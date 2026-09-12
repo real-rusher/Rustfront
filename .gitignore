@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.venv/
+rustfront_settings.json
+rustfront_save.json
