@@ -54,7 +54,11 @@ import pygame
 # --------------------------------------------------------------------------
 
 SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
-VERSION = "v0.1 PROTOTYP"
+# Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
+#   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
+#   1.0.0     erstmals von vorn bis hinten spielbar
+VERSION = "0.4.0"
+PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
 START_FENSTER = (1152, 648)
@@ -1754,7 +1758,8 @@ class App:
         pygame.draw.line(c, C_LINE_DK, (26, y - 5), (VW - 26, y - 5))
         hint = f"[{UP}{DOWN}] WÄHLEN   [{LEFT}{RIGHT}] ÄNDERN   [ENTER] OK   [ESC] ZURÜCK"
         FONT.draw(c, hint, 26, y, C_MUTED, 1)
-        FONT.draw(c, VERSION, VW - 26, y, C_MUTED_DK, 1, align="right")
+        FONT.draw(c, "V%s  %s" % (VERSION, PHASE), VW - 26, y, C_MUTED_DK, 1,
+                  align="right")
 
     def present(self):
         self.window.fill(C_VOID)
