@@ -1,25 +1,31 @@
 """
-RUSTFRONT / DUSTFRONT - Splash-Sequenz
-======================================
+DUSTFRONT - Splash-Sequenz
+==========================
 
 Spielt die fuenf Karten aus splash-sequenz.tsx ab. Gezeichnet wird in
 splash_engine.py, hier stehen Ablauf, Zeitdehnung und Ton.
 
 Zeitdehnung
 -----------
-Das Original laeuft 29,6 s. Das ist fuer einen Spielstart zu lang, aber
-einfach schneller abspielen sieht gehetzt aus. Stattdessen wird jede Karte in
-zwei Abschnitte geteilt: der Aufbau laeuft fast in Originalgeschwindigkeit,
-das Standbild danach wird kraeftig gekuerzt. Ergebnis: rund 19 s, ohne dass
-eine Bewegung gehetzt wirkt. Werte stehen in PHASEN.
+Jede Karte laeuft in drei Abschnitten: Aufbau, Standbild, Abblende. Der Aufbau
+laeuft etwas langsamer als im Original, damit nichts gehetzt wirkt, und das
+Standbild steht lange genug, dass man die Marke wirklich liest. Gesamt rund
+35 s. Alle Werte stehen in PHASEN, ein TEMPO von 1.3 bringt die Sequenz auf
+etwa 27 s.
 
 Ton
 ---
-Jede Karte hat ihre eigene Klangwelt, weil jede zu einer anderen Firma
-gehoert: Siegel orchestral-metallisch, Kaltwerk trocken und digital, Phosphor
-eine Bildroehre, Papiermond eine Handpresse, Tafel eine Druckmaschine.
-Alles wird zur Laufzeit synthetisiert, keine Audiodateien noetig. Die
-Erzeugung laeuft in einem Hintergrundfaden, damit der Start nicht haengt.
+Kein Klangbaustein wird zweimal verwendet, jede Karte hat ihre eigene
+Erzeugungsart:
+
+    Siegel      modale Synthese (Glocke, Metall) plus Streicherflaeche
+    Kaltwerk    Holzstaebe wie ein Marimba, dazu ein warmer Flaechenakkord
+    Phosphor    Elektrik: Zeilenpfeifen, Netzbrummen, Entladung, Statik
+    Papiermond  Holzpresse und echtes Papierrascheln mit koerniger Huellkurve
+    Tafel       laufende Druckmaschine mit Rumpeln und regelmaessigen Schlaegen
+
+Alles wird zur Laufzeit berechnet, keine Audiodateien noetig. Die Erzeugung
+laeuft in einem Hintergrundfaden, damit der Start nicht haengt.
 
 Einzeln ansehen:  python rustfront_splash.py
 """
@@ -40,7 +46,7 @@ from splash_engine import Engine, ORDER, LENS, clamp
 # ══════════════════════════════════════════════════════════════════
 
 TEMPO = 1.0          # >1 spielt die ganze Sequenz schneller ab
-VORLAUF = 0.35       # Schwarz vor der ersten Karte
+VORLAUF = 0.45       # Schwarz vor der ersten Karte
 SCHEMA = "aurum"     # aurum | glacies | ignis
 
 KARTEN_AN = {"a": True, "c": True, "t": True, "s": True, "b": True}
@@ -60,12 +66,13 @@ TEXTE = {
 }
 
 # Pro Karte: (Kartenzeit bis hierhin, echte Sekunden fuer diesen Abschnitt)
+# Abschnitt 1 = Aufbau, 2 = Standbild, 3 = Abblende.
 PHASEN = {
-    "a": [(7.25, 5.90), (11.0, 1.20)],   # Aufbau fast original, Standbild gekuerzt
-    "c": [(1.30, 1.10), (3.40, 1.00)],
-    "t": [(3.00, 2.45), (4.60, 0.90)],
-    "s": [(1.50, 1.40), (4.00, 1.00)],
-    "b": [(2.80, 2.50), (6.60, 1.35)],
+    "a": [(7.40, 8.20), (9.70, 3.20), (11.0, 1.30)],
+    "c": [(1.30, 1.60), (3.00, 2.20), (3.40, 0.40)],
+    "t": [(2.80, 3.20), (4.18, 2.00), (4.60, 0.45)],
+    "s": [(1.40, 1.80), (3.60, 2.60), (4.00, 0.40)],
+    "b": [(2.80, 3.40), (5.60, 2.80), (6.60, 1.00)],
 }
 
 NAMEN = {"a": "Siegel", "c": "Kaltwerk", "t": "Phosphor",
@@ -98,6 +105,13 @@ def karten_zeit(key: str, r: float) -> float:
 # ══════════════════════════════════════════════════════════════════
 
 class Synth:
+    """Kleine Werkstatt fuer Klaenge, die nach Material klingen sollen.
+
+    Statt fertiger Toene werden Koerper nachgebaut: modale Synthese fuer
+    Metall und Holz, resonant gefiltertes Rauschen fuer Luft und Schleifen,
+    koernige Huellkurven fuer Papier.
+    """
+
     def __init__(self, rate=44100):
         self.rate = rate
         self.rnd = random.Random(90210)
@@ -105,88 +119,187 @@ class Synth:
     def _n(self, dur):
         return max(1, int(self.rate * dur))
 
-    def sine(self, freqs, dur, vol=0.5, attack=0.005, decay=2.0, vib=0.0):
+    # ---- Bausteine ------------------------------------------------
+    def modal(self, modes, dur, attack=0.002, noise=0.0, noise_lp=1800,
+              noise_dec=0.012):
+        """Angeschlagener Koerper. modes = [(Frequenz, Abklingzeit, Anteil)].
+
+        Ganzzahlige Verhaeltnisse klingen nach Holz, schiefe nach Metall.
+        """
         n = self._n(dur)
         out = [0.0] * n
-        ar = max(1, int(self.rate * attack))
-        if not isinstance(freqs, (list, tuple)):
-            freqs = [freqs]
-        g = 1.0 / len(freqs)
+        rate = self.rate
         tp = 2 * math.pi
-        for f in freqs:
+        for (f, dec, amp) in modes:
+            d = math.exp(-1.0 / (max(0.005, dec) * rate))
+            a = amp
             ph = 0.0
+            inc = tp * f / rate
             for i in range(n):
-                fr = f * (1 + vib * math.sin(tp * 5.5 * i / self.rate))
-                ph += fr / self.rate
-                out[i] += math.sin(tp * ph) * g
-        for i in range(n):
-            out[i] *= (1 - i / n) ** decay * min(1.0, i / ar) * vol
+                out[i] += math.sin(ph) * a
+                ph += inc
+                a *= d
+        if noise > 0:                       # Anschlagsgeraeusch
+            k = 1 - math.exp(-tp * noise_lp / rate)
+            d = math.exp(-1.0 / (max(0.002, noise_dec) * rate))
+            a = noise
+            y = 0.0
+            u = self.rnd.uniform
+            for i in range(n):
+                y += k * (u(-1.0, 1.0) - y)
+                out[i] += y * a
+                a *= d
+        ar = max(1, int(rate * attack))
+        for i in range(min(ar, n)):
+            out[i] *= i / ar
         return out
 
-    def sweep(self, f0, f1, dur, vol=0.4, shape="sine", decay=1.8, attack=0.004):
+    def svf(self, dur, f0, f1, q=2.0, mode="bp", vol=0.4, attack=0.02,
+            decay=1.5, curve=1.0):
+        """Resonant gefiltertes Rauschen: Luftzug, Zischen, Schleifen."""
         n = self._n(dur)
         out = [0.0] * n
-        ar = max(1, int(self.rate * attack))
-        ph = 0.0
-        tp = 2 * math.pi
+        rate = self.rate
+        low = band = 0.0
+        u = self.rnd.uniform
+        ar = max(1, int(rate * attack))
+        damp = 1.0 / max(0.5, q)
         for i in range(n):
-            p = i / n
-            ph += (f0 + (f1 - f0) * p) / self.rate
-            x = ph % 1.0
-            if shape == "square":
-                s = 1.0 if x < 0.5 else -1.0
-            elif shape == "saw":
-                s = 2 * x - 1
-            else:
-                s = math.sin(tp * ph)
-            out[i] = s * (1 - p) ** decay * min(1.0, i / ar) * vol
+            p = (i / n) ** curve
+            fc = f0 + (f1 - f0) * p
+            f = 2 * math.sin(math.pi * min(0.45, fc / rate))
+            x = u(-1.0, 1.0)
+            high = x - low - damp * band
+            band += f * high
+            low += f * band
+            s = band if mode == "bp" else (low if mode == "lp" else high)
+            out[i] = s * (1 - i / n) ** decay * min(1.0, i / ar) * vol
         return out
 
-    def noise(self, dur, vol=0.4, lp0=4000, lp1=400, attack=0.004, decay=2.0,
-              hp=False):
-        """Rauschen durch ein wanderndes Einpolfilter."""
+    def pad(self, freqs, dur, vol=0.22, attack=0.4, decay=1.4, detune=0.004,
+            lp=1700):
+        """Weiche Flaeche: verstimmte Saegezaehne durch einen Tiefpass."""
         n = self._n(dur)
-        out = [0.0] * n
-        ar = max(1, int(self.rate * attack))
+        raw = [0.0] * n
+        rate = self.rate
+        for f in freqs:
+            for dt in (-detune, detune):
+                ph = 0.0
+                inc = (f * (1 + dt)) / rate
+                for i in range(n):
+                    ph = (ph + inc) % 1.0
+                    raw[i] += 2 * ph - 1
+        k = 1 - math.exp(-2 * math.pi * lp / rate)
+        g = vol / (2.0 * len(freqs))
+        ar = max(1, int(rate * attack))
         y = 0.0
-        prev = 0.0
-        rnd = self.rnd.uniform
-        tp2 = 2 * math.pi / self.rate
         for i in range(n):
-            p = i / n
-            a = 1 - math.exp(-tp2 * (lp0 + (lp1 - lp0) * p))
-            y += a * (rnd(-1.0, 1.0) - y)
-            s = (y - prev) if hp else y
-            prev = y
-            out[i] = s * (1 - p) ** decay * min(1.0, i / ar) * vol
-        return out
+            y += k * (raw[i] * g - y)
+            raw[i] = y * (1 - i / n) ** decay * min(1.0, i / ar)
+        return raw
 
-    def bump(self, f0, f1, dur, vol=0.7, decay=2.6):
-        """Tiefer Schlag mit fallender Tonhoehe."""
+    def sub(self, f0, f1, dur, vol=0.8, attack=0.2, decay=2.0):
+        """Tiefer Anschwellton, kein Schlag."""
         n = self._n(dur)
         out = [0.0] * n
-        ph = 0.0
+        rate = self.rate
         tp = 2 * math.pi
+        ph = 0.0
+        ar = max(1, int(rate * attack))
         for i in range(n):
             p = i / n
-            ph += (f0 * (1 - p) + f1 * p) / self.rate
-            out[i] = math.sin(tp * ph) * (1 - p) ** decay * vol
+            ph += tp * (f0 + (f1 - f0) * p) / rate
+            out[i] = math.sin(ph) * (1 - p) ** decay * min(1.0, i / ar) * vol
         return out
 
-    def klick(self, freq, dur=0.03, vol=0.5, shape="square"):
-        return self.sweep(freq, freq * 0.8, dur, vol, shape, decay=1.2, attack=0.001)
+    def rustle(self, dur, vol=0.3, hp=1100, grain=0.035, attack=0.12):
+        """Papier: Rauschen mit unruhiger, koerniger Huellkurve."""
+        n = self._n(dur)
+        out = [0.0] * n
+        rate = self.rate
+        u = self.rnd.uniform
+        k = 1 - math.exp(-2 * math.pi * hp / rate)
+        step = max(1, int(grain * rate))
+        ar = max(1, int(rate * attack))
+        y = 0.0
+        cur = nxt = abs(u(0.2, 1.0))
+        for i in range(n):
+            if i % step == 0:
+                cur = nxt
+                nxt = abs(u(0.05, 1.0))
+            f = (i % step) / step
+            g = cur + (nxt - cur) * f
+            x = u(-1.0, 1.0)
+            y += k * (x - y)
+            out[i] = (x - y) * g * (1 - i / n) ** 1.3 * min(1.0, i / ar) * vol
+        return out
 
-    def ratsche(self, dur, ticks, vol=0.35, f0=2600, f1=1500):
-        """Metallisches Einrasten: viele kurze Klicks, hinten dichter."""
+    def hum(self, dur, freqs, vol=0.08, attack=0.4, buzz=0.35):
+        """Netzbrummen: Grundton mit Oberwellen, leicht angeschmutzt."""
+        n = self._n(dur)
+        out = [0.0] * n
+        rate = self.rate
+        tp = 2 * math.pi
+        for j, f in enumerate(freqs):
+            amp = 1.0 / (1 + j * 1.6)
+            ph = 0.0
+            inc = tp * f / rate
+            for i in range(n):
+                s = math.sin(ph)
+                out[i] += (s + buzz * s * abs(s)) * amp
+                ph += inc
+        ar = max(1, int(rate * attack))
+        fade = max(1, int(rate * 0.3))
+        for i in range(n):
+            env = min(1.0, i / ar) * min(1.0, (n - i) / fade)
+            out[i] *= env * vol
+        return out
+
+    def whine(self, dur, freq, vol=0.06, attack=0.35, drift=0.004):
+        """Zeilenpfeifen einer Bildroehre, minimal schwebend."""
+        n = self._n(dur)
+        out = [0.0] * n
+        rate = self.rate
+        tp = 2 * math.pi
+        ph = 0.0
+        ar = max(1, int(rate * attack))
+        fade = max(1, int(rate * 0.25))
+        for i in range(n):
+            f = freq * (1 + drift * math.sin(tp * 0.7 * i / rate))
+            ph += tp * f / rate
+            env = min(1.0, i / ar) * min(1.0, (n - i) / fade)
+            out[i] = math.sin(ph) * env * vol
+        return out
+
+    def ratchet(self, dur, ticks, modes, vol=0.4, spread=0.7):
+        """Einrasten: viele kleine Anschlaege desselben Koerpers."""
         n = self._n(dur)
         out = [0.0] * n
         for k in range(ticks):
-            p = k / ticks
-            pos = int((p ** 0.72) * n)
-            tick = self.klick(f0 + (f1 - f0) * p, 0.012, vol * (0.5 + 0.5 * p))
-            for i, s in enumerate(tick):
+            p = k / max(1, ticks - 1)
+            pos = int((p ** spread) * n * 0.94)
+            scale = 1.0 + p * 0.35
+            tap = self.modal([(f * scale, dec, amp) for (f, dec, amp) in modes],
+                             0.09, 0.0005, 0.22, 3000, 0.004)
+            g = vol * (0.45 + 0.55 * p)
+            for i, s in enumerate(tap):
                 if pos + i < n:
-                    out[pos + i] += s
+                    out[pos + i] += s * g
+        return out
+
+    def machine(self, dur, interval=0.27, vol=0.5):
+        """Laufende Presse: Rumpeln plus regelmaessige Schlaege."""
+        out = self.svf(dur, 150, 520, 1.1, "lp", vol * 0.55, 0.30, 0.25)
+        n = len(out)
+        k = 0
+        while k * interval < dur:
+            pos = int(k * interval * self.rate)
+            hit = self.modal([(58, 0.20, 0.55), (94, 0.13, 0.28),
+                              (223, 0.07, 0.14)], 0.30, 0.001, 0.30, 800, 0.010)
+            for i, s in enumerate(hit):
+                if pos + i < n:
+                    out[pos + i] += s * vol * 0.85
+            k += 1
         return out
 
     def pause(self, dur):
@@ -220,75 +333,121 @@ class Synth:
             return None
 
 
+# Materialien. Verhaeltnisse bestimmen, wonach ein Koerper klingt.
+def _metall(f, dec=0.9, amp=0.5):
+    return [(f, dec, amp), (f * 2.76, dec * 0.55, amp * 0.42),
+            (f * 5.40, dec * 0.3, amp * 0.22), (f * 8.93, dec * 0.16, amp * 0.1)]
+
+
+def _glocke(f, dec=2.4, amp=0.5):
+    return [(f * 0.5, dec, amp * 0.55), (f, dec * 0.8, amp),
+            (f * 2.0, dec * 0.55, amp * 0.45), (f * 2.97, dec * 0.4, amp * 0.28),
+            (f * 4.16, dec * 0.25, amp * 0.16)]
+
+
+def _holz(f, dec=0.32, amp=0.6):
+    return [(f, dec, amp), (f * 3.93, dec * 0.35, amp * 0.3),
+            (f * 9.5, dec * 0.14, amp * 0.12)]
+
+
+def _presse(f, dec=0.5, amp=0.7):
+    return [(f, dec, amp), (f * 1.58, dec * 0.6, amp * 0.4),
+            (f * 2.44, dec * 0.3, amp * 0.2)]
+
+
 def _baue_klaenge(sy: Synth, key: str) -> dict:
-    """Klangwelt je Karte. Bewusst pro Firma voellig unterschiedlich."""
+    """Klangwelt je Karte, als Bauauftraege.
+
+    Jeder Eintrag ist eine Funktion, die den Klang erst beim Aufruf rechnet.
+    So kostet der erste Einsatz nicht die ganze Karte an Rechenzeit.
+    """
     s = {}
+
     if key == "a":
-        # Siegel: weiter Raum, Metall und Gold
-        s["flash"] = sy.mix(sy.bump(96, 26, 1.10, 0.9, 2.2),
-                            sy.noise(0.55, 0.35, 7000, 300, 0.002, 2.4))
-        s["orbit"] = sy.noise(1.15, 0.16, 260, 5200, 0.45, 1.2)
-        s["bezel"] = sy.ratsche(0.95, 26, 0.30)
-        s["wings"] = sy.mix(sy.noise(0.60, 0.30, 5200, 500, 0.06, 1.8),
-                            sy.sweep(900, 220, 0.55, 0.10, "sine", 1.6))
-        s["mount"] = sy.mix(sy.bump(150, 58, 0.34, 0.55, 3.0),
-                            sy.klick(1800, 0.03, 0.22))
-        s["title"] = sy.sine([523.25, 659.25, 783.99, 1046.5], 1.90, 0.46, 0.006, 2.4)
-        s["quote"] = sy.sine([1567.98, 2093.0], 1.20, 0.12, 0.22, 2.0)
+        # Siegel: Metall und Gold, weiter Raum, nichts Klickendes
+        s["zuendung"] = lambda: sy.mix(
+                sy.sub(38, 24, 3.2, 0.85, 0.30, 1.8),
+                sy.svf(2.6, 90, 900, 1.4, "lp", 0.30, 0.35, 1.1))
+        s["bahnen"] = lambda: sy.mix(
+                sy.svf(2.4, 320, 3400, 3.2, "bp", 0.30, 0.70, 0.9),
+                sy.modal(_glocke(1046.5, 2.2, 0.10), 2.4, 0.6))
+        s["messring"] = lambda: sy.ratchet(1.30, 16, _metall(1650, 0.10, 0.34), 0.62)
+        s["schwingen"] = lambda: sy.mix(
+                sy.svf(1.55, 2100, 320, 1.6, "bp", 0.34, 0.18, 1.3),
+                sy.sub(150, 62, 1.2, 0.18, 0.25, 2.2))
+        s["stand"] = lambda: sy.modal(_metall(104, 1.35, 0.55), 1.8, 0.002, 0.28, 700, 0.02)
+        s["wortmarke"] = lambda: sy.mix(
+                sy.modal(_glocke(523.25, 3.0, 0.5), 3.4, 0.004, 0.10, 4200, 0.006),
+                sy.pad([261.63, 392.0, 523.25], 3.2, 0.85, 0.75, 1.2))
+        s["spruch"] = lambda: sy.pad([784.0, 1046.5, 1318.5], 2.6, 1.25, 0.8, 1.6,
+                                 detune=0.006, lp=3200)
     elif key == "c":
-        # Kaltwerk: trocken, kurz, digital. Kein Nachhall, harte Kanten.
-        for i, f in enumerate((900, 760, 640)):
-            s["tok%d" % i] = sy.mix(sy.klick(f, 0.035, 0.42),
-                                    sy.noise(0.025, 0.22, 2600, 900, 0.001, 3.0))
-        s["stab"] = sy.mix(sy.sweep(440, 440, 0.26, 0.30, "square", 0.9, 0.002),
-                           sy.sweep(660, 660, 0.26, 0.20, "square", 0.9, 0.002))
-        s["bar"] = sy.sweep(320, 1750, 0.26, 0.26, "saw", 1.1, 0.002)
+        # Kaltwerk: Holzstaebe wie ein Marimba, trocken, kurz
+        for i, f in enumerate((392.0, 523.25, 659.25)):
+            s["stab%d" % i] = (lambda ff=f: sy.modal(_holz(ff, 0.30, 0.55),
+                                                     0.55, 0.001, 0.18, 2600, 0.006))
+        s["marke"] = lambda: sy.pad([261.63, 329.63, 392.0, 523.25], 1.7, 1.70,
+                                0.14, 1.5, detune=0.003, lp=1500)
+        s["strich"] = lambda: sy.svf(0.55, 380, 2600, 1.1, "lp", 0.95, 0.10, 1.6)
     elif key == "t":
-        # Phosphor: Bildroehre. Zeilenpfeifen, Netzbrummen, Statik.
-        s["on"] = sy.mix(sy.klick(1400, 0.02, 0.40),
-                         sy.noise(0.10, 0.26, 9000, 2000, 0.001, 2.6))
-        s["whine"] = sy.mix(sy.sine(7812, 3.60, 0.085, 0.30, 0.15),
-                            sy.sine([50, 100], 3.60, 0.075, 0.30, 0.12))
-        s["key"] = sy.klick(2300, 0.014, 0.20)
-        s["pop"] = sy.mix(sy.bump(130, 44, 0.20, 0.50, 3.2),
-                          sy.noise(0.14, 0.34, 9500, 1200, 0.001, 2.2))
-        s["off"] = sy.mix(sy.sweep(7200, 180, 0.32, 0.30, "sine", 1.1),
-                          sy.klick(900, 0.02, 0.30))
+        # Phosphor: reine Elektrik, kein Anschlag, nur Spannung
+        s["einschalten"] = lambda: sy.mix(
+                sy.sub(64, 41, 0.55, 0.55, 0.006, 2.6),
+                sy.svf(0.40, 1400, 300, 6.0, "bp", 0.30, 0.004, 2.0))
+        s["pfeifen"] = lambda: sy.mix(
+                sy.whine(6.2, 7812.0, 0.075),
+                sy.hum(6.2, [50.0, 100.0, 150.0], 0.075),
+                sy.svf(6.2, 3000, 3400, 0.8, "hp", 0.035, 0.8, 0.05))
+        s["taste"] = lambda: sy.modal([(184, 0.045, 0.4), (410, 0.02, 0.15)], 0.10,
+                                  0.001, 0.18, 900, 0.007)
+        s["entladung"] = lambda: sy.mix(
+                sy.svf(0.45, 4600, 520, 7.5, "bp", 0.40, 0.002, 2.4),
+                sy.sub(92, 48, 0.34, 0.42, 0.003, 3.0))
+        s["abschalten"] = lambda: sy.mix(
+                sy.svf(0.55, 6800, 220, 5.0, "bp", 0.30, 0.004, 1.6, curve=0.6),
+                sy.svf(0.30, 900, 180, 1.0, "lp", 0.22, 0.004, 2.0))
     elif key == "s":
-        # Papiermond: Handpresse. Holz, Papier, Farbe.
-        s["stamp"] = sy.mix(sy.bump(78, 33, 0.34, 0.85, 3.4),
-                            sy.noise(0.20, 0.42, 1500, 160, 0.001, 2.8))
-        s["stamp2"] = sy.mix(sy.bump(120, 50, 0.16, 0.40, 3.6),
-                             sy.noise(0.10, 0.22, 1800, 240, 0.001, 3.0))
-        s["slide"] = sy.noise(0.34, 0.26, 3200, 900, 0.10, 1.6, hp=True)
-        s["press"] = sy.mix(sy.bump(96, 42, 0.24, 0.55, 3.2),
-                            sy.noise(0.14, 0.28, 1300, 200, 0.001, 2.8))
-        s["tick"] = sy.klick(1500, 0.016, 0.22, "saw")
+        # Papiermond: Holzpresse und Papier, tief und weich
+        s["presse"] = lambda: sy.mix(
+                sy.modal(_presse(84, 0.55, 0.75), 1.1, 0.001, 0.40, 420, 0.030),
+                sy.sub(58, 40, 0.5, 0.35, 0.004, 3.0))
+        s["nachschlag"] = lambda: sy.modal(_presse(126, 0.28, 0.45), 0.5, 0.001,
+                                       0.22, 520, 0.016)
+        s["papier"] = lambda: sy.rustle(1.10, 0.60, 900, 0.030, 0.16)
+        s["farbe"] = lambda: sy.mix(
+                sy.modal(_presse(98, 0.34, 0.5), 0.7, 0.001, 0.26, 380, 0.022),
+                sy.rustle(0.55, 0.26, 700, 0.020, 0.08))
+        s["marke"] = lambda: sy.modal(_holz(660, 0.16, 0.35), 0.28, 0.001, 0.10,
+                                  2200, 0.004)
     elif key == "b":
-        # Tafel: Druckmaschine. Ein langer Lauf, dann Mechanik.
-        s["bar"] = sy.mix(sy.noise(1.55, 0.34, 500, 4200, 0.20, 0.6),
-                          sy.sine(62, 1.55, 0.20, 0.20, 0.7),
-                          sy.noise(1.55, 0.12, 3000, 700, 0.35, 0.8))
-        s["shutter"] = sy.mix(sy.klick(2400, 0.026, 0.40),
-                              sy.pause(0.045) + sy.klick(1750, 0.03, 0.34))
-        s["shine"] = sy.mix(sy.sine([1318.5, 1975.5], 0.75, 0.28, 0.004, 2.6),
-                            sy.sweep(2600, 3400, 0.30, 0.10, "sine", 2.0))
-        s["tick"] = sy.klick(1900, 0.018, 0.22)
+        # Tafel: laufende Druckmaschine, danach Mechanik
+        s["maschine"] = lambda: sy.machine(2.25, 0.27, 0.5)
+        s["blende"] = lambda: sy.mix(
+                sy.modal(_metall(880, 0.22, 0.4), 0.5, 0.001, 0.2, 3400, 0.005),
+                sy.pause(0.075) + sy.modal(_metall(620, 0.30, 0.34), 0.6, 0.001,
+                                           0.18, 2800, 0.006))
+        s["glanz"] = lambda: sy.modal(_glocke(1318.5, 1.5, 0.38), 1.8, 0.003, 0.05,
+                                  5200, 0.004)
+        s["zeiger"] = lambda: sy.modal(_metall(1480, 0.18, 0.26), 0.3, 0.001, 0.08,
+                                   4000, 0.003)
     return s
 
 
 # Kartenzeit -> Klang. Deckt sich mit der Choreografie im Original.
 CUES = {
-    "a": [(0.38, "flash"), (1.00, "orbit"), (1.85, "bezel"), (2.60, "wings"),
-          (3.35, "mount"), (3.75, "title"), (4.85, "quote")],
-    "c": [(0.10, "tok0"), (0.24, "tok1"), (0.38, "tok2"), (0.62, "stab"),
-          (0.86, "bar")],
-    "t": [(0.02, "on"), (0.05, "whine"), (0.45, "key"), (0.62, "key"),
-          (0.80, "key"), (1.08, "key"), (1.30, "key"), (1.61, "key"),
-          (1.85, "key"), (2.22, "pop"), (4.18, "off")],
-    "s": [(0.30, "stamp"), (0.35, "stamp2"), (0.52, "slide"), (0.78, "press"),
-          (1.16, "tick")],
-    "b": [(0.15, "bar"), (1.58, "shutter"), (1.70, "shine"), (2.12, "tick")],
+    "a": [(0.30, "zuendung"), (1.00, "bahnen"), (1.85, "messring"),
+          (2.55, "schwingen"), (3.35, "stand"), (3.75, "wortmarke"),
+          (4.85, "spruch")],
+    "c": [(0.10, "stab0"), (0.24, "stab1"), (0.38, "stab2"), (0.62, "marke"),
+          (0.86, "strich")],
+    "t": [(0.02, "einschalten"), (0.05, "pfeifen"), (0.45, "taste"),
+          (0.62, "taste"), (0.80, "taste"), (1.08, "taste"), (1.30, "taste"),
+          (1.61, "taste"), (1.85, "taste"), (2.22, "entladung"),
+          (4.18, "abschalten")],
+    "s": [(0.30, "presse"), (0.36, "nachschlag"), (0.52, "papier"),
+          (0.78, "farbe"), (1.16, "marke")],
+    "b": [(0.15, "maschine"), (1.58, "blende"), (1.70, "glanz"),
+          (2.12, "zeiger")],
 }
 
 
@@ -311,26 +470,36 @@ class SplashAudio:
         except pygame.error:
             pass
         sy = Synth(pygame.mixer.get_init()[0])
-        # Erste Karte sofort, damit der Einstieg sitzt. Rest nebenher.
-        self._bake(sy, ORDER[0])
+        self.banks = {k: {} for k in ORDER}
+        # Der erste Einsatz muss sofort sitzen, der Rest entsteht nebenher.
+        self._bake_one(sy, ORDER[0], CUES[ORDER[0]][0][1])
         threading.Thread(target=self._rest, args=(sy,), daemon=True).start()
 
-    def _bake(self, sy, key):
+    def _bake_one(self, sy, key, name):
         try:
-            bank = {}
-            for name, samples in _baue_klaenge(sy, key).items():
-                snd = sy.to_sound(samples)
-                if snd is not None:
-                    snd.set_volume(max(0.0, min(1.0, self.gain)))
-                    bank[name] = snd
-            self.banks[key] = bank
+            bauauftrag = _baue_klaenge(sy, key).get(name)
+            if bauauftrag is None:
+                return
+            snd = sy.to_sound(bauauftrag())
+            if snd is not None:
+                snd.set_volume(max(0.0, min(1.0, self.gain)))
+                self.banks.setdefault(key, {})[name] = snd
         except Exception:
-            self.banks[key] = {}
+            pass
 
     def _rest(self, sy):
-        for key in ORDER[1:]:
-            if key not in self.banks:
-                self._bake(sy, key)
+        for key in ORDER:
+            try:
+                bank = self.banks.setdefault(key, {})
+                for name, bauauftrag in _baue_klaenge(sy, key).items():
+                    if name in bank:
+                        continue
+                    snd = sy.to_sound(bauauftrag())
+                    if snd is not None:
+                        snd.set_volume(max(0.0, min(1.0, self.gain)))
+                        bank[name] = snd
+            except Exception:
+                continue
 
     def play(self, key, name):
         if not self.ok:
@@ -343,7 +512,7 @@ class SplashAudio:
                 pass
 
     @staticmethod
-    def hush(ms=200):
+    def hush(ms=260):
         try:
             if pygame.mixer.get_init():
                 pygame.mixer.fadeout(ms)
@@ -391,7 +560,6 @@ def play(app, tempo: float | None = None) -> str:
     if not karten:
         return "fertig"
 
-    # Menuebrummen waehrend des Intros pausieren
     drone = getattr(getattr(app, "audio", None), "drone_channel", None)
     if drone is not None:
         try:
@@ -404,7 +572,7 @@ def play(app, tempo: float | None = None) -> str:
     clock = pygame.time.Clock()
 
     def ende(status):
-        audio.hush(260)
+        audio.hush(300)
         if drone is not None:
             try:
                 drone.unpause()
@@ -459,9 +627,9 @@ def play(app, tempo: float | None = None) -> str:
             _present(app, surf, alpha)
 
         if ueberspringen:
-            audio.hush(140)
+            audio.hush(160)
             _black(app)
-            pygame.time.wait(90)
+            pygame.time.wait(110)
 
     _black(app)
     return ende("fertig")
