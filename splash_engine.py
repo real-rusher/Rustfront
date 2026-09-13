@@ -29,6 +29,7 @@ TL = {
     "micro": (6.55, 0.7),
 }
 B = {"ax": 52, "ay": 96, "aR": 22, "tx": 88, "trg": 296, "barIn": 0.15, "barDur": 1.45}
+SCHOCK = 3.55        # Kartenzeit, an der der zweite Teil des Spruchs einschlaegt
 C = {"my": 54, "gap": 15, "sw": 24, "sh": 12, "th": 4, "ox": 9}
 
 
@@ -251,9 +252,11 @@ class Engine:
         self.ACC, self.ENG, self.BG = SCHEMES.get(scheme, SCHEMES["aurum"])
         self.opts = {
             "name": "DUSTFRONT",
-            "motto": "THE STARS ARE THE BIRTHRIGHT OF HUMANITY",
+            "version": "VERSION 0.0.0 \u00b7 PRE-ALPHA",
             "sub": "EIN UNABHAENGIGES STUDIO \u00b7 MMXXVI",
             "role": "UNABHAENGIGE SPIELENTWICKLUNG",
+            "schlag1": "IN THE GRIM DARKNESS OF THE FAR FUTURE,",
+            "schlag2": "THERE IS ONLY WAR",
             "pname": "KALTWERK", "peyebrow": "POWERED BY",
             "psub": "ECHTZEIT-RENDERING & AUDIO",
             "tname": "PHOSPHOR", "tsub": "RUNTIME READY",
@@ -368,6 +371,20 @@ class Engine:
         self.buf = save
         self.bgc[key] = out
         return out
+
+    def shift(self, dx):
+        """Ganzes Bild waagerecht versetzen, fuer kurze Einschlaege."""
+        if not dx:
+            return
+        pad = b"\x00\x00\x00" * abs(dx)
+        w3 = W * 3
+        for y in range(H):
+            o0 = y * w3
+            row = bytes(self.buf[o0:o0 + w3])
+            if dx > 0:
+                self.buf[o0:o0 + w3] = pad + row[:w3 - len(pad)]
+            else:
+                self.buf[o0:o0 + w3] = row[len(pad):] + pad
 
     def draw_stars(self, t):
         plot = self.plot
@@ -651,14 +668,14 @@ class Engine:
                         for b in range(-2, 3):
                             if abs(a) + abs(b) <= 2:
                                 self.plot(dx + a, y + b, self.ACC, 6.8 - abs(a) * 0.7, 1)
-        if o["motto"]:
-            tr = self.fit_tracking(F5, o["motto"], 1, W - 20)
+        if o["version"]:
+            tr = self.fit_tracking(F5, o["version"], 1, W - 20)
 
             def per_m(i, ch, x):
                 p = seg(t, TL["quote"][0] + i * 0.02, TL["quote"][1])
                 return (eOut(p), 0, (1 - p) * (0 if ch == " " else 2.4))
-            self.draw_text_c(F5, o["motto"], CX, CY + 80, STEEL, 8.6, 1, tr, per_m, False)
-            self.last_motto_w = self.text_width(F5, o["motto"], tr)
+            self.draw_text_c(F5, o["version"], CX, CY + 80, STEEL, 8.6, 1, tr, per_m, False)
+            self.last_motto_w = self.text_width(F5, o["version"], tr)
         if o["sub"]:
             p = eOut(seg(t, TL["micro"][0], TL["micro"][1]))
             if p > 0:
@@ -815,12 +832,30 @@ class Engine:
                 self.plot(xi - 1, y, self.ENG, 5.5, 0.75)
                 self.plot(xi - 2, y, self.ENG, 3.2, 0.45)
                 self.plot(xi + 1, y, self.ENG, 2.6, 0.3)
-        if self.opts["motto"]:
-            p = eOut(seg(t, B["barIn"] + B["barDur"] + 0.3, 0.55))
+        # Erster Teil blendet ruhig ein
+        s1 = self.opts["schlag1"]
+        if s1:
+            p = eOut(seg(t, B["barIn"] + B["barDur"] + 0.3, 0.75))
             if p > 0:
-                self.draw_text_c(F5, self.opts["motto"], CX, 156, STEEL, 5.4, p,
-                                 self.fit_tracking(F5, self.opts["motto"], 1, W - 24),
-                                 None, False)
+                self.draw_text_c(F5, s1, CX, 140, STEEL, 5.4, p,
+                                 self.fit_tracking(F5, s1, 1, W - 24), None, False)
+
+        # Zweiter Teil schlaegt ohne Vorwarnung ein
+        s2 = self.opts["schlag2"]
+        k = t - SCHOCK
+        if s2 and k >= 0:
+            tr2 = self.fit_tracking(F7, s2, 3, W - 28)
+            jit = 2 if (k < 0.16 and math.floor(t * 60) % 2 == 0) else 0
+            lvl = 8.6 if k < 0.10 else 6.2
+            self.draw_text_c(F7, s2, CX + jit, 155, self.ACC, lvl, 1, tr2, None, True)
+            # Zwei Linien fahren aus der Mitte heraus
+            hw = int(min(1.0, k / 0.10) * (self.text_width(F7, s2, tr2) / 2 + 8))
+            for yy in (151, 169):
+                for x in range(CX - hw, CX + hw + 1):
+                    self.plot(x, yy, self.ACC, 7.2 if k < 0.14 else 4.4, 1)
+            if k < 0.18:                     # kurzes Ruckeln, kein Stroboskop
+                off = 2 if math.floor(k * 48) % 2 == 0 else -2
+                self.shift(off)
 
     # ═══════════ KARTE III - Partnermarke ═══════════
     def slab(self, i, t):
