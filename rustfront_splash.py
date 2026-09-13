@@ -39,7 +39,12 @@ import threading
 
 import pygame
 
-from splash_engine import Engine, ORDER, LENS, clamp
+from splash_engine import Engine, ORDER, LENS, SCHOCK, clamp
+
+try:                                     # eine einzige Quelle fuer die Version
+    from rustfront_menu import VERSION, PHASE
+except Exception:
+    VERSION, PHASE = "0.4.0", "PRE-ALPHA"
 
 # ══════════════════════════════════════════════════════════════════
 # Einstellungen
@@ -53,9 +58,13 @@ KARTEN_AN = {"a": True, "c": True, "t": True, "s": True, "b": True}
 
 TEXTE = {
     "name": "DUSTFRONT",
-    "motto": "THE STARS ARE THE BIRTHRIGHT OF HUMANITY",
-    "sub": "EIN UNABHAENGIGES STUDIO \u00b7 MMXXVI",
+    # Karte I: wer es macht und wo das Spiel gerade steht
+    "sub": "NICOLAS \u00b7 NIKOLAUS \u00b7 MARLON \u00b7 ALFRED",
+    "version": "VERSION %s \u00b7 %s" % (VERSION, PHASE),
+    # Karte V: der Spruch, zweiteilig inszeniert
     "role": "UNABHAENGIGE SPIELENTWICKLUNG",
+    "schlag1": "IN THE GRIM DARKNESS OF THE FAR FUTURE,",
+    "schlag2": "THERE IS ONLY WAR",
     "pname": "KALTWERK",
     "peyebrow": "POWERED BY",
     "psub": "ECHTZEIT-RENDERING & AUDIO",
@@ -70,9 +79,9 @@ TEXTE = {
 PHASEN = {
     "a": [(7.40, 8.20), (9.70, 3.20), (11.0, 1.30)],
     "c": [(1.30, 1.60), (3.00, 2.20), (3.40, 0.40)],
-    "t": [(2.80, 3.20), (4.18, 2.00), (4.60, 0.45)],
+    "t": [(2.80, 3.20), (4.18, 2.50), (4.60, 0.45)],
     "s": [(1.40, 1.80), (3.60, 2.60), (4.00, 0.40)],
-    "b": [(2.80, 3.40), (5.60, 2.80), (6.60, 1.00)],
+    "b": [(2.80, 3.40), (5.60, 3.60), (6.60, 1.20)],
 }
 
 NAMEN = {"a": "Siegel", "c": "Kaltwerk", "t": "Phosphor",
@@ -277,7 +286,7 @@ class Synth:
         out = [0.0] * n
         for k in range(ticks):
             p = k / max(1, ticks - 1)
-            pos = int((p ** spread) * n * 0.94)
+            pos = int((p ** spread) * n * 0.80)   # Platz fuer den letzten Ausklang
             scale = 1.0 + p * 0.35
             tap = self.modal([(f * scale, dec, amp) for (f, dec, amp) in modes],
                              0.09, 0.0005, 0.22, 3000, 0.004)
@@ -292,7 +301,7 @@ class Synth:
         out = self.svf(dur, 150, 520, 1.1, "lp", vol * 0.55, 0.30, 0.25)
         n = len(out)
         k = 0
-        while k * interval < dur:
+        while k * interval < dur - 0.40:      # letzter Schlag mit Platz zum Ausklingen
             pos = int(k * interval * self.rate)
             hit = self.modal([(58, 0.20, 0.55), (94, 0.13, 0.28),
                               (223, 0.07, 0.14)], 0.30, 0.001, 0.30, 800, 0.010)
@@ -318,7 +327,16 @@ class Synth:
         init = pygame.mixer.get_init()
         if not init:
             return None
-        channels = init[2]
+        rate, channels = init[0], init[2]
+        # Kurzer Ein- und Ausklang. Ohne den bricht ein noch klingender
+        # Koerper am Pufferende hart ab und knackt.
+        n = len(samples)
+        ein = min(n // 8, max(1, int(0.002 * rate)))
+        aus = min(n // 3, max(1, int(0.035 * rate)))
+        for i in range(ein):
+            samples[i] *= i / ein
+        for i in range(aus):
+            samples[n - 1 - i] *= i / aus
         peak = max(1e-6, max(abs(s) for s in samples))
         norm = min(1.0, 0.92 / peak) if peak > 0.92 else 1.0
         buf = array.array("h")
@@ -371,21 +389,21 @@ def _baue_klaenge(sy: Synth, key: str) -> dict:
         s["bahnen"] = lambda: sy.mix(
                 sy.svf(2.4, 320, 3400, 3.2, "bp", 0.30, 0.70, 0.9),
                 sy.modal(_glocke(1046.5, 2.2, 0.10), 2.4, 0.6))
-        s["messring"] = lambda: sy.ratchet(1.30, 16, _metall(1650, 0.10, 0.34), 0.62)
+        s["messring"] = lambda: sy.ratchet(1.45, 16, _metall(1650, 0.10, 0.34), 0.62)
         s["schwingen"] = lambda: sy.mix(
                 sy.svf(1.55, 2100, 320, 1.6, "bp", 0.34, 0.18, 1.3),
                 sy.sub(150, 62, 1.2, 0.18, 0.25, 2.2))
-        s["stand"] = lambda: sy.modal(_metall(104, 1.35, 0.55), 1.8, 0.002, 0.28, 700, 0.02)
+        s["stand"] = lambda: sy.modal(_metall(104, 1.35, 0.55), 4.00, 0.002, 0.28, 700, 0.02)
         s["wortmarke"] = lambda: sy.mix(
-                sy.modal(_glocke(523.25, 3.0, 0.5), 3.4, 0.004, 0.10, 4200, 0.006),
-                sy.pad([261.63, 392.0, 523.25], 3.2, 0.85, 0.75, 1.2))
+                sy.modal(_glocke(523.25, 3.0, 0.5), 6.20, 0.004, 0.10, 4200, 0.006),
+                sy.pad([261.63, 392.0, 523.25], 3.6, 0.85, 0.75, 1.2))
         s["spruch"] = lambda: sy.pad([784.0, 1046.5, 1318.5], 2.6, 1.25, 0.8, 1.6,
                                  detune=0.006, lp=3200)
     elif key == "c":
         # Kaltwerk: Holzstaebe wie ein Marimba, trocken, kurz
         for i, f in enumerate((392.0, 523.25, 659.25)):
             s["stab%d" % i] = (lambda ff=f: sy.modal(_holz(ff, 0.30, 0.55),
-                                                     0.55, 0.001, 0.18, 2600, 0.006))
+                                                     0.95, 0.001, 0.18, 2600, 0.006))
         s["marke"] = lambda: sy.pad([261.63, 329.63, 392.0, 523.25], 1.7, 1.70,
                                 0.14, 1.5, detune=0.003, lp=1500)
         s["strich"] = lambda: sy.svf(0.55, 380, 2600, 1.1, "lp", 0.95, 0.10, 1.6)
@@ -398,7 +416,7 @@ def _baue_klaenge(sy: Synth, key: str) -> dict:
                 sy.whine(6.2, 7812.0, 0.075),
                 sy.hum(6.2, [50.0, 100.0, 150.0], 0.075),
                 sy.svf(6.2, 3000, 3400, 0.8, "hp", 0.035, 0.8, 0.05))
-        s["taste"] = lambda: sy.modal([(184, 0.045, 0.4), (410, 0.02, 0.15)], 0.10,
+        s["taste"] = lambda: sy.modal([(184, 0.045, 0.4), (410, 0.02, 0.15)], 0.20,
                                   0.001, 0.18, 900, 0.007)
         s["entladung"] = lambda: sy.mix(
                 sy.svf(0.45, 4600, 520, 7.5, "bp", 0.40, 0.002, 2.4),
@@ -409,27 +427,32 @@ def _baue_klaenge(sy: Synth, key: str) -> dict:
     elif key == "s":
         # Papiermond: Holzpresse und Papier, tief und weich
         s["presse"] = lambda: sy.mix(
-                sy.modal(_presse(84, 0.55, 0.75), 1.1, 0.001, 0.40, 420, 0.030),
+                sy.modal(_presse(84, 0.55, 0.75), 1.90, 0.001, 0.40, 420, 0.030),
                 sy.sub(58, 40, 0.5, 0.35, 0.004, 3.0))
-        s["nachschlag"] = lambda: sy.modal(_presse(126, 0.28, 0.45), 0.5, 0.001,
+        s["nachschlag"] = lambda: sy.modal(_presse(126, 0.28, 0.45), 0.9, 0.001,
                                        0.22, 520, 0.016)
         s["papier"] = lambda: sy.rustle(1.10, 0.60, 900, 0.030, 0.16)
         s["farbe"] = lambda: sy.mix(
-                sy.modal(_presse(98, 0.34, 0.5), 0.7, 0.001, 0.26, 380, 0.022),
+                sy.modal(_presse(98, 0.34, 0.5), 1.1, 0.001, 0.26, 380, 0.022),
                 sy.rustle(0.55, 0.26, 700, 0.020, 0.08))
-        s["marke"] = lambda: sy.modal(_holz(660, 0.16, 0.35), 0.28, 0.001, 0.10,
+        s["marke"] = lambda: sy.modal(_holz(660, 0.16, 0.35), 0.50, 0.001, 0.10,
                                   2200, 0.004)
     elif key == "b":
         # Tafel: laufende Druckmaschine, danach Mechanik
-        s["maschine"] = lambda: sy.machine(2.25, 0.27, 0.5)
+        s["maschine"] = lambda: sy.machine(2.55, 0.27, 0.5)
         s["blende"] = lambda: sy.mix(
-                sy.modal(_metall(880, 0.22, 0.4), 0.5, 0.001, 0.2, 3400, 0.005),
-                sy.pause(0.075) + sy.modal(_metall(620, 0.30, 0.34), 0.6, 0.001,
+                sy.modal(_metall(880, 0.22, 0.4), 0.75, 0.001, 0.2, 3400, 0.005),
+                sy.pause(0.075) + sy.modal(_metall(620, 0.30, 0.34), 1.0, 0.001,
                                            0.18, 2800, 0.006))
-        s["glanz"] = lambda: sy.modal(_glocke(1318.5, 1.5, 0.38), 1.8, 0.003, 0.05,
+        s["glanz"] = lambda: sy.modal(_glocke(1318.5, 1.5, 0.38), 4.20, 0.003, 0.05,
                                   5200, 0.004)
-        s["zeiger"] = lambda: sy.modal(_metall(1480, 0.18, 0.26), 0.3, 0.001, 0.08,
+        s["zeiger"] = lambda: sy.modal(_metall(1480, 0.18, 0.26), 0.6, 0.001, 0.08,
                                    4000, 0.003)
+        # Der Einschlag: nichts Feines, eine Wand aus Metall und Druck
+        s["einschlag"] = lambda: sy.mix(
+                sy.sub(74, 27, 2.60, 0.95, 0.002, 1.5),
+                sy.modal(_metall(168, 2.10, 0.55), 5.40, 0.001, 0.55, 2400, 0.045),
+                sy.svf(0.90, 3600, 180, 1.3, "lp", 0.45, 0.002, 1.4))
     return s
 
 
@@ -447,7 +470,7 @@ CUES = {
     "s": [(0.30, "presse"), (0.36, "nachschlag"), (0.52, "papier"),
           (0.78, "farbe"), (1.16, "marke")],
     "b": [(0.15, "maschine"), (1.58, "blende"), (1.70, "glanz"),
-          (2.12, "zeiger")],
+          (2.12, "zeiger"), (SCHOCK, "einschlag")],
 }
 
 
