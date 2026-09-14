@@ -88,7 +88,7 @@ sich von dort. Wer die Nummer aendert, aendert nur diese zwei Zeilen.
 └── MAJOR
 ```
 
-### Welche Ziffer wird hochgezaehlt?
+### Welche Ziffer wird hochgezählt?
 
 Geh die drei Fragen **von oben nach unten** durch und nimm die erste, die mit
 ja beantwortet wird. Es gibt immer genau eine Antwort.
