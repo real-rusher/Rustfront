@@ -190,6 +190,10 @@ class Renderer:
                 if dunkel is not None:
                     sch = self.dunkel(sch, dunkel)
                 ziel.blit(sch, (p.x - sch.get_width() / 2, p.y - sch.get_height() / 2 + 5))
+            if w.spur is not None and w.tempo.length_squared() > 1:
+                r = w.tempo.normalize()
+                pygame.draw.line(ziel, (128, 80, 30), p - r * 17, p - r * 5, 1)
+                pygame.draw.line(ziel, w.spur, p - r * 6, p, 1)
             if w.bild is None:
                 continue
             s = self.bilder.gedreht(w.bild, w.winkel)
@@ -231,8 +235,8 @@ class Renderer:
         oben = held.ebene if held else 0
 
         if oben - 1 >= 0:                      # was unter dir durchscheint
-            self.ebene_zeichnen(ziel, welt, oben - 1, ecke, 96)
-            self.wesen_zeichnen(ziel, welt, oben - 1, ecke, alpha, 96)
+            self.ebene_zeichnen(ziel, welt, oben - 1, ecke, 118)
+            self.wesen_zeichnen(ziel, welt, oben - 1, ecke, alpha, 118)
 
         self.ebene_zeichnen(ziel, welt, oben, ecke, None)
         self.wesen_zeichnen(ziel, welt, oben, ecke, alpha)
