@@ -33,6 +33,7 @@ class Wesen:
     schiebt = True
     trefferbar = True
     bild = None
+    spur = None              # Farbe der Leuchtspur, None = keine
     radius = 8.0
     max_leben = 1.0
     schatten = True
@@ -128,6 +129,8 @@ class Geschoss(Wesen):
     schiebt = False
     trefferbar = False
     schatten = False
+    bild = "geschoss"
+    spur = (250, 206, 128)
     radius = 2.0
 
     def __init__(self, pos, richtung: float, daten: dict, ebene: int,
@@ -280,6 +283,7 @@ class Spieler(Wesen):
         # Rueckstoss auf den Schuetzen und auf die Kamera
         self.tempo -= pygame.Vector2(d["rueckstoss"], 0).rotate(self.winkel)
         self.welt.ruckeln(d["kamera"])
+        self.welt.klang("schuss_" + self.waffe_name, K.AUDIO["schuss"])
         self.welt.muendung(muendung, self.winkel, self.ebene)
         wolke(self.welt, muendung, 3, 120, 0.12, (255, 226, 160), self.ebene, 1,
               "funke", 34, self.winkel, 8.0)

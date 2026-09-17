@@ -22,7 +22,8 @@ angefasst werden muessen:
 
 4. **Bilder kommen aus der Registratur.** Gibt es assets/<name>.png, wird die
    Datei benutzt, sonst ein im Code erzeugter Platzhalter. Beim Austausch
-   gegen echte Pixel-Art aendert sich am Spielcode nichts.
+   gegen echte Pixel-Art aendert sich am Spielcode nichts. Fuer Klaenge gilt
+   dasselbe, siehe audio.py.
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from pathlib import Path
 import pygame
 
 from . import config as K
+from .audio import Klaenge
 
 # ══════════════════════════════════════════════════════════════════
 # Eingabe
@@ -227,6 +229,7 @@ class App:
         self.flaeche = self.flaeche.convert()
 
         self.bilder = Bilder(asset_ordner)
+        self.klaenge = Klaenge(asset_ordner)
         self.eingabe = Eingabe()
         self.uhr = pygame.time.Clock()
         self.stapel: list[Szene] = []
