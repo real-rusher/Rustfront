@@ -45,6 +45,7 @@ class Spiel(Szene):
         self.welt.ruckeln = self.kamera.stossen
         self.welt.kurz_langsam = self._zeitlupe
         self.welt.blutfleck = self._blutfleck
+        self.welt.klang = self.app.klaenge.spielen
 
         self.welle = 0
         self.pause_rest = 2.0

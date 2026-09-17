@@ -81,6 +81,15 @@ TREFFER = dict(
     zeitlupe=0.045,           # kurze Verlangsamung beim Toeten
 )
 
+# ══════════════════════════════════════════════════ TON
+
+# Klaenge liegen in assets/sfx. Fehlt eine Datei, erzeugt audio.py einen
+# Platzhalter. Namen: schuss_repetierer, schuss_schrot, sonst schuss.
+AUDIO = dict(
+    gesamt=0.75,              # Gesamtlautstaerke
+    schuss=0.85,              # Lautstaerke der Schuesse
+)
+
 # ══════════════════════════════════════════════════ INHALTE: Kacheln
 
 # fest      blockiert Bewegung
