@@ -118,13 +118,24 @@ def _wand():
 
 @platzhalter("kiste")
 def _kiste():
+    """Schwerer Frachtkasten. Steht auf dem Boden, deshalb eine Kachel gross
+    mit umlaufender Kante, damit er sich klar vom Untergrund abhebt."""
     s = _boden_basis(14, K.C_BODEN, K.C_FUGE)
-    k = pygame.Rect(4, 4, T - 8, T - 8)
+    k = pygame.Rect(3, 2, T - 6, T - 5)
+    pygame.draw.rect(s, (22, 16, 11), k.move(0, 2))          # eigener Schatten
     pygame.draw.rect(s, K.C_HULL_DK, k)
-    pygame.draw.rect(s, K.C_HULL, k.inflate(-4, -4))
-    pygame.draw.rect(s, K.C_HULL_SH, k, 1)
-    pygame.draw.line(s, K.C_HULL_SH, (k.left + 2, k.centery), (k.right - 3, k.centery))
-    pygame.draw.rect(s, K.C_AMBER, (k.centerx - 3, k.top + 3, 6, 2))
+    pygame.draw.rect(s, K.C_HULL, k.inflate(-6, -6))
+    pygame.draw.rect(s, (196, 178, 136), (k.left + 3, k.top + 3, k.width - 6, 2))
+    pygame.draw.rect(s, (22, 16, 11), k, 1)
+    # Eckwinkel
+    for ex in (k.left + 1, k.right - 4):
+        for ey in (k.top + 1, k.bottom - 4):
+            pygame.draw.rect(s, K.C_HULL_SH, (ex, ey, 3, 3))
+    # Spannband und Kennzeichnung
+    pygame.draw.rect(s, K.C_HULL_SH, (k.left + 1, k.centery - 1, k.width - 2, 3))
+    pygame.draw.rect(s, (150, 132, 96), (k.left + 1, k.centery - 1, k.width - 2, 1))
+    pygame.draw.rect(s, K.C_AMBER, (k.left + 4, k.top + 6, 5, 2))
+    _koerner(s, K.C_HULL_SH, 14, 55)
     return s
 
 
