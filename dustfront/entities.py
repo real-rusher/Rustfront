@@ -37,6 +37,7 @@ class Wesen:
     radius = 8.0
     max_leben = 1.0
     schatten = True
+    faellt = False           # True = kann in Loecher stuerzen
 
     def __init__(self, pos, ebene: int = 0) -> None:
         self.pos = pygame.Vector2(pos)
@@ -48,12 +49,51 @@ class Wesen:
         self.lebt = True
         self.blitz = 0.0
         self.welt = None
+        self.flug = 0.0          # Hoehe ueber dem eigenen Boden, waehrend eines Sturzes
+        self.sturz_rest = 0.0
+        self.sturz_hoehe = 0.0
 
     # ---- Ablauf ------------------------------------------------------
     def schritt(self, dt: float) -> None:
         self.vorher.update(self.pos)
         if self.blitz > 0:
             self.blitz -= dt
+        if self.sturz_rest > 0:
+            self.sturz_schritt(dt)
+
+    # ---- Sturz --------------------------------------------------------
+    def stuerzen(self) -> None:
+        """Faellt eine Ebene tiefer. Kein Laden, kein Schnitt: das Wesen ist
+        sofort unten und wird nur noch von oben eingeblendet."""
+        w = self.welt
+        ziel = self.ebene - 1
+        dz = w.abstand(self.ebene, ziel)
+        self.pos.update(w.landeplatz(self.pos, self.radius, ziel))
+        self.vorher.update(self.pos)
+        self.ebene = ziel
+        self.flug = dz
+        self.sturz_hoehe = dz
+        self.sturz_rest = K.STURZ["dauer"]
+        self.tempo *= 0.35
+
+    def sturz_schritt(self, dt: float) -> None:
+        self.sturz_rest -= dt
+        d = K.STURZ["dauer"]
+        t = max(0.0, min(1.0, 1.0 - self.sturz_rest / d))
+        # freier Fall: der Weg waechst quadratisch, also faellt die Hoehe so
+        self.flug = self.sturz_hoehe * (1.0 - t * t)
+        if self.sturz_rest <= 0:
+            self.flug = 0.0
+            self.aufschlag()
+
+    def aufschlag(self) -> None:
+        h = self.sturz_hoehe
+        self.sturz_hoehe = 0.0
+        schaden = max(K.STURZ["min_schaden"], h / 100.0 * K.STURZ["schaden_je_100"])
+        w = self.welt
+        wolke(w, self.pos, 12, 130, 0.45, K.C_MUTED_DK, self.ebene, 1, "staub")
+        w.ruckeln(min(6.0, 1.5 + h * 0.03))
+        self.schaden(schaden, None, None)
 
     def zeichenpos(self, alpha: float) -> pygame.Vector2:
         return self.vorher.lerp(self.pos, alpha)
@@ -190,6 +230,7 @@ class Geschoss(Wesen):
 class Spieler(Wesen):
     fraktion = "mensch"
     bild = "spieler"
+    faellt = True
 
     def __init__(self, pos, ebene=0) -> None:
         self.max_leben = K.SPIELER["leben"]
@@ -222,6 +263,10 @@ class Spieler(Wesen):
         s = K.SPIELER
         self.unverwundbar = max(0.0, self.unverwundbar - dt)
         self.takt = max(0.0, self.takt - dt)
+        if self.sturz_rest > 0:          # im Fall haengt man hilflos in der Luft
+            self.tempo *= 0.92
+            self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
+            return
 
         # Blickrichtung
         if (self.ziel - self.pos).length_squared() > 1:
@@ -236,6 +281,11 @@ class Spieler(Wesen):
         vor = pygame.Vector2(self.pos)
         self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
         self.welt.auseinander(self)
+
+        # Ueber den Rand getreten? Dann geht es sofort abwaerts.
+        if self.sturz_rest <= 0 and self.welt.loch_unter(self):
+            self.stuerzen()
+            return
 
         # Schrittstaub
         self.weg += self.pos.distance_to(vor)
@@ -324,6 +374,8 @@ class Gegner(Wesen):
         self.schlag_rest = 0.0
         self.letzte_sicht = None
         self.wartet = RND.uniform(0.0, 0.4)
+        self.treppen_sperre = 0.0
+        self.drall = RND.choice((-1, 1))      # Ausweichrichtung an Hindernissen
 
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
@@ -331,18 +383,22 @@ class Gegner(Wesen):
         self.schlag_rest = max(0.0, self.schlag_rest - dt)
         held = self.welt.held
 
+        # Sie laufen immer los. Auf einer anderen Ebene gehen sie zur Stelle
+        # unter oder ueber dem Spieler und nehmen die naechste Treppe.
         ziel = None
-        if held is not None and held.lebt and held.ebene == self.ebene:
-            abstand = self.pos.distance_to(held.pos)
-            if abstand < d["sicht"] and self.welt.sicht_frei(self.pos, held.pos, self.ebene):
-                self.letzte_sicht = pygame.Vector2(held.pos)
-                ziel = held.pos
+        self.treppen_sperre = max(0.0, self.treppen_sperre - dt)
+        if held is not None and held.lebt:
+            ziel = pygame.Vector2(held.pos)
+            if held.ebene == self.ebene:
+                abstand = self.pos.distance_to(held.pos)
                 if abstand < d["reichweite"] + held.radius and self.schlag_rest <= 0:
                     self.schlagen(held)
-            elif self.letzte_sicht is not None:
-                ziel = self.letzte_sicht
-                if self.pos.distance_to(ziel) < 12:
-                    self.letzte_sicht = None
+            elif self.treppen_sperre <= 0:
+                wohin = self.welt.treppe_unter(self)
+                naeher = (abs(wohin - held.ebene) < abs(self.ebene - held.ebene)
+                          if wohin is not None else False)
+                if naeher and self.welt.ebene_wechseln(self, wohin):
+                    self.treppen_sperre = 1.2
 
         if self.wartet > 0:
             self.wartet -= dt
@@ -360,10 +416,15 @@ class Gegner(Wesen):
         self.tempo.x = naehern(self.tempo.x, soll.x, d["beschleunigung"] * dt)
         self.tempo.y = naehern(self.tempo.y, soll.y, d["beschleunigung"] * dt)
         stoss_x, stoss_y = self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
+        # An einer Wand nicht stehenbleiben, sondern daran entlangschieben
         if stoss_x:
             self.tempo.x = 0
+            self.tempo.y += self.drall * d["tempo"] * 0.9 * dt * 60 * dt
         if stoss_y:
             self.tempo.y = 0
+            self.tempo.x += self.drall * d["tempo"] * 0.9 * dt * 60 * dt
+        if stoss_x and stoss_y:
+            self.drall = -self.drall
         self.welt.auseinander(self)
 
     def schlagen(self, ziel) -> None:

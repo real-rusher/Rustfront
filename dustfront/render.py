@@ -77,18 +77,39 @@ class Renderer:
     def __init__(self, bilder) -> None:
         self.bilder = bilder
         self._dunkel: dict[tuple, pygame.Surface] = {}
-        self._schatten = self._schatten_bauen()
+        self._schatten_cache: dict[tuple, pygame.Surface] = {}
+        self._tiefen: dict[int, pygame.Surface] = {}
+        self._dunst = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
         self._vignette = self._vignette_bauen()
         self._blut = self._blut_bauen()
         self._wandschatten = self._wandschatten_bauen()
         self._boden_namen = ("boden", "boden_2", "boden_3", "boden_4")
 
     # ---- Vorgefertigtes -------------------------------------------
-    @staticmethod
-    def _schatten_bauen() -> pygame.Surface:
-        s = pygame.Surface((34, 18), pygame.SRCALPHA)
-        pygame.draw.ellipse(s, (0, 0, 0, 90), s.get_rect())
-        pygame.draw.ellipse(s, (0, 0, 0, 60), s.get_rect().inflate(6, 3))
+    def schatten(self, radius: float, f: float = 1.0) -> pygame.Surface:
+        """Schatten passend zum Koerperkreis des Wesens.
+
+        Frueher war das ein festes Oval fuer alle, das weder zur Groesse noch
+        zur Fusslinie passte. Jetzt richtet sich die Ellipse nach dem Radius,
+        und f schrumpft sie, wenn das Wesen in der Luft haengt.
+        """
+        r = max(3, int(round(radius)))
+        k = max(2, int(round(f * 10)))
+        key = (r, k)
+        hit = self._schatten_cache.get(key)
+        if hit is not None:
+            return hit
+        g = f
+        w = max(4, int(r * 2.3 * g))
+        h = max(3, int(r * 1.15 * g))
+        s = pygame.Surface((w + 4, h + 4), pygame.SRCALPHA)
+        innen = pygame.Rect(2, 2, w, h)
+        pygame.draw.ellipse(s, (0, 0, 0, int(42 * g)), innen.inflate(4, 3))
+        pygame.draw.ellipse(s, (0, 0, 0, int(78 * g)), innen)
+        pygame.draw.ellipse(s, (0, 0, 0, int(104 * g)), innen.inflate(-4, -2))
+        if len(self._schatten_cache) > 200:
+            self._schatten_cache.clear()
+        self._schatten_cache[key] = s
         return s
 
     @staticmethod
@@ -136,10 +157,13 @@ class Renderer:
     # ---- Welt ------------------------------------------------------
     def ebene_zeichnen(self, ziel, welt, index: int, ecke, dunkel: int | None) -> None:
         e = welt.ebene(index)
+        # Der Ausschnitt richtet sich nach der Zielflaeche, nicht nach der
+        # Bildgroesse: die Tiefenflaeche fuer untere Ebenen ist groesser.
+        zw, zh = ziel.get_size()
         t0x = max(0, int(ecke.x // K.TILE))
         t0y = max(0, int(ecke.y // K.TILE))
-        t1x = min(e.breite - 1, int((ecke.x + K.GAME_W) // K.TILE))
-        t1y = min(e.hoehe - 1, int((ecke.y + K.GAME_H) // K.TILE))
+        t1x = min(e.breite - 1, int((ecke.x + zw) // K.TILE))
+        t1y = min(e.hoehe - 1, int((ecke.y + zh) // K.TILE))
         bild = self.bilder.bild
         fest = []
         # Erster Durchgang: alles Begehbare
@@ -184,12 +208,14 @@ class Renderer:
         liste = [w for w in welt.wesen if w.ebene == index and w.lebt]
         liste.sort(key=lambda w: w.pos.y)
         for w in liste:
-            p = w.zeichenpos(alpha) - ecke
+            boden = w.zeichenpos(alpha) - ecke      # Stelle, auf der es steht
+            hoch = w.flug * 0.55                    # Versatz waehrend eines Sturzes
+            p = pygame.Vector2(boden.x, boden.y - hoch)
             if w.schatten:
-                sch = self._schatten
-                if dunkel is not None:
-                    sch = self.dunkel(sch, dunkel)
-                ziel.blit(sch, (p.x - sch.get_width() / 2, p.y - sch.get_height() / 2 + 5))
+                f = 1.0 if w.flug <= 0 else max(0.34, 1.0 - w.flug / 240.0)
+                sch = self.schatten(w.radius, f)
+                ziel.blit(sch, (boden.x - sch.get_width() / 2 + 1,
+                                boden.y - sch.get_height() / 2 + 3))
             if w.spur is not None and w.tempo.length_squared() > 1:
                 r = w.tempo.normalize()
                 pygame.draw.line(ziel, (128, 80, 30), p - r * 17, p - r * 5, 1)
@@ -229,14 +255,53 @@ class Renderer:
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2),
                       special_flags=pygame.BLEND_RGB_ADD)
 
+    def _tiefenflaeche(self, k: float) -> pygame.Surface:
+        """Hilfsflaeche fuer eine tiefer liegende Ebene.
+
+        Sie zeigt einen groesseren Weltausschnitt und wird danach auf die
+        Bildgroesse verkleinert. Genau das laesst die untere Ebene weiter weg
+        wirken: gleiche Weltmitte, kleinerer Massstab.
+        """
+        schluessel = int(k * 200)
+        hit = self._tiefen.get(schluessel)
+        if hit is None:
+            w = int(K.GAME_W / k) + 2
+            h = int(K.GAME_H / k) + 2
+            hit = pygame.Surface((w, h), pygame.SRCALPHA)
+            if len(self._tiefen) > 8:
+                self._tiefen.clear()
+            self._tiefen[schluessel] = hit
+        return hit
+
     def welt_zeichnen(self, ziel, welt, kamera, alpha) -> None:
         ecke = kamera.ecke
         held = welt.held
         oben = held.ebene if held else 0
+        p = K.PERSPEKTIVE
 
-        if oben - 1 >= 0:                      # was unter dir durchscheint
-            self.ebene_zeichnen(ziel, welt, oben - 1, ecke, 118)
-            self.wesen_zeichnen(ziel, welt, oben - 1, ecke, alpha, 118)
+        # Alle Ebenen darunter, von der tiefsten nach oben. Je groesser der
+        # Hoehenabstand, desto staerker schrumpfen sie und desto mehr Dunst
+        # liegt davor. Gezeichnet wird alles, auch Gegner und Partikel, damit
+        # man Bewegung unter sich sieht.
+        unterste = max(0, oben - int(p["tiefe_sichtbar"]))
+        for idx in range(unterste, oben):
+            dz = welt.hoehe(oben) - welt.hoehe(idx)
+            k = p["brennweite"] / (p["brennweite"] + dz)
+            flaeche = self._tiefenflaeche(k)
+            flaeche.fill((0, 0, 0, 0))
+            mitte = kamera.pos + kamera.versatz
+            u_ecke = pygame.Vector2(round(mitte.x - flaeche.get_width() / 2),
+                                    round(mitte.y - flaeche.get_height() / 2))
+            dunkel = max(48, int(p["dunkel"] * k))
+            self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel)
+            self.wesen_zeichnen(flaeche, welt, idx, u_ecke, alpha, dunkel)
+            self.partikel_zeichnen(flaeche, welt, idx, u_ecke, alpha)
+            self.muendungsfeuer(flaeche, welt, u_ecke, idx)
+            ziel.blit(pygame.transform.scale(flaeche, (K.GAME_W, K.GAME_H)), (0, 0))
+            a = int(255 * p["dunst_staerke"] * (1.0 - k))
+            if a > 0:
+                self._dunst.fill((*p["dunst"], min(255, a)))
+                ziel.blit(self._dunst, (0, 0))
 
         self.ebene_zeichnen(ziel, welt, oben, ecke, None)
         self.wesen_zeichnen(ziel, welt, oben, ecke, alpha)
