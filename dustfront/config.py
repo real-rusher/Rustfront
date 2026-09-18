@@ -90,6 +90,30 @@ AUDIO = dict(
     schuss=0.85,              # Lautstaerke der Schuesse
 )
 
+# ══════════════════════════════════════════════════ HOEHE
+
+# Hoehe jeder Ebene in Welt-Pixeln. Der Abstand zwischen zwei Ebenen
+# entscheidet ueber drei Dinge: wie klein die untere gezeichnet wird, wie
+# lange ein Sturz dauert und wie weh er tut.
+#
+#   0 -> 1   Boden hinauf in die erste Mech-Etage, sehr weit
+#   1 -> 2   eine Etage im selben Rumpf, deutlich enger
+EBENEN_HOEHE = [0, 118, 182, 238, 288]
+
+PERSPEKTIVE = dict(
+    brennweite=430.0,     # je kleiner, desto staerker schrumpft die Tiefe
+    dunkel=128,           # Helligkeit der Ebene darunter (255 = unveraendert)
+    dunst=(20, 17, 26),   # kalter Schleier, der mit der Tiefe zunimmt
+    dunst_staerke=0.42,
+    tiefe_sichtbar=2,     # so viele Ebenen nach unten werden gezeichnet
+)
+
+STURZ = dict(
+    dauer=0.40,           # Sekunden, die der Fall dauert
+    schaden_je_100=9.0,   # Schaden pro 100 Pixel Fallhoehe
+    min_schaden=3.0,
+)
+
 # ══════════════════════════════════════════════════ INHALTE: Kacheln
 
 # fest      blockiert Bewegung
@@ -98,7 +122,10 @@ AUDIO = dict(
 LEER, BODEN, GITTER, WAND, KISTE, TREPPE_HOCH, TREPPE_RUNTER, LUKE = range(8)
 
 KACHELN = {
-    LEER:          dict(name="leer",     fest=True,  sicht=True,  bild="leer"),
+    # Ein Loch: man kann darueber hinwegschiessen und hineinfallen, aber es
+    # ist kein Boden. Wesen, die nicht fallen sollen, behandeln es als fest.
+    LEER:          dict(name="leer",     fest=False, sicht=False, bild="leer",
+                        loch=True),
     BODEN:         dict(name="boden",    fest=False, sicht=False, bild="boden"),
     GITTER:        dict(name="gitter",   fest=False, sicht=False, bild="gitter"),
     WAND:          dict(name="wand",     fest=True,  sicht=True,  bild="wand"),
