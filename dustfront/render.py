@@ -262,55 +262,77 @@ class Renderer:
         Bildgroesse verkleinert. Genau das laesst die untere Ebene weiter weg
         wirken: gleiche Weltmitte, kleinerer Massstab.
         """
-        schluessel = int(k * 200)
+        schluessel = int(k * 100)
         hit = self._tiefen.get(schluessel)
         if hit is None:
             w = int(K.GAME_W / k) + 2
             h = int(K.GAME_H / k) + 2
             hit = pygame.Surface((w, h), pygame.SRCALPHA)
-            if len(self._tiefen) > 8:
+            if len(self._tiefen) > 64:
                 self._tiefen.clear()
             self._tiefen[schluessel] = hit
         return hit
 
-    def welt_zeichnen(self, ziel, welt, kamera, alpha) -> None:
+    def welt_zeichnen(self, ziel, welt, kamera, alpha, blick_hoehe=None) -> None:
+        """Zeichnet alle Ebenen relativ zu einer Ansichtshoehe.
+
+        Die Ansicht haengt bewusst nicht an der Ebene der Figur, sondern an
+        einer Hoehe in Welt-Pixeln. Dadurch faellt beim Sturz nicht die
+        Darstellung um eine Stufe, sondern die Ansicht sinkt mit: die untere
+        Ebene waechst heran, die verlassene rutscht darueber weg. Dieselbe
+        Zahl treibt spaeter das freie Scrollen durch die Etagen.
+
+        dz = blick_hoehe - Ebenenhoehe.
+            dz > 0   liegt unter der Ansicht: verkleinert, dunkler, im Dunst
+            dz = 0   die angeschaute Ebene: unveraendert
+            dz < 0   liegt darueber: vergroessert und ausgeblendet
+        """
         ecke = kamera.ecke
         held = welt.held
-        oben = held.ebene if held else 0
         p = K.PERSPEKTIVE
+        if blick_hoehe is None:
+            blick_hoehe = welt.hoehe(held.ebene if held else 0)
 
-        # Alle Ebenen darunter, von der tiefsten nach oben. Je groesser der
-        # Hoehenabstand, desto staerker schrumpfen sie und desto mehr Dunst
-        # liegt davor. Gezeichnet wird alles, auch Gegner und Partikel, damit
-        # man Bewegung unter sich sieht.
-        unterste = max(0, oben - int(p["tiefe_sichtbar"]))
-        for idx in range(unterste, oben):
-            dz = welt.hoehe(oben) - welt.hoehe(idx)
-            k = p["brennweite"] / (p["brennweite"] + dz)
+        for idx in range(len(welt.ebenen)):
+            dz = blick_hoehe - welt.hoehe(idx)
+            if dz < -p["ausblenden"] or dz > p["brennweite"] * p["tiefe_sichtbar"]:
+                continue
+            sicht = 1.0 if dz >= 0 else max(0.0, 1.0 + dz / p["ausblenden"])
+            if sicht <= 0.01:
+                continue
+            k = p["brennweite"] / max(60.0, p["brennweite"] + dz)
+
+            if abs(dz) < 1.0:                      # die angeschaute Ebene
+                self.ebene_zeichnen(ziel, welt, idx, ecke, None)
+                self.wesen_zeichnen(ziel, welt, idx, ecke, alpha)
+                self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
+                self.muendungsfeuer(ziel, welt, ecke, idx)
+                continue
+
+            dunkel = max(48, int(p["dunkel"] * k)) if dz > 0 else None
             flaeche = self._tiefenflaeche(k)
             flaeche.fill((0, 0, 0, 0))
             mitte = kamera.pos + kamera.versatz
             u_ecke = pygame.Vector2(round(mitte.x - flaeche.get_width() / 2),
                                     round(mitte.y - flaeche.get_height() / 2))
-            dunkel = max(48, int(p["dunkel"] * k))
             self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel)
             self.wesen_zeichnen(flaeche, welt, idx, u_ecke, alpha, dunkel)
             self.partikel_zeichnen(flaeche, welt, idx, u_ecke, alpha)
             self.muendungsfeuer(flaeche, welt, u_ecke, idx)
-            ziel.blit(pygame.transform.scale(flaeche, (K.GAME_W, K.GAME_H)), (0, 0))
-            a = int(255 * p["dunst_staerke"] * (1.0 - k))
-            if a > 0:
-                self._dunst.fill((*p["dunst"], min(255, a)))
-                ziel.blit(self._dunst, (0, 0))
+            skaliert = pygame.transform.scale(flaeche, (K.GAME_W, K.GAME_H))
+            if sicht < 0.999:
+                skaliert.set_alpha(int(255 * sicht))
+            ziel.blit(skaliert, (0, 0))
+            if dz > 0:
+                a = int(255 * p["dunst_staerke"] * (1.0 - k))
+                if a > 0:
+                    self._dunst.fill((*p["dunst"], min(255, a)))
+                    ziel.blit(self._dunst, (0, 0))
 
-        self.ebene_zeichnen(ziel, welt, oben, ecke, None)
-        self.wesen_zeichnen(ziel, welt, oben, ecke, alpha)
-        self.partikel_zeichnen(ziel, welt, oben, ecke, alpha)
-        self.muendungsfeuer(ziel, welt, ecke, oben)
         ziel.blit(self._vignette, (0, 0))
 
     # ---- HUD -------------------------------------------------------
-    def hud(self, ziel, welt, spieler, wellen_text, punkte) -> None:
+    def hud(self, ziel, welt, spieler, wellen_text, punkte, blick=None) -> None:
         f = SCHRIFT
         # Lebensbalken
         x, y = 12, K.GAME_H - 26
@@ -346,14 +368,18 @@ class Renderer:
 
         # Ebenenanzeige, wie die Scrollleiste in den Mockups
         ex = K.GAME_W - 26
+        if blick is None:
+            blick = spieler.ebene
         for i in range(len(welt.ebenen) - 1, -1, -1):
             ey = 16 + (len(welt.ebenen) - 1 - i) * 14
-            aktiv = (i == spieler.ebene)
+            angeschaut = (i == blick)
             r = pygame.Rect(ex, ey, 18, 11)
-            pygame.draw.rect(ziel, K.C_AMBER if aktiv else (18, 12, 9), r)
-            pygame.draw.rect(ziel, K.C_AMBER if aktiv else K.C_MUTED_DK, r, 1)
+            pygame.draw.rect(ziel, K.C_AMBER if angeschaut else (18, 12, 9), r)
+            pygame.draw.rect(ziel, K.C_AMBER if angeschaut else K.C_MUTED_DK, r, 1)
             f.zeichnen(ziel, "E%d" % i, r.centerx, ey + 2,
-                       (18, 12, 8) if aktiv else K.C_MUTED, 1, ausrichtung="mitte")
+                       (18, 12, 8) if angeschaut else K.C_MUTED, 1, ausrichtung="mitte")
+            if i == spieler.ebene:          # wo die Figur wirklich steht
+                pygame.draw.rect(ziel, K.C_TEAL, (ex - 5, ey + 3, 3, 5))
 
         # Kopfzeile
         f.zeichnen(ziel, wellen_text, 12, 12, K.C_MUTED, 1)

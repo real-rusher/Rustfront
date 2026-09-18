@@ -37,7 +37,7 @@ def pruef(t, ok):
     if not ok: fails.append(t)
 
 pruef("Spieler lebt", held.lebt)
-pruef("Zwei Ebenen", len(szene.welt.ebenen) == 2)
+pruef("Drei Ebenen", len(szene.welt.ebenen) == 3)
 pruef("Start begehbar", szene.welt.frei(held.pos, held.radius, 0))
 
 # Welle startet

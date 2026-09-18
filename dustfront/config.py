@@ -106,6 +106,7 @@ PERSPEKTIVE = dict(
     dunst=(20, 17, 26),   # kalter Schleier, der mit der Tiefe zunimmt
     dunst_staerke=0.42,
     tiefe_sichtbar=2,     # so viele Ebenen nach unten werden gezeichnet
+    ausblenden=96.0,      # so weit ueber der Ansicht verschwindet eine Ebene
 )
 
 STURZ = dict(

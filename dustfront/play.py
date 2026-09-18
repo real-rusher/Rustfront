@@ -47,6 +47,13 @@ class Spiel(Szene):
         self.welt.blutfleck = self._blutfleck
         self.welt.klang = self.app.klaenge.spielen
 
+        # Ansicht: welche Ebene die Kamera anschaut, und die geglaettete
+        # Hoehe dazu. Beides haengt bewusst nicht an der Figur, damit man
+        # spaeter frei durch die Etagen scrollen kann.
+        self.blick = self.held.ebene
+        self.blick_hoehe = float(self.welt.hoehe(self.blick))
+        self._letzte_ebene = self.held.ebene
+
         self.welle = 0
         self.pause_rest = 2.0
         self.offen: list = []
@@ -109,9 +116,9 @@ class Spiel(Szene):
                 held.waffe_waehlen(0)
             if e.gedrueckt("waffe2"):
                 held.waffe_waehlen(1)
-            if e.rad:
-                held.waffe_waehlen((held.waffe + (1 if e.rad < 0 else -1))
-                                   % len(held.waffen))
+            if e.rad:                      # scrollen bewegt nur die Ansicht
+                self.blick = max(0, min(len(self.welt.ebenen) - 1,
+                                        self.blick + (1 if e.rad > 0 else -1)))
 
             ziel_ebene = self.welt.treppe_unter(held)
             if ziel_ebene is not None:
@@ -143,20 +150,37 @@ class Spiel(Szene):
                     self.welle_starten()
                     self.pause_rest = K.WELLE_PAUSE
 
+        # Wechselt die Figur die Ebene, folgt die Ansicht ihr nach
+        if held.ebene != self._letzte_ebene:
+            self._letzte_ebene = held.ebene
+            self.blick = held.ebene
+        if self.blick != held.ebene:
+            self.hinweis = "ANSICHT EBENE %d  [MAUSRAD]" % self.blick
+
+        # Waehrend eines Sturzes sinkt die Ansicht genau mit der Figur, sonst
+        # zieht sie weich zur angeschauten Ebene.
+        if held.flug > 0 and self.blick == held.ebene:
+            self.blick_hoehe = self.welt.hoehe(held.ebene) + held.flug
+        else:
+            ziel_h = float(self.welt.hoehe(self.blick))
+            self.blick_hoehe += (ziel_h - self.blick_hoehe) * min(1.0, 9.0 * dt)
+
         ebene = self.welt.ebene(held.ebene)
         self.kamera.schritt(dt, held.pos, held.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe))
 
     # ---- Bild ---------------------------------------------------------
     def zeichnen(self, ziel, alpha: float) -> None:
-        self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, alpha)
+        self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, alpha,
+                                    self.blick_hoehe)
         self.renderer.schaden_blende(ziel, self.schaden_blende)
 
         if self.gegner_uebrig == 0 and self.held.lebt:
             text = "NAECHSTE WELLE IN %d" % math.ceil(max(0.0, self.pause_rest))
         else:
             text = "WELLE %d  %d UEBRIG" % (self.welle, self.gegner_uebrig)
-        self.renderer.hud(ziel, self.welt, self.held, text, self.held.punkte)
+        self.renderer.hud(ziel, self.welt, self.held, text, self.held.punkte,
+                          self.blick)
         if self.hinweis:
             self.renderer.hinweis(ziel, self.hinweis)
         if not self.held.lebt:
