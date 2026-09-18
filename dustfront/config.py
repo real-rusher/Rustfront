@@ -105,14 +105,24 @@ PERSPEKTIVE = dict(
     dunkel=128,           # Helligkeit der Ebene darunter (255 = unveraendert)
     dunst=(20, 17, 26),   # kalter Schleier, der mit der Tiefe zunimmt
     dunst_staerke=0.42,
-    tiefe_sichtbar=2,     # so viele Ebenen nach unten werden gezeichnet
-    ausblenden=96.0,      # so weit ueber der Ansicht verschwindet eine Ebene
+    tiefe_sichtbar=8,     # so viele Ebenen nach unten werden gezeichnet
+    ausblenden=150.0,     # so weit ueber der Ansicht verschwindet eine Ebene
 )
 
 STURZ = dict(
-    dauer=0.40,           # Sekunden, die der Fall dauert
+    schwerkraft=980.0,    # Pixel je Sekunde im Quadrat, bestimmt die Falldauer
+    luftsteuerung=0.55,   # so viel Bewegung hat man waehrend des Sturzes
     schaden_je_100=9.0,   # Schaden pro 100 Pixel Fallhoehe
     min_schaden=3.0,
+)
+
+# Zielhilfe: eine Linie von der Waffe zum Mauszeiger, mit Z auch darueber
+# hinaus bis zur naechsten Wand.
+TRACER = dict(
+    weite=900.0,
+    farbe=(214, 64, 48),
+    kern=(255, 196, 176),
+    staerke=150,          # Deckkraft der Linie
 )
 
 # ══════════════════════════════════════════════════ INHALTE: Kacheln

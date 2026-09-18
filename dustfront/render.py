@@ -80,6 +80,7 @@ class Renderer:
         self._schatten_cache: dict[tuple, pygame.Surface] = {}
         self._tiefen: dict[int, pygame.Surface] = {}
         self._dunst = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+        self._linie = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
         self._vignette = self._vignette_bauen()
         self._blut = self._blut_bauen()
         self._wandschatten = self._wandschatten_bauen()
@@ -330,6 +331,36 @@ class Renderer:
                     ziel.blit(self._dunst, (0, 0))
 
         ziel.blit(self._vignette, (0, 0))
+
+    def tracer(self, ziel, welt, kamera, spieler) -> None:
+        """Zielhilfe: eine duenne Linie von der Waffe zum Mauszeiger.
+
+        Mit tracer_weit laeuft sie darueber hinaus weiter, bis etwas im Weg
+        steht. Beides sind Schalter am Spieler, T und Z.
+        """
+        if not spieler.tracer or not spieler.lebt:
+            return
+        t = K.TRACER
+        ecke = kamera.ecke
+        muendung = spieler.pos + pygame.Vector2(14, 0).rotate(spieler.winkel)
+        ende = pygame.Vector2(spieler.ziel)
+        richtung = ende - muendung
+        if richtung.length_squared() < 4:
+            return
+        if spieler.tracer_weit:
+            ende = welt.strahl(muendung, richtung.normalize(), t["weite"],
+                               spieler.ebene)
+        hoch = pygame.Vector2(0, spieler.flug * 0.55)
+        a = muendung - ecke - hoch
+        b = ende - ecke - hoch
+        linie = self._linie
+        linie.fill((0, 0, 0, 0))
+        pygame.draw.line(linie, (*t["farbe"], t["staerke"]), a, b, 1)
+        pygame.draw.line(linie, (*t["kern"], t["staerke"]), a,
+                         a + (b - a) * 0.12, 1)
+        ziel.blit(linie, (0, 0))
+        pygame.draw.rect(ziel, t["kern"], (int(b.x) - 1, int(b.y) - 1, 3, 3))
+        pygame.draw.rect(ziel, t["farbe"], (int(b.x), int(b.y), 1, 1))
 
     # ---- HUD -------------------------------------------------------
     def hud(self, ziel, welt, spieler, wellen_text, punkte, blick=None) -> None:

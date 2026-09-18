@@ -51,6 +51,7 @@ class Wesen:
         self.welt = None
         self.flug = 0.0          # Hoehe ueber dem eigenen Boden, waehrend eines Sturzes
         self.sturz_rest = 0.0
+        self.sturz_dauer = 0.0
         self.sturz_hoehe = 0.0
 
     # ---- Ablauf ------------------------------------------------------
@@ -63,25 +64,30 @@ class Wesen:
 
     # ---- Sturz --------------------------------------------------------
     def stuerzen(self) -> None:
-        """Faellt eine Ebene tiefer. Kein Laden, kein Schnitt: das Wesen ist
-        sofort unten und wird nur noch von oben eingeblendet."""
+        """Faellt bis auf die naechste Ebene, die hier wirklich Boden hat.
+
+        Ist die Stelle auch eine Ebene tiefer noch ein Loch, geht es weiter
+        nach unten. Von Ebene 2 bis auf den Boden ist das ein einziger Sturz
+        und kein Zwischenaufsetzen.
+        """
         w = self.welt
-        ziel = self.ebene - 1
-        dz = w.abstand(self.ebene, ziel)
+        ziel = w.boden_unter(self.pos, self.ebene)
+        dz = max(1.0, w.hoehe(self.ebene) - w.hoehe(ziel))
         self.pos.update(w.landeplatz(self.pos, self.radius, ziel))
         self.vorher.update(self.pos)
         self.ebene = ziel
         self.flug = dz
         self.sturz_hoehe = dz
-        self.sturz_rest = K.STURZ["dauer"]
-        self.tempo *= 0.35
+        # freier Fall: die Dauer folgt der Hoehe, nicht einer festen Zahl
+        self.sturz_dauer = math.sqrt(2.0 * dz / K.STURZ["schwerkraft"])
+        self.sturz_rest = self.sturz_dauer
+        self.tempo *= 0.7
 
     def sturz_schritt(self, dt: float) -> None:
         self.sturz_rest -= dt
-        d = K.STURZ["dauer"]
-        t = max(0.0, min(1.0, 1.0 - self.sturz_rest / d))
-        # freier Fall: der Weg waechst quadratisch, also faellt die Hoehe so
-        self.flug = self.sturz_hoehe * (1.0 - t * t)
+        t = max(0.0, self.sturz_dauer - self.sturz_rest)
+        self.flug = max(0.0, self.sturz_hoehe
+                        - 0.5 * K.STURZ["schwerkraft"] * t * t)
         if self.sturz_rest <= 0:
             self.flug = 0.0
             self.aufschlag()
@@ -248,6 +254,8 @@ class Spieler(Wesen):
         self.sprint = False
         self.feuert = False
         self.punkte = 0
+        self.tracer = False           # Zielhilfe an oder aus
+        self.tracer_weit = False      # laeuft sie ueber den Mauszeiger hinaus
 
     @property
     def waffe_daten(self) -> dict:
@@ -263,27 +271,29 @@ class Spieler(Wesen):
         s = K.SPIELER
         self.unverwundbar = max(0.0, self.unverwundbar - dt)
         self.takt = max(0.0, self.takt - dt)
-        if self.sturz_rest > 0:          # im Fall haengt man hilflos in der Luft
-            self.tempo *= 0.92
-            self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
-            return
-
         # Blickrichtung
         if (self.ziel - self.pos).length_squared() > 1:
             self.winkel = math.degrees(math.atan2(self.ziel.y - self.pos.y,
                                                   self.ziel.x - self.pos.x))
 
-        # Bewegung: beschleunigen in Wunschrichtung, sonst bremsen
-        ziel_tempo = self.will * s["tempo"] * (s["sprint"] if self.sprint else 1.0)
-        rate = s["beschleunigung"] if self.will.length_squared() > 0 else s["bremsung"]
+        # Bewegung: beschleunigen in Wunschrichtung, sonst bremsen. Im Sturz
+        # bleibt ein Teil der Steuerung, man kann also noch zur Seite ziehen.
+        luft = K.STURZ["luftsteuerung"] if self.sturz_rest > 0 else 1.0
+        ziel_tempo = self.will * s["tempo"] * (s["sprint"] if self.sprint else 1.0) * luft
+        rate = (s["beschleunigung"] if self.will.length_squared() > 0
+                else s["bremsung"]) * luft
         self.tempo.x = naehern(self.tempo.x, ziel_tempo.x, rate * dt)
         self.tempo.y = naehern(self.tempo.y, ziel_tempo.y, rate * dt)
         vor = pygame.Vector2(self.pos)
         self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
         self.welt.auseinander(self)
+        self.welt.befreien(self)
+
+        if self.sturz_rest > 0:          # im Sturz kein Schrittstaub, kein Feuer
+            return
 
         # Ueber den Rand getreten? Dann geht es sofort abwaerts.
-        if self.sturz_rest <= 0 and self.welt.loch_unter(self):
+        if self.welt.loch_unter(self):
             self.stuerzen()
             return
 
@@ -376,6 +386,8 @@ class Gegner(Wesen):
         self.wartet = RND.uniform(0.0, 0.4)
         self.treppen_sperre = 0.0
         self.drall = RND.choice((-1, 1))      # Ausweichrichtung an Hindernissen
+        self.ausweich_winkel = 0
+        self.ausweich_rest = 0
 
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
@@ -408,6 +420,7 @@ class Gegner(Wesen):
             richtung = ziel - self.pos
             if richtung.length_squared() > 1:
                 richtung.normalize_ip()
+                richtung = self.ausweichen(richtung)
                 self.winkel = math.degrees(math.atan2(richtung.y, richtung.x))
             soll = richtung * d["tempo"]
         else:
@@ -416,16 +429,37 @@ class Gegner(Wesen):
         self.tempo.x = naehern(self.tempo.x, soll.x, d["beschleunigung"] * dt)
         self.tempo.y = naehern(self.tempo.y, soll.y, d["beschleunigung"] * dt)
         stoss_x, stoss_y = self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
-        # An einer Wand nicht stehenbleiben, sondern daran entlangschieben
         if stoss_x:
             self.tempo.x = 0
-            self.tempo.y += self.drall * d["tempo"] * 0.9 * dt * 60 * dt
         if stoss_y:
             self.tempo.y = 0
-            self.tempo.x += self.drall * d["tempo"] * 0.9 * dt * 60 * dt
         if stoss_x and stoss_y:
-            self.drall = -self.drall
+            self.drall = -self.drall      # Sackgasse, andersherum versuchen
         self.welt.auseinander(self)
+        self.welt.befreien(self)
+
+    def ausweichen(self, richtung: pygame.Vector2) -> pygame.Vector2:
+        """Sucht eine freie Richtung nahe der gewuenschten.
+
+        Kein A-Stern, nur ein Faecher von Proben: erst geradeaus, dann in
+        immer groesseren Winkeln zu beiden Seiten, bevorzugt zur eigenen
+        Ausweichseite. Das reicht, um an Kisten und Mauerstuecken
+        vorbeizulaufen, statt davor stehen zu bleiben.
+        """
+        self.ausweich_rest -= 1
+        if self.ausweich_rest > 0 and self.ausweich_winkel:
+            return richtung.rotate(self.ausweich_winkel)
+        w = self.welt
+        probe = self.radius * 2.2 + 16
+        self.ausweich_rest = 12          # erst in zwölf Schritten neu pruefen
+        for winkel in (0, 24, -24, 48, -48, 72, -72, 100, -100, 130, -130):
+            g = winkel * self.drall
+            d = richtung.rotate(g)
+            if w.frei(self.pos + d * probe, self.radius, self.ebene, True):
+                self.ausweich_winkel = g
+                return d
+        self.ausweich_winkel = 0
+        return richtung
 
     def schlagen(self, ziel) -> None:
         self.schlag_rest = self.daten["schlagtakt"]

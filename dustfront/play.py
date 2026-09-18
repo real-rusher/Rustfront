@@ -112,6 +112,10 @@ class Spiel(Szene):
             held.feuert = e.gehalten("feuer")
             if e.gedrueckt("nachladen"):
                 held.nachladen()
+            if e.gedrueckt("tracer"):
+                held.tracer = not held.tracer
+            if e.gedrueckt("tracer_weit"):
+                held.tracer_weit = not held.tracer_weit
             if e.gedrueckt("waffe1"):
                 held.waffe_waehlen(0)
             if e.gedrueckt("waffe2"):
@@ -173,6 +177,7 @@ class Spiel(Szene):
     def zeichnen(self, ziel, alpha: float) -> None:
         self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, alpha,
                                     self.blick_hoehe)
+        self.renderer.tracer(ziel, self.welt, self.kamera, self.held)
         self.renderer.schaden_blende(ziel, self.schaden_blende)
 
         if self.gegner_uebrig == 0 and self.held.lebt:

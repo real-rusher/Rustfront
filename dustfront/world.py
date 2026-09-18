@@ -252,7 +252,11 @@ class Welt:
         return stoss_x, stoss_y
 
     def auseinander(self, wesen) -> None:
-        """Weiche Abstossung, damit Gegner sich nicht ineinander schieben."""
+        """Weiche Abstossung, damit Gegner sich nicht ineinander schieben.
+
+        Geschoben wird nur, wenn das Ziel frei ist. Sonst drueckt eine Gruppe
+        Gegner den Spieler in die naechste Wand.
+        """
         for a in self.nahe(wesen.pos, wesen.radius * 2, wesen.ebene):
             if a is wesen or not a.schiebt:
                 continue
@@ -261,8 +265,51 @@ class Welt:
             mindest = wesen.radius + a.radius
             if 0.0001 < abstand < mindest:
                 schub = d / abstand * (mindest - abstand) * 0.5
-                wesen.pos += schub
-                a.pos -= schub
+                if self.frei(wesen.pos + schub, wesen.radius, wesen.ebene,
+                             not getattr(wesen, "faellt", False)):
+                    wesen.pos += schub
+                if self.frei(a.pos - schub, a.radius, a.ebene,
+                             not getattr(a, "faellt", False)):
+                    a.pos -= schub
+
+    def befreien(self, wesen) -> bool:
+        """Holt ein Wesen aus der Wand, falls es doch einmal darin steckt.
+
+        Passiert durch Rueckstoss, Gedraenge oder einen ungluecklichen
+        Landeplatz. Gesucht wird der naechste freie Punkt in wachsenden
+        Ringen, damit der Ausweg so kurz wie moeglich bleibt.
+        """
+        lf = not getattr(wesen, "faellt", False)
+        if self.frei(wesen.pos, wesen.radius, wesen.ebene, lf):
+            return False
+        for r in (3.0, 6.0, 10.0, 15.0, 21.0, 29.0, 40.0, 54.0):
+            for i in range(12):
+                a = math.tau * i / 12 + r * 0.7
+                p = wesen.pos + pygame.Vector2(math.cos(a), math.sin(a)) * r
+                if self.frei(p, wesen.radius, wesen.ebene, lf):
+                    wesen.pos.update(p)
+                    wesen.vorher.update(p)
+                    wesen.tempo *= 0.4
+                    return True
+        return False
+
+    def strahl(self, von, richtung, laenge: float, ebene: int):
+        """Erster Punkt auf der Linie, an dem etwas im Weg steht."""
+        e = self.ebene(ebene)
+        schritte = max(1, int(laenge / (K.TILE * 0.4)))
+        for i in range(1, schritte + 1):
+            p = von + richtung * (laenge * i / schritte)
+            if e.sichtdicht(int(p.x // K.TILE), int(p.y // K.TILE)):
+                return von + richtung * (laenge * (i - 1) / schritte)
+        return von + richtung * laenge
+
+    def boden_unter(self, pos, ebene: int) -> int:
+        """Erste Ebene unterhalb, die an dieser Stelle wirklich Boden hat."""
+        tx, ty = int(pos.x // K.TILE), int(pos.y // K.TILE)
+        ziel = ebene - 1
+        while ziel > 0 and self.ebene(ziel).loch(tx, ty):
+            ziel -= 1
+        return max(0, ziel)
 
     def sicht_frei(self, von: pygame.Vector2, nach: pygame.Vector2, ebene: int) -> bool:
         """Grober Sichttest entlang der Linie, Schrittweite halbe Kachel."""

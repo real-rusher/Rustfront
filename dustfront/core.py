@@ -48,6 +48,8 @@ TASTEN = {
     "sprint":   [pygame.K_LSHIFT, pygame.K_RSHIFT],
     "nutzen":   [pygame.K_e],
     "nachladen": [pygame.K_r],
+    "tracer":   [pygame.K_t],
+    "tracer_weit": [pygame.K_z],
     "waffe1":   [pygame.K_1],
     "waffe2":   [pygame.K_2],
     "pause":    [pygame.K_ESCAPE],
