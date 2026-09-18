@@ -83,6 +83,9 @@ class Ebene:
     def fest_an(self, x: float, y: float) -> bool:
         return self.fest(int(x // K.TILE), int(y // K.TILE))
 
+    def loch(self, tx: int, ty: int) -> bool:
+        return K.KACHELN[self.kachel(tx, ty)].get("loch", False)
+
     def begehbar(self, tx: int, ty: int) -> bool:
         return not self.fest(tx, ty) and self.kachel(tx, ty) != K.LEER
 
@@ -142,6 +145,14 @@ class Welt:
     def ebene(self, index: int) -> Ebene:
         return self.ebenen[max(0, min(len(self.ebenen) - 1, index))]
 
+    def hoehe(self, index: int) -> float:
+        """Hoehe einer Ebene in Welt-Pixeln, aus der Tabelle in config."""
+        i = max(0, min(len(K.EBENEN_HOEHE) - 1, index))
+        return K.EBENEN_HOEHE[i]
+
+    def abstand(self, oben: int, unten: int) -> float:
+        return max(1.0, self.hoehe(oben) - self.hoehe(unten))
+
     def schritt(self, dt: float) -> None:
         self.zeit += dt
         if self.neue:
@@ -193,7 +204,9 @@ class Welt:
         return bestes
 
     # ---- Kollision ----------------------------------------------------
-    def frei(self, pos: pygame.Vector2, radius: float, ebene: int) -> bool:
+    def frei(self, pos: pygame.Vector2, radius: float, ebene: int,
+             loch_fest: bool = False) -> bool:
+        """loch_fest: Loecher zaehlen als Wand. Fuer alles, was nicht fallen soll."""
         e = self.ebene(ebene)
         t0x = int((pos.x - radius) // K.TILE)
         t1x = int((pos.x + radius) // K.TILE)
@@ -201,7 +214,7 @@ class Welt:
         t1y = int((pos.y + radius) // K.TILE)
         for ty in range(t0y, t1y + 1):
             for tx in range(t0x, t1x + 1):
-                if not e.fest(tx, ty):
+                if not (e.fest(tx, ty) or (loch_fest and e.loch(tx, ty))):
                     continue
                 nx = max(tx * K.TILE, min(pos.x, tx * K.TILE + K.TILE))
                 ny = max(ty * K.TILE, min(pos.y, ty * K.TILE + K.TILE))
@@ -217,19 +230,20 @@ class Welt:
         durch duenne Waende rutscht.
         """
         pos, r, eb = wesen.pos, wesen.radius, wesen.ebene
+        lf = not getattr(wesen, "faellt", False)
         stoss_x = stoss_y = False
         schritte = max(1, int(max(abs(dx), abs(dy)) / (r * 0.75)) + 1)
         sx, sy = dx / schritte, dy / schritte
         for _ in range(schritte):
             if sx:
                 pos.x += sx
-                if not self.frei(pos, r, eb):
+                if not self.frei(pos, r, eb, lf):
                     pos.x -= sx
                     stoss_x = True
                     sx = 0.0
             if sy:
                 pos.y += sy
-                if not self.frei(pos, r, eb):
+                if not self.frei(pos, r, eb, lf):
                     pos.y -= sy
                     stoss_y = True
                     sy = 0.0
@@ -265,6 +279,26 @@ class Welt:
         return True
 
     # ---- Ebenenwechsel --------------------------------------------------
+    def loch_unter(self, wesen) -> bool:
+        """Steht das Wesen ueber einem Loch, unter dem es eine Ebene gibt?"""
+        if wesen.ebene <= 0:
+            return False
+        e = self.ebene(wesen.ebene)
+        return e.loch(int(wesen.pos.x // K.TILE), int(wesen.pos.y // K.TILE))
+
+    def landeplatz(self, pos: pygame.Vector2, radius: float, ebene: int):
+        """Naechste freie Stelle auf der Zielebene, falls direkt darunter
+        etwas im Weg steht."""
+        if self.frei(pos, radius, ebene):
+            return pygame.Vector2(pos)
+        for r in (K.TILE * 0.5, K.TILE, K.TILE * 1.5):
+            for i in range(12):
+                a = math.tau * i / 12
+                p = pos + pygame.Vector2(math.cos(a), math.sin(a)) * r
+                if self.frei(p, radius, ebene):
+                    return p
+        return pygame.Vector2(pos)
+
     def treppe_unter(self, wesen) -> int | None:
         """Zielebene, wenn das Wesen auf einer Treppe oder Luke steht."""
         e = self.ebene(wesen.ebene)
