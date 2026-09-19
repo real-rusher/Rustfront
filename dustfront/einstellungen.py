@@ -47,10 +47,21 @@ VORGABE = {
     "tracer_weit": False,
 }
 
-AUFLOESUNGEN = ["1280x720", "1600x900", "1920x1080", "2560x1440", "960x540"]
+AUFLOESUNGEN = ["960x540", "1280x720", "1600x900", "1920x1080", "2560x1440"]
 FENSTERMODI = ["fenster", "randlos", "vollbild"]
 PARTIKEL = ["wenig", "normal", "viel"]
 RASTER = ["gefuellt", "ganzzahlig"]
+BILDRATEN = [0, 60, 75, 90, 120, 144, 165, 240]
+
+# Wie die Werte im Menue heissen sollen. Was hier fehlt, wird einfach
+# grossgeschrieben angezeigt.
+BESCHRIFTUNG = {
+    "fenstermodus": {"fenster": "FENSTER", "randlos": "RANDLOS",
+                     "vollbild": "VOLLBILD"},
+    "pixelraster": {"gefuellt": "FUELLT DAS FENSTER", "ganzzahlig": "GANZE PIXEL"},
+    "partikel": {"wenig": "WENIG", "normal": "NORMAL", "viel": "VIEL"},
+    "bildrate": {0: "UNBEGRENZT"},
+}
 
 # ══════════════════════════════════════════════════ Tastenbelegung
 
@@ -82,11 +93,39 @@ TASTEN_VORGABE = [
 FEST = {"pause"}
 
 
+# Wie eine Taste im Menue heissen soll. SDL schreibt "left shift", das ist
+# in einer Spalte von 100 Pixeln zu lang. Was hier fehlt, wird unveraendert
+# und grossgeschrieben angezeigt.
+KURZ = {
+    "left shift": "L-SHIFT", "right shift": "R-SHIFT",
+    "left ctrl": "L-STRG", "right ctrl": "R-STRG",
+    "left alt": "L-ALT", "right alt": "ALT GR",
+    "left meta": "L-META", "right meta": "R-META",
+    "escape": "ESC", "return": "ENTER", "space": "LEER",
+    "backspace": "RUECK", "tab": "TAB", "caps lock": "FESTST",
+    "up": "HOCH", "down": "RUNTER", "left": "LINKS", "right": "RECHTS",
+    "page up": "BILD HOCH", "page down": "BILD RUNTER",
+    "insert": "EINFG", "delete": "ENTF", "home": "POS1", "end": "ENDE",
+    "print screen": "DRUCK", "menu": "MENUE",
+}
+
+
 def taste_name(code: int) -> str:
     try:
         return pygame.key.name(code)
     except Exception:
         return "?"
+
+
+def taste_kurz(name: str) -> str:
+    """Anzeigename einer Taste, kurz genug fuer eine Menuespalte."""
+    return KURZ.get(name.lower(), name).upper()
+
+
+def belegung_text(namen) -> str:
+    """Alle Tasten einer Aktion als eine Zeile, `-` wenn keine belegt ist."""
+    kurz = [taste_kurz(n) for n in namen]
+    return " / ".join(kurz) if kurz else "-"
 
 
 def taste_code(name: str) -> int | None:

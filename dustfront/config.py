@@ -307,3 +307,34 @@ WELLEN = [
 ]
 WELLE_PAUSE = 4.0             # Sekunden zwischen zwei Wellen
 WELLE_WACHSTUM = 0.22         # plus 22 Prozent Gegner je Welle nach der Liste
+
+
+# ══════════════════════════════════════════════════════════════════
+# Version
+# ══════════════════════════════════════════════════════════════════
+#
+# Die eine Quelle der Wahrheit sind VERSION und PHASE in
+# `rustfront_menu.py`, so wie es im README steht. Hier wird die Zeile
+# ausgelesen statt das Modul zu importieren: ein Import wuerde das ganze
+# Hauptmenue starten, und das Spiel soll auch ohne Menue laufen.
+#
+# Faellt das Auslesen aus, steht hier eine Notnummer. Die ist absichtlich
+# als solche erkennbar, damit niemand eine falsche Version fuer echt haelt.
+
+def _version_lesen() -> tuple[str, str]:
+    import re
+    from pathlib import Path
+    quelle = Path(__file__).resolve().parent.parent / "rustfront_menu.py"
+    werte = {}
+    try:
+        text = quelle.read_text(encoding="utf-8")
+        for schluessel in ("VERSION", "PHASE"):
+            treffer = re.search(r'^%s\s*=\s*"([^"]+)"' % schluessel, text, re.M)
+            if treffer:
+                werte[schluessel] = treffer.group(1)
+    except OSError:
+        pass
+    return werte.get("VERSION", "0.0.0"), werte.get("PHASE", "UNBEKANNT")
+
+
+VERSION, PHASE = _version_lesen()

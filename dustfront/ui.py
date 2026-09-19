@@ -97,6 +97,23 @@ def tafel(ziel, rect, titel: str = "", rahmen=K.C_LINE if hasattr(K, "C_LINE")
     return rect
 
 
+def pfeil(ziel, x, y, farbe, richtung=1, hoehe=7):
+    """Kleines Dreieck. Die Pixelschrift hat keine Pfeilzeichen, also wird
+    gezeichnet statt gesetzt - das bleibt bei jeder Vergroesserung scharf.
+
+    x, y ist die Mitte. richtung: 1 nach rechts, -1 nach links.
+    """
+    h = hoehe if hoehe % 2 else hoehe + 1        # ungerade, sonst keine Spitze
+    b = h // 2 + 1
+    sx = x - (b - 1) // 2
+    for i in range(b):
+        laenge = h - 2 * i
+        if laenge <= 0:
+            break
+        pygame.draw.rect(ziel, farbe, (sx + i * richtung, y - laenge // 2,
+                                       1, laenge))
+
+
 def schleier(ziel, deckkraft=170):
     s = pygame.Surface(ziel.get_size(), pygame.SRCALPHA)
     s.fill((0, 0, 0, deckkraft))
@@ -151,7 +168,7 @@ class Knopf(Element):
         if z == UEBER:
             # Markierung an der linken Kante, wie im Hauptmenue
             pygame.draw.rect(ziel, K.C_ORANGE, (r.x, r.y + 3, 2, r.height - 6))
-            SCHRIFT.zeichnen(ziel, "►", r.x + 6, r.centery - 3, K.C_AMBER, 1)
+            pfeil(ziel, r.x + 8, r.centery, K.C_AMBER, 1, 7)
         SCHRIFT.zeichnen(ziel, self.text, r.centerx, r.centery - 3, schrift, 1,
                          ausrichtung="mitte")
 
@@ -278,10 +295,9 @@ class Wahl(Element):
         SCHRIFT.zeichnen(ziel, self.text, r.x + 4, r.centery - 3,
                          K.C_CREAM if hell else K.C_MUTED, 1)
         lr, rr = self.links_rect(), self.rechts_rect()
-        SCHRIFT.zeichnen(ziel, "◄", lr.centerx, lr.centery - 3,
-                         K.C_AMBER if hell else K.C_MUTED_DK, 1, ausrichtung="mitte")
-        SCHRIFT.zeichnen(ziel, "►", rr.centerx, rr.centery - 3,
-                         K.C_AMBER if hell else K.C_MUTED_DK, 1, ausrichtung="mitte")
+        pfarbe = K.C_AMBER if hell else K.C_MUTED_DK
+        pfeil(ziel, lr.centerx, lr.centery, pfarbe, -1, 7)
+        pfeil(ziel, rr.centerx, rr.centery, pfarbe, 1, 7)
         mitte = (lr.right + rr.left) // 2
         SCHRIFT.zeichnen(ziel, self.beschriftung(), mitte, r.centery - 3,
                          K.C_CREAM if hell else K.C_MUTED, 1, ausrichtung="mitte")
@@ -310,32 +326,55 @@ class Schalter(Element):
                          r.centery - 3, K.C_AMBER if self.an else K.C_MUTED, 1)
 
 
+def kuerzen(text: str, breite: int, skala: int = 1) -> str:
+    """Schneidet Text ab, der nicht in `breite` Pixel passt.
+
+    Lieber ein sichtbar gekuerztes Wort als eines, das in die Nachbarspalte
+    laeuft. Das abschliessende `>` zeigt an, dass da noch etwas fehlt.
+    """
+    if SCHRIFT.breite(text, skala) <= breite:
+        return text
+    kurz = text
+    while kurz and SCHRIFT.breite(kurz + ">", skala) > breite:
+        kurz = kurz[:-1]
+    return kurz + ">" if kurz else ""
+
+
 class Zeile(Element):
     """Eine Tastenbelegung: Aktion links, Taste rechts, anklickbar."""
 
     def __init__(self, rect, text: str, name: str, tasten: str,
-                 gesperrt: bool = False) -> None:
+                 gesperrt: bool = False, label_breite: int = 150) -> None:
         super().__init__(rect, name, gesperrt)
         self.text = text
         self.tasten = tasten
+        self.label_breite = label_breite
         self.wartet = False        # wartet auf den naechsten Tastendruck
+
+    @property
+    def feld_rect(self) -> pygame.Rect:
+        r = self.rect
+        return pygame.Rect(r.x + self.label_breite, r.y + 1,
+                           r.width - self.label_breite - 4, r.height - 2)
 
     def zeichnen(self, ziel) -> None:
         r = self.rect
         hell = self.ueber and not self.gesperrt
-        SCHRIFT.zeichnen(ziel, self.text, r.x + 4, r.centery - 3,
+        SCHRIFT.zeichnen(ziel, kuerzen(self.text, self.label_breite - 8),
+                         r.x + 4, r.centery - 3,
                          K.C_MUTED_DK if self.gesperrt else
                          (K.C_CREAM if hell else K.C_MUTED), 1)
-        feld = pygame.Rect(r.x + 150, r.y + 1, r.width - 154, r.height - 2)
+        feld = self.feld_rect
         if self.wartet:
             kasten(ziel, feld, K.C_TEAL, (10, 24, 22), 3)
-            SCHRIFT.zeichnen(ziel, "TASTE DRUECKEN", feld.centerx,
-                             feld.centery - 3, K.C_TEAL, 1, ausrichtung="mitte")
+            SCHRIFT.zeichnen(ziel, kuerzen("TASTE DRUECKEN", feld.width - 8),
+                             feld.centerx, feld.centery - 3, K.C_TEAL, 1,
+                             ausrichtung="mitte")
         else:
             kasten(ziel, feld, K.C_AMBER if hell else K.C_MUTED_DK,
                    (18, 13, 9), 3)
-            SCHRIFT.zeichnen(ziel, self.tasten.upper(), feld.centerx,
-                             feld.centery - 3,
+            SCHRIFT.zeichnen(ziel, kuerzen(self.tasten.upper(), feld.width - 4),
+                             feld.centerx, feld.centery - 3,
                              K.C_MUTED_DK if self.gesperrt else K.C_CREAM, 1,
                              ausrichtung="mitte")
 
