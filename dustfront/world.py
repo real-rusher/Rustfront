@@ -133,6 +133,9 @@ class Welt:
     def klang(self, name: str, lautstaerke: float = 1.0) -> None:
         pass
 
+    def brandfleck(self, pos, ebene: int, radius: float) -> None:
+        pass
+
     def muendung(self, pos, winkel: float, ebene: int) -> None:
         self.muendungen.append([pygame.Vector2(pos), winkel, ebene, 0.055])
 

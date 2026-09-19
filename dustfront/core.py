@@ -35,11 +35,14 @@ import pygame
 
 from . import config as K
 from .audio import Klaenge
+from .einstellungen import Einstellungen
 
 # ══════════════════════════════════════════════════════════════════
 # Eingabe
 # ══════════════════════════════════════════════════════════════════
 
+# Rueckfallebene, falls keine Einstellungen geladen werden konnten. Im
+# Normalfall kommt die Tabelle aus einstellungen.py und ist umlegbar.
 TASTEN = {
     "vor":      [pygame.K_w, pygame.K_UP],
     "zurueck":  [pygame.K_s, pygame.K_DOWN],
@@ -52,6 +55,12 @@ TASTEN = {
     "tracer_weit": [pygame.K_z],
     "waffe1":   [pygame.K_1],
     "waffe2":   [pygame.K_2],
+    "waffe3":   [pygame.K_3],
+    "waffe4":   [pygame.K_4],
+    "waffe5":   [pygame.K_5],
+    "waffe6":   [pygame.K_6],
+    "heilen":   [pygame.K_h],
+    "inventar": [pygame.K_TAB],
     "pause":    [pygame.K_ESCAPE],
     "debug":    [pygame.K_F3],
     "vollbild": [pygame.K_F11],
@@ -62,7 +71,8 @@ MAUSTASTEN = {"feuer": 1, "zweit": 3}
 class Eingabe:
     """Uebersetzt Tasten und Maus in benannte Aktionen."""
 
-    def __init__(self) -> None:
+    def __init__(self, tabelle: dict | None = None) -> None:
+        self.tabelle = dict(tabelle) if tabelle else dict(TASTEN)
         self._gehalten: set[str] = set()
         self._gedrueckt: set[str] = set()
         self._losgelassen: set[str] = set()
@@ -76,12 +86,12 @@ class Eingabe:
 
     def ereignis(self, ev) -> None:
         if ev.type == pygame.KEYDOWN:
-            for name, tasten in TASTEN.items():
+            for name, tasten in self.tabelle.items():
                 if ev.key in tasten:
                     self._gehalten.add(name)
                     self._gedrueckt.add(name)
         elif ev.type == pygame.KEYUP:
-            for name, tasten in TASTEN.items():
+            for name, tasten in self.tabelle.items():
                 if ev.key in tasten:
                     self._gehalten.discard(name)
                     self._losgelassen.add(name)
@@ -115,6 +125,11 @@ class Eingabe:
         if v.length_squared() > 1e-6:
             v.normalize_ip()
         return v
+
+    def tabelle_setzen(self, tabelle: dict) -> None:
+        """Nach einer Aenderung im Menue neu uebernehmen."""
+        self.tabelle = {k: list(v) for k, v in tabelle.items() if v}
+        self.alles_loslassen()
 
     def alles_loslassen(self) -> None:
         self._gehalten.clear()
@@ -223,20 +238,23 @@ class App:
                  headless=False) -> None:
         self.headless = headless
         pygame.init()
+        self.opt = Einstellungen()
         self.flaeche = pygame.Surface((K.GAME_W, K.GAME_H))
-        self.fenster_groesse = tuple(K.START_FENSTER)
-        self.vollbild = False
+        self.fenster_groesse = self.opt.aufloesung_paar()
+        self.vollbild = self.opt["fenstermodus"] != "fenster"
         self.anzeige_setzen()
         pygame.display.set_caption(titel)
         self.flaeche = self.flaeche.convert()
 
         self.bilder = Bilder(asset_ordner)
         self.klaenge = Klaenge(asset_ordner)
-        self.eingabe = Eingabe()
+        self.klaenge.lautstaerke_setzen(self.opt["ton_gesamt"] / 100.0,
+                                        self.opt["ton_effekte"] / 100.0)
+        self.eingabe = Eingabe(self.opt.tastentabelle())
         self.uhr = pygame.time.Clock()
         self.stapel: list[Szene] = []
         self.laeuft = True
-        self.fps_grenze = K.ZIEL_FPS
+        self.fps_grenze = int(self.opt["bildrate"] or 0)
         self.debug = False
         self.zeitlupe = 0.0            # Restsekunden kurzer Verlangsamung
         self._rest = 0.0
@@ -248,13 +266,13 @@ class App:
             self.fenster = pygame.display.set_mode(K.START_FENSTER)
             self.viewport_rechnen()
             return
-        if self.vollbild:
-            try:
-                groesse = pygame.display.get_desktop_sizes()[0]
-            except (pygame.error, AttributeError, IndexError):
-                info = pygame.display.Info()
-                groesse = (info.current_w, info.current_h)
-            versuche = [(groesse, pygame.FULLSCREEN), ((0, 0), pygame.FULLSCREEN)]
+        modus = self.opt["fenstermodus"] if self.vollbild else "fenster"
+        if modus == "randlos":
+            versuche = [(self.desktop_groesse(), pygame.NOFRAME),
+                        (self.desktop_groesse(), pygame.FULLSCREEN)]
+        elif modus == "vollbild":
+            versuche = [(self.desktop_groesse(), pygame.FULLSCREEN),
+                        ((0, 0), pygame.FULLSCREEN)]
         else:
             versuche = [(self.fenster_groesse, pygame.RESIZABLE)]
         for groesse, flags in versuche:
@@ -268,15 +286,40 @@ class App:
         self.fenster = pygame.display.set_mode(self.fenster_groesse, pygame.RESIZABLE)
         self.viewport_rechnen()
 
+    @staticmethod
+    def desktop_groesse() -> tuple[int, int]:
+        try:
+            return pygame.display.get_desktop_sizes()[0]
+        except (pygame.error, AttributeError, IndexError):
+            info = pygame.display.Info()
+            if info.current_w > 0:
+                return (info.current_w, info.current_h)
+            return tuple(K.START_FENSTER)
+
+    def anzeige_uebernehmen(self) -> None:
+        """Nach einer Aenderung in den Einstellungen neu aufsetzen."""
+        self.fenster_groesse = self.opt.aufloesung_paar()
+        self.vollbild = self.opt["fenstermodus"] != "fenster"
+        self.fps_grenze = int(self.opt["bildrate"] or 0)
+        self.anzeige_setzen()
+        self.klaenge.lautstaerke_setzen(self.opt["ton_gesamt"] / 100.0,
+                                        self.opt["ton_effekte"] / 100.0)
+
     def viewport_rechnen(self) -> None:
         fw, fh = self.fenster.get_size()
-        self.skala = max(0.25, min(fw / K.GAME_W, fh / K.GAME_H))
+        roh = min(fw / K.GAME_W, fh / K.GAME_H)
+        if self.opt["pixelraster"] == "ganzzahlig":
+            self.skala = max(1.0, float(int(roh)))
+        else:
+            self.skala = max(0.25, roh)
         w, h = int(K.GAME_W * self.skala), int(K.GAME_H * self.skala)
         self.viewport = pygame.Rect((fw - w) // 2, (fh - h) // 2, w, h)
 
     def vollbild_wechseln(self) -> None:
-        self.vollbild = not self.vollbild
-        self.anzeige_setzen()
+        self.opt["fenstermodus"] = ("fenster" if self.opt["fenstermodus"] != "fenster"
+                                    else "vollbild")
+        self.opt.speichern()
+        self.anzeige_uebernehmen()
 
     def zu_spiel(self, pos) -> pygame.Vector2:
         """Fensterkoordinate in Koordinate der Spielflaeche."""
@@ -317,10 +360,10 @@ class App:
                 self.viewport_rechnen()
                 continue
             if ev.type == pygame.KEYDOWN:
-                if ev.key in TASTEN["vollbild"]:
+                if ev.key in self.eingabe.tabelle.get("vollbild", ()):
                     self.vollbild_wechseln()
                     continue
-                if ev.key in TASTEN["debug"]:
+                if ev.key in self.eingabe.tabelle.get("debug", ()):
                     self.debug = not self.debug
                     continue
             self.eingabe.ereignis(ev)

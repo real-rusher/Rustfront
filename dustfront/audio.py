@@ -138,6 +138,75 @@ def _schuss_schrot(seed=0):
     )
 
 
+@platzhalter_klang("schuss_sturm")
+def _schuss_sturm(seed=0):
+    """Kuerzer und haerter als der Repetierer, fuer Dauerfeuer gedacht."""
+    return _mischen(
+        _rauschen(0.11, 0.9, 8000, 1400, 3.6, seed + 21),
+        _rauschen(0.04, 0.5, 13000, 7000, 2.2, seed + 22, hp=True),
+        _schlag(210, 84, 0.09, 0.55, 3.8),
+    )
+
+
+@platzhalter_klang("schuss_scharf")
+def _schuss_scharf(seed=0):
+    """Ein einzelner, sehr lauter Knall mit langem Nachhall."""
+    return _mischen(
+        _rauschen(0.55, 1.0, 6500, 240, 1.8, seed + 31),
+        _rauschen(0.07, 0.6, 11000, 4000, 1.6, seed + 32, hp=True),
+        _schlag(150, 46, 0.34, 0.9, 2.2),
+        [0.0] * int(RATE * 0.03) + _rauschen(0.7, 0.3, 1800, 300, 1.9, seed + 33),
+    )
+
+
+@platzhalter_klang("granate")
+def _granate(seed=0):
+    """Tiefer Schlag, Druckwelle, langes Grollen."""
+    return _mischen(
+        _schlag(90, 28, 0.9, 1.0, 1.8),
+        _rauschen(0.8, 0.9, 5000, 160, 1.5, seed + 41),
+        [0.0] * int(RATE * 0.04) + _rauschen(1.2, 0.45, 900, 120, 1.4, seed + 42),
+    )
+
+
+@platzhalter_klang("nahkampf")
+def _nahkampf(seed=0):
+    """Metall auf Metall, kurz und scharf."""
+    return _mischen(
+        _rauschen(0.10, 0.7, 9000, 2200, 3.4, seed + 51, hp=True),
+        _schlag(620, 280, 0.12, 0.4, 3.0),
+        _schlag(1400, 900, 0.09, 0.25, 4.0),
+    )
+
+
+@platzhalter_klang("wurf")
+def _wurf(seed=0):
+    return _rauschen(0.22, 0.4, 1800, 5200, 1.6, seed + 61, hp=True)
+
+
+@platzhalter_klang("medkit")
+def _medkit(seed=0):
+    return _mischen(_schlag(520, 760, 0.18, 0.35, 2.0),
+                    _rauschen(0.12, 0.2, 3000, 900, 2.4, seed + 71))
+
+
+@platzhalter_klang("aufheben")
+def _aufheben(seed=0):
+    return _mischen(_schlag(880, 1180, 0.12, 0.3, 2.4),
+                    _schlag(1320, 1760, 0.09, 0.18, 3.0))
+
+
+@platzhalter_klang("menue")
+def _menue(seed=0):
+    return _schlag(660, 720, 0.05, 0.22, 3.0)
+
+
+@platzhalter_klang("menue_ok")
+def _menue_ok(seed=0):
+    return _mischen(_schlag(430, 640, 0.10, 0.28, 2.6),
+                    _schlag(880, 1180, 0.08, 0.14, 3.2))
+
+
 @platzhalter_klang("schuss")
 def _schuss(seed=0):
     return _schuss_repetierer(seed)
@@ -156,6 +225,8 @@ class Klaenge:
         self.aus_datei: set[str] = set()
         self._cache: dict[str, list] = {}
         self.rnd = random.Random()
+        self.gesamt = K.AUDIO["gesamt"]
+        self.effekte = 1.0
         try:
             pygame.mixer.init(frequency=RATE, size=-16, channels=2, buffer=512)
             self.ok = pygame.mixer.get_init() is not None
@@ -216,13 +287,17 @@ class Klaenge:
         return hit
 
     # ---- Abspielen ---------------------------------------------------
+    def lautstaerke_setzen(self, gesamt: float, effekte: float) -> None:
+        self.gesamt = max(0.0, min(1.0, gesamt))
+        self.effekte = max(0.0, min(1.0, effekte))
+
     def spielen(self, name: str, lautstaerke: float = 1.0) -> None:
         fassungen = self.klang(name)
         if not fassungen:
             return
         s = fassungen[self.rnd.randrange(len(fassungen))]
         try:
-            s.set_volume(max(0.0, min(1.0, lautstaerke * K.AUDIO["gesamt"])))
+            s.set_volume(max(0.0, min(1.0, lautstaerke * self.gesamt * self.effekte)))
             s.play()
         except pygame.error:
             pass

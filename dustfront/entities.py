@@ -230,6 +230,108 @@ class Geschoss(Wesen):
 
 
 # ══════════════════════════════════════════════════════════════════
+# Granate
+# ══════════════════════════════════════════════════════════════════
+
+class Granate(Wesen):
+    """Fliegt, prallt von Waenden ab und zuendet nach ihrer Flugzeit."""
+
+    fraktion = "geschoss"
+    schiebt = False
+    trefferbar = False
+    schatten = True
+    radius = 3.0
+    bild = "granate"
+
+    def __init__(self, pos, richtung: float, daten: dict, ebene: int, von=None,
+                 weite: float | None = None) -> None:
+        super().__init__(pos, ebene)
+        self.daten = daten
+        self.von = von
+        self.winkel = richtung
+        self.rest = daten["flugzeit"]
+        self.dreh = RND.uniform(-700, 700)
+        # Anfangstempo so waehlen, dass sie nach der Reibung genau auf der
+        # gewuenschten Weite liegen bleibt. Der Weg einer gebremsten Bewegung
+        # ist v0 * (1 - e^(-k*t)) / k, das loesen wir nach v0 auf.
+        if weite is None:
+            weite = daten["wurf_max"]
+        k = daten["reibung"]
+        anteil = 1.0 - math.exp(-k * self.rest)
+        v0 = weite * k / max(0.05, anteil)
+        self.tempo = pygame.Vector2(v0, 0).rotate(richtung)
+
+    def schritt(self, dt: float) -> None:
+        self.vorher.update(self.pos)
+        self.rest -= dt
+        self.winkel += self.dreh * dt
+        self.tempo *= max(0.0, 1.0 - self.daten["reibung"] * dt)   # rollt aus
+        stoss_x, stoss_y = self.welt.bewegen(self, self.tempo.x * dt,
+                                             self.tempo.y * dt)
+        if stoss_x:
+            self.tempo.x = -self.tempo.x * 0.5
+        if stoss_y:
+            self.tempo.y = -self.tempo.y * 0.5
+        if self.rest <= 0:
+            self.zuenden()
+
+    def zuenden(self) -> None:
+        self.lebt = False
+        d = self.daten
+        w = self.welt
+        r = d["radius"]
+        for ziel in list(w.nahe(self.pos, r + 30, self.ebene)):
+            if not ziel.lebt or ziel is self:
+                continue
+            ab = ziel.pos - self.pos
+            entfernung = ab.length()
+            if entfernung > r + ziel.radius:
+                continue
+            # volle Wucht in der Mitte, am Rand ein Viertel
+            anteil = 1.0 - 0.75 * min(1.0, entfernung / r)
+            schub = (ab.normalize() * 320 * anteil) if entfernung > 0.01 else None
+            ziel.schaden(d["schaden"] * anteil, schub, self.von)
+        wolke(w, self.pos, 26, 340, 0.5, (255, 212, 140), self.ebene, 2, "funke")
+        wolke(w, self.pos, 18, 150, 0.9, K.C_MUTED_DK, self.ebene, 2, "staub")
+        w.brandfleck(self.pos, self.ebene, r)
+        w.ruckeln(d["kamera"])
+        w.kurz_langsam(0.05)
+        w.klang("granate", 1.0)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Aufsammler
+# ══════════════════════════════════════════════════════════════════
+
+class Aufsammler(Wesen):
+    """Liegt herum, bis jemand darueber laeuft."""
+
+    fraktion = "beute"
+    schiebt = False
+    trefferbar = False
+    radius = 8.0
+
+    def __init__(self, pos, art: str, ebene: int = 0) -> None:
+        super().__init__(pos, ebene)
+        self.art = art
+        self.bild = "medkit" if art == "medkit" else None
+
+    def schritt(self, dt: float) -> None:
+        super().schritt(dt)
+        held = self.welt.held
+        if held is None or not held.lebt or held.ebene != self.ebene:
+            return
+        if held.sturz_rest > 0:
+            return
+        if self.pos.distance_to(held.pos) < self.radius + held.radius + 3:
+            if self.art == "medkit" and held.medkits < K.MEDKIT["hoechstens"]:
+                held.medkits += 1
+                self.lebt = False
+                wolke(self.welt, self.pos, 8, 90, 0.4, K.C_TEAL, self.ebene, 1)
+                self.welt.klang("aufheben", 0.6)
+
+
+# ══════════════════════════════════════════════════════════════════
 # Spieler
 # ══════════════════════════════════════════════════════════════════
 
@@ -242,9 +344,15 @@ class Spieler(Wesen):
         self.max_leben = K.SPIELER["leben"]
         super().__init__(pos, ebene)
         self.radius = K.SPIELER["radius"]
-        self.waffen = ["repetierer", "schrot"]
+        self.waffen = list(K.HOTBAR)
         self.waffe = 0
         self.magazin = {w: K.WAFFEN[w]["magazin"] for w in self.waffen}
+        self.fokus = 0.0              # 0 = aus der Hueffte, 1 = ganz ruhig
+        self.zielt = False            # rechte Maustaste
+        self.medkits = 1
+        self.heilt_rest = 0.0
+        self.halte_zeit = 0.0         # wie lange der Abzug schon gedrueckt ist
+        self.schlag_zeigen = 0.0      # Restzeit der Nahkampf-Anzeige
         self.takt = 0.0
         self.nachlade_rest = 0.0
         self.unverwundbar = 0.0
@@ -256,6 +364,18 @@ class Spieler(Wesen):
         self.punkte = 0
         self.tracer = False           # Zielhilfe an oder aus
         self.tracer_weit = False      # laeuft sie ueber den Mauszeiger hinaus
+
+    @property
+    def streuung_jetzt(self) -> float:
+        """Streuung in Grad, wie sie dieser Schuss haette."""
+        d = self.waffe_daten
+        grund = d.get("streuung", 0.0)
+        fokus_ziel = d.get("fokus_streuung")
+        if fokus_ziel is not None:
+            grund = grund + (fokus_ziel - grund) * self.fokus
+        if self.tempo.length_squared() > 400:
+            grund += d.get("streuung_lauf", 0.0) * (1.0 - 0.6 * self.fokus)
+        return grund
 
     @property
     def waffe_daten(self) -> dict:
@@ -278,7 +398,27 @@ class Spieler(Wesen):
 
         # Bewegung: beschleunigen in Wunschrichtung, sonst bremsen. Im Sturz
         # bleibt ein Teil der Steuerung, man kann also noch zur Seite ziehen.
+        # Fokus der Scharfschuetzenwaffe: haelt man die rechte Maustaste,
+        # zieht sich der Streifen zusammen, laesst man los, springt er auf.
+        wd = self.waffe_daten
+        fd = wd.get("fokus_dauer")
+        if fd and self.zielt and self.sturz_rest <= 0:
+            self.fokus = min(1.0, self.fokus + dt / fd)
+        else:
+            self.fokus = max(0.0, self.fokus - dt / 0.28)
+
+        if self.heilt_rest > 0:
+            self.heilt_rest -= dt
+            if self.heilt_rest <= 0:
+                self.leben = min(self.max_leben, self.leben + K.MEDKIT["heilt"])
+                wolke(self.welt, self.pos, 10, 60, 0.6, K.C_TEAL, self.ebene, 1)
+
+        self.schlag_zeigen = max(0.0, self.schlag_zeigen - dt)
+        self.halte_zeit = self.halte_zeit + dt if self.feuert else 0.0
+
         luft = K.STURZ["luftsteuerung"] if self.sturz_rest > 0 else 1.0
+        if fd:
+            luft *= 1.0 - (1.0 - wd.get("fokus_tempo", 1.0)) * self.fokus
         ziel_tempo = self.will * s["tempo"] * (s["sprint"] if self.sprint else 1.0) * luft
         rate = (s["beschleunigung"] if self.will.length_squared() > 0
                 else s["bremsung"]) * luft
@@ -315,6 +455,8 @@ class Spieler(Wesen):
     # ---- Waffe -------------------------------------------------------
     def nachladen(self) -> None:
         d = self.waffe_daten
+        if not d.get("magazin"):
+            return
         if self.nachlade_rest <= 0 and self.magazin[self.waffe_name] < d["magazin"]:
             self.nachlade_rest = d["nachladen"]
 
@@ -324,24 +466,46 @@ class Spieler(Wesen):
             self.nachlade_rest = 0.0
             self.takt = max(self.takt, 0.18)
 
+    def heilen(self) -> None:
+        if (self.medkits > 0 and self.heilt_rest <= 0
+                and self.leben < self.max_leben):
+            self.medkits -= 1
+            self.heilt_rest = K.MEDKIT["dauer"]
+            self.welt.klang("medkit", 0.7)
+
     def feuern(self) -> None:
         d = self.waffe_daten
+        art = d.get("art", "schuss")
+        if art == "nahkampf":
+            self.schlagen()
+            return
         if self.magazin[self.waffe_name] <= 0:
             self.nachladen()
             return
         self.magazin[self.waffe_name] -= 1
         self.takt = d["takt"]
-
-        streuung = d["streuung"]
-        if self.tempo.length_squared() > 400:
-            streuung += d["streuung_lauf"]
         muendung = self.pos + pygame.Vector2(14, 0).rotate(self.winkel)
+
+        if art == "wurf":
+            # Sie fliegt dorthin, wo man hinzeigt, nicht immer gleich weit.
+            weite = min(d["wurf_max"], max(d["wurf_min"],
+                                           self.pos.distance_to(self.ziel)))
+            self.welt.dazu(Granate(muendung, self.winkel, d, self.ebene, self,
+                                   weite))
+            self.welt.ruckeln(1.2)
+            self.welt.klang("wurf", 0.6)
+            return
+
+        streuung = self.streuung_jetzt
+        if d.get("streuung_dauerfeuer"):
+            streuung += d["streuung_dauerfeuer"] * min(1.0, self.halte_zeit)
         for _ in range(d["geschosse"]):
             a = self.winkel + RND.uniform(-streuung, streuung)
             self.welt.dazu(Geschoss(muendung, a, d, self.ebene, self))
+        self.fokus *= 0.25            # der Schuss reisst die Waffe hoch
 
         # Rueckstoss auf den Schuetzen und auf die Kamera
-        self.tempo -= pygame.Vector2(d["rueckstoss"], 0).rotate(self.winkel)
+        self.tempo -= pygame.Vector2(d.get("rueckstoss", 0.0), 0).rotate(self.winkel)
         self.welt.ruckeln(d["kamera"])
         self.welt.klang("schuss_" + self.waffe_name, K.AUDIO["schuss"])
         self.welt.muendung(muendung, self.winkel, self.ebene)
@@ -352,6 +516,34 @@ class Spieler(Wesen):
             self.welt.partikel.append(Partikel(
                 self.pos, pygame.Vector2(RND.uniform(60, 110), 0).rotate(aus),
                 0.8, (176, 140, 62), 1, "huelse", 4.0, self.ebene))
+
+    def schlagen(self) -> None:
+        """Kurzer Schlag in einen Kegel vor dem Spieler."""
+        d = self.waffe_daten
+        self.takt = d["takt"]
+        self.schlag_zeigen = 0.16
+        w = self.welt
+        reich = d["reichweite"]
+        halb = d["winkel"] * 0.5
+        getroffen = 0
+        for ziel in list(w.nahe(self.pos, reich + 20, self.ebene)):
+            if ziel is self or ziel.fraktion == self.fraktion or not ziel.lebt:
+                continue
+            ab = ziel.pos - self.pos
+            if ab.length() > reich + ziel.radius:
+                continue
+            delta = (math.degrees(math.atan2(ab.y, ab.x)) - self.winkel + 180) % 360 - 180
+            if abs(delta) > halb:
+                continue
+            schub = ab.normalize() * d["schub"] if ab.length_squared() > 0.01 else None
+            ziel.schaden(d["schaden"], schub, self)
+            getroffen += 1
+        spitze = self.pos + pygame.Vector2(reich * 0.7, 0).rotate(self.winkel)
+        wolke(w, spitze, 6 if getroffen else 3, 160, 0.18,
+              K.C_CREAM if getroffen else K.C_MUTED, self.ebene, 1, "funke",
+              d["winkel"], self.winkel, 7.0)
+        w.ruckeln(d["kamera"] if getroffen else 0.8)
+        w.klang("nahkampf", 0.7)
 
     # ---- Schaden -----------------------------------------------------
     def schaden(self, menge, schub=None, von=None) -> None:

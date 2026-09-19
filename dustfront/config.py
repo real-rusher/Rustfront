@@ -151,8 +151,11 @@ KACHELN = {
 
 # ══════════════════════════════════════════════════ INHALTE: Waffen
 
+# art: schuss | wurf | nahkampf. Alles Weitere haengt an dieser einen Zeile,
+# eine neue Waffe ist ein Eintrag, keine neue Klasse.
 WAFFEN = {
     "repetierer": dict(
+        art="schuss",
         name="REPETIERER",
         schaden=26.0,
         takt=0.16,            # Sekunden zwischen zwei Schuessen
@@ -168,6 +171,7 @@ WAFFEN = {
         huelsen=1,
     ),
     "schrot": dict(
+        art="schuss",
         name="SCHROT",
         schaden=13.0,
         takt=0.62,
@@ -182,7 +186,86 @@ WAFFEN = {
         kamera=4.2,
         huelsen=1,
     ),
+    "sturm": dict(
+        art="schuss",
+        name="STURMGEWEHR",
+        schaden=16.0,
+        takt=0.085,           # rund 700 Schuss in der Minute
+        magazin=30,
+        nachladen=2.05,
+        streuung=2.2,
+        streuung_lauf=3.6,
+        streuung_dauerfeuer=4.5,   # Aufschlag, wenn man den Abzug haelt
+        geschosse=1,
+        tempo=760.0,
+        reichweite=470.0,
+        rueckstoss=22.0,
+        kamera=1.0,
+        huelsen=1,
+    ),
+    "scharf": dict(
+        art="schuss",
+        name="SCHARFSCHUETZE",
+        schaden=98.0,
+        takt=1.20,
+        magazin=5,
+        nachladen=2.7,
+        # Aus der Hueffte streut sie wild. Rechte Maustaste halten zieht den
+        # Streifen ueber fokus_dauer bis auf fokus_streuung zusammen.
+        streuung=14.0,
+        fokus_streuung=0.3,
+        fokus_dauer=1.5,
+        fokus_tempo=0.45,     # so langsam laeuft man im Fokus
+        streuung_lauf=6.0,
+        geschosse=1,
+        tempo=1150.0,
+        reichweite=900.0,
+        rueckstoss=190.0,
+        kamera=6.5,
+        huelsen=1,
+    ),
+    "granate": dict(
+        art="wurf",
+        name="GRANATE",
+        schaden=78.0,
+        radius=78.0,          # Wirkungskreis
+        takt=0.85,
+        magazin=3,
+        nachladen=3.2,
+        wurf_min=60.0,        # naeher wirft man nicht
+        wurf_max=260.0,        # weiter auch nicht
+        reibung=1.15,         # wie schnell sie ausrollt
+        flugzeit=1.05,        # danach zuendet sie, egal wo sie liegt
+        kamera=8.0,
+        rueckstoss=0.0,
+        huelsen=0,
+    ),
+    "brecheisen": dict(
+        art="nahkampf",
+        name="BRECHEISEN",
+        schaden=46.0,
+        takt=0.40,
+        reichweite=36.0,
+        winkel=80.0,          # Oeffnung des Schlags in Grad
+        schub=280.0,          # Rueckstoss auf das Ziel
+        kamera=2.6,
+        rueckstoss=0.0,
+        magazin=0,            # braucht keine Munition
+        nachladen=0.0,
+        huelsen=0,
+    ),
 }
+
+# Was der Spieler zu Beginn auf den Plaetzen 1 bis 6 traegt
+HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "brecheisen"]
+
+MEDKIT = dict(
+    name="MEDKIT",
+    heilt=45.0,
+    je_welle=2,           # so viele werden pro Welle abgeworfen
+    hoechstens=3,         # so viele kann man tragen
+    dauer=0.8,            # Sekunden, die das Anlegen braucht
+)
 
 # ══════════════════════════════════════════════════ INHALTE: Gegner
 

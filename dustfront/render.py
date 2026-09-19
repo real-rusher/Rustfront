@@ -81,6 +81,7 @@ class Renderer:
         self._tiefen: dict[int, pygame.Surface] = {}
         self._dunst = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
         self._linie = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+        self._brand: dict[int, pygame.Surface] = {}
         self._vignette = self._vignette_bauen()
         self._blut = self._blut_bauen()
         self._wandschatten = self._wandschatten_bauen()
@@ -143,6 +144,25 @@ class Renderer:
             pygame.draw.circle(s, (*K.C_BLUT, r.randrange(70, 150)), (x, y),
                                r.randrange(1, 5))
         return s
+
+    def brandfleck(self, radius: float) -> pygame.Surface:
+        """Russfleck, den eine Granate hinterlaesst."""
+        r = int(max(10, radius))
+        hit = self._brand.get(r)
+        if hit is None:
+            d = r * 2
+            hit = pygame.Surface((d, d), pygame.SRCALPHA)
+            rnd = random.Random(r)
+            for _ in range(int(r * 1.8)):
+                a = rnd.uniform(0, 6.283)
+                ab = rnd.uniform(0, 1.0) ** 0.6 * r
+                x = int(r + math.cos(a) * ab)
+                y = int(r + math.sin(a) * ab)
+                dunkelheit = int(150 * (1.0 - ab / r))
+                pygame.draw.circle(hit, (14, 10, 8, dunkelheit), (x, y),
+                                   rnd.randrange(2, 7))
+            self._brand[r] = hit
+        return hit
 
     def dunkel(self, surf: pygame.Surface, staerke: int) -> pygame.Surface:
         key = (id(surf), staerke)
@@ -362,6 +382,46 @@ class Renderer:
         pygame.draw.rect(ziel, t["kern"], (int(b.x) - 1, int(b.y) - 1, 3, 3))
         pygame.draw.rect(ziel, t["farbe"], (int(b.x), int(b.y), 1, 1))
 
+    def zielhilfen(self, ziel, welt, kamera, spieler) -> None:
+        """Streukegel der Scharfschuetzenwaffe und der Nahkampfbogen."""
+        if not spieler.lebt:
+            return
+        ecke = kamera.ecke
+        hoch = pygame.Vector2(0, spieler.flug * 0.55)
+        d = spieler.waffe_daten
+        p = spieler.pos - ecke - hoch
+
+        if d.get("fokus_dauer"):
+            halb = spieler.streuung_jetzt
+            weite = min(d["reichweite"], 340.0)
+            muendung = spieler.pos + pygame.Vector2(14, 0).rotate(spieler.winkel)
+            a = muendung - ecke - hoch
+            linie = self._linie
+            linie.fill((0, 0, 0, 0))
+            deck = int(40 + 90 * spieler.fokus)
+            for vz in (-1, 1):
+                b = a + pygame.Vector2(weite, 0).rotate(spieler.winkel + halb * vz)
+                pygame.draw.line(linie, (*K.C_AMBER, deck), a, b, 1)
+            if spieler.fokus > 0.55:      # ruhig genug fuer die Mittellinie
+                b = a + pygame.Vector2(weite, 0).rotate(spieler.winkel)
+                pygame.draw.line(linie, (*K.C_CREAM, int(60 + 120 * spieler.fokus)),
+                                 a, b, 1)
+            ziel.blit(linie, (0, 0))
+
+        if spieler.schlag_zeigen > 0 and d.get("art") == "nahkampf":
+            f = spieler.schlag_zeigen / 0.16
+            reich = d["reichweite"] * (0.6 + 0.4 * (1.0 - f))
+            halb = d["winkel"] * 0.5
+            linie = self._linie
+            linie.fill((0, 0, 0, 0))
+            punkte = [p]
+            schritte = 9
+            for i in range(schritte + 1):
+                g = spieler.winkel - halb + (2 * halb) * i / schritte
+                punkte.append(p + pygame.Vector2(reich, 0).rotate(g))
+            pygame.draw.polygon(linie, (*K.C_CREAM, int(70 * f)), punkte)
+            ziel.blit(linie, (0, 0))
+
     # ---- HUD -------------------------------------------------------
     def hud(self, ziel, welt, spieler, wellen_text, punkte, blick=None) -> None:
         f = SCHRIFT
@@ -411,6 +471,41 @@ class Renderer:
                        (18, 12, 8) if angeschaut else K.C_MUTED, 1, ausrichtung="mitte")
             if i == spieler.ebene:          # wo die Figur wirklich steht
                 pygame.draw.rect(ziel, K.C_TEAL, (ex - 5, ey + 3, 3, 5))
+
+        # Hotbar unten in der Mitte
+        n = len(spieler.waffen)
+        bw, bh, luecke = 34, 18, 3
+        gesamt = n * bw + (n - 1) * luecke
+        hx = (K.GAME_W - gesamt) // 2
+        hy = K.GAME_H - 22
+        for i, name in enumerate(spieler.waffen):
+            r = pygame.Rect(hx + i * (bw + luecke), hy, bw, bh)
+            aktiv = (i == spieler.waffe)
+            pygame.draw.rect(ziel, (10, 7, 5), r)
+            pygame.draw.rect(ziel, K.C_AMBER if aktiv else K.C_MUTED_DK, r, 1)
+            wd = K.WAFFEN[name]
+            f.zeichnen(ziel, "%d" % (i + 1), r.x + 2, r.y + 2,
+                       K.C_AMBER if aktiv else K.C_MUTED_DK, 1)
+            f.zeichnen(ziel, wd["name"][:4], r.centerx + 3, r.y + 2,
+                       K.C_CREAM if aktiv else K.C_MUTED, 1, ausrichtung="mitte")
+            if wd.get("magazin"):
+                f.zeichnen(ziel, "%d" % spieler.magazin[name], r.centerx + 3,
+                           r.y + 10, K.C_AMBER if aktiv else K.C_MUTED, 1,
+                           ausrichtung="mitte")
+            else:
+                f.zeichnen(ziel, "--", r.centerx + 3, r.y + 10, K.C_MUTED_DK, 1,
+                           ausrichtung="mitte")
+
+        # Medkits links neben der Hotbar
+        mx = hx - 40
+        f.zeichnen(ziel, "[H]", mx, hy + 1, K.C_MUTED_DK, 1)
+        for i in range(K.MEDKIT["hoechstens"]):
+            r = pygame.Rect(mx + i * 9, hy + 9, 7, 7)
+            pygame.draw.rect(ziel, K.C_TEAL if i < spieler.medkits else (24, 18, 13), r)
+            pygame.draw.rect(ziel, K.C_TEAL_DK, r, 1)
+        if spieler.heilt_rest > 0:
+            anteil = 1.0 - spieler.heilt_rest / K.MEDKIT["dauer"]
+            pygame.draw.rect(ziel, K.C_TEAL, (mx, hy - 4, int(30 * anteil), 2))
 
         # Kopfzeile
         f.zeichnen(ziel, wellen_text, 12, 12, K.C_MUTED, 1)

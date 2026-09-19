@@ -254,6 +254,28 @@ def _muendung():
     return s
 
 
+@platzhalter("medkit")
+def _medkit():
+    s = _flaeche(16, 14)
+    pygame.draw.rect(s, (28, 22, 16), (0, 2, 16, 12))
+    pygame.draw.rect(s, (214, 210, 196), (1, 3, 14, 10))
+    pygame.draw.rect(s, (168, 162, 148), (1, 10, 14, 3))
+    pygame.draw.rect(s, K.C_RED, (6, 5, 4, 6))
+    pygame.draw.rect(s, K.C_RED, (4, 7, 8, 2))
+    pygame.draw.rect(s, (60, 50, 38), (5, 0, 6, 3))
+    return _rand(s, (18, 13, 9))
+
+
+@platzhalter("granate")
+def _granate():
+    s = _flaeche(10, 10)
+    pygame.draw.ellipse(s, (54, 62, 44), (1, 1, 8, 8))
+    pygame.draw.ellipse(s, (78, 88, 62), (2, 2, 5, 5))
+    pygame.draw.rect(s, (40, 34, 24), (4, 0, 3, 3))
+    pygame.draw.rect(s, K.C_AMBER, (4, 1, 2, 1))
+    return _rand(s, (16, 12, 8))
+
+
 @platzhalter("huelse")
 def _huelse():
     s = _flaeche(4, 3)

@@ -19,7 +19,7 @@ import pygame
 
 from . import config as K
 from .core import Szene
-from .entities import Gegner, Spieler, wolke
+from .entities import Aufsammler, Gegner, Spieler, wolke
 from .font import SCHRIFT
 from .render import Kamera, Renderer
 from .world import freier_punkt, testkarte
@@ -46,6 +46,7 @@ class Spiel(Szene):
         self.welt.kurz_langsam = self._zeitlupe
         self.welt.blutfleck = self._blutfleck
         self.welt.klang = self.app.klaenge.spielen
+        self.welt.brandfleck = self._brandfleck
 
         # Ansicht: welche Ebene die Kamera anschaut, und die geglaettete
         # Hoehe dazu. Beides haengt bewusst nicht an der Figur, damit man
@@ -69,6 +70,10 @@ class Spiel(Szene):
         bild = self.renderer._blut
         self.welt.ebene(ebene).dekal(bild, pos.x, pos.y)
 
+    def _brandfleck(self, pos, ebene: int, radius: float) -> None:
+        self.welt.ebene(ebene).dekal(self.renderer.brandfleck(radius),
+                                     pos.x, pos.y)
+
     # ---- Wellen -------------------------------------------------------
     def welle_starten(self) -> None:
         self.welle += 1
@@ -88,6 +93,11 @@ class Spiel(Szene):
                 g = self.welt.dazu(Gegner(pos, art, ebene))
                 wolke(self.welt, pos, 8, 80, 0.45, K.C_MUTED_DK, ebene, 1, "staub")
                 self.offen.append(g)
+        # Nachschub: ein paar Medkits, verteilt auf die Ebenen
+        for _ in range(K.MEDKIT["je_welle"]):
+            eb = self.rnd.randrange(len(self.welt.ebenen))
+            self.welt.dazu(Aufsammler(freier_punkt(self.welt, eb, self.rnd),
+                                      "medkit", eb))
 
     @property
     def gegner_uebrig(self) -> int:
@@ -116,10 +126,12 @@ class Spiel(Szene):
                 held.tracer = not held.tracer
             if e.gedrueckt("tracer_weit"):
                 held.tracer_weit = not held.tracer_weit
-            if e.gedrueckt("waffe1"):
-                held.waffe_waehlen(0)
-            if e.gedrueckt("waffe2"):
-                held.waffe_waehlen(1)
+            for nr in range(1, 7):
+                if e.gedrueckt("waffe%d" % nr):
+                    held.waffe_waehlen(nr - 1)
+            if e.gedrueckt("heilen"):
+                held.heilen()
+            held.zielt = e.gehalten("zweit")
             if e.rad:                      # scrollen bewegt nur die Ansicht
                 self.blick = max(0, min(len(self.welt.ebenen) - 1,
                                         self.blick + (1 if e.rad > 0 else -1)))
@@ -177,6 +189,7 @@ class Spiel(Szene):
     def zeichnen(self, ziel, alpha: float) -> None:
         self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, alpha,
                                     self.blick_hoehe)
+        self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.held)
         self.renderer.tracer(ziel, self.welt, self.kamera, self.held)
         self.renderer.schaden_blende(ziel, self.schaden_blende)
 
