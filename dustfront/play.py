@@ -21,6 +21,8 @@ from . import config as K
 from .core import Szene
 from .entities import Aufsammler, Gegner, Spieler, wolke
 from .font import SCHRIFT
+from .inventar import Inventar
+from .menues import Pause
 from .render import Kamera, Renderer
 from .world import freier_punkt, testkarte
 
@@ -105,9 +107,16 @@ class Spiel(Szene):
 
     # ---- Ablauf -------------------------------------------------------
     def ereignis(self, ev) -> None:
-        if ev.type == pygame.KEYDOWN and ev.key in (pygame.K_ESCAPE,):
+        if ev.type != pygame.KEYDOWN:
+            return
+        # Beide Schirme sind Szenen ueber dieser hier. Das Spiel rechnet
+        # solange nicht weiter, bleibt aber sichtbar.
+        if ev.key in self.app.opt.codes("pause"):
             if self.held.lebt:
-                self.app.schieben(PauseSchirm(self.app, self))
+                self.app.schieben(Pause(self.app, self))
+        elif ev.key in self.app.opt.codes("inventar"):
+            if self.held.lebt:
+                self.app.schieben(Inventar(self.app, self))
 
     def schritt(self, dt: float) -> None:
         e = self.app.eingabe
@@ -219,28 +228,6 @@ class Spiel(Szene):
                              K.GAME_H // 2 + 26, K.C_AMBER, 1, 2, "mitte")
 
 
-class PauseSchirm(Szene):
-    deckt_zu = False
-
-    def __init__(self, app, spiel: Spiel) -> None:
-        super().__init__(app)
-        self.spiel = spiel
-
-    def betreten(self) -> None:
-        self.app.eingabe.alles_loslassen()
-
-    def ereignis(self, ev) -> None:
-        if ev.type == pygame.KEYDOWN:
-            if ev.key == pygame.K_ESCAPE:
-                self.app.werfen()
-            elif ev.key == pygame.K_q:
-                self.app.laeuft = False
-
-    def zeichnen(self, ziel, alpha: float) -> None:
-        s = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
-        s.fill((0, 0, 0, 150))
-        ziel.blit(s, (0, 0))
-        SCHRIFT.zeichnen(ziel, "PAUSE", K.GAME_W // 2, K.GAME_H // 2 - 22,
-                         K.C_AMBER, 3, 2, "mitte")
-        SCHRIFT.zeichnen(ziel, "[ESC] WEITER    [Q] BEENDEN", K.GAME_W // 2,
-                         K.GAME_H // 2 + 8, K.C_MUTED, 1, 2, "mitte")
+# Das frueher hier stehende PauseSchirm ist nach menues.Pause gewandert.
+# Es gibt weiter einen Namen darauf, damit aelterer Code nicht bricht.
+PauseSchirm = Pause

@@ -466,12 +466,15 @@ class Spieler(Wesen):
             self.nachlade_rest = 0.0
             self.takt = max(self.takt, 0.18)
 
-    def heilen(self) -> None:
+    def heilen(self) -> bool:
+        """Setzt ein Medkit an. Gibt zurueck, ob es losging."""
         if (self.medkits > 0 and self.heilt_rest <= 0
                 and self.leben < self.max_leben):
             self.medkits -= 1
             self.heilt_rest = K.MEDKIT["dauer"]
             self.welt.klang("medkit", 0.7)
+            return True
+        return False
 
     def feuern(self) -> None:
         d = self.waffe_daten

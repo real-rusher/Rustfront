@@ -283,3 +283,103 @@ def _huelse():
     pygame.draw.rect(s, (146, 112, 46), (0, 0, 4, 3))
     pygame.draw.rect(s, (206, 168, 82), (0, 0, 3, 1))
     return s
+
+
+# ──────────────────────────────── Waffensymbole
+#
+# Kleine Seitenansichten fuer Hotbar und Inventar. Sie muessen auf 26 mal 11
+# Pixel erkennbar sein, also zaehlt nur die Silhouette: Laenge des Laufs,
+# Dicke des Gehaeuses, was oben und was unten heraussteht. Farbe traegt hier
+# fast nichts, Form alles.
+
+_W_ST = (44, 37, 29)          # Stahl dunkel
+_W_ST_H = (108, 95, 74)       # Stahl hell
+_W_HOLZ = (96, 62, 34)        # Schaft
+_W_HOLZ_H = (134, 92, 54)
+
+
+def _waffe(breite=26, hoehe=11):
+    return _flaeche(breite, hoehe)
+
+
+@platzhalter("waffe_repetierer")
+def _waffe_repetierer():
+    s = _waffe()
+    pygame.draw.rect(s, _W_HOLZ, (1, 5, 9, 4))          # Schaft
+    pygame.draw.rect(s, _W_HOLZ_H, (1, 5, 9, 1))
+    pygame.draw.rect(s, _W_ST, (9, 4, 7, 4))            # Verschluss
+    pygame.draw.rect(s, _W_ST_H, (9, 4, 7, 1))
+    pygame.draw.rect(s, _W_ST, (16, 5, 9, 2))           # Lauf
+    pygame.draw.rect(s, _W_ST_H, (16, 5, 9, 1))
+    pygame.draw.rect(s, _W_ST, (14, 2, 2, 3))           # Kammerstengel
+    pygame.draw.rect(s, _W_ST, (11, 8, 2, 3))           # Abzugsbuegel
+    return s
+
+
+@platzhalter("waffe_sturm")
+def _waffe_sturm():
+    s = _waffe()
+    pygame.draw.rect(s, _W_ST, (1, 4, 6, 3))            # Schulterstuetze
+    pygame.draw.rect(s, _W_ST, (7, 3, 10, 5))           # Gehaeuse
+    pygame.draw.rect(s, _W_ST_H, (7, 3, 10, 1))
+    pygame.draw.rect(s, _W_ST, (8, 1, 7, 2))            # Tragegriff
+    pygame.draw.rect(s, _W_ST, (17, 4, 8, 2))           # Lauf
+    pygame.draw.rect(s, _W_ST_H, (17, 4, 8, 1))
+    pygame.draw.rect(s, (60, 52, 40), (10, 8, 4, 3))    # Magazin
+    pygame.draw.rect(s, K.C_AMBER, (10, 10, 4, 1))
+    pygame.draw.rect(s, _W_ST, (15, 8, 2, 2))
+    return s
+
+
+@platzhalter("waffe_schrot")
+def _waffe_schrot():
+    s = _waffe()
+    pygame.draw.rect(s, _W_HOLZ, (1, 5, 8, 5))          # dicker Schaft
+    pygame.draw.rect(s, _W_HOLZ_H, (1, 5, 8, 1))
+    pygame.draw.rect(s, _W_ST, (9, 4, 5, 4))
+    pygame.draw.rect(s, _W_ST, (14, 3, 11, 3))          # Lauf oben
+    pygame.draw.rect(s, _W_ST_H, (14, 3, 11, 1))
+    pygame.draw.rect(s, (66, 56, 44), (14, 6, 9, 2))    # Vorderschaft
+    pygame.draw.rect(s, _W_ST, (10, 8, 2, 3))
+    return s
+
+
+@platzhalter("waffe_scharf")
+def _waffe_scharf():
+    s = _waffe()
+    pygame.draw.rect(s, _W_HOLZ, (0, 5, 8, 4))
+    pygame.draw.rect(s, _W_HOLZ_H, (0, 5, 8, 1))
+    pygame.draw.rect(s, _W_ST, (8, 4, 6, 4))
+    pygame.draw.rect(s, _W_ST, (14, 5, 12, 2))          # sehr langer Lauf
+    pygame.draw.rect(s, _W_ST_H, (14, 5, 12, 1))
+    pygame.draw.rect(s, (30, 26, 20), (9, 1, 9, 3))     # Zielfernrohr
+    pygame.draw.rect(s, K.C_TEAL_DK, (16, 2, 2, 1))     # Linse
+    pygame.draw.rect(s, _W_ST, (20, 7, 1, 4))           # Zweibein
+    pygame.draw.rect(s, _W_ST, (23, 7, 1, 4))
+    pygame.draw.rect(s, _W_ST, (10, 8, 2, 3))
+    return s
+
+
+@platzhalter("waffe_granate")
+def _waffe_granate():
+    s = _waffe()
+    pygame.draw.ellipse(s, (54, 62, 44), (8, 2, 10, 8))
+    pygame.draw.ellipse(s, (78, 88, 62), (10, 3, 5, 4))
+    for y in (4, 7):                                     # Rillen
+        pygame.draw.rect(s, (38, 44, 32), (9, y, 8, 1))
+    pygame.draw.rect(s, (40, 34, 24), (12, 0, 3, 3))    # Zuender
+    pygame.draw.rect(s, K.C_AMBER, (12, 1, 2, 1))
+    pygame.draw.rect(s, (92, 80, 60), (15, 1, 4, 1))    # Buegel
+    return s
+
+
+@platzhalter("waffe_brecheisen")
+def _waffe_brecheisen():
+    s = _waffe()
+    for x in range(4, 22):                               # Schaft, leicht schraeg
+        pygame.draw.rect(s, K.C_RUST, (x, 7 - (x - 4) // 5, 1, 2))
+    pygame.draw.rect(s, (188, 82, 44), (4, 7, 16, 1))
+    pygame.draw.polygon(s, K.C_RUST, [(21, 4), (25, 2), (25, 4), (22, 6)])
+    pygame.draw.rect(s, K.C_RUST, (2, 6, 3, 4))          # gebogenes Ende
+    pygame.draw.rect(s, (60, 26, 14), (2, 9, 3, 1))
+    return s

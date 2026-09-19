@@ -484,17 +484,17 @@ class Renderer:
             pygame.draw.rect(ziel, (10, 7, 5), r)
             pygame.draw.rect(ziel, K.C_AMBER if aktiv else K.C_MUTED_DK, r, 1)
             wd = K.WAFFEN[name]
+            # Symbol statt abgeschnittenem Namen: auf 34 Pixel Breite passen
+            # nur vier Buchstaben, und "SCHA" sagt niemandem etwas.
+            sym = self.bilder.bild("waffe_" + name)
+            ziel.blit(sym, (r.centerx - sym.get_width() // 2,
+                            r.centery - sym.get_height() // 2))
             f.zeichnen(ziel, "%d" % (i + 1), r.x + 2, r.y + 2,
                        K.C_AMBER if aktiv else K.C_MUTED_DK, 1)
-            f.zeichnen(ziel, wd["name"][:4], r.centerx + 3, r.y + 2,
-                       K.C_CREAM if aktiv else K.C_MUTED, 1, ausrichtung="mitte")
-            if wd.get("magazin"):
-                f.zeichnen(ziel, "%d" % spieler.magazin[name], r.centerx + 3,
-                           r.y + 10, K.C_AMBER if aktiv else K.C_MUTED, 1,
-                           ausrichtung="mitte")
-            else:
-                f.zeichnen(ziel, "--", r.centerx + 3, r.y + 10, K.C_MUTED_DK, 1,
-                           ausrichtung="mitte")
+            f.zeichnen(ziel, "%d" % spieler.magazin[name] if wd.get("magazin")
+                       else "--", r.right - 2, r.bottom - 9,
+                       K.C_AMBER if aktiv else K.C_MUTED_DK, 1,
+                       ausrichtung="rechts")
 
         # Medkits links neben der Hotbar
         mx = hx - 40
