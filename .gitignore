@@ -3,3 +3,7 @@ __pycache__/
 .venv/
 rustfront_settings.json
 rustfront_save.json
+# Bilder, die die Tests beim Laufen ablegen
+spiel_*.png
+menue_*.png
+daten/
