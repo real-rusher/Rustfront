@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.4.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.8.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -21,7 +21,17 @@ Nicolas, Nikolaus, Marlon, Alfred.
 | --- | --- |
 | Splash-Sequenz | fertig, fuenf Karten mit eigenem Ton |
 | Hauptmenue | fertig, inklusive Optionen und Spielstand |
-| Spiel selbst | noch nicht begonnen, Platzhalter-Szene im Menue |
+| Spielkern | steht: feste Zeitschritte, drei Ebenen, Kollision, Wellen |
+| Waffen | sechs Stueck, alle im Test nachgewiesen |
+| Hoehenebenen | drei, alle gleichzeitig sichtbar, Sturz mit Steuerung in der Luft |
+| Inventar und Hotbar | fertig, Plaetze per Maus oder Tastatur umsortierbar |
+| Pause und Einstellungen | fertig: Anzeige, Ton, Steuerung, Mitwirkende |
+| Grafik-Einstellungen | Vignette, Wackeln und Partikel stehen; Licht, Wetter und Textursaetze sind vorgemerkt |
+| Texturen und Klaenge | noch alle im Code erzeugt, Dateien koennen sie jederzeit ersetzen |
+
+Der Spielkern gilt als tragfaehig: was jetzt noch dazukommt, haengt sich als
+weitere Szene, weiteres Wesen oder weitere Zeile in `config.py` an, statt
+Bestehendes umzubauen.
 
 ## Starten
 
@@ -42,6 +52,19 @@ Nur die Splash-Sequenz ansehen:
 python rustfront_splash.py
 ```
 
+Nur das Spiel, ohne Menue und ohne Intro:
+
+```
+python -m dustfront
+```
+
+Testlauf ohne Fenster, legt Bilder zum Anschauen ab:
+
+```
+python tests/test_spiel.py
+python tests/test_menues.py
+```
+
 Gebraucht werden Python 3.10 bis 3.14 und pygame-ce (getestet mit 2.5.8).
 Sonst nichts: Schrift, Grafik und Ton entstehen zur Laufzeit, es gibt keine
 Assets im Repo.
@@ -60,7 +83,47 @@ Assets im Repo.
 Waehrend des Intros springt jede Taste zur naechsten Karte, Esc ueberspringt
 die ganze Sequenz.
 
+## Steuerung im Spiel
+
+Alles bis auf die Maustasten und Esc laesst sich im Menue unter STEUERUNG
+umlegen. Eine Taste gehoert immer nur einer Aktion: legt man sie neu, wird sie
+der alten weggenommen.
+
+| Taste | Wirkung |
+| --- | --- |
+| W A S D | Laufen, auch waehrend eines Sturzes |
+| Shift | Sprint |
+| Maus links | Schiessen oder schlagen |
+| Maus rechts | Einzielen (bei der Scharfschuetzenwaffe) |
+| Mausrad | Ansicht eine Ebene hoch oder runter |
+| 1 bis 6 | Waffe waehlen |
+| R | Nachladen |
+| H | Medkit |
+| E | Treppe benutzen |
+| Tab | Inventar |
+| T | Ziellinie an oder aus |
+| Z | Ziellinie ueber den Zeiger hinaus verlaengern |
+| Esc | Pause |
+| F11 | Vollbild |
+| F3 | Debug-Anzeige |
+
+### Die sechs Waffen
+
+| Waffe | Art | Eigenheit |
+| --- | --- | --- |
+| Repetierer | Schuss | Der Allrounder. Genau, mittleres Tempo. |
+| Sturmgewehr | Schuss | Rund 700 Schuss in der Minute, streut bei Dauerfeuer auf. |
+| Schrot | Schuss | Sieben Kugeln auf einmal, nur auf kurze Entfernung. |
+| Scharfschuetze | Schuss | Aus der Hueffte unbrauchbar. Rechte Maustaste halten zieht den Streifen in anderthalb Sekunden bis auf Ziellinienbreite zusammen. Gemessen: auf 300 Pixel trifft sie aus der Hueffte 8 Prozent der Schuesse, eingezielt 100. |
+| Granate | Wurf | Fliegt genau so weit, wie man zielt, zwischen 60 und 260 Pixeln. |
+| Brecheisen | Nahkampf | Schlaegt in einem Kegel von 80 Grad und stoesst zurueck. Braucht keine Munition. |
+
+Die Munition haengt am Namen der Waffe, nicht an ihrem Platz. Umsortieren im
+Inventar kostet also keine Patrone.
+
 ## Dateien
+
+Aussen liegt das Menue, innen das Spiel. Beides laeuft auch einzeln.
 
 | Datei | Inhalt |
 | --- | --- |
@@ -68,9 +131,51 @@ die ganze Sequenz.
 | `rustfront_splash.py` | Ablauf, Zeitdehnung und Klangsynthese der Splash-Sequenz |
 | `splash_engine.py` | Zeichenwerk der Splash-Sequenz, portiert aus der Web-Fassung |
 
-Zur Laufzeit entstehen `rustfront_settings.json` (Einstellungen) und
-`rustfront_save.json` (Spielstand). Beide stehen in der `.gitignore` und
-gehoeren nicht ins Repo.
+Das Spiel selbst liegt im Paket `dustfront/`:
+
+| Datei | Inhalt |
+| --- | --- |
+| `config.py` | Alle Zahlen und Tabellen. Sonst steht nirgends eine freie Zahl. |
+| `core.py` | Anwendung, Szenenstapel, feste Zeitschritte, Eingabe, Bildablage |
+| `world.py` | Ebenen, Kacheln, Kollision, Sichtlinien, Treppen, Abgruende |
+| `entities.py` | Spieler, Gegner, Geschosse, Granaten, Aufsammler |
+| `render.py` | Kamera, Tiefenwirkung, Schatten, Ziellinie, HUD |
+| `play.py` | Die Spielregel: Wellen, Tod, Neustart |
+| `menues.py` | Pause, Einstellungen, Steuerung, Mitwirkende |
+| `inventar.py` | Ausruestung, Waffenraster, Tasche, Hotbar |
+| `ui.py` | Bedienelemente: Kaesten, Knoepfe, Reiter, Regler, Schalter |
+| `einstellungen.py` | Einstellungen und Tastenbelegung, lesen und schreiben |
+| `pfade.py` | Wo diese Dateien liegen, je nach Betriebssystem |
+| `art.py`, `audio.py`, `font.py` | Grafik, Klang und Schrift, alles zur Laufzeit erzeugt |
+
+### Wo die Einstellungen liegen
+
+**Nicht im Spielordner.** Wer das Spiel neu herunterlaedt, den Ordner loescht
+oder `git clean` laufen laesst, soll seine Tastenbelegung behalten. Deshalb
+liegen `einstellungen.json` und `tasten.json` dort, wo das System seine
+Benutzerdaten ablegt:
+
+| System | Ordner |
+| --- | --- |
+| Windows | `%APPDATA%\\Dustfront`, also `C:\\Users\\<name>\\AppData\\Roaming\\Dustfront` |
+| macOS | `~/Library/Application Support/Dustfront` |
+| Linux | `$XDG_CONFIG_HOME/dustfront`, sonst `~/.config/dustfront` |
+
+Der Pfad steht auch unten in den Einstellungen, man muss also nicht suchen.
+
+**Tragbarer Betrieb.** Liegt eine Datei `portable.txt` neben dem Paket, wird
+stattdessen der Unterordner `daten` im Spielordner benutzt. Praktisch fuer
+einen USB-Stick oder einen Schulrechner, auf dem man nichts im Benutzerprofil
+ablegen darf.
+
+Tasten stehen als lesbare Namen in der Datei, also `"w"` und `"left shift"`,
+nicht `119` und `1073742049`. Das kann man notfalls mit einem Texteditor
+reparieren. Kaputte oder unbekannte Eintraege werden verworfen und durch die
+Vorgabe ersetzt; eine beschaedigte Datei kostet hoechstens die eine
+Einstellung, die kaputt ist, nie den Start.
+
+Das alte Menue legt daneben weiter `rustfront_settings.json` und
+`rustfront_save.json` im Spielordner ab. Beide stehen in der `.gitignore`.
 
 ## Versionsnummern
 
@@ -135,6 +240,10 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.2.1 | Vollbild und Rufzeichen-Eingabe repariert |
 | 0.3.0 | Projekt ins Repo, README |
 | 0.4.0 | Klaenge auf materialbasierte Synthese umgestellt, zweiteiliger Spruch auf der letzten Karte, Versionsanzeige |
+| 0.5.0 | Das Spiel selbst: Welt, Wesen, Darstellung, Wellen, feste Zeitschritte |
+| 0.6.0 | Hoehenebenen mit echtem Abstand, Loecher zum Durchfallen und Durchschiessen, Sturz mit Steuerung in der Luft |
+| 0.7.0 | Sechs Waffen, Medkits, Hotbar, Ziellinie; Einstellungen und Tastenbelegung im Benutzerordner |
+| 0.8.0 | Pausenmenue, Einstellungen, umlegbare Steuerung, Abspann, Inventar |
 
 ## Anpassen
 
@@ -143,6 +252,20 @@ Alle Stellschrauben stehen oben in der jeweiligen Datei.
 * **Spielname**: `SPIEL_TITEL` in `rustfront_menu.py`, `TEXTE["name"]` in
   `rustfront_splash.py`.
 * **Version und Phase**: `VERSION` und `PHASE` in `rustfront_menu.py`.
+  `dustfront/config.py` liest die Zeile von dort aus, statt das Menue zu
+  importieren - das Spiel soll auch ohne Menue starten.
+* **Waffenwerte**: `WAFFEN` in `dustfront/config.py`. Schaden, Takt, Magazin,
+  Streuung, alles an einer Stelle. Wer eine siebte Waffe will, traegt sie dort
+  ein, haengt ihren Namen an `HOTBAR` und zeichnet ein Symbol
+  `waffe_<name>` in `art.py`. Sonst ist nichts zu tun.
+* **Hoehen der Ebenen**: `EBENEN_HOEHE` in `config.py`, in Welt-Pixeln.
+  Der Abstand zwischen zwei Zahlen ist der, den man beim Herunterschauen
+  sieht und beim Herunterfallen spuert.
+* **Vorgaben fuer Einstellungen und Tasten**: `VORGABE` und `TASTEN_VORGABE`
+  in `dustfront/einstellungen.py`.
+* **Texturen und Klaenge ersetzen**: eine Datei `assets/<name>.png` oder
+  `assets/sfx/<name>.wav` hinlegen, und sie tritt an die Stelle der im Code
+  gezeichneten Fassung. Es ist kein Code zu aendern.
 * **Dauer des Intros**: `PHASEN` in `rustfront_splash.py`. Jede Karte hat drei
   Abschnitte (Aufbau, Standbild, Abblende) mit jeweils der echten Dauer in
   Sekunden. `TEMPO` skaliert alles auf einmal, 1.3 bringt die Sequenz von rund
