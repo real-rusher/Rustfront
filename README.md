@@ -35,6 +35,19 @@ Der Spielkern gilt als tragfaehig: was jetzt noch dazukommt, haengt sich als
 weitere Szene, weiteres Wesen oder weitere Zeile in `config.py` an, statt
 Bestehendes umzubauen.
 
+## Wohin es geht
+
+**[`docs/KARTE.md`](docs/KARTE.md) ist der Weltenplan.** Dort steht
+vollstaendig, wie die Karte am Ende aufgebaut sein soll: die drei
+Massstaebe (Kontinent, Ort, Wandler), wie der Wandler in einen Ort
+gestempelt wird, wie die Sektoren und die vorrueckende Front funktionieren,
+was Fortschritt womit koppelt, und in welcher Reihenfolge das gebaut wird
+(Meilensteine M1 bis M9, von 0.12.0 bis 1.0.0).
+
+Gebaut ist davon noch nichts. Wer weitermacht, nimmt sich den naechsten
+Meilenstein aus Abschnitt 11 des Plans und liest vorher Abschnitt 3 ganz -
+dort steht die eine technische Entscheidung, an der alles andere haengt.
+
 ## Starten
 
 ```
@@ -194,6 +207,12 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `pfade.py` | Wo diese Dateien liegen, je nach Betriebssystem |
 | `art.py`, `audio.py`, `font.py` | Grafik, Klang und Schrift, alles zur Laufzeit erzeugt |
 | `vorlagen.py` | Die beiden Werkzeuge `--vorlagen` und `--assets` |
+
+Daneben liegt `docs/`:
+
+| Datei | Inhalt |
+| --- | --- |
+| `KARTE.md` | Der Weltenplan: Kontinent, Orte, Wandler, Front, Meilensteine |
 
 ### Wo die Einstellungen liegen
 
