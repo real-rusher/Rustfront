@@ -53,6 +53,11 @@ ist die eine Stelle dafuer.
   Durchsichtiges auf ein Schachbrett, damit man den Rand sieht.
 * **Waffensymbole** sind winzig (26x11). Dort zaehlt nur die Silhouette:
   Laenge des Laufs, Dicke des Gehaeuses, was oben und unten heraussteht.
+* **Schatten, Blut, Brandfleck, Wandschatten und Vignette** haben kein
+  festes Mass im Spiel. Sie richten sich nach dem, was sie wirft, und ihr
+  Mass in der Tabelle ist nur das Basismass, von dem aus gerechnet wird.
+  Hier malt man eine Form, keine feste Groesse - und am besten in
+  Graustufen mit Alpha, damit sie sich unter alles legen kann.
 
 ## Wenn etwas schiefgeht
 

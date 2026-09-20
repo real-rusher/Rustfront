@@ -69,8 +69,8 @@ class Spiel(Szene):
         self.app.zeitlupe = max(self.app.zeitlupe, sekunden)
 
     def _blutfleck(self, pos, ebene: int, radius: float) -> None:
-        bild = self.renderer._blut
-        self.welt.ebene(ebene).dekal(bild, pos.x, pos.y)
+        self.welt.ebene(ebene).dekal(self.renderer.blutfleck(radius),
+                                     pos.x, pos.y)
 
     def _brandfleck(self, pos, ebene: int, radius: float) -> None:
         self.welt.ebene(ebene).dekal(self.renderer.brandfleck(radius),

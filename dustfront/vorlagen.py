@@ -86,18 +86,29 @@ def _tafel(pygame, bilder, liste):
                      w // 2, v["rand"], K.C_AMBER, 1, ausrichtung="mitte")
     SCHRIFT.zeichnen(tafel, "DATEI ASSETS/NAME.PNG ERSETZT DAS BILD",
                      w // 2, v["rand"] + 9, K.C_MUTED, 1, ausrichtung="mitte")
+    platz = (zw - v["rand"], zh - v["luft"])
     for i, name in enumerate(liste):
         s = bilder.platzhalter(name)
         zelle = pygame.Rect(v["rand"] + (i % spalten) * zw,
                             v["rand"] + v["kopf"] + (i // spalten) * zh, zw, zh)
-        mitte_y = zelle.y + (zh - 16) // 2
-        grund = _karo(pygame, s.get_size())
-        grund.blit(s, (0, 0))
-        tafel.blit(grund, (zelle.centerx - s.get_width() // 2,
-                           mitte_y - s.get_height() // 2))
+        mitte_y = zelle.y + (zh - v["luft"]) // 2
+        # Was nicht in die Zelle passt - die Vignette ist bildschirmgross -
+        # wird nur fuer die Anschauung verkleinert. Das Mass darunter nennt
+        # weiter die echte Groesse.
+        gezeigt, mass = s, s.get_size()
+        if mass[0] > platz[0] or mass[1] > platz[1]:
+            k = min(platz[0] / mass[0], platz[1] / mass[1])
+            # Hier darf weichgezeichnet werden: die Tafel ist zum Anschauen,
+            # nicht zum Spielen.
+            gezeigt = pygame.transform.smoothscale(
+                s, (max(1, int(mass[0] * k)), max(1, int(mass[1] * k))))
+        grund = _karo(pygame, gezeigt.get_size())
+        grund.blit(gezeigt, (0, 0))
+        tafel.blit(grund, (zelle.centerx - gezeigt.get_width() // 2,
+                           mitte_y - gezeigt.get_height() // 2))
         SCHRIFT.zeichnen(tafel, name.upper(), zelle.centerx, zelle.bottom - 15,
                          K.C_CREAM, 1, ausrichtung="mitte")
-        SCHRIFT.zeichnen(tafel, "%d X %d" % s.get_size(), zelle.centerx,
+        SCHRIFT.zeichnen(tafel, "%d X %d" % mass, zelle.centerx,
                          zelle.bottom - 7, K.C_MUTED_DK, 1, ausrichtung="mitte")
     lupe = v["lupe"]
     return pygame.transform.scale(tafel, (w * lupe, h * lupe))

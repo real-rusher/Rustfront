@@ -646,7 +646,7 @@ class Gegner(Wesen):
             return richtung.rotate(self.ausweich_winkel)
         w = self.welt
         probe = self.radius * 2.2 + 16
-        self.ausweich_rest = 12          # erst in zwölf Schritten neu pruefen
+        self.ausweich_rest = 12          # erst in zwoelf Schritten neu pruefen
         for winkel in (0, 24, -24, 48, -48, 72, -72, 100, -100, 130, -130):
             g = winkel * self.drall
             d = richtung.rotate(g)

@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.9.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.10.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -28,6 +28,7 @@ Nicolas, Nikolaus, Marlon, Alfred.
 | Pause und Einstellungen | fertig: Anzeige, Ton, Steuerung, Mitwirkende |
 | Grafik-Einstellungen | Vignette, Wackeln und Partikel stehen; Licht, Wetter und Textursaetze sind vorgemerkt |
 | Texturen und Klaenge | noch alle im Code erzeugt; eine Datei in `assets/` ersetzt jedes Stueck, ohne Codeaenderung |
+| Ersetzbar sind | alle 30 Bilder, Kacheln und Figuren ebenso wie Schatten, Blut, Brandfleck und Vignette |
 
 Der Spielkern gilt als tragfaehig: was jetzt noch dazukommt, haengt sich als
 weitere Szene, weiteres Wesen oder weitere Zeile in `config.py` an, statt
@@ -253,6 +254,19 @@ darueber, dass Tabelle und gezeichnete Platzhalter sich decken.
 | `granate` | 10x10 | fliegende Granate |
 | `huelse` | 4x3 | ausgeworfene Patronenhuelse |
 | `waffe_repetierer` … `waffe_brecheisen` | 26x11 | die sechs Symbole in Hotbar und Inventar |
+| `schatten` | 48x24 | Fleck unter jedem Wesen |
+| `blut` | 26x26 | bleibt liegen, wo eines gestorben ist |
+| `brandfleck` | 156x156 | Russ, den eine Granate hinterlaesst |
+| `wandschatten` | 39x39 | was eine feste Kachel auf den Boden wirft |
+| `vignette` | 640x360 | Abdunkelung zum Bildrand |
+
+Die letzten fuenf haben kein festes Mass im Spiel: sie richten sich nach dem,
+was sie wirft — der Schatten nach dem Koerper, der Blutfleck nach dem Wesen,
+der Brandfleck nach dem Wirkungskreis. Das Mass in der Tabelle ist ihr
+**Basismass**, und das Spiel rechnet sie von dort auf die gebrauchte Groesse
+um, hart und ohne Weichzeichnen. Wer sie ersetzt, malt also eine Form, keine
+feste Groesse. Fuer welchen Wert das Basismass gilt, steht in `DEKAL` in
+`config.py`.
 
 Die Klangnamen stehen als `KLANG_NAMEN` in `config.py` und in
 `assets/sfx/LIESMICH.md`, mit der Regel, wann welcher spielt.
@@ -347,6 +361,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.7.0 | Sechs Waffen, Medkits, Hotbar, Ziellinie; Einstellungen und Tastenbelegung im Benutzerordner |
 | 0.8.0 | Pausenmenue, Einstellungen, umlegbare Steuerung, Abspann, Inventar |
 | 0.9.0 | Texturen und Klaenge aus Dateien: `assets/` nimmt jede Aufloesung an, Vorlagen-Werkzeug, Bestandsliste |
+| 0.10.0 | Schatten, Blut, Brandfleck, Wandschatten und Vignette ebenfalls ersetzbar; Blutfleck richtet sich nach der Groesse des Wesens |
 
 ## Anpassen
 

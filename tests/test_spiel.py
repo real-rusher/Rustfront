@@ -351,6 +351,38 @@ try:
     pruef("Nach vergessen() wird neu geladen",
           not b.aus_datei and b.bild("wand").get_at((5, 5)) == GRUEN)
 
+    # ── Dekale: Bilder ohne festes Mass ──────────────────────────────
+    # Schatten, Blut und Brandfleck richten sich nach dem, was sie wirft.
+    # Geprueft wird, dass sie aus ihrem Basismass wirklich mitwachsen und
+    # dass eine Datei auch hier durchschlaegt.
+    r = szene.renderer
+    klein = r.schatten(K.SPIELER["radius"])
+    gross = r.schatten(K.GEGNER["brecher"]["radius"])
+    pruef("Schatten waechst mit dem Koerper", gross.get_width() > klein.get_width(),
+          "%d gegen %d" % (klein.get_width(), gross.get_width()))
+    pruef("In der Luft schrumpft er",
+          r.schatten(K.SPIELER["radius"], 0.4).get_width() < klein.get_width())
+    pruef("Blutfleck waechst mit dem Wesen",
+          r.blutfleck(K.GEGNER["brecher"]["radius"]).get_width()
+          > r.blutfleck(K.GEGNER["laeufer"]["radius"]).get_width())
+    pruef("Brandfleck trifft im Wirkungskreis sein Basismass",
+          r.brandfleck(K.DEKAL["brand_radius"]).get_size()
+          == tuple(K.BILD_MASS["brandfleck"]), str(r.brandfleck(78.0).get_size()))
+    pruef("Kleinere Sprengung, kleinerer Fleck",
+          r.brandfleck(30.0).get_width() < r.brandfleck(78.0).get_width())
+
+    # Auch die bildschirmgrossen kommen aus der Registratur.
+    gruene_datei(weg / "vignette.png", (K.GAME_W, K.GAME_H))
+    gruene_datei(weg / "schatten.png", K.BILD_MASS["schatten"])
+    b2 = Bilder(weg)
+    pruef("Vignette laesst sich durch eine Datei ersetzen",
+          b2.bild("vignette").get_at((5, 5)) == GRUEN
+          and b2.bild("vignette").get_size() == (K.GAME_W, K.GAME_H))
+    from dustfront.render import Renderer
+    r2 = Renderer(b2)
+    pruef("Der Renderer nimmt die Dateifassung",
+          r2.schatten(K.SPIELER["radius"]).get_at((5, 5))[1] > 200)
+
     # ── Klaenge ──────────────────────────────────────────────────────
     sfx = weg / K.ASSETS["sfx"]
     sfx.mkdir()

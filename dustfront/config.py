@@ -109,6 +109,22 @@ ASSETS = dict(
 # Flaeche. Grell und absichtlich haesslich, damit es niemand uebersieht.
 C_FEHLT = (255, 0, 220, 180)
 
+# Flaechen, die nicht auf einer Kachel sitzen, sondern sich nach der Groesse
+# dessen richten, was sie wirft: der Schatten nach dem Koerper, der Blutfleck
+# nach dem Wesen, der Brandfleck nach dem Wirkungskreis. Gemalt sind sie in
+# einem Basismass (siehe BILD_MASS), und der Renderer rechnet sie von dort
+# auf die gebrauchte Groesse. Hier steht, fuer welchen Wert das Basismass
+# gilt.
+DEKAL = dict(
+    schatten_radius=20.0,     # Koerperradius, fuer den das Basisbild gilt
+    schatten_breite=2.3,      # Faktor Radius -> Breite des Ovals
+    schatten_hoehe=1.15,      # Faktor Radius -> Hoehe des Ovals
+    schatten_luft=0.34,       # so klein wird er, wenn das Wesen hoch fliegt
+    blut_radius=9.0,          # Wesensradius, fuer den das Basisbild gilt
+    brand_radius=78.0,        # Wirkungskreis, fuer den das Basisbild gilt
+    wand_versatz=7,           # so weit faellt der Schlagschatten einer Wand
+)
+
 # Sollmass jedes Bildes in Pixeln.
 #
 # Eine Datei darf in jeder Aufloesung gemalt sein: passt sie nicht auf das
@@ -150,6 +166,14 @@ BILD_MASS = {
     "waffe_scharf":     (26, 11),
     "waffe_granate":    (26, 11),
     "waffe_brecheisen": (26, 11),
+    # Dekale und Schatten. Das Mass ist hier ein Basismass: das Spiel rechnet
+    # die Flaeche auf die Groesse um, die es gerade braucht. Wer sie ersetzt,
+    # malt also nicht fuer eine feste Groesse, sondern eine Form.
+    "schatten":         (48, 24),
+    "blut":             (26, 26),
+    "brandfleck":       (156, 156),
+    "wandschatten":     (TILE + DEKAL["wand_versatz"], TILE + DEKAL["wand_versatz"]),
+    "vignette":         (GAME_W, GAME_H),
 }
 
 # Klaenge liegen in assets/sfx. Gesucht wird erst unter dem vollen Namen,
@@ -181,6 +205,7 @@ VORLAGEN = dict(
     zelle=(104, 54),          # Breite mal Hoehe einer Zelle
     rand=8,
     kopf=22,                  # Platz fuer die Ueberschrift
+    luft=16,                  # Platz unter dem Bild fuer Name und Mass
     lupe=2,                   # so oft wird die fertige Tafel hochskaliert
     karo=(26, 20, 15),        # Schachbrett hinter durchsichtigen Stellen
     karo_2=(34, 27, 20),

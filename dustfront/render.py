@@ -18,7 +18,6 @@ Mitte, wie in den Mockups vorgesehen.
 
 from __future__ import annotations
 
-import math
 import random
 
 import pygame
@@ -82,87 +81,71 @@ class Renderer:
         self._dunst = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
         self._linie = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
         self._brand: dict[int, pygame.Surface] = {}
-        self._vignette = self._vignette_bauen()
-        self._blut = self._blut_bauen()
-        self._wandschatten = self._wandschatten_bauen()
+        self._fleck_cache: dict[tuple, pygame.Surface] = {}
+        # Auch Schatten, Vignette und die Dekale kommen aus der Registratur:
+        # eine Datei assets/vignette.png ersetzt sie genauso wie eine Kachel.
+        # Gehalten werden sie hier, damit die Zeichenschleife nicht bei jedem
+        # Bild nachschlaegt.
+        self._vignette = bilder.bild("vignette")
+        self._blut = bilder.bild("blut")
+        self._wandschatten = bilder.bild("wandschatten")
         self._boden_namen = ("boden", "boden_2", "boden_3", "boden_4")
 
     # ---- Vorgefertigtes -------------------------------------------
+    def _passend(self, cache: dict, name: str, groesse, deckkraft: float = 1.0):
+        """Ein Bild aus der Registratur auf eine Groesse gebracht, gemerkt.
+
+        Schatten, Blut und Brandfleck haben keine feste Groesse: sie richten
+        sich nach dem, was sie wirft. Gemalt sind sie einmal in ihrem
+        Basismass, hier werden sie darauf umgerechnet. Das gilt fuer den
+        Platzhalter wie fuer eine hingelegte Datei - beide sind an dieser
+        Stelle nur noch eine Form.
+        """
+        w = max(1, int(groesse[0]))
+        h = max(1, int(groesse[1]))
+        deckung = max(0, min(255, int(round(255 * deckkraft))))
+        key = (w, h, deckung)
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+        # Hart skalieren, genau wie die Registratur es mit einer Datei macht.
+        # Weichzeichnen wuerde aus einem Blutfleck einen Farbnebel machen.
+        hit = pygame.transform.scale(self.bilder.bild(name), (w, h))
+        if deckung < 255:
+            hit = hit.copy()
+            hit.fill((255, 255, 255, deckung), special_flags=pygame.BLEND_RGBA_MULT)
+        if len(cache) > 200:
+            cache.clear()
+        cache[key] = hit
+        return hit
+
     def schatten(self, radius: float, f: float = 1.0) -> pygame.Surface:
         """Schatten passend zum Koerperkreis des Wesens.
 
         Frueher war das ein festes Oval fuer alle, das weder zur Groesse noch
-        zur Fusslinie passte. Jetzt richtet sich die Ellipse nach dem Radius,
-        und f schrumpft sie, wenn das Wesen in der Luft haengt.
+        zur Fusslinie passte. Jetzt richtet sich das Oval nach dem Radius,
+        und f schrumpft und lichtet es, wenn das Wesen in der Luft haengt.
         """
-        r = max(3, int(round(radius)))
-        k = max(2, int(round(f * 10)))
-        key = (r, k)
-        hit = self._schatten_cache.get(key)
-        if hit is not None:
-            return hit
-        g = f
-        w = max(4, int(r * 2.3 * g))
-        h = max(3, int(r * 1.15 * g))
-        s = pygame.Surface((w + 4, h + 4), pygame.SRCALPHA)
-        innen = pygame.Rect(2, 2, w, h)
-        pygame.draw.ellipse(s, (0, 0, 0, int(42 * g)), innen.inflate(4, 3))
-        pygame.draw.ellipse(s, (0, 0, 0, int(78 * g)), innen)
-        pygame.draw.ellipse(s, (0, 0, 0, int(104 * g)), innen.inflate(-4, -2))
-        if len(self._schatten_cache) > 200:
-            self._schatten_cache.clear()
-        self._schatten_cache[key] = s
-        return s
+        d = K.DEKAL
+        r = max(3.0, float(radius))
+        return self._passend(self._schatten_cache, "schatten",
+                             (r * d["schatten_breite"] * f + 4,
+                              r * d["schatten_hoehe"] * f + 4), f)
 
-    @staticmethod
-    def _vignette_bauen() -> pygame.Surface:
-        v = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
-        rand = 74
-        for i in range(rand):
-            a = int(88 * (1 - i / rand) ** 2)
-            if a <= 0:
-                continue
-            pygame.draw.rect(v, (0, 0, 0, a), (i, i, K.GAME_W - 2 * i, K.GAME_H - 2 * i), 1)
-        return v
-
-    @staticmethod
-    def _wandschatten_bauen() -> pygame.Surface:
-        """Schlagschatten, den eine feste Kachel auf den Boden wirft.
-        Licht kommt von oben links, also faellt er nach unten rechts."""
-        s = pygame.Surface((K.TILE + 7, K.TILE + 7), pygame.SRCALPHA)
-        for i in range(7):
-            a = int(96 * (1 - i / 7) ** 1.4)
-            pygame.draw.rect(s, (0, 0, 0, a), (i, i, K.TILE, K.TILE))
-        return s
-
-    @staticmethod
-    def _blut_bauen() -> pygame.Surface:
-        s = pygame.Surface((26, 26), pygame.SRCALPHA)
-        r = random.Random(9)
-        for _ in range(14):
-            x, y = r.randrange(4, 22), r.randrange(4, 22)
-            pygame.draw.circle(s, (*K.C_BLUT, r.randrange(70, 150)), (x, y),
-                               r.randrange(1, 5))
-        return s
+    def blutfleck(self, radius: float) -> pygame.Surface:
+        """Was liegen bleibt, wo ein Wesen gestorben ist. Ein Brecher
+        hinterlaesst mehr als ein Laeufer, darum haengt es am Radius."""
+        basis = K.BILD_MASS["blut"]
+        k = max(0.4, float(radius) / K.DEKAL["blut_radius"])
+        return self._passend(self._fleck_cache, "blut",
+                             (basis[0] * k, basis[1] * k))
 
     def brandfleck(self, radius: float) -> pygame.Surface:
         """Russfleck, den eine Granate hinterlaesst."""
-        r = int(max(10, radius))
-        hit = self._brand.get(r)
-        if hit is None:
-            d = r * 2
-            hit = pygame.Surface((d, d), pygame.SRCALPHA)
-            rnd = random.Random(r)
-            for _ in range(int(r * 1.8)):
-                a = rnd.uniform(0, 6.283)
-                ab = rnd.uniform(0, 1.0) ** 0.6 * r
-                x = int(r + math.cos(a) * ab)
-                y = int(r + math.sin(a) * ab)
-                dunkelheit = int(150 * (1.0 - ab / r))
-                pygame.draw.circle(hit, (14, 10, 8, dunkelheit), (x, y),
-                                   rnd.randrange(2, 7))
-            self._brand[r] = hit
-        return hit
+        k = max(0.2, float(radius) / K.DEKAL["brand_radius"])
+        basis = K.BILD_MASS["brandfleck"]
+        return self._passend(self._brand, "brandfleck",
+                             (basis[0] * k, basis[1] * k))
 
     def dunkel(self, surf: pygame.Surface, staerke: int) -> pygame.Surface:
         key = (id(surf), staerke)
@@ -233,7 +216,8 @@ class Renderer:
             hoch = w.flug * 0.55                    # Versatz waehrend eines Sturzes
             p = pygame.Vector2(boden.x, boden.y - hoch)
             if w.schatten:
-                f = 1.0 if w.flug <= 0 else max(0.34, 1.0 - w.flug / 240.0)
+                f = (1.0 if w.flug <= 0
+                     else max(K.DEKAL["schatten_luft"], 1.0 - w.flug / 240.0))
                 sch = self.schatten(w.radius, f)
                 ziel.blit(sch, (boden.x - sch.get_width() / 2 + 1,
                                 boden.y - sch.get_height() / 2 + 3))

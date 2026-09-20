@@ -14,6 +14,7 @@ Massstab: eine Kachel ist 32x32, eine Figur etwa 24x24.
 
 from __future__ import annotations
 
+import math
 import random
 
 import pygame
@@ -382,4 +383,83 @@ def _waffe_brecheisen():
     pygame.draw.polygon(s, K.C_RUST, [(21, 4), (25, 2), (25, 4), (22, 6)])
     pygame.draw.rect(s, K.C_RUST, (2, 6, 3, 4))          # gebogenes Ende
     pygame.draw.rect(s, (60, 26, 14), (2, 9, 3, 1))
+    return s
+
+
+# ──────────────────────────────── Schatten und Dekale
+#
+# Diese fuenf sitzen nicht auf einer Kachel und haben keine feste Groesse:
+# das Spiel rechnet sie von ihrem Basismass auf das um, was es gerade
+# braucht. Wer sie ersetzt, malt deshalb eine Form, keine feste Groesse.
+# Welcher Wert zum Basismass gehoert, steht in K.DEKAL.
+
+@platzhalter("schatten")
+def _schatten():
+    """Weicher Fleck unter jedem Wesen. Drei gestaffelte Ovale, damit der
+    Rand ausfranst statt hart abzubrechen."""
+    w, h = K.BILD_MASS["schatten"]
+    s = _flaeche(w, h)
+    innen = pygame.Rect(2, 2, w - 4, h - 4)
+    pygame.draw.ellipse(s, (0, 0, 0, 42), innen.inflate(4, 3))
+    pygame.draw.ellipse(s, (0, 0, 0, 78), innen)
+    pygame.draw.ellipse(s, (0, 0, 0, 104), innen.inflate(-4, -2))
+    return s
+
+
+@platzhalter("blut")
+def _blut():
+    """Was liegen bleibt, wo ein Wesen gestorben ist."""
+    w, h = K.BILD_MASS["blut"]
+    s = _flaeche(w, h)
+    r = random.Random(9)
+    for _ in range(14):
+        x, y = r.randrange(4, w - 4), r.randrange(4, h - 4)
+        pygame.draw.circle(s, (*K.C_BLUT, r.randrange(70, 150)), (x, y),
+                           r.randrange(1, 5))
+    return s
+
+
+@platzhalter("brandfleck")
+def _brandfleck():
+    """Russfleck, den eine Granate hinterlaesst. Dicht in der Mitte, nach
+    aussen immer duenner, damit kein Kreis mit hartem Rand entsteht."""
+    w, h = K.BILD_MASS["brandfleck"]
+    r = w // 2
+    s = _flaeche(w, h)
+    rnd = random.Random(r)
+    for _ in range(int(r * 1.8)):
+        winkel = rnd.uniform(0, 6.283)
+        ab = rnd.uniform(0, 1.0) ** 0.6 * r
+        x = int(r + math.cos(winkel) * ab)
+        y = int(r + math.sin(winkel) * ab)
+        dunkelheit = int(150 * (1.0 - ab / r))
+        pygame.draw.circle(s, (14, 10, 8, dunkelheit), (x, y),
+                           rnd.randrange(2, 7))
+    return s
+
+
+@platzhalter("wandschatten")
+def _wandschatten():
+    """Schlagschatten, den eine feste Kachel auf den Boden wirft.
+    Licht kommt von oben links, also faellt er nach unten rechts."""
+    versatz = K.DEKAL["wand_versatz"]
+    s = _flaeche(T + versatz, T + versatz)
+    for i in range(versatz):
+        a = int(96 * (1 - i / versatz) ** 1.4)
+        pygame.draw.rect(s, (0, 0, 0, a), (i, i, T, T))
+    return s
+
+
+@platzhalter("vignette")
+def _vignette():
+    """Abdunkelung zum Bildrand hin. Liegt ueber allem, auch ueber dem HUD
+    nicht - sie wird vor dem HUD gezeichnet."""
+    s = _flaeche(K.GAME_W, K.GAME_H)
+    rand = 74
+    for i in range(rand):
+        a = int(88 * (1 - i / rand) ** 2)
+        if a <= 0:
+            continue
+        pygame.draw.rect(s, (0, 0, 0, a), (i, i, K.GAME_W - 2 * i,
+                                           K.GAME_H - 2 * i), 1)
     return s
