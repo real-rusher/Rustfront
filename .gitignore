@@ -3,7 +3,10 @@ __pycache__/
 .venv/
 rustfront_settings.json
 rustfront_save.json
-# Bilder, die die Tests beim Laufen ablegen
-spiel_*.png
-menue_*.png
+# Bilder, die die Tests beim Laufen ablegen. Nur im Wurzelverzeichnis, damit
+# eine Textur assets/menue_knopf.png nicht versehentlich mitgemeint ist.
+/spiel_*.png
+/menue_*.png
+# Erzeugt von "python -m dustfront --vorlagen", jederzeit neu herstellbar
+assets_vorlage/
 daten/

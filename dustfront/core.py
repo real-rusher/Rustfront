@@ -155,9 +155,22 @@ def platzhalter(name):
 class Bilder:
     """Registratur fuer Sprites.
 
-    bild("wand") liefert assets/wand.png, falls vorhanden, sonst den im Code
-    erzeugten Platzhalter. Gedrehte Fassungen werden zwischengespeichert,
+    `bild("wand")` liefert `assets/wand.png`, falls vorhanden, sonst den im
+    Code erzeugten Platzhalter. Gedrehte Fassungen werden zwischengespeichert,
     damit pro Bild nicht neu rotiert wird.
+
+    Drei Dinge nimmt die Registratur dem Zeichner ab, damit eine hingelegte
+    Datei wirklich ohne Codeaenderung passt:
+
+    1. **Endung egal.** Gesucht wird in der Reihenfolge aus
+       `K.ASSETS["bild_endungen"]`, also erst .png, dann .webp, dann .bmp.
+    2. **Groesse egal.** Passt die Datei nicht auf das Sollmass aus
+       `K.BILD_MASS`, wird sie hart darauf gebracht, Pixel fuer Pixel und
+       ohne Weichzeichnen. Wer in doppelter Groesse malt, bekommt sauberes
+       Herunterrechnen; wer danebenliegt, reisst trotzdem kein Loch in die
+       Karte.
+    3. **Kaputte Datei kostet nichts.** Laesst sie sich nicht lesen, kommt
+       der Platzhalter, und der Grund landet in `fehler`.
     """
 
     DREH_SCHRITT = 3        # Grad
@@ -167,29 +180,66 @@ class Bilder:
         self._cache: dict[str, pygame.Surface] = {}
         self._dreh: dict[tuple, pygame.Surface] = {}
         self.aus_datei: set[str] = set()
+        self.fehler: list[str] = []
+
+    # ---- Suchen -----------------------------------------------------
+    def datei(self, name: str) -> Path | None:
+        """Die erste Datei, die zu diesem Namen passt, oder None."""
+        if self.ordner is None:
+            return None
+        for endung in K.ASSETS["bild_endungen"]:
+            pfad = self.ordner / (name + endung)
+            if pfad.is_file():
+                return pfad
+        return None
+
+    @staticmethod
+    def mass(name: str) -> tuple[int, int] | None:
+        """Das Sollmass des Bildes, oder None, wenn keines festgelegt ist."""
+        m = K.BILD_MASS.get(name)
+        return (int(m[0]), int(m[1])) if m else None
+
+    def _laden(self, name: str) -> pygame.Surface | None:
+        pfad = self.datei(name)
+        if pfad is None:
+            return None
+        try:
+            surf = pygame.image.load(str(pfad)).convert_alpha()
+        except (pygame.error, OSError) as grund:
+            self.fehler.append("%s: %s" % (pfad.name, grund))
+            return None
+        soll = self.mass(name)
+        if soll is not None and surf.get_size() != soll:
+            # Hart skalieren, nicht weichzeichnen: sonst verschmieren die
+            # Kanten und die Pixel-Art sieht aus wie ein Foto.
+            surf = pygame.transform.scale(surf, soll)
+        self.aus_datei.add(name)
+        return surf
 
     def bild(self, name: str) -> pygame.Surface:
         hit = self._cache.get(name)
         if hit is not None:
             return hit
-        surf = None
-        if self.ordner is not None:
-            pfad = self.ordner / (name + ".png")
-            if pfad.is_file():
-                try:
-                    surf = pygame.image.load(str(pfad)).convert_alpha()
-                    self.aus_datei.add(name)
-                except pygame.error:
-                    surf = None
+        surf = self._laden(name)
         if surf is None:
-            zeichner = _PLATZHALTER.get(name)
-            if zeichner is None:
-                surf = pygame.Surface((K.TILE, K.TILE), pygame.SRCALPHA)
-                surf.fill((255, 0, 220, 180))          # auffaellig fehlend
-            else:
-                surf = zeichner()
+            surf = self.platzhalter(name)
         self._cache[name] = surf
         return surf
+
+    def platzhalter(self, name: str) -> pygame.Surface:
+        """Die im Code gezeichnete Fassung, unabhaengig von jeder Datei.
+
+        Wird auch von `--vorlagen` gebraucht: dort soll die Vorlage aus dem
+        Code kommen, selbst wenn schon eine Datei danebenliegt.
+        """
+        zeichner = _PLATZHALTER.get(name)
+        if zeichner is None:
+            soll = self.mass(name) or (K.TILE, K.TILE)
+            surf = pygame.Surface(soll, pygame.SRCALPHA)
+            surf.fill(K.C_FEHLT)                       # auffaellig fehlend
+            self.fehler.append("%s: weder Datei noch Platzhalter" % name)
+            return surf
+        return zeichner()
 
     def gedreht(self, name: str, winkel: float) -> pygame.Surface:
         k = int(round(winkel / self.DREH_SCHRITT)) * self.DREH_SCHRITT % 360
@@ -199,6 +249,14 @@ class Bilder:
             hit = pygame.transform.rotate(self.bild(name), -k)
             self._dreh[key] = hit
         return hit
+
+    def vergessen(self) -> None:
+        """Alles neu laden. Fuer den Fall, dass jemand im laufenden Spiel
+        eine Datei dazulegt oder austauscht."""
+        self._cache.clear()
+        self._dreh.clear()
+        self.aus_datei.clear()
+        self.fehler.clear()
 
 
 # ══════════════════════════════════════════════════════════════════

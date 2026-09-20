@@ -81,13 +81,110 @@ TREFFER = dict(
     zeitlupe=0.045,           # kurze Verlangsamung beim Toeten
 )
 
-# ══════════════════════════════════════════════════ TON
+# ══════════════════════════════════════════════════ AUSSENHAUT
+#
+# Texturen und Klaenge. Alles, was das Spiel zeigt und hoert, hat einen
+# Namen. Zu jedem Namen sucht das Spiel zuerst eine Datei und zeichnet oder
+# rechnet nur dann selbst, wenn keine da ist:
+#
+#     assets/<name>.png           Bild
+#     assets/sfx/<name>.wav       Klang
+#
+# Eine hingelegte Datei ersetzt den Platzhalter, ohne dass eine Zeile Code
+# geaendert wird. Welche Namen es gibt, steht in BILD_MASS und KLANG_NAMEN
+# weiter unten; `python -m dustfront --vorlagen` schreibt von jedem Bild
+# eine masshaltige Vorlage zum Uebermalen heraus.
 
-# Klaenge liegen in assets/sfx. Fehlt eine Datei, erzeugt audio.py einen
-# Platzhalter. Namen: schuss_repetierer, schuss_schrot, sonst schuss.
+ASSETS = dict(
+    ordner="assets",              # Name des Ordners neben dem Paket
+    sfx="sfx",                    # Unterordner fuer die Klaenge
+    bild_endungen=(".png", ".webp", ".bmp"),
+    ton_endungen=(".wav", ".ogg"),
+    fassungen=8,                  # name_1 bis name_8 als Abwechslung
+    platzhalter_fassungen=3,      # so viele Kopien je erzeugtem Klang
+    vorlagen="assets_vorlage",    # dorthin schreibt --vorlagen
+)
+
+# Fehlt ein Bild ganz, also Datei und Platzhalter, zeigt das Spiel diese
+# Flaeche. Grell und absichtlich haesslich, damit es niemand uebersieht.
+C_FEHLT = (255, 0, 220, 180)
+
+# Sollmass jedes Bildes in Pixeln.
+#
+# Eine Datei darf in jeder Aufloesung gemalt sein: passt sie nicht auf das
+# Mass, wird sie beim Laden darauf gebracht, und zwar hart Pixel fuer Pixel,
+# ohne Weichzeichnen. Wer also in doppelter oder vierfacher Groesse malt,
+# bekommt sauberes Herunterrechnen geschenkt. Wer ein anderes Mass will,
+# aendert die Zahl hier, nicht den Code.
+#
+# Kacheln muessen TILE gross sein, sonst reissen Luecken in die Karte.
+# Figuren sitzen mittig auf einer quadratischen Flaeche und schauen nach
+# rechts, damit das Drehen stimmt.
+BILD_MASS = {
+    # Kacheln
+    "leer":             (TILE, TILE),
+    "boden":            (TILE, TILE),
+    "boden_2":          (TILE, TILE),
+    "boden_3":          (TILE, TILE),
+    "boden_4":          (TILE, TILE),
+    "gitter":           (TILE, TILE),
+    "wand":             (TILE, TILE),
+    "kiste":            (TILE, TILE),
+    "treppe_hoch":      (TILE, TILE),
+    "treppe_runter":    (TILE, TILE),
+    "luke":             (TILE, TILE),
+    # Figuren, quadratisch und nach rechts schauend
+    "spieler":          (28, 28),
+    "gegner_laeufer":   (28, 28),
+    "gegner_brecher":   (36, 36),
+    # Kleinkram
+    "geschoss":         (8, 4),
+    "muendung":         (20, 20),
+    "medkit":           (16, 14),
+    "granate":          (10, 10),
+    "huelse":           (4, 3),
+    # Waffensymbole fuer Hotbar und Inventar, Seitenansicht nach rechts
+    "waffe_repetierer": (26, 11),
+    "waffe_sturm":      (26, 11),
+    "waffe_schrot":     (26, 11),
+    "waffe_scharf":     (26, 11),
+    "waffe_granate":    (26, 11),
+    "waffe_brecheisen": (26, 11),
+}
+
+# Klaenge liegen in assets/sfx. Gesucht wird erst unter dem vollen Namen,
+# dann unter dem Teil vor dem Unterstrich: fuer "schuss_repetierer" also
+# schuss_repetierer.wav, danach schuss.wav.
+KLANG_NAMEN = (
+    "schuss",               # Rueckfall fuer jede Schusswaffe ohne eigene Datei
+    "schuss_repetierer",
+    "schuss_sturm",
+    "schuss_schrot",
+    "schuss_scharf",
+    "granate",
+    "nahkampf",
+    "wurf",
+    "medkit",
+    "aufheben",
+    "menue",
+    "menue_ok",
+)
+
 AUDIO = dict(
     gesamt=0.75,              # Gesamtlautstaerke
     schuss=0.85,              # Lautstaerke der Schuesse
+)
+
+# Mass der Uebersichtstafel, die `--vorlagen` neben die Einzelbilder legt.
+VORLAGEN = dict(
+    spalten=5,
+    zelle=(104, 54),          # Breite mal Hoehe einer Zelle
+    rand=8,
+    kopf=22,                  # Platz fuer die Ueberschrift
+    lupe=2,                   # so oft wird die fertige Tafel hochskaliert
+    karo=(26, 20, 15),        # Schachbrett hinter durchsichtigen Stellen
+    karo_2=(34, 27, 20),
+    karo_feld=4,
 )
 
 # ══════════════════════════════════════════════════ HOEHE

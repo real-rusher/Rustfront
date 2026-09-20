@@ -263,6 +263,133 @@ held.schaden(50)
 pruef("Tod erkannt", not held.lebt)
 sim(1.5)
 bild("spiel_4_tod.png")
+
+# ── Aussenhaut: Dateien statt Platzhalter ────────────────────────────
+# Das Versprechen lautet: eine Datei assets/<name>.png ersetzt das im Code
+# gezeichnete Bild, ohne dass eine Zeile Code geaendert wird. Geprueft wird
+# genau das, in einem Wegwerfordner, mit echten Dateien auf der Platte.
+import shutil, tempfile, wave
+from pathlib import Path
+from dustfront.core import Bilder, _PLATZHALTER
+from dustfront.audio import Klaenge
+
+print()
+GRUEN = (0, 255, 0, 255)
+
+# Die Tabelle und die Zeichner muessen sich decken, sonst laedt jemand eine
+# Datei auf ein Mass, das es gar nicht gibt.
+fehlt_tabelle = [n for n in _PLATZHALTER if n not in K.BILD_MASS]
+fehlt_zeichner = [n for n in K.BILD_MASS if n not in _PLATZHALTER]
+pruef("Jeder Platzhalter steht in BILD_MASS", not fehlt_tabelle,
+      ", ".join(fehlt_tabelle))
+pruef("Jeder Eintrag in BILD_MASS hat einen Zeichner", not fehlt_zeichner,
+      ", ".join(fehlt_zeichner))
+
+roh = Bilder(None)
+schief = ["%s: %s statt %s" % (n, roh.platzhalter(n).get_size(), K.BILD_MASS[n])
+          for n in K.BILD_MASS if roh.platzhalter(n).get_size() != tuple(K.BILD_MASS[n])]
+pruef("Jeder Platzhalter hat sein Sollmass", not schief, ", ".join(schief))
+
+# Alles, was die Inhalte-Tabellen verlangen, muss es auch geben.
+gebraucht = ([d["bild"] for d in K.KACHELN.values()]
+             + [d["bild"] for d in K.GEGNER.values()]
+             + ["waffe_" + w for w in K.WAFFEN]
+             + ["spieler", "geschoss", "muendung", "medkit", "granate", "huelse"])
+unbekannt = sorted({n for n in gebraucht if n not in K.BILD_MASS})
+pruef("Alle im Spiel verlangten Bilder sind bekannt", not unbekannt,
+      ", ".join(unbekannt))
+
+weg = Path(tempfile.mkdtemp(prefix="dustfront_haut_"))
+try:
+    def gruene_datei(pfad, groesse):
+        s = pygame.Surface(groesse, pygame.SRCALPHA)
+        s.fill(GRUEN)
+        pygame.image.save(s, str(pfad))
+
+    # 1. Richtiges Mass: die Datei kommt Pixel fuer Pixel so an, wie sie ist.
+    gruene_datei(weg / "wand.png", (K.TILE, K.TILE))
+    # 2. Falsches Mass: wird auf das Sollmass gebracht, statt die Karte zu
+    #    zerreissen.
+    gruene_datei(weg / "boden.png", (K.TILE * 2, K.TILE * 2))
+    # 3. Andere Endung: .bmp wird genauso genommen.
+    gruene_datei(weg / "kiste.bmp", (K.TILE, K.TILE))
+    # 4. Reihenfolge: .png gewinnt gegen .bmp beim selben Namen.
+    gruene_datei(weg / "gitter.png", (K.TILE, K.TILE))
+    (weg / "gitter.bmp").write_bytes(b"kein bild")
+    # 5. Kaputte Datei: kostet den Platzhalter nicht.
+    (weg / "luke.png").write_bytes(b"das ist kein PNG")
+
+    b = Bilder(weg)
+    w = b.bild("wand")
+    pruef("Datei ersetzt den Platzhalter",
+          w.get_at((5, 5)) == GRUEN and "wand" in b.aus_datei)
+    pruef("Datei behaelt ihr Mass", w.get_size() == (K.TILE, K.TILE))
+
+    bo = b.bild("boden")
+    pruef("Zu grosse Datei wird auf das Sollmass gebracht",
+          bo.get_size() == (K.TILE, K.TILE), str(bo.get_size()))
+    pruef("und bleibt dabei die Datei", bo.get_at((5, 5)) == GRUEN)
+
+    pruef("Auch .bmp wird genommen", b.bild("kiste").get_at((5, 5)) == GRUEN)
+    pruef("Bei zwei Endungen gewinnt .png",
+          b.bild("gitter").get_at((5, 5)) == GRUEN and not b.fehler)
+
+    lu = b.bild("luke")
+    pruef("Kaputte Datei faellt auf den Platzhalter zurueck",
+          lu.get_at((5, 5)) != GRUEN and lu.get_size() == (K.TILE, K.TILE))
+    pruef("und wird als Fehler vermerkt", any("luke" in f for f in b.fehler))
+
+    # Ohne Ordner bleibt alles beim Alten: das ist der Zustand im Repo.
+    ohne = Bilder(None)
+    pruef("Ohne assets-Ordner kommt alles aus dem Code",
+          not ohne.aus_datei and ohne.bild("wand").get_at((5, 5)) != GRUEN)
+
+    # Drehen und Zwischenspeichern muessen mit der Datei genauso gehen.
+    pruef("Gedrehte Fassung einer Datei klappt",
+          b.gedreht("wand", 90).get_size() == (K.TILE, K.TILE))
+    b.vergessen()
+    pruef("Nach vergessen() wird neu geladen",
+          not b.aus_datei and b.bild("wand").get_at((5, 5)) == GRUEN)
+
+    # ── Klaenge ──────────────────────────────────────────────────────
+    sfx = weg / K.ASSETS["sfx"]
+    sfx.mkdir()
+    with wave.open(str(sfx / "nahkampf.wav"), "wb") as f:
+        f.setnchannels(2); f.setsampwidth(2); f.setframerate(44100)
+        f.writeframes(b"\x00\x40" * 4410 * 2)
+    kl = Klaenge(weg)
+    if kl.ok:
+        kl.klang("nahkampf")
+        pruef("Klang kommt aus der Datei", "nahkampf" in kl.aus_datei)
+        kl.klang("schuss_repetierer")
+        pruef("Ohne Datei kommt der Klang aus dem Code",
+              "schuss_repetierer" not in kl.aus_datei
+              and len(kl.klang("schuss_repetierer")) > 0)
+        alle = [n for n in K.KLANG_NAMEN if not kl.klang(n)]
+        pruef("Jeder Name in KLANG_NAMEN gibt einen Klang", not alle,
+              ", ".join(alle))
+    else:
+        print("  --    Mixer nicht verfuegbar, Klangproben uebersprungen")
+
+    # ── Vorlagen ─────────────────────────────────────────────────────
+    from dustfront.vorlagen import schreiben, namen
+    ordner = weg / "vorlagen"
+    anzahl = schreiben(ordner, melden=False)
+    pruef("Vorlagen werden geschrieben", anzahl == len(K.BILD_MASS),
+          "%d Stueck" % anzahl)
+    lueckenhaft = [n for n in namen() if not (ordner / (n + ".png")).is_file()]
+    pruef("Zu jedem Namen liegt eine Vorlage", not lueckenhaft,
+          ", ".join(lueckenhaft))
+    pruef("Uebersichtstafel entsteht", (ordner / "_uebersicht.png").is_file())
+    # Die Vorlage muss zurueckgelesen genau das Sollmass haben, sonst taugt
+    # sie nicht als Malvorlage.
+    probe_bild = pygame.image.load(str(ordner / "spieler.png"))
+    pruef("Vorlage hat das Sollmass",
+          probe_bild.get_size() == tuple(K.BILD_MASS["spieler"]),
+          str(probe_bild.get_size()))
+finally:
+    shutil.rmtree(weg, ignore_errors=True)
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

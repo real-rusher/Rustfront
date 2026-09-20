@@ -1,5 +1,5 @@
 import sys
 
-from .main import starten
+from .main import aus_argumenten
 
-sys.exit(starten())
+sys.exit(aus_argumenten(sys.argv[1:]))

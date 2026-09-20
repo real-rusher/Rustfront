@@ -34,7 +34,7 @@ import pygame
 from . import config as K
 
 RATE = 44100
-ENDUNGEN = (".wav", ".ogg")
+ENDUNGEN = K.ASSETS["ton_endungen"]
 
 _PLATZHALTER = {}
 
@@ -217,12 +217,13 @@ def _schuss(seed=0):
 # ══════════════════════════════════════════════════════════════════
 
 class Klaenge:
-    FASSUNGEN = 3        # so viele leicht verschiedene Kopien je Platzhalter
+    FASSUNGEN = K.ASSETS["platzhalter_fassungen"]
 
     def __init__(self, ordner: Path | None = None) -> None:
-        self.ordner = (ordner / "sfx") if ordner is not None else None
+        self.ordner = (ordner / K.ASSETS["sfx"]) if ordner is not None else None
         self.ok = False
         self.aus_datei: set[str] = set()
+        self.fehler: list[str] = []
         self._cache: dict[str, list] = {}
         self.rnd = random.Random()
         self.gesamt = K.AUDIO["gesamt"]
@@ -244,15 +245,16 @@ class Klaenge:
         if self.ordner is None or not self.ordner.is_dir():
             return []
         gefunden = []
-        for kandidat in [name] + ["%s_%d" % (name, i) for i in range(1, 9)]:
+        nummern = range(1, K.ASSETS["fassungen"] + 1)
+        for kandidat in [name] + ["%s_%d" % (name, i) for i in nummern]:
             for endung in ENDUNGEN:
                 pfad = self.ordner / (kandidat + endung)
                 if pfad.is_file():
                     try:
                         gefunden.append(pygame.mixer.Sound(str(pfad)))
                         self.aus_datei.add(name)
-                    except pygame.error:
-                        pass
+                    except pygame.error as grund:
+                        self.fehler.append("%s: %s" % (pfad.name, grund))
         return gefunden
 
     def _bauen(self, name: str) -> list:

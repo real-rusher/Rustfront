@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.8.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.9.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -27,7 +27,7 @@ Nicolas, Nikolaus, Marlon, Alfred.
 | Inventar und Hotbar | fertig, Plaetze per Maus oder Tastatur umsortierbar |
 | Pause und Einstellungen | fertig: Anzeige, Ton, Steuerung, Mitwirkende |
 | Grafik-Einstellungen | Vignette, Wackeln und Partikel stehen; Licht, Wetter und Textursaetze sind vorgemerkt |
-| Texturen und Klaenge | noch alle im Code erzeugt, Dateien koennen sie jederzeit ersetzen |
+| Texturen und Klaenge | noch alle im Code erzeugt; eine Datei in `assets/` ersetzt jedes Stueck, ohne Codeaenderung |
 
 Der Spielkern gilt als tragfaehig: was jetzt noch dazukommt, haengt sich als
 weitere Szene, weiteres Wesen oder weitere Zeile in `config.py` an, statt
@@ -58,6 +58,14 @@ Nur das Spiel, ohne Menue und ohne Intro:
 python -m dustfront
 ```
 
+Vorlagen zum Uebermalen herausschreiben, und nachsehen, was gerade aus
+Dateien kommt:
+
+```
+python -m dustfront --vorlagen
+python -m dustfront --assets
+```
+
 Testlauf ohne Fenster, legt Bilder zum Anschauen ab:
 
 ```
@@ -66,8 +74,9 @@ python tests/test_menues.py
 ```
 
 Gebraucht werden Python 3.10 bis 3.14 und pygame-ce (getestet mit 2.5.8).
-Sonst nichts: Schrift, Grafik und Ton entstehen zur Laufzeit, es gibt keine
-Assets im Repo.
+Sonst nichts: Schrift, Grafik und Ton entstehen zur Laufzeit, es liegen keine
+fertigen Bilder oder Klaenge im Repo. Wie man sie durch eigene ersetzt, steht
+unter [Texturen und Klaenge](#texturen-und-klaenge).
 
 ## Steuerung im Menue
 
@@ -147,6 +156,7 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `einstellungen.py` | Einstellungen und Tastenbelegung, lesen und schreiben |
 | `pfade.py` | Wo diese Dateien liegen, je nach Betriebssystem |
 | `art.py`, `audio.py`, `font.py` | Grafik, Klang und Schrift, alles zur Laufzeit erzeugt |
+| `vorlagen.py` | Die beiden Werkzeuge `--vorlagen` und `--assets` |
 
 ### Wo die Einstellungen liegen
 
@@ -176,6 +186,98 @@ Einstellung, die kaputt ist, nie den Start.
 
 Das alte Menue legt daneben weiter `rustfront_settings.json` und
 `rustfront_save.json` im Spielordner ab. Beide stehen in der `.gitignore`.
+
+## Texturen und Klaenge
+
+Alles, was das Spiel zeigt und hoert, hat einen Namen. Zu jedem Namen sucht
+es zuerst eine Datei und zeichnet oder rechnet nur dann selbst, wenn keine da
+ist:
+
+```
+assets/<name>.png           Bild
+assets/sfx/<name>.wav       Klang
+```
+
+**Eine hingelegte Datei ersetzt den Platzhalter, ohne dass eine Zeile Code
+geaendert wird.** Kein Eintrag nachzutragen, keine Liste zu pflegen. Datei
+hinlegen, Spiel starten, fertig. Bei Bildern gehen auch `.webp` und `.bmp`,
+bei Klaengen auch `.ogg`; gesucht wird in dieser Reihenfolge, die erste
+gefundene gewinnt.
+
+### Der Weg von der leeren Datei ins Spiel
+
+```
+python -m dustfront --vorlagen
+```
+
+schreibt jedes Bild, das das Spiel kennt, nach `assets_vorlage/` — in der
+richtigen Groesse, unter dem richtigen Dateinamen, dazu eine
+Uebersichtstafel `_uebersicht.png` mit allen Bildern nebeneinander.
+Uebermalen, nach `assets/` kopieren, fertig. Umbenennen entfaellt.
+
+```
+python -m dustfront --assets
+```
+
+sagt umgekehrt zu jedem Namen, ob er gerade aus einer Datei oder aus dem Code
+kommt, und nennt jede Datei, die sich nicht lesen liess. Damit prueft man,
+ob eine neue Textur wirklich angenommen wurde.
+
+### Groesse
+
+Jedes Bild hat ein Sollmass. Wer genau darin malt, bekommt die Datei Pixel
+fuer Pixel so ins Spiel, wie sie ist. Wer groesser malt, darf das: die Datei
+wird beim Laden hart auf das Sollmass gerechnet, ohne Weichzeichnen. Ein
+sauberes Vielfaches — doppelt, dreifach, vierfach — rechnet exakt herunter
+und sieht am besten aus.
+
+Wer dauerhaft ein anderes Mass will, aendert die Zahl in `BILD_MASS` in
+`dustfront/config.py`. Das ist die eine Stelle dafuer, und ein Test wacht
+darueber, dass Tabelle und gezeichnete Platzhalter sich decken.
+
+| Name | Mass | Was es ist |
+| --- | --- | --- |
+| `leer` | 32x32 | Loch in der Ebene, man sieht hindurch |
+| `boden`, `boden_2`, `boden_3`, `boden_4` | 32x32 | Bodenplatten, zufaellig abgewechselt |
+| `gitter` | 32x32 | Gitterrost |
+| `wand` | 32x32 | feste Wand, blockiert Sicht und Schuss |
+| `kiste` | 32x32 | Frachtkasten, blockiert nur Bewegung |
+| `treppe_hoch`, `treppe_runter` | 32x32 | Treppen, mit E zu benutzen |
+| `luke` | 32x32 | Luke nach unten |
+| `spieler` | 28x28 | die eigene Figur |
+| `gegner_laeufer` | 28x28 | Laeufer |
+| `gegner_brecher` | 36x36 | Brecher, der schwere Gegner |
+| `geschoss` | 8x4 | fliegende Kugel |
+| `muendung` | 20x20 | Muendungsfeuer, wird additiv gemischt |
+| `medkit` | 16x14 | Medkit am Boden |
+| `granate` | 10x10 | fliegende Granate |
+| `huelse` | 4x3 | ausgeworfene Patronenhuelse |
+| `waffe_repetierer` … `waffe_brecheisen` | 26x11 | die sechs Symbole in Hotbar und Inventar |
+
+Die Klangnamen stehen als `KLANG_NAMEN` in `config.py` und in
+`assets/sfx/LIESMICH.md`, mit der Regel, wann welcher spielt.
+
+### Worauf beim Malen zu achten ist
+
+* **Kacheln** sind 32x32 und muessen randlos aneinanderpassen.
+* **Figuren** sitzen mittig auf einer quadratischen Flaeche und schauen nach
+  rechts, also auf 0 Grad. Das Spiel dreht sie von dort aus. Wer nach oben
+  malt, dessen Figur laeuft seitwaerts.
+* **Durchsichtigkeit** benutzen, wo nichts ist. Die Uebersichtstafel legt
+  Durchsichtiges auf ein Schachbrett, damit man den Rand sieht.
+* **Waffensymbole** sind winzig. Dort zaehlt nur die Silhouette: Laenge des
+  Laufs, Dicke des Gehaeuses, was oben und unten heraussteht.
+
+### Wenn etwas schiefgeht
+
+Eine Datei, die sich nicht lesen laesst, kostet nichts: das Spiel nimmt den
+Platzhalter und laeuft weiter. Den Grund zeigt `--assets`. Ein grelles Pink
+im Spiel heisst dagegen, dass weder Datei noch Code diesen Namen kennen —
+dann stimmt der Name nicht.
+
+Dass ein Dauerfeuer nicht aus einer einzigen Kopie klingt, regeln
+Nummern-Fassungen: `schuss_sturm_1.wav` bis `_8` daneben legen, und das
+Spiel waehlt bei jedem Schuss zufaellig eine davon.
 
 ## Versionsnummern
 
@@ -244,6 +346,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.6.0 | Hoehenebenen mit echtem Abstand, Loecher zum Durchfallen und Durchschiessen, Sturz mit Steuerung in der Luft |
 | 0.7.0 | Sechs Waffen, Medkits, Hotbar, Ziellinie; Einstellungen und Tastenbelegung im Benutzerordner |
 | 0.8.0 | Pausenmenue, Einstellungen, umlegbare Steuerung, Abspann, Inventar |
+| 0.9.0 | Texturen und Klaenge aus Dateien: `assets/` nimmt jede Aufloesung an, Vorlagen-Werkzeug, Bestandsliste |
 
 ## Anpassen
 
@@ -265,7 +368,9 @@ Alle Stellschrauben stehen oben in der jeweiligen Datei.
   in `dustfront/einstellungen.py`.
 * **Texturen und Klaenge ersetzen**: eine Datei `assets/<name>.png` oder
   `assets/sfx/<name>.wav` hinlegen, und sie tritt an die Stelle der im Code
-  gezeichneten Fassung. Es ist kein Code zu aendern.
+  gezeichneten Fassung. Es ist kein Code zu aendern. Namen, Masse und die
+  beiden Werkzeuge dazu stehen oben unter
+  [Texturen und Klaenge](#texturen-und-klaenge).
 * **Dauer des Intros**: `PHASEN` in `rustfront_splash.py`. Jede Karte hat drei
   Abschnitte (Aufbau, Standbild, Abblende) mit jeweils der echten Dauer in
   Sekunden. `TEMPO` skaliert alles auf einmal, 1.3 bringt die Sequenz von rund
