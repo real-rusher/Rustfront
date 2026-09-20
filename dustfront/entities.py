@@ -53,6 +53,7 @@ class Wesen:
         self.sturz_rest = 0.0
         self.sturz_dauer = 0.0
         self.sturz_hoehe = 0.0
+        self.sturz_ziel = None   # freier Platz, falls es unter uns eng ist
 
     # ---- Ablauf ------------------------------------------------------
     def schritt(self, dt: float) -> None:
@@ -73,11 +74,21 @@ class Wesen:
         w = self.welt
         ziel = w.boden_unter(self.pos, self.ebene)
         dz = max(1.0, w.hoehe(self.ebene) - w.hoehe(ziel))
-        self.pos.update(w.landeplatz(self.pos, self.radius, ziel))
-        self.vorher.update(self.pos)
+        # Die Figur bleibt stehen, wo sie ist, und faellt von dort. Frueher
+        # sprang sie hier sofort auf den spaeteren Landeplatz - seitlich und,
+        # ueber flug, auch nach oben. Das war der Ruck beim Absprung. Wo sie
+        # aufkommt, entscheidet sich jetzt erst beim Aufschlag.
         self.ebene = ziel
         self.flug = dz
         self.sturz_hoehe = dz
+        # Steht unter dem Loch etwas im Weg, wird der Ausweichplatz jetzt
+        # schon gesucht: die Figur rutscht waehrend des Fluges dorthin ab,
+        # statt im letzten Bild dorthin gesetzt zu werden.
+        self.sturz_ziel = None
+        if not w.frei(self.pos, self.radius, ziel):
+            frei_bei = w.landeplatz(self.pos, self.radius, ziel)
+            if frei_bei.distance_to(self.pos) > 0.5:
+                self.sturz_ziel = frei_bei
         # freier Fall: die Dauer folgt der Hoehe, nicht einer festen Zahl
         self.sturz_dauer = math.sqrt(2.0 * dz / K.STURZ["schwerkraft"])
         self.sturz_rest = self.sturz_dauer
@@ -88,13 +99,25 @@ class Wesen:
         t = max(0.0, self.sturz_dauer - self.sturz_rest)
         self.flug = max(0.0, self.sturz_hoehe
                         - 0.5 * K.STURZ["schwerkraft"] * t * t)
+        if self.sturz_ziel is not None:
+            # Am Hindernis abrutschen. Direkt an der Position, nicht ueber
+            # welt.bewegen: wer in einer Wand haengt, kaeme dort nie heraus.
+            self.pos.move_towards_ip(self.sturz_ziel,
+                                     K.STURZ["abrutschen"] * dt)
         if self.sturz_rest <= 0:
             self.flug = 0.0
+            self.sturz_ziel = None
             self.aufschlag()
 
     def aufschlag(self) -> None:
         h = self.sturz_hoehe
         self.sturz_hoehe = 0.0
+        # Erst jetzt zaehlt der Boden wieder. Steht an der Stelle etwas im
+        # Weg, wird die naechste freie daneben genommen; vorher war der Flug
+        # ungebremst, damit niemand mitten in der Luft an einer Wand haengt,
+        # die eine Etage tiefer steht.
+        self.pos.update(self.welt.landeplatz(self.pos, self.radius, self.ebene))
+        self.vorher.update(self.pos)
         schaden = max(K.STURZ["min_schaden"], h / 100.0 * K.STURZ["schaden_je_100"])
         w = self.welt
         wolke(w, self.pos, 12, 130, 0.45, K.C_MUTED_DK, self.ebene, 1, "staub")
@@ -337,7 +360,8 @@ class Aufsammler(Wesen):
 
 class Spieler(Wesen):
     fraktion = "mensch"
-    bild = "spieler"
+    # Kein fester Name: die Figur zeigt die Waffe, die sie gerade traegt.
+    # Siehe die Eigenschaft bild() weiter unten.
     faellt = True
 
     def __init__(self, pos, ebene=0) -> None:
@@ -380,6 +404,17 @@ class Spieler(Wesen):
     @property
     def waffe_daten(self) -> dict:
         return K.WAFFEN[self.waffen[self.waffe]]
+
+    @property
+    def bild(self) -> str:
+        """Die Figur mit der Waffe, die sie gerade haelt.
+
+        Gibt es zu der Waffe keine eigene Figur, bleibt die schlichte
+        uebrig - eine neue Waffe faellt dadurch hoechstens auf die Vorgabe
+        zurueck, statt ein fehlendes Bild zu zeigen.
+        """
+        name = "spieler_" + self.waffe_name
+        return name if name in K.BILD_MASS else "spieler"
 
     @property
     def waffe_name(self) -> str:
@@ -429,22 +464,21 @@ class Spieler(Wesen):
         self.welt.auseinander(self)
         self.welt.befreien(self)
 
-        if self.sturz_rest > 0:          # im Sturz kein Schrittstaub, kein Feuer
-            return
+        if self.sturz_rest > 0:
+            pass                         # in der Luft kein Staub, kein Loch
+        elif self.welt.loch_unter(self):
+            self.stuerzen()              # ueber den Rand getreten
+        else:
+            # Schrittstaub
+            self.weg += self.pos.distance_to(vor)
+            if self.weg > s["stiefel_abstand"]:
+                self.weg = 0.0
+                wolke(self.welt, self.pos + pygame.Vector2(0, 4), 2, 26, 0.34,
+                      K.C_MUTED_DK, self.ebene, 1, "staub", 360, 0, 6.0)
 
-        # Ueber den Rand getreten? Dann geht es sofort abwaerts.
-        if self.welt.loch_unter(self):
-            self.stuerzen()
-            return
-
-        # Schrittstaub
-        self.weg += self.pos.distance_to(vor)
-        if self.weg > s["stiefel_abstand"]:
-            self.weg = 0.0
-            wolke(self.welt, self.pos + pygame.Vector2(0, 4), 2, 26, 0.34,
-                  K.C_MUTED_DK, self.ebene, 1, "staub", 360, 0, 6.0)
-
-        # Nachladen laeuft weiter, auch wenn man rennt
+        # Nachladen und Feuern laufen immer weiter: beim Rennen, im Sturz,
+        # und waehrend ein Medkit angelegt wird. Keine Handlung sperrt eine
+        # andere aus - siehe abbrechen().
         if self.nachlade_rest > 0:
             self.nachlade_rest -= dt
             if self.nachlade_rest <= 0:
@@ -460,10 +494,22 @@ class Spieler(Wesen):
         if self.nachlade_rest <= 0 and self.magazin[self.waffe_name] < d["magazin"]:
             self.nachlade_rest = d["nachladen"]
 
+    def abbrechen(self) -> None:
+        """Beendet, was gerade laeuft, ohne es zu Ende zu bringen.
+
+        Die Regel im Spiel lautet: jede Handlung darf jederzeit begonnen
+        werden, und was noch nicht fertig war, wird dabei verworfen. Nie
+        wartet der Spieler darauf, dass eine Leiste vollgelaufen ist. Wer
+        spaeter eine Handlung dazunimmt - ein Terminal, eine Tuer - traegt
+        ihren Abbruch hier ein, und alle Aufrufer stimmen weiter.
+        """
+        self.nachlade_rest = 0.0
+        self.fokus = 0.0
+
     def waffe_waehlen(self, index: int) -> None:
         if 0 <= index < len(self.waffen) and index != self.waffe:
             self.waffe = index
-            self.nachlade_rest = 0.0
+            self.abbrechen()
             self.takt = max(self.takt, 0.18)
 
     def heilen(self) -> bool:

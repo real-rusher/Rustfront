@@ -212,15 +212,18 @@ class Renderer:
         liste = [w for w in welt.wesen if w.ebene == index and w.lebt]
         liste.sort(key=lambda w: w.pos.y)
         for w in liste:
-            boden = w.zeichenpos(alpha) - ecke      # Stelle, auf der es steht
-            hoch = w.flug * 0.55                    # Versatz waehrend eines Sturzes
-            p = pygame.Vector2(boden.x, boden.y - hoch)
+            p = boden = w.zeichenpos(alpha) - ecke  # Stelle, auf der es steht
             if w.schatten:
                 f = (1.0 if w.flug <= 0
                      else max(K.DEKAL["schatten_luft"], 1.0 - w.flug / 240.0))
                 sch = self.schatten(w.radius, f)
                 ziel.blit(sch, (boden.x - sch.get_width() / 2 + 1,
                                 boden.y - sch.get_height() / 2 + 3))
+            if w.flug > 0:
+                # Der Schatten gehoert auf diesen Boden, das Wesen selbst
+                # nicht: es haengt zwischen den Ebenen und wird nach allen
+                # Ebenen gezeichnet, mit dem Massstab seiner eigenen Hoehe.
+                continue
             if w.spur is not None and w.tempo.length_squared() > 1:
                 r = w.tempo.normalize()
                 pygame.draw.line(ziel, (128, 80, 30), p - r * 17, p - r * 5, 1)
@@ -234,6 +237,54 @@ class Renderer:
                 s = s.copy()
                 s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
+
+    def _bildpunkt(self, weltpos, kamera, k: float) -> pygame.Vector2:
+        """Wo ein Weltpunkt im Bild liegt, wenn er mit k verkleinert wird.
+
+        Dieselbe Rechnung, die auch hinter der Tiefenflaeche steckt: gleiche
+        Weltmitte, kleinerer Massstab.
+        """
+        mitte = kamera.pos + kamera.versatz
+        return pygame.Vector2(
+            K.GAME_W / 2 + (weltpos.x - mitte.x) * k,
+            K.GAME_H / 2 + (weltpos.y - mitte.y) * k)
+
+    def fliegende_zeichnen(self, ziel, welt, kamera, alpha, blick_hoehe) -> None:
+        """Wesen im Sturz, nach allen Ebenen und mit eigenem Massstab.
+
+        Ein fallendes Wesen gehoert zu keiner Ebene, es haengt zwischen
+        ihnen. Wurde es mit seiner Zielebene gezeichnet, trug es auch deren
+        Massstab - beim Absprung also den einer Ebene, die noch weit unter
+        ihm lag. Es schrumpfte dadurch schlagartig zusammen und sass
+        gleichzeitig um die volle Fallhoehe zu hoch im Bild.
+
+        Hier bekommt es den Massstab seiner eigenen Hoehe. Sinkt die Ansicht
+        mit ihm - das tut sie bei der eigenen Figur - bleibt es stehen und
+        die Welt waechst unter ihm heran. Genau das soll sich anfuehlen wie
+        ein Blick von oben in echte Tiefe.
+        """
+        p = K.PERSPEKTIVE
+        fliegende = [w for w in welt.wesen
+                     if w.lebt and w.flug > 0 and w.bild is not None]
+        if not fliegende:
+            return
+        # Das hoechste zuletzt, damit es ueber den tieferen liegt.
+        fliegende.sort(key=lambda w: welt.hoehe(w.ebene) + w.flug)
+        for w in fliegende:
+            dz = blick_hoehe - (welt.hoehe(w.ebene) + w.flug)
+            if dz < -p["ausblenden"]:
+                continue                      # zu weit ueber der Ansicht
+            k = p["brennweite"] / max(60.0, p["brennweite"] + dz)
+            s = self.bilder.gedreht(w.bild, w.winkel)
+            if abs(k - 1.0) > p["massstab_schwelle"]:
+                s = pygame.transform.scale(
+                    s, (max(1, int(round(s.get_width() * k))),
+                        max(1, int(round(s.get_height() * k)))))
+            if w.blitz > 0:
+                s = s.copy()
+                s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
+            b = self._bildpunkt(w.zeichenpos(alpha), kamera, k)
+            ziel.blit(s, (b.x - s.get_width() / 2, b.y - s.get_height() / 2))
 
     def partikel_zeichnen(self, ziel, welt, index, ecke, alpha) -> None:
         for p in welt.partikel:
@@ -334,6 +385,7 @@ class Renderer:
                     self._dunst.fill((*p["dunst"], min(255, a)))
                     ziel.blit(self._dunst, (0, 0))
 
+        self.fliegende_zeichnen(ziel, welt, kamera, alpha, blick_hoehe)
         ziel.blit(self._vignette, (0, 0))
 
     def tracer(self, ziel, welt, kamera, spieler) -> None:
@@ -354,32 +406,30 @@ class Renderer:
         if spieler.tracer_weit:
             ende = welt.strahl(muendung, richtung.normalize(), t["weite"],
                                spieler.ebene)
-        hoch = pygame.Vector2(0, spieler.flug * 0.55)
-        a = muendung - ecke - hoch
-        b = ende - ecke - hoch
+        a = muendung - ecke
+        b = ende - ecke
         linie = self._linie
         linie.fill((0, 0, 0, 0))
+        # Durchgehend rot. Frueher lag auf den ersten Prozenten ein heller
+        # Kern; weil er am Anteil der Strecke hing, wuchs er mit, sobald man
+        # die Linie mit Z verlaengert hat, und sah aus wie ein Fehler.
         pygame.draw.line(linie, (*t["farbe"], t["staerke"]), a, b, 1)
-        pygame.draw.line(linie, (*t["kern"], t["staerke"]), a,
-                         a + (b - a) * 0.12, 1)
         ziel.blit(linie, (0, 0))
-        pygame.draw.rect(ziel, t["kern"], (int(b.x) - 1, int(b.y) - 1, 3, 3))
-        pygame.draw.rect(ziel, t["farbe"], (int(b.x), int(b.y), 1, 1))
+        pygame.draw.rect(ziel, t["punkt"], (int(b.x) - 1, int(b.y) - 1, 3, 3))
 
     def zielhilfen(self, ziel, welt, kamera, spieler) -> None:
         """Streukegel der Scharfschuetzenwaffe und der Nahkampfbogen."""
         if not spieler.lebt:
             return
         ecke = kamera.ecke
-        hoch = pygame.Vector2(0, spieler.flug * 0.55)
         d = spieler.waffe_daten
-        p = spieler.pos - ecke - hoch
+        p = spieler.pos - ecke
 
         if d.get("fokus_dauer"):
             halb = spieler.streuung_jetzt
             weite = min(d["reichweite"], 340.0)
             muendung = spieler.pos + pygame.Vector2(14, 0).rotate(spieler.winkel)
-            a = muendung - ecke - hoch
+            a = muendung - ecke
             linie = self._linie
             linie.fill((0, 0, 0, 0))
             deck = int(40 + 90 * spieler.fokus)

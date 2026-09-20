@@ -238,6 +238,152 @@ pruef("Rueckweg vorhanden", zurueck == 0)
 e1 = szene.welt.ebene(1)
 pruef("Ebene 1 hat Loecher", any(k == K.LEER for k in e1.kacheln[e1.breite:-e1.breite]))
 
+# ── Sturz: nichts darf springen ──────────────────────────────────────
+# Der Sturz ist die eine Stelle, an der sich 2D wie Tiefe anfuehlen muss.
+# Frueher sprang die Figur beim Absprung um die volle Fallhoehe nach oben
+# und schrumpfte auf den Massstab der Zielebene zusammen. Gemessen wird
+# deshalb nicht der Zustand, sondern die Bildposition von Schritt zu
+# Schritt: ein Teleport zeigt sich dort als grosser Sprung.
+
+def bildpunkt_der_figur():
+    """Wo die Figur im Bild sitzt - dieselbe Rechnung wie im Renderer.
+
+    Das Kameraruckeln bleibt aussen vor: das ist gewolltes Feedback beim
+    Aufschlag und haette mit der Sturzbewegung nichts zu tun.
+    """
+    pp = K.PERSPEKTIVE
+    dz = szene.blick_hoehe - (szene.welt.hoehe(held.ebene) + held.flug)
+    k = pp["brennweite"] / max(60.0, pp["brennweite"] + dz)
+    m = szene.kamera.pos
+    return pygame.Vector2(K.GAME_W / 2 + (held.pos.x - m.x) * k,
+                          K.GAME_H / 2 + (held.pos.y - m.y) * k), k
+
+def absprungstellen(grenze=8):
+    """Feste Stellen auf Ebene 2, zwei Kacheln neben einem Loch."""
+    eo = szene.welt.ebene(2)
+    raus = []
+    for ty in range(6, eo.hoehe - 6):
+        for tx in range(10, eo.breite - 10):
+            if eo.loch(tx, ty) and not eo.loch(tx - 2, ty):
+                p = pygame.Vector2((tx - 2) * K.TILE + 16, ty * K.TILE + 16)
+                if szene.welt.frei(p, held.radius, 2):
+                    raus.append(p)
+                    if len(raus) >= grenze:
+                        return raus
+    return raus
+
+def sturz_messen(start):
+    """Laeuft von start nach rechts ins Loch. Gibt den groessten Sprung
+    der Bildposition zurueck, dazu ob ueberhaupt gefallen wurde."""
+    held.ebene = 2
+    held.pos.update(start); held.vorher.update(start)
+    held.leben = held.max_leben; held.tempo.update(0, 0)
+    held.unverwundbar = 999.0
+    szene.blick = 2; szene._letzte_ebene = 2
+    szene.blick_hoehe = float(szene.welt.hoehe(2))
+    for _ in range(150):                     # Kamera zur Ruhe kommen lassen
+        e.neues_bild(); e._gehalten = set(); szene.schritt(K.FIXED_DT)
+    if held.ebene != 2:
+        return 0.0, False
+    vorige, _ = bildpunkt_der_figur()
+    groesster, gefallen = 0.0, False
+    for _ in range(320):
+        e.neues_bild()
+        e._gehalten = ({"rechts"} if held.ebene == 2 and held.sturz_rest <= 0
+                       else set())
+        szene.schritt(K.FIXED_DT)
+        jetzt, _k = bildpunkt_der_figur()
+        if gefallen or held.sturz_rest > 0:
+            groesster = max(groesster, jetzt.distance_to(vorige))
+        if held.sturz_rest > 0:
+            gefallen = True
+        vorige = jetzt
+    return groesster, gefallen
+
+stellen = absprungstellen()
+pruef("Absprungstellen gefunden", len(stellen) >= 3, "%d" % len(stellen))
+spruenge = []
+for stelle in stellen:
+    gross, gefallen = sturz_messen(stelle)
+    if gefallen:
+        spruenge.append(gross)
+pruef("Es wurde wirklich gestuerzt", len(spruenge) >= 3, "%d Stuerze" % len(spruenge))
+# Ein Bild bei 120 Hz traegt hoechstens ein paar Pixel Bewegung. Alles
+# darueber waere ein Sprung, kein Fallen.
+schlimmster = max(spruenge) if spruenge else 0.0
+pruef("Kein Sprung der Bildposition im Sturz", schlimmster < 8.0,
+      "schlimmster %.2f px" % schlimmster)
+held.unverwundbar = 0.0
+held.ebene = 0
+held.pos.update(freies_feld()); held.vorher.update(held.pos)
+held.leben = held.max_leben
+szene.blick = 0; szene._letzte_ebene = 0
+szene.blick_hoehe = 0.0
+sim(0.4)
+
+# ── Handlungen sperren sich nicht gegenseitig ────────────────────────
+held.waffe = held.waffen.index("repetierer")
+held.magazin["repetierer"] = 0
+held.nachladen()
+pruef("Nachladen laeuft an", held.nachlade_rest > 0)
+held.waffe_waehlen(held.waffen.index("schrot"))
+pruef("Waffenwechsel bricht das Nachladen ab", held.nachlade_rest == 0.0)
+pruef("und die Waffe ist wirklich gewechselt", held.waffe_name == "schrot")
+
+held.waffe_waehlen(held.waffen.index("repetierer"))
+held.nachladen()
+held.leben = 40.0; held.medkits = 1; held.heilt_rest = 0.0
+pruef("Medkit geht auch mitten im Nachladen los", held.heilen())
+pruef("und das Nachladen laeuft dabei weiter", held.nachlade_rest > 0)
+# So lange, bis beides durch sein muss - das Medkit ist schneller fertig
+# als das Nachladen, gewartet wird auf den laengeren der beiden.
+sim(max(K.MEDKIT["dauer"], K.WAFFEN["repetierer"]["nachladen"]) + 0.3)
+pruef("Beides wird fertig", held.leben > 40.0 and held.magazin["repetierer"] > 0,
+      "%.0f Leben, %d Schuss" % (held.leben, held.magazin["repetierer"]))
+
+# Nachladen im Sturz: frueher stand die Zeit in der Luft still
+held.ebene = 2
+stelle = absprungstellen(1)
+if stelle:
+    held.pos.update(stelle[0]); held.vorher.update(stelle[0])
+    held.unverwundbar = 999.0
+    szene.blick = 2; szene._letzte_ebene = 2
+    szene.blick_hoehe = float(szene.welt.hoehe(2))
+    for _ in range(60):
+        e.neues_bild(); e._gehalten = set(); szene.schritt(K.FIXED_DT)
+    held.magazin["repetierer"] = 0
+    held.waffe = held.waffen.index("repetierer")
+    held.nachladen()
+    vorrat = held.nachlade_rest
+    for _ in range(40):
+        e.neues_bild(); e._gehalten = {"rechts"}; szene.schritt(K.FIXED_DT)
+        if held.sturz_rest > 0:
+            break
+    im_sturz = held.nachlade_rest
+    for _ in range(30):
+        e.neues_bild(); e._gehalten = set(); szene.schritt(K.FIXED_DT)
+    pruef("Nachladen laeuft auch im Sturz weiter", held.nachlade_rest < im_sturz
+          or held.magazin["repetierer"] > 0,
+          "%.2f -> %.2f" % (vorrat, held.nachlade_rest))
+held.unverwundbar = 0.0
+held.ebene = 0
+held.pos.update(freies_feld()); held.vorher.update(held.pos)
+held.leben = held.max_leben
+szene.blick = 0; szene._letzte_ebene = 0; szene.blick_hoehe = 0.0
+sim(0.3)
+
+# ── Die Figur zeigt, was sie traegt ──────────────────────────────────
+gesehen = set()
+for i, name in enumerate(held.waffen):
+    held.waffe = i
+    gesehen.add(held.bild)
+    pruef("Figur fuer %s vorhanden" % name.upper(),
+          held.bild in K.BILD_MASS and held.bild != "spieler",
+          held.bild)
+pruef("Jede Waffe hat ihre eigene Figur", len(gesehen) == len(held.waffen),
+      "%d Figuren fuer %d Waffen" % (len(gesehen), len(held.waffen)))
+held.waffe = 0
+
 # Gegner draufwerfen und Tempo messen
 from dustfront.entities import Gegner
 from dustfront.world import freier_punkt

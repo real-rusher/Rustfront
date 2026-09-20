@@ -233,6 +233,10 @@ class Welt:
         durch duenne Waende rutscht.
         """
         pos, r, eb = wesen.pos, wesen.radius, wesen.ebene
+        # Auch im Sturz zaehlen die Waende der Ebene, auf die es hinuntergeht:
+        # man gleitet im Flug an ihnen entlang statt hindurchzufliegen. Nur so
+        # steht die Figur beim Aufsetzen schon auf freiem Grund und muss nicht
+        # im letzten Bild noch zur Seite gesetzt werden.
         lf = not getattr(wesen, "faellt", False)
         stoss_x = stoss_y = False
         schritte = max(1, int(max(abs(dx), abs(dy)) / (r * 0.75)) + 1)
@@ -282,6 +286,8 @@ class Welt:
         Landeplatz. Gesucht wird der naechste freie Punkt in wachsenden
         Ringen, damit der Ausweg so kurz wie moeglich bleibt.
         """
+        if getattr(wesen, "sturz_rest", 0.0) > 0:
+            return False          # in der Luft steckt niemand in einer Wand
         lf = not getattr(wesen, "faellt", False)
         if self.frei(wesen.pos, wesen.radius, wesen.ebene, lf):
             return False

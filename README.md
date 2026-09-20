@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.10.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.11.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -22,13 +22,14 @@ Nicolas, Nikolaus, Marlon, Alfred.
 | Splash-Sequenz | fertig, fuenf Karten mit eigenem Ton |
 | Hauptmenue | fertig, inklusive Optionen und Spielstand |
 | Spielkern | steht: feste Zeitschritte, drei Ebenen, Kollision, Wellen |
-| Waffen | sechs Stueck, alle im Test nachgewiesen |
+| Waffen | sechs Stueck, alle im Test nachgewiesen, jede in der Hand zu erkennen |
 | Hoehenebenen | drei, alle gleichzeitig sichtbar, Sturz mit Steuerung in der Luft |
+| Sturz | ohne Ruck: die Figur bleibt stehen, die Welt waechst unter ihr heran |
 | Inventar und Hotbar | fertig, Plaetze per Maus oder Tastatur umsortierbar |
 | Pause und Einstellungen | fertig: Anzeige, Ton, Steuerung, Mitwirkende |
 | Grafik-Einstellungen | Vignette, Wackeln und Partikel stehen; Licht, Wetter und Textursaetze sind vorgemerkt |
 | Texturen und Klaenge | noch alle im Code erzeugt; eine Datei in `assets/` ersetzt jedes Stueck, ohne Codeaenderung |
-| Ersetzbar sind | alle 30 Bilder, Kacheln und Figuren ebenso wie Schatten, Blut, Brandfleck und Vignette |
+| Ersetzbar sind | alle 36 Bilder, Kacheln und Figuren ebenso wie Schatten, Blut, Brandfleck und Vignette |
 
 Der Spielkern gilt als tragfaehig: was jetzt noch dazukommt, haengt sich als
 weitere Szene, weiteres Wesen oder weitere Zeile in `config.py` an, statt
@@ -130,6 +131,30 @@ der alten weggenommen.
 
 Die Munition haengt am Namen der Waffe, nicht an ihrem Platz. Umsortieren im
 Inventar kostet also keine Patrone.
+
+## Wie sich das Spiel anfuehlen soll
+
+Drei Regeln, die ueber einzelnen Funktionen stehen. Wer etwas Neues
+einbaut, haelt sich daran, sonst faellt es auf.
+
+**Keine Handlung sperrt eine andere.** Man darf jederzeit die Waffe
+wechseln, nachladen, ein Medkit ansetzen, die Ebene wechseln oder die
+Ansicht verschieben - auch mitten in einer anderen Handlung und auch im
+Sturz. Was dabei noch nicht fertig war, wird verworfen, nicht abgewartet.
+Ein Waffenwechsel bricht also das Nachladen ab, statt darauf zu warten. Im
+Code sammelt `Spieler.abbrechen()` diese Abbrueche an einer Stelle; eine
+neue Handlung traegt sich dort ein.
+
+**Nichts springt.** Jede Bewegung, die man sieht, entsteht Bild fuer Bild.
+Besonders der Sturz: die Figur bleibt im Bild stehen und die Welt waechst
+unter ihr heran, statt dass sie an ihren spaeteren Landeplatz gesetzt wird.
+Steht unten etwas im Weg, rutscht sie waehrend des Fluges zur Seite.
+`tests/test_spiel.py` misst das nach - nicht den Zustand, sondern die
+Bildposition von Schritt zu Schritt.
+
+**Man sieht, was man tut.** Die Figur traegt die Waffe, die gewaehlt ist,
+sichtbar in der Hand. Zielhilfen gehoeren zu der Ebene, auf der man steht,
+und verschwinden, sobald man mit dem Mausrad woanders hinschaut.
 
 ## Dateien
 
@@ -245,7 +270,8 @@ darueber, dass Tabelle und gezeichnete Platzhalter sich decken.
 | `kiste` | 32x32 | Frachtkasten, blockiert nur Bewegung |
 | `treppe_hoch`, `treppe_runter` | 32x32 | Treppen, mit E zu benutzen |
 | `luke` | 32x32 | Luke nach unten |
-| `spieler` | 28x28 | die eigene Figur |
+| `spieler` | 28x28 | die eigene Figur ohne bestimmte Waffe |
+| `spieler_repetierer` … `spieler_brecheisen` | 56x56 | die Figur mit der jeweiligen Waffe in der Hand |
 | `gegner_laeufer` | 28x28 | Laeufer |
 | `gegner_brecher` | 36x36 | Brecher, der schwere Gegner |
 | `geschoss` | 8x4 | fliegende Kugel |
@@ -362,6 +388,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.8.0 | Pausenmenue, Einstellungen, umlegbare Steuerung, Abspann, Inventar |
 | 0.9.0 | Texturen und Klaenge aus Dateien: `assets/` nimmt jede Aufloesung an, Vorlagen-Werkzeug, Bestandsliste |
 | 0.10.0 | Schatten, Blut, Brandfleck, Wandschatten und Vignette ebenfalls ersetzbar; Blutfleck richtet sich nach der Groesse des Wesens |
+| 0.11.0 | Sturz ohne Ruck, Waffe in der Hand sichtbar, durchgehend rote Ziellinie, keine Handlung sperrt mehr eine andere |
 
 ## Anpassen
 

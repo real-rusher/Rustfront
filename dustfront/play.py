@@ -198,8 +198,13 @@ class Spiel(Szene):
     def zeichnen(self, ziel, alpha: float) -> None:
         self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, alpha,
                                     self.blick_hoehe)
-        self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.held)
-        self.renderer.tracer(ziel, self.welt, self.kamera, self.held)
+        # Ziellinie, Streukegel und Nahkampfbogen gehoeren zu der Ebene, auf
+        # der die Figur steht. Schaut man mit dem Mausrad eine Etage hoeher
+        # oder tiefer, haben sie dort nichts zu suchen - sie zeigten sonst
+        # ueber einen Boden, auf dem man gar nicht ist.
+        if self.blick == self.held.ebene:
+            self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.held)
+            self.renderer.tracer(ziel, self.welt, self.kamera, self.held)
         self.renderer.schaden_blende(ziel, self.schaden_blende)
 
         if self.gegner_uebrig == 0 and self.held.lebt:

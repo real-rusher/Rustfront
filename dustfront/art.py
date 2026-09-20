@@ -194,7 +194,67 @@ def _rand(s, farbe=(16, 11, 8)):
     return rand
 
 
-def _figur(groesse, rumpf, rumpf_dk, akzent, breit=False):
+def _hand_waffe(s, c, name):
+    """Zeichnet die getragene Waffe von oben, ab der Hand nach rechts.
+
+    Von oben sieht man von einer Waffe fast nur den Umriss. Laenge und
+    Dicke kommen deshalb aus K.WAFFEN_HAND, hier steht nur, wie daraus
+    Pixel werden. Die Hand sitzt bei x = c + 6.
+    """
+    d = K.WAFFEN_HAND.get(name)
+    if d is None:
+        return
+    hand = c + 6
+    # Deutlich heller als der Boden (K.C_BODEN), sonst verschwindet die
+    # Waffe darin - erkennen soll man sie ja auf einen Blick.
+    stahl, stahl_h = (92, 82, 64), (146, 132, 104)
+    if d["aufbau"] == "kugel":                    # Granate: nichts als Kugel
+        pygame.draw.circle(s, (70, 82, 56), (hand + 4, c), 5)
+        pygame.draw.circle(s, (104, 118, 80), (hand + 3, c - 1), 3)
+        pygame.draw.rect(s, (52, 44, 32), (hand + 2, c - 7, 4, 3))
+        pygame.draw.rect(s, K.C_AMBER, (hand + 3, c - 6, 2, 1))
+        return
+
+    if d["aufbau"] == "haken":                    # Brecheisen: roher Stab
+        laenge, dick = d["lauf"], d["dicke"]
+        pygame.draw.rect(s, K.C_RUST, (hand - d["schaft"], c - dick // 2 - 1,
+                                       d["schaft"] + laenge, dick + 1))
+        pygame.draw.rect(s, (188, 82, 44), (hand - d["schaft"], c - dick // 2 - 1,
+                                            d["schaft"] + laenge, 1))
+        pygame.draw.polygon(s, K.C_RUST, [(hand + laenge - 2, c - 3),
+                                          (hand + laenge + 2, c - 5),
+                                          (hand + laenge + 2, c - 2),
+                                          (hand + laenge - 1, c + 1)])
+        return
+
+    # Schaft hinter der Hand
+    sd = d["s_dicke"]
+    schaft_farbe = _W_HOLZ if d["holz"] else stahl
+    schaft_hell = _W_HOLZ_H if d["holz"] else stahl_h
+    pygame.draw.rect(s, schaft_farbe, (hand - d["schaft"], c - sd // 2,
+                                       d["schaft"] + 3, sd))
+    pygame.draw.rect(s, schaft_hell, (hand - d["schaft"], c - sd // 2,
+                                      d["schaft"] + 3, 1))
+    # Lauf nach vorn
+    dd = d["dicke"]
+    pygame.draw.rect(s, stahl, (hand, c - dd // 2, d["lauf"], dd))
+    pygame.draw.rect(s, stahl_h, (hand, c - dd // 2, d["lauf"], 1))
+
+    if d["aufbau"] == "kammer":                   # Kammerstengel quer
+        pygame.draw.rect(s, stahl_h, (hand - 1, c + 2, 3, 4))
+    elif d["aufbau"] == "magazin":                # Magazin unter dem Gehaeuse
+        pygame.draw.rect(s, (60, 52, 40), (hand - 3, c + 3, 5, 5))
+        pygame.draw.rect(s, K.C_AMBER, (hand - 3, c + 7, 5, 1))
+    elif d["aufbau"] == "doppel":                 # zweiter Lauf daneben
+        pygame.draw.rect(s, stahl, (hand, c - dd // 2 - 3, d["lauf"] - 2, 2))
+        pygame.draw.rect(s, stahl_h, (hand, c - dd // 2 - 3, d["lauf"] - 2, 1))
+    elif d["aufbau"] == "fernrohr":               # Zielfernrohr obenauf
+        pygame.draw.rect(s, (52, 46, 38), (hand - 4, c - 4, 12, 4))
+        pygame.draw.rect(s, (120, 110, 92), (hand - 4, c - 4, 12, 1))
+        pygame.draw.rect(s, K.C_TEAL, (hand + 7, c - 3, 1, 2))
+
+
+def _figur(groesse, rumpf, rumpf_dk, akzent, breit=False, waffe=None):
     """Draufsicht: Schultern quer, Kopf mittig, Waffe nach rechts."""
     s = _flaeche(groesse, groesse)
     c = groesse // 2
@@ -206,9 +266,12 @@ def _figur(groesse, rumpf, rumpf_dk, akzent, breit=False):
     # Arme nach vorn
     pygame.draw.line(s, rumpf_dk, (c + 1, c - 5), (c + 8, c - 3), 3)
     pygame.draw.line(s, rumpf_dk, (c + 1, c + 5), (c + 8, c + 3), 3)
-    # Waffe
-    pygame.draw.rect(s, (30, 25, 19), (c + 6, c - 2, 12, 4))
-    pygame.draw.rect(s, (86, 72, 52), (c + 6, c - 1, 10, 2))
+    # Waffe: entweder die benannte aus der Tabelle oder der alte Stummel
+    if waffe is not None:
+        _hand_waffe(s, c, waffe)
+    else:
+        pygame.draw.rect(s, (30, 25, 19), (c + 6, c - 2, 12, 4))
+        pygame.draw.rect(s, (86, 72, 52), (c + 6, c - 1, 10, 2))
     # Kopf
     pygame.draw.circle(s, rumpf_dk, (c + 1, c), 5)
     pygame.draw.circle(s, hell, (c + 1, c), 4)
@@ -219,6 +282,20 @@ def _figur(groesse, rumpf, rumpf_dk, akzent, breit=False):
 @platzhalter("spieler")
 def _spieler():
     return _figur(28, K.C_HULL, K.C_HULL_SH, K.C_TEAL)
+
+
+# Eine Figur je Waffe. Damit sieht man der Gestalt an, was sie traegt,
+# ohne in die Hotbar zu schauen. Registriert wird ueber eine Schleife: eine
+# siebte Waffe in WAFFEN_HAND bekommt ihre Figur dadurch von selbst.
+def _spieler_mit(waffe):
+    def zeichner():
+        gross = K.BILD_MASS["spieler_" + waffe][0]
+        return _figur(gross, K.C_HULL, K.C_HULL_SH, K.C_TEAL, waffe=waffe)
+    return zeichner
+
+
+for _waffe in K.WAFFEN_HAND:
+    platzhalter("spieler_" + _waffe)(_spieler_mit(_waffe))
 
 
 @platzhalter("gegner_laeufer")

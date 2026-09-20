@@ -149,8 +149,16 @@ BILD_MASS = {
     "treppe_hoch":      (TILE, TILE),
     "treppe_runter":    (TILE, TILE),
     "luke":             (TILE, TILE),
-    # Figuren, quadratisch und nach rechts schauend
+    # Figuren, quadratisch und nach rechts schauend. Die Figur mit Waffe
+    # braucht mehr Flaeche als die Figur allein, sonst ragt der Lauf der
+    # Scharfschuetzenwaffe hinaus.
     "spieler":          (28, 28),
+    "spieler_repetierer": (56, 56),
+    "spieler_sturm":      (56, 56),
+    "spieler_schrot":     (56, 56),
+    "spieler_scharf":     (56, 56),
+    "spieler_granate":    (56, 56),
+    "spieler_brecheisen": (56, 56),
     "gegner_laeufer":   (28, 28),
     "gegner_brecher":   (36, 36),
     # Kleinkram
@@ -229,6 +237,8 @@ PERSPEKTIVE = dict(
     dunst_staerke=0.42,
     tiefe_sichtbar=8,     # so viele Ebenen nach unten werden gezeichnet
     ausblenden=150.0,     # so weit ueber der Ansicht verschwindet eine Ebene
+    massstab_schwelle=0.02,   # ab so viel Abweichung wird ein Wesen im Sturz
+                              # ueberhaupt umgerechnet
 )
 
 STURZ = dict(
@@ -236,6 +246,8 @@ STURZ = dict(
     luftsteuerung=0.55,   # so viel Bewegung hat man waehrend des Sturzes
     schaden_je_100=9.0,   # Schaden pro 100 Pixel Fallhoehe
     min_schaden=3.0,
+    abrutschen=140.0,     # Pixel je Sekunde, mit denen man im Flug an einem
+                          # Hindernis unter sich zur Seite rutscht
 )
 
 # Zielhilfe: eine Linie von der Waffe zum Mauszeiger, mit Z auch darueber
@@ -243,8 +255,8 @@ STURZ = dict(
 TRACER = dict(
     weite=900.0,
     farbe=(214, 64, 48),
-    kern=(255, 196, 176),
-    staerke=150,          # Deckkraft der Linie
+    punkt=(255, 110, 86),  # der Fleck da, wo die Linie endet
+    staerke=150,           # Deckkraft der Linie
 )
 
 # ══════════════════════════════════════════════════ INHALTE: Kacheln
@@ -376,6 +388,34 @@ WAFFEN = {
         nachladen=0.0,
         huelsen=0,
     ),
+}
+
+# Wie eine Waffe in der Hand der Figur aussieht, von oben gesehen.
+#
+# In der Draufsicht sieht man von einer Waffe fast nur ihren Umriss, also
+# zaehlen Laenge und Dicke. Genau das soll reichen, um auf einen Blick zu
+# erkennen, was man gerade traegt - ohne in die Hotbar zu schauen.
+#
+#   lauf     wie weit sie ueber die Hand hinausragt, in Pixeln
+#   dicke    Dicke des Laufs
+#   schaft   wie weit sie hinter der Hand liegt
+#   s_dicke  Dicke des Schafts
+#   holz     True = brauner Schaft, False = Stahl
+#   aufbau   ein Merkmal obendrauf, siehe art.py:
+#            kammer | magazin | doppel | fernrohr | kugel | haken
+WAFFEN_HAND = {
+    "repetierer": dict(lauf=17, dicke=3, schaft=9, s_dicke=4, holz=True,
+                       aufbau="kammer"),
+    "sturm":      dict(lauf=14, dicke=4, schaft=8, s_dicke=5, holz=False,
+                       aufbau="magazin"),
+    "schrot":     dict(lauf=14, dicke=5, schaft=9, s_dicke=6, holz=True,
+                       aufbau="doppel"),
+    "scharf":     dict(lauf=22, dicke=3, schaft=9, s_dicke=4, holz=True,
+                       aufbau="fernrohr"),
+    "granate":    dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
+                       aufbau="kugel"),
+    "brecheisen": dict(lauf=15, dicke=2, schaft=5, s_dicke=2, holz=False,
+                       aufbau="haken"),
 }
 
 # Was der Spieler zu Beginn auf den Plaetzen 1 bis 6 traegt

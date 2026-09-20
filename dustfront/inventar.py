@@ -292,7 +292,9 @@ class Inventar(Szene):
         self._feldtitel(ziel, r, "TRAEGER")
 
         # Figur in der Mitte, Plaetze links und rechts daneben
-        bild = self.app.bilder.bild("spieler")
+        # Dieselbe Figur wie im Spiel, also mit der Waffe in der Hand: man
+        # soll im Inventar sehen, was man gerade traegt.
+        bild = self.app.bilder.bild(self.spiel.held.bild)
         ziel.blit(bild, (r.centerx - bild.get_width() // 2,
                          r.y + 60 - bild.get_height() // 2))
 
