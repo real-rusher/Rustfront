@@ -63,7 +63,7 @@ def klick(szene, fensterpunkt, runter=True, knopf=1):
 
 
 app = App("test", None, headless=True)
-szene = Spiel(app)
+szene = Spiel(app, seed=20250920)
 app.schieben(szene)
 held = szene.held
 

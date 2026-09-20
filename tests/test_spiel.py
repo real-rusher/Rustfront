@@ -10,7 +10,9 @@ from dustfront.core import App
 from dustfront.play import Spiel
 
 app = App("test", None, headless=True)
-szene = Spiel(app)
+# Fester Seed: sonst wuerfelt jede Runde eine andere Karte aus, und
+# Pruefungen wie "Rueckweg vorhanden" faellt mal so und mal so aus.
+szene = Spiel(app, seed=20250920)
 app.schieben(szene)
 held = szene.held
 e = app.eingabe
@@ -320,6 +322,89 @@ held.leben = held.max_leben
 szene.blick = 0; szene._letzte_ebene = 0
 szene.blick_hoehe = 0.0
 sim(0.4)
+
+# ── Steuerung in der Luft ────────────────────────────────────────────
+# Waehrend eines Sturzes behaelt man einen Teil der Bewegung (K.STURZ
+# ["luftsteuerung"]). Das ist spaeter Spielmechanik, also wird es gemessen
+# und nicht geglaubt: quer zur Fallrichtung ziehen, mit und ohne Taste.
+
+def sturz_quer(tasten, start):
+    """Laeuft ins Loch und haelt waehrend des Fluges 'tasten'.
+    Gibt zurueck, wie weit sich die Figur im Flug quer bewegt hat."""
+    held.ebene = 2
+    held.pos.update(start); held.vorher.update(start)
+    held.leben = held.max_leben; held.tempo.update(0, 0)
+    held.unverwundbar = 999.0
+    szene.blick = 2; szene._letzte_ebene = 2
+    szene.blick_hoehe = float(szene.welt.hoehe(2))
+    for _ in range(150):
+        e.neues_bild(); e._gehalten = set(); szene.schritt(K.FIXED_DT)
+    if held.ebene != 2:
+        return None
+    beim_absprung = None
+    for _ in range(320):
+        e.neues_bild()
+        if held.ebene == 2 and held.sturz_rest <= 0:
+            e._gehalten = {"rechts"}              # ins Loch laufen
+        elif held.sturz_rest > 0:
+            e._gehalten = set(tasten)             # im Flug steuern
+            if beim_absprung is None:
+                beim_absprung = pygame.Vector2(held.pos)
+        else:
+            e._gehalten = set()
+        war = held.sturz_rest
+        szene.schritt(K.FIXED_DT)
+        if war > 0 >= held.sturz_rest and beim_absprung is not None:
+            return held.pos - beim_absprung
+    return None
+
+quer_ohne, quer_mit = [], []
+for stelle in stellen[:4]:
+    a = sturz_quer((), stelle)
+    b = sturz_quer(("zurueck",), stelle)
+    if a is not None and b is not None:
+        quer_ohne.append(abs(a.y)); quer_mit.append(abs(b.y))
+pruef("Stuerze zum Messen der Luftsteuerung", len(quer_mit) >= 2,
+      "%d" % len(quer_mit))
+if quer_mit:
+    schub = sum(quer_mit) / max(0.5, sum(quer_ohne))
+    pruef("Im Sturz laesst sich die Figur steuern",
+          min(quer_mit) > 4.0 and schub > 2.0,
+          "mit Taste %.1f px, ohne %.1f px, also %.1f mal so weit"
+          % (max(quer_mit), max(quer_ohne), schub))
+    pruef("Aber langsamer als am Boden",
+          K.STURZ["luftsteuerung"] < 1.0,
+          "%.0f Prozent" % (K.STURZ["luftsteuerung"] * 100))
+
+# Steht unter dem Loch etwas im Weg, rutscht die Figur dorthin ab. Das darf
+# die Steuerung nur so lange ueberstimmen, wie es noeitg ist: sobald sie auf
+# freiem Grund haengt, gehoert die Bewegung wieder dem Spieler.
+if stellen:
+    held.ebene = 2
+    held.pos.update(stellen[0]); held.vorher.update(stellen[0])
+    held.unverwundbar = 999.0
+    szene.blick = 2; szene._letzte_ebene = 2
+    szene.blick_hoehe = float(szene.welt.hoehe(2))
+    for _ in range(150):
+        e.neues_bild(); e._gehalten = set(); szene.schritt(K.FIXED_DT)
+    for _ in range(320):
+        e.neues_bild()
+        e._gehalten = {"rechts"} if held.sturz_rest <= 0 else set()
+        szene.schritt(K.FIXED_DT)
+        if held.sturz_rest > 0:
+            break
+    if held.sturz_rest > 0:
+        # Ein Ausweichplatz, obwohl hier gar keiner noetig ist
+        held.sturz_ziel = pygame.Vector2(held.pos) + pygame.Vector2(60, 0)
+        e.neues_bild(); e._gehalten = set(); szene.schritt(K.FIXED_DT)
+        pruef("Auf freiem Grund endet das Abrutschen sofort",
+              held.sturz_ziel is None)
+held.unverwundbar = 0.0
+held.ebene = 0
+held.pos.update(freies_feld()); held.vorher.update(held.pos)
+held.leben = held.max_leben
+szene.blick = 0; szene._letzte_ebene = 0; szene.blick_hoehe = 0.0
+sim(0.3)
 
 # ── Handlungen sperren sich nicht gegenseitig ────────────────────────
 held.waffe = held.waffen.index("repetierer")

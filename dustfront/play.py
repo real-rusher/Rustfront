@@ -28,10 +28,13 @@ from .world import freier_punkt, testkarte
 
 
 class Spiel(Szene):
-    def __init__(self, app) -> None:
+    def __init__(self, app, seed=None) -> None:
         super().__init__(app)
         self.renderer = Renderer(app.bilder)
-        self.rnd = random.Random()
+        # Im Spiel ohne Seed, damit jede Runde anders ausfaellt. Die Tests
+        # geben einen festen mit: eine Pruefung, die mal gruen und mal rot
+        # ist, sagt nichts, und man gewoehnt sich an, sie zu uebersehen.
+        self.rnd = random.Random(seed)
         self.neu_aufbauen()
 
     # ---- Aufbau ------------------------------------------------------

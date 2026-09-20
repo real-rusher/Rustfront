@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.11.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.11.1, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -75,6 +75,11 @@ python tests/test_spiel.py
 python tests/test_menues.py
 ```
 
+Beide bauen ihre Welt mit einem festen Seed auf und laufen deshalb jedes
+Mal gleich ab. Das Spiel selbst wuerfelt weiter frei - den Seed gibt nur
+der Test mit (`Spiel(app, seed=...)`). Eine Pruefung, die mal gruen und mal
+rot ist, sagt nichts, und man gewoehnt sich an, sie zu uebersehen.
+
 Gebraucht werden Python 3.10 bis 3.14 und pygame-ce (getestet mit 2.5.8).
 Sonst nichts: Schrift, Grafik und Ton entstehen zur Laufzeit, es liegen keine
 fertigen Bilder oder Klaenge im Repo. Wie man sie durch eigene ersetzt, steht
@@ -102,7 +107,7 @@ der alten weggenommen.
 
 | Taste | Wirkung |
 | --- | --- |
-| W A S D | Laufen, auch waehrend eines Sturzes |
+| W A S D | Laufen, auch waehrend eines Sturzes (dort mit 55 Prozent Tempo) |
 | Shift | Sprint |
 | Maus links | Schiessen oder schlagen |
 | Maus rechts | Einzielen (bei der Scharfschuetzenwaffe) |
@@ -148,9 +153,15 @@ neue Handlung traegt sich dort ein.
 **Nichts springt.** Jede Bewegung, die man sieht, entsteht Bild fuer Bild.
 Besonders der Sturz: die Figur bleibt im Bild stehen und die Welt waechst
 unter ihr heran, statt dass sie an ihren spaeteren Landeplatz gesetzt wird.
-Steht unten etwas im Weg, rutscht sie waehrend des Fluges zur Seite.
-`tests/test_spiel.py` misst das nach - nicht den Zustand, sondern die
-Bildposition von Schritt zu Schritt.
+Steht unten etwas im Weg, rutscht sie waehrend des Fluges zur Seite - aber
+nur so lange, bis sie freien Grund unter sich hat, danach gehoert die
+Bewegung wieder dem Spieler. `tests/test_spiel.py` misst das nach: nicht
+den Zustand, sondern die Bildposition von Schritt zu Schritt.
+
+**Man bleibt am Steuer.** Auch im Sturz laesst sich die Figur lenken, mit
+55 Prozent des normalen Tempos (`luftsteuerung` in `config.py`). Gemessen
+sind das rund 25 Pixel quer auf einen Sturz ueber zwei Etagen - genug, um
+ein Loch noch zu treffen oder daneben zu landen.
 
 **Man sieht, was man tut.** Die Figur traegt die Waffe, die gewaehlt ist,
 sichtbar in der Hand. Zielhilfen gehoeren zu der Ebene, auf der man steht,
@@ -389,6 +400,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.9.0 | Texturen und Klaenge aus Dateien: `assets/` nimmt jede Aufloesung an, Vorlagen-Werkzeug, Bestandsliste |
 | 0.10.0 | Schatten, Blut, Brandfleck, Wandschatten und Vignette ebenfalls ersetzbar; Blutfleck richtet sich nach der Groesse des Wesens |
 | 0.11.0 | Sturz ohne Ruck, Waffe in der Hand sichtbar, durchgehend rote Ziellinie, keine Handlung sperrt mehr eine andere |
+| 0.11.1 | Steuerung in der Luft im Test nachgewiesen und gegen das Abrutschen abgesichert; Testlaeufe mit festem Seed reproduzierbar |
 
 ## Anpassen
 

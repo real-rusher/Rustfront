@@ -100,10 +100,18 @@ class Wesen:
         self.flug = max(0.0, self.sturz_hoehe
                         - 0.5 * K.STURZ["schwerkraft"] * t * t)
         if self.sturz_ziel is not None:
-            # Am Hindernis abrutschen. Direkt an der Position, nicht ueber
-            # welt.bewegen: wer in einer Wand haengt, kaeme dort nie heraus.
-            self.pos.move_towards_ip(self.sturz_ziel,
-                                     K.STURZ["abrutschen"] * dt)
+            if self.welt.frei(self.pos, self.radius, self.ebene):
+                # Freier Grund erreicht. Ab hier gehoert die Bewegung wieder
+                # dem Spieler: das Abrutschen ist schneller als die
+                # Luftsteuerung und wuerde sie sonst bis zur Landung
+                # ueberstimmen.
+                self.sturz_ziel = None
+            else:
+                # Am Hindernis abrutschen. Direkt an der Position, nicht
+                # ueber welt.bewegen: wer in einer Wand haengt, kaeme dort
+                # nie heraus.
+                self.pos.move_towards_ip(self.sturz_ziel,
+                                         K.STURZ["abrutschen"] * dt)
         if self.sturz_rest <= 0:
             self.flug = 0.0
             self.sturz_ziel = None
