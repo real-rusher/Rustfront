@@ -133,9 +133,13 @@ def probe(waffe, entfernung, dauer=1.4, halten=()):
     ziel.lebt = False
     return schaden
 
-pruef("Hotbar hat sechs Plaetze", len(held.waffen) == 6)
-pruef("Alle sechs Waffen sind bekannt",
+pruef("Hotbar hat sieben Plaetze", len(held.waffen) == 7,
+      "%d" % len(held.waffen))
+pruef("Alle sieben Waffen sind bekannt",
       all(w in K.WAFFEN for w in held.waffen))
+pruef("Zu jedem Platz gibt es eine Taste",
+      all(app.opt.codes("waffe%d" % (i + 1))
+          for i in range(len(held.waffen))))
 
 s = probe("repetierer", 150)
 pruef("Repetierer trifft auf 150 px", s > 0, "%.0f Schaden" % s)
@@ -150,6 +154,38 @@ s = probe("brecheisen", 30)
 pruef("Brecheisen trifft auf Armlaenge", s > 0, "%.0f Schaden" % s)
 s = probe("brecheisen", 120)
 pruef("Brecheisen trifft nicht durch den Raum", s == 0, "%.0f Schaden" % s)
+
+# ── Balance: Brecheisen, Schrot, Scharfschuetze ──────────────────────
+# Gemessen statt geglaubt. Die drei Zahlen haengen aneinander: das
+# Brecheisen nuetzt nur, wenn sein Takt ueber der Unverwundbarkeit liegt,
+# sonst laeuft jeder zweite Schlag ins Leere.
+b = K.WAFFEN["brecheisen"]
+pruef("Zwei Brecheisenschlaege toeten einen Spieler",
+      2 * b["schaden"] >= K.SPIELER["leben"],
+      "%.0f x 2 gegen %.0f Leben" % (b["schaden"], K.SPIELER["leben"]))
+pruef("Ein einzelner Schlag toetet noch nicht",
+      b["schaden"] < K.SPIELER["leben"], "%.0f" % b["schaden"])
+pruef("Und jeder Schlag sitzt: Takt ueber der Unverwundbarkeit",
+      b["takt"] > K.SPIELER["unverwundbar"],
+      "%.2f s Takt, %.2f s unverwundbar" % (b["takt"], K.SPIELER["unverwundbar"]))
+
+s = probe("schrot", 260)
+pruef("Schrot trifft jetzt auch auf 260 px", s > 0, "%.0f Schaden" % s)
+nah, weit = probe("schrot", 60), probe("schrot", 240)
+pruef("Nah trifft Schrot trotzdem haerter als weit", nah > weit,
+      "%.0f gegen %.0f" % (nah, weit))
+
+# Der Scharfschuetze soll weiter reichen, als das Bild breit ist.
+pruef("Scharfschuetze reicht weiter als das Bild breit ist",
+      K.WAFFEN["scharf"]["reichweite"] > K.GAME_W * 2,
+      "%.0f px bei %d px Bildbreite"
+      % (K.WAFFEN["scharf"]["reichweite"], K.GAME_W))
+s = probe("scharf", 900, dauer=2.0, halten=("zweit",))
+pruef("und trifft auf 900 px, weiter als man sehen kann", s > 0,
+      "%.0f Schaden" % s)
+pruef("Die verlaengerte Ziellinie reicht so weit wie der Schuss",
+      K.TRACER["weite"] >= K.WAFFEN["scharf"]["reichweite"],
+      "%.0f gegen %.0f" % (K.TRACER["weite"], K.WAFFEN["scharf"]["reichweite"]))
 
 # Scharfschuetze: aus der Hueffte breit, im Fokus schmal
 held.pos.update(freies_feld()); held.tempo.update(0, 0)
@@ -871,8 +907,14 @@ from dustfront.mehrspieler import KampfGegner
 _port = [51300]
 
 def gefechtspaar(modus, **kw):
-    """Gastgeber und Gast in einer Spielart, ueber echte Steckdosen."""
+    """Gastgeber und Gast in einer Spielart, ueber echte Steckdosen.
+
+    Mit festem Seed: sonst wuerfelt jedes Gefecht seine Einstiegsplaetze
+    neu, und Pruefungen, die vom Einstiegsort abhaengen, sind mal gruen
+    und mal rot.
+    """
     _port[0] += 1
+    kw.setdefault("seed", 20240 + _port[0])
     wirt_n = netz.Gastgeber(_port[0])
     wirt_s = Gefecht(app, "WIRT", gastgeber=wirt_n, modus=modus, **kw)
     gast_n = netz.Gast("127.0.0.1:%d" % _port[0])
@@ -997,6 +1039,100 @@ w.rest = K.FIXED_DT * 0.5          # knapp unter einem Schritt
 w.schritt(K.FIXED_DT)
 pruef("pvpve endet nach der gewaehlten Zeit", w.vorbei)
 w.verlassen(); ga.verlassen()
+
+# ── Granaten fallen, Rauch steht ─────────────────────────────────────
+# Beides am Spielkern gemessen, nicht am Gefecht: es gilt auch allein.
+from dustfront.entities import Granate, Rauchwolke
+
+def wurfstelle(ebene=2):
+    """Eine Stelle auf der Ebene, zwei Kacheln neben einem Loch."""
+    eo = szene.welt.ebene(ebene)
+    for ty in range(4, eo.hoehe - 4):
+        for tx in range(6, eo.breite - 6):
+            if eo.loch(tx, ty) and not eo.loch(tx - 2, ty):
+                p = pygame.Vector2((tx - 2) * K.TILE + 16, ty * K.TILE + 16)
+                if szene.welt.frei(p, 3.0, ebene):
+                    return p
+    return None
+
+stelle = wurfstelle()
+pruef("Wurfstelle neben einem Loch gefunden", stelle is not None)
+g = Granate(stelle, 0.0, K.WAFFEN["granate"], 2, None, 200.0)
+szene.welt.dazu(g)
+gefallen, groesster = False, 0.0
+vorige = pygame.Vector2(g.pos)
+for _ in range(400):
+    szene.welt.schritt(K.FIXED_DT)
+    if not g.lebt:
+        break
+    if g.sturz_rest > 0:
+        gefallen = True
+        groesster = max(groesster, g.pos.distance_to(vorige))
+    vorige = pygame.Vector2(g.pos)
+pruef("Eine Granate rollt ueber die Kante und faellt", gefallen)
+pruef("Sie landet unten, nicht auf der Wurfebene", g.ebene < 2,
+      "Ebene %d" % g.ebene)
+# Fallen, nicht springen: ein Bild bei 120 Hz traegt nur ein paar Pixel.
+pruef("Sie faellt weich, ohne Sprung", groesster < 8.0,
+      "groesster Schritt %.2f px" % groesster)
+pruef("Und zuendet erst, wenn sie liegt", not g.lebt)
+
+r = Granate(stelle, 0.0, K.WAFFEN["rauch"], 2, None, 200.0)
+szene.welt.dazu(r)
+for _ in range(600):
+    szene.welt.schritt(K.FIXED_DT)
+    if szene.welt.rauch:
+        break
+pruef("Eine Rauchgranate macht Rauch", len(szene.welt.rauch) == 1,
+      "%d Wolken" % len(szene.welt.rauch))
+qualm = szene.welt.rauch[0]
+pruef("Der Rauch liegt auf der Ebene, auf der sie landet", qualm.ebene < 2,
+      "Ebene %d" % qualm.ebene)
+pruef("Sie macht keinen Schaden", K.WAFFEN["rauch"]["schaden"] == 0)
+duenn = qualm.dichte
+for _ in range(int(K.RAUCH["aufbau"] / K.FIXED_DT) + 4):
+    szene.welt.schritt(K.FIXED_DT)
+pruef("Der Rauch zieht auf, statt sofort dazustehen",
+      duenn < 0.2 and qualm.dichte >= 0.999,
+      "%.2f auf %.2f" % (duenn, qualm.dichte))
+
+# Er muss wirklich verdecken - und zwar auch von der Ebene darueber aus.
+def bild_mit_rauch(blick):
+    szene.blick = blick
+    szene.blick_hoehe = float(szene.welt.hoehe(blick))
+    szene.kamera.pos.update(qualm.pos)
+    szene.kamera.versatz.update(0, 0)
+    mit = pygame.Surface((K.GAME_W, K.GAME_H))
+    szene.zeichnen(mit, 1.0)
+    gemerkt = szene.welt.rauch
+    szene.welt.rauch = []
+    ohne = pygame.Surface((K.GAME_W, K.GAME_H))
+    szene.zeichnen(ohne, 1.0)
+    szene.welt.rauch = gemerkt
+    anders = sum(1 for px in range(0, K.GAME_W, 2)
+                 for py in range(0, K.GAME_H, 2)
+                 if mit.get_at((px, py))[:3] != ohne.get_at((px, py))[:3])
+    return anders
+
+held.ebene = qualm.ebene
+held.pos.update(qualm.pos); held.vorher.update(held.pos)
+auf_ebene = bild_mit_rauch(qualm.ebene)
+pruef("Der Rauch ist auf seiner Ebene zu sehen", auf_ebene > 400,
+      "%d Bildpunkte" % auf_ebene)
+von_oben = bild_mit_rauch(min(len(szene.welt.ebenen) - 1, qualm.ebene + 1))
+pruef("Und von der Ebene darueber genauso", von_oben > 400,
+      "%d Bildpunkte" % von_oben)
+szene.blick = held.ebene
+szene.blick_hoehe = float(szene.welt.hoehe(held.ebene))
+
+for _ in range(int(K.RAUCH["dauer"] / K.FIXED_DT) + 10):
+    szene.welt.schritt(K.FIXED_DT)
+pruef("Nach seiner Zeit ist der Rauch weg", not szene.welt.rauch,
+      "%d uebrig" % len(szene.welt.rauch))
+held.ebene = 0
+held.pos.update(freies_feld()); held.vorher.update(held.pos)
+held.leben = held.max_leben
+szene.blick = 0; szene._letzte_ebene = 0; szene.blick_hoehe = 0.0
 
 # ── Mannschaften: team, versus, huegel ───────────────────────────────
 from dustfront.mehrspieler import Kaempfer
@@ -1144,7 +1280,8 @@ gast_k.pos.update(weit); gast_k.vorher.update(gast_k.pos)
 gast_k.ebene = K.ZONE["ebene"]
 pruef("Knapp daneben ist draussen", not w.in_der_zone(gast_k))
 
-w._zone(1.0)
+w.zone_stand[0] = 0.0      # der Gastgeber kann beim Einstieg schon drin
+w._zone(1.0)               # gestanden haben; gemessen wird eine Sekunde
 pruef("Allein im Kreis laedt es fuer die eigene Mannschaft",
       abs(w.zone_stand[0] - K.ZONE["je_sekunde"]) < 0.01
       and w.zone_stand[1] == 0.0, str(w.zone_stand))
@@ -1233,6 +1370,150 @@ pruef("Und zwar als Kreis, nicht als Flaeche ueber allem",
 figur = mit.get_at((K.GAME_W // 2, K.GAME_H // 2))[:3] \
     == ohne.get_at((K.GAME_W // 2, K.GAME_H // 2))[:3]
 pruef("Die Figur steht auf dem Kreis, nicht darunter", figur)
+w.verlassen(); ga.verlassen()
+
+# ── Die gemeldeten Fehler ────────────────────────────────────────────
+# Vier Stueck, jeder mit einer eigenen Pruefung, damit keiner still
+# zurueckkommt.
+
+# 1. Im Gefecht war kein Ton zu hoeren. Welt.klang ist von Haus aus eine
+#    leere Methode; der Einzelspieler haengt sich daran, das Gefecht nicht.
+w, ga = gefechtspaar("pvp")
+from dustfront.world import Welt
+def noch_leer(haken):
+    """Haengt an diesem Haken noch die leere Methode aus world.py?
+
+    Ueber __func__ verglichen: eine gebundene Methode ist nie gleich der
+    Funktion in der Klasse, ein schlichtes == waere also immer wahr und
+    die Pruefung wertlos.
+    """
+    return getattr(haken, "__func__", None) is getattr(Welt, haken.__name__, None)
+
+for wer, wie in (("Gastgeber", w), ("Gast", ga)):
+    pruef("%s hat einen echten Tonausgang" % wer,
+          not noch_leer(wie.welt.klang) and wie.welt.klang == app.klaenge.spielen)
+    pruef("%s spuert Treffer in der Kamera" % wer,
+          wie.welt.ruckeln == wie.kamera.stossen)
+    pruef("%s hinterlaesst Blutflecken" % wer, not noch_leer(wie.welt.blutfleck))
+    pruef("%s bekommt Brandflecken" % wer, not noch_leer(wie.welt.brandfleck))
+# Die Zeitlupe bleibt bewusst weg: sie wuerde beim Gastgeber die Runde
+# aller Gaeste mitbremsen.
+pruef("Aber keine Zeitlupe im Mehrspieler", noch_leer(w.welt.kurz_langsam))
+
+# 2. Ein Tod ohne Toeter - also durch Sturz - setzte wieder_in nie. Der
+#    Wiedereinstieg lief dadurch im selben Bild los: die Figur stand ohne
+#    Todesbild irgendwo anders auf der Karte.
+opfer = w.kaempfer[0]
+opfer.unverwundbar = 0.0
+wo = pygame.Vector2(opfer.pos)
+opfer.schaden(999, None, None)          # genau so kommt Sturzschaden an
+w._tote_abrechnen(K.FIXED_DT)
+pruef("Ein Sturztod versetzt niemanden sofort",
+      opfer.pos.distance_to(wo) < 1.0, "%.0f px" % opfer.pos.distance_to(wo))
+pruef("Er zaehlt trotzdem als Tod", opfer.tode == 1, "%d" % opfer.tode)
+pruef("Und der Wiedereinstieg laeuft wie sonst",
+      abs(opfer.wieder_in - K.GEFECHT["wieder_nach"]) < 0.02,
+      "%.2f s" % opfer.wieder_in)
+for _ in range(int(K.GEFECHT["wieder_nach"] / K.FIXED_DT) + 4):
+    w._tote_abrechnen(K.FIXED_DT)
+pruef("Nach der Wartezeit steigt er wieder ein", opfer.lebt)
+
+# 3. Die Ziellinie des Gastes zeigte auf seinen Einstiegspunkt: `ziel`
+#    steht in keiner Weltmeldung und blieb darum stehen, wo er anfing.
+gast_ich = ga.kaempfer[ga.meine_nummer]
+einstieg = pygame.Vector2(gast_ich.ziel)
+e.neues_bild()
+e.maus = pygame.Vector2(K.GAME_W - 40, 40)     # Maus in eine Ecke
+ga.schritt(K.FIXED_DT)
+pruef("Die Ziellinie des Gastes loest sich vom Einstiegspunkt",
+      gast_ich.ziel.distance_to(einstieg) > 20.0,
+      "%.0f px weg" % gast_ich.ziel.distance_to(einstieg))
+# Genau vergleichen ohne Bild dazwischen: die Kamera wackelt inzwischen
+# auch beim Gast, und ein Bild spaeter steht sie anderswo.
+ga._eigenes_zielen()
+soll = ga.kamera.zu_welt(e.maus)
+pruef("und trifft genau den Mauszeiger",
+      gast_ich.ziel.distance_to(soll) < 0.01,
+      "%.2f px daneben" % gast_ich.ziel.distance_to(soll))
+blick = math.degrees(math.atan2(soll.y - gast_ich.pos.y,
+                                soll.x - gast_ich.pos.x))
+pruef("Auch die Figur dreht sich sofort mit",
+      abs((gast_ich.winkel - blick + 180) % 360 - 180) < 0.01,
+      "%.1f gegen %.1f Grad" % (gast_ich.winkel, blick))
+w.verlassen(); ga.verlassen()
+
+# 4. Rauch und fallende Granaten muessen beim Gast ankommen - er rechnet
+#    nichts selbst nach.
+w, ga = gefechtspaar("pvp")
+w.welt.rauch.append(Rauchwolke(pygame.Vector2(300, 300), 0))
+netz_durchlassen(w, ga)
+pruef("Rauch kommt beim Gast an", len(ga.welt.rauch) == 1,
+      "%d Wolken" % len(ga.welt.rauch))
+if ga.welt.rauch:
+    pruef("Und zwar an derselben Stelle",
+          ga.welt.rauch[0].pos.distance_to(w.welt.rauch[0].pos) < 1.0)
+w.welt.rauch[0].lebt = False
+w.welt.schritt(K.FIXED_DT)
+netz_durchlassen(w, ga)
+pruef("Verwehter Rauch verschwindet auch beim Gast", not ga.welt.rauch)
+
+stelle = wurfstelle()
+fall_g = Granate(stelle, 0.0, K.WAFFEN["granate"], 2, None, 200.0)
+w.welt.dazu(fall_g)
+gesehen = False
+for _ in range(400):
+    w.schritt(K.NETZ["takt"]); ga.schritt(K.NETZ["takt"])
+    if not fall_g.lebt:
+        break
+    if fall_g.sturz_rest > 0:
+        for eintrag in ga._fremde_schuesse:
+            if eintrag[4] == "granate" and eintrag[5] > 0:
+                gesehen = True
+pruef("Der Gast sieht die Granate in der Luft, nicht schon unten", gesehen)
+
+# ── Die neuen Schalter beim Aufmachen ────────────────────────────────
+pruef("Einstiegsschutz ist standardmaessig an", w.schutz_an)
+# Am frisch Eingestiegenen gemessen: dieses Gefecht laeuft im Test schon
+# eine Weile, da waere der Schutz des Gastgebers laengst abgelaufen.
+frisch = w._dazu(77, "FRISCH")
+pruef("Und er wirkt beim Einstieg",
+      abs(frisch.unverwundbar - K.GEFECHT["schutz"]) < 0.01,
+      "%.1f s" % frisch.unverwundbar)
+frisch.lebt = False
+w.kaempfer.pop(77, None)
+w.verlassen(); ga.verlassen()
+
+w, ga = gefechtspaar("pvp", schutz=False, medkits=4, medkit_spawn=False)
+pruef("Der Gastgeber kann den Einstiegsschutz abschalten",
+      not w.schutz_an and w.schutz_zeit == 0.0)
+pruef("Dann steigt man ohne Schutz ein",
+      w.kaempfer[0].unverwundbar == 0.0)
+pruef("Die Zahl der Medkits beim Einstieg ist waehlbar",
+      w.kaempfer[0].medkits == 4, "%d" % w.kaempfer[0].medkits)
+pruef("Auch der Gast bekommt sie",
+      w.kaempfer[ga.meine_nummer].medkits == 4)
+pruef("Alle drei Schalter kommen beim Gast an",
+      not ga.schutz_an and ga.start_medkits == 4 and not ga.medkits_spawnen,
+      "Schutz %s, %d Medkits, Spawn %s"
+      % (ga.schutz_an, ga.start_medkits, ga.medkits_spawnen))
+# Abgeschaltet heisst abgeschaltet: auch nach langer Zeit liegt nichts da.
+for _ in range(int(K.GEFECHT["medkit_takt"] * 3 / K.FIXED_DT)):
+    w._beute_nachlegen(K.FIXED_DT)
+liegen = [x for x in w.welt.wesen + w.welt.neue
+          if isinstance(x, KampfBeute) and x.art == "medkit"]
+pruef("Ohne Medkit-Spawn liegt keines auf der Karte", not liegen,
+      "%d" % len(liegen))
+w.verlassen(); ga.verlassen()
+
+w, ga = gefechtspaar("pvp", medkits=0)
+for _ in range(int(K.GEFECHT["medkit_takt"] * 1.2 / K.FIXED_DT)):
+    w._beute_nachlegen(K.FIXED_DT)
+liegen = [x for x in w.welt.wesen + w.welt.neue
+          if isinstance(x, KampfBeute) and x.art == "medkit"]
+pruef("Mit Medkit-Spawn liegt wieder eines da", len(liegen) >= 1,
+      "%d" % len(liegen))
+pruef("Und ohne Startmedkits faengt man mit leeren Haenden an",
+      w.kaempfer[0].medkits == 0)
 w.verlassen(); ga.verlassen()
 
 # Ein Gast, der abbricht, darf den Gastgeber nicht mitreissen

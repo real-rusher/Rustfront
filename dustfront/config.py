@@ -158,6 +158,7 @@ BILD_MASS = {
     "spieler_schrot":     (56, 56),
     "spieler_scharf":     (56, 56),
     "spieler_granate":    (56, 56),
+    "spieler_rauch":      (56, 56),
     "spieler_brecheisen": (56, 56),
     "gegner_laeufer":   (28, 28),
     "gegner_brecher":   (36, 36),
@@ -167,6 +168,7 @@ BILD_MASS = {
     "medkit":           (16, 14),
     "munikiste":        (16, 14),
     "granate":          (10, 10),
+    "rauchgranate":     (10, 10),
     "huelse":           (4, 3),
     # Waffensymbole fuer Hotbar und Inventar, Seitenansicht nach rechts
     "waffe_repetierer": (26, 11),
@@ -174,6 +176,7 @@ BILD_MASS = {
     "waffe_schrot":     (26, 11),
     "waffe_scharf":     (26, 11),
     "waffe_granate":    (26, 11),
+    "waffe_rauch":      (26, 11),
     "waffe_brecheisen": (26, 11),
     # Dekale und Schatten. Das Mass ist hier ein Basismass: das Spiel rechnet
     # die Flaeche auf die Groesse um, die es gerade braucht. Wer sie ersetzt,
@@ -322,9 +325,13 @@ GEFECHT = dict(
     punkt_abschuss=1,
     punkt_selbst=-1,          # wer sich selbst erledigt, zahlt drauf
     schutz=2.0,               # Sekunden unverwundbar nach dem Einstieg
+    schutz_an=True,           # Vorgabe: der Gastgeber kann ihn abschalten
     abstand=160.0,            # so weit weg von anderen wird eingestiegen
     medkit_takt=12.0,         # Sekunden zwischen zwei Medkits
     medkit_hoechstens=4,      # so viele liegen gleichzeitig herum
+    medkits_spawnen=True,     # legt der Gastgeber beim Aufmachen fest
+    start_medkits=1,          # so viele hat man beim Einstieg dabei
+    start_medkits_hoechstens=9,   # mehr laesst der Gastgeber nicht zu
     tafel_oben=74,            # wo der Punktestand anfaengt, unter den Ebenen
 )
 
@@ -366,7 +373,7 @@ GEGNER_MP = dict(
 # Begrenzte Munition. Der Gastgeber schaltet sie beim Aufmachen an.
 MUNITION = dict(
     vorrat={"repetierer": 70, "sturm": 150, "schrot": 32, "scharf": 20,
-            "granate": 4, "brecheisen": 0},
+            "granate": 4, "rauch": 3, "brecheisen": 0},
     kiste_takt=18.0,          # Sekunden zwischen zwei Munitionskisten
     kiste_hoechstens=3,
     kiste_gibt=0.45,          # so viel vom vollen Vorrat gibt eine Kiste
@@ -405,7 +412,9 @@ STURZ = dict(
 # Zielhilfe: eine Linie von der Waffe zum Mauszeiger, mit Z auch darueber
 # hinaus bis zur naechsten Wand.
 TRACER = dict(
-    weite=900.0,
+    # So weit wie der Scharfschuetze schiesst: die verlaengerte Linie soll
+    # zeigen, wo der Schuss hingeht, und nicht vorher aufhoeren.
+    weite=2200.0,
     farbe=(214, 64, 48),
     punkt=(255, 110, 86),  # der Fleck da, wo die Linie endet
     staerke=150,           # Deckkraft der Linie
@@ -463,11 +472,14 @@ WAFFEN = {
         takt=0.62,
         magazin=6,
         nachladen=2.1,
-        streuung=7.5,
+        # Enger und weiter als frueher (7.5 Grad, 210 px). Sie bleibt die
+        # Waffe fuer kurze Wege, trifft jetzt aber auch auf halber
+        # Zimmerbreite noch mit mehr als zwei Kuegelchen.
+        streuung=5.5,
         streuung_lauf=3.0,
         geschosse=7,
         tempo=560.0,
-        reichweite=210.0,
+        reichweite=300.0,
         rueckstoss=150.0,
         kamera=4.2,
         huelsen=1,
@@ -505,7 +517,10 @@ WAFFEN = {
         streuung_lauf=6.0,
         geschosse=1,
         tempo=1150.0,
-        reichweite=900.0,
+        # Weiter, als man sehen kann: das Bild ist 640 Pixel breit, die
+        # Karte diagonal rund 1600. Mit 2200 endet ein Schuss an einer
+        # Wand oder am Kartenrand, nie an seiner eigenen Reichweite.
+        reichweite=2200.0,
         rueckstoss=190.0,
         kamera=6.5,
         huelsen=1,
@@ -526,11 +541,33 @@ WAFFEN = {
         rueckstoss=0.0,
         huelsen=0,
     ),
+    "rauch": dict(
+        art="wurf",
+        name="RAUCHGRANATE",
+        rauch=True,           # zuendet nicht, sondern qualmt
+        schaden=0.0,
+        radius=0.0,
+        takt=0.9,
+        magazin=2,
+        nachladen=3.4,
+        wurf_min=60.0,
+        wurf_max=240.0,
+        reibung=1.4,          # rollt kuerzer aus als die Sprenggranate
+        flugzeit=1.1,
+        kamera=1.2,
+        rueckstoss=0.0,
+        huelsen=0,
+    ),
     "brecheisen": dict(
         art="nahkampf",
         name="BRECHEISEN",
-        schaden=46.0,
-        takt=0.40,
+        # Zwei Treffer toeten (2 x 60 > 100 Leben). Der Takt liegt knapp
+        # ueber SPIELER["unverwundbar"] (0.6 s): mit den frueheren 0.40 s
+        # lief jeder zweite Schlag in die Unverwundbarkeit des Getroffenen
+        # und war umsonst - drei Schlaege fuer zwei Treffer. Jetzt sitzt
+        # jeder Schlag, und ein Mann ist nach 0.62 s erledigt.
+        schaden=60.0,
+        takt=0.62,
         reichweite=36.0,
         winkel=80.0,          # Oeffnung des Schlags in Grad
         schub=280.0,          # Rueckstoss auf das Ziel
@@ -566,12 +603,30 @@ WAFFEN_HAND = {
                        aufbau="fernrohr"),
     "granate":    dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
                        aufbau="kugel"),
+    "rauch":      dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
+                       aufbau="kugel"),
     "brecheisen": dict(lauf=15, dicke=2, schaft=5, s_dicke=2, holz=False,
                        aufbau="haken"),
 }
 
-# Was der Spieler zu Beginn auf den Plaetzen 1 bis 6 traegt
-HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "brecheisen"]
+# Was der Spieler zu Beginn auf den Plaetzen 1 bis 7 traegt
+HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "rauch",
+          "brecheisen"]
+
+# Rauchgranate: eine Wand, durch die niemand durchsieht - auch nicht von
+# der Ebene darueber. Sie macht keinen Schaden, sie nimmt nur die Sicht.
+RAUCH = dict(
+    radius=86.0,              # so weit reicht die Wolke in Weltpixeln
+    dauer=14.0,               # so lange steht sie
+    aufbau=1.2,               # Sekunden, bis sie dicht ist
+    abbau=3.0,                # Sekunden, in denen sie sich wieder aufloest
+    deckkraft=235,            # wie dicht sie im Kern ist (0 bis 255)
+    farbe=(196, 192, 186),
+    flocken=9,                # so viele Ballen bilden eine Wolke
+    flocken_streuung=0.62,    # wie weit sie vom Mittelpunkt wegliegen
+    wallen=7.0,               # Pixel, um die die Ballen langsam kreisen
+    wallen_takt=0.32,         # wie schnell sie das tun
+)
 
 MEDKIT = dict(
     name="MEDKIT",

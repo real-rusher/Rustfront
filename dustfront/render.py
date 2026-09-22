@@ -272,20 +272,35 @@ class Renderer:
         # Das hoechste zuletzt, damit es ueber den tieferen liegt.
         fliegende.sort(key=lambda w: welt.hoehe(w.ebene) + w.flug)
         for w in fliegende:
-            dz = blick_hoehe - (welt.hoehe(w.ebene) + w.flug)
-            if dz < -p["ausblenden"]:
-                continue                      # zu weit ueber der Ansicht
-            k = p["brennweite"] / max(60.0, p["brennweite"] + dz)
-            s = self.bilder.gedreht(w.bild, w.winkel)
-            if abs(k - 1.0) > p["massstab_schwelle"]:
-                s = pygame.transform.scale(
-                    s, (max(1, int(round(s.get_width() * k))),
-                        max(1, int(round(s.get_height() * k)))))
-            if w.blitz > 0:
-                s = s.copy()
-                s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
-            b = self._bildpunkt(w.zeichenpos(alpha), kamera, k)
-            ziel.blit(s, (b.x - s.get_width() / 2, b.y - s.get_height() / 2))
+            self.fliegendes(ziel, welt, kamera, blick_hoehe,
+                            w.zeichenpos(alpha), w.winkel, w.ebene, w.flug,
+                            w.bild, w.blitz > 0)
+
+    def fliegendes(self, ziel, welt, kamera, blick_hoehe, pos, winkel,
+                   ebene: int, flug: float, bild: str,
+                   blitzt: bool = False) -> None:
+        """Ein einzelnes Ding in der Luft, mit dem Massstab seiner Hoehe.
+
+        Eigene Methode, weil nicht nur eigene Wesen fallen: beim Gast im
+        Gefecht kommen fallende Granaten als blosse Zahlen aus dem Netz und
+        muessen mit derselben Rechnung ins Bild, sonst haengen sie in der
+        Luft, wo die Figur daneben schon faellt.
+        """
+        p = K.PERSPEKTIVE
+        dz = blick_hoehe - (welt.hoehe(ebene) + flug)
+        if dz < -p["ausblenden"]:
+            return                            # zu weit ueber der Ansicht
+        k = p["brennweite"] / max(60.0, p["brennweite"] + dz)
+        s = self.bilder.gedreht(bild, winkel)
+        if abs(k - 1.0) > p["massstab_schwelle"]:
+            s = pygame.transform.scale(
+                s, (max(1, int(round(s.get_width() * k))),
+                    max(1, int(round(s.get_height() * k)))))
+        if blitzt:
+            s = s.copy()
+            s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
+        b = self._bildpunkt(pos, kamera, k)
+        ziel.blit(s, (b.x - s.get_width() / 2, b.y - s.get_height() / 2))
 
     def partikel_zeichnen(self, ziel, welt, index, ecke, alpha) -> None:
         for p in welt.partikel:
@@ -373,6 +388,7 @@ class Renderer:
                 self.wesen_zeichnen(ziel, welt, idx, ecke, alpha)
                 self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
                 self.muendungsfeuer(ziel, welt, ecke, idx)
+                self.rauch_zeichnen(ziel, welt, idx, ecke)
                 continue
 
             dunkel = max(48, int(p["dunkel"] * k)) if dz > 0 else None
@@ -387,6 +403,7 @@ class Renderer:
             self.wesen_zeichnen(flaeche, welt, idx, u_ecke, alpha, dunkel)
             self.partikel_zeichnen(flaeche, welt, idx, u_ecke, alpha)
             self.muendungsfeuer(flaeche, welt, u_ecke, idx)
+            self.rauch_zeichnen(flaeche, welt, idx, u_ecke)
             skaliert = pygame.transform.scale(flaeche, (K.GAME_W, K.GAME_H))
             if sicht < 0.999:
                 skaliert.set_alpha(int(255 * sicht))
@@ -399,6 +416,45 @@ class Renderer:
 
         self.fliegende_zeichnen(ziel, welt, kamera, alpha, blick_hoehe)
         ziel.blit(self._vignette, (0, 0))
+
+    def rauch_zeichnen(self, ziel, welt, index: int, ecke) -> None:
+        """Rauchwolken der Ebene, ueber allem, was auf ihr steht.
+
+        Bewusst nach den Figuren und nach den Partikeln: Rauch nimmt die
+        Sicht, er liegt nicht am Boden. Weil er in die Ebene selbst
+        gezeichnet wird, verdeckt er auch dann, wenn man von weiter oben
+        auf diese Ebene hinuntersieht - genau das ist der Sinn.
+
+        Gezeichnet aus mehreren Ballen statt als eine Scheibe: ein Kreis
+        sieht nach Zielscheibe aus, mehrere ineinander nach Rauch. Sie
+        wallen langsam, damit die Wand lebt.
+        """
+        if not welt.rauch:
+            return
+        r = K.RAUCH
+        for wolke_ in welt.rauch:
+            if wolke_.ebene != index or not wolke_.lebt:
+                continue
+            dichte = wolke_.dichte
+            if dichte <= 0.01:
+                continue
+            m = wolke_.pos - ecke
+            gross = wolke_.radius * (0.55 + 0.45 * dichte)
+            flaeche = pygame.Surface((int(gross * 2.4), int(gross * 2.4)),
+                                     pygame.SRCALPHA)
+            mitte = flaeche.get_width() / 2
+            deckung = int(r["deckkraft"] * dichte)
+            for i in range(r["flocken"]):
+                a = math.tau * i / r["flocken"] + wolke_.alter * r["wallen_takt"]
+                weg = gross * r["flocken_streuung"] * (0.45 + 0.55 * ((i * 7) % 5) / 4)
+                wall = r["wallen"] * math.sin(wolke_.alter * 1.7 + i)
+                p = (mitte + math.cos(a) * weg,
+                     mitte + math.sin(a) * weg + wall * 0.3)
+                pygame.draw.circle(flaeche, (*r["farbe"], deckung), p,
+                                   gross * 0.62)
+            pygame.draw.circle(flaeche, (*r["farbe"], deckung), (mitte, mitte),
+                               gross * 0.7)
+            ziel.blit(flaeche, (m.x - mitte, m.y - mitte))
 
     def kreis_zone(self, ziel, mitte, radius: float, farbe, anteil: float = 0.0,
                    puls: float = 0.0, ring: int = 3, fuellung: int = 34) -> None:

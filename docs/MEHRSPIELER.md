@@ -1,7 +1,7 @@
 # DUSTFRONT - Der Mehrspieler, vollstaendig
 
 **Was das hier ist.** Die komplette Beschreibung des LAN-Mehrspielers, wie
-er auf dem Zweig `multiplayer-test` in Version 0.16.0 steht: Aufbau,
+er auf dem Zweig `multiplayer-test` in Version 0.17.0 steht: Aufbau,
 Protokoll, alle sechs Spielarten, jede Zahl mit Begruendung, jeder Fehler,
 der beim Bauen aufgetreten ist, und die Reihenfolge, in der man das Ganze
 wieder aufbaut.
@@ -12,10 +12,10 @@ herausgenommen, siehe Abschnitt 14). Dieses Dokument ist die Bauanleitung
 fuer den Tag, an dem er zurueckkommen soll.
 
 **Fuer wen.** Fuer Der Meister, und fuer jede Claude-Instanz, die den Satz
-hoert: *"bau mal wieder Mehrspieler ein wie in Version 0.16.0"*. Wer das
+hoert: *"bau mal wieder Mehrspieler ein wie in Version 0.17.0"*. Wer das
 liest, braucht ausser dem Spielkern nichts weiter zu wissen.
 
-**Stand beim Schreiben:** Version 0.16.0, PRE-ALPHA, Zweig
+**Stand beim Schreiben:** Version 0.17.0, PRE-ALPHA, Zweig
 `multiplayer-test`. Zwei Testlaeufe gruen: `tests/test_spiel.py` und
 `tests/test_menues.py`.
 
@@ -44,9 +44,10 @@ Drei Arten von Aussagen, immer unterscheidbar:
 
 ## 1. Kurzfassung
 
-Vier Dateien, rund 1400 Zeilen. Der Spielkern wurde dafuer **nicht**
-angefasst - das war die Bedingung, unter der sich der ganze Zweig spaeter
-in einem Stueck wieder entfernen liess.
+Vier Dateien, rund 1500 Zeilen. Der Spielkern wurde dafuer fast
+vollstaendig in Ruhe gelassen - das war die Bedingung, unter der sich der
+ganze Zweig spaeter in einem Stueck wieder entfernen liess. Die beiden
+Ausnahmen stehen in 2.4.
 
 | Datei | Zeilen | Was drin steht |
 | --- | ---: | --- |
@@ -119,8 +120,9 @@ in einem Stueck ankommen. Beides passiert im LAN wirklich. Deshalb haelt
 
 ### 2.4 Der Spielkern bleibt unangetastet
 
-**FEST.** `entities.py`, `world.py`, `play.py` wurden fuer den Mehrspieler
-nicht geaendert. Wo etwas fehlte, wurde es umgangen:
+**FEST.** `entities.py`, `world.py` und `play.py` wurden fuer den
+Mehrspieler so gut wie nicht geaendert (die zwei Ausnahmen stehen unten).
+Wo etwas fehlte, wurde es umgangen:
 
 * `Gegner.schritt()` liest `welt.held`. Statt das umzubauen, setzt
   `KampfGegner.schritt()` `welt.held` fuer die Dauer des Schritts auf sein
@@ -133,6 +135,13 @@ nicht geaendert. Wo etwas fehlte, wurde es umgangen:
 
 **GRUND.** Genau dadurch liess sich der ganze Mehrspieler spaeter mit zwei
 Reverts aus dem Hauptzweig nehmen, ohne dass am Spiel etwas fehlte.
+
+**Zwei Ausnahmen, ab 0.17.0.** Die Rauchgranate und der Granatensturz
+gehoeren zum Spiel, nicht zum Mehrspieler, und stehen darum im Kern:
+`Rauchwolke` in `entities.py`, die Liste `welt.rauch` in `world.py`, das
+Zeichnen in `render.py`. Der Mehrspieler schickt sie nur ueber die
+Leitung. Wer ihn wieder herausnimmt, laesst beides stehen - es funktioniert
+im Einzelspieler genauso.
 
 ---
 
@@ -210,8 +219,12 @@ Karte.
 
 ```json
 {"t": "willkommen", "id": 2, "name": "GAST",
- "modus": "huegel", "ende_art": "zeit", "ende_wert": 600.0, "knapp": false}
+ "modus": "huegel", "ende_art": "zeit", "ende_wert": 600.0, "knapp": false,
+ "schutz": true, "medkits": 1, "medkit_spawn": true}
 ```
+
+Die letzten drei sind die Schalter aus Abschnitt 7.7. Ein Gast stellt
+nichts davon selbst - er uebernimmt, was hier steht.
 
 **`welt`** - der ganze Zustand, `NETZ["takt"]` Mal je Sekunde. Kurze
 Schluessel, weil das Paket oft geht.
@@ -240,7 +253,8 @@ Dazu global:
 | Feld | Bedeutung |
 | --- | --- |
 | `rest` | Restzeit |
-| `schuesse` | `[[x, y, winkel, ebene, name], ...]` - Geschosse und Granaten |
+| `schuesse` | `[[x, y, winkel, ebene, name, flug], ...]` - Geschosse und Granaten. `flug` ist die Hoehe ueber der Zielebene: alles ueber 0 faellt gerade und wird beim Gast mit dem Massstab seiner eigenen Hoehe gezeichnet |
+| `rauch` | `[[x, y, ebene, radius, alter], ...]` - Rauchwolken. Das Alter genuegt, die Dichte rechnet jede Seite daraus selbst |
 | `beute` | `[[x, y, ebene, bild], ...]` |
 | `gegner` | `[[x, y, winkel, ebene, art, lebensanteil], ...]` |
 | `welle`, `pause`, `offen` | Wellenstand |
@@ -433,6 +447,38 @@ etwas wert, aber nie endgueltig.
 
 ---
 
+### 7.7 Was der Gastgeber sonst noch stellt
+
+Vier Schalter, die zu jeder Spielart gehoeren. Alle stehen im
+`willkommen`, keiner ist beim Gast einstellbar.
+
+| Schalter | Kommandozeile | Wirkung |
+| --- | --- | --- |
+| Knappe Munition | `--knapp` | Vorrat ausserhalb des Magazins, Nachschubkisten alle 18 s |
+| Einstiegsschutz | `--kein-schutz` schaltet ihn ab | `GEFECHT["schutz"]` Sekunden unverwundbar nach jedem Einstieg |
+| Medkits beim Einstieg | `--medkits N` | 0 bis 9, Vorgabe 1 |
+| Medkits auf der Karte | `--keine-medkits` schaltet sie ab | sonst alle 12 s eines, hoechstens 4 gleichzeitig |
+
+**Einstiegsschutz.** Gegen Spawnkilling: wer gerade erst eingestiegen ist,
+soll nicht von jemandem erledigt werden, der schon zielt. Er ist sichtbar -
+ein Ring um die Figur, der mit der Restzeit kleiner wird. **GRUND fuer den
+Ring:** ohne ihn sieht man nur, dass Treffer nichts tun, und haelt es fuer
+einen Fehler.
+
+Abschaltbar, weil man ihn auf einer kleinen Karte auch ausnutzen kann: man
+laeuft geschuetzt ins Gefecht. Bei zweien lohnt sich das Abschalten, bei
+sechsen nicht.
+
+**Medkits.** Dieselbe Idee wie die knappe Munition: ohne Nachschub zaehlt,
+was man beim Einstieg dabei hat, und ein Treffer wiegt schwerer. Wer
+`--medkits 0 --keine-medkits` setzt, spielt eine Runde ohne jede Heilung -
+das ist die haerteste Einstellung und fuer `versus` die interessanteste.
+
+Aufheben bleibt bei `MEDKIT["hoechstens"]` (3) gedeckelt, auch wenn man mit
+mehr einsteigt.
+
+---
+
 ## 8. Aufhelfen
 
 | Schritt | Was passiert |
@@ -593,6 +639,48 @@ Alle stehen in `config.py`. **Keine Zahl im Code.**
 | `VERSUS["boden_zeit"]` | 20 s | siehe 7.5 |
 | `VERSUS["revive_dauer"]` | 4.0 s | siehe 7.5 |
 
+### Einstieg und Heilung (0.17.0)
+
+| Name | Wert | Begruendung |
+| --- | ---: | --- |
+| `GEFECHT["schutz_an"]` | True | Vorgabe, vom Gastgeber abschaltbar |
+| `GEFECHT["start_medkits"]` | 1 | wie im Einzelspieler |
+| `GEFECHT["start_medkits_hoechstens"]` | 9 | mehr laesst der Gastgeber nicht zu |
+| `GEFECHT["medkits_spawnen"]` | True | abschaltbar, siehe 7.7 |
+
+### RAUCH (0.17.0)
+
+| Name | Wert | Begruendung |
+| --- | ---: | --- |
+| `radius` | 86 px | etwas kleiner als der Kreis in `huegel`: eine Tuer und ihr Umfeld, kein halber Raum |
+| `dauer` | 14 s | lang genug, um einen Weg zu queren, zu kurz, um eine Stelle dauerhaft zuzustellen |
+| `aufbau` | 1.2 s | sie zieht auf, statt dazustehen - wer sie wirft, kommt nicht sofort in Deckung |
+| `abbau` | 3.0 s | sie verweht sichtbar, niemand wird ueberrascht |
+| `deckkraft` | 235 | fast dicht. Darunter sieht man Umrisse, und dann nimmt sie niemand ernst |
+| `flocken` | 9 | ein Kreis sieht nach Zielscheibe aus, neun ineinander nach Rauch |
+
+Die Rauchgranate macht **keinen** Schaden und haelt **keine** Kugel auf.
+Wer hindurchschiesst, trifft - er sieht es nur nicht. **GRUND:** Sicht ist
+die Waehrung in diesem Spiel; Rauch, der auch noch schuetzt, waere zwei
+Sachen auf einmal.
+
+### Waffenzahlen, die sich in 0.17.0 geaendert haben
+
+| Waffe | Was | Vorher | Jetzt | Warum |
+| --- | --- | ---: | ---: | --- |
+| Brecheisen | Schaden | 46 | 60 | zwei Treffer toeten (2 x 60 > 100) |
+| Brecheisen | Takt | 0.40 s | 0.62 s | muss ueber `SPIELER["unverwundbar"]` (0.6 s) liegen, sonst verfaellt jeder zweite Schlag |
+| Schrot | Streuung | 7.5 Grad | 5.5 Grad | trifft auf halber Zimmerbreite mit mehr als zwei Kuegelchen |
+| Schrot | Reichweite | 210 px | 300 px | bleibt die Waffe fuer kurze Wege, ist aber nicht mehr auf Armlaenge beschraenkt |
+| Scharfschuetze | Reichweite | 900 px | 2200 px | weiter, als man sehen kann: das Bild ist 640 px breit, die Karte diagonal rund 1600 |
+| Ziellinie | Weite | 900 px | 2200 px | sie soll zeigen, wo der Schuss hingeht, und nicht vorher aufhoeren |
+
+**Das Brecheisen ist der Fall, an dem man sieht, wie zwei Zahlen
+aneinanderhaengen.** Mehr Schaden allein haette wenig gebracht: bei 0.40 s
+Takt lief jeder zweite Schlag in die Unverwundbarkeit des Getroffenen, man
+brauchte drei Schlaege fuer zwei Treffer. Erst der langsamere Takt macht
+aus "zwei Treffer toeten" auch "zwei Schlaege toeten".
+
 ### REVIVE (pve)
 
 `boden_zeit` 45 s, `dauer` 3 s, `reichweite` 28 px, `danach_leben` 40,
@@ -721,7 +809,84 @@ eigenen Listen unveraendert - eine zu kurze oder falsch gefuellte Liste aus
 dem Netz darf den Punktestand nicht kippen. Eine kaputte JSON-Zeile wirft
 niemanden raus, sie wird uebersprungen.
 
-### 12.9 Kleinere Fallen
+### 12.9 Kein Ton, kein Ruckeln, kein Blut (schwer, 0.17.0)
+
+**Symptom.** Im ganzen Mehrspieler war nichts zu hoeren, bei Gastgeber wie
+Gast. Kein Schuss, keine Explosion, kein Medkit.
+
+**Ursache.** `Welt.klang` ist in `world.py` eine **leere Methode**, genau
+wie `ruckeln`, `blutfleck`, `brandfleck` und `kurz_langsam`. Der
+Einzelspieler haengt in `play.neu_aufbauen()` die echten Empfaenger daran.
+Das Gefecht tat es nie - also lief alles ins Leere, ohne eine einzige
+Fehlermeldung.
+
+**Behebung.** `Gefecht._welt_verdrahten()`, aufgerufen im Baukasten.
+**Ausser `kurz_langsam`:** die Zeitlupe beim Toeten wuerde beim Gastgeber
+die ganze Welt verlangsamen, also auch die Runde aller Gaeste. Ein
+Abschuss darf nicht die Runde der anderen bremsen.
+
+**Merke.** Ein leerer Haken meldet sich nie. Wer eine zweite Spielszene
+neben `play.py` baut, geht dessen Aufbau Zeile fuer Zeile durch und fragt
+bei jeder: braucht meine Szene das auch?
+
+### 12.10 Der Sturztod als Teleport (schwer, 0.17.0)
+
+**Symptom.** Wer eine Ebene hinuntersprang, stand ploetzlich irgendwo
+anders auf der Karte. Ohne Todesbild, ohne Wartezeit. Bei Gastgeber und
+Gast gleichermassen.
+
+**Ursache.** In `_tote_abrechnen` hing alles an `if k.toeter is not None`:
+Todeszaehler, Punkte **und** `wieder_in`. Ein Sturz toetet ohne Toeter
+(`aufschlag()` ruft `schaden(..., von=None)`). Also blieb `wieder_in` auf
+0.0 stehen, war im selben Bild schon abgelaufen, und der Wiedereinstieg
+setzte die Figur sofort auf einen frischen Einstiegsplatz - im Test
+gemessen 244 Pixel weit.
+
+**Behebung.** Ein eigenes Merkmal `abgerechnet` am Kaempfer. Jeder Tod
+wird genau einmal verbucht, mit oder ohne Toeter; ein Sturztod kostet
+ausserdem einen Punkt, wie das Selbsterledigen.
+
+**Merke.** Sobald es einen Tod ohne Verursacher gibt, darf kein Zaehler
+mehr am Verursacher haengen. Das Gleiche gilt fuer Ertrinken, Feuer, Sturz
+aus der Karte - alles, was spaeter dazukommt.
+
+### 12.11 Die Ziellinie des Gastes zeigte auf seinen Einstieg (0.17.0)
+
+**Symptom.** Beim Gast zeigte die Ziellinie immer auf die Stelle, an der er
+eingestiegen war, egal wohin er die Maus hielt. Beim Gastgeber stimmte sie.
+
+**Ursache.** `ziel` steht in **keiner** Weltmeldung - es ist eine Eingabe,
+keine Weltlage. Der Gast simuliert nichts, also blieb `ziel` auf dem Wert
+aus dem Baukasten: `pos + (1, 0)`, dem Einstiegspunkt.
+
+**Behebung.** `_eigenes_zielen()`, einmal je Bild, aus der eigenen Maus -
+nicht aus dem Netz. Das ist zugleich das Richtigere: Zielen soll ohne
+Verzoegerung folgen. Geschossen wird weiterhin nur dort, wo der Gastgeber
+rechnet; die Linie ist Anzeige, keine Entscheidung.
+
+**Merke.** Die Trennung heisst nicht "der Gast zeigt nur an", sondern:
+**Weltlage kommt vom Gastgeber, eigene Eingabe gehoert dem Gast.** Was nur
+anzeigt und nichts entscheidet, darf und soll lokal sein.
+
+### 12.12 Granaten prallten an Loechern ab (0.17.0)
+
+**Symptom.** Eine Granate, die ueber eine Kante geworfen wurde, blieb oben
+liegen und zuendete eine Etage ueber dem, den sie treffen sollte.
+
+**Ursache.** `welt.bewegen` behandelt Loecher als Wand fuer alles, was das
+Klassenmerkmal `faellt` nicht gesetzt hat - und das hatte nur `Spieler`.
+
+**Behebung.** `Granate.faellt = True`, dazu ein `loch_unter`-Test im
+Schritt und ein eigenes `aufschlag()` **ohne** Sturzschaden: das geerbte
+haette der Granate Fallschaden gegeben, sie waere tot gewesen und haette
+nie gezuendet. Der Zuender wartet ausserdem, bis sie liegt, sonst kaeme
+der Knall auf der Zielebene an, waehrend sie im Bild noch faellt.
+
+**Merke.** `faellt` ist das Merkmal, das ueber Loecher entscheidet. Alles
+Neue, das hinunterfallen koennen soll, braucht es - und dann auch ein
+`aufschlag()`, das zu ihm passt.
+
+### 12.13 Kleinere Fallen
 
 | Falle | Was passiert |
 | --- | --- |
@@ -733,7 +898,7 @@ niemanden raus, sie wird uebersprungen.
 | Ein einzelner `FIXED_DT`-Schritt fuer `rest = 0.01` | Zu kurz. Restzeit knapp unter **einen** Schritt setzen. |
 | `Spiel()` ohne Seed im Test | Sporadische Fehlschlaege. Tests geben einen festen Seed. |
 
-### 12.10 Was **nicht** kaputt war
+### 12.14 Was **nicht** kaputt war
 
 Zwei Dinge sahen nach Fehlern aus und waren keine: die unterschiedlichen
 Blutflecken auf beiden Rechnern (Kosmetik wird nicht uebertragen, siehe
@@ -815,17 +980,20 @@ zurueck.
 
 **Schritt 3 - `Kaempfer` und `Gefecht`, nur pvp.** Fraktion je Spieler,
 `_dazu`, `_einstiegsort`, `_meine_eingabe`, `_anwenden`, `_weltmeldung`,
-`_welt_uebernehmen`, `knoepfe_sammeln` (siehe 12.1!). *Pruefbar:* zwei
-Szenen ueber echte Steckdosen, beide sehen einander, einer trifft den
-anderen.
+`_welt_uebernehmen`, `knoepfe_sammeln` (siehe 12.1!). **Und
+`_welt_verdrahten()`** - Ton, Ruckeln, Blut- und Brandflecken, siehe 12.9;
+ohne das laeuft alles davon still ins Leere. *Pruefbar:* zwei Szenen ueber
+echte Steckdosen, beide sehen einander, einer trifft den anderen, und man
+hoert es.
 
 **Schritt 4 - Namen, Punkte, Bestenliste, Endtafel.** *Pruefbar:* Runde
 endet nach Zeit und nach Abschuessen.
 
 **Schritt 5 - Zeichnen beim Gast.** `_fremdes_zeichnen` fuer Beute,
 Gegner, Geschosse, Granaten. Zielhilfen und Ziellinie nicht vergessen -
-`zeichnen()` muss **beide** rufen. *Pruefbar:* der Gast sieht eine fliegende
-Granate.
+`zeichnen()` muss **beide** rufen, und `_eigenes_zielen()` gehoert dazu
+(12.11). *Pruefbar:* der Gast sieht eine fliegende Granate, und seine
+Ziellinie folgt seiner Maus.
 
 **Schritt 6 - pve.** `REVIVE`, `Kaempfer.sterben` ohne Tod, `_revive`
 (erst sammeln, dann anwenden), `KampfBeute`, `KampfGegner` mit eigener
@@ -854,7 +1022,9 @@ im Bild nachweisbar (12.5), Gleichstand laedt nicht, der volle Kreis
 beendet das Gefecht.
 
 **Schritt 11 - Startdateien und Schalter.** `--host`, `--join`, `--modus`,
-`--ende`, `--wert`, `--knapp`, `--bestenliste`; die vier Startdateien.
+`--ende`, `--wert`, `--knapp`, `--kein-schutz`, `--medkits`,
+`--keine-medkits`, `--bestenliste`; die vier Startdateien. Alle Schalter
+gehoeren ins `willkommen`, sonst spielt der Gast nach anderen Regeln.
 
 **Schritt 12 - Tests.** Alles oben Genannte gehoert in
 `tests/test_spiel.py`, mit **echten** Steckdosen auf `127.0.0.1`. Was dort
@@ -900,6 +1070,28 @@ Mitte, drinnen/draussen/falsche Ebene, allein laedt es, Gleichstand laedt
 nicht, Vorsprung 2 laedt schneller, Obergrenze haelt, Ladestand kommt beim
 Gast an, voller Kreis beendet das Gefecht, **der Kreis ist im Bild
 nachweisbar** und die Figur steht darauf.
+
+**Die gemeldeten Fehler aus 0.17.0:** beide Seiten haben einen echten
+Tonausgang, spueren Treffer in der Kamera und hinterlassen Flecken, aber
+keine Zeitlupe; ein Sturztod versetzt niemanden, zaehlt trotzdem als Tod
+und wartet die uebliche Zeit ab; die Ziellinie des Gastes trifft genau den
+Mauszeiger und dreht die Figur sofort mit; Rauch und fallende Granaten
+kommen beim Gast an und verschwinden dort auch wieder.
+
+**Die neuen Schalter:** Einstiegsschutz an und aus, Zahl der Medkits beim
+Einstieg, Medkit-Nachschub an und aus - jeder davon beim Gastgeber gesetzt
+und beim Gast nachgeprueft.
+
+**Granate und Rauch (im Spielkern, ohne Netz):** eine Granate rollt ueber
+die Kante, faellt weich (unter 8 px je Bild) und zuendet erst unten; eine
+Rauchgranate macht genau eine Wolke, die aufzieht, im Bild wirklich
+verdeckt - auf ihrer Ebene und von der Ebene darueber - und nach ihrer
+Zeit verschwindet.
+
+**Balance, gemessen statt geglaubt:** zwei Brecheisenschlaege toeten, einer
+nicht, und der Takt liegt ueber der Unverwundbarkeit; Schrot trifft auf 260
+px und nah trotzdem haerter; der Scharfschuetze trifft auf 900 px, weiter
+als das Bild breit ist.
 
 **In `tests/test_menues.py`:** Bestenliste anlegen, eintragen, sortieren,
 Neustart ueberleben, kaputte Datei abfangen, Namen saeubern, Adressen

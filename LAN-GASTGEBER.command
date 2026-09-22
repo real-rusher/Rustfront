@@ -92,7 +92,25 @@ if [ "$MODUS" != "pvp" ]; then
 fi
 
 echo
+read -r -p "  Einstiegsschutz, 2 Sekunden unverwundbar? (J/n): " WAHL
+SCHUTZ=""
+case "${WAHL:-j}" in
+    n|N) SCHUTZ="--kein-schutz" ;;
+esac
+
+echo
+read -r -p "  Medkits beim Einstieg (Enter = 1): " MEDKITS
+MEDKITS="${MEDKITS:-1}"
+
+read -r -p "  Medkits immer wieder auf der Karte? (J/n): " WAHL
+MEDSPAWN=""
+case "${WAHL:-j}" in
+    n|N) MEDSPAWN="--keine-medkits" ;;
+esac
+
+echo
 # shellcheck disable=SC2086
 "$PY" -m dustfront --host --name "$NAME" --modus "$MODUS" \
-    --ende "$ENDE" --wert "$WERT" $KNAPP \
+    --ende "$ENDE" --wert "$WERT" --medkits "$MEDKITS" \
+    $KNAPP $SCHUTZ $MEDSPAWN \
     || abbrechen "Beendet mit einem Fehler."

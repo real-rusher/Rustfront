@@ -467,6 +467,30 @@ def _waffe_granate():
     return s
 
 
+@platzhalter("waffe_rauch")
+def _waffe_rauch():
+    s = _waffe()
+    # Buechse statt Kugel, damit man sie in der Hotbar nicht mit der
+    # Sprenggranate verwechselt. Heller Kopf, graue Schwaden.
+    pygame.draw.rect(s, (96, 100, 96), (9, 2, 9, 8))
+    pygame.draw.rect(s, (132, 138, 132), (10, 3, 3, 6))
+    pygame.draw.rect(s, (40, 34, 24), (12, 0, 3, 3))     # Zuender
+    pygame.draw.rect(s, K.C_CREAM, (12, 1, 2, 1))
+    for x in (19, 21, 23):                               # Schwaden
+        pygame.draw.rect(s, (168, 166, 160), (x, 3 + (x % 3), 1, 2))
+    return s
+
+
+@platzhalter("rauchgranate")
+def _rauchgranate():
+    s = _flaeche(10, 10)
+    pygame.draw.ellipse(s, (92, 96, 92), (1, 1, 8, 8))
+    pygame.draw.ellipse(s, (146, 150, 146), (2, 2, 5, 5))
+    pygame.draw.rect(s, (40, 34, 24), (4, 0, 3, 3))
+    pygame.draw.rect(s, K.C_CREAM, (4, 1, 2, 1))
+    return _rand(s, (16, 12, 8))
+
+
 @platzhalter("waffe_brecheisen")
 def _waffe_brecheisen():
     s = _waffe()

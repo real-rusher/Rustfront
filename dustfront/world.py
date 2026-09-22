@@ -116,6 +116,10 @@ class Welt:
         self.zeit = 0.0
         self.held = None                 # setzt die Spielszene
         self.muendungen: list = []       # kurze Lichtblitze am Lauf
+        # Rauchwolken. Eine eigene Liste und keine Wesen: sie stossen
+        # niemanden, sind nicht zu treffen und werden nicht gedreht - sie
+        # liegen nur auf ihrer Ebene und nehmen die Sicht.
+        self.rauch: list = []
 
     # ---- Rueckmeldungen an die Spielszene ------------------------------
     # Standardmaessig passiert nichts. Die Szene haengt sich hier ein, damit
@@ -171,6 +175,10 @@ class Welt:
             for m in self.muendungen:
                 m[3] -= dt
             self.muendungen = [m for m in self.muendungen if m[3] > 0]
+        for r in self.rauch:
+            r.schritt(dt)
+        if any(not r.lebt for r in self.rauch):
+            self.rauch = [r for r in self.rauch if r.lebt]
         if any(not w.lebt for w in self.wesen):
             self.wesen = [w for w in self.wesen if w.lebt]
         if any(not p.lebt for p in self.partikel):

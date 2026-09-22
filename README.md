@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.14.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.17.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -22,7 +22,7 @@ Nicolas, Nikolaus, Marlon, Alfred.
 | Splash-Sequenz | fertig, fuenf Karten mit eigenem Ton |
 | Hauptmenue | fertig, inklusive Optionen und Spielstand |
 | Spielkern | steht: feste Zeitschritte, drei Ebenen, Kollision, Wellen |
-| Waffen | sechs Stueck, alle im Test nachgewiesen, jede in der Hand zu erkennen |
+| Waffen | sieben Stueck, alle im Test nachgewiesen, jede in der Hand zu erkennen |
 | Hoehenebenen | drei, alle gleichzeitig sichtbar, Sturz mit Steuerung in der Luft |
 | Sturz | ohne Ruck: die Figur bleibt stehen, die Welt waechst unter ihr heran |
 | Inventar und Hotbar | fertig, Plaetze per Maus oder Tastatur umsortierbar |
@@ -155,7 +155,7 @@ der alten weggenommen.
 | Maus links | Schiessen oder schlagen |
 | Maus rechts | Einzielen (bei der Scharfschuetzenwaffe) |
 | Mausrad | Ansicht eine Ebene hoch oder runter |
-| 1 bis 6 | Waffe waehlen |
+| 1 bis 7 | Waffe waehlen |
 | R | Nachladen |
 | H | Medkit |
 | E | Treppe benutzen |
@@ -166,16 +166,17 @@ der alten weggenommen.
 | F11 | Vollbild |
 | F3 | Debug-Anzeige |
 
-### Die sechs Waffen
+### Die sieben Waffen
 
 | Waffe | Art | Eigenheit |
 | --- | --- | --- |
 | Repetierer | Schuss | Der Allrounder. Genau, mittleres Tempo. |
 | Sturmgewehr | Schuss | Rund 700 Schuss in der Minute, streut bei Dauerfeuer auf. |
-| Schrot | Schuss | Sieben Kugeln auf einmal, nur auf kurze Entfernung. |
-| Scharfschuetze | Schuss | Aus der Hueffte unbrauchbar. Rechte Maustaste halten zieht den Streifen in anderthalb Sekunden bis auf Ziellinienbreite zusammen. Gemessen: auf 300 Pixel trifft sie aus der Hueffte 8 Prozent der Schuesse, eingezielt 100. |
-| Granate | Wurf | Fliegt genau so weit, wie man zielt, zwischen 60 und 260 Pixeln. |
-| Brecheisen | Nahkampf | Schlaegt in einem Kegel von 80 Grad und stoesst zurueck. Braucht keine Munition. |
+| Schrot | Schuss | Sieben Kugeln auf einmal. Enger gebuendelt und weiter reichend als frueher, aber nah immer noch deutlich haerter. |
+| Scharfschuetze | Schuss | Reicht weiter, als das Bild breit ist: ein Schuss endet an einer Wand, nicht an seiner Reichweite. Aus der Hueffte unbrauchbar. Rechte Maustaste halten zieht den Streifen in anderthalb Sekunden bis auf Ziellinienbreite zusammen. Gemessen: auf 300 Pixel trifft sie aus der Hueffte 8 Prozent der Schuesse, eingezielt 100. |
+| Granate | Wurf | Fliegt genau so weit, wie man zielt, zwischen 60 und 260 Pixeln. Rollt sie ueber eine Kante, faellt sie auf die Ebene darunter und zuendet erst dort. |
+| Rauchgranate | Wurf | Macht keinen Schaden, sondern eine Wand aus Rauch. Vierzehn Sekunden lang sieht dort niemand mehr etwas - auch nicht, wer von der Ebene darueber hinunterschaut. |
+| Brecheisen | Nahkampf | Zwei Treffer toeten. Schlaegt in einem Kegel von 80 Grad und stoesst zurueck. Braucht keine Munition. |
 
 Die Munition haengt am Namen der Waffe, nicht an ihrem Platz. Umsortieren im
 Inventar kostet also keine Patrone.
@@ -205,7 +206,7 @@ Mehrspieler zurueckkommen soll.
 | **VERSUS** | Zwei Mannschaften, ein Leben je Runde, Aufhelfen durch die eigenen Leute | nach drei Rundensiegen |
 | **HUEGEL** | Zwei Mannschaften, ein sichtbarer Kreis in der Kartenmitte | wenn eine Mannschaft den Kreis vollgeladen hat |
 
-Alles aus dem Einzelspieler ist dabei: die sechs Waffen, drei Ebenen mit
+Alles aus dem Einzelspieler ist dabei: die sieben Waffen, drei Ebenen mit
 Treppen und Stuerzen, Ziellinie, Streukegel der Scharfschuetzenwaffe,
 Nahkampfbogen. Medkits liegen alle paar Sekunden neu aus, jeder kann sie
 nehmen.
@@ -278,7 +279,9 @@ alles ein Stueck auf.
 ### So spielt man es
 
 1. Einer startet **`LAN-GASTGEBER`**, tippt seinen Namen und waehlt dann
-   Spielart, Endbedingung und ob Munition knapp sein soll. Danach steht
+   Spielart, Endbedingung, ob Munition knapp sein soll, ob es einen
+   Einstiegsschutz gibt, wie viele Medkits man beim Einstieg dabei hat
+   und ob Medkits immer wieder auf der Karte erscheinen. Danach steht
    die Adresse im Fenster (etwa `192.168.1.7:50505`).
 2. Alle anderen starten **`LAN-GAST`**, tippen ihren Namen und diese
    Adresse. **Die Spielart bestimmt allein der Gastgeber** - sonst
@@ -628,6 +631,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.13.1 | Im Gefecht gingen einzelne Tastendruecke verloren; dazu fehlten Zielhilfen, Mausrad, Medkits, Munitionsanzeige und sichtbare Granaten |
 | 0.14.0 | Mehrspieler fertiggestellt: drei Spielarten, Aufhelfen, Wellen mit mehrspielertauglicher Gegner-KI, knappe Munition mit Nachschubkisten. Letzter Stand dieses Zweigs |
 | 0.16.0 | Mannschaften im Gefecht: TEAM, VERSUS mit einem Leben je Runde und Aufhelfen durch die eigenen Leute, HUEGEL mit sichtbarem Kreis in der Kartenmitte. Alles in `docs/MEHRSPIELER.md` beschrieben. Nur auf `multiplayer-test`; 0.15.0 gehoert dem Hauptzweig ohne Mehrspieler |
+| 0.17.0 | Rauchgranate als siebte Waffe; Granaten fallen ueber Kanten auf die Ebene darunter; Einstiegsschutz, Startmedkits und Medkit-Nachschub als Schalter beim Aufmachen. Dazu vier gemeldete Fehler behoben: kein Ton im Gefecht, Ziellinie des Gastes am Einstiegspunkt, Versetzung nach einem Sturztod, Granaten prallten an Loechern ab. Brecheisen toetet in zwei Treffern, Schrot reicht weiter und streut enger, Scharfschuetze weiter als das Bild breit ist |
 
 ## Anpassen
 

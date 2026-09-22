@@ -47,6 +47,7 @@ sie mitschicken wollte, haette den zehnfachen Netzverkehr fuer nichts.
 
 from __future__ import annotations
 
+import math
 import random
 
 import pygame
@@ -55,7 +56,7 @@ from . import bestenliste
 from . import config as K
 from . import netz
 from .core import Szene
-from .entities import Aufsammler, Gegner, Spieler, wolke
+from .entities import Aufsammler, Gegner, Rauchwolke, Spieler, wolke
 from .font import SCHRIFT
 from .render import Kamera, Renderer
 from .world import freier_punkt, testkarte
@@ -85,6 +86,7 @@ class Kaempfer(Spieler):
         self.tode = 0
         self.wieder_in = 0.0
         self.toeter = None           # wertet das Gefecht aus und raeumt weg
+        self.abgerechnet = False     # ist dieser Tod schon verbucht?
         # Am Boden. Die beiden Zeiten stehen am Kaempfer und nicht fest im
         # Code, weil versus andere braucht als pve: dort soll eine Runde
         # laufen, hier soll eine Welle zu schaffen sein.
@@ -278,7 +280,9 @@ class Gefecht(Szene):
 
     def __init__(self, app, name: str, gastgeber=None, gast=None,
                  modus: str = K.MODUS_VORGABE, ende_art: str = "zeit",
-                 ende_wert: float = 0.0, knapp: bool = False) -> None:
+                 ende_wert: float = 0.0, knapp: bool = False,
+                 schutz: bool | None = None, medkits: int | None = None,
+                 medkit_spawn: bool | None = None, seed: int | None = None) -> None:
         super().__init__(app)
         self.name = netz.name_saeubern(name)
         self.gastgeber = gastgeber
@@ -287,6 +291,15 @@ class Gefecht(Szene):
         self.regeln = K.MODI[self.modus]
         self.ende_art = ende_art if ende_art in K.ENDE_ARTEN else "zeit"
         self.knapp = bool(knapp)
+        # Drei Schalter, die der Gastgeber beim Aufmachen stellt. Der Gast
+        # bekommt sie mit dem Willkommen und stellt nichts selbst.
+        self.schutz_an = (K.GEFECHT["schutz_an"] if schutz is None
+                          else bool(schutz))
+        self.start_medkits = max(0, min(
+            K.GEFECHT["start_medkits_hoechstens"],
+            K.GEFECHT["start_medkits"] if medkits is None else int(medkits)))
+        self.medkits_spawnen = (K.GEFECHT["medkits_spawnen"]
+                                if medkit_spawn is None else bool(medkit_spawn))
         # Ohne Vorgabe des Gastgebers: Zeit wie immer, Abschuesse aber je
         # nachdem, ob ein Konto oder sechs gefuellt werden muessen.
         if self.ende_art == "zeit":
@@ -297,7 +310,11 @@ class Gefecht(Szene):
             vorgabe = K.GEFECHT["abschuesse_ziel"]
         self.ende_wert = float(ende_wert) or float(vorgabe)
 
-        self.rnd = random.Random()
+        # Im Spiel ohne Seed, damit jede Runde anders ausfaellt. Die Tests
+        # geben einen festen mit - ohne ihn haengt jede Pruefung daran, wo
+        # der Gastgeber zufaellig eingestiegen ist, und eine Pruefung, die
+        # mal gruen und mal rot ist, sagt nichts.
+        self.rnd = random.Random(seed)
         self.renderer = Renderer(app.bilder)
         self.welt = testkarte()
         self.kamera = Kamera()
@@ -342,10 +359,38 @@ class Gefecht(Szene):
         self.zone_mitte.update(ebene_zone.pixel_breite / 2,
                                ebene_zone.pixel_hoehe / 2)
 
+        self._welt_verdrahten()
+
         if self.ist_gastgeber:
             self.ich = self._dazu(0, self.name)
         else:
             self.gast.senden({"t": "hallo", "name": self.name})
+
+    def _welt_verdrahten(self) -> None:
+        """Die Rueckmeldungen der Welt anschliessen: Ton, Ruckeln, Flecken.
+
+        Genau das hat hier lange gefehlt. Welt.klang und die anderen sind
+        von Haus aus leere Methoden; der Einzelspieler haengt sich in
+        play.py daran. Das Gefecht tat es nicht - und darum war im ganzen
+        Mehrspieler kein Ton zu hoeren, kein Schuss zu spueren und kein
+        Blutfleck zu sehen, bei Gastgeber und Gast gleichermassen.
+
+        Eines bleibt bewusst weg: kurz_langsam. Die Zeitlupe beim Toeten
+        wuerde beim Gastgeber die ganze Welt verlangsamen, also auch fuer
+        alle Gaeste. Ein Abschuss darf nicht die Runde der anderen bremsen.
+        """
+        self.welt.ruckeln = self.kamera.stossen
+        self.welt.klang = self.app.klaenge.spielen
+        self.welt.blutfleck = self._blutfleck
+        self.welt.brandfleck = self._brandfleck
+
+    def _blutfleck(self, pos, ebene: int, radius: float) -> None:
+        self.welt.ebene(ebene).dekal(self.renderer.blutfleck(radius),
+                                     pos.x, pos.y)
+
+    def _brandfleck(self, pos, ebene: int, radius: float) -> None:
+        self.welt.ebene(ebene).dekal(self.renderer.brandfleck(radius),
+                                     pos.x, pos.y)
 
     # ---- Grundsaetzliches --------------------------------------------
     @property
@@ -359,6 +404,17 @@ class Gefecht(Szene):
     @property
     def mit_teams(self) -> bool:
         return self.regeln["teams"]
+
+    @property
+    def schutz_zeit(self) -> float:
+        """Sekunden Unverwundbarkeit nach dem Einstieg, 0 wenn abgeschaltet.
+
+        Gegen Spawnkilling: wer gerade erst eingestiegen ist, soll nicht
+        von jemandem erledigt werden, der schon zielt. Abschaltbar, weil
+        man den Schutz bei zweien auf einer kleinen Karte auch ausnutzen
+        kann - man laeuft geschuetzt ins Gefecht.
+        """
+        return K.GEFECHT["schutz"] if self.schutz_an else 0.0
 
     def _team_fuer(self) -> int:
         """Der Neue kommt in die kleinere Mannschaft.
@@ -395,7 +451,8 @@ class Gefecht(Szene):
                      self._fraktion_fuer(nummer, team), knapp=self.knapp,
                      team=team)
         self._regeln_anlegen(k)
-        k.unverwundbar = K.GEFECHT["schutz"]
+        k.unverwundbar = self.schutz_zeit
+        k.medkits = self.start_medkits
         self.kaempfer[nummer] = k
         self.welt.dazu(k)
         return k
@@ -443,7 +500,7 @@ class Gefecht(Szene):
         for name in ("nachladen", "heilen", "tracer", "tracer_weit"):
             if e.gedrueckt(name):
                 self._knoepfe.add(name)
-        for nr in range(1, 7):
+        for nr in range(1, 8):
             if e.gedrueckt("waffe%d" % nr):
                 self._waffe_wunsch = nr - 1
         if e.rad:
@@ -595,7 +652,9 @@ class Gefecht(Szene):
     def _willkommen(self, nummer: int, k: Kaempfer) -> dict:
         return {"t": "willkommen", "id": nummer, "name": k.name,
                 "modus": self.modus, "ende_art": self.ende_art,
-                "ende_wert": self.ende_wert, "knapp": self.knapp}
+                "ende_wert": self.ende_wert, "knapp": self.knapp,
+                "schutz": self.schutz_an, "medkits": self.start_medkits,
+                "medkit_spawn": self.medkits_spawnen}
 
     def _gegnerlast_zaehlen(self) -> None:
         """Wie viele Gegner gerade an welchem Spieler haengen.
@@ -759,10 +818,14 @@ class Gefecht(Szene):
 
     # ---- Beute ---------------------------------------------------------
     def _beute_nachlegen(self, dt: float) -> None:
-        self._seit_medkit += dt
-        if self._seit_medkit >= K.GEFECHT["medkit_takt"]:
-            self._seit_medkit = 0.0
-            self._beute_legen("medkit", K.GEFECHT["medkit_hoechstens"])
+        # Medkits auf der Karte sind abschaltbar - dieselbe Idee wie bei
+        # den Munitionskisten: ohne sie zaehlt, was man beim Einstieg
+        # dabei hat, und ein Treffer wiegt schwerer.
+        if self.medkits_spawnen:
+            self._seit_medkit += dt
+            if self._seit_medkit >= K.GEFECHT["medkit_takt"]:
+                self._seit_medkit = 0.0
+                self._beute_legen("medkit", K.GEFECHT["medkit_hoechstens"])
         if not self.knapp:
             return
         self._seit_muni += dt
@@ -812,7 +875,16 @@ class Gefecht(Szene):
         for k in list(self.kaempfer.values()):
             if k.lebt:
                 continue
-            if k.toeter is not None:
+            if not k.abgerechnet:
+                # Jeder Tod wird genau einmal abgerechnet, auch der ohne
+                # Toeter. Frueher hing das alles an "wenn es einen Toeter
+                # gibt" - und ein Sturz toetet ohne Toeter. Die Folge war
+                # ein wieder_in, das nie gesetzt wurde, also schon im
+                # naechsten Bild abgelaufen war: wer sich zu Tode fiel,
+                # stand ohne Todesbild sofort irgendwo anders auf der
+                # Karte. Genau das sah aus wie ein Teleport beim
+                # Hinunterspringen.
+                k.abgerechnet = True
                 toeter = getattr(k.toeter, "von", k.toeter)
                 if isinstance(toeter, Kaempfer) and toeter is not k:
                     toeter.abschuesse += K.GEFECHT["punkt_abschuss"]
@@ -821,7 +893,8 @@ class Gefecht(Szene):
                         # In "versus" nicht: dort zaehlen nur Rundensiege.
                         if not self.regeln["runden"]:
                             self.teampunkte[toeter.team] += 1
-                elif toeter is k:
+                elif toeter is k or toeter is None:
+                    # Selbst erledigt oder gestuerzt: beides kostet Punkte.
                     k.abschuesse += K.GEFECHT["punkt_selbst"]
                 k.toeter = None
                 k.tode += 1
@@ -844,11 +917,15 @@ class Gefecht(Szene):
         k.flug = 0.0
         k.sturz_rest = 0.0
         k.lebt = True
+        k.abgerechnet = False
+        k.toeter = None
+        k.wieder_in = 0.0
         k.am_boden = False
         k.raus = False
         k.boden_rest = 0.0
         k.revive_stand = 0.0
-        k.unverwundbar = K.GEFECHT["schutz"]
+        k.unverwundbar = self.schutz_zeit
+        k.medkits = max(k.medkits, self.start_medkits)
         k.magazin = {w: K.WAFFEN[w]["magazin"] for w in k.waffen}
         if k not in self.welt.wesen and k not in self.welt.neue:
             self.welt.dazu(k)
@@ -954,10 +1031,16 @@ class Gefecht(Szene):
                               w.ebene, w.bild])
                 continue
             name = getattr(w, "bild", None)
-            if name in ("geschoss", "granate"):
+            if name in ("geschoss", "granate", "rauchgranate"):
+                # Die Flughoehe muss mit: eine Granate, die eine Ebene
+                # tiefer faellt, haengt beim Gast sonst in der Luft.
                 flug.append([round(w.pos.x, 1), round(w.pos.y, 1),
-                             round(w.winkel, 1), w.ebene, name])
-        return {"t": "welt", "rest": round(self.rest, 1),
+                             round(w.winkel, 1), w.ebene, name,
+                             round(getattr(w, "flug", 0.0), 1)])
+        qualm = [[round(r.pos.x, 1), round(r.pos.y, 1), r.ebene,
+                  round(r.radius, 1), round(r.alter, 2)]
+                 for r in self.welt.rauch if r.lebt]
+        return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
                 "spieler": spieler, "schuesse": flug, "beute": beute,
                 "gegner": gegner, "welle": self.welle,
                 "pause": round(self.pause_rest, 1),
@@ -1014,6 +1097,15 @@ class Gefecht(Szene):
         except (TypeError, ValueError):
             pass
         self.knapp = bool(nachricht.get("knapp", False))
+        self.schutz_an = bool(nachricht.get("schutz", self.schutz_an))
+        self.medkits_spawnen = bool(nachricht.get("medkit_spawn",
+                                                  self.medkits_spawnen))
+        try:
+            self.start_medkits = max(0, min(
+                K.GEFECHT["start_medkits_hoechstens"],
+                int(nachricht.get("medkits", self.start_medkits))))
+        except (TypeError, ValueError):
+            pass
 
     @staticmethod
     def _liste_uebernehmen(ziel: list, werte, art) -> None:
@@ -1098,7 +1190,19 @@ class Gefecht(Szene):
         if self.ich is not None:
             self.welt.held = self.ich
         self._fremde_schuesse = [tuple(s) for s in meldung.get("schuesse", [])
-                                 if isinstance(s, (list, tuple)) and len(s) == 5]
+                                 if isinstance(s, (list, tuple)) and len(s) == 6]
+        # Rauch wird nicht mitsimuliert, sondern jedes Mal neu gesetzt. Er
+        # hat kein Gedaechtnis ausser seinem Alter, und das kommt mit.
+        self.welt.rauch = []
+        for eintrag in meldung.get("rauch", []):
+            if not isinstance(eintrag, (list, tuple)) or len(eintrag) != 5:
+                continue
+            try:
+                self.welt.rauch.append(Rauchwolke(
+                    pygame.Vector2(float(eintrag[0]), float(eintrag[1])),
+                    int(eintrag[2]), float(eintrag[3]), alter=float(eintrag[4])))
+            except (TypeError, ValueError):
+                continue
         self._fremde_beute = [tuple(b) for b in meldung.get("beute", [])
                               if isinstance(b, (list, tuple)) and len(b) == 4]
         self._fremde_gegner = [tuple(g) for g in meldung.get("gegner", [])
@@ -1115,6 +1219,8 @@ class Gefecht(Szene):
 
         if self.ich is None:
             return
+        if not self.ist_gastgeber:
+            self._eigenes_zielen()
         if self.ich.ebene != self._letzte_ebene:
             self._letzte_ebene = self.ich.ebene
             self.blick = self.ich.ebene
@@ -1132,6 +1238,29 @@ class Gefecht(Szene):
         ebene = self.welt.ebene(self.ich.ebene)
         self.kamera.schritt(dt, self.ich.pos, self.ich.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe))
+
+    def _eigenes_zielen(self) -> None:
+        """Beim Gast: die eigene Figur sofort dorthin ausrichten, wo die
+        Maus steht.
+
+        Ein Gast simuliert nichts, er setzt seine Figuren dorthin, wo der
+        Gastgeber sie meldet. Das Zielen war davon mitbetroffen: `ziel`
+        steht in keiner Weltmeldung, also blieb es auf dem Wert aus dem
+        Baukasten stehen - dem Einstiegspunkt. Die Ziellinie zeigte darum
+        beim Gast sein Leben lang auf die Stelle, an der er eingestiegen
+        ist, egal wohin er die Maus hielt.
+
+        Hier wird es einmal je Bild aus der eigenen Maus gesetzt, nicht
+        aus dem Netz. Das ist zugleich das Richtigere: Zielen soll ohne
+        einen Hin- und Rueckweg Verzoegerung folgen. Geschossen wird
+        weiterhin nur dort, wo der Gastgeber es ausrechnet - die Linie ist
+        Anzeige, keine Entscheidung.
+        """
+        ziel = self.kamera.zu_welt(self.app.eingabe.maus)
+        self.ich.ziel = ziel
+        ab = ziel - self.ich.pos
+        if ab.length_squared() > 1:
+            self.ich.winkel = math.degrees(math.atan2(ab.y, ab.x))
 
     def ereignis(self, ev) -> None:
         if ev.type == pygame.KEYDOWN and ev.key in self.app.opt.codes("pause"):
@@ -1211,7 +1340,15 @@ class Gefecht(Szene):
                 pygame.draw.rect(ziel, K.C_RED,
                                  (int(p.x) - breite // 2, int(p.y) - 20,
                                   int(breite * anteil), 2))
-        for (x, y, winkel, ebene, name) in self._fremde_schuesse:
+        for (x, y, winkel, ebene, name, hoehe) in self._fremde_schuesse:
+            if hoehe > 0:
+                # Faellt gerade eine Ebene tiefer: mit dem Massstab ihrer
+                # eigenen Hoehe zeichnen, wie es der Gastgeber auch tut.
+                self.renderer.fliegendes(ziel, self.welt, self.kamera,
+                                         self.blick_hoehe,
+                                         pygame.Vector2(x, y), winkel, ebene,
+                                         hoehe, name)
+                continue
             if ebene != self.blick:
                 continue
             s = self.renderer.bilder.gedreht(name, winkel)
@@ -1250,6 +1387,13 @@ class Gefecht(Szene):
                 continue
             eigen = (k is self.ich)
             farbe = self._farbe_fuer(k, eigen)
+            if self.schutz_an and k.unverwundbar > 0 and not k.am_boden:
+                # Ein Ring, solange der Einstiegsschutz haelt. Ohne ihn
+                # sieht man nur, dass Treffer nichts tun, und haelt es
+                # fuer einen Fehler.
+                staerke = max(0.0, min(1.0, k.unverwundbar / K.GEFECHT["schutz"]))
+                pygame.draw.circle(ziel, K.C_TEAL, (int(p.x), int(p.y)),
+                                   int(14 + 6 * staerke), 1)
             SCHRIFT.zeichnen(ziel, k.name, int(p.x), int(p.y) - 26, farbe, 1,
                              ausrichtung="mitte")
             if eigen and self.mit_teams:

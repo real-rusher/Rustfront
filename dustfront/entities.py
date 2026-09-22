@@ -273,6 +273,10 @@ class Granate(Wesen):
     schatten = True
     radius = 3.0
     bild = "granate"
+    # Wie der Spieler: Loecher sind fuer sie keine Wand. Ohne das prallte
+    # eine Granate an der Kante eines Lochs ab wie an einem Mauerstueck
+    # und blieb oben liegen - eine Etage ueber dem, den sie treffen sollte.
+    faellt = True
 
     def __init__(self, pos, richtung: float, daten: dict, ebene: int, von=None,
                  weite: float | None = None) -> None:
@@ -280,6 +284,7 @@ class Granate(Wesen):
         self.daten = daten
         self.von = von
         self.winkel = richtung
+        self.bild = "rauchgranate" if daten.get("rauch") else "granate"
         self.rest = daten["flugzeit"]
         self.dreh = RND.uniform(-700, 700)
         # Anfangstempo so waehlen, dass sie nach der Reibung genau auf der
@@ -296,6 +301,8 @@ class Granate(Wesen):
         self.vorher.update(self.pos)
         self.rest -= dt
         self.winkel += self.dreh * dt
+        if self.sturz_rest > 0:
+            self.sturz_schritt(dt)
         self.tempo *= max(0.0, 1.0 - self.daten["reibung"] * dt)   # rollt aus
         stoss_x, stoss_y = self.welt.bewegen(self, self.tempo.x * dt,
                                              self.tempo.y * dt)
@@ -303,13 +310,39 @@ class Granate(Wesen):
             self.tempo.x = -self.tempo.x * 0.5
         if stoss_y:
             self.tempo.y = -self.tempo.y * 0.5
-        if self.rest <= 0:
+        # Ueber die Kante gerollt: sie faellt hinunter wie eine Figur, mit
+        # derselben Rechnung. Frueher blieb sie ueber dem Loch in der Luft
+        # liegen und zuendete dort, wo unten niemand stand.
+        if self.sturz_rest <= 0 and self.welt.loch_unter(self):
+            self.stuerzen()
+        # Der Zuender wartet, bis sie liegt. Sonst kaeme der Knall auf der
+        # Zielebene an, waehrend die Granate im Bild noch in der Luft ist.
+        if self.rest <= 0 and self.sturz_rest <= 0:
             self.zuenden()
+
+    def aufschlag(self) -> None:
+        """Aufsetzen nach einem Sturz - ohne Sturzschaden.
+
+        Wesen.aufschlag() wuerde der Granate Fallschaden geben. Sie hat
+        Leben wie jedes Wesen, waere danach tot und wuerde nie zuenden.
+        """
+        self.sturz_hoehe = 0.0
+        self.pos.update(self.welt.landeplatz(self.pos, self.radius, self.ebene))
+        self.vorher.update(self.pos)
+        self.tempo *= 0.35
+        wolke(self.welt, self.pos, 4, 60, 0.3, K.C_MUTED_DK, self.ebene, 1,
+              "staub")
 
     def zuenden(self) -> None:
         self.lebt = False
         d = self.daten
         w = self.welt
+        if d.get("rauch"):
+            w.rauch.append(Rauchwolke(self.pos, self.ebene))
+            wolke(w, self.pos, 12, 90, 0.6, K.RAUCH["farbe"], self.ebene, 2)
+            w.ruckeln(d["kamera"])
+            w.klang("wurf", 0.8)
+            return
         r = d["radius"]
         for ziel in list(w.nahe(self.pos, r + 30, self.ebene)):
             if not ziel.lebt or ziel is self:
@@ -328,6 +361,48 @@ class Granate(Wesen):
         w.ruckeln(d["kamera"])
         w.kurz_langsam(0.05)
         w.klang("granate", 1.0)
+
+
+class Rauchwolke:
+    """Eine stehende Wand aus Rauch auf einer Ebene.
+
+    Kein Wesen: sie stoesst niemanden, ist nicht zu treffen und dreht sich
+    nicht. Sie liegt auf ihrer Ebene und nimmt die Sicht - auch die von
+    oben, denn der Renderer zeichnet sie in die Ebene hinein, nachdem die
+    Figuren dort stehen. Wer von Ebene 2 hinuntersieht, sieht also den
+    Rauch und nicht, wer darin steht.
+
+    Sie macht keinen Schaden. Wer hindurchschiesst, trifft weiter - nur
+    sehen kann er es nicht.
+    """
+
+    __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt")
+
+    def __init__(self, pos, ebene: int, radius: float | None = None,
+                 dauer: float | None = None, alter: float = 0.0) -> None:
+        r = K.RAUCH
+        self.pos = pygame.Vector2(pos)
+        self.ebene = int(ebene)
+        self.radius = float(r["radius"] if radius is None else radius)
+        self.dauer = float(r["dauer"] if dauer is None else dauer)
+        self.alter = float(alter)
+        self.lebt = True
+
+    @property
+    def dichte(self) -> float:
+        """0 bis 1: erst aufziehen, dann stehen, zum Schluss verwehen."""
+        r = K.RAUCH
+        if self.alter < r["aufbau"]:
+            return max(0.0, self.alter / r["aufbau"])
+        rest = self.dauer - self.alter
+        if rest < r["abbau"]:
+            return max(0.0, rest / r["abbau"])
+        return 1.0
+
+    def schritt(self, dt: float) -> None:
+        self.alter += dt
+        if self.alter >= self.dauer:
+            self.lebt = False
 
 
 # ══════════════════════════════════════════════════════════════════

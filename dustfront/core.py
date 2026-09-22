@@ -59,6 +59,7 @@ TASTEN = {
     "waffe4":   [pygame.K_4],
     "waffe5":   [pygame.K_5],
     "waffe6":   [pygame.K_6],
+    "waffe7":   [pygame.K_7],
     "heilen":   [pygame.K_h],
     "inventar": [pygame.K_TAB],
     "pause":    [pygame.K_ESCAPE],

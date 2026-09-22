@@ -104,15 +104,32 @@ set /a WERT=%WERT%*60
 
 :muni
 set "KNAPP="
-if "%MODUS%"=="pvp" goto los
+if "%MODUS%"=="pvp" goto schutz
 echo.
 set "WAHL="
 set /p "WAHL=  Munition begrenzen, mit Nachschubkisten? (j/N): "
 if /i "%WAHL%"=="j" set "KNAPP=--knapp"
 
+:schutz
+echo.
+set "SCHUTZ="
+set "WAHL="
+set /p "WAHL=  Einstiegsschutz, 2 Sekunden unverwundbar? (J/n): "
+if /i "%WAHL%"=="n" set "SCHUTZ=--kein-schutz"
+
+echo.
+set "MEDKITS="
+set /p "MEDKITS=  Medkits beim Einstieg (Enter = 1): "
+if "%MEDKITS%"=="" set "MEDKITS=1"
+
+set "MEDSPAWN="
+set "WAHL="
+set /p "WAHL=  Medkits immer wieder auf der Karte? (J/n): "
+if /i "%WAHL%"=="n" set "MEDSPAWN=--keine-medkits"
+
 :los
 echo.
-%PY% -m dustfront --host --name "%NAME%" --modus %MODUS% --ende %ENDE% --wert %WERT% %KNAPP%
+%PY% -m dustfront --host --name "%NAME%" --modus %MODUS% --ende %ENDE% --wert %WERT% --medkits %MEDKITS% %KNAPP% %SCHUTZ% %MEDSPAWN%
 if not errorlevel 1 exit /b 0
 echo.
 echo   Beendet mit einem Fehler. Die Meldung darueber sagt, woran es lag.

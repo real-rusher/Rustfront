@@ -138,7 +138,7 @@ class Spiel(Szene):
                 held.tracer = not held.tracer
             if e.gedrueckt("tracer_weit"):
                 held.tracer_weit = not held.tracer_weit
-            for nr in range(1, 7):
+            for nr in range(1, 8):
                 if e.gedrueckt("waffe%d" % nr):
                     held.waffe_waehlen(nr - 1)
             if e.gedrueckt("heilen"):

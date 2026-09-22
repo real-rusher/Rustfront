@@ -3,6 +3,8 @@ DUSTFRONT - Einstieg
 ====================
 
     python -m dustfront                Spiel starten
+    python -m dustfront --host ...     LAN-Runde aufmachen, siehe README
+    python -m dustfront --join WOHIN   einer LAN-Runde beitreten
     python -m dustfront --vorlagen     jedes Bild als Vorlage herausschreiben
     python -m dustfront --assets       zeigen, was aus Dateien kommt
 
@@ -52,7 +54,9 @@ def aus_menue(auftrag: dict | None = None) -> int:
 def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
             port: int = 0, headless: bool = False,
             modus: str = K.MODUS_VORGABE, ende_art: str = "zeit",
-            ende_wert: float = 0.0, knapp: bool = False) -> int:
+            ende_wert: float = 0.0, knapp: bool = False,
+            schutz: bool | None = None, medkits: int | None = None,
+            medkit_spawn: bool | None = None) -> int:
     """LAN-Test: als Gastgeber aufmachen oder als Gast verbinden.
 
     Die Spielart bestimmt allein der Gastgeber. Ein Gast bekommt sie mit
@@ -85,6 +89,17 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
                                          else "Abschuessen"))
             if knapp:
                 print("Munition ist knapp, es gibt Nachschubkisten.")
+            print("Einstiegsschutz: %s"
+                  % ("%.0f Sekunden" % K.GEFECHT["schutz"]
+                     if (K.GEFECHT["schutz_an"] if schutz is None else schutz)
+                     else "aus"))
+            wieviele = (K.GEFECHT["start_medkits"] if medkits is None
+                        else medkits)
+            print("Medkits beim Einstieg: %d" % wieviele)
+            print("Medkits auf der Karte: %s"
+                  % ("alle %.0f Sekunden" % K.GEFECHT["medkit_takt"]
+                     if (K.GEFECHT["medkits_spawnen"] if medkit_spawn is None
+                         else medkit_spawn) else "keine"))
             print("Mitspieler verbinden sich mit:")
             print("   %s" % wirt.adresse)
         else:
@@ -99,7 +114,8 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
 
     app.schieben(Gefecht(app, name or "GAST", gastgeber=wirt, gast=gast,
                          modus=modus, ende_art=ende_art,
-                         ende_wert=ende_wert, knapp=knapp))
+                         ende_wert=ende_wert, knapp=knapp, schutz=schutz,
+                         medkits=medkits, medkit_spawn=medkit_spawn))
     app.laufen()
     return 0
 
@@ -129,10 +145,18 @@ def aus_argumenten(argumente: list[str]) -> int:
         except ValueError:
             print("--wert braucht eine Zahl.")
             return 1
+        try:
+            medkits = int(wert("--medkits", str(K.GEFECHT["start_medkits"])))
+        except ValueError:
+            print("--medkits braucht eine ganze Zahl.")
+            return 1
         return gefecht(True, name=wert("--name", "GASTGEBER"),
                        port=int(wert("--port", "0") or 0),
                        modus=modus, ende_art=ende_art, ende_wert=ende_wert,
-                       knapp="--knapp" in argumente)
+                       knapp="--knapp" in argumente,
+                       schutz="--kein-schutz" not in argumente,
+                       medkits=medkits,
+                       medkit_spawn="--keine-medkits" not in argumente)
     if "--join" in argumente:
         return gefecht(False, wohin=wert("--join"),
                        name=wert("--name", "GAST"))
