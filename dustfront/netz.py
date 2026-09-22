@@ -129,7 +129,12 @@ class Leitung:
 class Gastgeber:
     """Nimmt Verbindungen an und haelt sie. Rechnen tut die Spielszene."""
 
-    def __init__(self, port: int | None = None) -> None:
+    def __init__(self, port: int | None = None, online: bool = False) -> None:
+        # online=True heisst nur eines: versuche, den Router zu ueberreden,
+        # den Port von aussen durchzulassen. Am Spiel selbst aendert es
+        # nichts - es ist dieselbe Leitung, nur von weiter her.
+        self.online = bool(online)
+        self.freigabe = None
         self.port = int(port or K.NETZ["port"])
         self.leitungen: dict[int, Leitung] = {}
         self.naechste_id = 1
@@ -138,11 +143,22 @@ class Gastgeber:
         self.sock.bind(("", self.port))
         self.sock.listen(K.NETZ["warteschlange"])
         self.sock.setblocking(False)
+        if self.online:
+            from .upnp import Freigabe
+            self.freigabe = Freigabe(self.port, eigene_adresse())
+            self.freigabe.oeffnen()
 
     @property
     def adresse(self) -> str:
-        """Die Adresse, die man den Mitspielern ansagt."""
+        """Die Adresse, die man den Mitspielern im eigenen Netz ansagt."""
         return "%s:%d" % (eigene_adresse(), self.port)
+
+    @property
+    def aussen(self) -> str:
+        """Die Adresse von ausserhalb, falls der Router mitgespielt hat."""
+        if self.freigabe is not None and self.freigabe.offen:
+            return "%s:%d" % (self.freigabe.aussen or "?", self.port)
+        return ""
 
     def annehmen(self) -> list[int]:
         """Neue Gaeste hereinlassen. Gibt deren Nummern zurueck."""
@@ -199,6 +215,11 @@ class Gastgeber:
             self.sock.close()
         except OSError:
             pass
+        if self.freigabe is not None:
+            # Die Tuer im Router wieder zumachen. Wer das vergisst,
+            # hinterlaesst eine offene Stelle, die bis zum naechsten
+            # Neustart des Routers offen bleibt.
+            self.freigabe.zumachen()
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -268,6 +289,18 @@ def eigene_adresse() -> str:
         return "127.0.0.1"
     finally:
         sock.close()
+
+
+def passwort_saeubern(wort: str) -> str:
+    """Kuerzt und saeubert ein Kennwort.
+
+    Nur Zeichen, die sich auf jeder Tastatur tippen und in dieser Schrift
+    anzeigen lassen. Ein Kennwort, das man nicht vorlesen kann, ist im
+    Wohnzimmer nutzlos.
+    """
+    erlaubt = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+    sauber = "".join(c for c in (wort or "").upper() if c in erlaubt)
+    return sauber[:K.NETZ["passwortlaenge"]]
 
 
 def name_saeubern(name: str) -> str:

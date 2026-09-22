@@ -31,6 +31,23 @@ read -r -p "  Dein Name (Enter = GASTGEBER): " NAME
 [ -n "${NAME:-}" ] || NAME="GASTGEBER"
 
 echo
+echo "  Wer soll mitspielen koennen?"
+echo "    1  nur im eigenen Netz (LAN)"
+echo "    2  auch ueber das Internet"
+echo
+read -r -p "  Welche (Enter = 1): " WAHL
+ONLINE=""
+PASSWORT=""
+if [ "${WAHL:-1}" = "2" ]; then
+    ONLINE="--online"
+    echo
+    echo "  Das Spiel versucht, den Port im Router selbst freizugeben."
+    echo "  Klappt das nicht, sagt es gleich, was einzutragen ist."
+    echo "  Wer die Adresse kennt, kann mitspielen - darum ein Kennwort:"
+    read -r -p "  Kennwort (Enter = keins): " PASSWORT
+fi
+
+echo
 echo "  Spielart:"
 echo "    1  PVP     jeder gegen jeden"
 echo "    2  PVE     alle zusammen gegen Wellen, mit Aufhelfen"
@@ -137,6 +154,6 @@ echo
 # shellcheck disable=SC2086
 "$PY" -m dustfront --host --name "$NAME" --modus "$MODUS" \
     --ende "$ENDE" --wert "$WERT" --medkits "$MEDKITS" \
-    --runden "$RUNDEN" --team "$TEAM" \
-    $KNAPP $SCHUTZ $MEDSPAWN \
+    --runden "$RUNDEN" --team "$TEAM" --passwort "$PASSWORT" \
+    $KNAPP $SCHUTZ $MEDSPAWN $ONLINE \
     || abbrechen "Beendet mit einem Fehler."

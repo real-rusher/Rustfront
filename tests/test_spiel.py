@@ -1158,22 +1158,30 @@ for px in range(bild_wolke.get_width()):
         c = tuple(bild_wolke.get_at((px, py)))
         if c[3]:
             farben[c] = farben.get(c, 0) + 1
-pruef("Rauch benutzt nur die Farben aus der Tabelle",
-      len(farben) <= len(K.RAUCH["farben"]), "%d Farben" % len(farben))
-pruef("Und jeder Block deckt voll", all(c[3] == 255 for c in farben))
-# Blockig heisst: jede Kante sitzt auf dem Raster. Ein weicher Verlauf
-# haette Kanten ueberall - und genau so etwas hat in einem Spiel aus
-# Kacheln nichts zu suchen.
+pruef("Rauch benutzt nur die Toene aus der Tabelle",
+      len({c[:3] for c in farben}) <= len(K.RAUCH["toene"]),
+      "%d Toene" % len({c[:3] for c in farben}))
+pruef("Und der Kern deckt voll",
+      any(c[3] == 255 for c in farben),
+      "hoechste Deckung %d" % max(c[3] for c in farben))
+# Pixel-Art heisst: jede Kante sitzt auf dem Korn des Spiels. Ein weicher
+# Verlauf haette Kanten ueberall, und genau so etwas hat in einer Welt
+# aus Kacheln nichts zu suchen.
 daneben = 0
 zeile = bild_wolke.get_height() // 2
 vor = None
 for px in range(bild_wolke.get_width()):
     c = tuple(bild_wolke.get_at((px, zeile)))
-    if vor is not None and c != vor and (px + wolke_ecke[0]) % K.RAUCH["block"]:
+    if vor is not None and c != vor and (px + wolke_ecke[0]) % K.RAUCH["korn"]:
         daneben += 1
     vor = c
-pruef("Jede Rauchkante sitzt auf dem Blockraster", daneben == 0,
+pruef("Jede Rauchkante sitzt auf dem Korn", daneben == 0,
       "%d daneben" % daneben)
+# Volumen: es muessen wirklich mehrere Tonstufen vorkommen, nicht eine
+# Flaeche in Grau.
+pruef("Die Wolke hat Tonstufen, ist also kein grauer Fleck",
+      len({c[:3] for c in farben}) >= 4,
+      "%d Toene" % len({c[:3] for c in farben}))
 fremd, _ = probe_renderer._rauchbild(wolke_probe, False)
 pruef("Rauch einer anderen Ebene ist blasser",
       fremd.get_at((fremd.get_width() // 2, fremd.get_height() // 2))[3]
@@ -1819,6 +1827,123 @@ for _ in range(int(K.GEFECHT["blick_zurueck"] / K.FIXED_DT) + 8):
 pruef("Nach kurzer Zeit schaut man wieder auf die eigene Ebene",
       w.blick == w.ich.ebene, "Ebene %d" % w.blick)
 w.verlassen(); ga.verlassen()
+
+# ── Treppen: nicht zweimal hintereinander ────────────────────────────
+# "nutzen" wird gehalten, nicht gedrueckt. Ohne Sperre versuchte darum
+# jedes Bild einen Wechsel: hoch, und weil auf der Zielkachel die Treppe
+# zurueck nach unten liegt, sofort wieder hinunter.
+w, ga = gefechtspaar("pvp")
+wirt_k = w.kaempfer[0]
+treppe = None
+eo = w.welt.ebene(0)
+for ty in range(eo.hoehe):
+    for tx in range(eo.breite):
+        if eo.kachel(tx, ty) == K.TREPPE_HOCH:
+            treppe = pygame.Vector2(tx * K.TILE + 16, ty * K.TILE + 16)
+            break
+    if treppe:
+        break
+pruef("Eine Treppe nach oben gefunden", treppe is not None)
+wirt_k.ebene = 0
+wirt_k.pos.update(treppe); wirt_k.vorher.update(treppe)
+wirt_k.treppe_rest = 0.0
+halten = {"will": [0.0, 0.0], "ziel": [treppe.x + 20, treppe.y],
+          "nutzen": True, "knoepfe": []}
+w._anwenden(wirt_k, halten)
+pruef("Einmal Druecken bringt eine Ebene hoch", wirt_k.ebene == 1,
+      "Ebene %d" % wirt_k.ebene)
+# Taste weiter gehalten: es darf nichts mehr passieren.
+for _ in range(60):
+    w._anwenden(wirt_k, halten)
+pruef("Gehalten bleibt es bei dieser einen Ebene", wirt_k.ebene == 1,
+      "Ebene %d" % wirt_k.ebene)
+pruef("Und die Sperre laeuft", wirt_k.treppe_rest > 0,
+      "%.2f s" % wirt_k.treppe_rest)
+# Nach der Sperre geht es wieder - dann eben zurueck nach unten.
+for _ in range(int(K.GEFECHT["treppe_takt"] / K.FIXED_DT) + 4):
+    wirt_k.schritt(K.FIXED_DT)
+w._anwenden(wirt_k, halten)
+pruef("Nach der Sperre geht es wieder", wirt_k.ebene == 0,
+      "Ebene %d" % wirt_k.ebene)
+w.verlassen(); ga.verlassen()
+
+# ── Online: Kennwort und der Weg durch den Router ────────────────────
+# Ein Port, der ins Internet offen steht, braucht einen Tuersteher. Und
+# die Routerabfrage muss auswertbar sein, ohne dass hier ein Router steht.
+from dustfront import upnp
+
+_port[0] += 1
+wirt_n = netz.Gastgeber(_port[0])
+geschuetzt = Gefecht(app, "WIRT", gastgeber=wirt_n, modus="pvp",
+                     passwort="Geheim-1", seed=777)
+falsch = Gefecht(app, "EINDRINGLING",
+                 gast=netz.Gast("127.0.0.1:%d" % _port[0]), passwort="egal")
+netz_durchlassen(geschuetzt, falsch, 20)
+pruef("Mit falschem Kennwort kommt niemand herein",
+      len(geschuetzt.kaempfer) == 1, "%d Kaempfer" % len(geschuetzt.kaempfer))
+pruef("Und der Abgewiesene erfaehrt, warum",
+      "ABGEWIESEN" in falsch.hinweis, falsch.hinweis)
+pruef("Seine Leitung ist zu", not falsch.gast.offen)
+
+richtig = Gefecht(app, "BEFUGT", gast=netz.Gast("127.0.0.1:%d" % _port[0]),
+                  passwort="geheim-1")     # Gross- und Kleinschreibung egal
+netz_durchlassen(geschuetzt, richtig, 20)
+pruef("Mit dem richtigen Kennwort schon",
+      len(geschuetzt.kaempfer) == 2, "%d Kaempfer" % len(geschuetzt.kaempfer))
+geschuetzt.verlassen(); falsch.verlassen(); richtig.verlassen()
+
+pruef("Ein Kennwort wird gesaeubert und gekuerzt",
+      netz.passwort_saeubern("  ge heim!1  ") == "GEHEIM1"
+      and len(netz.passwort_saeubern("X" * 40)) == K.NETZ["passwortlaenge"],
+      netz.passwort_saeubern("  ge heim!1  "))
+
+# Die Routerabfrage gegen erfundene Antworten - so laesst sie sich pruefen,
+# ohne dass in diesem Testlauf ein Router im Netz steht.
+ssdp = ("HTTP/1.1 200 OK\r\nCACHE-CONTROL: max-age=120\r\n"
+        "LOCATION: http://192.168.1.1:5000/rootDesc.xml\r\n\r\n")
+pruef("Die Antwort eines Routers wird gelesen",
+      upnp.kopfzeile_lesen(ssdp, "location")
+      == "http://192.168.1.1:5000/rootDesc.xml")
+beschreibung = ('<?xml version="1.0"?><root xmlns="urn:schemas-upnp-org:device-1-0">'
+                '<device><serviceList>'
+                '<service><serviceType>urn:schemas-upnp-org:service:Layer3Forwarding:1'
+                '</serviceType><controlURL>/ctl/L3F</controlURL></service>'
+                '<service><serviceType>urn:schemas-upnp-org:service:WANIPConnection:1'
+                '</serviceType><controlURL>/ctl/IPConn</controlURL></service>'
+                '</serviceList></device></root>')
+dienst, adresse = upnp.dienst_finden("http://192.168.1.1:5000/rootDesc.xml",
+                                     beschreibung)
+pruef("Die Stelle fuer Portfreigaben wird gefunden",
+      dienst.endswith("WANIPConnection:1")
+      and adresse == "http://192.168.1.1:5000/ctl/IPConn", adresse)
+pruef("Auch ein relativer Weg wird richtig angehaengt",
+      upnp.dienst_finden("http://10.0.0.1:80/desc/root.xml",
+                         beschreibung)[1] == "http://10.0.0.1:80/ctl/IPConn")
+pruef("Eine kaputte Beschreibung wirft niemanden um",
+      upnp.dienst_finden("http://x/y.xml", "<kein xml") == ("", ""))
+pruef("Die Aussenadresse wird aus der Antwort gelesen",
+      upnp.soap_antwort_lesen(
+          "<s:Body><u:GetExternalIPAddressResponse><NewExternalIPAddress>"
+          "93.184.216.34</NewExternalIPAddress></u:GetExternalIPAddressResponse>"
+          "</s:Body>", "NewExternalIPAddress") == "93.184.216.34")
+
+# Ohne Router muss die Freigabe sauber scheitern und sagen, was zu tun ist.
+frei = upnp.Freigabe(50505, "192.168.1.50")
+pruef("Eine Freigabe ohne Router ist einfach zu",
+      not frei.offen and len(frei.bericht()) >= 3)
+# Ein Gastgeber mit --online muss auch dann laufen, wenn kein Router
+# antwortet - und das tut hier keiner.
+_port[0] += 1
+online_wirt = netz.Gastgeber(_port[0], online=True)
+pruef("Ein Online-Gastgeber laeuft auch ohne Router",
+      online_wirt.port == _port[0] and online_wirt.freigabe is not None)
+pruef("Er sagt dann aber nicht, er sei von aussen erreichbar",
+      online_wirt.aussen == "", online_wirt.aussen)
+online_wirt.schliessen()
+
+pruef("Und der Bericht nennt Port und Ziel",
+      any("50505" in z and "192.168.1.50" in z for z in frei.bericht()),
+      " / ".join(frei.bericht()[:3]))
 
 # Ein Gast, der abbricht, darf den Gastgeber nicht mitreissen
 verbindung.schliessen()

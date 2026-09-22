@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.18.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.19.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -181,7 +181,7 @@ der alten weggenommen.
 Die Munition haengt am Namen der Waffe, nicht an ihrem Platz. Umsortieren im
 Inventar kostet also keine Patrone.
 
-## LAN-Gefecht
+## Gefecht im LAN und ueber das Internet
 
 > **Dieser Zweig ist abgeschlossen und wird nicht mehr weiterentwickelt.**
 > Der Mehrspieler war ein Test. Er ist fertiggestellt und liegt auf dem
@@ -290,9 +290,32 @@ alles ein Stueck auf.
    spielten zwei Leute mit verschiedenen Regeln auf derselben Karte.
 3. Fertig. Esc beendet.
 
-Alle muessen im selben Netz sein - gleiches WLAN oder gleicher Switch.
-Eine Windows-Firewall fragt beim ersten Mal, ob Python ins Netz darf; das
-muss erlaubt werden, sonst findet niemand den Gastgeber.
+Fuer eine LAN-Runde muessen alle im selben Netz sein - gleiches WLAN oder
+gleicher Switch. Eine Windows-Firewall fragt beim ersten Mal, ob Python
+ins Netz darf; das muss erlaubt werden, sonst findet niemand den
+Gastgeber.
+
+### Ueber das Internet
+
+Die Startdatei fragt gleich am Anfang, ob nur das eigene Netz mitspielen
+soll oder auch das Internet. Beim Internet versucht das Spiel, den Port im
+Router selbst freizugeben (UPnP), und sagt danach die Adresse an, die die
+anderen eintippen.
+
+Drei Dinge dazu, ehrlich:
+
+* **Es haengt am Router.** Viele Heimrouter koennen UPnP und haben es an,
+  dann geht es von allein. Manche koennen es nicht, und hinter einem
+  Mobilfunkanschluss oder in einem Wohnheim hilft es gar nichts. Klappt es
+  nicht, schreibt das Spiel genau hin, was von Hand einzutragen ist:
+  Protokoll TCP, Port, Zieladresse.
+* **Es wird ruckeliger als im LAN.** Der Gastgeber rechnet alles; ein Gast
+  sieht seine eigene Figur erst nach einem Hin- und Rueckweg. Im LAN sind
+  das zwei Millisekunden, ueber das Internet eher dreissig bis hundert.
+  Zielen folgt trotzdem sofort, das rechnet jeder bei sich.
+* **Ein offener Port ist ein offener Port.** Wer die Adresse kennt, kann
+  mitspielen. Darum fragt die Startdatei nach einem Kennwort. Ohne eines
+  kommt jeder herein, der die Adresse hat.
 
 Wer lieber tippt:
 
@@ -305,7 +328,9 @@ python -m dustfront --bestenliste
 ```
 
 `--team rot|blau|auto` waehlt die Mannschaft, `--runden N` die Zahl der
-Rundensiege in VERSUS.
+Rundensiege in VERSUS. `--online` versucht, den Port im Router freizugeben,
+`--passwort WORT` setzt ein Kennwort - beides zusammen ist der Weg ueber
+das Internet.
 `--modus` ist `pvp`, `pve`, `pvpve`, `team`, `versus` oder `huegel`;
 `--ende` ist `zeit` oder `abschuesse`, `--wert` die Sekunden
 beziehungsweise Abschuesse. Bei `versus` und `huegel` ist die Zeit nur die
@@ -636,6 +661,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.14.0 | Mehrspieler fertiggestellt: drei Spielarten, Aufhelfen, Wellen mit mehrspielertauglicher Gegner-KI, knappe Munition mit Nachschubkisten. Letzter Stand dieses Zweigs |
 | 0.16.0 | Mannschaften im Gefecht: TEAM, VERSUS mit einem Leben je Runde und Aufhelfen durch die eigenen Leute, HUEGEL mit sichtbarem Kreis in der Kartenmitte. Alles in `docs/MEHRSPIELER.md` beschrieben. Nur auf `multiplayer-test`; 0.15.0 gehoert dem Hauptzweig ohne Mehrspieler |
 | 0.17.0 | Rauchgranate als siebte Waffe; Granaten fallen ueber Kanten auf die Ebene darunter; Einstiegsschutz, Startmedkits und Medkit-Nachschub als Schalter beim Aufmachen. Dazu vier gemeldete Fehler behoben: kein Ton im Gefecht, Ziellinie des Gastes am Einstiegspunkt, Versetzung nach einem Sturztod, Granaten prallten an Loechern ab. Brecheisen toetet in zwei Treffern, Schrot reicht weiter und streut enger, Scharfschuetze weiter als das Bild breit ist |
+| 0.19.0 | Runden ueber das Internet: der Gastgeber laesst den Router den Port per UPnP selbst freigeben, mit Kennwort und ehrlicher Anleitung, falls es nicht klappt. Rauch neu gezeichnet - glattes Dichtefeld statt gewuerfelter Kloetze, Helligkeit nach Dicke, Licht von oben links. Treppen sperren nach einem Wechsel 1.5 Sekunden |
 | 0.18.0 | Pausenmenue im Gefecht, mit Regeln, Mannschaftseinteilung und Rundenstart fuer den Gastgeber; Rauch komplett neu als deckende Blockwand, die auch Namen verbirgt; Unverwundbarkeit nach einem Treffer entfernt, Schutz gibt es nur noch beim Einstieg; Sturz mit Ring, Staub und Ton; Rueckmeldung beim Aufsammeln; am Boden liegt man wirklich; wer aufhilft, steht still; Waffenwechsel ohne Verzoegerung; Schwung fuer das Brecheisen; neun neue Treppen; nach oben ist nur noch eine Ebene sichtbar; die verschobene Ansicht kommt von selbst zurueck |
 
 ## Anpassen

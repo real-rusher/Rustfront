@@ -87,6 +87,7 @@ class Kaempfer(Spieler):
         self.wieder_in = 0.0
         self.toeter = None           # wertet das Gefecht aus und raeumt weg
         self.abgerechnet = False     # ist dieser Tod schon verbucht?
+        self.treppe_rest = 0.0       # Sperre nach einem Ebenenwechsel
         # Am Boden. Die beiden Zeiten stehen am Kaempfer und nicht fest im
         # Code, weil versus andere braucht als pve: dort soll eine Runde
         # laufen, hier soll eine Welle zu schaffen sein.
@@ -149,6 +150,7 @@ class Kaempfer(Spieler):
         super().nachladen()
 
     def schritt(self, dt: float) -> None:
+        self.treppe_rest = max(0.0, self.treppe_rest - dt)
         vorher = self.magazin.get(self.waffe_name, 0)
         war_am_laden = self.nachlade_rest > 0
         super().schritt(dt)
@@ -297,7 +299,8 @@ class Gefecht(Szene):
                  ende_wert: float = 0.0, knapp: bool = False,
                  schutz: bool | None = None, medkits: int | None = None,
                  medkit_spawn: bool | None = None, runden: int | None = None,
-                 team: int | None = None, seed: int | None = None) -> None:
+                 team: int | None = None, passwort: str = "",
+                 seed: int | None = None) -> None:
         super().__init__(app)
         self.name = netz.name_saeubern(name)
         self.gastgeber = gastgeber
@@ -320,6 +323,11 @@ class Gefecht(Szene):
             K.VERSUS["runden_bis"] if runden is None else runden)))
         # In welche Mannschaft man will: -1 heisst "such mir eine aus".
         self.team_wunsch = int(-1 if team is None else team)
+        # Kennwort. Im eigenen Netz meist leer; ueber das Internet ist es
+        # das Einzige, was zwischen der Runde und jedem steht, der die
+        # Adresse kennt.
+        self.passwort = netz.passwort_saeubern(passwort)
+        self.abgewiesen = ""         # Grund, falls der Gastgeber absagt
         # Ohne Vorgabe des Gastgebers: Zeit wie immer, Abschuesse aber je
         # nachdem, ob ein Konto oder sechs gefuellt werden muessen.
         if self.ende_art == "zeit":
@@ -392,7 +400,8 @@ class Gefecht(Szene):
             self.ich = self._dazu(0, self.name, self.team_wunsch)
         else:
             self.gast.senden({"t": "hallo", "name": self.name,
-                              "team": self.team_wunsch})
+                              "team": self.team_wunsch,
+                              "wort": self.passwort})
 
     def _welt_verdrahten(self) -> None:
         """Die Rueckmeldungen der Welt anschliessen: Ton, Ruckeln, Flecken.
@@ -632,9 +641,23 @@ class Gefecht(Szene):
             k.zielt = False
             k.sprint = False
             return
+        # Treppe nehmen - aber nicht jedes Bild wieder.
+        #
+        # "nutzen" wird gehalten, nicht gedrueckt; das braucht das
+        # Aufhelfen. Ohne Sperre versuchte darum jedes Bild einen Wechsel:
+        # hoch, und weil auf der Zielkachel die Treppe zurueck nach unten
+        # liegt, sofort wieder hinunter. Man stand blinkend zwischen zwei
+        # Etagen. Die Sperre gilt fuer den Kaempfer, nicht fuer die
+        # Kachel - sie haelt also auch, wenn er nach dem Wechsel gleich
+        # auf der naechsten Treppe steht.
+        if k.treppe_rest > 0:
+            return
         ziel_ebene = self.welt.treppe_unter(k)
-        if ziel_ebene is not None:
-            self.welt.ebene_wechseln(k, ziel_ebene)
+        if ziel_ebene is not None and self.welt.ebene_wechseln(k, ziel_ebene):
+            k.treppe_rest = K.GEFECHT["treppe_takt"]
+            wolke(self.welt, k.pos, 10, 90, 0.4, K.C_MUTED_DK, k.ebene, 1,
+                  "staub")
+            self.welt.klang("aufheben", 0.4)
 
     def _darf_helfen(self, helfer, liegender) -> bool:
         """Mit Mannschaften hilft man nur den eigenen Leuten.
@@ -671,6 +694,17 @@ class Gefecht(Szene):
         for nummer, nachricht in self.gastgeber.holen():
             art = nachricht.get("t")
             if art == "hallo":
+                if self.passwort and (netz.passwort_saeubern(
+                        str(nachricht.get("wort", ""))) != self.passwort):
+                    # Falsches Kennwort: hoeflich absagen und auflegen.
+                    # Der Platz wird nicht belegt, der Name nicht
+                    # uebernommen, und die Runde merkt nichts davon.
+                    self.gastgeber.an_einen(nummer, {"t": "abgelehnt",
+                                                     "grund": "KENNWORT FALSCH"})
+                    leitung = self.gastgeber.leitungen.get(nummer)
+                    if leitung is not None:
+                        leitung.schliessen("Kennwort falsch")
+                    continue
                 if nummer not in self.kaempfer:
                     try:
                         wunsch = int(nachricht.get("team", -1))
@@ -1128,6 +1162,9 @@ class Gefecht(Szene):
     # ---- Schritt: Gast -------------------------------------------------
     def _schritt_gast(self, dt: float) -> None:
         self.hinweis = ""
+        if self.abgewiesen:
+            self.hinweis = "ABGEWIESEN: %s  [ESC]" % self.abgewiesen
+            return
         if not self.gast.offen:
             self.hinweis = "VERBINDUNG VERLOREN  [ESC]"
             return
@@ -1147,6 +1184,14 @@ class Gefecht(Szene):
                     self.hinweis = "NEUE RUNDE: %s" % K.MODI[self.modus]["name"]
             elif art == "welt":
                 self._welt_uebernehmen(nachricht)
+            elif art == "abgelehnt":
+                # Gemerkt und nicht nur angezeigt: der Gastgeber legt
+                # gleich darauf auf, und im naechsten Bild wuerde sonst
+                # "Verbindung verloren" daraus - die Meldung, die am
+                # wenigsten erklaert.
+                self.abgewiesen = str(nachricht.get("grund", ""))[:24]
+                self.gast.schliessen()
+                return
             elif art == "ende":
                 self.vorbei = True
                 self.gewonnen = bool(nachricht.get("gewonnen", False))

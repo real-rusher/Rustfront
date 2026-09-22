@@ -50,7 +50,9 @@ WOHIN=""
 while [ -z "$WOHIN" ]; do
     read -r -p "  Adresse des Gastgebers: " WOHIN
 done
+read -r -p "  Kennwort, falls eines gilt (Enter = keins): " PASSWORT
 
 echo
 "$PY" -m dustfront --join "$WOHIN" --name "$NAME" --team "$TEAM" \
+    --passwort "${PASSWORT:-}" \
     || abbrechen "Beendet mit einem Fehler."

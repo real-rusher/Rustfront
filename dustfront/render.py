@@ -469,31 +469,24 @@ class Renderer:
 
     def rauch_zeichnen(self, ziel, welt, index: int, ecke,
                        eigene_ebene: bool = True) -> None:
-        """Rauchwolken der Ebene, als Bloecke, ueber allem was dort steht.
+        """Rauchwolken der Ebene, ueber allem, was dort steht.
 
         Drei Dinge machen den Unterschied zu einer gemalten Wolke:
 
-        1. **Bloecke statt Kreis.** Alles in diesem Spiel sitzt auf einem
-           Raster; eine weich verlaufende Scheibe faellt sofort als
-           Fremdkoerper auf. Die Bloecke stehen im Weltraster, zwei Wolken
-           nebeneinander ergeben deshalb eine durchgehende Wand statt
-           zweier verschobener Flecken.
-        2. **Wirklich deckend.** Der Kern liegt bei voller Deckkraft. Wer
+        1. **Wirklich deckend.** Innen liegt sie bei voller Deckkraft. Wer
            darin steht, ist nicht zu sehen - und sein Name auch nicht,
            siehe `welt.verdeckt`.
-        3. **Ebene erkennbar.** Rauch einer fremden Ebene wird blasser
-           gezeichnet. Ohne das sieht eine Wand eine Etage hoeher genauso
-           aus wie die vor der eigenen Nase, und man weiss nicht, ob man
-           um sie herumlaufen oder ueber sie hinwegsehen kann.
-
-        Gepuffert wird je Wolke und je Zehntel Dichte: eine Wand aus rund
-        dreihundert Bloecken wird sonst hundertzwanzig Mal in der Sekunde
-        neu zusammengesetzt, und das auf jeder Ebene, auf der sie liegt.
+        2. **Aufloesung wie der Rest.** Gezeichnet wird in Bildpunkten von
+           `RAUCH["korn"]` Pixeln, also im selben Massstab wie die Kacheln
+           daneben. Die Form kommt aus einem glatten Dichtefeld, nicht aus
+           einzeln gewuerfelten Kloetzen - sonst sieht es nach Konfetti
+           aus statt nach Rauch.
+        3. **Ebene erkennbar.** Rauch einer fremden Ebene ist blasser.
+           Ohne das sieht eine Wand eine Etage hoeher genauso aus wie die
+           vor der eigenen Nase.
         """
         if not welt.rauch:
             return
-        r = K.RAUCH
-        b = int(r["block"])
         breite, hoehe = ziel.get_size()
         for wolke_ in welt.rauch:
             if wolke_.ebene != index or not wolke_.lebt:
@@ -512,50 +505,95 @@ class Renderer:
             ziel.blit(flaeche, (sx, sy))
 
     def _rauchbild(self, wolke_, eigene_ebene: bool):
-        """Die fertige Wolke als Flaeche, dazu ihre linke obere Weltecke."""
+        """Die fertige Wolke als Flaeche, dazu ihre linke obere Weltecke.
+
+        Das Dichtefeld kommt fertig von der Wolke; hier wird daraus nur
+        noch Farbe. Gebaut wird in einem kleinen Puffer, in dem ein
+        Bildpunkt einem Korn entspricht, und erst am Schluss hart
+        hochskaliert - das ist um Groessenordnungen schneller, als ein
+        paar tausend Rechtecke einzeln zu zeichnen, und ergibt genau die
+        harten Kanten, die zum Rest des Spiels passen.
+
+        **Volumen** kommt aus dem Gefaelle des Feldes: wo die Wolke zum
+        Licht hin dichter wird, ist sie hell, auf der Gegenseite dunkel.
+        Licht von oben links, wie ueberall sonst im Spiel. Das ist der
+        Unterschied zwischen einer Flaeche in Grau und etwas, das nach
+        einem Koerper aussieht.
+        """
         r = K.RAUCH
-        b = int(r["block"])
-        # Nur zehn Stufen: das Auge sieht den Unterschied nicht, der
-        # Puffer dafuer umso mehr.
-        stufe = int(wolke_.dichte * 10)
+        stufe = int(wolke_.dichte * 5)
         schluessel = (id(wolke_), stufe, eigene_ebene)
         fertig = self._rauch_puffer.get(schluessel)
         if fertig is not None:
             return fertig
 
-        bloecke = wolke_.bloecke()
-        if not bloecke:
-            return None, (0, 0)
-        x0 = min(bx for (bx, _by, _f, _k) in bloecke)
-        y0 = min(by for (_bx, by, _f, _k) in bloecke)
-        x1 = max(bx for (bx, _by, _f, _k) in bloecke) + b
-        y1 = max(by for (_bx, by, _f, _k) in bloecke) + b
-        flaeche = pygame.Surface((x1 - x0, y1 - y0), pygame.SRCALPHA)
-
+        korn = max(1, int(r["korn"]))
+        breite, x0, y0, werte = wolke_.feld(korn)
+        toene = r["toene"]
+        anzahl = len(toene)
         dichte = wolke_.dichte
-        # **Jeder Block ist voll deckend.** Auf- und Abbau zeigt sich
-        # daran, *welche* Bloecke stehen, nicht daran, wie durchsichtig
-        # sie sind: die Wand waechst von innen nach aussen und loest sich
-        # von aussen nach innen wieder auf. Ein weicher Verlauf waere
-        # genau das, was in einem Spiel aus Kacheln nichts zu suchen hat -
-        # und er machte aus einer Sichtwand einen Schleier, durch den man
-        # noch alles sah.
-        deckung = 255 if eigene_ebene else int(255 * r["fremde_ebene"])
-        for (bx, by, farbe, kern) in bloecke:
-            mx = bx + b * 0.5 - wolke_.pos.x
-            my = by + b * 0.5 - wolke_.pos.y
-            noetig = math.hypot(mx, my) / max(1.0, wolke_.radius)
-            # Feste Streuung je Block: der Rand loest sich gesprenkelt
-            # auf statt als sauberer Kreis, und zwar auf beiden Rechnern
-            # gleich.
-            streu = (((bx * 374761393) ^ (by * 668265263)) % 1000) / 1000.0
-            if dichte < noetig * 0.95 + streu * 0.14:
-                continue
-            ton = r["farben"][farbe if kern else (farbe + 1) % len(r["farben"])]
-            pygame.draw.rect(flaeche, (*ton, deckung),
-                             (bx - x0, by - y0, b, b))
+        # Beim Aufziehen waechst die Wand von innen nach aussen, beim
+        # Verwehen zieht sie sich wieder zusammen. Die Form bleibt, nur
+        # die Schwelle wandert.
+        schwelle = r["schwelle"] + (1.0 - dichte) * 0.55
+        # Das Licht als Schritt im Feld, nicht in Weltpixeln: so bleibt
+        # die Schattierung gleich, wenn man am Korn dreht.
+        lx = int(round(r["licht"][0] * r["licht_weite"] / korn))
+        ly = int(round(r["licht"][1] * r["licht_weite"] / korn))
+        staerke = r["licht_staerke"]
+        grund = r["grund"]
+        dicke_hell = r["dicke_hell"]
+        # Wie dick die Wolke an der dicksten Stelle ist - danach richtet
+        # sich, was "hell" heisst. Sonst waere eine verwehende Wolke
+        # gleichmaessig dunkel statt duenner.
+        dickste = max(werte) if werte else 1.0
+        spanne_d = max(0.01, dickste - schwelle)
+        # Die Deckkraft haengt am Abstand zur Mitte, nicht am Rauschen.
+        # Sonst riss jede Delle im Feld ein durchsichtiges Loch mitten in
+        # die Wand - und genau dort, wo `welt.verdeckt` sagt, hier sei
+        # niemand zu sehen. Beides muss dieselbe Grenze benutzen.
+        mx = (wolke_.pos.x - x0) / korn
+        my = (wolke_.pos.y - y0) / korn
+        schichten = [((wolke_.radius * bis / korn) ** 2, deck)
+                     for (bis, deck) in r["schichten"]]
+        if not eigene_ebene:
+            schichten = [(g, int(d * r["fremde_ebene"])) for (g, d) in schichten]
 
-        if len(self._rauch_puffer) > K.RAUCH["puffer"]:
+        roh = bytearray(breite * breite * 4)
+        for gy in range(breite):
+            zeile = gy * breite
+            dy = gy + 0.5 - my
+            dy2 = dy * dy
+            for gx in range(breite):
+                d = werte[zeile + gx]
+                if d <= schwelle:
+                    continue
+                qx, qy = gx + lx, gy + ly
+                gegen = (werte[qy * breite + qx]
+                         if 0 <= qx < breite and 0 <= qy < breite else 0.0)
+                tief = (d - schwelle) / spanne_d
+                hell = grund + dicke_hell * tief + (d - gegen) * staerke
+                i = int((1.0 - max(0.0, min(1.0, hell))) * (anzahl - 1) + 0.5)
+                ton = toene[max(0, min(anzahl - 1, i))]
+                dx = gx + 0.5 - mx
+                weg2 = dx * dx + dy2
+                a = 0
+                for (grenze, deck) in schichten:
+                    if weg2 <= grenze:
+                        a = deck
+                        break
+                if not a:
+                    continue
+                stelle = (zeile + gx) * 4
+                roh[stelle] = ton[0]
+                roh[stelle + 1] = ton[1]
+                roh[stelle + 2] = ton[2]
+                roh[stelle + 3] = a
+
+        klein = pygame.image.frombytes(bytes(roh), (breite, breite), "RGBA")
+        flaeche = (klein if korn == 1 else
+                   pygame.transform.scale(klein, (breite * korn, breite * korn)))
+        if len(self._rauch_puffer) > r["puffer"]:
             self._rauch_puffer.clear()
         self._rauch_puffer[schluessel] = (flaeche, (x0, y0))
         return flaeche, (x0, y0)

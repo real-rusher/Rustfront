@@ -351,7 +351,7 @@ class Granate(Wesen):
         w = self.welt
         if d.get("rauch"):
             w.rauch.append(Rauchwolke(self.pos, self.ebene))
-            wolke(w, self.pos, 12, 90, 0.6, K.RAUCH["farben"][0], self.ebene, 2)
+            wolke(w, self.pos, 12, 90, 0.6, K.RAUCH["toene"][0], self.ebene, 2)
             w.ruckeln(d["kamera"])
             w.klang("wurf", 0.8)
             return
@@ -375,6 +375,36 @@ class Granate(Wesen):
         w.klang("granate", 1.0)
 
 
+def _zufall(ix: int, iy: int, saat: int) -> float:
+    """Eine feste Zahl zwischen 0 und 1 fuer einen Gitterpunkt."""
+    h = (ix * 374761393) ^ (iy * 668265263) ^ (saat * 2246822519)
+    h = (h ^ (h >> 13)) * 1274126177
+    return ((h ^ (h >> 16)) & 0xFFFF) / 65535.0
+
+
+def _gitterwert(x: float, y: float, masche: float, saat: int) -> float:
+    """Weich ueberblendetes Zufallsgitter an der Stelle (x, y).
+
+    Der Unterschied zu einem Wuerfel je Bildpunkt ist der ganze Punkt:
+    benachbarte Stellen bekommen aehnliche Werte, und daraus werden
+    zusammenhaengende Ballen statt Rauschen. Zwischen den Gitterpunkten
+    wird mit einer S-Kurve ueberblendet, nicht linear - sonst sieht man
+    die Maschen als Rauten.
+    """
+    gx, gy = x / masche, y / masche
+    ix, iy = math.floor(gx), math.floor(gy)
+    fx, fy = gx - ix, gy - iy
+    sx = fx * fx * (3.0 - 2.0 * fx)
+    sy = fy * fy * (3.0 - 2.0 * fy)
+    a = _zufall(ix, iy, saat)
+    b = _zufall(ix + 1, iy, saat)
+    c = _zufall(ix, iy + 1, saat)
+    d = _zufall(ix + 1, iy + 1, saat)
+    oben = a + (b - a) * sx
+    unten = c + (d - c) * sx
+    return oben + (unten - oben) * sy
+
+
 class Rauchwolke:
     """Eine stehende Wand aus Rauch auf einer Ebene.
 
@@ -388,7 +418,7 @@ class Rauchwolke:
     sehen kann er es nicht.
     """
 
-    __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt", "_raster")
+    __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt", "_saat", "_feld")
 
     def __init__(self, pos, ebene: int, radius: float | None = None,
                  dauer: float | None = None, alter: float = 0.0) -> None:
@@ -399,7 +429,11 @@ class Rauchwolke:
         self.dauer = float(r["dauer"] if dauer is None else dauer)
         self.alter = float(alter)
         self.lebt = True
-        self._raster = None        # wird beim ersten Zeichnen gebaut
+        # Die Saat haengt an der Stelle, an der die Wolke steht: zwei
+        # Wolken nebeneinander sehen dadurch verschieden aus, dieselbe
+        # Wolke aber auf jedem Rechner gleich.
+        self._saat = (int(self.pos.x) * 73856093) ^ (int(self.pos.y) * 19349663)
+        self._feld = None          # wird beim ersten Zeichnen gebaut
 
     @property
     def dichte(self) -> float:
@@ -412,48 +446,107 @@ class Rauchwolke:
             return max(0.0, rest / r["abbau"])
         return 1.0
 
-    # ---- Die Bloecke ---------------------------------------------------
-    def bloecke(self) -> list:
-        """Die Bloecke der Wand, einmal gerechnet und dann behalten.
+    # ---- Das Dichtefeld -------------------------------------------------
+    def feld(self, korn: int):
+        """Das Dichtefeld der Wolke, einmal gerechnet und dann behalten.
 
-        Jeder Eintrag ist (bx, by, farbindex, kern) in Weltkoordinaten der
-        linken oberen Ecke. Ob ein Block steht, haengt allein an seiner
-        Lage und am Mittelpunkt der Wolke - also an Zahlen, die Gastgeber
-        und Gast beide kennen. Deshalb sieht dieselbe Wand auf beiden
-        Rechnern gleich aus, ohne dass ein Block uebertragen wird.
+        Gibt (breite, x0, y0, werte) zurueck: ein Quadrat aus Dichtewerten
+        im Abstand `korn`, dazu seine linke obere Weltecke.
 
-        Der Rand franst aus, statt rund zu sein: der Grenzradius wird je
-        Block um bis zu `zackung` verzogen. Eine saubere Kreisscheibe waere
-        in einem Spiel aus Kacheln sofort als Fremdkoerper zu erkennen.
+        **Warum einmal und nicht je Bild.** Das Feld haengt nur an der
+        Lage der Wolke, nicht an ihrer Dichte - die verschiebt spaeter
+        bloss die Schwelle, ab der ein Punkt ueberhaupt Rauch ist. Also
+        wird es genau einmal gebaut, und alle Zeichenstufen bedienen sich
+        daraus. Vorher wurde es fuenf Mal gerechnet, und jedes Mal
+        sechzigtausend Mal gehasht.
+
+        **Warum ein Gitter und kein Wuerfeln je Punkt.** Benachbarte
+        Stellen sollen aehnliche Werte haben, sonst entsteht Rauschen und
+        keine Wolke. Die Eckpunkte eines groben Gitters werden gewuerfelt,
+        dazwischen wird mit einer S-Kurve ueberblendet. Zwei Lagen
+        uebereinander: eine grobe fuer die Form, eine feinere fuer die
+        Struktur.
         """
-        if self._raster is not None:
-            return self._raster
+        if self._feld is not None and self._feld[0] == korn:
+            return self._feld[1:]
         r = K.RAUCH
-        b = int(r["block"])
-        # Am Raster der Welt ausgerichtet, nicht am Mittelpunkt der Wolke:
-        # so sitzen zwei Wolken nebeneinander im selben Gitter und ergeben
-        # eine durchgehende Wand statt zweier verschobener Flecken.
-        mx = int(self.pos.x) // b * b
-        my = int(self.pos.y) // b * b
-        weite = int(self.radius // b) + 2
-        raus = []
-        for gy in range(-weite, weite + 1):
-            for gx in range(-weite, weite + 1):
-                bx, by = mx + gx * b, my + gy * b
-                mitte_x = bx + b * 0.5 - self.pos.x
-                mitte_y = by + b * 0.5 - self.pos.y
-                weg = math.hypot(mitte_x, mitte_y)
-                # Feste Streuung aus der Lage: immer dieselbe Wolke.
-                streu = ((bx * 73856093) ^ (by * 19349663)) & 0xFFFF
-                zack = 1.0 + r["zackung"] * ((streu % 1000) / 1000.0 - 0.5) * 2.0
-                grenze = self.radius * zack
-                if weg > grenze:
-                    continue
-                kern = weg <= self.radius * r["kern"]
-                farbe = (streu >> 4) % len(r["farben"])
-                raus.append((bx, by, farbe, kern))
-        self._raster = raus
-        return raus
+        spanne = self.radius * 1.25
+        x0 = int((self.pos.x - spanne) // korn) * korn
+        y0 = int((self.pos.y - spanne) // korn) * korn
+        breite = max(1, int(spanne * 2 / korn) + 1)
+
+        werte = [0.0] * (breite * breite)
+        masche = r["gitter"]
+        gewicht = 1.0
+        ganz = 0.0
+        for lage in range(r["lagen"]):
+            ganz += gewicht
+            # Erst die Gitterpunkte, dann dazwischen ueberblenden. So wird
+            # je Lage ein paar hundert Mal gehasht statt zehntausende Male.
+            felder_je_masche = masche / korn
+            punkte = int(breite / felder_je_masche) + 2
+            gitter = [[_zufall(int(math.floor(x0 / masche)) + gx,
+                               int(math.floor(y0 / masche)) + gy,
+                               self._saat + lage)
+                       for gx in range(punkte + 1)]
+                      for gy in range(punkte + 1)]
+            versatz_x = (x0 / masche) - math.floor(x0 / masche)
+            versatz_y = (y0 / masche) - math.floor(y0 / masche)
+            for gy in range(breite):
+                fy = versatz_y + gy / felder_je_masche
+                iy = int(fy)
+                ty = fy - iy
+                sy = ty * ty * (3.0 - 2.0 * ty)
+                oben_zeile = gitter[iy]
+                unten_zeile = gitter[iy + 1]
+                zeile = gy * breite
+                for gx in range(breite):
+                    fx = versatz_x + gx / felder_je_masche
+                    ix = int(fx)
+                    tx = fx - ix
+                    sx = tx * tx * (3.0 - 2.0 * tx)
+                    a = oben_zeile[ix]
+                    b = oben_zeile[ix + 1]
+                    c = unten_zeile[ix]
+                    d = unten_zeile[ix + 1]
+                    oben = a + (b - a) * sx
+                    unten = c + (d - c) * sx
+                    werte[zeile + gx] += gewicht * (oben + (unten - oben) * sy)
+            masche *= 0.5
+            gewicht *= 0.5
+
+        # Grundform: voll in der Mitte, weich auslaufend zum Rand.
+        mx = self.pos.x - x0
+        my = self.pos.y - y0
+        rr = max(1.0, self.radius)
+        for gy in range(breite):
+            dy = (gy * korn + korn * 0.5 - my) / rr
+            zeile = gy * breite
+            for gx in range(breite):
+                dx = (gx * korn + korn * 0.5 - mx) / rr
+                # Hoch drei statt hoch zwei: innen bleibt die Wolke
+                # lange voll und faellt erst zum Rand hin schnell ab.
+                # Genau dort soll das Rauschen den Umriss ausfransen -
+                # im Inneren darf es keine Loecher reissen, eine
+                # Sichtwand mit Loechern ist keine.
+                u = math.sqrt(dx * dx + dy * dy)
+                abfall = 1.0 - u * u * u
+                if abfall <= 0.0:
+                    werte[zeile + gx] = 0.0
+                else:
+                    werte[zeile + gx] = abfall * (0.62 + 1.1 * werte[zeile + gx] / ganz)
+        self._feld = (korn, breite, x0, y0, werte)
+        return breite, x0, y0, werte
+
+    def dichte_bei(self, x: float, y: float) -> float:
+        """Dichte an einer Weltstelle, aus dem Feld abgelesen."""
+        korn = max(1, int(K.RAUCH["korn"]))
+        breite, x0, y0, werte = self.feld(korn)
+        gx = int((x - x0) // korn)
+        gy = int((y - y0) // korn)
+        if not (0 <= gx < breite and 0 <= gy < breite):
+            return 0.0
+        return werte[gy * breite + gx]
 
     def deckt(self, pos, ebene: int) -> bool:
         """Ist dieser Punkt vollstaendig verborgen?

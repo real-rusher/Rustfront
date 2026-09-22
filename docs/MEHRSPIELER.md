@@ -1,7 +1,7 @@
 # DUSTFRONT - Der Mehrspieler, vollstaendig
 
 **Was das hier ist.** Die komplette Beschreibung des LAN-Mehrspielers, wie
-er auf dem Zweig `multiplayer-test` in Version 0.18.0 steht: Aufbau,
+er auf dem Zweig `multiplayer-test` in Version 0.19.0 steht: Aufbau,
 Protokoll, alle sechs Spielarten, jede Zahl mit Begruendung, jeder Fehler,
 der beim Bauen aufgetreten ist, und die Reihenfolge, in der man das Ganze
 wieder aufbaut.
@@ -12,10 +12,10 @@ herausgenommen, siehe Abschnitt 14). Dieses Dokument ist die Bauanleitung
 fuer den Tag, an dem er zurueckkommen soll.
 
 **Fuer wen.** Fuer Der Meister, und fuer jede Claude-Instanz, die den Satz
-hoert: *"bau mal wieder Mehrspieler ein wie in Version 0.18.0"*. Wer das
+hoert: *"bau mal wieder Mehrspieler ein wie in Version 0.19.0"*. Wer das
 liest, braucht ausser dem Spielkern nichts weiter zu wissen.
 
-**Stand beim Schreiben:** Version 0.18.0, PRE-ALPHA, Zweig
+**Stand beim Schreiben:** Version 0.19.0, PRE-ALPHA, Zweig
 `multiplayer-test`. Zwei Testlaeufe gruen: `tests/test_spiel.py` und
 `tests/test_menues.py`.
 
@@ -53,6 +53,7 @@ Ausnahmen stehen in 2.4.
 | --- | ---: | --- |
 | `dustfront/netz.py` | ~250 | Steckdosen, Verbindungen, JSON-Zeilen. Weiss nichts vom Spiel. |
 | `dustfront/mehrspieler.py` | ~1400 | Die Spielszene `Gefecht` und drei Wesen. Weiss alles vom Spiel. |
+| `dustfront/upnp.py` | ~250 | Der Weg durch den Router, fuer Runden ueber das Internet. Weiss nichts vom Spiel. |
 | `dustfront/bestenliste.py` | ~110 | Bestenliste im Benutzerordner. |
 | `dustfront/config.py` | +150 | `NETZ`, `MODI`, `TEAMS`, `ZONE`, `VERSUS`, `GEFECHT`, `REVIVE`, `WELLEN_MP`, `GEGNER_MP`, `MUNITION`. |
 
@@ -518,6 +519,52 @@ Nummer bleibt dann, wie sie war.
 
 ---
 
+### 7.9 Ueber das Internet
+
+**FEST.** `--online` aendert am Spiel **nichts**. Es ist dieselbe Leitung,
+dasselbe Protokoll, derselbe autoritative Gastgeber - nur von weiter her.
+Der einzige Unterschied liegt davor: der Port muss durch den Router.
+
+Dafuer gibt es genau drei Wege, und nur zwei davon sind ohne eigenen
+Server zu haben:
+
+| Weg | Geht das? |
+| --- | --- |
+| Von Hand im Router freigeben | Immer - aber jeder muss es selbst tun |
+| **UPnP**: der Router macht es auf Bitte selbst | Oft. `dustfront/upnp.py` |
+| Server in der Mitte, der beide verbindet | Ueberall - braucht einen Rechner, der laeuft. **Gibt es hier nicht.** |
+
+Also UPnP mit Handarbeit als Rueckfall. Drei Schritte, alle mit
+Bordmitteln: M-SEARCH per UDP an 239.255.255.250:1900, die genannte
+Beschreibung als XML holen, dann `AddPortMapping` per SOAP. Dazu
+`GetExternalIPAddress` - die oeffentliche Adresse kommt damit **vom
+Router**, nicht von einer fremden Seite im Netz.
+
+**Jeder Fehler endet in upnp.py**, nicht im Gefecht: kein Router,
+abgelehnte Freigabe, Zeitueberschreitung - die Runde laeuft trotzdem, nur
+eben im eigenen Netz. Und die Freigabe wird beim Beenden wieder
+zurueckgenommen; wer das vergisst, hinterlaesst eine offene Stelle bis zum
+naechsten Neustart des Routers.
+
+**Kennwort.** Ein Port im Internet steht jedem offen, der die Adresse
+kennt. `--passwort` prueft im `hallo`; wer nicht passt, bekommt
+`abgelehnt` und die Leitung wird geschlossen, ohne dass ein Platz belegt
+oder ein Name uebernommen wird. Das Kennwort wird wie ein Name gesaeubert
+(Grossbuchstaben, Ziffern, `-` und `_`), damit man es am Telefon vorlesen
+kann.
+
+**OFFEN, und das ist der Punkt, an dem man ehrlich sein muss:** ueber das
+Internet ist die Verzoegerung so gross wie die Leitung. Der Gastgeber
+rechnet alles, es gibt keine Vorhersage beim Gast (siehe 2.1) - ein Gast
+sieht seine eigene Figur erst nach einem Hin- und Rueckweg. Im LAN sind
+das zwei Millisekunden, ueber das Internet dreissig bis hundert. Zielen
+folgt trotzdem sofort, das rechnet jeder bei sich (12.11). Wer das
+Gefecht wirklich ueber das Internet spielen will, braucht als naechstes
+eine Vorhersage fuer die eigene Bewegung - und das ist mehr Arbeit als
+alles, was hier bisher steht.
+
+---
+
 ## 8. Aufhelfen
 
 | Schritt | Was passiert |
@@ -695,22 +742,46 @@ Alle stehen in `config.py`. **Keine Zahl im Code.**
 | `dauer` | 14 s | lang genug, um einen Weg zu queren, zu kurz, um eine Stelle dauerhaft zuzustellen |
 | `aufbau` | 0.9 s | sie zieht auf, statt dazustehen - wer sie wirft, kommt nicht sofort in Deckung |
 | `abbau` | 2.4 s | sie verweht sichtbar, niemand wird ueberrascht |
-| `block` | 8 px | Kantenlaenge eines Blocks, ein Viertel einer Kachel |
-| `kern` | 0.72 | bis hierhin gilt eine Stelle als verborgen (`welt.verdeckt`) |
-| `zackung` | 0.30 | so stark franst der Rand aus. 0 waere ein Kreis |
+| `korn` | 3 px | Aufloesung der Wolke, im Massstab der Kacheln daneben |
+| `gitter` | 17 px | Maschenweite der groben Lage; die feine ist halb so gross |
+| `kern` | 0.70 | bis hierhin deckt sie voll - und verbirgt auch Namen |
+| `schwelle` | 0.30 | ab dieser Dichte steht ueberhaupt Rauch. Sie steigt beim Verwehen |
+| `grund` / `dicke_hell` | 0.20 / 0.70 | Helligkeit am duennen Rand und Zuwachs durch Dicke |
+| `licht_staerke` | 1.1 | wie stark das Gefaelle zum Licht die Tonstufe verschiebt |
 | `fremde_ebene` | 0.55 | so viel Deckkraft behaelt Rauch einer anderen Etage |
+| `puffer` | 24 | so viele fertige Wolkenbilder werden gehalten |
 
-**Blockig, nicht rund.** Die Wand besteht aus Bloecken im Weltraster, alle
-voll deckend, in vier Grautoenen. Auf- und Abbau zeigt sich daran, *welche*
-Bloecke stehen, nicht daran, wie durchsichtig sie sind. **GRUND:** alles in
-diesem Spiel sitzt auf einem Raster; eine weich verlaufende Scheibe faellt
-sofort als Fremdkoerper auf - und ein Verlauf machte aus der Sichtwand
-einen Schleier, durch den man noch alles sah.
+**Ein Dichtefeld, keine gewuerfelten Kloetze.** Der erste Anlauf wuerfelte
+jeden Block einzeln - das ergab Rauschen, kein Rauch: "sieht aus wie
+Konfetti" war das Urteil, und es stimmte. Jetzt liegt darunter ein
+glattes Feld aus zwei Zufallsgittern (17 px und 8.5 px Maschenweite), die
+dazwischen mit einer S-Kurve ueberblendet werden. Benachbarte Stellen
+bekommen dadurch aehnliche Werte, und daraus werden zusammenhaengende
+Ballen.
 
-Welche Bloecke stehen, entscheidet eine feste Rechnung aus ihrer Lage.
-Dadurch sieht dieselbe Wolke bei Gastgeber und Gast gleich aus, **ohne
-dass ein einziger Block uebertragen wird** - im Netz stehen nur Mitte,
-Ebene, Radius und Alter.
+**Volumen aus zwei Anteilen.** Wo die Wolke dick ist, streut sie mehr
+Licht und ist heller - das gibt ihr den Koerper. Dazu das Gefaelle zum
+Licht hin (von oben links, wie im ganzen Spiel) als leichte Kante.
+Umgekehrt gewichtet sah es aus wie Gestein: harte Adern mit viel
+Kontrast.
+
+**Pixel-Art bleibt es trotzdem**, weil das Feld in Koerner von
+`RAUCH["korn"]` (3 px) zerlegt und in sieben Tonstufen quantisiert wird.
+Gebaut wird in einem kleinen Puffer, in dem ein Bildpunkt einem Korn
+entspricht, und erst am Schluss hart hochskaliert - das ist um
+Groessenordnungen schneller, als ein paar tausend Rechtecke einzeln zu
+zeichnen.
+
+**Kosten:** rund 4 ms, einmal je Wolke. Das Feld haengt nur an der Lage,
+nicht an der Dichte; die verschiebt bloss die Schwelle. Alle
+Zeichenstufen bedienen sich also aus demselben Feld. Der erste Anlauf
+rechnete es fuenf Mal und brauchte 58 ms - ein sichtbarer Ruckler.
+
+**Deckkraft aus dem Abstand, nicht aus dem Rauschen.** Innerhalb von
+`kern` (70 % des Radius) deckt sie voll, darueber in zwei Stufen weniger.
+Haengt die Deckkraft am Feld, reisst jede Delle ein durchsichtiges Loch
+mitten in die Wand - und zwar genau dort, wo `welt.verdeckt` sagt, hier
+sei niemand zu sehen. Beide benutzen jetzt dieselbe Grenze.
 
 **Verborgen heisst wirklich verborgen.** Im Kern ist die Figur nicht zu
 sehen **und ihr Name auch nicht** (`welt.verdeckt`, gefragt nach der
@@ -984,7 +1055,25 @@ anderen.
 dieselbe Taste wieder herausfuehrt, ist eine Falle - besonders, wenn er
 etwas ausblendet, das man dauernd braucht.
 
-### 12.16 Kleinere Fallen
+### 12.16 Die Treppe, die zweimal ausloest (0.19.0)
+
+**Symptom.** Ein Druck auf E an der Treppe, und man steht blinkend
+zwischen zwei Etagen - hoch und sofort wieder hinunter.
+
+**Ursache.** `nutzen` wird **gehalten**, nicht gedrueckt; das braucht das
+Aufhelfen. Also versuchte jedes Bild einen Ebenenwechsel. Nach dem ersten
+steht die Figur auf der Zielkachel - und dort liegt die Treppe zurueck
+nach unten.
+
+**Behebung.** `GEFECHT["treppe_takt"]` (1.5 s) Sperre **am Kaempfer**,
+nicht an der Kachel. So haelt sie auch, wenn er nach dem Wechsel gleich
+auf der naechsten Treppe steht.
+
+**Merke.** Sobald eine Taste gehalten statt gedrueckt ausgewertet wird,
+braucht jede Handlung daran eine eigene Sperre. Der Einzelspieler hat das
+Problem nicht - er fragt `gedrueckt()` ab.
+
+### 12.17 Kleinere Fallen
 
 | Falle | Was passiert |
 | --- | --- |
@@ -996,7 +1085,7 @@ etwas ausblendet, das man dauernd braucht.
 | Ein einzelner `FIXED_DT`-Schritt fuer `rest = 0.01` | Zu kurz. Restzeit knapp unter **einen** Schritt setzen. |
 | `Spiel()` ohne Seed im Test | Sporadische Fehlschlaege. Tests geben einen festen Seed. |
 
-### 12.17 Was **nicht** kaputt war
+### 12.18 Was **nicht** kaputt war
 
 Zwei Dinge sahen nach Fehlern aus und waren keine: die unterschiedlichen
 Blutflecken auf beiden Rechnern (Kosmetik wird nicht uebertragen, siehe

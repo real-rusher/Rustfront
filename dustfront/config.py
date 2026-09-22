@@ -255,6 +255,7 @@ NETZ = dict(
     eingabe_takt=1.0 / 60.0,  # so oft schickt ein Gast seine Eingaben
     probe_ziel="10.255.255.255",   # nur um die eigene Adresse zu erfahren
     namenslaenge=10,
+    passwortlaenge=16,        # laenger wird abgeschnitten
     stumm_nach=8.0,           # ohne Lebenszeichen gilt ein Gast als weg
 )
 
@@ -350,6 +351,7 @@ GEFECHT = dict(
     start_medkits_hoechstens=9,   # mehr laesst der Gastgeber nicht zu
     tafel_oben=74,            # wo der Punktestand anfaengt, unter den Ebenen
     blick_zurueck=4.0,        # so lange bleibt die Ansicht auf einer fremden Ebene
+    treppe_takt=1.5,          # so lange geht nach einem Ebenenwechsel keiner mehr
 )
 
 # Am Boden liegen und wieder aufgeholfen werden. Nur in pve.
@@ -357,6 +359,20 @@ GEFECHT = dict(
 # Der Sinn: ein einzelner Fehler soll einen nicht aus der Runde nehmen,
 # aber er soll die anderen etwas kosten - naemlich die Zeit, in der sie
 # nicht schiessen, sondern helfen.
+# Der Weg durch den Router, fuer Runden ueber das Internet. Siehe
+# dustfront/upnp.py - dort steht auch, warum es nur diese eine Moeglichkeit
+# ohne eigenen Server gibt.
+UPNP = dict(
+    gruppe="239.255.255.250",   # die Adresse, an die alle UPnP-Geraete hoeren
+    port=1900,
+    suchzeit=2.0,             # so lange wird auf Antworten gewartet
+    wartezeit=3.0,            # Zeitlimit je Anfrage an den Router
+    puffer=8192,
+    hoechstens=6,             # so viele Antworten werden angesehen
+    dauer=7200,               # Sekunden, die die Freigabe gilt
+    beschriftung="DUSTFRONT",   # so heisst die Freigabe im Router
+)
+
 REVIVE = dict(
     boden_leben=0.0,          # damit faengt man am Boden an
     boden_zeit=45.0,          # so lange haelt man durch, dann ist es vorbei
@@ -638,26 +654,48 @@ HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "rauch",
 # Rauchgranate: eine Wand, durch die niemand durchsieht - auch nicht von
 # der Ebene darueber. Sie macht keinen Schaden, sie nimmt nur die Sicht.
 #
-# Gezeichnet wird sie als Gitter aus Bloecken, nicht als Kreis. Das ist
-# keine Geschmacksfrage: alles in diesem Spiel sitzt auf einem Raster, und
-# eine weich verlaufende runde Scheibe faellt sofort als Fremdkoerper auf.
-# Welche Bloecke stehen, entscheidet eine feste Rechnung aus ihrer Lage -
-# dadurch sieht dieselbe Wolke bei Gastgeber und Gast gleich aus, ohne dass
-# ein einziges Byte dafuer ueber die Leitung geht.
+# **Wie sie entsteht.** Nicht Block fuer Block gewuerfelt - das ergibt
+# Rauschen, keine Wolke. Statt dessen ein glattes Dichtefeld: ein grobes
+# Zufallsgitter, dazwischen weich ueberblendet, mal abfallend zum Rand hin.
+# Das Feld wird dann in wenige Tonstufen zerlegt, und die Kanten liegen auf
+# dem Pixelraster des Spiels. Dadurch bleibt es Pixel-Art und sieht
+# trotzdem nach Rauch aus statt nach Konfetti.
+#
+# **Volumen** kommt aus dem Gefaelle des Feldes: wo die Wolke zum Licht hin
+# dichter wird, ist sie hell, auf der Gegenseite dunkel. Licht von oben
+# links, wie ueberall sonst im Spiel.
 RAUCH = dict(
     radius=78.0,              # so weit reicht die Wand in Weltpixeln
     dauer=14.0,               # so lange steht sie
     aufbau=0.9,               # Sekunden, bis sie dicht ist
     abbau=2.4,                # Sekunden, in denen sie sich wieder aufloest
-    block=8,                  # Kantenlaenge eines Blocks in Weltpixeln
-    kern=0.72,                # bis hierhin (Anteil vom Radius) ist sie dicht
-    zackung=0.30,             # so stark franst der Rand aus, 0 = Kreis
-    farben=((188, 184, 176), (164, 160, 152), (139, 136, 128),
-            (116, 113, 107)),
+    korn=3,                   # Kantenlaenge eines Bildpunkts der Wolke
+    gitter=17.0,              # Maschenweite des Zufallsgitters in Pixeln
+    lagen=2,                  # so viele Gitter uebereinander (grob bis fein)
+    kern=0.70,                # bis hierhin deckt sie voll und verbirgt
+    schwelle=0.30,            # ab dieser Dichte steht ueberhaupt Rauch
+    licht=(-1.0, -1.0),       # woher das Licht kommt, wie im ganzen Spiel
+    licht_weite=5.0,          # ueber so viele Pixel wird das Gefaelle gemessen
+    # Helligkeit aus zwei Anteilen: wo die Wolke dick ist, streut sie
+    # mehr Licht und ist heller - das gibt ihr den Koerper. Das Gefaelle
+    # zum Licht hin kommt nur als leichte Kante dazu. Umgekehrt sah es
+    # aus wie Gestein: harte Adern mit viel Kontrast.
+    grund=0.20,               # Helligkeit am duennsten Rand
+    dicke_hell=0.70,          # wie viel Helligkeit die Dicke dazugibt
+    licht_staerke=1.1,        # wie stark das Gefaelle die Tonstufe verschiebt
+    # Gedeckte Grautoene mit einem Stich ins Warme: reines Weiss steht in
+    # einer Karte aus Rost und Braun wie ein Loch im Bild.
+    toene=((206, 202, 195), (186, 182, 175), (166, 162, 156),
+           (146, 143, 137), (126, 123, 118), (106, 104, 100),
+           (88, 86, 83)),
+    # Drei Stufen statt einer: eine einzige Kante zwischen deckend und
+    # durchsichtig sieht man als gezeichneten Kreis, und das ist genau
+    # das, was hier nicht sein soll.
+    schichten=((0.70, 255), (0.86, 205), (1.30, 150)),
     # Rauch einer anderen Ebene muss anders aussehen, sonst weiss man im
     # Gefecht nicht, ob die Wand vor einem liegt oder eine Etage hoeher.
     fremde_ebene=0.55,        # so viel Deckkraft behaelt er dort
-    puffer=64,                # so viele fertige Wolkenbilder werden gehalten
+    puffer=24,                # so viele fertige Wolkenbilder werden gehalten
 )
 
 # Kurze Aufschrift ueber aufgesammelter Beute. Ohne sie verschwindet eine

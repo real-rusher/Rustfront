@@ -57,7 +57,8 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
             ende_wert: float = 0.0, knapp: bool = False,
             schutz: bool | None = None, medkits: int | None = None,
             medkit_spawn: bool | None = None, runden: int | None = None,
-            team: int | None = None) -> int:
+            team: int | None = None, online: bool = False,
+            passwort: str = "") -> int:
     """LAN-Test: als Gastgeber aufmachen oder als Gast verbinden.
 
     Die Spielart bestimmt allein der Gastgeber. Ein Gast bekommt sie mit
@@ -71,7 +72,7 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
     wirt = gast = None
     try:
         if gastgeber:
-            wirt = netz.Gastgeber(port or None)
+            wirt = netz.Gastgeber(port or None, online=online)
             regeln = K.MODI.get(modus, K.MODI[K.MODUS_VORGABE])
             print("Gastgeber laeuft: %s - %s" % (regeln["name"], regeln["hinweis"]))
             if regeln["teams"]:
@@ -101,8 +102,21 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
                   % ("alle %.0f Sekunden" % K.GEFECHT["medkit_takt"]
                      if (K.GEFECHT["medkits_spawnen"] if medkit_spawn is None
                          else medkit_spawn) else "keine"))
-            print("Mitspieler verbinden sich mit:")
+            if passwort:
+                print("Kennwort: %s" % netz.passwort_saeubern(passwort))
+            print("Im eigenen Netz verbinden sich Mitspieler mit:")
             print("   %s" % wirt.adresse)
+            if online and wirt.freigabe is not None:
+                print()
+                for zeile in wirt.freigabe.bericht():
+                    print(zeile)
+                print()
+                print("Ueber das Internet ist die Verzoegerung so gross wie")
+                print("die Leitung: der Gastgeber rechnet alles, ein Gast")
+                print("sieht seine Figur erst nach einem Hin- und Rueckweg.")
+                if not passwort:
+                    print("Ohne Kennwort (--passwort) kann jeder mitspielen,")
+                    print("der die Adresse kennt.")
         else:
             gast = netz.Gast(wohin)
             if not gast.offen:
@@ -117,7 +131,7 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
                          modus=modus, ende_art=ende_art,
                          ende_wert=ende_wert, knapp=knapp, schutz=schutz,
                          medkits=medkits, medkit_spawn=medkit_spawn,
-                         runden=runden, team=team))
+                         runden=runden, team=team, passwort=passwort))
     app.laufen()
     return 0
 
@@ -175,10 +189,13 @@ def aus_argumenten(argumente: list[str]) -> int:
                        schutz="--kein-schutz" not in argumente,
                        medkits=medkits, runden=runden,
                        team=team_lesen(wert("--team", "")),
+                       online="--online" in argumente,
+                       passwort=wert("--passwort", ""),
                        medkit_spawn="--keine-medkits" not in argumente)
     if "--join" in argumente:
         return gefecht(False, wohin=wert("--join"),
                        name=wert("--name", "GAST"),
+                       passwort=wert("--passwort", ""),
                        team=team_lesen(wert("--team", "")))
     if "--bestenliste" in argumente:
         from . import bestenliste

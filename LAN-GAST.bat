@@ -62,8 +62,10 @@ echo.
 set "WOHIN="
 set /p "WOHIN=  Adresse des Gastgebers: "
 if "%WOHIN%"=="" goto fragen
+set "PASSWORT="
+set /p "PASSWORT=  Kennwort, falls eines gilt (Enter = keins): "
 echo.
-%PY% -m dustfront --join "%WOHIN%" --name "%NAME%" --team %TEAM%
+%PY% -m dustfront --join "%WOHIN%" --name "%NAME%" --team %TEAM% --passwort "%PASSWORT%"
 if not errorlevel 1 exit /b 0
 echo.
 echo   Beendet mit einem Fehler. Die Meldung darueber sagt, woran es lag.
