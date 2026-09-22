@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.11.1, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.11.2, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -49,6 +49,28 @@ Meilenstein aus Abschnitt 11 des Plans und liest vorher Abschnitt 3 ganz -
 dort steht die eine technische Entscheidung, an der alles andere haengt.
 
 ## Starten
+
+**Ohne Kommandozeile, einfach doppelklicken:**
+
+| System | Datei |
+| --- | --- |
+| Windows | `DUSTFRONT.bat` |
+| macOS, Linux | `DUSTFRONT.command` |
+
+Die Datei sucht sich Python selbst, installiert pygame-ce beim ersten Mal
+nach und startet das Hauptmenue. Geht etwas schief, bleibt das Fenster
+offen und sagt warum, statt kommentarlos zu verschwinden.
+
+Unter macOS beim allerersten Mal Rechtsklick auf die Datei und dann
+*Oeffnen* waehlen - danach reicht der Doppelklick.
+
+**Verknuepfung auf den Desktop** (Windows): Rechtsklick auf
+`DUSTFRONT.bat`, dann *Senden an* und *Desktop (Verknuepfung erstellen)*.
+Wer das Intro ueberspringen will, haengt in den Eigenschaften der
+Verknuepfung hinter das Ziel ein Leerzeichen und `--nosplash`; die
+Startdatei reicht Argumente durch.
+
+**Wer lieber tippt:**
 
 ```
 pip install pygame-ce
@@ -186,6 +208,8 @@ Aussen liegt das Menue, innen das Spiel. Beides laeuft auch einzeln.
 
 | Datei | Inhalt |
 | --- | --- |
+| `DUSTFRONT.bat` | Startdatei zum Doppelklicken, Windows |
+| `DUSTFRONT.command` | Startdatei zum Doppelklicken, macOS und Linux |
 | `rustfront_menu.py` | Hauptmenue, Kaltstart, Optionen, Spielstand, Einstiegspunkt |
 | `rustfront_splash.py` | Ablauf, Zeitdehnung und Klangsynthese der Splash-Sequenz |
 | `splash_engine.py` | Zeichenwerk der Splash-Sequenz, portiert aus der Web-Fassung |
@@ -420,6 +444,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.10.0 | Schatten, Blut, Brandfleck, Wandschatten und Vignette ebenfalls ersetzbar; Blutfleck richtet sich nach der Groesse des Wesens |
 | 0.11.0 | Sturz ohne Ruck, Waffe in der Hand sichtbar, durchgehend rote Ziellinie, keine Handlung sperrt mehr eine andere |
 | 0.11.1 | Steuerung in der Luft im Test nachgewiesen und gegen das Abrutschen abgesichert; Testlaeufe mit festem Seed reproduzierbar |
+| 0.11.2 | Startdateien zum Doppelklicken fuer Windows und macOS; Weltenplan in `docs/KARTE.md` |
 
 ## Anpassen
 

@@ -1,0 +1,3 @@
+# Startdateien behalten ihre Zeilenenden, sonst streikt die .bat
+*.bat text eol=crlf
+*.command text eol=lf
