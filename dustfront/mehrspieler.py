@@ -34,7 +34,7 @@ from . import bestenliste
 from . import config as K
 from . import netz
 from .core import Szene
-from .entities import Spieler
+from .entities import Aufsammler, Spieler, wolke
 from .font import SCHRIFT
 from .render import Kamera, Renderer
 from .world import freier_punkt, testkarte
@@ -62,6 +62,32 @@ class Kaempfer(Spieler):
         self.toeter = von
 
 
+class KampfBeute(Aufsammler):
+    """Ein Medkit, das jeder Kaempfer aufheben kann.
+
+    Der gewoehnliche Aufsammler schaut nur auf welt.held - im Einzelspieler
+    gibt es ja nur einen. Im Gefecht waere das der Gastgeber, und kein Gast
+    koennte je ein Medkit nehmen.
+    """
+
+    def __init__(self, pos, art: str, ebene: int, kaempfer: dict) -> None:
+        super().__init__(pos, art, ebene)
+        self._kaempfer = kaempfer
+
+    def schritt(self, dt: float) -> None:
+        for k in list(self._kaempfer.values()):
+            if not k.lebt or k.ebene != self.ebene:
+                continue
+            if self.pos.distance_to(k.pos) > self.radius + k.radius + 3:
+                continue
+            if self.art == "medkit" and k.medkits < K.MEDKIT["hoechstens"]:
+                k.medkits += 1
+                self.lebt = False
+                wolke(self.welt, self.pos, 8, 90, 0.4, K.C_TEAL, self.ebene, 1)
+                self.welt.klang("aufheben", 0.6)
+                return
+
+
 class Gefecht(Szene):
     """Die Spielszene fuer den LAN-Test, beim Gastgeber wie beim Gast."""
 
@@ -83,6 +109,12 @@ class Gefecht(Szene):
         self.blick_hoehe = 0.0
         self._seit_senden = 0.0
         self._fremde_schuesse: list[tuple] = []
+        self._fremde_beute: list[tuple] = []
+        self._knoepfe: set[str] = set()     # gesammelte Einmal-Druecke
+        self._waffe_wunsch = -1
+        self._rad = 0                       # Mausrad, noch nicht verrechnet
+        self._seit_medkit = 0.0
+        self._letzte_ebene = 0
         self.meine_nummer = 0        # beim Gast: kommt mit "willkommen"
 
         if self.ist_gastgeber:
@@ -115,27 +147,44 @@ class Gefecht(Szene):
         return freier_punkt(self.welt, 0, self.rnd)
 
     # ---- Eingabe ------------------------------------------------------
+    def knoepfe_sammeln(self) -> None:
+        """Einmalige Tastendruecke aufheben, bis das naechste Paket rausgeht.
+
+        Das ist keine Feinheit, sondern notwendig: gedrueckt() ist genau ein
+        Bild lang wahr, das Spiel rechnet 120 Mal in der Sekunde, gesendet
+        wird aber nur ein paar Dutzend Mal. Wer direkt beim Senden abfragt,
+        verliert die meisten Druecke - Nachladen, Treppe und Waffenwechsel
+        kamen deshalb fast nie an. Gesammelt geht keiner mehr verloren.
+
+        Laeuft bei Gastgeber und Gast gleichermassen; der Gastgeber legt die
+        Sammlung gleich auf seine eigene Figur.
+        """
+        e = self.app.eingabe
+        for name in ("nachladen", "nutzen", "heilen", "tracer", "tracer_weit"):
+            if e.gedrueckt(name):
+                self._knoepfe.add(name)
+        for nr in range(1, 7):
+            if e.gedrueckt("waffe%d" % nr):
+                self._waffe_wunsch = nr - 1
+        if e.rad:
+            self._rad += e.rad
+
     def _meine_eingabe(self) -> dict:
         e = self.app.eingabe
         ziel = self.kamera.zu_welt(e.maus)
-        return {
+        meldung = {
             "t": "ein",
             "will": [round(v, 2) for v in e.richtung()],
             "ziel": [round(ziel.x, 1), round(ziel.y, 1)],
             "feuert": e.gehalten("feuer"),
             "zielt": e.gehalten("zweit"),
             "sprint": e.gehalten("sprint"),
-            "waffe": self._gewaehlte_waffe(),
-            "nachladen": e.gedrueckt("nachladen"),
-            "nutzen": e.gedrueckt("nutzen"),
+            "waffe": self._waffe_wunsch,
+            "knoepfe": sorted(self._knoepfe),
         }
-
-    def _gewaehlte_waffe(self) -> int:
-        e = self.app.eingabe
-        for nr in range(1, 7):
-            if e.gedrueckt("waffe%d" % nr):
-                return nr - 1
-        return -1                     # -1 = nichts umschalten
+        self._knoepfe.clear()
+        self._waffe_wunsch = -1
+        return meldung
 
     def _anwenden(self, k: Kaempfer, ein: dict) -> None:
         """Eine Eingabemeldung auf einen Kaempfer legen. Nur beim Gastgeber.
@@ -160,15 +209,25 @@ class Gefecht(Szene):
         waffe = ein.get("waffe", -1)
         if isinstance(waffe, int) and 0 <= waffe < len(k.waffen):
             k.waffe_waehlen(waffe)
-        if ein.get("nachladen"):
+        knoepfe = ein.get("knoepfe") or []
+        if not isinstance(knoepfe, list):
+            return
+        if "nachladen" in knoepfe:
             k.nachladen()
-        if ein.get("nutzen"):
+        if "heilen" in knoepfe:
+            k.heilen()
+        if "tracer" in knoepfe:
+            k.tracer = not k.tracer
+        if "tracer_weit" in knoepfe:
+            k.tracer_weit = not k.tracer_weit
+        if "nutzen" in knoepfe:
             ziel_ebene = self.welt.treppe_unter(k)
             if ziel_ebene is not None:
                 self.welt.ebene_wechseln(k, ziel_ebene)
 
     # ---- Schritt: Gastgeber -------------------------------------------
     def _schritt_gastgeber(self, dt: float) -> None:
+        self.hinweis = ""
         for nummer in self.gastgeber.annehmen():
             pass                      # Kaempfer entsteht erst beim "hallo"
 
@@ -193,6 +252,7 @@ class Gefecht(Szene):
         if self.ich is not None:
             self._anwenden(self.ich, self._meine_eingabe())
 
+        self._medkits_nachlegen(dt)
         self.welt.schritt(dt)
         self._tote_abrechnen(dt)
 
@@ -204,6 +264,25 @@ class Gefecht(Szene):
         if self._seit_senden >= K.NETZ["takt"]:
             self._seit_senden = 0.0
             self.gastgeber.an_alle(self._weltmeldung())
+
+    def _medkits_nachlegen(self, dt: float) -> None:
+        """Alle paar Sekunden ein Medkit, solange nicht zu viele liegen.
+
+        Im Einzelspieler kommen Medkits mit jeder Welle. Hier gibt es keine
+        Wellen, also braucht es einen eigenen Takt - ohne ihn bleibt ein
+        Treffer fuer den Rest der Runde stehen.
+        """
+        self._seit_medkit += dt
+        if self._seit_medkit < K.GEFECHT["medkit_takt"]:
+            return
+        self._seit_medkit = 0.0
+        liegen = sum(1 for w in self.welt.wesen
+                     if isinstance(w, KampfBeute) and w.lebt)
+        if liegen >= K.GEFECHT["medkit_hoechstens"]:
+            return
+        ebene = self.rnd.randrange(len(self.welt.ebenen))
+        self.welt.dazu(KampfBeute(freier_punkt(self.welt, ebene, self.rnd),
+                                  "medkit", ebene, self.kaempfer))
 
     def _tote_abrechnen(self, dt: float) -> None:
         """Punkte vergeben und Gefallene wieder einsteigen lassen."""
@@ -250,14 +329,33 @@ class Gefecht(Szene):
                 "l": round(max(0.0, k.leben), 1),
                 "b": k.waffe_name, "a": k.abschuesse, "d": k.tode,
                 "v": k.lebt,
+                # Alles Weitere braucht der Gast, um sein eigenes HUD und
+                # seine Zielhilfen zu zeichnen. Ohne das steht dort die
+                # Munition der Vorgabe und der Nachladebalken fehlt ganz.
+                "m": k.magazin.get(k.waffe_name, 0),
+                "nl": round(k.nachlade_rest, 2),
+                "fo": round(k.fokus, 2),
+                "zi": k.zielt,
+                "tr": k.tracer, "tw": k.tracer_weit,
+                "mk": k.medkits, "hr": round(k.heilt_rest, 2),
+                "sz": round(k.schlag_zeigen, 2),
+                "wi": round(k.wieder_in, 1),
             })
-        schuesse = []
+        # Alles, was fliegt: Geschosse und geworfene Granaten. Beides sieht
+        # der Gast sonst gar nicht - eine Granate, die man nicht kommen
+        # sieht, ist kein Spiel, sondern Pech.
+        flug = []
         for w in self.welt.wesen:
-            if getattr(w, "bild", None) == "geschoss" and w.lebt:
-                schuesse.append([round(w.pos.x, 1), round(w.pos.y, 1),
-                                 round(w.winkel, 1), w.ebene])
+            name = getattr(w, "bild", None)
+            if name in ("geschoss", "granate") and w.lebt:
+                flug.append([round(w.pos.x, 1), round(w.pos.y, 1),
+                             round(w.winkel, 1), w.ebene, name])
+        beute = [[round(w.pos.x, 1), round(w.pos.y, 1), w.ebene,
+                  getattr(w, "art", "medkit")]
+                 for w in self.welt.wesen
+                 if isinstance(w, KampfBeute) and w.lebt]
         return {"t": "welt", "rest": round(self.rest, 1),
-                "spieler": spieler, "schuesse": schuesse,
+                "spieler": spieler, "schuesse": flug, "beute": beute,
                 "aus": self.vorbei}
 
     def _runde_beenden(self) -> None:
@@ -274,6 +372,7 @@ class Gefecht(Szene):
 
     # ---- Schritt: Gast -------------------------------------------------
     def _schritt_gast(self, dt: float) -> None:
+        self.hinweis = ""
         if not self.gast.offen:
             self.hinweis = "VERBINDUNG VERLOREN  [ESC]"
             return
@@ -290,8 +389,12 @@ class Gefecht(Szene):
                               if isinstance(e, dict)]
                 bestenliste.eintragen(self.liste)
 
+        # Warten Einmal-Druecke, geht das Paket sofort raus. Sonst haengt
+        # ein Nachladen oder ein Waffenwechsel bis zum naechsten Takt, und
+        # das spuert man deutlicher als jede Verzoegerung der Bewegung.
         self._seit_senden += dt
-        if self._seit_senden >= K.NETZ["takt"]:
+        eilig = bool(self._knoepfe) or self._waffe_wunsch >= 0
+        if eilig or self._seit_senden >= K.NETZ["eingabe_takt"]:
             self._seit_senden = 0.0
             self.gast.senden(self._meine_eingabe())
 
@@ -326,6 +429,16 @@ class Gefecht(Szene):
             waffe = eintrag.get("b")
             if waffe in k.waffen:
                 k.waffe = k.waffen.index(waffe)
+            k.magazin[k.waffe_name] = int(eintrag.get("m", 0))
+            k.nachlade_rest = float(eintrag.get("nl", 0.0))
+            k.fokus = float(eintrag.get("fo", 0.0))
+            k.zielt = bool(eintrag.get("zi", False))
+            k.tracer = bool(eintrag.get("tr", False))
+            k.tracer_weit = bool(eintrag.get("tw", False))
+            k.medkits = int(eintrag.get("mk", 0))
+            k.heilt_rest = float(eintrag.get("hr", 0.0))
+            k.schlag_zeigen = float(eintrag.get("sz", 0.0))
+            k.wieder_in = float(eintrag.get("wi", 0.0))
         for nummer in list(self.kaempfer):
             if nummer not in gesehen:
                 self.kaempfer.pop(nummer, None)
@@ -336,22 +449,39 @@ class Gefecht(Szene):
         if self.ich is not None:
             self.welt.held = self.ich
         self._fremde_schuesse = [tuple(s) for s in meldung.get("schuesse", [])
-                                 if isinstance(s, (list, tuple)) and len(s) == 4]
+                                 if isinstance(s, (list, tuple)) and len(s) == 5]
+        self._fremde_beute = [tuple(b) for b in meldung.get("beute", [])
+                              if isinstance(b, (list, tuple)) and len(b) == 4]
 
     # ---- Szene ---------------------------------------------------------
     def schritt(self, dt: float) -> None:
+        # Vor allem anderen: Einmal-Druecke aufheben, sonst gehen sie
+        # zwischen zwei Paketen verloren.
+        self.knoepfe_sammeln()
+
         if self.ist_gastgeber:
             self._schritt_gastgeber(dt)
         else:
             self._schritt_gast(dt)
 
         if self.ich is not None:
-            self.blick = self.ich.ebene
+            # Das Mausrad verschiebt nur die Ansicht, nicht die Figur - wie
+            # im Einzelspieler. Wechselt die Figur die Ebene, folgt die
+            # Ansicht ihr wieder nach.
+            if self.ich.ebene != self._letzte_ebene:
+                self._letzte_ebene = self.ich.ebene
+                self.blick = self.ich.ebene
+            if self._rad:
+                self.blick = max(0, min(len(self.welt.ebenen) - 1,
+                                        self.blick + (1 if self._rad > 0 else -1)))
+                self._rad = 0
             ziel_h = float(self.welt.hoehe(self.blick))
-            if self.ich.flug > 0:
+            if self.ich.flug > 0 and self.blick == self.ich.ebene:
                 self.blick_hoehe = self.welt.hoehe(self.ich.ebene) + self.ich.flug
             else:
                 self.blick_hoehe += (ziel_h - self.blick_hoehe) * min(1.0, 9.0 * dt)
+            if self.blick != self.ich.ebene:
+                self.hinweis = "ANSICHT EBENE %d  [MAUSRAD]" % self.blick
             ebene = self.welt.ebene(self.ich.ebene)
             self.kamera.schritt(dt, self.ich.pos, self.ich.ziel,
                                 (ebene.pixel_breite, ebene.pixel_hoehe))
@@ -365,7 +495,10 @@ class Gefecht(Szene):
                                     self.blick_hoehe)
         if not self.ist_gastgeber:
             self._schuesse_zeichnen(ziel)
-        if self.ich is not None and self.ich.lebt:
+        # Zielhilfen und Ziellinie gehoeren zu der Ebene, auf der man steht.
+        if (self.ich is not None and self.ich.lebt
+                and self.blick == self.ich.ebene):
+            self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.ich)
             self.renderer.tracer(ziel, self.welt, self.kamera, self.ich)
         self._namen_zeichnen(ziel)
         self._anzeige(ziel)
@@ -373,12 +506,23 @@ class Gefecht(Szene):
             self._endtafel(ziel)
 
     def _schuesse_zeichnen(self, ziel) -> None:
-        """Beim Gast gibt es keine echten Geschosse, nur gemeldete Punkte."""
+        """Beim Gast gibt es keine echten Wesen dafuer, nur gemeldete Punkte.
+
+        Gezeichnet werden Geschosse, geworfene Granaten und alles, was am
+        Boden liegt. Ohne das fliegt einem eine Granate ins Gesicht, die man
+        nie gesehen hat, und die Medkits sind unsichtbar.
+        """
         ecke = self.kamera.ecke
-        for (x, y, winkel, ebene) in self._fremde_schuesse:
+        for (x, y, ebene, art) in self._fremde_beute:
             if ebene != self.blick:
                 continue
-            s = self.renderer.bilder.gedreht("geschoss", winkel)
+            s = self.renderer.bilder.bild(art)
+            ziel.blit(s, (x - ecke.x - s.get_width() / 2,
+                          y - ecke.y - s.get_height() / 2))
+        for (x, y, winkel, ebene, name) in self._fremde_schuesse:
+            if ebene != self.blick:
+                continue
+            s = self.renderer.bilder.gedreht(name, winkel)
             ziel.blit(s, (x - ecke.x - s.get_width() / 2,
                           y - ecke.y - s.get_height() / 2))
 
@@ -415,8 +559,9 @@ class Gefecht(Szene):
         if self.ist_gastgeber:
             f.zeichnen(ziel, self.gastgeber.adresse, 12, 22, K.C_MUTED_DK, 1)
 
-        # Punktestand rechts
-        y = 12
+        # Punktestand rechts, unterhalb der Ebenenanzeige. Weiter oben
+        # laegen beide uebereinander.
+        y = K.GEFECHT["tafel_oben"]
         for k in bestenliste.sortiert(
                 [{"name": k.name, "abschuesse": k.abschuesse, "tode": k.tode,
                   "k": k} for k in self.kaempfer.values()]):
@@ -435,7 +580,7 @@ class Gefecht(Szene):
                        ausrichtung="mitte")
         elif self.ich is not None:
             self.renderer.hud(ziel, self.welt, self.ich, "", self.ich.abschuesse,
-                              self.blick)
+                              self.blick, kopf=False)
         if self.hinweis:
             self.renderer.hinweis(ziel, self.hinweis)
 

@@ -741,6 +741,124 @@ if stelle:
     pruef("Gefallener steigt wieder ein",
           b.lebt and b.leben == b.max_leben, "lebt=%s" % b.lebt)
 
+# ── Was im ersten LAN-Test gefehlt hat ───────────────────────────────
+# Jeder Punkt hier stand in einer Fehlermeldung aus dem Spiel. Sie stehen
+# als Pruefung da, damit sie nicht zurueckkommen.
+from dustfront.mehrspieler import KampfBeute
+
+def einmal_druecken(szene, taste):
+    """Eine Taste genau ein Bild lang druecken, wie im echten Ablauf.
+
+    neues_bild() leert die Einmal-Druecke - wer das im Test weglaesst,
+    schaltet einen Umschalter mehrfach hin und her und misst Unsinn.
+    """
+    e.neues_bild()
+    e._gedrueckt = {taste}
+    szene.knoepfe_sammeln()
+    e.neues_bild()
+    e._gedrueckt = set()
+
+def netz_takte(n=8):
+    for _ in range(n):
+        host.schritt(K.NETZ["takt"])
+        gast.schritt(K.NETZ["takt"])
+
+wirt_ich = host.kaempfer[0]
+gast_ich = host.kaempfer[gast.meine_nummer]
+gast_ich.lebt = True
+gast_ich.leben = gast_ich.max_leben
+
+# Der Kern: ein Druck, der nur ein Bild anliegt, darf nicht verlorengehen.
+# Genau daran sind vorher Nachladen, Treppe und Waffenwechsel gescheitert.
+einmal_druecken(gast, "tracer")
+pruef("Ein einzelner Tastendruck ueberlebt bis zum Senden",
+      "tracer" in gast._knoepfe)
+netz_takte()
+pruef("Der Gast kann seine Ziellinie umschalten", gast_ich.tracer)
+
+wirt_ich.tracer = False
+einmal_druecken(host, "tracer")
+host.schritt(K.FIXED_DT)
+pruef("Der Gastgeber kann seine Ziellinie umschalten", wirt_ich.tracer)
+
+# Medkits: erscheinen, und jeder kann sie nehmen
+host._seit_medkit = K.GEFECHT["medkit_takt"]
+host.schritt(K.FIXED_DT)
+liegen = [w for w in list(host.welt.wesen) + list(host.welt.neue)
+          if isinstance(w, KampfBeute)]
+pruef("Medkits erscheinen im Gefecht", len(liegen) >= 1, "%d" % len(liegen))
+if liegen:
+    m = liegen[0]
+    m.ebene = gast_ich.ebene
+    m.pos.update(gast_ich.pos)
+    gast_ich.medkits = 0
+    host.welt.schritt(K.FIXED_DT)
+    host.welt.schritt(K.FIXED_DT)
+    pruef("Auch ein Gast kann ein Medkit aufsammeln", gast_ich.medkits == 1,
+          "%d" % gast_ich.medkits)
+
+gast_ich.leben = 40.0
+gast_ich.heilt_rest = 0.0
+einmal_druecken(gast, "heilen")
+netz_takte()
+pruef("Ein Medkit laesst sich benutzen", gast_ich.heilt_rest > 0,
+      "%.2f s" % gast_ich.heilt_rest)
+
+# Mausrad verschiebt die Ansicht, wie im Einzelspieler
+host.blick = 0
+e.neues_bild(); e.rad = 1
+host.knoepfe_sammeln()
+e.neues_bild(); e.rad = 0
+host.schritt(K.FIXED_DT)
+pruef("Das Mausrad verschiebt die Ebenenansicht", host.blick == 1,
+      "Ebene %d" % host.blick)
+
+# Was der Gast fuer sein HUD braucht
+gast_ich.magazin[gast_ich.waffe_name] = 7
+gast_ich.nachlade_rest = 0.8
+netz_takte()
+kopie = gast.kaempfer[gast.meine_nummer]
+pruef("Die Munitionsanzahl kommt beim Gast an",
+      kopie.magazin[kopie.waffe_name] == 7, "%d" % kopie.magazin[kopie.waffe_name])
+pruef("Das Nachladen ist beim Gast sichtbar", kopie.nachlade_rest > 0,
+      "%.2f s" % kopie.nachlade_rest)
+pruef("Der Medkit-Vorrat kommt beim Gast an", kopie.medkits == gast_ich.medkits)
+
+# Granaten muss der Gast sehen, sonst trifft ihn was Unsichtbares
+gast_ich.nachlade_rest = 0.0
+gast_ich.takt = 0.0
+gast_ich.waffe = gast_ich.waffen.index("granate")
+gast_ich.magazin["granate"] = 3
+gast_ich.ziel = gast_ich.pos + pygame.Vector2(120, 0)
+host.welt.schritt(K.FIXED_DT)
+gast_ich.feuern()
+host.welt.schritt(K.FIXED_DT)
+arten = {s[4] for s in host._weltmeldung()["schuesse"]}
+pruef("Granaten stehen in der Weltmeldung", "granate" in arten, str(arten))
+netz_takte(4)
+pruef("Der Gast sieht die Granate fliegen",
+      any(s[4] == "granate" for s in gast._fremde_schuesse))
+
+# Treppen: der Einmal-Druck "nutzen" kam vorher nie an
+ebene_null = host.welt.ebene(0)
+treppe = None
+for ty in range(ebene_null.hoehe):
+    for tx in range(ebene_null.breite):
+        if ebene_null.daten(tx, ty).get("treppe") == 1:
+            treppe = (tx, ty)
+            break
+    if treppe:
+        break
+pruef("Treppe nach oben gefunden", treppe is not None)
+if treppe:
+    gast_ich.ebene = 0
+    gast_ich.pos.update(treppe[0] * K.TILE + 16, treppe[1] * K.TILE + 16)
+    gast_ich.lebt = True
+    einmal_druecken(gast, "nutzen")
+    netz_takte()
+    pruef("Der Gast kommt ueber die Treppe eine Ebene hoch",
+          gast_ich.ebene == 1, "Ebene %d" % gast_ich.ebene)
+
 # Ein Gast, der abbricht, darf den Gastgeber nicht mitreissen
 verbindung.schliessen()
 for _ in range(6):

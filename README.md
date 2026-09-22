@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.13.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.13.1, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -186,6 +186,11 @@ Ein kurzer Mehrspieler-Test: mehrere Leute auf einer Karte, **keine
 Gegner**, wer trifft bekommt einen Punkt. Nach der Runde steht die Liste,
 und sie wandert in eine Bestenliste im Benutzerordner.
 
+Alles aus dem Einzelspieler ist dabei: die sechs Waffen, drei Ebenen mit
+Treppen und Stuerzen, Ziellinie, Streukegel der Scharfschuetzenwaffe,
+Nahkampfbogen. Medkits liegen alle paar Sekunden neu aus, jeder kann sie
+nehmen. Wer faellt, steigt nach drei Sekunden wieder ein.
+
 ### So spielt man es
 
 1. Einer startet **`LAN-GASTGEBER`**, tippt seinen Namen und liest die
@@ -235,11 +240,16 @@ bei jedem selbst und sind reine Kosmetik.
 
 ### Was der Test noch nicht kann
 
-Ehrlich aufgezaehlt, damit niemand danach sucht: keine Vorhersage beim
-Gast (die eigene Figur laeuft mit der Verzoegerung des Netzes, im LAN
-unsichtbar, ueber WLAN spuerbar), kein Wiederverbinden nach einem Abbruch,
-keine Kartenwahl, keine Teams. Das Gefecht laeuft immer auf derselben
-Testkarte.
+Ehrlich aufgezaehlt, damit niemand danach sucht.
+
+**Keine Vorhersage beim Gast.** Die eigene Figur laeuft erst los, wenn die
+Antwort des Gastgebers da ist - ein Hin- und Rueckweg. Ueber Kabel ist das
+unsichtbar, ueber WLAN spuerbar. Das ist der einzige Punkt, der sich nicht
+durch eine Kleinigkeit beheben laesst: dafuer muesste der Gast seine eigene
+Figur mitrechnen und beim Eintreffen der Wahrheit zurechtruecken.
+
+Ausserdem: kein Wiederverbinden nach einem Abbruch, keine Kartenwahl,
+keine Teams. Das Gefecht laeuft immer auf derselben Testkarte.
 
 ## Wie sich das Spiel anfuehlen soll
 
@@ -521,6 +531,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.11.2 | Startdateien zum Doppelklicken fuer Windows und macOS; Weltenplan in `docs/KARTE.md` |
 | 0.12.0 | Das Hauptmenue startet das echte Spiel statt einer Platzhalter-Szene; Startdatei fuer den direkten Spieltest |
 | 0.13.0 | LAN-Gefecht: mehrere Spieler auf einer Karte, keine Gegner, Namen, Punkte und eine Bestenliste im Benutzerordner |
+| 0.13.1 | Im Gefecht gingen einzelne Tastendruecke verloren; dazu fehlten Zielhilfen, Mausrad, Medkits, Munitionsanzeige und sichtbare Granaten |
 
 ## Anpassen
 

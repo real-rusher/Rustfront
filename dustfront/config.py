@@ -232,7 +232,8 @@ NETZ = dict(
     puffer=65536,             # so viel wird je Versuch von der Leitung gelesen
     hoechstzeile=262144,      # laengere Nachricht = Leitung gilt als kaputt
     wartezeit=5.0,            # Sekunden, die ein Verbindungsversuch dauern darf
-    takt=1.0 / 30.0,          # so oft schickt der Gastgeber den Weltzustand
+    takt=1.0 / 60.0,          # so oft schickt der Gastgeber den Weltzustand
+    eingabe_takt=1.0 / 60.0,  # so oft schickt ein Gast seine Eingaben
     probe_ziel="10.255.255.255",   # nur um die eigene Adresse zu erfahren
     namenslaenge=10,
     stumm_nach=8.0,           # ohne Lebenszeichen gilt ein Gast als weg
@@ -246,6 +247,9 @@ GEFECHT = dict(
     punkt_selbst=-1,          # wer sich selbst erledigt, zahlt drauf
     schutz=2.0,               # Sekunden unverwundbar nach dem Einstieg
     abstand=160.0,            # so weit weg von anderen wird eingestiegen
+    medkit_takt=12.0,         # Sekunden zwischen zwei Medkits
+    medkit_hoechstens=4,      # so viele liegen gleichzeitig herum
+    tafel_oben=74,            # wo der Punktestand anfaengt, unter den Ebenen
 )
 
 # ══════════════════════════════════════════════════ HOEHE

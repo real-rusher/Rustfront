@@ -457,7 +457,11 @@ class Renderer:
             ziel.blit(linie, (0, 0))
 
     # ---- HUD -------------------------------------------------------
-    def hud(self, ziel, welt, spieler, wellen_text, punkte, blick=None) -> None:
+    def hud(self, ziel, welt, spieler, wellen_text, punkte, blick=None,
+            kopf: bool = True) -> None:
+        """kopf=False laesst die Kopfzeile weg. Im Gefecht gibt es weder
+        Wellen noch Schrott, und "SCHROTT 3" fuer drei Abschuesse waere
+        schlicht gelogen."""
         f = SCHRIFT
         # Lebensbalken
         x, y = 12, K.GAME_H - 26
@@ -542,8 +546,9 @@ class Renderer:
             pygame.draw.rect(ziel, K.C_TEAL, (mx, hy - 4, int(30 * anteil), 2))
 
         # Kopfzeile
-        f.zeichnen(ziel, wellen_text, 12, 12, K.C_MUTED, 1)
-        f.zeichnen(ziel, "SCHROTT %d" % punkte, 12, 22, K.C_AMBER, 1)
+        if kopf:
+            f.zeichnen(ziel, wellen_text, 12, 12, K.C_MUTED, 1)
+            f.zeichnen(ziel, "SCHROTT %d" % punkte, 12, 22, K.C_AMBER, 1)
 
     def hinweis(self, ziel, text) -> None:
         w = SCHRIFT.breite(text, 1) + 14
