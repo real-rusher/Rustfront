@@ -83,6 +83,7 @@ class Renderer:
         self._linie = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
         self._brand: dict[int, pygame.Surface] = {}
         self._fleck_cache: dict[tuple, pygame.Surface] = {}
+        self._rauch_puffer: dict[tuple, tuple] = {}
         # Auch Schatten, Vignette und die Dekale kommen aus der Registratur:
         # eine Datei assets/vignette.png ersetzt sie genauso wie eine Kachel.
         # Gehalten werden sie hier, damit die Zeichenschleife nicht bei jedem
@@ -346,7 +347,7 @@ class Renderer:
         return hit
 
     def welt_zeichnen(self, ziel, welt, kamera, alpha, blick_hoehe=None,
-                      boden=None) -> None:
+                      boden=None, blick=None) -> None:
         """Zeichnet alle Ebenen relativ zu einer Ansichtshoehe.
 
         Die Ansicht haengt bewusst nicht an der Ebene der Figur, sondern an
@@ -360,6 +361,13 @@ class Renderer:
             dz = 0   die angeschaute Ebene: unveraendert
             dz < 0   liegt darueber: vergroessert und ausgeblendet
 
+        blick ist die angeschaute Ebene als Nummer. Nach oben wird genau
+        **eine** Ebene mitgezeichnet, nicht alle: wer unten steht, soll die
+        Etage ueber sich durchscheinen sehen, aber nicht gleich drei
+        Stockwerke uebereinander. Ohne diese Grenze liegt ueber der
+        untersten Ebene ein Stapel aus allem, was darueber gebaut ist, und
+        man erkennt nicht mehr, was wozu gehoert.
+
         boden ist ein Aufruf (flaeche, ebene, ecke) direkt nach dem Boden
         und vor den Wesen. Damit zeichnet der Mehrspieler seinen Kreis in
         die Karte, statt darueber: er bekommt Verkleinerung, Abdunklung und
@@ -372,7 +380,11 @@ class Renderer:
         if blick_hoehe is None:
             blick_hoehe = welt.hoehe(held.ebene if held else 0)
 
+        if blick is None:
+            blick = held.ebene if held else 0
         for idx in range(len(welt.ebenen)):
+            if idx > blick + 1:
+                continue                  # hoechstens eine Etage nach oben
             dz = blick_hoehe - welt.hoehe(idx)
             if dz < -p["ausblenden"] or dz > p["brennweite"] * p["tiefe_sichtbar"]:
                 continue
@@ -388,7 +400,8 @@ class Renderer:
                 self.wesen_zeichnen(ziel, welt, idx, ecke, alpha)
                 self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
                 self.muendungsfeuer(ziel, welt, ecke, idx)
-                self.rauch_zeichnen(ziel, welt, idx, ecke)
+                self.rueckmeldung_zeichnen(ziel, welt, idx, ecke)
+                self.rauch_zeichnen(ziel, welt, idx, ecke, True)
                 continue
 
             dunkel = max(48, int(p["dunkel"] * k)) if dz > 0 else None
@@ -403,7 +416,8 @@ class Renderer:
             self.wesen_zeichnen(flaeche, welt, idx, u_ecke, alpha, dunkel)
             self.partikel_zeichnen(flaeche, welt, idx, u_ecke, alpha)
             self.muendungsfeuer(flaeche, welt, u_ecke, idx)
-            self.rauch_zeichnen(flaeche, welt, idx, u_ecke)
+            self.rueckmeldung_zeichnen(flaeche, welt, idx, u_ecke)
+            self.rauch_zeichnen(flaeche, welt, idx, u_ecke, False)
             skaliert = pygame.transform.scale(flaeche, (K.GAME_W, K.GAME_H))
             if sicht < 0.999:
                 skaliert.set_alpha(int(255 * sicht))
@@ -417,44 +431,134 @@ class Renderer:
         self.fliegende_zeichnen(ziel, welt, kamera, alpha, blick_hoehe)
         ziel.blit(self._vignette, (0, 0))
 
-    def rauch_zeichnen(self, ziel, welt, index: int, ecke) -> None:
-        """Rauchwolken der Ebene, ueber allem, was auf ihr steht.
+    def rueckmeldung_zeichnen(self, ziel, welt, index: int, ecke) -> None:
+        """Staubringe und Aufschriften der Ebene.
 
-        Bewusst nach den Figuren und nach den Partikeln: Rauch nimmt die
-        Sicht, er liegt nicht am Boden. Weil er in die Ebene selbst
-        gezeichnet wird, verdeckt er auch dann, wenn man von weiter oben
-        auf diese Ebene hinuntersieht - genau das ist der Sinn.
+        Beides ist blockig gezeichnet, nicht als weicher Kreis: der Ring
+        besteht aus acht Kloetzen, die nach aussen wandern. Runde Verlaeufe
+        passen nicht zu einem Spiel, das aus Kacheln gebaut ist.
+        """
+        st = K.STURZ
+        for (pos, ebene, rest, wucht) in welt.ringe:
+            if ebene != index:
+                continue
+            f = 1.0 - max(0.0, rest / st["ring_dauer"])
+            weite = st["ring_weite"] * wucht * f
+            klotz = max(2, int(4 * (1.0 - f) + 2))
+            deckung = int(200 * (1.0 - f))
+            if deckung <= 4:
+                continue
+            p = pos - ecke
+            flaeche = pygame.Surface((klotz, klotz), pygame.SRCALPHA)
+            flaeche.fill((*K.C_MUTED, deckung))
+            for i in range(8):
+                a = math.tau * i / 8 + wucht
+                ziel.blit(flaeche, (p.x + math.cos(a) * weite - klotz / 2,
+                                    p.y + math.sin(a) * weite * 0.6 - klotz / 2))
 
-        Gezeichnet aus mehreren Ballen statt als eine Scheibe: ein Kreis
-        sieht nach Zielscheibe aus, mehrere ineinander nach Rauch. Sie
-        wallen langsam, damit die Wand lebt.
+        b = K.BEUTE_ZEIGEN
+        for (pos, ebene, text, farbe, rest) in welt.aufschriften:
+            if ebene != index:
+                continue
+            f = 1.0 - max(0.0, rest / b["dauer"])
+            p = pos - ecke
+            SCHRIFT.zeichnen(ziel, text, int(p.x),
+                             int(p.y - 16 - b["steigt"] * f),
+                             farbe if f < 0.7 else K.C_MUTED, 1,
+                             ausrichtung="mitte")
+
+    def rauch_zeichnen(self, ziel, welt, index: int, ecke,
+                       eigene_ebene: bool = True) -> None:
+        """Rauchwolken der Ebene, als Bloecke, ueber allem was dort steht.
+
+        Drei Dinge machen den Unterschied zu einer gemalten Wolke:
+
+        1. **Bloecke statt Kreis.** Alles in diesem Spiel sitzt auf einem
+           Raster; eine weich verlaufende Scheibe faellt sofort als
+           Fremdkoerper auf. Die Bloecke stehen im Weltraster, zwei Wolken
+           nebeneinander ergeben deshalb eine durchgehende Wand statt
+           zweier verschobener Flecken.
+        2. **Wirklich deckend.** Der Kern liegt bei voller Deckkraft. Wer
+           darin steht, ist nicht zu sehen - und sein Name auch nicht,
+           siehe `welt.verdeckt`.
+        3. **Ebene erkennbar.** Rauch einer fremden Ebene wird blasser
+           gezeichnet. Ohne das sieht eine Wand eine Etage hoeher genauso
+           aus wie die vor der eigenen Nase, und man weiss nicht, ob man
+           um sie herumlaufen oder ueber sie hinwegsehen kann.
+
+        Gepuffert wird je Wolke und je Zehntel Dichte: eine Wand aus rund
+        dreihundert Bloecken wird sonst hundertzwanzig Mal in der Sekunde
+        neu zusammengesetzt, und das auf jeder Ebene, auf der sie liegt.
         """
         if not welt.rauch:
             return
         r = K.RAUCH
+        b = int(r["block"])
+        breite, hoehe = ziel.get_size()
         for wolke_ in welt.rauch:
             if wolke_.ebene != index or not wolke_.lebt:
                 continue
-            dichte = wolke_.dichte
-            if dichte <= 0.01:
+            if wolke_.dichte <= 0.01:
                 continue
-            m = wolke_.pos - ecke
-            gross = wolke_.radius * (0.55 + 0.45 * dichte)
-            flaeche = pygame.Surface((int(gross * 2.4), int(gross * 2.4)),
-                                     pygame.SRCALPHA)
-            mitte = flaeche.get_width() / 2
-            deckung = int(r["deckkraft"] * dichte)
-            for i in range(r["flocken"]):
-                a = math.tau * i / r["flocken"] + wolke_.alter * r["wallen_takt"]
-                weg = gross * r["flocken_streuung"] * (0.45 + 0.55 * ((i * 7) % 5) / 4)
-                wall = r["wallen"] * math.sin(wolke_.alter * 1.7 + i)
-                p = (mitte + math.cos(a) * weg,
-                     mitte + math.sin(a) * weg + wall * 0.3)
-                pygame.draw.circle(flaeche, (*r["farbe"], deckung), p,
-                                   gross * 0.62)
-            pygame.draw.circle(flaeche, (*r["farbe"], deckung), (mitte, mitte),
-                               gross * 0.7)
-            ziel.blit(flaeche, (m.x - mitte, m.y - mitte))
+            flaeche, versatz = self._rauchbild(wolke_, eigene_ebene)
+            if flaeche is None:
+                continue
+            sx = versatz[0] - ecke.x
+            sy = versatz[1] - ecke.y
+            if (sx > breite or sy > hoehe
+                    or sx + flaeche.get_width() < 0
+                    or sy + flaeche.get_height() < 0):
+                continue
+            ziel.blit(flaeche, (sx, sy))
+
+    def _rauchbild(self, wolke_, eigene_ebene: bool):
+        """Die fertige Wolke als Flaeche, dazu ihre linke obere Weltecke."""
+        r = K.RAUCH
+        b = int(r["block"])
+        # Nur zehn Stufen: das Auge sieht den Unterschied nicht, der
+        # Puffer dafuer umso mehr.
+        stufe = int(wolke_.dichte * 10)
+        schluessel = (id(wolke_), stufe, eigene_ebene)
+        fertig = self._rauch_puffer.get(schluessel)
+        if fertig is not None:
+            return fertig
+
+        bloecke = wolke_.bloecke()
+        if not bloecke:
+            return None, (0, 0)
+        x0 = min(bx for (bx, _by, _f, _k) in bloecke)
+        y0 = min(by for (_bx, by, _f, _k) in bloecke)
+        x1 = max(bx for (bx, _by, _f, _k) in bloecke) + b
+        y1 = max(by for (_bx, by, _f, _k) in bloecke) + b
+        flaeche = pygame.Surface((x1 - x0, y1 - y0), pygame.SRCALPHA)
+
+        dichte = wolke_.dichte
+        # **Jeder Block ist voll deckend.** Auf- und Abbau zeigt sich
+        # daran, *welche* Bloecke stehen, nicht daran, wie durchsichtig
+        # sie sind: die Wand waechst von innen nach aussen und loest sich
+        # von aussen nach innen wieder auf. Ein weicher Verlauf waere
+        # genau das, was in einem Spiel aus Kacheln nichts zu suchen hat -
+        # und er machte aus einer Sichtwand einen Schleier, durch den man
+        # noch alles sah.
+        deckung = 255 if eigene_ebene else int(255 * r["fremde_ebene"])
+        for (bx, by, farbe, kern) in bloecke:
+            mx = bx + b * 0.5 - wolke_.pos.x
+            my = by + b * 0.5 - wolke_.pos.y
+            noetig = math.hypot(mx, my) / max(1.0, wolke_.radius)
+            # Feste Streuung je Block: der Rand loest sich gesprenkelt
+            # auf statt als sauberer Kreis, und zwar auf beiden Rechnern
+            # gleich.
+            streu = (((bx * 374761393) ^ (by * 668265263)) % 1000) / 1000.0
+            if dichte < noetig * 0.95 + streu * 0.14:
+                continue
+            ton = r["farben"][farbe if kern else (farbe + 1) % len(r["farben"])]
+            pygame.draw.rect(flaeche, (*ton, deckung),
+                             (bx - x0, by - y0, b, b))
+
+        if len(self._rauch_puffer) > K.RAUCH["puffer"]:
+            self._rauch_puffer.clear()
+        self._rauch_puffer[schluessel] = (flaeche, (x0, y0))
+        return flaeche, (x0, y0)
 
     def kreis_zone(self, ziel, mitte, radius: float, farbe, anteil: float = 0.0,
                    puls: float = 0.0, ring: int = 3, fuellung: int = 34) -> None:
@@ -545,18 +649,47 @@ class Renderer:
             ziel.blit(linie, (0, 0))
 
         if spieler.schlag_zeigen > 0 and d.get("art") == "nahkampf":
-            f = spieler.schlag_zeigen / 0.16
-            reich = d["reichweite"] * (0.6 + 0.4 * (1.0 - f))
-            halb = d["winkel"] * 0.5
-            linie = self._linie
-            linie.fill((0, 0, 0, 0))
-            punkte = [p]
-            schritte = 9
-            for i in range(schritte + 1):
-                g = spieler.winkel - halb + (2 * halb) * i / schritte
-                punkte.append(p + pygame.Vector2(reich, 0).rotate(g))
-            pygame.draw.polygon(linie, (*K.C_CREAM, int(70 * f)), punkte)
-            ziel.blit(linie, (0, 0))
+            self.schwung_zeichnen(ziel, spieler, p, d)
+
+    def schwung_zeichnen(self, ziel, spieler, p, d) -> None:
+        """Der Schlag mit dem Brecheisen, als Bewegung statt als Kegel.
+
+        Vorher lag waehrend des Schlags ein heller Kegel vor der Figur und
+        verblasste - man sah, *dass* geschlagen wurde, aber nichts schwang.
+        Jetzt faehrt das Eisen in der Zeit des Schlags einmal durch den
+        Kegel, von der einen Seite zur anderen, und zieht eine kurze
+        Spur hinter sich her.
+
+        Gezeichnet wird mit Kloetzen statt mit einem weichen Bogen: das
+        passt zum Rest des Spiels und liest sich bei 640 Pixeln Breite
+        besser als eine duenne Kurve.
+        """
+        dauer = d.get("schwung", 0.26)
+        f = 1.0 - max(0.0, min(1.0, spieler.schlag_zeigen / dauer))
+        halb = d["winkel"] * 0.5
+        reich = d["reichweite"]
+        # Von -halb nach +halb, am Anfang schnell, am Ende auslaufend.
+        weg = 1.0 - (1.0 - f) * (1.0 - f)
+        jetzt = spieler.winkel - halb + 2 * halb * weg
+        linie = self._linie
+        linie.fill((0, 0, 0, 0))
+        # Spur: ein paar Grad hinter der Schneide, immer blasser
+        for i in range(6):
+            zurueck = jetzt - (2 * halb) * 0.09 * i
+            if zurueck < spieler.winkel - halb:
+                break
+            deck = int(150 * (1.0 - i / 6.0) * (1.0 - f * 0.5))
+            if deck <= 4:
+                continue
+            a = p + pygame.Vector2(reich * 0.35, 0).rotate(zurueck)
+            b = p + pygame.Vector2(reich, 0).rotate(zurueck)
+            pygame.draw.line(linie, (*K.C_MUTED, deck), a, b, 2)
+        # Die Schneide selbst, ein heller Klotz am Ende des Eisens
+        a = p + pygame.Vector2(reich * 0.3, 0).rotate(jetzt)
+        b = p + pygame.Vector2(reich, 0).rotate(jetzt)
+        pygame.draw.line(linie, (*K.C_RUST, 235), a, b, 3)
+        pygame.draw.rect(linie, (*K.C_CREAM, 245), (int(b.x) - 2, int(b.y) - 2, 4, 4))
+        ziel.blit(linie, (0, 0))
 
     # ---- HUD -------------------------------------------------------
     def hud(self, ziel, welt, spieler, wellen_text, punkte, blick=None,
@@ -661,10 +794,40 @@ class Renderer:
                          ausrichtung="mitte")
 
     def schaden_blende(self, ziel, staerke: float) -> None:
-        if staerke <= 0:
+        self.blende(ziel, K.C_RED, 90 * min(1.0, staerke))
+
+    def blende(self, ziel, farbe, deckung: float) -> None:
+        """Ein Farbschleier ueber dem ganzen Bild."""
+        d = int(max(0, min(255, deckung)))
+        if d <= 0:
             return
         s = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
-        s.fill((*K.C_RED, int(90 * min(1.0, staerke))))
+        s.fill((*farbe, d))
+        ziel.blit(s, (0, 0))
+
+    def randglut(self, ziel, farbe, staerke: float) -> None:
+        """Farbe an den Bildraendern, die Mitte bleibt frei.
+
+        Fuer Zustaende, die man die ganze Zeit sieht und trotzdem nicht im
+        Weg haben will - das Aufhelfen zum Beispiel: man muss weiter
+        erkennen, wer von wo kommt, soll aber keine Sekunde vergessen,
+        dass man gerade festgehalten ist.
+        """
+        staerke = max(0.0, min(1.0, staerke))
+        if staerke <= 0.01:
+            return
+        s = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+        breit = int(K.GLUT["breite"] * staerke)
+        stufen = max(1, K.GLUT["stufen"])
+        for i in range(stufen):
+            d = int(K.GLUT["deckung"] * staerke * (1.0 - i / stufen))
+            if d <= 0:
+                continue
+            dick = max(1, breit // stufen)
+            rand = i * dick
+            pygame.draw.rect(s, (*farbe, d),
+                             (rand, rand, K.GAME_W - 2 * rand,
+                              K.GAME_H - 2 * rand), dick)
         ziel.blit(s, (0, 0))
 
     def debug(self, ziel, app, welt) -> None:

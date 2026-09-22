@@ -103,6 +103,29 @@ if "%WERT%"=="" set "WERT=10"
 set /a WERT=%WERT%*60
 
 :muni
+set "RUNDEN=3"
+if not "%MODUS%"=="versus" goto teamwahl
+echo.
+set /p "RUNDEN=  Rundensiege bis zum Schluss (1-9, Enter = 3): "
+if "%RUNDEN%"=="" set "RUNDEN=3"
+
+:teamwahl
+set "TEAM=auto"
+if "%MODUS%"=="pvp" goto munition
+if "%MODUS%"=="pve" goto munition
+if "%MODUS%"=="pvpve" goto munition
+echo.
+echo   In welche Mannschaft willst du?
+echo     1  ROT
+echo     2  BLAU
+echo     3  egal, teil mich ein
+echo.
+set "WAHL="
+set /p "WAHL=  Welche (Enter = 3): "
+if "%WAHL%"=="1" set "TEAM=rot"
+if "%WAHL%"=="2" set "TEAM=blau"
+
+:munition
 set "KNAPP="
 if "%MODUS%"=="pvp" goto schutz
 echo.
@@ -129,7 +152,7 @@ if /i "%WAHL%"=="n" set "MEDSPAWN=--keine-medkits"
 
 :los
 echo.
-%PY% -m dustfront --host --name "%NAME%" --modus %MODUS% --ende %ENDE% --wert %WERT% --medkits %MEDKITS% %KNAPP% %SCHUTZ% %MEDSPAWN%
+%PY% -m dustfront --host --name "%NAME%" --modus %MODUS% --ende %ENDE% --wert %WERT% --medkits %MEDKITS% --runden %RUNDEN% --team %TEAM% %KNAPP% %SCHUTZ% %MEDSPAWN%
 if not errorlevel 1 exit /b 0
 echo.
 echo   Beendet mit einem Fehler. Die Meldung darueber sagt, woran es lag.

@@ -56,7 +56,8 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
             modus: str = K.MODUS_VORGABE, ende_art: str = "zeit",
             ende_wert: float = 0.0, knapp: bool = False,
             schutz: bool | None = None, medkits: int | None = None,
-            medkit_spawn: bool | None = None) -> int:
+            medkit_spawn: bool | None = None, runden: int | None = None,
+            team: int | None = None) -> int:
     """LAN-Test: als Gastgeber aufmachen oder als Gast verbinden.
 
     Die Spielart bestimmt allein der Gastgeber. Ein Gast bekommt sie mit
@@ -83,7 +84,7 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
             elif regeln["runden"]:
                 print("Ein Leben je Runde, %d Rundensiege entscheiden. "
                       "Aufhelfen geht nur in der eigenen Mannschaft."
-                      % K.VERSUS["runden_bis"])
+                      % (K.VERSUS["runden_bis"] if runden is None else runden))
             elif not regeln["revive"]:
                 print("Endet nach %s" % ("Zeit" if ende_art == "zeit"
                                          else "Abschuessen"))
@@ -115,9 +116,21 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
     app.schieben(Gefecht(app, name or "GAST", gastgeber=wirt, gast=gast,
                          modus=modus, ende_art=ende_art,
                          ende_wert=ende_wert, knapp=knapp, schutz=schutz,
-                         medkits=medkits, medkit_spawn=medkit_spawn))
+                         medkits=medkits, medkit_spawn=medkit_spawn,
+                         runden=runden, team=team))
     app.laufen()
     return 0
+
+
+def team_lesen(text: str) -> int | None:
+    """"rot", "blau" oder "auto" in eine Mannschaftsnummer uebersetzen."""
+    text = (text or "").strip().lower()
+    if not text or text in ("auto", "egal", "-"):
+        return None
+    for i, name in enumerate(K.TEAMS["namen"]):
+        if text == name.lower() or text == str(i + 1):
+            return i
+    return None
 
 
 def aus_argumenten(argumente: list[str]) -> int:
@@ -150,16 +163,23 @@ def aus_argumenten(argumente: list[str]) -> int:
         except ValueError:
             print("--medkits braucht eine ganze Zahl.")
             return 1
+        try:
+            runden = int(wert("--runden", str(K.VERSUS["runden_bis"])))
+        except ValueError:
+            print("--runden braucht eine ganze Zahl.")
+            return 1
         return gefecht(True, name=wert("--name", "GASTGEBER"),
                        port=int(wert("--port", "0") or 0),
                        modus=modus, ende_art=ende_art, ende_wert=ende_wert,
                        knapp="--knapp" in argumente,
                        schutz="--kein-schutz" not in argumente,
-                       medkits=medkits,
+                       medkits=medkits, runden=runden,
+                       team=team_lesen(wert("--team", "")),
                        medkit_spawn="--keine-medkits" not in argumente)
     if "--join" in argumente:
         return gefecht(False, wohin=wert("--join"),
-                       name=wert("--name", "GAST"))
+                       name=wert("--name", "GAST"),
+                       team=team_lesen(wert("--team", "")))
     if "--bestenliste" in argumente:
         from . import bestenliste
         daten = bestenliste.laden()

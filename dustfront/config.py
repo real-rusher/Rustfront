@@ -63,7 +63,11 @@ SPIELER = dict(
     bremsung=1500.0,          # wie schnell er steht, wenn man loslaesst
     sprint=1.55,              # Faktor auf das Tempo
     leben=100.0,
-    unverwundbar=0.6,         # Sekunden nach einem Treffer
+    # Kein Unverwundbarkeitsfenster nach einem Treffer. Es gab einmal
+    # eines (0.6 s) und es war ein Fehler: von einer Schrotladung zaehlte
+    # genau ein Kuegelchen, und Getroffene blinkten wie frisch
+    # eingestiegen. Schutz gibt es nur nach dem Einstieg, siehe
+    # GEFECHT["schutz"].
     stiefel_abstand=26.0,     # Pixel zwischen zwei Staubwolken
 )
 
@@ -73,6 +77,15 @@ KAMERA = dict(
     maus_max=54.0,
     ruckeln_abbau=2.6,        # wie schnell das Zittern verklingt
     ruckeln_max=9.0,
+)
+
+# Farbiger Schein an den Bildraendern, fuer Zustaende, die man dauernd
+# sieht: beim Aufhelfen zum Beispiel. Die Mitte bleibt frei, sonst sieht
+# man nicht mehr, wer von wo kommt.
+GLUT = dict(
+    breite=42,                # so weit reicht der Schein ins Bild
+    stufen=7,                 # so viele Rahmen bilden den Verlauf
+    deckung=64,               # Deckkraft des innersten Rahmens
 )
 
 TREFFER = dict(
@@ -160,6 +173,7 @@ BILD_MASS = {
     "spieler_granate":    (56, 56),
     "spieler_rauch":      (56, 56),
     "spieler_brecheisen": (56, 56),
+    "spieler_boden":      (28, 28),   # wer am Boden liegt
     "gegner_laeufer":   (28, 28),
     "gegner_brecher":   (36, 36),
     # Kleinkram
@@ -198,6 +212,7 @@ KLANG_NAMEN = (
     "schuss_schrot",
     "schuss_scharf",
     "granate",
+    "sturz",                # Aufsetzen nach einem Fall
     "nahkampf",
     "wurf",
     "medkit",
@@ -308,6 +323,7 @@ ZONE = dict(
 # Versus: ein Leben je Runde, wie in einem Rundenschuetzen.
 VERSUS = dict(
     runden_bis=3,             # so viele Rundensiege bis zum Schluss
+    runden_grenzen=(1, 9),    # so weit laesst der Gastgeber das verstellen
     pause=5.0,                # Sekunden zwischen zwei Runden
     boden_zeit=20.0,          # kuerzer als in pve: eine Runde soll laufen
     revive_dauer=4.0,         # und das Aufhelfen dauert laenger
@@ -333,6 +349,7 @@ GEFECHT = dict(
     start_medkits=1,          # so viele hat man beim Einstieg dabei
     start_medkits_hoechstens=9,   # mehr laesst der Gastgeber nicht zu
     tafel_oben=74,            # wo der Punktestand anfaengt, unter den Ebenen
+    blick_zurueck=4.0,        # so lange bleibt die Ansicht auf einer fremden Ebene
 )
 
 # Am Boden liegen und wieder aufgeholfen werden. Nur in pve.
@@ -405,6 +422,10 @@ STURZ = dict(
     luftsteuerung=0.55,   # so viel Bewegung hat man waehrend des Sturzes
     schaden_je_100=9.0,   # Schaden pro 100 Pixel Fallhoehe
     min_schaden=3.0,
+    staub=22,             # Partikel beim Aufsetzen
+    ruckeln=2.4,          # Grundwert des Kameraschlags, dazu die Hoehe
+    ring_dauer=0.34,      # so lange steht der Staubring am Boden
+    ring_weite=34.0,      # so weit laeuft er auseinander
     abrutschen=140.0,     # Pixel je Sekunde, mit denen man im Flug an einem
                           # Hindernis unter sich zur Seite rutscht
 )
@@ -550,9 +571,9 @@ WAFFEN = {
         takt=0.9,
         magazin=2,
         nachladen=3.4,
-        wurf_min=60.0,
-        wurf_max=240.0,
-        reibung=1.4,          # rollt kuerzer aus als die Sprenggranate
+        wurf_min=45.0,
+        wurf_max=165.0,       # deutlich kuerzer als die Sprenggranate (260)
+        reibung=1.8,          # und rollt schneller aus
         flugzeit=1.1,
         kamera=1.2,
         rueckstoss=0.0,
@@ -570,6 +591,7 @@ WAFFEN = {
         takt=0.62,
         reichweite=36.0,
         winkel=80.0,          # Oeffnung des Schlags in Grad
+        schwung=0.26,         # so lange dauert die Schlagbewegung im Bild
         schub=280.0,          # Rueckstoss auf das Ziel
         kamera=2.6,
         rueckstoss=0.0,
@@ -604,7 +626,7 @@ WAFFEN_HAND = {
     "granate":    dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
                        aufbau="kugel"),
     "rauch":      dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
-                       aufbau="kugel"),
+                       aufbau="buechse"),
     "brecheisen": dict(lauf=15, dicke=2, schaft=5, s_dicke=2, holz=False,
                        aufbau="haken"),
 }
@@ -615,17 +637,41 @@ HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "rauch",
 
 # Rauchgranate: eine Wand, durch die niemand durchsieht - auch nicht von
 # der Ebene darueber. Sie macht keinen Schaden, sie nimmt nur die Sicht.
+#
+# Gezeichnet wird sie als Gitter aus Bloecken, nicht als Kreis. Das ist
+# keine Geschmacksfrage: alles in diesem Spiel sitzt auf einem Raster, und
+# eine weich verlaufende runde Scheibe faellt sofort als Fremdkoerper auf.
+# Welche Bloecke stehen, entscheidet eine feste Rechnung aus ihrer Lage -
+# dadurch sieht dieselbe Wolke bei Gastgeber und Gast gleich aus, ohne dass
+# ein einziges Byte dafuer ueber die Leitung geht.
 RAUCH = dict(
-    radius=86.0,              # so weit reicht die Wolke in Weltpixeln
+    radius=78.0,              # so weit reicht die Wand in Weltpixeln
     dauer=14.0,               # so lange steht sie
-    aufbau=1.2,               # Sekunden, bis sie dicht ist
-    abbau=3.0,                # Sekunden, in denen sie sich wieder aufloest
-    deckkraft=235,            # wie dicht sie im Kern ist (0 bis 255)
-    farbe=(196, 192, 186),
-    flocken=9,                # so viele Ballen bilden eine Wolke
-    flocken_streuung=0.62,    # wie weit sie vom Mittelpunkt wegliegen
-    wallen=7.0,               # Pixel, um die die Ballen langsam kreisen
-    wallen_takt=0.32,         # wie schnell sie das tun
+    aufbau=0.9,               # Sekunden, bis sie dicht ist
+    abbau=2.4,                # Sekunden, in denen sie sich wieder aufloest
+    block=8,                  # Kantenlaenge eines Blocks in Weltpixeln
+    kern=0.72,                # bis hierhin (Anteil vom Radius) ist sie dicht
+    zackung=0.30,             # so stark franst der Rand aus, 0 = Kreis
+    farben=((188, 184, 176), (164, 160, 152), (139, 136, 128),
+            (116, 113, 107)),
+    # Rauch einer anderen Ebene muss anders aussehen, sonst weiss man im
+    # Gefecht nicht, ob die Wand vor einem liegt oder eine Etage hoeher.
+    fremde_ebene=0.55,        # so viel Deckkraft behaelt er dort
+    puffer=64,                # so viele fertige Wolkenbilder werden gehalten
+)
+
+# Kurze Aufschrift ueber aufgesammelter Beute. Ohne sie verschwindet eine
+# Munitionskiste im Vorbeilaufen einfach, und man weiss nicht, ob sie
+# ueberhaupt gewirkt hat.
+BEUTE_TEXTE = {
+    "medkit":   ("+ MEDKIT", C_TEAL),
+    "munition": ("+ MUNITION", C_AMBER),
+}
+
+BEUTE_ZEIGEN = dict(
+    dauer=0.95,               # so lange steht die Aufschrift
+    steigt=22.0,              # so weit steigt sie in dieser Zeit
+    funken=14,                # Partikel beim Aufheben
 )
 
 MEDKIT = dict(

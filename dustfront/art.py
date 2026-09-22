@@ -215,6 +215,17 @@ def _hand_waffe(s, c, name):
         pygame.draw.rect(s, K.C_AMBER, (hand + 3, c - 6, 2, 1))
         return
 
+    if d["aufbau"] == "buechse":                  # Rauchgranate: Blechdose
+        # Bewusst eckig und hell. Als Kugel sah sie aus wie die
+        # Sprenggranate, und im Gefecht muss man der Hand ansehen, was
+        # gleich fliegt.
+        pygame.draw.rect(s, (72, 76, 72), (hand + 1, c - 4, 7, 9))
+        pygame.draw.rect(s, (128, 134, 128), (hand + 2, c - 3, 5, 7))
+        pygame.draw.rect(s, (168, 172, 168), (hand + 2, c - 3, 5, 2))
+        pygame.draw.rect(s, (44, 46, 44), (hand + 3, c - 7, 3, 3))
+        pygame.draw.rect(s, K.C_CREAM, (hand + 4, c - 6, 1, 1))
+        return
+
     if d["aufbau"] == "haken":                    # Brecheisen: roher Stab
         laenge, dick = d["lauf"], d["dicke"]
         pygame.draw.rect(s, K.C_RUST, (hand - d["schaft"], c - dick // 2 - 1,
@@ -465,6 +476,31 @@ def _waffe_granate():
     pygame.draw.rect(s, K.C_AMBER, (12, 1, 2, 1))
     pygame.draw.rect(s, (92, 80, 60), (15, 1, 4, 1))    # Buegel
     return s
+
+
+@platzhalter("spieler_boden")
+def _spieler_boden():
+    """Wer am Boden liegt. Muss sich auf einen Blick von einem Stehenden
+    unterscheiden, auch fuer den Gegner auf der anderen Seite des Raums.
+
+    Drei Unterschiede, die schon einzeln reichen wuerden: die Gestalt
+    liegt quer statt aufrecht, sie hat keine Waffe in der Hand, und unter
+    ihr steht eine dunkle Blutlache. Dazu ist sie merklich kleiner - eine
+    liegende Gestalt nimmt von oben weniger Flaeche ein."""
+    s = _flaeche(28, 28)
+    c = 14
+    pygame.draw.ellipse(s, (58, 22, 18), (4, 9, 20, 11))          # Lache
+    pygame.draw.ellipse(s, (74, 28, 22), (7, 11, 14, 7))
+    # Rumpf quer, flacher als die stehende Gestalt
+    rumpf = pygame.Rect(c - 9, c - 4, 18, 9)
+    pygame.draw.ellipse(s, K.C_HULL_SH, rumpf)
+    pygame.draw.ellipse(s, K.C_HULL_DK, rumpf.inflate(-3, -3))
+    # Kopf zur Seite gekippt, Arme weggestreckt
+    pygame.draw.circle(s, K.C_HULL_DK, (c - 8, c + 1), 4)
+    pygame.draw.circle(s, K.C_HULL_SH, (c - 8, c + 1), 4, 1)
+    pygame.draw.line(s, K.C_HULL_SH, (c - 1, c - 3), (c + 6, c - 7), 3)
+    pygame.draw.line(s, K.C_HULL_SH, (c - 1, c + 4), (c + 7, c + 6), 3)
+    return _rand(s, (16, 11, 8))
 
 
 @platzhalter("waffe_rauch")

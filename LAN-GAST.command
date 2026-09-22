@@ -33,11 +33,24 @@ read -r -p "  Dein Name (Enter = GAST): " NAME
 echo
 echo "  Die Spielart bestimmt der Gastgeber."
 echo
+echo "  In welche Mannschaft willst du, falls mit Mannschaften gespielt wird?"
+echo "    1  ROT"
+echo "    2  BLAU"
+echo "    3  egal, teil mich ein"
+echo
+read -r -p "  Welche (Enter = 3): " WAHL
+case "${WAHL:-3}" in
+    1) TEAM="rot" ;;
+    2) TEAM="blau" ;;
+    *) TEAM="auto" ;;
+esac
+
+echo
 WOHIN=""
 while [ -z "$WOHIN" ]; do
     read -r -p "  Adresse des Gastgebers: " WOHIN
 done
 
 echo
-"$PY" -m dustfront --join "$WOHIN" --name "$NAME" \
+"$PY" -m dustfront --join "$WOHIN" --name "$NAME" --team "$TEAM" \
     || abbrechen "Beendet mit einem Fehler."

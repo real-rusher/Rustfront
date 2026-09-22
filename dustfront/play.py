@@ -200,7 +200,7 @@ class Spiel(Szene):
     # ---- Bild ---------------------------------------------------------
     def zeichnen(self, ziel, alpha: float) -> None:
         self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, alpha,
-                                    self.blick_hoehe)
+                                    self.blick_hoehe, blick=self.blick)
         # Ziellinie, Streukegel und Nahkampfbogen gehoeren zu der Ebene, auf
         # der die Figur steht. Schaut man mit dem Mausrad eine Etage hoeher
         # oder tiefer, haben sie dort nichts zu suchen - sie zeigten sonst

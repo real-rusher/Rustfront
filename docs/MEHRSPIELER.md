@@ -1,7 +1,7 @@
 # DUSTFRONT - Der Mehrspieler, vollstaendig
 
 **Was das hier ist.** Die komplette Beschreibung des LAN-Mehrspielers, wie
-er auf dem Zweig `multiplayer-test` in Version 0.17.0 steht: Aufbau,
+er auf dem Zweig `multiplayer-test` in Version 0.18.0 steht: Aufbau,
 Protokoll, alle sechs Spielarten, jede Zahl mit Begruendung, jeder Fehler,
 der beim Bauen aufgetreten ist, und die Reihenfolge, in der man das Ganze
 wieder aufbaut.
@@ -12,10 +12,10 @@ herausgenommen, siehe Abschnitt 14). Dieses Dokument ist die Bauanleitung
 fuer den Tag, an dem er zurueckkommen soll.
 
 **Fuer wen.** Fuer Der Meister, und fuer jede Claude-Instanz, die den Satz
-hoert: *"bau mal wieder Mehrspieler ein wie in Version 0.17.0"*. Wer das
+hoert: *"bau mal wieder Mehrspieler ein wie in Version 0.18.0"*. Wer das
 liest, braucht ausser dem Spielkern nichts weiter zu wissen.
 
-**Stand beim Schreiben:** Version 0.17.0, PRE-ALPHA, Zweig
+**Stand beim Schreiben:** Version 0.18.0, PRE-ALPHA, Zweig
 `multiplayer-test`. Zwei Testlaeufe gruen: `tests/test_spiel.py` und
 `tests/test_menues.py`.
 
@@ -479,6 +479,45 @@ mehr einsteigt.
 
 ---
 
+### 7.8 Das Pausenmenue
+
+**FEST.** Esc macht einen Deckel **in** der Szene auf, keine eigene Szene
+darueber.
+
+**GRUND.** Eine geschobene Szene haelt das Gefecht an. Beim Gastgeber
+heisst das: jeder Gast friert ein, solange einer ins Menue schaut. Hier
+laeuft die Welt weiter, nur die eigene Eingabe ist stillgelegt - und der
+Deckel ist halb durchsichtig, damit man sieht, dass es weitergeht. Das ist
+keine Kosmetik, sondern eine Warnung: wer hier steht, steht auch in der
+Welt und kann erschossen werden.
+
+Der Gast hat zwei Eintraege (weiter, gehen). Der Gastgeber stellt alles:
+
+| Eintrag | Wirkt |
+| --- | --- |
+| SPIELART | ab der naechsten Runde |
+| RUNDEN BIS SIEG (versus) | ab der naechsten Runde |
+| RUNDE ENDET NACH / BEI | ab der naechsten Runde |
+| EINSTIEGSSCHUTZ, MEDKITS, MUNITION KNAPP | ab der naechsten Runde |
+| MANNSCHAFTEN EINTEILEN | **sofort** |
+| NEUE RUNDE MIT DIESEN REGELN | sofort, setzt alles zurueck |
+
+**Warum die Regeln erst zur naechsten Runde gelten:** mitten im Gefecht
+die Spielart zu wechseln hiesse, Fraktionen, Punkte und Einstiegsplaetze
+unter laufenden Kugeln umzubauen. Die Mannschaftseinteilung ist die eine
+Ausnahme, weil ihr Zweck das Gegenteil ist: der Gastgeber greift ein,
+*weil* es gerade ungleich steht.
+
+**FEST: Eintraege, die etwas tun, reagieren nur auf Enter.** Ein Pfeil auf
+"GEFECHT VERLASSEN" haette sonst die Runde beendet - im Test gefunden,
+bevor es jemandem passiert ist.
+
+Der Neustart geht als Nachricht `neustart` an alle Gaeste. Es ist
+dieselbe Nachricht wie das `willkommen`, nur mit `id = -1`: die eigene
+Nummer bleibt dann, wie sie war.
+
+---
+
 ## 8. Aufhelfen
 
 | Schritt | Was passiert |
@@ -652,24 +691,46 @@ Alle stehen in `config.py`. **Keine Zahl im Code.**
 
 | Name | Wert | Begruendung |
 | --- | ---: | --- |
-| `radius` | 86 px | etwas kleiner als der Kreis in `huegel`: eine Tuer und ihr Umfeld, kein halber Raum |
+| `radius` | 78 px | eine Tuer und ihr Umfeld, kein halber Raum |
 | `dauer` | 14 s | lang genug, um einen Weg zu queren, zu kurz, um eine Stelle dauerhaft zuzustellen |
-| `aufbau` | 1.2 s | sie zieht auf, statt dazustehen - wer sie wirft, kommt nicht sofort in Deckung |
-| `abbau` | 3.0 s | sie verweht sichtbar, niemand wird ueberrascht |
-| `deckkraft` | 235 | fast dicht. Darunter sieht man Umrisse, und dann nimmt sie niemand ernst |
-| `flocken` | 9 | ein Kreis sieht nach Zielscheibe aus, neun ineinander nach Rauch |
+| `aufbau` | 0.9 s | sie zieht auf, statt dazustehen - wer sie wirft, kommt nicht sofort in Deckung |
+| `abbau` | 2.4 s | sie verweht sichtbar, niemand wird ueberrascht |
+| `block` | 8 px | Kantenlaenge eines Blocks, ein Viertel einer Kachel |
+| `kern` | 0.72 | bis hierhin gilt eine Stelle als verborgen (`welt.verdeckt`) |
+| `zackung` | 0.30 | so stark franst der Rand aus. 0 waere ein Kreis |
+| `fremde_ebene` | 0.55 | so viel Deckkraft behaelt Rauch einer anderen Etage |
+
+**Blockig, nicht rund.** Die Wand besteht aus Bloecken im Weltraster, alle
+voll deckend, in vier Grautoenen. Auf- und Abbau zeigt sich daran, *welche*
+Bloecke stehen, nicht daran, wie durchsichtig sie sind. **GRUND:** alles in
+diesem Spiel sitzt auf einem Raster; eine weich verlaufende Scheibe faellt
+sofort als Fremdkoerper auf - und ein Verlauf machte aus der Sichtwand
+einen Schleier, durch den man noch alles sah.
+
+Welche Bloecke stehen, entscheidet eine feste Rechnung aus ihrer Lage.
+Dadurch sieht dieselbe Wolke bei Gastgeber und Gast gleich aus, **ohne
+dass ein einziger Block uebertragen wird** - im Netz stehen nur Mitte,
+Ebene, Radius und Alter.
+
+**Verborgen heisst wirklich verborgen.** Im Kern ist die Figur nicht zu
+sehen **und ihr Name auch nicht** (`welt.verdeckt`, gefragt nach der
+Ebene des Verborgenen, nicht des Zuschauers). Ohne die Namensregel waere
+die Wand wertlos: man saehe die Gestalt nicht mehr, aber ihr Name
+schwebte weiter darueber und zeigte genau, wo sie steht.
 
 Die Rauchgranate macht **keinen** Schaden und haelt **keine** Kugel auf.
 Wer hindurchschiesst, trifft - er sieht es nur nicht. **GRUND:** Sicht ist
 die Waehrung in diesem Spiel; Rauch, der auch noch schuetzt, waere zwei
-Sachen auf einmal.
+Sachen auf einmal. Sie fliegt kuerzer als die Sprenggranate (165 statt
+260 px): eine Sichtwand, die man quer ueber die Karte setzen kann, nimmt
+dem Gegner die Karte statt einer Stelle.
 
 ### Waffenzahlen, die sich in 0.17.0 geaendert haben
 
 | Waffe | Was | Vorher | Jetzt | Warum |
 | --- | --- | ---: | ---: | --- |
 | Brecheisen | Schaden | 46 | 60 | zwei Treffer toeten (2 x 60 > 100) |
-| Brecheisen | Takt | 0.40 s | 0.62 s | muss ueber `SPIELER["unverwundbar"]` (0.6 s) liegen, sonst verfaellt jeder zweite Schlag |
+| Brecheisen | Takt | 0.40 s | 0.62 s | gab dem Schlag Gewicht; seit 0.18.0 gibt es ohnehin keine Unverwundbarkeit mehr, die Schlaege schlucken koennte |
 | Schrot | Streuung | 7.5 Grad | 5.5 Grad | trifft auf halber Zimmerbreite mit mehr als zwei Kuegelchen |
 | Schrot | Reichweite | 210 px | 300 px | bleibt die Waffe fuer kurze Wege, ist aber nicht mehr auf Armlaenge beschraenkt |
 | Scharfschuetze | Reichweite | 900 px | 2200 px | weiter, als man sehen kann: das Bild ist 640 px breit, die Karte diagonal rund 1600 |
@@ -886,7 +947,44 @@ der Knall auf der Zielebene an, waehrend sie im Bild noch faellt.
 Neue, das hinunterfallen koennen soll, braucht es - und dann auch ein
 `aufschlag()`, das zu ihm passt.
 
-### 12.13 Kleinere Fallen
+### 12.14 Unverwundbarkeit nach jedem Treffer (schwer, 0.18.0)
+
+**Symptom.** Wer beschossen wurde, blinkte nach jedem Schuss kurz wie
+frisch eingestiegen. Und eine Schrotladung tat kaum etwas.
+
+**Ursache.** `Spieler.schaden` setzte bei **jedem** Treffer
+`unverwundbar = 0.6`. Von sieben Schrotkugeln zaehlte damit genau eine -
+die erste. Dasselbe traf den Sturz: der Fallschaden machte fuer eine halbe
+Sekunde unverwundbar.
+
+**Behebung.** Ersatzlos gestrichen. Unverwundbarkeit gibt es nur noch nach
+dem Einstieg, und nur wenn der Gastgeber sie eingeschaltet hat.
+
+**Was das an der Balance aendert:** die Schrotflinte macht auf kurze
+Entfernung jetzt wirklich ihre 91 Schaden statt 13. Sie toetet nah in
+einem Schuss. Das ist gewollt - eine Schrotflinte, von der sechs von
+sieben Kugeln folgenlos bleiben, ist keine.
+
+### 12.15 Der Laserpointer, der nicht wiederkam (0.18.0)
+
+**Symptom.** "Mein Laserpointer ist auf einmal verschwunden und nicht
+mehr wiedergekommen."
+
+**Ursache.** Zielhilfen gehoeren zu der Ebene, auf der die Figur steht,
+und werden nur gezeichnet, solange man diese auch anschaut. Wer einmal am
+Mausrad gedreht hatte - oft versehentlich - schaute fuer den Rest der
+Runde eine Etage daneben. Nichts holte ihn zurueck, und der Hinweis dazu
+konnte von einem anderen Hinweis verdraengt werden.
+
+**Behebung.** Die verschobene Ansicht kommt nach `GEFECHT["blick_zurueck"]`
+Sekunden von selbst zurueck, und ihr Hinweis hat Vorrang vor allen
+anderen.
+
+**Merke.** Ein Zustand, in den man mit einer Taste kommt und aus dem nur
+dieselbe Taste wieder herausfuehrt, ist eine Falle - besonders, wenn er
+etwas ausblendet, das man dauernd braucht.
+
+### 12.16 Kleinere Fallen
 
 | Falle | Was passiert |
 | --- | --- |
@@ -898,7 +996,7 @@ Neue, das hinunterfallen koennen soll, braucht es - und dann auch ein
 | Ein einzelner `FIXED_DT`-Schritt fuer `rest = 0.01` | Zu kurz. Restzeit knapp unter **einen** Schritt setzen. |
 | `Spiel()` ohne Seed im Test | Sporadische Fehlschlaege. Tests geben einen festen Seed. |
 
-### 12.14 Was **nicht** kaputt war
+### 12.17 Was **nicht** kaputt war
 
 Zwei Dinge sahen nach Fehlern aus und waren keine: die unterschiedlichen
 Blutflecken auf beiden Rechnern (Kosmetik wird nicht uebertragen, siehe

@@ -179,6 +179,20 @@ def _nahkampf(seed=0):
     )
 
 
+@platzhalter_klang("sturz")
+def _sturz(seed=0):
+    """Aufsetzen nach einem Fall: dumpfer Schlag und aufwirbelnder Staub.
+
+    Tiefer als der Nahkampf und ohne Metall - man soll ihn nicht mit einem
+    Treffer verwechseln, sondern mit Stiefeln auf Blech.
+    """
+    return _mischen(
+        _schlag(150, 58, 0.26, 0.85, 2.2),
+        _rauschen(0.30, 0.5, 2600, 420, 2.0, seed + 81),
+        [0.0] * int(RATE * 0.02) + _rauschen(0.22, 0.28, 800, 200, 1.8, seed + 82),
+    )
+
+
 @platzhalter_klang("wurf")
 def _wurf(seed=0):
     return _rauschen(0.22, 0.4, 1800, 5200, 1.6, seed + 61, hp=True)

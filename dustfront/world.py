@@ -120,6 +120,11 @@ class Welt:
         # niemanden, sind nicht zu treffen und werden nicht gedreht - sie
         # liegen nur auf ihrer Ebene und nehmen die Sicht.
         self.rauch: list = []
+        # Reine Rueckmeldung: Staubringe beim Aufsetzen und kurze
+        # Aufschriften ueber aufgesammelter Beute. Beides entscheidet
+        # nichts, es sagt nur, dass etwas passiert ist.
+        self.ringe: list = []
+        self.aufschriften: list = []
 
     # ---- Rueckmeldungen an die Spielszene ------------------------------
     # Standardmaessig passiert nichts. Die Szene haengt sich hier ein, damit
@@ -139,6 +144,62 @@ class Welt:
 
     def brandfleck(self, pos, ebene: int, radius: float) -> None:
         pass
+
+    def aufschlagring(self, pos, ebene: int, wucht: float = 1.0) -> None:
+        """Ein Staubring, der vom Aufsetzpunkt nach aussen laeuft."""
+        self.ringe.append([pygame.Vector2(pos), int(ebene),
+                           K.STURZ["ring_dauer"], max(0.15, float(wucht))])
+
+    def aufschrift(self, pos, ebene: int, text: str, farbe=K.C_CREAM) -> None:
+        """Kurzer Text, der ueber der Stelle aufsteigt und verblasst.
+
+        Dafuer da, dass man merkt, dass etwas geschehen ist: eine
+        Munitionskiste, die man im Vorbeilaufen mitnimmt, verschwand sonst
+        einfach, und man stand da und wusste nicht, ob sie gewirkt hat.
+        """
+        self.aufschriften.append([pygame.Vector2(pos), int(ebene), str(text),
+                                  tuple(farbe), K.BEUTE_ZEIGEN["dauer"]])
+
+    def beute_genommen(self, pos, ebene: int, art: str, nummer: int = -1) -> None:
+        """Jemand hat etwas aufgehoben: Funken, Aufschrift, Ton.
+
+        Eine Stelle fuer alle drei, damit die Rueckmeldung ueberall gleich
+        aussieht - und damit der Mehrspieler sie sich abgreifen und an
+        seine Gaeste weitergeben kann, die ja nichts selbst rechnen.
+        """
+        from .entities import wolke
+        b = K.BEUTE_ZEIGEN
+        text, farbe = K.BEUTE_TEXTE.get(art, ("AUFGENOMMEN", K.C_CREAM))
+        wolke(self, pos, b["funken"], 110, 0.45, farbe, ebene, 1, "funke")
+        self.aufschrift(pos, ebene, text, farbe)
+        self.klang("aufheben", 0.75)
+
+    def effekte_schritt(self, dt: float) -> None:
+        """Ringe und Aufschriften altern lassen.
+
+        Getrennt von schritt(), weil ein Gast die Welt nicht simuliert,
+        seine Rueckmeldungen aber trotzdem laufen muessen.
+        """
+        for ring in self.ringe:
+            ring[2] -= dt
+        if any(r[2] <= 0 for r in self.ringe):
+            self.ringe = [r for r in self.ringe if r[2] > 0]
+        for a in self.aufschriften:
+            a[4] -= dt
+        if any(a[4] <= 0 for a in self.aufschriften):
+            self.aufschriften = [a for a in self.aufschriften if a[4] > 0]
+
+    def verdeckt(self, pos, ebene: int) -> bool:
+        """Steht an dieser Stelle so dichter Rauch, dass niemand sie sieht?
+
+        Gefragt wird nach der Ebene des Verborgenen, nicht nach der des
+        Zuschauers: wer von oben in eine Rauchwand hinunterschaut, sieht
+        genauso wenig wie der, der daneben steht.
+        """
+        for r in self.rauch:
+            if r.deckt(pos, ebene):
+                return True
+        return False
 
     def muendung(self, pos, winkel: float, ebene: int) -> None:
         self.muendungen.append([pygame.Vector2(pos), winkel, ebene, 0.055])
@@ -175,6 +236,7 @@ class Welt:
             for m in self.muendungen:
                 m[3] -= dt
             self.muendungen = [m for m in self.muendungen if m[3] > 0]
+        self.effekte_schritt(dt)
         for r in self.rauch:
             r.schritt(dt)
         if any(not r.lebt for r in self.rauch):
@@ -404,8 +466,8 @@ KARTE_E0 = [
     "############################################",
     "#..........................................#",
     "#.................,,,,,,,,.................#",
-    "#.................,,,,,,,,.................#",
-    "#.....##......##......##......##......##...#",
+    "#..>..............,,,,,,,,..............>..#",
+    "#.....##......##.....>##......##......##...#",
     "#.....##......##......##......##......##...#",
     "#........X........................X........#",
     "#....................#.....................#",
@@ -420,8 +482,8 @@ KARTE_E0 = [
     "#....................#.....................#",
     "#........X........................X........#",
     "#..........................................#",
-    "#.....##......##......##......##......##...#",
-    "#.....##......##......##......##......##...#",
+    "#.....##......##.....>##......##......##...#",
+    "#..>..##......##......##......##......##>..#",
     "#..........................................#",
     "#..........................................#",
     "############################################",
@@ -431,24 +493,24 @@ KARTE_E1 = [
     "############################################",
     "#..........................................#",
     "#.....X..............................X..o..#",
-    "#..........................................#",
-    "#...                ....                ...#",
+    "#..<....................................<..#",
+    "#...                .<..                ...#",
     "#...                ..X.                ...#",
-    "#.X.                ....                ...#",
+    "#.X.                .>..                ...#",
     "#...                ....                ...#",
-    "#...                ....                ...#",
+    "#.>.                ....                ...#",
     "#...              ........              ...#",
     "#...              .,,,,,,.              ...#",
     "#..................,,,,,,........>.........#",
     "#..................,,,<,,..................#",
-    "#...              .,,,,,,.              ...#",
+    "#...              .,,,,,,.              .>.#",
     "#...              ........              ...#",
     "#...                ....                ...#",
     "#...                ....                ...#",
     "#...                ....                .X.#",
     "#...                ..X.                ...#",
-    "#...                ....                ...#",
-    "#..........................................#",
+    "#...                .<..                ...#",
+    "#..<....................................<..#",
     "#.....X..............................X.....#",
     "#..........................................#",
     "############################################",
@@ -462,14 +524,14 @@ KARTE_E2 = [
     "#                                          #",
     "#               ......                     #",
     "#               ......                     #",
-    "# ......        ..X...                     #",
+    "# ......        ..X..<                     #",
     "# ......        ......                     #",
-    "# ..X...        ......        ............ #",
+    "# <.X...        ......        ............ #",
     "# ......        ......        .,,,,,,,,,,. #",
     "# .............................,,,,,,,X,,. #",
     "# .............................,,<,,,,,,,. #",
     "# .............................,,,,,,,,,,. #",
-    "# ......        ......        .,,,,X,,,,,. #",
+    "# ......        ......        .,,,,X,,,,,< #",
     "# ......        ......        .,,,,,,,,,,. #",
     "# ...X..        ......        ............ #",
     "# ......        ......                     #",

@@ -118,6 +118,13 @@ class Wesen:
             self.aufschlag()
 
     def aufschlag(self) -> None:
+        """Aufsetzen: Staub, Ring, Schlag, Ton - und dann erst der Schaden.
+
+        Ein Sturz ueber zwei Etagen war vorher fast nicht zu bemerken: ein
+        bisschen Staub, ein bisschen Schaden, kein Ton. Jetzt haengt alles
+        an der Fallhoehe, damit sich ein Sprung von der obersten Ebene
+        anders anfuehlt als ein Schritt ueber eine Kante.
+        """
         h = self.sturz_hoehe
         self.sturz_hoehe = 0.0
         # Erst jetzt zaehlt der Boden wieder. Steht an der Stelle etwas im
@@ -126,10 +133,15 @@ class Wesen:
         # die eine Etage tiefer steht.
         self.pos.update(self.welt.landeplatz(self.pos, self.radius, self.ebene))
         self.vorher.update(self.pos)
-        schaden = max(K.STURZ["min_schaden"], h / 100.0 * K.STURZ["schaden_je_100"])
+        st = K.STURZ
+        schaden = max(st["min_schaden"], h / 100.0 * st["schaden_je_100"])
         w = self.welt
-        wolke(w, self.pos, 12, 130, 0.45, K.C_MUTED_DK, self.ebene, 1, "staub")
-        w.ruckeln(min(6.0, 1.5 + h * 0.03))
+        wucht = min(1.0, h / 240.0)
+        wolke(w, self.pos, int(st["staub"] * (0.5 + 0.5 * wucht)),
+              130 + 90 * wucht, 0.5, K.C_MUTED_DK, self.ebene, 1, "staub")
+        w.ruckeln(min(K.KAMERA["ruckeln_max"], st["ruckeln"] + h * 0.035))
+        w.aufschlagring(self.pos, self.ebene, wucht)
+        w.klang("sturz", 0.55 + 0.45 * wucht)
         self.schaden(schaden, None, None)
 
     def zeichenpos(self, alpha: float) -> pygame.Vector2:
@@ -339,7 +351,7 @@ class Granate(Wesen):
         w = self.welt
         if d.get("rauch"):
             w.rauch.append(Rauchwolke(self.pos, self.ebene))
-            wolke(w, self.pos, 12, 90, 0.6, K.RAUCH["farbe"], self.ebene, 2)
+            wolke(w, self.pos, 12, 90, 0.6, K.RAUCH["farben"][0], self.ebene, 2)
             w.ruckeln(d["kamera"])
             w.klang("wurf", 0.8)
             return
@@ -376,7 +388,7 @@ class Rauchwolke:
     sehen kann er es nicht.
     """
 
-    __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt")
+    __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt", "_raster")
 
     def __init__(self, pos, ebene: int, radius: float | None = None,
                  dauer: float | None = None, alter: float = 0.0) -> None:
@@ -387,6 +399,7 @@ class Rauchwolke:
         self.dauer = float(r["dauer"] if dauer is None else dauer)
         self.alter = float(alter)
         self.lebt = True
+        self._raster = None        # wird beim ersten Zeichnen gebaut
 
     @property
     def dichte(self) -> float:
@@ -398,6 +411,62 @@ class Rauchwolke:
         if rest < r["abbau"]:
             return max(0.0, rest / r["abbau"])
         return 1.0
+
+    # ---- Die Bloecke ---------------------------------------------------
+    def bloecke(self) -> list:
+        """Die Bloecke der Wand, einmal gerechnet und dann behalten.
+
+        Jeder Eintrag ist (bx, by, farbindex, kern) in Weltkoordinaten der
+        linken oberen Ecke. Ob ein Block steht, haengt allein an seiner
+        Lage und am Mittelpunkt der Wolke - also an Zahlen, die Gastgeber
+        und Gast beide kennen. Deshalb sieht dieselbe Wand auf beiden
+        Rechnern gleich aus, ohne dass ein Block uebertragen wird.
+
+        Der Rand franst aus, statt rund zu sein: der Grenzradius wird je
+        Block um bis zu `zackung` verzogen. Eine saubere Kreisscheibe waere
+        in einem Spiel aus Kacheln sofort als Fremdkoerper zu erkennen.
+        """
+        if self._raster is not None:
+            return self._raster
+        r = K.RAUCH
+        b = int(r["block"])
+        # Am Raster der Welt ausgerichtet, nicht am Mittelpunkt der Wolke:
+        # so sitzen zwei Wolken nebeneinander im selben Gitter und ergeben
+        # eine durchgehende Wand statt zweier verschobener Flecken.
+        mx = int(self.pos.x) // b * b
+        my = int(self.pos.y) // b * b
+        weite = int(self.radius // b) + 2
+        raus = []
+        for gy in range(-weite, weite + 1):
+            for gx in range(-weite, weite + 1):
+                bx, by = mx + gx * b, my + gy * b
+                mitte_x = bx + b * 0.5 - self.pos.x
+                mitte_y = by + b * 0.5 - self.pos.y
+                weg = math.hypot(mitte_x, mitte_y)
+                # Feste Streuung aus der Lage: immer dieselbe Wolke.
+                streu = ((bx * 73856093) ^ (by * 19349663)) & 0xFFFF
+                zack = 1.0 + r["zackung"] * ((streu % 1000) / 1000.0 - 0.5) * 2.0
+                grenze = self.radius * zack
+                if weg > grenze:
+                    continue
+                kern = weg <= self.radius * r["kern"]
+                farbe = (streu >> 4) % len(r["farben"])
+                raus.append((bx, by, farbe, kern))
+        self._raster = raus
+        return raus
+
+    def deckt(self, pos, ebene: int) -> bool:
+        """Ist dieser Punkt vollstaendig verborgen?
+
+        Nur der dichte Kern zaehlt und nur, wenn die Wolke schon steht.
+        Wer im ausgefransten Rand steht, ist halb zu sehen - und wird
+        darum auch nicht versteckt.
+        """
+        if not self.lebt or int(ebene) != self.ebene:
+            return False
+        if self.dichte < 0.999:
+            return False
+        return self.pos.distance_to(pos) <= self.radius * K.RAUCH["kern"]
 
     def schritt(self, dt: float) -> None:
         self.alter += dt
@@ -590,10 +659,17 @@ class Spieler(Wesen):
         self.fokus = 0.0
 
     def waffe_waehlen(self, index: int) -> None:
+        """Waffe wechseln - immer, sofort, ohne Wartezeit.
+
+        Frueher stand hier `takt = max(takt, 0.18)`: eine Ziehzeit, in der
+        die neue Waffe noch nicht schoss. Im Gefecht fuehlte sich das an,
+        als haette der Wechsel nicht funktioniert. Es gilt dieselbe Regel
+        wie fuer alles andere: keine Handlung sperrt eine andere, und der
+        Wechsel sperrt am wenigsten.
+        """
         if 0 <= index < len(self.waffen) and index != self.waffe:
             self.waffe = index
             self.abbrechen()
-            self.takt = max(self.takt, 0.18)
 
     def heilen(self) -> bool:
         """Setzt ein Medkit an. Gibt zurueck, ob es losging."""
@@ -653,7 +729,7 @@ class Spieler(Wesen):
         """Kurzer Schlag in einen Kegel vor dem Spieler."""
         d = self.waffe_daten
         self.takt = d["takt"]
-        self.schlag_zeigen = 0.16
+        self.schlag_zeigen = d.get("schwung", 0.26)
         w = self.welt
         reich = d["reichweite"]
         halb = d["winkel"] * 0.5
@@ -679,9 +755,18 @@ class Spieler(Wesen):
 
     # ---- Schaden -----------------------------------------------------
     def schaden(self, menge, schub=None, von=None) -> None:
+        """Ein Treffer kommt an, solange kein Einstiegsschutz laeuft.
+
+        Frueher setzte **jeder** Treffer eine halbe Sekunde
+        Unverwundbarkeit. Das war nie so gedacht und hatte zwei haessliche
+        Folgen: von einer Schrotladung zaehlte genau ein Kuegelchen, und
+        wer beschossen wurde, blinkte nach jedem Schuss kurz wie frisch
+        eingestiegen. Unverwundbarkeit gibt es jetzt nur noch dort, wo sie
+        hingehoert - nach dem Einstieg, und nur, wenn der Gastgeber sie
+        eingeschaltet hat.
+        """
         if self.unverwundbar > 0:
             return
-        self.unverwundbar = K.SPIELER["unverwundbar"]
         self.welt.ruckeln(5.5)
         super().schaden(menge, schub, von)
 

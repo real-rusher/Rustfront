@@ -82,6 +82,31 @@ case "$MODUS" in
         ;;
 esac
 
+RUNDEN=3
+if [ "$MODUS" = "versus" ]; then
+    echo
+    read -r -p "  Rundensiege bis zum Schluss (1-9, Enter = 3): " RUNDEN
+    RUNDEN="${RUNDEN:-3}"
+fi
+
+TEAM="auto"
+case "$MODUS" in
+    team|versus|huegel)
+        echo
+        echo "  In welche Mannschaft willst du?"
+        echo "    1  ROT"
+        echo "    2  BLAU"
+        echo "    3  egal, teil mich ein"
+        echo
+        read -r -p "  Welche (Enter = 3): " WAHL
+        case "${WAHL:-3}" in
+            1) TEAM="rot" ;;
+            2) TEAM="blau" ;;
+            *) TEAM="auto" ;;
+        esac
+        ;;
+esac
+
 KNAPP=""
 if [ "$MODUS" != "pvp" ]; then
     echo
@@ -112,5 +137,6 @@ echo
 # shellcheck disable=SC2086
 "$PY" -m dustfront --host --name "$NAME" --modus "$MODUS" \
     --ende "$ENDE" --wert "$WERT" --medkits "$MEDKITS" \
+    --runden "$RUNDEN" --team "$TEAM" \
     $KNAPP $SCHUTZ $MEDSPAWN \
     || abbrechen "Beendet mit einem Fehler."

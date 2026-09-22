@@ -156,18 +156,27 @@ s = probe("brecheisen", 120)
 pruef("Brecheisen trifft nicht durch den Raum", s == 0, "%.0f Schaden" % s)
 
 # ── Balance: Brecheisen, Schrot, Scharfschuetze ──────────────────────
-# Gemessen statt geglaubt. Die drei Zahlen haengen aneinander: das
-# Brecheisen nuetzt nur, wenn sein Takt ueber der Unverwundbarkeit liegt,
-# sonst laeuft jeder zweite Schlag ins Leere.
+# Gemessen statt geglaubt.
 b = K.WAFFEN["brecheisen"]
 pruef("Zwei Brecheisenschlaege toeten einen Spieler",
       2 * b["schaden"] >= K.SPIELER["leben"],
       "%.0f x 2 gegen %.0f Leben" % (b["schaden"], K.SPIELER["leben"]))
 pruef("Ein einzelner Schlag toetet noch nicht",
       b["schaden"] < K.SPIELER["leben"], "%.0f" % b["schaden"])
-pruef("Und jeder Schlag sitzt: Takt ueber der Unverwundbarkeit",
-      b["takt"] > K.SPIELER["unverwundbar"],
-      "%.2f s Takt, %.2f s unverwundbar" % (b["takt"], K.SPIELER["unverwundbar"]))
+# Kein Unverwundbarkeitsfenster nach einem Treffer: es gab einmal eines
+# und es war ein Fehler. Von einer Schrotladung zaehlte damit genau ein
+# Kuegelchen, und Getroffene blinkten nach jedem Schuss wie frisch
+# eingestiegen.
+pruef("Ein Treffer macht niemanden kurz unverwundbar",
+      "unverwundbar" not in K.SPIELER)
+held.unverwundbar = 0.0
+held.leben = held.max_leben
+for _ in range(3):
+    held.schaden(10, None, None)
+pruef("Drei Treffer kurz hintereinander zaehlen alle drei",
+      abs(held.leben - (held.max_leben - 30)) < 0.01,
+      "%.0f statt %.0f Leben" % (held.leben, held.max_leben - 30))
+held.leben = held.max_leben
 
 s = probe("schrot", 260)
 pruef("Schrot trifft jetzt auch auf 260 px", s > 0, "%.0f Schaden" % s)
@@ -1134,6 +1143,120 @@ held.pos.update(freies_feld()); held.vorher.update(held.pos)
 held.leben = held.max_leben
 szene.blick = 0; szene._letzte_ebene = 0; szene.blick_hoehe = 0.0
 
+# ── Rauch: blockig, deckend, ebenenbewusst ───────────────────────────
+# Der wichtigste Punkt ist nicht, dass Rauch da ist, sondern dass er
+# wirklich deckt: eine Sichtwand, durch die man noch etwas erkennt, ist
+# keine Sichtwand.
+from dustfront.render import Renderer as _R
+probe_renderer = szene.renderer
+wolke_probe = Rauchwolke(pygame.Vector2(400, 300), 0)
+wolke_probe.alter = K.RAUCH["aufbau"] + 0.5
+bild_wolke, wolke_ecke = probe_renderer._rauchbild(wolke_probe, True)
+farben = {}
+for px in range(bild_wolke.get_width()):
+    for py in range(bild_wolke.get_height()):
+        c = tuple(bild_wolke.get_at((px, py)))
+        if c[3]:
+            farben[c] = farben.get(c, 0) + 1
+pruef("Rauch benutzt nur die Farben aus der Tabelle",
+      len(farben) <= len(K.RAUCH["farben"]), "%d Farben" % len(farben))
+pruef("Und jeder Block deckt voll", all(c[3] == 255 for c in farben))
+# Blockig heisst: jede Kante sitzt auf dem Raster. Ein weicher Verlauf
+# haette Kanten ueberall - und genau so etwas hat in einem Spiel aus
+# Kacheln nichts zu suchen.
+daneben = 0
+zeile = bild_wolke.get_height() // 2
+vor = None
+for px in range(bild_wolke.get_width()):
+    c = tuple(bild_wolke.get_at((px, zeile)))
+    if vor is not None and c != vor and (px + wolke_ecke[0]) % K.RAUCH["block"]:
+        daneben += 1
+    vor = c
+pruef("Jede Rauchkante sitzt auf dem Blockraster", daneben == 0,
+      "%d daneben" % daneben)
+fremd, _ = probe_renderer._rauchbild(wolke_probe, False)
+pruef("Rauch einer anderen Ebene ist blasser",
+      fremd.get_at((fremd.get_width() // 2, fremd.get_height() // 2))[3]
+      < bild_wolke.get_at((bild_wolke.get_width() // 2,
+                           bild_wolke.get_height() // 2))[3])
+
+# Deckt er wirklich? Die schaerfste Frage dazu ist nicht "sieht das Bild
+# anders aus", sondern: macht es ueberhaupt einen Unterschied, ob die
+# Figur da ist? Einmal mit Figur im Rauch zeichnen, einmal ohne - sind
+# beide Bilder gleich, ist von ihr nichts zu sehen.
+from dustfront.entities import Spieler as _Spieler
+stelle = freies_feld()
+held.ebene = 0
+held.pos.update(stelle); held.vorher.update(held.pos)
+opfer = _Spieler(stelle + pygame.Vector2(40, 0), 0)
+opfer.fraktion = "versteckt"
+szene.welt.dazu(opfer)
+szene.welt.schritt(K.FIXED_DT)
+szene.blick = 0; szene._letzte_ebene = 0; szene.blick_hoehe = 0.0
+szene.kamera.pos.update(stelle); szene.kamera.versatz.update(0, 0)
+wand = Rauchwolke(pygame.Vector2(opfer.pos), 0)
+wand.alter = K.RAUCH["aufbau"] + 0.5
+szene.welt.rauch.append(wand)
+
+mit_figur = pygame.Surface((K.GAME_W, K.GAME_H))
+szene.zeichnen(mit_figur, 1.0)
+opfer.lebt = False
+szene.welt.schritt(K.FIXED_DT)
+szene.welt.rauch = [wand]          # der Schritt haette sie altern lassen
+wand.alter = K.RAUCH["aufbau"] + 0.5
+ohne_figur = pygame.Surface((K.GAME_W, K.GAME_H))
+szene.zeichnen(ohne_figur, 1.0)
+
+anders = sum(1 for qx in range(0, K.GAME_W, 2) for qy in range(0, K.GAME_H, 2)
+             if mit_figur.get_at((qx, qy))[:3] != ohne_figur.get_at((qx, qy))[:3])
+pruef("Eine Figur im Rauch ist im Bild nicht zu finden", anders == 0,
+      "%d Bildpunkte verraten sie" % anders)
+
+pruef("Die Welt weiss, dass die Stelle verdeckt ist",
+      szene.welt.verdeckt(opfer.pos, 0))
+pruef("Knapp daneben ist sie es nicht",
+      not szene.welt.verdeckt(opfer.pos + pygame.Vector2(K.RAUCH["radius"] + 20, 0), 0))
+pruef("Und auf einer anderen Ebene auch nicht",
+      not szene.welt.verdeckt(opfer.pos, 1))
+opfer.lebt = False
+szene.welt.rauch = []
+szene.welt.schritt(K.FIXED_DT)
+
+# ── Ebenen: nur eine nach oben ───────────────────────────────────────
+# Wer unten steht, soll die Etage ueber sich durchscheinen sehen - aber
+# nicht gleich drei Stockwerke uebereinander.
+gezeichnet = []
+echt = szene.renderer.ebene_zeichnen
+def merken(ziel, welt, index, ecke, dunkel):
+    gezeichnet.append(index)
+    return echt(ziel, welt, index, ecke, dunkel)
+szene.renderer.ebene_zeichnen = merken
+szene.blick = 0
+szene.blick_hoehe = 0.0
+szene.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+szene.renderer.ebene_zeichnen = echt
+pruef("Von unten ist hoechstens eine Ebene nach oben zu sehen",
+      max(gezeichnet) <= 1, "gezeichnet: %s" % sorted(set(gezeichnet)))
+pruef("Die eigene Ebene natuerlich schon", 0 in gezeichnet)
+
+# ── Treppen: mehrere Wege nach oben ──────────────────────────────────
+wege = []
+for i in range(len(szene.welt.ebenen)):
+    eo = szene.welt.ebene(i)
+    wege.append(sum(1 for kach in eo.kacheln if kach == K.TREPPE_HOCH))
+pruef("Von jeder Ebene ausser der obersten geht es mehrfach hoch",
+      all(n >= 3 for n in wege[:-1]), "Treppen je Ebene: %s" % wege)
+# Sie muessen auch weit auseinanderliegen, sonst nuetzen sie nichts.
+punkte = []
+eo = szene.welt.ebene(0)
+for ty in range(eo.hoehe):
+    for tx in range(eo.breite):
+        if eo.kachel(tx, ty) == K.TREPPE_HOCH:
+            punkte.append(pygame.Vector2(tx * K.TILE, ty * K.TILE))
+weiteste = max(a.distance_to(b) for a in punkte for b in punkte)
+pruef("Und sie liegen ueber die Karte verteilt", weiteste > 600,
+      "%.0f px auseinander" % weiteste)
+
 # ── Mannschaften: team, versus, huegel ───────────────────────────────
 from dustfront.mehrspieler import Kaempfer
 
@@ -1514,6 +1637,187 @@ pruef("Mit Medkit-Spawn liegt wieder eines da", len(liegen) >= 1,
       "%d" % len(liegen))
 pruef("Und ohne Startmedkits faengt man mit leeren Haenden an",
       w.kaempfer[0].medkits == 0)
+w.verlassen(); ga.verlassen()
+
+# ── Pausenmenue, Mannschaften von Hand, neue Runde ───────────────────
+# Esc beendete frueher das ganze Spiel. Das ist der Fehler, an dem man
+# eine Runde verliert, weil man kurz nachsehen wollte.
+def taste(szene, key):
+    szene.ereignis(pygame.event.Event(pygame.KEYDOWN, key=key))
+
+w, ga = gefechtspaar("team", ende_art="zeit", ende_wert=600)
+app.laeuft = True
+taste(w, pygame.K_ESCAPE)
+pruef("Esc macht das Pausenmenue auf, statt zu beenden",
+      w.menue is not None and app.laeuft)
+pruef("Das Gefecht laeuft darunter weiter", not w.vorbei)
+# Im Menue wird nicht geschossen und nicht gelaufen.
+e.neues_bild(); e._gehalten = {"rechts"}
+ein = w._meine_eingabe()
+pruef("Im Menue steht die Figur still und feuert nicht",
+      ein["will"] == [0.0, 0.0] and not ein["feuert"] and not ein["nutzen"])
+e.neues_bild(); e._gehalten = set()
+taste(w, pygame.K_ESCAPE)
+pruef("Und Esc macht es wieder zu", w.menue is None)
+
+# Ein Pfeil darf niemals etwas ausloesen, das man nicht zurueckholen
+# kann. Auf "GEFECHT VERLASSEN" haette er frueher das Gefecht beendet.
+taste(w, pygame.K_ESCAPE)
+app.laeuft = True
+for i, (schluessel, _t, _wert) in enumerate(w._menue_baut()):
+    if schluessel not in ("weiter", "raus", "teams", "neu"):
+        continue
+    w.menue = i
+    taste(w, pygame.K_RIGHT)
+    taste(w, pygame.K_LEFT)
+pruef("Pfeile loesen keine Tat aus: das Menue bleibt offen",
+      w.menue is not None)
+pruef("und das Gefecht laeuft", app.laeuft and not w.vorbei)
+taste(w, pygame.K_ESCAPE)
+
+# Der Gastgeber hat mehr Knoepfe als der Gast.
+taste(w, pygame.K_ESCAPE)
+wirt_eintraege = [x[0] for x in w._menue_baut()]
+taste(ga, pygame.K_ESCAPE)
+gast_eintraege = [x[0] for x in ga._menue_baut()]
+pruef("Der Gastgeber kann die Regeln stellen",
+      "modus" in wirt_eintraege and "neu" in wirt_eintraege
+      and "teams" in wirt_eintraege, str(wirt_eintraege))
+pruef("Der Gast nur weiterspielen oder gehen",
+      gast_eintraege == ["weiter", "raus"], str(gast_eintraege))
+taste(ga, pygame.K_ESCAPE)
+
+# Mannschaften von Hand verschieben, sofort.
+wirt_k = w.kaempfer[0]
+vorher_team = wirt_k.team
+w._team_setzen(wirt_k, 1 - vorher_team)
+pruef("Der Gastgeber kann jemanden in die andere Mannschaft stecken",
+      wirt_k.team == 1 - vorher_team, "Team %d" % wirt_k.team)
+pruef("Die Fraktion geht mit, sonst schiesst er auf seine neuen Leute",
+      wirt_k.fraktion == w._fraktion_fuer(wirt_k.nummer, wirt_k.team),
+      wirt_k.fraktion)
+w._team_setzen(wirt_k, vorher_team)
+
+# Regeln aendern und eine neue Runde starten: der Gast muss mitkommen.
+w.wunsch["modus"] = "versus"
+w.wunsch["runden_bis"] = 5
+w.wunsch["schutz"] = False
+w.kaempfer[0].abschuesse = 7
+w._runde_neu()
+pruef("Eine neue Runde uebernimmt die neuen Regeln",
+      w.modus == "versus" and w.runden_bis == 5 and not w.schutz_an,
+      "%s, bis %d, Schutz %s" % (w.modus, w.runden_bis, w.schutz_an))
+pruef("Und setzt die Punkte zurueck",
+      w.kaempfer[0].abschuesse == 0 and w.teampunkte == [0, 0])
+netz_durchlassen(w, ga, 20)
+pruef("Der Gast spielt die neuen Regeln mit",
+      ga.modus == "versus" and ga.runden_bis == 5 and not ga.schutz_an,
+      "%s, bis %d, Schutz %s" % (ga.modus, ga.runden_bis, ga.schutz_an))
+w.verlassen(); ga.verlassen()
+
+# Rundenzahl und Mannschaftswunsch beim Starten
+w, ga = gefechtspaar("versus", runden=2, team=1)
+pruef("Die Rundenzahl laesst sich beim Aufmachen waehlen",
+      w.runden_bis == 2, "%d" % w.runden_bis)
+pruef("Und wer sich eine Mannschaft wuenscht, bekommt sie",
+      w.kaempfer[0].team == 1, "Team %d" % w.kaempfer[0].team)
+pruef("Der Gast landet dann in der anderen",
+      w.kaempfer[ga.meine_nummer].team == 0,
+      "Team %d" % w.kaempfer[ga.meine_nummer].team)
+# Bei gleichem Stand darf man waehlen - der Dritte macht es zwangslaeufig
+# ungleich, egal wohin er geht.
+dritter = w._dazu(91, "DRITTER", 1)
+pruef("Bei Gleichstand wird der Wunsch erfuellt", dritter.team == 1,
+      "Team %d" % dritter.team)
+# Jetzt steht es 2 zu 1. Wer sich die groessere wuenscht, bekommt sie nicht.
+vierter = w._dazu(92, "VIERTER", 1)
+pruef("Ein Wunsch in die groessere Mannschaft wird abgelehnt",
+      vierter.team == 0, "Team %d" % vierter.team)
+for nr in (91, 92):
+    weg = w.kaempfer.pop(nr, None)
+    if weg is not None:
+        weg.lebt = False
+
+# ── Am Boden und beim Aufhelfen ──────────────────────────────────────
+wirt_k, gast_k = w.kaempfer[0], w.kaempfer[ga.meine_nummer]
+wirt_k.unverwundbar = 0.0
+wirt_k.schaden(999, None, None)
+pruef("Wer faellt, liegt am Boden", wirt_k.am_boden)
+pruef("Und hat ein eigenes Bild, das man auf Entfernung erkennt",
+      wirt_k.bild == "spieler_boden", wirt_k.bild)
+wo = pygame.Vector2(wirt_k.pos)
+liegend = {"will": [1.0, 0.0], "ziel": [wo.x + 50, wo.y],
+           "feuert": True, "nutzen": True, "knoepfe": []}
+w._anwenden(wirt_k, liegend)
+for _ in range(int(0.5 / K.FIXED_DT)):
+    w.welt.schritt(K.FIXED_DT)
+pruef("Am Boden bewegt sich niemand mehr",
+      wirt_k.pos.distance_to(wo) < 1.0,
+      "%.1f px gekrochen" % wirt_k.pos.distance_to(wo))
+pruef("Und schiesst auch nicht", not wirt_k.feuert)
+
+# Der Helfer ist waehrend des Aufhelfens gebunden - bis auf die Waffe.
+# In versus hilft man nur den eigenen Leuten, also muss er erst in
+# dieselbe Mannschaft.
+w._team_setzen(gast_k, wirt_k.team)
+gast_k.pos.update(wirt_k.pos); gast_k.vorher.update(gast_k.pos)
+gast_k.ebene = wirt_k.ebene
+gast_k.waffe = 0
+helfen = {"will": [1.0, 0.0], "ziel": [gast_k.pos.x + 40, gast_k.pos.y],
+          "feuert": True, "nutzen": True, "waffe": 2, "knoepfe": []}
+w._anwenden(gast_k, helfen)
+pruef("Wer aufhilft, wird erkannt", gast_k.hilft == wirt_k.nummer)
+pruef("Er laeuft dabei nicht", gast_k.will.length() < 0.01)
+pruef("Und schiesst nicht", not gast_k.feuert)
+pruef("Die Waffe darf er trotzdem wechseln", gast_k.waffe == 2,
+      "Platz %d" % gast_k.waffe)
+w.verlassen(); ga.verlassen()
+
+# ── Rueckmeldung: Sturz, Aufheben, verschobene Ansicht ───────────────
+w, ga = gefechtspaar("pvp")
+wirt_k = w.kaempfer[0]
+w.welt.ringe = []
+gehoert = []
+w.welt.klang = lambda name, laut=1.0: gehoert.append(name)
+wirt_k.ebene = 2
+wirt_k.sturz_hoehe = 180.0
+wirt_k.aufschlag()
+pruef("Ein Aufschlag macht einen Staubring", len(w.welt.ringe) == 1)
+pruef("Und einen Ton", "sturz" in gehoert, str(gehoert))
+w.welt.klang = app.klaenge.spielen
+
+w.welt.aufschriften = []
+Welt.beute_genommen(w.welt, wirt_k.pos, wirt_k.ebene, "munition")
+pruef("Aufgesammelte Munition schreibt es an", len(w.welt.aufschriften) == 1,
+      str(w.welt.aufschriften))
+pruef("Und zwar lesbar",
+      w.welt.aufschriften[0][2] == K.BEUTE_TEXTE["munition"][0],
+      w.welt.aufschriften[0][2])
+
+# Der Gast merkt es auch, ohne eigenen Kanal: was aus der Beuteliste
+# verschwindet, wurde aufgehoben.
+ga.welt.aufschriften = []
+ga._fremde_beute = [(100.0, 100.0, 0, "munikiste")]
+ga._aufgehoben_erkennen([(100.0, 100.0, 0, "munikiste"),
+                         (200.0, 200.0, 0, "medkit")])
+pruef("Auch der Gast sieht, dass jemand etwas aufgehoben hat",
+      len(ga.welt.aufschriften) == 1
+      and ga.welt.aufschriften[0][2] == K.BEUTE_TEXTE["medkit"][0],
+      str(ga.welt.aufschriften))
+
+# Die verschobene Ansicht kommt von selbst zurueck - sonst fehlen die
+# Zielhilfen den Rest der Runde, und niemand weiss warum.
+w.ich.ebene = 0
+w._letzte_ebene = 0
+w.blick = 0
+w._rad = 1
+w.schritt(K.FIXED_DT)
+pruef("Das Mausrad verschiebt die Ansicht", w.blick == 1, "Ebene %d" % w.blick)
+pruef("Und sagt, dass sie zurueckkommt", "ZURUECK" in w.hinweis, w.hinweis)
+for _ in range(int(K.GEFECHT["blick_zurueck"] / K.FIXED_DT) + 8):
+    w.schritt(K.FIXED_DT)
+pruef("Nach kurzer Zeit schaut man wieder auf die eigene Ebene",
+      w.blick == w.ich.ebene, "Ebene %d" % w.blick)
 w.verlassen(); ga.verlassen()
 
 # Ein Gast, der abbricht, darf den Gastgeber nicht mitreissen
