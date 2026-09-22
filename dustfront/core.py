@@ -429,7 +429,14 @@ class App:
                 self.oben.ereignis(ev)
         self.eingabe.maus = self.zu_spiel(pygame.mouse.get_pos())
 
-    def laufen(self) -> None:
+    def laufen(self, beenden: bool = True) -> None:
+        """Die Spielschleife.
+
+        beenden=False laesst pygame am Leben, wenn die Schleife endet. Das
+        braucht das Hauptmenue: es hat pygame selbst hochgefahren und will
+        danach weiterlaufen, statt mit dem Spiel zusammen abgeraeumt zu
+        werden.
+        """
         while self.laeuft and self.stapel:
             echt = self.uhr.tick(self.fps_grenze) / 1000.0
             self.fps = self.uhr.get_fps()
@@ -457,7 +464,9 @@ class App:
             for szene in self._sichtbar():
                 szene.zeichnen(self.flaeche, alpha)
             self.ausgeben()
-        pygame.quit()
+        self.klaenge.stille()
+        if beenden:
+            pygame.quit()
 
     def _aktive(self) -> list[Szene]:
         """Nur die oberste Szene rechnet, darunter steht alles still."""

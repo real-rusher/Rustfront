@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.11.2, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.12.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -52,14 +52,20 @@ dort steht die eine technische Entscheidung, an der alles andere haengt.
 
 **Ohne Kommandozeile, einfach doppelklicken:**
 
-| System | Datei |
-| --- | --- |
-| Windows | `DUSTFRONT.bat` |
-| macOS, Linux | `DUSTFRONT.command` |
+| Was | Windows | macOS, Linux |
+| --- | --- | --- |
+| Das ganze Spiel, mit Menue und Intro | `DUSTFRONT.bat` | `DUSTFRONT.command` |
+| Direkt ins Spiel, zum Ausprobieren | `SPIELTEST.bat` | `SPIELTEST.command` |
 
 Die Datei sucht sich Python selbst, installiert pygame-ce beim ersten Mal
-nach und startet das Hauptmenue. Geht etwas schief, bleibt das Fenster
-offen und sagt warum, statt kommentarlos zu verschwinden.
+nach und startet dann. Geht etwas schief, bleibt das Fenster offen und sagt
+warum, statt kommentarlos zu verschwinden.
+
+**`SPIELTEST`** springt ohne Menue und ohne Intro direkt in eine Runde und
+schreibt die Steuerung ins Fenster. Zum schnellen Ausprobieren gedacht.
+**`DUSTFRONT`** ist der normale Weg: Intro, Hauptmenue, *NEUE KAMPAGNE*,
+und von dort geht es ins Spiel. Mit *AUFGEBEN* im Pausemenue kommt man
+zurueck ins Hauptmenue.
 
 Unter macOS beim allerersten Mal Rechtsklick auf die Datei und dann
 *Oeffnen* waehlen - danach reicht der Doppelklick.
@@ -210,6 +216,8 @@ Aussen liegt das Menue, innen das Spiel. Beides laeuft auch einzeln.
 | --- | --- |
 | `DUSTFRONT.bat` | Startdatei zum Doppelklicken, Windows |
 | `DUSTFRONT.command` | Startdatei zum Doppelklicken, macOS und Linux |
+| `SPIELTEST.bat` | Direkt ins Spiel, Windows |
+| `SPIELTEST.command` | Direkt ins Spiel, macOS und Linux |
 | `rustfront_menu.py` | Hauptmenue, Kaltstart, Optionen, Spielstand, Einstiegspunkt |
 | `rustfront_splash.py` | Ablauf, Zeitdehnung und Klangsynthese der Splash-Sequenz |
 | `splash_engine.py` | Zeichenwerk der Splash-Sequenz, portiert aus der Web-Fassung |
@@ -445,6 +453,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.11.0 | Sturz ohne Ruck, Waffe in der Hand sichtbar, durchgehend rote Ziellinie, keine Handlung sperrt mehr eine andere |
 | 0.11.1 | Steuerung in der Luft im Test nachgewiesen und gegen das Abrutschen abgesichert; Testlaeufe mit festem Seed reproduzierbar |
 | 0.11.2 | Startdateien zum Doppelklicken fuer Windows und macOS; Weltenplan in `docs/KARTE.md` |
+| 0.12.0 | Das Hauptmenue startet das echte Spiel statt einer Platzhalter-Szene; Startdatei fuer den direkten Spieltest |
 
 ## Anpassen
 
@@ -560,5 +569,7 @@ ergebnis = run_menu()
 #  "region": ..., "difficulty": ..., "callsign": ...}
 ```
 
-Die Platzhalter-Szene am Ende von `rustfront_menu.py` wird spaeter durch die
-echte Spielschleife ersetzt.
+Seit 0.12.0 ist das eingebaut: `spiel_scene()` in `rustfront_menu.py` ruft
+`dustfront.main.aus_menue()` auf und holt danach den Anzeigemodus des
+Menues zurueck. Fehlt das Paket `dustfront`, bleibt es bei der
+Platzhalter-Szene - das Menue laeuft weiterhin auch allein.

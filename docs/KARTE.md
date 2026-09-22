@@ -856,7 +856,10 @@ Jeder Meilenstein ist **fuer sich spielbar und fuer sich testbar**. Nach
 jedem laeuft das Spiel, beide Testlaeufe sind gruen, und es gibt etwas Neues
 zu sehen. Kein Meilenstein laesst das Spiel in einem halben Zustand.
 
-Versionsnummern nach dem Schema im README (neue Sache = MINOR hoch).
+Versionsnummern nach dem Schema im README (neue Sache = MINOR hoch). Die
+Nummern hier sind **Richtwerte, keine Zusagen**: zwischen zwei Meilensteinen
+kommen Reparaturen und Kleinigkeiten dazu, die auch hochzaehlen. Was zaehlt,
+ist die Reihenfolge, nicht die Ziffer.
 
 ### M1 - Karten kommen aus Dateien (0.12.0)
 

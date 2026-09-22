@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.11.2"
+VERSION = "0.12.0"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -1786,8 +1786,36 @@ class App:
 # Platzhalter-Szene, damit das Menue vollstaendig testbar ist
 # --------------------------------------------------------------------------
 
+def spiel_scene(window, app: App, result: dict) -> None:
+    """Uebergibt an das eigentliche Spiel und nimmt danach wieder auf.
+
+    Liegt das Paket `dustfront` nicht daneben, bleibt es beim Platzhalter -
+    das Menue soll auch allein lauffaehig bleiben, so wie es im README
+    steht.
+
+    Nach dem Spiel muss der Anzeigemodus zurueckgeholt werden: das Spiel
+    rendert auf 640x360 und setzt sich sein eigenes Fenster, das Menue
+    rechnet mit 480x270.
+    """
+    try:
+        from dustfront.main import aus_menue
+    except ImportError:
+        placeholder_scene(window, app, result)
+        return
+
+    app.write_save()
+    try:
+        aus_menue(result)
+    finally:
+        # Auch wenn das Spiel mit einem Fehler aussteigt, soll das Menue
+        # wieder erscheinen statt in einem toten Fenster zu enden.
+        app.apply_display()
+        pygame.event.clear()
+        pygame.key.set_repeat()
+
+
 def placeholder_scene(window, app: App, result: dict) -> None:
-    """Steht für das eigentliche Spiel. Esc speichert und kehrt zurück."""
+    """Rueckfall, falls das Paket dustfront fehlt. Esc kehrt zurück."""
     canvas = pygame.Surface((VW, VH))
     clock = pygame.time.Clock()
     t = 0.0
@@ -1872,7 +1900,7 @@ def main() -> int:
         result = app.run()
         if result["action"] == "quit":
             break
-        placeholder_scene(app.window, app, result)
+        spiel_scene(app.window, app, result)
         app.running = True
         app.fade, app.fade_dir, app.pending = 1.0, -1, None
         app.pages.pop("main", None)

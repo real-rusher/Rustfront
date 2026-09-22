@@ -26,11 +26,27 @@ def asset_ordner() -> Path | None:
     return p if p.is_dir() else None
 
 
-def starten(headless: bool = False) -> int:
+def starten(headless: bool = False, beenden: bool = True,
+            auftrag: dict | None = None) -> int:
+    """Startet das Spiel.
+
+    beenden=False laesst pygame stehen, wenn das Spiel endet - so ruft das
+    Hauptmenue uns auf und macht danach weiter.
+
+    auftrag ist das, was das Menue ausgewaehlt hat (Region, Schwierigkeit,
+    Rufzeichen). Das Spiel legt es ab, ohne es heute schon auszuwerten:
+    daran haengen spaeter die Sektoren, siehe docs/KARTE.md, M5 und M7.
+    """
     app = App("DUSTFRONT", asset_ordner(), headless=headless)
+    app.auftrag = dict(auftrag) if auftrag else {}
     app.schieben(Spiel(app))
-    app.laufen()
+    app.laufen(beenden=beenden)
     return 0
+
+
+def aus_menue(auftrag: dict | None = None) -> int:
+    """Einstieg fuer das Hauptmenue: spielen und danach zurueckkehren."""
+    return starten(headless=False, beenden=False, auftrag=auftrag)
 
 
 def aus_argumenten(argumente: list[str]) -> int:
