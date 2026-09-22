@@ -653,6 +653,102 @@ try:
 finally:
     shutil.rmtree(weg, ignore_errors=True)
 
+# ── LAN-Gefecht: verbinden und aufeinander schiessen ─────────────────
+# Echte Steckdosen auf dem eigenen Rechner, kein nachgebautes Netz. Was
+# hier nicht durchgeht, geht auch im LAN nicht durch.
+#
+# Die Bestenliste wird hier bewusst nicht angefasst - sie liegt im
+# Benutzerordner, und ein Testlauf hat dort nichts verloren. Ihre
+# Pruefungen stehen in test_menues.py, das seine Pfade umbiegt.
+print()
+from dustfront import netz
+from dustfront.mehrspieler import Gefecht
+
+PORT = 51011
+wirt = netz.Gastgeber(PORT)
+host = Gefecht(app, "ANGREIFER", gastgeber=wirt)
+pruef("Gastgeber macht auf", wirt.port == PORT)
+pruef("Gastgeber ist selbst dabei", len(host.kaempfer) == 1)
+
+verbindung = netz.Gast("127.0.0.1:%d" % PORT)
+pruef("Gast verbindet sich", verbindung.offen, verbindung.fehler)
+gast = Gefecht(app, "BESUCH", gast=verbindung)
+for _ in range(40):
+    host.schritt(K.NETZ["takt"])
+    gast.schritt(K.NETZ["takt"])
+
+pruef("Gastgeber kennt beide", len(host.kaempfer) == 2, "%d" % len(host.kaempfer))
+pruef("Gast hat eine Nummer", gast.meine_nummer > 0)
+pruef("Gast sieht beide", len(gast.kaempfer) == 2, "%d" % len(gast.kaempfer))
+pruef("Namen kommen unveraendert an",
+      sorted(k.name for k in host.kaempfer.values())
+      == sorted(k.name for k in gast.kaempfer.values()))
+eigener = host.kaempfer[gast.meine_nummer]
+kopie = gast.kaempfer[gast.meine_nummer]
+pruef("Position ist auf beiden Seiten gleich",
+      eigener.pos.distance_to(kopie.pos) < 1.0,
+      "%.2f px" % eigener.pos.distance_to(kopie.pos))
+
+# Der eigentliche Punkt: ohne Bots muessen sich Spieler treffen koennen.
+a, b = host.kaempfer[0], host.kaempfer[gast.meine_nummer]
+pruef("Jeder Spieler hat eine eigene Fraktion", a.fraktion != b.fraktion,
+      "%s / %s" % (a.fraktion, b.fraktion))
+
+stelle = None
+for _ in range(300):
+    kandidat = freier_punkt(host.welt, 0, host.rnd)
+    gegenueber = pygame.Vector2(kandidat.x + 140, kandidat.y)
+    if (host.welt.frei(kandidat, a.radius, 0)
+            and host.welt.frei(gegenueber, b.radius, 0)
+            and host.welt.sicht_frei(kandidat, gegenueber, 0)):
+        stelle = (kandidat, gegenueber)
+        break
+pruef("Freies Schussfeld gefunden", stelle is not None)
+
+if stelle:
+    hier, dort = stelle
+    for wer, wo in ((a, hier), (b, dort)):
+        wer.pos.update(wo); wer.vorher.update(wo); wer.tempo.update(0, 0)
+        wer.leben = wer.max_leben; wer.lebt = True; wer.unverwundbar = 0.0
+    a.waffe = a.waffen.index("repetierer")
+    a.magazin["repetierer"] = K.WAFFEN["repetierer"]["magazin"]
+    a.ziel = pygame.Vector2(b.pos)
+    host.welt.schritt(K.FIXED_DT)          # Blickwinkel setzen
+    vorher_leben = b.leben
+    a.feuern()
+    for _ in range(int(0.9 / K.FIXED_DT)):
+        b.pos.update(dort); b.tempo.update(0, 0); b.unverwundbar = 0.0
+        host.welt.schritt(K.FIXED_DT)
+    pruef("Ein Spieler trifft einen anderen", b.leben < vorher_leben,
+          "%.0f -> %.0f Leben" % (vorher_leben, b.leben))
+
+    punkte_vorher = a.abschuesse
+    b.leben = 5.0; b.unverwundbar = 0.0
+    a.takt = 0.0; a.magazin["repetierer"] = K.WAFFEN["repetierer"]["magazin"]
+    a.ziel = pygame.Vector2(b.pos)
+    a.feuern()
+    for _ in range(int(1.2 / K.FIXED_DT)):
+        if b.lebt:
+            b.pos.update(dort); b.tempo.update(0, 0); b.unverwundbar = 0.0
+        host.welt.schritt(K.FIXED_DT)
+        host._tote_abrechnen(K.FIXED_DT)
+    pruef("Der Abschuss wird ihm gutgeschrieben", a.abschuesse > punkte_vorher,
+          "%d -> %d" % (punkte_vorher, a.abschuesse))
+    pruef("Der Tod wird gezaehlt", b.tode >= 1, "%d" % b.tode)
+
+    for _ in range(int((K.GEFECHT["wieder_nach"] + 0.5) / K.FIXED_DT)):
+        host._tote_abrechnen(K.FIXED_DT)
+    pruef("Gefallener steigt wieder ein",
+          b.lebt and b.leben == b.max_leben, "lebt=%s" % b.lebt)
+
+# Ein Gast, der abbricht, darf den Gastgeber nicht mitreissen
+verbindung.schliessen()
+for _ in range(6):
+    host.schritt(K.NETZ["takt"])
+pruef("Gastgeber laeuft weiter, wenn ein Gast geht",
+      len(host.kaempfer) == 1, "%d uebrig" % len(host.kaempfer))
+host.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

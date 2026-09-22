@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.12.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.13.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -56,6 +56,8 @@ dort steht die eine technische Entscheidung, an der alles andere haengt.
 | --- | --- | --- |
 | Das ganze Spiel, mit Menue und Intro | `DUSTFRONT.bat` | `DUSTFRONT.command` |
 | Direkt ins Spiel, zum Ausprobieren | `SPIELTEST.bat` | `SPIELTEST.command` |
+| LAN: Runde aufmachen | `LAN-GASTGEBER.bat` | `LAN-GASTGEBER.command` |
+| LAN: mitspielen | `LAN-GAST.bat` | `LAN-GAST.command` |
 
 Die Datei sucht sich Python selbst, installiert pygame-ce beim ersten Mal
 nach und startet dann. Geht etwas schief, bleibt das Fenster offen und sagt
@@ -178,6 +180,67 @@ der alten weggenommen.
 Die Munition haengt am Namen der Waffe, nicht an ihrem Platz. Umsortieren im
 Inventar kostet also keine Patrone.
 
+## LAN-Gefecht
+
+Ein kurzer Mehrspieler-Test: mehrere Leute auf einer Karte, **keine
+Gegner**, wer trifft bekommt einen Punkt. Nach der Runde steht die Liste,
+und sie wandert in eine Bestenliste im Benutzerordner.
+
+### So spielt man es
+
+1. Einer startet **`LAN-GASTGEBER`**, tippt seinen Namen und liest die
+   Adresse ab, die im Fenster steht (etwa `192.168.1.7:50505`).
+2. Alle anderen starten **`LAN-GAST`**, tippen ihren Namen und diese
+   Adresse.
+3. Fertig. Esc beendet.
+
+Alle muessen im selben Netz sein - gleiches WLAN oder gleicher Switch.
+Eine Windows-Firewall fragt beim ersten Mal, ob Python ins Netz darf; das
+muss erlaubt werden, sonst findet niemand den Gastgeber.
+
+Wer lieber tippt:
+
+```
+python -m dustfront --host --name MEISTER
+python -m dustfront --join 192.168.1.7 --name BESUCH
+python -m dustfront --bestenliste
+```
+
+### Wie es aufgebaut ist
+
+**Ein Rechner rechnet, alle anderen schauen zu.** Der Gastgeber simuliert
+die ganze Welt. Gaeste schicken nur, was sie druecken, und bekommen
+zurueck, wo alles steht. Damit gibt es keinen Streit darueber, wer
+getroffen hat, und niemand kann durch eine geaenderte Datei schummeln.
+Der Preis ist ein Hin- und Rueckweg Verzoegerung, im LAN unter zwei
+Millisekunden.
+
+**Keine Threads.** Die Verbindungen stehen auf nicht-blockierend, einmal
+je Bild wird nachgesehen, was angekommen ist. Eine zweite Schleife waere
+nur eine Quelle fuer Fehler, die man nicht nachstellen kann.
+
+**Jeder Spieler hat eine eigene Fraktion.** Die Trefferabfrage
+ueberspringt alles, was zur selben Fraktion gehoert - alle Spieler tragen
+sonst "mensch" und koennten sich nie treffen. So bleibt der Spielkern
+unveraendert.
+
+Nicht uebers Netz gehen Partikel, Huelsen und Blutflecken. Die entstehen
+bei jedem selbst und sind reine Kosmetik.
+
+| Datei | Inhalt |
+| --- | --- |
+| `netz.py` | Verbindungen, Protokoll aus JSON-Zeilen, Gastgeber und Gast |
+| `mehrspieler.py` | Die Gefechtsszene, Punkte, Wiedereinstieg, Rundenende |
+| `bestenliste.py` | Abschuesse ueber alle Runden, im Benutzerordner |
+
+### Was der Test noch nicht kann
+
+Ehrlich aufgezaehlt, damit niemand danach sucht: keine Vorhersage beim
+Gast (die eigene Figur laeuft mit der Verzoegerung des Netzes, im LAN
+unsichtbar, ueber WLAN spuerbar), kein Wiederverbinden nach einem Abbruch,
+keine Kartenwahl, keine Teams. Das Gefecht laeuft immer auf derselben
+Testkarte.
+
 ## Wie sich das Spiel anfuehlen soll
 
 Drei Regeln, die ueber einzelnen Funktionen stehen. Wer etwas Neues
@@ -239,6 +302,9 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `pfade.py` | Wo diese Dateien liegen, je nach Betriebssystem |
 | `art.py`, `audio.py`, `font.py` | Grafik, Klang und Schrift, alles zur Laufzeit erzeugt |
 | `vorlagen.py` | Die beiden Werkzeuge `--vorlagen` und `--assets` |
+| `netz.py` | LAN-Verbindungen und Protokoll |
+| `mehrspieler.py` | Das LAN-Gefecht |
+| `bestenliste.py` | Abschuesse ueber alle Runden |
 
 Daneben liegt `docs/`:
 
@@ -454,6 +520,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.11.1 | Steuerung in der Luft im Test nachgewiesen und gegen das Abrutschen abgesichert; Testlaeufe mit festem Seed reproduzierbar |
 | 0.11.2 | Startdateien zum Doppelklicken fuer Windows und macOS; Weltenplan in `docs/KARTE.md` |
 | 0.12.0 | Das Hauptmenue startet das echte Spiel statt einer Platzhalter-Szene; Startdatei fuer den direkten Spieltest |
+| 0.13.0 | LAN-Gefecht: mehrere Spieler auf einer Karte, keine Gegner, Namen, Punkte und eine Bestenliste im Benutzerordner |
 
 ## Anpassen
 
