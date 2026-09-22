@@ -1,7 +1,7 @@
 # DUSTFRONT - Der Mehrspieler, vollstaendig
 
 **Was das hier ist.** Die komplette Beschreibung des LAN-Mehrspielers, wie
-er auf dem Zweig `multiplayer-test` in Version 0.19.0 steht: Aufbau,
+er auf dem Zweig `multiplayer-test` in Version 0.19.1 steht: Aufbau,
 Protokoll, alle sechs Spielarten, jede Zahl mit Begruendung, jeder Fehler,
 der beim Bauen aufgetreten ist, und die Reihenfolge, in der man das Ganze
 wieder aufbaut.
@@ -12,10 +12,10 @@ herausgenommen, siehe Abschnitt 14). Dieses Dokument ist die Bauanleitung
 fuer den Tag, an dem er zurueckkommen soll.
 
 **Fuer wen.** Fuer Der Meister, und fuer jede Claude-Instanz, die den Satz
-hoert: *"bau mal wieder Mehrspieler ein wie in Version 0.19.0"*. Wer das
+hoert: *"bau mal wieder Mehrspieler ein wie in Version 0.19.1"*. Wer das
 liest, braucht ausser dem Spielkern nichts weiter zu wissen.
 
-**Stand beim Schreiben:** Version 0.19.0, PRE-ALPHA, Zweig
+**Stand beim Schreiben:** Version 0.19.1, PRE-ALPHA, Zweig
 `multiplayer-test`. Zwei Testlaeufe gruen: `tests/test_spiel.py` und
 `tests/test_menues.py`.
 
@@ -820,9 +820,17 @@ aus "zwei Treffer toeten" auch "zwei Schlaege toeten".
 
 ### MUNITION (Schalter `--knapp`)
 
-Vorrat: Repetierer 70, Sturm 150, Schrot 32, Scharf 20, Granate 4,
-Brecheisen 0. Kiste alle 18 s, hoechstens 3 gleichzeitig, eine Kiste gibt
-45 % des vollen Vorrats.
+Vorrat: Repetierer 42, Sturm 90, Schrot 18, Scharf 10, Granate 3, Rauch 2,
+Brecheisen 0. Kiste alle 14 s, hoechstens 4 gleichzeitig, eine Kiste gibt
+50 % des vollen Vorrats.
+
+**Das sind rund drei Nachladungen je Waffe, und das ist die ganze Idee.**
+Vorher war es das Doppelte - 279 Schuss im Vorrat merkt in einer
+Testrunde niemand. Und ein Vorrat, der nie sinkt, macht jede
+Munitionskiste nutzlos: man kann nichts auffuellen, was voll ist.
+
+**Der Wiedereinstieg zahlt aus dem Vorrat.** Siehe 12.19 - das war der
+eigentliche Fehler.
 
 ### Was ich beim naechsten Mal zuerst drehen wuerde
 
@@ -1073,7 +1081,34 @@ auf der naechsten Treppe steht.
 braucht jede Handlung daran eine eigene Sperre. Der Einzelspieler hat das
 Problem nicht - er fragt `gedrueckt()` ab.
 
-### 12.17 Kleinere Fallen
+### 12.19 Knappe Munition, die keine war (schwer, 0.19.1)
+
+**Symptom.** Zwei Meldungen, die nach zwei Fehlern klangen: "man kann
+trotzdem unendlich oft nachladen" und "die Munitionskisten einzusammeln
+funktioniert auch nicht".
+
+**Ursache, eine fuer beide.** `_wieder_einsteigen` setzte
+`k.magazin = {alles voll}` - **am Vorrat vorbei**. In einem Deathmatch
+stirbt man alle paar Sekunden, bekommt also alle sieben Magazine
+geschenkt (60 Schuss) und kommt nie in die Lage, aus dem Vorrat
+nachladen zu muessen. Der Vorrat blieb voll. Und was voll ist, kann man
+nicht auffuellen: `auffuellen()` gibt False zurueck, die Kiste bleibt
+liegen, und es sieht aus, als ginge das Aufheben nicht.
+
+Dazu kam die zweite Haelfte: 279 Schuss Vorrat sind rund zwanzig
+Nachladungen. Selbst wer nie starb, merkte in einer Testrunde keine
+Grenze.
+
+**Behebung.** `_magazine_fuellen()`: ohne Begrenzung wie immer umsonst,
+mit Begrenzung als Nachladen aller Waffen, bezahlt aus dem Vorrat. Dazu
+die Vorraete halbiert und der Vorrat je Waffe in der Hotbar sichtbar,
+plus die Meldung "KEIN VORRAT", wenn beides leer ist.
+
+**Merke.** Wer eine Ressource begrenzt, muss **jede** Stelle finden, die
+sie vergibt - nicht nur die offensichtliche. Und eine Begrenzung, die man
+nirgends sinken sieht, ist von einer kaputten nicht zu unterscheiden.
+
+### 12.20 Kleinere Fallen
 
 | Falle | Was passiert |
 | --- | --- |
@@ -1085,7 +1120,7 @@ Problem nicht - er fragt `gedrueckt()` ab.
 | Ein einzelner `FIXED_DT`-Schritt fuer `rest = 0.01` | Zu kurz. Restzeit knapp unter **einen** Schritt setzen. |
 | `Spiel()` ohne Seed im Test | Sporadische Fehlschlaege. Tests geben einen festen Seed. |
 
-### 12.18 Was **nicht** kaputt war
+### 12.21 Was **nicht** kaputt war
 
 Zwei Dinge sahen nach Fehlern aus und waren keine: die unterschiedlichen
 Blutflecken auf beiden Rechnern (Kosmetik wird nicht uebertragen, siehe

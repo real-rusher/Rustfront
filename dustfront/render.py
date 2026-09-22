@@ -784,6 +784,8 @@ class Renderer:
                 pygame.draw.rect(ziel, K.C_TEAL, (ex - 5, ey + 3, 3, 5))
 
         # Hotbar unten in der Mitte
+        knapp = bool(getattr(spieler, "knapp", False))
+        vorrat = getattr(spieler, "vorrat", {})
         n = len(spieler.waffen)
         bw, bh, luecke = 34, 18, 3
         gesamt = n * bw + (n - 1) * luecke
@@ -806,6 +808,13 @@ class Renderer:
                        else "--", r.right - 2, r.bottom - 9,
                        K.C_AMBER if aktiv else K.C_MUTED_DK, 1,
                        ausrichtung="rechts")
+            # Bei knapper Munition steht der Vorrat unter dem Platz. Ohne
+            # das sieht man nur das Magazin und haelt die Begrenzung fuer
+            # kaputt, weil nirgends eine Zahl kleiner wird.
+            if knapp and wd.get("magazin"):
+                uebrig = vorrat.get(name, 0)
+                f.zeichnen(ziel, "%d" % uebrig, r.x + 2, r.bottom - 9,
+                           K.C_MUTED if uebrig else K.C_RED, 1)
 
         # Medkits links neben der Hotbar
         mx = hx - 40

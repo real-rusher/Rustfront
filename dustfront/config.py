@@ -405,11 +405,16 @@ GEGNER_MP = dict(
 
 # Begrenzte Munition. Der Gastgeber schaltet sie beim Aufmachen an.
 MUNITION = dict(
-    vorrat={"repetierer": 70, "sturm": 150, "schrot": 32, "scharf": 20,
-            "granate": 4, "rauch": 3, "brecheisen": 0},
-    kiste_takt=18.0,          # Sekunden zwischen zwei Munitionskisten
-    kiste_hoechstens=3,
-    kiste_gibt=0.45,          # so viel vom vollen Vorrat gibt eine Kiste
+    # Rund drei Nachladungen je Waffe. Vorher war es das Doppelte, und
+    # damit war die Begrenzung keine: 279 Schuss im Vorrat merkt in einer
+    # Testrunde niemand, und ein Vorrat, der nie sinkt, macht auch jede
+    # Munitionskiste nutzlos - man kann nichts aufnehmen, was man nicht
+    # braucht.
+    vorrat={"repetierer": 42, "sturm": 90, "schrot": 18, "scharf": 10,
+            "granate": 3, "rauch": 2, "brecheisen": 0},
+    kiste_takt=14.0,          # Sekunden zwischen zwei Munitionskisten
+    kiste_hoechstens=4,
+    kiste_gibt=0.5,           # so viel vom vollen Vorrat gibt eine Kiste
 )
 
 # ══════════════════════════════════════════════════ HOEHE

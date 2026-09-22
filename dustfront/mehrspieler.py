@@ -1010,6 +1010,32 @@ class Gefecht(Szene):
             if k.wieder_in <= 0 and not self.vorbei:
                 self._wieder_einsteigen(k)
 
+    def _magazine_fuellen(self, k: Kaempfer) -> None:
+        """Magazine beim Einstieg auffuellen.
+
+        Ohne knappe Munition wie immer: alles randvoll, umsonst.
+
+        **Mit knapper Munition kostet es Vorrat**, genau wie ein
+        Nachladen. Genau hier lief die Begrenzung frueher ins Leere: jeder
+        Wiedereinstieg schenkte alle Magazine neu - in einem Deathmatch
+        also alle paar Sekunden sechzig Schuss, am Vorrat vorbei. Man kam
+        nie in die Lage, aus dem Vorrat nachladen zu muessen; der blieb
+        voll, und weil er voll blieb, liess sich auch keine
+        Munitionskiste aufheben. Zwei gemeldete Fehler, eine Ursache.
+        """
+        if not self.knapp:
+            k.magazin = {w: K.WAFFEN[w]["magazin"] for w in k.waffen}
+            return
+        for w in k.waffen:
+            voll = K.WAFFEN[w]["magazin"]
+            if not voll:
+                continue
+            fehlt = voll - k.magazin.get(w, 0)
+            hat = k.vorrat.get(w, 0)
+            gibt = max(0, min(fehlt, hat))
+            k.magazin[w] = k.magazin.get(w, 0) + gibt
+            k.vorrat[w] = hat - gibt
+
     def _wieder_einsteigen(self, k: Kaempfer) -> None:
         k.pos.update(self._einstiegsort(k.team))
         k.vorher.update(k.pos)
@@ -1028,7 +1054,7 @@ class Gefecht(Szene):
         k.revive_stand = 0.0
         k.unverwundbar = self.schutz_zeit
         k.medkits = max(k.medkits, self.start_medkits)
-        k.magazin = {w: K.WAFFEN[w]["magazin"] for w in k.waffen}
+        self._magazine_fuellen(k)
         if k not in self.welt.wesen and k not in self.welt.neue:
             self.welt.dazu(k)
 
@@ -2041,6 +2067,12 @@ class Gefecht(Szene):
                 f.zeichnen(ziel, "VORRAT %d" % vorrat, K.GAME_W - 12,
                            K.GAME_H - 38, K.C_MUTED if vorrat else K.C_RED, 1,
                            ausrichtung="rechts")
+                if not vorrat and not self.ich.magazin.get(
+                        self.ich.waffe_name, 0):
+                    # Sonst drueckt man ratlos auf R und nichts passiert.
+                    f.zeichnen(ziel, "KEIN VORRAT - WAFFE WECHSELN ODER KISTE",
+                               K.GAME_W // 2, K.GAME_H - 46, K.C_RED, 1,
+                               ausrichtung="mitte")
         if self.hinweis:
             self.renderer.hinweis(ziel, self.hinweis)
 

@@ -1828,6 +1828,76 @@ pruef("Nach kurzer Zeit schaut man wieder auf die eigene Ebene",
       w.blick == w.ich.ebene, "Ebene %d" % w.blick)
 w.verlassen(); ga.verlassen()
 
+# ── Knappe Munition: sie muss wirklich knapp sein ────────────────────
+# Gemeldet als "man kann unendlich nachladen" und "Kisten lassen sich
+# nicht aufheben". Beides hatte dieselbe Ursache: jeder Wiedereinstieg
+# schenkte alle Magazine am Vorrat vorbei. Der Vorrat sank nie, und was
+# voll ist, kann man nicht auffuellen.
+w, ga = gefechtspaar("team", knapp=True, ende_art="zeit", ende_wert=900)
+wirt_k = w.kaempfer[0]
+name = wirt_k.waffe_name
+pruef("Knappe Munition kommt am Kaempfer an", wirt_k.knapp)
+voll_vorrat = K.MUNITION["vorrat"][name]
+pruef("Zu Beginn ist der Vorrat voll", wirt_k.vorrat[name] == voll_vorrat,
+      "%d" % wirt_k.vorrat[name])
+
+# Leerschiessen und nachladen kostet Vorrat.
+wirt_k.magazin[name] = 0
+wirt_k.nachlade_rest = 0.0
+wirt_k.nachladen()
+for _ in range(int(K.WAFFEN[name]["nachladen"] / K.FIXED_DT) + 6):
+    wirt_k.schritt(K.FIXED_DT)
+pruef("Nachladen nimmt aus dem Vorrat",
+      wirt_k.vorrat[name] == voll_vorrat - K.WAFFEN[name]["magazin"],
+      "%d von %d uebrig" % (wirt_k.vorrat[name], voll_vorrat))
+
+# **Der eigentliche Fehler:** ein Wiedereinstieg darf nicht umsonst
+# nachfuellen.
+wirt_k.magazin[name] = 0
+vorher_vorrat = wirt_k.vorrat[name]
+w._wieder_einsteigen(wirt_k)
+pruef("Ein Wiedereinstieg fuellt das Magazin",
+      wirt_k.magazin[name] == K.WAFFEN[name]["magazin"],
+      "%d" % wirt_k.magazin[name])
+pruef("Und bezahlt es aus dem Vorrat",
+      wirt_k.vorrat[name] == vorher_vorrat - K.WAFFEN[name]["magazin"],
+      "%d statt %d" % (wirt_k.vorrat[name],
+                       vorher_vorrat - K.WAFFEN[name]["magazin"]))
+
+# Ohne knappe Munition bleibt es wie immer: umsonst.
+w2, ga2 = gefechtspaar("team", knapp=False)
+frei_k = w2.kaempfer[0]
+frei_k.magazin[frei_k.waffe_name] = 0
+w2._wieder_einsteigen(frei_k)
+pruef("Ohne Begrenzung ist der Wiedereinstieg weiter umsonst",
+      frei_k.magazin[frei_k.waffe_name]
+      == K.WAFFEN[frei_k.waffe_name]["magazin"])
+w2.verlassen(); ga2.verlassen()
+
+# Ist der Vorrat leer, laeuft gar kein Nachladen mehr an.
+wirt_k.vorrat[name] = 0
+wirt_k.magazin[name] = 0
+wirt_k.nachlade_rest = 0.0
+wirt_k.nachladen()
+pruef("Ohne Vorrat startet kein Nachladen", wirt_k.nachlade_rest == 0.0,
+      "%.2f" % wirt_k.nachlade_rest)
+
+# Und dann laesst sich eine Kiste aufheben - was vorher nie noetig war.
+kiste = KampfBeute(pygame.Vector2(wirt_k.pos), "munition", wirt_k.ebene,
+                   w.kaempfer)
+w.welt.dazu(kiste)
+w.welt.schritt(K.FIXED_DT)
+pruef("Eine Munitionskiste wird im Vorbeilaufen genommen", not kiste.lebt)
+pruef("Und fuellt den Vorrat wieder auf", wirt_k.vorrat[name] > 0,
+      "%d" % wirt_k.vorrat[name])
+
+# Der Vorrat muss so knapp sein, dass er in einer Runde auffaellt.
+reicht = min(K.MUNITION["vorrat"][x] / K.WAFFEN[x]["magazin"]
+             for x in K.HOTBAR if K.WAFFEN[x]["magazin"])
+pruef("Der Vorrat reicht fuer wenige Nachladungen, nicht fuer zwanzig",
+      reicht <= 4.0, "knappste Waffe: %.1f Nachladungen" % reicht)
+w.verlassen(); ga.verlassen()
+
 # ── Treppen: nicht zweimal hintereinander ────────────────────────────
 # "nutzen" wird gehalten, nicht gedrueckt. Ohne Sperre versuchte darum
 # jedes Bild einen Wechsel: hoch, und weil auf der Zielkachel die Treppe
