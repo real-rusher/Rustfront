@@ -9,7 +9,10 @@ nicht anders, und *in welcher Reihenfolge*.
 gesagt bekommt "mach mit dem Kartenplan weiter". Wer hier anfaengt, liest
 zuerst Abschnitt 0 und 1, dann den Meilenstein, der dran ist.
 
-**Stand beim Schreiben:** Version 0.11.1, PRE-ALPHA. Der Spielkern steht
+**Stand beim Schreiben:** Version 0.11.1, PRE-ALPHA. (Inzwischen 0.15.0;
+zwischendurch ist ein LAN-Mehrspieler entstanden, der als Test
+fertiggestellt und auf den Zweig `multiplayer-test` abgespalten wurde. Fuer
+diesen Plan aendert das nichts - er beschreibt den Einzelspieler.) Der Spielkern steht
 (feste Zeitschritte, drei Ebenen, sechs Waffen, Inventar, Menues, Texturen
 aus Dateien). Es gibt genau eine Karte: `testkarte()` in `world.py`, drei
 handgetippte Textebenen. Alles Folgende haengt an dieser einen Struktur.

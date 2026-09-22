@@ -222,64 +222,6 @@ pruef("Die Heilung laeuft nach dem Schliessen durch", held.leben > 40.0,
       "%.0f Leben" % held.leben)
 
 # ── Bilder zum Anschauen ──────────────────────────────────────────────
-# ── LAN-Gefecht: Bestenliste und Rundenende ─────────────────────────
-# Hier und nicht in test_spiel.py, weil dieser Test seine Pfade schon auf
-# einen Wegwerfordner umgebogen hat - die Bestenliste des Spielers soll
-# ein Testlauf niemals anfassen.
-print("LAN-Gefecht")
-from dustfront import bestenliste
-from dustfront import netz
-from dustfront.mehrspieler import Gefecht
-
-pruef("Bestenliste faengt leer an", bestenliste.laden()["eintraege"] == [])
-pruef("und liegt im Wegwerfordner", _WEG in bestenliste.beschreibung(),
-      bestenliste.beschreibung())
-
-daten = bestenliste.eintragen([
-    {"name": "MEISTER", "abschuesse": 7, "tode": 2},
-    {"name": "BESUCH", "abschuesse": 3, "tode": 5},
-])
-pruef("Ergebnis wird eingetragen", len(daten["eintraege"]) == 2)
-pruef("Bester steht oben", daten["eintraege"][0]["name"] == "MEISTER",
-      daten["eintraege"][0]["name"])
-
-# Eine zweite Runde muss dazuzaehlen, nicht ersetzen
-daten = bestenliste.eintragen([{"name": "MEISTER", "abschuesse": 4, "tode": 1}])
-meister = [e for e in daten["eintraege"] if e["name"] == "MEISTER"][0]
-pruef("Runden werden zusammengezaehlt", meister["abschuesse"] == 11,
-      "%d Abschuesse, %d Runden" % (meister["abschuesse"], meister["runden"]))
-pruef("Die Liste ueberlebt einen Neustart",
-      bestenliste.laden()["eintraege"][0]["abschuesse"] == 11)
-
-# Kaputte Datei darf nichts kosten
-from dustfront import pfade
-pfade.datei(bestenliste.DATEI).write_text("{kein json", encoding="utf-8")
-pruef("Kaputte Bestenliste kostet nur die Liste",
-      bestenliste.laden()["eintraege"] == [])
-
-# Rundenende beim Gastgeber
-wirt = netz.Gastgeber(51007)
-gefecht = Gefecht(app, "MEISTER", gastgeber=wirt)
-gefecht.rest = 0.02
-for _ in range(4):
-    gefecht.schritt(K.NETZ["takt"])
-pruef("Runde endet, wenn die Zeit um ist", gefecht.vorbei)
-pruef("Endstand steht", len(gefecht.liste) == 1, str(gefecht.liste))
-pruef("und ist in der Bestenliste gelandet",
-      any(e["name"] == "MEISTER" for e in bestenliste.laden()["eintraege"]))
-gefecht.verlassen()
-
-# Namen, die aus dem Netz kommen, muessen anzeigbar werden
-pruef("Name wird gesaeubert", netz.name_saeubern("  m\u00e4x!! ") == "MX",
-      netz.name_saeubern("  m\u00e4x!! "))
-pruef("Leerer Name wird ersetzt", netz.name_saeubern("") == "GAST")
-pruef("Langer Name wird gekuerzt",
-      len(netz.name_saeubern("A" * 40)) == K.NETZ["namenslaenge"])
-pruef("Adresse mit Port wird zerlegt",
-      netz.adresse_lesen("192.168.1.7:50505") == ("192.168.1.7", 50505))
-pruef("Adresse ohne Port bekommt den Standard",
-      netz.adresse_lesen("192.168.1.7") == ("192.168.1.7", K.NETZ["port"]))
-
 print("Bilder")
 
 
