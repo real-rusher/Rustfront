@@ -998,6 +998,243 @@ w.schritt(K.FIXED_DT)
 pruef("pvpve endet nach der gewaehlten Zeit", w.vorbei)
 w.verlassen(); ga.verlassen()
 
+# ── Mannschaften: team, versus, huegel ───────────────────────────────
+from dustfront.mehrspieler import Kaempfer
+
+# Drei Spielarten, die sich denselben Unterbau teilen: zwei Mannschaften,
+# eine Fraktion je Mannschaft, ein gemeinsames Konto. Geprueft wird
+# deshalb einmal der Unterbau und danach je Spielart das, was nur sie hat.
+
+def netz_durchlassen(a, b, takte=12):
+    """So viele Netztakte, dass eine Meldung sicher angekommen ist."""
+    for _ in range(takte):
+        a.schritt(K.NETZ["takt"])
+        b.schritt(K.NETZ["takt"])
+
+
+# --- team: Abschuesse zaehlen fuer die Mannschaft
+w, ga = gefechtspaar("team", ende_art="abschuesse", ende_wert=4)
+wirt_k = w.kaempfer[0]
+gast_k = w.kaempfer[ga.meine_nummer]
+pruef("Die Spielart team kommt beim Gast an", ga.modus == "team", ga.modus)
+pruef("Der Gastgeber ist in der ersten Mannschaft", wirt_k.team == 0,
+      "Team %d" % wirt_k.team)
+pruef("Der Neue kommt in die andere Mannschaft", gast_k.team == 1,
+      "Team %d" % gast_k.team)
+pruef("Zwei Mannschaften sind zwei Fraktionen",
+      wirt_k.fraktion != gast_k.fraktion,
+      "%s / %s" % (wirt_k.fraktion, gast_k.fraktion))
+dritter = w._dazu(99, "DRITTER")
+pruef("Der dritte Mann fuellt die kleinere Mannschaft auf",
+      dritter.team == 0, "Team %d" % dritter.team)
+pruef("Gleiche Mannschaft heisst gleiche Fraktion",
+      dritter.fraktion == wirt_k.fraktion, dritter.fraktion)
+w.kaempfer.pop(99, None)
+dritter.lebt = False
+pruef("Die Mannschaft kommt beim Gast an",
+      ga.kaempfer[ga.meine_nummer].team == 1,
+      "Team %d" % ga.kaempfer[ga.meine_nummer].team)
+
+# Ein Abschuss zaehlt fuer das Konto der Mannschaft, nicht nur fuer den
+# Schuetzen.
+gast_k.lebt = False
+gast_k.toeter = wirt_k
+w._tote_abrechnen(K.FIXED_DT)
+pruef("Ein Abschuss zaehlt fuer die Mannschaft",
+      w.teampunkte[0] == 1 and w.teampunkte[1] == 0, str(w.teampunkte))
+pruef("Und weiter fuer den Schuetzen selbst", wirt_k.abschuesse == 1)
+w.teampunkte[0] = 4
+w._ende_pruefen(K.FIXED_DT)
+pruef("team endet bei der gewaehlten Teamabschusszahl",
+      w.vorbei and w.sieger_team == 0, "Sieger %d" % w.sieger_team)
+netz_durchlassen(w, ga)
+pruef("Der Gast erfaehrt, welche Mannschaft gewonnen hat",
+      ga.sieger_team == 0 and ga.teampunkte[0] == 4,
+      "Sieger %d, Stand %s" % (ga.sieger_team, ga.teampunkte))
+w.verlassen(); ga.verlassen()
+
+# --- versus: ein Leben je Runde, Aufhelfen nur in der eigenen Mannschaft
+w, ga = gefechtspaar("versus")
+wirt_k = w.kaempfer[0]
+gast_k = w.kaempfer[ga.meine_nummer]
+pruef("In versus wird aufgeholfen", w.regeln["revive"] and wirt_k.revive_an)
+pruef("Aber kuerzer als in pve",
+      wirt_k.boden_zeit == K.VERSUS["boden_zeit"]
+      and wirt_k.revive_dauer == K.VERSUS["revive_dauer"],
+      "%.0f s am Boden, %.0f s Aufhelfen"
+      % (wirt_k.boden_zeit, wirt_k.revive_dauer))
+pruef("Dem Gegner hilft niemand auf", not w._darf_helfen(wirt_k, gast_k))
+pruef("Dem eigenen Mann schon",
+      w._darf_helfen(wirt_k, Kaempfer(pygame.Vector2(0, 0), 0, 7, "X",
+                                      wirt_k.fraktion, team=wirt_k.team)))
+pruef("Die erste Runde laeuft", w.runde >= 1, "Runde %d" % w.runde)
+
+# Der Gast faellt und wird nicht aufgehoben: seine Mannschaft ist leer,
+# die Runde geht an die andere.
+gast_k.unverwundbar = 0.0
+gast_k.schaden(999, None, None)
+pruef("Wer faellt, liegt erst einmal am Boden",
+      gast_k.am_boden and gast_k.lebt)
+pruef("Am Boden ist die Runde noch nicht entschieden",
+      w.teampunkte == [0, 0], str(w.teampunkte))
+gast_k.boden_rest = 0.0
+w._revive(K.FIXED_DT)
+w._tote_abrechnen(K.FIXED_DT)
+pruef("Laeuft die Zeit am Boden ab, ist man fuer die Runde raus",
+      gast_k.raus and not gast_k.lebt)
+w._runden(K.FIXED_DT)
+pruef("Die Runde geht an die Mannschaft, die noch steht",
+      w.teampunkte[0] == 1, str(w.teampunkte))
+pruef("Danach laeuft die Pause", w.runden_pause > 0,
+      "%.1f s" % w.runden_pause)
+gast_k.magazin[gast_k.waffe_name] = 0
+runde_vorher = w.runde
+w._runden(K.VERSUS["pause"] + K.FIXED_DT)
+pruef("Nach der Pause faengt die naechste Runde an",
+      w.runde == runde_vorher + 1, "Runde %d" % w.runde)
+pruef("Und alle stehen wieder, mit vollem Magazin",
+      gast_k.lebt and not gast_k.raus and not gast_k.am_boden
+      and gast_k.magazin[gast_k.waffe_name]
+      == K.WAFFEN[gast_k.waffe_name]["magazin"])
+pruef("Die beiden stehen nicht nebeneinander",
+      wirt_k.pos.distance_to(gast_k.pos) > 60.0,
+      "%.0f px" % wirt_k.pos.distance_to(gast_k.pos))
+
+# Genug Rundensiege beenden das Gefecht.
+w.teampunkte[0] = K.VERSUS["runden_bis"] - 1
+gast_k.lebt = False
+gast_k.raus = True
+w._runden(K.FIXED_DT)
+pruef("Genug Rundensiege beenden das Gefecht",
+      w.vorbei and w.sieger_team == 0,
+      "%s, Sieger %d" % (w.teampunkte, w.sieger_team))
+w.verlassen(); ga.verlassen()
+
+# Allein wartet versus, statt jede Runde sofort zu entscheiden
+_port[0] += 1
+wirt_n = netz.Gastgeber(_port[0])
+allein = Gefecht(app, "ALLEIN", gastgeber=wirt_n, modus="versus")
+for _ in range(20):
+    allein.schritt(K.NETZ["takt"])
+pruef("Ohne Gegenmannschaft faengt keine Runde an",
+      allein.runde == 0 and allein.teampunkte == [0, 0],
+      "Runde %d, Stand %s" % (allein.runde, allein.teampunkte))
+allein.verlassen()
+
+# --- huegel: der Kreis in der Kartenmitte
+w, ga = gefechtspaar("huegel", ende_art="zeit", ende_wert=600)
+wirt_k = w.kaempfer[0]
+gast_k = w.kaempfer[ga.meine_nummer]
+ebene_null = w.welt.ebene(K.ZONE["ebene"])
+pruef("Der Kreis liegt in der Mitte der Karte",
+      abs(w.zone_mitte.x - ebene_null.pixel_breite / 2) < 1.0
+      and abs(w.zone_mitte.y - ebene_null.pixel_hoehe / 2) < 1.0,
+      "%.0f/%.0f" % (w.zone_mitte.x, w.zone_mitte.y))
+pruef("Der Gast rechnet dieselbe Mitte aus",
+      ga.zone_mitte.distance_to(w.zone_mitte) < 1.0)
+
+wirt_k.pos.update(w.zone_mitte); wirt_k.vorher.update(wirt_k.pos)
+wirt_k.ebene = K.ZONE["ebene"]
+pruef("Wer in der Mitte steht, ist im Kreis", w.in_der_zone(wirt_k))
+wirt_k.ebene = K.ZONE["ebene"] + 1
+pruef("Eine Ebene hoeher zaehlt nicht", not w.in_der_zone(wirt_k))
+wirt_k.ebene = K.ZONE["ebene"]
+weit = pygame.Vector2(w.zone_mitte.x + K.ZONE["radius"] + 8, w.zone_mitte.y)
+gast_k.pos.update(weit); gast_k.vorher.update(gast_k.pos)
+gast_k.ebene = K.ZONE["ebene"]
+pruef("Knapp daneben ist draussen", not w.in_der_zone(gast_k))
+
+w._zone(1.0)
+pruef("Allein im Kreis laedt es fuer die eigene Mannschaft",
+      abs(w.zone_stand[0] - K.ZONE["je_sekunde"]) < 0.01
+      and w.zone_stand[1] == 0.0, str(w.zone_stand))
+pruef("Und der Kreis gehoert sichtbar dieser Mannschaft",
+      w.zone_halter == 0, "Halter %d" % w.zone_halter)
+
+# Gleich viele auf beiden Seiten: nichts passiert, der Stand verfaellt.
+gast_k.pos.update(w.zone_mitte); gast_k.vorher.update(gast_k.pos)
+stand_vorher = w.zone_stand[0]
+w._zone(1.0)
+pruef("Bei Gleichstand im Kreis laedt niemand",
+      w.zone_stand[0] < stand_vorher and w.zone_halter == -1,
+      "%s, Halter %d" % (w.zone_stand, w.zone_halter))
+
+# Es zaehlt der Vorsprung, nicht die Kopfzahl: zwei gegen einen laedt
+# genauso schnell wie einer gegen keinen. Wer den Kreis gegen Widerstand
+# haelt, soll nicht schneller sein als der, der ihn leer vorfindet.
+zweiter = w._dazu(98, "ZWEITER")
+zweiter.team = 0
+zweiter.pos.update(w.zone_mitte); zweiter.vorher.update(zweiter.pos)
+zweiter.ebene = K.ZONE["ebene"]
+w.zone_stand[0] = 0.0
+w._zone(1.0)                      # zwei gegen einen
+pruef("Zwei gegen einen laedt wie einer gegen keinen",
+      abs(w.zone_stand[0] - K.ZONE["je_sekunde"]) < 0.01,
+      "%.1f" % w.zone_stand[0])
+gast_k.pos.update(weit); gast_k.vorher.update(gast_k.pos)
+w.zone_stand[0] = 0.0
+w._zone(1.0)                      # zwei gegen keinen
+pruef("Zwei gegen keinen laedt schneller",
+      w.zone_stand[0] > K.ZONE["je_sekunde"], "%.1f" % w.zone_stand[0])
+pruef("Aber nie schneller als die Obergrenze",
+      w.zone_stand[0] <= K.ZONE["hoechstens"] + 0.01, "%.1f" % w.zone_stand[0])
+w.kaempfer.pop(98, None)
+zweiter.lebt = False
+
+netz_durchlassen(w, ga)
+pruef("Der Ladestand kommt beim Gast an",
+      abs(ga.zone_stand[0] - w.zone_stand[0]) < 0.2,
+      "%s statt %s" % (ga.zone_stand, w.zone_stand))
+
+# Der volle Kreis entscheidet das Gefecht.
+w.zone_stand[0] = K.ZONE["bis"] - 0.01
+gast_k.pos.update(weit); gast_k.vorher.update(gast_k.pos)
+w._zone(1.0)
+pruef("Der volle Kreis beendet das Gefecht",
+      w.vorbei and w.sieger_team == 0, "Sieger %d" % w.sieger_team)
+
+# Und er ist auch wirklich zu sehen: dasselbe Bild einmal mit und einmal
+# ohne Kreis darf nicht gleich aussehen.
+w.vorbei = False
+w.zone_stand[0] = K.ZONE["bis"] * 0.5
+w.zone_halter = 0
+w.ich = wirt_k
+w.welt.held = wirt_k
+w.blick = K.ZONE["ebene"]
+w.blick_hoehe = float(w.welt.hoehe(K.ZONE["ebene"]))
+w.kamera.pos.update(wirt_k.pos)
+w.kamera.versatz.update(0, 0)
+mit = pygame.Surface((K.GAME_W, K.GAME_H))
+ohne = pygame.Surface((K.GAME_W, K.GAME_H))
+w.zeichnen(mit, 1.0)
+w.regeln = K.MODI["pvp"]
+w.zeichnen(ohne, 1.0)
+w.regeln = K.MODI["huegel"]
+anders = 0
+for px in range(0, K.GAME_W, 2):
+    for py in range(0, K.GAME_H, 2):
+        if mit.get_at((px, py))[:3] != ohne.get_at((px, py))[:3]:
+            anders += 1
+pruef("Der Kreis ist im Bild wirklich zu sehen", anders > 400,
+      "%d Bildpunkte anders" % anders)
+# Rund muss er sein: innerhalb des Radius anders, ausserhalb nicht. Genau
+# auf der Mitte steht die Figur und verdeckt ihn - der Kreis liegt unter
+# den Figuren, nicht darueber, und das soll auch so bleiben.
+def anders_bei(abstand):
+    px = int(K.GAME_W // 2 + abstand)
+    py = K.GAME_H // 2
+    return mit.get_at((px, py))[:3] != ohne.get_at((px, py))[:3]
+
+drinnen = anders_bei(K.ZONE["radius"] * 0.5)
+draussen = anders_bei(K.ZONE["radius"] + 40)
+pruef("Und zwar als Kreis, nicht als Flaeche ueber allem",
+      drinnen and not draussen,
+      "drinnen %s, draussen %s" % (drinnen, draussen))
+figur = mit.get_at((K.GAME_W // 2, K.GAME_H // 2))[:3] \
+    == ohne.get_at((K.GAME_W // 2, K.GAME_H // 2))[:3]
+pruef("Die Figur steht auf dem Kreis, nicht darunter", figur)
+w.verlassen(); ga.verlassen()
+
 # Ein Gast, der abbricht, darf den Gastgeber nicht mitreissen
 verbindung.schliessen()
 for _ in range(6):

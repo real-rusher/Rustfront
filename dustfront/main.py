@@ -69,7 +69,18 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
             wirt = netz.Gastgeber(port or None)
             regeln = K.MODI.get(modus, K.MODI[K.MODUS_VORGABE])
             print("Gastgeber laeuft: %s - %s" % (regeln["name"], regeln["hinweis"]))
-            if not regeln["revive"]:
+            if regeln["teams"]:
+                print("Mannschaften: %s gegen %s, neue Leute gehen in die "
+                      "kleinere." % K.TEAMS["namen"])
+            if regeln["zone"]:
+                print("Der Kreis liegt in der Kartenmitte, Ebene %d. Wer dort "
+                      "die Mehrheit hat, laedt bis %d."
+                      % (K.ZONE["ebene"], int(K.ZONE["bis"])))
+            elif regeln["runden"]:
+                print("Ein Leben je Runde, %d Rundensiege entscheiden. "
+                      "Aufhelfen geht nur in der eigenen Mannschaft."
+                      % K.VERSUS["runden_bis"])
+            elif not regeln["revive"]:
                 print("Endet nach %s" % ("Zeit" if ende_art == "zeit"
                                          else "Abschuessen"))
             if knapp:

@@ -35,32 +35,52 @@ echo "  Spielart:"
 echo "    1  PVP     jeder gegen jeden"
 echo "    2  PVE     alle zusammen gegen Wellen, mit Aufhelfen"
 echo "    3  PVPVE   Wellen, und dabei jeder gegen jeden"
+echo "    4  TEAM    zwei Mannschaften, Abschuesse zaehlen fuer das Team"
+echo "    5  VERSUS  zwei Mannschaften, ein Leben je Runde, mit Aufhelfen"
+echo "    6  HUEGEL  zwei Mannschaften, haltet den Kreis in der Mitte"
 echo
 read -r -p "  Welche (Enter = 1): " WAHL
 case "${WAHL:-1}" in
     2) MODUS="pve" ;;
     3) MODUS="pvpve" ;;
+    4) MODUS="team" ;;
+    5) MODUS="versus" ;;
+    6) MODUS="huegel" ;;
     *) MODUS="pvp" ;;
 esac
 
 ENDE="zeit"
 WERT=0
-if [ "$MODUS" != "pve" ]; then
-    echo
-    echo "  Wann endet die Runde?"
-    echo "    1  nach Zeit"
-    echo "    2  nach Abschuessen"
-    echo
-    read -r -p "  Welche (Enter = 1): " WAHL
-    if [ "${WAHL:-1}" = "2" ]; then
-        ENDE="abschuesse"
-        read -r -p "  Abschuesse bis Schluss (Enter = 20): " WERT
-        WERT="${WERT:-20}"
-    else
-        read -r -p "  Minuten (Enter = 5): " MINUTEN
-        WERT=$(( ${MINUTEN:-5} * 60 ))
-    fi
-fi
+case "$MODUS" in
+    pvp|pvpve|team)
+        echo
+        echo "  Wann endet die Runde?"
+        echo "    1  nach Zeit"
+        echo "    2  nach Abschuessen"
+        echo
+        read -r -p "  Welche (Enter = 1): " WAHL
+        if [ "${WAHL:-1}" = "2" ]; then
+            ENDE="abschuesse"
+            if [ "$MODUS" = "team" ]; then
+                read -r -p "  Teamabschuesse bis Schluss (Enter = 30): " WERT
+                WERT="${WERT:-30}"
+            else
+                read -r -p "  Abschuesse bis Schluss (Enter = 20): " WERT
+                WERT="${WERT:-20}"
+            fi
+        else
+            read -r -p "  Minuten (Enter = 5): " MINUTEN
+            WERT=$(( ${MINUTEN:-5} * 60 ))
+        fi
+        ;;
+    versus|huegel)
+        # Beide enden von selbst: versus nach Rundensiegen, huegel am
+        # vollen Kreis. Die Zeit ist nur die Notbremse.
+        echo
+        read -r -p "  Hoechstdauer in Minuten (Enter = 10): " MINUTEN
+        WERT=$(( ${MINUTEN:-10} * 60 ))
+        ;;
+esac
 
 KNAPP=""
 if [ "$MODUS" != "pvp" ]; then

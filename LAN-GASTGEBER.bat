@@ -49,16 +49,25 @@ echo   Spielart:
 echo     1  PVP     jeder gegen jeden
 echo     2  PVE     alle zusammen gegen Wellen, mit Aufhelfen
 echo     3  PVPVE   Wellen, und dabei jeder gegen jeden
+echo     4  TEAM    zwei Mannschaften, Abschuesse zaehlen fuer das Team
+echo     5  VERSUS  zwei Mannschaften, ein Leben je Runde, mit Aufhelfen
+echo     6  HUEGEL  zwei Mannschaften, haltet den Kreis in der Mitte
 echo.
 set "MODUS=pvp"
 set "WAHL="
 set /p "WAHL=  Welche (Enter = 1): "
 if "%WAHL%"=="2" set "MODUS=pve"
 if "%WAHL%"=="3" set "MODUS=pvpve"
+if "%WAHL%"=="4" set "MODUS=team"
+if "%WAHL%"=="5" set "MODUS=versus"
+if "%WAHL%"=="6" set "MODUS=huegel"
 
 set "ENDE=zeit"
 set "WERT=0"
 if "%MODUS%"=="pve" goto muni
+rem versus und huegel enden von selbst. Die Zeit ist nur die Notbremse.
+if "%MODUS%"=="versus" goto hoechstdauer
+if "%MODUS%"=="huegel" goto hoechstdauer
 
 echo.
 echo   Wann endet die Runde?
@@ -77,8 +86,21 @@ goto muni
 
 :wieviele
 set "WERT="
+if "%MODUS%"=="team" goto wieviele_team
 set /p "WERT=  Abschuesse bis Schluss (Enter = 20): "
 if "%WERT%"=="" set "WERT=20"
+goto muni
+
+:wieviele_team
+set /p "WERT=  Teamabschuesse bis Schluss (Enter = 30): "
+if "%WERT%"=="" set "WERT=30"
+goto muni
+
+:hoechstdauer
+set "WERT="
+set /p "WERT=  Hoechstdauer in Minuten (Enter = 10): "
+if "%WERT%"=="" set "WERT=10"
+set /a WERT=%WERT%*60
 
 :muni
 set "KNAPP="

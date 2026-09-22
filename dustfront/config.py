@@ -249,21 +249,73 @@ NETZ = dict(
 # gegner  = es kommen Wellen
 # beute   = Spieler koennen sich gegenseitig treffen
 # revive  = wer faellt, liegt am Boden und kann aufgeholfen bekommen
+# teams   = zwei Mannschaften statt jeder fuer sich
+# runden  = ein Leben je Runde, wer zuerst genug Runden hat, gewinnt
+# zone    = ein Kreis in der Kartenmitte, der erobert wird
 MODI = {
-    "pvp":   dict(name="PVP",   gegner=False, beute=True,  revive=False,
-                  hinweis="Jeder gegen jeden."),
-    "pve":   dict(name="PVE",   gegner=True,  beute=False, revive=True,
-                  hinweis="Alle zusammen gegen die Wellen."),
-    "pvpve": dict(name="PVPVE", gegner=True,  beute=True,  revive=False,
-                  hinweis="Wellen, und dabei jeder gegen jeden."),
+    "pvp":    dict(name="PVP",    gegner=False, beute=True,  revive=False,
+                   teams=False, runden=False, zone=False,
+                   hinweis="Jeder gegen jeden."),
+    "pve":    dict(name="PVE",    gegner=True,  beute=False, revive=True,
+                   teams=False, runden=False, zone=False,
+                   hinweis="Alle zusammen gegen die Wellen."),
+    "pvpve":  dict(name="PVPVE",  gegner=True,  beute=True,  revive=False,
+                   teams=False, runden=False, zone=False,
+                   hinweis="Wellen, und dabei jeder gegen jeden."),
+    "team":   dict(name="TEAM",   gegner=False, beute=True,  revive=False,
+                   teams=True,  runden=False, zone=False,
+                   hinweis="Zwei Mannschaften, Abschuesse zaehlen fuer das Team."),
+    "versus": dict(name="VERSUS", gegner=False, beute=True,  revive=True,
+                   teams=True,  runden=True,  zone=False,
+                   hinweis="Ein Leben je Runde. Mitspieler koennen aufhelfen."),
+    "huegel": dict(name="HUEGEL", gegner=False, beute=True,  revive=False,
+                   teams=True,  runden=False, zone=True,
+                   hinweis="Haltet den Kreis in der Mitte."),
 }
 MODUS_VORGABE = "pvp"
+
+# Zwei Mannschaften. Mehr waeren eine Zeile hier und sonst nichts - die
+# Zuteilung, die Faerbung und die Punktetafel rechnen alle ueber die Laenge
+# dieser Listen.
+TEAMS = dict(
+    namen=("ROT", "BLAU"),
+    farben=(C_ORANGE, C_TEAL),
+    dunkel=(C_RUST, C_TEAL_DK),
+)
+
+# Der Kreis in der Kartenmitte, nach dem Vorbild der Hot Zone.
+#
+# Wer drin steht, laedt fuer sein Team. Stehen beide Mannschaften drin,
+# zaehlt nur die Mehrheit - bei Gleichstand passiert nichts, und genau das
+# macht den Kreis zum Ort, an dem man sich trifft, statt ihn abwechselnd
+# leerzuraeumen.
+ZONE = dict(
+    ebene=0,                  # auf welcher Ebene der Kreis liegt
+    radius=96.0,              # in Welt-Pixeln
+    bis=100.0,                # so weit muss ein Team laden
+    je_sekunde=7.0,           # Fortschritt je Sekunde bei Mehrheit
+    je_kopf=2.5,              # Aufschlag je Kopf Mehrheit
+    hoechstens=18.0,          # mehr laedt niemand je Sekunde
+    verfall=1.2,              # so schnell sinkt der Stand, wenn keiner haelt
+    ring=3,                   # Dicke des Rings in Pixeln
+    fuellung=34,              # Deckkraft der Flaeche
+    puls=0.9,                 # Sekunden fuer einen Pulsschlag des Rings
+)
+
+# Versus: ein Leben je Runde, wie in einem Rundenschuetzen.
+VERSUS = dict(
+    runden_bis=3,             # so viele Rundensiege bis zum Schluss
+    pause=5.0,                # Sekunden zwischen zwei Runden
+    boden_zeit=20.0,          # kuerzer als in pve: eine Runde soll laufen
+    revive_dauer=4.0,         # und das Aufhelfen dauert laenger
+)
 
 # Wie eine Runde endet. Bei pvp und pvpve waehlt der Gastgeber; bei pve
 # endet sie, wenn alle am Boden liegen.
 ENDE_ARTEN = ("zeit", "abschuesse")
 
 GEFECHT = dict(
+    team_abschuesse=30,       # Teamabschuesse bis zum Sieg in "team"
     rundenzeit=300.0,         # Sekunden je Runde, wenn nach Zeit gespielt wird
     abschuesse_ziel=20,       # Abschuesse bis zum Sieg, wenn danach gespielt wird
     wieder_nach=3.0,          # Sekunden bis zum Wiedereinstieg nach dem Tod

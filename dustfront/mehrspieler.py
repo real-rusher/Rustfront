@@ -2,9 +2,10 @@
 DUSTFRONT - Gefecht im LAN
 ==========================
 
-Mehrspieler im LAN, in drei Spielarten. **Dieser Zweig wird nicht mehr
+Mehrspieler im LAN, in sechs Spielarten. **Dieser Zweig wird nicht mehr
 weiterentwickelt** - er war ein Test und ist als solcher fertiggestellt.
-Der Hauptzweig geht ohne Mehrspieler weiter, siehe docs/KARTE.md.
+Der Hauptzweig geht ohne Mehrspieler weiter, siehe docs/KARTE.md und
+docs/MEHRSPIELER.md.
 
     pvp     Jeder gegen jeden. Endet nach Zeit oder nach Abschuessen,
             der Gastgeber waehlt.
@@ -12,6 +13,21 @@ Der Hauptzweig geht ohne Mehrspieler weiter, siehe docs/KARTE.md.
             Wer faellt, liegt am Boden und kann aufgeholfen bekommen;
             nach jeder Welle steht ohnehin wieder jeder.
     pvpve   Wellen, und dabei jeder gegen jeden. Endet wie pvp.
+    team    Zwei Mannschaften, Abschuesse zaehlen fuer die Mannschaft.
+            Endet nach Zeit oder nach Teamabschuessen.
+    versus  Zwei Mannschaften, ein Leben je Runde. Wer faellt, liegt am
+            Boden und kann von der eigenen Mannschaft aufgeholfen werden -
+            danach ist er fuer diese Runde raus. Wer zuerst genug Runden
+            gewonnen hat, gewinnt.
+    huegel  Zwei Mannschaften und ein sichtbarer Kreis in der Kartenmitte.
+            Wer dort die Mehrheit hat, laedt fuer seine Mannschaft.
+
+**Mannschaften.** Nur drei Dinge unterscheiden sie vom Rest: die Fraktion
+haengt am Team statt am Spieler (deshalb trifft man den Nebenmann nicht),
+der Einstieg sucht einen Platz weit weg von den Fremden und nahe bei den
+eigenen, und gezaehlt wird auf ein gemeinsames Konto. Neue Mitspieler gehen
+in die kleinere Mannschaft, nicht abwechselnd - wer geht, hinterlaesst
+sonst eine Luecke, die nie wieder gefuellt wird.
 
 **Der Gastgeber rechnet alles.** Er hat die einzige echte Welt. Gaeste
 schicken nur, was sie druecken, und bekommen zurueck, wo alles steht. Ein
@@ -58,17 +74,23 @@ class Kaempfer(Spieler):
     """
 
     def __init__(self, pos, ebene: int, nummer: int, name: str,
-                 fraktion: str, knapp: bool = False) -> None:
+                 fraktion: str, knapp: bool = False, team: int = -1) -> None:
         super().__init__(pos, ebene)
         self.fraktion = fraktion
         self.nummer = nummer
         self.name = name
+        self.team = team             # -1 = keine Mannschaft, sonst 0 oder 1
+        self.raus = False            # in versus: diese Runde erledigt
         self.abschuesse = 0
         self.tode = 0
         self.wieder_in = 0.0
         self.toeter = None           # wertet das Gefecht aus und raeumt weg
-        # Am Boden
+        # Am Boden. Die beiden Zeiten stehen am Kaempfer und nicht fest im
+        # Code, weil versus andere braucht als pve: dort soll eine Runde
+        # laufen, hier soll eine Welle zu schaffen sein.
         self.revive_an = False
+        self.boden_zeit = K.REVIVE["boden_zeit"]
+        self.revive_dauer = K.REVIVE["dauer"]
         self.am_boden = False
         self.boden_rest = 0.0
         self.revive_stand = 0.0      # 0 bis 1, wie weit das Aufhelfen ist
@@ -87,7 +109,7 @@ class Kaempfer(Spieler):
             # weiter gezeichnet wird und ansprechbar bleibt.
             self.am_boden = True
             self.leben = K.REVIVE["boden_leben"]
-            self.boden_rest = K.REVIVE["boden_zeit"]
+            self.boden_rest = self.boden_zeit
             self.revive_stand = 0.0
             self.feuert = False
             self.toeter = von
@@ -265,9 +287,15 @@ class Gefecht(Szene):
         self.regeln = K.MODI[self.modus]
         self.ende_art = ende_art if ende_art in K.ENDE_ARTEN else "zeit"
         self.knapp = bool(knapp)
-        self.ende_wert = float(ende_wert) or (
-            K.GEFECHT["rundenzeit"] if self.ende_art == "zeit"
-            else K.GEFECHT["abschuesse_ziel"])
+        # Ohne Vorgabe des Gastgebers: Zeit wie immer, Abschuesse aber je
+        # nachdem, ob ein Konto oder sechs gefuellt werden muessen.
+        if self.ende_art == "zeit":
+            vorgabe = K.GEFECHT["rundenzeit"]
+        elif self.regeln["teams"]:
+            vorgabe = K.GEFECHT["team_abschuesse"]
+        else:
+            vorgabe = K.GEFECHT["abschuesse_ziel"]
+        self.ende_wert = float(ende_wert) or float(vorgabe)
 
         self.rnd = random.Random()
         self.renderer = Renderer(app.bilder)
@@ -275,6 +303,13 @@ class Gefecht(Szene):
         self.kamera = Kamera()
         self.kaempfer: dict[int, Kaempfer] = {}
         self.gegnerlast: dict[int, int] = {}
+        self.teampunkte = [0] * len(K.TEAMS["namen"])
+        self.zone_stand = [0.0] * len(K.TEAMS["namen"])
+        self.zone_mitte = pygame.Vector2(0, 0)
+        self.zone_halter = -1        # wer den Kreis gerade haelt, -1 = niemand
+        self.runde = 0               # in versus: welche Runde laeuft
+        self.runden_pause = 0.0
+        self.sieger_team = -1
         self.rest = self.ende_wert if self.ende_art == "zeit" else 0.0
         self.welle = 0
         self.pause_rest = K.WELLEN_MP["pause"]
@@ -298,6 +333,14 @@ class Gefecht(Szene):
         self._seit_medkit = 0.0
         self._seit_muni = 0.0
         self._letzte_ebene = 0
+        self._zeit = 0.0             # laeuft mit, treibt den Puls des Kreises
+
+        # Der Kreis liegt in der Mitte der Karte. Eine feste Stelle, die
+        # alle kennen - das ist der Punkt an dieser Spielart.
+        ebene_zone = self.welt.ebene(min(K.ZONE["ebene"],
+                                         len(self.welt.ebenen) - 1))
+        self.zone_mitte.update(ebene_zone.pixel_breite / 2,
+                               ebene_zone.pixel_hoehe / 2)
 
         if self.ist_gastgeber:
             self.ich = self._dazu(0, self.name)
@@ -313,33 +356,79 @@ class Gefecht(Szene):
     def mit_gegnern(self) -> bool:
         return self.regeln["gegner"]
 
-    def _fraktion_fuer(self, nummer: int) -> str:
-        """In pvp ist jeder sein eigener Feind, in pve sind alle eine Seite.
+    @property
+    def mit_teams(self) -> bool:
+        return self.regeln["teams"]
 
-        In pvpve gilt wieder jeder fuer sich - die Gegner sind ohnehin eine
-        eigene Fraktion und greifen alle Spieler an.
+    def _team_fuer(self) -> int:
+        """Der Neue kommt in die kleinere Mannschaft.
+
+        Ausgleichend statt abwechselnd: wer geht, hinterlaesst sonst eine
+        Luecke, die nie wieder gefuellt wird.
         """
+        if not self.mit_teams:
+            return -1
+        groessen = [0] * len(K.TEAMS["namen"])
+        for k in self.kaempfer.values():
+            if 0 <= k.team < len(groessen):
+                groessen[k.team] += 1
+        return groessen.index(min(groessen))
+
+    def _fraktion_fuer(self, nummer: int, team: int = -1) -> str:
+        """Wer wen treffen kann.
+
+        In pvp und pvpve ist jeder sein eigener Feind. In pve teilen sich
+        alle eine Fraktion, damit man die eigenen Leute nicht abschiesst.
+        Mit Mannschaften gehoert die Fraktion dem Team - so trifft man den
+        Nebenmann nicht, den Gegner aber schon.
+        """
+        if self.mit_teams and team >= 0:
+            return "team%d" % team
         if self.regeln["beute"]:
             return "kaempfer%d" % nummer
         return "mannschaft"
 
     def _dazu(self, nummer: int, name: str) -> Kaempfer:
-        pos = self._einstiegsort()
+        team = self._team_fuer()
+        pos = self._einstiegsort(team)
         k = Kaempfer(pos, 0, nummer, netz.name_saeubern(name),
-                     self._fraktion_fuer(nummer), knapp=self.knapp)
-        k.revive_an = self.regeln["revive"]
+                     self._fraktion_fuer(nummer, team), knapp=self.knapp,
+                     team=team)
+        self._regeln_anlegen(k)
         k.unverwundbar = K.GEFECHT["schutz"]
         self.kaempfer[nummer] = k
         self.welt.dazu(k)
         return k
 
-    def _einstiegsort(self) -> pygame.Vector2:
-        lebende = [k.pos for k in self.kaempfer.values() if k.lebt]
-        for _ in range(K.NETZ["hoechstens"] * 4):
+    def _regeln_anlegen(self, k: Kaempfer) -> None:
+        """Was die Spielart am einzelnen Kaempfer aendert."""
+        k.revive_an = self.regeln["revive"]
+        if self.regeln["runden"]:
+            k.boden_zeit = K.VERSUS["boden_zeit"]
+            k.revive_dauer = K.VERSUS["revive_dauer"]
+
+    def _einstiegsort(self, team: int = -1) -> pygame.Vector2:
+        """Ein freier Platz. Mit Mannschaften nahe bei den eigenen Leuten
+        und weit weg von den fremden - sonst faengt jede Runde mit einem
+        Gefecht an der Einstiegsstelle an."""
+        eigene = [k.pos for k in self.kaempfer.values()
+                  if k.lebt and team >= 0 and k.team == team]
+        fremde = [k.pos for k in self.kaempfer.values()
+                  if k.lebt and (team < 0 or k.team != team)]
+        bester, bester_wert = None, -1e18
+        for _ in range(K.NETZ["hoechstens"] * 6):
             p = freier_punkt(self.welt, 0, self.rnd)
-            if all(p.distance_to(q) > K.GEFECHT["abstand"] for q in lebende):
-                return p
-        return freier_punkt(self.welt, 0, self.rnd)
+            zu_fremd = min((p.distance_to(q) for q in fremde), default=9999.0)
+            if not self.mit_teams:
+                if zu_fremd > K.GEFECHT["abstand"]:
+                    return p
+                continue
+            zu_eigen = min((p.distance_to(q) for q in eigene), default=0.0)
+            # Weit weg von den Gegnern zaehlt, nahe bei den eigenen hilft.
+            wert = zu_fremd - zu_eigen * 0.5
+            if wert > bester_wert:
+                bester, bester_wert = p, wert
+        return bester if bester is not None else freier_punkt(self.welt, 0, self.rnd)
 
     # ---- Eingabe ------------------------------------------------------
     def knoepfe_sammeln(self) -> None:
@@ -436,6 +525,18 @@ class Gefecht(Szene):
         if ziel_ebene is not None:
             self.welt.ebene_wechseln(k, ziel_ebene)
 
+    def _darf_helfen(self, helfer, liegender) -> bool:
+        """Mit Mannschaften hilft man nur den eigenen Leuten.
+
+        Ohne diese Zeile koennte man in versus den Gegner aufheben, den man
+        gerade umgelegt hat - und die Runde nie beenden.
+        """
+        if helfer is None or liegender is None:
+            return False
+        if not self.mit_teams:
+            return True
+        return helfer.team == liegender.team
+
     def _wem_helfen(self, k: Kaempfer):
         """Der naechste Gefallene in Reichweite, oder None."""
         if not self.regeln["revive"]:
@@ -444,7 +545,7 @@ class Gefecht(Szene):
         for anderer in self.kaempfer.values():
             if anderer is k or not anderer.am_boden or not anderer.lebt:
                 continue
-            if anderer.ebene != k.ebene:
+            if anderer.ebene != k.ebene or not self._darf_helfen(k, anderer):
                 continue
             d = k.pos.distance_to(anderer.pos)
             if d <= beste:
@@ -478,6 +579,8 @@ class Gefecht(Szene):
         if not self.vorbei:
             self._beute_nachlegen(dt)
             self._wellen(dt)
+            self._zone(dt)
+            self._runden(dt)
         self._gegnerlast_zaehlen()
         self.welt.schritt(dt)
         self._revive(dt)
@@ -545,6 +648,115 @@ class Gefecht(Szene):
             self.gegner_offen.append(g)
             self.welt.dazu(g)
 
+    # ---- Der Kreis in der Mitte -----------------------------------------
+    def in_der_zone(self, k) -> bool:
+        """Steht dieser Kaempfer im Kreis? Nur auf der richtigen Ebene."""
+        if not k.lebt or k.am_boden:
+            return False
+        if k.ebene != K.ZONE["ebene"]:
+            return False
+        return k.pos.distance_to(self.zone_mitte) <= K.ZONE["radius"]
+
+    def _zone(self, dt: float) -> None:
+        """Wer die Mehrheit im Kreis hat, laedt fuer sein Team.
+
+        Bei Gleichstand passiert nichts - auch nicht, wenn beide viele
+        Leute drin haben. Das macht den Kreis zum Ort, an dem man sich
+        trifft, statt ihn abwechselnd leerzuraeumen: wer allein hineinlaeuft
+        laedt schnell, wer auf Widerstand trifft muss ihn erst wegraeumen.
+        """
+        if not self.regeln["zone"]:
+            return
+        z = K.ZONE
+        drin = [0] * len(self.teampunkte)
+        for k in self.kaempfer.values():
+            if 0 <= k.team < len(drin) and self.in_der_zone(k):
+                drin[k.team] += 1
+
+        hoechste = max(drin)
+        if hoechste == 0 or drin.count(hoechste) > 1:
+            # Niemand drin, oder Gleichstand: der Stand verfaellt langsam.
+            self.zone_halter = -1
+            for i in range(len(self.zone_stand)):
+                self.zone_stand[i] = max(0.0, self.zone_stand[i]
+                                         - z["verfall"] * dt)
+            return
+
+        halter = drin.index(hoechste)
+        self.zone_halter = halter
+        mehrheit = hoechste - max(
+            [d for i, d in enumerate(drin) if i != halter] or [0])
+        tempo = min(z["hoechstens"],
+                    z["je_sekunde"] + z["je_kopf"] * (mehrheit - 1))
+        self.zone_stand[halter] = min(z["bis"],
+                                      self.zone_stand[halter] + tempo * dt)
+        for i in range(len(self.zone_stand)):
+            if i != halter:
+                self.zone_stand[i] = max(0.0, self.zone_stand[i]
+                                         - z["verfall"] * dt)
+        if self.zone_stand[halter] >= z["bis"]:
+            self.sieger_team = halter
+            self._runde_beenden(gewonnen=True)
+
+    # ---- Runden (versus) -------------------------------------------------
+    def _runden(self, dt: float) -> None:
+        """Ein Leben je Runde. Wer zuerst genug Runden hat, gewinnt.
+
+        Eine Runde ist zu Ende, wenn eine Mannschaft niemanden mehr auf den
+        Beinen hat. Am Boden zaehlt noch als lebendig - solange jemand
+        aufhelfen kann, ist die Runde nicht entschieden.
+        """
+        if not self.regeln["runden"]:
+            return
+        if not self._beide_besetzt():
+            # Solange eine Mannschaft leer ist, waere jede Runde in dem
+            # Augenblick entschieden, in dem sie anfaengt. Also wartet sie.
+            self.runden_pause = K.VERSUS["pause"]
+            return
+        if self.runden_pause > 0:
+            self.runden_pause -= dt
+            if self.runden_pause <= 0:
+                self._runde_aufbauen()
+            return
+        if self.runde == 0:
+            self._runde_aufbauen()
+            return
+
+        steht = [0] * len(self.teampunkte)
+        for k in self.kaempfer.values():
+            if 0 <= k.team < len(steht) and k.lebt and not k.raus:
+                steht[k.team] += 1
+        leer = [i for i, n in enumerate(steht) if n == 0]
+        if not leer or len(leer) == len(steht):
+            if len(leer) == len(steht) and steht:
+                # Alle gleichzeitig hin: niemand bekommt den Punkt.
+                self.runden_pause = K.VERSUS["pause"]
+            return
+        sieger = [i for i in range(len(steht)) if i not in leer]
+        if len(sieger) != 1:
+            return
+        self.teampunkte[sieger[0]] += 1
+        self.runden_pause = K.VERSUS["pause"]
+        if self.teampunkte[sieger[0]] >= K.VERSUS["runden_bis"]:
+            self.sieger_team = sieger[0]
+            self._runde_beenden(gewonnen=True)
+
+    def _beide_besetzt(self) -> bool:
+        """Hat jede Mannschaft mindestens einen Mitspieler?"""
+        besetzt = [0] * len(self.teampunkte)
+        for k in self.kaempfer.values():
+            if 0 <= k.team < len(besetzt):
+                besetzt[k.team] += 1
+        return all(besetzt)
+
+    def _runde_aufbauen(self) -> None:
+        """Alle wieder auf die Beine, neue Plaetze, volle Magazine."""
+        self.runde += 1
+        self.runden_pause = 0.0
+        for k in list(self.kaempfer.values()):
+            k.raus = False
+            self._wieder_einsteigen(k)
+
     # ---- Beute ---------------------------------------------------------
     def _beute_nachlegen(self, dt: float) -> None:
         self._seit_medkit += dt
@@ -584,13 +796,13 @@ class Gefecht(Szene):
             if helfer:
                 # Zwei Helfer sind doppelt so schnell. Das belohnt, wenn
                 # sich die Mannschaft sammelt.
-                k.revive_stand += dt * helfer / K.REVIVE["dauer"]
+                k.revive_stand += dt * helfer / k.revive_dauer
                 if k.revive_stand >= 1.0:
                     k.aufhelfen()
                     wolke(self.welt, k.pos, 10, 70, 0.5, K.C_TEAL, k.ebene, 1)
                     self.welt.klang("medkit", 0.7)
             else:
-                k.revive_stand = max(0.0, k.revive_stand - dt / K.REVIVE["dauer"])
+                k.revive_stand = max(0.0, k.revive_stand - dt / k.revive_dauer)
                 k.boden_rest -= dt
                 if k.boden_rest <= 0:
                     k.am_boden = False
@@ -604,11 +816,19 @@ class Gefecht(Szene):
                 toeter = getattr(k.toeter, "von", k.toeter)
                 if isinstance(toeter, Kaempfer) and toeter is not k:
                     toeter.abschuesse += K.GEFECHT["punkt_abschuss"]
+                    if self.mit_teams and 0 <= toeter.team < len(self.teampunkte):
+                        # In "team" zaehlt der Abschuss fuer die Mannschaft.
+                        # In "versus" nicht: dort zaehlen nur Rundensiege.
+                        if not self.regeln["runden"]:
+                            self.teampunkte[toeter.team] += 1
                 elif toeter is k:
                     k.abschuesse += K.GEFECHT["punkt_selbst"]
                 k.toeter = None
                 k.tode += 1
                 k.wieder_in = K.GEFECHT["wieder_nach"]
+            if self.regeln["runden"]:
+                k.raus = True     # in versus bleibt man bis zur naechsten Runde
+                continue
             if self.regeln["revive"]:
                 continue          # in pve steigt niemand von selbst wieder ein
             k.wieder_in -= dt
@@ -616,7 +836,7 @@ class Gefecht(Szene):
                 self._wieder_einsteigen(k)
 
     def _wieder_einsteigen(self, k: Kaempfer) -> None:
-        k.pos.update(self._einstiegsort())
+        k.pos.update(self._einstiegsort(k.team))
         k.vorher.update(k.pos)
         k.tempo.update(0, 0)
         k.leben = k.max_leben
@@ -625,6 +845,9 @@ class Gefecht(Szene):
         k.sturz_rest = 0.0
         k.lebt = True
         k.am_boden = False
+        k.raus = False
+        k.boden_rest = 0.0
+        k.revive_stand = 0.0
         k.unverwundbar = K.GEFECHT["schutz"]
         k.magazin = {w: K.WAFFEN[w]["magazin"] for w in k.waffen}
         if k not in self.welt.wesen and k not in self.welt.neue:
@@ -633,6 +856,14 @@ class Gefecht(Szene):
     # ---- Ende ----------------------------------------------------------
     def _ende_pruefen(self, dt: float) -> None:
         if self.vorbei or not self.kaempfer:
+            return
+        # Zone und Runden beenden sich selbst, sobald ein Team am Ziel ist.
+        if self.regeln["zone"] or self.regeln["runden"]:
+            if self.ende_art == "zeit" and self.ende_wert > 0:
+                self.rest = max(0.0, self.rest - dt)
+                if self.rest <= 0:
+                    self.sieger_team = self._bestes_team()
+                    self._runde_beenden(gewonnen=True)
             return
         if self.regeln["revive"]:
             # pve: vorbei, wenn niemand mehr steht
@@ -644,11 +875,28 @@ class Gefecht(Szene):
         if self.ende_art == "zeit":
             self.rest = max(0.0, self.rest - dt)
             if self.rest <= 0:
+                self.sieger_team = self._bestes_team()
                 self._runde_beenden(gewonnen=True)
-        else:
-            if any(k.abschuesse >= self.ende_wert
-                   for k in self.kaempfer.values()):
-                self._runde_beenden(gewonnen=True)
+            return
+        # Nach Abschuessen: mit Mannschaften zaehlt die Mannschaft
+        if self.mit_teams:
+            ziel = self.ende_wert or K.GEFECHT["team_abschuesse"]
+            for i, punkte in enumerate(self.teampunkte):
+                if punkte >= ziel:
+                    self.sieger_team = i
+                    self._runde_beenden(gewonnen=True)
+                    return
+            return
+        if any(k.abschuesse >= self.ende_wert for k in self.kaempfer.values()):
+            self._runde_beenden(gewonnen=True)
+
+    def _bestes_team(self) -> int:
+        """Wer vorne liegt, wenn die Zeit ablaeuft. -1 bei Gleichstand."""
+        if not self.mit_teams:
+            return -1
+        stand = (self.zone_stand if self.regeln["zone"] else self.teampunkte)
+        hoechster = max(stand)
+        return stand.index(hoechster) if stand.count(hoechster) == 1 else -1
 
     def _runde_beenden(self, gewonnen: bool) -> None:
         self.vorbei = True
@@ -657,7 +905,9 @@ class Gefecht(Szene):
         bestenliste.eintragen(self.liste)
         if self.ist_gastgeber:
             self.gastgeber.an_alle({"t": "ende", "liste": self.liste,
-                                    "gewonnen": gewonnen, "welle": self.welle})
+                                    "gewonnen": gewonnen, "welle": self.welle,
+                                    "sieger": self.sieger_team,
+                                    "teampunkte": list(self.teampunkte)})
 
     def _endstand(self) -> list[dict]:
         return bestenliste.sortiert(
@@ -686,6 +936,7 @@ class Gefecht(Szene):
                 "wi": round(k.wieder_in, 1),
                 "ab": k.am_boden, "br": round(k.boden_rest, 1),
                 "rs": round(k.revive_stand, 2),
+                "tm": k.team, "ra": k.raus,
             })
         flug = []
         gegner = []
@@ -710,7 +961,14 @@ class Gefecht(Szene):
                 "spieler": spieler, "schuesse": flug, "beute": beute,
                 "gegner": gegner, "welle": self.welle,
                 "pause": round(self.pause_rest, 1),
-                "offen": len(self.gegner_offen), "aus": self.vorbei}
+                "offen": len(self.gegner_offen), "aus": self.vorbei,
+                # Mannschaften, Kreis und Runden. Der Gast rechnet nichts
+                # davon selbst nach - er zeigt nur an, was hier steht.
+                "tp": list(self.teampunkte),
+                "zs": [round(s, 1) for s in self.zone_stand],
+                "zh": self.zone_halter,
+                "rn": self.runde, "rp": round(self.runden_pause, 1),
+                "st": self.sieger_team}
 
     # ---- Schritt: Gast -------------------------------------------------
     def _schritt_gast(self, dt: float) -> None:
@@ -730,6 +988,9 @@ class Gefecht(Szene):
                 self.gewonnen = bool(nachricht.get("gewonnen", False))
                 self.liste = [e for e in nachricht.get("liste", [])
                               if isinstance(e, dict)]
+                self.sieger_team = int(nachricht.get("sieger", -1))
+                self._liste_uebernehmen(self.teampunkte,
+                                        nachricht.get("teampunkte"), int)
                 bestenliste.eintragen(self.liste)
 
         self._seit_senden += dt
@@ -754,11 +1015,32 @@ class Gefecht(Szene):
             pass
         self.knapp = bool(nachricht.get("knapp", False))
 
+    @staticmethod
+    def _liste_uebernehmen(ziel: list, werte, art) -> None:
+        """Zahlenliste aus dem Netz uebernehmen, ohne ihre Laenge zu aendern.
+
+        Was von aussen kommt, darf hier nichts kaputt machen: eine zu kurze
+        oder falsch gefuellte Liste laesst den Rest einfach stehen.
+        """
+        if not isinstance(werte, (list, tuple)):
+            return
+        for i in range(min(len(ziel), len(werte))):
+            try:
+                ziel[i] = art(werte[i])
+            except (TypeError, ValueError):
+                pass
+
     def _welt_uebernehmen(self, meldung: dict) -> None:
         self.rest = float(meldung.get("rest", self.rest))
         self.vorbei = bool(meldung.get("aus", False))
         self.welle = int(meldung.get("welle", 0))
         self.pause_rest = float(meldung.get("pause", 0.0))
+        self._liste_uebernehmen(self.teampunkte, meldung.get("tp"), int)
+        self._liste_uebernehmen(self.zone_stand, meldung.get("zs"), float)
+        self.zone_halter = int(meldung.get("zh", -1))
+        self.runde = int(meldung.get("rn", 0))
+        self.runden_pause = float(meldung.get("rp", 0.0))
+        self.sieger_team = int(meldung.get("st", -1))
         gesehen = set()
         for eintrag in meldung.get("spieler", []):
             try:
@@ -768,14 +1050,18 @@ class Gefecht(Szene):
                 continue
             gesehen.add(nummer)
             k = self.kaempfer.get(nummer)
+            team = int(eintrag.get("tm", -1))
             if k is None:
                 k = Kaempfer(pygame.Vector2(x, y), 0, nummer,
                              str(eintrag.get("n", "GAST")),
-                             self._fraktion_fuer(nummer), knapp=self.knapp)
-                k.revive_an = self.regeln["revive"]
+                             self._fraktion_fuer(nummer, team),
+                             knapp=self.knapp, team=team)
+                self._regeln_anlegen(k)
                 self.kaempfer[nummer] = k
                 if nummer == self.meine_nummer:
                     self.ich = k
+            k.team = team
+            k.raus = bool(eintrag.get("ra", False))
             k.vorher.update(k.pos)
             k.pos.update(x, y)
             k.winkel = float(eintrag.get("w", k.winkel))
@@ -820,6 +1106,7 @@ class Gefecht(Szene):
 
     # ---- Szene ---------------------------------------------------------
     def schritt(self, dt: float) -> None:
+        self._zeit += dt
         self.knoepfe_sammeln()
         if self.ist_gastgeber:
             self._schritt_gastgeber(dt)
@@ -854,7 +1141,8 @@ class Gefecht(Szene):
     # ---- Bild ----------------------------------------------------------
     def zeichnen(self, ziel, alpha: float) -> None:
         self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, alpha,
-                                    self.blick_hoehe)
+                                    self.blick_hoehe,
+                                    boden=self._kreis_zeichnen)
         if not self.ist_gastgeber:
             self._fremdes_zeichnen(ziel)
         if (self.ich is not None and self.ich.lebt and not self.ich.am_boden
@@ -865,6 +1153,32 @@ class Gefecht(Szene):
         self._anzeige(ziel)
         if self.vorbei:
             self._endtafel(ziel)
+
+    def _kreis_zeichnen(self, flaeche, ebene: int, ecke) -> None:
+        """Der Kreis in der Kartenmitte, auf den Boden seiner Ebene.
+
+        Wird vom Renderer je Ebene aufgerufen, noch bevor die Figuren
+        darauf stehen. Auf den verkleinerten Tiefenflaechen stimmt er
+        dadurch von selbst: dort ist die Flaeche groesser und wird
+        hinterher als Ganzes verkleinert.
+
+        Die Farbe gehoert dem, der gerade haelt. Haelt niemand, bleibt sie
+        neutral - man soll auf einen Blick sehen, ob der Kreis umkaempft
+        ist oder laeuft.
+        """
+        if not self.regeln["zone"] or ebene != K.ZONE["ebene"]:
+            return
+        z = K.ZONE
+        halter = self.zone_halter
+        if 0 <= halter < len(K.TEAMS["farben"]):
+            farbe = K.TEAMS["farben"][halter]
+            anteil = self.zone_stand[halter] / z["bis"]
+        else:
+            farbe = K.C_CREAM
+            anteil = max(self.zone_stand) / z["bis"] if self.zone_stand else 0.0
+        self.renderer.kreis_zone(flaeche, self.zone_mitte - ecke, z["radius"],
+                                 farbe, anteil, self._zeit / z["puls"],
+                                 z["ring"], z["fuellung"])
 
     def _fremdes_zeichnen(self, ziel) -> None:
         """Beim Gast gibt es keine echten Wesen dafuer, nur gemeldete Punkte.
@@ -904,6 +1218,26 @@ class Gefecht(Szene):
             ziel.blit(s, (x - ecke.x - s.get_width() / 2,
                           y - ecke.y - s.get_height() / 2))
 
+    def _farbe_fuer(self, k, eigen: bool = False):
+        """In welcher Farbe ein Mitspieler auftaucht.
+
+        Mit Mannschaften zaehlt die Mannschaft, nicht die eigene Figur: wer
+        im Gefecht ueberlegen muss, ob der da drueben zu ihm gehoert, hat
+        schon verloren. Die eigene Mannschaft bekommt die helle Farbe, die
+        fremde die dunkle.
+        """
+        if k.am_boden:
+            return K.C_RED
+        if self.mit_teams and 0 <= k.team < len(K.TEAMS["farben"]):
+            eigenes_team = (self.ich is not None and k.team == self.ich.team)
+            paar = K.TEAMS["farben"] if eigenes_team else K.TEAMS["dunkel"]
+            return paar[k.team]
+        if eigen:
+            return K.C_TEAL
+        if self.regeln["beute"]:
+            return K.C_AMBER
+        return K.C_HULL                   # eigene Mannschaft, kein Ziel
+
     def _namen_zeichnen(self, ziel) -> None:
         """Ueber jedem Mitspieler sein Name. Ohne das weiss man im Gefecht
         nicht, auf wen man schiesst - und in pve nicht, wem man helfen muss."""
@@ -915,16 +1249,14 @@ class Gefecht(Szene):
             if not (0 <= p.x <= K.GAME_W and 0 <= p.y <= K.GAME_H):
                 continue
             eigen = (k is self.ich)
-            if k.am_boden:
-                farbe = K.C_RED
-            elif eigen:
-                farbe = K.C_TEAL
-            elif self.regeln["beute"]:
-                farbe = K.C_AMBER
-            else:
-                farbe = K.C_HULL          # eigene Mannschaft, kein Ziel
+            farbe = self._farbe_fuer(k, eigen)
             SCHRIFT.zeichnen(ziel, k.name, int(p.x), int(p.y) - 26, farbe, 1,
                              ausrichtung="mitte")
+            if eigen and self.mit_teams:
+                # Mit Mannschaften traegt auch die eigene Figur die
+                # Mannschaftsfarbe. Der Strich darueber sagt: das bist du.
+                pygame.draw.rect(ziel, K.C_CREAM,
+                                 (int(p.x) - 3, int(p.y) - 31, 7, 1))
             breite = 24
             if k.am_boden:
                 # Am Boden zeigt der Balken, wie weit das Aufhelfen ist -
@@ -934,7 +1266,7 @@ class Gefecht(Szene):
                 pygame.draw.rect(ziel, K.C_TEAL,
                                  (int(p.x) - breite // 2, int(p.y) - 18,
                                   int(breite * k.revive_stand), 3))
-                if not eigen:
+                if not eigen and self._darf_helfen(self.ich, k):
                     SCHRIFT.zeichnen(ziel, "[E]", int(p.x), int(p.y) + 14,
                                      K.C_TEAL, 1, ausrichtung="mitte")
                 continue
@@ -944,6 +1276,69 @@ class Gefecht(Szene):
             pygame.draw.rect(ziel, farbe,
                              (int(p.x) - breite // 2, int(p.y) - 18,
                               int(breite * anteil), 3))
+
+    def _teamkopf(self, ziel, y: int) -> int:
+        """Mannschaftsstand oben in der Mitte, je nach Spielart.
+
+        Drei Spielarten, eine Anzeige: was zaehlt, steht in der Mitte
+        zwischen den beiden Mannschaftsnamen - Abschuesse, Rundensiege oder
+        der Ladestand des Kreises. Der Kreis bekommt zusaetzlich zwei
+        Balken, weil man dort auf ein Zehntel genau sehen will, wie knapp
+        es ist.
+        """
+        f = SCHRIFT
+        namen = K.TEAMS["namen"]
+        farben = K.TEAMS["farben"]
+        if self.regeln["zone"]:
+            werte = [int(s) for s in self.zone_stand]
+        else:
+            werte = list(self.teampunkte)
+        mitte = K.GAME_W // 2
+        f.zeichnen(ziel, "%s %d" % (namen[0], werte[0]), mitte - 8, y,
+                   farben[0], 1, ausrichtung="rechts")
+        f.zeichnen(ziel, ":", mitte, y, K.C_MUTED_DK, 1, ausrichtung="mitte")
+        f.zeichnen(ziel, "%d %s" % (werte[1], namen[1]), mitte + 8, y,
+                   farben[1], 1)
+        y += 10
+
+        if self.regeln["zone"]:
+            breite, hoehe = 60, 4
+            for i, stand in enumerate(self.zone_stand[:2]):
+                anteil = max(0.0, min(1.0, stand / K.ZONE["bis"]))
+                links = mitte - breite - 6 if i == 0 else mitte + 6
+                pygame.draw.rect(ziel, (16, 11, 8), (links, y, breite, hoehe))
+                fuellung = int(breite * anteil)
+                if i == 0:
+                    pygame.draw.rect(ziel, farben[0], (links, y, fuellung, hoehe))
+                else:
+                    # Der rechte Balken waechst nach rechts los, damit beide
+                    # von der Mitte aus laufen.
+                    pygame.draw.rect(ziel, farben[1], (links, y, fuellung, hoehe))
+            y += hoehe + 4
+            if self.zone_halter >= 0:
+                f.zeichnen(ziel, "%s HAELT DEN KREIS" % namen[self.zone_halter],
+                           mitte, y, farben[self.zone_halter], 1,
+                           ausrichtung="mitte")
+            elif self.ich is not None and self.in_der_zone(self.ich):
+                f.zeichnen(ziel, "UMKAEMPFT", mitte, y, K.C_CREAM, 1,
+                           ausrichtung="mitte")
+            y += 10
+            return y
+
+        if self.regeln["runden"]:
+            if not self._beide_besetzt():
+                f.zeichnen(ziel, "WARTET AUF MITSPIELER", mitte, y,
+                           K.C_MUTED, 1, ausrichtung="mitte")
+            elif self.runden_pause > 0:
+                f.zeichnen(ziel, "NAECHSTE RUNDE IN %d"
+                           % max(1, int(self.runden_pause + 0.99)), mitte, y,
+                           K.C_AMBER, 1, ausrichtung="mitte")
+            else:
+                f.zeichnen(ziel, "RUNDE %d  BIS %d SIEGEN"
+                           % (max(1, self.runde), K.VERSUS["runden_bis"]),
+                           mitte, y, K.C_MUTED, 1, ausrichtung="mitte")
+            y += 10
+        return y
 
     def _anzeige(self, ziel) -> None:
         f = SCHRIFT
@@ -957,15 +1352,26 @@ class Gefecht(Szene):
         if self.mit_gegnern:
             f.zeichnen(ziel, "WELLE %d" % max(1, self.welle), K.GAME_W // 2, 10,
                        K.C_CREAM, 2, ausrichtung="mitte")
-        if self.ende_art == "zeit" and not self.regeln["revive"]:
+        # Die Uhr laeuft ueberall ausser in pve: dort endet die Runde, wenn
+        # alle liegen, und eine Uhr waere eine Zahl ohne Bedeutung.
+        mit_uhr = self.mit_teams or not self.regeln["revive"]
+        y_kopf = 28 if self.mit_gegnern else 10
+        if self.ende_art == "zeit" and mit_uhr:
             minuten, sekunden = divmod(int(max(0.0, self.rest)), 60)
             f.zeichnen(ziel, "%d:%02d" % (minuten, sekunden), K.GAME_W // 2,
-                       28 if self.mit_gegnern else 10, K.C_CREAM,
-                       1 if self.mit_gegnern else 2, ausrichtung="mitte")
-        elif not self.regeln["revive"]:
-            f.zeichnen(ziel, "BIS %d ABSCHUESSE" % int(self.ende_wert),
-                       K.GAME_W // 2, 28 if self.mit_gegnern else 12,
-                       K.C_MUTED, 1, ausrichtung="mitte")
+                       y_kopf, K.C_CREAM, 1 if self.mit_gegnern else 2,
+                       ausrichtung="mitte")
+            y_kopf += 16 if not self.mit_gegnern else 10
+        elif mit_uhr and not self.regeln["zone"] and not self.regeln["runden"]:
+            text = ("BIS %d TEAMABSCHUESSE" if self.mit_teams
+                    else "BIS %d ABSCHUESSE")
+            f.zeichnen(ziel, text % int(self.ende_wert or
+                                        K.GEFECHT["team_abschuesse"]),
+                       K.GAME_W // 2, y_kopf + 2, K.C_MUTED, 1,
+                       ausrichtung="mitte")
+            y_kopf += 12
+        if self.mit_teams:
+            self._teamkopf(ziel, y_kopf)
 
         # Punktestand rechts, unterhalb der Ebenenanzeige
         y = K.GEFECHT["tafel_oben"]
@@ -973,15 +1379,18 @@ class Gefecht(Szene):
                 [{"name": k.name, "abschuesse": k.abschuesse, "tode": k.tode,
                   "k": k} for k in self.kaempfer.values()]):
             wer = eintrag["k"]
-            if wer is self.ich:
+            if self.mit_teams:
+                farbe = self._farbe_fuer(wer, wer is self.ich)
+            elif wer is self.ich:
                 farbe = K.C_TEAL
             elif wer.am_boden:
                 farbe = K.C_RED
             else:
                 farbe = K.C_MUTED
-            f.zeichnen(ziel, "%-10s %2d/%2d" % (eintrag["name"],
-                                                eintrag["abschuesse"],
-                                                eintrag["tode"]),
+            marke = ">" if wer is self.ich else " "
+            f.zeichnen(ziel, "%s%-10s %2d/%2d" % (marke, eintrag["name"],
+                                                  eintrag["abschuesse"],
+                                                  eintrag["tode"]),
                        K.GAME_W - 12, y, farbe, 1, ausrichtung="rechts")
             y += 9
 
@@ -996,7 +1405,11 @@ class Gefecht(Szene):
         elif not self.ich.lebt and not self.vorbei:
             f.zeichnen(ziel, "GEFALLEN", K.GAME_W // 2, K.GAME_H // 2 - 10,
                        K.C_RED, 2, ausrichtung="mitte")
-            if not self.regeln["revive"]:
+            if self.regeln["runden"]:
+                f.zeichnen(ziel, "RAUS BIS ZUR NAECHSTEN RUNDE", K.GAME_W // 2,
+                           K.GAME_H // 2 + 8, K.C_MUTED, 1,
+                           ausrichtung="mitte")
+            elif not self.regeln["revive"]:
                 f.zeichnen(ziel, "WIEDER IN %.0f" % max(0.0, self.ich.wieder_in),
                            K.GAME_W // 2, K.GAME_H // 2 + 8, K.C_MUTED, 1,
                            ausrichtung="mitte")
@@ -1018,13 +1431,28 @@ class Gefecht(Szene):
         deckel.fill((9, 6, 5, 220))
         ziel.blit(deckel, (0, 0))
         f = SCHRIFT
-        if self.regeln["revive"]:
+        farbe_kopf = K.C_AMBER
+        if self.mit_teams:
+            if 0 <= self.sieger_team < len(K.TEAMS["namen"]):
+                kopf = "%s GEWINNT" % K.TEAMS["namen"][self.sieger_team]
+                farbe_kopf = K.TEAMS["farben"][self.sieger_team]
+            else:
+                kopf = "UNENTSCHIEDEN"
+            if self.regeln["zone"]:
+                unter = "%d : %d IM KREIS" % (int(self.zone_stand[0]),
+                                              int(self.zone_stand[1]))
+            else:
+                unter = "%s %d : %d %s" % (K.TEAMS["namen"][0],
+                                           self.teampunkte[0],
+                                           self.teampunkte[1],
+                                           K.TEAMS["namen"][1])
+        elif self.regeln["revive"]:
             kopf = "ALLE GEFALLEN"
             unter = "WELLE %d ERREICHT" % max(1, self.welle)
         else:
             kopf = "RUNDE VORBEI"
             unter = "WELLE %d" % self.welle if self.mit_gegnern else ""
-        f.zeichnen(ziel, kopf, K.GAME_W // 2, 40, K.C_AMBER, 3,
+        f.zeichnen(ziel, kopf, K.GAME_W // 2, 40, farbe_kopf, 3,
                    ausrichtung="mitte")
         if unter:
             f.zeichnen(ziel, unter, K.GAME_W // 2, 66, K.C_MUTED, 1,

@@ -18,6 +18,7 @@ Mitte, wie in den Mockups vorgesehen.
 
 from __future__ import annotations
 
+import math
 import random
 
 import pygame
@@ -329,7 +330,8 @@ class Renderer:
             self._tiefen[schluessel] = hit
         return hit
 
-    def welt_zeichnen(self, ziel, welt, kamera, alpha, blick_hoehe=None) -> None:
+    def welt_zeichnen(self, ziel, welt, kamera, alpha, blick_hoehe=None,
+                      boden=None) -> None:
         """Zeichnet alle Ebenen relativ zu einer Ansichtshoehe.
 
         Die Ansicht haengt bewusst nicht an der Ebene der Figur, sondern an
@@ -342,6 +344,12 @@ class Renderer:
             dz > 0   liegt unter der Ansicht: verkleinert, dunkler, im Dunst
             dz = 0   die angeschaute Ebene: unveraendert
             dz < 0   liegt darueber: vergroessert und ausgeblendet
+
+        boden ist ein Aufruf (flaeche, ebene, ecke) direkt nach dem Boden
+        und vor den Wesen. Damit zeichnet der Mehrspieler seinen Kreis in
+        die Karte, statt darueber: er bekommt Verkleinerung, Abdunklung und
+        Dunst der jeweiligen Ebene geschenkt, und die Figuren stehen
+        sichtbar darauf.
         """
         ecke = kamera.ecke
         held = welt.held
@@ -360,6 +368,8 @@ class Renderer:
 
             if abs(dz) < 1.0:                      # die angeschaute Ebene
                 self.ebene_zeichnen(ziel, welt, idx, ecke, None)
+                if boden is not None:
+                    boden(ziel, idx, ecke)
                 self.wesen_zeichnen(ziel, welt, idx, ecke, alpha)
                 self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
                 self.muendungsfeuer(ziel, welt, ecke, idx)
@@ -372,6 +382,8 @@ class Renderer:
             u_ecke = pygame.Vector2(round(mitte.x - flaeche.get_width() / 2),
                                     round(mitte.y - flaeche.get_height() / 2))
             self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel)
+            if boden is not None:
+                boden(flaeche, idx, u_ecke)
             self.wesen_zeichnen(flaeche, welt, idx, u_ecke, alpha, dunkel)
             self.partikel_zeichnen(flaeche, welt, idx, u_ecke, alpha)
             self.muendungsfeuer(flaeche, welt, u_ecke, idx)
@@ -387,6 +399,40 @@ class Renderer:
 
         self.fliegende_zeichnen(ziel, welt, kamera, alpha, blick_hoehe)
         ziel.blit(self._vignette, (0, 0))
+
+    def kreis_zone(self, ziel, mitte, radius: float, farbe, anteil: float = 0.0,
+                   puls: float = 0.0, ring: int = 3, fuellung: int = 34) -> None:
+        """Der Kreis in der Kartenmitte, wie ihn der Mehrspieler braucht.
+
+        Absichtlich ohne Kamera und ohne Ebene: der Aufrufer uebergibt den
+        Mittelpunkt bereits in der Flaeche, in die gezeichnet wird. So
+        stimmt der Kreis auch auf den verkleinerten Tiefenflaechen, ohne
+        dass hier irgendetwas von Perspektive wissen muesste.
+
+        anteil zeichnet den Ladestand als Bogen, oben beginnend und im
+        Uhrzeigersinn - das liest man schneller als eine Zahl.
+        """
+        r = int(round(radius))
+        if r < 2:
+            return
+        m = pygame.Vector2(mitte)
+        rand = max(ring + 2, 4)
+        flaeche = pygame.Surface((2 * (r + rand), 2 * (r + rand)),
+                                 pygame.SRCALPHA)
+        mp = (r + rand, r + rand)
+        pygame.draw.circle(flaeche, (*farbe, fuellung), mp, r)
+        # Der Ring pulst leicht. Ein ruhiger Kreis verschwindet im Boden,
+        # ein pulsender sagt: hier geht es um etwas.
+        schlag = 0.5 + 0.5 * math.sin(puls * math.tau)
+        pygame.draw.circle(flaeche, (*farbe, int(120 + 90 * schlag)), mp, r,
+                           max(1, ring))
+        if anteil > 0.001:
+            kasten = pygame.Rect(rand, rand, 2 * r, 2 * r)
+            bogen = math.tau * max(0.0, min(1.0, anteil))
+            pygame.draw.arc(flaeche, (*farbe, 255), kasten,
+                            math.pi / 2 - bogen, math.pi / 2,
+                            max(2, ring + 1))
+        ziel.blit(flaeche, (m.x - r - rand, m.y - r - rand))
 
     def tracer(self, ziel, welt, kamera, spieler) -> None:
         """Zielhilfe: eine duenne Linie von der Waffe zum Mauszeiger.
