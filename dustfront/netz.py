@@ -28,9 +28,11 @@ Nachrichten vom Gast zum Gastgeber:
 
 Nachrichten vom Gastgeber zum Gast:
 
-    {"t": "willkommen", "id": 2, "runde": 300.0}
-    {"t": "welt", "spieler": [...], "schuesse": [...], "rest": 287.4}
-    {"t": "ende", "liste": [...]}
+    {"t": "willkommen", "id": 2, "modus": "huegel", "ende_art": "zeit", ...}
+    {"t": "welt", "spieler": [...], "schuesse": [...], "rest": 287.4, ...}
+    {"t": "ende", "liste": [...], "sieger": 0, "teampunkte": [3, 1]}
+
+Jedes Feld einzeln erklaert steht in docs/MEHRSPIELER.md, Abschnitt 4.
 """
 
 from __future__ import annotations

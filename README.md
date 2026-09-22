@@ -187,14 +187,23 @@ Inventar kostet also keine Patrone.
 > Zweig `multiplayer-test`; der Hauptzweig geht ohne ihn weiter, dem
 > Weltenplan in [`docs/KARTE.md`](docs/KARTE.md) nach.
 
-Mehrere Leute auf einer Karte, in drei Spielarten. Nach der Runde steht
+Mehrere Leute auf einer Karte, in sechs Spielarten. Nach der Runde steht
 die Liste, und sie wandert in eine Bestenliste im Benutzerordner.
+
+**Alles im Einzelnen steht in
+[`docs/MEHRSPIELER.md`](docs/MEHRSPIELER.md):** Aufbau, Protokoll Feld fuer
+Feld, jede Zahl mit Begruendung, jeder Fehler, der beim Bauen aufgetreten
+ist, und eine Bauanleitung in zwoelf Schritten fuer den Tag, an dem der
+Mehrspieler zurueckkommen soll.
 
 | Spielart | Was passiert | Wie es endet |
 | --- | --- | --- |
 | **PVP** | Jeder gegen jeden, keine Gegner | nach Zeit oder Abschuessen, der Gastgeber waehlt |
 | **PVE** | Alle zusammen gegen Wellen | wenn alle am Boden liegen |
 | **PVPVE** | Wellen, und dabei jeder gegen jeden | wie PVP |
+| **TEAM** | Zwei Mannschaften, Abschuesse zaehlen fuer die Mannschaft | nach Zeit oder 30 Teamabschuessen |
+| **VERSUS** | Zwei Mannschaften, ein Leben je Runde, Aufhelfen durch die eigenen Leute | nach drei Rundensiegen |
+| **HUEGEL** | Zwei Mannschaften, ein sichtbarer Kreis in der Kartenmitte | wenn eine Mannschaft den Kreis vollgeladen hat |
 
 Alles aus dem Einzelspieler ist dabei: die sechs Waffen, drei Ebenen mit
 Treppen und Stuerzen, Ziellinie, Streukegel der Scharfschuetzenwaffe,
@@ -212,8 +221,35 @@ Leben. Zwei Helfer sind doppelt so schnell.
 dafuer, dass eine Runde sonst mit dem ersten Fehler kippt. Vorbei ist es
 erst, wenn niemand mehr steht.
 
-In PVP und PVPVE gibt es kein Aufhelfen: dort steigt man nach drei
+In PVP, PVPVE und TEAM gibt es kein Aufhelfen: dort steigt man nach drei
 Sekunden neu ein.
+
+### Mannschaften: TEAM, VERSUS, HUEGEL
+
+Drei Spielarten mit zwei Mannschaften, **ROT** und **BLAU**. Wer dazukommt,
+geht in die kleinere - nicht abwechselnd, denn wer geht, hinterliesse sonst
+eine Luecke, die nie wieder gefuellt wird. Die eigene Mannschaft traegt die
+helle Farbe, die fremde die dunkle, und den Nebenmann kann man nicht
+treffen. Ein kurzer Strich ueber dem Namen zeigt, welche Figur die eigene
+ist.
+
+**TEAM** ist Deathmatch: jeder Abschuss zaehlt zweimal, fuer den Schuetzen
+und fuer die Mannschaft.
+
+**VERSUS** gibt jedem **ein Leben je Runde**. Wer faellt, liegt am Boden -
+und nur die **eigenen** Leute koennen aufhelfen, dafuer brauchen sie vier
+Sekunden statt drei. Wer die zwanzig Sekunden am Boden ausreizt, ist fuer
+die Runde raus. Eine Runde ist zu Ende, wenn eine Mannschaft niemanden mehr
+auf den Beinen hat; drei Rundensiege entscheiden. Solange eine Mannschaft
+leer ist, faengt keine Runde an.
+
+**HUEGEL** ist die Hot Zone: ein **sichtbarer Kreis in der Mitte der
+Karte**, unten auf Ebene 0. Wer dort die **Mehrheit** hat, laedt fuer seine
+Mannschaft; bei Gleichstand laedt **niemand**, und der Stand verfaellt
+langsam. Genau das macht den Kreis zu dem Ort, an dem man sich trifft,
+statt ihn abwechselnd leerzuraeumen. Der Kreis wird in den Boden gezeichnet
+und nicht darueber: die Figuren stehen sichtbar darauf, und von einer
+hoeheren Ebene aus sieht man ihn unten liegen, klein und im Dunst.
 
 ### Gegner, die mit mehreren Spielern zurechtkommen
 
@@ -258,12 +294,15 @@ Wer lieber tippt:
 ```
 python -m dustfront --host --name MEISTER --modus pve --knapp
 python -m dustfront --host --name MEISTER --modus pvp --ende abschuesse --wert 20
+python -m dustfront --host --name MEISTER --modus huegel --ende zeit --wert 600
 python -m dustfront --join 192.168.1.7 --name BESUCH
 python -m dustfront --bestenliste
 ```
 
-`--modus` ist `pvp`, `pve` oder `pvpve`; `--ende` ist `zeit` oder
-`abschuesse`, `--wert` die Sekunden beziehungsweise Abschuesse.
+`--modus` ist `pvp`, `pve`, `pvpve`, `team`, `versus` oder `huegel`;
+`--ende` ist `zeit` oder `abschuesse`, `--wert` die Sekunden
+beziehungsweise Abschuesse. Bei `versus` und `huegel` ist die Zeit nur die
+Notbremse - beide enden von selbst.
 
 ### Wie es aufgebaut ist
 
@@ -375,6 +414,7 @@ Daneben liegt `docs/`:
 | Datei | Inhalt |
 | --- | --- |
 | `KARTE.md` | Der Weltenplan: Kontinent, Orte, Wandler, Front, Meilensteine |
+| `MEHRSPIELER.md` | Der LAN-Mehrspieler vollstaendig: Aufbau, Protokoll, alle sechs Spielarten, jede Zahl, jeder aufgetretene Fehler, Bauanleitung zum Wiedereinbau |
 
 ### Wo die Einstellungen liegen
 
