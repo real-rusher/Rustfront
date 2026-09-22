@@ -344,6 +344,22 @@ def _medkit():
     return _rand(s, (18, 13, 9))
 
 
+@platzhalter("munikiste")
+def _munikiste():
+    """Munitionskiste. Bewusst dem Medkit aehnlich im Umriss, aber in
+    Messing statt Weiss - man soll auf einen Blick sehen, was da liegt."""
+    w, h = K.BILD_MASS["munikiste"]
+    s = _flaeche(w, h)
+    pygame.draw.rect(s, (28, 22, 16), (0, 2, w, h - 2))
+    pygame.draw.rect(s, (122, 96, 44), (1, 3, w - 2, h - 4))
+    pygame.draw.rect(s, (168, 136, 66), (1, 3, w - 2, 2))
+    pygame.draw.rect(s, (60, 46, 24), (1, h - 4, w - 2, 2))
+    for x in range(4, w - 3, 4):            # angedeutete Patronen
+        pygame.draw.rect(s, (206, 168, 82), (x, 6, 2, 4))
+    pygame.draw.rect(s, (60, 50, 38), (5, 0, 6, 3))
+    return _rand(s, (18, 13, 9))
+
+
 @platzhalter("granate")
 def _granate():
     s = _flaeche(10, 10)

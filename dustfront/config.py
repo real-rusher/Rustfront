@@ -165,6 +165,7 @@ BILD_MASS = {
     "geschoss":         (8, 4),
     "muendung":         (20, 20),
     "medkit":           (16, 14),
+    "munikiste":        (16, 14),
     "granate":          (10, 10),
     "huelse":           (4, 3),
     # Waffensymbole fuer Hotbar und Inventar, Seitenansicht nach rechts
@@ -239,9 +240,32 @@ NETZ = dict(
     stumm_nach=8.0,           # ohne Lebenszeichen gilt ein Gast als weg
 )
 
-# Eine Runde im Mehrspieler-Test. Keine Gegner, nur Spieler gegeneinander.
+# Die drei Spielarten im Mehrspieler.
+#
+#   pvp     nur Spieler gegeneinander, endet nach Zeit oder Abschuessen
+#   pve     alle zusammen gegen Wellen, endet wenn alle am Boden liegen
+#   pvpve   Wellen und Spieler gegeneinander, endet wie pvp
+#
+# gegner  = es kommen Wellen
+# beute   = Spieler koennen sich gegenseitig treffen
+# revive  = wer faellt, liegt am Boden und kann aufgeholfen bekommen
+MODI = {
+    "pvp":   dict(name="PVP",   gegner=False, beute=True,  revive=False,
+                  hinweis="Jeder gegen jeden."),
+    "pve":   dict(name="PVE",   gegner=True,  beute=False, revive=True,
+                  hinweis="Alle zusammen gegen die Wellen."),
+    "pvpve": dict(name="PVPVE", gegner=True,  beute=True,  revive=False,
+                  hinweis="Wellen, und dabei jeder gegen jeden."),
+}
+MODUS_VORGABE = "pvp"
+
+# Wie eine Runde endet. Bei pvp und pvpve waehlt der Gastgeber; bei pve
+# endet sie, wenn alle am Boden liegen.
+ENDE_ARTEN = ("zeit", "abschuesse")
+
 GEFECHT = dict(
-    rundenzeit=300.0,         # Sekunden je Runde
+    rundenzeit=300.0,         # Sekunden je Runde, wenn nach Zeit gespielt wird
+    abschuesse_ziel=20,       # Abschuesse bis zum Sieg, wenn danach gespielt wird
     wieder_nach=3.0,          # Sekunden bis zum Wiedereinstieg nach dem Tod
     punkt_abschuss=1,
     punkt_selbst=-1,          # wer sich selbst erledigt, zahlt drauf
@@ -250,6 +274,50 @@ GEFECHT = dict(
     medkit_takt=12.0,         # Sekunden zwischen zwei Medkits
     medkit_hoechstens=4,      # so viele liegen gleichzeitig herum
     tafel_oben=74,            # wo der Punktestand anfaengt, unter den Ebenen
+)
+
+# Am Boden liegen und wieder aufgeholfen werden. Nur in pve.
+#
+# Der Sinn: ein einzelner Fehler soll einen nicht aus der Runde nehmen,
+# aber er soll die anderen etwas kosten - naemlich die Zeit, in der sie
+# nicht schiessen, sondern helfen.
+REVIVE = dict(
+    boden_leben=0.0,          # damit faengt man am Boden an
+    boden_zeit=45.0,          # so lange haelt man durch, dann ist es vorbei
+    dauer=3.0,                # so lange muss ein Helfer danebenstehen
+    reichweite=28.0,          # so nah muss er sein
+    danach_leben=40.0,        # mit so viel Leben steht man wieder auf
+    schutz=2.0,               # Sekunden unverwundbar nach dem Aufstehen
+    kriechen=0.35,            # so viel Tempo hat man am Boden noch
+)
+
+# Wellen im Mehrspieler. Anders als im Einzelspieler waechst die Welle mit
+# der Zahl der Spieler - sonst ist dieselbe Welle zu viert ein Spaziergang.
+WELLEN_MP = dict(
+    pause=6.0,                # Sekunden zwischen zwei Wellen
+    grund=4,                  # so viele Gegner in Welle 1 bei einem Spieler
+    je_welle=0.35,            # plus 35 Prozent je weiterer Welle
+    je_spieler=0.6,           # plus 60 Prozent je weiterem Spieler
+    hoechstens=40,            # mehr werden nie gleichzeitig losgeschickt
+    brecher_ab=3,             # ab dieser Welle kommen auch Brecher
+    brecher_anteil=0.22,
+)
+
+# Gegner-KI im Mehrspieler: mehrere Ziele statt einem.
+GEGNER_MP = dict(
+    ziel_haltezeit=2.5,       # so lange bleibt ein Gegner bei seinem Ziel
+    gedraenge=0.55,           # Aufschlag je Gegner, der schon an dem Ziel haengt
+    ebenen_strafe=420.0,      # so viel "weiter weg" zaehlt eine fremde Ebene
+    boden_strafe=900.0,       # wer am Boden liegt, zieht kaum noch Gegner an
+)
+
+# Begrenzte Munition. Der Gastgeber schaltet sie beim Aufmachen an.
+MUNITION = dict(
+    vorrat={"repetierer": 70, "sturm": 150, "schrot": 32, "scharf": 20,
+            "granate": 4, "brecheisen": 0},
+    kiste_takt=18.0,          # Sekunden zwischen zwei Munitionskisten
+    kiste_hoechstens=3,
+    kiste_gibt=0.45,          # so viel vom vollen Vorrat gibt eine Kiste
 )
 
 # ══════════════════════════════════════════════════ HOEHE

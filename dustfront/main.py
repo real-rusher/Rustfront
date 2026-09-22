@@ -50,8 +50,15 @@ def aus_menue(auftrag: dict | None = None) -> int:
 
 
 def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
-            port: int = 0, headless: bool = False) -> int:
-    """LAN-Test: als Gastgeber aufmachen oder als Gast verbinden."""
+            port: int = 0, headless: bool = False,
+            modus: str = K.MODUS_VORGABE, ende_art: str = "zeit",
+            ende_wert: float = 0.0, knapp: bool = False) -> int:
+    """LAN-Test: als Gastgeber aufmachen oder als Gast verbinden.
+
+    Die Spielart bestimmt allein der Gastgeber. Ein Gast bekommt sie mit
+    dem Willkommen zugeschickt - sonst spielen zwei Leute mit verschiedenen
+    Regeln auf derselben Karte.
+    """
     from . import netz
     from .mehrspieler import Gefecht
 
@@ -60,7 +67,14 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
     try:
         if gastgeber:
             wirt = netz.Gastgeber(port or None)
-            print("Gastgeber laeuft. Mitspieler verbinden sich mit:")
+            regeln = K.MODI.get(modus, K.MODI[K.MODUS_VORGABE])
+            print("Gastgeber laeuft: %s - %s" % (regeln["name"], regeln["hinweis"]))
+            if not regeln["revive"]:
+                print("Endet nach %s" % ("Zeit" if ende_art == "zeit"
+                                         else "Abschuessen"))
+            if knapp:
+                print("Munition ist knapp, es gibt Nachschubkisten.")
+            print("Mitspieler verbinden sich mit:")
             print("   %s" % wirt.adresse)
         else:
             gast = netz.Gast(wohin)
@@ -72,7 +86,9 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
         print("Konnte nicht aufmachen: %s" % grund)
         return 1
 
-    app.schieben(Gefecht(app, name or "GAST", gastgeber=wirt, gast=gast))
+    app.schieben(Gefecht(app, name or "GAST", gastgeber=wirt, gast=gast,
+                         modus=modus, ende_art=ende_art,
+                         ende_wert=ende_wert, knapp=knapp))
     app.laufen()
     return 0
 
@@ -87,8 +103,25 @@ def aus_argumenten(argumente: list[str]) -> int:
         return vorgabe
 
     if "--host" in argumente:
+        modus = wert("--modus", K.MODUS_VORGABE).strip().lower()
+        if modus not in K.MODI:
+            print("Unbekannte Spielart %r. Moeglich: %s"
+                  % (modus, ", ".join(K.MODI)))
+            return 1
+        ende_art = wert("--ende", "zeit").strip().lower()
+        if ende_art not in K.ENDE_ARTEN:
+            print("Unbekanntes Ende %r. Moeglich: %s"
+                  % (ende_art, ", ".join(K.ENDE_ARTEN)))
+            return 1
+        try:
+            ende_wert = float(wert("--wert", "0") or 0)
+        except ValueError:
+            print("--wert braucht eine Zahl.")
+            return 1
         return gefecht(True, name=wert("--name", "GASTGEBER"),
-                       port=int(wert("--port", "0") or 0))
+                       port=int(wert("--port", "0") or 0),
+                       modus=modus, ende_art=ende_art, ende_wert=ende_wert,
+                       knapp="--knapp" in argumente)
     if "--join" in argumente:
         return gefecht(False, wohin=wert("--join"),
                        name=wert("--name", "GAST"))

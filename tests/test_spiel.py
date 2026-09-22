@@ -854,10 +854,149 @@ if treppe:
     gast_ich.ebene = 0
     gast_ich.pos.update(treppe[0] * K.TILE + 16, treppe[1] * K.TILE + 16)
     gast_ich.lebt = True
-    einmal_druecken(gast, "nutzen")
-    netz_takte()
+    # E wird gehalten, nicht gedrueckt: an derselben Taste haengt das
+    # Aufhelfen, und das braucht Zeit.
+    for _ in range(10):
+        e.neues_bild()
+        e._gehalten = {"nutzen"}
+        host.schritt(K.NETZ["takt"])
+        gast.schritt(K.NETZ["takt"])
+    e.neues_bild(); e._gehalten = set()
     pruef("Der Gast kommt ueber die Treppe eine Ebene hoch",
           gast_ich.ebene == 1, "Ebene %d" % gast_ich.ebene)
+
+# ── Die drei Spielarten ──────────────────────────────────────────────
+from dustfront.mehrspieler import KampfGegner
+
+_port = [51300]
+
+def gefechtspaar(modus, **kw):
+    """Gastgeber und Gast in einer Spielart, ueber echte Steckdosen."""
+    _port[0] += 1
+    wirt_n = netz.Gastgeber(_port[0])
+    wirt_s = Gefecht(app, "WIRT", gastgeber=wirt_n, modus=modus, **kw)
+    gast_n = netz.Gast("127.0.0.1:%d" % _port[0])
+    gast_s = Gefecht(app, "BESUCH", gast=gast_n)
+    for _ in range(30):
+        wirt_s.schritt(K.NETZ["takt"])
+        gast_s.schritt(K.NETZ["takt"])
+    return wirt_s, gast_s
+
+# --- pvp: wie gehabt, aber jetzt mit waehlbarem Ende
+w, ga = gefechtspaar("pvp", ende_art="abschuesse", ende_wert=3)
+pruef("Die Spielart kommt beim Gast an", ga.modus == "pvp", ga.modus)
+pruef("Auch die Endbedingung kommt an",
+      ga.ende_art == "abschuesse" and ga.ende_wert == 3,
+      "%s bis %s" % (ga.ende_art, ga.ende_wert))
+pruef("In pvp ist jeder sein eigener Feind",
+      w.kaempfer[0].fraktion != w.kaempfer[ga.meine_nummer].fraktion)
+pruef("In pvp kommen keine Wellen", not w.mit_gegnern)
+w.kaempfer[0].abschuesse = 3
+w.schritt(K.FIXED_DT)
+pruef("Die Runde endet bei der gewaehlten Abschusszahl", w.vorbei)
+w.verlassen(); ga.verlassen()
+
+# --- pve: Wellen, eine Mannschaft, knappe Munition
+w, ga = gefechtspaar("pve", knapp=True)
+pruef("Die Spielart pve kommt an", ga.modus == "pve")
+pruef("Knappe Munition kommt beim Gast an", ga.knapp)
+wirt_k = w.kaempfer[0]
+gast_k = w.kaempfer[ga.meine_nummer]
+pruef("In pve sind alle eine Mannschaft",
+      wirt_k.fraktion == gast_k.fraktion, wirt_k.fraktion)
+for _ in range(int(K.WELLEN_MP["pause"] / K.FIXED_DT) + 20):
+    w.schritt(K.FIXED_DT)
+feinde = [x for x in w.welt.wesen if isinstance(x, KampfGegner)]
+pruef("Eine Welle startet", w.welle >= 1 and len(feinde) > 0,
+      "Welle %d mit %d Gegnern" % (w.welle, len(feinde)))
+pruef("Die Welle waechst mit der Spielerzahl",
+      len(feinde) > K.WELLEN_MP["grund"], "%d statt %d"
+      % (len(feinde), K.WELLEN_MP["grund"]))
+
+# Die eigentliche Koop-Frage: haengen alle Gegner am selben Spieler?
+wirt_k.pos.update(200, 200); wirt_k.vorher.update(wirt_k.pos)
+gast_k.pos.update(900, 500); gast_k.vorher.update(gast_k.pos)
+for feind in feinde:
+    feind._ziel = None
+    feind._ziel_rest = 0.0
+# Lange genug, dass die Haltezeit eines Ziels mindestens einmal ablaeuft
+for _ in range(int(K.GEGNER_MP["ziel_haltezeit"] / K.FIXED_DT) + 30):
+    w.schritt(K.FIXED_DT)
+verteilung = dict(w.gegnerlast)
+pruef("Die Gegner verteilen sich auf beide Spieler",
+      len(verteilung) == 2 and min(verteilung.values()) > 0, str(verteilung))
+
+# --- Am Boden und wieder auf
+wirt_k.unverwundbar = 0.0
+wirt_k.leben = 1.0
+wirt_k.schaden(50, None, None)
+pruef("Wer faellt, liegt am Boden statt tot zu sein",
+      wirt_k.am_boden and wirt_k.lebt)
+gast_k.pos.update(wirt_k.pos); gast_k.vorher.update(gast_k.pos)
+gast_k.ebene = wirt_k.ebene
+hilfe_ein = {"will": [0, 0], "ziel": [gast_k.pos.x + 10, gast_k.pos.y],
+             "nutzen": True, "knoepfe": []}
+w._anwenden(gast_k, hilfe_ein)
+pruef("Der Helfer wird erkannt", gast_k.hilft == wirt_k.nummer,
+      "hilft %s" % gast_k.hilft)
+for _ in range(int(K.REVIVE["dauer"] / K.FIXED_DT) + 10):
+    w._anwenden(gast_k, hilfe_ein)
+    w._revive(K.FIXED_DT)
+# Der Gastgeber ist Spieler 0. Eine 0 ist in Python falsch, und genau
+# daran konnte ihm vorher niemand aufhelfen.
+pruef("Auch dem Gastgeber kann man aufhelfen",
+      not wirt_k.am_boden and wirt_k.leben == K.REVIVE["danach_leben"],
+      "%.0f Leben" % wirt_k.leben)
+
+# Der Schutz nach dem Aufhelfen macht unverwundbar - fuer die Pruefung
+# muss er weg, sonst kommt der Schaden gar nicht an.
+wirt_k.unverwundbar = 0.0
+wirt_k.schaden(999, None, None)
+gast_k.unverwundbar = 0.0
+gast_k.schaden(999, None, None)
+w._ende_pruefen(K.FIXED_DT)
+pruef("pve endet, wenn alle am Boden liegen", w.vorbei)
+wirt_k.aufhelfen(); gast_k.aufhelfen(); w.vorbei = False
+w._welle_starten()
+pruef("Jede Welle hilft allen wieder auf",
+      not wirt_k.am_boden and not gast_k.am_boden)
+
+# --- Knappe Munition
+wirt_k.waffe = wirt_k.waffen.index("repetierer")
+wirt_k.feuert = False
+wirt_k.magazin["repetierer"] = 0
+wirt_k.vorrat["repetierer"] = 5
+wirt_k.nachlade_rest = 0.0
+wirt_k.nachladen()
+for _ in range(int(K.WAFFEN["repetierer"]["nachladen"] / K.FIXED_DT) + 5):
+    wirt_k.schritt(K.FIXED_DT)
+pruef("Nachladen nimmt nur, was der Vorrat hergibt",
+      wirt_k.magazin["repetierer"] == 5 and wirt_k.vorrat["repetierer"] == 0,
+      "Magazin %d, Vorrat %d" % (wirt_k.magazin["repetierer"],
+                                 wirt_k.vorrat["repetierer"]))
+wirt_k.magazin["repetierer"] = 0
+wirt_k.nachlade_rest = 0.0
+wirt_k.nachladen()
+pruef("Ohne Vorrat laeuft gar kein Nachladen an",
+      wirt_k.nachlade_rest == 0.0, "%.2f" % wirt_k.nachlade_rest)
+kiste = KampfBeute(pygame.Vector2(wirt_k.pos), "munition", wirt_k.ebene,
+                   w.kaempfer)
+kiste.welt = w.welt
+kiste.schritt(K.FIXED_DT)
+pruef("Eine Munitionskiste fuellt den Vorrat",
+      wirt_k.vorrat["repetierer"] > 0, "%d" % wirt_k.vorrat["repetierer"])
+w.verlassen(); ga.verlassen()
+
+# --- pvpve: beides zugleich
+w, ga = gefechtspaar("pvpve", ende_art="zeit", ende_wert=60)
+pruef("pvpve hat Wellen", w.mit_gegnern)
+pruef("und dabei trifft jeder jeden",
+      w.kaempfer[0].fraktion != w.kaempfer[ga.meine_nummer].fraktion)
+pruef("In pvpve gibt es kein Aufhelfen", not w.regeln["revive"])
+w.rest = K.FIXED_DT * 0.5          # knapp unter einem Schritt
+w.schritt(K.FIXED_DT)
+pruef("pvpve endet nach der gewaehlten Zeit", w.vorbei)
+w.verlassen(); ga.verlassen()
 
 # Ein Gast, der abbricht, darf den Gastgeber nicht mitreissen
 verbindung.schliessen()

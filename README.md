@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.13.1, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.14.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -182,21 +182,71 @@ Inventar kostet also keine Patrone.
 
 ## LAN-Gefecht
 
-Ein kurzer Mehrspieler-Test: mehrere Leute auf einer Karte, **keine
-Gegner**, wer trifft bekommt einen Punkt. Nach der Runde steht die Liste,
-und sie wandert in eine Bestenliste im Benutzerordner.
+> **Dieser Zweig ist abgeschlossen und wird nicht mehr weiterentwickelt.**
+> Der Mehrspieler war ein Test. Er ist fertiggestellt und liegt auf dem
+> Zweig `multiplayer-test`; der Hauptzweig geht ohne ihn weiter, dem
+> Weltenplan in [`docs/KARTE.md`](docs/KARTE.md) nach.
+
+Mehrere Leute auf einer Karte, in drei Spielarten. Nach der Runde steht
+die Liste, und sie wandert in eine Bestenliste im Benutzerordner.
+
+| Spielart | Was passiert | Wie es endet |
+| --- | --- | --- |
+| **PVP** | Jeder gegen jeden, keine Gegner | nach Zeit oder Abschuessen, der Gastgeber waehlt |
+| **PVE** | Alle zusammen gegen Wellen | wenn alle am Boden liegen |
+| **PVPVE** | Wellen, und dabei jeder gegen jeden | wie PVP |
 
 Alles aus dem Einzelspieler ist dabei: die sechs Waffen, drei Ebenen mit
 Treppen und Stuerzen, Ziellinie, Streukegel der Scharfschuetzenwaffe,
 Nahkampfbogen. Medkits liegen alle paar Sekunden neu aus, jeder kann sie
-nehmen. Wer faellt, steigt nach drei Sekunden wieder ein.
+nehmen.
+
+### Koop: am Boden und wieder auf
+
+In **PVE** stirbt niemand sofort. Wer faellt, liegt am Boden, kann noch
+kriechen und haelt 45 Sekunden durch. Ein Mitspieler stellt sich daneben
+und haelt **E** - nach drei Sekunden steht man wieder, mit angeschlagenem
+Leben. Zwei Helfer sind doppelt so schnell.
+
+**Nach jeder Welle steht ohnehin wieder jeder.** Das ist der Ausgleich
+dafuer, dass eine Runde sonst mit dem ersten Fehler kippt. Vorbei ist es
+erst, wenn niemand mehr steht.
+
+In PVP und PVPVE gibt es kein Aufhelfen: dort steigt man nach drei
+Sekunden neu ein.
+
+### Gegner, die mit mehreren Spielern zurechtkommen
+
+Der Gegner aus dem Einzelspieler laeuft immer auf den einen Spieler zu,
+den es dort gibt. Zu viert waere das ein Rudel, das geschlossen auf
+denselben Mann zulaeuft, waehrend die anderen drei in Ruhe zielen.
+
+Im Gefecht waehlt jeder Gegner selbst, nach drei Regeln: **Naehe zaehlt**,
+**Gedraenge schreckt ab** (jeder Gegner, der schon an einem Ziel haengt,
+macht es unattraktiver), und **wer entschieden hat, bleibt ein paar
+Sekunden dabei** - sonst zappelt er zwischen zwei gleich weit entfernten
+Spielern. Wer am Boden liegt, zieht kaum noch Gegner an, damit sie die
+Helfer angreifen statt um einen Gefallenen herumzustehen.
+
+Die Wellen wachsen mit der Spielerzahl. Dieselbe Welle waere zu viert
+sonst ein Spaziergang.
+
+### Knappe Munition
+
+Der Gastgeber kann Munition begrenzen. Dann hat jede Waffe einen Vorrat
+ausserhalb des Magazins, der unter der Munitionsanzeige steht, und
+Nachladen kostet daraus. Ist der Vorrat leer, laeuft gar kein Nachladen
+mehr an. **Munitionskisten** erscheinen alle 18 Sekunden neu und fuellen
+alles ein Stueck auf.
 
 ### So spielt man es
 
-1. Einer startet **`LAN-GASTGEBER`**, tippt seinen Namen und liest die
-   Adresse ab, die im Fenster steht (etwa `192.168.1.7:50505`).
+1. Einer startet **`LAN-GASTGEBER`**, tippt seinen Namen und waehlt dann
+   Spielart, Endbedingung und ob Munition knapp sein soll. Danach steht
+   die Adresse im Fenster (etwa `192.168.1.7:50505`).
 2. Alle anderen starten **`LAN-GAST`**, tippen ihren Namen und diese
-   Adresse.
+   Adresse. **Die Spielart bestimmt allein der Gastgeber** - sonst
+   spielten zwei Leute mit verschiedenen Regeln auf derselben Karte.
 3. Fertig. Esc beendet.
 
 Alle muessen im selben Netz sein - gleiches WLAN oder gleicher Switch.
@@ -206,10 +256,14 @@ muss erlaubt werden, sonst findet niemand den Gastgeber.
 Wer lieber tippt:
 
 ```
-python -m dustfront --host --name MEISTER
+python -m dustfront --host --name MEISTER --modus pve --knapp
+python -m dustfront --host --name MEISTER --modus pvp --ende abschuesse --wert 20
 python -m dustfront --join 192.168.1.7 --name BESUCH
 python -m dustfront --bestenliste
 ```
+
+`--modus` ist `pvp`, `pve` oder `pvpve`; `--ende` ist `zeit` oder
+`abschuesse`, `--wert` die Sekunden beziehungsweise Abschuesse.
 
 ### Wie es aufgebaut ist
 
@@ -532,6 +586,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.12.0 | Das Hauptmenue startet das echte Spiel statt einer Platzhalter-Szene; Startdatei fuer den direkten Spieltest |
 | 0.13.0 | LAN-Gefecht: mehrere Spieler auf einer Karte, keine Gegner, Namen, Punkte und eine Bestenliste im Benutzerordner |
 | 0.13.1 | Im Gefecht gingen einzelne Tastendruecke verloren; dazu fehlten Zielhilfen, Mausrad, Medkits, Munitionsanzeige und sichtbare Granaten |
+| 0.14.0 | Mehrspieler fertiggestellt: drei Spielarten, Aufhelfen, Wellen mit mehrspielertauglicher Gegner-KI, knappe Munition mit Nachschubkisten. Letzter Stand dieses Zweigs |
 
 ## Anpassen
 

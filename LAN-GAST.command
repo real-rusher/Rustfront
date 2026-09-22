@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
 #  DUSTFRONT - LAN GAST
+#  Verbindet sich mit einem Gastgeber. Die Spielart bestimmt der.
 #  Unter macOS beim ersten Mal Rechtsklick -> Oeffnen.
 # ============================================================
 set -u
@@ -28,10 +29,15 @@ echo "  DUSTFRONT - LAN GAST"
 echo
 read -r -p "  Dein Name (Enter = GAST): " NAME
 [ -n "${NAME:-}" ] || NAME="GAST"
+
+echo
+echo "  Die Spielart bestimmt der Gastgeber."
+echo
 WOHIN=""
 while [ -z "$WOHIN" ]; do
     read -r -p "  Adresse des Gastgebers: " WOHIN
 done
+
 echo
 "$PY" -m dustfront --join "$WOHIN" --name "$NAME" \
     || abbrechen "Beendet mit einem Fehler."
