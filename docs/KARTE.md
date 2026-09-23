@@ -9,9 +9,12 @@ nicht anders, und *in welcher Reihenfolge*.
 gesagt bekommt "mach mit dem Kartenplan weiter". Wer hier anfaengt, liest
 zuerst Abschnitt 0 und 1, dann den Meilenstein, der dran ist.
 
-**Stand beim Schreiben:** Version 0.11.1, PRE-ALPHA. (Inzwischen 0.15.0;
-zwischendurch ist ein LAN-Mehrspieler entstanden, der als Test
-fertiggestellt und auf den Zweig `multiplayer-test` abgespalten wurde. Fuer
+**Stand beim Schreiben:** Version 0.11.1, PRE-ALPHA. (Hauptzweig
+inzwischen 0.15.0, naechste freie Nummer **0.20.0**. Zwischendurch ist ein
+Mehrspieler entstanden - LAN und Internet, sechs Spielarten - der als Test
+abgeschlossen und auf den Zweig `multiplayer-test` abgespalten wurde; er
+hat die Nummern 0.16.0 bis 0.19.1 verbraucht und ist in
+`docs/MEHRSPIELER.md` auf jenem Zweig vollstaendig beschrieben. Fuer
 diesen Plan aendert das nichts - er beschreibt den Einzelspieler.) Der Spielkern steht
 (feste Zeitschritte, drei Ebenen, sechs Waffen, Inventar, Menues, Texturen
 aus Dateien). Es gibt genau eine Karte: `testkarte()` in `world.py`, drei
@@ -864,7 +867,11 @@ Nummern hier sind **Richtwerte, keine Zusagen**: zwischen zwei Meilensteinen
 kommen Reparaturen und Kleinigkeiten dazu, die auch hochzaehlen. Was zaehlt,
 ist die Reihenfolge, nicht die Ziffer.
 
-### M1 - Karten kommen aus Dateien (0.12.0)
+Sie fangen bei 0.20.0 an und nicht mehr bei 0.12.0: 0.12.0 bis 0.19.1 sind
+vergeben, groesstenteils an den abgespaltenen Mehrspieler. Keine Nummer
+wird zweimal benutzt, auch nicht ueber Zweige hinweg.
+
+### M1 - Karten kommen aus Dateien (0.20.0)
 
 *Ziel:* `testkarte()` ist nicht mehr die einzige Karte.
 
@@ -878,7 +885,7 @@ ist die Reihenfolge, nicht die Ziffer.
 *Warum zuerst:* Ohne das ist jeder weitere Schritt eine Code-Aenderung.
 Danach ist ein neuer Ort eine Textdatei.
 
-### M2 - Mehrere Orte, ein Ortstyp mehr (0.13.0)
+### M2 - Mehrere Orte, ein Ortstyp mehr (0.21.0)
 
 * Drei bis vier handgetippte Wrackfelder
 * Ein Vorposten mit Wachtuermen
@@ -887,7 +894,7 @@ Danach ist ein neuer Ort eine Textdatei.
 
 *Sichtbar:* Es ist nicht mehr jedes Mal dieselbe Karte.
 
-### M3 - Der Wandler als Ort (0.14.0)
+### M3 - Der Wandler als Ort (0.22.0)
 
 * `wandler.py`: Bauplan aus Text, drei Decks
 * `Ebene.stempeln()`
@@ -898,7 +905,7 @@ Danach ist ein neuer Ort eine Textdatei.
 *Sichtbar:* Man hat ein Zuhause, und es steht wirklich in der Welt.
 *Das ist der Meilenstein, der das Spiel veraendert.*
 
-### M4 - Module und Schaechte (0.15.0)
+### M4 - Module und Schaechte (0.23.0)
 
 * Modulliste in `config.py`
 * Leere Schaechte auf E1, sichtbar leer
@@ -908,7 +915,7 @@ Danach ist ein neuer Ort eine Textdatei.
 
 *Sichtbar:* Schrott hat zum ersten Mal einen Zweck.
 
-### M5 - Die Sektorkarte (0.16.0)
+### M5 - Die Sektorkarte (0.24.0)
 
 * `sektor.py`: Graph, 14-20 Knoten, 6-8 Spalten
 * Sektorkarte als Szene, aufgerufen vom Kartentisch auf E2
@@ -917,7 +924,7 @@ Danach ist ein neuer Ort eine Textdatei.
 
 *Sichtbar:* Aus einzelnen Orten wird eine Reise.
 
-### M6 - Die Front (0.17.0)
+### M6 - Die Front (0.25.0)
 
 * `FRONT` in `config.py`
 * Die Front rueckt je Etappe
@@ -926,19 +933,19 @@ Danach ist ein neuer Ort eine Textdatei.
 
 *Sichtbar:* Das Spiel hat einen Motor. Der Titel erklaert sich.
 
-### M7 - Der Lauf als Ganzes (0.18.0)
+### M7 - Der Lauf als Ganzes (0.26.0)
 
 * Lauf-Spielstand: was bleibt (Wissen), was nicht (Wandler)
 * Sektorausgang, dann naechste Region
 * EISERN wird das, was es verspricht
 
-### M8 - Ortsvielfalt (0.19.0)
+### M8 - Ortsvielfalt (0.27.0)
 
 * Chorturm (5 Ebenen, hoch), Trichter (5 Ebenen, runter), Freie Werft
 * Bausteine statt ganzer Karten
 * Kartenpruefung im Test
 
-### M9 - Erzaehlung (0.20.0)
+### M9 - Erzaehlung (0.28.0)
 
 * Terminals
 * Funkbruchstuecke

@@ -42,29 +42,54 @@ vollstaendig, wie die Karte am Ende aufgebaut sein soll: die drei
 Massstaebe (Kontinent, Ort, Wandler), wie der Wandler in einen Ort
 gestempelt wird, wie die Sektoren und die vorrueckende Front funktionieren,
 was Fortschritt womit koppelt, und in welcher Reihenfolge das gebaut wird
-(Meilensteine M1 bis M9, von 0.12.0 bis 1.0.0).
+(Meilensteine M1 bis M9, von 0.20.0 bis 1.0.0).
 
-Gebaut ist davon noch nichts. Wer weitermacht, nimmt sich den naechsten
-Meilenstein aus Abschnitt 11 des Plans und liest vorher Abschnitt 3 ganz -
-dort steht die eine technische Entscheidung, an der alles andere haengt.
+Gebaut ist davon noch nichts. **Als naechstes steht M1 an: Karten kommen
+aus Dateien** - `karten/` mit Textdateien, `Welt.aus_datei()`, Marken fuer
+Start und Beute. Solange es nur `testkarte()` gibt, ist jeder weitere
+Schritt eine Codeaenderung; danach ist ein neuer Ort eine Textdatei.
+
+Wer weitermacht, nimmt sich den naechsten Meilenstein aus Abschnitt 11 des
+Plans und liest vorher Abschnitt 3 ganz - dort steht die eine technische
+Entscheidung, an der alles andere haengt.
 
 ### Der Mehrspieler liegt daneben, nicht hier
 
-Zwischen 0.13.0 und 0.14.0 ist ein LAN-Mehrspieler entstanden: drei
-Spielarten, Aufhelfen, Wellen und knappe Munition. Er war als Test
-gedacht, ist fertiggestellt und **wird nicht weiterentwickelt**.
+Zwischen 0.13.0 und 0.19.1 ist ein Mehrspieler entstanden - erst im LAN,
+zuletzt auch ueber das Internet. Er war als Test gedacht, ist
+**abgeschlossen** und wird nicht weiterentwickelt.
 
-Er liegt vollstaendig auf dem Zweig **`multiplayer-test`** und ist aus
-diesem Zweig wieder entfernt. Wer ihn ansehen oder spielen will:
+Was darin steckt: sechs Spielarten (PVP, PVE, PVPVE, TEAM, VERSUS und
+HUEGEL nach dem Vorbild der Hot Zone), Aufhelfen durch Mitspieler,
+Gegnerwellen, knappe Munition mit Nachschubkisten, Rauchgranaten,
+Pausenmenue mit Regelaenderung und Mannschaftseinteilung fuer den
+Gastgeber, Bestenliste, und Runden ueber das Internet, bei denen der
+Router per UPnP selbst den Port freigibt.
+
+| Wo | Was |
+| --- | --- |
+| Zweig `multiplayer-test` | der Mehrspieler, spielbar |
+| Zweig `mehrspieler-0.19.1` | derselbe Stand unter festem Namen, als Bezugspunkt |
+| `docs/MEHRSPIELER.md` **auf diesem Zweig** | alles darueber |
 
 ```
 git checkout multiplayer-test
 ```
 
+**`docs/MEHRSPIELER.md` ist die Bauanleitung**, falls er einmal
+zurueckkommen soll: Aufbau, Protokoll Feld fuer Feld, alle Spielarten,
+jede Zahl mit Begruendung, jeder Fehler, der beim Bauen aufgetreten ist,
+und die Reihenfolge in zwoelf Schritten. Damit genuegt spaeter der Satz
+*"bau den Mehrspieler wieder ein wie in 0.19.1"*.
+
 Der Hauptzweig geht ohne ihn weiter. Das ist Absicht: der Weltenplan
 baut auf einen Einzelspieler mit Wandler, Sektoren und Front, und ein
 mitgeschleppter Mehrspieler haette jede dieser Entscheidungen doppelt so
 teuer gemacht.
+
+**Die Versionsnummern 0.16.0 bis 0.19.1 sind dort vergeben.** Der
+Hauptzweig macht bei **0.20.0** weiter - keine Nummer wird zweimal
+benutzt, auch nicht ueber Zweige hinweg.
 
 ## Starten
 
@@ -474,8 +499,14 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.12.0 | Das Hauptmenue startet das echte Spiel statt einer Platzhalter-Szene; Startdatei fuer den direkten Spieltest |
 | 0.13.0 | LAN-Gefecht (nur auf `multiplayer-test`) |
 | 0.13.1 | Fehler im LAN-Gefecht (nur auf `multiplayer-test`) |
-| 0.14.0 | Mehrspieler fertiggestellt: drei Spielarten, Aufhelfen, Wellen, knappe Munition. Letzter Stand von `multiplayer-test` |
+| 0.14.0 | Mehrspieler: drei Spielarten, Aufhelfen, Wellen, knappe Munition (nur auf `multiplayer-test`) |
 | 0.15.0 | Mehrspieler aus dem Hauptzweig entfernt und auf `multiplayer-test` abgespalten |
+| 0.16.0 | Mannschaften: TEAM, VERSUS, HUEGEL (nur auf `multiplayer-test`) |
+| 0.17.0 | Rauchgranate, fallende Granaten, Einstiegsschutz (nur auf `multiplayer-test`) |
+| 0.18.0 | Pausenmenue, Rauch als Sichtwand, mehr Treppen (nur auf `multiplayer-test`) |
+| 0.19.0 | Runden ueber das Internet per UPnP (nur auf `multiplayer-test`) |
+| 0.19.1 | Knappe Munition wirkt wirklich. **Letzter Stand des Mehrspielers** (nur auf `multiplayer-test`) |
+| 0.20.0 | *(frei)* Naechste Nummer im Hauptzweig, siehe M1 im Weltenplan |
 
 ## Anpassen
 
