@@ -1,10 +1,13 @@
 # DUSTFRONT
 
-Ein Top-Down-Spiel auf dem Kontinent Veld. Du steuerst einen modularen
-Wandler, baust ihn aus Schrott weiter aus und bewegst dich zwischen drei
-Fraktionen: der Kolonne, dem Chor und den Freien Werften. Beide Spielmodi
-teilen dieselbe 90-Grad-Draufsicht, du wechselst mit Tab zwischen "an Bord"
-und "Fahr-Modus".
+Ein Mech-Kampfspiel auf dem Kontinent Veld. Du steuerst einen modularen
+Wandler - eine riesige Laufmaschine, die zugleich deine Basis ist - baust
+ihn aus Schrott weiter aus und bewegst dich zwischen drei Fraktionen: der
+Kolonne, dem Chor und den Freien Werften. Gekaempft wird auf zwei
+Massstaeben zugleich: Wandler gegen Wandler mit Geschuetzen, und zu Fuss
+auf den Decks, wenn geentert wird. Beide Spielmodi teilen dieselbe
+90-Grad-Draufsicht, du wechselst mit Tab zwischen "an Bord" und
+"Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
@@ -37,21 +40,33 @@ Bestehendes umzubauen.
 
 ## Wohin es geht
 
+**DUSTFRONT ist ein Mech-Kampfspiel.** Der riesige Wandler ist die Basis,
+das Fahrzeug und die Waffe in einem Stueck. Die Hoehenebenen gibt es, weil
+er Etagen hat: unten der Boden, darueber die Decks. Man steuert primaer den
+Wandler - stellt ihn aber auch auf Autopilot, legt die Waffensysteme auf
+den anderen Wandler fest, und geht dann selbst zu Fuss nach unten, um eine
+Enterung abzuwehren, den anderen Wandler zu entern, oder abzusteigen und
+Gebaeude im Wasteland zu pluendern. Das Vorbild ist
+*SAND: Raiders of Sophie*, in 2D und mit einem radikal anderen Vibe.
+
 **[`docs/KARTE.md`](docs/KARTE.md) ist der Weltenplan.** Dort steht
-vollstaendig, wie die Karte am Ende aufgebaut sein soll: die drei
-Massstaebe (Kontinent, Ort, Wandler), wie der Wandler in einen Ort
-gestempelt wird, wie die Sektoren und die vorrueckende Front funktionieren,
-was Fortschritt womit koppelt, und in welcher Reihenfolge das gebaut wird
-(Meilensteine M1 bis M9, von 0.20.0 bis 1.0.0).
+vollstaendig, wie das aufgebaut wird: warum jeder Rumpf eine eigene `Welt`
+ist und der Kern dafuer nicht angefasst werden muss, wie der Wandler an
+Stationen bedient wird (ohne zweites Bewegungssystem), warum der Autopilot
+die zentrale Mechanik ist, wie Duell und Enterung ablaufen, wie Sektoren
+und die vorrueckende Front funktionieren, und in welcher Reihenfolge das
+gebaut wird (Meilensteine M1 bis M9, von 0.20.0 bis 1.0.0).
 
 Gebaut ist davon noch nichts. **Als naechstes steht M1 an: Karten kommen
 aus Dateien** - `karten/` mit Textdateien, `Welt.aus_datei()`, Marken fuer
-Start und Beute. Solange es nur `testkarte()` gibt, ist jeder weitere
-Schritt eine Codeaenderung; danach ist ein neuer Ort eine Textdatei.
+Start, Stationen und Beute. Solange es nur `testkarte()` gibt, ist jeder
+weitere Schritt eine Codeaenderung; danach ist auch ein Wandler nur eine
+Textdatei.
 
-Wer weitermacht, nimmt sich den naechsten Meilenstein aus Abschnitt 11 des
-Plans und liest vorher Abschnitt 3 ganz - dort steht die eine technische
-Entscheidung, an der alles andere haengt.
+Wer weitermacht, nimmt sich den naechsten Meilenstein aus Abschnitt 13 des
+Plans und liest vorher Abschnitt 1, 2 und 5 ganz - Abschnitt 1 sagt, was
+eine fruehere Fassung des Plans falsch verstanden hatte, und Abschnitt 5
+enthaelt die eine technische Entscheidung, an der alles andere haengt.
 
 ### Der Mehrspieler liegt daneben, nicht hier
 

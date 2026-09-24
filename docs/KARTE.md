@@ -1,54 +1,225 @@
 # DUSTFRONT - Der Weltenplan
 
-**Was das hier ist.** Der vollstaendige Entwurf, wie die Karte von DUSTFRONT
-am Ende aufgebaut sein soll: vom Kontinent bis zur einzelnen Kachel. Nichts
-davon ist gebaut. Dieses Dokument sagt, *was* gebaut wird, *warum* es so und
-nicht anders, und *in welcher Reihenfolge*.
+**Was das hier ist.** Der vollstaendige Entwurf, wie DUSTFRONT am Ende
+aufgebaut sein soll: vom Kontinent ueber das Gefecht zweier Wandler bis zur
+einzelnen Kachel an Bord. Nichts davon ist gebaut. Dieses Dokument sagt,
+*was* gebaut wird, *warum* es so und nicht anders, und *in welcher
+Reihenfolge*.
 
 **Fuer wen.** Fuer Der Meister, und fuer jede Claude-Instanz, die spaeter
 gesagt bekommt "mach mit dem Kartenplan weiter". Wer hier anfaengt, liest
-zuerst Abschnitt 0 und 1, dann den Meilenstein, der dran ist.
+zuerst Abschnitt 0, 1 und 2, dann Abschnitt 5 ganz, dann den Meilenstein,
+der dran ist.
 
-**Stand beim Schreiben:** Version 0.11.1, PRE-ALPHA. (Hauptzweig
-inzwischen 0.15.0, naechste freie Nummer **0.20.0**. Zwischendurch ist ein
-Mehrspieler entstanden - LAN und Internet, sechs Spielarten - der als Test
-abgeschlossen und auf den Zweig `multiplayer-test` abgespalten wurde; er
-hat die Nummern 0.16.0 bis 0.19.1 verbraucht und ist in
-`docs/MEHRSPIELER.md` auf jenem Zweig vollstaendig beschrieben. Fuer
-diesen Plan aendert das nichts - er beschreibt den Einzelspieler.) Der Spielkern steht
-(feste Zeitschritte, drei Ebenen, sechs Waffen, Inventar, Menues, Texturen
-aus Dateien). Es gibt genau eine Karte: `testkarte()` in `world.py`, drei
-handgetippte Textebenen. Alles Folgende haengt an dieser einen Struktur.
+**Stand beim Schreiben:** Hauptzweig 0.15.0, PRE-ALPHA, naechste freie
+Nummer **0.20.0**. Der Spielkern steht (feste Zeitschritte, drei Ebenen,
+sechs Waffen, Inventar, Menues, Texturen aus Dateien). Es gibt genau eine
+Karte: `testkarte()` in `world.py`. Zwischendurch ist ein Mehrspieler
+entstanden, der als Test abgeschlossen auf `multiplayer-test` liegt und die
+Nummern 0.16.0 bis 0.19.1 verbraucht hat.
+
+> ### Achtung: Diese Fassung ist eine Korrektur
+>
+> Die erste Fassung dieses Dokuments hat das Spiel **falsch verstanden**.
+> Sie beschrieb einen Einzelspieler, der von Ort zu Ort faehrt, dort zu
+> Fuss kaempft, und dazwischen in seinem Wandler wohnt - der Wandler war
+> darin ein Zuhause unter mehreren Schauplaetzen, und das Fahren war ein
+> Kostenposten, den man am besten streicht.
+>
+> **Das ist es nicht.** DUSTFRONT ist ein **Mech-Kampfspiel**. Der riesige
+> Wandler *ist* die Basis, und er ist gleichzeitig das, womit gekaempft
+> wird. Abschnitt 1 zaehlt auf, was daraus folgt, und was von der alten
+> Fassung uebrig bleibt.
 
 ---
 
 ## 0. Wie dieses Dokument zu benutzen ist
 
 Es geht **von grob nach fein**. Wer nur einen Ueberblick braucht, liest 1
-bis 3. Wer baut, springt zu Abschnitt 11 (Meilensteine) und liest von dort
-zurueck.
+bis 4. Wer baut, liest 5 ganz und springt dann zu Abschnitt 13
+(Meilensteine).
 
-Drei Arten von Aussagen, immer unterscheidbar:
+Vier Arten von Aussagen, immer unterscheidbar:
 
 | Zeichen | Bedeutung |
 | --- | --- |
 | **FEST** | Steht schon im Code oder folgt zwingend daraus. Nicht verhandelbar, ohne Bestehendes umzubauen. |
 | **ENTWURF** | So ist es gedacht. Begruendet, durchgerechnet, aber aenderbar. |
-| **OFFEN** | Bewusst nicht entschieden. Steht in Abschnitt 12, Der Meister entscheidet. |
+| **OFFEN** | Bewusst nicht entschieden. Steht in Abschnitt 14, Der Meister entscheidet. |
+| **KORREKTUR** | Stand in der ersten Fassung anders. Hier steht, was falsch war. |
 
 **Die eiserne Regel dieses Plans:** Nichts in diesem Dokument darf
 erzwingen, dass der Spielkern umgebaut wird. Wo ein Entwurf das verlangen
 wuerde, steht ausdruecklich dabei, was genau sich aendern muss und warum es
-sich lohnt. Jede solche Stelle ist in Abschnitt 10 aufgelistet.
+sich lohnt. Jede solche Stelle ist in Abschnitt 12 aufgelistet.
 
 ---
 
-## 1. Was schon feststeht
+## 1. Was falsch verstanden war
+
+**KORREKTUR.** Fuenf Punkte, vom groessten abwaerts. Jeder zieht einen Teil
+des alten Plans mit sich.
+
+### 1.1 Der Wandler ist die Basis, nicht ein Ort unter vielen
+
+Alt: drei Massstaebe - Kontinent, Ort, Wandler - und der Wandler war der
+dritte, das Zuhause zwischen den Einsaetzen.
+
+Richtig: **Der Wandler ist der Mittelpunkt.** Er ist Basis, Fahrzeug,
+Waffenplattform und Lager in einem Stueck. Alles andere ordnet sich ihm
+unter: der Boden ist das, worueber er laeuft, Veld ist das, wohin er laeuft,
+und der Gegner ist in erster Linie **ein zweiter Wandler**.
+
+### 1.2 Die Ebenen sind die Etagen des Wandlers
+
+Alt: Ebenen waren Stockwerke von Ruinen, Kraterwaende, Turmgeschosse.
+
+Richtig: **Die Hoehenebenen gibt es, weil der Wandler Etagen hat.** Unten
+der Boden, darueber die Decks. Das war von Anfang an der Zweck der
+teuersten Mechanik im Spiel, und der alte Plan hat sie fuer Kulisse
+ausgegeben. `EBENEN_HOEHE` hat genau fuenf Eintraege - Boden plus vier
+Decks. Das passt nicht zufaellig (Abschnitt 5.4).
+
+### 1.3 Steuern ist der Hauptmodus, nicht der teuerste Fehler
+
+Alt, Abschnitt 10.4 der ersten Fassung: *"Ein zweites vollwertiges
+Bewegungssystem ist der teuerste Posten im ganzen Plan, und er bringt
+spielerisch am wenigsten."* Es folgte der Vorschlag, den Fahr-Modus
+vielleicht nie zu bauen und die Zeilen `FAHRT`, `DREHEN`, `BOOST`,
+`AUTOPILOT` aus dem Menue zu entfernen.
+
+Richtig: **Man steuert primaer den Wandler.** Diese Zeilen im Menue sind
+kein Altlast-Versprechen, sie sind die Beschreibung des Spiels. Sie stehen
+seit 0.1.0 da und waren die ganze Zeit der deutlichste Hinweis im Repo.
+
+Und: es braucht *kein* zweites Bewegungssystem. Siehe Abschnitt 6.1 - der
+Trick ist, dass der Spieler nie aufhoert, eine laufende Figur zu sein.
+
+### 1.4 Der Kampf hat zwei Massstaebe gleichzeitig
+
+Alt: Kampf war Kampf zu Fuss, Gegner waren Wellen von Laeufern.
+
+Richtig: Zwei Wandler beschiessen sich, **waehrend** ihre Besatzungen zu
+Fuss auf den Decks stehen. Man stellt den Kurs auf Autopilot, legt die
+Waffensysteme auf den anderen Wandler fest, und geht dann selbst nach
+unten, um eine **Enterung** abzuwehren - oder um den anderen Wandler zu
+entern. Das Gefecht zu Fuss, das der Spielkern heute schon kann, findet
+*auf* den Maschinen statt, nicht neben ihnen.
+
+### 1.5 Absteigen ist eine Entscheidung, keine Reise
+
+Alt: Man faehrt zu einem Ort, parkt, steigt aus, der Ort ist die Mission.
+
+Richtig: Man steigt ab, **waehrend der Wandler weiterlaeuft oder wartet** -
+um Gebaeude im Wasteland zu pluendern. Das ist ein Risiko, kein
+Ortswechsel: unten ist man allein, oben laeuft die Maschine ohne Fuehrer,
+und man muss zurueck, bevor etwas passiert.
+
+### 1.6 Was von der alten Fassung bleibt
+
+Nicht alles war falsch. Diese Teile sind uebernommen, teils umgebaut:
+
+| Bleibt | Wie es jetzt steht |
+| --- | --- |
+| Karten sind Text, Marken in der Karte | unveraendert, Abschnitt 5.6 - jetzt noch wichtiger, weil auch Wandler Textkarten sind |
+| Keine beweglichen Kacheln | unveraendert, Abschnitt 5.2 - der Grund ist jetzt ein anderer |
+| Module als begehbarer Fortschritt | Abschnitt 6.5, praktisch unveraendert. Die staerkste Idee der alten Fassung. |
+| Veld als Knotengraph | Abschnitt 9, gekuerzt. Die Fahrt dazwischen ist jetzt Spiel, nicht Transport. |
+| Die vorrueckende Front | Abschnitt 9.2, unveraendert und jetzt besser begruendet |
+| Drei Fraktionen, drei Regionen | Abschnitt 10, auf Wandler umgestellt |
+| Erzaehlen ohne Dialogsystem | Abschnitt 11.4, unveraendert |
+
+| Faellt weg | Warum |
+| --- | --- |
+| "Der Wandler wird in den Ort gestempelt" als Grundlage | Der Wandler steht nicht in einer fremden Karte, er *ist* die Karte. Das Stempeln bleibt als Sonderfall fuers Andocken, Abschnitt 5.2. |
+| "Drei Massstaebe" in der alten Reihenfolge | ersetzt durch Abschnitt 4 |
+| Ortstypen als Hauptinhalt (Chorturm, Trichter, Silo) | verschoben. Erst der Wandler, dann die Orte. Abschnitt 13. |
+| Der Vorschlag, den Fahr-Modus zu streichen | falsch, siehe 1.3 |
+
+---
+
+## 2. Das Vorbild: SAND: Raiders of Sophie
+
+Der Meister hat es als Inspiration genannt. Hier steht, was es ist, damit
+niemand raten muss - **und vor allem, was DUSTFRONT anders macht.**
+
+### 2.1 Was SAND ist
+
+Ein Dieselpunk-Extraction-Shooter von Hologryph und TowerHaus, Ego-Sicht,
+seit Juni 2026 im Early Access. Spielort ist der ausgetrocknete Planet
+**Sophie** in einem alternativen 1910. Man baut, ruestet und steuert eine
+riesige Laufmaschine, den **Trampler**, entworfen nach Baufahrzeugen der
+1870er mit angesetzten Klappbeinen.
+
+Was daran zaehlt, in Stichpunkten:
+
+* Der Trampler ist **nicht ein Fahrzeug, sondern die Festung**: Transport,
+  Lager, Schutz und Waffenplattform zugleich.
+* Er wird aus **Bauteilen** zusammengesetzt - Motoren, Reaktoren, Lager,
+  Einstiegspunkte, Waffen - und als Bauplan gespeichert, um ihn nach einem
+  Verlust neu zu bauen. Es gibt Gewichtsklassen: leicht und schnell,
+  schwer und gepanzert.
+* Eine Besatzung von bis zu fuenf Spielern teilt sich die Arbeit: *"einer
+  kuemmert sich um den Motor, einer steuert, einer repariert, die beiden
+  anderen bedienen die Kanonen."* Allein zu spielen ist moeglich, aber
+  ueberfordernd.
+* **Kritische Bauteile:** Reaktor, Beine, Schwungrad, Kapitaenskajuete.
+  Das Schwungrad macht die Lenkung - ist es hin, verliert man die
+  Richtungskontrolle. Beine werden im Stehen repariert.
+* **Entern:** Wer die Tuer sprengt und an Bord kommt, uebernimmt die
+  Maschine.
+* Man steigt ab, um **Ruinen, Staedte, Schiffswracks** zu pluendern, und
+  faehrt mit der Beute zu einem Funkturm, um sich ausfliegen zu lassen.
+  Das Aktivieren warnt alle in der Naehe.
+* Gegner sind KI-Kreaturen (**Upiors**), rivalisierende Besatzungen und
+  Sandstuerme.
+
+*Nicht verlaesslich gefunden:* wie der Innenraum in Etagen aufgeteilt ist,
+ob es einen Autopiloten gibt und wie genau die Waffen festgelegt werden.
+Die Fundstellen schweigen dazu. Wo dieser Plan solche Dinge festlegt, ist
+es eigene Erfindung und als ENTWURF markiert, nicht als Nachbau.
+
+### 2.2 Was DUSTFRONT uebernimmt
+
+1. **Die Maschine ist die Basis.** Der eine Satz, um den sich alles dreht.
+2. **Kritische Bauteile statt eines Lebensbalkens.** Ein Treffer nimmt dir
+   nicht Zahlen weg, sondern eine Faehigkeit - die Lenkung, ein Geschuetz,
+   das Licht. Das ist unendlich viel besser lesbar als ein Balken, und es
+   kostet im Kachelspiel fast nichts (Abschnitt 6.6).
+3. **Entern.** Der Moment, in dem Maschinenkampf und Fusskampf dasselbe
+   Gefecht werden.
+4. **Absteigen als Risiko.**
+5. **Arbeitsteilung als Spannungsquelle** - siehe naechster Punkt, aber
+   mit umgekehrtem Vorzeichen.
+
+### 2.3 Was DUSTFRONT ausdruecklich anders macht
+
+**"Das moechte ich quasi in 2D mit einem radikal anderen Vibe nachbauen."**
+Also, Punkt fuer Punkt:
+
+| SAND | DUSTFRONT |
+| --- | --- |
+| Ego-Sicht, 3D | **90-Grad-Draufsicht, 2D, Kachelwelt.** Man sieht den ganzen Wandler auf einmal - das ist keine Einschraenkung, das ist ein anderes Spiel. Man sieht die Enterer kommen. |
+| Besatzung aus fuenf Spielern | **Ein Spieler.** Allein sein ist nicht das Problem, sondern das Thema - siehe 6.3. |
+| PvPvE, Extraction, andere Spieler als Hauptgefahr | **Einzelspieler.** Der zweite Wandler ist KI. Der Mehrspieler liegt abgeschlossen auf `multiplayer-test` und kommt hier nicht vor. |
+| Alternatives 1910, Dieselpunk, Sandplanet | **Veld, Staub und Schrott, drei Fraktionen.** Kein Dieselpunk-Messing, sondern Rost, Blech und Asche. Das steht schon im README und aendert sich nicht. |
+| Offene Welt, prozedurale Duenen | **Knotengraph mit vorrueckender Front.** Entscheidung statt Weite, Abschnitt 9. |
+| Verlieren heisst Beute weg | **Verlieren heisst der Wandler weg** - bei EISERN endgueltig. Das Menue sagt das schon: *"ein wandler, ein leben."* |
+
+**Der wichtigste Unterschied ist der Blickwinkel.** In SAND weiss man nie
+genau, was auf dem eigenen Deck los ist. In DUSTFRONT sieht man es -
+und kommt trotzdem nicht rechtzeitig hin. Das ist eine andere Art von
+Druck, und sie passt zu einem Spiel, dessen Kernversprechen *"nichts
+springt, nichts sperrt"* ist.
+
+---
+
+## 3. Was schon feststeht
 
 Geerntet aus dem, was im Repo liegt. Das ist kein Vorschlag, das ist
 Bestandsaufnahme - der Plan muss dazu passen, nicht umgekehrt.
 
-### 1.1 Aus dem README
+### 3.1 Aus dem README
 
 * Kontinent **Veld**. Top-Down-Ansicht, 90 Grad von oben.
 * Der Spieler steuert einen **modularen Wandler** und **baut ihn aus
@@ -57,10 +228,13 @@ Bestandsaufnahme - der Plan muss dazu passen, nicht umgekehrt.
 * **Zwei Spielmodi**, die sich dieselbe Ansicht teilen: *an Bord* und
   *Fahr-Modus*, gewechselt mit Tab.
 
-### 1.2 Aus `rustfront_menu.py`
+Der letzte Punkt ist die Kurzfassung des ganzen Spiels und stand die ganze
+Zeit im ersten Absatz.
 
-Das Hauptmenue weiss schon mehr ueber das Spiel als das Spiel selbst. Diese
-Zeilen sind bindend, weil sie dem Spieler bereits etwas versprechen:
+### 3.2 Aus `rustfront_menu.py`
+
+Das Hauptmenue weiss schon mehr ueber das Spiel als das Spiel selbst.
+Diese Zeilen sind bindend, weil sie dem Spieler bereits etwas versprechen:
 
 ```python
 REGIONEN = [
@@ -71,927 +245,1056 @@ REGIONEN = [
     ("CHORWERK-RUINE", "der chor sendet noch. beste technik, kaum ueberlebende.",
      {"KOLONNE": 0.2,  "CHOR": 0.9,  "WERFTEN": 0.2}),
 ]
-FRAKTIONSFARBE = {"KOLONNE": C_ORANGE, "CHOR": C_TEAL, "WERFTEN": C_AMBER}
 ```
 
 Die Steuerungstabelle im Menue nennt Aktionen, die es im Spiel noch nicht
-gibt - sie sind damit als Absicht dokumentiert:
+gibt. **Sie sind damit als Absicht dokumentiert, und sie beschreiben genau
+das Spiel aus Abschnitt 1:**
 
-| Taste | Aktion | Gibt es? |
-| --- | --- | --- |
-| B | BAUEN | nein |
-| Q | WERKZEUG | nein |
-| TAB | MODUS WECHSELN | nein (Tab ist heute Inventar) |
-| A / D | DREHEN (FAHRT) | nein |
-| W / S | FAHRT | nein |
-| SHIFT | BOOST | teilweise (Sprint) |
-| H | AUTOPILOT | nein (H ist heute Medkit) |
+| Taste | Aktion | Gibt es? | Was es bedeutet |
+| --- | --- | --- | --- |
+| TAB | MODUS WECHSELN | nein (Tab ist heute Inventar) | zwischen "an Bord" und "Fahrt" |
+| W / S | FAHRT | nein | Schub am Steuerstand |
+| A / D | DREHEN (FAHRT) | nein | Kurs am Steuerstand |
+| SHIFT | BOOST | teilweise (Sprint) | Ueberlast, Abschnitt 6.2 |
+| H | AUTOPILOT | nein (H ist heute Medkit) | **der Schluessel zum ganzen Spiel**, Abschnitt 6.3 |
+| B | BAUEN | nein | Module und Reparatur |
+| Q | WERKZEUG | nein | Schweissgeraet, Abschnitt 6.6 |
 
 Ausserdem: `sector_preview()` zeichnet bereits eine **Sektorkarte aus acht
 Knoten**, verbunden durch gestrichelte Linien, jeder Knoten in einer
 Fraktionsfarbe. Der Spielstand kennt `region`, `difficulty`, `callsign`.
 Die Schwierigkeit **EISERN** ist beschrieben als *"ein wandler, ein leben.
-kein laden nach dem verlust."*
+kein laden nach dem verlust."* - und das ergibt erst jetzt seinen vollen
+Sinn.
 
-### 1.3 Aus dem Spielkern
+### 3.3 Aus dem Spielkern
 
 * **FEST:** Eine `Welt` ist eine Liste von `Ebene`n. Eine `Ebene` ist ein
   Kachelgitter mit einem Index. Jedes Wesen gehoert zu genau einer Ebene.
 * **FEST:** Karten sind **Text**. Ein Zeichen ist eine Kachel
   (`ZEICHEN` in `world.py`). `Ebene.aus_text()` baut daraus ein Gitter.
-* **FEST:** `EBENEN_HOEHE = [0, 118, 182, 238, 288]` - fuenf Hoehen sind
-  vorgesehen, drei werden benutzt. Der Abstand entscheidet ueber Sturzdauer,
-  Fallschaden und wie klein die untere Ebene gezeichnet wird.
+* **FEST:** `EBENEN_HOEHE = [0, 118, 182, 238, 288]` - **fuenf** Hoehen
+  sind vorgesehen, drei werden benutzt. Der Abstand entscheidet ueber
+  Sturzdauer, Fallschaden und wie klein die untere Ebene gezeichnet wird.
+* **FEST:** Ein Sturz laeuft ohne Ruck: die Figur bleibt stehen, die Welt
+  waechst unter ihr heran, und man kann in der Luft noch steuern.
 * **FEST:** Alle Zahlen in `config.py`. Jedes Bild durch eine Datei
   ersetzbar. Jeder Klang auch.
-* **FEST:** Das HUD zeigt bereits **SCHROTT** als Zaehler. Schrott ist also
-  die Waehrung, und das steht schon auf dem Bildschirm.
+* **FEST:** Das HUD zeigt bereits **SCHROTT** als Zaehler.
 
-### 1.4 Was der Name sagt
+### 3.4 Was der Name sagt
 
 **DUSTFRONT.** Eine *Front* aus Staub. Kein Ort, sondern eine Linie, die
-sich bewegt. Das ist der wichtigste Hinweis im ganzen Projekt, und der Plan
-baut darauf auf: **Die Karte hat einen Motor, und der Motor ist die
-vorrueckende Front.** Siehe Abschnitt 5.3.
+sich bewegt - und jetzt auch: zwei Maschinen, die sich an dieser Linie
+begegnen. Der Motor der Karte ist die vorrueckende Front (Abschnitt 9.2).
 
 ---
 
-## 2. Die drei Massstaebe
-
-Der Fehler, den man hier machen kann, ist "eine riesige Karte" woertlich zu
-nehmen und eine gigantische Kachelflaeche zu bauen. Das waere technisch
-machbar und spielerisch tot: leere Wege, kein Rhythmus, keine Spannung, und
-`ebene_zeichnen()` wuerde bei 500x500 Kacheln pro Bild durch eine Million
-Felder laufen.
-
-Stattdessen hat DUSTFRONT **drei Massstaebe**, die ineinandergreifen. Jeder
-hat eine eigene Aufgabe, eine eigene Zeitskala und ein eigenes Gefuehl.
+## 4. Die Massstaebe
 
 ```
-    VELD            Der Kontinent. Ein Knotengraph, keine Kacheln.
-    (Strategie)     Zeitskala: Tage. Hier entscheidet man WOHIN.
-        |           Die Front rueckt nach. Treibstoff ist knapp.
+    VELD              Der Kontinent. Knotengraph, keine Kacheln.
+    (Strategie)       Zeitskala: Etappen. Hier entscheidet man WOHIN.
+        |             Die Front rueckt nach.
         |
-        |  ankommen / abfahren
         v
-    DER ORT         Ein Knoten von innen. Kachelwelt, 3-5 Ebenen.
-    (Taktik)        Zeitskala: Minuten. Hier entscheidet man WIE.
-        |           Das ist der Spielkern, wie er heute schon laeuft.
+    DIE FAHRT         Der Wandler laeuft. Man ist an Bord, an einer Station,
+    (Hauptmodus)      oder unterwegs zwischen den Decks.
+        |             Zeitskala: Minuten. Hier passiert das Gefecht.
         |
-        |  Rampe / Luke
-        v
-    DER WANDLER     Das fahrende Zuhause. Kachelwelt, 3 Etagen.
-    (Ruhe, Bau)     Zeitskala: solange man will. Hier entscheidet man WOMIT.
-                    Kein Gegner an Bord (ausser bei Ueberfaellen).
+        +-----------------+--------------------+
+        |                 |                    |
+        v                 v                    v
+    DAS DUELL         DIE ENTERUNG          DER BODEN
+    (Wandler          (Fussgefecht          (absteigen, Gebaeude
+     gegen Wandler)    auf den Decks)        pluendern, Abschnitt 8)
 ```
 
-**Warum drei und nicht zwei.** Ohne den Wandler waere das Spiel eine Folge
-von Missionen ohne Zuhause - man haette nichts, wofuer man sammelt. Ohne
-Veld waere es eine Levelliste ohne Entscheidung. Ohne den Ort waere es ein
-Menuespiel. Alle drei tragen.
+**Der Unterschied zur alten Fassung:** Die Fahrt ist nicht mehr der
+langweilige Strich zwischen zwei Schauplaetzen, sondern der Ort, an dem
+alles passiert. Veld sagt nur noch, *in welche Richtung* gelaufen wird und
+wie viel Zeit bleibt.
 
 **Das Versprechen an den Spieler**, in einem Satz je Massstab:
 
 * *Veld:* "Ich komme nicht ueberall hin. Ich muss waehlen."
-* *Ort:* "Ich weiss nicht, was hinter der naechsten Wand ist."
-* *Wandler:* "Das hier ist meins, und es wird besser."
+* *Die Fahrt:* "Ich kann nicht an zwei Stellen gleichzeitig sein."
+* *Der Wandler:* "Das hier ist meins, und es wird besser."
+* *Der Boden:* "Wenn ich zu lange brauche, ist sie weg."
 
 ---
 
-## 3. Die eine technische Grundlage
+## 5. Die eine technische Grundlage
 
 Dieser Abschnitt ist der wichtigste des Dokuments. Wer ihn ueberspringt,
-baut spaeter dreimal dasselbe.
+baut spaeter dreimal dasselbe - oder baut sich den Kern kaputt.
 
-### 3.1 Alles Begehbare ist eine `Welt`
+### 5.1 Jeder Rumpf ist eine eigene `Welt`
 
-**ENTWURF, und zwar ein harter:** Der Ort und der Wandler sind **dieselbe
-Datenstruktur**. Beide sind eine `Welt` aus `Ebene`n, beide werden vom
-selben Renderer gezeichnet, beide benutzen dieselbe Kollision, dieselben
-Treppen, dieselben Stuerze.
+**ENTWURF, und zwar der harte, an dem alles haengt:**
 
-Das ist kein Sparzwang, das ist die Bedingung dafuer, dass sich der Wandler
-wie ein Ort anfuehlt und nicht wie ein Menue mit Hintergrundbild. Man laeuft
-an Bord genauso wie draussen, faellt genauso durch eine offene Luke, und
-schiesst durch dieselben Loecher.
+> Der eigene Wandler ist eine `Welt`. Der gegnerische Wandler ist eine
+> `Welt`. Der Boden ist eine `Welt`. Alle drei benutzen denselben
+> Renderer, dieselbe Kollision, dieselben Treppen, dieselben Stuerze.
+> Ein Wesen gehoert zu genau einer Welt und darin zu genau einer Ebene.
 
-**Was daraus folgt:** Es darf keinen Code geben, der "Wandler" von "Ort"
-unterscheidet, ausser bei den Regeln (Gegner, Beute, Zeitdruck). Die
-Darstellung unterscheidet gar nichts.
+**Warum das der entscheidende Griff ist.** Die naheliegende Frage lautet:
+"Wie bewege ich eine Maschine aus Kacheln durch eine Kachelwelt?" Darauf
+gibt es keine billige Antwort (siehe 5.2). Die richtige Frage lautet:
 
-### 3.2 Der Wandler wird in den Ort gestempelt
+> **Wer auf dem Deck steht, fuer den bewegt sich das Deck nicht.**
 
-Das ist die Kernentscheidung, und sie hat drei denkbare Antworten. Alle drei
-wurden durchgerechnet.
+Alle Koordinaten an Bord sind **relativ zum Rumpf**. Der Wandler bewegt
+sich nicht *in* einer Welt - er *ist* eine, und was sich bewegt, ist eine
+einzige Zahl: seine Position auf Veld. Diese Zahl wird gebraucht fuer
 
-**Weg A - zwei getrennte Welten, Blende dazwischen.**
-Man steht an der Rampe, drueckt E, kurze Schwarzblende, man ist an Bord.
-*Kosten:* niedrig, geht fast ohne neuen Code. *Preis:* der Wandler steht
-nicht wirklich in der Welt. Man kann nicht vom Oberdeck auf das Wrackfeld
-schiessen, nicht von draussen sehen, dass die Rampe offen ist. Der Uebergang
-ist ein Schnitt, und Schnitte kosten genau das Gefuehl, das in 0.11.0
-teuer erkauft wurde ("nichts springt").
+* den Hintergrund, der unter den Beinen durchzieht (Parallaxe, reine
+  Anzeige),
+* den Abstand zum anderen Wandler (entscheidet ueber Waffenreichweiten),
+* die Frage, ob die Rampe unten ankommt und ob geentert werden kann.
 
-**Weg B - der Wandler faehrt als bewegliches Kachelfeld durch die Ortswelt.**
-*Kosten:* sehr hoch. Bewegliche Kacheln bedeuten, dass Kollision,
-Sichtlinien und das Kachelraster nicht mehr an ganzen Kachelkoordinaten
-haengen duerfen. `frei()`, `strahl()`, `bewegen()`, `ebene_zeichnen()`
-muessten alle umgeschrieben werden. *Preis:* Monate, und ein Kern, der nicht
-mehr einfach ist.
+**Was daraus folgt:** `frei()`, `strahl()`, `bewegen()`, `ebene_zeichnen()`
+und `Welt.schritt()` bleiben **unveraendert**. Kein einziger Aufruf im
+Spielkern muss wissen, dass die Maschine laeuft. Das ist der Grund, warum
+ein Mech-Kampfspiel in diesem Kern ueberhaupt machbar ist.
 
-**Weg C - der Wandler wird beim Ankommen in die Ortswelt gestempelt.**
-Empfohlen. Der Wandler ist ein **Bauplan**: ein Satz Textebenen plus eine
-Liste von Einbauten. Beim Ankommen an einem Knoten wird dieser Bauplan an
-einer festgelegten Andockstelle in die Ebenen der Ortswelt kopiert -
-Kachel fuer Kachel, einmal, beim Aufbau der Karte.
+### 5.2 Die drei Wege, und warum es Weg A wird
+
+**Weg A - jeder Rumpf eine eigene Welt, verbunden durch Uebergaenge.**
+Empfohlen. Kosten: eine Liste von Welten statt einer, ein Versatz je Welt
+beim Zeichnen, und eine Handvoll Uebergaenge (5.3). Der Kern bleibt, wie er
+ist.
+
+**Weg B - der Wandler faehrt als bewegliches Kachelfeld durch eine grosse
+Bodenwelt.** *Kosten: sehr hoch.* Bewegliche Kacheln bedeuten, dass
+Kollision, Sichtlinien und das Kachelraster nicht mehr an ganzen
+Kachelkoordinaten haengen duerfen. *Preis:* Monate, und ein Kern, der nicht
+mehr einfach ist. **Nein.** (Das war in der alten Fassung schon die
+Antwort, aus demselben Grund.)
+
+**Weg C - der Wandler wird beim Ankommen in eine Ortskarte gestempelt.**
+Das war die Empfehlung der alten Fassung. Sie setzt voraus, dass der
+Wandler **steht**, und faellt damit als Grundlage aus - ein Wandler, der
+nur im Parken begehbar ist, ist kein Mech-Kampfspiel.
+
+**Aber:** Weg C bleibt als **Sonderfall** nuetzlich, naemlich ueberall dort,
+wo der Wandler wirklich haelt - beim Andocken an eine Freie Werft, bei
+einer Reparaturpause, am Sektorausgang. Dann wird der Rumpf an einer Marke
+in die Bodenkarte gestempelt und man laeuft nahtlos hinaus. Eine Funktion
+`stempeln(welt, bauplan, tx, ty)`, mehr nicht. **Spaeter, nicht zuerst.**
+
+### 5.3 Uebergaenge: derselbe Griff wie eine Treppe
+
+Ein **Uebergang** verbindet zwei Welten, genau so wie eine Treppe zwei
+Ebenen verbindet. Der Code dafuer existiert bereits im Prinzip - ein
+Ebenenwechsel setzt Ebene und Position neu, ein Weltwechsel setzt Welt und
+Position neu. Ein Feld mehr.
+
+| Uebergang | Von | Nach | Bedingung |
+| --- | --- | --- | --- |
+| **Rampe** | eigenes Unterdeck | Boden | Wandler steht oder geht Schritttempo |
+| **Enterbruecke** | eigenes Deck | fremdes Deck | Abstand unter `ENTERN["weite"]`, Bruecke ausgefahren |
+| **Enterhaken** | fremdes Deck | eigenes Deck | dasselbe, von der Gegenseite |
+| **Sturz** | jedes Deck | Boden | Fehltritt ueber die Kante - kein Uebergang, sondern ein Sturz |
+
+Der letzte ist der wichtigste und kostet **null neuen Code**: Wer ueber die
+Kante des Oberdecks geht, faellt. Der Sturz mit Steuerung in der Luft steht
+seit 0.11.0. Was neu dazukommt, ist die Pointe - **unten ist der Boden, und
+der Wandler laeuft weiter.** Man landet hinter der eigenen Maschine und
+sieht sie davonlaufen. Das ist ein ganzer Spielmoment fuer den Preis einer
+Zeile.
+
+**Sichtlinien zwischen Welten:** Ein Uebergang ist nur begehbar, wenn beide
+Seiten nah genug sind. Sichtlinien und Schuesse gehen ueber 5.5.
+
+### 5.4 Die Hoehenlage, und warum sie genau aufgeht
+
+`EBENEN_HOEHE = [0, 118, 182, 238, 288]` hat **fuenf** Eintraege. Die
+Aufteilung:
 
 ```
-    Ortskarte E1:  ..........................
-                   ....####..................
-                   ..........................
-
-    Wandler E1:    +------+
-                   |..>...|
-                   |.X..X.|
-                   +------+
-
-    Ergebnis E1:   ..........................
-                   ....####..+------+........
-                   ..........|..>...|........
-                   ..........|.X..X.|........
-                   ..........+------+........
+   Index 4   OBERDECK      Geschuetzstaende, freie Sicht, kein Schutz
+   Index 3   BRUECKE       Steuerstand, Kartentisch, Funk
+   Index 2   HAUPTDECK     Werkbank, Modulschaechte, Kojen, Lager
+   Index 1   UNTERDECK     Reaktor, Antrieb, Werkstatt, RAMPE
+   Index 0   BODEN         Wasteland. Gehoert zur Bodenwelt, nicht zum Rumpf.
 ```
 
-*Kosten:* gering. Eine Funktion `stempeln(welt, bauplan, tx, ty)`, die
-Kacheln kopiert. Mehr nicht - danach ist es eine ganz normale Welt.
-*Gewinn:* alles von Weg B, solange der Wandler steht. Man laeuft nahtlos
-hinaus, schiesst vom Oberdeck, sieht die Rampe. Kein Ladebildschirm, kein
-Schnitt.
-*Grenze:* der Wandler kann sich waehrend eines Ortsbesuchs nicht bewegen.
-Das ist kein Verlust, sondern richtig: **man parkt, man steigt aus, man
-arbeitet.** Die Fahrt ist ein eigener Massstab (Abschnitt 5).
+**Der Boden ist Index 0, der Rumpf belegt 1 bis 4.** Damit ist jede
+Zeichenentscheidung, die es schon gibt, sofort richtig: die Bodenwelt wird
+am kleinsten gezeichnet, die Decks darueber wachsen zur vollen Groesse, und
+wer faellt, wird waehrend des Sturzes kleiner - das ist genau die
+Perspektive, die im Mehrspieler-Zweig bereits nachgewiesen wurde
+(`fliegende_zeichnen`, `_bildpunkt`).
 
-**Entscheidung: Weg C.** Der Rest des Dokuments setzt ihn voraus.
+Ein Wandler muss nicht alle vier Decks haben. **ENTWURF, Gewichtsklassen:**
 
-### 3.3 Was `Ebene` dafuer koennen muss
-
-Heute kommt eine Ebene aus einer Liste gleich langer Zeilen. Fuer den
-Stempel braucht es drei kleine Faehigkeiten. Alle drei sind additiv - kein
-bestehender Aufruf aendert sich.
-
-| Neu | Wofuer | Aufwand |
+| Klasse | Decks | Wie es sich anfuehlt |
 | --- | --- | --- |
-| `Ebene.stempeln(zeilen, tx, ty)` | Bauplan an Position kopieren, Leerzeichen als "nichts aendern" | klein |
-| `Ebene.marken` | benannte Punkte aus der Karte (`@rampe`, `@werkbank`) | klein |
-| `Welt.aus_plan(plan)` | eine Welt aus einer Beschreibung bauen statt aus drei festen Listen | mittel |
+| leicht | Unterdeck + Bruecke (1, 3) | schnell, wenig Platz, jeder Treffer sitzt |
+| mittel | 1, 2, 3 | der Standard |
+| schwer | 1, 2, 3, 4 | langsam, viel Lager, Geschuetze oben |
 
-**Marken sind wichtiger, als sie aussehen.** Ohne sie muss jeder Ort im Code
-wissen, wo seine Rampe ist. Mit ihnen steht es in der Karte:
+Das kostet nichts: eine Welt mit weniger Ebenen ist schon heute erlaubt.
+
+**Nur eine Ebene nach oben sichtbar.** Im Mehrspieler wurde gelernt, dass
+alle Ebenen gleichzeitig zu zeigen unlesbar wird; `welt_zeichnen(...,
+blick=...)` zeigt hoechstens eine Ebene ueber der eigenen. Fuer einen
+Wandler mit vier Decks ist das keine Feinheit, sondern Bedingung.
+
+### 5.5 Schuesse zwischen Ruempfen
+
+Ein Schuss, der eine Welt verlaesst, wird um den Versatz zwischen den
+beiden Ruempfen verschoben und in der Zielwelt fortgesetzt. **Eine
+Koordinatenverschiebung, keine neue Physik.**
+
+```
+    Weltversatz = Position(Rumpf B) - Position(Rumpf A)
+
+    Treffer in B  <->  welt_B.treffer(punkt - versatz, radius, ebene, feind_von)
+```
+
+`Welt.treffer()` kennt bereits Fraktionen und ueberspringt die eigene Seite
+- das stammt aus dem Mehrspieler und passt hier unveraendert.
+
+**ENTWURF, drei Regeln, damit es lesbar bleibt:**
+
+1. **Handwaffen tragen nur ueber kurze Distanz von Rumpf zu Rumpf.** Sonst
+   wird jedes Duell ein Scharfschuetzenduell, und das Entern verliert
+   seinen Sinn. Die Reichweiten stehen ohnehin in `K.WAFFEN`.
+2. **Geschuetze tragen weit, treffen aber nur Rumpfteile**, keine Figuren.
+   Damit sind die beiden Massstaebe sauber getrennt: Geschuetze zerlegen
+   Maschinen, Handwaffen toeten Besatzungen.
+3. **Die eigene Maschine steht im Weg.** Wer vom Oberdeck schiesst, hat
+   freie Bahn; wer vom Hauptdeck schiesst, schiesst in die eigene
+   Aussenwand. Das ist schon durch `strahl()` abgedeckt und macht die Wahl
+   des Decks zur taktischen Frage.
+
+### 5.6 Karten, Marken und Baustellen
+
+Unveraendert aus der alten Fassung uebernommen, weil es dort richtig war
+und jetzt noch mehr traegt: **ein Wandler ist auch nur eine Textkarte.**
 
 ```
 ZEICHEN erweitern um Markierungszeichen, die beim Einlesen zu BODEN werden
 und ihre Position in ebene.marken ablegen:
 
-    "R"  ->  BODEN, marke "rampe"
-    "W"  ->  BODEN, marke "werkbank"
     "S"  ->  BODEN, marke "start"
-    "1".."9" -> BODEN, marke "punkt1".."punkt9"  (Gegnerwellen, Beute)
+    "R"  ->  BODEN, marke "rampe"
+    "T"  ->  BODEN, marke "steuerstand"
+    "G"  ->  BODEN, marke "geschuetz"
+    "W"  ->  BODEN, marke "werkbank"
+    "E"  ->  BODEN, marke "reaktor"
+    "M"  ->  BODEN, marke "modulschacht"
+    "1".."9" -> BODEN, marke "punkt1".."punkt9"
 ```
 
-Damit kann ein Kartenbauer - Mensch oder spaeter ein Generator - einen Ort
-vollstaendig in Text beschreiben, ohne eine Zeile Python.
+| Neu | Wofuer | Aufwand |
+| --- | --- | --- |
+| `Ebene.marken` | benannte Punkte aus der Karte | klein |
+| `Welt.aus_datei(name)` | Welt aus Textdateien statt aus Konstanten | klein |
+| `Welt.versatz` | wo dieser Rumpf gerade steht | klein |
+| `Ebene.stempeln(zeilen, tx, ty)` | Sonderfall Andocken, 5.2 | klein |
 
-### 3.4 Groessen, durchgerechnet
+Damit kann ein Kartenbauer - Mensch oder spaeter ein Generator - einen
+Wandler **oder** einen Ort vollstaendig in Text beschreiben, ohne eine
+Zeile Python. Das ist der Grund, warum das der erste Meilenstein bleibt.
 
-Die Zahlen sind nicht geraten. `ebene_zeichnen()` laeuft nur ueber den
-sichtbaren Ausschnitt, aber `Welt.schritt()` und das Nachbarschaftsraster
-laufen ueber alles.
+### 5.7 Groessen, durchgerechnet
 
 Bei 640x360 Bildpunkten und 32er Kacheln sieht man **20 x 11,25 Kacheln**
-gleichzeitig. Daraus folgen sinnvolle Ortsgroessen:
+gleichzeitig.
 
-| Ort | Kacheln | Bildschirme | Gefuehl |
+| Was | Kacheln je Ebene | Bildschirme | Begruendung |
 | --- | --- | --- | --- |
-| eng (Bunker, Silo) | 30 x 20 | 1,5 x 1,8 | man kennt ihn nach einem Besuch |
-| mittel (heutige Testkarte) | 44 x 24 | 2,2 x 2,1 | gut ueberschaubar |
-| gross (Wrackfeld, Trichter) | 80 x 50 | 4 x 4,4 | man braucht die Ebenenanzeige |
-| sehr gross (Obergrenze) | 120 x 70 | 6 x 6 | nur mit Wegmarken sinnvoll |
+| Wandler, leicht | 14 x 9 | 0,7 x 0,8 | passt auf einen Bildschirm - man sieht alles |
+| Wandler, mittel | 18 x 12 | 0,9 x 1,1 | knapp ein Bildschirm |
+| Wandler, schwer | 24 x 14 | 1,2 x 1,2 | man muss laufen, um hinzusehen |
+| Bodenausschnitt | 60 x 40 | 3 x 3,6 | so viel Wasteland, wie unter den Fuessen liegt |
+| Obergrenze | 120 x 70 | 6 x 6 | nur mit Wegmarken sinnvoll |
 
-**Obergrenze 120 x 70 je Ebene, fuenf Ebenen.** Das sind 42 000 Kacheln.
-Messwert heute: 3,9 ms pro Bild bei 51 Wesen auf 44x24x3. Der Zeichenaufwand
-haengt am Ausschnitt, nicht an der Kartengroesse, also bleibt er gleich. Was
-waechst, ist das einmalige Aufbauen und der Speicher (42 000 Ganzzahlen sind
-nichts). **Machbar, mit Reserve.**
+**Die Wandlergroesse ist bewusst klein.** Ein Rumpf, der auf einen
+Bildschirm passt, ist genau das, was der Top-Down-Blick hergibt: man sieht
+den Enterer an der Bruecke, waehrend man unten am Reaktor steht, und weiss
+sofort, dass man es nicht rechtzeitig schafft. Ein groesserer Rumpf gibt
+diesen Blick auf, ohne etwas dafuer zu bekommen.
 
-Was *nicht* machbar ist: eine zusammenhaengende Flaeche ueber ganz Veld.
-Deshalb der Knotengraph.
-
-### 3.5 Die fuenfte Ebene, und warum nach unten
-
-`EBENEN_HOEHE` hat fuenf Eintraege, benutzt werden drei. Der Plan nutzt alle
-fuenf, aber nicht so, wie man zuerst denkt.
-
-**ENTWURF:** Ebene 0 ist nicht immer der Boden. Bei einem **Trichter** ist
-Ebene 0 die Kraterwand oben und man steigt nach unten - dann sind die
-tieferen Ebenen negativ gedacht. Technisch bleibt es bei aufsteigenden
-Indizes; was sich aendert, ist nur, wo der Spieler startet und wohin die
-Treppen zeigen.
-
-Das kostet **null Code**: ein Ort mit fuenf Ebenen, Start auf Ebene 4,
-Treppen nach unten. Und es fuehlt sich voellig anders an als ein Turm, weil
-man beim Abstieg immer weiter ins Dunkle kommt und der Rueckweg nach oben
-der gefaehrliche ist.
+**Aufwand:** Messwert heute 3,9 ms pro Bild bei 51 Wesen auf 44x24x3. Drei
+Welten gleichzeitig (eigener Rumpf, fremder Rumpf, Boden) mit zusammen rund
+5 000 Kacheln je Ebene liegen darunter, weil der Zeichenaufwand am
+Ausschnitt haengt und nicht an der Kartengroesse. **Machbar, mit Reserve.**
 
 ---
 
-## 4. Der Wandler
+## 6. Der Wandler von innen
 
-Das fahrende Zuhause. Hier entscheidet sich, ob das Spiel eine Seele hat.
+Hier entscheidet sich, ob das Spiel eine Seele hat.
 
-### 4.1 Die Grundidee
+### 6.1 Stationen statt Fahr-Modus
 
-**ENTWURF:** Der Wandler ist gleichzeitig Fahrzeug, Basis und
-**Fortschrittsanzeige**. Es gibt keinen abstrakten Faehigkeitsbaum in einem
-Menue - man **laeuft durch seinen eigenen Fortschritt**. Ein neues Modul ist
-ein neuer Raum, den es vorher nicht gab. Wer nach zehn Stunden an Bord geht,
-sieht auf einen Blick, was er erreicht hat.
+**ENTWURF, und die zweite tragende Entscheidung nach 5.1:**
 
-Das ist die staerkste Idee in diesem Plan, und alles andere ordnet sich ihr
-unter. Begruendung: Ein Skill-Tree im Menue ist eine Tabelle. Ein Deck, das
-sich fuellt, ist ein Ort. Orte erinnert man, Tabellen nicht.
+> Der Spieler hoert nie auf, eine laufende Figur zu sein. Der Wandler wird
+> **an Stationen** bedient. Eine Station ist eine Kachel mit einer Marke.
+> Man stellt sich hin, drueckt E, und die Tasten bedeuten etwas anderes,
+> solange man dort steht.
 
-### 4.2 Die drei Decks
+Damit gibt es **kein zweites Bewegungssystem, keine zweite Kollision,
+keinen zweiten Kameramodus** - genau die drei Posten, die die alte Fassung
+zu Recht als teuer ausgerechnet hat. Man loest sie, indem man sie nicht
+baut.
 
-Der Wandler hat **drei Etagen**, genau wie der Spielkern sie schon kann.
-Jedes Deck hat eine klare Aufgabe, damit man nie sucht.
+`Spieler.nutzen` und `Spieler.abbrechen()` gibt es bereits. Eine Station
+ist eine Zustandsvariable am Spieler und ein anderer Satz Tastenbelegungen
+- weniger Code als eine einzige Waffe.
+
+Und **TAB "MODUS WECHSELN"** bekommt dadurch eine billige, ehrliche
+Bedeutung: die Ansicht springt zwischen "an Bord" (Kamera folgt der Figur)
+und "Fahrt" (Kamera zeigt beide Wandler und den Boden). Eine Kameraoption,
+kein Spielmodus.
+
+### 6.2 Die Stationen
+
+**ENTWURF.** Jede Station hat genau eine Aufgabe und liegt auf genau einem
+Deck, damit man nie sucht.
+
+| Station | Deck | Taste dort | Was sie tut | Was man dabei nicht kann |
+| --- | --- | --- | --- | --- |
+| **Steuerstand** | Bruecke | W/S Schub, A/D Kurs, SHIFT Ueberlast | Kurs und Tempo | schiessen, reparieren |
+| **Geschuetz** | Oberdeck | Maus zielen, Klick feuern | Rumpfteile des Gegners zerlegen | irgendwo anders sein |
+| **Maschine** | Unterdeck | W/S Leistung verteilen | Energie auf Antrieb, Waffen, Schild | sehen, was oben los ist |
+| **Kartentisch** | Bruecke | Karte oeffnen | Ziel auf Veld waehlen | alles andere |
+| **Funk** | Bruecke | - | deckt Knoten auf, faengt Bruchstuecke | - |
+| **Werkbank** | Hauptdeck | B bauen | Module einbauen, Waffen verbessern | fahren |
+
+**SHIFT ist Ueberlast, nicht Boost.** Mehr Tempo, dafuer steigt die
+Belastung eines kritischen Bauteils (6.6). Das ist dieselbe Taste wie der
+Sprint zu Fuss und dieselbe Idee: schneller, aber es kostet.
+
+### 6.3 Der Autopilot - der Kern des ganzen Spiels
+
+**ENTWURF, und der wichtigste Absatz im Dokument.**
+
+Der Meister hat es in einem Satz gesagt: *"man steuert primaer den mech,
+aber teils eben auf autopilot stellt und die waffensysteme auf den anderen
+mech fixiert, und dann eben zu fuss auf dem mech eine enterung abwehrt."*
+
+Daraus folgt die Mechanik, um die sich alles dreht:
+
+> **Man ist ein Mensch und hat vier Stationen. Der Autopilot ist der Preis
+> dafuer, woanders zu sein.**
+
+SAND loest das mit fuenf Spielern. DUSTFRONT hat einen - und macht daraus
+nicht einen Mangel, sondern das Thema. Jedes System laeuft in drei
+Zustaenden:
+
+| Zustand | Leistung | Wann |
+| --- | --- | --- |
+| **besetzt** | voll | man steht an der Station |
+| **festgelegt** | eingeschraenkt | man hat es auf Autopilot gestellt und ist weg |
+| **unbesetzt** | nichts | niemand hat sich darum gekuemmert |
+
+**ENTWURF, was "festgelegt" jeweils heisst** - die Zahlen kommen in
+`config.py` unter `AUTOPILOT` und werden gemessen, nicht geraten:
+
+| System | Besetzt | Festgelegt |
+| --- | --- | --- |
+| Steuerstand | voller Kurs und Schub | haelt den letzten Kurs, weicht nichts aus |
+| Geschuetz | freies Zielen, volle Feuerrate | feuert auf den festgelegten Rumpfteil, langsamer, trifft schlechter |
+| Maschine | Leistung frei verteilbar | eingefrorene Verteilung, kein Ausgleich bei Schaden |
+
+**Warum das traegt, in drei Punkten:**
+
+1. **Jede Entscheidung ist ein Verzicht, kein Menuepunkt.** Nach unten zu
+   gehen, um die Enterer aufzuhalten, heisst: die Geschuetze treffen jetzt
+   schlechter. Das ist echte Spannung ohne einen einzigen neuen Gegnertyp.
+2. **Es begruendet die Ebenen.** Der Weg vom Reaktor zum Oberdeck ist drei
+   Treppen lang, und diese Sekunden sind das Spiel. Die teuerste Mechanik
+   im Kern bekommt endlich ihren Zweck.
+3. **Es begruendet Module.** Ein besseres Zielsystem verbessert nicht
+   "Schaden", sondern den *festgelegten* Zustand - es kauft dir, woanders
+   zu sein. Das ist eine Fortschrittsachse, die niemand zweimal hat.
+
+**H ist die Taste dafuer**, wie das Menue seit 0.1.0 sagt.
+
+### 6.4 Grundriss
+
+**ENTWURF, mittlere Klasse, 18 x 12 je Deck.** Im Format, das
+`Ebene.aus_text()` schon versteht:
 
 ```
-   E2  BRUECKE          Steuerstand, Kartentisch, Funk, Kanzel
-       ------------     "Wohin fahre ich?"
-   E1  HAUPTDECK        Werkbank, Modulschaechte, Kojen, Lager
-       ------------     "Womit fahre ich?"
-   E0  UNTERDECK        Reaktor, Antrieb, Werkstatt, RAMPE nach draussen
-       ------------     "Faehrt es ueberhaupt noch?"
+E1 UNTERDECK              E2 HAUPTDECK              E3 BRUECKE          E4 OBERDECK
+##################        ##################        ##################   ##...####...##
+#....#RRRR#......#        #......#....#....#        #................#   #.G........G.#
+#.WW.#....#..EE..#        #.SS...#.MM.#.LL.#        #....#......#....#   #............#
+#.WW.......<.....#        #.SS........<....#        #.KK.>......#.FF.#   #.....<......#
+#....#....#......#        #......#....#....#        #................#   #............#
+#....o....#..>...#        #..MM..o....>....#        #....#..TT..#....#   #.G........G.#
+#.AA.#....#......#        #..MM..#....#....#        #................#   ##...####...##
+##################        ##################        ##################
+
+  R = Rampe                 S = Schlafkoje            K = Kartentisch     G = Geschuetz
+  W = Werkstatt             M = Modulschacht          T = Steuerstand
+  A = Antrieb               L = Lager                 F = Funk            > = Treppe hoch
+  E = Reaktor               o = Luke nach unten                           < = Treppe runter
 ```
 
-**Warum diese Reihenfolge.** Wer von draussen hereinkommt, betritt das
-Unterdeck - dreckig, laut, hier wird repariert. Nach oben wird es ruhiger
-und heller, bis zur Bruecke mit Aussicht. Das ist eine Stimmungskurve, die
-man beim Hochsteigen spuert, und sie belohnt das Heimkommen.
+**Was fest sein soll**, auch wenn der Grundriss sich noch aendert:
 
-Ausserdem praktisch: die Rampe liegt unten, der Kartentisch oben. Wer los
-will, geht hoch (Ziel waehlen) und dann runter (losfahren). Der Weg selbst
-erzaehlt den Ablauf.
+* Rampe unten aussen, Steuerstand ganz oben. Wer los will, geht hoch; wer
+  raus will, geht runter. Der Weg selbst erzaehlt den Ablauf.
+* Treppen durchgehend an derselben Stelle, damit man blind hoch und runter
+  findet - im Gefecht zaehlt jede Sekunde auf dieser Strecke.
+* Geschuetze auf dem Oberdeck, also am weitesten weg von allem anderen.
+  Das ist die Entscheidung aus 6.3 in Kachelform.
+* Das Oberdeck hat **offene Kanten**. Man kann herunterfallen. Absicht.
 
-### 4.3 Groesse und Grundriss
+### 6.5 Module: der Fortschritt zum Anfassen
 
-**ENTWURF:** Der Wandler misst **18 x 12 Kacheln** je Deck. Das sind knapp
-zwei Bildschirmbreiten - gross genug, dass es sich nach Raum anfuehlt, klein
-genug, dass man in wenigen Sekunden vom Reaktor zur Rampe kommt.
+**Aus der alten Fassung uebernommen, weil es dort schon richtig war.**
 
-Ein erster Grundriss, im Format, das `Ebene.aus_text()` schon versteht:
-
-```
-E0 UNTERDECK (18 x 12)          E1 HAUPTDECK                E2 BRUECKE
-##################              ##################          ##################
-#....#RRRR#......#              #......#....#....#          #................#
-#.WW.#....#..RE..#              #.SS...#.MM.#.LL.#          #....#......#....#
-#.WW.......<.....#              #.SS........<....#          #....#.KK...#....#
-#....#....#......#              #......#....#....#          #.....>..........#
-#....o....#..>...#              #..MM..o....>....#          #....#......#....#
-#.AA.#....#......#              #..MM..#....#....#          #....#..TT..#....#
-#.AA.#....#......#              #......#....#....#          #................#
-##################              ##################          ##################
-
-  R = Rampe (Marke)               S = Schlafkoje              K = Kartentisch
-  W = Werkstatt                   M = Modulschacht            T = Steuerstand
-  A = Antrieb                     L = Lager                   > = Treppe hoch
-  E = Reaktor                     o = Luke nach unten         < = Treppe runter
-```
-
-Das ist **ENTWURF, nicht fest** - der endgueltige Grundriss entsteht beim
-Bauen. Was fest sein soll: Rampe unten aussen, Treppen durchgehend an
-derselben Stelle (damit man blind hoch und runter findet), Modulschaechte
-gebuendelt auf E1.
-
-### 4.4 Module: der Fortschritt zum Anfassen
-
-**ENTWURF:** Ein Modul belegt einen **Schacht** - ein 2x2-Feld auf einem
-Deck. Ein leerer Schacht ist sichtbar leer (offene Verankerung, lose Kabel).
-Ein belegter Schacht zeigt das Modul und laesst sich benutzen.
+Es gibt keinen abstrakten Faehigkeitsbaum in einem Menue - man **laeuft
+durch seinen eigenen Fortschritt**. Ein neues Modul ist ein neuer Raum, den
+es vorher nicht gab. Ein Modul belegt einen **Schacht**, ein 2x2-Feld auf
+einem Deck. Ein leerer Schacht ist sichtbar leer: offene Verankerung, lose
+Kabel.
 
 | Modul | Deck | Was es tut | Warum man es will |
 | --- | --- | --- | --- |
-| **Reaktor** | E0 | liefert Energie, Stufe 1-3 | jedes andere Modul zieht davon |
-| **Antrieb** | E0 | Reichweite je Etappe | weiter kommen, bevor die Front nachrueckt |
-| **Werkstatt** | E0 | Reparatur zwischen Orten | ohne sie faehrt man Schaden mit |
-| **Greifer** | E0 | bergt schwere Beute | manche Module liegen sonst unerreichbar |
-| **Werkbank** | E1 | Waffen verbessern | die sechs Waffen bekommen Stufen |
-| **Lager** | E1 | wie viel Schrott mitgeht | ohne Lager laesst man Beute liegen |
-| **Kojen** | E1 | Leben zwischen Orten auffuellen | sonst zaehlt jeder Treffer dauerhaft |
-| **Labor** | E1 | Chor-Technik auswerten | der einzige Weg an die besten Teile |
-| **Funk** | E2 | deckt Sektorknoten auf | man faehrt nicht mehr blind |
-| **Kanzel** | E2 | Geschuetz gegen Ueberfaelle | sonst ist ein Ueberfall reiner Verlust |
-| **Panzerung** | alle | Huellenpunkte | ueberlebt den Ueberfall |
+| **Reaktor** | Unterdeck | liefert Energie, Stufe 1-3 | jedes andere Modul zieht davon |
+| **Antrieb** | Unterdeck | Reichweite und Tempo | der Front davonlaufen |
+| **Werkstatt** | Unterdeck | Reparatur unterwegs | ohne sie faehrt man Schaden mit |
+| **Zielrechner** | Oberdeck | hebt den **festgelegten** Zustand der Geschuetze | kauft dir, woanders zu sein (6.3) |
+| **Kursrechner** | Bruecke | Autopilot weicht Hindernissen aus | dasselbe fuer die Lenkung |
+| **Werkbank** | Hauptdeck | Waffen verbessern | die sechs Waffen bekommen Stufen |
+| **Lager** | Hauptdeck | wie viel Schrott mitgeht | ohne Lager laesst man Beute liegen |
+| **Kojen** | Hauptdeck | Leben zwischen Etappen auffuellen | sonst zaehlt jeder Treffer dauerhaft |
+| **Labor** | Hauptdeck | Chor-Technik auswerten | der einzige Weg an die besten Teile |
+| **Funk** | Bruecke | deckt Sektorknoten auf | man laeuft nicht mehr blind |
+| **Schotten** | alle | Tueren, die Enterer aufhalten | Zeit, um hinzukommen |
+| **Panzerung** | alle | schuetzt kritische Bauteile | ueberlebt das Duell |
 
 **Energie als Knappheit.** Der Reaktor liefert eine Zahl. Jedes Modul zieht
 eine Zahl. Man kann mehr einbauen, als man betreiben kann - dann muss man
-abschalten. Das erzeugt echte Entscheidungen, ohne eine einzige neue
-Mechanik: es ist Addition.
+abschalten, an der Station **Maschine**, im Gefecht, waehrend geschossen
+wird. Das erzeugt echte Entscheidungen, ohne eine einzige neue Mechanik: es
+ist Addition.
 
-**Warum das Spass macht:** Jeder Fund draussen hat einen sichtbaren Platz
-drinnen. Man traegt kein abstraktes "+3 Angriff" nach Hause, sondern eine
-Kiste, die in einem bestimmten Schacht landet und danach *da ist*.
+### 6.6 Kritische Bauteile statt eines Lebensbalkens
 
-### 4.5 Der Wandler als Gegenstand der Story
+**ENTWURF, uebernommen von SAND, und der beste Einzelgriff daraus.**
 
-**ENTWURF:** Der Wandler ist nicht neu. Er hat **Spuren von Vorbesitzern** -
-ein zugeschweisster Schacht, ein Name unter der Farbe, eine Koje zu viel.
-Wer genau hinsieht, findet sie. Das erzaehlt Geschichte ohne einen einzigen
-Dialog, passt zur Fraktion der Freien Werften (Weiterverwertung) und kostet
-nur Textur- und Marken-Arbeit.
+Ein Wandler hat keinen Huellenbalken, der von 100 auf 0 faellt. Er hat
+**Bauteile, und jedes hat eigene Punkte**. Ein Geschosstreffer trifft ein
+bestimmtes Feld, und was dort steht, geht kaputt.
 
-Bei **EISERN** ("ein wandler, ein leben") bekommt das Gewicht: der Wandler,
-den man verliert, ist der, in dem man zwanzig Stunden gelebt hat.
+| Bauteil | Kaputt heisst | Notbehelf |
+| --- | --- | --- |
+| **Reaktor** | keine Energie, alle Module aus | Handbetrieb, ein System zur Zeit |
+| **Beine** | Tempo weg, kein Ausweichen | nur im Stehen zu reparieren |
+| **Schwungrad** | keine Lenkung, der Kurs bleibt | - |
+| **Geschuetz** | das eine Geschuetz schweigt | das andere benutzen |
+| **Schotte** | Enterer kommen durch | mit dem Ruecken davorstellen |
+| **Rampe** | man kommt nicht runter | springen (5.3) |
+
+**Warum das so viel besser ist als ein Balken:**
+
+* **Es ist lesbar.** Man sieht am Bildschirm, *was* kaputt ist - es steht
+  ja als Kachel da und qualmt.
+* **Es erzeugt Geschichten.** "Die Lenkung war weg und ich bin mit
+  festgefahrenem Kurs in den Gegner gelaufen" ist ein Erlebnis. "Ich hatte
+  noch 12 Prozent" ist keines.
+* **Es kostet fast nichts.** Eine Kachel mit Punkten und einem Zustand.
+  Der Kern kennt Kacheln mit Eigenschaften bereits.
+* **Es begruendet das Werkzeug (Q).** Reparieren heisst: hingehen, davor
+  stehen, Q halten, waehrend woanders gekaempft wird. Wieder dieselbe
+  Klammer wie 6.3.
+
+**Wann ist ein Wandler verloren?** **ENTWURF:** Wenn der Reaktor
+durchgeht, oder wenn die Beine brechen und die Front aufschliesst. Nicht
+bei null Punkten - es gibt keine.
+
+### 6.7 Der Wandler als Gegenstand der Story
+
+**ENTWURF, aus der alten Fassung uebernommen.** Der Wandler ist nicht neu.
+Er hat **Spuren von Vorbesitzern** - ein zugeschweisster Schacht, ein Name
+unter der Farbe, eine Koje zu viel. Wer genau hinsieht, findet sie. Das
+erzaehlt Geschichte ohne einen einzigen Dialog und kostet nur Textur- und
+Marken-Arbeit.
+
+Bei **EISERN** (*"ein wandler, ein leben"*) bekommt das Gewicht: der
+Wandler, den man verliert, ist der, in dem man zwanzig Stunden gelebt hat.
 
 ---
 
-## 5. Veld: die Sektorkarte
+## 7. Das Duell
 
-### 5.1 Warum ein Graph und keine Flaeche
+Wie ein Kampf zwischen zwei Wandlern tatsaechlich ablaeuft.
 
-Ein durchgehender Kontinent waere leer. Ein Graph gibt jedem Weg eine
-Bedeutung: man sieht drei moegliche naechste Knoten, kennt von jedem etwas,
-und muss einen waehlen. Das ist eine Entscheidung pro Etappe statt einer
-Fahrt durch Nichts.
+### 7.1 Die vier Phasen
 
-Ausserdem: **die Vorschau gibt es schon.** `sector_preview()` zeichnet acht
-Knoten mit Verbindungen und Fraktionsfarben. Der Plan macht daraus die echte
-Karte, statt etwas Neues danebenzustellen.
+**ENTWURF.** Der Ablauf ergibt sich aus den Reichweiten, nicht aus
+Skripten:
 
-### 5.2 Aufbau eines Sektors
+```
+   1. SICHTEN     Der andere Rumpf am Rand. Man entscheidet:
+                  ausweichen oder stellen. Der Funk sagt, was er ist.
 
-**ENTWURF:** Ein Sektor ist ein Graph von **14 bis 20 Knoten**, gerichtet von
-links (Start) nach rechts (Ausgang), in **6 bis 8 Spalten**. Pro Spalte 2 bis
-4 Knoten. Von einem Knoten fuehren 1 bis 3 Kanten in die naechste Spalte.
+   2. BESCHIESSEN Geschuetze auf grosse Distanz. Rumpfteile gehen
+                  kaputt (6.6). Man rennt zwischen Geschuetz,
+                  Maschine und Werkstatt hin und her.
+
+   3. ANNAEHERN   Wer den Gegner lahmgelegt hat, kann heran.
+                  Handwaffen tragen. Jetzt sieht man Figuren auf dem
+                  anderen Deck stehen.
+
+   4. ENTERN      Bruecke raus oder Haken rueber. Fussgefecht auf den
+                  Decks - der Spielkern, wie er heute schon laeuft.
+```
+
+Man muss nicht bis 4 gehen. Wer nur den Antrieb zerschiesst und
+weiterlaeuft, hat gewonnen, aber nichts geholt. **Die Beute ist an Bord,
+und an Bord kommt man nur zu Fuss.** Das ist der Grund, warum Entern kein
+Sonderfall ist, sondern das Ziel.
+
+### 7.2 Warum Entern der Kern ist
+
+Weil es der eine Moment ist, in dem die beiden Massstaebe **dasselbe
+Gefecht** werden: Die Geschuetze feuern weiter, waehrend man auf einem
+fremden Hauptdeck mit dem Brecheisen um eine Ecke geht. Der Boden zieht
+unten durch. Die eigene Maschine laeuft auf Autopilot, mit niemandem am
+Steuer.
+
+Und es ist **kaum neuer Code**: Fussgefecht, Kollision, Waffen, Sturz,
+Treppen - alles steht. Was dazukommt, sind ein Uebergang (5.3) und eine
+Gegner-KI, die Treppen benutzen kann.
+
+### 7.3 Eine Enterung abwehren
+
+Die Gegenrichtung, und die haerteste Lage im Spiel. **ENTWURF:**
+
+* Enterer kommen an **einer** Stelle an Bord - dort, wo die Bruecke
+  aufsetzt. Man sieht es (Draufsicht!) und ist trotzdem drei Decks weg.
+* **Schotten** kaufen Sekunden. Sie sind das einzige Modul, dessen Nutzen
+  man nur merkt, wenn man es hat.
+* Wer alle Enterer erledigt, kann die Bruecke kappen - und der Rest der
+  fremden Besatzung ist drueben.
+* Wer verliert, verliert den Wandler. Nicht sofort das Spiel: man kann
+  noch springen (5.3) und unten weiterlaufen. Was man dann hat, ist eine
+  Figur im Wasteland und keine Basis mehr. **OFFEN:** ob das eine
+  Ueberlebenschance ist oder das Ende des Laufs, steht in Abschnitt 14.
+
+### 7.4 Die fremde Besatzung
+
+**ENTWURF.** Gegner sind keine Wellen von Laeufern mehr, sondern eine
+**Besatzung mit Stationen** - dieselbe Logik wie beim Spieler, gespiegelt.
+Das gibt lesbares Verhalten ohne eine einzige neue KI-Idee:
+
+* Jeder fremde Kaempfer hat eine Station, die er besetzen will.
+* Wird sein Geschuetz zerstoert, geht er zur Werkstatt.
+* Kommen Enterer, verlassen zwei Mann ihre Station und gehen hin.
+* Sind zu wenige uebrig, laeuft ihre Maschine auf Autopilot - genau wie
+  die eigene, mit denselben Nachteilen.
+
+Damit zahlt sich jeder Abschuss doppelt aus: ein Mann weniger heisst eine
+Station weniger. Das ist eine Schadensmechanik, die man sieht statt
+abzulesen.
+
+### 7.5 Was man gewinnt
+
+**ENTWURF:** Den fremden Rumpf pluendert man nach Bauteilen - genau die
+Module aus 6.5, die dort eingebaut sind. Wer ein Labor will, holt sich das
+Labor aus einem Chor-Wandler. Damit kommt der Fortschritt aus dem Kampf
+und nicht aus einer Beutetabelle.
+
+**OFFEN:** Ob man einen erbeuteten Wandler behalten und den eigenen
+aufgeben kann. Das waere ein starkes Stueck, kostet aber Spielstand-Arbeit.
+Abschnitt 14.
+
+---
+
+## 8. Der Boden
+
+### 8.1 Absteigen
+
+**ENTWURF.** Man geht aufs Unterdeck, oeffnet die Rampe, laeuft hinunter.
+Der Wandler bleibt stehen - oder eben nicht, wenn man ihn auf Autopilot
+gestellt hat.
+
+Was unten ist: **Gebaeude im Wasteland.** Ruinen, Silos, umgekippte
+Transporter, Vorposten. Jedes ist eine kleine Kachelwelt mit ein bis drei
+Ebenen und einer Hauptbeute, nach den Regeln aus 8.3.
+
+### 8.2 Warum das aufregend ist, und nicht nur ein zweiter Schauplatz
+
+Drei Gruende, alle aus der Grundstruktur, keiner aus einem Skript:
+
+1. **Oben laeuft die Maschine ohne dich.** Jede Sekunde unten ist eine
+   Sekunde, in der niemand am Steuer sitzt, niemand am Geschuetz und
+   niemand an der Werkstatt.
+2. **Die Front rueckt nach** (9.2). Unten zu sein kostet Etappenzeit.
+3. **Man ist zu Fuss und klein.** Ebene 0, kleinster Massstab, weiteste
+   Sicht - und der eigene Wandler steht als riesiges Ding am Rand des
+   Bildes. Das ist ein Bild, das man nur in dieser Ansicht bekommt.
+
+**Der schlimmste Fall, und den muss es geben:** Man kommt aus einer Ruine,
+und der eigene Wandler ist nicht mehr da, weil der Autopilot den Kurs
+gehalten hat. Dann laeuft man zu Fuss hinterher.
+
+### 8.3 Die Beute-Regel
+
+**ENTWURF, aus der alten Fassung uebernommen.** Jedes Gebaeude hat genau
+**eine Hauptbeute** und **verstreuten Schrott**. Die Hauptbeute liegt nie
+am Eingang und nie hinter einer einzelnen Tuer - sie liegt so, dass man
+**mindestens eine Ebene wechseln** muss. Jede Kammer hat **mindestens zwei
+Zugaenge** (eine Treppe zaehlt), damit sie keine Falle ist und der Schrot
+nicht unbesiegbar wird.
+
+### 8.4 Wie Gebaeude entstehen
+
+**ENTWURF, dreistufig - die Reihenfolge ist wichtig:**
+
+1. **Handgetippte Karten** unter `karten/boden/<typ>_<nummer>.txt`. Vier
+   bis sechs je Typ. Handgebaut ist besser als generiert, solange man noch
+   nicht weiss, was gut ist.
+2. **Bausteine** von 8x8 oder 16x16 Kacheln, die an den Raendern
+   zusammenpassen.
+3. **Echte Erzeugung** nur, wenn Stufe 2 sich erschoepft anfuehlt.
+
+**Pflicht ab Stufe 2:** Ein Pruefwerkzeug in `tests/`, das jede Karte
+testet: Hauptbeute erreichbar? Jede Kammer zwei Zugaenge? Kann man sich
+festfahren?
+
+---
+
+## 9. Veld und die Front
+
+Gekuerzt gegenueber der alten Fassung - das meiste stimmt weiter, ist aber
+nicht mehr der Mittelpunkt.
+
+### 9.1 Der Knotengraph
+
+**ENTWURF:** Ein Sektor ist ein Graph von **14 bis 20 Knoten**, gerichtet
+von links (Start) nach rechts (Ausgang), in **6 bis 8 Spalten**. Von einem
+Knoten fuehren 1 bis 3 Kanten in die naechste Spalte.
 
 ```
    Spalte  1     2     3     4     5     6     7
-                                                     Legende
            o-----o-----o     o-----o-----o           o  Knoten
-            \   / \   / \   /       \   /            -  Fahrtstrecke
+            \   / \   / \   /       \   /            -  Laufstrecke
              \ /   \ /   \ /         \ /             #  Ausgang
    START -----o-----o-----o-----o-----o----- #
              / \   / \   /       \   / \
-            /   \ /   \ /         \ /   \
-           o-----o     o-----o-----o     o
+            o-----o     o-----o-----o     o
 ```
 
-Man kann also nie alles sehen. Bei 16 Knoten und 7 Spalten besucht man etwa
-7 - **weniger als die Haelfte**. Das ist der Punkt: ein zweiter Durchlauf
-sieht anders aus, und jede Entscheidung kostet etwas anderes.
+Bei 16 Knoten und 7 Spalten besucht man etwa 7 - **weniger als die
+Haelfte**. Ein zweiter Durchlauf sieht anders aus.
 
-### 5.3 Die Front - der Motor der ganzen Karte
+**Was an einem Knoten sein kann:** ein feindlicher Wandler, ein
+Gebaeudefeld zum Pluendern, eine Freie Werft (Reparatur und Handel, kein
+Kampf), ein Sendemast (Vorwissen), ein Wrackfeld (viel Schrott, wenig
+Gefahr).
 
-**ENTWURF, und der wichtigste im Dokument.**
+**Die Vorschau gibt es schon:** `sector_preview()` zeichnet acht Knoten mit
+Verbindungen und Fraktionsfarben. Der Plan macht daraus die echte Karte.
+
+### 9.2 Die Front - der Motor
+
+**ENTWURF, unveraendert aus der alten Fassung, weil es dort richtig war.**
 
 Hinter dem Spieler rueckt eine Linie nach: die Staubfront der Kolonne. Sie
-bewegt sich pro **Etappe** eine feste Strecke nach rechts. Wer einen Knoten
-besucht, verbraucht eine Etappe. Wer zurueckfaehrt, auch.
+bewegt sich pro **Etappe** eine feste Strecke nach rechts. Jeder besuchte
+Knoten kostet eine Etappe. Zurueckgehen auch.
 
-```
-   ////|                                            //// bereits ueberrollt
-   ////|  o-----o-----o     o-----o-----o           |    die Front
-   ////|   \   / \   / \   /       \   /            X    hier steht der Spieler
-   ////|----X-----o-----o-----o-----o----- #
-   ////|   / \   / \   /       \   / \
-   ////|  o-----o     o-----o-----o     o
-```
-
-Was das bewirkt, alles auf einmal:
+Was das bewirkt:
 
 1. **Es gibt kein Ausruhen.** Man kann nicht jeden Knoten mitnehmen. Gier
    wird bestraft, ohne dass eine Uhr tickt, die man anstarrt.
-2. **Der Name stimmt.** DUSTFRONT ist die Front. Der Titel erklaert sich
-   beim ersten Blick auf die Karte.
-3. **Spannung ohne Gegner.** Der Druck kommt aus der Karte, nicht aus mehr
-   Feinden. Das haelt die Gefechte lesbar.
-4. **Rueckkehr kostet echt etwas.** Ein Knoten hinter einem ist nicht
-   "gratis nochmal", sondern eine Etappe naeher an der Front.
-5. **Eine Verlustbedingung, die kein Tod ist.** Wird man ueberrollt, ist der
-   Lauf vorbei - aber anders als beim Sterben, und das macht den zweiten
-   Durchlauf anders.
+2. **Der Name stimmt.** DUSTFRONT ist die Front.
+3. **Spannung ohne Gegner.** Der Druck kommt aus der Karte.
+4. **Es macht das Absteigen teuer** (8.2) - und damit zu einer
+   Entscheidung.
+5. **Eine Verlustbedingung, die kein Tod ist.**
 
-**Zahlen, ENTWURF:** Front rueckt 1 Spalte je 2 Etappen. Sektor hat 7
-Spalten. Man hat also rund 14 Etappen fuer 7 noetige Schritte - Luft fuer
-etwa 7 Umwege, wenn man nie zurueckfaehrt. Feinjustage gehoert in
+**Zahlen, ENTWURF:** Front rueckt 1 Spalte je 2 Etappen, Sektor hat 7
+Spalten, also rund 14 Etappen fuer 7 noetige Schritte. Feinjustage in
 `config.py` unter `FRONT`.
 
-### 5.4 Was man auf der Karte sieht
+### 9.3 Die Fahrt zwischen den Knoten
 
-**ENTWURF:** Ein Knoten zeigt vor dem Anfahren:
+**KORREKTUR.** Die alte Fassung nannte das *"Transport, und Transport ist
+selten das, wofuer man ein Spiel startet"*, und wollte es zu einer
+animierten Karte abkuerzen.
 
-* **Fraktionsfarbe** - wem der Ort gehoert (gibt es schon)
-* **Typ-Zeichen** - Wrack, Vorposten, Turm, Werft, Trichter (Abschnitt 6)
-* **eine Zeile Vorwissen**, wenn Funk eingebaut ist: *"schwer befestigt"*,
-  *"kaum bewacht"*, *"chor sendet"*
-
-Ohne Funk sieht man nur Farbe und Typ. **Das Funkmodul kauft Information**,
-und Information ist in einem Spiel mit knappen Etappen bares Geld. Damit hat
-ein unscheinbares Modul echtes Gewicht.
+Richtig: **Die Fahrt ist das Spiel.** Zwischen zwei Knoten laeuft der
+Wandler, man ist an Bord, und hier passiert alles aus Abschnitt 7 und 8.
+Der Knoten ist nur die Ankunft - die Strecke ist der Inhalt.
 
 ---
 
-## 6. Der Ort: wie ein Knoten von innen aussieht
+## 10. Die drei Fraktionen und die drei Regionen
 
-Hier lebt das Spiel. Der Spielkern kann das heute schon - was fehlt, ist
-Vielfalt und eine Regel, warum jeder Ort sich anders anfuehlt.
+Namen und Fraktionsverteilung stehen bereits im Menue und sind damit
+**FEST**. Was fehlt, ist ihr Charakter - und der haengt jetzt daran, *was
+fuer Wandler* sie fahren.
 
-### 6.1 Die Regel: jeder Ortstyp nutzt die Hoehe anders
+### 10.1 Die Fraktionen als Maschinen
 
-Das ist der Pruefstein fuer jeden Entwurf in diesem Abschnitt. Drei Ebenen
-sind teuer erkauft; ein Ort, der sie nicht braucht, verschwendet sie.
+**ENTWURF:**
 
-| Typ | Ebenen | Wie die Hoehe benutzt wird | Gefuehl |
-| --- | --- | --- | --- |
-| **Wrackfeld** | 2 | flach, wenige Aufbauten zum Draufsteigen | offen, ruhig, Sammeln |
-| **Vorposten** | 3 | Wachtuerme oben, Hof unten, Feuer von oben | Deckung suchen |
-| **Chorturm** | 5 | ein Turm, man steigt **hoch**, eng | Aufstieg, Klaustrophobie |
-| **Trichter** | 5 | ein Krater, man steigt **runter** | Abstieg, Rueckweg ist die Gefahr |
-| **Freie Werft** | 3 | kein Kampf, Ebenen als Stadtviertel | Ruhe, Handel |
-| **Silo** | 4 | senkrechte Schaechte, Stuerze als Abkuerzung | Tempo, Risiko |
-| **Konvoi** | 2 | flach, dafuer Zeitdruck | Hetze |
+| Fraktion | Ihre Wandler | Wie man gegen sie kaempft |
+| --- | --- | --- |
+| **Die Kolonne** | schwer, gepanzert, viele Geschuetze, grosse Besatzung | nicht im Beschuss gewinnen. Beine lahmlegen, entern, drinnen ist es eng und sie sind viele. |
+| **Der Chor** | unbemannt. Keine Besatzung, alles auf Autopilot, tadellos gewartet. | Beschuss wirkt, Entern ist leicht - nur ist drinnen niemand, den man umstimmen koennte, und die Maschine stoppt nicht. |
+| **Die Freien Werften** | zusammengeflickt, jeder anders, meist friedlich | gar nicht. Hier repariert und handelt man. |
 
-**Wrackfeld mit 2 Ebenen ist Absicht.** Nicht jeder Ort muss alles koennen.
-Ein flacher, offener Ort nach einem engen Turm ist Erholung, und Erholung
-macht den naechsten Turm wieder eng.
+**Der Chor ist der interessante Fall:** eine Anlage, die weiterlaeuft. Ein
+Chor-Wandler greift nicht an, er *faehrt seine Route* und behandelt einen
+als Stoerung. Das erlaubt Begegnungen, die man auch weglaufen kann - und
+macht Schleichen moeglich, ohne ein Schleichsystem zu bauen.
 
-### 6.2 Zonen statt Raeume
+### 10.2 Die drei Regionen
 
-**ENTWURF:** Ein Ort besteht aus **Zonen**, nicht aus einem gleichmaessigen
-Gewirr. Drei Sorten, und jeder Ort mischt sie anders:
-
-1. **Ankunft** - wo der Wandler parkt. Immer sicher, immer am Rand, immer
-   wiedererkennbar. Von hier sieht man in mindestens zwei Richtungen.
-2. **Durchgang** - Wege, Deckung, Treppen. Hier passiert der Kampf.
-3. **Kammer** - wo etwas ist, das man will. Beute, ein Modul, ein Terminal.
-   Eine Kammer hat **immer mindestens zwei Zugaenge** (eine Treppe zaehlt),
-   damit sie keine Falle ist.
-
-Die Regel mit den zwei Zugaengen ist nicht kosmetisch: mit nur einem Zugang
-wird jede Kammer zum Rueckzugspunkt, in dem man alles einzeln abarbeitet.
-Das ist langweilig und macht den Schrot unbesiegbar.
-
-### 6.3 Die Beute-Regel
-
-**ENTWURF:** Jeder Ort hat genau **eine Hauptbeute** (ein Modul, eine
-Blaupause, ein Fass Treibstoff) und **verstreuten Schrott**. Die Hauptbeute
-liegt nie am Anfang und nie hinter einer einzelnen Tuer - sie liegt so, dass
-man **mindestens eine Ebene wechseln** muss, um sie zu holen.
-
-Warum: Der Ebenenwechsel ist die teuerste und beste Mechanik des Spiels.
-Wenn Beute ihn erzwingt, wird er benutzt, statt eine Kuriositaet zu bleiben.
-
-### 6.4 Wie Orte entstehen
-
-**ENTWURF, dreistufig - und die Reihenfolge ist wichtig:**
-
-**Stufe 1 (zuerst): Handgetippte Karten.** Wie heute, in Textdateien unter
-`karten/<typ>_<nummer>.txt`. Vier bis sechs je Typ. Handgebaut ist besser
-als generiert, solange man noch nicht weiss, was gut ist.
-
-**Stufe 2: Bausteine.** Ein Ort wird aus handgetippten **Stuecken** von
-8x8 oder 16x16 Kacheln zusammengesetzt, die an den Raendern zusammenpassen.
-Das gibt Abwechslung mit handgemachter Qualitaet. Diese Technik traegt
-auch grosse Karten.
-
-**Stufe 3 (nur wenn noetig): echte Erzeugung.** Erst wenn Stufe 2 sich
-erschoepft anfuehlt.
-
-**Warum diese Reihenfolge:** Ein Generator, der gebaut wird, bevor man weiss,
-was einen guten Ort ausmacht, erzeugt gleichmaessigen Brei. Der Weg ueber
-Bausteine zwingt dazu, erst gute Stuecke zu haben.
-
-**Pflicht ab Stufe 2:** Ein Pruefwerkzeug, das jede erzeugte Karte testet:
-Ist die Hauptbeute erreichbar? Hat jede Kammer zwei Zugaenge? Ist jede Ebene
-von der Ankunft aus erreichbar? Gibt es eine Stelle, wo man sich
-festfahren kann? Das gehoert in `tests/test_karten.py` und laeuft als
-dritter Testlauf - oder haengt sich an `test_spiel.py`, damit es bei den
-zwei gewohnten Laeufen bleibt.
-
----
-
-## 7. Die drei Regionen
-
-Die Namen und die Fraktionsverteilung stehen bereits im Menue und sind damit
-**FEST**. Was fehlt, ist ihr Charakter: eine Region muss sich anders
-*anfuehlen*, nicht nur andere Zahlen haben.
-
-### 7.1 ASCHEWALD - Sektor 12
-
-> *"viel schrott, wenige patrouillen. der ruhige einstieg."*
+> **ASCHEWALD** - *"viel schrott, wenige patrouillen. der ruhige einstieg."*
 > Kolonne 0.3 · Chor 0.15 · Werften 0.7
 
-**Bild:** Verbrannter Wald aus Stahlmasten. Asche liegt knoecheltief, jeder
-Schritt staubt. Weite Sicht, wenig Deckung.
+Verbrannter Wald aus Stahlmasten, Asche knoecheltief. Weite Sicht, wenig
+Deckung. **Lehrsektor**, und er lehrt durch Aufbau, nicht durch Textkaesten:
+der erste Gegner ist ein einzelner Werften-Wandler mit halber Besatzung,
+der erste Abstieg ist in eine Ruine in Sichtweite, und die erste Enterung
+geht von einem selbst aus.
 
-**Was hier gelehrt wird.** Aschewald ist der Lehrsektor, und er lehrt durch
-Aufbau, nicht durch Textkaesten:
+> **TRICHTERFELD** - *"dichte kolonne-verbaende, dafuer schwere module im
+> wrackfeld."* Kolonne 0.85 · Chor 0.25 · Werften 0.35
 
-| Was der Spieler lernen soll | Wie die Karte es beibringt |
-| --- | --- |
-| Ebenen wechseln | Die erste Hauptbeute liegt auf einem Mast, nur ueber eine Treppe erreichbar. |
-| Stuerzen ist erlaubt | Der Rueckweg vom Mast ist ein Sprung. Fallschaden ist klein genug. |
-| Durch Loecher schiessen | Ein Gegner steht unter einem Gitterrost, bevor er einen bemerkt. |
-| Schrott ist Waehrung | Der erste Knoten hat mehr Schrott, als das Lager fasst. |
+Einschlagkrater, dazwischen Daemme aus gepresstem Schrott. Hier lernt man
+Beschuss: Kolonne-Wandler in Verbaenden, und **Verbaende ziehen durch**.
+Wer sich Zeit laesst, trifft auf mehr. Das koppelt direkt an die Front.
+Die schweren Module liegen in den Trichtern - man muss absteigen, waehrend
+oben etwas vorbeizieht.
 
-**Ortsmischung:** viele Wrackfelder, zwei bis drei Freie Werften, wenige
-Vorposten, **kein** Chorturm. Werftenanteil 0.7 heisst: hier gibt es
-Menschen, hier kann man handeln.
+> **CHORWERK-RUINE** - *"der chor sendet noch. beste technik, kaum
+> ueberlebende."* Kolonne 0.2 · Chor 0.9 · Werften 0.2
 
-### 7.2 TRICHTERFELD
+Tuerme aus weissem Beton, die immer noch Strom haben. Kein Rost, kein
+Staub. Hier sind die besten Bauteile, und sie stecken in Maschinen, die
+niemand fuehrt.
 
-> *"dichte kolonne-verbaende, dafuer schwere module im wrackfeld."*
-> Kolonne 0.85 · Chor 0.25 · Werften 0.35
+### 10.3 Wie die Regionen zusammenhaengen
 
-**Bild:** Einschlagkrater, einer neben dem anderen, randvoll mit dem, was
-die Kolonne liegengelassen hat. Zwischen den Trichtern Daemme aus
-gepresstem Schrott. Man ist entweder oben und sichtbar oder unten und blind.
-
-**Was hier anders ist.** Das ist der Sektor, in dem **Tiefe nach unten**
-zum ersten Mal wehtut. Trichter haben fuenf Ebenen, und Ebene 0 ist der
-Kraterboden - dunkel, eng, voll. Man steigt hinunter, weil die schweren
-Module unten liegen, und der Rueckweg ist der gefaehrliche, weil man nicht
-mehr fallen kann, sondern klettern muss.
-
-**Der Kolonne-Anteil von 0.85 muss man spueren:** Patrouillen sind hier
-nicht Gegner, die warten, sondern Verbaende, die **durchziehen**. Wer sich
-Zeit laesst, trifft auf mehr. Das koppelt direkt an die Front.
-
-**Ortsmischung:** Trichter, Vorposten, Konvoi-Hinterhalte. Werften selten
-und wertvoll.
-
-### 7.3 CHORWERK-RUINE
-
-> *"der chor sendet noch. beste technik, kaum ueberlebende."*
-> Kolonne 0.2 · Chor 0.9 · Werften 0.2
-
-**Bild:** Tuerme aus weissem Beton, die immer noch Strom haben. Kein Rost,
-kein Staub - der Chor haelt sauber. Licht, das von selbst angeht.
-
-**Was hier anders ist.** Der Chor ist keine Armee, sondern eine **Anlage,
-die weiterlaeuft**. Seine Gegner sind keine Soldaten, sondern Wartung, die
-einen als Stoerung einordnet. Das erlaubt Gegnertypen, die nicht auf den
-Spieler zulaufen, sondern Routen abgehen und nur reagieren, wenn man auf
-ihrer Route steht - und das macht Schleichen moeglich, ohne ein
-Schleichsystem zu bauen.
-
-**Chortuerme sind der Gegenentwurf zum Trichter:** man steigt **hoch**, eng,
-in einem Turm ohne Aussenlicht. Oben ist die beste Beute und der einzige
-Weg zurueck ist derselbe enge Schacht - ausser man wirft sich in den
-Lichtschacht und faellt fuenf Ebenen. Das ist der Moment, in dem der Sturz
-mit Steuerung in der Luft, der in 0.11.0 gebaut wurde, seinen Auftritt hat.
-
-**Ortsmischung:** Chortuerme, Silos, Sendemasten. Fast keine Werften -
-hier ist man allein.
-
-### 7.4 Wie die Regionen zusammenhaengen
-
-**ENTWURF:** Die drei Regionen sind **nicht** drei Schwierigkeitsgrade zur
-Auswahl, sondern drei Abschnitte einer Reise. Das Menue laesst einen
-waehlen, wo man **anfaengt** - wer spaeter anfaengt, faengt haerter an.
+**ENTWURF:** Drei Abschnitte einer Reise, keine drei Schwierigkeitsgrade.
+Das Menue laesst einen waehlen, wo man **anfaengt** - wer spaeter anfaengt,
+faengt haerter an.
 
 ```
    ASCHEWALD  --->  TRICHTERFELD  --->  CHORWERK-RUINE
    lernen           verdienen           riskieren
-   (Sektor 12)      (die Front holt      (der Grund, warum
-                     hier zum ersten      man ueberhaupt
-                     Mal wirklich auf)    gefahren ist)
 ```
 
-Jede Region ist ein eigener Sektorgraph mit eigenem Ausgang. Wer den Ausgang
-erreicht, faehrt in die naechste - mit dem Wandler, den er hat. **Der
-Wandler ist das, was zwischen den Regionen bleibt**, und damit ist er auch
-das, was den Fortschritt traegt.
+**Der Wandler ist das, was zwischen den Regionen bleibt** - und damit das,
+was den Fortschritt traegt.
 
 ---
 
-## 8. Progression: was waechst womit
+## 11. Progression
 
-Damit nichts doppelt oder gar nicht waechst, hier alles an einer Stelle.
+### 11.1 Die vier Faeden
 
-### 8.1 Die vier Faeden
-
-| Faden | Waehrung | Wo man ihn spuert | Verliert man ihn beim Tod? |
+| Faden | Waehrung | Wo man ihn spuert | Weg beim Verlust? |
 | --- | --- | --- | --- |
-| **Wandler** | Module, Schrott | an Bord, sichtbar als Raum | ja (bei EISERN endgueltig) |
-| **Waffen** | Schrott an der Werkbank | im Gefecht | ja |
+| **Wandler** | Module, Schrott, erbeutete Bauteile | an Bord, sichtbar als Raum | ja (bei EISERN endgueltig) |
+| **Waffen** | Schrott an der Werkbank | im Fussgefecht | ja |
 | **Wissen** | Blaupausen, Funkdaten | Sektorkarte, Bauliste | **nein** |
 | **Spieler** | Panzerung, Medkits | Leben im HUD | ja |
 
 **Der dritte Faden ist der wichtige.** Wissen bleibt. Wer einmal eine
 Blaupause gefunden hat, kann sie im naechsten Lauf bauen, wenn er das
 Material hat. Damit hat auch ein verlorener Lauf etwas gebracht, ohne dass
-die Schwierigkeit sinkt. Das ist der Unterschied zwischen "nochmal von vorn"
-und "nochmal, aber ich weiss jetzt mehr".
+die Schwierigkeit sinkt.
 
-### 8.2 Die Kopplung an die Karte
+### 11.2 Die Kopplung an die Karte
 
-Jeder Faden haengt an einem Ortstyp - so weiss man, wohin man fahren muss,
-wenn man etwas Bestimmtes braucht. Das macht die Sektorkarte zu einer echten
-Entscheidung statt zu einer Reihenfolge.
-
-| Braucht man | Faehrt man zu | Kostet |
+| Braucht man | Laeuft man zu | Kostet |
 | --- | --- | --- |
 | Schrott (Menge) | Wrackfeld | Zeit, wenig Risiko |
-| Schweres Modul | Trichter, Vorposten | viel Risiko |
-| Chor-Technik | Chorturm, Silo | sehr viel Risiko |
+| Ein bestimmtes Modul | einen Wandler, der es eingebaut hat | ein Duell und eine Enterung |
+| Schweres Bauteil | Trichter, Vorposten am Boden | absteigen, waehrend oben niemand steht |
 | Reparatur, Handel | Freie Werft | Schrott |
 | Vorwissen | Sendemast | eine Etappe |
 
-### 8.3 Die Waffen bekommen Stufen
+### 11.3 Die Waffen bekommen Stufen
 
 Die sechs Waffen stehen und sind ausbalanciert (im Test nachgewiesen). Sie
-sollen **nicht** ersetzt werden - man findet keine "bessere Schrotflinte".
+werden **nicht** ersetzt - man findet keine "bessere Schrotflinte".
 Stattdessen hat jede Waffe an der Werkbank drei Stufen, die je **eine Zahl
-in `K.WAFFEN`** anheben.
-
-Das ist mit Absicht langweilig gebaut: Es gibt bereits einen Test, der die
-Balance jeder Waffe misst. Stufen, die nur Zahlen anheben, lassen sich mit
-demselben Test pruefen. Waffen mit neuen Faehigkeiten wuerden das kaputt
-machen.
-
-**ENTWURF fuer die Stufen** - je Waffe genau eine Eigenheit, die ihren
-Charakter schaerft, statt sie rundum besser zu machen:
+in `K.WAFFEN`** anheben. Das ist mit Absicht langweilig gebaut: es gibt
+bereits einen Test, der die Balance jeder Waffe misst, und Stufen, die nur
+Zahlen anheben, lassen sich damit pruefen.
 
 | Waffe | Stufe hebt | Damit wird sie |
 | --- | --- | --- |
 | Repetierer | `magazin` | der verlaessliche Dauerlaeufer |
 | Sturmgewehr | `streuung_dauerfeuer` runter | im Dauerfeuer beherrschbar |
-| Schrot | `geschosse` | auf kurze Distanz vernichtend |
+| Schrot | `geschosse` | auf kurze Distanz vernichtend - die Enterwaffe |
 | Scharfschuetze | `fokus_dauer` runter | schneller einsatzbereit |
 | Granate | `radius` | Flaechenwaffe statt Punktwaffe |
 | Brecheisen | `schub` | ein Werkzeug, um Platz zu schaffen |
 
----
+Geschuetze sind **keine** Waffen aus `K.WAFFEN` - sie gehoeren zur Maschine
+und stehen unter `GESCHUETZE` in `config.py`. Das haelt die
+Waffenbalance-Tests sauber.
 
-## 9. Story: ein Geruest, keine Geschichte
-
-**OFFEN, zur Entscheidung.** Was hier steht, ist ein Vorschlag, der zu
-allem oben passt. Der Meister entscheidet, ob es so erzaehlt wird.
-
-### 9.1 Die Ausgangslage
-
-Die **Kolonne** rueckt ueber Veld vor - keine Armee mit Zielen, sondern
-etwas, das sich ausbreitet und alles einebnet, was es ueberrollt. Sie ist
-die Front, und sie ist im Ruecken des Spielers.
-
-Der **Chor** war vor der Kolonne da und ist praktisch verschwunden. Seine
-Anlagen laufen weiter, ohne dass jemand sie bedient. Sie senden - und
-niemand weiss, an wen.
-
-Die **Freien Werften** sind, was von den Menschen uebrig ist: Handel,
-Reparatur, Weiterverwertung. Kein Widerstand, nur Ausweichen. Der Spieler
-ist einer von ihnen.
-
-### 9.2 Der Bogen
-
-**ENTWURF:** Kein Heldenbogen, sondern ein Frachtauftrag, der sich als
-etwas anderes herausstellt.
-
-1. **Aschewald.** Man faehrt einen gewoehnlichen Bergungsauftrag. Die Front
-   ist weit weg, ein Geruecht. Am Ende des Sektors ueberholt sie einen zum
-   ersten Mal - eine Werft, bei der man war, ist beim Zurueckkommen nicht
-   mehr da.
-2. **Trichterfeld.** Man faehrt nicht mehr zu etwas hin, sondern vor etwas
-   davon. Zwischen den Trichtern findet man Chor-Technik, die nicht dorthin
-   gehoert - jemand hat sie dort vergraben.
-3. **Chorwerk-Ruine.** Man faehrt hin, weil die Sendungen eine Richtung
-   haben, und die Richtung ist vor der Front, nicht hinter ihr. Was am Ende
-   steht, entscheidet Der Meister.
-
-**Warum das traegt:** Der Bogen braucht keinen einzigen Dialog. Er besteht
-aus drei Sektoren und einer Front, die naeher kommt. Alles, was erzaehlt
-wird, wird durch Orte erzaehlt - und Orte sind das, was dieser Plan ohnehin
-baut.
-
-### 9.3 Wie erzaehlt wird
+### 11.4 Wie erzaehlt wird
 
 **ENTWURF - vier Mittel, alle billig, keines braucht ein Dialogsystem:**
 
-1. **Der Ort selbst.** Eine Werft mit gedeckten Tischen und niemandem darin.
-2. **Terminals.** Kurze Texte an festen Stellen, mit E zu lesen. Genau das,
-   wofuer `Spieler.abbrechen()` schon vorbereitet ist.
-3. **Der Funk.** Das Funkmodul faengt Bruchstuecke auf, die beim Fahren
-   eingeblendet werden. Ein Satz, kein Absatz.
-4. **Der Wandler.** Spuren der Vorbesitzer, die man nach Stunden erst
-   bemerkt.
+1. **Der Ort selbst.** Eine Werft mit gedeckten Tischen und niemandem
+   darin. Ein Chor-Wandler, der seit Jahren dieselbe Runde laeuft.
+2. **Terminals.** Kurze Texte an festen Stellen, mit E zu lesen.
+3. **Der Funk.** Bruchstuecke, die beim Laufen eingeblendet werden. Ein
+   Satz, kein Absatz.
+4. **Der Wandler.** Spuren der Vorbesitzer (6.7).
 
 **Was ausdruecklich nicht:** Gespraeche mit Auswahlmoeglichkeiten,
-Auftragsgeber, Textkaesten, die den Ablauf anhalten. Nichts davon passt zu
-einem Spiel, dessen Kernversprechen "nichts springt, nichts sperrt" ist.
+Auftragsgeber, Textkaesten, die den Ablauf anhalten.
 
 ---
 
-## 10. Machbarkeit: was neuen Code braucht
+## 12. Machbarkeit: was neuen Code braucht
 
-Ehrliche Aufstellung. Alles, was dieser Plan verlangt, in vier Toepfen.
+Ehrliche Aufstellung.
 
-### 10.1 Geht heute schon, ohne eine Zeile
+### 12.1 Geht heute schon, ohne eine Zeile
 
-* Mehr Ebenen je Ort (bis fuenf, `EBENEN_HOEHE` hat sie)
-* Groessere Karten (nur laengere Textlisten)
-* Orte, bei denen man nach unten statt nach oben steigt
+* Mehr Ebenen (bis fuenf, `EBENEN_HOEHE` hat sie)
+* Groessere und kleinere Karten
 * Neue Kacheltypen (ein Eintrag in `KACHELN` und `ZEICHEN`)
 * Neue Gegnertypen (ein Eintrag in `GEGNER` plus ein Bild)
+* Stuerzen von einem Deck, mit Steuerung in der Luft
 * Jede Textur und jeder Klang dafuer
 
-### 10.2 Kleine Ergaenzungen, additiv
+### 12.2 Kleine Ergaenzungen, additiv
 
 | Was | Wo | Aufwand |
 | --- | --- | --- |
-| Marken in Karten (`@rampe`) | `world.py`, `ZEICHEN` | klein |
-| `Ebene.stempeln()` | `world.py` | klein |
-| Karten aus Dateien statt aus Konstanten | `world.py` | klein |
-| Terminal-Kachel zum Lesen | `world.py`, `play.py` | klein |
+| Marken in Karten | `world.py`, `ZEICHEN` | klein |
+| `Welt.aus_datei()` | `world.py` | klein |
+| `Welt.versatz` (wo der Rumpf steht) | `world.py` | klein |
+| Stationen (Zustand am Spieler, andere Tasten) | `entities.py`, `play.py` | klein |
+| Kacheln mit Punkten und Zustand (6.6) | `world.py` | klein |
 | Waffenstufen | `config.py`, `inventar.py` | klein |
+| `Ebene.stempeln()` (Sonderfall Andocken) | `world.py` | klein |
 
-### 10.3 Neue Bausteine, aber ohne Umbau am Kern
+### 12.3 Neue Bausteine, aber ohne Umbau am Kern
 
 | Was | Neue Datei | Aufwand |
 | --- | --- | --- |
-| Sektorgraph, Knoten, Kanten | `sektor.py` | mittel |
-| Sektorkarte als Szene | `sektor_szene.py` | mittel |
-| Der Wandler als Bauplan + Module | `wandler.py` | mittel |
-| Modulschacht-Benutzung | `wandler.py` | mittel |
-| Lauf-Spielstand (was bleibt, was nicht) | `spielstand.py` | mittel |
+| Mehrere Welten gleichzeitig zeichnen, mit Versatz | `render.py` | **mittel, und der erste echte Posten** |
+| Der Wandler: Bauplan, Decks, Stationen, Module | `wandler.py` | mittel |
+| Schuesse zwischen Ruempfen (5.5) | `world.py` | mittel |
+| Uebergaenge zwischen Welten (5.3) | `world.py`, `play.py` | mittel |
+| Besatzungs-KI mit Stationen (7.4) | `entities.py` | mittel |
+| Gegner, die Treppen benutzen | `entities.py` | mittel |
+| Sektorgraph und Sektorkarte | `sektor.py` | mittel |
+| Lauf-Spielstand | `spielstand.py` | mittel |
 | Kartenpruefung | `tests/` | mittel |
 
-### 10.4 Was wirklich teuer ist - und die Empfehlung dazu
+### 12.4 Was wirklich teuer ist
 
 | Was | Warum teuer | Empfehlung |
 | --- | --- | --- |
-| **Fahr-Modus mit echter Physik** | zweites Bewegungssystem, zweite Kollision, zweiter Kameramodus | **Erst spaeter, und vielleicht nie.** Siehe unten. |
-| Bewegliche Kacheln (Weg B) | bricht das Kachelraster ueberall | nein |
-| Gegner, die Ebenen wechseln | Wegfindung ueber Treppen | machbar, aber nach hinten |
-| Echte Kartenerzeugung | Qualitaet schwer zu sichern | Stufe 3, nur wenn noetig |
+| **Bewegliche Kacheln (Weg B)** | bricht das Kachelraster ueberall | nein, nie |
+| **Beinanimation des Wandlers von aussen** | der Rumpf wird von innen gezeigt, aussen sieht man ihn nur auf der Sektorkarte | als Bild, nicht als Simulation |
+| **Echte Kartenerzeugung** | Qualitaet schwer zu sichern | Stufe 3, nur wenn noetig |
+| **Erbeuteten Wandler uebernehmen** | Spielstand, Bauplaene, Umzug des Inventars | OFFEN, Abschnitt 14 |
 
-**Zum Fahr-Modus, ehrlich:** Das Menue verspricht ihn (`FAHRT`, `DREHEN`,
-`BOOST`, `AUTOPILOT`). Ein zweites vollwertiges Bewegungssystem ist aber der
-teuerste Posten im ganzen Plan, und er bringt spielerisch am wenigsten -
-Fahren zwischen Knoten ist Transport, und Transport ist selten das, wofuer
-man ein Spiel startet.
-
-**Vorschlag:** Die Fahrt ist zunaechst **die Sektorkarte in Bewegung** - man
-waehlt ein Ziel, der Wandler zieht sichtbar ueber die Karte, unterwegs
-koennen Ereignisse kommen (Ueberfall, Fund, Funkspruch). Man ist dabei **an
-Bord und darf herumlaufen**: auf die Bruecke zum Kartentisch, nach unten zur
-Werkstatt. Das nutzt alles, was schon da ist, und gibt der Fahrt trotzdem
-Gegenwart.
-
-Ein echter Fahr-Modus mit Lenkung kann spaeter darauf gesetzt werden, ohne
-dass etwas umgebaut werden muss - oder er faellt weg, und niemand vermisst
-ihn. Wenn er wegfaellt, gehoeren die Zeilen aus der Menue-Steuerungstabelle
-entfernt, damit das Menue nichts verspricht, was es nicht gibt.
+**Der Unterschied zur alten Fassung:** Dort stand der Fahr-Modus als
+teuerster Posten. Er ist es nicht mehr, weil er nicht als zweites
+Bewegungssystem gebaut wird (6.1). Der teuerste Posten ist jetzt, mehrere
+Welten gleichzeitig zu zeichnen - und das sind ein paar Versatzrechnungen
+in `render.py`, kein Umbau.
 
 ---
 
-## 11. Reihenfolge der Umsetzung
+## 13. Reihenfolge der Umsetzung
 
 Jeder Meilenstein ist **fuer sich spielbar und fuer sich testbar**. Nach
-jedem laeuft das Spiel, beide Testlaeufe sind gruen, und es gibt etwas Neues
-zu sehen. Kein Meilenstein laesst das Spiel in einem halben Zustand.
+jedem laeuft das Spiel, beide Testlaeufe sind gruen, und es gibt etwas
+Neues zu sehen.
 
-Versionsnummern nach dem Schema im README (neue Sache = MINOR hoch). Die
-Nummern hier sind **Richtwerte, keine Zusagen**: zwischen zwei Meilensteinen
-kommen Reparaturen und Kleinigkeiten dazu, die auch hochzaehlen. Was zaehlt,
-ist die Reihenfolge, nicht die Ziffer.
+Versionsnummern nach dem Schema im README. Die Nummern sind **Richtwerte,
+keine Zusagen** - zwischen zwei Meilensteinen kommen Reparaturen dazu, die
+auch hochzaehlen. Sie fangen bei 0.20.0 an, weil 0.12.0 bis 0.19.1 vergeben
+sind, groesstenteils an den abgespaltenen Mehrspieler. Keine Nummer wird
+zweimal benutzt, auch nicht ueber Zweige hinweg.
 
-Sie fangen bei 0.20.0 an und nicht mehr bei 0.12.0: 0.12.0 bis 0.19.1 sind
-vergeben, groesstenteils an den abgespaltenen Mehrspieler. Keine Nummer
-wird zweimal benutzt, auch nicht ueber Zweige hinweg.
+**Die Reihenfolge ist gegenueber der alten Fassung umgestellt.** Der
+Wandler kommt weit nach vorn, die Ortsvielfalt weit nach hinten. Begruendung:
+Solange der Wandler nicht steht, weiss niemand, wofuer die Orte da sind.
 
 ### M1 - Karten kommen aus Dateien (0.20.0)
 
 *Ziel:* `testkarte()` ist nicht mehr die einzige Karte.
 
-* `karten/` mit Textdateien, eine Datei je Ebene oder eine mit Trennzeilen
+* `karten/` mit Textdateien, eine Datei je Welt mit Trennzeilen je Ebene
 * `Welt.aus_datei(name)`
-* Marken (`R`, `S`, `W`, `1`-`9`) mit `ebene.marken`
-* Der Spieler startet auf der Marke `S` statt auf einem Zufallspunkt
+* Marken (`S`, `R`, `T`, `G`, `W`, `E`, `M`, `1`-`9`) mit `ebene.marken`
+* Der Spieler startet auf der Marke `S`
 * Test: jede Karte im Ordner laedt, hat eine Startmarke, jede Ebene ist
   von dort erreichbar
 
-*Warum zuerst:* Ohne das ist jeder weitere Schritt eine Code-Aenderung.
-Danach ist ein neuer Ort eine Textdatei.
+*Warum weiter zuerst:* Ein Wandler ist auch nur eine Textkarte. Ohne
+diesen Schritt ist jeder weitere eine Codeaenderung.
 
-### M2 - Mehrere Orte, ein Ortstyp mehr (0.21.0)
+### M2 - Der Wandler als begehbarer Rumpf (0.21.0)
 
-* Drei bis vier handgetippte Wrackfelder
-* Ein Vorposten mit Wachtuermen
-* Beim Start wird zufaellig einer gewaehlt
-* Hauptbeute als Marke, erzwingt einen Ebenenwechsel
+* `wandler.py`: Bauplan aus Text, drei bis vier Decks
+* Der Wandler ist eine eigene `Welt` (5.1), er steht noch still
+* Man laeuft hinein, hoch, runter, ueber die Rampe hinaus auf einen Boden
+* Treppen zwischen den Decks, offene Kanten am Oberdeck, Sturz auf den Boden
 
-*Sichtbar:* Es ist nicht mehr jedes Mal dieselbe Karte.
+*Sichtbar:* Man hat ein Zuhause, und es ist wirklich begehbar.
 
-### M3 - Der Wandler als Ort (0.22.0)
+### M3 - Stationen und die Fahrt (0.22.0)
 
-* `wandler.py`: Bauplan aus Text, drei Decks
-* `Ebene.stempeln()`
-* Der Wandler wird an der Marke `R` in die Ortskarte gestempelt
-* Man kann hinein, hoch, runter, wieder hinaus - nahtlos
-* Noch keine Module, nur Raeume
+* Stationen als Marken plus Tastenbelegung (6.1, 6.2)
+* Steuerstand: der Rumpf bekommt eine Position, der Boden zieht durch
+* TAB schaltet die Ansicht zwischen "an Bord" und "Fahrt"
+* **Autopilot (H)** mit den drei Zustaenden aus 6.3
+* `AUTOPILOT` und `WANDLER` in `config.py`
 
-*Sichtbar:* Man hat ein Zuhause, und es steht wirklich in der Welt.
-*Das ist der Meilenstein, der das Spiel veraendert.*
+*Sichtbar:* **Es ist ein Mech-Spiel.** Der Meilenstein, der alles aendert.
 
-### M4 - Module und Schaechte (0.23.0)
+### M4 - Geschuetze und der zweite Rumpf (0.23.0)
 
-* Modulliste in `config.py`
-* Leere Schaechte auf E1, sichtbar leer
-* Zwei bis drei Module einbaubar (Lager, Kojen, Werkbank)
-* Energie als Budget
-* Bauen mit B an einem Schacht
+* Zweite Welt: ein feindlicher Wandler mit Versatz (5.5)
+* Geschuetzstationen, Schuesse zwischen Ruempfen
+* Kritische Bauteile mit Punkten und Zustand (6.6)
+* Reparieren mit Q an der Werkstatt
 
-*Sichtbar:* Schrott hat zum ersten Mal einen Zweck.
+*Sichtbar:* Das Duell. Phasen 1 bis 3 aus 7.1.
 
-### M5 - Die Sektorkarte (0.24.0)
+### M5 - Entern (0.24.0)
+
+* Uebergaenge zwischen Welten (5.3): Enterbruecke und Haken
+* Besatzungs-KI mit Stationen (7.4)
+* Gegner, die Treppen benutzen
+* Schotten als Modul
+
+*Sichtbar:* Phase 4. Maschinenkampf und Fusskampf sind dasselbe Gefecht.
+
+### M6 - Absteigen und pluendern (0.25.0)
+
+* Der Boden als eigene Welt mit Gebaeuden
+* Rampe runter, Gebaeude betreten, Hauptbeute nach 8.3
+* Der eigene Wandler laeuft weiter, wenn man ihn so eingestellt hat
+* Drei bis vier handgetippte Gebaeudetypen
+
+*Sichtbar:* Der schlimmste Fall aus 8.2 kann passieren.
+
+### M7 - Module, Schaechte, Energie (0.26.0)
+
+* Modulliste in `config.py`, leere Schaechte sichtbar leer
+* Bauen mit B an der Werkbank
+* Energie als Budget, Verteilung an der Station Maschine
+* Erbeutete Module aus fremden Ruempfen (7.5)
+
+*Sichtbar:* Schrott hat zum ersten Mal einen Zweck, und man laeuft durch
+seinen eigenen Fortschritt.
+
+### M8 - Veld: Sektorkarte und Front (0.27.0)
 
 * `sektor.py`: Graph, 14-20 Knoten, 6-8 Spalten
-* Sektorkarte als Szene, aufgerufen vom Kartentisch auf E2
-* Ein Knoten waehlen, hinfahren, dort ist der Ort
-* Noch keine Front
-
-*Sichtbar:* Aus einzelnen Orten wird eine Reise.
-
-### M6 - Die Front (0.25.0)
-
-* `FRONT` in `config.py`
-* Die Front rueckt je Etappe
+* Sektorkarte als Szene, aufgerufen vom Kartentisch
+* `FRONT` in `config.py`, die Front rueckt je Etappe
 * Ueberrollt werden beendet den Lauf
-* Anzeige auf der Sektorkarte
 
-*Sichtbar:* Das Spiel hat einen Motor. Der Titel erklaert sich.
+*Sichtbar:* Aus einzelnen Gefechten wird eine Reise mit Druck. Der Titel
+erklaert sich.
 
-### M7 - Der Lauf als Ganzes (0.26.0)
+### M9 - Der Lauf als Ganzes (0.28.0)
 
 * Lauf-Spielstand: was bleibt (Wissen), was nicht (Wandler)
 * Sektorausgang, dann naechste Region
 * EISERN wird das, was es verspricht
-
-### M8 - Ortsvielfalt (0.27.0)
-
-* Chorturm (5 Ebenen, hoch), Trichter (5 Ebenen, runter), Freie Werft
-* Bausteine statt ganzer Karten
-* Kartenpruefung im Test
-
-### M9 - Erzaehlung (0.28.0)
-
-* Terminals
-* Funkbruchstuecke
-* Spuren im Wandler
+* Terminals, Funkbruchstuecke, Spuren im Wandler
 
 **Nach M9 ist das Spiel von vorn bis hinten spielbar.** Damit stellt sich
 die erste Frage aus dem Versionsschema, und es wird `1.0.0`.
 
 ---
 
-## 12. Offene Fragen - hier entscheidet Der Meister
+## 14. Offene Fragen - hier entscheidet Der Meister
 
 Bewusst nicht entschieden. Jede Antwort aendert Teile des Plans.
 
-1. **Fahr-Modus:** Reicht "Fahrt als Sektorkarte in Bewegung, man laeuft an
-   Bord herum" (Abschnitt 10.4)? Oder soll es echtes Lenken geben? *Das ist
-   die teuerste Frage im Dokument.*
+**Zuerst die wichtigste:**
 
-2. **Roguelite oder Kampagne:** Beginnt man nach einem Verlust von vorn (mit
-   bleibendem Wissen), oder gibt es Speicherstaende? Das Menue kennt
-   "fortsetzen" und EISERN kennt "ein leben" - beides ist moeglich, aber es
-   sollte eines sein.
+0. **Welche Punkte waren sonst noch falsch verstanden?** Der Meister
+   schrieb *"viele punkte"* und nannte den groessten (der Wandler ist die
+   Basis). Abschnitt 1 zaehlt auf, was daraus abgeleitet wurde - aber
+   Ableitung ist Raten. Alles, was in Abschnitt 1.6 unter "bleibt" steht,
+   ist ungeprueft uebernommen: Veld als Knotengraph, die vorrueckende
+   Front, die drei Regionen, Module als begehbarer Fortschritt, EISERN als
+   Dauerverlust. Wenn davon etwas auch daneben liegt, gehoert es hier
+   korrigiert, bevor M2 anfaengt.
 
-3. **Wie viel Tod:** Ist der Spieler zerbrechlich (drei Treffer) oder zaeh?
-   Heute: 100 Leben, Laeufer macht 9. Das ist zaeh. Passt das zum Ton?
+**Dann der Rest:**
 
-4. **Gegner auf anderen Ebenen:** Sollen Gegner Treppen benutzen und einen
-   verfolgen? Das macht Ebenen gefaehrlicher, aber auch anstrengender.
+1. **Wie viel Maschine, wie viel Fuss?** Soll ein Duell ueberwiegend am
+   Geschuetz stattfinden (Maschinenspiel mit Fussgefecht als Hoehepunkt),
+   oder ueberwiegend zu Fuss (Fussspiel mit Maschine als Buehne)? Das
+   entscheidet ueber alle Reichweiten in 5.5.
 
-5. **Ist der Chor feindlich?** Oder gleichgueltig, solange man nicht stoert?
-   Die zweite Antwort ist interessanter und billiger zu bauen.
+2. **Verliert man mit dem Wandler den Lauf?** Oder laeuft man zu Fuss
+   weiter und kann sich einen neuen erbeuten (7.3)? Die zweite Antwort ist
+   dramatischer und deutlich teurer.
 
-6. **Ende:** Was steht am Ende der Chorwerk-Ruine? Ohne Antwort bleibt der
-   Bogen ein Rahmen.
+3. **Kann man einen erbeuteten Wandler uebernehmen?** (7.5) Starkes
+   Stueck, kostet Spielstand-Arbeit.
+
+4. **Roguelite oder Kampagne?** Beginnt man nach einem Verlust von vorn
+   (mit bleibendem Wissen), oder gibt es Speicherstaende? Das Menue kennt
+   "fortsetzen" und EISERN kennt "ein leben" - beides ist moeglich, aber
+   es sollte eines sein.
+
+5. **Wie viel Tod zu Fuss?** Heute: 100 Leben, Laeufer macht 9. Das ist
+   zaeh. Passt das zu einem Spiel, in dem Enterer auf dem eigenen Deck
+   stehen?
+
+6. **Ist der Chor feindlich?** Oder gleichgueltig, solange man nicht
+   stoert (10.1)? Die zweite Antwort ist interessanter und billiger.
+
+7. **Wird der Wandler entworfen oder gefunden?** SAND hat einen Editor.
+   Ein eigener Bauplan-Editor waere gross; ein Wandler, der Deck fuer Deck
+   waechst, waere billiger und passt besser zu 6.5.
+
+8. **Ende:** Was steht am Ende der Chorwerk-Ruine?
 
 ---
 
-## 13. Was dieses Dokument bewusst nicht tut
+## 15. Was dieses Dokument bewusst nicht tut
 
 * Es legt keine Kachelzeichen fest, die noch nicht gebraucht werden.
 * Es schreibt keine Dialoge.
 * Es nennt keine Balancewerte ausser als Beispiel - die gehoeren in
   `config.py`, und zwar erst, wenn sie gemessen sind.
-* Es entscheidet nichts, was in Abschnitt 12 steht.
+* Es behauptet nichts ueber SAND, was nicht belegt ist. Was dort nicht
+  auffindbar war, steht in 2.1 als nicht auffindbar.
+* Es entscheidet nichts, was in Abschnitt 14 steht.
 
-**Wer hier weitermacht:** Nimm den naechsten Meilenstein aus Abschnitt 11.
-Lies vorher Abschnitt 3 ganz. Halte dich an die drei Regeln aus dem README
+**Wer hier weitermacht:** Lies 1, 2 und 5 ganz. Nimm dann den naechsten
+Meilenstein aus Abschnitt 13. Halte dich an die drei Regeln aus dem README
 ("Wie sich das Spiel anfuehlen soll"). Wenn ein Meilenstein etwas verlangt,
-was Abschnitt 12 offen laesst, frag nach, statt zu raten.
+was Abschnitt 14 offen laesst, frag nach, statt zu raten.
+
+---
+
+### Quellen zu Abschnitt 2
+
+* [SAND: Raiders of Sophie auf Steam](https://store.steampowered.com/app/1431300/SAND_Raiders_of_Sophie/)
+* [Besprechung bei KeenGamer](https://www.keengamer.com/articles/reviews/pc-reviews/sand-raiders-of-sophie-review-desert-pirates/)
+* [Trampler-Ueberlebensleitfaden bei BlogAndGuide](https://www.blogandguide.com/sand-raiders-of-sophie-walker-trampler-survival-guide/)
+* [Ueberblick im SAND-Wiki](https://www.sandraidersofsophie.xyz/guides/what-is-sand-raiders-of-sophie)
