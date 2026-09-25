@@ -42,6 +42,19 @@ class Kamera:
         # ein und zeichnet auf eine groessere Flaeche, die danach verkleinert
         # wird. Ohne das haengt jede Kamera an GAME_W und GAME_H fest.
         self.sicht = pygame.Vector2(sicht or (K.GAME_W, K.GAME_H))
+        # Auf welches Vielfache die Bildecke einrastet.
+        #
+        # Das ist keine Feinheit, sondern der Unterschied zwischen ruhig und
+        # unbrauchbar. Wird eine grosse Flaeche hinterher verkleinert, tastet
+        # das Verkleinern ein festes Raster ab. Wandert die Ecke um einen
+        # einzelnen Weltpixel, verschiebt sich dieses Raster gegen die
+        # Textur - und dann flimmert **das ganze Bild**, nicht nur ein Rand.
+        #
+        # Gemessen: bei 1 zu 2 und drei Weltpixeln Versatz wechselten 29,5
+        # Prozent aller Bildpunkte ihre Farbe, ohne dass sich etwas bewegt
+        # haette. Rastet die Ecke auf dem Verkleinerungsfaktor ein, sind es
+        # null.
+        self.raster = 1
 
     def stossen(self, kraft: float) -> None:
         self.ruckeln = min(K.KAMERA["ruckeln_max"], self.ruckeln + kraft)
@@ -73,8 +86,10 @@ class Kamera:
 
     @property
     def ecke(self) -> pygame.Vector2:
-        return pygame.Vector2(round(self.pos.x - self.sicht.x / 2 + self.versatz.x),
-                              round(self.pos.y - self.sicht.y / 2 + self.versatz.y))
+        r = max(1, int(self.raster))
+        x = self.pos.x - self.sicht.x / 2 + self.versatz.x
+        y = self.pos.y - self.sicht.y / 2 + self.versatz.y
+        return pygame.Vector2(round(x / r) * r, round(y / r) * r)
 
     def zu_welt(self, bildpunkt) -> pygame.Vector2:
         return pygame.Vector2(bildpunkt) + self.ecke
@@ -106,6 +121,8 @@ class Renderer:
         self._glieder: dict[tuple, pygame.Surface] = {}
         self._gedrehte: dict[tuple, pygame.Surface] = {}
         self._umrisse: dict[tuple, pygame.Surface] = {}
+        self._schleier_cache: dict[tuple, pygame.Surface] = {}
+        self._vignetten: dict[tuple, pygame.Surface] = {}
 
     # ---- Vorgefertigtes -------------------------------------------
     def _passend(self, cache: dict, name: str, groesse, deckkraft: float = 1.0):
@@ -217,8 +234,10 @@ class Renderer:
             if dunkel is not None:
                 s = self.dunkel(s, dunkel)
             ziel.blit(s, (tx * K.TILE - ecke.x, sy))
-        # Dekale liegen auf dem Boden
+        # Dekale liegen auf dem Boden - falls es ueberhaupt welche gibt.
         d = e.dekale
+        if d is None:
+            return
         if dunkel is None:
             ziel.blit(d, (-ecke.x, -ecke.y))
         else:
@@ -327,22 +346,47 @@ class Renderer:
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2),
                       special_flags=pygame.BLEND_RGB_ADD)
 
-    def _tiefenflaeche(self, k: float) -> pygame.Surface:
+    def _tiefenflaeche(self, k: float, groesse) -> pygame.Surface:
         """Hilfsflaeche fuer eine tiefer liegende Ebene.
 
         Sie zeigt einen groesseren Weltausschnitt und wird danach auf die
-        Bildgroesse verkleinert. Genau das laesst die untere Ebene weiter weg
+        Zielgroesse verkleinert. Genau das laesst die untere Ebene weiter weg
         wirken: gleiche Weltmitte, kleinerer Massstab.
+
+        **Die Groesse kommt vom Ziel, nicht von GAME_W.** Die Aussenansicht
+        eines Wandlers zeichnet auf eine groessere Flaeche; stand hier die
+        Bildgroesse fest, wurde nur ihr linkes oberes Viertel gefuellt - und
+        genau das sah man als harte Helligkeitskante mitten im Bild.
         """
-        schluessel = int(k * 100)
+        zw, zh = int(groesse[0]), int(groesse[1])
+        schluessel = (int(k * 100), zw, zh)
         hit = self._tiefen.get(schluessel)
         if hit is None:
-            w = int(K.GAME_W / k) + 2
-            h = int(K.GAME_H / k) + 2
-            hit = pygame.Surface((w, h), pygame.SRCALPHA)
-            if len(self._tiefen) > 64:
+            hit = pygame.Surface((int(zw / k) + 2, int(zh / k) + 2),
+                                 pygame.SRCALPHA)
+            if len(self._tiefen) > 48:
                 self._tiefen.clear()
             self._tiefen[schluessel] = hit
+        return hit
+
+    def _schleier(self, groesse) -> pygame.Surface:
+        """Dunstflaeche in Zielgroesse, gehalten je Groesse."""
+        zw, zh = int(groesse[0]), int(groesse[1])
+        hit = self._schleier_cache.get((zw, zh))
+        if hit is None:
+            hit = pygame.Surface((zw, zh), pygame.SRCALPHA)
+            self._schleier_cache[(zw, zh)] = hit
+        return hit
+
+    def vignette(self, groesse) -> pygame.Surface:
+        """Die Vignette auf Zielgroesse gebracht, gehalten je Groesse."""
+        zw, zh = int(groesse[0]), int(groesse[1])
+        if (zw, zh) == self._vignette.get_size():
+            return self._vignette
+        hit = self._vignetten.get((zw, zh))
+        if hit is None:
+            hit = pygame.transform.scale(self._vignette, (zw, zh))
+            self._vignetten[(zw, zh)] = hit
         return hit
 
     def welt_zeichnen(self, ziel, welt, kamera, alpha, blick_hoehe=None) -> None:
@@ -362,6 +406,7 @@ class Renderer:
         ecke = kamera.ecke
         held = welt.held
         p = K.PERSPEKTIVE
+        ziel_gross = ziel.get_size()
         if blick_hoehe is None:
             blick_hoehe = welt.hoehe(held.ebene if held else 0)
 
@@ -382,7 +427,7 @@ class Renderer:
                 continue
 
             dunkel = max(48, int(p["dunkel"] * k)) if dz > 0 else None
-            flaeche = self._tiefenflaeche(k)
+            flaeche = self._tiefenflaeche(k, ziel_gross)
             flaeche.fill((0, 0, 0, 0))
             mitte = kamera.pos + kamera.versatz
             u_ecke = pygame.Vector2(round(mitte.x - flaeche.get_width() / 2),
@@ -391,18 +436,19 @@ class Renderer:
             self.wesen_zeichnen(flaeche, welt, idx, u_ecke, alpha, dunkel)
             self.partikel_zeichnen(flaeche, welt, idx, u_ecke, alpha)
             self.muendungsfeuer(flaeche, welt, u_ecke, idx)
-            skaliert = pygame.transform.scale(flaeche, (K.GAME_W, K.GAME_H))
+            skaliert = pygame.transform.scale(flaeche, ziel_gross)
             if sicht < 0.999:
                 skaliert.set_alpha(int(255 * sicht))
             ziel.blit(skaliert, (0, 0))
             if dz > 0:
                 a = int(255 * p["dunst_staerke"] * (1.0 - k))
                 if a > 0:
-                    self._dunst.fill((*p["dunst"], min(255, a)))
-                    ziel.blit(self._dunst, (0, 0))
+                    schleier = self._schleier(ziel_gross)
+                    schleier.fill((*p["dunst"], min(255, a)))
+                    ziel.blit(schleier, (0, 0))
 
         self.fliegende_zeichnen(ziel, welt, kamera, alpha, blick_hoehe)
-        ziel.blit(self._vignette, (0, 0))
+        ziel.blit(self.vignette(ziel_gross), (0, 0))
 
     def tracer(self, ziel, welt, kamera, spieler) -> None:
         """Zielhilfe: eine duenne Linie von der Waffe zum Mauszeiger.

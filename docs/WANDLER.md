@@ -5,7 +5,7 @@ einer Textdatei entsteht, warum ihre Bewegung wirklich aus den Beinen kommt,
 und wo jede Zahl steht. Wer spaeter etwas daran aendert, liest Abschnitt 2
 ganz - dort steht die eine Entscheidung, an der alles haengt.
 
-**Stand:** Version 0.20.0, Meilenstein M1 aus `docs/KARTE.md`.
+**Stand:** Version 0.21.0, Meilenstein M1 aus `docs/KARTE.md`.
 
 **Zum Ansehen:** `PROBELAUF.bat` (Windows) oder `PROBELAUF.command` (Mac),
 oder `python -m dustfront --probe`.
@@ -194,6 +194,73 @@ ist im Bauen tatsaechlich passiert.
 
 ---
 
+### 2.8 Standfestigkeit: wann eine Maschine umkippt
+
+**Die erste Fassung hatte hier eine Luecke, und sie war eine grosse.** Ob
+eine Maschine noch laufen konnte, haengt darin allein an der *Anzahl* der
+heilen Beine. Damit lief ein Sechsbeiner, dem vier Beine fehlten, auf den
+beiden hinteren froehlich weiter. So funktioniert das nicht.
+
+Gezaehlt wird jetzt nicht, sondern gemessen:
+
+> Eine Laufmaschine steht, solange ihr **Schwerpunkt** ueber der Flaeche
+> liegt, die ihre **stehenden Fuesse** aufspannen.
+
+Diese Flaeche ist die konvexe Huelle der Standfuesse, verbreitert um die
+Auflage eines Fusses. `halt` ist der Abstand des Schwerpunkts zu ihrem Rand:
+positiv heisst getragen, negativ heisst, sie faellt gleich.
+
+Daraus folgt alles Weitere, und zwar ohne eine einzige Regel je Beinzahl:
+
+| Imperator, sechs Beine | Halt | Ergebnis |
+| --- | --- | --- |
+| alle sechs | +343 | faehrt |
+| zwei diagonal verloren | +179 | faehrt |
+| **vier** verloren, diagonal uebrig | +73 | faehrt, wankt stark |
+| vier verloren, **nur hinten** uebrig | **-75** | **kippt um** |
+| drei verloren, alle auf **einer Seite** uebrig | negativ | **kippt um** |
+
+Es zaehlt also nicht, *wie viele* Beine fehlen, sondern *welche*. Drei
+Beine auf derselben Seite tragen nicht; zwei diagonale schon.
+
+**Statisch oder dynamisch.** Wer drei Beine hat und eines hebt, steht auf
+zweien - auf einer Strecke, nicht auf einer Flaeche. Eine Maschine mit drei
+Beinen kann also so wenig statisch gehen wie eine mit zweien: sie muss
+balancieren. Deshalb gilt die Stuetzflaechenbedingung beim **Treten** erst
+ab vier heilen Beinen (`K.GANG["statisch_ab"]`). Wer darunter liegt,
+balanciert - und den haelt statt der Flaeche die **Zeit**: bleibt er laenger
+als `WANDLER["kipp_zeit"]` ohne Halt, faellt er.
+
+Das haelt beide Faelle richtig:
+
+* Ein Zweibeiner steht beim Schritt immer auf einem Fuss und faellt trotzdem
+  nicht um - er faengt sich beim naechsten Aufsetzen.
+* Ein Sechsbeiner mit nur zwei hinteren Beinen bekommt seinen Halt auch
+  zwischen zwei Schritten nicht zurueck und kippt.
+
+**Nachruecken.** Faellt ein Bein aus, ruecken die uebrigen Fuesse nach - zur
+Haelfte (`K.GANG["ausgleich"]`) und nie weiter, als ein Bein von seiner
+Huefte aus reicht. Ohne das friert eine Maschine beim ersten Beinverlust
+ein; mit vollem Nachruecken koennte ein Sechsbeiner die Fuesse ganz nach
+vorn unter seine Masse stellen und auf zweien weiterlaufen. Die Haelfte
+laesst ihn humpeln und trotzdem kippen.
+
+### 2.9 Der Schwerpunkt sitzt nicht in der Mitte
+
+Ein Laufvogel traegt die Beine hinten und balanciert den Koerper darueber.
+Nimmt man seinen Schwerpunkt in der geometrischen Rumpfmitte an, liegt er
+einen halben Rumpf **vor** den Fuessen - und faellt nach vorn.
+
+Genau das ist beim Bauen passiert: der Warhound kippte beim Losgehen um,
+und das Modell hatte recht. Deshalb kennt jeder Bauplan einen Schwerpunkt:
+
+```
+schwerpunkt: -3.6 0
+```
+
+In Kacheln, von der Rumpfmitte aus. Beim Warhound sitzt er ueber den
+Hueften, wo bei einem Vogel der Schwanz das Gegengewicht traegt.
+
 ## 3. Der Wandler als Datei
 
 ### 3.1 Was drinsteht
@@ -227,13 +294,42 @@ Jede Zeile aus `K.WANDLER_KLASSEN` laesst sich in der Datei ueberschreiben
 (`tempo:`, `dreh:`, `takt:`, `bein_ober:` und so weiter). Die Datei gewinnt
 immer.
 
-### 3.2 Die drei Klassen
+### 3.2 Die vier Basen
 
-| Klasse | Beine | Decks | Tempo | Spielgefuehl |
-| --- | --- | --- | --- | --- |
-| **Warhound** | 2 | 3 | 78 | schnell, wendig in der Fahrt, wankt sichtbar. Ein verlorenes Bein ist das Ende. |
-| **Reaver** | 4 | 4 | 54 | der Standard. Ruhig, dreht auf dem Absatz, vertraegt ein Bein. |
-| **Imperator** | 6 | 6 | 33 | laufende Festung. Vertraegt drei Beine, passt nicht auf den Bildschirm, und ein Mensch bedient acht Geschuetze nicht. |
+Jede ist eine **eigene Bauform**, kein anders grosser Bauklotz: eigener
+Umriss, eigene Beinzahl, eigenes Fahrverhalten. Der Umriss steht als
+Laengsprofil in der Kartendatei - Vogel, Schlachtschiff, Festung, Wurm.
+
+| Basis | Bauform | Beine | Decks | Tempo | Volle Drehung |
+| --- | --- | --- | --- | --- | --- |
+| **Warhound** | Laufvogel: schwere Hueften, schmale Taille, spitzer Kopf | 2 | 3 | 78 | **11 s** |
+| **Reaver** | Schlachtschiff: breiter Kasten, ausgestellte Schultern | 4 | 4 | 54 | 34 s |
+| **Imperator** | wandernde Kathedrale: fast rechteckig, gestufter Bug | 6 | 6 | 33 | 109 s |
+| **Hundertfuss** | Belagerungslaeufer: 45 Kacheln lang, in Segmenten | 8 | 3 | 44 | **271 s** |
+
+**Das Drehen unterscheidet sie am staerksten**, und zwar um mehr als das
+Zwanzigfache. Ein Warhound dreht sich in elf Sekunden einmal um sich
+selbst; ein Hundertfuss braucht dafuer viereinhalb Minuten und ist gebaut,
+um geradeaus zu gehen. Wer mit ihm den Kurs aendert, tut das eine
+Viertelstunde vorher.
+
+Das ist keine Schikane, sondern die Bauform: Masse mal Hebel. Und es ist
+gemessen, nicht behauptet - der Testlauf verlangt, dass jede Maschine ihre
+eigene Rate faehrt und dass die Klassen um mehr als das Fuenffache
+auseinanderliegen.
+
+**Beinmasse sind Anteile der Rumpfbreite**, keine festen Pixel. Ein Bein,
+das eine Maschine von sechs Metern Rumpfbreite traegt, ist kein Stock - es
+ist so lang wie der Rumpf breit ist und ein gutes Viertel davon dick.
+Massgebend ist die **schmale** Achse: sonst bekaeme ein Belagerungslaeufer
+von 45 Kacheln Laenge Beine wie Bruecken.
+
+| Basis | Rumpf | Beinlaenge | Dicke |
+| --- | --- | --- | --- |
+| Warhound | 18x11 | 271 px | 48 px |
+| Reaver | 23x15 | 370 px | 65 px |
+| Imperator | 31x19 | 468 px | 82 px |
+| Hundertfuss | 45x11 | 271 px | 48 px |
 
 ### 3.3 Der Klassenunterschied faellt umsonst an
 
@@ -406,7 +502,39 @@ Wellenmuster zusammen. Kleine Stollen im festen Raster statt langer Rippen,
 und kein Zufallsversatz: gefertigte Flaechen sind regelmaessig, und jeder
 Wackler daran sieht nach Schmutz aus statt nach Blech.
 
-**6.10 Kamera an GAME_W festgenagelt.** Die Aussenansicht zeichnet auf eine
+**6.10 Spaghettibeine.** Die ersten Beine waren 18 Pixel dick und trugen
+einen Rumpf von 400 Pixeln Breite. Von oben sah das aus wie eine Kiste auf
+Zahnstochern. Masse duerfen bei einer Maschine, die es in vier Groessen
+gibt, nicht absolut dastehen - sie sind Anteile des Rumpfes.
+
+**6.11 Umgefallen ist nicht vorgesehen gewesen.** Die Standfestigkeit hing
+an der blossen **Anzahl** heiler Beine. Damit lief ein Sechsbeiner, dem vier
+fehlten, auf den beiden hinteren weiter. Siehe 2.8: es zaehlt nicht wie
+viele, sondern welche.
+
+**6.12 Die Drehrate der Bauklasse wurde nie gelesen.** Sie stand im
+Bauplan, aber das Gangwerk griff auf die globale Vorgabe zurueck - also
+drehten sich alle Maschinen gleich schnell, egal was in ihrer Datei stand.
+Ein Fehler, den keine Sichtpruefung findet und eine Messung sofort.
+
+**6.13 Die Vignette lag im linken oberen Viertel.** `welt_zeichnen`
+rechnete fest mit `GAME_W` und `GAME_H`. Die Aussenansicht zeichnet aber
+auf eine groessere Flaeche - also landeten Vignette, Dunst und die
+Tiefenflaeche alle nur in deren erstem Viertel. Nachgemessen war der
+Helligkeitssprung an der Viertelgrenze deutlich sichtbar. Der Renderer
+richtet sich jetzt nach der Zielflaeche.
+
+**6.14 Das Bild zitterte dauerhaft.** Jeder aufsetzende Fuss stiess die
+Kamera an. Bei 2,3 Gruppen je Sekunde klingt so ein Stoss nie ab, bevor der
+naechste kommt: gemessen lag das Ruckeln staendig bei vier Pixeln. Das ist
+kein Stampfen mehr, das ist ein flackerndes Bild.
+
+**6.15 Die Karte war zu klein.** 70 auf 46 Kacheln sind keine anderthalb
+Laengen eines Belagerungslaeufers. Jetzt 300 auf 200 - und damit die
+Fleckenflaeche nicht 245 Megabyte belegt, entsteht sie erst, wenn wirklich
+ein Fleck faellt.
+
+**6.16 Kamera an GAME_W festgenagelt.** Die Aussenansicht zeichnet auf eine
 groessere Flaeche und verkleinert sie danach. `Kamera.ecke` rechnete aber
 fest mit der Bildgroesse, also sass die Maschine in der Ecke. Die Kamera
 kennt jetzt ihre Sichtflaeche.

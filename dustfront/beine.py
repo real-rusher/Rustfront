@@ -105,6 +105,78 @@ def _weich(t: float) -> float:
     return t * t * (3.0 - 2.0 * t)
 
 
+def _konvexe_huelle(punkte: list) -> list:
+    """Konvexe Huelle einer Punktmenge (monotone chain).
+
+    Bei bis zu acht Fuessen ist das ein Dutzend Vergleiche - billiger als
+    jede Naeherung, und es stimmt exakt.
+    """
+    p = sorted({(round(v.x, 3), round(v.y, 3)) for v in punkte})
+    if len(p) <= 2:
+        return [pygame.Vector2(x, y) for x, y in p]
+
+    def kreuz(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    unten = []
+    for q in p:
+        while len(unten) >= 2 and kreuz(unten[-2], unten[-1], q) <= 0:
+            unten.pop()
+        unten.append(q)
+    oben = []
+    for q in reversed(p):
+        while len(oben) >= 2 and kreuz(oben[-2], oben[-1], q) <= 0:
+            oben.pop()
+        oben.append(q)
+    rund = unten[:-1] + oben[:-1]
+    return [pygame.Vector2(x, y) for x, y in rund]
+
+
+def _abstand_strecke(p: pygame.Vector2, a: pygame.Vector2,
+                     b: pygame.Vector2) -> float:
+    d = b - a
+    laenge = d.length_squared()
+    if laenge < 1e-9:
+        return p.distance_to(a)
+    tt = max(0.0, min(1.0, (p - a).dot(d) / laenge))
+    return p.distance_to(a + d * tt)
+
+
+def halt_abstand(punkt: pygame.Vector2, huelle: list) -> float:
+    """Wie weit ein Punkt **innerhalb** der Stuetzflaeche liegt.
+
+    Positiv heisst innen, negativ heisst darueber hinaus. Das ist die eine
+    Zahl, die entscheidet, ob eine Laufmaschine steht oder faellt.
+
+    Drei Faelle, und alle drei kommen vor:
+
+    * **kein Fuss** - es gibt keinen Halt, also der schlimmste Wert.
+    * **ein Fuss** - ein Punkt. Es gibt keine Flaeche, nur den Abstand zu
+      ihm; getragen wird das allein durch die Auflage des Fusses.
+    * **zwei Fuesse** - eine Strecke. Ein Zweibeiner steht auf einer Linie
+      und haelt sich nur durch die Breite seiner Fuesse. Deshalb wankt er.
+    * **drei und mehr** - eine echte Flaeche.
+    """
+    if not huelle:
+        return -1e9
+    if len(huelle) == 1:
+        return -punkt.distance_to(huelle[0])
+    if len(huelle) == 2:
+        return -_abstand_strecke(punkt, huelle[0], huelle[1])
+
+    innen = True
+    naechste = 1e9
+    n = len(huelle)
+    for i in range(n):
+        a, b = huelle[i], huelle[(i + 1) % n]
+        kante = b - a
+        seite = kante.x * (punkt.y - a.y) - kante.y * (punkt.x - a.x)
+        if seite < 0:
+            innen = False
+        naechste = min(naechste, _abstand_strecke(punkt, a, b))
+    return naechste if innen else -naechste
+
+
 def knie_punkt(huefte: pygame.Vector2, fuss: pygame.Vector2,
                ober: float, unter: float, seite: float) -> pygame.Vector2:
     """Wo das Knie steht, wenn Huefte und Fuss feststehen.
@@ -138,6 +210,9 @@ class Bein:
                  ober: float, unter: float) -> None:
         self.huefte_lokal = pygame.Vector2(huefte_lokal)
         self.ruhe_lokal = pygame.Vector2(ruhe_lokal)
+        # Die Ruhelage, wie sie in der Kartendatei steht. `ruhe_lokal`
+        # rueckt bei Beinverlust nach, `grund_ruhe` bleibt der Bezug.
+        self.grund_ruhe = pygame.Vector2(ruhe_lokal)
         self.seite = seite                  # +1 oder -1, wohin das Knie geht
         self.ober, self.unter = float(ober), float(unter)
 
@@ -215,12 +290,21 @@ class Gangwerk:
     """Alle Beine einer Maschine, und der Rumpf, den sie tragen."""
 
     def __init__(self, beine: list[Bein], pos, kurs: float = 0.0,
-                 takt: float = 1.0, tempo: float = 0.0) -> None:
+                 takt: float = 1.0, tempo: float = 0.0,
+                 fuss_breite: float = 20.0, rumpf_breite: float = 400.0,
+                 dreh: float = 0.0, schwerpunkt=None) -> None:
         self.beine = beine
         self.pos = pygame.Vector2(pos)
         self.kurs = float(kurs)
         self.takt_faktor = float(takt)
         self.tempo_max = float(tempo) or K.WANDLER["tempo"]
+        # Die Drehrate der Bauklasse. Sie stand vorher nur im Bauplan und
+        # wurde hier nie gelesen - dadurch drehten sich alle Maschinen
+        # gleich schnell, egal was in ihrer Datei stand.
+        self.dreh_max = float(dreh) or K.WANDLER["dreh"]
+        # Wo die Masse sitzt, im Rumpfkoordinatensystem. Nicht zwingend in
+        # der geometrischen Mitte - siehe Bauplan.schwerpunkt.
+        self.schwerpunkt_lokal = pygame.Vector2(schwerpunkt or (0, 0))
 
         # Alles, was sich nach der Beinlaenge richtet, einmal hier. Kurze
         # Beine machen kurze Schritte, lange machen lange - das ist der
@@ -229,6 +313,9 @@ class Gangwerk:
         self.reichweite = (sum(b.reichweite for b in beine) / len(beine)
                            if beine else 1.0)
         self.schritt_max = self.reichweite * K.GANG["schritt_anteil"]
+        # Auflage eines Fusses und der Rand, der beim Treten bleiben muss.
+        self.fuss_halt = fuss_breite * K.GANG["fuss_halt"]
+        self.halt_mindest = rumpf_breite * K.GANG["halt_mindest"]
 
         # Regelgroesse fuer die Schrittweite, siehe K.GANG["regelung"].
         self.korrektur = K.GANG["regel_start"]
@@ -239,6 +326,14 @@ class Gangwerk:
         self.lenkung = 0.0          # -1..1
         self.kurs_soll = float(kurs)
         self.ueberlast = False
+
+        # Stuetzflaeche und Umkippen. `halt` ist der Abstand des Rumpfes zum
+        # Rand der Flaeche, die seine stehenden Fuesse aufspannen: positiv
+        # heisst getragen, negativ heisst, er faellt gleich.
+        self.halt = 0.0
+        self.kipp_rest = 0.0
+        self.umgekippt = False
+        self.kipp_richtung = pygame.Vector2()
 
         self.wank = 0.0             # Schraeglage aus ungleichem Stand
         self.atem = 0.0             # das leichte Heben und Senken im Gang
@@ -266,6 +361,39 @@ class Gangwerk:
         for rang, b in enumerate(rechts):
             b.gruppe = (rang + 1) % 2
         self.gruppen = sorted({b.gruppe for b in self.beine}) or [0]
+
+    def ruhe_ausgleichen(self) -> None:
+        """Ruecken die uebrigen Fuesse nach, wenn ein Bein ausfaellt.
+
+        Ohne das friert eine Maschine beim ersten Beinverlust ein: die
+        Stuetzflaeche der verbliebenen Fuesse liegt neben dem Schwerpunkt,
+        also darf kein Bein mehr abheben, also steht sie. Das ist zu hart -
+        ein Vierbeiner auf drei Beinen humpelt, er erstarrt nicht.
+
+        Nachgerueckt wird nur zur Haelfte (`K.GANG["ausgleich"]`) und nie
+        weiter, als das Bein reicht. Beides zusammen haelt den Fall offen,
+        auf den es ankommt: ein Sechsbeiner mit nur noch zwei hinteren
+        Beinen koennte sonst die Fuesse ganz nach vorn unter seine Masse
+        stellen und weiterlaufen. Das tut eine Maschine dieser Groesse
+        nicht. Sie kippt.
+        """
+        heil = self.heile
+        if not heil:
+            return
+        mittel = pygame.Vector2()
+        for b in heil:
+            mittel += b.grund_ruhe
+        mittel /= len(heil)
+        fehlt = (self.schwerpunkt_lokal - mittel) * K.GANG["ausgleich"]
+        for b in self.beine:
+            ziel = b.grund_ruhe + fehlt
+            # Nicht weiter, als das Bein von seiner Huefte aus reicht.
+            arm = ziel - b.huefte_lokal
+            weite = b.reichweite * K.BEIN["spreizen"] * 1.25
+            if arm.length() > weite:
+                arm.scale_to_length(weite)
+                ziel = b.huefte_lokal + arm
+            b.ruhe_lokal.update(ziel)
 
     def setzen(self, pos, kurs: float) -> None:
         """Stellt die Maschine hin: alle Fuesse in ihre Ruhelage."""
@@ -302,16 +430,46 @@ class Gangwerk:
         hz = max(0.05, hz)
         return hz, len(self.gruppen) / hz
 
+    # ---- Standfestigkeit -------------------------------------------------
+    def stuetzflaeche(self, ohne: "Bein" = None) -> list:
+        """Die Flaeche, die die stehenden Fuesse aufspannen.
+
+        `ohne` laesst ein Bein weg - damit laesst sich vorher fragen, ob die
+        Maschine noch steht, *wenn* dieses Bein abhebt.
+        """
+        return _konvexe_huelle([b.fuss for b in self.beine
+                                if b.steht and b is not ohne])
+
+    @property
+    def schwerpunkt(self) -> pygame.Vector2:
+        """Der Punkt, der getragen werden muss - in Weltkoordinaten."""
+        return self.pos + _dreh(self.schwerpunkt_lokal, self.kurs)
+
+    def halt_mit(self, ohne: "Bein" = None) -> float:
+        """Wie sicher der Rumpf steht - mit oder ohne ein bestimmtes Bein.
+
+        Zur Flaeche kommt die Auflage der Fuesse dazu: ein Fuss ist kein
+        Punkt, sondern eine Platte, und genau deshalb kann ein Zweibeiner
+        ueberhaupt stehen.
+        """
+        huelle = self.stuetzflaeche(ohne)
+        if not huelle:
+            return -1e9
+        return halt_abstand(self.schwerpunkt, huelle) + self.fuss_halt
+
     # ---- Der Gang --------------------------------------------------------
     def schritt(self, dt: float, welt=None, klang=None, stoss=None) -> None:
         if dt <= 0.0:
+            return
+        if self.umgekippt:
+            self._kippen_weiter(dt)
             return
         g = K.GANG
         w = K.WANDLER
 
         # 1. Kurswunsch. Die Lenkung dreht nur den *Wunsch*; wie der Rumpf
         #    wirklich steht, ergibt sich weiter unten aus den Fuessen.
-        dreh_max = w["dreh"] * (K.WANDLER["ueberlast"] if self.ueberlast else 1.0)
+        dreh_max = self.dreh_max * (w["ueberlast"] if self.ueberlast else 1.0)
         self.kurs_soll += self.lenkung * dreh_max * dt
 
         # 2. Gangtakt. Er laeuft nur, wenn auch Schub anliegt - eine
@@ -350,12 +508,13 @@ class Gangwerk:
         # 6. Was sich daraus ergibt: gemessenes Tempo, Wanken, Atem.
         self._nachwirkungen(dt)
         self._regeln(dt, tempo_soll, laeuft)
+        self._standfestigkeit(dt, klang, stoss)
 
     # ---- Schritte auswaehlen ---------------------------------------------
     def _laufrichtung(self, vorausschau: float) -> pygame.Vector2:
         """Wohin ein Schritt zielt. Nimmt die Drehung ein Stueck vorweg,
         damit die Fuesse in die Kurve greifen statt ihr nachzulaufen."""
-        kurs = self.kurs_soll + (self.lenkung * K.WANDLER["dreh"]
+        kurs = self.kurs_soll + (self.lenkung * self.dreh_max
                                  * vorausschau * K.GANG["dreh_greifen"])
         r = math.radians(kurs)
         richtung = pygame.Vector2(math.cos(r), math.sin(r))
@@ -415,7 +574,21 @@ class Gangwerk:
         """
         if not b.heil or not b.steht:
             return False
-        return len(self.stehende) - 1 >= K.GANG["stand_mindest"]
+        if len(self.stehende) - 1 < K.GANG["stand_mindest"]:
+            return False
+        # Und die eigentliche Frage: traegt es noch, wenn dieses Bein
+        # abhebt? Die blosse Anzahl sagt das nicht - zwei Fuesse hinten
+        # tragen einen Rumpf nicht, dessen Masse davor liegt.
+        #
+        # Das gilt allerdings nur fuer **statisch** stehende Maschinen. Wer
+        # nur zwei Beine hat, steht beim Schritt zwangslaeufig auf einem
+        # Fuss und kann die Bedingung nie erfuellen - er faengt sich im
+        # Fallen wieder, so wie jeder Zweibeiner. Ihn haelt nicht die
+        # Stuetzflaeche, sondern die Zeit: bleibt er zu lange ohne Halt,
+        # kippt er (siehe _standfestigkeit).
+        if len(self.heile) < K.GANG["statisch_ab"]:
+            return True
+        return self.halt_mit(ohne=b) >= self.halt_mindest
 
     def _gruppe_treten(self, gruppe: int, tempo_soll: float,
                        zyklus: float) -> None:
@@ -537,6 +710,60 @@ class Gangwerk:
         fehler = max(-0.5, min(0.5, fehler))
         self.korrektur *= 1.0 + fehler * g["regelung"] * dt
         self.korrektur = max(g["regel_min"], min(g["regel_max"], self.korrektur))
+
+    def _standfestigkeit(self, dt: float, klang, stoss) -> None:
+        """Prueft, ob der Rumpf noch ueber seiner Stuetzflaeche liegt.
+
+        Das ist die Antwort auf die Frage, warum eine Maschine mit vier von
+        sechs verlorenen Beinen nicht einfach auf den zwei hinteren
+        weiterlaeuft: ihr Schwerpunkt liegt dann weit vor der Strecke, die
+        diese beiden Fuesse aufspannen. Sie kippt nach vorn.
+
+        Es steht dafuer keine Regel je Beinzahl im Code. Es ist Geometrie.
+        """
+        self.halt = self.halt_mit()
+        if self.halt >= 0.0:
+            self.kipp_rest = 0.0
+            return
+        self.kipp_rest += dt
+        if self.kipp_rest < K.WANDLER["kipp_zeit"]:
+            return
+
+        self.umgekippt = True
+        self.schub = self.lenkung = 0.0
+        # Wohin sie faellt: vom Mittel der Standfuesse weg.
+        huelle = self.stuetzflaeche()
+        if huelle:
+            mitte = pygame.Vector2()
+            for f in huelle:
+                mitte += f
+            mitte /= len(huelle)
+            richtung = self.schwerpunkt - mitte
+            if richtung.length_squared() > 1e-6:
+                self.kipp_richtung = richtung.normalize()
+        self.kipp_uhr = K.WANDLER["kipp_dauer"]
+        if stoss is not None:
+            stoss(K.KAMERA["ruckeln_max"])
+        if klang is not None:
+            klang("rumpf_stoss", 1.0)
+
+    def _kippen_weiter(self, dt: float) -> None:
+        """Der Sturz selbst: sie sackt in ihre Kipprichtung und bleibt liegen."""
+        rest = getattr(self, "kipp_uhr", 0.0)
+        if rest <= 0.0:
+            return
+        anteil = min(1.0, dt / rest)
+        self.pos += self.kipp_richtung * (self.reichweite * 0.35 * anteil)
+        self.wank += (K.WANDLER["kipp_wanken"] - self.wank) * min(1.0, dt * 2.0)
+        self.kipp_uhr = max(0.0, rest - dt)
+
+    def aufrichten(self) -> None:
+        """Wieder auf die Beine stellen. Fuer Reparatur und fuer den Test."""
+        self.umgekippt = False
+        self.kipp_rest = 0.0
+        self.kipp_uhr = 0.0
+        self.wank = 0.0
+        self.setzen(self.pos, self.kurs)
 
     # ---- Wenn ein Fuss aufsetzt --------------------------------------------
     def _aufgesetzt(self, b: Bein, welt, klang, stoss) -> None:

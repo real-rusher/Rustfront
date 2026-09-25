@@ -3,77 +3,88 @@ art: wandler
 klasse: reaver
 grund: deck
 
-# REAVER - der Standard. Vier Beine, vier Decks, 19 auf 13 Kacheln.
+# REAVER - der Standard. Vier Beine, vier Decks.
 #
-# Vier Beine heisst Kreuzgang: vorn links tritt mit hinten rechts, und zwei
-# Fuesse tragen immer. Deshalb laeuft er ruhig, deshalb bricht ihm ein
-# verlorenes Bein nicht das Genick - und deshalb ist er langsamer als ein
-# Warhound, denn er muss mehr Masse ueber jeden Schritt heben.
+# Bauform eines Schlachtschiffs: breiter Kasten mit ausgestellten
+# Schultern, stumpfer Bug. Die Form eines Dings, das Feuer aushalten soll,
+# nicht eines, das ausweicht.
 #
-# Vom Reaktor im Unterdeck bis zum Geschuetz ganz oben sind es drei Treppen.
-# Genau diese Sekunden sind der Preis dafuer, dass er mehr traegt.
+# Vier Beine im Kreuzgang: drei tragen immer, waehrend eines tritt.
+# Deshalb steht er statisch und kann auf der Stelle halten, ohne zu
+# balancieren. Eine volle Drehung dauert 33 Sekunden.
+#
+# Er vertraegt ein verlorenes Bein. Zwei auf derselben Seite nicht: dann
+# liegt sein Rumpf neben der Flaeche, die die uebrigen Fuesse aufspannen.
 
-bein: -3.4 -4.6 links
-bein: -3.4  4.6 rechts
-bein:  3.4 -4.6 links
-bein:  3.4  4.6 rechts
+bein: -5.0 -5.4 links
+bein: -5.0  5.4 rechts
+bein:  4.2 -5.4 links
+bein:  4.2  5.4 rechts
 
 --- ebene 0 ---
-   ###########
-  #...........#
-  #....A.......#
- #.A............#
- #...............#
-#........>.......#
-#..R.E.....Y......#
-#................#
- #...............#
- #.A............#
-  #....A.......#
-  #...........#
-   ###########
+   #############
+  #.............##
+ #................#
+#...A....A.........##
+#....................#
+#.....................#
+#..........>..........#
+#..R..E......Y........#
+#.....................#
+#.....................#
+#....................#
+#...A....A.........##
+ #................#
+  #.............##
+   #############
 
 --- ebene 1 ---
  
-    #########
-   #.........#
-  #.....M.....#
-  #..W.....L...#
- #.......<......#
- #....B..>.......#
- #..............#
-  #..M.....L...#
-  #.....M.....#
-   #.........#
-    #########
+ 
+  ###############
+  #.......M......##
+  #................#
+  #..W........L.....#
+  #........<........#
+  #....B...>........#
+  #.................#
+  #..M........L.....#
+  #................#
+  #.......M......##
+  ###############
+ 
  
 
 --- ebene 2 ---
  
  
-     #######
-    #....M..#
-   #..K......##
-  #............#
-  #.B....<.T....#
-  #......>.....#
-   #..F......##
-    #....M..#
-     #######
+ 
+   ##############
+   #.......M.....#
+   #...K..........##
+   #...............#
+   #.B.....<..T....#
+   #.......>.......#
+   #...F..........##
+   #.......M.....#
+   ##############
+ 
  
  
 
 --- ebene 3 ---
  
  
-     #######
-    #.......#
-   #.G......G##
-  #............#
-  #.............#
-  #......<.....#
-   #.G......G##
-    #.......#
-     #######
+ 
+ 
+    ############
+    #G.....G....##
+    #.............#
+    #.............#
+    #......<......#
+    #G.....G....##
+    ############
+ 
+ 
  
  

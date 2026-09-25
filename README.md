@@ -11,7 +11,7 @@ auf den Decks, wenn geentert wird. Beide Spielmodi teilen dieselbe
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.20.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.21.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -62,16 +62,24 @@ Daraus faellt alles Weitere von selbst an, ohne eine Zeile Sondercode:
 * Zwei Beine gehen im Wechselschritt, vier im Kreuzgang, sechs im Dreifuss -
   abgeleitet aus der Bauart, nicht aus einer Tabelle je Beinzahl.
 
-Drei Bauklassen nach dem Vorbild der Titanen: **Warhound** (2 Beine, 3
-Decks, schnell, wankt), **Reaver** (4 Beine, 4 Decks, der Standard),
-**Imperator** (6 Beine, 6 Decks, vertraegt drei verlorene Beine und passt
-nicht auf den Bildschirm). Jede von ihnen ist eine **Textdatei** in
-`karten/wandler/` - Decks als Text, Beine als Zeilen. Es gibt keine Zeile
-Python, die etwas ueber einen bestimmten Wandler weiss.
+**Sie kippt um, wenn ihre Fuesse sie nicht mehr tragen.** Eine Laufmaschine
+steht, solange ihr Schwerpunkt ueber der Flaeche liegt, die ihre stehenden
+Fuesse aufspannen. Es zaehlt deshalb nicht, *wie viele* Beine fehlen,
+sondern *welche*: ein Imperator faehrt mit zwei diagonal uebrigen Beinen
+weiter und kippt mit zwei hinteren nach vorn.
+
+Vier eigene Basen, jede mit eigenem Umriss und eigenem Fahrverhalten:
+**Warhound** (2 Beine, Laufvogel, dreht sich in 11 s um), **Reaver**
+(4 Beine, Schlachtschiff), **Imperator** (6 Beine, wandernde Kathedrale,
+109 s fuer eine Drehung), **Hundertfuss** (8 Beine, 45 Kacheln lang, ueber
+vier Minuten fuer eine Drehung - gebaut, um geradeaus zu gehen). Jede ist
+eine **Textdatei** in `karten/wandler/` - Decks als Text, Beine als Zeilen,
+Umriss als Profil. Es gibt keine Zeile Python, die etwas ueber einen
+bestimmten Wandler weiss.
 
 **Ansehen und selbst fahren:** `PROBELAUF.bat` (Windows) oder
-`PROBELAUF.command` (Mac) doppelklicken. W/S Schub, A/D Kurs, 1-3 Klasse
-wechseln, **4 laesst ein Bein ausfallen**. Die Anzeige zeigt befohlenes und
+`PROBELAUF.command` (Mac) doppelklicken. W/S Schub, A/D Kurs, 1-4 Basis
+wechseln, **5 laesst ein Bein ausfallen**, 6 richtet wieder auf. Die Anzeige zeigt befohlenes und
 gemessenes Tempo getrennt - das gemessene wird nirgends gesetzt, es ist der
 Weg, den der Rumpf wirklich zurueckgelegt hat.
 
@@ -167,7 +175,7 @@ mitgeschleppter Mehrspieler haette jede dieser Entscheidungen doppelt so
 teuer gemacht.
 
 **Die Versionsnummern 0.16.0 bis 0.19.1 sind dort vergeben.** Der
-Hauptzweig macht bei **0.21.0** weiter - keine Nummer wird zweimal
+Hauptzweig macht bei **0.22.0** weiter - keine Nummer wird zweimal
 benutzt, auch nicht ueber Zweige hinweg.
 
 ## Starten
@@ -586,7 +594,8 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.19.0 | Runden ueber das Internet per UPnP (nur auf `multiplayer-test`) |
 | 0.19.1 | Knappe Munition wirkt wirklich. **Letzter Stand des Mehrspielers** (nur auf `multiplayer-test`) |
 | 0.20.0 | **M1:** Karten aus Dateien mit Marken und Pruefer; der Wandler laeuft, drei Bauklassen, Rumpf und Beine aus Text |
-| 0.21.0 | *(frei)* Naechste Nummer, siehe M2 im Weltenplan |
+| 0.21.0 | Riesige Beine, Umkippen nach Stuetzflaeche, vier eigene Basen, grosse Karte; Vignette und Kameraruckeln repariert |
+| 0.22.0 | *(frei)* Naechste Nummer, siehe M2 im Weltenplan |
 
 ## Anpassen
 

@@ -688,8 +688,20 @@ WANDLER = dict(
 
     # ---- Masse ------------------------------------------------------
     radius=46.0,              # Rumpfradius fuer grobe Abfragen
-    stoss=2.1,                # Kameraruckeln je aufsetzendem Fuss
-    stoss_masse=0.55,         # Aufschlag je Gewichtsklasse
+    # Kameraruckeln je aufsetzendem Fuss. Klein, und das ist wichtig:
+    # bei 2,3 Gruppen je Sekunde klingt ein Stoss nie ab, bevor der
+    # naechste kommt. Gemessen lag das Ruckeln dauerhaft bei 4 Pixeln -
+    # das ist kein Stampfen mehr, das ist ein flackerndes Bild.
+    stoss=0.5,
+    stoss_masse=0.25,         # Aufschlag je Gewichtsklasse
+    # ---- Umkippen --------------------------------------------------
+    # Eine Laufmaschine steht, solange ihr Schwerpunkt ueber der Flaeche
+    # liegt, die ihre stehenden Fuesse aufspannen. Faellt er heraus, kippt
+    # sie - und zwar unabhaengig davon, wie viele Beine noch heil sind.
+    # Zwei Beine hinten tragen einen Rumpf nicht, dessen Masse davor liegt.
+    kipp_zeit=1.1,            # so lange haelt sie sich noch, dann faellt sie
+    kipp_wanken=14.0,         # Schraeglage beim Kippen, in Grad
+    kipp_dauer=2.2,           # so lange dauert der Sturz
 )
 
 # Wie der Rumpf von aussen aussieht. Gebaut wird er aus dem Grundriss der
@@ -702,7 +714,7 @@ WANDLER_BILD = dict(
     winkel=2,                 # so viele Warnwinkel am Bug
     winkel_deckkraft=96,      # abgenutzt, nicht frisch lackiert
     zoom=2,                   # Aussenansicht: 1 Bildpunkt je so viele Weltpunkte
-    zoom_grenzen=(1, 3),
+    zoom_grenzen=(1, 5),
 )
 
 # Gangarten. Der Takt sagt, wie viele Fuesse je Sekunde aufsetzen; die
@@ -741,17 +753,54 @@ GANG = dict(
     zwang=1.9,                # ab diesem Vielfachen von schritt_max tritt ein
                               # Bein auch ausser der Reihe (Notschritt)
     stand_mindest=1,          # so viele Fuesse bleiben immer am Boden
+    # Die eigentliche Bedingung ist aber nicht die Anzahl, sondern die
+    # **Stuetzflaeche**: die Flaeche, die die stehenden Fuesse aufspannen,
+    # verbreitert um die Auflage jedes Fusses. Ein Bein darf nur abheben,
+    # wenn der Rumpf danach immer noch darueber liegt.
+    fuss_halt=0.55,           # Auflage eines Fusses, Vielfaches der Fussbreite
+    halt_mindest=0.02,        # so viel Rand bleibt, Anteil der Rumpfbreite
+    # Faellt ein Bein aus, ruecken die uebrigen Fuesse nach - so weit sie
+    # reichen. Eine beschaedigte Maschine verteilt ihr Gewicht um und
+    # humpelt weiter, statt einzufrieren.
+    #
+    # Nur **teilweise**, und das ist der Punkt: voll nachgerueckt koennte
+    # ein Sechsbeiner auf zwei hinteren Beinen weiterlaufen, indem er die
+    # Fuesse ganz nach vorn unter die Masse stellt. Das tut eine Maschine
+    # dieser Groesse nicht - sie kippt.
+    ausgleich=0.5,            # so viel vom Fehlbetrag holen die Fuesse auf
+    # Ab so vielen heilen Beinen gilt die Stuetzflaeche auch beim Treten.
+    #
+    # **Vier**, und das folgt zwingend: wer drei Beine hat und eines hebt,
+    # steht auf zweien - auf einer Strecke, nicht auf einer Flaeche. Eine
+    # Maschine mit drei Beinen kann also gar nicht statisch gehen, so wenig
+    # wie eine mit zweien. Sie muss balancieren.
+    #
+    # Wer balanciert, den haelt nicht die Flaeche, sondern die Zeit: bleibt
+    # er laenger als WANDLER["kipp_zeit"] ohne Halt, faellt er. Damit
+    # humpelt ein angeschlagener Vierbeiner weiter, und ein Sechsbeiner mit
+    # nur noch zwei hinteren Beinen kippt trotzdem - denn der bekommt
+    # seinen Halt auch zwischen zwei Schritten nicht zurueck.
+    statisch_ab=4,
     dreh_greifen=0.55,        # wie stark ein Schritt die Drehung vorwegnimmt
 )
 
 # Bein: Geometrie und Aussehen. Laengen in Pixeln, alles je Klasse
 # ueberschreibbar.
 BEIN = dict(
-    # Laengen in Welt-Pixeln. Sie muessen zum Rumpf passen: ein Rumpf von
-    # 13 Kacheln ist 416 Pixel breit, also greift ein Bein rund 150 Pixel
-    # ueber ihn hinaus. Zu kurze Beine sehen aus wie Raeder unter einer
-    # Kiste, zu lange wie ein Insekt.
-    **BEIN_GRUNDMASS,         # ober, unter, Dicken, Fuss, Huefte
+    # **Die Beinmasse sind Anteile der halben Rumpfbreite, keine festen
+    # Pixel.** Das ist der Unterschied zwischen einem Tragwerk und
+    # Spaghetti: ein Bein, das eine Maschine von 600 Pixeln Breite traegt,
+    # ist keine 18 Pixel dick. Es ist ein riesiges mechanisches Bauteil,
+    # so dick wie ein Viertel des Rumpfes und so lang wie dieser breit.
+    #
+    # Absolut gesetzte Werte in einer Kartendatei gewinnen weiterhin.
+    **BEIN_GRUNDMASS,         # Rueckfall, falls nichts gerechnet wird
+    ober_anteil=0.68,         # Huefte bis Knie, Anteil der halben Rumpfbreite
+    unter_anteil=0.86,        # Knie bis Fuss
+    dicke_anteil=0.27,        # Dicke des Oberschenkels
+    dicke_unter_anteil=0.72,  # davon die Dicke des Schienbeins
+    fuss_anteil=1.75,         # davon die Kantenlaenge der Fussplatte
+    huefte_anteil=1.35,       # davon die Schulter
     knie_mindest=0.06,        # so weit bleibt das Bein vom Durchstrecken weg
     spreizen=0.58,            # Ruhepunkt des Fusses, Anteil der Reichweite
     schatten=0.62,            # Deckkraft des Beinschattens
@@ -763,27 +812,37 @@ BEIN = dict(
 # Bauklassen. Sie legen nur Voreinstellungen fest - was in der Kartendatei
 # steht, gewinnt. Decks und Beine kommen aus der Datei, hier steht, was
 # eine Klasse *bedeutet*.
+# Bauklassen. Jede ist eine **eigene Basis**, kein anders grosser Bauklotz:
+# eigener Umriss, eigene Beinzahl, eigenes Fahrverhalten. Was hier steht,
+# sind Voreinstellungen - was in der Kartendatei steht, gewinnt.
+#
+# Das Drehen unterscheidet sie am staerksten, und zwar um mehr als eine
+# Zehnerpotenz. Ein Warhound dreht sich auf der Stelle um; ein Hundertfuss
+# braucht dafuer Minuten und ist gebaut, um geradeaus zu gehen. Das ist
+# keine Schikane, das ist die Bauform: Masse mal Hebel.
 WANDLER_KLASSEN = {
     "warhound": dict(
         name="WARHOUND", gewicht=1,
-        tempo=78.0, dreh=38.0, bein=dict(ober=62.0, unter=72.0,
-                                         dicke_ober=14, dicke_unter=10,
-                                         fuss=17, huefte=15),
-        takt=1.25,            # Faktor auf GANG-Takt: leicht laeuft schneller
+        tempo=78.0, dreh=34.0, takt=1.25,
+        umriss="raptor",
     ),
     "reaver": dict(
         name="REAVER", gewicht=2,
-        tempo=54.0, dreh=26.0, bein=dict(ober=78.0, unter=90.0,
-                                         dicke_ober=18, dicke_unter=13,
-                                         fuss=22, huefte=20),
-        takt=1.0,
+        tempo=54.0, dreh=11.0, takt=1.0,
+        umriss="schlachtschiff",
     ),
     "imperator": dict(
         name="IMPERATOR", gewicht=3,
-        tempo=33.0, dreh=15.0, bein=dict(ober=104.0, unter=120.0,
-                                         dicke_ober=24, dicke_unter=17,
-                                         fuss=30, huefte=27),
-        takt=0.72,
+        tempo=33.0, dreh=3.5, takt=0.72,
+        umriss="festung",
+    ),
+    "hundertfuss": dict(
+        # Gebaut, um geradeaus zu gehen, und fuer sonst nichts. Eine volle
+        # Drehung dauert ueber zwei Minuten - wer den Kurs aendern will,
+        # plant ihn vorher.
+        name="HUNDERTFUSS", gewicht=3,
+        tempo=44.0, dreh=1.4, takt=0.9,
+        umriss="wurm",
     ),
 }
 

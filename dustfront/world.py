@@ -45,7 +45,13 @@ class Ebene:
         self.breite, self.hoehe, self.index = breite, hoehe, index
         self.kacheln = [K.LEER] * (breite * hoehe)
         self.variante = [0] * (breite * hoehe)     # fuer abwechselnde Bodenbilder
-        self.dekale = pygame.Surface((breite * K.TILE, hoehe * K.TILE), pygame.SRCALPHA)
+        # Blut, Russ und Einschlaege. **Erst bei Bedarf angelegt.**
+        #
+        # Eine Flaeche ueber die ganze Karte kostet vier Byte je Bildpunkt:
+        # bei 300 auf 200 Kacheln waeren das 245 Megabyte, nur damit sie
+        # bereitliegt. Die allermeisten Karten bekommen nie einen Fleck, und
+        # die, die einen bekommen, bekommen ihn spaeter.
+        self._dekale: pygame.Surface | None = None
         # Benannte Punkte aus der Karte: "start", "rampe", "steuerstand", ...
         # Damit muss kein Code mehr wissen, wo etwas liegt - es steht im Text.
         self.marken: dict[str, pygame.Vector2] = {}
@@ -127,9 +133,18 @@ class Ebene:
     def pixel_hoehe(self) -> int:
         return self.hoehe * K.TILE
 
+    @property
+    def dekale(self) -> "pygame.Surface | None":
+        """Die Fleckenflaeche, oder None, solange es keine Flecken gibt."""
+        return self._dekale
+
     def dekal(self, bild: pygame.Surface, x: float, y: float) -> None:
         """Brandfleck, Blut, Einschlag. Bleibt liegen, kostet nichts."""
-        self.dekale.blit(bild, (x - bild.get_width() / 2, y - bild.get_height() / 2))
+        if self._dekale is None:
+            self._dekale = pygame.Surface(
+                (self.breite * K.TILE, self.hoehe * K.TILE), pygame.SRCALPHA)
+        self._dekale.blit(bild, (x - bild.get_width() / 2,
+                                 y - bild.get_height() / 2))
 
 
 def hoehen_staffel(decks: int, mit_boden: bool = True) -> list[float]:

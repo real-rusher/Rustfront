@@ -1,0 +1,64 @@
+name: Hundertfuss
+art: wandler
+klasse: hundertfuss
+grund: deck
+
+# HUNDERTFUSS - Belagerungslaeufer. Acht Beine, drei Decks, 45 Kacheln lang.
+#
+# Gebaut, um geradeaus zu gehen, und fuer sonst nichts. Eine volle Drehung
+# dauert ueber vier Minuten: bei dieser Laenge muessen die Fuesse einen
+# riesigen Bogen laufen, und die Maschine hat keinen Hebel dafuer. Wer mit
+# ihm den Kurs aendert, tut das eine Viertelstunde vorher.
+#
+# Dafuer steht er unerschuetterlich: acht Fuesse spannen eine Flaeche auf,
+# aus der ein Rumpf kaum herausfaellt.
+#
+# Die Einschnuerungen im Umriss sind die Gelenke zwischen den Segmenten.
+
+bein: -14.0 -3.2 links
+bein: -14.0  3.2 rechts
+bein:  -7.0 -3.6 links
+bein:  -7.0  3.6 rechts
+bein:   0.0 -3.6 links
+bein:   0.0  3.6 rechts
+bein:   7.0 -3.2 links
+bein:   7.0  3.2 rechts
+
+--- ebene 0 ---
+                 #     ##      #
+  ###   ##### ###.## ##..######.##  ####
+##...###..A..#...A..#...A......A..##....##
+#.........................................#
+#..........................................##
+#.R...E...............>...............Y.....#
+#..........................................##
+#.........................................#
+##...###..A..#...A..#...A......A..##....##
+  ###   ##### ###.## ##..######.##  ####
+                 #     ##      #
+
+--- ebene 1 ---
+ 
+                        #
+  ###   ####   ##### ###.## ######  ###
+  #..###M...###....M#.....M#....M.##..M##
+  #.........M............................##
+  #...................<...................#
+  #...................>..................##
+  #..###...L###....W#......#.B....##...##
+  ###   ####   ##### ###.## ######  ###
+                        #
+ 
+
+--- ebene 2 ---
+ 
+ 
+                        #
+   ##   ####   ##### ###.## ######  ###
+   #G###...G###...G.#....G.#.....K##...##
+   #...................................T#
+   #G###...G###...G.#.<..G.#.....F##...##
+   ##   ####   ##### ###.## ######  ###
+                        #
+ 
+ 

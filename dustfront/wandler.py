@@ -69,19 +69,71 @@ class Bauplan:
         self.dreh = karte.zahl("dreh", vor.get("dreh", K.WANDLER["dreh"]))
         self.takt = karte.zahl("takt", vor.get("takt", 1.0))
 
-        self.bein_masse = dict(K.BEIN)
-        self.bein_masse.update(vor.get("bein", {}))
-        for schluessel in ("ober", "unter", "dicke_ober", "dicke_unter",
-                           "fuss", "huefte", "spreizen"):
-            roh = karte.text("bein_" + schluessel, "")
-            if roh:
-                self.bein_masse[schluessel] = float(roh)
-
         self.decks = len(karte.bloecke)
+        self.bein_masse = self._beinmasse_rechnen(karte, vor)
+
+        # Wo die Masse wirklich sitzt, in Kacheln von der Rumpfmitte aus.
+        #
+        # Das ist keine Feinheit. Ein Laufvogel traegt seine Beine hinten
+        # und balanciert den Koerper darueber - haelt man seinen
+        # Schwerpunkt in der geometrischen Mitte, liegt er einen halben
+        # Rumpf vor den Fuessen und faellt nach vorn. Genau das ist beim
+        # Bauen passiert, und das Modell hatte recht: so etwas steht nicht.
+        roh = karte.text("schwerpunkt", vor.get("schwerpunkt", "0 0"))
+        teile = str(roh).split()
+        try:
+            self.schwerpunkt = pygame.Vector2(float(teile[0]) * K.TILE,
+                                              float(teile[1]) * K.TILE)
+        except (ValueError, IndexError):
+            raise KartenFehler("%s: schwerpunkt: %r - erwartet zwei Zahlen"
+                               % (karte.name, roh))
         self.beine = self._beine_lesen(karte)
         if not self.beine:
             raise KartenFehler("%s: kein einziges `bein:` - eine Maschine "
                                "ohne Beine kann nicht laufen" % karte.name)
+
+    # ---- Beinmasse -------------------------------------------------------
+    def _beinmasse_rechnen(self, karte, vor) -> dict:
+        """Wie gross die Beine sind - abgeleitet aus dem Rumpf.
+
+        **Das ist der Unterschied zwischen einem Tragwerk und Spaghetti.**
+        Feste Pixelwerte sehen bei einem Warhound noch brauchbar aus und bei
+        einem Imperator laecherlich: ein Bein, das eine Maschine von sechs
+        Metern Rumpfbreite traegt, ist kein Stock. Es ist ein riesiges
+        mechanisches Bauteil.
+
+        Gerechnet wird aus der **halben Rumpfbreite** des untersten Decks:
+        ein Bein ist ungefaehr so lang wie der Rumpf breit ist, und sein
+        Oberschenkel ein gutes Viertel davon dick. Wer es anders will,
+        schreibt `bein_ober:` und so weiter in die Kartendatei - das gewinnt
+        immer.
+        """
+        block = karte.bloecke[0]
+        breite = max(len(z) for z in block) * K.TILE
+        hoehe = len(block) * K.TILE
+        # Massgebend ist die **schmale** Achse, nicht die lange. Wie hoch
+        # eine Maschine auf ihren Beinen steht, haengt daran, wie breit sie
+        # ist, nicht daran, wie lang - sonst bekaeme ein Belagerungslaeufer
+        # von 45 Kacheln Laenge Beine wie Bruecken.
+        halb = min(breite, hoehe) / 2.0
+
+        m = dict(K.BEIN)
+        m["ober"] = halb * K.BEIN["ober_anteil"]
+        m["unter"] = halb * K.BEIN["unter_anteil"]
+        m["dicke_ober"] = max(4, int(round(halb * K.BEIN["dicke_anteil"])))
+        m["dicke_unter"] = max(3, int(round(m["dicke_ober"]
+                                            * K.BEIN["dicke_unter_anteil"])))
+        m["fuss"] = max(6, int(round(m["dicke_ober"] * K.BEIN["fuss_anteil"])))
+        m["huefte"] = max(6, int(round(m["dicke_ober"]
+                                       * K.BEIN["huefte_anteil"])))
+        m.update(vor.get("bein", {}))
+        for schluessel in ("ober", "unter", "dicke_ober", "dicke_unter",
+                           "fuss", "huefte", "spreizen"):
+            roh = karte.text("bein_" + schluessel, "")
+            if roh:
+                m[schluessel] = float(roh)
+        m["rumpf_breite"] = min(breite, hoehe)
+        return m
 
     # ---- Beine ---------------------------------------------------------
     def _beine_lesen(self, karte) -> list[dict]:
@@ -159,7 +211,11 @@ class Wandler:
         beine = [Bein(b["huefte"], b["ruhe"], b["seite"], m["ober"], m["unter"])
                  for b in plan.beine]
         self.gangwerk = Gangwerk(beine, pos, kurs,
-                                 takt=plan.takt, tempo=plan.tempo)
+                                 takt=plan.takt, tempo=plan.tempo,
+                                 fuss_breite=m["fuss"],
+                                 rumpf_breite=m["rumpf_breite"],
+                                 dreh=plan.dreh,
+                                 schwerpunkt=plan.schwerpunkt)
         self._versatz_setzen()
 
     # ---- Was aussen sichtbar ist ----------------------------------------
@@ -247,6 +303,7 @@ class Wandler:
         b.heil = False
         b.t = -1.0
         b.hub = 0.0
+        self.gangwerk.ruhe_ausgleichen()
         return True
 
     def bein_richten(self, nummer: int) -> bool:
@@ -258,6 +315,7 @@ class Wandler:
             return False
         b.heil = True
         b.last = 0.0
+        self.gangwerk.ruhe_ausgleichen()
         b.fuss.update(b.ruhe_welt(self.pos, self.kurs))
         return True
 
@@ -266,9 +324,33 @@ class Wandler:
         return sum(1 for b in self.beine if b.heil)
 
     @property
+    def umgekippt(self) -> bool:
+        return self.gangwerk.umgekippt
+
+    @property
+    def halt(self) -> float:
+        """Wie weit der Rumpf innerhalb seiner Stuetzflaeche liegt."""
+        return self.gangwerk.halt
+
+    @property
     def fahrbereit(self) -> bool:
-        """Mit einem einzigen Bein traegt nichts mehr."""
-        return self.beine_heil >= 2
+        """Faehrt sie noch?
+
+        Zwei Bedingungen, und die zweite ist die interessante: sie muss
+        genug Beine haben *und* mit ihnen noch stehen koennen. Vier von
+        sechs verloren heisst nicht automatisch fahrbereit - wenn die zwei
+        uebrigen hinten sitzen, liegt der Rumpf vor ihrer Stuetzflaeche und
+        die Maschine kippt.
+        """
+        # Nicht der Halt in *diesem* Augenblick - der ist bei einem
+        # Zweibeiner mitten im Schritt naturgemaess schlecht, weil er dann
+        # auf einem Fuss steht. Ob eine Maschine traegt, entscheidet sich
+        # ueber die Zeit, und das tut `_standfestigkeit`: bleibt sie zu
+        # lange ohne Halt, kippt sie, und dann steht es hier.
+        return self.beine_heil >= 2 and not self.gangwerk.umgekippt
+
+    def aufrichten(self) -> None:
+        self.gangwerk.aufrichten()
 
     # ---- Stationen ---------------------------------------------------------
     def stationen(self) -> dict[str, tuple]:

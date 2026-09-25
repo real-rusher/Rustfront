@@ -16,9 +16,9 @@ Steuerung
     SHIFT       Ueberlast
     H           Autopilot: der letzte Befehl bleibt stehen
     TAB         Ansicht naeher oder weiter
-    1 / 2 / 3   Warhound, Reaver, Imperator
-    4           ein Bein ausfallen lassen
-    5           alle Beine richten
+    1 2 3 4     Warhound, Reaver, Imperator, Hundertfuss
+    5           ein Bein ausfallen lassen
+    6           alle Beine richten und aufrichten
     F3          Zahlen einblenden
     ESC         zurueck
 
@@ -50,7 +50,7 @@ from .render import Kamera, Renderer
 from .wandler import Wandler, bauplan
 from .world import karte_laden
 
-KLASSEN = ("warhound", "reaver", "imperator")
+KLASSEN = ("warhound", "reaver", "imperator", "hundertfuss")
 
 
 class Probelauf(Szene):
@@ -85,6 +85,9 @@ class Probelauf(Szene):
         gross = (K.GAME_W * self.zoom, K.GAME_H * self.zoom)
         self.flaeche = pygame.Surface(gross)
         self.kamera.sicht.update(gross)
+        # Die Kamera rastet auf dem Verkleinerungsfaktor ein, sonst kriecht
+        # beim Fahren die ganze Textur (siehe Kamera.raster).
+        self.kamera.raster = self.zoom
 
     def _melden(self, text: str) -> None:
         self.hinweis = text
@@ -102,9 +105,9 @@ class Probelauf(Szene):
             self.zoom = klein if self.zoom >= gross else self.zoom + 1
             self._flaeche_setzen()
             self._melden("ANSICHT 1 ZU %d" % self.zoom)
-        elif ev.key in (pygame.K_1, pygame.K_2, pygame.K_3):
+        elif ev.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4):
             self._setzen(KLASSEN[ev.key - pygame.K_1])
-        elif ev.key == pygame.K_4:
+        elif ev.key == pygame.K_5:
             heil = [i for i, b in enumerate(self.wandler.beine) if b.heil]
             if heil:
                 self.wandler.bein_verlieren(heil[-1])
@@ -112,9 +115,10 @@ class Probelauf(Szene):
                 self.kamera.stossen(6.0)
                 self._melden("BEIN AUSGEFALLEN - %d VON %d"
                              % (self.wandler.beine_heil, len(self.wandler.beine)))
-        elif ev.key == pygame.K_5:
+        elif ev.key == pygame.K_6:
             for i in range(len(self.wandler.beine)):
                 self.wandler.bein_richten(i)
+            self.wandler.aufrichten()
             self.app.klaenge.spielen("station_an")
             self._melden("ALLE BEINE GERICHTET")
         elif ev.key == pygame.K_h:
@@ -159,8 +163,9 @@ class Probelauf(Szene):
         self.renderer.welt_zeichnen(gross, self.boden, self.kamera, alpha,
                                     self.boden.hoehe(0))
         self.renderer.wandler_zeichnen(gross, self.wandler, self.kamera)
+        # Die Vignette legt `welt_zeichnen` schon auf die grosse Flaeche, in
+        # deren Groesse. Ein zweites Mal hier waere sie doppelt.
         pygame.transform.scale(gross, ziel.get_size(), ziel)
-        ziel.blit(self.renderer._vignette, (0, 0))
         self._tafel(ziel)
 
     def _tafel(self, ziel) -> None:
@@ -182,10 +187,21 @@ class Probelauf(Szene):
             ("AM BODEN  %d/%d" % (steht, self.wandler.beine_heil), K.C_AMBER),
             ("IN LUFT   %d" % luft, K.C_MUTED),
         ]
+        # Der Halt ist die Zahl, an der sich entscheidet, ob sie steht:
+        # wie weit ihr Schwerpunkt innerhalb der Flaeche liegt, die ihre
+        # stehenden Fuesse aufspannen. Negativ heisst, sie faellt gleich.
+        zeilen.append(("HALT   %6.0f" % g.halt,
+                       K.C_TEAL if g.halt >= 0 else K.C_RED))
         if self.wandler.beine_heil < len(g.beine):
             zeilen.append(("BEINE  %d VON %d"
                            % (self.wandler.beine_heil, len(g.beine)), K.C_RED))
-        if not self.wandler.fahrbereit:
+        if g.umgekippt:
+            zeilen.append(("UMGEKIPPT", K.C_RED))
+        elif g.kipp_rest > 0.05:
+            zeilen.append(("KIPPT IN %.1f S"
+                           % max(0.0, K.WANDLER["kipp_zeit"] - g.kipp_rest),
+                           K.C_ORANGE))
+        elif not self.wandler.fahrbereit:
             zeilen.append(("NICHT FAHRBEREIT", K.C_RED))
         if g.ueberlast:
             zeilen.append(("UEBERLAST", K.C_ORANGE))
@@ -205,7 +221,7 @@ class Probelauf(Szene):
             ziel.blit(s, ((K.GAME_W - s.get_width()) // 2, 16))
 
         hilfe = "W/S SCHUB   A/D KURS   SHIFT UEBERLAST   H AUTOPILOT   " \
-                "TAB ANSICHT   1-3 KLASSE   4 BEIN AB   5 RICHTEN"
+                "TAB ANSICHT   1-4 BASIS   5 BEIN AB   6 RICHTEN"
         s = SCHRIFT.flaeche(hilfe, K.C_MUTED_DK, 1)
         ziel.blit(s, ((K.GAME_W - s.get_width()) // 2, K.GAME_H - 12))
 
