@@ -31,6 +31,29 @@ Nummern 0.16.0 bis 0.19.1 verbraucht hat.
 > wird. Abschnitt 1 zaehlt auf, was daraus folgt, und was von der alten
 > Fassung uebrig bleibt.
 
+> ### Die Rangfolge, festgelegt von Der Meister
+>
+> **Zuerst die Grundmechanik, und jedes System einzeln funktionsfaehig.**
+> Front, Fraktionen mit eigenen Prioritaeten, Missionen, eine konkrete
+> Karte und eine Geschichte mit verschiedenen Enden sind *ambitioniert und
+> nicht die Prioritaet* - sie kommen, wenn alles andere laeuft.
+>
+> Begruendung von ihm, und sie ist richtig: ob der eigene Wandler gegen
+> einen KI-Wandler oder gegen den eines anderen Spielers faehrt, ist
+> hinterher **umbaubar**. Eine Geschichte laesst sich auf ein
+> funktionierendes Gefecht aufsetzen; ein Gefecht laesst sich nicht auf
+> eine Geschichte aufsetzen.
+>
+> Was von der Front jetzt schon gebraucht wird, ist **nicht der Bau,
+> sondern der Nachweis, dass sie spaeter ohne Umbau hineinpasst.** Der
+> steht in Abschnitt 9.4 als Liste von Bedingungen, die die Meilensteine
+> M1 bis M8 einhalten muessen.
+>
+> Die Abschnitte 9 bis 11 (Veld, Front, Fraktionen, Regionen,
+> Progression, Erzaehlung) bleiben deshalb im Dokument, sind aber
+> **Fernziel**, nicht Arbeitsauftrag. Sie stehen da, damit niemand die
+> Grundmechanik so baut, dass sie spaeter im Weg steht.
+
 ---
 
 ## 0. Wie dieses Dokument zu benutzen ist
@@ -47,6 +70,13 @@ Vier Arten von Aussagen, immer unterscheidbar:
 | **ENTWURF** | So ist es gedacht. Begruendet, durchgerechnet, aber aenderbar. |
 | **OFFEN** | Bewusst nicht entschieden. Steht in Abschnitt 14, Der Meister entscheidet. |
 | **KORREKTUR** | Stand in der ersten Fassung anders. Hier steht, was falsch war. |
+
+**Abschnitt 14 ist der wichtigste fuer Der Meister.** Er trennt vollstaendig,
+was von ihm kommt (14.1) von dem, was Claude vorgeschlagen hat, und sortiert
+Letzteres danach, **was es kostet, es spaeter zu aendern**: sechs
+Entscheidungen, die jetzt zaehlen (Topf A), zehn, die am Meilenstein
+gemessen werden (Topf B), Kosmetik, die niemand vorab entscheiden muss
+(Topf C), und das geparkte Fernziel (Topf D).
 
 **Die eiserne Regel dieses Plans:** Nichts in diesem Dokument darf
 erzwingen, dass der Spielkern umgebaut wird. Wo ein Entwurf das verlangen
@@ -922,7 +952,7 @@ Was das bewirkt:
 Spalten, also rund 14 Etappen fuer 7 noetige Schritte. Feinjustage in
 `config.py` unter `FRONT`.
 
-### 9.3 Die Fahrt zwischen den Knoten
+### 9.3 Die Fahrt zwischen den Knoten (KORREKTUR der alten Fassung)
 
 **KORREKTUR.** Die alte Fassung nannte das *"Transport, und Transport ist
 selten das, wofuer man ein Spiel startet"*, und wollte es zu einer
@@ -931,6 +961,46 @@ animierten Karte abkuerzen.
 Richtig: **Die Fahrt ist das Spiel.** Zwischen zwei Knoten laeuft der
 Wandler, man ist an Bord, und hier passiert alles aus Abschnitt 7 und 8.
 Der Knoten ist nur die Ankunft - die Strecke ist der Inhalt.
+
+### 9.4 Warum die Front spaeter passt, ohne sie jetzt zu bauen
+
+Der Meister hat es so gesetzt: *"Das mit der Front muessen wir wissen, dass
+das theoretisch geht."* Also - der Nachweis, und zwar als Liste von
+**Bedingungen an M1 bis M8**, nicht als Bauauftrag.
+
+**Was die Front technisch ist:** eine Zahl. Eine Spaltenposition auf einem
+Graphen, die nach jeder Etappe um einen Betrag steigt. Sie zeichnet einen
+Balken auf der Sektorkarte und vergleicht sich mit der eigenen Position.
+Das ist keine Mechanik, das ist eine Variable mit einer Anzeige.
+
+**Warum sie trotzdem umbauen kann, wenn man nicht aufpasst:** nicht weil
+sie kompliziert ist, sondern weil sie voraussetzt, dass es *einen Lauf gibt,
+der aus mehreren Gefechten besteht*. Wenn M1 bis M8 ein einzelnes Gefecht
+bauen, das beim Start alles frisch anlegt und beim Ende alles wegwirft, dann
+ist die Front spaeter ein Umbau. Wenn sie es nicht tun, ist sie eine neue
+Szene und eine Zahl.
+
+**Fuenf Bedingungen. Wer M1 bis M8 baut, haelt sie ein:**
+
+| # | Bedingung | Warum |
+| --- | --- | --- |
+| 1 | **Das Gefecht kennt seinen Ausgang.** Wenn ein Gefecht endet, hinterlaesst es ein Ergebnis - Wandler-Zustand, Beute, verbrauchte Zeit - statt nur zum Menue zurueckzuspringen. | Eine Etappe muss etwas an die naechste weitergeben koennen. Das ist der einzige Punkt, der spaeter wirklich weh taete. |
+| 2 | **Der Wandler-Zustand liegt nicht in der Szene.** Decks, Module, kaputte Bauteile, Inventar gehoeren in ein Objekt, das das Gefecht *bekommt*, nicht in eines, das es *anlegt*. | Sonst kann kein Schaden ueber eine Etappe hinaus bestehen bleiben, und ohne das hat die Front nichts, womit sie drohen koennte. |
+| 3 | **Ein Gefecht wird mit einem Auftrag gestartet** (welche Karte, welcher Gegner, welche Regeln) - so wie `Spiel(app, seed=...)` und `Gefecht(app, ..., seed=...)` es heute schon tun. | Die Sektorkarte wird spaeter genau dieser Auftraggeber. Wer das einhaelt, muss fuer M8 nichts anfassen. |
+| 4 | **Zeit wird gezaehlt, auch wenn sie noch nichts kostet.** Ein Zaehler "Etappen verbraucht" laeuft mit und wird angezeigt, ohne Folgen. | Die Front haengt daran. Ein Zaehler, den es schon gibt, bekommt spaeter nur eine Konsequenz. Das ist eine Zeile. |
+| 5 | **Kein Zahlenwert steht im Code.** Wie immer: `config.py`. Ein spaeterer Abschnitt `FRONT` steht dann neben `WANDLER` und `AUTOPILOT`, statt sie zu durchkreuzen. | Steht ohnehin als Hausregel fest. |
+
+**Was ausdruecklich *nicht* eingehalten werden muss:** es braucht jetzt
+keinen Graphen, keine Knoten, keine Sektorkarte, keine Etappenkosten und
+keine Ueberrollt-Bedingung. Bedingung 1 bis 4 sind zusammen vielleicht ein
+halber Tag Arbeit, verteilt ueber M2 bis M7, und sie sind auch ohne Front
+sinnvoll - ein Wandler, dessen Schaden nach dem Gefecht verschwindet, ist
+auch fuer sich genommen kein Wandler.
+
+**Damit ist die Frage beantwortet: ja, es geht.** Die Front ist spaeter
+eine neue Datei (`sektor.py`), eine neue Szene und eine Zahl - vorausgesetzt,
+die fuenf Zeilen oben stehen. Sie steht deshalb als Pruefpunkt in jedem
+Meilenstein, der sie beruehrt.
 
 ---
 
@@ -1130,9 +1200,20 @@ auch hochzaehlen. Sie fangen bei 0.20.0 an, weil 0.12.0 bis 0.19.1 vergeben
 sind, groesstenteils an den abgespaltenen Mehrspieler. Keine Nummer wird
 zweimal benutzt, auch nicht ueber Zweige hinweg.
 
-**Die Reihenfolge ist gegenueber der alten Fassung umgestellt.** Der
-Wandler kommt weit nach vorn, die Ortsvielfalt weit nach hinten. Begruendung:
-Solange der Wandler nicht steht, weiss niemand, wofuer die Orte da sind.
+**Die Reihenfolge folgt der Rangfolge vom Anfang des Dokuments:** erst
+jedes System einzeln funktionsfaehig, dann die Welt drumherum. M1 bis M8
+sind die Grundmechanik und ergeben zusammen ein fertiges Spiel ohne
+Sektoren, ohne Front und ohne Geschichte. M9 und M10 sind Fernziel.
+
+**Die Trennlinie liegt hinter M8.** Nach M8 kann man DUSTFRONT spielen:
+eigener Wandler gegen fremden Wandler, Geschuetze, Entern, Absteigen,
+Module, und ein Grund weiterzumachen. Das ist der Punkt, an dem entschieden
+wird, ob eine Geschichte darauf kommt oder Mitspieler - und beides ist von
+dort aus ein Aufsatz, kein Umbau.
+
+**Jeder Meilenstein bis M8 nennt am Ende seine Front-Pruefpunkte** aus
+Abschnitt 9.4. Das sind die einzigen Zugestaendnisse an das Fernziel, und
+sie sind auch ohne Fernziel richtig.
 
 ### M1 - Karten kommen aus Dateien (0.20.0)
 
@@ -1148,6 +1229,8 @@ Solange der Wandler nicht steht, weiss niemand, wofuer die Orte da sind.
 *Warum weiter zuerst:* Ein Wandler ist auch nur eine Textkarte. Ohne
 diesen Schritt ist jeder weitere eine Codeaenderung.
 
+*Front-Pruefpunkt:* keiner. M1 beruehrt nichts aus 9.4.
+
 ### M2 - Der Wandler als begehbarer Rumpf (0.21.0)
 
 * `wandler.py`: Bauplan aus Text, drei bis vier Decks
@@ -1156,6 +1239,10 @@ diesen Schritt ist jeder weitere eine Codeaenderung.
 * Treppen zwischen den Decks, offene Kanten am Oberdeck, Sturz auf den Boden
 
 *Sichtbar:* Man hat ein Zuhause, und es ist wirklich begehbar.
+
+*Front-Pruefpunkt (9.4, Bedingung 2):* Der Wandler-Zustand gehoert in ein
+eigenes Objekt, das die Szene **bekommt**, nicht anlegt. Das ist hier eine
+Entwurfsentscheidung von zehn Minuten und spaeter ein Umbau von Tagen.
 
 ### M3 - Stationen und die Fahrt (0.22.0)
 
@@ -1167,6 +1254,9 @@ diesen Schritt ist jeder weitere eine Codeaenderung.
 
 *Sichtbar:* **Es ist ein Mech-Spiel.** Der Meilenstein, der alles aendert.
 
+*Front-Pruefpunkt (9.4, Bedingung 4):* Die gelaufene Strecke wird gezaehlt
+und angezeigt, ohne Folgen. Der spaetere Etappenzaehler ist dann schon da.
+
 ### M4 - Geschuetze und der zweite Rumpf (0.23.0)
 
 * Zweite Welt: ein feindlicher Wandler mit Versatz (5.5)
@@ -1175,6 +1265,11 @@ diesen Schritt ist jeder weitere eine Codeaenderung.
 * Reparieren mit Q an der Werkstatt
 
 *Sichtbar:* Das Duell. Phasen 1 bis 3 aus 7.1.
+
+*Front-Pruefpunkt (9.4, Bedingung 3):* Das Gefecht wird mit einem Auftrag
+gestartet - welche Karte, welcher Gegner, welche Regeln - so wie
+`Spiel(app, seed=...)` es heute schon tut. Wer das einhaelt, muss fuer die
+Sektorkarte spaeter nichts anfassen.
 
 ### M5 - Entern (0.24.0)
 
@@ -1204,74 +1299,391 @@ diesen Schritt ist jeder weitere eine Codeaenderung.
 *Sichtbar:* Schrott hat zum ersten Mal einen Zweck, und man laeuft durch
 seinen eigenen Fortschritt.
 
-### M8 - Veld: Sektorkarte und Front (0.27.0)
+### M8 - Das Spiel ist rund (0.27.0)
+
+**Der wichtigste Meilenstein, und der, an dem die Rangfolge haengt.** Kein
+neues System, sondern der Schritt, der aus sieben Systemen ein Spiel macht.
+
+* Ein Gefecht hat einen Anfang und ein Ende und hinterlaesst ein Ergebnis
+  (9.4, Bedingung 1): Wandler-Zustand, Beute, verbrauchte Strecke
+* Man kann mehrere Gefechte hintereinander spielen, und der Wandler nimmt
+  Schaden und Module mit
+* Verlieren heisst etwas, Gewinnen heisst etwas
+* Die Balance wird gemessen: Geschuetze gegen Panzerung, Enterung gegen
+  Schotten, Autopilot-Abzuege (6.3) gegen Laufzeit zwischen den Decks
+* Jedes System einzeln im Test nachgewiesen, so wie die sechs Waffen es sind
+
+*Sichtbar:* **Man kann DUSTFRONT spielen.** Kein Sektor, keine Front, keine
+Geschichte - und es funktioniert trotzdem als Spiel.
+
+*Hier wird entschieden*, was darauf kommt: eine Geschichte (M9/M10), oder
+Mitspieler (der Mehrspieler von `multiplayer-test` liegt bereit und ist
+dokumentiert). Beides ist von hier ein Aufsatz, kein Umbau. Deshalb ist
+diese Entscheidung erst hier faellig und nicht vorher.
+
+---
+
+**Ab hier Fernziel.** Nicht anfangen, solange M1 bis M8 nicht stehen und
+jedes System einzeln funktioniert.
+
+### M9 - Veld: Sektorkarte und Front (0.28.0) - FERNZIEL
 
 * `sektor.py`: Graph, 14-20 Knoten, 6-8 Spalten
 * Sektorkarte als Szene, aufgerufen vom Kartentisch
 * `FRONT` in `config.py`, die Front rueckt je Etappe
 * Ueberrollt werden beendet den Lauf
+* Lauf-Spielstand: was bleibt (Wissen), was nicht (Wandler)
 
 *Sichtbar:* Aus einzelnen Gefechten wird eine Reise mit Druck. Der Titel
 erklaert sich.
 
-### M9 - Der Lauf als Ganzes (0.28.0)
+*Wenn 9.4 eingehalten wurde,* ist das eine neue Datei, eine neue Szene und
+eine Zahl. Wenn nicht, ist es ein Umbau - deshalb steht 9.4 da.
 
-* Lauf-Spielstand: was bleibt (Wissen), was nicht (Wandler)
-* Sektorausgang, dann naechste Region
-* EISERN wird das, was es verspricht
-* Terminals, Funkbruchstuecke, Spuren im Wandler
+### M10 - Fraktionen, Missionen, Erzaehlung - FERNZIEL
 
-**Nach M9 ist das Spiel von vorn bis hinten spielbar.** Damit stellt sich
+Der ambitionierte Teil, und der, den Der Meister ausdruecklich nach hinten
+gestellt hat. Er braucht praktisch alles aus M1 bis M9 als Unterlage:
+
+* Fraktionen mit eigenen Prioritaeten, die sich auch untereinander verhalten
+* Missionen oder Auftraege, mit denen man die Lage beeinflusst
+* Regionen mit eigenem Charakter (Abschnitt 10.2)
+* Erzaehlung: Terminals, Funkbruchstuecke, Spuren im Wandler (11.4)
+* Verschiedene Enden
+
+**Warum das ganz hinten steht:** Fraktionen mit eigenen Prioritaeten sind
+kein Inhalt, sondern ein System - und zwar ein grosses, das sich nur
+sinnvoll bauen laesst, wenn alles darunter steht und gemessen ist. Eine
+Geschichte laesst sich auf ein funktionierendes Gefecht aufsetzen. Ein
+Gefecht laesst sich nicht auf eine Geschichte aufsetzen.
+
+**Nach M10 ist das Spiel von vorn bis hinten spielbar.** Damit stellt sich
 die erste Frage aus dem Versionsschema, und es wird `1.0.0`.
 
 ---
 
-## 14. Offene Fragen - hier entscheidet Der Meister
+## 14. Was noch nicht entschieden ist
 
-Bewusst nicht entschieden. Jede Antwort aendert Teile des Plans.
+Der Meister hat gefragt: *"was denn theoretisch noch zu entscheiden waere
+oder welche Entscheidung ich noch umaendern koennte, was davor getroffen
+wurde, was also jetzt in dem Plan steht, was ich noch nicht explizit
+bestaetigt habe."*
 
-**Zuerst die wichtigste:**
+Dieser Abschnitt ist die Antwort, und er ist vollstaendig. **Alles, was in
+diesem Dokument steht und nicht in 14.1 aufgezaehlt ist, kommt von Claude
+und ist damit Vorschlag, nicht Beschluss.**
 
-0. **Welche Punkte waren sonst noch falsch verstanden?** Der Meister
-   schrieb *"viele punkte"* und nannte den groessten (der Wandler ist die
-   Basis). Abschnitt 1 zaehlt auf, was daraus abgeleitet wurde - aber
-   Ableitung ist Raten. Alles, was in Abschnitt 1.6 unter "bleibt" steht,
-   ist ungeprueft uebernommen: Veld als Knotengraph, die vorrueckende
-   Front, die drei Regionen, Module als begehbarer Fortschritt, EISERN als
-   Dauerverlust. Wenn davon etwas auch daneben liegt, gehoert es hier
-   korrigiert, bevor M2 anfaengt.
+Sortiert ist nach **Kosten der Aenderung**, nicht nach Wichtigkeit. Das ist
+der einzige Sortierschluessel, der praktisch hilft: was spaeter teuer wird,
+gehoert jetzt entschieden; was jederzeit billig bleibt, gehoert jetzt
+ignoriert.
 
-**Dann der Rest:**
+| Topf | Bedeutung | Wann faellig |
+| --- | --- | --- |
+| **A - Fundament** | Aenderung nachher heisst Umbau. 6 Stueck. | vor dem Meilenstein, der sie benutzt |
+| **B - Spielgefuehl** | Aenderung nachher heisst Zahlen und ein paar Stunden. 10 Stueck. | am Meilenstein selbst, gern nach dem Ausprobieren |
+| **C - Kosmetik** | Aenderung nachher kostet nichts. | nie vorab. Einfach machen. |
+| **D - Fernziel** | Betrifft nur M9 und M10. | nach M8, nicht vorher |
 
-1. **Wie viel Maschine, wie viel Fuss?** Soll ein Duell ueberwiegend am
-   Geschuetz stattfinden (Maschinenspiel mit Fussgefecht als Hoehepunkt),
-   oder ueberwiegend zu Fuss (Fussspiel mit Maschine als Buehne)? Das
-   entscheidet ueber alle Reichweiten in 5.5.
+---
 
-2. **Verliert man mit dem Wandler den Lauf?** Oder laeuft man zu Fuss
-   weiter und kann sich einen neuen erbeuten (7.3)? Die zweite Antwort ist
-   dramatischer und deutlich teurer.
+### 14.1 Was von Der Meister kommt
 
-3. **Kann man einen erbeuteten Wandler uebernehmen?** (7.5) Starkes
-   Stueck, kostet Spielstand-Arbeit.
+Zur Kontrolle, nicht zur Debatte. Wenn hier etwas falsch wiedergegeben ist,
+ist das der wichtigste Fehler im Dokument.
 
-4. **Roguelite oder Kampagne?** Beginnt man nach einem Verlust von vorn
-   (mit bleibendem Wissen), oder gibt es Speicherstaende? Das Menue kennt
-   "fortsetzen" und EISERN kennt "ein leben" - beides ist moeglich, aber
-   es sollte eines sein.
+**Aus dieser Sitzung, woertlich bestaetigt:**
 
-5. **Wie viel Tod zu Fuss?** Heute: 100 Leben, Laeufer macht 9. Das ist
-   zaeh. Passt das zu einem Spiel, in dem Enterer auf dem eigenen Deck
-   stehen?
+* Rustfront ist ein **Mech-Kampfspiel**, der riesige Mech ist auch die Basis
+* Die **Ebenen** sind die verschiedenen Etagen des Mechs und der Boden
+* Man steuert **primaer den Mech**
+* Man stellt ihn **teils auf Autopilot** und **fixiert die Waffensysteme**
+  auf den anderen Mech
+* Dann **zu Fuss auf dem eigenen Mech eine Enterung abwehren**
+* Oder **den anderen Mech entern**
+* Oder **absteigen, um Gebaeude im Wasteland zu looten**
+* Vorbild **SAND: Raiders of Sophie**, in 2D, mit einem **radikal anderen
+  Vibe**
+* **Rangfolge:** erst die Grundmechanik und jedes System einzeln
+  funktionsfaehig. Front, Fraktionen mit eigenen Prioritaeten, Missionen,
+  konkrete Karte, Geschichte mit verschiedenen Enden sind nicht die
+  Prioritaet und kommen danach.
+* **Begruendung dafuer, von ihm:** ob man gegen einen KI-Mech oder gegen
+  andere Spieler kaempft, ist hinterher umbaubar - "das kann man dann ja
+  eben einfach umbauen zu einer Story".
+* Von der Front wird jetzt nur gebraucht, **dass sie theoretisch geht**
+  (Abschnitt 9.4).
 
-6. **Ist der Chor feindlich?** Oder gleichgueltig, solange man nicht
-   stoert (10.1)? Die zweite Antwort ist interessanter und billiger.
+**Aus dem Repo, von ihm gebaut oder abgenommen** - also bestaetigt, aber
+aelter als die Korrektur:
 
-7. **Wird der Wandler entworfen oder gefunden?** SAND hat einen Editor.
-   Ein eigener Bauplan-Editor waere gross; ein Wandler, der Deck fuer Deck
-   waechst, waere billiger und passt besser zu 6.5.
+* Kontinent **Veld**, 90-Grad-Draufsicht
+* **Modularer Wandler**, aus Schrott weiter ausgebaut
+* Drei Fraktionen: **Kolonne, Chor, Freie Werften**
+* Drei Regionen im Menue: **ASCHEWALD, TRICHTERFELD, CHORWERK-RUINE** mit
+  ihren Fraktionsanteilen
+* **Tab** wechselt zwischen "an Bord" und "Fahr-Modus"
+* Die Steuerungstabelle im Menue: **B BAUEN, Q WERKZEUG, W/S FAHRT, A/D
+  DREHEN, SHIFT BOOST, H AUTOPILOT**
+* **EISERN:** "ein wandler, ein leben. kein laden nach dem verlust."
+* **SCHROTT** als Waehrung im HUD
+* Hausregeln: alle Zahlen in `config.py`, deutsche Bezeichner und
+  Kommentare, keine Umlaute im Code, beide Testlaeufe gruen, Version vor
+  dem Push hoch, keine Nummer zweimal
 
-8. **Ende:** Was steht am Ende der Chorwerk-Ruine?
+Alles andere unten ist Claude.
+
+---
+
+### 14.2 Topf A - Fundament: sechs Entscheidungen, die jetzt zaehlen
+
+Diese sechs sind es wert, vorher angesehen zu werden. Alle anderen nicht.
+
+#### A1 - Jeder Rumpf ist eine eigene `Welt` (5.1)
+
+*Im Plan:* Der eigene Wandler, der fremde Wandler und der Boden sind drei
+getrennte `Welt`-Objekte. Koordinaten an Bord sind relativ zum Rumpf. Was
+sich bewegt, ist eine Zahl je Rumpf.
+
+*Die Alternative:* eine grosse Bodenwelt, durch die der Wandler als
+bewegliches Kachelfeld laeuft (Weg B in 5.2).
+
+*Warum der Plan so steht:* Weg B verlangt, dass Kollision, Sichtlinien und
+das Kachelraster nicht mehr an ganzen Kachelkoordinaten haengen. Das heisst
+`frei()`, `strahl()`, `bewegen()` und `ebene_zeichnen()` neu schreiben -
+also den Kern, der gerade als tragfaehig gilt.
+
+*Kosten der Aenderung nachher:* **am hoechsten von allem.** Danach haengt
+jede Zeile in `wandler.py` daran.
+
+*Faellig:* vor M2.
+
+*Empfehlung:* so lassen. Das ist die Entscheidung, bei der ich mir am
+sichersten bin - sie macht ein Mech-Spiel in diesem Kern ueberhaupt
+moeglich.
+
+#### A2 - Stationen statt Fahr-Modus (6.1)
+
+*Im Plan:* Der Spieler hoert nie auf, eine laufende Figur zu sein. Der
+Wandler wird bedient, indem man sich an eine Kachel stellt und E drueckt;
+danach bedeuten die Tasten etwas anderes. TAB ist nur ein Kamerawechsel.
+
+*Die Alternative:* ein echter Fahr-Modus - die Figur verschwindet, man
+steuert die Maschine direkt, mit eigener Bewegung, eigener Kollision und
+eigener Kamera.
+
+*Warum der Plan so steht:* Das spart genau die drei teuersten Posten
+(zweites Bewegungssystem, zweite Kollision, zweiter Kameramodus), und es ist
+das, was den Autopiloten ueberhaupt zu einer Entscheidung macht: nur wenn
+man koerperlich an *einer* Station steht, kostet es etwas, woanders zu sein.
+
+*Kosten der Aenderung nachher:* hoch. Ein echter Fahr-Modus ist nachtraeglich
+machbar, aber dann liegt Arbeit doppelt.
+
+*Faellig:* vor M3.
+
+*Der eine Zweifel, ehrlich:* Es koennte sich zu indirekt anfuehlen. "Ich
+stehe am Steuer und halte W" ist weniger unmittelbar als "ich steuere".
+Wenn sich das in M3 so anfuehlt, ist die Rettung klein: die Kamera im
+Fahr-Blick loesst sich von der Figur, und es fuehlt sich an wie Steuern,
+obwohl es Stehen ist. **Das gehoert in M3 ausprobiert, nicht vorher
+entschieden.**
+
+#### A3 - Wie viele Spieler? (2.3)
+
+*Im Plan:* Einzelspieler. Ein Mensch, vier Stationen, und genau daraus
+kommt die ganze Spannung (6.3).
+
+*Was Der Meister gesagt hat:* nichts davon - aber in dieser Sitzung fiel
+*"ob man dann seinen Mech gegen einen anderen Mech steuert und gegen andere
+Spieler kaempft"*. Das laesst beides offen.
+
+*Die Alternativen:*
+1. **Einzelspieler**, wie im Plan. Autopilot ist die Antwort aufs Alleinsein.
+2. **Zwei Spieler auf einem Wandler** (Besatzung, wie SAND). Einer steuert,
+   einer am Geschuetz. Der Autopilot verliert seine Bedeutung, dafuer
+   entsteht echte Arbeitsteilung.
+3. **Zwei Spieler, je ein Wandler**, gegeneinander. Das waere der direkte
+   Weg zum PvP.
+
+*Warum das in Topf A gehoert:* Nicht wegen der Netztechnik - die liegt
+fertig und dokumentiert auf `multiplayer-test`. Sondern weil **Variante 2
+den Autopiloten entwertet** und damit die zentrale Mechanik aus 6.3. Ein
+Spiel, dessen Kern "du kannst nicht an zwei Stellen sein" ist, wird durch
+einen zweiten Spieler nicht groesser, sondern anders.
+
+*Kosten der Aenderung nachher:* Variante 3 ist billig und jederzeit
+nachtraeglich moeglich - zwei Ruempfe gibt es ab M4 sowieso. Variante 2 ist
+teuer, weil sie die Begruendung fuer 6.3 wegnimmt.
+
+*Faellig:* Variante 2 vor M3. Variante 3 kann bis nach M8 warten - und
+genau so steht es in M8.
+
+*Empfehlung:* Einzelspieler bauen, Variante 3 nach M8 offenhalten,
+Variante 2 nur wenn er sie ausdruecklich will.
+
+#### A4 - Boden = Ebene 0, Rumpf = Ebenen 1 bis 4 (5.4)
+
+*Im Plan:* Der Boden ist die unterste Ebene, der Wandler hat hoechstens vier
+Decks darueber. `EBENEN_HOEHE` hat genau fuenf Eintraege, das geht auf.
+
+*Die Alternative:* Der Boden bekommt eigene Ebenen (mehrstoeckige Gebaeude
+im Wasteland), dann reichen fuenf nicht mehr - dann braucht ein Gebaeude
+eine eigene Welt, oder `EBENEN_HOEHE` wird laenger.
+
+*Warum es zaehlt:* Es legt fest, **wie hoch ein Wandler maximal ist** und ob
+ein Gebaeude unten mehr als ein Geschoss haben darf. Vier Decks sind viel -
+der Weg vom Reaktor zum Oberdeck sind drei Treppen, und das ist schon die
+obere Grenze fuer etwas, das man im Gefecht rennen soll.
+
+*Kosten der Aenderung nachher:* mittel. `EBENEN_HOEHE` zu verlaengern ist
+eine Zeile, aber jede Karte und jede Perspektivzahl haengt daran.
+
+*Faellig:* vor M2.
+
+#### A5 - Geschuetze treffen Rumpfteile, Handwaffen treffen Figuren (5.5)
+
+*Im Plan:* Die zwei Massstaebe sind sauber getrennt. Geschuetze zerlegen
+Maschinen und koennen keine Personen toeten. Handwaffen toeten Personen und
+tragen nur kurz von Rumpf zu Rumpf.
+
+*Die Alternative:* alles trifft alles. Ein Geschuetztreffer reisst einen
+Mann vom Deck.
+
+*Warum der Plan so steht:* Ohne die Trennung wird jedes Duell ein
+Scharfschuetzenduell auf grosse Distanz, und Entern - das Herz aus 7.2 -
+passiert nie, weil man nie nah heran muss. Ausserdem bleiben die sechs
+Waffen balanciert und ihre Tests gueltig.
+
+*Kosten der Aenderung nachher:* mittel, betrifft aber die gesamte
+Gefechtsbalance und damit M4 bis M8.
+
+*Faellig:* vor M4. **Das ist dieselbe Frage wie "wie viel Maschine, wie viel
+Fuss" - siehe B1.**
+
+#### A6 - Kritische Bauteile statt Huellenbalken (6.6)
+
+*Im Plan:* Ein Wandler hat keinen Lebensbalken. Er hat Bauteile mit eigenen
+Punkten - Reaktor, Beine, Schwungrad, Geschuetze, Schotten, Rampe - und ein
+Treffer nimmt eine Faehigkeit, nicht eine Zahl.
+
+*Die Alternative:* ein Huellenbalken von 100 auf 0, wie bei einem Gegner.
+
+*Warum der Plan so steht:* Es ist von SAND uebernommen und der beste
+Einzelgriff daraus. Es ist lesbar (man sieht, *was* qualmt), es erzeugt
+Geschichten statt Prozentzahlen, und es begruendet Q (Werkzeug) und die
+Werkstatt.
+
+*Kosten der Aenderung nachher:* hoch, weil praktisch jede Folgeentscheidung
+daran haengt - Panzerung, Reparatur, wann ein Wandler verloren ist, wie sich
+ein Duell anfuehlt.
+
+*Faellig:* vor M4.
+
+*Empfehlung:* so lassen. Wenn es eine Idee in diesem Dokument gibt, die das
+Spiel besser macht als es sein muesste, ist es diese.
+
+---
+
+### 14.3 Topf B - Spielgefuehl: zehn Entscheidungen, die warten koennen
+
+Alle zehn sind am jeweiligen Meilenstein faellig, und bei allen ist
+*ausprobieren* besser als *vorher entscheiden*. Sie stehen hier, damit sie
+nicht vergessen werden, nicht damit sie jetzt beantwortet werden.
+
+| # | Entscheidung | Im Plan steht | Alternative | Faellig |
+| --- | --- | --- | --- | --- |
+| **B1** | **Wie viel Maschine, wie viel Fuss?** | ausgewogen: Beschuss bis Phase 3, Entern als Hoehepunkt (7.1) | Maschinenspiel mit Fussgefecht als Seltenheit, oder Fussspiel mit Maschine als Buehne | M4, durch Messen |
+| **B2** | **Autopilot: wie schlecht ist "festgelegt"?** | eingeschraenkt, Zahlen offen (6.3) | gar nicht schlechter (dann ist es Komfort, keine Mechanik), oder viel schlechter | M3, durch Messen |
+| **B3** | **Wie gross ist ein Wandler?** | 18x12 je Deck, passt fast auf einen Bildschirm (5.7) | deutlich groesser - man sieht nicht alles und muss suchen | M2 |
+| **B4** | **Welche Decks, mit welchem Inhalt?** | Unterdeck/Hauptdeck/Bruecke/Oberdeck mit festen Aufgaben (5.4, 6.4) | frei belegbar, oder andere Aufteilung | M2 |
+| **B5** | **Gewichtsklassen?** | drei, mit 2/3/4 Decks (5.4) | nur eine Bauart | M2 |
+| **B6** | **Wo kommen Enterer an Bord?** | an einer Stelle, wo die Bruecke aufsetzt (7.3) | mehrere Stellen gleichzeitig - deutlich haerter | M5 |
+| **B7** | **Spiegelt die fremde Besatzung meine Stationen?** | ja, gleiche Logik gespiegelt (7.4) | eigene KI-Regeln, oder nur Waechter ohne Stationen | M5 |
+| **B8** | **Was erbeutet man?** | Module aus dem fremden Rumpf (7.5) | Schrott und Blaupausen, keine Bauteile | M7 |
+| **B9** | **Waffenstufen: je eine Zahl** | drei Stufen, je eine Zahl in `K.WAFFEN` (11.3) | Waffen mit neuen Faehigkeiten - macht die Balancetests wertlos | M7 |
+| **B10** | **Wird der Wandler entworfen oder waechst er?** | er waechst Deck fuer Deck und Schacht fuer Schacht (6.5) | ein Bauplan-Editor wie in SAND - viel groesser | M7 |
+
+**Zwei davon sind mehr als Feinheiten:**
+
+**B1** entscheidet, was fuer ein Spiel das ist. Er ist absichtlich als
+Messung in M4 eingeplant und nicht als Entscheidung jetzt - denn die
+ehrliche Antwort bekommt man, indem man es spielt, nicht indem man darueber
+nachdenkt. Falls Der Meister eine Vorliebe hat, aendert das die
+Startreichweiten in `config.py` und sonst nichts.
+
+**B2** ist die Zahl, an der 6.3 haengt. Ist "festgelegt" nicht schlechter
+als "besetzt", gibt es keinen Grund, jemals an einer Station zu stehen, und
+die ganze Mechanik fehlt. Ist es zu schlecht, verlaesst man die Bruecke
+nie, und dann fehlt sie auch. Der richtige Wert liegt dazwischen und wird
+gemessen.
+
+---
+
+### 14.4 Topf C - Kosmetik: jetzt ignorieren
+
+Vollstaendigkeit halber, damit klar ist, worueber man **nicht** nachdenken
+muss. Alles hier ist eine Zeile in `config.py` oder ein Zeichen in einer
+Textdatei:
+
+* Der Grundriss in 6.4, jede einzelne Kachel darin
+* Welche Kachelzeichen fuer welche Marke stehen (5.6)
+* Die Namen der Stationen und Module
+* Jede Zahl, die im Dokument als Beispiel steht
+* Welche Bilder und Klaenge es gibt
+* Ob SHIFT "Ueberlast" oder "Boost" heisst
+
+**Regel dafuer:** Wer baut, entscheidet das selbst und fragt nicht. Wenn es
+falsch ist, sieht man es beim Spielen und aendert es.
+
+---
+
+### 14.5 Topf D - Fernziel: geparkt bis nach M8
+
+Der Meister hat diesen Bereich ausdruecklich nach hinten gestellt. Die
+Fragen stehen hier, damit sie nicht verloren gehen - **sie sind jetzt nicht
+zu beantworten.**
+
+1. **Bleibt Veld ein Knotengraph?** (9.1) Ungeprueft aus der alten Fassung
+   uebernommen.
+2. **Die Front-Zahlen:** 1 Spalte je 2 Etappen, 7 Spalten (9.2). Reine
+   Erfindung.
+3. **Sind die drei Fraktionen so?** Kolonne schwer und viele, Chor
+   unbemannt und gleichgueltig, Werften friedlich (10.1). Die
+   Fraktionsanteile stehen im Menue; ihr Charakter als Maschinen ist neu
+   erfunden.
+4. **Ist der Chor feindlich** oder gleichgueltig, solange man nicht stoert?
+   Die zweite Antwort ist interessanter und billiger.
+5. **Verliert man mit dem Wandler den Lauf** (7.3), oder laeuft man zu Fuss
+   weiter und erbeutet sich einen neuen? Die zweite Antwort ist dramatischer
+   und teurer.
+6. **Kann man einen erbeuteten Wandler uebernehmen?** (7.5)
+7. **Roguelite oder Kampagne?** Das Menue kennt "fortsetzen", EISERN kennt
+   "ein leben". Beides ist moeglich, es sollte eines sein.
+8. **Wie viel Tod zu Fuss?** Heute 100 Leben, Laeufer macht 9. Das ist
+   zaeh. Passt das, wenn Enterer auf dem eigenen Deck stehen?
+9. **Bleibt Wissen ueber einen Verlust hinaus?** (11.1)
+10. **Was steht am Ende?** Und wie viele Enden gibt es?
+
+**Punkt 8 ist der einzige, der frueher stoert:** Er betrifft M5 (Entern),
+nicht M9. Falls sich das Fussgefecht auf den Decks zu zaeh anfuehlt, ist es
+eine Zahl in `SPIELER` - aber sie sollte in M5 bewusst angesehen werden.
+
+---
+
+### 14.6 Und die Frage, die von letztem Mal offen ist
+
+Der Meister schrieb *"da gibt es leider viele punkte, die bei dem plan
+vollkommen falsch verstanden wurden"* und nannte den groessten. Diese
+Sitzung hat einen zweiten geklaert: die Rangfolge - Story, Fraktionen und
+Karte sind nicht die Prioritaet.
+
+**Offen bleibt, ob das alle waren.** Was in 14.1 unter "Aus dem Repo" steht,
+ist bestaetigt, aber aelter als die Korrektur, und was in Topf D steht, ist
+grossteils ungeprueft aus der alten Fassung uebernommen. Beides ist jetzt
+unkritisch, weil es Fernziel ist - **die Grundmechanik in M1 bis M8 haengt
+an keinem Punkt daraus.** Es genuegt also, das nach M8 zu klaeren, oder wann
+immer es ihm einfaellt.
 
 ---
 
@@ -1283,12 +1695,24 @@ Bewusst nicht entschieden. Jede Antwort aendert Teile des Plans.
   `config.py`, und zwar erst, wenn sie gemessen sind.
 * Es behauptet nichts ueber SAND, was nicht belegt ist. Was dort nicht
   auffindbar war, steht in 2.1 als nicht auffindbar.
-* Es entscheidet nichts, was in Abschnitt 14 steht.
+* Es entscheidet nichts aus Topf A oder D in Abschnitt 14.
+* Es faengt nicht mit dem Fernziel an. Abschnitt 9 bis 11 stehen da, damit
+  die Grundmechanik sie spaeter nicht ausschliesst - nicht als Auftrag.
 
-**Wer hier weitermacht:** Lies 1, 2 und 5 ganz. Nimm dann den naechsten
-Meilenstein aus Abschnitt 13. Halte dich an die drei Regeln aus dem README
-("Wie sich das Spiel anfuehlen soll"). Wenn ein Meilenstein etwas verlangt,
-was Abschnitt 14 offen laesst, frag nach, statt zu raten.
+**Wer hier weitermacht:**
+
+1. Lies Abschnitt 1, 2 und 5 ganz, und Abschnitt 14.1 (was von Der Meister
+   kommt und was Vorschlag ist).
+2. Nimm den naechsten Meilenstein aus Abschnitt 13. Bis M8 ist das
+   Grundmechanik - **M9 und M10 nicht anfangen**, solange M1 bis M8 nicht
+   stehen und jedes System einzeln gemessen ist.
+3. Halte die Front-Pruefpunkte des Meilensteins ein (Abschnitt 9.4). Sie
+   sind billig und verhindern den einzigen Umbau, der sonst spaeter droht.
+4. Halte dich an die drei Regeln aus dem README ("Wie sich das Spiel
+   anfuehlen soll").
+5. Verlangt ein Meilenstein etwas aus **Topf A** (14.2), frag nach. Etwas
+   aus **Topf B** (14.3): bau es, miss es, und leg die Zahl danach fest.
+   Etwas aus **Topf C** (14.4): entscheide selbst und frag nicht.
 
 ---
 

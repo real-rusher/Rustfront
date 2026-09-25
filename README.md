@@ -55,7 +55,16 @@ ist und der Kern dafuer nicht angefasst werden muss, wie der Wandler an
 Stationen bedient wird (ohne zweites Bewegungssystem), warum der Autopilot
 die zentrale Mechanik ist, wie Duell und Enterung ablaufen, wie Sektoren
 und die vorrueckende Front funktionieren, und in welcher Reihenfolge das
-gebaut wird (Meilensteine M1 bis M9, von 0.20.0 bis 1.0.0).
+gebaut wird (Meilensteine M1 bis M10, von 0.20.0 bis 1.0.0).
+
+**Die Rangfolge: erst die Grundmechanik, jedes System einzeln
+funktionsfaehig.** Front, Fraktionen mit eigenen Prioritaeten, Missionen und
+eine Geschichte mit verschiedenen Enden sind Fernziel - M1 bis M8 ergeben
+zusammen ein fertiges Spiel ohne alles davon. Eine Geschichte laesst sich
+auf ein funktionierendes Gefecht aufsetzen; ein Gefecht laesst sich nicht
+auf eine Geschichte aufsetzen. Was von der Front jetzt schon gebraucht
+wird, ist nicht der Bau, sondern der Nachweis, dass sie spaeter ohne Umbau
+hineinpasst - der steht in Abschnitt 9.4 als fuenf Bedingungen an M1 bis M8.
 
 Gebaut ist davon noch nichts. **Als naechstes steht M1 an: Karten kommen
 aus Dateien** - `karten/` mit Textdateien, `Welt.aus_datei()`, Marken fuer
@@ -64,9 +73,11 @@ weitere Schritt eine Codeaenderung; danach ist auch ein Wandler nur eine
 Textdatei.
 
 Wer weitermacht, nimmt sich den naechsten Meilenstein aus Abschnitt 13 des
-Plans und liest vorher Abschnitt 1, 2 und 5 ganz - Abschnitt 1 sagt, was
-eine fruehere Fassung des Plans falsch verstanden hatte, und Abschnitt 5
-enthaelt die eine technische Entscheidung, an der alles andere haengt.
+Plans und liest vorher Abschnitt 1, 2, 5 und 14 - Abschnitt 1 sagt, was
+eine fruehere Fassung des Plans falsch verstanden hatte, Abschnitt 5
+enthaelt die eine technische Entscheidung, an der alles andere haengt, und
+**Abschnitt 14 trennt, was von Der Meister kommt von dem, was nur
+Vorschlag ist**, sortiert danach, was es kostet, es spaeter zu aendern.
 
 ### Der Mehrspieler liegt daneben, nicht hier
 
