@@ -11,7 +11,7 @@ auf den Decks, wenn geentert wird. Beide Spielmodi teilen dieselbe
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.15.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.20.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -31,12 +31,66 @@ Nicolas, Nikolaus, Marlon, Alfred.
 | Inventar und Hotbar | fertig, Plaetze per Maus oder Tastatur umsortierbar |
 | Pause und Einstellungen | fertig: Anzeige, Ton, Steuerung, Mitwirkende |
 | Grafik-Einstellungen | Vignette, Wackeln und Partikel stehen; Licht, Wetter und Textursaetze sind vorgemerkt |
+| Karten | kommen aus `karten/` als Textdateien, mit Marken und Kartenpruefer |
+| Der Wandler | laeuft: Bauplan aus Text, beliebig viele Decks, Beine mit echtem Gang |
 | Texturen und Klaenge | noch alle im Code erzeugt; eine Datei in `assets/` ersetzt jedes Stueck, ohne Codeaenderung |
-| Ersetzbar sind | alle 36 Bilder, Kacheln und Figuren ebenso wie Schatten, Blut, Brandfleck und Vignette |
+| Ersetzbar sind | alle 58 Bilder, Kacheln und Figuren ebenso wie Schatten, Blut, Brandfleck und Vignette |
 
 Der Spielkern gilt als tragfaehig: was jetzt noch dazukommt, haengt sich als
 weitere Szene, weiteres Wesen oder weitere Zeile in `config.py` an, statt
 Bestehendes umzubauen.
+
+## Der Wandler laeuft
+
+Seit 0.20.0 gibt es die Laufmaschine, und sie laeuft wirklich - nicht als
+Animation, die zu einer Bewegung passt, sondern als Ursache dafuer.
+
+**Der Rumpf hat keine eigene Geschwindigkeit.** Er wird von den Fuessen
+getragen, die gerade am Boden stehen. Ein stehender Fuss ist in der Welt
+verankert und bewegt sich nicht - im Testlauf nachgemessen: null Pixel ueber
+acht Sekunden. Vorwaerts kommt die Maschine allein dadurch, dass ein Fuss
+beim Schritt **vor** seiner Ruhelage aufsetzt und der Rumpf danach zu seinen
+Fuessen hinzieht.
+
+Daraus faellt alles Weitere von selbst an, ohne eine Zeile Sondercode:
+
+* Tempo ist ein **Ergebnis**, kein Sollwert.
+* Ein zerstoertes Bein laesst den Rumpf schief haengen und macht ihn
+  langsamer, weil der Schwerpunkt der Standfuesse kippt.
+* Mit einem einzigen Bein geht gar nichts - es kann nicht tragen und treten
+  zugleich.
+* Zwei Beine gehen im Wechselschritt, vier im Kreuzgang, sechs im Dreifuss -
+  abgeleitet aus der Bauart, nicht aus einer Tabelle je Beinzahl.
+
+Drei Bauklassen nach dem Vorbild der Titanen: **Warhound** (2 Beine, 3
+Decks, schnell, wankt), **Reaver** (4 Beine, 4 Decks, der Standard),
+**Imperator** (6 Beine, 6 Decks, vertraegt drei verlorene Beine und passt
+nicht auf den Bildschirm). Jede von ihnen ist eine **Textdatei** in
+`karten/wandler/` - Decks als Text, Beine als Zeilen. Es gibt keine Zeile
+Python, die etwas ueber einen bestimmten Wandler weiss.
+
+**Ansehen und selbst fahren:** `PROBELAUF.bat` (Windows) oder
+`PROBELAUF.command` (Mac) doppelklicken. W/S Schub, A/D Kurs, 1-3 Klasse
+wechseln, **4 laesst ein Bein ausfallen**. Die Anzeige zeigt befohlenes und
+gemessenes Tempo getrennt - das gemessene wird nirgends gesetzt, es ist der
+Weg, den der Rumpf wirklich zurueckgelegt hat.
+
+**[`docs/WANDLER.md`](docs/WANDLER.md)** beschreibt alles davon: das
+Kartenformat, die Ausgleichsrechnung hinter dem Gang, die Bauklassen, das
+Aussehen - und jeden Fehler, der beim Bauen aufgetreten ist.
+
+## Karten kommen aus Dateien
+
+Bis 0.15.0 gab es genau eine Karte, und sie stand im Code. Jetzt liegt jede
+in `karten/` als Textdatei: ein Kopf, dann je Ebene ein Block, ein Zeichen
+eine Kachel. Grossbuchstaben sind **Marken** - sie werden zu einer Kachel
+*und* legen ihre Position unter einem Namen ab, sodass kein Code mehr wissen
+muss, wo der Start liegt oder wo der Steuerstand steht.
+
+Ein Kartenpruefer laeuft im Testlauf mit und fragt drei Dinge: fluchten die
+Treppen ueber den Ebenen, ist von der Startmarke aus jede Ebene erreichbar,
+und steht der Start im Freien. Eine kaputte Karte faellt damit im Test auf
+und nicht beim Spielen.
 
 ## Wohin es geht
 
@@ -66,11 +120,10 @@ auf eine Geschichte aufsetzen. Was von der Front jetzt schon gebraucht
 wird, ist nicht der Bau, sondern der Nachweis, dass sie spaeter ohne Umbau
 hineinpasst - der steht in Abschnitt 9.4 als fuenf Bedingungen an M1 bis M8.
 
-Gebaut ist davon noch nichts. **Als naechstes steht M1 an: Karten kommen
-aus Dateien** - `karten/` mit Textdateien, `Welt.aus_datei()`, Marken fuer
-Start, Stationen und Beute. Solange es nur `testkarte()` gibt, ist jeder
-weitere Schritt eine Codeaenderung; danach ist auch ein Wandler nur eine
-Textdatei.
+**M1 ist gebaut** (0.20.0): Karten kommen aus Dateien, und der Wandler ist
+selbst eine. **Als naechstes steht M2 an: der Wandler als begehbarer
+Rumpf** - die Decks stehen, die Stationen sind gesetzt, was fehlt, ist
+hineinzugehen.
 
 Wer weitermacht, nimmt sich den naechsten Meilenstein aus Abschnitt 13 des
 Plans und liest vorher Abschnitt 1, 2, 5 und 14 - Abschnitt 1 sagt, was
@@ -114,7 +167,7 @@ mitgeschleppter Mehrspieler haette jede dieser Entscheidungen doppelt so
 teuer gemacht.
 
 **Die Versionsnummern 0.16.0 bis 0.19.1 sind dort vergeben.** Der
-Hauptzweig macht bei **0.20.0** weiter - keine Nummer wird zweimal
+Hauptzweig macht bei **0.21.0** weiter - keine Nummer wird zweimal
 benutzt, auch nicht ueber Zweige hinweg.
 
 ## Starten
@@ -532,7 +585,8 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.18.0 | Pausenmenue, Rauch als Sichtwand, mehr Treppen (nur auf `multiplayer-test`) |
 | 0.19.0 | Runden ueber das Internet per UPnP (nur auf `multiplayer-test`) |
 | 0.19.1 | Knappe Munition wirkt wirklich. **Letzter Stand des Mehrspielers** (nur auf `multiplayer-test`) |
-| 0.20.0 | *(frei)* Naechste Nummer im Hauptzweig, siehe M1 im Weltenplan |
+| 0.20.0 | **M1:** Karten aus Dateien mit Marken und Pruefer; der Wandler laeuft, drei Bauklassen, Rumpf und Beine aus Text |
+| 0.21.0 | *(frei)* Naechste Nummer, siehe M2 im Weltenplan |
 
 ## Anpassen
 

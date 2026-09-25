@@ -201,6 +201,72 @@ def _menue(seed=0):
     return _schlag(660, 720, 0.05, 0.22, 3.0)
 
 
+# ── Der Wandler ───────────────────────────────────────────────────
+#
+# Der Schritt ist der wichtigste Klang im ganzen Spiel: er ist das, was aus
+# einer Bewegung einen Vorgang macht. Er besteht aus drei Lagen, und jede
+# hat eine Aufgabe:
+#
+#   Einschlag   ein tiefer Stoss - die Masse, die aufsetzt
+#   Blech       kurzes helles Scheppern - die Platte, die schwingt
+#   Staub       Rauschen, das ausklingt - was aufgewirbelt wird
+#
+# Ohne die tiefe Lage klingt es nach Schritt, nicht nach Maschine. Ohne die
+# helle nach Sack, nicht nach Stahl.
+
+@platzhalter_klang("schritt")
+def _schritt(seed=0):
+    r = random.Random(seed * 17 + 3)
+    f = 52 + r.uniform(-6, 6)
+    return _mischen(
+        _schlag(f, f * 0.42, 0.20, 0.95, 2.6),          # Masse
+        _schlag(f * 5.4, f * 3.1, 0.07, 0.30, 5.0),     # Blech
+        _rauschen(0.26, 0.30, 2600, 380, 2.8, seed),    # Staub
+    )
+
+
+@platzhalter_klang("servo")
+def _servo(seed=0):
+    """Ein Bein schwingt durch: Hydraulik, kein Anschlag."""
+    r = random.Random(seed * 31 + 9)
+    n = int(RATE * 0.17)
+    out = [0.0] * n
+    ph = 0.0
+    grund = 210 + r.uniform(-25, 25)
+    for i in range(n):
+        p = i / n
+        ph += 2 * math.pi * (grund * (1 + 0.55 * math.sin(math.pi * p))) / RATE
+        huell = math.sin(math.pi * p) ** 1.4
+        out[i] = (math.sin(ph) * 0.5 + math.sin(ph * 2.02) * 0.2) * huell * 0.34
+    return _mischen(out, _rauschen(0.17, 0.10, 4200, 1400, 1.6, seed))
+
+
+@platzhalter_klang("rumpf_stoss")
+def _rumpf_stoss(seed=0):
+    """Die ganze Maschine setzt hart auf. Tiefer und laenger als ein Schritt."""
+    return _mischen(
+        _schlag(38, 17, 0.42, 1.0, 2.0),
+        _schlag(126, 62, 0.16, 0.34, 4.0),
+        _rauschen(0.50, 0.34, 1700, 200, 2.2, seed),
+    )
+
+
+@platzhalter_klang("station_an")
+def _station_an(seed=0):
+    return _mischen(
+        _schlag(300, 620, 0.09, 0.42, 3.0),
+        _rauschen(0.07, 0.16, 5200, 2400, 3.0, seed),
+    )
+
+
+@platzhalter_klang("station_aus")
+def _station_aus(seed=0):
+    return _mischen(
+        _schlag(560, 250, 0.10, 0.38, 3.2),
+        _rauschen(0.07, 0.13, 4200, 1600, 3.0, seed),
+    )
+
+
 @platzhalter_klang("menue_ok")
 def _menue_ok(seed=0):
     return _mischen(_schlag(430, 640, 0.10, 0.28, 2.6),

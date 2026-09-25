@@ -1,0 +1,79 @@
+name: Reaver
+art: wandler
+klasse: reaver
+grund: deck
+
+# REAVER - der Standard. Vier Beine, vier Decks, 19 auf 13 Kacheln.
+#
+# Vier Beine heisst Kreuzgang: vorn links tritt mit hinten rechts, und zwei
+# Fuesse tragen immer. Deshalb laeuft er ruhig, deshalb bricht ihm ein
+# verlorenes Bein nicht das Genick - und deshalb ist er langsamer als ein
+# Warhound, denn er muss mehr Masse ueber jeden Schritt heben.
+#
+# Vom Reaktor im Unterdeck bis zum Geschuetz ganz oben sind es drei Treppen.
+# Genau diese Sekunden sind der Preis dafuer, dass er mehr traegt.
+
+bein: -3.4 -4.6 links
+bein: -3.4  4.6 rechts
+bein:  3.4 -4.6 links
+bein:  3.4  4.6 rechts
+
+--- ebene 0 ---
+   ###########
+  #...........#
+  #....A.......#
+ #.A............#
+ #...............#
+#........>.......#
+#..R.E.....Y......#
+#................#
+ #...............#
+ #.A............#
+  #....A.......#
+  #...........#
+   ###########
+
+--- ebene 1 ---
+ 
+    #########
+   #.........#
+  #.....M.....#
+  #..W.....L...#
+ #.......<......#
+ #....B..>.......#
+ #..............#
+  #..M.....L...#
+  #.....M.....#
+   #.........#
+    #########
+ 
+
+--- ebene 2 ---
+ 
+ 
+     #######
+    #....M..#
+   #..K......##
+  #............#
+  #.B....<.T....#
+  #......>.....#
+   #..F......##
+    #....M..#
+     #######
+ 
+ 
+
+--- ebene 3 ---
+ 
+ 
+     #######
+    #.......#
+   #.G......G##
+  #............#
+  #.............#
+  #......<.....#
+   #.G......G##
+    #.......#
+     #######
+ 
+ 

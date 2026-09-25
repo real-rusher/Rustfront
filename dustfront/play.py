@@ -24,7 +24,7 @@ from .font import SCHRIFT
 from .inventar import Inventar
 from .menues import Pause
 from .render import Kamera, Renderer
-from .world import freier_punkt, testkarte
+from .world import freier_punkt, karte_laden
 
 
 class Spiel(Szene):
@@ -39,10 +39,16 @@ class Spiel(Szene):
 
     # ---- Aufbau ------------------------------------------------------
     def neu_aufbauen(self) -> None:
-        self.welt = testkarte()
+        # Die Karte kommt aus `karten/`, nicht mehr aus dem Code. Welche,
+        # steht in K.KARTEN["start"] - oder im Auftrag aus dem Hauptmenue,
+        # sobald der eine Karte nennt.
+        auftrag = getattr(self.app, "auftrag", None) or {}
+        self.welt = karte_laden(auftrag.get("karte"))
         self.kamera = Kamera()
-        start = freier_punkt(self.welt, 0, self.rnd)
-        self.held = Spieler(start, 0)
+        # Und der Spieler faengt da an, wo die Karte es sagt (Marke S),
+        # nicht mehr auf einem Zufallspunkt.
+        start_ebene, start = self.welt.startpunkt()
+        self.held = Spieler(start, start_ebene)
         self.welt.dazu(self.held)
         self.welt.held = self.held
 

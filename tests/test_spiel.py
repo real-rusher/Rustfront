@@ -653,6 +653,239 @@ try:
 finally:
     shutil.rmtree(weg, ignore_errors=True)
 
+
+# ══════════════════════════════════════════════════════════════════
+# M1: Karten aus Dateien
+# ══════════════════════════════════════════════════════════════════
+
+print()
+print("-- Karten aus Dateien " + "-" * 40)
+
+from dustfront.karten import alle, lesen, pruefen, pruefen_welt, aus_text, KartenFehler
+from dustfront.world import Welt, hoehen_staffel, testkarte
+
+karten = alle()
+pruef("Karten liegen im Ordner", len(karten) >= 4, "%d Stueck" % len(karten))
+
+# Jede Karte muss laden und beide Pruefer bestehen. Das ist die eigentliche
+# Zusage von M1: ein neuer Ort ist eine Textdatei, und wenn sie falsch ist,
+# sagt es der Testlauf und nicht der Spieler.
+schlecht = []
+welten = {}
+for name in karten:
+    try:
+        k = lesen(name)
+        w = Welt.aus_karte(k)
+        welten[name] = w
+        f = pruefen(k) + pruefen_welt(w)
+        if f:
+            schlecht.append("%s: %s" % (name, f[0]))
+    except KartenFehler as fehler:
+        schlecht.append("%s: %s" % (name, fehler))
+pruef("Jede Karte laedt und ist baulich in Ordnung", not schlecht,
+      " | ".join(schlecht))
+
+# Marken: der Spieler faengt da an, wo es in der Karte steht. Verlangt wird
+# das von Orten - ein Rumpf ist kein Ort, in den man hineingeboren wird.
+orte = [n for n in karten if lesen(n).text("art", "ort") == "ort"]
+ohne_start = [n for n in orte if welten[n].marke("start") is None]
+pruef("Jeder Ort hat eine Startmarke", not ohne_start, ", ".join(ohne_start))
+pruef("Spiel startet auf der Marke, nicht auf einem Zufallspunkt",
+      szene.welt.marke("start") is not None)
+
+# Exaktes Uebernehmen: die Datei muss Kachel fuer Kachel dieselbe Karte
+# ergeben wie die eingebaute. Sonst hat der Umzug etwas verschluckt.
+alt_welt = testkarte()
+neu_welt = welten.get("probehalle")
+pruef("Probehalle ist Kachel fuer Kachel die alte Testkarte",
+      neu_welt is not None
+      and len(neu_welt.ebenen) == len(alt_welt.ebenen)
+      and all(a.kacheln == b.kacheln
+              for a, b in zip(alt_welt.ebenen, neu_welt.ebenen)))
+
+# Loecher am Zeilenende sind Karte, keine Leerzeilen. Daran ist der Leser
+# schon einmal gescheitert, und der Rumpf hat dabei seine Form verloren.
+form = aus_text("grund: deck\n\n--- ebene 0 ---\n  ###  \n #...# \n  ###  \n")
+pruef("Zeilen aus lauter Loechern bleiben erhalten",
+      len(form.bloecke[0]) == 3 and form.bloecke[0][0].startswith("  "))
+
+# Kaputte Karten fliegen mit einer Meldung, nicht mit einem Absturz.
+try:
+    aus_text("das ist kein kopf\n--- ebene 0 ---\n##\n")
+    gemeldet = False
+except KartenFehler:
+    gemeldet = True
+pruef("Ein kaputter Kopf wird gemeldet", gemeldet)
+
+# Hoehenstaffel: die erzeugte muss die von Hand gesetzte treffen.
+staffel = hoehen_staffel(4)
+abweichung = max(abs(a - b) for a, b in zip(staffel, K.EBENEN_HOEHE))
+pruef("Erzeugte Hoehenstaffel trifft die alte Tabelle", abweichung <= 1.5,
+      "groesste Abweichung %.1f px" % abweichung)
+tief = hoehen_staffel(10, mit_boden=False)
+pruef("Auch zehn Decks ergeben eine steigende Staffel",
+      len(tief) == 10 and all(b > a for a, b in zip(tief, tief[1:])))
+
+# ══════════════════════════════════════════════════════════════════
+# Das Beinwerk: die Bewegung kommt aus den Beinen
+# ══════════════════════════════════════════════════════════════════
+
+print()
+print("-- Der Wandler " + "-" * 47)
+
+from dustfront.wandler import Wandler, bauplan
+
+def laufen(w, sekunden, schub=1.0, lenkung=0.0):
+    """Laesst laufen und gibt das wirklich gefahrene Tempo zurueck."""
+    w.steuern(schub, lenkung)
+    start = pygame.Vector2(w.pos)
+    for _ in range(int(sekunden / K.FIXED_DT)):
+        w.schritt(K.FIXED_DT)
+    return w.pos.distance_to(start) / sekunden
+
+plaene = {}
+for klasse in ("warhound", "reaver", "imperator"):
+    plaene[klasse] = bauplan(klasse)
+pruef("Alle drei Bauplaene laden",
+      len(plaene) == 3 and all(p.beine for p in plaene.values()))
+
+# Gangarten leiten sich aus der Bauart ab, ohne Tabelle je Beinzahl.
+gruppen = {}
+for klasse, plan in plaene.items():
+    w = Wandler(plan, (3000, 3000))
+    gruppen[klasse] = [b.gruppe for b in w.beine]
+pruef("Zwei Beine gehen im Wechselschritt",
+      sorted(gruppen["warhound"]) == [0, 1])
+pruef("Vier Beine gehen im Kreuzgang",
+      gruppen["reaver"].count(0) == 2 and gruppen["reaver"].count(1) == 2
+      and gruppen["reaver"][0] != gruppen["reaver"][1]
+      and gruppen["reaver"][0] != gruppen["reaver"][2])
+pruef("Sechs Beine gehen im Dreifuss",
+      gruppen["imperator"].count(0) == 3 and gruppen["imperator"].count(1) == 3)
+
+# Der Kern des Modells: ein stehender Fuss ist in der Welt verankert und
+# bewegt sich **nicht**. Rutscht er, ist die ganze Ursachenkette dahin.
+w = Wandler(plaene["reaver"], (3000, 3000))
+w.steuern(1.0, 0.0)
+vorher = [pygame.Vector2(b.fuss) for b in w.beine]
+stand = [b.steht for b in w.beine]
+groesstes = 0.0
+for _ in range(int(8.0 / K.FIXED_DT)):
+    w.schritt(K.FIXED_DT)
+    for i, b in enumerate(w.beine):
+        if stand[i] and b.steht:
+            groesstes = max(groesstes, b.fuss.distance_to(vorher[i]))
+        vorher[i].update(b.fuss)
+        stand[i] = b.steht
+pruef("Ein stehender Fuss rutscht nie", groesstes < 1e-9,
+      "groesste Bewegung %.9f px" % groesstes)
+
+# Stillstand ist Stillstand: keine Drift, kein Zittern.
+w = Wandler(plaene["reaver"], (3000, 3000))
+start = pygame.Vector2(w.pos)
+w.steuern(0.0, 0.0)
+for _ in range(int(6.0 / K.FIXED_DT)):
+    w.schritt(K.FIXED_DT)
+pruef("Im Stand wandert der Rumpf nicht", w.pos.distance_to(start) < 0.5,
+      "%.4f px in 6 s" % w.pos.distance_to(start))
+
+# Tempo ist ein Ergebnis, kein Sollwert - es muss trotzdem herauskommen.
+schief = []
+for klasse, plan in plaene.items():
+    for schub in (1.0, 0.5):
+        w = Wandler(plan, (3000, 3000))
+        laufen(w, 4.0, schub)                    # einschwingen
+        v = laufen(w, 8.0, schub)
+        soll = plan.tempo * schub
+        if abs(v - soll) / soll > 0.12:
+            schief.append("%s bei %.0f%%: %.0f statt %.0f"
+                          % (klasse, schub * 100, v, soll))
+pruef("Die Beine liefern das befohlene Tempo", not schief, " | ".join(schief))
+
+# Beinverlust wirkt, ohne dass irgendwo ein Sonderfall steht.
+w = Wandler(plaene["reaver"], (3000, 3000))
+laufen(w, 4.0)
+ganz = laufen(w, 6.0)
+w.bein_verlieren(0)
+w.bein_verlieren(1)
+laufen(w, 4.0)
+angeschlagen = laufen(w, 6.0)
+pruef("Mit halben Beinen wankt der Rumpf", w.gangwerk.wank > 1.0,
+      "%.2f Grad" % w.gangwerk.wank)
+pruef("Mit halben Beinen laeuft er nicht schneller", angeschlagen <= ganz + 1.0,
+      "%.0f gegen %.0f px/s" % (angeschlagen, ganz))
+
+# Der Grenzfall: ein einziges Bein kann nicht tragen und treten zugleich.
+w = Wandler(plaene["warhound"], (3000, 3000))
+w.bein_verlieren(0)
+gestrandet = laufen(w, 8.0)
+pruef("Mit einem Bein geht gar nichts mehr", gestrandet < 1.0,
+      "%.2f px/s" % gestrandet)
+pruef("Und die Maschine sagt es", not w.fahrbereit)
+pruef("Reparatur bringt sie zurueck",
+      w.bein_richten(0) and w.fahrbereit and laufen(w, 6.0) > 20.0)
+
+# Drehen auf der Stelle. Wer genug Beine hat, dreht sauber; wer zwei hat,
+# schlurft dabei - und das ist keine Schwaeche des Modells, sondern seine
+# Aussage: mit zwei Beinen steht beim Drehen genau ein Fuss, und ein
+# einzelner Fuss legt keine Drehung fest. Ein Warhound muss sich
+# herumtreten, ein Reaver dreht auf dem Absatz.
+drift = {}
+for klasse in ("warhound", "reaver", "imperator"):
+    w = Wandler(plaene[klasse], (3000, 3000))
+    start, kurs0 = pygame.Vector2(w.pos), w.kurs
+    laufen(w, 6.0, schub=0.0, lenkung=1.0)
+    drift[klasse] = (abs(w.kurs - kurs0), w.pos.distance_to(start))
+pruef("Jede Maschine dreht auf der Stelle",
+      all(d[0] > 45.0 for d in drift.values()),
+      " ".join("%s %.0f Grad" % (k, d[0]) for k, d in drift.items()))
+pruef("Mit vier und mehr Beinen bleibt sie dabei stehen",
+      drift["reaver"][1] < 45.0 and drift["imperator"][1] < 45.0,
+      "Reaver %.0f px, Imperator %.0f px"
+      % (drift["reaver"][1], drift["imperator"][1]))
+pruef("Mit zwei Beinen schlurft sie dabei",
+      drift["warhound"][1] > drift["reaver"][1] * 2,
+      "Warhound %.0f px" % drift["warhound"][1])
+
+# Der Rumpf ist eine ganz normale Welt: begehbar, mit Treppen und Stationen.
+w = Wandler(plaene["imperator"], (3000, 3000))
+pruef("Der Rumpf hat so viele Decks wie die Datei",
+      len(w.welt.ebenen) == plaene["imperator"].decks)
+st = w.stationen()
+pruef("Der Rumpf hat Stationen", len(st) >= 4, ", ".join(sorted(st)))
+pruef("Jede Station steht auf einer begehbaren Kachel",
+      all(w.welt.ebene(deck).begehbar(int(p.x // K.TILE), int(p.y // K.TILE))
+          for deck, p in st.values()))
+
+# Hin und her rechnen zwischen Rumpf und Welt muss sich schliessen.
+w.gangwerk.kurs = 37.0
+probe = pygame.Vector2(120, 88)
+zurueck = w.nach_rumpf(w.nach_welt(probe))
+pruef("Umrechnen Rumpf zu Welt und zurueck trifft wieder denselben Punkt",
+      probe.distance_to(zurueck) < 0.01,
+      "%.5f px Abweichung" % probe.distance_to(zurueck))
+
+# Und die Maschine muss sich zeichnen lassen, ohne zu stolpern.
+from dustfront.render import Kamera as ProbeKamera
+probe_boden = welten.get("wasteland") or testkarte()
+probe_kamera = ProbeKamera(sicht=(K.GAME_W * 2, K.GAME_H * 2))
+probe_flaeche = pygame.Surface((K.GAME_W * 2, K.GAME_H * 2))
+gemalt = True
+try:
+    for klasse, plan in plaene.items():
+        wz = Wandler(plan, (1100, 700))
+        laufen(wz, 3.0)
+        probe_kamera.pos.update(wz.pos)
+        szene.renderer.welt_zeichnen(probe_flaeche, probe_boden, probe_kamera,
+                                     1.0, probe_boden.hoehe(0))
+        szene.renderer.wandler_zeichnen(probe_flaeche, wz, probe_kamera)
+except Exception as fehler:
+    gemalt = False
+    print("     ", type(fehler).__name__, fehler)
+pruef("Alle drei Maschinen lassen sich zeichnen", gemalt)
+pygame.image.save(probe_flaeche, "spiel_9_wandler.png")
+print("gespeichert spiel_9_wandler.png")
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

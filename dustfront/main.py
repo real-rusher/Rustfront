@@ -5,6 +5,7 @@ DUSTFRONT - Einstieg
     python -m dustfront                Spiel starten
     python -m dustfront --vorlagen     jedes Bild als Vorlage herausschreiben
     python -m dustfront --assets       zeigen, was aus Dateien kommt
+    python -m dustfront --probe        den Wandler laufen sehen und fahren
 
 Bilder werden, falls vorhanden, aus dem Ordner `assets` neben dem Paket
 geladen, Klaenge aus `assets/sfx`. Fehlt etwas, zeichnet und rechnet sich das
@@ -58,4 +59,7 @@ def aus_argumenten(argumente: list[str]) -> int:
     if "--assets" in argumente:
         from .vorlagen import bestand
         return bestand()
+    if "--probe" in argumente:
+        from .probe import starten as probe_starten
+        return probe_starten()
     return starten()

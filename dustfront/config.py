@@ -54,6 +54,23 @@ C_HULL_DK = (108, 94, 66)
 C_HULL_SH = (58, 47, 32)
 C_BLUT = (96, 30, 22)
 
+# Der Rumpf. Kuehler und grauer als der Boden: Wasteland ist Staub und
+# Rost, ein Deck ist Stahl. Der Unterschied muss auf einen Blick lesbar
+# sein, auch wenn beide Kacheln nebeneinander liegen - sonst weiss man
+# beim Absteigen nicht, wann man die Maschine verlassen hat.
+C_DECK = (58, 55, 49)
+C_DECK_2 = (50, 47, 42)
+C_DECK_FUGE = (32, 30, 26)
+C_DECK_HELL = (86, 81, 71)
+C_RUMPF = (78, 72, 62)
+C_RUMPF_OBEN = (116, 108, 93)
+C_RUMPF_KANTE = (26, 24, 20)
+C_STAHL = (96, 90, 78)
+C_STAHL_HELL = (152, 143, 124)
+C_STAHL_DUNKEL = (44, 41, 35)
+C_GLUT = (226, 122, 48)       # was in einem Reaktor gluht
+C_WARN = (204, 150, 52)       # Warnmarkierung, matter als C_AMBER
+
 # ══════════════════════════════════════════════════ GEFUEHL
 
 SPIELER = dict(
@@ -136,6 +153,11 @@ DEKAL = dict(
 # Kacheln muessen TILE gross sein, sonst reissen Luecken in die Karte.
 # Figuren sitzen mittig auf einer quadratischen Flaeche und schauen nach
 # rechts, damit das Drehen stimmt.
+# Grundmass der Beinglieder. Steht hier oben, weil BILD_MASS es braucht;
+# die vollstaendige Beintabelle K.BEIN weiter unten uebernimmt es.
+BEIN_GRUNDMASS = dict(ober=78.0, unter=90.0, dicke_ober=13, dicke_unter=10,
+                      fuss=18, huefte=17)
+
 BILD_MASS = {
     # Kacheln
     "leer":             (TILE, TILE),
@@ -149,6 +171,26 @@ BILD_MASS = {
     "treppe_hoch":      (TILE, TILE),
     "treppe_runter":    (TILE, TILE),
     "luke":             (TILE, TILE),
+    # Rumpfkacheln. Gleiche Groesse wie jede andere Kachel: ein Deck ist
+    # eine Karte wie jede andere, es sieht nur anders aus.
+    "deck":             (TILE, TILE),
+    "deck_2":           (TILE, TILE),
+    "deck_3":           (TILE, TILE),
+    "deck_4":           (TILE, TILE),
+    "deck_gitter":      (TILE, TILE),
+    "rumpfwand":        (TILE, TILE),
+    "rampe":            (TILE, TILE),
+    "modulschacht":     (TILE, TILE),
+    "antrieb":          (TILE, TILE),
+    "lager":            (TILE, TILE),
+    "koje":             (TILE, TILE),
+    "st_steuerstand":   (TILE, TILE),
+    "st_geschuetz":     (TILE, TILE),
+    "st_reaktor":       (TILE, TILE),
+    "st_werkbank":      (TILE, TILE),
+    "st_kartentisch":   (TILE, TILE),
+    "st_funk":          (TILE, TILE),
+    "st_werkstatt":     (TILE, TILE),
     # Figuren, quadratisch und nach rechts schauend. Die Figur mit Waffe
     # braucht mehr Flaeche als die Figur allein, sonst ragt der Lauf der
     # Scharfschuetzenwaffe hinaus.
@@ -167,6 +209,14 @@ BILD_MASS = {
     "medkit":           (16, 14),
     "granate":          (10, 10),
     "huelse":           (4, 3),
+    # Beinglieder. Sie liegen nach rechts und werden um ihre Mitte gedreht,
+    # genau wie jede Figur. Das Mass ist ein **Grundmass**: eine Bauklasse
+    # mit anderen Beinlaengen bekommt es hart umgerechnet, Pixel fuer
+    # Pixel. Wer sie ersetzt, malt also eine Form, keine feste Groesse.
+    "bein_ober":        (int(BEIN_GRUNDMASS["ober"]), BEIN_GRUNDMASS["dicke_ober"]),
+    "bein_unter":       (int(BEIN_GRUNDMASS["unter"]), BEIN_GRUNDMASS["dicke_unter"]),
+    "bein_fuss":        (BEIN_GRUNDMASS["fuss"], BEIN_GRUNDMASS["fuss"]),
+    "bein_huefte":      (BEIN_GRUNDMASS["huefte"], BEIN_GRUNDMASS["huefte"]),
     # Waffensymbole fuer Hotbar und Inventar, Seitenansicht nach rechts
     "waffe_repetierer": (26, 11),
     "waffe_sturm":      (26, 11),
@@ -200,6 +250,13 @@ KLANG_NAMEN = (
     "aufheben",
     "menue",
     "menue_ok",
+    # Der Wandler. "schritt" ist der wichtigste Klang im ganzen Spiel: er
+    # ist das, was einen Gang zu einem Vorgang macht.
+    "schritt",
+    "servo",                # ein Bein schwingt durch
+    "rumpf_stoss",          # die Maschine setzt hart auf
+    "station_an",           # eine Station wird uebernommen
+    "station_aus",
 )
 
 AUDIO = dict(
@@ -469,6 +526,286 @@ WELLEN = [
 ]
 WELLE_PAUSE = 4.0             # Sekunden zwischen zwei Wellen
 WELLE_WACHSTUM = 0.22         # plus 22 Prozent Gegner je Welle nach der Liste
+
+
+# ══════════════════════════════════════════════════ INHALTE: Rumpfkacheln
+#
+# Der Wandler ist eine begehbare Welt wie jede andere, nur besteht sein
+# Boden aus Rumpfplatten statt aus Wasteland. Deshalb gibt es zu jeder
+# Bodenkachel eine Rumpf-Entsprechung: gleiche Rolle, andere Textur.
+#
+#   BODEN   <->  DECK          worauf man steht
+#   GITTER  <->  DECK_GITTER   Laufrost, man sieht hindurch
+#   WAND    <->  RUMPFWAND     Aussenhaut und Schotten
+#
+# Welche der beiden Familien eine Karte benutzt, entscheidet die Kopfzeile
+# `grund:` der Kartendatei. Die Zeichen im Text bleiben dieselben, ein
+# Deck tippt sich also genau wie ein Stueck Wasteland.
+
+(DECK, DECK_GITTER, RUMPFWAND, RAMPE,
+ STEUERSTAND, GESCHUETZ, REAKTOR, WERKBANK, KARTENTISCH, FUNK,
+ MODULSCHACHT, ANTRIEB, WERKSTATT, LAGER, KOJE) = range(8, 23)
+
+# Stationen. `station` ist der Name, unter dem der Code sie findet; er ist
+# zugleich die Marke, die der Kartenleser ablegt. Wer eine Station dazu
+# erfinden will, braucht drei Zeilen: hier eine, in KACHELN eine, in
+# KARTEN["marken"] eine.
+STATIONEN = {
+    "steuerstand": dict(name="STEUERSTAND", kachel=STEUERSTAND, deck="bruecke",
+                        taste="steuern"),
+    "geschuetz":   dict(name="GESCHUETZ",   kachel=GESCHUETZ,   deck="oberdeck",
+                        taste="feuern"),
+    "reaktor":     dict(name="MASCHINE",    kachel=REAKTOR,     deck="unterdeck",
+                        taste="leistung"),
+    "werkbank":    dict(name="WERKBANK",    kachel=WERKBANK,    deck="hauptdeck",
+                        taste="bauen"),
+    "kartentisch": dict(name="KARTENTISCH", kachel=KARTENTISCH, deck="bruecke",
+                        taste="karte"),
+    "funk":        dict(name="FUNK",        kachel=FUNK,        deck="bruecke",
+                        taste="funk"),
+    "werkstatt":   dict(name="WERKSTATT",   kachel=WERKSTATT,   deck="unterdeck",
+                        taste="reparieren"),
+}
+
+KACHELN_RUMPF = {
+    DECK:         dict(name="deck",     fest=False, sicht=False, bild="deck"),
+    DECK_GITTER:  dict(name="rost",     fest=False, sicht=False, bild="deck_gitter"),
+    RUMPFWAND:    dict(name="schott",   fest=True,  sicht=True,  bild="rumpfwand"),
+    RAMPE:        dict(name="rampe",    fest=False, sicht=False, bild="rampe"),
+    STEUERSTAND:  dict(name="steuerstand", fest=False, sicht=False,
+                       bild="st_steuerstand", station="steuerstand"),
+    GESCHUETZ:    dict(name="geschuetz", fest=False, sicht=False,
+                       bild="st_geschuetz", station="geschuetz"),
+    REAKTOR:      dict(name="reaktor",  fest=False, sicht=False,
+                       bild="st_reaktor", station="reaktor"),
+    WERKBANK:     dict(name="werkbank", fest=False, sicht=False,
+                       bild="st_werkbank", station="werkbank"),
+    KARTENTISCH:  dict(name="kartentisch", fest=False, sicht=False,
+                       bild="st_kartentisch", station="kartentisch"),
+    FUNK:         dict(name="funk",     fest=False, sicht=False,
+                       bild="st_funk", station="funk"),
+    MODULSCHACHT: dict(name="schacht",  fest=False, sicht=False,
+                       bild="modulschacht"),
+    ANTRIEB:      dict(name="antrieb",  fest=True,  sicht=True,  bild="antrieb"),
+    WERKSTATT:    dict(name="werkstatt", fest=False, sicht=False,
+                       bild="st_werkstatt", station="werkstatt"),
+    LAGER:        dict(name="lager",    fest=True,  sicht=False, bild="lager"),
+    KOJE:         dict(name="koje",     fest=False, sicht=False, bild="koje"),
+}
+KACHELN.update(KACHELN_RUMPF)
+
+# ══════════════════════════════════════════════════ KARTEN AUS DATEIEN
+#
+# Eine Karte ist eine Textdatei in `karten/`. Kopf, dann je Ebene ein
+# Block. Ein Zeichen ist eine Kachel, genau wie bisher - neu ist nur, dass
+# der Text nicht mehr im Code steht.
+#
+#     name: Testhalle
+#     grund: boden
+#
+#     --- ebene 0 ---
+#     ##########
+#     #...S....#
+#     ##########
+#
+# Grossbuchstaben sind **Marken**: sie werden zu einer Kachel *und* legen
+# ihre Position unter einem Namen ab. Damit muss kein Code mehr wissen, wo
+# der Start, die Rampe oder der Steuerstand liegt - es steht in der Karte.
+
+KARTEN = dict(
+    ordner="karten",
+    endung=".txt",
+    trenner="---",            # Zeile, die einen Ebenenblock einleitet
+    kommentar="#",            # nur im Kopf; in den Zeilen ist # eine Wand
+    grund_voreinstellung="boden",
+    start="probehalle",       # welche Karte eine Runde beginnt
+    wandler="wandler/reaver", # welchen Rumpf der Probelauf zeigt
+    boden="wasteland",        # worauf er laeuft
+)
+
+# Zeichen -> Kachel, getrennt nach Untergrund. Beides hat dieselben Rollen,
+# damit ein Deck sich wie ein Stueck Boden tippt.
+ZEICHEN_BODEN = {
+    " ": LEER, ".": BODEN, ",": GITTER, "#": WAND, "X": KISTE,
+    "<": TREPPE_RUNTER, ">": TREPPE_HOCH, "o": LUKE,
+}
+ZEICHEN_DECK = {
+    " ": LEER, ".": DECK, ",": DECK_GITTER, "#": RUMPFWAND, "X": KISTE,
+    "<": TREPPE_RUNTER, ">": TREPPE_HOCH, "o": LUKE,
+}
+
+# Marke -> (Name, Kachel oder None fuer "nimm den Untergrund").
+# Ziffern 1 bis 9 kommen unten dazu, als punkt1 bis punkt9.
+MARKEN = {
+    "S": ("start",       None),
+    "R": ("rampe",       RAMPE),
+    "T": ("steuerstand", STEUERSTAND),
+    "G": ("geschuetz",   GESCHUETZ),
+    "E": ("reaktor",     REAKTOR),
+    "W": ("werkbank",    WERKBANK),
+    "K": ("kartentisch", KARTENTISCH),
+    "F": ("funk",        FUNK),
+    "M": ("modulschacht", MODULSCHACHT),
+    "A": ("antrieb",     ANTRIEB),
+    "Y": ("werkstatt",   WERKSTATT),
+    "L": ("lager",       LAGER),
+    "B": ("koje",        KOJE),
+}
+for _z in "123456789":
+    MARKEN[_z] = ("punkt" + _z, None)
+
+# ══════════════════════════════════════════════════ DER WANDLER
+#
+# Ein Wandler ist eine Kartendatei mit ein paar Kopfzeilen mehr. Alles
+# hier sind **Voreinstellungen**: jede Zeile laesst sich in der Datei
+# ueberschreiben, und die Datei laesst sich ohne eine Zeile Python
+# austauschen. Nichts am Wandler steht im Code fest.
+
+WANDLER = dict(
+    # ---- Fahrt ----------------------------------------------------
+    tempo=54.0,               # Pixel je Sekunde, die er hoechstens schafft
+    schub_an=0.9,             # Sekunden, bis der Befehl voll anliegt
+    schub_ab=1.4,             # Sekunden, bis er ausgelaufen ist
+    dreh=26.0,                # Grad je Sekunde bei vollem Ausschlag
+    dreh_an=1.6,              # Sekunden, bis die Lenkung voll anliegt
+    ueberlast=1.45,           # Faktor auf Tempo und Takt bei SHIFT
+    ueberlast_last=0.22,      # so viel Belastung je Sekunde auf die Beine
+
+    # ---- Wie der Rumpf den Beinen folgt ---------------------------
+    # Das ist die Stelle, an der sich entscheidet, ob die Maschine laeuft
+    # oder schwebt. Der Rumpf bekommt **keine** eigene Geschwindigkeit: er
+    # wird von den stehenden Fuessen getragen und zieht mit diesem Wert
+    # nach. Hoch = straff und mechanisch, niedrig = weich und traege.
+    koerper_zug=9.0,
+    # Gemessen, nicht geraten: bei 6.0 wanderte ein Reaver beim Drehen auf
+    # der Stelle 83 Pixel weit, bei 14.0 noch 26 - und er dreht dabei auch
+    # noch schneller, ohne dass das Geradeauslaufen darunter leidet.
+    kurs_zug=14.0,            # dasselbe fuer die Ausrichtung
+    wanken=0.7,               # Grad Schraeglage je fehlendem Standbein
+    wanken_zug=3.0,
+    heben=1.4,                # Pixel, um die der Rumpf je Schritt atmet
+    heben_zug=7.0,
+
+    # ---- Masse ------------------------------------------------------
+    radius=46.0,              # Rumpfradius fuer grobe Abfragen
+    stoss=2.1,                # Kameraruckeln je aufsetzendem Fuss
+    stoss_masse=0.55,         # Aufschlag je Gewichtsklasse
+)
+
+# Wie der Rumpf von aussen aussieht. Gebaut wird er aus dem Grundriss der
+# Decks - keine zweite Karte noetig -, hier steht nur, wie kraeftig.
+WANDLER_BILD = dict(
+    panzer_dunkel=196,        # so hell ist das unterste Deck (255 = wie innen)
+    stufe_hell=14,            # so viel heller wird jedes Deck darueber
+    plattenstoss=4,           # alle so viele Kacheln ein grosser Stoss
+    bug_tiefe=3,              # so viele Kachelreihen zaehlen als Bug
+    winkel=2,                 # so viele Warnwinkel am Bug
+    winkel_deckkraft=96,      # abgenutzt, nicht frisch lackiert
+    zoom=2,                   # Aussenansicht: 1 Bildpunkt je so viele Weltpunkte
+    zoom_grenzen=(1, 3),
+)
+
+# Gangarten. Der Takt sagt, wie viele Fuesse je Sekunde aufsetzen; die
+# Ordnung sagt, in welcher Reihenfolge. Eine neue Gangart ist ein Eintrag.
+#
+# `ordnung` ist eine Liste von Gruppen. Jede Gruppe tritt gemeinsam an.
+# Zwei Beine in einer Gruppe heisst Trab, eines heisst Schreiten.
+GANG = dict(
+    takt_ruhe=0.9,            # Gruppen je Sekunde im Schritttempo
+    takt_voll=2.3,            # Gruppen je Sekunde bei vollem Schub
+    schritt_dauer=0.34,       # Sekunden, die ein Fuss in der Luft ist
+    schritt_dauer_voll=0.21,  # dasselbe bei vollem Schub
+    # Schrittweite und Hub sind **Anteile der Beinreichweite**, keine festen
+    # Pixel. Sonst schlurft ein Imperator mit 224 Pixeln Bein genauso weit
+    # wie ein Warhound mit 134 - und sieht damit aus, als truege er zu
+    # grosse Schuhe.
+    schritt_anteil=0.42,      # so weit greift ein Fuss hoechstens
+    schritt_min=9.0,          # darunter lohnt kein Schritt
+    hub_anteil=0.075,         # so hoch hebt ein Fuss im Schritttempo
+    hub_voll_anteil=0.115,    # dasselbe bei vollem Schub
+    nachgreifen=0.34,         # so viel vom Schleppfehler holt ein Schritt auf
+    # Die Schrittweite wird **geregelt**, nicht ausgerechnet. Wie weit der
+    # Rumpf je Zyklus wirklich vorankommt, haengt an Dingen, die sich nicht
+    # sauber in eine Formel bringen lassen: wie viele Fuesse gerade tragen,
+    # wie alt ihre Standpunkte sind, wie straff der Rumpf nachzieht. Also
+    # misst die Maschine ihr eigenes Tempo und greift entsprechend weiter
+    # oder kuerzer - so, wie es ein Laeufer auch tut.
+    #
+    # Das ist nicht nur robuster, es ist richtiger: faellt ein Bein aus oder
+    # zieht die Ueberlast an, regelt sie nach, ohne dass dafuer irgendwo ein
+    # Sonderfall steht.
+    regel_start=0.62,         # Startwert, nah am eingeschwungenen Zustand
+    regelung=1.4,             # wie schnell nachgeregelt wird, je Sekunde
+    regel_min=0.25,
+    regel_max=2.40,
+    zwang=1.9,                # ab diesem Vielfachen von schritt_max tritt ein
+                              # Bein auch ausser der Reihe (Notschritt)
+    stand_mindest=1,          # so viele Fuesse bleiben immer am Boden
+    dreh_greifen=0.55,        # wie stark ein Schritt die Drehung vorwegnimmt
+)
+
+# Bein: Geometrie und Aussehen. Laengen in Pixeln, alles je Klasse
+# ueberschreibbar.
+BEIN = dict(
+    # Laengen in Welt-Pixeln. Sie muessen zum Rumpf passen: ein Rumpf von
+    # 13 Kacheln ist 416 Pixel breit, also greift ein Bein rund 150 Pixel
+    # ueber ihn hinaus. Zu kurze Beine sehen aus wie Raeder unter einer
+    # Kiste, zu lange wie ein Insekt.
+    **BEIN_GRUNDMASS,         # ober, unter, Dicken, Fuss, Huefte
+    knie_mindest=0.06,        # so weit bleibt das Bein vom Durchstrecken weg
+    spreizen=0.58,            # Ruhepunkt des Fusses, Anteil der Reichweite
+    schatten=0.62,            # Deckkraft des Beinschattens
+    schatten_versatz=5,       # Pixel, die der Schatten nachhinkt
+    hub_massstab=0.0042,      # so viel groesser wird ein Bein je Pixel Hub
+    hub_hell=26,              # so viel heller wird es im Schwung
+)
+
+# Bauklassen. Sie legen nur Voreinstellungen fest - was in der Kartendatei
+# steht, gewinnt. Decks und Beine kommen aus der Datei, hier steht, was
+# eine Klasse *bedeutet*.
+WANDLER_KLASSEN = {
+    "warhound": dict(
+        name="WARHOUND", gewicht=1,
+        tempo=78.0, dreh=38.0, bein=dict(ober=62.0, unter=72.0,
+                                         dicke_ober=14, dicke_unter=10,
+                                         fuss=17, huefte=15),
+        takt=1.25,            # Faktor auf GANG-Takt: leicht laeuft schneller
+    ),
+    "reaver": dict(
+        name="REAVER", gewicht=2,
+        tempo=54.0, dreh=26.0, bein=dict(ober=78.0, unter=90.0,
+                                         dicke_ober=18, dicke_unter=13,
+                                         fuss=22, huefte=20),
+        takt=1.0,
+    ),
+    "imperator": dict(
+        name="IMPERATOR", gewicht=3,
+        tempo=33.0, dreh=15.0, bein=dict(ober=104.0, unter=120.0,
+                                         dicke_ober=24, dicke_unter=17,
+                                         fuss=30, huefte=27),
+        takt=0.72,
+    ),
+}
+
+# ══════════════════════════════════════════════════ HOEHE JE RUMPF
+#
+# Die Tabelle EBENEN_HOEHE weiter oben ist keine willkuerliche Liste: sie
+# kodiert einen gleichbleibenden Wahrnehmungsschritt. Steht man oben, ist
+# jedes Deck darunter genau SCHRITT so gross wie das darueber - nur der
+# Boden faellt bewusst aus der Reihe und sitzt tiefer, damit er sich
+# absetzt.
+#
+#     hoehe(n) = brennweite * (SCHRITT**-n - 1)      n = Decks darunter
+#
+# Damit laesst sich die Staffel fuer **jede** Deckzahl erzeugen, und die
+# ersten Werte sind auf den Pixel die von Hand gesetzten. Ein Warhound mit
+# drei Decks und ein Imperator mit zehn sehen beide richtig aus.
+HOEHEN = dict(
+    schritt=0.895,            # scheinbare Groesse je Deck nach unten
+    boden_schritt=0.836,      # der eine groessere Sprung hinunter zum Boden
+    decks_hoechstens=12,
+)
+
 
 
 # ══════════════════════════════════════════════════════════════════

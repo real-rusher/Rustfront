@@ -540,3 +540,632 @@ def _vignette():
         pygame.draw.rect(s, (0, 0, 0, a), (i, i, K.GAME_W - 2 * i,
                                            K.GAME_H - 2 * i), 1)
     return s
+
+
+# ──────────────────────────────── Der Rumpf
+#
+# Ein Deck muss sich auf einen Blick von Wasteland unterscheiden, auch wenn
+# beide Kacheln nebeneinander liegen - sonst weiss man beim Absteigen nicht,
+# wann man die Maschine verlassen hat. Dafuer sorgen drei Dinge:
+#
+#   Farbe    kuehler und grauer. Draussen Staub und Rost, drinnen Stahl.
+#   Muster   Traenenblech statt gestreuter Flecken: gefertigt, nicht gewachsen.
+#   Kante    umlaufende Plattenfuge mit Nieten, regelmaessig statt zufaellig.
+#
+# Das Korn bleibt, sonst wirkt der Stahl wie Plastik. Aber es liegt duenner
+# darauf als beim Boden: benutzt, nicht verfallen.
+
+def _niete(s, x, y, hell=K.C_STAHL, dunkel=K.C_DECK_FUGE):
+    """Eine Niete: zwei helle Punkte, darunter ein Schatten. Drei Pixel,
+    und die Flaeche sieht verschraubt aus statt gemalt."""
+    pygame.draw.rect(s, hell, (x, y, 2, 2))
+    pygame.draw.rect(s, dunkel, (x, y + 2, 2, 1))
+    s.set_at((x, y), tuple(min(255, k + 34) for k in hell))
+
+
+def _stollen(s, x, y, hell, mitte, dunkel):
+    """Ein Stollen im Riffelblech, von oben gesehen.
+
+    Drei mal drei Pixel: oben links das Licht, unten rechts der Schatten,
+    dazwischen die Flaeche. Das ist die kleinste Form, die sich wirklich
+    als Erhebung liest - eine einfarbige Raute sieht aus wie ein Fleck,
+    und lange schraege Rippen legen sich zu Wellen zusammen.
+
+    Das Licht kommt von oben links, wie ueberall im Spiel (siehe
+    `_wandschatten`).
+    """
+    w, h = s.get_size()
+    def setz(px, py, farbe):
+        if 0 <= px < w and 0 <= py < h:
+            s.set_at((px, py), farbe)
+    setz(x + 1, y, hell)
+    setz(x, y + 1, hell)
+    setz(x + 1, y + 1, mitte)
+    setz(x + 2, y + 1, mitte)
+    setz(x + 1, y + 2, mitte)
+    setz(x + 2, y + 2, dunkel)
+    setz(x + 2, y, dunkel)
+    setz(x, y + 2, dunkel)
+
+
+def _deck_basis(seed, grund=None, muster=True, nieten=True):
+    """Eine Rumpfplatte. Grundlage jeder Kachel an Bord."""
+    r = random.Random(seed)
+    grund = grund or K.C_DECK
+    ton = tuple(max(0, min(255, c + r.randrange(-2, 3))) for c in grund)
+    s = _flaeche(T, T)
+    s.fill(ton)
+
+    hell = tuple(min(255, k + 20) for k in ton)
+    dunkel = tuple(max(0, k - 14) for k in ton)
+
+    if muster:                                  # Riffelblech, versetztes Raster
+        # Festes Raster ohne Zufallsversatz: gefertigte Flaechen sind
+        # regelmaessig, und jeder Wackler daran sieht nach Schmutz aus
+        # statt nach Blech. Die Abwechslung zwischen den Kacheln kommt aus
+        # der Phase, nicht aus verrutschten Stollen.
+        phase = seed % 2
+        st_hell = tuple(min(255, k + 24) for k in ton)
+        st_mitte = tuple(min(255, k + 9) for k in ton)
+        st_dunkel = tuple(max(0, k - 13) for k in ton)
+        for gy in range(-1, T // 6 + 2):
+            for gx in range(-1, T // 6 + 2):
+                x = gx * 6 + (3 if (gy + phase) % 2 else 0)
+                y = gy * 6 + 4
+                _stollen(s, x, y, st_hell, st_mitte, st_dunkel)
+
+    # Umlaufende Plattenfuge: oben und links dunkel, eine Zeile darunter hell.
+    pygame.draw.line(s, K.C_DECK_FUGE, (0, 0), (T - 1, 0))
+    pygame.draw.line(s, K.C_DECK_FUGE, (0, 0), (0, T - 1))
+    pygame.draw.line(s, hell, (1, 1), (T - 2, 1))
+    pygame.draw.line(s, tuple(max(0, k - 6) for k in ton), (0, T - 1), (T - 1, T - 1))
+
+    if nieten:
+        for nx, ny in ((2, 3), (T - 5, 3), (2, T - 6), (T - 5, T - 6)):
+            _niete(s, nx, ny)
+
+    if r.random() < 0.28:                       # Oelfleck oder Abrieb
+        x, y = r.randrange(6, T - 12), r.randrange(6, T - 10)
+        pygame.draw.ellipse(s, tuple(max(0, k - 9) for k in ton),
+                            (x, y, r.randrange(6, 11), r.randrange(4, 7)))
+    if r.random() < 0.22:                       # Schweissnaht
+        y = r.randrange(9, T - 9)
+        for x in range(4, T - 4, 2):
+            pygame.draw.rect(s, tuple(min(255, k + 12) for k in ton), (x, y, 1, 2))
+
+    _koerner(s, K.C_DECK_FUGE, 16, seed)
+    _koerner(s, hell, 8, seed + 1)
+    return s
+
+
+@platzhalter("deck")
+def _deck():
+    return _deck_basis(101)
+
+
+@platzhalter("deck_2")
+def _deck2():
+    return _deck_basis(102)
+
+
+@platzhalter("deck_3")
+def _deck3():
+    return _deck_basis(103, K.C_DECK_2)
+
+
+@platzhalter("deck_4")
+def _deck4():
+    return _deck_basis(104)
+
+
+@platzhalter("deck_gitter")
+def _deck_gitter():
+    """Laufrost. Man sieht hindurch, also ist zwischen den Streben Dunkel
+    und kein Blech."""
+    s = _flaeche(T, T)
+    s.fill((15, 13, 12))                        # der Blick nach unten
+    strebe = (48, 45, 39)
+    kante = (74, 69, 60)
+    for x in range(1, T, 5):                    # Laengsstreben, hochkant
+        pygame.draw.rect(s, strebe, (x, 0, 3, T))
+        pygame.draw.line(s, kante, (x, 0), (x, T - 1))       # Lichtkante
+        pygame.draw.line(s, (24, 22, 19), (x + 2, 0), (x + 2, T - 1))
+    for y in range(4, T, 12):                   # Querbaender, tiefer liegend
+        pygame.draw.rect(s, (36, 34, 29), (0, y, T, 2))
+        pygame.draw.line(s, (58, 54, 47), (0, y), (T - 1, y))
+    pygame.draw.line(s, K.C_DECK_FUGE, (0, 0), (T - 1, 0))
+    _koerner(s, (11, 10, 9), 16, 105)
+    _koerner(s, (86, 80, 70), 5, 106)
+    return s
+
+
+@platzhalter("rumpfwand")
+def _rumpfwand():
+    """Aussenhaut und Schotten. Wie die Wand draussen gebaut - obere Flaeche
+    hell, untere Kante hart - aber aus Stahl statt aus Stein."""
+    s = _flaeche(T, T)
+    s.fill(K.C_RUMPF)
+    pygame.draw.rect(s, K.C_RUMPF_OBEN, (0, 0, T, 6))
+    pygame.draw.rect(s, K.C_RUMPF_KANTE, (0, T - 3, T, 3))
+    pygame.draw.line(s, tuple(min(255, k + 24) for k in K.C_RUMPF_OBEN),
+                     (0, 0), (T - 1, 0))
+    for x in (0, T // 2):                       # senkrechte Plattenstoesse
+        pygame.draw.line(s, K.C_RUMPF_KANTE, (x, 6), (x, T - 4))
+        pygame.draw.line(s, tuple(min(255, k + 16) for k in K.C_RUMPF),
+                         (x + 1, 6), (x + 1, T - 4))
+    pygame.draw.line(s, (94, 87, 74), (1, 7), (T - 2, 7))
+    for nx in (4, T - 7):                       # Verschraubung oben
+        _niete(s, nx, 2, K.C_STAHL_HELL, (56, 51, 43))
+    _koerner(s, (60, 55, 47), 24, 107)
+    _koerner(s, (126, 117, 100), 10, 108)
+    return s
+
+
+@platzhalter("rampe")
+def _rampe():
+    """Der Weg nach draussen. Warnmarkierung, damit man sie im Gefecht
+    findet, ohne zu suchen."""
+    r = random.Random(110)
+    s = _deck_basis(109, muster=False, nieten=False)
+    # Warnmarkierung nur als schmales Band am oberen und unteren Rand, und
+    # zwar abgelaufen. Eine ganzflaechig gestreifte Kachel schreit lauter
+    # als alles andere auf dem Bildschirm und macht die Karte unlesbar -
+    # gesucht ist ein Hinweis, kein Absperrband.
+    for band_y in (1, T - 5):
+        for i in range(-6, T + 6, 7):
+            pygame.draw.polygon(s, K.C_WARN,
+                                [(i, band_y + 4), (i + 3, band_y + 4),
+                                 (i + 7, band_y), (i + 4, band_y)])
+        pygame.draw.rect(s, (0, 0, 0, 0), (0, band_y, 0, 0))
+    for y in range(7, T - 6, 6):                # Trittleisten quer
+        pygame.draw.rect(s, (40, 37, 32), (2, y, T - 4, 3))
+        pygame.draw.line(s, (86, 80, 70), (2, y), (T - 3, y))
+        pygame.draw.line(s, (22, 20, 17), (2, y + 2), (T - 3, y + 2))
+    # Und zuletzt die Jahre darueber: Tritt, Staub, abgelaufener Lack.
+    abgelaufen = pygame.Surface((T, T), pygame.SRCALPHA)
+    abgelaufen.fill((14, 12, 10, 132))
+    s.blit(abgelaufen, (0, 0))
+    for _ in range(30):                         # blank getretene Stellen
+        x, y = r.randrange(T), r.randrange(T)
+        s.set_at((x, y), tuple(min(255, k + 10) for k in K.C_DECK))
+    pygame.draw.line(s, K.C_DECK_FUGE, (0, 0), (T - 1, 0))
+    pygame.draw.line(s, K.C_DECK_FUGE, (0, 0), (0, T - 1))
+    _koerner(s, K.C_DECK_FUGE, 20, 110)
+    _koerner(s, (96, 90, 78), 6, 111)
+    return s
+
+
+# ──────────────────────────────── Stationen und Einbauten
+#
+# Von oben sieht man von einem Geraet fast nur seine Grundflaeche. Erkennbar
+# wird es dadurch **nicht** ueber Einzelheiten - dafuer ist keine Flaeche da -
+# sondern ueber drei Dinge:
+#
+#   Umriss   rund, eckig, laenglich. Das liest man als Erstes.
+#   Licht    ein farbiger Punkt sagt "das laeuft" und wo man hinsieht.
+#   Richtung wohin das Geraet zeigt, damit man weiss, wo man sich hinstellt.
+#
+# Die Lichter halten sich an die Bedeutung, die das Spiel schon benutzt:
+# tuerkis heisst Anzeige und Information, bernstein heisst Kraft und Gefahr.
+
+def _geraet(seed, rechteck, farbe=None, hell=None):
+    """Grundform jedes Einbaus: eine Platte auf dem Deck, mit Schatten."""
+    s = _deck_basis(seed, muster=False)
+    farbe = farbe or K.C_STAHL
+    hell = hell or K.C_STAHL_HELL
+    r = pygame.Rect(rechteck)
+    pygame.draw.rect(s, (18, 16, 14), r.move(1, 2))        # eigener Schatten
+    pygame.draw.rect(s, K.C_STAHL_DUNKEL, r)
+    pygame.draw.rect(s, farbe, r.inflate(-2, -2))
+    pygame.draw.line(s, hell, (r.left + 1, r.top + 1), (r.right - 2, r.top + 1))
+    return s, r
+
+
+def _lampe(s, x, y, farbe, grell=None):
+    """Ein Betriebslicht. Zwei Pixel Kern, ein Hof darum - so liest es sich
+    als Leuchte und nicht als Farbfleck."""
+    grell = grell or tuple(min(255, k + 70) for k in farbe)
+    pygame.draw.rect(s, tuple(k // 2 for k in farbe), (x - 1, y - 1, 4, 4))
+    pygame.draw.rect(s, farbe, (x, y, 2, 2))
+    s.set_at((x, y), grell)
+
+
+@platzhalter("st_steuerstand")
+def _st_steuerstand():
+    """Der Steuerstand. Laenglich quer, zwei Griffe, eine Anzeige - man
+    sieht sofort, auf welcher Seite man sich hinstellt."""
+    s, r = _geraet(120, (4, 9, T - 8, 13))
+    pygame.draw.rect(s, (30, 27, 23), (7, 12, T - 14, 6))   # Anzeigenblende
+    pygame.draw.rect(s, K.C_TEAL_DK, (8, 13, T - 16, 4))
+    for x in range(9, T - 8, 3):                            # Zeilen im Schirm
+        pygame.draw.rect(s, K.C_TEAL, (x, 14, 2, 1))
+    for gx in (5, T - 9):                                   # die beiden Griffe
+        pygame.draw.circle(s, K.C_STAHL_DUNKEL, (gx + 1, 20), 3)
+        pygame.draw.circle(s, (118, 110, 95), (gx + 1, 19), 2)
+    _lampe(s, T // 2 - 1, 10, K.C_TEAL)
+    _koerner(s, K.C_DECK_FUGE, 10, 120)
+    return s
+
+
+@platzhalter("st_geschuetz")
+def _st_geschuetz():
+    """Geschuetzstand: der Drehkranz, in dem das Rohr sitzt. Rund, damit man
+    ihn von allem anderen unterscheidet."""
+    s = _deck_basis(121, muster=False)
+    m = T // 2
+    pygame.draw.circle(s, (20, 18, 15), (m, m + 1), 12)     # Vertiefung
+    pygame.draw.circle(s, K.C_STAHL_DUNKEL, (m, m), 12)
+    pygame.draw.circle(s, K.C_STAHL, (m, m), 10)
+    for i in range(12):                                     # Zahnkranz
+        a = math.tau * i / 12
+        x = int(m + math.cos(a) * 10.5)
+        y = int(m + math.sin(a) * 10.5)
+        pygame.draw.rect(s, K.C_STAHL_DUNKEL, (x - 1, y - 1, 2, 2))
+    pygame.draw.circle(s, (42, 39, 34), (m, m), 6)
+    pygame.draw.circle(s, K.C_STAHL_HELL, (m, m - 1), 5, 1)
+    pygame.draw.rect(s, K.C_STAHL_DUNKEL, (m - 2, 3, 4, 8))  # Munitionszufuhr
+    pygame.draw.rect(s, K.C_WARN, (m - 2, 4, 4, 1))
+    _lampe(s, m - 1, m - 1, K.C_AMBER)
+    return s
+
+
+@platzhalter("st_reaktor")
+def _st_reaktor():
+    """Der Reaktor. Das einzige Bild im Rumpf, das von selbst leuchtet -
+    und deshalb das, an dem man sich unter Deck orientiert."""
+    s = _deck_basis(122, muster=False)
+    m = T // 2
+    for i in range(-T, T, 6):                               # Warnband
+        pygame.draw.polygon(s, (72, 56, 26),
+                            [(i, T), (i + 3, T), (i + 3 + T, 0), (i + T, 0)])
+    pygame.draw.circle(s, K.C_STAHL_DUNKEL, (m, m), 13)
+    pygame.draw.circle(s, (46, 42, 36), (m, m), 11)
+    for ring, farbe in ((9, (96, 54, 22)), (7, (150, 78, 28)),
+                        (5, K.C_GLUT), (3, (248, 186, 96))):
+        pygame.draw.circle(s, farbe, (m, m), ring)
+    pygame.draw.circle(s, (255, 236, 186), (m - 1, m - 1), 1)
+    for i in range(8):                                      # Kuehlrippen
+        a = math.tau * i / 8 + 0.4
+        x1 = int(m + math.cos(a) * 11); y1 = int(m + math.sin(a) * 11)
+        x2 = int(m + math.cos(a) * 14); y2 = int(m + math.sin(a) * 14)
+        pygame.draw.line(s, K.C_STAHL_DUNKEL, (x1, y1), (x2, y2), 2)
+        s.set_at((x2, y2), K.C_STAHL)
+    return s
+
+
+@platzhalter("st_werkbank")
+def _st_werkbank():
+    """Werkbank: eine Platte, Werkzeug darauf, ein Schraubstock an der Kante."""
+    s, r = _geraet(123, (3, 7, T - 6, 17), (86, 62, 38), (136, 100, 62))
+    for x in range(5, T - 5, 4):                            # Holzfugen
+        pygame.draw.line(s, (56, 40, 24), (x, 9), (x, r.bottom - 3))
+    pygame.draw.rect(s, K.C_STAHL_DUNKEL, (5, 10, 9, 3))    # Werkzeug
+    pygame.draw.rect(s, K.C_STAHL_HELL, (5, 10, 9, 1))
+    pygame.draw.rect(s, K.C_RUST, (17, 11, 8, 2))
+    pygame.draw.circle(s, K.C_STAHL, (22, 18), 3)
+    pygame.draw.rect(s, K.C_STAHL_DUNKEL, (4, 16, 7, 6))    # Schraubstock
+    pygame.draw.rect(s, (118, 110, 95), (5, 17, 5, 2))
+    _koerner(s, (48, 34, 20), 12, 123)
+    return s
+
+
+@platzhalter("st_kartentisch")
+def _st_kartentisch():
+    """Kartentisch: der einzige Ort an Bord, an dem Veld sichtbar wird."""
+    s, r = _geraet(124, (3, 5, T - 6, T - 10), (44, 40, 34), (74, 68, 58))
+    innen = r.inflate(-6, -6)
+    pygame.draw.rect(s, (16, 24, 26), innen)                # Leuchttisch
+    pygame.draw.rect(s, K.C_TEAL_DK, innen, 1)
+    rnd = random.Random(7)
+    punkte = [(innen.left + 3 + rnd.randrange(innen.width - 6),
+               innen.top + 2 + rnd.randrange(innen.height - 4)) for _ in range(5)]
+    for a, b in zip(punkte, punkte[1:]):                    # Sektorknoten
+        pygame.draw.line(s, (26, 70, 68), a, b)
+    for x, y in punkte:
+        s.set_at((x, y), K.C_TEAL)
+    _lampe(s, innen.centerx - 1, innen.top + 1, K.C_TEAL)
+    return s
+
+
+@platzhalter("st_funk")
+def _st_funk():
+    """Funk: Gehaeuse mit Lautsprechergitter, zwei Drehknoepfe, eine Skala."""
+    s, r = _geraet(125, (5, 6, T - 10, T - 12), (52, 48, 41), (92, 85, 73))
+    pygame.draw.rect(s, (24, 22, 19), (8, 9, 9, 9))         # Lautsprecher
+    for y in range(10, 18, 2):
+        pygame.draw.line(s, (62, 57, 49), (9, y), (15, y))
+    pygame.draw.rect(s, (18, 26, 27), (19, 9, 6, 4))        # Skala
+    pygame.draw.rect(s, K.C_TEAL, (20 + 2, 10, 1, 2))
+    for cx in (20, 24):                                      # Drehknoepfe
+        pygame.draw.circle(s, K.C_STAHL_DUNKEL, (cx, 17), 2)
+        s.set_at((cx, 16), K.C_STAHL_HELL)
+    pygame.draw.line(s, K.C_STAHL, (T - 7, 4), (T - 5, 12))  # Antenne
+    _lampe(s, 9, 20, K.C_AMBER)
+    return s
+
+
+@platzhalter("st_werkstatt")
+def _st_werkstatt():
+    """Werkstatt: Schweissgeraet und Flaschen. Hier wird repariert, also
+    liegt hier das Werkzeug fuer Q."""
+    s = _deck_basis(126, muster=False)
+    pygame.draw.rect(s, (18, 16, 14), (5, 8, 10, 18))       # Schatten
+    for i, farbe in enumerate(((62, 76, 58), (96, 62, 40))):  # zwei Flaschen
+        x = 5 + i * 6
+        pygame.draw.rect(s, K.C_STAHL_DUNKEL, (x, 7, 5, 18))
+        pygame.draw.rect(s, farbe, (x + 1, 8, 3, 16))
+        pygame.draw.rect(s, tuple(min(255, k + 40) for k in farbe), (x + 1, 8, 1, 16))
+        pygame.draw.rect(s, K.C_STAHL, (x + 1, 5, 3, 3))     # Ventil
+    pygame.draw.rect(s, K.C_STAHL_DUNKEL, (18, 14, 11, 9))   # Geraet
+    pygame.draw.rect(s, (66, 61, 52), (19, 15, 9, 7))
+    pygame.draw.rect(s, K.C_STAHL_HELL, (19, 15, 9, 1))
+    for x in range(20, 28, 2):                               # Schlauch
+        pygame.draw.line(s, (34, 30, 26), (x, 24), (x + 1, 26))
+    _lampe(s, 26, 17, K.C_TEAL)
+    s.set_at((17, 12), (255, 240, 200))                      # ein Funke
+    s.set_at((16, 13), K.C_AMBER)
+    return s
+
+
+@platzhalter("modulschacht")
+def _modulschacht():
+    """Ein **leerer** Schacht, und man muss ihm ansehen, dass er leer ist.
+
+    Der Fortschritt im Spiel ist begehbar: ein neues Modul ist ein neuer
+    Raum. Damit das wirkt, muss der leere Platz vorher als Luecke lesbar
+    sein - offene Verankerung, lose Kabel, blanker Rumpf darunter.
+    """
+    s = _deck_basis(127, muster=False, nieten=False)
+    r = pygame.Rect(3, 3, T - 6, T - 6)
+    pygame.draw.rect(s, (22, 20, 17), r)                     # offener Grund
+    pygame.draw.rect(s, K.C_STAHL_DUNKEL, r, 2)
+    for ex in (r.left + 1, r.right - 5):                     # Verankerung
+        for ey in (r.top + 1, r.bottom - 5):
+            pygame.draw.rect(s, K.C_STAHL, (ex, ey, 4, 4))
+            pygame.draw.rect(s, (24, 22, 18), (ex + 1, ey + 1, 2, 2))
+    rnd = random.Random(19)
+    for farbe in ((92, 60, 30), (46, 74, 72), (70, 64, 54)):  # lose Kabel
+        x0 = rnd.randrange(r.left + 4, r.right - 8)
+        y0 = rnd.randrange(r.top + 4, r.bottom - 6)
+        pygame.draw.lines(s, farbe, False,
+                          [(x0, y0), (x0 + 3, y0 + 3), (x0 + 7, y0 + 2),
+                           (x0 + 9, y0 + 5)])
+    _koerner(s, (14, 12, 10), 14, 127)
+    return s
+
+
+@platzhalter("antrieb")
+def _antrieb():
+    """Antriebsblock. Fest - man geht darum herum, nicht hindurch."""
+    s = _deck_basis(128, muster=False, nieten=False)
+    pygame.draw.rect(s, K.C_RUMPF_KANTE, (0, T - 3, T, 3))
+    pygame.draw.rect(s, (62, 57, 49), (0, 0, T, T - 3))
+    pygame.draw.rect(s, (86, 80, 69), (0, 0, T, 5))
+    for x in range(3, T - 4, 8):                             # Kolben
+        pygame.draw.rect(s, K.C_STAHL_DUNKEL, (x, 7, 6, 15))
+        pygame.draw.rect(s, K.C_STAHL, (x + 1, 8, 4, 13))
+        pygame.draw.rect(s, K.C_STAHL_HELL, (x + 1, 8, 1, 13))
+        pygame.draw.rect(s, (30, 27, 23), (x + 1, 14, 4, 2))
+    pygame.draw.rect(s, (34, 31, 26), (0, 23, T, 2))         # Riemen
+    _lampe(s, T - 6, 2, K.C_AMBER)
+    _koerner(s, (44, 40, 34), 20, 128)
+    return s
+
+
+@platzhalter("lager")
+def _lager():
+    """Gestapelte Frachtkaesten. Fest, und man sieht die Beute liegen."""
+    s = _deck_basis(129, muster=False, nieten=False)
+    for (x, y, w, h, ton) in ((2, 4, 14, 12, K.C_HULL_DK),
+                              (17, 2, 12, 15, (96, 84, 58)),
+                              (5, 17, 16, 12, K.C_HULL_DK),
+                              (22, 18, 8, 11, (86, 76, 52))):
+        pygame.draw.rect(s, (20, 17, 13), (x + 1, y + 2, w, h))
+        pygame.draw.rect(s, K.C_HULL_SH, (x, y, w, h))
+        pygame.draw.rect(s, ton, (x + 1, y + 1, w - 2, h - 2))
+        pygame.draw.rect(s, tuple(min(255, k + 34) for k in ton),
+                         (x + 2, y + 2, w - 4, 1))
+        pygame.draw.rect(s, K.C_HULL_SH, (x + 1, y + h // 2, w - 2, 2))
+    pygame.draw.rect(s, K.C_WARN, (19, 5, 4, 2))
+    _koerner(s, K.C_HULL_SH, 14, 129)
+    return s
+
+
+@platzhalter("koje")
+def _koje():
+    """Eine Schlafkoje. Das einzige Stueck an Bord, das niemandem nutzt und
+    trotzdem dasteht - und genau deshalb erzaehlt es etwas."""
+    s = _deck_basis(130, muster=False)
+    r = pygame.Rect(4, 3, T - 8, T - 6)
+    pygame.draw.rect(s, (18, 16, 14), r.move(1, 2))
+    pygame.draw.rect(s, K.C_STAHL_DUNKEL, r)                 # Rahmen
+    pygame.draw.rect(s, (58, 46, 38), r.inflate(-3, -3))     # Liegeflaeche
+    pygame.draw.rect(s, (150, 140, 118), (r.left + 3, r.top + 2, r.width - 6, 7))
+    pygame.draw.rect(s, (188, 178, 152), (r.left + 4, r.top + 3, r.width - 8, 3))
+    pygame.draw.rect(s, (112, 104, 86), (r.left + 3, r.top + 8, r.width - 6, 1))
+    pygame.draw.rect(s, (50, 44, 36), (r.left + 2, r.top + 11,
+                                       r.width - 4, r.height - 13))
+    for y in range(r.top + 13, r.bottom - 3, 3):             # Deckenfalten
+        pygame.draw.line(s, (40, 35, 29), (r.left + 3, y), (r.right - 4, y))
+    _koerner(s, (34, 30, 25), 12, 130)
+    return s
+
+
+# ──────────────────────────────── Beinglieder
+#
+# Von oben sieht man von einem Bein die Oberseite: ein gepanzertes Gehaeuse,
+# darin die Hydraulik. Die Glieder liegen nach rechts und werden um ihre
+# Mitte gedreht, genau wie jede Figur - das linke Ende ist das koerpernahe
+# Gelenk, das rechte das koerperferne.
+#
+#   bein_ober    Huefte  -> Knie    das schwere Glied, traegt die Last
+#   bein_unter   Knie    -> Fuss    schlanker, mit sichtbarer Kolbenstange
+#   bein_fuss    die Trittplatte
+#   bein_huefte  die Schulter am Rumpf
+#
+# Alle vier bekommen eine dunkle Randlinie. Ohne sie versinken sie im Boden,
+# sobald die Maschine ueber dunklen Untergrund laeuft - dasselbe Problem,
+# das die Figuren haben, und dieselbe Loesung.
+#
+# Das Mass in BILD_MASS ist ein **Grundmass**. Eine Bauklasse mit anderen
+# Beinlaengen bekommt es hart umgerechnet, Pixel fuer Pixel. Wer die Bilder
+# ersetzt, malt deshalb eine Form und keine feste Groesse.
+
+# Farbverlauf ueber den Querschnitt eines Glieds, von der oberen Kante zur
+# unteren. Licht kommt von oben links, wie ueberall im Spiel. Ohne diesen
+# Verlauf sieht ein Bein von oben aus wie ein Lineal: gleichmaessig hell,
+# ohne Koerper. Mit ihm liest es sich als gewoelbtes Panzerblech.
+_GLIED_TON = (
+    (0.00, (118, 110, 95)),     # Lichtkante oben
+    (0.16, (96, 90, 78)),
+    (0.42, (72, 67, 58)),
+    (0.70, (52, 48, 41)),
+    (0.88, (34, 31, 27)),
+    (1.00, (22, 20, 17)),       # Schattenkante unten
+)
+
+
+def _ton(f: float) -> tuple:
+    """Mischt den Querschnittston an der Stelle f (0 oben, 1 unten)."""
+    f = max(0.0, min(1.0, f))
+    for (a, fa), (b, fb) in zip(_GLIED_TON, _GLIED_TON[1:]):
+        if f <= b:
+            k = 0.0 if b == a else (f - a) / (b - a)
+            return tuple(int(round(fa[i] + (fb[i] - fa[i]) * k)) for i in range(3))
+    return _GLIED_TON[-1][1]
+
+
+def _glied(laenge, dicke, keil=0.0, seed=0, bauch=0.0):
+    """Grundform eines Beinglieds: ein gewoelbtes Gehaeuse, das sich zum
+    koerperfernen Ende verjuengt.
+
+    `keil` sagt, wie stark es sich verjuengt - 0 bleibt gleich dick, 1
+    laeuft spitz zu. `bauch` woelbt es in der Mitte zusaetzlich auf, wie ein
+    Muskel oder ein Gehaeuse um eine Mechanik.
+
+    Jede Spalte wird einzeln schattiert, von der Lichtkante oben bis zur
+    Schattenkante unten. Das ist der ganze Unterschied zwischen einem Rohr
+    und etwas, das Kraft uebertraegt.
+    """
+    s = _flaeche(laenge, dicke)
+    mitte = dicke / 2.0
+    for x in range(laenge):
+        t = x / max(1, laenge - 1)
+        halb = mitte * (1.0 - keil * t) + bauch * math.sin(math.pi * t)
+        y0 = int(round(mitte - halb))
+        y1 = int(round(mitte + halb))
+        hoehe = y1 - y0
+        if hoehe <= 0:
+            continue
+        for i in range(hoehe):
+            s.set_at((x, y0 + i), _ton(i / max(1, hoehe - 1)))
+    return s
+
+
+def _kolben(s, x0, x1, y, laenge_hell=True):
+    """Eine Kolbenstange laengs. Blanker Stahl, deshalb der hellste Strich
+    auf dem ganzen Bein - daran erkennt man von oben, dass da Hydraulik
+    arbeitet und nicht bloss ein Rohr liegt."""
+    pygame.draw.line(s, (26, 24, 20), (x0, y + 1), (x1, y + 1))
+    pygame.draw.line(s, K.C_STAHL_HELL, (x0, y), (x1, y))
+    if laenge_hell:
+        pygame.draw.line(s, (198, 188, 166), (x0 + 1, y), (x0 + max(2, (x1 - x0) // 3), y))
+
+
+def _bolzen(s, x, y):
+    pygame.draw.rect(s, (32, 29, 25), (x, y, 3, 3))
+    pygame.draw.rect(s, K.C_STAHL, (x, y, 2, 2))
+    s.set_at((x, y), K.C_STAHL_HELL)
+
+
+@platzhalter("bein_ober")
+def _bein_ober():
+    """Oberschenkel: das schwere Glied. Breite Schulter am Rumpf, schmaler
+    zum Knie, ein Panzerblech obenauf."""
+    laenge, dicke = K.BILD_MASS["bein_ober"]
+    s = _glied(laenge, dicke, keil=0.38, seed=41, bauch=1.2)
+    m = dicke // 2
+    # Querrippen. Sie verjuengen sich mit dem Glied, sonst laufen sie ueber
+    # die Kante hinaus und heben die Form wieder auf.
+    for x in range(9, laenge - 10, 8):
+        t = x / max(1, laenge - 1)
+        halb = int((dicke / 2.0) * (1.0 - 0.38 * t) + 1.2 * math.sin(math.pi * t))
+        pygame.draw.line(s, (40, 37, 32), (x, m - halb + 2), (x, m + halb - 2))
+        pygame.draw.line(s, (108, 101, 87), (x - 1, m - halb + 2),
+                         (x - 1, m + halb - 2))
+    _kolben(s, 7, laenge - 9, m + 1)
+    for x in (2, laenge - 7):                     # Verschraubung an den Enden
+        _bolzen(s, x, m - 1)
+    return _rand(s, (14, 12, 10))
+
+
+@platzhalter("bein_unter")
+def _bein_unter():
+    """Schienbein: schlanker, mit blanker Kolbenstange am Knie und einem
+    Panzerschutz zum Fuss hin."""
+    laenge, dicke = K.BILD_MASS["bein_unter"]
+    drittel = laenge // 3
+    # Am Knie eine blanke Kolbenstange, erst danach das Panzergehaeuse. Man
+    # sieht dem Bein damit an, wo es arbeitet und wo es nur traegt.
+    s = _glied(laenge, dicke, keil=0.24, seed=42, bauch=0.6)
+    m = dicke // 2
+    stange = pygame.Rect(2, m - 2, drittel - 2, 4)
+    pygame.draw.rect(s, (0, 0, 0, 0), stange)
+    pygame.draw.rect(s, (30, 27, 23), stange)
+    pygame.draw.line(s, K.C_STAHL_HELL, (stange.left, m - 2), (stange.right, m - 2))
+    pygame.draw.line(s, (204, 194, 172), (stange.left + 1, m - 2),
+                     (stange.left + stange.width // 2, m - 2))
+    pygame.draw.rect(s, (46, 42, 36), (drittel - 2, m - 3, 4, 7))  # Kragen
+    for x in range(drittel + 5, laenge - 9, 9):                    # Nietenreihe
+        _bolzen(s, x, m - 1)
+    pygame.draw.rect(s, (56, 52, 44), (laenge - 6, m - 3, 5, 6))   # Knoechel
+    pygame.draw.line(s, K.C_STAHL, (laenge - 6, m - 3), (laenge - 2, m - 3))
+    return _rand(s, (14, 12, 10))
+
+
+@platzhalter("bein_fuss")
+def _bein_fuss():
+    """Die Trittplatte, von oben. Drei Zehen nach vorn, eine Ferse hinten -
+    daran sieht man, wohin das Bein zeigt, auch wenn es still steht."""
+    g = K.BILD_MASS["bein_fuss"][0]
+    s = _flaeche(g, g)
+    m = g // 2
+    # Drei Klauen nach vorn, mit dunklen Spalten dazwischen. Die Spalten
+    # sind das Entscheidende: ohne sie verschmelzen die Zehen zu einem
+    # Klumpen, und der Fuss hat keine Richtung mehr.
+    for dy, laenge in ((-4, g - 7), (0, g - 4), (4, g - 7)):
+        y = m + dy
+        for x in range(m - 3, laenge):
+            t = (x - (m - 3)) / max(1, laenge - (m - 3) - 1)
+            halb = max(0, int(round(2.4 * (1.0 - t * 0.75))))
+            for i in range(-halb, halb + 1):
+                if 0 <= y + i < g and 0 <= x < g:
+                    s.set_at((x, y + i), _ton((i + halb) / max(1, 2 * halb)))
+    pygame.draw.circle(s, (26, 24, 20), (m - 3, m), 5)           # Ballen
+    pygame.draw.circle(s, (86, 80, 69), (m - 3, m - 1), 4)
+    pygame.draw.circle(s, (124, 116, 100), (m - 4, m - 2), 2)
+    pygame.draw.rect(s, (30, 27, 23), (0, m - 3, 4, 7))          # Ferse
+    pygame.draw.rect(s, (74, 68, 58), (1, m - 2, 3, 5))
+    pygame.draw.line(s, K.C_STAHL_HELL, (1, m - 2), (3, m - 2))
+    return _rand(s, (13, 11, 9))
+
+
+@platzhalter("bein_huefte")
+def _bein_huefte():
+    """Das Schultergelenk am Rumpf. Rund, weil es sich dreht - und das soll
+    man ihm ansehen."""
+    g = K.BILD_MASS["bein_huefte"][0]
+    s = _flaeche(g, g)
+    m = g // 2
+    pygame.draw.circle(s, (22, 20, 17), (m, m + 1), m - 1)
+    pygame.draw.circle(s, K.C_STAHL_DUNKEL, (m, m), m - 1)
+    pygame.draw.circle(s, (84, 78, 67), (m, m), m - 3)
+    pygame.draw.circle(s, K.C_STAHL_HELL, (m, m - 1), m - 4, 1)
+    for i in range(6):                                           # Kranzbolzen
+        a = math.tau * i / 6
+        x = int(m + math.cos(a) * (m - 2.5)) - 1
+        y = int(m + math.sin(a) * (m - 2.5)) - 1
+        pygame.draw.rect(s, K.C_STAHL, (x, y, 2, 2))
+        s.set_at((x, y), K.C_STAHL_HELL)
+    pygame.draw.circle(s, (34, 31, 26), (m, m), 2)
+    return _rand(s, (13, 11, 9))

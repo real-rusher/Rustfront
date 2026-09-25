@@ -46,20 +46,50 @@ class Ebene:
         self.kacheln = [K.LEER] * (breite * hoehe)
         self.variante = [0] * (breite * hoehe)     # fuer abwechselnde Bodenbilder
         self.dekale = pygame.Surface((breite * K.TILE, hoehe * K.TILE), pygame.SRCALPHA)
+        # Benannte Punkte aus der Karte: "start", "rampe", "steuerstand", ...
+        # Damit muss kein Code mehr wissen, wo etwas liegt - es steht im Text.
+        self.marken: dict[str, pygame.Vector2] = {}
 
     # ---- Aufbau ------------------------------------------------------
     @classmethod
-    def aus_text(cls, zeilen: list[str], index: int) -> "Ebene":
+    def aus_text(cls, zeilen: list[str], index: int,
+                 zeichen: dict | None = None) -> "Ebene":
+        """Baut eine Ebene aus Textzeilen.
+
+        `zeichen` waehlt die Kachelfamilie: Wasteland oder Rumpf. Ohne Angabe
+        bleibt es bei der alten Tabelle, damit bestehende Aufrufe unveraendert
+        weiterlaufen.
+        """
+        tabelle = ZEICHEN if zeichen is None else zeichen
+        grund = tabelle.get(".", K.BODEN)
         hoehe = len(zeilen)
         breite = max(len(z) for z in zeilen)
         e = cls(breite, hoehe, index)
         for ty, zeile in enumerate(zeilen):
             for tx in range(breite):
                 z = zeile[tx] if tx < len(zeile) else " "
-                e.setzen(tx, ty, ZEICHEN.get(z, K.BODEN))
+                marke = K.MARKEN.get(z)
+                if marke is not None:
+                    name, kachel = marke
+                    e.setzen(tx, ty, grund if kachel is None else kachel)
+                    e.marken[name] = pygame.Vector2(tx * K.TILE + K.TILE / 2,
+                                                    ty * K.TILE + K.TILE / 2)
+                else:
+                    e.setzen(tx, ty, tabelle.get(z, grund))
                 # gestreute Auswahl, sonst sieht man ein Muster im Boden
                 e.variante[ty * breite + tx] = ((tx * 73856093) ^ (ty * 19349663)) % 4
         return e
+
+    def stationen(self) -> dict[str, pygame.Vector2]:
+        """Alle Stationskacheln dieser Ebene, Name -> Mitte der Kachel."""
+        gefunden = {}
+        for ty in range(self.hoehe):
+            for tx in range(self.breite):
+                st = self.daten(tx, ty).get("station")
+                if st:
+                    gefunden[st] = pygame.Vector2(tx * K.TILE + K.TILE / 2,
+                                                  ty * K.TILE + K.TILE / 2)
+        return gefunden
 
     def setzen(self, tx: int, ty: int, kachel: int) -> None:
         if 0 <= tx < self.breite and 0 <= ty < self.hoehe:
@@ -102,12 +132,50 @@ class Ebene:
         self.dekale.blit(bild, (x - bild.get_width() / 2, y - bild.get_height() / 2))
 
 
+def hoehen_staffel(decks: int, mit_boden: bool = True) -> list[float]:
+    """Hoehentabelle fuer einen Rumpf mit beliebig vielen Decks.
+
+    Die von Hand gesetzte Tabelle `EBENEN_HOEHE` ist keine willkuerliche
+    Liste: sie kodiert einen gleichbleibenden Wahrnehmungsschritt. Steht man
+    oben, erscheint jedes Deck darunter genau `HOEHEN["schritt"]` so gross
+    wie das darueber - nur der Boden faellt bewusst aus der Reihe und sitzt
+    tiefer, damit er sich von den Decks absetzt.
+
+    Mit der Perspektive `k = brennweite / (brennweite + dz)` laesst sich das
+    umkehren: aus der gewuenschten scheinbaren Groesse folgt die Hoehe. Damit
+    ist die Staffel fuer *jede* Deckzahl erzeugbar, und fuer vier Decks kommt
+    auf den Pixel das heraus, was bisher von Hand dastand:
+
+        >>> [round(h) for h in hoehen_staffel(4)]
+        [0, 118, 181, 237, 287]
+
+    Zurueck kommt die Tabelle von unten nach oben, also so, wie die
+    Ebenenindizes laufen: Eintrag 0 ist der Boden, Eintrag 1 das unterste
+    Deck.
+    """
+    f = K.PERSPEKTIVE["brennweite"]
+    schritt = K.HOEHEN["schritt"]
+    decks = max(1, min(int(decks), K.HOEHEN["decks_hoechstens"]))
+
+    # Scheinbare Groesse je Ebene, vom obersten Deck abwaerts.
+    groessen = [1.0]
+    for _ in range(decks - 1):
+        groessen.append(groessen[-1] * schritt)
+    if mit_boden:
+        groessen.append(groessen[-1] * K.HOEHEN["boden_schritt"])
+
+    tiefen = [f / g - f for g in groessen]        # dz vom obersten Deck aus
+    unten = tiefen[-1]
+    return [unten - dz for dz in reversed(tiefen)]
+
+
 class Welt:
     """Haelt die Ebenen und alle Wesen."""
 
     ZELLE = 48          # Rastergroesse der Nachbarschaftssuche
 
-    def __init__(self, ebenen: list[Ebene]) -> None:
+    def __init__(self, ebenen: list[Ebene], staffel: list[float] | None = None,
+                 name: str = "") -> None:
         self.ebenen = ebenen
         self.wesen: list = []
         self.neue: list = []
@@ -116,6 +184,72 @@ class Welt:
         self.zeit = 0.0
         self.held = None                 # setzt die Spielszene
         self.muendungen: list = []       # kurze Lichtblitze am Lauf
+        self.name = name
+        # Eigene Hoehenstaffel. None heisst: die Tabelle aus config. Ein
+        # Rumpf bekommt hier seine eigene, damit ein Warhound mit drei Decks
+        # und ein Imperator mit zehn beide richtig aussehen (siehe
+        # hoehen_staffel unten).
+        self.staffel = staffel
+        # Wo dieser Rumpf in der Welt steht. Fuer den Boden und fuer jede
+        # heutige Karte bleibt das (0,0). Ein laufender Wandler traegt hier
+        # seine Position - als **Kommazahl**, nie als Kachelmass, damit sich
+        # kein Gitter je gegen sein eigenes Raster verschiebt.
+        self.versatz = pygame.Vector2()
+
+    # ---- Aus einer Kartendatei ----------------------------------------
+    @classmethod
+    def aus_karte(cls, karte, staffel: list[float] | None = None) -> "Welt":
+        """Baut eine Welt aus einer gelesenen `karten.Karte`."""
+        zeichen = karte.zeichen
+        ebenen = [Ebene.aus_text(block, idx, zeichen)
+                  for idx, block in enumerate(karte.bloecke)]
+        if staffel is None and karte.grund == "deck":
+            # Ein Rumpf bekommt seine Staffel aus seiner Deckzahl. Ein Ort
+            # behaelt die Tabelle aus config, damit sich an bestehenden
+            # Karten nichts aendert.
+            staffel = hoehen_staffel(len(ebenen), mit_boden=False)
+        return cls(ebenen, staffel, karte.name)
+
+    @classmethod
+    def aus_datei(cls, name: str, staffel: list[float] | None = None) -> "Welt":
+        """Liest `karten/<name>.txt` und baut die Welt daraus."""
+        from .karten import lesen
+        return cls.aus_karte(lesen(name), staffel)
+
+    def marke(self, name: str, ebene: int | None = None):
+        """Position einer Marke, oder None.
+
+        Ohne Ebenenangabe wird von unten nach oben gesucht und die erste
+        Fundstelle genommen. Zurueck kommt `(ebene, Vector2)`.
+        """
+        if ebene is not None:
+            p = self.ebene(ebene).marken.get(name)
+            return None if p is None else (ebene, pygame.Vector2(p))
+        for e in self.ebenen:
+            p = e.marken.get(name)
+            if p is not None:
+                return e.index, pygame.Vector2(p)
+        return None
+
+    def marken(self) -> dict[str, tuple]:
+        """Alle Marken aller Ebenen, Name -> (ebene, Vector2)."""
+        alle = {}
+        for e in self.ebenen:
+            for name, p in e.marken.items():
+                alle.setdefault(name, (e.index, pygame.Vector2(p)))
+        return alle
+
+    def startpunkt(self, ersatz_ebene: int = 0):
+        """Wo der Spieler anfaengt: die Marke `S`, sonst die Mitte.
+
+        Kein Zufallspunkt mehr - wer eine Karte baut, bestimmt, wo man
+        aufwacht.
+        """
+        treffer = self.marke("start")
+        if treffer is not None:
+            return treffer
+        e = self.ebene(ersatz_ebene)
+        return ersatz_ebene, pygame.Vector2(e.pixel_breite / 2, e.pixel_hoehe / 2)
 
     # ---- Rueckmeldungen an die Spielszene ------------------------------
     # Standardmaessig passiert nichts. Die Szene haengt sich hier ein, damit
@@ -149,9 +283,16 @@ class Welt:
         return self.ebenen[max(0, min(len(self.ebenen) - 1, index))]
 
     def hoehe(self, index: int) -> float:
-        """Hoehe einer Ebene in Welt-Pixeln, aus der Tabelle in config."""
-        i = max(0, min(len(K.EBENEN_HOEHE) - 1, index))
-        return K.EBENEN_HOEHE[i]
+        """Hoehe einer Ebene in Welt-Pixeln.
+
+        Die **eine** Stelle, an der eine Ebenenhoehe herkommt. Renderer,
+        Sturz und Blickhoehe rufen alle hierher, nie die Tabelle direkt -
+        deshalb genuegt eine eigene Staffel an dieser Welt, damit ein Rumpf
+        beliebig viele Decks haben kann.
+        """
+        tabelle = self.staffel if self.staffel else K.EBENEN_HOEHE
+        i = max(0, min(len(tabelle) - 1, index))
+        return tabelle[i]
 
     def abstand(self, oben: int, unten: int) -> float:
         return max(1.0, self.hoehe(oben) - self.hoehe(unten))
@@ -476,9 +617,31 @@ KARTE_E2 = [
 
 
 def testkarte() -> Welt:
+    """Die eingebaute Karte. Bleibt als Rueckfallebene bestehen.
+
+    Seit die Karten aus Dateien kommen, ist sie nicht mehr die Karte,
+    sondern die Versicherung: fehlt der Ordner `karten/` oder ist eine
+    Datei kaputt, startet das Spiel trotzdem.
+    """
     return Welt([Ebene.aus_text(KARTE_E0, 0),
                  Ebene.aus_text(KARTE_E1, 1),
                  Ebene.aus_text(KARTE_E2, 2)])
+
+
+def karte_laden(name: str | None = None) -> Welt:
+    """Laedt eine Karte aus `karten/`, mit Rueckfall auf die eingebaute.
+
+    Ein Spiel darf an einer fehlenden Datei nicht sterben. Faellt das Laden
+    aus, kommt `testkarte()` und der Grund steht auf der Konsole - sichtbar
+    genug, dass es auffaellt, harmlos genug, dass man weiterspielen kann.
+    """
+    from .karten import KartenFehler
+    try:
+        return Welt.aus_datei(name or K.KARTEN["start"])
+    except (KartenFehler, OSError) as fehler:
+        print("Karte %r nicht ladbar (%s) - nehme die eingebaute."
+              % (name or K.KARTEN["start"], fehler))
+        return testkarte()
 
 
 def freier_punkt(welt: Welt, ebene: int, rnd, weg_von=None, mindest=0.0):

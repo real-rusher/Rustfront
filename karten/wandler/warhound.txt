@@ -1,0 +1,54 @@
+name: Warhound
+art: wandler
+klasse: warhound
+grund: deck
+
+# WARHOUND - leichter Aufklaerer. Zwei Beine, drei Decks, 15 auf 9 Kacheln.
+#
+# Alles an dieser Maschine steht in dieser Datei: die Decks als Text, die
+# Beine als Zeilen, die Klasse als Wort. Es gibt keine Zeile Python, die
+# etwas ueber den Warhound weiss. Wer ihn umbaut, tippt hier.
+#
+# Zwei Beine heisst Wechselschritt, und Wechselschritt heisst: bei jedem
+# Schritt traegt genau ein Fuss. Deshalb wankt er sichtbar, deshalb ist er
+# schnell, und deshalb ist ein verlorenes Bein bei ihm das Ende.
+#
+#   bein: <huefte_x> <huefte_y> <knieseite> [fuss_x fuss_y]
+#   Angaben in Kacheln, von der Mitte des Rumpfes aus gemessen.
+#   knieseite: links oder rechts - wohin das Knie ausbricht.
+
+bein: -0.8 -3.4 links
+bein: -0.8  3.4 rechts
+
+--- ebene 0 ---
+  #########
+ #.........#
+ #.A........#
+#............#
+#.R.E..>.Y....#
+#............#
+ #.A........#
+ #.........#
+  #########
+
+--- ebene 1 ---
+ 
+   #######
+  #.......##
+ #..W....L..#
+ #.....<.....#
+ #..M..>.B..#
+  #.......##
+   #######
+ 
+
+--- ebene 2 ---
+ 
+ 
+    #####
+   #.K..G##
+  #......TG##
+   #.F.<.##
+    #####
+ 
+ 

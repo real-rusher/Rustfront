@@ -20,20 +20,28 @@ from __future__ import annotations
 
 import random
 
+import math
+
 import pygame
 
 from . import art  # noqa: F401  registriert die Platzhalter-Bilder
 from . import config as K
+from .beine import knie_punkt
 from .font import SCHRIFT
 
 RND = random.Random(4711)
 
 
 class Kamera:
-    def __init__(self, ziel=(0, 0)) -> None:
+    def __init__(self, ziel=(0, 0), sicht=None) -> None:
         self.pos = pygame.Vector2(ziel)
         self.ruckeln = 0.0
         self.versatz = pygame.Vector2(0, 0)
+        # Wie gross der Ausschnitt ist, den diese Kamera zeigt. Voreingestellt
+        # die Bildgroesse - die Aussenansicht eines Wandlers setzt hier mehr
+        # ein und zeichnet auf eine groessere Flaeche, die danach verkleinert
+        # wird. Ohne das haengt jede Kamera an GAME_W und GAME_H fest.
+        self.sicht = pygame.Vector2(sicht or (K.GAME_W, K.GAME_H))
 
     def stossen(self, kraft: float) -> None:
         self.ruckeln = min(K.KAMERA["ruckeln_max"], self.ruckeln + kraft)
@@ -52,21 +60,21 @@ class Kamera:
         self.versatz.update(RND.uniform(-r, r), RND.uniform(-r, r))
 
         # An den Kartenrand anlegen, damit man nicht ins Nichts schaut
-        halb_w, halb_h = K.GAME_W / 2, K.GAME_H / 2
+        halb_w, halb_h = self.sicht.x / 2, self.sicht.y / 2
         bw, bh = grenze
-        if bw > K.GAME_W:
+        if bw > self.sicht.x:
             self.pos.x = max(halb_w, min(bw - halb_w, self.pos.x))
         else:
             self.pos.x = bw / 2
-        if bh > K.GAME_H:
+        if bh > self.sicht.y:
             self.pos.y = max(halb_h, min(bh - halb_h, self.pos.y))
         else:
             self.pos.y = bh / 2
 
     @property
     def ecke(self) -> pygame.Vector2:
-        return pygame.Vector2(round(self.pos.x - K.GAME_W / 2 + self.versatz.x),
-                              round(self.pos.y - K.GAME_H / 2 + self.versatz.y))
+        return pygame.Vector2(round(self.pos.x - self.sicht.x / 2 + self.versatz.x),
+                              round(self.pos.y - self.sicht.y / 2 + self.versatz.y))
 
     def zu_welt(self, bildpunkt) -> pygame.Vector2:
         return pygame.Vector2(bildpunkt) + self.ecke
@@ -90,6 +98,14 @@ class Renderer:
         self._blut = bilder.bild("blut")
         self._wandschatten = bilder.bild("wandschatten")
         self._boden_namen = ("boden", "boden_2", "boden_3", "boden_4")
+        self._deck_namen = ("deck", "deck_2", "deck_3", "deck_4")
+        # Beinglieder und Rumpfumrisse: einmal auf Mass gebracht, dann nur
+        # noch gedreht. Ein Wandler zeichnet je Bild bis zu zwoelf Glieder,
+        # und jedes davon neu zu skalieren waere die teuerste Zeile im
+        # ganzen Renderer.
+        self._glieder: dict[tuple, pygame.Surface] = {}
+        self._gedrehte: dict[tuple, pygame.Surface] = {}
+        self._umrisse: dict[tuple, pygame.Surface] = {}
 
     # ---- Vorgefertigtes -------------------------------------------
     def _passend(self, cache: dict, name: str, groesse, deckkraft: float = 1.0):
@@ -571,3 +587,325 @@ class Renderer:
         for i, z in enumerate(zeilen):
             f.zeichnen(ziel, z, K.GAME_W - 12, 60 + i * 9, K.C_TEAL, 1,
                        ausrichtung="rechts")
+
+
+# ══════════════════════════════════════════════════════════════════
+# Der Wandler
+# ══════════════════════════════════════════════════════════════════
+#
+# Von aussen ist ein Wandler zweierlei: ein Rumpf, der sich dreht, und
+# Beine, die sich bewegen. Beides wird aus Bildern gebaut, die sich
+# austauschen lassen - der Rumpf aus seinen eigenen Deckkacheln, die Beine
+# aus vier Gliedbildern.
+#
+# Der Rumpf dreht sich, das Kachelraster darf das aber nie. Beides zugleich
+# geht, weil der Umriss **einmal** in ein Bild gezeichnet und danach nur
+# noch gedreht wird: die Kacheln bleiben in ihrem eigenen Raster, und was
+# sich dreht, ist eine fertige Flaeche. Wer an Bord laeuft, sieht wieder
+# das ungedrehte Raster - dort ist der Rumpf der ruhende Bezugsrahmen.
+
+def _erweitern(cls):
+    """Haengt die folgenden Methoden an den Renderer.
+
+    Getrennt geschrieben, damit der Wandler nicht mitten in die bestehende
+    Zeichenschleife einbricht: was oben steht, hat sich bewaehrt und bleibt
+    unangetastet.
+    """
+    def deko(fn):
+        setattr(cls, fn.__name__, fn)
+        return fn
+    return deko
+
+
+@_erweitern(Renderer)
+def glied(self, name: str, laenge: float, dicke: float,
+          winkel: float) -> pygame.Surface:
+    """Ein Beinglied auf Mass und im richtigen Winkel.
+
+    Das Bild in `BILD_MASS` ist ein Grundmass; eine Bauklasse mit anderen
+    Beinlaengen bekommt es hart umgerechnet, Pixel fuer Pixel, ohne
+    Weichzeichnen. Deshalb bleibt es auch beim Imperator scharf.
+    """
+    lang = max(1, int(round(laenge)))
+    dick = max(1, int(round(dicke)))
+    key = (name, lang, dick)
+    basis = self._glieder.get(key)
+    if basis is None:
+        roh = self.bilder.bild(name)
+        basis = (roh if roh.get_size() == (lang, dick)
+                 else pygame.transform.scale(roh, (lang, dick)))
+        self._glieder[key] = basis
+    stufe = int(round(winkel / self.bilder.DREH_SCHRITT)) * self.bilder.DREH_SCHRITT
+    stufe %= 360
+    dkey = (name, lang, dick, stufe)
+    fertig = self._gedrehte.get(dkey)
+    if fertig is None:
+        fertig = pygame.transform.rotate(basis, -stufe)
+        self._gedrehte[dkey] = fertig
+    return fertig
+
+
+@_erweitern(Renderer)
+def _strecke(self, ziel, name, von, nach, dicke, ecke, tonung=None) -> None:
+    """Zeichnet ein Glied von einem Punkt zum anderen."""
+    d = nach - von
+    laenge = d.length()
+    if laenge < 1.0:
+        return
+    winkel = math.degrees(math.atan2(d.y, d.x))
+    s = self.glied(name, laenge, dicke, winkel)
+    if tonung is not None:
+        s = s.copy()
+        s.fill(tonung, special_flags=pygame.BLEND_RGB_ADD)
+    mitte = (von + nach) * 0.5 - ecke
+    ziel.blit(s, (mitte.x - s.get_width() / 2, mitte.y - s.get_height() / 2))
+
+
+@_erweitern(Renderer)
+def _punktbild(self, ziel, name, punkt, mass, winkel, ecke, tonung=None) -> None:
+    lang = max(1, int(round(mass)))
+    s = self.glied(name, lang, lang, winkel)
+    if tonung is not None:
+        s = s.copy()
+        s.fill(tonung, special_flags=pygame.BLEND_RGB_ADD)
+    p = punkt - ecke
+    ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
+
+
+@_erweitern(Renderer)
+def beine_zeichnen(self, ziel, wandler, ecke, schatten=True) -> None:
+    """Alle Beine einer Maschine.
+
+    Zwei Durchgaenge, und die Reihenfolge ist der Grund, warum man einen
+    angehobenen Fuss ueberhaupt als angehoben sieht:
+
+    1. **Schatten**, alle auf Bodenhoehe, ohne Hub. Sie bleiben unten.
+    2. **Glieder**, mit Hub nach oben versetzt und im Schwung eine Spur
+       heller und groesser.
+
+    Erst die Luecke zwischen Schatten und Bein liest sich als Hoehe. Ohne
+    den Schatten schiebt sich ein Bein bloss nach oben, und niemand sieht,
+    dass es abhebt.
+    """
+    m = wandler.plan.bein_masse
+    mitte, kurs = wandler.pos, wandler.kurs
+
+    if schatten:
+        versatz = pygame.Vector2(K.BEIN["schatten_versatz"],
+                                 K.BEIN["schatten_versatz"])
+        schicht = pygame.Surface(ziel.get_size(), pygame.SRCALPHA)
+        for b in wandler.beine:
+            h = b.huefte_welt(mitte, kurs) + versatz
+            f = pygame.Vector2(b.fuss) + versatz          # ohne Hub: am Boden
+            k = knie_punkt(h, f, b.ober, b.unter, b.seite)
+            self._strecke(schicht, "bein_ober", h, k, m["dicke_ober"], ecke)
+            self._strecke(schicht, "bein_unter", k, f, m["dicke_unter"], ecke)
+            self._punktbild(schicht, "bein_fuss", f, m["fuss"], kurs, ecke)
+        schicht.fill((0, 0, 0, int(255 * K.BEIN["schatten"])),
+                     special_flags=pygame.BLEND_RGBA_MULT)
+        ziel.blit(schicht, (0, 0))
+
+    for b in wandler.beine:
+        h, k, f = b.glieder(mitte, kurs)
+        if not b.heil:
+            ton = None
+            self._strecke(ziel, "bein_ober", h, k, m["dicke_ober"] * 0.9, ecke)
+            continue
+        hell = int(b.hub * K.BEIN["hub_hell"] / max(1.0, self._hub_bezug(wandler)))
+        ton = (hell, hell, hell) if hell > 1 else None
+        wuchs = 1.0 + b.hub * K.BEIN["hub_massstab"]
+        self._strecke(ziel, "bein_ober", h, k, m["dicke_ober"] * wuchs, ecke, ton)
+        self._strecke(ziel, "bein_unter", k, f, m["dicke_unter"] * wuchs, ecke, ton)
+        self._punktbild(ziel, "bein_fuss", f, m["fuss"] * wuchs,
+                        kurs, ecke, ton)
+
+
+@_erweitern(Renderer)
+def _hub_bezug(self, wandler) -> float:
+    return max(1.0, wandler.gangwerk.reichweite * K.GANG["hub_voll_anteil"])
+
+
+@_erweitern(Renderer)
+def rumpf_umriss(self, wandler) -> pygame.Surface:
+    """Der Rumpf **von aussen**: ein gestufter Panzeraufbau, kein Grundriss.
+
+    Der erste Anlauf zeichnete hier einfach das oberste Deck. Das war
+    sichtbar falsch: von aussen sieht man nicht den Fussboden der Bruecke,
+    sondern das Blech darueber, und eine Maschine sah dadurch aus wie ein
+    aufgeklappter Bauplan.
+
+    Gebaut wird stattdessen aus dem, was ohnehin dasteht - **jedes Deck
+    einzeln, von unten nach oben**:
+
+    1. Das unterste Deck ist das groesste und dunkelste. Darueber legt sich
+       jedes weitere, kleiner und eine Spur heller.
+    2. Jedes bekommt ringsum eine Lichtkante. Erst die Staffelung dieser
+       Kanten macht aus einer Flaeche einen Aufbau - man sieht der Maschine
+       an, dass sie Etagen hat, ohne eine davon zu betreten.
+    3. Der Bug wird heller abgesetzt und bekommt Warnwinkel. Ohne das sieht
+       man einem Umriss nicht an, wohin er laeuft, und das ist die
+       wichtigste Auskunft, die eine Laufmaschine geben muss.
+    4. Aufbauten kommen an die Marken des obersten Decks: Geschuetze, wo
+       `G` steht, die Kanzel, wo `T` steht. Wer die Karte aendert, aendert
+       damit auch das Aussehen von aussen - ohne eine Zeile Code.
+
+    Wird einmal gebaut und behalten. Der Rumpf aendert sich nicht, waehrend
+    er laeuft; was sich aendert, ist allein der Winkel.
+    """
+    key = (id(wandler), "aussen")
+    fertig = self._umrisse.get(key)
+    if fertig is not None:
+        return fertig
+
+    kb = K.WANDLER_BILD
+    ebenen = wandler.welt.ebenen
+    breite = max(e.breite for e in ebenen)
+    hoehe = max(e.hoehe for e in ebenen)
+    s = pygame.Surface((breite * K.TILE, hoehe * K.TILE), pygame.SRCALPHA)
+    bild = self.bilder.bild
+
+    def belegung(e):
+        """Belegte Kacheln und der Bereich, den sie einnehmen."""
+        b = [[e.kachel(tx, ty) != K.LEER for tx in range(e.breite)]
+             for ty in range(e.hoehe)]
+        punkte = [(tx, ty) for ty in range(e.hoehe) for tx in range(e.breite)
+                  if b[ty][tx]]
+        if not punkte:
+            return b, None
+        xs = [x for x, _ in punkte]
+        ys = [y for _, y in punkte]
+        return b, (min(xs), min(ys), max(xs), max(ys))
+
+    # Ausgerichtet wird an dem, was wirklich belegt ist, nicht an der
+    # Arraygroesse. Beim Schreiben einer Karte fallen Leerzeichen am
+    # Zeilenende weg - ein Deck mit mehr Loechern rechts kaeme sonst
+    # schmaler heraus und der ganze Aufbau saesse schief.
+    _, grund_feld = belegung(ebenen[0])
+    grund_mitte = (((grund_feld[0] + grund_feld[2]) / 2.0,
+                    (grund_feld[1] + grund_feld[3]) / 2.0)
+                   if grund_feld else (breite / 2.0, hoehe / 2.0))
+
+    for idx, e in enumerate(ebenen):
+        belegt, feld = belegung(e)
+        if feld is None:
+            continue
+        ox = int(round(grund_mitte[0] - (feld[0] + feld[2]) / 2.0))
+        oy = int(round(grund_mitte[1] - (feld[1] + feld[3]) / 2.0))
+        hell = min(255, kb["panzer_dunkel"] + idx * kb["stufe_hell"])
+        bug = max(tx for ty in range(e.hoehe) for tx in range(e.breite)
+                  if belegt[ty][tx])
+
+        for ty in range(e.hoehe):
+            for tx in range(e.breite):
+                if not belegt[ty][tx]:
+                    continue
+                name = self._deck_namen[((tx * 73856093) ^ (ty * 19349663)) % 4]
+                s.blit(self.dunkel(bild(name), hell),
+                       ((tx + ox) * K.TILE, (ty + oy) * K.TILE))
+
+        # Plattenstoesse nur auf dem untersten Deck: darueber wuerden sie
+        # mit den Stufenkanten um Aufmerksamkeit streiten.
+        if idx == 0:
+            for tx in range(0, e.breite, kb["plattenstoss"]):
+                x = (tx + ox) * K.TILE
+                pygame.draw.line(s, (26, 24, 20), (x, 0), (x, hoehe * K.TILE))
+            for ty in range(0, e.hoehe, kb["plattenstoss"]):
+                y = (ty + oy) * K.TILE
+                pygame.draw.line(s, (26, 24, 20), (0, y), (breite * K.TILE, y))
+
+        for ty in range(e.hoehe):
+            for tx in range(e.breite):
+                if not belegt[ty][tx]:
+                    continue
+                x, y = (tx + ox) * K.TILE, (ty + oy) * K.TILE
+                vorn = tx >= bug - kb["bug_tiefe"] + 1
+                kante = (126, 118, 102) if vorn else (88, 82, 71)
+                if ty == 0 or not belegt[ty - 1][tx]:
+                    pygame.draw.rect(s, kante, (x, y, K.TILE, 2))
+                    pygame.draw.rect(s, (22, 20, 17), (x, y + 2, K.TILE, 1))
+                if ty == e.hoehe - 1 or not belegt[ty + 1][tx]:
+                    pygame.draw.rect(s, (28, 25, 21), (x, y + K.TILE - 3, K.TILE, 3))
+                    pygame.draw.rect(s, (62, 58, 50), (x, y + K.TILE - 3, K.TILE, 1))
+                if tx == 0 or not belegt[ty][tx - 1]:
+                    pygame.draw.rect(s, (36, 33, 28), (x, y, 3, K.TILE))
+                    pygame.draw.rect(s, (72, 67, 58), (x, y, 1, K.TILE))
+                if tx == e.breite - 1 or not belegt[ty][tx + 1]:
+                    pygame.draw.rect(s, kante, (x + K.TILE - 3, y, 3, K.TILE))
+                    pygame.draw.rect(s, (22, 20, 17), (x + K.TILE - 4, y, 1, K.TILE))
+
+    # Warnwinkel am Bug, zuletzt und ueber allen Decks - sonst deckt ihn der
+    # Aufbau zu, und die Maschine verliert ihre Richtung.
+    oben = ebenen[-1]
+    _, feld_o = belegung(oben)
+    if feld_o is None:
+        feld_o = (0, 0, oben.breite - 1, oben.hoehe - 1)
+    ox_o = int(round(grund_mitte[0] - (feld_o[0] + feld_o[2]) / 2.0))
+    oy_o = int(round(grund_mitte[1] - (feld_o[1] + feld_o[3]) / 2.0))
+    bug_o = feld_o[2]
+    mitte_y = (oy_o + oben.hoehe / 2) * K.TILE
+    spitze = (bug_o + ox_o + 1) * K.TILE
+    winkel = pygame.Surface((breite * K.TILE, hoehe * K.TILE), pygame.SRCALPHA)
+    for i in range(kb["winkel"]):
+        weit = K.TILE * (1.0 + i * 0.8)
+        pygame.draw.lines(winkel, K.C_WARN, False,
+                          [(spitze - weit, mitte_y - weit * 0.66),
+                           (spitze - weit + K.TILE * 0.66, mitte_y),
+                           (spitze - weit, mitte_y + weit * 0.66)], 3)
+    winkel.set_alpha(kb["winkel_deckkraft"])
+    s.blit(winkel, (0, 0))
+
+    # Aufbauten an den Marken des obersten Decks.
+    ox, oy = ox_o, oy_o
+    for ty in range(oben.hoehe):
+        for tx in range(oben.breite):
+            st = oben.daten(tx, ty).get("station")
+            x, y = (tx + ox) * K.TILE, (ty + oy) * K.TILE
+            if st == "geschuetz":
+                s.blit(bild("st_geschuetz"), (x, y))
+                pygame.draw.circle(s, (20, 18, 15),
+                                   (x + K.TILE // 2, y + K.TILE // 2), 8, 2)
+            elif st == "steuerstand":
+                kanzel = pygame.Rect(x + 3, y + 3, K.TILE - 6, K.TILE - 6)
+                pygame.draw.rect(s, (20, 27, 29), kanzel)
+                pygame.draw.rect(s, K.C_STAHL_DUNKEL, kanzel, 2)
+                pygame.draw.line(s, K.C_TEAL_DK, (kanzel.left + 2, kanzel.top + 3),
+                                 (kanzel.right - 3, kanzel.top + 3))
+                pygame.draw.line(s, K.C_TEAL, (kanzel.left + 3, kanzel.top + 2),
+                                 (kanzel.left + 9, kanzel.top + 2))
+
+    self._umrisse[key] = s
+    return s
+
+
+@_erweitern(Renderer)
+def rumpf_zeichnen(self, ziel, wandler, ecke) -> None:
+    """Der Rumpf von aussen: das Panzerdach, gedreht, mit Schlagschatten."""
+    bild = self.rumpf_umriss(wandler)
+    stufe = int(round(wandler.kurs / self.bilder.DREH_SCHRITT))
+    stufe = stufe * self.bilder.DREH_SCHRITT % 360
+    key = ("rumpf", id(wandler), stufe)
+    gedreht = self._gedrehte.get(key)
+    if gedreht is None:
+        gedreht = pygame.transform.rotate(bild, -stufe)
+        self._gedrehte[key] = gedreht
+
+    mitte = wandler.pos - ecke
+    mitte.y -= wandler.gangwerk.atem            # das Heben und Senken im Gang
+    b, h = gedreht.get_size()
+    schatten = pygame.Surface((b, h), pygame.SRCALPHA)
+    schatten.blit(gedreht, (0, 0))
+    schatten.fill((0, 0, 0, 150), special_flags=pygame.BLEND_RGBA_MULT)
+    v = K.DEKAL["wand_versatz"]
+    ziel.blit(schatten, (mitte.x - b / 2 + v, mitte.y - h / 2 + v))
+    ziel.blit(gedreht, (mitte.x - b / 2, mitte.y - h / 2))
+
+
+@_erweitern(Renderer)
+def wandler_zeichnen(self, ziel, wandler, kamera) -> None:
+    """Die ganze Maschine von aussen, in der richtigen Reihenfolge:
+    Beinschatten, Beine, Rumpf. Die Beine liegen unter dem Rumpf, weil sie
+    unter ihm haengen - wer sie darueber zeichnet, bekommt eine Maschine,
+    die auf Stelzen sitzt."""
+    ecke = kamera.ecke
+    self.beine_zeichnen(ziel, wandler, ecke)
+    self.rumpf_zeichnen(ziel, wandler, ecke)
