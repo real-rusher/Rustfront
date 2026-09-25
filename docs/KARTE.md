@@ -107,8 +107,8 @@ Alt: Ebenen waren Stockwerke von Ruinen, Kraterwaende, Turmgeschosse.
 Richtig: **Die Hoehenebenen gibt es, weil der Wandler Etagen hat.** Unten
 der Boden, darueber die Decks. Das war von Anfang an der Zweck der
 teuersten Mechanik im Spiel, und der alte Plan hat sie fuer Kulisse
-ausgegeben. `EBENEN_HOEHE` hat genau fuenf Eintraege - Boden plus vier
-Decks. Das passt nicht zufaellig (Abschnitt 5.4).
+ausgegeben. Wie viele Decks ein Rumpf hat, entscheidet seine Bauklasse -
+vom Warhound bis zum Emperor-Titan (Abschnitt 5.4).
 
 ### 1.3 Steuern ist der Hauptmodus, nicht der teuerste Fehler
 
@@ -304,9 +304,12 @@ Sinn.
   Kachelgitter mit einem Index. Jedes Wesen gehoert zu genau einer Ebene.
 * **FEST:** Karten sind **Text**. Ein Zeichen ist eine Kachel
   (`ZEICHEN` in `world.py`). `Ebene.aus_text()` baut daraus ein Gitter.
-* **FEST:** `EBENEN_HOEHE = [0, 118, 182, 238, 288]` - **fuenf** Hoehen
-  sind vorgesehen, drei werden benutzt. Der Abstand entscheidet ueber
-  Sturzdauer, Fallschaden und wie klein die untere Ebene gezeichnet wird.
+* **FEST:** `EBENEN_HOEHE = [0, 118, 182, 238, 288]` - fuenf Hoehen sind
+  vorgesehen, drei werden benutzt. Der Abstand entscheidet ueber Sturzdauer,
+  Fallschaden und wie klein die untere Ebene gezeichnet wird. Gelesen wird
+  die Tabelle an **genau einer** Stelle, in `Welt.hoehe()`; alles andere
+  ruft diese Methode. Deshalb kann jeder Rumpf spaeter seine eigene
+  Hoehenstaffel bekommen, ohne dass etwas umgebaut wird (5.4).
 * **FEST:** Ein Sturz laeuft ohne Ruck: die Figur bleibt stehen, die Welt
   waechst unter ihr heran, und man kann in der Luft noch steuern.
 * **FEST:** Alle Zahlen in `config.py`. Jedes Bild durch eine Datei
@@ -438,40 +441,161 @@ Zeile.
 **Sichtlinien zwischen Welten:** Ein Uebergang ist nur begehbar, wenn beide
 Seiten nah genug sind. Sichtlinien und Schuesse gehen ueber 5.5.
 
-### 5.4 Die Hoehenlage, und warum sie genau aufgeht
+#### Die Probe aufs Exempel (A1)
 
-`EBENEN_HOEHE = [0, 118, 182, 238, 288]` hat **fuenf** Eintraege. Die
-Aufteilung:
+Der Meister hat genau die richtige Frage gestellt: *"Waere sowas wie zwei
+Mechs nebeneinander parken und von einem zum anderen springen, oder
+zumindest Einschlaege von Waffen auf anderen Mechs plus Kills von Entities
+auf anderen Mechs sehen, dann moeglich?"*
+
+Das ist der Test, ob 5.1 taugt. **Antwort: ja, beides - und das Zweite ist
+fast geschenkt.**
+
+**Sehen, was auf dem anderen Rumpf passiert.** Jede Welt wird mit ihrem
+eigenen Bildversatz gezeichnet (`Versatz = Rumpfposition - Kamera`). Was auf
+dem fremden Deck steht, faellt, blutet, explodiert oder stirbt, sind
+schlicht die `wesen` und `partikel` jener Welt - gezeichnet an ihrem
+Versatz, mit derselben Perspektive wie alles andere. **Man sieht einen
+Enterer druben fallen, genau wie man ihn auf dem eigenen Deck fallen
+sieht.** Es braucht dafuer keine Zeile Sonderlogik, nur die Schleife ueber
+mehrere Welten statt ueber eine.
+
+**Von Rumpf zu Rumpf springen.** Auch ja, und der Mechanismus dafuer ist
+schon gebaut. Es gibt zwei Faelle:
+
+* **Hinuebergehen** ueber Bruecke oder Steg: ein Uebergang wie oben. Eine
+  Kachel betreten, Welt und Position wechseln. Trivial.
+* **Wirklich springen**, also eine Luecke ueberwinden und dabei in der Luft
+  sein: Genau das kann der Kern seit 0.11.0. Ein fliegendes Wesen (`w.flug`)
+  wird **ausserhalb der Ebenenstruktur** gezeichnet, mit der Perspektive
+  seiner eigenen Hoehe (`fliegende_zeichnen`, `_bildpunkt`), und man kann
+  waehrend des Fluges noch steuern.
+
+Der Sprung von Rumpf zu Rumpf ist also: beim Absprung wird die Figur ein
+fliegendes Wesen mit **absoluter** Position (Bezugsrahmen ist die Bodenwelt,
+die ohnehin der ruhende Rahmen ist). Beim Aufsetzen wird geprueft, welcher
+Rumpf unter ihr steht, und sie wird in dessen Welt uebernommen - Position
+zurueckgerechnet auf dessen Versatz. **Ein Rahmenwechsel beim Absprung und
+einer beim Aufsetzen, sonst nichts.**
+
+**Und das ergibt die beste Stelle im ganzen Entwurf**, ohne dass jemand sie
+erfinden musste: Wenn sich die beiden Maschinen waehrend des Sprungs
+gegeneinander bewegen, muss man **vorhalten**. Zieht der andere Rumpf weg,
+waehrend man in der Luft ist, greift man ins Leere und faellt auf den Boden
+- der Sturz mit Steuerung in der Luft, der schon da ist, mit einem Ausgang,
+der schon da ist (8.2: die Maschinen laufen ohne einen weiter).
+
+**Die eine Bedingung, die das erzwingt:** Der Versatz eines Rumpfes ist eine
+**Kommazahl, keine Kachelkoordinate.** Er wird nur beim Zeichnen und beim
+Umrechnen benutzt; kein Gitter verschiebt sich je gegen sein eigenes Raster.
+Wesenpositionen sind ohnehin schon Kommazahlen, nur die Kacheln sind ganze
+Zahlen - es aendert sich also nichts, was heute gilt.
+
+### 5.4 Die Hoehenlage: beliebig viele Decks, ohne Umbau
+
+**ENTSCHIEDEN von Der Meister (A4):** Es soll **grosse und kleine Wandler**
+geben, orientiert an den Titanen aus Warhammer 40k - vom Warhound bis zur
+Emperor-Klasse, jeder mit eigenen Vor- und Nachteilen, eigenem Spielgefuehl
+und eigener Bedeutung in der Geschichte. Eine feste Obergrenze von vier
+Decks ist damit hinfaellig.
+
+**Das geht, und es ist billiger, als es klingt.** Der Nachweis, nachgesehen
+im Code:
+
+#### Warum es nur eine Stelle betrifft
+
+`EBENEN_HOEHE` wird im ganzen Spiel an **genau einer** Stelle gelesen:
+
+```python
+# world.py
+def hoehe(self, index: int) -> float:
+    """Hoehe einer Ebene in Welt-Pixeln, aus der Tabelle in config."""
+    i = max(0, min(len(K.EBENEN_HOEHE) - 1, index))
+    return K.EBENEN_HOEHE[i]
+```
+
+Alles andere - `render.py` (Ebenenschleife und `fliegende_zeichnen`),
+`entities.py` (Sturz), `play.py` (Blickhoehe) - ruft **`welt.hoehe(idx)`**
+auf, nie die Tabelle direkt. Das ist schon heute eine Methode *an der Welt*.
+
+**Daraus folgt:** Gibt jeder Rumpf sich seine eigene Hoehentabelle, folgen
+Perspektive, Sturz, Blickhoehe und Zeichenreihenfolge automatisch. Das ist
+ein Methodenkoerper, keine Umstellung. Weil ohnehin jeder Rumpf eine eigene
+`Welt` ist (5.1), liegt die Tabelle genau dort, wo sie hingehoert.
+
+#### Die Tabelle ist keine Liste, sondern eine Regel
+
+Die fuenf Zahlen `[0, 118, 182, 238, 288]` sehen willkuerlich aus. Sind sie
+nicht. Die Perspektive rechnet
 
 ```
-   Index 4   OBERDECK      Geschuetzstaende, freie Sicht, kein Schutz
-   Index 3   BRUECKE       Steuerstand, Kartentisch, Funk
-   Index 2   HAUPTDECK     Werkbank, Modulschaechte, Kojen, Lager
-   Index 1   UNTERDECK     Reaktor, Antrieb, Werkstatt, RAMPE
-   Index 0   BODEN         Wasteland. Gehoert zur Bodenwelt, nicht zum Rumpf.
+    k = brennweite / (brennweite + dz)        brennweite = 430
+    dz = Hoehe der Ansicht - Hoehe der Ebene
 ```
 
-**Der Boden ist Index 0, der Rumpf belegt 1 bis 4.** Damit ist jede
-Zeichenentscheidung, die es schon gibt, sofort richtig: die Bodenwelt wird
-am kleinsten gezeichnet, die Decks darueber wachsen zur vollen Groesse, und
-wer faellt, wird waehrend des Sturzes kleiner - das ist genau die
-Perspektive, die im Mehrspieler-Zweig bereits nachgewiesen wurde
-(`fliegende_zeichnen`, `_bildpunkt`).
+Steht man oben und misst, wie gross jede Ebene darunter erscheint:
 
-Ein Wandler muss nicht alle vier Decks haben. **ENTWURF, Gewichtsklassen:**
+| Ebene | Hoehe | k | Verhaeltnis zur Ebene darueber |
+| --- | --- | --- | --- |
+| 4 | 288 | 1.0000 | - |
+| 3 | 238 | 0.8958 | 1.1163 |
+| 2 | 182 | 0.8022 | 1.1167 |
+| 1 | 118 | 0.7167 | 1.1194 |
+| 0 | 0 | 0.5989 | **1.1967** |
 
-| Klasse | Decks | Wie es sich anfuehlt |
-| --- | --- | --- |
-| leicht | Unterdeck + Bruecke (1, 3) | schnell, wenig Platz, jeder Treffer sitzt |
-| mittel | 1, 2, 3 | der Standard |
-| schwer | 1, 2, 3, 4 | langsam, viel Lager, Geschuetze oben |
+**Die Decks stehen in einem konstanten Schritt von 0.895** - jedes Deck
+erscheint genau 89,5 Prozent so gross wie das darueber. Der Boden faellt
+bewusst aus der Reihe (1.1967 statt 1.116) und sitzt tiefer, damit er sich
+deutlich von den Decks absetzt.
 
-Das kostet nichts: eine Welt mit weniger Ebenen ist schon heute erlaubt.
+Damit laesst sich die Tabelle fuer **jede** Deckzahl erzeugen:
 
-**Nur eine Ebene nach oben sichtbar.** Im Mehrspieler wurde gelernt, dass
-alle Ebenen gleichzeitig zu zeigen unlesbar wird; `welt_zeichnen(...,
-blick=...)` zeigt hoechstens eine Ebene ueber der eigenen. Fuer einen
-Wandler mit vier Decks ist das keine Feinheit, sondern Bedingung.
+```
+    deck_hoehe(n) = brennweite * (schritt**-n - 1)      schritt = 0.895
+    n = wie viele Decks unter dem obersten
+
+    n=0 ->    0      n=3 ->  170      n=6 ->  407
+    n=1 ->   50      n=4 ->  240      n=8 ->  614
+    n=2 ->  107      n=5 ->  319      n=9 ->  737
+```
+
+Die ersten Werte sind auf den Pixel die heutigen. **Ein Warhound mit drei
+Decks und ein Emperor-Titan mit zehn sehen beide richtig aus**, ohne dass
+jemand Zahlen von Hand sucht. `SCHRITT` und `BODEN_ABSTAND` kommen nach
+`config.py`, die Tabelle wird je Rumpf daraus gerechnet.
+
+#### Was gross und klein wirklich bedeutet
+
+Drei Dinge folgen aus der Deckzahl von selbst, ohne eine Sonderregel:
+
+1. **Lesbarkeit bleibt gleich.** `welt_zeichnen(..., blick=...)` zeigt
+   hoechstens **eine** Ebene ueber der eigenen (gelernt im Mehrspieler). Man
+   sieht also immer zwei Decks, egal ob der Rumpf drei oder zwoelf hat. Ein
+   Emperor-Titan wird nicht unuebersichtlicher, er wird **unuebersehbar** -
+   man kennt immer nur seine Umgebung.
+2. **Der Sturz wird toedlich.** Vom obersten Deck eines Zehn-Deck-Titanen
+   sind es rund 740 Pixel bis zum Boden, gut 1,2 Sekunden Fall. Fallschaden
+   haengt schon heute an der Hoehendifferenz. Wer von einem Emperor-Titan
+   faellt, stirbt - und das ist richtig.
+3. **Und der wichtigste: Groesse kostet Anwesenheit.** Mehr Decks heisst
+   laengere Wege zwischen den Stationen, und damit wiegt der Autopilot-Abzug
+   aus 6.3 schwerer. **Genau das ist der Klassenunterschied, und er faellt
+   umsonst an:**
+
+| Klasse | Decks | Geschuetze | Spielgefuehl |
+| --- | --- | --- | --- |
+| **Warhound** | 2-3 | 1-2 | schnell, man schafft jede Station rechtzeitig. Wenig Platz, jeder Treffer sitzt. |
+| **Reaver / Warlord** | 4-6 | 3-4 | der Standard. Man muss waehlen, wo man ist. |
+| **Emperor-Klasse** | 8-12 | 8+ | eine laufende Festung, die man **nie ganz bedienen kann**. Ohne gute Autopilot-Module ist sie ein Riese mit verbundenen Augen. Entern ist hier die eigentliche Gefahr, nicht der Beschuss. |
+
+Ein kleiner Wandler wird also **nicht** durch schlechtere Zahlen
+ausgeglichen, sondern dadurch, dass man ihn ganz beherrscht. Das ist der
+Unterschied in Spielgefuehl und Rolle, den Der Meister wollte, und er
+entsteht aus zwei bereits getroffenen Entscheidungen statt aus einer neuen
+Mechanik.
+
+*Faellig:* in **M2**. Nachtraeglich waere es teuer, weil dann jede Karte und
+jeder Bauplan auf fuenf feste Hoehen gebaut waere.
 
 ### 5.5 Schuesse zwischen Ruempfen
 
@@ -488,18 +612,45 @@ Koordinatenverschiebung, keine neue Physik.**
 `Welt.treffer()` kennt bereits Fraktionen und ueberspringt die eigene Seite
 - das stammt aus dem Mehrspieler und passt hier unveraendert.
 
-**ENTWURF, drei Regeln, damit es lesbar bleibt:**
+#### Geschosse treffen beides (KORREKTUR, A5)
 
-1. **Handwaffen tragen nur ueber kurze Distanz von Rumpf zu Rumpf.** Sonst
-   wird jedes Duell ein Scharfschuetzenduell, und das Entern verliert
-   seinen Sinn. Die Reichweiten stehen ohnehin in `K.WAFFEN`.
-2. **Geschuetze tragen weit, treffen aber nur Rumpfteile**, keine Figuren.
-   Damit sind die beiden Massstaebe sauber getrennt: Geschuetze zerlegen
-   Maschinen, Handwaffen toeten Besatzungen.
+**ENTSCHIEDEN von Der Meister:** *"es soll sich ja so anfuehlen wie SAND,
+also sollen Geschosse auf Mech- und Player-Ebene einschlagen."*
+
+Eine fruehere Fassung dieses Abschnitts trennte die Massstaebe: Geschuetze
+sollten nur Rumpfteile treffen, Handwaffen nur Figuren. **Das ist
+gestrichen.** Ein Geschuetztreffer schlaegt ein - er beschaedigt das
+Bauteil, das er trifft, *und* alles, was dort steht.
+
+*Die Sorge dahinter war:* wenn Geschuetze Leute toeten, gewinnt man jedes
+Duell aus der Ferne, und Entern passiert nie.
+
+*Warum sie unbegruendet war:* Der Grund zu entern ist nicht, dass Geschuetze
+keine Leute toeten koennen - **der Grund ist die Beute**, und die liegt an
+Bord (7.1). Wer den fremden Rumpf leerschiesst, hat einen Gegner ohne
+Besatzung und steht immer noch vor einer Maschine, in die er hineinmuss. Die
+Regel, die das Entern traegt, stand also schon da; die Trennung war
+ueberfluessig und haette das Spiel unglaubwuerdiger gemacht.
+
+**Was stattdessen die Balance traegt - drei Regeln, alle physisch statt
+willkuerlich:**
+
+1. **Decks sind Deckung, das Oberdeck ist es nicht.** Wer unter einem Deck
+   steht, ist vor Beschuss von oben und von der Seite geschuetzt. Das
+   Oberdeck hat den besten Schussbereich und **keinen** Schutz. Damit ist
+   die Wahl des Decks eine echte Abwaegung, und die offenen Kanten aus 6.4
+   bekommen einen zweiten Zweck.
+2. **Geschuetze sind Flaechenwaffen mit Flugzeit.** Sie treffen eine
+   Gegend, nicht einen Kopf. Eine Besatzung gezielt wegzuschiessen ist
+   moeglich, aber teuer und langsam - man zerlegt dabei genau die Bauteile,
+   die man erbeuten wollte (7.5). **Wer nur schiesst, gewinnt arm.**
 3. **Die eigene Maschine steht im Weg.** Wer vom Oberdeck schiesst, hat
    freie Bahn; wer vom Hauptdeck schiesst, schiesst in die eigene
-   Aussenwand. Das ist schon durch `strahl()` abgedeckt und macht die Wahl
-   des Decks zur taktischen Frage.
+   Aussenwand. Das deckt `strahl()` schon heute ab.
+
+**Technisch ist das die einfachere Loesung**, nicht die aufwendigere: ein
+Einschlag ruft einmal den Bauteilschaden (6.6) und einmal das bestehende
+`welt.treffer()` auf. Zwei Zeilen, statt zweier getrennter Trefferwege.
 
 ### 5.6 Karten, Marken und Baustellen
 
@@ -616,37 +767,82 @@ Daraus folgt die Mechanik, um die sich alles dreht:
 > dafuer, woanders zu sein.**
 
 SAND loest das mit fuenf Spielern. DUSTFRONT hat einen - und macht daraus
-nicht einen Mangel, sondern das Thema. Jedes System laeuft in drei
-Zustaenden:
+nicht einen Mangel, sondern das Thema.
 
-| Zustand | Leistung | Wann |
+#### Die Leiter der Entfernung (A2, nach Der Meister)
+
+Der Meister hat den Fortschritt so gedacht: *"dass man an verschiedenen
+Punkten in der Progression erst immer zum Steuerpult gehen kann, und dass es
+spaeter quasi ueber Ingame-Bluetooth von ueberall geht, mit Upgrades die
+zum Beispiel entscheiden, ob man den Mech steuern kann, wenn man nicht drauf
+ist."*
+
+**Das ist besser als der urspruengliche Entwurf und ersetzt ihn.** Aus drei
+Zustaenden wird eine **Leiter**, und die Sprosse haengt daran, *wie weit weg
+man ist* - genau die Groesse, um die es in diesem Abschnitt ohnehin geht:
+
+| Sprosse | Leistung | Wo man ist |
 | --- | --- | --- |
 | **besetzt** | voll | man steht an der Station |
-| **festgelegt** | eingeschraenkt | man hat es auf Autopilot gestellt und ist weg |
+| **in Reichweite** | leichter Abzug | irgendwo auf demselben Deck |
+| **fern bedient** | deutlicher Abzug, waechst mit der Entfernung | irgendwo auf dem Rumpf ("Bluetooth") |
+| **festgelegt** | fester Abzug, keine Reaktion auf Neues | Autopilot, man ist vom Rumpf herunter |
 | **unbesetzt** | nichts | niemand hat sich darum gekuemmert |
 
-**ENTWURF, was "festgelegt" jeweils heisst** - die Zahlen kommen in
+**Und der Fortschritt ist, diese Leiter hinaufzukaufen.** Ein Modul hebt
+nicht "Schaden", sondern **auf welcher Sprosse man noch brauchbar ist**. Die
+beste Stufe des Kursrechners ist die, mit der man den Wandler noch steuern
+kann, waehrend man unten in einer Ruine steht (8.2). Damit ist die
+Progression keine Zahlenreihe, sondern eine Antwort auf die Frage *"wie weit
+darf ich mich entfernen?"* - und das ist genau die Frage, aus der dieses
+Spiel besteht.
+
+**ENTWURF, was die Abzuege jeweils betreffen** - die Zahlen kommen nach
 `config.py` unter `AUTOPILOT` und werden gemessen, nicht geraten:
 
-| System | Besetzt | Festgelegt |
-| --- | --- | --- |
-| Steuerstand | voller Kurs und Schub | haelt den letzten Kurs, weicht nichts aus |
-| Geschuetz | freies Zielen, volle Feuerrate | feuert auf den festgelegten Rumpfteil, langsamer, trifft schlechter |
-| Maschine | Leistung frei verteilbar | eingefrorene Verteilung, kein Ausgleich bei Schaden |
+| System | Besetzt | Fern bedient | Festgelegt |
+| --- | --- | --- | --- |
+| Steuerstand | voller Kurs und Schub | traege Lenkung | haelt den letzten Kurs, weicht nichts aus |
+| Geschuetz | freies Zielen, volle Feuerrate | zielt langsamer nach | feuert auf den festgelegten Rumpfteil, trifft schlechter |
+| Maschine | Leistung frei verteilbar | Umverteilung dauert | eingefrorene Verteilung, kein Ausgleich bei Schaden |
 
-**Warum das traegt, in drei Punkten:**
+**Warum das traegt, in vier Punkten:**
 
 1. **Jede Entscheidung ist ein Verzicht, kein Menuepunkt.** Nach unten zu
    gehen, um die Enterer aufzuhalten, heisst: die Geschuetze treffen jetzt
-   schlechter. Das ist echte Spannung ohne einen einzigen neuen Gegnertyp.
-2. **Es begruendet die Ebenen.** Der Weg vom Reaktor zum Oberdeck ist drei
-   Treppen lang, und diese Sekunden sind das Spiel. Die teuerste Mechanik
-   im Kern bekommt endlich ihren Zweck.
-3. **Es begruendet Module.** Ein besseres Zielsystem verbessert nicht
-   "Schaden", sondern den *festgelegten* Zustand - es kauft dir, woanders
-   zu sein. Das ist eine Fortschrittsachse, die niemand zweimal hat.
+   schlechter. Echte Spannung ohne einen einzigen neuen Gegnertyp.
+2. **Es begruendet die Ebenen** - und mit 5.4 auch die Baugroesse. Der Weg
+   vom Reaktor zum Oberdeck sind bei einem Emperor-Titan acht Treppen, und
+   diese Sekunden sind das Spiel.
+3. **Es begruendet Module**, siehe oben: sie kaufen Entfernung.
+4. **Es macht den Fortschritt spuerbar statt ablesbar.** Der Moment, in dem
+   man zum ersten Mal aus einer Ruine heraus den eigenen Wandler herumzieht,
+   ist ein Ereignis. "+8% Zielgenauigkeit" ist keines.
 
 **H ist die Taste dafuer**, wie das Menue seit 0.1.0 sagt.
+
+#### Die eine Bedingung an den Code
+
+Der Meister hat gefragt, ob das fuers Programmieren wichtig ist oder sich
+spaeter aendern laesst. **Es laesst sich spaeter aendern - wenn eine Sache
+von Anfang an stimmt:**
+
+> Wer eine Station bedient, steht **an der Station**, nicht am Spieler.
+> Also `wandler.stationen["steuerstand"].bedient_von`, nicht
+> `spieler.modus == "steuern"`.
+
+Steht es an der Station, ist "aus der Ferne bedienen" nur eine gelockerte
+Abstandspruefung - eine Zeile, jederzeit nachruestbar, und die ganze Leiter
+oben ist eine Zahl je Sprosse. Steht es am Spieler, muss spaeter jede
+Station angefasst werden.
+
+**Derselbe Griff loest nebenbei A3** (mehrere Spieler): eine Station, die
+weiss, *wer* sie bedient, kann auch von einem zweiten Menschen bedient
+werden. Fuer den Mehrspieler spaeter faellt damit nichts an, was nicht
+ohnehin da waere.
+
+*Faellig:* in **M3**. Die Leiter selbst nicht - nur diese eine
+Entwurfsentscheidung, und die kostet zehn Minuten.
 
 ### 6.4 Grundriss
 
@@ -1138,7 +1334,7 @@ Ehrliche Aufstellung.
 
 ### 12.1 Geht heute schon, ohne eine Zeile
 
-* Mehr Ebenen (bis fuenf, `EBENEN_HOEHE` hat sie)
+* Mehr Ebenen (fuenf stehen in `EBENEN_HOEHE`, mehr braucht 5.4)
 * Groessere und kleinere Karten
 * Neue Kacheltypen (ein Eintrag in `KACHELN` und `ZEICHEN`)
 * Neue Gegnertypen (ein Eintrag in `GEGNER` plus ein Bild)
@@ -1162,6 +1358,8 @@ Ehrliche Aufstellung.
 | Was | Neue Datei | Aufwand |
 | --- | --- | --- |
 | Mehrere Welten gleichzeitig zeichnen, mit Versatz | `render.py` | **mittel, und der erste echte Posten** |
+| Hoehenstaffel je Rumpf statt global (5.4) | `world.py` | klein - ein Methodenkoerper |
+| Sprung von Rumpf zu Rumpf (5.3) | `entities.py` | klein - der Sturz kann es schon |
 | Der Wandler: Bauplan, Decks, Stationen, Module | `wandler.py` | mittel |
 | Schuesse zwischen Ruempfen (5.5) | `world.py` | mittel |
 | Uebergaenge zwischen Welten (5.3) | `world.py`, `play.py` | mittel |
@@ -1233,12 +1431,20 @@ diesen Schritt ist jeder weitere eine Codeaenderung.
 
 ### M2 - Der Wandler als begehbarer Rumpf (0.21.0)
 
-* `wandler.py`: Bauplan aus Text, drei bis vier Decks
+* `wandler.py`: Bauplan aus Text, **beliebig viele Decks** (5.4)
 * Der Wandler ist eine eigene `Welt` (5.1), er steht noch still
+* **Die Hoehenstaffel gehoert an den Rumpf, nicht in `config.py`:**
+  `Welt.hoehe()` rechnet sie aus Deckzahl und `SCHRITT`, statt die globale
+  Tabelle zu lesen. Eine Methode, und der Emperor-Titan ist moeglich.
+* Zwei Baugroessen zum Vergleich anlegen, klein und gross - damit sich
+  zeigt, ob lange Wege sich gut oder nur laestig anfuehlen
 * Man laeuft hinein, hoch, runter, ueber die Rampe hinaus auf einen Boden
 * Treppen zwischen den Decks, offene Kanten am Oberdeck, Sturz auf den Boden
 
 *Sichtbar:* Man hat ein Zuhause, und es ist wirklich begehbar.
+
+*Hier faellt A4 an.* Nachtraeglich waere es teuer, weil dann jede Karte und
+jeder Bauplan auf fuenf feste Hoehen gebaut waere.
 
 *Front-Pruefpunkt (9.4, Bedingung 2):* Der Wandler-Zustand gehoert in ein
 eigenes Objekt, das die Szene **bekommt**, nicht anlegt. Das ist hier eine
@@ -1247,9 +1453,13 @@ Entwurfsentscheidung von zehn Minuten und spaeter ein Umbau von Tagen.
 ### M3 - Stationen und die Fahrt (0.22.0)
 
 * Stationen als Marken plus Tastenbelegung (6.1, 6.2)
+* **Die Belegung gehoert an die Station, nicht an den Spieler** (6.3, Ende).
+  Zehn Minuten jetzt; spart spaeter, fuer Fernbedienung (A2) und
+  Mitspieler (A3) jede Station anzufassen.
 * Steuerstand: der Rumpf bekommt eine Position, der Boden zieht durch
 * TAB schaltet die Ansicht zwischen "an Bord" und "Fahrt"
-* **Autopilot (H)** mit den drei Zustaenden aus 6.3
+* **Autopilot (H)**, zunaechst nur "besetzt" und "festgelegt" - die volle
+  Leiter aus 6.3 kommt mit den Modulen in M7
 * `AUTOPILOT` und `WANDLER` in `config.py`
 
 *Sichtbar:* **Es ist ein Mech-Spiel.** Der Meilenstein, der alles aendert.
@@ -1259,12 +1469,17 @@ und angezeigt, ohne Folgen. Der spaetere Etappenzaehler ist dann schon da.
 
 ### M4 - Geschuetze und der zweite Rumpf (0.23.0)
 
-* Zweite Welt: ein feindlicher Wandler mit Versatz (5.5)
+* Zweite Welt: ein feindlicher Wandler mit Versatz (5.5). Der Versatz ist
+  eine **Kommazahl**, kein Kachelmass (5.3).
 * Geschuetzstationen, Schuesse zwischen Ruempfen
+* **Ein Einschlag trifft Bauteil und Besatzung** (A5) - ein Aufruf fuer den
+  Bauteilschaden, einer fuer das bestehende `welt.treffer()`
+* Decks als Deckung, das Oberdeck ohne (5.5)
 * Kritische Bauteile mit Punkten und Zustand (6.6)
 * Reparieren mit Q an der Werkstatt
 
-*Sichtbar:* Das Duell. Phasen 1 bis 3 aus 7.1.
+*Sichtbar:* Das Duell. Phasen 1 bis 3 aus 7.1. Und: man sieht Leute auf dem
+fremden Deck sterben - das ist die Probe aus 5.3, und sie faellt hier an.
 
 *Front-Pruefpunkt (9.4, Bedingung 3):* Das Gefecht wird mit einem Auftrag
 gestartet - welche Karte, welcher Gegner, welche Regeln - so wie
@@ -1274,6 +1489,9 @@ Sektorkarte spaeter nichts anfassen.
 ### M5 - Entern (0.24.0)
 
 * Uebergaenge zwischen Welten (5.3): Enterbruecke und Haken
+* **Springen von Rumpf zu Rumpf** (5.3): beim Absprung fliegendes Wesen mit
+  absoluter Position, beim Aufsetzen in den Rumpf darunter uebernommen.
+  Zieht der andere weg, faellt man auf den Boden.
 * Besatzungs-KI mit Stationen (7.4)
 * Gegner, die Treppen benutzen
 * Schotten als Modul
@@ -1380,7 +1598,7 @@ ignoriert.
 
 | Topf | Bedeutung | Wann faellig |
 | --- | --- | --- |
-| **A - Fundament** | Aenderung nachher heisst Umbau. 6 Stueck. | vor dem Meilenstein, der sie benutzt |
+| **A - Fundament** | Aenderung nachher heisst Umbau. 6 Stueck. | **alle sechs entschieden** (14.2) |
 | **B - Spielgefuehl** | Aenderung nachher heisst Zahlen und ein paar Stunden. 10 Stueck. | am Meilenstein selbst, gern nach dem Ausprobieren |
 | **C - Kosmetik** | Aenderung nachher kostet nichts. | nie vorab. Einfach machen. |
 | **D - Fernziel** | Betrifft nur M9 und M10. | nach M8, nicht vorher |
@@ -1435,155 +1653,148 @@ Alles andere unten ist Claude.
 
 ---
 
-### 14.2 Topf A - Fundament: sechs Entscheidungen, die jetzt zaehlen
+### 14.2 Topf A - Fundament: entschieden
 
-Diese sechs sind es wert, vorher angesehen zu werden. Alle anderen nicht.
+**Alle sechs sind beantwortet.** Der Meister hat sie in einem Zug erledigt;
+was hier steht, ist das Ergebnis und die Begruendung, nicht mehr eine Frage.
+Zwei davon haben den Plan geaendert (A4 und A5), eine hat ihn verbessert
+(A2).
 
-#### A1 - Jeder Rumpf ist eine eigene `Welt` (5.1)
+| | Entscheidung | Ergebnis | Wirkt in |
+| --- | --- | --- | --- |
+| **A1** | Jeder Rumpf eine eigene `Welt` | **bleibt**, mit Nachweis (5.3) | M2 |
+| **A2** | Stationen statt Fahr-Modus | **bleibt**, Fernbedienung als Fortschritt ergaenzt (6.3) | M3 |
+| **A3** | Wie viele Spieler | **Einzelspieler**, spaeter je ein Spieler pro Wandler | M3 / nach M8 |
+| **A4** | Wie viele Decks | **beliebig viele**, Titanklassen (5.4) - *geaendert* | M2 |
+| **A5** | Was Geschosse treffen | **beides, Mech und Figuren** (5.5) - *umgedreht* | M4 |
+| **A6** | Kritische Bauteile | **bleibt** | M4 |
 
-*Im Plan:* Der eigene Wandler, der fremde Wandler und der Boden sind drei
-getrennte `Welt`-Objekte. Koordinaten an Bord sind relativ zum Rumpf. Was
-sich bewegt, ist eine Zahl je Rumpf.
+#### A1 - Jeder Rumpf ist eine eigene `Welt` (5.1) - BLEIBT
 
-*Die Alternative:* eine grosse Bodenwelt, durch die der Wandler als
-bewegliches Kachelfeld laeuft (Weg B in 5.2).
+*Entschieden:* bleibt, nachdem Der Meister die entscheidende Probe verlangt
+hat - zwei Wandler nebeneinander, von einem zum anderen springen, Einschlaege
+und Tote auf dem fremden Rumpf sehen.
 
-*Warum der Plan so steht:* Weg B verlangt, dass Kollision, Sichtlinien und
-das Kachelraster nicht mehr an ganzen Kachelkoordinaten haengen. Das heisst
-`frei()`, `strahl()`, `bewegen()` und `ebene_zeichnen()` neu schreiben -
-also den Kern, der gerade als tragfaehig gilt.
+**Beides geht.** Der Nachweis steht in **5.3, "Die Probe aufs Exempel"**:
+Sehen ist eine Zeichenschleife ueber mehrere Welten mit je eigenem Versatz;
+Springen ist der Sturzmechanismus aus 0.11.0, mit einem Rahmenwechsel beim
+Absprung und einem beim Aufsetzen.
 
-*Kosten der Aenderung nachher:* **am hoechsten von allem.** Danach haengt
-jede Zeile in `wandler.py` daran.
+*Die Bedingung, die das erzwingt:* der Versatz eines Rumpfes ist eine
+Kommazahl, keine Kachelkoordinate. Aendert nichts an heute geltenden Regeln.
 
-*Faellig:* vor M2.
+*Warum nicht der andere Weg:* Weg B (beweglich Kacheln) verlangt, dass
+Kollision, Sichtlinien und Kachelraster nicht mehr an ganzen Koordinaten
+haengen - also `frei()`, `strahl()`, `bewegen()`, `ebene_zeichnen()` neu.
 
-*Empfehlung:* so lassen. Das ist die Entscheidung, bei der ich mir am
-sichersten bin - sie macht ein Mech-Spiel in diesem Kern ueberhaupt
-moeglich.
+#### A2 - Stationen statt Fahr-Modus (6.1) - BLEIBT, ERWEITERT
 
-#### A2 - Stationen statt Fahr-Modus (6.1)
+*Entschieden:* bleibt. Der Meister hat gefragt, ob das fuers Programmieren
+wichtig ist oder sich spaeter aendern laesst - **es laesst sich spaeter
+aendern**, und sein eigener Entwurf ist dabei besser als der
+urspruengliche.
 
-*Im Plan:* Der Spieler hoert nie auf, eine laufende Figur zu sein. Der
-Wandler wird bedient, indem man sich an eine Kachel stellt und E drueckt;
-danach bedeuten die Tasten etwas anderes. TAB ist nur ein Kamerawechsel.
+*Sein Entwurf:* erst muss man zum Steuerpult gehen, spaeter geht es "ueber
+Ingame-Bluetooth von ueberall", mit Upgrades, die entscheiden, ob man den
+Wandler noch steuern kann, wenn man nicht drauf ist.
 
-*Die Alternative:* ein echter Fahr-Modus - die Figur verschwindet, man
-steuert die Maschine direkt, mit eigener Bewegung, eigener Kollision und
-eigener Kamera.
+*Was daraus wurde:* die **Leiter der Entfernung** in 6.3. Aus drei
+Zustaenden werden fuenf Sprossen, von "besetzt" bis "unbesetzt", und der
+Fortschritt ist, diese Leiter hinaufzukaufen. Module heben nicht Schaden,
+sondern **wie weit man sich entfernen darf**. Das ist die bessere
+Fortschrittsachse, und sie stammt von ihm.
 
-*Warum der Plan so steht:* Das spart genau die drei teuersten Posten
-(zweites Bewegungssystem, zweite Kollision, zweiter Kameramodus), und es ist
-das, was den Autopiloten ueberhaupt zu einer Entscheidung macht: nur wenn
-man koerperlich an *einer* Station steht, kostet es etwas, woanders zu sein.
+*Die eine Bedingung:* Stationsbelegung gehoert **an die Station**
+(`wandler.stationen[...].bedient_von`), nicht als Zustand an den Spieler.
+Dann ist Fernbedienung eine gelockerte Abstandspruefung. Kostet in M3 zehn
+Minuten und spart spaeter, jede Station anzufassen.
 
-*Kosten der Aenderung nachher:* hoch. Ein echter Fahr-Modus ist nachtraeglich
-machbar, aber dann liegt Arbeit doppelt.
+*Sein zweiter Punkt, auch richtig:* Perspektive loest sich ueber die Ebenen
+billig. Bestaetigt im Code - die Perspektive ist ein einziger projektiver
+Faktor, der an `welt.hoehe()` haengt (Rechnung in 5.4).
 
-*Faellig:* vor M3.
+*Der Zweifel bleibt stehen:* ob sich "am Steuer stehen und W halten"
+unmittelbar genug anfuehlt, zeigt erst M3. Die Rettung waere klein - die
+Kamera loest sich im Fahr-Blick von der Figur.
 
-*Der eine Zweifel, ehrlich:* Es koennte sich zu indirekt anfuehlen. "Ich
-stehe am Steuer und halte W" ist weniger unmittelbar als "ich steuere".
-Wenn sich das in M3 so anfuehlt, ist die Rettung klein: die Kamera im
-Fahr-Blick loesst sich von der Figur, und es fuehlt sich an wie Steuern,
-obwohl es Stehen ist. **Das gehoert in M3 ausprobiert, nicht vorher
-entschieden.**
+#### A3 - Wie viele Spieler (2.3) - EINZELSPIELER, SPAETER PvP
 
-#### A3 - Wie viele Spieler? (2.3)
+*Entschieden:* **erst Einzelspieler.** Spaeter ein Spieler pro Wandler;
+zwei Spieler auf demselben Wandler bleiben als Nischenoption denkbar, nicht
+als Entwurfsziel.
 
-*Im Plan:* Einzelspieler. Ein Mensch, vier Stationen, und genau daraus
-kommt die ganze Spannung (6.3).
+*Was das heisst:* Die Mechanik aus 6.3 bleibt unangetastet, denn sie wird
+nur durch *zwei Menschen auf einem Rumpf* entwertet - und genau das ist zur
+Nische erklaert. Ein Spieler pro Wandler laesst sie voll in Kraft: jeder
+sitzt im selben Dilemma.
 
-*Was Der Meister gesagt hat:* nichts davon - aber in dieser Sitzung fiel
-*"ob man dann seinen Mech gegen einen anderen Mech steuert und gegen andere
-Spieler kaempft"*. Das laesst beides offen.
+*Wann das faellig wird:* nach M8, und dort steht es auch. Ab M4 gibt es
+ohnehin zwei Ruempfe; aus dem zweiten einen Menschen zu machen, ist dann
+kein Umbau. Das Netz liegt fertig und dokumentiert auf `multiplayer-test`.
 
-*Die Alternativen:*
-1. **Einzelspieler**, wie im Plan. Autopilot ist die Antwort aufs Alleinsein.
-2. **Zwei Spieler auf einem Wandler** (Besatzung, wie SAND). Einer steuert,
-   einer am Geschuetz. Der Autopilot verliert seine Bedeutung, dafuer
-   entsteht echte Arbeitsteilung.
-3. **Zwei Spieler, je ein Wandler**, gegeneinander. Das waere der direkte
-   Weg zum PvP.
+*Was jetzt schon dafuer getan wird:* nichts Eigenes - die Bedingung aus A2
+(Belegung an der Station) genuegt bereits, weil eine Station, die weiss
+*wer* sie bedient, auch einen zweiten Menschen kennt.
 
-*Warum das in Topf A gehoert:* Nicht wegen der Netztechnik - die liegt
-fertig und dokumentiert auf `multiplayer-test`. Sondern weil **Variante 2
-den Autopiloten entwertet** und damit die zentrale Mechanik aus 6.3. Ein
-Spiel, dessen Kern "du kannst nicht an zwei Stellen sein" ist, wird durch
-einen zweiten Spieler nicht groesser, sondern anders.
+#### A4 - Wie viele Decks (5.4) - GEAENDERT: beliebig viele
 
-*Kosten der Aenderung nachher:* Variante 3 ist billig und jederzeit
-nachtraeglich moeglich - zwei Ruempfe gibt es ab M4 sowieso. Variante 2 ist
-teuer, weil sie die Begruendung fuer 6.3 wegnimmt.
+*Entschieden:* **Die Obergrenze von vier Decks faellt.** Der Meister will
+grosse und kleine Wandler nach dem Vorbild der Titanen aus Warhammer 40k -
+vom Warhound bis zur Emperor-Klasse, je mit eigenen Vor- und Nachteilen,
+eigenem Spielgefuehl und eigener Bedeutung in der Geschichte.
 
-*Faellig:* Variante 2 vor M3. Variante 3 kann bis nach M8 warten - und
-genau so steht es in M8.
+*Warum das billig ist:* `EBENEN_HOEHE` wird im ganzen Spiel an **genau
+einer** Stelle gelesen, und das ist bereits eine Methode an der `Welt`.
+Alles andere ruft `welt.hoehe(idx)`. Gibt jeder Rumpf sich seine eigene
+Tabelle, folgen Perspektive, Sturz und Blickhoehe von selbst.
 
-*Empfehlung:* Einzelspieler bauen, Variante 3 nach M8 offenhalten,
-Variante 2 nur wenn er sie ausdruecklich will.
+*Und die Tabelle ist eine Regel, keine Liste:* die heutigen fuenf Zahlen
+kodieren einen konstanten Wahrnehmungsschritt von 0.895 je Deck (Rechnung
+in 5.4). Daraus laesst sich jede Deckzahl erzeugen, und die ersten Werte
+sind auf den Pixel die heutigen.
 
-#### A4 - Boden = Ebene 0, Rumpf = Ebenen 1 bis 4 (5.4)
+*Der Gewinn, der dabei umsonst anfaellt:* Groesse kostet Anwesenheit. Mehr
+Decks heisst laengere Wege und damit schwerere Autopilot-Abzuege (6.3). Ein
+Warhound beherrscht man ganz; einen Emperor-Titan nie. **Das ist der
+Klassenunterschied, den Der Meister wollte, und er entsteht aus zwei
+bereits getroffenen Entscheidungen statt aus einer neuen Mechanik.**
 
-*Im Plan:* Der Boden ist die unterste Ebene, der Wandler hat hoechstens vier
-Decks darueber. `EBENEN_HOEHE` hat genau fuenf Eintraege, das geht auf.
+*Faellig:* M2. Nachtraeglich teuer, weil dann jede Karte auf fuenf feste
+Hoehen gebaut waere.
 
-*Die Alternative:* Der Boden bekommt eigene Ebenen (mehrstoeckige Gebaeude
-im Wasteland), dann reichen fuenf nicht mehr - dann braucht ein Gebaeude
-eine eigene Welt, oder `EBENEN_HOEHE` wird laenger.
+#### A5 - Was Geschosse treffen (5.5) - UMGEDREHT
 
-*Warum es zaehlt:* Es legt fest, **wie hoch ein Wandler maximal ist** und ob
-ein Gebaeude unten mehr als ein Geschoss haben darf. Vier Decks sind viel -
-der Weg vom Reaktor zum Oberdeck sind drei Treppen, und das ist schon die
-obere Grenze fuer etwas, das man im Gefecht rennen soll.
+*Entschieden:* **Geschosse schlagen auf Mech- und Spielerebene ein**, so wie
+in SAND. Die urspruengliche Trennung - Geschuetze nur gegen Rumpfteile,
+Handwaffen nur gegen Figuren - ist gestrichen.
 
-*Kosten der Aenderung nachher:* mittel. `EBENEN_HOEHE` zu verlaengern ist
-eine Zeile, aber jede Karte und jede Perspektivzahl haengt daran.
+*Warum die Sorge dahinter unbegruendet war:* Der Grund zu entern ist nicht,
+dass Geschuetze keine Leute toeten koennen - **der Grund ist die Beute**,
+und die liegt an Bord (7.1). Wer den fremden Rumpf leerschiesst, steht
+immer noch vor einer Maschine, in die er hineinmuss. Die Regel, die das
+Entern traegt, stand schon da.
 
-*Faellig:* vor M2.
+*Was die Balance stattdessen traegt* (ausgefuehrt in 5.5): Decks sind
+Deckung und das Oberdeck ist keine; Geschuetze sind Flaechenwaffen mit
+Flugzeit und zerlegen beim Leerschiessen genau die Bauteile, die man
+erbeuten wollte; die eigene Maschine steht im Weg.
 
-#### A5 - Geschuetze treffen Rumpfteile, Handwaffen treffen Figuren (5.5)
+*Nebenbei:* technisch ist das die **einfachere** Loesung. Ein Einschlag ruft
+einmal den Bauteilschaden und einmal das bestehende `welt.treffer()` auf,
+statt zweier getrennter Trefferwege.
 
-*Im Plan:* Die zwei Massstaebe sind sauber getrennt. Geschuetze zerlegen
-Maschinen und koennen keine Personen toeten. Handwaffen toeten Personen und
-tragen nur kurz von Rumpf zu Rumpf.
+#### A6 - Kritische Bauteile statt Huellenbalken (6.6) - BLEIBT
 
-*Die Alternative:* alles trifft alles. Ein Geschuetztreffer reisst einen
-Mann vom Deck.
+*Entschieden:* bleibt, ohne Einwand.
 
-*Warum der Plan so steht:* Ohne die Trennung wird jedes Duell ein
-Scharfschuetzenduell auf grosse Distanz, und Entern - das Herz aus 7.2 -
-passiert nie, weil man nie nah heran muss. Ausserdem bleiben die sechs
-Waffen balanciert und ihre Tests gueltig.
+Ein Wandler hat keinen Lebensbalken, sondern Bauteile mit eigenen Punkten -
+Reaktor, Beine, Schwungrad, Geschuetze, Schotten, Rampe. Ein Treffer nimmt
+eine Faehigkeit, nicht eine Zahl. Es ist lesbar, es erzeugt Geschichten
+statt Prozenten, und es begruendet Q und die Werkstatt.
 
-*Kosten der Aenderung nachher:* mittel, betrifft aber die gesamte
-Gefechtsbalance und damit M4 bis M8.
-
-*Faellig:* vor M4. **Das ist dieselbe Frage wie "wie viel Maschine, wie viel
-Fuss" - siehe B1.**
-
-#### A6 - Kritische Bauteile statt Huellenbalken (6.6)
-
-*Im Plan:* Ein Wandler hat keinen Lebensbalken. Er hat Bauteile mit eigenen
-Punkten - Reaktor, Beine, Schwungrad, Geschuetze, Schotten, Rampe - und ein
-Treffer nimmt eine Faehigkeit, nicht eine Zahl.
-
-*Die Alternative:* ein Huellenbalken von 100 auf 0, wie bei einem Gegner.
-
-*Warum der Plan so steht:* Es ist von SAND uebernommen und der beste
-Einzelgriff daraus. Es ist lesbar (man sieht, *was* qualmt), es erzeugt
-Geschichten statt Prozentzahlen, und es begruendet Q (Werkzeug) und die
-Werkstatt.
-
-*Kosten der Aenderung nachher:* hoch, weil praktisch jede Folgeentscheidung
-daran haengt - Panzerung, Reparatur, wann ein Wandler verloren ist, wie sich
-ein Duell anfuehlt.
-
-*Faellig:* vor M4.
-
-*Empfehlung:* so lassen. Wenn es eine Idee in diesem Dokument gibt, die das
-Spiel besser macht als es sein muesste, ist es diese.
-
----
+*Passt jetzt noch besser*, weil nach A5 derselbe Einschlag Bauteil und
+Besatzung trifft - Schaden ist dadurch an einem Ort sichtbar statt in zwei
+Balken.
 
 ### 14.3 Topf B - Spielgefuehl: zehn Entscheidungen, die warten koennen
 
@@ -1593,11 +1804,11 @@ nicht vergessen werden, nicht damit sie jetzt beantwortet werden.
 
 | # | Entscheidung | Im Plan steht | Alternative | Faellig |
 | --- | --- | --- | --- | --- |
-| **B1** | **Wie viel Maschine, wie viel Fuss?** | ausgewogen: Beschuss bis Phase 3, Entern als Hoehepunkt (7.1) | Maschinenspiel mit Fussgefecht als Seltenheit, oder Fussspiel mit Maschine als Buehne | M4, durch Messen |
+| **B1** | **Wie viel Maschine, wie viel Fuss?** | ausgewogen: Beschuss bis Phase 3, Entern als Hoehepunkt (7.1). Mit A5 ist die *Richtung* gesetzt - Beschuss ist toedlich, aber die Beute zwingt an Bord. Offen bleibt das Verhaeltnis. | Maschinenspiel mit Fussgefecht als Seltenheit, oder Fussspiel mit Maschine als Buehne | M4, durch Messen |
 | **B2** | **Autopilot: wie schlecht ist "festgelegt"?** | eingeschraenkt, Zahlen offen (6.3) | gar nicht schlechter (dann ist es Komfort, keine Mechanik), oder viel schlechter | M3, durch Messen |
-| **B3** | **Wie gross ist ein Wandler?** | 18x12 je Deck, passt fast auf einen Bildschirm (5.7) | deutlich groesser - man sieht nicht alles und muss suchen | M2 |
+| **B3** | **Grundflaeche je Deck?** | 18x12, passt fast auf einen Bildschirm (5.7). Die *Hoehe* ist mit A4 entschieden, die Flaeche nicht. | deutlich groesser - man sieht nicht alles und muss suchen | M2 |
 | **B4** | **Welche Decks, mit welchem Inhalt?** | Unterdeck/Hauptdeck/Bruecke/Oberdeck mit festen Aufgaben (5.4, 6.4) | frei belegbar, oder andere Aufteilung | M2 |
-| **B5** | **Gewichtsklassen?** | drei, mit 2/3/4 Decks (5.4) | nur eine Bauart | M2 |
+| **B5** | **Welche Titanklassen genau?** | drei Stufen als Anhalt: Warhound 2-3 Decks, Reaver/Warlord 4-6, Emperor 8-12 (5.4). Dass es sie gibt, ist mit A4 entschieden - die Zahlen nicht. | mehr oder weniger Stufen, andere Deckzahlen | M2, dann M7 |
 | **B6** | **Wo kommen Enterer an Bord?** | an einer Stelle, wo die Bruecke aufsetzt (7.3) | mehrere Stellen gleichzeitig - deutlich haerter | M5 |
 | **B7** | **Spiegelt die fremde Besatzung meine Stationen?** | ja, gleiche Logik gespiegelt (7.4) | eigene KI-Regeln, oder nur Waechter ohne Stationen | M5 |
 | **B8** | **Was erbeutet man?** | Module aus dem fremden Rumpf (7.5) | Schrott und Blaupausen, keine Bauteile | M7 |
