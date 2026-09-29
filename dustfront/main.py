@@ -7,6 +7,7 @@ DUSTFRONT - Einstieg
     python -m dustfront --join WOHIN   einer LAN-Runde beitreten
     python -m dustfront --vorlagen     jedes Bild als Vorlage herausschreiben
     python -m dustfront --assets       zeigen, was aus Dateien kommt
+    python -m dustfront --konto ...    Konten anlegen und ansehen
 
 Bilder werden, falls vorhanden, aus dem Ordner `assets` neben dem Paket
 geladen, Klaenge aus `assets/sfx`. Fehlt etwas, zeichnet und rechnet sich das
@@ -58,7 +59,7 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
             schutz: bool | None = None, medkits: int | None = None,
             medkit_spawn: bool | None = None, runden: int | None = None,
             team: int | None = None, online: bool = False,
-            passwort: str = "") -> int:
+            passwort: str = "", loadouts: str | None = None) -> int:
     """LAN-Test: als Gastgeber aufmachen oder als Gast verbinden.
 
     Die Spielart bestimmt allein der Gastgeber. Ein Gast bekommt sie mit
@@ -102,6 +103,10 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
                   % ("alle %.0f Sekunden" % K.GEFECHT["medkit_takt"]
                      if (K.GEFECHT["medkits_spawnen"] if medkit_spawn is None
                          else medkit_spawn) else "keine"))
+            print("Ausruestung: %s"
+                  % ("jeder traegt sein eigenes Loadout"
+                     if (loadouts or K.GEFECHT["loadouts"]) == "eigenes"
+                     else "jeder hat alles"))
             if passwort:
                 print("Kennwort: %s" % netz.passwort_saeubern(passwort))
             print("Im eigenen Netz verbinden sich Mitspieler mit:")
@@ -131,9 +136,79 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
                          modus=modus, ende_art=ende_art,
                          ende_wert=ende_wert, knapp=knapp, schutz=schutz,
                          medkits=medkits, medkit_spawn=medkit_spawn,
-                         runden=runden, team=team, passwort=passwort))
+                         runden=runden, team=team, passwort=passwort,
+                         loadouts=loadouts))
     app.laufen()
     return 0
+
+
+def konten(argumente: list[str], wert) -> int:
+    """Konten im Terminal anlegen und ansehen.
+
+        python -m dustfront --konto liste
+        python -m dustfront --konto neu   --name MEISTER [--wort GEHEIM123]
+        python -m dustfront --konto pruef --name MEISTER --wort GEHEIM123
+
+    Damit kann der Gastgeber einer LAN-Runde seinen Gaesten Konten
+    anlegen, ohne dass irgendwo ein Server laufen muss. Das war
+    ausdruecklich gewuenscht: im Keller mit vier Leuten und ohne
+    Internet soll jeder trotzdem seine Zahlen und seine Loadouts haben.
+
+    Das Kennwort laesst sich weglassen; dann wird es abgefragt und
+    dabei nicht angezeigt. Auf der Kommandozeile stuende es sonst
+    hinterher in der Verlaufsdatei der Shell.
+    """
+    import getpass
+
+    from . import ablage as A
+
+    was = wert("--konto", "liste").strip().lower()
+    lokal = A.LokaleAblage()
+    if was in ("liste", "zeigen", ""):
+        namen = lokal.namen()
+        print("Konten auf diesem Rechner: %s" % (pfade_text() or "nirgends"))
+        if not namen:
+            print("  noch keines - anlegen mit --konto neu --name <name>")
+        for n in namen:
+            print("  %s" % n)
+        netz_ablage = A.NetzAblage()
+        print("Server: %s" % (netz_ablage.url if netz_ablage.eingerichtet
+                              else "keiner eingetragen, siehe docs/KONTO.md"))
+        return 0
+
+    name = A.name_saeubern(wert("--name", ""))
+    fehler = A.name_pruefen(name)
+    if fehler:
+        print(fehler.capitalize())
+        return 1
+    wort = wert("--wort", "")
+    if not wort:
+        try:
+            wort = getpass.getpass("Kennwort fuer %s: " % name)
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 1
+
+    if was == "neu":
+        antwort = lokal.anlegen(name, wort)
+        if not antwort:
+            print(antwort.fehler.capitalize())
+            return 1
+        print("Konto %s angelegt." % name)
+        print("Es gilt auf diesem Rechner. Mit einem eingetragenen Server")
+        print("gilt es ueberall - siehe docs/KONTO.md.")
+        return 0
+    if was in ("pruef", "pruefen", "test"):
+        antwort = lokal.anmelden(name, wort)
+        print("In Ordnung." if antwort else antwort.fehler.capitalize())
+        return 0 if antwort else 1
+    print("Unbekannt: --konto %s. Moeglich: liste, neu, pruef" % was)
+    return 1
+
+
+def pfade_text() -> str:
+    from . import pfade
+    return pfade.beschreibung()
 
 
 def team_lesen(text: str) -> int | None:
@@ -191,6 +266,8 @@ def aus_argumenten(argumente: list[str]) -> int:
                        team=team_lesen(wert("--team", "")),
                        online="--online" in argumente,
                        passwort=wert("--passwort", ""),
+                       loadouts=("eigenes" if "--loadouts" in argumente
+                                 else None),
                        medkit_spawn="--keine-medkits" not in argumente)
     if "--join" in argumente:
         return gefecht(False, wohin=wert("--join"),
@@ -207,6 +284,8 @@ def aus_argumenten(argumente: list[str]) -> int:
             print("  %2d. %-12s %4d Abschuesse  %4d Tode  %3d Runden"
                   % (platz, e["name"], e["abschuesse"], e["tode"], e["runden"]))
         return 0
+    if "--konto" in argumente:
+        return konten(argumente, wert)
     if "--vorlagen" in argumente:
         from .vorlagen import schreiben
         schreiben()

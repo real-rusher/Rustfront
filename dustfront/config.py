@@ -423,6 +423,12 @@ VERSUS = dict(
 ENDE_ARTEN = ("zeit", "abschuesse")
 
 GEFECHT = dict(
+    # Gelten Loadouts in dieser Runde? "alles" ist die Vorgabe: wer eine
+    # Runde aufmacht, um zu spielen, soll nicht erst eine Ausruestung
+    # zusammenstellen muessen. "eigenes" ist die Runde, in der die Wahl
+    # der Waffe eine Wahl ist.
+    loadouts="alles",
+    loadout_arten=("alles", "eigenes"),
     team_abschuesse=30,       # Teamabschuesse bis zum Sieg in "team"
     rundenzeit=300.0,         # Sekunden je Runde, wenn nach Zeit gespielt wird
     abschuesse_ziel=20,       # Abschuesse bis zum Sieg, wenn danach gespielt wird
@@ -762,6 +768,92 @@ for _team in TEAMS["kombi"]:
 # NAHKAMPF. Ein Werkzeug, das man im Gedraenge braucht, sollte keinen
 # Waffenwechsel kosten.
 HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "rauch"]
+
+# ══════════════════════════════════════════════════ AUSRUESTUNG
+#
+# Ein Loadout ist zwei Waffen und eine Wurfwaffe. Das Brecheisen steht
+# bewusst nicht drin: es liegt auf F und ist immer da. Wer sich also
+# ausruestet, entscheidet ueber drei Plaetze, nicht ueber sechs - das ist
+# eine Entscheidung, die man noch ueberblickt, und sie kostet etwas.
+#
+# Der Gastgeber entscheidet, ob Loadouts ueberhaupt gelten:
+#
+#   "eigenes"   jeder traegt sein gewaehltes Loadout
+#   "alles"     jeder hat alles, wie bisher
+#
+# Beides muss es geben. "Alles" ist die Runde, in der man einfach spielt;
+# "eigenes" ist die, in der die Wahl der Waffe eine Wahl ist.
+LOADOUT = dict(
+    plaetze=3,                # so viele Loadouts kann man sich anlegen
+    waffen=2,                 # so viele Waffen je Loadout
+    wuerfe=1,                 # so viele Wurfwaffen je Loadout
+    # Woraus gewaehlt werden darf. Bewusst als eigene Listen und nicht
+    # aus WAFFEN abgeleitet: was waehlbar ist, ist eine Spielentscheidung
+    # und nicht dasselbe wie das, was es gibt.
+    auswahl_waffen=("repetierer", "sturm", "schrot", "scharf"),
+    auswahl_wuerfe=("granate", "rauch"),
+    # Womit ein neues Loadout vorbelegt wird. Drei Stueck, damit man nach
+    # dem ersten Anmelden gleich drei brauchbare Saetze hat und nicht vor
+    # drei leeren Plaetzen sitzt.
+    vorlagen=(
+        dict(name="STURM", waffen=("sturm", "schrot"), wuerfe=("granate",)),
+        dict(name="JAEGER", waffen=("scharf", "repetierer"), wuerfe=("rauch",)),
+        dict(name="NAHKAMPF", waffen=("schrot", "sturm"), wuerfe=("rauch",)),
+    ),
+    namenslaenge=12,
+)
+
+# ══════════════════════════════════════════════════ ZAHLEN, DIE MITLAUFEN
+#
+# Was von einer Runde festgehalten wird. Eine Liste an genau einer Stelle,
+# damit die Statistik, die Siegtafel und der Abgleich mit dem Server
+# dieselben Namen benutzen - drei Stellen mit je eigener Schreibweise
+# waeren der sichere Weg in Zahlen, die nicht zueinander passen.
+#
+# **Nur harmlose Zahlen.** Was hier steht, entsteht im Spiel und sagt
+# nichts ueber den Menschen davor: keine Adressen, keine Geraete, keine
+# Zeiten, an denen jemand am Rechner sass. Ein Name, den man sich selbst
+# gibt, und was die Figur getan hat.
+WERTE = (
+    # (Schluessel, Aufschrift, Art)
+    #   "summe"   wird ueber Runden addiert
+    #   "bestes"  nur der Hoechstwert zaehlt
+    ("abschuesse",    "ABSCHUESSE",       "summe"),
+    ("tode",          "TODE",             "summe"),
+    ("hilfen",        "AUFGEHOLFEN",      "summe"),
+    ("schaden",       "SCHADEN",          "summe"),
+    ("schaden_ein",   "EINGESTECKT",      "summe"),
+    ("schuesse",      "SCHUESSE",         "summe"),
+    ("treffer",       "TREFFER",          "summe"),
+    ("kopftreffer",   "NAHKAMPFTREFFER",  "summe"),
+    ("granaten",      "GRANATEN",         "summe"),
+    ("rauchwolken",   "RAUCHWOLKEN",      "summe"),
+    ("medkits",       "MEDKITS",          "summe"),
+    ("beute",         "AUFGESAMMELT",     "summe"),
+    ("strecke",       "GELAUFEN",         "summe"),
+    ("stuerze",       "STUERZE",          "summe"),
+    ("zonenzeit",     "IM KREIS",         "summe"),
+    ("runden",        "RUNDEN",           "summe"),
+    ("siege",         "SIEGE",            "summe"),
+    ("spielzeit",     "SPIELZEIT",        "summe"),
+    ("serie",         "BESTE SERIE",      "bestes"),
+    ("abschuesse_r",  "BESTE RUNDE",      "bestes"),
+)
+
+# Je Waffe wird getrennt gezaehlt, sonst laesst sich nie sagen, womit
+# jemand wirklich spielt. Genau das braucht die Siegtafel spaeter fuer
+# das Zeichen der meistbenutzten Waffe.
+WAFFEN_WERTE = ("schuesse", "treffer", "abschuesse")
+
+KONTO = dict(
+    # So oft versucht das Spiel, sein Journal loszuwerden. Nicht oefter:
+    # ein Abgleich, der nichts zu tun hat, kostet trotzdem eine Anfrage.
+    abgleich_takt=45.0,
+    journal_hoechstens=400,   # so viele Runden warten hoechstens
+    # Wie lange ein fehlgeschlagener Versuch Ruhe gibt, damit ein Server,
+    # der gerade nicht mag, nicht jede Sekunde neu gefragt wird.
+    ruhe_nach_fehler=30.0,
+)
 
 # Der Schlag mit dem Brecheisen, jederzeit auf einer eigenen Taste.
 #

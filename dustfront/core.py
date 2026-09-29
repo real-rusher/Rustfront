@@ -319,6 +319,37 @@ class App:
         self.zeitlupe = 0.0            # Restsekunden kurzer Verlangsamung
         self._rest = 0.0
         self.fps = 0.0
+        # Das Konto. Es haengt an der App und nicht an einer Szene: eine
+        # Anmeldung soll einen Szenenwechsel ueberleben, und das Journal
+        # soll auch dann weiterlaufen, wenn man gerade im Menue steht.
+        # Angelegt wird es traege - wer nur die Testkarte startet, soll
+        # deswegen keine Datei anlegen und keinen Faden starten.
+        self._konto = None
+
+    @property
+    def konto(self):
+        """Das Konto des Spielers. Wird beim ersten Zugriff angelegt."""
+        if self._konto is None:
+            from .konto import Konto
+            self._konto = Konto()
+            # Was im Konto steht, gilt fuer die Einstellungen: wer sich
+            # an einem anderen Rechner anmeldet, bringt sein Bildwackeln
+            # und seine Lautstaerken mit.
+            if self._konto.angemeldet and self._konto.werte:
+                self.opt.konto_uebernehmen(self._konto.werte)
+        return self._konto
+
+    def konto_sichern(self) -> None:
+        """Die eigenen Einstellungen ins Konto uebernehmen und ablegen.
+
+        Aufgerufen, wenn im Menue etwas geaendert wurde. Ohne Anmeldung
+        bleibt es bei der Datei auf diesem Rechner - das ist kein
+        Sonderfall, sondern der Normalfall vor der ersten Anmeldung.
+        """
+        if self._konto is None:
+            return
+        self._konto.werte.update(self.opt.konto_werte())
+        self._konto.profil_sichern()
 
     # ---- Anzeige ----------------------------------------------------
     def anzeige_setzen(self) -> None:
@@ -450,6 +481,11 @@ class App:
             self.ereignisse()
             if not self.laeuft or not self.stapel:
                 break
+
+            # Das Konto laeuft mit der echten Zeit, nicht mit dem festen
+            # Schritt: es simuliert nichts, es holt nur Antworten ab.
+            if self._konto is not None:
+                self._konto.schritt(echt)
 
             self._rest += echt
             schritte = 0

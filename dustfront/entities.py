@@ -155,6 +155,8 @@ class Wesen:
                   self)
         w.aufschlagring(self.pos, self.ebene, wucht)
         w.klang("sturz", 0.55 + 0.45 * wucht, self.pos, self.ebene)
+        if hasattr(self, "zaehlen"):
+            self.zaehlen("stuerze")
         self.schaden(schaden, None, None)
 
     def zeichenpos(self, alpha: float) -> pygame.Vector2:
@@ -165,10 +167,19 @@ class Wesen:
                 von=None) -> None:
         if not self.lebt or self.leben <= 0:
             return
+        # Nur der Schaden, der wirklich angekommen ist. Wer einen mit
+        # 3 Leben mit einer Granate erwischt, hat 3 Schaden gemacht und
+        # nicht 78 - sonst sagt die Zahl nichts.
+        angekommen = min(float(menge), max(0.0, self.leben))
         self.leben -= menge
         self.blitz = K.TREFFER["blitz"]
         if schub is not None:
             self.tempo += schub
+        if angekommen > 0:
+            if hasattr(von, "zaehlen") and von is not self:
+                von.zaehlen("schaden", angekommen)
+            if hasattr(self, "zaehlen"):
+                self.zaehlen("schaden_ein", angekommen)
         if self.leben <= 0:
             self.sterben(von)
 
@@ -236,7 +247,7 @@ class Geschoss(Wesen):
     radius = 2.0
 
     def __init__(self, pos, richtung: float, daten: dict, ebene: int,
-                 von=None) -> None:
+                 von=None, waffe: str = "") -> None:
         super().__init__(pos, ebene)
         self.winkel = richtung
         r = math.radians(richtung)
@@ -244,6 +255,10 @@ class Geschoss(Wesen):
         self.schaden_wert = daten["schaden"]
         self.rest = daten["reichweite"]
         self.von = von
+        # Womit geschossen wurde, muss das Geschoss selbst wissen: beim
+        # Einschlag kann der Schuetze laengst die Waffe gewechselt haben,
+        # und dann landete der Treffer bei der falschen.
+        self.waffe = waffe
         self.quelle_fraktion = von.fraktion if von else "neutral"
 
     def schritt(self, dt: float) -> None:
@@ -277,6 +292,8 @@ class Geschoss(Wesen):
         richtung = math.degrees(math.atan2(self.tempo.y, self.tempo.x))
         if ziel is not None:
             schub = pygame.Vector2(self.tempo).normalize() * K.TREFFER["rueckstoss"]
+            if hasattr(self.von, "zaehlen"):
+                self.von.zaehlen("treffer", 1.0, self.waffe)
             ziel.schaden(self.schaden_wert, schub, self.von)
             wolke(self.welt, self.pos, 6, 150, 0.22, K.C_BLUT, self.ebene, 1,
                   "blut", 110, richtung, 5.0)
@@ -661,6 +678,56 @@ class Spieler(Wesen):
         # zur naechsten Wand. So sieht man, was man wirklich treffen wuerde,
         # statt nur, wo der Zeiger steht. Mit Z umschaltbar wie bisher.
         self.tracer_weit = True
+        # Was diese Figur in der Runde getan hat. Ein Woerterbuch und
+        # keine zwanzig Felder: was gezaehlt wird, steht in K.WERTE, und
+        # neue Zahlen sollen dort dazukommen und nicht hier.
+        self.zaehler: dict[str, float] = {}
+        self.waffen_zaehler: dict[str, dict] = {}
+        self.serie = 0                # laufende Abschussfolge, Tod setzt zurueck
+
+    # ---- Zaehlen -----------------------------------------------------
+    def zaehlen(self, name: str, wert: float = 1.0, waffe: str = "") -> None:
+        """Eine Zahl hochsetzen. Die einzige Stelle, die das tut.
+
+        `waffe` zaehlt zusaetzlich getrennt je Waffe - sonst laesst sich
+        nie sagen, womit jemand wirklich spielt, und genau das braucht
+        die Siegtafel spaeter fuer das Zeichen der meistbenutzten Waffe.
+        """
+        self.zaehler[name] = self.zaehler.get(name, 0.0) + wert
+        if waffe:
+            je = self.waffen_zaehler.setdefault(waffe, {})
+            je[name] = je.get(name, 0.0) + wert
+
+    def zaehler_leeren(self) -> None:
+        """Vor einer neuen Runde. Der Zaehlerstand gehoert einer Runde."""
+        self.zaehler = {}
+        self.waffen_zaehler = {}
+        self.serie = 0
+
+    def werte_runde(self) -> dict:
+        """Die Zahlen dieser Runde, so wie sie ins Journal gehen."""
+        art = {s: a for s, _t, a in K.WERTE}
+        werte = {}
+        for s, wert in self.zaehler.items():
+            if s not in art:
+                continue
+            werte[s] = int(wert) if float(wert).is_integer() else round(wert, 2)
+        werte["abschuesse"] = int(self.abschuesse) if hasattr(self, "abschuesse") \
+            else int(self.zaehler.get("abschuesse", 0))
+        werte["tode"] = int(getattr(self, "tode", self.zaehler.get("tode", 0)))
+        werte["abschuesse_r"] = werte["abschuesse"]
+        werte["serie"] = int(self.zaehler.get("serie", 0))
+        return werte
+
+    def waffen_runde(self) -> dict:
+        """Dasselbe je Waffe, auf die Schluessel in K.WAFFEN_WERTE begrenzt."""
+        raus = {}
+        for waffe, zahlen in self.waffen_zaehler.items():
+            eintrag = {s: int(zahlen.get(s, 0)) for s in K.WAFFEN_WERTE
+                       if zahlen.get(s)}
+            if eintrag:
+                raus[waffe] = eintrag
+        return raus
 
     @property
     def streuung_jetzt(self) -> float:
@@ -771,8 +838,11 @@ class Spieler(Wesen):
         elif self.welt.loch_unter(self):
             self.stuerzen()              # ueber den Rand getreten
         else:
-            # Schrittstaub
-            self.weg += self.pos.distance_to(vor)
+            # Schrittstaub. Derselbe Abstand zaehlt die gelaufene
+            # Strecke mit - sie steht ohnehin schon da.
+            gegangen = self.pos.distance_to(vor)
+            self.weg += gegangen
+            self.zaehlen("strecke", gegangen)
             if self.weg > s["stiefel_abstand"]:
                 self.weg = 0.0
                 wolke(self.welt, self.pos + pygame.Vector2(0, 4), 2, 26, 0.34,
@@ -828,6 +898,7 @@ class Spieler(Wesen):
             self.medkits -= 1
             self.heilt_rest = K.MEDKIT["dauer"]
             self.welt.klang("medkit", 0.7)
+            self.zaehlen("medkits")
             return True
         return False
 
@@ -852,14 +923,21 @@ class Spieler(Wesen):
                                    weite))
             self.welt.ruckeln(1.2, "wurf", self.pos, self.ebene, self)
             self.welt.klang("wurf", 0.6, self.pos, self.ebene)
+            self.zaehlen("rauchwolken" if d.get("rauch") else "granaten",
+                         1.0, self.waffe_name)
             return
 
+        # Ein Abzug ist ein Schuss, auch bei Schrot mit acht Kuegelchen:
+        # sonst laesst sich die Treffergenauigkeit einer Schrotflinte nicht
+        # mit der eines Gewehrs vergleichen.
+        self.zaehlen("schuesse", 1.0, self.waffe_name)
         streuung = self.streuung_jetzt
         if d.get("streuung_dauerfeuer"):
             streuung += d["streuung_dauerfeuer"] * min(1.0, self.halte_zeit)
         for _ in range(d["geschosse"]):
             a = self.winkel + RND.uniform(-streuung, streuung)
-            self.welt.dazu(Geschoss(muendung, a, d, self.ebene, self))
+            self.welt.dazu(Geschoss(muendung, a, d, self.ebene, self,
+                                    self.waffe_name))
         self.fokus *= 0.25            # der Schuss reisst die Waffe hoch
 
         # Rueckstoss auf den Schuetzen. Blitz, Funken, Knall und der Schlag
@@ -885,6 +963,7 @@ class Spieler(Wesen):
         if daten is None:
             self.takt = d["takt"]
         self.schlag_zeigen = d.get("schwung", 0.26)
+        self.zaehlen("schuesse", 1.0, K.NAHKAMPF["waffe"])
         w = self.welt
         reich = d["reichweite"]
         halb = d["winkel"] * 0.5
@@ -900,6 +979,7 @@ class Spieler(Wesen):
                 continue
             schub = ab.normalize() * d["schub"] if ab.length_squared() > 0.01 else None
             ziel.schaden(d["schaden"], schub, self)
+            self.zaehlen("kopftreffer", 1.0, K.NAHKAMPF["waffe"])
             getroffen += 1
         spitze = self.pos + pygame.Vector2(reich * 0.7, 0).rotate(self.winkel)
         w.schlagknall(spitze, self.winkel, self.ebene, bool(getroffen), self)

@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.19.3, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.20.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -323,14 +323,20 @@ Wer lieber tippt:
 python -m dustfront --host --name MEISTER --modus pve --knapp
 python -m dustfront --host --name MEISTER --modus pvp --ende abschuesse --wert 20
 python -m dustfront --host --name MEISTER --modus huegel --ende zeit --wert 600
+python -m dustfront --host --name MEISTER --modus pvp --loadouts
 python -m dustfront --join 192.168.1.7 --name BESUCH
 python -m dustfront --bestenliste
+python -m dustfront --konto liste
 ```
 
 `--team rot|blau|auto` waehlt die Mannschaft, `--runden N` die Zahl der
 Rundensiege in VERSUS. `--online` versucht, den Port im Router freizugeben,
 `--passwort WORT` setzt ein Kennwort - beides zusammen ist der Weg ueber
 das Internet.
+`--loadouts` laesst jeden sein eigenes Loadout tragen - zwei Waffen und
+eine Wurfwaffe statt aller sechs Plaetze; ohne den Schalter hat jeder
+alles. Konten, Statistik und Loadouts stehen in
+[`docs/KONTO.md`](docs/KONTO.md).
 `--modus` ist `pvp`, `pve`, `pvpve`, `team`, `versus` oder `huegel`;
 `--ende` ist `zeit` oder `abschuesse`, `--wert` die Sekunden
 beziehungsweise Abschuesse. Bei `versus` und `huegel` ist die Zeit nur die
@@ -440,6 +446,8 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `netz.py` | LAN-Verbindungen und Protokoll |
 | `mehrspieler.py` | Das LAN-Gefecht |
 | `bestenliste.py` | Abschuesse ueber alle Runden |
+| `konto.py` | Anmeldung, Profil, Loadouts, das Journal der Runden |
+| `ablage.py` | Wo Konten und Zahlen liegen: Datei oder Server |
 
 Daneben liegt `docs/`:
 
@@ -447,6 +455,7 @@ Daneben liegt `docs/`:
 | --- | --- |
 | `KARTE.md` | Der Weltenplan: Kontinent, Orte, Wandler, Front, Meilensteine |
 | `MEHRSPIELER.md` | Der LAN-Mehrspieler vollstaendig: Aufbau, Protokoll, alle sechs Spielarten, jede Zahl, jeder aufgetretene Fehler, Bauanleitung zum Wiedereinbau |
+| `KONTO.md` | Konto, Statistik und Loadouts: warum Supabase, warum die Zahlen nicht auseinanderlaufen koennen, und wie man es in zehn Minuten aufsetzt |
 
 ### Wo die Einstellungen liegen
 
@@ -661,6 +670,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.14.0 | Mehrspieler fertiggestellt: drei Spielarten, Aufhelfen, Wellen mit mehrspielertauglicher Gegner-KI, knappe Munition mit Nachschubkisten. Letzter Stand dieses Zweigs |
 | 0.16.0 | Mannschaften im Gefecht: TEAM, VERSUS mit einem Leben je Runde und Aufhelfen durch die eigenen Leute, HUEGEL mit sichtbarem Kreis in der Kartenmitte. Alles in `docs/MEHRSPIELER.md` beschrieben. Nur auf `multiplayer-test`; 0.15.0 gehoert dem Hauptzweig ohne Mehrspieler |
 | 0.17.0 | Rauchgranate als siebte Waffe; Granaten fallen ueber Kanten auf die Ebene darunter; Einstiegsschutz, Startmedkits und Medkit-Nachschub als Schalter beim Aufmachen. Dazu vier gemeldete Fehler behoben: kein Ton im Gefecht, Ziellinie des Gastes am Einstiegspunkt, Versetzung nach einem Sturztod, Granaten prallten an Loechern ab. Brecheisen toetet in zwei Treffern, Schrot reicht weiter und streut enger, Scharfschuetze weiter als das Bild breit ist |
+| 0.20.0 | Konten, Statistik und Loadouts. Alle harmlosen Spielwerte laufen mit - Abschuesse, Schaden, Schuesse und Treffer je Waffe, gelaufene Strecke, Zeit im Kreis, beste Abschussfolge, und zwanzig weitere, alle in `WERTE` an einer Stelle. Als Ablage **Supabase**, aus vier Gruenden in `docs/KONTO.md` begruendet; der wichtigste: es spricht nur HTTPS und JSON, also reicht die Standardbibliothek, und sein oeffentlicher Schluessel darf im Quelltext stehen - damit geht die Anmeldung auf einem frisch heruntergeladenen Spiel sofort. Ohne eingetragenen Server laeuft alles lokal weiter, mit scrypt-gehashten Kennwoertern und `--konto neu` im Terminal fuer LAN-Runden ohne Internet. Gegen auseinanderlaufende Zahlen drei Regeln: der Gastgeber vergibt die Partiekennung und rechnet die Werte, ein eindeutiger Index laesst dieselbe Runde genau einmal zu, und was gespielt wurde, liegt sofort im Journal auf der Platte und wird erst nach Bestaetigung abgehakt - ein Netzaussetzer nach dem Schreiben kann damit weder etwas verlieren noch verdoppeln, nachgestellt in `tests/test_konto.py`. Loadouts: drei Saetze aus zwei Waffen und einer Wurfwaffe, im Profil und damit auf jedem Rechner, mit `--loadouts` als Regel der Runde |
 | 0.19.3 | Zwei gemeldete Fehler, beide gemessen statt geraten. **Das Bild des Gastgebers zitterte ohne Pause**, das der Gaeste gar nicht: `Welt.ruckeln` war eine Meldung ohne Absender und ohne Ort, und weil der Gastgeber die Welt aller Spieler rechnet, lief jeder Schuss der ganzen Runde auf seiner Kamera zusammen - 2,09 Pixel in 100 % der Bilder gegen 0,00 beim Gast. Jetzt entscheidet der Zuschauer: andere Ebene oder zu weit weg ruckelt gar nicht, zwischen zwei Schlaegen liegt eine Sperre, und der eigene Gewehrschuss reisst nichts mehr. Der Regler im Menue wirkt endlich und gehoert zum Konto. **Granaten waren bei Gaesten unsichtbar** und schienen zu springen: ein Gast bekam von einer Explosion nichts (0 Partikel, kein Ton, kein Brandfleck) und zeichnete fliegende Dinge stur an die letzte Meldung - 80 % Stillstand, Spruenge bis 7 Pixel. Wirkungen gehen jetzt als eigene Meldung an alle und werden mit demselben Code nachgespielt, fliegende Dinge tragen eine Kennung und werden zwischen zwei Meldungen weitergezeichnet (2 % Stillstand, hoechstens 1,4 Pixel). Dazu die Leitung: `sendall` auf einer nicht-blockierenden Steckdose zerriss Nachrichten, jetzt wird gepuffert und ein Rueckstand gekuerzt |
 | 0.19.2 | Mannschaftsfarben, Brecheisen auf F und fuenf gemeldete Fehler |
 | 0.19.1 | Knappe Munition war keine: jeder Wiedereinstieg fuellte alle Magazine am Vorrat vorbei, der Vorrat sank nie, und darum liess sich auch keine Munitionskiste aufheben. Wiedereinstieg zahlt jetzt aus dem Vorrat, die Vorraete sind halbiert, und der Vorrat steht je Waffe in der Hotbar |

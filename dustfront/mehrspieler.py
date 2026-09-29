@@ -54,6 +54,8 @@ import pygame
 
 from . import bestenliste
 from . import config as K
+from . import ablage
+from . import konto as konto_modul
 from . import netz
 from . import world as welt_modul
 from .core import Szene
@@ -76,8 +78,20 @@ class Kaempfer(Spieler):
     """
 
     def __init__(self, pos, ebene: int, nummer: int, name: str,
-                 fraktion: str, knapp: bool = False, team: int = -1) -> None:
+                 fraktion: str, knapp: bool = False, team: int = -1,
+                 loadout=None) -> None:
         super().__init__(pos, ebene)
+        # Ein Loadout, wenn die Runde danach gespielt wird. Gesetzt wird es
+        # **vor** allem anderen, weil Magazin und Vorrat je Waffe angelegt
+        # werden: nachtraeglich haette die Figur Munition fuer Waffen, die
+        # sie nicht traegt, und keine fuer die, die sie traegt.
+        if loadout:
+            plaetze = konto_modul.hotbar_aus_loadout(loadout)
+            if plaetze:
+                self.waffen = plaetze
+                self.waffe = 0
+                self.magazin = {w: K.WAFFEN[w]["magazin"] for w in self.waffen}
+        self.loadout = dict(loadout) if loadout else None
         self.fraktion = fraktion
         self.nummer = nummer
         self.name = name
@@ -237,6 +251,7 @@ class KampfBeute(Aufsammler):
                 genommen = k.auffuellen(K.MUNITION["kiste_gibt"])
             if genommen:
                 self.lebt = False
+                k.zaehlen("beute")
                 self.welt.beute_genommen(self.pos, self.ebene, self.art,
                                          k.nummer)
                 return
@@ -327,6 +342,7 @@ class Gefecht(Szene):
                  schutz: bool | None = None, medkits: int | None = None,
                  medkit_spawn: bool | None = None, runden: int | None = None,
                  team: int | None = None, passwort: str = "",
+                 loadouts: str | None = None,
                  seed: int | None = None) -> None:
         super().__init__(app)
         self.name = netz.name_saeubern(name)
@@ -348,6 +364,13 @@ class Gefecht(Szene):
         g = K.VERSUS["runden_grenzen"]
         self.runden_bis = max(g[0], min(g[1], int(
             K.VERSUS["runden_bis"] if runden is None else runden)))
+        # Gelten Loadouts? "eigenes" heisst: jeder traegt seine zwei
+        # Waffen und seine Wurfwaffe. "alles" heisst: jeder hat alles, wie
+        # bisher. Der Gastgeber entscheidet es, ein Gast bekommt es mit dem
+        # Willkommen - zwei Leute mit verschiedenen Regeln auf derselben
+        # Karte waeren kein Gefecht, sondern ein Missverstaendnis.
+        self.loadout_regel = (loadouts if loadouts in K.GEFECHT["loadout_arten"]
+                              else K.GEFECHT["loadouts"])
         # In welche Mannschaft man will: -1 heisst "such mir eine aus".
         self.team_wunsch = int(-1 if team is None else team)
         # Kennwort. Im eigenen Netz meist leer; ueber das Internet ist es
@@ -399,6 +422,13 @@ class Gefecht(Szene):
         self.ich = None
         self.meine_nummer = 0
 
+        # Kennung der laufenden Partie. Der Gastgeber vergibt sie am
+        # Rundenende und schickt sie mit; sie ist der Schluessel, unter
+        # dem alle Rechner dieselbe Runde ablegen.
+        self.partie = ""
+        self._gebucht = ""
+        self._rundenzeit = 0.0
+
         self._seit_senden = 0.0
         # Was seit der letzten Meldung an Wirkung entstanden ist. Wird mit
         # der Weltmeldung verschickt und dabei geleert.
@@ -442,11 +472,16 @@ class Gefecht(Szene):
             # Erst die Seiten festlegen, dann einsteigen - sonst hat der
             # Gastgeber keine Zone und landet irgendwo.
             self._einstiegszonen_waehlen()
-            self.ich = self._dazu(0, self.name, self.team_wunsch)
+            self.ich = self._dazu(0, self.name, self.team_wunsch,
+                                  self.mein_loadout())
         else:
             self.gast.senden({"t": "hallo", "name": self.name,
                               "team": self.team_wunsch,
-                              "wort": self.passwort})
+                              "wort": self.passwort,
+                              # Das Loadout geht mit der Anmeldung mit. Der
+                              # Gastgeber legt die Figur an, also muss er zu
+                              # diesem Zeitpunkt wissen, was sie traegt.
+                              "lo": self.mein_loadout()})
 
     def _welt_verdrahten(self) -> None:
         """Die Rueckmeldungen der Welt anschliessen: Ton, Ruckeln, Flecken.
@@ -586,6 +621,22 @@ class Gefecht(Szene):
         return self.regeln["teams"]
 
     @property
+    def mit_loadouts(self) -> bool:
+        return self.loadout_regel == "eigenes"
+
+    def mein_loadout(self) -> dict | None:
+        """Das eigene Loadout, oder None, wenn es keines gibt.
+
+        Ohne Konto gibt es trotzdem eines: die Vorlagen stehen auch dem
+        offen, der sich nie angemeldet hat. Ein Spiel, das ohne Anmeldung
+        nur mit halber Ausruestung laeuft, waere eine Zumutung.
+        """
+        konto = getattr(self.app, "konto", None)
+        if konto is None:
+            return None
+        return konto.loadout
+
+    @property
     def schutz_zeit(self) -> float:
         """Sekunden Unverwundbarkeit nach dem Einstieg, 0 wenn abgeschaltet.
 
@@ -672,12 +723,14 @@ class Gefecht(Szene):
             return "kaempfer%d" % nummer
         return "mannschaft"
 
-    def _dazu(self, nummer: int, name: str, wunsch: int = -1) -> Kaempfer:
+    def _dazu(self, nummer: int, name: str, wunsch: int = -1,
+              loadout=None) -> Kaempfer:
         team = self._team_fuer(wunsch)
         pos = self._einstiegsort(team)
         k = Kaempfer(pos, 0, nummer, netz.name_saeubern(name),
                      self._fraktion_fuer(nummer, team), knapp=self.knapp,
-                     team=team)
+                     team=team,
+                     loadout=loadout if self.mit_loadouts else None)
         self._regeln_anlegen(k)
         k.unverwundbar = self.schutz_zeit
         k.medkits = self.start_medkits
@@ -985,7 +1038,9 @@ class Gefecht(Szene):
                     except (TypeError, ValueError):
                         wunsch = -1
                     k = self._dazu(nummer, nachricht.get("name", "GAST"),
-                                   wunsch)
+                                   wunsch,
+                                   konto_modul.loadout_saeubern(
+                                       nachricht.get("lo")))
                     self.gastgeber.an_einen(nummer, self._willkommen(nummer, k))
             elif art == "ein":
                 k = self.kaempfer.get(nummer)
@@ -1037,7 +1092,8 @@ class Gefecht(Szene):
                 "ende_wert": self.ende_wert, "knapp": self.knapp,
                 "schutz": self.schutz_an, "medkits": self.start_medkits,
                 "medkit_spawn": self.medkits_spawnen,
-                "runden_bis": self.runden_bis}
+                "runden_bis": self.runden_bis,
+                "loadouts": self.loadout_regel}
 
     def _gegnerlast_zaehlen(self) -> None:
         """Wie viele Gegner gerade an welchem Spieler haengen.
@@ -1114,6 +1170,10 @@ class Gefecht(Szene):
         for k in self.kaempfer.values():
             if 0 <= k.team < len(drin) and self.in_der_zone(k):
                 drin[k.team] += 1
+                # Die Zeit im Kreis zaehlt fuer jeden, der drin steht -
+                # auch dann, wenn seine Mannschaft gerade nichts laedt.
+                # Dagestanden hat er trotzdem.
+                k.zaehlen("zonenzeit", dt)
 
         hoechste = max(drin)
         if hoechste == 0 or drin.count(hoechste) > 1:
@@ -1248,7 +1308,12 @@ class Gefecht(Szene):
                 if k.revive_stand >= 1.0:
                     k.aufhelfen()
                     wolke(self.welt, k.pos, 10, 70, 0.5, K.C_TEAL, k.ebene, 1)
-                    self.welt.klang("medkit", 0.7)
+                    self.welt.klang("medkit", 0.7, k.pos, k.ebene)
+                    # Aufhelfen zaehlt bei denen, die geholfen haben, nicht
+                    # bei dem, dem geholfen wurde.
+                    for helfer_k in self.kaempfer.values():
+                        if helfer_k.hilft == k.nummer:
+                            helfer_k.zaehlen("hilfen")
             else:
                 k.revive_stand = max(0.0, k.revive_stand - dt / k.revive_dauer)
                 k.boden_rest -= dt
@@ -1273,6 +1338,9 @@ class Gefecht(Szene):
                 toeter = getattr(k.toeter, "von", k.toeter)
                 if isinstance(toeter, Kaempfer) and toeter is not k:
                     toeter.abschuesse += K.GEFECHT["punkt_abschuss"]
+                    toeter.serie += 1
+                    toeter.zaehler["serie"] = max(
+                        toeter.zaehler.get("serie", 0), toeter.serie)
                     if self.mit_teams and 0 <= toeter.team < len(self.teampunkte):
                         # In "team" zaehlt der Abschuss fuer die Mannschaft.
                         # In "versus" nicht: dort zaehlen nur Rundensiege.
@@ -1283,6 +1351,7 @@ class Gefecht(Szene):
                     k.abschuesse += K.GEFECHT["punkt_selbst"]
                 k.toeter = None
                 k.tode += 1
+                k.serie = 0          # der eigene Tod beendet die Folge
                 k.wieder_in = K.GEFECHT["wieder_nach"]
             if self.regeln["runden"]:
                 k.raus = True     # in versus bleibt man bis zur naechsten Runde
@@ -1392,10 +1461,68 @@ class Gefecht(Szene):
         self.liste = self._endstand()
         bestenliste.eintragen(self.liste)
         if self.ist_gastgeber:
+            # Die Partiekennung vergibt **nur** der Gastgeber, und sie geht
+            # an alle. Das ist der ganze Trick gegen auseinanderlaufende
+            # Zahlen: jeder Rechner traegt dieselbe Runde unter derselben
+            # Kennung ein, und die Tabelle laesst sie genau einmal zu. Ob
+            # ein Gast die Meldung zweimal bekommt oder sein Abgleich
+            # dreimal losgeht, ist damit gleichgueltig.
+            self.partie = self.partie or ablage.kennung()
             self.gastgeber.an_alle({"t": "ende", "liste": self.liste,
                                     "gewonnen": gewonnen, "welle": self.welle,
                                     "sieger": self.sieger_team,
-                                    "teampunkte": list(self.teampunkte)})
+                                    "teampunkte": list(self.teampunkte),
+                                    "partie": self.partie,
+                                    "werte": self._werte_aller()})
+        self._runde_buchen()
+
+    def _werte_aller(self) -> dict:
+        """Die Zahlen jedes Spielers, nach Spielernummer.
+
+        Gerechnet hat sie der Gastgeber - er ist der einzige, der die
+        Welt simuliert und damit der einzige, der sie ueberhaupt kennen
+        kann. Ein Gast bekommt seine eigenen zugeschickt und traegt nur
+        die ein; so kann niemand seine eigene Statistik erfinden, und
+        zwei Rechner koennen fuer dieselbe Runde keine zwei verschiedenen
+        Zahlen ablegen.
+        """
+        raus = {}
+        for k in self.kaempfer.values():
+            raus[str(k.nummer)] = {"werte": k.werte_runde(),
+                                   "waffen": k.waffen_runde(),
+                                   "team": k.team}
+        return raus
+
+    def _runde_buchen(self, werte=None) -> None:
+        """Die eigene Runde ins Journal des Kontos schreiben.
+
+        Genau einmal je Runde, und nur die eigene Figur. `partie` kommt
+        vom Gastgeber; ohne sie wird nicht gebucht, denn eine Runde ohne
+        gemeinsame Kennung waere die eine, die doppelt zaehlen koennte.
+        """
+        konto = getattr(self.app, "konto", None)
+        if konto is None or self.ich is None or not self.partie:
+            return
+        if self.partie == self._gebucht:
+            return
+        self._gebucht = self.partie
+        if werte is None:
+            werte = {"werte": self.ich.werte_runde(),
+                     "waffen": self.ich.waffen_runde(),
+                     "team": self.ich.team}
+        zahlen = dict(werte.get("werte") or {})
+        zahlen["runden"] = 1
+        zahlen["spielzeit"] = round(self._rundenzeit, 1)
+        sieger = self.sieger_team
+        gewonnen = (self.gewonnen if not self.mit_teams
+                    else (sieger >= 0 and sieger == werte.get("team", -1)))
+        zahlen["siege"] = 1 if gewonnen else 0
+        konto.runde_eintragen({
+            "partie": self.partie, "modus": self.modus,
+            "gastgeber": self.ist_gastgeber, "gewonnen": bool(gewonnen),
+            "team": int(werte.get("team", -1)),
+            "werte": zahlen, "waffen": dict(werte.get("waffen") or {}),
+        })
 
     def _endstand(self) -> list[dict]:
         return bestenliste.sortiert(
@@ -1530,6 +1657,16 @@ class Gefecht(Szene):
                 self._liste_uebernehmen(self.teampunkte,
                                         nachricht.get("teampunkte"), int)
                 bestenliste.eintragen(self.liste)
+                # Die Zahlen rechnet der Gastgeber, der Gast traegt nur
+                # seine eigenen ein - unter der Kennung, die von dort
+                # kommt. Damit legen beide dieselbe Runde ab, und die
+                # Tabelle laesst sie genau einmal zu.
+                self.partie = str(nachricht.get("partie") or "")
+                alle = nachricht.get("werte")
+                meine = None
+                if isinstance(alle, dict):
+                    meine = alle.get(str(self.meine_nummer))
+                self._runde_buchen(meine if isinstance(meine, dict) else None)
 
         # Der Gast simuliert nichts, seine Rueckmeldungen muessen aber
         # trotzdem laufen: Staubringe und Aufschriften altern hier.
@@ -1577,6 +1714,9 @@ class Gefecht(Szene):
             pass
         self.medkits_spawnen = bool(nachricht.get("medkit_spawn",
                                                   self.medkits_spawnen))
+        regel = nachricht.get("loadouts")
+        if regel in K.GEFECHT["loadout_arten"]:
+            self.loadout_regel = regel
         try:
             self.start_medkits = max(0, min(
                 K.GEFECHT["start_medkits_hoechstens"],
@@ -1827,6 +1967,8 @@ class Gefecht(Szene):
     # ---- Szene ---------------------------------------------------------
     def schritt(self, dt: float) -> None:
         self._zeit += dt
+        if not self.vorbei:
+            self._rundenzeit += dt
         if self.menue is None:
             self.knoepfe_sammeln()
         else:
@@ -2136,6 +2278,11 @@ class Gefecht(Szene):
         self._wirkung = []
         self.welt.partikel = []
         self.welt.muendungen = []
+        # Eine neue Partie faengt bei null an - auch beim Zaehlen.
+        self.partie = ""
+        self._rundenzeit = 0.0
+        for k in self.kaempfer.values():
+            k.zaehler_leeren()
 
         self._teams_ausgleichen()
         self._einstiegszonen_waehlen()
