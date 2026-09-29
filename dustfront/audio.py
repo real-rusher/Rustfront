@@ -262,6 +262,35 @@ def _schuss_lmg(seed=0):
     )
 
 
+@platzhalter_klang("rakete")
+def _rakete(seed=0):
+    """Der Abschuss: ein Zischen, das anschwillt, kein Knall.
+
+    Eine Rakete wird nicht abgefeuert, sie faehrt los. Darum breites
+    Rauschen mit einem Anstieg statt eines Abfalls, ein tiefer Schub
+    darunter und ein Nachzischen. Wer das hoert, hat noch eine Sekunde.
+    """
+    zischen = _rauschen(0.45, 0.85, 900, 4200, 0.5, seed + 1)
+    n = len(zischen)
+    for i in range(n):
+        p = i / n
+        zischen[i] *= min(1.0, p * 8.0) * (1.0 - p) ** 0.7
+    return _mischen(zischen, _schlag(140, 70, 0.22, 0.70, 2.2))
+
+
+@platzhalter_klang("erfasst")
+def _erfasst(seed=0):
+    """Zwei kurze hohe Toene: die Erfassung steht.
+
+    Kurz und unverwechselbar. Er sagt dem Schuetzen, dass er loslassen
+    kann - und er ist so gebaut, dass man ihn auch im Gefecht hoert,
+    ohne dass er wie ein Treffer klingt.
+    """
+    return _mischen(_schlag(1560, 1560, 0.05, 0.35, 2.0),
+                    [0.0] * int(RATE * 0.07)
+                    + _schlag(2080, 2080, 0.06, 0.32, 2.0))
+
+
 @platzhalter_klang("blend")
 def _blend(seed=0):
     """Der Knall einer Blendgranate: hart, hell, ohne Tiefe.

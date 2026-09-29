@@ -431,6 +431,151 @@ class Granate(Wesen):
         w.kurz_langsam(0.05)
 
 
+class Rakete(Wesen):
+    """Eine Rakete. Fliegt langsam, lenkt traege, zerlegt alles am Ende.
+
+    Sie ist mit Absicht **langsam**: eine Rakete, der man nicht ausweichen
+    kann, ist keine Waffe, sondern eine Ansage. Wer sie kommen sieht, hat
+    eine Sekunde, und diese Sekunde ist das ganze Spiel gegen sie.
+
+    **Lenken kann sie kaum.** `lenk_dreh` Grad je Sekunde, nicht mehr -
+    an jeder Ecke verliert sie ihr Ziel, und um eine Wand herum kommt sie
+    nie. Ohne das waere die Erfassung ein Todesurteil statt einer
+    Entscheidung.
+
+    **Ebenenwechsel im Flug.** Nur mit Erfassung, und nur ueber einem
+    Loch: wer eine Etage tiefer erfasst wurde, bekommt sie durch den
+    Abgrund, durch den man ihn gesehen hat. Ohne Erfassung fliegt sie
+    darueber hinweg, wie jedes andere Geschoss auch.
+    """
+
+    fraktion = "geschoss"
+    schiebt = False
+    trefferbar = False
+    schatten = True
+    radius = 4.0
+    bild = "flugrakete"
+    faellt = False          # sie faellt nicht, sie fliegt
+
+    def __init__(self, pos, richtung: float, daten: dict, ebene: int,
+                 von=None, ziel=None) -> None:
+        super().__init__(pos, ebene)
+        self.daten = daten
+        self.von = von
+        self.winkel = richtung
+        self.rest = daten["flugzeit"]
+        self.weg = 0.0
+        # Wen sie sucht. None heisst: sie fliegt geradeaus.
+        self.ziel = ziel
+        self.quelle_fraktion = von.fraktion if von else "neutral"
+        self.tempo = pygame.Vector2(daten["tempo"], 0).rotate(richtung)
+        self._rauch_rest = 0.0
+
+    def schritt(self, dt: float) -> None:
+        self.vorher.update(self.pos)
+        self.rest -= dt
+        if self.rest <= 0:
+            self.einschlag(None)
+            return
+        self._lenken(dt)
+        self._ebene_wechseln()
+
+        weg = self.tempo * dt
+        strecke = weg.length()
+        self.weg += strecke
+        if self.weg > self.daten["reichweite"]:
+            self.einschlag(None)
+            return
+        # In Stuecken, damit sie bei ihrem Tempo nichts durchfliegt.
+        schritte = max(1, int(strecke / 6.0))
+        teil = weg / schritte
+        e = self.welt.ebene(self.ebene)
+        for _ in range(schritte):
+            self.pos += teil
+            getroffen = self.welt.treffer(self.pos, self.radius, self.ebene,
+                                          self.quelle_fraktion)
+            if getroffen is not None and getroffen is not self.von:
+                self.einschlag(getroffen)
+                return
+            if e.sichtdicht(int(self.pos.x // K.TILE), int(self.pos.y // K.TILE)):
+                self.pos -= teil
+                self.einschlag(None)
+                return
+        self._rauchfahne(dt)
+
+    def _lenken(self, dt: float) -> None:
+        """Auf das erfasste Ziel zudrehen - langsam."""
+        ziel = self.ziel
+        if ziel is None or not getattr(ziel, "lebt", False):
+            return
+        ab = ziel.pos - self.pos
+        if ab.length() < self.daten["lenk_ab"]:
+            return                      # so kurz vor dem Ziel wird nicht mehr
+        soll = math.degrees(math.atan2(ab.y, ab.x))
+        diff = (soll - self.winkel + 180) % 360 - 180
+        hoechstens = self.daten["lenk_dreh"] * dt
+        self.winkel += max(-hoechstens, min(hoechstens, diff))
+        self.tempo = pygame.Vector2(self.daten["tempo"], 0).rotate(self.winkel)
+
+    def _ebene_wechseln(self) -> None:
+        """Ueber einem Loch zur erfassten Etage hinunter.
+
+        Nur mit Erfassung und nur nach unten: eine Rakete steigt nicht.
+        Und nur dort, wo wirklich ein Loch ist - sonst fliegt sie ueber
+        den Boden hinweg, wie jedes Geschoss.
+        """
+        ziel = self.ziel
+        if ziel is None or ziel.ebene >= self.ebene:
+            return
+        e = self.welt.ebene(self.ebene)
+        if not e.loch(int(self.pos.x // K.TILE), int(self.pos.y // K.TILE)):
+            return
+        self.ebene -= 1
+
+    def _rauchfahne(self, dt: float) -> None:
+        self._rauch_rest -= dt
+        if self._rauch_rest > 0:
+            return
+        self._rauch_rest = 0.022
+        hinten = self.pos - pygame.Vector2(9, 0).rotate(self.winkel)
+        self.welt.partikel.append(Partikel(
+            hinten, (RND.uniform(-12, 12), RND.uniform(-12, 12)),
+            RND.uniform(0.35, 0.7), K.C_MUTED, 1, "staub", 2.4, self.ebene))
+
+    def einschlag(self, getroffen) -> None:
+        """Sprengen. Eigenschaden ja, Mannschaftsschaden nein.
+
+        Der Unterschied steht hier und nicht in `Wesen.schaden`: nur die
+        Rakete kennt ihn, und nur sie soll ihn kennen. Alles andere in
+        diesem Spiel trifft, was es trifft.
+        """
+        self.lebt = False
+        d = self.daten
+        w = self.welt
+        r = d["radius"]
+        schuetze = self.von
+        mein_team = getattr(schuetze, "team", -2)
+        for ziel in list(w.nahe(self.pos, r + 30, self.ebene)):
+            if not ziel.lebt or ziel is self:
+                continue
+            ab = ziel.pos - self.pos
+            entfernung = ab.length()
+            if entfernung > r + ziel.radius:
+                continue
+            if ziel is schuetze:
+                anteil = d["eigen_anteil"]
+            elif (mein_team is not None and mein_team >= 0
+                  and getattr(ziel, "team", -1) == mein_team):
+                continue          # eigene Leute nimmt sie nicht mit
+            else:
+                anteil = 1.0
+            anteil *= 1.0 - 0.7 * min(1.0, entfernung / r)
+            schub = (ab.normalize() * 420 * anteil) if entfernung > 0.01 else None
+            ziel.schaden(d["schaden"] * anteil, schub, schuetze)
+        w.explosion(self.pos, self.ebene, r)
+        w.kurz_langsam(0.06)
+
+
 class Brandflaeche:
     """Brennender Boden. Die Wirkung eines Molotow.
 
@@ -887,6 +1032,14 @@ class Spieler(Wesen):
         self.anlauf = 0.0
         self.salve_rest = 0           # wie viele Schuss die Salve noch hat
         self.salve_takt = 0.0
+        # Raketenwerfer. `rpg` heisst: er wird getragen, und dann traegt
+        # man sonst nichts. `rpg_waffen` merkt sich, was vorher da war.
+        self.rpg = False
+        self.rpg_waffen: list[str] = []
+        # Zielerfassung: auf wen, wie weit, und steht sie schon?
+        self.erfasst = None
+        self.erfassung = 0.0
+        self.erfassung_rest = 0.0
 
     # ---- Zaehlen -----------------------------------------------------
     def zaehlen(self, name: str, wert: float = 1.0, waffe: str = "") -> None:
@@ -982,6 +1135,115 @@ class Spieler(Wesen):
         gemischt = dict(d)
         gemischt.update(modi.get(self.modus_von(name), {}))
         return gemischt
+
+    # ---- Raketenwerfer -------------------------------------------------
+    def rpg_nehmen(self) -> bool:
+        """Den Raketenwerfer aufheben. Danach traegt man nur noch ihn.
+
+        Das Brecheisen bleibt - es liegt auf F und belegt keinen Platz.
+        Ohne das waere man mit leerem Rohr voellig wehrlos, und eine
+        Waffe, die einen wehrlos macht, hebt niemand auf.
+        """
+        if self.rpg:
+            return False
+        self.rpg = True
+        self.rpg_waffen = list(self.waffen)
+        self.waffen = ["rakete"]
+        self.waffe = 0
+        self.magazin["rakete"] = K.WAFFEN["rakete"]["magazin"]
+        self.takt = 0.0
+        self.abbrechen()
+        return True
+
+    def rpg_ablegen(self) -> None:
+        """Geschossen - zurueck zu dem, was man vorher trug."""
+        if not self.rpg:
+            return
+        self.rpg = False
+        self.waffen = self.rpg_waffen or list(K.HOTBAR)
+        self.rpg_waffen = []
+        self.waffe = 0
+        self.erfasst = None
+        self.erfassung = 0.0
+
+    def _erfassung_fuehren(self, dt: float, d: dict) -> None:
+        """Rechte Maustaste halten und dabei auf jemanden zeigen.
+
+        Erfasst wird, wer nah genug an der Zeigerichtung liegt, in Sicht
+        ist und nicht zur eigenen Mannschaft gehoert. Eine Etage tiefer
+        geht nur ueber einem Loch - man muss ihn ja sehen koennen.
+
+        Laesst man los oder verliert ihn aus den Augen, haelt die
+        Erfassung noch `halten` Sekunden. Ohne diese Nachfrist reisst sie
+        an jedem Pfosten ab, und das waere nur aergerlich.
+        """
+        e = K.ERFASSUNG
+        if not self.rpg or not d.get("lenk_dreh") or not self.lenkbar:
+            self.erfasst = None
+            self.erfassung = 0.0
+            return
+        kandidat = self._erfassungsziel(e) if self.zielt else None
+        if kandidat is not None:
+            if kandidat is not self.erfasst and self.erfassung < 1.0:
+                self.erfasst = kandidat
+                self.erfassung = 0.0
+            self.erfasst = kandidat
+            vorher = self.erfassung
+            self.erfassung = min(1.0, self.erfassung + dt / max(0.05, e["dauer"]))
+            if vorher < 1.0 <= self.erfassung:
+                # Genau einmal, im Augenblick des Einrastens. Der Ton sagt
+                # dem Schuetzen, dass er loslassen kann - danach schaut er
+                # wieder auf das Ziel statt auf den Ring.
+                self.welt.klang("erfasst", 0.8)
+            self.erfassung_rest = e["halten"]
+            return
+        # Kein Ziel im Zeiger: die Nachfrist laeuft.
+        self.erfassung_rest = max(0.0, self.erfassung_rest - dt)
+        if self.erfassung_rest <= 0.0 or self.erfasst is None \
+                or not self.erfasst.lebt:
+            self.erfasst = None
+            self.erfassung = 0.0
+        elif self.erfassung < 1.0:
+            # Noch nicht fertig und schon verloren: sie faellt zurueck.
+            self.erfassung = max(0.0, self.erfassung - dt / max(0.05, e["dauer"]))
+
+    def _erfassungsziel(self, e: dict):
+        """Wen der Zeiger gerade meint. None, wenn niemanden."""
+        w = self.welt
+        if w is None:
+            return None
+        bestes, bester_winkel = None, e["winkel"]
+        for ziel in w.wesen:
+            if ziel is self or not getattr(ziel, "lebt", False):
+                continue
+            if not getattr(ziel, "trefferbar", False):
+                continue
+            if ziel.fraktion == self.fraktion:
+                continue
+            ab = ziel.pos - self.pos
+            weite = ab.length()
+            if weite > e["weite"] or weite < 1.0:
+                continue
+            if ziel.ebene > self.ebene:
+                continue            # nach oben wird nicht erfasst
+            if ziel.ebene < self.ebene:
+                # Nur durch ein Loch. Geprueft wird an der Stelle des
+                # Ziels auf **meiner** Ebene: dort muss der Boden fehlen,
+                # sonst sehe ich ihn gar nicht.
+                tx, ty = int(ziel.pos.x // K.TILE), int(ziel.pos.y // K.TILE)
+                if not w.ebene(self.ebene).loch(tx, ty):
+                    continue
+            elif not w.sicht_frei(self.pos, ziel.pos, self.ebene):
+                continue
+            richtung = math.degrees(math.atan2(ab.y, ab.x))
+            delta = abs((richtung - self.winkel + 180) % 360 - 180)
+            if delta < bester_winkel:
+                bestes, bester_winkel = ziel, delta
+        return bestes
+
+    # Ob der Werfer lenken darf. Setzt die Spielszene aus den Regeln des
+    # Gastgebers - ohne Lenkung fliegt die Rakete geradeaus.
+    lenkbar = True
 
     # ---- Gewicht: was eine schwere Waffe kostet ------------------------
     @property
@@ -1175,6 +1437,7 @@ class Spieler(Wesen):
         self.halte_zeit = self.halte_zeit + dt if self.feuert else 0.0
         self._anlauf_fuehren(dt, wd)
         self._salve_fuehren(dt, wd)
+        self._erfassung_fuehren(dt, wd)
 
         luft = K.STURZ["luftsteuerung"] if self.sturz_rest > 0 else 1.0
         if fd:
@@ -1277,6 +1540,23 @@ class Spieler(Wesen):
             self.takt = anlauf_takt + (d["takt"] - anlauf_takt) * self.anlauf
         else:
             self.takt = d["takt"]
+
+        if art == "rakete":
+            self.magazin[self.waffe_name] -= 1
+            muendung = self.pos + pygame.Vector2(18, 0).rotate(self.winkel)
+            ziel = self.erfasst if self.erfassung >= 1.0 else None
+            streuung = d.get("streuung", 0.0)
+            richtung = self.winkel + RND.uniform(-streuung, streuung)
+            self.welt.dazu(Rakete(muendung, richtung, d, self.ebene, self,
+                                  ziel))
+            self.tempo -= pygame.Vector2(d.get("rueckstoss", 0.0),
+                                         0).rotate(self.winkel)
+            self.welt.raketenstart(muendung, self.winkel, self.ebene, self,
+                                   ziel)
+            self.zaehlen("granaten", 1.0, "rakete")
+            # Rohr leer: zurueck zu dem, was man vorher trug.
+            self.rpg_ablegen()
+            return
 
         if art == "wurf":
             self.magazin[self.waffe_name] -= 1

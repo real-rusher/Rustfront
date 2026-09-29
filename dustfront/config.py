@@ -300,6 +300,7 @@ BILD_MASS = {
     "spieler_schrot":     (56, 56),
     "spieler_scharf":     (56, 56),
     "spieler_lmg":        (56, 56),
+    "spieler_rakete":     (56, 56),
     "spieler_granate":    (56, 56),
     "spieler_rauch":      (56, 56),
     "spieler_molotov":    (56, 56),
@@ -317,6 +318,8 @@ BILD_MASS = {
     "rauchgranate":     (10, 10),
     "molotov":          (10, 10),
     "blendgranate":     (10, 10),
+    "flugrakete":       (16, 8),
+    "rpg_kiste":        (18, 14),
     "huelse":           (4, 3),
     # Waffensymbole fuer Hotbar und Inventar, Seitenansicht nach rechts
     "waffe_repetierer": (26, 11),
@@ -324,6 +327,7 @@ BILD_MASS = {
     "waffe_schrot":     (26, 11),
     "waffe_scharf":     (26, 11),
     "waffe_lmg":        (26, 11),
+    "waffe_rakete":     (26, 11),
     "waffe_granate":    (26, 11),
     "waffe_rauch":      (26, 11),
     "waffe_molotov":    (26, 11),
@@ -357,6 +361,8 @@ KLANG_NAMEN = (
     "aufheben",
     "molotov",              # Glas zerbricht und Feuer faengt
     "blend",                # der Knall der Blendgranate
+    "rakete",               # der Abschuss
+    "erfasst",              # Ton, wenn die Erfassung steht
     "blend_pfeifen",        # das Pfeifen danach im Ohr
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
@@ -531,6 +537,11 @@ GEFECHT = dict(
     # der Waffe eine Wahl ist.
     loadouts="alles",
     loadout_arten=("alles", "eigenes"),
+    # Der Raketenwerfer. Aus, wenn der Gastgeber ihn nicht will - er
+    # veraendert eine Runde, und das soll eine Entscheidung sein.
+    rpg=False,
+    rpg_lenkung=True,     # mit Zielerfassung, oder ungelenkt
+    rpg_takt=75.0,        # Sekunden, bis ein neuer auf der Karte liegt
     team_abschuesse=30,       # Teamabschuesse bis zum Sieg in "team"
     rundenzeit=300.0,         # Sekunden je Runde, wenn nach Zeit gespielt wird
     abschuesse_ziel=20,       # Abschuesse bis zum Sieg, wenn danach gespielt wird
@@ -870,6 +881,36 @@ WAFFEN = {
             ),
         },
     ),
+    # ── Raketenwerfer ────────────────────────────────────────────────
+    #
+    # Kein Platz in der Hotbar: er liegt **einmal** auf der Karte, und wer
+    # ihn aufhebt, traegt nur noch ihn - bis er geschossen hat. Das
+    # Brecheisen bleibt auf F, sonst waere man voellig wehrlos.
+    #
+    # Eigenschaden ja, Mannschaftsschaden nein. Beides mit Absicht: wer
+    # aus zwei Metern auf eine Wand schiesst, soll dafuer bezahlen, aber
+    # niemand soll seine eigenen Leute mitnehmen koennen - eine Waffe,
+    # die einmal in der Runde vorkommt, darf keine Runde ruinieren.
+    "rakete": dict(
+        art="rakete",
+        name="RAKETENWERFER",
+        schaden=140.0,
+        radius=96.0,          # Wirkungskreis
+        eigen_anteil=0.55,    # so viel davon bekommt man selbst ab
+        takt=1.2,
+        magazin=1,
+        nachladen=0.0,        # nachgeladen wird nicht: eine ist eine
+        tempo=330.0,          # langsam genug, dass man ausweichen kann
+        reichweite=1800.0,
+        flugzeit=5.0,
+        kamera=8.0,
+        rueckstoss=90.0,
+        huelsen=0,
+        streuung=0.6,
+        # Lenkung. Nur, wenn der Gastgeber sie eingeschaltet hat.
+        lenk_dreh=120.0,      # Grad je Sekunde, mehr schafft sie nicht
+        lenk_ab=40.0,         # ab dieser Entfernung wird ueberhaupt gelenkt
+    ),
     "blend": dict(
         art="wurf",
         name="BLENDGRANATE",
@@ -959,6 +1000,11 @@ WAFFEN_HAND = {
     # und Zweibein. Man soll an der Hand sehen, was jemand traegt.
     "lmg":        dict(lauf=21, dicke=6, schaft=11, s_dicke=7, holz=False,
                        aufbau="zweibein"),
+    # Ein Rohr, dick und stumpf, mit dem Sprengkopf vorn. Die
+    # unverwechselbarste Silhouette im ganzen Spiel - und das soll sie
+    # sein: wer eine Rakete traegt, ist von weitem zu erkennen.
+    "rakete":     dict(lauf=24, dicke=8, schaft=6, s_dicke=5, holz=False,
+                       aufbau="rohr"),
     "granate":    dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
                        aufbau="kugel"),
     "rauch":      dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
@@ -1221,6 +1267,35 @@ def skin_setzen(rolle: str, name: str) -> bool:
 def skin_zuruecksetzen() -> None:
     SKIN_WAHL.clear()
 
+
+# Die Zielerfassung des Raketenwerfers.
+#
+# Rechte Maustaste halten, waehrend man auf jemanden zeigt. Ein Kreis
+# zieht sich um ihn zusammen; ist er ganz zu, wechselt er die Farbe und
+# die Erfassung steht. Danach lenkt die Rakete - aber sie kann keine
+# engen Kurven, und daran scheitert sie an jeder Ecke.
+#
+# **Nach unten nur ueber einem Abgrund.** Wer eine Etage tiefer steht,
+# laesst sich nur dann erfassen, wenn zwischen ihm und einem selbst ein
+# Loch im Boden ist - man muss ihn ja sehen koennen. Die Rakete wechselt
+# dann im Flug sauber die Ebene. Ohne Erfassung fliegt sie schlicht
+# darueber hinweg, wie alles andere auch.
+#
+# Und: **der Erfasste merkt es.** Erst ein Zeichen, dass da jemand zielt,
+# dann ein anderes, wenn die Rakete unterwegs ist. Eine Waffe, die ohne
+# Vorwarnung um die Ecke kommt, waere keine Entscheidung mehr.
+ERFASSUNG = dict(
+    dauer=1.0,            # so lange muss man halten
+    weite=900.0,          # weiter geht es nicht
+    winkel=14.0,          # so nah muss der Zeiger am Ziel sein, in Grad
+    halten=0.45,          # so lange haelt die Erfassung ohne Sicht
+    ring_gross=34.0,      # Durchmesser des Kreises am Anfang
+    ring_klein=13.0,      # und am Ende
+    farbe=(236, 178, 62),
+    farbe_fest=(96, 232, 150),
+    warnung=(236, 96, 62),        # Rand beim Erfassten
+    warnung_scharf=(255, 64, 40),  # und wenn die Rakete fliegt
+)
 
 RAUCH = dict(
     radius=78.0,              # so weit reicht die Wand in Weltpixeln

@@ -60,8 +60,8 @@ from . import netz
 from . import ui
 from . import world as welt_modul
 from .core import Szene
-from .entities import (Aufsammler, Brandflaeche, Gegner, Rauchwolke,
-                       Spieler, wolke)
+from .entities import (Aufsammler, Brandflaeche, Gegner, Rakete,
+                       Rauchwolke, Spieler, wolke)
 from .font import SCHRIFT
 from .render import Befinden, Kamera, Renderer
 from .world import Welt, freier_punkt, testkarte
@@ -239,9 +239,12 @@ class KampfBeute(Aufsammler):
     koennte je etwas aufheben.
     """
 
+    BILDER = {"munition": "munikiste", "medkit": "medkit",
+              "rakete": "rpg_kiste"}
+
     def __init__(self, pos, art: str, ebene: int, kaempfer: dict) -> None:
         super().__init__(pos, art, ebene)
-        self.bild = "munikiste" if art == "munition" else "medkit"
+        self.bild = self.BILDER.get(art, "medkit")
         self._kaempfer = kaempfer
 
     def schritt(self, dt: float) -> None:
@@ -256,6 +259,10 @@ class KampfBeute(Aufsammler):
                 genommen = True
             elif self.art == "munition":
                 genommen = k.auffuellen(K.MUNITION["kiste_gibt"])
+            elif self.art == "rakete":
+                # Wer schon einen traegt, laesst ihn liegen. Sonst waere
+                # der Werfer einmal in der Runde eben doch zweimal da.
+                genommen = k.rpg_nehmen()
             if genommen:
                 self.lebt = False
                 k.zaehlen("beute")
@@ -355,7 +362,8 @@ class Gefecht(Szene):
                  schutz: bool | None = None, medkits: int | None = None,
                  medkit_spawn: bool | None = None, runden: int | None = None,
                  team: int | None = None, passwort: str = "",
-                 loadouts: str | None = None,
+                 loadouts: str | None = None, rpg: bool | None = None,
+                 rpg_lenkung: bool | None = None,
                  seed: int | None = None) -> None:
         super().__init__(app)
         self.name = netz.name_saeubern(name)
@@ -384,6 +392,12 @@ class Gefecht(Szene):
         # Karte waeren kein Gefecht, sondern ein Missverstaendnis.
         self.loadout_regel = (loadouts if loadouts in K.GEFECHT["loadout_arten"]
                               else K.GEFECHT["loadouts"])
+        # Der Raketenwerfer. Aus, wenn der Gastgeber ihn nicht will: er
+        # veraendert eine Runde, und das soll eine Entscheidung sein.
+        self.rpg_an = (K.GEFECHT["rpg"] if rpg is None else bool(rpg))
+        self.rpg_lenkung = (K.GEFECHT["rpg_lenkung"] if rpg_lenkung is None
+                            else bool(rpg_lenkung))
+        self._rpg_takt = K.GEFECHT["rpg_takt"] * 0.4
         # In welche Mannschaft man will: -1 heisst "such mir eine aus".
         self.team_wunsch = int(-1 if team is None else team)
         # Kennwort. Im eigenen Netz meist leer; ueber das Internet ist es
@@ -539,6 +553,7 @@ class Gefecht(Szene):
             self.welt.explosion = self._explosion_melden
             self.welt.schussknall = self._schussknall_melden
             self.welt.schlagknall = self._schlagknall_melden
+            self.welt.raketenstart = self._raketenstart_melden
 
     def _blutfleck(self, pos, ebene: int, radius: float) -> None:
         self.welt.ebene(ebene).dekal(self.renderer.blutfleck(radius),
@@ -604,6 +619,12 @@ class Gefecht(Szene):
                               int(ebene), round(winkel, 1),
                               1 if getroffen else 0])
 
+    def _raketenstart_melden(self, pos, winkel: float, ebene: int,
+                             quelle=None, ziel=None) -> None:
+        Welt.raketenstart(self.welt, pos, winkel, ebene, quelle, ziel)
+        self._wirkung.append(["r", round(pos.x, 1), round(pos.y, 1),
+                              int(ebene), round(winkel, 1), 0])
+
     def _wirkung_nachspielen(self, eintraege) -> None:
         """Beim Gast: die gemeldeten Wirkungen in der eigenen Welt ausloesen.
 
@@ -647,6 +668,12 @@ class Gefecht(Szene):
                 except (TypeError, ValueError):
                     continue
                 self.welt.schlagknall(pos, winkel, ebene, bool(e[5]))
+            elif art == "r":
+                try:
+                    winkel = float(e[4])
+                except (TypeError, ValueError):
+                    continue
+                self.welt.raketenstart(pos, winkel, ebene)
 
     # ---- Grundsaetzliches --------------------------------------------
     @property
@@ -678,6 +705,10 @@ class Gefecht(Szene):
         # das darf es nicht laehmen.
         stapel = getattr(self.app, "stapel", [])
         return self in stapel and stapel[-1] is not self
+
+    @property
+    def mit_rpg(self) -> bool:
+        return bool(self.rpg_an)
 
     @property
     def mit_loadouts(self) -> bool:
@@ -796,6 +827,16 @@ class Gefecht(Szene):
         self.kaempfer[nummer] = k
         self.welt.dazu(k)
         return k
+
+    def _rpg_regeln(self) -> None:
+        """Jedem Kaempfer sagen, ob sein Werfer lenken darf.
+
+        Der Gastgeber entscheidet das, nicht die Figur - sonst haette ein
+        Gast mit geaenderter Datei eine Lenkung, die in dieser Runde gar
+        nicht gilt.
+        """
+        for k in self.kaempfer.values():
+            k.lenkbar = self.rpg_lenkung
 
     def _loadout_anlegen(self, k: Kaempfer) -> None:
         """Dem Kaempfer die Waffen geben, die gerade fuer ihn gelten.
@@ -1149,6 +1190,7 @@ class Gefecht(Szene):
             self._zone(dt)
             self._runden(dt)
         self._gegnerlast_zaehlen()
+        self._rpg_regeln()
         self.welt.schritt(dt)
         self._revive(dt)
         self._tote_abrechnen(dt)
@@ -1181,7 +1223,8 @@ class Gefecht(Szene):
                 "schutz": self.schutz_an, "medkits": self.start_medkits,
                 "medkit_spawn": self.medkits_spawnen,
                 "runden_bis": self.runden_bis,
-                "loadouts": self.loadout_regel}
+                "loadouts": self.loadout_regel,
+                "rpg": self.rpg_an, "rpg_lenkung": self.rpg_lenkung}
 
     def _gegnerlast_zaehlen(self) -> None:
         """Wie viele Gegner gerade an welchem Spieler haengen.
@@ -1359,6 +1402,19 @@ class Gefecht(Szene):
             if self._seit_medkit >= K.GEFECHT["medkit_takt"]:
                 self._seit_medkit = 0.0
                 self._beute_legen("medkit", K.GEFECHT["medkit_hoechstens"])
+        if self.mit_rpg:
+            # Vor der Munition und nicht danach: der Zweig darunter steigt
+            # bei nicht-knapper Munition sofort aus, und dann laege nie
+            # ein Werfer auf der Karte.
+            self._rpg_takt -= dt
+            if self._rpg_takt <= 0.0:
+                self._rpg_takt = K.GEFECHT["rpg_takt"]
+                # **Einer**. Weder liegen zwei herum, noch bekommt einer
+                # den zweiten, waehrend er den ersten noch traegt.
+                traegt = any(getattr(k, "rpg", False)
+                             for k in self.kaempfer.values())
+                if not traegt:
+                    self._beute_legen("rakete", 1)
         if not self.knapp:
             return
         self._seit_muni += dt
@@ -1649,6 +1705,13 @@ class Gefecht(Szene):
                 "ab": k.am_boden, "br": round(k.boden_rest, 1),
                 "rs": round(k.revive_stand, 2),
                 "tm": k.team, "ra": k.raus,
+                # Raketenwerfer und Zielerfassung. Der Gast zeichnet
+                # daraus den Ring um sein Ziel und die Warnung, wenn er
+                # selbst erfasst wird.
+                "rp": k.rpg,
+                "ef": -1 if k.erfasst is None else getattr(k.erfasst,
+                                                           "nummer", -1),
+                "es": round(k.erfassung, 2),
                 # Wem gerade aufgeholfen wird: der Gast braucht es fuer
                 # den blauen Schein am Rand, sonst weiss er nicht, warum
                 # seine Figur festhaengt.
@@ -1823,6 +1886,8 @@ class Gefecht(Szene):
         regel = nachricht.get("loadouts")
         if regel in K.GEFECHT["loadout_arten"]:
             self.loadout_regel = regel
+        self.rpg_an = bool(nachricht.get("rpg", self.rpg_an))
+        self.rpg_lenkung = bool(nachricht.get("rpg_lenkung", self.rpg_lenkung))
         try:
             self.start_medkits = max(0, min(
                 K.GEFECHT["start_medkits_hoechstens"],
@@ -1929,9 +1994,28 @@ class Gefecht(Szene):
             k.revive_stand = float(eintrag.get("rs", 0.0))
             hilft = int(eintrag.get("hf", -1))
             k.hilft = None if hilft < 0 else hilft
+            k.rpg = bool(eintrag.get("rp", False))
+            if k.rpg and k.waffen != ["rakete"]:
+                # Beim Gast wird nichts simuliert: die Waffe muss aus der
+                # Meldung folgen, sonst traegt seine Figur im Bild
+                # weiterhin das Gewehr, waehrend sie in Wahrheit ein Rohr
+                # auf der Schulter hat.
+                k.rpg_waffen = list(k.waffen)
+                k.waffen = ["rakete"]
+                k.waffe = 0
+                k.magazin.setdefault("rakete", 1)
+            elif not k.rpg and k.waffen == ["rakete"]:
+                k.waffen = k.rpg_waffen or list(K.HOTBAR)
+                k.waffe = 0
+            k.erfassung = float(eintrag.get("es", 0.0))
+            k._erfasst_nummer = int(eintrag.get("ef", -1))
         for nummer in list(self.kaempfer):
             if nummer not in gesehen:
                 self.kaempfer.pop(nummer, None)
+        # Erst jetzt, wo alle da sind, die Erfassung verknuepfen.
+        for k in self.kaempfer.values():
+            nr = getattr(k, "_erfasst_nummer", -1)
+            k.erfasst = self.kaempfer.get(nr) if nr >= 0 else None
         # Der Renderer laeuft ueber welt.wesen: beim Gast wird die Liste
         # gesetzt statt simuliert.
         self.welt.wesen = [k for k in self.kaempfer.values() if k.lebt]
@@ -2264,6 +2348,11 @@ class Gefecht(Szene):
             eintraege.append(("loadouts", "AUSRUESTUNG",
                               "EIGENES LOADOUT" if w["loadouts"] == "eigenes"
                               else "JEDER HAT ALLES"))
+            eintraege.append(("rpg", "RAKETENWERFER",
+                              "AN" if w["rpg"] else "AUS"))
+            if w["rpg"]:
+                eintraege.append(("rpg_lenkung", "  MIT ZIELERFASSUNG",
+                                  "AN" if w["rpg_lenkung"] else "AUS"))
             if regeln["teams"]:
                 eintraege.append(("teams", "MANNSCHAFTEN EINTEILEN", ""))
             eintraege.append(("neu", "NEUE RUNDE MIT DIESEN REGELN", ""))
@@ -2389,6 +2478,11 @@ class Gefecht(Szene):
         elif schluessel == "loadouts":
             w["loadouts"] = ("alles" if w["loadouts"] == "eigenes"
                              else "eigenes")
+        elif schluessel == "rpg":
+            w["rpg"] = not w["rpg"]
+            self.menue = min(self.menue, len(self._menue_baut()) - 1)
+        elif schluessel == "rpg_lenkung":
+            w["rpg_lenkung"] = not w["rpg_lenkung"]
         elif schluessel == "teams":
             self.menue_teams = True
             self.menue_zeile = 0
@@ -2446,6 +2540,8 @@ class Gefecht(Szene):
         self.medkits_spawnen = bool(w["medkit_spawn"])
         if w.get("loadouts") in K.GEFECHT["loadout_arten"]:
             self.loadout_regel = w["loadouts"]
+        self.rpg_an = bool(w.get("rpg", self.rpg_an))
+        self.rpg_lenkung = bool(w.get("rpg_lenkung", self.rpg_lenkung))
 
         self.teampunkte = [0] * len(K.TEAMS["namen"])
         self.zone_stand = [0.0] * len(self.teampunkte)
@@ -2483,6 +2579,7 @@ class Gefecht(Szene):
         for k in self.kaempfer.values():
             k.zaehler_leeren()
             k.opfer = {}
+            k.rpg_ablegen()
             self._loadout_anlegen(k)
 
         self._teams_ausgleichen()
@@ -2541,7 +2638,8 @@ class Gefecht(Szene):
                     knapp=self.knapp, schutz=self.schutz_an,
                     medkits=self.start_medkits,
                     medkit_spawn=self.medkits_spawnen,
-                    loadouts=self.loadout_regel)
+                    loadouts=self.loadout_regel,
+                    rpg=self.rpg_an, rpg_lenkung=self.rpg_lenkung)
 
 
     # ---- Bild ----------------------------------------------------------
@@ -2563,6 +2661,7 @@ class Gefecht(Szene):
             self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.ich)
             self.renderer.tracer(ziel, self.welt, self.kamera, self.ich)
         self._namen_zeichnen(ziel)
+        self._erfassung_zeichnen(ziel)
         # Der rote Rand liegt ueber der Welt, aber unter der Anzeige: die
         # Zahlen sollen lesbar bleiben, auch wenn es einem schlecht geht.
         self.befinden.zeichnen(ziel)
@@ -2661,6 +2760,61 @@ class Gefecht(Szene):
             s = self.renderer.bilder.gedreht(name, winkel)
             ziel.blit(s, (x - ecke.x - s.get_width() / 2,
                           y - ecke.y - s.get_height() / 2))
+
+    def _erfassung_zeichnen(self, ziel) -> None:
+        """Der Ring um das erfasste Ziel - und die Warnung, wenn man es ist.
+
+        Zwei Sachen in einer Methode, weil sie zusammengehoeren: derselbe
+        Vorgang, einmal von der Seite des Schuetzen und einmal von der des
+        Getroffenen. Wer erfasst wird, **muss** es merken; eine Waffe, die
+        ohne Vorwarnung um die Ecke kommt, ist keine Entscheidung mehr.
+        """
+        ich = self.ich
+        if ich is None:
+            return
+        e = K.ERFASSUNG
+        ecke = self.kamera.ecke
+
+        # 1. Was ich selbst gerade erfasse.
+        opfer = getattr(ich, "erfasst", None)
+        stand = getattr(ich, "erfassung", 0.0)
+        if opfer is not None and stand > 0.0 and opfer.lebt:
+            fest = stand >= 1.0
+            farbe = e["farbe_fest"] if fest else e["farbe"]
+            # Der Kreis zieht sich zusammen, waehrend die Erfassung laeuft.
+            r = int(e["ring_gross"]
+                    + (e["ring_klein"] - e["ring_gross"]) * min(1.0, stand))
+            p = opfer.pos - ecke
+            if 0 <= p.x <= K.GAME_W and 0 <= p.y <= K.GAME_H:
+                pygame.draw.circle(ziel, farbe, (int(p.x), int(p.y)), r, 1)
+                if fest:
+                    # Steht sie, kommt ein zweiter Ring dazu und vier
+                    # Ecken - man soll es nicht uebersehen koennen.
+                    pygame.draw.circle(ziel, farbe, (int(p.x), int(p.y)),
+                                       r + 3, 1)
+                    for dx, dy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+                        ex, ey = int(p.x) + dx * (r + 3), int(p.y) + dy * (r + 3)
+                        pygame.draw.line(ziel, farbe, (ex, ey),
+                                         (ex - dx * 4, ey), 1)
+                        pygame.draw.line(ziel, farbe, (ex, ey),
+                                         (ex, ey - dy * 4), 1)
+
+        # 2. Ob mich jemand erfasst - und ob schon geschossen wurde.
+        erfasst_mich = 0.0
+        for k in self.kaempfer.values():
+            if k is ich:
+                continue
+            if getattr(k, "erfasst", None) is ich:
+                erfasst_mich = max(erfasst_mich, getattr(k, "erfassung", 0.0))
+        fliegt = any(getattr(r, "ziel", None) is ich
+                     for r in self.welt.wesen if isinstance(r, Rakete))
+        if fliegt:
+            # Die Rakete ist unterwegs. Anderer Ton, und er pulst.
+            puls = 0.55 + 0.45 * abs(math.sin(self._zeit * 9.0))
+            self.renderer.randglut(ziel, K.ERFASSUNG["warnung_scharf"], puls)
+        elif erfasst_mich > 0.0:
+            self.renderer.randglut(ziel, K.ERFASSUNG["warnung"],
+                                   0.25 + 0.45 * erfasst_mich)
 
     def _farbe_fuer(self, k, eigen: bool = False):
         """In welcher Farbe ein Mitspieler auftaucht.

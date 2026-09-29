@@ -346,6 +346,26 @@ class Welt:
         self.ruckeln(daten.get("kamera", 1.0), "schuss", pos, ebene, quelle)
         self.klang("schuss_" + waffe, K.AUDIO["schuss"], pos, ebene)
 
+    def raketenstart(self, pos, winkel: float, ebene: int, quelle=None,
+                     ziel=None) -> None:
+        """Der Abschuss einer Rakete: Rauch, Feuerstrahl, Knall.
+
+        Wie schussknall eine Sache der Welt und nicht des Wesens, damit
+        ein Gast sie mit demselben Code nachspielen kann.
+        """
+        from .entities import wolke
+        pos = pygame.Vector2(pos)
+        self.muendung(pos, winkel, ebene)
+        # Der Ruecksstrahl nach hinten: das ist es, was einen
+        # Raketenwerfer von einem Gewehr unterscheidet.
+        hinten = (winkel + 180) % 360
+        wolke(self, pos, 16, 280, 0.45, (246, 196, 120), ebene, 2, "funke",
+              44, hinten, 6.0)
+        wolke(self, pos, 12, 130, 0.9, K.C_MUTED, ebene, 2, "staub",
+              70, hinten, 3.0)
+        self.ruckeln(K.WAFFEN["rakete"]["kamera"], "schuss", pos, ebene, quelle)
+        self.klang("rakete", 1.0, pos, ebene)
+
     def schlagknall(self, pos, winkel: float, ebene: int,
                     getroffen: bool = False, quelle=None) -> None:
         """Der Schwung des Brecheisens: Funken in einem Kegel und ein Ton."""

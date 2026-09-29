@@ -226,6 +226,26 @@ def _hand_waffe(s, c, name):
         pygame.draw.rect(s, K.C_CREAM, (hand + 4, c - 6, 1, 1))
         return
 
+    if d["aufbau"] == "rohr":                     # Raketenwerfer: dickes Rohr
+        # Die unverwechselbarste Silhouette im Spiel, und das soll sie
+        # sein: wer eine Rakete traegt, ist von weitem zu erkennen. Ein
+        # sehr dickes Rohr, vorn der Sprengkopf, hinten offen.
+        laenge, dick = d["lauf"], d["dicke"]
+        pygame.draw.rect(s, (62, 58, 48), (hand - d["schaft"], c - dick // 2,
+                                           d["schaft"] + laenge, dick))
+        pygame.draw.rect(s, (104, 96, 78), (hand - d["schaft"] + 1, c - dick // 2 + 1,
+                                            d["schaft"] + laenge - 2, 2))
+        # Sprengkopf
+        pygame.draw.polygon(s, (150, 62, 40),
+                            [(hand + laenge - 3, c - dick // 2 - 1),
+                             (hand + laenge + 4, c),
+                             (hand + laenge - 3, c + dick // 2 + 1)])
+        pygame.draw.rect(s, (214, 96, 56), (hand + laenge - 3, c - 1, 4, 2))
+        # Hinten offen: das Rohr ist dort dunkel
+        pygame.draw.rect(s, (18, 16, 14), (hand - d["schaft"], c - dick // 2 + 1,
+                                           2, dick - 2))
+        return
+
     if d["aufbau"] == "zweibein":                 # MG: dick, mit Zweibein
         # In der Draufsicht ist ein MG vor allem eines: breit. Dazu ein
         # Kastenmagazin unter dem Lauf und ein Zweibein vorn, das nach
@@ -643,6 +663,42 @@ def _molotov():
     pygame.draw.rect(s, (38, 52, 38), (4, 0, 3, 3))        # Hals mit Lappen
     pygame.draw.rect(s, K.C_CREAM, (4, 0, 3, 1))
     pygame.draw.rect(s, (240, 164, 56), (5, 0, 1, 1))
+    return _rand(s, (16, 12, 8))
+
+
+@platzhalter("waffe_rakete")
+def _waffe_rakete():
+    s = _waffe()
+    pygame.draw.rect(s, (62, 58, 48), (2, 3, 19, 6))       # Rohr
+    pygame.draw.rect(s, (104, 96, 78), (3, 4, 17, 2))
+    pygame.draw.rect(s, (18, 16, 14), (2, 4, 2, 4))        # hinten offen
+    pygame.draw.polygon(s, (150, 62, 40), [(20, 2), (25, 5), (25, 6), (20, 9)])
+    pygame.draw.rect(s, (214, 96, 56), (21, 5, 3, 2))      # Sprengkopf
+    pygame.draw.rect(s, (48, 44, 38), (8, 9, 4, 2))        # Griff
+    return s
+
+
+@platzhalter("flugrakete")
+def _flugrakete():
+    s = _flaeche(16, 8)
+    pygame.draw.rect(s, (86, 80, 66), (3, 2, 9, 4))        # Koerper
+    pygame.draw.rect(s, (140, 130, 106), (3, 2, 9, 1))
+    pygame.draw.polygon(s, (170, 70, 44), [(12, 1), (15, 4), (12, 6)])
+    pygame.draw.polygon(s, (52, 48, 40), [(3, 1), (0, 0), (0, 7), (3, 6)])
+    pygame.draw.rect(s, (252, 208, 120), (0, 3, 2, 2))     # Strahl hinten
+    return _rand(s, (16, 12, 8))
+
+
+@platzhalter("rpg_kiste")
+def _rpg_kiste():
+    s = _flaeche(18, 14)
+    pygame.draw.rect(s, (44, 48, 40), (0, 2, 18, 10))
+    pygame.draw.rect(s, (72, 78, 64), (1, 3, 16, 8))
+    pygame.draw.rect(s, (34, 36, 30), (1, 6, 16, 1))
+    # Das Rohr obendrauf, damit man sie nicht mit einer Munikiste
+    # verwechselt - eine Rakete liegt einmal in der Runde.
+    pygame.draw.rect(s, (86, 80, 66), (2, 0, 12, 3))
+    pygame.draw.polygon(s, (170, 70, 44), [(14, 0), (17, 1), (14, 3)])
     return _rand(s, (16, 12, 8))
 
 

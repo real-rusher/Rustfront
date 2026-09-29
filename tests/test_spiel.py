@@ -2930,6 +2930,221 @@ pruef("Mit dem Sturmgewehr geht es weiter sofort",
 pruef("Und es behindert das Lauftempo nicht",
       abs(held.gewicht_tempo - 1.0) < 0.01)
 
+# ── Raketenwerfer ────────────────────────────────────────────────────
+#
+# "In den Hosteinstellungen aktivierbar, einmaliger Pickup auf der Karte,
+# man kann bis zum Schuss nur den RPG ausruesten ausser dem Brecheisen
+# mit F, Eigenschaden ja aber kein Teamschaden; optionale Zielerfassung:
+# eine Sekunde rechte Maustaste halten, Kreis zieht sich zusammen und
+# wechselt die Farbe, die Rakete lenkt aber kann keine engen Kurven;
+# nach unten nur ueber Abgruenden auf sichtbare Gegner, und die Rakete
+# wechselt dann sauber die Ebene; der Erfasste bekommt eine Vignette."
+from dustfront.entities import Rakete
+from dustfront.mehrspieler import KampfBeute
+
+w, ga = gefechtspaar("team", rpg=True)
+pruef("Der Gastgeber kann den Werfer einschalten", w.mit_rpg)
+pruef("Und der Gast erfaehrt es", ga.rpg_an, str(ga.rpg_an))
+aus = gefechtspaar("pvp")
+pruef("Ohne Schalter gibt es ihn nicht", not aus[0].mit_rpg)
+aus[0].verlassen(); aus[1].verlassen()
+
+schuetze = w.kaempfer[0]
+opfer = w.kaempfer[ga.meine_nummer]
+kamerad = w._dazu(8, "KAMERAD", schuetze.team)
+schuetze.pos.update(400, 400); schuetze.vorher.update(schuetze.pos)
+schuetze.ebene = 0
+schuetze.winkel = 0.0
+opfer.pos.update(700, 400); opfer.vorher.update(opfer.pos)
+opfer.ebene = 0
+kamerad.pos.update(430, 400); kamerad.vorher.update(kamerad.pos)
+kamerad.ebene = 0
+
+# Aufheben: danach traegt man nur noch ihn.
+vorher_waffen = list(schuetze.waffen)
+pruef("Aufheben klappt", schuetze.rpg_nehmen())
+pruef("Und danach traegt man nur noch den Werfer",
+      schuetze.waffen == ["rakete"], str(schuetze.waffen))
+pruef("Ein zweiter geht nicht", not schuetze.rpg_nehmen())
+pruef("Das Brecheisen bleibt trotzdem da",
+      K.NAHKAMPF["waffe"] not in schuetze.waffen and bool(schuetze.nahkampf()))
+schuetze.nahkampf_rest = 0.0
+
+# Zielerfassung.
+schuetze.lenkbar = True
+schuetze.zielt = True
+schuetze.ziel.update(opfer.pos)
+schuetze.winkel = 0.0
+e = K.ERFASSUNG
+for _ in range(int(e["dauer"] * 0.4 / K.FIXED_DT)):
+    schuetze.schritt(K.FIXED_DT)
+pruef("Die Erfassung laeuft an",
+      schuetze.erfasst is opfer and 0.1 < schuetze.erfassung < 0.9,
+      "%.2f" % schuetze.erfassung)
+for _ in range(int(e["dauer"] / K.FIXED_DT)):
+    schuetze.schritt(K.FIXED_DT)
+pruef("Und steht nach der vollen Zeit", schuetze.erfassung >= 1.0,
+      "%.2f" % schuetze.erfassung)
+pruef("Der eigene Kamerad wird nicht erfasst", schuetze.erfasst is not kamerad)
+
+# Loslassen: sie haelt noch kurz und faellt dann.
+schuetze.zielt = False
+for _ in range(int((e["halten"] + 0.1) / K.FIXED_DT)):
+    schuetze.schritt(K.FIXED_DT)
+pruef("Nach dem Loslassen faellt die Erfassung weg",
+      schuetze.erfasst is None, str(schuetze.erfasst))
+
+# Ohne Lenkung gibt es gar keine Erfassung.
+schuetze.lenkbar = False
+schuetze.zielt = True
+for _ in range(int(e["dauer"] * 1.5 / K.FIXED_DT)):
+    schuetze.schritt(K.FIXED_DT)
+pruef("Ohne Zielerfassung erfasst sie nichts", schuetze.erfasst is None)
+schuetze.lenkbar = True
+
+# Schiessen.
+schuetze.zielt = True
+schuetze.ziel.update(opfer.pos)
+for _ in range(int(e["dauer"] * 1.5 / K.FIXED_DT)):
+    schuetze.schritt(K.FIXED_DT)
+schuetze.takt = 0.0
+schuetze.feuern()
+raketen = [x for x in w.welt.neue + w.welt.wesen if isinstance(x, Rakete)]
+pruef("Der Werfer schiesst eine Rakete", len(raketen) == 1,
+      "%d" % len(raketen))
+rakete = raketen[0]
+pruef("Und sie hat ihr Ziel", rakete.ziel is opfer)
+pruef("Nach dem Schuss ist das Rohr weg",
+      not schuetze.rpg and schuetze.waffen == vorher_waffen,
+      str(schuetze.waffen))
+
+# Lenken: sie dreht, aber nur langsam.
+rakete.winkel = -90.0                       # quer zum Ziel
+rakete.tempo = pygame.Vector2(rakete.daten["tempo"], 0).rotate(-90.0)
+vorher_winkel = rakete.winkel
+rakete._lenken(K.FIXED_DT)
+gedreht = abs((rakete.winkel - vorher_winkel + 180) % 360 - 180)
+erlaubt = rakete.daten["lenk_dreh"] * K.FIXED_DT
+pruef("Die Rakete lenkt hoechstens so schnell wie erlaubt",
+      gedreht <= erlaubt + 0.001,
+      "%.3f Grad je Schritt, erlaubt %.3f" % (gedreht, erlaubt))
+pruef("Und dreht in die richtige Richtung", gedreht > 0.0)
+
+# Eigenschaden ja, Mannschaftsschaden nein.
+for k in (schuetze, kamerad, opfer):
+    k.unverwundbar = 0.0
+    k.leben = 200.0
+    k.max_leben = 200.0
+rakete.pos.update(schuetze.pos)
+rakete.ebene = schuetze.ebene
+kamerad.pos.update(schuetze.pos + pygame.Vector2(12, 0))
+opfer.pos.update(schuetze.pos + pygame.Vector2(18, 0))
+opfer.ebene = kamerad.ebene = schuetze.ebene
+w.welt.schritt(0.0)                          # Raster neu bauen
+rakete.einschlag(None)
+pruef("Der Schuetze bekommt etwas ab", schuetze.leben < 200.0,
+      "%.0f Leben" % schuetze.leben)
+pruef("Aber weniger als voll",
+      schuetze.leben > 200.0 - K.WAFFEN["rakete"]["schaden"],
+      "%.0f Leben" % schuetze.leben)
+pruef("Die eigene Mannschaft gar nichts", kamerad.leben == 200.0,
+      "%.0f Leben" % kamerad.leben)
+pruef("Der Gegner dagegen schon", opfer.leben < 200.0,
+      "%.0f Leben" % opfer.leben)
+
+# Nach unten erfassen: nur ueber einem Loch.
+schuetze.rpg_nehmen()
+schuetze.erfasst = None
+schuetze.erfassung = 0.0
+ebene1 = w.welt.ebene(1)
+loch = None
+for ty in range(ebene1.hoehe):
+    for tx in range(ebene1.breite):
+        if ebene1.loch(tx, ty):
+            loch = (tx, ty)
+            break
+    if loch:
+        break
+pruef("Die Karte hat ein Loch auf Ebene 1", loch is not None)
+if loch:
+    unter_loch = pygame.Vector2((loch[0] + 0.5) * K.TILE,
+                                (loch[1] + 0.5) * K.TILE)
+    schuetze.ebene = 1
+    schuetze.pos.update(unter_loch - pygame.Vector2(120, 0))
+    schuetze.vorher.update(schuetze.pos)
+    schuetze.winkel = 0.0
+    schuetze.ziel.update(unter_loch)
+    opfer.ebene = 0
+    opfer.pos.update(unter_loch)
+    opfer.vorher.update(opfer.pos)
+    opfer.leben = 200.0
+    schuetze.zielt = True
+    for _ in range(int(e["dauer"] * 1.5 / K.FIXED_DT)):
+        schuetze.schritt(K.FIXED_DT)
+    pruef("Durch ein Loch laesst sich nach unten erfassen",
+          schuetze.erfasst is opfer and schuetze.erfassung >= 1.0,
+          "%s, %.2f" % (schuetze.erfasst, schuetze.erfassung))
+
+    # Und dieselbe Lage ohne Loch: nichts.
+    fest = None
+    for ty in range(ebene1.hoehe):
+        for tx in range(ebene1.breite):
+            if ebene1.begehbar(tx, ty) and not ebene1.loch(tx, ty):
+                fest = (tx, ty)
+                break
+        if fest:
+            break
+    if fest:
+        auf_boden = pygame.Vector2((fest[0] + 0.5) * K.TILE,
+                                   (fest[1] + 0.5) * K.TILE)
+        schuetze.erfasst = None
+        schuetze.erfassung = 0.0
+        schuetze.pos.update(auf_boden - pygame.Vector2(100, 0))
+        schuetze.vorher.update(schuetze.pos)
+        schuetze.ziel.update(auf_boden)
+        opfer.pos.update(auf_boden)
+        opfer.vorher.update(opfer.pos)
+        for _ in range(int(e["dauer"] * 1.5 / K.FIXED_DT)):
+            schuetze.schritt(K.FIXED_DT)
+        pruef("Ueber festem Boden nicht", schuetze.erfasst is None,
+              str(schuetze.erfasst))
+
+    # Die Rakete wechselt im Flug die Ebene - aber nur mit Erfassung.
+    r = Rakete(unter_loch - pygame.Vector2(30, 0), 0.0,
+               K.WAFFEN["rakete"], 1, schuetze, opfer)
+    w.welt.dazu(r)
+    opfer.ebene = 0
+    opfer.pos.update(unter_loch)
+    r.pos.update(unter_loch)
+    r._ebene_wechseln()
+    pruef("Ueber dem Loch faellt sie eine Ebene tiefer", r.ebene == 0,
+          "Ebene %d" % r.ebene)
+    ungelenkt = Rakete(unter_loch, 0.0, K.WAFFEN["rakete"], 1, schuetze, None)
+    w.welt.dazu(ungelenkt)
+    ungelenkt._ebene_wechseln()
+    pruef("Ohne Erfassung fliegt sie darueber hinweg", ungelenkt.ebene == 1,
+          "Ebene %d" % ungelenkt.ebene)
+    r.lebt = ungelenkt.lebt = False
+
+# Der Pickup liegt auf der Karte, und nur einer.
+w.welt.wesen = [x for x in w.welt.wesen if not isinstance(x, KampfBeute)]
+for k in w.kaempfer.values():
+    k.rpg_ablegen()
+w._rpg_takt = 0.0
+for _ in range(int(3.0 / K.FIXED_DT)):
+    w.schritt(K.FIXED_DT)
+werfer = [x for x in w.welt.wesen
+          if isinstance(x, KampfBeute) and x.art == "rakete" and x.lebt]
+pruef("Ein Werfer liegt auf der Karte", len(werfer) == 1,
+      "%d" % len(werfer))
+w._rpg_takt = 0.0
+for _ in range(int(3.0 / K.FIXED_DT)):
+    w.schritt(K.FIXED_DT)
+werfer = [x for x in w.welt.wesen
+          if isinstance(x, KampfBeute) and x.art == "rakete" and x.lebt]
+pruef("Und nur einer", len(werfer) == 1, "%d" % len(werfer))
+w.verlassen(); ga.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
