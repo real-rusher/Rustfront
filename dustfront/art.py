@@ -226,6 +226,16 @@ def _hand_waffe(s, c, name):
         pygame.draw.rect(s, K.C_CREAM, (hand + 4, c - 6, 1, 1))
         return
 
+    if d["aufbau"] == "walze":                    # Blendgranate: glatte Walze
+        # Glatt und hell, ohne Riffel und ohne Lappen: in der Hand muss
+        # man ihr ansehen, dass sie nicht splittert und nicht brennt.
+        pygame.draw.rect(s, (126, 128, 132), (hand + 2, c - 4, 5, 9))
+        pygame.draw.rect(s, (188, 192, 196), (hand + 3, c - 3, 3, 7))
+        pygame.draw.rect(s, (236, 240, 244), (hand + 3, c - 3, 1, 7))
+        pygame.draw.rect(s, (52, 54, 58), (hand + 3, c - 6, 3, 2))
+        pygame.draw.rect(s, (236, 232, 200), (hand + 4, c - 7, 1, 2))
+        return
+
     if d["aufbau"] == "flasche":                  # Molotow: Flasche mit Lappen
         # Schmal und hoch, mit einem hellen Lappen obendrauf. Von oben
         # sieht man von einer Flasche wenig; was sie unterscheidbar
@@ -610,6 +620,31 @@ def _molotov():
     pygame.draw.rect(s, (38, 52, 38), (4, 0, 3, 3))        # Hals mit Lappen
     pygame.draw.rect(s, K.C_CREAM, (4, 0, 3, 1))
     pygame.draw.rect(s, (240, 164, 56), (5, 0, 1, 1))
+    return _rand(s, (16, 12, 8))
+
+
+@platzhalter("waffe_blend")
+def _waffe_blend():
+    s = _waffe()
+    # Eine glatte helle Walze mit Buegel. In der Hotbar muss sie sich von
+    # der Buechse der Rauchgranate und der Flasche unterscheiden - das
+    # macht hier die durchgehend helle Flaeche ohne Aufsatz.
+    pygame.draw.rect(s, (110, 114, 118), (7, 3, 13, 6))
+    pygame.draw.rect(s, (176, 182, 188), (8, 4, 11, 4))
+    pygame.draw.rect(s, (232, 238, 244), (8, 4, 11, 1))
+    pygame.draw.rect(s, (54, 56, 60), (20, 4, 3, 4))       # Kopf
+    pygame.draw.rect(s, (236, 232, 200), (23, 5, 2, 2))    # Zuender
+    pygame.draw.rect(s, (54, 56, 60), (10, 1, 7, 2))       # Buegel
+    return s
+
+
+@platzhalter("blendgranate")
+def _blendgranate():
+    s = _flaeche(10, 10)
+    pygame.draw.ellipse(s, (108, 112, 116), (1, 2, 8, 6))
+    pygame.draw.ellipse(s, (182, 188, 194), (2, 3, 5, 3))
+    pygame.draw.rect(s, (52, 54, 58), (4, 0, 3, 3))
+    pygame.draw.rect(s, (240, 238, 210), (4, 0, 2, 1))
     return _rand(s, (16, 12, 8))
 
 

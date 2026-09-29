@@ -1085,12 +1085,34 @@ class Befinden:
         self.medkit_rest = 0.0
         self.ruhe_rest = 0.0
         self.anteil = 1.0
+        # Blendung. `blend` ist, wie weiss das Bild gerade ist; `blend_rest`
+        # wie lange es noch dauert. Zwei Werte, weil das Weiss hart kommt
+        # und weich geht - umgekehrt waere es kein Blitz.
+        self.blend = 0.0
+        self.blend_rest = 0.0
         self._puffer = None
 
     # ---- Meldungen -----------------------------------------------------
     def treffer(self, menge: float = 1.0) -> None:
         b = K.BEFINDEN
         self.stoss = min(1.0, self.stoss + b["treffer_stoss"] * min(1.0, menge))
+
+    def blenden(self, staerke: float) -> None:
+        """Ein Blitz hat getroffen. Staerke 0 bis 1.
+
+        Das Groessere von beidem zaehlt: zwei Blendgranaten kurz
+        hintereinander sollen nicht addieren, sondern die schlimmere
+        gelten lassen. Addieren hiesse, dass zwei halbe Treffer schlimmer
+        waeren als ein voller, und das ergibt keinen Sinn.
+        """
+        b = K.BLENDEN
+        staerke = max(0.0, min(1.0, staerke))
+        if staerke <= 0.01:
+            return
+        self.blend = max(self.blend, staerke)
+        self.blend_rest = max(self.blend_rest,
+                              b["mindest"] + (b["dauer"] - b["mindest"])
+                              * staerke)
 
     def medkit(self) -> None:
         m = K.MEDKIT_BLICK
@@ -1106,6 +1128,8 @@ class Befinden:
         self.klasse = -1
         self.medkit_rest = 0.0
         self.ruhe_rest = 0.0
+        self.blend = 0.0
+        self.blend_rest = 0.0
 
     # ---- Ablauf --------------------------------------------------------
     @property
@@ -1145,6 +1169,17 @@ class Befinden:
         b = K.BEFINDEN
         self.anteil = max(0.0, min(1.0, anteil))
         self.stoss = max(0.0, self.stoss - b["treffer_abbau"] * dt)
+        # Die Blendung klingt ab, und zwar langsamer, je laenger sie noch
+        # dauert: die erste halbe Sekunde ist fast alles weiss, danach
+        # wird es zuegig wieder klar.
+        if self.blend_rest > 0.0:
+            self.blend_rest = max(0.0, self.blend_rest - dt)
+            bl = K.BLENDEN
+            ganz = max(0.01, bl["mindest"] + (bl["dauer"] - bl["mindest"]))
+            rest = self.blend_rest / ganz
+            self.blend = min(self.blend, rest ** (1.0 / bl["abklingen"]))
+        else:
+            self.blend = 0.0
         self.medkit_rest = max(0.0, self.medkit_rest - dt)
         self.ruhe_rest = max(0.0, self.ruhe_rest - dt)
 
@@ -1179,7 +1214,12 @@ class Befinden:
 
     # ---- Bild ----------------------------------------------------------
     def zeichnen(self, ziel, renderer=None) -> None:
-        """Erst das Medkit auf das ganze Bild, dann der Rand."""
+        """Erst das Medkit auf das ganze Bild, dann der Rand, dann Weiss.
+
+        Die Blendung kommt zuletzt und ueber alles - auch ueber die
+        Anzeige. Sie ist nicht "ein Effekt in der Welt", sie ist das, was
+        die Augen gerade noch hergeben.
+        """
         if self.medkit_rest > 0.0:
             self._medkit_zeichnen(ziel)
         staerke = self.staerke
@@ -1187,6 +1227,17 @@ class Befinden:
             self._rand_zeichnen(ziel, K.BEFINDEN["farbe"], staerke,
                                 K.BEFINDEN["deckung_max"],
                                 K.BEFINDEN["breite"], K.BEFINDEN["stufen"])
+
+    def blendung_zeichnen(self, ziel) -> None:
+        """Das Weiss. Getrennt, weil es ueber die Anzeige gehoert."""
+        if self.blend <= 0.01:
+            return
+        d = int(255 * K.BLENDEN["weiss"] * min(1.0, self.blend))
+        if d <= 0:
+            return
+        flaeche = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+        flaeche.fill((255, 255, 252, d))
+        ziel.blit(flaeche, (0, 0))
 
     def _rand_zeichnen(self, ziel, farbe, staerke, deckung, breite,
                        stufen) -> None:

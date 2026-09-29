@@ -99,6 +99,8 @@ TASTEN_VORGABE = [
     ("waffe5",      "PLATZ 5",          ["5"]),
     ("waffe6",      "PLATZ 6",          ["6"]),
     ("waffe7",      "PLATZ 7",          ["7"]),
+    ("waffe8",      "PLATZ 8",          ["8"]),
+    ("waffe9",      "PLATZ 9",          ["9"]),
     ("nahkampf",    "BRECHEISEN",       ["f"]),
     ("tracer",      "ZIELLINIE",        ["t"]),
     ("tracer_weit", "LINIE VERLAENGERN", ["z"]),

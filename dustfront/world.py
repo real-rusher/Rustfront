@@ -75,6 +75,47 @@ def ruckel_wert(kraft: float, anlass: str = "", pos=None, ebene: int = 0,
     return kraft * r["fremd"] * (1.0 - weg / r["reichweite"])
 
 
+def blend_wert(pos, ebene: int, ich, welt=None) -> float:
+    """Wie stark ein Blitz an dieser Stelle **diesen** Zuschauer blendet.
+
+    Drei Fragen, in dieser Reihenfolge, weil jede die naechste erspart:
+
+    1. Dieselbe Ebene? Ein Blitz eine Etage hoeher blendet nicht. Wie
+       ueberall in diesem Spiel gehoert eine Wirkung zu einer Ebene.
+    2. Freie Sicht? Steht eine Wand dazwischen, passiert nichts. Das ist
+       der Griff, den man im Gefecht lernt: in Deckung gehen hilft.
+    3. Wie nah, und schaut man hin? Nah blendet voll; wer weggedreht
+       steht, bekommt nur einen Teil ab - aber nicht nichts, denn eine
+       Blendgranate hinter einem taucht den ganzen Raum in Licht.
+
+    Mannschaften spielen bewusst keine Rolle. Eine Blendgranate, die nur
+    Gegner trifft, ist keine Entscheidung mehr, sondern ein Knopf.
+    """
+    if ich is None:
+        return 0.0
+    b = K.BLENDEN
+    pos = pygame.Vector2(pos)
+    if int(ebene) != int(getattr(ich, "ebene", ebene)):
+        return 0.0
+    weg = pos.distance_to(ich.pos)
+    if weg >= b["weite"]:
+        return 0.0
+    if welt is not None and not welt.sicht_frei(ich.pos, pos, int(ebene)):
+        return 0.0
+    if weg <= b["nah"]:
+        naehe = 1.0
+    else:
+        naehe = 1.0 - (weg - b["nah"]) / max(1.0, b["weite"] - b["nah"])
+    ab = pos - ich.pos
+    hin = 1.0
+    if ab.length_squared() > 1.0:
+        richtung = math.degrees(math.atan2(ab.y, ab.x))
+        delta = abs((richtung - getattr(ich, "winkel", 0.0) + 180) % 360 - 180)
+        if delta > b["blickwinkel"] * 0.5:
+            hin = b["abgewandt"]
+    return max(0.0, min(1.0, naehe * hin))
+
+
 def klang_wert(lautstaerke: float, pos=None, ebene: int = 0, ich=None) -> float:
     """Wie laut ein Ton bei diesem Zuschauer ankommt.
 
@@ -224,6 +265,11 @@ class Welt:
     def brandfleck(self, pos, ebene: int, radius: float) -> None:
         pass
 
+    def blitz(self, pos, ebene: int) -> None:
+        """Hier hat es geblitzt. Wer davon geblendet wird, entscheidet
+        jeder Zuschauer fuer sich - die Szene haengt sich hier ein."""
+        pass
+
     # ---- Wirkungen, die jeder sehen und hoeren muss ---------------------
     #
     # Was hier steht, ist bewusst **nicht** ueber die Wesen verstreut.
@@ -254,6 +300,19 @@ class Welt:
         if art == "rauch":
             wolke(self, pos, 12, 90, 0.6, K.RAUCH["toene"][0], ebene, 2)
             self.klang("wurf", 0.8, pos, ebene)
+            return
+        if art == "blend":
+            b = K.BLENDEN
+            # In der Welt ist es ein **Funke**, kein Feuerball. Aus der
+            # Entfernung soll man ein Blitzen sehen und daran erkennen,
+            # was gerade passiert ist - nicht eine Explosion, die man mit
+            # einer Granate verwechselt.
+            wolke(self, pos, 14, 260, b["funke_dauer"], (255, 255, 246),
+                  ebene, 2, "funke")
+            wolke(self, pos, 6, 120, b["funke_dauer"] * 1.6, (206, 226, 255),
+                  ebene, 1, "funke")
+            self.blitz(pos, ebene)
+            self.klang(K.skin("blend_knall"), 1.0, pos, ebene)
             return
         if art == "feuer":
             # Kein Knall und kein Kameraschlag: eine Flasche zerbricht,

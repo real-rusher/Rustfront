@@ -326,7 +326,17 @@ class Granate(Wesen):
         self.daten = daten
         self.von = von
         self.winkel = richtung
-        self.bild = "rauchgranate" if daten.get("rauch") else "granate"
+        # Das Bild kommt ueber die Skin-Rolle und nicht als fester Name:
+        # eine Skin soll spaeter die eigene Blendgranate austauschen
+        # koennen, ohne dass hier etwas anders steht.
+        if daten.get("rauch"):
+            self.bild = "rauchgranate"
+        elif daten.get("feuer"):
+            self.bild = K.skin("molotov_flug")
+        elif daten.get("blend"):
+            self.bild = K.skin("blend_flug")
+        else:
+            self.bild = "granate"
         self.rest = daten["flugzeit"]
         self.dreh = RND.uniform(-700, 700)
         # Anfangstempo so waehlen, dass sie nach der Reibung genau auf der
@@ -389,6 +399,13 @@ class Granate(Wesen):
         if d.get("rauch"):
             w.rauch.append(Rauchwolke(self.pos, self.ebene))
             w.explosion(self.pos, self.ebene, 0.0, "rauch")
+            return
+        if d.get("blend"):
+            # Kein Schaden, kein Rueckstoss, keine Mannschaftsfrage: die
+            # Blendgranate nimmt eine Sekunde, und sie nimmt sie jedem,
+            # der hinsieht. Wer wie stark geblendet ist, rechnet jeder
+            # Rechner fuer sich aus der Lage des Blitzes.
+            w.explosion(self.pos, self.ebene, 0.0, "blend")
             return
         if d.get("feuer"):
             # Kein Sprengschaden - das ist der Punkt an dieser Waffe. Die

@@ -531,6 +531,7 @@ class Gefecht(Szene):
         self.welt.klang = self._klang
         self.welt.blutfleck = self._blutfleck
         self.welt.brandfleck = self._brandfleck
+        self.welt.blitz = self._blitz
         if self.ist_gastgeber:
             # Nur beim Gastgeber: was in der Welt an Wirkung entsteht,
             # wird zusaetzlich mitgeschrieben und geht als Meldung an die
@@ -546,6 +547,18 @@ class Gefecht(Szene):
     def _brandfleck(self, pos, ebene: int, radius: float) -> None:
         self.welt.ebene(ebene).dekal(self.renderer.brandfleck(radius),
                                      pos.x, pos.y)
+
+    def _blitz(self, pos, ebene: int) -> None:
+        """Eine Blendgranate ist gezuendet. Blendet sie **mich**?
+
+        Gerechnet wird hier und nicht beim Gastgeber: es ist eine Frage
+        des Bildes, nicht des Spiels, und gleiche Lage ergibt auf jedem
+        Rechner dieselbe Antwort. Uebertragen werden muss dafuer nichts.
+        """
+        staerke = welt_modul.blend_wert(pos, ebene, self.ich, self.welt)
+        if staerke > 0.0:
+            self.befinden.blenden(staerke)
+            self.app.klaenge.spielen(K.skin("blend_pfeifen"), 0.35 + 0.5 * staerke)
 
     def _ruckeln(self, kraft: float, anlass: str = "", pos=None,
                  ebene: int = 0, quelle=None) -> None:
@@ -918,7 +931,7 @@ class Gefecht(Szene):
                      "nahkampf"):
             if taste in tabelle.get(name, ()):
                 self._knoepfe.add(name)
-        for nr in range(1, 8):
+        for nr in range(1, K.HOTBAR_PLAETZE + 1):
             if taste in tabelle.get("waffe%d" % nr, ()):
                 self._waffe_wunsch = nr - 1
 
@@ -934,7 +947,7 @@ class Gefecht(Szene):
                      "nahkampf"):
             if e.gedrueckt(name):
                 self._knoepfe.add(name)
-        for nr in range(1, 8):
+        for nr in range(1, K.HOTBAR_PLAETZE + 1):
             if e.gedrueckt("waffe%d" % nr):
                 self._waffe_wunsch = nr - 1
 
@@ -2564,6 +2577,9 @@ class Gefecht(Szene):
             self._endtafel(ziel)
         if self.menue is not None:
             self._menue_zeichnen(ziel)
+        # Zuletzt und ueber allem: das Weiss einer Blendgranate. Es liegt
+        # auch ueber der Anzeige - geblendet ist geblendet.
+        self.befinden.blendung_zeichnen(ziel)
 
     def _kreis_zeichnen(self, flaeche, ebene: int, ecke) -> None:
         """Der Kreis in der Kartenmitte, auf den Boden seiner Ebene.

@@ -245,6 +245,47 @@ def _molotov(seed=0):
     return _mischen(glas, [0.0] * int(RATE * 0.03) + lodern)
 
 
+@platzhalter_klang("blend")
+def _blend(seed=0):
+    """Der Knall einer Blendgranate: hart, hell, ohne Tiefe.
+
+    Anders als eine Sprenggranate hat sie **keinen** Koerper. Eine
+    Sprengladung drueckt, eine Blendladung knallt - also hohes Rauschen
+    mit einem sehr kurzen Anstieg und einem Metallnachhall, und kein
+    einziger tiefer Schlag darunter. Genau daran hoert man im Gefecht,
+    was gerade geflogen kam, bevor man es sieht.
+    """
+    return _mischen(
+        _rauschen(0.12, 1.0, 14000, 9000, 2.0, seed + 1, hp=True),
+        _rauschen(0.30, 0.45, 8000, 4000, 2.6, seed + 2, hp=True),
+        _schlag(2400, 1800, 0.08, 0.35, 2.2),
+    )
+
+
+@platzhalter_klang("blend_pfeifen")
+def _blend_pfeifen(seed=0):
+    """Das Pfeifen danach im Ohr. Lang, schmal, langsam verklingend.
+
+    Ein reiner hoher Ton, der zwei Sekunden braucht. Er ist der Grund,
+    warum eine Blendgranate wehtut: das Bild ist nach einer Sekunde
+    wieder da, das Pfeifen nicht, und solange es laeuft, hoert man keine
+    Schritte.
+    """
+    n = int(RATE * K.BLENDEN["ton_dauer"])
+    out = [0.0] * n
+    ph = ph2 = 0.0
+    tp = 2 * math.pi
+    for i in range(n):
+        p = i / n
+        # Zwei dicht benachbarte Toene: das schwebt leicht und klingt
+        # nach Ohr und nicht nach Signalgeber.
+        ph += tp * 3150 / RATE
+        ph2 += tp * 3184 / RATE
+        huelle = min(1.0, p * 40.0) * (1.0 - p) ** 1.6
+        out[i] = (math.sin(ph) * 0.6 + math.sin(ph2) * 0.4) * huelle * 0.5
+    return out
+
+
 @platzhalter_klang("herzschlag")
 def _herzschlag(seed=0):
     """Zwei Schlaege, der zweite leiser und dichter dahinter.

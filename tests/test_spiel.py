@@ -147,7 +147,8 @@ pruef("Die Hotbar hat so viele Plaetze wie die Tabelle sagt",
       len(held.waffen) == len(K.HOTBAR), "%d von %d"
       % (len(held.waffen), len(K.HOTBAR)))
 pruef("Und es sind noch Tasten dafuer da",
-      len(held.waffen) <= 7, "%d Plaetze" % len(held.waffen))
+      len(held.waffen) <= K.HOTBAR_PLAETZE,
+      "%d von hoechstens %d" % (len(held.waffen), K.HOTBAR_PLAETZE))
 pruef("Alle Waffen der Hotbar sind bekannt",
       all(w in K.WAFFEN for w in held.waffen))
 # Das Brecheisen gehoert nicht mehr dazu: es liegt auf einer eigenen
@@ -2668,6 +2669,116 @@ for _ in range(4):
 pruef("Nach ihrer Zeit ist sie aus", not w.welt.feuer)
 pruef("Und hinterlaesst einen Brandfleck",
       w.welt.ebene(brand.ebene).dekale is not None)
+w.verlassen(); ga.verlassen()
+
+# ── Blendgranate ─────────────────────────────────────────────────────
+#
+# "Blendgranate (kleines Funkeln aus der Entfernung; lauter schriller Ton
+# + weisser Bildschirm auch fuer das eigene Team und die eigene Granate,
+# Ton klingt ab; Bild und Ton muessen fuer ein spaeteres Skin-System
+# austauschbar sein)."
+from dustfront.world import blend_wert
+
+w, ga = gefechtspaar("pvp")
+wirt_k = w.kaempfer[0]
+gast_k = w.kaempfer[ga.meine_nummer]
+wirt_k.pos.update(500, 400); wirt_k.vorher.update(wirt_k.pos)
+wirt_k.ebene = 0
+wirt_k.winkel = 0.0
+gast_k.pos.update(1400, 1000); gast_k.vorher.update(gast_k.pos)
+
+pruef("Die Blendgranate steht in der Hotbar", "blend" in K.HOTBAR)
+pruef("Und macht keinen Schaden",
+      K.WAFFEN["blend"]["schaden"] == 0.0 and K.WAFFEN["blend"]["blend"])
+
+blitz = wirt_k.pos + pygame.Vector2(60, 0)      # genau vor ihm
+pruef("Direkt davor blendet sie voll",
+      blend_wert(blitz, 0, wirt_k, w.welt) > 0.9,
+      "%.2f" % blend_wert(blitz, 0, wirt_k, w.welt))
+pruef("Eine Ebene hoeher gar nicht",
+      blend_wert(blitz, 1, wirt_k, w.welt) == 0.0)
+weit = wirt_k.pos + pygame.Vector2(K.BLENDEN["weite"] + 20, 0)
+pruef("Weit weg auch nicht", blend_wert(weit, 0, wirt_k, w.welt) == 0.0)
+mittel = wirt_k.pos + pygame.Vector2(
+    (K.BLENDEN["nah"] + K.BLENDEN["weite"]) / 2, 0)
+mitte_wert = blend_wert(mittel, 0, wirt_k, w.welt)
+pruef("Dazwischen anteilig", 0.2 < mitte_wert < 0.8, "%.2f" % mitte_wert)
+wirt_k.winkel = 180.0                            # weggedreht
+weggedreht = blend_wert(blitz, 0, wirt_k, w.welt)
+pruef("Wegdrehen hilft deutlich", weggedreht < 0.5, "%.2f" % weggedreht)
+pruef("Aber nicht ganz - der Raum ist trotzdem hell",
+      weggedreht > 0.0, "%.2f" % weggedreht)
+wirt_k.winkel = 0.0
+
+# Die eigene Granate und die eigene Mannschaft blenden genauso. Das ist
+# der Punkt: sonst waere sie keine Entscheidung mehr, sondern ein Knopf.
+pruef("Mannschaften spielen keine Rolle",
+      "team" not in blend_wert.__doc__.lower()
+      or "keine rolle" in blend_wert.__doc__.lower())
+befinden = w.befinden
+befinden.zuruecksetzen()
+w.welt.blitz(blitz, 0)
+pruef("Die eigene Blendgranate blendet einen selbst",
+      befinden.blend > 0.9, "%.2f" % befinden.blend)
+probe = pygame.Surface((K.GAME_W, K.GAME_H))
+probe.fill((20, 15, 10))
+befinden.blendung_zeichnen(probe)
+hell = pygame.transform.average_color(probe)
+pruef("Und das Bild wird weiss", sum(hell[:3]) > 500, "%s" % (tuple(hell[:3]),))
+
+# Sie klingt ab, und zwar erst langsam und dann schneller.
+verlauf = []
+for _ in range(int(K.BLENDEN["dauer"] / K.FIXED_DT) + 8):
+    befinden.schritt(K.FIXED_DT, 1.0)
+    verlauf.append(befinden.blend)
+pruef("Die Blendung klingt ab", verlauf[-1] < 0.01,
+      "%.2f am Ende" % verlauf[-1])
+mitte = verlauf[len(verlauf) // 2]
+pruef("Am Anfang bleibt sie lange stark", verlauf[20] > 0.85,
+      "%.2f nach 0.17 s" % verlauf[20])
+pruef("Und wird dann zuegig klar", mitte < 0.7, "%.2f in der Mitte" % mitte)
+
+# Zwei Blitze addieren nicht - der schlimmere gilt.
+befinden.zuruecksetzen()
+befinden.blenden(0.4)
+befinden.blenden(0.4)
+pruef("Zwei halbe Blitze sind kein voller", befinden.blend < 0.5,
+      "%.2f" % befinden.blend)
+befinden.blenden(0.9)
+pruef("Der schlimmere gilt", befinden.blend > 0.85, "%.2f" % befinden.blend)
+
+# Eine Wand dazwischen schuetzt.
+befinden.zuruecksetzen()
+ebene0 = w.welt.ebene(0)
+wand = None
+for ty in range(ebene0.hoehe):
+    for tx in range(ebene0.breite):
+        if ebene0.sichtdicht(tx, ty):
+            wand = (tx, ty)
+            break
+    if wand:
+        break
+if wand:
+    # Die Figur auf die eine Seite, den Blitz auf die andere.
+    mitte_wand = pygame.Vector2((wand[0] + 0.5) * K.TILE,
+                                (wand[1] + 0.5) * K.TILE)
+    wirt_k.pos.update(mitte_wand - pygame.Vector2(K.TILE * 2, 0))
+    wirt_k.vorher.update(wirt_k.pos)
+    hinter = mitte_wand + pygame.Vector2(K.TILE * 2, 0)
+    pruef("Eine Wand dazwischen schuetzt ganz",
+          blend_wert(hinter, 0, wirt_k, w.welt) == 0.0,
+          "%.2f" % blend_wert(hinter, 0, wirt_k, w.welt))
+
+# Skin-System: Bild und Ton haengen an einer Rolle, nicht an einem Namen.
+pruef("Bild und Klang haengen an Rollen",
+      K.skin("blend_flug") == "blendgranate"
+      and K.skin("blend_knall") == "blend")
+pruef("Und lassen sich umlegen",
+      K.skin_setzen("blend_flug", "goldgranate")
+      and K.skin("blend_flug") == "goldgranate")
+K.skin_zuruecksetzen()
+pruef("Und wieder zuruecksetzen", K.skin("blend_flug") == "blendgranate")
+pruef("Unbekannte Rollen werden abgelehnt", not K.skin_setzen("gibtsnicht", "x"))
 w.verlassen(); ga.verlassen()
 
 print()

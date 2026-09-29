@@ -53,6 +53,7 @@ class Spiel(Szene):
         self.welt.blutfleck = self._blutfleck
         self.welt.klang = self._klang
         self.welt.brandfleck = self._brandfleck
+        self.welt.blitz = self._blitz
 
         # Ansicht: welche Ebene die Kamera anschaut, und die geglaettete
         # Hoehe dazu. Beides haengt bewusst nicht an der Figur, damit man
@@ -82,6 +83,18 @@ class Spiel(Szene):
     def _brandfleck(self, pos, ebene: int, radius: float) -> None:
         self.welt.ebene(ebene).dekal(self.renderer.brandfleck(radius),
                                      pos.x, pos.y)
+
+    def _blitz(self, pos, ebene: int) -> None:
+        """Eine Blendgranate ist gezuendet. Blendet sie **mich**?
+
+        Gerechnet wird hier und nicht beim Gastgeber: es ist eine Frage
+        des Bildes, nicht des Spiels, und gleiche Lage ergibt auf jedem
+        Rechner dieselbe Antwort. Uebertragen werden muss dafuer nichts.
+        """
+        staerke = welt_modul.blend_wert(pos, ebene, self.held, self.welt)
+        if staerke > 0.0:
+            self.befinden.blenden(staerke)
+            self.app.klaenge.spielen(K.skin("blend_pfeifen"), 0.35 + 0.5 * staerke)
 
     def _ruckeln(self, kraft: float, anlass: str = "", pos=None,
                  ebene: int = 0, quelle=None) -> None:
@@ -153,7 +166,7 @@ class Spiel(Szene):
                 held.tracer = not held.tracer
             if e.gedrueckt("tracer_weit"):
                 held.tracer_weit = not held.tracer_weit
-            for nr in range(1, 8):
+            for nr in range(1, K.HOTBAR_PLAETZE + 1):
                 if e.gedrueckt("waffe%d" % nr):
                     held.waffe_waehlen(nr - 1)
             if e.gedrueckt("heilen"):
@@ -246,6 +259,7 @@ class Spiel(Szene):
                           self.blick)
         if self.hinweis:
             self.renderer.hinweis(ziel, self.hinweis)
+        self.befinden.blendung_zeichnen(ziel)
         if not self.held.lebt:
             self.tod_schirm(ziel)
         if self.app.debug:

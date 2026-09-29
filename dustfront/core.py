@@ -60,6 +60,8 @@ TASTEN = {
     "waffe5":   [pygame.K_5],
     "waffe6":   [pygame.K_6],
     "waffe7":   [pygame.K_7],
+    "waffe8":   [pygame.K_8],
+    "waffe9":   [pygame.K_9],
     "heilen":   [pygame.K_h],
     "nahkampf": [pygame.K_f],
     "inventar": [pygame.K_TAB],

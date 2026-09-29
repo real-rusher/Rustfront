@@ -302,6 +302,7 @@ BILD_MASS = {
     "spieler_granate":    (56, 56),
     "spieler_rauch":      (56, 56),
     "spieler_molotov":    (56, 56),
+    "spieler_blend":      (56, 56),
     "spieler_brecheisen": (56, 56),
     "spieler_boden":      (28, 28),   # wer am Boden liegt
     "gegner_laeufer":   (28, 28),
@@ -314,6 +315,7 @@ BILD_MASS = {
     "granate":          (10, 10),
     "rauchgranate":     (10, 10),
     "molotov":          (10, 10),
+    "blendgranate":     (10, 10),
     "huelse":           (4, 3),
     # Waffensymbole fuer Hotbar und Inventar, Seitenansicht nach rechts
     "waffe_repetierer": (26, 11),
@@ -323,6 +325,7 @@ BILD_MASS = {
     "waffe_granate":    (26, 11),
     "waffe_rauch":      (26, 11),
     "waffe_molotov":    (26, 11),
+    "waffe_blend":      (26, 11),
     "waffe_brecheisen": (26, 11),
     # Dekale und Schatten. Das Mass ist hier ein Basismass: das Spiel rechnet
     # die Flaeche auf die Groesse um, die es gerade braucht. Wer sie ersetzt,
@@ -350,6 +353,8 @@ KLANG_NAMEN = (
     "medkit",
     "aufheben",
     "molotov",              # Glas zerbricht und Feuer faengt
+    "blend",                # der Knall der Blendgranate
+    "blend_pfeifen",        # das Pfeifen danach im Ohr
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -604,7 +609,8 @@ MUNITION = dict(
     # Munitionskiste nutzlos - man kann nichts aufnehmen, was man nicht
     # braucht.
     vorrat={"repetierer": 42, "sturm": 90, "schrot": 18, "scharf": 10,
-            "granate": 3, "rauch": 2, "molotov": 2, "brecheisen": 0},
+            "granate": 3, "rauch": 2, "molotov": 2, "blend": 2,
+            "brecheisen": 0},
     kiste_takt=14.0,          # Sekunden zwischen zwei Munitionskisten
     kiste_hoechstens=4,
     kiste_gibt=0.5,           # so viel vom vollen Vorrat gibt eine Kiste
@@ -793,6 +799,25 @@ WAFFEN = {
         rueckstoss=0.0,
         huelsen=0,
     ),
+    "blend": dict(
+        art="wurf",
+        name="BLENDGRANATE",
+        # Sie macht keinen Schaden. Sie nimmt eine Sekunde - und eine
+        # Sekunde ist in einem Gefecht sehr lang.
+        blend=True,
+        schaden=0.0,
+        radius=0.0,
+        takt=0.9,
+        magazin=2,
+        nachladen=3.2,
+        wurf_min=60.0,
+        wurf_max=260.0,
+        reibung=1.2,
+        flugzeit=1.35,        # laenger als eine Granate: man wirft sie voraus
+        kamera=0.0,           # der Knall ruckelt nicht, er blendet
+        rueckstoss=0.0,
+        huelsen=0,
+    ),
     "molotov": dict(
         art="wurf",
         name="MOLOTOW",
@@ -865,6 +890,8 @@ WAFFEN_HAND = {
                        aufbau="buechse"),
     "molotov":    dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
                        aufbau="flasche"),
+    "blend":      dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
+                       aufbau="walze"),
     "brecheisen": dict(lauf=15, dicke=2, schaft=5, s_dicke=2, holz=False,
                        aufbau="haken"),
 }
@@ -886,7 +913,13 @@ for _team in TEAMS["kombi"]:
 # NAHKAMPF. Ein Werkzeug, das man im Gedraenge braucht, sollte keinen
 # Waffenwechsel kosten.
 HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "rauch",
-          "molotov"]
+          "molotov", "blend"]
+
+# So viele Plaetze kann die Hotbar hoechstens haben. Es sind die Tasten 1
+# bis 9 - mehr Plaetze sind keine Auswahl mehr, sondern eine Suche. Wer
+# mehr Waffen will, als hier hineinpassen, spielt mit Loadouts: zwei
+# Waffen und eine Wurfwaffe, und die Entscheidung faellt vor der Runde.
+HOTBAR_PLAETZE = 9
 
 # ══════════════════════════════════════════════════ AUSRUESTUNG
 #
@@ -910,7 +943,7 @@ LOADOUT = dict(
     # aus WAFFEN abgeleitet: was waehlbar ist, ist eine Spielentscheidung
     # und nicht dasselbe wie das, was es gibt.
     auswahl_waffen=("repetierer", "sturm", "schrot", "scharf"),
-    auswahl_wuerfe=("granate", "rauch", "molotov"),
+    auswahl_wuerfe=("granate", "rauch", "molotov", "blend"),
     # Womit ein neues Loadout vorbelegt wird. Drei Stueck, damit man nach
     # dem ersten Anmelden gleich drei brauchbare Saetze hat und nicht vor
     # drei leeren Plaetzen sitzt.
@@ -1028,6 +1061,91 @@ FEUER = dict(
     funken=2.0,               # Funken je Sekunde und Flaeche
     brandfleck=True,          # hinterlaesst einen Fleck, wenn es aus ist
 )
+
+# Die Blendgranate.
+#
+# **Sie unterscheidet keine Mannschaften.** Wer hinsieht, ist geblendet -
+# die eigenen Leute, man selbst, jeder. Das ist ausdruecklich so gewollt
+# und nicht vergessen: eine Blendgranate, die nur Gegner trifft, ist
+# keine Entscheidung mehr, sondern ein Knopf.
+#
+# Wie stark es trifft, rechnet **jeder Rechner fuer sich** aus der Lage
+# des Blitzes. Nichts davon wird uebertragen, und darum kann auch nichts
+# auseinanderlaufen: gleiche Lage, gleiche Rechnung, gleiches Ergebnis.
+# Der Gastgeber entscheidet hier nichts - es ist eine Frage des Bildes
+# und nicht des Spiels.
+#
+# Drei Dinge zaehlen, und alle drei kann man im Gefecht lernen:
+#
+#   Ebene       Ein Blitz auf einer anderen Etage blendet nicht.
+#   Sicht       Steht eine Wand dazwischen, passiert nichts. Wegdrehen
+#               hilft nicht ganz, aber deutlich (siehe `abgewandt`).
+#   Entfernung  Nah voll, ab `weite` gar nicht.
+BLENDEN = dict(
+    weite=360.0,          # ab hier blendet sie nicht mehr
+    nah=90.0,             # bis hierhin blendet sie voll
+    dauer=2.6,            # so lange dauert die volle Blendung
+    mindest=0.55,         # so lange mindestens, wenn sie ueberhaupt trifft
+    weiss=0.9,            # wie weiss das Bild wird, 0 bis 1
+    abklingen=1.8,        # je hoeher, desto schneller wird wieder klar
+    abgewandt=0.35,       # so viel bleibt uebrig, wenn man weggedreht steht
+    blickwinkel=100.0,    # innerhalb dieses Kegels gilt man als hinsehend
+    # Der Funke in der Welt: klein, hell, kurz. Aus der Entfernung soll
+    # man ein Blitzen sehen und nicht eine Explosion.
+    funke_dauer=0.22,
+    funke_gross=13.0,
+    ton_dauer=2.2,        # so lange klingt das Pfeifen im Ohr nach
+)
+
+# ══════════════════════════════════════════════════ SKINS
+#
+# Vorbereitung fuer das, was spaeter kommt: austauschbare Bilder und
+# Klaenge je Gegenstand, ohne dass eine Zeile Code sich aendert.
+#
+# Der Griff dazu ist eine **Rolle**. Der Code fragt nie nach einem
+# Dateinamen, sondern nach einer Rolle - "das Bild, das fliegt", "der
+# Knall" -, und diese Tabelle sagt, welcher Name gerade dahintersteht.
+# Eine Skin aendert nur die Tabelle.
+#
+# Warum nicht einfach die Datei austauschen? Weil dann alle dieselbe
+# Blendgranate haetten. Eine Skin gehoert einem Spieler, und zwei Spieler
+# in derselben Runde sollen verschiedene tragen koennen - genau dafuer
+# muss der Name zur Laufzeit umschaltbar sein und nicht im Ordner liegen.
+SKIN_ROLLEN = {
+    "blend_flug": "blendgranate",      # das Bild, das durch die Luft geht
+    "blend_hand": "spieler_blend",     # die Figur, die sie traegt
+    "blend_symbol": "waffe_blend",     # das Zeichen in der Hotbar
+    "blend_knall": "blend",            # Klang beim Zuenden
+    "blend_pfeifen": "blend_pfeifen",  # Klang danach im Ohr
+    "molotov_flug": "molotov",
+    "molotov_hand": "spieler_molotov",
+    "molotov_symbol": "waffe_molotov",
+    "molotov_knall": "molotov",
+}
+
+# Was gerade gewaehlt ist. Leer heisst: die Vorgabe aus SKIN_ROLLEN.
+SKIN_WAHL: dict[str, str] = {}
+
+
+def skin(rolle: str) -> str:
+    """Welcher Name gerade hinter einer Rolle steht."""
+    return SKIN_WAHL.get(rolle) or SKIN_ROLLEN.get(rolle, rolle)
+
+
+def skin_setzen(rolle: str, name: str) -> bool:
+    """Eine Rolle auf einen anderen Namen legen. False, wenn unbekannt."""
+    if rolle not in SKIN_ROLLEN:
+        return False
+    if name:
+        SKIN_WAHL[rolle] = str(name)
+    else:
+        SKIN_WAHL.pop(rolle, None)
+    return True
+
+
+def skin_zuruecksetzen() -> None:
+    SKIN_WAHL.clear()
+
 
 RAUCH = dict(
     radius=78.0,              # so weit reicht die Wand in Weltpixeln
