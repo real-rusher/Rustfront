@@ -60,7 +60,8 @@ from . import netz
 from . import ui
 from . import world as welt_modul
 from .core import Szene
-from .entities import Aufsammler, Gegner, Rauchwolke, Spieler, wolke
+from .entities import (Aufsammler, Brandflaeche, Gegner, Rauchwolke,
+                       Spieler, wolke)
 from .font import SCHRIFT
 from .render import Befinden, Kamera, Renderer
 from .world import Welt, freier_punkt, testkarte
@@ -572,10 +573,10 @@ class Gefecht(Szene):
     # das Ergebnis gar nicht auseinanderlaufen: es ist derselbe Code.
 
     def _explosion_melden(self, pos, ebene: int, radius: float,
-                          rauch: bool = False) -> None:
-        Welt.explosion(self.welt, pos, ebene, radius, rauch)
+                          art: str = "spreng") -> None:
+        Welt.explosion(self.welt, pos, ebene, radius, art)
         self._wirkung.append(["x", round(pos.x, 1), round(pos.y, 1),
-                              int(ebene), round(radius, 1), 1 if rauch else 0])
+                              int(ebene), round(radius, 1), str(art)])
 
     def _schussknall_melden(self, pos, winkel: float, ebene: int, waffe: str,
                             quelle=None) -> None:
@@ -610,10 +611,15 @@ class Gefecht(Szene):
                 continue
             if art == "x":
                 try:
-                    radius, rauch = float(e[4]), bool(e[5])
+                    radius = float(e[4])
                 except (TypeError, ValueError):
                     continue
-                self.welt.explosion(pos, ebene, radius, rauch)
+                # Aeltere Gastgeber schicken hier noch 0 oder 1 statt
+                # eines Namens. Beides soll ankommen.
+                wirkung = e[5]
+                if not isinstance(wirkung, str):
+                    wirkung = "rauch" if wirkung else "spreng"
+                self.welt.explosion(pos, ebene, radius, wirkung)
             elif art == "s":
                 try:
                     winkel = float(e[4])
@@ -1666,7 +1672,14 @@ class Gefecht(Szene):
         # geleert, bevor der naechste Schritt neue erzeugt - sonst
         # explodierte bei den Gaesten jede Granate wieder und wieder.
         wirkung, self._wirkung = self._wirkung, []
+        # Brandflaechen wie der Rauch: mit Kennung, damit der Gast sie
+        # wiedererkennt und nicht bei jedem Paket neu anlegt. Das war beim
+        # Rauch der teure Fehler, und ein Feuerfeld kostet genauso viel.
+        brand = [[round(b.pos.x, 1), round(b.pos.y, 1), b.ebene,
+                  round(b.radius, 1), round(b.alter, 2), b.kennung]
+                 for b in self.welt.feuer if b.lebt]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
+                "feuer": brand,
                 "wirkung": wirkung,
                 "spieler": spieler, "schuesse": flug, "beute": beute,
                 "gegner": gegner, "welle": self.welle,
@@ -1705,6 +1718,7 @@ class Gefecht(Szene):
                     self.vorbei = False
                     self.liste = []
                     self.welt.rauch = []
+                    self.welt.feuer = []
                     self._fremde_beute = []
                     self._fremde_gegner = []
                     self._fremde_schuesse = []
@@ -1909,6 +1923,7 @@ class Gefecht(Szene):
         vorige_beute = self._fremde_beute
         self._fliegendes_uebernehmen(meldung.get("schuesse", []))
         self._rauch_uebernehmen(meldung.get("rauch", []))
+        self._feuer_uebernehmen(meldung.get("feuer", []))
         self._wirkung_nachspielen(meldung.get("wirkung", []))
         self._fremde_beute = [tuple(b) for b in meldung.get("beute", [])
                               if isinstance(b, (list, tuple)) and len(b) == 4]
@@ -1953,6 +1968,40 @@ class Gefecht(Szene):
             vx, vy = (alt[0], alt[1]) if alt is not None else (x, y)
             raus.append((x, y, winkel, ebene, name, hoehe, kennung, vx, vy))
         self._fremde_schuesse = raus
+
+    def _feuer_uebernehmen(self, eintraege) -> None:
+        """Brandflaechen beim Gast nachfuehren, ohne sie neu zu bauen.
+
+        Wortwoertlich dieselbe Ueberlegung wie beim Rauch: eine Flaeche
+        rechnet beim Anlegen ihr Dichtefeld, und das bei sechzig Paketen
+        in der Sekunde neu zu tun kostet mehr als die halbe Rechenzeit.
+        Die Kennung sagt, was schon da ist.
+
+        Schaden macht hier nichts: der Gast rechnet die Welt nicht, und
+        `Welt.schritt` laeuft bei ihm gar nicht erst. Die Flaechen altern
+        nur mit, damit sie zuengeln und ausgehen.
+        """
+        vorhanden = {b.kennung: b for b in self.welt.feuer}
+        behalten = []
+        for eintrag in eintraege:
+            if not isinstance(eintrag, (list, tuple)) or len(eintrag) < 6:
+                continue
+            try:
+                x, y = float(eintrag[0]), float(eintrag[1])
+                ebene, radius = int(eintrag[2]), float(eintrag[3])
+                alter = float(eintrag[4])
+                kennung = int(eintrag[5])
+            except (TypeError, ValueError):
+                continue
+            alt = vorhanden.get(kennung)
+            if alt is not None:
+                alt.alter = alter
+                alt.lebt = True
+                behalten.append(alt)
+                continue
+            behalten.append(Brandflaeche(pygame.Vector2(x, y), ebene, radius,
+                                         alter=alter, kennung=kennung))
+        self.welt.feuer = behalten
 
     def _rauch_uebernehmen(self, eintraege) -> None:
         """Rauchwolken beim Gast nachfuehren - **ohne sie neu zu bauen**.
@@ -2402,6 +2451,7 @@ class Gefecht(Szene):
             if not isinstance(x, Kaempfer):
                 x.lebt = False
         self.welt.rauch = []
+        self.welt.feuer = []
         # Auch die Wirkungen, die noch nicht hinaus sind: sonst knallt
         # bei den Gaesten im ersten Bild der neuen Runde noch die letzte
         # Granate der alten.

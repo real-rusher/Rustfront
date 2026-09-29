@@ -175,6 +175,10 @@ class Welt:
         # niemanden, sind nicht zu treffen und werden nicht gedreht - sie
         # liegen nur auf ihrer Ebene und nehmen die Sicht.
         self.rauch: list = []
+        # Brandflaechen. Eigene Liste aus demselben Grund wie der Rauch:
+        # sie sind keine Wesen, stossen niemanden und sind nicht zu
+        # treffen - sie liegen auf ihrer Ebene und nehmen den Ort.
+        self.feuer: list = []
         # Reine Rueckmeldung: Staubringe beim Aufsetzen und kurze
         # Aufschriften ueber aufgesammelter Beute. Beides entscheidet
         # nichts, es sagt nur, dass etwas passiert ist.
@@ -238,13 +242,26 @@ class Welt:
     # kann das nicht mehr - es ist derselbe Code.
 
     def explosion(self, pos, ebene: int, radius: float,
-                  rauch: bool = False) -> None:
-        """Wie eine Granate aussieht und klingt, wenn sie zuendet."""
+                  art: str = "spreng") -> None:
+        """Wie eine Wurfwaffe aussieht und klingt, wenn sie wirkt.
+
+        `art` statt eines Wahrheitswerts: es gibt nicht mehr nur "zuendet
+        oder qualmt". Mit dem Molotow kam "zerbricht und brennt" dazu, und
+        der naechste Wurf kommt bestimmt.
+        """
         from .entities import wolke
         pos = pygame.Vector2(pos)
-        if rauch:
+        if art == "rauch":
             wolke(self, pos, 12, 90, 0.6, K.RAUCH["toene"][0], ebene, 2)
             self.klang("wurf", 0.8, pos, ebene)
+            return
+        if art == "feuer":
+            # Kein Knall und kein Kameraschlag: eine Flasche zerbricht,
+            # sie explodiert nicht. Was man hoert, ist Glas und Auflodern.
+            f = K.FEUER
+            wolke(self, pos, 22, 210, 0.7, f["toene"][2], ebene, 2, "funke")
+            wolke(self, pos, 10, 90, 0.5, f["toene"][1], ebene, 1, "funke")
+            self.klang("molotov", 0.9, pos, ebene)
             return
         wolke(self, pos, 26, 340, 0.5, (255, 212, 140), ebene, 2, "funke")
         wolke(self, pos, 18, 150, 0.9, K.C_MUTED_DK, ebene, 2, "staub")
@@ -333,6 +350,12 @@ class Welt:
             p.schritt(dt)
         if any(not p.lebt for p in self.partikel):
             self.partikel = [p for p in self.partikel if p.lebt]
+        # Beim Gast altert das Feuer hier mit, ohne Welt: er bekommt die
+        # Flaechen gemeldet und soll sie zuengeln sehen, aber niemandem
+        # Schaden machen - das rechnet der Gastgeber.
+        if self.feuer and not self._rechnet:
+            for b in self.feuer:
+                b.schritt(dt, None)
         if self.muendungen:
             for m in self.muendungen:
                 m[3] -= dt
@@ -370,8 +393,14 @@ class Welt:
     def abstand(self, oben: int, unten: int) -> float:
         return max(1.0, self.hoehe(oben) - self.hoehe(unten))
 
+    # True, solange diese Welt wirklich gerechnet wird. Beim Gast steht
+    # sie auf False: er bekommt alles gemeldet und darf nichts selbst
+    # entscheiden - vor allem keinen Schaden.
+    _rechnet = False
+
     def schritt(self, dt: float) -> None:
         self.zeit += dt
+        self._rechnet = True
         if self.neue:
             self.wesen.extend(self.neue)
             self.neue.clear()
@@ -384,6 +413,12 @@ class Welt:
             r.schritt(dt)
         if any(not r.lebt for r in self.rauch):
             self.rauch = [r for r in self.rauch if r.lebt]
+        # Feuer bekommt die Welt mit: es macht Schaden, und Schaden rechnet
+        # nur, wer die Welt rechnet.
+        for b in self.feuer:
+            b.schritt(dt, self)
+        if any(not b.lebt for b in self.feuer):
+            self.feuer = [b for b in self.feuer if b.lebt]
         if any(not w.lebt for w in self.wesen):
             self.wesen = [w for w in self.wesen if w.lebt]
 

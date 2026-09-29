@@ -226,6 +226,25 @@ def _schuss(seed=0):
     return _schuss_repetierer(seed)
 
 
+@platzhalter_klang("molotov")
+def _molotov(seed=0):
+    """Glas zerbricht, dann faengt etwas Feuer.
+
+    Kein Knall: eine Flasche explodiert nicht. Was man hoert, ist ein
+    kurzes helles Splittern und danach ein Auflodern - breites Rauschen,
+    das ansteigt statt abzufallen. Genau daran erkennt man im Gefecht,
+    dass da kein Sprengsatz kam, sondern ein Ort weggenommen wurde.
+    """
+    glas = _rauschen(0.09, 0.75, 9000, 5200, 2.2, seed + 1, hp=True)
+    lodern = _rauschen(0.55, 0.50, 1400, 3000, 0.6, seed + 2)
+    # Das Auflodern faengt leise an und wird lauter - umgekehrt zu allem
+    # anderen hier.
+    n = len(lodern)
+    for i in range(n):
+        lodern[i] *= min(1.0, (i / n) * 3.0) * (1.0 - i / n) ** 0.8
+    return _mischen(glas, [0.0] * int(RATE * 0.03) + lodern)
+
+
 @platzhalter_klang("herzschlag")
 def _herzschlag(seed=0):
     """Zwei Schlaege, der zweite leiser und dichter dahinter.

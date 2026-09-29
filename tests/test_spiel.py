@@ -143,8 +143,11 @@ def probe(waffe, entfernung, dauer=1.4, halten=()):
     ziel.lebt = False
     return schaden
 
-pruef("Hotbar hat sechs Plaetze", len(held.waffen) == 6,
-      "%d" % len(held.waffen))
+pruef("Die Hotbar hat so viele Plaetze wie die Tabelle sagt",
+      len(held.waffen) == len(K.HOTBAR), "%d von %d"
+      % (len(held.waffen), len(K.HOTBAR)))
+pruef("Und es sind noch Tasten dafuer da",
+      len(held.waffen) <= 7, "%d Plaetze" % len(held.waffen))
 pruef("Alle Waffen der Hotbar sind bekannt",
       all(w in K.WAFFEN for w in held.waffen))
 # Das Brecheisen gehoert nicht mehr dazu: es liegt auf einer eigenen
@@ -2554,6 +2557,117 @@ gast_zeilen = ga._tafel_zeilen()
 pruef("Der Gast baut dieselbe Tafel",
       [z["name"] for z in gast_zeilen] == [z["name"] for z in zeilen],
       str([z["name"] for z in gast_zeilen]))
+w.verlassen(); ga.verlassen()
+
+# ── Molotow: brennender Boden, genau auf einer Ebene ────────────────
+#
+# "Molotow (brennender Boden, kein Sprengschaden, muss auf allen Ebenen
+# perfekt funktionieren und nicht ebenenuebergreifend)."
+from dustfront.entities import Brandflaeche
+
+w, ga = gefechtspaar("pvp")
+wirt_k = w.kaempfer[0]
+gast_k = w.kaempfer[ga.meine_nummer]
+wirt_k.pos.update(400, 300); wirt_k.vorher.update(wirt_k.pos)
+wirt_k.ebene = 0
+gast_k.pos.update(1200, 900); gast_k.vorher.update(gast_k.pos)
+
+pruef("Der Molotow steht in der Hotbar", "molotov" in K.HOTBAR)
+pruef("Und macht keinen Sprengschaden",
+      K.WAFFEN["molotov"]["schaden"] == 0.0 and K.WAFFEN["molotov"]["feuer"])
+
+# Werfen: eine Flasche fliegt, zerbricht, und es brennt.
+wirt_k.waffe_waehlen(wirt_k.waffen.index("molotov"))
+wirt_k.takt = 0.0
+wirt_k.magazin["molotov"] = 2
+wirt_k.ziel.update(wirt_k.pos + pygame.Vector2(120, 0))
+wirt_k.winkel = 0.0
+wirt_k.feuern()
+for _ in range(int(1.6 / K.FIXED_DT)):
+    w.schritt(K.FIXED_DT)
+pruef("Ein Molotow hinterlaesst eine Brandflaeche",
+      len(w.welt.feuer) == 1, "%d" % len(w.welt.feuer))
+brand = w.welt.feuer[0]
+pruef("Sie liegt auf der Ebene, auf der die Flasche zerbrach",
+      brand.ebene == wirt_k.ebene, "Ebene %d" % brand.ebene)
+
+# Schaden: je Sekunde, in der Mitte mehr als am Rand, und nur auf
+# derselben Ebene.
+opfer = w._dazu(7, "OPFER", 1)
+opfer.pos.update(brand.pos); opfer.vorher.update(opfer.pos)
+opfer.ebene = brand.ebene
+opfer.unverwundbar = 0.0
+opfer.leben = 100.0
+for _ in range(int(1.0 / K.FIXED_DT)):
+    opfer.unverwundbar = 0.0
+    w.welt.schritt(K.FIXED_DT)
+mitte_schaden = 100.0 - opfer.leben
+pruef("Wer darin steht, brennt", mitte_schaden > 20.0,
+      "%.0f Schaden in einer Sekunde" % mitte_schaden)
+pruef("Aber nicht sofort tot", opfer.leben > 0,
+      "%.0f Leben" % opfer.leben)
+
+opfer.leben = 100.0
+opfer.pos.update(brand.pos + pygame.Vector2(brand.radius * 0.9, 0))
+opfer.vorher.update(opfer.pos)
+for _ in range(int(1.0 / K.FIXED_DT)):
+    opfer.unverwundbar = 0.0
+    w.welt.schritt(K.FIXED_DT)
+rand_schaden = 100.0 - opfer.leben
+pruef("Am Rand brennt es weniger als in der Mitte",
+      0.0 < rand_schaden < mitte_schaden,
+      "%.0f gegen %.0f" % (rand_schaden, mitte_schaden))
+
+# Der Punkt, auf den es ankommt: durch den Boden brennt es nicht.
+# Geprueft mit dem Feuer **oben** und der Figur unten - so kann sie
+# nicht stuerzen, und was sie verliert, kann nur vom Feuer kommen.
+w.welt.feuer = []
+oben = Brandflaeche(pygame.Vector2(brand.pos), brand.ebene + 1)
+oben.alter = 2.0
+w.welt.feuer.append(oben)
+opfer.leben = 100.0
+opfer.ebene = 0
+opfer.pos.update(brand.pos); opfer.vorher.update(opfer.pos)
+for _ in range(int(1.5 / K.FIXED_DT)):
+    opfer.unverwundbar = 0.0
+    w.welt.schritt(K.FIXED_DT)
+pruef("Feuer eine Ebene hoeher tut unten gar nichts", opfer.leben == 100.0,
+      "%.0f Leben" % opfer.leben)
+w.welt.feuer = [brand]
+brand.lebt = True
+pruef("Und die Flaeche sagt das auch",
+      brand.brennt(brand.pos, brand.ebene) > 0
+      and brand.brennt(brand.pos, brand.ebene + 1) == 0.0
+      and brand.brennt(brand.pos, brand.ebene - 1) == 0.0)
+pruef("Weit weg auf derselben Ebene auch nicht",
+      brand.brennt(brand.pos + pygame.Vector2(brand.radius + 10, 0),
+                   brand.ebene) == 0.0)
+
+# Der Gast bekommt sie gemeldet - mit Kennung, damit er sie wiedererkennt.
+for _ in range(6):
+    w.schritt(K.FIXED_DT)
+    ga.schritt(K.FIXED_DT)
+pruef("Der Gast sieht die Brandflaeche", len(ga.welt.feuer) == 1,
+      "%d" % len(ga.welt.feuer))
+if ga.welt.feuer:
+    gast_brand = ga.welt.feuer[0]
+    pruef("An derselben Stelle und auf derselben Ebene",
+          gast_brand.pos.distance_to(brand.pos) < 1.0
+          and gast_brand.ebene == brand.ebene)
+    for _ in range(6):
+        w.schritt(K.FIXED_DT)
+        ga.schritt(K.FIXED_DT)
+    pruef("Und sie wird nicht bei jedem Paket neu gebaut",
+          ga.welt.feuer and ga.welt.feuer[0] is gast_brand)
+
+# Ausgebrannt heisst weg - und ein Fleck bleibt.
+w.welt.ebene(brand.ebene)._dekale = None
+brand.alter = brand.dauer - 0.01
+for _ in range(4):
+    w.welt.schritt(K.FIXED_DT)
+pruef("Nach ihrer Zeit ist sie aus", not w.welt.feuer)
+pruef("Und hinterlaesst einen Brandfleck",
+      w.welt.ebene(brand.ebene).dekale is not None)
 w.verlassen(); ga.verlassen()
 
 print()

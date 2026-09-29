@@ -125,6 +125,7 @@ class Renderer:
         self._brand: dict[int, pygame.Surface] = {}
         self._fleck_cache: dict[tuple, pygame.Surface] = {}
         self._rauch_puffer: dict[tuple, tuple] = {}
+        self._feuer_puffer: dict[int, tuple] = {}
         # Auch Schatten, Vignette und die Dekale kommen aus der Registratur:
         # eine Datei assets/vignette.png ersetzt sie genauso wie eine Kachel.
         # Gehalten werden sie hier, damit die Zeichenschleife nicht bei jedem
@@ -438,6 +439,7 @@ class Renderer:
                 self.ebene_zeichnen(ziel, welt, idx, ecke, None)
                 if boden is not None:
                     boden(ziel, idx, ecke)
+                self.feuer_zeichnen(ziel, welt, idx, ecke, True)
                 self.wesen_zeichnen(ziel, welt, idx, ecke, alpha)
                 self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
                 self.muendungsfeuer(ziel, welt, ecke, idx)
@@ -454,6 +456,7 @@ class Renderer:
             self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel)
             if boden is not None:
                 boden(flaeche, idx, u_ecke)
+            self.feuer_zeichnen(flaeche, welt, idx, u_ecke, False)
             self.wesen_zeichnen(flaeche, welt, idx, u_ecke, alpha, dunkel)
             self.partikel_zeichnen(flaeche, welt, idx, u_ecke, alpha)
             self.muendungsfeuer(flaeche, welt, u_ecke, idx)
@@ -507,6 +510,90 @@ class Renderer:
                              int(p.y - 16 - b["steigt"] * f),
                              farbe if f < 0.7 else K.C_MUTED, 1,
                              ausrichtung="mitte")
+
+    def feuer_zeichnen(self, ziel, welt, index: int, ecke,
+                       eigene_ebene: bool = True) -> None:
+        """Brandflaechen der Ebene - **unter** allem, was dort steht.
+
+        Das ist der Unterschied zum Rauch, und er ist wichtig: Rauch
+        steht zwischen dem Betrachter und den Figuren, Feuer liegt am
+        Boden und die Figuren stehen darin. Wer durch ein Feuer laeuft,
+        muss sichtbar bleiben - sonst waere ein Molotow eine Sichtwand,
+        und dafuer gibt es die Rauchgranate.
+
+        Das Zuengeln kommt **nicht** aus neuem Wuerfeln je Bild. Das Feld
+        steht fest; was wandert, ist die Schwelle, ab der ein Punkt
+        brennt. Neu gewuerfeltes Feuer flackert wie Rauschen und sieht
+        nach Fehler aus, nicht nach Flamme.
+        """
+        if not welt.feuer:
+            return
+        breite, hoehe = ziel.get_size()
+        for brand in welt.feuer:
+            if brand.ebene != index or not brand.lebt:
+                continue
+            if brand.staerke <= 0.01:
+                continue
+            flaeche, versatz = self._feuerbild(brand, welt.zeit, eigene_ebene)
+            if flaeche is None:
+                continue
+            sx = versatz[0] - ecke.x
+            sy = versatz[1] - ecke.y
+            if (sx > breite or sy > hoehe
+                    or sx + flaeche.get_width() < 0
+                    or sy + flaeche.get_height() < 0):
+                continue
+            ziel.blit(flaeche, (sx, sy))
+
+    def _feuerbild(self, brand, zeit: float, eigene_ebene: bool):
+        """Eine Brandflaeche als Bild, in Stufen aus dem Dichtefeld.
+
+        Gemerkt wird nach Kennung und einem groben Zeitschritt: die
+        Flammen sollen zuengeln, aber nicht jedes Bild neu gezeichnet
+        werden - bei dreihundert Bildern je Sekunde waere das dreihundert
+        Mal dieselbe Rechnung fuer ein Bild, das sich kaum aendert.
+        """
+        f = K.FEUER
+        korn = f["korn"]
+        schritt = 1.0 / max(1.0, f["zunge"] * 6.0)
+        takt = int(zeit / schritt)
+        schluessel = (brand.kennung, takt, round(brand.staerke, 2), eigene_ebene)
+        hit = self._feuer_puffer.get(brand.kennung)
+        if hit is not None and hit[0] == schluessel:
+            return hit[1], hit[2]
+        breite, x0, y0, werte = brand.feld(korn)
+        flaeche = pygame.Surface((breite * korn, breite * korn), pygame.SRCALPHA)
+        toene = f["toene"]
+        # Die wandernde Schwelle: einmal je Zeitschritt ein neuer Wert,
+        # aus der Kennung und dem Takt gewuerfelt. Damit zuengelt es auf
+        # jedem Rechner gleich, ohne dass etwas uebertragen werden muss.
+        zunge = ((brand.kennung * 2654435761 + takt * 40503) % 1000) / 1000.0
+        grund = f["schwelle"] * (0.80 + 0.40 * zunge)
+        stufen = len(toene)
+        deckung = brand.staerke if eigene_ebene else brand.staerke * 0.65
+        for gy in range(breite):
+            zeile = gy * breite
+            for gx in range(breite):
+                w = werte[zeile + gx]
+                if w <= grund:
+                    continue
+                # Je dichter, desto heisser: aussen Glimmen, innen heller
+                # Kern. Der Kern ist klein, sonst sieht es aus wie eine
+                # Lampe und nicht wie Feuer.
+                anteil = min(1.0, (w - grund) / max(0.01, 1.0 - grund))
+                # Linear, weil das Feld schon auf 0 bis 1 normiert ist.
+                # Der helle Kern ist damit genau das oberste Viertel der
+                # Dichte - ein Kern, keine Flaeche.
+                stufe = min(stufen - 1, int(anteil * stufen))
+                ton = toene[stufe]
+                a = int(255 * deckung * (0.55 + 0.45 * anteil))
+                pygame.draw.rect(flaeche, (*ton, a),
+                                 (gx * korn, gy * korn, korn, korn))
+        self._feuer_puffer[brand.kennung] = (schluessel, flaeche, (x0, y0))
+        # Was nicht mehr brennt, muss auch nicht mehr gemerkt werden.
+        if len(self._feuer_puffer) > 24:
+            self._feuer_puffer.clear()
+        return flaeche, (x0, y0)
 
     def rauch_zeichnen(self, ziel, welt, index: int, ecke,
                        eigene_ebene: bool = True) -> None:

@@ -226,6 +226,18 @@ def _hand_waffe(s, c, name):
         pygame.draw.rect(s, K.C_CREAM, (hand + 4, c - 6, 1, 1))
         return
 
+    if d["aufbau"] == "flasche":                  # Molotow: Flasche mit Lappen
+        # Schmal und hoch, mit einem hellen Lappen obendrauf. Von oben
+        # sieht man von einer Flasche wenig; was sie unterscheidbar
+        # macht, ist die Schulter und der brennende Docht.
+        pygame.draw.rect(s, (46, 66, 44), (hand + 2, c - 3, 5, 8))
+        pygame.draw.rect(s, (84, 116, 78), (hand + 3, c - 2, 3, 6))
+        pygame.draw.rect(s, (132, 168, 120), (hand + 3, c - 2, 1, 6))
+        pygame.draw.rect(s, (38, 52, 38), (hand + 3, c - 6, 3, 3))   # Hals
+        pygame.draw.rect(s, K.C_CREAM, (hand + 3, c - 8, 3, 2))      # Lappen
+        pygame.draw.rect(s, (236, 150, 44), (hand + 4, c - 9, 1, 1))
+        return
+
     if d["aufbau"] == "haken":                    # Brecheisen: roher Stab
         laenge, dick = d["lauf"], d["dicke"]
         pygame.draw.rect(s, K.C_RUST, (hand - d["schaft"], c - dick // 2 - 1,
@@ -570,6 +582,34 @@ def _rauchgranate():
     pygame.draw.ellipse(s, (146, 150, 146), (2, 2, 5, 5))
     pygame.draw.rect(s, (40, 34, 24), (4, 0, 3, 3))
     pygame.draw.rect(s, K.C_CREAM, (4, 1, 2, 1))
+    return _rand(s, (16, 12, 8))
+
+
+@platzhalter("waffe_molotov")
+def _waffe_molotov():
+    s = _waffe()
+    # Eine Flasche in der Seitenansicht: Bauch, Schulter, Hals, Lappen.
+    # In der Hotbar muss man sie von der Buechse der Rauchgranate
+    # unterscheiden koennen, und das schafft die Form des Halses.
+    pygame.draw.rect(s, (46, 66, 44), (8, 3, 9, 7))
+    pygame.draw.rect(s, (84, 116, 78), (9, 4, 7, 5))
+    pygame.draw.rect(s, (132, 168, 120), (9, 4, 7, 1))     # Glanz oben
+    pygame.draw.rect(s, (46, 66, 44), (17, 4, 3, 5))       # Schulter
+    pygame.draw.rect(s, (38, 52, 38), (20, 5, 4, 3))       # Hals
+    pygame.draw.rect(s, K.C_CREAM, (24, 4, 2, 4))          # Lappen
+    pygame.draw.rect(s, (236, 150, 44), (25, 3, 1, 2))     # Flamme
+    pygame.draw.rect(s, (252, 214, 120), (25, 3, 1, 1))
+    return s
+
+
+@platzhalter("molotov")
+def _molotov():
+    s = _flaeche(10, 10)
+    pygame.draw.ellipse(s, (52, 74, 48), (1, 2, 8, 6))
+    pygame.draw.ellipse(s, (96, 130, 88), (2, 3, 5, 3))
+    pygame.draw.rect(s, (38, 52, 38), (4, 0, 3, 3))        # Hals mit Lappen
+    pygame.draw.rect(s, K.C_CREAM, (4, 0, 3, 1))
+    pygame.draw.rect(s, (240, 164, 56), (5, 0, 1, 1))
     return _rand(s, (16, 12, 8))
 
 

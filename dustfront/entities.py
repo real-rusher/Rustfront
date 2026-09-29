@@ -388,7 +388,15 @@ class Granate(Wesen):
         w = self.welt
         if d.get("rauch"):
             w.rauch.append(Rauchwolke(self.pos, self.ebene))
-            w.explosion(self.pos, self.ebene, 0.0, rauch=True)
+            w.explosion(self.pos, self.ebene, 0.0, "rauch")
+            return
+        if d.get("feuer"):
+            # Kein Sprengschaden - das ist der Punkt an dieser Waffe. Die
+            # Flaeche entsteht dort, wo die Flasche liegt, und auf der
+            # Ebene, auf der sie liegt. Ist sie durch ein Loch gefallen,
+            # ist das die untere; dann brennt es eben dort.
+            w.feuer.append(Brandflaeche(self.pos, self.ebene, von=self.von))
+            w.explosion(self.pos, self.ebene, 0.0, "feuer")
             return
         r = d["radius"]
         for ziel in list(w.nahe(self.pos, r + 30, self.ebene)):
@@ -404,6 +412,176 @@ class Granate(Wesen):
             ziel.schaden(d["schaden"] * anteil, schub, self.von)
         w.explosion(self.pos, self.ebene, r)
         w.kurz_langsam(0.05)
+
+
+class Brandflaeche:
+    """Brennender Boden. Die Wirkung eines Molotow.
+
+    Wie die Rauchwolke kein Wesen: sie stoesst niemanden, ist nicht zu
+    treffen und dreht sich nicht. Anders als der Rauch nimmt sie aber
+    nicht die Sicht, sondern den **Ort** - wer hindurchlaeuft, brennt.
+
+    **Sie wirkt auf genau einer Ebene.** Feuer auf Deck 2 brennt nicht
+    durch den Boden auf Deck 1, und wer eine Etage tiefer steht, ist in
+    Sicherheit. Das ist keine Vereinfachung, sondern die Regel: alles in
+    diesem Spiel gehoert zu einer Ebene, und wer davon eine Ausnahme
+    macht, bekommt spaeter jede Ebenenfrage doppelt.
+
+    Der Schaden laeuft je Sekunde, nicht in Stufen. Wer hindurchhechtet,
+    soll dafuer bezahlen und weiterleben; wer stehenbleibt, nicht.
+    """
+
+    __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt",
+                 "kennung", "von", "_saat", "_feld", "_funkenrest")
+
+    _naechste_kennung = 0
+
+    def __init__(self, pos, ebene: int, radius: float | None = None,
+                 dauer: float | None = None, alter: float = 0.0,
+                 kennung: int | None = None, von=None) -> None:
+        f = K.FEUER
+        self.pos = pygame.Vector2(pos)
+        self.ebene = int(ebene)
+        self.radius = float(f["radius"] if radius is None else radius)
+        self.dauer = float(f["dauer"] if dauer is None else dauer)
+        self.alter = float(alter)
+        self.lebt = True
+        self.von = von
+        if kennung is None:
+            Brandflaeche._naechste_kennung += 1
+            kennung = Brandflaeche._naechste_kennung
+        self.kennung = int(kennung)
+        # Wie beim Rauch: die Saat haengt an der Stelle. Zwei Feuer
+        # nebeneinander sehen verschieden aus, dasselbe Feuer aber auf
+        # jedem Rechner gleich.
+        self._saat = (int(self.pos.x) * 40503677) ^ (int(self.pos.y) * 13731337)
+        self._feld = None
+        self._funkenrest = 0.0
+
+    @property
+    def staerke(self) -> float:
+        """0 bis 1: auflodern, brennen, herunterbrennen."""
+        f = K.FEUER
+        if self.alter < f["aufbau"]:
+            return max(0.0, self.alter / f["aufbau"])
+        rest = self.dauer - self.alter
+        if rest < f["abbau"]:
+            return max(0.0, rest / f["abbau"])
+        return 1.0
+
+    def brennt(self, punkt, ebene: int) -> float:
+        """Wie stark es an dieser Stelle brennt. 0, wenn gar nicht.
+
+        Die Ebene wird zuerst geprueft und nicht zuletzt: eine Stelle auf
+        einer anderen Etage brennt nie, egal wie nah sie in der Draufsicht
+        liegt.
+        """
+        if int(ebene) != self.ebene or not self.lebt:
+            return 0.0
+        weg = pygame.Vector2(punkt).distance_to(self.pos)
+        if weg > self.radius:
+            return 0.0
+        f = K.FEUER
+        # Innen voll, aussen weniger - aber nie null, sonst waere der Rand
+        # eine Linie, an der man gefahrlos stehen kann.
+        aussen = weg / max(1.0, self.radius)
+        return self.staerke * (1.0 - (1.0 - f["rand_anteil"]) * aussen)
+
+    def schritt(self, dt: float, welt=None) -> None:
+        self.alter += dt
+        if self.alter >= self.dauer:
+            self.lebt = False
+            if welt is not None and K.FEUER["brandfleck"]:
+                welt.brandfleck(self.pos, self.ebene, self.radius * 0.8)
+            return
+        if welt is None:
+            return
+        f = K.FEUER
+        for ziel in list(welt.nahe(self.pos, self.radius + 12, self.ebene)):
+            if not ziel.lebt or ziel.fraktion == "geschoss":
+                continue
+            anteil = self.brennt(ziel.pos, ziel.ebene)
+            if anteil > 0.0:
+                ziel.schaden(f["schaden"] * anteil * dt, None, self.von)
+        # Funken steigen auf. Sie sind das, was ein Feuer von einem
+        # roten Fleck unterscheidet.
+        self._funkenrest += f["funken"] * self.staerke * dt
+        while self._funkenrest >= 1.0:
+            self._funkenrest -= 1.0
+            winkel = RND.uniform(0, 360)
+            weg = RND.uniform(0, self.radius * 0.85)
+            stelle = self.pos + pygame.Vector2(weg, 0).rotate(winkel)
+            welt.partikel.append(Partikel(
+                stelle, (RND.uniform(-14, 14), RND.uniform(-46, -22)),
+                RND.uniform(0.5, 1.1), f["toene"][3], 1, "funke", 1.2,
+                self.ebene))
+
+    def feld(self, korn: int):
+        """Das Dichtefeld, einmal gerechnet und dann behalten.
+
+        Dieselbe Ueberlegung wie beim Rauch: das Feld haengt nur an der
+        Lage, nicht am Alter. Das Zuengeln entsteht spaeter daraus, dass
+        die Schwelle wandert - nicht daraus, dass hier neu gewuerfelt
+        wird. Ein Feuer, das jedes Bild neu gerechnet wird, flackert wie
+        Rauschen und sieht nach Fehler aus, nicht nach Flamme.
+        """
+        if self._feld is not None and self._feld[0] == korn:
+            return self._feld[1:]
+        f = K.FEUER
+        spanne = self.radius * 1.1
+        x0 = int((self.pos.x - spanne) // korn) * korn
+        y0 = int((self.pos.y - spanne) // korn) * korn
+        breite = max(1, int(spanne * 2 / korn) + 1)
+        werte = [0.0] * (breite * breite)
+        masche = f["gitter"]
+        felder_je_masche = masche / korn
+        punkte = int(breite / felder_je_masche) + 2
+        gitter = [[_zufall(int(math.floor(x0 / masche)) + gx,
+                           int(math.floor(y0 / masche)) + gy, self._saat)
+                   for gx in range(punkte + 1)]
+                  for gy in range(punkte + 1)]
+        versatz_x = (x0 / masche) - math.floor(x0 / masche)
+        versatz_y = (y0 / masche) - math.floor(y0 / masche)
+        mx = self.pos.x - x0
+        my = self.pos.y - y0
+        rr = max(1.0, self.radius)
+        for gy in range(breite):
+            fy = versatz_y + gy / felder_je_masche
+            iy = int(fy)
+            ty = fy - iy
+            sy = ty * ty * (3.0 - 2.0 * ty)
+            oben_zeile = gitter[iy]
+            unten_zeile = gitter[iy + 1]
+            zeile = gy * breite
+            dy = (gy * korn + korn * 0.5 - my) / rr
+            for gx in range(breite):
+                fx = versatz_x + gx / felder_je_masche
+                ix = int(fx)
+                tx = fx - ix
+                sx = tx * tx * (3.0 - 2.0 * tx)
+                a, b = oben_zeile[ix], oben_zeile[ix + 1]
+                c, d = unten_zeile[ix], unten_zeile[ix + 1]
+                oben = a + (b - a) * sx
+                unten = c + (d - c) * sx
+                dx = (gx * korn + korn * 0.5 - mx) / rr
+                u = math.sqrt(dx * dx + dy * dy)
+                # Quadratischer Abfall: anders als beim Rauch soll das
+                # Feuer zur Mitte hin deutlich heisser sein, nicht bis
+                # zum Rand gleich dicht. Ein Feuer hat einen Kern.
+                abfall = 1.0 - u * u
+                werte[zeile + gx] = (0.0 if abfall <= 0.0 else
+                                     abfall * (0.55 + 0.9 *
+                                               (oben + (unten - oben) * sy)))
+        # Auf 0 bis 1 normieren. Ohne das liegt der Hoechstwert je nach
+        # Zufall irgendwo zwischen 0,6 und 1,5, und die Farbstufen im
+        # Renderer laegen bei jedem Feuer anders - mal ein kleiner heller
+        # Kern, mal eine Flaeche, die ganz hell ist. Genau das sah aus
+        # wie eine Lampe und nicht wie Feuer.
+        hoechst = max(werte) or 1.0
+        for i, w in enumerate(werte):
+            werte[i] = w / hoechst
+        self._feld = (korn, breite, x0, y0, werte)
+        return breite, x0, y0, werte
 
 
 def _zufall(ix: int, iy: int, saat: int) -> float:

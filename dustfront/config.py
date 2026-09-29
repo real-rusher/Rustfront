@@ -301,6 +301,7 @@ BILD_MASS = {
     "spieler_scharf":     (56, 56),
     "spieler_granate":    (56, 56),
     "spieler_rauch":      (56, 56),
+    "spieler_molotov":    (56, 56),
     "spieler_brecheisen": (56, 56),
     "spieler_boden":      (28, 28),   # wer am Boden liegt
     "gegner_laeufer":   (28, 28),
@@ -312,6 +313,7 @@ BILD_MASS = {
     "munikiste":        (16, 14),
     "granate":          (10, 10),
     "rauchgranate":     (10, 10),
+    "molotov":          (10, 10),
     "huelse":           (4, 3),
     # Waffensymbole fuer Hotbar und Inventar, Seitenansicht nach rechts
     "waffe_repetierer": (26, 11),
@@ -320,6 +322,7 @@ BILD_MASS = {
     "waffe_scharf":     (26, 11),
     "waffe_granate":    (26, 11),
     "waffe_rauch":      (26, 11),
+    "waffe_molotov":    (26, 11),
     "waffe_brecheisen": (26, 11),
     # Dekale und Schatten. Das Mass ist hier ein Basismass: das Spiel rechnet
     # die Flaeche auf die Groesse um, die es gerade braucht. Wer sie ersetzt,
@@ -346,6 +349,8 @@ KLANG_NAMEN = (
     "wurf",
     "medkit",
     "aufheben",
+    "molotov",              # Glas zerbricht und Feuer faengt
+
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
     "herzschlag",
@@ -599,7 +604,7 @@ MUNITION = dict(
     # Munitionskiste nutzlos - man kann nichts aufnehmen, was man nicht
     # braucht.
     vorrat={"repetierer": 42, "sturm": 90, "schrot": 18, "scharf": 10,
-            "granate": 3, "rauch": 2, "brecheisen": 0},
+            "granate": 3, "rauch": 2, "molotov": 2, "brecheisen": 0},
     kiste_takt=14.0,          # Sekunden zwischen zwei Munitionskisten
     kiste_hoechstens=4,
     kiste_gibt=0.5,           # so viel vom vollen Vorrat gibt eine Kiste
@@ -788,6 +793,28 @@ WAFFEN = {
         rueckstoss=0.0,
         huelsen=0,
     ),
+    "molotov": dict(
+        art="wurf",
+        name="MOLOTOW",
+        # Kein Sprengschaden. Das ist der ganze Punkt an dieser Waffe:
+        # sie toetet niemanden im Wurf, sie **nimmt einen Ort weg**. Wer
+        # durchlaeuft, brennt; wer wartet, verliert Zeit. Eine Granate
+        # entscheidet einen Zweikampf, ein Molotow entscheidet, wo er
+        # stattfindet.
+        feuer=True,
+        schaden=0.0,          # im Einschlag
+        radius=0.0,
+        takt=1.0,
+        magazin=2,
+        nachladen=3.6,
+        wurf_min=55.0,
+        wurf_max=225.0,
+        reibung=1.5,
+        flugzeit=0.95,        # zerbricht frueher als eine Granate zuendet
+        kamera=1.4,
+        rueckstoss=0.0,
+        huelsen=0,
+    ),
     "brecheisen": dict(
         art="nahkampf",
         name="BRECHEISEN",
@@ -836,6 +863,8 @@ WAFFEN_HAND = {
                        aufbau="kugel"),
     "rauch":      dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
                        aufbau="buechse"),
+    "molotov":    dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
+                       aufbau="flasche"),
     "brecheisen": dict(lauf=15, dicke=2, schaft=5, s_dicke=2, holz=False,
                        aufbau="haken"),
 }
@@ -856,7 +885,8 @@ for _team in TEAMS["kombi"]:
 # Taste und ist damit immer da, ohne einen Platz zu belegen - siehe
 # NAHKAMPF. Ein Werkzeug, das man im Gedraenge braucht, sollte keinen
 # Waffenwechsel kosten.
-HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "rauch"]
+HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "rauch",
+          "molotov"]
 
 # ══════════════════════════════════════════════════ AUSRUESTUNG
 #
@@ -880,7 +910,7 @@ LOADOUT = dict(
     # aus WAFFEN abgeleitet: was waehlbar ist, ist eine Spielentscheidung
     # und nicht dasselbe wie das, was es gibt.
     auswahl_waffen=("repetierer", "sturm", "schrot", "scharf"),
-    auswahl_wuerfe=("granate", "rauch"),
+    auswahl_wuerfe=("granate", "rauch", "molotov"),
     # Womit ein neues Loadout vorbelegt wird. Drei Stueck, damit man nach
     # dem ersten Anmelden gleich drei brauchbare Saetze hat und nicht vor
     # drei leeren Plaetzen sitzt.
@@ -972,6 +1002,33 @@ NAHKAMPF = dict(
 # **Volumen** kommt aus dem Gefaelle des Feldes: wo die Wolke zum Licht hin
 # dichter wird, ist sie hell, auf der Gegenseite dunkel. Licht von oben
 # links, wie ueberall sonst im Spiel.
+# Die Brandflaeche eines Molotow.
+#
+# Sie liegt auf **einer** Ebene und wirkt nur dort. Das ist keine
+# Vereinfachung, sondern die Regel: Feuer auf Deck 2 brennt nicht durch
+# den Boden auf Deck 1, und wer eine Etage tiefer steht, ist in
+# Sicherheit. Faellt der Molotow selbst durch ein Loch, zerbricht er
+# unten - dann brennt es eben dort.
+#
+# Der Schaden laeuft je Sekunde und nicht in Stufen: wer hindurchhechtet,
+# soll dafuer bezahlen, aber weiterleben; wer stehenbleibt, nicht.
+FEUER = dict(
+    radius=62.0,              # so weit reicht die Flaeche
+    dauer=7.5,                # so lange brennt sie
+    aufbau=0.35,              # Sekunden, bis sie voll brennt
+    abbau=1.6,                # Sekunden, in denen sie herunterbrennt
+    schaden=34.0,             # Schaden je Sekunde in der Mitte
+    rand_anteil=0.45,         # so viel davon ganz aussen
+    korn=3,                   # Kantenlaenge eines Bildpunkts
+    gitter=13.0,              # Maschenweite des Zufallsgitters
+    schwelle=0.34,            # ab dieser Dichte brennt ueberhaupt etwas
+    zunge=1.9,                # wie schnell die Flammen zuengeln
+    # Von aussen nach innen: dunkles Glimmen, Rot, Orange, heller Kern.
+    toene=((84, 22, 10), (172, 54, 16), (230, 122, 26), (250, 192, 92)),
+    funken=2.0,               # Funken je Sekunde und Flaeche
+    brandfleck=True,          # hinterlaesst einen Fleck, wenn es aus ist
+)
+
 RAUCH = dict(
     radius=78.0,              # so weit reicht die Wand in Weltpixeln
     dauer=14.0,               # so lange steht sie
