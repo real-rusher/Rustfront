@@ -106,18 +106,44 @@ class Kaempfer(Spieler):
         self.vorrat = {w: K.MUNITION["vorrat"].get(w, 0) for w in self.waffen}
 
     @property
-    def bild(self) -> str:
-        """Am Boden eine eigene Figur, sonst die mit der Waffe.
+    def team_vorsatz(self) -> str:
+        """`rot_`, `blau_` oder leer - je nach Mannschaft.
 
-        Ohne das unterschied sich ein Liegender nur durch die Farbe seines
-        Namens von einem Stehenden - im Gefecht viel zu wenig. Ein Gegner
-        muss auf einen Blick erkennen, wer unten ist: das ist der Mann,
-        den er liegen lassen kann, und die Stelle, an der gleich jemand
-        zum Helfen stehen bleibt.
+        Leer heisst: keine Mannschaften im Spiel, also traegt niemand eine
+        Farbe. In einem Jeder-gegen-jeden waere sie auch sinnlos.
         """
+        if 0 <= self.team < len(K.TEAMS["kombi"]):
+            return K.TEAMS["kombi"][self.team]["name"].lower() + "_"
+        return ""
+
+    @property
+    def bild(self) -> str:
+        """Am Boden eine eigene Figur, sonst die mit der Waffe - und beides
+        in den Farben der Mannschaft.
+
+        Zwei Dinge muss man einer Gestalt auf einen Blick ansehen, ohne
+        Namen und ohne Balken:
+
+        **Wer unten liegt.** Ohne das unterschied sich ein Liegender nur
+        durch die Farbe seines Namens von einem Stehenden - im Gefecht viel
+        zu wenig. Ein Gegner muss sofort erkennen, wen er liegen lassen
+        kann und wo gleich jemand zum Helfen stehen bleibt.
+
+        **Zu wem er gehoert.** Namen verschwinden im Rauch, auf Entfernung
+        und eine Ebene tiefer. Die Farbe der Figur bleibt. Deshalb traegt
+        sie die Mannschaftsfarbe und nicht nur die Schrift darueber.
+        """
+        vorsatz = self.team_vorsatz
         if self.am_boden:
-            return "spieler_boden"
-        return super().bild
+            name = "spieler_%sboden" % vorsatz
+            return name if name in K.BILD_MASS else "spieler_boden"
+        if self.schwingt:
+            # Waffe verstaut, nur die Gestalt - darueber zeichnet der
+            # Renderer die Bewegung des Eisens.
+            name = "spieler_%s" % vorsatz.rstrip("_") if vorsatz else "spieler"
+            return name if name in K.BILD_MASS else "spieler"
+        name = "spieler_%s%s" % (vorsatz, self.waffe_name)
+        return name if name in K.BILD_MASS else super().bild
 
     # ---- Am Boden statt tot -------------------------------------------
     def sterben(self, von=None) -> None:
@@ -345,6 +371,9 @@ class Gefecht(Szene):
         self.rnd = random.Random(seed)
         self.renderer = Renderer(app.bilder)
         self.welt = testkarte()
+        # Feste Einstiegsseite je Mannschaft. Wird vor dem ersten Einstieg
+        # gewaehlt und gilt die ganze Runde (siehe _einstiegszonen_waehlen).
+        self.einstiegszonen: list = []
         self.kamera = Kamera()
         self.kaempfer: dict[int, Kaempfer] = {}
         self.gegnerlast: dict[int, int] = {}
@@ -397,6 +426,9 @@ class Gefecht(Szene):
         self.wunsch = self._wunsch_lesen()
 
         if self.ist_gastgeber:
+            # Erst die Seiten festlegen, dann einsteigen - sonst hat der
+            # Gastgeber keine Zone und landet irgendwo.
+            self._einstiegszonen_waehlen()
             self.ich = self._dazu(0, self.name, self.team_wunsch)
         else:
             self.gast.senden({"t": "hallo", "name": self.name,
@@ -475,6 +507,46 @@ class Gefecht(Szene):
             return wunsch
         return groessen.index(min(groessen))
 
+    def _teams_ausgleichen(self) -> None:
+        """Bringt die Mannschaften ins Gleichgewicht, ohne sie zu wuerfeln.
+
+        **Hier lag ein Fehler, der bei vier Leuten drei in dieselbe
+        Mannschaft steckte.** Der alte Weg setzte beim Rundenstart fuer
+        jeden einzeln `k.team = self._team_fuer()` - und `_team_fuer`
+        zaehlt die Mannschaftsgroessen aus den Werten, die *gerade* an den
+        Kaempfern stehen. Waehrend der Schleife sind das teils die alten,
+        teils die neuen. Aus [0,0,1,1] wurde dadurch [0,0,0,1]:
+
+            k0: Groessen [2,2] -> kleinste ist 0 -> bleibt 0
+            k1: Groessen [2,2] -> kleinste ist 0 -> bleibt 0
+            k2: Groessen [2,2] -> kleinste ist 0 -> **wechselt zu 0**
+            k3: Groessen [3,1] -> kleinste ist 1 -> bleibt 1
+
+        Je nach Ausgangslage ging es gut oder nicht - genau deshalb trat
+        es "manchmal" auf.
+
+        Jetzt bleibt jede Einteilung erhalten, die der Gastgeber vorgenommen
+        hat, und ausgeglichen wird nur, wenn eine Mannschaft wirklich zu
+        gross ist. Verschoben werden dann die zuletzt Hinzugekommenen -
+        wer schon laenger dabei ist, behaelt seine Seite.
+        """
+        if not self.mit_teams:
+            return
+        anzahl = len(K.TEAMS["namen"])
+        leute = sorted(self.kaempfer.values(), key=lambda k: k.nummer)
+        for k in leute:
+            if not 0 <= k.team < anzahl:
+                k.team = 0
+        # So lange den Groessten verkleinern, bis der Unterschied hoechstens
+        # eins ist. Das endet immer, weil jeder Schritt ihn verringert.
+        for _ in range(len(leute) + 1):
+            gruppen = [[k for k in leute if k.team == i] for i in range(anzahl)]
+            groesste = max(range(anzahl), key=lambda i: len(gruppen[i]))
+            kleinste = min(range(anzahl), key=lambda i: len(gruppen[i]))
+            if len(gruppen[groesste]) - len(gruppen[kleinste]) <= 1:
+                break
+            gruppen[groesste][-1].team = kleinste
+
     def _fraktion_fuer(self, nummer: int, team: int = -1) -> str:
         """Wer wen treffen kann.
 
@@ -509,14 +581,61 @@ class Gefecht(Szene):
             k.boden_zeit = K.VERSUS["boden_zeit"]
             k.revive_dauer = K.VERSUS["revive_dauer"]
 
-    def _einstiegsort(self, team: int = -1) -> pygame.Vector2:
-        """Ein freier Platz. Mit Mannschaften nahe bei den eigenen Leuten
-        und weit weg von den fremden - sonst faengt jede Runde mit einem
-        Gefecht an der Einstiegsstelle an."""
+    def _einstiegszonen_waehlen(self) -> None:
+        """Legt fuer jede Mannschaft **eine** Seite der Karte fest.
+
+        Vorher suchte jeder Einstieg neu nach "weit weg von den Gegnern,
+        nahe bei den eigenen". Das ergab von Runde zu Runde andere Seiten,
+        und mitten in der Runde wanderten die Mannschaften ueber die Karte,
+        weil sich die Lage der Lebenden staendig aendert.
+
+        Jetzt werden einmal je Runde zwei Ankerpunkte gesucht, die so weit
+        wie moeglich auseinanderliegen, und jede Mannschaft bekommt einen.
+        Der gilt die ganze Runde. Man weiss dadurch, wo die eigenen Leute
+        einsteigen und aus welcher Richtung die anderen kommen - und genau
+        das macht eine Karte lesbar.
+        """
+        anzahl = len(K.TEAMS["namen"])
+        self.einstiegszonen = []
+        if not self.mit_teams:
+            return
+        # Kandidaten sammeln und das Paar mit dem groessten Abstand nehmen.
+        punkte = [freier_punkt(self.welt, 0, self.rnd)
+                  for _ in range(K.GEFECHT["zonen_proben"])]
+        beste, bester_wert = None, -1.0
+        for i, a in enumerate(punkte):
+            for b in punkte[i + 1:]:
+                d = a.distance_squared_to(b)
+                if d > bester_wert:
+                    beste, bester_wert = (a, b), d
+        if beste is None:
+            beste = (freier_punkt(self.welt, 0, self.rnd),
+                     freier_punkt(self.welt, 0, self.rnd))
+        for i in range(anzahl):
+            self.einstiegszonen.append(pygame.Vector2(beste[i % 2]))
+
+    def _einstiegsort(self, team: int = -1, ausser=None) -> pygame.Vector2:
+        """Ein freier Platz zum Einsteigen.
+
+        `ausser` ist der Kaempfer, der gerade eingesetzt wird. Er muss
+        heraus, und das war ein echter Fehler: beim Rundenstart wird
+        `lebt` gesetzt, *bevor* der Platz gesucht wird. Der Gastgeber zaehlte
+        sich dadurch selbst zu den "eigenen Leuten", in deren Naehe man
+        einsteigen soll - und stand prompt wieder da, wo er in der Runde
+        davor gestanden hatte.
+
+        Mit Mannschaften wird in der Zone der eigenen Mannschaft gesucht
+        (siehe `_einstiegszonen_waehlen`), sonst einfach weit weg von allen
+        anderen.
+        """
         eigene = [k.pos for k in self.kaempfer.values()
-                  if k.lebt and team >= 0 and k.team == team]
+                  if k.lebt and k is not ausser and team >= 0 and k.team == team]
         fremde = [k.pos for k in self.kaempfer.values()
-                  if k.lebt and (team < 0 or k.team != team)]
+                  if k.lebt and k is not ausser and (team < 0 or k.team != team)]
+        anker = None
+        if self.mit_teams and 0 <= team < len(self.einstiegszonen):
+            anker = self.einstiegszonen[team]
+
         bester, bester_wert = None, -1e18
         for _ in range(K.NETZ["hoechstens"] * 6):
             p = freier_punkt(self.welt, 0, self.rnd)
@@ -526,30 +645,64 @@ class Gefecht(Szene):
                     return p
                 continue
             zu_eigen = min((p.distance_to(q) for q in eigene), default=0.0)
-            # Weit weg von den Gegnern zaehlt, nahe bei den eigenen hilft.
-            wert = zu_fremd - zu_eigen * 0.5
+            # Die eigene Zone zaehlt am meisten - sie haelt die Seite fest.
+            # Abstand zu den Gegnern und Naehe zu den eigenen Leuten
+            # entscheiden nur noch darueber, wo *innerhalb* der Zone.
+            zur_zone = p.distance_to(anker) if anker is not None else 0.0
+            wert = (-zur_zone * K.GEFECHT["zonen_zug"]
+                    + zu_fremd * 0.35 - zu_eigen * 0.2)
             if wert > bester_wert:
                 bester, bester_wert = p, wert
         return bester if bester is not None else freier_punkt(self.welt, 0, self.rnd)
 
     # ---- Eingabe ------------------------------------------------------
-    def knoepfe_sammeln(self) -> None:
-        """Einmalige Tastendruecke aufheben, bis das naechste Paket rausgeht.
+    # Einmalige Tastendruecke - Nachladen, Medkit, Zielhilfe, Waffenwahl -
+    # werden **beim Ereignis** aufgehoben und nicht im Zeitschritt.
+    #
+    # Das ist kein Stil, das behebt einen Fehler. Die Ereignisschleife
+    # laeuft je Bild und loescht dabei alles, was "gerade gedrueckt" ist.
+    # Der Zeitschritt laeuft aber nur, wenn genug Zeit aufgelaufen ist -
+    # bei 120 Schritten je Sekunde und unbegrenzter Bildrate gibt es reihum
+    # Bilder ganz ohne Schritt. Wer in einem solchen Bild eine Taste
+    # drueckt, dessen Druck sieht der Zeitschritt nie.
+    #
+    # Gemessen, mit der Schleife aus core.laufen:
+    #
+    #      60 Bilder/s    0 Prozent der Bilder ohne Schritt
+    #     144 Bilder/s   17 Prozent
+    #     300 Bilder/s   60 Prozent
+    #
+    # Und die Bildrate ist am Anfang einer Runde am hoechsten, weil noch
+    # wenig auf der Karte steht. Genau deshalb ging Z "bei den ersten paar
+    # Klicks" nicht - und Nachladen und Waffenwechsel ebenso, nur faellt es
+    # dort weniger auf, weil man es sofort noch einmal drueckt.
 
-        Notwendig, keine Feinheit: gedrueckt() ist genau ein Bild lang wahr,
-        das Spiel rechnet 120 Mal in der Sekunde, gesendet wird nur ein paar
-        Dutzend Mal. Wer direkt beim Senden abfragt, verliert die meisten
-        Druecke.
+    def _knopf_merken(self, taste) -> None:
+        """Einen Tastendruck aufheben, bis das naechste Paket rausgeht."""
+        tabelle = self.app.eingabe.tabelle
+        for name in ("nachladen", "heilen", "tracer", "tracer_weit",
+                     "nahkampf"):
+            if taste in tabelle.get(name, ()):
+                self._knoepfe.add(name)
+        for nr in range(1, 8):
+            if taste in tabelle.get("waffe%d" % nr, ()):
+                self._waffe_wunsch = nr - 1
+
+    def knoepfe_sammeln(self) -> None:
+        """Bleibt als Rueckfallebene fuer Tasten, die kein Ereignis erzeugen.
+
+        Die Maustasten kommen weiterhin ueber `gehalten()` und brauchen das
+        hier nicht; was hier steht, faengt nur den Fall ab, dass eine
+        Belegung ohne Tastencode auskommt.
         """
         e = self.app.eingabe
-        for name in ("nachladen", "heilen", "tracer", "tracer_weit"):
+        for name in ("nachladen", "heilen", "tracer", "tracer_weit",
+                     "nahkampf"):
             if e.gedrueckt(name):
                 self._knoepfe.add(name)
         for nr in range(1, 8):
             if e.gedrueckt("waffe%d" % nr):
                 self._waffe_wunsch = nr - 1
-        if e.rad:
-            self._rad += e.rad
 
     def _meine_eingabe(self) -> dict:
         e = self.app.eingabe
@@ -608,7 +761,11 @@ class Gefecht(Szene):
             k.waffe_waehlen(waffe)
 
         k.will = will
-        k.feuert = bool(ein.get("feuert"))
+        # Waehrend des Schwungs ist die Waffe verstaut - dann wird auch
+        # nicht geschossen. Sonst schluege man mit dem Eisen und feuerte
+        # zugleich eine Waffe ab, die man gar nicht in der Hand hat.
+        k.feuert = bool(ein.get("feuert")) and not (
+            K.NAHKAMPF["sperrt_feuer"] and k.schwingt)
         k.zielt = bool(ein.get("zielt"))
         k.sprint = bool(ein.get("sprint"))
 
@@ -622,6 +779,12 @@ class Gefecht(Szene):
                 k.tracer = not k.tracer
             if "tracer_weit" in knoepfe:
                 k.tracer_weit = not k.tracer_weit
+            if "nahkampf" in knoepfe:
+                # Das Brecheisen liegt auf einer eigenen Taste und braucht
+                # keinen Waffenwechsel. Es schlaegt mit seinen eigenen
+                # Werten, egal was gerade in der Hand ist.
+                if k.nahkampf():
+                    self.welt.klang("nahkampf", 0.9)
 
         # Nutzen: erst jemandem aufhelfen, sonst die Treppe nehmen.
         k.hilft = None
@@ -914,6 +1077,8 @@ class Gefecht(Szene):
         """Alle wieder auf die Beine, neue Plaetze, volle Magazine."""
         self.runde += 1
         self.runden_pause = 0.0
+        # Neue Runde, neue Seiten - aber innerhalb der Runde bleiben sie.
+        self._einstiegszonen_waehlen()
         for k in list(self.kaempfer.values()):
             k.raus = False
             self._wieder_einsteigen(k)
@@ -1037,7 +1202,7 @@ class Gefecht(Szene):
             k.vorrat[w] = hat - gibt
 
     def _wieder_einsteigen(self, k: Kaempfer) -> None:
-        k.pos.update(self._einstiegsort(k.team))
+        k.pos.update(self._einstiegsort(k.team, ausser=k))
         k.vorher.update(k.pos)
         k.tempo.update(0, 0)
         k.leben = k.max_leben
@@ -1169,8 +1334,11 @@ class Gefecht(Szene):
                 flug.append([round(w.pos.x, 1), round(w.pos.y, 1),
                              round(w.winkel, 1), w.ebene, name,
                              round(getattr(w, "flug", 0.0), 1)])
+        # Die Kennung muss mit. Ohne sie kann der Gast eine Wolke, die er
+        # schon hat, nicht von einer neuen unterscheiden - und baut sie
+        # deshalb bei jedem Paket neu (siehe _welt_uebernehmen).
         qualm = [[round(r.pos.x, 1), round(r.pos.y, 1), r.ebene,
-                  round(r.radius, 1), round(r.alter, 2)]
+                  round(r.radius, 1), round(r.alter, 2), r.kennung]
                  for r in self.welt.rauch if r.lebt]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
                 "spieler": spieler, "schuesse": flug, "beute": beute,
@@ -1364,23 +1532,56 @@ class Gefecht(Szene):
         vorige_beute = self._fremde_beute
         self._fremde_schuesse = [tuple(s) for s in meldung.get("schuesse", [])
                                  if isinstance(s, (list, tuple)) and len(s) == 6]
-        # Rauch wird nicht mitsimuliert, sondern jedes Mal neu gesetzt. Er
-        # hat kein Gedaechtnis ausser seinem Alter, und das kommt mit.
-        self.welt.rauch = []
-        for eintrag in meldung.get("rauch", []):
-            if not isinstance(eintrag, (list, tuple)) or len(eintrag) != 5:
-                continue
-            try:
-                self.welt.rauch.append(Rauchwolke(
-                    pygame.Vector2(float(eintrag[0]), float(eintrag[1])),
-                    int(eintrag[2]), float(eintrag[3]), alter=float(eintrag[4])))
-            except (TypeError, ValueError):
-                continue
+        self._rauch_uebernehmen(meldung.get("rauch", []))
         self._fremde_beute = [tuple(b) for b in meldung.get("beute", [])
                               if isinstance(b, (list, tuple)) and len(b) == 4]
         self._fremde_gegner = [tuple(g) for g in meldung.get("gegner", [])
                                if isinstance(g, (list, tuple)) and len(g) == 6]
         self._aufgehoben_erkennen(vorige_beute)
+
+    def _rauch_uebernehmen(self, eintraege) -> None:
+        """Rauchwolken beim Gast nachfuehren - **ohne sie neu zu bauen**.
+
+        Hier lag der Fehler, der sich als "Desync" gezeigt hat. Vorher warf
+        der Gast bei *jedem* Netzpaket alle Wolken weg und legte sie neu an.
+        Eine Wolke rechnet beim Anlegen ihr Dichtefeld, und das kostet:
+        gemessen **9 Millisekunden fuer zwei Wolken**. Bei sechzig Paketen
+        je Sekunde sind das 550 Millisekunden Rechenzeit je Sekunde - mehr
+        als die Haelfte des Rechners, nur fuer Rauch.
+
+        Das Bild des Gastes brach dadurch ein, sobald Rauch stand. Was man
+        sah, waren ruckelnde Mitspieler und Granaten, die zu springen
+        schienen - also genau das, was nach Desync aussieht, in Wahrheit
+        aber eine ueberlastete Anzeige war.
+
+        Jede Wolke traegt jetzt eine Kennung. Was der Gast schon hat,
+        bekommt nur sein neues Alter; neu ist nur, was wirklich neu ist,
+        und weg ist, was der Gastgeber nicht mehr meldet.
+        """
+        vorhanden = {r.kennung: r for r in self.welt.rauch}
+        behalten = []
+        for eintrag in eintraege:
+            if not isinstance(eintrag, (list, tuple)) or len(eintrag) < 5:
+                continue
+            try:
+                x, y = float(eintrag[0]), float(eintrag[1])
+                ebene, radius = int(eintrag[2]), float(eintrag[3])
+                alter = float(eintrag[4])
+                # Aeltere Gastgeber senden keine Kennung. Dann dient die
+                # Lage als Ersatz: eine Wolke bewegt sich nicht.
+                kennung = int(eintrag[5]) if len(eintrag) > 5 else \
+                    hash((round(x), round(y), ebene)) & 0x7FFFFFFF
+            except (TypeError, ValueError):
+                continue
+            alt = vorhanden.get(kennung)
+            if alt is not None:
+                alt.alter = alter
+                alt.lebt = True
+                behalten.append(alt)
+                continue
+            behalten.append(Rauchwolke(pygame.Vector2(x, y), ebene, radius,
+                                       alter=alter, kennung=kennung))
+        self.welt.rauch = behalten
 
     def _aufgehoben_erkennen(self, vorher: list) -> None:
         """Beim Gast: was aus der Beuteliste verschwindet, wurde aufgehoben.
@@ -1554,8 +1755,13 @@ class Gefecht(Szene):
         self.menue_teams = False
 
     def ereignis(self, ev) -> None:
+        if ev.type == pygame.MOUSEWHEEL and self.menue is None:
+            self._rad += ev.y
+            return
         if ev.type != pygame.KEYDOWN:
             return
+        if self.menue is None:
+            self._knopf_merken(ev.key)
         if ev.key in self.app.opt.codes("pause"):
             # Esc beendete frueher das ganze Spiel. Jetzt macht es auf und
             # wieder zu, und hinaus geht es nur ueber den Eintrag dafuer.
@@ -1674,7 +1880,7 @@ class Gefecht(Szene):
             return
         k.team = max(0, min(len(K.TEAMS["namen"]) - 1, int(team)))
         k.fraktion = self._fraktion_fuer(k.nummer, k.team)
-        k.pos.update(self._einstiegsort(k.team))
+        k.pos.update(self._einstiegsort(k.team, ausser=k))
         k.vorher.update(k.pos)
         k.unverwundbar = self.schutz_zeit
 
@@ -1719,12 +1925,15 @@ class Gefecht(Szene):
                 x.lebt = False
         self.welt.rauch = []
 
+        self._teams_ausgleichen()
+        self._einstiegszonen_waehlen()
         for k in self.kaempfer.values():
             k.abschuesse = 0
             k.tode = 0
             k.knapp = self.knapp
             k.vorrat = {v: K.MUNITION["vorrat"].get(v, 0) for v in k.waffen}
-            k.team = self._team_fuer() if self.mit_teams else -1
+            if not self.mit_teams:
+                k.team = -1
             k.fraktion = self._fraktion_fuer(k.nummer, k.team)
             self._regeln_anlegen(k)
             k.lebt = True
@@ -1850,10 +2059,14 @@ class Gefecht(Szene):
         """
         if k.am_boden:
             return K.C_RED
-        if self.mit_teams and 0 <= k.team < len(K.TEAMS["farben"]):
+        if self.mit_teams and 0 <= k.team < len(K.TEAMS["kombi"]):
+            # Dieselbe Farbkombination wie die Figur selbst, damit Schrift
+            # und Gestalt zusammengehoeren. Die eigene Mannschaft kraeftig,
+            # die fremde gedaempft - so bleibt der Blick bei den eigenen
+            # Leuten haengen und nicht bei jedem Namen im Bild.
+            kombi = K.TEAMS["kombi"][k.team]
             eigenes_team = (self.ich is not None and k.team == self.ich.team)
-            paar = K.TEAMS["farben"] if eigenes_team else K.TEAMS["dunkel"]
-            return paar[k.team]
+            return kombi["hud"] if eigenes_team else kombi["hud_dunkel"]
         if eigen:
             return K.C_TEAL
         if self.regeln["beute"]:
@@ -1921,6 +2134,20 @@ class Gefecht(Szene):
                              (int(p.x) - breite // 2, int(p.y) - 18,
                               int(breite * anteil), 3))
 
+    @staticmethod
+    def _teamzeichen(ziel, x: int, y: int, kombi: dict) -> None:
+        """Das Farbzeichen einer Mannschaft: Rumpffarbe mit Akzentpunkt.
+
+        Dieselben beiden Farben, die auch die Figur traegt. Sie stehen hier
+        nicht zur Zierde: wer sie einmal neben dem Mannschaftsnamen gesehen
+        hat, erkennt die Gestalt auf der anderen Seite des Raums wieder,
+        ohne ihren Namen lesen zu muessen.
+        """
+        pygame.draw.rect(ziel, (14, 10, 7), (x - 1, y - 1, 9, 9))
+        pygame.draw.rect(ziel, kombi["kante"], (x, y, 7, 7))
+        pygame.draw.rect(ziel, kombi["rumpf"], (x + 1, y + 1, 5, 5))
+        pygame.draw.rect(ziel, kombi["akzent"], (x + 2, y + 2, 3, 3))
+
     def _teamkopf(self, ziel, y: int) -> int:
         """Mannschaftsstand oben in der Mitte, je nach Spielart.
 
@@ -1931,18 +2158,27 @@ class Gefecht(Szene):
         es ist.
         """
         f = SCHRIFT
-        namen = K.TEAMS["namen"]
-        farben = K.TEAMS["farben"]
+        kombis = K.TEAMS["kombi"]
+        namen = [k["name"] for k in kombis]
+        farben = [k["hud"] for k in kombis]
         if self.regeln["zone"]:
             werte = [int(s) for s in self.zone_stand]
         else:
             werte = list(self.teampunkte)
         mitte = K.GAME_W // 2
-        f.zeichnen(ziel, "%s %d" % (namen[0], werte[0]), mitte - 8, y,
-                   farben[0], 1, ausrichtung="rechts")
+        links_text = "%s %d" % (namen[0], werte[0])
+        rechts_text = "%d %s" % (werte[1], namen[1])
+        f.zeichnen(ziel, links_text, mitte - 8, y, farben[0], 1,
+                   ausrichtung="rechts")
         f.zeichnen(ziel, ":", mitte, y, K.C_MUTED_DK, 1, ausrichtung="mitte")
-        f.zeichnen(ziel, "%d %s" % (werte[1], namen[1]), mitte + 8, y,
-                   farben[1], 1)
+        f.zeichnen(ziel, rechts_text, mitte + 8, y, farben[1], 1)
+        # Neben jedem Namen das Farbzeichen der Mannschaft - dieselbe
+        # Kombination, die auch die Figuren tragen. Damit lernt man die
+        # Zuordnung beilaeufig, statt sie im Gefecht raten zu muessen.
+        self._teamzeichen(ziel, mitte - 12 - f.breite(links_text, 1) - 9,
+                          y - 1, kombis[0])
+        self._teamzeichen(ziel, mitte + 12 + f.breite(rechts_text, 1) + 2,
+                          y - 1, kombis[1])
         y += 10
 
         if self.regeln["zone"]:

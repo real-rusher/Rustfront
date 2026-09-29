@@ -686,8 +686,14 @@ class Renderer:
                                  a, b, 1)
             ziel.blit(linie, (0, 0))
 
-        if spieler.schlag_zeigen > 0 and d.get("art") == "nahkampf":
-            self.schwung_zeichnen(ziel, spieler, p, d)
+        # Der Schwung gehoert jetzt zum Brecheisen auf der eigenen Taste,
+        # nicht mehr zur gewaehlten Waffe. Gezeichnet wird er deshalb mit
+        # **dessen** Daten - sonst haette ein Schlag mit dem Sturmgewehr in
+        # der Hand die Reichweite des Sturmgewehrs.
+        if spieler.schlag_zeigen > 0:
+            nah = K.WAFFEN.get(K.NAHKAMPF["waffe"], d)
+            if nah.get("art") == "nahkampf" or d.get("art") == "nahkampf":
+                self.schwung_zeichnen(ziel, spieler, p, nah)
 
     def schwung_zeichnen(self, ziel, spieler, p, d) -> None:
         """Der Schlag mit dem Brecheisen, als Bewegung statt als Kegel.

@@ -309,6 +309,43 @@ for _waffe in K.WAFFEN_HAND:
     platzhalter("spieler_" + _waffe)(_spieler_mit(_waffe))
 
 
+# ── Mannschaftsfarben ─────────────────────────────────────────────
+#
+# Jede Mannschaft bekommt jede Spielerfigur noch einmal, in ihren eigenen
+# Farben. Das ist der Punkt, an dem man im Gefecht auf einen Blick sieht,
+# wer zu wem gehoert - ohne Namen, ohne Balken, auch quer ueber den Raum
+# und auch eine Ebene tiefer, wo eine Gestalt nur noch ein Fleck ist.
+#
+# Registriert wird ueber eine Schleife: eine dritte Mannschaft in
+# K.TEAMS["kombi"] bekommt ihre Figuren dadurch von selbst, und jede davon
+# ist einzeln durch eine Datei ersetzbar.
+
+def _spieler_team(kombi, waffe=None):
+    def zeichner():
+        if waffe is None:
+            return _figur(K.BILD_MASS["spieler"][0], kombi["rumpf"],
+                          kombi["kante"], kombi["akzent"])
+        gross = K.BILD_MASS["spieler_" + waffe][0]
+        return _figur(gross, kombi["rumpf"], kombi["kante"], kombi["akzent"],
+                      waffe=waffe)
+    return zeichner
+
+
+def _boden_team(kombi):
+    def zeichner():
+        return _figur_boden(kombi["rumpf"], kombi["kante"])
+    return zeichner
+
+
+for _kombi in K.TEAMS["kombi"]:
+    _kurz = _kombi["name"].lower()
+    platzhalter("spieler_" + _kurz)(_spieler_team(_kombi))
+    platzhalter("spieler_%s_boden" % _kurz)(_boden_team(_kombi))
+    for _waffe in K.WAFFEN_HAND:
+        platzhalter("spieler_%s_%s" % (_kurz, _waffe))(
+            _spieler_team(_kombi, _waffe))
+
+
 @platzhalter("gegner_laeufer")
 def _gegner_laeufer():
     return _figur(28, (128, 84, 58), (58, 36, 24), K.C_ORANGE)
@@ -478,6 +515,28 @@ def _waffe_granate():
     return s
 
 
+def _figur_boden(rumpf=None, kante=None):
+    """Die liegende Gestalt, in den Farben einer Mannschaft.
+
+    Auch am Boden muss man sehen, zu wem jemand gehoert - sonst rennt man
+    quer ueber die Karte, um einem Gegner aufzuhelfen.
+    """
+    rumpf = rumpf or K.C_HULL_DK
+    kante = kante or K.C_HULL_SH
+    s = _flaeche(28, 28)
+    c = 14
+    pygame.draw.ellipse(s, (58, 22, 18), (4, 9, 20, 11))          # Lache
+    pygame.draw.ellipse(s, (74, 28, 22), (7, 11, 14, 7))
+    koerper = pygame.Rect(c - 9, c - 4, 18, 9)
+    pygame.draw.ellipse(s, kante, koerper)
+    pygame.draw.ellipse(s, rumpf, koerper.inflate(-3, -3))
+    pygame.draw.circle(s, rumpf, (c - 8, c + 1), 4)
+    pygame.draw.circle(s, kante, (c - 8, c + 1), 4, 1)
+    pygame.draw.line(s, kante, (c - 1, c - 3), (c + 6, c - 7), 3)
+    pygame.draw.line(s, kante, (c - 1, c + 4), (c + 7, c + 6), 3)
+    return _rand(s, (16, 11, 8))
+
+
 @platzhalter("spieler_boden")
 def _spieler_boden():
     """Wer am Boden liegt. Muss sich auf einen Blick von einem Stehenden
@@ -487,20 +546,7 @@ def _spieler_boden():
     liegt quer statt aufrecht, sie hat keine Waffe in der Hand, und unter
     ihr steht eine dunkle Blutlache. Dazu ist sie merklich kleiner - eine
     liegende Gestalt nimmt von oben weniger Flaeche ein."""
-    s = _flaeche(28, 28)
-    c = 14
-    pygame.draw.ellipse(s, (58, 22, 18), (4, 9, 20, 11))          # Lache
-    pygame.draw.ellipse(s, (74, 28, 22), (7, 11, 14, 7))
-    # Rumpf quer, flacher als die stehende Gestalt
-    rumpf = pygame.Rect(c - 9, c - 4, 18, 9)
-    pygame.draw.ellipse(s, K.C_HULL_SH, rumpf)
-    pygame.draw.ellipse(s, K.C_HULL_DK, rumpf.inflate(-3, -3))
-    # Kopf zur Seite gekippt, Arme weggestreckt
-    pygame.draw.circle(s, K.C_HULL_DK, (c - 8, c + 1), 4)
-    pygame.draw.circle(s, K.C_HULL_SH, (c - 8, c + 1), 4, 1)
-    pygame.draw.line(s, K.C_HULL_SH, (c - 1, c - 3), (c + 6, c - 7), 3)
-    pygame.draw.line(s, K.C_HULL_SH, (c - 1, c + 4), (c + 7, c + 6), 3)
-    return _rand(s, (16, 11, 8))
+    return _figur_boden()
 
 
 @platzhalter("waffe_rauch")

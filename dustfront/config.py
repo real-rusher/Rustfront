@@ -296,10 +296,36 @@ MODUS_VORGABE = "pvp"
 # Zwei Mannschaften. Mehr waeren eine Zeile hier und sonst nichts - die
 # Zuteilung, die Faerbung und die Punktetafel rechnen alle ueber die Laenge
 # dieser Listen.
+# Mannschaften und ihre Farben.
+#
+# Eine Mannschaft ist nicht eine Farbe, sondern eine **Kombination** aus
+# dreien - und die Figur selbst traegt sie, nicht nur ihr Name. Das ist der
+# Unterschied, auf den es im Gefecht ankommt: Namen werden ausgeblendet,
+# sobald jemand im Rauch steht oder zu weit weg ist, und auf einer anderen
+# Ebene sieht man von einer Gestalt nur noch ihren Umriss. Wer dann erst
+# ueberlegen muss, ob der da drueben zu ihm gehoert, hat schon verloren.
+#
+#   rumpf    die grosse Flaeche. Sie entscheidet auf Entfernung.
+#   kante    Schatten und Umriss. Sie haelt die Figur vom Boden getrennt.
+#   akzent   der helle Punkt am Kopf. Er sagt, wohin sie schaut.
+#   hud      dieselbe Farbe fuer Schrift und Balken, kraeftiger
+#   hud_dunkel  dieselbe fuer die fremde Mannschaft, gedaempft
+#
+# Die beiden Kombinationen sind bewusst gegensaetzlich gewaehlt: warm
+# gegen kalt. Auf dem staubbraunen Boden trennen sich Orange und Tuerkis
+# noch dann, wenn beide klein und halb verdeckt sind.
 TEAMS = dict(
     namen=("ROT", "BLAU"),
-    farben=(C_ORANGE, C_TEAL),
+    farben=(C_ORANGE, C_TEAL),          # bleibt fuer bestehenden Code
     dunkel=(C_RUST, C_TEAL_DK),
+    kombi=(
+        dict(name="ROT",
+             rumpf=(176, 88, 54), kante=(72, 30, 20), akzent=(248, 182, 92),
+             hud=C_ORANGE, hud_dunkel=C_RUST),
+        dict(name="BLAU",
+             rumpf=(82, 126, 146), kante=(24, 50, 62), akzent=(126, 230, 216),
+             hud=C_TEAL, hud_dunkel=C_TEAL_DK),
+    ),
 )
 
 # Der Kreis in der Kartenmitte, nach dem Vorbild der Hot Zone.
@@ -352,6 +378,11 @@ GEFECHT = dict(
     tafel_oben=74,            # wo der Punktestand anfaengt, unter den Ebenen
     blick_zurueck=4.0,        # so lange bleibt die Ansicht auf einer fremden Ebene
     treppe_takt=1.5,          # so lange geht nach einem Ebenenwechsel keiner mehr
+    # Einstiegszonen: jede Mannschaft bekommt einmal je Runde eine Seite
+    # und behaelt sie. Aus so vielen Proben wird das Paar mit dem groessten
+    # Abstand gewaehlt.
+    zonen_proben=40,
+    zonen_zug=1.0,            # wie stark die eigene Zone den Platz bestimmt
 )
 
 # Am Boden liegen und wieder aufgeholfen werden. Nur in pve.
@@ -652,9 +683,38 @@ WAFFEN_HAND = {
                        aufbau="haken"),
 }
 
-# Was der Spieler zu Beginn auf den Plaetzen 1 bis 7 traegt
-HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "rauch",
-          "brecheisen"]
+# Jede Mannschaft bekommt ihre eigene Fassung jeder Spielerfigur. Sie sind
+# damit einzeln durch eine Datei ersetzbar - wer `assets/spieler_rot_sturm.png`
+# hinlegt, bekommt genau die eine Figur ausgetauscht, und der Rest bleibt.
+for _team in TEAMS["kombi"]:
+    _kurz = _team["name"].lower()
+    BILD_MASS["spieler_%s" % _kurz] = BILD_MASS["spieler"]
+    BILD_MASS["spieler_%s_boden" % _kurz] = BILD_MASS["spieler_boden"]
+    for _w in WAFFEN_HAND:
+        BILD_MASS["spieler_%s_%s" % (_kurz, _w)] = BILD_MASS["spieler_" + _w]
+
+# Was der Spieler zu Beginn auf den Plaetzen 1 bis 6 traegt.
+#
+# Das Brecheisen steht **nicht** mehr darin. Es liegt auf einer eigenen
+# Taste und ist damit immer da, ohne einen Platz zu belegen - siehe
+# NAHKAMPF. Ein Werkzeug, das man im Gedraenge braucht, sollte keinen
+# Waffenwechsel kosten.
+HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "rauch"]
+
+# Der Schlag mit dem Brecheisen, jederzeit auf einer eigenen Taste.
+#
+# Die Waffe selbst bleibt in WAFFEN stehen: von dort kommen Schaden,
+# Reichweite, Kegel und Schwungdauer. Was sich aendert, ist nur, wie man
+# sie einsetzt - man waehlt sie nicht mehr aus, man schlaegt.
+#
+# **Gehalten wird sie nie sichtbar.** Waehrend des Schlags verschwindet
+# die gewaehlte Waffe aus der Hand, und man sieht allein die Bewegung des
+# Eisens; danach ist sie wieder da. Eine Figur, die dauerhaft ein
+# Brecheisen traegt, waere eine Luege - sie traegt ein Gewehr.
+NAHKAMPF = dict(
+    waffe="brecheisen",       # welcher Eintrag aus WAFFEN den Schlag macht
+    sperrt_feuer=True,        # waehrend des Schwungs wird nicht geschossen
+)
 
 # Rauchgranate: eine Wand, durch die niemand durchsieht - auch nicht von
 # der Ebene darueber. Sie macht keinen Schaden, sie nimmt nur die Sicht.

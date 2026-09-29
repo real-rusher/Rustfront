@@ -418,10 +418,16 @@ class Rauchwolke:
     sehen kann er es nicht.
     """
 
-    __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt", "_saat", "_feld")
+    __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt",
+                 "kennung", "_saat", "_feld")
+
+    # Fortlaufende Nummer je Wolke. Sie ist das, woran der Gast eine Wolke
+    # wiedererkennt, die er schon hat - siehe Gefecht._welt_uebernehmen.
+    _naechste_kennung = 0
 
     def __init__(self, pos, ebene: int, radius: float | None = None,
-                 dauer: float | None = None, alter: float = 0.0) -> None:
+                 dauer: float | None = None, alter: float = 0.0,
+                 kennung: int | None = None) -> None:
         r = K.RAUCH
         self.pos = pygame.Vector2(pos)
         self.ebene = int(ebene)
@@ -429,6 +435,10 @@ class Rauchwolke:
         self.dauer = float(r["dauer"] if dauer is None else dauer)
         self.alter = float(alter)
         self.lebt = True
+        if kennung is None:
+            Rauchwolke._naechste_kennung += 1
+            kennung = Rauchwolke._naechste_kennung
+        self.kennung = int(kennung)
         # Die Saat haengt an der Stelle, an der die Wolke steht: zwei
         # Wolken nebeneinander sehen dadurch verschieden aus, dieselbe
         # Wolke aber auf jedem Rechner gleich.
@@ -622,6 +632,7 @@ class Spieler(Wesen):
         self.heilt_rest = 0.0
         self.halte_zeit = 0.0         # wie lange der Abzug schon gedrueckt ist
         self.schlag_zeigen = 0.0      # Restzeit der Nahkampf-Anzeige
+        self.nahkampf_rest = 0.0      # eigener Takt fuer den Schlag auf F
         self.takt = 0.0
         self.nachlade_rest = 0.0
         self.unverwundbar = 0.0
@@ -632,7 +643,10 @@ class Spieler(Wesen):
         self.feuert = False
         self.punkte = 0
         self.tracer = False           # Zielhilfe an oder aus
-        self.tracer_weit = False      # laeuft sie ueber den Mauszeiger hinaus
+        # Die Linie laeuft standardmaessig ueber den Mauszeiger hinaus bis
+        # zur naechsten Wand. So sieht man, was man wirklich treffen wuerde,
+        # statt nur, wo der Zeiger steht. Mit Z umschaltbar wie bisher.
+        self.tracer_weit = True
 
     @property
     def streuung_jetzt(self) -> float:
@@ -650,6 +664,29 @@ class Spieler(Wesen):
     def waffe_daten(self) -> dict:
         return K.WAFFEN[self.waffen[self.waffe]]
 
+    def nahkampf(self) -> bool:
+        """Schlag mit dem Brecheisen, unabhaengig von der gewaehlten Waffe.
+
+        Jederzeit auf einer eigenen Taste. Er hat seinen eigenen Takt und
+        haelt die Schusswaffe nicht auf - was ihn aufhaelt, ist der Schwung
+        selbst: waehrend er laeuft, ist die Waffe verstaut (siehe `bild`),
+        und wer nichts in der Hand hat, schiesst auch nicht.
+        """
+        d = K.WAFFEN.get(K.NAHKAMPF["waffe"])
+        if d is None or self.nahkampf_rest > 0 or self.schlag_zeigen > 0:
+            return False
+        if self.nachlade_rest > 0:
+            return False
+        self.nahkampf_rest = d["takt"]
+        self.schlag_zeigen = d.get("schwung", 0.26)
+        self.schlagen(d)
+        return True
+
+    @property
+    def schwingt(self) -> bool:
+        """Laeuft gerade ein Schlag mit dem Brecheisen?"""
+        return self.schlag_zeigen > 0 and self.nahkampf_rest > 0
+
     @property
     def bild(self) -> str:
         """Die Figur mit der Waffe, die sie gerade haelt.
@@ -658,6 +695,11 @@ class Spieler(Wesen):
         uebrig - eine neue Waffe faellt dadurch hoechstens auf die Vorgabe
         zurueck, statt ein fehlendes Bild zu zeigen.
         """
+        # Waehrend des Schlags ist die Waffe verstaut: man sieht die
+        # blosse Gestalt und darueber die Bewegung des Eisens. Das
+        # Brecheisen selbst wird nie in der Hand gezeigt.
+        if self.schwingt:
+            return "spieler"
         name = "spieler_" + self.waffe_name
         return name if name in K.BILD_MASS else "spieler"
 
@@ -694,6 +736,7 @@ class Spieler(Wesen):
                 wolke(self.welt, self.pos, 10, 60, 0.6, K.C_TEAL, self.ebene, 1)
 
         self.schlag_zeigen = max(0.0, self.schlag_zeigen - dt)
+        self.nahkampf_rest = max(0.0, self.nahkampf_rest - dt)
         self.halte_zeit = self.halte_zeit + dt if self.feuert else 0.0
 
         luft = K.STURZ["luftsteuerung"] if self.sturz_rest > 0 else 1.0
@@ -818,10 +861,16 @@ class Spieler(Wesen):
                 self.pos, pygame.Vector2(RND.uniform(60, 110), 0).rotate(aus),
                 0.8, (176, 140, 62), 1, "huelse", 4.0, self.ebene))
 
-    def schlagen(self) -> None:
-        """Kurzer Schlag in einen Kegel vor dem Spieler."""
-        d = self.waffe_daten
-        self.takt = d["takt"]
+    def schlagen(self, daten: dict | None = None) -> None:
+        """Kurzer Schlag in einen Kegel vor dem Spieler.
+
+        `daten` erlaubt, mit einer anderen Waffe zu schlagen als der
+        gehaltenen - das braucht der Schlag mit dem Brecheisen auf einer
+        eigenen Taste, der ja gerade nicht die gewaehlte Waffe benutzt.
+        """
+        d = daten or self.waffe_daten
+        if daten is None:
+            self.takt = d["takt"]
         self.schlag_zeigen = d.get("schwung", 0.26)
         w = self.welt
         reich = d["reichweite"]

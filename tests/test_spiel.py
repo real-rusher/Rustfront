@@ -94,8 +94,15 @@ def probe(waffe, entfernung, dauer=1.4, halten=()):
     held.pos.update(start); held.tempo.update(0, 0); held.ebene = 0
     held.takt = 0.0; held.nachlade_rest = 0.0; held.fokus = 0.0
     held.feuert = False; held.will.update(0, 0)   # kein Dauerfeuer von vorhin
-    held.waffe = held.waffen.index(waffe)
-    held.magazin[waffe] = max(1, K.WAFFEN[waffe]["magazin"])
+    # Das Brecheisen liegt seit 0.19.2 nicht mehr in der Hotbar, sondern
+    # auf einer eigenen Taste. Gemessen wird trotzdem dasselbe: was ein
+    # Schlag anrichtet.
+    nah = waffe == K.NAHKAMPF["waffe"]
+    if not nah:
+        held.waffe = held.waffen.index(waffe)
+        held.magazin[waffe] = max(1, K.WAFFEN[waffe]["magazin"])
+    held.nahkampf_rest = 0.0
+    held.schlag_zeigen = 0.0
     ziel = Gegner(start + pygame.Vector2(entfernung, 0), "laeufer", 0)
     ziel.leben = 9999.0
     szene.welt.dazu(ziel)
@@ -124,7 +131,10 @@ def probe(waffe, entfernung, dauer=1.4, halten=()):
             festhalten()
             szene.welt.schritt(K.FIXED_DT)
     festhalten()
-    held.feuern()
+    if nah:
+        held.nahkampf()
+    else:
+        held.feuern()
     for _ in range(int(dauer / K.FIXED_DT)):
         festhalten()
         szene.welt.schritt(K.FIXED_DT)
@@ -133,10 +143,16 @@ def probe(waffe, entfernung, dauer=1.4, halten=()):
     ziel.lebt = False
     return schaden
 
-pruef("Hotbar hat sieben Plaetze", len(held.waffen) == 7,
+pruef("Hotbar hat sechs Plaetze", len(held.waffen) == 6,
       "%d" % len(held.waffen))
-pruef("Alle sieben Waffen sind bekannt",
+pruef("Alle Waffen der Hotbar sind bekannt",
       all(w in K.WAFFEN for w in held.waffen))
+# Das Brecheisen gehoert nicht mehr dazu: es liegt auf einer eigenen
+# Taste und belegt keinen Platz.
+pruef("Das Brecheisen belegt keinen Hotbarplatz mehr",
+      K.NAHKAMPF["waffe"] not in held.waffen)
+pruef("Es ist trotzdem eine bekannte Waffe",
+      K.NAHKAMPF["waffe"] in K.WAFFEN)
 pruef("Zu jedem Platz gibt es eine Taste",
       all(app.opt.codes("waffe%d" % (i + 1))
           for i in range(len(held.waffen))))
@@ -849,14 +865,29 @@ netz_takte()
 pruef("Ein Medkit laesst sich benutzen", gast_ich.heilt_rest > 0,
       "%.2f s" % gast_ich.heilt_rest)
 
-# Mausrad verschiebt die Ansicht, wie im Einzelspieler
+# Mausrad verschiebt die Ansicht, wie im Einzelspieler.
+#
+# Geprueft wird ueber ein echtes Ereignis, nicht ueber das Setzen von
+# e.rad: Rad und Tastendruecke werden seit 0.19.2 dort aufgehoben, weil
+# der Zeitschritt bei hoher Bildrate nicht in jedem Bild laeuft und die
+# Druecke sonst verlorengehen.
 host.blick = 0
-e.neues_bild(); e.rad = 1
-host.knoepfe_sammeln()
-e.neues_bild(); e.rad = 0
+e.neues_bild()
+host.ereignis(pygame.event.Event(pygame.MOUSEWHEEL, {"x": 0, "y": 1}))
 host.schritt(K.FIXED_DT)
 pruef("Das Mausrad verschiebt die Ebenenansicht", host.blick == 1,
       "Ebene %d" % host.blick)
+
+# Und der eigentliche Punkt: ein Tastendruck darf auch dann ankommen,
+# wenn in diesem Bild gar kein Zeitschritt laeuft.
+host._knoepfe.clear()
+e.neues_bild()
+for taste in e.tabelle.get("tracer_weit", ()):
+    host.ereignis(pygame.event.Event(pygame.KEYDOWN, {"key": taste}))
+    break
+e.neues_bild()              # naechstes Bild, ohne dass ein Schritt lief
+pruef("Ein Tastendruck ueberlebt ein Bild ohne Zeitschritt",
+      "tracer_weit" in host._knoepfe, " ".join(sorted(host._knoepfe)))
 
 # Was der Gast fuer sein HUD braucht
 gast_ich.magazin[gast_ich.waffe_name] = 7
@@ -1752,7 +1783,11 @@ wirt_k.unverwundbar = 0.0
 wirt_k.schaden(999, None, None)
 pruef("Wer faellt, liegt am Boden", wirt_k.am_boden)
 pruef("Und hat ein eigenes Bild, das man auf Entfernung erkennt",
-      wirt_k.bild == "spieler_boden", wirt_k.bild)
+      wirt_k.bild.endswith("boden"), wirt_k.bild)
+# Mit Mannschaften traegt auch die liegende Gestalt die Mannschaftsfarbe -
+# sonst rennt man quer ueber die Karte, um einem Gegner aufzuhelfen.
+pruef("Und in Mannschaftsspielarten die Farbe seiner Mannschaft",
+      (not w.mit_teams) or wirt_k.bild != "spieler_boden", wirt_k.bild)
 wo = pygame.Vector2(wirt_k.pos)
 liegend = {"will": [1.0, 0.0], "ziel": [wo.x + 50, wo.y],
            "feuert": True, "nutzen": True, "knoepfe": []}
