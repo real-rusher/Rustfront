@@ -928,7 +928,7 @@ class Gefecht(Szene):
         """Einen Tastendruck aufheben, bis das naechste Paket rausgeht."""
         tabelle = self.app.eingabe.tabelle
         for name in ("nachladen", "heilen", "tracer", "tracer_weit",
-                     "nahkampf"):
+                     "nahkampf", "feuermodus"):
             if taste in tabelle.get(name, ()):
                 self._knoepfe.add(name)
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
@@ -944,7 +944,7 @@ class Gefecht(Szene):
         """
         e = self.app.eingabe
         for name in ("nachladen", "heilen", "tracer", "tracer_weit",
-                     "nahkampf"):
+                     "nahkampf", "feuermodus"):
             if e.gedrueckt(name):
                 self._knoepfe.add(name)
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
@@ -1026,6 +1026,11 @@ class Gefecht(Szene):
                 k.tracer = not k.tracer
             if "tracer_weit" in knoepfe:
                 k.tracer_weit = not k.tracer_weit
+            if "feuermodus" in knoepfe:
+                # Die Betriebsart gehoert zur Figur und damit zum
+                # Gastgeber - sonst schoesse der Gast im Dauerfeuer,
+                # waehrend der Gastgeber eine Salve rechnet.
+                k.modus_wechseln()
             if "nahkampf" in knoepfe:
                 # Das Brecheisen liegt auf einer eigenen Taste und braucht
                 # keinen Waffenwechsel. Es schlaegt mit seinen eigenen

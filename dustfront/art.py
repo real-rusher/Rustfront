@@ -226,6 +226,29 @@ def _hand_waffe(s, c, name):
         pygame.draw.rect(s, K.C_CREAM, (hand + 4, c - 6, 1, 1))
         return
 
+    if d["aufbau"] == "zweibein":                 # MG: dick, mit Zweibein
+        # In der Draufsicht ist ein MG vor allem eines: breit. Dazu ein
+        # Kastenmagazin unter dem Lauf und ein Zweibein vorn, das nach
+        # beiden Seiten absteht - daran erkennt man es auf einen Blick,
+        # auch wenn Lauf und Laenge dem Scharfschuetzen aehneln.
+        laenge, dick = d["lauf"], d["dicke"]
+        pygame.draw.rect(s, (56, 52, 44), (hand - d["schaft"], c - d["s_dicke"] // 2,
+                                           d["schaft"] + 3, d["s_dicke"]))
+        pygame.draw.rect(s, stahl, (hand, c - dick // 2, laenge, dick))
+        pygame.draw.rect(s, stahl_h, (hand, c - dick // 2, laenge, 1))
+        # Kastenmagazin
+        pygame.draw.rect(s, (44, 48, 44), (hand + 2, c + dick // 2, 7, 5))
+        pygame.draw.rect(s, (78, 84, 76), (hand + 3, c + dick // 2 + 1, 5, 3))
+        # Zweibein, nach beiden Seiten
+        pygame.draw.line(s, (40, 38, 32), (hand + laenge - 5, c - dick // 2),
+                         (hand + laenge - 1, c - dick // 2 - 4))
+        pygame.draw.line(s, (40, 38, 32), (hand + laenge - 5, c + dick // 2),
+                         (hand + laenge - 1, c + dick // 2 + 4))
+        # Muendungsbremse
+        pygame.draw.rect(s, (30, 28, 24), (hand + laenge - 2, c - dick // 2 - 1,
+                                           3, dick + 2))
+        return
+
     if d["aufbau"] == "walze":                    # Blendgranate: glatte Walze
         # Glatt und hell, ohne Riffel und ohne Lappen: in der Hand muss
         # man ihr ansehen, dass sie nicht splittert und nicht brennt.
@@ -621,6 +644,24 @@ def _molotov():
     pygame.draw.rect(s, K.C_CREAM, (4, 0, 3, 1))
     pygame.draw.rect(s, (240, 164, 56), (5, 0, 1, 1))
     return _rand(s, (16, 12, 8))
+
+
+@platzhalter("waffe_lmg")
+def _waffe_lmg():
+    s = _waffe()
+    # Gross und schwer: langer dicker Lauf, Kastenmagazin darunter,
+    # Zweibein vorn, breiter Schaft hinten. In der Hotbar muss man es
+    # vom Scharfschuetzen unterscheiden koennen, und das schafft die
+    # Dicke, nicht die Laenge.
+    pygame.draw.rect(s, (48, 44, 38), (1, 3, 8, 5))        # Schaft
+    pygame.draw.rect(s, (84, 78, 66), (2, 4, 6, 2))
+    pygame.draw.rect(s, (92, 86, 70), (7, 3, 15, 5))       # Gehaeuse und Lauf
+    pygame.draw.rect(s, (146, 136, 110), (7, 3, 15, 1))
+    pygame.draw.rect(s, (44, 48, 44), (9, 8, 6, 3))        # Kastenmagazin
+    pygame.draw.rect(s, (30, 28, 24), (22, 2, 3, 7))       # Muendungsbremse
+    pygame.draw.line(s, (40, 38, 32), (18, 3), (21, 0))    # Zweibein
+    pygame.draw.line(s, (40, 38, 32), (18, 8), (21, 10))
+    return s
 
 
 @platzhalter("waffe_blend")

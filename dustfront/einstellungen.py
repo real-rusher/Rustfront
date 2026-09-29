@@ -101,6 +101,7 @@ TASTEN_VORGABE = [
     ("waffe7",      "PLATZ 7",          ["7"]),
     ("waffe8",      "PLATZ 8",          ["8"]),
     ("waffe9",      "PLATZ 9",          ["9"]),
+    ("feuermodus",  "FEUERART",         ["v"]),
     ("nahkampf",    "BRECHEISEN",       ["f"]),
     ("tracer",      "ZIELLINIE",        ["t"]),
     ("tracer_weit", "LINIE VERLAENGERN", ["z"]),

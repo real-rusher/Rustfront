@@ -890,6 +890,22 @@ class Renderer:
         d = spieler.waffe_daten
         rx = K.GAME_W - 12
         f.zeichnen(ziel, d["name"], rx, y - 12, K.C_AMBER, 1, ausrichtung="rechts")
+        # Hat die Waffe Betriebsarten, steht die gewaehlte daneben. Ohne
+        # das weiss man nicht, was gleich passiert, wenn man drueckt - und
+        # das ist bei einem MG der Unterschied zwischen einer Salve und
+        # einem halben Magazin.
+        kurz = d.get("kurz")
+        if kurz:
+            breite_name = f.breite(d["name"], 1)
+            f.zeichnen(ziel, kurz, rx - breite_name - 6, y - 12,
+                       K.C_TEAL, 1, ausrichtung="rechts")
+        # Der Anlauf einer Waffe mit Drehzahl: ein schmaler Streifen unter
+        # dem Namen. Er sagt, ob der naechste Druck schon Feuer ergibt.
+        if getattr(spieler, "anlauf", 0.0) > 0.02:
+            bw = 40
+            pygame.draw.rect(ziel, (18, 12, 9), (rx - bw, y - 3, bw, 2))
+            pygame.draw.rect(ziel, K.C_TEAL,
+                             (rx - bw, y - 3, int(bw * spieler.anlauf), 2))
         if spieler.nachlade_rest > 0:
             p = 1.0 - spieler.nachlade_rest / d["nachladen"]
             bw = 74

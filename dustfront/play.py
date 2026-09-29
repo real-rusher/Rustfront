@@ -166,6 +166,12 @@ class Spiel(Szene):
                 held.tracer = not held.tracer
             if e.gedrueckt("tracer_weit"):
                 held.tracer_weit = not held.tracer_weit
+            if e.gedrueckt("feuermodus"):
+                neu_modus = held.modus_wechseln()
+                if neu_modus:
+                    self.hinweis = "%s: %s" % (
+                        held.waffe_daten["name"],
+                        K.WAFFEN[held.waffe_name]["modus_daten"][neu_modus]["kurz"])
             for nr in range(1, K.HOTBAR_PLAETZE + 1):
                 if e.gedrueckt("waffe%d" % nr):
                     held.waffe_waehlen(nr - 1)

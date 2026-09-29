@@ -879,6 +879,14 @@ class Spieler(Wesen):
         self.zaehler: dict[str, float] = {}
         self.waffen_zaehler: dict[str, dict] = {}
         self.serie = 0                # laufende Abschussfolge, Tod setzt zurueck
+        # Betriebsart je Waffe. Leer heisst: die erste aus K.WAFFEN[..]["modi"].
+        self.modi: dict[str, str] = {}
+        # Anlauf wie bei einer Minigun: 0 bis 1. Steigt, solange gefeuert
+        # wird, und faellt sonst. Er entscheidet ueber den Takt - darum
+        # bringt Antippen bei einem MG fast nichts.
+        self.anlauf = 0.0
+        self.salve_rest = 0           # wie viele Schuss die Salve noch hat
+        self.salve_takt = 0.0
 
     # ---- Zaehlen -----------------------------------------------------
     def zaehlen(self, name: str, wert: float = 1.0, waffe: str = "") -> None:
@@ -932,13 +940,150 @@ class Spieler(Wesen):
         fokus_ziel = d.get("fokus_streuung")
         if fokus_ziel is not None:
             grund = grund + (fokus_ziel - grund) * self.fokus
-        if self.tempo.length_squared() > 400:
+        # Ein MG wird genauer, je laenger man haelt - umgekehrt zu allem
+        # anderen. Der Lauf laeuft sich ein, der Schuetze findet den
+        # Rueckstoss. Wer antippt, trifft nichts; wer ein paar Sekunden
+        # haelt, trifft sehr genau.
+        ziel = d.get("streuung_ziel")
+        if ziel is not None:
+            dauer = max(0.05, d.get("streuung_dauer", 2.0))
+            weit = min(1.0, self.halte_zeit / dauer)
+            grund = grund + (ziel - grund) * weit
+        # "Laeuft" heisst: die Figur **will** laufen. Nicht: sie bewegt
+        # sich. Der Unterschied ist keine Feinheit - der eigene Rueckstoss
+        # schiebt einen ebenfalls, und eine Waffe, die sich selbst durch
+        # ihren Rueckstoss ungenauer macht, ist eine Waffe mit einem
+        # Fehler. Dasselbe gilt fuer den, der gerade weggestossen wurde:
+        # dafuer kann er nichts.
+        steht = (self.will.length_squared() <= 0.01
+                 and self.tempo.length_squared() <= 3600)
+        if not steht:
             grund += d.get("streuung_lauf", 0.0) * (1.0 - 0.6 * self.fokus)
+        elif d.get("streuung_stand") is not None:
+            # Im Stehen deutlich enger. Nur die Salve hat das: sie ist die
+            # Betriebsart fuer den, der eine Stellung haelt.
+            grund *= d["streuung_stand"]
         return grund
 
     @property
     def waffe_daten(self) -> dict:
-        return K.WAFFEN[self.waffen[self.waffe]]
+        """Die Werte der gehaltenen Waffe - samt gewaehlter Betriebsart.
+
+        Hat eine Waffe `modus_daten`, wird der gewaehlte Satz darueber
+        gelegt. Damit sieht der ganze uebrige Code weiterhin nur `takt`,
+        `streuung` und so weiter, und keine einzige Stelle muss wissen,
+        dass es ueberhaupt Betriebsarten gibt.
+        """
+        name = self.waffen[self.waffe]
+        d = K.WAFFEN[name]
+        modi = d.get("modus_daten")
+        if not modi:
+            return d
+        gemischt = dict(d)
+        gemischt.update(modi.get(self.modus_von(name), {}))
+        return gemischt
+
+    # ---- Gewicht: was eine schwere Waffe kostet ------------------------
+    @property
+    def am_feuern(self) -> float:
+        """0 bis 1: wie sehr die Waffe gerade am Wirken ist.
+
+        Nicht einfach `feuert`: ein MG wiegt auch dann noch schwer, wenn
+        der Abzug schon los ist und der Lauf noch dreht. Umgekehrt soll
+        man nicht schon beim ersten Antippen festkleben.
+        """
+        d = self.waffe_daten
+        if not d.get("gewicht_tempo") and not d.get("gewicht_drehen"):
+            return 0.0
+        if d.get("modus_daten") or d.get("anlauf"):
+            # Mit Anlauf zaehlt die Drehzahl, nicht der Finger.
+            return max(self.anlauf, 1.0 if self.salve_rest > 0 else 0.0)
+        return 1.0 if self.feuert else 0.0
+
+    @property
+    def gewicht_tempo(self) -> float:
+        """Faktor auf das Lauftempo. 1.0 heisst: keine Behinderung."""
+        d = self.waffe_daten
+        voll = d.get("gewicht_tempo")
+        if voll is None:
+            return 1.0
+        return 1.0 - (1.0 - voll) * self.am_feuern
+
+    @property
+    def dreh_grenze(self) -> float:
+        """Grad je Sekunde, mehr geht nicht. 0 heisst: keine Grenze."""
+        d = self.waffe_daten
+        voll = d.get("gewicht_drehen")
+        if not voll:
+            return 0.0
+        wirkt = self.am_feuern
+        if wirkt <= 0.01:
+            return 0.0
+        # Zwischen "gar keine Grenze" und der vollen Grenze wird nicht
+        # linear ueberblendet, sondern die Grenze wird angehoben: bei
+        # halber Drehzahl darf man doppelt so schnell drehen.
+        return voll / max(0.05, wirkt)
+
+    def _anlauf_fuehren(self, dt: float, d: dict) -> None:
+        """Die Drehzahl einer Minigun. Steigt beim Halten, faellt sonst."""
+        auf = d.get("anlauf")
+        if not auf:
+            self.anlauf = 0.0
+            return
+        if self.feuert and self.magazin.get(self.waffe_name, 0) > 0:
+            self.anlauf = min(1.0, self.anlauf + dt / max(0.01, auf))
+        else:
+            self.anlauf = max(0.0, self.anlauf
+                              - dt / max(0.01, d.get("anlauf_abbau", 1.0)))
+
+    def _salve_fuehren(self, dt: float, d: dict) -> None:
+        """Eine angefangene Salve zu Ende schiessen, Schuss fuer Schuss.
+
+        Die Schuesse einer Salve kommen fast gleichzeitig - `salve_takt`
+        ist ein Bruchteil des normalen Takts. Trotzdem sind es einzelne
+        Geschosse und keine Schrotladung: sie fliegen nacheinander los,
+        jedes mit eigener Streuung.
+        """
+        if self.salve_rest <= 0:
+            return
+        self.salve_takt = max(0.0, self.salve_takt - dt)
+        if self.salve_takt > 0.0:
+            return
+        self.salve_rest -= 1
+        self.salve_takt = d.get("salve_takt", 0.03)
+        self._schuss_abgeben(d)
+
+    # ---- Betriebsarten -------------------------------------------------
+    def modus_von(self, waffe: str) -> str:
+        """Welche Betriebsart fuer diese Waffe gewaehlt ist."""
+        modi = K.WAFFEN.get(waffe, {}).get("modi")
+        if not modi:
+            return ""
+        gewaehlt = self.modi.get(waffe)
+        return gewaehlt if gewaehlt in modi else modi[0]
+
+    @property
+    def modus(self) -> str:
+        return self.modus_von(self.waffe_name)
+
+    def modus_wechseln(self) -> str:
+        """Auf die naechste Betriebsart schalten. Gibt die neue zurueck.
+
+        Der Anlauf faellt dabei auf null: wer mitten im Dauerfeuer auf
+        Salve schaltet, soll nicht die Drehzahl mitnehmen. Und der Takt
+        wird neu gesetzt, sonst kaeme die erste Salve sofort.
+        """
+        waffe = self.waffe_name
+        modi = K.WAFFEN.get(waffe, {}).get("modi")
+        if not modi or len(modi) < 2:
+            return ""
+        jetzt = self.modus_von(waffe)
+        neu = modi[(list(modi).index(jetzt) + 1) % len(modi)]
+        self.modi[waffe] = neu
+        self.anlauf = 0.0
+        self.salve_rest = 0
+        self.takt = max(self.takt, 0.18)
+        return neu
 
     def nahkampf(self) -> bool:
         """Schlag mit dem Brecheisen, unabhaengig von der gewaehlten Waffe.
@@ -989,10 +1134,24 @@ class Spieler(Wesen):
         s = K.SPIELER
         self.unverwundbar = max(0.0, self.unverwundbar - dt)
         self.takt = max(0.0, self.takt - dt)
-        # Blickrichtung
+        # Blickrichtung. Normalerweise sofort - die Figur schaut dorthin,
+        # wo die Maus steht, und zwar ohne Verzoegerung. Eine schwere
+        # Waffe begrenzt das: mit dem MG im Anschlag dreht man sich nicht
+        # auf der Stelle um, und genau das ist ihr Preis.
         if (self.ziel - self.pos).length_squared() > 1:
-            self.winkel = math.degrees(math.atan2(self.ziel.y - self.pos.y,
-                                                  self.ziel.x - self.pos.x))
+            soll = math.degrees(math.atan2(self.ziel.y - self.pos.y,
+                                           self.ziel.x - self.pos.x))
+            grenze = self.dreh_grenze
+            if grenze <= 0.0:
+                self.winkel = soll
+            else:
+                ab = (soll - self.winkel + 180) % 360 - 180
+                hoechstens = grenze * dt
+                if abs(ab) <= hoechstens:
+                    self.winkel = soll
+                else:
+                    self.winkel += hoechstens * (1.0 if ab > 0 else -1.0)
+                    self.winkel = (self.winkel + 180) % 360 - 180
 
         # Bewegung: beschleunigen in Wunschrichtung, sonst bremsen. Im Sturz
         # bleibt ein Teil der Steuerung, man kann also noch zur Seite ziehen.
@@ -1014,10 +1173,13 @@ class Spieler(Wesen):
         self.schlag_zeigen = max(0.0, self.schlag_zeigen - dt)
         self.nahkampf_rest = max(0.0, self.nahkampf_rest - dt)
         self.halte_zeit = self.halte_zeit + dt if self.feuert else 0.0
+        self._anlauf_fuehren(dt, wd)
+        self._salve_fuehren(dt, wd)
 
         luft = K.STURZ["luftsteuerung"] if self.sturz_rest > 0 else 1.0
         if fd:
             luft *= 1.0 - (1.0 - wd.get("fokus_tempo", 1.0)) * self.fokus
+        luft *= self.gewicht_tempo
         ziel_tempo = self.will * s["tempo"] * (s["sprint"] if self.sprint else 1.0) * luft
         rate = (s["beschleunigung"] if self.will.length_squared() > 0
                 else s["bremsung"]) * luft
@@ -1106,11 +1268,19 @@ class Spieler(Wesen):
         if self.magazin[self.waffe_name] <= 0:
             self.nachladen()
             return
-        self.magazin[self.waffe_name] -= 1
-        self.takt = d["takt"]
-        muendung = self.pos + pygame.Vector2(14, 0).rotate(self.winkel)
+        # Der Takt einer Waffe mit Anlauf haengt an der Drehzahl: am
+        # Anfang langsam, bei voller Drehzahl schnell. Genau dadurch
+        # bringt Antippen bei einem MG fast nichts - der erste Schuss
+        # kostet so viel wie sonst vier.
+        anlauf_takt = d.get("anlauf_takt")
+        if anlauf_takt is not None:
+            self.takt = anlauf_takt + (d["takt"] - anlauf_takt) * self.anlauf
+        else:
+            self.takt = d["takt"]
 
         if art == "wurf":
+            self.magazin[self.waffe_name] -= 1
+            muendung = self.pos + pygame.Vector2(14, 0).rotate(self.winkel)
             # Sie fliegt dorthin, wo man hinzeigt, nicht immer gleich weit.
             weite = min(d["wurf_max"], max(d["wurf_min"],
                                            self.pos.distance_to(self.ziel)))
@@ -1121,6 +1291,28 @@ class Spieler(Wesen):
             self.zaehlen("rauchwolken" if d.get("rauch") else "granaten",
                          1.0, self.waffe_name)
             return
+
+        # Eine Salve ist **ein** Abzug und mehrere Geschosse. Der erste
+        # Schuss geht sofort, die uebrigen holt `_salve_fuehren` Bild fuer
+        # Bild nach - fast gleichzeitig, aber einzeln und mit eigener
+        # Streuung. Eine Schrotladung waere etwas anderes: die faechert.
+        salve = d.get("salve")
+        if salve and salve > 1:
+            self.salve_rest = salve - 1
+            self.salve_takt = d.get("salve_takt", 0.03)
+        self._schuss_abgeben(d)
+
+    def _schuss_abgeben(self, d: dict) -> None:
+        """Ein einzelner Schuss: Munition, Geschoss, Rueckstoss, Knall.
+
+        Eigene Methode, weil eine Salve sie mehrfach braucht - und weil
+        `feuern` sonst nicht mehr zu lesen waere.
+        """
+        if self.magazin.get(self.waffe_name, 0) <= 0:
+            self.salve_rest = 0
+            return
+        self.magazin[self.waffe_name] -= 1
+        muendung = self.pos + pygame.Vector2(14, 0).rotate(self.winkel)
 
         # Ein Abzug ist ein Schuss, auch bei Schrot mit acht Kuegelchen:
         # sonst laesst sich die Treffergenauigkeit einer Schrotflinte nicht

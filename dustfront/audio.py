@@ -245,6 +245,23 @@ def _molotov(seed=0):
     return _mischen(glas, [0.0] * int(RATE * 0.03) + lodern)
 
 
+@platzhalter_klang("schuss_lmg")
+def _schuss_lmg(seed=0):
+    """Ein MG: tiefer und breiter als das Sturmgewehr, mit Nachhall.
+
+    Der Unterschied zum Sturmgewehr ist nicht die Lautstaerke, sondern
+    das Gewicht darunter. Ein tiefer Schlag traegt den Knall, und ein
+    langer dunkler Nachhall haengt daran - so klingt etwas, das auf einem
+    Zweibein steht und nicht in der Hand liegt.
+    """
+    return _mischen(
+        _rauschen(0.14, 0.95, 5200, 700, 3.0, seed + 1),
+        _rauschen(0.06, 0.45, 11000, 5000, 2.2, seed + 2, hp=True),
+        _schlag(120, 46, 0.16, 0.85, 3.0),
+        [0.0] * int(RATE * 0.02) + _rauschen(0.30, 0.22, 1800, 420, 2.4, seed + 3),
+    )
+
+
 @platzhalter_klang("blend")
 def _blend(seed=0):
     """Der Knall einer Blendgranate: hart, hell, ohne Tiefe.

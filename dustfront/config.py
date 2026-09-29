@@ -299,6 +299,7 @@ BILD_MASS = {
     "spieler_sturm":      (56, 56),
     "spieler_schrot":     (56, 56),
     "spieler_scharf":     (56, 56),
+    "spieler_lmg":        (56, 56),
     "spieler_granate":    (56, 56),
     "spieler_rauch":      (56, 56),
     "spieler_molotov":    (56, 56),
@@ -322,6 +323,7 @@ BILD_MASS = {
     "waffe_sturm":      (26, 11),
     "waffe_schrot":     (26, 11),
     "waffe_scharf":     (26, 11),
+    "waffe_lmg":        (26, 11),
     "waffe_granate":    (26, 11),
     "waffe_rauch":      (26, 11),
     "waffe_molotov":    (26, 11),
@@ -346,6 +348,7 @@ KLANG_NAMEN = (
     "schuss_sturm",
     "schuss_schrot",
     "schuss_scharf",
+    "schuss_lmg",
     "granate",
     "sturz",                # Aufsetzen nach einem Fall
     "nahkampf",
@@ -609,7 +612,7 @@ MUNITION = dict(
     # Munitionskiste nutzlos - man kann nichts aufnehmen, was man nicht
     # braucht.
     vorrat={"repetierer": 42, "sturm": 90, "schrot": 18, "scharf": 10,
-            "granate": 3, "rauch": 2, "molotov": 2, "blend": 2,
+            "lmg": 200, "granate": 3, "rauch": 2, "molotov": 2, "blend": 2,
             "brecheisen": 0},
     kiste_takt=14.0,          # Sekunden zwischen zwei Munitionskisten
     kiste_hoechstens=4,
@@ -799,6 +802,74 @@ WAFFEN = {
         rueckstoss=0.0,
         huelsen=0,
     ),
+    # ── MG ───────────────────────────────────────────────────────────
+    #
+    # Die schwerste Waffe im Spiel, und sie fuehlt sich auch so an. Wer
+    # sie abfeuert, steht praktisch: das Lauftempo faellt auf ein Drittel,
+    # und drehen laesst sie sich nur noch langsam. Dafuer wird sie, je
+    # laenger man haelt, **genauer** - umgekehrt zu allem anderen hier.
+    #
+    # **Zwei Betriebsarten**, umschaltbar auf einer eigenen Taste. Was in
+    # `modi` steht, ueberschreibt die Werte darueber; der Rest des Codes
+    # sieht davon nichts und liest wie bisher `takt` und `streuung`.
+    #
+    #   dauer   Dauerfeuer mit Anlauf wie bei einer Minigun. Der erste
+    #           Schuss kommt spaet, dann wird es schneller. Antippen
+    #           bringt darum fast nichts - genau so gewollt: dieses Ding
+    #           ist keine Waffe fuer einen Schuss.
+    #   salve   Kurze Salven, vier Schuss fast gleichzeitig. Dazwischen
+    #           kann man warten, im Stehen ist sie enger, und drehen geht
+    #           ein Stueck besser. Die Betriebsart fuer den, der eine
+    #           Stellung haelt statt einen Gang zu fegen.
+    "lmg": dict(
+        art="schuss",
+        name="MG",
+        schaden=25.0,
+        tempo=1020.0,
+        reichweite=1450.0,     # fast so weit wie der Scharfschuetze
+        magazin=100,
+        nachladen=6.4,         # das dauert, und das soll es
+        geschosse=1,
+        huelsen=2,
+        kamera=1.0,
+        rueckstoss=30.0,
+        takt=0.075,
+        streuung=7.0,
+        streuung_lauf=5.0,
+        # Was das MG ausmacht, unabhaengig von der Betriebsart.
+        gewicht_tempo=0.32,    # so viel vom Lauftempo bleibt beim Feuern
+        gewicht_drehen=64.0,   # Grad je Sekunde, mehr geht nicht
+        modi=("dauer", "salve"),
+        modus_daten={
+            "dauer": dict(
+                kurz="DAUER",
+                takt=0.072,            # bei voller Drehzahl
+                anlauf_takt=0.30,      # und am Anfang
+                anlauf=1.15,           # Sekunden bis zur vollen Drehzahl
+                anlauf_abbau=2.4,      # wie schnell sie wieder faellt
+                streuung=7.5,
+                streuung_ziel=0.9,     # so eng wird sie beim Halten
+                streuung_dauer=2.6,    # so lange dauert das
+                gewicht_tempo=0.28,
+                gewicht_drehen=56.0,
+            ),
+            "salve": dict(
+                kurz="SALVE",
+                takt=0.85,             # zwischen zwei Salven
+                salve=4,               # Schuesse je Salve
+                salve_takt=0.032,      # fast gleichzeitig
+                anlauf_takt=0.85,      # kein Anlauf: die erste Salve sitzt
+                anlauf=0.01,
+                anlauf_abbau=4.0,
+                streuung=3.0,
+                streuung_ziel=1.4,
+                streuung_dauer=1.2,
+                streuung_stand=0.55,   # im Stehen so viel davon
+                gewicht_tempo=0.52,
+                gewicht_drehen=92.0,
+            ),
+        },
+    ),
     "blend": dict(
         art="wurf",
         name="BLENDGRANATE",
@@ -884,6 +955,10 @@ WAFFEN_HAND = {
                        aufbau="doppel"),
     "scharf":     dict(lauf=22, dicke=3, schaft=9, s_dicke=4, holz=True,
                        aufbau="fernrohr"),
+    # Lang wie der Scharfschuetze, aber viel dicker, mit Kastenmagazin
+    # und Zweibein. Man soll an der Hand sehen, was jemand traegt.
+    "lmg":        dict(lauf=21, dicke=6, schaft=11, s_dicke=7, holz=False,
+                       aufbau="zweibein"),
     "granate":    dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
                        aufbau="kugel"),
     "rauch":      dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
@@ -912,8 +987,8 @@ for _team in TEAMS["kombi"]:
 # Taste und ist damit immer da, ohne einen Platz zu belegen - siehe
 # NAHKAMPF. Ein Werkzeug, das man im Gedraenge braucht, sollte keinen
 # Waffenwechsel kosten.
-HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "granate", "rauch",
-          "molotov", "blend"]
+HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "lmg", "granate",
+          "rauch", "molotov", "blend"]
 
 # So viele Plaetze kann die Hotbar hoechstens haben. Es sind die Tasten 1
 # bis 9 - mehr Plaetze sind keine Auswahl mehr, sondern eine Suche. Wer
@@ -942,7 +1017,7 @@ LOADOUT = dict(
     # Woraus gewaehlt werden darf. Bewusst als eigene Listen und nicht
     # aus WAFFEN abgeleitet: was waehlbar ist, ist eine Spielentscheidung
     # und nicht dasselbe wie das, was es gibt.
-    auswahl_waffen=("repetierer", "sturm", "schrot", "scharf"),
+    auswahl_waffen=("repetierer", "sturm", "schrot", "scharf", "lmg"),
     auswahl_wuerfe=("granate", "rauch", "molotov", "blend"),
     # Womit ein neues Loadout vorbelegt wird. Drei Stueck, damit man nach
     # dem ersten Anmelden gleich drei brauchbare Saetze hat und nicht vor

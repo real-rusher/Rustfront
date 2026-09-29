@@ -2781,6 +2781,155 @@ pruef("Und wieder zuruecksetzen", K.skin("blend_flug") == "blendgranate")
 pruef("Unbekannte Rollen werden abgelehnt", not K.skin_setzen("gibtsnicht", "x"))
 w.verlassen(); ga.verlassen()
 
+# ── MG: schwer, zwei Betriebsarten, genauer beim Halten ─────────────
+#
+# "Extreme Verlangsamung beim Feuern, langsameres Drehen, Genauigkeit
+# konvergiert je laenger man feuert, grosses Magazin, weite Reichweite,
+# guter Schaden. Zwei Modi: Dauerfeuer mit Anlauf wie eine Minigun, so
+# dass Antippen nichts bringt, und Salvenmodus mit kurzen Salven."
+mg = K.WAFFEN["lmg"]
+pruef("Das MG steht in der Hotbar", "lmg" in K.HOTBAR)
+pruef("Grosses Magazin", mg["magazin"] >= 80, "%d" % mg["magazin"])
+pruef("Weite Reichweite", mg["reichweite"] > K.WAFFEN["sturm"]["reichweite"],
+      "%.0f gegen %.0f" % (mg["reichweite"], K.WAFFEN["sturm"]["reichweite"]))
+pruef("Guter Schaden", mg["schaden"] > K.WAFFEN["sturm"]["schaden"],
+      "%.0f gegen %.0f" % (mg["schaden"], K.WAFFEN["sturm"]["schaden"]))
+pruef("Und zwei Betriebsarten", tuple(mg["modi"]) == ("dauer", "salve"))
+
+held.waffe_waehlen(held.waffen.index("lmg"))
+held.modi.clear()
+pruef("Dauerfeuer ist die Vorgabe", held.modus == "dauer", held.modus)
+pruef("Die Werte der Betriebsart gelten",
+      held.waffe_daten["takt"] == mg["modus_daten"]["dauer"]["takt"])
+held.modus_wechseln()
+pruef("Umschalten geht", held.modus == "salve", held.modus)
+pruef("Und aendert die Werte",
+      held.waffe_daten.get("salve") == mg["modus_daten"]["salve"]["salve"])
+held.modus_wechseln()
+pruef("Und wieder zurueck", held.modus == "dauer")
+
+
+def mg_lauf(sekunden, modus, druecken=None, laufen=False):
+    """Feuert das MG und gibt (Schuesse, Streuung am Anfang, am Ende)."""
+    held.modi["lmg"] = modus
+    held.anlauf = 0.0
+    held.salve_rest = 0
+    held.takt = 0.0
+    held.halte_zeit = 0.0
+    held.tempo.update(0, 0)
+    held.magazin["lmg"] = 100000
+    schuesse = []
+    for i in range(int(sekunden / K.FIXED_DT)):
+        t = i * K.FIXED_DT
+        held.feuert = True if druecken is None else druecken(t)
+        held.will.update((1, 0) if laufen else (0, 0))
+        vorher = held.magazin["lmg"]
+        held.schritt(K.FIXED_DT)
+        if held.feuert and held.takt <= 0:
+            held.feuern()
+        if held.magazin["lmg"] < vorher:
+            schuesse.append(held.streuung_jetzt)
+    held.feuert = False
+    held.will.update(0, 0)
+    return schuesse
+
+
+dauer = mg_lauf(4.0, "dauer")
+pruef("Vier Sekunden Halten geben Dauerfeuer", len(dauer) > 30,
+      "%d Schuss" % len(dauer))
+pruef("Und es wird dabei deutlich genauer", dauer[-1] < dauer[0] * 0.2,
+      "%.2f Grad am Anfang, %.2f am Ende" % (dauer[0], dauer[-1]))
+pruef("Am Ende sehr genau",
+      dauer[-1] <= mg["modus_daten"]["dauer"]["streuung_ziel"] + 0.01,
+      "%.2f Grad" % dauer[-1])
+
+antippen = mg_lauf(4.0, "dauer", druecken=lambda t: (t % 0.55) < 0.15)
+pruef("Antippen bringt fast nichts", len(antippen) < len(dauer) * 0.3,
+      "%d gegen %d Schuss in denselben 4 s" % (len(antippen), len(dauer)))
+
+laufend = mg_lauf(4.0, "dauer", laufen=True)
+pruef("Im Laufen bleibt es ungenau", laufend[-1] > dauer[-1] * 3,
+      "%.2f gegen %.2f Grad" % (laufend[-1], dauer[-1]))
+
+salve = mg_lauf(4.0, "salve")
+anzahl_salve = mg["modus_daten"]["salve"]["salve"]
+pruef("Der Salvenmodus schiesst deutlich weniger", len(salve) < len(dauer) / 2,
+      "%d gegen %d" % (len(salve), len(dauer)))
+pruef("Und zwar in Salven",
+      len(salve) % anzahl_salve == 0 and len(salve) >= anzahl_salve,
+      "%d Schuss, Salve zu %d" % (len(salve), anzahl_salve))
+pruef("Im Stehen ist die Salve genau", salve[-1] < 1.5,
+      "%.2f Grad" % salve[-1])
+
+# Die Salve kommt fast gleichzeitig - deutlich schneller als der Takt.
+held.modi["lmg"] = "salve"
+held.anlauf = 0.0
+held.salve_rest = 0
+held.takt = 0.0
+held.magazin["lmg"] = 50
+held.feuert = True
+held.feuern()
+schuss_zeiten = []
+for i in range(int(0.5 / K.FIXED_DT)):
+    vorher = held.magazin["lmg"]
+    held.schritt(K.FIXED_DT)
+    if held.magazin["lmg"] < vorher:
+        schuss_zeiten.append(i * K.FIXED_DT)
+held.feuert = False
+pruef("Die Schuesse einer Salve kommen fast gleichzeitig",
+      schuss_zeiten and schuss_zeiten[-1] < 0.2,
+      "letzter nach %.2f s" % (schuss_zeiten[-1] if schuss_zeiten else -1))
+
+# Gewicht: Tempo und Drehen.
+held.modi["lmg"] = "dauer"
+held.anlauf = 0.0
+pruef("Ohne Anlauf behindert es nicht",
+      abs(held.gewicht_tempo - 1.0) < 0.01 and held.dreh_grenze == 0.0)
+held.anlauf = 1.0
+pruef("Bei voller Drehzahl bleibt wenig Tempo", held.gewicht_tempo < 0.4,
+      "%.2f" % held.gewicht_tempo)
+pruef("Und das Drehen ist begrenzt",
+      0 < held.dreh_grenze <= mg["modus_daten"]["dauer"]["gewicht_drehen"] + 0.1,
+      "%.0f Grad je Sekunde" % held.dreh_grenze)
+held.modi["lmg"] = "salve"
+salve_dreh = held.dreh_grenze
+held.modi["lmg"] = "dauer"
+pruef("Im Salvenmodus dreht es sich besser", salve_dreh > held.dreh_grenze,
+      "%.0f gegen %.0f Grad je Sekunde" % (salve_dreh, held.dreh_grenze))
+
+# Und das Drehen wirkt wirklich. Gemessen wird der Winkel je Schritt und
+# nicht die Dauer einer ganzen Drehung: waehrend man feuert, schiebt der
+# Rueckstoss die Figur, und dadurch wandert auch die Zielrichtung - eine
+# Messung ueber sechs Sekunden misst dann beides zugleich.
+held.waffe_waehlen(held.waffen.index("lmg"))
+held.modi["lmg"] = "dauer"
+held.anlauf = 1.0
+held.winkel = 0.0
+held.feuert = False
+held.ziel.update(held.pos + pygame.Vector2(0, 200))    # 90 Grad zur Seite
+vorher_winkel = held.winkel
+held.schritt(K.FIXED_DT)
+je_schritt = abs((held.winkel - vorher_winkel + 180) % 360 - 180)
+erlaubt = mg["modus_daten"]["dauer"]["gewicht_drehen"] * K.FIXED_DT
+pruef("Das MG dreht hoechstens so schnell wie erlaubt",
+      je_schritt <= erlaubt + 0.01,
+      "%.3f Grad je Schritt, erlaubt %.3f" % (je_schritt, erlaubt))
+pruef("Und braucht damit fuer eine Vierteldrehung merklich Zeit",
+      90.0 / max(0.01, je_schritt) * K.FIXED_DT > 1.0,
+      "%.1f s fuer 90 Grad"
+      % (90.0 / max(0.01, je_schritt) * K.FIXED_DT))
+
+# Eine andere Waffe dreht weiter sofort.
+held.waffe_waehlen(held.waffen.index("sturm"))
+held.winkel = 0.0
+held.ziel.update(held.pos + pygame.Vector2(-200, 0))
+held.schritt(K.FIXED_DT)
+pruef("Mit dem Sturmgewehr geht es weiter sofort",
+      abs((180 - held.winkel + 180) % 360 - 180) < 1.0,
+      "%.0f Grad" % held.winkel)
+pruef("Und es behindert das Lauftempo nicht",
+      abs(held.gewicht_tempo - 1.0) < 0.01)
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
