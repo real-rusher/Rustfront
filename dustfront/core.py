@@ -269,6 +269,13 @@ class Szene:
     """Ein Zustand des Spiels. Die App haelt einen Stapel davon."""
 
     deckt_zu = True          # False = darunterliegende Szene wird mitgezeichnet
+    # True = diese Szene rechnet weiter, auch wenn eine andere ueber ihr
+    # liegt. Genau eine Art von Szene braucht das: eine, die an einer
+    # Leitung haengt. Ein LAN-Gefecht, das stillsteht, waehrend jemand
+    # sein Loadout aendert, hoert auf zu antworten - und der Gastgeber
+    # wirft ihn nach acht Sekunden als stumm hinaus. Eingaben bekommt sie
+    # trotzdem nicht: die gehen immer nur an die oberste Szene.
+    weiterlaufen = False
 
     def __init__(self, app: "App") -> None:
         self.app = app
@@ -507,8 +514,21 @@ class App:
             pygame.quit()
 
     def _aktive(self) -> list[Szene]:
-        """Nur die oberste Szene rechnet, darunter steht alles still."""
-        return self.stapel[-1:]
+        """Die oberste Szene rechnet - und alles darunter, was muss.
+
+        "Muss" heisst: `weiterlaufen`. Das hat nur, wer an einer Leitung
+        haengt und nicht einfach anhalten kann, ohne dass die Gegenseite
+        ihn fuer weg haelt. Alles andere steht still, solange ein Menue
+        darueber liegt - so war es immer, und so soll es bleiben.
+        """
+        if len(self.stapel) < 2:
+            return self.stapel[-1:]
+        raus = [self.stapel[-1]]
+        for szene in reversed(self.stapel[:-1]):
+            if not szene.weiterlaufen:
+                break
+            raus.insert(0, szene)
+        return raus
 
     def _sichtbar(self) -> list[Szene]:
         i = len(self.stapel) - 1

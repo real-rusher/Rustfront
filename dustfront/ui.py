@@ -379,6 +379,95 @@ class Zeile(Element):
                              ausrichtung="mitte")
 
 
+class Textfeld(Element):
+    """Ein Feld, in das man tippt. Fuer Name und Kennwort.
+
+    Das erste Bedienelement im Spiel, das Zeichen entgegennimmt, und
+    darum ein paar Entscheidungen, die es sonst nirgends gibt:
+
+    **Verdeckt.** Ein Kennwortfeld zeigt Punkte statt Buchstaben. Nicht
+    aus Formalismus - wer im Keller zu viert vor einem Bildschirm sitzt,
+    tippt sein Kennwort vor drei Leuten ein.
+
+    **Ein blinkender Strich.** Ohne ihn sieht ein leeres Feld genauso aus
+    wie ein Feld, das gerade nicht dran ist, und man tippt ins Leere.
+
+    **Ein Filter.** `erlaubt` entscheidet, welche Zeichen hereinkommen.
+    Der Kontoname laesst nur zu, was ein Kontoname sein darf; dann kann
+    man gar nicht erst etwas eingeben, das hinterher abgelehnt wird.
+    """
+
+    def __init__(self, rect, text: str, name: str, wert: str = "",
+                 verdeckt: bool = False, laenge: int = 32,
+                 label_breite: int = 96, erlaubt=None) -> None:
+        super().__init__(rect, name)
+        self.text = text
+        self.wert = str(wert)
+        self.verdeckt = bool(verdeckt)
+        self.laenge = int(laenge)
+        self.label_breite = int(label_breite)
+        self.erlaubt = erlaubt
+        self.aktiv = False
+        self.blinken = 0.0
+
+    @property
+    def feld_rect(self) -> pygame.Rect:
+        r = self.rect
+        return pygame.Rect(r.x + self.label_breite, r.y + 1,
+                           r.width - self.label_breite - 2, r.height - 2)
+
+    def tippen(self, ev) -> bool:
+        """Einen Tastendruck verarbeiten. True, wenn er hier verbraucht ist.
+
+        Enter und Tab bleiben ausdruecklich uebrig: die gehoeren der
+        Maske, damit man ohne Maus von Feld zu Feld und zum Knopf kommt.
+        """
+        if ev.key == pygame.K_BACKSPACE:
+            self.wert = self.wert[:-1]
+            self.blinken = 0.0
+            return True
+        if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_TAB,
+                      pygame.K_ESCAPE, pygame.K_UP, pygame.K_DOWN):
+            return False
+        zeichen = getattr(ev, "unicode", "")
+        if not zeichen or not zeichen.isprintable():
+            return False
+        if self.erlaubt is not None and not self.erlaubt(zeichen):
+            return True        # verbraucht, aber verworfen: kein Piepen
+        if len(self.wert) < self.laenge:
+            self.wert += zeichen
+            self.blinken = 0.0
+        return True
+
+    def schritt(self, dt: float) -> None:
+        self.blinken = (self.blinken + dt) % 1.0
+
+    def zeichnen(self, ziel) -> None:
+        r = self.rect
+        hell = self.aktiv or self.ueber
+        SCHRIFT.zeichnen(ziel, kuerzen(self.text, self.label_breite - 8),
+                         r.x + 4, r.centery - 3,
+                         K.C_CREAM if hell else K.C_MUTED, 1)
+        feld = self.feld_rect
+        kasten(ziel, feld,
+               K.C_AMBER if self.aktiv else (K.C_MUTED if self.ueber
+                                             else K.C_MUTED_DK),
+               (26, 19, 13) if self.aktiv else (16, 11, 8), 3)
+        gezeigt = ("•" * len(self.wert)) if self.verdeckt else self.wert
+        gezeigt = gezeigt[-40:]
+        # Von rechts kuerzen, damit man immer das sieht, was man gerade
+        # tippt, und nicht den Anfang eines langen Namens.
+        while gezeigt and SCHRIFT.breite(gezeigt, 1) > feld.width - 10:
+            gezeigt = gezeigt[1:]
+        SCHRIFT.zeichnen(ziel, gezeigt, feld.x + 4, feld.centery - 3,
+                         K.C_CREAM, 1)
+        if self.aktiv and self.blinken < 0.55:
+            x = feld.x + 4 + SCHRIFT.breite(gezeigt, 1)
+            pygame.draw.rect(ziel, K.C_AMBER,
+                             (min(x, feld.right - 3), feld.y + 3, 1,
+                              feld.height - 6))
+
+
 # ══════════════════════════════════════════════════ Rasterfelder
 
 def feld(ziel, rect, gefuellt=False, gewaehlt=False, ueber=False):

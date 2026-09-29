@@ -280,13 +280,15 @@ class Pause(Menue):
 
     def __init__(self, app, spiel) -> None:
         self.spiel = spiel
-        self.tafel = _mitte(232, 246)
+        self.tafel = _mitte(232, 280)
         super().__init__(app)
 
     def aufbauen(self) -> None:
         r = self.tafel
         eintraege = [
             ("FORTSETZEN", "weiter"),
+            ("KONTO", "konto"),
+            ("AUSRUESTUNG", "ausruestung"),
             ("EINSTELLUNGEN", "opt"),
             ("STEUERUNG", "tasten"),
             ("MITWIRKENDE", "credits"),
@@ -302,6 +304,10 @@ class Pause(Menue):
     def ausloesen(self, el) -> None:
         if el.name == "weiter":
             self.zurueck()
+        elif el.name == "konto":
+            self.app.schieben(Anmeldung(self.app))
+        elif el.name == "ausruestung":
+            self.app.schieben(Ausruestung(self.app))
         elif el.name == "opt":
             self.app.schieben(Einstellungen(self.app))
         elif el.name == "tasten":
@@ -818,3 +824,333 @@ class Mitwirkende(Menue):
             el.zeichnen(ziel)
         SCHRIFT.zeichnen(ziel, "[LEERTASTE] ANHALTEN   [ESC] ZURUECK", r.centerx,
                          r.bottom - 15, K.C_MUTED_DK, 1, 1, "mitte")
+
+
+# ══════════════════════════════════════════════════════════════════
+# Anmeldung
+# ══════════════════════════════════════════════════════════════════
+
+class Anmeldung(Menue):
+    """Name und Kennwort. Die einzige Maske im Spiel, in die getippt wird.
+
+    Sie ist mit Absicht eine **Einladung und keine Schranke**. Wer sie
+    wegdrueckt, spielt sofort weiter; seine Runden landen trotzdem im
+    Journal und wandern beim spaeteren Anmelden mit. Ein Spiel, das ohne
+    Anmeldung nicht anfaengt, ist kaputt.
+
+    Wo das Konto gilt, steht oben in der Maske: an diesem Rechner oder
+    ueberall. Das ist keine Kleinigkeit fuer den, der davor sitzt - der
+    Unterschied entscheidet, ob seine Zahlen den naechsten Rechner
+    erreichen.
+    """
+
+    titel = "KONTO"
+
+    def __init__(self, app, danach=None) -> None:
+        self.tafel = _mitte(300, 208)
+        # Was nach einer erfolgreichen Anmeldung passieren soll. Gebraucht
+        # wird das beim Start einer LAN-Runde: erst anmelden, dann - wenn
+        # noch kein Loadout gewaehlt ist - gleich die Ausruestung.
+        self.danach = danach
+        self.tippt = 0          # welches Textfeld gerade dran ist
+        super().__init__(app)
+
+    def aufbauen(self) -> None:
+        from . import ablage
+
+        r = self.tafel
+        konto = self.app.konto
+        bx, bw = r.x + 22, r.width - 44
+        y = r.y + 58
+        if konto.angemeldet:
+            self.elemente = [
+                ui.Knopf((bx, y, bw, 20), "AUSRUESTUNG", "ausruestung"),
+                ui.Knopf((bx, y + 26, bw, 20), "ABMELDEN", "abmelden"),
+                ui.Knopf((bx, y + 52, bw, 20), "ZURUECK", "zurueck"),
+            ]
+            return
+        self.elemente = [
+            ui.Textfeld((bx, y, bw, 18), "NAME", "name",
+                        laenge=ablage.NAMENSLAENGE,
+                        erlaubt=lambda c: c.isalnum() or c in "-_"),
+            ui.Textfeld((bx, y + 24, bw, 18), "KENNWORT", "wort",
+                        verdeckt=True, laenge=ablage.WORTLAENGE),
+            ui.Knopf((bx, y + 52, bw // 2 - 3, 20), "ANMELDEN", "anmelden"),
+            ui.Knopf((bx + bw // 2 + 3, y + 52, bw // 2 - 3, 20),
+                     "KONTO ANLEGEN", "anlegen"),
+            ui.Knopf((bx, y + 78, bw, 18), "OHNE KONTO SPIELEN", "ohne"),
+        ]
+        self._feld_setzen(0)
+
+    # ---- Textfelder ---------------------------------------------------
+    @property
+    def felder(self) -> list:
+        return [e for e in self.elemente if isinstance(e, ui.Textfeld)]
+
+    def _feld_setzen(self, i: int) -> None:
+        felder = self.felder
+        if not felder:
+            return
+        self.tippt = i % len(felder)
+        for j, f in enumerate(felder):
+            f.aktiv = (j == self.tippt)
+
+    def _wert(self, name: str) -> str:
+        for f in self.felder:
+            if f.name == name:
+                return f.wert
+        return ""
+
+    def taste(self, ev) -> None:
+        """Erst die Tastatur ans Feld, dann erst ans Menue.
+
+        Sonst waehlte jedes `w` eine Zeile weiter oben, statt ein w in den
+        Namen zu schreiben - und genau das ist der Fehler, den man in
+        jedem zweiten Spiel mit selbstgebautem Menue findet.
+        """
+        felder = self.felder
+        if felder and 0 <= self.tippt < len(felder):
+            if felder[self.tippt].tippen(ev):
+                self.fehler_leeren()
+                return
+        if ev.key == pygame.K_TAB or (ev.key == pygame.K_DOWN and felder):
+            self._feld_setzen(self.tippt + 1)
+            return
+        if ev.key == pygame.K_UP and felder:
+            self._feld_setzen(self.tippt - 1)
+            return
+        if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER) and felder:
+            # Enter im letzten Feld meldet an - das erwartet jeder.
+            if self.tippt < len(felder) - 1:
+                self._feld_setzen(self.tippt + 1)
+            else:
+                self.ausloesen(ui.Knopf((0, 0, 1, 1), "", "anmelden"))
+            return
+        super().taste(ev)
+
+    def fehler_leeren(self) -> None:
+        self.app.konto.fehler = ""
+
+    def maus_druck(self, pos) -> None:
+        for i, f in enumerate(self.felder):
+            if f.rect.collidepoint(pos):
+                self._feld_setzen(i)
+                return
+        super().maus_druck(pos)
+
+    # ---- Ablauf -------------------------------------------------------
+    def schritt(self, dt: float) -> None:
+        super().schritt(dt)
+        for f in self.felder:
+            f.schritt(dt)
+        konto = self.app.konto
+        if konto.angemeldet and self.felder:
+            # Gerade durchgekommen: die Maske baut sich neu und zeigt von
+            # jetzt an, was ein Angemeldeter braucht.
+            self.aufbauen()
+            self.wahl = 0
+            self._weiter()
+
+    def _weiter(self) -> None:
+        """Nach der Anmeldung: weiter zu dem, was uns hergeschickt hat."""
+        if self.danach is None:
+            return
+        naechste, self.danach = self.danach, None
+        naechste(self)
+
+    def ausloesen(self, el) -> None:
+        konto = self.app.konto
+        if el.name == "zurueck" or el.name == "ohne":
+            self._weiter()
+            self.zurueck()
+        elif el.name == "ausruestung":
+            self.app.schieben(Ausruestung(self.app))
+        elif el.name == "abmelden":
+            konto.abmelden()
+            self.aufbauen()
+            self.wahl = 0
+        elif el.name in ("anmelden", "anlegen"):
+            name, wort = self._wert("name"), self._wert("wort")
+            if el.name == "anmelden":
+                konto.anmelden(name, wort)
+            else:
+                konto.anlegen(name, wort)
+
+    def inhalt_zeichnen(self, ziel) -> None:
+        r = self.tafel
+        konto = self.app.konto
+        SCHRIFT.zeichnen(ziel, konto.beschreibung(), r.centerx, r.y + 26,
+                         K.C_MUTED, 1, 1, "mitte")
+        if konto.angemeldet:
+            SCHRIFT.zeichnen(ziel, "ANGEMELDET ALS %s" % konto.name.upper(),
+                             r.centerx, r.y + 40, K.C_TEAL, 1, 1, "mitte")
+            uebersicht = konto.uebersicht()
+            offen = len(konto.journal.offen())
+            runden = uebersicht.get("runden", 0)
+            zeilen = [
+                "%d RUNDE%s  %d ABSCHUESSE  %d TODE"
+                % (runden, "" if runden == 1 else "N",
+                   uebersicht.get("abschuesse", 0), uebersicht.get("tode", 0)),
+                ("%d RUNDE WARTET AUF DEN ABGLEICH" % offen if offen == 1
+                 else "%d RUNDEN WARTEN AUF DEN ABGLEICH" % offen) if offen
+                else "ALLES ABGEGLICHEN",
+            ]
+            for i, zeile in enumerate(zeilen):
+                SCHRIFT.zeichnen(ziel, zeile, r.centerx, r.bottom - 44 + i * 10,
+                                 K.C_MUTED, 1, 1, "mitte")
+            return
+        y = r.bottom - 44
+        if konto.laeuft:
+            SCHRIFT.zeichnen(ziel, "EINEN AUGENBLICK ...", r.centerx, y,
+                             K.C_AMBER, 1, 1, "mitte")
+        elif konto.fehler:
+            SCHRIFT.zeichnen(ziel, konto.fehler[:44], r.centerx, y,
+                             K.C_RED, 1, 1, "mitte")
+        else:
+            SCHRIFT.zeichnen(ziel, "OHNE KONTO ZAEHLT ALLES TROTZDEM MIT",
+                             r.centerx, y, K.C_MUTED_DK, 1, 1, "mitte")
+            SCHRIFT.zeichnen(ziel, "UND WANDERT BEIM ANMELDEN MIT HOCH",
+                             r.centerx, y + 10, K.C_MUTED_DK, 1, 1, "mitte")
+
+    def fusstext(self) -> str:
+        if self.app.konto.angemeldet:
+            return "[ESC] ZURUECK"
+        return "[TAB] FELD  [ENTER] ANMELDEN  [ESC] SPAETER"
+
+
+# ══════════════════════════════════════════════════════════════════
+# Ausruestung
+# ══════════════════════════════════════════════════════════════════
+
+class Ausruestung(Menue):
+    """Drei Saetze aus zwei Waffen und einer Wurfwaffe.
+
+    Bewusst eine einzige Seite und keine Unterseiten: wer sich ausruestet,
+    will alle drei Entscheidungen zugleich sehen. Der gewaehlte Satz ist
+    zugleich der, den man traegt - es gibt kein zweites Bestaetigen, das
+    man vergessen koennte.
+    """
+
+    titel = "AUSRUESTUNG"
+
+    def __init__(self, app, danach=None) -> None:
+        self.tafel = _mitte(316, 216)
+        self.danach = danach
+        super().__init__(app)
+
+    @property
+    def konto(self):
+        return self.app.konto
+
+    def aufbauen(self) -> None:
+        r = self.tafel
+        lo = K.LOADOUT
+        konto = self.konto
+        satz = konto.loadout
+        bx, bw = r.x + 22, r.width - 44
+        y = r.y + 54
+        self.elemente = [
+            ui.Wahl((bx, y, bw, 16), "SATZ", "satz",
+                    [str(i) for i in range(lo["plaetze"])],
+                    konto.gewaehlt,
+                    {str(i): "%d - %s" % (i + 1, konto.loadouts[i]["name"])
+                     for i in range(len(konto.loadouts))}),
+        ]
+        y += 24
+        for nr in range(lo["waffen"]):
+            jetzt = (satz["waffen"][nr] if nr < len(satz["waffen"])
+                     else lo["auswahl_waffen"][0])
+            self.elemente.append(ui.Wahl(
+                (bx, y + nr * 20, bw, 16), "WAFFE %d" % (nr + 1),
+                "waffe%d" % nr, list(lo["auswahl_waffen"]),
+                list(lo["auswahl_waffen"]).index(jetzt),
+                {w: K.WAFFEN[w]["name"] for w in lo["auswahl_waffen"]}))
+        y += lo["waffen"] * 20
+        for nr in range(lo["wuerfe"]):
+            jetzt = (satz["wuerfe"][nr] if nr < len(satz["wuerfe"])
+                     else lo["auswahl_wuerfe"][0])
+            self.elemente.append(ui.Wahl(
+                (bx, y + nr * 20, bw, 16), "WURFWAFFE",
+                "wurf%d" % nr, list(lo["auswahl_wuerfe"]),
+                list(lo["auswahl_wuerfe"]).index(jetzt),
+                {w: K.WAFFEN[w]["name"] for w in lo["auswahl_wuerfe"]}))
+        self.elemente.append(
+            ui.Knopf((bx, r.bottom - 40, bw, 20), "FERTIG", "fertig"))
+
+    def geaendert(self, el) -> None:
+        """Jede Aenderung wirkt sofort und wird sofort abgelegt.
+
+        Kein Speichern-Knopf. Was man sieht, ist der Stand - und wer das
+        Menue zumacht, hat nichts verloren.
+        """
+        konto = self.konto
+        if el.name == "satz":
+            konto.loadout_waehlen(int(el.wert))
+            self.aufbauen()
+            self.wahl = 0
+            return
+        lo = K.LOADOUT
+        waffen, wuerfe = [], []
+        for e in self.elemente:
+            if e.name.startswith("waffe"):
+                waffen.append(e.wert)
+            elif e.name.startswith("wurf"):
+                wuerfe.append(e.wert)
+        # Zwei gleiche Waffen waeren ein Platz weniger, kein Vorteil. Die
+        # zweite rutscht darum auf die naechste freie.
+        sauber = []
+        for w in waffen:
+            if w in sauber:
+                for anderer in lo["auswahl_waffen"]:
+                    if anderer not in sauber:
+                        w = anderer
+                        break
+            sauber.append(w)
+        alt = konto.loadout
+        konto.loadout_setzen(konto.gewaehlt,
+                             {"name": alt["name"], "waffen": sauber,
+                              "wuerfe": wuerfe})
+        if sauber != waffen:
+            self.aufbauen()
+
+    def ausloesen(self, el) -> None:
+        if el.name == "fertig":
+            self.konto.loadout_bestaetigen()
+            naechste, self.danach = self.danach, None
+            self.zurueck()
+            if naechste is not None:
+                naechste(self)
+
+    def zurueck(self) -> None:
+        # Auch wer mit Escape hinausgeht, hat gewaehlt. Sonst fragt die
+        # naechste Runde wieder, und das waere nur laestig.
+        self.konto.loadout_bestaetigen()
+        super().zurueck()
+
+    def inhalt_zeichnen(self, ziel) -> None:
+        r = self.tafel
+        satz = self.konto.loadout
+        SCHRIFT.zeichnen(ziel, "ZWEI WAFFEN UND EINE WURFWAFFE", r.centerx,
+                         r.y + 28, K.C_MUTED, 1, 1, "mitte")
+        SCHRIFT.zeichnen(ziel, "DAS BRECHEISEN LIEGT AUF F UND IST IMMER DA",
+                         r.centerx, r.y + 38, K.C_MUTED_DK, 1, 1, "mitte")
+        # Die drei Plaetze so zeigen, wie sie im Gefecht liegen. Wer die
+        # Reihenfolge kennt, greift blind - und sieht hier, wo was liegt.
+        from .konto import hotbar_aus_loadout
+        plaetze = hotbar_aus_loadout(satz)
+        breite, luft = 82, 6
+        gesamt = len(plaetze) * breite + (len(plaetze) - 1) * luft
+        x = r.centerx - gesamt // 2
+        y = r.bottom - 66
+        for i, waffe in enumerate(plaetze):
+            kasten = pygame.Rect(x + i * (breite + luft), y, breite, 18)
+            ui.kasten(ziel, kasten, K.C_MUTED_DK, (18, 13, 9), 3)
+            SCHRIFT.zeichnen(ziel, str(i + 1), kasten.x + 3, kasten.y + 2,
+                             K.C_MUTED_DK, 1)
+            SCHRIFT.zeichnen(ziel, ui.kuerzen(K.WAFFEN[waffe]["name"],
+                                              breite - 14),
+                             kasten.centerx + 3, kasten.centery - 3,
+                             K.C_CREAM, 1, 1, "mitte")
+
+    def fusstext(self) -> str:
+        return "[LINKS/RECHTS] AENDERN   [ESC] FERTIG"

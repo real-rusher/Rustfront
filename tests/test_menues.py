@@ -75,7 +75,13 @@ print("Pausenmenue")
 taste(szene, app.opt.codes("pause")[0])
 pruef("Pausentaste oeffnet die Pause", isinstance(app.oben, M.Pause))
 pause = app.oben
-taste(pause, pygame.K_DOWN)
+# Ueber den Namen gesucht und nicht ueber die Zeilenzahl: die Pause
+# bekommt immer wieder Eintraege dazu, und eine Pruefung, die zaehlt,
+# geht dann kaputt, ohne dass etwas kaputt ist.
+namen = [el.name for el in pause.elemente]
+pruef("Die Pause fuehrt zum Konto und zur Ausruestung",
+      "konto" in namen and "ausruestung" in namen, ", ".join(namen))
+pause.wahl = namen.index("opt")
 taste(pause, pygame.K_RETURN)
 pruef("EINSTELLUNGEN oeffnet sich", isinstance(app.oben, M.Einstellungen))
 
@@ -117,7 +123,7 @@ pruef("ESC geht zurueck zur Pause", app.oben is pause)
 
 # ── Steuerung ─────────────────────────────────────────────────────────
 print("Steuerung")
-pause.wahl = 2
+pause.wahl = [el.name for el in pause.elemente].index("tasten")
 taste(pause, pygame.K_RETURN)
 st = app.oben
 pruef("STEUERUNG oeffnet sich", isinstance(st, M.Steuerung))
@@ -156,7 +162,7 @@ taste(st, pygame.K_ESCAPE)
 
 # ── Mitwirkende ───────────────────────────────────────────────────────
 print("Mitwirkende")
-pause.wahl = 3
+pause.wahl = [el.name for el in pause.elemente].index("credits")
 taste(pause, pygame.K_RETURN)
 cr = app.oben
 pruef("MITWIRKENDE oeffnet sich", isinstance(cr, M.Mitwirkende))
@@ -303,6 +309,107 @@ schirm(M.Einstellungen(app, 2), "menue_4_grafik.png")
 schirm(M.Steuerung(app), "menue_5_steuerung.png")
 schirm(M.Mitwirkende(app), "menue_6_mitwirkende.png", schritte=360)
 schirm(Inventar(app, szene), "menue_7_inventar.png")
+
+# ── Konto und Ausruestung ────────────────────────────────────────────
+print("Konto und Ausruestung")
+from dustfront import konto as KONTO_M
+from dustfront import ablage as ABLAGE
+
+app._konto = KONTO_M.Konto(ablage_=ABLAGE.LokaleAblage(ordner=pfade.ordner()),
+                           ordner=pfade.ordner(), mit_faden=False)
+
+pause.wahl = [el.name for el in pause.elemente].index("konto")
+taste(pause, pygame.K_RETURN)
+an = app.oben
+pruef("KONTO oeffnet sich", isinstance(an, M.Anmeldung))
+pruef("Zwei Felder: Name und Kennwort",
+      [f.name for f in an.felder] == ["name", "wort"],
+      str([f.name for f in an.felder]))
+pruef("Das Kennwortfeld ist verdeckt", an.felder[1].verdeckt)
+
+# Getippt wird ins Feld und nicht ins Menue. Genau hier geht es sonst
+# schief: ein "w" waehlte frueher eine Zeile weiter, statt ein w zu
+# schreiben.
+def tippen(szene, text):
+    for c in text:
+        szene.ereignis(pygame.event.Event(pygame.KEYDOWN, key=ord(c[0]),
+                                          unicode=c))
+
+vorher_wahl = an.wahl
+tippen(an, "MeisterW")
+pruef("Getippt wird ins Feld, nicht ins Menue",
+      an.felder[0].wert == "MeisterW" and an.wahl == vorher_wahl,
+      "%r, Wahl %d" % (an.felder[0].wert, an.wahl))
+tippen(an, "!? ")
+pruef("Was kein Kontoname sein darf, kommt nicht hinein",
+      an.felder[0].wert == "MeisterW", an.felder[0].wert)
+taste(an, pygame.K_BACKSPACE)
+pruef("Rueckschritt loescht ein Zeichen", an.felder[0].wert == "Meister")
+taste(an, pygame.K_TAB)
+pruef("TAB springt ins naechste Feld", an.tippt == 1)
+tippen(an, "geheim12345")
+pruef("Und dort steht das Kennwort", an.felder[1].wert == "geheim12345")
+
+# Ein zu kurzes Kennwort muss eine Auskunft geben, keine stille Ablehnung.
+an.felder[1].wert = "kurz"
+an.ausloesen(ui.Knopf((0, 0, 1, 1), "", "anlegen"))
+pruef("Ein zu kurzes Kennwort wird erklaert",
+      "KENNWORT" in app.konto.fehler, app.konto.fehler)
+
+an.felder[1].wert = "geheim12345"
+an.ausloesen(ui.Knopf((0, 0, 1, 1), "", "anlegen"))
+pruef("Mit einem guten Kennwort geht es durch",
+      app.konto.angemeldet and app.konto.name == "Meister",
+      app.konto.fehler or app.konto.name)
+an.schritt(0.1)
+namen = [el.name for el in an.elemente]
+pruef("Die Maske zeigt danach, was ein Angemeldeter braucht",
+      "abmelden" in namen and not an.felder, str(namen))
+
+an.ausloesen(ui.Knopf((0, 0, 1, 1), "", "ausruestung"))
+aus = app.oben
+pruef("AUSRUESTUNG oeffnet sich", isinstance(aus, M.Ausruestung))
+waehler = [el.name for el in aus.elemente]
+pruef("Ein Satz, zwei Waffen, eine Wurfwaffe",
+      waehler[:4] == ["satz", "waffe0", "waffe1", "wurf0"], str(waehler))
+
+w0 = next(el for el in aus.elemente if el.name == "waffe0")
+w0.index = list(K.LOADOUT["auswahl_waffen"]).index("scharf")
+aus.geaendert(w0)
+pruef("Eine geaenderte Waffe steht sofort im Loadout",
+      "scharf" in app.konto.loadout["waffen"],
+      str(app.konto.loadout["waffen"]))
+pruef("Und sofort auf der Platte",
+      "scharf" in KONTO_M.Konto(ablage_=ABLAGE.LokaleAblage(ordner=pfade.ordner()),
+                                ordner=pfade.ordner(),
+                                mit_faden=False).loadout["waffen"])
+
+# Zweimal dieselbe Waffe waere ein Platz weniger, kein Vorteil.
+w1 = next(el for el in aus.elemente if el.name == "waffe1")
+w1.index = list(K.LOADOUT["auswahl_waffen"]).index("scharf")
+aus.geaendert(w1)
+pruef("Zweimal dieselbe Waffe gibt es nicht",
+      len(set(app.konto.loadout["waffen"])) == 2,
+      str(app.konto.loadout["waffen"]))
+
+satz = next(el for el in aus.elemente if el.name == "satz")
+satz.index = 2
+aus.geaendert(satz)
+pruef("Ein anderer Satz laesst sich waehlen", app.konto.gewaehlt == 2)
+pruef("Und die Waehler zeigen dann dessen Waffen",
+      next(el for el in aus.elemente if el.name == "waffe0").wert
+      == app.konto.loadout["waffen"][0])
+
+pruef("Vorher wurde noch nie ausgeruestet", not app.konto.loadout_gewaehlt_je)
+taste(aus, pygame.K_ESCAPE)
+pruef("Nach dem Schliessen gilt es als erledigt",
+      app.konto.loadout_gewaehlt_je)
+pruef("Und wir sind wieder bei der Anmeldung", app.oben is an)
+taste(an, pygame.K_ESCAPE)
+
+# Bilder der beiden neuen Masken, wie bei den anderen auch.
+schirm(M.Anmeldung(app), "menue_8_konto.png")
+schirm(M.Ausruestung(app), "menue_9_ausruestung.png")
 
 print()
 print("FEHLER:", ", ".join(fehler) if fehler else "keine")

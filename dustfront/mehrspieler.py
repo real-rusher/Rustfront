@@ -336,6 +336,12 @@ class KampfGegner(Gegner):
 class Gefecht(Szene):
     """Die Spielszene fuer den LAN-Test, beim Gastgeber wie beim Gast."""
 
+    # Das Gefecht haelt eine Leitung offen und darf darum nie anhalten,
+    # auch nicht, wenn ein Menue darueber liegt: der Gastgeber wirft
+    # einen Gast nach K.NETZ["stumm_nach"] Sekunden ohne Lebenszeichen
+    # hinaus. Gesteuert wird trotzdem nichts - siehe `pausiert`.
+    weiterlaufen = True
+
     def __init__(self, app, name: str, gastgeber=None, gast=None,
                  modus: str = K.MODUS_VORGABE, ende_art: str = "zeit",
                  ende_wert: float = 0.0, knapp: bool = False,
@@ -428,6 +434,7 @@ class Gefecht(Szene):
         self.partie = ""
         self._gebucht = ""
         self._rundenzeit = 0.0
+        self._masken_durch = False
 
         self._seit_senden = 0.0
         # Was seit der letzten Meldung an Wirkung entstanden ist. Wird mit
@@ -621,6 +628,24 @@ class Gefecht(Szene):
         return self.regeln["teams"]
 
     @property
+    def pausiert(self) -> bool:
+        """Wird gerade nicht gespielt, obwohl die Welt weiterlaeuft?
+
+        Zwei Faelle: das eigene Menue ist auf, oder eine andere Szene
+        liegt darueber - Ausruestung, Konto. In beiden darf die Figur
+        nicht laufen und nicht schiessen, sonst steht man im Menue und
+        wird nebenbei erschossen, waehrend der Finger noch auf der Taste
+        liegt.
+        """
+        if self.menue is not None:
+            return True
+        # Gefragt wird nach dem Stapel und nicht nach `app.oben`: in den
+        # Pruefungen laeuft ein Gefecht auch mal ganz ohne Stapel, und
+        # das darf es nicht laehmen.
+        stapel = getattr(self.app, "stapel", [])
+        return self in stapel and stapel[-1] is not self
+
+    @property
     def mit_loadouts(self) -> bool:
         return self.loadout_regel == "eigenes"
 
@@ -737,6 +762,30 @@ class Gefecht(Szene):
         self.kaempfer[nummer] = k
         self.welt.dazu(k)
         return k
+
+    def _loadout_anlegen(self, k: Kaempfer) -> None:
+        """Dem Kaempfer die Waffen geben, die gerade fuer ihn gelten.
+
+        Ohne Loadout-Regel bekommt jeder alles zurueck - auch dann, wenn
+        die Runde vorher mit Loadouts lief. Sonst liefe jemand nach einem
+        Regelwechsel mit drei Plaetzen herum, waehrend alle anderen sechs
+        haben.
+        """
+        if self.mit_loadouts:
+            # Der Gastgeber kennt das Loadout jedes Gastes von dessen
+            # Anmeldung; sein eigenes holt er sich frisch, damit eine
+            # Aenderung im Menue ankommt.
+            lo = self.mein_loadout() if k is self.ich else k.loadout
+            plaetze = konto_modul.hotbar_aus_loadout(lo) if lo else []
+        else:
+            plaetze = list(K.HOTBAR)
+        if not plaetze or plaetze == k.waffen:
+            return
+        k.loadout = dict(lo) if self.mit_loadouts and lo else None
+        k.waffen = plaetze
+        k.waffe = 0
+        k.magazin = {w: K.WAFFEN[w]["magazin"] for w in plaetze}
+        k.vorrat = {w: K.MUNITION["vorrat"].get(w, 0) for w in plaetze}
 
     def _regeln_anlegen(self, k: Kaempfer) -> None:
         """Was die Spielart am einzelnen Kaempfer aendert."""
@@ -871,7 +920,7 @@ class Gefecht(Szene):
     def _meine_eingabe(self) -> dict:
         e = self.app.eingabe
         ziel = self.kamera.zu_welt(e.maus)
-        offen = self.menue is not None
+        offen = self.pausiert
         meldung = {
             "t": "ein",
             "will": [0.0, 0.0] if offen else [round(v, 2) for v in e.richtung()],
@@ -1389,6 +1438,11 @@ class Gefecht(Szene):
             k.vorrat[w] = hat - gibt
 
     def _wieder_einsteigen(self, k: Kaempfer) -> None:
+        # Ein im Menue geaendertes Loadout gilt ab dem naechsten Leben.
+        # Sofort waere ein kostenloser Waffenwechsel mitten im Gefecht -
+        # man wuerde die Ausruestung nach dem Gegner aussuchen, den man
+        # gerade vor sich hat, und die Entscheidung waere keine mehr.
+        self._loadout_anlegen(k)
         k.pos.update(self._einstiegsort(k.team, ausser=k))
         k.vorher.update(k.pos)
         k.tempo.update(0, 0)
@@ -1969,7 +2023,8 @@ class Gefecht(Szene):
         self._zeit += dt
         if not self.vorbei:
             self._rundenzeit += dt
-        if self.menue is None:
+        self._start_masken()
+        if not self.pausiert:
             self.knoepfe_sammeln()
         else:
             # Im Menue wird nicht gelaufen und nicht geschossen. Die Welt
@@ -2061,6 +2116,12 @@ class Gefecht(Szene):
     def _menue_baut(self) -> list:
         """Die Eintraege, wie sie gerade gelten. Je nach Rolle und Spielart."""
         eintraege = [("weiter", "WEITER", "")]
+        konto = getattr(self.app, "konto", None)
+        eintraege.append(("ausruestung", "MEINE AUSRUESTUNG",
+                          konto.loadout["name"] if konto else ""))
+        eintraege.append(("konto", "KONTO",
+                          konto.name.upper() if konto and konto.angemeldet
+                          else "NICHT ANGEMELDET"))
         if self.ist_gastgeber:
             w = self.wunsch
             eintraege.append(("modus", "SPIELART", K.MODI[w["modus"]]["name"]))
@@ -2084,6 +2145,9 @@ class Gefecht(Szene):
                               "AN" if w["medkit_spawn"] else "AUS"))
             eintraege.append(("knapp", "MUNITION KNAPP",
                               "AN" if w["knapp"] else "AUS"))
+            eintraege.append(("loadouts", "AUSRUESTUNG",
+                              "EIGENES LOADOUT" if w["loadouts"] == "eigenes"
+                              else "JEDER HAT ALLES"))
             if regeln["teams"]:
                 eintraege.append(("teams", "MANNSCHAFTEN EINTEILEN", ""))
             eintraege.append(("neu", "NEUE RUNDE MIT DIESEN REGELN", ""))
@@ -2149,7 +2213,7 @@ class Gefecht(Szene):
     # Eintraege, die etwas *tun*, statt einen Wert zu verstellen. Sie
     # reagieren nur auf Enter. Auf einen Pfeil zu hoeren waere hier
     # gefaehrlich: ein Druck daneben haette das Gefecht beendet.
-    TATEN = ("weiter", "raus", "teams", "neu")
+    TATEN = ("weiter", "raus", "teams", "neu", "ausruestung", "konto")
 
     def _menue_wirken(self, schluessel: str, vor: bool, waehlen: bool) -> None:
         if schluessel in self.TATEN and not waehlen:
@@ -2160,6 +2224,18 @@ class Gefecht(Szene):
             return
         if schluessel == "raus":
             self.app.laeuft = False
+            return
+        if schluessel in ("ausruestung", "konto"):
+            # Als eigene Szene und nicht als Unterseite: die beiden
+            # Masken gehoeren dem Konto, nicht dem Gefecht, und der
+            # Einzelspieler oeffnet genau dieselben. Das Gefecht laeuft
+            # darunter weiter (Szene.weiterlaufen), sonst faellt die
+            # Leitung tot.
+            from .menues import Anmeldung, Ausruestung
+            self._menue_zu()
+            self.app.schieben(Ausruestung(self.app)
+                              if schluessel == "ausruestung"
+                              else Anmeldung(self.app))
             return
         if not self.ist_gastgeber:
             return
@@ -2194,6 +2270,9 @@ class Gefecht(Szene):
             w["medkit_spawn"] = not w["medkit_spawn"]
         elif schluessel == "knapp":
             w["knapp"] = not w["knapp"]
+        elif schluessel == "loadouts":
+            w["loadouts"] = ("alles" if w["loadouts"] == "eigenes"
+                             else "eigenes")
         elif schluessel == "teams":
             self.menue_teams = True
             self.menue_zeile = 0
@@ -2249,6 +2328,8 @@ class Gefecht(Szene):
         self.schutz_an = bool(w["schutz"])
         self.start_medkits = int(w["medkits"])
         self.medkits_spawnen = bool(w["medkit_spawn"])
+        if w.get("loadouts") in K.GEFECHT["loadout_arten"]:
+            self.loadout_regel = w["loadouts"]
 
         self.teampunkte = [0] * len(K.TEAMS["namen"])
         self.zone_stand = [0.0] * len(self.teampunkte)
@@ -2283,6 +2364,7 @@ class Gefecht(Szene):
         self._rundenzeit = 0.0
         for k in self.kaempfer.values():
             k.zaehler_leeren()
+            self._loadout_anlegen(k)
 
         self._teams_ausgleichen()
         self._einstiegszonen_waehlen()
@@ -2302,13 +2384,45 @@ class Gefecht(Szene):
             self.gastgeber.an_alle(dict(self._willkommen(-1, None),
                                         t="neustart"))
 
+    def _start_masken(self) -> None:
+        """Einmal beim Betreten: anmelden, und wenn noetig ausruesten.
+
+        Beides **einmal** und beides wegdrueckbar. Wer "OHNE KONTO
+        SPIELEN" waehlt, wird nicht wieder gefragt; wer sich ein Loadout
+        zusammengestellt hat, auch nicht. Eine Maske, die bei jedem Start
+        wieder auftaucht, lernt man wegzuklicken, ohne sie zu lesen - und
+        dann haette sie auch gleich wegbleiben koennen.
+        """
+        if self._masken_durch:
+            return
+        stapel = getattr(self.app, "stapel", [])
+        if self not in stapel or stapel[-1] is not self:
+            return
+        self._masken_durch = True
+        konto = getattr(self.app, "konto", None)
+        if konto is None:
+            return
+        from .menues import Anmeldung, Ausruestung
+
+        def ausruesten(_szene=None):
+            if self.mit_loadouts and not konto.loadout_gewaehlt_je:
+                self.app.schieben(Ausruestung(self.app))
+
+        if not konto.angemeldet and not konto.werte.get("anmeldung_gefragt"):
+            konto.werte["anmeldung_gefragt"] = True
+            konto.profil_sichern()
+            self.app.schieben(Anmeldung(self.app, danach=ausruesten))
+            return
+        ausruesten()
+
     def _wunsch_lesen(self) -> dict:
         """Die Regeln, die gerade gelten, als Ausgangspunkt fuers Menue."""
         return dict(modus=self.modus, ende_art=self.ende_art,
                     ende_wert=self.ende_wert, runden_bis=self.runden_bis,
                     knapp=self.knapp, schutz=self.schutz_an,
                     medkits=self.start_medkits,
-                    medkit_spawn=self.medkits_spawnen)
+                    medkit_spawn=self.medkits_spawnen,
+                    loadouts=self.loadout_regel)
 
 
     # ---- Bild ----------------------------------------------------------

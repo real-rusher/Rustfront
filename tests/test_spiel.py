@@ -1747,8 +1747,14 @@ gast_eintraege = [x[0] for x in ga._menue_baut()]
 pruef("Der Gastgeber kann die Regeln stellen",
       "modus" in wirt_eintraege and "neu" in wirt_eintraege
       and "teams" in wirt_eintraege, str(wirt_eintraege))
-pruef("Der Gast nur weiterspielen oder gehen",
-      gast_eintraege == ["weiter", "raus"], str(gast_eintraege))
+pruef("Der Gast stellt keine Regeln",
+      not ({"modus", "neu", "teams", "knapp", "loadouts"}
+           & set(gast_eintraege)), str(gast_eintraege))
+pruef("Seine eigene Ausruestung und sein Konto schon",
+      "ausruestung" in gast_eintraege and "konto" in gast_eintraege,
+      str(gast_eintraege))
+pruef("Und der Gastgeber stellt die Ausruestungsregel",
+      "loadouts" in wirt_eintraege, str(wirt_eintraege))
 taste(ga, pygame.K_ESCAPE)
 
 # Mannschaften von Hand verschieben, sofort.
