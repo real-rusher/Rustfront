@@ -55,6 +55,7 @@ import pygame
 from . import bestenliste
 from . import config as K
 from . import netz
+from . import world as welt_modul
 from .core import Szene
 from .entities import Aufsammler, Gegner, Rauchwolke, Spieler, wolke
 from .font import SCHRIFT
@@ -399,7 +400,19 @@ class Gefecht(Szene):
         self.meine_nummer = 0
 
         self._seit_senden = 0.0
+        # Was seit der letzten Meldung an Wirkung entstanden ist. Wird mit
+        # der Weltmeldung verschickt und dabei geleert.
+        self._wirkung: list[list] = []
         self._fremde_schuesse: list[tuple] = []
+        # Uhr fuer die Zwischenlagen beim Gast. Der Gastgeber meldet
+        # sechzigmal in der Sekunde, gezeichnet wird bis zu dreihundertmal
+        # - dazwischen muss weitergezeichnet werden, sonst steht das Bild
+        # fuenf Bilder still und springt dann. Gemessen wird der Abstand
+        # zweier Meldungen, nicht angenommen: eine ueberlastete Leitung
+        # meldet eben seltener, und dann soll auch langsamer ueberblendet
+        # werden statt frueh anzuhalten.
+        self._seit_paket = 0.0
+        self._paket_takt = float(K.NETZ["takt"])
         self._fremde_beute: list[tuple] = []
         self._fremde_gegner: list[tuple] = []
         self._knoepfe: set[str] = set()
@@ -447,11 +460,26 @@ class Gefecht(Szene):
         Eines bleibt bewusst weg: kurz_langsam. Die Zeitlupe beim Toeten
         wuerde beim Gastgeber die ganze Welt verlangsamen, also auch fuer
         alle Gaeste. Ein Abschuss darf nicht die Runde der anderen bremsen.
+
+        Ruckeln und Klang haengen **nicht mehr stur** an Kamera und
+        Tonausgabe. Genau das war der gemeldete Fehler: der Gastgeber
+        rechnet die Welt aller Spieler, also lief bei ihm jeder Schuss
+        der ganzen Runde auf seiner eigenen Kamera zusammen - gemessen
+        2,09 Pixel Dauerzittern in 100 % der Bilder, waehrend der Gast
+        bei 0,00 sass. Dazwischen liegt jetzt eine Rechnung, die fragt,
+        ob die Meldung diesen Zuschauer ueberhaupt angeht.
         """
-        self.welt.ruckeln = self.kamera.stossen
-        self.welt.klang = self.app.klaenge.spielen
+        self.welt.ruckeln = self._ruckeln
+        self.welt.klang = self._klang
         self.welt.blutfleck = self._blutfleck
         self.welt.brandfleck = self._brandfleck
+        if self.ist_gastgeber:
+            # Nur beim Gastgeber: was in der Welt an Wirkung entsteht,
+            # wird zusaetzlich mitgeschrieben und geht als Meldung an die
+            # Gaeste, die selbst nichts rechnen. Siehe _wirkung_melden.
+            self.welt.explosion = self._explosion_melden
+            self.welt.schussknall = self._schussknall_melden
+            self.welt.schlagknall = self._schlagknall_melden
 
     def _blutfleck(self, pos, ebene: int, radius: float) -> None:
         self.welt.ebene(ebene).dekal(self.renderer.blutfleck(radius),
@@ -460,6 +488,89 @@ class Gefecht(Szene):
     def _brandfleck(self, pos, ebene: int, radius: float) -> None:
         self.welt.ebene(ebene).dekal(self.renderer.brandfleck(radius),
                                      pos.x, pos.y)
+
+    def _ruckeln(self, kraft: float, anlass: str = "", pos=None,
+                 ebene: int = 0, quelle=None) -> None:
+        self.kamera.stossen(welt_modul.ruckel_wert(kraft, anlass, pos, ebene,
+                                                   quelle, self.ich))
+
+    def _klang(self, name: str, lautstaerke: float = 1.0, pos=None,
+               ebene: int | None = None) -> None:
+        laut = welt_modul.klang_wert(lautstaerke, pos, ebene or 0, self.ich)
+        if laut > 0.0:
+            self.app.klaenge.spielen(name, laut)
+
+    # ---- Wirkung, die an die Gaeste weitergeht -------------------------
+    #
+    # Ein Gast simuliert nichts. Bisher hiess das: er sah das Bild einer
+    # Granate fliegen, und dann war es weg - kein Knall, keine Funken,
+    # kein Brandfleck. Gemessen an einer Runde ueber echte Steckdosen:
+    # Gastgeber 5 Partikel und ein Ton, Gast 0 und keiner. Auch am Lauf
+    # blitzte bei ihm nie etwas, und im ganzen Mehrspieler war ausser dem
+    # eigenen Nachladen kein Schuss zu hoeren.
+    #
+    # Es fehlte schlicht der Kanal. Jetzt schreibt der Gastgeber jede
+    # Wirkung mit, schickt sie mit der Weltmeldung und der Gast ruft
+    # damit **dieselbe** Funktion in seiner eigenen Welt auf. Damit kann
+    # das Ergebnis gar nicht auseinanderlaufen: es ist derselbe Code.
+
+    def _explosion_melden(self, pos, ebene: int, radius: float,
+                          rauch: bool = False) -> None:
+        Welt.explosion(self.welt, pos, ebene, radius, rauch)
+        self._wirkung.append(["x", round(pos.x, 1), round(pos.y, 1),
+                              int(ebene), round(radius, 1), 1 if rauch else 0])
+
+    def _schussknall_melden(self, pos, winkel: float, ebene: int, waffe: str,
+                            quelle=None) -> None:
+        Welt.schussknall(self.welt, pos, winkel, ebene, waffe, quelle)
+        self._wirkung.append(["s", round(pos.x, 1), round(pos.y, 1),
+                              int(ebene), round(winkel, 1), waffe])
+
+    def _schlagknall_melden(self, pos, winkel: float, ebene: int,
+                            getroffen: bool = False, quelle=None) -> None:
+        Welt.schlagknall(self.welt, pos, winkel, ebene, getroffen, quelle)
+        self._wirkung.append(["n", round(pos.x, 1), round(pos.y, 1),
+                              int(ebene), round(winkel, 1),
+                              1 if getroffen else 0])
+
+    def _wirkung_nachspielen(self, eintraege) -> None:
+        """Beim Gast: die gemeldeten Wirkungen in der eigenen Welt ausloesen.
+
+        Der Absender ist bewusst None. Damit gilt fuer den Gast alles als
+        fremd, was nicht seine eigene Figur betrifft - und die Rechnung in
+        `ruckel_wert` entscheidet nach Ebene und Entfernung, ob es ihn
+        angeht. Der Schuss eines Mitspielers am anderen Ende der Karte ist
+        dann zu hoeren, aber ruckelt nicht.
+        """
+        for e in eintraege:
+            if not isinstance(e, (list, tuple)) or len(e) != 6:
+                continue
+            try:
+                art = str(e[0])
+                pos = pygame.Vector2(float(e[1]), float(e[2]))
+                ebene = int(e[3])
+            except (TypeError, ValueError):
+                continue
+            if art == "x":
+                try:
+                    radius, rauch = float(e[4]), bool(e[5])
+                except (TypeError, ValueError):
+                    continue
+                self.welt.explosion(pos, ebene, radius, rauch)
+            elif art == "s":
+                try:
+                    winkel = float(e[4])
+                except (TypeError, ValueError):
+                    continue
+                waffe = str(e[5])
+                if waffe in K.WAFFEN:
+                    self.welt.schussknall(pos, winkel, ebene, waffe)
+            elif art == "n":
+                try:
+                    winkel = float(e[4])
+                except (TypeError, ValueError):
+                    continue
+                self.welt.schlagknall(pos, winkel, ebene, bool(e[5]))
 
     # ---- Grundsaetzliches --------------------------------------------
     @property
@@ -902,7 +1013,14 @@ class Gefecht(Szene):
 
         self._seit_senden += dt
         if self._seit_senden >= K.NETZ["takt"]:
-            self._seit_senden = 0.0
+            # Abgezogen, nicht auf null gesetzt: sonst geht bei jedem
+            # Senden der Rest verloren, und der tatsaechliche Takt haengt
+            # davon ab, wie das Bildmass zum Netztakt passt. Bei 1/120 zu
+            # 1/60 ginge es gerade auf, bei jedem anderen Verhaeltnis
+            # schleicht sich ein Fehler ein, der die Meldungen ungleich
+            # verteilt - und ungleich verteilte Meldungen sehen aus wie
+            # springende Granaten.
+            self._seit_senden -= K.NETZ["takt"]
             self.gastgeber.an_alle(self._weltmeldung())
 
     def _willkommen(self, nummer: int, k: Kaempfer | None) -> dict:
@@ -1330,17 +1448,26 @@ class Gefecht(Szene):
             name = getattr(w, "bild", None)
             if name in ("geschoss", "granate", "rauchgranate"):
                 # Die Flughoehe muss mit: eine Granate, die eine Ebene
-                # tiefer faellt, haengt beim Gast sonst in der Luft.
+                # tiefer faellt, haengt beim Gast sonst in der Luft. Und
+                # die Kennung, damit der Gast dieselbe Granate von einem
+                # Paket zum naechsten wiedererkennt und zwischen den
+                # Paketen weiterzeichnen kann, statt sie springen zu
+                # lassen.
                 flug.append([round(w.pos.x, 1), round(w.pos.y, 1),
                              round(w.winkel, 1), w.ebene, name,
-                             round(getattr(w, "flug", 0.0), 1)])
+                             round(getattr(w, "flug", 0.0), 1), w.kennung])
         # Die Kennung muss mit. Ohne sie kann der Gast eine Wolke, die er
         # schon hat, nicht von einer neuen unterscheiden - und baut sie
         # deshalb bei jedem Paket neu (siehe _welt_uebernehmen).
         qualm = [[round(r.pos.x, 1), round(r.pos.y, 1), r.ebene,
                   round(r.radius, 1), round(r.alter, 2), r.kennung]
                  for r in self.welt.rauch if r.lebt]
+        # Die Wirkungen gehen genau einmal hinaus. Was hier mitgeht, ist
+        # geleert, bevor der naechste Schritt neue erzeugt - sonst
+        # explodierte bei den Gaesten jede Granate wieder und wieder.
+        wirkung, self._wirkung = self._wirkung, []
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
+                "wirkung": wirkung,
                 "spieler": spieler, "schuesse": flug, "beute": beute,
                 "gegner": gegner, "welle": self.welle,
                 "pause": round(self.pause_rest, 1),
@@ -1363,6 +1490,11 @@ class Gefecht(Szene):
             self.hinweis = "VERBINDUNG VERLOREN  [ESC]"
             return
 
+        # Vor dem Lesen der Post hochgezaehlt, nicht danach: eine
+        # Meldung setzt die Uhr auf null, und dann soll die Ueberblendung
+        # bei null anfangen und nicht schon bei der Haelfte stehen.
+        self._seit_paket += dt
+
         for nachricht in self.gast.holen():
             art = nachricht.get("t")
             if art in ("willkommen", "neustart"):
@@ -1375,6 +1507,9 @@ class Gefecht(Szene):
                     self.welt.rauch = []
                     self._fremde_beute = []
                     self._fremde_gegner = []
+                    self._fremde_schuesse = []
+                    self.welt.partikel = []
+                    self.welt.muendungen = []
                     self.hinweis = "NEUE RUNDE: %s" % K.MODI[self.modus]["name"]
             elif art == "welt":
                 self._welt_uebernehmen(nachricht)
@@ -1404,7 +1539,11 @@ class Gefecht(Szene):
         self._seit_senden += dt
         eilig = bool(self._knoepfe) or self._waffe_wunsch >= 0
         if eilig or self._seit_senden >= K.NETZ["eingabe_takt"]:
-            self._seit_senden = 0.0
+            # Bei einer eiligen Meldung faengt der Takt neu an, sonst wird
+            # nur der Takt abgezogen - siehe die Begruendung beim
+            # Gastgeber.
+            self._seit_senden = (0.0 if eilig
+                                 else self._seit_senden - K.NETZ["eingabe_takt"])
             self.gast.senden(self._meine_eingabe())
 
     def _willkommen_lesen(self, nachricht: dict) -> None:
@@ -1460,7 +1599,31 @@ class Gefecht(Szene):
             except (TypeError, ValueError):
                 pass
 
+    def misch(self, alpha: float = 0.0) -> float:
+        """Wie weit zwischen der vorletzten und der letzten Meldung.
+
+        0 heisst: die letzte Meldung ist gerade angekommen, 1 heisst: die
+        naechste ist faellig. Beim Gastgeber gibt es nichts zu mischen,
+        der rechnet ja selbst - dort zaehlt der Bildanteil des Schrittes.
+
+        `alpha` ist genau dieser Bildanteil und gehoert dazu: gerechnet
+        wird nur alle 1/120 s, gezeichnet bis zu 300-mal in der Sekunde.
+        Ohne ihn haette die Ueberblendung nur so viele Stufen, wie es
+        Rechenschritte gibt, und zwei bis drei Bilder hintereinander
+        zeigten dasselbe - gemessen stand die Granate dann in 61 % der
+        Bilder still. Mit ihm laeuft sie in jedem Bild weiter.
+        """
+        vergangen = self._seit_paket + max(0.0, min(1.0, alpha)) * K.FIXED_DT
+        return max(0.0, min(1.0, vergangen / max(1e-4, self._paket_takt)))
+
     def _welt_uebernehmen(self, meldung: dict) -> None:
+        # Den Meldungsabstand messen und weich mitfuehren. Ein einzelnes
+        # spaetes Paket soll die Ueberblendung nicht gleich umwerfen.
+        if self._seit_paket > 0.0:
+            self._paket_takt += (self._seit_paket - self._paket_takt) * 0.25
+            self._paket_takt = max(K.NETZ["takt"] * 0.5,
+                                   min(0.5, self._paket_takt))
+        self._seit_paket = 0.0
         self.rest = float(meldung.get("rest", self.rest))
         self.vorbei = bool(meldung.get("aus", False))
         self.welle = int(meldung.get("welle", 0))
@@ -1530,14 +1693,52 @@ class Gefecht(Szene):
         if self.ich is not None:
             self.welt.held = self.ich
         vorige_beute = self._fremde_beute
-        self._fremde_schuesse = [tuple(s) for s in meldung.get("schuesse", [])
-                                 if isinstance(s, (list, tuple)) and len(s) == 6]
+        self._fliegendes_uebernehmen(meldung.get("schuesse", []))
         self._rauch_uebernehmen(meldung.get("rauch", []))
+        self._wirkung_nachspielen(meldung.get("wirkung", []))
         self._fremde_beute = [tuple(b) for b in meldung.get("beute", [])
                               if isinstance(b, (list, tuple)) and len(b) == 4]
         self._fremde_gegner = [tuple(g) for g in meldung.get("gegner", [])
                                if isinstance(g, (list, tuple)) and len(g) == 6]
         self._aufgehoben_erkennen(vorige_beute)
+
+    def _fliegendes_uebernehmen(self, eintraege) -> None:
+        """Geschosse und Granaten beim Gast nachfuehren, mit Zwischenlage.
+
+        Der zweite Teil des gemeldeten Granatenfehlers steckte hier. Die
+        Liste wurde bei jedem Paket weggeworfen und neu gesetzt, und
+        gezeichnet wurde stur die zuletzt gemeldete Stelle. Bei sechzig
+        Paketen und dreihundert Bildern in der Sekunde heisst das: fuenf
+        Bilder lang steht die Granate still, dann springt sie um ihren
+        ganzen Weg weiter - waehrend jeder Mitspieler daneben sauber
+        zwischen zwei Meldungen laeuft, weil Kaempfer ein `vorher` haben.
+        Eine Granate sprang also sichtbar und landete gefuehlt woanders,
+        als sie geflogen war.
+
+        Jetzt traegt jedes fliegende Ding seine Kennung. Was schon da
+        war, behaelt seine letzte Lage als `vorher`, und gezeichnet wird
+        dazwischen - genau wie bei den Figuren.
+        """
+        vorher = {e[6]: e for e in self._fremde_schuesse if len(e) > 6}
+        raus = []
+        for e in eintraege:
+            if not isinstance(e, (list, tuple)) or len(e) < 6:
+                continue
+            try:
+                x, y = float(e[0]), float(e[1])
+                winkel, ebene = float(e[2]), int(e[3])
+                name, hoehe = str(e[4]), float(e[5])
+                # Aeltere Gastgeber schicken keine Kennung. Dann gibt es
+                # eben keine Zwischenlage, aber alles andere geht weiter.
+                kennung = int(e[6]) if len(e) > 6 else 0
+            except (TypeError, ValueError):
+                continue
+            alt = vorher.get(kennung) if kennung else None
+            # Die bisher gemeldete Lage wird zur Ausgangslage. Zwischen
+            # ihr und der neuen wird gezeichnet.
+            vx, vy = (alt[0], alt[1]) if alt is not None else (x, y)
+            raus.append((x, y, winkel, ebene, name, hoehe, kennung, vx, vy))
+        self._fremde_schuesse = raus
 
     def _rauch_uebernehmen(self, eintraege) -> None:
         """Rauchwolken beim Gast nachfuehren - **ohne sie neu zu bauen**.
@@ -1615,10 +1816,12 @@ class Gefecht(Szene):
                 self.welt.aufschlagring(k.pos, k.ebene, wucht)
                 wolke(self.welt, k.pos, int(K.STURZ["staub"] * 0.6),
                       140, 0.5, K.C_MUTED_DK, k.ebene, 1, "staub")
-                self.welt.klang("sturz", 0.55 + 0.45 * wucht)
-                if k is self.ich:
-                    self.kamera.stossen(min(K.KAMERA["ruckeln_max"],
-                                            K.STURZ["ruckeln"] + vorher * 0.035))
+                self.welt.klang("sturz", 0.55 + 0.45 * wucht, k.pos, k.ebene)
+                # Dieselbe Rechnung wie ueberall, mit `quelle=k`: der eigene
+                # Aufschlag zaehlt voll, der eines anderen nach Ebene und
+                # Entfernung.
+                self.welt.ruckeln(K.STURZ["ruckeln"] + vorher * 0.035, "sturz",
+                                  k.pos, k.ebene, k)
             self._flughoehen[k.nummer] = k.flug
 
     # ---- Szene ---------------------------------------------------------
@@ -1677,6 +1880,9 @@ class Gefecht(Szene):
             self.hinweis = ("ANSICHT EBENE %d - ZURUECK IN %.0f"
                             % (self.blick, self.blick_rest + 0.9))
         ebene = self.welt.ebene(self.ich.ebene)
+        # Die Einstellung greift bei jedem Bild neu: wer das Wackeln
+        # im Pausenmenue abschaltet, sieht es sofort stehen.
+        self.kamera.anteil = self.app.opt.ruckel_anteil()
         self.kamera.schritt(dt, self.ich.pos, self.ich.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe))
 
@@ -1924,6 +2130,12 @@ class Gefecht(Szene):
             if not isinstance(x, Kaempfer):
                 x.lebt = False
         self.welt.rauch = []
+        # Auch die Wirkungen, die noch nicht hinaus sind: sonst knallt
+        # bei den Gaesten im ersten Bild der neuen Runde noch die letzte
+        # Granate der alten.
+        self._wirkung = []
+        self.welt.partikel = []
+        self.welt.muendungen = []
 
         self._teams_ausgleichen()
         self._einstiegszonen_waehlen()
@@ -1954,11 +2166,18 @@ class Gefecht(Szene):
 
     # ---- Bild ----------------------------------------------------------
     def zeichnen(self, ziel, alpha: float) -> None:
-        self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, alpha,
+        # Beim Gast wird nicht zwischen zwei Rechenschritten ueberblendet,
+        # sondern zwischen zwei Meldungen. `vorher` und `pos` eines
+        # Mitspielers stehen bei ihm eine Sechzigstelsekunde auseinander,
+        # nicht eine Hundertzwanzigstel - mit dem Bildanteil waere die
+        # Bewegung nach der halben Zeit fertig und stuende dann still.
+        # Genau das sah man als Ruckeln der Mitspieler.
+        misch = alpha if self.ist_gastgeber else self.misch(alpha)
+        self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, misch,
                                     self.blick_hoehe, blick=self.blick,
                                     boden=self._kreis_zeichnen)
         if not self.ist_gastgeber:
-            self._fremdes_zeichnen(ziel)
+            self._fremdes_zeichnen(ziel, misch)
         if (self.ich is not None and self.ich.lebt and not self.ich.am_boden
                 and self.blick == self.ich.ebene):
             self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.ich)
@@ -2003,7 +2222,7 @@ class Gefecht(Szene):
                                  farbe, anteil, self._zeit / z["puls"],
                                  z["ring"], z["fuellung"])
 
-    def _fremdes_zeichnen(self, ziel) -> None:
+    def _fremdes_zeichnen(self, ziel, misch: float = 1.0) -> None:
         """Beim Gast gibt es keine echten Wesen dafuer, nur gemeldete Punkte.
 
         Gegner, Beute, Geschosse und geworfene Granaten. Ohne das fliegt
@@ -2034,7 +2253,11 @@ class Gefecht(Szene):
                 pygame.draw.rect(ziel, K.C_RED,
                                  (int(p.x) - breite // 2, int(p.y) - 20,
                                   int(breite * anteil), 2))
-        for (x, y, winkel, ebene, name, hoehe) in self._fremde_schuesse:
+        for (x, y, winkel, ebene, name, hoehe, _kn, vx, vy) in self._fremde_schuesse:
+            # Zwischen der vorletzten und der letzten Meldung. Ohne das
+            # steht eine Granate fuenf Bilder still und springt dann.
+            x = vx + (x - vx) * misch
+            y = vy + (y - vy) * misch
             if hoehe > 0:
                 # Faellt gerade eine Ebene tiefer: mit dem Massstab ihrer
                 # eigenen Hoehe zeichnen, wie es der Gastgeber auch tut.

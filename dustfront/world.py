@@ -38,6 +38,61 @@ ZEICHEN = {
 }
 
 
+# ══════════════════════════════════════════════════════════════════
+# Wie sehr eine Meldung den Zuschauer angeht
+# ══════════════════════════════════════════════════════════════════
+#
+# Zwei kleine Funktionen, die beide Spielszenen benutzen - der
+# Einzelspieler genauso wie das Gefecht. Sie stehen hier und nicht in
+# einer der Szenen, weil sie sonst zweimal dastuenden und beim naechsten
+# Mal auseinanderliefen.
+
+def ruckel_wert(kraft: float, anlass: str = "", pos=None, ebene: int = 0,
+                quelle=None, ich=None) -> float:
+    """Wie stark ein gemeldeter Schlag **diesen** Zuschauer angeht.
+
+    Ohne diese Rechnung bekam der Gastgeber das Ruckeln der ganzen Runde
+    ab, weil bei ihm die Welt aller Spieler laeuft. Jetzt zaehlt, was
+    einen selbst betrifft: der eigene Sturz, der eigene Treffer, die
+    Explosion in der Naehe. Was ein anderer zwei Etagen hoeher tut,
+    ergibt null.
+    """
+    r = K.RUCKELN
+    kraft = float(kraft) * r["anlass"].get(anlass, 1.0)
+    if kraft <= 0.0:
+        return 0.0
+    if ich is None or quelle is ich:
+        return kraft
+    if pos is None:
+        return kraft * r["fremd"]
+    if int(ebene) != int(getattr(ich, "ebene", ebene)):
+        kraft *= r["fremde_ebene"]
+        if kraft <= 0.0:
+            return 0.0
+    weg = pygame.Vector2(pos).distance_to(ich.pos)
+    if weg >= r["reichweite"]:
+        return 0.0
+    return kraft * r["fremd"] * (1.0 - weg / r["reichweite"])
+
+
+def klang_wert(lautstaerke: float, pos=None, ebene: int = 0, ich=None) -> float:
+    """Wie laut ein Ton bei diesem Zuschauer ankommt.
+
+    Ohne Ort ist er ein Ton der eigenen Figur und bleibt, wie er ist.
+    """
+    a = K.AUDIO
+    lautstaerke = float(lautstaerke)
+    if pos is None or ich is None or lautstaerke <= 0.0:
+        return lautstaerke
+    if int(ebene) != int(getattr(ich, "ebene", ebene)):
+        lautstaerke *= a["fremde_ebene"]
+    weg = pygame.Vector2(pos).distance_to(ich.pos)
+    if weg > a["nah"]:
+        spanne = max(1.0, a["weit"] - a["nah"])
+        lautstaerke *= max(0.0, 1.0 - (weg - a["nah"]) / spanne)
+    return lautstaerke if lautstaerke >= a["leiseste"] else 0.0
+
+
 class Ebene:
     """Ein Kachelgitter auf einer Hoehe."""
 
@@ -130,7 +185,19 @@ class Welt:
     # Standardmaessig passiert nichts. Die Szene haengt sich hier ein, damit
     # Wesen Kameraruckeln oder Dekale ausloesen koennen, ohne den Renderer zu
     # kennen.
-    def ruckeln(self, kraft: float) -> None:
+    def ruckeln(self, kraft: float, anlass: str = "", pos=None,
+                ebene: int = 0, quelle=None) -> None:
+        """Ein Schlag auf die Kamera - mit Anlass, Ort und Absender.
+
+        Die drei zusaetzlichen Angaben sind der ganze Unterschied zu
+        frueher. Ohne sie musste die Szene jeden Schlag nehmen, wie er
+        kam; der Gastgeber rechnet aber die Welt **aller** Spieler und
+        bekam deshalb jeden Schuss, jeden Treffer und jede Granate der
+        ganzen Runde auf seine eigene Kamera - dauerhaft und ohne Pause,
+        waehrend bei den Gaesten gar nichts ankam. Mit Anlass, Ort und
+        Absender entscheidet nicht mehr der Ausloeser, sondern der
+        Zuschauer: was mich nichts angeht, ruckelt bei mir auch nicht.
+        """
         pass
 
     def kurz_langsam(self, sekunden: float) -> None:
@@ -139,11 +206,82 @@ class Welt:
     def blutfleck(self, pos, ebene: int, radius: float) -> None:
         pass
 
-    def klang(self, name: str, lautstaerke: float = 1.0) -> None:
+    def klang(self, name: str, lautstaerke: float = 1.0, pos=None,
+              ebene: int | None = None) -> None:
+        """Ein Ton. Mit Ort wird er nach Entfernung und Ebene abgesenkt.
+
+        Ohne Ort ist er ein Ton der eigenen Figur und damit voll zu
+        hoeren - ein Nachladen zum Beispiel. Mit Ort gehoert er in die
+        Welt, und dann soll ein Schuss am anderen Ende der Karte auch so
+        klingen.
+        """
         pass
 
     def brandfleck(self, pos, ebene: int, radius: float) -> None:
         pass
+
+    # ---- Wirkungen, die jeder sehen und hoeren muss ---------------------
+    #
+    # Was hier steht, ist bewusst **nicht** ueber die Wesen verstreut.
+    # Eine Explosion ist zwei Dinge auf einmal: Schaden, den nur der
+    # Gastgeber rechnen darf, und ein Auftritt samt Ton, den jeder
+    # bekommen muss. Frueher lagen beide Haelften zusammen in
+    # `Granate.zuenden`, und weil ein Gast keine Granate simuliert, sah
+    # und hoerte er von einer Explosion **gar nichts**: das Bild der
+    # Granate verschwand einfach, ohne Knall, ohne Funken, ohne
+    # Brandfleck. Gemessen an einer Runde ueber echte Steckdosen -
+    # Gastgeber 5 Partikel und zwei Toene, Gast 0 und keinen.
+    #
+    # Getrennt gehen beide Haelften ihren eigenen Weg: der Schaden bleibt
+    # beim Gastgeber, und der Auftritt geht als Meldung an alle und wird
+    # dort mit genau derselben Funktion nachgespielt. Auseinanderlaufen
+    # kann das nicht mehr - es ist derselbe Code.
+
+    def explosion(self, pos, ebene: int, radius: float,
+                  rauch: bool = False) -> None:
+        """Wie eine Granate aussieht und klingt, wenn sie zuendet."""
+        from .entities import wolke
+        pos = pygame.Vector2(pos)
+        if rauch:
+            wolke(self, pos, 12, 90, 0.6, K.RAUCH["toene"][0], ebene, 2)
+            self.klang("wurf", 0.8, pos, ebene)
+            return
+        wolke(self, pos, 26, 340, 0.5, (255, 212, 140), ebene, 2, "funke")
+        wolke(self, pos, 18, 150, 0.9, K.C_MUTED_DK, ebene, 2, "staub")
+        self.brandfleck(pos, ebene, radius)
+        self.ruckeln(K.WAFFEN["granate"]["kamera"], "explosion", pos, ebene)
+        self.klang("granate", 1.0, pos, ebene)
+
+    def schussknall(self, pos, winkel: float, ebene: int, waffe: str,
+                    quelle=None) -> None:
+        """Muendungsblitz, Funken und Knall eines Schusses.
+
+        Auch das sah ein Gast bisher nicht: der Gastgeber schickt die
+        Geschosse, aber nicht das, was am Lauf passiert. Es blitzte
+        nirgends, und zu hoeren war im ganzen Mehrspieler kein einziger
+        Schuss ausser dem eigenen.
+        """
+        from .entities import wolke
+        pos = pygame.Vector2(pos)
+        self.muendung(pos, winkel, ebene)
+        wolke(self, pos, 3, 120, 0.12, (255, 226, 160), ebene, 1, "funke",
+              34, winkel, 8.0)
+        daten = K.WAFFEN.get(waffe, {})
+        self.ruckeln(daten.get("kamera", 1.0), "schuss", pos, ebene, quelle)
+        self.klang("schuss_" + waffe, K.AUDIO["schuss"], pos, ebene)
+
+    def schlagknall(self, pos, winkel: float, ebene: int,
+                    getroffen: bool = False, quelle=None) -> None:
+        """Der Schwung des Brecheisens: Funken in einem Kegel und ein Ton."""
+        from .entities import wolke
+        d = K.WAFFEN["brecheisen"]
+        pos = pygame.Vector2(pos)
+        wolke(self, pos, 6 if getroffen else 3, 160, 0.18,
+              K.C_CREAM if getroffen else K.C_MUTED, ebene, 1, "funke",
+              d["winkel"], winkel, 7.0)
+        self.ruckeln(d["kamera"] if getroffen else 0.8, "nahkampf", pos,
+                     ebene, quelle)
+        self.klang("nahkampf", 0.7, pos, ebene)
 
     def aufschlagring(self, pos, ebene: int, wucht: float = 1.0) -> None:
         """Ein Staubring, der vom Aufsetzpunkt nach aussen laeuft."""
@@ -175,10 +313,13 @@ class Welt:
         self.klang("aufheben", 0.75)
 
     def effekte_schritt(self, dt: float) -> None:
-        """Ringe und Aufschriften altern lassen.
+        """Alles altern lassen, was nur Rueckmeldung ist und nichts entscheidet.
 
         Getrennt von schritt(), weil ein Gast die Welt nicht simuliert,
-        seine Rueckmeldungen aber trotzdem laufen muessen.
+        seine Rueckmeldungen aber trotzdem laufen muessen. Partikel und
+        Muendungsblitze gehoeren seit der Wirkungsmeldung dazu: der Gast
+        legt sie jetzt selbst an, und was nie altert, liegt bis zum Ende
+        der Runde im Bild.
         """
         for ring in self.ringe:
             ring[2] -= dt
@@ -188,6 +329,14 @@ class Welt:
             a[4] -= dt
         if any(a[4] <= 0 for a in self.aufschriften):
             self.aufschriften = [a for a in self.aufschriften if a[4] > 0]
+        for p in self.partikel:
+            p.schritt(dt)
+        if any(not p.lebt for p in self.partikel):
+            self.partikel = [p for p in self.partikel if p.lebt]
+        if self.muendungen:
+            for m in self.muendungen:
+                m[3] -= dt
+            self.muendungen = [m for m in self.muendungen if m[3] > 0]
 
     def verdeckt(self, pos, ebene: int) -> bool:
         """Steht an dieser Stelle so dichter Rauch, dass niemand sie sieht?
@@ -230,12 +379,6 @@ class Welt:
         for w in self.wesen:
             if w.lebt:
                 w.schritt(dt)
-        for p in self.partikel:
-            p.schritt(dt)
-        if self.muendungen:
-            for m in self.muendungen:
-                m[3] -= dt
-            self.muendungen = [m for m in self.muendungen if m[3] > 0]
         self.effekte_schritt(dt)
         for r in self.rauch:
             r.schritt(dt)
@@ -243,8 +386,6 @@ class Welt:
             self.rauch = [r for r in self.rauch if r.lebt]
         if any(not w.lebt for w in self.wesen):
             self.wesen = [w for w in self.wesen if w.lebt]
-        if any(not p.lebt for p in self.partikel):
-            self.partikel = [p for p in self.partikel if p.lebt]
 
     # ---- Nachbarschaft ------------------------------------------------
     def _raster_bauen(self) -> None:

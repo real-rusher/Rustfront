@@ -62,8 +62,10 @@ class Leitung:
         self.sock.setblocking(False)
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self._rest = b""
+        self._raus: list[bytes] = []   # was noch hinaus will, Zeile fuer Zeile
         self.offen = True
         self.grund = ""
+        self.verworfen = 0             # ueberholte Zeilen, nur zum Nachsehen
 
     def schliessen(self, grund: str = "") -> None:
         if self.offen:
@@ -75,21 +77,88 @@ class Leitung:
                 pass
 
     def senden(self, nachricht: dict) -> bool:
-        """Eine Nachricht rausschicken. False, wenn die Leitung tot ist."""
+        """Eine Nachricht rausschicken. False, wenn die Leitung tot ist.
+
+        Hier stand `sendall` auf einer **nicht-blockierenden** Steckdose,
+        und das ist ein stiller Widerspruch. Ist der Sendepuffer des Kerns
+        voll - und das ist er, sobald jemand mit schwacher Verbindung
+        mitspielt oder die Karte voller Wesen ist -, dann schreibt
+        `sendall` einen Teil der Zeile und wirft danach BlockingIOError.
+        Der halbe Satz ist dann schon unterwegs, der Rest fehlt, und die
+        Leitung wurde im Fehlerzweig kurzerhand zugemacht. Aus Sicht des
+        Spielers: die Welt stand fuer einen Moment, Granaten sprangen oder
+        blieben ganz aus, und manchmal flog jemand aus der Runde.
+
+        Jetzt wird gepuffert. Was nicht durchgeht, bleibt liegen und geht
+        beim naechsten Versuch raus; die Zeilengrenze bleibt dabei immer
+        heil, weil nur ganze Zeilen in die Schlange kommen und ein
+        angefangener Rest vorn wieder eingesetzt wird.
+        """
         if not self.offen:
             return False
         try:
             roh = (json.dumps(nachricht, separators=(",", ":")) + "\n").encode()
-            self.sock.sendall(roh)
-            return True
-        except OSError as fehler:
-            self.schliessen(str(fehler))
+        except (TypeError, ValueError):
             return False
+        self._raus.append(roh)
+        self._schlange_kuerzen()
+        return self.spuelen()
+
+    def _schlange_kuerzen(self) -> None:
+        """Staut sich zu viel, fliegt das Ueberholte raus - nicht die Leitung.
+
+        Eine Weltmeldung von vor zwei Zehnteln ist wertlos: die naechste
+        sagt dasselbe, nur richtig. Sie noch zu schicken kostet nur Zeit
+        und schiebt den Rueckstand weiter vor sich her. Andere Nachrichten
+        - Willkommen, Ende, Abgelehnt - gibt es genau einmal und bleiben
+        immer stehen.
+        """
+        grenze = K.NETZ["stau_zeilen"]
+        if len(self._raus) <= grenze:
+            return
+        behalten = []
+        # Die vorderste Zeile kann schon angefangen gesendet sein und
+        # bleibt darum in jedem Fall stehen.
+        for i, zeile in enumerate(self._raus):
+            if i > 0 and (zeile.startswith(b'{"t":"welt"')
+                          or zeile.startswith(b'{"t":"ein"')):
+                if len(behalten) + (len(self._raus) - i) > grenze:
+                    self.verworfen += 1
+                    continue
+            behalten.append(zeile)
+        self._raus = behalten
+
+    def spuelen(self) -> bool:
+        """Schickt so viel aus der Schlange, wie gerade durchgeht."""
+        if not self.offen:
+            return False
+        while self._raus:
+            try:
+                geschickt = self.sock.send(self._raus[0])
+            except (BlockingIOError, InterruptedError):
+                return True       # Puffer voll, der Rest wartet auf spaeter
+            except OSError as fehler:
+                self.schliessen(str(fehler))
+                return False
+            if geschickt <= 0:
+                return True
+            if geschickt < len(self._raus[0]):
+                self._raus[0] = self._raus[0][geschickt:]
+                return True
+            self._raus.pop(0)
+        return True
 
     def holen(self) -> list[dict]:
-        """Alles, was inzwischen angekommen ist. Blockiert nie."""
+        """Alles, was inzwischen angekommen ist. Blockiert nie.
+
+        Nebenbei geht hier los, was noch in der Sendeschlange liegt.
+        Beide Seiten fragen einmal je Bild nach Post, also ist das die
+        Stelle, an der ein Rueckstand zuverlaessig wieder abfliesst -
+        auch dann, wenn gerade nichts Neues zu schicken ist.
+        """
         if not self.offen:
             return []
+        self.spuelen()
         raus = []
         while True:
             bereit, _, _ = select.select([self.sock], [], [], 0)

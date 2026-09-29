@@ -18,6 +18,7 @@ import random
 import pygame
 
 from . import config as K
+from . import world as welt_modul
 from .core import Szene
 from .entities import Aufsammler, Gegner, Spieler, wolke
 from .font import SCHRIFT
@@ -47,10 +48,10 @@ class Spiel(Szene):
         self.welt.held = self.held
 
         # Die Welt meldet sich bei uns, wenn es wackeln oder spritzen soll
-        self.welt.ruckeln = self.kamera.stossen
+        self.welt.ruckeln = self._ruckeln
         self.welt.kurz_langsam = self._zeitlupe
         self.welt.blutfleck = self._blutfleck
-        self.welt.klang = self.app.klaenge.spielen
+        self.welt.klang = self._klang
         self.welt.brandfleck = self._brandfleck
 
         # Ansicht: welche Ebene die Kamera anschaut, und die geglaettete
@@ -78,6 +79,17 @@ class Spiel(Szene):
     def _brandfleck(self, pos, ebene: int, radius: float) -> None:
         self.welt.ebene(ebene).dekal(self.renderer.brandfleck(radius),
                                      pos.x, pos.y)
+
+    def _ruckeln(self, kraft: float, anlass: str = "", pos=None,
+                 ebene: int = 0, quelle=None) -> None:
+        self.kamera.stossen(welt_modul.ruckel_wert(kraft, anlass, pos, ebene,
+                                             quelle, self.held))
+
+    def _klang(self, name: str, lautstaerke: float = 1.0, pos=None,
+               ebene: int | None = None) -> None:
+        laut = welt_modul.klang_wert(lautstaerke, pos, ebene or 0, self.held)
+        if laut > 0.0:
+            self.app.klaenge.spielen(name, laut)
 
     # ---- Wellen -------------------------------------------------------
     def welle_starten(self) -> None:
@@ -155,7 +167,7 @@ class Spiel(Szene):
                     if self.welt.ebene_wechseln(held, ziel_ebene):
                         wolke(self.welt, held.pos, 10, 90, 0.4, K.C_MUTED_DK,
                               held.ebene, 1, "staub")
-                        self.kamera.stossen(2.0)
+                        self.kamera.stossen(0.8)
             vorher_leben = held.leben
         else:
             held.will.update(0, 0)
@@ -194,6 +206,9 @@ class Spiel(Szene):
             self.blick_hoehe += (ziel_h - self.blick_hoehe) * min(1.0, 9.0 * dt)
 
         ebene = self.welt.ebene(held.ebene)
+        # Die Einstellung greift bei jedem Bild neu: wer das Wackeln
+        # im Pausenmenue abschaltet, sieht es sofort stehen.
+        self.kamera.anteil = self.app.opt.ruckel_anteil()
         self.kamera.schritt(dt, held.pos, held.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe))
 

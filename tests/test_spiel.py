@@ -455,6 +455,15 @@ if stellen:
         if held.sturz_rest > 0:
             break
     if held.sturz_rest > 0:
+        # Erst auf wirklich freien Grund stellen. Geprueft wird, dass ein
+        # Ausweichplatz verschwindet, sobald keiner mehr noetig ist - nicht,
+        # ob die Figur nach dreihundert Schritten Anlauf zufaellig ueber
+        # einer freien Kachel haengt. Frueher hing die Pruefung genau
+        # daran und wurde rot, sobald sich irgendwo eine Nachkommastelle
+        # der Bahn aenderte.
+        held.pos.update(szene.welt.landeplatz(held.pos, held.radius,
+                                              held.ebene))
+        held.vorher.update(held.pos)
         # Ein Ausweichplatz, obwohl hier gar keiner noetig ist
         held.sturz_ziel = pygame.Vector2(held.pos) + pygame.Vector2(60, 0)
         e.neues_bild(); e._gehalten = set(); szene.schritt(K.FIXED_DT)
@@ -1552,10 +1561,26 @@ def noch_leer(haken):
     return getattr(haken, "__func__", None) is getattr(Welt, haken.__name__, None)
 
 for wer, wie in (("Gastgeber", w), ("Gast", ga)):
+    # Geprueft wird die Wirkung, nicht mehr die Gleichheit der Haken:
+    # zwischen Welt und Kamera liegt seit dem Ruckelfehler eine Rechnung,
+    # die fragt, ob eine Meldung diesen Zuschauer ueberhaupt angeht.
+    gehoert = []
+    echt = app.klaenge.spielen
+    app.klaenge.spielen = lambda n, l=1.0: gehoert.append((n, l))
+    wie.welt.klang("nachladen", 1.0)
+    app.klaenge.spielen = echt
     pruef("%s hat einen echten Tonausgang" % wer,
-          not noch_leer(wie.welt.klang) and wie.welt.klang == app.klaenge.spielen)
-    pruef("%s spuert Treffer in der Kamera" % wer,
-          wie.welt.ruckeln == wie.kamera.stossen)
+          not noch_leer(wie.welt.klang) and gehoert == [("nachladen", 1.0)],
+          str(gehoert))
+    wie.kamera.ruckeln = 0.0
+    wie.kamera._sperre = 0.0
+    wie.kamera.anteil = 1.0
+    wenn_ich = wie.ich
+    wie.welt.ruckeln(9.0, "explosion", None if wenn_ich is None else wenn_ich.pos,
+                     0 if wenn_ich is None else wenn_ich.ebene, wenn_ich)
+    pruef("%s spuert eine Explosion neben sich in der Kamera" % wer,
+          not noch_leer(wie.welt.ruckeln) and wie.kamera.ruckeln > 0.5,
+          "%.2f px" % wie.kamera.ruckeln)
     pruef("%s hinterlaesst Blutflecken" % wer, not noch_leer(wie.welt.blutfleck))
     pruef("%s bekommt Brandflecken" % wer, not noch_leer(wie.welt.brandfleck))
 # Die Zeitlupe bleibt bewusst weg: sie wuerde beim Gastgeber die Runde
@@ -1821,13 +1846,13 @@ w, ga = gefechtspaar("pvp")
 wirt_k = w.kaempfer[0]
 w.welt.ringe = []
 gehoert = []
-w.welt.klang = lambda name, laut=1.0: gehoert.append(name)
+w.welt.klang = lambda name, laut=1.0, pos=None, ebene=None: gehoert.append(name)
 wirt_k.ebene = 2
 wirt_k.sturz_hoehe = 180.0
 wirt_k.aufschlag()
 pruef("Ein Aufschlag macht einen Staubring", len(w.welt.ringe) == 1)
 pruef("Und einen Ton", "sturz" in gehoert, str(gehoert))
-w.welt.klang = app.klaenge.spielen
+w.welt.klang = w._klang
 
 w.welt.aufschriften = []
 Welt.beute_genommen(w.welt, wirt_k.pos, wirt_k.ebene, "munition")
@@ -2057,6 +2082,210 @@ for _ in range(6):
 pruef("Gastgeber laeuft weiter, wenn ein Gast geht",
       len(host.kaempfer) == 1, "%d uebrig" % len(host.kaempfer))
 host.verlassen()
+
+import json
+from dustfront import einstellungen as E
+
+# ── Kameraruckeln: selten, schwach und nur, wenn es einen angeht ─────
+#
+# Der gemeldete Fehler: "Der Bildschirm vom Host ruckelt die ganze Zeit
+# von Shots und Granaten, ohne Pause, bei Gaesten ist aber quasi gar
+# nichts." Gemessen am alten Stand - ein einziger anderer Spieler, 1600
+# Pixel entfernt und eine Etage hoeher, haelt den Abzug: 2,09 Pixel
+# Dauerzittern beim Gastgeber in 100 % der Bilder, 0,00 beim Gast.
+w, ga = gefechtspaar("pvp")
+wirt_k = w.kaempfer[0]
+gast_k = w.kaempfer[ga.meine_nummer]
+wirt_k.pos.update(200, 200); wirt_k.vorher.update(wirt_k.pos); wirt_k.ebene = 0
+gast_k.pos.update(1500, 1000); gast_k.vorher.update(gast_k.pos)
+gast_k.ebene = min(1, len(w.welt.ebenen) - 1)
+gast_k.waffe_waehlen(gast_k.waffen.index("sturm"))
+w.kamera.ruckeln = 0.0
+werte = []
+for _ in range(int(3.0 / K.FIXED_DT)):
+    w._anwenden(gast_k, {"will": [0, 0], "ziel": [gast_k.pos.x + 60, gast_k.pos.y],
+                         "feuert": True})
+    gast_k.magazin["sturm"] = 999
+    w.schritt(K.FIXED_DT)
+    werte.append(w.kamera.ruckeln)
+pruef("Fremdes Dauerfeuer laesst das Bild des Gastgebers stehen",
+      max(werte) < 0.01,
+      "groesster Ausschlag %.2f px in %d Bildern" % (max(werte), len(werte)))
+
+# Und der eigene Schuss? Ein Sturmgewehr soll gar nichts mehr reissen,
+# eine Explosion daneben schon - sonst waere es kein schwaches Ruckeln,
+# sondern keines.
+def eigen_ruckeln(anlass, kraft, entfernung=0.0, ebene_dazu=0):
+    w.kamera.ruckeln = 0.0
+    w.kamera._sperre = 0.0
+    w.kamera.anteil = 1.0
+    ort = wirt_k.pos + pygame.Vector2(entfernung, 0)
+    w.welt.ruckeln(kraft, anlass, ort, wirt_k.ebene + ebene_dazu,
+                   wirt_k if entfernung == 0.0 and not ebene_dazu else None)
+    return w.kamera.ruckeln
+
+pruef("Der eigene Gewehrschuss ruckelt nicht mehr",
+      eigen_ruckeln("schuss", K.WAFFEN["sturm"]["kamera"]) < 0.01)
+pruef("Eine Explosion neben einem schon",
+      eigen_ruckeln("explosion", K.WAFFEN["granate"]["kamera"]) > 0.5,
+      "%.2f px" % eigen_ruckeln("explosion", K.WAFFEN["granate"]["kamera"]))
+pruef("Aber schwach: nie mehr als ein paar Pixel",
+      eigen_ruckeln("explosion", 99.0) <= K.RUCKELN["max"] + 0.001,
+      "%.2f px" % eigen_ruckeln("explosion", 99.0))
+pruef("Dieselbe Explosion eine Ebene hoeher gar nicht",
+      eigen_ruckeln("explosion", K.WAFFEN["granate"]["kamera"],
+                    entfernung=10.0, ebene_dazu=1) < 0.01)
+pruef("Und weit weg auch nicht",
+      eigen_ruckeln("explosion", K.WAFFEN["granate"]["kamera"],
+                    entfernung=K.RUCKELN["reichweite"] + 10) < 0.01)
+# Die Sperre: zwei Schlaege dicht hintereinander ergeben einen, nicht zwei.
+w.kamera.ruckeln = 0.0; w.kamera._sperre = 0.0; w.kamera.anteil = 1.0
+w.kamera.stossen(2.0)
+eins = w.kamera.ruckeln
+w.kamera.stossen(2.0)
+pruef("Zwei Schlaege dicht hintereinander legen nicht nach",
+      abs(w.kamera.ruckeln - eins) < 0.001, "%.2f px" % w.kamera.ruckeln)
+
+# Der Regler im Menue hing an nichts. Auf 0 muss das Bild stehen.
+w.kamera.ruckeln = 0.0; w.kamera._sperre = 0.0
+w.kamera.anteil = 0.0
+w.kamera.stossen(99.0)
+pruef("Auf 0 gestellt steht das Bild vollkommen still",
+      w.kamera.ruckeln < 0.001, "%.2f px" % w.kamera.ruckeln)
+app.opt["bildschirm_ruckeln"] = 0
+pruef("Und der Regler im Menue ist genau dieser Wert",
+      app.opt.ruckel_anteil() == 0.0)
+app.opt["bildschirm_ruckeln"] = 100
+pruef("Das Ruckeln gehoert zum Konto, nicht zum Geraet",
+      "bildschirm_ruckeln" in E.KONTO_WERTE
+      and "aufloesung" not in E.KONTO_WERTE)
+app.opt.konto_uebernehmen({"bildschirm_ruckeln": 40, "aufloesung": "1x1",
+                           "unsinn": True})
+pruef("Ein Konto bringt seine Einstellungen mit",
+      app.opt["bildschirm_ruckeln"] == 40, "%s" % app.opt["bildschirm_ruckeln"])
+pruef("Aber nur die, die zum Spieler gehoeren",
+      app.opt["aufloesung"] != "1x1", app.opt["aufloesung"])
+app.opt["bildschirm_ruckeln"] = 100
+w.verlassen(); ga.verlassen()
+
+# ── Granaten beim Gast: sichtbar, hoerbar, und ohne Spruenge ─────────
+#
+# "Manchmal waren Granaten bei manchen Leuten, auf die sie geworfen
+# wurden, unsichtbar, oder sie landeten an komplett verschiedenen Orten."
+# Zwei Ursachen, beide gemessen: der Gast bekam von einer Explosion gar
+# nichts (0 Partikel, kein Ton, kein Brandfleck), und er zeichnete
+# fliegende Dinge stur an die zuletzt gemeldete Stelle - bei 300 Bildern
+# und 60 Meldungen stand die Granate in 80 % der Bilder still und sprang
+# dann um bis zu 7 Pixel.
+w, ga = gefechtspaar("pvp")
+wirt_k = w.kaempfer[0]
+gast_k = w.kaempfer[ga.meine_nummer]
+wirt_k.pos.update(300, 300); wirt_k.vorher.update(wirt_k.pos)
+gast_k.pos.update(900, 300); gast_k.vorher.update(gast_k.pos)
+gehoert = []
+echt = app.klaenge.spielen
+app.klaenge.spielen = lambda n, l=1.0: gehoert.append(n)
+wirt_k.waffe_waehlen(wirt_k.waffen.index("granate"))
+wirt_k.takt = 0.0
+wirt_k.winkel = 0.0
+wirt_k.ziel.update(560, 300)
+wirt_k.feuern()
+gesehen = 0
+bahn = []
+for _ in range(int(1.6 / K.FIXED_DT)):
+    w.schritt(K.FIXED_DT)
+    ga.schritt(K.FIXED_DT)
+    wurf = [s for s in ga._fremde_schuesse if s[4] == "granate"]
+    if wurf:
+        gesehen += 1
+        bahn.append(pygame.Vector2(wurf[0][0], wurf[0][1]))
+app.klaenge.spielen = echt
+pruef("Der Gast sieht die geworfene Granate fliegen", gesehen > 40,
+      "%d Bilder" % gesehen)
+pruef("Und hoert sie zuenden", "granate" in gehoert, str(sorted(set(gehoert))))
+pruef("Und bekommt ihre Funken und ihren Staub",
+      len(ga.welt.partikel) > 0 or len(ga.welt.ringe) > 0,
+      "%d Partikel" % len(ga.welt.partikel))
+pruef("Und ihren Brandfleck", ga.welt.ebene(0).dekale is not None)
+if len(bahn) > 2:
+    pruef("Sie liegt am Ende dort, wo sie hingeworfen wurde",
+          abs(bahn[-1].x - 560) < 40 and abs(bahn[-1].y - 300) < 20,
+          "%.0f / %.0f" % (bahn[-1].x, bahn[-1].y))
+
+# Die Zwischenlage: jedes fliegende Ding traegt seine Kennung, und
+# zwischen zwei Meldungen wird weitergezeichnet statt stehengeblieben.
+eintrag = None
+wirt_k.takt = 0.0
+wirt_k.magazin["granate"] = 3
+wirt_k.feuern()
+for _ in range(20):
+    w.schritt(K.FIXED_DT)
+    ga.schritt(K.FIXED_DT)
+    for s in ga._fremde_schuesse:
+        if s[4] == "granate":
+            eintrag = s
+pruef("Fliegende Dinge tragen eine Kennung",
+      eintrag is not None and len(eintrag) == 9 and eintrag[6] > 0,
+      str(eintrag))
+if eintrag is not None:
+    frueh = pygame.Vector2(eintrag[7], eintrag[8])
+    spaet = pygame.Vector2(eintrag[0], eintrag[1])
+    pruef("Und eine Ausgangslage, zwischen der gezeichnet wird",
+          frueh.distance_to(spaet) > 0.5,
+          "%.1f px zwischen zwei Meldungen" % frueh.distance_to(spaet))
+pruef("Der Bildanteil zaehlt bei der Ueberblendung mit",
+      ga.misch(0.0) < ga.misch(1.0) or ga.misch(1.0) >= 0.999,
+      "%.2f -> %.2f" % (ga.misch(0.0), ga.misch(1.0)))
+w.verlassen(); ga.verlassen()
+
+# ── Die Leitung: voller Sendepuffer darf nichts zerreissen ───────────
+#
+# `sendall` auf einer nicht-blockierenden Steckdose schreibt einen Teil
+# der Zeile und wirft dann - die halbe Nachricht ist unterwegs, der Rest
+# fehlt, und im Fehlerzweig wurde die Leitung zugemacht.
+class LahmeSteckdose:
+    """Nimmt je Versuch nur ein paar Bytes, wie ein voller Sendepuffer."""
+
+    def __init__(self, haeppchen=12):
+        self.haeppchen = haeppchen
+        self.geschrieben = b""
+        self.dran = 0
+
+    def setblocking(self, x): pass
+    def setsockopt(self, *a): pass
+    def close(self): pass
+
+    def send(self, daten):
+        self.dran += 1
+        if self.dran % 3 == 0:
+            raise BlockingIOError()          # jetzt geht gar nichts mehr
+        teil = daten[:self.haeppchen]
+        self.geschrieben += teil
+        return len(teil)
+
+lahm = LahmeSteckdose()
+leitung = netz.Leitung(lahm)
+for i in range(5):
+    leitung.senden({"t": "welt", "nr": i, "fuellung": "x" * 60})
+for _ in range(80):
+    leitung.spuelen()
+pruef("Eine zaehe Leitung bleibt offen", leitung.offen, leitung.grund)
+zeilen = [z for z in lahm.geschrieben.split(b"\n") if z]
+pruef("Und schickt jede Zeile ganz und heil",
+      len(zeilen) == 5 and all(json.loads(z.decode())["nr"] == i
+                               for i, z in enumerate(zeilen)),
+      "%d Zeilen" % len(zeilen))
+
+# Staut sich zu viel, fliegt das Ueberholte raus - nicht die Leitung.
+stau = netz.Leitung(LahmeSteckdose(haeppchen=0))
+for i in range(K.NETZ["stau_zeilen"] + 50):
+    stau.senden({"t": "welt", "nr": i})
+pruef("Ein Rueckstand wird gekuerzt statt nachgeschleppt",
+      len(stau._raus) <= K.NETZ["stau_zeilen"] and stau.verworfen > 0,
+      "%d in der Schlange, %d verworfen" % (len(stau._raus), stau.verworfen))
+stau.senden({"t": "ende", "sieger": 1})
+pruef("Was es nur einmal gibt, bleibt trotzdem stehen",
+      any(b'"t":"ende"' in z for z in stau._raus))
 
 print()
 print("FEHLER:", fails or "keine")

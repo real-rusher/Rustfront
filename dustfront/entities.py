@@ -39,7 +39,19 @@ class Wesen:
     schatten = True
     faellt = False           # True = kann in Loecher stuerzen
 
+    # Eine laufende Nummer je Wesen. Gebraucht wird sie vom Gast: er
+    # bekommt sechzigmal in der Sekunde eine Liste fliegender Dinge und
+    # konnte bisher nicht sagen, welcher Punkt darin dieselbe Granate ist
+    # wie im Paket davor. Also zeichnete er jedes Paket neu an die
+    # gemeldete Stelle - bei 300 Bildern und 60 Paketen fuenf gleiche
+    # Bilder, dann ein Sprung. Genau das sah aus wie "die Granate ist
+    # woanders gelandet". Mit der Nummer laesst sich dazwischen
+    # weiterzeichnen.
+    _naechste_kennung = 0
+
     def __init__(self, pos, ebene: int = 0) -> None:
+        Wesen._naechste_kennung += 1
+        self.kennung = Wesen._naechste_kennung
         self.pos = pygame.Vector2(pos)
         self.vorher = pygame.Vector2(pos)
         self.tempo = pygame.Vector2(0, 0)
@@ -139,9 +151,10 @@ class Wesen:
         wucht = min(1.0, h / 240.0)
         wolke(w, self.pos, int(st["staub"] * (0.5 + 0.5 * wucht)),
               130 + 90 * wucht, 0.5, K.C_MUTED_DK, self.ebene, 1, "staub")
-        w.ruckeln(min(K.KAMERA["ruckeln_max"], st["ruckeln"] + h * 0.035))
+        w.ruckeln(st["ruckeln"] + h * 0.035, "sturz", self.pos, self.ebene,
+                  self)
         w.aufschlagring(self.pos, self.ebene, wucht)
-        w.klang("sturz", 0.55 + 0.45 * wucht)
+        w.klang("sturz", 0.55 + 0.45 * wucht, self.pos, self.ebene)
         self.schaden(schaden, None, None)
 
     def zeichenpos(self, alpha: float) -> pygame.Vector2:
@@ -346,14 +359,19 @@ class Granate(Wesen):
               "staub")
 
     def zuenden(self) -> None:
+        """Zuenden ist zweierlei: Wirkung und Auftritt.
+
+        Die Wirkung - Schaden und Rauchwand - rechnet nur, wer die Welt
+        rechnet. Der Auftritt steht in `Welt.explosion` und wird von dort
+        aus auch bei jedem Gast nachgespielt; sonst verschwindet bei ihm
+        nur das Bild der Granate, ohne Knall und ohne Funken.
+        """
         self.lebt = False
         d = self.daten
         w = self.welt
         if d.get("rauch"):
             w.rauch.append(Rauchwolke(self.pos, self.ebene))
-            wolke(w, self.pos, 12, 90, 0.6, K.RAUCH["toene"][0], self.ebene, 2)
-            w.ruckeln(d["kamera"])
-            w.klang("wurf", 0.8)
+            w.explosion(self.pos, self.ebene, 0.0, rauch=True)
             return
         r = d["radius"]
         for ziel in list(w.nahe(self.pos, r + 30, self.ebene)):
@@ -367,12 +385,8 @@ class Granate(Wesen):
             anteil = 1.0 - 0.75 * min(1.0, entfernung / r)
             schub = (ab.normalize() * 320 * anteil) if entfernung > 0.01 else None
             ziel.schaden(d["schaden"] * anteil, schub, self.von)
-        wolke(w, self.pos, 26, 340, 0.5, (255, 212, 140), self.ebene, 2, "funke")
-        wolke(w, self.pos, 18, 150, 0.9, K.C_MUTED_DK, self.ebene, 2, "staub")
-        w.brandfleck(self.pos, self.ebene, r)
-        w.ruckeln(d["kamera"])
+        w.explosion(self.pos, self.ebene, r)
         w.kurz_langsam(0.05)
-        w.klang("granate", 1.0)
 
 
 def _zufall(ix: int, iy: int, saat: int) -> float:
@@ -836,8 +850,8 @@ class Spieler(Wesen):
                                            self.pos.distance_to(self.ziel)))
             self.welt.dazu(Granate(muendung, self.winkel, d, self.ebene, self,
                                    weite))
-            self.welt.ruckeln(1.2)
-            self.welt.klang("wurf", 0.6)
+            self.welt.ruckeln(1.2, "wurf", self.pos, self.ebene, self)
+            self.welt.klang("wurf", 0.6, self.pos, self.ebene)
             return
 
         streuung = self.streuung_jetzt
@@ -848,13 +862,12 @@ class Spieler(Wesen):
             self.welt.dazu(Geschoss(muendung, a, d, self.ebene, self))
         self.fokus *= 0.25            # der Schuss reisst die Waffe hoch
 
-        # Rueckstoss auf den Schuetzen und auf die Kamera
+        # Rueckstoss auf den Schuetzen. Blitz, Funken, Knall und der Schlag
+        # auf die Kamera stehen zusammen in Welt.schussknall - dort, wo sie
+        # auch ein Gast nachspielen kann, der selbst nichts rechnet.
         self.tempo -= pygame.Vector2(d.get("rueckstoss", 0.0), 0).rotate(self.winkel)
-        self.welt.ruckeln(d["kamera"])
-        self.welt.klang("schuss_" + self.waffe_name, K.AUDIO["schuss"])
-        self.welt.muendung(muendung, self.winkel, self.ebene)
-        wolke(self.welt, muendung, 3, 120, 0.12, (255, 226, 160), self.ebene, 1,
-              "funke", 34, self.winkel, 8.0)
+        self.welt.schussknall(muendung, self.winkel, self.ebene,
+                              self.waffe_name, self)
         for _ in range(d["huelsen"]):
             aus = self.winkel + 90 + RND.uniform(-20, 20)
             self.welt.partikel.append(Partikel(
@@ -889,11 +902,7 @@ class Spieler(Wesen):
             ziel.schaden(d["schaden"], schub, self)
             getroffen += 1
         spitze = self.pos + pygame.Vector2(reich * 0.7, 0).rotate(self.winkel)
-        wolke(w, spitze, 6 if getroffen else 3, 160, 0.18,
-              K.C_CREAM if getroffen else K.C_MUTED, self.ebene, 1, "funke",
-              d["winkel"], self.winkel, 7.0)
-        w.ruckeln(d["kamera"] if getroffen else 0.8)
-        w.klang("nahkampf", 0.7)
+        w.schlagknall(spitze, self.winkel, self.ebene, bool(getroffen), self)
 
     # ---- Schaden -----------------------------------------------------
     def schaden(self, menge, schub=None, von=None) -> None:
@@ -909,7 +918,9 @@ class Spieler(Wesen):
         """
         if self.unverwundbar > 0:
             return
-        self.welt.ruckeln(5.5)
+        # Der Anlass "treffer" gilt dem Getroffenen, nicht dem Schuetzen:
+        # das Bild soll dem zucken, der die Kugel abbekommt.
+        self.welt.ruckeln(5.5, "treffer", self.pos, self.ebene, self)
         super().schaden(menge, schub, von)
 
     def sterben(self, von=None) -> None:
@@ -1027,7 +1038,7 @@ class Gegner(Wesen):
         wolke(w, self.pos, 14, 190, 0.55, K.C_BLUT, self.ebene, 2, "blut")
         wolke(w, self.pos, 6, 90, 0.7, K.C_MUTED_DK, self.ebene, 1, "staub")
         w.blutfleck(self.pos, self.ebene, self.radius)
-        w.ruckeln(2.2)
+        w.ruckeln(2.2, "tod", self.pos, self.ebene, self)
         w.kurz_langsam(K.TREFFER["zeitlupe"])
         if isinstance(von, Spieler) or (von is not None and von.fraktion == "mensch"):
             held = w.held

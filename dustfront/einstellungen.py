@@ -38,14 +38,30 @@ VORGABE = {
     "ton_gesamt": 75,
     "ton_effekte": 85,
     "ton_musik": 60,
-    # Grafik (noch ohne Wirkung, die Schalter stehen schon bereit)
-    "vignette": True,
-    "bildschirm_ruckeln": 100,     # Prozent der Staerke
+    # Grafik
+    "vignette": True,             # noch ohne Wirkung, der Schalter steht bereit
+    # Prozent der Staerke, 0 = das Bild steht vollkommen still. Die
+    # Vorgabe ist absichtlich 100 und nicht weniger: schwach und selten
+    # ist das Ruckeln schon in RUCKELN eingestellt, und zweimal
+    # heruntergedreht bliebe von einer Explosion neben einem gar nichts
+    # mehr uebrig. Der Regler ist der Griff des Spielers obendrauf.
+    "bildschirm_ruckeln": 100,
     "partikel": "viel",            # wenig | normal | viel
     # Spiel
     "tracer": False,
     "tracer_weit": False,
 }
+
+# Welche Einstellungen zum **Spieler** gehoeren und nicht zum Geraet.
+#
+# Auf welcher Aufloesung jemand spielt, ist Sache des Rechners, vor dem er
+# sitzt. Ob ihm vom Wackeln schlecht wird, ist es nicht - das gilt an
+# jedem Rechner, an dem er sich anmeldet. Was hier steht, wandert darum
+# spaeter mit dem Konto mit (siehe konto_werte / konto_uebernehmen); alles
+# andere bleibt, wo es ist.
+KONTO_WERTE = ("bildschirm_ruckeln", "vignette", "partikel",
+               "tracer", "tracer_weit", "ton_gesamt", "ton_effekte",
+               "ton_musik")
 
 AUFLOESUNGEN = ["960x540", "1280x720", "1600x900", "1920x1080", "2560x1440"]
 FENSTERMODI = ["fenster", "randlos", "vollbild"]
@@ -157,6 +173,47 @@ class Einstellungen:
 
     def __setitem__(self, schluessel: str, wert) -> None:
         self.werte[schluessel] = wert
+
+    def ruckel_anteil(self) -> float:
+        """Wie stark das Bild wackeln darf, 0.0 bis 1.0.
+
+        Die Einstellung gab es schon, sie hing nur an nichts: der Regler
+        stand im Menue und liess sich ziehen, und die Kamera fragte ihn
+        nie. Jetzt liest sie ihn bei jedem Bild.
+        """
+        try:
+            wert = float(self["bildschirm_ruckeln"])
+        except (TypeError, ValueError):
+            wert = 100.0
+        return max(0.0, min(1.0, wert / 100.0))
+
+    # ---- Konto -------------------------------------------------------
+    # Vorbereitung fuer die Anmeldung: was zum Spieler gehoert, soll auf
+    # jedem Geraet gelten, an dem er sich anmeldet. Beide Richtungen sind
+    # bewusst reine Woerterbucharbeit und kennen weder Netz noch Datenbank
+    # - das haengt sich spaeter aussen an.
+
+    def konto_werte(self) -> dict:
+        """Die Einstellungen, die zum Spieler gehoeren, zum Hochladen."""
+        return {k: self.werte.get(k, VORGABE[k]) for k in KONTO_WERTE}
+
+    def konto_uebernehmen(self, werte) -> int:
+        """Einstellungen aus einem Konto uebernehmen. Gibt die Anzahl zurueck.
+
+        Geprueft wie beim Lesen der Datei: was nicht bekannt ist oder den
+        falschen Typ hat, wird verworfen. Eine kaputte Antwort vom Server
+        darf hoechstens die eine Einstellung kosten, die kaputt ist.
+        """
+        if not isinstance(werte, dict):
+            return 0
+        genommen = 0
+        for k, v in werte.items():
+            if k in KONTO_WERTE and isinstance(v, type(VORGABE[k])):
+                self.werte[k] = v
+                genommen += 1
+        if genommen:
+            self.speichern()
+        return genommen
 
     def codes(self, aktion: str) -> list[int]:
         """Tastencodes einer Aktion, fuer den Vergleich im Spiel."""

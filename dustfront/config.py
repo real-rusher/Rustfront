@@ -75,8 +75,56 @@ KAMERA = dict(
     nachlauf=11.0,            # je hoeher, desto straffer klebt sie am Spieler
     maus_zug=0.26,            # wie weit sie in Blickrichtung vorlaeuft
     maus_max=54.0,
-    ruckeln_abbau=2.6,        # wie schnell das Zittern verklingt
-    ruckeln_max=9.0,
+)
+
+# Kameraruckeln.
+#
+# Hier lag einer der haesslichsten gemeldeten Fehler: beim Gastgeber
+# zitterte das Bild ununterbrochen, bei den Gaesten ruehrte sich fast
+# nichts. Die Ursache war keine Kleinigkeit im Zahlenwerk, sondern der
+# Aufbau. `Welt.ruckeln` war **eine einzige Rueckmeldung ohne Absender
+# und ohne Ort**, und die Spielszene haengte sie stur an ihre eigene
+# Kamera. Der Gastgeber rechnet aber die ganze Welt: jeder Schuss, jeder
+# Treffer, jede Granate und jeder Sturz **aller** Spieler auf **allen**
+# Ebenen lief bei ihm zusammen. Gemessen an einer Runde, in der ein
+# einziger anderer Spieler 1600 Pixel entfernt und eine Etage hoeher den
+# Abzug hielt: 2,09 Pixel Dauerzittern beim Gastgeber, in 100 % der
+# Bilder, Spitzen bis 7,95 - und 0,00 beim Gast, der ja nichts rechnet.
+#
+# Darum entscheidet ab jetzt nicht mehr der Ausloeser, sondern der
+# Zuschauer. Jede Meldung sagt, **was** passiert ist, **wo** und **wem**;
+# die Szene rechnet daraus aus, ob es sie ueberhaupt angeht:
+#
+#   * eine andere Ebene ruckelt gar nicht,
+#   * in der Ferne ruckelt nichts (`reichweite`),
+#   * was ein anderer tut, zaehlt nur zum Teil (`fremd`),
+#   * und zwischen zwei Schlaegen liegt eine Sperre, damit Dauerfeuer
+#     kein Dauerzittern mehr ergibt.
+#
+# Dazu die zweite Haelfte des Auftrags: selten und schwach. `anlass`
+# haelt je Vorgang einen Faktor auf den Wert, der in der Waffentabelle
+# steht. Der eigene Gewehrschuss steht auf 0,10 und liegt damit unter
+# `schwelle` - er ruckelt schlicht nicht mehr. Uebrig bleibt, was ein
+# Ruckeln verdient: eine Explosion neben einem, ein Treffer, den man
+# selbst abbekommt, und der eigene Sturz.
+RUCKELN = dict(
+    staerke=1.0,          # Gesamtfaktor, greift auf alles
+    max=3.2,              # so weit reisst es das Bild hoechstens (vorher 9.0)
+    abbau=6.4,            # wie schnell es verklingt (vorher 2.6)
+    schwelle=0.40,        # darunter wird gar nicht erst geruckelt
+    sperre=0.22,          # Mindestabstand zweier Schlaege in Sekunden
+    fremd=0.55,           # was ein anderer ausloest, zaehlt nur zum Teil
+    reichweite=240.0,     # ab hier ist fremdes Ruckeln ganz weg
+    fremde_ebene=0.0,     # eine andere Etage ruckelt nicht mit
+    anlass=dict(
+        schuss=0.10,      # der Dauerkandidat: bleibt unter der Schwelle
+        wurf=0.0,         # eine Granate zu werfen ruckelt nicht
+        nahkampf=0.12,
+        treffer=0.16,     # wenn es einen selbst trifft
+        explosion=0.30,
+        sturz=0.35,
+        tod=0.0,          # dass jemand faellt, reisst niemandem das Bild
+    ),
 )
 
 # Farbiger Schein an den Bildraendern, fuer Zustaende, die man dauernd
@@ -224,6 +272,14 @@ KLANG_NAMEN = (
 AUDIO = dict(
     gesamt=0.75,              # Gesamtlautstaerke
     schuss=0.85,              # Lautstaerke der Schuesse
+    # Wie ein Ton mit der Entfernung leiser wird. Bis `nah` ist er voll
+    # zu hoeren, ab `weit` nicht mehr; dazwischen faellt er gleichmaessig
+    # ab. `fremde_ebene` gilt fuer alles, was eine Etage hoeher oder
+    # tiefer passiert - man hoert es, aber gedaempft durch den Boden.
+    nah=190.0,
+    weit=1150.0,
+    leiseste=0.06,            # darunter wird nichts mehr abgespielt
+    fremde_ebene=0.45,
 )
 
 # Mass der Uebersichtstafel, die `--vorlagen` neben die Einzelbilder legt.
@@ -257,6 +313,12 @@ NETZ = dict(
     namenslaenge=10,
     passwortlaenge=16,        # laenger wird abgeschnitten
     stumm_nach=8.0,           # ohne Lebenszeichen gilt ein Gast als weg
+    # So viele Zeilen duerfen sich hoechstens stauen, wenn die Leitung
+    # gerade nicht mehr annimmt. Darueber wird das Ueberholte weggeworfen
+    # statt nachgeschickt: eine Weltmeldung von vorhin sagt nichts, was
+    # die naechste nicht besser sagt. Zwei Sekunden Takt sind reichlich
+    # und trotzdem klein genug, dass kein Rueckstand entsteht.
+    stau_zeilen=120,
 )
 
 # Die drei Spielarten im Mehrspieler.

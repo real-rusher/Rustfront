@@ -31,13 +31,37 @@ RND = random.Random(4711)
 
 
 class Kamera:
+    """Der Bildausschnitt. Folgt dem Spieler, laeuft ein Stueck in seine
+    Blickrichtung vor und bekommt gelegentlich einen Schlag ab.
+
+    Das Ruckeln haelt zwei Dinge auseinander, die frueher eines waren:
+
+    ``anteil``  wie stark geruckelt werden **darf**. Das ist die
+                Einstellung des Spielers (Menue und, spaeter, das Konto),
+                0.0 bis 1.0. Auf 0 steht das Bild vollkommen still - auch
+                dann, wenn die Welt gerade explodiert.
+    ``ruckeln`` wie stark es gerade **wirklich** ruckelt.
+
+    Und es hat eine Sperre. Ohne sie ergibt Dauerfeuer ein Dauerzittern:
+    jeder Schuss legt nach, bevor der vorige verklungen ist, und das Bild
+    kommt nie zur Ruhe. Genau so sah es beim Gastgeber aus.
+    """
+
     def __init__(self, ziel=(0, 0)) -> None:
         self.pos = pygame.Vector2(ziel)
         self.ruckeln = 0.0
         self.versatz = pygame.Vector2(0, 0)
+        self.anteil = 1.0
+        self._sperre = 0.0
 
     def stossen(self, kraft: float) -> None:
-        self.ruckeln = min(K.KAMERA["ruckeln_max"], self.ruckeln + kraft)
+        """Ein Schlag auf die Kamera. Kleines und zu Dichtes faellt weg."""
+        r = K.RUCKELN
+        kraft = float(kraft) * r["staerke"] * self.anteil
+        if kraft < r["schwelle"] or self._sperre > 0.0:
+            return
+        self._sperre = r["sperre"]
+        self.ruckeln = min(r["max"], self.ruckeln + kraft)
 
     def schritt(self, dt: float, ziel: pygame.Vector2, blick: pygame.Vector2,
                 grenze: tuple[int, int]) -> None:
@@ -48,7 +72,9 @@ class Kamera:
         wunsch = ziel + vor * k["maus_zug"]
         self.pos += (wunsch - self.pos) * min(1.0, k["nachlauf"] * dt)
 
-        self.ruckeln = max(0.0, self.ruckeln - k["ruckeln_abbau"] * dt * max(1.0, self.ruckeln))
+        self._sperre = max(0.0, self._sperre - dt)
+        self.ruckeln = max(0.0, self.ruckeln
+                           - K.RUCKELN["abbau"] * dt * max(1.0, self.ruckeln))
         r = self.ruckeln
         self.versatz.update(RND.uniform(-r, r), RND.uniform(-r, r))
 
@@ -66,11 +92,26 @@ class Kamera:
 
     @property
     def ecke(self) -> pygame.Vector2:
+        """Die Ecke zum **Zeichnen**. Das Ruckeln steckt hier drin."""
         return pygame.Vector2(round(self.pos.x - K.GAME_W / 2 + self.versatz.x),
                               round(self.pos.y - K.GAME_H / 2 + self.versatz.y))
 
+    @property
+    def ecke_ruhig(self) -> pygame.Vector2:
+        """Dieselbe Ecke **ohne** Ruckeln, zum Umrechnen von Eingaben.
+
+        Der Unterschied ist keine Feinheit. `zu_welt` liefert den Punkt,
+        auf den gezielt wird, und daraus folgt der Winkel jedes Schusses
+        und - bei der Granate - die Wurfweite. Rechnete man das ueber die
+        wackelnde Ecke, veraenderte sich das Ziel mit jedem Zittern des
+        Bildes: man haelt still, und der Wurf geht trotzdem woandershin.
+        Das Ruckeln gehoert ins Bild, nicht in die Hand.
+        """
+        return pygame.Vector2(round(self.pos.x - K.GAME_W / 2),
+                              round(self.pos.y - K.GAME_H / 2))
+
     def zu_welt(self, bildpunkt) -> pygame.Vector2:
-        return pygame.Vector2(bildpunkt) + self.ecke
+        return pygame.Vector2(bildpunkt) + self.ecke_ruhig
 
 
 class Renderer:
