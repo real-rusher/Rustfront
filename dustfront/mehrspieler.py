@@ -363,7 +363,7 @@ class Gefecht(Szene):
                  medkit_spawn: bool | None = None, runden: int | None = None,
                  team: int | None = None, passwort: str = "",
                  loadouts: str | None = None, rpg: bool | None = None,
-                 rpg_lenkung: bool | None = None,
+                 rpg_lenkung: bool | None = None, karte: str = "",
                  seed: int | None = None) -> None:
         super().__init__(app)
         self.name = netz.name_saeubern(name)
@@ -421,7 +421,18 @@ class Gefecht(Szene):
         # mal gruen und mal rot ist, sagt nichts.
         self.rnd = random.Random(seed)
         self.renderer = Renderer(app.bilder)
-        self.welt = testkarte()
+        # Die Karte. Ohne Namen die eingebaute Testkarte; sonst eine
+        # Datei aus `karten/`. Faellt sie aus, laeuft die Runde trotzdem -
+        # eine fehlende Kartendatei darf kein Gefecht verhindern.
+        self.karte = ""
+        self.karte_kopf: dict = {}
+        self.welt = None
+        if karte:
+            gelesen, kopf = welt_modul.karte_lesen(karte)
+            if gelesen is not None:
+                self.welt, self.karte, self.karte_kopf = gelesen, karte, kopf
+        if self.welt is None:
+            self.welt = testkarte()
         # Feste Einstiegsseite je Mannschaft. Wird vor dem ersten Einstieg
         # gewaehlt und gilt die ganze Runde (siehe _einstiegszonen_waehlen).
         self.einstiegszonen: list = []
@@ -431,6 +442,8 @@ class Gefecht(Szene):
         self.teampunkte = [0] * len(K.TEAMS["namen"])
         self.zone_stand = [0.0] * len(K.TEAMS["namen"])
         self.zone_mitte = pygame.Vector2(0, 0)
+        self.zone_ebene = K.ZONE["ebene"]
+        self.zone_name = ""
         self.zone_halter = -1        # wer den Kreis gerade haelt, -1 = niemand
         self.runde = 0               # in versus: welche Runde laeuft
         self.runden_pause = 0.0
@@ -497,10 +510,10 @@ class Gefecht(Szene):
 
         # Der Kreis liegt in der Mitte der Karte. Eine feste Stelle, die
         # alle kennen - das ist der Punkt an dieser Spielart.
-        ebene_zone = self.welt.ebene(min(K.ZONE["ebene"],
-                                         len(self.welt.ebenen) - 1))
-        self.zone_mitte.update(ebene_zone.pixel_breite / 2,
-                               ebene_zone.pixel_hoehe / 2)
+        self.kreise = self._kreise_lesen()
+        self.kreis_nr = 0
+        self.kreis_rest = K.ZONE["wechsel"]
+        self._kreis_setzen(0)
 
         self._welt_verdrahten()
         self.wunsch = self._wunsch_lesen()
@@ -1224,7 +1237,8 @@ class Gefecht(Szene):
                 "medkit_spawn": self.medkits_spawnen,
                 "runden_bis": self.runden_bis,
                 "loadouts": self.loadout_regel,
-                "rpg": self.rpg_an, "rpg_lenkung": self.rpg_lenkung}
+                "rpg": self.rpg_an, "rpg_lenkung": self.rpg_lenkung,
+                "karte": self.karte}
 
     def _gegnerlast_zaehlen(self) -> None:
         """Wie viele Gegner gerade an welchem Spieler haengen.
@@ -1282,9 +1296,60 @@ class Gefecht(Szene):
         """Steht dieser Kaempfer im Kreis? Nur auf der richtigen Ebene."""
         if not k.lebt or k.am_boden:
             return False
-        if k.ebene != K.ZONE["ebene"]:
+        # Die Ebene kommt aus der Karte und nicht mehr fest aus der
+        # Tabelle: auf STAUBTAL liegt einer der Kreise auf einem Plateau.
+        if k.ebene != self.zone_ebene:
             return False
         return k.pos.distance_to(self.zone_mitte) <= K.ZONE["radius"]
+
+    def _kreise_lesen(self) -> list[tuple]:
+        """Wo die Kreise dieser Karte liegen: [(Ebene, Punkt, Name), ...].
+
+        Sie stehen als Marken **in der Kartendatei**, nicht in einer
+        Tabelle daneben: wer eine Karte baut, setzt dort ein A, ein B und
+        ein C hin und ist fertig. Der Kopf sagt nur, welche Buchstaben
+        Kreise sind und wie sie heissen.
+
+        Hat eine Karte keine Marken, bleibt es bei der Mitte - so wie
+        bisher und wie bei der Testkarte.
+        """
+        namen = str(self.karte_kopf.get("kreise", "")).split()
+        raus = []
+        for buchstabe in namen:
+            for i, e in enumerate(self.welt.ebenen):
+                for punkt in e.marken.get(buchstabe, ()):
+                    raus.append((i, pygame.Vector2(punkt), buchstabe))
+        if raus:
+            return raus
+        e = self.welt.ebene(min(K.ZONE["ebene"], len(self.welt.ebenen) - 1))
+        return [(e.index, pygame.Vector2(e.pixel_breite / 2,
+                                         e.pixel_hoehe / 2), "")]
+
+    def _kreis_setzen(self, nr: int) -> None:
+        nr = nr % max(1, len(self.kreise))
+        self.kreis_nr = nr
+        ebene, punkt, name = self.kreise[nr]
+        self.zone_ebene = ebene
+        self.zone_mitte.update(punkt)
+        self.zone_name = name
+
+    def _kreis_wandern(self, dt: float) -> None:
+        """Bei mehreren Kreisen wandert er weiter.
+
+        Eine sehr grosse Karte mit drei Kreisen zugleich ist keine grosse
+        Karte, sondern drei kleine: die Mannschaften teilen sich auf und
+        treffen sich nie. Ein Kreis, der weiterzieht, haelt sie beisammen
+        und macht die Groesse trotzdem nutzbar - man muss den Weg gehen.
+        """
+        if len(self.kreise) < 2:
+            return
+        self.kreis_rest -= dt
+        if self.kreis_rest > 0:
+            return
+        self.kreis_rest = K.ZONE["wechsel"]
+        self._kreis_setzen(self.kreis_nr + 1)
+        self.hinweis = "DER KREIS ZIEHT WEITER"
+        self.welt.klang("erfasst", 0.5)
 
     def _zone(self, dt: float) -> None:
         """Wer die Mehrheit im Kreis hat, laedt fuer sein Team.
@@ -1296,6 +1361,7 @@ class Gefecht(Szene):
         """
         if not self.regeln["zone"]:
             return
+        self._kreis_wandern(dt)
         z = K.ZONE
         drin = [0] * len(self.teampunkte)
         for k in self.kaempfer.values():
@@ -1771,6 +1837,7 @@ class Gefecht(Szene):
                 "tp": list(self.teampunkte),
                 "zs": [round(s, 1) for s in self.zone_stand],
                 "zh": self.zone_halter,
+                "zk": self.kreis_nr,
                 "rn": self.runde, "rp": round(self.runden_pause, 1),
                 "st": self.sieger_team}
 
@@ -1888,6 +1955,20 @@ class Gefecht(Szene):
             self.loadout_regel = regel
         self.rpg_an = bool(nachricht.get("rpg", self.rpg_an))
         self.rpg_lenkung = bool(nachricht.get("rpg_lenkung", self.rpg_lenkung))
+        karte = str(nachricht.get("karte", ""))
+        if karte and karte != self.karte:
+            # Der Gastgeber bestimmt die Karte. Wer sie nicht hat, bleibt
+            # auf der Testkarte - dann stimmt zwar nichts mehr, aber er
+            # fliegt wenigstens nicht heraus, und der Hinweis sagt es.
+            gelesen, kopf = welt_modul.karte_lesen(karte)
+            if gelesen is not None:
+                self.welt = gelesen
+                self.karte, self.karte_kopf = karte, kopf
+                self._welt_verdrahten()
+                self.kreise = self._kreise_lesen()
+                self._kreis_setzen(0)
+            else:
+                self.hinweis = "KARTE %s FEHLT" % karte.upper()
         try:
             self.start_medkits = max(0, min(
                 K.GEFECHT["start_medkits_hoechstens"],
@@ -1942,6 +2023,9 @@ class Gefecht(Szene):
         self._liste_uebernehmen(self.teampunkte, meldung.get("tp"), int)
         self._liste_uebernehmen(self.zone_stand, meldung.get("zs"), float)
         self.zone_halter = int(meldung.get("zh", -1))
+        kreis = int(meldung.get("zk", 0))
+        if self.kreise and kreis != self.kreis_nr:
+            self._kreis_setzen(kreis)
         self.runde = int(meldung.get("rn", 0))
         self.runden_pause = float(meldung.get("rp", 0.0))
         self.sieger_team = int(meldung.get("st", -1))
@@ -2325,6 +2409,8 @@ class Gefecht(Szene):
         if self.ist_gastgeber:
             w = self.wunsch
             eintraege.append(("modus", "SPIELART", K.MODI[w["modus"]]["name"]))
+            eintraege.append(("karte", "KARTE",
+                              (w["karte"] or "TESTKARTE").upper()))
             regeln = K.MODI[w["modus"]]
             if regeln["runden"]:
                 eintraege.append(("runden", "RUNDEN BIS SIEG",
@@ -2478,6 +2564,14 @@ class Gefecht(Szene):
         elif schluessel == "loadouts":
             w["loadouts"] = ("alles" if w["loadouts"] == "eigenes"
                              else "eigenes")
+        elif schluessel == "karte":
+            # Alle Karten aus dem Ordner, dazu die eingebaute Testkarte
+            # als leerer Name. Wer keine Datei hat, blaettert eben nur
+            # durch eine Auswahl von einer.
+            auswahl = [""] + welt_modul.karten_liste()
+            jetzt = w["karte"] if w["karte"] in auswahl else ""
+            i = (auswahl.index(jetzt) + (1 if vor else -1)) % len(auswahl)
+            w["karte"] = auswahl[i]
         elif schluessel == "rpg":
             w["rpg"] = not w["rpg"]
             self.menue = min(self.menue, len(self._menue_baut()) - 1)
@@ -2542,6 +2636,20 @@ class Gefecht(Szene):
             self.loadout_regel = w["loadouts"]
         self.rpg_an = bool(w.get("rpg", self.rpg_an))
         self.rpg_lenkung = bool(w.get("rpg_lenkung", self.rpg_lenkung))
+        gewaehlt = str(w.get("karte", ""))
+        if gewaehlt != self.karte:
+            gelesen, kopf = (welt_modul.karte_lesen(gewaehlt) if gewaehlt
+                             else (testkarte(), {}))
+            if gelesen is not None:
+                self.welt = gelesen
+                self.karte, self.karte_kopf = gewaehlt, kopf
+                self._welt_verdrahten()
+                self.kreise = self._kreise_lesen()
+                self._kreis_setzen(0)
+                # Alles, was auf der alten Karte stand, gehoert nicht auf
+                # die neue - auch nicht die Kaempfer.
+                for k in self.kaempfer.values():
+                    self.welt.dazu(k)
 
         self.teampunkte = [0] * len(K.TEAMS["namen"])
         self.zone_stand = [0.0] * len(self.teampunkte)
@@ -2633,7 +2741,8 @@ class Gefecht(Szene):
 
     def _wunsch_lesen(self) -> dict:
         """Die Regeln, die gerade gelten, als Ausgangspunkt fuers Menue."""
-        return dict(modus=self.modus, ende_art=self.ende_art,
+        return dict(modus=self.modus, karte=self.karte,
+                    ende_art=self.ende_art,
                     ende_wert=self.ende_wert, runden_bis=self.runden_bis,
                     knapp=self.knapp, schutz=self.schutz_an,
                     medkits=self.start_medkits,
@@ -2697,7 +2806,7 @@ class Gefecht(Szene):
         neutral - man soll auf einen Blick sehen, ob der Kreis umkaempft
         ist oder laeuft.
         """
-        if not self.regeln["zone"] or ebene != K.ZONE["ebene"]:
+        if not self.regeln["zone"] or ebene != self.zone_ebene:
             return
         z = K.ZONE
         halter = self.zone_halter
@@ -2992,6 +3101,9 @@ class Gefecht(Szene):
         # Kopfzeile: Spielart, und was die Runde beendet
         f.zeichnen(ziel, K.MODI[self.modus]["name"], 12, 12, K.C_AMBER, 1)
         rolle = "GASTGEBER" if self.ist_gastgeber else "GAST"
+        if self.karte:
+            rolle = "%s - %s" % (rolle, (self.karte_kopf.get("name")
+                                         or self.karte).upper())
         f.zeichnen(ziel, rolle, 12, 22, K.C_MUTED_DK, 1)
         if self.ist_gastgeber:
             f.zeichnen(ziel, self.gastgeber.adresse, 12, 32, K.C_MUTED_DK, 1)

@@ -203,8 +203,20 @@ class Renderer:
         return hit
 
     # ---- Welt ------------------------------------------------------
+    # Kachelsaetze. Der Name einer Karte sagt, welcher gilt - `satz` im
+    # Kopf der Kartendatei. Was hier nicht steht, bleibt beim Standard;
+    # eine Karte mit unbekanntem Satz sieht also aus wie immer und faellt
+    # nicht aus.
+    SAETZE = {
+        "": {},
+        "wueste": {"boden": ("sand", "sand_2", "sand_3", "sand_4"),
+                   "wand": "sand_wand", "kiste": "sand_kiste"},
+    }
+
     def ebene_zeichnen(self, ziel, welt, index: int, ecke, dunkel: int | None) -> None:
         e = welt.ebene(index)
+        satz = self.SAETZE.get(getattr(welt, "satz", ""), {})
+        boden_namen = satz.get("boden", self._boden_namen)
         # Der Ausschnitt richtet sich nach der Zielflaeche, nicht nach der
         # Bildgroesse: die Tiefenflaeche fuer untere Ebenen ist groesser.
         zw, zh = ziel.get_size()
@@ -224,11 +236,12 @@ class Renderer:
                     continue
                 daten = K.KACHELN[kachel]
                 if daten["fest"]:
-                    fest.append((tx, ty, daten["bild"], sy))
+                    fest.append((tx, ty,
+                                 satz.get(daten["bild"], daten["bild"]), sy))
                     continue
-                name = daten["bild"]
+                name = satz.get(daten["bild"], daten["bild"])
                 if kachel == K.BODEN:
-                    name = self._boden_namen[e.variante[zeile + tx]]
+                    name = boden_namen[e.variante[zeile + tx]]
                 s = bild(name)
                 if dunkel is not None:
                     s = self.dunkel(s, dunkel)
@@ -247,6 +260,8 @@ class Renderer:
             ziel.blit(s, (tx * K.TILE - ecke.x, sy))
         # Dekale liegen auf dem Boden
         d = e.dekale
+        if d is None:
+            return
         if dunkel is None:
             ziel.blit(d, (-ecke.x, -ecke.y))
         else:

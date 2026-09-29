@@ -20,6 +20,7 @@ Struktur erzeugen, ohne dass der Spielcode es merkt.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import pygame
 
@@ -141,7 +142,13 @@ class Ebene:
         self.breite, self.hoehe, self.index = breite, hoehe, index
         self.kacheln = [K.LEER] * (breite * hoehe)
         self.variante = [0] * (breite * hoehe)     # fuer abwechselnde Bodenbilder
-        self.dekale = pygame.Surface((breite * K.TILE, hoehe * K.TILE), pygame.SRCALPHA)
+        # Dekale werden **traege** angelegt. Eine Ebene von 120 mal 80
+        # Kacheln ist 3840 mal 2560 Bildpunkte gross - als Flaeche mit
+        # Alphakanal sind das rund 39 Megabyte, je Ebene. Drei Ebenen
+        # waeren 118, und das noch bevor irgendwo ein Blutfleck liegt.
+        # Angelegt wird sie erst, wenn wirklich der erste hinkommt.
+        self._dekale = None
+        self._marken: dict[str, list] = {}
 
     # ---- Aufbau ------------------------------------------------------
     @classmethod
@@ -152,10 +159,34 @@ class Ebene:
         for ty, zeile in enumerate(zeilen):
             for tx in range(breite):
                 z = zeile[tx] if tx < len(zeile) else " "
+                # Grossbuchstaben ausser X sind **Marken**: sie sagen der
+                # Spielart, wo etwas hingehoert - ein Kreis, ein
+                # Einstiegsplatz -, und werden selbst zu Boden. So steht
+                # in der Kartendatei, wo die Punkte liegen, und nicht in
+                # einer zweiten Datei daneben, die man vergisst.
+                if z.isalpha() and z.isupper() and z not in ZEICHEN:
+                    e.marken.setdefault(z, []).append(
+                        pygame.Vector2(tx * K.TILE + K.TILE / 2,
+                                       ty * K.TILE + K.TILE / 2))
+                    z = "."
                 e.setzen(tx, ty, ZEICHEN.get(z, K.BODEN))
                 # gestreute Auswahl, sonst sieht man ein Muster im Boden
                 e.variante[ty * breite + tx] = ((tx * 73856093) ^ (ty * 19349663)) % 4
         return e
+
+    @property
+    def marken(self) -> dict:
+        """Benannte Stellen dieser Ebene, aus den Grossbuchstaben."""
+        return self._marken
+
+    @property
+    def dekale(self):
+        """Die Flaeche mit Blut- und Brandflecken, oder None.
+
+        None heisst: es liegt noch keiner. Der Renderer prueft darauf und
+        spart sich dann den Blit - und die Karte spart sich den Speicher.
+        """
+        return self._dekale
 
     def setzen(self, tx: int, ty: int, kachel: int) -> None:
         if 0 <= tx < self.breite and 0 <= ty < self.hoehe:
@@ -195,7 +226,11 @@ class Ebene:
 
     def dekal(self, bild: pygame.Surface, x: float, y: float) -> None:
         """Brandfleck, Blut, Einschlag. Bleibt liegen, kostet nichts."""
-        self.dekale.blit(bild, (x - bild.get_width() / 2, y - bild.get_height() / 2))
+        if self._dekale is None:
+            self._dekale = pygame.Surface(
+                (self.breite * K.TILE, self.hoehe * K.TILE), pygame.SRCALPHA)
+        self._dekale.blit(bild, (x - bild.get_width() / 2,
+                                 y - bild.get_height() / 2))
 
 
 class Welt:
@@ -203,8 +238,12 @@ class Welt:
 
     ZELLE = 48          # Rastergroesse der Nachbarschaftssuche
 
-    def __init__(self, ebenen: list[Ebene]) -> None:
+    def __init__(self, ebenen: list[Ebene], satz: str = "") -> None:
         self.ebenen = ebenen
+        # Welcher Kachelsatz gilt. Leer ist der Standard; "wueste" tauscht
+        # Boden, Wand und Kiste gegen Sand, Fels und Fass. Steht als
+        # `satz:` im Kopf der Kartendatei.
+        self.satz = satz
         self.wesen: list = []
         self.neue: list = []
         self.partikel: list = []
@@ -798,6 +837,79 @@ KARTE_E2 = [
     "#                                          #",
     "############################################",
 ]
+
+
+# ══════════════════════════════════════════════════════════════════
+# Karten aus Dateien
+# ══════════════════════════════════════════════════════════════════
+#
+# Eine Karte ist eine Textdatei in `karten/`. Ein Zeichen ist eine
+# Kachel, und die Ebenen stehen hintereinander, getrennt durch eine
+# Zeile `--- ebene N ---`. Damit laesst sich eine Karte in jedem
+# Texteditor bauen, und ein spaeterer Tiled-Importeur erzeugt genau
+# dieselbe Struktur, ohne dass der Spielcode es merkt.
+#
+# Alles vor der ersten Ebenenzeile ist Kopf: `schluessel: wert`,
+# frei erweiterbar. Zeilen, die mit `#` **und einem Leerzeichen**
+# beginnen, sind Kommentar - ein einzelnes `#` ist eine Wand.
+
+def kartenordner() -> Path:
+    from .pfade import spielordner
+    return spielordner() / "karten"
+
+
+def karten_liste() -> list[str]:
+    ordner = kartenordner()
+    if not ordner.is_dir():
+        return []
+    return sorted(p.stem for p in ordner.glob("*.txt"))
+
+
+def karte_lesen(name: str):
+    """Eine Karte laden. Gibt (Welt, Kopf) zurueck, oder (None, {}).
+
+    Nichts daran wirft: eine kaputte oder fehlende Kartendatei darf
+    hoechstens diese eine Karte kosten, nie den Start.
+    """
+    pfad = kartenordner() / ("%s.txt" % name)
+    if not pfad.is_file():
+        return None, {}
+    try:
+        roh = pfad.read_text(encoding="utf-8")
+    except OSError:
+        return None, {}
+    return karte_aus_text(roh)
+
+
+def karte_aus_text(roh: str):
+    kopf: dict[str, str] = {}
+    bloecke: list[list[str]] = []
+    jetzt: list[str] | None = None
+    for zeile in roh.splitlines():
+        blank = zeile.strip()
+        if blank.startswith("--- ebene"):
+            jetzt = []
+            bloecke.append(jetzt)
+            continue
+        if jetzt is None:
+            if blank.startswith("# ") or not blank:
+                continue
+            if ":" in blank:
+                schluessel, _, wert = blank.partition(":")
+                kopf[schluessel.strip()] = wert.strip()
+            continue
+        # **Kein rstrip und kein Ueberspringen leerer Zeilen.** Eine
+        # Zeile aus lauter Leerzeichen ist eine Reihe Loecher, und wer
+        # sie wegwirft, verschiebt alles darunter um eine Kachel. Das
+        # ist der Fehler, der eine Karte still kaputtmacht.
+        jetzt.append(zeile)
+    bloecke = [[z for z in b if len(z) > 0] for b in bloecke]
+    bloecke = [b for b in bloecke if b]
+    if not bloecke:
+        return None, kopf
+    welt = Welt([Ebene.aus_text(b, i) for i, b in enumerate(bloecke)],
+                satz=str(kopf.get("satz", "")))
+    return welt, kopf
 
 
 def testkarte() -> Welt:

@@ -40,6 +40,17 @@ C_FUGE = (30, 22, 16)
 C_WAND = (64, 52, 39)
 C_WAND_OBEN = (92, 76, 56)
 C_WAND_KANTE = (28, 21, 15)
+
+# Der Wuestensatz. Heller, gelber, ohne Platten und ohne Nieten - Sand
+# hat keine Fugen. Die Wand ist Lehm und Fels statt Blech: eine Karte im
+# Freien darf nicht aussehen wie ein Gang im Rumpf, sonst haette man sie
+# sich sparen koennen.
+C_SAND = (96, 79, 54)
+C_SAND_KORN = (116, 97, 66)
+C_SAND_DUNKEL = (72, 58, 40)
+C_FELS = (110, 92, 66)
+C_FELS_OBEN = (146, 124, 90)
+C_FELS_KANTE = (56, 44, 31)
 C_CREAM = (238, 226, 203)
 C_AMBER = (232, 163, 61)
 C_ORANGE = (226, 98, 47)
@@ -285,6 +296,14 @@ BILD_MASS = {
     "boden_2":          (TILE, TILE),
     "boden_3":          (TILE, TILE),
     "boden_4":          (TILE, TILE),
+    # Der Wuestensatz. Dieselben Masse, eigener Name: wer eine
+    # Karte im Freien baut, bekommt Sand statt Blech.
+    "sand":             (TILE, TILE),
+    "sand_2":           (TILE, TILE),
+    "sand_3":           (TILE, TILE),
+    "sand_4":           (TILE, TILE),
+    "sand_wand":        (TILE, TILE),
+    "sand_kiste":       (TILE, TILE),
     "gitter":           (TILE, TILE),
     "wand":             (TILE, TILE),
     "kiste":            (TILE, TILE),
@@ -515,6 +534,12 @@ ZONE = dict(
     ring=3,                   # Dicke des Rings in Pixeln
     fuellung=34,              # Deckkraft der Flaeche
     puls=0.9,                 # Sekunden fuer einen Pulsschlag des Rings
+    # Hat eine Karte mehrere Kreise, zieht der Kampf nach dieser Zeit
+    # zum naechsten weiter. Drei Kreise **zugleich** waeren auf einer
+    # sehr grossen Karte keine grosse Karte, sondern drei kleine: die
+    # Mannschaften teilen sich auf und treffen sich nie. Einer, der
+    # weiterzieht, haelt sie beisammen - man muss den Weg gehen.
+    wechsel=75.0,
 )
 
 # Versus: ein Leben je Runde, wie in einem Rundenschuetzen.

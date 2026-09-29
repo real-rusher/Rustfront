@@ -93,6 +93,100 @@ def _boden4():
     return _boden_basis(47, K.C_BODEN, K.C_FUGE)
 
 
+# ──────────────────────────────── Wueste
+#
+# Derselbe Aufbau, anderer Untergrund. Sand hat **keine Fugen** und keine
+# Nieten - er hat Korn, Riffel und hier und da einen Stein. Wer die
+# Plattenkachel bloss einfaerbt, bekommt eine gelbe Werkhalle und keine
+# Wueste; der Unterschied liegt darin, was fehlt.
+
+def _sand_basis(seed):
+    r = random.Random(seed)
+    ton = tuple(max(0, min(255, c + r.randrange(-3, 4))) for c in K.C_SAND)
+    s = _flaeche(T, T)
+    s.fill(ton)
+    # Riffel: flache Wellen, wie der Wind sie zieht.
+    #
+    # **Kurz und mit Abstand zum Rand.** Es gibt nur vier Bodenbilder, und
+    # die wiederholen sich alle paar Kacheln; ein Riffel, der bis an die
+    # Kachelkante laeuft, setzt sich beim Nachbarn fort und ergibt eine
+    # durchgehende Linie ueber die halbe Karte. Das sah aus wie Dielen,
+    # nicht wie Sand. Innerhalb der Kachel kann nichts zusammenwachsen.
+    for _ in range(r.randrange(3, 6)):
+        y = r.randrange(3, T - 4)
+        laenge = r.randrange(T // 5, T // 2)
+        x = r.randrange(3, T - laenge - 3)
+        pygame.draw.line(s, K.C_SAND_DUNKEL, (x, y), (x + laenge, y))
+        pygame.draw.line(s, K.C_SAND_KORN, (x + 1, y - 1), (x + laenge - 1, y - 1))
+    _koerner(s, K.C_SAND_KORN, 26, seed + 3)
+    _koerner(s, K.C_SAND_DUNKEL, 16, seed + 7)
+    if r.random() < 0.45:                     # ein Stein
+        x, y = r.randrange(3, T - 6), r.randrange(3, T - 6)
+        b, h = r.randrange(2, 4), r.randrange(2, 3)
+        pygame.draw.rect(s, (86, 72, 52), (x, y + 1, b, h))
+        pygame.draw.rect(s, (132, 114, 84), (x, y, b, 1))
+    return s
+
+
+@platzhalter("sand")
+def _sand():
+    return _sand_basis(101)
+
+
+@platzhalter("sand_2")
+def _sand2():
+    return _sand_basis(137)
+
+
+@platzhalter("sand_3")
+def _sand3():
+    return _sand_basis(211)
+
+
+@platzhalter("sand_4")
+def _sand4():
+    return _sand_basis(307)
+
+
+@platzhalter("sand_wand")
+def _sand_wand():
+    """Lehm und Fels. Heller als die Blechwand und mit rauem Kopf."""
+    s = _flaeche(T, T)
+    s.fill(K.C_FELS)
+    pygame.draw.rect(s, K.C_FELS_OBEN, (0, 0, T, 6))
+    pygame.draw.rect(s, K.C_FELS_KANTE, (0, T - 3, T, 3))
+    # Unregelmaessige Lagen statt gerader Bleche: Fels bricht, er wird
+    # nicht geschweisst.
+    # Auch hier mit Abstand zum Rand: eine Fuge, die bis an die Kante
+    # laeuft, zieht sich sonst ueber die ganze Felswand durch.
+    r = random.Random(55)
+    for y in range(7, T - 4, 5):
+        x = r.randrange(2, 8)
+        pygame.draw.line(s, K.C_FELS_KANTE, (x, y),
+                         (T - 3 - r.randrange(0, 6), y))
+    for _ in range(3):
+        x, y = r.randrange(1, T - 4), r.randrange(7, T - 6)
+        pygame.draw.rect(s, (92, 76, 54), (x, y, r.randrange(2, 5), 2))
+    _koerner(s, (84, 68, 48), 26, 23)
+    _koerner(s, (162, 140, 104), 12, 24)
+    return s
+
+
+@platzhalter("sand_kiste")
+def _sand_kiste():
+    """Ein Fass. Im Sand steht kein Frachtkasten, da steht ein Fass -
+    und ein Ring aus Fassern ist das Wahrzeichen des offenen Kreises."""
+    s = _sand_basis(163)
+    pygame.draw.ellipse(s, (20, 15, 10), (4, T - 13, T - 8, 11))   # Schatten
+    pygame.draw.rect(s, (74, 62, 44), (5, 4, T - 10, T - 10))
+    pygame.draw.rect(s, (118, 96, 60), (6, 5, T - 12, T - 12))
+    pygame.draw.rect(s, (156, 128, 82), (7, 6, T - 14, 2))
+    for y in (10, 16, 22):
+        pygame.draw.line(s, (62, 50, 34), (6, y), (T - 7, y))
+    pygame.draw.rect(s, (24, 18, 12), (5, 4, T - 10, T - 10), 1)
+    return s
+
+
 @platzhalter("gitter")
 def _gitter():
     s = _boden_basis(13, K.C_BODEN_2, K.C_FUGE)

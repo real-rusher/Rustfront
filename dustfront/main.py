@@ -8,6 +8,7 @@ DUSTFRONT - Einstieg
     python -m dustfront --vorlagen     jedes Bild als Vorlage herausschreiben
     python -m dustfront --assets       zeigen, was aus Dateien kommt
     python -m dustfront --konto ...    Konten anlegen und ansehen
+    python -m dustfront --karten       zeigen, welche Karten es gibt
 
 Bilder werden, falls vorhanden, aus dem Ordner `assets` neben dem Paket
 geladen, Klaenge aus `assets/sfx`. Fehlt etwas, zeichnet und rechnet sich das
@@ -59,7 +60,8 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
             schutz: bool | None = None, medkits: int | None = None,
             medkit_spawn: bool | None = None, runden: int | None = None,
             team: int | None = None, online: bool = False,
-            passwort: str = "", loadouts: str | None = None) -> int:
+            passwort: str = "", loadouts: str | None = None,
+            karte: str = "") -> int:
     """LAN-Test: als Gastgeber aufmachen oder als Gast verbinden.
 
     Die Spielart bestimmt allein der Gastgeber. Ein Gast bekommt sie mit
@@ -103,6 +105,12 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
                   % ("alle %.0f Sekunden" % K.GEFECHT["medkit_takt"]
                      if (K.GEFECHT["medkits_spawnen"] if medkit_spawn is None
                          else medkit_spawn) else "keine"))
+            if karte:
+                from . import world as W
+                print("Karte: %s" % karte)
+                if W.karte_lesen(karte)[0] is None:
+                    print("  gibt es nicht - moeglich: %s"
+                          % (", ".join(W.karten_liste()) or "keine"))
             print("Ausruestung: %s"
                   % ("jeder traegt sein eigenes Loadout"
                      if (loadouts or K.GEFECHT["loadouts"]) == "eigenes"
@@ -137,7 +145,7 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
                          ende_wert=ende_wert, knapp=knapp, schutz=schutz,
                          medkits=medkits, medkit_spawn=medkit_spawn,
                          runden=runden, team=team, passwort=passwort,
-                         loadouts=loadouts))
+                         loadouts=loadouts, karte=karte))
     app.laufen()
     return 0
 
@@ -268,6 +276,7 @@ def aus_argumenten(argumente: list[str]) -> int:
                        passwort=wert("--passwort", ""),
                        loadouts=("eigenes" if "--loadouts" in argumente
                                  else None),
+                       karte=wert("--karte", ""),
                        medkit_spawn="--keine-medkits" not in argumente)
     if "--join" in argumente:
         return gefecht(False, wohin=wert("--join"),
@@ -283,6 +292,21 @@ def aus_argumenten(argumente: list[str]) -> int:
         for platz, e in enumerate(daten["eintraege"], 1):
             print("  %2d. %-12s %4d Abschuesse  %4d Tode  %3d Runden"
                   % (platz, e["name"], e["abschuesse"], e["tode"], e["runden"]))
+        return 0
+    if "--karten" in argumente:
+        from . import world as W
+        namen = W.karten_liste()
+        print("Karten in %s:" % W.kartenordner())
+        if not namen:
+            print("  keine - das Spiel nimmt dann seine Testkarte")
+        for n in namen:
+            welt, kopf = W.karte_lesen(n)
+            if welt is None:
+                print("  %-14s KAPUTT" % n)
+                continue
+            e = welt.ebene(0)
+            print("  %-14s %s, %d Ebenen, %d x %d Kacheln"
+                  % (n, kopf.get("name", n), len(welt.ebenen), e.breite, e.hoehe))
         return 0
     if "--konto" in argumente:
         return konten(argumente, wert)

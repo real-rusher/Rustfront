@@ -3145,6 +3145,141 @@ werfer = [x for x in w.welt.wesen
 pruef("Und nur einer", len(werfer) == 1, "%d" % len(werfer))
 w.verlassen(); ga.verlassen()
 
+# ── STAUBTAL: sehr gross, sehr leer, drei Kreise ────────────────────
+#
+# "Eine neue, sehr grosse, sehr leere Sand-/Wuestenkarte, keine Gaenge
+# ueber dem Rest, Plateaus als hoehere Ebenen unter die man nicht kommt,
+# Wildwest-Optik mit dem postapokalyptischen Vibe, generell flach ausser
+# Plateaus und ein paar kleinen Gebaeuden. Drei Hot Zones, die nicht
+# identisch sind, und ihre Orte muessen selbsterklaerend sein."
+from dustfront import world as W
+
+pruef("Die Karte liegt im Ordner", "staubtal" in W.karten_liste(),
+      str(W.karten_liste()))
+staub, kopf = W.karte_lesen("staubtal")
+pruef("Und laesst sich lesen", staub is not None)
+pruef("Sie heisst STAUBTAL", kopf.get("name") == "STAUBTAL", str(kopf))
+pruef("Und benutzt den Wuestensatz", staub.satz == "wueste", staub.satz)
+
+s0, s1 = staub.ebenen[0], staub.ebenen[1]
+pruef("Beide Ebenen sind gleich gross",
+      (s0.breite, s0.hoehe) == (s1.breite, s1.hoehe),
+      "%dx%d gegen %dx%d" % (s0.breite, s0.hoehe, s1.breite, s1.hoehe))
+pruef("Sie ist sehr gross",
+      s0.breite >= 100 and s0.hoehe >= 70,
+      "%d x %d Kacheln = %d x %d Pixel"
+      % (s0.breite, s0.hoehe, s0.pixel_breite, s0.pixel_hoehe))
+begehbar = sum(1 for ty in range(s0.hoehe) for tx in range(s0.breite)
+               if s0.begehbar(tx, ty))
+pruef("Und sehr leer", begehbar > s0.breite * s0.hoehe * 0.6,
+      "%d von %d Kacheln begehbar" % (begehbar, s0.breite * s0.hoehe))
+
+# Plateaus: obere Ebene nur Tafeln, und unter jeder Tafel steht Fels.
+oben = sum(1 for ty in range(s1.hoehe) for tx in range(s1.breite)
+           if s1.begehbar(tx, ty))
+pruef("Die obere Ebene ist kein Gangnetz, sondern sind Tafeln",
+      0 < oben < s0.breite * s0.hoehe * 0.25,
+      "%d Kacheln oben gegen %d unten" % (oben, begehbar))
+darunter = 0
+for ty in range(s1.hoehe):
+    for tx in range(s1.breite):
+        if not s1.begehbar(tx, ty):
+            continue
+        if s0.begehbar(tx, ty) and s0.daten(tx, ty).get("treppe") is None:
+            darunter += 1
+pruef("Unter die Plateaus kommt man nicht", darunter == 0,
+      "%d begehbare Kacheln unter einem Plateau" % darunter)
+
+# Und hinauf kommt man trotzdem.
+hoch = [(tx, ty) for ty in range(s0.hoehe) for tx in range(s0.breite)
+        if s0.daten(tx, ty).get("treppe") == 1]
+runter = [(tx, ty) for ty in range(s1.hoehe) for tx in range(s1.breite)
+          if s1.daten(tx, ty).get("treppe") == -1]
+pruef("Es gibt Rampen hinauf", len(hoch) >= 3, "%d" % len(hoch))
+pruef("Und ebenso viele hinunter", len(runter) == len(hoch),
+      "%d hinauf, %d hinunter" % (len(hoch), len(runter)))
+# Jede Rampe muss auch wirklich benutzbar sein: oben muss Platz sein.
+blockiert = [p for p in hoch
+             if not staub.frei(pygame.Vector2(p[0] * K.TILE + K.TILE / 2,
+                                              p[1] * K.TILE + K.TILE / 2),
+                               K.SPIELER["radius"], 1)]
+pruef("Und ueber jeder Rampe ist Platz", not blockiert, str(blockiert))
+
+# Drei Kreise, nicht identisch, und einer davon oben.
+marken = {}
+for e in staub.ebenen:
+    for name, stellen in e.marken.items():
+        marken[name] = (e.index, stellen[0])
+pruef("Die Karte nennt drei Kreise",
+      sorted(marken) == ["A", "B", "C"], str(sorted(marken)))
+pruef("Und einer liegt auf einem Plateau",
+      any(e == 1 for e, _p in marken.values()),
+      str({k: v[0] for k, v in marken.items()}))
+pruef("Sie liegen weit auseinander",
+      min(marken["A"][1].distance_to(marken[b][1]) for b in "BC") > 800,
+      "%.0f px" % min(marken["A"][1].distance_to(marken[b][1]) for b in "BC"))
+# Selbsterklaerend heisst hier: um den Kreis im Sand steht ein Ring aus
+# Fassern, und die beiden anderen liegen in einer Halle bzw. auf einem
+# Plateau. Geprueft wird das Wahrzeichen des offenen Kreises.
+kreis_a = marken["A"][1]
+fasser = 0
+for ty in range(s0.hoehe):
+    for tx in range(s0.breite):
+        if s0.kachel(tx, ty) != K.KISTE:
+            continue
+        p = pygame.Vector2(tx * K.TILE + K.TILE / 2, ty * K.TILE + K.TILE / 2)
+        if 200 < p.distance_to(kreis_a) < 380:
+            fasser += 1
+pruef("Um den Kreis im Sand steht ein Ring aus Fassern", fasser >= 10,
+      "%d Fasser im Ring" % fasser)
+
+# Im Gefecht: die Karte laesst sich waehlen und der Kreis wandert.
+w, ga = gefechtspaar("huegel", karte="staubtal")
+pruef("Das Gefecht laeuft auf der Karte", w.karte == "staubtal", w.karte)
+pruef("Und der Gast bekommt sie auch", ga.karte == "staubtal", ga.karte)
+pruef("Sie kennt drei Kreise", len(w.kreise) == 3, "%d" % len(w.kreise))
+erster = (w.zone_ebene, pygame.Vector2(w.zone_mitte))
+pruef("Der Kreis liegt auf einer Marke",
+      any(e == w.zone_ebene and p.distance_to(w.zone_mitte) < 1.0
+          for e, p in marken.values()))
+w.kreis_rest = 0.0
+w._kreis_wandern(K.FIXED_DT)
+pruef("Nach der Zeit zieht er weiter",
+      (w.zone_ebene, w.zone_mitte) != erster,
+      "%d/%s gegen %d/%s" % (w.zone_ebene, w.zone_mitte, erster[0], erster[1]))
+for _ in range(len(w.kreise) - 1):
+    w.kreis_rest = 0.0
+    w._kreis_wandern(K.FIXED_DT)
+pruef("Und kommt im Kreis herum",
+      (w.zone_ebene, pygame.Vector2(w.zone_mitte)) == erster,
+      "%d/%s" % (w.zone_ebene, w.zone_mitte))
+# Wer auf der falschen Ebene im Kreis steht, zaehlt nicht.
+w._kreis_setzen(next(i for i, (e, _p, _n) in enumerate(w.kreise) if e == 1))
+wer = w.kaempfer[0]
+wer.pos.update(w.zone_mitte); wer.vorher.update(wer.pos)
+wer.ebene = 1
+pruef("Auf der richtigen Ebene zaehlt man im Kreis", w.in_der_zone(wer))
+wer.ebene = 0
+pruef("Eine Ebene tiefer nicht", not w.in_der_zone(wer))
+
+# Und der Kreis des Gastes wandert mit.
+for _ in range(8):
+    w.schritt(K.FIXED_DT)
+    ga.schritt(K.FIXED_DT)
+pruef("Der Gast steht auf demselben Kreis",
+      ga.kreis_nr == w.kreis_nr
+      and ga.zone_mitte.distance_to(w.zone_mitte) < 1.0,
+      "%d gegen %d" % (ga.kreis_nr, w.kreis_nr))
+w.verlassen(); ga.verlassen()
+
+# Eine kaputte oder fehlende Karte darf nichts umwerfen.
+pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
+pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)
+w2, _ga2 = gefechtspaar("pvp", karte="gibtsnicht")
+pruef("Das Gefecht laeuft trotzdem, auf der Testkarte",
+      w2.karte == "" and len(w2.welt.ebenen) == 3, w2.karte)
+w2.verlassen(); _ga2.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
