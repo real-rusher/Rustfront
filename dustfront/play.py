@@ -24,7 +24,7 @@ from .entities import Aufsammler, Gegner, Spieler, wolke
 from .font import SCHRIFT
 from .inventar import Inventar
 from .menues import Pause
-from .render import Kamera, Renderer
+from .render import Befinden, Kamera, Renderer
 from .world import freier_punkt, testkarte
 
 
@@ -65,8 +65,11 @@ class Spiel(Szene):
         self.pause_rest = 2.0
         self.offen: list = []
         self.schaden_blende = 0.0
+        self.befinden = Befinden()
         self.tot_seit = 0.0
         self.hinweis = ""
+        self._heilte = 0.0
+        self.befinden.zuruecksetzen()
         self.kamera.pos.update(self.held.pos)
 
     def _zeitlupe(self, sekunden: float) -> None:
@@ -181,6 +184,15 @@ class Spiel(Szene):
         self.welt.schritt(dt)
         if held.leben < vorher_leben:
             self.schaden_blende = 1.0
+            self.befinden.treffer((vorher_leben - held.leben) / 40.0)
+        if held.heilt_rest <= 0 < self._heilte:
+            self.befinden.medkit()
+        self._heilte = held.heilt_rest
+        self.befinden.schritt(dt, held.leben / held.max_leben if held.lebt else 0.0,
+                              self._klang)
+        self.app.klaenge.daempfung_setzen(self.befinden.dumpf)
+        if self.befinden.dumpf > 0.0:
+            self.app.klaenge.dumpf_nachziehen()
 
         # Wellen nachschieben
         if held.lebt:
@@ -224,6 +236,7 @@ class Spiel(Szene):
             self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.held)
             self.renderer.tracer(ziel, self.welt, self.kamera, self.held)
         self.renderer.schaden_blende(ziel, self.schaden_blende)
+        self.befinden.zeichnen(ziel)
 
         if self.gegner_uebrig == 0 and self.held.lebt:
             text = "NAECHSTE WELLE IN %d" % math.ceil(max(0.0, self.pause_rest))

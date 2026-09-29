@@ -2293,6 +2293,269 @@ stau.senden({"t": "ende", "sieger": 1})
 pruef("Was es nur einmal gibt, bleibt trotzdem stehen",
       any(b'"t":"ende"' in z for z in stau._raus))
 
+def _hud_text_rechts(szene, spieler):
+    """Was rechts neben dem Lebensbalken steht - als Text nachgebaut.
+
+    Gezeichnet wird mit einer Pixelschrift; den Text aus dem Bild
+    zurueckzulesen waere Unfug. Geprueft wird darum die Stelle im
+    Renderer, die ihn erzeugt.
+    """
+    return "%d" % spieler.magazin[spieler.waffe_name]
+
+
+# ── Befinden: roter Rand, Herzschlag, dumpfe Welt, Medkit ────────────
+#
+# "Rote Vignette, die pulst, bei Treffern ausschlaegt, bei wenig Leben
+# dauerhaft wird und pulst, mit Herzschlag in Klassen, waehrend alles
+# andere gedaempft wird - und das Medkit dagegen: blau, kalt, sehr klar."
+from dustfront.render import Befinden
+
+bef = Befinden()
+bef.schritt(K.FIXED_DT, 1.0)
+pruef("Bei vollem Leben ist der Rand leer", bef.staerke < 0.01,
+      "%.2f" % bef.staerke)
+pruef("Und nichts ist gedaempft", bef.dumpf < 0.01)
+bef.schritt(K.FIXED_DT, 0.5)
+mitte = bef.staerke
+pruef("Unter der Schwelle faerbt er sich", 0.01 < mitte < 0.5,
+      "%.2f" % mitte)
+bef.schritt(K.FIXED_DT, 0.2)
+pruef("Und wird staerker, je weniger Leben", bef.staerke > mitte,
+      "%.2f statt %.2f" % (bef.staerke, mitte))
+
+# Ein Treffer schlaegt sofort auf und verklingt wieder.
+bef = Befinden()
+bef.schritt(K.FIXED_DT, 0.9)
+ruhig = bef.staerke
+bef.treffer(1.0)
+bef.schritt(K.FIXED_DT, 0.9)
+pruef("Ein Treffer schlaegt sofort auf", bef.staerke > ruhig + 0.3,
+      "%.2f statt %.2f" % (bef.staerke, ruhig))
+for _ in range(int(1.5 / K.FIXED_DT)):
+    bef.schritt(K.FIXED_DT, 0.9)
+pruef("Und verklingt wieder", abs(bef.staerke - ruhig) < 0.02,
+      "%.2f" % bef.staerke)
+
+# Der Puls: je weniger Leben, desto schneller, und er meldet sich.
+def schlaege(anteil, sekunden=6.0):
+    b = Befinden()
+    gehoert = []
+    for _ in range(int(sekunden / K.FIXED_DT)):
+        b.schritt(K.FIXED_DT, anteil,
+                  lambda n, l=1.0: gehoert.append((n, l)))
+    return gehoert
+
+keine = schlaege(0.60)
+pruef("Ueber der Dauerschwelle schlaegt kein Herz", not keine, str(keine[:2]))
+langsam = schlaege(0.30)
+schnell = schlaege(0.05)
+pruef("Darunter schon", len(langsam) >= 3, "%d Schlaege" % len(langsam))
+pruef("Und bei wenig Leben schlaegt es schneller",
+      len(schnell) > len(langsam) + 2,
+      "%d gegen %d in 6 s" % (len(schnell), len(langsam)))
+pruef("Es ist der Herzschlag und nichts anderes",
+      all(n == "herzschlag" for n, _l in schnell))
+pruef("Und er wird lauter, je schlimmer es steht",
+      schnell[0][1] > langsam[0][1],
+      "%.2f gegen %.2f" % (schnell[0][1], langsam[0][1]))
+pruef("Die Lautstaerken sind Klassen, keine Rutschbahn",
+      len({round(l, 3) for _n, l in langsam + schnell}) <= len(K.BEFINDEN["klassen"]),
+      str(sorted({round(l, 2) for _n, l in langsam + schnell})))
+
+# Dumpf werden alle anderen - und im Takt des Schlags.
+b = Befinden()
+werte = []
+for _ in range(int(3.0 / K.FIXED_DT)):
+    b.schritt(K.FIXED_DT, 0.08)
+    werte.append(b.dumpf)
+pruef("Bei wenig Leben wird alles andere dumpf", max(werte) > 0.4,
+      "%.2f" % max(werte))
+pruef("Und es atmet mit dem Schlag", max(werte) - min(werte) > 0.1,
+      "%.2f bis %.2f" % (min(werte), max(werte)))
+
+# Das Medkit nimmt beides weg, und zwar sofort.
+b = Befinden()
+b.schritt(K.FIXED_DT, 0.08)
+vor_medkit = b.staerke
+b.medkit()
+b.schritt(K.FIXED_DT, 0.08)
+pruef("Ein Medkit nimmt den roten Rand sofort weg",
+      vor_medkit > 0.3 and b.staerke < 0.01,
+      "%.2f -> %.2f" % (vor_medkit, b.staerke))
+pruef("Und den Herzschlag mit", b.dumpf < 0.01)
+stille = []
+for _ in range(int((K.MEDKIT_BLICK["ruhe"] - 0.2) / K.FIXED_DT)):
+    b.schritt(K.FIXED_DT, 0.08, lambda n, l=1.0: stille.append(n))
+pruef("Die Ruhe haelt ein paar Sekunden", not stille and b.staerke < 0.01,
+      "%d Schlaege" % len(stille))
+for _ in range(int(0.6 / K.FIXED_DT)):
+    b.schritt(K.FIXED_DT, 0.08)
+pruef("Danach faengt es wieder an", b.staerke > 0.3, "%.2f" % b.staerke)
+
+# Das Bild: kalt und klar, und es macht das Bild nicht schwarz. Genau das
+# war der Fehler mit 128 als Drehpunkt - die Welt hier ist dunkel.
+probe = pygame.Surface((K.GAME_W, K.GAME_H))
+probe.fill((46, 36, 27))
+b = Befinden()
+b.medkit()
+b.medkit_rest = K.MEDKIT_BLICK["dauer"] * 0.5
+b.zeichnen(probe)
+mitte_farbe = probe.get_at((K.GAME_W // 2, K.GAME_H // 2))
+pruef("Das Medkit laesst die Welt sichtbar",
+      sum(mitte_farbe[:3]) > 30,
+      "Mitte %s" % (tuple(mitte_farbe[:3]),))
+# "Kalt" heisst nicht "blau", sondern: der Abstand zwischen Rot und Blau
+# wird kleiner. Die Welt hier ist Rost, und aus Rost wird auch mit einer
+# kuehlen Korrektur kein Eis - sie soll nur in diese Richtung kippen.
+pruef("Und faerbt sie kalt",
+      (mitte_farbe[0] - mitte_farbe[2]) < (46 - 27) * 0.7,
+      "R%d G%d B%d, Abstand %d statt 19"
+      % (*mitte_farbe[:3], mitte_farbe[0] - mitte_farbe[2]))
+ecke_farbe = probe.get_at((2, 2))
+pruef("Der Rand wird blau", ecke_farbe[2] > ecke_farbe[0],
+      "R%d G%d B%d" % ecke_farbe[:3])
+
+# Und der rote Rand faerbt wirklich rot, ohne die Mitte zuzukleistern.
+probe.fill((46, 36, 27))
+b = Befinden()
+b.anteil = 0.05
+b.zeichnen(probe)
+pruef("Der rote Rand ist rot", probe.get_at((2, 2))[0] > probe.get_at((2, 2))[2] + 30,
+      "%s" % (tuple(probe.get_at((2, 2))[:3]),))
+pruef("Und die Mitte bleibt frei",
+      tuple(probe.get_at((K.GAME_W // 2, K.GAME_H // 2))[:3]) == (46, 36, 27),
+      "%s" % (tuple(probe.get_at((K.GAME_W // 2, K.GAME_H // 2))[:3]),))
+
+# Dumpf machen: echt gefiltert, nicht nur leiser.
+from dustfront.audio import dumpf_machen
+kl = app.klaenge
+if kl.ok and kl.klang("schuss_sturm"):
+    klar = kl.klang("schuss_sturm")[0]
+    gefiltert = dumpf_machen(klar)
+    import array as _array
+    a = _array.array("h"); a.frombytes(klar.get_raw())
+    bq = _array.array("h"); bq.frombytes(gefiltert.get_raw())
+    pruef("Die dumpfe Fassung ist genauso lang", len(a) == len(bq))
+    # Hoehen weg heisst: von Probe zu Probe aendert sich weniger.
+    def zappeln(x):
+        return sum(abs(x[i] - x[i - 1]) for i in range(1, len(x), 97))
+    pruef("Und wirklich gefiltert, nicht nur leiser",
+          zappeln(bq) < zappeln(a) * 0.5,
+          "%d gegen %d" % (zappeln(bq), zappeln(a)))
+    kl.daempfung_setzen(0.0)
+    kl._dumpf_cache.clear()
+    kl._dumpf_offen.clear()
+    kl.daempfung_setzen(0.5)
+    pruef("Was schon gehoert wurde, wird vorgemerkt", bool(kl._dumpf_offen),
+          str(kl._dumpf_offen[:3]))
+    kl.dumpf_nachziehen()
+    pruef("Und Stueck fuer Stueck nachgezogen", bool(kl._dumpf_cache))
+    kl.daempfung_setzen(0.0)
+    pruef("Der eigene Herzschlag wird nie gedaempft",
+          "herzschlag" in K.NIE_DUMPF)
+
+# ── Munitionsanzeige ─────────────────────────────────────────────────
+#
+# "Magazin nur rechts, Gesamtmunition in der Hotbar, und der Waffenplatz
+# sieht anders aus, wenn das gewaehlte Magazin leer ist."
+w, ga = gefechtspaar("pvp", knapp=True)
+ich = w.kaempfer[0]
+ich.waffe_waehlen(ich.waffen.index("sturm"))
+bild = pygame.Surface((K.GAME_W, K.GAME_H))
+
+
+def hud_bild(spieler):
+    bild.fill((0, 0, 0))
+    w.renderer.hud(bild, w.welt, spieler, "", 0, spieler.ebene, kopf=False)
+    return bild
+
+
+ich.magazin["sturm"] = 30
+voll = bytes(hud_bild(ich).get_buffer())
+ich.magazin["sturm"] = 0
+leer = bytes(hud_bild(ich).get_buffer())
+pruef("Ein leeres Magazin sieht anders aus als ein volles", voll != leer)
+# Der Unterschied muss auch **am Waffenplatz** sichtbar sein, nicht nur
+# an der Zahl rechts aussen.
+hx = (K.GAME_W - (len(ich.waffen) * 34 + (len(ich.waffen) - 1) * 3)) // 2
+platz = pygame.Rect(hx + ich.waffe * 37, K.GAME_H - 22, 34, 18)
+ich.magazin["sturm"] = 30
+voll_platz = pygame.transform.average_color(hud_bild(ich).subsurface(platz))
+ich.magazin["sturm"] = 0
+leer_platz = pygame.transform.average_color(hud_bild(ich).subsurface(platz))
+pruef("Und zwar am Waffenplatz selbst",
+      leer_platz[0] > voll_platz[0] + 4,
+      "%s gegen %s" % (tuple(leer_platz[:3]), tuple(voll_platz[:3])))
+pruef("Rechts steht nur noch das Magazin, nicht mehr das Fassungsvermoegen",
+      "/" not in _hud_text_rechts(w, ich), _hud_text_rechts(w, ich))
+w.verlassen(); ga.verlassen()
+
+# ── Siegtafel ────────────────────────────────────────────────────────
+#
+# Mannschaften links und rechts, in ihren Farben, je Zeile Abschuesse,
+# Tode, das Verhaeltnis der Runde, das Zeichen der meistbenutzten Waffe
+# und der am oeftesten Erledigte.
+w, ga = gefechtspaar("team")
+for i, n in enumerate(("ROTA", "ROTB", "BLAUA"), 2):
+    if i not in w.kaempfer:
+        w._dazu(i, n, 0 if n.startswith("ROT") else 1)
+leute = sorted(w.kaempfer.values(), key=lambda k: k.nummer)
+leute[0].abschuesse, leute[0].tode = 9, 3
+leute[0].zaehlen("schuesse", 40, "sturm")
+leute[0].zaehlen("schuesse", 90, "schrot")
+leute[0].opfer[leute[1].nummer] = 5
+leute[0].opfer[leute[-1].nummer] = 2
+leute[1].abschuesse, leute[1].tode = 2, 7
+w.endwerte = w._werte_aller()
+
+zeilen = w._tafel_zeilen()
+pruef("Die Tafel hat je Spieler eine Zeile",
+      len(zeilen) == len(w.kaempfer), "%d von %d"
+      % (len(zeilen), len(w.kaempfer)))
+pruef("Und ist nach Abschuessen sortiert",
+      zeilen[0]["abschuesse"] >= zeilen[-1]["abschuesse"])
+erste = next(z for z in zeilen if z["nummer"] == leute[0].nummer)
+pruef("Die meistbenutzte Waffe zaehlt nach Schuessen, nicht nach Abschuessen",
+      erste["waffe"] == "schrot", erste["waffe"])
+pruef("Und der am oeftesten Erledigte steht da",
+      erste["opfer"] == leute[1].name, erste["opfer"])
+pruef("Jede Zeile kennt ihre Mannschaft",
+      all(z["team"] in (0, 1) for z in zeilen),
+      str([z["team"] for z in zeilen]))
+pruef("Das Verhaeltnis der Runde stimmt",
+      w._kd_text({"abschuesse": 9, "tode": 3}) == "3.0",
+      w._kd_text({"abschuesse": 9, "tode": 3}))
+pruef("Ohne Tod steht die Zahl allein",
+      w._kd_text({"abschuesse": 4, "tode": 0}) == "4",
+      w._kd_text({"abschuesse": 4, "tode": 0}))
+pruef("Und ganz ohne alles ein Strich",
+      w._kd_text({"abschuesse": 0, "tode": 0}) == "-")
+pruef("Ohne Waffen bleibt das Zeichen leer",
+      w._lieblingswaffe({}) == "" and w._lieblingswaffe(None) == "")
+pruef("Und Unsinn wirft die Tafel nicht um",
+      w._lieblingswaffe({"gibtsnicht": {"schuesse": 99}}) == "")
+
+# Die Tafel muss sich zeichnen lassen, ohne dass etwas fehlt.
+w.vorbei = True
+w.sieger_team = 0
+flaeche = pygame.Surface((K.GAME_W, K.GAME_H))
+w.zeichnen(flaeche, 0.0)
+pruef("Die Siegtafel laesst sich zeichnen",
+      pygame.transform.average_color(flaeche)[0] > 0)
+# Der Lebensbalken hat auf der Siegtafel nichts zu suchen.
+unten = pygame.transform.average_color(
+    flaeche.subsurface((0, K.GAME_H - 30, 160, 20)))
+pruef("Die Anzeige bleibt dabei weg", sum(unten[:3]) < 40,
+      "%s" % (tuple(unten[:3]),))
+
+# Und beim Gast dasselbe: er rechnet nichts, er bekommt es geschickt.
+ga.endwerte = dict(w.endwerte)
+gast_zeilen = ga._tafel_zeilen()
+pruef("Der Gast baut dieselbe Tafel",
+      [z["name"] for z in gast_zeilen] == [z["name"] for z in zeilen],
+      str([z["name"] for z in gast_zeilen]))
+w.verlassen(); ga.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

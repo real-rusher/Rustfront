@@ -226,6 +226,76 @@ def _schuss(seed=0):
     return _schuss_repetierer(seed)
 
 
+@platzhalter_klang("herzschlag")
+def _herzschlag(seed=0):
+    """Zwei Schlaege, der zweite leiser und dichter dahinter.
+
+    Ein Herz macht "lub-dub", nicht "bum". Der Unterschied klingt nach
+    einem Koerper statt nach einer Trommel, und genau darum geht es: es
+    soll der eigene Brustkorb sein, den man hoert, nicht ein Effekt.
+
+    Sehr tief angesetzt (58 Hz auf 34 Hz), weil ein Herzschlag mehr
+    gefuehlt als gehoert wird. Auf kleinen Lautsprechern bleibt davon
+    ein dumpfes Klopfen uebrig - auch richtig.
+    """
+    erster = _schlag(58, 34, 0.14, 0.95, 2.6)
+    luecke = [0.0] * int(RATE * 0.17)
+    zweiter = _schlag(52, 30, 0.12, 0.62, 3.0)
+    # Ein Hauch Rauschen darunter, damit es Koerper hat und nicht wie
+    # ein reiner Sinuston klingt.
+    koerper = _rauschen(0.30, 0.10, 220, 90, 3.4, seed + 5)
+    return _mischen(erster + luecke + zweiter, koerper)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Dumpf machen
+# ══════════════════════════════════════════════════════════════════
+
+def dumpf_machen(sound, grenze: float = 620.0, gain: float = 0.72):
+    """Eine dumpfe Fassung eines Klangs. Echt gefiltert, nicht leiser.
+
+    "Dumpf" ist keine Lautstaerke, sondern ein Frequenzgang: die Hoehen
+    fehlen, der Rest bleibt. Nur leiser zu drehen klingt nach leiser, und
+    das ist etwas anderes als "die Welt ist weit weg" - genau dieser
+    Unterschied ist der ganze Effekt bei wenig Leben.
+
+    Gerechnet wird mit einem Tiefpass erster Ordnung ueber die rohen
+    Proben, so wie `_rauschen` es beim Bauen schon tut. Das kostet einen
+    Python-Durchlauf je Klang; darum wird jede Fassung genau einmal
+    gebaut und dann behalten. Ein Klang von einer Zehntelsekunde sind
+    keine zehntausend Proben - das faellt einmal an und nie wieder.
+
+    Ohne numpy, wie alles hier. `array` reicht.
+    """
+    try:
+        roh = sound.get_raw()
+    except (pygame.error, AttributeError):
+        return sound
+    proben = array.array("h")
+    try:
+        proben.frombytes(roh)
+    except ValueError:
+        return sound
+    init = pygame.mixer.get_init()
+    kanaele = init[2] if init else 1
+    rate = init[0] if init else RATE
+    k = 1.0 - math.exp(-2.0 * math.pi * grenze / rate)
+    # Je Kanal ein eigener Durchlauf, mit Schrittweite statt Modulo: die
+    # beiden Kanaele duerfen sich nicht mischen, und ein `i % kanaele` in
+    # der innersten Schleife kostet bei vierzigtausend Proben spuerbar.
+    n = len(proben)
+    for c in range(kanaele):
+        y = 0.0
+        for i in range(c, n, kanaele):
+            y += k * (proben[i] - y)
+            v = int(y * gain)
+            proben[i] = -32768 if v < -32768 else (32767 if v > 32767 else v)
+    try:
+        return pygame.mixer.Sound(buffer=proben.tobytes())
+    except pygame.error:
+        return sound
+
+
 # ══════════════════════════════════════════════════════════════════
 # Registratur
 # ══════════════════════════════════════════════════════════════════
@@ -239,9 +309,14 @@ class Klaenge:
         self.aus_datei: set[str] = set()
         self.fehler: list[str] = []
         self._cache: dict[str, list] = {}
+        self._dumpf_cache: dict[str, list] = {}
+        self._dumpf_offen: list[str] = []
         self.rnd = random.Random()
         self.gesamt = K.AUDIO["gesamt"]
         self.effekte = 1.0
+        # Wie dumpf die Welt gerade klingt, 0 bis 1. Gesetzt von der
+        # Spielszene aus `Befinden.dumpf`; hier wird nur danach gehandelt.
+        self.daempfung = 0.0
         try:
             pygame.mixer.init(frequency=RATE, size=-16, channels=2, buffer=512)
             self.ok = pygame.mixer.get_init() is not None
@@ -302,19 +377,101 @@ class Klaenge:
             self._cache[name] = hit
         return hit
 
+    def dumpf(self, name: str) -> list | None:
+        """Dieselben Fassungen, nur gefiltert - **wenn sie schon da sind**.
+
+        Gebaut wird nicht hier. Ein Filterlauf kostet gemessen etwa 23
+        Millisekunden je Klang, und die mitten im Gefecht zu nehmen waeren
+        drei ausgelassene Bilder an genau der Stelle, an der es eng wird.
+        Statt dessen wird vorgemerkt und `dumpf_nachziehen` baut je Aufruf
+        einen Namen - bis dahin klingt der Klang eben nur leiser.
+        """
+        hit = self._dumpf_cache.get(name)
+        if hit is None and name not in self._dumpf_offen:
+            self._dumpf_offen.append(name)
+        return hit
+
+    def dumpf_nachziehen(self) -> bool:
+        """Einen vorgemerkten Klang filtern. True, wenn etwas getan wurde."""
+        while self._dumpf_offen:
+            name = self._dumpf_offen.pop(0)
+            if name in self._dumpf_cache:
+                continue
+            # Nur **eine** dumpfe Fassung je Name, auch wenn es drei
+            # klare gibt. Abwechslung hoert man an einem Klang, dem die
+            # Hoehen fehlen, ohnehin kaum - und das Filtern kostet je
+            # Fassung gemessen gut zwanzig Millisekunden. Drei davon in
+            # einem Bild waeren ein sichtbarer Haenger.
+            fassungen = self.klang(name)
+            self._dumpf_cache[name] = ([dumpf_machen(fassungen[0])]
+                                       if fassungen else [])
+            return True
+        return False
+
+    def dumpf_vorbereiten(self) -> None:
+        """Alles vormerken, was in dieser Runde schon zu hoeren war.
+
+        Bewusst nur das und nicht die ganze Namensliste: einen Klang
+        anzulegen, den es noch gar nicht gibt, kostet ein Vielfaches des
+        Filterns - gemessen 521 Millisekunden fuer alle gegen 55 fuer das
+        Filtern aller. Was noch nie gespielt wurde, wird auch gleich
+        nicht gebraucht; und wenn doch, holt `dumpf` es sich nach.
+
+        Aufgerufen, sobald es einem zum ersten Mal schlecht geht. Gebaut
+        wird trotzdem einer nach dem anderen.
+        """
+        for name in self._cache:
+            if name not in K.NIE_DUMPF and name not in self._dumpf_cache:
+                if name not in self._dumpf_offen:
+                    self._dumpf_offen.append(name)
+
     # ---- Abspielen ---------------------------------------------------
     def lautstaerke_setzen(self, gesamt: float, effekte: float) -> None:
         self.gesamt = max(0.0, min(1.0, gesamt))
         self.effekte = max(0.0, min(1.0, effekte))
 
+    def daempfung_setzen(self, wert: float) -> None:
+        vorher = self.daempfung
+        self.daempfung = max(0.0, min(1.0, wert))
+        if self.daempfung > 0.0 and vorher <= 0.0:
+            self.dumpf_vorbereiten()
+
     def spielen(self, name: str, lautstaerke: float = 1.0) -> None:
+        """Einen Klang abspielen - klar, dumpf, oder zwischen beidem.
+
+        Der Uebergang ist ein echtes Ueberblenden und kein Umschalten:
+        bei halber Daempfung laufen beide Fassungen zugleich, jede mit
+        ihrem Anteil. Ein hartes Umschalten mitten im Gefecht hoert man
+        als Knacks, und ein Knacks an der Stelle, an der es einem
+        schlecht geht, ist genau das Gegenteil von dem, was der Effekt
+        soll.
+        """
         fassungen = self.klang(name)
         if not fassungen:
             return
-        s = fassungen[self.rnd.randrange(len(fassungen))]
+        laut = max(0.0, min(1.0, lautstaerke * self.gesamt * self.effekte))
+        if laut <= 0.0:
+            return
+        i = self.rnd.randrange(len(fassungen))
+        d = 0.0 if name in K.NIE_DUMPF else self.daempfung
         try:
-            s.set_volume(max(0.0, min(1.0, lautstaerke * self.gesamt * self.effekte)))
-            s.play()
+            if d < 0.995:
+                s = fassungen[i]
+                s.set_volume(laut * (1.0 - d))
+                s.play()
+            if d > 0.005:
+                gefiltert = self.dumpf(name)
+                if gefiltert is None:
+                    # Noch nicht gefiltert: dann eben nur leiser. Das ist
+                    # schlechter, aber es ist da, und es ist nie ein Loch.
+                    if d >= 0.995:
+                        s = fassungen[i]
+                        s.set_volume(laut * 0.45)
+                        s.play()
+                elif gefiltert:
+                    g = gefiltert[i % len(gefiltert)]
+                    g.set_volume(laut * d)
+                    g.play()
         except pygame.error:
             pass
 

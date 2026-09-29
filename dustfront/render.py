@@ -811,9 +811,22 @@ class Renderer:
             f.zeichnen(ziel, "NACHLADEN", rx - bw - 6, y, K.C_MUTED, 1,
                        ausrichtung="rechts")
         else:
+            # Rechts steht **nur** das Magazin, nicht mehr "12 / 30". Die
+            # zweite Zahl war der Inhalt eines vollen Magazins, also eine
+            # Konstante - und im Gefecht liest niemand eine Konstante. Was
+            # man wissen will, ist "wie viele noch", und das soll gross und
+            # allein dastehen. Der Vorrat steht in der Hotbar, bei der
+            # Waffe, zu der er gehoert.
             munition = spieler.magazin[spieler.waffe_name]
-            f.zeichnen(ziel, "%d / %d" % (munition, d["magazin"]), rx, y,
-                       K.C_CREAM if munition else K.C_RED, 2, ausrichtung="rechts")
+            leer = not munition and d.get("magazin")
+            farbe = K.C_CREAM
+            if leer:
+                # Ein leeres Magazin blinkt. Rot allein reicht nicht: rot
+                # ist im HUD auch der Lebensbalken, und wer gerade beschossen
+                # wird, schaut nicht genau hin.
+                farbe = K.C_RED if (welt.zeit * 4.0) % 1.0 < 0.6 else (90, 26, 20)
+            f.zeichnen(ziel, "%d" % munition, rx, y, farbe, 2,
+                       ausrichtung="rechts")
 
         # Ebenenanzeige, wie die Scrollleiste in den Mockups
         ex = K.GAME_W - 26
@@ -841,27 +854,45 @@ class Renderer:
         for i, name in enumerate(spieler.waffen):
             r = pygame.Rect(hx + i * (bw + luecke), hy, bw, bh)
             aktiv = (i == spieler.waffe)
-            pygame.draw.rect(ziel, (10, 7, 5), r)
-            pygame.draw.rect(ziel, K.C_AMBER if aktiv else K.C_MUTED_DK, r, 1)
             wd = K.WAFFEN[name]
+            # Der Platz der gewaehlten Waffe sieht anders aus, wenn ihr
+            # Magazin leer ist. Nicht nur die Zahl daneben: im Gefecht
+            # schaut man auf die Hotbar, um zu entscheiden, worauf man
+            # wechselt, und dann muss man "der hier ist leer" sehen, ohne
+            # drei Zahlen zu lesen.
+            leer = aktiv and wd.get("magazin") and not spieler.magazin[name]
+            pygame.draw.rect(ziel, (34, 10, 8) if leer else (10, 7, 5), r)
+            pygame.draw.rect(ziel, K.C_RED if leer else
+                             (K.C_AMBER if aktiv else K.C_MUTED_DK), r, 1)
+            if leer:
+                # Ein Balken quer, wie ein durchgestrichenes Feld.
+                pygame.draw.line(ziel, (120, 34, 26), (r.x + 2, r.bottom - 3),
+                                 (r.right - 3, r.bottom - 3))
             # Symbol statt abgeschnittenem Namen: auf 34 Pixel Breite passen
             # nur vier Buchstaben, und "SCHA" sagt niemandem etwas.
             sym = self.bilder.bild("waffe_" + name)
             ziel.blit(sym, (r.centerx - sym.get_width() // 2,
                             r.centery - sym.get_height() // 2))
             f.zeichnen(ziel, "%d" % (i + 1), r.x + 2, r.y + 2,
-                       K.C_AMBER if aktiv else K.C_MUTED_DK, 1)
-            f.zeichnen(ziel, "%d" % spieler.magazin[name] if wd.get("magazin")
-                       else "--", r.right - 2, r.bottom - 9,
-                       K.C_AMBER if aktiv else K.C_MUTED_DK, 1,
-                       ausrichtung="rechts")
-            # Bei knapper Munition steht der Vorrat unter dem Platz. Ohne
-            # das sieht man nur das Magazin und haelt die Begrenzung fuer
-            # kaputt, weil nirgends eine Zahl kleiner wird.
-            if knapp and wd.get("magazin"):
+                       K.C_RED if leer else
+                       (K.C_AMBER if aktiv else K.C_MUTED_DK), 1)
+            # In der Hotbar steht der **Vorrat**, nicht das Magazin. Das
+            # Magazin der gewaehlten Waffe steht schon gross rechts; es ein
+            # zweites Mal hinzuschreiben kostet den Platz, an dem die
+            # eigentliche Frage steht: reicht es ueberhaupt noch?
+            if not wd.get("magazin"):
+                text, farbe = "--", K.C_MUTED_DK
+            elif not knapp:
+                # Ohne knappe Munition wird nichts abgezogen. Eine Zahl,
+                # die nie kleiner wird, waere eine Luege.
+                text, farbe = "∞", (K.C_MUTED if aktiv else K.C_MUTED_DK)
+            else:
                 uebrig = vorrat.get(name, 0)
-                f.zeichnen(ziel, "%d" % uebrig, r.x + 2, r.bottom - 9,
-                           K.C_MUTED if uebrig else K.C_RED, 1)
+                text = "%d" % uebrig
+                farbe = (K.C_RED if not uebrig else
+                         (K.C_AMBER if aktiv else K.C_MUTED))
+            f.zeichnen(ziel, text, r.right - 2, r.bottom - 9, farbe, 1,
+                       ausrichtung="rechts")
 
         # Medkits links neben der Hotbar
         mx = hx - 40
@@ -935,3 +966,202 @@ class Renderer:
         for i, z in enumerate(zeilen):
             f.zeichnen(ziel, z, K.GAME_W - 12, 60 + i * 9, K.C_TEAL, 1,
                        ausrichtung="rechts")
+
+
+# ══════════════════════════════════════════════════════════════════
+# Befinden: wie es einem geht, ohne dass man auf eine Zahl schaut
+# ══════════════════════════════════════════════════════════════════
+
+class Befinden:
+    """Roter Rand, Herzschlag, dumpfe Welt - und das Medkit dagegen.
+
+    Ein eigenes Ding und kein Teil der Spielszene, weil beide Szenen es
+    brauchen und weil es **nichts entscheidet**: es liest den Lebensanteil
+    und macht daraus Bild und Ton. Nimmt man es heraus, spielt sich die
+    Runde genauso, sie fuehlt sich nur nach nichts an.
+
+    Wie es zusammenhaengt:
+
+        Leben faellt   ->  roter Schein am Rand waechst
+        unter `dauerhaft_ab`  ->  er bleibt stehen und pulst
+        jeder Puls     ->  Schein flackert auf, Herzschlag im Ohr,
+                           alles andere wird dumpfer
+        Treffer        ->  ein sofortiger Aufschlag, der verklingt
+        Medkit         ->  blau, kalt, sehr klar - und danach Ruhe
+    """
+
+    def __init__(self) -> None:
+        self.stoss = 0.0          # was ein Treffer gerade dazugibt
+        self.puls = 0.0           # 0 bis 1, wo im Herzschlag wir stehen
+        self.schlag = 0.0         # 0 bis 1, Helligkeit dieses Schlags
+        self.klasse = -1          # welche Herzschlagklasse gerade gilt
+        self.medkit_rest = 0.0
+        self.ruhe_rest = 0.0
+        self.anteil = 1.0
+        self._puffer = None
+
+    # ---- Meldungen -----------------------------------------------------
+    def treffer(self, menge: float = 1.0) -> None:
+        b = K.BEFINDEN
+        self.stoss = min(1.0, self.stoss + b["treffer_stoss"] * min(1.0, menge))
+
+    def medkit(self) -> None:
+        m = K.MEDKIT_BLICK
+        self.medkit_rest = m["dauer"]
+        self.ruhe_rest = m["ruhe"]
+        self.stoss = 0.0
+
+    def zuruecksetzen(self) -> None:
+        """Nach dem Wiedereinstieg faengt alles von vorn an."""
+        self.stoss = 0.0
+        self.puls = 0.0
+        self.schlag = 0.0
+        self.klasse = -1
+        self.medkit_rest = 0.0
+        self.ruhe_rest = 0.0
+
+    # ---- Ablauf --------------------------------------------------------
+    @property
+    def not_anteil(self) -> float:
+        """0 bis 1: wie weit unter der Dauerschwelle das Leben steht."""
+        b = K.BEFINDEN
+        if self.anteil >= b["dauerhaft_ab"]:
+            return 0.0
+        return min(1.0, 1.0 - self.anteil / max(0.01, b["dauerhaft_ab"]))
+
+    @property
+    def staerke(self) -> float:
+        """Wie stark der rote Schein gerade ist, 0 bis 1."""
+        b = K.BEFINDEN
+        if self.ruhe_rest > 0.0:
+            # Nach einem Medkit ist Ruhe. Das ist der Punkt an einem
+            # Medkit: es soll sich anfuehlen, als faende man wieder Luft.
+            return 0.0
+        grund = 0.0
+        if self.anteil < b["ab"]:
+            grund = min(1.0, (b["ab"] - self.anteil) / max(0.01, b["ab"]))
+        atem = 1.0 + b["puls_tiefe"] * self.schlag * self.not_anteil
+        return max(0.0, min(1.0, grund * atem + self.stoss))
+
+    @property
+    def dumpf(self) -> float:
+        """Wie dumpf alles andere klingen soll, 0 bis 1."""
+        b = K.BEFINDEN
+        if self.ruhe_rest > 0.0:
+            return 0.0
+        # Die Daempfung folgt demselben Schlag wie der Schein. Beides
+        # zusammen ist der Effekt: die Welt zieht sich im Takt zurueck.
+        return min(1.0, b["dumpf_max"] * self.not_anteil
+                   * (0.55 + 0.45 * self.schlag))
+
+    def schritt(self, dt: float, anteil: float, klang=None) -> None:
+        b = K.BEFINDEN
+        self.anteil = max(0.0, min(1.0, anteil))
+        self.stoss = max(0.0, self.stoss - b["treffer_abbau"] * dt)
+        self.medkit_rest = max(0.0, self.medkit_rest - dt)
+        self.ruhe_rest = max(0.0, self.ruhe_rest - dt)
+
+        not_anteil = self.not_anteil
+        if not_anteil <= 0.0 or self.ruhe_rest > 0.0:
+            self.puls = 0.0
+            self.schlag = max(0.0, self.schlag - 4.0 * dt)
+            self.klasse = -1
+            return
+        dauer = (b["puls_langsam"]
+                 + (b["puls_schnell"] - b["puls_langsam"]) * not_anteil)
+        vorher = self.puls
+        self.puls = (self.puls + dt / max(0.05, dauer)) % 1.0
+        # Der Schlag ist kurz und der Rest der Runde still: eine Kurve,
+        # die schnell ansteigt und langsam faellt, mit `puls_schaerfe` als
+        # Griff dafuer.
+        self.schlag = max(0.0, 1.0 - self.puls * b["puls_schaerfe"])
+        if self.puls < vorher and klang is not None:
+            klasse = self._klasse()
+            self.klasse = klasse
+            if klasse >= 0:
+                klang("herzschlag", b["klassen_laut"][klasse])
+
+    def _klasse(self) -> int:
+        """Welche der drei Herzschlagklassen gerade gilt."""
+        b = K.BEFINDEN
+        klasse = -1
+        for i, grenze in enumerate(b["klassen"]):
+            if self.anteil <= grenze:
+                klasse = i
+        return klasse
+
+    # ---- Bild ----------------------------------------------------------
+    def zeichnen(self, ziel, renderer=None) -> None:
+        """Erst das Medkit auf das ganze Bild, dann der Rand."""
+        if self.medkit_rest > 0.0:
+            self._medkit_zeichnen(ziel)
+        staerke = self.staerke
+        if staerke > 0.01:
+            self._rand_zeichnen(ziel, K.BEFINDEN["farbe"], staerke,
+                                K.BEFINDEN["deckung_max"],
+                                K.BEFINDEN["breite"], K.BEFINDEN["stufen"])
+
+    def _rand_zeichnen(self, ziel, farbe, staerke, deckung, breite,
+                       stufen) -> None:
+        s = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+        breit = max(stufen, int(breite * (0.45 + 0.55 * staerke)))
+        for i in range(stufen):
+            d = int(deckung * staerke * (1.0 - i / stufen) ** 1.6)
+            if d <= 0:
+                continue
+            dick = max(1, breit // stufen)
+            rand = i * dick
+            pygame.draw.rect(s, (*farbe, d),
+                             (rand, rand, K.GAME_W - 2 * rand,
+                              K.GAME_H - 2 * rand), dick)
+        ziel.blit(s, (0, 0))
+
+    def _medkit_zeichnen(self, ziel) -> None:
+        """Kalt, klar und einen Augenblick lang hell.
+
+        Der Kontrast entsteht ohne Shader: das Bild wird auf sich selbst
+        addiert (also verdoppelt) und dann um einen Grauwert gesenkt.
+        `out = 2*in - g` ist eine harte Kontrastkurve, und Kontrast ist
+        das, was das Auge als "scharf" liest. Damit es sich einblenden
+        laesst, wird das Ergebnis mit einer Deckkraft ueber das Original
+        gelegt statt es zu ersetzen.
+        """
+        m = K.MEDKIT_BLICK
+        t = self.medkit_rest / max(0.01, m["dauer"])      # 1 -> 0
+        # Sanft auslaufen, nicht abschneiden.
+        weich = t * t * (3.0 - 2.0 * t)
+        if self._puffer is None or self._puffer.get_size() != ziel.get_size():
+            self._puffer = pygame.Surface(ziel.get_size()).convert()
+        puffer = self._puffer
+        puffer.blit(ziel, (0, 0))
+        # 1. Kontrast: verdoppeln, dann die Mitte zurueckziehen.
+        puffer.blit(puffer, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+        g = m["kontrast_mitte"]
+        puffer.fill((g, g, g), special_flags=pygame.BLEND_RGB_SUB)
+        # 2. Kaelte: mit einem kuehlen Ton multiplizieren. Der Rostton der
+        #    Welt faellt dabei zusammen, das Blau bleibt stehen.
+        kalt = m["kalt_ton"]
+        anteil = m["kaelte"] * weich
+        ton = tuple(int(255 + (c - 255) * anteil) for c in kalt)
+        puffer.fill(ton, special_flags=pygame.BLEND_RGB_MULT)
+        # Multiplizieren allein macht nur die hellen Stellen kuehler - die
+        # dunklen bleiben, wo sie sind, und die Welt hier besteht fast nur
+        # aus dunklen Stellen. Also zusaetzlich ein wenig Blau **dazu**:
+        # das hebt die Schatten ins Kalte. Genau so arbeitet eine kuehle
+        # Farbkorrektur auch sonst - Schatten anheben, Lichter entwaermen.
+        hebung = int(m["kalt_hebung"] * anteil)
+        if hebung > 0:
+            puffer.fill((0, hebung // 2, hebung),
+                        special_flags=pygame.BLEND_RGB_ADD)
+        puffer.set_alpha(int(255 * m["kontrast"] * weich))
+        ziel.blit(puffer, (0, 0))
+        # 3. Der helle Anschlag, hart einsetzend und langsam ausklingend.
+        rest_blitz = self.medkit_rest - (m["dauer"] - m["blitz"])
+        if rest_blitz > 0.0:
+            b = rest_blitz / max(0.01, m["blitz"])
+            flaeche = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+            flaeche.fill((*m["farbe"], int(130 * b * b)))
+            ziel.blit(flaeche, (0, 0))
+        # 4. Der blaue Rand - der Gegenschlag zum roten.
+        self._rand_zeichnen(ziel, m["farbe"], weich, m["rand_deckung"],
+                            K.BEFINDEN["breite"], K.BEFINDEN["stufen"])

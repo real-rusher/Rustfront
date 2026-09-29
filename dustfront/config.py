@@ -142,6 +142,87 @@ TREFFER = dict(
     zeitlupe=0.045,           # kurze Verlangsamung beim Toeten
 )
 
+# ══════════════════════════════════════════════════ BEFINDEN
+#
+# Wie es einem geht, ohne dass man auf eine Zahl schaut.
+#
+# Ein Lebensbalken ist eine Zahl in Balkenform: man muss hinsehen, um sie
+# zu lesen, und im Gefecht sieht man nicht hin. Was hier steht, arbeitet
+# am Rand des Blickfelds und im Ohr - dort, wo man etwas merkt, ohne es
+# anzusehen.
+#
+# Der rote Schein setzt unterhalb von `ab` ein und waechst. Unter
+# `dauerhaft_ab` bleibt er stehen und **pulst**, mit einem Herzschlag im
+# Ohr; je weniger Leben, desto schneller. Und mit jedem Schlag wird alles
+# andere dumpfer - Schuesse, Schritte, spaeter die Musik. Das ist der
+# eigentliche Griff: nicht lauter werden, sondern die Welt wegnehmen.
+#
+# Der Herzschlag laeuft in **Klassen** und nicht stufenlos. Ein Ton, der
+# sich unmerklich beschleunigt, merkt niemand; drei klar verschiedene
+# Zustaende merkt jeder, und man weiss nach zwei Runden, in welchem man
+# steckt.
+BEFINDEN = dict(
+    ab=0.70,              # ab diesem Lebensanteil faerbt sich der Rand
+    dauerhaft_ab=0.38,    # darunter bleibt er stehen und pulst
+    breite=64,            # so weit reicht der Schein ins Bild
+    stufen=9,             # so viele Rahmen bilden den Verlauf
+    deckung_max=132,      # Deckkraft des innersten Rahmens bei null Leben
+    farbe=(148, 24, 18),
+    # Ein Treffer schlaegt sofort auf und verklingt wieder. Ohne das
+    # merkt man einen Treffer erst daran, dass der Balken kuerzer ist.
+    treffer_stoss=0.55,
+    treffer_abbau=2.1,
+    # Puls. Sekunden je Schlag, von `dauerhaft_ab` bis null Leben.
+    puls_langsam=1.20,
+    puls_schnell=0.50,
+    puls_tiefe=0.50,      # wie stark der Schein mit dem Schlag atmet
+    puls_schaerfe=2.6,    # je hoeher, desto knapper der Schlag
+    # Herzschlag im Ohr: drei Klassen, je Klasse eine Lautstaerke.
+    klassen=(0.38, 0.24, 0.12),
+    klassen_laut=(0.30, 0.52, 0.80),
+    # Wie dumpf alles andere wird. 0 = unveraendert, 1 = ganz weggenommen.
+    dumpf_max=0.85,
+)
+
+# Das Medkit. Der Gegenschlag zum roten Rand: **blau, kalt und sehr
+# klar** - und danach ein paar Sekunden Ruhe.
+#
+# Nachgesehen, wie andere Spiele so etwas machen: der Adrenalinschuss in
+# Left 4 Dead 2 dreht den Kontrast hoch, zieht die Farbe heraus und legt
+# eine starke Vignette an - "tunnel vision through increased vignetting,
+# maxes out the color correction to suck the color from the shot". Das
+# ist genau die Sprache, die hier gebraucht wird, nur in die andere
+# Richtung: nicht enger und rot, sondern weiter, kalt und scharf.
+#
+# Drei Griffe, alle drei ohne Shader, alle drei auf der fertigen Flaeche:
+#
+#   Kontrast   Bild verdoppeln, Mitte abziehen. out = 2*in - grau.
+#              Das ist eine harte Kontrastkurve, und Kontrast ist das,
+#              was das Auge als "scharf" liest - ohne dass ein einziger
+#              Pixel schaerfer wird, was bei Pixelkunst auch nicht ginge.
+#   Kaelte     mit einem kuehlen Ton multiplizieren. Der Rostton der
+#              Welt faellt dabei zusammen, das Blau bleibt stehen.
+#   Blitz      ein kurzer heller Anschlag, hart einsetzend und langsam
+#              ausklingend. Er markiert den Augenblick.
+MEDKIT_BLICK = dict(
+    dauer=1.30,           # so lange ist es kalt und klar
+    blitz=0.18,           # davon der helle Anschlag
+    farbe=(104, 198, 236),
+    rand_deckung=110,     # blauer Schein am Rand
+    kontrast=0.80,        # 0 = wie sonst, 1 = volle Verdoppelung
+    # Um welchen Grauwert der Kontrast dreht. **Nicht 128.** Die Welt von
+    # DUSTFRONT ist dunkel: gemessen liegt ihre mittlere Helligkeit bei
+    # 36 von 255. Mit 128 als Drehpunkt faellt alles unter der Mitte ins
+    # Schwarze, und wer ein Medkit anlegt, sieht eine Sekunde lang gar
+    # nichts mehr - ausgerechnet in dem Moment, in dem er getroffen wurde.
+    # Der Drehpunkt gehoert also dorthin, wo das Bild wirklich liegt.
+    kontrast_mitte=44,
+    kaelte=0.60,          # wie weit es ins Kalte kippt
+    kalt_ton=(196, 228, 255),   # damit wird multipliziert
+    kalt_hebung=118,      # so viel Blau kommt dazu, hebt die Schatten
+    ruhe=3.0,             # so lange bleiben roter Schein und Puls danach weg
+)
+
 # ══════════════════════════════════════════════════ AUSSENHAUT
 #
 # Texturen und Klaenge. Alles, was das Spiel zeigt und hoert, hat einen
@@ -265,9 +346,17 @@ KLANG_NAMEN = (
     "wurf",
     "medkit",
     "aufheben",
+    # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
+    # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
+    "herzschlag",
     "menue",
     "menue_ok",
 )
+
+# Klaenge, die **nicht** gedaempft werden, wenn es einem schlecht geht.
+# Der eigene Herzschlag wird ja gerade lauter, nicht leiser, und die
+# Menuetoene gehoeren nicht in die Welt.
+NIE_DUMPF = ("herzschlag", "menue", "menue_ok")
 
 AUDIO = dict(
     gesamt=0.75,              # Gesamtlautstaerke

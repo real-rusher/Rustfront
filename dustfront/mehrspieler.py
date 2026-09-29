@@ -57,11 +57,12 @@ from . import config as K
 from . import ablage
 from . import konto as konto_modul
 from . import netz
+from . import ui
 from . import world as welt_modul
 from .core import Szene
 from .entities import Aufsammler, Gegner, Rauchwolke, Spieler, wolke
 from .font import SCHRIFT
-from .render import Kamera, Renderer
+from .render import Befinden, Kamera, Renderer
 from .world import Welt, freier_punkt, testkarte
 
 
@@ -99,6 +100,11 @@ class Kaempfer(Spieler):
         self.raus = False            # in versus: diese Runde erledigt
         self.abschuesse = 0
         self.tode = 0
+        # Wen dieser Kaempfer wie oft erwischt hat. Gebraucht fuer die
+        # Zeile "am oeftesten erledigt" auf der Siegtafel - die Zahl, die
+        # nach der Runde am meisten erzaehlt, weil sie sagt, wer gegen wen
+        # gespielt hat und nicht nur wie gut.
+        self.opfer: dict[int, int] = {}
         self.wieder_in = 0.0
         self.toeter = None           # wertet das Gefecht aus und raeumt weg
         self.abgerechnet = False     # ist dieser Tod schon verbucht?
@@ -435,6 +441,9 @@ class Gefecht(Szene):
         self._gebucht = ""
         self._rundenzeit = 0.0
         self._masken_durch = False
+        # Die Zahlen, aus denen die Siegtafel gebaut wird. Beim Gastgeber
+        # gerechnet, beim Gast aus der Endmeldung - beide Male dieselben.
+        self.endwerte: dict = {}
 
         self._seit_senden = 0.0
         # Was seit der letzten Meldung an Wirkung entstanden ist. Wird mit
@@ -450,6 +459,12 @@ class Gefecht(Szene):
         # werden statt frueh anzuhalten.
         self._seit_paket = 0.0
         self._paket_takt = float(K.NETZ["takt"])
+        # Roter Rand, Herzschlag, dumpfe Welt - und das Medkit dagegen.
+        # Gelesen wird nur das eigene Leben; beim Gast steht es genauso in
+        # der Weltmeldung wie beim Gastgeber in seiner eigenen Figur.
+        self.befinden = Befinden()
+        self._leben_vorher = 0.0
+        self._heilte = 0.0
         self._fremde_beute: list[tuple] = []
         self._fremde_gegner: list[tuple] = []
         self._knoepfe: set[str] = set()
@@ -1387,6 +1402,7 @@ class Gefecht(Szene):
                 toeter = getattr(k.toeter, "von", k.toeter)
                 if isinstance(toeter, Kaempfer) and toeter is not k:
                     toeter.abschuesse += K.GEFECHT["punkt_abschuss"]
+                    toeter.opfer[k.nummer] = toeter.opfer.get(k.nummer, 0) + 1
                     toeter.serie += 1
                     toeter.zaehler["serie"] = max(
                         toeter.zaehler.get("serie", 0), toeter.serie)
@@ -1522,12 +1538,13 @@ class Gefecht(Szene):
             # ein Gast die Meldung zweimal bekommt oder sein Abgleich
             # dreimal losgeht, ist damit gleichgueltig.
             self.partie = self.partie or ablage.kennung()
+            self.endwerte = self._werte_aller()
             self.gastgeber.an_alle({"t": "ende", "liste": self.liste,
                                     "gewonnen": gewonnen, "welle": self.welle,
                                     "sieger": self.sieger_team,
                                     "teampunkte": list(self.teampunkte),
                                     "partie": self.partie,
-                                    "werte": self._werte_aller()})
+                                    "werte": self.endwerte})
         self._runde_buchen()
 
     def _werte_aller(self) -> dict:
@@ -1544,7 +1561,9 @@ class Gefecht(Szene):
         for k in self.kaempfer.values():
             raus[str(k.nummer)] = {"werte": k.werte_runde(),
                                    "waffen": k.waffen_runde(),
-                                   "team": k.team}
+                                   "team": k.team, "name": k.name,
+                                   "opfer": {str(n): z for n, z
+                                             in k.opfer.items() if z}}
         return raus
 
     def _runde_buchen(self, werte=None) -> None:
@@ -1719,6 +1738,7 @@ class Gefecht(Szene):
                 alle = nachricht.get("werte")
                 meine = None
                 if isinstance(alle, dict):
+                    self.endwerte = alle
                     meine = alle.get(str(self.meine_nummer))
                 self._runde_buchen(meine if isinstance(meine, dict) else None)
 
@@ -2043,6 +2063,7 @@ class Gefecht(Szene):
             return
         if not self.ist_gastgeber:
             self._eigenes_zielen()
+        self._befinden_fuehren(dt)
         if self.ich.ebene != self._letzte_ebene:
             self._letzte_ebene = self.ich.ebene
             self.blick = self.ich.ebene
@@ -2082,6 +2103,34 @@ class Gefecht(Szene):
         self.kamera.anteil = self.app.opt.ruckel_anteil()
         self.kamera.schritt(dt, self.ich.pos, self.ich.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe))
+
+    def _befinden_fuehren(self, dt: float) -> None:
+        """Den roten Rand und den Herzschlag nachfuehren.
+
+        Gelesen wird ausschliesslich das eigene Leben - beim Gast steht es
+        in der Weltmeldung, beim Gastgeber in seiner Figur, und beide
+        Wege fuehren hier zusammen. Ein Treffer wird am Unterschied
+        erkannt und nicht gemeldet: dann gilt dieselbe Rechnung fuer
+        Kugeln, Granaten, Stuerze und alles, was noch kommt.
+        """
+        ich = self.ich
+        if ich is None:
+            return
+        leben = max(0.0, ich.leben) if ich.lebt else 0.0
+        if leben < self._leben_vorher - 0.01:
+            self.befinden.treffer((self._leben_vorher - leben) / 40.0)
+        elif leben > self._leben_vorher + 20.0:
+            # Deutlich mehr Leben als eben: Wiedereinstieg oder
+            # Aufgeholfen. Dann faengt alles von vorn an.
+            self.befinden.zuruecksetzen()
+        self._leben_vorher = leben
+        if ich.heilt_rest <= 0 < self._heilte:
+            self.befinden.medkit()
+        self._heilte = ich.heilt_rest
+        self.befinden.schritt(dt, leben / max(1.0, ich.max_leben), self._klang)
+        self.app.klaenge.daempfung_setzen(self.befinden.dumpf)
+        if self.befinden.dumpf > 0.0:
+            self.app.klaenge.dumpf_nachziehen()
 
     def _eigenes_zielen(self) -> None:
         """Beim Gast: die eigene Figur sofort dorthin ausrichten, wo die
@@ -2362,8 +2411,10 @@ class Gefecht(Szene):
         # Eine neue Partie faengt bei null an - auch beim Zaehlen.
         self.partie = ""
         self._rundenzeit = 0.0
+        self.endwerte = {}
         for k in self.kaempfer.values():
             k.zaehler_leeren()
+            k.opfer = {}
             self._loadout_anlegen(k)
 
         self._teams_ausgleichen()
@@ -2444,6 +2495,9 @@ class Gefecht(Szene):
             self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.ich)
             self.renderer.tracer(ziel, self.welt, self.kamera, self.ich)
         self._namen_zeichnen(ziel)
+        # Der rote Rand liegt ueber der Welt, aber unter der Anzeige: die
+        # Zahlen sollen lesbar bleiben, auch wenn es einem schlecht geht.
+        self.befinden.zeichnen(ziel)
         if self.ich is not None and self.ich.hilft is not None:
             # Blauer Schein am Rand, solange man jemanden aufhilft. Er
             # sagt, warum die Figur gerade nicht laeuft und nicht
@@ -2451,8 +2505,12 @@ class Gefecht(Szene):
             opfer = self.kaempfer.get(self.ich.hilft)
             stand = opfer.revive_stand if opfer is not None else 0.0
             self.renderer.randglut(ziel, K.C_TEAL, 0.45 + 0.55 * stand)
-        self._anzeige(ziel)
-        if self.vorbei:
+        # Die Anzeige bleibt weg, sobald die Runde vorbei ist: Lebensbalken
+        # und Hotbar sagen dann nichts mehr, und sie standen quer durch die
+        # Siegtafel.
+        if not self.vorbei:
+            self._anzeige(ziel)
+        else:
             self._endtafel(ziel)
         if self.menue is not None:
             self._menue_zeichnen(ziel)
@@ -2781,12 +2839,10 @@ class Gefecht(Szene):
             self.renderer.hud(ziel, self.welt, self.ich, "",
                               self.ich.abschuesse, self.blick, kopf=False)
             if self.knapp:
-                # Bei knapper Munition steht der Vorrat unter dem Magazin.
-                # Ohne ihn weiss man nicht, ob sich Nachladen noch lohnt.
+                # Der Vorrat steht in der Hotbar, bei der Waffe, zu der er
+                # gehoert - hier bleibt nur die Warnung, wenn gar nichts
+                # mehr da ist.
                 vorrat = self.ich.vorrat.get(self.ich.waffe_name, 0)
-                f.zeichnen(ziel, "VORRAT %d" % vorrat, K.GAME_W - 12,
-                           K.GAME_H - 38, K.C_MUTED if vorrat else K.C_RED, 1,
-                           ausrichtung="rechts")
                 if not vorrat and not self.ich.magazin.get(
                         self.ich.waffe_name, 0):
                     # Sonst drueckt man ratlos auf R und nichts passiert.
@@ -2872,16 +2928,105 @@ class Gefecht(Szene):
         f.zeichnen(ziel, "[ESC] ZURUECK", K.GAME_W // 2, K.GAME_H - 22,
                    K.C_MUTED_DK, 1, ausrichtung="mitte")
 
+    # ── Siegtafel ────────────────────────────────────────────────────
+    #
+    # Gebaut wie in den Spielen, die das seit Jahren machen: die beiden
+    # Mannschaften nebeneinander, jede in ihrer Farbe, innerhalb der
+    # Mannschaft sortiert. Der Sinn ist nicht Zierde - man soll nach einer
+    # Runde in drei Sekunden sehen, wie sie gelaufen ist, und dafuer
+    # muessen die eigenen Leute beieinander stehen und nicht zwischen den
+    # Gegnern verteilt.
+    #
+    # Je Zeile: Platz, Name, das **Zeichen** der meistbenutzten Waffe
+    # (kein Name - auf zwanzig Pixel passt keiner, und ein Zeichen liest
+    # sich schneller), Abschuesse, Tode, das Verhaeltnis der Runde und
+    # der, den man am oeftesten erwischt hat.
+
+    def _tafel_zeilen(self) -> list[dict]:
+        """Was auf der Siegtafel steht, je Spieler eine Zeile.
+
+        Die Zahlen kommen aus `endwerte` - beim Gastgeber gerechnet, beim
+        Gast aus der Endmeldung. Faellt das aus (eine aeltere Gegenstelle
+        zum Beispiel), wird aus den Kaempfern gebaut, was noch da ist:
+        lieber eine magere Tafel als gar keine.
+        """
+        zeilen = []
+        for nummer, eintrag in sorted((self.endwerte or {}).items(),
+                                      key=lambda p: int(p[0])):
+            if not isinstance(eintrag, dict):
+                continue
+            werte = eintrag.get("werte") or {}
+            zeilen.append({
+                "nummer": int(nummer),
+                "name": str(eintrag.get("name")
+                            or getattr(self.kaempfer.get(int(nummer)),
+                                       "name", "?")),
+                "team": int(eintrag.get("team", -1)),
+                "abschuesse": int(werte.get("abschuesse", 0)),
+                "tode": int(werte.get("tode", 0)),
+                "waffe": self._lieblingswaffe(eintrag.get("waffen")),
+                "opfer": self._haeufigstes_opfer(eintrag.get("opfer")),
+            })
+        if not zeilen:
+            for k in self.kaempfer.values():
+                zeilen.append({"nummer": k.nummer, "name": k.name,
+                               "team": k.team, "abschuesse": k.abschuesse,
+                               "tode": k.tode, "waffe": "", "opfer": ""})
+        zeilen.sort(key=lambda z: (-z["abschuesse"], z["tode"], z["name"]))
+        return zeilen
+
+    @staticmethod
+    def _lieblingswaffe(waffen) -> str:
+        """Womit am meisten geschossen wurde. Leer, wenn mit nichts.
+
+        Gezaehlt wird nach Schuessen und nicht nach Abschuessen: gefragt
+        ist, was jemand **benutzt** hat, und wer eine Runde lang mit dem
+        Scharfschuetzen danebenhaelt, hat trotzdem mit ihm gespielt.
+        """
+        if not isinstance(waffen, dict) or not waffen:
+            return ""
+        bestes, meiste = "", 0
+        for name, zahlen in waffen.items():
+            if not isinstance(zahlen, dict) or name not in K.WAFFEN:
+                continue
+            wieviel = int(zahlen.get("schuesse", 0) or 0)
+            if wieviel > meiste:
+                bestes, meiste = name, wieviel
+        return bestes
+
+    def _haeufigstes_opfer(self, opfer) -> str:
+        """Wen dieser Spieler am oeftesten erwischt hat."""
+        if not isinstance(opfer, dict) or not opfer:
+            return ""
+        bester, meiste = "", 0
+        for nummer, zahl in opfer.items():
+            try:
+                zahl = int(zahl)
+                nummer = int(nummer)
+            except (TypeError, ValueError):
+                continue
+            if zahl <= meiste:
+                continue
+            eintrag = (self.endwerte or {}).get(str(nummer)) or {}
+            name = eintrag.get("name") or getattr(
+                self.kaempfer.get(nummer), "name", "")
+            if name:
+                bester, meiste = str(name), zahl
+        return bester
+
     def _endtafel(self, ziel) -> None:
+        # Fast blickdicht. Vorher schimmerten Namen und die ganze Anzeige
+        # durch die Tafel, und beides stand quer durch die Zahlen, die man
+        # eigentlich lesen wollte.
         deckel = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
-        deckel.fill((9, 6, 5, 220))
+        deckel.fill((9, 6, 5, 246))
         ziel.blit(deckel, (0, 0))
         f = SCHRIFT
         farbe_kopf = K.C_AMBER
         if self.mit_teams:
             if 0 <= self.sieger_team < len(K.TEAMS["namen"]):
                 kopf = "%s GEWINNT" % K.TEAMS["namen"][self.sieger_team]
-                farbe_kopf = K.TEAMS["farben"][self.sieger_team]
+                farbe_kopf = K.TEAMS["kombi"][self.sieger_team]["hud"]
             else:
                 kopf = "UNENTSCHIEDEN"
             if self.regeln["zone"]:
@@ -2898,22 +3043,110 @@ class Gefecht(Szene):
         else:
             kopf = "RUNDE VORBEI"
             unter = "WELLE %d" % self.welle if self.mit_gegnern else ""
-        f.zeichnen(ziel, kopf, K.GAME_W // 2, 40, farbe_kopf, 3,
+        f.zeichnen(ziel, kopf, K.GAME_W // 2, 22, farbe_kopf, 3,
                    ausrichtung="mitte")
         if unter:
-            f.zeichnen(ziel, unter, K.GAME_W // 2, 66, K.C_MUTED, 1,
+            f.zeichnen(ziel, unter, K.GAME_W // 2, 48, K.C_MUTED, 1,
                        ausrichtung="mitte")
-        y = 92
-        for platz, e in enumerate(self.liste, 1):
-            farbe = K.C_CREAM if platz == 1 else K.C_MUTED
-            f.zeichnen(ziel, "%d." % platz, 180, y, farbe, 1)
-            f.zeichnen(ziel, str(e.get("name", "?")), 206, y, farbe, 1)
-            f.zeichnen(ziel, "%d ABSCHUESSE  %d TODE"
-                       % (e.get("abschuesse", 0), e.get("tode", 0)),
-                       K.GAME_W - 180, y, farbe, 1, ausrichtung="rechts")
-            y += 12
-        f.zeichnen(ziel, "[ESC] BEENDEN", K.GAME_W // 2, K.GAME_H - 30,
+
+        zeilen = self._tafel_zeilen()
+        if self.mit_teams:
+            breite = 300
+            hoch = self._tafel_hoehe(max(
+                len([z for z in zeilen if z["team"] == 0]),
+                len([z for z in zeilen if z["team"] == 1])))
+            oben = max(72, (K.GAME_H - hoch) // 2)
+            for seite in range(2):
+                x = 10 + seite * (K.GAME_W - 2 * 10 - breite)
+                self._tafel_spalte(ziel, x, oben, breite,
+                                   [z for z in zeilen if z["team"] == seite],
+                                   seite)
+            ohne = [z for z in zeilen if not 0 <= z["team"] < 2]
+            if ohne:
+                self._tafel_spalte(ziel, (K.GAME_W - breite) // 2,
+                                   oben + hoch + 8, breite, ohne, -1)
+        else:
+            breite = 360
+            oben = max(72, (K.GAME_H - self._tafel_hoehe(len(zeilen))) // 2)
+            self._tafel_spalte(ziel, (K.GAME_W - breite) // 2, oben, breite,
+                               zeilen, -1)
+        f.zeichnen(ziel, "[ESC] BEENDEN", K.GAME_W // 2, K.GAME_H - 20,
                    K.C_MUTED_DK, 1, ausrichtung="mitte")
+
+    @staticmethod
+    def _tafel_hoehe(zeilen: int) -> int:
+        return 16 + 11 * max(1, zeilen) + 14
+
+    def _tafel_spalte(self, ziel, x: int, y: int, breite: int, zeilen: list,
+                      team: int) -> None:
+        """Eine Mannschaft als Block: Kopf, Spaltentitel, Zeilen."""
+        f = SCHRIFT
+        if 0 <= team < len(K.TEAMS["kombi"]):
+            kombi = K.TEAMS["kombi"][team]
+            hell, dunkel = kombi["hud"], kombi["hud_dunkel"]
+            name = kombi["name"]
+        else:
+            hell, dunkel, name = K.C_CREAM, K.C_MUTED_DK, "ALLE"
+        rand = pygame.Rect(x, y, breite, self._tafel_hoehe(len(zeilen)))
+        pygame.draw.rect(ziel, (14, 10, 8), rand)
+        pygame.draw.rect(ziel, dunkel, rand, 1)
+        # Ein voller Balken in der Mannschaftsfarbe ueber dem Block: die
+        # Farbe muss man sehen, bevor man einen Namen liest.
+        pygame.draw.rect(ziel, hell, (x, y, breite, 2))
+        if 0 <= team < len(K.TEAMS["kombi"]):
+            self._teamzeichen(ziel, x + 5, y + 6, K.TEAMS["kombi"][team])
+        f.zeichnen(ziel, name, x + (16 if team >= 0 else 5), y + 6, hell, 1)
+
+        # Spaltentitel. "K/D" steht fuer die Runde, nicht fuer die
+        # Bestenliste - deshalb "RUNDE" darunter und nicht mehr.
+        sx = self._tafel_spalten(x, breite)
+        kopfzeile = y + 6
+        f.zeichnen(ziel, "A", sx["abschuesse"], kopfzeile, dunkel, 1, 1, "rechts")
+        f.zeichnen(ziel, "T", sx["tode"], kopfzeile, dunkel, 1, 1, "rechts")
+        f.zeichnen(ziel, "K/D", sx["kd"], kopfzeile, dunkel, 1, 1, "rechts")
+        f.zeichnen(ziel, "ERLEDIGT", sx["opfer"], kopfzeile, dunkel, 1)
+
+        zy = y + 18
+        for platz, z in enumerate(zeilen, 1):
+            eigen = (self.ich is not None and z["nummer"] == self.ich.nummer)
+            if eigen:
+                pygame.draw.rect(ziel, (30, 22, 16), (x + 2, zy - 2,
+                                                      breite - 4, 11))
+            farbe = hell if eigen else (K.C_CREAM if platz == 1 else K.C_MUTED)
+            f.zeichnen(ziel, "%d" % platz, x + 6, zy, dunkel, 1)
+            f.zeichnen(ziel, ui.kuerzen(z["name"], sx["waffe"] - x - 20),
+                       x + 16, zy, farbe, 1)
+            # Nur das Zeichen der Waffe. Ein Name passt nicht, und ein
+            # abgeschnittener Name sagt weniger als ein Umriss.
+            if z["waffe"]:
+                bild = self.renderer.bilder.bild("waffe_" + z["waffe"])
+                ziel.blit(bild, (sx["waffe"], zy + 3 - bild.get_height() // 2))
+            f.zeichnen(ziel, "%d" % z["abschuesse"], sx["abschuesse"], zy,
+                       farbe, 1, 1, "rechts")
+            f.zeichnen(ziel, "%d" % z["tode"], sx["tode"], zy, K.C_MUTED, 1,
+                       1, "rechts")
+            f.zeichnen(ziel, self._kd_text(z), sx["kd"], zy,
+                       K.C_MUTED if z["tode"] else K.C_TEAL, 1, 1, "rechts")
+            if z["opfer"]:
+                f.zeichnen(ziel, ui.kuerzen(z["opfer"], x + breite - 6
+                                            - sx["opfer"]),
+                           sx["opfer"], zy, K.C_MUTED_DK, 1)
+            zy += 11
+
+    @staticmethod
+    def _tafel_spalten(x: int, breite: int) -> dict:
+        """Wo die Spalten liegen. Einmal gerechnet, zweimal benutzt -
+        Kopfzeile und Zeilen muessen uebereinanderstehen."""
+        rechts = x + breite - 6
+        return {"waffe": rechts - 158, "abschuesse": rechts - 116,
+                "tode": rechts - 96, "kd": rechts - 68, "opfer": rechts - 58}
+
+    @staticmethod
+    def _kd_text(z: dict) -> str:
+        """Abschuesse je Tod. Ohne Tod steht die Zahl allein da."""
+        if not z["tode"]:
+            return "%d" % z["abschuesse"] if z["abschuesse"] else "-"
+        return "%.1f" % (z["abschuesse"] / z["tode"])
 
     def verlassen(self) -> None:
         if self.ist_gastgeber:
