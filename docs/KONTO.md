@@ -215,10 +215,17 @@ create policy "eigene gefechte anlegen"  on gefecht for insert with check (auth.
 -- Klient seine Zahlen nicht nachbessern.
 
 -- Beim Anlegen eines Kontos gleich ein Profil dazu.
-create or replace function neues_profil() returns trigger
-language plpgsql security definer as $$
+--
+-- Die beiden Kleinigkeiten in der ersten Zeile sind keine: ohne
+-- `set search_path` laeuft die Funktion mit dem Suchpfad des
+-- Anmeldedienstes, und der kennt `public` nicht - dann findet sie
+-- `profil` nicht, das Anlegen bricht ab, und der Dienst meldet nur
+-- "Database error saving new user". Darum der leere Suchpfad und
+-- ueberall der volle Name `public.profil`.
+create or replace function public.neues_profil() returns trigger
+language plpgsql security definer set search_path = '' as $$
 begin
-  insert into profil (konto, name)
+  insert into public.profil (konto, name)
   values (new.id, coalesce(new.raw_user_meta_data->>'name', 'SPIELER'))
   on conflict (konto) do nothing;
   return new;
@@ -226,7 +233,7 @@ end $$;
 
 drop trigger if exists profil_anlegen on auth.users;
 create trigger profil_anlegen after insert on auth.users
-  for each row execute function neues_profil();
+  for each row execute function public.neues_profil();
 ```
 
 ### 5.3 Bestaetigung per Post ausschalten

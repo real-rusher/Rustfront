@@ -292,6 +292,14 @@ def konto_server_pruefen(A, wert) -> int:
         elif "API KEY" in grund or "JWT" in grund or "401" in grund:
             print("Der Schluessel stimmt nicht.")
             print("Settings -> API Keys, der 'publishable key'.")
+        elif "DATABASE ERROR" in grund:
+            print("Der Anmeldedienst kommt bis zur Datenbank und scheitert")
+            print("dort. Das ist fast immer der Ausloeser, der beim Anlegen")
+            print("eines Kontos das Profil dazulegt: ohne 'set search_path'")
+            print("und den vollen Namen 'public.profil' findet er die")
+            print("Tabelle nicht, und mehr als diese Meldung kommt nicht")
+            print("zurueck. Das Stueck ab 'Beim Anlegen eines Kontos' aus")
+            print("docs/KONTO.md 5.2 noch einmal ausfuehren.")
         elif "INVALID" in grund and "EMAIL" in grund:
             print("Der Anmeldedienst lehnt die Adresse ab.")
             print("Das Spiel meldet sich als <name>@spieler.dustfront an.")
