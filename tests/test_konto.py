@@ -547,6 +547,61 @@ pruef("Ohne Zugang sagt der Selbsttest das",
 ablage.SERVER.clear()
 ablage.SERVER.update(_zugang_vorher)
 
+# ══════════════════════════════════════════════════ Die Kontoseite
+#
+# KONTO.html wird erzeugt, nicht getippt. Geprueft wird darum zweierlei:
+# dass das Erzeugen geht, und dass die **eingecheckte** Datei noch zu
+# dem passt, woraus sie erzeugt wurde. Ohne das Zweite faellt niemandem
+# auf, wenn jemand eine Waffe hinzufuegt und die Seite sie nicht kennt -
+# bis sich jemand wundert, warum sie fehlt.
+print("\n-- Die Kontoseite --")
+import werkzeug_kontoseite as WKS
+
+_seite = Path(arbeitsordner) / "KONTO.html"
+WKS.schreiben(_seite)
+_text = _seite.read_text(encoding="utf-8")
+pruef("Die Kontoseite laesst sich erzeugen", _seite.stat().st_size > 20000,
+      "%d Bytes" % _seite.stat().st_size)
+pruef("Der Platzhalter ist ersetzt", "/*DATEN*/" not in _text)
+
+# Die Daten aus der Seite herausschneiden und wirklich lesen. Ein Test,
+# der nur nach Zeichenketten sucht, uebersieht genau die Faelle, um die
+# es geht - etwa ein Feld, das statt eines Namens ein ganzes Objekt
+# enthaelt (so geschehen bei den Spielarten).
+_roh = _text.split("const DATEN =\n", 1)[1].split("\n;", 1)[0]
+_d = json.loads(_roh)
+
+pruef("Der Zugang steht in der Seite",
+      _d["server"]["url"] == ablage.SERVER["url"]
+      and _d["server"]["schluessel"] == ablage.SERVER["schluessel"])
+pruef("Jeder Wert aus K.WERTE ist darin",
+      [w["schluessel"] for w in _d["werte"]] == [s for s, _n, _a in K.WERTE])
+pruef("Jede Waffe ist darin, mit Namen und Bild",
+      set(_d["waffen"]) == set(K.WAFFEN)
+      and all(v["name"] and v["bild"].startswith("data:image/png;base64,")
+              for v in _d["waffen"].values()))
+# Genau der Fehler, der im Browser als "[object Object]" auffiel.
+pruef("Die Spielarten sind Namen und keine ganzen Regelwerke",
+      all(isinstance(v, str) and v for v in _d["modi"].values()),
+      str(list(_d["modi"].values())[:3]))
+pruef("Die Schrift ist vollstaendig mitgegangen",
+      len(_d["schrift"]["zeichen"]) > 40 and _d["schrift"]["breite"] == 5)
+pruef("Die Loadout-Regeln stimmen mit dem Spiel ueberein",
+      _d["loadout"]["plaetze"] == K.LOADOUT["plaetze"]
+      and _d["loadout"]["auswahl_waffen"] == list(K.LOADOUT["auswahl_waffen"]))
+pruef("Nichts aus der Seite laedt eine Nachbardatei",
+      "<script src" not in _text and "<link " not in _text
+      and 'url("' not in _text)
+
+# Und die Datei, die wirklich im Zweig liegt.
+_echte = Path(__file__).resolve().parent.parent / "KONTO.html"
+if _echte.is_file():
+    pruef("Die eingecheckte KONTO.html ist auf dem Stand",
+          _echte.read_text(encoding="utf-8") == _text,
+          "sonst: python -m dustfront --kontoseite")
+else:
+    pruef("Die eingecheckte KONTO.html ist da", False, str(_echte))
+
 # ══════════════════════════════════════════════════ Der Faden
 print("\n-- Der Faden fuer das Netz --")
 werk = konto_modul.Werk()

@@ -352,6 +352,84 @@ eingetragen ist, nicht ob er geht.
 
 ---
 
+## 5a. Die Kontoseite
+
+`KONTO.html` im Wurzelverzeichnis. Doppelklicken, anmelden, fertig - kein
+Server, keine Installation, kein Internet ausser dem zu Supabase.
+
+### Was sie kann
+
+| Reiter | Inhalt |
+|---|---|
+| **UEBERSICHT** | Die sechs Zahlen, die man wirklich anschaut, dazu Verhaeltnis und Trefferquote (gerechnet, nicht gespeichert) |
+| **WERTE** | **Jeder** Zaehler, mit seinem Namen in der Datenbank daneben - und darunter alles, was sonst noch im Profil steht |
+| **WAFFEN** | Schuesse, Treffer, Abschuesse je Waffe, addiert aus allen Runden, mit dem Symbol aus dem Spiel |
+| **RUNDEN** | Jede gespielte Runde einzeln, so wie sie in der Tabelle steht |
+| **AUSRUESTUNG** | Die drei Loadouts aendern und eines zum Tragen waehlen |
+| **AUSSEHEN** | Grau. Vorbereitet, noch ohne Inhalt - siehe `docs/KOSMETIK.md` |
+| **KONTO** | Anzeigename, Kennwort aendern, Kennung, Fassung, abmelden |
+
+Dazu **ALLES HERUNTERLADEN**: Profil und alle Runden als JSON-Datei. Das
+ist der Punkt an der Sache. Wer wissen will, was ueber ihn gespeichert
+ist, soll es nicht erfragen muessen, sondern anklicken koennen.
+
+### Was sie nicht kann, mit Absicht
+
+* **Zahlen aendern.** Geschrieben werden genau zwei Sachen: der
+  Anzeigename und die Loadouts. Werte, die man selbst setzen kann, waeren
+  keine Statistik mehr.
+* **Ein Konto loeschen.** Dafuer braucht es den *secret key*, und der
+  darf in keiner Datei stehen, die jemand herunterladen kann.
+* **Fremde Konten sehen.** Der Zeilenschutz laesst nur die eigenen Zeilen
+  durch, und das entscheidet der Server, nicht die Seite.
+
+### Wie sie gebaut ist
+
+**Sie wird erzeugt, nicht getippt:**
+
+```
+python -m dustfront --kontoseite      (oder: python werkzeug_kontoseite.py)
+```
+
+`werkzeug_kontoseite.py` nimmt `kontoseite_vorlage.html` und schiebt an
+einer einzigen Stelle (`/*DATEN*/`) alles hinein, was die Seite ueber
+DUSTFRONT wissen muss: Zugang, Waffen mit Namen und Bild, die Namen
+aller Werte, die Loadout-Regeln, Spielarten, Mannschaftsfarben,
+Seltenheitsstufen - und die Pixelschrift des Spiels als Punktmuster,
+mit der die Ueberschriften auf eine Leinwand gemalt werden.
+
+**Warum erzeugt:** weil sonst dieselben Sachen zweimal gepflegt werden
+muessten, und zweimal gepflegt heisst einmal gepflegt. Wer eine Waffe
+hinzufuegt, soll sie auf der Seite sehen, ohne daran zu denken.
+`tests/test_konto.py` prueft darum auch, ob die **eingecheckte**
+`KONTO.html` noch zu `config.py` passt - wenn nicht, sagt der Test,
+womit sie neu zu erzeugen ist.
+
+**Warum eine einzige Datei:** eine Seite unter `file://` darf keine
+Nachbardateien laden. Kein `fetch` auf eine JSON daneben, kein
+`<script src=...>`. Bilder gehen als `data:`-URI mit, alles andere steht
+im Quelltext. Das ist auch der Grund, warum sie ueberhaupt so
+funktionieren kann: Supabase antwortet mit
+`access-control-allow-origin: *`, also nimmt es auch eine Anfrage von
+einer Datei ohne Herkunft an.
+
+### Etwas dazubauen
+
+Ein neuer Reiter ist **ein Eintrag** in `SEITEN` in der Vorlage:
+
+```js
+{name:"AUSSEHEN", frei:true, bauen:(ziel) => { ... }},
+```
+
+Die Leiste, das Umschalten und das Neuzeichnen ergeben sich daraus.
+`frei:false` macht ihn grau und zeigt beim Darueberfahren, was fehlt -
+so steht in der Seite selbst, was noch kommt.
+
+Alles, was mit dem Server redet, steht in `Netz`; was gerade bekannt
+ist, in `Stand`. Zwei Stellen, nicht zwanzig.
+
+---
+
 ## 6. Ohne Server
 
 Alles laeuft weiter, nur eben auf diesem Rechner:
@@ -409,6 +487,9 @@ vorbelegt wird.
 | `<Benutzerordner>/sitzung.json` | Die laufende Anmeldung und das Profil |
 | `<Benutzerordner>/journal.json` | Die gespielten Runden, mit Haken |
 | `<Benutzerordner>/server.json` | Eigener Zugang, falls gewuenscht |
+| `KONTO.html` | Die Kontoseite zum Doppelklicken (5a). Erzeugt |
+| `kontoseite_vorlage.html` | Ihre Vorlage. **Hier wird geaendert**, nicht in KONTO.html |
+| `werkzeug_kontoseite.py` | Erzeugt die eine aus der anderen |
 | `--konto server` | Die Abnahme eines frisch aufgesetzten Projekts (5.5) |
 
 Wo der Benutzerordner liegt, sagt `python -m dustfront --konto liste`.

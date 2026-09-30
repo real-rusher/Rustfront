@@ -10,6 +10,7 @@ DUSTFRONT - Einstieg
     python -m dustfront --konto ...    Konten anlegen und ansehen
     python -m dustfront --karten       zeigen, welche Karten es gibt
     python -m dustfront --kosmetik     Vorschaubilder fuer Kisten und Skins
+    python -m dustfront --kontoseite   KONTO.html neu erzeugen
 
 Bilder werden, falls vorhanden, aus dem Ordner `assets` neben dem Paket
 geladen, Klaenge aus `assets/sfx`. Fehlt etwas, zeichnet und rechnet sich das
@@ -493,6 +494,19 @@ def aus_argumenten(argumente: list[str]) -> int:
         for p in pfade:
             print("  %s" % p)
         pygame.quit()
+        return 0
+    if "--kontoseite" in argumente:
+        # Das Werkzeug liegt im Wurzelverzeichnis, nicht im Paket: es
+        # gehoert nicht zum Spiel, es baut nur eine Datei daneben.
+        import sys as _sys
+        from pathlib import Path as _Path
+        _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+        import werkzeug_kontoseite
+        ziel = werkzeug_kontoseite.schreiben(wert("--kontoseite", "")
+                                             or werkzeug_kontoseite.ZIEL)
+        print("Kontoseite geschrieben: %s (%.0f KB)"
+              % (ziel, ziel.stat().st_size / 1024.0))
+        print("Zum Ansehen die Datei doppelklicken.")
         return 0
     if "--karten" in argumente:
         from . import world as W

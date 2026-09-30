@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<!--
+  DUSTFRONT - Kontoseite
+
+  DIESE DATEI IST DIE VORLAGE. Die fertige Seite ist KONTO.html und wird
+  erzeugt:
+
+      python werkzeug_kontoseite.py
+
+  Alles, was die Seite ueber das Spiel weiss - Waffen, Namen der Werte,
+  Farben, Schrift, Zugang zum Server -, kommt beim Erzeugen aus
+  dustfront/config.py und assets/ und landet unten in DATEN. Hier
+  steht es deshalb nirgends noch einmal.
+
+  Aufbau, falls jemand etwas dazubauen will:
+
+    Netz      alles, was mit dem Server redet. Eine Stelle.
+    Stand     was gerade bekannt ist. Eine Stelle.
+    Schrift   die Pixelschrift des Spiels, auf Leinwand gemalt.
+    Bauen     kleine Helfer fuer Kaesten, Knoepfe, Reihen.
+    SEITEN    die Reiter. Eine neue Seite ist ein Eintrag hier.
+
+  Eine neue Seite braucht genau einen Eintrag in SEITEN:
+
+      { name: "AUSSEHEN", titel: "AUSSEHEN", bauen: (ziel) => {...} }
+
+  Mehr nicht. Die Leiste, das Umschalten und das Neuzeichnen ergeben
+  sich daraus.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DUSTFRONT - Konto</title>
+<style>
+  :root{
+    --amber:#e8a33d; --creme:#eee2cb; --matt:#836c52; --matt-dunkel:#544231;
+    --grund:#090605; --tafel:#120d0a; --kasten:#1a130e; --linie:#3a2e22;
+    --rot:#e2622f; --blau:#3fd2c0;
+    --schnitt:6px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--grund); color:var(--creme);
+    font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Courier New",monospace;
+    font-size:13px; line-height:1.55; letter-spacing:.04em;
+    -webkit-font-smoothing:none;
+    min-height:100vh;
+  }
+  /* Der Hintergrund des Spiels: Staub, nicht Schwarz. */
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(120% 90% at 50% -10%, rgba(232,163,61,.07), transparent 60%),
+      repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px);
+  }
+  .rahmen{position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:22px 16px 64px}
+
+  /* Abgeschnittene Ecken - die Form, die sich durch das ganze Spiel zieht. */
+  .kante{
+    clip-path:polygon(var(--schnitt) 0, calc(100% - var(--schnitt)) 0, 100% var(--schnitt),
+      100% calc(100% - var(--schnitt)), calc(100% - var(--schnitt)) 100%,
+      var(--schnitt) 100%, 0 calc(100% - var(--schnitt)), 0 var(--schnitt));
+  }
+  .tafel{background:var(--tafel); border:1px solid var(--linie); padding:16px; margin-bottom:14px}
+  .kasten{background:var(--kasten); border:1px solid var(--linie); padding:12px}
+
+  h1,h2,h3{margin:0; font-weight:normal; letter-spacing:.12em}
+  .titel{display:block}
+  .unter{color:var(--matt); font-size:12px; letter-spacing:.14em; text-transform:uppercase}
+  .matt{color:var(--matt)} .dunkel{color:var(--matt-dunkel)} .amber{color:var(--amber)}
+  .creme{color:var(--creme)} .rot{color:var(--rot)} .blau{color:var(--blau)}
+  .klein{font-size:11px} .mono{font-variant-numeric:tabular-nums}
+  .rechts{text-align:right} .mitte{text-align:center}
+
+  /* Kopf */
+  .kopf{display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:16px}
+  .kopf .wer{margin-left:auto; text-align:right}
+
+  /* Reiter */
+  .leiste{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px}
+  .reiter{
+    background:var(--kasten); border:1px solid var(--linie); color:var(--matt);
+    padding:8px 14px; cursor:pointer; letter-spacing:.12em; font:inherit;
+    text-transform:uppercase; font-size:12px;
+  }
+  .reiter:hover{color:var(--creme); border-color:var(--matt)}
+  .reiter[aria-selected="true"]{color:#1a130e; background:var(--amber); border-color:var(--amber)}
+  .reiter:disabled{color:#3b2f24; cursor:not-allowed; border-color:#251d16}
+  .reiter:disabled:hover{color:#3b2f24; border-color:#251d16}
+
+  /* Knoepfe und Felder */
+  button.knopf{
+    background:var(--kasten); border:1px solid var(--matt-dunkel); color:var(--creme);
+    padding:9px 16px; cursor:pointer; font:inherit; letter-spacing:.12em;
+    text-transform:uppercase; font-size:12px;
+  }
+  button.knopf:hover:not(:disabled){border-color:var(--amber); color:var(--amber)}
+  button.knopf.stark{background:var(--amber); border-color:var(--amber); color:#1a130e}
+  button.knopf.stark:hover:not(:disabled){background:#f4b455}
+  button.knopf:disabled{opacity:.4; cursor:not-allowed}
+  input,select{
+    background:#0d0907; border:1px solid var(--matt-dunkel); color:var(--creme);
+    padding:9px 11px; font:inherit; letter-spacing:.08em; width:100%;
+  }
+  input:focus,select:focus{outline:none; border-color:var(--amber)}
+  label{display:block; color:var(--matt); font-size:11px; letter-spacing:.14em;
+        text-transform:uppercase; margin-bottom:5px}
+  .feld{margin-bottom:12px}
+
+  /* Gitter */
+  .gitter{display:grid; gap:10px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+
+  /* Wertkachel */
+  .wert{background:var(--kasten); border:1px solid var(--linie); padding:11px 13px}
+  .wert .zahl{font-size:22px; color:var(--creme); letter-spacing:.02em; line-height:1.2}
+  .wert .bez{color:var(--matt); font-size:11px; letter-spacing:.14em; text-transform:uppercase}
+  .wert .roh{color:var(--matt-dunkel); font-size:10px; letter-spacing:.06em}
+  .wert.neu{border-color:var(--amber)}
+
+  /* Tabelle */
+  table{width:100%; border-collapse:collapse; font-size:12px}
+  th{color:var(--matt); font-weight:normal; text-align:left; letter-spacing:.14em;
+     text-transform:uppercase; font-size:11px; padding:7px 9px;
+     border-bottom:1px solid var(--linie)}
+  td{padding:7px 9px; border-bottom:1px solid #1e1710}
+  tr:hover td{background:#171009}
+  .balken{height:4px; background:#241b13; position:relative; overflow:hidden}
+  .balken i{position:absolute; inset:0 auto 0 0; background:var(--amber)}
+
+  /* Waffensymbol */
+  .symbol{image-rendering:pixelated; height:20px; vertical-align:middle}
+  .symbol.gross{height:34px}
+
+  /* Loadout */
+  .satz{background:var(--kasten); border:1px solid var(--linie); padding:13px}
+  .satz.gewaehlt{border-color:var(--amber)}
+  .schlitz{
+    display:flex; align-items:center; gap:9px; background:#0d0907;
+    border:1px solid var(--linie); padding:7px 9px; margin-bottom:7px; cursor:pointer;
+  }
+  .schlitz:hover{border-color:var(--matt)}
+  .schlitz select{border:none; background:transparent; padding:0; flex:1}
+
+  /* Meldung */
+  .meldung{padding:11px 14px; margin-bottom:12px; border:1px solid var(--linie);
+           background:var(--kasten); font-size:12px}
+  .meldung.gut{border-color:#4a7a3c; color:#b9d9a8}
+  .meldung.schlecht{border-color:#8a3b2a; color:#e9a892}
+  .meldung.arbeit{border-color:var(--matt-dunkel); color:var(--matt)}
+
+  /* Anmeldung */
+  .tor{max-width:400px; margin:6vh auto}
+  .tor canvas{display:block; margin:0 auto 6px}
+
+  .fuss{color:var(--matt-dunkel); font-size:11px; text-align:center; margin-top:30px;
+        letter-spacing:.1em; line-height:1.9}
+  .fuss a{color:var(--matt)}
+  canvas.pixeltext{image-rendering:pixelated; display:block}
+  .verborgen{display:none !important}
+</style>
+</head>
+<body>
+<div class="rahmen" id="rahmen"></div>
+
+<script>
+"use strict";
+
+// ══════════════════════════════════════════════════════════════════
+// Was die Seite ueber DUSTFRONT weiss. Erzeugt, nicht getippt.
+// ══════════════════════════════════════════════════════════════════
+const DATEN =
+{
+ "version": "0.25.0",
+ "phase": "PRE-ALPHA",
+ "server": {
+  "url": "https://kruokzzrcbfktlsnubno.supabase.co",
+  "schluessel": "sb_publishable_CDGENbJNgNC-bTaZHjTJTQ_pTcFWmDN",
+  "postfach": "spieler.dustfront"
+ },
+ "werte": [
+  {
+   "schluessel": "abschuesse",
+   "name": "ABSCHUESSE",
+   "art": "summe"
+  },
+  {
+   "schluessel": "tode",
+   "name": "TODE",
+   "art": "summe"
+  },
+  {
+   "schluessel": "hilfen",
+   "name": "AUFGEHOLFEN",
+   "art": "summe"
+  },
+  {
+   "schluessel": "schaden",
+   "name": "SCHADEN",
+   "art": "summe"
+  },
+  {
+   "schluessel": "schaden_ein",
+   "name": "EINGESTECKT",
+   "art": "summe"
+  },
+  {
+   "schluessel": "schuesse",
+   "name": "SCHUESSE",
+   "art": "summe"
+  },
+  {
+   "schluessel": "treffer",
+   "name": "TREFFER",
+   "art": "summe"
+  },
+  {
+   "schluessel": "kopftreffer",
+   "name": "NAHKAMPFTREFFER",
+   "art": "summe"
+  },
+  {
+   "schluessel": "granaten",
+   "name": "GRANATEN",
+   "art": "summe"
+  },
+  {
+   "schluessel": "rauchwolken",
+   "name": "RAUCHWOLKEN",
+   "art": "summe"
+  },
+  {
+   "schluessel": "medkits",
+   "name": "MEDKITS",
+   "art": "summe"
+  },
+  {
+   "schluessel": "beute",
+   "name": "AUFGESAMMELT",
+   "art": "summe"
+  },
+  {
+   "schluessel": "strecke",
+   "name": "GELAUFEN",
+   "art": "summe"
+  },
+  {
+   "schluessel": "stuerze",
+   "name": "STUERZE",
+   "art": "summe"
+  },
+  {
+   "schluessel": "zonenzeit",
+   "name": "IM KREIS",
+   "art": "summe"
+  },
+  {
+   "schluessel": "runden",
+   "name": "RUNDEN",
+   "art": "summe"
+  },
+  {
+   "schluessel": "siege",
+   "name": "SIEGE",
+   "art": "summe"
+  },
+  {
+   "schluessel": "spielzeit",
+   "name": "SPIELZEIT",
+   "art": "summe"
+  },
+  {
+   "schluessel": "serie",
+   "name": "BESTE SERIE",
+   "art": "bestes"
+  },
+  {
+   "schluessel": "abschuesse_r",
+   "name": "BESTE RUNDE",
+   "art": "bestes"
+  }
+ ],
+ "waffenwerte": [
+  "schuesse",
+  "treffer",
+  "abschuesse"
+ ],
+ "waffen": {
+  "repetierer": {
+   "name": "REPETIERER",
+   "art": "schuss",
+   "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAeklEQVQ4jWNgGAVQoKMq+19HVfY/seqZaOkYZMBCjKKceC8Mlx84dpkkixgZGBgY2mLM8AbBspPPcco5WOkStGTKwm2MLAwMDAy3Hr0hyXXIgFifERV0+MCV248ZqWaRiSQrw4JD9xhhqYxYwzEsWnDoHskaSQV0S94Am68eyax3aT4AAAAASUVORK5CYII="
+  },
+  "schrot": {
+   "name": "SCHROT",
+   "art": "schuss",
+   "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAeUlEQVQ4jWNgGAVkAkZyNebEe/0nVu2UhdsYibJIR1WWaEOxgSu3HzOyMDAwMLTFmOE1aNnJ55TYw8DAwMDAwsDAwHDr0RuSNYoJ8xNUs+/EFXiIMZFsA5mAhRhFV24/ZoTF05XbjyGuvP2YJIvo66MFh+6RncyJBQAa5RxR2ptMvAAAAABJRU5ErkJggg=="
+  },
+  "sturm": {
+   "name": "STURMGEWEHR",
+   "art": "schuss",
+   "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAeklEQVQ4jWNgoBNgJKRAR1X2Py65K7cfE9QPA0zEKqQU4HVRTrwXTt8ggykLtxH0GSMDA/7gIQY4WOkSdAgLJRbAwIFjlwmqoYpFxCQKvAqIDVKKLUIGNiYaKJYeOXODEeYQYiwaHMkbGbxYbIviI4nYw0TrZWBgYAAA460g/1bEfa8AAAAASUVORK5CYII="
+  },
+  "scharf": {
+   "name": "SCHARFSCHUETZE",
+   "art": "schuss",
+   "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAh0lEQVQ4jWNgoBNgJEaRnJTIf0JqHj17g9csJmJdhAv8c3Nj+OfmRlAdC6UWMe3aRZQ6gkGnoyqLNdiu3H5MVLDDLWqLMcMb/stOPscq7mClS4o9DCy3Hr0hSQMMHDh2mTSLyLKFAXfQ6ajK/ofJIbMJWoSsCZ8FhADLgkP3yNJIKqA4HxELANDOKiIzqnMMAAAAAElFTkSuQmCC"
+  },
+  "granate": {
+   "name": "GRANATE",
+   "art": "wurf",
+   "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAmElEQVQ4jWNkIBFoKEn8h7Fv3HvBSKw+ohXCwIvFtv8ZGBgYHOpvM5joqaDILdlwBKd5JFlkZqfz/9OTN3A+TXxkZqfzX0JKCM5/8ewdAwMDA8OpQ1eIMoMoRWo6Cv/xyd+68oCgOQQVmNnp/GdgYGBA9g0MwHzFwEDYZ0yELMJmKDY+ITB4gg4GYEGIDqiaGHBZRqwldAUAgwM1hEUl5r4AAAAASUVORK5CYII="
+  },
+  "rauch": {
+   "name": "RAUCHGRANATE",
+   "art": "wurf",
+   "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAhElEQVQ4jWNkIBFoKEn8h7Fv3HvBSKp+osG7R6f/v3t0+j+yhcQAolyUkJIAN/TEvh1wcQsnDzh7wZwFeM1iIdZFKmoqUDqH4c6tO3jVrli24H9EVAKKxUzEWkQMWLFsAc7gpKpFMADzDbLFVLUIPbiQAU18hM1imlqEDIhOdYRS2qABACAgJwWCbXDDAAAAAElFTkSuQmCC"
+  },
+  "lmg": {
+   "name": "MG",
+   "art": "schuss",
+   "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAsklEQVQ4jWNgoAHQUFP4TwtzB9YSORmJ/zDMwMDAwMLAwMBgoKOG1RVJMR5EWzJt3iaGrCQ/BgYGhv8MDAwMPVNWocgzwixSUZLB0MzBwUK0Rejg0LFLcPajJy8Ymcg2iUQAd/Kde08wJHW0FKhmEd18xEiMIh0DHayJ5cqFK3D9GmoK/2/cegDnw1IbAwMkjsiPbTRw49YDRljyvnHrAeOjJy9QPEHVoLtx6wEjsoXIAABk1jaI/EVr2QAAAABJRU5ErkJggg=="
+  },
+  "rakete": {
+   "name": "RAKETENWERFER",
+   "art": "rakete",
+   "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAkklEQVQ4jWNgGAUEwDQ7jf/YxBlhDDsrA6wKSAURLD/g7KxDN+DmwxlCAnz/GRgYGMICHCiySO/eLQyxrEM3GFkoMhUHcFASgLMP3PvAMM1O4z+GRdduPaLIEj0cTqeJjw7c+4DCRwk6HS0lqluINTHgAgY6aiip8cKVW3j1TLPT+I9sAQwwkeJCYgA2SxgYGBgAVVsl5dkD2cAAAAAASUVORK5CYII="
+  },
+  "blend": {
+   "name": "BLENDGRANATE",
+   "art": "wurf",
+   "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAb0lEQVQ4jWNgoBNgJFahmYXNf1xyp04cIWgOE7EWUQrwuiSvqAynL3CBSX1dWM1kIaSxqqaOaEvaWppQghg5SAladOLECaItQgdvXpz4z8DAwCAiYcFItzgi6CNKgIiEBfFBt2/PLpIMJyapDw8AAO0IGl+D8CUIAAAAAElFTkSuQmCC"
+  },
+  "molotov": {
+   "name": "MOLOTOW",
+   "art": "wurf",
+   "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAdUlEQVQ4jWNgGAVkAkZCCvScdP4TUnNp3xW85vy5VvGfKIvC0nxwyq+atQWvpe8enf7/b0siAwshixgYGBgunLlGjDIGBgYGBjUTNYwQYPKZz8BEtAkUArpZRFTQkQJunbmFEkdCcqbEW3Tr3D288oRSHV0BAMedILh0h48NAAAAAElFTkSuQmCC"
+  },
+  "brecheisen": {
+   "name": "BRECHEISEN",
+   "art": "nahkampf",
+   "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAZ0lEQVQ4jWNgGAVkgGk2cv8ZaW0BjE1Vi5ANRgdkW4TPUHSQdeQRI9wiZI1ZRx6hOIBYQ5H1TbOR+4/Mx2qRmhgfsY7FAC7rrmANJRZsgrdefcLpUnIB3AAbKT64j448+0TT1EhTAADRGyKf1VqrxgAAAABJRU5ErkJggg=="
+  }
+ },
+ "loadout": {
+  "plaetze": 3,
+  "waffen": 2,
+  "wuerfe": 1,
+  "auswahl_waffen": [
+   "repetierer",
+   "sturm",
+   "schrot",
+   "scharf",
+   "lmg"
+  ],
+  "auswahl_wuerfe": [
+   "granate",
+   "rauch",
+   "molotov",
+   "blend"
+  ],
+  "vorlagen": [
+   {
+    "name": "STURM",
+    "waffen": [
+     "sturm",
+     "schrot"
+    ],
+    "wuerfe": [
+     "granate"
+    ]
+   },
+   {
+    "name": "JAEGER",
+    "waffen": [
+     "scharf",
+     "repetierer"
+    ],
+    "wuerfe": [
+     "rauch"
+    ]
+   },
+   {
+    "name": "NAHKAMPF",
+    "waffen": [
+     "schrot",
+     "sturm"
+    ],
+    "wuerfe": [
+     "rauch"
+    ]
+   }
+  ],
+  "namenslaenge": 12
+ },
+ "modi": {
+  "pvp": "PVP",
+  "pve": "PVE",
+  "pvpve": "PVPVE",
+  "team": "TEAM",
+  "versus": "VERSUS",
+  "huegel": "HUEGEL"
+ },
+ "modi_hinweis": {
+  "pvp": "Jeder gegen jeden.",
+  "pve": "Alle zusammen gegen die Wellen.",
+  "pvpve": "Wellen, und dabei jeder gegen jeden.",
+  "team": "Zwei Mannschaften, Abschuesse zaehlen fuer das Team.",
+  "versus": "Ein Leben je Runde. Mitspieler koennen aufhelfen.",
+  "huegel": "Haltet den Kreis in der Mitte."
+ },
+ "teams": [
+  {
+   "name": "ROT",
+   "farbe": "#e2622f",
+   "dunkel": "#963c1e"
+  },
+  {
+   "name": "BLAU",
+   "farbe": "#3fd2c0",
+   "dunkel": "#1c605a"
+  }
+ ],
+ "seltenheit": [
+  {
+   "name": "GEBRAUCHT",
+   "farbe": "#847c6e",
+   "anteil": 0.6
+  },
+  {
+   "name": "INSTAND",
+   "farbe": "#6096c4",
+   "anteil": 0.25
+  },
+  {
+   "name": "SELTEN",
+   "farbe": "#8c6cd0",
+   "anteil": 0.1
+  },
+  {
+   "name": "RAR",
+   "farbe": "#ce54a8",
+   "anteil": 0.04
+  },
+  {
+   "name": "LEGENDE",
+   "farbe": "#e8a838",
+   "anteil": 0.01
+  }
+ ],
+ "rollen": {
+  "blend_flug": "blendgranate",
+  "blend_hand": "spieler_blend",
+  "blend_knall": "blend",
+  "blend_pfeifen": "blend_pfeifen",
+  "blend_symbol": "waffe_blend",
+  "brecheisen_hand": "spieler_brecheisen",
+  "brecheisen_knall": "schuss",
+  "brecheisen_symbol": "waffe_brecheisen",
+  "figur": "spieler",
+  "figur_boden": "spieler_boden",
+  "granate_hand": "spieler_granate",
+  "granate_knall": "schuss",
+  "granate_symbol": "waffe_granate",
+  "lmg_hand": "spieler_lmg",
+  "lmg_knall": "schuss_lmg",
+  "lmg_symbol": "waffe_lmg",
+  "molotov_flug": "molotov",
+  "molotov_hand": "spieler_molotov",
+  "molotov_knall": "molotov",
+  "molotov_symbol": "waffe_molotov",
+  "rakete_hand": "spieler_rakete",
+  "rakete_knall": "schuss",
+  "rakete_symbol": "waffe_rakete",
+  "rauch_hand": "spieler_rauch",
+  "rauch_knall": "schuss",
+  "rauch_symbol": "waffe_rauch",
+  "repetierer_hand": "spieler_repetierer",
+  "repetierer_knall": "schuss_repetierer",
+  "repetierer_symbol": "waffe_repetierer",
+  "scharf_hand": "spieler_scharf",
+  "scharf_knall": "schuss_scharf",
+  "scharf_symbol": "waffe_scharf",
+  "schrot_hand": "spieler_schrot",
+  "schrot_knall": "schuss_schrot",
+  "schrot_symbol": "waffe_schrot",
+  "sturm_hand": "spieler_sturm",
+  "sturm_knall": "schuss_sturm",
+  "sturm_symbol": "waffe_sturm"
+ },
+ "figur": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAYAAAByDd+UAAABeUlEQVRIie2VMWrDMBSGn0sKAZOQKWjIUuPJQ7P2ADlAc4BA1i6hpCSHSHAIWbIWeoDkADlA13rwZFQohYpCIaQYAhncoTxh2ZYsNVPBPxisZz19+mXpCaDSf5dlmtCy6wm+7+Ojcb52AoJ2mxmP9fpTY3BNF4ag0WTB4xjr9aeJLrQUiDAE3d/d8m8Y221m2lAth1lQkTyXQBixBEC9xMoZoTtKqRBfrrdKeBgxkIEvlJkFQthqPobVfFzYx3MJeC4RdjRKe0kRloVgO72Z0spCpcCWXU88lwiwIj2Qa6H9/vnN35tNO9ffyGHWXRp2+fQIp8EQbrpXyjFK/yGlFBzHMZmXUkYOR5OF4NJnAXd5GgwBAOD55VU5htThPj5aYcRgud4CpVS6I30WgM8C3n77+LI67QZ02g04HOLcU3oOPZcIhz59LNC1TGHEcmextBSpoGU6C4jSAasqjVaFz0JVEBnICIhQgN+yVQTSvZ7OuvFNQJUq/Vk/l262eWiuTV4AAAAASUVORK5CYII=",
+ "farben": {
+  "amber": "#e8a33d",
+  "creme": "#eee2cb",
+  "matt": "#836c52",
+  "matt_dunkel": "#544231",
+  "grund": "#090605"
+ },
+ "schrift": {
+  "breite": 5,
+  "hoehe": 7,
+  "zeichen": {
+   "A": "01110/10001/10001/11111/10001/10001/10001",
+   "B": "11110/10001/10001/11110/10001/10001/11110",
+   "C": "01110/10001/10000/10000/10000/10001/01110",
+   "D": "11110/10001/10001/10001/10001/10001/11110",
+   "E": "11111/10000/10000/11110/10000/10000/11111",
+   "F": "11111/10000/10000/11110/10000/10000/10000",
+   "G": "01110/10001/10000/10111/10001/10001/01111",
+   "H": "10001/10001/10001/11111/10001/10001/10001",
+   "I": "11111/00100/00100/00100/00100/00100/11111",
+   "J": "00111/00010/00010/00010/00010/10010/01100",
+   "K": "10001/10010/10100/11000/10100/10010/10001",
+   "L": "10000/10000/10000/10000/10000/10000/11111",
+   "M": "10001/11011/10101/10001/10001/10001/10001",
+   "N": "10001/11001/10101/10011/10001/10001/10001",
+   "O": "01110/10001/10001/10001/10001/10001/01110",
+   "P": "11110/10001/10001/11110/10000/10000/10000",
+   "Q": "01110/10001/10001/10001/10101/10010/01101",
+   "R": "11110/10001/10001/11110/10100/10010/10001",
+   "S": "01111/10000/10000/01110/00001/00001/11110",
+   "T": "11111/00100/00100/00100/00100/00100/00100",
+   "U": "10001/10001/10001/10001/10001/10001/01110",
+   "V": "10001/10001/10001/10001/10001/01010/00100",
+   "W": "10001/10001/10001/10001/10101/11011/10001",
+   "X": "10001/10001/01010/00100/01010/10001/10001",
+   "Y": "10001/10001/01010/00100/00100/00100/00100",
+   "Z": "11111/00001/00010/00100/01000/10000/11111",
+   "0": "01110/10001/10011/10101/11001/10001/01110",
+   "1": "00100/01100/00100/00100/00100/00100/01110",
+   "2": "01110/10001/00001/00010/00100/01000/11111",
+   "3": "11110/00001/00001/01110/00001/00001/11110",
+   "4": "00010/00110/01010/10010/11111/00010/00010",
+   "5": "11111/10000/11110/00001/00001/10001/01110",
+   "6": "00110/01000/10000/11110/10001/10001/01110",
+   "7": "11111/00001/00010/00100/01000/01000/01000",
+   "8": "01110/10001/10001/01110/10001/10001/01110",
+   "9": "01110/10001/10001/01111/00001/00010/01100",
+   " ": "00000/00000/00000/00000/00000/00000/00000",
+   ".": "00000/00000/00000/00000/00000/01100/01100",
+   ",": "00000/00000/00000/00000/01100/01100/01000",
+   ":": "00000/01100/01100/00000/01100/01100/00000",
+   "-": "00000/00000/00000/11111/00000/00000/00000",
+   "_": "00000/00000/00000/00000/00000/00000/11111",
+   "/": "00001/00001/00010/00100/01000/10000/10000",
+   "!": "00100/00100/00100/00100/00100/00000/00100",
+   "?": "01110/10001/00001/00010/00100/00000/00100",
+   "%": "11001/11010/00010/00100/01000/01011/10011",
+   "+": "00000/00100/00100/11111/00100/00100/00000",
+   "[": "01110/01000/01000/01000/01000/01000/01110",
+   "]": "01110/00010/00010/00010/00010/00010/01110",
+   "<": "00010/00100/01000/10000/01000/00100/00010",
+   ">": "01000/00100/00010/00001/00010/00100/01000",
+   "·": "00000/00000/01100/01100/00000/00000/00000",
+   "∞": "00000/00000/01010/10101/01010/00000/00000",
+   "Ä": "01010/00000/01110/10001/11111/10001/10001",
+   "Ö": "01010/00000/01110/10001/10001/10001/01110",
+   "Ü": "01010/00000/10001/10001/10001/10001/01110"
+  },
+  "ersatz": {
+   "ä": "Ä",
+   "ö": "Ö",
+   "ü": "Ü",
+   "ß": "SS"
+  }
+ },
+ "namenslaenge": 24,
+ "wortlaenge": 72
+}
+;
+
+// ══════════════════════════════════════════════════════════════════
+// Schrift - die 5x7-Pixelschrift des Spiels
+//
+// Ueberschriften werden damit auf eine Leinwand gemalt, nicht gesetzt.
+// Das ist der Unterschied zwischen "sieht aus wie das Spiel" und "ist
+// dieselbe Schrift wie im Spiel". Fliesstext bleibt eine normale
+// Schriftart - eine 5x7-Schrift ist zum Lesen von Absaetzen zu grob.
+// ══════════════════════════════════════════════════════════════════
+const Schrift = {
+  zeilen: (() => {
+    const z = {};
+    for (const [k, v] of Object.entries(DATEN.schrift.zeichen)) z[k] = v.split("/");
+    return z;
+  })(),
+  vorbereiten(text){
+    let aus = "";
+    for (const c of String(text)){
+      const e = DATEN.schrift.ersatz[c];
+      aus += e !== undefined ? e : (c.toUpperCase());
+    }
+    return aus;
+  },
+  malen(text, skala, farbe){
+    const GW = DATEN.schrift.breite, GH = DATEN.schrift.hoehe, luft = 1;
+    const t = this.vorbereiten(text);
+    const c = document.createElement("canvas");
+    c.className = "pixeltext";
+    c.width = Math.max(1, t.length * (GW + luft) * skala - luft * skala);
+    c.height = GH * skala;
+    const g = c.getContext("2d");
+    g.fillStyle = farbe;
+    for (let i = 0; i < t.length; i++){
+      const rows = this.zeilen[t[i]] || this.zeilen["?"];
+      if (!rows) continue;
+      for (let y = 0; y < rows.length; y++)
+        for (let x = 0; x < rows[y].length; x++)
+          if (rows[y][x] === "1")
+            g.fillRect((i * (GW + luft) + x) * skala, y * skala, skala, skala);
+    }
+    return c;
+  },
+};
+
+// ══════════════════════════════════════════════════════════════════
+// Netz - alles, was mit dem Server redet, an einer Stelle
+//
+// Dieselben zwei Wege wie im Spiel (dustfront/ablage.py):
+//   /auth/v1/...   Anmeldedienst. Kennwoerter gehen nur hierhin.
+//   /rest/v1/...   Die Tabellen. Der Server laesst ueber den
+//                  Zeilenschutz nur die eigenen Zeilen durch.
+//
+// Kein Aufruf wirft. Was schiefgeht, kommt als {ok:false, fehler} -
+// genauso wie im Spiel, damit sich beide gleich verhalten.
+// ══════════════════════════════════════════════════════════════════
+const Netz = {
+  get url(){ return (DATEN.server.url || "").replace(/\/+$/, ""); },
+  get schluessel(){ return DATEN.server.schluessel || ""; },
+  get eingerichtet(){ return !!(this.url && this.schluessel); },
+
+  postfach(name){
+    return name.trim().toLowerCase() + "@" + DATEN.server.postfach;
+  },
+
+  async rufen(weg, {daten, marke, methode, kopf} = {}){
+    if (!this.eingerichtet) return {ok:false, fehler:"KEIN SERVER EINGETRAGEN"};
+    const k = {
+      "apikey": this.schluessel,
+      "Authorization": "Bearer " + (marke || this.schluessel),
+      "Accept": "application/json",
+      ...(kopf || {}),
+    };
+    if (daten !== undefined) k["Content-Type"] = "application/json";
+    let antwort;
+    try{
+      antwort = await fetch(this.url + weg, {
+        method: methode || (daten !== undefined ? "POST" : "GET"),
+        headers: k,
+        body: daten !== undefined ? JSON.stringify(daten) : undefined,
+      });
+    }catch(e){
+      return {ok:false, fehler:"SERVER NICHT ERREICHBAR"};
+    }
+    const roh = await antwort.text();
+    let inhalt = null;
+    if (roh.trim()){ try{ inhalt = JSON.parse(roh); }catch(e){ inhalt = null; } }
+    if (!antwort.ok){
+      const grund = (inhalt && (inhalt.msg || inhalt.message ||
+                    inhalt.error_description || inhalt.error)) || ("FEHLER " + antwort.status);
+      return {ok:false, fehler:String(grund).toUpperCase().slice(0,140)};
+    }
+    return {ok:true, daten: inhalt === null ? {} : inhalt};
+  },
+
+  async anmelden(name, wort){
+    const a = await this.rufen("/auth/v1/token?grant_type=password",
+      {daten:{email:this.postfach(name), password:wort}});
+    return a.ok ? this.sitzungLesen(a.daten, name) : a;
+  },
+
+  async anlegen(name, wort){
+    const a = await this.rufen("/auth/v1/signup",
+      {daten:{email:this.postfach(name), password:wort, data:{name}}});
+    return a.ok ? this.sitzungLesen(a.daten, name) : a;
+  },
+
+  sitzungLesen(d, name){
+    const marke = d && d.access_token;
+    const wer = d && d.user && d.user.id;
+    if (!marke || !wer) return {ok:false, fehler:"KONTO ANGELEGT, ABER NOCH NICHT BESTAETIGT"};
+    return {ok:true, daten:{
+      marke, erneuern: d.refresh_token || "", kennung: wer,
+      name: (d.user.user_metadata && d.user.user_metadata.name) || name,
+      laeuft_ab: Date.now() + (Number(d.expires_in) || 3600) * 1000,
+    }};
+  },
+
+  async erneuern(marke){
+    const a = await this.rufen("/auth/v1/token?grant_type=refresh_token",
+      {daten:{refresh_token:marke}});
+    return a.ok ? this.sitzungLesen(a.daten, "") : a;
+  },
+
+  async kennwortAendern(marke, wort){
+    return this.rufen("/auth/v1/user", {daten:{password:wort}, marke, methode:"PUT"});
+  },
+
+  async profilLesen(marke){
+    const a = await this.rufen("/rest/v1/profil?select=name,fassung,werte,loadouts&limit=1",
+      {marke});
+    if (!a.ok) return a;
+    const z = Array.isArray(a.daten) && a.daten[0];
+    return {ok:true, daten: z
+      ? {name:z.name||"", fassung:Number(z.fassung)||0, werte:z.werte||{}, loadouts:z.loadouts||[]}
+      : {name:"", fassung:0, werte:{}, loadouts:[]}};
+  },
+
+  // Nur schreiben, wenn die Fassung noch stimmt - dieselbe Regel wie im
+  // Spiel. Wer eine alte Fassung schickt, trifft keine Zeile und bekommt
+  // eine Abfuhr statt eines stillen Ueberschreibens.
+  async profilSchreiben(marke, profil){
+    const erwartet = Number(profil.fassung) || 0;
+    const rumpf = {fassung: erwartet + 1,
+                   werte: profil.werte || {}, loadouts: profil.loadouts || []};
+    if (profil.name !== undefined) rumpf.name = profil.name;
+    const a = await this.rufen("/rest/v1/profil?fassung=eq." + erwartet,
+      {daten:rumpf, marke, methode:"PATCH", kopf:{"Prefer":"return=representation"}});
+    if (!a.ok) return a;
+    const z = Array.isArray(a.daten) && a.daten[0];
+    if (!z) return {ok:false, fehler:"PROFIL WURDE ZWISCHENDURCH GEAENDERT"};
+    return {ok:true, daten:{name:z.name||"", fassung:Number(z.fassung),
+                            werte:z.werte||{}, loadouts:z.loadouts||[]}};
+  },
+
+  async gefechteLesen(marke, hoechstens){
+    const a = await this.rufen("/rest/v1/gefecht?select=*&order=gespielt.desc&limit=" +
+      (hoechstens || 500), {marke});
+    if (!a.ok) return a;
+    return {ok:true, daten: Array.isArray(a.daten) ? a.daten : []};
+  },
+};
+
+// ══════════════════════════════════════════════════════════════════
+// Stand - was gerade bekannt ist
+// ══════════════════════════════════════════════════════════════════
+const SCHLUESSEL = "dustfront.konto.sitzung";
+const Stand = {
+  sitzung:null, profil:null, gefechte:[], seite:"UEBERSICHT", meldung:null,
+
+  laden(){
+    try{
+      const roh = localStorage.getItem(SCHLUESSEL);
+      if (roh) this.sitzung = JSON.parse(roh);
+    }catch(e){ this.sitzung = null; }
+  },
+  sichern(){
+    try{
+      if (this.sitzung) localStorage.setItem(SCHLUESSEL, JSON.stringify(this.sitzung));
+      else localStorage.removeItem(SCHLUESSEL);
+    }catch(e){ /* privates Fenster: dann eben nur fuer diesen Besuch */ }
+  },
+  abmelden(){
+    this.sitzung = null; this.profil = null; this.gefechte = [];
+    this.seite = "UEBERSICHT"; this.sichern(); zeichnen();
+  },
+};
+
+// ══════════════════════════════════════════════════════════════════
+// Bauen - kleine Helfer. Kein Rahmenwerk, nur Funktionen.
+// ══════════════════════════════════════════════════════════════════
+function el(art, klasse, text){
+  const e = document.createElement(art);
+  if (klasse) e.className = klasse;
+  if (text !== undefined && text !== null) e.textContent = text;
+  return e;
+}
+function anhaengen(ziel, ...kinder){ for (const k of kinder) if (k) ziel.appendChild(k); return ziel; }
+
+function ueberschrift(text, skala, farbe){
+  const h = el("div", "titel");
+  h.appendChild(Schrift.malen(text, skala || 3, farbe || DATEN.farben.amber));
+  return h;
+}
+
+function tafel(titel){
+  const t = el("div", "tafel kante");
+  if (titel){
+    const kopf = el("div");
+    kopf.style.marginBottom = "12px";
+    kopf.appendChild(Schrift.malen(titel, 2, DATEN.farben.amber));
+    t.appendChild(kopf);
+  }
+  return t;
+}
+
+function wertkachel(name, zahl, roh){
+  const k = el("div", "wert kante");
+  const z = el("div", "zahl mono", zahl);
+  if (String(zahl).length > 11) z.style.fontSize = "15px";
+  else if (String(zahl).length > 8) z.style.fontSize = "18px";
+  anhaengen(k, z, el("div", "bez", name));
+  if (roh) k.appendChild(el("div", "roh", roh));
+  return k;
+}
+
+function knopf(text, klasse, tun){
+  const b = el("button", "knopf kante" + (klasse ? " " + klasse : ""), text);
+  if (tun) b.addEventListener("click", tun);
+  return b;
+}
+
+function feld(bezeichnung, art, wert, attr){
+  const h = el("div", "feld");
+  h.appendChild(el("label", null, bezeichnung));
+  const i = el("input");
+  i.type = art; i.value = wert || "";
+  Object.assign(i, attr || {});
+  h.appendChild(i);
+  h.eingabe = i;
+  return h;
+}
+
+function meldung(text, art){
+  Stand.meldung = text ? {text, art: art || "arbeit"} : null;
+}
+
+function waffenbild(schluessel, gross){
+  const w = DATEN.waffen[schluessel];
+  if (!w) return null;
+  const i = el("img", "symbol" + (gross ? " gross" : ""));
+  i.src = w.bild; i.alt = w.name; i.title = w.name;
+  return i;
+}
+
+// Zahlen so anschreiben, wie ein Mensch sie liest. Sekunden und Meter
+// stehen roh in der Datenbank; hier bekommen sie ihre Einheit.
+function zahlText(schluessel, wert){
+  const n = Number(wert) || 0;
+  if (schluessel === "spielzeit" || schluessel === "zonenzeit"){
+    const s = Math.round(n);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    if (h) return h + " H " + String(m).padStart(2, "0") + " MIN";
+    if (m) return m + " MIN " + String(s % 60).padStart(2, "0") + " S";
+    return s + " S";
+  }
+  if (schluessel === "strecke"){
+    // Das Spiel rechnet in Pixeln; 32 Pixel sind eine Kachel.
+    return Math.round(n / 32).toLocaleString("de-DE") + " KACHELN";
+  }
+  if (!Number.isInteger(n)) return n.toFixed(1);
+  return n.toLocaleString("de-DE");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SEITEN - die Reiter
+//
+// Eine neue Seite ist genau ein Eintrag hier. `frei` sagt, ob sie schon
+// etwas kann; steht dort false, erscheint sie grau in der Leiste. Das
+// ist Absicht: was kommen soll, soll man sehen koennen.
+// ══════════════════════════════════════════════════════════════════
+const SEITEN = [
+  {name:"UEBERSICHT", frei:true, bauen:seiteUebersicht},
+  {name:"WERTE",      frei:true, bauen:seiteWerte},
+  {name:"WAFFEN",     frei:true, bauen:seiteWaffen},
+  {name:"RUNDEN",     frei:true, bauen:seiteRunden},
+  {name:"AUSRUESTUNG",frei:true, bauen:seiteAusruestung},
+  {name:"AUSSEHEN",   frei:false, bauen:seiteAussehen,
+   hinweis:"Vorbereitet, noch ohne Inhalt - siehe docs/KOSMETIK.md"},
+  {name:"KONTO",      frei:true, bauen:seiteKonto},
+];
+
+// ---- Uebersicht ---------------------------------------------------
+function seiteUebersicht(ziel){
+  const w = (Stand.profil && Stand.profil.werte) || {};
+  const t = tafel("AUF EINEN BLICK");
+  const g = el("div", "gitter g4");
+  const wichtig = ["abschuesse","tode","runden","siege","spielzeit","serie"];
+  for (const s of wichtig){
+    const d = DATEN.werte.find(v => v.schluessel === s);
+    if (d) g.appendChild(wertkachel(d.name, zahlText(s, w[s]), null));
+  }
+  // Verhaeltnis und Trefferquote rechnet die Seite aus - sie stehen
+  // nirgends gespeichert, und das soll auch so bleiben: abgeleitete
+  // Zahlen in der Datenbank laufen frueher oder spaeter auseinander.
+  const kd = (Number(w.tode) || 0) ? (Number(w.abschuesse)||0) / Number(w.tode) : (Number(w.abschuesse)||0);
+  g.appendChild(wertkachel("VERHAELTNIS", kd.toFixed(2), "abschuesse / tode"));
+  const quote = (Number(w.schuesse) || 0) ? 100 * (Number(w.treffer)||0) / Number(w.schuesse) : 0;
+  g.appendChild(wertkachel("TREFFERQUOTE", quote.toFixed(1) + " %", "treffer / schuesse"));
+  t.appendChild(g);
+  ziel.appendChild(t);
+
+  const t2 = tafel("WAS MITLAEUFT");
+  const p = el("div", "klein matt");
+  p.innerHTML =
+    "Alles, was DUSTFRONT ueber dich speichert, steht auf dieser Seite - " +
+    "nicht eine Auswahl davon, sondern alles. Unter <b class='creme'>WERTE</b> " +
+    "steht jeder einzelne Zaehler mit seinem Namen in der Datenbank, unter " +
+    "<b class='creme'>RUNDEN</b> jede gespielte Runde einzeln. " +
+    "Was <b>nicht</b> gespeichert wird: keine Adresse, kein echter Name, " +
+    "keine Aufzeichnung davon, wann du spielst und mit wem, nichts vom " +
+    "Rechner. Der Name, mit dem du dich anmeldest, wird zu einer Adresse " +
+    "auf einer Domaene, die es nicht gibt (" + DATEN.server.postfach + ") - " +
+    "es gibt also gar keine, an die jemand schreiben koennte.";
+  t2.appendChild(p);
+  const reihe = el("div");
+  reihe.style.marginTop = "14px";
+  reihe.appendChild(knopf("ALLES HERUNTERLADEN", null, herunterladen));
+  t2.appendChild(reihe);
+  ziel.appendChild(t2);
+}
+
+function herunterladen(){
+  const alles = {
+    gezogen: new Date().toISOString(),
+    konto: {name: Stand.sitzung.name, kennung: Stand.sitzung.kennung},
+    profil: Stand.profil,
+    gefechte: Stand.gefechte,
+  };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(alles, null, 2)],
+    {type:"application/json"}));
+  a.download = "dustfront-" + (Stand.sitzung.name || "konto").toLowerCase() + ".json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ---- Werte --------------------------------------------------------
+function seiteWerte(ziel){
+  const w = (Stand.profil && Stand.profil.werte) || {};
+  const t = tafel("JEDER ZÄHLER");
+  t.appendChild(el("div", "klein matt",
+    "Links der Name, den das Spiel benutzt, klein darunter der Name in der " +
+    "Datenbank. Was das Spiel noch nicht kennt, steht unten unter SONST NOCH."));
+  const g = el("div", "gitter g3");
+  g.style.marginTop = "12px";
+  const bekannt = new Set();
+  for (const v of DATEN.werte){
+    bekannt.add(v.schluessel);
+    g.appendChild(wertkachel(v.name, zahlText(v.schluessel, w[v.schluessel]),
+      v.schluessel + (v.art === "bestes" ? "  (bestes)" : "")));
+  }
+  t.appendChild(g);
+  ziel.appendChild(t);
+
+  // Alles, was sonst noch im Profil steht. Das ist der eigentliche
+  // Punkt an "transparent": nicht nur die Zaehler zeigen, die man
+  // kennt, sondern auch die, die spaeter dazukommen.
+  const rest = Object.keys(w).filter(k => !bekannt.has(k)).sort();
+  const t2 = tafel("SONST NOCH");
+  if (!rest.length){
+    t2.appendChild(el("div", "klein matt",
+      "Nichts. Im Profil steht kein Wert, den diese Seite nicht kennt."));
+  }else{
+    t2.appendChild(el("div", "klein matt",
+      "Werte, die das Spiel gespeichert hat und die diese Seite noch nicht " +
+      "benennen kann. Sie stehen hier trotzdem - roh."));
+    const tab = el("table");
+    tab.style.marginTop = "10px";
+    const kopf = el("tr");
+    anhaengen(kopf, el("th", null, "SCHLUESSEL"), el("th", "rechts", "WERT"));
+    anhaengen(tab, anhaengen(el("thead"), kopf));
+    const koerper = el("tbody");
+    for (const k of rest){
+      const r = el("tr");
+      anhaengen(r, el("td", "matt", k),
+        el("td", "rechts mono", typeof w[k] === "object"
+          ? JSON.stringify(w[k]) : String(w[k])));
+      koerper.appendChild(r);
+    }
+    tab.appendChild(koerper);
+    t2.appendChild(tab);
+  }
+  ziel.appendChild(t2);
+}
+
+// ---- Waffen -------------------------------------------------------
+function seiteWaffen(ziel){
+  // Je Waffe zaehlt das Spiel Schuesse, Treffer und Abschuesse. Die
+  // Zahlen liegen in den Runden, nicht im Profil - also hier addiert.
+  const summe = {};
+  for (const g of Stand.gefechte){
+    const wf = g.waffen || {};
+    for (const [waffe, werte] of Object.entries(wf)){
+      const s = summe[waffe] || (summe[waffe] = {});
+      for (const [k, v] of Object.entries(werte || {}))
+        s[k] = (s[k] || 0) + (Number(v) || 0);
+    }
+  }
+  const t = tafel("JE WAFFE");
+  if (!Stand.gefechte.length){
+    t.appendChild(el("div", "klein matt",
+      "Noch keine Runde gespielt - darum auch noch keine Zahlen je Waffe."));
+    ziel.appendChild(t);
+    return;
+  }
+  t.appendChild(el("div", "klein matt",
+    "Addiert aus allen " + Stand.gefechte.length + " Runden. Die Quote ist " +
+    "Treffer durch Schuesse."));
+  const tab = el("table");
+  tab.style.marginTop = "10px";
+  const kopf = el("tr");
+  anhaengen(kopf, el("th", null, ""), el("th", null, "WAFFE"));
+  for (const s of DATEN.waffenwerte) anhaengen(kopf, el("th", "rechts", s.toUpperCase()));
+  anhaengen(kopf, el("th", "rechts", "QUOTE"), el("th", null, "ANTEIL"));
+  anhaengen(tab, anhaengen(el("thead"), kopf));
+  const koerper = el("tbody");
+  const reihen = Object.entries(summe).sort(
+    (a, b) => (b[1].abschuesse || 0) - (a[1].abschuesse || 0));
+  const meiste = Math.max(1, ...reihen.map(r => r[1].abschuesse || 0));
+  for (const [waffe, s] of reihen){
+    const r = el("tr");
+    const bildzelle = el("td");
+    const b = waffenbild(waffe, false);
+    if (b) bildzelle.appendChild(b);
+    anhaengen(r, bildzelle,
+      el("td", "creme", (DATEN.waffen[waffe] || {}).name || waffe));
+    for (const k of DATEN.waffenwerte)
+      anhaengen(r, el("td", "rechts mono", (s[k] || 0).toLocaleString("de-DE")));
+    const q = (s.schuesse || 0) ? 100 * (s.treffer || 0) / s.schuesse : 0;
+    anhaengen(r, el("td", "rechts mono matt", q.toFixed(1) + " %"));
+    // Ein Balken in eigener Spalte: man sieht auf einen Blick, womit
+    // wirklich gespielt wird, ohne Zahlen zu vergleichen. Als Zeile
+    // darunter sah er aus wie eine Trennlinie.
+    const bz = el("td");
+    bz.style.width = "140px";
+    const bal = el("div", "balken");
+    const inner = el("i");
+    inner.style.width = (100 * (s.abschuesse || 0) / meiste) + "%";
+    bal.appendChild(inner);
+    bz.appendChild(bal);
+    r.appendChild(bz);
+    koerper.appendChild(r);
+  }
+  tab.appendChild(koerper);
+  t.appendChild(tab);
+  ziel.appendChild(t);
+}
+
+// ---- Runden -------------------------------------------------------
+function seiteRunden(ziel){
+  const t = tafel("JEDE RUNDE");
+  if (!Stand.gefechte.length){
+    t.appendChild(el("div", "klein matt", "Noch keine Runde gespielt."));
+    ziel.appendChild(t);
+    return;
+  }
+  t.appendChild(el("div", "klein matt",
+    Stand.gefechte.length + " Runden, neueste zuerst. Jede Zeile ist eine " +
+    "Zeile in der Tabelle gefecht - mehr steht dort nicht."));
+  const tab = el("table");
+  tab.style.marginTop = "10px";
+  const kopf = el("tr");
+  for (const s of ["WANN","ART","SEITE","AUSGANG","ABSCHUESSE","TODE","SCHADEN"])
+    anhaengen(kopf, el("th", s === "WANN" || s === "ART" ? null : "rechts", s));
+  anhaengen(tab, anhaengen(el("thead"), kopf));
+  const koerper = el("tbody");
+  for (const g of Stand.gefechte){
+    const w = g.werte || {};
+    const r = el("tr");
+    const wann = new Date((Number(g.gespielt) || 0) * 1000);
+    anhaengen(r,
+      el("td", "matt", isNaN(wann) ? "-" : wann.toLocaleString("de-DE")),
+      el("td", null, (DATEN.modi[g.modus] || g.modus || "-")));
+    if (DATEN.modi_hinweis && DATEN.modi_hinweis[g.modus])
+      r.lastChild.title = DATEN.modi_hinweis[g.modus];
+    const seite = el("td", "rechts");
+    if (g.team === 0 || g.team === 1){
+      const s = DATEN.teams[g.team];
+      seite.textContent = s.name;
+      seite.style.color = s.farbe;
+    }else seite.textContent = "-";
+    r.appendChild(seite);
+    const aus = el("td", "rechts");
+    aus.textContent = g.gewonnen === true ? "SIEG" : g.gewonnen === false ? "NIEDERLAGE" : "-";
+    aus.className = "rechts " + (g.gewonnen === true ? "amber" : "matt");
+    r.appendChild(aus);
+    for (const k of ["abschuesse","tode","schaden"])
+      anhaengen(r, el("td", "rechts mono", (Number(w[k]) || 0).toLocaleString("de-DE")));
+    koerper.appendChild(r);
+  }
+  tab.appendChild(koerper);
+  t.appendChild(tab);
+  ziel.appendChild(t);
+}
+
+// ---- Ausruestung --------------------------------------------------
+function seiteAusruestung(ziel){
+  const L = DATEN.loadout;
+  const t = tafel("AUSRÜSTUNG");
+  t.appendChild(el("div", "klein matt",
+    "Ein Loadout ist " + L.waffen + " Waffen und " + L.wuerfe + " Wurfwaffe. " +
+    "Das Brecheisen steht nicht darin - es liegt auf F und ist immer da. " +
+    "Ob die Loadouts in einer Runde ueberhaupt gelten, entscheidet der " +
+    "Gastgeber."));
+
+  const saetze = holeLoadouts();
+  const g = el("div", "gitter g3");
+  g.style.marginTop = "12px";
+  const gewaehlt = Number((Stand.profil.werte || {}).loadout_gewaehlt) || 0;
+
+  saetze.forEach((satz, i) => {
+    const k = el("div", "satz kante" + (i === gewaehlt ? " gewaehlt" : ""));
+    const namensfeld = el("input");
+    namensfeld.value = satz.name || ("SATZ " + (i + 1));
+    namensfeld.maxLength = L.namenslaenge;
+    namensfeld.style.marginBottom = "9px";
+    namensfeld.addEventListener("input", () => { satz.name = namensfeld.value.toUpperCase(); });
+    k.appendChild(namensfeld);
+
+    const schlitz = (liste, stelle, auswahl) => {
+      const z = el("div", "schlitz");
+      const bild = waffenbild(liste[stelle], false);
+      if (bild) z.appendChild(bild);
+      const s = el("select");
+      for (const w of auswahl){
+        const o = el("option", null, (DATEN.waffen[w] || {}).name || w);
+        o.value = w;
+        if (w === liste[stelle]) o.selected = true;
+        s.appendChild(o);
+      }
+      s.addEventListener("change", () => { liste[stelle] = s.value; zeichnen(); });
+      z.appendChild(s);
+      return z;
+    };
+    for (let j = 0; j < L.waffen; j++) k.appendChild(schlitz(satz.waffen, j, L.auswahl_waffen));
+    for (let j = 0; j < L.wuerfe; j++) k.appendChild(schlitz(satz.wuerfe, j, L.auswahl_wuerfe));
+
+    const fuss = el("div");
+    fuss.style.marginTop = "9px";
+    if (i === gewaehlt){
+      fuss.appendChild(el("div", "klein amber", "GETRAGEN"));
+    }else{
+      fuss.appendChild(knopf("TRAGEN", null, () => {
+        Stand.profil.werte = Object.assign({}, Stand.profil.werte,
+          {loadout_gewaehlt: i});
+        sichernProfil();
+      }));
+    }
+    k.appendChild(fuss);
+    g.appendChild(k);
+  });
+  t.appendChild(g);
+
+  const reihe = el("div");
+  reihe.style.marginTop = "14px";
+  reihe.appendChild(knopf("SPEICHERN", "stark", () => {
+    Stand.profil.loadouts = saetze;
+    sichernProfil();
+  }));
+  t.appendChild(reihe);
+  ziel.appendChild(t);
+}
+
+// Immer so viele Saetze, wie K.LOADOUT vorsieht - fehlende werden aus
+// den Vorlagen aufgefuellt. So steht die Maske nie halb leer da, und
+// was gespeichert wird, passt zu dem, was das Spiel erwartet.
+function holeLoadouts(){
+  const L = DATEN.loadout;
+  const da = Array.isArray(Stand.profil.loadouts) ? Stand.profil.loadouts : [];
+  const aus = [];
+  for (let i = 0; i < L.plaetze; i++){
+    const v = L.vorlagen[i % L.vorlagen.length];
+    const s = da[i] || {};
+    const waffen = [], wuerfe = [];
+    for (let j = 0; j < L.waffen; j++){
+      const w = (s.waffen || [])[j];
+      waffen.push(L.auswahl_waffen.includes(w) ? w : v.waffen[j % v.waffen.length]);
+    }
+    for (let j = 0; j < L.wuerfe; j++){
+      const w = (s.wuerfe || [])[j];
+      wuerfe.push(L.auswahl_wuerfe.includes(w) ? w : v.wuerfe[j % v.wuerfe.length]);
+    }
+    aus.push({name: String(s.name || v.name).toUpperCase().slice(0, L.namenslaenge),
+              waffen, wuerfe});
+  }
+  return aus;
+}
+
+// ---- Aussehen (vorbereitet) ---------------------------------------
+function seiteAussehen(ziel){
+  const t = tafel("AUSSEHEN");
+  t.appendChild(el("div", "klein matt",
+    "Noch nichts davon ist eingebaut. Was im Spiel hinter einer Rolle " +
+    "steht, laesst sich spaeter austauschen - die " +
+    Object.keys(DATEN.rollen).length + " Rollen gibt es schon, die " +
+    "Stufen auch. Wie es aussehen wuerde, steht in docs/KOSMETIK.md."));
+  const g = el("div", "gitter g4");
+  g.style.marginTop = "12px";
+  for (const s of DATEN.seltenheit){
+    const k = el("div", "wert kante");
+    k.style.borderColor = s.farbe;
+    const z = el("div", "zahl");
+    z.textContent = (s.anteil * 100).toFixed(1) + " %";
+    z.style.color = s.farbe;
+    anhaengen(k, z, el("div", "bez", s.name));
+    g.appendChild(k);
+  }
+  t.appendChild(g);
+  ziel.appendChild(t);
+}
+
+// ---- Konto --------------------------------------------------------
+function seiteKonto(ziel){
+  const t = tafel("KONTO");
+  const namensfeld = feld("ANZEIGENAME", "text", Stand.profil.name || Stand.sitzung.name,
+    {maxLength: DATEN.namenslaenge});
+  t.appendChild(namensfeld);
+  t.appendChild(el("div", "klein matt",
+    "Der Anzeigename steht auf der Siegtafel. Angemeldet wird weiter mit " +
+    "dem Namen, mit dem das Konto angelegt wurde - der laesst sich nicht " +
+    "aendern, denn an ihm haengen alle Runden."));
+  const r1 = el("div");
+  r1.style.margin = "12px 0 22px";
+  r1.appendChild(knopf("NAMEN SPEICHERN", "stark", () => {
+    Stand.profil.name = namensfeld.eingabe.value.trim().toUpperCase();
+    sichernProfil();
+  }));
+  t.appendChild(r1);
+
+  const neu = feld("NEUES KENNWORT", "password", "", {autocomplete:"new-password"});
+  const nochmal = feld("NOCH EINMAL", "password", "", {autocomplete:"new-password"});
+  anhaengen(t, neu, nochmal);
+  const r2 = el("div");
+  r2.appendChild(knopf("KENNWORT AENDERN", null, async () => {
+    const a = neu.eingabe.value, b = nochmal.eingabe.value;
+    if (a.length < 8) return sageUndZeichne("KENNWORT ZU KURZ - MINDESTENS 8 ZEICHEN", "schlecht");
+    if (a !== b) return sageUndZeichne("DIE BEIDEN KENNWOERTER SIND NICHT GLEICH", "schlecht");
+    meldung("AENDERE...", "arbeit"); zeichnen();
+    const antwort = await Netz.kennwortAendern(Stand.sitzung.marke, a);
+    sageUndZeichne(antwort.ok ? "KENNWORT GEAENDERT" : antwort.fehler,
+      antwort.ok ? "gut" : "schlecht");
+  }));
+  t.appendChild(r2);
+  ziel.appendChild(t);
+
+  const t2 = tafel("ZUGANG");
+  const tab = el("table");
+  for (const [k, v] of [
+    ["KENNUNG", Stand.sitzung.kennung],
+    ["SERVER", Netz.url],
+    ["FASSUNG DES PROFILS", String(Stand.profil.fassung)],
+    ["RUNDEN AUF DEM SERVER", String(Stand.gefechte.length)],
+  ]){
+    const r = el("tr");
+    anhaengen(r, el("td", "matt", k), el("td", "rechts mono klein", v));
+    tab.appendChild(r);
+  }
+  t2.appendChild(tab);
+  const r3 = el("div");
+  r3.style.marginTop = "14px";
+  anhaengen(r3, knopf("NEU LADEN", null, () => ladenUndZeichnen(true)),
+    knopf("ABMELDEN", null, () => Stand.abmelden()));
+  r3.lastChild.style.marginLeft = "8px";
+  t2.appendChild(r3);
+  t2.appendChild(el("div", "klein matt",
+    "Ein Konto ganz zu loeschen geht von hier aus nicht: dazu braucht es " +
+    "den geheimen Schluessel des Projekts, und der darf in keiner Datei " +
+    "stehen, die jemand herunterladen kann. Wer sein Konto weghaben will, " +
+    "sagt es dem, der den Server betreut."));
+  ziel.appendChild(t2);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Ablauf
+// ══════════════════════════════════════════════════════════════════
+function sageUndZeichne(text, art){ meldung(text, art); zeichnen(); }
+
+async function sichernProfil(){
+  meldung("SPEICHERE...", "arbeit"); zeichnen();
+  const antwort = await Netz.profilSchreiben(Stand.sitzung.marke, Stand.profil);
+  if (antwort.ok){
+    Stand.profil = antwort.daten;
+    sageUndZeichne("GESPEICHERT", "gut");
+  }else{
+    // Die Fassung hat nicht mehr gestimmt: frisch lesen, damit der
+    // naechste Versuch auf dem steht, was wirklich da ist.
+    await ladenUndZeichnen(true);
+    sageUndZeichne(antwort.fehler, "schlecht");
+  }
+}
+
+async function ladenUndZeichnen(still){
+  if (!still){ meldung("LADE...", "arbeit"); zeichnen(); }
+  const p = await Netz.profilLesen(Stand.sitzung.marke);
+  if (!p.ok){
+    // Abgelaufene Sitzung: einmal erneuern, sonst hinaus.
+    if (Stand.sitzung.erneuern){
+      const e = await Netz.erneuern(Stand.sitzung.erneuern);
+      if (e.ok){
+        Stand.sitzung = Object.assign({}, Stand.sitzung, e.daten);
+        Stand.sichern();
+        return ladenUndZeichnen(true);
+      }
+    }
+    Stand.abmelden();
+    return sageUndZeichne("DIE ANMELDUNG IST ABGELAUFEN", "schlecht");
+  }
+  Stand.profil = p.daten;
+  const g = await Netz.gefechteLesen(Stand.sitzung.marke);
+  Stand.gefechte = g.ok ? g.daten : [];
+  if (!still) meldung(null);
+  zeichnen();
+}
+
+function zeichnen(){
+  const r = document.getElementById("rahmen");
+  r.textContent = "";
+  if (!Stand.sitzung) return zeichneTor(r);
+
+  const kopf = el("div", "kopf");
+  const links = el("div");
+  anhaengen(links, ueberschrift("DUSTFRONT", 4),
+    el("div", "unter", "KONTO  ·  VERSION " + DATEN.version + "  ·  " + DATEN.phase));
+  kopf.appendChild(links);
+  const wer = el("div", "wer");
+  wer.style.display = "flex";
+  wer.style.alignItems = "center";
+  wer.style.gap = "10px";
+  const kachel = el("div", "kasten kante");
+  kachel.style.padding = "5px";
+  kachel.style.lineHeight = "0";
+  const bild = el("img");
+  bild.src = DATEN.figur; bild.alt = "";
+  bild.style.imageRendering = "pixelated";
+  bild.style.height = "42px";
+  kachel.appendChild(bild);
+  const text = el("div");
+  anhaengen(text,
+    el("div", "creme", (Stand.profil && Stand.profil.name) || Stand.sitzung.name),
+    el("div", "klein dunkel", "ANGEMELDET"));
+  anhaengen(wer, kachel, text);
+  kopf.appendChild(wer);
+  r.appendChild(kopf);
+
+  const leiste = el("div", "leiste");
+  for (const s of SEITEN){
+    const b = el("button", "reiter kante", s.name.replace(/UE/g, "Ü"));
+    b.setAttribute("aria-selected", String(s.name === Stand.seite));
+    if (!s.frei){ b.disabled = true; b.title = s.hinweis || ""; }
+    else b.addEventListener("click", () => { Stand.seite = s.name; meldung(null); zeichnen(); });
+    leiste.appendChild(b);
+  }
+  r.appendChild(leiste);
+
+  if (Stand.meldung){
+    r.appendChild(el("div", "meldung kante " + Stand.meldung.art, Stand.meldung.text));
+  }
+
+  if (!Stand.profil){
+    r.appendChild(el("div", "meldung kante arbeit", "LADE..."));
+  }else{
+    const s = SEITEN.find(x => x.name === Stand.seite) || SEITEN[0];
+    const inhalt = el("div");
+    try{ s.bauen(inhalt); }
+    catch(e){ inhalt.appendChild(el("div", "meldung kante schlecht",
+      "DIESE SEITE HAT EINEN FEHLER: " + e.message)); }
+    r.appendChild(inhalt);
+  }
+
+  r.appendChild(el("div", "fuss",
+    "DUSTFRONT " + DATEN.version + " · Diese Seite liegt auf deinem Rechner " +
+    "und redet nur mit dem Spielserver. Erzeugt aus werkzeug_kontoseite.py."));
+}
+
+function zeichneTor(ziel){
+  const tor = el("div", "tor");
+  const t = el("div", "tafel kante");
+  const kopf = el("div", "mitte");
+  kopf.style.marginBottom = "4px";
+  kopf.appendChild(Schrift.malen("DUSTFRONT", 4, DATEN.farben.amber));
+  kopf.firstChild.style.margin = "0 auto";
+  t.appendChild(kopf);
+  t.appendChild(el("div", "unter mitte", "KONTO"));
+
+  if (!Netz.eingerichtet){
+    t.appendChild(el("div", "meldung kante schlecht",
+      "In dieser Datei steht kein Server. Sie wurde erzeugt, bevor einer " +
+      "eingetragen war - neu erzeugen mit werkzeug_kontoseite.py."));
+    ziel.appendChild(anhaengen(tor, t));
+    return;
+  }
+
+  const name = feld("NAME", "text", "", {autocomplete:"username",
+    maxLength: DATEN.namenslaenge});
+  const wort = feld("KENNWORT", "password", "", {autocomplete:"current-password"});
+  name.style.marginTop = "18px";
+  anhaengen(t, name, wort);
+
+  if (Stand.meldung) t.appendChild(el("div", "meldung kante " + Stand.meldung.art,
+    Stand.meldung.text));
+
+  const tun = async (anlegen) => {
+    const n = name.eingabe.value.trim(), w = wort.eingabe.value;
+    if (!n) return sageUndZeichne("NAME FEHLT", "schlecht");
+    if (w.length < 8) return sageUndZeichne("KENNWORT ZU KURZ - MINDESTENS 8 ZEICHEN", "schlecht");
+    meldung(anlegen ? "LEGE AN..." : "MELDE AN...", "arbeit"); zeichnen();
+    const a = anlegen ? await Netz.anlegen(n, w) : await Netz.anmelden(n, w);
+    if (!a.ok) return sageUndZeichne(a.fehler, "schlecht");
+    Stand.sitzung = a.daten; Stand.sichern(); meldung(null);
+    await ladenUndZeichnen(true);
+  };
+
+  const reihe = el("div");
+  reihe.style.display = "flex"; reihe.style.gap = "8px"; reihe.style.marginTop = "6px";
+  const anmelden = knopf("ANMELDEN", "stark", () => tun(false));
+  anmelden.style.flex = "1";
+  const neu = knopf("NEU", null, () => tun(true));
+  anhaengen(reihe, anmelden, neu);
+  t.appendChild(reihe);
+
+  for (const f of [name, wort])
+    f.eingabe.addEventListener("keydown", (e) => { if (e.key === "Enter") tun(false); });
+
+  t.appendChild(el("div", "klein matt",
+    "Dasselbe Konto wie im Spiel. Es gibt keine Adresse zum Zuruecksetzen - " +
+    "wer sein Kennwort vergisst, legt ein neues Konto an oder fragt den, " +
+    "der den Server betreut."));
+  tor.appendChild(t);
+  ziel.appendChild(tor);
+  setTimeout(() => name.eingabe.focus(), 0);
+}
+
+// ---- Los ----------------------------------------------------------
+Stand.laden();
+zeichnen();
+if (Stand.sitzung) ladenUndZeichnen(false);
+</script>
+</body>
+</html>
