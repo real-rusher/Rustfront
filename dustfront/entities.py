@@ -594,13 +594,15 @@ class Brandflaeche:
     """
 
     __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt",
-                 "kennung", "von", "_saat", "_feld", "_funkenrest")
+                 "kennung", "von", "verschont", "_saat", "_feld",
+                 "_funkenrest")
 
     _naechste_kennung = 0
 
     def __init__(self, pos, ebene: int, radius: float | None = None,
                  dauer: float | None = None, alter: float = 0.0,
-                 kennung: int | None = None, von=None) -> None:
+                 kennung: int | None = None, von=None,
+                 verschont: str = "") -> None:
         f = K.FEUER
         self.pos = pygame.Vector2(pos)
         self.ebene = int(ebene)
@@ -609,6 +611,12 @@ class Brandflaeche:
         self.alter = float(alter)
         self.lebt = True
         self.von = von
+        # Welche Fraktion dieses Feuer nicht anfasst.
+        #
+        # Leer heisst: es brennt alles, und so bleibt der Molotow eines
+        # Spielers auch. Gesetzt wird es nur beim Feuer, das ein Gegner
+        # legt - siehe Blaeher und Brandstifter. Der Grund steht dort.
+        self.verschont = str(verschont)
         if kennung is None:
             Brandflaeche._naechste_kennung += 1
             kennung = Brandflaeche._naechste_kennung
@@ -661,6 +669,8 @@ class Brandflaeche:
         f = K.FEUER
         for ziel in list(welt.nahe(self.pos, self.radius + 12, self.ebene)):
             if not ziel.lebt or ziel.fraktion == "geschoss":
+                continue
+            if self.verschont and ziel.fraktion == self.verschont:
                 continue
             anteil = self.brennt(ziel.pos, ziel.ebene)
             if anteil > 0.0:
@@ -1682,12 +1692,15 @@ class Spieler(Wesen):
 class Gegner(Wesen):
     fraktion = "feind"
 
-    def __init__(self, pos, art: str, ebene=0) -> None:
-        d = K.GEGNER[art]
+    def __init__(self, pos, art: str, ebene=0, leben: float | None = None) -> None:
+        d = K.gegner_daten(art)
         self.art = art
         self.daten = d
-        self.max_leben = d["leben"]
+        # Ein Boss bekommt sein Leben von aussen gesetzt: es haengt davon
+        # ab, wie viele mitspielen und wie viele Bosse schon lagen.
+        self.max_leben = float(d["leben"] if leben is None else leben)
         super().__init__(pos, ebene)
+        self.leben = self.max_leben
         self.radius = d["radius"]
         self.bild = d["bild"]
         self.schlag_rest = 0.0
@@ -1697,6 +1710,22 @@ class Gegner(Wesen):
         self.drall = RND.choice((-1, 1))      # Ausweichrichtung an Hindernissen
         self.ausweich_winkel = 0
         self.ausweich_rest = 0
+        # Fernkampf, Platzen und Faehigkeit: alles drei steht in den
+        # Daten und nicht in Unterklassen. Ein neuer Gegner ist damit ein
+        # Eintrag in der Tabelle und kein neuer Zweig im Code.
+        self.fern = d.get("fern")
+        self.platzt = d.get("platzt")
+        self.faehigkeit = d.get("faehigkeit")
+        self.ist_boss = K.ist_boss(art)
+        self.schiebbar = not d.get("unverschiebbar", False)
+        self.fern_rest = RND.uniform(0.6, 1.8) if self.fern else 0.0
+        # Faehigkeit: `rest` bis zum naechsten Mal, `vorlauf` laeuft,
+        # waehrend sie schon angekuendigt ist. Der Vorlauf ist der Grund,
+        # warum ein Boss fair ist - man sieht, was kommt, und hat Zeit.
+        self.f_rest = (self.faehigkeit or {}).get("takt", 0.0) * 0.6
+        self.f_vorlauf = 0.0
+        self.f_ziel = None
+        self.brut = []          # was die Mutter gerufen hat, fuer das Limit
 
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
@@ -1714,6 +1743,12 @@ class Gegner(Wesen):
                 abstand = self.pos.distance_to(held.pos)
                 if abstand < d["reichweite"] + held.radius and self.schlag_rest <= 0:
                     self.schlagen(held)
+                # Ein Speier will gar nicht heran. Er haelt Abstand und
+                # spuckt - und wenn man ihn draengt, weicht er zurueck.
+                if self.fern:
+                    ziel = self._fern_fuehren(dt, held, abstand, ziel)
+                if self.faehigkeit:
+                    self._faehigkeit_fuehren(dt, held)
             elif self.treppen_sperre <= 0:
                 wohin = self.welt.treppe_unter(self)
                 naeher = (abs(wohin - held.ebene) < abs(self.ebene - held.ebene)
@@ -1747,6 +1782,132 @@ class Gegner(Wesen):
         self.welt.auseinander(self)
         self.welt.befreien(self)
 
+    # ---- Fernkampf ------------------------------------------------------
+    def _fern_fuehren(self, dt, ziel_wesen, abstand, ziel):
+        """Der Speier: auf Abstand bleiben und spucken.
+
+        Er hat drei Zonen statt zweier. Zu weit weg geht er vor, im Band
+        bleibt er stehen und spuckt, zu nah geht er rueckwaerts. Ohne die
+        dritte Zone klebt er an einem, sobald man einmal herangelaufen
+        ist - und dann ist er ein langsamer Laeufer und nichts weiter.
+        """
+        f = self.fern
+        self.fern_rest = max(0.0, self.fern_rest - dt)
+        sicht = self.welt.sicht_frei(self.pos, ziel_wesen.pos, self.ebene)
+        if abstand <= f["reichweite"] and sicht:
+            if self.fern_rest <= 0.0:
+                self._speien(ziel_wesen)
+                self.fern_rest = f["takt"]
+            if abstand < f["halten"]:
+                # Rueckwaerts: weg vom Ziel, aber weiter hingedreht.
+                weg = self.pos - ziel_wesen.pos
+                if weg.length_squared() > 1:
+                    return self.pos + weg.normalize() * 60
+                return None
+            return None          # im Band: stehenbleiben und spucken
+        return ziel
+
+    def _speien(self, ziel_wesen) -> None:
+        f = self.fern
+        richtung = ziel_wesen.pos - self.pos
+        winkel = math.degrees(math.atan2(richtung.y, richtung.x))
+        winkel += RND.uniform(-f["streuung"], f["streuung"])
+        self.winkel = winkel
+        daten = {"tempo": f["tempo"], "schaden": self.daten["schaden"],
+                 "reichweite": f["reichweite"] * 1.25}
+        g = Geschoss(self.pos, winkel, daten, self.ebene, von=self,
+                     waffe=self.art)
+        g.bild = f.get("bild", "speichel")
+        g.spur = (126, 176, 86)
+        self.welt.dazu(g)
+        self.welt.klang("speien", 0.55, self.pos, self.ebene)
+
+    # ---- Faehigkeiten der Bosse ----------------------------------------
+    def _faehigkeit_fuehren(self, dt, ziel_wesen) -> None:
+        """Ankuendigen, dann ausloesen.
+
+        Der Vorlauf ist das Wesentliche daran. Ein Boss, der ohne
+        Vorwarnung 34 Schaden im Umkreis macht, ist kein Boss, sondern
+        eine Steuer - man kann nichts dagegen tun ausser Abstand halten,
+        und dann ist das Muster "immer weglaufen". Mit Vorlauf wird es
+        eine Frage: reicht die Zeit noch fuer einen Schuss?
+        """
+        f = self.faehigkeit
+        if self.f_vorlauf > 0.0:
+            self.f_vorlauf -= dt
+            if self.f_vorlauf <= 0.0:
+                self._faehigkeit_ausloesen(f)
+            return
+        self.f_rest -= dt
+        if self.f_rest > 0.0:
+            return
+        self.f_rest = f["takt"]
+        self.f_vorlauf = f["vorlauf"]
+        self.f_ziel = pygame.Vector2(ziel_wesen.pos)
+        if f["art"] == "brand":
+            # Vorhalten: dorthin, wo das Ziel gleich sein wird. Sonst
+            # laeuft jeder einfach aus dem Feuer heraus, waehrend es
+            # entsteht, und die Faehigkeit trifft nie.
+            self.f_ziel += ziel_wesen.tempo * f.get("vorhalt", 0.0)
+            weg = self.f_ziel - self.pos
+            if weg.length() > f["wurfweite"]:
+                self.f_ziel = self.pos + weg.normalize() * f["wurfweite"]
+        self.welt.aufschrift(self.pos, self.ebene,
+                             {"stampfer": "STAMPFT", "brut": "RUFT",
+                              "brand": "WIRFT"}.get(f["art"], ""), K.C_RED)
+        self.welt.klang("boss_ansage", 0.7, self.pos, self.ebene)
+
+    def _faehigkeit_ausloesen(self, f) -> None:
+        w = self.welt
+        art = f["art"]
+        if art == "stampfer":
+            # Trifft im Umkreis, auch hinter Deckung - darum ist die
+            # Antwort Abstand und nicht eine Ecke.
+            w.explosion(self.pos, self.ebene, f["radius"], "spreng")
+            w.ruckeln(f["ruckeln"], "explosion", self.pos, self.ebene, self)
+            for ding in w.nahe(self.pos, f["radius"], self.ebene):
+                if getattr(ding, "fraktion", "") == "feind" or ding is self:
+                    continue
+                if not getattr(ding, "trefferbar", False) or not ding.lebt:
+                    continue
+                weit = self.pos.distance_to(ding.pos)
+                if weit >= f["radius"]:
+                    continue         # nahe() liefert ganze Zellen, nicht den Kreis
+                anteil = 1.0 - weit / f["radius"]
+                schub = ding.pos - self.pos
+                if schub.length_squared() > 0.01:
+                    schub = schub.normalize() * 260 * anteil
+                ding.schaden(f["schaden"] * anteil, schub, self)
+        elif art == "brut":
+            self.brut = [g for g in self.brut if g.lebt]
+            if len(self.brut) >= f["hoechstens"]:
+                return
+            for _ in range(f["anzahl"]):
+                punkt = self.pos + pygame.Vector2(
+                    RND.uniform(-f["streuung"], f["streuung"]),
+                    RND.uniform(-f["streuung"], f["streuung"]))
+                if not w.frei(punkt, 10, self.ebene):
+                    continue
+                kind = self._brut_erzeugen(punkt, f["was"])
+                if kind is not None:
+                    self.brut.append(kind)
+                    w.dazu(kind)
+            wolke(w, self.pos, 12, 130, 0.5, (96, 140, 70), self.ebene, 2, "blut")
+        elif art == "brand":
+            ziel = self.f_ziel if self.f_ziel is not None else self.pos
+            w.feuer.append(Brandflaeche(ziel, self.ebene, radius=f["radius"],
+                                        von=self, verschont="feind"))
+            w.explosion(ziel, self.ebene, f["radius"] * 0.5, "feuer")
+
+    def _brut_erzeugen(self, punkt, art: str):
+        """Wie ein gerufener Gegner entsteht.
+
+        Im Einzelspieler ist das ein gewoehnlicher Gegner. Im Mehrspieler
+        muss er gezaehlt und gemeldet werden, und darum ueberschreibt
+        KampfGegner diese eine Zeile statt der ganzen Faehigkeit.
+        """
+        return Gegner(punkt, art, self.ebene)
+
     def ausweichen(self, richtung: pygame.Vector2) -> pygame.Vector2:
         """Sucht eine freie Richtung nahe der gewuenschten.
 
@@ -1770,6 +1931,54 @@ class Gegner(Wesen):
         self.ausweich_winkel = 0
         return richtung
 
+    def _platzen(self) -> None:
+        """Der Blaeher geht hoch, wenn er stirbt.
+
+        Er trifft dabei **keine anderen Gegner**. Das ist eine bewusste
+        Entscheidung und keine Vergesslichkeit: wer den Blaeher in ein
+        Rudel lockt und dort erschiesst, hat einen Trick gefunden, und
+        ein Trick, der eine halbe Welle loescht, ersetzt das Spiel. Was
+        er trifft, sind die Leute - also ist er genau das, was er sein
+        soll: ein Grund, nicht beieinanderzustehen.
+        """
+        p = self.platzt
+        w = self.welt
+        w.explosion(self.pos, self.ebene, p["radius"], "feuer")
+        w.ruckeln(2.8, "explosion", self.pos, self.ebene, self)
+        for ding in w.nahe(self.pos, p["radius"], self.ebene):
+            if ding is self or getattr(ding, "fraktion", "") == "feind":
+                continue
+            if not getattr(ding, "trefferbar", False) or not ding.lebt:
+                continue
+            weit = self.pos.distance_to(ding.pos)
+            if weit >= p["radius"]:
+                continue             # nahe() liefert ganze Zellen, nicht den Kreis
+            anteil = 1.0 - weit / p["radius"]
+            schub = ding.pos - self.pos
+            if schub.length_squared() > 0.01:
+                schub = schub.normalize() * 220 * anteil
+            ding.schaden(p["schaden"] * anteil, schub, self)
+        if p.get("zuendet"):
+            # `verschont="feind"`, und zwar nach einer Messung: ohne das
+            # toetete das Feuer eines einzigen Blaehers alle fuenf
+            # Laeufer, die um ihn herumstanden. Damit waere "Blaeher ins
+            # Rudel locken und erschiessen" ein Trick, der eine halbe
+            # Welle loescht - und wer den Trick hat, spielt ihn und
+            # nicht das Spiel. Der Molotow eines Spielers brennt
+            # weiterhin alles, das ist ja seine Aufgabe.
+            w.feuer.append(Brandflaeche(self.pos, self.ebene,
+                                        radius=p["radius"] * 0.62,
+                                        dauer=K.FEUER["dauer"] * 0.55, von=self,
+                                        verschont="feind"))
+
+    def schaden(self, menge: float, schub=None, von=None) -> None:
+        # Ein Boss laesst sich nicht durch die Karte schieben. Ohne das
+        # traegt ein Sturmgewehr den Koloss rueckwaerts aus der Halle -
+        # und dann ist seine ganze Bedrohung eine Frage des Nachladens.
+        if not self.schiebbar:
+            schub = None
+        super().schaden(menge, schub, von)
+
     def schlagen(self, ziel) -> None:
         self.schlag_rest = self.daten["schlagtakt"]
         schub = ziel.pos - self.pos
@@ -1785,8 +1994,10 @@ class Gegner(Wesen):
         wolke(w, self.pos, 14, 190, 0.55, K.C_BLUT, self.ebene, 2, "blut")
         wolke(w, self.pos, 6, 90, 0.7, K.C_MUTED_DK, self.ebene, 1, "staub")
         w.blutfleck(self.pos, self.ebene, self.radius)
-        w.ruckeln(2.2, "tod", self.pos, self.ebene, self)
+        w.ruckeln(3.4 if self.ist_boss else 2.2, "tod", self.pos, self.ebene, self)
         w.kurz_langsam(K.TREFFER["zeitlupe"])
+        if self.platzt:
+            self._platzen()
         if isinstance(von, Spieler) or (von is not None and von.fraktion == "mensch"):
             held = w.held
             if held is not None:

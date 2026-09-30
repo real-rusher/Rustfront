@@ -519,6 +519,153 @@ def _gegner_brecher():
     return s
 
 
+# ── Die drei neuen Gegner
+#
+# Jeder muss sich auf einen Blick von den anderen unterscheiden, und zwar
+# an **Form und Farbe zugleich**. Nur an der Farbe geht es nicht: im
+# Rauch, im Feuerschein und auf dem Sand von STAUBTAL sieht alles
+# orangebraun aus. Also hat der Renner eine schmale Silhouette, der
+# Blaeher eine runde, der Speier eine mit Auswuchs.
+
+@platzhalter("gegner_renner")
+def _gegner_renner():
+    """Der Schnelle. Muss sich vom Laeufer auf einen Blick unterscheiden.
+
+    Der erste Versuch war ein kleinerer, hellerer Laeufer - und genau das
+    reichte nicht: im Bild nebeneinander sah man den Unterschied, im
+    Gefecht nicht. Er ist deshalb nicht dieselbe Gestalt in klein,
+    sondern eine andere Form: laenglich statt rund, knochenhell statt
+    erdbraun, und nach vorn gebeugt mit Schleppe dahinter.
+    """
+    s = _flaeche(24, 24)
+    c = 12
+    # Laenglicher Leib, nach vorn geneigt: die Silhouette allein sagt
+    # schon "der ist schnell".
+    pygame.draw.ellipse(s, (58, 50, 42), (c - 9, c - 5, 20, 10))
+    pygame.draw.ellipse(s, (196, 182, 156), (c - 8, c - 4, 18, 8))
+    pygame.draw.ellipse(s, (232, 222, 198), (c - 6, c - 4, 12, 5))
+    # Die Arme weit vorgestreckt.
+    pygame.draw.line(s, (58, 50, 42), (c + 2, c - 4), (c + 10, c - 6), 2)
+    pygame.draw.line(s, (58, 50, 42), (c + 2, c + 4), (c + 10, c + 6), 2)
+    # Schleppe nach hinten: drei Striche, die schmaler werden.
+    for i, dy in enumerate((-3, 0, 3)):
+        laenge = 6 - abs(dy)
+        pygame.draw.line(s, (128, 116, 96), (c - 9, c + dy),
+                         (c - 9 - laenge, c + dy), 1)
+    pygame.draw.circle(s, (46, 40, 34), (c + 5, c), 4)
+    pygame.draw.circle(s, (238, 232, 214), (c + 5, c), 3)
+    pygame.draw.circle(s, (226, 62, 42), (c + 7, c), 2)
+    return _rand(s)
+
+
+@platzhalter("gegner_speier")
+def _gegner_speier():
+    s = _figur(30, (92, 106, 62), (42, 52, 28), (168, 226, 96))
+    c = 15
+    # Der Kropf vorn: daher kommt der Spuck, und man sieht, wohin er zielt.
+    pygame.draw.circle(s, (54, 68, 34), (c + 8, c), 5)
+    pygame.draw.circle(s, (110, 140, 70), (c + 8, c), 4)
+    pygame.draw.circle(s, (176, 232, 108), (c + 10, c), 2)
+    return _rand(s)
+
+
+@platzhalter("gegner_blaeher")
+def _gegner_blaeher():
+    # Rund und aufgedunsen, mit hellen Blasen. Die Form sagt "platzt".
+    s = _flaeche(34, 34)
+    c = 17
+    pygame.draw.circle(s, (58, 44, 26), (c, c), 13)
+    pygame.draw.circle(s, (126, 96, 52), (c, c), 12)
+    pygame.draw.circle(s, (158, 126, 70), (c - 2, c - 3), 9)
+    for (bx, by, br) in ((-5, 4, 3), (5, 5, 2), (3, -6, 3), (-6, -4, 2)):
+        pygame.draw.circle(s, (196, 178, 96), (c + bx, c + by), br)
+        pygame.draw.circle(s, (232, 220, 150), (c + bx - 1, c + by - 1), max(1, br - 2))
+    pygame.draw.circle(s, (46, 34, 20), (c + 9, c), 4)      # der kleine Kopf
+    pygame.draw.circle(s, K.C_ORANGE, (c + 10, c), 2)
+    return _rand(s)
+
+
+# ── Die Bosse
+#
+# Gross, und jeder mit einem Merkmal, das seine Faehigkeit ankuendigt:
+# der Koloss hat Platten (er stampft), die Mutter einen Leib voller
+# Brut (sie ruft), der Brandstifter glimmt (er wirft Feuer).
+
+@platzhalter("boss_koloss")
+def _boss_koloss():
+    s = _flaeche(58, 58)
+    c = 29
+    pygame.draw.circle(s, (34, 30, 26), (c, c), 24)
+    pygame.draw.circle(s, (96, 88, 78), (c, c), 22)
+    pygame.draw.circle(s, (128, 118, 102), (c - 2, c - 3), 18)
+    # Panzerplatten quer. Sie geben ihm die Schwere, die er im Spiel hat.
+    for i, dy in enumerate((-12, -4, 4, 12)):
+        breit = 30 - abs(dy)
+        pygame.draw.rect(s, (58, 52, 44), (c - breit // 2, c + dy - 2, breit, 4))
+        pygame.draw.rect(s, (150, 138, 118), (c - breit // 2, c + dy - 2, breit, 1))
+    # Zwei Faeuste vorn - womit er stampft.
+    for dy in (-11, 11):
+        pygame.draw.circle(s, (44, 38, 32), (c + 15, c + dy), 7)
+        pygame.draw.circle(s, (112, 100, 86), (c + 15, c + dy), 6)
+        pygame.draw.circle(s, K.C_RUST, (c + 17, c + dy), 2)
+    pygame.draw.circle(s, (22, 18, 15), (c + 6, c), 6)
+    pygame.draw.circle(s, K.C_RED, (c + 8, c), 3)
+    return _rand(s)
+
+
+@platzhalter("boss_mutter")
+def _boss_mutter():
+    s = _flaeche(48, 48)
+    c = 24
+    pygame.draw.ellipse(s, (36, 46, 26), (c - 17, c - 14, 34, 28))
+    pygame.draw.ellipse(s, (86, 108, 58), (c - 15, c - 12, 30, 24))
+    pygame.draw.ellipse(s, (116, 144, 74), (c - 13, c - 11, 24, 18))
+    # Die Brut im Leib: helle Punkte, die man zaehlen kann.
+    for (bx, by) in ((-7, -3), (-2, 3), (3, -4), (-5, 4), (5, 3), (0, -6)):
+        pygame.draw.circle(s, (188, 226, 120), (c + bx, c + by), 3)
+        pygame.draw.circle(s, (238, 250, 196), (c + bx - 1, c + by - 1), 1)
+    # Ranken nach hinten.
+    for dy in (-9, 0, 9):
+        pygame.draw.line(s, (52, 66, 34), (c - 14, c + dy),
+                         (c - 21, c + dy + (2 if dy else 0)), 2)
+    pygame.draw.circle(s, (30, 38, 22), (c + 12, c), 6)
+    pygame.draw.circle(s, (170, 220, 100), (c + 14, c), 3)
+    return _rand(s)
+
+
+@platzhalter("boss_brandstifter")
+def _boss_brandstifter():
+    s = _flaeche(46, 46)
+    c = 23
+    pygame.draw.circle(s, (42, 24, 16), (c, c), 17)
+    pygame.draw.circle(s, (118, 62, 32), (c, c), 15)
+    pygame.draw.circle(s, (152, 84, 38), (c - 2, c - 2), 12)
+    # Glut in den Fugen: er sieht aus, als brenne er von innen.
+    for winkel in range(0, 360, 45):
+        r = math.radians(winkel)
+        x, y = c + math.cos(r) * 9, c + math.sin(r) * 9
+        pygame.draw.circle(s, (246, 172, 62), (int(x), int(y)), 3)
+        pygame.draw.circle(s, (255, 232, 168), (int(x), int(y)), 1)
+    # Der Kessel auf dem Ruecken, aus dem er schoepft.
+    pygame.draw.rect(s, (54, 34, 22), (c - 16, c - 6, 9, 12))
+    pygame.draw.rect(s, (96, 58, 30), (c - 15, c - 5, 7, 10))
+    pygame.draw.rect(s, K.C_AMBER, (c - 14, c - 4, 5, 3))
+    pygame.draw.circle(s, (28, 16, 10), (c + 11, c), 6)
+    pygame.draw.circle(s, (255, 196, 88), (c + 13, c), 3)
+    return _rand(s)
+
+
+@platzhalter("speichel")
+def _speichel():
+    # Der Spuck des Speiers. Gruen, damit man ihn nicht mit dem eigenen
+    # Geschoss verwechselt - im Getuemmel ist das der ganze Unterschied.
+    s = _flaeche(10, 6)
+    pygame.draw.ellipse(s, (58, 88, 36), (0, 1, 10, 4))
+    pygame.draw.ellipse(s, (126, 176, 86), (1, 1, 7, 4))
+    pygame.draw.circle(s, (206, 240, 160), (7, 3), 2)
+    return s
+
+
 # ──────────────────────────────── Kleinkram
 
 @platzhalter("geschoss")

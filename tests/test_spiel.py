@@ -956,6 +956,7 @@ if treppe:
 
 # ── Die drei Spielarten ──────────────────────────────────────────────
 from dustfront.mehrspieler import KampfGegner
+from dustfront import entities as EN
 
 _port = [51300]
 
@@ -3206,10 +3207,20 @@ blockiert = [p for p in hoch
 pruef("Und ueber jeder Rampe ist Platz", not blockiert, str(blockiert))
 
 # Drei Kreise, nicht identisch, und einer davon oben.
+#
+# `marken` sind alle Grossbuchstaben der Karte, und dazu gehoeren seit
+# den Spawnstellen auch die Z. Geprueft werden hier die Kreise - welche
+# Buchstaben das sind, sagt der Kopf der Karte und nicht dieser Test.
+alle_marken = {}
+for e in staub.ebenen:
+    for name, stellen in e.marken.items():
+        alle_marken.setdefault(name, []).append((e.index, stellen))
+kreisnamen = str(kopf.get("kreise", "")).split()
 marken = {}
 for e in staub.ebenen:
     for name, stellen in e.marken.items():
-        marken[name] = (e.index, stellen[0])
+        if name in kreisnamen:
+            marken[name] = (e.index, stellen[0])
 pruef("Die Karte nennt drei Kreise",
       sorted(marken) == ["A", "B", "C"], str(sorted(marken)))
 pruef("Und einer liegt auf einem Plateau",
@@ -3333,6 +3344,223 @@ _haengt = [m.__name__ for m in (dustfront.play, dustfront.render,
 pruef("Kein Spielmodul ruft die Kosmetik auf", not _haengt, ", ".join(_haengt))
 import shutil as _sh
 _sh.rmtree(_weg, ignore_errors=True)
+
+# ─────────────────────────────────────────────────────────────────────
+# Gegner, Bosse, Wellen und vor allem: wo sie herkommen.
+print()
+print("-- Wellen, Gegner und Bosse --")
+from dustfront.mehrspieler import KampfGegner
+from dustfront import entities as EN
+
+# Die Tabellen muessen zusammenpassen. Ein Gegner, der in MISCHUNG steht
+# und in GEGNER fehlt, faellt sonst erst auf, wenn die Welle laeuft, in
+# der er zum ersten Mal drankommt - also vielleicht nie beim Testen.
+pruef("Jede Art aus MISCHUNG gibt es wirklich",
+      all(e["art"] in K.GEGNER for e in K.MISCHUNG),
+      str([e["art"] for e in K.MISCHUNG if e["art"] not in K.GEGNER]))
+pruef("Jeder Boss aus BOSS_FOLGE gibt es wirklich",
+      all(a in K.BOSSE for a in K.BOSS_FOLGE))
+pruef("Jeder Gegner und Boss hat ein Bild",
+      all(K.gegner_daten(a)["bild"] in K.BILD_MASS
+          for a in list(K.GEGNER) + list(K.BOSSE)))
+pruef("Was die Mutter ruft, gibt es",
+      K.BOSSE["mutter"]["faehigkeit"]["was"] in K.GEGNER)
+pruef("gegner_daten findet beide Tabellen",
+      K.gegner_daten("laeufer")["name"] == "LAEUFER"
+      and K.gegner_daten("koloss")["name"] == "KOLOSS"
+      and K.ist_boss("koloss") and not K.ist_boss("laeufer"))
+
+# Eine Welle je Karte aufstellen und die Spawnstellen vermessen. Das war
+# der gemeldete Fehler, und er faellt nur auf einer grossen Karte auf -
+# darum wird STAUBTAL ausdruecklich mitgeprueft.
+for kartenname in ("", "staubtal"):
+    wg, gg = gefechtspaar("pve", karte=kartenname)
+    titel = kartenname or "Testkarte"
+    wg.welle = 0
+    wg.gegner_offen = []
+    wg.welle_rest = []
+    wg._welle_starten()
+    while wg.welle_rest:                 # allen Nachschub sofort holen
+        wg.schub_rest = 0.0
+        wg._nachschub(0.0)
+    spieler = [k for k in wg.kaempfer.values() if k.lebt]
+    abstaende = [min(x.pos.distance_to(k.pos) for k in spieler)
+                 for x in wg.gegner_offen]
+    fremd = sum(1 for x in wg.gegner_offen
+                if all(x.ebene != k.ebene for k in spieler))
+    pruef("%s: kein Gegner steht einem im Gesicht" % titel,
+          min(abstaende) >= K.SPAWN["nah"] * 0.9,
+          "naechster %.0f px, Untergrenze %.0f" % (min(abstaende), K.SPAWN["nah"]))
+    # Die Obergrenze ist das eigentliche Anliegen: 1477 Pixel im Mittel
+    # waren zwanzig Sekunden Fussmarsch, bevor ueberhaupt etwas passierte.
+    pruef("%s: und keiner laeuft eine halbe Minute" % titel,
+          max(abstaende) <= K.SPAWN["weit_boss"] * 1.6,
+          "weitester %.0f px" % max(abstaende))
+    pruef("%s: fast alle auf einer Ebene mit jemandem" % titel,
+          fremd <= max(1, len(wg.gegner_offen) // 3),
+          "%d von %d" % (fremd, len(wg.gegner_offen)))
+    marken = sum(len(e.marken.get("Z", ())) for e in wg.welt.ebenen)
+    pruef("%s: die Karte nennt Spawnstellen" % titel, marken > 0, "%d" % marken)
+    pruef("%s: und alle liegen auf begehbarem Boden" % titel,
+          all(e.begehbar(int(p[0] // K.TILE), int(p[1] // K.TILE))
+              for e in wg.welt.ebenen for p in e.marken.get("Z", ())))
+    wg.verlassen(); gg.verlassen()
+
+# Der Aufbau der Wellen.
+w6, g6 = gefechtspaar("pve", karte="staubtal")
+arten_je_welle = {}
+for nr in range(1, 21):
+    w6.welle = nr - 1
+    w6.gegner_offen = []
+    w6.welle_rest = []
+    w6._welle_starten()
+    arten_je_welle[nr] = set(w6.welle_rest) | {x.art for x in w6.gegner_offen}
+pruef("Welle 1 ist nur Laeufer - man lernt einen nach dem anderen",
+      arten_je_welle[1] == {"laeufer"}, str(arten_je_welle[1]))
+pruef("Spaeter ist die Welle wirklich gemischt",
+      len(arten_je_welle[12]) >= 4, str(sorted(arten_je_welle[12])))
+# Geprueft wird die Tabelle und nicht eine Ziehung: ob ein Blaeher in
+# seiner ersten Welle wirklich gewuerfelt wird, ist Zufall - dass es ihn
+# ab dann geben kann, ist die Regel.
+ab_werte = [e["ab"] for e in K.MISCHUNG]
+pruef("Jede Welle bringt hoechstens eine neue Gegnerart",
+      len(set(ab_werte)) == len(ab_werte), str(ab_werte))
+bossstart = [nr for nr in range(1, 21)
+             if nr >= K.WELLEN_MP["boss_ab"] and nr % K.WELLEN_MP["boss_alle"] == 0]
+pruef("Und keine faellt mit einer Bosswelle zusammen",
+      not (set(ab_werte) & set(bossstart)),
+      "neue Arten ab %s, Bosswellen %s" % (sorted(set(ab_werte)), bossstart))
+
+bosswellen = [nr for nr in range(1, 21)
+              if any(K.ist_boss(a) for a in arten_je_welle[nr])]
+pruef("Jede fuenfte Welle bringt einen Boss",
+      bosswellen == [5, 10, 15, 20], str(bosswellen))
+gesehen = []
+for nr in bosswellen:
+    gesehen += [a for a in arten_je_welle[nr] if K.ist_boss(a)]
+pruef("Und zwar reihum, nicht gewuerfelt",
+      gesehen[:3] == list(K.BOSS_FOLGE), str(gesehen))
+pruef("In einer Bosswelle steht genau ein Boss",
+      all(sum(1 for a in arten_je_welle[nr] if K.ist_boss(a)) == 1
+          for nr in bosswellen))
+
+# Der Boss selbst.
+w6.welle = 4
+w6.gegner_offen = []; w6.welle_rest = []
+w6._welle_starten()
+boss = next(x for x in w6.gegner_offen if x.ist_boss)
+pruef("Der Boss hat mehr Leben, wenn mehr mitspielen",
+      boss.max_leben > K.BOSSE[boss.art]["leben"],
+      "%.0f statt %.0f" % (boss.max_leben, K.BOSSE[boss.art]["leben"]))
+pruef("Der Koloss laesst sich nicht durch die Karte schieben",
+      not boss.schiebbar if boss.art == "koloss" else True)
+# Gemessen wird das Tempo und nicht die Strecke: der Boss laeuft
+# waehrend des Schritts ohnehin, und die Frage ist, ob der Treffer
+# obendrauf kommt.
+tempo_vorher = pygame.Vector2(boss.tempo)
+boss.schaden(10.0, pygame.Vector2(900, 0), None)
+if boss.art == "koloss":
+    pruef("Ein Treffer traegt ihn nicht weg",
+          boss.tempo.distance_to(tempo_vorher) < 0.01,
+          "%.1f px/s Rueckstoss" % boss.tempo.distance_to(tempo_vorher))
+laeufer_probe = KampfGegner(boss.pos + pygame.Vector2(60, 0), "laeufer",
+                            boss.ebene, w6)
+w6.welt.dazu(laeufer_probe)
+t2 = pygame.Vector2(laeufer_probe.tempo)
+laeufer_probe.schaden(1.0, pygame.Vector2(900, 0), None)
+pruef("Ein gewoehnlicher Gegner aber schon - sonst faende sich der "
+      "Unterschied nicht",
+      laeufer_probe.tempo.distance_to(t2) > 100.0,
+      "%.0f px/s" % laeufer_probe.tempo.distance_to(t2))
+
+# Die Haengerwache. Sie ist der Grund, warum eine Runde ueberhaupt
+# weiterlaeuft: gemessen blieb ein Laeufer 120 Sekunden an einer
+# Plateauwand stehen, und weil eine Welle erst endet, wenn alle liegen,
+# stand damit alles.
+w6.gegner_offen = []; w6.welle_rest = []
+opfer = [k for k in w6.kaempfer.values() if k.lebt][0]
+haenger = KampfGegner(opfer.pos + pygame.Vector2(700, 0), "laeufer",
+                      opfer.ebene, w6)
+w6.welt.dazu(haenger)
+haenger._ziel = opfer
+steht_bei = pygame.Vector2(opfer.pos + pygame.Vector2(700, 0))
+umgesetzt = False
+for _ in range(int((K.GEGNER_MP["stockt_ab"] + 2.0)
+                   / K.GEGNER_MP["stockt_pruefung"])):
+    if umgesetzt:
+        break
+    haenger.pos.update(steht_bei)          # er kommt nie naeher
+    haenger._haenger_pruefen(K.GEGNER_MP["stockt_pruefung"])
+    umgesetzt = haenger.pos.distance_to(steht_bei) > 1.0
+pruef("Wer nicht ankommt, wird umgesetzt", umgesetzt,
+      "jetzt %.0f px vom Spieler statt 700"
+      % haenger.pos.distance_to(opfer.pos))
+pruef("Und zwar in das Band um die Spieler",
+      haenger.pos.distance_to(opfer.pos) <= K.SPAWN["weit"] * 1.6,
+      "%.0f px" % haenger.pos.distance_to(opfer.pos))
+boss.f_rest = 0.0
+boss._stockt = 99.0
+boss_vorher = pygame.Vector2(boss.pos)
+boss._haenger_pruefen(9.0)
+pruef("Ein Boss aber nicht - ihn zu suchen gehoert dazu",
+      boss.pos == boss_vorher)
+w6.verlassen(); g6.verlassen()
+
+# Fernkampf und Platzen.
+w7, g7 = gefechtspaar("pve")
+ziel_k = [k for k in w7.kaempfer.values() if k.lebt][0]
+sp = KampfGegner(ziel_k.pos + pygame.Vector2(200, 0), "speier", ziel_k.ebene, w7)
+w7.welt.dazu(sp)
+sp.wartet = 0.0
+geschosse = 0
+for _ in range(int(6.0 / K.FIXED_DT)):
+    vor = sum(1 for x in w7.welt.wesen if isinstance(x, EN.Geschoss) and x.lebt)
+    w7.schritt(K.FIXED_DT)
+    nach = sum(1 for x in w7.welt.wesen if isinstance(x, EN.Geschoss) and x.lebt)
+    geschosse += max(0, nach - vor)
+    ziel_k.leben = ziel_k.max_leben
+pruef("Der Speier spuckt statt zu schlagen", geschosse >= 1, "%d" % geschosse)
+pruef("Und bleibt dabei auf Abstand",
+      sp.pos.distance_to(ziel_k.pos) > K.GEGNER["speier"]["reichweite"] * 3,
+      "%.0f px" % sp.pos.distance_to(ziel_k.pos))
+
+bl = KampfGegner(ziel_k.pos + pygame.Vector2(40, 0), "blaeher", ziel_k.ebene, w7)
+nachbar = KampfGegner(ziel_k.pos + pygame.Vector2(52, 8), "laeufer",
+                      ziel_k.ebene, w7)
+for x in (bl, nachbar):
+    w7.welt.dazu(x)
+w7.schritt(K.FIXED_DT)
+leben_vorher, nachbar_vorher = ziel_k.leben, nachbar.leben
+bl.schaden(999.0, None, ziel_k)
+w7.schritt(K.FIXED_DT)
+pruef("Der Blaeher trifft beim Platzen die Leute",
+      ziel_k.leben < leben_vorher,
+      "%.0f Schaden" % (leben_vorher - ziel_k.leben))
+# Das ist der Punkt, an dem es kippen wuerde: traefe er auch Gegner,
+# waere "Blaeher ins Rudel locken" ein Trick, der eine halbe Welle
+# loescht - und dann spielt man den Trick und nicht das Spiel.
+pruef("Aber keine anderen Gegner",
+      nachbar.leben == nachbar_vorher,
+      "%.0f Schaden am Nachbarn" % (nachbar_vorher - nachbar.leben))
+w7.verlassen(); g7.verlassen()
+
+# Und dass der Gast alles davon sieht.
+w8, g8 = gefechtspaar("pve", karte="staubtal")
+w8.welle = 4
+w8.gegner_offen = []; w8.welle_rest = []
+w8._welle_starten()
+for _ in range(40):
+    w8.schritt(K.NETZ["takt"]); g8.schritt(K.NETZ["takt"])
+lebende = sum(1 for x in w8.gegner_offen if x.lebt)
+pruef("Der Gast sieht dieselben Gegner wie der Gastgeber",
+      len(g8._fremde_gegner) == lebende,
+      "%d gegen %d" % (len(g8._fremde_gegner), lebende))
+pruef("Und jeder traegt seine Kennung, sonst ruckeln sie",
+      all(len(e) == 10 and e[6] for e in g8._fremde_gegner))
+pruef("Auch der Boss kommt beim Gast an",
+      any(K.ist_boss(e[4]) for e in g8._fremde_gegner),
+      str(sorted({e[4] for e in g8._fremde_gegner})))
+w8.verlassen(); g8.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

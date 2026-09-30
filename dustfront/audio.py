@@ -332,6 +332,46 @@ def _blend_pfeifen(seed=0):
     return out
 
 
+@platzhalter_klang("speien")
+def _speien(seed=0):
+    """Der Spuck des Speiers: ein nasses Ausstossen, kurz und tief.
+
+    Gefiltertes Rauschen mit einem Tiefpass, der aufgeht statt zuzu-
+    gehen - das klingt nach etwas, das herauskommt, und nicht nach
+    etwas, das anschlaegt. Deutlich dumpfer als jeder Schuss, damit man
+    im Getuemmel hoert, dass es kein Mitspieler war.
+    """
+    return _mischen(
+        _rauschen(0.16, 0.42, 380, 1500, 2.6, seed),
+        _schlag(180, 90, 0.10, 0.28, 4.0),
+    )
+
+
+@platzhalter_klang("boss_ansage")
+def _boss_ansage(seed=0):
+    """Ein Boss kuendigt an, was er gleich tut.
+
+    Zwei tiefe Toene, der zweite hoeher - ein Hornsignal, kein Knall.
+    Es muss sich von allem unterscheiden, was sonst im Bild passiert,
+    denn es ist die einzige Warnung, die es gibt; wer es fuer einen
+    Schuss haelt, weicht nicht aus.
+    """
+    n = int(RATE * 0.55)
+    out = [0.0] * n
+    ph = ph2 = 0.0
+    tp = 2 * math.pi
+    for i in range(n):
+        p = i / n
+        # Der Ton steigt in der zweiten Haelfte - das liest sich als
+        # "es kommt", waehrend ein fallender Ton nach "vorbei" klingt.
+        f = 110.0 + 46.0 * max(0.0, (p - 0.45) / 0.55)
+        ph += tp * f / RATE
+        ph2 += tp * (f * 1.5) / RATE
+        huelle = min(1.0, p * 26.0) * (1.0 - p) ** 1.1
+        out[i] = (math.sin(ph) * 0.62 + math.sin(ph2) * 0.22) * huelle * 0.8
+    return out
+
+
 @platzhalter_klang("herzschlag")
 def _herzschlag(seed=0):
     """Zwei Schlaege, der zweite leiser und dichter dahinter.

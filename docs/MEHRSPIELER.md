@@ -1134,6 +1134,156 @@ weg. Wer die Zahl senkt, holt sich das Ruckeln zurueck.
 
 ---
 
+## 12a. Wellen, Gegner und Bosse
+
+### Der Fehler, der alles ausloeste
+
+Gemessen auf STAUBTAL (3840 mal 2560 Pixel), Welle 1, zwei Spieler:
+
+| | vorher | jetzt |
+|---|---|---|
+| Abstand zum naechsten Spieler, Median | **1477 px** | 446 px |
+| Laufzeit, bis er ankommt | **20 s** | 6 s |
+| Weitester | 1975 px (27 s) | 553 px (7 s) |
+| Auf einer Ebene ohne jeden Spieler | **4 von 6** | 1 von 6 |
+
+Der Grund war eine Zeile: `freier_punkt(welt, rnd.randrange(ebenen))`.
+Eine gewuerfelte Stelle irgendwo auf der Karte, auf einer gewuerfelten
+Ebene. Auf der Testkarte (1408 mal 768) fiel das nie auf, weil dort
+jeder zufaellige Punkt zwangslaeufig nah liegt - Median 420 Pixel. Auf
+einer grossen Karte war eine Welle damit zwanzig Sekunden nichts und
+danach ein Troepfeln, und zwei Drittel standen auf einem Plateau, auf
+das nur Rampen fuehren.
+
+### Wo sie jetzt herkommen
+
+`_spawnstelle()` in `mehrspieler.py`, vier Regeln (`K.SPAWN`):
+
+1. **Bei jemandem**, nicht ueber der Karte: gewuerfelt wird im Ring um
+   einen lebenden Spieler.
+2. **Zwischen `nah` (260) und `weit` (620).** Naeher stuende er im
+   Gesicht, weiter waere wieder Fussmarsch. Der Abstand gilt gegen
+   **jeden** Spieler, nicht nur gegen den gewuerfelten - stand dort
+   einmal nur der eine, und prompt entstand auf der kleinen Karte ein
+   Gegner 137 Pixel neben dem zweiten Mann.
+3. **Moeglichst ausser Sicht** (`welt.sicht_frei`). Geht das nicht - auf
+   offenem Sand oft nicht -, dann eben im Blickfeld.
+4. **Auf der Ebene eines Spielers**, in 85 Prozent der Faelle.
+
+Dazu **Marken in der Karte**: der Buchstabe `Z` ist eine Spawnstelle,
+genau wie `A`, `B`, `C` Kreise sind. STAUBTAL hat 31 davon - am Fuss der
+Plateaus, an den Buden, im Depot, an der Mauer -, die Testkarte 21. Auf
+offenem Sand steht keine: mitten im Freien aus dem Nichts zu erscheinen
+sieht nach Fehler aus, hinter einer Bude hervorzukommen nicht. Marken
+sind eine **Bevorzugung, keine Bedingung** - wer eine Karte ohne Z baut,
+bekommt trotzdem Gegner.
+
+### Die Haengerwache
+
+Der zweite Fehler, gefunden beim Nachmessen: ein Laeufer stand nach 120
+Sekunden immer noch 323 Pixel entfernt an einer Plateauwand, **auf
+derselben Ebene** wie die Spieler. Das Ausweichen ist ein Faecher aus
+Proben und kein Wegesucher; an einem Plateau von 32 mal 19 Kacheln
+reicht es nicht. Und weil eine Welle erst endet, wenn alle liegen, stand
+damit die ganze Runde: in 300 Sekunden wurde Welle 2 nicht fertig.
+
+Ein richtiger Wegesucher waere die saubere Antwort und ein eigenes
+Stueck Arbeit. Die ehrliche steht in `_haenger_pruefen`: wer sieben
+Sekunden lang nicht naeher kommt, wird an eine frische Stelle gesetzt.
+Er ist dabei ausser Sicht, weil die Stelle genau darauf geprueft wird.
+Danach: fuenf Wellen in 300 Sekunden statt zwei.
+
+**Ein Boss wird nie umgesetzt.** Ihn zu suchen gehoert zur Aufgabe, und
+einer, der hinter dem Ruecken neu auftaucht, ist unfair.
+
+### Woraus eine Welle besteht
+
+`K.MISCHUNG`: je Gegnerart, ab welcher Welle es sie gibt und mit welchem
+Gewicht. Die Gewichte verschieben sich mit der Wellennummer; der Laeufer
+hat einen fallenden Zuschlag und eine Untergrenze - er verschwindet
+nicht, aber er macht Platz.
+
+| Welle | neu dabei | Frage, die er stellt |
+|---|---|---|
+| 1 | LAEUFER | kannst du treffen, bevor er da ist? |
+| 2 | RENNER | kannst du dich noch umdrehen? (138 px/s gegen 132 beim Spieler) |
+| 3 | BRECHER | reicht deine Munition? |
+| 4 | BLAEHER | wo steht ihr gerade? (platzt beim Sterben) |
+| 6 | SPEIER | kommst du an ihn heran? (haelt 150-230 px Abstand und spuckt) |
+
+**Hoechstens eine neue Art je Welle**, und keine faellt mit einer
+Bosswelle zusammen - Welle 5 ist schon die neue Sache. Ein Test haelt
+beides fest.
+
+### Nachschub statt einer Lieferung
+
+Bisher stand die ganze Welle auf einmal da: der Druck kam einmal und war
+vorbei, und bei vierzig Gegnern fiel die Bildrate. Jetzt kommt sie in
+Schueben zu sechs, mit 3,2 Sekunden Pause, hoechstens 22 zugleich auf
+der Karte. Kleine Wellen kommen weiter auf einmal - bei sechs Gegnern
+ist ein Nachschub nur eine Verzoegerung.
+
+### Die Bosse
+
+Jede fuenfte Welle, reihum, immer genau einer. Sein Leben waechst mit
+der Zahl der Spieler (plus 55 Prozent je weiterem) und mit der Zahl der
+Bosse, die schon lagen (plus 30 Prozent). In einer Bosswelle kommt
+weniger Fussvolk - der Boss ist die Aufgabe, ein volles Rudel daneben
+macht ihn nicht schwerer, nur unuebersichtlich.
+
+| Boss | Faehigkeit | Wozu er zwingt |
+|---|---|---|
+| **KOLOSS** | Stampfer: 104 px Umkreis, trifft auch hinter Deckung | **weg von ihm** - Nahkampf wird toedlich, eine Ecke hilft nicht |
+| **MUTTER** | Brut: ruft alle 5 s drei Renner, hoechstens 14 | **zu ihr hin** - wer die Brut abarbeitet, dreht den Hahn nicht zu |
+| **BRANDSTIFTER** | Brand: wirft Feuer dorthin, wo jemand gleich sein wird | **in Bewegung** - er nimmt Stellungen weg, nicht Leben |
+
+**Jede Faehigkeit hat einen Vorlauf** (0,6 bis 0,9 s) und wird
+angekuendigt: ein Ring, der sich zuzieht, in der Groesse der Wirkung,
+dazu ein Wort ueber dem Boss und ein Ton. Das ist der Unterschied
+zwischen einem Boss und einer Steuer - ohne Vorwarnung kann man nur
+Abstand halten, mit Vorwarnung wird es eine Frage: reicht die Zeit noch
+fuer einen Schuss?
+
+Der Koloss ist **unverschiebbar**. Ohne das traegt ein Sturmgewehr ihn
+rueckwaerts aus der Halle, und seine ganze Bedrohung wird eine Frage des
+Nachladens.
+
+### Das Feuer eines Gegners verschont Gegner
+
+Gemessen: ein Blaeher, der in einem Rudel von fuenf Laeufern platzte,
+toetete durch sein Feuer **alle fuenf**. Damit waere "Blaeher ins Rudel
+locken und erschiessen" ein Trick, der eine halbe Welle loescht - und
+wer den Trick hat, spielt ihn und nicht das Spiel.
+
+`Brandflaeche` hat darum ein Feld `verschont`. Leer heisst: es brennt
+alles, und so bleibt der **Molotow eines Spielers** - das ist ja seine
+Aufgabe. Gesetzt wird es nur beim Feuer, das ein Gegner legt. Nachher
+gemessen: Blaeher 0 von 5, Molotow weiter 5 von 5.
+
+### Im Netz
+
+Ein Gegner geht als `[x, y, winkel, ebene, art, lebensanteil, kennung,
+vorlauf]`. Die beiden letzten sind neu:
+
+* **Kennung**, damit der Gast zwischen zwei Meldungen zeichnen kann.
+  Ohne sie stand jeder Gegner die halbe Zeit still und sprang dann -
+  derselbe Fehler wie frueher bei den Granaten. Bei einem Laeufer faellt
+  das gerade noch durch, bei einem 58 Pixel breiten Koloss nicht.
+  Gemessen: Stillstand 2,2 Prozent, Median 0,57 px je Bild.
+* **Vorlauf**, damit der Gast die Ankuendigung sieht. Ohne ihn saehe er
+  den Stampfer erst am Schaden.
+
+Gemessen ueber 25 Sekunden: Gastgeber und Gast zeigten in **250 von 250**
+Proben dieselbe Zahl Gegner.
+
+Nebenbei aufgefallen und mitbehoben: der **Gastgeber zeichnete gar keine
+Lebensbalken** fuer Gegner, nur der Gast. Bei einem Laeufer, der nach
+zwei Treffern liegt, faellt das nicht auf; bei einem Boss mit 2170 Leben
+ist es der Unterschied zwischen "gleich ist er soweit" und "schiesse ich
+hier ins Leere?". Jetzt zeichnen beide dasselbe.
+
+---
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:
@@ -1156,6 +1306,12 @@ weg. Wer die Zahl senkt, holt sich das Ruckeln zurueck.
   anderen Karte muss man das pruefen.
 * **Kein Ton fuer Mannschaftsereignisse.** Kein Klang beim Erobern, kein
   Rundenende-Signal.
+* **Kein Wegesucher.** Gegner weichen mit einem Faecher aus Proben aus.
+  An einem Plateau reicht das nicht, und die Haengerwache (12a) setzt
+  dann um, statt einen Weg zu finden. Das ist eine Notloesung, die
+  funktioniert, und keine Loesung. Wer es richtig will, braucht ein
+  Abstandsfeld je Ebene - dann laufen Gegner auch um Ecken, statt an
+  ihnen zu kleben.
 
 ---
 

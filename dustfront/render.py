@@ -289,6 +289,11 @@ class Renderer:
                 pygame.draw.line(ziel, w.spur, p - r * 6, p, 1)
             if w.bild is None:
                 continue
+            # Was ein Boss gleich tut, gehoert unter ihn und nicht auf
+            # ihn - sonst verdeckt der Ring genau die Gestalt, die man
+            # ansehen muss.
+            if getattr(w, "f_vorlauf", 0.0) > 0.0:
+                self.ankuendigung(ziel, p, w)
             s = self.bilder.gedreht(w.bild, w.winkel)
             if dunkel is not None:
                 s = self.dunkel(s, dunkel)
@@ -296,6 +301,50 @@ class Renderer:
                 s = s.copy()
                 s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
+            if dunkel is None and getattr(w, "fraktion", "") == "feind":
+                self.gegnerbalken(ziel, p, w)
+
+    def gegnerbalken(self, ziel, p, w) -> None:
+        """Wie viel ein Gegner noch hat.
+
+        Gab es bisher nur beim Gast - der Gastgeber sah gar keinen. Das
+        fiel nie auf, solange ein Laeufer nach zwei Treffern lag; bei
+        einem Boss mit 1400 Leben ist es der Unterschied zwischen
+        "gleich ist er soweit" und "schiesse ich hier eigentlich ins
+        Leere?".
+        """
+        max_leben = getattr(w, "max_leben", 0.0) or 0.0
+        if max_leben <= 0:
+            return
+        anteil = max(0.0, min(1.0, w.leben / max_leben))
+        if anteil > 0.999:
+            return
+        boss = getattr(w, "ist_boss", False)
+        breite, dick = (34, 3) if boss else (20, 2)
+        hoch = int(w.radius) + 11
+        x, y = int(p.x) - breite // 2, int(p.y) - hoch
+        pygame.draw.rect(ziel, (16, 11, 8), (x, y, breite, dick))
+        pygame.draw.rect(ziel, K.C_AMBER if boss else K.C_RED,
+                         (x, y, int(breite * anteil), dick))
+
+    def ankuendigung(self, ziel, p, w) -> None:
+        """Ein Ring, der sich zuzieht: gleich passiert etwas.
+
+        Dieselbe Sprache wie die Zielerfassung des Raketenwerfers, damit
+        man sie nicht zweimal lernen muss. Beim Stampfer hat der Ring die
+        Reichweite des Schadens - man sieht also nicht nur, **dass**
+        etwas kommt, sondern auch **wohin** es reicht.
+        """
+        f = getattr(w, "faehigkeit", None) or {}
+        gesamt = max(0.01, f.get("vorlauf", 0.5))
+        anteil = max(0.0, min(1.0, w.f_vorlauf / gesamt))
+        radius = float(f.get("radius", w.radius) or w.radius)
+        if f.get("art") == "brut":
+            radius = w.radius * 2.2
+        pygame.draw.circle(ziel, (78, 30, 22), (int(p.x), int(p.y)),
+                           int(radius), 1)
+        pygame.draw.circle(ziel, K.C_RED, (int(p.x), int(p.y)),
+                           max(2, int(radius * (0.25 + 0.75 * anteil))), 2)
 
     def _bildpunkt(self, weltpos, kamera, k: float) -> pygame.Vector2:
         """Wo ein Weltpunkt im Bild liegt, wenn er mit k verkleinert wird.

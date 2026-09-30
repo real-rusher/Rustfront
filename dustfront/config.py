@@ -328,8 +328,17 @@ BILD_MASS = {
     "spieler_boden":      (28, 28),   # wer am Boden liegt
     "gegner_laeufer":   (28, 28),
     "gegner_brecher":   (36, 36),
+    "gegner_renner":    (24, 24),
+    "gegner_speier":    (30, 30),
+    "gegner_blaeher":   (34, 34),
+    # Bosse. Sie sind deutlich groesser als alles andere - man soll auf
+    # den ersten Blick sehen, dass da etwas anderes steht.
+    "boss_koloss":      (58, 58),
+    "boss_mutter":      (48, 48),
+    "boss_brandstifter": (46, 46),
     # Kleinkram
     "geschoss":         (8, 4),
+    "speichel":         (10, 6),
     "muendung":         (20, 20),
     "medkit":           (16, 14),
     "munikiste":        (16, 14),
@@ -383,6 +392,8 @@ KLANG_NAMEN = (
     "rakete",               # der Abschuss
     "erfasst",              # Ton, wenn die Erfassung steht
     "blend_pfeifen",        # das Pfeifen danach im Ohr
+    "speien",               # der Spuck des Speiers
+    "boss_ansage",          # ein Boss kuendigt an, was er gleich tut
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -627,9 +638,76 @@ WELLEN_MP = dict(
     grund=4,                  # so viele Gegner in Welle 1 bei einem Spieler
     je_welle=0.35,            # plus 35 Prozent je weiterer Welle
     je_spieler=0.6,           # plus 60 Prozent je weiterem Spieler
-    hoechstens=40,            # mehr werden nie gleichzeitig losgeschickt
-    brecher_ab=3,             # ab dieser Welle kommen auch Brecher
+    hoechstens=40,            # mehr werden nie gleichzeitig unterwegs
+    brecher_ab=3,             # nur noch fuer den Notfall, siehe MISCHUNG
     brecher_anteil=0.22,
+
+    # ── Nachschub statt einer einzigen Lieferung.
+    #
+    # Bisher stand die ganze Welle auf einmal auf der Karte. Das hatte
+    # zwei Folgen, und beide waren schlecht: der Druck kam einmal und war
+    # dann vorbei, und bei vierzig Gegnern auf einmal fiel die Bildrate.
+    # Jetzt kommt sie in Schueben. Der erste ist sofort da, der naechste,
+    # sobald genug vom vorigen liegt - so bleibt der Druck stehen,
+    # solange die Welle laeuft.
+    schub=6,                  # so viele kommen auf einmal
+    schub_pause=3.2,          # Sekunden zwischen zwei Schueben
+    schub_ab=10,              # erst ab so vielen Gegnern wird geschoben
+    gleichzeitig=22,          # so viele stehen hoechstens zugleich da
+
+    # ── Bosse
+    boss_alle=5,              # jede fuenfte Welle bringt einen
+    boss_ab=5,                # die erste Bosswelle
+    boss_leben_je_spieler=0.55,   # plus 55 Prozent Leben je weiterem Spieler
+    boss_leben_je_runde=0.30,     # plus 30 Prozent je durchlaufener Bossrunde
+    boss_begleitung=0.45,     # so viel der normalen Welle kommt dazu
+)
+
+# Woraus eine Welle besteht. Je Eintrag: ab welcher Welle es den Gegner
+# gibt, und mit welchem Gewicht er dann gezogen wird.
+#
+# Gelesen wird das so: in Welle 1 gibt es nur Laeufer. Ab Welle 2 kommen
+# Renner dazu, ab 3 Brecher, ab 5 Blaeher, ab 6 Speier. Die Gewichte
+# verschieben sich mit der Welle - `steigt` ist der Zuschlag je Welle
+# nach dem Auftauchen. Laeufer haben einen negativen: sie bleiben, aber
+# sie machen mit der Zeit Platz.
+#
+# Warum ueberhaupt gestaffelt: weil ein Spieler in Welle 1 nicht fuenf
+# Gegnerarten lernen kann. Jede Welle bringt hoechstens eine neue dazu,
+# und zwischen zwei neuen liegt immer mindestens eine Welle zum Ueben.
+MISCHUNG = (
+    dict(art="laeufer", ab=1, gewicht=10.0, steigt=-0.55, mindestens=1.5),
+    dict(art="renner",  ab=2, gewicht=2.0,  steigt=0.55),
+    dict(art="brecher", ab=3, gewicht=1.2,  steigt=0.40),
+    # ab=4 und nicht 5: Welle 5 ist die erste Bosswelle, und die ist
+    # schon die neue Sache. Zwei neue Dinge in derselben Welle sind
+    # eines zu viel.
+    dict(art="blaeher", ab=4, gewicht=1.0,  steigt=0.28),
+    dict(art="speier",  ab=6, gewicht=1.0,  steigt=0.30),
+)
+
+# ── Wo Gegner auftauchen
+#
+# Das war der eigentliche Fehler, und er fiel erst mit STAUBTAL auf.
+# Gemessen auf 3840 x 2560 Pixeln: ein Gegner landete im Mittel 1477
+# Pixel vom naechsten Spieler entfernt, also **zwanzig Sekunden**
+# Fussmarsch, der weiteste 27 Sekunden - und vier von sechs auf einer
+# Ebene, auf der niemand stand. Eine Welle war damit zwanzig Sekunden
+# nichts und danach ein Troepfeln. Auf der kleinen Testkarte fiel das
+# nie auf (Median 420 Pixel, sechs Sekunden), weil die Karte so klein
+# ist, dass ein zufaelliger Punkt zwangslaeufig nah liegt.
+#
+# Die Stelle wird jetzt gesucht und nicht gewuerfelt, nach vier Regeln:
+SPAWN = dict(
+    nah=260.0,          # naeher nicht: sonst steht er im Gesicht
+    weit=620.0,         # weiter nicht: sonst laeuft man Welle statt Kampf
+    weit_boss=760.0,    # ein Boss darf von weiter kommen, man soll ihn sehen
+    eigene_ebene=0.85,  # so oft auf der Ebene eines Spielers
+    verdeckt_versuche=14,   # so oft wird eine Stelle ausser Sicht gesucht
+    versuche=60,        # danach: irgendeine freie Stelle im Band
+    marken="Z",         # Buchstaben in der Karte, die Spawnstellen sind
+    marke_band=1.6,     # eine Marke zaehlt bis zum 1,6-fachen von `weit`
+    marke_anteil=0.55,  # so oft wird eine passende Marke genommen
 )
 
 # Gegner-KI im Mehrspieler: mehrere Ziele statt einem.
@@ -638,6 +716,24 @@ GEGNER_MP = dict(
     gedraenge=0.55,           # Aufschlag je Gegner, der schon an dem Ziel haengt
     ebenen_strafe=420.0,      # so viel "weiter weg" zaehlt eine fremde Ebene
     boden_strafe=900.0,       # wer am Boden liegt, zieht kaum noch Gegner an
+
+    # ── Wer nicht ankommt, wird umgesetzt.
+    #
+    # Das Ausweichen ist ein Faecher aus Proben und kein Wegesucher. Das
+    # reicht fuer eine Kiste und ein Mauerstueck - an einem Plateau von
+    # 32 mal 19 Kacheln reicht es nicht. Gemessen auf STAUBTAL: ein
+    # Laeufer stand nach 120 Sekunden immer noch 323 Pixel entfernt auf
+    # **derselben** Ebene wie die Spieler und kam nicht heran. Weil eine
+    # Welle erst endet, wenn alle liegen, stand damit die ganze Runde -
+    # in 300 Sekunden wurde Welle 2 nicht fertig.
+    #
+    # Ein richtiger Wegesucher waere die saubere Antwort und ein eigenes
+    # Stueck Arbeit. Das hier ist die ehrliche: wer eine Weile nicht
+    # naeher kommt, wird an eine frische Stelle gesetzt. Er ist dabei
+    # ohnehin ausser Sicht, und die Welle laeuft weiter.
+    stockt_ab=7.0,            # so lange ohne Fortschritt gilt als Haenger
+    stockt_schritt=16.0,      # weniger Naeherung als das zaehlt nicht
+    stockt_pruefung=1.0,      # so oft wird nachgesehen
 )
 
 # Begrenzte Munition. Der Gastgeber schaltet sie beim Aufmachen an.
@@ -1435,7 +1531,160 @@ GEGNER = {
         bild="gegner_brecher",
         punkte=30,
     ),
+    # ── Die drei neuen. Jeder stellt eine andere Frage.
+    #
+    # Laeufer und Brecher fragen dieselbe: "kannst du treffen, bevor er
+    # da ist?" Zwei Gegner, eine Frage - darum wurde eine Welle ab der
+    # dritten Minute langweilig. Die folgenden fragen etwas anderes, und
+    # darum aendert sich das Spiel, wenn sie dazukommen.
+    "renner": dict(
+        name="RENNER",
+        leben=26.0,              # ein Schrotschuss, ein Treffer mit dem Gewehr
+        radius=8.0,
+        tempo=138.0,             # schneller als ein laufender Spieler (120)
+        beschleunigung=900.0,
+        schaden=7.0,
+        schlagtakt=0.55,
+        reichweite=16.0,
+        sicht=420.0,
+        bild="gegner_renner",
+        punkte=15,
+        # Frage: "kannst du dich noch umdrehen?" Stehenbleiben ist bei
+        # ihm keine Stellung mehr, sondern ein Fehler.
+    ),
+    "speier": dict(
+        name="SPEIER",
+        leben=58.0,
+        radius=10.0,
+        tempo=40.0,              # langsam: er will gar nicht heran
+        beschleunigung=300.0,
+        schaden=14.0,            # Schaden des Spucks
+        schlagtakt=2.4,
+        reichweite=17.0,
+        sicht=360.0,
+        bild="gegner_speier",
+        punkte=25,
+        # Frage: "kommst du an ihn heran?" Er haelt Abstand und spuckt.
+        # Wer in Deckung wartet, wartet vergeblich - er muss geholt werden.
+        fern=dict(reichweite=230.0, halten=150.0, takt=2.4, tempo=250.0,
+                  streuung=5.0, bild="speichel"),
+    ),
+    "blaeher": dict(
+        name="BLAEHER",
+        leben=90.0,
+        radius=13.0,
+        tempo=46.0,
+        beschleunigung=300.0,
+        schaden=0.0,             # Er schlaegt nicht. Er kommt nur naeher.
+        schlagtakt=1.0,
+        reichweite=20.0,
+        sicht=340.0,
+        bild="gegner_blaeher",
+        punkte=25,
+        # Frage: "wo steht ihr gerade?" Er platzt, wenn er stirbt - also
+        # auch dann, wenn man ihn rechtzeitig erledigt, nur eben weiter
+        # weg. Zusammenstehen wird dadurch teuer.
+        platzt=dict(radius=76.0, schaden=46.0, zuendet=True),
+    ),
 }
+
+# ══════════════════════════════════════════════════ INHALTE: Bosse
+#
+# Ein Boss ist ein Gegner mit drei Unterschieden: er hat sehr viel mehr
+# Leben, er hat **eine** Faehigkeit, die man verstehen muss, und er steht
+# oben im Bild mit Namen und Balken.
+#
+# Drei Stueck, und jeder zwingt zu etwas anderem:
+#
+#   KOLOSS        zwingt weg von ihm      (Nahkampf wird toedlich)
+#   MUTTER        zwingt zu ihm hin       (Warten macht es schlimmer)
+#   BRANDSTIFTER  zwingt in Bewegung      (Stehenbleiben wird toedlich)
+#
+# Mehr als einer davon zugleich waere Krach statt Druck - darum kommt
+# je Bosswelle genau einer, reihum.
+BOSSE = {
+    "koloss": dict(
+        name="KOLOSS",
+        leben=1400.0,
+        radius=22.0,
+        tempo=44.0,               # langsamer als jeder Spieler. Mit Absicht.
+        beschleunigung=260.0,
+        schaden=40.0,
+        schlagtakt=1.8,
+        reichweite=30.0,
+        sicht=600.0,
+        bild="boss_koloss",
+        punkte=400,
+        # Der Stampfer: im Umkreis trifft es jeden, auch hinter Deckung.
+        # Darum ist Weglaufen die Antwort und nicht eine Ecke.
+        faehigkeit=dict(art="stampfer", takt=4.5, vorlauf=0.9,
+                        radius=104.0, schaden=34.0, ruckeln=2.6),
+        # Er faellt nicht um, wenn man ihn trifft - sonst schoebe ihn ein
+        # Sturmgewehr durch die halbe Karte.
+        unverschiebbar=True,
+    ),
+    "mutter": dict(
+        name="MUTTER",
+        leben=900.0,
+        radius=18.0,
+        tempo=58.0,
+        beschleunigung=340.0,
+        schaden=18.0,
+        schlagtakt=1.2,
+        reichweite=24.0,
+        sicht=520.0,
+        bild="boss_mutter",
+        punkte=400,
+        # Sie ruft nach. Wer sie stehenlaesst und die Brut abarbeitet,
+        # arbeitet gegen einen Hahn, den er nicht zudreht.
+        faehigkeit=dict(art="brut", takt=5.0, vorlauf=0.6,
+                        anzahl=3, was="renner", hoechstens=14, streuung=40.0),
+        unverschiebbar=False,
+    ),
+    "brandstifter": dict(
+        name="BRANDSTIFTER",
+        leben=1050.0,
+        radius=17.0,
+        tempo=64.0,
+        beschleunigung=380.0,
+        schaden=16.0,
+        schlagtakt=1.4,
+        reichweite=22.0,
+        sicht=560.0,
+        bild="boss_brandstifter",
+        punkte=400,
+        # Er wirft Feuer dorthin, wo jemand steht. Das nimmt Stellungen
+        # weg, statt Leben - und genau deshalb wirkt es.
+        faehigkeit=dict(art="brand", takt=3.6, vorlauf=0.7,
+                        radius=58.0, wurfweite=300.0, vorhalt=0.55),
+        unverschiebbar=False,
+    ),
+}
+
+# Die Reihenfolge, in der die Bosse kommen. Reihum, damit man den
+# naechsten kennt und sich darauf einrichten kann - eine Ueberraschung
+# ist beim ersten Mal gut und beim fuenften Mal nur noch Zufall.
+BOSS_FOLGE = ("koloss", "mutter", "brandstifter")
+
+
+def gegner_daten(art: str) -> dict:
+    """Die Werte eines Gegners, egal ob normaler oder Boss.
+
+    Es gibt zwei Tabellen, weil ein Boss etwas anderes ist als ein
+    Laeufer und das auch beim Lesen so aussehen soll. Fuer alles, was
+    danach kommt - Klasse, Netz, Anzeige -, ist es aber ein Gegner wie
+    jeder andere, und darum fragt dort niemand, aus welcher Tabelle er
+    stammt.
+    """
+    if art in GEGNER:
+        return GEGNER[art]
+    if art in BOSSE:
+        return BOSSE[art]
+    return GEGNER["laeufer"]
+
+
+def ist_boss(art: str) -> bool:
+    return art in BOSSE
 
 # Wellen: (Anzahl, Typ) je Welle, danach wird hochskaliert
 WELLEN = [

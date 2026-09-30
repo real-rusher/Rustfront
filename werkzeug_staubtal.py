@@ -55,6 +55,34 @@ KREISE = [
     dict(name="KANZEL", zeichen="C", ebene=1, mitte=(60, 17), ring=0),
 ]
 
+# Spawnstellen. Der Buchstabe Z in der Karte sagt: hier kommen Gegner
+# heraus, wenn jemand in der Naehe ist.
+#
+# Sie sind nicht gleichmaessig verteilt, sondern dort, wo es sich
+# erklaert - aus dem Dunkel unter den Plateaus, aus den Buden, aus dem
+# Depot. Auf offenem Sand steht keine: mitten im Freien aus dem Nichts
+# zu erscheinen sieht nach Fehler aus, hinter einer Bude hervorzukommen
+# nicht. Wo keine Marke passt, sucht das Spiel selbst eine Stelle im
+# Band um die Spieler (siehe K.SPAWN) - die Marken sind eine
+# Bevorzugung, keine Bedingung.
+SPAWNS = [
+    # Am Fuss der drei Plateaus, im Schatten der Felswand.
+    (42, 14, 0), (78, 22, 0), (60, 30, 0),
+    (8, 46, 0), (32, 58, 0), (20, 41, 0),
+    (86, 44, 0), (110, 54, 0), (98, 61, 0),
+    # An den Buden.
+    (14, 16, 0), (28, 22, 0), (34, 64, 0), (50, 68, 0),
+    (60, 50, 0), (74, 48, 0), (96, 70, 0), (112, 68, 0),
+    # Im Depot und an seinen Toren.
+    (82, 26, 0), (106, 14, 0), (92, 34, 0),
+    # Am Rand der Karte, wo die Mauer steht.
+    (6, 8, 0), (114, 8, 0), (6, 72, 0), (114, 74, 0), (60, 76, 0),
+    # Und oben auf den Plateaus - wenige, damit auch dort etwas kommt,
+    # wenn dort gekaempft wird.
+    (50, 12, 1), (70, 22, 1), (14, 48, 1), (26, 58, 1),
+    (92, 44, 1), (104, 54, 1),
+]
+
 # Fasser und Wracks im freien Feld. Ohne sie ist eine sehr grosse,
 # sehr flache Karte nur gross und flach.
 STREU = [
@@ -180,6 +208,30 @@ def bauen():
                     g[y][x] = SAND
         g[cy][cx] = kr["zeichen"]
 
+    # Spawnmarken. Zuletzt, damit sie nichts ueberschreibt - und nur
+    # dort, wo wirklich Boden ist: eine Marke in einer Wand waere eine
+    # Stelle, an der nie etwas herauskommt, und das faellt niemandem auf.
+    gesetzt = 0
+    for (x, y, ebene) in SPAWNS:
+        g = e0 if ebene == 0 else e1
+        if not (0 < x < B - 1 and 0 < y < H - 1):
+            continue
+        if g[y][x] != SAND:
+            # Nachbarschaft absuchen, statt die Marke wegzuwerfen.
+            for (dx, dy) in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1),
+                             (2, 0), (-2, 0), (0, 2), (0, -2)):
+                if 0 < x + dx < B - 1 and 0 < y + dy < H - 1 \
+                        and g[y + dy][x + dx] == SAND:
+                    x, y = x + dx, y + dy
+                    break
+            else:
+                continue
+        g[y][x] = "Z"
+        gesetzt += 1
+    if gesetzt < len(SPAWNS) * 0.7:
+        raise SystemExit("Nur %d von %d Spawnmarken gesetzt - die Liste passt "
+                         "nicht mehr zum Grundriss." % (gesetzt, len(SPAWNS)))
+
     return e0, e1
 
 
@@ -194,6 +246,10 @@ def schreiben(pfad):
         "#",
         "# Marken: A KESSEL (offener Sand), B DEPOT (in der Halle),",
         "#         C KANZEL (auf dem grossen Plateau).",
+        "#         Z ist eine Spawnstelle fuer Gegner - am Fuss der",
+        "#         Plateaus, an den Buden, an der Mauer. Im offenen Sand",
+        "#         steht keine: dort aus dem Nichts zu erscheinen sieht",
+        "#         nach Fehler aus.",
         "",
         "name: STAUBTAL",
         "satz: wueste",

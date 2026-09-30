@@ -294,11 +294,77 @@ class KampfGegner(Gegner):
     einen Gefallenen herum, statt die Helfer anzugreifen.
     """
 
-    def __init__(self, pos, art: str, ebene: int, gefecht) -> None:
-        super().__init__(pos, art, ebene)
+    def __init__(self, pos, art: str, ebene: int, gefecht,
+                 leben: float | None = None) -> None:
+        super().__init__(pos, art, ebene, leben=leben)
         self._gefecht = gefecht
         self._ziel = None
         self._ziel_rest = 0.0
+        # Haengerwache: bestes bisher erreichtes Naeherkommen und wie
+        # lange es sich nicht gebessert hat.
+        self._bestes = 1e18
+        self._stockt = 0.0
+        self._pruef_rest = K.GEGNER_MP["stockt_pruefung"]
+
+    def _haenger_pruefen(self, dt: float) -> None:
+        """Wer nicht naeher kommt, wird umgesetzt.
+
+        Ohne das steht eine Runde still, sobald ein einziger Gegner
+        haengt: eine Welle endet erst, wenn alle liegen. Gemessen auf
+        STAUBTAL blieb ein Laeufer 120 Sekunden lang 323 Pixel entfernt
+        an einer Plateauwand haengen, auf derselben Ebene wie die
+        Spieler - in 300 Sekunden wurde Welle 2 nicht fertig.
+
+        Umgesetzt statt getoetet: ein Gegner, der sich in Luft aufloest,
+        ist ein Fehler, den man sieht. Einer, der aus einer anderen
+        Richtung kommt, ist keiner - und er ist ausser Sicht, wenn es
+        passiert, weil die Spawnstelle genau darauf geprueft wird.
+
+        Ein Boss wird nie umgesetzt. Ihn zu suchen ist Teil der Aufgabe,
+        und ein Boss, der hinter dem Ruecken neu auftaucht, ist unfair.
+        """
+        if self.ist_boss:
+            return
+        self._pruef_rest -= dt
+        if self._pruef_rest > 0.0:
+            return
+        g = K.GEGNER_MP
+        self._pruef_rest = g["stockt_pruefung"]
+        ziel = self._ziel
+        if ziel is None or not ziel.lebt:
+            self._bestes = 1e18
+            self._stockt = 0.0
+            return
+        weit = self.pos.distance_to(ziel.pos)
+        if ziel.ebene != self.ebene:
+            weit += g["ebenen_strafe"]
+        if weit < self._bestes - g["stockt_schritt"]:
+            self._bestes = weit
+            self._stockt = 0.0
+            return
+        self._stockt += g["stockt_pruefung"]
+        if self._stockt < g["stockt_ab"]:
+            return
+        ebene, pos = self._gefecht._spawnstelle()
+        self.pos.update(pos)
+        self.vorher.update(pos)
+        self.ebene = ebene
+        self.tempo.update(0, 0)
+        self._bestes = 1e18
+        self._stockt = 0.0
+        self._ziel = None          # am neuen Ort neu entscheiden
+
+    def _brut_erzeugen(self, punkt, art: str):
+        """Was die Mutter ruft, ist ein KampfGegner und wird mitgezaehlt.
+
+        Ohne das Mitzaehlen laeuft die Welle weiter, sobald die
+        urspruenglichen Gegner liegen - die Brut stuende dann noch auf
+        der Karte, waehrend schon die naechste Welle anfaengt. Und ohne
+        KampfGegner suchte sie sich kein Ziel unter mehreren Spielern.
+        """
+        kind = KampfGegner(punkt, art, self.ebene, self._gefecht)
+        self._gefecht.gegner_offen.append(kind)
+        return kind
 
     def _ziel_waehlen(self, dt: float):
         self._ziel_rest -= dt
@@ -341,6 +407,7 @@ class KampfGegner(Gegner):
             super().schritt(dt)
         finally:
             self.welt.held = vorher
+        self._haenger_pruefen(dt)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -452,6 +519,13 @@ class Gefecht(Szene):
         self.welle = 0
         self.pause_rest = K.WELLEN_MP["pause"]
         self.gegner_offen: list = []
+        # Was von der laufenden Welle noch nicht losgeschickt ist, und
+        # wann der naechste Schub darf. Eine Welle steht nicht mehr auf
+        # einmal da, sie kommt nach.
+        self.welle_rest: list[str] = []
+        self.schub_rest = 0.0
+        self.boss_welle = False
+        self.boss = None            # der Boss dieser Welle, solange er lebt
         self.vorbei = False
         self.gewonnen = False
         self.liste: list[dict] = []
@@ -511,6 +585,9 @@ class Gefecht(Szene):
         # Der Kreis liegt in der Mitte der Karte. Eine feste Stelle, die
         # alle kennen - das ist der Punkt an dieser Spielart.
         self.kreise = self._kreise_lesen()
+        # Spawnmarken der Karte, einmal gelesen. Sie stehen dort als
+        # Buchstaben, genau wie die Kreise.
+        self._spawnmarken = self._spawnmarken_lesen()
         self.kreis_nr = 0
         self.kreis_rest = K.ZONE["wechsel"]
         self._kreis_setzen(0)
@@ -1257,6 +1334,12 @@ class Gefecht(Szene):
         if not self.mit_gegnern:
             return
         self.gegner_offen = [g for g in self.gegner_offen if g.lebt]
+        if self.boss is not None and not self.boss.lebt:
+            self.boss = None
+        # Erst nachschieben, was von der Welle noch aussteht.
+        if self.welle_rest:
+            self._nachschub(dt)
+            return
         if self.gegner_offen:
             return
         self.pause_rest -= dt
@@ -1280,16 +1363,230 @@ class Gefecht(Szene):
                      * (1.0 + w["je_welle"] * (self.welle - 1))
                      * (1.0 + w["je_spieler"] * (lebende - 1)))
         anzahl = max(1, min(w["hoechstens"], anzahl))
-        brecher = 0
-        if self.welle >= w["brecher_ab"]:
-            brecher = int(anzahl * w["brecher_anteil"])
-        for i in range(anzahl):
-            art = "brecher" if i < brecher else "laeufer"
-            ebene = self.rnd.randrange(len(self.welt.ebenen))
-            pos = freier_punkt(self.welt, ebene, self.rnd)
+
+        self.boss_welle = (self.welle >= w["boss_ab"]
+                           and self.welle % w["boss_alle"] == 0)
+        if self.boss_welle:
+            # In einer Bosswelle kommt weniger Fussvolk. Der Boss ist die
+            # Aufgabe; ein volles Rudel daneben macht ihn nicht schwerer,
+            # sondern nur unuebersichtlich.
+            anzahl = max(1, int(anzahl * w["boss_begleitung"]))
+            self._boss_setzen(lebende)
+
+        # Der Bauplan der Welle, einmal gezogen und dann abgearbeitet.
+        # Vorher gezogen und nicht Stueck fuer Stueck, damit die Mischung
+        # stimmt: wer je Gegner wuerfelt, bekommt bei sechs Gegnern mit
+        # etwas Pech sechsmal dasselbe.
+        self.welle_rest = self._welle_bauen(anzahl)
+        self.schub_rest = 0.0
+        self._nachschub(0.0)
+
+    def _welle_bauen(self, anzahl: int) -> list[str]:
+        """Woraus die Welle besteht - als Liste von Gegnerarten.
+
+        Gezogen wird nach Gewichten aus `K.MISCHUNG`, die sich mit der
+        Wellennummer verschieben. Der Laeufer hat ein fallendes Gewicht:
+        er verschwindet nicht, aber er macht Platz. Ohne die Untergrenze
+        `mindestens` waere er ab Welle 15 ganz weg, und dann besteht eine
+        Welle nur noch aus Sonderfaellen - was ermuedet, weil nichts mehr
+        gewoehnlich ist.
+        """
+        offen = []
+        for e in K.MISCHUNG:
+            if self.welle < e["ab"]:
+                continue
+            g = e["gewicht"] + e.get("steigt", 0.0) * (self.welle - e["ab"])
+            g = max(e.get("mindestens", 0.0), g)
+            if g > 0:
+                offen.append((e["art"], g))
+        if not offen:
+            offen = [("laeufer", 1.0)]
+        summe = sum(g for _a, g in offen)
+        raus = []
+        for _ in range(anzahl):
+            wurf = self.rnd.uniform(0.0, summe)
+            for art, g in offen:
+                wurf -= g
+                if wurf <= 0:
+                    raus.append(art)
+                    break
+            else:
+                raus.append(offen[0][0])
+        return raus
+
+    def _boss_setzen(self, lebende: int) -> None:
+        """Den Boss dieser Welle aufstellen.
+
+        Sein Leben waechst mit der Zahl der Spieler und mit der Zahl der
+        Bosse, die schon lagen. Beides ist noetig: zu viert faellt ein
+        fester Boss in Sekunden, und der dritte Koloss darf nicht
+        derselbe sein wie der erste.
+        """
+        w = K.WELLEN_MP
+        nummer = self.welle // w["boss_alle"]          # 1, 2, 3, ...
+        art = K.BOSS_FOLGE[(nummer - 1) % len(K.BOSS_FOLGE)]
+        leben = (K.BOSSE[art]["leben"]
+                 * (1.0 + w["boss_leben_je_spieler"] * (lebende - 1))
+                 * (1.0 + w["boss_leben_je_runde"] * (nummer - 1)))
+        ebene, pos = self._spawnstelle(boss=True)
+        g = KampfGegner(pos, art, ebene, self, leben=leben)
+        self.gegner_offen.append(g)
+        self.welt.dazu(g)
+        self.boss = g
+        self.hinweis = "%s" % K.BOSSE[art]["name"]
+        self.welt.klang("boss_ansage", 1.0)
+
+    def _nachschub(self, dt: float) -> None:
+        """Den naechsten Schub losschicken, wenn Platz und Zeit da sind.
+
+        Zwei Bremsen: `gleichzeitig` haelt die Zahl der Gegner auf der
+        Karte im Rahmen (sonst faellt die Bildrate, und eine Welle, die
+        ruckelt, ist keine Herausforderung, sondern ein Aergernis), und
+        `schub_pause` gibt dem Rudel Zeit anzukommen, bevor das naechste
+        losgeht. Kleine Wellen kommen weiter auf einmal - bei sechs
+        Gegnern ist ein Nachschub nur eine Verzoegerung.
+        """
+        if not self.welle_rest:
+            return
+        w = K.WELLEN_MP
+        self.schub_rest = max(0.0, self.schub_rest - dt)
+        lebende = sum(1 for g in self.gegner_offen if g.lebt)
+        auf_einmal = len(self.welle_rest) + lebende < w["schub_ab"]
+        if not auf_einmal:
+            if self.schub_rest > 0.0 or lebende >= w["gleichzeitig"]:
+                return
+        wie_viele = len(self.welle_rest) if auf_einmal else min(
+            w["schub"], len(self.welle_rest), w["gleichzeitig"] - lebende)
+        for _ in range(max(0, wie_viele)):
+            art = self.welle_rest.pop()
+            ebene, pos = self._spawnstelle()
             g = KampfGegner(pos, art, ebene, self)
             self.gegner_offen.append(g)
             self.welt.dazu(g)
+        self.schub_rest = w["schub_pause"]
+
+    # ---- Wo Gegner auftauchen -------------------------------------------
+    def _spawnstelle(self, boss: bool = False):
+        """Eine Stelle im Band um die Spieler. Gibt (Ebene, Punkt).
+
+        Vier Regeln, in dieser Reihenfolge:
+
+        1. **Bei jemandem.** Gewuerfelt wird um einen lebenden Spieler
+           herum, nicht ueber der Karte. Auf STAUBTAL war der Unterschied
+           gemessen 1477 gegen jetzt rund 400 Pixel - also zwanzig
+           Sekunden Fussmarsch gegen fuenf.
+        2. **Nicht zu nah und nicht zu weit.** Zwischen `nah` und `weit`.
+           Naeher waere ein Gegner, der aus dem Nichts im Ruecken steht;
+           weiter waere wieder Fussmarsch.
+        3. **Moeglichst ausser Sicht.** Es soll niemand vor den Augen
+           entstehen. Geht das nicht - auf offenem Sand geht es oft
+           nicht -, dann eben im Blickfeld; das ist besser als gar kein
+           Gegner oder einer am anderen Ende der Karte.
+        4. **Auf der Ebene des Spielers**, fast immer. Auf STAUBTAL sind
+           die oberen Ebenen Plateaus, auf die nur Rampen fuehren - wer
+           dort oben entsteht, waehrend unten gekaempft wird, kommt nie
+           an. Frueher landeten dort vier von sechs.
+
+        Findet sich gar nichts, bleibt es beim alten Verfahren. Lieber
+        ein Gegner an einer maessigen Stelle als keiner.
+        """
+        s = K.SPAWN
+        anker = [k for k in self.kaempfer.values() if k.lebt]
+        if not anker:
+            ebene = self.rnd.randrange(len(self.welt.ebenen))
+            return ebene, freier_punkt(self.welt, ebene, self.rnd)
+        wer = self.rnd.choice(anker)
+        weit = s["weit_boss"] if boss else s["weit"]
+
+        # Kartenmarken zuerst: wer eine Karte baut, soll sagen duerfen,
+        # wo die Dinger herkommen. Sie gelten aber nur, wenn sie auch in
+        # der Naehe liegen - sonst waere es wieder ein Fussmarsch.
+        marke = self._spawnmarke(wer, weit * s["marke_band"], anker)
+        if marke is not None and self.rnd.random() < s["marke_anteil"]:
+            return marke
+
+        ebene = wer.ebene
+        if self.rnd.random() > s["eigene_ebene"] and len(self.welt.ebenen) > 1:
+            ebene = self.rnd.randrange(len(self.welt.ebenen))
+        bester = None
+        for versuch in range(s["versuche"]):
+            winkel = self.rnd.uniform(0.0, 360.0)
+            abstand = self.rnd.uniform(s["nah"], weit)
+            p = wer.pos + pygame.Vector2(abstand, 0).rotate(winkel)
+            e = self.welt.ebene(ebene)
+            if not (8 < p.x < e.pixel_breite - 8 and 8 < p.y < e.pixel_hoehe - 8):
+                continue
+            if not self.welt.frei(p, 14, ebene):
+                continue
+            # Der Abstand gilt gegen **jeden** Spieler, nicht nur gegen
+            # den gewuerfelten. Stand hier einmal nur `wer`, und prompt
+            # entstand auf der kleinen Testkarte ein Gegner 137 Pixel
+            # neben dem zweiten Mann - die Spieler stehen dort naeher
+            # beieinander als das Band breit ist.
+            if self._zu_nah(p, ebene, anker):
+                continue
+            if bester is None:
+                bester = p
+            # Ausser Sicht ist besser, aber nur so lange gesucht, wie es
+            # sich lohnt - danach zaehlt die erste brauchbare Stelle.
+            if versuch < s["verdeckt_versuche"]:
+                if ebene == wer.ebene and self.welt.sicht_frei(p, wer.pos, ebene):
+                    continue
+            return ebene, p
+        if bester is not None:
+            return ebene, bester
+        # Nichts gefunden: dann wenigstens irgendwo mit Abstand. Die
+        # kleine Testkarte ist klein genug, dass das vorkommt.
+        for _ in range(20):
+            p = freier_punkt(self.welt, ebene, self.rnd)
+            if not self._zu_nah(p, ebene, anker):
+                return ebene, p
+        return ebene, freier_punkt(self.welt, ebene, self.rnd)
+
+    def _zu_nah(self, punkt, ebene: int, anker) -> bool:
+        """Steht diese Stelle jemandem im Gesicht? Auf seiner Ebene."""
+        nah = K.SPAWN["nah"]
+        return any(k.ebene == ebene and punkt.distance_to(k.pos) < nah
+                   for k in anker)
+
+    def _spawnmarke(self, wer, hoechstens: float, anker):
+        """Eine Spawnmarke aus der Karte, die nah genug liegt.
+
+        Die Marken stehen als Buchstaben in der Kartendatei, genau wie
+        die Kreise - wer eine Karte baut, setzt ein Z hin und ist fertig.
+        """
+        if not self._spawnmarken:
+            return None
+        # Dieselbe Untergrenze wie beim Ring. Stand hier einmal die
+        # Haelfte davon, und prompt entstand auf der Testkarte ein
+        # Gegner 105 Pixel neben einem Spieler - eine Marke darf naeher
+        # liegen als der Ring wuerfelt, aber nicht im Gesicht.
+        nah = K.SPAWN["nah"]
+        passend = [(e, p) for (e, p) in self._spawnmarken
+                   if e == wer.ebene
+                   and nah < p.distance_to(wer.pos) <= hoechstens
+                   and not self._zu_nah(p, e, anker)]
+        if not passend:
+            return None
+        ebene, punkt = self.rnd.choice(passend)
+        # Etwas streuen, damit nicht alle auf demselben Pixel stehen.
+        for _ in range(8):
+            p = punkt + pygame.Vector2(self.rnd.uniform(-34, 34),
+                                       self.rnd.uniform(-34, 34))
+            if self._zu_nah(p, ebene, anker):
+                continue          # die Streuung darf die Grenze nicht reissen
+            if self.welt.frei(p, 14, ebene):
+                return ebene, p
+        return ebene, punkt
+
+    def _spawnmarken_lesen(self) -> list:
+        """Alle Spawnmarken der Karte: [(Ebene, Punkt), ...]."""
+        raus = []
+        for buchstabe in str(K.SPAWN["marken"]):
+            for i, e in enumerate(self.welt.ebenen):
+                for punkt in e.marken.get(buchstabe, ()):
+                    raus.append((i, pygame.Vector2(punkt)))
+        return raus
 
     # ---- Der Kreis in der Mitte -----------------------------------------
     def in_der_zone(self, k) -> bool:
@@ -1790,9 +2087,14 @@ class Gefecht(Szene):
             if not w.lebt:
                 continue
             if isinstance(w, KampfGegner):
+                # Die Kennung ist neu und der Grund, warum Gegner beim
+                # Gast nicht mehr ruckeln - siehe _gegner_uebernehmen.
+                # Der Vorlauf sagt, ob gerade eine Faehigkeit anliegt:
+                # ohne ihn saehe der Gast den Stampfer erst am Schaden.
                 gegner.append([round(w.pos.x, 1), round(w.pos.y, 1),
                                round(w.winkel, 1), w.ebene, w.art,
-                               round(max(0.0, w.leben) / w.max_leben, 2)])
+                               round(max(0.0, w.leben) / w.max_leben, 2),
+                               w.kennung, round(w.f_vorlauf, 2)])
                 continue
             if isinstance(w, KampfBeute):
                 beute.append([round(w.pos.x, 1), round(w.pos.y, 1),
@@ -2113,9 +2415,41 @@ class Gefecht(Szene):
         self._wirkung_nachspielen(meldung.get("wirkung", []))
         self._fremde_beute = [tuple(b) for b in meldung.get("beute", [])
                               if isinstance(b, (list, tuple)) and len(b) == 4]
-        self._fremde_gegner = [tuple(g) for g in meldung.get("gegner", [])
-                               if isinstance(g, (list, tuple)) and len(g) == 6]
+        self._gegner_uebernehmen(meldung.get("gegner", []))
         self._aufgehoben_erkennen(vorige_beute)
+
+    def _gegner_uebernehmen(self, eintraege) -> None:
+        """Gegner beim Gast nachfuehren, mit Zwischenlage.
+
+        Genau dieselbe Ueberlegung wie bei den Geschossen, und genau
+        derselbe Fehler: die Liste wurde bei jedem Paket weggeworfen und
+        gezeichnet wurde die zuletzt gemeldete Stelle. Bei sechzig
+        Paketen und 120 Bildern heisst das, dass jeder Gegner die Haelfte
+        der Zeit stillsteht und dann springt. Bei einem Laeufer faellt
+        das gerade noch durch; bei einem Koloss, der 58 Pixel breit ist
+        und sich langsam bewegt, sieht man jeden Sprung.
+        """
+        vorher = {e[6]: e for e in self._fremde_gegner if len(e) > 6}
+        raus = []
+        for e in eintraege:
+            if not isinstance(e, (list, tuple)) or len(e) < 6:
+                continue
+            try:
+                x, y = float(e[0]), float(e[1])
+                winkel, ebene = float(e[2]), int(e[3])
+                art, anteil = str(e[4]), float(e[5])
+                # Aeltere Gastgeber schicken beides nicht. Dann gibt es
+                # keine Zwischenlage und keine Ankuendigung, aber der
+                # Gegner steht trotzdem da.
+                kennung = int(e[6]) if len(e) > 6 else 0
+                vorlauf = float(e[7]) if len(e) > 7 else 0.0
+            except (TypeError, ValueError):
+                continue
+            alt = vorher.get(kennung) if kennung else None
+            vx, vy = (alt[0], alt[1]) if alt is not None else (x, y)
+            raus.append((x, y, winkel, ebene, art, anteil, kennung, vorlauf,
+                         vx, vy))
+        self._fremde_gegner = raus
 
     def _fliegendes_uebernehmen(self, eintraege) -> None:
         """Geschosse und Granaten beim Gast nachfuehren, mit Zwischenlage.
@@ -2820,6 +3154,27 @@ class Gefecht(Szene):
                                  farbe, anteil, self._zeit / z["puls"],
                                  z["ring"], z["fuellung"])
 
+    def _ankuendigung_zeichnen(self, ziel, p, daten, vorlauf) -> None:
+        """Was ein Boss gleich tut, bevor er es tut.
+
+        Ein Ring, der sich zuzieht - dieselbe Sprache wie die
+        Zielerfassung des Raketenwerfers, damit man sie nicht neu lernen
+        muss. Beim Stampfer hat er die Groesse des Schadens: man sieht
+        also nicht nur **dass** etwas kommt, sondern auch **wohin** es
+        reicht, und kann entscheiden statt zu raten.
+        """
+        f = daten.get("faehigkeit") or {}
+        gesamt = max(0.01, f.get("vorlauf", 0.5))
+        anteil = max(0.0, min(1.0, vorlauf / gesamt))
+        radius = float(f.get("radius", daten.get("radius", 12)) or 12)
+        if f.get("art") == "brut":
+            radius = daten.get("radius", 16) * 2.2
+        # Aussen der volle Umfang, innen der zulaufende Ring.
+        pygame.draw.circle(ziel, (78, 30, 22), (int(p.x), int(p.y)),
+                           int(radius), 1)
+        jetzt = int(radius * (0.25 + 0.75 * anteil))
+        pygame.draw.circle(ziel, K.C_RED, (int(p.x), int(p.y)), max(2, jetzt), 2)
+
     def _fremdes_zeichnen(self, ziel, misch: float = 1.0) -> None:
         """Beim Gast gibt es keine echten Wesen dafuer, nur gemeldete Punkte.
 
@@ -2834,23 +3189,33 @@ class Gefecht(Szene):
             s = self.renderer.bilder.bild(bild)
             ziel.blit(s, (x - ecke.x - s.get_width() / 2,
                           y - ecke.y - s.get_height() / 2))
-        for (x, y, winkel, ebene, art, anteil) in self._fremde_gegner:
+        for (x, y, winkel, ebene, art, anteil, _kn, vorlauf,
+             vx, vy) in self._fremde_gegner:
             if ebene != self.blick:
                 continue
-            name = K.GEGNER.get(art, {}).get("bild", "gegner_laeufer")
-            s = self.renderer.bilder.gedreht(name, winkel)
+            # Zwischen der vorletzten und der letzten Meldung, wie bei
+            # den Geschossen. Ohne das steht jeder Gegner die halbe Zeit.
+            x = vx + (x - vx) * misch
+            y = vy + (y - vy) * misch
+            d = K.gegner_daten(art)
+            s = self.renderer.bilder.gedreht(d.get("bild", "gegner_laeufer"), winkel)
             p = pygame.Vector2(x - ecke.x, y - ecke.y)
-            sch = self.renderer.schatten(K.GEGNER.get(art, {}).get("radius", 9))
+            sch = self.renderer.schatten(d.get("radius", 9))
             ziel.blit(sch, (p.x - sch.get_width() / 2 + 1,
                             p.y - sch.get_height() / 2 + 3))
+            if vorlauf > 0.0:
+                self._ankuendigung_zeichnen(ziel, p, d, vorlauf)
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
             if anteil < 0.999:
-                breite = 20
+                boss = K.ist_boss(art)
+                breite = 34 if boss else 20
+                hoch = int(d.get("radius", 9)) + 11
                 pygame.draw.rect(ziel, (16, 11, 8),
-                                 (int(p.x) - breite // 2, int(p.y) - 20, breite, 2))
-                pygame.draw.rect(ziel, K.C_RED,
-                                 (int(p.x) - breite // 2, int(p.y) - 20,
-                                  int(breite * anteil), 2))
+                                 (int(p.x) - breite // 2, int(p.y) - hoch,
+                                  breite, 3 if boss else 2))
+                pygame.draw.rect(ziel, K.C_AMBER if boss else K.C_RED,
+                                 (int(p.x) - breite // 2, int(p.y) - hoch,
+                                  int(breite * anteil), 3 if boss else 2))
         for (x, y, winkel, ebene, name, hoehe, _kn, vx, vy) in self._fremde_schuesse:
             # Zwischen der vorletzten und der letzten Meldung. Ohne das
             # steht eine Granate fuenf Bilder still und springt dann.
