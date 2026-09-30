@@ -252,7 +252,7 @@ class Spiel(Szene):
         # der die Figur steht. Schaut man mit dem Mausrad eine Etage hoeher
         # oder tiefer, haben sie dort nichts zu suchen - sie zeigten sonst
         # ueber einen Boden, auf dem man gar nicht ist.
-        if self.blick == self.held.ebene:
+        if self.blick == self.held.ebene and self.held.heilt_rest <= 0:
             self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.held)
             self.renderer.tracer(ziel, self.welt, self.kamera, self.held)
         self.renderer.schaden_blende(ziel, self.schaden_blende)

@@ -174,7 +174,10 @@ class Kaempfer(Spieler):
             # Renderer die Bewegung des Eisens.
             name = "spieler_%s" % vorsatz.rstrip("_") if vorsatz else "spieler"
             return name if name in K.BILD_MASS else "spieler"
-        name = "spieler_%s%s" % (vorsatz, self.waffe_name)
+        # Beim Anlegen eines Medkits haelt die Figur das Medkit, nicht die
+        # Waffe - fuer alle sichtbar, der Gast bekommt heilt_rest mit.
+        gehalten = "medkit" if self.heilt_rest > 0 else self.waffe_name
+        name = "spieler_%s%s" % (vorsatz, gehalten)
         return name if name in K.BILD_MASS else super().bild
 
     # ---- Am Boden statt tot -------------------------------------------
@@ -3461,8 +3464,10 @@ class Gefecht(Szene):
                                     oben_aus=not self.obere_zeigen)
         if not self.ist_gastgeber:
             self._fremdes_zeichnen(ziel, misch)
+        # Ziellinie und Streukegel nicht, solange man ein Medkit anlegt:
+        # dann schiesst man nicht, und eine Linie saehe aus, als ob.
         if (self.ich is not None and self.ich.lebt and not self.ich.am_boden
-                and self.blick == self.ich.ebene):
+                and self.blick == self.ich.ebene and self.ich.heilt_rest <= 0):
             self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.ich)
             self.renderer.tracer(ziel, self.welt, self.kamera, self.ich)
         self._namen_zeichnen(ziel)

@@ -1395,7 +1395,7 @@ class Spieler(Wesen):
         d = K.WAFFEN.get(K.NAHKAMPF["waffe"])
         if d is None or self.nahkampf_rest > 0 or self.schlag_zeigen > 0:
             return False
-        if self.nachlade_rest > 0:
+        if self.nachlade_rest > 0 or self.heilt_rest > 0:
             return False
         self.nahkampf_rest = d["takt"]
         self.schlag_zeigen = d.get("schwung", 0.26)
@@ -1420,6 +1420,8 @@ class Spieler(Wesen):
         # Brecheisen selbst wird nie in der Hand gezeigt.
         if self.schwingt:
             return "spieler"
+        if self.heilt_rest > 0:
+            return "spieler_medkit"
         name = "spieler_" + self.waffe_name
         return name if name in K.BILD_MASS else "spieler"
 
@@ -1529,14 +1531,17 @@ class Spieler(Wesen):
                 wolke(self.welt, self.pos + pygame.Vector2(0, 4), 2, 26, 0.34,
                       K.C_MUTED_DK, self.ebene, 1, "staub", 360, 0, 6.0)
 
-        # Nachladen und Feuern laufen immer weiter: beim Rennen, im Sturz,
-        # und waehrend ein Medkit angelegt wird. Keine Handlung sperrt eine
-        # andere aus - siehe abbrechen().
+        # Nachladen und Feuern laufen immer weiter: beim Laufen, im Sturz
+        # und beim Dash. Keine Handlung sperrt eine andere aus - siehe
+        # abbrechen(). Mit einer Ausnahme: waehrend ein Medkit angelegt
+        # wird, hat die Figur es in der Hand und nicht die Waffe, und das
+        # sieht man ihr an. Was sie nicht haelt, schiesst nicht. Das
+        # Nachladen laeuft dabei weiter - es ist ein Zaehler, kein Griff.
         if self.nachlade_rest > 0:
             self.nachlade_rest -= dt
             if self.nachlade_rest <= 0:
                 self.magazin[self.waffe_name] = self.waffe_daten["magazin"]
-        elif self.feuert and self.takt <= 0:
+        elif self.feuert and self.takt <= 0 and self.heilt_rest <= 0:
             self.feuern()
 
     # ---- Waffe -------------------------------------------------------

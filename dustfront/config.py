@@ -362,6 +362,7 @@ BILD_MASS = {
     "spieler_molotov":    (56, 56),
     "spieler_blend":      (56, 56),
     "spieler_brecheisen": (56, 56),
+    "spieler_medkit":     (56, 56),   # waehrend des Anlegens
     "spieler_boden":      (28, 28),   # wer am Boden liegt
     "gegner_laeufer":   (28, 28),
     "gegner_brecher":   (36, 36),
@@ -1201,6 +1202,11 @@ WAFFEN_HAND = {
                        aufbau="walze"),
     "brecheisen": dict(lauf=15, dicke=2, schaft=5, s_dicke=2, holz=False,
                        aufbau="haken"),
+    # Keine Waffe, aber etwas in der Hand: waehrend ein Medkit angelegt
+    # wird, haelt die Figur es statt der Waffe. Steht hier, damit es wie
+    # jede Waffe eine Figur je Mannschaft bekommt.
+    "medkit":     dict(lauf=0,  dicke=0, schaft=0, s_dicke=0, holz=False,
+                       aufbau="koffer"),
 }
 
 # Jede Mannschaft bekommt ihre eigene Fassung jeder Spielerfigur. Sie sind

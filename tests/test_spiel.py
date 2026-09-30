@@ -4048,6 +4048,60 @@ pruef("Wer herunterfaellt, bleibt sichtbar",
 faller.flug = 0.0
 wo_w.verlassen(); wo_g.verlassen()
 
+# ── Medkit in der Hand ───────────────────────────────────────────────
+# Beim Anlegen haelt die Figur das Medkit statt der Waffe - man sieht es,
+# und was sie nicht haelt, schiesst nicht.
+pruef("Die Figur mit Medkit gibt es, auch je Mannschaft",
+      "spieler_medkit" in K.BILD_MASS and all(
+          "spieler_%s_medkit" % t["name"].lower() in K.BILD_MASS
+          for t in K.TEAMS["kombi"]))
+# Ein frisches Spiel: die Figur von oben ist laengst gestorben.
+sz_m = Spiel(app, seed=20250921)
+h_m = sz_m.held
+e = app.eingabe          # `e` hiess zwischendurch eine Ebene
+
+def sim_m(sekunden, halten=()):
+    for _ in range(int(sekunden / K.FIXED_DT)):
+        e.neues_bild()
+        e._gehalten = set(halten)
+        e.maus = pygame.Vector2(620, 180)
+        sz_m.schritt(K.FIXED_DT)
+
+sim_m(0.1)
+h_m.unverwundbar = 99.0
+h_m.waffe = h_m.waffen.index("repetierer")
+h_m.magazin["repetierer"] = K.WAFFEN["repetierer"]["magazin"]
+h_m.nachlade_rest = 0.0
+h_m.leben = h_m.max_leben * 0.5
+h_m.medkits = 1
+pruef("Das Medkit geht los", h_m.heilen())
+pruef("Solange es angelegt wird, haelt die Figur es", h_m.bild == "spieler_medkit",
+      h_m.bild)
+voll = h_m.magazin["repetierer"]
+sim_m(K.MEDKIT["dauer"] * 0.8, halten={"feuer"})
+pruef("Und schiesst dabei nicht", h_m.magazin["repetierer"] == voll,
+      "%d von %d" % (h_m.magazin["repetierer"], voll))
+pruef("Auch das Brecheisen bleibt stecken", not h_m.nahkampf())
+sim_m(K.MEDKIT["dauer"] * 0.4 + 0.3, halten={"feuer"})
+pruef("Danach ist die Waffe wieder da", h_m.bild == "spieler_repetierer",
+      h_m.bild)
+pruef("Und sie schiesst wieder", h_m.magazin["repetierer"] < voll,
+      "%d von %d" % (h_m.magazin["repetierer"], voll))
+pruef("Geheilt hat es auch", h_m.leben > h_m.max_leben * 0.5)
+
+wm, gm = gefechtspaar("team")
+fig_m = wm.kaempfer[gm.meine_nummer]
+fig_m.leben = fig_m.max_leben * 0.5
+fig_m.medkits = 1
+fig_m.heilen()
+for _ in range(6):
+    wm.schritt(K.NETZ["takt"]); gm.schritt(K.NETZ["takt"])
+pruef("Im Gefecht traegt die Figur das Medkit in Mannschaftsfarbe",
+      fig_m.bild.endswith("_medkit") and fig_m.bild != "spieler_medkit",
+      fig_m.bild)
+pruef("Und der Gast sieht dasselbe", gm.ich.bild == fig_m.bild, gm.ich.bild)
+wm.verlassen(); gm.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
