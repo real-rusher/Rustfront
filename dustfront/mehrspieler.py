@@ -569,6 +569,7 @@ class Gefecht(Szene):
         self._heilte = 0.0
         self._fremde_beute: list[tuple] = []
         self._fremde_gegner: list[tuple] = []
+        self._in_wirkung = False      # siehe NETZKLAENGE
         self._knoepfe: set[str] = set()
         self._waffe_wunsch = -1
         self._rad = 0
@@ -670,11 +671,28 @@ class Gefecht(Szene):
         self.kamera.stossen(welt_modul.ruckel_wert(kraft, anlass, pos, ebene,
                                                    quelle, self.ich))
 
+    # Klaenge, die der Gastgeber an die Gaeste weiterreicht.
+    #
+    # Nicht alle: was in Explosion, Schuss oder Schlag steckt, kommt mit
+    # deren eigener Meldung, und den Sturz baut der Gast aus der Flughoehe
+    # selbst nach. Weitergereicht wird nur, was beim Gast sonst **fehlt** -
+    # und das war mehr, als man denkt: die Ansage eines Bosses und den
+    # Spuck des Speiers hat seit 0.26 kein Gast je gehoert.
+    NETZKLAENGE = ("speien", "boss_ansage", "dash", "wurf", "medkit", "ruf")
+
     def _klang(self, name: str, lautstaerke: float = 1.0, pos=None,
                ebene: int | None = None) -> None:
         laut = welt_modul.klang_wert(lautstaerke, pos, ebene or 0, self.ich)
         if laut > 0.0:
             self.app.klaenge.spielen(name, laut)
+        if (self.ist_gastgeber and name in self.NETZKLAENGE
+                and not self._in_wirkung):
+            if pos is None:
+                x = y = -99999.0          # ohne Ort: ueberall gleich laut
+            else:
+                x, y = round(pos.x, 1), round(pos.y, 1)
+            self._wirkung.append(["k", x, y, int(ebene or 0),
+                                  round(float(lautstaerke), 2), str(name)])
 
     # ---- Wirkung, die an die Gaeste weitergeht -------------------------
     #
@@ -692,26 +710,42 @@ class Gefecht(Szene):
 
     def _explosion_melden(self, pos, ebene: int, radius: float,
                           art: str = "spreng") -> None:
-        Welt.explosion(self.welt, pos, ebene, radius, art)
+        self._in_wirkung = True
+        try:
+            Welt.explosion(self.welt, pos, ebene, radius, art)
+        finally:
+            self._in_wirkung = False
         self._wirkung.append(["x", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(radius, 1), str(art)])
 
     def _schussknall_melden(self, pos, winkel: float, ebene: int, waffe: str,
                             quelle=None) -> None:
-        Welt.schussknall(self.welt, pos, winkel, ebene, waffe, quelle)
+        self._in_wirkung = True
+        try:
+            Welt.schussknall(self.welt, pos, winkel, ebene, waffe, quelle)
+        finally:
+            self._in_wirkung = False
         self._wirkung.append(["s", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(winkel, 1), waffe])
 
     def _schlagknall_melden(self, pos, winkel: float, ebene: int,
                             getroffen: bool = False, quelle=None) -> None:
-        Welt.schlagknall(self.welt, pos, winkel, ebene, getroffen, quelle)
+        self._in_wirkung = True
+        try:
+            Welt.schlagknall(self.welt, pos, winkel, ebene, getroffen, quelle)
+        finally:
+            self._in_wirkung = False
         self._wirkung.append(["n", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(winkel, 1),
                               1 if getroffen else 0])
 
     def _raketenstart_melden(self, pos, winkel: float, ebene: int,
                              quelle=None, ziel=None) -> None:
-        Welt.raketenstart(self.welt, pos, winkel, ebene, quelle, ziel)
+        self._in_wirkung = True
+        try:
+            Welt.raketenstart(self.welt, pos, winkel, ebene, quelle, ziel)
+        finally:
+            self._in_wirkung = False
         self._wirkung.append(["r", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(winkel, 1), 0])
 
@@ -758,6 +792,16 @@ class Gefecht(Szene):
                 except (TypeError, ValueError):
                     continue
                 self.welt.schlagknall(pos, winkel, ebene, bool(e[5]))
+            elif art == "k":
+                try:
+                    laut = float(e[4])
+                except (TypeError, ValueError):
+                    continue
+                name = str(e[5])
+                if name not in self.NETZKLAENGE:
+                    continue       # nur, was auch geschickt werden darf
+                ort = None if pos.x < -9e4 else pos
+                self.welt.klang(name, laut, ort, ebene)
             elif art == "r":
                 try:
                     winkel = float(e[4])
@@ -1055,13 +1099,24 @@ class Gefecht(Szene):
     # Klicks" nicht - und Nachladen und Waffenwechsel ebenso, nur faellt es
     # dort weniger auf, weil man es sofort noch einmal drueckt.
 
+    # Tasten, die als einzelner Druck zum Gastgeber gehen. An einer
+    # Stelle, weil es sie zweimal braucht (Ereignis und Rueckfallebene) -
+    # und eine Taste, die in der einen Liste steht und in der anderen
+    # fehlt, geht genau dann nicht, wenn es darauf ankommt.
+    DRUECKE = ("nachladen", "heilen", "tracer", "tracer_weit",
+               "nahkampf", "feuermodus", "dash")
+
     def _knopf_merken(self, taste) -> None:
         """Einen Tastendruck aufheben, bis das naechste Paket rausgeht."""
         tabelle = self.app.eingabe.tabelle
-        for name in ("nachladen", "heilen", "tracer", "tracer_weit",
-                     "nahkampf", "feuermodus"):
+        for name in self.DRUECKE:
             if taste in tabelle.get(name, ()):
                 self._knoepfe.add(name)
+        # Am Boden ist "benutzen" ein Ruf. Als Druck geschickt, nicht als
+        # gehaltener Zustand: ein Ruf ist ein Ereignis, und der Gastgeber
+        # entscheidet, ob er gerade zaehlt.
+        if taste in tabelle.get("nutzen", ()):
+            self._knoepfe.add("rufen")
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
             if taste in tabelle.get("waffe%d" % nr, ()):
                 self._waffe_wunsch = nr - 1
@@ -1074,10 +1129,11 @@ class Gefecht(Szene):
         Belegung ohne Tastencode auskommt.
         """
         e = self.app.eingabe
-        for name in ("nachladen", "heilen", "tracer", "tracer_weit",
-                     "nahkampf", "feuermodus"):
+        for name in self.DRUECKE:
             if e.gedrueckt(name):
                 self._knoepfe.add(name)
+        if e.gedrueckt("nutzen"):
+            self._knoepfe.add("rufen")
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
             if e.gedrueckt("waffe%d" % nr):
                 self._waffe_wunsch = nr - 1
@@ -1092,7 +1148,6 @@ class Gefecht(Szene):
             "ziel": [round(ziel.x, 1), round(ziel.y, 1)],
             "feuert": False if offen else e.gehalten("feuer"),
             "zielt": False if offen else e.gehalten("zweit"),
-            "sprint": False if offen else e.gehalten("sprint"),
             # Nutzen wird gehalten, nicht gedrueckt: Treppe und Aufhelfen
             # haengen beide daran, und Aufhelfen braucht Zeit.
             "nutzen": False if offen else e.gehalten("nutzen"),
@@ -1128,7 +1183,6 @@ class Gefecht(Szene):
             k.tempo.update(0, 0)
             k.feuert = False
             k.zielt = False
-            k.sprint = False
             k.hilft = None
             return
 
@@ -1145,12 +1199,13 @@ class Gefecht(Szene):
         k.feuert = bool(ein.get("feuert")) and not (
             K.NAHKAMPF["sperrt_feuer"] and k.schwingt)
         k.zielt = bool(ein.get("zielt"))
-        k.sprint = bool(ein.get("sprint"))
 
         knoepfe = ein.get("knoepfe") or []
         if isinstance(knoepfe, list):
             if "nachladen" in knoepfe:
                 k.nachladen()
+            if "dash" in knoepfe:
+                k.dashen()
             if "heilen" in knoepfe:
                 k.heilen()
             if "tracer" in knoepfe:
@@ -1185,7 +1240,6 @@ class Gefecht(Szene):
             k.tempo *= 0.2
             k.feuert = False
             k.zielt = False
-            k.sprint = False
             return
         # Treppe nehmen - aber nicht jedes Bild wieder.
         #
@@ -2059,6 +2113,19 @@ class Gefecht(Szene):
                 "v": k.lebt,
                 "m": k.magazin.get(k.waffe_name, 0),
                 "vo": k.vorrat.get(k.waffe_name, 0),
+                # Magazin und Vorrat **jeder** Waffe, nicht nur der
+                # gehaltenen. Stand hier einmal nur die gehaltene, und der
+                # Gast sah in der Hotbar fuer jede andere Waffe den Stand
+                # vom Rundenbeginn - gemessen 30/90 fuers Sturmgewehr,
+                # waehrend es in Wahrheit 1/60 hatte. Die Waffenliste geht
+                # mit, damit beide Listen sicher zueinander gehoeren.
+                # Dash: wie viele bereit, wie weit die naechste ist, und
+                # ob gerade einer laeuft (fuer die Spur hinter der Figur).
+                "dl": k.dash_ladungen, "dp": round(k.dash_laden, 2),
+                "dr": round(k.dash_rest, 2),
+                "wl": list(k.waffen),
+                "ml": [k.magazin.get(n, 0) for n in k.waffen],
+                "vl": [k.vorrat.get(n, 0) for n in k.waffen],
                 "nl": round(k.nachlade_rest, 2),
                 "fo": round(k.fokus, 2), "zi": k.zielt,
                 "tr": k.tracer, "tw": k.tracer_weit,
@@ -2366,7 +2433,21 @@ class Gefecht(Szene):
                 k.waffe = k.waffen.index(waffe)
             k.magazin[k.waffe_name] = int(eintrag.get("m", 0))
             k.vorrat[k.waffe_name] = int(eintrag.get("vo", 0))
+            namen, mags, vorr = (eintrag.get("wl"), eintrag.get("ml"),
+                                 eintrag.get("vl"))
+            if (isinstance(namen, list) and isinstance(mags, list)
+                    and isinstance(vorr, list)
+                    and len(namen) == len(mags) == len(vorr)):
+                for n, m, v in zip(namen, mags, vorr):
+                    try:
+                        k.magazin[str(n)] = int(m)
+                        k.vorrat[str(n)] = int(v)
+                    except (TypeError, ValueError):
+                        continue
             k.nachlade_rest = float(eintrag.get("nl", 0.0))
+            k.dash_ladungen = int(eintrag.get("dl", K.DASH["ladungen"]))
+            k.dash_laden = float(eintrag.get("dp", 0.0))
+            k.dash_rest = float(eintrag.get("dr", 0.0))
             k.fokus = float(eintrag.get("fo", 0.0))
             k.zielt = bool(eintrag.get("zi", False))
             k.tracer = bool(eintrag.get("tr", False))

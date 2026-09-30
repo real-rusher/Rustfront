@@ -140,12 +140,12 @@ pruef("Die Eingabe kennt die neue Taste",
 pruef("Steht sofort in tasten.json",
       E.Einstellungen().tasten["nachladen"] == ["j"])
 
-# Eine Taste gehoert immer nur einer Aktion: H vom Medkit auf Sprint legen
-zeile = next(el for el in st.elemente if el.name == "sprint")
+# Eine Taste gehoert immer nur einer Aktion: H vom Medkit auf den Dash legen
+zeile = next(el for el in st.elemente if el.name == "dash")
 st.wahl = st.elemente.index(zeile)
 taste(st, pygame.K_RETURN)
 taste(st, pygame.K_h)
-pruef("Sprint bekommt H", app.opt.tasten["sprint"] == ["h"])
+pruef("Der Dash bekommt H", app.opt.tasten["dash"] == ["h"])
 pruef("Das Medkit verliert H dabei", "h" not in app.opt.tasten["heilen"],
       str(app.opt.tasten["heilen"]))
 

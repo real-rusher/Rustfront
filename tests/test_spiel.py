@@ -3562,6 +3562,97 @@ pruef("Auch der Boss kommt beim Gast an",
       str(sorted({e[4] for e in g8._fremde_gegner})))
 w8.verlassen(); g8.verlassen()
 
+# ─────────────────────────────────────────────────────────────────────
+# 0.27: Tempo, Dash, Boden, Ebenen, Lobby und die neue Anzeige.
+print()
+print("-- 0.27 --")
+
+# Munition beim Gast. Gemeldet als "bei Gaesten wurde die Gesamtmunition
+# gar nicht angezeigt": geschickt wurde nur der Stand der gehaltenen
+# Waffe, und jede andere zeigte beim Gast ihren Stand vom Rundenbeginn.
+wm, gm = gefechtspaar("pvp", knapp=True)
+wahr = wm.kaempfer[gm.meine_nummer]
+for name, weg in (("sturm", 30), ("schrot", 6)):
+    wahr.vorrat[name] = max(0, wahr.vorrat[name] - weg)
+    wahr.magazin[name] = 1
+wahr.waffe = wahr.waffen.index("repetierer")
+for _ in range(30):
+    wm.schritt(K.NETZ["takt"]); gm.schritt(K.NETZ["takt"])
+falsch = [n for n in wahr.waffen
+          if (wahr.magazin.get(n), wahr.vorrat.get(n))
+          != (gm.ich.magazin.get(n), gm.ich.vorrat.get(n))]
+pruef("Der Gast kennt Magazin und Vorrat jeder Waffe, nicht nur der gehaltenen",
+      not falsch, str(falsch))
+wm.verlassen(); gm.verlassen()
+
+# Tempo und Dash.
+pruef("Kein Sprint mehr in den Werten", "sprint" not in K.SPIELER)
+pruef("Der Renner bleibt schneller als ein gehender Spieler",
+      K.GEGNER["renner"]["tempo"] > K.SPIELER["tempo"])
+pruef("Der Laeufer holt einen gehenden Spieler nicht ein",
+      K.GEGNER["laeufer"]["tempo"] < K.SPIELER["tempo"])
+
+wd, gd = gefechtspaar("pvp")
+ich_d = wd.kaempfer[0]
+ich_d.schutz = 0.0
+for _ in range(10):
+    wd.schritt(K.FIXED_DT)
+start = pygame.Vector2(ich_d.pos)
+ich_d.will = pygame.Vector2(1, 0)
+pruef("Man hat zu Beginn zwei Ladungen", ich_d.dash_ladungen == 2)
+pruef("Ein Dash geht", ich_d.dashen())
+for _ in range(int(0.5 / K.FIXED_DT)):
+    ich_d.will = pygame.Vector2(0, 0)
+    wd.schritt(K.FIXED_DT)
+weg = ich_d.pos.distance_to(start)
+pruef("Er traegt rund zwei Kacheln weit", 45.0 < weg < 110.0, "%.0f px" % weg)
+pruef("Und kostet eine Ladung", ich_d.dash_ladungen == 1)
+ich_d.dash_sperre = 0.0
+pruef("Die zweite geht auch", ich_d.dashen())
+ich_d.dash_rest = 0.0
+ich_d.dash_sperre = 0.0
+pruef("Eine dritte nicht", not ich_d.dashen())
+for _ in range(int((K.DASH["nachladen"] + 0.05) / K.FIXED_DT)):
+    wd.schritt(K.FIXED_DT)
+pruef("Nach einer Ladezeit ist genau eine wieder da",
+      ich_d.dash_ladungen == 1, "%d" % ich_d.dash_ladungen)
+for _ in range(int(K.DASH["nachladen"] / K.FIXED_DT)):
+    wd.schritt(K.FIXED_DT)
+pruef("Nach zwei Ladezeiten beide - sie laden nacheinander",
+      ich_d.dash_ladungen == 2, "%d" % ich_d.dash_ladungen)
+ich_d.heilt_rest = 0.5
+pruef("Beim Anlegen eines Medkits geht kein Dash", not ich_d.dashen())
+ich_d.heilt_rest = 0.0
+
+wd.verlassen(); gd.verlassen()
+
+# Der Gast: sein Druck muss ankommen, und er muss seine Ladungen sehen.
+# Ein frisches Paar - oben lief der Gastgeber Sekunden lang allein, und
+# das ist kein Zustand, in dem ein Gast je steckt.
+wd, gd = gefechtspaar("pvp")
+gast_fig = wd.kaempfer[gd.meine_nummer]
+vorher_l = gast_fig.dash_ladungen
+gd._knoepfe.add("dash")
+for _ in range(20):
+    wd.schritt(K.NETZ["takt"]); gd.schritt(K.NETZ["takt"])
+pruef("Der Dash des Gastes kommt beim Gastgeber an",
+      gast_fig.dash_ladungen == vorher_l - 1,
+      "%d statt %d" % (gast_fig.dash_ladungen, vorher_l - 1))
+pruef("Und der Gast sieht seine Ladungen",
+      gd.ich.dash_ladungen == gast_fig.dash_ladungen)
+wd.verlassen(); gd.verlassen()
+
+# Eine Eingabezeile mit einem Tastendruck darf beim Stau nicht wegfallen.
+from dustfront import netz as N
+lt = N.Leitung.__new__(N.Leitung)
+lt._raus = [b'{"t":"ein","knoepfe":[],"waffe":-1}\n'] * 5 + \
+           [b'{"t":"ein","knoepfe":["dash"],"waffe":-1}\n'] + \
+           [b'{"t":"ein","knoepfe":[],"waffe":-1}\n'] * 400
+lt.verworfen = 0
+lt._schlange_kuerzen()
+pruef("Ein Tastendruck ueberlebt das Kuerzen der Schlange",
+      any(b"dash" in z for z in lt._raus), "%d Zeilen" % len(lt._raus))
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -372,6 +372,43 @@ def _boss_ansage(seed=0):
     return out
 
 
+@platzhalter_klang("dash")
+def _dash(seed=0):
+    """Der Dash: ein kurzes Luftreissen, hell und trocken.
+
+    Rauschen mit einem Tiefpass, der schnell aufgeht - das klingt nach
+    Bewegung und nicht nach Aufprall. Kurz, weil man ihn oft hoert, und
+    leiser als jeder Schuss, weil er keine Gefahr ankuendigt.
+    """
+    return _mischen(
+        _rauschen(0.14, 0.34, 900, 4200, 3.4, seed, hp=True),
+        _rauschen(0.10, 0.18, 300, 900, 4.0, seed + 1),
+    )
+
+
+@platzhalter_klang("ruf")
+def _ruf(seed=0):
+    """Ein Gefallener ruft. Zwei kurze Toene, der zweite tiefer.
+
+    Es muss sich von allem anderen unterscheiden, was im Gefecht
+    klingt - Schuesse, Explosionen, Gegner. Ein Hornsignal nach unten
+    liest sich als "hier!", und es ist leise genug, dass es nicht nervt,
+    wenn jemand alle anderthalb Sekunden ruft.
+    """
+    n = int(RATE * 0.42)
+    out = [0.0] * n
+    ph = 0.0
+    tp = 2 * math.pi
+    for i in range(n):
+        p = i / n
+        f = 740.0 if p < 0.45 else 560.0
+        ph += tp * f / RATE
+        teil = p / 0.45 if p < 0.45 else (p - 0.5) / 0.5
+        huelle = 0.0 if 0.45 <= p < 0.5 else min(1.0, teil * 18.0) * (1.0 - teil) ** 1.4
+        out[i] = (math.sin(ph) * 0.7 + math.sin(ph * 2.0) * 0.18) * huelle * 0.55
+    return out
+
+
 @platzhalter_klang("herzschlag")
 def _herzschlag(seed=0):
     """Zwei Schlaege, der zweite leiser und dichter dahinter.

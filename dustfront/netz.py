@@ -120,6 +120,16 @@ class Leitung:
         # Die vorderste Zeile kann schon angefangen gesendet sein und
         # bleibt darum in jedem Fall stehen.
         for i, zeile in enumerate(self._raus):
+            # Eine Eingabezeile mit Tastendruecken darf nicht weg. "ein"
+            # traegt zweierlei: den gehaltenen Zustand (Richtung, Ziel,
+            # Feuer), den die naechste Zeile ohnehin richtig sagt - und
+            # einzelne Druecke wie Nachladen, Medkit oder Dash, die es
+            # genau einmal gibt. Wirft man die Zeile weg, ist der Druck
+            # verloren: man drueckt Dash, und nichts passiert.
+            einmalig = (b'"knoepfe":[]' not in zeile or b'"waffe":-1' not in zeile)
+            if zeile.startswith(b'{"t":"ein"') and einmalig:
+                behalten.append(zeile)
+                continue
             if i > 0 and (zeile.startswith(b'{"t":"welt"')
                           or zeile.startswith(b'{"t":"ein"')):
                 if len(behalten) + (len(self._raus) - i) > grenze:

@@ -67,12 +67,29 @@ C_BLUT = (96, 30, 22)
 
 # ══════════════════════════════════════════════════ GEFUEHL
 
+# Tempo. Etwas langsamer als bis 0.26, und aus einem gemessenen Grund:
+# auf Distanz war kaum zu treffen. Nachgebaut mit denselben Regeln wie
+# Spieler.schritt(), ein Ziel, das Haken schlaegt, und ein Schuetze, der
+# ideal vorhaelt - Trefferquote mit dem Sturmgewehr auf 470 Pixel:
+#
+#     bis 0.26, gehend (132)          20 %
+#     bis 0.26, sprintend (205)       13 %
+#     jetzt (108, kein Sprint)        23 %
+#
+# Der groesste Hebel war dabei nicht das Tempo, sondern der Sprint: er
+# machte jedes flüchtende Ziel auf offenem Sand fast unerreichbar. Er ist
+# darum durch den Dash ersetzt - schnell sein geht weiter, aber nur kurz
+# und nur, wenn man es sich einteilt.
+#
+# Die Beschleunigung ist bewusst nur leicht gesenkt. Weniger davon macht
+# Treffen gemessen **schwerer**, nicht leichter: das Ziel steckt dann
+# laenger in einer Richtungsaenderung, und auf die kann man nicht
+# vorhalten (110 px/s mit 600 Beschleunigung: 19,6 % gegen 23,4 % mit 1250).
 SPIELER = dict(
     radius=9.0,
-    tempo=132.0,              # Pixel pro Sekunde bei vollem Lauf
-    beschleunigung=1250.0,    # wie schnell das Tempo erreicht wird
-    bremsung=1500.0,          # wie schnell er steht, wenn man loslaesst
-    sprint=1.55,              # Faktor auf das Tempo
+    tempo=108.0,              # Pixel pro Sekunde bei vollem Lauf (war 132)
+    beschleunigung=1150.0,    # wie schnell das Tempo erreicht wird (war 1250)
+    bremsung=1400.0,          # wie schnell er steht, wenn man loslaesst (war 1500)
     leben=100.0,
     # Kein Unverwundbarkeitsfenster nach einem Treffer. Es gab einmal
     # eines (0.6 s) und es war ein Fehler: von einer Schrotladung zaehlte
@@ -80,6 +97,26 @@ SPIELER = dict(
     # eingestiegen. Schutz gibt es nur nach dem Einstieg, siehe
     # GEFECHT["schutz"].
     stiefel_abstand=26.0,     # Pixel zwischen zwei Staubwolken
+)
+
+# Der Dash ersetzt den Sprint.
+#
+# Zwei Ladungen, die sich **nacheinander** wieder fuellen: erst die eine,
+# dann die andere. Wer beide verbraucht, wartet also doppelt so lange auf
+# die zweite - das ist der Unterschied zum Sprint, den man einfach
+# gedrueckt hielt. Ein Dash ist eine Entscheidung.
+#
+# Ein Stoss von 0,16 s auf 430 px/s bringt rund 70 Pixel - gut zwei
+# Kacheln. Genug, um aus einem Feuer, einer Stampferwelle oder einer
+# Schusslinie zu kommen; zu wenig, um damit ueber die Karte zu reisen.
+DASH = dict(
+    ladungen=2,
+    nachladen=3.4,            # Sekunden je Ladung, eine nach der anderen
+    tempo=430.0,              # Pixel pro Sekunde waehrend des Stosses
+    dauer=0.16,               # so lange haelt der Stoss
+    sperre=0.30,              # frueher geht der naechste nicht
+    auslauf=1.25,             # am Ende auf so viel Lauftempo abgefangen
+    staub=10,                 # Staubwolken beim Absprung
 )
 
 KAMERA = dict(
@@ -394,6 +431,8 @@ KLANG_NAMEN = (
     "blend_pfeifen",        # das Pfeifen danach im Ohr
     "speien",               # der Spuck des Speiers
     "boss_ansage",          # ein Boss kuendigt an, was er gleich tut
+    "dash",                 # der kurze Stoss
+    "ruf",                  # wer am Boden liegt, ruft nach Hilfe
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -1500,16 +1539,23 @@ MEDKIT = dict(
     je_welle=2,           # so viele werden pro Welle abgeworfen
     hoechstens=3,         # so viele kann man tragen
     dauer=0.8,            # Sekunden, die das Anlegen braucht
+    # Waehrend des Anlegens hat man das Medkit in der Hand und nicht die
+    # Waffe - also geht man langsamer und schiesst nicht. Das ist der
+    # Preis dafuer, dass es mitten im Gefecht geht.
+    tempo=0.55,
 )
 
 # ══════════════════════════════════════════════════ INHALTE: Gegner
 
+# Alle Gegnertempi seit 0.27 mit 0,85 malgenommen - im selben Verhaeltnis,
+# in dem der Spieler langsamer wurde. So bleibt, was vorher galt: der
+# Laeufer holt einen gehenden Spieler nicht ein, der Renner schon.
 GEGNER = {
     "laeufer": dict(
         name="LAEUFER",
         leben=44.0,
         radius=9.0,
-        tempo=74.0,
+        tempo=63.0,
         beschleunigung=560.0,
         schaden=9.0,
         schlagtakt=0.85,
@@ -1522,7 +1568,7 @@ GEGNER = {
         name="BRECHER",
         leben=140.0,
         radius=13.0,
-        tempo=52.0,
+        tempo=44.0,
         beschleunigung=380.0,
         schaden=22.0,
         schlagtakt=1.3,
@@ -1541,7 +1587,7 @@ GEGNER = {
         name="RENNER",
         leben=26.0,              # ein Schrotschuss, ein Treffer mit dem Gewehr
         radius=8.0,
-        tempo=138.0,             # schneller als ein laufender Spieler (120)
+        tempo=118.0,             # schneller als ein laufender Spieler (108)
         beschleunigung=900.0,
         schaden=7.0,
         schlagtakt=0.55,
@@ -1556,7 +1602,7 @@ GEGNER = {
         name="SPEIER",
         leben=58.0,
         radius=10.0,
-        tempo=40.0,              # langsam: er will gar nicht heran
+        tempo=34.0,              # langsam: er will gar nicht heran
         beschleunigung=300.0,
         schaden=14.0,            # Schaden des Spucks
         schlagtakt=2.4,
@@ -1573,7 +1619,7 @@ GEGNER = {
         name="BLAEHER",
         leben=90.0,
         radius=13.0,
-        tempo=46.0,
+        tempo=39.0,
         beschleunigung=300.0,
         schaden=0.0,             # Er schlaegt nicht. Er kommt nur naeher.
         schlagtakt=1.0,
@@ -1607,7 +1653,7 @@ BOSSE = {
         name="KOLOSS",
         leben=1400.0,
         radius=22.0,
-        tempo=44.0,               # langsamer als jeder Spieler. Mit Absicht.
+        tempo=38.0,               # langsamer als jeder Spieler. Mit Absicht.
         beschleunigung=260.0,
         schaden=40.0,
         schlagtakt=1.8,
@@ -1627,7 +1673,7 @@ BOSSE = {
         name="MUTTER",
         leben=900.0,
         radius=18.0,
-        tempo=58.0,
+        tempo=50.0,
         beschleunigung=340.0,
         schaden=18.0,
         schlagtakt=1.2,
@@ -1645,7 +1691,7 @@ BOSSE = {
         name="BRANDSTIFTER",
         leben=1050.0,
         radius=17.0,
-        tempo=64.0,
+        tempo=54.0,
         beschleunigung=380.0,
         schaden=16.0,
         schlagtakt=1.4,

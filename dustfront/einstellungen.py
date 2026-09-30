@@ -87,8 +87,12 @@ TASTEN_VORGABE = [
     ("zurueck",     "ZURUECK",          ["s", "down"]),
     ("links",       "LINKS",            ["a", "left"]),
     ("rechts",      "RECHTS",           ["d", "right"]),
-    ("sprint",      "SPRINT",           ["left shift", "right shift"]),
-    ("nutzen",      "BENUTZEN",         ["e"]),
+    ("dash",        "DASH",             ["left shift", "right shift"]),
+    # Am Boden heisst dieselbe Taste "rufen": wer liegt, kann nichts
+    # benutzen, aber er kann auf sich aufmerksam machen.
+    ("nutzen",      "BENUTZEN / RUFEN", ["e"]),
+    ("ziehen",      "GEFALLENEN ZIEHEN", ["g"]),
+    ("ebenen",      "OBERE EBENEN",     ["q"]),
     ("nachladen",   "NACHLADEN",        ["r"]),
     ("heilen",      "MEDKIT",           ["h"]),
     ("inventar",    "INVENTAR",         ["tab"]),
@@ -275,6 +279,11 @@ class Einstellungen:
         if t is not None and t.is_file():
             try:
                 roh = json.loads(t.read_text(encoding="utf-8"))
+                # Der Sprint ist seit 0.27 der Dash. Wer ihn umgelegt
+                # hatte, soll seine Taste behalten und nicht still auf
+                # Shift zurueckfallen.
+                if "sprint" in roh and "dash" not in roh:
+                    roh["dash"] = roh.pop("sprint")
                 bekannt = {name for name, _, _ in TASTEN_VORGABE}
                 for k, v in roh.items():
                     if k in bekannt and isinstance(v, list):

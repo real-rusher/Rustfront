@@ -157,7 +157,8 @@ class Spiel(Szene):
 
         if held.lebt:
             held.will = e.richtung()
-            held.sprint = e.gehalten("sprint")
+            if e.gedrueckt("dash"):
+                held.dashen()
             held.ziel = self.kamera.zu_welt(e.maus)
             held.feuert = e.gehalten("feuer")
             if e.gedrueckt("nachladen"):

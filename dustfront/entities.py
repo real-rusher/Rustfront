@@ -1020,7 +1020,14 @@ class Spieler(Wesen):
         self.weg = 0.0                 # fuer Schrittstaub
         self.ziel = pygame.Vector2(pos) + pygame.Vector2(1, 0)
         self.will = pygame.Vector2(0, 0)
-        self.sprint = False
+        # Dash statt Sprint (K.DASH). `dash_ladungen` ist, was bereit ist;
+        # `dash_laden` von 0 bis 1 der Fortschritt der naechsten. Sie
+        # fuellen sich nacheinander, nicht gleichzeitig.
+        self.dash_ladungen = K.DASH["ladungen"]
+        self.dash_laden = 0.0
+        self.dash_rest = 0.0          # so lange laeuft der Stoss noch
+        self.dash_sperre = 0.0
+        self.dash_richtung = pygame.Vector2(1, 0)
         self.feuert = False
         self.punkte = 0
         self.tracer = False           # Zielhilfe an oder aus
@@ -1453,11 +1460,29 @@ class Spieler(Wesen):
         if fd:
             luft *= 1.0 - (1.0 - wd.get("fokus_tempo", 1.0)) * self.fokus
         luft *= self.gewicht_tempo
-        ziel_tempo = self.will * s["tempo"] * (s["sprint"] if self.sprint else 1.0) * luft
+        if self.heilt_rest > 0:
+            # Wer ein Medkit anlegt, hat die Haende voll und geht langsamer.
+            luft *= K.MEDKIT["tempo"]
+        self._dash_laden(dt)
+        ziel_tempo = self.will * s["tempo"] * luft
         rate = (s["beschleunigung"] if self.will.length_squared() > 0
                 else s["bremsung"]) * luft
-        self.tempo.x = naehern(self.tempo.x, ziel_tempo.x, rate * dt)
-        self.tempo.y = naehern(self.tempo.y, ziel_tempo.y, rate * dt)
+        if self.dash_rest > 0:
+            # Waehrend des Stosses zaehlt nur er.
+            self.dash_rest -= dt
+            self.tempo.update(self.dash_richtung * K.DASH["tempo"])
+            if self.dash_rest <= 0:
+                # Am Ende auf knapp Lauftempo abfangen. Ohne das bremste
+                # die normale Regel ihn von 430 px/s herunter, und dieses
+                # Auslaufen allein trug noch einmal 66 Pixel - gemessen
+                # 136 statt der gedachten 70. Ein Rest bleibt, damit er
+                # weich auslaeuft statt an einer Kante abzubrechen.
+                deckel = s["tempo"] * K.DASH["auslauf"]
+                if self.tempo.length() > deckel:
+                    self.tempo.scale_to_length(deckel)
+        else:
+            self.tempo.x = naehern(self.tempo.x, ziel_tempo.x, rate * dt)
+            self.tempo.y = naehern(self.tempo.y, ziel_tempo.y, rate * dt)
         vor = pygame.Vector2(self.pos)
         self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
         self.welt.auseinander(self)
@@ -1489,6 +1514,54 @@ class Spieler(Wesen):
             self.feuern()
 
     # ---- Waffe -------------------------------------------------------
+    # ---- Dash -----------------------------------------------------------
+    def _dash_laden(self, dt: float) -> None:
+        """Die Ladungen fuellen sich nacheinander wieder auf."""
+        d = K.DASH
+        self.dash_sperre = max(0.0, self.dash_sperre - dt)
+        if self.dash_ladungen >= d["ladungen"]:
+            self.dash_laden = 0.0
+            return
+        self.dash_laden += dt / d["nachladen"]
+        if self.dash_laden >= 1.0:
+            self.dash_ladungen += 1
+            self.dash_laden = 0.0 if self.dash_ladungen >= d["ladungen"] else \
+                self.dash_laden - 1.0
+
+    @property
+    def kann_dashen(self) -> bool:
+        return (self.lebt and not getattr(self, "am_boden", False)
+                and self.dash_ladungen > 0 and self.dash_sperre <= 0
+                and self.dash_rest <= 0 and self.sturz_rest <= 0
+                and self.heilt_rest <= 0
+                and getattr(self, "zieht", None) is None)
+
+    def dashen(self) -> bool:
+        """Ein Stoss in Laufrichtung, oder in Blickrichtung, wenn man steht.
+
+        Nicht im Fall, nicht am Boden, nicht beim Anlegen eines Medkits
+        und nicht beim Ziehen eines Gefallenen: in allen vier Faellen hat
+        man sich fuer etwas anderes entschieden, und der Dash waere ein
+        Ausweg, der diese Entscheidung nichts kosten laesst.
+        """
+        if not self.kann_dashen:
+            return False
+        richtung = pygame.Vector2(self.will)
+        if richtung.length_squared() < 0.01:
+            r = math.radians(self.winkel)
+            richtung = pygame.Vector2(math.cos(r), math.sin(r))
+        richtung.normalize_ip()
+        self.dash_richtung = richtung
+        self.dash_rest = K.DASH["dauer"]
+        self.dash_sperre = K.DASH["sperre"]
+        self.dash_ladungen -= 1
+        w = self.welt
+        if w is not None:
+            wolke(w, self.pos, K.DASH["staub"], 110, 0.45, K.C_MUTED_DK,
+                  self.ebene, 1, "staub")
+            w.klang("dash", 0.6, self.pos, self.ebene)
+        return True
+
     def nachladen(self) -> None:
         d = self.waffe_daten
         if not d.get("magazin"):
