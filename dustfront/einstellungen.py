@@ -50,6 +50,11 @@ VORGABE = {
     # Spiel
     "tracer": False,
     "tracer_weit": False,
+    # Im Mehrspieler: ob die Etage ueber einem zu Beginn jeder Partie
+    # gezeigt wird, wo sie ueber Spielflaeche liegt. Aus, weil sie dort
+    # genau den Gang verdeckt, in dem geschossen wird; Q schaltet in der
+    # Runde um. Plateaus ueber Fels bleiben immer sichtbar.
+    "obere_ebenen": False,
 }
 
 # Welche Einstellungen zum **Spieler** gehoeren und nicht zum Geraet.
@@ -61,7 +66,7 @@ VORGABE = {
 # andere bleibt, wo es ist.
 KONTO_WERTE = ("bildschirm_ruckeln", "vignette", "partikel",
                "tracer", "tracer_weit", "ton_gesamt", "ton_effekte",
-               "ton_musik")
+               "ton_musik", "obere_ebenen")
 
 AUFLOESUNGEN = ["960x540", "1280x720", "1600x900", "1920x1080", "2560x1440"]
 FENSTERMODI = ["fenster", "randlos", "vollbild"]

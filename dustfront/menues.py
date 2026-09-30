@@ -381,12 +381,17 @@ HILFE = {
         "ANMELDEST.",
     ],
     "partikel": ["MENGE AN STAUB, FUNKEN UND HUELSEN."],
+    "obere_ebenen": [
+        "IM MEHRSPIELER: OB DIE ETAGE UEBER DIR ZU BEGINN JEDER PARTIE",
+        "GEZEIGT WIRD, WO SIE UEBER SPIELFLAECHE LIEGT. PLATEAUS BLEIBEN",
+        "IMMER. IN DER RUNDE SCHALTET Q UM (UMLEGBAR). GEHOERT ZUM KONTO.",
+    ],
     "spaeter0": ["RICHTUNGSLICHT UND ECHTE SCHATTEN. SPAETER."],
     "spaeter1": ["STAUBWEHEN UND WETTER UEBER DER KARTE. SPAETER."],
     "spaeter2": ["UMSCHALTEN ZWISCHEN TEXTURSAETZEN. SPAETER."],
     "reset": ["SETZT ALLE WERTE DIESER SEITEN AUF DIE VORGABE ZURUECK."],
     "zurueck": ["ZURUECK ZUM PAUSENMENUE. GESPEICHERT IST SCHON ALLES."],
-    "reiter_anzeige": ["FENSTER, AUFLOESUNG, BILDRATE."],
+    "reiter_anzeige": ["FENSTER, AUFLOESUNG, BILDRATE, OBERE EBENEN."],
     "reiter_ton": ["LAUTSTAERKEN."],
     "reiter_grafik": ["EFFEKTE UND WAS SPAETER DAZUKOMMT."],
 }
@@ -449,6 +454,11 @@ class Einstellungen(Menue):
             ui.Wahl(self._reihe(zx, zy, zw, 3), "PIXELRASTER", "pixelraster",
                     E.RASTER, self._index(E.RASTER, o["pixelraster"]),
                     E.BESCHRIFTUNG["pixelraster"]),
+            # Eine Zeile Abstand: darueber steht, was zum Rechner gehoert,
+            # hier, was zum Spieler gehoert und mit dem Konto wandert.
+            # Auf GRAFIK waere kein Platz mehr, dort stehen schon sechs.
+            ui.Schalter(self._reihe(zx, zy, zw, 5), "OBERE EBENEN",
+                        "obere_ebenen", o["obere_ebenen"]),
         ]
 
     def _seite_ton(self, zx, zy, zw) -> None:

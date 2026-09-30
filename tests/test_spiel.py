@@ -3954,6 +3954,100 @@ lt._schlange_kuerzen()
 pruef("Ein Tastendruck ueberlebt das Kuerzen der Schlange",
       any(b"dash" in z for z in lt._raus), "%d Zeilen" % len(lt._raus))
 
+# ── Obere Ebenen: im Mehrspieler aus, wo sie ueber Spielflaeche liegen ──
+from dustfront import einstellungen as EST
+from dustfront.world import testkarte
+pruef("Die Vorliebe gibt es, und sie steht auf aus",
+      EST.VORGABE.get("obere_ebenen") is False)
+pruef("Sie wandert mit dem Konto", "obere_ebenen" in EST.KONTO_WERTE)
+pruef("Q ist belegt", pygame.K_q in app.opt.codes("ebenen"))
+
+arena = testkarte()
+wo = W.karte_lesen("staubtal")[0]
+wo_rd = szene.renderer
+m_arena = wo_rd.obermaske(arena, 1)
+m_staub = wo_rd.obermaske(wo, 1)
+e0a, e1a = arena.ebene(0), arena.ebene(1)
+boden_ueber_boden = [i for i, k in enumerate(e1a.kacheln)
+                     if k == K.BODEN and e0a.kacheln[i] == K.BODEN]
+pruef("Arena: Boden ueber Boden wird ausgeblendet",
+      boden_ueber_boden and all(m_arena[i] for i in boden_ueber_boden),
+      "%d Kacheln" % len(boden_ueber_boden))
+fels = [i for i, k in enumerate(e1a.kacheln)
+        if k == K.BODEN and K.KACHELN[e0a.kacheln[i]]["fest"]]
+pruef("Arena: Boden ueber Wand bleibt", fels and not any(m_arena[i] for i in fels),
+      "%d Kacheln" % len(fels))
+e0s, e1s = wo.ebene(0), wo.ebene(1)
+plateau = [i for i, k in enumerate(e1s.kacheln) if k != K.LEER]
+bleibt = sum(1 for i in plateau if not m_staub[i])
+pruef("STAUBTAL: die Plateaus bleiben, nur die Rampenkoepfe gehen",
+      bleibt >= len(plateau) - 7 and all(
+          e1s.kacheln[i] == K.TREPPE_RUNTER for i in plateau if m_staub[i]),
+      "%d von %d bleiben" % (bleibt, len(plateau)))
+
+# Im Gefecht: aus zum Start, Q schaltet, nur beim eigenen Rechner.
+app.opt["obere_ebenen"] = False
+wo_w, wo_g = gefechtspaar("pvp")
+pruef("Zum Start ausgeblendet, wie die Vorliebe sagt",
+      not wo_w.obere_zeigen and not wo_g.obere_zeigen)
+wo_g.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_q, mod=0,
+                                 unicode="q", scancode=0))
+pruef("Q blendet sie beim Gast ein", wo_g.obere_zeigen)
+pruef("Beim Gastgeber aendert das nichts", not wo_w.obere_zeigen)
+pruef("Und es sagt, was jetzt gilt", "SICHTBAR" in wo_g.hinweis, wo_g.hinweis)
+wo_g.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_q, mod=0,
+                                 unicode="q", scancode=0))
+pruef("Noch einmal Q: wieder aus", not wo_g.obere_zeigen)
+
+# Das Bild: mit der Figur unten in der Arena unterscheidet es sich, und
+# was faellt, bleibt sichtbar.
+ich_o = wo_w.ich
+ziel_o = None
+for i in boden_ueber_boden:
+    tx, ty = i % e0a.breite, i // e0a.breite
+    p = pygame.Vector2(tx * K.TILE + 16, ty * K.TILE + 16)
+    if wo_w.welt.frei(p, 8, 0):
+        ziel_o = p
+        break
+ich_o.ebene = 0
+ich_o.pos.update(ziel_o); ich_o.vorher.update(ziel_o)
+for _ in range(30):
+    wo_w.schritt(K.FIXED_DT)
+bilder_o = []
+for zeigen in (True, False):
+    wo_w.obere_zeigen = zeigen
+    app.flaeche.fill(K.C_VOID)
+    wo_w.zeichnen(app.flaeche, 1.0)
+    bilder_o.append(pygame.image.tobytes(app.flaeche, "RGB"))
+pruef("Ein- und ausgeblendet sind zwei verschiedene Bilder",
+      bilder_o[0] != bilder_o[1])
+# Ein Mitspieler oben, genau ueber der Stelle: steht er, verschwindet
+# er mit seiner Etage. Faellt er, muss er zu sehen sein - sonst landet
+# einem jemand auf dem Kopf, den man nie kommen sah.
+faller = wo_w.kaempfer[wo_g.meine_nummer]
+wo_w.obere_zeigen = False
+
+def bild_mit(ebene, flug, stelle):
+    faller.ebene, faller.flug = ebene, flug
+    faller.pos.update(stelle); faller.vorher.update(stelle)
+    app.flaeche.fill(K.C_VOID)
+    wo_w.zeichnen(app.flaeche, 1.0)
+    return pygame.image.tobytes(app.flaeche, "RGB")
+
+ueber = ziel_o + pygame.Vector2(48, 0)
+weit_weg = pygame.Vector2(ziel_o.x + 2000, ziel_o.y)
+leer_o = bild_mit(1, 0.0, weit_weg)
+pruef("Wer oben steht, verschwindet mit der Etage",
+      bild_mit(1, 0.0, ueber) == leer_o)
+wo_w.obere_zeigen = True
+pruef("Eingeblendet sieht man ihn - die Pruefung davor sagt also etwas",
+      bild_mit(1, 0.0, ueber) != bild_mit(1, 0.0, weit_weg))
+wo_w.obere_zeigen = False
+pruef("Wer herunterfaellt, bleibt sichtbar",
+      bild_mit(0, 60.0, ueber) != leer_o)
+faller.flug = 0.0
+wo_w.verlassen(); wo_g.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

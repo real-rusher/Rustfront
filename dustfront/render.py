@@ -452,8 +452,96 @@ class Renderer:
             self._tiefen[schluessel] = hit
         return hit
 
+    def obermaske(self, welt, index: int) -> bytearray:
+        """Welche Kacheln der Ebene `index` ueber spielbarem Boden liegen.
+
+        1 heisst: darunter kann man stehen, also verdeckt diese Kachel
+        etwas, das man sehen will. 0 heisst: darunter ist Fels, die
+        Kachel gehoert zu einem Plateau und bleibt immer sichtbar - das
+        Hochland im STAUBTAL steht vollstaendig auf Wand und wird deshalb
+        nie ausgeblendet, das Zwischengeschoss der Arena fast ganz.
+
+        Wand ueber Wand ist der Sonderfall. Die Aussenmauer der oberen
+        Etage steht auf der Aussenmauer der unteren; bliebe sie stehen,
+        wuerde ueber der Karte ein vergroesserter Rahmen ohne Boden
+        schweben. Eine feste Kachel geht darum mit, wenn sie an
+        ausgeblendeten Boden grenzt und an keinen sichtbaren.
+
+        Haengt an der Welt: die Kacheln darunter aendern sich waehrend
+        einer Runde nicht, eine neue Karte bringt eine neue Welt mit.
+        """
+        cache = welt.__dict__.setdefault("_obermasken", {})
+        hit = cache.get(index)
+        if hit is not None:
+            return hit
+        oben, unten = welt.ebene(index), welt.ebene(index - 1)
+        b, h = oben.breite, oben.hoehe
+        maske = bytearray(b * h)
+        if (unten.breite, unten.hoehe) != (b, h):
+            cache[index] = maske      # passt nicht aufeinander: alles zeigen
+            return maske
+        fest = {k: d["fest"] for k, d in K.KACHELN.items()}
+        for i, k in enumerate(oben.kacheln):
+            if k != K.LEER and not fest[unten.kacheln[i]]:
+                maske[i] = 1
+        # Zweiter Durchgang fuer Wand ueber Wand, gegen die erste Maske.
+        erst = bytes(maske)
+        for ty in range(h):
+            for tx in range(b):
+                i = ty * b + tx
+                k = oben.kacheln[i]
+                if erst[i] or k == K.LEER or not fest[k]:
+                    continue
+                weg = bleibt = False
+                for ny in range(max(0, ty - 1), min(h, ty + 2)):
+                    for nx in range(max(0, tx - 1), min(b, tx + 2)):
+                        j = ny * b + nx
+                        nk = oben.kacheln[j]
+                        if nk == K.LEER or fest[nk]:
+                            continue
+                        if erst[j]:
+                            weg = True
+                        else:
+                            bleibt = True
+                if weg and not bleibt:
+                    maske[i] = 1
+        cache[index] = maske
+        return maske
+
+    def _ausstanzen(self, flaeche, welt, index: int, ecke) -> None:
+        """Loescht aus der fertigen Ebene, was ueber Spielflaeche liegt.
+
+        Nach dem Zeichnen und nicht davor: auch wer dort oben steht,
+        verschwindet mit - eine Figur ohne Boden unter sich waere
+        verwirrender als keine. Was herunterfaellt, zeichnet
+        `fliegende_zeichnen` gesondert und bleibt deshalb sichtbar.
+        Zeilenweise zusammengefasst, damit es ein paar Dutzend Fuellungen
+        je Bild sind und nicht einige hundert.
+        """
+        maske = self.obermaske(welt, index)
+        e = welt.ebene(index)
+        zw, zh = flaeche.get_size()
+        t0x = max(0, int(ecke.x // K.TILE))
+        t0y = max(0, int(ecke.y // K.TILE))
+        t1x = min(e.breite - 1, int((ecke.x + zw) // K.TILE))
+        t1y = min(e.hoehe - 1, int((ecke.y + zh) // K.TILE))
+        leer = (0, 0, 0, 0)
+        for ty in range(t0y, t1y + 1):
+            zeile = ty * e.breite
+            sy = ty * K.TILE - ecke.y
+            tx = t0x
+            while tx <= t1x:
+                if not maske[zeile + tx]:
+                    tx += 1
+                    continue
+                anfang = tx
+                while tx <= t1x and maske[zeile + tx]:
+                    tx += 1
+                flaeche.fill(leer, (anfang * K.TILE - ecke.x, sy,
+                                    (tx - anfang) * K.TILE, K.TILE))
+
     def welt_zeichnen(self, ziel, welt, kamera, alpha, blick_hoehe=None,
-                      boden=None, blick=None) -> None:
+                      boden=None, blick=None, oben_aus=False) -> None:
         """Zeichnet alle Ebenen relativ zu einer Ansichtshoehe.
 
         Die Ansicht haengt bewusst nicht an der Ebene der Figur, sondern an
@@ -479,6 +567,10 @@ class Renderer:
         die Karte, statt darueber: er bekommt Verkleinerung, Abdunklung und
         Dunst der jeweiligen Ebene geschenkt, und die Figuren stehen
         sichtbar darauf.
+
+        oben_aus blendet die Etage darueber dort aus, wo sie ueber
+        Spielflaeche liegt (siehe `obermaske`). Das will der Mehrspieler:
+        dort verdeckt sie sonst genau den Gang, in dem geschossen wird.
         """
         ecke = kamera.ecke
         held = welt.held
@@ -526,7 +618,9 @@ class Renderer:
             self.muendungsfeuer(flaeche, welt, u_ecke, idx)
             self.rueckmeldung_zeichnen(flaeche, welt, idx, u_ecke)
             self.rauch_zeichnen(flaeche, welt, idx, u_ecke, False)
-            skaliert = pygame.transform.scale(flaeche, (K.GAME_W, K.GAME_H))
+            if oben_aus and dz < 0 and idx > 0:
+                self._ausstanzen(flaeche, welt, idx, u_ecke)
+            skaliert =pygame.transform.scale(flaeche, (K.GAME_W, K.GAME_H))
             if sicht < 0.999:
                 skaliert.set_alpha(int(255 * sicht))
             ziel.blit(skaliert, (0, 0))

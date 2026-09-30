@@ -611,6 +611,11 @@ class Gefecht(Szene):
         self.blick = 0
         self.blick_hoehe = 0.0
         self.blick_rest = 0.0     # so lange bleibt die Ansicht verschoben
+        # Ob die Etage ueber einem gezeichnet wird, wo sie ueber
+        # Spielflaeche liegt. Nur hier, nie beim Gastgeber: was einer
+        # sieht, ist seine Sache. Jede Partie faengt mit der Vorliebe aus
+        # dem Konto an, Q schaltet waehrenddessen um.
+        self.obere_zeigen = bool(app.opt["obere_ebenen"])
         self.ich = None
         self.meine_nummer = 0
 
@@ -2490,6 +2495,7 @@ class Gefecht(Szene):
                     self.welt.partikel = []
                     self.welt.muendungen = []
                     self.hinweis = "NEUE RUNDE: %s" % K.MODI[self.modus]["name"]
+                    self.obere_zeigen = bool(self.app.opt["obere_ebenen"])
             elif art == "welt":
                 self._welt_uebernehmen(nachricht)
             elif art == "abgelehnt":
@@ -3133,6 +3139,8 @@ class Gefecht(Szene):
             return
         if self.menue is None:
             self._knopf_merken(ev.key)
+            if ev.key in self.app.opt.codes("ebenen"):
+                self.obere_umschalten()
         if ev.key in self.app.opt.codes("pause"):
             # Esc beendete frueher das ganze Spiel. Jetzt macht es auf und
             # wieder zu, und hinaus geht es nur ueber den Eintrag dafuer.
@@ -3146,6 +3154,18 @@ class Gefecht(Szene):
         if self.menue is None:
             return
         self._menue_taste(ev.key)
+
+    def obere_umschalten(self) -> None:
+        """Q: die Etage darueber ein- oder ausblenden.
+
+        Geht nicht zum Gastgeber - es aendert nur, was man selbst sieht.
+        Der Hinweis sagt, was jetzt gilt; ohne ihn weiss man nach einem
+        Druck auf einer Karte ohne Obergeschoss nicht, ob er ankam.
+        """
+        self.obere_zeigen = not self.obere_zeigen
+        self.hinweis = ("OBERE EBENEN SICHTBAR" if self.obere_zeigen
+                        else "OBERE EBENEN AUSGEBLENDET")
+        self.app.klaenge.spielen("menue", 0.3)
 
     def _menue_taste(self, taste) -> None:
         codes = self.app.opt.codes
@@ -3337,6 +3357,7 @@ class Gefecht(Szene):
         self.gewonnen = False
         self.liste = []
         self.rest = self.ende_wert if self.ende_art == "zeit" else 0.0
+        self.obere_zeigen = bool(self.app.opt["obere_ebenen"])
 
         # Alles, was herumliegt oder herumlaeuft, kommt weg: eine neue
         # Runde faengt nicht mit den Granaten der alten an.
@@ -3436,7 +3457,8 @@ class Gefecht(Szene):
         misch = alpha if self.ist_gastgeber else self.misch(alpha)
         self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, misch,
                                     self.blick_hoehe, blick=self.blick,
-                                    boden=self._kreis_zeichnen)
+                                    boden=self._kreis_zeichnen,
+                                    oben_aus=not self.obere_zeigen)
         if not self.ist_gastgeber:
             self._fremdes_zeichnen(ziel, misch)
         if (self.ich is not None and self.ich.lebt and not self.ich.am_boden
