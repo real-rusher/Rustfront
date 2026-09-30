@@ -593,9 +593,17 @@ ZONE = dict(
 )
 
 # Versus: ein Leben je Runde, wie in einem Rundenschuetzen.
+# Versus: ein Leben je Runde.
+#
+# Seit 0.27 stellt der Gastgeber ein, wie viele Runden **gespielt** werden,
+# nicht mehr, wie viele gewonnen werden muessen. Das ist die Zahl, die man
+# vorher wissen will ("wir spielen fuenf"). Wer nicht mehr einzuholen ist,
+# gewinnt vorzeitig; steht es nach allen Runden gleich - bei einer geraden
+# Zahl oder nach einer Runde ohne Sieger -, kommt eine Runde dazu, und die
+# ist Matchpoint.
 VERSUS = dict(
-    runden_bis=3,             # so viele Rundensiege bis zum Schluss
-    runden_grenzen=(1, 9),    # so weit laesst der Gastgeber das verstellen
+    runden=5,                 # so viele Runden werden gespielt
+    runden_grenzen=(1, 15),   # so weit laesst der Gastgeber das verstellen
     pause=5.0,                # Sekunden zwischen zwei Runden
     boden_zeit=20.0,          # kuerzer als in pve: eine Runde soll laufen
     revive_dauer=4.0,         # und das Aufhelfen dauert laenger
@@ -658,6 +666,24 @@ UPNP = dict(
     hoechstens=6,             # so viele Antworten werden angesehen
     dauer=7200,               # Sekunden, die die Freigabe gilt
     beschriftung="DUSTFRONT",   # so heisst die Freigabe im Router
+)
+
+# Rufen am Boden (E). Der Gefallene kann sonst nichts - aber er kann
+# sagen, wo er liegt. Wer ihn nicht im Bild hat, sieht den Randpfeil
+# aufleuchten; wer ihn im Bild hat, sieht ueber ihm ein Zeichen und die
+# Figur zucken.
+RUFEN = dict(
+    sperre=1.5,               # so oft darf man rufen
+    zeigen=1.1,               # so lange leuchtet der Ruf nach
+    zucken=2.2,               # Pixel, so weit zuckt die Figur beim Ruf
+)
+
+# Einen Gefallenen ziehen. Gleiche Reichweite wie beim Aufhelfen - wer
+# ihn aufheben koennte, kann ihn auch wegziehen, und umgekehrt.
+ZIEHEN = dict(
+    tempo=0.52,               # so viel Lauftempo bleibt dem Ziehenden
+    leine=20.0,               # so weit hinter ihm liegt der Gezogene
+    reisst=64.0,              # weiter weg, und er laesst los
 )
 
 REVIVE = dict(

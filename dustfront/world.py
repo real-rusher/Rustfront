@@ -628,8 +628,14 @@ class Welt:
         Geschoben wird nur, wenn das Ziel frei ist. Sonst drueckt eine Gruppe
         Gegner den Spieler in die naechste Wand.
         """
+        # Wer am Boden liegt, liegt fest: er schiebt niemanden und wird von
+        # niemandem geschoben. Vorher rutschte ein Gefallener unter jedem,
+        # der an ihm vorbeiging, ein Stueck weiter - und wer genug Leute um
+        # ihn herum hatte, schob ihn quer durch den Raum.
+        if getattr(wesen, "am_boden", False):
+            return
         for a in self.nahe(wesen.pos, wesen.radius * 2, wesen.ebene):
-            if a is wesen or not a.schiebt:
+            if a is wesen or not a.schiebt or getattr(a, "am_boden", False):
                 continue
             d = wesen.pos - a.pos
             abstand = d.length()

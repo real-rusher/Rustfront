@@ -1417,7 +1417,10 @@ class Spieler(Wesen):
         # wo die Maus steht, und zwar ohne Verzoegerung. Eine schwere
         # Waffe begrenzt das: mit dem MG im Anschlag dreht man sich nicht
         # auf der Stelle um, und genau das ist ihr Preis.
-        if (self.ziel - self.pos).length_squared() > 1:
+        # Wer am Boden liegt, dreht sich nicht mehr. Vorher folgte die
+        # liegende Figur weiter der Maus und drehte sich am Boden im Kreis.
+        if (self.ziel - self.pos).length_squared() > 1 \
+                and not getattr(self, "am_boden", False):
             soll = math.degrees(math.atan2(self.ziel.y - self.pos.y,
                                            self.ziel.x - self.pos.x))
             grenze = self.dreh_grenze
@@ -1463,6 +1466,9 @@ class Spieler(Wesen):
         if self.heilt_rest > 0:
             # Wer ein Medkit anlegt, hat die Haende voll und geht langsamer.
             luft *= K.MEDKIT["tempo"]
+        if getattr(self, "zieht", None) is not None:
+            # Wer jemanden zieht, ebenso.
+            luft *= K.ZIEHEN["tempo"]
         self._dash_laden(dt)
         ziel_tempo = self.will * s["tempo"] * luft
         rate = (s["beschleunigung"] if self.will.length_squared() > 0

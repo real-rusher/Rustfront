@@ -88,9 +88,10 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
                       "die Mehrheit hat, laedt bis %d."
                       % (K.ZONE["ebene"], int(K.ZONE["bis"])))
             elif regeln["runden"]:
-                print("Ein Leben je Runde, %d Rundensiege entscheiden. "
-                      "Aufhelfen geht nur in der eigenen Mannschaft."
-                      % (K.VERSUS["runden_bis"] if runden is None else runden))
+                print("Ein Leben je Runde, %d Runden werden gespielt, bei "
+                      "Gleichstand eine mehr als Matchpoint. Aufhelfen geht "
+                      "nur in der eigenen Mannschaft."
+                      % (K.VERSUS["runden"] if runden is None else runden))
             elif not regeln["revive"]:
                 print("Endet nach %s" % ("Zeit" if ende_art == "zeit"
                                          else "Abschuessen"))
@@ -451,7 +452,7 @@ def aus_argumenten(argumente: list[str]) -> int:
             print("--medkits braucht eine ganze Zahl.")
             return 1
         try:
-            runden = int(wert("--runden", str(K.VERSUS["runden_bis"])))
+            runden = int(wert("--runden", str(K.VERSUS["runden"])))
         except ValueError:
             print("--runden braucht eine ganze Zahl.")
             return 1

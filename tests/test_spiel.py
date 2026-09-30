@@ -1381,22 +1381,20 @@ pruef("Dem eigenen Mann schon",
                                       wirt_k.fraktion, team=wirt_k.team)))
 pruef("Die erste Runde laeuft", w.runde >= 1, "Runde %d" % w.runde)
 
-# Der Gast faellt und wird nicht aufgehoben: seine Mannschaft ist leer,
-# die Runde geht an die andere.
+# Der Gast faellt. Er ist allein in seiner Mannschaft - also kann ihm
+# niemand aufhelfen, und die Runde ist in dem Augenblick entschieden.
+#
+# Bis 0.26 stand hier das Gegenteil ("Am Boden ist die Runde noch nicht
+# entschieden"), und genau das war der gemeldete Fehler: man gewann erst,
+# wenn der Bodentimer des Gefallenen abgelaufen war.
 gast_k.unverwundbar = 0.0
 gast_k.schaden(999, None, None)
 pruef("Wer faellt, liegt erst einmal am Boden",
       gast_k.am_boden and gast_k.lebt)
-pruef("Am Boden ist die Runde noch nicht entschieden",
-      w.teampunkte == [0, 0], str(w.teampunkte))
-gast_k.boden_rest = 0.0
-w._revive(K.FIXED_DT)
-w._tote_abrechnen(K.FIXED_DT)
-pruef("Laeuft die Zeit am Boden ab, ist man fuer die Runde raus",
-      gast_k.raus and not gast_k.lebt)
 w._runden(K.FIXED_DT)
-pruef("Die Runde geht an die Mannschaft, die noch steht",
-      w.teampunkte[0] == 1, str(w.teampunkte))
+pruef("Liegt die ganze Mannschaft, ist die Runde sofort entschieden",
+      w.teampunkte == [1, 0] and w.runden_gespielt == 1,
+      "%s, gespielt %d" % (w.teampunkte, w.runden_gespielt))
 pruef("Danach laeuft die Pause", w.runden_pause > 0,
       "%.1f s" % w.runden_pause)
 gast_k.magazin[gast_k.waffe_name] = 0
@@ -1412,14 +1410,65 @@ pruef("Die beiden stehen nicht nebeneinander",
       wirt_k.pos.distance_to(gast_k.pos) > 60.0,
       "%.0f px" % wirt_k.pos.distance_to(gast_k.pos))
 
-# Genug Rundensiege beenden das Gefecht.
-w.teampunkte[0] = K.VERSUS["runden_bis"] - 1
-gast_k.lebt = False
-gast_k.raus = True
+# Solange einer steht, der aufhelfen kann, ist nichts entschieden.
+dritter_v = Kaempfer(pygame.Vector2(gast_k.pos) + pygame.Vector2(30, 0), 0, 9,
+                     "DRITTER", gast_k.fraktion, team=gast_k.team)
+w.kaempfer[9] = dritter_v
+w.welt.dazu(dritter_v)
+gast_k.unverwundbar = 0.0            # nach dem Neustart gilt wieder Schutz
+gast_k.schutz = 0.0
+dritter_v.unverwundbar = 0.0
+gast_k.schaden(999, None, None)
+stand_vorher = list(w.teampunkte)
 w._runden(K.FIXED_DT)
-pruef("Genug Rundensiege beenden das Gefecht",
+pruef("Steht noch ein Mitspieler, laeuft die Runde weiter",
+      w.teampunkte == stand_vorher, str(w.teampunkte))
+dritter_v.schaden(999, None, None)
+w._runden(K.FIXED_DT)
+pruef("Liegt auch er, ist sie vorbei - ohne auf einen Timer zu warten",
+      w.teampunkte[0] == stand_vorher[0] + 1 and gast_k.boden_rest > 1.0,
+      "%s, Bodenzeit noch %.0f s" % (w.teampunkte, gast_k.boden_rest))
+w.kaempfer.pop(9, None)
+dritter_v.lebt = False
+w.verlassen(); ga.verlassen()
+
+# Wie viele Runden gespielt werden, und der Matchpoint.
+w, ga = gefechtspaar("versus", runden=4)
+pruef("Die Rundenzahl ist die Zahl der gespielten Runden",
+      w.runden_anzahl == 4 and w.runden_text() == "RUNDE 1 VON 4",
+      w.runden_text())
+w.teampunkte = [3, 0]; w.runden_gespielt = 3
+pruef("Wer nicht mehr einzuholen ist, hat gewonnen",
+      w._match_sieger() == 0)
+w.teampunkte = [2, 1]; w.runden_gespielt = 3
+pruef("Wer noch einholen kann, spielt weiter", w._match_sieger() == -1)
+w.teampunkte = [2, 2]; w.runden_gespielt = 4
+pruef("Gleichstand nach allen Runden: es geht weiter",
+      w._match_sieger() == -1 and w.matchpoint)
+pruef("Und die naechste heisst Matchpoint", w.runden_text().startswith("MATCHPOINT"),
+      w.runden_text())
+w.teampunkte = [3, 2]; w.runden_gespielt = 5
+pruef("Wer den Matchpoint holt, gewinnt", w._match_sieger() == 0)
+w.teampunkte = [1, 1]; w.runden_gespielt = 3
+pruef("Eine Runde ohne Sieger zaehlt als gespielt",
+      w._match_sieger() == -1 and not w.matchpoint)
+w.verlassen(); ga.verlassen()
+
+w, ga = gefechtspaar("versus", runden=5)
+wirt_k = w.kaempfer[0]
+gast_k = w.kaempfer[ga.meine_nummer]
+w.teampunkte = [2, 0]
+w.runden_gespielt = 2
+gast_k.unverwundbar = 0.0
+gast_k.schaden(999, None, None)
+w._runden(K.FIXED_DT)
+pruef("Der dritte Sieg von fuenf beendet das Gefecht",
       w.vorbei and w.sieger_team == 0,
       "%s, Sieger %d" % (w.teampunkte, w.sieger_team))
+netz_durchlassen(w, ga, 10)
+pruef("Und der Gast kennt Rundenzahl und Stand",
+      ga.runden_anzahl == 5 and ga.teampunkte == [3, 0],
+      "%d, %s" % (ga.runden_anzahl, ga.teampunkte))
 w.verlassen(); ga.verlassen()
 
 # Allein wartet versus, statt jede Runde sofort zu entscheiden
@@ -1775,25 +1824,25 @@ w._team_setzen(wirt_k, vorher_team)
 
 # Regeln aendern und eine neue Runde starten: der Gast muss mitkommen.
 w.wunsch["modus"] = "versus"
-w.wunsch["runden_bis"] = 5
+w.wunsch["runden"] = 5
 w.wunsch["schutz"] = False
 w.kaempfer[0].abschuesse = 7
 w._runde_neu()
 pruef("Eine neue Runde uebernimmt die neuen Regeln",
-      w.modus == "versus" and w.runden_bis == 5 and not w.schutz_an,
-      "%s, bis %d, Schutz %s" % (w.modus, w.runden_bis, w.schutz_an))
+      w.modus == "versus" and w.runden_anzahl == 5 and not w.schutz_an,
+      "%s, %d Runden, Schutz %s" % (w.modus, w.runden_anzahl, w.schutz_an))
 pruef("Und setzt die Punkte zurueck",
       w.kaempfer[0].abschuesse == 0 and w.teampunkte == [0, 0])
 netz_durchlassen(w, ga, 20)
 pruef("Der Gast spielt die neuen Regeln mit",
-      ga.modus == "versus" and ga.runden_bis == 5 and not ga.schutz_an,
-      "%s, bis %d, Schutz %s" % (ga.modus, ga.runden_bis, ga.schutz_an))
+      ga.modus == "versus" and ga.runden_anzahl == 5 and not ga.schutz_an,
+      "%s, %d Runden, Schutz %s" % (ga.modus, ga.runden_anzahl, ga.schutz_an))
 w.verlassen(); ga.verlassen()
 
 # Rundenzahl und Mannschaftswunsch beim Starten
 w, ga = gefechtspaar("versus", runden=2, team=1)
 pruef("Die Rundenzahl laesst sich beim Aufmachen waehlen",
-      w.runden_bis == 2, "%d" % w.runden_bis)
+      w.runden_anzahl == 2, "%d" % w.runden_anzahl)
 pruef("Und wer sich eine Mannschaft wuenscht, bekommt sie",
       w.kaempfer[0].team == 1, "Team %d" % w.kaempfer[0].team)
 pruef("Der Gast landet dann in der anderen",
@@ -3585,6 +3634,98 @@ pruef("Der Gast kennt Magazin und Vorrat jeder Waffe, nicht nur der gehaltenen",
       not falsch, str(falsch))
 wm.verlassen(); gm.verlassen()
 
+# Wer selbst liegt, bekommt kein "[E]" neben einem anderen Liegenden.
+wh, gh = gefechtspaar("pve")
+eins, zwei = wh.kaempfer[0], wh.kaempfer[gh.meine_nummer]
+pruef("Ein Stehender darf einem Liegenden helfen",
+      wh._darf_helfen(eins, zwei))
+for k in (eins, zwei):
+    k.unverwundbar = 0.0
+    k.schaden(999, None, None)
+pruef("Ein Liegender darf keinem Liegenden helfen - kein Hinweis, keine Hilfe",
+      eins.am_boden and not wh._darf_helfen(eins, zwei)
+      and wh._wem_helfen(eins) is None)
+wh.verlassen(); gh.verlassen()
+
+# Am Boden: nicht schieben, nicht drehen - aber ziehen und rufen.
+wz, gz = gefechtspaar("pve")
+liegt = wz.kaempfer[gz.meine_nummer]
+# Der Ziehende ist eine dritte Figur ohne eigene Tastatur: die Figur des
+# Gastgebers bekaeme jedes Bild dessen echte, leere Eingabe und liesse
+# sofort wieder los.
+zieher = Kaempfer(pygame.Vector2(liegt.pos), liegt.ebene, 8, "ZIEHER",
+                  liegt.fraktion, team=liegt.team)
+wz.kaempfer[8] = zieher
+wz.welt.dazu(zieher)
+wz._regeln_anlegen(zieher)
+liegt.unverwundbar = 0.0
+liegt.pos.update(wz.welt.landeplatz(pygame.Vector2(704, 384), liegt.radius,
+                                    liegt.ebene))
+zieher.ebene = liegt.ebene
+zieher.pos.update(liegt.pos + pygame.Vector2(18, 0))
+liegt.schaden(999, None, None)
+lage = pygame.Vector2(liegt.pos)
+winkel_vorher = liegt.winkel
+liegt.schaden(5.0, pygame.Vector2(900, 0), None)
+liegt.ziel = liegt.pos + pygame.Vector2(0, 200)      # die Maus zieht nach unten
+for _ in range(20):
+    wz.schritt(K.FIXED_DT)
+pruef("Ein Gefallener wird von einem Treffer nicht weggestossen",
+      liegt.pos.distance_to(lage) < 1.0, "%.1f px" % liegt.pos.distance_to(lage))
+pruef("Und dreht sich nicht mehr mit der Maus",
+      abs(liegt.winkel - winkel_vorher) < 0.01,
+      "%.1f -> %.1f" % (winkel_vorher, liegt.winkel))
+# Jemand laeuft ueber ihn hinweg: er bleibt liegen.
+zieher.pos.update(liegt.pos + pygame.Vector2(2, 0))
+for _ in range(10):
+    wz.welt.auseinander(zieher)
+pruef("Wer an ihm vorbeigeht, schiebt ihn nicht",
+      liegt.pos.distance_to(lage) < 1.0, "%.1f px" % liegt.pos.distance_to(lage))
+zieher.pos.update(liegt.pos + pygame.Vector2(18, 0))
+
+# Ziehen
+ein_z = {"will": [1.0, 0.0], "ziel": [zieher.pos.x + 100, zieher.pos.y],
+         "feuert": True, "zielt": False, "nutzen": True, "ziehen": True,
+         "waffe": -1, "knoepfe": []}
+wz._anwenden(zieher, ein_z)
+pruef("Mit G greift man einen Gefallenen in Reichweite",
+      zieher.zieht == liegt.nummer and liegt.gezogen_von == zieher.nummer)
+pruef("Und schiesst dabei nicht und hilft nicht auf",
+      not zieher.feuert and zieher.hilft is None)
+pruef("Und dasht nicht", not zieher.kann_dashen)
+start_z = pygame.Vector2(liegt.pos)
+for _ in range(int(0.8 / K.FIXED_DT)):
+    wz._anwenden(zieher, ein_z)
+    wz.schritt(K.FIXED_DT)
+pruef("Der Gefallene kommt mit",
+      liegt.pos.distance_to(start_z) > 20.0
+      and liegt.pos.distance_to(zieher.pos) < K.ZIEHEN["leine"] + 6,
+      "%.0f px gezogen, %.0f px Abstand" % (liegt.pos.distance_to(start_z),
+                                            liegt.pos.distance_to(zieher.pos)))
+pruef("Und dreht sich dabei nicht", abs(liegt.winkel - winkel_vorher) < 0.01)
+tempo_z = zieher.tempo.length()
+pruef("Wer zieht, geht langsamer",
+      tempo_z < K.SPIELER["tempo"] * K.ZIEHEN["tempo"] + 3.0,
+      "%.0f px/s" % tempo_z)
+netz_durchlassen(wz, gz, 10)
+pruef("Der Gast weiss, dass er gezogen wird",
+      gz.kaempfer.get(8) is not None and gz.kaempfer[8].zieht == liegt.nummer)
+ein_z["ziehen"] = False
+wz._anwenden(zieher, ein_z)
+pruef("Loslassen gibt ihn frei",
+      zieher.zieht is None and liegt.gezogen_von is None)
+
+# Rufen: hoechstens alle anderthalb Sekunden.
+gz._knoepfe.add("rufen")
+netz_durchlassen(wz, gz, 6)
+pruef("Der Gefallene ruft mit E", liegt.ruf_zeigen > 0.0,
+      "%.2f" % liegt.ruf_zeigen)
+zeigen_vorher = liegt.ruf_sperre
+wz._rufen(liegt)
+pruef("Und nicht gleich noch einmal", liegt.ruf_sperre <= zeigen_vorher)
+pruef("Der Gast sieht den Ruf", gz.ich.ruf_zeigen > 0.0)
+wz.verlassen(); gz.verlassen()
+
 # Tempo und Dash.
 pruef("Kein Sprint mehr in den Werten", "sprint" not in K.SPIELER)
 pruef("Der Renner bleibt schneller als ein gehender Spieler",
@@ -3597,8 +3738,21 @@ ich_d = wd.kaempfer[0]
 ich_d.schutz = 0.0
 for _ in range(10):
     wd.schritt(K.FIXED_DT)
+# Eine Richtung suchen, in der 140 Pixel frei sind - sonst misst der
+# Test, wie weit die naechste Wand weg ist, und nicht den Dash.
+frei_richtung = None
+for grad in range(0, 360, 15):
+    r = pygame.Vector2(1, 0).rotate(grad)
+    if all(wd.welt.frei(ich_d.pos + r * d, ich_d.radius, ich_d.ebene)
+           for d in range(8, 141, 8)):
+        frei_richtung = r
+        break
+if frei_richtung is None:
+    ich_d.pos.update(wd.welt.landeplatz(pygame.Vector2(704, 384),
+                                        ich_d.radius, ich_d.ebene))
+    frei_richtung = pygame.Vector2(1, 0)
 start = pygame.Vector2(ich_d.pos)
-ich_d.will = pygame.Vector2(1, 0)
+ich_d.will = pygame.Vector2(frei_richtung)
 pruef("Man hat zu Beginn zwei Ladungen", ich_d.dash_ladungen == 2)
 pruef("Ein Dash geht", ich_d.dashen())
 for _ in range(int(0.5 / K.FIXED_DT)):

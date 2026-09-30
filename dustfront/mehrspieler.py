@@ -123,6 +123,16 @@ class Kaempfer(Spieler):
         # der Gastgeber ist Spieler 0, und eine 0 ist in Python falsch.
         # Genau daran haette niemand je dem Gastgeber aufhelfen koennen.
         self.hilft = None
+        # Wen er gerade zieht (Nummer oder None), und von wem er gezogen
+        # wird. Beides getrennt, weil beide Seiten es wissen muessen: der
+        # Ziehende, um langsamer zu gehen, der Gezogene, um nicht zu
+        # zweit an ihm zu zerren.
+        self.zieht = None
+        self.gezogen_von = None
+        # Rufen am Boden: Sperre bis zum naechsten Ruf, und wie lange der
+        # letzte noch zu sehen ist.
+        self.ruf_sperre = 0.0
+        self.ruf_zeigen = 0.0
         # Munitionsvorrat
         self.knapp = knapp
         self.vorrat = {w: K.MUNITION["vorrat"].get(w, 0) for w in self.waffen}
@@ -182,11 +192,37 @@ class Kaempfer(Spieler):
         super().sterben(von)
         self.toeter = von
 
+    def schaden(self, menge, schub=None, von=None) -> None:
+        # Am Boden gibt es keinen Rueckstoss. Wer liegt, liegt - sonst
+        # schoebe jede Salve, jede Granate und jeder Stampfer einen
+        # Gefallenen ein Stueck weiter, und am Ende laege er ganz woanders
+        # als dort, wo sein Team ihn zuletzt gesehen hat.
+        if self.am_boden:
+            schub = None
+        super().schaden(menge, schub, von)
+
+    def zeichenpos(self, alpha: float) -> pygame.Vector2:
+        """Wo die Figur gezeichnet wird. Beim Ruf zuckt sie kurz.
+
+        Nur das Bild bewegt sich, nicht die Figur - sonst verschoebe jeder
+        Ruf den Gefallenen, und genau das soll am Boden nicht mehr gehen.
+        """
+        p = super().zeichenpos(alpha)
+        if self.am_boden and self.ruf_zeigen > 0.0:
+            frisch = self.ruf_zeigen - (K.RUFEN["zeigen"] - 0.45)
+            if frisch > 0.0:
+                t = self.ruf_zeigen * 58.0
+                weit = K.RUFEN["zucken"] * min(1.0, frisch / 0.45)
+                p = p + pygame.Vector2(math.sin(t) * weit,
+                                       math.cos(t * 1.3) * weit * 0.6)
+        return p
+
     def aufhelfen(self) -> None:
         """Wieder auf die Beine, mit angeschlagenem Leben."""
         self.am_boden = False
         self.boden_rest = 0.0
         self.revive_stand = 0.0
+        self.gezogen_von = None
         self.leben = K.REVIVE["danach_leben"]
         self.unverwundbar = K.REVIVE["schutz"]
 
@@ -199,6 +235,10 @@ class Kaempfer(Spieler):
 
     def schritt(self, dt: float) -> None:
         self.treppe_rest = max(0.0, self.treppe_rest - dt)
+        self.ruf_sperre = max(0.0, self.ruf_sperre - dt)
+        self.ruf_zeigen = max(0.0, self.ruf_zeigen - dt)
+        if not self.am_boden:
+            self.ruf_zeigen = 0.0
         vorher = self.magazin.get(self.waffe_name, 0)
         war_am_laden = self.nachlade_rest > 0
         super().schritt(dt)
@@ -450,8 +490,12 @@ class Gefecht(Szene):
         self.medkits_spawnen = (K.GEFECHT["medkits_spawnen"]
                                 if medkit_spawn is None else bool(medkit_spawn))
         g = K.VERSUS["runden_grenzen"]
-        self.runden_bis = max(g[0], min(g[1], int(
-            K.VERSUS["runden_bis"] if runden is None else runden)))
+        self.runden_anzahl = max(g[0], min(g[1], int(
+            K.VERSUS["runden"] if runden is None else runden)))
+        # Gespielte Runden, Unentschieden mitgezaehlt. Die Siege stehen in
+        # teampunkte; aus ihnen allein laesst sich nicht ablesen, ob alle
+        # Runden durch sind.
+        self.runden_gespielt = 0
         # Gelten Loadouts? "eigenes" heisst: jeder traegt seine zwei
         # Waffen und seine Wurfwaffe. "alles" heisst: jeder hat alles, wie
         # bisher. Der Gastgeber entscheidet es, ein Gast bekommt es mit dem
@@ -513,6 +557,7 @@ class Gefecht(Szene):
         self.zone_name = ""
         self.zone_halter = -1        # wer den Kreis gerade haelt, -1 = niemand
         self.runde = 0               # in versus: welche Runde laeuft
+        self.runde_sieger = -1       # wer die letzte Runde geholt hat
         self.runden_pause = 0.0
         self.sieger_team = -1
         self.rest = self.ende_wert if self.ende_art == "zeit" else 0.0
@@ -1151,6 +1196,7 @@ class Gefecht(Szene):
             # Nutzen wird gehalten, nicht gedrueckt: Treppe und Aufhelfen
             # haengen beide daran, und Aufhelfen braucht Zeit.
             "nutzen": False if offen else e.gehalten("nutzen"),
+            "ziehen": False if offen else e.gehalten("ziehen"),
             "waffe": self._waffe_wunsch,
             "knoepfe": sorted(self._knoepfe),
         }
@@ -1184,6 +1230,11 @@ class Gefecht(Szene):
             k.feuert = False
             k.zielt = False
             k.hilft = None
+            k.zieht = None
+            # Das Einzige, was man am Boden noch tun kann: rufen.
+            knoepfe = ein.get("knoepfe") or []
+            if isinstance(knoepfe, list) and "rufen" in knoepfe:
+                self._rufen(k)
             return
 
         waffe = ein.get("waffe", -1)
@@ -1224,8 +1275,23 @@ class Gefecht(Szene):
                 if k.nahkampf():
                     self.welt.klang("nahkampf", 0.9)
 
-        # Nutzen: erst jemandem aufhelfen, sonst die Treppe nehmen.
+        # Ziehen: gehalten, und solange es laeuft, gibt es nichts anderes.
+        # Kein Schiessen und kein Aufhelfen - wer beide Haende an einem
+        # Gefallenen hat, hat keine frei. Das ist der Preis dafuer, ihn aus
+        # der Schusslinie holen zu koennen.
         k.hilft = None
+        if ein.get("ziehen"):
+            opfer = (self.kaempfer.get(k.zieht) if k.zieht is not None
+                     else self._wen_ziehen(k))
+            if opfer is not None and self._ziehen_moeglich(k, opfer):
+                k.zieht = opfer.nummer
+                opfer.gezogen_von = k.nummer
+                k.feuert = False
+                k.zielt = False
+                return
+        self._loslassen(k)
+
+        # Nutzen: erst jemandem aufhelfen, sonst die Treppe nehmen.
         if not ein.get("nutzen"):
             return
         opfer = self._wem_helfen(k)
@@ -1267,6 +1333,15 @@ class Gefecht(Szene):
         """
         if helfer is None or liegender is None:
             return False
+        # Wer selbst liegt, hilft niemandem auf. Die Pruefung fehlte hier,
+        # und darum stand bei einem Gefallenen neben einem anderen
+        # Gefallenen "[E]" - als koenne er ihn aufheben. Die Handlung selbst
+        # war woanders schon gesperrt, der Hinweis nicht; jetzt sagen beide
+        # dasselbe, weil beide hier fragen.
+        if not helfer.lebt or getattr(helfer, "am_boden", False):
+            return False
+        if helfer is liegender:
+            return False
         if not self.mit_teams:
             return True
         return helfer.team == liegender.team
@@ -1285,6 +1360,83 @@ class Gefecht(Szene):
             if d <= beste:
                 naechster, beste = anderer, d
         return naechster
+
+    # ---- Ziehen ---------------------------------------------------------
+    def _wen_ziehen(self, k: Kaempfer):
+        """Wer sich ziehen laesst: dieselben Regeln wie beim Aufhelfen.
+
+        Aus demselben Grund: wer einen Gefallenen aufheben duerfte, darf
+        ihn auch aus der Schusslinie holen - und den Gegner, den man
+        gerade umgelegt hat, darf man in beiden Faellen nicht anfassen.
+        Wer schon gezogen wird, faellt raus: zu zweit an einem zu zerren,
+        ergaebe einen Koerper, der zwischen zwei Leuten zittert.
+        """
+        if not self.regeln["revive"]:
+            return None
+        naechster, beste = None, K.REVIVE["reichweite"]
+        for anderer in self.kaempfer.values():
+            if not self._ziehen_moeglich(k, anderer):
+                continue
+            if anderer.gezogen_von not in (None, k.nummer):
+                continue
+            d = k.pos.distance_to(anderer.pos)
+            if d <= beste:
+                naechster, beste = anderer, d
+        return naechster
+
+    def _ziehen_moeglich(self, k, opfer) -> bool:
+        if opfer is None or opfer is k:
+            return False
+        if not (opfer.lebt and opfer.am_boden):
+            return False
+        if opfer.ebene != k.ebene or not self._darf_helfen(k, opfer):
+            return False
+        return k.pos.distance_to(opfer.pos) <= K.ZIEHEN["reisst"]
+
+    def _loslassen(self, k: Kaempfer) -> None:
+        if k.zieht is None:
+            return
+        opfer = self.kaempfer.get(k.zieht)
+        if opfer is not None and opfer.gezogen_von == k.nummer:
+            opfer.gezogen_von = None
+        k.zieht = None
+
+    def _ziehen(self, dt: float) -> None:
+        """Gezogene folgen an einer kurzen Leine hinter dem Ziehenden.
+
+        Die Figur wird verschoben, nicht gedreht - sie liegt, wie sie
+        gefallen ist. Und sie wird nur dorthin gesetzt, wo Boden ist: ein
+        Gefallener, den man ueber eine Kante zieht, soll nicht in die
+        Tiefe fallen, sondern am Rand haengen bleiben.
+        """
+        for k in self.kaempfer.values():
+            if k.zieht is None:
+                continue
+            opfer = self.kaempfer.get(k.zieht)
+            if (opfer is None or not k.lebt or k.am_boden
+                    or not self._ziehen_moeglich(k, opfer)):
+                self._loslassen(k)
+                continue
+            weg = opfer.pos - k.pos
+            if weg.length_squared() < 0.01:
+                weg = pygame.Vector2(-1, 0)
+            ziel = k.pos + weg.normalize() * K.ZIEHEN["leine"]
+            schritt = ziel - opfer.pos
+            if schritt.length_squared() < 0.04:
+                continue
+            neu = opfer.pos + schritt
+            if self.welt.frei(neu, opfer.radius * 0.8, opfer.ebene, True):
+                opfer.vorher.update(opfer.pos)
+                opfer.pos.update(neu)
+
+    # ---- Rufen am Boden ---------------------------------------------------
+    def _rufen(self, k: Kaempfer) -> None:
+        """Ein Gefallener macht auf sich aufmerksam. Hoechstens alle 1,5 s."""
+        if not k.am_boden or k.ruf_sperre > 0.0:
+            return
+        k.ruf_sperre = K.RUFEN["sperre"]
+        k.ruf_zeigen = K.RUFEN["zeigen"]
+        self.welt.klang("ruf", 0.8, k.pos, k.ebene)
 
     # ---- Schritt: Gastgeber -------------------------------------------
     def _schritt_gastgeber(self, dt: float) -> None:
@@ -1336,6 +1488,7 @@ class Gefecht(Szene):
         self._gegnerlast_zaehlen()
         self._rpg_regeln()
         self.welt.schritt(dt)
+        self._ziehen(dt)
         self._revive(dt)
         self._tote_abrechnen(dt)
         self._ende_pruefen(dt)
@@ -1366,7 +1519,7 @@ class Gefecht(Szene):
                 "ende_wert": self.ende_wert, "knapp": self.knapp,
                 "schutz": self.schutz_an, "medkits": self.start_medkits,
                 "medkit_spawn": self.medkits_spawnen,
-                "runden_bis": self.runden_bis,
+                "runden": self.runden_anzahl,
                 "loadouts": self.loadout_regel,
                 "rpg": self.rpg_an, "rpg_lenkung": self.rpg_lenkung,
                 "karte": self.karte}
@@ -1772,24 +1925,68 @@ class Gefecht(Szene):
             self._runde_aufbauen()
             return
 
+        # Wer zaehlt als "steht noch"? Nur, wer auf den Beinen ist.
+        #
+        # Bis 0.26 zaehlte auch, wer am Boden lag - "solange jemand
+        # aufhelfen kann, ist die Runde nicht entschieden". Nur konnte, wer
+        # am Boden lag, selbst niemandem aufhelfen. Lagen alle einer
+        # Mannschaft, war die Runde also laengst entschieden, aber sie
+        # lief weiter, bis der Bodentimer jedes einzelnen abgelaufen war:
+        # zwanzig Sekunden Warten auf einen Sieg, der schon feststand.
+        # Gemeldet als "man gewinnt erst, wenn man die Timer abwartet".
         steht = [0] * len(self.teampunkte)
         for k in self.kaempfer.values():
-            if 0 <= k.team < len(steht) and k.lebt and not k.raus:
+            if (0 <= k.team < len(steht) and k.lebt and not k.raus
+                    and not k.am_boden):
                 steht[k.team] += 1
         leer = [i for i, n in enumerate(steht) if n == 0]
-        if not leer or len(leer) == len(steht):
-            if len(leer) == len(steht) and steht:
-                # Alle gleichzeitig hin: niemand bekommt den Punkt.
-                self.runden_pause = K.VERSUS["pause"]
+        if not leer:
             return
-        sieger = [i for i in range(len(steht)) if i not in leer]
-        if len(sieger) != 1:
-            return
-        self.teampunkte[sieger[0]] += 1
+        self.runden_gespielt += 1
         self.runden_pause = K.VERSUS["pause"]
-        if self.teampunkte[sieger[0]] >= self.runden_bis:
-            self.sieger_team = sieger[0]
+        if len(leer) < len(steht):
+            sieger = [i for i in range(len(steht)) if i not in leer]
+            if len(sieger) == 1:
+                self.teampunkte[sieger[0]] += 1
+                self.runde_sieger = sieger[0]
+        else:
+            # Alle gleichzeitig hin: niemand bekommt den Punkt, aber die
+            # Runde ist gespielt.
+            self.runde_sieger = -1
+        entschieden = self._match_sieger()
+        if entschieden >= 0:
+            self.sieger_team = entschieden
             self._runde_beenden(gewonnen=True)
+
+    def _match_sieger(self) -> int:
+        """Wer das Match gewonnen hat, oder -1, wenn es weitergeht.
+
+        Zwei Wege zum Sieg: nicht mehr einzuholen sein, oder nach allen
+        Runden vorne liegen. Steht es danach gleich, geht es weiter - jede
+        weitere Runde ist dann Matchpoint.
+        """
+        punkte = self.teampunkte
+        if len(punkte) < 2:
+            return -1
+        rest = max(0, self.runden_anzahl - self.runden_gespielt)
+        for i, p in enumerate(punkte):
+            andere = max(q for j, q in enumerate(punkte) if j != i)
+            if p > andere + rest:
+                return i
+        return -1
+
+    @property
+    def matchpoint(self) -> bool:
+        """Alle Runden gespielt und Gleichstand: die naechste entscheidet."""
+        return (self.regeln["runden"]
+                and self.runden_gespielt >= self.runden_anzahl
+                and len(set(self.teampunkte)) == 1)
+
+    def runden_text(self) -> str:
+        if self.matchpoint:
+            return "MATCHPOINT  %s" % ":".join(str(p) for p in self.teampunkte)
+        runde = min(self.runden_gespielt + 1, self.runden_anzahl)
+        return "RUNDE %d VON %d" % (runde, self.runden_anzahl)
 
     def _beide_besetzt(self) -> bool:
         """Hat jede Mannschaft mindestens einen Mitspieler?"""
@@ -2146,6 +2343,10 @@ class Gefecht(Szene):
                 # den blauen Schein am Rand, sonst weiss er nicht, warum
                 # seine Figur festhaengt.
                 "hf": -1 if k.hilft is None else k.hilft,
+                # Ziehen und Rufen: wen er zieht, und wie lange sein Ruf
+                # noch nachleuchtet.
+                "zg": -1 if k.zieht is None else k.zieht,
+                "rz": round(k.ruf_zeigen, 2),
             })
         flug = []
         gegner = []
@@ -2208,6 +2409,7 @@ class Gefecht(Szene):
                 "zh": self.zone_halter,
                 "zk": self.kreis_nr,
                 "rn": self.runde, "rp": round(self.runden_pause, 1),
+                "rg": self.runden_gespielt, "rs": self.runde_sieger,
                 "st": self.sieger_team}
 
     # ---- Schritt: Gast -------------------------------------------------
@@ -2313,8 +2515,8 @@ class Gefecht(Szene):
         self.schutz_an = bool(nachricht.get("schutz", self.schutz_an))
         g = K.VERSUS["runden_grenzen"]
         try:
-            self.runden_bis = max(g[0], min(g[1], int(
-                nachricht.get("runden_bis", self.runden_bis))))
+            self.runden_anzahl = max(g[0], min(g[1], int(
+                nachricht.get("runden", self.runden_anzahl))))
         except (TypeError, ValueError):
             pass
         self.medkits_spawnen = bool(nachricht.get("medkit_spawn",
@@ -2397,6 +2599,8 @@ class Gefecht(Szene):
             self._kreis_setzen(kreis)
         self.runde = int(meldung.get("rn", 0))
         self.runden_pause = float(meldung.get("rp", 0.0))
+        self.runden_gespielt = int(meldung.get("rg", 0))
+        self.runde_sieger = int(meldung.get("rs", -1))
         self.sieger_team = int(meldung.get("st", -1))
         gesehen = set()
         for eintrag in meldung.get("spieler", []):
@@ -2461,6 +2665,9 @@ class Gefecht(Szene):
             k.revive_stand = float(eintrag.get("rs", 0.0))
             hilft = int(eintrag.get("hf", -1))
             k.hilft = None if hilft < 0 else hilft
+            zieht = int(eintrag.get("zg", -1))
+            k.zieht = None if zieht < 0 else zieht
+            k.ruf_zeigen = float(eintrag.get("rz", 0.0))
             k.rpg = bool(eintrag.get("rp", False))
             if k.rpg and k.waffen != ["rakete"]:
                 # Beim Gast wird nichts simuliert: die Waffe muss aus der
@@ -2828,8 +3035,8 @@ class Gefecht(Szene):
                               (w["karte"] or "TESTKARTE").upper()))
             regeln = K.MODI[w["modus"]]
             if regeln["runden"]:
-                eintraege.append(("runden", "RUNDEN BIS SIEG",
-                                  str(w["runden_bis"])))
+                eintraege.append(("runden", "GESPIELTE RUNDEN",
+                                  str(w["runden"])))
             elif not regeln["zone"] and not regeln["revive"]:
                 eintraege.append(("ende", "RUNDE ENDET NACH",
                                   "ZEIT" if w["ende_art"] == "zeit"
@@ -2955,8 +3162,7 @@ class Gefecht(Szene):
             self.menue = min(self.menue, len(self._menue_baut()) - 1)
         elif schluessel == "runden":
             g = K.VERSUS["runden_grenzen"]
-            w["runden_bis"] = max(g[0], min(g[1],
-                                            w["runden_bis"] + (1 if vor else -1)))
+            w["runden"] = max(g[0], min(g[1], w["runden"] + (1 if vor else -1)))
         elif schluessel == "ende":
             w["ende_art"] = "abschuesse" if w["ende_art"] == "zeit" else "zeit"
             w["ende_wert"] = (K.GEFECHT["rundenzeit"] if w["ende_art"] == "zeit"
@@ -3042,7 +3248,7 @@ class Gefecht(Szene):
         self.regeln = K.MODI[self.modus]
         self.ende_art = w["ende_art"] if w["ende_art"] in K.ENDE_ARTEN else "zeit"
         self.ende_wert = float(w["ende_wert"])
-        self.runden_bis = int(w["runden_bis"])
+        self.runden_anzahl = int(w["runden"])
         self.knapp = bool(w["knapp"])
         self.schutz_an = bool(w["schutz"])
         self.start_medkits = int(w["medkits"])
@@ -3070,6 +3276,8 @@ class Gefecht(Szene):
         self.zone_stand = [0.0] * len(self.teampunkte)
         self.zone_halter = -1
         self.runde = 0
+        self.runden_gespielt = 0
+        self.runde_sieger = -1
         self.runden_pause = 0.0
         self.sieger_team = -1
         self.welle = 0
@@ -3158,7 +3366,7 @@ class Gefecht(Szene):
         """Die Regeln, die gerade gelten, als Ausgangspunkt fuers Menue."""
         return dict(modus=self.modus, karte=self.karte,
                     ende_art=self.ende_art,
-                    ende_wert=self.ende_wert, runden_bis=self.runden_bis,
+                    ende_wert=self.ende_wert, runden=self.runden_anzahl,
                     knapp=self.knapp, schutz=self.schutz_an,
                     medkits=self.start_medkits,
                     medkit_spawn=self.medkits_spawnen,
@@ -3185,6 +3393,7 @@ class Gefecht(Szene):
             self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.ich)
             self.renderer.tracer(ziel, self.welt, self.kamera, self.ich)
         self._namen_zeichnen(ziel)
+        self._randpfeile(ziel)
         self._erfassung_zeichnen(ziel)
         # Der rote Rand liegt ueber der Welt, aber unter der Anzeige: die
         # Zahlen sollen lesbar bleiben, auch wenn es einem schlecht geht.
@@ -3395,6 +3604,83 @@ class Gefecht(Szene):
             return K.C_AMBER
         return K.C_HULL                   # eigene Mannschaft, kein Ziel
 
+    def _tastenname(self, aktion: str) -> str:
+        """Die erste Taste einer Aktion, so wie der Spieler sie belegt hat."""
+        tasten = getattr(getattr(self.app, "opt", None), "tasten", {}) or {}
+        namen = tasten.get(aktion) or []
+        return (namen[0] if namen else aktion).upper()[:6]
+
+    def _verbuendet(self, k) -> bool:
+        """Gehoert er zu mir - so, dass ich ihm aufhelfen koennte?"""
+        if self.ich is None or k is self.ich or not self.regeln["revive"]:
+            return False
+        return (not self.mit_teams) or k.team == self.ich.team
+
+    def _ruf_marke(self, ziel, p, k) -> None:
+        """Ueber einem Rufenden: ein Zeichen, das blinkt.
+
+        Fuer den, der ihn im Bild hat. Das Blinken ist schnell und kurz -
+        es soll den Blick ziehen, nicht nerven.
+        """
+        an = int(k.ruf_zeigen * 9.0) % 2 == 0
+        farbe = K.C_AMBER if an else K.C_CREAM
+        x, y = int(p.x), int(p.y) - 40
+        pygame.draw.polygon(ziel, (16, 11, 8), [(x, y - 7), (x + 7, y),
+                                                (x, y + 7), (x - 7, y)])
+        pygame.draw.polygon(ziel, farbe, [(x, y - 6), (x + 6, y),
+                                          (x, y + 6), (x - 6, y)], 1)
+        SCHRIFT.zeichnen(ziel, "!", x, y - 3, farbe, 1, ausrichtung="mitte")
+
+    def _randpfeile(self, ziel) -> None:
+        """Wo ein Gefallener aus dem eigenen Team liegt, den man nicht sieht.
+
+        Ein Pfeil am Bildrand, der auf ihn zeigt, mit den Sekunden, die er
+        noch hat. Ruft er, leuchtet der Pfeil auf und wird groesser.
+        Gezeigt wird er, sobald der Gefallene nicht im Bild ist - oder auf
+        einer anderen Ebene liegt, denn dann sieht man ihn ja auch nicht.
+        """
+        if self.ich is None or self.vorbei:
+            return
+        rand = 16
+        mitte = pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2)
+        ecke = self.kamera.ecke
+        for k in self.kaempfer.values():
+            if not (k.lebt and k.am_boden and self._verbuendet(k)):
+                continue
+            p = k.pos - ecke
+            im_bild = (rand <= p.x <= K.GAME_W - rand
+                       and rand <= p.y <= K.GAME_H - rand)
+            if im_bild and k.ebene == self.blick:
+                continue
+            richtung = p - mitte
+            if richtung.length_squared() < 1.0:
+                richtung = pygame.Vector2(0, -1)
+            # Schnitt mit dem Rechteck, eingerueckt um den Rand.
+            halb = pygame.Vector2(K.GAME_W / 2 - rand, K.GAME_H / 2 - rand)
+            teiler = max(abs(richtung.x) / halb.x, abs(richtung.y) / halb.y)
+            stelle = mitte + richtung / teiler
+            winkel = math.degrees(math.atan2(richtung.y, richtung.x))
+            ruft = k.ruf_zeigen > 0.0
+            puls = 1.0
+            if ruft:
+                puls = 1.0 + 0.45 * abs(math.sin(k.ruf_zeigen * 11.0))
+            groesse = 7.0 * puls
+            farbe = (K.C_AMBER if (ruft and int(k.ruf_zeigen * 9) % 2 == 0)
+                     else self._farbe_fuer(k, False))
+            spitze = stelle + pygame.Vector2(groesse, 0).rotate(winkel)
+            links = stelle + pygame.Vector2(-groesse * 0.7, groesse * 0.75).rotate(winkel)
+            rechts = stelle + pygame.Vector2(-groesse * 0.7, -groesse * 0.75).rotate(winkel)
+            pygame.draw.polygon(ziel, (16, 11, 8),
+                                [spitze + (1, 1), links + (1, 1), rechts + (1, 1)])
+            pygame.draw.polygon(ziel, farbe, [spitze, links, rechts])
+            # Die Zeit, die er noch hat, und ob er eine Ebene woanders liegt.
+            text = "%d" % max(0, int(k.boden_rest + 0.99))
+            if k.ebene != self.blick:
+                text += " E%d" % k.ebene
+            hinten = stelle - pygame.Vector2(groesse + 9, 0).rotate(winkel)
+            SCHRIFT.zeichnen(ziel, text, int(hinten.x), int(hinten.y) - 3,
+                             farbe, 1, ausrichtung="mitte")
+
     def _namen_zeichnen(self, ziel) -> None:
         """Ueber jedem Mitspieler sein Name, sein Leben und sein Schutz.
 
@@ -3445,9 +3731,20 @@ class Gefecht(Szene):
                 pygame.draw.rect(ziel, K.C_TEAL,
                                  (int(p.x) - breite // 2, int(p.y) - 18,
                                   int(breite * k.revive_stand), 3))
-                if not eigen and self._darf_helfen(self.ich, k):
-                    SCHRIFT.zeichnen(ziel, "[E]", int(p.x), int(p.y) + 14,
-                                     K.C_TEAL, 1, ausrichtung="mitte")
+                if (not eigen and self._darf_helfen(self.ich, k)
+                        and self.ich.pos.distance_to(k.pos)
+                        <= K.REVIVE["reichweite"] * 2.5):
+                    # In Reichweite: was geht. Das Ziehen steht dabei, weil
+                    # man es sonst nie entdeckt - es ist die eine Taste,
+                    # die man nur in dieser Lage braucht.
+                    taste_e = self._tastenname("nutzen")
+                    taste_g = self._tastenname("ziehen")
+                    SCHRIFT.zeichnen(ziel, "[%s] AUF  [%s] ZIEHEN"
+                                     % (taste_e, taste_g),
+                                     int(p.x), int(p.y) + 14, K.C_TEAL, 1,
+                                     ausrichtung="mitte")
+                if k.ruf_zeigen > 0.0:
+                    self._ruf_marke(ziel, p, k)
                 continue
             anteil = max(0.0, min(1.0, k.leben / k.max_leben))
             pygame.draw.rect(ziel, (16, 11, 8),
@@ -3536,9 +3833,8 @@ class Gefecht(Szene):
                            % max(1, int(self.runden_pause + 0.99)), mitte, y,
                            K.C_AMBER, 1, ausrichtung="mitte")
             else:
-                f.zeichnen(ziel, "RUNDE %d  BIS %d SIEGEN"
-                           % (max(1, self.runde), self.runden_bis),
-                           mitte, y, K.C_MUTED, 1, ausrichtung="mitte")
+                f.zeichnen(ziel, self.runden_text(), mitte, y, K.C_MUTED, 1,
+                           ausrichtung="mitte")
             y += 10
         return y
 
