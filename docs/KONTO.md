@@ -231,12 +231,30 @@ create trigger profil_anlegen after insert on auth.users
 
 ### 5.3 Bestaetigung per Post ausschalten
 
-**Authentication → Sign In / Providers → Email**: *Confirm email*
-**aus**. Sonst wartet jedes neue Konto auf eine Bestaetigung an eine
-Adresse, die es nicht gibt - und niemand kann sich anmelden.
+Der direkte Weg, an der Oberflaeche vorbei:
 
-Das ist der Punkt, an dem es am haeufigsten haengt. `--konto server`
-(5.5) sagt es einem, statt dass man danach sucht.
+    https://supabase.com/dashboard/project/_/auth/providers
+
+Das `_` ersetzt Supabase selbst durch das Projekt. Ueber das Menue:
+**Authentication**, dort die Seite mit den Anmeldearten - je nach Stand
+der Oberflaeche heisst sie *Providers* oder *Sign In / Providers*, die
+Adresse ist dieselbe. Dort **Email** aufklappen und den Schalter fuer
+das Bestaetigen der Adresse ausschalten (*Confirm email*; in der
+Konfiguration heisst er `enable_confirmations`). Speichern nicht
+vergessen.
+
+**Warum das sein muss:** bei einem gehosteten Projekt steht die
+Bestaetigung von Haus aus an. Das Spiel meldet sich aber mit einer
+Adresse an, die es nicht gibt (`<name>@spieler.dustfront`, siehe 5.4) -
+die Bestaetigung kaeme also nie an, und niemand kaeme je hinein.
+
+**Woran man merkt, dass es noch ansteht:** der Anmeldedienst legt das
+Konto an, gibt aber keine Sitzung zurueck. Das Spiel sagt dann
+
+    KONTO ANGELEGT, ABER NOCH NICHT BESTAETIGT
+
+und `--konto server` (5.5) faellt beim ersten Schritt durch und nennt
+genau diese Stelle. Das ist der Punkt, an dem es am haeufigsten haengt.
 
 ### 5.4 Zugang eintragen
 
