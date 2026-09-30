@@ -87,8 +87,8 @@ from . import pfade
 # Steht eine Datei `server.json` im Benutzerordner, gilt die davor. So
 # kann man ein eigenes Projekt benutzen, ohne den Quelltext zu aendern.
 SERVER = {
-    "url": "",            # z.B. "https://abcdefghijkl.supabase.co"
-    "schluessel": "",     # der oeffentliche Schluessel (sb_publishable_...)
+    "url": "https://kruokzzrcbfktlsnubno.supabase.co",
+    "schluessel": "sb_publishable_CDGENbJNgNC-bTaZHjTJTQ_pTcFWmDN",
     # Die Domaene, hinter der die Spielernamen als Adresse laufen. Sie
     # existiert nicht und soll nicht existieren - siehe `_postfach`.
     # Sie steht hier und nicht im Code, weil der Anmeldedienst eine

@@ -272,18 +272,31 @@ def konto_server_pruefen(A, wert) -> int:
         # steht dann gleich dabei, statt dass jemand danach sucht.
         grund = angelegt.fehler
         print()
-        if "CONFIRM" in grund or "BESTAET" in grund:
-            print("Vermutlich steht die Bestaetigung per Post noch an.")
+        # Die Reihenfolge ist Absicht. Mehrere dieser Meldungen enthalten
+        # das Wort EMAIL, und die Ursachen dahinter sind voellig
+        # verschieden - wer zuerst auf EMAIL prueft, schickt jeden in die
+        # falsche Ecke. Vom Engsten zum Weitesten also.
+        if "DISABLED" in grund or "NOT ALLOWED" in grund or "SIGNUP" in grund:
+            print("Der Anmeldedienst nimmt gar keine neuen Konten an.")
+            print("Das ist nicht die Bestaetigung per Post, sondern ein")
+            print("Schalter davor - einer von zweien:")
+            print("  Authentication -> Sign In / Providers -> Email")
+            print("  muss ueberhaupt eingeschaltet sein (der Schalter am")
+            print("  Anbieter selbst, nicht 'Confirm email' darin), und")
+            print("  'Allow new users to sign up' muss an sein.")
+            print("Siehe docs/KONTO.md, 5.3.")
+        elif "CONFIRM" in grund or "BESTAET" in grund:
+            print("Die Bestaetigung per Post steht noch an.")
             print("Authentication -> Sign In / Providers -> Email:")
             print("'Confirm email' ausschalten. Siehe docs/KONTO.md, 5.3.")
-        elif "EMAIL" in grund or "ADRESS" in grund or "INVALID" in grund:
-            print("Vermutlich lehnt der Anmeldedienst die Adresse ab.")
+        elif "API KEY" in grund or "JWT" in grund or "401" in grund:
+            print("Der Schluessel stimmt nicht.")
+            print("Settings -> API Keys, der 'publishable key'.")
+        elif "INVALID" in grund and "EMAIL" in grund:
+            print("Der Anmeldedienst lehnt die Adresse ab.")
             print("Das Spiel meldet sich als <name>@spieler.dustfront an.")
             print("Abhilfe: in SERVER eine Domaene eintragen, die er")
             print("annimmt - siehe docs/KONTO.md, 5.4.")
-        elif "API KEY" in grund or "JWT" in grund or "401" in grund:
-            print("Vermutlich stimmt der Schluessel nicht.")
-            print("Settings -> API Keys, der 'publishable key'.")
         else:
             print("Weder Tabellen noch Zeilenschutz sind bis hierhin im")
             print("Spiel - das ist noch der Anmeldedienst allein.")
@@ -323,6 +336,28 @@ def konto_server_pruefen(A, wert) -> int:
             print("Der eindeutige Index auf (partie, konto) fehlt. Ohne ihn")
             print("zaehlt jeder Wiederholungsversuch noch einmal. Das SQL")
             print("aus docs/KONTO.md 5.2 noch einmal ausfuehren.")
+
+    # Der Zeilenschutz. Er ist die einzige Zusage in docs/KONTO.md, die
+    # nicht davon abhaengt, dass sich der Klient benimmt - und genau
+    # darum muss sie geprueft werden. Gelesen wird hier mit dem
+    # oeffentlichen Schluessel allein, ohne Sitzung: so weit kommt jeder,
+    # der das Spiel herunterlaedt. Was dabei zu sehen ist, ist das, was
+    # ein veraenderter Klient sehen koennte.
+    ohne = netz.gefechte_lesen("")
+    sichtbar = len(ohne.daten.get("gefechte", [])) if ohne else -1
+    dicht = (sichtbar == 0)
+    schritte.append(dicht)
+    print(("  ok    " if dicht else "FEHLER  ")
+          + "Ohne Anmeldung ist nichts zu sehen   %s"
+          % ("nichts" if dicht else "%d Zeilen" % sichtbar))
+    if not dicht:
+        fehler.append(("Zeilenschutz", "%d Zeilen ohne Anmeldung" % sichtbar))
+        print()
+        print("Der Zeilenschutz steht nicht. Ohne ihn kann jeder, der das")
+        print("Spiel herunterlaedt, alle Zahlen aller Spieler lesen - der")
+        print("Schluessel liegt ja im Quelltext. Das SQL aus docs/KONTO.md")
+        print("5.2 ab 'alter table ... enable row level security' noch")
+        print("einmal ausfuehren.")
 
     print()
     if fehler:
