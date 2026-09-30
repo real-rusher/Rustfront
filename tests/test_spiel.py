@@ -1507,10 +1507,14 @@ gast_k.pos.update(weit); gast_k.vorher.update(gast_k.pos)
 gast_k.ebene = K.ZONE["ebene"]
 pruef("Knapp daneben ist draussen", not w.in_der_zone(gast_k))
 
+# Seit 0.27 stellt der Gastgeber die Haltezeit ein; die Rate wird daraus
+# hochgerechnet (zone_faktor). Gemessen wird deshalb gegen die Rate mal
+# Faktor, nicht mehr gegen die blanke Tabellenzahl.
+je_s = K.ZONE["je_sekunde"] * w.zone_faktor
 w.zone_stand[0] = 0.0      # der Gastgeber kann beim Einstieg schon drin
 w._zone(1.0)               # gestanden haben; gemessen wird eine Sekunde
 pruef("Allein im Kreis laedt es fuer die eigene Mannschaft",
-      abs(w.zone_stand[0] - K.ZONE["je_sekunde"]) < 0.01
+      abs(w.zone_stand[0] - je_s) < 0.01
       and w.zone_stand[1] == 0.0, str(w.zone_stand))
 pruef("Und der Kreis gehoert sichtbar dieser Mannschaft",
       w.zone_halter == 0, "Halter %d" % w.zone_halter)
@@ -1533,15 +1537,16 @@ zweiter.ebene = K.ZONE["ebene"]
 w.zone_stand[0] = 0.0
 w._zone(1.0)                      # zwei gegen einen
 pruef("Zwei gegen einen laedt wie einer gegen keinen",
-      abs(w.zone_stand[0] - K.ZONE["je_sekunde"]) < 0.01,
+      abs(w.zone_stand[0] - je_s) < 0.01,
       "%.1f" % w.zone_stand[0])
 gast_k.pos.update(weit); gast_k.vorher.update(gast_k.pos)
 w.zone_stand[0] = 0.0
 w._zone(1.0)                      # zwei gegen keinen
 pruef("Zwei gegen keinen laedt schneller",
-      w.zone_stand[0] > K.ZONE["je_sekunde"], "%.1f" % w.zone_stand[0])
+      w.zone_stand[0] > je_s, "%.1f" % w.zone_stand[0])
 pruef("Aber nie schneller als die Obergrenze",
-      w.zone_stand[0] <= K.ZONE["hoechstens"] + 0.01, "%.1f" % w.zone_stand[0])
+      w.zone_stand[0] <= K.ZONE["hoechstens"] * w.zone_faktor + 0.01,
+      "%.1f" % w.zone_stand[0])
 w.kaempfer.pop(98, None)
 zweiter.lebt = False
 
@@ -4101,6 +4106,175 @@ pruef("Im Gefecht traegt die Figur das Medkit in Mannschaftsfarbe",
       fig_m.bild)
 pruef("Und der Gast sieht dasselbe", gm.ich.bild == fig_m.bild, gm.ich.bild)
 wm.verlassen(); gm.verlassen()
+
+# ── Die Regeln an einer Stelle (regeln.py) ───────────────────────────
+from dustfront import regeln as RG
+d_r = RG.vorgabe()
+pruef("Jede Regel hat eine Vorgabe", set(d_r) == set(RG.NACH_NAME), str(d_r))
+kaputt = RG.saeubern({"modus": "quatsch", "medkits": 999, "bosse": "ja",
+                      "huegel_zeit": -5, "loadouts": 3, "ende_wert": "x"})
+pruef("Was von aussen kommt, wird gesaeubert",
+      kaputt["modus"] == K.MODUS_VORGABE and
+      kaputt["medkits"] == K.GEFECHT["start_medkits_hoechstens"] and
+      kaputt["bosse"] is True and kaputt["huegel_zeit"] == min(K.ZONE["haltezeiten"])
+      and kaputt["loadouts"] == K.GEFECHT["loadouts"], str(kaputt))
+sicht_pve = [f.schluessel for f in RG.sichtbar(RG.vorgabe(modus="pve"))]
+sicht_pvp = [f.schluessel for f in RG.sichtbar(RG.vorgabe(modus="pvp"))]
+sicht_hue = [f.schluessel for f in RG.sichtbar(RG.vorgabe(modus="huegel"))]
+pruef("Schwierigkeit und Bosse nur, wo es Gegner gibt",
+      {"schwierigkeit", "bosse"} <= set(sicht_pve)
+      and not ({"schwierigkeit", "bosse"} & set(sicht_pvp)))
+pruef("Haltezeit und Verfall nur beim Huegel",
+      {"huegel_zeit", "huegel_verfall"} <= set(sicht_hue)
+      and not ({"huegel_zeit", "huegel_verfall"} & set(sicht_pve)))
+pruef("Der Huegel hat eine Hoechstdauer, aber keine Endart",
+      "ende_wert" in sicht_hue and "ende_art" not in sicht_hue)
+d_r = RG.vorgabe(modus="versus", runden=15)
+RG.verstellen(d_r, "runden", 1)
+pruef("Zahlen bleiben am Rand stehen", d_r["runden"] == 15, str(d_r["runden"]))
+d_r = RG.vorgabe(loadouts="gleich")
+RG.verstellen(d_r, "loadouts", 1)
+pruef("Aufzaehlungen fangen vorn wieder an", d_r["loadouts"] == "alles")
+d_r = RG.vorgabe(modus="pvp")
+RG.verstellen(d_r, "ende_art", 1)
+pruef("Wechselt die Endart, passt der Endwert dazu",
+      d_r["ende_art"] == "abschuesse"
+      and d_r["ende_wert"] == K.GEFECHT["abschuesse_ziel"], str(d_r["ende_wert"]))
+
+# ── Schwierigkeit und Bosse ──────────────────────────────────────────
+def welle_messen(stufe, bosse=True, welle=1):
+    wx, gx = gefechtspaar("pve", regeln={"schwierigkeit": stufe,
+                                         "bosse": bosse})
+    wx.welle = welle - 1
+    wx._welle_starten()
+    for _ in range(3):
+        wx._nachschub(99.0)
+    gegner = [g for g in wx.gegner_offen if not g.ist_boss]
+    ergebnis = dict(anzahl=len(gegner) + len(wx.welle_rest),
+                    boss=wx.boss, pause=wx.pause_rest,
+                    laeufer=[g for g in gegner if g.art == "laeufer"][:1],
+                    gast=gx.schwierigkeit, gast_bosse=gx.bosse_an)
+    netz_durchlassen(wx, gx, 5)
+    ergebnis["gast"] = gx.schwierigkeit
+    ergebnis["gast_bosse"] = gx.bosse_an
+    wx.verlassen(); gx.verlassen()
+    return ergebnis
+
+normal = welle_messen("normal", welle=4)
+schwer = welle_messen("schwer", welle=4)
+leicht = welle_messen("leicht", welle=4)
+pruef("SCHWER bringt mehr Gegner als NORMAL, LEICHT weniger",
+      leicht["anzahl"] < normal["anzahl"] < schwer["anzahl"],
+      "%d / %d / %d" % (leicht["anzahl"], normal["anzahl"], schwer["anzahl"]))
+if normal["laeufer"] and schwer["laeufer"]:
+    ln, ls = normal["laeufer"][0], schwer["laeufer"][0]
+    pruef("Auf SCHWER haelt ein Laeufer mehr aus und schlaegt haerter",
+          ls.max_leben > ln.max_leben and ls.daten["schaden"] > ln.daten["schaden"],
+          "%.0f/%.0f Leben, %.1f/%.1f Schaden" % (ln.max_leben, ls.max_leben,
+                                                  ln.daten["schaden"],
+                                                  ls.daten["schaden"]))
+pruef("Die Tabelle selbst bleibt dabei unveraendert",
+      K.GEGNER["laeufer"]["schaden"] == 9.0)
+pruef("LEICHT laesst mehr Pause zwischen den Wellen",
+      leicht["pause"] > normal["pause"] > schwer["pause"])
+pruef("Der Gast kennt die Schwierigkeit", schwer["gast"] == "schwer")
+mit_boss = welle_messen("normal", True, welle=5)
+ohne_boss = welle_messen("normal", False, welle=5)
+pruef("Welle 5 bringt einen Boss", mit_boss["boss"] is not None)
+pruef("Ohne Bosse nicht - und die Welle kommt dafuer in voller Staerke",
+      ohne_boss["boss"] is None and ohne_boss["anzahl"] > mit_boss["anzahl"],
+      "%d statt %d" % (ohne_boss["anzahl"], mit_boss["anzahl"]))
+pruef("Auch das weiss der Gast", ohne_boss["gast_bosse"] is False)
+
+# ── Eines fuer alle ──────────────────────────────────────────────────
+from dustfront import konto as KMOD
+fest_nr = 1
+fest_plaetze = KMOD.hotbar_aus_loadout(app.konto.loadouts[fest_nr])
+wl, gl = gefechtspaar("pvp", regeln={"loadouts": "gleich",
+                                     "loadout_nr": fest_nr})
+gast_fig = wl.kaempfer[gl.meine_nummer]
+pruef("Bei EINES FUER ALLE traegt der Gastgeber das gewaehlte",
+      wl.kaempfer[0].waffen == fest_plaetze, str(wl.kaempfer[0].waffen))
+pruef("Und der Gast genau dasselbe", gast_fig.waffen == fest_plaetze,
+      str(gast_fig.waffen))
+netz_durchlassen(wl, gl, 10)
+pruef("Er sieht es auch bei sich", gl.ich.waffen == fest_plaetze,
+      str(gl.ich.waffen))
+# Danach wieder das eigene: die neue Runde mit "eigenes".
+wl.wunsch["loadouts"] = "eigenes"
+wl._runde_neu()
+eigenes = KMOD.hotbar_aus_loadout(gast_fig.angemeldet) if gast_fig.angemeldet else None
+pruef("Nach einer solchen Runde traegt der Gast wieder sein eigenes",
+      eigenes is not None and gast_fig.waffen == eigenes,
+      "%s statt %s" % (gast_fig.waffen, eigenes))
+netz_durchlassen(wl, gl, 10)
+# Das war ein Fehler seit den Loadouts: die Liste ging mit, der Gast
+# uebernahm sie nie und sah in der Hotbar alle neun Waffen.
+pruef("Und seine Hotbar zeigt genau das, nicht alle neun",
+      gl.ich.waffen == eigenes, str(gl.ich.waffen))
+wl.verlassen(); gl.verlassen()
+
+# ── Huegel: Haltezeit und Verfall ────────────────────────────────────
+def huegel_messen(zeit, verfall=True):
+    wh, gh = gefechtspaar("huegel", regeln={"huegel_zeit": zeit,
+                                            "huegel_verfall": verfall})
+    wk = wh.kaempfer[0]
+    gk = wh.kaempfer[gh.meine_nummer]
+    gk.pos.update(-500, -500); gk.vorher.update(gk.pos)
+    wk.pos.update(wh.zone_mitte); wk.vorher.update(wk.pos)
+    wk.ebene = K.ZONE["ebene"]
+    wh.zone_stand = [0.0, 0.0]
+    t = 0.0
+    while not wh.vorbei and t < 400:
+        wh._zone(0.05)
+        t += 0.05
+    # Und der Verfall: halb voll, dann niemand drin.
+    wh.vorbei = False
+    wh.zone_stand[wk.team] = 50.0
+    wk.pos.update(-500, -500)
+    for _ in range(100):
+        wh._zone(0.05)
+    rest = wh.zone_stand[wk.team]
+    netz_durchlassen(wh, gh, 5)
+    gast_zeit = gh.huegel_zeit
+    wh.verlassen(); gh.verlassen()
+    return t, rest, gast_zeit
+
+t15, rest15, _g = huegel_messen(15)
+t60, rest60, g60 = huegel_messen(60)
+pruef("Mit 15 s Haltezeit braucht einer allein rund 15 s", 14.0 < t15 < 16.0,
+      "%.1f s" % t15)
+pruef("Mit 60 s rund 60 s", 58.0 < t60 < 62.0, "%.1f s" % t60)
+pruef("Der Gast kennt die Haltezeit", g60 == 60, str(g60))
+pruef("Mit Verfall sinkt ein verlassener Stand", rest15 < 50.0, "%.1f" % rest15)
+_t, rest_aus, _g = huegel_messen(15, verfall=False)
+pruef("Ohne Verfall bleibt er stehen", abs(rest_aus - 50.0) < 0.01,
+      "%.1f" % rest_aus)
+
+# ── Kartenwechsel beim Gast: auch zurueck, und mit allen Mitspielern ──
+wk_, gk_ = gefechtspaar("pvp", karte="staubtal")
+pruef("Beide starten auf STAUBTAL", wk_.karte == "staubtal" and gk_.karte == "staubtal")
+wk_.wunsch["karte"] = ""
+wk_._runde_neu()
+netz_durchlassen(wk_, gk_, 20)
+pruef("Zurueck auf die eingebaute Karte kommt der Gast mit",
+      gk_.karte == "" and len(gk_.welt.ebenen) == 3,
+      "%r, %d Ebenen" % (gk_.karte, len(gk_.welt.ebenen)))
+pruef("Und alle Mitspieler stehen in seiner neuen Welt",
+      all(k in gk_.welt.wesen or k in gk_.welt.neue
+          for k in gk_.kaempfer.values()), "%d Kaempfer" % len(gk_.kaempfer))
+wk_.verlassen(); gk_.verlassen()
+
+# ── Das Pausenmenue kennt die neuen Regeln ───────────────────────────
+wm_, gm_ = gefechtspaar("pve")
+eintraege = [x[0] for x in wm_._menue_baut()]
+pruef("Im Menue stehen Schwierigkeit und Bosse",
+      "schwierigkeit" in eintraege and "bosse" in eintraege, str(eintraege))
+wm_.menue = eintraege.index("schwierigkeit")
+wm_._menue_wirken("schwierigkeit", True, False)
+pruef("Und lassen sich verstellen", wm_.wunsch["schwierigkeit"] == "schwer",
+      wm_.wunsch["schwierigkeit"])
+wm_.verlassen(); gm_.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

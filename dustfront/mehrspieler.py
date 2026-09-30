@@ -57,6 +57,7 @@ from . import config as K
 from . import ablage
 from . import konto as konto_modul
 from . import netz
+from . import regeln as R
 from . import ui
 from . import world as welt_modul
 from .core import Szene
@@ -341,6 +342,18 @@ class KampfGegner(Gegner):
                  leben: float | None = None) -> None:
         super().__init__(pos, art, ebene, leben=leben)
         self._gefecht = gefecht
+        # Die Schwierigkeit des Gefechts. Beim Boss steckt sie schon im
+        # uebergebenen Leben (siehe _boss_setzen), sonst kommt sie hier
+        # dazu. Schaden und Tempo gelten fuer beide.
+        stufe = getattr(gefecht, "stufe", None)
+        if stufe is not None and stufe is not K.SCHWIERIGKEIT["normal"]:
+            self.daten = K.gegner_verstaerkt(self.daten, stufe)
+            self.fern = self.daten.get("fern")
+            self.platzt = self.daten.get("platzt")
+            self.faehigkeit = self.daten.get("faehigkeit")
+            if leben is None:
+                self.max_leben *= stufe["leben"]
+                self.leben = self.max_leben
         self._ziel = None
         self._ziel_rest = 0.0
         # Haengerwache: bestes bisher erreichtes Naeherkommen und wie
@@ -507,43 +520,35 @@ class Gefecht(Szene):
                  team: int | None = None, passwort: str = "",
                  loadouts: str | None = None, rpg: bool | None = None,
                  rpg_lenkung: bool | None = None, karte: str = "",
-                 seed: int | None = None) -> None:
+                 seed: int | None = None, regeln: dict | None = None) -> None:
         super().__init__(app)
         self.name = netz.name_saeubern(name)
         self.gastgeber = gastgeber
         self.gast = gast
-        self.modus = modus if modus in K.MODI else K.MODUS_VORGABE
-        self.regeln = K.MODI[self.modus]
-        self.ende_art = ende_art if ende_art in K.ENDE_ARTEN else "zeit"
-        self.knapp = bool(knapp)
-        # Drei Schalter, die der Gastgeber beim Aufmachen stellt. Der Gast
-        # bekommt sie mit dem Willkommen und stellt nichts selbst.
-        self.schutz_an = (K.GEFECHT["schutz_an"] if schutz is None
-                          else bool(schutz))
-        self.start_medkits = max(0, min(
-            K.GEFECHT["start_medkits_hoechstens"],
-            K.GEFECHT["start_medkits"] if medkits is None else int(medkits)))
-        self.medkits_spawnen = (K.GEFECHT["medkits_spawnen"]
-                                if medkit_spawn is None else bool(medkit_spawn))
-        g = K.VERSUS["runden_grenzen"]
-        self.runden_anzahl = max(g[0], min(g[1], int(
-            K.VERSUS["runden"] if runden is None else runden)))
+        # Die Regeln der Runde, als eine Sammlung (siehe regeln.py). Die
+        # einzelnen Parameter oben bleiben fuer die Kommandozeile und die
+        # Pruefungen; `regeln` ist der Weg fuer Lobby und Rundenplan, die
+        # eine ganze Sammlung auf einmal haben. Was davon gesetzt ist,
+        # gewinnt, und `saeubern` macht aus beidem eine gueltige Sammlung.
+        # Ein Gast bekommt sie mit dem Willkommen und stellt nichts selbst.
+        roh = {"modus": modus, "ende_art": ende_art, "knapp": bool(knapp),
+               "karte": karte}
+        if ende_wert:
+            roh["ende_wert"] = float(ende_wert)
+        for schluessel, wert in (("schutz", schutz), ("medkits", medkits),
+                                 ("medkit_spawn", medkit_spawn),
+                                 ("runden", runden), ("loadouts", loadouts),
+                                 ("rpg", rpg), ("rpg_lenkung", rpg_lenkung)):
+            if wert is not None:
+                roh[schluessel] = wert
+        if regeln:
+            roh.update(regeln)
+        self.regelwerk = R.saeubern(roh, self._umfeld())
+        self._regeln_setzen(self.regelwerk)
         # Gespielte Runden, Unentschieden mitgezaehlt. Die Siege stehen in
         # teampunkte; aus ihnen allein laesst sich nicht ablesen, ob alle
         # Runden durch sind.
         self.runden_gespielt = 0
-        # Gelten Loadouts? "eigenes" heisst: jeder traegt seine zwei
-        # Waffen und seine Wurfwaffe. "alles" heisst: jeder hat alles, wie
-        # bisher. Der Gastgeber entscheidet es, ein Gast bekommt es mit dem
-        # Willkommen - zwei Leute mit verschiedenen Regeln auf derselben
-        # Karte waeren kein Gefecht, sondern ein Missverstaendnis.
-        self.loadout_regel = (loadouts if loadouts in K.GEFECHT["loadout_arten"]
-                              else K.GEFECHT["loadouts"])
-        # Der Raketenwerfer. Aus, wenn der Gastgeber ihn nicht will: er
-        # veraendert eine Runde, und das soll eine Entscheidung sein.
-        self.rpg_an = (K.GEFECHT["rpg"] if rpg is None else bool(rpg))
-        self.rpg_lenkung = (K.GEFECHT["rpg_lenkung"] if rpg_lenkung is None
-                            else bool(rpg_lenkung))
         self._rpg_takt = K.GEFECHT["rpg_takt"] * 0.4
         # In welche Mannschaft man will: -1 heisst "such mir eine aus".
         self.team_wunsch = int(-1 if team is None else team)
@@ -552,15 +557,6 @@ class Gefecht(Szene):
         # Adresse kennt.
         self.passwort = netz.passwort_saeubern(passwort)
         self.abgewiesen = ""         # Grund, falls der Gastgeber absagt
-        # Ohne Vorgabe des Gastgebers: Zeit wie immer, Abschuesse aber je
-        # nachdem, ob ein Konto oder sechs gefuellt werden muessen.
-        if self.ende_art == "zeit":
-            vorgabe = K.GEFECHT["rundenzeit"]
-        elif self.regeln["teams"]:
-            vorgabe = K.GEFECHT["team_abschuesse"]
-        else:
-            vorgabe = K.GEFECHT["abschuesse_ziel"]
-        self.ende_wert = float(ende_wert) or float(vorgabe)
 
         # Im Spiel ohne Seed, damit jede Runde anders ausfaellt. Die Tests
         # geben einen festen mit - ohne ihn haengt jede Pruefung daran, wo
@@ -574,6 +570,7 @@ class Gefecht(Szene):
         self.karte = ""
         self.karte_kopf: dict = {}
         self.welt = None
+        karte = self.regelwerk["karte"]
         if karte:
             gelesen, kopf = welt_modul.karte_lesen(karte)
             if gelesen is not None:
@@ -938,7 +935,80 @@ class Gefecht(Szene):
 
     @property
     def mit_loadouts(self) -> bool:
-        return self.loadout_regel == "eigenes"
+        """Ob Loadouts gelten - das eigene oder eines fuer alle."""
+        return self.loadout_regel in ("eigenes", "gleich")
+
+    def _umfeld(self) -> dict:
+        """Was es fuer die Regeln nur hier gibt: Loadouts und Karten.
+
+        Die Loadouts sind die des Gastgebers - aus ihnen waehlt er das eine,
+        das bei "eines fuer alle" jeder traegt.
+        """
+        konto = getattr(self.app, "konto", None)
+        return {"loadouts": list(konto.loadouts) if konto is not None else [],
+                "karten": welt_modul.karten_liste()}
+
+    def _regeln_setzen(self, d: dict) -> None:
+        """Eine Regelsammlung in die Felder des Gefechts uebernehmen.
+
+        Die Felder bleiben, weil der ganze Rest des Gefechts sie liest -
+        `self.knapp` an vierzig Stellen durch `self.regelwerk["knapp"]` zu
+        ersetzen, braechte nichts ausser Gelegenheiten fuer Tippfehler.
+        Die Karte gehoert nicht hierher: sie zu wechseln heisst, eine Welt
+        zu laden, und das macht `_karte_wechseln`.
+        """
+        self.regelwerk = dict(d)
+        self.modus = d["modus"]
+        self.regeln = K.MODI[self.modus]
+        self.ende_art = d["ende_art"]
+        self.ende_wert = float(d["ende_wert"])
+        self.knapp = bool(d["knapp"])
+        self.schutz_an = bool(d["schutz"])
+        self.start_medkits = int(d["medkits"])
+        self.medkits_spawnen = bool(d["medkit_spawn"])
+        self.runden_anzahl = int(d["runden"])
+        # Gelten Loadouts? "eigenes": jeder traegt seine zwei Waffen und
+        # seine Wurfwaffe. "alles": jeder hat alles. "gleich": alle tragen
+        # das eine, das der Gastgeber gewaehlt hat (loadout_nr).
+        self.loadout_regel = d["loadouts"]
+        self.loadout_nr = int(d["loadout_nr"])
+        self.rpg_an = bool(d["rpg"])
+        self.rpg_lenkung = bool(d["rpg_lenkung"])
+        self.schwierigkeit = d["schwierigkeit"]
+        self.stufe = K.SCHWIERIGKEIT[self.schwierigkeit]
+        self.bosse_an = bool(d["bosse"])
+        self.huegel_zeit = float(d["huegel_zeit"])
+        self.huegel_verfall = bool(d["huegel_verfall"])
+
+    def _fest_loadout(self) -> dict | None:
+        """Das Loadout, das bei "eines fuer alle" jeder traegt.
+
+        Beim Gastgeber aus seinem Konto, mit der Nummer aus den Regeln.
+        Gibt es die Nummer nicht mehr - er hat eines geloescht -, nimmt er
+        sein gewaehltes; ohne Konto gibt es keines, und dann hat eben
+        jeder alles.
+        """
+        konto = getattr(self.app, "konto", None)
+        if konto is None or not konto.loadouts:
+            return None
+        if 0 <= self.loadout_nr < len(konto.loadouts):
+            return dict(konto.loadouts[self.loadout_nr])
+        return dict(konto.loadout)
+
+    def _loadout_fuer(self, k, angemeldet=None) -> dict | None:
+        """Was ein Kaempfer tragen soll, oder None fuer "alles".
+
+        `angemeldet` ist das Loadout, das ein Gast beim Verbinden
+        mitgeschickt hat; beim Gastgeber selbst gilt sein aktuelles.
+        """
+        if self.loadout_regel == "gleich":
+            return self._fest_loadout()
+        if self.loadout_regel == "eigenes":
+            if k is not None and k is self.ich:
+                return self.mein_loadout()
+            return angemeldet if angemeldet is not None else getattr(
+                k, "loadout", None)
+        return None
 
     def mein_loadout(self) -> dict | None:
         """Das eigene Loadout, oder None, wenn es keines gibt.
@@ -1043,10 +1113,16 @@ class Gefecht(Szene):
               loadout=None) -> Kaempfer:
         team = self._team_fuer(wunsch)
         pos = self._einstiegsort(team)
+        angemeldet = dict(loadout) if loadout else None
+        if self.loadout_regel == "gleich":
+            loadout = self._fest_loadout()
         k = Kaempfer(pos, 0, nummer, netz.name_saeubern(name),
                      self._fraktion_fuer(nummer, team), knapp=self.knapp,
                      team=team,
                      loadout=loadout if self.mit_loadouts else None)
+        # Was er selbst mitgebracht hat, bleibt gemerkt - auch in einer
+        # Runde, in der alle dasselbe tragen. Danach bekommt er es zurueck.
+        k.angemeldet = angemeldet
         self._regeln_anlegen(k)
         k.unverwundbar = self.schutz_zeit
         k.medkits = self.start_medkits
@@ -1075,10 +1151,14 @@ class Gefecht(Szene):
         if self.mit_loadouts:
             # Der Gastgeber kennt das Loadout jedes Gastes von dessen
             # Anmeldung; sein eigenes holt er sich frisch, damit eine
-            # Aenderung im Menue ankommt.
-            lo = self.mein_loadout() if k is self.ich else k.loadout
+            # Aenderung im Menue ankommt. Bei "eines fuer alle" ist es fuer
+            # jeden dasselbe - das eigene bleibt dabei an der Figur
+            # gemerkt (`angemeldet`), damit es nach einer solchen Runde
+            # wieder da ist.
+            lo = self._loadout_fuer(k, getattr(k, "angemeldet", None))
             plaetze = konto_modul.hotbar_aus_loadout(lo) if lo else []
         else:
+            lo = None
             plaetze = list(K.HOTBAR)
         if not plaetze or plaetze == k.waffen:
             return
@@ -1560,16 +1640,12 @@ class Gefecht(Szene):
         etwas geaendert hat. Sie darf darum keinen Gast voraussetzen -
         mit nummer = -1 gilt sie fuer alle.
         """
+        # Die Regeln als eine Sammlung (regeln.py) - der Gast saeubert sie
+        # mit derselben Tabelle, mit der sie hier gebaut wurden. Eine neue
+        # Regel kommt dadurch ohne eine Zeile hier beim Gast an.
         return {"t": "willkommen", "id": nummer,
                 "name": k.name if k is not None else "",
-                "modus": self.modus, "ende_art": self.ende_art,
-                "ende_wert": self.ende_wert, "knapp": self.knapp,
-                "schutz": self.schutz_an, "medkits": self.start_medkits,
-                "medkit_spawn": self.medkits_spawnen,
-                "runden": self.runden_anzahl,
-                "loadouts": self.loadout_regel,
-                "rpg": self.rpg_an, "rpg_lenkung": self.rpg_lenkung,
-                "karte": self.karte}
+                "regeln": dict(self.regelwerk, karte=self.karte)}
 
     def _gegnerlast_zaehlen(self) -> None:
         """Wie viele Gegner gerade an welchem Spieler haengen.
@@ -1605,20 +1681,24 @@ class Gefecht(Szene):
 
     def _welle_starten(self) -> None:
         w = K.WELLEN_MP
+        stufe = self.stufe
         self.welle += 1
-        self.pause_rest = w["pause"]
+        self.pause_rest = stufe["pause"]
         # Nach jeder Welle steht wieder jeder auf. Das ist der Ausgleich
         # dafuer, dass eine Runde sonst mit dem ersten Fehler kippt.
         for k in self.kaempfer.values():
             if k.am_boden:
                 k.aufhelfen()
         lebende = max(1, sum(1 for k in self.kaempfer.values() if k.lebt))
-        anzahl = int(w["grund"]
+        anzahl = int(w["grund"] * stufe["anzahl"]
                      * (1.0 + w["je_welle"] * (self.welle - 1))
                      * (1.0 + w["je_spieler"] * (lebende - 1)))
         anzahl = max(1, min(w["hoechstens"], anzahl))
 
-        self.boss_welle = (self.welle >= w["boss_ab"]
+        # Ohne Bosse bleibt die Welle eine gewoehnliche, in voller Staerke.
+        # Sie faellt nicht aus: wer Bosse abschaltet, will weiterspielen,
+        # nicht eine Pause geschenkt bekommen.
+        self.boss_welle = (self.bosse_an and self.welle >= w["boss_ab"]
                            and self.welle % w["boss_alle"] == 0)
         if self.boss_welle:
             # In einer Bosswelle kommt weniger Fussvolk. Der Boss ist die
@@ -1646,10 +1726,13 @@ class Gefecht(Szene):
         gewoehnlich ist.
         """
         offen = []
+        # Auf ALBTRAUM kommen neue Arten frueher, nie aber vor Welle 1.
+        frueher = self.stufe.get("frueher", 0)
         for e in K.MISCHUNG:
-            if self.welle < e["ab"]:
+            ab = max(1, e["ab"] - frueher)
+            if self.welle < ab:
                 continue
-            g = e["gewicht"] + e.get("steigt", 0.0) * (self.welle - e["ab"])
+            g = e["gewicht"] + e.get("steigt", 0.0) * (self.welle - ab)
             g = max(e.get("mindestens", 0.0), g)
             if g > 0:
                 offen.append((e["art"], g))
@@ -1679,7 +1762,7 @@ class Gefecht(Szene):
         w = K.WELLEN_MP
         nummer = self.welle // w["boss_alle"]          # 1, 2, 3, ...
         art = K.BOSS_FOLGE[(nummer - 1) % len(K.BOSS_FOLGE)]
-        leben = (K.BOSSE[art]["leben"]
+        leben = (K.BOSSE[art]["leben"] * self.stufe["boss"]
                  * (1.0 + w["boss_leben_je_spieler"] * (lebende - 1))
                  * (1.0 + w["boss_leben_je_runde"] * (nummer - 1)))
         ebene, pos = self._spawnstelle(boss=True)
@@ -1909,6 +1992,16 @@ class Gefecht(Szene):
         self.hinweis = "DER KREIS ZIEHT WEITER"
         self.welt.klang("erfasst", 0.5)
 
+    @property
+    def zone_faktor(self) -> float:
+        """Wie viel schneller oder langsamer der Kreis laedt als bis 0.26.
+
+        Die Haltezeit ist die Zeit, die einer allein ohne Gegenwehr
+        braucht. Bis 0.26 waren das bis / je_sekunde = gut 14 Sekunden.
+        """
+        z = K.ZONE
+        return (z["bis"] / z["je_sekunde"]) / max(1.0, self.huegel_zeit)
+
     def _zone(self, dt: float) -> None:
         """Wer die Mehrheit im Kreis hat, laedt fuer sein Team.
 
@@ -1930,27 +2023,32 @@ class Gefecht(Szene):
                 # Dagestanden hat er trotzdem.
                 k.zaehlen("zonenzeit", dt)
 
+        # Der Verfall im selben Verhaeltnis wie das Laden (siehe
+        # ZONE["haltezeit"]), und gar keiner, wenn der Gastgeber ihn
+        # abgeschaltet hat: dann bleibt jeder Stand, bis er voll ist.
+        verfall = (z["verfall"] * self.zone_faktor
+                   if self.huegel_verfall else 0.0)
         hoechste = max(drin)
         if hoechste == 0 or drin.count(hoechste) > 1:
             # Niemand drin, oder Gleichstand: der Stand verfaellt langsam.
             self.zone_halter = -1
             for i in range(len(self.zone_stand)):
                 self.zone_stand[i] = max(0.0, self.zone_stand[i]
-                                         - z["verfall"] * dt)
+                                         - verfall * dt)
             return
 
         halter = drin.index(hoechste)
         self.zone_halter = halter
         mehrheit = hoechste - max(
             [d for i, d in enumerate(drin) if i != halter] or [0])
-        tempo = min(z["hoechstens"],
-                    z["je_sekunde"] + z["je_kopf"] * (mehrheit - 1))
+        tempo = self.zone_faktor * min(
+            z["hoechstens"], z["je_sekunde"] + z["je_kopf"] * (mehrheit - 1))
         self.zone_stand[halter] = min(z["bis"],
                                       self.zone_stand[halter] + tempo * dt)
         for i in range(len(self.zone_stand)):
             if i != halter:
                 self.zone_stand[i] = max(0.0, self.zone_stand[i]
-                                         - z["verfall"] * dt)
+                                         - verfall * dt)
         if self.zone_stand[halter] >= z["bis"]:
             self.sieger_team = halter
             self._runde_beenden(gewonnen=True)
@@ -2552,55 +2650,56 @@ class Gefecht(Szene):
         fuer den Neustart mitten im Gefecht. Beim Neustart steht -1 in
         der Nummer: die eigene bleibt dann, wie sie war.
         """
-        nummer = int(nachricht.get("id", 0))
+        try:
+            nummer = int(nachricht.get("id", 0))
+        except (TypeError, ValueError):
+            nummer = -1
         if nummer >= 0:
             self.meine_nummer = nummer
-        modus = nachricht.get("modus")
-        if modus in K.MODI:
-            self.modus = modus
-            self.regeln = K.MODI[modus]
-        art = nachricht.get("ende_art")
-        if art in K.ENDE_ARTEN:
-            self.ende_art = art
-        try:
-            self.ende_wert = float(nachricht.get("ende_wert", self.ende_wert))
-        except (TypeError, ValueError):
-            pass
-        self.knapp = bool(nachricht.get("knapp", False))
-        self.schutz_an = bool(nachricht.get("schutz", self.schutz_an))
-        g = K.VERSUS["runden_grenzen"]
-        try:
-            self.runden_anzahl = max(g[0], min(g[1], int(
-                nachricht.get("runden", self.runden_anzahl))))
-        except (TypeError, ValueError):
-            pass
-        self.medkits_spawnen = bool(nachricht.get("medkit_spawn",
-                                                  self.medkits_spawnen))
-        regel = nachricht.get("loadouts")
-        if regel in K.GEFECHT["loadout_arten"]:
-            self.loadout_regel = regel
-        self.rpg_an = bool(nachricht.get("rpg", self.rpg_an))
-        self.rpg_lenkung = bool(nachricht.get("rpg_lenkung", self.rpg_lenkung))
-        karte = str(nachricht.get("karte", ""))
-        if karte and karte != self.karte:
+        d = R.saeubern(nachricht.get("regeln"))
+        self._regeln_setzen(d)
+        if not self._karte_wechseln(d["karte"]):
             # Der Gastgeber bestimmt die Karte. Wer sie nicht hat, bleibt
-            # auf der Testkarte - dann stimmt zwar nichts mehr, aber er
-            # fliegt wenigstens nicht heraus, und der Hinweis sagt es.
-            gelesen, kopf = welt_modul.karte_lesen(karte)
-            if gelesen is not None:
-                self.welt = gelesen
-                self.karte, self.karte_kopf = karte, kopf
-                self._welt_verdrahten()
-                self.kreise = self._kreise_lesen()
-                self._kreis_setzen(0)
-            else:
-                self.hinweis = "KARTE %s FEHLT" % karte.upper()
-        try:
-            self.start_medkits = max(0, min(
-                K.GEFECHT["start_medkits_hoechstens"],
-                int(nachricht.get("medkits", self.start_medkits))))
-        except (TypeError, ValueError):
-            pass
+            # auf der alten - dann stimmt zwar nichts mehr, aber er fliegt
+            # wenigstens nicht heraus, und der Hinweis sagt es.
+            self.hinweis = "KARTE %s FEHLT" % d["karte"].upper()
+
+    def _karte_wechseln(self, name: str) -> bool:
+        """Auf eine andere Karte wechseln, beim Gastgeber wie beim Gast.
+
+        Gibt zurueck, ob die Karte jetzt gilt. Stand vorher zweimal da,
+        und beide Male unvollstaendig: beim Gast fehlte der Rueckweg auf
+        die eingebaute Karte (ein leerer Name wurde uebergangen), und die
+        Kaempfer blieben in der alten Welt - auf der neuen Karte waren
+        dann alle Mitspieler unsichtbar. In der Lobby wird die Karte mit
+        jeder Runde gewechselt; dort waere das sofort aufgefallen.
+        """
+        name = str(name or "")
+        if name == self.karte and self.welt is not None:
+            return True
+        if name:
+            gelesen, kopf = welt_modul.karte_lesen(name)
+            if gelesen is None:
+                return False
+        else:
+            gelesen, kopf = testkarte(), {}
+        self.welt = gelesen
+        self.karte, self.karte_kopf = name, kopf
+        self._welt_verdrahten()
+        self.kreise = self._kreise_lesen()
+        self._kreis_setzen(0)
+        # Die Spawnmarken und das Wegenetz gehoeren zur Karte. Stand hier
+        # einmal nicht - und nach einem Kartenwechsel kamen die Gegner an
+        # den Marken der alten Karte heraus. Das Wegenetz braucht nur, wer
+        # Gegner rechnet.
+        self._spawnmarken = self._spawnmarken_lesen()
+        if self.ist_gastgeber and self.regeln["gegner"]:
+            self.welt.wege
+        # Alles, was auf der alten Karte stand, gehoert nicht auf die neue
+        # - die Kaempfer aber schon.
+        for k in self.kaempfer.values():
+            self.welt.dazu(k)
+        return True
 
     @staticmethod
     def _liste_uebernehmen(ziel: list, werte, art) -> None:
@@ -2687,6 +2786,21 @@ class Gefecht(Szene):
             k.abschuesse = int(eintrag.get("a", 0))
             k.tode = int(eintrag.get("d", 0))
             k.lebt = bool(eintrag.get("v", True))
+            # Welche Waffen die Figur ueberhaupt traegt. Die Liste ging seit
+            # 0.27 schon mit (fuer Magazin und Vorrat), wurde aber nie
+            # uebernommen: mit eigenem Loadout zeigte die Hotbar des Gastes
+            # alle neun Waffen, obwohl er nur drei hatte - und ein Druck auf
+            # Platz 5 waehlte beim Gastgeber eine ganz andere. Sie enthaelt
+            # auch den Raketenwerfer, wenn er getragen wird.
+            namen = eintrag.get("wl")
+            if (isinstance(namen, list) and namen and namen != k.waffen
+                    and all(isinstance(n, str) and n in K.WAFFEN
+                            for n in namen)):
+                k.waffen = list(namen)
+                for n in namen:
+                    k.magazin.setdefault(n, 0)
+                    k.vorrat.setdefault(n, 0)
+                k.waffe = min(k.waffe, len(namen) - 1)
             waffe = eintrag.get("b")
             if waffe in k.waffen:
                 k.waffe = k.waffen.index(waffe)
@@ -3084,38 +3198,16 @@ class Gefecht(Szene):
                           konto.name.upper() if konto and konto.angemeldet
                           else "NICHT ANGEMELDET"))
         if self.ist_gastgeber:
+            # Die Regeln kommen aus der Tabelle in regeln.py - dieselbe, die
+            # auch die Lobby zeigt. Was bei der gewaehlten Spielart nicht
+            # gilt, steht nicht da.
             w = self.wunsch
-            eintraege.append(("modus", "SPIELART", K.MODI[w["modus"]]["name"]))
-            eintraege.append(("karte", "KARTE",
-                              (w["karte"] or "TESTKARTE").upper()))
+            umfeld = self._umfeld()
+            for f in R.sichtbar(w):
+                name = ("  " if f.einzug(w) else "") + f.name(w)
+                eintraege.append((f.schluessel, name,
+                                  R.anzeige(w, f.schluessel, umfeld)))
             regeln = K.MODI[w["modus"]]
-            if regeln["runden"]:
-                eintraege.append(("runden", "GESPIELTE RUNDEN",
-                                  str(w["runden"])))
-            elif not regeln["zone"] and not regeln["revive"]:
-                eintraege.append(("ende", "RUNDE ENDET NACH",
-                                  "ZEIT" if w["ende_art"] == "zeit"
-                                  else "ABSCHUESSEN"))
-                eintraege.append(("wert", "  UND ZWAR BEI",
-                                  ("%d MIN" % round(w["ende_wert"] / 60)
-                                   if w["ende_art"] == "zeit"
-                                   else "%d" % int(w["ende_wert"]))))
-            eintraege.append(("schutz", "EINSTIEGSSCHUTZ",
-                              "AN" if w["schutz"] else "AUS"))
-            eintraege.append(("medkits", "MEDKITS BEIM EINSTIEG",
-                              str(w["medkits"])))
-            eintraege.append(("medspawn", "MEDKITS AUF DER KARTE",
-                              "AN" if w["medkit_spawn"] else "AUS"))
-            eintraege.append(("knapp", "MUNITION KNAPP",
-                              "AN" if w["knapp"] else "AUS"))
-            eintraege.append(("loadouts", "AUSRUESTUNG",
-                              "EIGENES LOADOUT" if w["loadouts"] == "eigenes"
-                              else "JEDER HAT ALLES"))
-            eintraege.append(("rpg", "RAKETENWERFER",
-                              "AN" if w["rpg"] else "AUS"))
-            if w["rpg"]:
-                eintraege.append(("rpg_lenkung", "  MIT ZIELERFASSUNG",
-                                  "AN" if w["rpg_lenkung"] else "AUS"))
             if regeln["teams"]:
                 eintraege.append(("teams", "MANNSCHAFTEN EINTEILEN", ""))
             eintraege.append(("neu", "NEUE RUNDE MIT DIESEN REGELN", ""))
@@ -3221,53 +3313,14 @@ class Gefecht(Szene):
             return
         if not self.ist_gastgeber:
             return
-        w = self.wunsch
-        if schluessel == "modus":
-            namen = list(K.MODI)
-            i = (namen.index(w["modus"]) + (1 if vor else -1)) % len(namen)
-            w["modus"] = namen[i]
-            # Eine Spielart ohne Mannschaften hat kein Rundenziel und
-            # umgekehrt - die Anzeige baut sich beim naechsten Bild neu.
+        if schluessel in R.NACH_NAME:
+            R.verstellen(self.wunsch, schluessel, 1 if vor else -1,
+                         self._umfeld())
+            # Eine andere Spielart hat andere Zeilen - die Auswahl darf
+            # dabei nicht hinter das Ende rutschen.
             self.menue = min(self.menue, len(self._menue_baut()) - 1)
-        elif schluessel == "runden":
-            g = K.VERSUS["runden_grenzen"]
-            w["runden"] = max(g[0], min(g[1], w["runden"] + (1 if vor else -1)))
-        elif schluessel == "ende":
-            w["ende_art"] = "abschuesse" if w["ende_art"] == "zeit" else "zeit"
-            w["ende_wert"] = (K.GEFECHT["rundenzeit"] if w["ende_art"] == "zeit"
-                              else K.GEFECHT["abschuesse_ziel"])
-        elif schluessel == "wert":
-            if w["ende_art"] == "zeit":
-                w["ende_wert"] = max(60.0, min(1800.0,
-                                               w["ende_wert"] + (60 if vor else -60)))
-            else:
-                w["ende_wert"] = max(1, min(200, w["ende_wert"] + (5 if vor else -5)))
-        elif schluessel == "schutz":
-            w["schutz"] = not w["schutz"]
-        elif schluessel == "medkits":
-            w["medkits"] = max(0, min(K.GEFECHT["start_medkits_hoechstens"],
-                                      w["medkits"] + (1 if vor else -1)))
-        elif schluessel == "medspawn":
-            w["medkit_spawn"] = not w["medkit_spawn"]
-        elif schluessel == "knapp":
-            w["knapp"] = not w["knapp"]
-        elif schluessel == "loadouts":
-            w["loadouts"] = ("alles" if w["loadouts"] == "eigenes"
-                             else "eigenes")
-        elif schluessel == "karte":
-            # Alle Karten aus dem Ordner, dazu die eingebaute Testkarte
-            # als leerer Name. Wer keine Datei hat, blaettert eben nur
-            # durch eine Auswahl von einer.
-            auswahl = [""] + welt_modul.karten_liste()
-            jetzt = w["karte"] if w["karte"] in auswahl else ""
-            i = (auswahl.index(jetzt) + (1 if vor else -1)) % len(auswahl)
-            w["karte"] = auswahl[i]
-        elif schluessel == "rpg":
-            w["rpg"] = not w["rpg"]
-            self.menue = min(self.menue, len(self._menue_baut()) - 1)
-        elif schluessel == "rpg_lenkung":
-            w["rpg_lenkung"] = not w["rpg_lenkung"]
-        elif schluessel == "teams":
+            return
+        if schluessel == "teams":
             self.menue_teams = True
             self.menue_zeile = 0
         elif schluessel == "neu":
@@ -3312,39 +3365,9 @@ class Gefecht(Szene):
         neuen Regeln geschickt wie beim Verbinden. Ohne diese Nachricht
         spielten sie die Runde mit den alten weiter.
         """
-        w = self.wunsch
-        self.modus = w["modus"] if w["modus"] in K.MODI else K.MODUS_VORGABE
-        self.regeln = K.MODI[self.modus]
-        self.ende_art = w["ende_art"] if w["ende_art"] in K.ENDE_ARTEN else "zeit"
-        self.ende_wert = float(w["ende_wert"])
-        self.runden_anzahl = int(w["runden"])
-        self.knapp = bool(w["knapp"])
-        self.schutz_an = bool(w["schutz"])
-        self.start_medkits = int(w["medkits"])
-        self.medkits_spawnen = bool(w["medkit_spawn"])
-        if w.get("loadouts") in K.GEFECHT["loadout_arten"]:
-            self.loadout_regel = w["loadouts"]
-        self.rpg_an = bool(w.get("rpg", self.rpg_an))
-        self.rpg_lenkung = bool(w.get("rpg_lenkung", self.rpg_lenkung))
-        gewaehlt = str(w.get("karte", ""))
-        if gewaehlt != self.karte:
-            gelesen, kopf = (welt_modul.karte_lesen(gewaehlt) if gewaehlt
-                             else (testkarte(), {}))
-            if gelesen is not None:
-                self.welt = gelesen
-                self.karte, self.karte_kopf = gewaehlt, kopf
-                self._welt_verdrahten()
-                self.kreise = self._kreise_lesen()
-                self._kreis_setzen(0)
-                # Die Spawnmarken und das Wegenetz gehoeren zur Karte. Stand
-                # hier einmal nicht - und nach einem Kartenwechsel kamen die
-                # Gegner an den Marken der alten Karte heraus.
-                self._spawnmarken = self._spawnmarken_lesen()
-                self.welt.wege
-                # Alles, was auf der alten Karte stand, gehoert nicht auf
-                # die neue - auch nicht die Kaempfer.
-                for k in self.kaempfer.values():
-                    self.welt.dazu(k)
+        self.wunsch = R.saeubern(self.wunsch, self._umfeld())
+        self._regeln_setzen(self.wunsch)
+        self._karte_wechseln(self.wunsch["karte"])
 
         self.teampunkte = [0] * len(K.TEAMS["namen"])
         self.zone_stand = [0.0] * len(self.teampunkte)
@@ -3355,7 +3378,7 @@ class Gefecht(Szene):
         self.runden_pause = 0.0
         self.sieger_team = -1
         self.welle = 0
-        self.pause_rest = K.WELLEN_MP["pause"]
+        self.pause_rest = self.stufe["pause"]
         self.vorbei = False
         self.gewonnen = False
         self.liste = []
@@ -3427,7 +3450,9 @@ class Gefecht(Szene):
         from .menues import Anmeldung, Ausruestung
 
         def ausruesten(_szene=None):
-            if self.mit_loadouts and not konto.loadout_gewaehlt_je:
+            # Nur bei "eigenes": bei "eines fuer alle" waehlt der
+            # Gastgeber, und die eigene Wahl aendert nichts.
+            if self.loadout_regel == "eigenes" and not konto.loadout_gewaehlt_je:
                 self.app.schieben(Ausruestung(self.app))
 
         if not konto.angemeldet and not konto.werte.get("anmeldung_gefragt"):
@@ -3439,14 +3464,7 @@ class Gefecht(Szene):
 
     def _wunsch_lesen(self) -> dict:
         """Die Regeln, die gerade gelten, als Ausgangspunkt fuers Menue."""
-        return dict(modus=self.modus, karte=self.karte,
-                    ende_art=self.ende_art,
-                    ende_wert=self.ende_wert, runden=self.runden_anzahl,
-                    knapp=self.knapp, schutz=self.schutz_an,
-                    medkits=self.start_medkits,
-                    medkit_spawn=self.medkits_spawnen,
-                    loadouts=self.loadout_regel,
-                    rpg=self.rpg_an, rpg_lenkung=self.rpg_lenkung)
+        return dict(self.regelwerk, karte=self.karte)
 
 
     # ---- Bild ----------------------------------------------------------
@@ -4035,8 +4053,22 @@ class Gefecht(Szene):
 
         eintraege = self._menue_baut()
         self.menue = max(0, min(len(eintraege) - 1, self.menue))
+        # Seit die Regeln aus der Tabelle kommen, sind es beim Huegel mit
+        # allem Drum und Dran neunzehn Zeilen - mehr, als zwischen Titel
+        # und Fusszeile passen. Gezeigt wird ein Fenster, das der Auswahl
+        # folgt, mit einem Pfeil oben und unten, wenn dort noch mehr steht.
+        platz = (K.GAME_H - 36 - 92) // 15
+        erste = 0
+        if len(eintraege) > platz:
+            erste = max(0, min(len(eintraege) - platz,
+                               self.menue - platz // 2))
         y = 92
+        if erste > 0:
+            pygame.draw.polygon(ziel, K.C_AMBER, [(318, y - 8), (322, y - 12),
+                                                  (326, y - 8)])
         for i, (_schluessel, text, wert) in enumerate(eintraege):
+            if i < erste or i >= erste + platz:
+                continue
             aktiv = (i == self.menue)
             farbe = K.C_CREAM if aktiv else K.C_MUTED
             if aktiv:
@@ -4048,6 +4080,9 @@ class Gefecht(Szene):
                            K.C_AMBER if aktiv else K.C_MUTED_DK, 1,
                            ausrichtung="rechts")
             y += 15
+        if erste + platz < len(eintraege):
+            pygame.draw.polygon(ziel, K.C_AMBER, [(318, y - 4), (322, y),
+                                                  (326, y - 4)])
 
         f.zeichnen(ziel, "PFEILE WAEHLEN   ENTER BESTAETIGT   [ESC] ZURUECK",
                    K.GAME_W // 2, K.GAME_H - 22, K.C_MUTED_DK, 1,

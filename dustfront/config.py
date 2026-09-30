@@ -582,6 +582,16 @@ ZONE = dict(
     je_kopf=2.5,              # Aufschlag je Kopf Mehrheit
     hoechstens=18.0,          # mehr laedt niemand je Sekunde
     verfall=1.2,              # so schnell sinkt der Stand, wenn keiner haelt
+    # Seit 0.27 stellt der Gastgeber ein, wie lange man den Kreis halten
+    # muss - in Sekunden, allein und ohne Gegenwehr gerechnet, weil das
+    # die Zahl ist, die man sich vorstellen kann. Die Rate oben wird
+    # daraus hochgerechnet, der Verfall im selben Verhaeltnis: sonst
+    # waere bei drei Minuten Haltezeit ein kurzer Ausfall mehr wert als
+    # eine Minute im Kreis. Die Vorgabe entspricht dem alten Wert (100
+    # bei 7 je Sekunde, gut 14 Sekunden).
+    haltezeit=15,
+    haltezeiten=(10, 15, 20, 30, 45, 60, 90, 120, 180),
+    verfall_an=True,          # sinkt der Stand, wenn keiner haelt?
     ring=3,                   # Dicke des Rings in Pixeln
     fuellung=34,              # Deckkraft der Flaeche
     puls=0.9,                 # Sekunden fuer einen Pulsschlag des Rings
@@ -619,8 +629,11 @@ GEFECHT = dict(
     # Runde aufmacht, um zu spielen, soll nicht erst eine Ausruestung
     # zusammenstellen muessen. "eigenes" ist die Runde, in der die Wahl
     # der Waffe eine Wahl ist.
+    # Seit 0.27 gibt es eine dritte: "gleich" - der Gastgeber waehlt eines
+    # seiner Loadouts, und alle tragen genau das. Die Runde, in der nicht
+    # die Ausruestung entscheidet, sondern wer besser damit umgeht.
     loadouts="alles",
-    loadout_arten=("alles", "eigenes"),
+    loadout_arten=("alles", "eigenes", "gleich"),
     # Der Raketenwerfer. Aus, wenn der Gastgeber ihn nicht will - er
     # veraendert eine Runde, und das soll eine Entscheidung sein.
     rpg=False,
@@ -728,6 +741,51 @@ WELLEN_MP = dict(
     boss_leben_je_runde=0.30,     # plus 30 Prozent je durchlaufener Bossrunde
     boss_begleitung=0.45,     # so viel der normalen Welle kommt dazu
 )
+
+# Schwierigkeit fuer alles mit Wellen, vom Gastgeber gewaehlt.
+#
+#   anzahl    so viel mehr Gegner je Welle
+#   leben     so viel mehr Leben je Gegner
+#   schaden   so viel mehr Schaden - Schlag, Spuck, Platzen, Stampfer
+#   tempo     so viel schneller. Leicht bleibt bei 1: sonst waere der
+#             Renner langsamer als ein gehender Spieler, und genau das
+#             ist sein Sinn.
+#   boss      so viel mehr Leben fuer den Boss
+#   pause     Sekunden zwischen zwei Wellen
+#   frueher   um so viele Wellen kommen neue Gegnerarten frueher
+#
+# NORMAL ist genau das Spiel bis 0.26 - an ihm ist alles gemessen.
+SCHWIERIGKEIT = {
+    "leicht":   dict(name="LEICHT",   anzahl=0.70, leben=0.75, schaden=0.60,
+                     tempo=1.00, boss=0.70, pause=9.0, frueher=0),
+    "normal":   dict(name="NORMAL",   anzahl=1.00, leben=1.00, schaden=1.00,
+                     tempo=1.00, boss=1.00, pause=6.0, frueher=0),
+    "schwer":   dict(name="SCHWER",   anzahl=1.30, leben=1.20, schaden=1.30,
+                     tempo=1.05, boss=1.35, pause=5.0, frueher=0),
+    "albtraum": dict(name="ALBTRAUM", anzahl=1.60, leben=1.45, schaden=1.60,
+                     tempo=1.10, boss=1.70, pause=4.0, frueher=1),
+}
+SCHWIERIGKEIT_VORGABE = "normal"
+
+
+def gegner_verstaerkt(daten: dict, stufe: dict) -> dict:
+    """Die Werte eines Gegners, mit einer Schwierigkeit verrechnet.
+
+    Eine Kopie: die Tabelle selbst bleibt, wie sie ist, sonst wuerde jede
+    Welle auf SCHWER die naechste noch einmal verstaerken. Schaden wird
+    ueberall verrechnet, wo er steht - auch im Spuck, im Platzen und in
+    der Faehigkeit eines Bosses.
+    """
+    d = dict(daten)
+    d["schaden"] = d.get("schaden", 0.0) * stufe["schaden"]
+    d["tempo"] = d.get("tempo", 0.0) * stufe["tempo"]
+    for teil in ("fern", "platzt", "faehigkeit"):
+        if isinstance(d.get(teil), dict):
+            d[teil] = dict(d[teil])
+            if "schaden" in d[teil]:
+                d[teil]["schaden"] = d[teil]["schaden"] * stufe["schaden"]
+    return d
+
 
 # Woraus eine Welle besteht. Je Eintrag: ab welcher Welle es den Gegner
 # gibt, und mit welchem Gewicht er dann gezogen wird.
