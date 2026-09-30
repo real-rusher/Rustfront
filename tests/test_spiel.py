@@ -3280,6 +3280,60 @@ pruef("Das Gefecht laeuft trotzdem, auf der Testkarte",
       w2.karte == "" and len(w2.welt.ebenen) == 3, w2.karte)
 w2.verlassen(); _ga2.verlassen()
 
+# ─────────────────────────────────────────────────────────────────────
+# Kosmetik: die Vorbereitung darf das Spiel nicht anfassen.
+#
+# Zwei Sachen werden hier geprueft, und die zweite ist die wichtigere:
+# dass die Rollen funktionieren, und dass sie im Ruhezustand **nichts
+# aendern**. Solange K.SKIN_WAHL leer ist, muss jede Rolle ihre Vorgabe
+# liefern - sonst sieht das Spiel anders aus, ohne dass jemand etwas
+# gewaehlt haette.
+_wahl_vorher = dict(K.SKIN_WAHL)
+pruef("Jede Rolle loest auf einen Namen auf",
+      all(isinstance(K.skin(r), str) and K.skin(r) for r in K.SKIN_ROLLEN))
+pruef("Ohne Wahl steht ueberall die Vorgabe",
+      not K.SKIN_WAHL
+      and all(K.skin(r) == K.SKIN_ROLLEN[r] for r in K.SKIN_ROLLEN))
+pruef("Eine unbekannte Rolle wird abgelehnt",
+      K.skin_setzen("gibtsnicht", "irgendwas") is False
+      and "gibtsnicht" not in K.SKIN_WAHL)
+_probe = "blend_symbol"
+pruef("Eine bekannte Rolle laesst sich umlegen",
+      K.skin_setzen(_probe, "waffe_granate") and K.skin(_probe) == "waffe_granate")
+K.skin_zuruecksetzen()
+pruef("Zuruecksetzen stellt den Ausgangsstand wieder her",
+      dict(K.SKIN_WAHL) == _wahl_vorher and K.skin(_probe) == K.SKIN_ROLLEN[_probe])
+pruef("Die Anteile der Stufen ergeben zusammen eins",
+      abs(sum(s["anteil"] for s in K.SELTENHEIT) - 1.0) < 1e-9,
+      "%.4f" % sum(s["anteil"] for s in K.SELTENHEIT))
+pruef("Jede Stufe hat Namen und Farbe",
+      all(s["name"] and len(s["farbe"]) == 3 for s in K.SELTENHEIT))
+
+# Und das Vorschaumodul: es muss laufen, es muss fuenf Bilder schreiben,
+# und es darf die Wahl nicht veraendern. Geschrieben wird in einen
+# Wegwerfordner - die Vorschau im Projekt ist Handarbeit, kein Testmuell.
+import tempfile
+from pathlib import Path
+from dustfront import kosmetik
+_weg = Path(tempfile.mkdtemp(prefix="dustfront_kosmetik_"))
+_pfade = kosmetik.schreiben(app.bilder, _weg, lupe=1)
+pruef("Die Vorschau schreibt fuenf Bilder",
+      len(_pfade) == 5 and all(Path(p).exists() for p in _pfade),
+      "%d" % len(_pfade))
+_erst = pygame.image.load(_pfade[0])
+pruef("Und zwar in Spielgroesse",
+      _erst.get_size() == (K.GAME_W, K.GAME_H), str(_erst.get_size()))
+pruef("Zeichnen aendert die Skinwahl nicht", dict(K.SKIN_WAHL) == _wahl_vorher)
+# Kein Spielmodul darf die Kosmetik kennen. Sonst haengt doch etwas daran.
+import dustfront.play, dustfront.render, dustfront.entities, dustfront.mehrspieler
+_haengt = [m.__name__ for m in (dustfront.play, dustfront.render,
+                                dustfront.entities, dustfront.mehrspieler,
+                                sys.modules["dustfront.core"])
+           if "kosmetik" in open(m.__file__, encoding="utf-8").read()]
+pruef("Kein Spielmodul ruft die Kosmetik auf", not _haengt, ", ".join(_haengt))
+import shutil as _sh
+_sh.rmtree(_weg, ignore_errors=True)
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

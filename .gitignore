@@ -7,6 +7,8 @@ rustfront_save.json
 # eine Textur assets/menue_knopf.png nicht versehentlich mitgemeint ist.
 /spiel_*.png
 /menue_*.png
+# Erzeugt von "python -m dustfront --kosmetik", jederzeit neu herstellbar
+kosmetik_vorschau/
 # Erzeugt von "python -m dustfront --vorlagen", jederzeit neu herstellbar
 assets_vorlage/
 daten/

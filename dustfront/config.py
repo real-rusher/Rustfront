@@ -1267,7 +1267,35 @@ SKIN_ROLLEN = {
     "molotov_hand": "spieler_molotov",
     "molotov_symbol": "waffe_molotov",
     "molotov_knall": "molotov",
+    # Die Figur selbst. `figur` ist die Gestalt ohne Waffe, `boden` die
+    # liegende. Die Figuren mit Waffe entstehen daraus und aus der
+    # Waffenrolle - deshalb steht hier nicht jede Kombination einzeln.
+    "figur": "spieler",
+    "figur_boden": "spieler_boden",
 }
+
+# Und je Schusswaffe dieselben drei Rollen. Als Schleife und nicht von
+# Hand, damit eine neue Waffe nicht drei vergessene Zeilen bedeutet.
+for _w in ("repetierer", "sturm", "schrot", "scharf", "lmg", "granate",
+           "rauch", "brecheisen", "rakete"):
+    SKIN_ROLLEN["%s_hand" % _w] = "spieler_%s" % _w
+    SKIN_ROLLEN["%s_symbol" % _w] = "waffe_%s" % _w
+    SKIN_ROLLEN["%s_knall" % _w] = ("schuss_%s" % _w
+                                    if "schuss_%s" % _w in KLANG_NAMEN
+                                    else "schuss")
+
+# Seltenheitsstufen. **Noch nicht eingebaut** - sie stehen hier, weil
+# die Farben an einer Stelle gehoeren und nicht in einem Entwurf.
+#
+# Die Reihenfolge ist die Reihenfolge: je weiter hinten, desto seltener.
+# Die Wahrscheinlichkeiten sind ein Vorschlag und keine Zusage.
+SELTENHEIT = (
+    dict(name="GEBRAUCHT",  farbe=(132, 124, 110), anteil=0.60),
+    dict(name="INSTAND",    farbe=(96, 150, 196),  anteil=0.25),
+    dict(name="SELTEN",     farbe=(140, 108, 208), anteil=0.10),
+    dict(name="RAR",        farbe=(206, 84, 168),  anteil=0.04),
+    dict(name="LEGENDE",    farbe=(232, 168, 56),  anteil=0.01),
+)
 
 # Was gerade gewaehlt ist. Leer heisst: die Vorgabe aus SKIN_ROLLEN.
 SKIN_WAHL: dict[str, str] = {}

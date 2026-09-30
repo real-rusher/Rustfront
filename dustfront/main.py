@@ -9,6 +9,7 @@ DUSTFRONT - Einstieg
     python -m dustfront --assets       zeigen, was aus Dateien kommt
     python -m dustfront --konto ...    Konten anlegen und ansehen
     python -m dustfront --karten       zeigen, welche Karten es gibt
+    python -m dustfront --kosmetik     Vorschaubilder fuer Kisten und Skins
 
 Bilder werden, falls vorhanden, aus dem Ordner `assets` neben dem Paket
 geladen, Klaenge aus `assets/sfx`. Fehlt etwas, zeichnet und rechnet sich das
@@ -292,6 +293,18 @@ def aus_argumenten(argumente: list[str]) -> int:
         for platz, e in enumerate(daten["eintraege"], 1):
             print("  %2d. %-12s %4d Abschuesse  %4d Tode  %3d Runden"
                   % (platz, e["name"], e["abschuesse"], e["tode"], e["runden"]))
+        return 0
+    if "--kosmetik" in argumente:
+        from .core import Bilder
+        from .kosmetik import schreiben
+        import pygame
+        pygame.init()
+        pygame.display.set_mode((64, 64))
+        pfade = schreiben(Bilder(asset_ordner()))
+        print("Vorschau geschrieben - eingebaut ist davon nichts:")
+        for p in pfade:
+            print("  %s" % p)
+        pygame.quit()
         return 0
     if "--karten" in argumente:
         from . import world as W

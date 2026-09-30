@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.23.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.24.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -329,7 +329,14 @@ python -m dustfront --bestenliste
 python -m dustfront --konto liste
 python -m dustfront --karten
 python -m dustfront --host --name MEISTER --modus huegel --karte staubtal
+python -m dustfront --kosmetik
 ```
+
+`--kosmetik` schreibt die Vorschaubilder fuer Kisten, Skins und die
+zweite Siegtafel nach `kosmetik_vorschau/`. **Eingebaut ist davon nichts**
+- es sind Bilder, ueber die sich entscheiden laesst, ob es so aussehen
+soll. Warum, und was ein Einbau kosten wuerde, steht in
+[`docs/KOSMETIK.md`](docs/KOSMETIK.md).
 
 `--team rot|blau|auto` waehlt die Mannschaft, `--runden N` die Zahl der
 Rundensiege in VERSUS. `--online` versucht, den Port im Router freizugeben,
@@ -463,6 +470,7 @@ Daneben liegt `docs/`:
 | `KARTE.md` | Der Weltenplan: Kontinent, Orte, Wandler, Front, Meilensteine |
 | `MEHRSPIELER.md` | Der LAN-Mehrspieler vollstaendig: Aufbau, Protokoll, alle sechs Spielarten, jede Zahl, jeder aufgetretene Fehler, Bauanleitung zum Wiedereinbau |
 | `KONTO.md` | Konto, Statistik und Loadouts: warum Supabase, warum die Zahlen nicht auseinanderlaufen koennen, und wie man es in zehn Minuten aufsetzt |
+| `KOSMETIK.md` | Kisten, Skins, Musikkits und die zweite Siegtafel - fuenf Bilder, die Begruendung dazu, und der ehrliche Ueberschlag, was ein Einbau kosten wuerde. **Eingebaut ist davon nichts.** |
 
 ### Wo die Einstellungen liegen
 
@@ -677,6 +685,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.14.0 | Mehrspieler fertiggestellt: drei Spielarten, Aufhelfen, Wellen mit mehrspielertauglicher Gegner-KI, knappe Munition mit Nachschubkisten. Letzter Stand dieses Zweigs |
 | 0.16.0 | Mannschaften im Gefecht: TEAM, VERSUS mit einem Leben je Runde und Aufhelfen durch die eigenen Leute, HUEGEL mit sichtbarem Kreis in der Kartenmitte. Alles in `docs/MEHRSPIELER.md` beschrieben. Nur auf `multiplayer-test`; 0.15.0 gehoert dem Hauptzweig ohne Mehrspieler |
 | 0.17.0 | Rauchgranate als siebte Waffe; Granaten fallen ueber Kanten auf die Ebene darunter; Einstiegsschutz, Startmedkits und Medkit-Nachschub als Schalter beim Aufmachen. Dazu vier gemeldete Fehler behoben: kein Ton im Gefecht, Ziellinie des Gastes am Einstiegspunkt, Versetzung nach einem Sturztod, Granaten prallten an Loechern ab. Brecheisen toetet in zwei Treffern, Schrot reicht weiter und streut enger, Scharfschuetze weiter als das Bild breit ist |
+| 0.24.0 | Kosmetik, **vorgezeichnet und nicht eingebaut**. `python -m dustfront --kosmetik` schreibt fuenf Bilder nach `kosmetik_vorschau/`: das laufende Band einer Kiste nach dem Vorbild von CS, das Ergebnis, die Maske zum Waehlen von Figur, Waffen, Wurfwaffen, Klang und Musikkit, und eine zweite Siegtafel - je drei je Mannschaft in ihren Farben, darunter eine Buehne mit Siegerpodest, auf der die drei Besten ihre Animation machen und das Musikstueck des MVP laeuft. Jedes Bild traegt die Zeile `VORSCHAU - NOCH NICHT EINGEBAUT`, und das ist woertlich zu nehmen: kein Spielmodul importiert `kosmetik.py`, `K.SKIN_WAHL` ist leer, und ein Test prueft beides. Zwei Dinge daran stehen wirklich im Code und wurden dabei geprueft - die 38 **Rollen** in `K.SKIN_ROLLEN`, hinter denen jeder Bild- und Klangname steht statt fest im Quelltext, und die fuenf **Stufen** in `K.SELTENHEIT`; die Prozente auf dem Kistenbild sind nicht gemalt, sie kommen aus dieser Tabelle. Begruendung, Aufbau und der ehrliche Ueberschlag, was ein Einbau kosten wuerde - Besitz und Uebertragung sind die Arbeit, die Kistenanimation ist der kleinste Teil daran -, stehen in `docs/KOSMETIK.md` |
 | 0.23.0 | **STAUBTAL**, die erste Karte aus einer Datei: 120 mal 80 Kacheln, also 3840 mal 2560 Pixel, und zu drei Vierteln offener Sand. Die obere Ebene ist kein Gangnetz, sondern drei Plateaus - und unter jedem steht Fels, man kommt nicht darunter, nur ueber eine der sieben Rampen hinauf. Dazu ein eigener Kachelsatz: Sand mit Windriffeln statt Blechplatten, Fels statt Wand, Fasser statt Frachtkaesten. Drei Kreise, die nicht gleich sind - einer im offenen Sand mit einem Ring aus Fassern als Wahrzeichen, einer in einer Halle, einer auf dem groessten Plateau -, und weil drei Kreise zugleich aus einer grossen Karte drei kleine machen wuerden, **wandert** der Kreis von einem zum naechsten. Karten sind jetzt Textdateien in `karten/` mit Kopf und Ebenenbloecken; Grossbuchstaben darin sind Marken, also steht in der Karte selbst, wo die Kreise liegen. Waehlbar im Gastgebermenue und mit `--karte` |
 | 0.22.0 | Vier neue Waffen. **Molotow**: brennender Boden, kein Sprengschaden, genau auf einer Ebene - sie toetet niemanden im Wurf, sie nimmt einen Ort weg. **Blendgranate**: kein Schaden, aber eine Sekunde, und sie unterscheidet keine Mannschaften; wie stark sie trifft, rechnet jeder Rechner selbst aus der Lage des Blitzes, also kann nichts auseinanderlaufen. Bild und Klang haengen dabei an einer **Rolle** statt an einem Dateinamen - die Vorbereitung fuer Skins. **MG**: die schwerste Waffe im Spiel, Lauftempo auf 28 %, 56 Grad Drehung je Sekunde, dafuer von 7,5 auf 0,9 Grad Streuung beim Halten; zwei Betriebsarten auf einer eigenen Taste, Dauerfeuer mit Minigun-Anlauf (45 Schuss beim Halten gegen 8 beim Antippen) und Salve zu vier Schuss fast gleichzeitig. **Raketenwerfer**: vom Gastgeber einzuschalten, liegt einmal auf der Karte, wer ihn traegt traegt sonst nichts ausser dem Brecheisen auf F, Eigenschaden ja und Mannschaftsschaden nein; mit Zielerfassung ueber die rechte Maustaste - ein Kreis zieht sich zu und rastet ein, die Rakete lenkt dann mit hoechstens 120 Grad je Sekunde und kommt um keine Ecke. Nach unten wird nur ueber einem Loch erfasst, und die Rakete wechselt dort im Flug die Ebene; ohne Erfassung fliegt sie darueber hinweg. Wer erfasst wird, sieht es - und sieht es anders, sobald geschossen wurde |
 | 0.21.0 | Was man spuert, statt es abzulesen. **Befinden**: ein roter Rand, der sich mit sinkendem Leben faerbt, bei einem Treffer aufschlaegt und unter 38 % stehenbleibt und pulst - mit einem Herzschlag im Ohr, in drei Klassen statt stufenlos, weil man eine Beschleunigung nicht merkt und drei Zustaende sehr wohl. Dazu wird alles andere **wirklich dumpf**: jeder Klang bekommt eine tiefpassgefilterte Fassung (echt gefiltert, nicht nur leiser - ohne numpy, mit `array`), und zwischen klar und dumpf wird ueberblendet statt umgeschaltet. Gebaut wird nur, was schon zu hoeren war, einer je Bild: 5 ms im Mittel statt 521 ms fuer alles auf einmal. Das **Medkit** ist der Gegenschlag: ein kalter Blitz, dann ist die Welt eine Sekunde lang sehr klar und sehr kalt (Kontrast ueber `2*in - g`, Drehpunkt bei 44 statt 128, weil die Welt hier gemessen bei Helligkeit 36 liegt und sonst schwarz wuerde), und danach drei Sekunden Ruhe. **Munitionsanzeige**: rechts nur noch das Magazin, in der Hotbar der Vorrat bei der Waffe, zu der er gehoert, und der Platz der gewaehlten Waffe sieht anders aus, wenn ihr Magazin leer ist. **Siegtafel** nach dem Vorbild von CS und Valorant: Mannschaften links und rechts in ihren Farben, je Zeile Platz, Name, das Zeichen der meistbenutzten Waffe, Abschuesse, Tode, das Verhaeltnis der Runde und der am oeftesten Erledigte |
