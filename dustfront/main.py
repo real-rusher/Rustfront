@@ -310,6 +310,7 @@ def konto_server_pruefen(A, wert) -> int:
             print("Spiel - das ist noch der Anmeldedienst allein.")
         return 1
     sitzung = str(angelegt.daten.get("sitzung", ""))
+    kennung = str(angelegt.daten.get("kennung", ""))
 
     schritt("Anmelden", netz.anmelden(name, wort))
     gelesen = netz.profil_lesen(sitzung)
@@ -323,15 +324,41 @@ def konto_server_pruefen(A, wert) -> int:
                 "Fassung %s" % (geschrieben.daten.get("fassung")
                                 if geschrieben else "-"))
 
+    # Die Zeile muss genauso aussehen wie die, die das Spiel schickt -
+    # `konto` eingeschlossen (konto.py setzt es beim Abgleich). Ein
+    # Selbsttest, der eine andere Zeile schickt als der Spielcode,
+    # prueft etwas, das es nicht gibt.
     partie = "selbsttest-" + A.kennung()
-    runde = [{"partie": partie, "gespielt": int(time.time()),
+    runde = [{"partie": partie, "konto": kennung, "gespielt": int(time.time()),
               "modus": "pruef", "team": 0, "gewonnen": True,
               "gastgeber": True, "werte": {"abschuesse": 1}, "waffen": {}}]
-    schritt("Runde buchen", netz.gefechte_senden(sitzung, runde), partie[:20])
+    gebucht = schritt("Runde buchen", netz.gefechte_senden(sitzung, runde),
+                      partie[:20])
     schritt("Dieselbe Runde noch einmal buchen",
             netz.gefechte_senden(sitzung, runde))
+
+    # Und dieselbe Runde auf fremden Namen. Das ist der Versuch, den ein
+    # veraenderter Klient machen wuerde: Zahlen fuer ein anderes Konto
+    # schreiben. Er muss scheitern, und zwar am Server.
+    fremd = [dict(runde[0], partie=partie + "-fremd",
+                  konto="00000000-0000-0000-0000-000000000001")]
+    abgelehnt = not netz.gefechte_senden(sitzung, fremd)
+    schritte.append(abgelehnt)
+    print(("  ok    " if abgelehnt else "FEHLER  ")
+          + "Eine Runde auf fremden Namen wird abgelehnt")
+    if not abgelehnt:
+        fehler.append(("Zeilenschutz", "fremde Zeile angenommen"))
+        print()
+        print("Der Server nimmt Zahlen fuer ein fremdes Konto an. Damit")
+        print("kann jeder jedem alles anschreiben. Die Regel 'eigene")
+        print("gefechte anlegen' aus docs/KONTO.md 5.2 fehlt oder passt")
+        print("nicht.")
+
     zurueck = netz.gefechte_lesen(sitzung)
-    if schritt("Runden zurueklesen", zurueck):
+    if schritt("Runden zurueklesen", zurueck) and gebucht:
+        # Nur pruefen, wenn das Buchen ueberhaupt durchkam. Sonst steht
+        # dort 0x, und die Meldung schoebe es auf den fehlenden Index -
+        # also auf etwas, das gar nicht dran war.
         wie_oft = sum(1 for z in zurueck.daten.get("gefechte", [])
                       if z.get("partie") == partie)
         doppelt = (wie_oft == 1)

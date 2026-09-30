@@ -349,6 +349,14 @@ class FalscherServer:
             if methode == "GET":
                 return [z for (p, k), z in self.gefechte.items() if k == wer], 200
             for zeile in koerper:
+                # Der Zeilenschutz, nachgebaut: `with check (auth.uid() =
+                # konto)`. Wer eine Zeile auf fremden Namen schickt,
+                # bekommt sie zurueck. Ohne das hier haette der
+                # nachgebaute Server eine Luecke, die der echte nicht
+                # hat - und dann prueft der Test etwas Schwaecheres.
+                if str(zeile.get("konto") or wer) != wer:
+                    return {"message": "new row violates row-level security"
+                                       " policy for table \"gefecht\""}, 403
                 schluessel = (str(zeile.get("partie")), wer)
                 # ignore-duplicates: was schon da ist, bleibt, wie es ist.
                 self.gefechte.setdefault(schluessel, zeile)
@@ -388,6 +396,7 @@ pruef("Das Kennwort geht nur an den Anmeldedienst",
       all("/auth/" in weg for methode, weg in server.anfragen
           if methode == "POST" and "signup" in weg))
 tok = an.daten["sitzung"]
+wer = an.daten["kennung"]          # die Kennung des Kontos, wie im Spiel
 pruef("Anmelden klappt", bool(netz.anmelden("Meister", "geheim12345")))
 pruef("Mit falschem Kennwort nicht",
       not netz.anmelden("Meister", "falsch12345"))
@@ -407,7 +416,10 @@ pruef("Und der neue Stand kommt mit",
       alt.daten.get("fassung") == 1, str(alt.daten))
 
 # Der eigentliche Punkt: ein Aussetzer nach dem Schreiben.
-zeile = {"partie": "p1", "konto": "x", "gespielt": 1,
+# `konto` ist die eigene Kennung, nicht irgendein Platzhalter: der
+# Server laesst seit dem Zeilenschutz nichts anderes durch, und der
+# Spielcode setzt es in konto.py genauso.
+zeile = {"partie": "p1", "konto": wer, "gespielt": 1,
          "modus": "pvp", "werte": {"abschuesse": 3}}
 server.aussetzen = 1
 erster = netz.gefechte_senden(tok, [zeile])
@@ -492,9 +504,20 @@ pruef("Der Selbsttest winkt ein heiles Projekt durch", _rueck == 0,
 # der eine Fehler, der im Betrieb niemandem auffaellt und trotzdem alle
 # Zahlen verdirbt. Der Selbsttest muss ihn finden.
 class ServerOhneIndex(FalscherServer):
+    """Genau ein Mangel: kein eindeutiger Index. Alles andere heil.
+
+    Das ist Absicht. Wer hier mehr kaputtmacht, prueft nicht mehr, ob
+    der Selbsttest *diesen* Mangel findet, sondern nur noch, ob er
+    irgendetwas findet.
+    """
+
     def _bearbeiten(self, methode, weg, koerper, token):
         if "/rest/v1/gefecht" in weg and methode == "POST":
-            for zeile in koerper:                # kein setdefault: haengt an
+            for zeile in koerper:
+                if str(zeile.get("konto") or token[4:]) != token[4:]:
+                    return {"message": "new row violates row-level security"
+                                       " policy for table \"gefecht\""}, 403
+                # kein setdefault: jede Sendung haengt eine Zeile an
                 self.gefechte[(str(zeile.get("partie")),
                                token[4:], len(self.gefechte))] = zeile
             return {}, 201
@@ -512,8 +535,17 @@ ablage.NetzAblage = _echte_netzablage
 urllib.request.urlopen = echt_urlopen
 
 # Ohne eingetragenen Server sagt er das und faellt nicht um.
+#
+# **Der Zugang muss dafuer wirklich weg.** Seit in SERVER ein echtes
+# Projekt steht, wuerde dieser Aufruf sonst hinausgehen und dort ein
+# Wegwerfkonto anlegen - eine Testreihe, die das Netz anfasst, ist keine
+# Testreihe mehr. Genau das ist hier einmal passiert.
+_zugang_vorher = dict(ablage.SERVER)
+ablage.SERVER.update(url="", schluessel="")
 pruef("Ohne Zugang sagt der Selbsttest das",
       main_modul.konto_server_pruefen(ablage, _wert_aus({})) == 1)
+ablage.SERVER.clear()
+ablage.SERVER.update(_zugang_vorher)
 
 # ══════════════════════════════════════════════════ Der Faden
 print("\n-- Der Faden fuer das Netz --")

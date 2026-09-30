@@ -320,18 +320,28 @@ gegangen, den ein Spieler auch geht:
   ok    Anmelden
   ok    Profil lesen   Fassung 0
   ok    Profil schreiben   Fassung 1
-  ok    Runde buchen   selbsttest-1a0f14a3d
+  ok    Runde buchen   selbsttest-1a0f1fbd4
   ok    Dieselbe Runde noch einmal buchen
+  ok    Eine Runde auf fremden Namen wird abgelehnt
   ok    Runden zurueklesen
   ok    Sie steht genau einmal da   1x
+  ok    Ohne Anmeldung ist nichts zu sehen   nichts
 
-Alle 8 Schritte in Ordnung. Der Server traegt.
+Alle 10 Schritte in Ordnung. Der Server traegt.
 ```
 
-Der vorletzte und der letzte Schritt sind die wichtigsten: sie pruefen
-die Regel, an der die ganze Statistik haengt. Steht dort `2x`, fehlt der
-eindeutige Index aus 5.2 - und dann zaehlt spaeter jeder Netzaussetzer
-eine Runde doppelt, ohne dass es jemandem auffaellt.
+Die letzten vier Schritte sind die, um die es eigentlich geht:
+
+* **Genau einmal.** Steht dort `2x`, fehlt der eindeutige Index aus 5.2 -
+  und dann zaehlt spaeter jeder Netzaussetzer eine Runde doppelt, ohne
+  dass es jemandem auffaellt.
+* **Fremder Name.** Geschrieben wird eine Runde auf ein anderes Konto,
+  also das, was ein veraenderter Klient versuchen wuerde. Der Server
+  muss sie ablehnen, nicht das Spiel.
+* **Ohne Anmeldung.** Gelesen wird mit dem oeffentlichen Schluessel
+  allein. So weit kommt jeder, der das Spiel herunterlaedt - kommt dabei
+  auch nur eine Zeile zurueck, kann jeder alle Zahlen aller Spieler
+  lesen.
 
 Schlaegt ein Schritt fehl, nennt der Selbsttest den wahrscheinlichen
 Grund und die Stelle in der Oberflaeche. Er legt dabei ein Wegwerfkonto
