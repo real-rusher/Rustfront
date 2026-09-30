@@ -407,7 +407,9 @@ def sturz_quer(tasten, start):
     if held.ebene != 2:
         return None
     beim_absprung = None
-    for _ in range(320):
+    # 480 statt 320 Bilder: seit 0.27 geht die Figur 108 statt 132 px/s
+    # und braucht zur Kante entsprechend laenger.
+    for _ in range(480):
         e.neues_bild()
         if held.ebene == 2 and held.sturz_rest <= 0:
             e._gehalten = {"rechts"}              # ins Loch laufen
@@ -3248,12 +3250,17 @@ runter = [(tx, ty) for ty in range(s1.hoehe) for tx in range(s1.breite)
 pruef("Es gibt Rampen hinauf", len(hoch) >= 3, "%d" % len(hoch))
 pruef("Und ebenso viele hinunter", len(runter) == len(hoch),
       "%d hinauf, %d hinunter" % (len(hoch), len(runter)))
-# Jede Rampe muss auch wirklich benutzbar sein: oben muss Platz sein.
-blockiert = [p for p in hoch
-             if not staub.frei(pygame.Vector2(p[0] * K.TILE + K.TILE / 2,
-                                              p[1] * K.TILE + K.TILE / 2),
-                               K.SPIELER["radius"], 1)]
-pruef("Und ueber jeder Rampe ist Platz", not blockiert, str(blockiert))
+# Jede Rampe muss auch wirklich benutzbar sein: oben muss **Boden** sein.
+#
+# Hier stand bis 0.27 nur `frei()`, und frei heisst "keine Wand" - ein
+# Loch ist keine Wand. Der Test war also gruen, waehrend alle sieben
+# Rampen auf ein Loch fuehrten und jeder, der hinaufging, sofort wieder
+# hinunterfiel. Jetzt wird nach Boden gefragt.
+ohne_boden = [p for p in hoch
+              if not staub.ebene(1).begehbar(p[0], p[1])
+              or staub.ebene(1).loch(p[0], p[1])]
+pruef("Und ueber jeder Rampe ist oben Boden, kein Loch",
+      not ohne_boden, str(ohne_boden))
 
 # Drei Kreise, nicht identisch, und einer davon oben.
 #
@@ -3725,6 +3732,146 @@ wz._rufen(liegt)
 pruef("Und nicht gleich noch einmal", liegt.ruf_sperre <= zeigen_vorher)
 pruef("Der Gast sieht den Ruf", gz.ich.ruf_zeigen > 0.0)
 wz.verlassen(); gz.verlassen()
+
+# Granaten behalten beim Fall ueber eine Kante ihren Schwung.
+from dustfront.entities import Granate as _Granate
+wg_ = W.testkarte()
+e1_ = wg_.ebene(1)
+kante = None
+for ty in range(2, e1_.hoehe - 2):
+    for tx in range(2, e1_.breite - 8):
+        if (all(e1_.begehbar(tx + i, ty) for i in range(3))
+                and all(e1_.loch(tx + 3 + i, ty) for i in range(3))
+                and wg_.boden_unter(pygame.Vector2((tx + 4.5) * 32, (ty + .5) * 32), 1) == 0):
+            kante = (tx, ty)
+            break
+    if kante:
+        break
+gr = _Granate(pygame.Vector2(kante[0] * 32 + 16, kante[1] * 32 + 16), 0.0,
+              dict(K.WAFFEN["granate"], flugzeit=3.0), 1, weite=260)
+wg_.dazu(gr)
+v_absturz, schritte, gefallen, gelandet = None, 0, False, False
+reibung = K.WAFFEN["granate"]["reibung"]
+for _ in range(int(2.5 / K.FIXED_DT)):
+    gr.rest = 99.0
+    v_letzt = gr.tempo.length()
+    wg_.schritt(K.FIXED_DT)
+    if gr.sturz_rest > 0 and not gefallen:
+        gefallen, v_absturz = True, v_letzt
+    if gefallen:
+        schritte += 1
+    if gefallen and gr.sturz_rest <= 0 and gr.flug <= 0:
+        gelandet = True
+        break
+ideal = v_absturz * (1.0 - reibung * K.FIXED_DT) ** schritte
+pruef("Eine Granate faellt ueber die Kante", gefallen and gelandet)
+pruef("Und hat nach der Landung das Tempo eines ungestoerten Wurfs",
+      abs(gr.tempo.length() - ideal) < ideal * 0.05,
+      "%.0f px/s, ungestoert %.0f (vorher 25 Prozent davon)"
+      % (gr.tempo.length(), ideal))
+
+# Wegfindung zwischen Ebenen.
+import random as _rnd
+for karte_w, ebene_w in (("staubtal", 1), ("", 2)):
+    ww, gw = gefechtspaar("pve", karte=karte_w)
+    ww.pause_rest = 99999.0
+    for x in list(ww.welt.wesen):
+        if isinstance(x, KampfGegner):
+            x.lebt = False
+    ww.gegner_offen = []; ww.welle_rest = []
+    netz_w = ww.welt.wege
+    e_w = ww.welt.ebene(ebene_w)
+    stelle = next((tx, ty) for ty in range(e_w.hoehe) for tx in range(e_w.breite)
+                  if e_w.begehbar(tx, ty) and not e_w.loch(tx, ty)
+                  and e_w.kachel(tx, ty) == K.BODEN and tx > e_w.breite // 2)
+    ziel_w = ww.welt.landeplatz(pygame.Vector2((stelle[0] + .5) * 32,
+                                               (stelle[1] + .5) * 32), 9, ebene_w)
+    for k in ww.kaempfer.values():
+        k.ebene = ebene_w; k.pos.update(ziel_w)
+    rr = _rnd.Random(3)
+    e0_w = ww.welt.ebene(0)
+    kand = [(tx, ty) for ty in range(e0_w.hoehe) for tx in range(e0_w.breite)
+            if e0_w.begehbar(tx, ty) and not e0_w.loch(tx, ty)
+            and 450 < pygame.Vector2((tx + .5) * 32, (ty + .5) * 32).distance_to(ziel_w) < 900]
+    laeufer_w = []
+    for _ in range(4):
+        tx, ty = rr.choice(kand)
+        gg = KampfGegner(pygame.Vector2((tx + .5) * 32, (ty + .5) * 32), "laeufer", 0, ww)
+        gg.wartet = 0.0
+        ww.welt.dazu(gg); ww.gegner_offen.append(gg); laeufer_w.append(gg)
+    umgesetzt_w = []
+    for gg in laeufer_w:
+        vorher_pruef = gg._haenger_pruefen
+        def _spion(dt, gg=gg, vorher_pruef=vorher_pruef):
+            vor = pygame.Vector2(gg.pos)
+            vorher_pruef(dt)
+            if gg.pos.distance_to(vor) > 40:
+                umgesetzt_w.append(gg)
+        gg._haenger_pruefen = _spion
+    oben_w = set()
+    for _ in range(int(60.0 / K.FIXED_DT)):
+        for k in ww.kaempfer.values():
+            k.leben = k.max_leben; k.am_boden = False
+            k.pos.update(ziel_w); k.ebene = ebene_w; k.tempo.update(0, 0)
+        ww.schritt(K.FIXED_DT)
+        for gg in laeufer_w:
+            if gg.ebene == ebene_w and gg.pos.distance_to(ziel_w) < 60:
+                oben_w.add(id(gg))
+    titel_w = karte_w or "Testkarte"
+    pruef("%s: Gegner gehen ueber Treppen zu einem Spieler auf Ebene %d"
+          % (titel_w, ebene_w), len(oben_w) == len(laeufer_w),
+          "%d von %d" % (len(oben_w), len(laeufer_w)))
+    pruef("%s: und zwar zu Fuss, keiner musste umgesetzt werden" % titel_w,
+          not umgesetzt_w, "%d umgesetzt" % len(umgesetzt_w))
+    ww.verlassen(); gw.verlassen()
+
+# Ein Boss wechselt die Ebene nicht - er wartet.
+wb, gb = gefechtspaar("pve")
+wb.pause_rest = 99999.0
+boss_b = KampfGegner(pygame.Vector2(21.5 * 32, 3.5 * 32), "koloss", 0, wb)
+boss_b.wartet = 0.0
+wb.welt.dazu(boss_b); wb.gegner_offen = [boss_b]
+for k in wb.kaempfer.values():
+    k.ebene = 1
+for _ in range(int(8.0 / K.FIXED_DT)):
+    for k in wb.kaempfer.values():
+        k.ebene = 1; k.leben = k.max_leben
+    wb.schritt(K.FIXED_DT)
+pruef("Ein Boss bleibt auf seiner Ebene, auch auf einer Treppe",
+      boss_b.ebene == 0, "Ebene %d" % boss_b.ebene)
+wb.verlassen(); gb.verlassen()
+
+# Wer neben seinem Ziel steht und zuschlaegt, ist kein Haenger.
+wn, gn = gefechtspaar("pve")
+wn.pause_rest = 99999.0
+opfer_n = wn.kaempfer[0]
+nah_n = KampfGegner(opfer_n.pos + pygame.Vector2(20, 0), "laeufer", opfer_n.ebene, wn)
+wn.welt.dazu(nah_n)
+nah_n._ziel = opfer_n
+stelle_n = pygame.Vector2(nah_n.pos)
+for _ in range(12):
+    nah_n.pos.update(stelle_n)
+    nah_n._haenger_pruefen(1.0)
+pruef("Ein Gegner, der am Ziel steht, wird nicht umgesetzt",
+      nah_n.pos.distance_to(stelle_n) < 1.0,
+      "%.0f px verschoben" % nah_n.pos.distance_to(stelle_n))
+wn.verlassen(); gn.verlassen()
+
+# Und keiner entsteht in der Luft.
+wl, gl = gefechtspaar("pve", karte="staubtal")
+luft = 0
+for k in wl.kaempfer.values():
+    k.ebene = 1
+    k.pos.update(wl.welt.landeplatz(pygame.Vector2(60.5 * 32, 17.5 * 32), 9, 1))
+for _ in range(80):
+    eb_l, p_l = wl._spawnstelle()
+    tx_l, ty_l = int(p_l.x // K.TILE), int(p_l.y // K.TILE)
+    e_l = wl.welt.ebene(eb_l)
+    if not e_l.begehbar(tx_l, ty_l) or e_l.loch(tx_l, ty_l):
+        luft += 1
+pruef("Keine Spawnstelle liegt ueber einem Loch", luft == 0,
+      "%d von 80" % luft)
+wl.verlassen(); gl.verlassen()
 
 # Tempo und Dash.
 pruef("Kein Sprint mehr in den Werten", "sprint" not in K.SPIELER)

@@ -375,9 +375,40 @@ class KampfGegner(Gegner):
             self._bestes = 1e18
             self._stockt = 0.0
             return
-        weit = self.pos.distance_to(ziel.pos)
-        if ziel.ebene != self.ebene:
-            weit += g["ebenen_strafe"]
+        # Wer schon am Ziel ist, haengt nicht. Das fehlte in 0.26: ein
+        # Gegner, der neben seinem Ziel stand und zuschlug, kam ja nicht
+        # mehr "naeher" - die Wache hielt ihn nach sieben Sekunden fuer
+        # festgefahren und setzte ihn weg. Wer stillstand und kaempfte,
+        # verlor so regelmaessig seine Angreifer. Dasselbe gilt fuer einen
+        # Speier, der im Halteband steht: er soll dort stehen.
+        if ziel.ebene == self.ebene:
+            nah = self.pos.distance_to(ziel.pos)
+            reicht = self.daten["reichweite"] + ziel.radius + 18.0
+            if self.fern:
+                reicht = max(reicht, self.fern["reichweite"] + 10.0)
+            if nah <= reicht:
+                self._bestes = nah
+                self._stockt = 0.0
+                return
+        # Auf dem Weg zu einer Treppe zaehlt der Weg dorthin, nicht der
+        # Abstand zum Ziel: zur Rampe geht es oft erst einmal weg vom
+        # Spieler, und das ist Fortschritt, kein Haenger.
+        # Der Modus schliesst die Treppe ein: nach einem Ebenenwechsel geht
+        # es zur naechsten, und deren Weg ist laenger als der letzte Rest
+        # zur vorigen. Ohne das hielt die Wache genau den Gegner, der gut
+        # vorankam, fuer festgefahren und setzte ihn um.
+        modus = ("treppe", self.weg_nr, self.ebene) if self.weg_rest >= 0 \
+            else ("direkt", -1, self.ebene)
+        if modus != getattr(self, "_modus", modus):
+            self._bestes = 1e18
+            self._stockt = 0.0
+        self._modus = modus
+        if modus[0] == "treppe":
+            weit = float(self.weg_rest * K.TILE)
+        else:
+            weit = self.pos.distance_to(ziel.pos)
+            if ziel.ebene != self.ebene:
+                weit += g["ebenen_strafe"]
         if weit < self._bestes - g["stockt_schritt"]:
             self._bestes = weit
             self._stockt = 0.0
@@ -385,7 +416,7 @@ class KampfGegner(Gegner):
         self._stockt += g["stockt_pruefung"]
         if self._stockt < g["stockt_ab"]:
             return
-        ebene, pos = self._gefecht._spawnstelle()
+        ebene, pos = self._gefecht._spawnstelle(bei=ziel)
         self.pos.update(pos)
         self.vorher.update(pos)
         self.ebene = ebene
@@ -417,6 +448,8 @@ class KampfGegner(Gegner):
         for k in self._gefecht.kaempfer.values():
             if not k.lebt:
                 continue
+            if self.ist_boss and k.ebene != self.ebene:
+                continue       # ein Boss wartet auf seiner Ebene
             wert = self.pos.distance_to(k.pos)
             if k.ebene != self.ebene:
                 wert += g["ebenen_strafe"]
@@ -634,6 +667,12 @@ class Gefecht(Szene):
         # Spawnmarken der Karte, einmal gelesen. Sie stehen dort als
         # Buchstaben, genau wie die Kreise.
         self._spawnmarken = self._spawnmarken_lesen()
+        # Das Wegenetz jetzt bauen, beim Laden, und nicht, wenn der erste
+        # Gegner es braucht: auf STAUBTAL kostet es 66 ms, und mitten in
+        # einer Welle waere das ein Ruckler. Der Gast rechnet keine Gegner
+        # und braucht es nicht.
+        if self.ist_gastgeber and self.regeln["gegner"]:
+            self.welt.wege
         self.kreis_nr = 0
         self.kreis_rest = K.ZONE["wechsel"]
         self._kreis_setzen(0)
@@ -1673,7 +1712,7 @@ class Gefecht(Szene):
         self.schub_rest = w["schub_pause"]
 
     # ---- Wo Gegner auftauchen -------------------------------------------
-    def _spawnstelle(self, boss: bool = False):
+    def _spawnstelle(self, boss: bool = False, bei=None):
         """Eine Stelle im Band um die Spieler. Gibt (Ebene, Punkt).
 
         Vier Regeln, in dieser Reihenfolge:
@@ -1702,7 +1741,10 @@ class Gefecht(Szene):
         if not anker:
             ebene = self.rnd.randrange(len(self.welt.ebenen))
             return ebene, freier_punkt(self.welt, ebene, self.rnd)
-        wer = self.rnd.choice(anker)
+        # `bei`: um einen bestimmten Spieler, etwa den, dem ein umgesetzter
+        # Gegner nachlief - sonst landete er beim anderen Ende der Karte und
+        # jagte ploetzlich jemand anderen.
+        wer = bei if (bei is not None and bei in anker) else self.rnd.choice(anker)
         weit = s["weit_boss"] if boss else s["weit"]
 
         # Kartenmarken zuerst: wer eine Karte baut, soll sagen duerfen,
@@ -1723,7 +1765,11 @@ class Gefecht(Szene):
             e = self.welt.ebene(ebene)
             if not (8 < p.x < e.pixel_breite - 8 and 8 < p.y < e.pixel_hoehe - 8):
                 continue
-            if not self.welt.frei(p, 14, ebene):
+            # Mit Loechern als Wand: `frei()` allein haelt ein Loch fuer
+            # freien Platz. Auf STAUBTAL ist die obere Ebene ausserhalb der
+            # Plateaus nur Loch - und dort entstanden Gegner in der Luft,
+            # die nicht fallen koennen und nie irgendwo ankamen.
+            if not self.welt.frei(p, 14, ebene, True):
                 continue
             # Der Abstand gilt gegen **jeden** Spieler, nicht nur gegen
             # den gewuerfelten. Stand hier einmal nur `wer`, und prompt
@@ -1782,7 +1828,7 @@ class Gefecht(Szene):
                                        self.rnd.uniform(-34, 34))
             if self._zu_nah(p, ebene, anker):
                 continue          # die Streuung darf die Grenze nicht reissen
-            if self.welt.frei(p, 14, ebene):
+            if self.welt.frei(p, 14, ebene, True):
                 return ebene, p
         return ebene, punkt
 
@@ -3267,6 +3313,11 @@ class Gefecht(Szene):
                 self._welt_verdrahten()
                 self.kreise = self._kreise_lesen()
                 self._kreis_setzen(0)
+                # Die Spawnmarken und das Wegenetz gehoeren zur Karte. Stand
+                # hier einmal nicht - und nach einem Kartenwechsel kamen die
+                # Gegner an den Marken der alten Karte heraus.
+                self._spawnmarken = self._spawnmarken_lesen()
+                self.welt.wege
                 # Alles, was auf der alten Karte stand, gehoert nicht auf
                 # die neue - auch nicht die Kaempfer.
                 for k in self.kaempfer.values():

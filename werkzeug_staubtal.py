@@ -163,11 +163,20 @@ def bauen():
         x0, y0, x1, y1 = p["kasten"]
         for (rx, ry) in p["rampen"]:
             e0[ry][rx] = ">"
-            # Die Treppe hinunter liegt auf der Tafel, an der naechsten
-            # Kachel innerhalb des Plateaus.
-            zx = min(max(rx, x0 + 1), x1 - 1)
-            zy = min(max(ry, y0 + 1), y1 - 1)
-            e1[zy][zx] = "<"
+            # Die Treppe hinunter liegt **genau ueber** der Rampe, nicht
+            # auf der Tafel daneben. Ein Ebenenwechsel behaelt die Stelle -
+            # wer unten auf der Rampe steht, steht danach oben an derselben
+            # Stelle. Bis 0.27 lag die obere Treppe eine Kachel versetzt im
+            # Plateau, und ueber der Rampe war oben ein Loch: wer hinaufging,
+            # fiel sofort wieder hinunter. Alle sieben Rampen, seit STAUBTAL
+            # gibt - die Plateaus und damit der Kreis KANZEL waren nie zu
+            # erreichen. Die obere Treppe ist jetzt ein Absatz, der eine
+            # Kachel ueber die Kante ragt.
+            e1[ry][rx] = "<"
+            # Die Kachel am Rand, auf die man vom Absatz tritt, und ihre
+            # Nachbarn frei von Fassern - sonst endet die Rampe an einem.
+            zx = min(max(rx, x0), x1)
+            zy = min(max(ry, y0), y1)
             for dy in (-1, 0, 1):
                 for dx in (-1, 0, 1):
                     nx, ny = zx + dx, zy + dy

@@ -517,6 +517,9 @@ class Welt:
     _rechnet = False
 
     def schritt(self, dt: float) -> None:
+        # Zaehlt die Bilder. Das Wegenetz rechnet je Bild hoechstens ein
+        # neues Feld und muss wissen, wann ein neues Bild anfaengt.
+        self.bildnummer = getattr(self, "bildnummer", 0) + 1
         self.zeit += dt
         self._rechnet = True
         if self.neue:
@@ -737,6 +740,20 @@ class Welt:
         if 0 <= ziel < len(self.ebenen):
             return ziel
         return None
+
+    @property
+    def wege(self):
+        """Das Wegenetz zwischen den Ebenen, beim ersten Gebrauch gerechnet.
+
+        Die Karte aendert sich nicht, also genuegt ein Mal - gemessen rund
+        20 Millisekunden auf STAUBTAL. Siehe wege.py.
+        """
+        netz = getattr(self, "_wege", None)
+        if netz is None:
+            from .wege import Wegenetz
+            netz = Wegenetz(self)
+            self._wege = netz
+        return netz
 
     def ebene_wechseln(self, wesen, ziel: int) -> bool:
         """Wechselt die Ebene, wenn der Platz dort frei ist."""

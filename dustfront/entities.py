@@ -372,16 +372,36 @@ class Granate(Wesen):
         if self.rest <= 0 and self.sturz_rest <= 0:
             self.zuenden()
 
+    def stuerzen(self) -> None:
+        """Ueber die Kante: sie fliegt weiter, wie sie geworfen wurde.
+
+        Wesen.stuerzen() nimmt beim Absprung 30 Prozent des Tempos weg -
+        fuer eine Figur richtig, die ueber eine Kante stolpert. Eine
+        Granate stolpert nicht. Zusammen mit dem harten Abbremsen beim
+        Aufsetzen hatte sie gemessen nach der Landung nur noch 25 Prozent
+        des Tempos, das sie ohne Sturz gehabt haette, und legte im Flug 71
+        Prozent der Strecke zurueck. Gemeldet als: sie verliert beim Fall
+        das ganze Momentum.
+
+        Jetzt folgt sie waehrend des Falls derselben Kurve wie jeder
+        andere Wurf - dieselbe Reibung, kein Abzug beim Absprung, keiner
+        beim Aufsetzen.
+        """
+        tempo = pygame.Vector2(self.tempo)
+        super().stuerzen()
+        self.tempo = tempo
+
     def aufschlag(self) -> None:
-        """Aufsetzen nach einem Sturz - ohne Sturzschaden.
+        """Aufsetzen nach einem Sturz - ohne Sturzschaden und ohne Bremse.
 
         Wesen.aufschlag() wuerde der Granate Fallschaden geben. Sie hat
         Leben wie jedes Wesen, waere danach tot und wuerde nie zuenden.
+        Das Tempo bleibt: sie rollt weiter, wie sie gerollt waere, wenn
+        dort keine Kante gewesen waere.
         """
         self.sturz_hoehe = 0.0
         self.pos.update(self.welt.landeplatz(self.pos, self.radius, self.ebene))
         self.vorher.update(self.pos)
-        self.tempo *= 0.35
         wolke(self.welt, self.pos, 4, 60, 0.3, K.C_MUTED_DK, self.ebene, 1,
               "staub")
 
@@ -1805,6 +1825,8 @@ class Gegner(Wesen):
         self.f_vorlauf = 0.0
         self.f_ziel = None
         self.brut = []          # was die Mutter gerufen hat, fuer das Limit
+        self.weg_rest = -1      # Kacheln bis zur naechsten Treppe, -1: kein Weg
+        self.weg_nr = -1        # welche Treppe gerade angesteuert wird
 
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
@@ -1812,13 +1834,33 @@ class Gegner(Wesen):
         self.schlag_rest = max(0.0, self.schlag_rest - dt)
         held = self.welt.held
 
-        # Sie laufen immer los. Auf einer anderen Ebene gehen sie zur Stelle
-        # unter oder ueber dem Spieler und nehmen die naechste Treppe.
+        # Sie laufen immer los. Ist das Ziel nur ueber eine Treppe zu
+        # erreichen, gehen sie den Weg dorthin (wege.py); ein Boss nicht,
+        # der wartet auf seiner Ebene.
         ziel = None
         self.treppen_sperre = max(0.0, self.treppen_sperre - dt)
-        if held is not None and held.lebt:
+        self.weg_rest = -1
+        wege = None
+        if held is not None and held.lebt and not self.ist_boss:
+            wege = self.welt.wege
+            if not wege.braucht_weg(self.ebene, self.pos, held.ebene, held.pos):
+                wege = None
+        if held is not None and held.lebt and wege is not None:
+            # Das Ziel ist nur ueber eine Treppe zu erreichen: eine andere
+            # Ebene, oder dieselbe, aber ein anderes Plateau. Dann wird die
+            # naechste Treppe auf dem Weg angesteuert, nicht das Ziel -
+            # geradewegs aufs Ziel zu fuehrte unter ein Plateau und vor
+            # eine Felswand.
+            ziel = self._treppe_ansteuern(wege, held)
+        elif held is not None and held.lebt:
             ziel = pygame.Vector2(held.pos)
             if held.ebene == self.ebene:
+                ziel = self._umweg(ziel, held)
+            if held.ebene != self.ebene and self.ist_boss:
+                # Ein Boss wechselt nicht die Ebene. Er wartet - wer ihn
+                # meiden will, geht hinauf; wer ihn will, kommt herunter.
+                ziel = None
+            elif held.ebene == self.ebene:
                 abstand = self.pos.distance_to(held.pos)
                 if abstand < d["reichweite"] + held.radius and self.schlag_rest <= 0:
                     self.schlagen(held)
@@ -1828,7 +1870,7 @@ class Gegner(Wesen):
                     ziel = self._fern_fuehren(dt, held, abstand, ziel)
                 if self.faehigkeit:
                     self._faehigkeit_fuehren(dt, held)
-            elif self.treppen_sperre <= 0:
+            elif self.treppen_sperre <= 0 and not self.ist_boss:
                 wohin = self.welt.treppe_unter(self)
                 naeher = (abs(wohin - held.ebene) < abs(self.ebene - held.ebene)
                           if wohin is not None else False)
@@ -1843,7 +1885,11 @@ class Gegner(Wesen):
             richtung = ziel - self.pos
             if richtung.length_squared() > 1:
                 richtung.normalize_ip()
-                richtung = self.ausweichen(richtung)
+                # Auf dem Weg zu einer Treppe fuehrt das Feld schon um jede
+                # Wand herum. Der Faecher wuerde es nur verbiegen - und an
+                # einer schmalen Rampe genau daneben laufen lassen.
+                if self.weg_rest < 0:
+                    richtung = self.ausweichen(richtung)
                 self.winkel = math.degrees(math.atan2(richtung.y, richtung.x))
             soll = richtung * d["tempo"]
         else:
@@ -1860,6 +1906,52 @@ class Gegner(Wesen):
             self.drall = -self.drall      # Sackgasse, andersherum versuchen
         self.welt.auseinander(self)
         self.welt.befreien(self)
+
+    # ---- Um Hindernisse herum ------------------------------------------
+    def _umweg(self, ziel, held):
+        """Geradewegs, wenn der Weg frei ist - sonst ueber das Abstandsfeld.
+
+        Der Faecher aus dem Ausweichen reicht fuer eine Kiste. An einer
+        Plateauwand oder einem Band aus Loechern haengt er fest, und dann
+        stand ein Gegner vor dem Spieler und kam nicht heran. Hier wird
+        erst gefragt, ob der gerade Weg frei ist; nur wenn nicht, folgt der
+        Gegner dem Feld zur Kachel des Spielers.
+        """
+        wege = self.welt.wege
+        if wege.gerade_frei(self.ebene, self.pos, held.pos, self.radius):
+            return ziel
+        _schl, feld = wege.feld_zu(self.ebene, held.pos)
+        punkt, rest = wege.schritt_ueber(self.ebene, feld, self.pos)
+        if punkt is None:
+            return ziel
+        self.weg_rest = rest
+        self.weg_nr = -2              # "Feld zum Ziel", fuer die Wache
+        return punkt
+
+    # ---- Ueber Treppen --------------------------------------------------
+    def _treppe_ansteuern(self, wege, held):
+        """Zur naechsten Treppe auf dem Weg gehen - und oben weiter.
+
+        Gibt den Punkt zurueck, auf den als naechstes zugelaufen wird. Wer
+        auf der Treppe steht, wechselt. `weg_rest` ist, wie weit es noch
+        bis zur Treppe ist; die Haengerwache misst daran den Fortschritt,
+        denn auf dem Weg zu einer Treppe entfernt man sich oft erst vom
+        Ziel - und wuerde sonst fuer einen Haenger gehalten und umgesetzt.
+        """
+        nr = wege.naechste_treppe(self.ebene, self.pos, held.ebene, held.pos)
+        if nr is None:
+            # Kein Weg (etwa auf ein Plateau ohne Rampe): wie frueher
+            # geradewegs zu. Die Haengerwache faengt das auf.
+            return pygame.Vector2(held.pos)
+        punkt, rest = wege.schritt_zu(nr, self.pos)
+        self.weg_rest = rest
+        self.weg_nr = nr
+        if rest == 0 and self.treppen_sperre <= 0:
+            _eb, _tx, _ty, ziel_ebene = wege.treppen[nr]
+            if self.welt.ebene_wechseln(self, ziel_ebene):
+                self.treppen_sperre = 1.0
+                self.weg_rest = -1
+        return punkt
 
     # ---- Fernkampf ------------------------------------------------------
     def _fern_fuehren(self, dt, ziel_wesen, abstand, ziel):
