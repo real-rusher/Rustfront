@@ -602,8 +602,10 @@ def _gegner_blaeher():
 # ── Die Bosse
 #
 # Gross, und jeder mit einem Merkmal, das seine Faehigkeit ankuendigt:
-# der Koloss hat Platten (er stampft), die Mutter einen Leib voller
-# Brut (sie ruft), der Brandstifter glimmt (er wirft Feuer).
+# der Koloss hat Platten (er stampft), die Mutter einen Sack voller
+# Renner (sie ruft), der Brandstifter Tanks und eine brennende Flasche
+# (er wirft Feuer). Und jeder mit eigenem Umriss - rund ist schon der
+# Blaeher, und ein grosser Blaeher ist kein Boss.
 
 @platzhalter("boss_koloss")
 def _boss_koloss():
@@ -629,43 +631,114 @@ def _boss_koloss():
 
 @platzhalter("boss_mutter")
 def _boss_mutter():
+    """Die Mutter. Ein riesiger Brutsack hinten, vorn ein kleiner Leib mit
+    langen, spinnigen Armen.
+
+    Die erste Fassung war ein gruenes Ei mit hellen Punkten - so gruen
+    wie der Speier und so rund wie der Blaeher, und im Gefecht hielt man
+    sie fuer einen grossen Speier. Jetzt ist sie birnenfoermig statt rund
+    und fleischig-violett statt gruen. Was im Sack liegt, sind Renner:
+    knochenhell, eingerollt, mit dem roten Auge - man sieht ihr also an,
+    **was** sie gleich ruft.
+    """
     s = _flaeche(48, 48)
     c = 24
-    pygame.draw.ellipse(s, (36, 46, 26), (c - 17, c - 14, 34, 28))
-    pygame.draw.ellipse(s, (86, 108, 58), (c - 15, c - 12, 30, 24))
-    pygame.draw.ellipse(s, (116, 144, 74), (c - 13, c - 11, 24, 18))
-    # Die Brut im Leib: helle Punkte, die man zaehlen kann.
-    for (bx, by) in ((-7, -3), (-2, 3), (3, -4), (-5, 4), (5, 3), (0, -6)):
-        pygame.draw.circle(s, (188, 226, 120), (c + bx, c + by), 3)
-        pygame.draw.circle(s, (238, 250, 196), (c + bx - 1, c + by - 1), 1)
-    # Ranken nach hinten.
-    for dy in (-9, 0, 9):
-        pygame.draw.line(s, (52, 66, 34), (c - 14, c + dy),
-                         (c - 21, c + dy + (2 if dy else 0)), 2)
-    pygame.draw.circle(s, (30, 38, 22), (c + 12, c), 6)
-    pygame.draw.circle(s, (170, 220, 100), (c + 14, c), 3)
+    kante, leib, hell = (44, 22, 32), (128, 74, 92), (168, 108, 122)
+    # Nachschleppende Straenge hinter dem Sack.
+    for dy, lang in ((-8, 6), (0, 8), (8, 6)):
+        pygame.draw.line(s, (70, 38, 50), (c - 20, c + dy),
+                         (c - 20 - lang, c + dy + (dy // 4)), 2)
+    # Der Sack: gross, prall, hinten.
+    sack = pygame.Rect(c - 22, c - 16, 30, 32)
+    pygame.draw.ellipse(s, kante, sack)
+    pygame.draw.ellipse(s, leib, sack.inflate(-3, -3))
+    pygame.draw.ellipse(s, hell, sack.inflate(-12, -14).move(-2, -4))
+    # Adern ueber den Sack.
+    for (a, b) in (((c - 16, c - 9), (c - 6, c - 12)),
+                   ((c - 18, c + 4), (c - 8, c + 11)),
+                   ((c - 12, c - 2), (c - 3, c + 1))):
+        pygame.draw.line(s, (88, 44, 62), a, b, 1)
+    # Die Brut im Sack: eingerollte Renner, knochenhell mit rotem Auge.
+    for (bx, by) in ((-15, -6), (-9, 4), (-13, 9), (-5, -8), (-3, 5)):
+        pygame.draw.ellipse(s, (70, 50, 52), (c + bx - 3, c + by - 2, 8, 6))
+        pygame.draw.ellipse(s, (214, 200, 176), (c + bx - 2, c + by - 2, 6, 4))
+        pygame.draw.rect(s, (226, 62, 42), (c + bx + 2, c + by - 1, 1, 1))
+    # Der Leib vorn: klein gegen den Sack.
+    pygame.draw.ellipse(s, kante, (c + 2, c - 8, 14, 16))
+    pygame.draw.ellipse(s, (104, 62, 74), (c + 3, c - 7, 12, 14))
+    pygame.draw.ellipse(s, (146, 94, 106), (c + 4, c - 6, 7, 6))
+    # Vier lange Arme, nach vorn gespreizt, mit Klauen.
+    for (x0, y0, x1, y1) in ((c + 8, c - 6, c + 18, c - 15),
+                             (c + 8, c + 6, c + 18, c + 15),
+                             (c + 5, c - 7, c + 8, c - 19),
+                             (c + 5, c + 7, c + 8, c + 19)):
+        pygame.draw.line(s, kante, (x0, y0), (x1, y1), 3)
+        pygame.draw.line(s, (150, 104, 110), (x0, y0), (x1, y1), 1)
+        pygame.draw.rect(s, (226, 214, 190), (x1, y1 - 1, 2, 2))
+    # Kopf mit drei Augen.
+    pygame.draw.circle(s, (34, 18, 24), (c + 17, c), 5)
+    pygame.draw.circle(s, (88, 50, 62), (c + 17, c), 4)
+    for (ax, ay) in ((c + 19, c - 2), (c + 20, c), (c + 19, c + 2)):
+        pygame.draw.rect(s, (236, 70, 48), (ax, ay, 1, 1))
     return _rand(s)
 
 
 @platzhalter("boss_brandstifter")
 def _boss_brandstifter():
+    """Der Brandstifter. Ein Mann in verkohltem Schutzanzug, zwei
+    Brennstofftanks auf dem Ruecken, vorn eine brennende Flasche.
+
+    Die erste Fassung war eine glimmende Kugel - so rund wie der Blaeher
+    und in derselben Farbe, und man wusste nicht, ob gleich etwas platzt
+    oder brennt. Jetzt ist er die einzige Gestalt mit breiten Schultern
+    und Tanks, fast schwarz statt orange, und das Feuer sitzt genau dort,
+    wo es herkommt: in der Hand, die wirft.
+    """
     s = _flaeche(46, 46)
     c = 23
-    pygame.draw.circle(s, (42, 24, 16), (c, c), 17)
-    pygame.draw.circle(s, (118, 62, 32), (c, c), 15)
-    pygame.draw.circle(s, (152, 84, 38), (c - 2, c - 2), 12)
-    # Glut in den Fugen: er sieht aus, als brenne er von innen.
-    for winkel in range(0, 360, 45):
-        r = math.radians(winkel)
-        x, y = c + math.cos(r) * 9, c + math.sin(r) * 9
-        pygame.draw.circle(s, (246, 172, 62), (int(x), int(y)), 3)
-        pygame.draw.circle(s, (255, 232, 168), (int(x), int(y)), 1)
-    # Der Kessel auf dem Ruecken, aus dem er schoepft.
-    pygame.draw.rect(s, (54, 34, 22), (c - 16, c - 6, 9, 12))
-    pygame.draw.rect(s, (96, 58, 30), (c - 15, c - 5, 7, 10))
-    pygame.draw.rect(s, K.C_AMBER, (c - 14, c - 4, 5, 3))
-    pygame.draw.circle(s, (28, 16, 10), (c + 11, c), 6)
-    pygame.draw.circle(s, (255, 196, 88), (c + 13, c), 3)
+    # Die Tanks auf dem Ruecken, rostrot mit Messingkappen.
+    for dy in (-11, 2):
+        pygame.draw.rect(s, (40, 18, 12), (c - 19, c + dy - 1, 12, 11),
+                         border_radius=3)
+        pygame.draw.rect(s, (146, 54, 34), (c - 18, c + dy, 10, 9),
+                         border_radius=3)
+        pygame.draw.rect(s, (200, 92, 56), (c - 18, c + dy + 1, 10, 2))
+        pygame.draw.rect(s, (224, 172, 72), (c - 20, c + dy + 3, 2, 3))
+    # Schultern: breit, verkohlt.
+    schulter = pygame.Rect(c - 11, c - 14, 22, 28)
+    pygame.draw.ellipse(s, (18, 14, 12), schulter)
+    pygame.draw.ellipse(s, (74, 62, 52), schulter.inflate(-3, -3))
+    pygame.draw.ellipse(s, (106, 90, 74), schulter.inflate(-10, -14).move(-2, -4))
+    # Glut in den Rissen des Anzugs - hell genug, dass er auch auf
+    # dunklem Boden nicht nur ein Loch ist.
+    for (a, b) in (((c - 7, c - 9), (c - 2, c - 5)),
+                   ((c - 8, c + 6), (c - 2, c + 9)),
+                   ((c + 1, c - 12), (c + 4, c - 8))):
+        pygame.draw.line(s, (214, 92, 34), a, b, 2)
+        pygame.draw.line(s, (255, 196, 96), a, b, 1)
+    # Der Schlauch vom Tank nach vorn.
+    pygame.draw.lines(s, (30, 24, 20), False,
+                      [(c - 9, c + 7), (c - 2, c + 12), (c + 8, c + 11)], 2)
+    # Arme nach vorn: der untere haelt die Flasche.
+    pygame.draw.line(s, (26, 20, 18), (c + 2, c - 8), (c + 11, c - 6), 4)
+    pygame.draw.line(s, (26, 20, 18), (c + 2, c + 8), (c + 12, c + 7), 4)
+    # Die Flasche mit brennendem Lappen. Die Flamme ist sein Zeichen und
+    # darf deshalb gross sein: sie sagt, womit er gleich wirft.
+    pygame.draw.rect(s, (46, 66, 44), (c + 12, c + 5, 5, 5))
+    pygame.draw.rect(s, (104, 140, 92), (c + 13, c + 6, 2, 3))
+    pygame.draw.polygon(s, (196, 54, 28), [(c + 16, c + 4), (c + 20, c + 1),
+                                           (c + 22, c + 5), (c + 21, c + 11),
+                                           (c + 16, c + 10)])
+    pygame.draw.polygon(s, (246, 140, 44), [(c + 17, c + 5), (c + 20, c + 3),
+                                            (c + 21, c + 6), (c + 20, c + 9),
+                                            (c + 17, c + 9)])
+    pygame.draw.rect(s, (255, 226, 132), (c + 17, c + 6, 3, 2))
+    # Kopf: Gasmaske mit zwei gluehenden Glaesern und dem Filter vorn.
+    pygame.draw.circle(s, (14, 12, 10), (c + 4, c - 1), 6)
+    pygame.draw.circle(s, (48, 42, 38), (c + 4, c - 1), 5)
+    pygame.draw.rect(s, (255, 196, 88), (c + 6, c - 4, 2, 2))
+    pygame.draw.rect(s, (255, 196, 88), (c + 6, c + 1, 2, 2))
+    pygame.draw.rect(s, (96, 90, 82), (c + 9, c - 2, 3, 3))
     return _rand(s)
 
 
