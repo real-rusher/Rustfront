@@ -364,10 +364,21 @@ urllib.request.urlopen = server
 
 netz = ablage.NetzAblage(url="https://test.supabase.co", schluessel="anon")
 pruef("Eine Netzablage mit Zugang gilt als eingerichtet", netz.eingerichtet)
-pruef("Ohne Zugang nicht",
+# Leere Angaben heissen "nimm den eingetragenen Zugang", nicht "keiner".
+# Solange in SERVER nichts stand, war das dasselbe; seit dort ein echtes
+# Projekt steht, ist es das nicht mehr. Fuer "kein Zugang" muss also der
+# eingetragene weg - so, wie es bei jemandem aussieht, der das Spiel ohne
+# Server benutzt.
+_zugang_vorher = dict(ablage.SERVER)
+ablage.SERVER.update(url="", schluessel="")
+pruef("Ohne Zugang gilt eine Netzablage als nicht eingerichtet",
       not ablage.NetzAblage(url="", schluessel="").eingerichtet)
 pruef("Und antwortet dann sauber statt zu werfen",
       not ablage.NetzAblage(url="", schluessel="").anmelden("a", "b"))
+ablage.SERVER.clear()
+ablage.SERVER.update(_zugang_vorher)
+pruef("Leere Angaben nehmen sonst den eingetragenen Zugang",
+      ablage.NetzAblage(url="", schluessel="").url == ablage.SERVER["url"])
 
 an = netz.anlegen("Meister", "geheim12345")
 pruef("Ein Konto laesst sich auf dem Server anlegen", bool(an), an.fehler)
