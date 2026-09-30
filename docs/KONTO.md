@@ -44,7 +44,8 @@ Vier Gruende, in der Reihenfolge ihres Gewichts:
    reicht, genau wie schon bei der Portfreigabe in `upnp.py`. Wer das
    Spiel herunterlaedt, hat alles, was er braucht - das ist Punkt 2,
    direkt erfuellt.
-2. **Der oeffentliche Schluessel darf oeffentlich sein.** Der *anon key*
+2. **Der oeffentliche Schluessel darf oeffentlich sein.** Der
+    *publishable key*
    ist dafuer gemacht, im Klienten zu stehen; er liegt deshalb mit im
    Quelltext. Niemand muss irgendwo etwas eintragen, damit die Anmeldung
    auf einem neuen Rechner geht.
@@ -160,10 +161,12 @@ Zehn Minuten, einmalig.
 
 ### 5.1 Projekt anlegen
 
-1. Auf <https://supabase.com> mit GitHub anmelden, **New project**.
-2. Name egal, Region moeglichst nah, Datenbankkennwort notieren (wird
-   hier nie gebraucht, aber Supabase fragt danach).
-3. Warten, bis es steht.
+1. Auf <https://supabase.com> anmelden. In der Organisation **New
+   project**.
+2. Name egal, Region moeglichst nah (Frankfurt), Datenbankkennwort
+   notieren. Es wird hier nie gebraucht, aber Supabase fragt danach und
+   zeigt es spaeter nicht wieder.
+3. Warten, bis es steht - das dauert ein paar Minuten.
 
 ### 5.2 Tabellen anlegen
 
@@ -228,31 +231,52 @@ create trigger profil_anlegen after insert on auth.users
 
 ### 5.3 Bestaetigung per Post ausschalten
 
-**Authentication → Providers → Email**: *Confirm email* **aus**. Sonst
-wartet jedes neue Konto auf eine Bestaetigung an eine Adresse, die es
-nicht gibt.
+**Authentication → Sign In / Providers → Email**: *Confirm email*
+**aus**. Sonst wartet jedes neue Konto auf eine Bestaetigung an eine
+Adresse, die es nicht gibt - und niemand kann sich anmelden.
+
+Das ist der Punkt, an dem es am haeufigsten haengt. `--konto server`
+(5.5) sagt es einem, statt dass man danach sucht.
 
 ### 5.4 Zugang eintragen
 
-**Project Settings → API**: dort stehen *Project URL* und der *anon
-public* Schluessel. Beides in `dustfront/ablage.py` oben in `SERVER`
-eintragen:
+**Settings → API Keys**. Dort stehen zwei Sorten Schluessel, und es ist
+wichtig, die richtige zu nehmen:
+
+| Schluessel | Nehmen? |
+|---|---|
+| *publishable key*, faengt mit `sb_publishable_` an | **Ja.** Er ist dafuer gemacht, im Klienten zu stehen. |
+| *secret key*, faengt mit `sb_secret_` an | **Nein, niemals.** Er haengt den Zeilenschutz aus. Wer ihn ins Repository legt, hat die Datenbank verschenkt. |
+| *anon* / *service_role* (alte Namen, fangen mit `eyJ` an) | Gehen noch, laufen aber Ende 2026 aus. Fuer ein neues Projekt der falsche Weg. |
+
+Die *Project URL* steht unter **Settings → API** (oder im **Connect**-
+Dialog oben). Beides in `dustfront/ablage.py` oben in `SERVER` eintragen:
 
 ```python
 SERVER = {
     "url": "https://abcdefghijkl.supabase.co",
-    "schluessel": "eyJhbGciOi...",
+    "schluessel": "sb_publishable_...",
+    "postfach": "spieler.dustfront",
 }
 ```
 
-Beides darf im Quelltext stehen und ins Repository - genau darum geht die
-Anmeldung auf einem frisch heruntergeladenen Spiel sofort.
+URL und publishable key duerfen im Quelltext stehen und ins Repository -
+genau darum geht die Anmeldung auf einem frisch heruntergeladenen Spiel
+sofort. Das ist keine Nachlaessigkeit, sondern die Bedingung, unter der
+das Ganze ueberhaupt gebaut wurde.
+
+`postfach` ist die Domaene, hinter der die Spielernamen als Adresse
+laufen (`MEISTER` wird zu `meister@spieler.dustfront`). Sie existiert
+nicht und soll nicht existieren. Falls der Anmeldedienst die erfundene
+Endung ablehnt, wird hier eine andere eingetragen - das ist dann eine
+Zeile. **Vorher entscheiden:** wer die Domaene aendert, nachdem sich
+Leute angemeldet haben, hat danach andere Konten.
 
 Wer ein eigenes Projekt benutzen will, ohne den Quelltext zu aendern,
 legt stattdessen `server.json` in den Benutzerordner (siehe `pfade.py`):
 
 ```json
-{"url": "https://...", "schluessel": "eyJ..."}
+{"url": "https://...", "schluessel": "sb_publishable_..."}
 ```
 
 Diese Datei gilt vor `SERVER`.
@@ -260,10 +284,36 @@ Diese Datei gilt vor `SERVER`.
 ### 5.5 Nachsehen, ob es geht
 
 ```
-python -m dustfront --konto liste
+python -m dustfront --konto server
 ```
 
-zeigt, ob ein Server eingetragen ist. Danach im Spiel anmelden.
+Das ist die Abnahme. Es wird nicht angepingt, sondern der ganze Weg
+gegangen, den ein Spieler auch geht:
+
+```
+  ok    Konto anlegen   PRUEF3f2a91c
+  ok    Anmelden
+  ok    Profil lesen   Fassung 0
+  ok    Profil schreiben   Fassung 1
+  ok    Runde buchen   selbsttest-1a0f14a3d
+  ok    Dieselbe Runde noch einmal buchen
+  ok    Runden zurueklesen
+  ok    Sie steht genau einmal da   1x
+
+Alle 8 Schritte in Ordnung. Der Server traegt.
+```
+
+Der vorletzte und der letzte Schritt sind die wichtigsten: sie pruefen
+die Regel, an der die ganze Statistik haengt. Steht dort `2x`, fehlt der
+eindeutige Index aus 5.2 - und dann zaehlt spaeter jeder Netzaussetzer
+eine Runde doppelt, ohne dass es jemandem auffaellt.
+
+Schlaegt ein Schritt fehl, nennt der Selbsttest den wahrscheinlichen
+Grund und die Stelle in der Oberflaeche. Er legt dabei ein Wegwerfkonto
+mit gewuerfeltem Namen an, das stehenbleibt.
+
+`python -m dustfront --konto liste` zeigt nur, **ob** ein Server
+eingetragen ist, nicht ob er geht.
 
 ---
 
@@ -324,5 +374,6 @@ vorbelegt wird.
 | `<Benutzerordner>/sitzung.json` | Die laufende Anmeldung und das Profil |
 | `<Benutzerordner>/journal.json` | Die gespielten Runden, mit Haken |
 | `<Benutzerordner>/server.json` | Eigener Zugang, falls gewuenscht |
+| `--konto server` | Die Abnahme eines frisch aufgesetzten Projekts (5.5) |
 
 Wo der Benutzerordner liegt, sagt `python -m dustfront --konto liste`.

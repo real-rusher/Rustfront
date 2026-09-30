@@ -453,7 +453,56 @@ pruef("Danach wieder", len(kn.journal.offen()) == 0,
       "%d offen" % len(kn.journal.offen()))
 kn.schliessen()
 
+# ─────────────────────────────────────────────────────────────────────
+# Der Selbsttest --konto server.
+#
+# Er ist das Werkzeug, mit dem ein frisch aufgesetztes Supabase-Projekt
+# abgenommen wird. Also muss er selbst geprueft sein, und zwar in beide
+# Richtungen: er muss ein gutes Projekt durchwinken **und** ein kaputtes
+# durchfallen lassen. Ein Selbsttest, der immer "in Ordnung" sagt, ist
+# schlimmer als keiner.
+print("\n-- Der Selbsttest fuer den Server --")
+from dustfront import main as main_modul
+
+def _wert_aus(paare):
+    return lambda name, vorgabe="": paare.get(name, vorgabe)
+
+class GuterZugang(ablage.NetzAblage):
+    def __init__(self, *a, **k):
+        super().__init__(url="https://test.supabase.co", schluessel="anon")
+
+_echte_netzablage = ablage.NetzAblage
+ablage.NetzAblage = GuterZugang
+_rueck = main_modul.konto_server_pruefen(ablage, _wert_aus({}))
+pruef("Der Selbsttest winkt ein heiles Projekt durch", _rueck == 0,
+      "Rueckgabe %d" % _rueck)
+
+# Und jetzt dasselbe mit einem Server, dem der eindeutige Index fehlt -
+# der eine Fehler, der im Betrieb niemandem auffaellt und trotzdem alle
+# Zahlen verdirbt. Der Selbsttest muss ihn finden.
+class ServerOhneIndex(FalscherServer):
+    def _bearbeiten(self, methode, weg, koerper, token):
+        if "/rest/v1/gefecht" in weg and methode == "POST":
+            for zeile in koerper:                # kein setdefault: haengt an
+                self.gefechte[(str(zeile.get("partie")),
+                               token[4:], len(self.gefechte))] = zeile
+            return {}, 201
+        if "/rest/v1/gefecht" in weg and methode == "GET":
+            return [z for s, z in self.gefechte.items()
+                    if s[1] == token[4:]], 200
+        return super()._bearbeiten(methode, weg, koerper, token)
+
+urllib.request.urlopen = ServerOhneIndex()
+_rueck = main_modul.konto_server_pruefen(ablage, _wert_aus({}))
+pruef("Und laesst ein Projekt ohne Doppelschutz durchfallen", _rueck == 1,
+      "Rueckgabe %d" % _rueck)
+
+ablage.NetzAblage = _echte_netzablage
 urllib.request.urlopen = echt_urlopen
+
+# Ohne eingetragenen Server sagt er das und faellt nicht um.
+pruef("Ohne Zugang sagt der Selbsttest das",
+      main_modul.konto_server_pruefen(ablage, _wert_aus({})) == 1)
 
 # ══════════════════════════════════════════════════ Der Faden
 print("\n-- Der Faden fuer das Netz --")

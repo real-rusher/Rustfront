@@ -183,7 +183,11 @@ def konten(argumente: list[str], wert) -> int:
         netz_ablage = A.NetzAblage()
         print("Server: %s" % (netz_ablage.url if netz_ablage.eingerichtet
                               else "keiner eingetragen, siehe docs/KONTO.md"))
+        if netz_ablage.eingerichtet:
+            print("  ob er wirklich geht, sagt --konto server")
         return 0
+    if was in ("server", "pruefserver", "selbsttest"):
+        return konto_server_pruefen(A, wert)
 
     name = A.name_saeubern(wert("--name", ""))
     fehler = A.name_pruefen(name)
@@ -211,8 +215,122 @@ def konten(argumente: list[str], wert) -> int:
         antwort = lokal.anmelden(name, wort)
         print("In Ordnung." if antwort else antwort.fehler.capitalize())
         return 0 if antwort else 1
-    print("Unbekannt: --konto %s. Moeglich: liste, neu, pruef" % was)
+    print("Unbekannt: --konto %s. Moeglich: liste, neu, pruef, server" % was)
     return 1
+
+
+def konto_server_pruefen(A, wert) -> int:
+    """Der Selbsttest gegen den eingetragenen Supabase-Zugang.
+
+    Er beantwortet die einzige Frage, die zaehlt: **geht es wirklich?**
+    Ein eingetragener Server ist noch kein funktionierender Server - die
+    Tabellen koennen fehlen, der Zeilenschutz kann falschherum stehen,
+    die Bestaetigung per Post kann noch anstehen, und die Adresse
+    `<name>@spieler.dustfront` kann abgelehnt werden. Jedes davon faellt
+    erst beim ersten echten Spieler auf, wenn man es nicht vorher prueft.
+
+    Darum wird hier nicht "angepingt", sondern der ganze Weg gegangen,
+    den ein Spieler auch geht: Konto anlegen, anmelden, Profil lesen,
+    Profil schreiben, eine Runde buchen, **dieselbe Runde noch einmal
+    buchen** und nachsehen, dass sie nur einmal dasteht. Der vorletzte
+    Schritt ist der wichtigste - er prueft die Regel, an der die ganze
+    Statistik haengt (`docs/KONTO.md`, Abschnitt 3).
+
+    Angelegt wird dabei ein Wegwerfkonto mit gewuerfeltem Namen. Es
+    bleibt stehen; loeschen kann nur, wer die Datenbank aufmacht, und
+    dafuer ist ein Selbsttest der falsche Ort.
+    """
+    import time
+
+    netz = A.NetzAblage()
+    if not netz.eingerichtet:
+        print("Kein Server eingetragen.")
+        print("Was einzutragen ist und wo es steht: docs/KONTO.md, 5.4.")
+        return 1
+    print("Server: %s" % netz.url)
+    print("Schluessel: %s...%s (%d Zeichen)"
+          % (netz.schluessel[:12], netz.schluessel[-4:], len(netz.schluessel)))
+    print()
+
+    name = A.name_saeubern(wert("--name", "")) or ("PRUEF" + A.kennung()[:7])
+    wort = wert("--wort", "") or ("P" + A.kennung()[:16])
+    schritte, fehler = [], []
+
+    def schritt(titel, antwort, zusatz=""):
+        ok = bool(antwort)
+        schritte.append(ok)
+        print(("  ok    " if ok else "FEHLER  ") + titel
+              + (("   " + zusatz) if zusatz else "")
+              + ("" if ok else "   " + antwort.fehler))
+        if not ok:
+            fehler.append((titel, antwort.fehler))
+        return ok
+
+    angelegt = netz.anlegen(name, wort)
+    if not schritt("Konto anlegen", angelegt, name):
+        # Ohne Konto hat der Rest keinen Sinn. Der haeufigste Grund
+        # steht dann gleich dabei, statt dass jemand danach sucht.
+        grund = angelegt.fehler
+        print()
+        if "CONFIRM" in grund or "BESTAET" in grund:
+            print("Vermutlich steht die Bestaetigung per Post noch an.")
+            print("Authentication -> Sign In / Providers -> Email:")
+            print("'Confirm email' ausschalten. Siehe docs/KONTO.md, 5.3.")
+        elif "EMAIL" in grund or "ADRESS" in grund or "INVALID" in grund:
+            print("Vermutlich lehnt der Anmeldedienst die Adresse ab.")
+            print("Das Spiel meldet sich als <name>@spieler.dustfront an.")
+            print("Abhilfe: in SERVER eine Domaene eintragen, die er")
+            print("annimmt - siehe docs/KONTO.md, 5.4.")
+        elif "API KEY" in grund or "JWT" in grund or "401" in grund:
+            print("Vermutlich stimmt der Schluessel nicht.")
+            print("Settings -> API Keys, der 'publishable key'.")
+        else:
+            print("Weder Tabellen noch Zeilenschutz sind bis hierhin im")
+            print("Spiel - das ist noch der Anmeldedienst allein.")
+        return 1
+    sitzung = str(angelegt.daten.get("sitzung", ""))
+
+    schritt("Anmelden", netz.anmelden(name, wort))
+    gelesen = netz.profil_lesen(sitzung)
+    schritt("Profil lesen", gelesen,
+            "Fassung %s" % (gelesen.daten.get("fassung") if gelesen else "-"))
+    if gelesen:
+        profil = dict(gelesen.daten)
+        profil["werte"] = {"selbsttest": 1}
+        geschrieben = netz.profil_schreiben(sitzung, profil)
+        schritt("Profil schreiben", geschrieben,
+                "Fassung %s" % (geschrieben.daten.get("fassung")
+                                if geschrieben else "-"))
+
+    partie = "selbsttest-" + A.kennung()
+    runde = [{"partie": partie, "gespielt": int(time.time()),
+              "modus": "pruef", "team": 0, "gewonnen": True,
+              "gastgeber": True, "werte": {"abschuesse": 1}, "waffen": {}}]
+    schritt("Runde buchen", netz.gefechte_senden(sitzung, runde), partie[:20])
+    schritt("Dieselbe Runde noch einmal buchen",
+            netz.gefechte_senden(sitzung, runde))
+    zurueck = netz.gefechte_lesen(sitzung)
+    if schritt("Runden zurueklesen", zurueck):
+        wie_oft = sum(1 for z in zurueck.daten.get("gefechte", [])
+                      if z.get("partie") == partie)
+        doppelt = (wie_oft == 1)
+        schritte.append(doppelt)
+        print(("  ok    " if doppelt else "FEHLER  ")
+              + "Sie steht genau einmal da   %dx" % wie_oft)
+        if not doppelt:
+            fehler.append(("Doppelschutz", "%dx statt 1x" % wie_oft))
+            print()
+            print("Der eindeutige Index auf (partie, konto) fehlt. Ohne ihn")
+            print("zaehlt jeder Wiederholungsversuch noch einmal. Das SQL")
+            print("aus docs/KONTO.md 5.2 noch einmal ausfuehren.")
+
+    print()
+    if fehler:
+        print("FEHLER: %d von %d Schritten" % (len(fehler), len(schritte)))
+        return 1
+    print("Alle %d Schritte in Ordnung. Der Server traegt." % len(schritte))
+    print("Das Wegwerfkonto %s bleibt stehen." % name)
+    return 0
 
 
 def pfade_text() -> str:

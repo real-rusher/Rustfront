@@ -25,9 +25,9 @@ nie durcheinanderbringt. Supabase erfuellt das aus vier Gruenden:
     kein `pip install` - `urllib.request` aus der Standardbibliothek
     reicht, genau wie schon bei der Portfreigabe in `upnp.py`. Wer das
     Spiel herunterlaedt, hat damit alles, was er braucht.
-2. **Der oeffentliche Schluessel darf oeffentlich sein.** Der "anon key"
-    ist dafuer gemacht, im Klienten zu stehen. Er darf also mit im
-    Quelltext liegen, und deshalb geht die Anmeldung auf einem neuen
+2. **Der oeffentliche Schluessel darf oeffentlich sein.** Der
+    *publishable key* ist dafuer gemacht, im Klienten zu stehen. Er
+    darf also mit im Quelltext liegen, und deshalb geht die Anmeldung auf einem neuen
     Rechner sofort, ohne dass irgendwer irgendwo etwas eintragen muss.
     Genau das war die Bedingung.
 3. **Kennwoerter fasst das Spiel nie an.** Sie gehen einmal ueber TLS
@@ -79,14 +79,23 @@ from . import pfade
 # ══════════════════════════════════════════════════ Zugang zum Server
 #
 # Hier hinein kommen die beiden Werte aus der Supabase-Projektseite. Beide
-# duerfen oeffentlich sein - der anon key ist dafuer gedacht. Solange
+# duerfen oeffentlich sein - der publishable key ist dafuer gedacht.
+# Der *secret key* gehoert hier NICHT hinein: er haengt den Zeilenschutz
+# aus, und damit waere die ganze Absicherung unten hinfaellig. Solange
 # `url` leer ist, benutzt das Spiel die lokale Ablage und sagt das auch.
 #
 # Steht eine Datei `server.json` im Benutzerordner, gilt die davor. So
 # kann man ein eigenes Projekt benutzen, ohne den Quelltext zu aendern.
 SERVER = {
     "url": "",            # z.B. "https://abcdefghijkl.supabase.co"
-    "schluessel": "",     # der oeffentliche anon key
+    "schluessel": "",     # der oeffentliche Schluessel (sb_publishable_...)
+    # Die Domaene, hinter der die Spielernamen als Adresse laufen. Sie
+    # existiert nicht und soll nicht existieren - siehe `_postfach`.
+    # Sie steht hier und nicht im Code, weil der Anmeldedienst eine
+    # erfundene Endung ablehnen kann; dann ist es eine Zeile statt einer
+    # Suche. Wird sie geaendert, nachdem sich Leute angemeldet haben,
+    # sind das andere Konten - also vorher entscheiden.
+    "postfach": "spieler.dustfront",
 }
 
 SERVER_DATEI = "server.json"
@@ -111,7 +120,7 @@ def server_lesen() -> dict:
         try:
             roh = json.loads(pfad.read_text(encoding="utf-8"))
             if isinstance(roh, dict):
-                for k in ("url", "schluessel"):
+                for k in ("url", "schluessel", "postfach"):
                     if isinstance(roh.get(k), str) and roh[k].strip():
                         werte[k] = roh[k].strip()
         except (OSError, ValueError):
@@ -426,10 +435,13 @@ class NetzAblage:
 
     art = "netz"
 
-    def __init__(self, url: str = "", schluessel: str = "") -> None:
+    def __init__(self, url: str = "", schluessel: str = "",
+                 postfach: str = "") -> None:
         werte = server_lesen()
         self.url = (url or werte["url"]).rstrip("/")
         self.schluessel = schluessel or werte["schluessel"]
+        self.domaene = (postfach or werte.get("postfach")
+                        or SERVER["postfach"]).lstrip("@")
 
     @property
     def eingerichtet(self) -> bool:
@@ -476,16 +488,19 @@ class NetzAblage:
             return schlecht("ANTWORT NICHT LESBAR")
 
     # ---- Konten -------------------------------------------------------
-    @staticmethod
-    def _postfach(name: str) -> str:
+    def _postfach(self, name: str) -> str:
         """Supabase will eine Adresse, das Spiel will einen Namen.
 
         Angemeldet wird darum mit `<name>@spieler.dustfront`, einer
         Domaene, die es nicht gibt und nie geben wird. Eine echte
         Adresse wird nicht abgefragt: sie waere fuer ein Schulprojekt
         eine Menge personenbezogener Daten, die niemand braucht.
+
+        Welche Domaene es ist, steht in `SERVER["postfach"]` und nicht
+        hier - ein Anmeldedienst, der eine erfundene Endung ablehnt,
+        soll eine Zeile kosten und keine Suche.
         """
-        return "%s@spieler.dustfront" % name.lower()
+        return "%s@%s" % (name.lower(), self.domaene)
 
     def anlegen(self, name: str, wort: str) -> Antwort:
         name = name_saeubern(name)
