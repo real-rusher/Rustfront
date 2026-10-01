@@ -538,5 +538,76 @@ vorbelegt wird.
 | `kontoseite_vorlage.html` | Ihre Vorlage. **Hier wird geaendert**, nicht in KONTO.html |
 | `werkzeug_kontoseite.py` | Erzeugt die eine aus der anderen |
 | `--konto server` | Die Abnahme eines frisch aufgesetzten Projekts (5.5) |
+| `dustfront/zertifikate.pem` | Mitgelieferte Wurzelzertifikate (9) |
+| `<Benutzerordner>/zertifikate.pem` | Die Wurzel des eigenen Netzes, falls es HTTPS mitliest (9) |
 
 Wo der Benutzerordner liegt, sagt `python -m dustfront --konto liste`.
+
+---
+
+## 9. Wenn die Anmeldung ZERTIFIKAT sagt
+
+Gemeldet aus dem Netz einer Klinik: das Spiel meldete beim Anmelden
+`SERVER NICHT ERREICHBAR [SSL: CERTIFICATE_VERIFY_FAILED ...]`, Firefox
+oeffnete dieselbe Adresse ohne Murren. Seit 0.28 heisst die Meldung
+`ZERTIFIKAT UNBEKANNT [KONTO.MD 9]` - und hier steht, was dahinter steckt.
+
+**Die Pruefung wird nie abgeschaltet.** Ohne sie koennte sich jeder im
+selben Netz als Server ausgeben und Kennwoerter mitlesen. Stattdessen
+bekommt das Spiel die Wurzel, die ihm fehlt. Drei Ursachen gibt es:
+
+| Ursache | Was das Spiel dagegen tut |
+|---|---|
+| **Windows hat die Wurzel noch nicht.** Windows laedt Wurzelzertifikate erst nach, wenn ein Programm sie ueber Windows anfragt. Python sieht nur, was schon da ist. | Die Wurzeln der ueblichen Stellen (Google Trust Services, Let's Encrypt, GlobalSign, DigiCert, Amazon, Sectigo) liegen bei: `dustfront/zertifikate.pem`. Seit 0.28, nichts zu tun. |
+| **Python ab 3.13 prueft streng** (RFC 5280) und lehnt viele Zertifikate ab, die Firmen- und Kliniknetze selbst ausstellen - auch wenn Windows ihnen vertraut. | Die Strenge ist zurueckgenommen. Die Kette wird weiter ganz geprueft, nur Formfehler in den Erweiterungen fuehren nicht mehr zur Ablehnung - wie im Browser. Seit 0.28, nichts zu tun. |
+| **Das Netz liest HTTPS mit.** Eine Firewall unterschreibt jede Verbindung mit einem eigenen Zertifikat neu. Ihre Wurzel kennt der Browser (die Verwaltung hat sie dort eingetragen), Python nicht. | Liegt `zertifikate.pem` im Benutzerordner, wird sie zusaetzlich geladen. Die Datei muss man selbst holen, siehe unten. |
+
+**Welche es ist, sagt der Selbsttest:**
+
+```
+python -m dustfront --konto server
+```
+
+Scheitert er am Zertifikat, schreibt er dazu, **wer** das Zertifikat
+ausgestellt hat, das ankommt. Steht da Google Trust Services oder Let's
+Encrypt, ist es eine der ersten beiden Ursachen. Steht da der Name einer
+Firewall (Fortinet, Sophos, Palo Alto, Zscaler, Cisco ...) oder des
+Hauses, liest das Netz mit.
+
+### Die Wurzel des Netzes aus Firefox holen
+
+1. In Firefox die Adresse des Servers oeffnen (die `url` aus `SERVER` in
+   `ablage.py` oder aus `server.json`, also `https://<projekt>.supabase.co`).
+   Was die Seite anzeigt, ist egal - es geht nur um die Verbindung.
+2. Links in der Adressleiste auf das **Schloss** klicken, dann
+   **Verbindung sicher**, dann **Weitere Informationen**, dann
+   **Zertifikat anzeigen**.
+3. Oben stehen Reiter, einer je Zertifikat der Kette. Der **rechte** ist
+   die Wurzel. Ihn waehlen, nach unten zu **Verschiedenes** und bei
+   **Herunterladen** auf **PEM (Zertifikat)** klicken.
+4. Die Datei in **`zertifikate.pem`** umbenennen und in den Benutzerordner
+   legen - unter Windows `%APPDATA%\Dustfront` (so in die Adresszeile des
+   Explorers tippen). Wo er genau liegt, sagt
+   `python -m dustfront --konto liste`.
+5. Das Spiel neu starten.
+
+Mehrere Wurzeln duerfen in derselben Datei stehen, einfach hintereinander.
+Eine kaputte Datei haelt das Spiel nicht auf; sie wird uebergangen.
+
+**Nur die Wurzel des eigenen Netzes nehmen**, und nie eine Datei, die
+einem jemand schickt. Wer eine Wurzel in diese Datei bekommt, kann alles
+mitlesen, was das Spiel mit dem Server redet.
+
+Geht es gar nicht, bleibt **OHNE KONTO SPIELEN**: alles laeuft, gezaehlt
+wird auf diesem Rechner (6). Oder ein anderes Netz, etwa der Hotspot
+eines Telefons.
+
+### Die mitgelieferten Wurzeln erneuern
+
+`dustfront/zertifikate.pem` ist ein Auszug aus der Liste von Mozilla,
+ueber das Python-Paket `certifi`. Wurzeln laufen nach zehn bis
+fuenfundzwanzig Jahren ab; wer sie erneuern will, nimmt aus
+`certifi.where()` dieselben Eintraege (die Namen stehen in der Datei als
+`# Label:`) und ersetzt die Datei. Die eigenen des Systems und die im
+Benutzerordner gelten weiter daneben.
+

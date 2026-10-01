@@ -273,7 +273,7 @@ class FalscherServer:
         self.aussetzen = 0          # so viele Antworten fallen noch aus
         self.anfragen = []
 
-    def __call__(self, anfrage, timeout=None):
+    def __call__(self, anfrage, timeout=None, context=None):
         import io
         import urllib.error
         weg = anfrage.full_url
@@ -803,6 +803,105 @@ pruef("Beide Journale sind abgeglichen",
 w.verlassen(); g.verlassen()
 app_w.konto.schliessen(); app_g.konto.schliessen()
 pygame.quit()
+
+# ══════════════════════════════════════════════════ Zertifikate
+# Gemeldet aus einem Kliniknetz: CERTIFICATE_VERIFY_FAILED beim Anmelden,
+# waehrend Firefox dieselbe Adresse oeffnete. Nachgestellt mit einem
+# eigenen HTTPS-Server, dessen Zertifikat von einer eigenen Wurzel
+# unterschrieben ist - genau wie bei einer Firewall, die mitliest.
+print("\n-- Zertifikate --")
+import ssl as _ssl
+import subprocess as _sp
+import threading as _th
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from dustfront.font import Schrift as _Schrift
+
+pruef("Runde Klammern werden eckig - die Schrift hat keine runden",
+      _Schrift.vorbereiten("(SSL)") == "[SSL]")
+k_tls = ablage.tls_kontext(neu=True)
+pruef("Die strenge Pruefung von Python 3.13 ist zurueckgenommen",
+      not (k_tls.verify_flags & getattr(_ssl, "VERIFY_X509_STRICT", 0)))
+pruef("Geprueft wird trotzdem, und zwar mit Namen",
+      k_tls.verify_mode == _ssl.CERT_REQUIRED and k_tls.check_hostname)
+pruef("Die mitgelieferten Wurzeln werden geladen",
+      any(p.name == "zertifikate.pem" and p.parent.name == "dustfront"
+          for p in ablage.zertifikat_dateien()))
+mitgeliefert = _ssl.create_default_context(
+    cafile=str(Path(ablage.__file__).with_name("zertifikate.pem")))
+pruef("Und es sind die erwarteten", mitgeliefert.cert_store_stats()["x509_ca"] >= 15,
+      str(mitgeliefert.cert_store_stats()))
+
+zert = frischer_ordner("zertifikate")
+def openssl(*argumente):
+    return _sp.run(["openssl", *argumente], cwd=zert, capture_output=True).returncode == 0
+hat_openssl = shutil.which("openssl") is not None and openssl(
+    "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2",
+    "-keyout", "wurzel.key", "-out", "wurzel.pem",
+    "-subj", "/O=Testnetz/CN=DUSTFRONT TESTNETZ WURZEL",
+    "-addext", "basicConstraints=critical,CA:TRUE",
+    "-addext", "keyUsage=critical,keyCertSign,cRLSign")
+if hat_openssl:
+    (zert / "san.ext").write_text("subjectAltName=IP:127.0.0.1\n")
+    hat_openssl = (openssl("req", "-newkey", "rsa:2048", "-nodes", "-keyout", "server.key",
+                           "-out", "server.csr", "-subj", "/CN=127.0.0.1")
+                   and openssl("x509", "-req", "-in", "server.csr", "-CA", "wurzel.pem",
+                               "-CAkey", "wurzel.key", "-CAcreateserial", "-days", "2",
+                               "-extfile", "san.ext", "-out", "server.pem"))
+if not hat_openssl:
+    print("  --  openssl fehlt - der Teil mit dem eigenen Server wird uebersprungen")
+else:
+    class _Antwort(BaseHTTPRequestHandler):
+        def do_GET(self):
+            roh = b'[{"name":"","fassung":0,"werte":{},"loadouts":[]}]'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(roh)))
+            self.end_headers()
+            self.wfile.write(roh)
+        def log_message(self, *a):
+            pass
+    https = ThreadingHTTPServer(("127.0.0.1", 0), _Antwort)
+    sk = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
+    sk.load_cert_chain(str(zert / "server.pem"), str(zert / "server.key"))
+    https.socket = sk.wrap_socket(https.socket, server_side=True)
+    _th.Thread(target=https.serve_forever, daemon=True).start()
+    adresse = "https://127.0.0.1:%d" % https.server_address[1]
+    fremd = ablage.NetzAblage(url=adresse, schluessel="test")
+
+    a = fremd.profil_lesen("marke")
+    pruef("Eine unbekannte Wurzel wird abgelehnt - nicht stillschweigend angenommen",
+          not a and a.fehler.startswith("ZERTIFIKAT UNBEKANNT"), a.fehler)
+    pruef("Die Meldung passt in die Anzeige und sagt, wo es weitergeht",
+          len(a.fehler) <= 40 and "KONTO.MD 9" in a.fehler, "%d Zeichen" % len(a.fehler))
+    aussteller = ablage.zertifikat_aussteller(adresse)
+    pruef("Der Selbsttest kann sagen, wer das Zertifikat ausgestellt hat",
+          "DUSTFRONT TESTNETZ WURZEL" in aussteller, aussteller)
+
+    # Die Wurzel des Netzes in den Benutzerordner - und es geht.
+    eigene = zert / "benutzer"
+    eigene.mkdir()
+    shutil.copy(zert / "wurzel.pem", eigene / ablage.ZERTIFIKAT_DATEI)
+    alt_datei = ablage.pfade.datei
+    ablage.pfade.datei = lambda name: eigene / name
+    try:
+        ablage.tls_kontext(neu=True)
+        b = fremd.profil_lesen("marke")
+        pruef("Mit zertifikate.pem im Benutzerordner geht die Verbindung",
+              bool(b), b.fehler)
+        # Und nur fuer den Namen, fuer den das Zertifikat ausgestellt ist.
+        anders = ablage.NetzAblage(url=adresse.replace("127.0.0.1", "localhost"),
+                                   schluessel="test")
+        c = anders.profil_lesen("marke")
+        pruef("Der Name wird trotzdem geprueft", not c and "ZERTIFIKAT" in c.fehler,
+              c.fehler)
+        (eigene / ablage.ZERTIFIKAT_DATEI).write_text("kaputt")
+        ablage.tls_kontext(neu=True)
+        pruef("Eine kaputte zertifikate.pem haelt nichts auf",
+              not fremd.profil_lesen("marke"))
+    finally:
+        ablage.pfade.datei = alt_datei
+        ablage.tls_kontext(neu=True)
+        https.shutdown()
 
 shutil.rmtree(arbeitsordner, ignore_errors=True)
 print()

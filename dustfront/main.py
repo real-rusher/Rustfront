@@ -302,6 +302,21 @@ def konto_server_pruefen(A, wert) -> int:
             print("Die Bestaetigung per Post steht noch an.")
             print("Authentication -> Sign In / Providers -> Email:")
             print("'Confirm email' ausschalten. Siehe docs/KONTO.md, 5.3.")
+        elif "ZERTIFIKAT" in grund:
+            # Vor dem Schluessel: hier kam die Anfrage gar nicht erst an.
+            aussteller = A.zertifikat_aussteller(netz.url)
+            print("Die Verbindung kommt zustande, aber das Zertifikat des")
+            print("Servers laesst sich nicht pruefen - es fehlt eine Wurzel,")
+            print("der dieser Rechner vertraut.")
+            if aussteller:
+                print("Ausgestellt von: %s" % aussteller)
+                print("Steht da nicht Google Trust Services, Let's Encrypt oder")
+                print("eine andere bekannte Stelle, liest das Netz HTTPS mit")
+                print("(Firewall einer Firma, Schule, Klinik).")
+            print("Abhilfe: die Wurzel dieses Netzes als zertifikate.pem in")
+            print("den Benutzerordner legen:")
+            print("  %s" % (A.pfade.datei(A.ZERTIFIKAT_DATEI) or "?"))
+            print("Wie, steht in docs/KONTO.md, Abschnitt 9.")
         elif "API KEY" in grund or "JWT" in grund or "401" in grund:
             print("Der Schluessel stimmt nicht.")
             print("Settings -> API Keys, der 'publishable key'.")

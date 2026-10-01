@@ -69,6 +69,7 @@ import hmac
 import json
 import os
 import secrets
+import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -99,6 +100,8 @@ SERVER = {
 }
 
 SERVER_DATEI = "server.json"
+# Eigene Wurzelzertifikate, falls das Netz HTTPS mitliest (siehe tls_kontext).
+ZERTIFIKAT_DATEI = "zertifikate.pem"
 KONTEN_DATEI = "konten.json"
 PROFIL_DATEI = "profil.json"
 JOURNAL_DATEI = "journal.json"
@@ -127,6 +130,126 @@ def server_lesen() -> dict:
             pass
     werte["url"] = werte["url"].rstrip("/")
     return werte
+
+
+# ══════════════════════════════════════════════════ Verschluesselung
+#
+# Mit dem Server wird nur ueber HTTPS geredet, und das Zertifikat wird
+# **immer** geprueft. Ohne Pruefung koennte jeder im selben Netz sich als
+# Server ausgeben und Kennwoerter mitlesen - abschalten ist darum keine
+# Abhilfe, nie.
+#
+# Gemeldet war: im Netz einer Klinik scheiterte die Anmeldung mit
+# CERTIFICATE_VERIFY_FAILED, waehrend Firefox dieselbe Adresse oeffnete.
+# Drei Ursachen kommen dafuer in Frage, und gegen alle drei hilft etwas:
+#
+# 1. Windows hat die noetige Wurzel noch gar nicht. Windows laedt
+#    Wurzelzertifikate erst nach, wenn ein Programm sie ueber Windows
+#    selbst anfragt; Python sieht nur, was schon da ist. Abhilfe: die
+#    Wurzeln der ueblichen Anbieter liegen dem Spiel bei
+#    (dustfront/zertifikate.pem) - zusaetzlich zu denen des Systems.
+# 2. Python ab 3.13 prueft streng nach RFC 5280 (VERIFY_X509_STRICT) und
+#    lehnt damit viele Zertifikate ab, die Firmen- und Kliniknetze selbst
+#    ausstellen - auch wenn Windows ihnen vertraut. Abhilfe: die Strenge
+#    wird zurueckgenommen. Die Kette wird trotzdem vollstaendig geprueft,
+#    bis zu einer Wurzel, der vertraut wird; nur Formfehler in den
+#    Erweiterungen fuehren nicht mehr zur Ablehnung. So halten es auch
+#    die Browser.
+# 3. Das Netz liest HTTPS mit (eine Firewall, die jede Verbindung mit
+#    eigenem Zertifikat neu unterschreibt), und dessen Wurzel kennt nur
+#    der Browser. Abhilfe: liegt `zertifikate.pem` im Benutzerordner, wird
+#    sie zusaetzlich geladen. Wie man sie aus Firefox bekommt, steht in
+#    docs/KONTO.md, Abschnitt 9.
+
+_tls = None
+
+
+def tls_kontext(neu: bool = False) -> ssl.SSLContext:
+    """Der eine Kontext fuer alle HTTPS-Aufrufe. Einmal gebaut, gemerkt."""
+    global _tls
+    if _tls is not None and not neu:
+        return _tls
+    k = ssl.create_default_context()                  # die des Systems
+    k.verify_flags &= ~getattr(ssl, "VERIFY_X509_STRICT", 0)
+    for pfad in zertifikat_dateien():
+        try:
+            k.load_verify_locations(cafile=str(pfad))
+        except (OSError, ssl.SSLError, ValueError):
+            pass            # eine kaputte Datei darf das Spiel nicht aufhalten
+    _tls = k
+    return k
+
+
+def zertifikat_dateien() -> list:
+    """Was zusaetzlich zu den Wurzeln des Systems geladen wird."""
+    from pathlib import Path
+    aus = [Path(__file__).with_name(ZERTIFIKAT_DATEI)]
+    eigene = pfade.datei(ZERTIFIKAT_DATEI)
+    if eigene is not None:
+        aus.append(eigene)
+    return [p for p in aus if p.is_file()]
+
+
+def tls_fehler(fehler) -> str:
+    """Eine Zertifikatspruefung, die scheitert, in Worten, die passen.
+
+    Die Meldung von OpenSSL ist zu lang fuer die Anzeige und sagt nicht,
+    was zu tun ist. Kurz: was los ist, und wo es weitergeht. Leer, wenn es
+    kein Zertifikatsfehler ist.
+    """
+    grund = getattr(fehler, "reason", fehler)
+    if not isinstance(grund, ssl.SSLCertVerificationError):
+        return ""
+    code = getattr(grund, "verify_code", 0)
+    if code in (2, 18, 19, 20, 21):
+        was = "UNBEKANNT"
+    elif code == 10:
+        was = "ABGELAUFEN"
+    elif code == 62:
+        was = "FALSCHER NAME"
+    else:
+        was = "UNGUELTIG"
+    return "ZERTIFIKAT %s [KONTO.MD 9]" % was
+
+
+def zertifikat_aussteller(url: str) -> str:
+    """Wer das Zertifikat ausgestellt hat, das unter `url` ankommt.
+
+    Nur fuer die Fehlersuche im Selbsttest: steht hier nicht Google, Let's
+    Encrypt oder eine andere bekannte Stelle, sondern der Name einer
+    Firewall oder eines Netzes, dann liest das Netz HTTPS mit (Ursache 3
+    oben). Dafuer wird die Verbindung **ohne** Pruefung aufgebaut, das
+    Zertifikat gelesen und sofort wieder getrennt - es geht nichts hinaus,
+    kein Schluessel, kein Kennwort, keine Anfrage.
+    """
+    import socket
+    import tempfile
+    try:
+        teile = urllib.parse.urlsplit(url)
+        wirt, port = teile.hostname, teile.port or 443
+        if not wirt:
+            return ""
+        k = ssl.create_default_context()
+        k.check_hostname = False
+        k.verify_mode = ssl.CERT_NONE
+        with socket.create_connection((wirt, port), timeout=WARTEZEIT) as roh:
+            with k.wrap_socket(roh, server_hostname=wirt) as s:
+                der = s.getpeercert(binary_form=True)
+        if not der:
+            return ""
+        # Lesen kann Python ein Zertifikat nur aus einer Datei.
+        with tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False) as d:
+            d.write(ssl.DER_cert_to_PEM_cert(der))
+            name = d.name
+        try:
+            info = ssl._ssl._test_decode_cert(name)
+        finally:
+            os.unlink(name)
+        felder = dict(x[0] for x in info.get("issuer", ()) if x)
+        return " / ".join(v for v in (felder.get("organizationName"),
+                                      felder.get("commonName")) if v)
+    except Exception:          # Fehlersuche darf selbst nicht scheitern
+        return ""
 
 
 # ══════════════════════════════════════════════════ Antwort
@@ -474,7 +597,8 @@ class NetzAblage:
         for k, v in (kopf or {}).items():
             anfrage.add_header(k, v)
         try:
-            with urllib.request.urlopen(anfrage, timeout=WARTEZEIT) as antwort:
+            with urllib.request.urlopen(anfrage, timeout=WARTEZEIT,
+                                        context=tls_kontext()) as antwort:
                 roh = antwort.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as fehler:
             try:
@@ -486,6 +610,9 @@ class NetzAblage:
                 grund = "FEHLER %d" % fehler.code
             return schlecht(str(grund)[:120].upper())
         except (urllib.error.URLError, OSError, ValueError) as fehler:
+            zertifikat = tls_fehler(fehler)
+            if zertifikat:
+                return schlecht(zertifikat)
             return schlecht("SERVER NICHT ERREICHBAR (%s)"
                             % str(getattr(fehler, "reason", fehler))[:60])
         if not roh.strip():

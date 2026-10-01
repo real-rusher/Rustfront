@@ -75,7 +75,10 @@ _G = {
     "\u00d6": "01010/00000/01110/10001/10001/10001/01110",
     "\u00dc": "01010/00000/10001/10001/10001/10001/01110",
 }
-_TRANS = {"\u00e4": "\u00c4", "\u00f6": "\u00d6", "\u00fc": "\u00dc", "\u00df": "SS"}
+# Runde Klammern hat die Schrift nicht - eckige schon. Ohne diese Zeile
+# stand in jeder Fehlermeldung mit Klammer ein Fragezeichen.
+_TRANS = {"\u00e4": "\u00c4", "\u00f6": "\u00d6", "\u00fc": "\u00dc", "\u00df": "SS",
+          "(": "[", ")": "]"}
 
 
 class Schrift:
