@@ -232,17 +232,52 @@ class Journal:
             self.speichern()
         return anzahl
 
-    def summe(self) -> dict:
+    @staticmethod
+    def abgebrochen(eintrag: dict) -> bool:
+        """Endete diese Runde vor ihrer Zeit? (seit 0.31)
+
+        Steht in "ende"; aeltere Zeilen haben das Feld nicht und sind
+        regulaer - abgebrochene wurden vor 0.31 gar nicht gebucht. Eine
+        Zeile, die ohne die Spalte hochging (alter Server, siehe
+        NetzAblage.gefechte_senden), traegt es noch in den Werten.
+        """
+        if str(eintrag.get("ende") or "") == "abgebrochen":
+            return True
+        werte = eintrag.get("werte") or {}
+        try:
+            return float(werte.get("abgebrochen", 0) or 0) > 0
+        except (TypeError, ValueError, AttributeError):
+            return False
+
+    def summe(self, version: str = "", abgebrochene: bool = False) -> dict:
         """Alle Runden im Journal zu einer Uebersicht zusammengerechnet.
 
         Gerechnet wird lokal und nicht auf dem Server. Damit stimmt die
         Anzeige auch ohne Netz, und sie stimmt sofort - man schiesst
         jemanden ab und sieht es, ohne auf eine Antwort zu warten.
+
+        Abgebrochene Runden zaehlen nicht mit (`abgebrochene=True` nimmt
+        sie dazu). Sonst stimmt "Abschuesse je Runde" nicht mehr: eine
+        Runde, die nach einer Minute endete, hat wenige Abschuesse und
+        zaehlt dabei nicht als Runde. Nur wie viele es waren, steht
+        immer da ("abgebrochen").
+
+        `version`: nur die Runden dieser Fassung des Spiels. Nach einer
+        Aenderung am Gleichgewicht - Zombies mit weniger Leben - sind die
+        Zahlen davor und danach nicht dieselben, und so lassen sie sich
+        auseinanderhalten.
         """
         art = {s: a for s, _t, a in K.WERTE}
         summe = {s: 0 for s in art}
         waffen: dict[str, dict] = {}
+        abbrueche = 0
         for e in self.eintraege:
+            if version and str(e.get("version") or "") != version:
+                continue
+            if self.abgebrochen(e):
+                abbrueche += 1
+                if not abgebrochene:
+                    continue
             werte = e.get("werte") or {}
             for s, a in art.items():
                 try:
@@ -264,11 +299,22 @@ class Journal:
                         pass
         # Ganze Zahlen bleiben ganze Zahlen. 17.0 Abschuesse sieht falsch
         # aus, auch wenn es richtig ist.
+        summe["abgebrochen"] = abbrueche
         for s, wert in summe.items():
             if float(wert).is_integer():
                 summe[s] = int(wert)
         summe["waffen"] = waffen
         return summe
+
+    def versionen(self) -> list[str]:
+        """Mit welchen Fassungen des Spiels gespielt wurde, die neueste vorn."""
+        def schluessel(v: str):
+            try:
+                return tuple(int(t) for t in v.split("."))
+            except ValueError:
+                return (-1,)
+        alle = {str(e.get("version") or "") for e in self.eintraege}
+        return sorted((v for v in alle if v), key=schluessel, reverse=True)
 
 
 # ══════════════════════════════════════════════════ Der Faden fuer das Netz
@@ -756,6 +802,38 @@ class Konto:
         anzahl = self.journal.abhaken(antwort.daten.get("genommen") or [])
         if anzahl:
             self.hinweis = "%d RUNDEN ABGEGLICHEN" % anzahl
+
+    def hochladen_vor_ende(self) -> bool:
+        """Beim Beenden: was offen ist, jetzt noch hoch. True, wenn es ging.
+
+        Ohne Faden und ohne auf den Takt zu warten - das Fenster geht
+        gleich zu, und eine gerade abgebrochene Runde soll nicht bis zum
+        naechsten Start im Journal liegen. Klappt es nicht, ist nichts
+        verloren: das Journal steht auf der Platte, und beim naechsten
+        Start geht es hoch wie immer.
+
+        Kurz gehalten (ablage.WARTEZEIT gilt je Anfrage, und es ist genau
+        eine): ein Spiel, das sich beim Schliessen eine halbe Minute
+        Zeit laesst, schliesst man das naechste Mal ueber den Taskmanager.
+        """
+        if not self.angemeldet or not self.mit_server:
+            return False
+        offen = self.journal.offen()
+        if not offen:
+            return True
+        paket = []
+        for e in offen:
+            zeile = {k: v for k, v in e.items() if k != "abgeglichen"}
+            zeile["konto"] = self.kennung
+            paket.append(zeile)
+        try:
+            antwort = self.ablage.gefechte_senden(self.sitzung, paket)
+        except Exception:                          # noqa: BLE001
+            return False
+        if not antwort:
+            return False
+        self.journal.abhaken(antwort.daten.get("genommen") or [])
+        return True
 
     def schliessen(self) -> None:
         self.sitzung_speichern()

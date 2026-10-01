@@ -111,7 +111,17 @@ JOURNAL_DATEI = "journal.json"
 # eine halbe Minute vor einem haengenden Fenster sitzen.
 WARTEZEIT = 8.0
 
+# Die Spalten, die die Tabelle `gefecht` mit 0.31 bekommen hat (KONTO.md
+# 5.7): mit welcher Fassung gespielt wurde, ob die Runde regulaer endete,
+# und wen man wie oft erledigt hat.
+SPALTEN_031 = ("version", "ende", "opfer")
+
 NAMENSLAENGE = 24
+# Namen, die kein Spieler bekommt. "admin" meldet auf der Kontoseite den
+# ADMIN an (KONTO.md 5.8) - ein Spieler gleichen Namens waere dort nicht
+# zu erreichen und stuende in jeder Liste neben ihm. Der Server lehnt ihn
+# ebenfalls ab; hier steht es nur, damit es sofort und verstaendlich kommt.
+VORBEHALTEN = ("admin",)
 WORTLAENGE = 72           # bcrypt schneidet darueber ohnehin ab
 
 
@@ -337,6 +347,8 @@ def name_pruefen(name: str) -> str:
         return "NAME ZU LANG"
     if not name[0].isalnum():
         return "NAME MUSS MIT BUCHSTABE ODER ZIFFER BEGINNEN"
+    if name.lower() in VORBEHALTEN:
+        return "NAME VORBEHALTEN"
     return ""
 
 
@@ -601,6 +613,9 @@ class NetzAblage:
 
     def __init__(self, url: str = "", schluessel: str = "",
                  postfach: str = "") -> None:
+        # True, sobald der Server die Spalten von 0.31 nicht kannte
+        # (KONTO.md 5.7). Der Selbsttest sagt es dann.
+        self.alte_tabelle = False
         werte = server_lesen()
         self.url = (url or werte["url"]).rstrip("/")
         self.schluessel = schluessel or werte["schluessel"]
@@ -797,13 +812,49 @@ class NetzAblage:
         """
         if not eintraege:
             return gut({"genommen": []})
+        paket = [self._zeile(e) for e in eintraege if isinstance(e, dict)]
         antwort = self._rufen(
-            "/rest/v1/gefecht", list(eintraege), token=sitzung,
+            "/rest/v1/gefecht", paket, token=sitzung,
             kopf={"Prefer": "resolution=ignore-duplicates,return=minimal"})
+        if not antwort and self._spalte_fehlt(antwort.fehler):
+            # Der Server kennt die Spalten von 0.31 noch nicht (KONTO.md
+            # 5.7 ist nicht gelaufen). Dann ohne sie - eine Runde ohne
+            # Version ist besser als eine, die im Journal festhaengt und
+            # alle danach mit aufhaelt. Ob sie abgebrochen war, steht
+            # trotzdem drin: in den Werten ("abgebrochen": 1).
+            self.alte_tabelle = True
+            paket = [{k: v for k, v in z.items() if k not in SPALTEN_031}
+                     for z in paket]
+            antwort = self._rufen(
+                "/rest/v1/gefecht", paket, token=sitzung,
+                kopf={"Prefer": "resolution=ignore-duplicates,return=minimal"})
         if not antwort:
             return antwort
         return gut({"genommen": [str(e.get("partie")) for e in eintraege
                                  if isinstance(e, dict) and e.get("partie")]})
+
+    @staticmethod
+    def _zeile(e: dict) -> dict:
+        """Eine Journalzeile so, wie sie in die Tabelle geht.
+
+        PostgREST will in einem Paket ueberall dieselben Spalten; eine
+        alte Zeile aus dem Journal (vor 0.31) hat die neuen nicht. Sie
+        bekommt sie, statt das ganze Paket abzulehnen: die Version leer
+        ("" heisst "unbekannt"), das Ende "regulaer" - vor 0.31 wurden
+        abgebrochene Runden gar nicht gebucht.
+        """
+        zeile = dict(e)
+        zeile.setdefault("version", "")
+        zeile.setdefault("ende", "regulaer")
+        zeile.setdefault("opfer", [])
+        return zeile
+
+    @staticmethod
+    def _spalte_fehlt(fehler: str) -> bool:
+        """Sagt der Server, dass es eine der neuen Spalten nicht gibt?"""
+        text = str(fehler or "").upper()
+        return "COLUMN" in text and any(("'%s'" % s.upper()) in text
+                                        for s in SPALTEN_031)
 
     def gefechte_lesen(self, sitzung: str, hoechstens: int = 200) -> Antwort:
         antwort = self._rufen(

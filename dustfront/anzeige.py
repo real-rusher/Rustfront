@@ -368,17 +368,20 @@ class Anzeige:
             _text(ziel, "MEDKIT", r.x + 6, y, K.C_TEAL)
             _balken(ziel, (r.x + 46, y + 2, r.width - 52, 3), fertig, K.C_TEAL)
             return
-        # Dash: zwei Ladungen, die naechste fuellt sich sichtbar.
+        # Dash: die Ladungen, die naechste fuellt sich sichtbar. Die
+        # Breite teilt sich der Platz bis zu den Medkits (x + 74).
         _text(ziel, "DASH", r.x + 6, y, K.C_MUTED)
         voll = K.DASH["ladungen"]
+        schritt = max(6, min(14, 40 // max(1, voll)))
+        breit = schritt - 2
         for i in range(voll):
-            x = r.x + 32 + i * 14
-            pygame.draw.rect(ziel, (26, 19, 14), (x, y + 1, 12, 4))
+            x = r.x + 32 + i * schritt
+            pygame.draw.rect(ziel, (26, 19, 14), (x, y + 1, breit, 4))
             if i < ich.dash_ladungen:
-                pygame.draw.rect(ziel, K.C_AMBER, (x, y + 1, 12, 4))
+                pygame.draw.rect(ziel, K.C_AMBER, (x, y + 1, breit, 4))
             elif i == ich.dash_ladungen:
                 pygame.draw.rect(ziel, K.C_MUTED_DK,
-                                 (x, y + 1, int(12 * ich.dash_laden), 4))
+                                 (x, y + 1, int(breit * ich.dash_laden), 4))
         # Medkits nur, wenn es in dieser Runde welche gibt.
         if g.start_medkits <= 0 and not g.medkits_spawnen and ich.medkits <= 0:
             return

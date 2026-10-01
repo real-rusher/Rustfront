@@ -359,7 +359,8 @@ def konto_server_pruefen(A, wert) -> int:
     partie = "selbsttest-" + A.kennung()
     runde = [{"partie": partie, "konto": kennung, "gespielt": int(time.time()),
               "modus": "pruef", "team": 0, "gewonnen": True,
-              "gastgeber": True, "werte": {"abschuesse": 1}, "waffen": {}}]
+              "gastgeber": True, "werte": {"abschuesse": 1}, "waffen": {},
+              "version": K.VERSION, "ende": "regulaer", "opfer": []}]
     gebucht = schritt("Runde buchen", netz.gefechte_senden(sitzung, runde),
                       partie[:20])
     schritt("Dieselbe Runde noch einmal buchen",
@@ -426,6 +427,15 @@ def konto_server_pruefen(A, wert) -> int:
     # alles andere weiter. Darum zaehlt sie nicht als Schritt, der den
     # Test scheitern laesst - aber wer den Server betreut, soll es hier
     # erfahren und nicht erst, wenn ein Spieler fragt.
+    # Die Spalten von 0.31 (Version, Ende, Opfer) ebenso: ohne sie geht
+    # jede Runde trotzdem hoch, nur ohne diese drei (ablage.py).
+    if netz.alte_tabelle:
+        print("  --    Tabelle gefecht ohne die Spalten von 0.31 (version, ende,")
+        print("        opfer) - Runden gehen hoch, aber ohne Version und Opfer.")
+        print("        Nachruesten: docs/KONTO.md, 5.7.")
+    elif gebucht:
+        print("  ok    Tabelle gefecht hat die Spalten von 0.31")
+
     kos = netz.kosmetik_lesen(sitzung)
     if kos:
         print("  ok    Tabelle kosmetik ist da (Spielerkosmetik)")

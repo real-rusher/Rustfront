@@ -195,7 +195,7 @@
 // ══════════════════════════════════════════════════════════════════
 const DATEN =
 {
- "version": "0.30.0",
+ "version": "0.31.0",
  "phase": "PRE-ALPHA",
  "server": {
   "url": "https://kruokzzrcbfktlsnubno.supabase.co",
@@ -206,6 +206,16 @@ const DATEN =
   {
    "schluessel": "abschuesse",
    "name": "ABSCHUESSE",
+   "art": "summe"
+  },
+  {
+   "schluessel": "gegner_abschuesse",
+   "name": "ZOMBIES",
+   "art": "summe"
+  },
+  {
+   "schluessel": "boss_abschuesse",
+   "name": "BOSSE",
    "art": "summe"
   },
   {
@@ -236,6 +246,36 @@ const DATEN =
   {
    "schluessel": "treffer",
    "name": "TREFFER",
+   "art": "summe"
+  },
+  {
+   "schluessel": "treffer_spieler",
+   "name": "TREFFER SPIELER",
+   "art": "summe"
+  },
+  {
+   "schluessel": "treffer_gegner",
+   "name": "TREFFER ZOMBIES",
+   "art": "summe"
+  },
+  {
+   "schluessel": "schuesse_pvp",
+   "name": "SCHUESSE PVP",
+   "art": "summe"
+  },
+  {
+   "schluessel": "treffer_pvp",
+   "name": "TREFFER PVP",
+   "art": "summe"
+  },
+  {
+   "schluessel": "schuesse_pve",
+   "name": "SCHUESSE PVE",
+   "art": "summe"
+  },
+  {
+   "schluessel": "treffer_pve",
+   "name": "TREFFER PVE",
    "art": "summe"
   },
   {
@@ -281,6 +321,11 @@ const DATEN =
   {
    "schluessel": "runden",
    "name": "RUNDEN",
+   "art": "summe"
+  },
+  {
+   "schluessel": "abgebrochen",
+   "name": "ABGEBROCHEN",
    "art": "summe"
   },
   {
@@ -432,6 +477,14 @@ const DATEN =
   "team": "Zwei Mannschaften, Abschuesse zaehlen fuer das Team.",
   "versus": "Ein Leben je Runde. Mitspieler koennen aufhelfen.",
   "huegel": "Haltet den Kreis in der Mitte."
+ },
+ "modus_art": {
+  "pvp": "pvp",
+  "team": "pvp",
+  "versus": "pvp",
+  "huegel": "pvp",
+  "pve": "pve",
+  "pvpve": "pvpve"
  },
  "teams": [
   {
@@ -591,6 +644,9 @@ const DATEN =
   }
  },
  "namenslaenge": 24,
+ "vorbehalten": [
+  "admin"
+ ],
  "wortlaenge": 72,
  "kosmetik": {
   "ton_min": 1.0,
@@ -793,11 +849,39 @@ const Netz = {
                             werte:z.werte||{}, loadouts:z.loadouts||[]}};
   },
 
+  // Alle Runden, nicht nur die neuesten 500: seit die Uebersicht aus den
+  // Runden rechnet, waere jede fehlende eine fehlende Zahl. Seitenweise,
+  // weil Supabase je Anfrage hoechstens 1000 Zeilen schickt.
   async gefechteLesen(marke, hoechstens){
-    const a = await this.rufen("/rest/v1/gefecht?select=*&order=gespielt.desc&limit=" +
-      (hoechstens || 500), {marke});
-    if (!a.ok) return a;
-    return {ok:true, daten: Array.isArray(a.daten) ? a.daten : []};
+    const seite = 1000, alle = [];
+    const grenze = hoechstens || 200000;
+    while (alle.length < grenze){
+      const a = await this.rufen("/rest/v1/gefecht?select=*&order=gespielt.desc,partie.asc" +
+        "&limit=" + seite + "&offset=" + alle.length, {marke});
+      if (!a.ok) return alle.length ? {ok:true, daten:alle, unvollstaendig:true} : a;
+      const z = Array.isArray(a.daten) ? a.daten : [];
+      alle.push(...z);
+      if (z.length < seite) break;
+    }
+    return {ok:true, daten:alle};
+  },
+
+  // ---- ADMIN: Funktionen auf dem Server (docs/KONTO.md 5.8) ----------
+  // Jede bekommt das Kennwort mit und prueft es selbst. Sie werfen nie,
+  // sondern antworten {ok:false, fehler, sekunden} - hier ausgepackt, so
+  // dass es aussieht wie jede andere Antwort dieser Seite.
+  async rpc(name, argumente){
+    const a = await this.rufen("/rest/v1/rpc/" + name, {daten:argumente});
+    if (!a.ok){
+      if (/PGRST202|COULD NOT FIND THE FUNCTION/.test(a.fehler))
+        return {ok:false, fehler:"AUF DEM SERVER FEHLT DAS ADMIN-SQL - SIEHE docs/KONTO.md, ABSCHNITT 5.8"};
+      return a;
+    }
+    const d = a.daten || {};
+    if (d.ok === false)
+      return {ok:false, fehler:String(d.fehler || "FEHLER"), sekunden:Number(d.sekunden) || 0,
+              frei: d.frei === undefined ? null : Number(d.frei)};
+    return {ok:true, daten:d};
   },
 
   // ---- Spielerkosmetik: eine Zeile je Konto (docs/KONTO.md 5.6) ----
@@ -830,6 +914,8 @@ const Netz = {
 const SCHLUESSEL = "dustfront.konto.sitzung";
 const Stand = {
   sitzung:null, profil:null, gefechte:[], seite:"UEBERSICHT", meldung:null,
+  // version: null = alle, "" = vor 0.31, sonst die Fassung.
+  filter:{version:null, art:"", abgebrochene:false},
   // Die Loadouts in Arbeit, bis SPEICHERN. Ohne diesen Entwurf baute
   // jede Auswahl die Seite neu - aus dem gespeicherten Profil -, und die
   // eben gewaehlte Waffe sprang sofort zurueck (gemeldet in 0.29).
@@ -841,13 +927,23 @@ const Stand = {
       if (roh) this.sitzung = JSON.parse(roh);
     }catch(e){ this.sitzung = null; }
   },
+  // Der ADMIN: {wort, muss_aendern, konten, alle, seite}, oder null. Das
+  // Kennwort steht nur hier, im Speicher dieser offenen Seite - nie im
+  // Browser gespeichert. Wer neu laedt, meldet sich neu an.
+  admin:null,
+
   sichern(){
+    // Ein vom ADMIN geoeffnetes Konto ist keine Anmeldung. Gespeichert,
+    // stuende es nach dem Neuladen als angemeldeter Spieler da - ohne
+    // Marke, und ueber der eigenen Sitzung, falls es eine gab.
+    if (this.sitzung && this.sitzung.admin) return;
     try{
       if (this.sitzung) localStorage.setItem(SCHLUESSEL, JSON.stringify(this.sitzung));
       else localStorage.removeItem(SCHLUESSEL);
     }catch(e){ /* privates Fenster: dann eben nur fuer diesen Besuch */ }
   },
   abmelden(){
+    if (this.admin){ return adminZurListe(); }
     this.sitzung = null; this.profil = null; this.gefechte = []; this.entwurf = null;
     this.seite = "UEBERSICHT"; this.sichern();
     // Die Kosmetik gehoert zum Konto: wer sich als jemand anderes
@@ -856,6 +952,107 @@ const Stand = {
     zeichnen();
   },
 };
+
+// ══════════════════════════════════════════════════════════════════
+// Ziel - wohin Profil, Runden und Kosmetik gehen
+//
+// Das eigene Konto, oder - beim ADMIN - das Konto, das er gerade offen
+// hat. Alle Reiter (AUSRUESTUNG, KOSMETIK, die Zahlen) bleiben dieselben;
+// nur dieser eine Ort entscheidet, ueber welchen Weg gelesen und
+// geschrieben wird. So sieht der ADMIN ein Konto genau so, wie sein
+// Spieler es sieht, und es gibt keine zweite Fassung jeder Seite.
+// ══════════════════════════════════════════════════════════════════
+const Ziel = {
+  get admin(){ return !!(Stand.admin && Stand.sitzung && Stand.sitzung.admin); },
+
+  async profilLesen(){
+    if (!this.admin) return Netz.profilLesen(Stand.sitzung.marke);
+    const a = await Admin.rufen("admin_profil", {konto:Stand.sitzung.kennung});
+    return a.ok ? {ok:true, daten:a.daten.profil} : a;
+  },
+  async profilSchreiben(profil){
+    if (!this.admin) return Netz.profilSchreiben(Stand.sitzung.marke, profil);
+    const a = await Admin.rufen("admin_profil_schreiben", {
+      konto:Stand.sitzung.kennung, fassung:Number(profil.fassung) || 0,
+      name:profil.name || "", werte:profil.werte || {}, loadouts:profil.loadouts || []});
+    return a.ok ? {ok:true, daten:a.daten.profil} : a;
+  },
+  async gefechteLesen(){
+    if (!this.admin) return Netz.gefechteLesen(Stand.sitzung.marke);
+    return Admin.gefechte(Stand.sitzung.kennung);
+  },
+  async kosmetikLesen(){
+    if (!this.admin) return mitSitzung((m) => Netz.kosmetikLesen(m));
+    const a = await Admin.rufen("admin_kosmetik", {konto:Stand.sitzung.kennung});
+    return a.ok ? {ok:true, daten:{ton:a.daten.ton || "", bild:a.daten.bild || ""}} : a;
+  },
+  async kosmetikSchreiben(ton, bild){
+    const kennung = Stand.sitzung.kennung;
+    if (this.admin)
+      return Admin.rufen("admin_kosmetik_schreiben", {konto:kennung, ton:ton || "", bild:bild || ""});
+    return (ton || bild)
+      ? mitSitzung((m) => Netz.kosmetikSchreiben(m, kennung, ton, bild))
+      : mitSitzung((m) => Netz.kosmetikLoeschen(m, kennung));
+  },
+};
+
+// ══════════════════════════════════════════════════════════════════
+// Admin - das Konto, das alle anderen sieht (docs/KONTO.md 5.8)
+// ══════════════════════════════════════════════════════════════════
+const Admin = {
+  // Jeder Aufruf mit dem Kennwort. Kommt FALSCH oder GESPERRT zurueck,
+  // hat jemand das Kennwort geaendert oder es wird gerade geraten - dann
+  // ist diese Anmeldung vorbei.
+  async rufen(name, argumente){
+    const a = await Netz.rpc(name, Object.assign({wort:Stand.admin ? Stand.admin.wort : ""},
+                                                  argumente || {}));
+    if (!a.ok && (a.fehler === "FALSCH" || a.fehler === "GESPERRT") && Stand.admin){
+      adminAbmelden(sperrText(a));
+    }
+    return a;
+  },
+
+  // Seitenweise wie Netz.gefechteLesen; ohne Konto die aller Spieler.
+  async gefechte(konto){
+    const seite = 1000, alle = [];
+    while (alle.length < 200000){
+      const a = await this.rufen("admin_gefechte",
+        {konto:konto || null, ab:alle.length, anzahl:seite});
+      if (!a.ok) return alle.length ? {ok:true, daten:alle, unvollstaendig:true} : a;
+      const z = Array.isArray(a.daten.gefechte) ? a.daten.gefechte : [];
+      alle.push(...z);
+      if (z.length < seite) break;
+    }
+    return {ok:true, daten:alle};
+  },
+
+  nameVon(kennung){
+    const k = Stand.admin && (Stand.admin.konten || []).find(x => x.konto === kennung);
+    return k ? (k.name || k.anmeldename) : String(kennung || "?").slice(0, 8) + "…";
+  },
+};
+
+function dauerText(sekunden){
+  const s = Math.max(0, Math.ceil(Number(sekunden) || 0));
+  const t = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60), r = s % 60;
+  if (t) return t + " TAG" + (t > 1 ? "E" : "") + " " + h + " H";
+  if (h) return h + " H " + m + " MIN";
+  if (m) return m + " MIN" + (r ? " " + r + " S" : "");
+  return r + " S";
+}
+
+// Was eine Abfuhr beim Anmelden heisst, in einem Satz.
+function sperrText(a){
+  if (a.fehler === "GESPERRT")
+    return "ZU VIELE FEHLVERSUCHE - GESPERRT, NOCH " + dauerText(a.sekunden);
+  if (a.fehler === "FALSCH"){
+    if (a.sekunden > 0) return "KENNWORT FALSCH - GESPERRT FUER " + dauerText(a.sekunden);
+    if (a.frei === 1) return "KENNWORT FALSCH - NOCH EIN FEHLVERSUCH OHNE SPERRE";
+    return "KENNWORT FALSCH - DER NAECHSTE FEHLVERSUCH SPERRT";
+  }
+  return a.fehler;
+}
 
 // ══════════════════════════════════════════════════════════════════
 // Bauen - kleine Helfer. Kein Rahmenwerk, nur Funktionen.
@@ -944,6 +1141,157 @@ function zahlText(schluessel, wert){
 }
 
 // ══════════════════════════════════════════════════════════════════
+// Auswertung - die Zahlen aus den Runden, nicht aus dem Profil
+//
+// Bis 0.30 las die Seite UEBERSICHT und WERTE aus profil.werte. Dort
+// stehen aber die Einstellungen (Bildschirmruckeln, Aufloesung, ...),
+// keine Zaehler - die Kacheln zeigten darum Nullen. Gerechnet wird jetzt
+// wie im Spiel (konto.py, Journal.summe): jede Runde ist eine Zeile in
+// `gefecht`, und die Summe ist die Summe dieser Zeilen.
+//
+// Seit 0.31 mit drei Filtern, die ueberall gelten:
+//   VERSION   nur die Runden einer Fassung des Spiels. Nach einer
+//             Aenderung am Gleichgewicht (Zombies mit weniger Leben)
+//             sind die Zahlen davor und danach nicht dieselben.
+//   ART       PVP, PVE oder PVPVE (K.MODUS_ART im Spiel).
+//   ABGEBROCHENE  sonst nicht mitgezaehlt - eine Runde, die nach einer
+//             Minute endete, hat wenige Abschuesse und zaehlt nicht als
+//             Runde; "Abschuesse je Runde" stimmte sonst nicht mehr.
+// ══════════════════════════════════════════════════════════════════
+const Auswertung = {
+  abgebrochen(g){
+    // Dieselbe Regel wie Journal.abgebrochen: die Spalte "ende", oder -
+    // fuer Zeilen, die ein Server ohne die Spalten von 0.31 angenommen
+    // hat - der Zaehler in den Werten.
+    if (String(g.ende || "") === "abgebrochen") return true;
+    return (Number((g.werte || {}).abgebrochen) || 0) > 0;
+  },
+
+  art(g){ return (DATEN.modus_art || {})[g.modus] || ""; },
+
+  // Ohne Version heisst: gespielt vor 0.31. Eine eigene Wahl im Filter,
+  // statt sie still unter "alle" zu verstecken.
+  version(g){ return String(g.version || ""); },
+
+  versionen(gefechte){
+    const zahl = (v) => v.split(".").map(t => Number(t) || 0);
+    const alle = [...new Set(gefechte.map(g => this.version(g)))];
+    return alle.sort((a, b) => {
+      if (!a) return 1; if (!b) return -1;
+      const x = zahl(a), y = zahl(b);
+      for (let i = 0; i < Math.max(x.length, y.length); i++){
+        if ((x[i] || 0) !== (y[i] || 0)) return (y[i] || 0) - (x[i] || 0);
+      }
+      return 0;
+    });
+  },
+
+  // Version und Art. Abgebrochene bleiben drin - wie viele es waren,
+  // soll man auch dann sehen, wenn sie nicht mitzaehlen.
+  passend(gefechte, f){
+    return gefechte.filter(g =>
+      (f.version === null || f.version === undefined || this.version(g) === f.version) &&
+      (!f.art || this.art(g) === f.art));
+  },
+
+  zaehlend(gefechte, f){
+    const p = this.passend(gefechte, f);
+    return f.abgebrochene ? p : p.filter(g => !this.abgebrochen(g));
+  },
+
+  summe(gefechte, f){
+    const passend = this.passend(gefechte, f);
+    const zeilen = f.abgebrochene ? passend : passend.filter(g => !this.abgebrochen(g));
+    const werte = {};
+    for (const d of DATEN.werte) werte[d.schluessel] = 0;
+    const fremd = {};
+    for (const g of zeilen){
+      for (const [k, v] of Object.entries(g.werte || {})){
+        const n = Number(v) || 0;
+        const d = DATEN.werte.find(x => x.schluessel === k);
+        if (!d){ fremd[k] = (fremd[k] || 0) + n; continue; }
+        werte[k] = d.art === "bestes" ? Math.max(werte[k], n) : werte[k] + n;
+      }
+    }
+    werte.abgebrochen = passend.filter(g => this.abgebrochen(g)).length;
+    return {werte, fremd, zeilen, passend};
+  },
+
+  waffen(zeilen){
+    const summe = {};
+    for (const g of zeilen){
+      for (const [waffe, werte] of Object.entries(g.waffen || {})){
+        const s = summe[waffe] || (summe[waffe] = {});
+        for (const [k, v] of Object.entries(werte || {}))
+          s[k] = (s[k] || 0) + (Number(v) || 0);
+      }
+    }
+    return summe;
+  },
+
+  // Wen wie oft erledigt. Nach Konto, wenn es eines gibt - so bleibt es
+  // derselbe Gegner, auch wenn er seinen Namen aendert; angezeigt wird
+  // der zuletzt gesehene Name. Ohne Konto (Gast ohne Anmeldung) nach Name.
+  opfer(zeilen){
+    const je = new Map();
+    const neueste = [...zeilen].sort((a, b) => (Number(a.gespielt) || 0) - (Number(b.gespielt) || 0));
+    for (const g of neueste){
+      for (const o of (Array.isArray(g.opfer) ? g.opfer : [])){
+        const schluessel = o.konto ? "k:" + o.konto : "n:" + String(o.name || "?");
+        const e = je.get(schluessel) || {name:"?", konto:o.konto || "", anzahl:0};
+        e.name = String(o.name || e.name);
+        e.anzahl += Number(o.anzahl) || 0;
+        je.set(schluessel, e);
+      }
+    }
+    return [...je.values()].sort((a, b) => b.anzahl - a.anzahl || a.name.localeCompare(b.name));
+  },
+};
+
+// Der Filter steht in Stand.filter und gilt auf allen Reitern mit Zahlen.
+function filterLeiste(gefechte){
+  const f = Stand.filter;
+  const t = el("div", "zeile filter");
+  t.style.marginBottom = "12px";
+
+  const ver = el("select");
+  ver.style.width = "auto";
+  const optionen = [["*", "ALLE VERSIONEN"]];
+  for (const v of Auswertung.versionen(gefechte))
+    optionen.push([v, v ? "VERSION " + v : "VOR 0.31 (OHNE VERSION)"]);
+  for (const [wert, text] of optionen){
+    const o = el("option", null, text); o.value = wert; ver.appendChild(o);
+  }
+  const gewaehlt = (f.version === null || f.version === undefined) ? "*" : f.version;
+  // Eine Version, die es in diesen Runden nicht gibt (anderes Konto beim
+  // ADMIN), faellt auf "alle" zurueck - sonst stuende ueberall null.
+  if (!optionen.some(o => o[0] === gewaehlt)) f.version = null;
+  ver.value = (f.version === null) ? "*" : f.version;
+  ver.addEventListener("change", () => {
+    Stand.filter.version = ver.value === "*" ? null : ver.value; zeichnen();
+  });
+
+  const art = el("select");
+  art.style.width = "auto";
+  for (const [wert, text] of [["", "ALLE ARTEN"], ["pvp", "NUR PVP"], ["pve", "NUR PVE"],
+                              ["pvpve", "NUR PVPVE"]]){
+    const o = el("option", null, text); o.value = wert; art.appendChild(o);
+  }
+  art.value = f.art || "";
+  art.addEventListener("change", () => { Stand.filter.art = art.value; zeichnen(); });
+
+  const lab = el("label");
+  lab.style.margin = "0";
+  lab.style.cursor = "pointer";
+  const box = el("input"); box.type = "checkbox"; box.checked = !!f.abgebrochene;
+  box.addEventListener("change", () => { Stand.filter.abgebrochene = box.checked; zeichnen(); });
+  anhaengen(lab, box, document.createTextNode("ABGEBROCHENE MITZÄHLEN"));
+
+  anhaengen(t, ver, art, lab);
+  return t;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // SEITEN - die Reiter
 //
 // Eine neue Seite ist genau ein Eintrag hier. `frei` sagt, ob sie schon
@@ -954,6 +1302,7 @@ const SEITEN = [
   {name:"UEBERSICHT", frei:true, bauen:seiteUebersicht},
   {name:"WERTE",      frei:true, bauen:seiteWerte},
   {name:"WAFFEN",     frei:true, bauen:seiteWaffen},
+  {name:"ERLEDIGT",   frei:true, bauen:seiteErledigt},
   {name:"RUNDEN",     frei:true, bauen:seiteRunden},
   {name:"AUSRUESTUNG",frei:true, bauen:seiteAusruestung},
   {name:"KOSMETIK",   frei:true, bauen:seiteKosmetik},
@@ -964,23 +1313,48 @@ const SEITEN = [
 
 // ---- Uebersicht ---------------------------------------------------
 function seiteUebersicht(ziel){
-  const w = (Stand.profil && Stand.profil.werte) || {};
+  uebersichtBauen(ziel, Stand.gefechte);
+  ziel.appendChild(wasMitlaeuft());
+}
+
+function quoteText(treffer, schuesse){
+  return ((Number(schuesse) || 0) ? 100 * (Number(treffer) || 0) / Number(schuesse) : 0)
+    .toFixed(1) + " %";
+}
+
+// Gebaut fuer eine beliebige Menge Runden: die eigenen, oder (ADMIN) die
+// aller Konten zusammen.
+function uebersichtBauen(ziel, gefechte){
+  ziel.appendChild(filterLeiste(gefechte));
+  const {werte: w, zeilen} = Auswertung.summe(gefechte, Stand.filter);
   const t = tafel("AUF EINEN BLICK");
   const g = el("div", "gitter g4");
-  const wichtig = ["abschuesse","tode","runden","siege","spielzeit","serie"];
+  const wichtig = ["abschuesse","tode","runden","siege","spielzeit","serie",
+                   "gegner_abschuesse","abgebrochen"];
   for (const s of wichtig){
     const d = DATEN.werte.find(v => v.schluessel === s);
     if (d) g.appendChild(wertkachel(d.name, zahlText(s, w[s]), null));
   }
-  // Verhaeltnis und Trefferquote rechnet die Seite aus - sie stehen
+  // Verhaeltnis und Trefferquoten rechnet die Seite aus - sie stehen
   // nirgends gespeichert, und das soll auch so bleiben: abgeleitete
   // Zahlen in der Datenbank laufen frueher oder spaeter auseinander.
   const kd = (Number(w.tode) || 0) ? (Number(w.abschuesse)||0) / Number(w.tode) : (Number(w.abschuesse)||0);
   g.appendChild(wertkachel("VERHAELTNIS", kd.toFixed(2), "abschuesse / tode"));
-  const quote = (Number(w.schuesse) || 0) ? 100 * (Number(w.treffer)||0) / Number(w.schuesse) : 0;
-  g.appendChild(wertkachel("TREFFERQUOTE", quote.toFixed(1) + " %", "treffer / schuesse"));
+  const jeRunde = (Number(w.runden) || 0) ? (Number(w.abschuesse) || 0) / Number(w.runden) : 0;
+  g.appendChild(wertkachel("ABSCHÜSSE JE RUNDE", jeRunde.toFixed(2), "abschuesse / runden"));
+  g.appendChild(wertkachel("TREFFERQUOTE", quoteText(w.treffer, w.schuesse), "treffer / schuesse"));
+  g.appendChild(wertkachel("QUOTE PVP", quoteText(w.treffer_pvp, w.schuesse_pvp),
+    "treffer_pvp / schuesse_pvp"));
+  g.appendChild(wertkachel("QUOTE PVE", quoteText(w.treffer_pve, w.schuesse_pve),
+    "treffer_pve / schuesse_pve"));
   t.appendChild(g);
+  t.appendChild(el("div", "klein dunkel abstand",
+    zeilen.length + " Runden gezaehlt" + (Stand.filter.abgebrochene
+      ? " (abgebrochene eingeschlossen)." : ", abgebrochene nicht.")));
   ziel.appendChild(t);
+}
+
+function wasMitlaeuft(){
 
   const t2 = tafel("WAS MITLAEUFT");
   const p = el("div", "klein matt");
@@ -1000,7 +1374,7 @@ function seiteUebersicht(ziel){
   reihe.style.marginTop = "14px";
   reihe.appendChild(knopf("ALLES HERUNTERLADEN", null, herunterladen));
   t2.appendChild(reihe);
-  ziel.appendChild(t2);
+  return t2;
 }
 
 async function herunterladen(){
@@ -1024,7 +1398,12 @@ async function herunterladen(){
 
 // ---- Werte --------------------------------------------------------
 function seiteWerte(ziel){
-  const w = (Stand.profil && Stand.profil.werte) || {};
+  werteBauen(ziel, Stand.gefechte, (Stand.profil && Stand.profil.werte) || {});
+}
+
+function werteBauen(ziel, gefechte, einstellungen){
+  ziel.appendChild(filterLeiste(gefechte));
+  const {werte: w, fremd} = Auswertung.summe(gefechte, Stand.filter);
   const t = tafel("JEDER ZÄHLER");
   t.appendChild(el("div", "klein matt",
     "Links der Name, den das Spiel benutzt, klein darunter der Name in der " +
@@ -1040,59 +1419,60 @@ function seiteWerte(ziel){
   t.appendChild(g);
   ziel.appendChild(t);
 
-  // Alles, was sonst noch im Profil steht. Das ist der eigentliche
+  // Alles, was sonst noch gespeichert ist. Das ist der eigentliche
   // Punkt an "transparent": nicht nur die Zaehler zeigen, die man
-  // kennt, sondern auch die, die spaeter dazukommen.
-  const rest = Object.keys(w).filter(k => !bekannt.has(k)).sort();
+  // kennt, sondern auch die, die spaeter dazukommen - und die
+  // Einstellungen, die im Profil liegen.
   const t2 = tafel("SONST NOCH");
-  if (!rest.length){
-    t2.appendChild(el("div", "klein matt",
-      "Nichts. Im Profil steht kein Wert, den diese Seite nicht kennt."));
-  }else{
-    t2.appendChild(el("div", "klein matt",
-      "Werte, die das Spiel gespeichert hat und die diese Seite noch nicht " +
-      "benennen kann. Sie stehen hier trotzdem - roh."));
-    const tab = el("table");
-    tab.style.marginTop = "10px";
-    const kopf = el("tr");
-    anhaengen(kopf, el("th", null, "SCHLUESSEL"), el("th", "rechts", "WERT"));
-    anhaengen(tab, anhaengen(el("thead"), kopf));
-    const koerper = el("tbody");
-    for (const k of rest){
-      const r = el("tr");
-      anhaengen(r, el("td", "matt", k),
-        el("td", "rechts mono", typeof w[k] === "object"
-          ? JSON.stringify(w[k]) : String(w[k])));
-      koerper.appendChild(r);
-    }
-    tab.appendChild(koerper);
-    t2.appendChild(tab);
-  }
+  const rest = Object.keys(fremd).sort();
+  t2.appendChild(el("div", "klein matt", rest.length
+    ? "Zaehler in den Runden, die diese Seite noch nicht benennen kann - roh:"
+    : "In den Runden steht kein Zaehler, den diese Seite nicht kennt."));
+  if (rest.length) t2.appendChild(rohTabelle(rest.map(k => [k, fremd[k]])));
+  const e = Object.keys(einstellungen || {}).sort();
+  const unter = el("div", "klein matt abstand", e.length
+    ? "Im Profil gespeichert (Einstellungen aus dem Spiel, keine Zaehler):"
+    : "Im Profil sind keine Einstellungen gespeichert.");
+  t2.appendChild(unter);
+  if (e.length) t2.appendChild(rohTabelle(e.map(k => [k, einstellungen[k]])));
   ziel.appendChild(t2);
 }
 
+function rohTabelle(paare){
+  const tab = el("table");
+  tab.style.marginTop = "10px";
+  const kopf = el("tr");
+  anhaengen(kopf, el("th", null, "SCHLUESSEL"), el("th", "rechts", "WERT"));
+  anhaengen(tab, anhaengen(el("thead"), kopf));
+  const koerper = el("tbody");
+  for (const [k, v] of paare){
+    const r = el("tr");
+    anhaengen(r, el("td", "matt", k),
+      el("td", "rechts mono", typeof v === "object" ? JSON.stringify(v) : String(v)));
+    koerper.appendChild(r);
+  }
+  tab.appendChild(koerper);
+  return tab;
+}
+
 // ---- Waffen -------------------------------------------------------
-function seiteWaffen(ziel){
+function seiteWaffen(ziel){ waffenBauen(ziel, Stand.gefechte); }
+
+function waffenBauen(ziel, gefechte){
   // Je Waffe zaehlt das Spiel Schuesse, Treffer und Abschuesse. Die
   // Zahlen liegen in den Runden, nicht im Profil - also hier addiert.
-  const summe = {};
-  for (const g of Stand.gefechte){
-    const wf = g.waffen || {};
-    for (const [waffe, werte] of Object.entries(wf)){
-      const s = summe[waffe] || (summe[waffe] = {});
-      for (const [k, v] of Object.entries(werte || {}))
-        s[k] = (s[k] || 0) + (Number(v) || 0);
-    }
-  }
+  ziel.appendChild(filterLeiste(gefechte));
+  const zeilen = Auswertung.zaehlend(gefechte, Stand.filter);
+  const summe = Auswertung.waffen(zeilen);
   const t = tafel("JE WAFFE");
-  if (!Stand.gefechte.length){
+  if (!zeilen.length){
     t.appendChild(el("div", "klein matt",
       "Noch keine Runde gespielt - darum auch noch keine Zahlen je Waffe."));
     ziel.appendChild(t);
     return;
   }
   t.appendChild(el("div", "klein matt",
-    "Addiert aus allen " + Stand.gefechte.length + " Runden. Die Quote ist " +
+    "Addiert aus " + zeilen.length + " Runden. Die Quote ist " +
     "Treffer durch Schuesse."));
   const tab = el("table");
   tab.style.marginTop = "10px";
@@ -1135,32 +1515,96 @@ function seiteWaffen(ziel){
 }
 
 // ---- Runden -------------------------------------------------------
-function seiteRunden(ziel){
-  const t = tafel("JEDE RUNDE");
-  if (!Stand.gefechte.length){
-    t.appendChild(el("div", "klein matt", "Noch keine Runde gespielt."));
+// ---- Erledigt -----------------------------------------------------
+function seiteErledigt(ziel){ erledigtBauen(ziel, Stand.gefechte); }
+
+function erledigtBauen(ziel, gefechte){
+  ziel.appendChild(filterLeiste(gefechte));
+  const zeilen = Auswertung.zaehlend(gefechte, Stand.filter);
+  const liste = Auswertung.opfer(zeilen);
+  const t = tafel("WEN WIE OFT");
+  if (!liste.length){
+    t.appendChild(el("div", "klein matt",
+      "Noch niemand - oder nur in Runden von vor 0.31, als das Spiel es sich " +
+      "noch nicht gemerkt hat."));
     ziel.appendChild(t);
     return;
   }
   t.appendChild(el("div", "klein matt",
-    Stand.gefechte.length + " Runden, neueste zuerst. Jede Zeile ist eine " +
-    "Zeile in der Tabelle gefecht - mehr steht dort nicht."));
+    "Spieler, die du erledigt hast, aus " + zeilen.length + " Runden. Nach Konto " +
+    "gezaehlt, wenn es eines gibt - wer sich umbenennt, bleibt derselbe; " +
+    "dasteht der zuletzt gesehene Name."));
   const tab = el("table");
   tab.style.marginTop = "10px";
   const kopf = el("tr");
-  for (const s of ["WANN","ART","SEITE","AUSGANG","ABSCHUESSE","TODE","SCHADEN"])
-    anhaengen(kopf, el("th", s === "WANN" || s === "ART" ? null : "rechts", s));
+  anhaengen(kopf, el("th", null, "NAME"), el("th", null, "KONTO"),
+    el("th", "rechts", "ERLEDIGT"), el("th", null, ""));
   anhaengen(tab, anhaengen(el("thead"), kopf));
   const koerper = el("tbody");
-  for (const g of Stand.gefechte){
+  const meiste = Math.max(1, ...liste.map(o => o.anzahl));
+  for (const o of liste){
+    const r = el("tr");
+    anhaengen(r, el("td", "creme", o.name),
+      el("td", "dunkel klein", o.konto ? o.konto.slice(0, 8) + "…" : "OHNE KONTO"),
+      el("td", "rechts mono", o.anzahl.toLocaleString("de-DE")));
+    const bz = el("td");
+    bz.style.width = "140px";
+    const bal = el("div", "balken");
+    const inner = el("i");
+    inner.style.width = (100 * o.anzahl / meiste) + "%";
+    bal.appendChild(inner);
+    bz.appendChild(bal);
+    r.appendChild(bz);
+    koerper.appendChild(r);
+  }
+  tab.appendChild(koerper);
+  t.appendChild(tab);
+  ziel.appendChild(t);
+}
+
+// ---- Runden -------------------------------------------------------
+const RUNDEN_ZEIGEN = 400;     // mehr Zeilen macht der Browser, aber niemand liest sie
+
+function seiteRunden(ziel){ rundenBauen(ziel, Stand.gefechte, false); }
+
+function rundenBauen(ziel, gefechte, mitKonto){
+  ziel.appendChild(filterLeiste(gefechte));
+  const zeilen = Auswertung.zaehlend(gefechte, Stand.filter);
+  const t = tafel("JEDE RUNDE");
+  if (!zeilen.length){
+    t.appendChild(el("div", "klein matt", gefechte.length
+      ? "Keine Runde passt zum Filter." : "Noch keine Runde gespielt."));
+    ziel.appendChild(t);
+    return;
+  }
+  const versteckt = Auswertung.passend(gefechte, Stand.filter).length - zeilen.length;
+  t.appendChild(el("div", "klein matt",
+    zeilen.length + " Runden, neueste zuerst" +
+    (zeilen.length > RUNDEN_ZEIGEN ? " (die neuesten " + RUNDEN_ZEIGEN + " stehen hier)" : "") +
+    ". Jede Zeile ist eine Zeile in der Tabelle gefecht - mehr steht dort nicht." +
+    (versteckt ? " " + versteckt + " abgebrochene ausgeblendet." : "")));
+  const tab = el("table");
+  tab.style.marginTop = "10px";
+  const kopf = el("tr");
+  const spalten = ["WANN", ...(mitKonto ? ["KONTO"] : []), "ART", "VERSION", "ENDE",
+                   "SEITE", "AUSGANG", "ABSCHUESSE", "TODE", "SCHADEN"];
+  for (const s of spalten)
+    anhaengen(kopf, el("th", ["WANN","KONTO","ART","VERSION","ENDE"].includes(s) ? null : "rechts", s));
+  anhaengen(tab, anhaengen(el("thead"), kopf));
+  const koerper = el("tbody");
+  for (const g of zeilen.slice(0, RUNDEN_ZEIGEN)){
     const w = g.werte || {};
     const r = el("tr");
     const wann = new Date((Number(g.gespielt) || 0) * 1000);
+    r.appendChild(el("td", "matt", isNaN(wann) ? "-" : wann.toLocaleString("de-DE")));
+    if (mitKonto) r.appendChild(el("td", "creme", Admin.nameVon(g.konto)));
     anhaengen(r,
-      el("td", "matt", isNaN(wann) ? "-" : wann.toLocaleString("de-DE")),
       el("td", null, (DATEN.modi[g.modus] || g.modus || "-")));
     if (DATEN.modi_hinweis && DATEN.modi_hinweis[g.modus])
       r.lastChild.title = DATEN.modi_hinweis[g.modus];
+    const abbruch = Auswertung.abgebrochen(g);
+    anhaengen(r, el("td", "dunkel", Auswertung.version(g) || "-"),
+      el("td", abbruch ? "rot" : "matt", abbruch ? "ABGEBROCHEN" : "REGULÄR"));
     const seite = el("td", "rechts");
     if (g.team === 0 || g.team === 1){
       const s = DATEN.teams[g.team];
@@ -1169,7 +1613,8 @@ function seiteRunden(ziel){
     }else seite.textContent = "-";
     r.appendChild(seite);
     const aus = el("td", "rechts");
-    aus.textContent = g.gewonnen === true ? "SIEG" : g.gewonnen === false ? "NIEDERLAGE" : "-";
+    aus.textContent = abbruch ? "-" : g.gewonnen === true ? "SIEG"
+      : g.gewonnen === false ? "NIEDERLAGE" : "-";
     aus.className = "rechts " + (g.gewonnen === true ? "amber" : "matt");
     r.appendChild(aus);
     for (const k of ["abschuesse","tode","schaden"])
@@ -2154,7 +2599,7 @@ async function kosmetikLaden(){
   const S = Werkstatt.server;
   if (S.laedt) return;
   S.laedt = true;
-  const a = await mitSitzung((m) => Netz.kosmetikLesen(m));
+  const a = await Ziel.kosmetikLesen();
   S.laedt = false;
   S.geladen = true;
   if (!a.ok){ S.fehler = kosmetikFehler(a.fehler); zeichnen(); return; }
@@ -2179,10 +2624,7 @@ async function kosmetikSpeichern(){
     bild = zuBase64(png);
   }
   sageUndZeichne("SPEICHERE...", "arbeit");
-  const kennung = Stand.sitzung.kennung;
-  const a = (ton || bild)
-    ? await mitSitzung((m) => Netz.kosmetikSchreiben(m, kennung, ton, bild))
-    : await mitSitzung((m) => Netz.kosmetikLoeschen(m, kennung));
+  const a = await Ziel.kosmetikSchreiben(ton, bild);
   if (!a.ok) return sageUndZeichne(kosmetikFehler(a.fehler), "schlecht");
   S.ton = ton; S.bild = bild; S.fehler = "";
   W.tonWeg = W.bildWeg = false;
@@ -2417,6 +2859,7 @@ function seiteKosmetik(ziel){
 
 // ---- Konto --------------------------------------------------------
 function seiteKonto(ziel){
+  if (Ziel.admin) return seiteVerwalten(ziel);
   const t = tafel("KONTO");
   const namensfeld = feld("ANZEIGENAME", "text", Stand.profil.name || Stand.sitzung.name,
     {maxLength: DATEN.namenslaenge});
@@ -2483,7 +2926,7 @@ function sageUndZeichne(text, art){ meldung(text, art); zeichnen(); }
 
 async function sichernProfil(){
   meldung("SPEICHERE...", "arbeit"); zeichnen();
-  const antwort = await Netz.profilSchreiben(Stand.sitzung.marke, Stand.profil);
+  const antwort = await Ziel.profilSchreiben(Stand.profil);
   if (antwort.ok){
     Stand.profil = antwort.daten;
     sageUndZeichne("GESPEICHERT", "gut");
@@ -2499,7 +2942,13 @@ async function sichernProfil(){
 
 async function ladenUndZeichnen(still){
   if (!still){ meldung("LADE...", "arbeit"); zeichnen(); }
-  const p = await Netz.profilLesen(Stand.sitzung.marke);
+  const p = await Ziel.profilLesen();
+  if (!p.ok && Ziel.admin){
+    // Beim ADMIN gibt es keine Sitzung, die ablaufen koennte. Was hier
+    // scheitert, sagt der Server - zurueck zur Liste, mit seinem Grund.
+    if (Stand.admin) adminZurListe(p.fehler);
+    return;
+  }
   if (!p.ok){
     // Abgelaufene Sitzung: einmal erneuern, sonst hinaus.
     if (Stand.sitzung.erneuern){
@@ -2514,7 +2963,7 @@ async function ladenUndZeichnen(still){
     return sageUndZeichne("DIE ANMELDUNG IST ABGELAUFEN", "schlecht");
   }
   Stand.profil = p.daten;
-  const g = await Netz.gefechteLesen(Stand.sitzung.marke);
+  const g = await Ziel.gefechteLesen();
   Stand.gefechte = g.ok ? g.daten : [];
   if (!still) meldung(null);
   zeichnen();
@@ -2523,6 +2972,7 @@ async function ladenUndZeichnen(still){
 function zeichnen(){
   const r = document.getElementById("rahmen");
   r.textContent = "";
+  if (Stand.admin && !Stand.sitzung) return zeichneAdmin(r);
   if (!Stand.sitzung) return zeichneTor(r);
 
   const kopf = el("div", "kopf");
@@ -2545,8 +2995,14 @@ function zeichnen(){
   const text = el("div");
   anhaengen(text,
     el("div", "creme", (Stand.profil && Stand.profil.name) || Stand.sitzung.name),
-    el("div", "klein dunkel", "ANGEMELDET"));
+    el("div", "klein dunkel", Ziel.admin
+      ? "ANMELDENAME " + String(Stand.sitzung.name).toUpperCase() + " · VOM ADMIN GEOEFFNET"
+      : "ANGEMELDET"));
   anhaengen(wer, kachel, text);
+  if (Ziel.admin){
+    const zurueck = knopf("ZUR LISTE", null, () => adminZurListe());
+    wer.insertBefore(zurueck, wer.firstChild);
+  }
   kopf.appendChild(wer);
   r.appendChild(kopf);
 
@@ -2610,6 +3066,13 @@ function zeichneTor(ziel){
   const tun = async (anlegen) => {
     const n = name.eingabe.value.trim(), w = wort.eingabe.value;
     if (!n) return sageUndZeichne("NAME FEHLT", "schlecht");
+    if ((DATEN.vorbehalten || []).includes(n.toLowerCase())){
+      // Der ADMIN ist kein Konto im Anmeldedienst: sein Kennwort prueft
+      // der Server in einer Funktion (5.8), und das erste ist "123" -
+      // darum hier keine Mindestlaenge.
+      if (anlegen) return sageUndZeichne("NAME VORBEHALTEN", "schlecht");
+      return adminAnmelden(w);
+    }
     if (w.length < 8) return sageUndZeichne("KENNWORT ZU KURZ - MINDESTENS 8 ZEICHEN", "schlecht");
     meldung(anlegen ? "LEGE AN..." : "MELDE AN...", "arbeit"); zeichnen();
     const a = anlegen ? await Netz.anlegen(n, w) : await Netz.anmelden(n, w);
@@ -2636,6 +3099,297 @@ function zeichneTor(ziel){
   tor.appendChild(t);
   ziel.appendChild(tor);
   setTimeout(() => name.eingabe.focus(), 0);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Die Seiten des ADMIN
+// ══════════════════════════════════════════════════════════════════
+async function adminAnmelden(wort){
+  meldung("MELDE AN...", "arbeit"); zeichnen();
+  const a = await Netz.rpc("admin_anmelden", {wort});
+  if (!a.ok) return sageUndZeichne(sperrText(a), "schlecht");
+  Stand.admin = {wort, muss_aendern: !!a.daten.muss_aendern, konten:[], alle:null,
+                 seite:"KONTEN"};
+  meldung(null);
+  if (Stand.admin.muss_aendern) return zeichnen();
+  await adminLaden();
+}
+
+function adminAbmelden(grund){
+  Stand.admin = null;
+  Stand.sitzung = null; Stand.profil = null; Stand.gefechte = []; Stand.entwurf = null;
+  Stand.seite = "UEBERSICHT";
+  // Eine eigene Anmeldung, die vorher in diesem Browser stand, ist wieder da.
+  Stand.laden();
+  werkstattLeeren();
+  if (grund) meldung(grund, "schlecht"); else meldung(null);
+  zeichnen();
+  if (Stand.sitzung) ladenUndZeichnen(true);
+}
+
+async function adminLaden(){
+  meldung("LADE ALLE KONTEN...", "arbeit"); zeichnen();
+  const k = await Admin.rufen("admin_konten", {});
+  if (!Stand.admin) return;
+  if (!k.ok) return sageUndZeichne(k.fehler, "schlecht");
+  Stand.admin.konten = k.daten.konten || [];
+  const g = await Admin.gefechte(null);
+  if (!Stand.admin) return;
+  Stand.admin.alle = g.ok ? g.daten : [];
+  meldung(g.ok ? null : g.fehler, g.ok ? null : "schlecht");
+  zeichnen();
+}
+
+function adminOeffnen(k){
+  Stand.sitzung = {admin:true, name:k.anmeldename, kennung:k.konto};
+  Stand.profil = null; Stand.gefechte = []; Stand.entwurf = null;
+  Stand.seite = "UEBERSICHT";
+  werkstattLeeren();
+  ladenUndZeichnen(false);
+}
+
+function adminZurListe(grund){
+  Stand.sitzung = null; Stand.profil = null; Stand.gefechte = []; Stand.entwurf = null;
+  werkstattLeeren();
+  if (grund) meldung(grund, "schlecht"); else meldung(null);
+  if (Stand.admin && !Stand.admin.muss_aendern) adminLaden(); else zeichnen();
+}
+
+const ADMIN_SEITEN = [
+  {name:"KONTEN",     bauen:adminKonten},
+  {name:"UEBERSICHT", bauen:(z) => uebersichtBauen(z, Stand.admin.alle || [])},
+  {name:"WERTE",      bauen:(z) => werteBauen(z, Stand.admin.alle || [], {})},
+  {name:"WAFFEN",     bauen:(z) => waffenBauen(z, Stand.admin.alle || [])},
+  {name:"ERLEDIGT",   bauen:(z) => erledigtBauen(z, Stand.admin.alle || [])},
+  {name:"RUNDEN",     bauen:(z) => rundenBauen(z, Stand.admin.alle || [], true)},
+  {name:"ADMIN",      bauen:adminSelbst},
+];
+
+function zeichneAdmin(r){
+  const kopf = el("div", "kopf");
+  const links = el("div");
+  anhaengen(links, ueberschrift("DUSTFRONT", 4),
+    el("div", "unter", "ADMIN  ·  VERSION " + DATEN.version + "  ·  " + DATEN.phase));
+  kopf.appendChild(links);
+  const wer = el("div", "wer");
+  anhaengen(wer, el("div", "amber", "ADMIN"),
+    el("div", "klein dunkel", "SIEHT ALLE KONTEN"));
+  kopf.appendChild(wer);
+  r.appendChild(kopf);
+
+  if (Stand.admin.muss_aendern){
+    // Vorher geht auf dem Server ohnehin nichts (admin_darf). Hier steht
+    // darum auch nichts anderes zur Wahl.
+    const t = tafel("ERST EIN NEUES KENNWORT");
+    t.appendChild(el("div", "klein matt",
+      "Das erste Kennwort des ADMIN ist 123, und das weiss jeder, der " +
+      "docs/KONTO.md gelesen hat. Bevor irgendetwas anderes geht, kommt ein " +
+      "eigenes - mindestens 8 Zeichen."));
+    if (Stand.meldung) t.appendChild(el("div", "meldung kante " + Stand.meldung.art,
+      Stand.meldung.text));
+    const neu = feld("NEUES KENNWORT", "password", "", {autocomplete:"new-password"});
+    const nochmal = feld("NOCH EINMAL", "password", "", {autocomplete:"new-password"});
+    neu.style.marginTop = "14px";
+    anhaengen(t, neu, nochmal);
+    const reihe = el("div", "zeile");
+    anhaengen(reihe,
+      knopf("KENNWORT SETZEN", "stark", () => adminWortAendern(neu.eingabe.value,
+                                                                nochmal.eingabe.value)),
+      knopf("ABMELDEN", null, () => adminAbmelden()));
+    t.appendChild(reihe);
+    r.appendChild(t);
+    setTimeout(() => neu.eingabe.focus(), 0);
+    return;
+  }
+
+  const leiste = el("div", "leiste");
+  for (const s of ADMIN_SEITEN){
+    const b = el("button", "reiter kante", s.name.replace(/UE/g, "Ü"));
+    b.setAttribute("aria-selected", String(s.name === Stand.admin.seite));
+    b.addEventListener("click", () => { Stand.admin.seite = s.name; meldung(null); zeichnen(); });
+    leiste.appendChild(b);
+  }
+  r.appendChild(leiste);
+  if (Stand.meldung) r.appendChild(el("div", "meldung kante " + Stand.meldung.art,
+    Stand.meldung.text));
+  if (Stand.admin.alle === null){
+    r.appendChild(el("div", "meldung kante arbeit", "LADE..."));
+    return;
+  }
+  const s = ADMIN_SEITEN.find(x => x.name === Stand.admin.seite) || ADMIN_SEITEN[0];
+  const inhalt = el("div");
+  if (s.name !== "KONTEN" && s.name !== "ADMIN")
+    inhalt.appendChild(el("div", "klein matt", "ALLE KONTEN ZUSAMMEN - " +
+      Stand.admin.konten.length + " KONTEN, " + Stand.admin.alle.length + " RUNDEN."));
+  try{ s.bauen(inhalt); }
+  catch(e){ inhalt.appendChild(el("div", "meldung kante schlecht",
+    "DIESE SEITE HAT EINEN FEHLER: " + e.message)); }
+  r.appendChild(inhalt);
+  r.appendChild(el("div", "fuss",
+    "DUSTFRONT " + DATEN.version + " · ADMIN · Das Kennwort steht nur im Speicher " +
+    "dieser Seite. Neu laden heisst neu anmelden."));
+}
+
+async function adminWortAendern(a, b){
+  if (a.length < 8) return sageUndZeichne("KENNWORT ZU KURZ - MINDESTENS 8 ZEICHEN", "schlecht");
+  if (a !== b) return sageUndZeichne("DIE BEIDEN KENNWOERTER SIND NICHT GLEICH", "schlecht");
+  meldung("AENDERE...", "arbeit"); zeichnen();
+  const antwort = await Admin.rufen("admin_wort_aendern", {neu:a});
+  if (!Stand.admin) return;
+  if (!antwort.ok) return sageUndZeichne(antwort.fehler, "schlecht");
+  const vorher = Stand.admin.muss_aendern;
+  Stand.admin.wort = a;
+  Stand.admin.muss_aendern = false;
+  meldung("KENNWORT DES ADMIN GEAENDERT", "gut");
+  if (vorher) await adminLaden(); else zeichnen();
+}
+
+function adminKonten(ziel){
+  const t = tafel("ALLE KONTEN");
+  const k = Stand.admin.konten;
+  t.appendChild(el("div", "klein matt", k.length
+    ? k.length + " Konten. Oeffnen zeigt ein Konto so, wie sein Spieler es sieht - " +
+      "mit allen Reitern, und alles darin laesst sich aendern."
+    : "Noch kein Konto angelegt."));
+  const suche = el("input");
+  suche.placeholder = "SUCHEN";
+  suche.value = Stand.admin.suche || "";
+  suche.style.margin = "10px 0";
+  suche.addEventListener("input", () => {
+    Stand.admin.suche = suche.value;
+    const f = suche.value.trim().toLowerCase();
+    for (const z of tab.querySelectorAll("tbody tr"))
+      z.classList.toggle("verborgen", !!f && !z.dataset.suche.includes(f));
+  });
+  t.appendChild(suche);
+  const tab = el("table");
+  const kopf = el("tr");
+  anhaengen(kopf, el("th", null, "ANMELDENAME"), el("th", null, "ANZEIGENAME"),
+    el("th", "rechts", "RUNDEN"), el("th", null, "ANGELEGT"), el("th", null, ""));
+  anhaengen(tab, anhaengen(el("thead"), kopf));
+  const koerper = el("tbody");
+  const f = (Stand.admin.suche || "").trim().toLowerCase();
+  for (const konto of k){
+    const z = el("tr");
+    z.dataset.suche = (konto.anmeldename + " " + konto.name).toLowerCase();
+    if (f && !z.dataset.suche.includes(f)) z.classList.add("verborgen");
+    const wann = new Date((Number(konto.angelegt) || 0) * 1000);
+    const b = knopf("OEFFNEN", null, () => adminOeffnen(konto));
+    b.style.padding = "5px 10px";
+    const bz = el("td", "rechts");
+    bz.appendChild(b);
+    anhaengen(z, el("td", "creme", konto.anmeldename), el("td", null, konto.name || "-"),
+      el("td", "rechts mono", (Number(konto.runden) || 0).toLocaleString("de-DE")),
+      el("td", "matt", isNaN(wann) ? "-" : wann.toLocaleDateString("de-DE")), bz);
+    koerper.appendChild(z);
+  }
+  tab.appendChild(koerper);
+  t.appendChild(tab);
+  ziel.appendChild(t);
+}
+
+function adminSelbst(ziel){
+  const t = tafel("KENNWORT DES ADMIN");
+  const neu = feld("NEUES KENNWORT", "password", "", {autocomplete:"new-password"});
+  const nochmal = feld("NOCH EINMAL", "password", "", {autocomplete:"new-password"});
+  anhaengen(t, neu, nochmal);
+  t.appendChild(knopf("KENNWORT AENDERN", "stark",
+    () => adminWortAendern(neu.eingabe.value, nochmal.eingabe.value)));
+  ziel.appendChild(t);
+  const t2 = tafel("SPERRE");
+  t2.appendChild(el("div", "klein matt",
+    "Zwei Fehlversuche kosten nichts. Der dritte sperrt 1 Minute, der vierte 5, " +
+    "der fuenfte 15, der sechste 30, danach verdoppelt sich die Sperre mit jedem " +
+    "weiteren. Ein richtiges Kennwort setzt alles zurueck. Ausgesperrt: " +
+    "docs/KONTO.md, Abschnitt 5.8."));
+  const reihe = el("div", "zeile abstand");
+  anhaengen(reihe, knopf("NEU LADEN", null, () => adminLaden()),
+    knopf("ABMELDEN", null, () => adminAbmelden()));
+  t2.appendChild(reihe);
+  ziel.appendChild(t2);
+}
+
+// Der Reiter KONTO eines vom ADMIN geoeffneten Kontos.
+function seiteVerwalten(ziel){
+  const kennung = Stand.sitzung.kennung;
+  const t = tafel("ANMELDENAME");
+  const name = feld("NEUER ANMELDENAME", "text", Stand.sitzung.name,
+    {maxLength: DATEN.namenslaenge});
+  t.appendChild(name);
+  t.appendChild(el("div", "klein matt",
+    "Der Name, mit dem sich der Spieler anmeldet - im Spiel und hier. Der " +
+    "Anzeigename wechselt mit. Die Runden bleiben am Konto, nicht am Namen."));
+  const r1 = el("div", "abstand");
+  r1.appendChild(knopf("UMBENENNEN", "stark", async () => {
+    const neu = name.eingabe.value.trim();
+    meldung("AENDERE...", "arbeit"); zeichnen();
+    const a = await Admin.rufen("admin_name_aendern", {konto:kennung, neu});
+    if (!Stand.admin) return;
+    if (!a.ok) return sageUndZeichne(a.fehler, "schlecht");
+    Stand.sitzung = Object.assign({}, Stand.sitzung, {name:a.daten.anmeldename});
+    await ladenUndZeichnen(true);
+    sageUndZeichne("UMBENANNT IN " + a.daten.anmeldename.toUpperCase(), "gut");
+  }));
+  t.appendChild(r1);
+  ziel.appendChild(t);
+
+  const t2 = tafel("KENNWORT");
+  const neu = feld("NEUES KENNWORT", "password", "", {autocomplete:"new-password"});
+  const nochmal = feld("NOCH EINMAL", "password", "", {autocomplete:"new-password"});
+  anhaengen(t2, neu, nochmal);
+  t2.appendChild(el("div", "klein matt",
+    "Setzt das Kennwort dieses Kontos. Alle seine Anmeldungen enden damit."));
+  const r2 = el("div", "abstand");
+  r2.appendChild(knopf("KENNWORT SETZEN", null, async () => {
+    const a = neu.eingabe.value, b = nochmal.eingabe.value;
+    if (a.length < 8) return sageUndZeichne("KENNWORT ZU KURZ - MINDESTENS 8 ZEICHEN", "schlecht");
+    if (a !== b) return sageUndZeichne("DIE BEIDEN KENNWOERTER SIND NICHT GLEICH", "schlecht");
+    meldung("AENDERE...", "arbeit"); zeichnen();
+    const antwort = await Admin.rufen("admin_kennwort_setzen", {konto:kennung, neu:a});
+    if (!Stand.admin) return;
+    sageUndZeichne(antwort.ok ? "KENNWORT GESETZT" : antwort.fehler,
+      antwort.ok ? "gut" : "schlecht");
+  }));
+  t2.appendChild(r2);
+  ziel.appendChild(t2);
+
+  const t3 = tafel("KONTO LOESCHEN");
+  t3.appendChild(el("div", "klein matt",
+    "Loescht das Konto mit allen Runden, dem Profil und der Kosmetik. Es gibt " +
+    "kein Zurueck. Zur Bestaetigung den Anmeldenamen eintippen."));
+  const bestaetigen = feld("ANMELDENAME ZUR BESTAETIGUNG", "text", "", {autocomplete:"off"});
+  bestaetigen.style.marginTop = "12px";
+  t3.appendChild(bestaetigen);
+  const loeschen = knopf("ENDGUELTIG LOESCHEN", null, async () => {
+    if (bestaetigen.eingabe.value.trim().toLowerCase() !== String(Stand.sitzung.name).toLowerCase())
+      return sageUndZeichne("DER NAME STIMMT NICHT - NICHTS GELOESCHT", "schlecht");
+    meldung("LOESCHE...", "arbeit"); zeichnen();
+    const a = await Admin.rufen("admin_loeschen", {konto:kennung});
+    if (!Stand.admin) return;
+    if (!a.ok) return sageUndZeichne(a.fehler, "schlecht");
+    const weg = Stand.sitzung.name;
+    Stand.sitzung = null; Stand.profil = null; Stand.gefechte = []; Stand.entwurf = null;
+    werkstattLeeren();
+    meldung("KONTO " + String(weg).toUpperCase() + " GELOESCHT", "gut");
+    await adminLaden();
+    meldung("KONTO " + String(weg).toUpperCase() + " GELOESCHT", "gut");
+    zeichnen();
+  });
+  loeschen.style.borderColor = "#8a3b2a";
+  loeschen.style.color = "#e9a892";
+  t3.appendChild(loeschen);
+  ziel.appendChild(t3);
+
+  const t4 = tafel("ZUGANG");
+  const tab = el("table");
+  for (const [k, v] of [["KENNUNG", kennung], ["FASSUNG DES PROFILS", String(Stand.profil.fassung)],
+                        ["RUNDEN AUF DEM SERVER", String(Stand.gefechte.length)]]){
+    const z = el("tr");
+    anhaengen(z, el("td", "matt", k), el("td", "rechts mono klein", v));
+    tab.appendChild(z);
+  }
+  t4.appendChild(tab);
+  ziel.appendChild(t4);
 }
 
 // ---- Los ----------------------------------------------------------

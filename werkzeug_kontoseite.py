@@ -175,6 +175,9 @@ def daten() -> dict:
                  for k, v in K.MODI.items() if not _nur_lobby(v)},
         "modi_hinweis": {k: v.get("hinweis", "") for k, v in K.MODI.items()
                          if isinstance(v, dict) and not _nur_lobby(v)},
+        # Welche Spielart PVP und welche PVE ist (0.31): fuer den Filter
+        # und die Trefferquoten getrennt nach beidem.
+        "modus_art": dict(K.MODUS_ART),
         "teams": [{"name": t["name"], "farbe": _farbe(t["hud"]),
                    "dunkel": _farbe(t["hud_dunkel"])}
                   for t in K.TEAMS["kombi"]],
@@ -190,6 +193,7 @@ def daten() -> dict:
         "schrift": {"breite": GW, "hoehe": GH, "zeichen": dict(_G),
                     "ersatz": dict(_TRANS)},
         "namenslaenge": A.NAMENSLAENGE,
+        "vorbehalten": list(A.VORBEHALTEN),
         "wortlaenge": A.WORTLAENGE,
         # Spielerkosmetik: dieselben Grenzen wie im Spiel - die Seite
         # laesst gar nicht erst etwas machen, was das Spiel ablehnen wuerde.

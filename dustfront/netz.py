@@ -286,6 +286,12 @@ class Gastgeber:
         if leitung is not None:
             leitung.senden(nachricht)
 
+    def spuelen(self) -> None:
+        """Was noch in den Schlangen liegt, jetzt hinaus - vor dem Schliessen,
+        damit die letzte Nachricht (der Abbruch) noch ankommt."""
+        for leitung in list(self.leitungen.values()):
+            leitung.spuelen()
+
     def schliessen(self) -> None:
         for leitung in list(self.leitungen.values()):
             leitung.schliessen("Gastgeber beendet")

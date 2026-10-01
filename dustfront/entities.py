@@ -233,6 +233,42 @@ def wolke(welt, pos, anzahl, tempo, dauer, farbe, ebene, groesse=1,
             dauer * RND.uniform(0.6, 1.2), farbe, groesse, art, reibung, ebene))
 
 
+def abschuss_buchen(von, ziel, waffe: str, lebte: bool) -> None:
+    """Hat dieser Treffer `ziel` getoetet? Dann beim Schuetzen buchen.
+
+    Je Waffe als "abschuesse" (die Spalte gab es in der Statistik schon
+    lange, gezaehlt hatte sie nie jemand), und bei Zombies und Bossen als
+    eigene Zahl. Spieler zaehlt das Gefecht selbst - dort entscheidet
+    erst das Ende der Bodenzeit, ob einer wirklich gefallen ist.
+    """
+    if not hasattr(von, "zaehlen"):
+        return
+    if hasattr(ziel, "toeter_waffe"):
+        # Ein Kaempfer im Gefecht: er faellt erst um und stirbt spaeter.
+        # Hier nur die Waffe merken, mit der er umgeworfen wurde; gebucht
+        # wird beim Abrechnen (Gefecht._tote_abrechnen), einmal je Tod.
+        if lebte and ziel.toeter is von and not ziel.toeter_waffe:
+            ziel.toeter_waffe = waffe
+        return
+    if not lebte or ziel.lebt:
+        return
+    von.zaehlen("abschuesse", 1.0, waffe)
+    if isinstance(ziel, Gegner) and not getattr(ziel, "ist_puppe", False):
+        von.zaehlen("gegner_abschuesse")
+        if getattr(ziel, "ist_boss", False):
+            von.zaehlen("boss_abschuesse")
+
+
+def treffer_ziel_buchen(von, ziel) -> None:
+    """Ein Treffer, getrennt danach, ob er einen Spieler oder einen Zombie traf."""
+    if not hasattr(von, "zaehlen"):
+        return
+    if isinstance(ziel, Spieler):
+        von.zaehlen("treffer_spieler")
+    elif isinstance(ziel, Gegner) and not getattr(ziel, "ist_puppe", False):
+        von.zaehlen("treffer_gegner")
+
+
 # ══════════════════════════════════════════════════════════════════
 # Geschoss
 # ══════════════════════════════════════════════════════════════════
@@ -294,7 +330,10 @@ class Geschoss(Wesen):
             schub = pygame.Vector2(self.tempo).normalize() * K.TREFFER["rueckstoss"]
             if hasattr(self.von, "zaehlen"):
                 self.von.zaehlen("treffer", 1.0, self.waffe)
+                treffer_ziel_buchen(self.von, ziel)
+            lebte = ziel.lebt
             ziel.schaden(self.schaden_wert, schub, self.von)
+            abschuss_buchen(self.von, ziel, self.waffe, lebte)
             wolke(self.welt, self.pos, 6, 150, 0.22, K.C_BLUT, self.ebene, 1,
                   "blut", 110, richtung, 5.0)
         else:
@@ -448,7 +487,9 @@ class Granate(Wesen):
             # volle Wucht in der Mitte, am Rand ein Viertel
             anteil = 1.0 - 0.75 * min(1.0, entfernung / r)
             schub = (ab.normalize() * 320 * anteil) if entfernung > 0.01 else None
+            lebte = ziel.lebt
             ziel.schaden(d["schaden"] * anteil, schub, self.von)
+            abschuss_buchen(self.von, ziel, "granate", lebte)
         w.explosion(self.pos, self.ebene, r)
         w.kurz_langsam(0.05)
 
@@ -593,7 +634,9 @@ class Rakete(Wesen):
                 anteil = 1.0
             anteil *= 1.0 - 0.7 * min(1.0, entfernung / r)
             schub = (ab.normalize() * 420 * anteil) if entfernung > 0.01 else None
+            lebte = ziel.lebt
             ziel.schaden(d["schaden"] * anteil, schub, schuetze)
+            abschuss_buchen(schuetze, ziel, "rakete", lebte)
         w.explosion(self.pos, self.ebene, r)
         w.kurz_langsam(0.06)
 

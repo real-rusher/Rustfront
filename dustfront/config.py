@@ -110,8 +110,8 @@ SPIELER = dict(
 # Kacheln. Genug, um aus einem Feuer, einer Stampferwelle oder einer
 # Schusslinie zu kommen; zu wenig, um damit ueber die Karte zu reisen.
 DASH = dict(
-    ladungen=2,
-    nachladen=3.4,            # Sekunden je Ladung, eine nach der anderen
+    ladungen=3,               # seit 0.31 drei statt zwei
+    nachladen=2.7,            # Sekunden je Ladung, eine nach der anderen (vorher 3.4)
     tempo=430.0,              # Pixel pro Sekunde waehrend des Stosses
     dauer=0.16,               # so lange haelt der Stoss
     sperre=0.30,              # frueher geht der naechste nicht
@@ -683,6 +683,16 @@ GEFECHT = dict(
     rpg=False,
     rpg_lenkung=True,     # mit Zielerfassung, oder ungelenkt
     rpg_takt=75.0,        # Sekunden, bis ein neuer auf der Karte liegt
+    # Seit 0.31: eine Runde, die vor ihrem Ende abbricht (Fenster zu,
+    # Verbindung weg, der Gastgeber beendet), wird trotzdem gebucht - als
+    # "abgebrochen", getrennt von den regulaeren. Erst ab so vielen
+    # Sekunden: wer eine Runde aufmacht und gleich wieder zu, hat nicht
+    # gespielt, und eine Zeile voller Nullen sagt nichts.
+    abbruch_ab=5.0,
+    # So oft schickt der Gastgeber jedem Gast seine Zahlen. Bricht die
+    # Verbindung, bucht der Gast den letzten Stand - hoechstens so viele
+    # Sekunden fehlen dann.
+    zwischenstand_takt=2.0,
     team_abschuesse=30,       # Teamabschuesse bis zum Sieg in "team"
     rundenzeit=300.0,         # Sekunden je Runde, wenn nach Zeit gespielt wird
     abschuesse_ziel=20,       # Abschuesse bis zum Sieg, wenn danach gespielt wird
@@ -1397,13 +1407,27 @@ WERTE = (
     # (Schluessel, Aufschrift, Art)
     #   "summe"   wird ueber Runden addiert
     #   "bestes"  nur der Hoechstwert zaehlt
-    ("abschuesse",    "ABSCHUESSE",       "summe"),
+    ("abschuesse",    "ABSCHUESSE",       "summe"),     # Spieler
+    ("gegner_abschuesse", "ZOMBIES",      "summe"),     # seit 0.31
+    ("boss_abschuesse", "BOSSE",          "summe"),
     ("tode",          "TODE",             "summe"),
     ("hilfen",        "AUFGEHOLFEN",      "summe"),
     ("schaden",       "SCHADEN",          "summe"),
     ("schaden_ein",   "EINGESTECKT",      "summe"),
     ("schuesse",      "SCHUESSE",         "summe"),
     ("treffer",       "TREFFER",          "summe"),
+    # Getrennt nach Ziel (seit 0.31): ein Treffer auf einen Spieler oder
+    # auf einen Zombie. Das geht in jeder Spielart, auch in PVPVE.
+    ("treffer_spieler", "TREFFER SPIELER", "summe"),
+    ("treffer_gegner", "TREFFER ZOMBIES",  "summe"),
+    # Und nach der Art der Runde (MODUS_ART): Schuesse und Treffer in
+    # PVP-Runden und in PVE-Runden. PVPVE steht in keinem von beiden -
+    # dort laesst sich ein Schuss keiner Seite zuordnen; dafuer gibt es
+    # die Trennung nach Ziel oben.
+    ("schuesse_pvp",  "SCHUESSE PVP",     "summe"),
+    ("treffer_pvp",   "TREFFER PVP",      "summe"),
+    ("schuesse_pve",  "SCHUESSE PVE",     "summe"),
+    ("treffer_pve",   "TREFFER PVE",      "summe"),
     ("kopftreffer",   "NAHKAMPFTREFFER",  "summe"),
     ("granaten",      "GRANATEN",         "summe"),
     ("rauchwolken",   "RAUCHWOLKEN",      "summe"),
@@ -1413,11 +1437,20 @@ WERTE = (
     ("stuerze",       "STUERZE",          "summe"),
     ("zonenzeit",     "IM KREIS",         "summe"),
     ("runden",        "RUNDEN",           "summe"),
+    # Runden, die vor ihrem Ende abbrachen (Fenster zu, Verbindung weg,
+    # Gastgeber beendet). Sie werden hochgeladen, zaehlen aber nirgends
+    # sonst mit - sonst stimmte "Abschuesse je Runde" nicht mehr.
+    ("abgebrochen",   "ABGEBROCHEN",      "summe"),
     ("siege",         "SIEGE",            "summe"),
     ("spielzeit",     "SPIELZEIT",        "summe"),
     ("serie",         "BESTE SERIE",      "bestes"),
     ("abschuesse_r",  "BESTE RUNDE",      "bestes"),
 )
+
+# Welche Spielart zu welcher Seite der Statistik gehoert (WERTE, *_pvp
+# und *_pve). PVPVE ist beides und darum keines.
+MODUS_ART = {"pvp": "pvp", "team": "pvp", "versus": "pvp", "huegel": "pvp",
+             "pve": "pve", "pvpve": "pvpve"}
 
 # Je Waffe wird getrennt gezaehlt, sonst laesst sich nie sagen, womit
 # jemand wirklich spielt. Genau das braucht die Siegtafel spaeter fuer

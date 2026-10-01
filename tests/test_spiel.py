@@ -4019,27 +4019,31 @@ if frei_richtung is None:
     frei_richtung = pygame.Vector2(1, 0)
 start = pygame.Vector2(ich_d.pos)
 ich_d.will = pygame.Vector2(frei_richtung)
-pruef("Man hat zu Beginn zwei Ladungen", ich_d.dash_ladungen == 2)
+LADUNGEN = K.DASH["ladungen"]
+pruef("Man hat zu Beginn drei Ladungen", LADUNGEN == 3 and ich_d.dash_ladungen == 3)
 pruef("Ein Dash geht", ich_d.dashen())
 for _ in range(int(0.5 / K.FIXED_DT)):
     ich_d.will = pygame.Vector2(0, 0)
     wd.schritt(K.FIXED_DT)
 weg = ich_d.pos.distance_to(start)
 pruef("Er traegt rund zwei Kacheln weit", 45.0 < weg < 110.0, "%.0f px" % weg)
-pruef("Und kostet eine Ladung", ich_d.dash_ladungen == 1)
-ich_d.dash_sperre = 0.0
-pruef("Die zweite geht auch", ich_d.dashen())
+pruef("Und kostet eine Ladung", ich_d.dash_ladungen == LADUNGEN - 1)
+for _ in range(LADUNGEN - 1):
+    ich_d.dash_rest = 0.0
+    ich_d.dash_sperre = 0.0
+    pruef("Die naechste geht auch", ich_d.dashen())
 ich_d.dash_rest = 0.0
 ich_d.dash_sperre = 0.0
-pruef("Eine dritte nicht", not ich_d.dashen())
+pruef("Danach keine mehr", not ich_d.dashen())
+pruef("Und sie laden schneller als frueher (3,4 s)", K.DASH["nachladen"] < 3.4)
 for _ in range(int((K.DASH["nachladen"] + 0.05) / K.FIXED_DT)):
     wd.schritt(K.FIXED_DT)
 pruef("Nach einer Ladezeit ist genau eine wieder da",
       ich_d.dash_ladungen == 1, "%d" % ich_d.dash_ladungen)
-for _ in range(int(K.DASH["nachladen"] / K.FIXED_DT)):
+for _ in range(int(K.DASH["nachladen"] * (LADUNGEN - 1) / K.FIXED_DT) + 2):
     wd.schritt(K.FIXED_DT)
-pruef("Nach zwei Ladezeiten beide - sie laden nacheinander",
-      ich_d.dash_ladungen == 2, "%d" % ich_d.dash_ladungen)
+pruef("Nach drei Ladezeiten alle - sie laden nacheinander",
+      ich_d.dash_ladungen == LADUNGEN, "%d" % ich_d.dash_ladungen)
 ich_d.heilt_rest = 0.5
 pruef("Beim Anlegen eines Medkits geht kein Dash", not ich_d.dashen())
 ich_d.heilt_rest = 0.0
@@ -5395,6 +5399,253 @@ print("     Bildzeit: %.1f ms normal, %.1f ms bei Zoom 2" % (ohne_zoom * 1000, m
 pruef("Zoom 2 bleibt bezahlbar", mit_zoom < 8 * ohne_zoom + 0.004,
       "%.1f ms" % (mit_zoom * 1000))
 wz.verlassen(); gz.verlassen()
+
+# ── Der Gast sieht alles, was fliegt ─────────────────────────────────
+# Gemeldet in 0.30: "bei Gaesten werden gar keine Granaten angezeigt,
+# nur die Explosion". Gesendet wurde nur, was "geschoss", "granate" oder
+# "rauchgranate" hiess - Molotow, Blendgranate und Rakete hatten seit den
+# Skins andere Bildnamen und kamen nie an.
+from dustfront.entities import Granate as _Gr31, Rakete as _Rk31
+wf, gf = gefechtspaar("pvp")
+for _ in range(20):
+    wf.schritt(K.NETZ["takt"]); gf.schritt(K.NETZ["takt"])
+werfer = wf.kaempfer[0]
+start = pygame.Vector2(werfer.pos)
+geworfen = {}
+for art in ("granate", "molotov", "blend", "rauch"):
+    gr = _Gr31(start, 0.0, K.WAFFEN[art], werfer.ebene, werfer, 120.0)
+    wf.welt.dazu(gr)
+    geworfen[art] = gr
+# Die Rakete schlaegt an der ersten Wand oder Figur ein. Also in eine
+# Richtung, in der die naechsten 80 Pixel frei sind - sonst haengt die
+# Pruefung davon ab, wo der Seed den Werfer hinstellt.
+def _frei_richtung(pos, ebene):
+    e = wf.welt.ebene(ebene)
+    for winkel in (0.0, 90.0, 180.0, 270.0, 45.0, 135.0, 225.0, 315.0):
+        r_ = pygame.Vector2(1, 0).rotate(winkel)
+        if all(not e.sichtdicht(int((pos.x + r_.x * d) // K.TILE),
+                                int((pos.y + r_.y * d) // K.TILE))
+               for d in range(8, 88, 4)):
+            return winkel
+    return 0.0
+rk = _Rk31(pygame.Vector2(start), _frei_richtung(start, werfer.ebene), K.WAFFEN["rakete"],
+           werfer.ebene, werfer, None)
+wf.welt.dazu(rk)
+for _ in range(4):
+    wf.schritt(K.NETZ["takt"]); gf.schritt(K.NETZ["takt"])
+beim_gast = {e[4] for e in gf._fremde_schuesse}
+for art, gr in geworfen.items():
+    pruef("Der Gast sieht die %s im Flug" % art.upper(), gr.bild in beim_gast,
+          "%s / %s" % (gr.bild, sorted(beim_gast)))
+pruef("Und die Rakete", rk.bild in beim_gast,
+      "%s, fliegt noch: %s" % (sorted(beim_gast), rk.lebt))
+app.flaeche.fill(K.C_VOID)
+gf.zeichnen(app.flaeche, 1.0)            # zeichnen darf nicht stolpern
+wf.verlassen(); gf.verlassen()
+
+# ── Statistik seit 0.31 ──────────────────────────────────────────────
+# Gewuenscht: wen man wie oft erledigt hat, Schuesse und Treffer getrennt
+# nach PVP und PVE, abgebrochene Runden gebucht aber getrennt gezaehlt,
+# und jede Zeile mit der Version. Jeder mit eigenem, angemeldetem Konto -
+# sonst landeten Gastgeber und Gast im selben Journal.
+def stat_app(name):
+    a = kos_app(name, None)
+    a._konto.anlegen(name, "geheim123")
+    return a
+
+def stat_paar(modus, **kw):
+    _neuer_port()
+    kw.setdefault("seed", 31000 + _port[0])
+    aw, ag = stat_app("STATW%d" % _port[0]), stat_app("STATG%d" % _port[0])
+    w_ = Gefecht(aw, "WIRT", gastgeber=netz.Gastgeber(_port[0]), modus=modus, **kw)
+    g_ = Gefecht(ag, "BESUCH", gast=netz.Gast("127.0.0.1:%d" % _port[0]))
+    for _ in range(30):
+        w_.schritt(K.NETZ["takt"]); g_.schritt(K.NETZ["takt"])
+    return w_, g_
+
+def stat_laufen(w_, g_, sekunden):
+    for _ in range(int(sekunden / K.NETZ["takt"])):
+        w_.schritt(K.NETZ["takt"])
+        if g_ is not None:
+            g_.schritt(K.NETZ["takt"])
+
+def journal(sz):
+    return sz.app.konto.journal.eintraege
+
+pruef("Die Testkonten sind angemeldet",
+      stat_app("STATPROBE").konto.angemeldet)
+
+# --- PVE: ein Zombie fallt durch eine Granate, ein Schuss trifft einen
+ws, gs = stat_paar("pve")
+pruef("Der Gast meldet sein Konto beim Gastgeber an",
+      ws.kaempfer[gs.meine_nummer].konto == gs.app.konto.kennung
+      and gs.app.konto.kennung != "", ws.kaempfer[gs.meine_nummer].konto)
+stat_laufen(ws, gs, K.WELLEN_MP["pause"] + 0.3)
+wk31 = ws.kaempfer[0]
+wk31.unverwundbar = 999.0
+ws.kaempfer[gs.meine_nummer].unverwundbar = 999.0
+feinde31 = [x for x in ws.welt.wesen if isinstance(x, KampfGegner) and x.lebt]
+pruef("Fuer die Probe ist eine Welle da", len(feinde31) >= 2, str(len(feinde31)))
+z1, z2 = feinde31[0], feinde31[1]
+z1.leben = 1.0
+gr31 = EN.Granate(pygame.Vector2(z1.pos), 0.0, K.WAFFEN["granate"], z1.ebene, wk31, 0.0)
+ws.welt.dazu(gr31)
+ws.welt.wesen.append(gr31)
+gr31.welt = ws.welt
+gr31.zuenden()
+pruef("Ein Zombie durch die Granate zaehlt als Zombieabschuss",
+      wk31.zaehler.get("gegner_abschuesse", 0) >= 1, str(wk31.zaehler))
+pruef("... und je Waffe als Abschuss der Granate",
+      wk31.waffen_zaehler.get("granate", {}).get("abschuesse", 0) >= 1,
+      str(wk31.waffen_zaehler))
+pruef("Ein Zombie ist kein Spieler: die Summe der Spielerabschuesse bleibt",
+      wk31.werte_runde()["abschuesse"] == 0, str(wk31.werte_runde()))
+z2.leben = 9999.0
+vor = wk31.zaehler.get("treffer_gegner", 0)
+ziel_dx = pygame.Vector2(-12, 0)
+kugel = EN.Geschoss(z2.pos + ziel_dx, 0.0, K.WAFFEN["repetierer"], z2.ebene, wk31, "repetierer")
+kugel.welt = ws.welt
+for _ in range(20):
+    if not kugel.lebt:
+        break
+    kugel.schritt(K.FIXED_DT)
+pruef("Ein Treffer auf einen Zombie zaehlt als Treffer auf Gegner",
+      wk31.zaehler.get("treffer_gegner", 0) == vor + 1, str(wk31.zaehler))
+wk31.zaehlen("schuesse", 7.0, "repetierer")
+
+# Zwischenstand: der Gast bekommt seine Zahlen, bevor die Runde endet.
+ws.kaempfer[gs.meine_nummer].zaehlen("schuesse", 3.0, "repetierer")
+stat_laufen(ws, gs, K.GEFECHT["zwischenstand_takt"] + 0.3)
+pruef("Der Gast hat einen Zwischenstand seiner eigenen Zahlen",
+      isinstance(gs._zwischenstand, dict)
+      and gs._zwischenstand["werte"].get("schuesse") == 3, str(gs._zwischenstand))
+
+# Abbruch: der Gastgeber geht mitten in der Runde (ESC, Fenster zu).
+stat_laufen(ws, gs, max(0.0, K.GEFECHT["abbruch_ab"] - ws._rundenzeit) + 0.2)
+pruef("Die Runde laeuft lange genug, um gebucht zu werden", ws.runde_laeuft)
+ws.verlassen()
+for _ in range(10):
+    gs.schritt(K.NETZ["takt"])
+jw = journal(ws)
+jg = journal(gs)
+pruef("Der Gastgeber bucht die abgebrochene Runde", len(jw) == 1, str(jw))
+pruef("Der Gast auch", len(jg) == 1, str(jg))
+if jw and jg:
+    ew, eg = jw[0], jg[0]
+    pruef("Beide unter derselben Partie, als Abbruch gekennzeichnet",
+          ew["partie"] == eg["partie"] and ew["partie"].startswith("abbruch-")
+          and ew["ende"] == eg["ende"] == "abgebrochen",
+          "%s / %s" % (ew["partie"], eg["partie"]))
+    pruef("Mit der Version, mit der gespielt wurde",
+          ew["version"] == eg["version"] == K.VERSION, ew["version"])
+    pruef("Ein Abbruch ist keine Runde und kein Sieg, aber ein Abbruch",
+          ew["werte"]["runden"] == 0 and ew["werte"]["siege"] == 0
+          and ew["werte"]["abgebrochen"] == 1 and not ew["gewonnen"], str(ew["werte"]))
+    pruef("Schuesse und Treffer stehen zusaetzlich unter PVE",
+          ew["werte"]["schuesse_pve"] == ew["werte"]["schuesse"] == 7
+          and ew["werte"]["treffer_pve"] == ew["werte"].get("treffer", 0)
+          and "schuesse_pvp" not in ew["werte"], str(ew["werte"]))
+    pruef("Der Gast bucht die Zahlen, die der Gastgeber gerechnet hat",
+          eg["werte"]["schuesse"] == 3 and eg["werte"]["schuesse_pve"] == 3,
+          str(eg["werte"]))
+    pruef("Zombieabschuesse kommen mit", ew["werte"].get("gegner_abschuesse", 0) >= 1)
+    summe_w = ws.app.konto.journal.summe()
+    pruef("In der Uebersicht zaehlt der Abbruch nicht mit, nur als Abbruch",
+          summe_w["runden"] == 0 and summe_w["schuesse"] == 0
+          and summe_w["abgebrochen"] == 1, str({k: summe_w[k] for k in
+                                                 ("runden", "schuesse", "abgebrochen")}))
+    summe_a = ws.app.konto.journal.summe(abgebrochene=True)
+    pruef("Wer will, nimmt die Abbrueche dazu", summe_a["schuesse"] == 7)
+    pruef("Nach Version getrennt",
+          ws.app.konto.journal.summe(version="0.0.1", abgebrochene=True)["schuesse"] == 0
+          and ws.app.konto.journal.summe(version=K.VERSION, abgebrochene=True)["schuesse"] == 7
+          and ws.app.konto.journal.versionen() == [K.VERSION])
+gs.verlassen()
+pruef("Wer danach selbst geht, bucht nicht noch einmal", len(journal(gs)) == 1)
+
+# --- Zu kurz: wer aufmacht und gleich wieder geht, hat nicht gespielt
+wk_, gk_ = stat_paar("pvp")
+wk_.verlassen()
+for _ in range(10):
+    gk_.schritt(K.NETZ["takt"])
+gk_.verlassen()
+pruef("Eine Runde unter %.0f s wird nicht gebucht" % K.GEFECHT["abbruch_ab"],
+      journal(wk_) == [] and journal(gk_) == [], str(journal(wk_)))
+
+# --- PVP: der Gastgeber erledigt den Gast, die Runde endet regulaer
+wp, gp = stat_paar("pvp", ende_art="abschuesse", ende_wert=1)
+stat_laufen(wp, gp, K.GEFECHT["schutz"] + 0.5)
+opfer31 = wp.kaempfer[gp.meine_nummer]
+schuetze = wp.kaempfer[0]
+opfer31.unverwundbar = 0.0
+opfer31.leben = 1.0
+kugel = EN.Geschoss(opfer31.pos + ziel_dx, 0.0, K.WAFFEN["scharf"], opfer31.ebene,
+                    schuetze, "scharf")
+kugel.welt = wp.welt
+for _ in range(20):
+    if not kugel.lebt:
+        break
+    kugel.schritt(K.FIXED_DT)
+pruef("Der Treffer zaehlt als Treffer auf einen Spieler",
+      schuetze.zaehler.get("treffer_spieler", 0) == 1, str(schuetze.zaehler))
+schuetze.zaehlen("schuesse", 2.0, "scharf")
+if opfer31.am_boden:
+    opfer31.boden_rest = 0.0
+stat_laufen(wp, gp, 1.0)
+pruef("Die Runde ist vorbei", wp.vorbei and gp.vorbei)
+jw = journal(wp)
+jg = journal(gp)
+pruef("Beide haben genau eine Zeile", len(jw) == 1 and len(jg) == 1,
+      "%d / %d" % (len(jw), len(jg)))
+if jw and jg:
+    ew, eg = jw[0], jg[0]
+    pruef("Regulaer beendet, mit Version",
+          ew["ende"] == eg["ende"] == "regulaer" and ew["version"] == K.VERSION
+          and ew["werte"]["runden"] == 1 and "abgebrochen" not in ew["werte"])
+    pruef("Wen er erledigt hat: der Gast, mit Name und Konto",
+          ew["opfer"] == [{"name": "BESUCH", "konto": gp.app.konto.kennung,
+                           "anzahl": 1}], str(ew["opfer"]))
+    pruef("Der Gast hat niemanden erledigt", eg["opfer"] == [], str(eg["opfer"]))
+    pruef("Der Abschuss steht bei der Waffe, mit der er fiel",
+          ew["waffen"].get("scharf", {}).get("abschuesse") == 1, str(ew["waffen"]))
+    pruef("... und die Summe zaehlt ihn genau einmal",
+          ew["werte"]["abschuesse"] == 1, str(ew["werte"]))
+    pruef("Schuesse und Treffer stehen unter PVP",
+          ew["werte"]["schuesse_pvp"] == 2 and ew["werte"]["treffer_pvp"] == 1
+          and "schuesse_pve" not in ew["werte"], str(ew["werte"]))
+    pruef("Danach ist kein Abbruch mehr zu buchen", not wp.runde_laeuft)
+wp.verlassen(); gp.verlassen()
+pruef("Auch nicht beim Verlassen nach dem Ende",
+      len(journal(wp)) == 1 and len(journal(gp)) == 1)
+
+# --- Verbindung weg: der Gastgeber stuerzt ab, ohne etwas zu sagen
+wv, gv = stat_paar("pvp")
+gv_k = wv.kaempfer[gv.meine_nummer]
+gv_k.zaehlen("schuesse", 4.0, "repetierer")
+stat_laufen(wv, gv, K.GEFECHT["abbruch_ab"] + 0.4)
+wv.gastgeber.schliessen()       # kein verlassen: kein "abbruch" geht hinaus
+for _ in range(10):
+    gv.schritt(K.NETZ["takt"])
+jg = journal(gv)
+pruef("Der Gast bucht bei Verbindungsverlust den letzten Zwischenstand",
+      len(jg) == 1 and jg[0]["ende"] == "abgebrochen"
+      and jg[0]["werte"]["schuesse"] == 4 and jg[0]["werte"]["schuesse_pvp"] == 4,
+      str(jg))
+gv.verlassen()
+
+# --- Fenster zu: das Spiel verlaesst alle Szenen und bucht dabei
+wx, gx = stat_paar("pvp")
+stat_laufen(wx, gx, K.GEFECHT["abbruch_ab"] + 0.4)
+wx.app.stapel = [wx]
+wx.app._fenster_zu()
+for _ in range(10):
+    gx.schritt(K.NETZ["takt"])
+pruef("Fenster zu beim Gastgeber: die Runde ist gebucht, die Szene verlassen",
+      len(journal(wx)) == 1 and journal(wx)[0]["ende"] == "abgebrochen"
+      and wx.app.stapel == [], str(journal(wx)))
+pruef("... und der Gast hat es erfahren",
+      len(journal(gx)) == 1 and journal(gx)[0]["partie"] == journal(wx)[0]["partie"])
+gx.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

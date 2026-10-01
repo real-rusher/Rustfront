@@ -64,8 +64,8 @@ from .lobby import LobbyTeil, lobby_regeln
 from .spielerkosmetik import KosmetikTeil
 from . import world as welt_modul
 from .core import Szene
-from .entities import (Aufsammler, Brandflaeche, Gegner, Rakete,
-                       Rauchwolke, Spieler, wolke)
+from .entities import (Aufsammler, Brandflaeche, Gegner, Geschoss, Granate,
+                       Rakete, Rauchwolke, Spieler, wolke)
 from .font import SCHRIFT
 from .render import Befinden, Kamera, Renderer
 from .world import Welt, freier_punkt, testkarte
@@ -110,8 +110,17 @@ class Kaempfer(Spieler):
         # nach der Runde am meisten erzaehlt, weil sie sagt, wer gegen wen
         # gespielt hat und nicht nur wie gut.
         self.opfer: dict[int, int] = {}
+        # Die Kennung seines Kontos, wenn er angemeldet ist - damit die
+        # Statistik "wen wie oft erledigt" auch dann stimmt, wenn einer
+        # seinen Namen aendert. Leer ohne Konto.
+        self.konto = ""
         self.wieder_in = 0.0
         self.toeter = None           # wertet das Gefecht aus und raeumt weg
+        # Womit der Toeter ihn erwischt hat (seit 0.31). Ein Spieler stirbt
+        # erst am Ende der Bodenzeit, lange nach dem Treffer - dann weiss
+        # niemand mehr, welche Waffe es war. Gemerkt wird sie darum beim
+        # Treffer (entities.abschuss_buchen) und gebucht beim Abrechnen.
+        self.toeter_waffe = ""
         self.abgerechnet = False     # ist dieser Tod schon verbucht?
         self.treppe_rest = 0.0       # Sperre nach einem Ebenenwechsel
         # Am Boden. Die beiden Zeiten stehen am Kaempfer und nicht fest im
@@ -186,6 +195,10 @@ class Kaempfer(Spieler):
 
     # ---- Am Boden statt tot -------------------------------------------
     def sterben(self, von=None) -> None:
+        # Ein anderer Toeter, eine andere Waffe. Derselbe (die Bodenzeit
+        # ist um) behaelt die, mit der er ihn umgeworfen hat.
+        if von is not self.toeter:
+            self.toeter_waffe = ""
         if self.revive_an and not self.am_boden:
             # Nicht tot, nur unten. lebt bleibt True, damit die Figur
             # weiter gezeichnet wird und ansprechbar bleibt.
@@ -235,6 +248,8 @@ class Kaempfer(Spieler):
         self.boden_rest = 0.0
         self.revive_stand = 0.0
         self.gezogen_von = None
+        self.toeter = None           # wer ihn umgeworfen hatte, hat es nicht geschafft
+        self.toeter_waffe = ""
         self.leben = K.REVIVE["danach_leben"]
         self.unverwundbar = K.REVIVE["schutz"]
 
@@ -716,6 +731,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # dem alle Rechner dieselbe Runde ablegen.
         self.partie = ""
         self._gebucht = ""
+        self._runde_gebucht = False   # ist die laufende Runde schon gebucht?
+        self._zwischenstand = None    # beim Gast: seine letzten Zahlen
+        self._seit_zwischenstand = 0.0
+        self._spielernamen: dict[int, tuple] = {}   # Nummer -> (Name, Konto)
         self._rundenzeit = 0.0
         self._masken_durch = False
         # Die Zahlen, aus denen die Siegtafel gebaut wird. Beim Gastgeber
@@ -792,6 +811,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._einstiegszonen_waehlen()
             self.ich = self._dazu(0, self.name, self.team_wunsch,
                                   self.mein_loadout())
+            self.ich.konto = self._meine_kontokennung()
+            self._namen_merken(self.ich)
             if self.in_lobby:
                 self._lobby_bestuecken()
         else:
@@ -801,6 +822,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                               # Gastgeber und Gast muessen genau dieselbe
                               # Version haben (siehe _version_passt).
                               "version": K.VERSION,
+                              # Die Kontokennung (keine Anmeldedaten, nur die
+                              # oeffentliche Nummer) - fuer "wen wie oft".
+                              "kt": self._meine_kontokennung(),
                               # Das Loadout geht mit der Anmeldung mit. Der
                               # Gastgeber legt die Figur an, also muss er zu
                               # diesem Zeitpunkt wissen, was sie traegt.
@@ -1288,6 +1312,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         k.medkits = self.start_medkits
         self.kaempfer[nummer] = k
         self.welt.dazu(k)
+        self._namen_merken(k)
         return k
 
     def _rpg_regeln(self) -> None:
@@ -1772,6 +1797,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                                    wunsch,
                                    konto_modul.loadout_saeubern(
                                        nachricht.get("lo")))
+                    k.konto = str(nachricht.get("kt") or "")[:64]
+                    self._namen_merken(k)
                     self.gastgeber.an_einen(nummer, self._willkommen(nummer, k))
                     # Und gleich den Plan: wer in die Lobby kommt, soll
                     # sehen, was als Naechstes gespielt wird.
@@ -1815,6 +1842,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._ende_pruefen(dt)
         self._plan_fuehren(dt)
 
+        self._zwischenstand_schicken(dt)
         self._seit_senden += dt
         if self._seit_senden >= K.NETZ["takt"]:
             # Abgezogen, nicht auf null gesetzt: sonst geht bei jedem
@@ -2533,6 +2561,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 if isinstance(toeter, Kaempfer) and toeter is not k:
                     toeter.abschuesse += K.GEFECHT["punkt_abschuss"]
                     toeter.opfer[k.nummer] = toeter.opfer.get(k.nummer, 0) + 1
+                    if k.toeter_waffe:
+                        # Je Waffe. Die Summe "abschuesse" kommt weiter aus
+                        # toeter.abschuesse (werte_runde) - dieses zaehlen
+                        # aendert sie nicht, es fuellt nur die Waffenzeile.
+                        toeter.zaehlen("abschuesse", 1.0, k.toeter_waffe)
                     toeter.serie += 1
                     toeter.zaehler["serie"] = max(
                         toeter.zaehler.get("serie", 0), toeter.serie)
@@ -2545,6 +2578,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                     # Selbst erledigt oder gestuerzt: beides kostet Punkte.
                     k.abschuesse += K.GEFECHT["punkt_selbst"]
                 k.toeter = None
+                k.toeter_waffe = ""
                 k.tode += 1
                 k.serie = 0          # der eigene Tod beendet die Folge
                 k.wieder_in = (K.LOBBY["wieder_nach"] if self.in_lobby
@@ -2688,45 +2722,140 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         zwei Rechner koennen fuer dieselbe Runde keine zwei verschiedenen
         Zahlen ablegen.
         """
-        raus = {}
-        for k in self.kaempfer.values():
-            raus[str(k.nummer)] = {"werte": k.werte_runde(),
-                                   "waffen": k.waffen_runde(),
-                                   "team": k.team, "name": k.name,
-                                   "opfer": {str(n): z for n, z
-                                             in k.opfer.items() if z}}
-        return raus
+        return {str(k.nummer): self._werte_von(k) for k in self.kaempfer.values()}
 
-    def _runde_buchen(self, werte=None) -> None:
+    def _werte_von(self, k) -> dict:
+        """Die Zahlen eines Kaempfers, so wie sie gebucht werden."""
+        return {"werte": k.werte_runde(), "waffen": k.waffen_runde(),
+                "team": k.team, "name": k.name, "opfer": self._opfer_liste(k)}
+
+    def _namen_merken(self, k) -> None:
+        """Name und Konto je Nummer, auch fuer die, die schon gegangen sind:
+        wer einen erledigt hat, der danach geht, soll ihn trotzdem in seiner
+        Statistik behalten."""
+        self._spielernamen[k.nummer] = (k.name, getattr(k, "konto", ""))
+
+    def _opfer_liste(self, k) -> list:
+        """Wen er wie oft erledigt hat - mit Namen und Konto statt Nummer.
+        Die Nummer gilt nur in diesem Gefecht, der Name und das Konto
+        auch danach."""
+        raus = []
+        for nummer, anzahl in sorted(k.opfer.items()):
+            if anzahl <= 0:
+                continue
+            name, konto = self._spielernamen.get(nummer, ("", ""))
+            if not name:
+                name = getattr(self.kaempfer.get(nummer), "name", "") or "?"
+            raus.append({"name": name, "konto": konto, "anzahl": int(anzahl)})
+        return raus[:64]
+
+    def _meine_kontokennung(self) -> str:
+        konto = getattr(self.app, "konto", None)
+        if konto is not None and konto.angemeldet:
+            return str(konto.kennung or "")[:64]
+        return ""
+
+    def _runde_buchen(self, werte=None, abgebrochen: bool = False,
+                      partie: str = "") -> None:
         """Die eigene Runde ins Journal des Kontos schreiben.
 
         Genau einmal je Runde, und nur die eigene Figur. `partie` kommt
         vom Gastgeber; ohne sie wird nicht gebucht, denn eine Runde ohne
         gemeinsame Kennung waere die eine, die doppelt zaehlen koennte.
+
+        `abgebrochen`: die Runde endete nicht regulaer - Fenster zu,
+        Verbindung weg, der Gastgeber hat abgebrochen (siehe
+        _abbruch_buchen). Sie wird trotzdem hochgeladen, mit allem, was
+        bis dahin gezaehlt war, aber als "abgebrochen" markiert: keine
+        Runde, kein Sieg, sondern ein Abbruch. So bleibt "Abschuesse je
+        Runde" richtig, und wer will, kann die Abbrueche trotzdem sehen.
+
+        Jede Zeile traegt die Version, mit der gespielt wurde: wird spaeter
+        etwas ausbalanciert, lassen sich die Zahlen davor und danach
+        auseinanderhalten.
         """
         konto = getattr(self.app, "konto", None)
-        if konto is None or self.ich is None or not self.partie:
+        partie = partie or self.partie
+        if konto is None or self.ich is None or not partie:
             return
-        if self.partie == self._gebucht:
+        if partie == self._gebucht or self._runde_gebucht:
             return
-        self._gebucht = self.partie
+        self._gebucht = partie
+        self._runde_gebucht = True
         if werte is None:
-            werte = {"werte": self.ich.werte_runde(),
-                     "waffen": self.ich.waffen_runde(),
-                     "team": self.ich.team}
+            werte = (self._werte_von(self.ich) if self.ist_gastgeber
+                     else (self._zwischenstand or self._werte_von(self.ich)))
         zahlen = dict(werte.get("werte") or {})
-        zahlen["runden"] = 1
+        art = K.MODUS_ART.get(self.modus, "")
+        if art in ("pvp", "pve"):
+            zahlen["schuesse_" + art] = zahlen.get("schuesse", 0)
+            zahlen["treffer_" + art] = zahlen.get("treffer", 0)
         zahlen["spielzeit"] = round(self._rundenzeit, 1)
-        sieger = self.sieger_team
-        gewonnen = (self.gewonnen if not self.mit_teams
-                    else (sieger >= 0 and sieger == werte.get("team", -1)))
-        zahlen["siege"] = 1 if gewonnen else 0
+        if abgebrochen:
+            gewonnen = False
+            zahlen["runden"] = 0
+            zahlen["siege"] = 0
+            zahlen["abgebrochen"] = 1
+        else:
+            sieger = self.sieger_team
+            gewonnen = (self.gewonnen if not self.mit_teams
+                        else (sieger >= 0 and sieger == werte.get("team", -1)))
+            zahlen["runden"] = 1
+            zahlen["siege"] = 1 if gewonnen else 0
+        opfer = werte.get("opfer")
         konto.runde_eintragen({
-            "partie": self.partie, "modus": self.modus,
+            "partie": partie, "modus": self.modus,
             "gastgeber": self.ist_gastgeber, "gewonnen": bool(gewonnen),
             "team": int(werte.get("team", -1)),
             "werte": zahlen, "waffen": dict(werte.get("waffen") or {}),
+            "version": K.VERSION,
+            "ende": "abgebrochen" if abgebrochen else "regulaer",
+            "opfer": list(opfer)[:64] if isinstance(opfer, list) else [],
         })
+
+    @property
+    def runde_laeuft(self) -> bool:
+        """Laeuft eine Runde, die bei einem Abbruch gebucht werden muss?"""
+        return (not self.in_lobby and not self.vorbei and not self._runde_gebucht
+                and self._rundenzeit >= K.GEFECHT["abbruch_ab"])
+
+    def _abbruch_buchen(self) -> None:
+        """Die laufende Runde endet vor ihrer Zeit. Trotzdem buchen.
+
+        Beim Gastgeber fuer alle: jeder Gast bekommt seine Zahlen und eine
+        gemeinsame Kennung, wie beim regulaeren Ende. Beim Gast nur fuer
+        sich, mit dem letzten Zwischenstand, den der Gastgeber geschickt
+        hat - er selbst rechnet ja nichts.
+        """
+        if not self.runde_laeuft:
+            return
+        partie = "abbruch-" + ablage.kennung()
+        if self.ist_gastgeber:
+            try:
+                self.gastgeber.an_alle({"t": "abbruch", "partie": partie,
+                                        "werte": self._werte_aller()})
+                self.gastgeber.spuelen()
+            except OSError:
+                pass
+        self._runde_buchen(None, abgebrochen=True, partie=partie)
+
+    def _zwischenstand_schicken(self, dt: float) -> None:
+        """Jedem Gast alle paar Sekunden seine Zahlen.
+
+        Damit er bei einem Abbruch, den der Gastgeber nicht mehr melden
+        kann - Verbindung weg, eigenes Fenster zu -, trotzdem etwas zu
+        buchen hat.
+        """
+        if self.in_lobby or self.vorbei:
+            return
+        self._seit_zwischenstand += dt
+        if self._seit_zwischenstand < K.GEFECHT["zwischenstand_takt"]:
+            return
+        self._seit_zwischenstand = 0.0
+        for k in self.kaempfer.values():
+            if k is not self.ich:
+                self.gastgeber.an_einen(k.nummer, {"t": "stand",
+                                                   "w": self._werte_von(k)})
 
     def _endstand(self) -> list[dict]:
         return bestenliste.sortiert(
@@ -2805,8 +2934,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 beute.append([round(w.pos.x, 1), round(w.pos.y, 1),
                               w.ebene, w.bild])
                 continue
-            name = getattr(w, "bild", None)
-            if name in ("geschoss", "granate", "rauchgranate"):
+            # Alles, was fliegt - erkannt an der Art und **nicht** am
+            # Bildnamen. Frueher stand hier eine Liste von Namen
+            # ("geschoss", "granate", "rauchgranate"), und seit Molotow,
+            # Blendgranate und Rakete eigene Bilder haben (Skins), kamen
+            # sie beim Gast nie an: er sah nur die Explosion (gemeldet in
+            # 0.30). Der Name geht als Bild mit, wie er ist.
+            if isinstance(w, (Geschoss, Granate, Rakete)):
+                name = getattr(w, "bild", None) or "geschoss"
                 # Die Flughoehe muss mit: eine Granate, die eine Ebene
                 # tiefer faellt, haengt beim Gast sonst in der Luft. Und
                 # die Kennung, damit der Gast dieselbe Granate von einem
@@ -2861,6 +2996,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             return
         if not self.gast.offen:
             self.hinweis = "VERBINDUNG VERLOREN  [ESC]"
+            self._abbruch_buchen()          # mit dem letzten Zwischenstand
             return
 
         # Vor dem Lesen der Post hochgezaehlt, nicht danach: eine
@@ -2873,12 +3009,22 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             if art in ("willkommen", "neustart"):
                 if not self._version_vom_gastgeber(nachricht):
                     return
+                if art == "neustart":
+                    # War die alte Runde noch nicht gebucht (ein Gastgeber
+                    # von vor 0.31 schickt kein "abbruch"), ist das ihr
+                    # Abbruch. Vor dem Lesen der neuen Regeln: danach
+                    # stuende schon der neue Modus da, und die Runde
+                    # landete unter dem falschen.
+                    self._abbruch_buchen()
                 self._willkommen_lesen(nachricht)
                 # Aufgenommen: ab jetzt darf die eigene Kosmetik hinaus.
                 self._kos_zugelassen = True
                 if art == "neustart":
                     # Der Gastgeber hat die Regeln gewechselt. Alles, was
                     # von der alten Runde noch herumliegt, kommt weg.
+                    self._runde_gebucht = False
+                    self._zwischenstand = None
+                    self._rundenzeit = 0.0
                     self.vorbei = False
                     self.liste = []
                     self.welt.rauch = []
@@ -2892,6 +3038,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                     self.obere_zeigen = bool(self.app.opt["obere_ebenen"])
             elif art == "welt":
                 self._welt_uebernehmen(nachricht)
+            elif art == "stand":
+                w = nachricht.get("w")
+                if isinstance(w, dict):
+                    self._zwischenstand = w
+            elif art == "abbruch":
+                # Der Gastgeber hat die Runde vor ihrem Ende beendet. Er
+                # schickt die Zahlen und eine gemeinsame Kennung mit.
+                alle = nachricht.get("werte")
+                meine = alle.get(str(self.meine_nummer)) if isinstance(alle, dict) else None
+                if self.runde_laeuft or (not self._runde_gebucht and not self.vorbei
+                                         and not self.in_lobby):
+                    self._runde_buchen(meine if isinstance(meine, dict) else None,
+                                       abgebrochen=True,
+                                       partie=str(nachricht.get("partie") or "")[:64])
             elif art == "plan":
                 self._plan_lesen(nachricht)
             elif art in ("kos", "kos_index"):
@@ -3730,6 +3890,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         neuen Regeln geschickt wie beim Verbinden. Ohne diese Nachricht
         spielten sie die Runde mit den alten weiter.
         """
+        # Laeuft noch eine Runde, ist das hier ihr Abbruch: neue Runde,
+        # zurueck in die Lobby. Gebucht wird sie trotzdem (_abbruch_buchen).
+        self._abbruch_buchen()
         self.wunsch = R.saeubern(self.wunsch, self._umfeld())
         self._regeln_setzen(self.wunsch)
         self._karte_wechseln(self.wunsch["karte"])
@@ -3769,6 +3932,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Eine neue Partie faengt bei null an - auch beim Zaehlen.
         self.partie = ""
         self._rundenzeit = 0.0
+        self._runde_gebucht = False
+        self._zwischenstand = None
         self.endwerte = {}
         for k in self.kaempfer.values():
             k.zaehler_leeren()
@@ -4569,7 +4734,24 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         return bestes
 
     def _haeufigstes_opfer(self, opfer) -> str:
-        """Wen dieser Spieler am oeftesten erwischt hat."""
+        """Wen dieser Spieler am oeftesten erwischt hat.
+
+        Seit 0.31 kommt `opfer` als Liste mit Namen (_opfer_liste) - so,
+        wie es auch gebucht wird. Ein Gastgeber von davor schickte ein
+        Woerterbuch nach Spielernummer; das geht weiter.
+        """
+        if isinstance(opfer, list):
+            bester, meiste = "", 0
+            for o in opfer:
+                if not isinstance(o, dict):
+                    continue
+                try:
+                    zahl = int(o.get("anzahl", 0))
+                except (TypeError, ValueError):
+                    continue
+                if zahl > meiste and o.get("name"):
+                    bester, meiste = str(o["name"])[:24], zahl
+            return bester
         if not isinstance(opfer, dict) or not opfer:
             return ""
         bester, meiste = "", 0
@@ -4730,6 +4912,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         return "%.1f" % (z["abschuesse"] / z["tode"])
 
     def verlassen(self) -> None:
+        # Wer mitten in einer Runde geht - Menue, Fenster zu -, bucht sie
+        # als abgebrochen; der Gastgeber auch fuer alle Gaeste.
+        try:
+            self._abbruch_buchen()
+        except Exception:               # gehen darf daran nie scheitern
+            pass
         if self.ist_gastgeber:
             self.gastgeber.schliessen()
         elif self.gast is not None:

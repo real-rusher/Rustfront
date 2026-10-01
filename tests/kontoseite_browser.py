@@ -114,6 +114,95 @@ class Server:
         self.geloescht = 0
         self.profil = {"name": "TESTER", "fassung": 1, "werte": {}, "loadouts": []}
         self.profil_geschrieben = []
+        self.gefechte = []
+        self.gefecht_anfragen = 0
+        # Der ADMIN (KONTO.md 5.8), so weit nachgebaut, wie die Seite ihn
+        # sieht: dieselben Antworten wie die Funktionen in SQL. Ob die
+        # Funktionen selbst stimmen, prueft tests/test_admin_sql.py.
+        self.admin_wort = "123"
+        self.admin_muss = True
+        self.admin_sperre = 0          # Sekunden; > 0 heisst gesperrt
+        self.admin_frei = 2
+        self.rpc = []                  # (name, argumente)
+        self.konten = {
+            "k-1": {"anmeldename": "erster", "name": "ERSTER", "angelegt": 1700000000,
+                    "profil": {"name": "ERSTER", "fassung": 3, "werte": {"bildschirm_ruckeln": 40},
+                               "loadouts": []}, "kosmetik": {"ton": "", "bild": ""}},
+            "k-2": {"anmeldename": "zweiter", "name": "ZWEITER", "angelegt": 1700000100,
+                    "profil": {"name": "ZWEITER", "fassung": 1, "werte": {}, "loadouts": []},
+                    "kosmetik": {"ton": "", "bild": ""}},
+        }
+        self.admin_runden = [
+            {"partie": "a1", "konto": "k-1", "gespielt": 2000, "modus": "pvp", "team": -1,
+             "gewonnen": True, "werte": {"abschuesse": 6, "runden": 1}, "waffen": {},
+             "version": "0.31.0", "ende": "regulaer",
+             "opfer": [{"name": "ZWEITER", "konto": "k-2", "anzahl": 6}]},
+            {"partie": "a1", "konto": "k-2", "gespielt": 2000, "modus": "pvp", "team": -1,
+             "gewonnen": False, "werte": {"abschuesse": 2, "runden": 1}, "waffen": {},
+             "version": "0.31.0", "ende": "regulaer",
+             "opfer": [{"name": "ERSTER", "konto": "k-1", "anzahl": 2}]},
+        ]
+
+    def admin_rpc(self, name, a):
+        self.rpc.append((name, a))
+        if self.admin_sperre > 0:
+            return {"ok": False, "fehler": "GESPERRT", "sekunden": self.admin_sperre}
+        if a.get("wort") != self.admin_wort:
+            self.admin_frei -= 1
+            if self.admin_frei < 0:
+                self.admin_sperre = 60
+                return {"ok": False, "fehler": "FALSCH", "sekunden": 60, "frei": 0}
+            return {"ok": False, "fehler": "FALSCH", "sekunden": 0, "frei": self.admin_frei}
+        self.admin_frei = 2
+        if name == "admin_anmelden":
+            return {"ok": True, "muss_aendern": self.admin_muss}
+        if name == "admin_wort_aendern":
+            if len(a.get("neu", "")) < 8:
+                return {"ok": False, "fehler": "KENNWORT ZU KURZ (MINDESTENS 8)"}
+            self.admin_wort, self.admin_muss = a["neu"], False
+            return {"ok": True}
+        if self.admin_muss:
+            return {"ok": False, "fehler": "ERST DAS KENNWORT AENDERN"}
+        k = self.konten.get(a.get("konto"))
+        if name == "admin_konten":
+            return {"ok": True, "konten": [
+                {"konto": n, "anmeldename": v["anmeldename"], "name": v["profil"]["name"],
+                 "fassung": v["profil"]["fassung"], "angelegt": v["angelegt"],
+                 "runden": sum(1 for z in self.admin_runden if z["konto"] == n)}
+                for n, v in sorted(self.konten.items())]}
+        if name == "admin_gefechte":
+            zeilen = [z for z in self.admin_runden
+                      if a.get("konto") in (None, z["konto"]) and z["konto"] in self.konten]
+            ab = int(a.get("ab") or 0)
+            return {"ok": True, "gefechte": zeilen[ab:ab + int(a.get("anzahl") or 1000)]}
+        if k is None:
+            return {"ok": False, "fehler": "KONTO NICHT GEFUNDEN"}
+        if name == "admin_profil":
+            return {"ok": True, "profil": dict(k["profil"])}
+        if name == "admin_profil_schreiben":
+            if int(a["fassung"]) != k["profil"]["fassung"]:
+                return {"ok": False, "fehler": "PROFIL WURDE ZWISCHENDURCH GEAENDERT"}
+            k["profil"] = {"name": a["name"] or k["profil"]["name"], "fassung": a["fassung"] + 1,
+                           "werte": a["werte"], "loadouts": a["loadouts"]}
+            return {"ok": True, "profil": dict(k["profil"])}
+        if name == "admin_kosmetik":
+            return {"ok": True, **k["kosmetik"]}
+        if name == "admin_kosmetik_schreiben":
+            k["kosmetik"] = {"ton": a["ton"], "bild": a["bild"]}
+            return {"ok": True}
+        if name == "admin_name_aendern":
+            if a["neu"].lower() == "admin":
+                return {"ok": False, "fehler": "NAME VORBEHALTEN"}
+            k["anmeldename"] = a["neu"].lower()
+            k["profil"]["name"] = a["neu"]
+            return {"ok": True, "anmeldename": a["neu"].lower()}
+        if name == "admin_kennwort_setzen":
+            k["wort"] = a["neu"]
+            return {"ok": True}
+        if name == "admin_loeschen":
+            del self.konten[a["konto"]]
+            return {"ok": True}
+        return {"ok": False, "fehler": "UNBEKANNT"}
 
     def antworten(self, route):
         anfrage = route.request
@@ -129,6 +218,9 @@ class Server:
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,PUT",
                 "Access-Control-Allow-Headers": "*"})
+        if weg.startswith("rest/v1/rpc/"):
+            return json_antwort(200, self.admin_rpc(weg.split("/")[3].split("?")[0],
+                                                    json.loads(anfrage.post_data or "{}")))
         if weg.startswith("rest/v1/profil"):
             if methode == "PATCH":
                 daten = json.loads(anfrage.post_data or "{}")
@@ -136,7 +228,15 @@ class Server:
                 self.profil = dict(self.profil, **daten)
             return json_antwort(200, [self.profil])
         if weg.startswith("rest/v1/gefecht"):
-            return json_antwort(200, [])
+            # Wie Supabase: hoechstens 1000 Zeilen je Antwort, limit und
+            # offset aus der Adresse.
+            from urllib.parse import urlparse, parse_qs
+            q = parse_qs(urlparse(anfrage.url).query)
+            grenze = min(1000, int((q.get("limit") or ["1000"])[0]))
+            ab = int((q.get("offset") or ["0"])[0])
+            self.gefecht_anfragen += 1
+            zeilen = sorted(self.gefechte, key=lambda z: -z["gespielt"])
+            return json_antwort(200, zeilen[ab:ab + grenze])
         if weg.startswith("rest/v1/kosmetik"):
             if self.tabelle_fehlt:
                 return json_antwort(404, {
@@ -403,12 +503,212 @@ with sync_playwright() as pw:
           s.locator(".satz select").first.input_value() == wert
           and "NOCH NICHT GESPEICHERT" not in s.inner_text("body"))
 
+    # ── Statistik aus den Runden (0.31) ───────────────────────────────
+    # Bis 0.30 las die Seite die Uebersicht aus profil.werte, wo die
+    # Einstellungen stehen - es standen Nullen da. Jetzt aus den Runden,
+    # mit Filtern fuer Version, Art und Abbrueche.
+    def runde(nr, modus, version, ende, werte, opfer=()):
+        return {"partie": "p%d" % nr, "konto": SITZUNG["kennung"], "gespielt": 1000 + nr,
+                "modus": modus, "team": -1, "gewonnen": False, "gastgeber": True,
+                "werte": werte, "waffen": {"scharf": {"abschuesse": werte.get("abschuesse", 0)}},
+                "version": version, "ende": ende, "opfer": list(opfer)}
+    server.gefechte = [
+        runde(1, "pvp", "0.31.0", "regulaer",
+              {"abschuesse": 4, "tode": 2, "runden": 1, "schuesse": 10, "treffer": 5,
+               "schuesse_pvp": 10, "treffer_pvp": 5},
+              [{"name": "ZWEI", "konto": "k-2", "anzahl": 3},
+               {"name": "GAST", "konto": "", "anzahl": 1}]),
+        runde(2, "pve", "0.31.0", "regulaer",
+              {"abschuesse": 0, "runden": 1, "gegner_abschuesse": 30,
+               "schuesse": 40, "treffer": 10, "schuesse_pve": 40, "treffer_pve": 10}),
+        runde(3, "pvp", "0.31.0", "abgebrochen",
+              {"abschuesse": 2, "runden": 0, "abgebrochen": 1},
+              [{"name": "ZWEI-NEU", "konto": "k-2", "anzahl": 2}]),
+        # Vor 0.31: ohne Version und Ende.
+        dict(runde(4, "pvp", "", "", {"abschuesse": 1, "runden": 1}), version=None, ende=None),
+    ]
+    s.reload()
+    warten(s, "document.body.innerText.includes('AUF EINEN BLICK')")
+
+    def kachel(name):
+        return s.evaluate("""(n) => { for (const k of document.querySelectorAll('.wert'))
+            if (k.querySelector('.bez').textContent === n) return k.querySelector('.zahl').textContent;
+            return null; }""", name)
+    namen = {d["schluessel"]: d["name"] for d in s.evaluate("DATEN.werte")}
+    pruef("Die Uebersicht rechnet aus den Runden, ohne den Abbruch",
+          kachel(namen["abschuesse"]) == "5" and kachel(namen["runden"]) == "3"
+          and kachel(namen["abgebrochen"]) == "1" and kachel(namen["gegner_abschuesse"]) == "30",
+          "%s / %s / %s" % (kachel(namen["abschuesse"]), kachel(namen["runden"]),
+                            kachel(namen["abgebrochen"])))
+    pruef("Trefferquote getrennt nach PVP und PVE",
+          kachel("QUOTE PVP") == "50.0 %" and kachel("QUOTE PVE") == "25.0 %",
+          "%s / %s" % (kachel("QUOTE PVP"), kachel("QUOTE PVE")))
+    s.locator(".filter input[type=checkbox]").check()
+    pruef("Abgebrochene auf Wunsch mitgezaehlt", kachel(namen["abschuesse"]) == "7",
+          kachel(namen["abschuesse"]))
+    s.locator(".filter input[type=checkbox]").uncheck()
+    s.locator(".filter select").first.select_option("0.31.0")
+    pruef("Nur Version 0.31.0: die alte Runde faellt heraus",
+          kachel(namen["abschuesse"]) == "4" and kachel(namen["runden"]) == "2",
+          kachel(namen["abschuesse"]))
+    s.locator(".filter select").first.select_option("")
+    pruef("Die Runden ohne Version lassen sich einzeln waehlen",
+          kachel(namen["abschuesse"]) == "1", kachel(namen["abschuesse"]))
+    s.locator(".filter select").first.select_option("*")
+    s.locator(".filter select").nth(1).select_option("pve")
+    pruef("Nur PVE", kachel(namen["gegner_abschuesse"]) == "30"
+          and kachel(namen["abschuesse"]) == "0")
+    s.locator(".filter select").nth(1).select_option("")
+    s.get_by_role("button", name="ERLEDIGT").click()
+    zeilen_e = s.locator(".tafel table tbody tr").all_inner_texts()
+    pruef("ERLEDIGT: wen wie oft, ohne den Abbruch",
+          len(zeilen_e) == 2 and "ZWEI" in zeilen_e[0] and "3" in zeilen_e[0], str(zeilen_e))
+    s.locator(".filter input[type=checkbox]").check()
+    zeilen_e = s.locator(".tafel table tbody tr").all_inner_texts()
+    pruef("Mit Abbruch: nach Konto zusammen, unter dem neuesten Namen",
+          len(zeilen_e) == 2 and "ZWEI-NEU" in zeilen_e[0] and "\t5" in zeilen_e[0],
+          str(zeilen_e))
+    s.get_by_role("button", name="RUNDEN").click()
+    text_r = s.inner_text("body")
+    pruef("RUNDEN zeigt Version und Ende",
+          "ABGEBROCHEN" in text_r and "0.31.0" in text_r and "REGULÄR" in text_r)
+    s.locator(".filter input[type=checkbox]").uncheck()
+    pruef("Ohne Abbrueche sagt RUNDEN, wie viele fehlen",
+          "1 abgebrochene ausgeblendet" in s.inner_text("body"))
+    s.get_by_role("button", name="WERTE").click()
+    pruef("Die Einstellungen aus dem Profil stehen als Einstellungen da",
+          "keine Zaehler" in s.inner_text("body") or "keine Einstellungen" in s.inner_text("body"))
+
+    # Mehr als eine Seite: alle Runden muessen ankommen.
+    server.gefechte = [runde(100 + i, "pvp", "0.31.0", "regulaer",
+                             {"abschuesse": 1, "runden": 1}) for i in range(2345)]
+    server.gefecht_anfragen = 0
+    s.reload()
+    s.get_by_role("button", name="ÜBERSICHT").click()
+    warten(s, "document.body.innerText.includes('AUF EINEN BLICK')")
+    pruef("Auch 2345 Runden kommen ganz an, seitenweise",
+          kachel(namen["abschuesse"]) == "2.345" and server.gefecht_anfragen == 3,
+          "%s in %d Anfragen" % (kachel(namen["abschuesse"]), server.gefecht_anfragen))
+    server.gefechte = []
+
     # ── Ohne Tabelle auf dem Server ───────────────────────────────────
     server.tabelle_fehlt = True
     s.reload()
     s.get_by_role("button", name="KOSMETIK").click()
     pruef("Fehlt die Tabelle, steht da, was zu tun ist",
           warten(s, "document.body.innerText.includes('5.6')"))
+
+    # ── Der ADMIN (0.31) ──────────────────────────────────────────────
+    # Eine eigene Seite ohne gespeicherte Anmeldung: der ADMIN meldet sich
+    # am Tor an, mit dem Namen admin.
+    server.tabelle_fehlt = False
+    k2 = browser.new_context()
+    k2.route("**/rest/v1/**", server.antworten)
+    k2.route("**/auth/v1/**", server.antworten)
+    a = k2.new_page()
+    a.on("pageerror", lambda e: fehler_js.append(str(e)))
+    a.goto(seite.as_uri())
+
+    def anmelden(name, wort, knopfname="ANMELDEN"):
+        a.locator("input").nth(0).fill(name)
+        a.locator("input").nth(1).fill(wort)
+        a.get_by_role("button", name=knopfname, exact=True).click()
+
+    anmelden("admin", "123", "NEU")
+    pruef("Ein Konto ADMIN laesst sich nicht anlegen",
+          warten(a, "document.body.innerText.includes('NAME VORBEHALTEN')")
+          and not server.rpc)
+    anmelden("admin", "falsch")
+    pruef("Falsches Kennwort: die Seite sagt, wie viele Versuche noch frei sind",
+          warten(a, "document.body.innerText.includes('NOCH EIN FEHLVERSUCH OHNE SPERRE')"))
+    anmelden("Admin", "123")
+    pruef("Mit 123 (kurz, aber erlaubt) geht es - und zuerst kommt ein neues Kennwort",
+          warten(a, "document.body.innerText.includes('Das erste Kennwort des ADMIN ist 123')")
+          and a.get_by_role("button", name="KONTEN").count() == 0)
+    a.locator("input[type=password]").nth(0).fill("NeuesAdmin1")
+    a.locator("input[type=password]").nth(1).fill("NeuesAdminX")
+    a.get_by_role("button", name="KENNWORT SETZEN").click()
+    pruef("Zwei verschiedene werden nicht genommen",
+          warten(a, "document.body.innerText.includes('NICHT GLEICH')") and server.admin_muss)
+    a.locator("input[type=password]").nth(0).fill("NeuesAdmin1")
+    a.locator("input[type=password]").nth(1).fill("NeuesAdmin1")
+    a.get_by_role("button", name="KENNWORT SETZEN").click()
+    pruef("Danach die Liste aller Konten",
+          warten(a, "document.body.innerText.includes('Oeffnen zeigt ein Konto')")
+          and "erster" in a.inner_text("body") and "zweiter" in a.inner_text("body"))
+    pruef("Das Kennwort steht nirgends im Browser gespeichert",
+          "NeuesAdmin1" not in a.evaluate("JSON.stringify(localStorage)"))
+    a.get_by_role("button", name="ÜBERSICHT").click()
+    pruef("Die Statistik aller zusammen",
+          warten(a, "document.body.innerText.includes('Runden gezaehlt')")
+          and a.evaluate("""() => { for (const k of document.querySelectorAll('.wert'))
+              if (k.querySelector('.bez').textContent === DATEN.werte.find(
+                  v => v.schluessel === 'abschuesse').name)
+                return k.querySelector('.zahl').textContent; }""") == "8")
+    a.get_by_role("button", name="RUNDEN").click()
+    pruef("RUNDEN zeigt, wessen Runde es ist",
+          "ERSTER" in a.inner_text("body") and "KONTO" in a.inner_text("body"))
+    a.get_by_role("button", name="ERLEDIGT").click()
+    pruef("ERLEDIGT: wer wen am oeftesten - ueber alle",
+          "ZWEITER" in a.locator(".tafel table tbody tr").first.inner_text())
+
+    # Ein Konto oeffnen: dieselben Reiter wie beim Spieler.
+    a.get_by_role("button", name="KONTEN").click()
+    a.locator("tr", has_text="erster").get_by_role("button", name="OEFFNEN").click()
+    pruef("Ein Konto oeffnen zeigt seine Zahlen",
+          warten(a, "document.body.innerText.includes('VOM ADMIN GEOEFFNET')")
+          and warten(a, "document.body.innerText.includes('Runden gezaehlt')"))
+    a.get_by_role("button", name="AUSRÜSTUNG").click()
+    erste_a = a.locator(".satz select").first
+    wert_a = a.evaluate("(sel) => Array.from(sel.options).map(o => o.value)"
+                        ".find(v => v !== sel.value)", erste_a.element_handle())
+    erste_a.select_option(wert_a)
+    a.locator(".tafel").get_by_role("button", name="SPEICHERN").click()
+    warten(a, "document.body.innerText.includes('GESPEICHERT')")
+    letzte = [x for x in server.rpc if x[0] == "admin_profil_schreiben"]
+    pruef("Loadouts eines anderen aendern: geht als ADMIN an den Server, mit Fassung",
+          letzte and letzte[-1][1]["konto"] == "k-1" and letzte[-1][1]["fassung"] == 3
+          and server.konten["k-1"]["profil"]["loadouts"][0]["waffen"][0] == wert_a,
+          str(letzte[-1:])[:200])
+    pruef("Die Werte (Einstellungen) bleiben dabei, wie sie waren",
+          server.konten["k-1"]["profil"]["werte"] == {"bildschirm_ruckeln": 40})
+    a.get_by_role("button", name="KOSMETIK").click()
+    pruef("Auch die Kosmetik eines anderen geht auf",
+          warten(a, "Werkstatt.server.geladen === true")
+          and any(x[0] == "admin_kosmetik" and x[1]["konto"] == "k-1" for x in server.rpc))
+    a.get_by_role("button", name="KONTO").click()
+    a.locator("input").first.fill("Umbenannt")
+    a.get_by_role("button", name="UMBENENNEN").click()
+    pruef("Umbenennen",
+          warten(a, "document.body.innerText.includes('UMBENANNT IN UMBENANNT')")
+          and server.konten["k-1"]["anmeldename"] == "umbenannt")
+    a.locator("input[type=password]").nth(0).fill("Spielerwort9")
+    a.locator("input[type=password]").nth(1).fill("Spielerwort9")
+    a.get_by_role("button", name="KENNWORT SETZEN").click()
+    pruef("Kennwort eines anderen setzen",
+          warten(a, "document.body.innerText.includes('KENNWORT GESETZT')")
+          and server.konten["k-1"].get("wort") == "Spielerwort9")
+    a.locator("input[autocomplete=off]").fill("falscher")
+    a.get_by_role("button", name="ENDGUELTIG LOESCHEN").click()
+    pruef("Loeschen nur mit dem richtigen Namen",
+          warten(a, "document.body.innerText.includes('NICHTS GELOESCHT')")
+          and "k-1" in server.konten)
+    a.locator("input[autocomplete=off]").fill("umbenannt")
+    a.get_by_role("button", name="ENDGUELTIG LOESCHEN").click()
+    pruef("Und dann ist es weg, und es geht zurueck zur Liste",
+          warten(a, "document.body.innerText.includes('GELOESCHT')")
+          and warten(a, "document.body.innerText.includes('Oeffnen zeigt ein Konto')")
+          and "k-1" not in server.konten and "umbenannt" not in a.inner_text("body"))
+
+    # Gesperrt waehrend der Arbeit: jemand raet gerade. Dann ist Schluss.
+    server.admin_sperre = 90
+    a.get_by_role("button", name="ADMIN", exact=True).click()
+    a.get_by_role("button", name="NEU LADEN").click()
+    pruef("Wird der ADMIN gesperrt, endet die Anmeldung mit der Wartezeit",
+          warten(a, "document.body.innerText.includes('GESPERRT, NOCH 1 MIN 30 S')")
+          and a.locator("input[type=password]").count() == 1)
+    server.admin_sperre = 0
+    k2.close()
 
     pruef("Kein Fehler im Skript der Seite", not fehler_js, "; ".join(fehler_js)[:300])
     browser.close()

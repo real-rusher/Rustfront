@@ -1331,7 +1331,7 @@ Neunzehn Punkte auf einmal, darum hier nach Thema geordnet.
 ### Bewegung und Tempo
 
 * **Dash statt Sprint** (`K.DASH`): zwei Ladungen, die nacheinander
-  nachladen (3,4 s je Ladung). Ein Stoss traegt rund zwei Kacheln
+  nachladen (3,4 s je Ladung; seit 0.31 drei Ladungen zu 2,7 s). Ein Stoss traegt rund zwei Kacheln
   (gemessen 75 px). Nicht im Sturz, nicht am Boden, nicht beim Medkit,
   nicht beim Ziehen.
 * **Langsamer**: Spieler 108 statt 132 px/s, alle Gegner mal 0,85 im
@@ -1589,6 +1589,67 @@ eine Salve ueber den Rand trug, an einer unsichtbaren Kante haengen.
 Schritt der Welt. Davor nahm der Schuss im selben Schritt gleich wieder
 eine Patrone, und die Zahl sprang bei jedem Schuss von 100 auf 99 und
 zurueck (gemeldet als Flackern beim MG).
+
+## 12e. Version 0.31: Statistik, Abbrueche, ADMIN
+
+### Wer bucht was
+
+**FEST.** Gerechnet wird weiter nur beim Gastgeber (`Kaempfer.zaehlen`).
+Neu gezaehlt: `gegner_abschuesse` und `boss_abschuesse`
+(`entities.abschuss_buchen`), `treffer_spieler` und `treffer_gegner`
+(`treffer_ziel_buchen`), und beim Buchen `schuesse_pvp`/`treffer_pvp` oder
+`schuesse_pve`/`treffer_pve` nach `MODUS_ART`. PVPVE bekommt keine der
+beiden - dort ist ein Schuss weder das eine noch das andere.
+
+**FEST.** Ein Spieler faellt erst um und stirbt spaeter (Bodenzeit). Die
+Waffe des Treffers, der ihn umwarf, merkt sich `Kaempfer.toeter_waffe`;
+gebucht wird sie beim Abrechnen, einmal je Tod. Die Summe `abschuesse`
+kommt weiter aus `Kaempfer.abschuesse` - die Zeile je Waffe aendert sie
+nicht.
+
+**FEST.** Wen man wie oft erledigt hat: `Kaempfer.opfer` je Nummer, beim
+Buchen mit Name und Kontokennung (`_opfer_liste`). Die Kennung schickt der
+Gast mit "hallo" (`kt`); wer ohne Konto spielt, steht nur mit Namen da.
+
+### Abbrueche
+
+**FEST.** Endet eine Runde, die laenger als `GEFECHT["abbruch_ab"]` lief,
+nicht regulaer, bucht `_abbruch_buchen` sie als `ende = "abgebrochen"`:
+
+* **Gastgeber geht** (ESC, Fenster zu, zurueck in die Lobby, neue Regeln):
+  er schickt `{"t":"abbruch","partie","werte"}` an alle, spuelt die
+  Leitungen und bucht sich selbst. Die Gaeste buchen ihre Zahlen unter
+  derselben Partie.
+* **Leitung reisst**: der Gast bucht den letzten `{"t":"stand"}`, den der
+  Gastgeber alle `GEFECHT["zwischenstand_takt"]` Sekunden schickt.
+* **Gast geht**: er bucht seinen letzten Zwischenstand.
+* **Fenster zu**: `App._fenster_zu` verlaesst jetzt alle Szenen wie ESC -
+  vorher endete die Schleife einfach, und die Runde war fuer alle weg.
+  Danach laedt `Konto.hochladen_vor_ende` noch hoch, was offen ist.
+
+**GRUND.** Getrennt von den regulaeren, weil sonst jede Statistik "je
+Runde" kippt: eine nach einer Minute abgebrochene Runde hat wenige
+Abschuesse und zaehlt nicht als Runde. Gebucht wird sie trotzdem, weil
+die Zahlen darin gespielt wurden.
+
+**FEST.** Jede gebuchte Zeile traegt `version` (`K.VERSION`). Nach einer
+Aenderung am Gleichgewicht lassen sich die Zahlen davor und danach trennen.
+
+### Der ADMIN
+
+Ganz im Server (`docs/KONTO.md` 5.8) und auf der Kontoseite; im Spiel ist
+nur der Name `admin` vorbehalten (`ablage.VORBEHALTEN`).
+
+### Kleinere Fallen
+
+* **Granaten beim Gast unsichtbar** (gemeldet): gesendet wurde nur, was
+  "geschoss", "granate" oder "rauchgranate" hiess. Molotow, Blendgranate und
+  Rakete hatten seit den Skins andere Bildnamen. Jetzt geht alles hinaus,
+  was ein `Geschoss`, eine `Granate` oder eine `Rakete` ist, mit seinem
+  Bildnamen.
+* **Neustart beim Gast**: der Abbruch einer alten Runde wird gebucht,
+  *bevor* die neuen Regeln gelesen werden - sonst stuende sie unter dem
+  neuen Modus.
 
 ---
 

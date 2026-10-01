@@ -147,6 +147,12 @@ Stuerze, Zeit im Kreis, Runden, Siege, Spielzeit, beste Abschussfolge,
 beste Runde - und dasselbe getrennt je Waffe (Schuesse, Treffer,
 Abschuesse), damit sich sagen laesst, womit jemand wirklich spielt.
 
+Seit 0.31 dazu: Zombie- und Bossabschuesse, Treffer auf Spieler und auf
+Zombies, Schuesse und Treffer getrennt nach PVP und PVE, die Zahl der
+abgebrochenen Runden - und je Runde die Version, ob sie regulaer endete,
+und wen man darin wie oft erledigt hat (Name und Kontokennung des
+Gegners, die einzige Zeile, in der ein anderes Konto vorkommt; siehe 5.7).
+
 **Keine Adresse.** Supabase will fuer ein Konto eine E-Mail-Adresse.
 Angemeldet wird deshalb mit `<name>@spieler.dustfront`, einer Domaene,
 die es nicht gibt und nie geben wird. Eine echte Adresse wird nicht
@@ -361,14 +367,24 @@ Server, keine Installation, kein Internet ausser dem zu Supabase.
 
 | Reiter | Inhalt |
 |---|---|
-| **UEBERSICHT** | Die sechs Zahlen, die man wirklich anschaut, dazu Verhaeltnis und Trefferquote (gerechnet, nicht gespeichert) |
-| **WERTE** | **Jeder** Zaehler, mit seinem Namen in der Datenbank daneben - und darunter alles, was sonst noch im Profil steht |
+| **UEBERSICHT** | Die Zahlen, die man wirklich anschaut, dazu Verhaeltnis, Abschuesse je Runde und Trefferquoten gesamt, PVP und PVE (gerechnet, nicht gespeichert). Seit 0.31 aus den Runden - bis 0.30 aus dem Profil, wo die Einstellungen stehen, und darum Nullen |
+| **WERTE** | **Jeder** Zaehler, mit seinem Namen in der Datenbank daneben - und darunter alles, was sonst noch gespeichert ist, auch die Einstellungen im Profil |
 | **WAFFEN** | Schuesse, Treffer, Abschuesse je Waffe, addiert aus allen Runden, mit dem Symbol aus dem Spiel |
-| **RUNDEN** | Jede gespielte Runde einzeln, so wie sie in der Tabelle steht |
+| **ERLEDIGT** | Wen du wie oft erledigt hast, nach Konto (seit 0.31) |
+| **RUNDEN** | Jede gespielte Runde einzeln, so wie sie in der Tabelle steht, mit Version und Ende |
 | **AUSRUESTUNG** | Die drei Loadouts aendern und eines zum Tragen waehlen. Geaendert wird ein Entwurf, bis SPEICHERN - bis 0.29 sprang eine gewaehlte Waffe sofort zurueck, weil jede Auswahl die Seite aus dem Gespeicherten neu baute |
 | **AUSSEHEN** | Grau. Vorbereitet, noch ohne Inhalt - siehe `docs/KOSMETIK.md` |
 | **KOSMETIK** | Eigener Ton und eigenes Bild fuer die Blendgranate: MP3 laden und zuschneiden, Bass, lauter, mit Knall und Pfeifen aus dem Spiel mischen; Bild laden und filtern, auf dem Weiss verschieben und in der Groesse einstellen (sonst fuellt es den Schirm); Vorschau in Spielgroesse. Braucht die Tabelle aus 5.6 |
 | **KONTO** | Anzeigename, Kennwort aendern, Kennung, Fassung, abmelden |
+
+Ueber UEBERSICHT, WERTE, WAFFEN, ERLEDIGT und RUNDEN steht ein Filter:
+**Version** (oder "vor 0.31"), **Art** (PVP, PVE, PVPVE) und ob
+**abgebrochene Runden** mitzaehlen (5.7). Er gilt auf allen fuenf.
+
+Mit dem Namen **admin** meldet sich der ADMIN an (5.8): eine Liste aller
+Konten, dieselben Zahlenreiter ueber alle zusammen, und jedes Konto zum
+Oeffnen - mit genau den Reitern, die sein Spieler sieht, und KONTO zum
+Umbenennen, Kennwort setzen und Loeschen.
 
 Dazu **ALLES HERUNTERLADEN**: Profil, alle Runden und die Kosmetik als JSON-Datei. Das
 ist der Punkt an der Sache. Wer wissen will, was ueber ihn gespeichert
@@ -379,10 +395,13 @@ ist, soll es nicht erfragen muessen, sondern anklicken koennen.
 * **Zahlen aendern.** Geschrieben werden genau drei Sachen: der
   Anzeigename, die Loadouts und die eigene Spielerkosmetik (5.6). Werte,
   die man selbst setzen kann, waeren keine Statistik mehr.
-* **Ein Konto loeschen.** Dafuer braucht es den *secret key*, und der
-  darf in keiner Datei stehen, die jemand herunterladen kann.
+* **Das eigene Konto loeschen.** Das kann nur der ADMIN (5.8) - ohne
+  *secret key*, der in keiner Datei stehen darf, die jemand herunterladen
+  kann.
 * **Fremde Konten sehen.** Der Zeilenschutz laesst nur die eigenen Zeilen
-  durch, und das entscheidet der Server, nicht die Seite.
+  durch, und das entscheidet der Server, nicht die Seite. Die einzige
+  Ausnahme ist der ADMIN (5.8), und der geht nicht am Zeilenschutz
+  vorbei, sondern durch Funktionen, die sein Kennwort pruefen.
 
 ### Wie sie gebaut ist
 
@@ -477,6 +496,485 @@ bekommt sie nie zu sehen.
 Fehlt die Tabelle, sagt die Kontoseite es auf dem Reiter KOSMETIK; das
 Spiel laeuft dann ohne Kosmetik weiter.
 
+### 5.7 Version, Abbruch und Opfer (seit 0.31)
+
+Seit 0.31 traegt jede Runde drei Spalten mehr: **mit welcher Version**
+gespielt wurde, ob sie **regulaer endete oder abgebrochen** wurde, und
+**wen man darin wie oft erledigt** hat. Einmal im **SQL Editor**
+ausfuehren (wiederholbar):
+
+```sql
+-- ── 0.31: Version, Ende und Opfer je Runde ─────────────────────────
+-- Mit welcher Fassung des Spiels gespielt wurde ("" = vor 0.31),
+-- ob die Runde regulaer endete oder abgebrochen wurde, und wen man
+-- darin wie oft erledigt hat ([{"name","konto","anzahl"}]).
+alter table gefecht add column if not exists version text  not null default '';
+alter table gefecht add column if not exists ende    text  not null default 'regulaer';
+alter table gefecht add column if not exists opfer   jsonb not null default '[]'::jsonb;
+
+-- Nur diese zwei. Ein Tippfehler im Spiel soll auffallen und nicht
+-- als dritte Art von Ende in der Statistik stehen.
+alter table gefecht drop constraint if exists gefecht_ende;
+alter table gefecht add  constraint gefecht_ende check (ende in ('regulaer', 'abgebrochen'));
+
+-- Wer nach Version filtert, soll nicht die ganze Tabelle lesen muessen.
+create index if not exists gefecht_version on gefecht (version);
+
+-- Supabase merkt sich die Spalten einer Tabelle. Ohne das kennt es die
+-- neuen erst nach ein paar Minuten.
+notify pgrst, 'reload schema';
+```
+
+**Was "abgebrochen" heisst:** die Runde endete vor ihrer Zeit - das Fenster
+ging zu, die Verbindung riss, der Gastgeber ging zurueck in die Lobby oder
+wechselte die Regeln. Sie wird trotzdem hochgeladen, mit allem, was bis
+dahin gezaehlt war, aber mit `ende = 'abgebrochen'`, `runden = 0`,
+`siege = 0` und `abgebrochen = 1` in den Werten. Die Uebersicht im Spiel
+und auf der Kontoseite laesst sie weg, damit "Abschuesse je Runde" und
+"Siege je Runde" stimmen; wer will, nimmt sie mit einem Haken dazu. Wie
+viele es waren, steht immer da. Gebucht wird ein Abbruch erst ab
+`GEFECHT["abbruch_ab"]` Sekunden (5) - wer eine Runde aufmacht und gleich
+wieder zu, hat nicht gespielt.
+
+**Wer bucht, wenn die Verbindung weg ist:** der Gastgeber schickt jedem Gast
+alle `GEFECHT["zwischenstand_takt"]` Sekunden (2) seine Zahlen. Reisst die
+Leitung, bucht der Gast diesen letzten Stand. Geht der Gastgeber geordnet
+(ESC, Fenster zu), schickt er vorher allen dieselbe Partiekennung und ihre
+Zahlen - genau wie beim regulaeren Ende. Beim Schliessen des Fensters
+laedt das Spiel noch hoch, was offen ist (`Konto.hochladen_vor_ende`);
+klappt das nicht, geht es beim naechsten Start hoch wie immer.
+
+**Warum die Version:** wird spaeter etwas ausbalanciert (Zombies mit weniger
+Leben, eine schwaechere Waffe), sind die Zahlen davor und danach nicht
+dieselben. Die Kontoseite filtert danach; `Journal.summe(version=...)` im
+Spiel ebenso. Runden von vor 0.31 haben die Version `''`.
+
+**Ohne diese Spalten** geht jede Runde trotzdem hoch - das Spiel merkt am
+Fehler `PGRST204`, dass der Server sie nicht kennt, und schickt sie ohne
+(`ablage.py`, `SPALTEN_031`). Ob sie abgebrochen war, steht dann noch in
+den Werten; Version und Opfer fehlen. Der Selbsttest (5.5) sagt es.
+
+**Getrennt nach PVP und PVE** sind seit 0.31 auch Schuesse und Treffer
+(`schuesse_pvp`, `treffer_pvp`, `schuesse_pve`, `treffer_pve`), dazu
+Treffer auf Spieler und auf Zombies, Zombie- und Bossabschuesse, und je
+Waffe die Abschuesse. Das sind Werte in der Spalte `werte` und brauchen
+keine eigene Spalte.
+
+### 5.8 Das ADMIN-Konto (seit 0.31)
+
+Ein Konto, das alle anderen sieht und verwalten kann: alle Profile, die
+Statistik aller zusammen, Loadouts und Kosmetik bearbeiten, Namen und
+Kennwoerter aendern, Konten loeschen. Angemeldet wird auf der Kontoseite
+mit dem Namen **admin**. Das erste Kennwort ist **123**; es muss sofort
+geaendert werden, vorher geht nichts anderes.
+
+Einmal im **SQL Editor** ausfuehren, **nach 5.2, 5.6 und 5.7**:
+
+```sql
+-- ── 0.31: Das ADMIN-Konto ──────────────────────────────────────────
+-- Kein Konto im Anmeldedienst, sondern eine Zeile mit einem Kennwort-
+-- Hash und Funktionen, die es bei jedem Aufruf pruefen. So steht nirgends
+-- ein geheimer Schluessel, und der Zeilenschutz der Spieler bleibt, wie
+-- er ist: ein Spieler sieht weiter nur sich selbst.
+create extension if not exists pgcrypto with schema extensions;
+
+create table if not exists public.admin_zugang (
+  nr            int primary key default 1 check (nr = 1),    -- genau eine Zeile
+  hash          text not null,                              -- bcrypt
+  muss_aendern  boolean not null default true,              -- "123" gilt nur einmal
+  fehlversuche  int not null default 0,
+  gesperrt_bis  timestamptz,
+  geaendert     timestamptz not null default now()
+);
+-- Zeilenschutz an und KEINE Regel: von aussen liest und schreibt niemand
+-- diese Tabelle, auch kein angemeldeter Spieler. Nur die Funktionen unten.
+alter table public.admin_zugang enable row level security;
+revoke all on public.admin_zugang from public, anon, authenticated;
+
+-- Das Anfangskennwort. Beim ersten Anmelden muss es geaendert werden;
+-- vorher geht keine andere Funktion. "on conflict do nothing": ein
+-- zweites Ausfuehren setzt ein geaendertes Kennwort NICHT zurueck.
+insert into public.admin_zugang (nr, hash)
+values (1, extensions.crypt('123', extensions.gen_salt('bf')))
+on conflict (nr) do nothing;
+
+-- Den Namen ADMIN bekommt kein Spieler. Sonst gaebe es zwei "admin",
+-- und die Kontoseite wuesste nicht, welcher gemeint ist.
+create or replace function public.name_vorbehalten() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if lower(split_part(new.email, '@', 1)) = 'admin' then
+    raise exception 'NAME VORBEHALTEN';
+  end if;
+  return new;
+end $$;
+drop trigger if exists name_vorbehalten on auth.users;
+create trigger name_vorbehalten before insert on auth.users
+  for each row execute function public.name_vorbehalten();
+
+-- ── Pruefen und Sperren ───────────────────────────────────────────
+-- Die ersten zwei Fehlversuche kosten nichts. Der dritte sperrt eine
+-- Minute, der vierte 5, der fuenfte 15, der sechste 30, und danach
+-- verdoppelt sich die Sperre mit jedem weiteren (60, 120, 240, ...).
+-- Ein richtiges Kennwort setzt alles zurueck. Waehrend einer Sperre
+-- wird gar nicht erst geprueft - auch das richtige Kennwort nicht,
+-- sonst waere die Sperre keine - und es zaehlt auch nichts hoch.
+--
+-- Die Funktion wirft nie. Ein Fehler wuerde die Transaktion
+-- zuruecknehmen und mit ihr den hochgezaehlten Fehlversuch: man koennte
+-- dann beliebig oft raten. Darum kommt jede Antwort als JSON zurueck.
+create or replace function public.admin_sperre_minuten(versuche int) returns numeric
+language sql immutable set search_path = '' as $$
+  select case
+    when versuche < 3 then 0
+    when versuche = 3 then 1
+    when versuche = 4 then 5
+    when versuche = 5 then 15
+    -- Die Hochzahl ist gedeckelt (2^20 * 30 Minuten sind 60 Jahre),
+    -- damit die Rechnung nie ueber das Ende des Kalenders hinauslaeuft.
+    else 30 * power(2, least(versuche - 6, 20))
+  end
+$$;
+
+create or replace function public.admin_pruefen(wort text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  z public.admin_zugang;
+  minuten numeric;
+begin
+  select * into z from public.admin_zugang where nr = 1 for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'fehler', 'KEIN ADMIN EINGERICHTET');
+  end if;
+  if z.gesperrt_bis is not null and z.gesperrt_bis > now() then
+    return jsonb_build_object('ok', false, 'fehler', 'GESPERRT',
+      'sekunden', ceil(extract(epoch from z.gesperrt_bis - now())));
+  end if;
+  if wort is not null and z.hash = extensions.crypt(wort, z.hash) then
+    update public.admin_zugang set fehlversuche = 0, gesperrt_bis = null where nr = 1;
+    return jsonb_build_object('ok', true, 'muss_aendern', z.muss_aendern);
+  end if;
+  minuten := public.admin_sperre_minuten(z.fehlversuche + 1);
+  update public.admin_zugang
+     set fehlversuche = z.fehlversuche + 1,
+         gesperrt_bis = case when minuten > 0
+                             then now() + minuten * interval '1 minute' end
+   where nr = 1;
+  return jsonb_build_object('ok', false, 'fehler', 'FALSCH',
+    'fehlversuche', z.fehlversuche + 1,
+    'sekunden', minuten * 60,
+    -- Wie viele Fehlversuche noch nichts kosten. Nach dem zweiten: keiner.
+    'frei', greatest(0, 1 - z.fehlversuche));
+end $$;
+
+-- Fuer alles ausser dem Anmelden und dem Kennwortwechsel: richtig, und
+-- das Anfangskennwort schon ersetzt. Gibt null zurueck, wenn es geht.
+create or replace function public.admin_darf(wort text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare p jsonb;
+begin
+  p := public.admin_pruefen(wort);
+  if not (p->>'ok')::boolean then return p; end if;
+  if (p->>'muss_aendern')::boolean then
+    return jsonb_build_object('ok', false, 'fehler', 'ERST DAS KENNWORT AENDERN');
+  end if;
+  return null;
+end $$;
+
+-- Diese drei sind nur fuer die Funktionen hier, nicht fuer die Kontoseite.
+revoke execute on function public.admin_pruefen(text)        from public, anon, authenticated;
+revoke execute on function public.admin_darf(text)           from public, anon, authenticated;
+revoke execute on function public.admin_sperre_minuten(int)  from public, anon, authenticated;
+
+-- ── Anmelden, eigenes Kennwort ────────────────────────────────────
+create or replace function public.admin_anmelden(wort text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+begin
+  return public.admin_pruefen(wort);
+end $$;
+
+create or replace function public.admin_wort_aendern(wort text, neu text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare p jsonb;
+begin
+  p := public.admin_pruefen(wort);
+  if not (p->>'ok')::boolean then return p; end if;
+  if neu is null or length(neu) < 8 then
+    return jsonb_build_object('ok', false, 'fehler', 'KENNWORT ZU KURZ (MINDESTENS 8)');
+  end if;
+  if length(neu) > 72 then
+    return jsonb_build_object('ok', false, 'fehler', 'KENNWORT ZU LANG (HOECHSTENS 72)');
+  end if;
+  if neu = wort then
+    return jsonb_build_object('ok', false, 'fehler', 'DAS IST DAS ALTE KENNWORT');
+  end if;
+  update public.admin_zugang
+     set hash = extensions.crypt(neu, extensions.gen_salt('bf')),
+         muss_aendern = false, geaendert = now()
+   where nr = 1;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- ── Lesen ─────────────────────────────────────────────────────────
+create or replace function public.admin_konten(wort text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare f jsonb;
+begin
+  f := public.admin_darf(wort);
+  if f is not null then return f; end if;
+  return jsonb_build_object('ok', true, 'konten', coalesce((
+    select jsonb_agg(jsonb_build_object(
+             'konto',      u.id,
+             'anmeldename', split_part(u.email, '@', 1),
+             'name',       coalesce(p.name, ''),
+             'fassung',    coalesce(p.fassung, 0),
+             'runden',     (select count(*) from public.gefecht g where g.konto = u.id),
+             'angelegt',   extract(epoch from u.created_at)::bigint)
+           order by lower(u.email))
+      from auth.users u left join public.profil p on p.konto = u.id), '[]'::jsonb));
+end $$;
+
+create or replace function public.admin_profil(wort text, konto uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare f jsonb; p public.profil;
+begin
+  f := public.admin_darf(wort);
+  if f is not null then return f; end if;
+  select * into p from public.profil where profil.konto = admin_profil.konto;
+  if not found then
+    return jsonb_build_object('ok', false, 'fehler', 'KEIN PROFIL ZU DIESEM KONTO');
+  end if;
+  return jsonb_build_object('ok', true, 'profil', jsonb_build_object(
+    'name', p.name, 'fassung', p.fassung, 'werte', p.werte, 'loadouts', p.loadouts));
+end $$;
+
+-- Die Runden, seitenweise: ohne Konto die aller Spieler zusammen.
+create or replace function public.admin_gefechte(wort text, konto uuid default null,
+                                                 ab int default 0, anzahl int default 1000)
+returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare f jsonb;
+begin
+  f := public.admin_darf(wort);
+  if f is not null then return f; end if;
+  return jsonb_build_object('ok', true, 'gefechte', coalesce((
+    select jsonb_agg(to_jsonb(g) order by g.gespielt desc, g.partie, g.konto)
+      from (select * from public.gefecht x
+             where admin_gefechte.konto is null or x.konto = admin_gefechte.konto
+             order by x.gespielt desc, x.partie, x.konto
+             offset greatest(0, ab) limit least(greatest(1, anzahl), 1000)) g), '[]'::jsonb));
+end $$;
+
+create or replace function public.admin_kosmetik(wort text, konto uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare f jsonb; k public.kosmetik;
+begin
+  f := public.admin_darf(wort);
+  if f is not null then return f; end if;
+  select * into k from public.kosmetik where kosmetik.konto = admin_kosmetik.konto;
+  return jsonb_build_object('ok', true, 'ton', coalesce(k.blend_ton, ''),
+                            'bild', coalesce(k.blend_bild, ''));
+end $$;
+
+-- ── Aendern ───────────────────────────────────────────────────────
+-- Dieselbe Regel wie fuer den Spieler: nur, wenn die Fassung noch
+-- stimmt. Sonst ueberschriebe der ADMIN, was das Spiel gerade gespeichert
+-- hat, oder umgekehrt - und ein Loadout waere still verschwunden.
+create or replace function public.admin_profil_schreiben(wort text, konto uuid, fassung bigint,
+                                                         name text, werte jsonb, loadouts jsonb)
+returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare f jsonb; p public.profil;
+begin
+  f := public.admin_darf(wort);
+  if f is not null then return f; end if;
+  update public.profil
+     set fassung  = profil.fassung + 1,
+         name     = coalesce(nullif(admin_profil_schreiben.name, ''), profil.name),
+         werte    = coalesce(admin_profil_schreiben.werte, '{}'::jsonb),
+         loadouts = coalesce(admin_profil_schreiben.loadouts, '[]'::jsonb),
+         geaendert = now()
+   where profil.konto = admin_profil_schreiben.konto
+     and profil.fassung = admin_profil_schreiben.fassung
+  returning * into p;
+  if not found then
+    return jsonb_build_object('ok', false, 'fehler', 'PROFIL WURDE ZWISCHENDURCH GEAENDERT');
+  end if;
+  return jsonb_build_object('ok', true, 'profil', jsonb_build_object(
+    'name', p.name, 'fassung', p.fassung, 'werte', p.werte, 'loadouts', p.loadouts));
+end $$;
+
+-- Beides leer heisst: weg damit. Die Groessengrenzen der Tabelle gelten
+-- auch hier - eine zu grosse Datei wird abgelehnt, nicht abgeschnitten.
+create or replace function public.admin_kosmetik_schreiben(wort text, konto uuid,
+                                                           ton text, bild text)
+returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare f jsonb;
+begin
+  f := public.admin_darf(wort);
+  if f is not null then return f; end if;
+  if coalesce(ton, '') = '' and coalesce(bild, '') = '' then
+    delete from public.kosmetik where kosmetik.konto = admin_kosmetik_schreiben.konto;
+    return jsonb_build_object('ok', true);
+  end if;
+  begin
+    insert into public.kosmetik (konto, blend_ton, blend_bild, geaendert)
+    values (admin_kosmetik_schreiben.konto, coalesce(ton, ''), coalesce(bild, ''), now())
+    on conflict on constraint kosmetik_pkey do update
+      set blend_ton = excluded.blend_ton, blend_bild = excluded.blend_bild,
+          geaendert = now();
+  exception when check_violation then
+    return jsonb_build_object('ok', false, 'fehler', 'ZU GROSS FUER DEN SERVER');
+  end;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- Der Name, mit dem man sich anmeldet. Er steckt an drei Stellen im
+-- Anmeldedienst (Adresse, Metadaten, Identitaet) und im Profil, und
+-- alle vier muessen zusammen wechseln - sonst meldet man sich mit dem
+-- neuen Namen an und heisst im Spiel noch wie vorher.
+create or replace function public.admin_name_aendern(wort text, konto uuid, neu text)
+returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare f jsonb; alt text; adresse text;
+begin
+  f := public.admin_darf(wort);
+  if f is not null then return f; end if;
+  neu := trim(coalesce(neu, ''));
+  -- Dieselben Regeln wie im Spiel (ablage.name_pruefen).
+  if neu !~ '^[[:alnum:]][[:alnum:]_-]{2,23}$' then
+    return jsonb_build_object('ok', false, 'fehler',
+      'NAME: 3 BIS 24 ZEICHEN, BUCHSTABEN, ZIFFERN, - UND _');
+  end if;
+  if lower(neu) = 'admin' then
+    return jsonb_build_object('ok', false, 'fehler', 'NAME VORBEHALTEN');
+  end if;
+  select email into alt from auth.users where id = admin_name_aendern.konto;
+  if not found then
+    return jsonb_build_object('ok', false, 'fehler', 'KONTO NICHT GEFUNDEN');
+  end if;
+  adresse := lower(neu) || '@' || split_part(alt, '@', 2);
+  if exists (select 1 from auth.users
+              where lower(email) = adresse and id <> admin_name_aendern.konto) then
+    return jsonb_build_object('ok', false, 'fehler', 'NAME SCHON VERGEBEN');
+  end if;
+  update auth.users
+     set email = adresse,
+         raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb)
+                              || jsonb_build_object('name', neu),
+         updated_at = now()
+   where id = admin_name_aendern.konto;
+  update auth.identities
+     set identity_data = coalesce(identity_data, '{}'::jsonb)
+                         || jsonb_build_object('email', adresse)
+   where user_id = admin_name_aendern.konto and provider = 'email';
+  update public.profil set name = neu, fassung = profil.fassung + 1, geaendert = now()
+   where profil.konto = admin_name_aendern.konto;
+  return jsonb_build_object('ok', true, 'anmeldename', lower(neu));
+end $$;
+
+-- Ein neues Kennwort fuer ein Konto. Alle Anmeldungen dieses Kontos
+-- enden damit - wer das alte kannte, soll nicht angemeldet bleiben.
+create or replace function public.admin_kennwort_setzen(wort text, konto uuid, neu text)
+returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare f jsonb;
+begin
+  f := public.admin_darf(wort);
+  if f is not null then return f; end if;
+  if neu is null or length(neu) < 8 then
+    return jsonb_build_object('ok', false, 'fehler', 'KENNWORT ZU KURZ (MINDESTENS 8)');
+  end if;
+  if length(neu) > 72 then
+    return jsonb_build_object('ok', false, 'fehler', 'KENNWORT ZU LANG (HOECHSTENS 72)');
+  end if;
+  update auth.users
+     set encrypted_password = extensions.crypt(neu, extensions.gen_salt('bf')),
+         updated_at = now()
+   where id = admin_kennwort_setzen.konto;
+  if not found then
+    return jsonb_build_object('ok', false, 'fehler', 'KONTO NICHT GEFUNDEN');
+  end if;
+  delete from auth.sessions where user_id = admin_kennwort_setzen.konto;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- Weg damit: das Konto, sein Profil, seine Runden, seine Kosmetik. Die
+-- drei Tabellen haengen mit "on delete cascade" am Konto (5.2, 5.6).
+create or replace function public.admin_loeschen(wort text, konto uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare f jsonb;
+begin
+  f := public.admin_darf(wort);
+  if f is not null then return f; end if;
+  delete from auth.users where id = admin_loeschen.konto;
+  if not found then
+    return jsonb_build_object('ok', false, 'fehler', 'KONTO NICHT GEFUNDEN');
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+notify pgrst, 'reload schema';
+```
+
+**Wie es gebaut ist - und warum so.** Der ADMIN ist kein Konto im
+Anmeldedienst, sondern eine Zeile in `admin_zugang` mit einem bcrypt-Hash.
+Jede Funktion bekommt das Kennwort mit und prueft es selbst
+(`security definer`: sie laeuft mit den Rechten dessen, der sie angelegt
+hat, und kommt darum an alle Zeilen). Das hat drei Gruende:
+
+* **Kein geheimer Schluessel in einer Datei.** Fremde Kennwoerter setzen und
+  Konten loeschen geht sonst nur mit dem *secret key*, und der darf nie in
+  `KONTO.html` stehen. So bleibt der oeffentliche Schluessel der einzige.
+* **Der Zeilenschutz der Spieler bleibt unangetastet.** Kein Spieler
+  bekommt mehr Rechte; die Regeln aus 5.2 gelten weiter genau so.
+* **Die Sperre sitzt im Server.** Eine Sperre in der Seite umgeht jeder,
+  der die Seite neu laedt.
+
+Das Kennwort des ADMIN steht nur im Speicher der offenen Seite, nie im
+Browser gespeichert: wer die Seite neu laedt, meldet sich neu an.
+
+**Die Sperre.** Zwei Fehlversuche kosten nichts. Der dritte sperrt
+**1 Minute**, der vierte **5**, der fuenfte **15**, der sechste **30**,
+danach verdoppelt sich die Sperre mit jedem weiteren Fehlversuch (60, 120,
+240 Minuten, ...). Ein richtiges Kennwort setzt alles zurueck. Waehrend
+einer Sperre wird gar nicht erst geprueft, auch nicht das richtige
+Kennwort. Die Funktionen werfen nie, sondern antworten mit JSON: ein
+Fehler naehme die Transaktion zurueck und mit ihr den gezaehlten
+Fehlversuch.
+
+**Ausgesperrt?** Im SQL Editor (dort ist man ohnehin Besitzer der Datenbank):
+
+```
+update admin_zugang set fehlversuche = 0, gesperrt_bis = null;
+```
+
+**Kennwort vergessen?** Ebenda zurueck auf `123` - beim naechsten Anmelden
+muss es wieder geaendert werden:
+
+```
+update admin_zugang set hash = extensions.crypt('123', extensions.gen_salt('bf')),
+                        muss_aendern = true, fehlversuche = 0, gesperrt_bis = null;
+```
+
+**Der Name ADMIN ist vorbehalten.** Kein Spieler kann ihn anlegen (der
+Ausloeser `name_vorbehalten`, und Spiel und Kontoseite pruefen es schon
+vorher), und der ADMIN kann niemanden so umbenennen.
+
+**Was der ADMIN tut, tut er wirklich.** Ein neues Kennwort beendet alle
+Anmeldungen des Kontos. Ein geloeschtes Konto ist mit allen Runden, dem
+Profil und der Kosmetik weg - es gibt kein Zurueck. Die Kontoseite fragt
+darum vorher nach dem Namen des Kontos.
+
+**Statistik aller.** Die Kontoseite liest dafuer alle Runden aller Konten
+(`admin_gefechte` ohne Konto, je 1000) und rechnet sie mit denselben
+Filtern zusammen wie die eigenen: Version, Art, Abbrueche.
+
+`tests/test_admin_sql.py` fuehrt diesen Abschnitt (und 5.2, 5.6, 5.7) gegen
+ein nachgebautes Supabase in einem lokalen PostgreSQL aus und prueft jede
+Funktion, die Sperre und den Zeilenschutz.
+
 ## 6. Ohne Server
 
 Alles laeuft weiter, nur eben auf diesem Rechner:
@@ -530,6 +1028,8 @@ vorbelegt wird.
 | `dustfront/konto.py` | Anmeldung, Profil, Loadouts, Journal, der Faden fuers Netz |
 | `dustfront/config.py` | `WERTE`, `WAFFEN_WERTE`, `LOADOUT`, `KONTO` |
 | `tests/test_konto.py` | Alles davon, ohne Netz - mit nachgebautem Server |
+| `tests/test_admin_sql.py` | Das SQL aus 5.2 bis 5.8 gegen ein lokales PostgreSQL |
+| `tests/kontoseite_browser.py` | Die Kontoseite in Chromium, mit vorgetaeuschtem Server |
 | `<Benutzerordner>/konten.json` | Lokale Konten (nur ohne Server) |
 | `<Benutzerordner>/sitzung.json` | Die laufende Anmeldung und das Profil |
 | `<Benutzerordner>/journal.json` | Die gespielten Runden, mit Haken |

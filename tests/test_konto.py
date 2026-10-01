@@ -476,6 +476,105 @@ pruef("Danach wieder", len(kn.journal.offen()) == 0,
       "%d offen" % len(kn.journal.offen()))
 kn.schliessen()
 
+# ── Seit 0.31: Version, Ende, Opfer ─────────────────────────────────
+print("\n-- Version, Abbruch und Opfer (0.31) --")
+kn2 = konto_modul.Konto(ablage_=netz, ordner=frischer_ordner("netzkonto31"),
+                        mit_faden=False)
+kn2.anmelden("Meister", "geheim12345")
+kn2.runde_eintragen({"partie": "v31-a", "modus": "pvp", "version": K.VERSION,
+                     "ende": "regulaer", "werte": {"abschuesse": 4, "runden": 1},
+                     "opfer": [{"name": "ZWEI", "konto": "id-2", "anzahl": 4}]})
+kn2.runde_eintragen({"partie": "v31-b", "modus": "pvp", "version": K.VERSION,
+                     "ende": "abgebrochen",
+                     "werte": {"abschuesse": 2, "runden": 0, "abgebrochen": 1}})
+# Eine Zeile wie vor 0.31: ohne die neuen Felder. Im selben Paket.
+kn2.runde_eintragen({"partie": "v31-alt", "modus": "pve",
+                     "werte": {"abschuesse": 1, "runden": 1}})
+kn2._ruhe = 0.0
+kn2.abgleichen()
+pruef("Alle drei gehen hoch, auch die alte im selben Paket",
+      len(kn2.journal.offen()) == 0, kn2.fehler)
+z31 = server.gefechte.get(("v31-a", kn2.kennung), {})
+pruef("Mit Version, Ende und Opfern",
+      z31.get("version") == K.VERSION and z31.get("ende") == "regulaer"
+      and z31.get("opfer") == [{"name": "ZWEI", "konto": "id-2", "anzahl": 4}],
+      str(z31))
+z_alt = server.gefechte.get(("v31-alt", kn2.kennung), {})
+pruef("Die alte bekommt leere Version und 'regulaer'",
+      z_alt.get("version") == "" and z_alt.get("ende") == "regulaer"
+      and z_alt.get("opfer") == [], str(z_alt))
+u31 = kn2.uebersicht()
+pruef("Die Uebersicht laesst den Abbruch weg und zaehlt ihn",
+      u31["abschuesse"] == 5 and u31["runden"] == 2 and u31["abgebrochen"] == 1,
+      str({k: u31[k] for k in ("abschuesse", "runden", "abgebrochen")}))
+pruef("Mit Abbruechen auf Wunsch",
+      kn2.journal.summe(abgebrochene=True)["abschuesse"] == 7)
+pruef("Nur eine Version: die alte Zeile ohne Version faellt heraus",
+      kn2.journal.summe(version=K.VERSION)["abschuesse"] == 4)
+alt_abbruch = {"partie": "x", "werte": {"abgebrochen": 1}}
+pruef("Ein Abbruch ohne Spalte 'ende' wird an den Werten erkannt",
+      konto_modul.Journal.abgebrochen(alt_abbruch)
+      and not konto_modul.Journal.abgebrochen({"partie": "y", "werte": {}}))
+pruef("Die Versionen, neueste vorn",
+      kn2.journal.versionen() == [K.VERSION])
+
+
+class ServerVor031(FalscherServer):
+    """Ein Server, auf dem 5.7 noch nicht lief: die Spalten fehlen.
+
+    Antwortet genau so, wie PostgREST es tut - mit PGRST204 und dem
+    Namen der Spalte.
+    """
+
+    def _bearbeiten(self, methode, weg, koerper, token):
+        if "/rest/v1/gefecht" in weg and methode == "POST":
+            for zeile in koerper:
+                for spalte in ("version", "ende", "opfer"):
+                    if spalte in zeile:
+                        return {"code": "PGRST204",
+                                "message": "Could not find the '%s' column of "
+                                           "'gefecht' in the schema cache" % spalte}, 400
+        return super()._bearbeiten(methode, weg, koerper, token)
+
+
+alt_server = ServerVor031()
+urllib.request.urlopen = alt_server
+netz_alt = ablage.NetzAblage(url="https://test.supabase.co", schluessel="anon")
+a31 = netz_alt.anlegen("Altserver", "geheim12345")
+tok31 = a31.daten["sitzung"]
+r31 = netz_alt.gefechte_senden(tok31, [{
+    "partie": "alt-1", "konto": a31.daten["kennung"], "modus": "pvp",
+    "version": K.VERSION, "ende": "abgebrochen",
+    "werte": {"abschuesse": 2, "abgebrochen": 1}, "opfer": []}])
+pruef("Ohne die neuen Spalten geht die Runde trotzdem hoch", bool(r31),
+      r31.fehler)
+z_a = alt_server.gefechte.get(("alt-1", a31.daten["kennung"]), {})
+pruef("... ohne sie, aber der Abbruch steht noch in den Werten",
+      "version" not in z_a and z_a.get("werte", {}).get("abgebrochen") == 1, str(z_a))
+pruef("Und die Ablage merkt es sich fuer den Selbsttest", netz_alt.alte_tabelle)
+pruef("Ein anderer Fehler loest den Rueckzug nicht aus",
+      not ablage.NetzAblage._spalte_fehlt("NEW ROW VIOLATES ROW-LEVEL SECURITY")
+      and ablage.NetzAblage._spalte_fehlt(
+          "COULD NOT FIND THE 'OPFER' COLUMN OF 'GEFECHT' IN THE SCHEMA CACHE"))
+urllib.request.urlopen = server
+
+# Beim Schliessen des Fensters: was offen ist, sofort hoch (core._fenster_zu).
+kn2.runde_eintragen({"partie": "v31-zu", "modus": "pvp", "version": K.VERSION,
+                     "ende": "abgebrochen", "werte": {"abgebrochen": 1}})
+server.aussetzen = 1
+pruef("Klappt es beim Schliessen nicht, bleibt die Runde im Journal",
+      not kn2.hochladen_vor_ende() and len(kn2.journal.offen()) == 1)
+pruef("Sonst geht sie sofort hoch, ohne Faden und ohne Takt",
+      kn2.hochladen_vor_ende() and len(kn2.journal.offen()) == 0
+      and ("v31-zu", kn2.kennung) in server.gefechte)
+pruef("Den Namen ADMIN bekommt kein Spieler (KONTO.md 5.8)",
+      ablage.name_pruefen("Admin") == "NAME VORBEHALTEN"
+      and ablage.name_pruefen("Admiral") == ""
+      and not ablage.LokaleAblage(ordner=frischer_ordner("admin31")).anlegen("admin", "geheim12345"))
+lokal31 = konto_modul.Konto(ordner=frischer_ordner("lokal31"), mit_faden=False)
+pruef("Ohne Server gibt es nichts hochzuladen", not lokal31.hochladen_vor_ende())
+kn2.schliessen()
+
 # ─────────────────────────────────────────────────────────────────────
 # Der Selbsttest --konto server.
 #

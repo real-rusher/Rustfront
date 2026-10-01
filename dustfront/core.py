@@ -531,9 +531,37 @@ class App:
             for szene in self._sichtbar():
                 szene.zeichnen(self.flaeche, alpha)
             self.ausgeben()
+        if not self.laeuft:
+            self._fenster_zu()
         self.klaenge.stille()
         if beenden:
             pygame.quit()
+
+    def _fenster_zu(self) -> None:
+        """Das Fenster wurde geschlossen: aufraeumen, bevor alles weg ist.
+
+        Erst jede Szene verlassen, oberste zuerst - genau wie mit ESC. Das
+        ist der Weg, auf dem ein laufendes Gefecht seine Runde als
+        abgebrochen bucht und die Gaeste es erfahren (seit 0.31; vorher
+        endete die Schleife einfach, und die Runde war fuer alle weg).
+        Dann das Konto: was im Journal offen ist, noch hochladen.
+
+        Jeder Schritt fuer sich gefangen. Ein Fehler beim Aufraeumen darf
+        das Schliessen nicht verhindern - wer auf X klickt, will, dass
+        das Fenster zugeht.
+        """
+        while self.stapel:
+            try:
+                self.werfen()
+            except Exception:                      # noqa: BLE001
+                pass
+        if self._konto is not None:
+            try:
+                # Laeuft im Faden gerade derselbe Abgleich, schadet das
+                # nicht: dieselbe Partie zweimal ist dieselbe Zeile (3.2).
+                self._konto.hochladen_vor_ende()
+            except Exception:                      # noqa: BLE001
+                pass
 
     def _aktive(self) -> list[Szene]:
         """Die oberste Szene rechnet - und alles darunter, was muss.
