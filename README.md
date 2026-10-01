@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.26.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.27.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -151,14 +151,17 @@ der alten weggenommen.
 | Taste | Wirkung |
 | --- | --- |
 | W A S D | Laufen, auch waehrend eines Sturzes (dort mit 55 Prozent Tempo) |
-| Shift | Sprint |
+| Shift | Dash (zwei Ladungen, laden nacheinander nach) |
 | Maus links | Schiessen oder schlagen |
 | Maus rechts | Einzielen (bei der Scharfschuetzenwaffe) |
 | Mausrad | Ansicht eine Ebene hoch oder runter |
-| 1 bis 7 | Waffe waehlen |
+| 1 bis 9 | Waffe waehlen |
 | R | Nachladen |
 | H | Medkit |
-| E | Treppe benutzen |
+| E | Treppe benutzen, aufhelfen; am Boden: rufen |
+| G | Gefallenen Mitspieler ziehen (Gefecht) |
+| Q | Obere Ebenen ein- oder ausblenden (Gefecht) |
+| P | Runden einstellen, in der Lobby (Gefecht) |
 | Tab | Inventar |
 | T | Ziellinie an oder aus |
 | Z | Ziellinie ueber den Zeiger hinaus verlaengern |
@@ -278,17 +281,21 @@ alles ein Stueck auf.
 
 ### So spielt man es
 
-1. Einer startet **`LAN-GASTGEBER`**, tippt seinen Namen und waehlt dann
-   Spielart, Endbedingung, Rundenzahl, Mannschaft, ob Munition knapp
-   sein soll, ob es einen Einstiegsschutz gibt, wie viele Medkits man
-   beim Einstieg dabei hat und ob Medkits immer wieder auf der Karte
-   erscheinen. Danach steht die Adresse im Fenster (etwa
-   `192.168.1.7:50505`). **Alles davon laesst sich spaeter mit Esc im
-   Pausenmenue aendern** - es gilt dann ab der naechsten Runde.
+1. Einer startet **`LAN-GASTGEBER`**, tippt seinen Namen und sagt, ob nur
+   das eigene Netz oder auch das Internet mitspielen soll. Mehr fragt die
+   Startdatei nicht: es geht in die **Lobby**, und dort steht oben links
+   die Adresse (etwa `192.168.1.7:50505`).
 2. Alle anderen starten **`LAN-GAST`**, tippen ihren Namen und diese
-   Adresse. **Die Spielart bestimmt allein der Gastgeber** - sonst
-   spielten zwei Leute mit verschiedenen Regeln auf derselben Karte.
-3. Fertig. Esc beendet.
+   Adresse, und landen ebenfalls in der Lobby.
+3. In der Lobby: links die Arena (PVP), in der Mitte der Schiessstand,
+   rechts das Gehege mit Zombies. Auf dem Platz dazwischen tut niemandem
+   etwas weh. Der Gastgeber stellt mit **P** die naechste Runde ein -
+   Spielart, Karte, Schwierigkeit, Ausruestung und alles andere - und
+   startet sie. Wer mehrere Runden hintereinander will, klappt den
+   Rundenplan auf. Nach der Runde geht es weiter oder zurueck in die
+   Lobby. **Die Regeln bestimmt allein der Gastgeber**; die anderen sehen
+   die Tafel, koennen aber nichts aendern.
+4. Fertig. Esc oeffnet das Menue, dort geht es hinaus.
 
 Fuer eine LAN-Runde muessen alle im selben Netz sein - gleiches WLAN oder
 gleicher Switch. Eine Windows-Firewall fragt beim ersten Mal, ob Python
@@ -339,8 +346,10 @@ zweite Siegtafel nach `kosmetik_vorschau/`. **Eingebaut ist davon nichts**
 soll. Warum, und was ein Einbau kosten wuerde, steht in
 [`docs/KOSMETIK.md`](docs/KOSMETIK.md).
 
+Was auf der Kommandozeile steht, wird die erste geplante Runde in der
+Lobby; `--sofort` ueberspringt die Lobby und faengt gleich an.
 `--team rot|blau|auto` waehlt die Mannschaft, `--runden N` die Zahl der
-Rundensiege in VERSUS. `--online` versucht, den Port im Router freizugeben,
+gespielten Runden in VERSUS. `--online` versucht, den Port im Router freizugeben,
 `--passwort WORT` setzt ein Kennwort - beides zusammen ist der Weg ueber
 das Internet.
 `--loadouts` laesst jeden sein eigenes Loadout tragen - zwei Waffen und
@@ -686,6 +695,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.14.0 | Mehrspieler fertiggestellt: drei Spielarten, Aufhelfen, Wellen mit mehrspielertauglicher Gegner-KI, knappe Munition mit Nachschubkisten. Letzter Stand dieses Zweigs |
 | 0.16.0 | Mannschaften im Gefecht: TEAM, VERSUS mit einem Leben je Runde und Aufhelfen durch die eigenen Leute, HUEGEL mit sichtbarem Kreis in der Kartenmitte. Alles in `docs/MEHRSPIELER.md` beschrieben. Nur auf `multiplayer-test`; 0.15.0 gehoert dem Hauptzweig ohne Mehrspieler |
 | 0.17.0 | Rauchgranate als siebte Waffe; Granaten fallen ueber Kanten auf die Ebene darunter; Einstiegsschutz, Startmedkits und Medkit-Nachschub als Schalter beim Aufmachen. Dazu vier gemeldete Fehler behoben: kein Ton im Gefecht, Ziellinie des Gastes am Einstiegspunkt, Versetzung nach einem Sturztod, Granaten prallten an Loechern ab. Brecheisen toetet in zwei Treffern, Schrot reicht weiter und streut enger, Scharfschuetze weiter als das Bild breit ist |
+| 0.27.0 | Neunzehn Punkte auf einmal, alles in [`docs/MEHRSPIELER.md`](docs/MEHRSPIELER.md), Abschnitt 12b. **Lobby**: wer aufmacht, landet zuerst auf einem Platz mit Arena (PVP), Schiessstand (Puppen, die den Schaden zeigen) und Gehege (Zombies); der Gastgeber stellt die Runden im Spiel ein (P) statt im Terminal, auf Wunsch als **Rundenplan** mit mehreren Runden, Schleife und Kopieren. **Regeln an einer Stelle** (`regeln.py`), neu: Schwierigkeit und Bosse an/aus fuer alles mit Wellen, ein Loadout fuer alle, Haltezeit und Verfall beim Huegel, gespielte Runden mit Matchpoint bei Versus. **Neue Anzeige** mit festen Orten und Modi (grosse Hotbar mit Loadout, kleine ohne; Vorrat nur bei knapper Munition; Bossbalken). **Dash** statt Sprint, alles etwas langsamer (Treffer auf weite Distanz 13 -> 23 Prozent). **Am Boden**: nicht mehr schiebbar, Mitspieler koennen ziehen (G), Rufen mit E, Randpfeile; Versus endet, sobald niemand mehr aufhelfen kann. **Ebenen**: obere ueber Spielflaeche ausgeblendet (Q, als Kontovorliebe), Granaten behalten beim Fall ihren Schwung, Gegner gehen ueber Treppen und Rampen (`wege.py`). Medkit in der Hand beim Anlegen, Mutter und Brandstifter neu gezeichnet. Dabei gefunden: alle sieben Rampen auf STAUBTAL fuehrten seit 0.23 ins Loch, der Gast sah weder seine Gesamtmunition noch sein Loadout in der Hotbar, Klaenge des Gastgebers kamen nie an, Tastendruecke fielen bei voller Leitung weg |
 | 0.26.0 | Die Wellen ausgebaut, und dabei zwei Fehler gefunden, die eine Runde stillstehen liessen. **Wo Gegner herkommen** war eine Zeile: eine gewuerfelte Stelle irgendwo auf der Karte. Auf STAUBTAL gemessen hiess das 1477 Pixel im Mittel - zwanzig Sekunden Fussmarsch, bevor ueberhaupt etwas passierte -, und vier von sechs standen auf einem Plateau, auf das nur Rampen fuehren. Jetzt wird die Stelle gesucht: im Ring um einen Spieler, zwischen 260 und 620 Pixeln, moeglichst ausser Sicht, fast immer auf seiner Ebene (jetzt 446 Pixel, sechs Sekunden). Dazu Marken in der Karte - `Z` ist eine Spawnstelle, so wie `A B C` Kreise sind: 31 auf STAUBTAL am Fuss der Plateaus und an den Buden, 21 auf der Testkarte, und keine im offenen Sand. Der zweite Fehler fiel erst beim Nachmessen auf: ein Laeufer stand 120 Sekunden an einer Plateauwand, auf **derselben** Ebene wie die Spieler - und weil eine Welle erst endet, wenn alle liegen, wurde in 300 Sekunden Welle 2 nicht fertig. Wer sieben Sekunden nicht naeher kommt, wird jetzt umgesetzt; danach fuenf Wellen statt zwei. **Drei neue Gegner**, jeder mit einer anderen Frage: RENNER (138 px/s gegen 132 beim Spieler - Stehenbleiben ist keine Stellung mehr), SPEIER (haelt 150 bis 230 Pixel Abstand und spuckt, will gar nicht heran) und BLAEHER (platzt beim Sterben - Zusammenstehen wird teuer). **Drei Bosse**, jede fuenfte Welle, reihum: KOLOSS mit einem Stampfer, der auch hinter Deckung trifft (zwingt weg von ihm), MUTTER, die laufend Renner ruft (zwingt zu ihr hin), BRANDSTIFTER, der Feuer dorthin wirft, wo man gleich sein wird (zwingt in Bewegung). Jede Faehigkeit wird angekuendigt - ein Ring in der Groesse der Wirkung, ein Wort, ein Ton -, denn ohne Vorwarnung ist ein Boss keine Frage, sondern eine Steuer. **Wellen** kommen in Schueben statt auf einmal, hoechstens 22 zugleich, und bringen hoechstens eine neue Gegnerart je Welle; keine faellt mit einer Bosswelle zusammen. Nebenbei: das Feuer eines Gegners verschont Gegner - gemessen toetete ein Blaeher sonst alle fuenf Laeufer um sich herum, und dann spielt man den Trick statt des Spiels; der Molotow eines Spielers brennt weiter alles. Gegner tragen im Netz jetzt eine Kennung und ruckeln dadurch nicht mehr beim Gast (Stillstand 2,2 statt rund 50 Prozent), und der **Gastgeber** zeichnet endlich auch Lebensbalken - bisher tat das nur der Gast |
 | 0.25.0 | **KONTO.html** - die Kontoseite zum Doppelklicken. Anmelden mit demselben Konto wie im Spiel, dann: jeder einzelne Zaehler mit seinem Namen in der Datenbank daneben, jede gespielte Runde einzeln, Schuesse und Treffer je Waffe mit dem Symbol aus dem Spiel, die drei Loadouts aendern und tragen, Anzeigename und Kennwort. Dazu ein Knopf, der **alles** als JSON herunterlaedt - wer wissen will, was ueber ihn gespeichert ist, soll es anklicken koennen statt erfragen zu muessen. Was die Seite **nicht** kann, mit Absicht: Zahlen aendern (geschrieben werden nur Anzeigename und Loadouts - selbst setzbare Werte waeren keine Statistik mehr), Konten loeschen (dafuer braeuchte es den geheimen Schluessel, und der darf in keiner herunterladbaren Datei stehen) und fremde Zeilen sehen (das entscheidet der Zeilenschutz auf dem Server, nicht die Seite). Sie wird **erzeugt**, nicht getippt: `werkzeug_kontoseite.py` schiebt Waffen, Wertnamen, Loadout-Regeln, Farben, Bilder und die Pixelschrift des Spiels an einer einzigen Stelle in `kontoseite_vorlage.html`, damit nichts zweimal gepflegt werden muss - und ein Test prueft, dass die eingecheckte Datei noch zu `config.py` passt. Alles in einer Datei, weil eine Seite unter `file://` keine Nachbardateien laden darf; Bilder gehen als data-URI mit. Ein neuer Reiter ist ein Eintrag in `SEITEN`. Gefahren und angesehen wurde sie im Browser gegen den echten Server, nicht nur gelesen - dabei fielen die Spielarten auf, die als `[object Object]` dastanden |
 | 0.24.0 | Kosmetik, **vorgezeichnet und nicht eingebaut**. `python -m dustfront --kosmetik` schreibt fuenf Bilder nach `kosmetik_vorschau/`: das laufende Band einer Kiste nach dem Vorbild von CS, das Ergebnis, die Maske zum Waehlen von Figur, Waffen, Wurfwaffen, Klang und Musikkit, und eine zweite Siegtafel - je drei je Mannschaft in ihren Farben, darunter eine Buehne mit Siegerpodest, auf der die drei Besten ihre Animation machen und das Musikstueck des MVP laeuft. Jedes Bild traegt die Zeile `VORSCHAU - NOCH NICHT EINGEBAUT`, und das ist woertlich zu nehmen: kein Spielmodul importiert `kosmetik.py`, `K.SKIN_WAHL` ist leer, und ein Test prueft beides. Zwei Dinge daran stehen wirklich im Code und wurden dabei geprueft - die 38 **Rollen** in `K.SKIN_ROLLEN`, hinter denen jeder Bild- und Klangname steht statt fest im Quelltext, und die fuenf **Stufen** in `K.SELTENHEIT`; die Prozente auf dem Kistenbild sind nicht gemalt, sie kommen aus dieser Tabelle. Begruendung, Aufbau und der ehrliche Ueberschlag, was ein Einbau kosten wuerde - Besitz und Uebertragung sind die Arbeit, die Kistenanimation ist der kleinste Teil daran -, stehen in `docs/KOSMETIK.md` |

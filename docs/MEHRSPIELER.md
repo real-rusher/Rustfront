@@ -55,6 +55,10 @@ Ausnahmen stehen in 2.4.
 | `dustfront/mehrspieler.py` | ~1400 | Die Spielszene `Gefecht` und drei Wesen. Weiss alles vom Spiel. |
 | `dustfront/upnp.py` | ~250 | Der Weg durch den Router, fuer Runden ueber das Internet. Weiss nichts vom Spiel. |
 | `dustfront/bestenliste.py` | ~110 | Bestenliste im Benutzerordner. |
+| `dustfront/regeln.py` | ~380 | Seit 0.27: jede Regel einer Runde einmal - Name, Werte, wann sie gilt (12b). |
+| `dustfront/lobby.py` | ~690 | Seit 0.27: Lobby, Rundenplan und die Tafel dazu (12b). |
+| `dustfront/anzeige.py` | ~530 | Seit 0.27: die Anzeige im Gefecht (12b). |
+| `dustfront/wege.py` | ~350 | Seit 0.27: Wegenetz ueber Treppen und Rampen fuer die Gegner (12b). |
 | `dustfront/config.py` | +150 | `NETZ`, `MODI`, `TEAMS`, `ZONE`, `VERSUS`, `GEFECHT`, `REVIVE`, `WELLEN_MP`, `GEGNER_MP`, `MUNITION`. |
 
 Dazu: vier Startdateien (`LAN-GASTGEBER.bat/.command`,
@@ -71,6 +75,9 @@ Abschnitt "LAN-Gefecht" von `tests/test_spiel.py`.
 | `team` | TEAM | nein | ja | nein | ja | Zeit oder Teamabschuesse |
 | `versus` | VERSUS | nein | ja | ja | ja | Rundensiege (Zeit als Notbremse) |
 | `huegel` | HUEGEL | nein | ja | nein | ja | voller Kreis (Zeit als Notbremse) |
+
+Dazu seit 0.27 die **Lobby** (`lobby`): keine waehlbare Spielart, sondern
+der Ort vor und zwischen den Runden (12b).
 
 ---
 
@@ -446,11 +453,25 @@ Ladung dauert eine Runde allein rund 14 Sekunden - deshalb ist die
 Anzeige zweifarbig und der Verfall langsam (1.2/s): ein Vorsprung ist
 etwas wert, aber nie endgueltig.
 
+**Seit 0.27** stellt der Gastgeber die **Haltezeit** ein (10 bis 180 s,
+Vorgabe 15; allein und ohne Gegenwehr gerechnet) und ob der Fortschritt
+**verfaellt**. Rate und Verfall werden aus der Haltezeit hochgerechnet
+(`zone_faktor`), im selben Verhaeltnis - sonst waere bei drei Minuten ein
+kurzer Ausfall mehr wert als eine Minute im Kreis. Gemessen: 15,1 s bei
+15, 60,0 s bei 60.
+
 ---
 
 ### 7.7 Was der Gastgeber sonst noch stellt
 
-Vier Schalter, die zu jeder Spielart gehoeren. Alle stehen im
+**Seit 0.27 steht jede Regel in `regeln.py`** und wird in der Lobby auf
+einer Tafel eingestellt, nicht mehr im Terminal (12b). Die Kommandozeile
+geht weiter und belegt die erste geplante Runde vor. Neu dazu:
+SCHWIERIGKEIT und BOSSE (alles mit Wellen), EINES FUER ALLE (ein Loadout
+des Gastgebers fuer jeden), HALTEZEIT und VERFALL (huegel), HOECHSTDAUER
+(versus, huegel).
+
+Die Schalter von 0.19, die zu jeder Spielart gehoeren. Alle stehen im
 `willkommen`, keiner ist beim Gast einstellbar.
 
 | Schalter | Kommandozeile | Wirkung |
@@ -496,12 +517,15 @@ Der Gast hat zwei Eintraege (weiter, gehen). Der Gastgeber stellt alles:
 
 | Eintrag | Wirkt |
 | --- | --- |
-| SPIELART | ab der naechsten Runde |
-| RUNDEN BIS SIEG (versus) | ab der naechsten Runde |
-| RUNDE ENDET NACH / BEI | ab der naechsten Runde |
-| EINSTIEGSSCHUTZ, MEDKITS, MUNITION KNAPP | ab der naechsten Runde |
+| jede Regel aus `regeln.py`, die bei der Spielart gilt | ab der naechsten Runde |
 | MANNSCHAFTEN EINTEILEN | **sofort** |
 | NEUE RUNDE MIT DIESEN REGELN | sofort, setzt alles zurueck |
+| RUNDEN EINSTELLEN | oeffnet die Tafel (12b) |
+| ZURUECK IN DIE LOBBY | sofort |
+
+In der Lobby stehen dort keine Regeln, sondern RUNDEN EINSTELLEN und
+RUNDE STARTEN. Werden es mehr Zeilen, als passen, blaettert das Menue
+mit der Auswahl.
 
 **Warum die Regeln erst zur naechsten Runde gelten:** mitten im Gefecht
 die Spielart zu wechseln hiesse, Fraktionen, Punkte und Einstiegsplaetze
@@ -651,6 +675,10 @@ Bogen, **oben beginnend im Uhrzeigersinn**. Farbe ist die der haltenden
 Mannschaft, sonst cremefarben.
 
 ### 10.2 Kopfzeile
+
+**Seit 0.27 ersetzt durch `anzeige.py`** (12b). Die Tabelle bleibt als
+Beschreibung dessen, was oben in der Mitte steht; die Adresse steht nur
+noch in der Lobby und im Pausenmenue.
 
 | Zeile | Wann |
 | --- | --- |
@@ -1284,6 +1312,99 @@ hier ins Leere?". Jetzt zeichnen beide dasselbe.
 
 ---
 
+## 12b. Version 0.27: Lobby, Regeln, Anzeige, und was dabei auffiel
+
+Neunzehn Punkte auf einmal, darum hier nach Thema geordnet.
+
+### Bewegung und Tempo
+
+* **Dash statt Sprint** (`K.DASH`): zwei Ladungen, die nacheinander
+  nachladen (3,4 s je Ladung). Ein Stoss traegt rund zwei Kacheln
+  (gemessen 75 px). Nicht im Sturz, nicht am Boden, nicht beim Medkit,
+  nicht beim Ziehen.
+* **Langsamer**: Spieler 108 statt 132 px/s, alle Gegner mal 0,85 im
+  selben Verhaeltnis. Treffer auf weite Distanz gemessen 13 -> 23 Prozent.
+* **Medkit in der Hand**: beim Anlegen (0,8 s) haelt die Figur das Medkit
+  statt der Waffe, geht mit 0,55 und schiesst nicht.
+
+### Am Boden
+
+* Nicht mehr schieb- und drehbar. Ein Mitspieler in Reichweite **zieht**
+  ihn mit G (`K.ZIEHEN`, 0,52 Tempo; dabei kein Schiessen, kein Aufhelfen).
+* Wer liegt, sieht kein "aufhelfen" mehr neben einem anderen Liegenden.
+* **Rufen** mit E (1,5 s Sperre): der Randpfeil bei den Mitspielern
+  pulst, ist er im Bild, blinkt ueber ihm eine Marke und die Figur zuckt.
+  Randpfeile zeigen auf jeden gefallenen Mitspieler ausserhalb des Bildes.
+* **Versus**: eine Mannschaft verliert, sobald niemand mehr steht, der
+  aufhelfen koennte - nicht erst, wenn alle Uhren abgelaufen sind.
+  Rundenzahl einstellbar (gespielte Runden), Gleichstand bringt eine
+  Runde als **Matchpoint**.
+
+### Ebenen
+
+* Im Mehrspieler sind obere Ebenen dort ausgeblendet, wo sie ueber
+  Spielflaeche liegen (`Renderer.obermaske`); Plateaus ueber Fels bleiben.
+  Q schaltet um, die Vorliebe fuer den Rundenstart (OBERE EBENEN) wandert
+  mit dem Konto. Was faellt, bleibt sichtbar.
+* Granaten behalten ihren Schwung beim Fall ueber eine Kante.
+* **Wegenetz** (`wege.py`): Gegner folgen ueber Treppen und Rampen auf
+  andere Ebenen; Bosse warten auf ihrer. Dabei gefunden: alle sieben
+  Rampen auf STAUBTAL fuehrten seit 0.23 ins Loch.
+
+### Regeln an einer Stelle (`regeln.py`)
+
+Eine Regelsammlung ist ein Woerterbuch. `vorgabe()`, `saeubern(roh)`,
+`sichtbar(d)`, `verstellen(d, k, +1)`, `anzeige(d, k)`. Pausenmenue,
+Willkommen, Neustart und Lobby lesen alle diese Tabelle. Neu:
+
+| Regel | Werte | Wo |
+| --- | --- | --- |
+| SCHWIERIGKEIT | leicht, normal, schwer, albtraum (`K.SCHWIERIGKEIT`) | mit Wellen |
+| BOSSE | an/aus; aus heisst volle Welle statt Bosswelle | mit Wellen |
+| AUSRUESTUNG: EINES FUER ALLE | ein Loadout des Gastgebers fuer jeden | ueberall |
+| HALTEZEIT, VERFALL | 10-180 s, an/aus | huegel |
+| HOECHSTDAUER | Minuten | versus, huegel |
+
+### Die Lobby (`lobby.py`, `karten/lobby.txt`)
+
+Wer aufmacht, landet in der Lobby (`--sofort` ueberspringt sie). Drei
+Bereiche, im Kopf der Kartendatei als Rechtecke: **Arena** (PVP - nur
+dort treffen sich Spieler, und nur wenn beide drin stehen), **Schiess-
+stand** (vier Puppen: fallen nicht, heilen nach 2,5 s, zeigen den Schaden
+als Zahl) und **Gehege** (Zombies, nur wenn jemand drin ist; sie bleiben
+am Tor stehen). Auf dem Platz tut niemandem etwas weh. Nichts wird
+gebucht.
+
+Der Gastgeber stellt die Runden auf einer Tafel ein (P). Zu sehen ist
+zuerst nur die naechste Runde und START; der **Rundenplan** klappt erst
+auf Wunsch auf: mehrere Runden, kopieren/einfuegen, Schleife. Nach jeder
+geplanten Runde zeigt die Siegtafel 12 s, was kommt, dann geht es weiter
+- oder zurueck in die Lobby. Nachricht `plan` an alle Gaeste.
+
+### Die Anzeige (`anzeige.py`)
+
+Feste Orte statt gewachsener Plaetze, und Modi nach den Regeln: Hotbar
+gross mit Loadout, klein mit allen Waffen; Vorrat nur bei knapper
+Munition; oben Mitte je Spielart Uhr, Welle mit Restzahl und Bossbalken,
+Teamstand, Versuspunkte, Kreisbalken. Die Raender bleiben fuer die Pfeile
+frei.
+
+### Was dabei an Fehlern auffiel
+
+* Der Gast sah die Gesamtmunition anderer Waffen nicht (nur die gehaltene
+  ging mit) - und uebernahm die Waffenliste nie: mit eigenem Loadout zeigte
+  seine Hotbar neun statt drei Waffen.
+* Klaenge des Gastgebers (Bossansage, Spucken) kamen beim Gast nie an.
+* Einzelne Tastendruecke fielen bei voller Leitung weg.
+* Kartenwechsel beim Gast: zurueck auf die eingebaute Karte ging nicht,
+  und die Mitspieler blieben in der alten Welt.
+* Der Mannschaftswunsch ging verloren, wenn eine Teamrunde aus einer Runde
+  ohne Mannschaften heraus anfing.
+* Die Haengerwache setzte Gegner um, die am Ziel standen und kaempften.
+* Spawnstellen ueber Loechern auf STAUBTAL.
+
+---
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:
@@ -1294,8 +1415,6 @@ hier ins Leere?". Jetzt zeichnen beide dasselbe.
 * **`NETZ["stumm_nach"]` wird nicht benutzt.** Ein Gast, dessen Rechner
   einfach stehen bleibt, faellt erst auf, wenn TCP die Leitung abbricht.
   Die Zahl steht bereit, die Pruefung fehlt.
-* **Keine Lobby.** Die Spielart wird beim Start gewaehlt und laeuft bis zum
-  Ende. Kein Mannschaftswechsel von Hand, kein Ausbalancieren im Spiel.
 * **Kein Wiedereinstieg nach Verbindungsabbruch.** Wer rausfliegt, ist weg;
   beim Wiederverbinden bekommt er eine neue Nummer und faengt bei null an.
 * **Keine Karte fuer Mannschaften.** `testkarte()` hat keine getrennten
@@ -1306,12 +1425,8 @@ hier ins Leere?". Jetzt zeichnen beide dasselbe.
   anderen Karte muss man das pruefen.
 * **Kein Ton fuer Mannschaftsereignisse.** Kein Klang beim Erobern, kein
   Rundenende-Signal.
-* **Kein Wegesucher.** Gegner weichen mit einem Faecher aus Proben aus.
-  An einem Plateau reicht das nicht, und die Haengerwache (12a) setzt
-  dann um, statt einen Weg zu finden. Das ist eine Notloesung, die
-  funktioniert, und keine Loesung. Wer es richtig will, braucht ein
-  Abstandsfeld je Ebene - dann laufen Gegner auch um Ecken, statt an
-  ihnen zu kleben.
+* ~~Kein Wegesucher.~~ Seit 0.27 gibt es ihn (`wege.py`, 12b). Die
+  Haengerwache bleibt als Rueckfall.
 
 ---
 
