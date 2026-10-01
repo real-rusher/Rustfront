@@ -788,7 +788,10 @@ class Konto:
             fern = loadouts_saeubern(antwort.daten.get("loadouts"))
             if fern != self.loadouts:
                 self.hinweis = "PROFIL WAR NEUER, WIRD ZUSAMMENGEFUEHRT"
-            self.werte = dict(antwort.daten.get("werte") or {}) | dict(self.werte)
+            # Die eigenen Werte gewinnen. Mit ** statt `|`: das Spiel laeuft
+            # auch unter Python 3.8, und dort gibt es `|` fuer dict nicht
+            # (gemeldet nach 0.31.1, Absturz beim Gastgeber).
+            self.werte = {**dict(antwort.daten.get("werte") or {}), **dict(self.werte)}
             self.sitzung_speichern()
         else:
             self.fehler = antwort.fehler

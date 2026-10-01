@@ -571,6 +571,40 @@ pruef("Den Namen ADMIN bekommt kein Spieler (KONTO.md 5.8)",
       ablage.name_pruefen("Admin") == "NAME VORBEHALTEN"
       and ablage.name_pruefen("Admiral") == ""
       and not ablage.LokaleAblage(ordner=frischer_ordner("admin31")).anlegen("admin", "geheim12345"))
+# Jemand anders hat das Profil zwischendurch geschrieben (der ADMIN, ein
+# zweiter Rechner). Dann gilt dessen Stand, und die eigenen Werte werden
+# darueber gelegt. Dieser Zweig stuerzte unter Python 3.8 ab - `dict | dict`
+# gibt es dort nicht - und war bis dahin nie durchlaufen worden.
+kn2.werte = {"bildschirm_ruckeln": 40}
+kn2.profil_sichern()
+fremd31 = server.profile[kn2.kennung]
+server.profile[kn2.kennung] = {"fassung": int(fremd31["fassung"]) + 1,
+                               "werte": {"aufloesung": "2x", "bildschirm_ruckeln": 99},
+                               "loadouts": fremd31["loadouts"]}
+kn2.werte = {"bildschirm_ruckeln": 10}
+try:
+    kn2.profil_sichern()
+    zusammen = kn2.werte
+except TypeError as fehler:
+    zusammen = {"fehler": str(fehler)}
+pruef("Ein neuerer Stand auf dem Server wird zusammengefuehrt, ohne Absturz",
+      zusammen.get("aufloesung") == "2x", str(zusammen))
+pruef("... und die eigenen Werte gewinnen dabei",
+      zusammen.get("bildschirm_ruckeln") == 10, str(zusammen))
+
+# Das Spiel laeuft auch unter Python 3.8 (gemeldet: 3.8.8 unter Windows).
+# Syntax, die es dort nicht gibt, faellt hier auf; was erst beim Laufen
+# scheitert (wie `dict | dict`), finden nur die Tests selbst unter 3.8.
+import ast as _ast
+WURZEL = Path(__file__).resolve().parent.parent
+_zu_neu = []
+for _datei in sorted((WURZEL / "dustfront").glob("*.py")) + sorted(WURZEL.glob("*.py")):
+    try:
+        _ast.parse(_datei.read_text(encoding="utf-8"), feature_version=(3, 8))
+    except SyntaxError as fehler:
+        _zu_neu.append("%s:%s" % (_datei.name, fehler.lineno))
+pruef("Aller Quelltext ist gueltiges Python 3.8", not _zu_neu, ", ".join(_zu_neu))
+
 lokal31 = konto_modul.Konto(ordner=frischer_ordner("lokal31"), mit_faden=False)
 pruef("Ohne Server gibt es nichts hochzuladen", not lokal31.hochladen_vor_ende())
 kn2.schliessen()
