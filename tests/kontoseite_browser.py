@@ -112,6 +112,8 @@ class Server:
         self.tabelle_fehlt = False
         self.geschrieben = []
         self.geloescht = 0
+        self.profil = {"name": "TESTER", "fassung": 1, "werte": {}, "loadouts": []}
+        self.profil_geschrieben = []
 
     def antworten(self, route):
         anfrage = route.request
@@ -128,8 +130,11 @@ class Server:
                 "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,PUT",
                 "Access-Control-Allow-Headers": "*"})
         if weg.startswith("rest/v1/profil"):
-            return json_antwort(200, [{"name": "TESTER", "fassung": 1,
-                                       "werte": {}, "loadouts": []}])
+            if methode == "PATCH":
+                daten = json.loads(anfrage.post_data or "{}")
+                self.profil_geschrieben.append(daten)
+                self.profil = dict(self.profil, **daten)
+            return json_antwort(200, [self.profil])
         if weg.startswith("rest/v1/gefecht"):
             return json_antwort(200, [])
         if weg.startswith("rest/v1/kosmetik"):
@@ -280,9 +285,30 @@ with sync_playwright() as pw:
 
     # ── Bild ──────────────────────────────────────────────────────────
     datei_waehlen(s, 1, ordner / "bild.png")
-    pruef("Ein Bild wird zugeschnitten",
+    pruef("Ein Bild wird gelesen - ganz, mit seinen Seiten",
           warten(s, "Werkstatt.bild && Werkstatt.bild.flaeche "
-                    "&& Werkstatt.bild.flaeche.width === %d" % K.SPIELERKOSMETIK["bild_zeigen"]))
+                    "&& Werkstatt.bild.flaeche.width === 300 && Werkstatt.bild.flaeche.height === 200"))
+    fuellt = s.evaluate("lageVon(Werkstatt.bild)")
+    pruef("Und fuellt erst einmal den ganzen Schirm",
+          fuellt["x"] == 0.5 and fuellt["y"] == 0.5
+          and fuellt["h"] * 360 * 300 / 200.0 >= 639.5 and fuellt["h"] >= 1.0, str(fuellt))
+    vorschau = s.locator("canvas.spielbild")
+    vorschau.scroll_into_view_if_needed()       # die Maus erreicht nur, was zu sehen ist
+    vk = vorschau.bounding_box()
+    s.mouse.move(vk["x"] + vk["width"] / 2, vk["y"] + vk["height"] / 2)
+    s.mouse.down()
+    s.mouse.move(vk["x"] + vk["width"] * 0.75, vk["y"] + vk["height"] * 0.65, steps=6)
+    s.mouse.up()
+    s.mouse.move(vk["x"] + vk["width"] / 2, vk["y"] + vk["height"] / 2)
+    for _ in range(6):
+        s.mouse.wheel(0, 120)             # kleiner
+    lage = s.evaluate("lageVon(Werkstatt.bild)")
+    pruef("Ziehen verschiebt es auf dem Weiss",
+          abs(lage["x"] - 0.75) < 0.03 and abs(lage["y"] - 0.65) < 0.03, str(lage))
+    pruef("Das Mausrad macht es kleiner", lage["h"] < fuellt["h"] * 0.7, str(lage))
+    regler_setzen(s, "GROESSE", 50)
+    lage = s.evaluate("lageVon(Werkstatt.bild)")
+    pruef("Der Regler GROESSE auch", abs(lage["h"] - 0.5) < 0.001, str(lage))
     regler_setzen(s, "FRITTIERT", 60)
     regler_setzen(s, "PIXEL", 4)
     s.wait_for_timeout(200)
@@ -308,8 +334,11 @@ with sync_playwright() as pw:
     if k_spiel is not None:
         pruef("Mit der Laenge aus dem Ausschnitt", abs(k_spiel.dauer - laenge) < 0.01,
               "%.3f S" % k_spiel.dauer)
-        pruef("Und dem Bild in Spielgroesse",
-              k_spiel.bild.get_size() == (K.SPIELERKOSMETIK["bild_zeigen"],) * 2)
+        pruef("Und dem Bild mit seinen Seiten",
+              k_spiel.bild.get_size() == (300, 200), str(k_spiel.bild.get_size()))
+        pruef("Und dort, wo es hingeschoben wurde - im Spiel genauso",
+              abs(k_spiel.lage["x"] - lage["x"]) < 0.001 and abs(k_spiel.lage["y"] - lage["y"]) < 0.001
+              and abs(k_spiel.lage["h"] - 0.5) < 0.001, str(k_spiel.lage))
         _r, im_spiel = SK.ton_lesen(k_spiel.ton)
         vorschau = s.evaluate("Array.from(Werkstatt.ton.fertig.proben)")
         pruef("Und es klingt im Spiel genau wie in der Vorschau",
@@ -322,6 +351,10 @@ with sync_playwright() as pw:
     s.get_by_role("button", name="KOSMETIK").click()
     pruef("Nach dem Neuladen steht der Ton als gespeichert da",
           warten(s, "Werkstatt.server.tonFertig !== null && Werkstatt.server.bildFlaeche !== null"))
+    gelage = s.evaluate("Werkstatt.server.bildLage")
+    pruef("Auch das gespeicherte Bild steht an seinem Platz",
+          k_spiel is not None and abs(gelage["x"] - k_spiel.lage["x"]) < 0.001
+          and abs(gelage["h"] - k_spiel.lage["h"]) < 0.001, str(gelage))
     pruef("Und die Vorschau ist dieselbe wie vorher",
           k_spiel is not None and s.evaluate("Array.from(Werkstatt.server.tonFertig.proben)")
           == list(SK.ton_lesen(k_spiel.ton)[1]))
@@ -343,6 +376,32 @@ with sync_playwright() as pw:
     s.get_by_role("button", name="SPEICHERN").click()
     pruef("Beides entfernt: die Zeile wird geloescht",
           warten(s, "document.body.innerText.includes('ENTFERNT')") and server.geloescht == 1)
+
+    # ── Loadouts: eine gewaehlte Waffe bleibt gewaehlt ────────────────
+    # Gemeldet in 0.29: "man klickt auf die neue Waffe, aber der Schlitz
+    # flackert nur kurz" - die Seite baute sich aus dem Gespeicherten neu.
+    s.get_by_role("button", name="AUSRÜSTUNG").click()
+    erste = s.locator(".satz select").first
+    vorher_w = erste.input_value()
+    andere = [o for o in erste.locator("option").all_inner_texts()]
+    wert = s.evaluate("(sel) => Array.from(sel.options).map(o => o.value)"
+                      ".find(v => v !== sel.value)", erste.element_handle())
+    erste.select_option(wert)
+    s.wait_for_timeout(100)
+    pruef("Die gewaehlte Waffe bleibt im Schlitz",
+          s.locator(".satz select").first.input_value() == wert,
+          "%s -> %s" % (vorher_w, s.locator(".satz select").first.input_value()))
+    pruef("Und die Seite sagt, dass noch nicht gespeichert ist",
+          "NOCH NICHT GESPEICHERT" in s.inner_text("body"))
+    s.locator(".tafel").get_by_role("button", name="SPEICHERN").click()
+    pruef("Gespeichert geht sie an den Server",
+          warten(s, "document.body.innerText.includes('GESPEICHERT')")
+          and server.profil_geschrieben
+          and server.profil_geschrieben[-1]["loadouts"][0]["waffen"][0] == wert,
+          str(server.profil_geschrieben[-1:])[:200])
+    pruef("Und steht danach noch da",
+          s.locator(".satz select").first.input_value() == wert
+          and "NOCH NICHT GESPEICHERT" not in s.inner_text("body"))
 
     # ── Ohne Tabelle auf dem Server ───────────────────────────────────
     server.tabelle_fehlt = True

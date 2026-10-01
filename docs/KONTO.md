@@ -365,9 +365,9 @@ Server, keine Installation, kein Internet ausser dem zu Supabase.
 | **WERTE** | **Jeder** Zaehler, mit seinem Namen in der Datenbank daneben - und darunter alles, was sonst noch im Profil steht |
 | **WAFFEN** | Schuesse, Treffer, Abschuesse je Waffe, addiert aus allen Runden, mit dem Symbol aus dem Spiel |
 | **RUNDEN** | Jede gespielte Runde einzeln, so wie sie in der Tabelle steht |
-| **AUSRUESTUNG** | Die drei Loadouts aendern und eines zum Tragen waehlen |
+| **AUSRUESTUNG** | Die drei Loadouts aendern und eines zum Tragen waehlen. Geaendert wird ein Entwurf, bis SPEICHERN - bis 0.29 sprang eine gewaehlte Waffe sofort zurueck, weil jede Auswahl die Seite aus dem Gespeicherten neu baute |
 | **AUSSEHEN** | Grau. Vorbereitet, noch ohne Inhalt - siehe `docs/KOSMETIK.md` |
-| **KOSMETIK** | Eigener Ton und eigenes Bild fuer die Blendgranate: MP3 laden und zuschneiden, Bass, lauter, mit Knall und Pfeifen aus dem Spiel mischen; Bild ausschneiden und filtern; Vorschau in Spielgroesse. Braucht die Tabelle aus 5.6 |
+| **KOSMETIK** | Eigener Ton und eigenes Bild fuer die Blendgranate: MP3 laden und zuschneiden, Bass, lauter, mit Knall und Pfeifen aus dem Spiel mischen; Bild laden und filtern, auf dem Weiss verschieben und in der Groesse einstellen (sonst fuellt es den Schirm); Vorschau in Spielgroesse. Braucht die Tabelle aus 5.6 |
 | **KONTO** | Anzeigename, Kennwort aendern, Kennung, Fassung, abmelden |
 
 Dazu **ALLES HERUNTERLADEN**: Profil, alle Runden und die Kosmetik als JSON-Datei. Das

@@ -212,6 +212,44 @@ def bild_lesen(daten: bytes) -> pygame.Surface:
     return flaeche
 
 
+def bild_lage(daten: bytes, groesse: tuple[int, int]) -> dict:
+    """Wo das Bild im Weiss steht: {"x", "y", "h"} - Mitte und Hoehe als
+    Anteil am Bildschirm.
+
+    Steht im PNG selbst, als tEXt-Abschnitt mit dem Schluessel
+    "dustfront" und JSON dahinter. So braucht es weder eine neue Spalte
+    auf dem Server noch eine neue Netzmeldung, und der Fingerabdruck des
+    Pakets deckt die Lage mit ab. Fehlt der Abschnitt (Bilder aus 0.28)
+    oder ist er kaputt, fuellt das Bild den ganzen Schirm - so gemeldet:
+    "das Bild bei der Flash soll den ganzen Screen bedecken".
+    """
+    b, h = max(1, groesse[0]), max(1, groesse[1])
+    fuellen = max(K.GAME_W / float(b), K.GAME_H / float(h)) * h / float(K.GAME_H)
+    lage = {"x": 0.5, "y": 0.5, "h": fuellen}
+    try:
+        o = 8
+        while o + 12 <= len(daten):
+            laenge = struct.unpack(">I", daten[o:o + 4])[0]
+            art = daten[o + 4:o + 8]
+            if art == b"IDAT" or o + 12 + laenge > len(daten):
+                break                       # Textabschnitte stehen davor
+            if art == b"tEXt":
+                inhalt = bytes(daten[o + 8:o + 8 + laenge])
+                schluessel, _, text = inhalt.partition(b"\0")
+                if schluessel == b"dustfront":
+                    roh = json.loads(text.decode("latin-1"))
+                    for k, (lo, hi) in (("x", G["lage_xy"]), ("y", G["lage_xy"]),
+                                        ("h", G["lage_h"])):
+                        v = float(roh[k])
+                        if v == v:          # NaN fliegt raus
+                            lage[k] = max(lo, min(hi, v))
+                    break
+            o += 12 + laenge
+    except (ValueError, TypeError, KeyError, struct.error):
+        pass
+    return lage
+
+
 # ══════════════════════════════════════════════════════════════════
 # Ein Paket: Ton und Bild eines Spielers
 # ══════════════════════════════════════════════════════════════════
@@ -235,6 +273,8 @@ class Kosmetik:
         self.ton = ton_aufbereiten(self.ton_roh) if self.ton_roh else b""
         self.bild_daten = bytes(bild) if bild else b""
         self.bild = bild_lesen(self.bild_daten) if self.bild_daten else None
+        self.lage = (bild_lage(self.bild_daten, self.bild.get_size())
+                     if self.bild is not None else None)
         if not self.ton and self.bild is None:
             raise ValueError("LEERE KOSMETIK")
         self.kennung = hashlib.sha1(self.ton_roh + b"|" + self.bild_daten
@@ -590,26 +630,40 @@ class KosmetikTeil:
         if klang is not None and laut > 0.0:
             self.app.klaenge.ton_spielen(klang, laut)
         if k.bild is not None and staerke > 0.0:
-            self.kos_zeigen = k.bild
+            self.kos_zeigen = k
         return True
 
     def _kosmetik_bild_zeichnen(self, ziel) -> None:
-        """Das Bild des Werfers im Weiss - so stark, wie das Weiss noch ist."""
-        bild = self.kos_zeigen
+        """Das Bild des Werfers im Weiss - so stark, wie das Weiss noch ist.
+
+        Wo und wie gross, sagt seine Lage (bild_lage): ohne Angabe fuellt
+        es den Schirm, sonst steht es, wo der Spieler es in der Kontoseite
+        hingeschoben hat. Was ueber den Rand ragt, ist abgeschnitten.
+        """
+        k = self.kos_zeigen
         blend = getattr(self.befinden, "blend", 0.0)
-        if bild is None:
+        if k is None:
             return
         if blend <= 0.01:
             self.kos_zeigen = None
             return
         # Einmal skaliert und gemerkt, nicht in jedem Bild neu.
-        if self._kos_gross[0] is not bild:
-            groesse = G["bild_zeigen"]
-            b, h = bild.get_size()
-            massstab = groesse / float(max(b, h))
-            self._kos_gross = (bild, pygame.transform.scale(
-                bild, (max(1, int(b * massstab)), max(1, int(h * massstab)))))
+        if self._kos_gross[0] is not k:
+            b, h = k.bild.get_size()
+            ziel_h = max(1, int(k.lage["h"] * K.GAME_H))
+            ziel_b = max(1, int(b * ziel_h / float(h)))
+            # Weich vergroessert: ein Foto in doppelter Groesse mit harten
+            # Pixeln sah aus wie ein Fehler. Wer Pixel will, hat in der
+            # Kontoseite den Filter PIXEL - die bleiben auch weich gezogen
+            # gut erkennbar.
+            try:
+                gross = pygame.transform.smoothscale(k.bild.convert_alpha()
+                                                     if pygame.display.get_surface()
+                                                     else k.bild, (ziel_b, ziel_h))
+            except (pygame.error, ValueError):
+                gross = pygame.transform.scale(k.bild, (ziel_b, ziel_h))
+            self._kos_gross = (k, gross)
         s = self._kos_gross[1]
         s.set_alpha(int(255 * min(1.0, blend * 1.4)))
-        ziel.blit(s, ((K.GAME_W - s.get_width()) // 2,
-                      (K.GAME_H - s.get_height()) // 2))
+        ziel.blit(s, (int(k.lage["x"] * K.GAME_W - s.get_width() / 2),
+                      int(k.lage["y"] * K.GAME_H - s.get_height() / 2)))

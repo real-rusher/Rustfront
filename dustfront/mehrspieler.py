@@ -751,6 +751,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._knoepfe: set[str] = set()
         self._waffe_wunsch = -1
         self._rad = 0
+        # Sichtweite (Mausrad): wohin der Zoom will, und die Flaechen, auf
+        # die mit Zoom gezeichnet wird (siehe _zoom_zeichnen).
+        self.zoom_ziel = K.ZOOM["start"]
+        self._leinwand = None
+        self._nebel = None
         self._seit_medkit = 0.0
         self._seit_muni = 0.0
         self._letzte_ebene = 0
@@ -1802,6 +1807,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._gegnerlast_zaehlen()
         self._rpg_regeln()
         self.welt.schritt(dt)
+        if self.in_lobby:
+            self._lobby_munition()        # nach dem Schuss, siehe dort
         self._ziehen(dt)
         self._revive(dt)
         self._tote_abrechnen(dt)
@@ -3430,6 +3437,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Die Einstellung greift bei jedem Bild neu: wer das Wackeln
         # im Pausenmenue abschaltet, sieht es sofort stehen.
         self.kamera.anteil = self.app.opt.ruckel_anteil()
+        # Der Zoom zieht weich nach - ein Sprung auf die doppelte Weite
+        # in einem Bild verliert einen voellig.
+        z = self.kamera.zoom
+        z += (self.zoom_ziel - z) * min(1.0, K.ZOOM["weich"] * dt)
+        self.kamera.zoom = self.zoom_ziel if abs(self.zoom_ziel - z) < 0.004 else z
         self.kamera.schritt(dt, self.ich.pos, self.ich.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe))
 
@@ -3552,7 +3564,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
 
     def ereignis(self, ev) -> None:
         if ev.type == pygame.MOUSEWHEEL and self.menue is None:
-            self._rad += ev.y
+            # Das Rad aendert die Sichtweite; mit Strg wie frueher die
+            # angeschaute Ebene.
+            if pygame.key.get_mods() & pygame.KMOD_CTRL:
+                self._rad += ev.y
+            elif ev.y:
+                self.zoom_stufe(-1 if ev.y > 0 else 1)
             return
         if ev.type != pygame.KEYDOWN:
             return
@@ -3566,6 +3583,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._knopf_merken(ev.key)
             if ev.key in self.app.opt.codes("ebenen"):
                 self.obere_umschalten()
+            if ev.key in self.app.opt.codes("ansicht_hoch"):
+                self._rad += 1
+            if ev.key in self.app.opt.codes("ansicht_runter"):
+                self._rad -= 1
             if ev.key in self.app.opt.codes("planen"):
                 self.planung_oeffnen()
                 return
@@ -3823,18 +3844,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Bewegung nach der halben Zeit fertig und stuende dann still.
         # Genau das sah man als Ruckeln der Mitspieler.
         misch = alpha if self.ist_gastgeber else self.misch(alpha)
-        self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, misch,
-                                    self.blick_hoehe, blick=self.blick,
-                                    boden=self._kreis_zeichnen,
-                                    oben_aus=not self.obere_zeigen)
-        if not self.ist_gastgeber:
-            self._fremdes_zeichnen(ziel, misch)
-        # Ziellinie und Streukegel nicht, solange man ein Medkit anlegt:
-        # dann schiesst man nicht, und eine Linie saehe aus, als ob.
-        if (self.ich is not None and self.ich.lebt and not self.ich.am_boden
-                and self.blick == self.ich.ebene and self.ich.heilt_rest <= 0):
-            self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.ich)
-            self.renderer.tracer(ziel, self.welt, self.kamera, self.ich)
+        if abs(self.kamera.zoom - 1.0) < 0.004:
+            self._welt_bild(ziel, misch)
+        else:
+            self._zoom_zeichnen(ziel, misch)
         self._namen_zeichnen(ziel)
         self._randpfeile(ziel)
         self._erfassung_zeichnen(ziel)
@@ -3865,6 +3878,126 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Werfer eines hat, sein Bild (Spielerkosmetik).
         self.befinden.blendung_zeichnen(ziel)
         self._kosmetik_bild_zeichnen(ziel)
+
+    def _welt_bild(self, ziel, misch: float) -> None:
+        """Alles, was in Weltkoordinaten liegt: die Welt, beim Gast die
+        gemeldeten Wesen, Ziellinie und Streukegel."""
+        self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, misch,
+                                    self.blick_hoehe, blick=self.blick,
+                                    boden=self._kreis_zeichnen,
+                                    oben_aus=not self.obere_zeigen)
+        if not self.ist_gastgeber:
+            self._fremdes_zeichnen(ziel, misch)
+        # Ziellinie und Streukegel nicht, solange man ein Medkit anlegt:
+        # dann schiesst man nicht, und eine Linie saehe aus, als ob.
+        if (self.ich is not None and self.ich.lebt and not self.ich.am_boden
+                and self.blick == self.ich.ebene and self.ich.heilt_rest <= 0):
+            self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.ich)
+            self.renderer.tracer(ziel, self.welt, self.kamera, self.ich)
+
+    # ---- Sichtweite und Nebel -------------------------------------------
+    def zoom_stufe(self, schritt: int) -> None:
+        """Eine Stufe weiter oder naeher (Mausrad)."""
+        stufen = K.ZOOM["stufen"]
+        jetzt = min(range(len(stufen)), key=lambda i: abs(stufen[i] - self.zoom_ziel))
+        self.zoom_ziel = stufen[max(0, min(len(stufen) - 1, jetzt + schritt))]
+
+    def _sicht_mitte(self) -> pygame.Vector2:
+        """Wo das normale Bild (Zoom 1) jetzt stuende - dieselbe Rechnung
+        wie Kamera.schritt, nur mit der normalen Groesse."""
+        if self.ich is None:
+            return pygame.Vector2(self.kamera.pos)
+        k = K.KAMERA
+        vor = pygame.Vector2(self.ich.ziel) - self.ich.pos
+        if vor.length() > k["maus_max"]:
+            vor.scale_to_length(k["maus_max"])
+        m = self.ich.pos + vor * k["maus_zug"]
+        e = self.welt.ebene(self.ich.ebene)
+        for achse, bild, karte in ((0, K.GAME_W, e.pixel_breite),
+                                   (1, K.GAME_H, e.pixel_hoehe)):
+            if karte > bild:
+                m[achse] = max(bild / 2, min(karte - bild / 2, m[achse]))
+            else:
+                m[achse] = karte / 2
+        return m
+
+    def sicht_welt(self) -> pygame.Rect | None:
+        """Das normale Bild in Weltpixeln - ausserhalb liegt der Nebel.
+        None, wenn nichts im Nebel liegt (Zoom 1 oder naeher)."""
+        if self.kamera.zoom <= 1.0 + 0.004:
+            return None
+        mitte = self._sicht_mitte()
+        r = pygame.Rect(0, 0, K.GAME_W, K.GAME_H)
+        r.center = (round(mitte.x), round(mitte.y))
+        return r
+
+    def im_licht(self, pos) -> bool:
+        """Liegt der Weltpunkt ausserhalb des Nebels?"""
+        r = self.sicht_welt()
+        return r is None or r.collidepoint(pos.x, pos.y)
+
+    def _zoom_zeichnen(self, ziel, misch: float) -> None:
+        """Die Welt mit Zoom: groesser zeichnen, Nebel, verkleinern.
+
+        1. Auf eine Flaeche in Zoomgroesse, mit dem Renderer auf dieser
+           Groesse - die Kamera rechnet mit derselben (Kamera.zoom).
+        2. Weiter weg als normal (Zoom > 1): erst nur das Gelaende ueber
+           alles, darueber der Nebel, und dann das volle Bild - aber
+           beschnitten auf das normale Bild (set_clip). Was draussen
+           steht, wird also gar nicht erst gezeichnet; der Nebel verbirgt
+           nicht nur, er ist leer.
+        3. Auf 640 x 360 bringen: verkleinert weich, vergroessert hart.
+           Die Vignette kommt erst danach, auf das fertige Bild.
+        """
+        z = self.kamera.zoom
+        groesse = (max(1, int(round(K.GAME_W * z))), max(1, int(round(K.GAME_H * z))))
+        if self._leinwand is None or self._leinwand.get_size() != groesse:
+            self._leinwand = pygame.Surface(groesse, 0, ziel)
+        lw = self._leinwand
+        r = self.renderer
+        r.groesse, r.vignette_an = groesse, False
+        try:
+            lw.fill(K.C_VOID)
+            sicht = self.sicht_welt()
+            if sicht is None:
+                self._welt_bild(lw, misch)
+            else:
+                ecke = self.kamera.ecke
+                bild_sicht = sicht.move(-int(ecke.x), -int(ecke.y))
+                r.nur_gelaende = True
+                try:
+                    r.welt_zeichnen(lw, self.welt, self.kamera, misch, self.blick_hoehe,
+                                    blick=self.blick, boden=self._kreis_zeichnen,
+                                    oben_aus=not self.obere_zeigen)
+                finally:
+                    r.nur_gelaende = False
+                # Der Nebel wird einmal je Groesse gefuellt und dann nur in
+                # vier Streifen um das normale Bild aufgelegt - nicht jedes
+                # Bild neu gefuellt und ganz aufgelegt.
+                if self._nebel is None or self._nebel.get_size() != groesse:
+                    self._nebel = pygame.Surface(groesse, pygame.SRCALPHA)
+                    self._nebel.fill(K.ZOOM["nebel"])
+                b, h = groesse
+                s = bild_sicht.clip(pygame.Rect(0, 0, b, h))
+                for streifen in (pygame.Rect(0, 0, b, s.top),
+                                 pygame.Rect(0, s.bottom, b, h - s.bottom),
+                                 pygame.Rect(0, s.top, s.left, s.height),
+                                 pygame.Rect(s.right, s.top, b - s.right, s.height)):
+                    if streifen.width > 0 and streifen.height > 0:
+                        lw.blit(self._nebel, streifen.topleft, streifen)
+                lw.set_clip(bild_sicht)
+                try:
+                    self._welt_bild(lw, misch)
+                finally:
+                    lw.set_clip(None)
+                pygame.draw.rect(lw, K.ZOOM["nebel_rand"], bild_sicht.inflate(2, 2), 1)
+        finally:
+            r.groesse, r.vignette_an = (K.GAME_W, K.GAME_H), True
+        if z > 1.0:
+            ziel.blit(pygame.transform.smoothscale(lw, (K.GAME_W, K.GAME_H)), (0, 0))
+        else:
+            ziel.blit(pygame.transform.scale(lw, (K.GAME_W, K.GAME_H)), (0, 0))
+        ziel.blit(r._vignette, (0, 0))
 
     def _kreis_zeichnen(self, flaeche, ebene: int, ecke) -> None:
         """Der Kreis in der Kartenmitte, auf den Boden seiner Ebene.
@@ -3985,7 +4118,6 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         if ich is None:
             return
         e = K.ERFASSUNG
-        ecke = self.kamera.ecke
 
         # 1. Was ich selbst gerade erfasse.
         opfer = getattr(ich, "erfasst", None)
@@ -3996,7 +4128,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             # Der Kreis zieht sich zusammen, waehrend die Erfassung laeuft.
             r = int(e["ring_gross"]
                     + (e["ring_klein"] - e["ring_gross"]) * min(1.0, stand))
-            p = opfer.pos - ecke
+            p = self.kamera.zu_bild(opfer.pos)
             if 0 <= p.x <= K.GAME_W and 0 <= p.y <= K.GAME_H:
                 pygame.draw.circle(ziel, farbe, (int(p.x), int(p.y)), r, 1)
                 if fest:
@@ -4027,6 +4159,21 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         elif erfasst_mich > 0.0:
             self.renderer.randglut(ziel, K.ERFASSUNG["warnung"],
                                    0.25 + 0.45 * erfasst_mich)
+
+    def gegner_fuer_karte(self) -> list[tuple]:
+        """Zombies und Bosse fuer die Minikarte: (x, y, ebene).
+
+        Nur, wo es in dieser Runde Gegner gibt - und in der Lobby das
+        Gehege. Die Puppen im Schiessstand sind Ziele, keine Gegner. Beim
+        Gastgeber aus der Welt, beim Gast aus der letzten Weltmeldung.
+        """
+        if not (self.mit_gegnern or self.in_lobby):
+            return []
+        if self.ist_gastgeber:
+            return [(w.pos.x, w.pos.y, int(w.ebene)) for w in self.welt.wesen
+                    if isinstance(w, KampfGegner) and w.lebt and w.art != "puppe"]
+        return [(e[0], e[1], int(e[3])) for e in self._fremde_gegner
+                if e[4] != "puppe"]
 
     def _farbe_fuer(self, k, eigen: bool = False):
         """In welcher Farbe ein Mitspieler auftaucht.
@@ -4094,13 +4241,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # dazwischen, sonst lagen sie unten auf der Waffe und der Panzerung.
         oben, unten = RAND_OBEN, K.GAME_H - RAND_UNTEN
         mitte = pygame.Vector2(K.GAME_W / 2, (oben + unten) / 2)
-        ecke = self.kamera.ecke
         for k in self.kaempfer.values():
             if not (k.lebt and k.am_boden and self._verbuendet(k)):
                 continue
-            p = k.pos - ecke
+            p = self.kamera.zu_bild(k.pos)
+            # Im Nebel sieht man ihn nicht - dann zeigt der Pfeil.
             im_bild = (rand <= p.x <= K.GAME_W - rand
-                       and rand <= p.y <= K.GAME_H - rand)
+                       and rand <= p.y <= K.GAME_H - rand and self.im_licht(k.pos))
             if im_bild and k.ebene == self.blick:
                 continue
             richtung = p - mitte
@@ -4110,6 +4257,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             halb = pygame.Vector2(K.GAME_W / 2 - rand, (unten - oben) / 2)
             teiler = max(abs(richtung.x) / halb.x, abs(richtung.y) / halb.y)
             stelle = mitte + richtung / teiler
+            # Oben links steht die Minikarte, darunter Spielart und Karte.
+            # Ein Pfeil, der dort landete, rutscht darunter - wo der
+            # Gefallene liegt, zeigt die Karte ja ohnehin.
+            karte_unten = self.hud._karte_unten
+            if karte_unten and stelle.y < karte_unten + 26 \
+                    and stelle.x < K.MINIKARTE["links"] + K.MINIKARTE["breite"] + 10:
+                stelle.y = karte_unten + 26
             winkel = math.degrees(math.atan2(richtung.y, richtung.x))
             ruft = k.ruf_zeigen > 0.0
             puls = 1.0
@@ -4142,13 +4296,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         nach der des Zuschauers: auch von oben sieht man in eine
         Rauchwand nicht hinein.
         """
-        ecke = self.kamera.ecke
         for k in self.kaempfer.values():
             if not k.lebt or k.ebene != self.blick:
                 continue
             if k is not self.ich and self.welt.verdeckt(k.pos, k.ebene):
                 continue
-            p = k.pos - ecke
+            if not self.im_licht(k.pos):
+                continue                # im Nebel steht auch kein Name
+            p = self.kamera.zu_bild(k.pos)
             if not (0 <= p.x <= K.GAME_W and 0 <= p.y <= K.GAME_H):
                 continue
             eigen = (k is self.ich)

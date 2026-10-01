@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.29.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.30.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -154,7 +154,8 @@ der alten weggenommen.
 | Shift | Dash (zwei Ladungen, laden nacheinander nach) |
 | Maus links | Schiessen oder schlagen |
 | Maus rechts | Einzielen (bei der Scharfschuetzenwaffe) |
-| Mausrad | Ansicht eine Ebene hoch oder runter |
+| Mausrad | Im Gefecht: Sichtweite (weiter weg oder naeher; ausserhalb des normalen Bildes Nebel). Im Einzelspiel: Ansicht eine Ebene hoch oder runter |
+| Strg + Mausrad, Bild hoch / Bild runter | Ansicht eine Ebene hoch oder runter (Gefecht) |
 | 1 bis 9 | Waffe waehlen |
 | R | Nachladen |
 | V | Feuerart wechseln (beim MG: Dauerfeuer oder Salve) |
@@ -483,7 +484,7 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `lobby.py` | Die Lobby und der Rundenplan |
 | `regeln.py` | Die Regeln eines Gefechts, an einer Stelle |
 | `anzeige.py` | Die Anzeige im Gefecht |
-| `minikarte.py` | Die Minikarte oben rechts |
+| `minikarte.py` | Die Minikarte oben links |
 | `windows_tls.py` | Unter Windows: Zertifikate von Windows pruefen lassen |
 | `spielerkosmetik.py` | Eigener Ton und eigenes Bild fuer die Blendgranate: pruefen, verteilen, zeigen |
 | `bestenliste.py` | Abschuesse ueber alle Runden |
@@ -717,6 +718,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.14.0 | Mehrspieler fertiggestellt: drei Spielarten, Aufhelfen, Wellen mit mehrspielertauglicher Gegner-KI, knappe Munition mit Nachschubkisten. Letzter Stand dieses Zweigs |
 | 0.16.0 | Mannschaften im Gefecht: TEAM, VERSUS mit einem Leben je Runde und Aufhelfen durch die eigenen Leute, HUEGEL mit sichtbarem Kreis in der Kartenmitte. Alles in `docs/MEHRSPIELER.md` beschrieben. Nur auf `multiplayer-test`; 0.15.0 gehoert dem Hauptzweig ohne Mehrspieler |
 | 0.17.0 | Rauchgranate als siebte Waffe; Granaten fallen ueber Kanten auf die Ebene darunter; Einstiegsschutz, Startmedkits und Medkit-Nachschub als Schalter beim Aufmachen. Dazu vier gemeldete Fehler behoben: kein Ton im Gefecht, Ziellinie des Gastes am Einstiegspunkt, Versetzung nach einem Sturztod, Granaten prallten an Loechern ab. Brecheisen toetet in zwei Treffern, Schrot reicht weiter und streut enger, Scharfschuetze weiter als das Bild breit ist |
+| 0.30.0 | **Sichtweite mit Nebel**: im Gefecht stellt das Mausrad ein, wie viel Welt ins Bild passt (0,75 bis 2). Alles ausserhalb des normalen Bildes liegt im Nebel - Gelaende gedaempft, aber keine Gegner, Mitspieler oder Granaten, sie werden dort gar nicht gezeichnet. Die Ebenenansicht liegt im Gefecht jetzt auf Strg + Mausrad und Bild hoch/runter. **Blendgranate**: weit weg oder weggedreht kein Weiss mehr, nur eine weisse Explosion mit Glitzer und Druckring, ohne Splitter und Brandfleck. **Kosmetikbild** fuellt jetzt den ganzen Schirm; in der Kontoseite laesst es sich auf dem Weiss verschieben und in der Groesse einstellen (die Lage steht im PNG). **Minikarte** oben links, mit den Zombies in PVE. **Gegner fallen**, wenn ein Rueckstoss sie ueber eine Kante schiebt - selbst laufen sie nie hinunter. Behoben: die Munitionsanzeige flackerte in der Lobby bei jedem Schuss; in KONTO.html sprang eine gewaehlte Waffe im Loadout sofort zurueck |
 | 0.29.0 | **Minikarte** oben rechts, ein Versuch: der Grundriss der eigenen Ebene, man selbst mit Blickrichtung, die eigenen Leute, der Bildausschnitt und in HUEGEL der Kreis - Gegner nicht, sonst waere es ein Wandhack (`dustfront/minikarte.py`). **Anmeldung im Kliniknetz, zweiter Anlauf**: nach 0.28.1 kam ZERTIFIKAT UNGUELTIG. Unter Windows fragt das Spiel jetzt, wenn Python ablehnt, Windows selbst - wie Edge und Chrome (`dustfront/windows_tls.py`); jeder Fehler dabei heisst nein. Die Anmeldetafel zeigt Grund und Aussteller, auch ohne Eingabeaufforderung. **Blendgranate** jetzt ganz weiss und deckend, solange sie voll wirkt; erst beim Abklingen scheint die Welt durch. **Unendlich Munition in der Lobby.** **MG deutlich schwaecher**: 17 statt 25 je Schuss, Salve zu drei statt vier (51 statt 100 auf einen Klick - vorher mehr als ein Scharfschuss), Dauerfeuer langsamer, unter dem Sturmgewehr |
 | 0.28.1 | **Anmeldung scheiterte am Zertifikat** (gemeldet aus einem Kliniknetz: `CERTIFICATE_VERIFY_FAILED`, waehrend Firefox die Seite oeffnete). Die Pruefung bleibt an; stattdessen liegen die ueblichen Wurzelzertifikate dem Spiel bei, die strenge Pruefung von Python 3.13 ist zurueckgenommen, und eine `zertifikate.pem` im Benutzerordner wird mitgeladen - fuer Netze, die HTTPS mitlesen. Die Meldung sagt jetzt ZERTIFIKAT UNBEKANNT und verweist auf [`docs/KONTO.md`](docs/KONTO.md), Abschnitt 9; der Selbsttest nennt, wer das Zertifikat ausgestellt hat. Runde Klammern erscheinen nicht mehr als Fragezeichen |
 | 0.28.0 | **Spielerkosmetik, ein erster Versuch**: ein eigener Ton und ein eigenes Bild fuer die Blendgranate. Gemacht in der Kontoseite (Reiter KOSMETIK: MP3 zuschneiden, Bass, lauter, mit Knall und Pfeifen aus dem Spiel mischen; Bild ausschneiden und filtern, mit Vorschau in Spielgroesse), abgelegt im Konto (neue Tabelle, `docs/KONTO.md` 5.6), in der Lobby an alle verteilt. Der Gastgeber startet mit oder ohne Kosmetik - mit erst, wenn alle alles haben. Wer wirft, klingt nach seinem Ton, und im Weiss steht sein Bild. Der Ton dauert 1 bis 4 Sekunden und wird immer leiser; das prueft das Spiel bei jedem Paket selbst. Neue Netzmeldungen, darum neue Version. Neuer Browsertest `tests/kontoseite_browser.py` |

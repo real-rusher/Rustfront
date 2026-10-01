@@ -170,12 +170,11 @@
   canvas.welle{display:block; width:100%; height:96px; background:#0d0907;
                border:1px solid var(--linie); cursor:ew-resize; touch-action:none}
   canvas.welle.ruhig{height:64px; cursor:default}
-  canvas.zuschnitt{display:block; width:100%; max-width:288px; aspect-ratio:1/1;
-                   image-rendering:pixelated;
-                   border:1px solid var(--linie); cursor:grab; touch-action:none;
+  canvas.zuschnitt{display:block; max-width:100%; max-height:200px;
+                   border:1px solid var(--linie);
                    background:conic-gradient(#1a130e 25%, #0d0907 0 50%, #1a130e 0 75%, #0d0907 0) 0 0/16px 16px}
   canvas.spielbild{display:block; width:100%; max-width:640px; aspect-ratio:16/9;
-                   image-rendering:pixelated; border:1px solid var(--linie)}
+                   image-rendering:pixelated; border:1px solid var(--linie); touch-action:none}
   .status{font-size:11px; letter-spacing:.12em; text-transform:uppercase; margin:2px 0 10px}
 
   .fuss{color:var(--matt-dunkel); font-size:11px; text-align:center; margin-top:30px;
@@ -388,6 +387,10 @@ const Netz = {
 const SCHLUESSEL = "dustfront.konto.sitzung";
 const Stand = {
   sitzung:null, profil:null, gefechte:[], seite:"UEBERSICHT", meldung:null,
+  // Die Loadouts in Arbeit, bis SPEICHERN. Ohne diesen Entwurf baute
+  // jede Auswahl die Seite neu - aus dem gespeicherten Profil -, und die
+  // eben gewaehlte Waffe sprang sofort zurueck (gemeldet in 0.29).
+  entwurf:null,
 
   laden(){
     try{
@@ -402,7 +405,7 @@ const Stand = {
     }catch(e){ /* privates Fenster: dann eben nur fuer diesen Besuch */ }
   },
   abmelden(){
-    this.sitzung = null; this.profil = null; this.gefechte = [];
+    this.sitzung = null; this.profil = null; this.gefechte = []; this.entwurf = null;
     this.seite = "UEBERSICHT"; this.sichern();
     // Die Kosmetik gehoert zum Konto: wer sich als jemand anderes
     // anmeldet, soll nicht die des Vorigen weiterbearbeiten.
@@ -745,7 +748,9 @@ function seiteAusruestung(ziel){
     "Ob die Loadouts in einer Runde ueberhaupt gelten, entscheidet der " +
     "Gastgeber."));
 
-  const saetze = holeLoadouts();
+  if (!Stand.entwurf) Stand.entwurf = holeLoadouts();
+  const saetze = Stand.entwurf;
+  const geaendert = JSON.stringify(saetze) !== JSON.stringify(holeLoadouts());
   const g = el("div", "gitter g3");
   g.style.marginTop = "12px";
   const gewaehlt = Number((Stand.profil.werte || {}).loadout_gewaehlt) || 0;
@@ -795,10 +800,18 @@ function seiteAusruestung(ziel){
 
   const reihe = el("div");
   reihe.style.marginTop = "14px";
-  reihe.appendChild(knopf("SPEICHERN", "stark", () => {
-    Stand.profil.loadouts = saetze;
-    sichernProfil();
+  reihe.appendChild(knopf("SPEICHERN", "stark", async () => {
+    const vorher = Stand.profil.loadouts;
+    Stand.profil.loadouts = JSON.parse(JSON.stringify(saetze));
+    if (await sichernProfil()) Stand.entwurf = null;     // jetzt gilt das Gespeicherte
+    else Stand.profil.loadouts = vorher;                  // der Entwurf bleibt
+    zeichnen();
   }));
+  if (geaendert){
+    const hinweis = el("span", "klein amber", "  GEAENDERT - NOCH NICHT GESPEICHERT");
+    hinweis.style.marginLeft = "12px";
+    reihe.appendChild(hinweis);
+  }
   t.appendChild(reihe);
   ziel.appendChild(t);
 }
@@ -891,7 +904,7 @@ const Werkstatt = {
 function werkstattLeeren(){
   tonStoppen();
   Werkstatt.server = {geladen:false, laedt:false, fehler:"", ton:"", bild:"",
-                      tonFertig:null, bildFlaeche:null};
+                      tonFertig:null, bildFlaeche:null, bildLage:null};
   Werkstatt.ton = null; Werkstatt.tonWeg = false;
   Werkstatt.bild = null; Werkstatt.bildWeg = false;
 }
@@ -1272,8 +1285,14 @@ function zuschneidenEinrichten(c){
 }
 
 // ---- Bild ---------------------------------------------------------
+// Seit 0.30 fuellt das Bild den ganzen Schirm, und man kann es auf dem
+// Weiss verschieben und groesser oder kleiner machen (gemeldet). Wo es
+// steht, kommt ins PNG selbst - als tEXt-Abschnitt "dustfront" mit
+// {"x", "y", "h"}: Mitte und Hoehe als Anteil am Bildschirm. Genau so
+// liest es spielerkosmetik.bild_lage. Kein Ausschnitt mehr: was ueber
+// den Rand ragt, schneidet der Bildschirm ab.
 function bildVorgaben(){
-  return {zoom:1, x:0.5, y:0.5, rund:false, hell:0, kontrast:0, saett:0,
+  return {rund:false, hell:0, kontrast:0, saett:0,
           farbton:0, stil:"normal", pixel:1, frittiert:0};
 }
 
@@ -1295,14 +1314,26 @@ function bildUebernehmen(img, name){
   if (!img.naturalWidth || !img.naturalHeight)
     return sageUndZeichne("DIESES BILD IST LEER", "schlecht");
   const alt = Werkstatt.bild;
-  // Wie beim Ton: die Filter bleiben, der Ausschnitt nicht.
+  // Wie beim Ton: die Filter bleiben. Die Lage nicht - ein anderes Bild
+  // hat andere Seiten, und es soll erst einmal den Schirm fuellen.
   Werkstatt.bild = Object.assign(bildVorgaben(), alt || {},
-    {zoom:1, x:0.5, y:0.5, quelle:img, name:String(name).toUpperCase(),
-     flaeche:null, stand:0, gespeichert:-1});
+    {quelle:img, name:String(name).toUpperCase(), lage:null,
+     ausgabe:KOS.bild_max, flaeche:null, stand:0, gespeichert:-1});
   Werkstatt.bildWeg = false;
   meldung(null);
   zeichnen();
   bildRechnen();
+}
+
+// Fuellen: so gross, dass kein Weiss mehr zu sehen ist - dieselbe Rechnung
+// wie in bild_lage, wenn das PNG keine Lage traegt.
+function lageFuellen(b, h){
+  const W = DATEN.spielbild.breite, H = DATEN.spielbild.hoehe;
+  return {x:0.5, y:0.5, h:Math.max(W / b, H / h) * h / H};
+}
+
+function lageVon(B){
+  return B.lage || lageFuellen(B.flaeche.width, B.flaeche.height);
 }
 
 // Ein Zufall mit festem Anfang: das Rauschen von FRITTIERT soll beim
@@ -1319,7 +1350,7 @@ function zufall(saat){
 
 // Die Filter, von Hand auf die Pixel. ctx.filter waere kuerzer, kann
 // aber nicht jeder Browser - und FRITTIERT kann keiner.
-function filtern(p, seite, B){
+function filtern(p, breite, hoehe, B){
   const f = B.frittiert / 100;
   const hell = B.hell / 100 * 128;
   const C = Math.max(-254, Math.min(254, B.kontrast * 2.55 + 160 * f));
@@ -1361,12 +1392,12 @@ function filtern(p, seite, B){
   if (f > 0){
     // Nachschaerfen: der Unterschied zum Nachbarn mal 1 + 2f. Das macht
     // die Kanten, an denen man ein frittiertes Bild erkennt.
-    const alt = new Uint8ClampedArray(p), staerke = 2 * f;
-    for (let y = 1; y < seite - 1; y++){
-      for (let x = 1; x < seite - 1; x++){
-        const i = (y * seite + x) * 4;
+    const alt = new Uint8ClampedArray(p), staerke = 2 * f, zeile = breite * 4;
+    for (let y = 1; y < hoehe - 1; y++){
+      for (let x = 1; x < breite - 1; x++){
+        const i = (y * breite + x) * 4;
         for (let k = 0; k < 3; k++){
-          const um = alt[i - 4 + k] + alt[i + 4 + k] + alt[i - seite * 4 + k] + alt[i + seite * 4 + k];
+          const um = alt[i - 4 + k] + alt[i + 4 + k] + alt[i - zeile + k] + alt[i + zeile + k];
           p[i + k] = alt[i + k] + staerke * (alt[i + k] - um / 4);
         }
       }
@@ -1377,38 +1408,43 @@ function filtern(p, seite, B){
 function bildRechnen(){
   const B = Werkstatt.bild;
   if (!B) return;
-  const S = KOS.bild_zeigen;
-  const c = document.createElement("canvas");
-  c.width = c.height = S;
-  const g = c.getContext("2d", {willReadFrequently:true});
+  // Das ganze Bild, die lange Seite hoechstens `ausgabe` Pixel. Kleiner
+  // wird `ausgabe` nur, wenn das PNG sonst nicht durch die Grenze passt
+  // (bildPng).
   const w = B.quelle.naturalWidth, h = B.quelle.naturalHeight;
-  // Das groesste Quadrat im Bild, durch den Zoom geteilt, um (x, y).
-  const seite = Math.min(w, h) / B.zoom;
-  const sx = Math.max(0, Math.min(w - seite, B.x * w - seite / 2));
-  const sy = Math.max(0, Math.min(h - seite, B.y * h - seite / 2));
+  const m = Math.min(1, B.ausgabe / Math.max(w, h));
+  const bw = Math.max(1, Math.round(w * m)), bh = Math.max(1, Math.round(h * m));
+  const c = document.createElement("canvas");
+  c.width = bw; c.height = bh;
+  const g = c.getContext("2d", {willReadFrequently:true});
   const px = Math.max(1, Math.round(B.pixel));
   if (px > 1){
     const k = document.createElement("canvas");
-    k.width = k.height = Math.max(1, Math.round(S / px));
+    k.width = Math.max(1, Math.round(bw / px)); k.height = Math.max(1, Math.round(bh / px));
     const kg = k.getContext("2d");
     kg.imageSmoothingQuality = "high";
-    kg.drawImage(B.quelle, sx, sy, seite, seite, 0, 0, k.width, k.height);
+    kg.drawImage(B.quelle, 0, 0, k.width, k.height);
     g.imageSmoothingEnabled = false;
-    g.drawImage(k, 0, 0, S, S);
+    g.drawImage(k, 0, 0, bw, bh);
   }else{
     g.imageSmoothingQuality = "high";
-    g.drawImage(B.quelle, sx, sy, seite, seite, 0, 0, S, S);
+    g.drawImage(B.quelle, 0, 0, bw, bh);
   }
-  const d = g.getImageData(0, 0, S, S);
-  filtern(d.data, S, B);
+  const d = g.getImageData(0, 0, bw, bh);
+  filtern(d.data, bw, bh, B);
   g.putImageData(d, 0, 0);
   if (B.rund){
     g.globalCompositeOperation = "destination-in";
-    g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(bw / 2, bh / 2, Math.min(bw, bh) / 2, 0, Math.PI * 2); g.fill();
     g.globalCompositeOperation = "source-over";
   }
   B.flaeche = c;
   B.stand++;
+  const r = Werkstatt.dom.groesseRegler;
+  if (r && r.isConnected){
+    const h = Math.round(lageVon(B).h * 100);
+    r.eingabe.value = h; r.stand.textContent = h + " %";
+  }
   bildMalen();
   statusMalen();
 }
@@ -1419,33 +1455,133 @@ function bildPlanen(){
   _bildTakt = requestAnimationFrame(() => { _bildTakt = 0; bildRechnen(); });
 }
 
+// ---- PNG mit Lage ---------------------------------------------------
+let _crcTafel = null;
+function crc32(bytes){
+  if (!_crcTafel){
+    _crcTafel = new Uint32Array(256);
+    for (let n = 0; n < 256; n++){
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      _crcTafel[n] = c >>> 0;
+    }
+  }
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = _crcTafel[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+// Den Abschnitt "dustfront" gleich hinter den Kopf (IHDR) setzen.
+function pngMitLage(png, lage){
+  const text = JSON.stringify({x:+lage.x.toFixed(4), y:+lage.y.toFixed(4), h:+lage.h.toFixed(4)});
+  const inhalt = new TextEncoder().encode("dustfront\0" + text);
+  const stueck = new Uint8Array(12 + inhalt.length);
+  const d = new DataView(stueck.buffer);
+  d.setUint32(0, inhalt.length);
+  stueck.set([0x74, 0x45, 0x58, 0x74], 4);               // "tEXt"
+  stueck.set(inhalt, 8);
+  d.setUint32(8 + inhalt.length, crc32(stueck.subarray(4, 8 + inhalt.length)));
+  const kopf = 8 + 25;                                  // Signatur + IHDR
+  const aus = new Uint8Array(png.length + stueck.length);
+  aus.set(png.subarray(0, kopf), 0);
+  aus.set(stueck, kopf);
+  aus.set(png.subarray(kopf), kopf + stueck.length);
+  return aus;
+}
+
+// Die Lage aus einem PNG lesen, wie bild_lage im Spiel.
+function pngLage(png, b, h){
+  const lage = lageFuellen(b, h);
+  try{
+    const d = new DataView(png.buffer, png.byteOffset, png.byteLength);
+    let o = 8;
+    while (o + 12 <= png.length){
+      const laenge = d.getUint32(o);
+      const art = String.fromCharCode(png[o + 4], png[o + 5], png[o + 6], png[o + 7]);
+      if (art === "IDAT" || o + 12 + laenge > png.length) break;
+      if (art === "tEXt"){
+        const inhalt = png.subarray(o + 8, o + 8 + laenge);
+        const null_bei = inhalt.indexOf(0);
+        if (new TextDecoder("latin1").decode(inhalt.subarray(0, null_bei)) === "dustfront"){
+          const roh = JSON.parse(new TextDecoder("latin1").decode(inhalt.subarray(null_bei + 1)));
+          const kappen = (v, [lo, hi]) => Math.max(lo, Math.min(hi, Number(v)));
+          for (const [k, grenzen] of [["x", KOS.lage_xy], ["y", KOS.lage_xy], ["h", KOS.lage_h]])
+            if (Number.isFinite(Number(roh[k]))) lage[k] = kappen(roh[k], grenzen);
+          break;
+        }
+      }
+      o += 12 + laenge;
+    }
+  }catch(e){ /* dann fuellt es eben */ }
+  return lage;
+}
+
+// Das PNG zum Hochladen. Passt es nicht unter die Grenze des Spiels,
+// wird das Bild kleiner gerechnet und noch einmal versucht - die Lage ist
+// ein Anteil am Schirm und bleibt, wie sie ist.
 async function bildPng(){
   const B = Werkstatt.bild;
   if (!B || !B.flaeche) return null;
-  const blob = await new Promise((ja) => B.flaeche.toBlob(ja, "image/png"));
-  return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+  const lage = lageVon(B);
+  for (const groesse of [KOS.bild_max, 256, 200, 160, 128, 96]){
+    if (groesse > KOS.bild_max) continue;
+    if (B.ausgabe !== groesse){ B.ausgabe = groesse; bildRechnen(); }
+    const blob = await new Promise((ja) => B.flaeche.toBlob(ja, "image/png"));
+    if (!blob) return null;
+    const png = pngMitLage(new Uint8Array(await blob.arrayBuffer()), lage);
+    if (png.length <= KOS.bild_bytes) return png;
+  }
+  return null;
 }
 
 function aktuellesBild(){
   const B = Werkstatt.bild;
-  if (B) return B.flaeche;
-  return Werkstatt.bildWeg ? null : Werkstatt.server.bildFlaeche;
+  if (B && B.flaeche) return {flaeche:B.flaeche, lage:lageVon(B)};
+  if (B || Werkstatt.bildWeg) return null;
+  const S = Werkstatt.server;
+  return S.bildFlaeche ? {flaeche:S.bildFlaeche, lage:S.bildLage} : null;
 }
 
+// Die kleine Vorschau neben den Reglern: das Bild allein, wie es gefiltert ist.
 function bildMalen(){
   const c = Werkstatt.dom.zuschnitt;
   if (c && c.isConnected){
-    const g = c.getContext("2d"), S = KOS.bild_zeigen;
-    if (c.width !== S){ c.width = c.height = S; }
-    g.clearRect(0, 0, S, S);
     const b = aktuellesBild();
-    if (b) g.drawImage(b, 0, 0, S, S);
+    const g = c.getContext("2d");
+    if (b){
+      if (c.width !== b.flaeche.width || c.height !== b.flaeche.height){
+        c.width = b.flaeche.width; c.height = b.flaeche.height;
+      }
+      g.clearRect(0, 0, c.width, c.height);
+      g.drawImage(b.flaeche, 0, 0);
+    }else{
+      g.clearRect(0, 0, c.width, c.height);
+    }
   }
   spielMalen(0.8);
 }
 
-// Ziehen verschiebt den Ausschnitt, das Mausrad zoomt.
-function zuschnittEinrichten(c){
+// Auf der Vorschau im Spiel: ziehen verschiebt das Bild, das Mausrad
+// macht es groesser oder kleiner. Nur fuer ein Bild in Arbeit - ein
+// gespeichertes muesste man ohnehin neu hochladen.
+function lageAendern(neu){
+  const B = Werkstatt.bild;
+  if (!B || !B.flaeche) return;
+  const alt = lageVon(B);
+  B.lage = {x:Math.max(KOS.lage_xy[0], Math.min(KOS.lage_xy[1], neu.x ?? alt.x)),
+            y:Math.max(KOS.lage_xy[0], Math.min(KOS.lage_xy[1], neu.y ?? alt.y)),
+            h:Math.max(KOS.lage_h[0], Math.min(KOS.lage_h[1], neu.h ?? alt.h))};
+  B.stand++;
+  const r = Werkstatt.dom.groesseRegler;
+  if (r && r.isConnected){
+    r.eingabe.value = Math.round(B.lage.h * 100);
+    r.stand.textContent = Math.round(B.lage.h * 100) + " %";
+  }
+  spielMalen(0.8);
+  statusMalen();
+}
+
+function lageEinrichten(c){
   let zug = null;
   c.addEventListener("pointerdown", (ev) => {
     if (!Werkstatt.bild) return;
@@ -1454,33 +1590,25 @@ function zuschnittEinrichten(c){
     c.style.cursor = "grabbing";
   });
   c.addEventListener("pointermove", (ev) => {
-    const B = Werkstatt.bild;
-    if (!zug || !B) return;
-    const r = c.getBoundingClientRect();
-    const w = B.quelle.naturalWidth, h = B.quelle.naturalHeight;
-    const seite = Math.min(w, h) / B.zoom;
-    B.x = Math.max(0, Math.min(1, B.x - (ev.clientX - zug.x) / r.width * seite / w));
-    B.y = Math.max(0, Math.min(1, B.y - (ev.clientY - zug.y) / r.height * seite / h));
+    if (!zug || !Werkstatt.bild) return;
+    const r = c.getBoundingClientRect(), alt = lageVon(Werkstatt.bild);
+    lageAendern({x:alt.x + (ev.clientX - zug.x) / r.width,
+                 y:alt.y + (ev.clientY - zug.y) / r.height});
     zug = {x:ev.clientX, y:ev.clientY};
-    bildPlanen();
   });
   const los = () => { zug = null; c.style.cursor = ""; };
   c.addEventListener("pointerup", los);
   c.addEventListener("pointercancel", los);
   c.addEventListener("wheel", (ev) => {
-    const B = Werkstatt.bild;
-    if (!B) return;
+    if (!Werkstatt.bild) return;
     ev.preventDefault();
-    B.zoom = Math.max(1, Math.min(6, B.zoom * (ev.deltaY < 0 ? 1.1 : 1 / 1.1)));
-    const r = Werkstatt.dom.zoomRegler;
-    if (r && r.isConnected){ r.eingabe.value = B.zoom; r.stand.textContent = B.zoom.toFixed(2) + "×"; }
-    bildPlanen();
+    lageAendern({h:lageVon(Werkstatt.bild).h * (ev.deltaY < 0 ? 1.08 : 1 / 1.08)});
   }, {passive:false});
 }
 
 // ---- So sieht es im Spiel aus ---------------------------------------
 // Dieselbe Flaeche wie das Spiel (640 x 360), dasselbe Weiss, dasselbe
-// Bild in derselben Groesse mit derselben Deckkraft wie in
+// Bild an derselben Stelle mit derselben Deckkraft wie in
 // spielerkosmetik._kosmetik_bild_zeichnen und render.blendung_zeichnen.
 function spielMalen(blend){
   const c = Werkstatt.dom.spiel;
@@ -1504,10 +1632,12 @@ function spielMalen(blend){
   g.fillRect(0, 0, W, H);
   const b = aktuellesBild();
   if (b){
-    const S = KOS.bild_zeigen, m = S / Math.max(b.width, b.height);
-    const bw = Math.max(1, Math.round(b.width * m)), bh = Math.max(1, Math.round(b.height * m));
+    const bh = Math.max(1, Math.round(b.lage.h * H));
+    const bw = Math.max(1, Math.round(b.flaeche.width * bh / b.flaeche.height));
+    g.imageSmoothingEnabled = true;             // im Spiel: smoothscale
     g.globalAlpha = Math.min(1, blend * 1.4);
-    g.drawImage(b, Math.floor((W - bw) / 2), Math.floor((H - bh) / 2), bw, bh);
+    g.drawImage(b.flaeche, Math.round(b.lage.x * W - bw / 2),
+                Math.round(b.lage.y * H - bh / 2), bw, bh);
     g.globalAlpha = 1;
   }
 }
@@ -1558,7 +1688,7 @@ function kosmetikFehler(f){
 // Grenze, das Bild als Leinwand.
 async function serverAufbereiten(){
   const S = Werkstatt.server;
-  S.tonFertig = null; S.bildFlaeche = null;
+  S.tonFertig = null; S.bildFlaeche = null; S.bildLage = null;
   if (S.ton){
     const w = wavLesen(ausBase64(S.ton));
     if (w) S.tonFertig = {proben:tonAusklingen(w.proben, w.rate).proben, rate:w.rate};
@@ -1572,6 +1702,7 @@ async function serverAufbereiten(){
       c.width = img.naturalWidth; c.height = img.naturalHeight;
       c.getContext("2d").drawImage(img, 0, 0);
       S.bildFlaeche = c;
+      S.bildLage = pngLage(ausBase64(S.bild), c.width, c.height);
     }catch(e){ S.bildFlaeche = null; }
   }
 }
@@ -1760,15 +1891,18 @@ function seiteKosmetik(ziel){
   b.appendChild(W.dom.bildStatus);
   b.appendChild(dateiKnopf("DATEI WAEHLEN", "image/*", bildDatei));
   const z = el("canvas", "zuschnitt abstand");
-  z.title = "Ziehen: Ausschnitt verschieben. Mausrad: naeher heran.";
+  z.title = "Das Bild mit seinen Filtern. Verschoben wird es unten im Weiss.";
   W.dom.zuschnitt = z;
-  zuschnittEinrichten(z);
   b.appendChild(z);
   const B = W.bild;
   if (B){
     const neu = (feld) => (v) => { B[feld] = v; bildPlanen(); };
     const zahl = (v) => (v > 0 ? "+" : "") + v;
-    W.dom.zoomRegler = regler("NAEHER", 1, 6, 0.05, B.zoom, (v) => v.toFixed(2) + "×", neu("zoom"));
+    const h0 = B.flaeche ? lageVon(B).h : 1;
+    W.dom.groesseRegler = regler("GROESSE", Math.round(KOS.lage_h[0] * 100),
+      Math.round(KOS.lage_h[1] * 100), 1, Math.round(h0 * 100), (v) => v + " %",
+      (v) => lageAendern({h:v / 100}));
+    W.dom.groesseRegler.title = "Hoehe des Bildes im Verhaeltnis zum Bildschirm";
     const stil = el("select");
     for (const [wert, name] of [["normal","NORMAL"],["grau","GRAU"],["sepia","SEPIA"],["umgekehrt","UMGEKEHRT"]]){
       const o = el("option", null, name); o.value = wert;
@@ -1784,7 +1918,7 @@ function seiteKosmetik(ziel){
     haken.addEventListener("change", () => { B.rund = haken.checked; bildPlanen(); });
     anhaengen(rund, haken, document.createTextNode("RUND AUSSCHNEIDEN"));
     anhaengen(b, el("div", "abstand"),
-      W.dom.zoomRegler,
+      W.dom.groesseRegler,
       regler("HELLIGKEIT", -100, 100, 1, B.hell, zahl, neu("hell")),
       regler("KONTRAST", -100, 100, 1, B.kontrast, zahl, neu("kontrast")),
       regler("FARBE", -100, 200, 1, B.saett, zahl, neu("saett")),
@@ -1796,6 +1930,8 @@ function seiteKosmetik(ziel){
   }
   const bz = el("div", "zeile abstand");
   anhaengen(bz,
+    B ? knopf("FUELLEN", null, () => { B.lage = null; B.stand++; zeichnen(); bildMalen(); }) : null,
+    B ? knopf("MITTE", null, () => lageAendern({x:0.5, y:0.5})) : null,
     B ? knopf("FILTER ZURUECK", null, () => {
           const v = bildVorgaben();
           for (const k of ["hell","kontrast","saett","farbton","stil","pixel","frittiert","rund"]) B[k] = v[k];
@@ -1812,9 +1948,13 @@ function seiteKosmetik(ziel){
   const s = tafel("SO SIEHT ES IM SPIEL AUS");
   s.appendChild(el("div", "klein matt",
     "Dieselbe Flaeche wie im Spiel, dasselbe Weiss, dasselbe Abklingen. " +
-    "Das Bild steht in der Mitte, " + KOS.bild_zeigen + " Pixel gross, und verblasst mit dem Weiss."));
+    "Ohne weiteres fuellt das Bild den ganzen Schirm. Mit der Maus ziehen verschiebt es, " +
+    "das Mausrad (oder GROESSE) macht es groesser oder kleiner; was ueber den Rand ragt, " +
+    "ist abgeschnitten. FUELLEN setzt es zurueck."));
   const sc = el("canvas", "spielbild abstand");
   W.dom.spiel = sc;
+  lageEinrichten(sc);
+  if (W.bild) sc.style.cursor = "grab";
   const figur = new Image();
   figur.onload = () => spielMalen(0.8);
   figur.src = DATEN.figur;
@@ -1881,7 +2021,7 @@ function seiteKonto(ziel){
   t2.appendChild(tab);
   const r3 = el("div");
   r3.style.marginTop = "14px";
-  anhaengen(r3, knopf("NEU LADEN", null, () => ladenUndZeichnen(true)),
+  anhaengen(r3, knopf("NEU LADEN", null, () => { Stand.entwurf = null; ladenUndZeichnen(true); }),
     knopf("ABMELDEN", null, () => Stand.abmelden()));
   r3.lastChild.style.marginLeft = "8px";
   t2.appendChild(r3);
@@ -1906,10 +2046,12 @@ async function sichernProfil(){
     sageUndZeichne("GESPEICHERT", "gut");
   }else{
     // Die Fassung hat nicht mehr gestimmt: frisch lesen, damit der
-    // naechste Versuch auf dem steht, was wirklich da ist.
+    // naechste Versuch auf dem steht, was wirklich da ist. Ein Entwurf
+    // der Loadouts bleibt dabei stehen - er ist ja noch nicht verloren.
     await ladenUndZeichnen(true);
     sageUndZeichne(antwort.fehler, "schlecht");
   }
+  return antwort.ok;
 }
 
 async function ladenUndZeichnen(still){

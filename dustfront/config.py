@@ -125,6 +125,19 @@ KAMERA = dict(
     maus_max=54.0,
 )
 
+# Sichtweite im Gefecht (Mausrad, seit 0.30). 1 ist das normale Bild; mehr
+# heisst: mehr Welt im Bild, kleiner gezeichnet. Alles ausserhalb des
+# normalen Bildes liegt im **Nebel**: man sieht das Gelaende gedaempft,
+# aber keine Wesen - keine Gegner, keine Mitspieler, keine Granaten. Ein
+# weiterer Blick ist damit Ueberblick, kein Vorteil.
+ZOOM = dict(
+    stufen=(0.75, 1.0, 1.25, 1.5, 1.75, 2.0),
+    start=1.0,
+    weich=12.0,               # wie schnell der Zoom nachzieht
+    nebel=(14, 10, 8, 168),   # Farbe und Deckkraft des Nebels
+    nebel_rand=(96, 78, 56),  # die Kante des normalen Bildes
+)
+
 # Kameraruckeln.
 #
 # Hier lag einer der haesslichsten gemeldeten Fehler: beim Gastgeber
@@ -1476,14 +1489,14 @@ FEUER = dict(
     brandfleck=True,          # hinterlaesst einen Fleck, wenn es aus ist
 )
 
-# Die Minikarte oben rechts (minikarte.py), ein Versuch. Groesse in
+# Die Minikarte oben links (minikarte.py), ein Versuch. Groesse in
 # Spielpixeln: hoechstens so breit und hoch, die Seiten wie die Karte.
 MINIKARTE = dict(
     an=True,
     breite=84,
     hoehe=56,
     oben=8,
-    rand_rechts=36,       # Platz fuer die Ebenenanzeige daneben
+    links=8,
 )
 
 # Spielerkosmetik: eigener Ton und eigenes Bild fuer die Blendgranate.
@@ -1509,8 +1522,14 @@ SPIELERKOSMETIK = dict(
     ton_ausklang=1.0,       # ueber diesen Anteil faellt die Grenze auf null
     ton_abfall=0.95,        # so weit folgt die Grenze je Abschnitt nach unten
     bild_bytes=150_000,     # so gross darf das PNG hoechstens sein
-    bild_max=256,           # so breit und hoch hoechstens
-    bild_zeigen=144,        # so gross steht es im Weiss der Blendung
+    bild_max=320,           # so breit und hoch hoechstens
+    # Wo und wie gross es im Weiss steht, steht im PNG selbst (ein
+    # tEXt-Abschnitt "dustfront", gesetzt von der Kontoseite): Mitte x, y
+    # als Anteil am Bild, Hoehe h als Anteil an der Bildhoehe. Fehlt er,
+    # fuellt das Bild den ganzen Schirm. Was darin steht, wird auf diese
+    # Bereiche gekappt.
+    lage_xy=(-0.5, 1.5),
+    lage_h=(0.05, 4.0),
     teil=8000,              # Zeichen je Netzmeldung
     teile_je_schritt=2,     # so viele Teile gehen je Schritt hinaus
     teile_max=100,          # mehr Teile hat kein gueltiges Paket (groesstes: 92)
@@ -1550,6 +1569,13 @@ BLENDEN = dict(
     deckend_ab=0.55,      # ab dieser Staerke ist nichts mehr zu sehen
     abklingen=1.8,        # je hoeher, desto schneller wird wieder klar
     abgewandt=0.35,       # so viel bleibt uebrig, wenn man weggedreht steht
+    # Darunter kein Weiss, nur die Explosion in der Welt. Hoeher als
+    # `abgewandt`: wer wegschaut, wird nicht geblendet. Bei Blick auf den
+    # Blitz endet das Weiss bei rund 250 Pixeln.
+    schwelle=0.4,
+    glitzer_dauer=1.1,    # so lange leuchtet der Glitzer nach
+    ring=1.3,             # Wucht des Druckrings
+    kamera=2.5,           # Kameraschlag - weniger als bei der Granate
     blickwinkel=100.0,    # innerhalb dieses Kegels gilt man als hinsehend
     # Der Funke in der Welt: klein, hell, kurz. Aus der Entfernung soll
     # man ein Blitzen sehen und nicht eine Explosion.

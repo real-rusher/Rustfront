@@ -248,6 +248,11 @@ class LobbyTeil:
         nichts nachzuladen. Die Lobby ist zum Ausprobieren da, und wer
         eine Waffe kennenlernen will, soll schiessen und nicht warten.
         Nur beim Gastgeber: die Magazine gehen mit der Weltmeldung hinaus.
+
+        Aufgerufen **nach** dem Schritt der Welt, nicht davor. Davor
+        stand es zuerst, und dann nahm der Schuss im selben Schritt gleich
+        wieder eine Patrone: die Zahl sprang bei jedem Schuss von 100 auf
+        99 und zurueck - beim MG im Dauerfeuer ein Flackern (gemeldet).
         """
         for k in self.kaempfer.values():
             for w in list(k.magazin):
@@ -269,7 +274,6 @@ class LobbyTeil:
         """
         from .mehrspieler import KampfGegner
         L = K.LOBBY
-        self._lobby_munition()
         self.gehege = [g for g in self.gehege if g.lebt]
         drin = [k for k in self.kaempfer.values()
                 if k.lebt and self.im_bereich(k, "pve")]

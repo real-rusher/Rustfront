@@ -98,6 +98,8 @@ TASTEN_VORGABE = [
     ("nutzen",      "BENUTZEN / RUFEN", ["e"]),
     ("ziehen",      "GEFALLENEN ZIEHEN", ["g"]),
     ("ebenen",      "OBERE EBENEN",     ["q"]),
+    ("ansicht_hoch", "EBENE DARUEBER",  ["page up"]),
+    ("ansicht_runter", "EBENE DARUNTER", ["page down"]),
     ("planen",      "RUNDEN EINSTELLEN", ["p"]),
     ("nachladen",   "NACHLADEN",        ["r"]),
     ("heilen",      "MEDKIT",           ["h"]),

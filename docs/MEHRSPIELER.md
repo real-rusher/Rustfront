@@ -1486,7 +1486,9 @@ Vier Meldungen, alle neben der Weltmeldung her:
 | `kos_weg` | Gast → Gastgeber | ich habe meine entfernt |
 
 Ein Paket ist JSON mit Base64: der Ton **so, wie er vom Konto kam**, und
-das PNG. Die Kennung ist `sha1(ton|bild)`, 16 Zeichen. Jeder Rechner
+das PNG. Seit 0.30 traegt das PNG einen tEXt-Abschnitt `dustfront` mit der
+Lage im Weiss (`{"x", "y", "h"}`, Anteile am Bildschirm); fehlt er, fuellt
+das Bild den ganzen Schirm (`spielerkosmetik.bild_lage`). Die Kennung ist `sha1(ton|bild)`, 16 Zeichen. Jeder Rechner
 bereitet den Ton selbst auf; weil das festgelegt ist, kommt ueberall
 dasselbe heraus, und die Kennung am Rohen stimmt bei allen.
 
@@ -1532,6 +1534,61 @@ deckend, wie das Weiss noch ist. Wer keine hat, knallt wie immer.
 **0.28.0.** Neue Meldungen und ein siebtes Feld in `x`: ein Gast von 0.27
 verstuende die Lobby nicht mehr. Die Versionspruefung (0.27.1) weist ihn
 ab, wie sie soll.
+
+---
+
+## 12d. Version 0.30: Sichtweite, Nebel, Blendung, fallende Gegner
+
+### Sichtweite und Nebel
+
+**FEST.** Das Mausrad stellt im Gefecht ein, wie viel Welt ins Bild passt:
+`ZOOM["stufen"]` von 0,75 bis 2. Gezeichnet wird dafuer auf eine Flaeche in
+Zoomgroesse (`Renderer.groesse`, `Kamera.zoom`) und danach auf 640 x 360
+gebracht; die Anzeige kommt erst danach und bleibt scharf. Zielen rechnet
+ueber `Kamera.zu_welt`, Namen, Randpfeile und Zielerfassung ueber
+`Kamera.zu_bild`.
+
+**FEST.** Ausserhalb des normalen Bildes (wo die Kamera bei Zoom 1 stuende)
+liegt der Nebel. Gezeichnet wird zuerst nur das Gelaende
+(`Renderer.nur_gelaende`), darauf der Nebel, und dann das volle Bild -
+beschnitten auf das normale Bild (`set_clip`). Wesen ausserhalb werden also
+**gar nicht** gezeichnet, und ihre Namen auch nicht.
+
+**GRUND.** Wer weiter sieht, soll Ueberblick haben, keinen Vorteil. Ein
+Zoom, der Gegner hinter dem Rand zeigt, waere ein Wandhack, den jeder
+eingeschaltet laesst.
+
+Die Ebenenansicht liegt im Gefecht dafuer auf Strg + Mausrad und auf
+Bild hoch / Bild runter (umlegbar, `ansicht_hoch`, `ansicht_runter`). Im
+Einzelspiel bleibt das Rad bei den Ebenen.
+
+### Blendgranate
+
+**FEST.** Unter `BLENDEN["schwelle"]` (0,4) gibt es kein Weiss. Wer
+wegschaut (`abgewandt` 0,35) oder weiter als rund 250 Pixel weg steht,
+sieht nur, was jeder sieht: eine weisse Explosion mit Glitzer und
+Druckring - ohne Splitter, ohne Brandfleck. Darueber ist das Weiss ganz
+weiss und deckend (`deckend_ab`), bis es abklingt.
+
+### Fallende Gegner
+
+**FEST.** Ein Gegner laeuft nie in ein Loch - die Kacheln sind fuer ihn
+Wand. Der Rueckstoss steckt aber in einem eigenen Topf (`Gegner.stoss`) und
+kennt diese Wand nicht: schiebt ein Treffer einen Gegner ueber die Kante,
+faellt er auf die Ebene darunter, mit Sturz und Schaden wie eine Figur.
+Waehrenddessen haelt `world.befreien` ihn nicht an der Kante fest
+(`Gegner.geschoben`). Bosse lassen sich gar nicht schieben und fallen
+darum auch nicht.
+
+**GRUND.** Als Notbremse, nicht als Spielzug: vorher blieb ein Gegner, den
+eine Salve ueber den Rand trug, an einer unsichtbaren Kante haengen.
+
+### Lobby: unendliche Munition
+
+`LobbyTeil._lobby_munition` fuellt jedes Magazin, und zwar **nach** dem
+Schritt der Welt. Davor nahm der Schuss im selben Schritt gleich wieder
+eine Patrone, und die Zahl sprang bei jedem Schuss von 100 auf 99 und
+zurueck (gemeldet als Flackern beim MG).
 
 ---
 

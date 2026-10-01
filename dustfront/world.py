@@ -86,8 +86,12 @@ def blend_wert(pos, ebene: int, ich, welt=None) -> float:
     2. Freie Sicht? Steht eine Wand dazwischen, passiert nichts. Das ist
        der Griff, den man im Gefecht lernt: in Deckung gehen hilft.
     3. Wie nah, und schaut man hin? Nah blendet voll; wer weggedreht
-       steht, bekommt nur einen Teil ab - aber nicht nichts, denn eine
-       Blendgranate hinter einem taucht den ganzen Raum in Licht.
+       steht, bekommt nur einen Teil ab.
+    4. Reicht es ueberhaupt? Unter `schwelle` gibt es **kein** Weiss -
+       nur die Explosion mit dem Glitzer in der Welt, die jeder sieht.
+       Gemeldet in 0.29: weiter weg oder weggedreht soll man sie sehen,
+       aber nicht geblendet werden. Wer weggedreht steht, kommt darum
+       nicht mehr ueber die Schwelle (`abgewandt` liegt darunter).
 
     Mannschaften spielen bewusst keine Rolle. Eine Blendgranate, die nur
     Gegner trifft, ist keine Entscheidung mehr, sondern ein Knopf.
@@ -114,7 +118,8 @@ def blend_wert(pos, ebene: int, ich, welt=None) -> float:
         delta = abs((richtung - getattr(ich, "winkel", 0.0) + 180) % 360 - 180)
         if delta > b["blickwinkel"] * 0.5:
             hin = b["abgewandt"]
-    return max(0.0, min(1.0, naehe * hin))
+    wert = max(0.0, min(1.0, naehe * hin))
+    return wert if wert >= b["schwelle"] else 0.0
 
 
 def klang_wert(lautstaerke: float, pos=None, ebene: int = 0, ich=None) -> float:
@@ -346,14 +351,23 @@ class Welt:
             return
         if art == "blend":
             b = K.BLENDEN
-            # In der Welt ist es ein **Funke**, kein Feuerball. Aus der
-            # Entfernung soll man ein Blitzen sehen und daran erkennen,
-            # was gerade passiert ist - nicht eine Explosion, die man mit
-            # einer Granate verwechselt.
-            wolke(self, pos, 14, 260, b["funke_dauer"], (255, 255, 246),
+            # In der Welt eine Explosion wie bei der Granate - aber weiss
+            # statt Feuer, und **ohne Splitter**: kein Rauchpilz, kein
+            # Brandfleck, kein Schaden. Dazu Glitzer, der langsamer fliegt
+            # und laenger leuchtet. Das ist alles, was sieht, wer weit weg
+            # steht oder weggedreht - das Weiss im Bild bekommt nur, wer
+            # wirklich getroffen ist (blend_wert, `schwelle`). So gemeldet:
+            # "weiter weg bzw. wegschauen: nur Glitzer und Funken mit einer
+            # Explosion wie eher von der Granate, ohne Fragmente".
+            wolke(self, pos, 24, 300, b["funke_dauer"] * 1.8, (255, 255, 248),
                   ebene, 2, "funke")
-            wolke(self, pos, 6, 120, b["funke_dauer"] * 1.6, (206, 226, 255),
-                  ebene, 1, "funke")
+            wolke(self, pos, 16, 120, b["glitzer_dauer"], (255, 232, 160),
+                  ebene, 1, "funke", reibung=1.6)
+            wolke(self, pos, 12, 90, b["glitzer_dauer"] * 1.2, (196, 222, 255),
+                  ebene, 1, "funke", reibung=1.4)
+            wolke(self, pos, 6, 50, 0.7, K.C_MUTED, ebene, 2, "staub")
+            self.aufschlagring(pos, ebene, b["ring"])
+            self.ruckeln(b["kamera"], "explosion", pos, ebene)
             if not self.blitz(pos, ebene, von):
                 self.klang(K.skin("blend_knall"), 1.0, pos, ebene)
             return
@@ -596,8 +610,13 @@ class Welt:
                     return False
         return True
 
-    def bewegen(self, wesen, dx: float, dy: float) -> tuple[bool, bool]:
+    def bewegen(self, wesen, dx: float, dy: float,
+                loch_fest: bool | None = None) -> tuple[bool, bool]:
         """Achsenweise schieben. Gibt zurueck, ob an x bzw. y angestossen wurde.
+
+        `loch_fest` ueberstimmt, ob Loecher fuer dieses Wesen Wand sind -
+        gebraucht fuer den Rueckstoss eines Gegners, der selbst nie in ein
+        Loch laeuft, aber hineingeschoben werden kann (Gegner._geschoben).
 
         Getrennt nach Achsen, damit man an einer Wand entlanggleitet statt
         kleben zu bleiben. Grosse Schritte werden unterteilt, damit nichts
@@ -608,7 +627,7 @@ class Welt:
         # man gleitet im Flug an ihnen entlang statt hindurchzufliegen. Nur so
         # steht die Figur beim Aufsetzen schon auf freiem Grund und muss nicht
         # im letzten Bild noch zur Seite gesetzt werden.
-        lf = not getattr(wesen, "faellt", False)
+        lf = (not getattr(wesen, "faellt", False)) if loch_fest is None else loch_fest
         stoss_x = stoss_y = False
         schritte = max(1, int(max(abs(dx), abs(dy)) / (r * 0.75)) + 1)
         sx, sy = dx / schritte, dy / schritte
@@ -665,7 +684,10 @@ class Welt:
         """
         if getattr(wesen, "sturz_rest", 0.0) > 0:
             return False          # in der Luft steckt niemand in einer Wand
-        lf = not getattr(wesen, "faellt", False)
+        # Ein Gegner, der gerade geschoben wird, darf ueber der Kante
+        # haengen - sonst zoege ihn das hier in jedem Schritt zurueck, und
+        # er fiele nie (Gegner._geschoben).
+        lf = not getattr(wesen, "faellt", False) and not getattr(wesen, "geschoben", False)
         if self.frei(wesen.pos, wesen.radius, wesen.ebene, lf):
             return False
         for r in (3.0, 6.0, 10.0, 15.0, 21.0, 29.0, 40.0, 54.0):

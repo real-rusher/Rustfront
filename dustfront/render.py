@@ -53,6 +53,20 @@ class Kamera:
         self.versatz = pygame.Vector2(0, 0)
         self.anteil = 1.0
         self._sperre = 0.0
+        # Wie viel Welt ins Bild passt: 1 ist das normale Bild, 2 die
+        # doppelte Breite und Hoehe (Mausrad im Gefecht, mehrspieler.py).
+        # Das Bild selbst bleibt 640 x 360 - die Welt wird dafuer auf eine
+        # groessere Flaeche gezeichnet und verkleinert.
+        self.zoom = 1.0
+
+    @property
+    def breite(self) -> float:
+        """Wie viele Weltpixel das Bild breit ist."""
+        return K.GAME_W * self.zoom
+
+    @property
+    def hoehe(self) -> float:
+        return K.GAME_H * self.zoom
 
     def stossen(self, kraft: float) -> None:
         """Ein Schlag auf die Kamera. Kleines und zu Dichtes faellt weg."""
@@ -79,13 +93,13 @@ class Kamera:
         self.versatz.update(RND.uniform(-r, r), RND.uniform(-r, r))
 
         # An den Kartenrand anlegen, damit man nicht ins Nichts schaut
-        halb_w, halb_h = K.GAME_W / 2, K.GAME_H / 2
+        halb_w, halb_h = self.breite / 2, self.hoehe / 2
         bw, bh = grenze
-        if bw > K.GAME_W:
+        if bw > self.breite:
             self.pos.x = max(halb_w, min(bw - halb_w, self.pos.x))
         else:
             self.pos.x = bw / 2
-        if bh > K.GAME_H:
+        if bh > self.hoehe:
             self.pos.y = max(halb_h, min(bh - halb_h, self.pos.y))
         else:
             self.pos.y = bh / 2
@@ -93,8 +107,8 @@ class Kamera:
     @property
     def ecke(self) -> pygame.Vector2:
         """Die Ecke zum **Zeichnen**. Das Ruckeln steckt hier drin."""
-        return pygame.Vector2(round(self.pos.x - K.GAME_W / 2 + self.versatz.x),
-                              round(self.pos.y - K.GAME_H / 2 + self.versatz.y))
+        return pygame.Vector2(round(self.pos.x - self.breite / 2 + self.versatz.x),
+                              round(self.pos.y - self.hoehe / 2 + self.versatz.y))
 
     @property
     def ecke_ruhig(self) -> pygame.Vector2:
@@ -107,11 +121,16 @@ class Kamera:
         Bildes: man haelt still, und der Wurf geht trotzdem woandershin.
         Das Ruckeln gehoert ins Bild, nicht in die Hand.
         """
-        return pygame.Vector2(round(self.pos.x - K.GAME_W / 2),
-                              round(self.pos.y - K.GAME_H / 2))
+        return pygame.Vector2(round(self.pos.x - self.breite / 2),
+                              round(self.pos.y - self.hoehe / 2))
 
     def zu_welt(self, bildpunkt) -> pygame.Vector2:
-        return pygame.Vector2(bildpunkt) + self.ecke_ruhig
+        """Bildpunkt (im 640 x 360-Bild) -> Weltpunkt, auch mit Zoom."""
+        return pygame.Vector2(bildpunkt) * self.zoom + self.ecke_ruhig
+
+    def zu_bild(self, weltpunkt) -> pygame.Vector2:
+        """Weltpunkt -> Bildpunkt im 640 x 360-Bild, mit Ruckeln und Zoom."""
+        return (pygame.Vector2(weltpunkt) - self.ecke) / self.zoom
 
 
 class Renderer:
@@ -120,8 +139,16 @@ class Renderer:
         self._dunkel: dict[tuple, pygame.Surface] = {}
         self._schatten_cache: dict[tuple, pygame.Surface] = {}
         self._tiefen: dict[int, pygame.Surface] = {}
-        self._dunst = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
-        self._linie = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+        # Wie gross die Flaeche ist, auf die die Welt gezeichnet wird. Fast
+        # immer das Bild selbst; mit Zoom (mehrspieler.py) eine groessere,
+        # die danach verkleinert wird. Alles, was die Welt zeichnet, fragt
+        # hier und nicht bei K.GAME_W.
+        self.groesse = (K.GAME_W, K.GAME_H)
+        self.vignette_an = True
+        # Nur Boden und Waende, keine Wesen, kein Rauch, keine Funken:
+        # das Gelaende im Nebel (mehrspieler.py, Zoom).
+        self.nur_gelaende = False
+        self._puffer_je: dict[str, pygame.Surface] = {}
         self._brand: dict[int, pygame.Surface] = {}
         self._fleck_cache: dict[tuple, pygame.Surface] = {}
         self._rauch_puffer: dict[tuple, tuple] = {}
@@ -354,8 +381,8 @@ class Renderer:
         """
         mitte = kamera.pos + kamera.versatz
         return pygame.Vector2(
-            K.GAME_W / 2 + (weltpos.x - mitte.x) * k,
-            K.GAME_H / 2 + (weltpos.y - mitte.y) * k)
+            self.groesse[0] / 2 + (weltpos.x - mitte.x) * k,
+            self.groesse[1] / 2 + (weltpos.y - mitte.y) * k)
 
     def fliegende_zeichnen(self, ziel, welt, kamera, alpha, blick_hoehe) -> None:
         """Wesen im Sturz, nach allen Ebenen und mit eigenem Massstab.
@@ -441,11 +468,11 @@ class Renderer:
         Bildgroesse verkleinert. Genau das laesst die untere Ebene weiter weg
         wirken: gleiche Weltmitte, kleinerer Massstab.
         """
-        schluessel = int(k * 100)
+        schluessel = (int(k * 100), self.groesse)
         hit = self._tiefen.get(schluessel)
         if hit is None:
-            w = int(K.GAME_W / k) + 2
-            h = int(K.GAME_H / k) + 2
+            w = int(self.groesse[0] / k) + 2
+            h = int(self.groesse[1] / k) + 2
             hit = pygame.Surface((w, h), pygame.SRCALPHA)
             if len(self._tiefen) > 64:
                 self._tiefen.clear()
@@ -595,6 +622,8 @@ class Renderer:
                 self.ebene_zeichnen(ziel, welt, idx, ecke, None)
                 if boden is not None:
                     boden(ziel, idx, ecke)
+                if self.nur_gelaende:
+                    continue
                 self.feuer_zeichnen(ziel, welt, idx, ecke, True)
                 self.wesen_zeichnen(ziel, welt, idx, ecke, alpha)
                 self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
@@ -612,15 +641,16 @@ class Renderer:
             self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel)
             if boden is not None:
                 boden(flaeche, idx, u_ecke)
-            self.feuer_zeichnen(flaeche, welt, idx, u_ecke, False)
-            self.wesen_zeichnen(flaeche, welt, idx, u_ecke, alpha, dunkel)
-            self.partikel_zeichnen(flaeche, welt, idx, u_ecke, alpha)
-            self.muendungsfeuer(flaeche, welt, u_ecke, idx)
-            self.rueckmeldung_zeichnen(flaeche, welt, idx, u_ecke)
-            self.rauch_zeichnen(flaeche, welt, idx, u_ecke, False)
+            if not self.nur_gelaende:
+                self.feuer_zeichnen(flaeche, welt, idx, u_ecke, False)
+                self.wesen_zeichnen(flaeche, welt, idx, u_ecke, alpha, dunkel)
+                self.partikel_zeichnen(flaeche, welt, idx, u_ecke, alpha)
+                self.muendungsfeuer(flaeche, welt, u_ecke, idx)
+                self.rueckmeldung_zeichnen(flaeche, welt, idx, u_ecke)
+                self.rauch_zeichnen(flaeche, welt, idx, u_ecke, False)
             if oben_aus and dz < 0 and idx > 0:
                 self._ausstanzen(flaeche, welt, idx, u_ecke)
-            skaliert =pygame.transform.scale(flaeche, (K.GAME_W, K.GAME_H))
+            skaliert = pygame.transform.scale(flaeche, self.groesse)
             if sicht < 0.999:
                 skaliert.set_alpha(int(255 * sicht))
             ziel.blit(skaliert, (0, 0))
@@ -630,8 +660,27 @@ class Renderer:
                     self._dunst.fill((*p["dunst"], min(255, a)))
                     ziel.blit(self._dunst, (0, 0))
 
-        self.fliegende_zeichnen(ziel, welt, kamera, alpha, blick_hoehe)
-        ziel.blit(self._vignette, (0, 0))
+        if not self.nur_gelaende:
+            self.fliegende_zeichnen(ziel, welt, kamera, alpha, blick_hoehe)
+        if self.vignette_an:
+            ziel.blit(self._vignette, (0, 0))
+
+    def _puffer(self, name: str) -> pygame.Surface:
+        """Eine durchsichtige Hilfsflaeche in der Groesse, in der gerade
+        gezeichnet wird. Mit Zoom ist das eine andere als ohne."""
+        s = self._puffer_je.get(name)
+        if s is None or s.get_size() != self.groesse:
+            s = pygame.Surface(self.groesse, pygame.SRCALPHA)
+            self._puffer_je[name] = s
+        return s
+
+    @property
+    def _dunst(self) -> pygame.Surface:
+        return self._puffer("dunst")
+
+    @property
+    def _linie(self) -> pygame.Surface:
+        return self._puffer("linie")
 
     def rueckmeldung_zeichnen(self, ziel, welt, index: int, ecke) -> None:
         """Staubringe und Aufschriften der Ebene.

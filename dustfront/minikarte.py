@@ -2,17 +2,19 @@
 DUSTFRONT - Die Minikarte (ein Versuch)
 =======================================
 
-Oben rechts, neben den Ebenen: der Grundriss der Ebene, auf der man
-steht, und darauf
+Oben links (seit 0.30; vorher oben rechts): der Grundriss der Ebene, auf
+der man steht, und darauf
 
 * man selbst (hell, mit Blickrichtung),
 * die eigenen Leute - wer zur selben Fraktion gehoert,
+* die Zombies und Bosse, wenn es welche gibt (PVE, PVPVE, Gehege),
 * der Ausschnitt, den man gerade im Bild hat,
 * in HUEGEL der Kreis, wenn er auf dieser Ebene liegt.
 
-**Gegner stehen nicht darauf.** Das ist kein Vergessen: eine Karte, die
-zeigt, wo der Feind hinter der Wand steht, ist ein Wandhack, den alle
-haben. Wer einen Gegner sehen will, muss ihn sehen.
+**Gegnerische Spieler stehen nicht darauf.** Das ist kein Vergessen: eine
+Karte, die zeigt, wo der Feind hinter der Wand steht, ist ein Wandhack,
+den alle haben. Bei den Zombies ist es anders - sie sind keine Mitspieler,
+die sich verstecken, und in PVE spielt man gemeinsam gegen sie.
 
 Der Grundriss wird je Ebene einmal gemalt und gemerkt - die Karte aendert
 sich im Gefecht nicht, die Punkte darauf schon. Ein Kartenwechsel gibt
@@ -32,6 +34,7 @@ M = K.MINIKARTE
 FARBE_BODEN = (58, 46, 34)
 FARBE_WAND = (126, 104, 78)
 FARBE_TREPPE = (72, 150, 140)
+FARBE_GEGNER = (226, 72, 52)
 RAHMEN = (84, 66, 48)
 GRUND = (11, 8, 6, 200)
 
@@ -42,11 +45,10 @@ class Minikarte:
         self._grundriss: dict[int, pygame.Surface] = {}
 
     def rechteck(self, welt) -> pygame.Rect:
-        """Wo sie steht: oben rechts, links neben den Ebenen."""
+        """Wo sie steht: oben links."""
         e = welt.ebenen[0]
         breite, hoehe = self._mass(e.breite, e.hoehe)
-        rechts = K.GAME_W - M["rand_rechts"]
-        return pygame.Rect(rechts - breite, M["oben"], breite, hoehe)
+        return pygame.Rect(M["links"], M["oben"], breite, hoehe)
 
     @staticmethod
     def _mass(kb: int, kh: int) -> tuple[int, int]:
@@ -106,9 +108,17 @@ class Minikarte:
 
         # Der Ausschnitt im Bild.
         mitte = g.kamera.pos
-        sicht = pygame.Rect(0, 0, max(2, int(K.GAME_W * sx)), max(2, int(K.GAME_H * sy)))
+        sicht = pygame.Rect(0, 0, max(2, int(g.kamera.breite * sx)),
+                            max(2, int(g.kamera.hoehe * sy)))
         sicht.center = punkt(mitte)
         pygame.draw.rect(ziel, (150, 128, 96), sicht.clip(r), 1)
+
+        # Zombies und Bosse - darunter, damit die eigenen Leute obenauf
+        # zu sehen sind, wenn es eng wird.
+        for (x, y, ebene) in g.gegner_fuer_karte():
+            if ebene == nr:
+                px, py = punkt(pygame.Vector2(x, y))
+                pygame.draw.rect(ziel, FARBE_GEGNER, (px - 1, py - 1, 2, 2))
 
         # Die eigenen Leute, dann man selbst obenauf.
         for k in g.kaempfer.values():

@@ -11,10 +11,9 @@ stand die ganze Runde oben links, und den Dash sah man gar nicht.
 
 Jetzt hat alles einen festen Ort:
 
-    oben links     Spielart und Karte
+    oben links     die Minikarte, darunter Spielart und Karte
     oben Mitte     worum es gerade geht: Uhr, Welle, Mannschaften, Boss
-    oben rechts    Minikarte, daneben die Ebenen, darunter der Punktestand
-                   (nur die ersten fuenf)
+    oben rechts    Ebenen, darunter der Punktestand (nur die ersten fuenf)
     unten links    Panzerung, Dash, Medkits
     unten rechts   Waffe, Magazin, Vorrat
     unten Mitte    die Hotbar - und darueber ein Hinweis, wenn es einen gibt
@@ -88,11 +87,11 @@ class Anzeige:
     # ---- Ganz ----------------------------------------------------------
     def zeichnen(self, ziel) -> None:
         g = self.g
+        r = self.minikarte.zeichnen(ziel, g) if K.MINIKARTE["an"] else None
+        self._karte_unten = r.bottom + 2 if r is not None else 0
         self._kopf_links(ziel)
         self._kopf_mitte(ziel)
         self._ebenen(ziel)
-        r = self.minikarte.zeichnen(ziel, g) if K.MINIKARTE["an"] else None
-        self._karte_unten = r.bottom + 2 if r is not None else 0
         self._punkte(ziel)
         ich = g.ich
         if ich is not None:
@@ -110,16 +109,18 @@ class Anzeige:
     # ---- Oben links ------------------------------------------------
     def _kopf_links(self, ziel) -> None:
         g = self.g
-        _text(ziel, K.MODI[g.modus]["name"], 10, 8, K.C_AMBER)
+        # Unter der Minikarte, wenn es eine gibt.
+        y = self._karte_unten + 4 if self._karte_unten else 8
+        _text(ziel, K.MODI[g.modus]["name"], 10, y, K.C_AMBER)
         if g.in_lobby:
             # Die Adresse braucht man, um sie weiterzusagen - also in der
             # Lobby, und nicht die ganze Runde lang. Die Karte heisst hier
             # wie die Spielart; zweimal LOBBY sagt nichts.
             if g.ist_gastgeber:
-                _text(ziel, g.gastgeber.adresse, 10, 17, K.C_MUTED_DK)
+                _text(ziel, g.gastgeber.adresse, 10, y + 9, K.C_MUTED_DK)
             return
         karte = (g.karte_kopf.get("name") or g.karte or "TESTKARTE").upper()
-        _text(ziel, karte, 10, 17, K.C_MUTED)
+        _text(ziel, karte, 10, y + 9, K.C_MUTED)
 
     # ---- Oben Mitte ------------------------------------------------
     def _kopf_mitte(self, ziel) -> None:
@@ -322,8 +323,7 @@ class Anzeige:
         zeigen = reihe[:5]
         if g.ich is not None and not any(e["k"] is g.ich for e in zeigen):
             zeigen = reihe[:4] + [e for e in reihe if e["k"] is g.ich]
-        # Unter den Ebenen und unter der Minikarte, was tiefer reicht.
-        oben = max(8 + len(g.welt.ebenen) * 13, self._karte_unten) + 6
+        oben = 8 + len(g.welt.ebenen) * 13 + 6
         rechts = W - 10
         for i, e in enumerate(zeigen):
             wer = e["k"]

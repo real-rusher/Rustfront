@@ -66,6 +66,10 @@ TASTEN = {
     "waffe8":   [pygame.K_8],
     "waffe9":   [pygame.K_9],
     "feuermodus": [pygame.K_v],
+    # Die Ebene anschauen. Im Gefecht gehoert das Mausrad seit 0.30 dem
+    # Zoom; die Ebenen gehen dort mit Strg + Mausrad oder diesen Tasten.
+    "ansicht_hoch": [pygame.K_PAGEUP],
+    "ansicht_runter": [pygame.K_PAGEDOWN],
     "heilen":   [pygame.K_h],
     "nahkampf": [pygame.K_f],
     "inventar": [pygame.K_TAB],

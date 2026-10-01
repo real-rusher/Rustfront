@@ -1814,6 +1814,10 @@ class Gegner(Wesen):
         self.wartet = RND.uniform(0.0, 0.4)
         self.treppen_sperre = 0.0
         self.drall = RND.choice((-1, 1))      # Ausweichrichtung an Hindernissen
+        # Rueckstoss in einem eigenen Topf, nicht im Lauftempo: laufen
+        # tut ein Gegner nie in ein Loch, geschoben werden kann er schon
+        # hinein - und faellt dann (siehe schritt).
+        self.stoss = pygame.Vector2(0, 0)
         self.ausweich_winkel = 0
         self.ausweich_rest = 0
         # Fernkampf, Platzen und Faehigkeit: alles drei steht in den
@@ -1839,6 +1843,8 @@ class Gegner(Wesen):
         super().schritt(dt)
         d = self.daten
         self.schlag_rest = max(0.0, self.schlag_rest - dt)
+        if self.sturz_rest > 0:
+            return          # im Fall: kein Laufen, kein Schlagen
         held = self.welt.held
 
         # Sie laufen immer los. Ist das Ziel nur ueber eine Treppe zu
@@ -1911,8 +1917,42 @@ class Gegner(Wesen):
             self.tempo.y = 0
         if stoss_x and stoss_y:
             self.drall = -self.drall      # Sackgasse, andersherum versuchen
+        self._geschoben(dt, d)
         self.welt.auseinander(self)
         self.welt.befreien(self)
+
+    @property
+    def geschoben(self) -> bool:
+        """Wird er gerade vom Rueckstoss getragen? (world.befreien fragt das.)"""
+        return self.stoss.length_squared() > 1.0
+
+    def _geschoben(self, dt: float, d: dict) -> None:
+        """Der Rueckstoss: als Einziges darf er einen Gegner ueber eine Kante tragen.
+
+        Selbst laeuft ein Gegner nie in ein Loch - die Kacheln zaehlen fuer
+        ihn wie eine Wand (Wesen.faellt). Ein Rueckstoss kennt diese Wand
+        nicht. Landet der Gegner dadurch ueber einem Loch, faellt er auf die
+        Ebene darunter, wie eine Figur. Gedacht als Notbremse und nicht als
+        Spielzug: vorher blieb ein Gegner, den eine Salve ueber den Rand
+        schob, an der unsichtbaren Kante haengen.
+
+        Gebremst wird wie vorher, als der Stoss noch im Lauftempo steckte
+        (`beschleunigung`) - ein Treffer schiebt also genauso weit wie
+        bisher, nur eben auch ueber eine Kante.
+        """
+        if self.stoss.length_squared() < 0.01:
+            return
+        sx, sy = self.welt.bewegen(self, self.stoss.x * dt, self.stoss.y * dt,
+                                   loch_fest=False)
+        if sx:
+            self.stoss.x = 0.0
+        if sy:
+            self.stoss.y = 0.0
+        self.stoss.x = naehern(self.stoss.x, 0.0, d["beschleunigung"] * dt)
+        self.stoss.y = naehern(self.stoss.y, 0.0, d["beschleunigung"] * dt)
+        if self.welt.loch_unter(self):
+            self.stoss *= 0.5
+            self.stuerzen()
 
     # ---- Um Hindernisse herum ------------------------------------------
     def _umweg(self, ziel, held):
@@ -2154,6 +2194,9 @@ class Gegner(Wesen):
         # traegt ein Sturmgewehr den Koloss rueckwaerts aus der Halle -
         # und dann ist seine ganze Bedrohung eine Frage des Nachladens.
         if not self.schiebbar:
+            schub = None
+        if schub is not None:
+            self.stoss += schub     # eigener Topf, siehe _geschoben
             schub = None
         super().schaden(menge, schub, von)
 

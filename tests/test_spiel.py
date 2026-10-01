@@ -880,7 +880,8 @@ netz_takte()
 pruef("Ein Medkit laesst sich benutzen", gast_ich.heilt_rest > 0,
       "%.2f s" % gast_ich.heilt_rest)
 
-# Mausrad verschiebt die Ansicht, wie im Einzelspieler.
+# Strg + Mausrad verschiebt die Ansicht, wie im Einzelspieler das Rad
+# allein. (Seit 0.30 gehoert das Rad im Gefecht der Sichtweite.)
 #
 # Geprueft wird ueber ein echtes Ereignis, nicht ueber das Setzen von
 # e.rad: Rad und Tastendruecke werden seit 0.19.2 dort aufgehoben, weil
@@ -888,9 +889,12 @@ pruef("Ein Medkit laesst sich benutzen", gast_ich.heilt_rest > 0,
 # Druecke sonst verlorengehen.
 host.blick = 0
 e.neues_bild()
+_mods_alt = pygame.key.get_mods()
+pygame.key.set_mods(pygame.KMOD_LCTRL)
 host.ereignis(pygame.event.Event(pygame.MOUSEWHEEL, {"x": 0, "y": 1}))
+pygame.key.set_mods(_mods_alt)
 host.schritt(K.FIXED_DT)
-pruef("Das Mausrad verschiebt die Ebenenansicht", host.blick == 1,
+pruef("Strg + Mausrad verschiebt die Ebenenansicht", host.blick == 1,
       "Ebene %d" % host.blick)
 
 # Und der eigentliche Punkt: ein Tastendruck darf auch dann ankommen,
@@ -2834,9 +2838,25 @@ mitte_wert = blend_wert(mittel, 0, wirt_k, w.welt)
 pruef("Dazwischen anteilig", 0.2 < mitte_wert < 0.8, "%.2f" % mitte_wert)
 wirt_k.winkel = 180.0                            # weggedreht
 weggedreht = blend_wert(blitz, 0, wirt_k, w.welt)
-pruef("Wegdrehen hilft deutlich", weggedreht < 0.5, "%.2f" % weggedreht)
-pruef("Aber nicht ganz - der Raum ist trotzdem hell",
-      weggedreht > 0.0, "%.2f" % weggedreht)
+# Seit 0.30: wer wegschaut, wird nicht geblendet - er sieht nur die
+# Explosion mit dem Glitzer in der Welt (so gemeldet).
+pruef("Weggedreht kein Weiss", weggedreht == 0.0, "%.2f" % weggedreht)
+fern = wirt_k.pos + pygame.Vector2(K.BLENDEN["weite"] - 40, 0)
+wirt_k.winkel = 0.0
+pruef("Weit weg, aber hingeschaut, auch keins",
+      blend_wert(fern, 0, wirt_k, w.welt) == 0.0)
+teilchen_vorher = len(w.welt.partikel)
+flecken = []
+alt_fleck = w.welt.brandfleck
+w.welt.brandfleck = lambda *a: flecken.append(a)
+Welt.explosion(w.welt, fern, 0, 0.0, "blend")
+w.welt.brandfleck = alt_fleck
+neu_teilchen = w.welt.partikel[teilchen_vorher:]
+pruef("Zu sehen ist sie trotzdem: Explosion und Glitzer",
+      len(neu_teilchen) >= 40
+      and any(p.art == "funke" and p.leben > 0.8 for p in neu_teilchen),
+      "%d Teilchen" % len(neu_teilchen))
+pruef("Ohne Splitter: kein Brandfleck", not flecken)
 wirt_k.winkel = 0.0
 
 # Die eigene Granate und die eigene Mannschaft blenden genauso. Das ist
@@ -3619,12 +3639,14 @@ if boss.art == "koloss":
 laeufer_probe = KampfGegner(boss.pos + pygame.Vector2(60, 0), "laeufer",
                             boss.ebene, w6)
 w6.welt.dazu(laeufer_probe)
-t2 = pygame.Vector2(laeufer_probe.tempo)
+# Seit 0.30 steckt der Rueckstoss eines Gegners in einem eigenen Topf
+# (Gegner.stoss), damit er ihn ueber eine Kante tragen kann.
+t2 = pygame.Vector2(laeufer_probe.stoss)
 laeufer_probe.schaden(1.0, pygame.Vector2(900, 0), None)
 pruef("Ein gewoehnlicher Gegner aber schon - sonst faende sich der "
       "Unterschied nicht",
-      laeufer_probe.tempo.distance_to(t2) > 100.0,
-      "%.0f px/s" % laeufer_probe.tempo.distance_to(t2))
+      laeufer_probe.stoss.distance_to(t2) > 100.0,
+      "%.0f px/s" % laeufer_probe.stoss.distance_to(t2))
 
 # Die Haengerwache. Sie ist der Grund, warum eine Runde ueberhaupt
 # weiterlaeuft: gemessen blieb ein Laeufer 120 Sekunden an einer
@@ -4879,6 +4901,33 @@ pruef("Nur PNG", "KEIN PNG" in m, m)
 m = fehler_von(SK.bild_lesen, b"\x89PNG\r\n\x1a\n" + bytes(100))
 pruef("Ein kaputtes PNG wird abgelehnt und nicht abgestuerzt", "NICHT LESBAR" in m, m)
 
+# Die Lage im Weiss steht im PNG (tEXt "dustfront").
+import zlib as _zlib
+def mit_lage(png, lage_text):
+    roh = b"dustfront\0" + lage_text.encode("latin-1")
+    stueck = (_struct.pack(">I", len(roh)) + b"tEXt" + roh
+              + _struct.pack(">I", _zlib.crc32(b"tEXt" + roh) & 0xFFFFFFFF))
+    return png[:33] + stueck + png[33:]          # gleich nach IHDR
+breit_png = png_bauen(64, 32)
+ohne = SK.bild_lage(breit_png, (64, 32))
+pruef("Ohne Angabe fuellt das Bild den Schirm",
+      ohne["x"] == 0.5 and ohne["y"] == 0.5
+      and ohne["h"] * K.GAME_H * 64 / 32.0 >= K.GAME_W - 0.5 and ohne["h"] >= 1.0,
+      str(ohne))
+gesetzt = SK.bild_lage(mit_lage(breit_png, '{"x": 0.25, "y": 0.7, "h": 0.5}'), (64, 32))
+pruef("Mit Angabe steht es, wo es hingeschoben wurde", gesetzt == {"x": 0.25, "y": 0.7, "h": 0.5},
+      str(gesetzt))
+pruef("Pygame liest das PNG trotzdem",
+      SK.bild_lesen(mit_lage(breit_png, '{"x": 0.25, "y": 0.7, "h": 0.5}')).get_size() == (64, 32))
+wild = SK.bild_lage(mit_lage(breit_png, '{"x": 99, "y": -99, "h": 1e9}'), (64, 32))
+pruef("Was ausserhalb liegt, wird gekappt",
+      wild == {"x": GK["lage_xy"][1], "y": GK["lage_xy"][0], "h": GK["lage_h"][1]}, str(wild))
+pruef("Kaputtes JSON heisst: fuellen",
+      SK.bild_lage(mit_lage(breit_png, '{kaputt'), (64, 32)) == ohne)
+pruef("Die Lage gehoert zum Fingerabdruck",
+      SK.Kosmetik(b"", breit_png).kennung
+      != SK.Kosmetik(b"", mit_lage(breit_png, '{"x": 0.2, "y": 0.5, "h": 0.5}')).kennung)
+
 # Ein Paket.
 ton_a, bild_a = wav_bauen(1.5, hz=300), png_bauen(farbe=(220, 30, 30))
 kos_a = SK.Kosmetik(ton_a, bild_a)
@@ -5063,20 +5112,23 @@ pruef("Beim Gastgeber klingt die Blendgranate wie die des Werfers",
       (("ton", wk_.kosmetiken[n1].klang()) in log_w or not mixer_an)
       and ("name", knall) not in log_w and ("name", pfeifen) not in log_w,
       str(log_w[:4]))
-pruef("Und im Weiss steht sein Bild", wk_.kos_zeigen is wk_.kosmetiken[n1].bild
+pruef("Und im Weiss steht sein Bild", wk_.kos_zeigen is wk_.kosmetiken[n1]
       and wk_.befinden.blend > 0.3)
 neben_2 = pygame.Vector2(wk_.kaempfer[n2].pos)
 wk_.welt.explosion(neben_2, wk_.kaempfer[n2].ebene, 0.0, "blend", von=werfer1)
 kos_laufen(6)
 pruef("Beim Gast ebenso - auch wenn er selbst gar keine hat",
       (("ton", g2_.kosmetiken[n1].klang()) in log_2 or not mixer_an)
-      and ("name", knall) not in log_2 and g2_.kos_zeigen is g2_.kosmetiken[n1].bild,
+      and ("name", knall) not in log_2 and g2_.kos_zeigen is g2_.kosmetiken[n1],
       str(log_2[:4]))
 app_kc.flaeche.fill(K.C_VOID)
 g2_.zeichnen(app_kc.flaeche, 1.0)
 mitte_k = app_kc.flaeche.get_at((K.GAME_W // 2, K.GAME_H // 2))
 pruef("Das Bild ist mitten im Weiss zu sehen", mitte_k.b > mitte_k.r + 80,
       str(tuple(mitte_k)))
+ecke_k = app_kc.flaeche.get_at((3, 3))
+pruef("Ohne Angabe fuellt es den ganzen Schirm, bis in die Ecken",
+      ecke_k.b > ecke_k.r + 80, str(tuple(ecke_k)))
 del log_w[:]
 wk_.kos_zeigen = None
 wk_.welt.explosion(pygame.Vector2(wk_.ich.pos), wk_.ich.ebene, 0.0, "blend",
@@ -5148,9 +5200,9 @@ pruef("Der Gast sieht es so", gm9.ich is not None
 app.flaeche.fill(K.C_VOID)
 wm9.zeichnen(app.flaeche, 1.0)
 r9 = wm9.hud.minikarte.rechteck(wm9.welt)
-pruef("Die Minikarte steht oben rechts, links neben den Ebenen",
-      r9.right <= K.GAME_W - 30 and r9.top >= 4 and r9.width <= K.MINIKARTE["breite"]
-      and r9.height <= K.MINIKARTE["hoehe"], str(r9))
+pruef("Die Minikarte steht oben links",
+      r9.left == K.MINIKARTE["links"] and r9.top == K.MINIKARTE["oben"]
+      and r9.width <= K.MINIKARTE["breite"] and r9.height <= K.MINIKARTE["hoehe"], str(r9))
 ich9 = wm9.ich
 sx = r9.width / float(wm9.welt.ebenen[0].pixel_breite)
 sy = r9.height / float(wm9.welt.ebenen[0].pixel_hoehe)
@@ -5165,7 +5217,11 @@ def nur_verbuendete(modus):
         w.schritt(K.NETZ["takt"]); g.schritt(K.NETZ["takt"])
     w._farbe_fuer = lambda k, eigen=False: (1, 2, 250)
     andere = w.kaempfer[g.meine_nummer]
-    andere.pos.update(w.ich.pos + pygame.Vector2(300, 0)); andere.ebene = w.ich.ebene
+    e0 = w.welt.ebene(w.ich.ebene)
+    # Sicher auf der Karte und weit genug weg von einem selbst.
+    andere.pos.update(e0.pixel_breite * (0.75 if w.ich.pos.x < e0.pixel_breite / 2 else 0.25),
+                      e0.pixel_hoehe * 0.5)
+    andere.ebene = w.ich.ebene
     app.flaeche.fill(K.C_VOID)
     w.hud.minikarte.zeichnen(app.flaeche, w)
     r = w.hud.minikarte.rechteck(w.welt)
@@ -5192,6 +5248,153 @@ bf.blendung_zeichnen(app.flaeche)
 halb = tuple(app.flaeche.get_at((5, 5)))[:3]
 pruef("Wenn sie nachlaesst, scheint die Welt wieder durch",
       100 < halb[0] < 255 and halb != (255, 255, 255), str(halb))
+
+# ── Gegner fallen nur, wenn man sie schiebt ──────────────────────────
+from dustfront.entities import Gegner as _G30
+_sp = Spiel(app, seed=20250920)
+_w = _sp.welt
+def kante_suchen(welt):
+    """Eine begehbare Kachel auf Ebene 1, rechts daneben ein Loch, unter
+    dem Ebene 0 Boden hat - und weiter rechts wieder Boden."""
+    e1, e0 = welt.ebene(1), welt.ebene(0)
+    for ty in range(2, e1.hoehe - 2):
+        for tx in range(2, e1.breite - 5):
+            if (e1.begehbar(tx, ty) and e1.begehbar(tx - 1, ty)
+                    and e1.begehbar(tx, ty - 1) and e1.begehbar(tx, ty + 1)
+                    and e1.loch(tx + 1, ty) and e1.loch(tx + 1, ty - 1)
+                    and e1.loch(tx + 1, ty + 1) and e0.begehbar(tx + 1, ty)
+                    and e0.begehbar(tx + 2, ty)):
+                return tx, ty
+    return None
+kante = kante_suchen(_w)
+pruef("Die Testkarte hat eine Kante ueber einem Loch", kante is not None)
+if kante:
+    tx, ty = kante
+    rand_x = (tx + 1) * K.TILE           # hier beginnt das Loch
+    def zombie_an_der_kante():
+        z = _G30(pygame.Vector2(rand_x - 12, (ty + 0.5) * K.TILE), "laeufer", 1)
+        z.wartet = 0.0
+        _w.dazu(z)
+        return z
+    _w.held.pos.update(rand_x + 3 * K.TILE, (ty + 0.5) * K.TILE)
+    _w.held.ebene = 1
+    laeufer = zombie_an_der_kante()
+    laeufer.winkel = 0.0
+    for _ in range(int(2.0 / K.FIXED_DT)):
+        laeufer.tempo.update(laeufer.daten["tempo"], 0)    # stur auf das Loch zu
+        laeufer.schritt(K.FIXED_DT)
+    pruef("Von selbst laeuft ein Gegner nicht ueber die Kante",
+          laeufer.ebene == 1 and laeufer.sturz_rest <= 0 and laeufer.pos.x < rand_x,
+          "Ebene %d, x %.0f, Kante %d" % (laeufer.ebene, laeufer.pos.x, rand_x))
+    _w.wesen.remove(laeufer) if laeufer in _w.wesen else None
+
+    geschoben = zombie_an_der_kante()
+    _w.held.ebene = 0            # niemand oben, der ihn zuruecklockt
+    geschoben.schaden(1.0, pygame.Vector2(K.TREFFER["rueckstoss"] * 2.5, 0), None)
+    fiel = False
+    for _ in range(int(2.5 / K.FIXED_DT)):
+        geschoben.schritt(K.FIXED_DT)
+        fiel = fiel or geschoben.sturz_rest > 0
+    pruef("Geschoben faellt er hinunter", fiel and geschoben.ebene == 0,
+          "Ebene %d" % geschoben.ebene)
+    pruef("Und steht unten auf Boden, nicht in einer Wand",
+          _w.frei(geschoben.pos, geschoben.radius, 0)
+          and geschoben.sturz_rest <= 0 and geschoben.flug == 0.0)
+    pruef("Der Sturz tut weh", geschoben.leben < geschoben.max_leben - 1.0,
+          "%.0f von %.0f" % (geschoben.leben, geschoben.max_leben))
+
+    weit = zombie_an_der_kante()
+    weit.pos.x -= 3 * K.TILE            # weit genug weg von der Kante
+    weit.schaden(1.0, pygame.Vector2(K.TREFFER["rueckstoss"], 0), None)
+    for _ in range(int(1.0 / K.FIXED_DT)):
+        weit.schritt(K.FIXED_DT)
+    pruef("Ein kleiner Stoss weit vor der Kante laesst ihn oben",
+          weit.ebene == 1, "Ebene %d" % weit.ebene)
+
+# ── Sichtweite: Mausrad und Nebel ────────────────────────────────────
+from dustfront.mehrspieler import KampfGegner as _KG30
+wz, gz = gefechtspaar("pve", karte="staubtal")
+for _ in range(20):
+    wz.schritt(K.NETZ["takt"]); gz.schritt(K.NETZ["takt"])
+for x in list(wz.welt.wesen):
+    if isinstance(x, _KG30):
+        wz.welt.wesen.remove(x)
+wz._wellen = lambda dt: None             # keine neuen Gegner, die das Bild stoeren
+pruef("Ohne Drehen ist die Sicht normal", wz.kamera.zoom == 1.0 and wz.sicht_welt() is None)
+wz.ereignis(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=-1))
+pruef("Mausrad zurueck: weiter weg", wz.zoom_ziel > 1.0, "%.2f" % wz.zoom_ziel)
+for _ in range(8):
+    wz.ereignis(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=-1))
+pruef("Bis zur weitesten Stufe, nicht darueber",
+      wz.zoom_ziel == max(K.ZOOM["stufen"]), "%.2f" % wz.zoom_ziel)
+blick_vorher, rad_vorher = wz.blick, wz._rad
+wz.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_PAGEUP, mod=0, unicode=""))
+pruef("Bild hoch schaut eine Ebene hoeher (statt des Mausrads)",
+      wz._rad == rad_vorher + 1)
+wz._rad = 0
+for _ in range(int(0.8 / K.FIXED_DT)):
+    wz.schritt(K.FIXED_DT)
+pruef("Der Zoom zieht nach", abs(wz.kamera.zoom - 2.0) < 0.01, "%.3f" % wz.kamera.zoom)
+
+ich_z = wz.ich
+mitte_bild = pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2)
+w1 = wz.kamera.zu_welt(mitte_bild)
+w2 = wz.kamera.zu_welt(mitte_bild + pygame.Vector2(100, 0))
+pruef("Zielen: ein Bildpixel sind jetzt zwei Weltpixel",
+      abs((w2 - w1).x - 200) < 0.01, "%.1f" % (w2 - w1).x)
+pruef("Und zu_bild ist die Umkehrung",
+      (wz.kamera.zu_bild(wz.kamera.zu_welt((123, 77)) + wz.kamera.versatz)
+       - pygame.Vector2(123, 77)).length() < 0.6)
+
+sicht = wz.sicht_welt()
+pruef("Mit Zoom gibt es ein normales Bild, ausserhalb Nebel",
+      sicht is not None and sicht.size == (K.GAME_W, K.GAME_H)
+      and sicht.collidepoint(ich_z.pos.x, ich_z.pos.y))
+
+def bild_mit(gegner_pos):
+    """Zeichnet einmal ohne und einmal mit einem Gegner an der Stelle und
+    gibt zurueck, ob man ihn dort im Bild sieht."""
+    stelle = wz.kamera.zu_bild(gegner_pos)
+    rechteck = pygame.Rect(int(stelle.x) - 8, int(stelle.y) - 8, 16, 16)
+    app.flaeche.fill(K.C_VOID)
+    wz.zeichnen(app.flaeche, 1.0)
+    ohne = app.flaeche.subsurface(rechteck).copy()
+    g = _KG30(pygame.Vector2(gegner_pos), "brecher", ich_z.ebene, wz)
+    g.wartet = 99.0
+    g.welt = wz.welt
+    wz.welt.wesen.append(g)          # sofort, nicht erst im naechsten Schritt
+    app.flaeche.fill(K.C_VOID)
+    wz.zeichnen(app.flaeche, 1.0)
+    mit = app.flaeche.subsurface(rechteck).copy()
+    wz.welt.wesen.remove(g)
+    unterschied = sum(1 for x in range(16) for y in range(16)
+                      if ohne.get_at((x, y)) != mit.get_at((x, y)))
+    return unterschied > 6
+
+drinnen = pygame.Vector2(sicht.centerx + 120, sicht.centery)
+draussen = pygame.Vector2(sicht.right + 120, sicht.centery)
+pruef("Im normalen Bild sieht man einen Gegner auch mit Zoom",
+      wz.welt.frei(drinnen, 10, ich_z.ebene) and bild_mit(drinnen))
+pruef("Im Nebel nicht - er wird gar nicht gezeichnet",
+      wz.welt.frei(draussen, 10, ich_z.ebene) and not bild_mit(draussen))
+pruef("Und Namen stehen im Nebel auch keine", not wz.im_licht(draussen))
+
+import time as _zeit
+t0 = _zeit.perf_counter()
+for _ in range(10):
+    wz.zeichnen(app.flaeche, 1.0)
+mit_zoom = (_zeit.perf_counter() - t0) / 10
+wz.zoom_ziel = 1.0; wz.kamera.zoom = 1.0
+t0 = _zeit.perf_counter()
+for _ in range(10):
+    wz.zeichnen(app.flaeche, 1.0)
+ohne_zoom = (_zeit.perf_counter() - t0) / 10
+print("     Bildzeit: %.1f ms normal, %.1f ms bei Zoom 2" % (ohne_zoom * 1000, mit_zoom * 1000))
+# Viermal so viel Flaeche, dazu Nebel und Verkleinern: mehr kostet es,
+# aber es darf nicht ausufern.
+pruef("Zoom 2 bleibt bezahlbar", mit_zoom < 8 * ohne_zoom + 0.004,
+      "%.1f ms" % (mit_zoom * 1000))
+wz.verlassen(); gz.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")
