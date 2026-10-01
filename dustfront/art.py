@@ -438,17 +438,27 @@ def _hand_waffe(s, c, name):
         pygame.draw.rect(s, K.C_TEAL, (hand + 7, c - 3, 1, 2))
 
 
+# Wie weit die Arme eines Zombies vom dunklen Ton zum Rumpfton aufgehellt
+# sind (0 = so dunkel wie der Kopfrand, 1 = Rumpffarbe). Siehe _figur.
+ZOMBIE_ARMTON = 0.30
+
+
 def _figur(groesse, rumpf, rumpf_dk, akzent, breit=False, waffe=None,
            bewaffnet=True):
     """Draufsicht: Schultern quer, Kopf mittig, Waffe nach rechts.
 
     `bewaffnet=False`: ein Zombie. Bis 0.31 hielten die Gegner denselben
     Gewehrstummel wie der Spieler - sie benutzten dieselbe Figur, und
-    deren Vorgabe war eine Waffe. Nur die Waffe wegzunehmen reicht nicht:
-    die Arme laufen zur Mitte zusammen, weil sie ein Gewehr halten, und
-    griffen dann ins Leere. Ohne Waffe zeigen sie darum parallel nach
-    vorn, etwas laenger und leicht ungleich - das sieht nach Zugreifen aus
-    und nicht nach Zielen.
+    deren Vorgabe war eine Waffe. Ohne Waffe bleiben die Arme kurz, so
+    lang wie beim Bewaffneten, laufen aber nur noch einen Pixel zur Mitte
+    statt zwei: sie halten ja nichts. Und sie sind etwas heller als der
+    Kopfrand (ZOMBIE_ARMTON). Der dunkle Rand des Kopfes lag vorher unter
+    der Waffe; ohne sie liegt er genau zwischen den Armen, und in
+    derselben Farbe wuchs alles zu einem dunklen Klotz zusammen.
+
+    Laengere Arme, gespreizte, parallele, mit Klauen oder Faeusten sind
+    in 0.31.1 bis 0.31.3 ausprobiert worden - in 28 Pixeln sah keine
+    davon besser aus als diese unscheinbare.
     """
     s = _flaeche(groesse, groesse)
     c = groesse // 2
@@ -462,9 +472,9 @@ def _figur(groesse, rumpf, rumpf_dk, akzent, breit=False, waffe=None,
         pygame.draw.line(s, rumpf_dk, (c + 1, c - 5), (c + 8, c - 3), 3)
         pygame.draw.line(s, rumpf_dk, (c + 1, c + 5), (c + 8, c + 3), 3)
     else:
-        # Parallel nach vorn, der eine Arm etwas weiter als der andere.
-        pygame.draw.line(s, rumpf_dk, (c + 1, c - 5), (c + 11, c - 5), 3)
-        pygame.draw.line(s, rumpf_dk, (c + 1, c + 5), (c + 10, c + 5), 3)
+        arm = tuple(int(d + (r - d) * ZOMBIE_ARMTON) for d, r in zip(rumpf_dk, rumpf))
+        pygame.draw.line(s, arm, (c + 1, c - 5), (c + 8, c - 4), 3)
+        pygame.draw.line(s, arm, (c + 1, c + 5), (c + 8, c + 4), 3)
     # Waffe: entweder die benannte aus der Tabelle oder der alte Stummel
     if waffe is not None:
         _hand_waffe(s, c, waffe)

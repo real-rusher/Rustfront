@@ -5798,16 +5798,24 @@ pruef("Gegenprobe: die Spielerfigur ohne Waffe hat den Stummel noch",
       _stummel_pixel("spieler") > 0)
 for zname in ("gegner_laeufer", "gegner_brecher", "gegner_speier"):
     pruef("%s haelt keine Schusswaffe" % zname, _stummel_pixel(zname) == 0)
+from dustfront import art as _ART
+_ZFARBEN = {"gegner_laeufer": ((128, 84, 58), (58, 36, 24)),
+            "gegner_brecher": ((112, 70, 48), (48, 30, 20))}
+for zname, (rumpf_z, dunkel_z) in _ZFARBEN.items():
     zb = _PLATZHALTER[zname]()
     zc = zb.get_width() // 2
-    # Beide Arme reichen parallel nach vorn - an der Stelle, an der die
-    # Gewehrarme schon zusammengelaufen waeren (x = c + 9), stehen sie
-    # noch bei c - 5 und c + 5.
-    pruef("%s greift mit zwei parallelen Armen, nicht mit einem Lauf" % zname,
-          zb.get_at((zc + 9, zc - 5)).a > 0 and zb.get_at((zc + 9, zc + 5)).a > 0)
-    pruef("%s: die Arme sind ungleich lang" % zname,
-          zb.get_at((zc + 11, zc - 5)).a > 0 and zb.get_at((zc + 11, zc + 5)) !=
-          zb.get_at((zc + 11, zc - 5)))
+    arm_z = tuple(int(d + (r - d) * _ART.ZOMBIE_ARMTON) for d, r in zip(dunkel_z, rumpf_z))
+    # Kurze Arme, so lang wie beim Bewaffneten (bis c + 8), in ihrem eigenen,
+    # etwas helleren Ton - sonst wachsen sie mit dem Kopfrand zusammen.
+    pruef("%s hat zwei kurze Arme im eigenen Ton" % zname,
+          tuple(zb.get_at((zc + 7, zc - 4)))[:3] == arm_z
+          and tuple(zb.get_at((zc + 7, zc + 4)))[:3] == arm_z,
+          "%s / %s statt %s" % (tuple(zb.get_at((zc + 7, zc - 4)))[:3],
+                                tuple(zb.get_at((zc + 7, zc + 4)))[:3], arm_z))
+    pruef("%s: die Arme heben sich vom Kopfrand ab" % zname,
+          arm_z != dunkel_z and tuple(zb.get_at((zc + 5, zc)))[:3] == dunkel_z)
+    pruef("%s: nicht laenger als beim Bewaffneten" % zname,
+          zb.get_at((zc + 10, zc - 4)).a == 0 and zb.get_at((zc + 10, zc + 4)).a == 0)
 for zname in ("gegner_laeufer", "gegner_brecher"):
     zb = _PLATZHALTER[zname]()
     zc = zb.get_width() // 2

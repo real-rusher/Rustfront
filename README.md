@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.31.3, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.31.4, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -720,6 +720,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.14.0 | Mehrspieler fertiggestellt: drei Spielarten, Aufhelfen, Wellen mit mehrspielertauglicher Gegner-KI, knappe Munition mit Nachschubkisten. Letzter Stand dieses Zweigs |
 | 0.16.0 | Mannschaften im Gefecht: TEAM, VERSUS mit einem Leben je Runde und Aufhelfen durch die eigenen Leute, HUEGEL mit sichtbarem Kreis in der Kartenmitte. Alles in `docs/MEHRSPIELER.md` beschrieben. Nur auf `multiplayer-test`; 0.15.0 gehoert dem Hauptzweig ohne Mehrspieler |
 | 0.17.0 | Rauchgranate als siebte Waffe; Granaten fallen ueber Kanten auf die Ebene darunter; Einstiegsschutz, Startmedkits und Medkit-Nachschub als Schalter beim Aufmachen. Dazu vier gemeldete Fehler behoben: kein Ton im Gefecht, Ziellinie des Gastes am Einstiegspunkt, Versetzung nach einem Sturztod, Granaten prallten an Loechern ab. Brecheisen toetet in zwei Treffern, Schrot reicht weiter und streut enger, Scharfschuetze weiter als das Bild breit ist |
+| 0.31.4 | **Zombie-Arme, endgueltig unscheinbar**: kurz wie beim Bewaffneten (bis c + 8), nur leicht zur Mitte, und etwas heller als der Kopfrand. Der Rand des Kopfes lag frueher unter der Waffe; ohne sie wuchs er mit gleichfarbigen Armen zu einem dunklen Klotz zusammen |
 | 0.31.3 | **Zombie-Arme ruhiger**: Laeufer, Brecher und Speier strecken die Arme jetzt parallel nach vorn, etwas laenger und leicht ungleich - ohne die Klauenfinger und Faeuste aus 0.31.1, die in 28 Pixeln unruhig wirkten. `_figur` hat dafuer `bewaffnet=False` |
 | 0.31.2 | **Absturz unter Python 3.8** (gemeldet beim Gastgeber, Python 3.8.8): stand auf dem Server ein neuerer Profilstand - etwa nachdem der ADMIN das Profil geaendert hatte -, fuehrte das Spiel beide mit `dict | dict` zusammen, und das gibt es erst ab Python 3.9. Jetzt mit `{**a, **b}`. Der Zweig war nie getestet; jetzt schon, und alle Testsuiten laufen auch unter Python 3.8 mit pygame-ce 2.5.2 |
 | 0.31.1 | **Plateaus sind Felsbloecke**: auf STAUBTAL hing ein Plateau, von unten mit eingeblendeter oberer Ebene, versetzt und blass neben seinem Felssockel, dazwischen Boden wie Luft. Die obere Ebene wird vergroessert gezeichnet (sie ist naeher am Auge) und war ueber dem Fels zu 79 Prozent durchsichtig. Jetzt ist der Deckel deckend, und zwischen ihm und dem Sockel steht eine Felswand aus Gesteinsbaendern, mit derselben Perspektive gerechnet wie die Ebenen; was vom Auge abgewandt ist, liegt unter dem Deckel. Gilt fuer jede Etage, die auf Wand steht, also auch in der Arena. Was ueber Spielflaeche liegt, blendet weiter aus. **Zombies tragen keine Gewehre mehr**: Laeufer und Speier greifen mit Klauen, der Brecher mit Faeusten - sie hatten den Waffenstummel der Spielerfigur geerbt |

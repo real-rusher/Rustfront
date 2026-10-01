@@ -1679,13 +1679,15 @@ gesehen), verdeckt jetzt der Deckel - wie bei einem echten Felsen. Und es
 gilt fuer jede Etage, die auf Wand steht, also auch fuer die Arena.
 
 **FEST.** Laeufer, Brecher und Speier zeichnet `_figur(..., bewaffnet=False)`:
-kein Gewehrstummel, und die Arme parallel nach vorn, etwas laenger und
-leicht ungleich (c + 11 und c + 10). Vorher erbten sie von der
-Spielerfigur deren Vorgabe, eine Waffe. Nur die Waffe wegzunehmen reicht
-nicht: die Arme der Spielerfigur laufen zur Mitte zusammen, weil sie ein
-Gewehr halten, und griffen dann ins Leere. In 0.31.1 hatten die Arme noch
-Klauen und der Brecher Faeuste - in 28 Pixeln war das unruhig; 0.31.3
-nimmt beides zurueck.
+kein Gewehrstummel, kurze Arme wie beim Bewaffneten (bis c + 8), nur einen
+Pixel zur Mitte statt zwei, und in einem eigenen Ton: 30 Prozent vom
+dunklen Ton zum Rumpfton (`art.ZOMBIE_ARMTON`).
+
+**GRUND.** Der dunkle Rand des Kopfes lag vorher unter der Waffe. Ohne sie
+liegt er genau zwischen den Armen, und in derselben Farbe wuchsen Arme und
+Kopf zu einem dunklen Klotz zusammen. Ausprobiert und verworfen, jeweils
+mit Bild: Klauen und Faeuste (0.31.1), laengere parallele Arme (0.31.3),
+den Kopfrand aufhellen - die Arme aufzuhellen war das Unauffaelligste.
 
 ---
 
