@@ -4276,6 +4276,253 @@ pruef("Und lassen sich verstellen", wm_.wunsch["schwierigkeit"] == "schwer",
       wm_.wunsch["schwierigkeit"])
 wm_.verlassen(); gm_.verlassen()
 
+# ── Die Lobby ────────────────────────────────────────────────────────
+from dustfront import lobby as LB
+pruef("Die Lobby ist keine waehlbare Spielart",
+      "lobby" not in [m for m in RG.NACH_NAME["modus"].werte({}, None)])
+pruef("Und keine waehlbare Karte",
+      K.LOBBY["karte"] not in RG.NACH_NAME["karte"].werte({}, None))
+pruef("Gueltig ist sie trotzdem - sie muss durchs Netz",
+      RG.saeubern({"modus": "lobby", "karte": "lobby"})["modus"] == "lobby")
+pruef("Die Kommandozeile nimmt --modus lobby nicht an",
+      __import__("dustfront.main", fromlist=["x"]).aus_argumenten(
+          ["--host", "--modus", "lobby"]) == 1)
+
+def lobbypaar(**kw):
+    """Wie gefechtspaar, aber der Gastgeber macht mit Lobby auf."""
+    _port[0] += 1
+    kw.setdefault("seed", 20240 + _port[0])
+    wirt = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_port[0]),
+                   lobby=True, **kw)
+    gast = Gefecht(app, "BESUCH", gast=netz.Gast("127.0.0.1:%d" % _port[0]))
+    for _ in range(30):
+        wirt.schritt(K.NETZ["takt"])
+        gast.schritt(K.NETZ["takt"])
+    return wirt, gast
+
+wl_, gl_ = lobbypaar(modus="pve", regeln={"schwierigkeit": "schwer"})
+pruef("Mit Lobby faengt es in der Lobby an",
+      wl_.in_lobby and wl_.karte == "lobby", "%s / %s" % (wl_.modus, wl_.karte))
+pruef("Was die Kommandozeile sagt, ist die erste geplante Runde",
+      wl_.plan[0]["modus"] == "pve" and wl_.plan[0]["schwierigkeit"] == "schwer",
+      str(wl_.plan[0]))
+pruef("Die Karte hat ihre drei Bereiche", set(wl_.bereiche) == {"pvp", "stand", "pve"},
+      str(list(wl_.bereiche)))
+pruef("Im Schiessstand stehen Puppen", len(wl_.puppen) == 4, "%d" % len(wl_.puppen))
+pruef("Der Gast ist mit in der Lobby",
+      gl_.in_lobby and gl_.karte == "lobby" and set(gl_.bereiche) == set(wl_.bereiche))
+pruef("Und kennt den Plan", gl_.plan[0]["modus"] == "pve", str(gl_.plan[0]["modus"]))
+pruef("Er sieht die Puppen", sum(1 for x in gl_._fremde_gegner if x[4] == "puppe") == 4,
+      "%d" % sum(1 for x in gl_._fremde_gegner if x[4] == "puppe"))
+wk_l = wl_.kaempfer[0]
+gk_l = wl_.kaempfer[gl_.meine_nummer]
+
+def beide(sekunden, jedesmal=None):
+    """Gastgeber und Gast zusammen rechnen. Allein liefe der Gastgeber
+    so lange, bis er den stummen Gast hinauswirft."""
+    for _ in range(int(sekunden / K.FIXED_DT)):
+        wl_.schritt(K.FIXED_DT)
+        gl_.schritt(K.FIXED_DT)
+        if jedesmal is not None:
+            jedesmal()
+
+pruef("Man steigt auf dem Platz ein, in keinem Bereich",
+      wl_.bereich_von(wk_l) == "" and wl_.bereich_von(gk_l) == "",
+      "%s / %s" % (wl_.bereich_von(wk_l), wl_.bereich_von(gk_l)))
+
+# Wer wem wehtun darf
+def stellen(k, bereich, dx=0):
+    r = wl_.bereiche[bereich]
+    k.pos.update(r.centerx + dx, r.bottom - 48); k.vorher.update(k.pos)
+    k.ebene = 0
+
+for k in (wk_l, gk_l):
+    k.unverwundbar = 0.0
+gk_l.leben = gk_l.max_leben
+gk_l.schaden(20, None, wk_l)
+pruef("Auf dem Platz tut niemandem etwas weh", gk_l.leben == gk_l.max_leben)
+stellen(wk_l, "pvp", -40); stellen(gk_l, "pvp", 40)
+gk_l.schaden(20, None, wk_l)
+pruef("In der Arena schon", gk_l.leben == gk_l.max_leben - 20, "%.0f" % gk_l.leben)
+gk_l.leben = gk_l.max_leben
+wk_l.pos.update(wl_.bereiche["stand"].center); wk_l.vorher.update(wk_l.pos)
+gk_l.schaden(20, None, wk_l)
+pruef("Aber nicht von draussen hinein", gk_l.leben == gk_l.max_leben)
+z_l = KampfGegner(pygame.Vector2(wl_.bereiche["pve"].center), "laeufer", 0, wl_)
+gk_l.schaden(10, None, z_l)
+pruef("Ein Zombie tut ausserhalb des Geheges nichts", gk_l.leben == gk_l.max_leben)
+stellen(gk_l, "pve")
+gk_l.schaden(10, None, z_l)
+pruef("Im Gehege schon", gk_l.leben == gk_l.max_leben - 10, "%.0f" % gk_l.leben)
+gk_l.leben = gk_l.max_leben
+
+# Die Puppe: faellt nicht, heilt, zeigt Zahlen - auch beim Gast
+puppe = wl_.puppen[0]
+vorher_schriften = len(gl_.welt.aufschriften)
+puppe.schaden(puppe.max_leben + 50, None, wk_l)
+pruef("Eine Puppe faellt nicht um", puppe.lebt and puppe.leben > 0)
+puppe.schaden(40, None, wk_l)
+halb = puppe.leben
+beide(0.4)
+pruef("Sie zeigt, was sie abbekam", any(a[2].isdigit() for a in wl_.welt.aufschriften))
+pruef("Auch beim Gast", len(gl_.welt.aufschriften) > vorher_schriften)
+beide(K.LOBBY["puppe_heilt"] + 0.3)
+pruef("Und fuellt sich nach einer Weile wieder auf",
+      puppe.leben == puppe.max_leben and halb < puppe.max_leben)
+
+# Das Gehege: fuellt sich, wenn einer drin ist, und haelt die Zombies drin
+stellen(wk_l, "pve")
+stellen(gk_l, "stand")
+def _heil():
+    wk_l.leben = wk_l.max_leben
+beide(8.0, _heil)
+pruef("Mit einem im Gehege kommen Zombies", len(wl_.gehege) == K.LOBBY["gehege_grund"],
+      "%d" % len(wl_.gehege))
+pruef("Wellen gibt es in der Lobby nicht", wl_.welle == 0 and not wl_.welle_rest)
+wk_l.pos.update(wl_.bereiche["stand"].center); wk_l.vorher.update(wk_l.pos)
+beide(8.0)
+r_pve = wl_.bereiche["pve"]
+pruef("Wer hinausgeht, laesst sie im Gehege zurueck",
+      wl_.gehege and all(r_pve.collidepoint(z.pos) for z in wl_.gehege),
+      str([tuple(map(int, z.pos)) for z in wl_.gehege]))
+pruef("Die Lobby endet nie und bucht nichts",
+      not wl_.vorbei and wl_.partie == "")
+
+# Tod in der Lobby: schnell wieder da, auf dem Platz
+stellen(wk_l, "pvp", -40); stellen(gk_l, "pvp", 40)
+wk_l.unverwundbar = 0.0
+wk_l.schaden(999, None, gk_l)
+pruef("In der Arena kann man fallen", not wk_l.lebt)
+beide(K.LOBBY["wieder_nach"] + 0.2)
+pruef("Und steht schnell wieder auf dem Platz",
+      wk_l.lebt and wl_.bereich_von(wk_l) == "", wl_.bereich_von(wk_l))
+
+# Das Pausenmenue in der Lobby
+eintraege_l = [x[0] for x in wl_._menue_baut()]
+pruef("In der Lobby stellt das Menue keine Regeln, sondern oeffnet die Tafel",
+      "planen" in eintraege_l and "starten" in eintraege_l
+      and "modus" not in eintraege_l, str(eintraege_l))
+gast_eintraege_l = [x[0] for x in gl_._menue_baut()]
+pruef("Der Gast kann den Plan ansehen, aber nicht starten",
+      "planen" in gast_eintraege_l and "starten" not in gast_eintraege_l)
+
+# ── Der Rundenplan ───────────────────────────────────────────────────
+nr2 = wl_.plan_dazu(0)
+wl_.plan_verstellen(nr2, "modus", "versus")
+wl_.plan_verstellen(nr2, "runden", 1)
+pruef("Eine Runde kommt dazu", len(wl_.plan) == 2 and wl_.plan[1]["modus"] == "versus")
+wl_.plan_kopieren(0)
+nr3 = wl_.plan_dazu(1)
+wl_.plan_einfuegen(nr3)
+pruef("Kopieren und Einfuegen uebernimmt alle Einstellungen",
+      wl_.plan[2] == wl_.plan[0], "%s / %s" % (wl_.plan[2]["modus"], wl_.plan[0]["modus"]))
+wl_.plan_weg(2)
+pruef("Weg nimmt sie wieder heraus", len(wl_.plan) == 2)
+for _ in range(len(wl_.plan) + 3):
+    wl_.plan_weg(0)
+pruef("Eine bleibt immer", len(wl_.plan) == 1)
+wl_.plan_verstellen(0, "modus", "pvp")
+wl_.plan_verstellen(0, "ende_art", "abschuesse")
+wl_.plan_verstellen(0, "ende_wert", 1)
+wl_.plan_dazu(0)
+wl_.plan_verstellen(1, "modus", "team")
+wl_.plan_verstellen(1, "ende_art", "abschuesse")
+wl_.plan_verstellen(1, "ende_wert", 1)
+netz_durchlassen(wl_, gl_, 6)
+pruef("Der Gast sieht jede Aenderung", [d["modus"] for d in gl_.plan] == ["pvp", "team"],
+      str([d["modus"] for d in gl_.plan]))
+gl_.plan_verstellen(0, "modus", "pve")
+pruef("Er selbst kann nichts aendern", gl_.plan[0]["modus"] == "pvp")
+
+# Starten, Runde vorbei, naechste Runde, zurueck in die Lobby
+wl_.plan_starten(0)
+netz_durchlassen(wl_, gl_, 10)
+pruef("Start: die erste geplante Runde laeuft", wl_.modus == "pvp"
+      and not wl_.in_lobby and wl_.plan_laeuft, wl_.modus)
+pruef("Der Gast ist mit dabei", gl_.modus == "pvp" and not gl_.in_lobby
+      and gl_.karte == "", "%s / %r" % (gl_.modus, gl_.karte))
+pruef("Die Puppen sind weg", not any(isinstance(x, KampfGegner) for x in wl_.welt.wesen))
+eintraege_r = [x[0] for x in wl_._menue_baut()]
+pruef("In der Runde fuehrt das Menue zurueck in die Lobby", "lobby" in eintraege_r)
+wl_.kaempfer[0].abschuesse = 1
+beide(0.1)
+pruef("Die Runde endet wie immer", wl_.vorbei)
+netz_durchlassen(wl_, gl_, 6)
+pruef("Die Tafel zaehlt herunter, auch beim Gast",
+      0 < wl_.plan_weiter <= K.LOBBY["weiter_nach"] and gl_.plan_weiter > 0,
+      "%.1f / %.1f" % (wl_.plan_weiter, gl_.plan_weiter))
+pruef("Und sagt, was kommt", "TEAM" in wl_.plan_ausblick(), wl_.plan_ausblick())
+beide(K.LOBBY["weiter_nach"] + 0.5)
+pruef("Danach kommt von selbst die naechste geplante Runde",
+      wl_.modus == "team" and not wl_.vorbei and wl_.plan_pos == 1, wl_.modus)
+for k in wl_.kaempfer.values():
+    if k.team >= 0:
+        wl_.teampunkte[k.team] = 1
+        break
+beide(0.1)
+pruef("Auch die endet", wl_.vorbei)
+beide(K.LOBBY["weiter_nach"] + 0.5)
+netz_durchlassen(wl_, gl_, 10)
+pruef("Ohne Schleife geht es danach zurueck in die Lobby",
+      wl_.in_lobby and not wl_.plan_laeuft and gl_.in_lobby, wl_.modus)
+pruef("Mit Puppen und allen Mitspielern",
+      len(wl_.puppen) == 4 and all(k in wl_.welt.wesen or k in wl_.welt.neue
+                                   for k in wl_.kaempfer.values()))
+# Mit Schleife: nach der letzten wieder die erste.
+wl_.plan_schleife_setzen(True)
+wl_.plan_starten(1)
+for k in wl_.kaempfer.values():
+    if k.team >= 0:
+        wl_.teampunkte[k.team] = 1
+        break
+beide(K.LOBBY["weiter_nach"] + 1.0)
+pruef("Mit Schleife kommt nach der letzten wieder die erste",
+      wl_.modus == "pvp" and wl_.plan_pos == 0 and wl_.plan_laeuft, wl_.modus)
+wl_.lobby_betreten()
+pruef("Zurueck in die Lobby geht jederzeit", wl_.in_lobby and not wl_.plan_laeuft)
+
+# Die Tafel: der Gastgeber stellt ein, der Gast sieht nur zu
+tafel_w = LB.Rundenplanung(app, wl_)
+tafel_g = LB.Rundenplanung(app, gl_)
+netz_durchlassen(wl_, gl_, 6)
+tafel_g.aufbauen()
+regel_w = [e for e in tafel_w.elemente if e.name == "r:modus"]
+pruef("Auf der Tafel stehen die Regeln der naechsten Runde", bool(regel_w))
+pruef("Beim Gast ist alles gesperrt",
+      all(e.gesperrt for e in tafel_g.elemente if e.name.startswith("r:")))
+pruef("Und es gibt keinen Startknopf",
+      not any(e.name == "start" for e in tafel_g.elemente)
+      and any(e.name == "start" for e in tafel_w.elemente))
+el = regel_w[0]
+el.blaettern(1)
+tafel_w.geaendert(el)
+pruef("Ein Klick auf der Tafel aendert den Plan", wl_.plan[0]["modus"] == el.wert,
+      "%s / %s" % (wl_.plan[0]["modus"], el.wert))
+r_el = RG.NACH_NAME["runden"]
+wl_.plan_verstellen(0, "modus", "versus")
+tafel_w.aufbauen()
+runden_el = [e for e in tafel_w.elemente if e.name == "r:runden"][0]
+runden_el.index = len(runden_el.optionen) - 1
+runden_el.blaettern(1)
+pruef("Zahlen bleiben auf der Tafel am Rand stehen",
+      runden_el.wert == max(r_el.werte({}, None)), str(runden_el.wert))
+tafel_w.ausloesen([e for e in tafel_w.elemente if e.name == "planen"][0])
+pruef("Der Rundenplan klappt erst auf Wunsch auf",
+      wl_.plan_offen and any(e.name == "dazu" for e in tafel_w.elemente))
+wl_.plan_offen = False
+wl_.verlassen(); gl_.verlassen()
+
+# Mannschaftswunsch: in der Lobby gibt es keine Mannschaften, der Wunsch
+# beim Verbinden soll aber in der ersten Teamrunde gelten.
+wt_, gt_ = lobbypaar(modus="team", team=1)
+pruef("In der Lobby hat niemand eine Mannschaft",
+      all(k.team == -1 for k in wt_.kaempfer.values()))
+wt_.plan_starten(0)
+pruef("Die erste Teamrunde erfuellt den Wunsch vom Verbinden",
+      wt_.kaempfer[0].team == 1 and wt_.kaempfer[gt_.meine_nummer].team == 0,
+      "%d / %d" % (wt_.kaempfer[0].team, wt_.kaempfer[gt_.meine_nummer].team))
+wt_.verlassen(); gt_.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

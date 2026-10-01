@@ -98,6 +98,7 @@ TASTEN_VORGABE = [
     ("nutzen",      "BENUTZEN / RUFEN", ["e"]),
     ("ziehen",      "GEFALLENEN ZIEHEN", ["g"]),
     ("ebenen",      "OBERE EBENEN",     ["q"]),
+    ("planen",      "RUNDEN EINSTELLEN", ["p"]),
     ("nachladen",   "NACHLADEN",        ["r"]),
     ("heilen",      "MEDKIT",           ["h"]),
     ("inventar",    "INVENTAR",         ["tab"]),

@@ -59,6 +59,7 @@ from . import konto as konto_modul
 from . import netz
 from . import regeln as R
 from . import ui
+from .lobby import LobbyTeil, lobby_regeln
 from . import world as welt_modul
 from .core import Szene
 from .entities import (Aufsammler, Brandflaeche, Gegner, Rakete,
@@ -203,6 +204,11 @@ class Kaempfer(Spieler):
         # als dort, wo sein Team ihn zuletzt gesehen hat.
         if self.am_boden:
             schub = None
+        # In der Lobby entscheidet das Gefecht, wo es wehtut (lobby.py).
+        # Gefragt wird die Welt, weil die Figur ihr Gefecht nicht kennt.
+        pruefen = getattr(self.welt, "darf_treffen", None)
+        if pruefen is not None and not pruefen(self, von):
+            return
         super().schaden(menge, schub, von)
 
     def zeichenpos(self, alpha: float) -> pygame.Vector2:
@@ -346,7 +352,8 @@ class KampfGegner(Gegner):
         # uebergebenen Leben (siehe _boss_setzen), sonst kommt sie hier
         # dazu. Schaden und Tempo gelten fuer beide.
         stufe = getattr(gefecht, "stufe", None)
-        if stufe is not None and stufe is not K.SCHWIERIGKEIT["normal"]:
+        if (stufe is not None and stufe is not K.SCHWIERIGKEIT["normal"]
+                and art not in K.UEBUNG):
             self.daten = K.gegner_verstaerkt(self.daten, stufe)
             self.fern = self.daten.get("fern")
             self.platzt = self.daten.get("platzt")
@@ -356,6 +363,12 @@ class KampfGegner(Gegner):
                 self.leben = self.max_leben
         self._ziel = None
         self._ziel_rest = 0.0
+        # Zielpuppe im Schiessstand: wie lange seit dem letzten Treffer,
+        # und was sich an Schaden fuer die naechste Zahl gesammelt hat.
+        self.ist_puppe = art in K.UEBUNG
+        self._ruhe = 0.0
+        self._summe = 0.0
+        self._summe_rest = 0.0
         # Haengerwache: bestes bisher erreichtes Naeherkommen und wie
         # lange es sich nicht gebessert hat.
         self._bestes = 1e18
@@ -379,7 +392,9 @@ class KampfGegner(Gegner):
         Ein Boss wird nie umgesetzt. Ihn zu suchen ist Teil der Aufgabe,
         und ein Boss, der hinter dem Ruecken neu auftaucht, ist unfair.
         """
-        if self.ist_boss:
+        if self.ist_boss or getattr(self._gefecht, "in_lobby", False):
+            # In der Lobby bleibt jeder im Gehege - umgesetzt wuerde er
+            # irgendwohin auf den Platz, wo er nichts zu suchen hat.
             return
         self._pruef_rest -= dt
         if self._pruef_rest > 0.0:
@@ -461,9 +476,12 @@ class KampfGegner(Gegner):
         g = K.GEGNER_MP
         last = self._gefecht.gegnerlast
         bestes, bester_wert = None, 1e18
+        lobby = getattr(self._gefecht, "in_lobby", False)
         for k in self._gefecht.kaempfer.values():
             if not k.lebt:
                 continue
+            if lobby and not self._gefecht.im_bereich(k, "pve"):
+                continue       # im Gehege jagt er nur, wer drin ist
             if self.ist_boss and k.ebene != self.ebene:
                 continue       # ein Boss wartet auf seiner Ebene
             wert = self.pos.distance_to(k.pos)
@@ -490,6 +508,9 @@ class KampfGegner(Gegner):
         # gesetzt und danach zurueckgegeben. Der Spielkern bleibt dadurch
         # unveraendert, und dieser ganze Zweig laesst sich spaeter in einem
         # Stueck entfernen.
+        if self.ist_puppe:
+            self._puppe_schritt(dt)
+            return
         vorher = self.welt.held
         self.welt.held = self._ziel_waehlen(dt)
         try:
@@ -497,14 +518,57 @@ class KampfGegner(Gegner):
         finally:
             self.welt.held = vorher
         self._haenger_pruefen(dt)
+        if getattr(self._gefecht, "in_lobby", False):
+            self._gefecht._im_gehege_halten(self)
+
+    # ---- Die Zielpuppe ---------------------------------------------------
+    def _puppe_schritt(self, dt: float) -> None:
+        """Eine Puppe steht. Sie heilt sich und zeigt, was sie abbekam.
+
+        Nur das Noetigste aus Wesen.schritt: das Aufleuchten beim Treffer
+        soll abklingen, bewegt wird nichts.
+        """
+        self.vorher.update(self.pos)
+        self.blitz = max(0.0, self.blitz - dt)
+        self._ruhe += dt
+        if self._ruhe >= K.LOBBY["puppe_heilt"]:
+            self.leben = self.max_leben
+        if self._summe > 0.0:
+            self._summe_rest -= dt
+            if self._summe_rest <= 0.0:
+                self._gefecht.schadenszahl(self.pos, self.ebene, self._summe)
+                self._summe = 0.0
+
+    def schaden(self, menge, schub=None, von=None) -> None:
+        if not self.ist_puppe:
+            super().schaden(menge, schub, von)
+            return
+        # Die Zahl kommt gesammelt: ein MG trifft zwoelfmal die Sekunde,
+        # und zwoelf Zahlen uebereinander liest niemand. Eine je Viertel-
+        # sekunde, mit der Summe, sagt dasselbe und ist lesbar.
+        if self._summe <= 0.0:
+            self._summe_rest = 0.25
+        self._summe += float(menge)
+        self._ruhe = 0.0
+        super().schaden(menge, None, von)
+
+    def sterben(self, von=None) -> None:
+        if self.ist_puppe:
+            # Eine Puppe faellt nicht um, sie fuellt sich wieder auf.
+            self.leben = self.max_leben
+            return
+        super().sterben(von)
 
 
 # ══════════════════════════════════════════════════════════════════
 # Die Szene
 # ══════════════════════════════════════════════════════════════════
 
-class Gefecht(Szene):
-    """Die Spielszene fuer den LAN-Test, beim Gastgeber wie beim Gast."""
+class Gefecht(Szene, LobbyTeil):
+    """Die Spielszene fuer den LAN-Test, beim Gastgeber wie beim Gast.
+
+    Die Lobby und der Rundenplan stehen in lobby.py (LobbyTeil).
+    """
 
     # Das Gefecht haelt eine Leitung offen und darf darum nie anhalten,
     # auch nicht, wenn ein Menue darueber liegt: der Gastgeber wirft
@@ -520,7 +584,8 @@ class Gefecht(Szene):
                  team: int | None = None, passwort: str = "",
                  loadouts: str | None = None, rpg: bool | None = None,
                  rpg_lenkung: bool | None = None, karte: str = "",
-                 seed: int | None = None, regeln: dict | None = None) -> None:
+                 seed: int | None = None, regeln: dict | None = None,
+                 lobby: bool = False) -> None:
         super().__init__(app)
         self.name = netz.name_saeubern(name)
         self.gastgeber = gastgeber
@@ -544,6 +609,13 @@ class Gefecht(Szene):
         if regeln:
             roh.update(regeln)
         self.regelwerk = R.saeubern(roh, self._umfeld())
+        # Mit Lobby (der Normalfall beim Aufmachen seit 0.27): was eben
+        # zusammengestellt wurde, ist die erste geplante Runde, und
+        # angefangen wird in der Lobby. Ohne Lobby geht es sofort los, wie
+        # bisher - so laufen die Pruefungen und `--sofort`.
+        self._lobby_anlegen(self.regelwerk if gastgeber is not None else None)
+        if lobby and gastgeber is not None:
+            self.regelwerk = lobby_regeln()
         self._regeln_setzen(self.regelwerk)
         # Gespielte Runden, Unentschieden mitgezaehlt. Die Siege stehen in
         # teampunkte; aus ihnen allein laesst sich nicht ablesen, ob alle
@@ -683,6 +755,7 @@ class Gefecht(Szene):
         self._kreis_setzen(0)
 
         self._welt_verdrahten()
+        self._karte_geladen()
         self.wunsch = self._wunsch_lesen()
 
         if self.ist_gastgeber:
@@ -691,6 +764,8 @@ class Gefecht(Szene):
             self._einstiegszonen_waehlen()
             self.ich = self._dazu(0, self.name, self.team_wunsch,
                                   self.mein_loadout())
+            if self.in_lobby:
+                self._lobby_bestuecken()
         else:
             self.gast.senden({"t": "hallo", "name": self.name,
                               "team": self.team_wunsch,
@@ -723,6 +798,8 @@ class Gefecht(Szene):
         """
         self.welt.ruckeln = self._ruckeln
         self.welt.klang = self._klang
+        # Wer wem schaden darf - ausser in der Lobby immer (lobby.py).
+        self.welt.darf_treffen = self._darf_treffen
         self.welt.blutfleck = self._blutfleck
         self.welt.brandfleck = self._brandfleck
         self.welt.blitz = self._blitz
@@ -806,6 +883,19 @@ class Gefecht(Szene):
             self._in_wirkung = False
         self._wirkung.append(["x", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(radius, 1), str(art)])
+
+    def schadenszahl(self, pos, ebene: int, menge: float) -> None:
+        """Eine Zahl ueber einer Puppe: so viel hat es gerade getroffen.
+
+        Beim Gastgeber in die eigene Welt, und als Wirkung an die Gaeste -
+        die Puppen stehen bei ihnen ja nur als gemeldete Punkte.
+        """
+        text = "%d" % max(1, round(menge))
+        oben = pygame.Vector2(pos.x, pos.y - 14)
+        self.welt.aufschrift(oben, ebene, text, K.C_AMBER)
+        if self.ist_gastgeber:
+            self._wirkung.append(["t", round(oben.x, 1), round(oben.y, 1),
+                                  int(ebene), 0, text])
 
     def _schussknall_melden(self, pos, winkel: float, ebene: int, waffe: str,
                             quelle=None) -> None:
@@ -897,6 +987,12 @@ class Gefecht(Szene):
                 except (TypeError, ValueError):
                     continue
                 self.welt.raketenstart(pos, winkel, ebene)
+            elif art == "t":
+                # Eine Schadenszahl im Schiessstand. Nur Ziffern: was hier
+                # ankommt, steht danach im Bild.
+                text = str(e[5])[:6]
+                if text.isdigit():
+                    self.welt.aufschrift(pos, ebene, text, K.C_AMBER)
 
     # ---- Grundsaetzliches --------------------------------------------
     @property
@@ -1082,9 +1178,24 @@ class Gefecht(Szene):
             return
         anzahl = len(K.TEAMS["namen"])
         leute = sorted(self.kaempfer.values(), key=lambda k: k.nummer)
+        # Wer noch keine Mannschaft hat - etwa, weil er aus der Lobby kommt,
+        # wo es keine gibt -, bekommt zuerst die, die er sich beim
+        # Verbinden gewuenscht hat, und sonst die kleinere. Vorher landeten
+        # alle erst in der ersten und wurden dann nach Nummer verschoben;
+        # der Wunsch ging dabei verloren.
+        ohne = []
         for k in leute:
-            if not 0 <= k.team < anzahl:
-                k.team = 0
+            if 0 <= k.team < anzahl:
+                continue
+            wunsch = getattr(k, "team_wunsch", -1)
+            if 0 <= wunsch < anzahl:
+                k.team = wunsch
+            else:
+                ohne.append(k)
+        for k in ohne:
+            groessen = [sum(1 for x in leute if x.team == i)
+                        for i in range(anzahl)]
+            k.team = groessen.index(min(groessen))
         # So lange den Groessten verkleinern, bis der Unterschied hoechstens
         # eins ist. Das endet immer, weil jeder Schritt ihn verringert.
         for _ in range(len(leute) + 1):
@@ -1123,6 +1234,9 @@ class Gefecht(Szene):
         # Was er selbst mitgebracht hat, bleibt gemerkt - auch in einer
         # Runde, in der alle dasselbe tragen. Danach bekommt er es zurueck.
         k.angemeldet = angemeldet
+        # Ebenso sein Mannschaftswunsch: in der Lobby gibt es keine
+        # Mannschaften, der Wunsch soll aber in der ersten Teamrunde gelten.
+        k.team_wunsch = int(wunsch)
         self._regeln_anlegen(k)
         k.unverwundbar = self.schutz_zeit
         k.medkits = self.start_medkits
@@ -1222,6 +1336,10 @@ class Gefecht(Szene):
         (siehe `_einstiegszonen_waehlen`), sonst einfach weit weg von allen
         anderen.
         """
+        if self.in_lobby:
+            platz = self._lobby_einstieg(ausser)
+            if platz is not None:
+                return platz
         eigene = [k.pos for k in self.kaempfer.values()
                   if k.lebt and k is not ausser and team >= 0 and k.team == team]
         fremde = [k.pos for k in self.kaempfer.values()
@@ -1594,6 +1712,9 @@ class Gefecht(Szene):
                                    konto_modul.loadout_saeubern(
                                        nachricht.get("lo")))
                     self.gastgeber.an_einen(nummer, self._willkommen(nummer, k))
+                    # Und gleich den Plan: wer in die Lobby kommt, soll
+                    # sehen, was als Naechstes gespielt wird.
+                    self.gastgeber.an_einen(nummer, self._plan_meldung())
             elif art == "ein":
                 k = self.kaempfer.get(nummer)
                 if k is not None:
@@ -1607,7 +1728,10 @@ class Gefecht(Szene):
         if self.ich is not None:
             self._anwenden(self.ich, self._meine_eingabe())
 
-        if not self.vorbei:
+        if self.in_lobby:
+            # Keine Wellen, keine Beute, kein Ende - nur das Gehege.
+            self._lobby_schritt(dt)
+        elif not self.vorbei:
             self._beute_nachlegen(dt)
             self._wellen(dt)
             self._zone(dt)
@@ -1619,6 +1743,7 @@ class Gefecht(Szene):
         self._revive(dt)
         self._tote_abrechnen(dt)
         self._ende_pruefen(dt)
+        self._plan_fuehren(dt)
 
         self._seit_senden += dt
         if self._seit_senden >= K.NETZ["takt"]:
@@ -2263,7 +2388,8 @@ class Gefecht(Szene):
                 k.toeter = None
                 k.tode += 1
                 k.serie = 0          # der eigene Tod beendet die Folge
-                k.wieder_in = K.GEFECHT["wieder_nach"]
+                k.wieder_in = (K.LOBBY["wieder_nach"] if self.in_lobby
+                               else K.GEFECHT["wieder_nach"])
             if self.regeln["runden"]:
                 k.raus = True     # in versus bleibt man bis zur naechsten Runde
                 continue
@@ -2328,7 +2454,7 @@ class Gefecht(Szene):
 
     # ---- Ende ----------------------------------------------------------
     def _ende_pruefen(self, dt: float) -> None:
-        if self.vorbei or not self.kaempfer:
+        if self.vorbei or not self.kaempfer or self.in_lobby:
             return
         # Zone und Runden beenden sich selbst, sobald ein Team am Ziel ist.
         if self.regeln["zone"] or self.regeln["runden"]:
@@ -2599,6 +2725,8 @@ class Gefecht(Szene):
                     self.obere_zeigen = bool(self.app.opt["obere_ebenen"])
             elif art == "welt":
                 self._welt_uebernehmen(nachricht)
+            elif art == "plan":
+                self._plan_lesen(nachricht)
             elif art == "abgelehnt":
                 # Gemerkt und nicht nur angezeigt: der Gastgeber legt
                 # gleich darauf auf, und im naechsten Bild wuerde sonst
@@ -2699,6 +2827,7 @@ class Gefecht(Szene):
         # - die Kaempfer aber schon.
         for k in self.kaempfer.values():
             self.welt.dazu(k)
+        self._karte_geladen()
         return True
 
     @staticmethod
@@ -3085,10 +3214,15 @@ class Gefecht(Szene):
         else:
             self._schritt_gast(dt)
 
+        if not self.ist_gastgeber and self.plan_weiter > 0:
+            # Beim Gast nur Anzeige: die Zahl auf der Siegtafel soll
+            # herunterzaehlen, auch wenn keine neue Meldung kommt.
+            self.plan_weiter = max(0.0, self.plan_weiter - dt)
         if self.ich is None:
             return
         if not self.ist_gastgeber:
             self._eigenes_zielen()
+        self._bereich_melden()
         self._befinden_fuehren(dt)
         if self.ich.ebene != self._letzte_ebene:
             self._letzte_ebene = self.ich.ebene
@@ -3197,6 +3331,17 @@ class Gefecht(Szene):
         eintraege.append(("konto", "KONTO",
                           konto.name.upper() if konto and konto.angemeldet
                           else "NICHT ANGEMELDET"))
+        if self.in_lobby:
+            # In der Lobby gibt es keine Regeln zu stellen - die gehoeren
+            # zur naechsten Runde, und die stellt man auf der Tafel ein.
+            if self.ist_gastgeber:
+                eintraege.append(("planen", "RUNDEN EINSTELLEN", ""))
+                eintraege.append(("starten", "RUNDE STARTEN",
+                                  R.kurz(self.plan[0], self._umfeld())))
+            else:
+                eintraege.append(("planen", "RUNDEN ANSEHEN", ""))
+            eintraege.append(("raus", "GEFECHT VERLASSEN", ""))
+            return eintraege
         if self.ist_gastgeber:
             # Die Regeln kommen aus der Tabelle in regeln.py - dieselbe, die
             # auch die Lobby zeigt. Was bei der gewaehlten Spielart nicht
@@ -3211,6 +3356,8 @@ class Gefecht(Szene):
             if regeln["teams"]:
                 eintraege.append(("teams", "MANNSCHAFTEN EINTEILEN", ""))
             eintraege.append(("neu", "NEUE RUNDE MIT DIESEN REGELN", ""))
+            eintraege.append(("planen", "RUNDEN EINSTELLEN", ""))
+            eintraege.append(("lobby", "ZURUECK IN DIE LOBBY", ""))
         eintraege.append(("raus", "GEFECHT VERLASSEN", ""))
         return eintraege
 
@@ -3236,6 +3383,9 @@ class Gefecht(Szene):
             self._knopf_merken(ev.key)
             if ev.key in self.app.opt.codes("ebenen"):
                 self.obere_umschalten()
+            if ev.key in self.app.opt.codes("planen"):
+                self.planung_oeffnen()
+                return
         if ev.key in self.app.opt.codes("pause"):
             # Esc beendete frueher das ganze Spiel. Jetzt macht es auf und
             # wieder zu, und hinaus geht es nur ueber den Eintrag dafuer.
@@ -3287,7 +3437,8 @@ class Gefecht(Szene):
     # Eintraege, die etwas *tun*, statt einen Wert zu verstellen. Sie
     # reagieren nur auf Enter. Auf einen Pfeil zu hoeren waere hier
     # gefaehrlich: ein Druck daneben haette das Gefecht beendet.
-    TATEN = ("weiter", "raus", "teams", "neu", "ausruestung", "konto")
+    TATEN = ("weiter", "raus", "teams", "neu", "ausruestung", "konto",
+             "planen", "starten", "lobby")
 
     def _menue_wirken(self, schluessel: str, vor: bool, waehlen: bool) -> None:
         if schluessel in self.TATEN and not waehlen:
@@ -3298,6 +3449,10 @@ class Gefecht(Szene):
             return
         if schluessel == "raus":
             self.app.laeuft = False
+            return
+        if schluessel == "planen":
+            self._menue_zu()
+            self.planung_oeffnen()
             return
         if schluessel in ("ausruestung", "konto"):
             # Als eigene Szene und nicht als Unterseite: die beiden
@@ -3326,6 +3481,12 @@ class Gefecht(Szene):
         elif schluessel == "neu":
             self._runde_neu()
             self._menue_zu()
+        elif schluessel == "starten":
+            self._menue_zu()
+            self.plan_starten(0)
+        elif schluessel == "lobby":
+            self._menue_zu()
+            self.lobby_betreten()
 
     def _menue_teams_taste(self, hoch, runter, links, rechts, waehlen) -> None:
         leute = sorted(self.kaempfer.values(), key=lambda k: k.nummer)
@@ -3424,6 +3585,9 @@ class Gefecht(Szene):
             self._regeln_anlegen(k)
             k.lebt = True
             self._wieder_einsteigen(k)
+
+        if self.in_lobby:
+            self._lobby_bestuecken()
 
         if self.ist_gastgeber:
             self.gastgeber.an_alle(dict(self._willkommen(-1, None),
@@ -3946,12 +4110,15 @@ class Gefecht(Szene):
         if self.ist_gastgeber:
             f.zeichnen(ziel, self.gastgeber.adresse, 12, 32, K.C_MUTED_DK, 1)
 
-        if self.mit_gegnern:
+        if self.in_lobby:
+            self._lobby_kopf(ziel)
+        elif self.mit_gegnern:
             f.zeichnen(ziel, "WELLE %d" % max(1, self.welle), K.GAME_W // 2, 10,
                        K.C_CREAM, 2, ausrichtung="mitte")
         # Die Uhr laeuft ueberall ausser in pve: dort endet die Runde, wenn
         # alle liegen, und eine Uhr waere eine Zahl ohne Bedeutung.
-        mit_uhr = self.mit_teams or not self.regeln["revive"]
+        mit_uhr = ((self.mit_teams or not self.regeln["revive"])
+                   and not self.in_lobby)
         y_kopf = 28 if self.mit_gegnern else 10
         if self.ende_art == "zeit" and mit_uhr:
             minuten, sekunden = divmod(int(max(0.0, self.rest)), 60)
@@ -4262,7 +4429,14 @@ class Gefecht(Szene):
             oben = max(72, (K.GAME_H - self._tafel_hoehe(len(zeilen))) // 2)
             self._tafel_spalte(ziel, (K.GAME_W - breite) // 2, oben, breite,
                                zeilen, -1)
-        f.zeichnen(ziel, "[ESC] BEENDEN", K.GAME_W // 2, K.GAME_H - 20,
+        if self.plan_laeuft and self.plan_weiter >= 0:
+            # Was als Naechstes kommt, und wann. Ohne das stand man vor der
+            # Tafel und wusste nicht, ob noch etwas passiert.
+            f.zeichnen(ziel, "WEITER IN %d:  %s" % (
+                int(self.plan_weiter + 0.99), self.plan_ausblick()),
+                K.GAME_W // 2, K.GAME_H - 30, K.C_AMBER, 1,
+                ausrichtung="mitte")
+        f.zeichnen(ziel, "[ESC] MENUE", K.GAME_W // 2, K.GAME_H - 18,
                    K.C_MUTED_DK, 1, ausrichtung="mitte")
 
     @staticmethod

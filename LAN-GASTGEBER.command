@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
 #  DUSTFRONT - LAN GASTGEBER
-#  Macht eine Runde auf und waehlt die Spielart.
+#  Macht eine Runde auf. Die Spielart und alles andere stellst
+#  du danach im Spiel ein, in der Lobby (Taste P).
 #  Unter macOS beim ersten Mal Rechtsklick -> Oeffnen.
 # ============================================================
 set -u
@@ -47,113 +48,11 @@ if [ "${WAHL:-1}" = "2" ]; then
     read -r -p "  Kennwort (Enter = keins): " PASSWORT
 fi
 
-echo
-echo "  Spielart:"
-echo "    1  PVP     jeder gegen jeden"
-echo "    2  PVE     alle zusammen gegen Wellen, mit Aufhelfen"
-echo "    3  PVPVE   Wellen, und dabei jeder gegen jeden"
-echo "    4  TEAM    zwei Mannschaften, Abschuesse zaehlen fuer das Team"
-echo "    5  VERSUS  zwei Mannschaften, ein Leben je Runde, mit Aufhelfen"
-echo "    6  HUEGEL  zwei Mannschaften, haltet den Kreis in der Mitte"
-echo
-read -r -p "  Welche (Enter = 1): " WAHL
-case "${WAHL:-1}" in
-    2) MODUS="pve" ;;
-    3) MODUS="pvpve" ;;
-    4) MODUS="team" ;;
-    5) MODUS="versus" ;;
-    6) MODUS="huegel" ;;
-    *) MODUS="pvp" ;;
-esac
-
-ENDE="zeit"
-WERT=0
-case "$MODUS" in
-    pvp|pvpve|team)
-        echo
-        echo "  Wann endet die Runde?"
-        echo "    1  nach Zeit"
-        echo "    2  nach Abschuessen"
-        echo
-        read -r -p "  Welche (Enter = 1): " WAHL
-        if [ "${WAHL:-1}" = "2" ]; then
-            ENDE="abschuesse"
-            if [ "$MODUS" = "team" ]; then
-                read -r -p "  Teamabschuesse bis Schluss (Enter = 30): " WERT
-                WERT="${WERT:-30}"
-            else
-                read -r -p "  Abschuesse bis Schluss (Enter = 20): " WERT
-                WERT="${WERT:-20}"
-            fi
-        else
-            read -r -p "  Minuten (Enter = 5): " MINUTEN
-            WERT=$(( ${MINUTEN:-5} * 60 ))
-        fi
-        ;;
-    versus|huegel)
-        # Beide enden von selbst: versus nach Rundensiegen, huegel am
-        # vollen Kreis. Die Zeit ist nur die Notbremse.
-        echo
-        read -r -p "  Hoechstdauer in Minuten (Enter = 10): " MINUTEN
-        WERT=$(( ${MINUTEN:-10} * 60 ))
-        ;;
-esac
-
-RUNDEN=3
-if [ "$MODUS" = "versus" ]; then
-    echo
-    read -r -p "  Rundensiege bis zum Schluss (1-9, Enter = 3): " RUNDEN
-    RUNDEN="${RUNDEN:-3}"
-fi
-
-TEAM="auto"
-case "$MODUS" in
-    team|versus|huegel)
-        echo
-        echo "  In welche Mannschaft willst du?"
-        echo "    1  ROT"
-        echo "    2  BLAU"
-        echo "    3  egal, teil mich ein"
-        echo
-        read -r -p "  Welche (Enter = 3): " WAHL
-        case "${WAHL:-3}" in
-            1) TEAM="rot" ;;
-            2) TEAM="blau" ;;
-            *) TEAM="auto" ;;
-        esac
-        ;;
-esac
-
-KNAPP=""
-if [ "$MODUS" != "pvp" ]; then
-    echo
-    read -r -p "  Munition begrenzen, mit Nachschubkisten? (j/N): " WAHL
-    case "${WAHL:-n}" in
-        j|J) KNAPP="--knapp" ;;
-    esac
-fi
-
-echo
-read -r -p "  Einstiegsschutz, 2 Sekunden unverwundbar? (J/n): " WAHL
-SCHUTZ=""
-case "${WAHL:-j}" in
-    n|N) SCHUTZ="--kein-schutz" ;;
-esac
-
-echo
-read -r -p "  Medkits beim Einstieg (Enter = 1): " MEDKITS
-MEDKITS="${MEDKITS:-1}"
-
-read -r -p "  Medkits immer wieder auf der Karte? (J/n): " WAHL
-MEDSPAWN=""
-case "${WAHL:-j}" in
-    n|N) MEDSPAWN="--keine-medkits" ;;
-esac
+# Mehr wird hier nicht gefragt. Spielart, Karte, Runden und alles
+# andere stellst du im Spiel ein: es geht zuerst in die Lobby, dort
+# oeffnet P die Tafel dafuer.
 
 echo
 # shellcheck disable=SC2086
-"$PY" -m dustfront --host --name "$NAME" --modus "$MODUS" \
-    --ende "$ENDE" --wert "$WERT" --medkits "$MEDKITS" \
-    --runden "$RUNDEN" --team "$TEAM" --passwort "$PASSWORT" \
-    $KNAPP $SCHUTZ $MEDSPAWN $ONLINE \
+"$PY" -m dustfront --host --name "$NAME" --passwort "$PASSWORT" $ONLINE \
     || abbrechen "Beendet mit einem Fehler."

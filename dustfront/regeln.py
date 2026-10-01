@@ -44,9 +44,13 @@ def _karten(d, u):
     annehmen koennen, die der Gastgeber waehlt - er hat sie ja auch.
     """
     if u and "karten" in u:
-        return [""] + list(u["karten"])
-    from . import world
-    return [""] + list(world.karten_liste())
+        liste = list(u["karten"])
+    else:
+        from . import world
+        liste = list(world.karten_liste())
+    # Die Lobby ist kein Schauplatz fuer eine Runde - sie ist der Ort
+    # dazwischen. Gueltig ist sie trotzdem (siehe `erlaubt`).
+    return [""] + [k for k in liste if k != K.LOBBY["karte"]]
 
 
 def _abschuesse_werte():
@@ -119,7 +123,7 @@ class Feld:
 
     def __init__(self, schluessel, name, gruppe, vorgabe, werte, text=None,
                  gilt=None, rund=False, zahl=False, schalter=False,
-                 einzug=False, hilfe=""):
+                 einzug=False, hilfe="", erlaubt=None):
         self.schluessel = schluessel
         self._name = name
         self.gruppe = gruppe
@@ -132,6 +136,10 @@ class Feld:
         self.schalter = schalter
         self._einzug = einzug
         self.hilfe = hilfe
+        # Gueltig, aber nicht waehlbar: die Lobby als Spielart und als
+        # Karte. Sie muss durchs Netz und durch `saeubern`, im Menue
+        # durchblaettern soll man sie aber nicht.
+        self._erlaubt = erlaubt
 
     def name(self, d) -> str:
         """Die Beschriftung. Bei manchen Regeln haengt sie an der Spielart:
@@ -181,9 +189,11 @@ FELDER = (
     # ── Die Runde
     Feld("modus", "SPIELART", "RUNDE", K.MODUS_VORGABE, _modi,
          text=lambda v, d, u: K.MODI[v]["name"], rund=True,
+         erlaubt=lambda v: v in K.MODI,
          hilfe="WIE GESPIELT WIRD."),
     Feld("karte", "KARTE", "RUNDE", "", _karten,
          text=lambda v, d, u: (v or "TESTKARTE").upper(), rund=True,
+         erlaubt=lambda v: v == K.LOBBY["karte"],
          hilfe="AUF WELCHER KARTE."),
     Feld("runden", "GESPIELTE RUNDEN", "RUNDE", K.VERSUS["runden"],
          lambda d, u: range(K.VERSUS["runden_grenzen"][0],
@@ -261,6 +271,12 @@ def vorgabe(**ueber) -> dict:
 
 def _passend(f: Feld, v, d, umfeld):
     """v, wenn es erlaubt ist - sonst None."""
+    if f._erlaubt is not None:
+        try:
+            if f._erlaubt(v):
+                return v
+        except TypeError:          # eine Liste als Spielart, von aussen
+            return None
     werte = f.werte(d, umfeld)
     if f.schalter:
         return v if isinstance(v, bool) else None

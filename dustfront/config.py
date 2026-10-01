@@ -369,6 +369,7 @@ BILD_MASS = {
     "gegner_renner":    (24, 24),
     "gegner_speier":    (30, 30),
     "gegner_blaeher":   (34, 34),
+    "puppe":            (28, 28),     # Zielpuppe im Schiessstand der Lobby
     # Bosse. Sie sind deutlich groesser als alles andere - man soll auf
     # den ersten Blick sehen, dass da etwas anderes steht.
     "boss_koloss":      (58, 58),
@@ -530,6 +531,13 @@ MODI = {
     "huegel": dict(name="HUEGEL", gegner=False, beute=True,  revive=False,
                    teams=True,  runden=False, zone=True,
                    hinweis="Haltet den Kreis in der Mitte."),
+    # Keine Spielart, die man waehlt, sondern der Ort dazwischen: hier
+    # landet man beim Aufmachen und nach jeder Runde (siehe LOBBY).
+    # "gegner" steht an, weil es im Gehege Zombies gibt - Wellen gibt es
+    # keine, das Gefecht fragt vorher nach `lobby`.
+    "lobby":  dict(name="LOBBY",  gegner=True,  beute=True,  revive=False,
+                   teams=False, runden=False, zone=False, lobby=True,
+                   hinweis="Rumlaufen, ueben, auf die Runde warten."),
 }
 MODUS_VORGABE = "pvp"
 
@@ -602,6 +610,29 @@ ZONE = dict(
     # weiterzieht, haelt sie beisammen - man muss den Weg gehen.
     wechsel=75.0,
 )
+
+# Die Lobby: wo man beim Aufmachen landet und nach jeder Runde.
+#
+# Drei Bereiche, in der Kartendatei als Rechtecke im Kopf eingetragen:
+# PVP (hier trifft jeder jeden), STAND (der Schiessstand mit Puppen) und
+# PVE (das Gehege mit Zombies). Ausserhalb dieser Bereiche tut niemandem
+# etwas weh - man soll dort stehen und reden koennen, waehrend der
+# Gastgeber die naechste Runde einstellt. Nichts aus der Lobby wird
+# gebucht: keine Runde, kein Abschuss, keine Statistik.
+LOBBY = dict(
+    karte="lobby",
+    wieder_nach=1.5,          # so schnell steht man in der Lobby wieder auf
+    puppe_heilt=2.5,          # Sekunden ohne Treffer, dann ist sie wieder voll
+    gehege_grund=3,           # so viele Zombies im Gehege, wenn einer drin ist
+    gehege_je_spieler=2,      # und so viele mehr je weiterem
+    gehege_hoechstens=10,
+    gehege_takt=1.4,          # Sekunden zwischen zwei neuen
+    gehege_arten=("laeufer", "laeufer", "renner", "brecher", "speier",
+                  "blaeher"),
+    weiter_nach=12.0,         # so lange steht die Siegtafel vor der naechsten
+    plan_hoechstens=12,       # mehr Runden plant niemand
+)
+
 
 # Versus: ein Leben je Runde, wie in einem Rundenschuetzen.
 # Versus: ein Leben je Runde.
@@ -1816,11 +1847,34 @@ def gegner_daten(art: str) -> dict:
         return GEGNER[art]
     if art in BOSSE:
         return BOSSE[art]
+    if art in UEBUNG:
+        return UEBUNG[art]
     return GEGNER["laeufer"]
 
 
 def ist_boss(art: str) -> bool:
     return art in BOSSE
+
+# Was nur im Schiessstand der Lobby steht. Eine eigene Tabelle und nicht
+# GEGNER, damit sie nie in eine Welle geraet und keine Pruefung, die ueber
+# "alle Gegner" geht, eine Puppe mitzaehlt, die sich nicht bewegt.
+UEBUNG = {
+    "puppe": dict(
+        name="PUPPE",
+        leben=500.0,
+        radius=11.0,
+        tempo=0.0,
+        beschleunigung=0.0,
+        schaden=0.0,
+        schlagtakt=99.0,
+        reichweite=0.0,
+        sicht=0.0,
+        bild="puppe",
+        punkte=0,
+        unverschiebbar=True,
+    ),
+}
+
 
 # Wellen: (Anzahl, Typ) je Welle, danach wird hochskaliert
 WELLEN = [

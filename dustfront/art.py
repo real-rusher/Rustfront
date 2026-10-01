@@ -742,6 +742,33 @@ def _boss_brandstifter():
     return _rand(s)
 
 
+@platzhalter("puppe")
+def _puppe():
+    """Die Zielpuppe im Schiessstand der Lobby.
+
+    Von oben: ein Sandsack auf einem Pfahl, mit einem Querholz als Arme
+    und einer aufgemalten Scheibe. Bewusst hell und rund, nichts daran
+    sieht aus wie ein Zombie - im Schiessstand soll niemand zoegern, und
+    im Gehege daneben soll niemand eine Puppe fuer einen Gegner halten.
+    """
+    s = _flaeche(28, 28)
+    c = 14
+    # Das Querholz, unter dem Sack.
+    pygame.draw.rect(s, (54, 38, 24), (c - 2, c - 12, 5, 24))
+    pygame.draw.rect(s, (112, 80, 48), (c - 1, c - 12, 3, 24))
+    # Der Sack.
+    pygame.draw.circle(s, (70, 58, 40), (c, c), 9)
+    pygame.draw.circle(s, (176, 154, 110), (c, c), 8)
+    pygame.draw.circle(s, (206, 186, 140), (c - 2, c - 2), 5)
+    # Die Scheibe: rot, weiss, rot.
+    pygame.draw.circle(s, (196, 58, 40), (c, c), 6, 2)
+    pygame.draw.circle(s, (236, 230, 214), (c, c), 3)
+    pygame.draw.circle(s, (196, 58, 40), (c, c), 1)
+    # Die Naht, an der er zugebunden ist.
+    pygame.draw.line(s, (96, 80, 56), (c + 6, c - 3), (c + 8, c - 5))
+    return _rand(s)
+
+
 @platzhalter("speichel")
 def _speichel():
     # Der Spuck des Speiers. Gruen, damit man ihn nicht mit dem eigenen

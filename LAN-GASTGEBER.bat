@@ -1,7 +1,8 @@
 @echo off
 rem ============================================================
 rem  DUSTFRONT - LAN GASTGEBER
-rem  Macht eine Runde auf und waehlt die Spielart.
+rem  Macht eine Runde auf. Die Spielart und alles andere stellst
+rem  du danach im Spiel ein, in der Lobby (Taste P).
 rem ============================================================
 setlocal
 title DUSTFRONT - LAN GASTGEBER
@@ -53,7 +54,7 @@ set "ONLINE="
 set "PASSWORT="
 set "WAHL="
 set /p "WAHL=  Welche (Enter = 1): "
-if not "%WAHL%"=="2" goto spielart
+if not "%WAHL%"=="2" goto los
 set "ONLINE=--online"
 echo.
 echo   Das Spiel versucht, den Port im Router selbst freizugeben.
@@ -61,117 +62,13 @@ echo   Klappt das nicht, sagt es gleich, was einzutragen ist.
 echo   Wer die Adresse kennt, kann mitspielen - darum ein Kennwort:
 set /p "PASSWORT=  Kennwort (Enter = keins): "
 
-:spielart
-
-echo.
-echo   Spielart:
-echo     1  PVP     jeder gegen jeden
-echo     2  PVE     alle zusammen gegen Wellen, mit Aufhelfen
-echo     3  PVPVE   Wellen, und dabei jeder gegen jeden
-echo     4  TEAM    zwei Mannschaften, Abschuesse zaehlen fuer das Team
-echo     5  VERSUS  zwei Mannschaften, ein Leben je Runde, mit Aufhelfen
-echo     6  HUEGEL  zwei Mannschaften, haltet den Kreis in der Mitte
-echo.
-set "MODUS=pvp"
-set "WAHL="
-set /p "WAHL=  Welche (Enter = 1): "
-if "%WAHL%"=="2" set "MODUS=pve"
-if "%WAHL%"=="3" set "MODUS=pvpve"
-if "%WAHL%"=="4" set "MODUS=team"
-if "%WAHL%"=="5" set "MODUS=versus"
-if "%WAHL%"=="6" set "MODUS=huegel"
-
-set "ENDE=zeit"
-set "WERT=0"
-if "%MODUS%"=="pve" goto muni
-rem versus und huegel enden von selbst. Die Zeit ist nur die Notbremse.
-if "%MODUS%"=="versus" goto hoechstdauer
-if "%MODUS%"=="huegel" goto hoechstdauer
-
-echo.
-echo   Wann endet die Runde?
-echo     1  nach Zeit
-echo     2  nach Abschuessen
-echo.
-set "WAHL="
-set /p "WAHL=  Welche (Enter = 1): "
-if "%WAHL%"=="2" set "ENDE=abschuesse"
-if "%ENDE%"=="abschuesse" goto wieviele
-set "WERT="
-set /p "WERT=  Minuten (Enter = 5): "
-if "%WERT%"=="" set "WERT=5"
-set /a WERT=%WERT%*60
-goto muni
-
-:wieviele
-set "WERT="
-if "%MODUS%"=="team" goto wieviele_team
-set /p "WERT=  Abschuesse bis Schluss (Enter = 20): "
-if "%WERT%"=="" set "WERT=20"
-goto muni
-
-:wieviele_team
-set /p "WERT=  Teamabschuesse bis Schluss (Enter = 30): "
-if "%WERT%"=="" set "WERT=30"
-goto muni
-
-:hoechstdauer
-set "WERT="
-set /p "WERT=  Hoechstdauer in Minuten (Enter = 10): "
-if "%WERT%"=="" set "WERT=10"
-set /a WERT=%WERT%*60
-
-:muni
-set "RUNDEN=3"
-if not "%MODUS%"=="versus" goto teamwahl
-echo.
-set /p "RUNDEN=  Rundensiege bis zum Schluss (1-9, Enter = 3): "
-if "%RUNDEN%"=="" set "RUNDEN=3"
-
-:teamwahl
-set "TEAM=auto"
-if "%MODUS%"=="pvp" goto munition
-if "%MODUS%"=="pve" goto munition
-if "%MODUS%"=="pvpve" goto munition
-echo.
-echo   In welche Mannschaft willst du?
-echo     1  ROT
-echo     2  BLAU
-echo     3  egal, teil mich ein
-echo.
-set "WAHL="
-set /p "WAHL=  Welche (Enter = 3): "
-if "%WAHL%"=="1" set "TEAM=rot"
-if "%WAHL%"=="2" set "TEAM=blau"
-
-:munition
-set "KNAPP="
-if "%MODUS%"=="pvp" goto schutz
-echo.
-set "WAHL="
-set /p "WAHL=  Munition begrenzen, mit Nachschubkisten? (j/N): "
-if /i "%WAHL%"=="j" set "KNAPP=--knapp"
-
-:schutz
-echo.
-set "SCHUTZ="
-set "WAHL="
-set /p "WAHL=  Einstiegsschutz, 2 Sekunden unverwundbar? (J/n): "
-if /i "%WAHL%"=="n" set "SCHUTZ=--kein-schutz"
-
-echo.
-set "MEDKITS="
-set /p "MEDKITS=  Medkits beim Einstieg (Enter = 1): "
-if "%MEDKITS%"=="" set "MEDKITS=1"
-
-set "MEDSPAWN="
-set "WAHL="
-set /p "WAHL=  Medkits immer wieder auf der Karte? (J/n): "
-if /i "%WAHL%"=="n" set "MEDSPAWN=--keine-medkits"
+rem Mehr wird hier nicht gefragt. Spielart, Karte, Runden und alles
+rem andere stellst du im Spiel ein: es geht zuerst in die Lobby, dort
+rem oeffnet P die Tafel dafuer.
 
 :los
 echo.
-%PY% -m dustfront --host --name "%NAME%" --modus %MODUS% --ende %ENDE% --wert %WERT% --medkits %MEDKITS% --runden %RUNDEN% --team %TEAM% --passwort "%PASSWORT%" %KNAPP% %SCHUTZ% %MEDSPAWN% %ONLINE%
+%PY% -m dustfront --host --name "%NAME%" --passwort "%PASSWORT%" %ONLINE%
 if not errorlevel 1 exit /b 0
 echo.
 echo   Beendet mit einem Fehler. Die Meldung darueber sagt, woran es lag.

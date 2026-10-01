@@ -249,12 +249,16 @@ class Wahl(Element):
     """Blaettert durch eine Liste von Werten, mit Pfeilen links und rechts."""
 
     def __init__(self, rect, text: str, name: str, optionen: list,
-                 index: int = 0, anzeige: dict | None = None) -> None:
+                 index: int = 0, anzeige: dict | None = None,
+                 spalte: int = 116) -> None:
         super().__init__(rect, name)
         self.text = text
         self.optionen = list(optionen)
         self.index = max(0, min(len(self.optionen) - 1, index))
         self.anzeige = anzeige or {}
+        # Wo die Pfeile anfangen. 116 reicht fuer die Einstellungen; die
+        # Regeln der Lobby haben laengere Namen ("FORTSCHRITT VERFAELLT").
+        self.spalte = spalte
 
     @property
     def wert(self):
@@ -266,7 +270,7 @@ class Wahl(Element):
 
     def links_rect(self) -> pygame.Rect:
         r = self.rect
-        return pygame.Rect(r.x + 116, r.y + 1, 12, r.height - 2)
+        return pygame.Rect(r.x + self.spalte, r.y + 1, 12, r.height - 2)
 
     def rechts_rect(self) -> pygame.Rect:
         r = self.rect
@@ -306,17 +310,19 @@ class Wahl(Element):
 class Schalter(Element):
     """An oder aus."""
 
-    def __init__(self, rect, text: str, name: str, an: bool) -> None:
+    def __init__(self, rect, text: str, name: str, an: bool,
+                 spalte: int = 116) -> None:
         super().__init__(rect, name)
         self.text = text
         self.an = bool(an)
+        self.spalte = spalte
 
     def zeichnen(self, ziel) -> None:
         r = self.rect
         hell = self.ueber
         SCHRIFT.zeichnen(ziel, self.text, r.x + 4, r.centery - 3,
                          K.C_CREAM if hell else K.C_MUTED, 1)
-        k = pygame.Rect(r.x + 116, r.y + 2, 26, r.height - 4)
+        k = pygame.Rect(r.x + self.spalte, r.y + 2, 26, r.height - 4)
         kasten(ziel, k, K.C_AMBER if self.an else K.C_MUTED_DK,
                (34, 24, 14) if self.an else (14, 10, 8), 3)
         knopf = pygame.Rect(k.x + (k.width - 11) if self.an else k.x + 1,

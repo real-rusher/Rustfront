@@ -4,6 +4,8 @@ DUSTFRONT - Einstieg
 
     python -m dustfront                Spiel starten
     python -m dustfront --host ...     LAN-Runde aufmachen, siehe README
+                                       (startet in der Lobby; --sofort
+                                       ueberspringt sie)
     python -m dustfront --join WOHIN   einer LAN-Runde beitreten
     python -m dustfront --vorlagen     jedes Bild als Vorlage herausschreiben
     python -m dustfront --assets       zeigen, was aus Dateien kommt
@@ -63,7 +65,7 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
             medkit_spawn: bool | None = None, runden: int | None = None,
             team: int | None = None, online: bool = False,
             passwort: str = "", loadouts: str | None = None,
-            karte: str = "") -> int:
+            karte: str = "", lobby: bool = True) -> int:
     """LAN-Test: als Gastgeber aufmachen oder als Gast verbinden.
 
     Die Spielart bestimmt allein der Gastgeber. Ein Gast bekommt sie mit
@@ -79,45 +81,53 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
         if gastgeber:
             wirt = netz.Gastgeber(port or None, online=online)
             regeln = K.MODI.get(modus, K.MODI[K.MODUS_VORGABE])
-            print("Gastgeber laeuft: %s - %s" % (regeln["name"], regeln["hinweis"]))
-            if regeln["teams"]:
-                print("Mannschaften: %s gegen %s, neue Leute gehen in die "
-                      "kleinere." % K.TEAMS["namen"])
-            if regeln["zone"]:
-                print("Der Kreis liegt in der Kartenmitte, Ebene %d. Wer dort "
-                      "die Mehrheit hat, laedt bis %d."
-                      % (K.ZONE["ebene"], int(K.ZONE["bis"])))
-            elif regeln["runden"]:
-                print("Ein Leben je Runde, %d Runden werden gespielt, bei "
-                      "Gleichstand eine mehr als Matchpoint. Aufhelfen geht "
-                      "nur in der eigenen Mannschaft."
-                      % (K.VERSUS["runden"] if runden is None else runden))
-            elif not regeln["revive"]:
-                print("Endet nach %s" % ("Zeit" if ende_art == "zeit"
-                                         else "Abschuessen"))
-            if knapp:
-                print("Munition ist knapp, es gibt Nachschubkisten.")
-            print("Einstiegsschutz: %s"
-                  % ("%.0f Sekunden" % K.GEFECHT["schutz"]
-                     if (K.GEFECHT["schutz_an"] if schutz is None else schutz)
-                     else "aus"))
-            wieviele = (K.GEFECHT["start_medkits"] if medkits is None
-                        else medkits)
-            print("Medkits beim Einstieg: %d" % wieviele)
-            print("Medkits auf der Karte: %s"
-                  % ("alle %.0f Sekunden" % K.GEFECHT["medkit_takt"]
-                     if (K.GEFECHT["medkits_spawnen"] if medkit_spawn is None
-                         else medkit_spawn) else "keine"))
-            if karte:
-                from . import world as W
-                print("Karte: %s" % karte)
-                if W.karte_lesen(karte)[0] is None:
-                    print("  gibt es nicht - moeglich: %s"
-                          % (", ".join(W.karten_liste()) or "keine"))
-            print("Ausruestung: %s"
-                  % ("jeder traegt sein eigenes Loadout"
-                     if (loadouts or K.GEFECHT["loadouts"]) == "eigenes"
-                     else "jeder hat alles"))
+            if lobby:
+                # Seit 0.27 stellt man die Runde im Spiel ein, nicht hier.
+                # Was auf der Kommandozeile stand, ist die erste geplante.
+                print("Gastgeber laeuft. Es geht in die Lobby: dort stellst")
+                print("du die Runden ein (Taste P) und startest sie.")
+                print("Vorbelegt: %s - %s" % (regeln["name"], regeln["hinweis"]))
+            else:
+                print("Gastgeber laeuft: %s - %s"
+                      % (regeln["name"], regeln["hinweis"]))
+                if regeln["teams"]:
+                    print("Mannschaften: %s gegen %s, neue Leute gehen in die "
+                          "kleinere." % K.TEAMS["namen"])
+                if regeln["zone"]:
+                    print("Der Kreis liegt in der Kartenmitte, Ebene %d. Wer dort "
+                          "die Mehrheit hat, laedt bis %d."
+                          % (K.ZONE["ebene"], int(K.ZONE["bis"])))
+                elif regeln["runden"]:
+                    print("Ein Leben je Runde, %d Runden werden gespielt, bei "
+                          "Gleichstand eine mehr als Matchpoint. Aufhelfen geht "
+                          "nur in der eigenen Mannschaft."
+                          % (K.VERSUS["runden"] if runden is None else runden))
+                elif not regeln["revive"]:
+                    print("Endet nach %s" % ("Zeit" if ende_art == "zeit"
+                                             else "Abschuessen"))
+                if knapp:
+                    print("Munition ist knapp, es gibt Nachschubkisten.")
+                print("Einstiegsschutz: %s"
+                      % ("%.0f Sekunden" % K.GEFECHT["schutz"]
+                         if (K.GEFECHT["schutz_an"] if schutz is None else schutz)
+                         else "aus"))
+                wieviele = (K.GEFECHT["start_medkits"] if medkits is None
+                            else medkits)
+                print("Medkits beim Einstieg: %d" % wieviele)
+                print("Medkits auf der Karte: %s"
+                      % ("alle %.0f Sekunden" % K.GEFECHT["medkit_takt"]
+                         if (K.GEFECHT["medkits_spawnen"] if medkit_spawn is None
+                             else medkit_spawn) else "keine"))
+                if karte:
+                    from . import world as W
+                    print("Karte: %s" % karte)
+                    if W.karte_lesen(karte)[0] is None:
+                        print("  gibt es nicht - moeglich: %s"
+                              % (", ".join(W.karten_liste()) or "keine"))
+                print("Ausruestung: %s"
+                      % ("jeder traegt sein eigenes Loadout"
+                         if (loadouts or K.GEFECHT["loadouts"]) == "eigenes"
+                         else "jeder hat alles"))
             if passwort:
                 print("Kennwort: %s" % netz.passwort_saeubern(passwort))
             print("Im eigenen Netz verbinden sich Mitspieler mit:")
@@ -148,7 +158,8 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
                          ende_wert=ende_wert, knapp=knapp, schutz=schutz,
                          medkits=medkits, medkit_spawn=medkit_spawn,
                          runden=runden, team=team, passwort=passwort,
-                         loadouts=loadouts, karte=karte))
+                         loadouts=loadouts, karte=karte,
+                         lobby=lobby and gastgeber))
     app.laufen()
     return 0
 
@@ -432,9 +443,10 @@ def aus_argumenten(argumente: list[str]) -> int:
 
     if "--host" in argumente:
         modus = wert("--modus", K.MODUS_VORGABE).strip().lower()
-        if modus not in K.MODI:
+        waehlbar = [m for m in K.MODI if not K.MODI[m].get("lobby")]
+        if modus not in waehlbar:
             print("Unbekannte Spielart %r. Moeglich: %s"
-                  % (modus, ", ".join(K.MODI)))
+                  % (modus, ", ".join(waehlbar)))
             return 1
         ende_art = wert("--ende", "zeit").strip().lower()
         if ende_art not in K.ENDE_ARTEN:
@@ -468,7 +480,8 @@ def aus_argumenten(argumente: list[str]) -> int:
                        loadouts=("eigenes" if "--loadouts" in argumente
                                  else None),
                        karte=wert("--karte", ""),
-                       medkit_spawn="--keine-medkits" not in argumente)
+                       medkit_spawn="--keine-medkits" not in argumente,
+                       lobby="--sofort" not in argumente)
     if "--join" in argumente:
         return gefecht(False, wohin=wert("--join"),
                        name=wert("--name", "GAST"),

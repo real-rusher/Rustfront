@@ -44,6 +44,10 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 ZIEL = "KONTO.html"
 
 
+def _nur_lobby(modus) -> bool:
+    return isinstance(modus, dict) and bool(modus.get("lobby"))
+
+
 def _farbe(rgb) -> str:
     return "#%02x%02x%02x" % tuple(int(c) for c in rgb[:3])
 
@@ -99,11 +103,13 @@ def daten() -> dict:
             "namenslaenge": K.LOADOUT["namenslaenge"],
         },
         # Nur den Namen, nicht die ganze Spielart: in K.MODI steht ein
-        # Wuerfel voller Regeln, und die gehen die Seite nichts an.
+        # Wuerfel voller Regeln, und die gehen die Seite nichts an. Die
+        # Lobby nicht - aus ihr wird nie etwas gebucht, sie haette auf der
+        # Seite eine Spalte, die immer leer bleibt.
         "modi": {k: (v.get("name") or k.upper()) if isinstance(v, dict) else str(v)
-                 for k, v in K.MODI.items()},
+                 for k, v in K.MODI.items() if not _nur_lobby(v)},
         "modi_hinweis": {k: v.get("hinweis", "") for k, v in K.MODI.items()
-                         if isinstance(v, dict)},
+                         if isinstance(v, dict) and not _nur_lobby(v)},
         "teams": [{"name": t["name"], "farbe": _farbe(t["hud"]),
                    "dunkel": _farbe(t["hud_dunkel"])}
                   for t in K.TEAMS["kombi"]],

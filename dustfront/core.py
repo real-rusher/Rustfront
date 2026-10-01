@@ -51,6 +51,7 @@ TASTEN = {
     "dash":     [pygame.K_LSHIFT, pygame.K_RSHIFT],
     "ziehen":   [pygame.K_g],
     "ebenen":   [pygame.K_q],
+    "planen":   [pygame.K_p],
     "nutzen":   [pygame.K_e],
     "nachladen": [pygame.K_r],
     "tracer":   [pygame.K_t],
