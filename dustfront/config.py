@@ -1027,7 +1027,10 @@ WAFFEN = {
         streuung_lauf=3.4,    # Aufschlag, wenn man sich bewegt
         geschosse=1,
         tempo=690.0,
-        reichweite=430.0,
+        # 0.32: 430 -> 560. Die genaueste Waffe nach dem Scharfschuetzen
+        # reichte weniger weit als das Sturmgewehr (470) - damit hatte
+        # sie keine Lage, in der sie die bessere Wahl war.
+        reichweite=560.0,
         rueckstoss=38.0,      # Schub auf den Schuetzen
         kamera=1.6,           # Ruckeln
         huelsen=1,
@@ -1156,15 +1159,27 @@ WAFFEN = {
     "lmg": dict(
         art="schuss",
         name="MG",
+        # Je Schuss mehr als das Sturmgewehr (16) - so gewuenscht ("guter
+        # Schaden"). Seine Staerke bezahlt es mit Anlauf, Gewicht und seit
+        # 0.32 mit der kuerzeren Reichweite.
         schaden=17.0,
         tempo=1020.0,
-        reichweite=1450.0,     # fast so weit wie der Scharfschuetze
+        # 0.32: 1450 -> 1000. Mit dem engen Kegel nach dem Einschiessen
+        # (0,9 Grad) war es auf 1450 Pixel ein zweiter Scharfschuetze mit
+        # hundert Schuss. Jetzt bleibt die Weite dem Scharfschuetzen.
+        reichweite=1000.0,
         magazin=100,
         nachladen=6.4,         # das dauert, und das soll es
         geschosse=1,
         huelsen=2,
         kamera=1.0,
-        rueckstoss=30.0,
+        # 0.32: Das MG schiebt den Schuetzen kaum noch. Gemeldet: "dass das
+        # MG einen so weit nach hinten drueckt, war so nicht gedacht ...
+        # das ist ein sehr starkes Movement Tool". Es soll langsam machen
+        # (gewicht_tempo), nicht schieben. Der alte Schub (30 je Schuss)
+        # bleibt als erweiterte Rundenregel "MG-RUECKSTOSS SCHIEBT".
+        rueckstoss=3.0,
+        rueckstoss_voll=30.0,
         takt=0.075,
         streuung=7.0,
         streuung_lauf=5.0,

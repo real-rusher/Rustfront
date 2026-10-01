@@ -5942,6 +5942,56 @@ for zname in ("gegner_laeufer", "gegner_brecher"):
     pruef("%s: vor der Brust kein Lauf mehr" % zname,
           zb.get_at((zc + 12, zc)).a == 0, str(zb.get_at((zc + 12, zc))))
 
+# ── Waffenbalance 0.32 ───────────────────────────────────────────────
+# Gemeldet: "dass das MG einen so weit nach hinten drueckt, war so nicht
+# gedacht ... standardmaessig extrem langsam, aber nicht gepusht".
+from dustfront import regeln as _R42
+_w42, _g42 = gefechtspaar("pvp", karte="staubtal")
+_e42 = _w42.welt.ebene(0)
+_platz42 = None
+for _ty in range(3, _e42.hoehe - 3):
+    for _tx in range(16, _e42.breite - 16):
+        if all(_e42.begehbar(_tx + dx, _ty + dy) for dx in range(-15, 16) for dy in (-1, 0, 1)):
+            _platz42 = pygame.Vector2((_tx + 0.5) * K.TILE, (_ty + 0.5) * K.TILE)
+            break
+    if _platz42:
+        break
+_k42 = _w42._dazu(9, "PROBE")
+def _mg_weg(schub_regel):
+    _k42.mg_schub = schub_regel
+    _k42.unverwundbar = 999
+    _k42.pos.update(_platz42); _k42.vorher.update(_platz42); _k42.tempo.update(0, 0)
+    _k42.waffe = _k42.waffen.index("lmg")
+    _k42.anlauf = 0.0; _k42.takt = 0.0
+    for _ in range(int(3.0 / K.FIXED_DT)):
+        _k42.magazin["lmg"] = 999
+        _k42.ziel = _k42.pos + pygame.Vector2(300, 0)
+        _k42.will = pygame.Vector2(0, 0)
+        _k42.feuert = True
+        _k42.schritt(K.FIXED_DT)
+    _k42.feuert = False
+    return _platz42.x - _k42.pos.x
+_ohne42, _mit42 = _mg_weg(False), _mg_weg(True)
+pruef("Das MG schiebt den Schuetzen von sich aus kaum", _ohne42 < 6,
+      "%.0f px in 3 s Dauerfeuer" % _ohne42)
+pruef("Mit der Regel MG-RUECKSTOSS SCHIEBT wie frueher",
+      _mit42 > 15, "%.0f px" % _mit42)
+pruef("Die Regel gibt es, aus als Vorgabe",
+      "mg_schub" in _R42.NACH_NAME and _R42.vorgabe()["mg_schub"] is False)
+_w42._regeln_setzen(dict(_w42.regelwerk, mg_schub=True))
+pruef("Sie kommt bei allen Figuren an",
+      all(k.mg_schub for k in _w42.kaempfer.values()))
+_w42._regeln_setzen(dict(_w42.regelwerk, mg_schub=False))
+from dustfront.entities import Geschoss as _G42
+_ein42 = _G42(pygame.Vector2(0, 0), 0.0, K.WAFFEN["schrot"], 0, None, "schrot")
+pruef("Der Schrot-Stoss gilt je Schuss, nicht je Kugel",
+      abs(_ein42.schub_anteil * K.WAFFEN["schrot"]["geschosse"] - 1.0) < 1e-9)
+pruef("Der Repetierer reicht weiter als das Sturmgewehr",
+      K.WAFFEN["repetierer"]["reichweite"] > K.WAFFEN["sturm"]["reichweite"])
+pruef("Und das MG nicht mehr fast so weit wie der Scharfschuetze",
+      K.WAFFEN["lmg"]["reichweite"] < 0.5 * K.WAFFEN["scharf"]["reichweite"])
+_w42.verlassen(); _g42.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

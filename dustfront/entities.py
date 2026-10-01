@@ -291,6 +291,10 @@ class Geschoss(Wesen):
         self.schaden_wert = daten["schaden"]
         self.rest = daten["reichweite"]
         self.von = von
+        # Der Stoss auf das Ziel gilt je Schuss, nicht je Kugel: vorher
+        # schob jede der sieben Schrotkugeln einzeln, und aus naechster
+        # Naehe flog ein Getroffener rund 240 Pixel weit (0.32).
+        self.schub_anteil = 1.0 / max(1, int(daten.get("geschosse", 1)))
         # Womit geschossen wurde, muss das Geschoss selbst wissen: beim
         # Einschlag kann der Schuetze laengst die Waffe gewechselt haben,
         # und dann landete der Treffer bei der falschen.
@@ -327,7 +331,8 @@ class Geschoss(Wesen):
         self.lebt = False
         richtung = math.degrees(math.atan2(self.tempo.y, self.tempo.x))
         if ziel is not None:
-            schub = pygame.Vector2(self.tempo).normalize() * K.TREFFER["rueckstoss"]
+            schub = (pygame.Vector2(self.tempo).normalize()
+                     * K.TREFFER["rueckstoss"] * self.schub_anteil)
             if hasattr(self.von, "zaehlen"):
                 self.von.zaehlen("treffer", 1.0, self.waffe)
                 treffer_ziel_buchen(self.von, ziel)
@@ -1475,6 +1480,17 @@ class Spieler(Wesen):
         return self.waffen[self.waffe]
 
     # ---- Ablauf ------------------------------------------------------
+    def rueckstoss_wert(self, d: dict) -> float:
+        """Wie stark ein Schuss den Schuetzen zurueckschiebt.
+
+        Das MG hat zwei Werte: den schwachen (Vorgabe) und den vollen, den
+        der Gastgeber als erweiterte Regel einschalten kann (`mg_schub`,
+        setzt das Gefecht an jeder Figur).
+        """
+        if getattr(self, "mg_schub", False) and "rueckstoss_voll" in d:
+            return float(d["rueckstoss_voll"])
+        return float(d.get("rueckstoss", 0.0))
+
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
         s = K.SPIELER
@@ -1769,7 +1785,7 @@ class Spieler(Wesen):
         # Rueckstoss auf den Schuetzen. Blitz, Funken, Knall und der Schlag
         # auf die Kamera stehen zusammen in Welt.schussknall - dort, wo sie
         # auch ein Gast nachspielen kann, der selbst nichts rechnet.
-        self.tempo -= pygame.Vector2(d.get("rueckstoss", 0.0), 0).rotate(self.winkel)
+        self.tempo -= pygame.Vector2(self.rueckstoss_wert(d), 0).rotate(self.winkel)
         self.welt.schussknall(muendung, self.winkel, self.ebene,
                               self.waffe_name, self)
         for _ in range(d["huelsen"]):

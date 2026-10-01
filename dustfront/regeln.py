@@ -251,6 +251,9 @@ FELDER = (
     Feld("rpg_lenkung", "MIT ZIELERFASSUNG", "AUSRUESTUNG",
          K.GEFECHT["rpg_lenkung"], None, schalter=True, einzug=True,
          gilt=lambda d: bool(d.get("rpg"))),
+    Feld("mg_schub", "MG-RUECKSTOSS SCHIEBT", "AUSRUESTUNG", False, None,
+         schalter=True,
+         hilfe="AUS: DAS MG MACHT NUR LANGSAM. AN: JEDER SCHUSS SCHIEBT ZURUECK."),
     # ── Der Einstieg
     Feld("schutz", "EINSTIEGSSCHUTZ", "EINSTIEG", K.GEFECHT["schutz_an"],
          None, schalter=True),

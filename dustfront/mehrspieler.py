@@ -1155,6 +1155,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self.loadout_nr = int(d["loadout_nr"])
         self.rpg_an = bool(d["rpg"])
         self.rpg_lenkung = bool(d["rpg_lenkung"])
+        self.mg_schub = bool(d.get("mg_schub", False))
+        for k in getattr(self, "kaempfer", {}).values():
+            k.mg_schub = self.mg_schub
         self.schwierigkeit = d["schwierigkeit"]
         self.stufe = K.SCHWIERIGKEIT[self.schwierigkeit]
         self.bosse_an = bool(d["bosse"])
@@ -1371,6 +1374,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     def _regeln_anlegen(self, k: Kaempfer) -> None:
         """Was die Spielart am einzelnen Kaempfer aendert."""
         k.revive_an = self.regeln["revive"]
+        k.mg_schub = getattr(self, "mg_schub", False)
         if self.regeln["runden"]:
             k.boden_zeit = K.VERSUS["boden_zeit"]
             k.revive_dauer = K.VERSUS["revive_dauer"]
