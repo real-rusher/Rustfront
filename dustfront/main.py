@@ -319,7 +319,7 @@ def konto_server_pruefen(A, wert) -> int:
             print("  Anbieter selbst, nicht 'Confirm email' darin), und")
             print("  'Allow new users to sign up' muss an sein.")
             print("Siehe docs/KONTO.md, 5.3.")
-        elif "CONFIRM" in grund or "BESTAET" in grund:
+        elif "CONFIRM" in grund or "BESTÄT" in grund or "BESTAET" in grund:
             print("Die Bestaetigung per Post steht noch an.")
             print("Authentication -> Sign In / Providers -> Email:")
             print("'Confirm email' ausschalten. Siehe docs/KONTO.md, 5.3.")

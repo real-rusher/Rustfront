@@ -449,7 +449,7 @@ class Zeile(Element):
         feld = self.feld_rect
         if self.wartet:
             kasten(ziel, feld, K.C_TEAL, (10, 24, 22), 3)
-            SCHRIFT.zeichnen(ziel, kuerzen("TASTE DRUECKEN", feld.width - 8),
+            SCHRIFT.zeichnen(ziel, kuerzen("TASTE DRÜCKEN", feld.width - 8),
                              feld.centerx, feld.centery - 3, K.C_TEAL, 1,
                              ausrichtung="mitte")
         else:

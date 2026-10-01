@@ -2027,7 +2027,7 @@ w.blick = 0
 w._rad = 1
 w.schritt(K.FIXED_DT)
 pruef("Das Mausrad verschiebt die Ansicht", w.blick == 1, "Ebene %d" % w.blick)
-pruef("Und sagt, dass sie zurueckkommt", "ZURUECK" in w.hinweis, w.hinweis)
+pruef("Und sagt, dass sie zurueckkommt", "ZURÜCK" in w.hinweis, w.hinweis)
 for _ in range(int(K.GEFECHT["blick_zurueck"] / K.FIXED_DT) + 8):
     w.schritt(K.FIXED_DT)
 pruef("Nach kurzer Zeit schaut man wieder auf die eigene Ebene",
@@ -3638,7 +3638,7 @@ pruef("Jeder Gegner und Boss hat ein Bild",
 pruef("Was die Mutter ruft, gibt es",
       K.BOSSE["mutter"]["faehigkeit"]["was"] in K.GEGNER)
 pruef("gegner_daten findet beide Tabellen",
-      K.gegner_daten("laeufer")["name"] == "LAEUFER"
+      K.gegner_daten("laeufer")["name"] == "LÄUFER"
       and K.gegner_daten("koloss")["name"] == "KOLOSS"
       and K.ist_boss("koloss") and not K.ist_boss("laeufer"))
 
@@ -5029,7 +5029,7 @@ pruef("Das Aufbereiten ist ueberall gleich",
 # Das Bild.
 pruef("Ein kleines PNG geht", SK.bild_lesen(png_bauen()).get_size() == (32, 32))
 m = fehler_von(SK.bild_lesen, png_bauen(GK["bild_max"] + 1, 8))
-pruef("Ein zu breites nicht", "HOECHSTENS" in m, m)
+pruef("Ein zu breites nicht", "HÖCHSTENS" in m, m)
 m = fehler_von(SK.bild_lesen, b"GIF89a" + bytes(100))
 pruef("Nur PNG", "KEIN PNG" in m, m)
 m = fehler_von(SK.bild_lesen, b"\x89PNG\r\n\x1a\n" + bytes(100))
@@ -5175,7 +5175,7 @@ pruef("Kommt einer dazu, ist nicht mehr alles geladen",
       len(wk_.kaempfer) == 3 and not wk_.kosmetik_bereit, str(wk_.kosmetik_stand()))
 pruef("Dann geht der Start mit Kosmetik nicht",
       not wk_.plan_starten(0, kosmetik=True) and wk_.in_lobby
-      and "KOSMETIK LAEDT" in wk_.hinweis, wk_.hinweis)
+      and "KOSMETIK LÄDT" in wk_.hinweis, wk_.hinweis)
 tafel_k = LB.Rundenplanung(app_ka, wk_)
 knopf_k = {e.name: e for e in tafel_k.elemente}
 pruef("Auf der Tafel ist MIT KOSMETIK gesperrt, OHNE nicht",

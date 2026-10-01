@@ -787,7 +787,7 @@ class Konto:
             self.profil_fassung = int(antwort.daten.get("fassung", 0))
             fern = loadouts_saeubern(antwort.daten.get("loadouts"))
             if fern != self.loadouts:
-                self.hinweis = "PROFIL WAR NEUER, WIRD ZUSAMMENGEFUEHRT"
+                self.hinweis = "PROFIL WAR NEUER, WIRD ZUSAMMENGEFÜHRT"
             # Die eigenen Werte gewinnen. Mit ** statt `|`: das Spiel laeuft
             # auch unter Python 3.8, und dort gibt es `|` fuer dict nicht
             # (gemeldet nach 0.31.1, Absturz beim Gastgeber).

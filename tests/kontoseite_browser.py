@@ -406,7 +406,7 @@ with sync_playwright() as pw:
     pruef("Ziehen verschiebt es auf dem Weiss",
           abs(lage["x"] - 0.75) < 0.03 and abs(lage["y"] - 0.65) < 0.03, str(lage))
     pruef("Das Mausrad macht es kleiner", lage["h"] < fuellt["h"] * 0.7, str(lage))
-    regler_setzen(s, "GROESSE", 50)
+    regler_setzen(s, "GRÖSSE", 50)
     lage = s.evaluate("lageVon(Werkstatt.bild)")
     pruef("Der Regler GROESSE auch", abs(lage["h"] - 0.5) < 0.001, str(lage))
     regler_setzen(s, "FRITTIERT", 60)
@@ -634,13 +634,13 @@ with sync_playwright() as pw:
     a.locator("input[type=password]").nth(1).fill("NeuesAdmin1")
     a.get_by_role("button", name="KENNWORT SETZEN").click()
     pruef("Danach die Liste aller Konten",
-          warten(a, "document.body.innerText.includes('Oeffnen zeigt ein Konto')")
+          warten(a, "document.body.innerText.includes('Öffnen zeigt ein Konto')")
           and "erster" in a.inner_text("body") and "zweiter" in a.inner_text("body"))
     pruef("Das Kennwort steht nirgends im Browser gespeichert",
           "NeuesAdmin1" not in a.evaluate("JSON.stringify(localStorage)"))
     a.get_by_role("button", name="ÜBERSICHT").click()
     pruef("Die Statistik aller zusammen",
-          warten(a, "document.body.innerText.includes('Runden gezaehlt')")
+          warten(a, "document.body.innerText.includes('Runden gezählt')")
           and a.evaluate("""() => { for (const k of document.querySelectorAll('.wert'))
               if (k.querySelector('.bez').textContent === DATEN.werte.find(
                   v => v.schluessel === 'abschuesse').name)
@@ -654,10 +654,10 @@ with sync_playwright() as pw:
 
     # Ein Konto oeffnen: dieselben Reiter wie beim Spieler.
     a.get_by_role("button", name="KONTEN").click()
-    a.locator("tr", has_text="erster").get_by_role("button", name="OEFFNEN").click()
+    a.locator("tr", has_text="erster").get_by_role("button", name="ÖFFNEN").click()
     pruef("Ein Konto oeffnen zeigt seine Zahlen",
-          warten(a, "document.body.innerText.includes('VOM ADMIN GEOEFFNET')")
-          and warten(a, "document.body.innerText.includes('Runden gezaehlt')"))
+          warten(a, "document.body.innerText.includes('VOM ADMIN GEÖFFNET')")
+          and warten(a, "document.body.innerText.includes('Runden gezählt')"))
     a.get_by_role("button", name="AUSRÜSTUNG").click()
     erste_a = a.locator(".satz select").first
     wert_a = a.evaluate("(sel) => Array.from(sel.options).map(o => o.value)"
@@ -689,15 +689,15 @@ with sync_playwright() as pw:
           warten(a, "document.body.innerText.includes('KENNWORT GESETZT')")
           and server.konten["k-1"].get("wort") == "Spielerwort9")
     a.locator("input[autocomplete=off]").fill("falscher")
-    a.get_by_role("button", name="ENDGUELTIG LOESCHEN").click()
+    a.get_by_role("button", name="ENDGÜLTIG LÖSCHEN").click()
     pruef("Loeschen nur mit dem richtigen Namen",
-          warten(a, "document.body.innerText.includes('NICHTS GELOESCHT')")
+          warten(a, "document.body.innerText.includes('NICHTS GELÖSCHT')")
           and "k-1" in server.konten)
     a.locator("input[autocomplete=off]").fill("umbenannt")
-    a.get_by_role("button", name="ENDGUELTIG LOESCHEN").click()
+    a.get_by_role("button", name="ENDGÜLTIG LÖSCHEN").click()
     pruef("Und dann ist es weg, und es geht zurueck zur Liste",
-          warten(a, "document.body.innerText.includes('GELOESCHT')")
-          and warten(a, "document.body.innerText.includes('Oeffnen zeigt ein Konto')")
+          warten(a, "document.body.innerText.includes('GELÖSCHT')")
+          and warten(a, "document.body.innerText.includes('Öffnen zeigt ein Konto')")
           and "k-1" not in server.konten and "umbenannt" not in a.inner_text("body"))
 
     # Gesperrt waehrend der Arbeit: jemand raet gerade. Dann ist Schluss.

@@ -47,14 +47,14 @@ ORDNER = "kosmetik_vorschau"
 # Platzhalter und sollen zeigen, wie lang ein Name sein darf.
 BEISPIELE = [
     ("STURMGEWEHR", "sturm", "ROSTNARBE", 0),
-    ("SCHROT", "schrot", "STAUBFAENGER", 0),
-    ("SCHARFSCHUETZE", "scharf", "LANGER BLICK", 1),
+    ("SCHROT", "schrot", "STAUBFÄNGER", 0),
+    ("SCHARFSCHÜTZE", "scharf", "LANGER BLICK", 1),
     ("MG", "lmg", "KESSELFLICKEN", 1),
     ("REPETIERER", "repetierer", "ALTES EISEN", 0),
     ("BLENDGRANATE", "blend", "WEISSE NACHT", 2),
     ("MOLOTOW", "molotov", "LETZTE RUNDE", 2),
     ("RAKETENWERFER", "rakete", "ABSCHIED", 3),
-    ("BRECHEISEN", "brecheisen", "TUERGRUSS", 4),
+    ("BRECHEISEN", "brecheisen", "TÜRGRUSS", 4),
 ]
 
 
@@ -165,7 +165,7 @@ def kiste_lauf(bilder, stand: float = 0.62):
         for i in range(6):
             pygame.draw.line(f, K.C_AMBER, (mitte - 5 + i, y + r * i),
                              (mitte + 5 - i, y + r * i))
-    SCHRIFT.zeichnen(f, "[LEERTASTE] UEBERSPRINGEN", K.GAME_W // 2,
+    SCHRIFT.zeichnen(f, "[LEERTASTE] ÜBERSPRINGEN", K.GAME_W // 2,
                      band.bottom + 12, (108, 92, 70), 1, ausrichtung="mitte")
 
     # Die Stufen mit ihren Anteilen. Sie stehen hier, weil sie hierhin
@@ -228,7 +228,7 @@ def kiste_ergebnis(bilder):
     das nimmt dem Moment aber alles. Das kommt auf die naechste Seite.
     """
     f = _flaeche()
-    eintrag = ("BRECHEISEN", "brecheisen", "TUERGRUSS", 4)
+    eintrag = ("BRECHEISEN", "brecheisen", "TÜRGRUSS", 4)
     s = K.SELTENHEIT[eintrag[3]]
     mitte = (K.GAME_W // 2, 174)
     # Gross und kraeftig: der Kasten deckt die Mitte ohnehin ab, zu sehen
@@ -289,7 +289,7 @@ def skinauswahl(bilder):
     f.blit(gross, (vor.centerx - gross.get_width() // 2, vor.y + 16))
     pygame.draw.rect(f, K.SELTENHEIT[1]["farbe"],
                      (vor.x + 4, vor.bottom - 5, vor.width - 8, 3))
-    SCHRIFT.zeichnen(f, "STAUBLAEUFER", vor.centerx, vor.bottom - 32,
+    SCHRIFT.zeichnen(f, "STAUBLÄUFER", vor.centerx, vor.bottom - 32,
                      K.C_CREAM, 1, ausrichtung="mitte")
     SCHRIFT.zeichnen(f, K.SELTENHEIT[1]["name"], vor.centerx, vor.bottom - 20,
                      K.SELTENHEIT[1]["farbe"], 1, ausrichtung="mitte")
@@ -322,8 +322,8 @@ def skinauswahl(bilder):
             zeichner(r, i, e)
         return y + ((len(eintraege) + 3) // 4) * (hoehe + 10)
 
-    figuren = [("STAUBLAEUFER", 1), ("ROSTGRAU", 0), ("NACHTZUG", 2),
-               ("SANDKOENIG", 3)]
+    figuren = [("STAUBLÄUFER", 1), ("ROSTGRAU", 0), ("NACHTZUG", 2),
+               ("SANDKÖNIG", 3)]
     figur_zwei = pygame.transform.scale(figur, (figur.get_width() * 2,
                                                 figur.get_height() * 2))
 
@@ -350,7 +350,7 @@ def skinauswahl(bilder):
     reihe("WURF", y + 16, wuerfe, 48,
           lambda r, i, e: _gegenstand(f, bilder, r, e))
 
-    SCHRIFT.zeichnen(f, "[PFEILE] WAEHLEN   [ESC] ZURUECK", K.GAME_W // 2,
+    SCHRIFT.zeichnen(f, "[PFEILE] WÄHLEN   [ESC] ZURÜCK", K.GAME_W // 2,
                      K.GAME_H - 24, (108, 92, 70), 1, ausrichtung="mitte")
     _hinweis(f)
     return f

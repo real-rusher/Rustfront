@@ -55,7 +55,7 @@ def lobby_regeln() -> dict:
 FARBEN = {"pvp": (196, 72, 48), "stand": (220, 160, 64), "pve": (132, 176, 84)}
 NAMEN = {"pvp": "PVP", "stand": "SCHIESSSTAND", "pve": "PVE"}
 HINWEISE = {"pvp": "ARENA: HIER TRIFFT JEDER JEDEN",
-            "stand": "SCHIESSSTAND: DIE PUPPEN ZAEHLEN MIT",
+            "stand": "SCHIESSSTAND: DIE PUPPEN ZÄHLEN MIT",
             "pve": "GEHEGE: DIE ZOMBIES SIND ECHT",
             "": "LOBBY: HIER TUT NIEMANDEM ETWAS WEH"}
 
@@ -414,7 +414,7 @@ class LobbyTeil:
         if kosmetik is not None:
             if kosmetik and not self.kosmetik_bereit:
                 da, noetig = self.kosmetik_stand()
-                self._meldung = "KOSMETIK LAEDT NOCH - %d VON %d" % (da, noetig)
+                self._meldung = "KOSMETIK LÄDT NOCH - %d VON %d" % (da, noetig)
                 self._meldung_rest = 3.0
                 self.hinweis = self._meldung
                 return False
@@ -473,7 +473,7 @@ class LobbyTeil:
                                      R.kurz(self.plan[naechste], self._umfeld()))
         if self.plan_schleife and self.plan:
             return "VON VORN: %s" % R.kurz(self.plan[0], self._umfeld())
-        return "ZURUECK IN DIE LOBBY"
+        return "ZURÜCK IN DIE LOBBY"
 
     def _lobby_kopf(self, ziel) -> None:
         """Oben in der Mitte: wo man ist, was als Naechstes kommt, und
@@ -482,7 +482,7 @@ class LobbyTeil:
         SCHRIFT.zeichnen(ziel, "LOBBY", mitte, 8, K.C_CREAM, 2,
                          ausrichtung="mitte")
         if self.plan:
-            vorn = "ALS NAECHSTES: " if len(self.plan) == 1 else \
+            vorn = "ALS NÄCHSTES: " if len(self.plan) == 1 else \
                 "RUNDE 1 VON %d: " % len(self.plan)
             SCHRIFT.zeichnen(ziel, vorn + R.kurz(self.plan[0], self._umfeld()),
                              mitte, 26, K.C_AMBER, 1, ausrichtung="mitte")
@@ -503,7 +503,7 @@ class LobbyTeil:
             if da >= noetig:
                 text, farbe = "KOSMETIK: ALLES GELADEN", K.C_TEAL
             else:
-                text, farbe = ("KOSMETIK LAEDT  %d VON %d" % (da, noetig),
+                text, farbe = ("KOSMETIK LÄDT  %d VON %d" % (da, noetig),
                                K.C_AMBER)
             SCHRIFT.zeichnen(ziel, text, mitte, 56, farbe, 1,
                              ausrichtung="mitte")
@@ -554,7 +554,7 @@ class Rundenplanung(Menue):
         self.nr = 0
         self._stand = -1
         super().__init__(app)
-        self.unterzeile = ("DU STELLST DIE NAECHSTEN RUNDEN EIN"
+        self.unterzeile = ("DU STELLST DIE NÄCHSTEN RUNDEN EIN"
                            if gefecht.ist_gastgeber
                            else "DER GASTGEBER STELLT EIN - DU SIEHST ZU")
 
@@ -606,7 +606,7 @@ class Rundenplanung(Menue):
                      gesperrt=not self.darf or len(g.plan) <= 1),
             ui.Knopf((x, y + 18, halb, 14), "KOPIEREN", "kopieren",
                      gesperrt=not self.darf),
-            ui.Knopf((x + halb + 4, y + 18, halb, 14), "EINFUEGEN", "einfuegen",
+            ui.Knopf((x + halb + 4, y + 18, halb, 14), "EINFÜGEN", "einfuegen",
                      gesperrt=not self.darf or g.plan_ablage is None),
         ]
         schleife = ui.Schalter((x, y + 40, breite, 14), "SCHLEIFE", "schleife",
@@ -664,7 +664,7 @@ class Rundenplanung(Menue):
                 # mit Luft zu ZURUECK in der Mitte.
                 self.elemente.append(ui.Knopf(
                     (r.right - 16 - 214, y, 104, 16),
-                    "MIT KOSMETIK" if bereit else "LAEDT %d/%d" % (da, noetig),
+                    "MIT KOSMETIK" if bereit else "LÄDT %d/%d" % (da, noetig),
                     "start_mit", gesperrt=not bereit))
                 self.elemente.append(ui.Knopf(
                     (r.right - 16 - 104, y, 104, 16), "OHNE KOSMETIK",
@@ -673,7 +673,7 @@ class Rundenplanung(Menue):
                 self.elemente.append(ui.Knopf((r.right - 16 - 150, y, 150, 16),
                                               "START", "start"))
         self.elemente.append(ui.Knopf((r.centerx - 55, y, 110, 16),
-                                      "ZURUECK", "zurueck"))
+                                      "ZURÜCK", "zurueck"))
 
     # ---- Reaktion ------------------------------------------------------
     def ausloesen(self, el) -> None:
@@ -701,12 +701,12 @@ class Rundenplanung(Menue):
             self.sagen("RUNDE %d KOPIERT" % (self.nr + 1))
         elif name == "einfuegen":
             g.plan_einfuegen(self.nr)
-            self.sagen("IN RUNDE %d EINGEFUEGT" % (self.nr + 1))
+            self.sagen("IN RUNDE %d EINGEFÜGT" % (self.nr + 1))
         elif name in ("start", "start_ohne", "start_mit"):
             if g.plan_starten(0, kosmetik=(name == "start_mit")):
                 self.app.werfen()
             else:
-                self.sagen("KOSMETIK LAEDT NOCH")
+                self.sagen("KOSMETIK LÄDT NOCH")
             return
         self.aufbauen()
 
@@ -766,7 +766,7 @@ class Rundenplanung(Menue):
         else:
             x = r.x + 100
         titel = ("RUNDE %d VON %d" % (self.nr + 1, len(g.plan))
-                 if len(g.plan) > 1 else "NAECHSTE RUNDE")
+                 if len(g.plan) > 1 else "NÄCHSTE RUNDE")
         SCHRIFT.zeichnen(ziel, titel, x, r.y + 46, K.C_AMBER, 1)
         # Was die gewaehlte Zeile bedeutet.
         el = self.gewaehlt()
@@ -775,8 +775,8 @@ class Rundenplanung(Menue):
             f = R.NACH_NAME.get(el.name[2:])
             hilfe = f.hilfe if f is not None else ""
         elif el is not None and el.name == "start":
-            hilfe = ("STARTET RUNDE 1 - DANACH DIE NAECHSTE IM PLAN"
-                     if len(g.plan) > 1 else "STARTET DIE RUNDE FUER ALLE")
+            hilfe = ("STARTET RUNDE 1 - DANACH DIE NÄCHSTE IM PLAN"
+                     if len(g.plan) > 1 else "STARTET DIE RUNDE FÜR ALLE")
         elif el is not None and el.name == "planen":
             hilfe = "MEHRERE RUNDEN HINTEREINANDER, SCHLEIFE, KOPIEREN"
         elif el is not None and el.name == "ansicht":
@@ -790,7 +790,7 @@ class Rundenplanung(Menue):
         elif el is not None and el.name == "start_ohne":
             hilfe = "ALLE BLENDGRANATEN WIE IMMER"
         if not self.darf:
-            hilfe = hilfe or "NUR DER GASTGEBER KANN HIER ETWAS AENDERN"
+            hilfe = hilfe or "NUR DER GASTGEBER KANN HIER ETWAS ÄNDERN"
         if hilfe:
             SCHRIFT.zeichnen(ziel, hilfe, r.centerx, r.bottom - 34,
                              K.C_MUTED, 1, ausrichtung="mitte")
@@ -808,4 +808,4 @@ class Rundenplanung(Menue):
                                  ausrichtung="mitte")
 
     def fusstext(self) -> str:
-        return "[MAUS] ODER [PFEILE] EINSTELLEN   [P] / [ESC] ZURUECK"
+        return "[MAUS] ODER [PFEILE] EINSTELLEN   [P] / [ESC] ZURÜCK"

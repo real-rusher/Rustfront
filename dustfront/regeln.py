@@ -205,10 +205,10 @@ FELDER = (
          hilfe="BEI GLEICHSTAND KOMMT EINE RUNDE ALS MATCHPOINT DAZU."),
     Feld("ende_art", "RUNDE ENDET NACH", "RUNDE", "zeit",
          lambda d, u: K.ENDE_ARTEN,
-         text=lambda v, d, u: "ZEIT" if v == "zeit" else "ABSCHUESSEN",
+         text=lambda v, d, u: "ZEIT" if v == "zeit" else "ABSCHÜSSEN",
          gilt=lambda d: not _endet_selbst(d), rund=True),
     Feld("ende_wert",
-         lambda d: "HOECHSTDAUER" if _mit_notbremse(d) else "UND ZWAR BEI",
+         lambda d: "HÖCHSTDAUER" if _mit_notbremse(d) else "UND ZWAR BEI",
          "RUNDE", _ende_vorgabe, _ende_werte,
          text=lambda v, d, u: ("%d MIN" % round(v / 60)
                                if d.get("ende_art") == "zeit" else "%d" % v),
@@ -219,44 +219,44 @@ FELDER = (
          text=lambda v, d, u: "%d S" % v,
          gilt=lambda d: _regeln(d)["zone"], zahl=True,
          hilfe="SO LANGE MUSS EINER DEN KREIS ALLEIN HALTEN."),
-    Feld("huegel_verfall", "FORTSCHRITT VERFAELLT", "RUNDE",
+    Feld("huegel_verfall", "FORTSCHRITT VERFÄLLT", "RUNDE",
          K.ZONE["verfall_an"], None, schalter=True, einzug=True,
          gilt=lambda d: _regeln(d)["zone"],
-         hilfe="SINKT DER STAND, WENN KEINER HAELT?"),
+         hilfe="SINKT DER STAND, WENN KEINER HÄLT?"),
     # ── Die Gegner
     Feld("schwierigkeit", "SCHWIERIGKEIT", "GEGNER", K.SCHWIERIGKEIT_VORGABE,
          lambda d, u: K.SCHWIERIGKEIT,
          text=lambda v, d, u: K.SCHWIERIGKEIT[v]["name"],
          gilt=lambda d: _regeln(d)["gegner"],
-         hilfe="WIE VIELE, WIE ZAEH UND WIE HART DIE WELLEN SIND."),
+         hilfe="WIE VIELE, WIE ZÄH UND WIE HART DIE WELLEN SIND."),
     Feld("bosse", "BOSSE", "GEGNER", True, None, schalter=True,
          gilt=lambda d: _regeln(d)["gegner"],
-         hilfe="JEDE FUENFTE WELLE EIN BOSS - ODER KEINER."),
+         hilfe="JEDE FÜNFTE WELLE EIN BOSS - ODER KEINER."),
     # ── Die Ausruestung
-    Feld("loadouts", "AUSRUESTUNG", "AUSRUESTUNG", K.GEFECHT["loadouts"],
+    Feld("loadouts", "AUSRÜSTUNG", "AUSRÜSTUNG", K.GEFECHT["loadouts"],
          lambda d, u: K.GEFECHT["loadout_arten"],
          text=lambda v, d, u: {"alles": "JEDER HAT ALLES",
                                "eigenes": "EIGENES LOADOUT",
-                               "gleich": "EINES FUER ALLE"}[v], rund=True),
-    Feld("loadout_nr", "LOADOUT", "AUSRUESTUNG", 0, _loadout_nummern,
+                               "gleich": "EINES FÜR ALLE"}[v], rund=True),
+    Feld("loadout_nr", "LOADOUT", "AUSRÜSTUNG", 0, _loadout_nummern,
          text=_loadout_name, gilt=lambda d: d.get("loadouts") == "gleich",
          rund=True, einzug=True,
          hilfe="EINES DEINER LOADOUTS - DAS TRAGEN ALLE."),
-    Feld("knapp", "MUNITION KNAPP", "AUSRUESTUNG", False, None, schalter=True),
-    Feld("medkits", "MEDKITS BEIM EINSTIEG", "AUSRUESTUNG",
+    Feld("knapp", "MUNITION KNAPP", "AUSRÜSTUNG", False, None, schalter=True),
+    Feld("medkits", "MEDKITS BEIM EINSTIEG", "AUSRÜSTUNG",
          K.GEFECHT["start_medkits"],
          lambda d, u: range(0, K.GEFECHT["start_medkits_hoechstens"] + 1),
          zahl=True),
-    Feld("medkit_spawn", "MEDKITS AUF DER KARTE", "AUSRUESTUNG",
+    Feld("medkit_spawn", "MEDKITS AUF DER KARTE", "AUSRÜSTUNG",
          K.GEFECHT["medkits_spawnen"], None, schalter=True),
-    Feld("rpg", "RAKETENWERFER", "AUSRUESTUNG", K.GEFECHT["rpg"], None,
+    Feld("rpg", "RAKETENWERFER", "AUSRÜSTUNG", K.GEFECHT["rpg"], None,
          schalter=True),
-    Feld("rpg_lenkung", "MIT ZIELERFASSUNG", "AUSRUESTUNG",
+    Feld("rpg_lenkung", "MIT ZIELERFASSUNG", "AUSRÜSTUNG",
          K.GEFECHT["rpg_lenkung"], None, schalter=True, einzug=True,
          gilt=lambda d: bool(d.get("rpg"))),
-    Feld("mg_schub", "MG-RUECKSTOSS SCHIEBT", "AUSRUESTUNG", False, None,
+    Feld("mg_schub", "MG-RÜCKSTOSS SCHIEBT", "AUSRÜSTUNG", False, None,
          schalter=True,
-         hilfe="AUS: DAS MG MACHT NUR LANGSAM. AN: JEDER SCHUSS SCHIEBT ZURUECK."),
+         hilfe="AUS: DAS MG MACHT NUR LANGSAM. AN: JEDER SCHUSS SCHIEBT ZURÜCK."),
     # ── Der Einstieg
     Feld("schutz", "EINSTIEGSSCHUTZ", "EINSTIEG", K.GEFECHT["schutz_an"],
          None, schalter=True),
@@ -264,7 +264,7 @@ FELDER = (
     # Gastgeber entscheidet es beim Start - MIT oder OHNE KOSMETIK -, und
     # mit Kosmetik geht es erst, wenn alle alles geladen haben. Hier steht
     # es nur, damit die Entscheidung mit den Regeln zu den Gaesten kommt.
-    Feld("kosmetik", "SPIELERKOSMETIK", "AUSRUESTUNG", False, None,
+    Feld("kosmetik", "SPIELERKOSMETIK", "AUSRÜSTUNG", False, None,
          schalter=True, gilt=lambda d: False),
 )
 
@@ -280,7 +280,7 @@ EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert",
            "huegel_zeit", "schwierigkeit", "loadouts", "loadout_nr")
 for _f in FELDER:
     _f.einfach = _f.schluessel in EINFACH
-GRUPPEN = ("RUNDE", "GEGNER", "AUSRUESTUNG", "EINSTIEG")
+GRUPPEN = ("RUNDE", "GEGNER", "AUSRÜSTUNG", "EINSTIEG")
 
 
 def vorgabe(**ueber) -> dict:

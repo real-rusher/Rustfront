@@ -66,7 +66,7 @@ FELDER = [
     ("SCHUSS/S", "takt", "%.1f"),
     ("MAGAZIN", "magazin", "%.0f"),
     ("REICHWEITE", "reichweite", "%.0f"),
-    ("PRAEZISION", "streuung", None),
+    ("PRÄZISION", "streuung", None),
 ]
 
 # Groesster Wert je Feld ueber alle Waffen. Einmal gerechnet, nicht je Bild.
@@ -170,7 +170,7 @@ class Inventar(Szene):
                 self.greift = self.wahl
                 self.zieht = False
                 self.app.klaenge.spielen("menue", 0.5)
-                self.sagen("PLATZ WAEHLEN UND NOCH EINMAL ENTER")
+                self.sagen("PLATZ WÄHLEN UND NOCH EINMAL ENTER")
             else:
                 self.tauschen(self.greift, self.wahl)
                 self.loslassen()
@@ -185,7 +185,7 @@ class Inventar(Szene):
             if self.held.heilen():
                 self.sagen("MEDKIT ANGESETZT - WIRKT DRAUSSEN WEITER")
             else:
-                self.sagen("KEIN MEDKIT UEBRIG")
+                self.sagen("KEIN MEDKIT ÜBRIG")
 
     def bewegen(self, d: int) -> None:
         n = len(self.plaetze)
@@ -260,7 +260,7 @@ class Inventar(Szene):
             return
         ui.schleier(ziel, 184)
         ui.tafel(ziel, TAFEL)
-        SCHRIFT.zeichnen(ziel, "AUSRUESTUNG", TAFEL.centerx, TAFEL.y + 8,
+        SCHRIFT.zeichnen(ziel, "AUSRÜSTUNG", TAFEL.centerx, TAFEL.y + 8,
                          K.C_AMBER, 2, 2, "mitte")
         pygame.draw.line(ziel, K.C_MUTED_DK, (TAFEL.x + 18, TAFEL.y + 24),
                          (TAFEL.right - 19, TAFEL.y + 24))
@@ -276,7 +276,7 @@ class Inventar(Szene):
             SCHRIFT.zeichnen(ziel, self.meldung, TAFEL.centerx,
                              TAFEL.bottom - 24, K.C_TEAL, 1, 1, "mitte")
         SCHRIFT.zeichnen(ziel, "[ZIEHEN] UMSORTIEREN   [RECHTSKLICK] ANLEGEN   "
-                               "[TAB] ZURUECK", TAFEL.centerx, TAFEL.bottom - 13,
+                               "[TAB] ZURÜCK", TAFEL.centerx, TAFEL.bottom - 13,
                          K.C_MUTED_DK, 1, 1, "mitte")
 
     @staticmethod
@@ -289,7 +289,7 @@ class Inventar(Szene):
     # ---- Traeger -----------------------------------------------------
     def _traeger(self, ziel) -> None:
         r = pygame.Rect(TAFEL.x + 16, SPALTE_Y, 150, SPALTE_H)
-        self._feldtitel(ziel, r, "TRAEGER")
+        self._feldtitel(ziel, r, "TRÄGER")
 
         # Figur in der Mitte, Plaetze links und rechts daneben
         # Dieselbe Figur wie im Spiel, also mit der Waffe in der Hand: man
@@ -309,7 +309,7 @@ class Inventar(Szene):
                              (f.centerx + 5, f.centery))
             SCHRIFT.zeichnen(ziel, text, f.centerx, f.bottom + 2, K.C_MUTED_DK,
                              1, 1, "mitte")
-        SCHRIFT.zeichnen(ziel, "PANZERUNG KOMMT SPAETER", r.centerx,
+        SCHRIFT.zeichnen(ziel, "PANZERUNG KOMMT SPÄTER", r.centerx,
                          r.bottom - 12, K.C_MUTED_DK, 1, 1, "mitte")
 
     # ---- Waffen ------------------------------------------------------
@@ -335,7 +335,7 @@ class Inventar(Szene):
         if self.greift is not None and not self.zieht:
             SCHRIFT.zeichnen(ziel, "AUFGENOMMEN", r.right - 6, r.y + 5,
                              K.C_TEAL, 1, 1, "rechts")
-        for i, z in enumerate(("ZIEHEN TAUSCHT ZWEI PLAETZE.",
+        for i, z in enumerate(("ZIEHEN TAUSCHT ZWEI PLÄTZE.",
                                "MUNITION BLEIBT AN DER WAFFE")):
             SCHRIFT.zeichnen(ziel, ui.kuerzen(z, r.width - 12), r.x + 6,
                              r.bottom - 22 + i * 10, K.C_MUTED_DK, 1)

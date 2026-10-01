@@ -551,11 +551,11 @@ MODI = {
                    hinweis="Wellen, und dabei jeder gegen jeden."),
     "team":   dict(name="TEAM",   gegner=False, beute=True,  revive=False,
                    teams=True,  runden=False, zone=False,
-                   hinweis="Zwei Mannschaften, Abschuesse zaehlen fuer das Team."),
+                   hinweis="Zwei Mannschaften, Abschüsse zählen für das Team."),
     "versus": dict(name="VERSUS", gegner=False, beute=True,  revive=True,
                    teams=True,  runden=True,  zone=False,
-                   hinweis="Ein Leben je Runde. Mitspieler koennen aufhelfen."),
-    "huegel": dict(name="HUEGEL", gegner=False, beute=True,  revive=False,
+                   hinweis="Ein Leben je Runde. Mitspieler können aufhelfen."),
+    "huegel": dict(name="HÜGEL", gegner=False, beute=True,  revive=False,
                    teams=True,  runden=False, zone=True,
                    hinweis="Haltet den Kreis in der Mitte."),
     # Keine Spielart, die man waehlt, sondern der Ort dazwischen: hier
@@ -564,7 +564,7 @@ MODI = {
     # keine, das Gefecht fragt vorher nach `lobby`.
     "lobby":  dict(name="LOBBY",  gegner=True,  beute=True,  revive=False,
                    teams=False, runden=False, zone=False, lobby=True,
-                   hinweis="Rumlaufen, ueben, auf die Runde warten."),
+                   hinweis="Rumlaufen, üben, auf die Runde warten."),
 }
 MODUS_VORGABE = "pvp"
 
@@ -1096,7 +1096,7 @@ WAFFEN = {
     ),
     "scharf": dict(
         art="schuss",
-        name="SCHARFSCHUETZE",
+        name="SCHARFSCHÜTZE",
         schaden=98.0,
         takt=1.20,
         magazin=5,
@@ -1434,7 +1434,7 @@ LOADOUT = dict(
     # drei leeren Plaetzen sitzt.
     vorlagen=(
         dict(name="STURM", waffen=("sturm", "schrot"), wuerfe=("granate",)),
-        dict(name="JAEGER", waffen=("scharf", "repetierer"), wuerfe=("rauch",)),
+        dict(name="JÄGER", waffen=("scharf", "repetierer"), wuerfe=("rauch",)),
         dict(name="NAHKAMPF", waffen=("schrot", "sturm"), wuerfe=("rauch",)),
     ),
     namenslaenge=12,
@@ -1455,14 +1455,14 @@ WERTE = (
     # (Schluessel, Aufschrift, Art)
     #   "summe"   wird ueber Runden addiert
     #   "bestes"  nur der Hoechstwert zaehlt
-    ("abschuesse",    "ABSCHUESSE",       "summe"),     # Spieler
+    ("abschuesse",    "ABSCHÜSSE",        "summe"),     # Spieler
     ("gegner_abschuesse", "ZOMBIES",      "summe"),     # seit 0.31
     ("boss_abschuesse", "BOSSE",          "summe"),
     ("tode",          "TODE",             "summe"),
     ("hilfen",        "AUFGEHOLFEN",      "summe"),
     ("schaden",       "SCHADEN",          "summe"),
     ("schaden_ein",   "EINGESTECKT",      "summe"),
-    ("schuesse",      "SCHUESSE",         "summe"),
+    ("schuesse",      "SCHÜSSE",          "summe"),
     ("treffer",       "TREFFER",          "summe"),
     # Getrennt nach Ziel (seit 0.31): ein Treffer auf einen Spieler oder
     # auf einen Zombie. Das geht in jeder Spielart, auch in PVPVE.
@@ -1472,9 +1472,9 @@ WERTE = (
     # PVP-Runden und in PVE-Runden. PVPVE steht in keinem von beiden -
     # dort laesst sich ein Schuss keiner Seite zuordnen; dafuer gibt es
     # die Trennung nach Ziel oben.
-    ("schuesse_pvp",  "SCHUESSE PVP",     "summe"),
+    ("schuesse_pvp",  "SCHÜSSE PVP",      "summe"),
     ("treffer_pvp",   "TREFFER PVP",      "summe"),
-    ("schuesse_pve",  "SCHUESSE PVE",     "summe"),
+    ("schuesse_pve",  "SCHÜSSE PVE",      "summe"),
     ("treffer_pve",   "TREFFER PVE",      "summe"),
     ("kopftreffer",   "NAHKAMPFTREFFER",  "summe"),
     ("granaten",      "GRANATEN",         "summe"),
@@ -1482,7 +1482,7 @@ WERTE = (
     ("medkits",       "MEDKITS",          "summe"),
     ("beute",         "AUFGESAMMELT",     "summe"),
     ("strecke",       "GELAUFEN",         "summe"),
-    ("stuerze",       "STUERZE",          "summe"),
+    ("stuerze",       "STÜRZE",           "summe"),
     ("zonenzeit",     "IM KREIS",         "summe"),
     ("runden",        "RUNDEN",           "summe"),
     # Runden, die vor ihrem Ende abbrachen (Fenster zu, Verbindung weg,
@@ -1847,7 +1847,7 @@ MEDKIT = dict(
 # Laeufer holt einen gehenden Spieler nicht ein, der Renner schon.
 GEGNER = {
     "laeufer": dict(
-        name="LAEUFER",
+        name="LÄUFER",
         leben=44.0,
         radius=9.0,
         tempo=63.0,
@@ -1911,7 +1911,7 @@ GEGNER = {
                   streuung=5.0, bild="speichel"),
     ),
     "blaeher": dict(
-        name="BLAEHER",
+        name="BLÄHER",
         leben=90.0,
         radius=13.0,
         tempo=39.0,

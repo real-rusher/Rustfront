@@ -195,7 +195,7 @@
 // ══════════════════════════════════════════════════════════════════
 const DATEN =
 {
- "version": "0.32.3",
+ "version": "0.32.4",
  "phase": "PRE-ALPHA",
  "server": {
   "url": "https://kruokzzrcbfktlsnubno.supabase.co",
@@ -205,7 +205,7 @@ const DATEN =
  "werte": [
   {
    "schluessel": "abschuesse",
-   "name": "ABSCHUESSE",
+   "name": "ABSCHÜSSE",
    "art": "summe"
   },
   {
@@ -240,7 +240,7 @@ const DATEN =
   },
   {
    "schluessel": "schuesse",
-   "name": "SCHUESSE",
+   "name": "SCHÜSSE",
    "art": "summe"
   },
   {
@@ -260,7 +260,7 @@ const DATEN =
   },
   {
    "schluessel": "schuesse_pvp",
-   "name": "SCHUESSE PVP",
+   "name": "SCHÜSSE PVP",
    "art": "summe"
   },
   {
@@ -270,7 +270,7 @@ const DATEN =
   },
   {
    "schluessel": "schuesse_pve",
-   "name": "SCHUESSE PVE",
+   "name": "SCHÜSSE PVE",
    "art": "summe"
   },
   {
@@ -310,7 +310,7 @@ const DATEN =
   },
   {
    "schluessel": "stuerze",
-   "name": "STUERZE",
+   "name": "STÜRZE",
    "art": "summe"
   },
   {
@@ -371,7 +371,7 @@ const DATEN =
    "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAeklEQVQ4jWNgoBNgJKRAR1X2Py65K7cfE9QPA0zEKqQU4HVRTrwXTt8ggykLtxH0GSMDA/7gIQY4WOkSdAgLJRbAwIFjlwmqoYpFxCQKvAqIDVKKLUIGNiYaKJYeOXODEeYQYiwaHMkbGbxYbIviI4nYw0TrZWBgYAAA460g/1bEfa8AAAAASUVORK5CYII="
   },
   "scharf": {
-   "name": "SCHARFSCHUETZE",
+   "name": "SCHARFSCHÜTZE",
    "art": "schuss",
    "bild": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAALCAYAAABhwJ3wAAAAh0lEQVQ4jWNgoBNgJEaRnJTIf0JqHj17g9csJmJdhAv8c3Nj+OfmRlAdC6UWMe3aRZQ6gkGnoyqLNdiu3H5MVLDDLWqLMcMb/stOPscq7mClS4o9DCy3Hr0hSQMMHDh2mTSLyLKFAXfQ6ajK/ofJIbMJWoSsCZ8FhADLgkP3yNJIKqA4HxELANDOKiIzqnMMAAAAAElFTkSuQmCC"
   },
@@ -440,7 +440,7 @@ const DATEN =
     ]
    },
    {
-    "name": "JAEGER",
+    "name": "JÄGER",
     "waffen": [
      "scharf",
      "repetierer"
@@ -468,14 +468,14 @@ const DATEN =
   "pvpve": "PVPVE",
   "team": "TEAM",
   "versus": "VERSUS",
-  "huegel": "HUEGEL"
+  "huegel": "HÜGEL"
  },
  "modi_hinweis": {
   "pvp": "Jeder gegen jeden.",
   "pve": "Alle zusammen gegen die Wellen.",
   "pvpve": "Wellen, und dabei jeder gegen jeden.",
-  "team": "Zwei Mannschaften, Abschuesse zaehlen fuer das Team.",
-  "versus": "Ein Leben je Runde. Mitspieler koennen aufhelfen.",
+  "team": "Zwei Mannschaften, Abschüsse zählen für das Team.",
+  "versus": "Ein Leben je Runde. Mitspieler können aufhelfen.",
   "huegel": "Haltet den Kreis in der Mitte."
  },
  "modus_art": {
@@ -805,7 +805,7 @@ const Netz = {
   sitzungLesen(d, name){
     const marke = d && d.access_token;
     const wer = d && d.user && d.user.id;
-    if (!marke || !wer) return {ok:false, fehler:"KONTO ANGELEGT, ABER NOCH NICHT BESTAETIGT"};
+    if (!marke || !wer) return {ok:false, fehler:"KONTO ANGELEGT, ABER NOCH NICHT BESTÄTIGT"};
     return {ok:true, daten:{
       marke, erneuern: d.refresh_token || "", kennung: wer,
       name: (d.user.user_metadata && d.user.user_metadata.name) || name,
@@ -845,7 +845,7 @@ const Netz = {
       {daten:rumpf, marke, methode:"PATCH", kopf:{"Prefer":"return=representation"}});
     if (!a.ok) return a;
     const z = Array.isArray(a.daten) && a.daten[0];
-    if (!z) return {ok:false, fehler:"PROFIL WURDE ZWISCHENDURCH GEAENDERT"};
+    if (!z) return {ok:false, fehler:"PROFIL WURDE ZWISCHENDURCH GEÄNDERT"};
     return {ok:true, daten:{name:z.name||"", fassung:Number(z.fassung),
                             werte:z.werte||{}, loadouts:z.loadouts||[]}};
   },
@@ -1048,9 +1048,9 @@ function sperrText(a){
   if (a.fehler === "GESPERRT")
     return "ZU VIELE FEHLVERSUCHE - GESPERRT, NOCH " + dauerText(a.sekunden);
   if (a.fehler === "FALSCH"){
-    if (a.sekunden > 0) return "KENNWORT FALSCH - GESPERRT FUER " + dauerText(a.sekunden);
+    if (a.sekunden > 0) return "KENNWORT FALSCH - GESPERRT FÜR " + dauerText(a.sekunden);
     if (a.frei === 1) return "KENNWORT FALSCH - NOCH EIN FEHLVERSUCH OHNE SPERRE";
-    return "KENNWORT FALSCH - DER NAECHSTE FEHLVERSUCH SPERRT";
+    return "KENNWORT FALSCH - DER NÄCHSTE FEHLVERSUCH SPERRT";
   }
   return a.fehler;
 }
@@ -1305,7 +1305,7 @@ const SEITEN = [
   {name:"WAFFEN",     frei:true, bauen:seiteWaffen},
   {name:"ERLEDIGT",   frei:true, bauen:seiteErledigt},
   {name:"RUNDEN",     frei:true, bauen:seiteRunden},
-  {name:"AUSRUESTUNG",frei:true, bauen:seiteAusruestung},
+  {name:"AUSRÜSTUNG",frei:true, bauen:seiteAusruestung},
   {name:"KOSMETIK",   frei:true, bauen:seiteKosmetik},
   {name:"AUSSEHEN",   frei:false, bauen:seiteAussehen,
    hinweis:"Vorbereitet, noch ohne Inhalt - siehe docs/KOSMETIK.md"},
@@ -1340,36 +1340,36 @@ function uebersichtBauen(ziel, gefechte){
   // nirgends gespeichert, und das soll auch so bleiben: abgeleitete
   // Zahlen in der Datenbank laufen frueher oder spaeter auseinander.
   const kd = (Number(w.tode) || 0) ? (Number(w.abschuesse)||0) / Number(w.tode) : (Number(w.abschuesse)||0);
-  g.appendChild(wertkachel("VERHAELTNIS", kd.toFixed(2), "abschuesse / tode"));
+  g.appendChild(wertkachel("VERHÄLTNIS", kd.toFixed(2), "abschüsse / tode"));
   const jeRunde = (Number(w.runden) || 0) ? (Number(w.abschuesse) || 0) / Number(w.runden) : 0;
-  g.appendChild(wertkachel("ABSCHÜSSE JE RUNDE", jeRunde.toFixed(2), "abschuesse / runden"));
-  g.appendChild(wertkachel("TREFFERQUOTE", quoteText(w.treffer, w.schuesse), "treffer / schuesse"));
+  g.appendChild(wertkachel("ABSCHÜSSE JE RUNDE", jeRunde.toFixed(2), "abschüsse / runden"));
+  g.appendChild(wertkachel("TREFFERQUOTE", quoteText(w.treffer, w.schuesse), "treffer / schüsse"));
   g.appendChild(wertkachel("QUOTE PVP", quoteText(w.treffer_pvp, w.schuesse_pvp),
     "treffer_pvp / schuesse_pvp"));
   g.appendChild(wertkachel("QUOTE PVE", quoteText(w.treffer_pve, w.schuesse_pve),
     "treffer_pve / schuesse_pve"));
   t.appendChild(g);
   t.appendChild(el("div", "klein dunkel abstand",
-    zeilen.length + " Runden gezaehlt" + (Stand.filter.abgebrochene
+    zeilen.length + " Runden gezählt" + (Stand.filter.abgebrochene
       ? " (abgebrochene eingeschlossen)." : ", abgebrochene nicht.")));
   ziel.appendChild(t);
 }
 
 function wasMitlaeuft(){
 
-  const t2 = tafel("WAS MITLAEUFT");
+  const t2 = tafel("WAS MITLÄUFT");
   const p = el("div", "klein matt");
   p.innerHTML =
-    "Alles, was DUSTFRONT ueber dich speichert, steht auf dieser Seite - " +
+    "Alles, was DUSTFRONT über dich speichert, steht auf dieser Seite - " +
     "nicht eine Auswahl davon, sondern alles. Unter <b class='creme'>WERTE</b> " +
-    "steht jeder einzelne Zaehler mit seinem Namen in der Datenbank, unter " +
+    "steht jeder einzelne Zähler mit seinem Namen in der Datenbank, unter " +
     "<b class='creme'>RUNDEN</b> jede gespielte Runde einzeln, unter " +
     "<b class='creme'>KOSMETIK</b> dein Ton und dein Bild fuer die Blendgranate. " +
     "Was <b>nicht</b> gespeichert wird: keine Adresse, kein echter Name, " +
     "keine Aufzeichnung davon, wann du spielst und mit wem, nichts vom " +
     "Rechner. Der Name, mit dem du dich anmeldest, wird zu einer Adresse " +
-    "auf einer Domaene, die es nicht gibt (" + DATEN.server.postfach + ") - " +
-    "es gibt also gar keine, an die jemand schreiben koennte.";
+    "auf einer Domäne, die es nicht gibt (" + DATEN.server.postfach + ") - " +
+    "es gibt also gar keine, an die jemand schreiben könnte.";
   t2.appendChild(p);
   const reihe = el("div");
   reihe.style.marginTop = "14px";
@@ -1427,12 +1427,12 @@ function werteBauen(ziel, gefechte, einstellungen){
   const t2 = tafel("SONST NOCH");
   const rest = Object.keys(fremd).sort();
   t2.appendChild(el("div", "klein matt", rest.length
-    ? "Zaehler in den Runden, die diese Seite noch nicht benennen kann - roh:"
-    : "In den Runden steht kein Zaehler, den diese Seite nicht kennt."));
+    ? "Zähler in den Runden, die diese Seite noch nicht benennen kann - roh:"
+    : "In den Runden steht kein Zähler, den diese Seite nicht kennt."));
   if (rest.length) t2.appendChild(rohTabelle(rest.map(k => [k, fremd[k]])));
   const e = Object.keys(einstellungen || {}).sort();
   const unter = el("div", "klein matt abstand", e.length
-    ? "Im Profil gespeichert (Einstellungen aus dem Spiel, keine Zaehler):"
+    ? "Im Profil gespeichert (Einstellungen aus dem Spiel, keine Zähler):"
     : "Im Profil sind keine Einstellungen gespeichert.");
   t2.appendChild(unter);
   if (e.length) t2.appendChild(rohTabelle(e.map(k => [k, einstellungen[k]])));
@@ -1474,7 +1474,7 @@ function waffenBauen(ziel, gefechte){
   }
   t.appendChild(el("div", "klein matt",
     "Addiert aus " + zeilen.length + " Runden. Die Quote ist " +
-    "Treffer durch Schuesse."));
+    "Treffer durch Schüsse."));
   const tab = el("table");
   tab.style.marginTop = "10px";
   const kopf = el("tr");
@@ -1533,7 +1533,7 @@ function erledigtBauen(ziel, gefechte){
   }
   t.appendChild(el("div", "klein matt",
     "Spieler, die du erledigt hast, aus " + zeilen.length + " Runden. Nach Konto " +
-    "gezaehlt, wenn es eines gibt - wer sich umbenennt, bleibt derselbe; " +
+    "gezählt, wenn es eines gibt - wer sich umbenennt, bleibt derselbe; " +
     "dasteht der zuletzt gesehene Name."));
   const tab = el("table");
   tab.style.marginTop = "10px";
@@ -1588,7 +1588,7 @@ function rundenBauen(ziel, gefechte, mitKonto){
   tab.style.marginTop = "10px";
   const kopf = el("tr");
   const spalten = ["WANN", ...(mitKonto ? ["KONTO"] : []), "ART", "VERSION", "ENDE",
-                   "SEITE", "AUSGANG", "ABSCHUESSE", "TODE", "SCHADEN"];
+                   "SEITE", "AUSGANG", "ABSCHÜSSE", "TODE", "SCHADEN"];
   for (const s of spalten)
     anhaengen(kopf, el("th", ["WANN","KONTO","ART","VERSION","ENDE"].includes(s) ? null : "rechts", s));
   anhaengen(tab, anhaengen(el("thead"), kopf));
@@ -1634,7 +1634,7 @@ function seiteAusruestung(ziel){
   t.appendChild(el("div", "klein matt",
     "Ein Loadout ist " + L.waffen + " Waffen und " + L.wuerfe + " Wurfwaffe. " +
     "Das Brecheisen steht nicht darin - es liegt auf F und ist immer da. " +
-    "Ob die Loadouts in einer Runde ueberhaupt gelten, entscheidet der " +
+    "Ob die Loadouts in einer Runde überhaupt gelten, entscheidet der " +
     "Gastgeber."));
 
   if (!Stand.entwurf) Stand.entwurf = holeLoadouts();
@@ -1697,7 +1697,7 @@ function seiteAusruestung(ziel){
     zeichnen();
   }));
   if (geaendert){
-    const hinweis = el("span", "klein amber", "  GEAENDERT - NOCH NICHT GESPEICHERT");
+    const hinweis = el("span", "klein amber", "  GEÄNDERT - NOCH NICHT GESPEICHERT");
     hinweis.style.marginLeft = "12px";
     reihe.appendChild(hinweis);
   }
@@ -1735,9 +1735,9 @@ function seiteAussehen(ziel){
   const t = tafel("AUSSEHEN");
   t.appendChild(el("div", "klein matt",
     "Noch nichts davon ist eingebaut. Was im Spiel hinter einer Rolle " +
-    "steht, laesst sich spaeter austauschen - die " +
+    "steht, lässt sich später austauschen - die " +
     Object.keys(DATEN.rollen).length + " Rollen gibt es schon, die " +
-    "Stufen auch. Wie es aussehen wuerde, steht in docs/KOSMETIK.md."));
+    "Stufen auch. Wie es aussehen würde, steht in docs/KOSMETIK.md."));
   const g = el("div", "gitter g4");
   g.style.marginTop = "12px";
   for (const s of DATEN.seltenheit){
@@ -1968,14 +1968,14 @@ function saettigung(){
 async function tonDatei(datei){
   if (!datei) return;
   if (datei.size > 40 * 1024 * 1024)
-    return sageUndZeichne("DIE DATEI IST ZU GROSS - HOECHSTENS 40 MB", "schlecht");
+    return sageUndZeichne("DIE DATEI IST ZU GROSS - HÖCHSTENS 40 MB", "schlecht");
   const ctx = audioKontext();
   if (!ctx || typeof OfflineAudioContext === "undefined")
     return sageUndZeichne("DIESER BROWSER KANN KEINEN TON BEARBEITEN", "schlecht");
   sageUndZeichne("LESE " + datei.name.toUpperCase() + "...", "arbeit");
   let puffer;
   try{ puffer = await ctx.decodeAudioData(await datei.arrayBuffer()); }
-  catch(e){ return sageUndZeichne("DIESE DATEI LAESST SICH NICHT LESEN - MP3, WAV ODER OGG", "schlecht"); }
+  catch(e){ return sageUndZeichne("DIESE DATEI LÄSST SICH NICHT LESEN - MP3, WAV ODER OGG", "schlecht"); }
   tonUebernehmen(puffer, datei.name);
 }
 
@@ -1983,7 +1983,7 @@ async function tonDatei(datei){
 // keine eigene Datei haben und nur den Bass drehen wollen.
 function klassischAlsGrundlage(){
   const k = klassisch("knall"), p = klassisch("pfeifen");
-  if (!k || !p) return sageUndZeichne("DIE KLAENGE AUS DEM SPIEL FEHLEN IN DIESER SEITE", "schlecht");
+  if (!k || !p) return sageUndZeichne("DIE KLÄNGE AUS DEM SPIEL FEHLEN IN DIESER SEITE", "schlecht");
   const rate = k.sampleRate;
   const n = Math.max(k.length, p.length, Math.ceil(rate * KOS.ton_min));
   const b = new AudioBuffer({length:n, sampleRate:rate, numberOfChannels:1});
@@ -2125,7 +2125,7 @@ function tonMalen(){
   const z = Werkstatt.dom.tonText;
   if (z && z.isConnected && T){
     z.textContent = "START " + T.start.toFixed(2) + " S  ·  ENDE " + T.ende.toFixed(2) +
-      " S  ·  LAENGE " + (T.ende - T.start).toFixed(2) + " S  (" + KOS.ton_min.toFixed(1) +
+      " S  ·  LÄNGE " + (T.ende - T.start).toFixed(2) + " S  (" + KOS.ton_min.toFixed(1) +
       " BIS " + KOS.ton_max.toFixed(1) + ")";
   }
 }
@@ -2188,13 +2188,13 @@ function bildVorgaben(){
 async function bildDatei(datei){
   if (!datei) return;
   if (datei.size > 40 * 1024 * 1024)
-    return sageUndZeichne("DAS BILD IST ZU GROSS - HOECHSTENS 40 MB", "schlecht");
+    return sageUndZeichne("DAS BILD IST ZU GROSS - HÖCHSTENS 40 MB", "schlecht");
   const url = URL.createObjectURL(datei), img = new Image();
   try{
     await new Promise((ja, nein) => { img.onload = ja; img.onerror = nein; img.src = url; });
   }catch(e){
     URL.revokeObjectURL(url);
-    return sageUndZeichne("DIESES BILD LAESST SICH NICHT LESEN", "schlecht");
+    return sageUndZeichne("DIESES BILD LÄSST SICH NICHT LESEN", "schlecht");
   }
   bildUebernehmen(img, datei.name);
 }
@@ -2569,7 +2569,7 @@ function kosmetikFehler(f){
   if (/KOSMETIK/.test(t) && /(SCHEMA CACHE|DOES NOT EXIST|COULD NOT FIND)/.test(t))
     return "AUF DEM SERVER FEHLT DIE TABELLE KOSMETIK. WER DEN SERVER BETREUT, " +
            "LEGT SIE EINMAL AN - SIEHE docs/KONTO.md, ABSCHNITT 5.6.";
-  if (/GROESSE|CHECK CONSTRAINT/.test(t)) return "ZU GROSS FUER DEN SERVER";
+  if (/GROESSE|CHECK CONSTRAINT/.test(t)) return "ZU GROSS FÜR DEN SERVER";
   return t;
 }
 
@@ -2633,7 +2633,7 @@ async function kosmetikSpeichern(){
   if (W.bild) W.bild.gespeichert = W.bild.stand;
   await serverAufbereiten();
   sageUndZeichne(ton || bild
-    ? "GESPEICHERT - IM SPIEL AB DER NAECHSTEN LOBBY"
+    ? "GESPEICHERT - IM SPIEL AB DER NÄCHSTEN LOBBY"
     : "ENTFERNT - DEINE BLENDGRANATE KNALLT WIEDER WIE IMMER", "gut");
 }
 
@@ -2705,8 +2705,8 @@ function seiteKosmetik(ziel){
     "<b class='creme'>ohne Kosmetik</b> - mit erst, wenn jeder alles hat. " +
     "Zwei Regeln gelten immer: der Ton dauert " + KOS.ton_min.toFixed(1) + " bis " +
     KOS.ton_max.toFixed(1) + " Sekunden, und er <b class='creme'>wird immer leiser</b> - " +
-    "nach einem kurzen Anlauf haelt das Spiel ihn unter einer Linie, die bis zum " +
-    "Ende auf null faellt. Was du unten hoerst, ist schon so gerechnet.";
+    "nach einem kurzen Anlauf hält das Spiel ihn unter einer Linie, die bis zum " +
+    "Ende auf null fällt. Was du unten hörst, ist schon so gerechnet.";
   kopf.appendChild(p);
   if (W.server.laedt || !W.server.geladen)
     kopf.appendChild(anhaengen(el("div", "meldung kante arbeit abstand"), el("span", null, "LADE...")));
@@ -2728,7 +2728,7 @@ function seiteKosmetik(ziel){
   t.appendChild(W.dom.tonStatus);
   const tz = el("div", "zeile");
   anhaengen(tz,
-    dateiKnopf("DATEI WAEHLEN", "audio/*,.mp3,.wav,.ogg,.m4a,.flac", tonDatei),
+    dateiKnopf("DATEI WÄHLEN", "audio/*,.mp3,.wav,.ogg,.m4a,.flac", tonDatei),
     knopf("KLASSISCH", null, klassischAlsGrundlage));
   tz.lastChild.title = "Knall und Pfeifen aus dem Spiel als Ausgangspunkt";
   t.appendChild(tz);
@@ -2748,7 +2748,7 @@ function seiteKosmetik(ziel){
       regler("KNALL", 0, 100, 1, T.knall, pz, (v) => { T.knall = v; tonPlanen(); }),
       regler("PFEIFEN", 0, 100, 1, T.pfeifen, pz, (v) => { T.pfeifen = v; tonPlanen(); }),
       regler("ABKLINGEN", 0, 100, 1, T.abklingen, pz, (v) => { T.abklingen = v; tonPlanen(); }));
-    t.lastChild.title = "Wie schnell er von selbst leiser wird - das Spiel sorgt ohnehin dafuer";
+    t.lastChild.title = "Wie schnell er von selbst leiser wird - das Spiel sorgt ohnehin dafür";
   }
   const e = el("canvas", "welle ruhig abstand");
   e.title = "So klingt er im Spiel. Gestrichelt: die Grenze, unter der er bleiben muss.";
@@ -2758,7 +2758,7 @@ function seiteKosmetik(ziel){
     "UNTEN: SO KLINGT ER IM SPIEL. GESTRICHELT DIE GRENZE, DUNKEL WAS SIE WEGNIMMT."));
   const tk2 = el("div", "zeile abstand");
   anhaengen(tk2,
-    knopf("ANHOEREN", null, () => { const a = aktuellerTon(); if (a) tonSpielen(a); }),
+    knopf("ANHÖREN", null, () => { const a = aktuellerTon(); if (a) tonSpielen(a); }),
     knopf("STOP", null, tonStoppen),
     (T || W.server.ton) && !W.tonWeg
       ? knopf("TON ENTFERNEN", null, () => {
@@ -2775,7 +2775,7 @@ function seiteKosmetik(ziel){
   b.appendChild(bk);
   W.dom.bildStatus = el("div", "status");
   b.appendChild(W.dom.bildStatus);
-  b.appendChild(dateiKnopf("DATEI WAEHLEN", "image/*", bildDatei));
+  b.appendChild(dateiKnopf("DATEI WÄHLEN", "image/*", bildDatei));
   const z = el("canvas", "zuschnitt abstand");
   z.title = "Das Bild mit seinen Filtern. Verschoben wird es unten im Weiss.";
   W.dom.zuschnitt = z;
@@ -2785,10 +2785,10 @@ function seiteKosmetik(ziel){
     const neu = (feld) => (v) => { B[feld] = v; bildPlanen(); };
     const zahl = (v) => (v > 0 ? "+" : "") + v;
     const h0 = B.flaeche ? lageVon(B).h : 1;
-    W.dom.groesseRegler = regler("GROESSE", Math.round(KOS.lage_h[0] * 100),
+    W.dom.groesseRegler = regler("GRÖSSE", Math.round(KOS.lage_h[0] * 100),
       Math.round(KOS.lage_h[1] * 100), 1, Math.round(h0 * 100), (v) => v + " %",
       (v) => lageAendern({h:v / 100}));
-    W.dom.groesseRegler.title = "Hoehe des Bildes im Verhaeltnis zum Bildschirm";
+    W.dom.groesseRegler.title = "Höhe des Bildes im Verhältnis zum Bildschirm";
     const stil = el("select");
     for (const [wert, name] of [["normal","NORMAL"],["grau","GRAU"],["sepia","SEPIA"],["umgekehrt","UMGEKEHRT"]]){
       const o = el("option", null, name); o.value = wert;
@@ -2816,9 +2816,9 @@ function seiteKosmetik(ziel){
   }
   const bz = el("div", "zeile abstand");
   anhaengen(bz,
-    B ? knopf("FUELLEN", null, () => { B.lage = null; B.stand++; zeichnen(); bildMalen(); }) : null,
+    B ? knopf("FÜLLEN", null, () => { B.lage = null; B.stand++; zeichnen(); bildMalen(); }) : null,
     B ? knopf("MITTE", null, () => lageAendern({x:0.5, y:0.5})) : null,
-    B ? knopf("FILTER ZURUECK", null, () => {
+    B ? knopf("FILTER ZURÜCK", null, () => {
           const v = bildVorgaben();
           for (const k of ["hell","kontrast","saett","farbton","stil","pixel","frittiert","rund"]) B[k] = v[k];
           zeichnen(); bildRechnen(); }) : null,
@@ -2833,10 +2833,10 @@ function seiteKosmetik(ziel){
   // ---- Im Spiel
   const s = tafel("SO SIEHT ES IM SPIEL AUS");
   s.appendChild(el("div", "klein matt",
-    "Dieselbe Flaeche wie im Spiel, dasselbe Weiss, dasselbe Abklingen. " +
-    "Ohne weiteres fuellt das Bild den ganzen Schirm. Mit der Maus ziehen verschiebt es, " +
-    "das Mausrad (oder GROESSE) macht es groesser oder kleiner; was ueber den Rand ragt, " +
-    "ist abgeschnitten. FUELLEN setzt es zurueck."));
+    "Dieselbe Fläche wie im Spiel, dasselbe Weiss, dasselbe Abklingen. " +
+    "Ohne weiteres füllt das Bild den ganzen Schirm. Mit der Maus ziehen verschiebt es, " +
+    "das Mausrad (oder GRÖSSE) macht es größer oder kleiner; was über den Rand ragt, " +
+    "ist abgeschnitten. FÜLLEN setzt es zurück."));
   const sc = el("canvas", "spielbild abstand");
   W.dom.spiel = sc;
   lageEinrichten(sc);
@@ -2867,8 +2867,8 @@ function seiteKonto(ziel){
   t.appendChild(namensfeld);
   t.appendChild(el("div", "klein matt",
     "Der Anzeigename steht auf der Siegtafel. Angemeldet wird weiter mit " +
-    "dem Namen, mit dem das Konto angelegt wurde - der laesst sich nicht " +
-    "aendern, denn an ihm haengen alle Runden."));
+    "dem Namen, mit dem das Konto angelegt wurde - der lässt sich nicht " +
+    "ändern, denn an ihm hängen alle Runden."));
   const r1 = el("div");
   r1.style.margin = "12px 0 22px";
   r1.appendChild(knopf("NAMEN SPEICHERN", "stark", () => {
@@ -2881,13 +2881,13 @@ function seiteKonto(ziel){
   const nochmal = feld("NOCH EINMAL", "password", "", {autocomplete:"new-password"});
   anhaengen(t, neu, nochmal);
   const r2 = el("div");
-  r2.appendChild(knopf("KENNWORT AENDERN", null, async () => {
+  r2.appendChild(knopf("KENNWORT ÄNDERN", null, async () => {
     const a = neu.eingabe.value, b = nochmal.eingabe.value;
     if (a.length < 8) return sageUndZeichne("KENNWORT ZU KURZ - MINDESTENS 8 ZEICHEN", "schlecht");
-    if (a !== b) return sageUndZeichne("DIE BEIDEN KENNWOERTER SIND NICHT GLEICH", "schlecht");
-    meldung("AENDERE...", "arbeit"); zeichnen();
+    if (a !== b) return sageUndZeichne("DIE BEIDEN KENNWÖRTER SIND NICHT GLEICH", "schlecht");
+    meldung("ÄNDERE...", "arbeit"); zeichnen();
     const antwort = await Netz.kennwortAendern(Stand.sitzung.marke, a);
-    sageUndZeichne(antwort.ok ? "KENNWORT GEAENDERT" : antwort.fehler,
+    sageUndZeichne(antwort.ok ? "KENNWORT GEÄNDERT" : antwort.fehler,
       antwort.ok ? "gut" : "schlecht");
   }));
   t.appendChild(r2);
@@ -2913,7 +2913,7 @@ function seiteKonto(ziel){
   r3.lastChild.style.marginLeft = "8px";
   t2.appendChild(r3);
   t2.appendChild(el("div", "klein matt",
-    "Ein Konto ganz zu loeschen geht von hier aus nicht: dazu braucht es " +
+    "Ein Konto ganz zu löschen geht von hier aus nicht: dazu braucht es " +
     "den geheimen Schluessel des Projekts, und der darf in keiner Datei " +
     "stehen, die jemand herunterladen kann. Wer sein Konto weghaben will, " +
     "sagt es dem, der den Server betreut."));
@@ -2997,7 +2997,7 @@ function zeichnen(){
   anhaengen(text,
     el("div", "creme", (Stand.profil && Stand.profil.name) || Stand.sitzung.name),
     el("div", "klein dunkel", Ziel.admin
-      ? "ANMELDENAME " + String(Stand.sitzung.name).toUpperCase() + " · VOM ADMIN GEOEFFNET"
+      ? "ANMELDENAME " + String(Stand.sitzung.name).toUpperCase() + " · VOM ADMIN GEÖFFNET"
       : "ANGEMELDET"));
   anhaengen(wer, kachel, text);
   if (Ziel.admin){
@@ -3094,7 +3094,7 @@ function zeichneTor(ziel){
     f.eingabe.addEventListener("keydown", (e) => { if (e.key === "Enter") tun(false); });
 
   t.appendChild(el("div", "klein matt",
-    "Dasselbe Konto wie im Spiel. Es gibt keine Adresse zum Zuruecksetzen - " +
+    "Dasselbe Konto wie im Spiel. Es gibt keine Adresse zum Zurücksetzen - " +
     "wer sein Kennwort vergisst, legt ein neues Konto an oder fragt den, " +
     "der den Server betreut."));
   tor.appendChild(t);
@@ -3233,15 +3233,15 @@ function zeichneAdmin(r){
 
 async function adminWortAendern(a, b){
   if (a.length < 8) return sageUndZeichne("KENNWORT ZU KURZ - MINDESTENS 8 ZEICHEN", "schlecht");
-  if (a !== b) return sageUndZeichne("DIE BEIDEN KENNWOERTER SIND NICHT GLEICH", "schlecht");
-  meldung("AENDERE...", "arbeit"); zeichnen();
+  if (a !== b) return sageUndZeichne("DIE BEIDEN KENNWÖRTER SIND NICHT GLEICH", "schlecht");
+  meldung("ÄNDERE...", "arbeit"); zeichnen();
   const antwort = await Admin.rufen("admin_wort_aendern", {neu:a});
   if (!Stand.admin) return;
   if (!antwort.ok) return sageUndZeichne(antwort.fehler, "schlecht");
   const vorher = Stand.admin.muss_aendern;
   Stand.admin.wort = a;
   Stand.admin.muss_aendern = false;
-  meldung("KENNWORT DES ADMIN GEAENDERT", "gut");
+  meldung("KENNWORT DES ADMIN GEÄNDERT", "gut");
   if (vorher) await adminLaden(); else zeichnen();
 }
 
@@ -3249,8 +3249,8 @@ function adminKonten(ziel){
   const t = tafel("ALLE KONTEN");
   const k = Stand.admin.konten;
   t.appendChild(el("div", "klein matt", k.length
-    ? k.length + " Konten. Oeffnen zeigt ein Konto so, wie sein Spieler es sieht - " +
-      "mit allen Reitern, und alles darin laesst sich aendern."
+    ? k.length + " Konten. Öffnen zeigt ein Konto so, wie sein Spieler es sieht - " +
+      "mit allen Reitern, und alles darin lässt sich ändern."
     : "Noch kein Konto angelegt."));
   const suche = el("input");
   suche.placeholder = "SUCHEN";
@@ -3275,7 +3275,7 @@ function adminKonten(ziel){
     z.dataset.suche = (konto.anmeldename + " " + konto.name).toLowerCase();
     if (f && !z.dataset.suche.includes(f)) z.classList.add("verborgen");
     const wann = new Date((Number(konto.angelegt) || 0) * 1000);
-    const b = knopf("OEFFNEN", null, () => adminOeffnen(konto));
+    const b = knopf("ÖFFNEN", null, () => adminOeffnen(konto));
     b.style.padding = "5px 10px";
     const bz = el("td", "rechts");
     bz.appendChild(b);
@@ -3294,14 +3294,14 @@ function adminSelbst(ziel){
   const neu = feld("NEUES KENNWORT", "password", "", {autocomplete:"new-password"});
   const nochmal = feld("NOCH EINMAL", "password", "", {autocomplete:"new-password"});
   anhaengen(t, neu, nochmal);
-  t.appendChild(knopf("KENNWORT AENDERN", "stark",
+  t.appendChild(knopf("KENNWORT ÄNDERN", "stark",
     () => adminWortAendern(neu.eingabe.value, nochmal.eingabe.value)));
   ziel.appendChild(t);
   const t2 = tafel("SPERRE");
   t2.appendChild(el("div", "klein matt",
     "Zwei Fehlversuche kosten nichts. Der dritte sperrt 1 Minute, der vierte 5, " +
-    "der fuenfte 15, der sechste 30, danach verdoppelt sich die Sperre mit jedem " +
-    "weiteren. Ein richtiges Kennwort setzt alles zurueck. Ausgesperrt: " +
+    "der fünfte 15, der sechste 30, danach verdoppelt sich die Sperre mit jedem " +
+    "weiteren. Ein richtiges Kennwort setzt alles zurück. Ausgesperrt: " +
     "docs/KONTO.md, Abschnitt 5.8."));
   const reihe = el("div", "zeile abstand");
   anhaengen(reihe, knopf("NEU LADEN", null, () => adminLaden()),
@@ -3323,7 +3323,7 @@ function seiteVerwalten(ziel){
   const r1 = el("div", "abstand");
   r1.appendChild(knopf("UMBENENNEN", "stark", async () => {
     const neu = name.eingabe.value.trim();
-    meldung("AENDERE...", "arbeit"); zeichnen();
+    meldung("ÄNDERE...", "arbeit"); zeichnen();
     const a = await Admin.rufen("admin_name_aendern", {konto:kennung, neu});
     if (!Stand.admin) return;
     if (!a.ok) return sageUndZeichne(a.fehler, "schlecht");
@@ -3344,8 +3344,8 @@ function seiteVerwalten(ziel){
   r2.appendChild(knopf("KENNWORT SETZEN", null, async () => {
     const a = neu.eingabe.value, b = nochmal.eingabe.value;
     if (a.length < 8) return sageUndZeichne("KENNWORT ZU KURZ - MINDESTENS 8 ZEICHEN", "schlecht");
-    if (a !== b) return sageUndZeichne("DIE BEIDEN KENNWOERTER SIND NICHT GLEICH", "schlecht");
-    meldung("AENDERE...", "arbeit"); zeichnen();
+    if (a !== b) return sageUndZeichne("DIE BEIDEN KENNWÖRTER SIND NICHT GLEICH", "schlecht");
+    meldung("ÄNDERE...", "arbeit"); zeichnen();
     const antwort = await Admin.rufen("admin_kennwort_setzen", {konto:kennung, neu:a});
     if (!Stand.admin) return;
     sageUndZeichne(antwort.ok ? "KENNWORT GESETZT" : antwort.fehler,
@@ -3354,26 +3354,26 @@ function seiteVerwalten(ziel){
   t2.appendChild(r2);
   ziel.appendChild(t2);
 
-  const t3 = tafel("KONTO LOESCHEN");
+  const t3 = tafel("KONTO LÖSCHEN");
   t3.appendChild(el("div", "klein matt",
-    "Loescht das Konto mit allen Runden, dem Profil und der Kosmetik. Es gibt " +
-    "kein Zurueck. Zur Bestaetigung den Anmeldenamen eintippen."));
-  const bestaetigen = feld("ANMELDENAME ZUR BESTAETIGUNG", "text", "", {autocomplete:"off"});
+    "Löscht das Konto mit allen Runden, dem Profil und der Kosmetik. Es gibt " +
+    "kein Zurück. Zur Bestätigung den Anmeldenamen eintippen."));
+  const bestaetigen = feld("ANMELDENAME ZUR BESTÄTIGUNG", "text", "", {autocomplete:"off"});
   bestaetigen.style.marginTop = "12px";
   t3.appendChild(bestaetigen);
-  const loeschen = knopf("ENDGUELTIG LOESCHEN", null, async () => {
+  const loeschen = knopf("ENDGÜLTIG LÖSCHEN", null, async () => {
     if (bestaetigen.eingabe.value.trim().toLowerCase() !== String(Stand.sitzung.name).toLowerCase())
-      return sageUndZeichne("DER NAME STIMMT NICHT - NICHTS GELOESCHT", "schlecht");
-    meldung("LOESCHE...", "arbeit"); zeichnen();
+      return sageUndZeichne("DER NAME STIMMT NICHT - NICHTS GELÖSCHT", "schlecht");
+    meldung("LÖSCHE...", "arbeit"); zeichnen();
     const a = await Admin.rufen("admin_loeschen", {konto:kennung});
     if (!Stand.admin) return;
     if (!a.ok) return sageUndZeichne(a.fehler, "schlecht");
     const weg = Stand.sitzung.name;
     Stand.sitzung = null; Stand.profil = null; Stand.gefechte = []; Stand.entwurf = null;
     werkstattLeeren();
-    meldung("KONTO " + String(weg).toUpperCase() + " GELOESCHT", "gut");
+    meldung("KONTO " + String(weg).toUpperCase() + " GELÖSCHT", "gut");
     await adminLaden();
-    meldung("KONTO " + String(weg).toUpperCase() + " GELOESCHT", "gut");
+    meldung("KONTO " + String(weg).toUpperCase() + " GELÖSCHT", "gut");
     zeichnen();
   });
   loeschen.style.borderColor = "#8a3b2a";

@@ -84,7 +84,7 @@ def ton_lesen(daten: bytes):
     if dauer < G["ton_min"]:
         raise ValueError("TON ZU KURZ - MINDESTENS %.1f S" % G["ton_min"])
     if dauer > G["ton_max"] + 0.05:
-        raise ValueError("TON ZU LANG - HOECHSTENS %.1f S" % G["ton_max"])
+        raise ValueError("TON ZU LANG - HÖCHSTENS %.1f S" % G["ton_max"])
     return rate, proben
 
 
@@ -206,7 +206,7 @@ def bild_lesen(daten: bytes) -> pygame.Surface:
         raise ValueError("PNG NICHT LESBAR") from fehler
     b, h = flaeche.get_size()
     if not (1 <= b <= G["bild_max"] and 1 <= h <= G["bild_max"]):
-        raise ValueError("BILD ZU GROSS - HOECHSTENS %d PX" % G["bild_max"])
+        raise ValueError("BILD ZU GROSS - HÖCHSTENS %d PX" % G["bild_max"])
     if pygame.display.get_surface() is not None:
         flaeche = flaeche.convert_alpha()
     return flaeche

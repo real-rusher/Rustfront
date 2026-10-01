@@ -1977,7 +1977,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         if seine == K.VERSION:
             return True
         self.gastgeber.an_einen(nummer, {
-            "t": "abgelehnt", "grund": "VERSION %s NOETIG" % K.VERSION,
+            "t": "abgelehnt", "grund": "VERSION %s NÖTIG" % K.VERSION,
             "version": K.VERSION, "deine": seine})
         leitung = self.gastgeber.leitungen.get(nummer)
         if leitung is not None:
@@ -2032,7 +2032,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                    ausrichtung="mitte")
         f.zeichnen(ziel, "DER GASTGEBER", mitte + 60, r.y + 44, K.C_MUTED, 1,
                    ausrichtung="mitte")
-        f.zeichnen(ziel, seine or "AELTER", mitte + 60, r.y + 56, K.C_AMBER, 2,
+        f.zeichnen(ziel, seine or "ÄLTER", mitte + 60, r.y + 56, K.C_AMBER, 2,
                    ausrichtung="mitte")
         if not seine or _version_kleiner(seine, meine):
             rat = "DER GASTGEBER MUSS SEIN SPIEL AKTUALISIEREN."
@@ -2044,7 +2044,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                    ausrichtung="mitte")
         f.zeichnen(ziel, "NEUESTER STAND: ZWEIG MULTIPLAYER-TEST",
                    mitte, r.y + 114, K.C_MUTED, 1, ausrichtung="mitte")
-        f.zeichnen(ziel, "[ESC] ZURUECK", mitte, r.bottom - 16, K.C_MUTED_DK, 1,
+        f.zeichnen(ziel, "[ESC] ZURÜCK", mitte, r.bottom - 16, K.C_MUTED_DK, 1,
                    ausrichtung="mitte")
 
     def _gegnerlast_zaehlen(self) -> None:
@@ -2075,7 +2075,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self.pause_rest -= dt
         if self.pause_rest > 0:
             if self.welle > 0:
-                self.hinweis = "NAECHSTE WELLE IN %d" % max(1, int(self.pause_rest) + 1)
+                self.hinweis = "NÄCHSTE WELLE IN %d" % max(1, int(self.pause_rest) + 1)
             return
         self._welle_starten()
 
@@ -3686,7 +3686,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             # Hat Vorrang vor jedem anderen Hinweis: solange die Ansicht
             # verschoben ist, fehlen die Zielhilfen, und das muss man
             # wissen.
-            self.hinweis = ("ANSICHT EBENE %d - ZURUECK IN %.0f"
+            self.hinweis = ("ANSICHT EBENE %d - ZURÜCK IN %.0f"
                             % (self.blick, self.blick_rest + 0.9))
         ebene = self.welt.ebene(self.ich.ebene)
         # Die Einstellung greift bei jedem Bild neu: wer das Wackeln
@@ -4957,7 +4957,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         f.zeichnen(ziel, "  ".join("%s %d" % (n, g)
                                    for n, g in zip(K.TEAMS["namen"], groessen)),
                    K.GAME_W // 2, y + 10, K.C_MUTED, 1, ausrichtung="mitte")
-        f.zeichnen(ziel, "[ESC] ZURUECK", K.GAME_W // 2, K.GAME_H - 22,
+        f.zeichnen(ziel, "[ESC] ZURÜCK", K.GAME_W // 2, K.GAME_H - 22,
                    K.C_MUTED_DK, 1, ausrichtung="mitte")
 
     # ── Siegtafel ────────────────────────────────────────────────────
@@ -5126,7 +5126,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 int(self.plan_weiter + 0.99), self.plan_ausblick()),
                 K.GAME_W // 2, K.GAME_H - 30, K.C_AMBER, 1,
                 ausrichtung="mitte")
-        f.zeichnen(ziel, "[ESC] MENUE", K.GAME_W // 2, K.GAME_H - 18,
+        f.zeichnen(ziel, "[ESC] MENÜ", K.GAME_W // 2, K.GAME_H - 18,
                    K.C_MUTED_DK, 1, ausrichtung="mitte")
 
     @staticmethod

@@ -97,7 +97,7 @@ BILDRATEN = [0, 60, 75, 90, 120, 144, 165, 240]
 BESCHRIFTUNG = {
     "fenstermodus": {"fenster": "FENSTER", "randlos": "RANDLOS",
                      "vollbild": "VOLLBILD"},
-    "pixelraster": {"gefuellt": "FUELLT DAS FENSTER", "ganzzahlig": "GANZE PIXEL"},
+    "pixelraster": {"gefuellt": "FÜLLT DAS FENSTER", "ganzzahlig": "GANZE PIXEL"},
     "partikel": {"wenig": "WENIG", "normal": "NORMAL", "viel": "VIEL"},
     "bildrate": {0: "UNBEGRENZT"},
     "blendung": {"normal": "WIE VOM WERFER", "weiss": "NUR WEISS",
@@ -108,8 +108,8 @@ BESCHRIFTUNG = {
 
 # Reihenfolge ist zugleich die Reihenfolge im Menue.
 TASTEN_VORGABE = [
-    ("vor",         "VORWAERTS",        ["w", "up"]),
-    ("zurueck",     "ZURUECK",          ["s", "down"]),
+    ("vor",         "VORWÄRTS",        ["w", "up"]),
+    ("zurueck",     "ZURÜCK",          ["s", "down"]),
     ("links",       "LINKS",            ["a", "left"]),
     ("rechts",      "RECHTS",           ["d", "right"]),
     ("dash",        "DASH",             ["left shift", "right shift"]),
@@ -118,7 +118,7 @@ TASTEN_VORGABE = [
     ("nutzen",      "BENUTZEN / RUFEN", ["e"]),
     ("ziehen",      "GEFALLENEN ZIEHEN", ["g"]),
     ("ebenen",      "OBERE EBENEN",     ["q"]),
-    ("ansicht_hoch", "EBENE DARUEBER",  ["page up"]),
+    ("ansicht_hoch", "EBENE DARÜBER",  ["page up"]),
     ("ansicht_runter", "EBENE DARUNTER", ["page down"]),
     ("planen",      "RUNDEN EINSTELLEN", ["p"]),
     ("nachladen",   "NACHLADEN",        ["r"]),
@@ -136,7 +136,7 @@ TASTEN_VORGABE = [
     ("feuermodus",  "FEUERART",         ["v"]),
     ("nahkampf",    "BRECHEISEN",       ["f"]),
     ("tracer",      "ZIELLINIE",        ["t"]),
-    ("tracer_weit", "LINIE VERLAENGERN", ["z"]),
+    ("tracer_weit", "LINIE VERLÄNGERN", ["z"]),
     ("pause",       "PAUSE",            ["escape"]),
     ("vollbild",    "VOLLBILD",         ["f11"]),
     ("debug",       "DEBUG-ANZEIGE",    ["f3"]),
@@ -155,11 +155,11 @@ KURZ = {
     "left alt": "L-ALT", "right alt": "ALT GR",
     "left meta": "L-META", "right meta": "R-META",
     "escape": "ESC", "return": "ENTER", "space": "LEER",
-    "backspace": "RUECK", "tab": "TAB", "caps lock": "FESTST",
+    "backspace": "RÜCK", "tab": "TAB", "caps lock": "FESTST",
     "up": "HOCH", "down": "RUNTER", "left": "LINKS", "right": "RECHTS",
     "page up": "BILD HOCH", "page down": "BILD RUNTER",
     "insert": "EINFG", "delete": "ENTF", "home": "POS1", "end": "ENDE",
-    "print screen": "DRUCK", "menu": "MENUE",
+    "print screen": "DRUCK", "menu": "MENÜ",
 }
 
 

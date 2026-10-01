@@ -144,8 +144,8 @@ class Anzeige:
                   2 if gross else 1, "mitte")
             y += 17 if gross else 10
         elif self._mit_abschussziel:
-            text = ("BIS %d TEAMABSCHUESSE" if g.mit_teams
-                    else "BIS %d ABSCHUESSE")
+            text = ("BIS %d TEAMABSCHÜSSE" if g.mit_teams
+                    else "BIS %d ABSCHÜSSE")
             _text(ziel, text % int(g.ende_wert or K.GEFECHT["team_abschuesse"]),
                   mitte, y + 2, K.C_MUTED, 1, "mitte")
             y += 12
@@ -175,7 +175,7 @@ class Anzeige:
         y += 17
         rest = g.gegner_rest
         if rest <= 0 and g.pause_rest > 0 and g.welle > 0:
-            _text(ziel, "NAECHSTE IN %d" % max(1, int(g.pause_rest + 0.99)),
+            _text(ziel, "NÄCHSTE IN %d" % max(1, int(g.pause_rest + 0.99)),
                   mitte, y, K.C_AMBER, 1, "mitte")
         elif rest > 0:
             _text(ziel, "NOCH %d" % rest, mitte, y, K.C_MUTED, 1, "mitte")
@@ -228,7 +228,7 @@ class Anzeige:
                 _text(ziel, "WARTET AUF MITSPIELER", mitte, y, K.C_MUTED, 1,
                       "mitte")
             elif g.runden_pause > 0:
-                _text(ziel, "NAECHSTE RUNDE IN %d"
+                _text(ziel, "NÄCHSTE RUNDE IN %d"
                       % max(1, int(g.runden_pause + 0.99)), mitte, y,
                       K.C_AMBER, 1, "mitte")
             else:
@@ -268,10 +268,10 @@ class Anzeige:
                 pygame.draw.rect(ziel, farben[1], (links, y, fuellung, 4))
         y += 8
         if g.zone_halter >= 0:
-            _text(ziel, "%s HAELT DEN KREIS" % namen[g.zone_halter], mitte, y,
+            _text(ziel, "%s HÄLT DEN KREIS" % namen[g.zone_halter], mitte, y,
                   farben[g.zone_halter], 1, "mitte")
         elif g.ich is not None and g.in_der_zone(g.ich):
-            _text(ziel, "UMKAEMPFT", mitte, y, K.C_CREAM, 1, "mitte")
+            _text(ziel, "UMKÄMPFT", mitte, y, K.C_CREAM, 1, "mitte")
         elif g.zone_name:
             _text(ziel, g.zone_name, mitte, y, K.C_MUTED, 1, "mitte")
         return y + 10
@@ -495,7 +495,7 @@ class Anzeige:
             return "RAKETENWERFER - EIN SCHUSS"
         if g.loadout_regel == "gleich":
             lo = g._fest_loadout() if g.ist_gastgeber else None
-            return ("FUER ALLE: %s" % lo["name"].upper() if lo
+            return ("FÜR ALLE: %s" % lo["name"].upper() if lo
                     else "LOADOUT VOM GASTGEBER")
         if g.loadout_regel == "eigenes":
             lo = g.mein_loadout()
@@ -529,7 +529,7 @@ class Anzeige:
         g = self.g
         _text(ziel, "GEFALLEN", W // 2, H // 2 - 10, K.C_RED, 2, "mitte")
         if g.regeln["runden"]:
-            _text(ziel, "RAUS BIS ZUR NAECHSTEN RUNDE", W // 2, H // 2 + 8,
+            _text(ziel, "RAUS BIS ZUR NÄCHSTEN RUNDE", W // 2, H // 2 + 8,
                   K.C_MUTED, 1, "mitte")
         elif not g.regeln["revive"]:
             _text(ziel, "WIEDER IN %.0f" % max(0.0, ich.wieder_in), W // 2,

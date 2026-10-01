@@ -211,11 +211,11 @@ def tls_fehler(fehler) -> str:
     if not isinstance(grund, ssl.SSLCertVerificationError):
         return ""
     code = getattr(grund, "verify_code", 0)
-    was = {-1: "WINDOWS LEHNT AB", 7: "SIGNATUR FALSCH", 9: "ZU FRUEH - UHR?",
-           10: "ABGELAUFEN", 24: "STELLE UNGUELTIG", 26: "FALSCHER ZWECK",
+    was = {-1: "WINDOWS LEHNT AB", 7: "SIGNATUR FALSCH", 9: "ZU FRÜH - UHR?",
+           10: "ABGELAUFEN", 24: "STELLE UNGÜLTIG", 26: "FALSCHER ZWECK",
            62: "FALSCHER NAME"}.get(code)
     if was is None:
-        was = "UNBEKANNT" if code in (2, 18, 19, 20, 21) else "UNGUELTIG"
+        was = "UNBEKANNT" if code in (2, 18, 19, 20, 21) else "UNGÜLTIG"
     return "ZERTIFIKAT %s [KONTO.MD 9]" % was
 
 
@@ -362,7 +362,7 @@ def wort_pruefen(wort: str) -> str:
     if len(wort) < 8:
         return "KENNWORT ZU KURZ (MINDESTENS 8)"
     if len(wort) > WORTLAENGE:
-        return "KENNWORT ZU LANG (HOECHSTENS %d)" % WORTLAENGE
+        return "KENNWORT ZU LANG (HÖCHSTENS %d)" % WORTLAENGE
     return ""
 
 
@@ -477,7 +477,7 @@ class LokaleAblage:
         try:
             salz = base64.b64decode(eintrag["salz"])
         except (KeyError, ValueError):
-            return schlecht("KONTO BESCHAEDIGT")
+            return schlecht("KONTO BESCHÄDIGT")
         if not hmac.compare_digest(self._hash(wort, salz),
                                    str(eintrag.get("hash", ""))):
             return schlecht("NAME ODER KENNWORT FALSCH")
@@ -536,13 +536,13 @@ class LokaleAblage:
             return Antwort(False, {"fassung": int(steht.get("fassung", 0)),
                                    "werte": dict(steht.get("werte") or {}),
                                    "loadouts": list(steht.get("loadouts") or [])},
-                           "PROFIL WURDE ZWISCHENDURCH GEAENDERT")
+                           "PROFIL WURDE ZWISCHENDURCH GEÄNDERT")
         neu = {"fassung": erwartet + 1,
                "werte": dict(profil.get("werte") or {}),
                "loadouts": list(profil.get("loadouts") or [])}
         eintrag["profil"] = neu
         if not self._schreiben(daten):
-            return schlecht("PROFIL LAESST SICH HIER NICHT SPEICHERN")
+            return schlecht("PROFIL LÄSST SICH HIER NICHT SPEICHERN")
         return gut(neu)
 
     # ---- Zahlen -------------------------------------------------------
@@ -729,7 +729,7 @@ class NetzAblage:
             # signup ohne Sitzung heisst: der Server will eine Bestaetigung
             # per Post. Fuer dieses Spiel ist das ausgeschaltet, aber wenn
             # jemand ein eigenes Projekt aufsetzt, soll er es erfahren.
-            return schlecht("KONTO ANGELEGT, ABER NOCH NICHT BESTAETIGT")
+            return schlecht("KONTO ANGELEGT, ABER NOCH NICHT BESTÄTIGT")
         return gut({"kennung": str(wer), "name": name, "sitzung": str(token),
                     "erneuern": str(daten.get("refresh_token") or "")})
 
@@ -794,7 +794,7 @@ class NetzAblage:
         if not zeilen:
             neu = self.profil_lesen(sitzung)
             return Antwort(False, neu.daten if neu else None,
-                           "PROFIL WURDE ZWISCHENDURCH GEAENDERT")
+                           "PROFIL WURDE ZWISCHENDURCH GEÄNDERT")
         zeile = zeilen[0]
         return gut({"fassung": int(zeile.get("fassung", erwartet + 1)),
                     "werte": dict(zeile.get("werte") or {}),

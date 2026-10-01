@@ -264,9 +264,9 @@ class Spiel(Szene):
         self.befinden.zeichnen(ziel)
 
         if self.gegner_uebrig == 0 and self.held.lebt:
-            text = "NAECHSTE WELLE IN %d" % math.ceil(max(0.0, self.pause_rest))
+            text = "NÄCHSTE WELLE IN %d" % math.ceil(max(0.0, self.pause_rest))
         else:
-            text = "WELLE %d  %d UEBRIG" % (self.welle, self.gegner_uebrig)
+            text = "WELLE %d  %d ÜBRIG" % (self.welle, self.gegner_uebrig)
         self.renderer.hud(ziel, self.welt, self.held, text, self.held.punkte,
                           self.blick)
         if self.hinweis:

@@ -171,7 +171,7 @@ def bestand() -> int:
         print("  %-20s %3d x %-3d  %s" % ((name,) + s.get_size() + (herkunft,)))
 
     print()
-    print("KLAENGE")
+    print("KLÄNGE")
     klaenge = Klaenge(ordner)
     for name in K.KLANG_NAMEN:
         klaenge.klang(name)

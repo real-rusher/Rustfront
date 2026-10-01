@@ -270,7 +270,7 @@ class Menue(Szene):
                              K.C_MUTED_DK, 1, 1, "mitte")
 
     def fusstext(self) -> str:
-        return "[PFEILE] WAEHLEN   [ENTER] OEFFNEN   [ESC] ZURUECK"
+        return "[PFEILE] WÄHLEN   [ENTER] ÖFFNEN   [ESC] ZURÜCK"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -387,49 +387,49 @@ class Pause(Menue):
 # hier und nicht im Elementnamen, damit die Erklaerung wachsen kann, ohne
 # dass das Menue umgebaut werden muss.
 HILFE = {
-    "_": ["ZEILE WAEHLEN, UM MEHR ZU ERFAHREN."],
+    "_": ["ZEILE WÄHLEN, UM MEHR ZU ERFAHREN."],
     "fenstermodus": [
-        "FENSTER LAESST SICH VERSCHIEBEN UND IN DER GROESSE ZIEHEN.",
-        "RANDLOS FUELLT DEN BILDSCHIRM, ALT+TAB BLEIBT SCHNELL.",
-        "VOLLBILD UEBERNIMMT DEN BILDSCHIRM GANZ ALLEIN.",
+        "FENSTER LÄSST SICH VERSCHIEBEN UND IN DER GRÖSSE ZIEHEN.",
+        "RANDLOS FÜLLT DEN BILDSCHIRM, ALT+TAB BLEIBT SCHNELL.",
+        "VOLLBILD ÜBERNIMMT DEN BILDSCHIRM GANZ ALLEIN.",
     ],
     "aufloesung": [
-        "GROESSE DES FENSTERS. IM VOLLBILD GILT DER BILDSCHIRM.",
-        "GERECHNET WIRD IMMER MIT 640 MAL 360 UND DANN VERGROESSERT.",
+        "GRÖSSE DES FENSTERS. IM VOLLBILD GILT DER BILDSCHIRM.",
+        "GERECHNET WIRD IMMER MIT 640 MAL 360 UND DANN VERGRÖSSERT.",
     ],
     "bildrate": [
         "OBERGRENZE DER BILDER JE SEKUNDE.",
-        "UNBEGRENZT IST FLUESSIGER, BEGRENZT SCHONT AKKU UND LUEFTER.",
-        "DIE SPIELREGEL LAEUFT IMMER MIT 120 SCHRITTEN, UNABHAENGIG DAVON.",
+        "UNBEGRENZT IST FLÜSSIGER, BEGRENZT SCHONT AKKU UND LÜFTER.",
+        "DIE SPIELREGEL LÄUFT IMMER MIT 120 SCHRITTEN, UNABHÄNGIG DAVON.",
     ],
     "pixelraster": [
-        "FUELLT DAS FENSTER NUTZT JEDEN PIXEL, KANN ABER LEICHT WISCHEN.",
-        "GANZE PIXEL VERGROESSERT NUR UM 2X, 3X, 4X - GESTOCHEN SCHARF,",
-        "DAFUER BLEIBT AUSSEN EIN SCHWARZER RAND STEHEN.",
+        "FÜLLT DAS FENSTER NUTZT JEDEN PIXEL, KANN ABER LEICHT WISCHEN.",
+        "GANZE PIXEL VERGRÖSSERT NUR UM 2X, 3X, 4X - GESTOCHEN SCHARF,",
+        "DAFÜR BLEIBT AUSSEN EIN SCHWARZER RAND STEHEN.",
     ],
-    "ton_gesamt": ["REGELT ALLES ZUSAMMEN, AUCH SPAETERE MUSIK."],
+    "ton_gesamt": ["REGELT ALLES ZUSAMMEN, AUCH SPÄTERE MUSIK."],
     "ton_effekte": [
-        "SCHUESSE, SCHRITTE, EINSCHLAEGE.",
+        "SCHÜSSE, SCHRITTE, EINSCHLÄGE.",
         "WIRD MIT GESAMT MULTIPLIZIERT, NICHT ERSETZT.",
     ],
     "ton_musik": [
-        "LAUTSTAERKE DER MUSIK.",
-        "NOCH OHNE WIRKUNG - ES GIBT BISHER KEINE STUECKE.",
+        "LAUTSTÄRKE DER MUSIK.",
+        "NOCH OHNE WIRKUNG - ES GIBT BISHER KEINE STÜCKE.",
     ],
-    "probe": ["SPIELT EINEN SCHUSS, DAMIT MAN DIE LAUTSTAERKE HOERT."],
+    "probe": ["SPIELT EINEN SCHUSS, DAMIT MAN DIE LAUTSTÄRKE HÖRT."],
     "vignette": ["DUNKLE ECKEN. ZIEHT DEN BLICK ZUR MITTE."],
     "bildschirm_ruckeln": [
         "WIE STARK DAS BILD BEI EXPLOSIONEN UND TREFFERN WACKELT.",
         "ES RUCKELT NUR NOCH, WAS NAH GENUG UND AUF DERSELBEN EBENE",
         "PASSIERT. AUF 0 STEHT DAS BILD VOLLKOMMEN STILL.",
-        "GEHOERT ZUM KONTO: GILT AN JEDEM RECHNER, AN DEM DU DICH",
+        "GEHÖRT ZUM KONTO: GILT AN JEDEM RECHNER, AN DEM DU DICH",
         "ANMELDEST.",
     ],
-    "partikel": ["MENGE AN STAUB, FUNKEN UND HUELSEN."],
+    "partikel": ["MENGE AN STAUB, FUNKEN UND HÜLSEN."],
     "obere_ebenen": [
-        "IM MEHRSPIELER: OB DIE ETAGE UEBER DIR ZU BEGINN JEDER PARTIE",
-        "GEZEIGT WIRD, WO SIE UEBER SPIELFLAECHE LIEGT. PLATEAUS BLEIBEN",
-        "IMMER. IN DER RUNDE SCHALTET Q UM (UMLEGBAR). GEHOERT ZUM KONTO.",
+        "IM MEHRSPIELER: OB DIE ETAGE ÜBER DIR ZU BEGINN JEDER PARTIE",
+        "GEZEIGT WIRD, WO SIE ÜBER SPIELFLÄCHE LIEGT. PLATEAUS BLEIBEN",
+        "IMMER. IN DER RUNDE SCHALTET Q UM (UMLEGBAR). GEHÖRT ZUM KONTO.",
     ],
     "blendung": [
         "WIE EINE BLENDGRANATE BEI DIR AUSSIEHT. WIE VOM WERFER: WEISS,",
@@ -441,7 +441,7 @@ HILFE = {
         "EIN UNSICHTBARER PUNKT VOR DER WAFFE IST DIE BILDMITTE - DU SIEHST",
         "MEHR VON DEM, WAS VOR DIR LIEGT. GEHÖRT ZUM KONTO.",
     ],
-    "reset": ["SETZT ALLE WERTE DIESER SEITEN AUF DIE VORGABE ZURUECK."],
+    "reset": ["SETZT ALLE WERTE DIESER SEITEN AUF DIE VORGABE ZURÜCK."],
     "zurueck": ["ZURÜCK ZUM PAUSENMENÜ. GESPEICHERT IST SCHON ALLES."],
     "reiter_video": ["FENSTER, AUFLÖSUNG, BILDRATE, PIXELRASTER."],
     "reiter_audio": ["LAUTSTÄRKEN."],
@@ -728,7 +728,7 @@ class Steuerung(Menue):
             self.app.opt.zuruecksetzen_tasten()
             self.app.eingabe.tabelle_setzen(self.app.opt.tastentabelle())
             self.aufbauen()
-            self.sagen("BELEGUNG AUF VORGABE ZURUECKGESETZT")
+            self.sagen("BELEGUNG AUF VORGABE ZURÜCKGESETZT")
         elif el.name == "zurueck":
             self.zurueck()
         elif isinstance(el, ui.Zeile):
@@ -740,7 +740,7 @@ class Steuerung(Menue):
                 el.wartet = False
         zeile.wartet = True
         self.wartet_auf = zeile.name
-        self.sagen("NEUE TASTE FUER %s   [ESC] ABBRECHEN" % zeile.text, 30.0)
+        self.sagen("NEUE TASTE FÜR %s   [ESC] ABBRECHEN" % zeile.text, 30.0)
 
     def abbrechen(self) -> None:
         self.wartet_auf = None
@@ -831,15 +831,15 @@ MITWIRKENDE = [
     ("luft", ""),
     ("teil", "TON"),
     ("rolle", "JEDER KLANG WIRD GERECHNET, KEINER IST GESAMPELT"),
-    ("rolle", "MODALE SYNTHESE FUER HOLZ UND METALL"),
-    ("rolle", "GEFILTERTES RAUSCHEN FUER ALLES, WAS STAUBT"),
+    ("rolle", "MODALE SYNTHESE FÜR HOLZ UND METALL"),
+    ("rolle", "GEFILTERTES RAUSCHEN FÜR ALLES, WAS STAUBT"),
     ("luft", ""),
     ("teil", "WERKZEUG"),
     ("text", "PYTHON UND PYGAME-CE"),
     ("text", "GESCHRIEBEN OHNE SPIEL-BAUKASTEN"),
     ("luft", ""),
     ("teil", "DANK"),
-    ("text", "AN ALLE, DIE EINE FRUEHE FASSUNG ERTRAGEN HABEN"),
+    ("text", "AN ALLE, DIE EINE FRÜHE FASSUNG ERTRAGEN HABEN"),
     ("text", "UND TROTZDEM GESAGT HABEN, WAS NICHT STIMMT"),
     ("luft", ""),
     ("luft", ""),
@@ -875,7 +875,7 @@ class Mitwirkende(Menue):
     def aufbauen(self) -> None:
         r = self.tafel
         self.elemente = [ui.Knopf((r.centerx - 48, r.bottom - 44, 96, 18),
-                                  "ZURUECK", "zurueck")]
+                                  "ZURÜCK", "zurueck")]
 
     def ausloesen(self, el) -> None:
         self.zurueck()
@@ -955,7 +955,7 @@ class Mitwirkende(Menue):
         for i, el in enumerate(self.elemente):
             el.ueber = (i == self.wahl)
             el.zeichnen(ziel)
-        SCHRIFT.zeichnen(ziel, "[LEERTASTE] ANHALTEN   [ESC] ZURUECK", r.centerx,
+        SCHRIFT.zeichnen(ziel, "[LEERTASTE] ANHALTEN   [ESC] ZURÜCK", r.centerx,
                          r.bottom - 15, K.C_MUTED_DK, 1, 1, "mitte")
 
 
@@ -997,9 +997,9 @@ class Anmeldung(Menue):
         y = r.y + 58
         if konto.angemeldet:
             self.elemente = [
-                ui.Knopf((bx, y, bw, 20), "AUSRUESTUNG", "ausruestung"),
+                ui.Knopf((bx, y, bw, 20), "AUSRÜSTUNG", "ausruestung"),
                 ui.Knopf((bx, y + 26, bw, 20), "ABMELDEN", "abmelden"),
-                ui.Knopf((bx, y + 52, bw, 20), "ZURUECK", "zurueck"),
+                ui.Knopf((bx, y + 52, bw, 20), "ZURÜCK", "zurueck"),
             ]
             return
         self.elemente = [
@@ -1121,7 +1121,7 @@ class Anmeldung(Menue):
             offen = len(konto.journal.offen())
             runden = uebersicht.get("runden", 0)
             zeilen = [
-                "%d RUNDE%s  %d ABSCHUESSE  %d TODE"
+                "%d RUNDE%s  %d ABSCHÜSSE  %d TODE"
                 % (runden, "" if runden == 1 else "N",
                    uebersicht.get("abschuesse", 0), uebersicht.get("tode", 0)),
                 ("%d RUNDE WARTET AUF DEN ABGLEICH" % offen if offen == 1
@@ -1152,15 +1152,15 @@ class Anmeldung(Menue):
                     SCHRIFT.zeichnen(ziel, zeile[:46], r.centerx, y + 10 + i * 9,
                                      K.C_MUTED, 1, 1, "mitte")
         else:
-            SCHRIFT.zeichnen(ziel, "OHNE KONTO ZAEHLT ALLES TROTZDEM MIT",
+            SCHRIFT.zeichnen(ziel, "OHNE KONTO ZÄHLT ALLES TROTZDEM MIT",
                              r.centerx, y, K.C_MUTED_DK, 1, 1, "mitte")
             SCHRIFT.zeichnen(ziel, "UND WANDERT BEIM ANMELDEN MIT HOCH",
                              r.centerx, y + 10, K.C_MUTED_DK, 1, 1, "mitte")
 
     def fusstext(self) -> str:
         if self.app.konto.angemeldet:
-            return "[ESC] ZURUECK"
-        return "[TAB] FELD  [ENTER] ANMELDEN  [ESC] SPAETER"
+            return "[ESC] ZURÜCK"
+        return "[TAB] FELD  [ENTER] ANMELDEN  [ESC] SPÄTER"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -1176,7 +1176,7 @@ class Ausruestung(Menue):
     man vergessen koennte.
     """
 
-    titel = "AUSRUESTUNG"
+    titel = "AUSRÜSTUNG"
 
     def __init__(self, app, danach=None) -> None:
         self.tafel = _mitte(316, 216)
@@ -1298,4 +1298,4 @@ class Ausruestung(Menue):
                              K.C_CREAM, 1, 1, "mitte")
 
     def fusstext(self) -> str:
-        return "[LINKS/RECHTS] AENDERN   [ESC] FERTIG"
+        return "[LINKS/RECHTS] ÄNDERN   [ESC] FERTIG"

@@ -273,7 +273,7 @@ class Freigabe:
             return [
                 "Der Router hat Port %d von selbst freigegeben (UPnP)." % self.port,
                 "Mitspieler verbinden sich mit:",
-                "   %s:%d" % (self.aussen or "DEINE-OEFFENTLICHE-IP", self.port),
+                "   %s:%d" % (self.aussen or "DEINE-ÖFFENTLICHE-IP", self.port),
             ]
         return [
             "Automatisch ging es nicht: %s" % (self.grund or "unbekannt"),
