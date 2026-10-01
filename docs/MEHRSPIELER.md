@@ -1651,6 +1651,37 @@ nur der Name `admin` vorbehalten (`ablage.VORBEHALTEN`).
   *bevor* die neuen Regeln gelesen werden - sonst stuende sie unter dem
   neuen Modus.
 
+## 12f. Version 0.31.1: Plateaus als Felsbloecke, Zombies ohne Gewehr
+
+**FEST.** Ein Plateau ist auf der oberen Ebene ein Stueck Boden ueber
+Fels der unteren (`obermaske` 0). Sein Deckel wird deckend gezeichnet,
+auch wenn die Etage sonst ausblendet; nur was ueber Spielflaeche liegt
+(`obermaske` 1), wird durchsichtig (`_ausstanzen` mit
+`BLEND_RGBA_MULT`) oder mit `oben_aus` ganz weggenommen.
+
+**FEST.** Zwischen Deckel und Sockel zeichnet `Renderer.klippen_zeichnen`
+eine Felswand: je Kante eines Plateaus (`Renderer.klippen`, zu ganzen
+Strecken zusammengefasst und je Welt gemerkt) ein Viereck vom Deckelrand
+zum Sockelrand. Beide Raender kommen aus `_abbildung` - genau der
+Rechnung, mit der die Ebene selbst ins Bild kommt, samt der ganzzahligen
+Groesse der Tiefenflaeche. Gezeichnet wird nur, was dem Auge zugewandt
+ist; der Rest laege ohnehin unter dem Deckel. Gesteinsbaender, Fugen und
+eine helle Oberkante stehen in `KLIPPEN`, die Farbe kommt aus der
+Wandkachel des Kartensatzes.
+
+**GRUND.** Gemeldet: von unten sah man den Felsblock, dann Boden "wie
+Luft", dann blass und versetzt das Plateau. Die obere Ebene ist naeher am
+Auge und darum groesser - das ist richtig. Falsch war, dass nichts den
+Deckel mit dem Sockel verband und dass man durch den Deckel hindurchsah.
+
+**Folge.** Was auf dem Boden hinter einem Plateau steht (vom Auge aus
+gesehen), verdeckt jetzt der Deckel - wie bei einem echten Felsen. Und es
+gilt fuer jede Etage, die auf Wand steht, also auch fuer die Arena.
+
+**FEST.** Laeufer, Brecher und Speier zeichnet `_figur(..., klauen=True)`:
+Arme nach vorn, auseinander, mit Klauen (beim Brecher Faeusten). Vorher
+erbten sie von der Spielerfigur deren Vorgabe, einen Gewehrstummel.
+
 ---
 
 ## 13. Was fehlt

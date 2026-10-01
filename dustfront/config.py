@@ -953,6 +953,16 @@ PERSPEKTIVE = dict(
                               # ueberhaupt umgerechnet
 )
 
+# Die Felswand zwischen einem Plateau und dem Boden darunter (render.py,
+# Renderer.klippen). Ein Plateau ist ein Felsblock, kein schwebender
+# Deckel - bis 0.31 hing er versetzt und blass ueber seinem Sockel.
+KLIPPEN = dict(
+    schichten=4,          # so viele Gesteinsbaender von oben nach unten
+    abdunkeln=0.42,       # um so viel ist das unterste dunkler als das oberste
+    fuge=0.72,            # die Linie zwischen zwei Baendern, so viel dunkler
+    kante=1.45,           # die Oberkante faengt Licht, so viel heller
+)
+
 STURZ = dict(
     schwerkraft=980.0,    # Pixel je Sekunde im Quadrat, bestimmt die Falldauer
     luftsteuerung=0.55,   # so viel Bewegung hat man waehrend des Sturzes

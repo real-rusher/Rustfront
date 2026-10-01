@@ -5647,6 +5647,168 @@ pruef("... und der Gast hat es erfahren",
       len(journal(gx)) == 1 and journal(gx)[0]["partie"] == journal(wx)[0]["partie"])
 gx.verlassen()
 
+# ── Plateaus sind Felsbloecke (nach 0.31) ────────────────────────────
+# Gemeldet: auf STAUBTAL, unten stehend mit eingeblendeter oberer Ebene,
+# hing das Plateau versetzt und blass neben seinem Felssockel, und
+# dazwischen sah man Boden "wie Luft". Die obere Ebene wird vergroessert
+# gezeichnet (sie ist naeher am Auge), und ueber dem Fels war sie zu
+# 79 Prozent durchsichtig. Jetzt: der Deckel deckend, und zwischen ihm
+# und dem Sockel eine Felswand mit derselben Perspektive.
+pw_w, pw_g = gefechtspaar("pvp", karte="staubtal")
+pw_r = pw_w.renderer
+pw_welt = pw_w.welt
+kanten = pw_r.klippen(pw_welt, 1, False)
+pruef("Die Plateaus von STAUBTAL haben Kanten",
+      len(kanten) > 0, "%d Strecken" % len(kanten))
+pruef("... zu ganzen Waenden zusammengefasst, nicht Kachel fuer Kachel",
+      len(kanten) < 80, "%d Strecken" % len(kanten))
+e1p = pw_welt.ebene(1)
+maske_p = pw_r.obermaske(pw_welt, 1)
+
+def _plateau_feld(tx, ty):
+    if not (0 <= tx < e1p.breite and 0 <= ty < e1p.hoehe):
+        return False
+    i = ty * e1p.breite + tx
+    return e1p.kacheln[i] != K.LEER and not maske_p[i]
+
+def _kante_stimmt(ax, ay, bx, by, nx, ny):
+    """Jede Kachel entlang der Kante: innen Plateau, aussen keines."""
+    T = K.TILE
+    schritte = int(max(abs(bx - ax), abs(by - ay)) // T)
+    for n in range(schritte):
+        mx = ax + (bx - ax) * (n + 0.5) / schritte
+        my = ay + (by - ay) * (n + 0.5) / schritte
+        innen = (int((mx - nx * 4) // T), int((my - ny * 4) // T))
+        aussen = (int((mx + nx * 4) // T), int((my + ny * 4) // T))
+        if not _plateau_feld(*innen) or _plateau_feld(*aussen):
+            return False
+    return True
+
+pruef("Jede Kante liegt genau am Rand eines Plateaus",
+      all(_kante_stimmt(*kn) for kn in kanten))
+
+# Die Figur unten, suedlich vor dem grossen Plateau (Reihen 8 bis 27).
+ich_p = pw_w.ich
+ich_p.ebene = 0; ich_p.flug = 0.0
+ich_p.pos.update(60.5 * K.TILE, 31.5 * K.TILE); ich_p.vorher.update(ich_p.pos)
+for _ in range(30):
+    pw_w.schritt(K.FIXED_DT)
+pw_w.obere_zeigen = True
+kam = pw_w.kamera
+dz1 = pw_welt.hoehe(0) - pw_welt.hoehe(1)
+k1 = K.PERSPEKTIVE["brennweite"] / max(60.0, K.PERSPEKTIVE["brennweite"] + dz1)
+ab_unten = pw_r._abbildung(kam, 1.0, 0.0)
+ab_oben = pw_r._abbildung(kam, k1, dz1)
+probe = pygame.Surface(pw_r.groesse, pygame.SRCALPHA)
+probe.fill((0, 0, 0, 0))
+anzahl_w = pw_r.klippen_zeichnen(probe, pw_welt, 1, ab_unten, ab_oben, False)
+pruef("Von unten werden Waende gezeichnet", anzahl_w > 0, str(anzahl_w))
+# Die Suedwand des grossen Plateaus: zwischen Deckelrand und Sockelrand.
+x_w = 60.5 * K.TILE
+y_sockel = (28 * K.TILE - ab_unten[0].y) * ab_unten[2]
+y_deckel = (28 * K.TILE - ab_oben[0].y) * ab_oben[2]
+sx = int((x_w - ab_unten[0].x) * ab_unten[1])
+pruef("Der Deckelrand liegt weiter vom Auge weg als der Sockel",
+      y_deckel < y_sockel - 4, "%.0f / %.0f" % (y_deckel, y_sockel))
+mitte_w = int((y_deckel + y_sockel) / 2)
+pruef("Zwischen beiden steht die Felswand - keine Luft",
+      probe.get_at((sx, mitte_w)).a == 255, str(probe.get_at((sx, mitte_w))))
+# Die Nordwand liegt hinter dem Plateau und unter seinem Deckel.
+y_nord = int((8 * K.TILE - ab_unten[0].y) * ab_unten[2]) - 2
+if 0 <= y_nord < pw_r.groesse[1]:
+    pruef("Die abgewandte Wand wird nicht gezeichnet",
+          probe.get_at((sx, y_nord)).a == 0)
+
+# Der Deckel ist deckend: was darunter auf Ebene 0 liegt, scheint nicht
+# durch. Zweimal gezeichnet, einmal mit anderem Boden unten.
+def _bild_mit_boden(art):
+    e0 = pw_welt.ebene(0)
+    alt_k = list(e0.kacheln)
+    if art is not None:
+        for i, k in enumerate(e0.kacheln):
+            if k == K.BODEN:
+                e0.kacheln[i] = art
+    app.flaeche.fill(K.C_VOID)
+    pw_w.zeichnen(app.flaeche, 1.0)
+    bild_ = app.flaeche.copy()
+    e0.kacheln[:] = alt_k
+    return bild_
+
+vorher_p = _bild_mit_boden(None)
+anders_p = _bild_mit_boden(K.GITTER)
+# Ein Punkt auf dem Deckel: knapp oberhalb der Wand, links von der Uhr
+# und rechts von der Minikarte.
+py_d = int(y_deckel / pw_w.kamera.zoom) - 8
+px_d = 240
+gleich = vorher_p.get_at((px_d, py_d)) == anders_p.get_at((px_d, py_d))
+pruef("Durch den Deckel scheint der Boden darunter nicht durch", gleich,
+      "%s / %s" % (vorher_p.get_at((px_d, py_d)), anders_p.get_at((px_d, py_d))))
+pw_w.obere_zeigen = False
+ohne_a = _bild_mit_boden(None)
+ohne_b = _bild_mit_boden(K.GITTER)
+pruef("Auch ausgeblendet bleibt das Plateau ein Block",
+      ohne_a.get_at((px_d, py_d)) == ohne_b.get_at((px_d, py_d)))
+
+# Was ueber Spielflaeche liegt, blendet weiter aus - nur das Plateau nicht.
+flaeche_p = pygame.Surface((4 * K.TILE, K.TILE), pygame.SRCALPHA)
+fels_i = next(i for i, k in enumerate(e1p.kacheln) if k != K.LEER and not maske_p[i])
+gang_i = next(i for i, k in enumerate(e1p.kacheln) if k != K.LEER and maske_p[i])
+for i_, x_ in ((fels_i, 0), (gang_i, 2)):
+    flaeche_p.fill((200, 180, 140, 255), (x_ * K.TILE, 0, K.TILE, K.TILE))
+# Die beiden Felder an ihre Stellen gerueckt: eine Ecke je Feld.
+for i_, x_ in ((fels_i, 0), (gang_i, 2)):
+    tx_, ty_ = i_ % e1p.breite, i_ // e1p.breite
+    teil = flaeche_p.subsurface((x_ * K.TILE, 0, K.TILE, K.TILE))
+    pw_r._ausstanzen(teil, pw_welt, 1, pygame.Vector2(tx_ * K.TILE, ty_ * K.TILE),
+                     (255, 255, 255, 64), pygame.BLEND_RGBA_MULT)
+pruef("Ueber Fels bleibt die Etage deckend",
+      flaeche_p.get_at((K.TILE // 2, K.TILE // 2)).a == 255)
+pruef("Ueber Spielflaeche wird sie durchsichtig",
+      flaeche_p.get_at((2 * K.TILE + K.TILE // 2, K.TILE // 2)).a < 80)
+
+# Auf dem Plateau stehend: der Blick hinab zeigt keine Wand ueber dem Rand.
+ich_p.ebene = 1; ich_p.pos.update(46 * K.TILE, 26 * K.TILE); ich_p.vorher.update(ich_p.pos)
+for _ in range(30):
+    pw_w.schritt(K.FIXED_DT)
+app.flaeche.fill(K.C_VOID)
+pw_w.zeichnen(app.flaeche, 1.0)              # darf nicht stolpern
+dz0 = pw_welt.hoehe(1) - pw_welt.hoehe(0)
+k0 = K.PERSPEKTIVE["brennweite"] / max(60.0, K.PERSPEKTIVE["brennweite"] + dz0)
+probe.fill((0, 0, 0, 0))
+pw_r.klippen_zeichnen(probe, pw_welt, 1, pw_r._abbildung(kam, k0, dz0),
+                      pw_r._abbildung(kam, 1.0, 0.0), False)
+sued_rand = int((28 * K.TILE - kam.ecke.y) / 1.0) + 2
+pruef("Von oben liegt die Suedwand unter dem Deckel, nicht davor",
+      not (0 <= sued_rand < pw_r.groesse[1])
+      or probe.get_at((int(46 * K.TILE - kam.ecke.x), sued_rand)).a == 0)
+pw_w.verlassen(); pw_g.verlassen()
+
+# ── Zombies tragen keine Schusswaffen (nach 0.31) ───────────────────
+# Laeufer, Brecher und Speier benutzten die Spielerfigur, und deren
+# Vorgabe ohne Waffe war ein Gewehrstummel. Jetzt Arme mit Klauen (der
+# Brecher mit Faeusten). Erkannt wird der Stummel an seiner Farbe.
+STUMMEL = (86, 72, 52)
+def _stummel_pixel(name):
+    b = _PLATZHALTER[name]()
+    return sum(1 for x in range(b.get_width()) for y in range(b.get_height())
+               if tuple(b.get_at((x, y)))[:3] == STUMMEL and b.get_at((x, y)).a)
+
+pruef("Gegenprobe: die Spielerfigur ohne Waffe hat den Stummel noch",
+      _stummel_pixel("spieler") > 0)
+for zname in ("gegner_laeufer", "gegner_brecher", "gegner_speier"):
+    pruef("%s haelt keine Schusswaffe" % zname, _stummel_pixel(zname) == 0)
+    zb = _PLATZHALTER[zname]()
+    zc = zb.get_width() // 2
+    # Vor der Brust, wo der Lauf lag, ist jetzt nichts - die Haende sind
+    # rechts und links davon.
+    pruef("%s greift mit zwei Haenden, nicht mit einem Lauf" % zname,
+          zb.get_at((zc + 10, zc - 6)).a > 0 and zb.get_at((zc + 10, zc + 6)).a > 0)
+for zname in ("gegner_laeufer", "gegner_brecher"):
+    zb = _PLATZHALTER[zname]()
+    zc = zb.get_width() // 2
+    pruef("%s: vor der Brust kein Lauf mehr" % zname,
+          zb.get_at((zc + 12, zc)).a == 0, str(zb.get_at((zc + 12, zc))))
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

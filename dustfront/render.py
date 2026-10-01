@@ -153,6 +153,7 @@ class Renderer:
         self._fleck_cache: dict[tuple, pygame.Surface] = {}
         self._rauch_puffer: dict[tuple, tuple] = {}
         self._feuer_puffer: dict[int, tuple] = {}
+        self._klippen_farbe: dict[str, tuple] = {}
         # Auch Schatten, Vignette und die Dekale kommen aus der Registratur:
         # eine Datei assets/vignette.png ersetzt sie genauso wie eine Kachel.
         # Gehalten werden sie hier, damit die Zeichenschleife nicht bei jedem
@@ -535,8 +536,14 @@ class Renderer:
         cache[index] = maske
         return maske
 
-    def _ausstanzen(self, flaeche, welt, index: int, ecke) -> None:
+    def _ausstanzen(self, flaeche, welt, index: int, ecke,
+                    farbe=(0, 0, 0, 0), modus: int = 0) -> None:
         """Loescht aus der fertigen Ebene, was ueber Spielflaeche liegt.
+
+        Mit `farbe` und `modus` = BLEND_RGBA_MULT wird es nicht geloescht,
+        sondern nur durchsichtiger: so blendet die Etage darueber dort aus,
+        wo sie ueber Spielflaeche liegt, und bleibt ueber Fels deckend
+        (siehe `klippen`).
 
         Nach dem Zeichnen und nicht davor: auch wer dort oben steht,
         verschwindet mit - eine Figur ohne Boden unter sich waere
@@ -552,7 +559,6 @@ class Renderer:
         t0y = max(0, int(ecke.y // K.TILE))
         t1x = min(e.breite - 1, int((ecke.x + zw) // K.TILE))
         t1y = min(e.hoehe - 1, int((ecke.y + zh) // K.TILE))
-        leer = (0, 0, 0, 0)
         for ty in range(t0y, t1y + 1):
             zeile = ty * e.breite
             sy = ty * K.TILE - ecke.y
@@ -564,8 +570,173 @@ class Renderer:
                 anfang = tx
                 while tx <= t1x and maske[zeile + tx]:
                     tx += 1
-                flaeche.fill(leer, (anfang * K.TILE - ecke.x, sy,
-                                    (tx - anfang) * K.TILE, K.TILE))
+                flaeche.fill(farbe, (anfang * K.TILE - ecke.x, sy,
+                                     (tx - anfang) * K.TILE, K.TILE), modus)
+
+    # ---- Klippen: die Felswand zwischen Plateau und Boden -------------
+    #
+    # Ein Plateau ist auf der oberen Ebene ein Stueck Boden, das auf Fels
+    # der unteren steht (obermaske 0). Gezeichnet wird die obere Ebene
+    # vergroessert - sie liegt naeher am Auge. Ohne Wand dazwischen hing
+    # ihr Deckel deshalb versetzt und blass ueber dem Felsblock, und
+    # zwischen beiden sah man Boden wie Luft (gemeldet nach 0.31). Hier
+    # kommt die Wand: an jeder Kante des Plateaus ein Viereck vom Rand
+    # des Deckels hinunter zum Rand des Sockels, beide mit genau der
+    # Abbildung ihrer Ebene gerechnet. Was dem Auge zugewandt ist, ist zu
+    # sehen; die abgewandten Waende liegen unter dem Deckel und fallen weg.
+
+    def klippen(self, welt, index: int, oben_aus: bool) -> list:
+        """Die Kanten der Plateaus von Ebene `index`, in Welt-Pixeln.
+
+        Je Eintrag (ax, ay, bx, by, nx, ny): eine Strecke am Rand des
+        Plateaus und die Richtung, in die die Wand schaut. Zusammenhaengende
+        Kanten sind zu einer Strecke zusammengefasst - eine Seite des
+        grossen Plateaus ist eine Wand und nicht dreissig.
+
+        Eine Wand steht, wo ein Plateaufeld an ein Feld grenzt, auf dem
+        oben nichts gezeichnet wird: ein Loch, oder - mit `oben_aus` -
+        ein ausgeblendetes Stueck Etage. Am Kartenrand nicht.
+        """
+        cache = welt.__dict__.setdefault("_klippen", {})
+        schluessel = (index, bool(oben_aus))
+        hit = cache.get(schluessel)
+        if hit is not None:
+            return hit
+        raus = []
+        if index <= 0 or index >= len(welt.ebenen):
+            cache[schluessel] = raus
+            return raus
+        maske = self.obermaske(welt, index)
+        oben = welt.ebene(index)
+        b, h, T = oben.breite, oben.hoehe, K.TILE
+        if (welt.ebene(index - 1).breite, welt.ebene(index - 1).hoehe) != (b, h):
+            cache[schluessel] = raus
+            return raus
+
+        def plateau(tx, ty):
+            i = ty * b + tx
+            return oben.kacheln[i] != K.LEER and not maske[i]
+
+        def offen(tx, ty):
+            if not (0 <= tx < b and 0 <= ty < h):
+                return False
+            i = ty * b + tx
+            return oben.kacheln[i] == K.LEER or (oben_aus and maske[i])
+
+        # Waagerechte Kanten (Wand nach Norden oder Sueden), zeilenweise.
+        for ty in range(h):
+            for dy in (-1, 1):
+                tx = 0
+                while tx < b:
+                    if not (plateau(tx, ty) and offen(tx, ty + dy)):
+                        tx += 1
+                        continue
+                    anfang = tx
+                    while tx < b and plateau(tx, ty) and offen(tx, ty + dy):
+                        tx += 1
+                    y = (ty + (1 if dy > 0 else 0)) * T
+                    raus.append((anfang * T, y, tx * T, y, 0, dy))
+        # Senkrechte Kanten (Wand nach Westen oder Osten), spaltenweise.
+        for tx in range(b):
+            for dx in (-1, 1):
+                ty = 0
+                while ty < h:
+                    if not (plateau(tx, ty) and offen(tx + dx, ty)):
+                        ty += 1
+                        continue
+                    anfang = ty
+                    while ty < h and plateau(tx, ty) and offen(tx + dx, ty):
+                        ty += 1
+                    x = (tx + (1 if dx > 0 else 0)) * T
+                    raus.append((x, anfang * T, x, ty * T, dx, 0))
+        cache[schluessel] = raus
+        return raus
+
+    def _abbildung(self, kamera, k: float, dz: float):
+        """Wie eine Ebene ins Bild kommt: Bildpunkt = (Weltpunkt - ecke) * s.
+
+        Genau die Rechnung von `welt_zeichnen`: die angeschaute Ebene ohne
+        Massstab an `kamera.ecke`, jede andere auf ihrer Tiefenflaeche, die
+        danach auf die Bildgroesse gebracht wird. Die Flaeche ist eine
+        ganze Zahl Pixel gross, ihr Massstab darum nicht ganz k - wer mit
+        k rechnete, laege mit der Wand ein paar Pixel neben der Ebene.
+        """
+        if abs(dz) < 1.0:
+            return kamera.ecke, 1.0, 1.0
+        w = int(self.groesse[0] / k) + 2
+        h = int(self.groesse[1] / k) + 2
+        mitte = kamera.pos + kamera.versatz
+        ecke = pygame.Vector2(round(mitte.x - w / 2), round(mitte.y - h / 2))
+        return ecke, self.groesse[0] / w, self.groesse[1] / h
+
+    def _klippenfarbe(self, welt):
+        """Die Farbe des Felses: die Wandkachel des Kartensatzes, gemittelt."""
+        satz = getattr(welt, "satz", "")
+        hit = self._klippen_farbe.get(satz)
+        if hit is None:
+            name = self.SAETZE.get(satz, {}).get("wand", "wand")
+            hit = tuple(pygame.transform.average_color(self.bilder.bild(name))[:3])
+            self._klippen_farbe[satz] = hit
+        return hit
+
+    def klippen_zeichnen(self, ziel, welt, index: int, unten, oben,
+                         oben_aus: bool, dunkel: float = 1.0) -> int:
+        """Die Waende zwischen Ebene `index` und der darunter. Gibt zurueck,
+        wie viele gezeichnet wurden (fuer die Tests).
+
+        `unten` und `oben` sind die Abbildungen beider Ebenen (`_abbildung`).
+        """
+        kanten = self.klippen(welt, index, oben_aus)
+        if not kanten:
+            return 0
+        ue, usx, usy = unten
+        oe, osx, osy = oben
+        gw, gh = self.groesse
+        grund = self._klippenfarbe(welt)
+        # Licht von oben links, wie die Schlagschatten der Waende: die Wand
+        # nach Sueden ist die hellste, die nach Norden die dunkelste.
+        licht = {(0, 1): 0.82, (1, 0): 0.66, (-1, 0): 0.74, (0, -1): 0.56}
+        schichten = K.KLIPPEN["schichten"]
+        gezeichnet = 0
+        for (ax, ay, bx, by, nx, ny) in kanten:
+            pa = ((ax - oe.x) * osx, (ay - oe.y) * osy)
+            pb = ((bx - oe.x) * osx, (by - oe.y) * osy)
+            ua = ((ax - ue.x) * usx, (ay - ue.y) * usy)
+            ub = ((bx - ue.x) * usx, (by - ue.y) * usy)
+            # Dem Auge zugewandt? Dann liegt der Sockel weiter in
+            # Blickrichtung der Wand als der Deckelrand. Sonst steckt die
+            # Wand unter dem Deckel.
+            if ((ua[0] - pa[0]) * nx + (ua[1] - pa[1]) * ny) <= 0.5:
+                continue
+            xs = (pa[0], pb[0], ua[0], ub[0])
+            ys = (pa[1], pb[1], ua[1], ub[1])
+            if max(xs) < 0 or min(xs) > gw or max(ys) < 0 or min(ys) > gh:
+                continue
+            hell = licht.get((nx, ny), 0.7) * dunkel
+            # Geschichteter Fels: Baender von oben nach unten, jedes etwas
+            # dunkler - das liest sich als Hoehe und nicht als Flaeche.
+            for nr in range(schichten):
+                t0, t1 = nr / schichten, (nr + 1) / schichten
+                f = hell * (1.0 - K.KLIPPEN["abdunkeln"] * t0)
+                farbe = tuple(max(0, min(255, int(c * f))) for c in grund)
+                viereck = [
+                    (pa[0] + (ua[0] - pa[0]) * t0, pa[1] + (ua[1] - pa[1]) * t0),
+                    (pb[0] + (ub[0] - pb[0]) * t0, pb[1] + (ub[1] - pb[1]) * t0),
+                    (pb[0] + (ub[0] - pb[0]) * t1, pb[1] + (ub[1] - pb[1]) * t1),
+                    (pa[0] + (ua[0] - pa[0]) * t1, pa[1] + (ua[1] - pa[1]) * t1),
+                ]
+                pygame.draw.polygon(ziel, farbe, viereck)
+                if nr:
+                    # Eine Fuge zwischen zwei Baendern, wie Schichten im Sandstein.
+                    fuge = tuple(int(c * f * K.KLIPPEN["fuge"]) for c in grund)
+                    pygame.draw.line(ziel, fuge, viereck[0], viereck[1], 1)
+            # Die Kante oben faengt Licht, der Fuss liegt im Schatten.
+            kante = tuple(min(255, int(c * hell * K.KLIPPEN["kante"])) for c in grund)
+            fuss = tuple(int(c * hell * 0.45) for c in grund)
+            pygame.draw.line(ziel, kante, pa, pb, 1)
+            pygame.draw.line(ziel, fuss, ua, ub, 1)
+            gezeichnet += 1
+        return gezeichnet
 
     def welt_zeichnen(self, ziel, welt, kamera, alpha, blick_hoehe=None,
                       boden=None, blick=None, oben_aus=False) -> None:
@@ -607,6 +778,9 @@ class Renderer:
 
         if blick is None:
             blick = held.ebene if held else 0
+        # Wie jede gezeichnete Ebene ins Bild kam - die Klippen zwischen
+        # zwei Ebenen brauchen beide Abbildungen.
+        abbildung: dict[int, tuple] = {}
         for idx in range(len(welt.ebenen)):
             if idx > blick + 1:
                 continue                  # hoechstens eine Etage nach oben
@@ -617,6 +791,11 @@ class Renderer:
             if sicht <= 0.01:
                 continue
             k = p["brennweite"] / max(60.0, p["brennweite"] + dz)
+            abbildung[idx] = self._abbildung(kamera, k, dz)
+            if idx - 1 in abbildung:
+                self.klippen_zeichnen(
+                    ziel, welt, idx, abbildung[idx - 1], abbildung[idx], oben_aus,
+                    max(48, int(p["dunkel"] * k)) / 255.0 if dz > 0 else 1.0)
 
             if abs(dz) < 1.0:                      # die angeschaute Ebene
                 self.ebene_zeichnen(ziel, welt, idx, ecke, None)
@@ -635,9 +814,7 @@ class Renderer:
             dunkel = max(48, int(p["dunkel"] * k)) if dz > 0 else None
             flaeche = self._tiefenflaeche(k)
             flaeche.fill((0, 0, 0, 0))
-            mitte = kamera.pos + kamera.versatz
-            u_ecke = pygame.Vector2(round(mitte.x - flaeche.get_width() / 2),
-                                    round(mitte.y - flaeche.get_height() / 2))
+            u_ecke = abbildung[idx][0]
             self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel)
             if boden is not None:
                 boden(flaeche, idx, u_ecke)
@@ -648,8 +825,20 @@ class Renderer:
                 self.muendungsfeuer(flaeche, welt, u_ecke, idx)
                 self.rueckmeldung_zeichnen(flaeche, welt, idx, u_ecke)
                 self.rauch_zeichnen(flaeche, welt, idx, u_ecke, False)
-            if oben_aus and dz < 0 and idx > 0:
-                self._ausstanzen(flaeche, welt, idx, u_ecke)
+            if dz < 0 and idx > 0:
+                # Ueber Spielflaeche blendet die Etage aus (oder ist mit
+                # oben_aus ganz weg), damit sie den Gang darunter nicht
+                # verdeckt. Ueber Fels - das Plateau - bleibt sie deckend:
+                # sie ist der Deckel des Felsblocks, und durch einen
+                # Felsblock sieht man nicht. Blass gezeichnet stand dort
+                # ein Geist ueber dem Sockel statt eines Plateaus.
+                if oben_aus:
+                    self._ausstanzen(flaeche, welt, idx, u_ecke)
+                elif sicht < 0.999:
+                    self._ausstanzen(flaeche, welt, idx, u_ecke,
+                                     (255, 255, 255, int(255 * sicht)),
+                                     pygame.BLEND_RGBA_MULT)
+                sicht = 1.0
             skaliert = pygame.transform.scale(flaeche, self.groesse)
             if sicht < 0.999:
                 skaliert.set_alpha(int(255 * sicht))
