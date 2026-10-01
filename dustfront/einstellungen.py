@@ -59,6 +59,10 @@ VORGABE = {
     # heisst SPIELER (sitzung.spielername). Seit 0.32 fragt kein Starter
     # mehr im Terminal danach - eingetragen wird er in der Lobbysuche.
     "spielername": "",
+    # Die Rundentafel zeigt erst die einfache Ansicht (regeln.EINFACH).
+    # Wer einmal ERWEITERT gewaehlt hat, bekommt sie beim naechsten Mal
+    # wieder - wer viel einstellt, soll nicht jedes Mal umschalten.
+    "runden_erweitert": False,
 }
 
 # Welche Einstellungen zum **Spieler** gehoeren und nicht zum Geraet.

@@ -561,6 +561,15 @@ MODI = {
 }
 MODUS_VORGABE = "pvp"
 
+# Die Standardrunde (seit 0.32): womit eine frische Lobby plant, und was
+# der Knopf STANDARDRUNDE auf der Rundentafel einstellt. Gedacht fuer die,
+# die zum ersten Mal dabei sind - zwei Mannschaften, damit niemand allein
+# gegen alle steht, zehn Minuten auf der richtigen Karte, und jeder hat
+# alles, damit man nicht vorher ein Loadout bauen muss. Was hier fehlt,
+# bekommt die Vorgabe aus regeln.py.
+STANDARDRUNDE = dict(modus="team", karte="staubtal", ende_art="zeit",
+                     ende_wert=600, loadouts="alles")
+
 # Zwei Mannschaften. Mehr waeren eine Zeile hier und sonst nichts - die
 # Zuteilung, die Faerbung und die Punktetafel rechnen alle ueber die Laenge
 # dieser Listen.

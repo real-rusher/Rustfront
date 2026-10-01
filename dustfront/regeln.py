@@ -119,12 +119,15 @@ class Feld:
     zahl: auch Werte zwischen den Stufen annehmen, solange sie im
     Rahmen liegen. Die Kommandozeile darf "--wert 7" sagen, obwohl das
     Menue in anderen Schritten zaehlt.
+    einfach: steht auch in der einfachen Ansicht der Rundentafel
+    (seit 0.32, siehe EINFACH).
     """
 
     def __init__(self, schluessel, name, gruppe, vorgabe, werte, text=None,
                  gilt=None, rund=False, zahl=False, schalter=False,
                  einzug=False, hilfe="", erlaubt=None):
         self.schluessel = schluessel
+        self.einfach = False        # gesetzt nach FELDER, aus EINFACH
         self._name = name
         self.gruppe = gruppe
         self._vorgabe = vorgabe
@@ -266,6 +269,17 @@ FELDER = (
 )
 
 NACH_NAME = {f.schluessel: f for f in FELDER}
+
+# Was die einfache Ansicht der Rundentafel zeigt (seit 0.32). Gemeldet:
+# "Menues fuer neue Spieler: Rundeneinstellungen in einfach und
+# erweitert." Wer zum ersten Mal eine Runde aufmacht, soll Spielart,
+# Karte, Dauer und Ausruestung sehen und nicht sechzehn Zeilen. Alles
+# andere steht unter ERWEITERT und behaelt dort seinen Wert, auch wenn
+# es gerade nicht zu sehen ist.
+EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert",
+           "huegel_zeit", "schwierigkeit", "loadouts", "loadout_nr")
+for _f in FELDER:
+    _f.einfach = _f.schluessel in EINFACH
 GRUPPEN = ("RUNDE", "GEGNER", "AUSRUESTUNG", "EINSTIEG")
 
 
@@ -323,9 +337,44 @@ def saeubern(roh, umfeld=None) -> dict:
     return d
 
 
-def sichtbar(d) -> list:
-    """Die Felder, die bei dieser Sammlung zaehlen, in Menuereihenfolge."""
-    return [f for f in FELDER if f.gilt(d)]
+def sichtbar(d, erweitert: bool = True) -> list:
+    """Die Felder, die bei dieser Sammlung zaehlen, in Menuereihenfolge.
+
+    erweitert=False: nur die aus EINFACH.
+    """
+    return [f for f in FELDER if f.gilt(d) and (erweitert or f.einfach)]
+
+
+def verborgen_geaendert(d, umfeld=None) -> list:
+    """Erweiterte Regeln, die gelten und nicht auf der Standardrunde stehen.
+
+    Fuer die einfache Ansicht: wer dort nur Spielart und Karte sieht,
+    soll trotzdem erfahren, dass unter ERWEITERT etwas verstellt ist -
+    sonst wundert er sich, warum die Munition knapp ist.
+    """
+    standard = standardrunde(umfeld)
+    raus = []
+    for f in FELDER:
+        if f.einfach or not f.gilt(d):
+            continue
+        # Verglichen mit der Vorgabe *dieser* Spielart, nicht mit der
+        # Standardrunde: deren Spielart hat andere Vorgaben.
+        if d.get(f.schluessel) != f.vorgabe(d) and \
+                d.get(f.schluessel) != standard.get(f.schluessel):
+            raus.append(f)
+    return raus
+
+
+def standardrunde(umfeld=None) -> dict:
+    """Die Runde, die eine frische Lobby plant (K.STANDARDRUNDE).
+
+    Fehlt die Karte auf dieser Platte, die eingebaute: eine Standardrunde,
+    die nicht startet, waere das Gegenteil von dem, wofuer sie da ist.
+    """
+    d = dict(K.STANDARDRUNDE)
+    if d.get("karte") and d["karte"] not in _karten(d, umfeld):
+        d["karte"] = ""
+    return saeubern(d, umfeld)
 
 
 def verstellen(d: dict, schluessel: str, schritt: int = 1,

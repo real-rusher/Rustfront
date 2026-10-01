@@ -357,6 +357,13 @@ class LobbyTeil:
         self.plan[nr] = R.saeubern(d, self._umfeld())
         self._plan_geaendert()
 
+    def plan_standard(self, nr: int) -> None:
+        """Eine geplante Runde auf die Standardrunde setzen (0.32)."""
+        if not self.ist_gastgeber or not 0 <= nr < len(self.plan):
+            return
+        self.plan[nr] = R.standardrunde(self._umfeld())
+        self._plan_geaendert()
+
     def plan_dazu(self, nach: int) -> int:
         """Eine Runde hinter `nach` einfuegen, als Kopie davon."""
         if not self.ist_gastgeber or len(self.plan) >= K.LOBBY["plan_hoechstens"]:
@@ -607,11 +614,15 @@ class Rundenplanung(Menue):
         schleife.gesperrt = not self.darf
         self.elemente.append(schleife)
 
+    @property
+    def erweitert(self) -> bool:
+        return bool(self.app.opt["runden_erweitert"])
+
     def _regeln_spalte(self, x: int, y: int, breite: int) -> None:
         g = self.gefecht
         d = g.plan[self.nr]
         umfeld = g._umfeld()
-        for i, f in enumerate(R.sichtbar(d)):
+        for i, f in enumerate(R.sichtbar(d, self.erweitert)):
             rect = (x, y + i * self.ZEILE, breite, 14)
             name = ("  " if f.einzug(d) else "") + f.name(d)
             if f.schalter:
@@ -631,6 +642,14 @@ class Rundenplanung(Menue):
 
     def _fuss(self, r) -> None:
         g = self.gefecht
+        # Oben rechts: einfach oder erweitert, und zurueck zum Standard.
+        oben = r.y + 40
+        self.elemente.append(ui.Knopf(
+            (r.right - 16 - 96, oben, 96, 14),
+            "EINFACH <" if self.erweitert else "ERWEITERT >", "ansicht"))
+        self.elemente.append(ui.Knopf(
+            (r.right - 16 - 96 - 104, oben, 100, 14), "STANDARDRUNDE",
+            "standard", gesperrt=not self.darf))
         y = r.bottom - 58
         self.elemente.append(ui.Knopf(
             (r.x + 16, y, 150, 16),
@@ -665,6 +684,12 @@ class Rundenplanung(Menue):
             return
         if name == "planen":
             g.plan_offen = not g.plan_offen
+        elif name == "ansicht":
+            self.app.opt["runden_erweitert"] = not self.erweitert
+            self.app.opt.speichern()
+        elif name == "standard":
+            g.plan_standard(self.nr)
+            self.sagen("RUNDE %d IST JETZT DIE STANDARDRUNDE" % (self.nr + 1))
         elif name.startswith("runde:"):
             self.nr = int(name.split(":")[1])
         elif name == "dazu":
@@ -754,6 +779,12 @@ class Rundenplanung(Menue):
                      if len(g.plan) > 1 else "STARTET DIE RUNDE FUER ALLE")
         elif el is not None and el.name == "planen":
             hilfe = "MEHRERE RUNDEN HINTEREINANDER, SCHLEIFE, KOPIEREN"
+        elif el is not None and el.name == "ansicht":
+            hilfe = ("NUR DAS WICHTIGSTE ZEIGEN" if self.erweitert
+                     else "ALLE REGELN: MUNITION, MEDKITS, SCHUTZ, RAKETEN ...")
+        elif el is not None and el.name == "standard":
+            hilfe = "%s - FÜR DEN ANFANG DAS RICHTIGE" % R.kurz(
+                R.standardrunde(g._umfeld()), g._umfeld())
         elif el is not None and el.name == "start_mit":
             hilfe = "BLENDGRANATEN KLINGEN UND AUSSEHEN WIE VOM WERFER GEMACHT"
         elif el is not None and el.name == "start_ohne":
@@ -763,6 +794,18 @@ class Rundenplanung(Menue):
         if hilfe:
             SCHRIFT.zeichnen(ziel, hilfe, r.centerx, r.bottom - 34,
                              K.C_MUTED, 1, ausrichtung="mitte")
+        if not self.erweitert:
+            # Was unter ERWEITERT verstellt ist, soll man auch in der
+            # einfachen Ansicht erfahren.
+            anders = R.verborgen_geaendert(g.plan[self.nr], g._umfeld())
+            if anders:
+                text = "UNTER ERWEITERT VERSTELLT: " + ", ".join(
+                    f.name(g.plan[self.nr]).strip() for f in anders[:3])
+                if len(anders) > 3:
+                    text += " +%d" % (len(anders) - 3)
+                SCHRIFT.zeichnen(ziel, ui.kuerzen(text, r.width - 40),
+                                 r.centerx, r.bottom - 76, K.C_AMBER, 1,
+                                 ausrichtung="mitte")
 
     def fusstext(self) -> str:
         return "[MAUS] ODER [PFEILE] EINSTELLEN   [P] / [ESC] ZURUECK"

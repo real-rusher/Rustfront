@@ -6160,6 +6160,42 @@ for _a in (_app_a, _app_b):
     while _a.stapel:
         _a.werfen()
 
+# ── 0.32: Rundentafel einfach / erweitert, Standardrunde ─────────────
+# Gemeldet: "Menues fuer neue Spieler: Rundeneinstellungen einfach und
+# erweitert, mit einer definierten Standardrunde."
+from dustfront import regeln as _R46, lobby as _LB46, sitzung as _s46
+_neuer_port()
+_l46 = _s46.eigene_lobby(app, headless_port=_port[0])
+pruef("Eine frische Lobby plant die Standardrunde",
+      _l46.plan[0] == _R46.standardrunde(_l46._umfeld())
+      and _l46.plan[0]["modus"] == K.STANDARDRUNDE["modus"],
+      _R46.kurz(_l46.plan[0]))
+_einf = [f.schluessel for f in _R46.sichtbar(_l46.plan[0], False)]
+_alle = [f.schluessel for f in _R46.sichtbar(_l46.plan[0])]
+pruef("Einfach zeigt Spielart, Karte, Dauer - und nicht alles",
+      {"modus", "karte", "ende_wert"} <= set(_einf) and len(_einf) < len(_alle)
+      and "knapp" not in _einf and "knapp" in _alle, str(_einf))
+_alt46 = app.opt["runden_erweitert"]
+app.opt["runden_erweitert"] = False
+_t46 = _LB46.Rundenplanung(app, _l46)
+_namen46 = [el.name for el in _t46.elemente]
+pruef("Die Tafel faengt einfach an", "r:knapp" not in _namen46
+      and "r:modus" in _namen46 and "ansicht" in _namen46, str(_namen46))
+_t46.ausloesen([el for el in _t46.elemente if el.name == "ansicht"][0])
+pruef("ERWEITERT zeigt alle Regeln und merkt es sich",
+      "r:knapp" in [el.name for el in _t46.elemente]
+      and app.opt["runden_erweitert"] is True)
+_l46.plan_verstellen(0, "modus", "pve")
+_l46.plan_verstellen(0, "knapp", True)
+pruef("Was unter ERWEITERT verstellt ist, weiss die einfache Ansicht",
+      [f.schluessel for f in _R46.verborgen_geaendert(_l46.plan[0])] == ["knapp"])
+_t46.ausloesen([el for el in _t46.elemente if el.name == "standard"][0])
+pruef("STANDARDRUNDE setzt die Runde zurueck",
+      _l46.plan[0] == _R46.standardrunde(_l46._umfeld()), _R46.kurz(_l46.plan[0]))
+app.opt["runden_erweitert"] = _alt46
+app.opt.speichern()
+_l46.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

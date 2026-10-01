@@ -80,8 +80,11 @@ def eigene_lobby(app, hinweis: str = "", headless_port: int | None = None):
             continue
     if wirt is None:
         return None
+    from . import regeln as R
+    # Geplant ist zuerst die Standardrunde (K.STANDARDRUNDE): wer neu ist,
+    # drueckt START und spielt etwas Vernuenftiges.
     g = Gefecht(app, spielername(app), gastgeber=wirt, lobby=True,
-                ansagen=True, heimkehr=True)
+                ansagen=True, heimkehr=True, regeln=R.standardrunde())
     app.ersetzen(g)
     if hinweis:
         g.melden(hinweis, 6.0)

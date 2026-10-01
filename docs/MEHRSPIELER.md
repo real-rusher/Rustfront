@@ -1801,6 +1801,24 @@ Mehrere Lobbys auf einem Rechner teilen sich den Suchport
 nicht auf, laeuft die Lobby trotzdem, sie ist nur nicht zu finden -
 beitreten per Adresse geht weiterhin.
 
+### Rundentafel: einfach und erweitert, Standardrunde
+
+Gemeldet: "Menues fuer neue Spieler: Rundeneinstellungen in einfach und
+erweitert, mit einer definierten Standardrunde."
+
+* **Einfach** zeigt nur, was `regeln.EINFACH` nennt: Spielart, Karte,
+  Runden, Endart und Dauer, Haltezeit, Schwierigkeit, Ausruestung. Alles
+  andere steht unter **ERWEITERT** und behaelt dort seinen Wert. Die
+  Wahl gilt je Spieler und bleibt stehen (`runden_erweitert` in
+  `einstellungen.json`).
+* Ist unter ERWEITERT etwas verstellt, sagt die einfache Ansicht es in
+  einer Zeile (`regeln.verborgen_geaendert`) - sonst wundert man sich,
+  warum die Munition knapp ist.
+* **Standardrunde** (`K.STANDARDRUNDE`, `regeln.standardrunde`): TEAM auf
+  STAUBTAL, zehn Minuten, jeder hat alles. Damit plant jede frische Lobby,
+  und der Knopf STANDARDRUNDE setzt die gewaehlte Runde darauf zurueck.
+  Fehlt die Karte, nimmt sie die eingebaute.
+
 ### Name ohne Konto
 
 Angemeldet heisst man wie das Konto. Sonst gilt der Name aus der
