@@ -5785,8 +5785,9 @@ pw_w.verlassen(); pw_g.verlassen()
 
 # ── Zombies tragen keine Schusswaffen (nach 0.31) ───────────────────
 # Laeufer, Brecher und Speier benutzten die Spielerfigur, und deren
-# Vorgabe ohne Waffe war ein Gewehrstummel. Jetzt Arme mit Klauen (der
-# Brecher mit Faeusten). Erkannt wird der Stummel an seiner Farbe.
+# Vorgabe ohne Waffe war ein Gewehrstummel. Jetzt `bewaffnet=False`: die
+# Arme parallel nach vorn statt zur Mitte, wo das Gewehr war. Erkannt wird
+# der Stummel an seiner Farbe.
 STUMMEL = (86, 72, 52)
 def _stummel_pixel(name):
     b = _PLATZHALTER[name]()
@@ -5799,10 +5800,14 @@ for zname in ("gegner_laeufer", "gegner_brecher", "gegner_speier"):
     pruef("%s haelt keine Schusswaffe" % zname, _stummel_pixel(zname) == 0)
     zb = _PLATZHALTER[zname]()
     zc = zb.get_width() // 2
-    # Vor der Brust, wo der Lauf lag, ist jetzt nichts - die Haende sind
-    # rechts und links davon.
-    pruef("%s greift mit zwei Haenden, nicht mit einem Lauf" % zname,
-          zb.get_at((zc + 10, zc - 6)).a > 0 and zb.get_at((zc + 10, zc + 6)).a > 0)
+    # Beide Arme reichen parallel nach vorn - an der Stelle, an der die
+    # Gewehrarme schon zusammengelaufen waeren (x = c + 9), stehen sie
+    # noch bei c - 5 und c + 5.
+    pruef("%s greift mit zwei parallelen Armen, nicht mit einem Lauf" % zname,
+          zb.get_at((zc + 9, zc - 5)).a > 0 and zb.get_at((zc + 9, zc + 5)).a > 0)
+    pruef("%s: die Arme sind ungleich lang" % zname,
+          zb.get_at((zc + 11, zc - 5)).a > 0 and zb.get_at((zc + 11, zc + 5)) !=
+          zb.get_at((zc + 11, zc - 5)))
 for zname in ("gegner_laeufer", "gegner_brecher"):
     zb = _PLATZHALTER[zname]()
     zc = zb.get_width() // 2

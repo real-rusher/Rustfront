@@ -1678,9 +1678,14 @@ Deckel mit dem Sockel verband und dass man durch den Deckel hindurchsah.
 gesehen), verdeckt jetzt der Deckel - wie bei einem echten Felsen. Und es
 gilt fuer jede Etage, die auf Wand steht, also auch fuer die Arena.
 
-**FEST.** Laeufer, Brecher und Speier zeichnet `_figur(..., klauen=True)`:
-Arme nach vorn, auseinander, mit Klauen (beim Brecher Faeusten). Vorher
-erbten sie von der Spielerfigur deren Vorgabe, einen Gewehrstummel.
+**FEST.** Laeufer, Brecher und Speier zeichnet `_figur(..., bewaffnet=False)`:
+kein Gewehrstummel, und die Arme parallel nach vorn, etwas laenger und
+leicht ungleich (c + 11 und c + 10). Vorher erbten sie von der
+Spielerfigur deren Vorgabe, eine Waffe. Nur die Waffe wegzunehmen reicht
+nicht: die Arme der Spielerfigur laufen zur Mitte zusammen, weil sie ein
+Gewehr halten, und griffen dann ins Leere. In 0.31.1 hatten die Arme noch
+Klauen und der Brecher Faeuste - in 28 Pixeln war das unruhig; 0.31.3
+nimmt beides zurueck.
 
 ---
 

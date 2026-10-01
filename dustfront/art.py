@@ -438,37 +438,17 @@ def _hand_waffe(s, c, name):
         pygame.draw.rect(s, K.C_TEAL, (hand + 7, c - 3, 1, 2))
 
 
-def _klauen(s, c, rumpf_dk, haut, laenge=10, faeuste=False):
-    """Zwei Arme nach vorn, auseinander statt zur Mitte, mit Klauen.
-
-    Die Gegner hielten bis 0.31 denselben Gewehrstummel wie der Spieler -
-    sie benutzten dieselbe Figur, und deren Vorgabe war eine Waffe. Ein
-    Zombie schiesst nicht. Er greift: die Arme gestreckt, leicht ungleich
-    lang, die Haende offen. So sieht man auch von oben, in welche Richtung
-    er will, ohne dass er etwas traegt.
-    """
-    for seite, mehr in ((-1, 0), (1, 1)):            # ein Arm etwas laenger
-        schulter = (c + 1, c + seite * 5)
-        hand = (c + laenge + mehr, c + seite * 6)
-        pygame.draw.line(s, rumpf_dk, schulter, hand, 3)
-        pygame.draw.line(s, haut, (schulter[0] + 1, schulter[1]),
-                         (hand[0] - 1, hand[1]), 1)
-        if faeuste:
-            pygame.draw.circle(s, rumpf_dk, hand, 3)
-            pygame.draw.circle(s, haut, hand, 2)
-            continue
-        pygame.draw.circle(s, haut, hand, 1)
-        # Drei Finger, gespreizt nach vorn.
-        for df in (-1, 0, 1):
-            pygame.draw.line(s, rumpf_dk, (hand[0] + 1, hand[1] + df),
-                             (hand[0] + 3, hand[1] + df * 2), 1)
-
-
 def _figur(groesse, rumpf, rumpf_dk, akzent, breit=False, waffe=None,
-           klauen=False, faeuste=False):
+           bewaffnet=True):
     """Draufsicht: Schultern quer, Kopf mittig, Waffe nach rechts.
 
-    `klauen`: ein Zombie - Arme mit Haenden statt einer Waffe (_klauen).
+    `bewaffnet=False`: ein Zombie. Bis 0.31 hielten die Gegner denselben
+    Gewehrstummel wie der Spieler - sie benutzten dieselbe Figur, und
+    deren Vorgabe war eine Waffe. Nur die Waffe wegzunehmen reicht nicht:
+    die Arme laufen zur Mitte zusammen, weil sie ein Gewehr halten, und
+    griffen dann ins Leere. Ohne Waffe zeigen sie darum parallel nach
+    vorn, etwas laenger und leicht ungleich - das sieht nach Zugreifen aus
+    und nicht nach Zielen.
     """
     s = _flaeche(groesse, groesse)
     c = groesse // 2
@@ -477,18 +457,18 @@ def _figur(groesse, rumpf, rumpf_dk, akzent, breit=False, waffe=None,
     pygame.draw.ellipse(s, rumpf_dk, schulter)
     pygame.draw.ellipse(s, rumpf, schulter.inflate(-3, -3))
     pygame.draw.ellipse(s, hell, schulter.inflate(-3, -3).move(0, -2), 1)
-    if klauen:
-        _klauen(s, c, rumpf_dk, hell, laenge=(9 if faeuste else 10), faeuste=faeuste)
-    else:
+    if bewaffnet or waffe is not None:
         # Arme nach vorn, zur Waffe hin
         pygame.draw.line(s, rumpf_dk, (c + 1, c - 5), (c + 8, c - 3), 3)
         pygame.draw.line(s, rumpf_dk, (c + 1, c + 5), (c + 8, c + 3), 3)
-    # Waffe: entweder die benannte aus der Tabelle oder der alte Stummel
-    if klauen:
-        pass
-    elif waffe is not None:
-        _hand_waffe(s, c, waffe)
     else:
+        # Parallel nach vorn, der eine Arm etwas weiter als der andere.
+        pygame.draw.line(s, rumpf_dk, (c + 1, c - 5), (c + 11, c - 5), 3)
+        pygame.draw.line(s, rumpf_dk, (c + 1, c + 5), (c + 10, c + 5), 3)
+    # Waffe: entweder die benannte aus der Tabelle oder der alte Stummel
+    if waffe is not None:
+        _hand_waffe(s, c, waffe)
+    elif bewaffnet:
         pygame.draw.rect(s, (30, 25, 19), (c + 6, c - 2, 12, 4))
         pygame.draw.rect(s, (86, 72, 52), (c + 6, c - 1, 10, 2))
     # Kopf
@@ -556,14 +536,13 @@ for _kombi in K.TEAMS["kombi"]:
 
 @platzhalter("gegner_laeufer")
 def _gegner_laeufer():
-    return _figur(28, (128, 84, 58), (58, 36, 24), K.C_ORANGE, klauen=True)
+    return _figur(28, (128, 84, 58), (58, 36, 24), K.C_ORANGE, bewaffnet=False)
 
 
 @platzhalter("gegner_brecher")
 def _gegner_brecher():
-    # Der Schwere schlaegt zu statt zu greifen: Faeuste statt Klauen.
     s = _figur(36, (112, 70, 48), (48, 30, 20), K.C_RED, breit=True,
-               klauen=True, faeuste=True)
+               bewaffnet=False)
     c = 18
     pygame.draw.rect(s, (74, 48, 32), (c - 9, c - 12, 18, 4))
     pygame.draw.rect(s, K.C_RUST, (c - 8, c - 11, 16, 2))
@@ -611,7 +590,7 @@ def _gegner_renner():
 
 @platzhalter("gegner_speier")
 def _gegner_speier():
-    s = _figur(30, (92, 106, 62), (42, 52, 28), (168, 226, 96), klauen=True)
+    s = _figur(30, (92, 106, 62), (42, 52, 28), (168, 226, 96), bewaffnet=False)
     c = 15
     # Der Kropf vorn: daher kommt der Spuck, und man sieht, wohin er zielt.
     pygame.draw.circle(s, (54, 68, 34), (c + 8, c), 5)
