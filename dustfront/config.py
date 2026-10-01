@@ -1598,8 +1598,15 @@ SPIELERKOSMETIK = dict(
 #               hilft nicht ganz, aber deutlich (siehe `abgewandt`).
 #   Entfernung  Nah voll, ab `weite` gar nicht.
 BLENDEN = dict(
-    weite=360.0,          # ab hier blendet sie nicht mehr
-    nah=90.0,             # bis hierhin blendet sie voll
+    # Seit 0.32 eine Waffe fuer die kurze Distanz (gemeldet: "soll wirklich
+    # eher fuer Nahdistanz nutzbar sein"). Vorher reichte das Weiss bis
+    # rund 250 Pixel, jetzt bis rund 150 - etwa fuenf Kacheln.
+    weite=200.0,          # ab hier blendet sie nicht mehr (vorher 360)
+    nah=70.0,             # bis hierhin blendet sie voll (vorher 90)
+    # Ganz nah blendet sie auch den, der wegschaut. Man dreht sich im
+    # Gefecht staendig; ob ein Blitz direkt neben einem wirkt, hing sonst
+    # davon ab, wohin die Maus gerade zeigte - Glueck statt Spiel.
+    rundum=64.0,          # so nah wirkt sie in jede Richtung (zwei Kacheln)
     dauer=2.6,            # so lange dauert die volle Blendung
     mindest=0.55,         # so lange mindestens, wenn sie ueberhaupt trifft
     # Ganz weiss und deckend: wer voll getroffen ist, sieht nichts mehr -
@@ -1613,8 +1620,9 @@ BLENDEN = dict(
     abklingen=1.8,        # je hoeher, desto schneller wird wieder klar
     abgewandt=0.35,       # so viel bleibt uebrig, wenn man weggedreht steht
     # Darunter kein Weiss, nur die Explosion in der Welt. Hoeher als
-    # `abgewandt`: wer wegschaut, wird nicht geblendet. Bei Blick auf den
-    # Blitz endet das Weiss bei rund 250 Pixeln.
+    # `abgewandt`: wer wegschaut, wird nicht geblendet - ausser innerhalb
+    # von `rundum`. Bei Blick auf den Blitz endet das Weiss bei rund 150
+    # Pixeln (nah + (1 - schwelle) * (weite - nah)).
     schwelle=0.4,
     glitzer_dauer=1.1,    # so lange leuchtet der Glitzer nach
     ring=1.3,             # Wucht des Druckrings

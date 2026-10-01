@@ -2837,10 +2837,26 @@ mittel = wirt_k.pos + pygame.Vector2(
 mitte_wert = blend_wert(mittel, 0, wirt_k, w.welt)
 pruef("Dazwischen anteilig", 0.2 < mitte_wert < 0.8, "%.2f" % mitte_wert)
 wirt_k.winkel = 180.0                            # weggedreht
-weggedreht = blend_wert(blitz, 0, wirt_k, w.welt)
 # Seit 0.30: wer wegschaut, wird nicht geblendet - er sieht nur die
-# Explosion mit dem Glitzer in der Welt (so gemeldet).
-pruef("Weggedreht kein Weiss", weggedreht == 0.0, "%.2f" % weggedreht)
+# Explosion mit dem Glitzer in der Welt (so gemeldet). Seit 0.32 nicht
+# mehr ganz nah: innerhalb von `rundum` wirkt sie in jede Richtung, sonst
+# entschied die Mausrichtung im Moment des Knalls.
+ganz_nah = wirt_k.pos + pygame.Vector2(K.BLENDEN["rundum"] - 8, 0)
+pruef("Ganz nah blendet sie auch weggedreht voll",
+      blend_wert(ganz_nah, 0, wirt_k, w.welt) > 0.9,
+      "%.2f" % blend_wert(ganz_nah, 0, wirt_k, w.welt))
+etwas_weiter = wirt_k.pos + pygame.Vector2(K.BLENDEN["rundum"] + 30, 0)
+weggedreht = blend_wert(etwas_weiter, 0, wirt_k, w.welt)
+pruef("Etwas weiter weg und weggedreht: kein Weiss", weggedreht == 0.0,
+      "%.2f" % weggedreht)
+wirt_k.winkel = 0.0
+# Die Reichweite ist kurz (0.32): bei Blick auf den Blitz endet das
+# Weiss bei rund 150 Pixeln, vorher bei rund 250.
+reich = [d for d in range(0, 400, 2)
+         if blend_wert(wirt_k.pos + pygame.Vector2(d, 0), 0, wirt_k, w.welt) > 0.0]
+pruef("Das Weiss reicht nur noch rund 150 Pixel weit",
+      reich and 130 <= max(reich) <= 170, "bis %s" % (max(reich) if reich else "-"))
+wirt_k.winkel = 180.0
 fern = wirt_k.pos + pygame.Vector2(K.BLENDEN["weite"] - 40, 0)
 wirt_k.winkel = 0.0
 pruef("Weit weg, aber hingeschaut, auch keins",
@@ -2917,6 +2933,38 @@ if wand:
     pruef("Eine Wand dazwischen schuetzt ganz",
           blend_wert(hinter, 0, wirt_k, w.welt) == 0.0,
           "%.2f" % blend_wert(hinter, 0, wirt_k, w.welt))
+
+# Um die Ecke geworfen, eng hinter der Ecke versteckt (gemeldet nach
+# 0.31.4: "wird oft noch voll getroffen"). Die Sichtlinie wurde in halben
+# Kacheln abgetastet und uebersprang schraeg angeschnittene Ecken.
+from dustfront.world import Welt as _W39, Ebene as _E39
+import random as _r39
+_ecken_karte = ["".join("#" if (x == 6 and y <= 6) or x in (0, 13) or y in (0, 13)
+                        else "." for x in range(14)) for y in range(14)]
+_eckwelt = _W39([_E39.aus_text(_ecken_karte, 0)])
+_eck = pygame.Vector2(6 * K.TILE, 7 * K.TILE)
+_rz = _r39.Random(39)
+_leck = _n = 0
+for _ in range(3000):
+    _sp = _eck + pygame.Vector2(-_rz.uniform(10, 40), -_rz.uniform(4, 36))
+    _gr = _eck + pygame.Vector2(_rz.uniform(36, 100), _rz.uniform(-90, 30))
+    _d = _gr - _sp
+    if any(int((_sp + _d * (i / 2000)).x // K.TILE) == 6
+           and int((_sp + _d * (i / 2000)).y // K.TILE) <= 6 for i in range(1, 2001)):
+        _n += 1
+        _leck += _eckwelt.sicht_frei(_sp, _gr, 0)
+pruef("Eng hinter einer Ecke schuetzt die Wand immer", _n > 2000 and _leck == 0,
+      "%d von %d durchgelassen" % (_leck, _n))
+# Und durch den Spalt zwischen zwei Waenden, die sich nur an einer Ecke
+# beruehren, sieht man nicht.
+_spalt = ["......", "..#...", "...#..", "......"]
+_spaltwelt = _W39([_E39.aus_text(_spalt, 0)])
+pruef("Durch eine Kachelecke zwischen zwei Waenden geht kein Blick",
+      not _spaltwelt.sicht_frei(pygame.Vector2(2.5 * K.TILE, 2.5 * K.TILE),
+                                pygame.Vector2(3.5 * K.TILE, 1.5 * K.TILE), 0))
+pruef("Freie Sicht bleibt frei",
+      _spaltwelt.sicht_frei(pygame.Vector2(0.5 * K.TILE, 0.5 * K.TILE),
+                            pygame.Vector2(5.5 * K.TILE, 0.5 * K.TILE), 0))
 
 # Skin-System: Bild und Ton haengen an einer Rolle, nicht an einem Namen.
 pruef("Bild und Klang haengen an Rollen",

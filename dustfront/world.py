@@ -86,7 +86,8 @@ def blend_wert(pos, ebene: int, ich, welt=None) -> float:
     2. Freie Sicht? Steht eine Wand dazwischen, passiert nichts. Das ist
        der Griff, den man im Gefecht lernt: in Deckung gehen hilft.
     3. Wie nah, und schaut man hin? Nah blendet voll; wer weggedreht
-       steht, bekommt nur einen Teil ab.
+       steht, bekommt nur einen Teil ab - ausser ganz nah (`rundum`):
+       dort wirkt sie in jede Richtung (seit 0.32).
     4. Reicht es ueberhaupt? Unter `schwelle` gibt es **kein** Weiss -
        nur die Explosion mit dem Glitzer in der Welt, die jeder sieht.
        Gemeldet in 0.29: weiter weg oder weggedreht soll man sie sehen,
@@ -113,7 +114,7 @@ def blend_wert(pos, ebene: int, ich, welt=None) -> float:
         naehe = 1.0 - (weg - b["nah"]) / max(1.0, b["weite"] - b["nah"])
     ab = pos - ich.pos
     hin = 1.0
-    if ab.length_squared() > 1.0:
+    if weg > b["rundum"] and ab.length_squared() > 1.0:
         richtung = math.degrees(math.atan2(ab.y, ab.x))
         delta = abs((richtung - getattr(ich, "winkel", 0.0) + 180) % 360 - 180)
         if delta > b["blickwinkel"] * 0.5:
@@ -720,16 +721,62 @@ class Welt:
         return max(0, ziel)
 
     def sicht_frei(self, von: pygame.Vector2, nach: pygame.Vector2, ebene: int) -> bool:
-        """Grober Sichttest entlang der Linie, Schrittweite halbe Kachel."""
+        """Freie Sicht von `von` nach `nach`? Jede Kachel auf der Linie zaehlt.
+
+        Bis 0.31 wurde die Linie in Schritten einer halben Kachel abgetastet.
+        Was eine Wandecke nur schraeg anschneidet, liegt dabei auf weniger
+        als einer halben Kachel - und wurde oft uebersprungen. Gemessen:
+        wer sich eng hinter eine Ecke stellte, galt in zwei von hundert
+        Faellen trotzdem als sichtbar, und eine Blendgranate um die Ecke
+        traf ihn voll (gemeldet). Jetzt wird die Linie Kachel fuer Kachel
+        verfolgt (Amanatides/Woo): keine Kachel, durch die sie geht, kann
+        fehlen. Geht sie genau durch eine Kachelecke, sperrt jede der beiden
+        Nachbarkacheln - durch einen Spalt zwischen zwei Waenden sieht man
+        nicht.
+
+        Die Startkachel zaehlt nicht (man steht ja darin), die Zielkachel
+        schon - wie vorher.
+        """
         e = self.ebene(ebene)
-        d = nach - von
-        laenge = d.length()
-        if laenge < 1.0:
+        T = float(K.TILE)
+        x0, y0 = von.x / T, von.y / T
+        x1, y1 = nach.x / T, nach.y / T
+        dx, dy = x1 - x0, y1 - y0
+        if dx * dx + dy * dy < (1.0 / T) ** 2:
             return True
-        schritte = int(laenge / (K.TILE * 0.5)) + 1
-        for i in range(1, schritte + 1):
-            p = von + d * (i / schritte)
-            if e.sichtdicht(int(p.x // K.TILE), int(p.y // K.TILE)):
+        tx, ty = int(math.floor(x0)), int(math.floor(y0))
+        sx = 1 if dx > 0 else -1
+        sy = 1 if dy > 0 else -1
+        unendlich = float("inf")
+        tdx = abs(1.0 / dx) if dx else unendlich
+        tdy = abs(1.0 / dy) if dy else unendlich
+        if dx > 0:
+            tmx = (tx + 1 - x0) * tdx
+        elif dx < 0:
+            tmx = (x0 - tx) * tdx
+        else:
+            tmx = unendlich
+        if dy > 0:
+            tmy = (ty + 1 - y0) * tdy
+        elif dy < 0:
+            tmy = (y0 - ty) * tdy
+        else:
+            tmy = unendlich
+        while min(tmx, tmy) <= 1.0:
+            if abs(tmx - tmy) < 1e-9:
+                if e.sichtdicht(tx + sx, ty) or e.sichtdicht(tx, ty + sy):
+                    return False
+                tx += sx
+                ty += sy
+                tmx += tdx
+                tmy += tdy
+            elif tmx < tmy:
+                tx += sx
+                tmx += tdx
+            else:
+                ty += sy
+                tmy += tdy
+            if e.sichtdicht(tx, ty):
                 return False
         return True
 
