@@ -1813,6 +1813,54 @@ e.neues_bild(); e._gehalten = set()
 taste(w, pygame.K_ESCAPE)
 pruef("Und Esc macht es wieder zu", w.menue is None)
 
+# Seit 0.32 mit der Maus (gemeldet: "mit der Maus bedienbar, und alle
+# Eingaben ans Spiel blockiert, solange es offen ist").
+def _fenster(gx, gy):
+    return (int(app.viewport.x + gx * app.skala), int(app.viewport.y + gy * app.skala))
+taste(w, pygame.K_ESCAPE)
+_fl = w._menue_flaechen()
+_eintr = [x[0] for x in w._menue_baut()]
+_i_einst = _eintr.index("einstellungen")
+w.ereignis(pygame.event.Event(pygame.MOUSEMOTION, pos=_fenster(*_fl[_i_einst].center),
+                              rel=(0, 0), buttons=(0, 0, 0)))
+pruef("Die Maus waehlt den Eintrag, auf dem sie steht", w.menue == _i_einst,
+      "%s statt %d" % (w.menue, _i_einst))
+_zoom_vor = w.zoom_ziel
+w.ereignis(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=1, flipped=False))
+pruef("Das Rad blaettert im Menue und zoomt nicht", w.zoom_ziel == _zoom_vor
+      and w.menue == _i_einst - 1)
+# Die Figur dreht sich nicht mit der Maus, solange das Menue offen ist.
+e.neues_bild(); e.maus = pygame.Vector2(10, 10)
+_z1 = w._meine_eingabe()["ziel"]
+e.neues_bild(); e.maus = pygame.Vector2(600, 300)
+_z2 = w._meine_eingabe()["ziel"]
+pruef("Im Menue bleibt das Ziel stehen, wo es war", _z1 == _z2, "%s / %s" % (_z1, _z2))
+# Klick auf WEITER: zu - und der gedrueckte Knopf schiesst nicht.
+w.ereignis(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1,
+                              pos=_fenster(*_fl[0].center)))
+pruef("Ein Klick auf WEITER macht das Menue zu", w.menue is None)
+e.neues_bild(); e._gehalten = {"feuer"}
+pruef("Der Klick auf WEITER loest keinen Schuss aus",
+      not w._meine_eingabe()["feuert"])
+e.neues_bild(); e._gehalten = set()
+w._meine_eingabe()
+e.neues_bild(); e._gehalten = {"feuer"}
+pruef("Nach dem Loslassen schiesst man wieder", w._meine_eingabe()["feuert"])
+e.neues_bild(); e._gehalten = set()
+taste(w, pygame.K_ESCAPE)
+w.ereignis(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=3,
+                              pos=_fenster(400, 200)))
+pruef("Rechtsklick geht zurueck wie Esc", w.menue is None)
+taste(w, pygame.K_ESCAPE)
+w._menue_wirken("einstellungen", True, True)
+pruef("EINSTELLUNGEN oeffnet die Einstellungen ueber dem Gefecht",
+      type(app.oben).__name__ == "Einstellungen" and w.menue is None)
+app.werfen()
+app.flaeche.fill(K.C_VOID)
+taste(w, pygame.K_ESCAPE)
+w.zeichnen(app.flaeche, 1.0)            # Spalte und Tafel duerfen nicht abstuerzen
+taste(w, pygame.K_ESCAPE)
+
 # Ein Pfeil darf niemals etwas ausloesen, das man nicht zurueckholen
 # kann. Auf "GEFECHT VERLASSEN" haette er frueher das Gefecht beendet.
 taste(w, pygame.K_ESCAPE)
@@ -1833,17 +1881,20 @@ taste(w, pygame.K_ESCAPE)
 wirt_eintraege = [x[0] for x in w._menue_baut()]
 taste(ga, pygame.K_ESCAPE)
 gast_eintraege = [x[0] for x in ga._menue_baut()]
-pruef("Der Gastgeber kann die Regeln stellen",
-      "modus" in wirt_eintraege and "neu" in wirt_eintraege
+pruef("Der Gastgeber stellt die naechste Runde, startet neu, teilt ein",
+      "planen" in wirt_eintraege and "neu" in wirt_eintraege
       and "teams" in wirt_eintraege, str(wirt_eintraege))
+pruef("Regeln stehen nicht mehr als Zeilen im Pausenmenue (0.32)",
+      "modus" not in wirt_eintraege and "loadouts" not in wirt_eintraege,
+      str(wirt_eintraege))
 pruef("Der Gast stellt keine Regeln",
       not ({"modus", "neu", "teams", "knapp", "loadouts"}
            & set(gast_eintraege)), str(gast_eintraege))
 pruef("Seine eigene Ausruestung und sein Konto schon",
       "ausruestung" in gast_eintraege and "konto" in gast_eintraege,
       str(gast_eintraege))
-pruef("Und der Gastgeber stellt die Ausruestungsregel",
-      "loadouts" in wirt_eintraege, str(wirt_eintraege))
+pruef("Einstellungen gibt es fuer beide",
+      "einstellungen" in wirt_eintraege and "einstellungen" in gast_eintraege)
 taste(ga, pygame.K_ESCAPE)
 
 # Mannschaften von Hand verschieben, sofort.
@@ -4431,15 +4482,17 @@ pruef("Und alle Mitspieler stehen in seiner neuen Welt",
           for k in gk_.kaempfer.values()), "%d Kaempfer" % len(gk_.kaempfer))
 wk_.verlassen(); gk_.verlassen()
 
-# ── Das Pausenmenue kennt die neuen Regeln ───────────────────────────
+# ── Die Rundentafel kennt die neuen Regeln ───────────────────────────
+# Seit 0.32 stellt man sie nur noch dort ein, nicht mehr im Pausenmenue.
 wm_, gm_ = gefechtspaar("pve")
-eintraege = [x[0] for x in wm_._menue_baut()]
-pruef("Im Menue stehen Schwierigkeit und Bosse",
+wm_.plan_verstellen(0, "modus", "pve")
+eintraege = [f.schluessel for f in RG.sichtbar(wm_.plan[0])]
+pruef("Auf der Tafel stehen Schwierigkeit und Bosse",
       "schwierigkeit" in eintraege and "bosse" in eintraege, str(eintraege))
-wm_.menue = eintraege.index("schwierigkeit")
-wm_._menue_wirken("schwierigkeit", True, False)
-pruef("Und lassen sich verstellen", wm_.wunsch["schwierigkeit"] == "schwer",
-      wm_.wunsch["schwierigkeit"])
+_vor = wm_.plan[0]["schwierigkeit"]
+wm_.plan_verstellen(0, "schwierigkeit", "schwer")
+pruef("Und lassen sich verstellen", wm_.plan[0]["schwierigkeit"] == "schwer",
+      "%s -> %s" % (_vor, wm_.plan[0]["schwierigkeit"]))
 wm_.verlassen(); gm_.verlassen()
 
 # ── Die Lobby ────────────────────────────────────────────────────────

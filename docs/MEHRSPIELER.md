@@ -510,24 +510,46 @@ darueber.
 
 **GRUND.** Eine geschobene Szene haelt das Gefecht an. Beim Gastgeber
 heisst das: jeder Gast friert ein, solange einer ins Menue schaut. Hier
-laeuft die Welt weiter, nur die eigene Eingabe ist stillgelegt - und der
-Deckel ist halb durchsichtig, damit man sieht, dass es weitergeht. Das ist
-keine Kosmetik, sondern eine Warnung: wer hier steht, steht auch in der
-Welt und kann erschossen werden.
+laeuft die Welt weiter, nur die eigene Eingabe ist stillgelegt - und das
+Gefecht bleibt rechts neben der Spalte sichtbar. Das ist keine Kosmetik,
+sondern eine Warnung: wer hier steht, steht auch in der Welt und kann
+erschossen werden.
 
-Der Gast hat zwei Eintraege (weiter, gehen). Der Gastgeber stellt alles:
+**Aussehen (seit 0.32, nach Helldivers 2).** Eine dunkle Spalte am
+linken Rand, die Eintraege klappen nacheinander von links auf (je 30 ms
+versetzt, `ui.aufklappen`), rechts eine Tafel: Spielart, Karte, Spieler,
+Zeit oder Punkte, **die naechste Runde**, beim Gastgeber die Adresse, und
+darunter in einem Satz, was der gewaehlte Eintrag tut. Das Pausenmenue im
+Einzelspieler (`menues.Pause`) sieht genauso aus (`ui.spalteneintrag`).
 
-| Eintrag | Wirkt |
-| --- | --- |
-| jede Regel aus `regeln.py`, die bei der Spielart gilt | ab der naechsten Runde |
-| MANNSCHAFTEN EINTEILEN | **sofort** |
-| NEUE RUNDE MIT DIESEN REGELN | sofort, setzt alles zurueck |
-| RUNDEN EINSTELLEN | oeffnet die Tafel (12b) |
-| ZURUECK IN DIE LOBBY | sofort |
+**Maus.** Zeigen waehlt, Linksklick loest aus, Rechtsklick geht zurueck
+wie Esc, das Rad blaettert. Im Menue gehoert die Maus allein dem Menue:
 
-In der Lobby stehen dort keine Regeln, sondern RUNDEN EINSTELLEN und
-RUNDE STARTEN. Werden es mehr Zeilen, als passen, blaettert das Menue
-mit der Auswahl.
+* kein Zoom am Rad,
+* **kein Zielen** - das Ziel bleibt, wo es beim Aufmachen war
+  (`_ziel_zuletzt`). Vorher drehte sich die Figur fuer alle sichtbar mit,
+  waehrend man ueber die Eintraege fuhr;
+* **kein Schuss nach WEITER**: der Klick auf WEITER haelt die linke
+  Taste noch, wenn das Menue zugeht. `_feuer_sperre` haelt das Feuer
+  zurueck, bis beide Maustasten einmal oben waren.
+
+**Eintraege.** Seit 0.32 nur noch Taten, keine Regelzeilen mehr. Bis dahin
+stand beim Gastgeber jede Regel der Runde hier, beim Huegel neunzehn
+Zeilen - dieselben, die auch die Rundentafel stellt. Jetzt stellt man die
+naechste Runde an einer Stelle ein:
+
+| Eintrag | Wer | Wirkt |
+| --- | --- | --- |
+| WEITER | alle | |
+| RUNDE STARTEN (MIT / OHNE KOSMETIK) | Gastgeber, Lobby | sofort |
+| NAECHSTE RUNDE EINSTELLEN / ANSEHEN | alle | oeffnet die Tafel (12b) |
+| RUNDE NEU STARTEN | Gastgeber, Runde | sofort, setzt alles zurueck |
+| MANNSCHAFTEN | Gastgeber, Teams | **sofort** |
+| AUSRUESTUNG, KONTO, EINSTELLUNGEN | alle | Szene darueber |
+| ANDERER LOBBY BEITRETEN | Lobby | Lobbysuche (12g) |
+| LOBBY / GEFECHT VERLASSEN | Gast | in die eigene Lobby (12g) |
+| GEFECHT VERLASSEN | Gastgeber, Runde | alle zurueck in die Lobby |
+| SPIEL BEENDEN | alle | zu, bzw. zurueck ins Hauptmenue |
 
 **Warum die Regeln erst zur naechsten Runde gelten:** mitten im Gefecht
 die Spielart zu wechseln hiesse, Fraktionen, Punkte und Einstiegsplaetze

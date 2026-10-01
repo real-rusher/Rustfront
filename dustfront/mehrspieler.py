@@ -811,6 +811,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self.menue = None
         self.menue_teams = False
         self.menue_zeile = 0
+        self._menue_seit = 0.0
+        self._feuer_sperre = False   # siehe _menue_zu
+        self._ziel_zuletzt = None    # wohin gezielt wurde, bevor das Menue aufging
         self._zeit = 0.0             # laeuft mit, treibt den Puls des Kreises
 
         # Der Kreis liegt in der Mitte der Karte. Eine feste Stelle, die
@@ -1536,14 +1539,25 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
 
     def _meine_eingabe(self) -> dict:
         e = self.app.eingabe
-        ziel = self.kamera.zu_welt(e.maus)
         offen = self.pausiert
+        if offen and self._ziel_zuletzt is not None:
+            # GRUND: Im Menue faehrt die Maus ueber die Eintraege. Folgte
+            # die Figur ihr, drehte sie sich dabei wild im Kreis - fuer
+            # alle anderen sichtbar, und das Menue sollte gerade *alle*
+            # Eingaben vom Spiel fernhalten.
+            ziel = self._ziel_zuletzt
+        else:
+            ziel = self.kamera.zu_welt(e.maus)
+            self._ziel_zuletzt = pygame.Vector2(ziel)
+        if self._feuer_sperre and not (e.gehalten("feuer") or e.gehalten("zweit")):
+            self._feuer_sperre = False
+        still = offen or self._feuer_sperre
         meldung = {
             "t": "ein",
             "will": [0.0, 0.0] if offen else [round(v, 2) for v in e.richtung()],
             "ziel": [round(ziel.x, 1), round(ziel.y, 1)],
-            "feuert": False if offen else e.gehalten("feuer"),
-            "zielt": False if offen else e.gehalten("zweit"),
+            "feuert": False if still else e.gehalten("feuer"),
+            "zielt": False if still else e.gehalten("zweit"),
             # Nutzen wird gehalten, nicht gedrueckt: Treppe und Aufhelfen
             # haengen beide daran, und Aufhelfen braucht Zeit.
             "nutzen": False if offen else e.gehalten("nutzen"),
@@ -3731,6 +3745,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         weiterhin nur dort, wo der Gastgeber es ausrechnet - die Linie ist
         Anzeige, keine Entscheidung.
         """
+        if self.pausiert:
+            return                  # im Menue zielt man nicht (_meine_eingabe)
         ziel = self.kamera.zu_welt(self.app.eingabe.maus)
         self.ich.ziel = ziel
         ab = ziel - self.ich.pos
@@ -3745,54 +3761,53 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     # Hier laeuft die Welt weiter, nur die eigene Eingabe ist stillgelegt.
 
     def _menue_baut(self) -> list:
-        """Die Eintraege, wie sie gerade gelten. Je nach Rolle und Spielart."""
+        """Die Eintraege, wie sie gerade gelten. Je nach Rolle und Ort.
+
+        Seit 0.32 nur noch Taten, keine Regelzeilen. GRUND: Bis dahin
+        stand beim Gastgeber jede Regel der Runde hier (beim Huegel
+        neunzehn Zeilen) - dieselben, die auch die Rundentafel (P) stellt.
+        Zwei Stellen fuer dasselbe, und die laengere davon im Weg, wenn man
+        nur weiterspielen will. Die naechste Runde stellt man jetzt an
+        einer Stelle ein: NAECHSTE RUNDE oeffnet die Tafel.
+        """
         eintraege = [("weiter", "WEITER", "")]
         konto = getattr(self.app, "konto", None)
-        eintraege.append(("ausruestung", "MEINE AUSRUESTUNG",
-                          konto.loadout["name"] if konto else ""))
-        eintraege.append(("konto", "KONTO",
-                          konto.name.upper() if konto and konto.angemeldet
-                          else "NICHT ANGEMELDET"))
         if self.in_lobby:
-            # In der Lobby gibt es keine Regeln zu stellen - die gehoeren
-            # zur naechsten Runde, und die stellt man auf der Tafel ein.
             if self.ist_gastgeber:
-                eintraege.append(("planen", "RUNDEN EINSTELLEN", ""))
                 if self.kos_index:
                     da, noetig = self.kosmetik_stand()
                     eintraege.append(("starten_kos", "STARTEN MIT KOSMETIK",
                                       "BEREIT" if da >= noetig
-                                      else "LAEDT %d/%d" % (da, noetig)))
+                                      else "LÄDT %d/%d" % (da, noetig)))
                     eintraege.append(("starten", "STARTEN OHNE KOSMETIK",
                                       R.kurz(self.plan[0], self._umfeld())))
                 else:
                     eintraege.append(("starten", "RUNDE STARTEN",
                                       R.kurz(self.plan[0], self._umfeld())))
+                eintraege.append(("planen", "RUNDE EINSTELLEN", ""))
             else:
-                eintraege.append(("planen", "RUNDEN ANSEHEN", ""))
+                eintraege.append(("planen", "NÄCHSTE RUNDE ANSEHEN", ""))
+        elif self.ist_gastgeber:
+            eintraege.append(("planen", "NÄCHSTE RUNDE EINSTELLEN", ""))
+            eintraege.append(("neu", "RUNDE NEU STARTEN", ""))
+            if self.mit_teams:
+                eintraege.append(("teams", "MANNSCHAFTEN", ""))
+        else:
+            eintraege.append(("planen", "NÄCHSTE RUNDE ANSEHEN", ""))
+        eintraege.append(("ausruestung", "AUSRÜSTUNG",
+                          konto.loadout["name"] if konto else ""))
+        eintraege.append(("konto", "KONTO",
+                          konto.name.upper() if konto and konto.angemeldet
+                          else "NICHT ANGEMELDET"))
+        eintraege.append(("einstellungen", "EINSTELLUNGEN", ""))
+        if self.in_lobby:
             # Von Lobby zu Lobby (seit 0.32): beitreten geht aus jeder
             # Lobby, auch aus einer fremden - man steigt dann direkt um.
             eintraege.append(("suchen", "ANDERER LOBBY BEITRETEN", ""))
             if not self.ist_gastgeber:
                 eintraege.append(("raus", "LOBBY VERLASSEN",
                                   "IN DEINE LOBBY" if self.heimkehr else ""))
-            eintraege.append(("beenden", "SPIEL BEENDEN", self._beenden_wohin()))
-            return eintraege
-        if self.ist_gastgeber:
-            # Die Regeln kommen aus der Tabelle in regeln.py - dieselbe, die
-            # auch die Lobby zeigt. Was bei der gewaehlten Spielart nicht
-            # gilt, steht nicht da.
-            w = self.wunsch
-            umfeld = self._umfeld()
-            for f in R.sichtbar(w):
-                name = ("  " if f.einzug(w) else "") + f.name(w)
-                eintraege.append((f.schluessel, name,
-                                  R.anzeige(w, f.schluessel, umfeld)))
-            regeln = K.MODI[w["modus"]]
-            if regeln["teams"]:
-                eintraege.append(("teams", "MANNSCHAFTEN EINTEILEN", ""))
-            eintraege.append(("neu", "NEUE RUNDE MIT DIESEN REGELN", ""))
-            eintraege.append(("planen", "RUNDEN EINSTELLEN", ""))
+        elif self.ist_gastgeber:
             # GRUND: Der Gastgeber ist der Server. Geht er allein, ist die
             # Runde fuer alle vorbei - "Gefecht verlassen" heisst bei ihm
             # darum: alle zusammen zurueck in die Lobby.
@@ -3811,6 +3826,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self.menue = 0
         self.menue_teams = False
         self.menue_zeile = 0
+        # Ab wann die Eintraege aufklappen (siehe _menue_zeichnen).
+        self._menue_seit = self._zeit
         # Nichts soll weiterlaufen, was man vor dem Aufmachen gedrueckt hat.
         self._knoepfe.clear()
         self._waffe_wunsch = -1
@@ -3818,8 +3835,19 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     def _menue_zu(self) -> None:
         self.menue = None
         self.menue_teams = False
+        # GRUND: Wer WEITER anklickt, hat die linke Maustaste noch unten,
+        # wenn das Menue zugeht - und die ist der Abzug. Ohne Sperre ging
+        # mit dem Klick auf WEITER der erste Schuss los. Sie faellt, sobald
+        # beide Maustasten einmal oben waren (_meine_eingabe).
+        self._feuer_sperre = True
 
     def ereignis(self, ev) -> None:
+        if self.menue is not None and self.versionsfehler is None and ev.type in (
+                pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEWHEEL):
+            # Im Menue gehoert die Maus dem Menue und nichts davon dem
+            # Spiel: kein Zoom, kein Schuss, kein Zielen (siehe pausiert).
+            self._menue_maus(ev)
+            return
         if ev.type == pygame.MOUSEWHEEL and self.menue is None:
             # Das Rad aendert die Sichtweite; mit Strg wie frueher die
             # angeschaute Ebene.
@@ -3900,7 +3928,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     # gefaehrlich: ein Druck daneben haette das Gefecht beendet.
     TATEN = ("weiter", "raus", "teams", "neu", "ausruestung", "konto",
              "planen", "starten", "starten_kos", "lobby", "suchen",
-             "beenden")
+             "beenden", "einstellungen")
 
     def _menue_wirken(self, schluessel: str, vor: bool, waehlen: bool) -> None:
         if schluessel in self.TATEN and not waehlen:
@@ -3924,6 +3952,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._menue_zu()
             self.app.schieben(LobbySuche(self.app, self))
             return
+        if schluessel == "einstellungen":
+            # Als Szene darueber, wie die Ausruestung: das Gefecht laeuft
+            # darunter weiter und bekommt keine Eingaben (pausiert).
+            from .menues import Einstellungen
+            self._menue_zu()
+            self.app.schieben(Einstellungen(self.app))
+            return
         if schluessel == "planen":
             self._menue_zu()
             self.planung_oeffnen()
@@ -3941,13 +3976,6 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                               else Anmeldung(self.app))
             return
         if not self.ist_gastgeber:
-            return
-        if schluessel in R.NACH_NAME:
-            R.verstellen(self.wunsch, schluessel, 1 if vor else -1,
-                         self._umfeld())
-            # Eine andere Spielart hat andere Zeilen - die Auswahl darf
-            # dabei nicht hinter das Ende rutschen.
-            self.menue = min(self.menue, len(self._menue_baut()) - 1)
             return
         if schluessel == "teams":
             self.menue_teams = True
@@ -4678,6 +4706,78 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 return K.BOSSE[art]["name"], float(eintrag[5])
         return None
 
+    # Das Pausenmenue seit 0.32, nach dem Vorbild von Helldivers 2: kein
+    # Kasten in der Mitte, sondern eine dunkle Spalte am linken Rand, in
+    # der die Eintraege nacheinander aufklappen, und rechts eine Tafel mit
+    # dem, was man wissen will - welche Runde, was als Naechstes kommt,
+    # und was der gewaehlte Eintrag tut. Das Gefecht bleibt rechts davon
+    # sichtbar: es laeuft weiter, und das soll man sehen.
+    MENUE_SPALTE = 230              # Breite der linken Spalte
+    MENUE_OBEN = 76                 # erster Eintrag
+    MENUE_ZEILE = 22                # Abstand der Eintraege
+    MENUE_HILFE = {
+        "weiter": "ZURÜCK INS SPIEL.",
+        "starten": "STARTET DIE NÄCHSTE GEPLANTE RUNDE FÜR ALLE.",
+        "starten_kos": "STARTET, SOBALD DIE KOSMETIK BEI ALLEN IST.",
+        "planen": "SPIELART, KARTE UND REGELN DER NÄCHSTEN RUNDE (TASTE P).",
+        "neu": "BRICHT DIE RUNDE AB UND FÄNGT SIE NEU AN.",
+        "teams": "MITSPIELER SOFORT IN DIE ANDERE MANNSCHAFT.",
+        "ausruestung": "DEINE LOADOUTS. GILT AB DEM NÄCHSTEN EINSTIEG.",
+        "konto": "ANMELDEN, ABMELDEN, DEINE ZAHLEN.",
+        "einstellungen": "BILD, TON, STEUERUNG, BARRIEREFREIHEIT.",
+        "suchen": "LOBBYS IM SELBEN NETZ - ANKLICKEN UND UMSTEIGEN.",
+        "raus": "ZURÜCK IN DEINE EIGENE LOBBY.",
+        "lobby": "BEENDET DIE RUNDE. ALLE GEHEN ZURÜCK IN DIE LOBBY.",
+        "beenden": "SCHLIESST DAS SPIEL.",
+    }
+
+    def _menue_flaechen(self) -> list:
+        """Wo die Eintraege stehen - fuer das Bild und fuer die Maus."""
+        return [pygame.Rect(16, self.MENUE_OBEN + i * self.MENUE_ZEILE,
+                            self.MENUE_SPALTE - 30, 19)
+                for i in range(len(self._menue_baut()))]
+
+    def _teams_flaechen(self) -> list:
+        leute = sorted(self.kaempfer.values(), key=lambda k: k.nummer)
+        return [pygame.Rect(140, 83 + i * 15, 360, 13) for i in range(len(leute))]
+
+    def _menue_maus(self, ev) -> None:
+        """Die Maus im Menue: zeigen waehlt, Linksklick loest aus.
+
+        Rechtsklick geht eine Ebene zurueck wie Esc. Das Rad blaettert.
+        """
+        if ev.type == pygame.MOUSEWHEEL:
+            if ev.y:
+                self._menue_taste(pygame.K_UP if ev.y > 0 else pygame.K_DOWN)
+            return
+        pos = self.app.zu_spiel(ev.pos)
+        if self.menue_teams:
+            for i, r in enumerate(self._teams_flaechen()):
+                if r.collidepoint(pos):
+                    self.menue_zeile = i
+                    if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                        self._menue_taste(pygame.K_RETURN)
+                    break
+            if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 3:
+                self.menue_teams = False
+            return
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 3:
+            self._menue_zu()
+            return
+        for i, r in enumerate(self._menue_flaechen()):
+            if r.collidepoint(pos):
+                if self.menue != i and ev.type == pygame.MOUSEMOTION:
+                    self.app.klaenge.spielen("menue", 0.25)
+                self.menue = i
+                if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                    eintraege = self._menue_baut()
+                    self._menue_wirken(eintraege[i][0], True, True)
+                return
+
+    def _aufklappen(self, i: int) -> float:
+        """0 bis 1: wie weit Eintrag i schon aufgeklappt ist."""
+        return ui.aufklappen(self._zeit - self._menue_seit, i)
+
     def _menue_zeichnen(self, ziel) -> None:
         """Der Deckel ueber dem laufenden Gefecht.
 
@@ -4687,63 +4787,124 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         """
         f = SCHRIFT
         deckel = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
-        deckel.fill((9, 6, 5, 190))
+        deckel.fill((9, 6, 5, 120))
         ziel.blit(deckel, (0, 0))
 
         if self.menue_teams:
+            deckel.fill((9, 6, 5, 110))
+            ziel.blit(deckel, (0, 0))
             self._menue_teams_zeichnen(ziel)
             return
 
-        f.zeichnen(ziel, "PAUSE", K.GAME_W // 2, 34, K.C_AMBER, 3,
-                   ausrichtung="mitte")
-        f.zeichnen(ziel, "DAS GEFECHT LAEUFT WEITER", K.GAME_W // 2, 58,
-                   K.C_RED, 1, ausrichtung="mitte")
-        if self.ist_gastgeber:
-            f.zeichnen(ziel, "AENDERUNGEN GELTEN AB DER NAECHSTEN RUNDE",
-                       K.GAME_W // 2, 70, K.C_MUTED_DK, 1, ausrichtung="mitte")
+        sp = self.MENUE_SPALTE
+        spalte = pygame.Surface((sp, K.GAME_H), pygame.SRCALPHA)
+        # Fast deckend: Minikarte und Lebensbalken liegen unter der Spalte
+        # und sollen nicht durch die Eintraege scheinen.
+        spalte.fill((9, 6, 5, 246))
+        ziel.blit(spalte, (0, 0))
+        pygame.draw.line(ziel, K.C_MUTED_DK, (sp, 0), (sp, K.GAME_H))
+
+        auf = self._aufklappen(0)
+        f.zeichnen(ziel, "PAUSE", 16 - int((1 - auf) * 20), 20, K.C_AMBER, 3)
+        f.zeichnen(ziel, "DIE LOBBY LÄUFT WEITER" if self.in_lobby
+                   else "DAS GEFECHT LÄUFT WEITER", 16, 48, K.C_RED, 1)
+        pygame.draw.line(ziel, K.C_MUTED_DK, (16, 62), (sp - 14, 62))
 
         eintraege = self._menue_baut()
         self.menue = max(0, min(len(eintraege) - 1, self.menue))
-        # Seit die Regeln aus der Tabelle kommen, sind es beim Huegel mit
-        # allem Drum und Dran neunzehn Zeilen - mehr, als zwischen Titel
-        # und Fusszeile passen. Gezeigt wird ein Fenster, das der Auswahl
-        # folgt, mit einem Pfeil oben und unten, wenn dort noch mehr steht.
-        platz = (K.GAME_H - 36 - 92) // 15
-        erste = 0
-        if len(eintraege) > platz:
-            erste = max(0, min(len(eintraege) - platz,
-                               self.menue - platz // 2))
-        y = 92
-        if erste > 0:
-            pygame.draw.polygon(ziel, K.C_AMBER, [(318, y - 8), (322, y - 12),
-                                                  (326, y - 8)])
-        for i, (_schluessel, text, wert) in enumerate(eintraege):
-            if i < erste or i >= erste + platz:
+        flaechen = self._menue_flaechen()
+        for i, ((schluessel, text, wert), r) in enumerate(zip(eintraege, flaechen)):
+            p = self._aufklappen(i + 1)
+            if p <= 0.0:
                 continue
-            aktiv = (i == self.menue)
-            farbe = K.C_CREAM if aktiv else K.C_MUTED
-            if aktiv:
-                pygame.draw.rect(ziel, (24, 17, 12), (110, y - 3, 420, 13))
-                pygame.draw.rect(ziel, K.C_AMBER, (110, y - 3, 3, 13))
-            f.zeichnen(ziel, text, 124, y, farbe, 1)
-            if wert:
-                f.zeichnen(ziel, "< %s >" % wert if aktiv else wert, 520, y,
-                           K.C_AMBER if aktiv else K.C_MUTED_DK, 1,
-                           ausrichtung="rechts")
-            y += 15
-        if erste + platz < len(eintraege):
-            pygame.draw.polygon(ziel, K.C_AMBER, [(318, y - 4), (322, y),
-                                                  (326, y - 4)])
+            r = r.move(-int((1.0 - p) * 36), 0)
+            ui.spalteneintrag(ziel, r, text, i == self.menue,
+                              schluessel in ("beenden", "raus", "lobby"), wert)
+            # Eine Trennlinie vor dem Weg hinaus: was ins Spiel fuehrt,
+            # und was aus ihm heraus, soll man nicht verwechseln.
+            if i + 1 < len(eintraege) and eintraege[i + 1][0] in (
+                    "suchen", "raus", "lobby") and schluessel not in (
+                    "suchen", "raus", "lobby"):
+                pygame.draw.line(ziel, K.C_MUTED_DK, (r.x, r.bottom + 1),
+                                 (r.right, r.bottom + 1))
 
+        f.zeichnen(ziel, "MAUS ODER PFEILE, ENTER", 16, K.GAME_H - 30,
+                   K.C_MUTED_DK, 1)
+        f.zeichnen(ziel, "[ESC] ODER RECHTSKLICK: ZURÜCK", 16, K.GAME_H - 19,
+                   K.C_MUTED_DK, 1)
+        self._menue_tafel(ziel, eintraege[self.menue][0] if eintraege else "")
+
+    def _menue_tafel(self, ziel, gewaehlt: str) -> None:
+        """Rechts: diese Runde, die naechste, und was der Eintrag tut."""
+        f = SCHRIFT
+        p = self._aufklappen(2)
+        if p <= 0.0:
+            return
+        breite = 226
+        r = pygame.Rect(K.GAME_W - breite - 18 + int((1.0 - p) * 40), 20,
+                        breite, 0)
+        zeilen: list[tuple] = []        # (text, farbe, skala)
+        if self.in_lobby:
+            zeilen.append(("LOBBY", K.C_TEAL, 2))
+        else:
+            zeilen.append((K.MODI[self.modus]["name"], K.C_AMBER, 2))
+        karte = (self.karte_kopf.get("name") or self.karte or "TESTKARTE")
+        zeilen.append(("KARTE  %s" % str(karte).upper(), K.C_MUTED, 1))
+        zeilen.append(("SPIELER  %d" % len(self.kaempfer), K.C_MUTED, 1))
+        if not self.in_lobby:
+            if self.regeln["runden"]:
+                zeilen.append((self.runden_text(), K.C_MUTED, 1))
+            elif self.ende_art == "zeit" and self.rest > 0:
+                m, sek = divmod(int(self.rest), 60)
+                zeilen.append(("NOCH  %d:%02d" % (m, sek), K.C_MUTED, 1))
+            if self.mit_teams:
+                zeilen.append(("PUNKTE  %s" % " : ".join(
+                    str(x) for x in self.teampunkte), K.C_MUTED, 1))
+        zeilen.append(("", K.C_MUTED, 1))
+        zeilen.append(("NÄCHSTE RUNDE", K.C_AMBER, 1))
+        if self.in_lobby or not self.plan_laeuft:
+            naechste = R.kurz(self.plan[0], self._umfeld()) if self.plan else "-"
+        else:
+            naechste = self.plan_ausblick()
+        zeilen.append((naechste, K.C_CREAM, 1))
         if self.ist_gastgeber:
-            # Die Adresse steht nicht mehr die ganze Runde in der Anzeige,
-            # nur in der Lobby - und hier, wenn man sie nachsehen will.
-            f.zeichnen(ziel, "ADRESSE  %s" % self.gastgeber.adresse,
-                       K.GAME_W // 2, K.GAME_H - 34, K.C_MUTED_DK, 1,
-                       ausrichtung="mitte")
-        f.zeichnen(ziel, "PFEILE WAEHLEN   ENTER BESTAETIGT   [ESC] ZURUECK",
-                   K.GAME_W // 2, K.GAME_H - 22, K.C_MUTED_DK, 1,
-                   ausrichtung="mitte")
+            zeilen.append(("", K.C_MUTED, 1))
+            zeilen.append(("ADRESSE  %s" % self.gastgeber.adresse,
+                           K.C_MUTED_DK, 1))
+        hilfe = self.MENUE_HILFE.get(gewaehlt, "")
+        # Hoehe ausrechnen, dann zeichnen: Text, der sich umbricht, zaehlt
+        # mehrfach.
+        def umbrechen(text, skala):
+            worte, raus, zeile = text.split(), [], ""
+            for w in worte:
+                probe = (zeile + " " + w).strip()
+                if f.breite(probe, skala) > breite - 20 and zeile:
+                    raus.append(zeile)
+                    zeile = w
+                else:
+                    zeile = probe
+            return raus + ([zeile] if zeile else [""])
+        gesetzt = []
+        for text, farbe, skala in zeilen:
+            for t in umbrechen(text, skala):
+                gesetzt.append((t, farbe, skala))
+        hoehe = 14 + sum(18 if sk == 2 else 10 for _t, _f, sk in gesetzt)
+        if hilfe:
+            hilfe_zeilen = umbrechen(hilfe, 1)
+            hoehe += 12 + 10 * len(hilfe_zeilen)
+        r.height = hoehe
+        ui.kasten(ziel, r, K.C_MUTED_DK, (12, 9, 7), 5)
+        y = r.y + 8
+        for text, farbe, skala in gesetzt:
+            f.zeichnen(ziel, text, r.x + 10, y, farbe, skala)
+            y += 18 if skala == 2 else 10
+        if hilfe:
+            y += 4
+            pygame.draw.line(ziel, K.C_MUTED_DK, (r.x + 10, y), (r.right - 10, y))
+            y += 6
+            for t in hilfe_zeilen:
+                f.zeichnen(ziel, t, r.x + 10, y, K.C_TEAL, 1)
+                y += 10
 
     def _menue_teams_zeichnen(self, ziel) -> None:
         f = SCHRIFT

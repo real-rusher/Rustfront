@@ -274,30 +274,35 @@ class Menue(Szene):
 # ══════════════════════════════════════════════════════════════════
 
 class Pause(Menue):
-    """Was man sieht, wenn man mitten im Gefecht Escape drueckt."""
+    """Was man sieht, wenn man mitten im Spiel Escape drueckt.
+
+    Seit 0.32 wie das Pausenmenue im Gefecht (mehrspieler.py), nach dem
+    Vorbild von Helldivers 2: eine dunkle Spalte links, in der die
+    Eintraege nacheinander aufklappen, rechts eine kleine Tafel mit dem
+    Stand. Das Spiel bleibt daneben sichtbar.
+    """
 
     titel = "PAUSE"
+    SPALTE = 230
 
     def __init__(self, app, spiel) -> None:
         self.spiel = spiel
-        self.tafel = _mitte(232, 280)
+        self.tafel = pygame.Rect(0, 0, self.SPALTE, K.GAME_H)
         super().__init__(app)
 
     def aufbauen(self) -> None:
-        r = self.tafel
         eintraege = [
             ("FORTSETZEN", "weiter"),
+            ("AUSRÜSTUNG", "ausruestung"),
             ("KONTO", "konto"),
-            ("AUSRUESTUNG", "ausruestung"),
             ("EINSTELLUNGEN", "opt"),
             ("STEUERUNG", "tasten"),
             ("MITWIRKENDE", "credits"),
             ("AUFGEBEN", "raus"),
         ]
-        bx, bw, bh = r.x + 24, r.width - 48, 22
-        by = r.y + 44
         self.elemente = [
-            ui.Knopf((bx, by + i * (bh + 6), bw, bh), text, name)
+            ui.SpaltenKnopf((16, 76 + i * 22, self.SPALTE - 30, 19), text, name,
+                            nr=i, gehen=(name == "raus"))
             for i, (text, name) in enumerate(eintraege)
         ]
 
@@ -317,18 +322,54 @@ class Pause(Menue):
         elif el.name == "raus":
             self.app.laeuft = False
 
+    def ereignis(self, ev) -> None:
+        # Rechtsklick geht zurueck wie Esc - wie im Gefecht.
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 3:
+            self.klang("menue", 0.4)
+            self.zurueck()
+            return
+        super().ereignis(ev)
+
+    def zeichnen(self, ziel, alpha: float) -> None:
+        if not self.oben_auf:
+            return
+        ui.schleier(ziel, 110)
+        spalte = pygame.Surface((self.SPALTE, K.GAME_H), pygame.SRCALPHA)
+        spalte.fill((9, 6, 5, 246))
+        ziel.blit(spalte, (0, 0))
+        pygame.draw.line(ziel, K.C_MUTED_DK, (self.SPALTE, 0),
+                         (self.SPALTE, K.GAME_H))
+        auf = ui.aufklappen(self.zeit, 0)
+        SCHRIFT.zeichnen(ziel, "PAUSE", 16 - int((1 - auf) * 20), 20,
+                         K.C_AMBER, 3)
+        SCHRIFT.zeichnen(ziel, "DAS SPIEL STEHT", 16, 48, K.C_MUTED, 1)
+        pygame.draw.line(ziel, K.C_MUTED_DK, (16, 62), (self.SPALTE - 14, 62))
+        for i, el in enumerate(self.elemente):
+            el.ueber = (i == self.wahl) and not el.gesperrt
+            el.seit = self.zeit
+            el.zeichnen(ziel)
+        self.inhalt_zeichnen(ziel)
+        text = self.meldung or "MAUS ODER PFEILE, ENTER"
+        SCHRIFT.zeichnen(ziel, text, 16, K.GAME_H - 30,
+                         K.C_TEAL if self.meldung else K.C_MUTED_DK, 1)
+        SCHRIFT.zeichnen(ziel, "[ESC] ODER RECHTSKLICK: WEITER", 16,
+                         K.GAME_H - 19, K.C_MUTED_DK, 1)
+
     def inhalt_zeichnen(self, ziel) -> None:
-        r = self.tafel
+        p = ui.aufklappen(self.zeit, 2)
+        if p <= 0.0:
+            return
         s = self.spiel
-        y = r.bottom - 42
-        pygame.draw.line(ziel, K.C_MUTED_DK, (r.x + 18, y - 6), (r.right - 19, y - 6))
-        SCHRIFT.zeichnen(ziel, "WELLE %d" % s.welle, r.x + 24, y, K.C_MUTED, 1)
-        SCHRIFT.zeichnen(ziel, "SCHROTT %d" % s.held.punkte, r.right - 24, y,
-                         K.C_AMBER, 1, 1, "rechts")
-        SCHRIFT.zeichnen(ziel, "EBENE %d" % s.held.ebene, r.x + 24, y + 10,
+        r = pygame.Rect(K.GAME_W - 200 + int((1.0 - p) * 40), 20, 182, 70)
+        ui.kasten(ziel, r, K.C_MUTED_DK, (12, 9, 7), 5)
+        SCHRIFT.zeichnen(ziel, "WELLE %d" % s.welle, r.x + 10, r.y + 8,
+                         K.C_AMBER, 2)
+        SCHRIFT.zeichnen(ziel, "SCHROTT %d" % s.held.punkte, r.x + 10,
+                         r.y + 28, K.C_MUTED, 1)
+        SCHRIFT.zeichnen(ziel, "EBENE %d" % s.held.ebene, r.x + 10, r.y + 38,
                          K.C_MUTED, 1)
-        SCHRIFT.zeichnen(ziel, "%s %s" % (K.PHASE, K.VERSION), r.right - 24,
-                         y + 10, K.C_MUTED_DK, 1, 1, "rechts")
+        SCHRIFT.zeichnen(ziel, "%s %s" % (K.PHASE, K.VERSION), r.x + 10,
+                         r.y + 54, K.C_MUTED_DK, 1)
 
     def fusstext(self) -> str:
         return "[ESC] WEITERSPIELEN"

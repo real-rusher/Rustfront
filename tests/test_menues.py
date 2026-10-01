@@ -302,7 +302,7 @@ def schirm(neue_szene, name, schritte=0):
     print("  gespeichert " + name)
 
 
-schirm(M.Pause(app, szene), "menue_1_pause.png")
+schirm(M.Pause(app, szene), "menue_1_pause.png", schritte=60)   # aufgeklappt
 schirm(M.Einstellungen(app, 0), "menue_2_anzeige.png")
 schirm(M.Einstellungen(app, 1), "menue_3_ton.png")
 schirm(M.Einstellungen(app, 2), "menue_4_grafik.png")

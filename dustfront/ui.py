@@ -173,6 +173,60 @@ class Knopf(Element):
                          ausrichtung="mitte")
 
 
+def spalteneintrag(ziel, r, text: str, aktiv: bool, gehen: bool = False,
+                   wert: str = "") -> None:
+    """Ein Eintrag der Pausenspalte (seit 0.32, nach Helldivers 2).
+
+    Eine Stelle fuer das Aussehen, damit das Pausenmenue im Gefecht und
+    das im Einzelspieler gleich aussehen. `gehen` faerbt die Eintraege,
+    die aus dem Spiel hinausfuehren, rot - die verwechselt man sonst.
+    """
+    if aktiv:
+        pygame.draw.rect(ziel, (40, 27, 15), r)
+        pygame.draw.rect(ziel, K.C_ORANGE if gehen else K.C_AMBER,
+                         (r.x, r.y, 3, r.height))
+    else:
+        pygame.draw.rect(ziel, (20, 14, 10), r)
+    farbe = K.C_CREAM if aktiv else (K.C_RED if gehen else K.C_MUTED)
+    SCHRIFT.zeichnen(ziel, text, r.x + 10, r.centery - 3, farbe, 1)
+    # Der Wert nur, wenn er ganz passt. Abgeschnitten sagt er nichts.
+    if wert and SCHRIFT.breite(wert, 1) <= r.width - SCHRIFT.breite(text, 1) - 26:
+        SCHRIFT.zeichnen(ziel, wert, r.right - 6, r.centery - 3,
+                         K.C_AMBER if aktiv else K.C_MUTED_DK, 1,
+                         ausrichtung="rechts")
+
+
+def aufklappen(seit: float, i: int) -> float:
+    """0 bis 1: wie weit Eintrag i einer Spalte aufgeklappt ist.
+
+    Die Eintraege kommen nacheinander von links herein, je 30 ms
+    versetzt, und bremsen am Ende ab. Kurz genug, dass niemand darauf
+    wartet - lang genug, dass man sieht, woher sie kommen.
+    """
+    p = max(0.0, min(1.0, (seit - i * 0.03) / 0.14))
+    return 1.0 - (1.0 - p) ** 3
+
+
+class SpaltenKnopf(Element):
+    """Ein Knopf der Pausenspalte. Klappt mit `seit` auf (siehe Pause)."""
+
+    def __init__(self, rect, text: str, name: str, nr: int = 0,
+                 gehen: bool = False, wert: str = "") -> None:
+        super().__init__(rect, name)
+        self.text = text
+        self.nr = nr
+        self.gehen = gehen
+        self.wert = wert
+        self.seit = 1.0
+
+    def zeichnen(self, ziel) -> None:
+        p = aufklappen(self.seit, self.nr + 1)
+        if p <= 0.0:
+            return
+        r = self.rect.move(-int((1.0 - p) * 36), 0)
+        spalteneintrag(ziel, r, self.text, self.ueber, self.gehen, self.wert)
+
+
 class Reiter(Element):
     """Knopf fuer eine Seitenauswahl, oben an der Tafel."""
 
