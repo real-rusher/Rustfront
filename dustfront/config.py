@@ -511,6 +511,13 @@ NETZ = dict(
     # die naechste nicht besser sagt. Zwei Sekunden Takt sind reichlich
     # und trotzdem klein genug, dass kein Rueckstand entsteht.
     stau_zeilen=120,
+    # Lobbys im eigenen Netz finden (lan.py). Ein eigener UDP-Port neben
+    # dem Spielport: der Spielport wandert, wenn auf einem Rechner zwei
+    # Lobbys offen sind, der Suchport muss fuer alle derselbe sein.
+    such_port=50504,
+    such_takt=1.5,            # so oft fragt die offene Liste nach
+    such_vergessen=5.0,       # so lange ohne Antwort, dann faellt sie raus
+    port_versuche=8,          # so viele Spielports ab `port` probiert die Lobby
 )
 
 # Die drei Spielarten im Mehrspieler.

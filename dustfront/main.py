@@ -3,6 +3,7 @@ DUSTFRONT - Einstieg
 ====================
 
     python -m dustfront                Spiel starten
+    python -m dustfront --lobby        in die eigene Lobby (Mehrspieler)
     python -m dustfront --host ...     LAN-Runde aufmachen, siehe README
                                        (startet in der Lobby; --sofort
                                        ueberspringt sie)
@@ -47,9 +48,28 @@ def starten(headless: bool = False, beenden: bool = True,
     """
     app = App("DUSTFRONT", asset_ordner(), headless=headless)
     app.auftrag = dict(auftrag) if auftrag else {}
-    app.schieben(Spiel(app))
+    # Vom Hauptmenue aus: "Spiel beenden" fuehrt dorthin zurueck, nicht
+    # auf den Desktop. Das Gefecht schreibt es so an.
+    app.hauptmenue = not beenden
+    if app.auftrag.get("action") == "mehrspieler":
+        from . import sitzung
+        if sitzung.eigene_lobby(app) is None:
+            print("Keine Lobby moeglich: die Ports ab %d sind alle belegt."
+                  % K.NETZ["port"])
+            return 1
+    else:
+        app.schieben(Spiel(app))
     app.laufen(beenden=beenden)
     return 0
+
+
+def lobby(headless: bool = False) -> int:
+    """Seit 0.32 der einzige Weg in den Mehrspieler: die eigene Lobby.
+
+    Kein Terminal, keine Fragen. Der Name kommt aus dem Konto oder aus der
+    Lobbysuche, beitreten geht im Spiel (Esc -> ANDERER LOBBY BEITRETEN).
+    """
+    return starten(headless=headless, auftrag={"action": "mehrspieler"})
 
 
 def aus_menue(auftrag: dict | None = None) -> int:
@@ -154,6 +174,7 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
         return 1
 
     app.schieben(Gefecht(app, name or "GAST", gastgeber=wirt, gast=gast,
+                         ansagen=gastgeber and lobby, heimkehr=True,
                          modus=modus, ende_art=ende_art,
                          ende_wert=ende_wert, knapp=knapp, schutz=schutz,
                          medkits=medkits, medkit_spawn=medkit_spawn,
@@ -477,6 +498,8 @@ def aus_argumenten(argumente: list[str]) -> int:
                 return argumente[i + 1]
         return vorgabe
 
+    if "--lobby" in argumente:
+        return lobby()
     if "--host" in argumente:
         modus = wert("--modus", K.MODUS_VORGABE).strip().lower()
         waehlbar = [m for m in K.MODI if not K.MODI[m].get("lobby")]

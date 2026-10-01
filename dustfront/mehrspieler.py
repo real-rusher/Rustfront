@@ -625,11 +625,26 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                  loadouts: str | None = None, rpg: bool | None = None,
                  rpg_lenkung: bool | None = None, karte: str = "",
                  seed: int | None = None, regeln: dict | None = None,
-                 lobby: bool = False) -> None:
+                 lobby: bool = False, ansagen: bool = False,
+                 heimkehr: bool = False) -> None:
         super().__init__(app)
         self.name = netz.name_saeubern(name)
         self.gastgeber = gastgeber
         self.gast = gast
+        # Seit 0.32 startet jeder in seiner eigenen Lobby (sitzung.py).
+        # `heimkehr`: wer eine fremde Runde verlaesst oder aus ihr fliegt,
+        # landet wieder in seiner eigenen Lobby statt vor dem Desktop.
+        # Aus nur in den Pruefungen, die ein Gefecht von Hand bauen und
+        # danach in Ruhe nachsehen wollen, was der Gast anzeigt.
+        self.heimkehr = bool(heimkehr)
+        self.wohin = ""              # beim Gast: wohin er verbunden ist
+        # `ansagen`: die Lobby beantwortet die Suche aus lan.py. Nur beim
+        # Gastgeber, und nicht in den Pruefungen - die sollen keinen
+        # festen UDP-Port belegen.
+        self.ansager = None
+        if ansagen and gastgeber is not None:
+            from . import lan
+            self.ansager = lan.Ansager()
         # Die Regeln der Runde, als eine Sammlung (siehe regeln.py). Die
         # einzelnen Parameter oben bleiben fuer die Kommandozeile und die
         # Pruefungen; `regeln` ist der Weg fuer Lobby und Rundenplan, die
@@ -1790,6 +1805,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         if self._meldung_rest > 0:
             self.hinweis = self._meldung
         self.gastgeber.annehmen()
+        if self.ansager is not None:
+            self.ansager.schritt(self._ansage)
 
         for nummer, nachricht in self.gastgeber.holen():
             art = nachricht.get("t")
@@ -1873,6 +1890,44 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             # springende Granaten.
             self._seit_senden -= K.NETZ["takt"]
             self.gastgeber.an_alle(self._weltmeldung())
+
+    def _ansage(self) -> dict:
+        """Was die Lobbysuche ueber diese Runde erfaehrt (lan.py).
+
+        Nur, was man zum Waehlen braucht. Das Kennwort selbst geht nie
+        hinaus, nur ob eines gilt.
+        """
+        return {"name": self.name, "port": self.gastgeber.port,
+                "version": K.VERSION, "spieler": len(self.kaempfer),
+                # Der Gastgeber zaehlt mit: er ist einer der Spieler, aber
+                # keiner der K.NETZ["hoechstens"] Gaeste.
+                "hoechstens": K.NETZ["hoechstens"] + 1,
+                "lobby": bool(self.in_lobby),
+                "modus": K.MODI[self.modus]["name"],
+                "karte": self.karte, "passwort": bool(self.passwort)}
+
+    def melden(self, text: str, dauer: float = 4.0) -> None:
+        """Ein Hinweis, der ein paar Sekunden stehen bleibt."""
+        self._meldung = str(text)
+        self._meldung_rest = float(dauer)
+        self.hinweis = self._meldung
+
+    def _gastgeber_name(self) -> str:
+        """Beim Gast: wie der Gastgeber heisst. Er hat immer die Nummer 0."""
+        k = self.kaempfer.get(0)
+        return k.name if k is not None else ""
+
+    def heim(self, hinweis: str = "") -> None:
+        """Zurueck in die eigene Lobby. Ohne `heimkehr`: hinaus wie frueher."""
+        if not self.heimkehr:
+            self.app.laeuft = False
+            return
+        from . import sitzung
+        if sitzung.eigene_lobby(self.app, hinweis) is None:
+            # Kein Port frei - sehr unwahrscheinlich, aber dann lieber
+            # sauber zu als ein Fenster ohne Szene.
+            print("Keine eigene Lobby moeglich: alle Ports belegt.")
+            self.app.laeuft = False
 
     def _willkommen(self, nummer: int, k: Kaempfer | None) -> dict:
         """Alle Regeln der Runde in einer Nachricht.
@@ -3012,10 +3067,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             return
         if self.abgewiesen:
             self.hinweis = "ABGEWIESEN: %s  [ESC]" % self.abgewiesen
+            if self.heimkehr:
+                self.heim("ABGEWIESEN: %s" % self.abgewiesen)
             return
         if not self.gast.offen:
             self.hinweis = "VERBINDUNG VERLOREN  [ESC]"
             self._abbruch_buchen()          # mit dem letzten Zwischenstand
+            if self.heimkehr:
+                # Der Gastgeber hat aufgehoert oder die Leitung ist weg.
+                # Zurueck in die eigene Lobby, mit dem Grund obendrauf.
+                self.heim("VERBINDUNG ZU %s VERLOREN"
+                          % (self._gastgeber_name() or "DER LOBBY"))
             return
 
         # Vor dem Lesen der Post hochgezaehlt, nicht danach: eine
@@ -3708,7 +3770,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                                       R.kurz(self.plan[0], self._umfeld())))
             else:
                 eintraege.append(("planen", "RUNDEN ANSEHEN", ""))
-            eintraege.append(("raus", "GEFECHT VERLASSEN", ""))
+            # Von Lobby zu Lobby (seit 0.32): beitreten geht aus jeder
+            # Lobby, auch aus einer fremden - man steigt dann direkt um.
+            eintraege.append(("suchen", "ANDERER LOBBY BEITRETEN", ""))
+            if not self.ist_gastgeber:
+                eintraege.append(("raus", "LOBBY VERLASSEN",
+                                  "IN DEINE LOBBY" if self.heimkehr else ""))
+            eintraege.append(("beenden", "SPIEL BEENDEN", self._beenden_wohin()))
             return eintraege
         if self.ist_gastgeber:
             # Die Regeln kommen aus der Tabelle in regeln.py - dieselbe, die
@@ -3725,9 +3793,19 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 eintraege.append(("teams", "MANNSCHAFTEN EINTEILEN", ""))
             eintraege.append(("neu", "NEUE RUNDE MIT DIESEN REGELN", ""))
             eintraege.append(("planen", "RUNDEN EINSTELLEN", ""))
-            eintraege.append(("lobby", "ZURUECK IN DIE LOBBY", ""))
-        eintraege.append(("raus", "GEFECHT VERLASSEN", ""))
+            # GRUND: Der Gastgeber ist der Server. Geht er allein, ist die
+            # Runde fuer alle vorbei - "Gefecht verlassen" heisst bei ihm
+            # darum: alle zusammen zurueck in die Lobby.
+            eintraege.append(("lobby", "GEFECHT VERLASSEN", "ALLE IN DIE LOBBY"))
+        else:
+            eintraege.append(("raus", "GEFECHT VERLASSEN",
+                              "IN DEINE LOBBY" if self.heimkehr else ""))
+        eintraege.append(("beenden", "SPIEL BEENDEN", self._beenden_wohin()))
         return eintraege
+
+    def _beenden_wohin(self) -> str:
+        """Wohin SPIEL BEENDEN fuehrt: vom Hauptmenue gestartet dorthin."""
+        return "ZUM HAUPTMENÜ" if getattr(self.app, "hauptmenue", False) else ""
 
     def _menue_auf(self) -> None:
         self.menue = 0
@@ -3756,7 +3834,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             # Hier gibt es nichts mehr zu spielen: Esc fuehrt hinaus,
             # nicht ins Pausenmenue hinter der Tafel.
             if ev.key in self.app.opt.codes("pause"):
-                self.app.laeuft = False
+                self.heim("FALSCHE VERSION - NICHT BEIGETRETEN")
             return
         if self.menue is None:
             self._knopf_merken(ev.key)
@@ -3821,7 +3899,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     # reagieren nur auf Enter. Auf einen Pfeil zu hoeren waere hier
     # gefaehrlich: ein Druck daneben haette das Gefecht beendet.
     TATEN = ("weiter", "raus", "teams", "neu", "ausruestung", "konto",
-             "planen", "starten", "starten_kos", "lobby")
+             "planen", "starten", "starten_kos", "lobby", "suchen",
+             "beenden")
 
     def _menue_wirken(self, schluessel: str, vor: bool, waehlen: bool) -> None:
         if schluessel in self.TATEN and not waehlen:
@@ -3831,7 +3910,19 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._menue_zu()
             return
         if schluessel == "raus":
+            self._menue_zu()
+            if self.ist_gastgeber:
+                self.lobby_betreten()
+            else:
+                self.heim("")
+            return
+        if schluessel == "beenden":
             self.app.laeuft = False
+            return
+        if schluessel == "suchen":
+            from .sitzung import LobbySuche
+            self._menue_zu()
+            self.app.schieben(LobbySuche(self.app, self))
             return
         if schluessel == "planen":
             self._menue_zu()
@@ -4937,6 +5028,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._abbruch_buchen()
         except Exception:               # gehen darf daran nie scheitern
             pass
+        if self.ansager is not None:
+            self.ansager.schliessen()
+            self.ansager = None
         if self.ist_gastgeber:
             self.gastgeber.schliessen()
         elif self.gast is not None:

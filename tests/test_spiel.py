@@ -5992,6 +5992,121 @@ pruef("Und das MG nicht mehr fast so weit wie der Scharfschuetze",
       K.WAFFEN["lmg"]["reichweite"] < 0.5 * K.WAFFEN["scharf"]["reichweite"])
 _w42.verlassen(); _g42.verlassen()
 
+# ── 0.32: von Lobby zu Lobby, ohne LAN-GAST und LAN-GASTGEBER ─────────
+# Gemeldet: "Es soll nicht mehr LAN-Gast und LAN-Gastgeber geben ...
+# direkt in die Lobby ... wenn ein Gast eine Runde mit einem anderen
+# Gastgeber verlaesst, soll er wieder zurueck in eine Lobby kommen."
+# Gebaut mit zwei Apps, wie zwei Rechner: jede hat ihren eigenen Stapel.
+import time as _t45
+from dustfront import lan as _lan45, sitzung as _s45
+from dustfront.core import App as _App45
+_app_a = _App45("A", None, headless=True)
+_app_b = _App45("B", None, headless=True)
+
+def _beide45(n=20):
+    for _ in range(n):
+        for _a in (_app_a, _app_b):
+            for _sz in list(_a._aktive()):
+                _sz.schritt(K.FIXED_DT)
+        _t45.sleep(0.002)
+
+_neuer_port(); _pa45 = _port[0]
+_neuer_port(); _pb45 = _port[0]
+_la45 = _s45.eigene_lobby(_app_a, headless_port=_pa45)
+_lb45 = _s45.eigene_lobby(_app_b, headless_port=_pb45)
+pruef("Jeder startet in seiner eigenen Lobby",
+      _la45.in_lobby and _lb45.in_lobby and _la45.ist_gastgeber
+      and _app_a.stapel == [_la45])
+pruef("Ohne Konto und Namen heisst man nicht einfach SPIELER",
+      _s45.spielername(_app_a).startswith("SPIELER"), _s45.spielername(_app_a))
+pruef("Die Lobby ist im Netz zu finden (sie hat einen Ansager)",
+      _la45.ansager is not None and _la45.ansager.sock is not None,
+      _la45.ansager.fehler if _la45.ansager else "keiner")
+
+_grund45 = _s45.beitreten(_app_b, "127.0.0.1:%d" % _pa45)
+_gast45 = _app_b.stapel[-1]
+_beide45(40)
+pruef("Beitreten: B steigt aus seiner Lobby in die von A um",
+      not _grund45 and not _gast45.ist_gastgeber and len(_la45.kaempfer) == 2
+      and _lb45 not in _app_b.stapel, _grund45)
+pruef("Die alte eigene Lobby ist dabei zugegangen",
+      not _lb45.gastgeber.leitungen and _lb45.ansager is None)
+_eintr45 = [x[0] for x in _gast45._menue_baut()]
+pruef("Im Menue: anderer Lobby beitreten, Lobby verlassen, Spiel beenden",
+      {"suchen", "raus", "beenden"} <= set(_eintr45), str(_eintr45))
+_gast45._menue_auf()
+_gast45._menue_wirken("raus", True, True)
+_heim45 = _app_b.stapel[-1]
+_beide45(20)
+pruef("Lobby verlassen fuehrt in die eigene Lobby, nicht hinaus",
+      _app_b.laeuft and _heim45.ist_gastgeber and _heim45.in_lobby
+      and len(_la45.kaempfer) == 1, "%d bei A" % len(_la45.kaempfer))
+
+# Der Gastgeber hoert auf: der Gast landet von selbst wieder daheim.
+_s45.beitreten(_app_b, "127.0.0.1:%d" % _pa45)
+_beide45(30)
+_la45.plan_starten(0)
+_beide45(20)
+pruef("Mitten in einer fremden Runde", not _app_b.stapel[-1].in_lobby
+      and not _app_b.stapel[-1].ist_gastgeber)
+_app_a.werfen()
+_beide45(10)
+_daheim45 = _app_b.stapel[-1]
+pruef("Hoert der Gastgeber auf, geht es zurueck in die eigene Lobby",
+      _app_b.laeuft and _daheim45.ist_gastgeber and _daheim45.in_lobby)
+pruef("Und dort steht, warum", "VERLOREN" in _daheim45.hinweis,
+      _daheim45.hinweis)
+pruef("Ein Beitritt ins Leere laesst einen, wo man ist",
+      bool(_s45.beitreten(_app_b, "127.0.0.1:%d" % _pa45))
+      and _app_b.stapel[-1] is _daheim45)
+
+# Abgewiesen (Kennwort): auch das fuehrt heim, mit dem Grund.
+_neuer_port()
+_wk45 = Gefecht(_app_a, "WIRT", gastgeber=netz.Gastgeber(_port[0]),
+                lobby=True, passwort="GEHEIM", ansagen=True)
+_app_a.schieben(_wk45)
+_s45.beitreten(_app_b, "127.0.0.1:%d" % _port[0], "falsch")
+_beide45(30)
+pruef("Abgewiesen: zurueck in die eigene Lobby, mit dem Grund",
+      _app_b.stapel[-1].ist_gastgeber
+      and "KENNWORT" in _app_b.stapel[-1].hinweis, _app_b.stapel[-1].hinweis)
+
+# Die Suche findet die Lobby von A - mit Kennwort-Hinweis -, aber nie
+# die eigene.
+_such45 = _s45.LobbySuche(_app_b, _app_b.stapel[-1])
+_app_b.schieben(_such45)
+for _ in range(80):
+    _beide45(1)
+    _t45.sleep(0.01)
+    if any(e["port"] == _port[0] for e in _such45._liste()):
+        break
+_gef45 = [e for e in _such45._liste() if e["port"] == _port[0]]
+pruef("Die Lobbysuche findet die Lobby im Netz",
+      len(_gef45) == 1 and _gef45[0]["name"] == "WIRT" and _gef45[0]["passwort"],
+      str(_such45._liste()))
+pruef("Die eigene Lobby steht nicht in der Liste",
+      not any(e["kennung"] == _app_b.stapel[0].ansager.kennung
+              for e in _such45._liste()))
+pruef("Unter der Suche laeuft die eigene Lobby weiter, ohne Eingaben",
+      _app_b.stapel[0].pausiert and _app_b.stapel[0] in _app_b._aktive())
+_btn45 = [el for el in _such45.elemente if el.name.startswith("lobby:")]
+pruef("Jede gefundene Lobby ist ein Knopf", bool(_btn45))
+if _btn45:
+    _such45.ausloesen(_btn45[0])
+    pruef("Mit Kennwort fragt die Suche erst danach",
+          "KENNWORT" in _such45.meldung and _such45._verbinde is None,
+          _such45.meldung)
+app.flaeche.fill(K.C_VOID)
+_such45.zeichnen(app.flaeche, 1.0)          # darf nicht abstuerzen
+pruef("Eine Antwort aus dem Netz wird geprueft, bevor sie zaehlt",
+      _lan45.eintrag_pruefen(b"kein json", "1.2.3.4") is None
+      and _lan45.eintrag_pruefen(b'{"port": 99999}', "1.2.3.4") is None
+      and _lan45.eintrag_pruefen(b'{"port": 50505, "name": "x<>y"}',
+                                 "1.2.3.4")["name"] == "XY")
+for _a in (_app_a, _app_b):
+    while _a.stapel:
+        _a.werfen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

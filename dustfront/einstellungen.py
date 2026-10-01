@@ -55,6 +55,10 @@ VORGABE = {
     # genau den Gang verdeckt, in dem geschossen wird; Q schaltet in der
     # Runde um. Plateaus ueber Fels bleiben immer sichtbar.
     "obere_ebenen": False,
+    # Wie man in Lobbys heisst, solange man nicht angemeldet ist. Leer
+    # heisst SPIELER (sitzung.spielername). Seit 0.32 fragt kein Starter
+    # mehr im Terminal danach - eingetragen wird er in der Lobbysuche.
+    "spielername": "",
 }
 
 # Welche Einstellungen zum **Spieler** gehoeren und nicht zum Geraet.

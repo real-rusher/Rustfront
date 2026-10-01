@@ -218,8 +218,22 @@ class Gastgeber:
         self.leitungen: dict[int, Leitung] = {}
         self.naechste_id = 1
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind(("", self.port))
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            # GRUND: Unter Windows heisst SO_REUSEADDR etwas anderes als
+            # ueberall sonst - ein zweites Programm darf sich dann auf
+            # einen Port setzen, der schon belegt ist. Seit jeder in
+            # seiner eigenen Lobby startet, sind zwei Fenster auf einem
+            # Rechner normal; das zweite muss merken, dass der Port
+            # besetzt ist, und den naechsten nehmen (sitzung.py).
+            self.sock.setsockopt(socket.SOL_SOCKET,
+                                 socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            self.sock.bind(("", self.port))
+        except OSError:
+            self.sock.close()
+            raise
         self.sock.listen(K.NETZ["warteschlange"])
         self.sock.setblocking(False)
         if self.online:

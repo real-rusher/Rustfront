@@ -1,15 +1,21 @@
 @echo off
 rem ============================================================
-rem  SPIELTEST - direkt ins Spiel, ohne Menue und ohne Intro.
+rem  DUSTFRONT MEHRSPIELER - einfach doppelklicken.
 rem
-rem  Zum Ausprobieren der Spielmechanik. Wer das ganze Spiel mit
-rem  Menue will, nimmt DUSTFRONT.bat daneben.
+rem  Startet direkt in die eigene Lobby. Es wird nichts gefragt:
+rem  anderen Lobbys im selben Netz trittst du im Spiel bei
+rem  (Esc -> ANDERER LOBBY BEITRETEN). Ersetzt seit 0.32 die
+rem  beiden Starter LAN-GAST und LAN-GASTGEBER.
 rem
-rem  Mit goto statt verschachtelten Klammern gebaut: tiefe
-rem  if-Bloecke sind in cmd eine verlaessliche Fehlerquelle.
+rem  Sucht Python, prueft ob pygame-ce da ist und installiert
+rem  es notfalls.
+rem
+rem  Geht etwas schief, bleibt das Fenster offen und sagt warum.
+rem  Bewusst mit goto statt verschachtelter Klammern gebaut:
+rem  tiefe if-Bloecke sind in cmd eine verlaessliche Fehlerquelle.
 rem ============================================================
 setlocal
-title DUSTFRONT - SPIELTEST
+title DUSTFRONT - MEHRSPIELER
 
 rem In den Ordner dieser Datei wechseln. Ohne das sucht Python
 rem die Spieldateien im falschen Verzeichnis.
@@ -57,19 +63,11 @@ pause
 exit /b 1
 
 :starten
-echo.
-echo   DUSTFRONT - Spieltest
-echo.
-echo   W A S D laufen, Maus zielen, links schiessen
-echo   1 bis 6 Waffe, R nachladen, H Medkit
-echo   E Treppe, Mausrad Ebene ansehen, Tab Inventar
-echo   T Ziellinie, Esc Pause
-echo.
-%PY% -m dustfront %*
+%PY% -m dustfront --lobby %*
 if not errorlevel 1 exit /b 0
 
 echo.
-echo   Der Spieltest wurde mit einem Fehler beendet.
+echo   DUSTFRONT wurde mit einem Fehler beendet.
 echo   Die Meldung darueber sagt, woran es lag.
 echo.
 pause

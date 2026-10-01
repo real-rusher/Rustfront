@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.31.4"
+VERSION = "0.32.0"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -1220,6 +1220,8 @@ class MainPage(Page):
                    enabled=has_save, accent=C_TEAL),
             Action("NEUER AUFTRAG", lambda a: a.goto("newgame"),
                    "neue kampagne. region, schwierigkeit und rufzeichen wählen."),
+            Action("MEHRSPIELER", lambda a: a.start_game("mehrspieler"),
+                   "in die eigene lobby. von dort anderen lobbys im netz beitreten."),
             Action("OPTIONEN", lambda a: a.goto("options"),
                    "bild, ton und darstellung anpassen."),
             Action("STEUERUNG", lambda a: a.goto("controls"),
@@ -1804,7 +1806,10 @@ def spiel_scene(window, app: App, result: dict) -> None:
         placeholder_scene(window, app, result)
         return
 
-    app.write_save()
+    if result.get("action") != "mehrspieler":
+        # Der Mehrspieler hat keinen Spielstand; FORTSETZEN soll weiter
+        # auf den letzten Auftrag zeigen.
+        app.write_save()
     try:
         aus_menue(result)
     finally:

@@ -61,9 +61,11 @@ Ausnahmen stehen in 2.4.
 | `dustfront/wege.py` | ~350 | Seit 0.27: Wegenetz ueber Treppen und Rampen fuer die Gegner (12b). |
 | `dustfront/config.py` | +150 | `NETZ`, `MODI`, `TEAMS`, `ZONE`, `VERSUS`, `GEFECHT`, `REVIVE`, `WELLEN_MP`, `GEGNER_MP`, `MUNITION`. |
 
-Dazu: vier Startdateien (`LAN-GASTGEBER.bat/.command`,
-`LAN-GAST.bat/.command`), Schalter in `main.py` und die Pruefungen im
-Abschnitt "LAN-Gefecht" von `tests/test_spiel.py`.
+Dazu: zwei Startdateien (`MEHRSPIELER.bat/.command`, seit 0.32 statt
+der vier `LAN-GASTGEBER`/`LAN-GAST`), Schalter in `main.py`, die
+Lobbysuche (`lan.py`), das Umsteigen zwischen Lobbys (`sitzung.py`, beide
+12g) und die Pruefungen im Abschnitt "LAN-Gefecht" von
+`tests/test_spiel.py`.
 
 **Sechs Spielarten:**
 
@@ -1691,6 +1693,105 @@ den Kopfrand aufhellen - die Arme aufzuhellen war das Unauffaelligste.
 
 ---
 
+## 12g. Version 0.32: von Lobby zu Lobby
+
+Gemeldet: "Es soll nicht mehr wirklich LAN-Gast und LAN-Gastgeber geben.
+Man soll durch eine Datei direkt in die Lobby kommen und von da aus
+anderen Lobbys im selben LAN beitreten koennen. Wenn ein Gast eine Runde
+mit einem anderen Gastgeber verlaesst, soll er wieder zurueck in eine
+Lobby kommen."
+
+### Jeder ist Gastgeber seiner eigenen Lobby
+
+`sitzung.eigene_lobby(app)` macht einen `Gastgeber` auf und schiebt ein
+`Gefecht(lobby=True, ansagen=True, heimkehr=True)`. Es gibt keine Rolle
+mehr, die man vorher waehlen muss: wer niemandem beitritt, ist Gastgeber,
+und wer beitritt, war es bis eben.
+
+**Der Port wandert.** Ist 50505 belegt - ein zweites Fenster auf demselben
+Rechner -, wird 50506 genommen und so weiter (`NETZ["port_versuche"]`).
+**FEST:** Unter Windows setzt der Gastgeber dafuer `SO_EXCLUSIVEADDRUSE`
+statt `SO_REUSEADDR`. GRUND: `SO_REUSEADDR` heisst unter Windows "darf
+sich auf einen belegten Port setzen"; das zweite Fenster haette 50505
+bekommen, und die Verbindungen waeren zufaellig beim einen oder anderen
+gelandet.
+
+### Erst verbinden, dann umsteigen
+
+`sitzung.beitreten(app, adresse, kennwort)` baut die Verbindung auf,
+**bevor** die eigene Lobby zugeht. Scheitert sie, bleibt alles, wie es
+war, und die Suche sagt warum (`fehler_kurz`: "DORT IST KEINE LOBBY
+OFFEN", "KEINE ANTWORT - FALSCHE ADRESSE?" ...). Steht sie, ersetzt das
+Gast-Gefecht den ganzen Stapel; die eigene Lobby wird dabei verlassen, wie
+mit Esc - Gaeste, die dort waren, landen ihrerseits daheim.
+
+### Zurueck nach Hause (`heimkehr`)
+
+Ein Gast mit `heimkehr` geht in drei Faellen von selbst in eine neue
+eigene Lobby, mit einem Hinweis oben:
+
+| Fall | Hinweis |
+| --- | --- |
+| Menue: LOBBY / GEFECHT VERLASSEN | - |
+| Leitung tot (Gastgeber hoert auf, Netz weg) | VERBINDUNG ZU <NAME> VERLOREN |
+| abgewiesen (Kennwort, voll) | ABGEWIESEN: <GRUND> |
+
+Bei einer falschen Version bleibt die Tafel mit beiden Versionen stehen
+(12b), Esc fuehrt dann nach Hause statt aus dem Spiel. Die laufende
+Runde wird vorher wie jeder Abbruch gebucht (12e). Ohne `heimkehr` - nur
+in Pruefungen, die ein Gefecht von Hand bauen - bleibt es beim Alten:
+Hinweis und Esc.
+
+Der **Gastgeber** hat keinen Eintrag "verlassen": er ist der Server.
+"GEFECHT VERLASSEN" heisst bei ihm "alle zurueck in die Lobby"
+(`lobby_betreten`). *SPIEL BEENDEN* haben alle; vom Hauptmenue aus
+gestartet fuehrt es dorthin zurueck.
+
+### Die Suche (`lan.py`)
+
+UDP, Port `NETZ["such_port"]` = 50504, ohne Server:
+
+    Sucher  -> Rundruf  "DUSTFRONT?"
+    Ansager -> Absender {"name","port","version","spieler","hoechstens",
+                         "lobby","modus","karte","passwort","kennung"}
+
+* **Gefragt wird, nicht gerufen.** Nur wer die Liste offen hat, fragt
+  (alle `such_takt` = 1,5 s); nur wer gefragt wird, antwortet. Eine Lobby,
+  die `such_vergessen` = 5 s nicht geantwortet hat, faellt heraus.
+* **Drei Ziele je Frage:** 255.255.255.255, der Rundruf des eigenen
+  /24-Netzes (Windows mit mehreren Netzkarten schickt den ersten nur auf
+  einer hinaus) und 127.0.0.1.
+* **`kennung`** ist eine Zufallszahl je Lobby. Sie haelt die eigene Lobby
+  aus der eigenen Liste und fasst zusammen, was ueber zwei Wege antwortet
+  (127.0.0.1 und die Netzadresse; die Netzadresse gewinnt).
+* **Alles aus dem Netz wird geprueft** (`eintrag_pruefen`): kaputtes JSON,
+  Ports ausserhalb 1-65535, Namen mit fremden Zeichen. Beitreten ist
+  danach eine ganz normale Verbindung mit allen Pruefungen des Gastgebers
+  (Version, Kennwort, Platz) - die Liste verspricht nichts.
+* Das **Kennwort** geht nie hinaus, nur *ob* eines gilt. Wer eine Lobby
+  mit Kennwort anklickt und keines eingetragen hat, wird erst danach
+  gefragt.
+* Eine Lobby mit anderer Version oder ohne freien Platz steht in der
+  Liste, ist aber gesperrt und sagt warum.
+
+Mehrere Lobbys auf einem Rechner teilen sich den Suchport
+(`SO_REUSEADDR`, unter macOS zusaetzlich `SO_REUSEPORT`). Geht der Port
+nicht auf, laeuft die Lobby trotzdem, sie ist nur nicht zu finden -
+beitreten per Adresse geht weiterhin.
+
+### Name ohne Konto
+
+Angemeldet heisst man wie das Konto. Sonst gilt der Name aus der
+Lobbysuche (`einstellungen.json`, `spielername`), und ganz ohne
+`SPIELER` plus das Ende der eigenen Adresse (`SPIELER27`) - sonst hiesse
+jede Lobby im Netz gleich.
+
+### Internet
+
+Die Startdatei dafuer ist mit LAN-GASTGEBER weggefallen. Es geht ueber
+`python -m dustfront --host --online --passwort GEHEIM` (7.9); die anderen
+tragen die Adresse in der Lobbysuche unter ADRESSE ein.
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:
@@ -1730,6 +1831,7 @@ README, Abschnitt "Versionsnummern".
 **Starten:**
 
 ```
+python -m dustfront --lobby
 python -m dustfront --host --name MEISTER --modus huegel --ende zeit --wert 600
 python -m dustfront --join 192.168.1.7:50505 --name GAST
 python -m dustfront --bestenliste
@@ -1737,7 +1839,8 @@ python -m dustfront --bestenliste
 
 `--modus` ist einer von `pvp pve pvpve team versus huegel`, `--ende` ist
 `zeit` oder `abschuesse`, `--knapp` begrenzt die Munition. Ohne
-Kommandozeile: `LAN-GASTGEBER.bat` bzw. `.command` fragt alles ab.
+Kommandozeile: `MEHRSPIELER.bat` bzw. `.command` - es geht ohne Fragen
+in die eigene Lobby, alles andere im Spiel (12g).
 
 ---
 

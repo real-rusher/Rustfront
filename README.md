@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.31.4, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.32.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -56,8 +56,7 @@ dort steht die eine technische Entscheidung, an der alles andere haengt.
 | --- | --- | --- |
 | Das ganze Spiel, mit Menue und Intro | `DUSTFRONT.bat` | `DUSTFRONT.command` |
 | Direkt ins Spiel, zum Ausprobieren | `SPIELTEST.bat` | `SPIELTEST.command` |
-| LAN: Runde aufmachen | `LAN-GASTGEBER.bat` | `LAN-GASTGEBER.command` |
-| LAN: mitspielen | `LAN-GAST.bat` | `LAN-GAST.command` |
+| Mehrspieler: direkt in die eigene Lobby | `MEHRSPIELER.bat` | `MEHRSPIELER.command` |
 
 Die Datei sucht sich Python selbst, installiert pygame-ce beim ersten Mal
 nach und startet dann. Geht etwas schief, bleibt das Fenster offen und sagt
@@ -285,12 +284,15 @@ alles ein Stueck auf.
 
 ### So spielt man es
 
-1. Einer startet **`LAN-GASTGEBER`**, tippt seinen Namen und sagt, ob nur
-   das eigene Netz oder auch das Internet mitspielen soll. Mehr fragt die
-   Startdatei nicht: es geht in die **Lobby**, und dort steht oben links
-   die Adresse (etwa `192.168.1.7:50505`).
-2. Alle anderen starten **`LAN-GAST`**, tippen ihren Namen und diese
-   Adresse, und landen ebenfalls in der Lobby.
+1. Jeder startet **`MEHRSPIELER`** (oder im Hauptmenue *MEHRSPIELER*).
+   Es wird nichts gefragt: jeder landet in seiner **eigenen Lobby**. Oben
+   links steht ihre Adresse (etwa `192.168.1.7:50505`).
+2. Wer zu jemand anderem will: **Esc -> ANDERER LOBBY BEITRETEN**. Dort
+   stehen alle Lobbys im selben Netz von selbst in einer Liste - anklicken
+   genuegt. Eine Adresse von Hand geht darunter, ebenso ein Kennwort und,
+   ohne Konto, der eigene Name. Wer eine fremde Lobby oder Runde verlaesst
+   (Esc -> *GEFECHT VERLASSEN*), aus ihr abgewiesen wird oder dessen
+   Gastgeber aufhoert, landet wieder in **seiner eigenen** Lobby.
 3. In der Lobby: links die Arena (PVP), in der Mitte der Schiessstand,
    rechts das Gehege mit Zombies. Auf dem Platz dazwischen tut niemandem
    etwas weh. Der Gastgeber stellt mit **P** die naechste Runde ein -
@@ -301,7 +303,8 @@ alles ein Stueck auf.
    die Tafel, koennen aber nichts aendern.
    Hat jemand **Spielerkosmetik** (siehe unten), startet der Gastgeber
    **mit** oder **ohne** - mit erst, wenn sie bei allen angekommen ist.
-4. Fertig. Esc oeffnet das Menue, dort geht es hinaus.
+4. Fertig. Esc oeffnet das Menue; *SPIEL BEENDEN* macht zu (vom
+   Hauptmenue aus gestartet: zurueck ins Hauptmenue).
 
 ### Spielerkosmetik: der eigene Knall
 
@@ -323,10 +326,11 @@ Gastgeber.
 
 ### Ueber das Internet
 
-Die Startdatei fragt gleich am Anfang, ob nur das eigene Netz mitspielen
-soll oder auch das Internet. Beim Internet versucht das Spiel, den Port im
-Router selbst freizugeben (UPnP), und sagt danach die Adresse an, die die
-anderen eintippen.
+Seit 0.32 gibt es dafuer keine eigene Startdatei mehr; das Internet geht
+ueber die Kommandozeile: `python -m dustfront --host --online --passwort
+GEHEIM`. Das Spiel versucht dann, den Port im Router selbst freizugeben
+(UPnP), und sagt die Adresse an, die die anderen in der Lobbysuche unter
+*ADRESSE* eintippen.
 
 Drei Dinge dazu, ehrlich:
 
@@ -340,12 +344,13 @@ Drei Dinge dazu, ehrlich:
   das zwei Millisekunden, ueber das Internet eher dreissig bis hundert.
   Zielen folgt trotzdem sofort, das rechnet jeder bei sich.
 * **Ein offener Port ist ein offener Port.** Wer die Adresse kennt, kann
-  mitspielen. Darum fragt die Startdatei nach einem Kennwort. Ohne eines
+  mitspielen. Darum gehoert `--passwort` dazu. Ohne eines
   kommt jeder herein, der die Adresse hat.
 
 Wer lieber tippt:
 
 ```
+python -m dustfront --lobby
 python -m dustfront --host --name MEISTER --modus pve --knapp
 python -m dustfront --host --name MEISTER --modus pvp --ende abschuesse --wert 20
 python -m dustfront --host --name MEISTER --modus huegel --ende zeit --wert 600
@@ -720,6 +725,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.14.0 | Mehrspieler fertiggestellt: drei Spielarten, Aufhelfen, Wellen mit mehrspielertauglicher Gegner-KI, knappe Munition mit Nachschubkisten. Letzter Stand dieses Zweigs |
 | 0.16.0 | Mannschaften im Gefecht: TEAM, VERSUS mit einem Leben je Runde und Aufhelfen durch die eigenen Leute, HUEGEL mit sichtbarem Kreis in der Kartenmitte. Alles in `docs/MEHRSPIELER.md` beschrieben. Nur auf `multiplayer-test`; 0.15.0 gehoert dem Hauptzweig ohne Mehrspieler |
 | 0.17.0 | Rauchgranate als siebte Waffe; Granaten fallen ueber Kanten auf die Ebene darunter; Einstiegsschutz, Startmedkits und Medkit-Nachschub als Schalter beim Aufmachen. Dazu vier gemeldete Fehler behoben: kein Ton im Gefecht, Ziellinie des Gastes am Einstiegspunkt, Versetzung nach einem Sturztod, Granaten prallten an Loechern ab. Brecheisen toetet in zwei Treffern, Schrot reicht weiter und streut enger, Scharfschuetze weiter als das Bild breit ist |
+| 0.32.0 | **Von Lobby zu Lobby**: LAN-GAST und LAN-GASTGEBER sind weg. `MEHRSPIELER` (oder *MEHRSPIELER* im Hauptmenue) fuehrt ohne Fragen in die eigene Lobby; Lobbys im selben Netz finden sich von selbst (UDP-Suche auf Port 50504, `lan.py`), beitreten per Klick. Wer eine fremde Runde verlaesst, abgewiesen wird oder den Gastgeber verliert, landet in seiner eigenen Lobby (`sitzung.py`). **Blendgranate**: ganz nah wirkt sie immer voll, auch weggedreht; ihre Reichweite ist viel kleiner, und hinter einer Wand bekommt man nichts mehr ab (exakte Sichtlinie statt Halbkachel-Schritten). **Zielpuppen** zeigen je Treffer eine Zahl und lassen sich nicht mehr schieben. **Waffenbalance**: das MG schiebt den Schuetzen nicht mehr (Regel *MG-RUECKSTOSS SCHIEBT* fuer die alte Bewegungstechnik), reicht 1000 statt 1450; der Repetierer reicht 560 statt 430; der Schrot-Stoss gilt je Schuss statt je Kugel. Grosses Eszett in der Pixelschrift. Unter Windows nimmt ein zweites Spiel nicht mehr denselben Port; `SPIELTEST.bat` fand unter Windows Python nicht (`>/dev/null` statt `>nul`) |
 | 0.31.4 | **Zombie-Arme, endgueltig unscheinbar**: kurz wie beim Bewaffneten (bis c + 8), nur leicht zur Mitte, und etwas heller als der Kopfrand. Der Rand des Kopfes lag frueher unter der Waffe; ohne sie wuchs er mit gleichfarbigen Armen zu einem dunklen Klotz zusammen |
 | 0.31.3 | **Zombie-Arme ruhiger**: Laeufer, Brecher und Speier strecken die Arme jetzt parallel nach vorn, etwas laenger und leicht ungleich - ohne die Klauenfinger und Faeuste aus 0.31.1, die in 28 Pixeln unruhig wirkten. `_figur` hat dafuer `bewaffnet=False` |
 | 0.31.2 | **Absturz unter Python 3.8** (gemeldet beim Gastgeber, Python 3.8.8): stand auf dem Server ein neuerer Profilstand - etwa nachdem der ADMIN das Profil geaendert hatte -, fuehrte das Spiel beide mit `dict | dict` zusammen, und das gibt es erst ab Python 3.9. Jetzt mit `{**a, **b}`. Der Zweig war nie getestet; jetzt schon, und alle Testsuiten laufen auch unter Python 3.8 mit pygame-ce 2.5.2 |
