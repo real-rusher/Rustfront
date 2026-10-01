@@ -74,10 +74,13 @@ _G = {
     "\u00c4": "01010/00000/01110/10001/11111/10001/10001",
     "\u00d6": "01010/00000/01110/10001/10001/10001/01110",
     "\u00dc": "01010/00000/10001/10001/10001/10001/01110",
+    # Das grosse Eszett. Die Schrift kennt nur Grossbuchstaben, und "SS"
+    # fuer ein ss sah in einem deutschen Spiel nach Notloesung aus.
+    "\u1e9e": "01110/10001/10010/10110/10001/10001/10110",
 }
 # Runde Klammern hat die Schrift nicht - eckige schon. Ohne diese Zeile
 # stand in jeder Fehlermeldung mit Klammer ein Fragezeichen.
-_TRANS = {"\u00e4": "\u00c4", "\u00f6": "\u00d6", "\u00fc": "\u00dc", "\u00df": "SS",
+_TRANS = {"\u00e4": "\u00c4", "\u00f6": "\u00d6", "\u00fc": "\u00dc", "\u00df": "\u1e9e",
           "(": "[", ")": "]"}
 
 
