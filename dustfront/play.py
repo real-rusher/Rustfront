@@ -242,11 +242,15 @@ class Spiel(Szene):
         # Die Einstellung greift bei jedem Bild neu: wer das Wackeln
         # im Pausenmenue abschaltet, sieht es sofort stehen.
         self.kamera.anteil = self.app.opt.ruckel_anteil()
+        self.kamera.vorausschau = (K.KAMERA["blick_weite"]
+                                   if self.app.opt["kamera_blick"] else 0.0)
         self.kamera.schritt(dt, held.pos, held.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe))
 
     # ---- Bild ---------------------------------------------------------
     def zeichnen(self, ziel, alpha: float) -> None:
+        # Seit 0.32 haengt die Vignette am Schalter in GRAFIK.
+        self.renderer.vignette_an = bool(self.app.opt["vignette"])
         self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, alpha,
                                     self.blick_hoehe, blick=self.blick)
         # Ziellinie, Streukegel und Nahkampfbogen gehoeren zu der Ebene, auf
@@ -267,7 +271,9 @@ class Spiel(Szene):
                           self.blick)
         if self.hinweis:
             self.renderer.hinweis(ziel, self.hinweis)
-        self.befinden.blendung_zeichnen(ziel)
+        self.befinden.blendung_zeichnen(
+            ziel, (0, 0, 0) if self.app.opt["blendung"] == "schwarz"
+            else (255, 255, 255))
         if not self.held.lebt:
             self.tod_schirm(ziel)
         if self.app.debug:

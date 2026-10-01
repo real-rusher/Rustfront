@@ -99,7 +99,8 @@ pruef("Aenderung steht sofort in der Datei",
 
 opt.seite_wechseln(1)
 regler = [el for el in opt.elemente if isinstance(el, ui.Regler)]
-pruef("Tonseite hat drei Regler", len(regler) == 3, str(len(regler)))
+pruef("Tonseite hat zwei Regler (Musik gibt es noch nicht)", len(regler) == 2,
+      str(len(regler)))
 opt.wahl = opt.elemente.index(regler[0])
 vorher = app.opt["ton_gesamt"]
 taste(opt, pygame.K_LEFT)
@@ -110,11 +111,39 @@ pruef("Der Mischer uebernimmt den Wert sofort",
 
 opt.seite_wechseln(2)
 gesperrt = [el for el in opt.elemente if el.gesperrt]
-pruef("Drei Zeilen sind als spaeter markiert", len(gesperrt) == 3,
+pruef("Was es noch nicht gibt, ist als NICHT VERFUEGBAR markiert",
+      len(gesperrt) == 4 and all(isinstance(el, ui.Platzhalter) for el in gesperrt),
       str(len(gesperrt)))
+pruef("Ein Platzhalter laesst sich nicht waehlen",
+      not any(el in opt.waehlbar for el in gesperrt))
 opt.wahl = opt.elemente.index(gesperrt[0])
 taste(opt, pygame.K_RETURN)
 pruef("Eine gesperrte Zeile tut nichts", app.oben is opt)
+opt.maus_druck(pygame.Vector2(gesperrt[0].rect.center))
+pruef("Auch ein Klick darauf nicht", app.oben is opt)
+
+# Barrierefreiheit (seit 0.32)
+opt.seite_wechseln(4)
+namen4 = [el.name for el in opt.elemente]
+pruef("Barrierefreiheit: Blendgranate, Bildwackeln, Blick voraus",
+      {"blendung", "bildschirm_ruckeln", "kamera_blick"} <= set(namen4), str(namen4))
+bl = next(el for el in opt.elemente if el.name == "blendung")
+opt.wahl = opt.elemente.index(bl)
+taste(opt, pygame.K_RIGHT)
+pruef("Die Blendung laesst sich auf NUR WEISS stellen",
+      app.opt["blendung"] == "weiss", app.opt["blendung"])
+pruef("Und gehoert zum Konto", "blendung" in E.KONTO_WERTE)
+pruef("Blick voraus ist aus, solange man ihn nicht anmacht",
+      E.VORGABE["kamera_blick"] is False)
+# Der Reiter STEUERUNG tauscht die Szene aus - und zurueck.
+opt.seite_wechseln(3)
+pruef("Der Reiter STEUERUNG zeigt die Tastenbelegung",
+      isinstance(app.oben, M.Steuerung), type(app.oben).__name__)
+st_r = app.oben
+taste(st_r, pygame.K_e)
+pruef("E blaettert weiter zu BARRIEREFREIHEIT",
+      isinstance(app.oben, M.Einstellungen) and app.oben.seite == 4)
+opt = app.oben
 
 app.opt.zuruecksetzen_werte()
 app.anzeige_uebernehmen()
@@ -306,6 +335,7 @@ schirm(M.Pause(app, szene), "menue_1_pause.png", schritte=60)   # aufgeklappt
 schirm(M.Einstellungen(app, 0), "menue_2_anzeige.png")
 schirm(M.Einstellungen(app, 1), "menue_3_ton.png")
 schirm(M.Einstellungen(app, 2), "menue_4_grafik.png")
+schirm(M.Einstellungen(app, 4), "menue_4b_barrierefreiheit.png")
 schirm(M.Steuerung(app), "menue_5_steuerung.png")
 schirm(M.Mitwirkende(app), "menue_6_mitwirkende.png", schritte=360)
 schirm(Inventar(app, szene), "menue_7_inventar.png")

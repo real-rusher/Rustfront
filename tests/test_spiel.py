@@ -6196,6 +6196,42 @@ app.opt["runden_erweitert"] = _alt46
 app.opt.speichern()
 _l46.verlassen()
 
+# ── 0.32: Barrierefreiheit - Blendung einfarbig, Blick voraus ────────
+from dustfront.render import Kamera as _Kam47
+_k47 = _Kam47((1000, 1000))
+for _ in range(600):
+    _k47.schritt(K.FIXED_DT, pygame.Vector2(1000, 1000),
+                 pygame.Vector2(1300, 1000), (4000, 4000))
+_ohne47 = _k47.pos.x - 1000
+_k47.vorausschau = K.KAMERA["blick_weite"]
+for _ in range(600):
+    _k47.schritt(K.FIXED_DT, pygame.Vector2(1000, 1000),
+                 pygame.Vector2(1300, 1000), (4000, 4000))
+pruef("Blick voraus: die Bildmitte liegt vor der Waffe",
+      abs(_k47.pos.x - 1000 - K.KAMERA["blick_weite"]) < 1.0
+      and abs(_k47.pos.y - 1000) < 1.0, "%.1f statt %.1f vorher" % (
+          _k47.pos.x - 1000, _ohne47))
+for _ in range(600):
+    _k47.schritt(K.FIXED_DT, pygame.Vector2(1000, 1000),
+                 pygame.Vector2(1000 + 2, 1000 - 900), (4000, 4000))
+pruef("Nur die Richtung zaehlt, nicht wie weit die Maus weg ist",
+      abs((_k47.pos - pygame.Vector2(1000, 1000)).length()
+          - K.KAMERA["blick_weite"]) < 1.0 and _k47.pos.y < 1000)
+_w47, _g47 = gefechtspaar("pvp")
+_alt47 = app.opt["blendung"]
+for _art47, _farbe47 in (("schwarz", (0, 0, 0)), ("weiss", (255, 255, 255))):
+    app.opt["blendung"] = _art47
+    _g47.befinden.blend = 1.0
+    _g47.befinden.blend_rest = 2.0
+    app.flaeche.fill((90, 60, 30))
+    _g47.zeichnen(app.flaeche, 1.0)
+    pruef("Blendung NUR %s: das Bild ist %s" % (_art47.upper(), _art47),
+          tuple(app.flaeche.get_at((K.GAME_W // 2, K.GAME_H // 2)))[:3] == _farbe47,
+          str(app.flaeche.get_at((K.GAME_W // 2, K.GAME_H // 2))))
+    pruef("Und zeigt kein fremdes Bild", _g47.kos_zeigen is None)
+app.opt["blendung"] = _alt47
+_w47.verlassen(); _g47.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

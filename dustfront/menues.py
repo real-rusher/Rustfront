@@ -35,6 +35,10 @@ from .font import SCHRIFT
 # ══════════════════════════════════════════════════ Masse
 
 TAFEL_GROSS = pygame.Rect(64, 30, 512, 300)
+# Einstellungen und Steuerung (seit 0.32): fast das ganze Bild. Fuenf
+# Reiter und die Tastenbelegung in zwei Spalten passen sonst nicht, und
+# beim Wechsel zwischen den Reitern soll die Tafel nicht springen.
+TAFEL_BREIT = pygame.Rect(16, 10, 608, 340)
 ZEILE_H = 16
 ZEILE_ABSTAND = 4
 
@@ -427,26 +431,69 @@ HILFE = {
         "GEZEIGT WIRD, WO SIE UEBER SPIELFLAECHE LIEGT. PLATEAUS BLEIBEN",
         "IMMER. IN DER RUNDE SCHALTET Q UM (UMLEGBAR). GEHOERT ZUM KONTO.",
     ],
-    "spaeter0": ["RICHTUNGSLICHT UND ECHTE SCHATTEN. SPAETER."],
-    "spaeter1": ["STAUBWEHEN UND WETTER UEBER DER KARTE. SPAETER."],
-    "spaeter2": ["UMSCHALTEN ZWISCHEN TEXTURSAETZEN. SPAETER."],
+    "blendung": [
+        "WIE EINE BLENDGRANATE BEI DIR AUSSIEHT. WIE VOM WERFER: WEISS,",
+        "MIT SEINEM BILD (SPIELERKOSMETIK). NUR WEISS / NUR SCHWARZ: EINE",
+        "FLÄCHE OHNE FREMDES BILD. GILT NUR BEI DIR, DIE WIRKUNG BLEIBT.",
+    ],
+    "kamera_blick": [
+        "EXPERIMENTELL: DIE KAMERA SCHAUT DORTHIN VORAUS, WOHIN DU ZIELST.",
+        "EIN UNSICHTBARER PUNKT VOR DER WAFFE IST DIE BILDMITTE - DU SIEHST",
+        "MEHR VON DEM, WAS VOR DIR LIEGT. GEHÖRT ZUM KONTO.",
+    ],
     "reset": ["SETZT ALLE WERTE DIESER SEITEN AUF DIE VORGABE ZURUECK."],
-    "zurueck": ["ZURUECK ZUM PAUSENMENUE. GESPEICHERT IST SCHON ALLES."],
-    "reiter_anzeige": ["FENSTER, AUFLOESUNG, BILDRATE, OBERE EBENEN."],
-    "reiter_ton": ["LAUTSTAERKEN."],
-    "reiter_grafik": ["EFFEKTE UND WAS SPAETER DAZUKOMMT."],
+    "zurueck": ["ZURÜCK ZUM PAUSENMENÜ. GESPEICHERT IST SCHON ALLES."],
+    "reiter_video": ["FENSTER, AUFLÖSUNG, BILDRATE, PIXELRASTER."],
+    "reiter_audio": ["LAUTSTÄRKEN."],
+    "reiter_grafik": ["VIGNETTE, OBERE EBENEN UND WAS SPÄTER DAZUKOMMT."],
+    "reiter_steuerung": ["DIE TASTENBELEGUNG."],
+    "reiter_zugang": ["BLENDGRANATE, BILDWACKELN, KAMERA."],
 }
 
 
+# Die Reiter der Einstellungen, in dieser Reihenfolge. STEUERUNG ist
+# eine eigene Szene (die Tastenbelegung braucht die ganze Tafel); ihr
+# Reiter tauscht die Szene aus, und die Steuerung zeigt dieselben Reiter.
+SEITEN = [("VIDEO", "video"), ("AUDIO", "audio"), ("GRAFIK", "grafik"),
+          ("STEUERUNG", "steuerung"), ("BARRIEREFREIHEIT", "zugang")]
+SEITE_STEUERUNG = 3
+
+
+def reiter_bauen(menue, r, aktiv: int) -> list:
+    """Die Reiterleiste oben an der Tafel, je so breit wie ihr Text."""
+    breiten = [SCHRIFT.breite(text, 1) + 18 for text, _ in SEITEN]
+    x = r.centerx - (sum(breiten) + 4 * (len(SEITEN) - 1)) // 2
+    raus = []
+    for i, ((text, name), b) in enumerate(zip(SEITEN, breiten)):
+        t = ui.Reiter((x, r.y + 30, b, 15), text, "reiter_" + name)
+        t.aktiv = (i == aktiv)
+        raus.append(t)
+        x += b + 4
+    return raus
+
+
+def seite_oeffnen(app, nr: int) -> None:
+    """Von einer Einstellungsseite zur anderen - auch ueber die Szene hinweg."""
+    app.werfen()
+    app.schieben(Steuerung(app, reiter=True) if nr == SEITE_STEUERUNG
+                 else Einstellungen(app, nr))
+
+
 class Einstellungen(Menue):
-    """Drei Seiten hinter Reitern: Anzeige, Ton, Grafik."""
+    """Video, Audio, Grafik, Steuerung, Barrierefreiheit (seit 0.32).
+
+    Was es noch nicht gibt, steht als Platzhalter da: grau, mit NICHT
+    VERFUEGBAR, und nicht anklickbar (ui.Platzhalter). So sieht man,
+    wohin es geht, ohne dass etwas ins Leere klickt - und keine Zeile tut
+    so, als wirke sie, waehrend sie an nichts haengt.
+    """
 
     titel = "EINSTELLUNGEN"
-    SEITEN = [("ANZEIGE", "anzeige"), ("TON", "ton"), ("GRAFIK", "grafik")]
+    SEITEN = SEITEN
 
     def __init__(self, app, seite: int = 0) -> None:
-        self.seite = seite
-        self.tafel = TAFEL_GROSS.copy()
+        self.seite = seite if seite != SEITE_STEUERUNG else 0
+        self.tafel = TAFEL_BREIT.copy()
         super().__init__(app)
         # Beim Oeffnen steht die Auswahl auf der ersten echten Zeile, nicht
         # auf dem Reiter. Sonst erklaert der Kasten unten den Reiter.
@@ -455,39 +502,36 @@ class Einstellungen(Menue):
     # ---- Aufbau ------------------------------------------------------
     def aufbauen(self) -> None:
         r = self.tafel
-        self.elemente = []
-        # Reiter
-        bw = 108
-        bx = r.centerx - (len(self.SEITEN) * (bw + 4) - 4) // 2
-        self.reiter = []
-        for i, (text, name) in enumerate(self.SEITEN):
-            t = ui.Reiter((bx + i * (bw + 4), r.y + 30, bw, 15), text, "reiter_" + name)
-            t.aktiv = (i == self.seite)
-            self.reiter.append(t)
-            self.elemente.append(t)
-
+        self.reiter = reiter_bauen(self, r, self.seite)
+        self.elemente = list(self.reiter)
         zx, zw = r.x + 26, r.width - 52
-        zy = r.y + 58
-        baue = (self._seite_anzeige, self._seite_ton, self._seite_grafik)[self.seite]
+        zy = r.y + 56
+        baue = {0: self._seite_video, 1: self._seite_audio,
+                2: self._seite_grafik, 4: self._seite_zugang}[self.seite]
         baue(zx, zy, zw)
 
         # Fussknoepfe
         fy = r.bottom - 40
-        self.elemente.append(ui.Knopf((r.x + 26, fy, 120, 18), "ZURUECKSETZEN",
+        self.elemente.append(ui.Knopf((r.x + 26, fy, 120, 18), "ZURÜCKSETZEN",
                                       "reset"))
-        self.elemente.append(ui.Knopf((r.right - 26 - 96, fy, 96, 18), "ZURUECK",
+        self.elemente.append(ui.Knopf((r.right - 26 - 96, fy, 96, 18), "ZURÜCK",
                                       "zurueck"))
 
     def _reihe(self, zx, zy, zw, i):
         return (zx, zy + i * (ZEILE_H + ZEILE_ABSTAND), zw, ZEILE_H)
 
-    def _seite_anzeige(self, zx, zy, zw) -> None:
+    def _platzhalter(self, zx, zy, zw, ab: int, texte) -> None:
+        for i, text in enumerate(texte):
+            self.elemente.append(ui.Platzhalter(self._reihe(zx, zy, zw, ab + i),
+                                                text, "spaeter_%s" % text))
+
+    def _seite_video(self, zx, zy, zw) -> None:
         o = self.app.opt
         self.elemente += [
             ui.Wahl(self._reihe(zx, zy, zw, 0), "FENSTERMODUS", "fenstermodus",
                     E.FENSTERMODI, self._index(E.FENSTERMODI, o["fenstermodus"]),
                     E.BESCHRIFTUNG["fenstermodus"]),
-            ui.Wahl(self._reihe(zx, zy, zw, 1), "AUFLOESUNG", "aufloesung",
+            ui.Wahl(self._reihe(zx, zy, zw, 1), "AUFLÖSUNG", "aufloesung",
                     E.AUFLOESUNGEN, self._index(E.AUFLOESUNGEN, o["aufloesung"])),
             ui.Wahl(self._reihe(zx, zy, zw, 2), "BILDRATE", "bildrate",
                     E.BILDRATEN, self._index(E.BILDRATEN, o["bildrate"]),
@@ -495,24 +539,21 @@ class Einstellungen(Menue):
             ui.Wahl(self._reihe(zx, zy, zw, 3), "PIXELRASTER", "pixelraster",
                     E.RASTER, self._index(E.RASTER, o["pixelraster"]),
                     E.BESCHRIFTUNG["pixelraster"]),
-            # Eine Zeile Abstand: darueber steht, was zum Rechner gehoert,
-            # hier, was zum Spieler gehoert und mit dem Konto wandert.
-            # Auf GRAFIK waere kein Platz mehr, dort stehen schon sechs.
-            ui.Schalter(self._reihe(zx, zy, zw, 5), "OBERE EBENEN",
-                        "obere_ebenen", o["obere_ebenen"]),
         ]
+        self._platzhalter(zx, zy, zw, 4, ("VSYNC", "HELLIGKEIT"))
 
-    def _seite_ton(self, zx, zy, zw) -> None:
+    def _seite_audio(self, zx, zy, zw) -> None:
         o = self.app.opt
         self.elemente += [
             ui.Regler(self._reihe(zx, zy, zw, 0), "GESAMT", "ton_gesamt",
                       o["ton_gesamt"]),
             ui.Regler(self._reihe(zx, zy, zw, 1), "EFFEKTE", "ton_effekte",
                       o["ton_effekte"]),
-            ui.Regler(self._reihe(zx, zy, zw, 2), "MUSIK", "ton_musik",
-                      o["ton_musik"]),
         ]
-        self.elemente.append(ui.Knopf(self._reihe(zx, zy, 128, 4), "PROBE HOEREN",
+        # Musik gibt es noch nicht. Der Regler stand frueher trotzdem da
+        # und liess sich ziehen - ohne jede Wirkung.
+        self._platzhalter(zx, zy, zw, 2, ("MUSIK", "AUSGABEGERÄT"))
+        self.elemente.append(ui.Knopf(self._reihe(zx, zy, 128, 5), "PROBE HÖREN",
                                       "probe"))
 
     def _seite_grafik(self, zx, zy, zw) -> None:
@@ -520,19 +561,27 @@ class Einstellungen(Menue):
         self.elemente += [
             ui.Schalter(self._reihe(zx, zy, zw, 0), "VIGNETTE", "vignette",
                         o["vignette"]),
+            ui.Schalter(self._reihe(zx, zy, zw, 1), "OBERE EBENEN",
+                        "obere_ebenen", o["obere_ebenen"]),
+        ]
+        # PARTIKEL stand als Wahl da und hing an nichts; jetzt ehrlich.
+        self._platzhalter(zx, zy, zw, 2, ("PARTIKEL", "LICHT UND SCHATTEN",
+                                          "WETTER UND STAUB", "TEXTURSATZ"))
+
+    def _seite_zugang(self, zx, zy, zw) -> None:
+        o = self.app.opt
+        self.elemente += [
+            ui.Wahl(self._reihe(zx, zy, zw, 0), "BLENDGRANATE", "blendung",
+                    E.BLENDUNGEN, self._index(E.BLENDUNGEN, o["blendung"]),
+                    E.BESCHRIFTUNG["blendung"]),
             ui.Regler(self._reihe(zx, zy, zw, 1), "BILDWACKELN",
                       "bildschirm_ruckeln", o["bildschirm_ruckeln"]),
-            ui.Wahl(self._reihe(zx, zy, zw, 2), "PARTIKEL", "partikel",
-                    E.PARTIKEL, self._index(E.PARTIKEL, o["partikel"]),
-                    E.BESCHRIFTUNG["partikel"]),
+            ui.Schalter(self._reihe(zx, zy, zw, 2), "BLICK VORAUS",
+                        "kamera_blick", o["kamera_blick"]),
         ]
-        # Was spaeter kommt, steht schon da, aber grau. So sieht man, wohin
-        # es geht, ohne dass etwas ins Leere klickt.
-        for i, text in enumerate(("LICHT UND SCHATTEN", "WETTER UND STAUB",
-                                  "TEXTURSATZ")):
-            self.elemente.append(
-                ui.Knopf(self._reihe(zx, zy, zw, 3 + i), text, "spaeter%d" % i,
-                         gesperrt=True))
+        self._platzhalter(zx, zy, zw, 3, ("FARBEN FÜR FARBENBLINDE",
+                                          "UNTERTITEL FÜR GERÄUSCHE",
+                                          "SCHRIFTGRÖSSE"))
 
     @staticmethod
     def _index(liste, wert) -> int:
@@ -547,6 +596,10 @@ class Einstellungen(Menue):
 
     def seite_wechseln(self, nr: int) -> None:
         if nr == self.seite:
+            return
+        if nr == SEITE_STEUERUNG:
+            self.klang("menue", 0.45)
+            seite_oeffnen(self.app, nr)
             return
         self.seite = nr
         merk = self.wahl
@@ -565,7 +618,7 @@ class Einstellungen(Menue):
             self.app.opt.zuruecksetzen_werte()
             self.app.anzeige_uebernehmen()
             self.aufbauen()
-            self.sagen("EINSTELLUNGEN AUF VORGABE ZURUECKGESETZT")
+            self.sagen("EINSTELLUNGEN AUF VORGABE ZURÜCKGESETZT")
         elif el.name == "zurueck":
             self.zurueck()
 
@@ -578,6 +631,9 @@ class Einstellungen(Menue):
         elif isinstance(el, ui.Schalter):
             o[el.name] = el.an
         o.speichern()
+        if el.name in E.KONTO_WERTE:
+            # Was zum Spieler gehoert, wandert mit dem Konto.
+            self.app.konto_sichern()
         if el.name in ("fenstermodus", "aufloesung", "bildrate", "pixelraster"):
             self.app.anzeige_uebernehmen()
             self.aufbauen()
@@ -604,8 +660,15 @@ class Einstellungen(Menue):
         SCHRIFT.zeichnen(ziel, "ABLAGE  " + pfade.beschreibung(), r.x + 26,
                          r.bottom - 112, K.C_MUTED_DK, 1)
 
+    def taste(self, ev) -> None:
+        # Q und E blaettern die Reiter, wie in vielen Spielen.
+        if ev.key in (pygame.K_q, pygame.K_e):
+            self.reiter_blaettern(-1 if ev.key == pygame.K_q else 1)
+            return
+        super().taste(ev)
+
     def fusstext(self) -> str:
-        return "[LINKS/RECHTS] AENDERN   [ESC] ZURUECK"
+        return "[LINKS/RECHTS] ÄNDERN   [Q/E] SEITE   [ESC] ZURÜCK"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -613,38 +676,54 @@ class Einstellungen(Menue):
 # ══════════════════════════════════════════════════════════════════
 
 class Steuerung(Menue):
-    """Tastenbelegung. Zeile anklicken, neue Taste druecken, fertig."""
+    """Tastenbelegung. Zeile anklicken, neue Taste druecken, fertig.
 
-    titel = "STEUERUNG"
-    unterzeile = "ZEILE WAEHLEN, DANN NEUE TASTE DRUECKEN"
+    Seit 0.32 ein Reiter der Einstellungen (SEITEN): dieselbe Tafel,
+    dieselben Reiter, nur eine eigene Szene, weil die Belegung die ganze
+    Tafel braucht.
+    """
 
-    def __init__(self, app) -> None:
-        self.tafel = TAFEL_GROSS.copy()
+    titel = "EINSTELLUNGEN"
+
+    def __init__(self, app, reiter: bool = True) -> None:
+        self.tafel = TAFEL_BREIT.copy()
         self.wartet_auf: str | None = None
         super().__init__(app)
+        self.wahl = len(self.reiter)
 
     def aufbauen(self) -> None:
         r = self.tafel
         o = self.app.opt
-        self.elemente = []
+        self.reiter = reiter_bauen(self, r, SEITE_STEUERUNG)
+        self.elemente = list(self.reiter)
         spalten = 2
         je_spalte = math.ceil(len(E.TASTEN_VORGABE) / spalten)
-        sw = (r.width - 52 - 16) // spalten
+        sw = (r.width - 52 - 24) // spalten
         for i, (name, label, _) in enumerate(E.TASTEN_VORGABE):
             sp, zi = divmod(i, je_spalte)
-            x = r.x + 26 + sp * (sw + 16)
-            y = r.y + 44 + zi * 15
+            x = r.x + 26 + sp * (sw + 24)
+            y = r.y + 52 + zi * 12
             self.elemente.append(
-                ui.Zeile((x, y, sw, 13), label, name,
+                ui.Zeile((x, y, sw, 11), label, name,
                          E.belegung_text(o.tasten.get(name, [])),
-                         gesperrt=(name in E.FEST), label_breite=112))
+                         gesperrt=(name in E.FEST), label_breite=130))
         fy = r.bottom - 40
-        self.elemente.append(ui.Knopf((r.x + 26, fy, 120, 18), "ZURUECKSETZEN",
+        self.elemente.append(ui.Knopf((r.x + 26, fy, 120, 18), "ZURÜCKSETZEN",
                                       "reset"))
-        self.elemente.append(ui.Knopf((r.right - 26 - 96, fy, 96, 18), "ZURUECK",
+        self.elemente.append(ui.Knopf((r.right - 26 - 96, fy, 96, 18), "ZURÜCK",
                                       "zurueck"))
 
+    def reiter_blaettern(self, d: int) -> None:
+        self.klang("menue", 0.45)
+        seite_oeffnen(self.app, (SEITE_STEUERUNG + d) % len(SEITEN))
+
     def ausloesen(self, el) -> None:
+        if el.name.startswith("reiter_"):
+            nr = [n for _, n in SEITEN].index(el.name[7:])
+            if nr != SEITE_STEUERUNG:
+                self.klang("menue", 0.45)
+                seite_oeffnen(self.app, nr)
+            return
         if el.name == "reset":
             self.app.opt.zuruecksetzen_tasten()
             self.app.eingabe.tabelle_setzen(self.app.opt.tastentabelle())
@@ -673,6 +752,9 @@ class Steuerung(Menue):
     # Solange eine Zeile wartet, faengt sie jeden Tastendruck ab.
     def taste(self, ev) -> None:
         if self.wartet_auf is None:
+            if ev.key in (pygame.K_q, pygame.K_e):
+                self.reiter_blaettern(-1 if ev.key == pygame.K_q else 1)
+                return
             super().taste(ev)
             return
         if ev.key == pygame.K_ESCAPE:
@@ -703,17 +785,17 @@ class Steuerung(Menue):
 
     def inhalt_zeichnen(self, ziel) -> None:
         r = self.tafel
-        kasten_r = pygame.Rect(r.x + 26, r.bottom - 88, r.width - 52, 38)
+        kasten_r = pygame.Rect(r.x + 26, r.bottom - 84, r.width - 52, 38)
         ui.kasten(ziel, kasten_r, (40, 31, 23), (10, 7, 6), 4)
         for i, z in enumerate((
-                "MAUS LINKS SCHIESST, MAUS RECHTS ZIELT - FEST VERDRAHTET.",
-                "PAUSE LAESST SICH NICHT UMLEGEN, SONST SPERRT MAN SICH AUS.",
-                "EINE TASTE GEHOERT IMMER NUR EINER AKTION.")):
+                "ZEILE WÄHLEN, DANN NEUE TASTE DRÜCKEN. EINE TASTE GEHÖRT NUR EINER AKTION.",
+                "MAUS LINKS SCHIESST, MAUS RECHTS ZIELT, DAS RAD ZOOMT - FEST VERDRAHTET.",
+                "PAUSE LÄSST SICH NICHT UMLEGEN, SONST SPERRT MAN SICH AUS.")):
             SCHRIFT.zeichnen(ziel, z, kasten_r.x + 8, kasten_r.y + 6 + i * 10,
                              K.C_MUTED, 1)
 
     def fusstext(self) -> str:
-        return "[ENTER] UMLEGEN   [ESC] ZURUECK"
+        return "[ENTER] UMLEGEN   [Q/E] SEITE   [ESC] ZURÜCK"
 
 
 # ══════════════════════════════════════════════════════════════════

@@ -386,6 +386,28 @@ class Schalter(Element):
                          r.centery - 3, K.C_AMBER if self.an else K.C_MUTED, 1)
 
 
+class Platzhalter(Element):
+    """Eine Einstellung, die es noch nicht gibt (seit 0.32).
+
+    Steht da, damit man sieht, was kommt - aber grau, mit NICHT
+    VERFUEGBAR daneben, und gesperrt: weder Maus noch Pfeile kommen
+    darauf, und nichts klickt ins Leere.
+    """
+
+    def __init__(self, rect, text: str, name: str = "") -> None:
+        super().__init__(rect, name or text, gesperrt=True)
+        self.text = text
+
+    def zeichnen(self, ziel) -> None:
+        r = self.rect
+        SCHRIFT.zeichnen(ziel, self.text, r.x + 4, r.centery - 3,
+                         K.C_MUTED_DK, 1)
+        SCHRIFT.zeichnen(ziel, "NICHT VERFÜGBAR", r.right - 4, r.centery - 3,
+                         (70, 56, 44), 1, ausrichtung="rechts")
+        pygame.draw.line(ziel, (40, 31, 23), (r.x + 4, r.bottom - 1),
+                         (r.right - 4, r.bottom - 1))
+
+
 def kuerzen(text: str, breite: int, skala: int = 1) -> str:
     """Schneidet Text ab, der nicht in `breite` Pixel passt.
 

@@ -123,6 +123,13 @@ KAMERA = dict(
     nachlauf=11.0,            # je hoeher, desto straffer klebt sie am Spieler
     maus_zug=0.26,            # wie weit sie in Blickrichtung vorlaeuft
     maus_max=54.0,
+    # Experimentell, Barrierefreiheit "BLICK VORAUS" (seit 0.32, aus als
+    # Vorgabe): ein unsichtbarer Punkt so weit vor der Waffe, in
+    # Blickrichtung, ist die Bildmitte. Man sieht mehr von dem, was vor
+    # einem liegt, und weniger von dem dahinter. 110 Pixel sind ein gutes
+    # Drittel der halben Bildbreite - die Figur bleibt sicher im Bild.
+    blick_weite=110.0,
+    blick_nachlauf=6.0,       # weicher als sonst: Drehen soll nicht reissen
 )
 
 # Sichtweite im Gefecht (Mausrad, seit 0.30). 1 ist das normale Bild; mehr

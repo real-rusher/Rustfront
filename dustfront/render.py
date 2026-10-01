@@ -58,6 +58,10 @@ class Kamera:
         # Das Bild selbst bleibt 640 x 360 - die Welt wird dafuer auf eine
         # groessere Flaeche gezeichnet und verkleinert.
         self.zoom = 1.0
+        # Blick voraus (Barrierefreiheit, experimentell): so viele
+        # Weltpixel vor der Figur, in Blickrichtung, liegt die Bildmitte.
+        # 0 = aus, dann wie immer ein kleines Stueck zur Maus hin.
+        self.vorausschau = 0.0
 
     @property
     def breite(self) -> float:
@@ -81,10 +85,20 @@ class Kamera:
                 grenze: tuple[int, int]) -> None:
         k = K.KAMERA
         vor = (blick - ziel)
-        if vor.length() > k["maus_max"]:
-            vor.scale_to_length(k["maus_max"])
-        wunsch = ziel + vor * k["maus_zug"]
-        self.pos += (wunsch - self.pos) * min(1.0, k["nachlauf"] * dt)
+        if self.vorausschau > 0.0:
+            # Der unsichtbare Punkt vor der Waffe. Nur die Richtung zaehlt,
+            # nicht wie weit die Maus weg ist: sonst liefe das Bild der Maus
+            # hinterher, und die Maus mit dem Bild - es schaukelte sich auf.
+            wunsch = pygame.Vector2(ziel)
+            if vor.length_squared() > 1.0:
+                wunsch += vor.normalize() * self.vorausschau
+            nachlauf = k["blick_nachlauf"]
+        else:
+            if vor.length() > k["maus_max"]:
+                vor.scale_to_length(k["maus_max"])
+            wunsch = ziel + vor * k["maus_zug"]
+            nachlauf = k["nachlauf"]
+        self.pos += (wunsch - self.pos) * min(1.0, nachlauf * dt)
 
         self._sperre = max(0.0, self._sperre - dt)
         self.ruckeln = max(0.0, self.ruckeln
@@ -1640,8 +1654,13 @@ class Befinden:
                                 K.BEFINDEN["deckung_max"],
                                 K.BEFINDEN["breite"], K.BEFINDEN["stufen"])
 
-    def blendung_zeichnen(self, ziel) -> None:
-        """Das Weiss. Getrennt, weil es ueber die Anzeige gehoert."""
+    def blendung_zeichnen(self, ziel, farbe=(255, 255, 255)) -> None:
+        """Das Weiss. Getrennt, weil es ueber die Anzeige gehoert.
+
+        `farbe` ist seit 0.32 einstellbar (Barrierefreiheit: NUR SCHWARZ).
+        Staerke und Dauer bleiben dieselben - es aendert nur, wie es
+        aussieht, nicht, wie lange man nichts sieht.
+        """
         if self.blend <= 0.01:
             return
         b = K.BLENDEN
@@ -1649,10 +1668,10 @@ class Befinden:
         if d <= 0:
             return
         if d >= 255:
-            ziel.fill((255, 255, 255))        # ganz zu: nichts scheint durch
+            ziel.fill(farbe)                  # ganz zu: nichts scheint durch
             return
         flaeche = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
-        flaeche.fill((255, 255, 255, d))
+        flaeche.fill((*farbe, d))
         ziel.blit(flaeche, (0, 0))
 
     def _rand_zeichnen(self, ziel, farbe, staerke, deckung, breite,

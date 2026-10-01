@@ -63,6 +63,15 @@ VORGABE = {
     # Wer einmal ERWEITERT gewaehlt hat, bekommt sie beim naechsten Mal
     # wieder - wer viel einstellt, soll nicht jedes Mal umschalten.
     "runden_erweitert": False,
+    # Barrierefreiheit (seit 0.32). Wie die Blendgranate aussieht, nur bei
+    # einem selbst: "normal" ist Weiss mit dem Bild des Werfers
+    # (Spielerkosmetik), "weiss" und "schwarz" sind eine einfarbige Flaeche
+    # ohne fremdes Bild - fuer alle, denen ein greller Blitz oder fremde
+    # Bilder zu viel sind.
+    "blendung": "normal",
+    # Experimentell: die Kamera schaut in Blickrichtung voraus (siehe
+    # Kamera.vorausschau). Aus als Vorgabe.
+    "kamera_blick": False,
 }
 
 # Welche Einstellungen zum **Spieler** gehoeren und nicht zum Geraet.
@@ -74,11 +83,12 @@ VORGABE = {
 # andere bleibt, wo es ist.
 KONTO_WERTE = ("bildschirm_ruckeln", "vignette", "partikel",
                "tracer", "tracer_weit", "ton_gesamt", "ton_effekte",
-               "ton_musik", "obere_ebenen")
+               "ton_musik", "obere_ebenen", "blendung", "kamera_blick")
 
 AUFLOESUNGEN = ["960x540", "1280x720", "1600x900", "1920x1080", "2560x1440"]
 FENSTERMODI = ["fenster", "randlos", "vollbild"]
 PARTIKEL = ["wenig", "normal", "viel"]
+BLENDUNGEN = ["normal", "weiss", "schwarz"]
 RASTER = ["gefuellt", "ganzzahlig"]
 BILDRATEN = [0, 60, 75, 90, 120, 144, 165, 240]
 
@@ -90,6 +100,8 @@ BESCHRIFTUNG = {
     "pixelraster": {"gefuellt": "FUELLT DAS FENSTER", "ganzzahlig": "GANZE PIXEL"},
     "partikel": {"wenig": "WENIG", "normal": "NORMAL", "viel": "VIEL"},
     "bildrate": {0: "UNBEGRENZT"},
+    "blendung": {"normal": "WIE VOM WERFER", "weiss": "NUR WEISS",
+                 "schwarz": "NUR SCHWARZ"},
 }
 
 # ══════════════════════════════════════════════════ Tastenbelegung

@@ -3692,6 +3692,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Die Einstellung greift bei jedem Bild neu: wer das Wackeln
         # im Pausenmenue abschaltet, sieht es sofort stehen.
         self.kamera.anteil = self.app.opt.ruckel_anteil()
+        self.kamera.vorausschau = (K.KAMERA["blick_weite"]
+                                   if self.app.opt["kamera_blick"] else 0.0)
         # Der Zoom zieht weich nach - ein Sprung auf die doppelte Weite
         # in einem Bild verliert einen voellig.
         z = self.kamera.zoom
@@ -4147,6 +4149,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Bewegung nach der halben Zeit fertig und stuende dann still.
         # Genau das sah man als Ruckeln der Mitspieler.
         misch = alpha if self.ist_gastgeber else self.misch(alpha)
+        self.renderer.vignette_an = self._vignette_an()
         if abs(self.kamera.zoom - 1.0) < 0.004:
             self._welt_bild(ziel, misch)
         else:
@@ -4179,8 +4182,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Zuletzt und ueber allem: das Weiss einer Blendgranate. Es liegt
         # auch ueber der Anzeige - geblendet ist geblendet. Darin, wenn der
         # Werfer eines hat, sein Bild (Spielerkosmetik).
-        self.befinden.blendung_zeichnen(ziel)
-        self._kosmetik_bild_zeichnen(ziel)
+        # Barrierefreiheit (seit 0.32, nur bei einem selbst): NUR WEISS und
+        # NUR SCHWARZ zeigen eine Flaeche ohne das Bild des Werfers.
+        art = self.app.opt["blendung"]
+        self.befinden.blendung_zeichnen(
+            ziel, (0, 0, 0) if art == "schwarz" else (255, 255, 255))
+        if art in ("weiss", "schwarz"):
+            self.kos_zeigen = None
+        else:
+            self._kosmetik_bild_zeichnen(ziel)
 
     def _welt_bild(self, ziel, misch: float) -> None:
         """Alles, was in Weltkoordinaten liegt: die Welt, beim Gast die
@@ -4295,12 +4305,24 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                     lw.set_clip(None)
                 pygame.draw.rect(lw, K.ZOOM["nebel_rand"], bild_sicht.inflate(2, 2), 1)
         finally:
-            r.groesse, r.vignette_an = (K.GAME_W, K.GAME_H), True
+            r.groesse, r.vignette_an = (K.GAME_W, K.GAME_H), self._vignette_an()
         if z > 1.0:
             ziel.blit(pygame.transform.smoothscale(lw, (K.GAME_W, K.GAME_H)), (0, 0))
         else:
             ziel.blit(pygame.transform.scale(lw, (K.GAME_W, K.GAME_H)), (0, 0))
-        ziel.blit(r._vignette, (0, 0))
+        if self._vignette_an():
+            ziel.blit(r._vignette, (0, 0))
+
+    def _vignette_an(self) -> bool:
+        """Die dunklen Ecken - seit 0.32 haengen sie am Schalter in GRAFIK.
+
+        Der Schalter stand seit 0.12 im Menue und hing an nichts; die
+        Ecken wurden immer gezeichnet.
+        """
+        try:
+            return bool(self.app.opt["vignette"])
+        except (KeyError, TypeError, AttributeError):
+            return True
 
     def _kreis_zeichnen(self, flaeche, ebene: int, ecke) -> None:
         """Der Kreis in der Kartenmitte, auf den Boden seiner Ebene.
