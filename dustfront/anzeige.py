@@ -13,7 +13,8 @@ Jetzt hat alles einen festen Ort:
 
     oben links     Spielart und Karte
     oben Mitte     worum es gerade geht: Uhr, Welle, Mannschaften, Boss
-    oben rechts    Ebenen, darunter der Punktestand (nur die ersten fuenf)
+    oben rechts    Minikarte, daneben die Ebenen, darunter der Punktestand
+                   (nur die ersten fuenf)
     unten links    Panzerung, Dash, Medkits
     unten rechts   Waffe, Magazin, Vorrat
     unten Mitte    die Hotbar - und darueber ein Hinweis, wenn es einen gibt
@@ -45,6 +46,7 @@ import pygame
 from . import config as K
 from . import ui
 from .font import SCHRIFT
+from .minikarte import Minikarte
 
 W, H = K.GAME_W, K.GAME_H
 SCHATTEN = (8, 6, 4)
@@ -80,6 +82,8 @@ class Anzeige:
 
     def __init__(self, gefecht) -> None:
         self.g = gefecht
+        self.minikarte = Minikarte()
+        self._karte_unten = 0          # Unterkante der Minikarte, 0: keine
 
     # ---- Ganz ----------------------------------------------------------
     def zeichnen(self, ziel) -> None:
@@ -87,6 +91,8 @@ class Anzeige:
         self._kopf_links(ziel)
         self._kopf_mitte(ziel)
         self._ebenen(ziel)
+        r = self.minikarte.zeichnen(ziel, g) if K.MINIKARTE["an"] else None
+        self._karte_unten = r.bottom + 2 if r is not None else 0
         self._punkte(ziel)
         ich = g.ich
         if ich is not None:
@@ -316,7 +322,8 @@ class Anzeige:
         zeigen = reihe[:5]
         if g.ich is not None and not any(e["k"] is g.ich for e in zeigen):
             zeigen = reihe[:4] + [e for e in reihe if e["k"] is g.ich]
-        oben = 8 + len(g.welt.ebenen) * 13 + 6
+        # Unter den Ebenen und unter der Minikarte, was tiefer reicht.
+        oben = max(8 + len(g.welt.ebenen) * 13, self._karte_unten) + 6
         rechts = W - 10
         for i, e in enumerate(zeigen):
             wer = e["k"]

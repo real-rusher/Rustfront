@@ -196,7 +196,7 @@
 // ══════════════════════════════════════════════════════════════════
 const DATEN =
 {
- "version": "0.28.1",
+ "version": "0.29.0",
  "phase": "PRE-ALPHA",
  "server": {
   "url": "https://kruokzzrcbfktlsnubno.supabase.co",
@@ -628,7 +628,8 @@ const DATEN =
  "blenden": {
   "dauer": 2.6,
   "abklingen": 1.8,
-  "weiss": 0.9
+  "weiss": 1.0,
+  "deckend_ab": 0.55
  }
 }
 ;
@@ -1934,7 +1935,8 @@ function spielMalen(blend){
   if (figur && figur.complete) g.drawImage(figur, W / 2 - figur.width, H / 2 - figur.height,
                                            figur.width * 2, figur.height * 2);
   if (blend <= 0.01) return;
-  g.fillStyle = "rgba(255,255,252," + (DATEN.blenden.weiss * Math.min(1, blend)) + ")";
+  g.fillStyle = "rgba(255,255,255," + (DATEN.blenden.weiss *
+    Math.min(1, blend / Math.max(0.01, DATEN.blenden.deckend_ab))) + ")";
   g.fillRect(0, 0, W, H);
   const b = aktuellesBild();
   if (b){

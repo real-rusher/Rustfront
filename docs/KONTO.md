@@ -539,6 +539,7 @@ vorbelegt wird.
 | `werkzeug_kontoseite.py` | Erzeugt die eine aus der anderen |
 | `--konto server` | Die Abnahme eines frisch aufgesetzten Projekts (5.5) |
 | `dustfront/zertifikate.pem` | Mitgelieferte Wurzelzertifikate (9) |
+| `dustfront/windows_tls.py` | Unter Windows: Windows das Zertifikat pruefen lassen (9) |
 | `<Benutzerordner>/zertifikate.pem` | Die Wurzel des eigenen Netzes, falls es HTTPS mitliest (9) |
 
 Wo der Benutzerordner liegt, sagt `python -m dustfront --konto liste`.
@@ -559,10 +560,33 @@ bekommt das Spiel die Wurzel, die ihm fehlt. Drei Ursachen gibt es:
 | Ursache | Was das Spiel dagegen tut |
 |---|---|
 | **Windows hat die Wurzel noch nicht.** Windows laedt Wurzelzertifikate erst nach, wenn ein Programm sie ueber Windows anfragt. Python sieht nur, was schon da ist. | Die Wurzeln der ueblichen Stellen (Google Trust Services, Let's Encrypt, GlobalSign, DigiCert, Amazon, Sectigo) liegen bei: `dustfront/zertifikate.pem`. Seit 0.28, nichts zu tun. |
+| **Python und Windows urteilen verschieden.** Die Firewall eines Hauses bringt Zwischenzertifikate mit, die nur Windows kennt, oder ein Zertifikat, das OpenSSL anders liest. | Unter Windows fragt das Spiel dann Windows (seit 0.29, siehe unten). Nichts zu tun. |
 | **Python ab 3.13 prueft streng** (RFC 5280) und lehnt viele Zertifikate ab, die Firmen- und Kliniknetze selbst ausstellen - auch wenn Windows ihnen vertraut. | Die Strenge ist zurueckgenommen. Die Kette wird weiter ganz geprueft, nur Formfehler in den Erweiterungen fuehren nicht mehr zur Ablehnung - wie im Browser. Seit 0.28, nichts zu tun. |
 | **Das Netz liest HTTPS mit.** Eine Firewall unterschreibt jede Verbindung mit einem eigenen Zertifikat neu. Ihre Wurzel kennt der Browser (die Verwaltung hat sie dort eingetragen), Python nicht. | Liegt `zertifikate.pem` im Benutzerordner, wird sie zusaetzlich geladen. Die Datei muss man selbst holen, siehe unten. |
 
-**Welche es ist, sagt der Selbsttest:**
+**Seit 0.29 fragt das Spiel unter Windows Windows selbst** (`windows_tls.py`),
+wenn Python ablehnt - so wie Edge und Chrome es tun. Damit gilt, was auf
+dem Rechner gilt: die Wurzeln, die die Verwaltung eingetragen hat, die
+Zwischenzertifikate der Firewall, die Wurzeln, die Windows bei Bedarf
+nachlaedt. Gemeldet war nach 0.28.1 noch `ZERTIFIKAT UNGUELTIG` - genau
+der Fall, in dem Python und Windows verschieden urteilen. Wie das geht:
+
+1. Verbindung aufbauen, Handschlag, die Kette des Servers lesen. Noch ist
+   nichts gesendet.
+2. Windows pruefen lassen: `CertGetCertificateChain`, dann
+   `CertVerifyCertificateChainPolicy` mit der SSL-Regel und dem Namen
+   des Servers.
+3. Nur bei einem Ja geht die Anfrage hinaus. **Jeder Fehler heisst nein** -
+   auch einer im Code, der Windows fragt.
+
+Hat Windows einmal ja gesagt, wird ab da gleich Windows gefragt.
+
+**Ohne Eingabeaufforderung:** die Anmeldetafel zeigt unter der Meldung
+zwei Zeilen - `GRUND:` (was OpenSSL oder Windows gesagt hat) und `VON:`
+(wer das Zertifikat ausgestellt hat, das ankommt). Das ist dasselbe, was
+der Selbsttest sagt.
+
+**Welche es ist, sagt auch der Selbsttest:**
 
 ```
 python -m dustfront --konto server

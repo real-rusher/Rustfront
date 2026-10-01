@@ -2924,6 +2924,16 @@ pruef("Weite Reichweite", mg["reichweite"] > K.WAFFEN["sturm"]["reichweite"],
 pruef("Guter Schaden", mg["schaden"] > K.WAFFEN["sturm"]["schaden"],
       "%.0f gegen %.0f" % (mg["schaden"], K.WAFFEN["sturm"]["schaden"]))
 pruef("Und zwei Betriebsarten", tuple(mg["modi"]) == ("dauer", "salve"))
+# Gemeldet in 0.28: "das MG macht teils mehr Schaden als die Sniper".
+md = mg["modus_daten"]
+salve_schaden = mg["schaden"] * md["salve"]["salve"]
+pruef("Eine ganze Salve trifft nicht einmal so hart wie ein Scharfschuss",
+      salve_schaden < 0.6 * K.WAFFEN["scharf"]["schaden"],
+      "%.0f gegen %.0f" % (salve_schaden, K.WAFFEN["scharf"]["schaden"]))
+mg_dps = mg["schaden"] / md["dauer"]["takt"]
+sturm_dps = K.WAFFEN["sturm"]["schaden"] / K.WAFFEN["sturm"]["takt"]
+pruef("Dauerfeuer bei voller Drehzahl bleibt unter dem Sturmgewehr",
+      mg_dps < sturm_dps, "%.0f gegen %.0f je Sekunde" % (mg_dps, sturm_dps))
 
 held.waffe_waehlen(held.waffen.index("lmg"))
 held.modi.clear()
@@ -5115,6 +5125,73 @@ pruef("Wer geht, nimmt seine Kosmetik mit",
       n1 not in wk_.kos_index and n1 not in g2_.kosmetiken,
       "%s / %s" % (wk_.kos_index, list(g2_.kosmetiken)))
 wk_.verlassen(); g2_.verlassen()
+
+# ── 0.29: Munition in der Lobby, deckende Blendung, Minikarte ────────
+from dustfront.render import Befinden as _Bef
+wm9, gm9 = lobbypaar(modus="pvp")
+k9 = wm9.kaempfer[gm9.meine_nummer]
+k9.waffe_waehlen(k9.waffen.index("sturm"))
+k9.magazin["sturm"] = 2
+k9.magazin["granate"] = 0
+k9.nachlade_rest = 1.5
+for _ in range(10):
+    wm9.schritt(K.NETZ["takt"]); gm9.schritt(K.NETZ["takt"])
+pruef("In der Lobby ist jedes Magazin wieder voll - auch die Granaten",
+      k9.magazin["sturm"] == K.WAFFEN["sturm"]["magazin"]
+      and k9.magazin["granate"] == K.WAFFEN["granate"]["magazin"],
+      "%d / %d" % (k9.magazin["sturm"], k9.magazin["granate"]))
+pruef("Und niemand muss nachladen", k9.nachlade_rest == 0.0)
+pruef("Der Gast sieht es so", gm9.ich is not None
+      and gm9.ich.magazin.get("sturm") == K.WAFFEN["sturm"]["magazin"])
+
+# Die Minikarte: oben rechts, neben den Ebenen, der Punktestand darunter.
+app.flaeche.fill(K.C_VOID)
+wm9.zeichnen(app.flaeche, 1.0)
+r9 = wm9.hud.minikarte.rechteck(wm9.welt)
+pruef("Die Minikarte steht oben rechts, links neben den Ebenen",
+      r9.right <= K.GAME_W - 30 and r9.top >= 4 and r9.width <= K.MINIKARTE["breite"]
+      and r9.height <= K.MINIKARTE["hoehe"], str(r9))
+ich9 = wm9.ich
+sx = r9.width / float(wm9.welt.ebenen[0].pixel_breite)
+sy = r9.height / float(wm9.welt.ebenen[0].pixel_hoehe)
+px = (int(r9.x + ich9.pos.x * sx), int(r9.y + ich9.pos.y * sy))
+pruef("Man selbst steht darauf, wo man ist",
+      tuple(app.flaeche.get_at(px))[:3] == (230, 255, 248), str(tuple(app.flaeche.get_at(px))))
+wm9.verlassen(); gm9.verlassen()
+
+def nur_verbuendete(modus):
+    w, g = gefechtspaar(modus)
+    for _ in range(10):
+        w.schritt(K.NETZ["takt"]); g.schritt(K.NETZ["takt"])
+    w._farbe_fuer = lambda k, eigen=False: (1, 2, 250)
+    andere = w.kaempfer[g.meine_nummer]
+    andere.pos.update(w.ich.pos + pygame.Vector2(300, 0)); andere.ebene = w.ich.ebene
+    app.flaeche.fill(K.C_VOID)
+    w.hud.minikarte.zeichnen(app.flaeche, w)
+    r = w.hud.minikarte.rechteck(w.welt)
+    e = w.welt.ebenen[0]
+    q = (int(r.x + andere.pos.x * r.width / float(e.pixel_breite)),
+         int(r.y + andere.pos.y * r.height / float(e.pixel_hoehe)))
+    sichtbar = tuple(app.flaeche.get_at(q))[:3] == (1, 2, 250)
+    w.verlassen(); g.verlassen()
+    return sichtbar
+pruef("In PVE stehen die Mitspieler auf der Karte", nur_verbuendete("pve"))
+pruef("In PVP nicht - die Karte ist kein Wandhack", not nur_verbuendete("pvp"))
+
+# Die Blendung: voll getroffen ist alles weiss und nichts scheint durch.
+bf = _Bef()
+bf.blend = 1.0
+app.flaeche.fill((20, 10, 5))
+bf.blendung_zeichnen(app.flaeche)
+pruef("Voll geblendet ist das Bild ganz weiss",
+      tuple(app.flaeche.get_at((5, 5)))[:3] == (255, 255, 255)
+      and tuple(app.flaeche.get_at((K.GAME_W - 3, K.GAME_H - 3)))[:3] == (255, 255, 255))
+bf.blend = K.BLENDEN["deckend_ab"] * 0.5
+app.flaeche.fill((20, 10, 5))
+bf.blendung_zeichnen(app.flaeche)
+halb = tuple(app.flaeche.get_at((5, 5)))[:3]
+pruef("Wenn sie nachlaesst, scheint die Welt wieder durch",
+      100 < halb[0] < 255 and halb != (255, 255, 255), str(halb))
 
 print()
 print("FEHLER:", fails or "keine")

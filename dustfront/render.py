@@ -1406,11 +1406,15 @@ class Befinden:
         """Das Weiss. Getrennt, weil es ueber die Anzeige gehoert."""
         if self.blend <= 0.01:
             return
-        d = int(255 * K.BLENDEN["weiss"] * min(1.0, self.blend))
+        b = K.BLENDEN
+        d = int(255 * b["weiss"] * min(1.0, self.blend / max(0.01, b["deckend_ab"])))
         if d <= 0:
             return
+        if d >= 255:
+            ziel.fill((255, 255, 255))        # ganz zu: nichts scheint durch
+            return
         flaeche = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
-        flaeche.fill((255, 255, 252, d))
+        flaeche.fill((255, 255, 255, d))
         ziel.blit(flaeche, (0, 0))
 
     def _rand_zeichnen(self, ziel, farbe, staerke, deckung, breite,

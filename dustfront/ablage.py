@@ -201,15 +201,48 @@ def tls_fehler(fehler) -> str:
     if not isinstance(grund, ssl.SSLCertVerificationError):
         return ""
     code = getattr(grund, "verify_code", 0)
-    if code in (2, 18, 19, 20, 21):
-        was = "UNBEKANNT"
-    elif code == 10:
-        was = "ABGELAUFEN"
-    elif code == 62:
-        was = "FALSCHER NAME"
-    else:
-        was = "UNGUELTIG"
+    was = {-1: "WINDOWS LEHNT AB", 7: "SIGNATUR FALSCH", 9: "ZU FRUEH - UHR?",
+           10: "ABGELAUFEN", 24: "STELLE UNGUELTIG", 26: "FALSCHER ZWECK",
+           62: "FALSCHER NAME"}.get(code)
+    if was is None:
+        was = "UNBEKANNT" if code in (2, 18, 19, 20, 21) else "UNGUELTIG"
     return "ZERTIFIKAT %s [KONTO.MD 9]" % was
+
+
+# Was beim letzten Zertifikatsfehler los war - fuer die Anmeldetafel,
+# die es unter der Meldung zeigt. Ohne Eingabeaufforderung (gemeldet:
+# "ich hab kein cmd hier") ist das die einzige Stelle, an der man es
+# erfaehrt. Leer, solange nichts schiefging.
+TLS_STAND: dict = {}
+# Hat Windows schon einmal ja gesagt, wo OpenSSL nein sagte, wird gleich
+# Windows gefragt - statt jedes Mal zwei Handschlaege.
+_windows_zuerst = False
+
+
+def _tls_merken(fehler, url: str) -> None:
+    grund = getattr(fehler, "reason", fehler)
+    text = (getattr(grund, "verify_message", "") or str(grund)).upper()
+    global TLS_STAND
+    TLS_STAND = {"grund": text[:60], "code": getattr(grund, "verify_code", 0),
+                 "aussteller": zertifikat_aussteller(url)[:60]}
+
+
+def oeffnen(anfrage, url: str):
+    """urlopen mit der Zertifikatspruefung von oben - und unter Windows,
+    wenn OpenSSL ablehnt, mit der von Windows (windows_tls.py)."""
+    global _windows_zuerst
+    from . import windows_tls
+    if _windows_zuerst and windows_tls.verfuegbar():
+        return windows_tls.oeffner().open(anfrage, timeout=WARTEZEIT)
+    try:
+        return urllib.request.urlopen(anfrage, timeout=WARTEZEIT,
+                                      context=tls_kontext())
+    except urllib.error.URLError as fehler:
+        if not (tls_fehler(fehler) and windows_tls.verfuegbar()):
+            raise
+    antwort = windows_tls.oeffner().open(anfrage, timeout=WARTEZEIT)
+    _windows_zuerst = True
+    return antwort
 
 
 def zertifikat_aussteller(url: str) -> str:
@@ -597,8 +630,7 @@ class NetzAblage:
         for k, v in (kopf or {}).items():
             anfrage.add_header(k, v)
         try:
-            with urllib.request.urlopen(anfrage, timeout=WARTEZEIT,
-                                        context=tls_kontext()) as antwort:
+            with oeffnen(anfrage, self.url) as antwort:
                 roh = antwort.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as fehler:
             try:
@@ -612,6 +644,7 @@ class NetzAblage:
         except (urllib.error.URLError, OSError, ValueError) as fehler:
             zertifikat = tls_fehler(fehler)
             if zertifikat:
+                _tls_merken(fehler, self.url)
                 return schlecht(zertifikat)
             return schlecht("SERVER NICHT ERREICHBAR (%s)"
                             % str(getattr(fehler, "reason", fehler))[:60])

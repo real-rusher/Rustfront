@@ -1111,10 +1111,19 @@ WAFFEN = {
     #           kann man warten, im Stehen ist sie enger, und drehen geht
     #           ein Stueck besser. Die Betriebsart fuer den, der eine
     #           Stellung haelt statt einen Gang zu fegen.
+    #
+    # Abgeschwaecht in 0.29 (gemeldet: "macht teils mehr Schaden als die
+    # Sniper"). So war es: 25 je Schuss, die Salve vier davon fast
+    # gleichzeitig - 100 auf einen Klick, mehr als ein Scharfschuss (98) -,
+    # und im Dauerfeuer 347 Schaden je Sekunde, fast doppelt so viel wie
+    # das Sturmgewehr. Jetzt: 17 je Schuss (ein Hauch ueber dem
+    # Sturmgewehr), die Salve zu dreien (51, rund ein halber Scharfschuss),
+    # Dauerfeuer bei voller Drehzahl knapp unter dem Sturmgewehr. Was das
+    # MG behaelt: das Magazin, die Reichweite, die Genauigkeit beim Halten.
     "lmg": dict(
         art="schuss",
         name="MG",
-        schaden=25.0,
+        schaden=17.0,
         tempo=1020.0,
         reichweite=1450.0,     # fast so weit wie der Scharfschuetze
         magazin=100,
@@ -1133,7 +1142,7 @@ WAFFEN = {
         modus_daten={
             "dauer": dict(
                 kurz="DAUER",
-                takt=0.072,            # bei voller Drehzahl
+                takt=0.095,            # bei voller Drehzahl
                 anlauf_takt=0.30,      # und am Anfang
                 anlauf=1.15,           # Sekunden bis zur vollen Drehzahl
                 anlauf_abbau=2.4,      # wie schnell sie wieder faellt
@@ -1145,8 +1154,8 @@ WAFFEN = {
             ),
             "salve": dict(
                 kurz="SALVE",
-                takt=0.85,             # zwischen zwei Salven
-                salve=4,               # Schuesse je Salve
+                takt=0.9,              # zwischen zwei Salven
+                salve=3,               # Schuesse je Salve
                 salve_takt=0.032,      # fast gleichzeitig
                 anlauf_takt=0.85,      # kein Anlauf: die erste Salve sitzt
                 anlauf=0.01,
@@ -1467,6 +1476,16 @@ FEUER = dict(
     brandfleck=True,          # hinterlaesst einen Fleck, wenn es aus ist
 )
 
+# Die Minikarte oben rechts (minikarte.py), ein Versuch. Groesse in
+# Spielpixeln: hoechstens so breit und hoch, die Seiten wie die Karte.
+MINIKARTE = dict(
+    an=True,
+    breite=84,
+    hoehe=56,
+    oben=8,
+    rand_rechts=36,       # Platz fuer die Ebenenanzeige daneben
+)
+
 # Spielerkosmetik: eigener Ton und eigenes Bild fuer die Blendgranate.
 #
 # Ein erster Versuch, wie Spieler selbst etwas ins Spiel bringen. Gemacht
@@ -1521,7 +1540,14 @@ BLENDEN = dict(
     nah=90.0,             # bis hierhin blendet sie voll
     dauer=2.6,            # so lange dauert die volle Blendung
     mindest=0.55,         # so lange mindestens, wenn sie ueberhaupt trifft
-    weiss=0.9,            # wie weiss das Bild wird, 0 bis 1
+    # Ganz weiss und deckend: wer voll getroffen ist, sieht nichts mehr -
+    # keine Welt, keine Anzeige. Gemeldet war, dass die alte Fassung
+    # (90 % Deckkraft, leicht gelblich) zu durchsichtig und zu matt war.
+    # Erst wenn die Blendung unter `deckend_ab` faellt, scheint das Bild
+    # wieder durch. Ein schwacher Blitz (weit weg, weggedreht) kommt gar
+    # nicht so hoch und bleibt darum durchsichtig.
+    weiss=1.0,            # wie weiss das Bild wird, 0 bis 1
+    deckend_ab=0.55,      # ab dieser Staerke ist nichts mehr zu sehen
     abklingen=1.8,        # je hoeher, desto schneller wird wieder klar
     abgewandt=0.35,       # so viel bleibt uebrig, wenn man weggedreht steht
     blickwinkel=100.0,    # innerhalb dieses Kegels gilt man als hinsehend

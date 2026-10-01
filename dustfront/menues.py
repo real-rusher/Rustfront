@@ -1016,6 +1016,18 @@ class Anmeldung(Menue):
         elif konto.fehler:
             SCHRIFT.zeichnen(ziel, konto.fehler[:44], r.centerx, y,
                              K.C_RED, 1, 1, "mitte")
+            # Beim Zertifikat dazu, was genau los ist und wer es
+            # ausgestellt hat. Ohne Eingabeaufforderung ist das die
+            # einzige Stelle, an der man es erfaehrt (docs/KONTO.md 9).
+            from . import ablage
+            stand = ablage.TLS_STAND
+            if "ZERTIFIKAT" in konto.fehler and stand:
+                zeilen = ["GRUND: %s" % stand.get("grund", "?")]
+                if stand.get("aussteller"):
+                    zeilen.append("VON: %s" % stand["aussteller"])
+                for i, zeile in enumerate(zeilen):
+                    SCHRIFT.zeichnen(ziel, zeile[:46], r.centerx, y + 10 + i * 9,
+                                     K.C_MUTED, 1, 1, "mitte")
         else:
             SCHRIFT.zeichnen(ziel, "OHNE KONTO ZAEHLT ALLES TROTZDEM MIT",
                              r.centerx, y, K.C_MUTED_DK, 1, 1, "mitte")

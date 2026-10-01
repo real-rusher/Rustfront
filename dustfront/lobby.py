@@ -240,6 +240,25 @@ class LobbyTeil:
             self.welt.dazu(p)
             self.puppen.append(p)
 
+    def _lobby_munition(self) -> None:
+        """In der Lobby geht die Munition nie aus.
+
+        Jedes Magazin wird in jedem Schritt wieder voll, auch das der
+        Wurfwaffen, und ein angefangenes Nachladen faellt weg - es gibt
+        nichts nachzuladen. Die Lobby ist zum Ausprobieren da, und wer
+        eine Waffe kennenlernen will, soll schiessen und nicht warten.
+        Nur beim Gastgeber: die Magazine gehen mit der Weltmeldung hinaus.
+        """
+        for k in self.kaempfer.values():
+            for w in list(k.magazin):
+                if w == "rakete":
+                    continue        # einmal auf der Karte, einmal geschossen
+                voll = K.WAFFEN.get(w, {}).get("magazin")
+                if voll is not None and k.magazin[w] < voll:
+                    k.magazin[w] = voll
+            if getattr(k, "nachlade_rest", 0.0) > 0:
+                k.nachlade_rest = 0.0
+
     def _lobby_schritt(self, dt: float) -> None:
         """Das Gehege fuellen, solange jemand drin ist.
 
@@ -250,6 +269,7 @@ class LobbyTeil:
         """
         from .mehrspieler import KampfGegner
         L = K.LOBBY
+        self._lobby_munition()
         self.gehege = [g for g in self.gehege if g.lebt]
         drin = [k for k in self.kaempfer.values()
                 if k.lebt and self.im_bereich(k, "pve")]

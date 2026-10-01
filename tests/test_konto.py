@@ -850,8 +850,11 @@ if hat_openssl:
 if not hat_openssl:
     print("  --  openssl fehlt - der Teil mit dem eigenen Server wird uebersprungen")
 else:
+    anfragen = []
+
     class _Antwort(BaseHTTPRequestHandler):
         def do_GET(self):
+            anfragen.append(self.path)
             roh = b'[{"name":"","fassung":0,"werte":{},"loadouts":[]}]'
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -876,6 +879,47 @@ else:
     aussteller = ablage.zertifikat_aussteller(adresse)
     pruef("Der Selbsttest kann sagen, wer das Zertifikat ausgestellt hat",
           "DUSTFRONT TESTNETZ WURZEL" in aussteller, aussteller)
+
+    pruef("Die Anmeldetafel erfaehrt Grund und Aussteller",
+          "DUSTFRONT TESTNETZ WURZEL" in ablage.TLS_STAND.get("aussteller", "")
+          and ablage.TLS_STAND.get("grund"), str(ablage.TLS_STAND))
+    pruef("Und nichts ist beim Server angekommen", not anfragen, str(anfragen))
+
+    # Unter Windows fragt das Spiel Windows, wenn OpenSSL ablehnt
+    # (windows_tls.py). Windows selbst gibt es hier nicht - ersetzt wird
+    # nur seine Antwort; Handschlag, Kette, Ablehnen laufen echt.
+    from dustfront import windows_tls as WT
+    pruef("Ohne Windows heisst die Antwort nein", WT.pruefen([b"x"], "a") != 0)
+    import ctypes as _ct
+    pruef("Die Strukturen haben die Groessen aus wincrypt.h (64 Bit)",
+          _ct.sizeof(_ct.c_void_p) != 8 or
+          [_ct.sizeof(s) for s in (WT.CERT_CHAIN_PARA, WT.SSL_EXTRA_CERT_CHAIN_POLICY_PARA,
+                                   WT.CERT_CHAIN_POLICY_PARA, WT.CERT_CHAIN_POLICY_STATUS)]
+          == [32, 24, 16, 24])
+    gefragt = []
+    alt_v, alt_p = WT.verfuegbar, WT.pruefen
+    WT.verfuegbar = lambda: True
+    try:
+        WT.pruefen = lambda kette, name: (gefragt.append((kette, name)), 0x800B0109)[1]
+        d = fremd.profil_lesen("marke")
+        pruef("Sagt Windows nein, bleibt es nein",
+              not d and d.fehler == "ZERTIFIKAT WINDOWS LEHNT AB [KONTO.MD 9]", d.fehler)
+        pruef("Mit dem Grund von Windows", ablage.TLS_STAND.get("grund") == "WURZEL UNBEKANNT",
+              str(ablage.TLS_STAND))
+        pruef("Und auch dann ist nichts beim Server angekommen", not anfragen, str(anfragen))
+        server_der = _ssl.PEM_cert_to_DER_cert((zert / "server.pem").read_text())
+        pruef("Windows bekommt das Zertifikat des Servers und seinen Namen",
+              gefragt and gefragt[-1][0][0] == server_der and gefragt[-1][1] == "127.0.0.1")
+        WT.pruefen = lambda kette, name: 0
+        e = fremd.profil_lesen("marke")
+        pruef("Sagt Windows ja, geht die Anmeldung durch", bool(e), e.fehler)
+        pruef("Danach wird gleich Windows gefragt", ablage._windows_zuerst)
+        WT.pruefen = lambda kette, name: -1
+        f = fremd.profil_lesen("marke")
+        pruef("Kann Windows nicht antworten, heisst das nein", not f, f.fehler)
+    finally:
+        WT.verfuegbar, WT.pruefen = alt_v, alt_p
+        ablage._windows_zuerst = False
 
     # Die Wurzel des Netzes in den Benutzerordner - und es geht.
     eigene = zert / "benutzer"

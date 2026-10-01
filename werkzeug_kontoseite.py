@@ -202,7 +202,8 @@ def daten() -> dict:
         "spielbild": {"breite": K.GAME_W, "hoehe": K.GAME_H},
         "blenden": {"dauer": K.BLENDEN["dauer"],
                     "abklingen": K.BLENDEN["abklingen"],
-                    "weiss": K.BLENDEN["weiss"]},
+                    "weiss": K.BLENDEN["weiss"],
+                    "deckend_ab": K.BLENDEN["deckend_ab"]},
     }
 
 
