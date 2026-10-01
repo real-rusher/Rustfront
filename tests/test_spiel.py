@@ -4523,6 +4523,69 @@ pruef("Die erste Teamrunde erfuellt den Wunsch vom Verbinden",
       "%d / %d" % (wt_.kaempfer[0].team, wt_.kaempfer[gt_.meine_nummer].team))
 wt_.verlassen(); gt_.verlassen()
 
+# ── Die Anzeige (anzeige.py) ─────────────────────────────────────────
+from dustfront import anzeige as AZ
+hud_probe = AZ.Anzeige(None)
+neun = hud_probe.hotbar_rechteck(len(K.HOTBAR))
+drei = hud_probe.hotbar_rechteck(3)
+pruef("Mit allen Waffen ueberdeckt die Hotbar nichts",
+      not neun.colliderect(AZ.LINKS) and not neun.colliderect(AZ.RECHTS),
+      "%s / %s / %s" % (neun, AZ.LINKS, AZ.RECHTS))
+pruef("Mit Loadout sind die Felder groesser",
+      AZ.Anzeige.hotbar_gross(3) and not AZ.Anzeige.hotbar_gross(9)
+      and drei.height > neun.height)
+pruef("Der Hinweis liegt ueber der Hotbar, nicht auf ihr",
+      AZ.HINWEIS_Y + 15 < neun.y - 10)
+
+wa_, ga_ = gefechtspaar("pve", knapp=True)
+wa_.welle = 4
+wa_._welle_starten()
+netz_durchlassen(wa_, ga_, 10)
+pruef("Der Gast weiss, wie viele Gegner die Welle noch hat",
+      ga_.gegner_rest == wa_.gegner_rest > 0,
+      "%d / %d" % (ga_.gegner_rest, wa_.gegner_rest))
+wa_.welle = 9
+for alt in wa_.gegner_offen:
+    alt.lebt = False         # ein Boss je Welle - der alte muss weg
+wa_.gegner_offen = []
+wa_.welle_rest = []
+wa_._welle_starten()
+netz_durchlassen(wa_, ga_, 10)
+pruef("Und welcher Boss gerade da ist, und wie weit er ist",
+      wa_.boss_stand() is not None and ga_.boss_stand() is not None
+      and ga_.boss_stand()[0] == wa_.boss_stand()[0],
+      "%s / %s" % (wa_.boss_stand(), ga_.boss_stand()))
+
+def hud_bild(sz):
+    app.flaeche.fill(K.C_VOID)
+    sz.hud.zeichnen(app.flaeche)
+    return app.flaeche.copy()
+
+# Der Vorrat steht nur bei knapper Munition unter den Feldern.
+unter = pygame.Rect(0, AZ.H - 14, AZ.W, 12)
+mit_vorrat = hud_bild(wa_).subsurface(unter).copy()
+wa_.knapp = False
+ohne_vorrat = hud_bild(wa_).subsurface(unter).copy()
+wa_.knapp = True
+pruef("Den Vorrat gibt es nur bei knapper Munition",
+      pygame.image.tobytes(mit_vorrat, "RGB") != pygame.image.tobytes(ohne_vorrat, "RGB"))
+wa_.verlassen(); ga_.verlassen()
+
+# Die Pfeile zu Gefallenen bleiben aus den Anzeigestreifen heraus.
+wp_, gp_ = gefechtspaar("pve")
+liegt = wp_.kaempfer[gp_.meine_nummer]
+liegt.unverwundbar = 0.0
+liegt.schaden(999, None, None)
+for ziel_pos in ((0, 5000), (0, -5000), (5000, 0)):
+    liegt.pos.update(wp_.ich.pos + pygame.Vector2(ziel_pos))
+    pfeilbild = pygame.Surface((AZ.W, AZ.H), pygame.SRCALPHA)
+    wp_._randpfeile(pfeilbild)
+    benutzt = pfeilbild.get_bounding_rect()
+    pruef("Der Pfeil nach %s liegt zwischen den Anzeigestreifen" % (ziel_pos,),
+          benutzt.width > 0 and benutzt.top >= AZ.RAND_OBEN - 12
+          and benutzt.bottom <= AZ.H - AZ.RAND_UNTEN + 12, str(benutzt))
+wp_.verlassen(); gp_.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -55,6 +55,7 @@ import pygame
 from . import bestenliste
 from . import config as K
 from . import ablage
+from .anzeige import RAND_OBEN, RAND_UNTEN, Anzeige
 from . import konto as konto_modul
 from . import netz
 from . import regeln as R
@@ -720,6 +721,8 @@ class Gefecht(Szene, LobbyTeil):
         # Gelesen wird nur das eigene Leben; beim Gast steht es genauso in
         # der Weltmeldung wie beim Gastgeber in seiner eigenen Figur.
         self.befinden = Befinden()
+        self.hud = Anzeige(self)
+        self._gegner_rest = 0        # beim Gast: so meldet es der Gastgeber
         self._leben_vorher = 0.0
         self._heilte = 0.0
         self._fremde_beute: list[tuple] = []
@@ -2680,6 +2683,7 @@ class Gefecht(Szene, LobbyTeil):
                 "gegner": gegner, "welle": self.welle,
                 "pause": round(self.pause_rest, 1),
                 "offen": len(self.gegner_offen), "aus": self.vorbei,
+                "gr": self.gegner_rest,
                 # Mannschaften, Kreis und Runden. Der Gast rechnet nichts
                 # davon selbst nach - er zeigt nur an, was hier steht.
                 "tp": list(self.teampunkte),
@@ -2874,6 +2878,7 @@ class Gefecht(Szene, LobbyTeil):
         self.vorbei = bool(meldung.get("aus", False))
         self.welle = int(meldung.get("welle", 0))
         self.pause_rest = float(meldung.get("pause", 0.0))
+        self._gegner_rest = int(meldung.get("gr", 0))
         self._liste_uebernehmen(self.teampunkte, meldung.get("tp"), int)
         self._liste_uebernehmen(self.zone_stand, meldung.get("zs"), float)
         self.zone_halter = int(meldung.get("zh", -1))
@@ -3902,7 +3907,10 @@ class Gefecht(Szene, LobbyTeil):
         if self.ich is None or self.vorbei:
             return
         rand = 16
-        mitte = pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2)
+        # Oben und unten liegt die Anzeige - die Pfeile bleiben im Streifen
+        # dazwischen, sonst lagen sie unten auf der Waffe und der Panzerung.
+        oben, unten = RAND_OBEN, K.GAME_H - RAND_UNTEN
+        mitte = pygame.Vector2(K.GAME_W / 2, (oben + unten) / 2)
         ecke = self.kamera.ecke
         for k in self.kaempfer.values():
             if not (k.lebt and k.am_boden and self._verbuendet(k)):
@@ -3915,8 +3923,8 @@ class Gefecht(Szene, LobbyTeil):
             richtung = p - mitte
             if richtung.length_squared() < 1.0:
                 richtung = pygame.Vector2(0, -1)
-            # Schnitt mit dem Rechteck, eingerueckt um den Rand.
-            halb = pygame.Vector2(K.GAME_W / 2 - rand, K.GAME_H / 2 - rand)
+            # Schnitt mit dem Rechteck zwischen den Anzeigestreifen.
+            halb = pygame.Vector2(K.GAME_W / 2 - rand, (unten - oben) / 2)
             teiler = max(abs(richtung.x) / halb.x, abs(richtung.y) / halb.y)
             stelle = mitte + richtung / teiler
             winkel = math.degrees(math.atan2(richtung.y, richtung.x))
@@ -4027,172 +4035,35 @@ class Gefecht(Szene, LobbyTeil):
         pygame.draw.rect(ziel, kombi["rumpf"], (x + 1, y + 1, 5, 5))
         pygame.draw.rect(ziel, kombi["akzent"], (x + 2, y + 2, 3, 3))
 
-    def _teamkopf(self, ziel, y: int) -> int:
-        """Mannschaftsstand oben in der Mitte, je nach Spielart.
-
-        Drei Spielarten, eine Anzeige: was zaehlt, steht in der Mitte
-        zwischen den beiden Mannschaftsnamen - Abschuesse, Rundensiege oder
-        der Ladestand des Kreises. Der Kreis bekommt zusaetzlich zwei
-        Balken, weil man dort auf ein Zehntel genau sehen will, wie knapp
-        es ist.
-        """
-        f = SCHRIFT
-        kombis = K.TEAMS["kombi"]
-        namen = [k["name"] for k in kombis]
-        farben = [k["hud"] for k in kombis]
-        if self.regeln["zone"]:
-            werte = [int(s) for s in self.zone_stand]
-        else:
-            werte = list(self.teampunkte)
-        mitte = K.GAME_W // 2
-        links_text = "%s %d" % (namen[0], werte[0])
-        rechts_text = "%d %s" % (werte[1], namen[1])
-        f.zeichnen(ziel, links_text, mitte - 8, y, farben[0], 1,
-                   ausrichtung="rechts")
-        f.zeichnen(ziel, ":", mitte, y, K.C_MUTED_DK, 1, ausrichtung="mitte")
-        f.zeichnen(ziel, rechts_text, mitte + 8, y, farben[1], 1)
-        # Neben jedem Namen das Farbzeichen der Mannschaft - dieselbe
-        # Kombination, die auch die Figuren tragen. Damit lernt man die
-        # Zuordnung beilaeufig, statt sie im Gefecht raten zu muessen.
-        self._teamzeichen(ziel, mitte - 12 - f.breite(links_text, 1) - 9,
-                          y - 1, kombis[0])
-        self._teamzeichen(ziel, mitte + 12 + f.breite(rechts_text, 1) + 2,
-                          y - 1, kombis[1])
-        y += 10
-
-        if self.regeln["zone"]:
-            breite, hoehe = 60, 4
-            for i, stand in enumerate(self.zone_stand[:2]):
-                anteil = max(0.0, min(1.0, stand / K.ZONE["bis"]))
-                links = mitte - breite - 6 if i == 0 else mitte + 6
-                pygame.draw.rect(ziel, (16, 11, 8), (links, y, breite, hoehe))
-                fuellung = int(breite * anteil)
-                if i == 0:
-                    pygame.draw.rect(ziel, farben[0], (links, y, fuellung, hoehe))
-                else:
-                    # Der rechte Balken waechst nach rechts los, damit beide
-                    # von der Mitte aus laufen.
-                    pygame.draw.rect(ziel, farben[1], (links, y, fuellung, hoehe))
-            y += hoehe + 4
-            if self.zone_halter >= 0:
-                f.zeichnen(ziel, "%s HAELT DEN KREIS" % namen[self.zone_halter],
-                           mitte, y, farben[self.zone_halter], 1,
-                           ausrichtung="mitte")
-            elif self.ich is not None and self.in_der_zone(self.ich):
-                f.zeichnen(ziel, "UMKAEMPFT", mitte, y, K.C_CREAM, 1,
-                           ausrichtung="mitte")
-            y += 10
-            return y
-
-        if self.regeln["runden"]:
-            if not self._beide_besetzt():
-                f.zeichnen(ziel, "WARTET AUF MITSPIELER", mitte, y,
-                           K.C_MUTED, 1, ausrichtung="mitte")
-            elif self.runden_pause > 0:
-                f.zeichnen(ziel, "NAECHSTE RUNDE IN %d"
-                           % max(1, int(self.runden_pause + 0.99)), mitte, y,
-                           K.C_AMBER, 1, ausrichtung="mitte")
-            else:
-                f.zeichnen(ziel, self.runden_text(), mitte, y, K.C_MUTED, 1,
-                           ausrichtung="mitte")
-            y += 10
-        return y
-
     def _anzeige(self, ziel) -> None:
-        f = SCHRIFT
-        # Kopfzeile: Spielart, und was die Runde beendet
-        f.zeichnen(ziel, K.MODI[self.modus]["name"], 12, 12, K.C_AMBER, 1)
-        rolle = "GASTGEBER" if self.ist_gastgeber else "GAST"
-        if self.karte:
-            rolle = "%s - %s" % (rolle, (self.karte_kopf.get("name")
-                                         or self.karte).upper())
-        f.zeichnen(ziel, rolle, 12, 22, K.C_MUTED_DK, 1)
+        """Die Anzeige steht seit 0.27 in anzeige.py."""
+        self.hud.zeichnen(ziel)
+
+    @property
+    def gegner_rest(self) -> int:
+        """Wie viele Gegner die laufende Welle noch hat - auch die, die noch
+        nicht losgeschickt sind. Beim Gast, was der Gastgeber meldet."""
         if self.ist_gastgeber:
-            f.zeichnen(ziel, self.gastgeber.adresse, 12, 32, K.C_MUTED_DK, 1)
+            return (sum(1 for g in self.gegner_offen if g.lebt)
+                    + len(self.welle_rest))
+        return self._gegner_rest
 
-        if self.in_lobby:
-            self._lobby_kopf(ziel)
-        elif self.mit_gegnern:
-            f.zeichnen(ziel, "WELLE %d" % max(1, self.welle), K.GAME_W // 2, 10,
-                       K.C_CREAM, 2, ausrichtung="mitte")
-        # Die Uhr laeuft ueberall ausser in pve: dort endet die Runde, wenn
-        # alle liegen, und eine Uhr waere eine Zahl ohne Bedeutung.
-        mit_uhr = ((self.mit_teams or not self.regeln["revive"])
-                   and not self.in_lobby)
-        y_kopf = 28 if self.mit_gegnern else 10
-        if self.ende_art == "zeit" and mit_uhr:
-            minuten, sekunden = divmod(int(max(0.0, self.rest)), 60)
-            f.zeichnen(ziel, "%d:%02d" % (minuten, sekunden), K.GAME_W // 2,
-                       y_kopf, K.C_CREAM, 1 if self.mit_gegnern else 2,
-                       ausrichtung="mitte")
-            y_kopf += 16 if not self.mit_gegnern else 10
-        elif mit_uhr and not self.regeln["zone"] and not self.regeln["runden"]:
-            text = ("BIS %d TEAMABSCHUESSE" if self.mit_teams
-                    else "BIS %d ABSCHUESSE")
-            f.zeichnen(ziel, text % int(self.ende_wert or
-                                        K.GEFECHT["team_abschuesse"]),
-                       K.GAME_W // 2, y_kopf + 2, K.C_MUTED, 1,
-                       ausrichtung="mitte")
-            y_kopf += 12
-        if self.mit_teams:
-            self._teamkopf(ziel, y_kopf)
+    def boss_stand(self):
+        """(Name, Anteil Leben) des Bosses dieser Welle, oder None.
 
-        # Punktestand rechts, unterhalb der Ebenenanzeige
-        y = K.GEFECHT["tafel_oben"]
-        for eintrag in bestenliste.sortiert(
-                [{"name": k.name, "abschuesse": k.abschuesse, "tode": k.tode,
-                  "k": k} for k in self.kaempfer.values()]):
-            wer = eintrag["k"]
-            if self.mit_teams:
-                farbe = self._farbe_fuer(wer, wer is self.ich)
-            elif wer is self.ich:
-                farbe = K.C_TEAL
-            elif wer.am_boden:
-                farbe = K.C_RED
-            else:
-                farbe = K.C_MUTED
-            marke = ">" if wer is self.ich else " "
-            f.zeichnen(ziel, "%s%-10s %2d/%2d" % (marke, eintrag["name"],
-                                                  eintrag["abschuesse"],
-                                                  eintrag["tode"]),
-                       K.GAME_W - 12, y, farbe, 1, ausrichtung="rechts")
-            y += 9
-
-        if self.ich is None:
-            return
-        if self.ich.am_boden:
-            f.zeichnen(ziel, "AM BODEN", K.GAME_W // 2, K.GAME_H // 2 - 10,
-                       K.C_RED, 2, ausrichtung="mitte")
-            f.zeichnen(ziel, "NOCH %d SEKUNDEN" % max(0, int(self.ich.boden_rest)),
-                       K.GAME_W // 2, K.GAME_H // 2 + 8, K.C_MUTED, 1,
-                       ausrichtung="mitte")
-        elif not self.ich.lebt and not self.vorbei:
-            f.zeichnen(ziel, "GEFALLEN", K.GAME_W // 2, K.GAME_H // 2 - 10,
-                       K.C_RED, 2, ausrichtung="mitte")
-            if self.regeln["runden"]:
-                f.zeichnen(ziel, "RAUS BIS ZUR NAECHSTEN RUNDE", K.GAME_W // 2,
-                           K.GAME_H // 2 + 8, K.C_MUTED, 1,
-                           ausrichtung="mitte")
-            elif not self.regeln["revive"]:
-                f.zeichnen(ziel, "WIEDER IN %.0f" % max(0.0, self.ich.wieder_in),
-                           K.GAME_W // 2, K.GAME_H // 2 + 8, K.C_MUTED, 1,
-                           ausrichtung="mitte")
-        else:
-            self.renderer.hud(ziel, self.welt, self.ich, "",
-                              self.ich.abschuesse, self.blick, kopf=False)
-            if self.knapp:
-                # Der Vorrat steht in der Hotbar, bei der Waffe, zu der er
-                # gehoert - hier bleibt nur die Warnung, wenn gar nichts
-                # mehr da ist.
-                vorrat = self.ich.vorrat.get(self.ich.waffe_name, 0)
-                if not vorrat and not self.ich.magazin.get(
-                        self.ich.waffe_name, 0):
-                    # Sonst drueckt man ratlos auf R und nichts passiert.
-                    f.zeichnen(ziel, "KEIN VORRAT - WAFFE WECHSELN ODER KISTE",
-                               K.GAME_W // 2, K.GAME_H - 46, K.C_RED, 1,
-                               ausrichtung="mitte")
-        if self.hinweis:
-            self.renderer.hinweis(ziel, self.hinweis)
+        Beim Gast aus den gemeldeten Gegnern - einen Boss gibt es je Welle
+        hoechstens einmal, also ist der erste, den man findet, der richtige.
+        """
+        if self.ist_gastgeber:
+            b = self.boss
+            if b is None or not b.lebt:
+                return None
+            return K.BOSSE[b.art]["name"], max(0.0, b.leben) / b.max_leben
+        for eintrag in self._fremde_gegner:
+            art = eintrag[4]
+            if K.ist_boss(art):
+                return K.BOSSE[art]["name"], float(eintrag[5])
+        return None
 
     def _menue_zeichnen(self, ziel) -> None:
         """Der Deckel ueber dem laufenden Gefecht.
@@ -4251,6 +4122,12 @@ class Gefecht(Szene, LobbyTeil):
             pygame.draw.polygon(ziel, K.C_AMBER, [(318, y - 4), (322, y),
                                                   (326, y - 4)])
 
+        if self.ist_gastgeber:
+            # Die Adresse steht nicht mehr die ganze Runde in der Anzeige,
+            # nur in der Lobby - und hier, wenn man sie nachsehen will.
+            f.zeichnen(ziel, "ADRESSE  %s" % self.gastgeber.adresse,
+                       K.GAME_W // 2, K.GAME_H - 34, K.C_MUTED_DK, 1,
+                       ausrichtung="mitte")
         f.zeichnen(ziel, "PFEILE WAEHLEN   ENTER BESTAETIGT   [ESC] ZURUECK",
                    K.GAME_W // 2, K.GAME_H - 22, K.C_MUTED_DK, 1,
                    ausrichtung="mitte")
