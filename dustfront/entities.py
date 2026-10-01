@@ -425,7 +425,9 @@ class Granate(Wesen):
             # Blendgranate nimmt eine Sekunde, und sie nimmt sie jedem,
             # der hinsieht. Wer wie stark geblendet ist, rechnet jeder
             # Rechner fuer sich aus der Lage des Blitzes.
-            w.explosion(self.pos, self.ebene, 0.0, "blend")
+            # Der Werfer geht mit: seine Spielerkosmetik bestimmt, wie es
+            # klingt und was im Weiss steht (spielerkosmetik.py).
+            w.explosion(self.pos, self.ebene, 0.0, "blend", von=self.von)
             return
         if d.get("feuer"):
             # Kein Sprengschaden - das ist der Punkt an dieser Waffe. Die

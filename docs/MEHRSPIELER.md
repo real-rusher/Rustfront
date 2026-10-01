@@ -1432,6 +1432,109 @@ aendert, zaehlt die Version hoch**, sonst greift die Pruefung nicht.
 
 ---
 
+## 12c. Version 0.28: Spielerkosmetik
+
+Ein erster Versuch, wie Spieler selbst etwas ins Spiel bringen: ein
+eigener **Ton** und ein eigenes **Bild** fuer die Blendgranate. Gemacht
+wird beides in der Kontoseite (KONTO.html, Reiter KOSMETIK), abgelegt im
+Konto (Tabelle `kosmetik`, `docs/KONTO.md` 5.6), verteilt in der Lobby,
+gezeigt beim Werfen. Alles im Spiel steht in `dustfront/spielerkosmetik.py`;
+das Gefecht bindet es wie die Lobby als Mixin ein (`KosmetikTeil`).
+
+### Was der Spieler macht
+
+In der Kontoseite: eine MP3 (oder WAV, OGG) laden, mit der Maus
+zuschneiden, Bass bis +40 dB, LAUTER bis +30 dB (weich uebersteuert, tanh),
+den klassischen Knall und das Pfeifen **aus dem Spiel** dazumischen,
+abklingen lassen. Ein Bild laden, ausschneiden, Filter darueber (Helligkeit,
+Kontrast, Farbe, Farbton, Pixel, Frittiert, Grau/Sepia/Umgekehrt, rund).
+Darunter eine Vorschau in Spielgroesse mit Blitz und Ton.
+
+### Die zwei Regeln fuer den Ton
+
+**FEST.** 1,0 bis 4,0 Sekunden. Und er **wird immer leiser**: nach 120 ms
+Anlauf fuehrt `ton_ausklingen` eine Obergrenze, die nie steigt, geradlinig
+auf null faellt und im letzten Abschnitt null ist. Wird der Ton leiser,
+folgt die Grenze - hoechstens um `ton_abfall` (0,95) je 20-ms-Abschnitt,
+damit nach einer kurzen Luecke zwischen zwei Schlaegen noch etwas kommt.
+Was darueber liegt, wird heruntergeregelt; zwischen den Abschnitten gilt
+an jeder Kante die kleinere Verstaerkung, also bekommt keine Probe mehr,
+als ihr Abschnitt darf.
+
+**GRUND.** Ein Dauerton waere eine Waffe: wer ihn hoert, hoert keine
+Schritte mehr. Ein zu kurzer Ton waere ein Klick, kein Knall.
+
+**FEST.** Geprueft wird **im Spiel**, bei jedem Paket - auch beim eigenen
+vom Server, auch bei dem eines Mitspielers. Die Seite rechnet die Grenze
+fuer ihre Vorschau nach (`tonAusklingen`, Schritt fuer Schritt gleich),
+laedt aber den Ton **davor** hoch.
+
+**GRUND.** Eine veraenderte Seite oder ein veraenderter Klient kaeme sonst
+mit einem Dauerton durch. Und weil das Spiel die Grenze genau einmal
+rechnet, klingt es im Spiel Probe fuer Probe wie in der Vorschau -
+`tests/kontoseite_browser.py` prueft genau das.
+
+### Verteilen in der Lobby
+
+Vier Meldungen, alle neben der Weltmeldung her:
+
+| Meldung | Richtung | Inhalt |
+| --- | --- | --- |
+| `kos` | Gast → Gastgeber, Gastgeber → Gast | ein Teil eines Pakets: `k` Kennung, `i`/`n` Teil von, `d` Daten; vom Gastgeber dazu `von` |
+| `kos_index` | Gastgeber → alle | wer welche Kosmetik hat: Nummer → Kennung |
+| `kos_hat` | Gast → Gastgeber | was hier schon fertig angekommen ist |
+| `kos_weg` | Gast → Gastgeber | ich habe meine entfernt |
+
+Ein Paket ist JSON mit Base64: der Ton **so, wie er vom Konto kam**, und
+das PNG. Die Kennung ist `sha1(ton|bild)`, 16 Zeichen. Jeder Rechner
+bereitet den Ton selbst auf; weil das festgelegt ist, kommt ueberall
+dasselbe heraus, und die Kennung am Rohen stimmt bei allen.
+
+**FEST.** Teile zu 8000 Zeichen, **zwei je Schritt**, hoechstens 100 je
+Paket (das groesste erlaubte hat 92). Kommt eine neue Kennung, ist das alte
+Paket hinfaellig - auch was davon noch in der Schlange wartet.
+
+**GRUND.** Eine Viertelmegabyte vor jeder Weltmeldung, und die Lobby
+ruckelte, waehrend geladen wird. `netz._schlange_kuerzen` wirft `kos`
+nie weg - es ist keine Weltmeldung, die die naechste ersetzt.
+
+Wer geht, nimmt seine Kosmetik mit: der Gastgeber streicht ihn aus dem
+Index, und jeder Rechner wirft weg, was nicht mehr darin steht.
+
+### Mit oder ohne - der Gastgeber entscheidet
+
+Gibt es Kosmetik, hat die Tafel (P) und das Pausenmenue statt START zwei
+Knoepfe: **MIT KOSMETIK** und **OHNE KOSMETIK**. Oben in der Lobby steht,
+wie weit sie verteilt ist ("KOSMETIK LAEDT 2 VON 3").
+
+**FEST.** Mit Kosmetik geht es erst, wenn **jeder Rechner jede Kosmetik
+jedes anderen** hat (`kosmetik_stand`, beim Gastgeber aus den `kos_hat`
+der Gaeste). Bis dahin ist der Knopf gesperrt, und `plan_starten` lehnt ab.
+Die Entscheidung ist die Regel `kosmetik` in `regeln.py` - versteckt, in
+keinem Menue, aber sie geht mit den Regeln zu den Gaesten und gilt fuer
+den ganzen Rundenplan. In der Lobby gilt Kosmetik immer: dort probiert man
+sie aus.
+
+**GRUND.** Sonst hoerte der eine den Ton des Werfers und der andere den
+gewoehnlichen Knall, und keiner wuesste, was der andere erlebt.
+
+### Beim Werfen
+
+`Granate` gibt ihren Werfer an `Welt.explosion(..., von=)` weiter, die
+Wirkungsmeldung `x` traegt ihn als siebtes Feld (seine Nummer, -1 ohne).
+`Welt.blitz` fragt die Szene; hat der Werfer Kosmetik und gilt sie, spielt
+sie **seinen Ton** (so laut, wie ein Knall an dieser Stelle waere) statt
+Knall und Pfeifen, und legt **sein Bild** ins Weiss - 144 Pixel, so
+deckend, wie das Weiss noch ist. Wer keine hat, knallt wie immer.
+
+### Version
+
+**0.28.0.** Neue Meldungen und ein siebtes Feld in `x`: ein Gast von 0.27
+verstuende die Lobby nicht mehr. Die Versionspruefung (0.27.1) weist ihn
+ab, wie sie soll.
+
+---
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:
@@ -1616,6 +1719,25 @@ als das Bild breit ist.
 **In `tests/test_menues.py`:** Bestenliste anlegen, eintragen, sortieren,
 Neustart ueberleben, kaputte Datei abfangen, Namen saeubern, Adressen
 zerlegen.
+
+**Spielerkosmetik (0.28):** zu kurz, zu lang, falsches Format, ein Kopf,
+der mehr Proben behauptet, als da sind; der Ton wird immer leiser, endet in
+Stille, kein Abschnitt liegt ueber der Grenze, ein Knall, der schnell genug
+abklingt, bleibt unangetastet; PNG zu gross, kaputt, kein PNG; Teile in
+falscher Reihenfolge, falscher Fingerabdruck; das Konto merkt sich die
+eigene und vergisst eine abgelehnte. Im Netz mit drei echten Rechnern:
+alle bekommen alles, ein Neuer sperrt MIT KOSMETIK, bis er alles hat,
+gefaelschte Pakete werden abgelehnt, mit Kosmetik klingt und zeigt die
+Blendgranate den Werfer - beim Gastgeber wie beim Gast, im Bild
+nachgewiesen -, ohne Kosmetik und ohne Werferkosmetik knallt sie wie immer;
+aendern, entfernen und gehen kommen bei allen an.
+
+**In `tests/kontoseite_browser.py`** (Chromium ueber Playwright, mit
+vorgetaeuschtem Server): die Grenze der Seite ist Probe fuer Probe die des
+Spiels; WAV und MP3 laden, zu kurz abgelehnt, Zuschneiden mit der Maus
+bleibt in den Grenzen; was die Seite hochlaedt, nimmt das Spiel an und es
+klingt dort wie in der Vorschau; entfernen loescht die Zeile; fehlt die
+Tabelle, sagt die Seite, was zu tun ist.
 
 ---
 

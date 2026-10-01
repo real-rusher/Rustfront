@@ -1467,6 +1467,36 @@ FEUER = dict(
     brandfleck=True,          # hinterlaesst einen Fleck, wenn es aus ist
 )
 
+# Spielerkosmetik: eigener Ton und eigenes Bild fuer die Blendgranate.
+#
+# Ein erster Versuch, wie Spieler selbst etwas ins Spiel bringen. Gemacht
+# wird es in der Kontoseite (KONTO.html, Reiter KOSMETIK), abgelegt im
+# Konto auf dem Server (Tabelle `kosmetik`, docs/KONTO.md 5.6), verteilt
+# in der Lobby an alle Mitspieler (spielerkosmetik.py). Was hier steht,
+# prueft das Spiel bei **jedem** Paket - auch bei dem, das ein anderer
+# Rechner schickt. Eine veraenderte Kontoseite kommt damit nicht weiter
+# als die echte.
+SPIELERKOSMETIK = dict(
+    ton_min=1.0,            # Sekunden. Kuerzer geht nicht: ein Klick ist kein Knall
+    ton_max=4.0,            # Sekunden. Laenger blockiert es den Ton der Runde
+    ton_bytes=400_000,      # so gross darf die WAV-Datei hoechstens sein
+    ton_raten=(11025, 16000, 22050, 32000, 44100, 48000),
+    # Der Ton muss immer leiser werden. Die Kontoseite rechnet es vor; das
+    # Spiel sorgt trotzdem selbst dafuer, damit kein Paket daran vorbei
+    # kommt. Gefuehrt wird eine Obergrenze, die nie steigt und am Ende
+    # null ist (spielerkosmetik.ton_ausklingen).
+    ton_abschnitt=0.02,     # Sekunden je Abschnitt beim Pruefen
+    ton_anlauf=0.12,        # so lange darf es am Anfang noch anschwellen
+    ton_ausklang=1.0,       # ueber diesen Anteil faellt die Grenze auf null
+    ton_abfall=0.95,        # so weit folgt die Grenze je Abschnitt nach unten
+    bild_bytes=150_000,     # so gross darf das PNG hoechstens sein
+    bild_max=256,           # so breit und hoch hoechstens
+    bild_zeigen=144,        # so gross steht es im Weiss der Blendung
+    teil=8000,              # Zeichen je Netzmeldung
+    teile_je_schritt=2,     # so viele Teile gehen je Schritt hinaus
+    teile_max=100,          # mehr Teile hat kein gueltiges Paket (groesstes: 92)
+)
+
 # Die Blendgranate.
 #
 # **Sie unterscheidet keine Mannschaften.** Wer hinsieht, ist geblendet -

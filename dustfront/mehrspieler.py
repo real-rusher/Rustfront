@@ -61,6 +61,7 @@ from . import netz
 from . import regeln as R
 from . import ui
 from .lobby import LobbyTeil, lobby_regeln
+from .spielerkosmetik import KosmetikTeil
 from . import world as welt_modul
 from .core import Szene
 from .entities import (Aufsammler, Brandflaeche, Gegner, Rakete,
@@ -575,7 +576,7 @@ def _version_kleiner(a: str, b: str) -> bool:
     return teile(a) < teile(b)
 
 
-class Gefecht(Szene, LobbyTeil):
+class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     """Die Spielszene fuer den LAN-Test, beim Gastgeber wie beim Gast.
 
     Die Lobby und der Rundenplan stehen in lobby.py (LobbyTeil).
@@ -740,6 +741,7 @@ class Gefecht(Szene, LobbyTeil):
         # der Weltmeldung wie beim Gastgeber in seiner eigenen Figur.
         self.befinden = Befinden()
         self.hud = Anzeige(self)
+        self._kosmetik_anlegen()
         self._gegner_rest = 0        # beim Gast: so meldet es der Gastgeber
         self._leben_vorher = 0.0
         self._heilte = 0.0
@@ -844,7 +846,7 @@ class Gefecht(Szene, LobbyTeil):
         self.welt.ebene(ebene).dekal(self.renderer.brandfleck(radius),
                                      pos.x, pos.y)
 
-    def _blitz(self, pos, ebene: int) -> None:
+    def _blitz(self, pos, ebene: int, von=None) -> bool:
         """Eine Blendgranate ist gezuendet. Blendet sie **mich**?
 
         Gerechnet wird hier und nicht beim Gastgeber: es ist eine Frage
@@ -854,7 +856,16 @@ class Gefecht(Szene, LobbyTeil):
         staerke = welt_modul.blend_wert(pos, ebene, self.ich, self.welt)
         if staerke > 0.0:
             self.befinden.blenden(staerke)
+        # Spielerkosmetik des Werfers: sein Ton statt Knall und Pfeifen,
+        # sein Bild im Weiss. Gehoert wird der Ton wie ein Knall - laut,
+        # wer nah ist, leise, wer weit weg ist, gar nicht auf einer
+        # anderen Ebene. Ohne Kosmetik bleibt alles wie bisher.
+        laut = welt_modul.klang_wert(1.0, pos, ebene, self.ich)
+        if self.kosmetik_blitz(von, staerke, laut):
+            return True
+        if staerke > 0.0:
             self.app.klaenge.spielen(K.skin("blend_pfeifen"), 0.35 + 0.5 * staerke)
+        return False
 
     def _ruckeln(self, kraft: float, anlass: str = "", pos=None,
                  ebene: int = 0, quelle=None) -> None:
@@ -899,14 +910,17 @@ class Gefecht(Szene, LobbyTeil):
     # das Ergebnis gar nicht auseinanderlaufen: es ist derselbe Code.
 
     def _explosion_melden(self, pos, ebene: int, radius: float,
-                          art: str = "spreng") -> None:
+                          art: str = "spreng", von=None) -> None:
         self._in_wirkung = True
         try:
-            Welt.explosion(self.welt, pos, ebene, radius, art)
+            Welt.explosion(self.welt, pos, ebene, radius, art, von)
         finally:
             self._in_wirkung = False
+        # Als siebtes die Nummer des Werfers - der Gast braucht sie fuer
+        # die Spielerkosmetik der Blendgranate. -1, wenn es keinen gibt.
         self._wirkung.append(["x", round(pos.x, 1), round(pos.y, 1),
-                              int(ebene), round(radius, 1), str(art)])
+                              int(ebene), round(radius, 1), str(art),
+                              int(getattr(von, "nummer", -1))])
 
     def schadenszahl(self, pos, ebene: int, menge: float) -> None:
         """Eine Zahl ueber einer Puppe: so viel hat es gerade getroffen.
@@ -962,7 +976,7 @@ class Gefecht(Szene, LobbyTeil):
         dann zu hoeren, aber ruckelt nicht.
         """
         for e in eintraege:
-            if not isinstance(e, (list, tuple)) or len(e) != 6:
+            if not isinstance(e, (list, tuple)) or len(e) not in (6, 7):
                 continue
             try:
                 art = str(e[0])
@@ -980,7 +994,10 @@ class Gefecht(Szene, LobbyTeil):
                 wirkung = e[5]
                 if not isinstance(wirkung, str):
                     wirkung = "rauch" if wirkung else "spreng"
-                self.welt.explosion(pos, ebene, radius, wirkung)
+                von = None
+                if len(e) == 7 and isinstance(e[6], int) and e[6] >= 0:
+                    von = e[6]          # Nummer des Werfers
+                self.welt.explosion(pos, ebene, radius, wirkung, von)
             elif art == "s":
                 try:
                     winkel = float(e[4])
@@ -1754,10 +1771,16 @@ class Gefecht(Szene, LobbyTeil):
                     # Und gleich den Plan: wer in die Lobby kommt, soll
                     # sehen, was als Naechstes gespielt wird.
                     self.gastgeber.an_einen(nummer, self._plan_meldung())
+                    # Dazu die Spielerkosmetik, die schon da ist.
+                    self._kos_neuer_gast(nummer)
             elif art == "ein":
                 k = self.kaempfer.get(nummer)
                 if k is not None:
                     self._anwenden(k, nachricht)
+            elif art in ("kos", "kos_hat", "kos_weg"):
+                # Spielerkosmetik - nur von dem, der schon dabei ist.
+                if nummer in self.kaempfer:
+                    self._kos_vom_gast(nummer, nachricht)
 
         for nummer in self.gastgeber.gegangen():
             k = self.kaempfer.pop(nummer, None)
@@ -1766,6 +1789,7 @@ class Gefecht(Szene, LobbyTeil):
 
         if self.ich is not None:
             self._anwenden(self.ich, self._meine_eingabe())
+        self._kosmetik_schritt()
 
         if self.in_lobby:
             # Keine Wellen, keine Beute, kein Ende - nur das Gehege.
@@ -2843,6 +2867,8 @@ class Gefecht(Szene, LobbyTeil):
                 if not self._version_vom_gastgeber(nachricht):
                     return
                 self._willkommen_lesen(nachricht)
+                # Aufgenommen: ab jetzt darf die eigene Kosmetik hinaus.
+                self._kos_zugelassen = True
                 if art == "neustart":
                     # Der Gastgeber hat die Regeln gewechselt. Alles, was
                     # von der alten Runde noch herumliegt, kommt weg.
@@ -2861,6 +2887,8 @@ class Gefecht(Szene, LobbyTeil):
                 self._welt_uebernehmen(nachricht)
             elif art == "plan":
                 self._plan_lesen(nachricht)
+            elif art in ("kos", "kos_index"):
+                self._kos_beim_gast(nachricht)
             elif art == "abgelehnt":
                 # Gemerkt und nicht nur angezeigt: der Gastgeber legt
                 # gleich darauf auf, und im naechsten Bild wuerde sonst
@@ -2898,6 +2926,8 @@ class Gefecht(Szene, LobbyTeil):
         # trotzdem laufen: Staubringe und Aufschriften altern hier.
         self.welt.effekte_schritt(dt)
         self._aufsetzen_erkennen()
+        if self.gast.offen:
+            self._kosmetik_schritt()
 
         self._seit_senden += dt
         eilig = bool(self._knoepfe) or self._waffe_wunsch >= 0
@@ -3475,8 +3505,16 @@ class Gefecht(Szene, LobbyTeil):
             # zur naechsten Runde, und die stellt man auf der Tafel ein.
             if self.ist_gastgeber:
                 eintraege.append(("planen", "RUNDEN EINSTELLEN", ""))
-                eintraege.append(("starten", "RUNDE STARTEN",
-                                  R.kurz(self.plan[0], self._umfeld())))
+                if self.kos_index:
+                    da, noetig = self.kosmetik_stand()
+                    eintraege.append(("starten_kos", "STARTEN MIT KOSMETIK",
+                                      "BEREIT" if da >= noetig
+                                      else "LAEDT %d/%d" % (da, noetig)))
+                    eintraege.append(("starten", "STARTEN OHNE KOSMETIK",
+                                      R.kurz(self.plan[0], self._umfeld())))
+                else:
+                    eintraege.append(("starten", "RUNDE STARTEN",
+                                      R.kurz(self.plan[0], self._umfeld())))
             else:
                 eintraege.append(("planen", "RUNDEN ANSEHEN", ""))
             eintraege.append(("raus", "GEFECHT VERLASSEN", ""))
@@ -3583,7 +3621,7 @@ class Gefecht(Szene, LobbyTeil):
     # reagieren nur auf Enter. Auf einen Pfeil zu hoeren waere hier
     # gefaehrlich: ein Druck daneben haette das Gefecht beendet.
     TATEN = ("weiter", "raus", "teams", "neu", "ausruestung", "konto",
-             "planen", "starten", "lobby")
+             "planen", "starten", "starten_kos", "lobby")
 
     def _menue_wirken(self, schluessel: str, vor: bool, waehlen: bool) -> None:
         if schluessel in self.TATEN and not waehlen:
@@ -3626,9 +3664,9 @@ class Gefecht(Szene, LobbyTeil):
         elif schluessel == "neu":
             self._runde_neu()
             self._menue_zu()
-        elif schluessel == "starten":
-            self._menue_zu()
-            self.plan_starten(0)
+        elif schluessel in ("starten", "starten_kos"):
+            if self.plan_starten(0, kosmetik=(schluessel == "starten_kos")):
+                self._menue_zu()
         elif schluessel == "lobby":
             self._menue_zu()
             self.lobby_betreten()
@@ -3823,8 +3861,10 @@ class Gefecht(Szene, LobbyTeil):
             self._versionsfehler_zeichnen(ziel)
             return
         # Zuletzt und ueber allem: das Weiss einer Blendgranate. Es liegt
-        # auch ueber der Anzeige - geblendet ist geblendet.
+        # auch ueber der Anzeige - geblendet ist geblendet. Darin, wenn der
+        # Werfer eines hat, sein Bild (Spielerkosmetik).
         self.befinden.blendung_zeichnen(ziel)
+        self._kosmetik_bild_zeichnen(ziel)
 
     def _kreis_zeichnen(self, flaeche, ebene: int, ecke) -> None:
         """Der Kreis in der Kartenmitte, auf den Boden seiner Ebene.

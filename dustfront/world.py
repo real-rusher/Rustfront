@@ -304,10 +304,14 @@ class Welt:
     def brandfleck(self, pos, ebene: int, radius: float) -> None:
         pass
 
-    def blitz(self, pos, ebene: int) -> None:
+    def blitz(self, pos, ebene: int, von=None):
         """Hier hat es geblitzt. Wer davon geblendet wird, entscheidet
-        jeder Zuschauer fuer sich - die Szene haengt sich hier ein."""
-        pass
+        jeder Zuschauer fuer sich - die Szene haengt sich hier ein.
+
+        `von` ist der Werfer. Gibt die Szene True zurueck, hat sie den Ton
+        selbst gespielt (Spielerkosmetik), und der gewoehnliche Knall
+        bleibt aus."""
+        return False
 
     # ---- Wirkungen, die jeder sehen und hoeren muss ---------------------
     #
@@ -327,7 +331,7 @@ class Welt:
     # kann das nicht mehr - es ist derselbe Code.
 
     def explosion(self, pos, ebene: int, radius: float,
-                  art: str = "spreng") -> None:
+                  art: str = "spreng", von=None) -> None:
         """Wie eine Wurfwaffe aussieht und klingt, wenn sie wirkt.
 
         `art` statt eines Wahrheitswerts: es gibt nicht mehr nur "zuendet
@@ -350,8 +354,8 @@ class Welt:
                   ebene, 2, "funke")
             wolke(self, pos, 6, 120, b["funke_dauer"] * 1.6, (206, 226, 255),
                   ebene, 1, "funke")
-            self.blitz(pos, ebene)
-            self.klang(K.skin("blend_knall"), 1.0, pos, ebene)
+            if not self.blitz(pos, ebene, von):
+                self.klang(K.skin("blend_knall"), 1.0, pos, ebene)
             return
         if art == "feuer":
             # Kein Knall und kein Kameraschlag: eine Flasche zerbricht,

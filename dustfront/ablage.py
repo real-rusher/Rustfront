@@ -414,6 +414,14 @@ class LokaleAblage:
         eintrag = self._lesen()["konten"][str(sitzung)[6:]]
         return gut({"gefechte": list((eintrag.get("gefechte") or {}).values())})
 
+    def kosmetik_lesen(self, sitzung: str) -> Antwort:
+        """Lokal gibt es keine: gemacht wird Kosmetik in der Kontoseite,
+        und die redet nur mit dem Server."""
+        prfg = self.sitzung_pruefen(sitzung)
+        if not prfg:
+            return prfg
+        return gut({"ton": "", "bild": ""})
+
 
 # ══════════════════════════════════════════════════ Netzablage
 
@@ -645,6 +653,26 @@ class NetzAblage:
             return antwort
         zeilen = antwort.daten if isinstance(antwort.daten, list) else []
         return gut({"gefechte": zeilen})
+
+
+    # ---- Kosmetik -----------------------------------------------------
+    def kosmetik_lesen(self, sitzung: str) -> Antwort:
+        """Ton und Bild fuer die Blendgranate, so wie die Kontoseite sie
+        abgelegt hat (Base64). Leer, wenn es keine Zeile gibt.
+
+        Eine eigene Tabelle und nicht das Profil: das Profil geht bei
+        jeder Aenderung eines Loadouts hin und her, und dabei jedes Mal
+        eine Viertelmegabyte Ton mitzuschicken waere Verschwendung.
+        """
+        antwort = self._rufen(
+            "/rest/v1/kosmetik?select=blend_ton,blend_bild&limit=1",
+            token=sitzung)
+        if not antwort:
+            return antwort
+        zeilen = antwort.daten if isinstance(antwort.daten, list) else []
+        zeile = zeilen[0] if zeilen and isinstance(zeilen[0], dict) else {}
+        return gut({"ton": str(zeile.get("blend_ton") or ""),
+                    "bild": str(zeile.get("blend_bild") or "")})
 
 
 def waehlen(lokal_erzwingen: bool = False):

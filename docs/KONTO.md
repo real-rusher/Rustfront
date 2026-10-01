@@ -367,17 +367,18 @@ Server, keine Installation, kein Internet ausser dem zu Supabase.
 | **RUNDEN** | Jede gespielte Runde einzeln, so wie sie in der Tabelle steht |
 | **AUSRUESTUNG** | Die drei Loadouts aendern und eines zum Tragen waehlen |
 | **AUSSEHEN** | Grau. Vorbereitet, noch ohne Inhalt - siehe `docs/KOSMETIK.md` |
+| **KOSMETIK** | Eigener Ton und eigenes Bild fuer die Blendgranate: MP3 laden und zuschneiden, Bass, lauter, mit Knall und Pfeifen aus dem Spiel mischen; Bild ausschneiden und filtern; Vorschau in Spielgroesse. Braucht die Tabelle aus 5.6 |
 | **KONTO** | Anzeigename, Kennwort aendern, Kennung, Fassung, abmelden |
 
-Dazu **ALLES HERUNTERLADEN**: Profil und alle Runden als JSON-Datei. Das
+Dazu **ALLES HERUNTERLADEN**: Profil, alle Runden und die Kosmetik als JSON-Datei. Das
 ist der Punkt an der Sache. Wer wissen will, was ueber ihn gespeichert
 ist, soll es nicht erfragen muessen, sondern anklicken koennen.
 
 ### Was sie nicht kann, mit Absicht
 
-* **Zahlen aendern.** Geschrieben werden genau zwei Sachen: der
-  Anzeigename und die Loadouts. Werte, die man selbst setzen kann, waeren
-  keine Statistik mehr.
+* **Zahlen aendern.** Geschrieben werden genau drei Sachen: der
+  Anzeigename, die Loadouts und die eigene Spielerkosmetik (5.6). Werte,
+  die man selbst setzen kann, waeren keine Statistik mehr.
 * **Ein Konto loeschen.** Dafuer braucht es den *secret key*, und der
   darf in keiner Datei stehen, die jemand herunterladen kann.
 * **Fremde Konten sehen.** Der Zeilenschutz laesst nur die eigenen Zeilen
@@ -429,6 +430,52 @@ Alles, was mit dem Server redet, steht in `Netz`; was gerade bekannt
 ist, in `Stand`. Zwei Stellen, nicht zwanzig.
 
 ---
+
+### 5.6 Spielerkosmetik (seit 0.28)
+
+Eigener Ton und eigenes Bild fuer die Blendgranate, gemacht in der
+Kontoseite (Reiter KOSMETIK). Dafuer braucht es **eine weitere Tabelle**.
+Einmal im **SQL Editor** ausfuehren:
+
+```sql
+-- ── Kosmetik: eine Zeile je Konto ───────────────────────────────────
+-- Eigene Tabelle und nicht das Profil: das Profil geht bei jedem
+-- geaenderten Loadout hin und her, und eine Viertelmegabyte Ton jedes
+-- Mal mitzuschicken waere Verschwendung.
+create table if not exists kosmetik (
+  konto      uuid primary key default auth.uid()
+             references auth.users(id) on delete cascade,
+  blend_ton  text not null default '',   -- WAV, Base64
+  blend_bild text not null default '',   -- PNG, Base64
+  geaendert  timestamptz not null default now(),
+  -- Die Grenzen stehen auch hier, nicht nur im Spiel: ein veraenderter
+  -- Klient soll den Server nicht mit Megabytes fuellen koennen.
+  constraint kosmetik_ton_groesse  check (octet_length(blend_ton)  <= 540000),
+  constraint kosmetik_bild_groesse check (octet_length(blend_bild) <= 210000)
+);
+
+alter table kosmetik enable row level security;
+
+-- Die drop-Zeilen machen das Ganze wiederholbar: wer es ein zweites Mal
+-- ausfuehrt, bekommt keinen Fehler "policy already exists".
+drop policy if exists "eigene kosmetik lesen"    on kosmetik;
+drop policy if exists "eigene kosmetik anlegen"  on kosmetik;
+drop policy if exists "eigene kosmetik aendern"  on kosmetik;
+drop policy if exists "eigene kosmetik loeschen" on kosmetik;
+create policy "eigene kosmetik lesen"    on kosmetik for select using (auth.uid() = konto);
+create policy "eigene kosmetik anlegen"  on kosmetik for insert with check (auth.uid() = konto);
+create policy "eigene kosmetik aendern"  on kosmetik for update using (auth.uid() = konto)
+                                                     with check (auth.uid() = konto);
+create policy "eigene kosmetik loeschen" on kosmetik for delete using (auth.uid() = konto);
+```
+
+**Warum nur die eigene lesbar ist:** an die Kosmetik der anderen kommt man
+nicht ueber den Server, sondern in der Lobby - jeder schickt seine selbst
+an den Gastgeber, der verteilt sie. Wer nicht mit dir in einer Runde ist,
+bekommt sie nie zu sehen.
+
+Fehlt die Tabelle, sagt die Kontoseite es auf dem Reiter KOSMETIK; das
+Spiel laeuft dann ohne Kosmetik weiter.
 
 ## 6. Ohne Server
 

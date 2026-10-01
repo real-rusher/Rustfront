@@ -254,6 +254,12 @@ FELDER = (
     # ── Der Einstieg
     Feld("schutz", "EINSTIEGSSCHUTZ", "EINSTIEG", K.GEFECHT["schutz_an"],
          None, schalter=True),
+    # ── Spielerkosmetik (spielerkosmetik.py). Steht in keinem Menue: der
+    # Gastgeber entscheidet es beim Start - MIT oder OHNE KOSMETIK -, und
+    # mit Kosmetik geht es erst, wenn alle alles geladen haben. Hier steht
+    # es nur, damit die Entscheidung mit den Regeln zu den Gaesten kommt.
+    Feld("kosmetik", "SPIELERKOSMETIK", "AUSRUESTUNG", False, None,
+         schalter=True, gilt=lambda d: False),
 )
 
 NACH_NAME = {f.schluessel: f for f in FELDER}

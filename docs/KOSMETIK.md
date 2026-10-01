@@ -4,6 +4,12 @@
 Musikkits und eine zweite Siegtafel - wie sie aussehen wuerden, wenn es sie
 gaebe.
 
+> **Nicht zu verwechseln** mit der *Spielerkosmetik* seit 0.28: einem
+> eigenen Ton und Bild fuer die Blendgranate, die Spieler selbst machen
+> (Kontoseite, Reiter KOSMETIK). Die ist eingebaut und steht in
+> `docs/MEHRSPIELER.md`, Abschnitt 12c. Hier geht es um etwas anderes:
+> Dinge, die das Spiel ausgibt.
+
 **Was das hier nicht ist.** Eine Ankuendigung. **Eingebaut ist davon
 nichts.** Kein Spielcode ruft `dustfront/kosmetik.py` auf, keine Runde
 haengt daran, kein Konto bekommt dadurch ein Inventar, und niemand kann

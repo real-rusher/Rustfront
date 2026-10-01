@@ -68,6 +68,9 @@ from . import config as K
 from . import pfade
 
 SITZUNG_DATEI = "sitzung.json"
+# Die eigene Spielerkosmetik, wie sie zuletzt vom Server kam. Damit sie
+# auch ohne Netz da ist - und damit nicht jeder Start sie neu laedt.
+KOSMETIK_DATEI = "kosmetik.json"
 JOURNAL_DATEI = "journal.json"
 
 
@@ -351,7 +354,12 @@ class Konto:
         self._werk = Werk() if mit_faden else None
         self._seit_abgleich = 0.0
         self._ruhe = 0.0
+        # Ton und Bild fuer die Blendgranate (spielerkosmetik.py), oder
+        # None. Kommt vom Server und liegt danach auch auf der Platte.
+        self.kosmetik = None
+        self.kosmetik_fehler = ""
         self.sitzung_laden()
+        self._kosmetik_merken_laden()
 
     # ---- Zustand ------------------------------------------------------
     @property
@@ -462,6 +470,8 @@ class Konto:
         self.erneuern_marke = ""
         self.profil_fassung = 0
         self.sitzung_loeschen()
+        self.kosmetik = None
+        self._kosmetik_merken(None, "", "")
         self.hinweis = "ABGEMELDET"
 
     def _starten(self, marke: str, arbeit) -> None:
@@ -481,6 +491,85 @@ class Konto:
         sitzung = self.sitzung
         self._starten("profil_lesen",
                       lambda: self.ablage.profil_lesen(sitzung))
+
+    def kosmetik_holen(self) -> None:
+        """Die eigene Kosmetik vom Server holen. Laeuft nebenher.
+
+        Still und nicht ueber `_starten`: das loescht Hinweis und Fehler
+        und setzt `laeuft` - richtig fuer etwas, das der Spieler angestossen
+        hat, falsch fuer etwas, das beim Betreten jeder Lobby mitlaeuft. Ein
+        "ANGEMELDET" oder ein echter Fehler bliebe sonst nicht stehen.
+        """
+        if not self.angemeldet:
+            return
+        sitzung = self.sitzung
+        arbeit = lambda: self.ablage.kosmetik_lesen(sitzung)
+        if self._werk is None:
+            self._ergebnis("kosmetik_lesen", arbeit())
+            return
+        self._werk.auftrag("kosmetik_lesen", arbeit)
+
+    def _kosmetik_gelesen(self, antwort) -> None:
+        """Pruefen wie jedes fremde Paket - auch das eigene vom Server."""
+        from . import spielerkosmetik
+        if not antwort:
+            # Meist: die Tabelle ist noch nicht angelegt. Dann gilt, was
+            # auf der Platte liegt, und das Spiel laeuft ohne weiter.
+            self.kosmetik_fehler = antwort.fehler
+            return
+        ton = str(antwort.daten.get("ton") or "")
+        bild = str(antwort.daten.get("bild") or "")
+        if not ton and not bild:
+            self.kosmetik = None
+            self.kosmetik_fehler = ""
+            self._kosmetik_merken(None, "", "")
+            return
+        try:
+            self.kosmetik = spielerkosmetik.aus_konto(ton, bild)
+            self.kosmetik_fehler = ""
+            self._kosmetik_merken(self.kosmetik, ton, bild)
+        except ValueError as fehler:
+            # Auf dem Server liegt jetzt etwas, das nicht gilt. Dann auch
+            # nicht mehr das Alte von der Platte - sonst kaeme es beim
+            # naechsten Start wieder, und keiner wuesste, warum.
+            self.kosmetik = None
+            self.kosmetik_fehler = str(fehler)
+            self._kosmetik_merken(None, "", "")
+
+    def _kosmetik_pfad(self):
+        if self._ordner is not None:
+            return self._ordner / KOSMETIK_DATEI
+        return pfade.datei(KOSMETIK_DATEI)
+
+    def _kosmetik_merken(self, kosmetik, ton: str, bild: str) -> None:
+        pfad = self._kosmetik_pfad()
+        if pfad is None:
+            return
+        try:
+            if kosmetik is None:
+                if pfad.is_file():
+                    pfad.unlink()
+                return
+            pfad.parent.mkdir(parents=True, exist_ok=True)
+            pfad.write_text(json.dumps({"konto": self.kennung, "ton": ton,
+                                        "bild": bild}), encoding="utf-8")
+        except OSError:
+            pass
+
+    def _kosmetik_merken_laden(self) -> None:
+        """Was zuletzt vom Server kam - aber nur fuer dasselbe Konto."""
+        from . import spielerkosmetik
+        pfad = self._kosmetik_pfad()
+        if pfad is None or not pfad.is_file() or not self.angemeldet:
+            return
+        try:
+            daten = json.loads(pfad.read_text(encoding="utf-8"))
+            if not isinstance(daten, dict) or daten.get("konto") != self.kennung:
+                return
+            self.kosmetik = spielerkosmetik.aus_konto(
+                str(daten.get("ton") or ""), str(daten.get("bild") or ""))
+        except (OSError, ValueError):
+            self.kosmetik = None
 
     def profil_sichern(self) -> None:
         """Einstellungen und Loadouts ablegen.
@@ -594,6 +683,8 @@ class Konto:
             self._profil_geschrieben(antwort)
         elif marke == "gefechte_senden":
             self._gefechte_geschickt(antwort)
+        elif marke == "kosmetik_lesen":
+            self._kosmetik_gelesen(antwort)
 
     def _angemeldet(self, marke: str, antwort) -> None:
         if not antwort:
@@ -613,6 +704,7 @@ class Konto:
             e.setdefault("konto", self.kennung)
         self.journal.speichern()
         self.profil_holen()
+        self.kosmetik_holen()
 
     def _profil_gelesen(self, antwort) -> None:
         if not antwort:

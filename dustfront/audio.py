@@ -658,6 +658,26 @@ class Klaenge:
         except pygame.error:
             pass
 
+    def ton_spielen(self, ton, lautstaerke: float = 1.0) -> None:
+        """Einen fertigen Ton abspielen, der nicht aus der Tabelle kommt.
+
+        Fuer die Spielerkosmetik: der Ton eines Mitspielers hat keinen
+        Namen hier und keine dumpfe Fassung. Er bekommt dieselbe
+        Lautstaerke wie alles andere, und wenn die Welt gerade dumpf
+        klingt, ist er eben leiser.
+        """
+        if not self.ok or ton is None:
+            return
+        laut = max(0.0, min(1.0, lautstaerke * self.gesamt * self.effekte))
+        laut *= 1.0 - 0.55 * self.daempfung
+        if laut <= 0.0:
+            return
+        try:
+            ton.set_volume(laut)
+            ton.play()
+        except pygame.error:
+            pass
+
     def stille(self) -> None:
         if self.ok:
             try:

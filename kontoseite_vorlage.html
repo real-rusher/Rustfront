@@ -157,6 +157,27 @@
   .tor{max-width:400px; margin:6vh auto}
   .tor canvas{display:block; margin:0 auto 6px}
 
+  /* Kosmetik: Regler, Wellen, Zuschnitt, Vorschau */
+  input[type=range]{padding:0; border:none; background:transparent; accent-color:var(--amber);
+                    height:22px; cursor:pointer}
+  input[type=file]{padding:7px; cursor:pointer}
+  input[type=checkbox]{width:auto; accent-color:var(--amber); margin:0 6px 0 0; vertical-align:middle}
+  .regler{display:grid; grid-template-columns:118px 1fr 78px; align-items:center; gap:10px; margin-bottom:4px}
+  .regler label{margin:0}
+  .regler .stand{color:var(--creme); font-size:11px; text-align:right; font-variant-numeric:tabular-nums}
+  .zeile{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  .abstand{margin-top:12px}
+  canvas.welle{display:block; width:100%; height:96px; background:#0d0907;
+               border:1px solid var(--linie); cursor:ew-resize; touch-action:none}
+  canvas.welle.ruhig{height:64px; cursor:default}
+  canvas.zuschnitt{display:block; width:100%; max-width:288px; aspect-ratio:1/1;
+                   image-rendering:pixelated;
+                   border:1px solid var(--linie); cursor:grab; touch-action:none;
+                   background:conic-gradient(#1a130e 25%, #0d0907 0 50%, #1a130e 0 75%, #0d0907 0) 0 0/16px 16px}
+  canvas.spielbild{display:block; width:100%; max-width:640px; aspect-ratio:16/9;
+                   image-rendering:pixelated; border:1px solid var(--linie)}
+  .status{font-size:11px; letter-spacing:.12em; text-transform:uppercase; margin:2px 0 10px}
+
   .fuss{color:var(--matt-dunkel); font-size:11px; text-align:center; margin-top:30px;
         letter-spacing:.1em; line-height:1.9}
   .fuss a{color:var(--matt)}
@@ -336,6 +357,29 @@ const Netz = {
     if (!a.ok) return a;
     return {ok:true, daten: Array.isArray(a.daten) ? a.daten : []};
   },
+
+  // ---- Spielerkosmetik: eine Zeile je Konto (docs/KONTO.md 5.6) ----
+  async kosmetikLesen(marke){
+    const a = await this.rufen("/rest/v1/kosmetik?select=blend_ton,blend_bild&limit=1", {marke});
+    if (!a.ok) return a;
+    const z = Array.isArray(a.daten) && a.daten[0];
+    return {ok:true, daten:{ton: (z && z.blend_ton) || "", bild: (z && z.blend_bild) || ""}};
+  },
+
+  // Anlegen oder ueberschreiben in einem: gibt es die Zeile schon, wird
+  // sie ersetzt (resolution=merge-duplicates), sonst angelegt.
+  async kosmetikSchreiben(marke, kennung, ton, bild){
+    return this.rufen("/rest/v1/kosmetik?on_conflict=konto", {
+      marke, methode:"POST",
+      daten:{konto:kennung, blend_ton:ton, blend_bild:bild,
+             geaendert:new Date().toISOString()},
+      kopf:{"Prefer":"resolution=merge-duplicates,return=minimal"}});
+  },
+
+  async kosmetikLoeschen(marke, kennung){
+    return this.rufen("/rest/v1/kosmetik?konto=eq." + encodeURIComponent(kennung),
+      {marke, methode:"DELETE"});
+  },
 };
 
 // ══════════════════════════════════════════════════════════════════
@@ -359,7 +403,11 @@ const Stand = {
   },
   abmelden(){
     this.sitzung = null; this.profil = null; this.gefechte = [];
-    this.seite = "UEBERSICHT"; this.sichern(); zeichnen();
+    this.seite = "UEBERSICHT"; this.sichern();
+    // Die Kosmetik gehoert zum Konto: wer sich als jemand anderes
+    // anmeldet, soll nicht die des Vorigen weiterbearbeiten.
+    werkstattLeeren();
+    zeichnen();
   },
 };
 
@@ -462,6 +510,7 @@ const SEITEN = [
   {name:"WAFFEN",     frei:true, bauen:seiteWaffen},
   {name:"RUNDEN",     frei:true, bauen:seiteRunden},
   {name:"AUSRUESTUNG",frei:true, bauen:seiteAusruestung},
+  {name:"KOSMETIK",   frei:true, bauen:seiteKosmetik},
   {name:"AUSSEHEN",   frei:false, bauen:seiteAussehen,
    hinweis:"Vorbereitet, noch ohne Inhalt - siehe docs/KOSMETIK.md"},
   {name:"KONTO",      frei:true, bauen:seiteKonto},
@@ -493,7 +542,8 @@ function seiteUebersicht(ziel){
     "Alles, was DUSTFRONT ueber dich speichert, steht auf dieser Seite - " +
     "nicht eine Auswahl davon, sondern alles. Unter <b class='creme'>WERTE</b> " +
     "steht jeder einzelne Zaehler mit seinem Namen in der Datenbank, unter " +
-    "<b class='creme'>RUNDEN</b> jede gespielte Runde einzeln. " +
+    "<b class='creme'>RUNDEN</b> jede gespielte Runde einzeln, unter " +
+    "<b class='creme'>KOSMETIK</b> dein Ton und dein Bild fuer die Blendgranate. " +
     "Was <b>nicht</b> gespeichert wird: keine Adresse, kein echter Name, " +
     "keine Aufzeichnung davon, wann du spielst und mit wem, nichts vom " +
     "Rechner. Der Name, mit dem du dich anmeldest, wird zu einer Adresse " +
@@ -507,12 +557,16 @@ function seiteUebersicht(ziel){
   ziel.appendChild(t2);
 }
 
-function herunterladen(){
+async function herunterladen(){
+  // Die Kosmetik gehoert dazu - "alles" heisst alles. Sie wird erst
+  // geholt, wenn jemand den Reiter oder diesen Knopf benutzt.
+  if (!Werkstatt.server.geladen) await kosmetikLaden();
   const alles = {
     gezogen: new Date().toISOString(),
     konto: {name: Stand.sitzung.name, kennung: Stand.sitzung.kennung},
     profil: Stand.profil,
     gefechte: Stand.gefechte,
+    kosmetik: {blend_ton: Werkstatt.server.ton, blend_bild: Werkstatt.server.bild},
   };
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([JSON.stringify(alles, null, 2)],
@@ -797,6 +851,986 @@ function seiteAussehen(ziel){
   ziel.appendChild(t);
 }
 
+// ══════════════════════════════════════════════════════════════════
+// Werkstatt - die Spielerkosmetik (Reiter KOSMETIK)
+//
+// Ein eigener Ton und ein eigenes Bild fuer die Blendgranate. Wer eine
+// wirft, klingt nach seinem Ton, und im Weiss der Blendung steht sein
+// Bild - bei allen Mitspielern, wenn der Gastgeber mit Kosmetik startet
+// (dustfront/spielerkosmetik.py).
+//
+// Der Weg eines Tons:
+//
+//   Datei (MP3, WAV, OGG)  -> zuschneiden -> Bass -> lauter (weich
+//   uebersteuert) -> klassischer Knall und Pfeifen dazu -> eigenes
+//   Abklingen -> 22050 Hz, 16 Bit, mono
+//
+// Das ist der Ton, der hochgeladen wird. Das Spiel legt danach seine
+// Grenze darueber: er wird immer leiser, und am Ende ist er still. Die
+// Seite rechnet dieselbe Grenze fuer die Vorschau nach (tonAusklingen) -
+// Schritt fuer Schritt wie im Spiel, damit man hier hoert, was man dort
+// hoert. Hochgeladen wird trotzdem der Ton davor: verbindlich ist, was
+// das Spiel rechnet, nicht was eine Seite behauptet.
+//
+// Der Zustand steht hier und nicht im DOM: zeichnen() baut die Seite bei
+// jeder Meldung neu, und eine geladene Datei soll das ueberleben.
+// ══════════════════════════════════════════════════════════════════
+const KOS = DATEN.kosmetik;
+
+const Werkstatt = {
+  server: null,        // was auf dem Server liegt, siehe werkstattLeeren
+  ton: null,           // der Ton in Arbeit, siehe tonUebernehmen
+  tonWeg: false,       // den gespeicherten Ton beim Speichern entfernen
+  bild: null,          // das Bild in Arbeit, siehe bildUebernehmen
+  bildWeg: false,
+  klassisch: {},       // AudioBuffer der Klaenge aus dem Spiel
+  dom: {},             // die Leinwaende der gerade gebauten Seite
+  _ctx: null, _laeuft: null, _rechnen: 0, _takt: 0, _blitz: 0,
+};
+
+function werkstattLeeren(){
+  tonStoppen();
+  Werkstatt.server = {geladen:false, laedt:false, fehler:"", ton:"", bild:"",
+                      tonFertig:null, bildFlaeche:null};
+  Werkstatt.ton = null; Werkstatt.tonWeg = false;
+  Werkstatt.bild = null; Werkstatt.bildWeg = false;
+}
+
+// ---- Bytes --------------------------------------------------------
+function zuBase64(bytes){
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function ausBase64(text){
+  const s = atob(text), b = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+  return b;
+}
+
+// WAV, 16 Bit mono - genau das, was spielerkosmetik.ton_lesen annimmt.
+function wavSchreiben(proben, rate){
+  const n = proben.length, d = new DataView(new ArrayBuffer(44 + 2 * n));
+  const text = (o, s) => { for (let i = 0; i < s.length; i++) d.setUint8(o + i, s.charCodeAt(i)); };
+  text(0, "RIFF"); d.setUint32(4, 36 + 2 * n, true); text(8, "WAVE");
+  text(12, "fmt "); d.setUint32(16, 16, true); d.setUint16(20, 1, true);
+  d.setUint16(22, 1, true); d.setUint32(24, rate, true); d.setUint32(28, rate * 2, true);
+  d.setUint16(32, 2, true); d.setUint16(34, 16, true);
+  text(36, "data"); d.setUint32(40, 2 * n, true);
+  for (let i = 0; i < n; i++) d.setInt16(44 + 2 * i, proben[i], true);
+  return new Uint8Array(d.buffer);
+}
+
+// Liest eine WAV wie das Spiel: 16 Bit, eine oder zwei Spuren, zwei
+// werden gemittelt (abgerundet, wie // in Python). Null, wenn nicht.
+function wavLesen(bytes){
+  if (bytes.length < 12) return null;
+  const d = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const kennung = (o) => String.fromCharCode(d.getUint8(o), d.getUint8(o + 1),
+                                             d.getUint8(o + 2), d.getUint8(o + 3));
+  if (kennung(0) !== "RIFF" || kennung(8) !== "WAVE") return null;
+  let o = 12, spuren = 0, rate = 0, breite = 0, anfang = -1, laenge = 0;
+  while (o + 8 <= bytes.length){
+    const art = kennung(o), groesse = d.getUint32(o + 4, true);
+    if (art === "fmt " && o + 24 <= bytes.length){
+      spuren = d.getUint16(o + 10, true); rate = d.getUint32(o + 12, true);
+      breite = d.getUint16(o + 22, true);
+    }else if (art === "data"){
+      anfang = o + 8; laenge = Math.min(groesse, bytes.length - anfang); break;
+    }
+    o += 8 + groesse + (groesse % 2);
+  }
+  if (anfang < 0 || breite !== 16 || (spuren !== 1 && spuren !== 2)) return null;
+  const n = Math.floor(laenge / 2 / spuren), proben = new Int16Array(n);
+  for (let i = 0; i < n; i++){
+    proben[i] = spuren === 1 ? d.getInt16(anfang + 2 * i, true)
+      : Math.floor((d.getInt16(anfang + 4 * i, true) + d.getInt16(anfang + 4 * i + 2, true)) / 2);
+  }
+  return {rate, proben};
+}
+
+// ---- Die Grenze des Spiels ----------------------------------------
+// Genau spielerkosmetik.ton_ausklingen, Zeile fuer Zeile. Gleiche
+// Rechenschritte in gleicher Reihenfolge geben in beiden Sprachen
+// dieselben Zahlen - tests/kontoseite_browser.py prueft das Probe fuer
+// Probe. Wer eines aendert, aendert das andere mit.
+function tonAusklingen(proben, rate){
+  const n = proben.length;
+  const breite = Math.max(1, Math.trunc(rate * KOS.ton_abschnitt));
+  const anzahl = Math.floor((n + breite - 1) / breite);
+  const spitzen = [];
+  for (let a = 0; a < anzahl; a++){
+    let s = 0;
+    const bis = Math.min(n, (a + 1) * breite);
+    for (let i = a * breite; i < bis; i++) s = Math.max(s, Math.abs(proben[i]));
+    spitzen.push(s);
+  }
+  const anlauf = Math.max(1, Math.round(KOS.ton_anlauf / KOS.ton_abschnitt));
+  const ausklangAb = Math.trunc(n * (1.0 - KOS.ton_ausklang));
+  const rest = Math.max(1, n - ausklangAb);
+  const oben = Math.max(0, ...spitzen.slice(0, anlauf));
+  let erlaubt = oben;
+  const gaenge = [];
+  for (let a = 0; a < anzahl; a++){
+    const spitze = spitzen[a];
+    if (a < anlauf){ gaenge.push(1.0); continue; }
+    const ende = Math.min(n, (a + 1) * breite);
+    const linie = oben * Math.max(0.0, Math.min(1.0, 1.0 - (ende - ausklangAb) / rest));
+    erlaubt = Math.min(erlaubt, linie);
+    if (a === anzahl - 1) erlaubt = 0.0;
+    const g = spitze > 0 ? Math.min(1.0, erlaubt / spitze) : 1.0;
+    gaenge.push(g);
+    erlaubt = Math.min(erlaubt, Math.max(spitze * g, erlaubt * KOS.ton_abfall));
+  }
+  const kanten = [gaenge.length ? gaenge[0] : 1.0];
+  for (let a = 1; a < anzahl; a++) kanten.push(Math.min(gaenge[a - 1], gaenge[a]));
+  kanten.push(gaenge.length ? gaenge[gaenge.length - 1] : 1.0);
+  const aus = new Int16Array(n);
+  for (let i = 0; i < n; i++){
+    const a = Math.floor(i / breite);
+    const g = kanten[a] + (kanten[a + 1] - kanten[a]) * ((i % breite) / breite);
+    aus[i] = Math.max(-32768, Math.min(32767, Math.trunc(proben[i] * g)));
+  }
+  return {proben:aus, oben, anlauf, breite};
+}
+
+// ---- Klang --------------------------------------------------------
+function audioKontext(){
+  if (!Werkstatt._ctx){
+    const AK = window.AudioContext || window.webkitAudioContext;
+    if (!AK) return null;
+    Werkstatt._ctx = new AK();
+  }
+  if (Werkstatt._ctx.state === "suspended") Werkstatt._ctx.resume();
+  return Werkstatt._ctx;
+}
+
+function pufferAus(proben, rate){
+  const b = new AudioBuffer({length:Math.max(1, proben.length), sampleRate:rate,
+                             numberOfChannels:1});
+  const f = new Float32Array(Math.max(1, proben.length));
+  for (let i = 0; i < proben.length; i++) f[i] = proben[i] / 32768;
+  b.copyToChannel(f, 0);
+  return b;
+}
+
+// Knall und Pfeifen aus dem Spiel, beim ersten Gebrauch ausgepackt.
+function klassisch(art){
+  if (!Werkstatt.klassisch[art] && DATEN.klassisch && DATEN.klassisch[art]){
+    const w = wavLesen(ausBase64(DATEN.klassisch[art].split(",")[1]));
+    if (w) Werkstatt.klassisch[art] = pufferAus(w.proben, w.rate);
+  }
+  return Werkstatt.klassisch[art] || null;
+}
+
+function tonSpielen(t){
+  const ctx = audioKontext();
+  if (!ctx || !t) return;
+  tonStoppen();
+  const s = ctx.createBufferSource();
+  s.buffer = pufferAus(t.proben, t.rate);
+  s.connect(ctx.destination);
+  s.start();
+  Werkstatt._laeuft = s;
+  s.onended = () => { if (Werkstatt._laeuft === s) Werkstatt._laeuft = null; };
+}
+function tonStoppen(){
+  if (Werkstatt._laeuft){ try{ Werkstatt._laeuft.stop(); }catch(e){} }
+  Werkstatt._laeuft = null;
+}
+
+// Was gerade gilt: der Ton in Arbeit, sonst der gespeicherte - beide so,
+// wie das Spiel sie spielen wird.
+function aktuellerTon(){
+  const T = Werkstatt.ton;
+  if (T) return T.fertig ? {proben:T.fertig.proben, rate:KOS.rate} : null;
+  return Werkstatt.tonWeg ? null : Werkstatt.server.tonFertig;
+}
+
+// Die Kurve fuer "lauter": tanh, also weich uebersteuert statt hart
+// abgeschnitten. Ein Formglied bildet nur -1..1 ab und schneidet alles
+// darueber ab - darum geht das Signal um VORHALT leiser hinein, und die
+// Kurve rechnet es wieder hoch. So bleibt bis +42 dB alles weich.
+const VORHALT = 128;
+let _saettigung = null;
+function saettigung(){
+  if (!_saettigung){
+    const n = 65536;
+    _saettigung = new Float32Array(n);
+    for (let i = 0; i < n; i++) _saettigung[i] = Math.tanh(VORHALT * (2 * i / (n - 1) - 1));
+  }
+  return _saettigung;
+}
+
+async function tonDatei(datei){
+  if (!datei) return;
+  if (datei.size > 40 * 1024 * 1024)
+    return sageUndZeichne("DIE DATEI IST ZU GROSS - HOECHSTENS 40 MB", "schlecht");
+  const ctx = audioKontext();
+  if (!ctx || typeof OfflineAudioContext === "undefined")
+    return sageUndZeichne("DIESER BROWSER KANN KEINEN TON BEARBEITEN", "schlecht");
+  sageUndZeichne("LESE " + datei.name.toUpperCase() + "...", "arbeit");
+  let puffer;
+  try{ puffer = await ctx.decodeAudioData(await datei.arrayBuffer()); }
+  catch(e){ return sageUndZeichne("DIESE DATEI LAESST SICH NICHT LESEN - MP3, WAV ODER OGG", "schlecht"); }
+  tonUebernehmen(puffer, datei.name);
+}
+
+// Der klassische Knall mit Pfeifen als Ausgangspunkt - fuer alle, die
+// keine eigene Datei haben und nur den Bass drehen wollen.
+function klassischAlsGrundlage(){
+  const k = klassisch("knall"), p = klassisch("pfeifen");
+  if (!k || !p) return sageUndZeichne("DIE KLAENGE AUS DEM SPIEL FEHLEN IN DIESER SEITE", "schlecht");
+  const rate = k.sampleRate;
+  const n = Math.max(k.length, p.length, Math.ceil(rate * KOS.ton_min));
+  const b = new AudioBuffer({length:n, sampleRate:rate, numberOfChannels:1});
+  const f = new Float32Array(n), kk = k.getChannelData(0), pp = p.getChannelData(0);
+  for (let i = 0; i < n; i++) f[i] = (i < kk.length ? kk[i] : 0) + (i < pp.length ? 0.6 * pp[i] : 0);
+  b.copyToChannel(f, 0);
+  tonUebernehmen(b, "KLASSISCH");
+}
+
+function tonUebernehmen(puffer, name){
+  if (puffer.duration < KOS.ton_min)
+    return sageUndZeichne("DER TON IST ZU KURZ - MINDESTENS " + KOS.ton_min.toFixed(1) + " S", "schlecht");
+  // Die Regler bleiben, wie sie waren: wer eine zweite Datei probiert,
+  // will sie meist genauso klingen lassen.
+  const alt = Werkstatt.ton || {bass:0, laut:0, knall:0, pfeifen:0, abklingen:0};
+  Werkstatt.ton = {quelle:puffer, name:String(name).toUpperCase(),
+    start:0, ende:Math.min(puffer.duration, KOS.ton_max),
+    bass:alt.bass, laut:alt.laut, knall:alt.knall, pfeifen:alt.pfeifen,
+    abklingen:alt.abklingen, wav:null, fertig:null, gespeichert:null};
+  Werkstatt.tonWeg = false;
+  meldung(null);
+  zeichnen();
+  tonRechnen();
+}
+
+function tonPlanen(){
+  clearTimeout(Werkstatt._takt);
+  Werkstatt._takt = setTimeout(tonRechnen, 120);
+}
+
+// Rechnet den Ton neu. Laeuft ein Regler, kommen viele Auftraege
+// hintereinander - nur der letzte zaehlt.
+async function tonRechnen(){
+  const T = Werkstatt.ton;
+  if (!T) return;
+  const nr = ++Werkstatt._rechnen;
+  const rate = KOS.rate, dauer = T.ende - T.start;
+  const n = Math.max(1, Math.round(dauer * rate));
+  const ctx = new OfflineAudioContext(1, n, rate);
+  const quelle = ctx.createBufferSource();
+  quelle.buffer = T.quelle;
+  const bass = ctx.createBiquadFilter();
+  bass.type = "lowshelf"; bass.frequency.value = 140; bass.gain.value = T.bass;
+  const vor = ctx.createGain();
+  vor.gain.value = Math.pow(10, T.laut / 20) / VORHALT;
+  const form = ctx.createWaveShaper();
+  form.curve = saettigung(); form.oversample = "4x";
+  const summe = ctx.createGain();
+  quelle.connect(bass); bass.connect(vor); vor.connect(form); form.connect(summe);
+  quelle.start(0, T.start, dauer);
+  for (const art of ["knall", "pfeifen"]){
+    const b = klassisch(art);
+    if (T[art] <= 0 || !b) continue;
+    const s = ctx.createBufferSource(), g = ctx.createGain();
+    s.buffer = b; g.gain.value = T[art] / 100;
+    s.connect(g); g.connect(summe); s.start(0);
+  }
+  summe.connect(ctx.destination);
+  let gerechnet;
+  try{ gerechnet = await ctx.startRendering(); }catch(e){ return; }
+  if (nr !== Werkstatt._rechnen || T !== Werkstatt.ton) return;    // ueberholt
+  // Das eigene Abklingen, dann so leise, dass nichts abgeschnitten wird.
+  const f = gerechnet.getChannelData(0), k = 5 * T.abklingen / 100;
+  let spitze = 0;
+  for (let i = 0; i < n; i++){
+    f[i] *= Math.exp(-k * i / n);
+    spitze = Math.max(spitze, Math.abs(f[i]));
+  }
+  const norm = spitze > 0.98 ? 0.98 / spitze : 1;
+  const roh = new Int16Array(n);
+  for (let i = 0; i < n; i++) roh[i] = Math.round(f[i] * norm * 32767);
+  T.roh = roh;
+  T.wav = wavSchreiben(roh, rate);
+  T.fertig = tonAusklingen(roh, rate);
+  tonMalen();
+  statusMalen();
+}
+
+// ---- Wellen malen ---------------------------------------------------
+function welleMalen(c, werte, von, bis, farbe, skala){
+  const g = c.getContext("2d"), B = c.width, H = c.height;
+  g.fillStyle = farbe;
+  const je = Math.max(1, (bis - von) / B);
+  for (let x = 0; x < B; x++){
+    const a = Math.floor(von + x * je), e = Math.min(bis, Math.floor(von + (x + 1) * je) + 1);
+    let lo = 0, hi = 0;
+    for (let i = a; i < e; i++){ const v = werte[i] * skala; if (v < lo) lo = v; if (v > hi) hi = v; }
+    const y0 = H / 2 - hi * H / 2, y1 = H / 2 - lo * H / 2;
+    g.fillRect(x, y0, 1, Math.max(1, y1 - y0));
+  }
+}
+
+function leinwand(c){
+  // Die Leinwand rechnet in echten Pixeln, nicht in CSS-Pixeln: sonst
+  // wird die Welle auf einem scharfen Bildschirm matschig.
+  const r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  const b = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d));
+  if (c.width !== b || c.height !== h){ c.width = b; c.height = h; }
+  const g = c.getContext("2d");
+  g.clearRect(0, 0, b, h);
+  return g;
+}
+
+function tonMalen(){
+  const T = Werkstatt.ton, c = Werkstatt.dom.welle, e = Werkstatt.dom.ergebnis;
+  if (c && c.isConnected && T){
+    const g = leinwand(c), B = c.width, H = c.height;
+    const kanal = T.quelle.getChannelData(0), dauer = T.quelle.duration;
+    welleMalen(c, kanal, 0, kanal.length, DATEN.farben.matt_dunkel, 1);
+    // Der gewaehlte Ausschnitt hell, mit zwei Griffen.
+    const x0 = Math.round(T.start / dauer * B), x1 = Math.round(T.ende / dauer * B);
+    g.save(); g.beginPath(); g.rect(x0, 0, x1 - x0, H); g.clip();
+    welleMalen(c, kanal, 0, kanal.length, DATEN.farben.amber, 1);
+    g.restore();
+    g.fillStyle = "rgba(232,163,61,.10)"; g.fillRect(x0, 0, x1 - x0, H);
+    g.fillStyle = DATEN.farben.creme;
+    for (const x of [x0, x1]) g.fillRect(Math.min(B - 2, Math.max(0, x - 1)), 0, 2, H);
+  }
+  if (e && e.isConnected){
+    const g = leinwand(e), B = e.width, H = e.height;
+    const t = T ? T : null;
+    if (t && t.fertig){
+      // Dunkel, was gerechnet wurde; hell, was davon im Spiel klingt;
+      // gestrichelt die Grenze, unter der es bleiben muss.
+      welleMalen(e, t.roh, 0, t.roh.length, DATEN.farben.matt_dunkel, 1 / 32768);
+      welleMalen(e, t.fertig.proben, 0, t.fertig.proben.length, DATEN.farben.amber, 1 / 32768);
+      const f = t.fertig, n = f.proben.length, h = f.oben / 32768;
+      const xa = Math.min(n, f.anlauf * f.breite) / n * B;
+      g.strokeStyle = DATEN.farben.creme; g.setLineDash([4, 4]); g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(xa, H / 2 - h * H / 2); g.lineTo(B, H / 2);
+      g.moveTo(xa, H / 2 + h * H / 2); g.lineTo(B, H / 2);
+      g.stroke(); g.setLineDash([]);
+    }else{
+      const s = aktuellerTon();
+      if (s) welleMalen(e, s.proben, 0, s.proben.length, DATEN.farben.amber, 1 / 32768);
+    }
+  }
+  const z = Werkstatt.dom.tonText;
+  if (z && z.isConnected && T){
+    z.textContent = "START " + T.start.toFixed(2) + " S  ·  ENDE " + T.ende.toFixed(2) +
+      " S  ·  LAENGE " + (T.ende - T.start).toFixed(2) + " S  (" + KOS.ton_min.toFixed(1) +
+      " BIS " + KOS.ton_max.toFixed(1) + ")";
+  }
+}
+
+// Zuschneiden mit der Maus: an einem Griff zieht man ihn, dazwischen
+// verschiebt man den ganzen Ausschnitt. Laenger als erlaubt oder kuerzer
+// geht nicht - der Griff bleibt einfach stehen.
+function zuschneidenEinrichten(c){
+  let zug = null;
+  const zeit = (ev) => {
+    const r = c.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * Werkstatt.ton.quelle.duration;
+  };
+  c.addEventListener("pointerdown", (ev) => {
+    const T = Werkstatt.ton;
+    if (!T) return;
+    const t = zeit(ev), r = c.getBoundingClientRect();
+    const fang = 8 / r.width * T.quelle.duration;
+    if (Math.abs(t - T.start) <= fang) zug = {art:"start"};
+    else if (Math.abs(t - T.ende) <= fang) zug = {art:"ende"};
+    else if (t > T.start && t < T.ende) zug = {art:"mitte", ab:t - T.start};
+    else zug = {art: t < T.start ? "start" : "ende"};
+    c.setPointerCapture(ev.pointerId);
+    bewegen(ev);
+  });
+  const bewegen = (ev) => {
+    const T = Werkstatt.ton;
+    if (!zug || !T) return;
+    const t = zeit(ev), dauer = T.quelle.duration;
+    if (zug.art === "start")
+      T.start = Math.max(Math.max(0, T.ende - KOS.ton_max), Math.min(t, T.ende - KOS.ton_min));
+    else if (zug.art === "ende")
+      T.ende = Math.min(Math.min(dauer, T.start + KOS.ton_max), Math.max(t, T.start + KOS.ton_min));
+    else{
+      const laenge = T.ende - T.start;
+      T.start = Math.max(0, Math.min(dauer - laenge, t - zug.ab));
+      T.ende = T.start + laenge;
+    }
+    tonMalen();
+    tonPlanen();
+  };
+  c.addEventListener("pointermove", bewegen);
+  const los = () => { zug = null; };
+  c.addEventListener("pointerup", los);
+  c.addEventListener("pointercancel", los);
+}
+
+// ---- Bild ---------------------------------------------------------
+function bildVorgaben(){
+  return {zoom:1, x:0.5, y:0.5, rund:false, hell:0, kontrast:0, saett:0,
+          farbton:0, stil:"normal", pixel:1, frittiert:0};
+}
+
+async function bildDatei(datei){
+  if (!datei) return;
+  if (datei.size > 40 * 1024 * 1024)
+    return sageUndZeichne("DAS BILD IST ZU GROSS - HOECHSTENS 40 MB", "schlecht");
+  const url = URL.createObjectURL(datei), img = new Image();
+  try{
+    await new Promise((ja, nein) => { img.onload = ja; img.onerror = nein; img.src = url; });
+  }catch(e){
+    URL.revokeObjectURL(url);
+    return sageUndZeichne("DIESES BILD LAESST SICH NICHT LESEN", "schlecht");
+  }
+  bildUebernehmen(img, datei.name);
+}
+
+function bildUebernehmen(img, name){
+  if (!img.naturalWidth || !img.naturalHeight)
+    return sageUndZeichne("DIESES BILD IST LEER", "schlecht");
+  const alt = Werkstatt.bild;
+  // Wie beim Ton: die Filter bleiben, der Ausschnitt nicht.
+  Werkstatt.bild = Object.assign(bildVorgaben(), alt || {},
+    {zoom:1, x:0.5, y:0.5, quelle:img, name:String(name).toUpperCase(),
+     flaeche:null, stand:0, gespeichert:-1});
+  Werkstatt.bildWeg = false;
+  meldung(null);
+  zeichnen();
+  bildRechnen();
+}
+
+// Ein Zufall mit festem Anfang: das Rauschen von FRITTIERT soll beim
+// Schieben eines anderen Reglers nicht flimmern.
+function zufall(saat){
+  let s = saat >>> 0;
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Die Filter, von Hand auf die Pixel. ctx.filter waere kuerzer, kann
+// aber nicht jeder Browser - und FRITTIERT kann keiner.
+function filtern(p, seite, B){
+  const f = B.frittiert / 100;
+  const hell = B.hell / 100 * 128;
+  const C = Math.max(-254, Math.min(254, B.kontrast * 2.55 + 160 * f));
+  const kf = (259 * (C + 255)) / (255 * (259 - C));
+  const satt = Math.max(0, 1 + B.saett / 100 + 2.5 * f);
+  const w = B.farbton * Math.PI / 180, co = Math.cos(w), si = Math.sin(w);
+  // Farbton drehen: dieselbe Matrix wie hue-rotate in CSS.
+  const m = [0.213 + co * 0.787 - si * 0.213, 0.715 - co * 0.715 - si * 0.715, 0.072 - co * 0.072 + si * 0.928,
+             0.213 - co * 0.213 + si * 0.143, 0.715 + co * 0.285 + si * 0.140, 0.072 - co * 0.072 - si * 0.283,
+             0.213 - co * 0.213 - si * 0.787, 0.715 - co * 0.715 + si * 0.715, 0.072 + co * 0.928 + si * 0.072];
+  const stufen = Math.round(256 - 236 * f), q = 255 / Math.max(1, stufen - 1);
+  const rnd = zufall(20251001);
+  for (let i = 0; i < p.length; i += 4){
+    let r = p[i], g = p[i + 1], b = p[i + 2];
+    r += hell; g += hell; b += hell;
+    r = (r - 128) * kf + 128; g = (g - 128) * kf + 128; b = (b - 128) * kf + 128;
+    const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    r = l + (r - l) * satt; g = l + (g - l) * satt; b = l + (b - l) * satt;
+    if (B.farbton){
+      const r2 = m[0] * r + m[1] * g + m[2] * b, g2 = m[3] * r + m[4] * g + m[5] * b;
+      b = m[6] * r + m[7] * g + m[8] * b; r = r2; g = g2;
+    }
+    if (B.stil === "grau"){
+      r = g = b = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }else if (B.stil === "sepia"){
+      const r2 = 0.393 * r + 0.769 * g + 0.189 * b, g2 = 0.349 * r + 0.686 * g + 0.168 * b;
+      b = 0.272 * r + 0.534 * g + 0.131 * b; r = r2; g = g2;
+    }else if (B.stil === "umgekehrt"){
+      r = 255 - r; g = 255 - g; b = 255 - b;
+    }
+    if (f > 0){
+      // Frittiert: zu warm, zu bunt, zu hart, verrauscht, in Stufen.
+      const rausch = (rnd() - 0.5) * 90 * f;
+      r += 46 * f + rausch; g += 8 * f + rausch; b += -46 * f + rausch;
+      r = Math.round(r / q) * q; g = Math.round(g / q) * q; b = Math.round(b / q) * q;
+    }
+    p[i] = r; p[i + 1] = g; p[i + 2] = b;        // Uint8Clamped: rundet und kappt selbst
+  }
+  if (f > 0){
+    // Nachschaerfen: der Unterschied zum Nachbarn mal 1 + 2f. Das macht
+    // die Kanten, an denen man ein frittiertes Bild erkennt.
+    const alt = new Uint8ClampedArray(p), staerke = 2 * f;
+    for (let y = 1; y < seite - 1; y++){
+      for (let x = 1; x < seite - 1; x++){
+        const i = (y * seite + x) * 4;
+        for (let k = 0; k < 3; k++){
+          const um = alt[i - 4 + k] + alt[i + 4 + k] + alt[i - seite * 4 + k] + alt[i + seite * 4 + k];
+          p[i + k] = alt[i + k] + staerke * (alt[i + k] - um / 4);
+        }
+      }
+    }
+  }
+}
+
+function bildRechnen(){
+  const B = Werkstatt.bild;
+  if (!B) return;
+  const S = KOS.bild_zeigen;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d", {willReadFrequently:true});
+  const w = B.quelle.naturalWidth, h = B.quelle.naturalHeight;
+  // Das groesste Quadrat im Bild, durch den Zoom geteilt, um (x, y).
+  const seite = Math.min(w, h) / B.zoom;
+  const sx = Math.max(0, Math.min(w - seite, B.x * w - seite / 2));
+  const sy = Math.max(0, Math.min(h - seite, B.y * h - seite / 2));
+  const px = Math.max(1, Math.round(B.pixel));
+  if (px > 1){
+    const k = document.createElement("canvas");
+    k.width = k.height = Math.max(1, Math.round(S / px));
+    const kg = k.getContext("2d");
+    kg.imageSmoothingQuality = "high";
+    kg.drawImage(B.quelle, sx, sy, seite, seite, 0, 0, k.width, k.height);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(k, 0, 0, S, S);
+  }else{
+    g.imageSmoothingQuality = "high";
+    g.drawImage(B.quelle, sx, sy, seite, seite, 0, 0, S, S);
+  }
+  const d = g.getImageData(0, 0, S, S);
+  filtern(d.data, S, B);
+  g.putImageData(d, 0, 0);
+  if (B.rund){
+    g.globalCompositeOperation = "destination-in";
+    g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); g.fill();
+    g.globalCompositeOperation = "source-over";
+  }
+  B.flaeche = c;
+  B.stand++;
+  bildMalen();
+  statusMalen();
+}
+
+let _bildTakt = 0;
+function bildPlanen(){
+  if (_bildTakt) return;
+  _bildTakt = requestAnimationFrame(() => { _bildTakt = 0; bildRechnen(); });
+}
+
+async function bildPng(){
+  const B = Werkstatt.bild;
+  if (!B || !B.flaeche) return null;
+  const blob = await new Promise((ja) => B.flaeche.toBlob(ja, "image/png"));
+  return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+}
+
+function aktuellesBild(){
+  const B = Werkstatt.bild;
+  if (B) return B.flaeche;
+  return Werkstatt.bildWeg ? null : Werkstatt.server.bildFlaeche;
+}
+
+function bildMalen(){
+  const c = Werkstatt.dom.zuschnitt;
+  if (c && c.isConnected){
+    const g = c.getContext("2d"), S = KOS.bild_zeigen;
+    if (c.width !== S){ c.width = c.height = S; }
+    g.clearRect(0, 0, S, S);
+    const b = aktuellesBild();
+    if (b) g.drawImage(b, 0, 0, S, S);
+  }
+  spielMalen(0.8);
+}
+
+// Ziehen verschiebt den Ausschnitt, das Mausrad zoomt.
+function zuschnittEinrichten(c){
+  let zug = null;
+  c.addEventListener("pointerdown", (ev) => {
+    if (!Werkstatt.bild) return;
+    zug = {x:ev.clientX, y:ev.clientY};
+    c.setPointerCapture(ev.pointerId);
+    c.style.cursor = "grabbing";
+  });
+  c.addEventListener("pointermove", (ev) => {
+    const B = Werkstatt.bild;
+    if (!zug || !B) return;
+    const r = c.getBoundingClientRect();
+    const w = B.quelle.naturalWidth, h = B.quelle.naturalHeight;
+    const seite = Math.min(w, h) / B.zoom;
+    B.x = Math.max(0, Math.min(1, B.x - (ev.clientX - zug.x) / r.width * seite / w));
+    B.y = Math.max(0, Math.min(1, B.y - (ev.clientY - zug.y) / r.height * seite / h));
+    zug = {x:ev.clientX, y:ev.clientY};
+    bildPlanen();
+  });
+  const los = () => { zug = null; c.style.cursor = ""; };
+  c.addEventListener("pointerup", los);
+  c.addEventListener("pointercancel", los);
+  c.addEventListener("wheel", (ev) => {
+    const B = Werkstatt.bild;
+    if (!B) return;
+    ev.preventDefault();
+    B.zoom = Math.max(1, Math.min(6, B.zoom * (ev.deltaY < 0 ? 1.1 : 1 / 1.1)));
+    const r = Werkstatt.dom.zoomRegler;
+    if (r && r.isConnected){ r.eingabe.value = B.zoom; r.stand.textContent = B.zoom.toFixed(2) + "×"; }
+    bildPlanen();
+  }, {passive:false});
+}
+
+// ---- So sieht es im Spiel aus ---------------------------------------
+// Dieselbe Flaeche wie das Spiel (640 x 360), dasselbe Weiss, dasselbe
+// Bild in derselben Groesse mit derselben Deckkraft wie in
+// spielerkosmetik._kosmetik_bild_zeichnen und render.blendung_zeichnen.
+function spielMalen(blend){
+  const c = Werkstatt.dom.spiel;
+  if (!c || !c.isConnected) return;
+  const W = DATEN.spielbild.breite, H = DATEN.spielbild.hoehe;
+  if (c.width !== W){ c.width = W; c.height = H; }
+  const g = c.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  // Ein Stueck Boden, damit man das Weiss als Weiss sieht.
+  for (let y = 0; y < H; y += 32)
+    for (let x = 0; x < W; x += 32){
+      g.fillStyle = ((x + y) / 32) % 2 ? "#2a2018" : "#241b14";
+      g.fillRect(x, y, 32, 32);
+    }
+  const figur = Werkstatt.dom.figur;
+  if (figur && figur.complete) g.drawImage(figur, W / 2 - figur.width, H / 2 - figur.height,
+                                           figur.width * 2, figur.height * 2);
+  if (blend <= 0.01) return;
+  g.fillStyle = "rgba(255,255,252," + (DATEN.blenden.weiss * Math.min(1, blend)) + ")";
+  g.fillRect(0, 0, W, H);
+  const b = aktuellesBild();
+  if (b){
+    const S = KOS.bild_zeigen, m = S / Math.max(b.width, b.height);
+    const bw = Math.max(1, Math.round(b.width * m)), bh = Math.max(1, Math.round(b.height * m));
+    g.globalAlpha = Math.min(1, blend * 1.4);
+    g.drawImage(b, Math.floor((W - bw) / 2), Math.floor((H - bh) / 2), bw, bh);
+    g.globalAlpha = 1;
+  }
+}
+
+// Ein Blitz von vorn: Ton ab, und das Weiss klingt ab wie im Spiel
+// (render.Befinden: Rest hoch 1 durch abklingen).
+function blitzZeigen(){
+  const t = aktuellerTon();
+  if (t) tonSpielen(t);
+  const ab = performance.now(), dauer = DATEN.blenden.dauer * 1000;
+  const nr = ++Werkstatt._blitz;
+  const schritt = (jetzt) => {
+    if (nr !== Werkstatt._blitz) return;
+    const rest = Math.max(0, 1 - (jetzt - ab) / dauer);
+    spielMalen(Math.pow(rest, 1 / DATEN.blenden.abklingen));
+    if (rest > 0) requestAnimationFrame(schritt);
+    else spielMalen(0.8);
+  };
+  requestAnimationFrame(schritt);
+}
+
+// ---- Der Server -----------------------------------------------------
+// Jeder Aufruf mit einer abgelaufenen Anmeldung wird einmal erneuert
+// und wiederholt - die Kosmetik bastelt man laenger als eine Stunde.
+async function mitSitzung(tun){
+  let a = await tun(Stand.sitzung.marke);
+  if (!a.ok && /JWT|TOKEN/.test(a.fehler) && Stand.sitzung.erneuern){
+    const e = await Netz.erneuern(Stand.sitzung.erneuern);
+    if (e.ok){
+      Stand.sitzung = Object.assign({}, Stand.sitzung, e.daten);
+      Stand.sichern();
+      a = await tun(Stand.sitzung.marke);
+    }
+  }
+  return a;
+}
+
+function kosmetikFehler(f){
+  const t = String(f || "");
+  if (/KOSMETIK/.test(t) && /(SCHEMA CACHE|DOES NOT EXIST|COULD NOT FIND)/.test(t))
+    return "AUF DEM SERVER FEHLT DIE TABELLE KOSMETIK. WER DEN SERVER BETREUT, " +
+           "LEGT SIE EINMAL AN - SIEHE docs/KONTO.md, ABSCHNITT 5.6.";
+  if (/GROESSE|CHECK CONSTRAINT/.test(t)) return "ZU GROSS FUER DEN SERVER";
+  return t;
+}
+
+// Was gespeichert ist, aufbereitet wie im Spiel: der Ton durch die
+// Grenze, das Bild als Leinwand.
+async function serverAufbereiten(){
+  const S = Werkstatt.server;
+  S.tonFertig = null; S.bildFlaeche = null;
+  if (S.ton){
+    const w = wavLesen(ausBase64(S.ton));
+    if (w) S.tonFertig = {proben:tonAusklingen(w.proben, w.rate).proben, rate:w.rate};
+  }
+  if (S.bild){
+    const img = new Image();
+    try{
+      await new Promise((ja, nein) => { img.onload = ja; img.onerror = nein;
+                                         img.src = "data:image/png;base64," + S.bild; });
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext("2d").drawImage(img, 0, 0);
+      S.bildFlaeche = c;
+    }catch(e){ S.bildFlaeche = null; }
+  }
+}
+
+async function kosmetikLaden(){
+  const S = Werkstatt.server;
+  if (S.laedt) return;
+  S.laedt = true;
+  const a = await mitSitzung((m) => Netz.kosmetikLesen(m));
+  S.laedt = false;
+  S.geladen = true;
+  if (!a.ok){ S.fehler = kosmetikFehler(a.fehler); zeichnen(); return; }
+  S.fehler = ""; S.ton = a.daten.ton; S.bild = a.daten.bild;
+  await serverAufbereiten();
+  zeichnen();
+}
+
+async function kosmetikSpeichern(){
+  const W = Werkstatt, S = W.server;
+  let ton = W.tonWeg ? "" : S.ton, bild = W.bildWeg ? "" : S.bild;
+  if (W.ton){
+    if (!W.ton.wav) return sageUndZeichne("DER TON WIRD NOCH GERECHNET - GLEICH NOCH EINMAL", "schlecht");
+    if (W.ton.wav.length > KOS.ton_bytes) return sageUndZeichne("DER TON IST ZU GROSS", "schlecht");
+    ton = zuBase64(W.ton.wav);
+  }
+  if (W.bild){
+    const png = await bildPng();
+    if (!png) return sageUndZeichne("DAS BILD LIESS SICH NICHT SPEICHERN", "schlecht");
+    if (png.length > KOS.bild_bytes)
+      return sageUndZeichne("DAS BILD IST ZU GROSS - WENIGER FRITTIERT ODER MEHR PIXEL", "schlecht");
+    bild = zuBase64(png);
+  }
+  sageUndZeichne("SPEICHERE...", "arbeit");
+  const kennung = Stand.sitzung.kennung;
+  const a = (ton || bild)
+    ? await mitSitzung((m) => Netz.kosmetikSchreiben(m, kennung, ton, bild))
+    : await mitSitzung((m) => Netz.kosmetikLoeschen(m, kennung));
+  if (!a.ok) return sageUndZeichne(kosmetikFehler(a.fehler), "schlecht");
+  S.ton = ton; S.bild = bild; S.fehler = "";
+  W.tonWeg = W.bildWeg = false;
+  if (W.ton) W.ton.gespeichert = W.ton.wav;
+  if (W.bild) W.bild.gespeichert = W.bild.stand;
+  await serverAufbereiten();
+  sageUndZeichne(ton || bild
+    ? "GESPEICHERT - IM SPIEL AB DER NAECHSTEN LOBBY"
+    : "ENTFERNT - DEINE BLENDGRANATE KNALLT WIEDER WIE IMMER", "gut");
+}
+
+// ---- Die Seite ------------------------------------------------------
+function regler(name, min, max, schritt, wert, text, aendern){
+  const z = el("div", "regler");
+  const r = el("input");
+  r.type = "range"; r.min = min; r.max = max; r.step = schritt; r.value = wert;
+  r.setAttribute("aria-label", name);
+  const s = el("span", "stand", text(Number(wert)));
+  r.addEventListener("input", () => { const v = Number(r.value); s.textContent = text(v); aendern(v); });
+  anhaengen(z, el("label", null, name), r, s);
+  z.eingabe = r; z.stand = s;
+  return z;
+}
+
+function dateiKnopf(text, annehmen, tun){
+  const i = el("input");
+  i.type = "file"; i.accept = annehmen;
+  i.className = "verborgen";
+  i.addEventListener("change", () => { const d = i.files && i.files[0]; i.value = ""; tun(d); });
+  const b = knopf(text, null, () => i.click());
+  b.datei = i;
+  const h = el("span");
+  anhaengen(h, b, i);
+  return h;
+}
+
+function statusText(art){
+  const W = Werkstatt, S = W.server;
+  if (art === "ton"){
+    if (W.ton) return W.ton.gespeichert && W.ton.gespeichert === W.ton.wav
+      ? ["GESPEICHERT  ·  " + W.ton.name, "blau"]
+      : ["IN ARBEIT  ·  " + W.ton.name + "  ·  NOCH NICHT GESPEICHERT", "amber"];
+    if (W.tonWeg) return ["WIRD BEIM SPEICHERN ENTFERNT", "rot"];
+    if (S.tonFertig) return ["GESPEICHERT  ·  " + (S.tonFertig.proben.length / S.tonFertig.rate).toFixed(2) + " S", "blau"];
+    return ["NOCH KEINER - DEINE BLENDGRANATE KNALLT WIE IMMER", "matt"];
+  }
+  if (W.bild) return W.bild.gespeichert === W.bild.stand
+    ? ["GESPEICHERT  ·  " + W.bild.name, "blau"]
+    : ["IN ARBEIT  ·  " + W.bild.name + "  ·  NOCH NICHT GESPEICHERT", "amber"];
+  if (W.bildWeg) return ["WIRD BEIM SPEICHERN ENTFERNT", "rot"];
+  if (S.bildFlaeche) return ["GESPEICHERT", "blau"];
+  return ["NOCH KEINS - IM WEISS STEHT NICHTS", "matt"];
+}
+
+function statusMalen(){
+  for (const art of ["ton", "bild"]){
+    const z = Werkstatt.dom[art + "Status"];
+    if (!z || !z.isConnected) continue;
+    const [text, farbe] = statusText(art);
+    z.textContent = text; z.className = "status " + farbe;
+  }
+}
+
+function seiteKosmetik(ziel){
+  const W = Werkstatt;
+  if (!W.server) werkstattLeeren();
+  W.dom = {};
+  if (!W.server.geladen && !W.server.laedt) kosmetikLaden();
+
+  const kopf = tafel("BLENDGRANATE");
+  const p = el("div", "klein matt");
+  p.innerHTML =
+    "Dein eigener Knall und dein eigenes Bild. Wirfst du eine Blendgranate, " +
+    "hoeren alle <b class='creme'>deinen Ton</b>, und im Weiss der Blendung steht " +
+    "<b class='creme'>dein Bild</b>. Verteilt wird beides in der Lobby an alle, die " +
+    "mitspielen; der Gastgeber startet dann <b class='creme'>mit</b> oder " +
+    "<b class='creme'>ohne Kosmetik</b> - mit erst, wenn jeder alles hat. " +
+    "Zwei Regeln gelten immer: der Ton dauert " + KOS.ton_min.toFixed(1) + " bis " +
+    KOS.ton_max.toFixed(1) + " Sekunden, und er <b class='creme'>wird immer leiser</b> - " +
+    "nach einem kurzen Anlauf haelt das Spiel ihn unter einer Linie, die bis zum " +
+    "Ende auf null faellt. Was du unten hoerst, ist schon so gerechnet.";
+  kopf.appendChild(p);
+  if (W.server.laedt || !W.server.geladen)
+    kopf.appendChild(anhaengen(el("div", "meldung kante arbeit abstand"), el("span", null, "LADE...")));
+  else if (W.server.fehler)
+    kopf.appendChild(el("div", "meldung kante schlecht abstand", W.server.fehler));
+  ziel.appendChild(kopf);
+
+  const gitter = el("div", "gitter g2");
+  gitter.style.alignItems = "start";
+  gitter.style.marginBottom = "14px";
+
+  // ---- Ton
+  const t = el("div", "tafel kante");
+  t.style.marginBottom = "0";
+  const tk = el("div"); tk.style.marginBottom = "4px";
+  tk.appendChild(Schrift.malen("TON", 2, DATEN.farben.amber));
+  t.appendChild(tk);
+  W.dom.tonStatus = el("div", "status");
+  t.appendChild(W.dom.tonStatus);
+  const tz = el("div", "zeile");
+  anhaengen(tz,
+    dateiKnopf("DATEI WAEHLEN", "audio/*,.mp3,.wav,.ogg,.m4a,.flac", tonDatei),
+    knopf("KLASSISCH", null, klassischAlsGrundlage));
+  tz.lastChild.title = "Knall und Pfeifen aus dem Spiel als Ausgangspunkt";
+  t.appendChild(tz);
+  const T = W.ton;
+  if (T){
+    const c = el("canvas", "welle abstand");
+    c.title = "Ziehen: Anfang und Ende verschieben";
+    W.dom.welle = c;
+    zuschneidenEinrichten(c);
+    W.dom.tonText = el("div", "klein matt");
+    W.dom.tonText.style.margin = "4px 0 10px";
+    anhaengen(t, c, W.dom.tonText);
+    const db = (v) => "+" + v + " DB", pz = (v) => v + " %";
+    anhaengen(t,
+      regler("BASS", 0, 40, 1, T.bass, db, (v) => { T.bass = v; tonPlanen(); }),
+      regler("LAUTER", 0, 30, 1, T.laut, db, (v) => { T.laut = v; tonPlanen(); }),
+      regler("KNALL", 0, 100, 1, T.knall, pz, (v) => { T.knall = v; tonPlanen(); }),
+      regler("PFEIFEN", 0, 100, 1, T.pfeifen, pz, (v) => { T.pfeifen = v; tonPlanen(); }),
+      regler("ABKLINGEN", 0, 100, 1, T.abklingen, pz, (v) => { T.abklingen = v; tonPlanen(); }));
+    t.lastChild.title = "Wie schnell er von selbst leiser wird - das Spiel sorgt ohnehin dafuer";
+  }
+  const e = el("canvas", "welle ruhig abstand");
+  e.title = "So klingt er im Spiel. Gestrichelt: die Grenze, unter der er bleiben muss.";
+  W.dom.ergebnis = e;
+  t.appendChild(e);
+  t.appendChild(el("div", "klein dunkel",
+    "UNTEN: SO KLINGT ER IM SPIEL. GESTRICHELT DIE GRENZE, DUNKEL WAS SIE WEGNIMMT."));
+  const tk2 = el("div", "zeile abstand");
+  anhaengen(tk2,
+    knopf("ANHOEREN", null, () => { const a = aktuellerTon(); if (a) tonSpielen(a); }),
+    knopf("STOP", null, tonStoppen),
+    (T || W.server.ton) && !W.tonWeg
+      ? knopf("TON ENTFERNEN", null, () => {
+          tonStoppen(); W.ton = null; W.tonWeg = !!W.server.ton; zeichnen(); })
+      : null);
+  t.appendChild(tk2);
+  gitter.appendChild(t);
+
+  // ---- Bild
+  const b = el("div", "tafel kante");
+  b.style.marginBottom = "0";
+  const bk = el("div"); bk.style.marginBottom = "4px";
+  bk.appendChild(Schrift.malen("BILD", 2, DATEN.farben.amber));
+  b.appendChild(bk);
+  W.dom.bildStatus = el("div", "status");
+  b.appendChild(W.dom.bildStatus);
+  b.appendChild(dateiKnopf("DATEI WAEHLEN", "image/*", bildDatei));
+  const z = el("canvas", "zuschnitt abstand");
+  z.title = "Ziehen: Ausschnitt verschieben. Mausrad: naeher heran.";
+  W.dom.zuschnitt = z;
+  zuschnittEinrichten(z);
+  b.appendChild(z);
+  const B = W.bild;
+  if (B){
+    const neu = (feld) => (v) => { B[feld] = v; bildPlanen(); };
+    const zahl = (v) => (v > 0 ? "+" : "") + v;
+    W.dom.zoomRegler = regler("NAEHER", 1, 6, 0.05, B.zoom, (v) => v.toFixed(2) + "×", neu("zoom"));
+    const stil = el("select");
+    for (const [wert, name] of [["normal","NORMAL"],["grau","GRAU"],["sepia","SEPIA"],["umgekehrt","UMGEKEHRT"]]){
+      const o = el("option", null, name); o.value = wert;
+      if (B.stil === wert) o.selected = true;
+      stil.appendChild(o);
+    }
+    stil.addEventListener("change", () => { B.stil = stil.value; bildPlanen(); });
+    const stilZeile = el("div", "regler");
+    anhaengen(stilZeile, el("label", null, "STIL"), stil, el("span"));
+    const rund = el("label", "klein");
+    rund.style.margin = "6px 0 0";
+    const haken = el("input"); haken.type = "checkbox"; haken.checked = B.rund;
+    haken.addEventListener("change", () => { B.rund = haken.checked; bildPlanen(); });
+    anhaengen(rund, haken, document.createTextNode("RUND AUSSCHNEIDEN"));
+    anhaengen(b, el("div", "abstand"),
+      W.dom.zoomRegler,
+      regler("HELLIGKEIT", -100, 100, 1, B.hell, zahl, neu("hell")),
+      regler("KONTRAST", -100, 100, 1, B.kontrast, zahl, neu("kontrast")),
+      regler("FARBE", -100, 200, 1, B.saett, zahl, neu("saett")),
+      regler("FARBTON", 0, 359, 1, B.farbton, (v) => v + "°", neu("farbton")),
+      regler("PIXEL", 1, 16, 1, B.pixel, (v) => v === 1 ? "AUS" : v + " PX", neu("pixel")),
+      regler("FRITTIERT", 0, 100, 1, B.frittiert, (v) => v + " %", neu("frittiert")),
+      stilZeile, rund);
+    b.lastChild.previousSibling.style.marginTop = "6px";
+  }
+  const bz = el("div", "zeile abstand");
+  anhaengen(bz,
+    B ? knopf("FILTER ZURUECK", null, () => {
+          const v = bildVorgaben();
+          for (const k of ["hell","kontrast","saett","farbton","stil","pixel","frittiert","rund"]) B[k] = v[k];
+          zeichnen(); bildRechnen(); }) : null,
+    (B || W.server.bild) && !W.bildWeg
+      ? knopf("BILD ENTFERNEN", null, () => {
+          W.bild = null; W.bildWeg = !!W.server.bild; zeichnen(); })
+      : null);
+  b.appendChild(bz);
+  gitter.appendChild(b);
+  ziel.appendChild(gitter);
+
+  // ---- Im Spiel
+  const s = tafel("SO SIEHT ES IM SPIEL AUS");
+  s.appendChild(el("div", "klein matt",
+    "Dieselbe Flaeche wie im Spiel, dasselbe Weiss, dasselbe Abklingen. " +
+    "Das Bild steht in der Mitte, " + KOS.bild_zeigen + " Pixel gross, und verblasst mit dem Weiss."));
+  const sc = el("canvas", "spielbild abstand");
+  W.dom.spiel = sc;
+  const figur = new Image();
+  figur.onload = () => spielMalen(0.8);
+  figur.src = DATEN.figur;
+  W.dom.figur = figur;
+  s.appendChild(sc);
+  const sz = el("div", "zeile abstand");
+  const speichern = knopf("SPEICHERN", "stark", kosmetikSpeichern);
+  if (W.server.laedt || !W.server.geladen) speichern.disabled = true;
+  anhaengen(sz, knopf("BLITZ!", null, blitzZeigen), speichern);
+  s.appendChild(sz);
+  ziel.appendChild(s);
+
+  // Gemalt wird, wenn die Leinwaende im Dokument stehen und ihre Groesse
+  // kennen - also nach dem Einhaengen.
+  requestAnimationFrame(() => { tonMalen(); bildMalen(); statusMalen(); });
+}
+
 // ---- Konto --------------------------------------------------------
 function seiteKonto(ziel){
   const t = tafel("KONTO");
@@ -1019,6 +2053,7 @@ function zeichneTor(ziel){
 }
 
 // ---- Los ----------------------------------------------------------
+werkstattLeeren();
 Stand.laden();
 zeichnen();
 if (Stand.sitzung) ladenUndZeichnen(false);

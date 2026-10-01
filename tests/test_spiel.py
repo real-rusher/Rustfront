@@ -964,6 +964,28 @@ from dustfront import entities as EN
 
 _port = [51300]
 
+def _neuer_port():
+    """Den naechsten freien Port fuer ein Testgefecht.
+
+    Die Testports liegen im Bereich, aus dem das System auch die Ports
+    fuer ausgehende Verbindungen nimmt. Haelt irgendein Programm auf dem
+    Rechner gerade eine Verbindung ueber genau diesen Port, scheitert das
+    Aufmachen mit "Address already in use" - ein Fehler des Rechners,
+    nicht des Spiels. Also: weiterzaehlen, bis einer frei ist.
+    """
+    import socket as _s
+    while True:
+        _port[0] += 1
+        probe = _s.socket(_s.AF_INET, _s.SOCK_STREAM)
+        probe.setsockopt(_s.SOL_SOCKET, _s.SO_REUSEADDR, 1)
+        try:
+            probe.bind(("", _port[0]))
+            return _port[0]
+        except OSError:
+            continue
+        finally:
+            probe.close()
+
 def gefechtspaar(modus, **kw):
     """Gastgeber und Gast in einer Spielart, ueber echte Steckdosen.
 
@@ -971,7 +993,7 @@ def gefechtspaar(modus, **kw):
     neu, und Pruefungen, die vom Einstiegsort abhaengen, sind mal gruen
     und mal rot.
     """
-    _port[0] += 1
+    _neuer_port()
     kw.setdefault("seed", 20240 + _port[0])
     wirt_n = netz.Gastgeber(_port[0])
     wirt_s = Gefecht(app, "WIRT", gastgeber=wirt_n, modus=modus, **kw)
@@ -1476,7 +1498,7 @@ pruef("Und der Gast kennt Rundenzahl und Stand",
 w.verlassen(); ga.verlassen()
 
 # Allein wartet versus, statt jede Runde sofort zu entscheiden
-_port[0] += 1
+_neuer_port()
 wirt_n = netz.Gastgeber(_port[0])
 allein = Gefecht(app, "ALLEIN", gastgeber=wirt_n, modus="versus")
 for _ in range(20):
@@ -2119,7 +2141,7 @@ w.verlassen(); ga.verlassen()
 # die Routerabfrage muss auswertbar sein, ohne dass hier ein Router steht.
 from dustfront import upnp
 
-_port[0] += 1
+_neuer_port()
 wirt_n = netz.Gastgeber(_port[0])
 geschuetzt = Gefecht(app, "WIRT", gastgeber=wirt_n, modus="pvp",
                      passwort="Geheim-1", seed=777)
@@ -2180,7 +2202,7 @@ pruef("Eine Freigabe ohne Router ist einfach zu",
       not frei.offen and len(frei.bericht()) >= 3)
 # Ein Gastgeber mit --online muss auch dann laufen, wenn kein Router
 # antwortet - und das tut hier keiner.
-_port[0] += 1
+_neuer_port()
 online_wirt = netz.Gastgeber(_port[0], online=True)
 pruef("Ein Online-Gastgeber laeuft auch ohne Router",
       online_wirt.port == _port[0] and online_wirt.freigabe is not None)
@@ -3447,11 +3469,21 @@ pruef("Und zwar in Spielgroesse",
       _erst.get_size() == (K.GAME_W, K.GAME_H), str(_erst.get_size()))
 pruef("Zeichnen aendert die Skinwahl nicht", dict(K.SKIN_WAHL) == _wahl_vorher)
 # Kein Spielmodul darf die Kosmetik kennen. Sonst haengt doch etwas daran.
+# Gemeint ist das Vorschaumodul kosmetik.py - die Spielerkosmetik
+# (spielerkosmetik.py) ist etwas anderes und gehoert ins Gefecht. Darum
+# wird nach dem Einbinden gesucht und nicht nach dem Wort.
+import re as _re
 import dustfront.play, dustfront.render, dustfront.entities, dustfront.mehrspieler
+_einbinden = _re.compile(r"from \.kosmetik\b|from \. import [^\n]*\bkosmetik\b"
+                         r"|\bimport kosmetik\b|dustfront\.kosmetik\b")
 _haengt = [m.__name__ for m in (dustfront.play, dustfront.render,
                                 dustfront.entities, dustfront.mehrspieler,
                                 sys.modules["dustfront.core"])
-           if "kosmetik" in open(m.__file__, encoding="utf-8").read()]
+           if _einbinden.search(open(m.__file__, encoding="utf-8").read())]
+pruef("Die Suche findet ein Einbinden ueberhaupt",
+      _einbinden.search("from . import config as K, kosmetik")
+      and _einbinden.search("from .kosmetik import schreiben")
+      and not _einbinden.search("from .spielerkosmetik import KosmetikTeil"))
 pruef("Kein Spielmodul ruft die Kosmetik auf", not _haengt, ", ".join(_haengt))
 import shutil as _sh
 _sh.rmtree(_weg, ignore_errors=True)
@@ -4340,7 +4372,7 @@ pruef("Die Kommandozeile nimmt --modus lobby nicht an",
 
 def lobbypaar(**kw):
     """Wie gefechtspaar, aber der Gastgeber macht mit Lobby auf."""
-    _port[0] += 1
+    _neuer_port()
     kw.setdefault("seed", 20240 + _port[0])
     wirt = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_port[0]),
                    lobby=True, **kw)
@@ -4638,7 +4670,7 @@ wp_.verlassen(); gp_.verlassen()
 
 # ── Nur dieselbe Version spielt zusammen ─────────────────────────────
 import json as _json, socket as _socket, time as _time
-_port[0] += 1
+_neuer_port()
 wv = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_port[0]), modus="pvp", seed=5)
 echte_version = K.VERSION
 K.VERSION = "0.0.1"                 # der Gast hat eine andere
@@ -4694,6 +4726,395 @@ from dustfront.mehrspieler import _version_kleiner
 pruef("Wer aelter ist, wird richtig erkannt",
       _version_kleiner("0.26.9", "0.27.1") and not _version_kleiner("0.27.10", "0.27.2"))
 w2.verlassen(); g2.verlassen()
+
+# ── Spielerkosmetik (spielerkosmetik.py) ─────────────────────────────
+import io as _io, array as _array, wave as _wave, base64 as _b64, struct as _struct
+import tempfile as _tempfile
+from pathlib import Path as _Path
+from dustfront import spielerkosmetik as SK
+from dustfront import ablage as _AB, konto as _KM
+GK = K.SPIELERKOSMETIK
+
+def wav_bauen(dauer, rate=22050, spuren=1, breite=2, huelle=None, hz=440.0):
+    """Eine WAV wie aus der Kontoseite: ein Sinus unter einer Huelle.
+    `huelle` bekommt den Anteil an der Laenge (0..1) und gibt 0..1."""
+    n = int(dauer * rate)
+    huelle = huelle or (lambda x: 0.8)
+    puffer = _io.BytesIO()
+    with _wave.open(puffer, "wb") as w:
+        w.setnchannels(spuren); w.setsampwidth(breite); w.setframerate(rate)
+        if breite != 2:
+            w.writeframes(bytes([128]) * (n * spuren * breite))
+        else:
+            a = _array.array("h")
+            for i in range(n):
+                v = int(32000 * huelle(i / float(n))
+                        * math.sin(2 * math.pi * hz * i / rate))
+                a.extend([v] * spuren)
+            w.writeframes(a.tobytes())
+    return puffer.getvalue()
+
+def png_bauen(b=32, h=32, farbe=(220, 30, 30)):
+    s = pygame.Surface((b, h), pygame.SRCALPHA)
+    s.fill(tuple(farbe) + (255,))
+    puffer = _io.BytesIO()
+    pygame.image.save(s, puffer, "k.png")
+    return puffer.getvalue()
+
+def fehler_von(f, *a):
+    """Die Meldung, mit der `f` ablehnt - leer, wenn es durchging."""
+    try:
+        f(*a)
+    except ValueError as fehler:
+        return str(fehler)
+    return ""
+
+def spitzen(wav):
+    """Lautester Ausschlag je Pruefabschnitt."""
+    rate, p = SK.ton_lesen(wav)
+    b = int(rate * GK["ton_abschnitt"])
+    return [max(abs(x) for x in p[i:i + b]) for i in range(0, len(p), b)]
+
+# Pruefen: was nicht passt, kommt nicht hinein.
+m = fehler_von(SK.ton_lesen, wav_bauen(0.5))
+pruef("Ein zu kurzer Ton wird abgelehnt", "ZU KURZ" in m, m)
+pruef("Genau die Mindestlaenge geht", fehler_von(SK.ton_lesen, wav_bauen(GK["ton_min"])) == "")
+m = fehler_von(SK.ton_lesen, wav_bauen(GK["ton_max"] + 0.5, rate=11025))
+pruef("Ein zu langer Ton wird abgelehnt", "ZU LANG" in m, m)
+m = fehler_von(SK.ton_lesen, wav_bauen(1.5, breite=1))
+pruef("8 Bit werden nicht angenommen", "FORMAT" in m, m)
+m = fehler_von(SK.ton_lesen, wav_bauen(1.5, rate=8000))
+pruef("Eine unuebliche Rate auch nicht", "FORMAT" in m, m)
+m = fehler_von(SK.ton_lesen, b"ID3\x04" + bytes(4000))
+pruef("Eine MP3 so wie sie ist auch nicht - die Kontoseite macht WAV daraus",
+      "KEINE WAV" in m, m)
+m = fehler_von(SK.ton_lesen, b"RIFF" + bytes(GK["ton_bytes"]))
+pruef("Zu gross wird vor dem Lesen abgelehnt", "ZU GROSS" in m, m)
+# Ein Kopf, der zwei Sekunden behauptet, vor einer halben.
+gelogen = bytearray(wav_bauen(0.5))
+_struct.pack_into("<I", gelogen, 40, 2 * 22050 * 2)
+m = fehler_von(SK.ton_lesen, bytes(gelogen))
+pruef("Gezaehlt werden die echten Proben, nicht was der Kopf behauptet",
+      "ZU KURZ" in m, m)
+rate_s, proben_s = SK.ton_lesen(wav_bauen(1.5, spuren=2))
+pruef("Stereo wird zu mono", len(proben_s) == int(1.5 * 22050), "%d" % len(proben_s))
+
+# Der Ton wird immer leiser.
+anlauf = int(GK["ton_anlauf"] / GK["ton_abschnitt"])
+schwellend = wav_bauen(2.0, huelle=lambda x: 0.05 + 0.95 * x)
+sp_ein = spitzen(schwellend)
+sp_aus = spitzen(SK.ton_aufbereiten(schwellend))
+ueber = max(sp_aus[a] - max(sp_aus[:a]) for a in range(anlauf, len(sp_aus)))
+pruef("Ein anschwellender Ton wird gedeckelt: nach dem Anlauf nie lauter",
+      ueber <= 0.02 * max(sp_aus) and sp_ein[-2] > 4 * sp_ein[anlauf],
+      "hoechstens %d ueber dem Bisherigen" % ueber)
+def schluss(wav):
+    """Der lauteste Ausschlag in den letzten fuenf Millisekunden."""
+    rate, p = SK.ton_lesen(wav)
+    return max(abs(x) for x in p[-int(rate * 0.005):])
+pruef("Und er endet in Stille",
+      schluss(SK.ton_aufbereiten(schwellend)) <= 0.01 * max(sp_aus),
+      "%d von %d" % (schluss(SK.ton_aufbereiten(schwellend)), max(sp_aus)))
+dauer_ein = spitzen(wav_bauen(2.0))
+dauer_aus = spitzen(SK.ton_aufbereiten(wav_bauen(2.0)))
+n_ = len(dauer_aus)
+pruef("Ein Dauerton wird stetig leiser",
+      all(dauer_aus[a + 1] <= dauer_aus[a] + 0.02 * dauer_ein[a]
+          for a in range(anlauf, n_ - 1))
+      and dauer_aus[n_ // 2] < 0.6 * dauer_ein[n_ // 2],
+      "Mitte %d von %d" % (dauer_aus[n_ // 2], dauer_ein[n_ // 2]))
+pruef("Und laeuft auf null",
+      dauer_aus[int(n_ * 0.8)] > dauer_aus[int(n_ * 0.9)] > dauer_aus[-1]
+      and schluss(SK.ton_aufbereiten(wav_bauen(2.0))) <= 0.01 * dauer_ein[-1],
+      "%d > %d > %d" % (dauer_aus[int(n_ * 0.8)], dauer_aus[int(n_ * 0.9)],
+                        dauer_aus[-1]))
+# Schneller als die Grenze: bleibt ganz, wie er ist - bis auf den letzten,
+# stillen Abschnitt.
+knall_ = wav_bauen(2.0, huelle=lambda x: (1 - x) ** 2)
+pruef("Ein Knall, der von selbst schnell genug abklingt, bleibt unangetastet",
+      spitzen(SK.ton_aufbereiten(knall_))[:-2] == spitzen(knall_)[:-2])
+# Zwischen zwei Schlaegen eine kurze Luecke: danach darf es wieder fast
+# so laut sein - nur nicht lauter als die Grenze.
+def schlaege(x):
+    return 0.9 if (x * 10) % 1.0 < 0.6 else 0.05
+sp_schl = spitzen(SK.ton_aufbereiten(wav_bauen(2.0, huelle=schlaege)))
+pruef("Nach einer kurzen Luecke kommt der naechste Schlag noch durch",
+      sp_schl[int(n_ * 0.3)] > 0.4 * max(sp_schl), "%d von %d"
+      % (sp_schl[int(n_ * 0.3)], max(sp_schl)))
+# Die Grenze selbst: oben der lauteste Ausschlag im Anlauf, dann
+# geradlinig auf null. Kein Abschnitt darf darueber - auch nicht der
+# Ausklang eines Schlags in die Luecke danach hinein.
+def ueber_der_linie(wav_ein):
+    rate, p = SK.ton_lesen(wav_ein)
+    b = int(rate * GK["ton_abschnitt"])
+    sp_e = [max(abs(x) for x in p[i:i + b]) for i in range(0, len(p), b)]
+    sp_a = spitzen(SK.ton_aufbereiten(wav_ein))
+    oben = max(sp_e[:anlauf])
+    n = len(p)
+    return max(sp_a[a] - oben * (1.0 - min(n, (a + 1) * b) / float(n)) + 0.0
+               for a in range(anlauf, len(sp_a)))
+schlimmst = max(ueber_der_linie(wav_bauen(2.0, huelle=h))
+                for h in (schlaege, lambda x: 0.8, lambda x: 0.05 + 0.95 * x))
+pruef("Kein Abschnitt liegt ueber der Grenze, auch nicht zwischen Schlaegen",
+      schlimmst <= 1.0, "hoechstens %.0f darueber" % schlimmst)
+pruef("Das Aufbereiten ist ueberall gleich",
+      SK.ton_aufbereiten(schwellend) == SK.ton_aufbereiten(schwellend))
+
+# Das Bild.
+pruef("Ein kleines PNG geht", SK.bild_lesen(png_bauen()).get_size() == (32, 32))
+m = fehler_von(SK.bild_lesen, png_bauen(GK["bild_max"] + 1, 8))
+pruef("Ein zu breites nicht", "HOECHSTENS" in m, m)
+m = fehler_von(SK.bild_lesen, b"GIF89a" + bytes(100))
+pruef("Nur PNG", "KEIN PNG" in m, m)
+m = fehler_von(SK.bild_lesen, b"\x89PNG\r\n\x1a\n" + bytes(100))
+pruef("Ein kaputtes PNG wird abgelehnt und nicht abgestuerzt", "NICHT LESBAR" in m, m)
+
+# Ein Paket.
+ton_a, bild_a = wav_bauen(1.5, hz=300), png_bauen(farbe=(220, 30, 30))
+kos_a = SK.Kosmetik(ton_a, bild_a)
+pruef("Ein Paket hat einen Fingerabdruck", len(kos_a.kennung) == 16)
+pruef("Der nach dem Netz derselbe ist",
+      SK.aus_text(kos_a.text()).kennung == kos_a.kennung)
+pruef("Nur ein Bild geht", SK.Kosmetik(b"", bild_a).bild is not None)
+pruef("Nur ein Ton auch", abs(SK.Kosmetik(ton_a).dauer - 1.5) < 0.01)
+pruef("Gar nichts nicht", "LEER" in fehler_von(SK.Kosmetik, b"", b""))
+pruef("Ein kaputtes Paket wird abgelehnt", "NICHT LESBAR" in fehler_von(SK.aus_text, "{kaputt"))
+m = fehler_von(SK.aus_text, '{"ton": "%s", "bild": ""}'
+               % _b64.b64encode(wav_bauen(0.4)).decode())
+pruef("Und eines mit zu kurzem Ton auch", "ZU KURZ" in m, m)
+groesst = (4 * math.ceil(GK["ton_bytes"] / 3.0) + 4 * math.ceil(GK["bild_bytes"] / 3.0)
+           + len('{"ton": "", "bild": ""}'))
+pruef("Auch das groesste erlaubte Paket hat nicht mehr Teile als erlaubt",
+      math.ceil(groesst / float(GK["teil"])) <= GK["teile_max"],
+      "%d Teile" % math.ceil(groesst / float(GK["teil"])))
+pruef("Und ein Teil ist weit unter der laengsten Netzzeile",
+      GK["teil"] + 200 < K.NETZ["hoechstzeile"])
+
+# Zusammensetzen.
+sm = SK.Sammler()
+teile_a = kos_a.teile()
+reihe = list(reversed(range(len(teile_a))))
+zwischen = [sm.nimm(3, kos_a.kennung, i, len(teile_a), teile_a[i]) for i in reihe[:-1]]
+fertig = sm.nimm(3, kos_a.kennung, reihe[-1], len(teile_a), teile_a[reihe[-1]])
+pruef("Teile in falscher Reihenfolge werden richtig zusammengesetzt",
+      len(teile_a) > 2 and all(z is None for z in zwischen)
+      and fertig is not None and fertig.kennung == kos_a.kennung, "%d Teile" % len(teile_a))
+m = ""
+try:
+    for i, t_ in enumerate(teile_a):
+        sm.nimm(3, "0000000000000000", i, len(teile_a), t_)
+except ValueError as f:
+    m = str(f)
+pruef("Passt der Fingerabdruck nicht, wird es abgelehnt", "KENNUNG" in m, m)
+pruef("Mehr Teile als erlaubt werden gar nicht gesammelt",
+      sm.nimm(4, "x", 0, GK["teile_max"] + 1, "a") is None and 4 not in sm._stapel)
+
+# Das Konto merkt sie sich.
+_ok = _Path(_tempfile.mkdtemp(prefix="dustfront_kosmetik_konto_"))
+_abl_k = _AB.LokaleAblage(ordner=_ok / "ablage")
+kk = _KM.Konto(ablage_=_abl_k, ordner=_ok, mit_faden=False)
+kk.anlegen("Kosmo", "geheim12345")
+pruef("Lokal gibt es keine Kosmetik", kk.angemeldet and kk.kosmetik is None, kk.fehler)
+kk.hinweis = "ANGEMELDET"
+kk.kosmetik_holen()
+pruef("Das Holen nebenher laesst den Hinweis stehen", kk.hinweis == "ANGEMELDET")
+_b = lambda x: _b64.b64encode(x).decode()
+kk._kosmetik_gelesen(_AB.gut({"ton": _b(ton_a), "bild": _b(bild_a)}))
+pruef("Was vom Server kommt, wird geprueft und gilt",
+      kk.kosmetik is not None and kk.kosmetik.kennung == kos_a.kennung)
+kk2 = _KM.Konto(ablage_=_abl_k, ordner=_ok, mit_faden=False)
+pruef("Und ist beim naechsten Start auch ohne Netz da",
+      kk2.kosmetik is not None and kk2.kosmetik.kennung == kos_a.kennung)
+kk._kosmetik_gelesen(_AB.schlecht("TABELLE FEHLT"))
+pruef("Ein Fehler vom Server laesst die gemerkte stehen",
+      kk.kosmetik is not None and kk.kosmetik_fehler == "TABELLE FEHLT")
+kk._kosmetik_gelesen(_AB.gut({"ton": _b(wav_bauen(0.4)), "bild": ""}))
+kk3 = _KM.Konto(ablage_=_abl_k, ordner=_ok, mit_faden=False)
+pruef("Was die Pruefung nicht besteht, gilt nicht - auch nicht von der Platte",
+      kk.kosmetik is None and "ZU KURZ" in kk.kosmetik_fehler and kk3.kosmetik is None,
+      kk.kosmetik_fehler)
+kk._kosmetik_gelesen(_AB.gut({"ton": _b(ton_a), "bild": ""}))
+kk.abmelden()
+pruef("Abmelden nimmt sie mit", kk.kosmetik is None
+      and not (_ok / _KM.KOSMETIK_DATEI).exists())
+
+# Verteilen in der Lobby: Gastgeber mit Kosmetik, ein Gast mit, einer ohne.
+# Jeder mit eigenem Konto - sonst haetten alle dieselbe.
+def kos_app(name, kosmetik):
+    a = App(name, None, headless=True)
+    o = _Path(_tempfile.mkdtemp(prefix="dustfront_kosmetik_app_"))
+    a._konto = _KM.Konto(ablage_=_AB.LokaleAblage(ordner=o / "ablage"),
+                         ordner=o, mit_faden=False)
+    a._konto.kosmetik = kosmetik
+    return a
+
+kos_b = SK.Kosmetik(wav_bauen(2.0, hz=500), png_bauen(48, 24, (30, 30, 220)))
+app_ka, app_kb, app_kc = kos_app("KA", kos_a), kos_app("KB", kos_b), kos_app("KC", None)
+_neuer_port()
+wk_ = Gefecht(app_ka, "WIRT", gastgeber=netz.Gastgeber(_port[0]), lobby=True,
+              modus="pvp", seed=7)
+g1_ = Gefecht(app_kb, "EINS", gast=netz.Gast("127.0.0.1:%d" % _port[0]))
+alle_k = [wk_, g1_]
+
+def kos_laufen(schritte, bis=None):
+    for i in range(schritte):
+        for x in alle_k:
+            x.schritt(K.NETZ["takt"])
+        if bis is not None and bis():
+            return i + 1
+    return schritte
+
+kos_laufen(400, lambda: wk_.kosmetik_bereit and len(wk_.kos_index) == 2
+           and g1_.kosmetik_von(0) is not None)
+n1 = g1_.meine_nummer
+pruef("Der Gastgeber kennt beide Kosmetiken",
+      wk_.kos_index == {0: kos_a.kennung, n1: kos_b.kennung}, str(wk_.kos_index))
+pruef("Der Gast hat die des Gastgebers",
+      g1_.kosmetik_von(0) is not None and g1_.kosmetik_von(0).kennung == kos_a.kennung)
+pruef("Und der Gastgeber die des Gastes",
+      wk_.kosmetik_von(n1) is not None and wk_.kosmetik_von(n1).kennung == kos_b.kennung)
+pruef("Damit ist alles geladen", wk_.kosmetik_stand() == (1, 1), str(wk_.kosmetik_stand()))
+
+g2_ = Gefecht(app_kc, "ZWEI", gast=netz.Gast("127.0.0.1:%d" % _port[0]))
+alle_k.append(g2_)
+kos_laufen(60, lambda: len(wk_.kaempfer) == 3)
+pruef("Kommt einer dazu, ist nicht mehr alles geladen",
+      len(wk_.kaempfer) == 3 and not wk_.kosmetik_bereit, str(wk_.kosmetik_stand()))
+pruef("Dann geht der Start mit Kosmetik nicht",
+      not wk_.plan_starten(0, kosmetik=True) and wk_.in_lobby
+      and "KOSMETIK LAEDT" in wk_.hinweis, wk_.hinweis)
+tafel_k = LB.Rundenplanung(app_ka, wk_)
+knopf_k = {e.name: e for e in tafel_k.elemente}
+pruef("Auf der Tafel ist MIT KOSMETIK gesperrt, OHNE nicht",
+      knopf_k["start_mit"].gesperrt and not knopf_k["start_ohne"].gesperrt
+      and "start" not in knopf_k)
+eintraege_k = [e[0] for e in wk_._menue_baut()]
+pruef("Das Pausenmenue bietet beides an",
+      "starten_kos" in eintraege_k and "starten" in eintraege_k)
+schritte_k = kos_laufen(600, lambda: wk_.kosmetik_bereit)
+n2 = g2_.meine_nummer
+pruef("Der Neue bekommt alles", g2_.kosmetik_von(0) is not None
+      and g2_.kosmetik_von(n1) is not None
+      and g2_.kosmetik_von(n1).kennung == kos_b.kennung,
+      "%d Schritte" % schritte_k)
+pruef("Wer keine hat, steht nicht im Index", n2 not in wk_.kos_index)
+pruef("Der Gastgeber zaehlt alle Rechner", wk_.kosmetik_stand() == (3, 3),
+      str(wk_.kosmetik_stand()))
+pruef("Der Gast zaehlt fuer sich", g2_.kosmetik_stand() == (2, 2),
+      str(g2_.kosmetik_stand()))
+tafel_k.aufbauen()
+knopf_k = {e.name: e for e in tafel_k.elemente}
+pruef("Jetzt ist MIT KOSMETIK frei", not knopf_k["start_mit"].gesperrt)
+pruef("In der Lobby gilt Kosmetik immer", wk_.kosmetik_aktiv and g2_.kosmetik_aktiv)
+app_ka.flaeche.fill(K.C_VOID)
+wk_.zeichnen(app_ka.flaeche, 1.0)            # Kopfzeile mit Ladestand
+
+# Ein veraenderter Klient: falscher Fingerabdruck, zu kurzer Ton.
+klein = SK.Kosmetik(b"", png_bauen(8, 8))
+g1_.gast.senden({"t": "kos", "k": "falsch0000000000", "i": 0, "n": 1, "d": klein.text()})
+kos_laufen(10)
+pruef("Ein Paket mit falschem Fingerabdruck wird abgelehnt",
+      wk_.kos_index.get(n1) == kos_b.kennung and "ABGELEHNT" in wk_._meldung,
+      wk_._meldung)
+roh_kurz = '{"ton": "%s", "bild": ""}' % _b(wav_bauen(0.5, rate=11025))
+kennung_kurz = __import__("hashlib").sha1(wav_bauen(0.5, rate=11025) + b"|").hexdigest()[:16]
+stuecke = [roh_kurz[i:i + GK["teil"]] for i in range(0, len(roh_kurz), GK["teil"])]
+for i, s in enumerate(stuecke):
+    g1_.gast.senden({"t": "kos", "k": kennung_kurz, "i": i, "n": len(stuecke), "d": s})
+wk_._meldung = ""
+kos_laufen(10)
+pruef("Ein zu kurzer Ton an der Kontoseite vorbei kommt nicht durch",
+      wk_.kos_index.get(n1) == kos_b.kennung and "ZU KURZ" in wk_._meldung,
+      wk_._meldung)
+
+# Die Runde mit Kosmetik.
+pruef("Ist alles da, startet die Runde mit Kosmetik",
+      wk_.plan_starten(0, kosmetik=True) and not wk_.in_lobby)
+kos_laufen(40)
+pruef("Und alle wissen es",
+      all(x.regelwerk.get("kosmetik") and x.kosmetik_aktiv for x in alle_k)
+      and not any(x.in_lobby for x in alle_k))
+pruef("Die Kosmetik bleibt ueber den Rundenstart erhalten",
+      g2_.kosmetik_von(n1) is not None and wk_.kosmetik_von(n1) is not None)
+
+def lauschen(a):
+    """Was eine App abspielt: eigene Toene und Klaenge aus der Tabelle."""
+    log = []
+    a.klaenge.ton_spielen = lambda ton, laut=1.0: log.append(("ton", ton))
+    a.klaenge.spielen = lambda name, laut=1.0, *x, **y: log.append(("name", name))
+    return log
+
+log_w, log_2 = lauschen(app_ka), lauschen(app_kc)
+knall, pfeifen = K.skin("blend_knall"), K.skin("blend_pfeifen")
+werfer1 = wk_.kaempfer[n1]
+wk_.welt.explosion(pygame.Vector2(wk_.ich.pos), wk_.ich.ebene, 0.0, "blend", von=werfer1)
+mixer_an = pygame.mixer.get_init() is not None
+pruef("Beim Gastgeber klingt die Blendgranate wie die des Werfers",
+      (("ton", wk_.kosmetiken[n1].klang()) in log_w or not mixer_an)
+      and ("name", knall) not in log_w and ("name", pfeifen) not in log_w,
+      str(log_w[:4]))
+pruef("Und im Weiss steht sein Bild", wk_.kos_zeigen is wk_.kosmetiken[n1].bild
+      and wk_.befinden.blend > 0.3)
+neben_2 = pygame.Vector2(wk_.kaempfer[n2].pos)
+wk_.welt.explosion(neben_2, wk_.kaempfer[n2].ebene, 0.0, "blend", von=werfer1)
+kos_laufen(6)
+pruef("Beim Gast ebenso - auch wenn er selbst gar keine hat",
+      (("ton", g2_.kosmetiken[n1].klang()) in log_2 or not mixer_an)
+      and ("name", knall) not in log_2 and g2_.kos_zeigen is g2_.kosmetiken[n1].bild,
+      str(log_2[:4]))
+app_kc.flaeche.fill(K.C_VOID)
+g2_.zeichnen(app_kc.flaeche, 1.0)
+mitte_k = app_kc.flaeche.get_at((K.GAME_W // 2, K.GAME_H // 2))
+pruef("Das Bild ist mitten im Weiss zu sehen", mitte_k.b > mitte_k.r + 80,
+      str(tuple(mitte_k)))
+del log_w[:]
+wk_.kos_zeigen = None
+wk_.welt.explosion(pygame.Vector2(wk_.ich.pos), wk_.ich.ebene, 0.0, "blend",
+                   von=wk_.kaempfer[n2])
+pruef("Wirft einer ohne Kosmetik, knallt es wie immer",
+      ("name", knall) in log_w and not any(e[0] == "ton" for e in log_w)
+      and wk_.kos_zeigen is None, str(log_w[:4]))
+
+# Die Runde ohne Kosmetik.
+wk_.lobby_betreten()
+kos_laufen(40)
+pruef("Ohne Kosmetik gestartet", wk_.plan_starten(0, kosmetik=False))
+kos_laufen(40)
+pruef("Weiss es auch jeder", all(not x.regelwerk.get("kosmetik")
+                                 and not x.kosmetik_aktiv for x in alle_k))
+del log_w[:]
+wk_.welt.explosion(pygame.Vector2(wk_.ich.pos), wk_.ich.ebene, 0.0, "blend",
+                   von=werfer1 if n1 in wk_.kaempfer else wk_.kaempfer[n1])
+pruef("Dann knallt auch die Granate des Gastes wie immer",
+      ("name", knall) in log_w and not any(e[0] == "ton" for e in log_w)
+      and wk_.kos_zeigen is None, str(log_w[:4]))
+
+# Zurueck in der Lobby: ein Gast aendert seine, dann nimmt er sie weg.
+wk_.lobby_betreten()
+kos_laufen(20)
+kos_b2 = SK.Kosmetik(wav_bauen(1.2, hz=700))
+app_kb._konto.kosmetik = kos_b2
+kos_laufen(400, lambda: g2_.kosmetik_von(n1) is not None
+           and g2_.kosmetik_von(n1).kennung == kos_b2.kennung)
+pruef("Aendert ein Gast seine Kosmetik, haben alle die neue",
+      wk_.kos_index.get(n1) == kos_b2.kennung and g2_.kosmetik_von(n1) is not None
+      and g2_.kosmetik_von(n1).kennung == kos_b2.kennung and g2_.kosmetik_von(n1).bild is None)
+app_kb._konto.kosmetik = None
+kos_laufen(20)
+pruef("Nimmt er sie weg, ist sie ueberall weg",
+      n1 not in wk_.kos_index and n1 not in g2_.kosmetiken and n1 not in wk_.kosmetiken)
+pruef("Und es wird nur noch gezaehlt, was es gibt", wk_.kosmetik_stand() == (2, 2),
+      str(wk_.kosmetik_stand()))
+app_kb._konto.kosmetik = kos_b
+kos_laufen(400, lambda: g2_.kosmetik_von(n1) is not None)
+g1_.verlassen()
+alle_k.remove(g1_)
+kos_laufen(60, lambda: n1 not in wk_.kaempfer)
+kos_laufen(10)
+pruef("Wer geht, nimmt seine Kosmetik mit",
+      n1 not in wk_.kos_index and n1 not in g2_.kosmetiken,
+      "%s / %s" % (wk_.kos_index, list(g2_.kosmetiken)))
+wk_.verlassen(); g2_.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

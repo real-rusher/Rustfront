@@ -407,6 +407,17 @@ def konto_server_pruefen(A, wert) -> int:
         print("5.2 ab 'alter table ... enable row level security' noch")
         print("einmal ausfuehren.")
 
+    # Die Spielerkosmetik (0.28) ist eine Zugabe: ohne ihre Tabelle laeuft
+    # alles andere weiter. Darum zaehlt sie nicht als Schritt, der den
+    # Test scheitern laesst - aber wer den Server betreut, soll es hier
+    # erfahren und nicht erst, wenn ein Spieler fragt.
+    kos = netz.kosmetik_lesen(sitzung)
+    if kos:
+        print("  ok    Tabelle kosmetik ist da (Spielerkosmetik)")
+    else:
+        print("  --    Tabelle kosmetik fehlt - ohne sie keine Spielerkosmetik,")
+        print("        alles andere geht. Anlegen: docs/KONTO.md, 5.6.")
+
     print()
     if fehler:
         print("FEHLER: %d von %d Schritten" % (len(fehler), len(schritte)))

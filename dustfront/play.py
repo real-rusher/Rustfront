@@ -84,7 +84,7 @@ class Spiel(Szene):
         self.welt.ebene(ebene).dekal(self.renderer.brandfleck(radius),
                                      pos.x, pos.y)
 
-    def _blitz(self, pos, ebene: int) -> None:
+    def _blitz(self, pos, ebene: int, von=None) -> bool:
         """Eine Blendgranate ist gezuendet. Blendet sie **mich**?
 
         Gerechnet wird hier und nicht beim Gastgeber: es ist eine Frage
@@ -95,6 +95,7 @@ class Spiel(Szene):
         if staerke > 0.0:
             self.befinden.blenden(staerke)
             self.app.klaenge.spielen(K.skin("blend_pfeifen"), 0.35 + 0.5 * staerke)
+        return False
 
     def _ruckeln(self, kraft: float, anlass: str = "", pos=None,
                  ebene: int = 0, quelle=None) -> None:

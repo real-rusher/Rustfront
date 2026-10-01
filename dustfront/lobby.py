@@ -78,6 +78,7 @@ class LobbyTeil:
         self.plan_weiter = -1.0       # Sekunden bis zur naechsten, -1: keine
         self.plan_ablage: dict | None = None
         self.plan_offen = False       # ist der Rundenplan aufgeklappt?
+        self.plan_kosmetik = False    # mit Spielerkosmetik gestartet?
         self.plan_stand = 0           # zaehlt jede Aenderung mit
         self.bereiche: dict[str, pygame.Rect] = {}
         self.puppen: list = []
@@ -368,20 +369,36 @@ class LobbyTeil:
         self.plan_schleife = bool(an)
         self._plan_geaendert()
 
-    def plan_starten(self, nr: int = 0) -> None:
-        """Die geplante Runde `nr` anfangen. Aus der Lobby oder danach."""
+    def plan_starten(self, nr: int = 0, kosmetik: bool | None = None) -> bool:
+        """Die geplante Runde `nr` anfangen. Aus der Lobby oder danach.
+
+        `kosmetik` entscheidet der Gastgeber beim Start aus der Lobby, und
+        es gilt dann fuer den ganzen Plan. Mit Kosmetik geht es nur, wenn
+        alle alles geladen haben - sonst hoerte der eine den Ton des
+        Werfers und der andere den gewoehnlichen Knall, und keiner wuesste,
+        was der andere erlebt. Gibt zurueck, ob es losging.
+        """
         if not self.ist_gastgeber or not self.plan:
-            return
+            return False
+        if kosmetik is not None:
+            if kosmetik and not self.kosmetik_bereit:
+                da, noetig = self.kosmetik_stand()
+                self._meldung = "KOSMETIK LAEDT NOCH - %d VON %d" % (da, noetig)
+                self._meldung_rest = 3.0
+                self.hinweis = self._meldung
+                return False
+            self.plan_kosmetik = bool(kosmetik)
         nr = max(0, min(len(self.plan) - 1, nr))
         self.plan_pos = nr
         self.plan_laeuft = True
         self.plan_weiter = -1.0
-        self.wunsch = dict(self.plan[nr])
+        self.wunsch = dict(self.plan[nr], kosmetik=self.plan_kosmetik)
         self._runde_neu()
         if len(self.plan) > 1:
             self.hinweis = "RUNDE %d VON %d: %s" % (
                 nr + 1, len(self.plan), K.MODI[self.modus]["name"])
         self._plan_geaendert()
+        return True
 
     def lobby_betreten(self) -> None:
         """Zurueck in die Lobby, von wo auch immer."""
@@ -447,6 +464,17 @@ class LobbyTeil:
         wo = self.bereich_von(self.ich) if self.ich is not None else ""
         if wo:
             SCHRIFT.zeichnen(ziel, NAMEN[wo], mitte, 46, FARBEN[wo], 1,
+                             ausrichtung="mitte")
+        # Spielerkosmetik: wie weit sie verteilt ist. Nur, wenn es welche
+        # gibt - sonst ist es eine Zeile ueber nichts.
+        if self.kos_index:
+            da, noetig = self.kosmetik_stand()
+            if da >= noetig:
+                text, farbe = "KOSMETIK: ALLES GELADEN", K.C_TEAL
+            else:
+                text, farbe = ("KOSMETIK LAEDT  %d VON %d" % (da, noetig),
+                               K.C_AMBER)
+            SCHRIFT.zeichnen(ziel, text, mitte, 56, farbe, 1,
                              ausrichtung="mitte")
 
     def planung_oeffnen(self) -> None:
@@ -584,8 +612,23 @@ class Rundenplanung(Menue):
             (r.x + 16, y, 150, 16),
             "RUNDENPLAN <" if g.plan_offen else "RUNDENPLAN >", "planen"))
         if self.darf and g.in_lobby:
-            self.elemente.append(ui.Knopf((r.right - 16 - 150, y, 150, 16),
-                                          "START", "start"))
+            if g.kos_index:
+                # Es gibt Spielerkosmetik: der Gastgeber entscheidet beim
+                # Start. Mit Kosmetik erst, wenn alle alles haben.
+                da, noetig = g.kosmetik_stand()
+                bereit = da >= noetig
+                # Zwei schmale statt eines breiten Knopfs, rechtsbuendig
+                # mit Luft zu ZURUECK in der Mitte.
+                self.elemente.append(ui.Knopf(
+                    (r.right - 16 - 214, y, 104, 16),
+                    "MIT KOSMETIK" if bereit else "LAEDT %d/%d" % (da, noetig),
+                    "start_mit", gesperrt=not bereit))
+                self.elemente.append(ui.Knopf(
+                    (r.right - 16 - 104, y, 104, 16), "OHNE KOSMETIK",
+                    "start_ohne"))
+            else:
+                self.elemente.append(ui.Knopf((r.right - 16 - 150, y, 150, 16),
+                                              "START", "start"))
         self.elemente.append(ui.Knopf((r.centerx - 55, y, 110, 16),
                                       "ZURUECK", "zurueck"))
 
@@ -610,9 +653,11 @@ class Rundenplanung(Menue):
         elif name == "einfuegen":
             g.plan_einfuegen(self.nr)
             self.sagen("IN RUNDE %d EINGEFUEGT" % (self.nr + 1))
-        elif name == "start":
-            self.app.werfen()
-            g.plan_starten(0)
+        elif name in ("start", "start_ohne", "start_mit"):
+            if g.plan_starten(0, kosmetik=(name == "start_mit")):
+                self.app.werfen()
+            else:
+                self.sagen("KOSMETIK LAEDT NOCH")
             return
         self.aufbauen()
 
@@ -630,8 +675,12 @@ class Rundenplanung(Menue):
         super().schritt(dt)
         # Der Plan kann sich von aussen aendern: beim Gast kommt ein neuer
         # vom Gastgeber, beim Gastgeber startet vielleicht gerade eine Runde.
-        if self._stand != self.gefecht.plan_stand:
+        # Ebenso der Ladestand der Kosmetik, an dem der Startknopf haengt.
+        kos = (bool(self.gefecht.kos_index), self.gefecht.kosmetik_stand())
+        if self._stand != self.gefecht.plan_stand or kos != getattr(
+                self, "_kos_alt", kos):
             self.aufbauen()
+        self._kos_alt = kos
 
     def taste(self, ev) -> None:
         if ev.key in self.app.opt.codes("planen"):
@@ -681,6 +730,10 @@ class Rundenplanung(Menue):
                      if len(g.plan) > 1 else "STARTET DIE RUNDE FUER ALLE")
         elif el is not None and el.name == "planen":
             hilfe = "MEHRERE RUNDEN HINTEREINANDER, SCHLEIFE, KOPIEREN"
+        elif el is not None and el.name == "start_mit":
+            hilfe = "BLENDGRANATEN KLINGEN UND AUSSEHEN WIE VOM WERFER GEMACHT"
+        elif el is not None and el.name == "start_ohne":
+            hilfe = "ALLE BLENDGRANATEN WIE IMMER"
         if not self.darf:
             hilfe = hilfe or "NUR DER GASTGEBER KANN HIER ETWAS AENDERN"
         if hilfe:

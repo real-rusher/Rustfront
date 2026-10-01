@@ -27,9 +27,16 @@ steht im Quelltext. Eine Datei, kein Server, kein Installieren.
 
 Was die Seite **nicht** tut: sie rechnet nichts aus, was das Spiel
 rechnet. Sie zeigt an, was auf dem Server steht, und schreibt genau
-zwei Sachen zurueck - den Anzeigenamen und die Loadouts. Alles andere
-ist zu lesen und nicht zu aendern; Zahlen, die man selbst setzen kann,
-waeren keine Statistik mehr.
+drei Sachen zurueck - den Anzeigenamen, die Loadouts und die eigene
+Spielerkosmetik (Ton und Bild der Blendgranate). Alles andere ist zu
+lesen und nicht zu aendern; Zahlen, die man selbst setzen kann, waeren
+keine Statistik mehr.
+
+Die eine Ausnahme vom "nichts rechnen": die Grenze, unter der ein
+Kosmetikton immer leiser wird. Die Seite rechnet sie fuer ihre Vorschau
+nach, Schritt fuer Schritt wie spielerkosmetik.ton_ausklingen - sonst
+hoerte man beim Basteln etwas anderes als im Spiel. Hochgeladen wird
+der Ton davor; gerechnet wird es verbindlich im Spiel.
 """
 from __future__ import annotations
 
@@ -50,6 +57,64 @@ def _nur_lobby(modus) -> bool:
 
 def _farbe(rgb) -> str:
     return "#%02x%02x%02x" % tuple(int(c) for c in rgb[:3])
+
+
+def _wav_uri(proben, rate: int) -> str:
+    """16 Bit mono als data:-URI, so wie die Seite es abspielen kann."""
+    import io
+    import wave
+
+    puffer = io.BytesIO()
+    with wave.open(puffer, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(proben.tobytes())
+    return "data:audio/wav;base64," + base64.b64encode(
+        puffer.getvalue()).decode("ascii")
+
+
+def _klassische_klaenge(asset_ordner) -> dict:
+    """Knall und Pfeifen der Blendgranate, so wie das Spiel sie spielt.
+
+    Nicht nachgebaut, sondern **dieselben**: geholt ueber die Klangtafel
+    des Spiels, also eine Datei aus assets/sfx, wenn dort eine liegt, und
+    sonst der Platzhalter aus audio.py. Wer seinen Ton "mit dem
+    klassischen Knall" mischt, mischt also wirklich den aus dem Spiel.
+
+    Abgelegt als 22050 Hz mono - das ist die Rate, mit der die Seite den
+    Kosmetikton rechnet, und die halbe Datei.
+    """
+    import array
+
+    import pygame
+
+    from dustfront import config as K
+    from dustfront.audio import Klaenge
+
+    klaenge = Klaenge(asset_ordner)
+    init = pygame.mixer.get_init()
+    aus = {"knall": "", "pfeifen": ""}
+    if not klaenge.ok or not init or abs(init[1]) != 16:
+        return aus
+    rate, _breite, spuren = init
+    for schluessel, name in (("knall", K.skin("blend_knall")),
+                             ("pfeifen", K.skin("blend_pfeifen"))):
+        fassungen = klaenge.klang(name)
+        if not fassungen:
+            continue
+        roh = array.array("h")
+        roh.frombytes(fassungen[0].get_raw())
+        mono = roh[::spuren]
+        if rate % 2 == 0 and rate // 2 >= 22050:
+            # Paarweise mitteln: halbe Rate, ohne dass hohe Toene als
+            # falsche tiefe zurueckkommen.
+            mono = array.array("h", ((mono[i] + mono[i + 1]) // 2
+                                     for i in range(0, len(mono) - 1, 2)))
+            aus[schluessel] = _wav_uri(mono, rate // 2)
+        else:
+            aus[schluessel] = _wav_uri(mono, rate)
+    return aus
 
 
 def daten() -> dict:
@@ -126,6 +191,18 @@ def daten() -> dict:
                     "ersatz": dict(_TRANS)},
         "namenslaenge": A.NAMENSLAENGE,
         "wortlaenge": A.WORTLAENGE,
+        # Spielerkosmetik: dieselben Grenzen wie im Spiel - die Seite
+        # laesst gar nicht erst etwas machen, was das Spiel ablehnen wuerde.
+        "kosmetik": dict({k: (list(v) if isinstance(v, tuple) else v)
+                          for k, v in K.SPIELERKOSMETIK.items()},
+                         rate=22050),
+        "klassisch": _klassische_klaenge(asset_ordner()),
+        # Fuer die Vorschau "so sieht es im Spiel aus": dieselbe Flaeche,
+        # dasselbe Weiss, dasselbe Abklingen wie render.Befinden.
+        "spielbild": {"breite": K.GAME_W, "hoehe": K.GAME_H},
+        "blenden": {"dauer": K.BLENDEN["dauer"],
+                    "abklingen": K.BLENDEN["abklingen"],
+                    "weiss": K.BLENDEN["weiss"]},
     }
 
 
