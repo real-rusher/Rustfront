@@ -553,19 +553,32 @@ class KampfGegner(Gegner):
         if self._summe > 0.0:
             self._summe_rest -= dt
             if self._summe_rest <= 0.0:
-                self._gefecht.schadenszahl(self.pos, self.ebene, self._summe)
+                self._zahl_zeigen(self._summe)
                 self._summe = 0.0
+
+    def _zahl_zeigen(self, menge: float) -> None:
+        """Eine Zahl ueber der Puppe. Mehrere kurz nacheinander (Schrot,
+        Salve) stehen versetzt nebeneinander statt aufeinander."""
+        self._zahl_nr = (getattr(self, "_zahl_nr", -1) + 1) % 6
+        dx = (-9, 9, 0, -14, 14, 0)[self._zahl_nr]
+        dy = (0, 0, -7, -7, -7, -14)[self._zahl_nr]
+        self._gefecht.schadenszahl(self.pos, self.ebene, menge, dx, dy)
 
     def schaden(self, menge, schub=None, von=None) -> None:
         if not self.ist_puppe:
             super().schaden(menge, schub, von)
             return
-        # Die Zahl kommt gesammelt: ein MG trifft zwoelfmal die Sekunde,
-        # und zwoelf Zahlen uebereinander liest niemand. Eine je Viertel-
-        # sekunde, mit der Summe, sagt dasselbe und ist lesbar.
-        if self._summe <= 0.0:
-            self._summe_rest = 0.25
-        self._summe += float(menge)
+        # Seit 0.32 eine Zahl je Treffer (gemeldet: "nicht pro Sekunde,
+        # sondern wirklich pro Schuss"). Nur Feuer trifft in jedem Schritt
+        # mit einem Bruchteil eines Punkts - 120 Zahlen in der Sekunde
+        # liest niemand. Was unter einem Punkt liegt, wird darum weiter je
+        # Viertelsekunde zusammengezaehlt; ein Schuss liegt immer darueber.
+        if float(menge) >= 1.0:
+            self._zahl_zeigen(float(menge))
+        else:
+            if self._summe <= 0.0:
+                self._summe_rest = 0.25
+            self._summe += float(menge)
         self._ruhe = 0.0
         super().schaden(menge, None, von)
 
@@ -951,14 +964,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                               int(ebene), round(radius, 1), str(art),
                               int(getattr(von, "nummer", -1))])
 
-    def schadenszahl(self, pos, ebene: int, menge: float) -> None:
+    def schadenszahl(self, pos, ebene: int, menge: float,
+                     dx: float = 0.0, dy: float = 0.0) -> None:
         """Eine Zahl ueber einer Puppe: so viel hat es gerade getroffen.
 
         Beim Gastgeber in die eigene Welt, und als Wirkung an die Gaeste -
-        die Puppen stehen bei ihnen ja nur als gemeldete Punkte.
+        die Puppen stehen bei ihnen ja nur als gemeldete Punkte. `dx`, `dy`
+        versetzen sie, damit mehrere Treffer nebeneinander lesbar bleiben.
         """
         text = "%d" % max(1, round(menge))
-        oben = pygame.Vector2(pos.x, pos.y - 14)
+        oben = pygame.Vector2(pos.x + dx, pos.y - 14 + dy)
         self.welt.aufschrift(oben, ebene, text, K.C_AMBER)
         if self.ist_gastgeber:
             self._wirkung.append(["t", round(oben.x, 1), round(oben.y, 1),

@@ -4536,6 +4536,35 @@ beide(K.LOBBY["puppe_heilt"] + 0.3)
 pruef("Und fuellt sich nach einer Weile wieder auf",
       puppe.leben == puppe.max_leben and halb < puppe.max_leben)
 
+# Seit 0.32: eine Zahl je Treffer, nicht je Viertelsekunde (gemeldet).
+wl_.welt.aufschriften = []
+for _treffer in (23, 17, 31):
+    puppe.schaden(_treffer, pygame.Vector2(1, 0), wk_l)
+zahlen = [a[2] for a in wl_.welt.aufschriften if a[2].isdigit()]
+pruef("Drei Treffer, drei Zahlen - sofort und jede fuer sich",
+      sorted(zahlen) == ["17", "23", "31"], str(zahlen))
+pruef("... nebeneinander, nicht aufeinander",
+      len({(round(a[0].x), round(a[0].y)) for a in wl_.welt.aufschriften}) == 3)
+wl_.welt.aufschriften = []
+for _ in range(int(1.0 / K.FIXED_DT)):        # Feuer: Bruchteile je Schritt
+    puppe.schaden(0.2, None, wk_l)
+    puppe._puppe_schritt(K.FIXED_DT)
+feuerzahlen = [a[2] for a in wl_.welt.aufschriften if a[2].isdigit()]
+pruef("Feuer kommt weiter gesammelt, nicht 120 Zahlen die Sekunde",
+      1 <= len(feuerzahlen) <= 5, "%d Zahlen" % len(feuerzahlen))
+
+# Und sie laesst sich nicht wegschieben, auch nicht durch Hineinlaufen.
+puppe_ort = pygame.Vector2(puppe.pos)
+wk_l.ebene = puppe.ebene
+for _ in range(60):
+    wk_l.pos.update(puppe.pos + pygame.Vector2(puppe.radius + wk_l.radius - 6, 0))
+    wl_.welt.auseinander(wk_l)
+pruef("Eine Puppe weicht beim Hineinlaufen keinen Pixel",
+      puppe.pos == puppe_ort, "%s -> %s" % (puppe_ort, puppe.pos))
+pruef("... der Spieler wird stattdessen ganz zurueckgeschoben",
+      wk_l.pos.distance_to(puppe.pos) >= puppe.radius + wk_l.radius - 0.01,
+      "%.1f" % wk_l.pos.distance_to(puppe.pos))
+
 # Das Gehege: fuellt sich, wenn einer drin ist, und haelt die Zombies drin
 stellen(wk_l, "pve")
 stellen(gk_l, "stand")
@@ -5695,6 +5724,43 @@ pruef("... und der Gast hat es erfahren",
       len(journal(gx)) == 1 and journal(gx)[0]["partie"] == journal(wx)[0]["partie"])
 gx.verlassen()
 
+# ── Der Brandstifter verbrennt sich nicht selbst ───────────────────
+# Gemeldet aus einem Playtest: "der Feuerboss nimmt Schaden von seinem
+# eigenen Feuer und toetet sich praktisch selbst". Nachgemessen: sein
+# Feuer verschont Gegner (verschont="feind", seit 0.26). Was ihn brennt,
+# ist der Molotow eines Spielers - das ist Absicht, der brennt alles.
+from dustfront.mehrspieler import KampfGegner as _KG40
+_w40, _g40 = gefechtspaar("pve")
+_ich40 = _w40.kaempfer[0]
+_ich40.unverwundbar = 9999.0
+_boss40 = _KG40(pygame.Vector2(_ich40.pos) + pygame.Vector2(60, 0), "brandstifter", 0, _w40)
+_w40.welt.dazu(_boss40)
+_w40.welt.wesen.append(_boss40)
+_quellen40 = {}
+_alt40 = _boss40.schaden
+def _schaden40(menge, schub=None, von=None):
+    _quellen40[von] = _quellen40.get(von, 0.0) + menge
+    return _alt40(menge, schub, von)
+_boss40.schaden = _schaden40
+_im_feuer40 = 0
+for _ in range(int(20 / K.FIXED_DT)):
+    _ich40.pos.update(_boss40.pos + pygame.Vector2(40, 0)); _ich40.vorher.update(_ich40.pos)
+    _w40.schritt(K.FIXED_DT)
+    if any(f.brennt(_boss40.pos, _boss40.ebene) > 0 for f in _w40.welt.feuer):
+        _im_feuer40 += 1
+pruef("Der Brandstifter steht in seinem eigenen Feuer",
+      _im_feuer40 * K.FIXED_DT > 5.0, "%.1f s" % (_im_feuer40 * K.FIXED_DT))
+pruef("... und nimmt davon keinen Schaden",
+      _boss40.leben == K.BOSSE["brandstifter"]["leben"] and not _quellen40,
+      "%.1f Leben" % _boss40.leben)
+from dustfront.entities import Brandflaeche as _BF40
+_w40.welt.feuer.append(_BF40(pygame.Vector2(_boss40.pos), 0, radius=60, von=_ich40))
+for _ in range(int(2 / K.FIXED_DT)):
+    _w40.schritt(K.FIXED_DT)
+pruef("Der Molotow eines Spielers brennt ihn sehr wohl",
+      _boss40.leben < K.BOSSE["brandstifter"]["leben"], "%.1f Leben" % _boss40.leben)
+_w40.verlassen(); _g40.verlassen()
+
 # ── Plateaus sind Felsbloecke (nach 0.31) ────────────────────────────
 # Gemeldet: auf STAUBTAL, unten stehend mit eingeblendeter oberer Ebene,
 # hing das Plateau versetzt und blass neben seinem Felssockel, und
@@ -5743,6 +5809,10 @@ for _ in range(30):
     pw_w.schritt(K.FIXED_DT)
 pw_w.obere_zeigen = True
 kam = pw_w.kamera
+# Die Kamera direkt auf die Figur: wo sie startet, haengt vom Seed ab,
+# und 30 Schritte holen sie nicht von ueberall her ein.
+kam.pos.update(ich_p.pos)
+kam.versatz.update(0, 0)
 dz1 = pw_welt.hoehe(0) - pw_welt.hoehe(1)
 k1 = K.PERSPEKTIVE["brennweite"] / max(60.0, K.PERSPEKTIVE["brennweite"] + dz1)
 ab_unten = pw_r._abbildung(kam, 1.0, 0.0)
@@ -5818,6 +5888,8 @@ pruef("Ueber Spielflaeche wird sie durchsichtig",
 ich_p.ebene = 1; ich_p.pos.update(46 * K.TILE, 26 * K.TILE); ich_p.vorher.update(ich_p.pos)
 for _ in range(30):
     pw_w.schritt(K.FIXED_DT)
+kam.pos.update(ich_p.pos)
+kam.versatz.update(0, 0)
 app.flaeche.fill(K.C_VOID)
 pw_w.zeichnen(app.flaeche, 1.0)              # darf nicht stolpern
 dz0 = pw_welt.hoehe(1) - pw_welt.hoehe(0)

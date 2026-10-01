@@ -661,20 +661,32 @@ class Welt:
         # ihn herum hatte, schob ihn quer durch den Raum.
         if getattr(wesen, "am_boden", False):
             return
+        # Wer unverschiebbar ist (Zielpuppe, Koloss), bleibt stehen, und der
+        # andere weicht den ganzen Weg aus. Vorher gab jeder die Haelfte
+        # nach - und eine Puppe liess sich durch Hineinlaufen quer durch
+        # den Schiessstand schieben (gemeldet nach 0.31).
+        fest_w = not getattr(wesen, "schiebbar", True)
         for a in self.nahe(wesen.pos, wesen.radius * 2, wesen.ebene):
             if a is wesen or not a.schiebt or getattr(a, "am_boden", False):
+                continue
+            fest_a = not getattr(a, "schiebbar", True)
+            if fest_w and fest_a:
                 continue
             d = wesen.pos - a.pos
             abstand = d.length()
             mindest = wesen.radius + a.radius
             if 0.0001 < abstand < mindest:
-                schub = d / abstand * (mindest - abstand) * 0.5
-                if self.frei(wesen.pos + schub, wesen.radius, wesen.ebene,
-                             not getattr(wesen, "faellt", False)):
-                    wesen.pos += schub
-                if self.frei(a.pos - schub, a.radius, a.ebene,
-                             not getattr(a, "faellt", False)):
-                    a.pos -= schub
+                schub = d / abstand * (mindest - abstand)
+                if not fest_w:
+                    weg = schub * (1.0 if fest_a else 0.5)
+                    if self.frei(wesen.pos + weg, wesen.radius, wesen.ebene,
+                                 not getattr(wesen, "faellt", False)):
+                        wesen.pos += weg
+                if not fest_a:
+                    weg = schub * (1.0 if fest_w else 0.5)
+                    if self.frei(a.pos - weg, a.radius, a.ebene,
+                                 not getattr(a, "faellt", False)):
+                        a.pos -= weg
 
     def befreien(self, wesen) -> bool:
         """Holt ein Wesen aus der Wand, falls es doch einmal darin steckt.
