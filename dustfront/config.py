@@ -686,7 +686,10 @@ GEFECHT = dict(
     start_medkits_hoechstens=9,   # mehr laesst der Gastgeber nicht zu
     tafel_oben=74,            # wo der Punktestand anfaengt, unter den Ebenen
     blick_zurueck=4.0,        # so lange bleibt die Ansicht auf einer fremden Ebene
-    treppe_takt=1.5,          # so lange geht nach einem Ebenenwechsel keiner mehr
+    # So lange geht nach einem Ebenenwechsel keiner mehr. Seit 0.27 haengt
+    # die Treppe am Druck, nicht am Halten - die Sperre faengt nur noch
+    # einen versehentlichen Doppeldruck ab und darf darum kurz sein.
+    treppe_takt=0.5,
     # Einstiegszonen: jede Mannschaft bekommt einmal je Runde eine Seite
     # und behaelt sie. Aus so vielen Proben wird das Paar mit dem groessten
     # Abstand gewaehlt.

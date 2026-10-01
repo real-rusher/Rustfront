@@ -1405,11 +1405,12 @@ class Gefecht(Szene, LobbyTeil):
         for name in self.DRUECKE:
             if taste in tabelle.get(name, ()):
                 self._knoepfe.add(name)
-        # Am Boden ist "benutzen" ein Ruf. Als Druck geschickt, nicht als
-        # gehaltener Zustand: ein Ruf ist ein Ereignis, und der Gastgeber
-        # entscheidet, ob er gerade zaehlt.
+        # Der Druck auf E geht zusaetzlich als Ereignis mit. Daran haengen
+        # Treppe und Ruf (am Boden) - beides soll genau einmal je Druck
+        # passieren, und ein Ereignis geht nie verloren (siehe
+        # netz._schlange_kuerzen). Gehalten wird E nur fuer das Aufhelfen.
         if taste in tabelle.get("nutzen", ()):
-            self._knoepfe.add("rufen")
+            self._knoepfe.add("nutzen")
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
             if taste in tabelle.get("waffe%d" % nr, ()):
                 self._waffe_wunsch = nr - 1
@@ -1426,7 +1427,7 @@ class Gefecht(Szene, LobbyTeil):
             if e.gedrueckt(name):
                 self._knoepfe.add(name)
         if e.gedrueckt("nutzen"):
-            self._knoepfe.add("rufen")
+            self._knoepfe.add("nutzen")
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
             if e.gedrueckt("waffe%d" % nr):
                 self._waffe_wunsch = nr - 1
@@ -1479,9 +1480,9 @@ class Gefecht(Szene, LobbyTeil):
             k.zielt = False
             k.hilft = None
             k.zieht = None
-            # Das Einzige, was man am Boden noch tun kann: rufen.
-            knoepfe = ein.get("knoepfe") or []
-            if isinstance(knoepfe, list) and "rufen" in knoepfe:
+            # Das Einzige, was man am Boden noch tun kann: rufen - mit
+            # demselben Druck auf E, der sonst die Treppe nimmt.
+            if self._e_gedrueckt(ein):
                 self._rufen(k)
             return
 
@@ -1540,9 +1541,10 @@ class Gefecht(Szene, LobbyTeil):
         self._loslassen(k)
 
         # Nutzen: erst jemandem aufhelfen, sonst die Treppe nehmen.
-        if not ein.get("nutzen"):
+        gedrueckt = self._e_gedrueckt(ein)
+        if not ein.get("nutzen") and not gedrueckt:
             return
-        opfer = self._wem_helfen(k)
+        opfer = self._wem_helfen(k) if ein.get("nutzen") else None
         if opfer is not None:
             k.hilft = opfer.nummer
             # Wer aufhilft, hat die Haende voll: er steht still und
@@ -1555,16 +1557,18 @@ class Gefecht(Szene, LobbyTeil):
             k.feuert = False
             k.zielt = False
             return
-        # Treppe nehmen - aber nicht jedes Bild wieder.
+        # Treppe nehmen: nur auf einen **Druck**, nicht solange E gehalten
+        # ist.
         #
-        # "nutzen" wird gehalten, nicht gedrueckt; das braucht das
-        # Aufhelfen. Ohne Sperre versuchte darum jedes Bild einen Wechsel:
-        # hoch, und weil auf der Zielkachel die Treppe zurueck nach unten
-        # liegt, sofort wieder hinunter. Man stand blinkend zwischen zwei
-        # Etagen. Die Sperre gilt fuer den Kaempfer, nicht fuer die
-        # Kachel - sie haelt also auch, wenn er nach dem Wechsel gleich
-        # auf der naechsten Treppe steht.
-        if k.treppe_rest > 0:
+        # Bis 0.27 hing die Treppe am gehaltenen Zustand, mit 1,5 s Sperre
+        # dazwischen (0.19.0, siehe docs/MEHRSPIELER.md 12.16). Das hielt,
+        # solange die Taste wirklich losgelassen wurde. Beim Gast ging das
+        # schief: blieb sein E als gehalten stehen - etwa weil das Fenster
+        # beim Loslassen den Fokus verloren hatte und das Loslassen nie
+        # ankam -, ging er alle anderthalb Sekunden hoch, runter, hoch.
+        # Jetzt zaehlt nur das Ereignis "E gedrueckt", das je Druck genau
+        # einmal kommt. Die kurze Sperre bleibt gegen einen Doppeldruck.
+        if not gedrueckt or k.treppe_rest > 0:
             return
         ziel_ebene = self.welt.treppe_unter(k)
         if ziel_ebene is not None and self.welt.ebene_wechseln(k, ziel_ebene):
@@ -1572,6 +1576,12 @@ class Gefecht(Szene, LobbyTeil):
             wolke(self.welt, k.pos, 10, 90, 0.4, K.C_MUTED_DK, k.ebene, 1,
                   "staub")
             self.welt.klang("aufheben", 0.4)
+
+    @staticmethod
+    def _e_gedrueckt(ein: dict) -> bool:
+        """Steht in dieser Eingabe ein Druck auf E?"""
+        knoepfe = ein.get("knoepfe") or []
+        return isinstance(knoepfe, list) and "nutzen" in knoepfe
 
     def _darf_helfen(self, helfer, liegender) -> bool:
         """Mit Mannschaften hilft man nur den eigenen Leuten.

@@ -945,13 +945,15 @@ if treppe:
     gast_ich.ebene = 0
     gast_ich.pos.update(treppe[0] * K.TILE + 16, treppe[1] * K.TILE + 16)
     gast_ich.lebt = True
-    # E wird gehalten, nicht gedrueckt: an derselben Taste haengt das
-    # Aufhelfen, und das braucht Zeit.
+    # Ein Druck auf E, wie ihn das Fenster meldet. Seit 0.27 nimmt der
+    # Druck die Treppe, nicht das Halten (Halten ist fuers Aufhelfen).
+    e.neues_bild()
+    gast.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_e))
     for _ in range(10):
-        e.neues_bild()
         e._gehalten = {"nutzen"}
         host.schritt(K.NETZ["takt"])
         gast.schritt(K.NETZ["takt"])
+        e.neues_bild()
     e.neues_bild(); e._gehalten = set()
     pruef("Der Gast kommt ueber die Treppe eine Ebene hoch",
           gast_ich.ebene == 1, "Ebene %d" % gast_ich.ebene)
@@ -2044,24 +2046,72 @@ pruef("Eine Treppe nach oben gefunden", treppe is not None)
 wirt_k.ebene = 0
 wirt_k.pos.update(treppe); wirt_k.vorher.update(treppe)
 wirt_k.treppe_rest = 0.0
-halten = {"will": [0.0, 0.0], "ziel": [treppe.x + 20, treppe.y],
-          "nutzen": True, "knoepfe": []}
-w._anwenden(wirt_k, halten)
+# Seit 0.27 haengt die Treppe am Druck (Ereignis "nutzen" in knoepfe),
+# nicht mehr am gehaltenen E.
+druck = {"will": [0.0, 0.0], "ziel": [treppe.x + 20, treppe.y],
+         "nutzen": True, "knoepfe": ["nutzen"]}
+halten = dict(druck, knoepfe=[])
+w._anwenden(wirt_k, druck)
 pruef("Einmal Druecken bringt eine Ebene hoch", wirt_k.ebene == 1,
       "Ebene %d" % wirt_k.ebene)
-# Taste weiter gehalten: es darf nichts mehr passieren.
-for _ in range(60):
+# Taste weiter gehalten - auch weit ueber die Sperre hinaus: nichts mehr.
+for _ in range(int(5.0 / K.FIXED_DT)):
     w._anwenden(wirt_k, halten)
-pruef("Gehalten bleibt es bei dieser einen Ebene", wirt_k.ebene == 1,
-      "Ebene %d" % wirt_k.ebene)
-pruef("Und die Sperre laeuft", wirt_k.treppe_rest > 0,
-      "%.2f s" % wirt_k.treppe_rest)
-# Nach der Sperre geht es wieder - dann eben zurueck nach unten.
+    wirt_k.schritt(K.FIXED_DT)
+pruef("Gehalten bleibt es bei dieser einen Ebene, auch nach Sekunden",
+      wirt_k.ebene == 1, "Ebene %d" % wirt_k.ebene)
+# Ein zweiter Druck sofort danach zaehlt nicht (Doppeldruck) ...
+wirt_k.treppe_rest = K.GEFECHT["treppe_takt"]
+w._anwenden(wirt_k, druck)
+pruef("Ein Doppeldruck nimmt die Treppe nicht zweimal", wirt_k.ebene == 1)
+# ... ein neuer Druck nach der Sperre schon - dann eben zurueck nach unten.
 for _ in range(int(K.GEFECHT["treppe_takt"] / K.FIXED_DT) + 4):
     wirt_k.schritt(K.FIXED_DT)
-w._anwenden(wirt_k, halten)
-pruef("Nach der Sperre geht es wieder", wirt_k.ebene == 0,
+w._anwenden(wirt_k, druck)
+pruef("Ein neuer Druck nach der Sperre geht wieder", wirt_k.ebene == 0,
       "Ebene %d" % wirt_k.ebene)
+
+# Der gemeldete Fehler: beim Gast. Sein E bleibt als gehalten stehen (das
+# Loslassen kam nie an) - frueher ging er dann alle 1,5 s hoch und runter.
+gast_k = w.kaempfer[ga.meine_nummer]
+gast_k.ebene = 0
+gast_k.pos.update(treppe); gast_k.vorher.update(treppe)
+gast_k.treppe_rest = 0.0
+gast_k.unverwundbar = 99.0
+verlauf = [gast_k.ebene]
+for i in range(int(6.0 / K.FIXED_DT)):
+    e.neues_bild()
+    if i == 0:
+        # Ein Druck, dessen Loslassen nie kommt.
+        e.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_e))
+        ga.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_e))
+    ga.schritt(K.FIXED_DT)
+    e._gehalten = set()          # der Gastgeber selbst drueckt nichts
+    e._gedrueckt = set()
+    w.schritt(K.FIXED_DT)
+    e._gehalten = {"nutzen"}     # beim Gast haengt E fest
+    if not verlauf or verlauf[-1] != gast_k.ebene:
+        verlauf.append(gast_k.ebene)
+e._gehalten = set()
+pruef("Gast: ein festhaengendes E nimmt die Treppe genau einmal",
+      verlauf == [0, 1], str(verlauf))
+
+# Und der kurze Tipp: Druecken und Loslassen im selben Bild. Der gehaltene
+# Zustand ist dann schon wieder aus - der Druck muss trotzdem ankommen.
+gast_k.ebene = 0
+gast_k.pos.update(treppe); gast_k.vorher.update(treppe)
+gast_k.treppe_rest = 0.0
+e.neues_bild()
+for typ in (pygame.KEYDOWN, pygame.KEYUP):
+    ev = pygame.event.Event(typ, key=pygame.K_e)
+    e.ereignis(ev)
+    ga.ereignis(ev)
+ga.schritt(K.FIXED_DT)
+e.neues_bild()
+for _ in range(20):
+    ga.schritt(K.NETZ["takt"]); w.schritt(K.NETZ["takt"])
+pruef("Gast: ein ganz kurzer Tipp auf E nimmt die Treppe einmal",
+      gast_k.ebene == 1, "Ebene %d" % gast_k.ebene)
 w.verlassen(); ga.verlassen()
 
 # ── Online: Kennwort und der Weg durch den Router ────────────────────
@@ -3728,7 +3778,7 @@ pruef("Loslassen gibt ihn frei",
       zieher.zieht is None and liegt.gezogen_von is None)
 
 # Rufen: hoechstens alle anderthalb Sekunden.
-gz._knoepfe.add("rufen")
+gz._knoepfe.add("nutzen")
 netz_durchlassen(wz, gz, 6)
 pruef("Der Gefallene ruft mit E", liegt.ruf_zeigen > 0.0,
       "%.2f" % liegt.ruf_zeigen)

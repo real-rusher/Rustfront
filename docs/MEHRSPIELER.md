@@ -1109,6 +1109,18 @@ auf der naechsten Treppe steht.
 braucht jede Handlung daran eine eigene Sperre. Der Einzelspieler hat das
 Problem nicht - er fragt `gedrueckt()` ab.
 
+**Nachtrag 0.27.** Beim Gast kam es wieder: hoch, runter, hoch, alle
+anderthalb Sekunden. Die Sperre hielt nur, solange E wirklich losgelassen
+wurde - blieb es beim Gast als gehalten stehen (das Loslassen ging an ein
+anderes Fenster, weil der Fokus wechselte), nahm er nach jeder Sperre die
+Treppe erneut. Jetzt haengt die Treppe am **Druck**: das Ereignis
+`nutzen` in `knoepfe`, das je Druck genau einmal kommt und beim Stau nie
+verworfen wird. Halten zaehlt nur noch fuers Aufhelfen. Die Sperre ist auf
+0,5 s geschrumpft und faengt nur noch einen Doppeldruck ab. Dazu laesst
+das Spiel beim Fokusverlust alle Tasten los, und die Tastenwiederholung
+ist im Spiel aus - sonst waere ein gehaltenes E wieder eine Folge von
+Druecken.
+
 ### 12.19 Knappe Munition, die keine war (schwer, 0.19.1)
 
 **Symptom.** Zwei Meldungen, die nach zwei Fehlern klangen: "man kann

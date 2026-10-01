@@ -311,6 +311,10 @@ class App:
                  headless=False) -> None:
         self.headless = headless
         pygame.init()
+        # Keine Tastenwiederholung im Spiel. Das Hauptmenue schaltet sie
+        # fuer sich ein; im Spiel waere jede Wiederholung ein neuer Druck -
+        # E gehalten hiesse dann: Treppe hoch, runter, hoch.
+        pygame.key.set_repeat()
         self.opt = Einstellungen()
         self.flaeche = pygame.Surface((K.GAME_W, K.GAME_H))
         self.fenster_groesse = self.opt.aufloesung_paar()
@@ -455,6 +459,14 @@ class App:
             if ev.type == pygame.QUIT:
                 self.laeuft = False
                 return
+            if ev.type == pygame.WINDOWFOCUSLOST:
+                # Wer das Fenster wechselt, waehrend er eine Taste haelt,
+                # laesst sie im anderen Fenster los - dieses hier erfaehrt
+                # davon nie. Ohne das blieb die Taste als gehalten stehen:
+                # die Figur lief weiter, schoss weiter, und beim Gast nahm
+                # ein festhaengendes E immer wieder die Treppe.
+                self.eingabe.alles_loslassen()
+                continue
             if ev.type in (pygame.WINDOWSIZECHANGED, pygame.VIDEORESIZE):
                 surf = pygame.display.get_surface()
                 if surf is not None:
