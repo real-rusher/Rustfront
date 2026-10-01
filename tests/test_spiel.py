@@ -4636,6 +4636,65 @@ for ziel_pos in ((0, 5000), (0, -5000), (5000, 0)):
           and benutzt.bottom <= AZ.H - AZ.RAND_UNTEN + 12, str(benutzt))
 wp_.verlassen(); gp_.verlassen()
 
+# ── Nur dieselbe Version spielt zusammen ─────────────────────────────
+import json as _json, socket as _socket, time as _time
+_port[0] += 1
+wv = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_port[0]), modus="pvp", seed=5)
+echte_version = K.VERSION
+K.VERSION = "0.0.1"                 # der Gast hat eine andere
+gv = Gefecht(app, "ALT", gast=netz.Gast("127.0.0.1:%d" % _port[0]))
+for _ in range(30):
+    K.VERSION = echte_version
+    wv.schritt(K.NETZ["takt"])
+    K.VERSION = "0.0.1"
+    gv.schritt(K.NETZ["takt"])
+K.VERSION = echte_version
+pruef("Ein Gast mit anderer Version wird abgewiesen", len(wv.kaempfer) == 1,
+      str(list(wv.kaempfer)))
+pruef("Und bekommt die Tafel mit beiden Versionen",
+      gv.versionsfehler == ("0.0.1", echte_version), str(gv.versionsfehler))
+pruef("Der Gastgeber sagt, wen er abgewiesen hat", "ALT" in wv.hinweis, wv.hinweis)
+app.flaeche.fill(K.C_VOID)
+gv.zeichnen(app.flaeche, 1.0)      # die Tafel darf nicht abstuerzen
+gv.verlassen()
+
+# Ein Gast von vor 0.27.1 schickt gar keine Version - er zeigt nur die
+# 24 Zeichen des Grundes, und die muessen allein verstaendlich sein.
+roh = _socket.create_connection(("127.0.0.1", _port[0]))
+roh.sendall((_json.dumps({"t": "hallo", "name": "UR", "team": -1, "wort": ""})
+             + "\n").encode())
+antwort = b""
+for _ in range(60):
+    wv.schritt(K.NETZ["takt"])
+    roh.settimeout(0.02)
+    try:
+        antwort += roh.recv(4096)
+    except (_socket.timeout, BlockingIOError):
+        pass
+    if b"abgelehnt" in antwort:
+        break
+roh.close()
+zeile = [z for z in antwort.split(b"\n") if b"abgelehnt" in z]
+grund = _json.loads(zeile[0]).get("grund", "") if zeile else ""
+pruef("Auch ein alter Gast ohne Versionsangabe wird abgewiesen",
+      bool(zeile) and len(wv.kaempfer) == 1, str(antwort[:80]))
+pruef("Mit einem Grund, den auch seine alte Anzeige ganz zeigt",
+      echte_version in grund and len(grund) <= 24, grund)
+wv.verlassen()
+
+# Die andere Richtung: der Gastgeber ist der Aeltere.
+w2, g2 = gefechtspaar("pvp")
+g2.versionsfehler = None
+pruef("Gleiche Version: es geht los", g2.versionsfehler is None
+      and len(w2.kaempfer) == 2)
+g2._version_vom_gastgeber({"t": "neustart", "regeln": {}})
+pruef("Ein Gastgeber ohne Versionsangabe (vor 0.27.1) wird vom Gast verlassen",
+      g2.versionsfehler == (echte_version, "") and not g2.gast.offen)
+from dustfront.mehrspieler import _version_kleiner
+pruef("Wer aelter ist, wird richtig erkannt",
+      _version_kleiner("0.26.9", "0.27.1") and not _version_kleiner("0.27.10", "0.27.2"))
+w2.verlassen(); g2.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

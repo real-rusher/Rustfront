@@ -1401,6 +1401,21 @@ Munition; oben Mitte je Spielart Uhr, Welle mit Restzahl und Bossbalken,
 Teamstand, Versuspunkte, Kreisbalken. Die Raender bleiben fuer die Pfeile
 frei.
 
+### Nur gleiche Versionen (0.27.1)
+
+**FEST.** Der Gast schickt im `hallo` seine Version (`K.VERSION`, gelesen
+aus `rustfront_menu.py`), der Gastgeber vergleicht sie **genau** und sagt
+sonst mit `abgelehnt` ab: `grund` "VERSION x NOETIG" (hoechstens 24
+Zeichen, so viel zeigen alte Gaeste), dazu `version` und `deine`. Ein neuer
+Gast zeigt dann die Tafel FALSCHE VERSION. Umgekehrt steht die Version im
+`willkommen`/`neustart`; fehlt sie oder weicht sie ab, legt der Gast auf.
+
+**GRUND.** Gastgeber und Gast teilen sich die Arbeit - der Gast schickt
+Druecke, der Gastgeber rechnet. Ein Fehler, der in der einen Version
+behoben ist, kommt mit der anderen zurueck: so geschehen mit der Treppe
+(12.16, Nachtrag). Daraus folgt eine Pflicht: **wer am Netzcode etwas
+aendert, zaehlt die Version hoch**, sonst greift die Pruefung nicht.
+
 ### Was dabei an Fehlern auffiel
 
 * Der Gast sah die Gesamtmunition anderer Waffen nicht (nur die gehaltene

@@ -565,6 +565,16 @@ class KampfGegner(Gegner):
 # Die Szene
 # ══════════════════════════════════════════════════════════════════
 
+def _version_kleiner(a: str, b: str) -> bool:
+    """Ist Version a aelter als b? Unlesbares zaehlt als aelter."""
+    def teile(v):
+        try:
+            return tuple(int(x) for x in v.split("."))
+        except ValueError:
+            return (-1,)
+    return teile(a) < teile(b)
+
+
 class Gefecht(Szene, LobbyTeil):
     """Die Spielszene fuer den LAN-Test, beim Gastgeber wie beim Gast.
 
@@ -630,6 +640,14 @@ class Gefecht(Szene, LobbyTeil):
         # Adresse kennt.
         self.passwort = netz.passwort_saeubern(passwort)
         self.abgewiesen = ""         # Grund, falls der Gastgeber absagt
+        # Passen die Versionen nicht zusammen: (meine, die des Gastgebers).
+        # Dann gibt es kein Gefecht, sondern eine Tafel, die sagt, warum.
+        self.versionsfehler: tuple[str, str] | None = None
+        # Ein Hinweis, der ein paar Sekunden stehen bleibt. `hinweis` wird
+        # beim Gastgeber jedes Bild neu gesetzt - fuer etwas, das einmal
+        # passiert (jemand wurde abgewiesen), waere er sofort wieder weg.
+        self._meldung = ""
+        self._meldung_rest = 0.0
 
         # Im Spiel ohne Seed, damit jede Runde anders ausfaellt. Die Tests
         # geben einen festen mit - ohne ihn haengt jede Pruefung daran, wo
@@ -773,6 +791,9 @@ class Gefecht(Szene, LobbyTeil):
             self.gast.senden({"t": "hallo", "name": self.name,
                               "team": self.team_wunsch,
                               "wort": self.passwort,
+                              # Gastgeber und Gast muessen genau dieselbe
+                              # Version haben (siehe _version_passt).
+                              "version": K.VERSION,
                               # Das Loadout geht mit der Anmeldung mit. Der
                               # Gastgeber legt die Figur an, also muss er zu
                               # diesem Zeitpunkt wissen, was sie traegt.
@@ -1699,6 +1720,9 @@ class Gefecht(Szene, LobbyTeil):
     # ---- Schritt: Gastgeber -------------------------------------------
     def _schritt_gastgeber(self, dt: float) -> None:
         self.hinweis = ""
+        self._meldung_rest = max(0.0, self._meldung_rest - dt)
+        if self._meldung_rest > 0:
+            self.hinweis = self._meldung
         self.gastgeber.annehmen()
 
         for nummer, nachricht in self.gastgeber.holen():
@@ -1714,6 +1738,8 @@ class Gefecht(Szene, LobbyTeil):
                     leitung = self.gastgeber.leitungen.get(nummer)
                     if leitung is not None:
                         leitung.schliessen("Kennwort falsch")
+                    continue
+                if not self._version_passt(nummer, nachricht):
                     continue
                 if nummer not in self.kaempfer:
                     try:
@@ -1783,7 +1809,96 @@ class Gefecht(Szene, LobbyTeil):
         # Regel kommt dadurch ohne eine Zeile hier beim Gast an.
         return {"t": "willkommen", "id": nummer,
                 "name": k.name if k is not None else "",
+                "version": K.VERSION,
                 "regeln": dict(self.regelwerk, karte=self.karte)}
+
+    def _version_passt(self, nummer: int, hallo: dict) -> bool:
+        """Beim Gastgeber: hat der Neue genau meine Version? Sonst absagen.
+
+        Genau dieselbe, nicht "ungefaehr": Gastgeber und Gast teilen sich
+        die Arbeit (der Gast schickt Druecke, der Gastgeber rechnet), und
+        ein Fehler, der in einer Version behoben ist, kommt mit der
+        anderen zurueck - so war es mit der Treppe in 0.27.0. Lieber gar
+        kein Gefecht als eines, in dem sich Fehler einschleichen, die
+        keiner mehr nachvollziehen kann.
+
+        Der Grund ist kurz genug fuer die Anzeige alter Gaeste, die noch
+        keine eigene Tafel dafuer haben (sie zeigen 24 Zeichen). Ein Gast
+        von vor 0.27.1 schickt gar keine Version - auch er wird abgewiesen.
+        """
+        seine = str(hallo.get("version", "") or "")[:16]
+        if seine == K.VERSION:
+            return True
+        self.gastgeber.an_einen(nummer, {
+            "t": "abgelehnt", "grund": "VERSION %s NOETIG" % K.VERSION,
+            "version": K.VERSION, "deine": seine})
+        leitung = self.gastgeber.leitungen.get(nummer)
+        if leitung is not None:
+            leitung.schliessen("Version passt nicht")
+        name = netz.name_saeubern(str(hallo.get("name", "GAST")))
+        print("Abgewiesen: %s hat Version %s, hier laeuft %s."
+              % (name, seine or "vor 0.27.1", K.VERSION))
+        self._meldung = "%s ABGEWIESEN: VERSION %s" % (name, seine or "ALT")
+        self._meldung_rest = 4.0
+        self.hinweis = self._meldung
+        return False
+
+    def _version_vom_gastgeber(self, nachricht: dict) -> bool:
+        """Beim Gast: hat der Gastgeber genau meine Version?
+
+        Die andere Richtung derselben Pruefung - fuer den Fall, dass der
+        Gastgeber der Aeltere ist. Ein Gastgeber von vor 0.27.1 prueft
+        selbst nicht und schickt keine Version; dann sagt der Gast ab.
+        """
+        seine = str(nachricht.get("version", "") or "")[:16]
+        if seine == K.VERSION:
+            return True
+        self._version_falsch(seine)
+        return False
+
+    def _version_falsch(self, beim_gastgeber: str) -> None:
+        self.versionsfehler = (K.VERSION, beim_gastgeber)
+        self.abgewiesen = "FALSCHE VERSION"
+        print("Falsche Version: du hast %s, der Gastgeber %s. Beide brauchen "
+              "denselben Stand." % (K.VERSION, beim_gastgeber or "eine aeltere"))
+        self.gast.schliessen()
+
+    def _versionsfehler_zeichnen(self, ziel) -> None:
+        """Die Tafel, wenn die Versionen nicht passen.
+
+        Vorher stand bei jeder Absage eine Zeile "ABGEWIESEN: ..." unten im
+        Bild, ueber einer leeren Testkarte. Bei einer falschen Version
+        reicht das nicht: man muss wissen, **wer** die andere hat und was
+        jetzt zu tun ist.
+        """
+        meine, seine = self.versionsfehler
+        f = SCHRIFT
+        ui.schleier(ziel, 225)
+        r = pygame.Rect(K.GAME_W // 2 - 200, K.GAME_H // 2 - 78, 400, 156)
+        ui.kasten(ziel, r, K.C_RED, (14, 9, 7), 5)
+        mitte = r.centerx
+        f.zeichnen(ziel, "FALSCHE VERSION", mitte, r.y + 12, K.C_RED, 2,
+                   ausrichtung="mitte")
+        f.zeichnen(ziel, "DU HAST", mitte - 60, r.y + 44, K.C_MUTED, 1,
+                   ausrichtung="mitte")
+        f.zeichnen(ziel, meine, mitte - 60, r.y + 56, K.C_CREAM, 2,
+                   ausrichtung="mitte")
+        f.zeichnen(ziel, "DER GASTGEBER", mitte + 60, r.y + 44, K.C_MUTED, 1,
+                   ausrichtung="mitte")
+        f.zeichnen(ziel, seine or "AELTER", mitte + 60, r.y + 56, K.C_AMBER, 2,
+                   ausrichtung="mitte")
+        if not seine or _version_kleiner(seine, meine):
+            rat = "DER GASTGEBER MUSS SEIN SPIEL AKTUALISIEREN."
+        else:
+            rat = "DU MUSST DEIN SPIEL AKTUALISIEREN."
+        f.zeichnen(ziel, "GASTGEBER UND GAST BRAUCHEN GENAU DIESELBE VERSION.",
+                   mitte, r.y + 86, K.C_CREAM, 1, ausrichtung="mitte")
+        f.zeichnen(ziel, rat, mitte, r.y + 100, K.C_AMBER, 1,
+                   ausrichtung="mitte")
+        f.zeichnen(ziel, "NEUESTER STAND: ZWEIG MULTIPLAYER-TEST",
+                   mitte, r.y + 114, K.C_MUTED, 1, ausrichtung="mitte")
+        f.zeichnen(ziel, "[ESC] ZURUECK", mitte, r.bottom - 16, K.C_MUTED_DK, 1,
+                   ausrichtung="mitte")
 
     def _gegnerlast_zaehlen(self) -> None:
         """Wie viele Gegner gerade an welchem Spieler haengen.
@@ -2707,6 +2822,9 @@ class Gefecht(Szene, LobbyTeil):
     # ---- Schritt: Gast -------------------------------------------------
     def _schritt_gast(self, dt: float) -> None:
         self.hinweis = ""
+        if self.versionsfehler is not None:
+            self.hinweis = ""
+            return
         if self.abgewiesen:
             self.hinweis = "ABGEWIESEN: %s  [ESC]" % self.abgewiesen
             return
@@ -2722,6 +2840,8 @@ class Gefecht(Szene, LobbyTeil):
         for nachricht in self.gast.holen():
             art = nachricht.get("t")
             if art in ("willkommen", "neustart"):
+                if not self._version_vom_gastgeber(nachricht):
+                    return
                 self._willkommen_lesen(nachricht)
                 if art == "neustart":
                     # Der Gastgeber hat die Regeln gewechselt. Alles, was
@@ -2746,6 +2866,10 @@ class Gefecht(Szene, LobbyTeil):
                 # gleich darauf auf, und im naechsten Bild wuerde sonst
                 # "Verbindung verloren" daraus - die Meldung, die am
                 # wenigsten erklaert.
+                if "version" in nachricht:
+                    # Abgesagt wegen der Version: eigene Tafel statt Zeile.
+                    self._version_falsch(str(nachricht.get("version", ""))[:16])
+                    return
                 self.abgewiesen = str(nachricht.get("grund", ""))[:24]
                 self.gast.schliessen()
                 return
@@ -3394,6 +3518,12 @@ class Gefecht(Szene, LobbyTeil):
             return
         if ev.type != pygame.KEYDOWN:
             return
+        if self.versionsfehler is not None:
+            # Hier gibt es nichts mehr zu spielen: Esc fuehrt hinaus,
+            # nicht ins Pausenmenue hinter der Tafel.
+            if ev.key in self.app.opt.codes("pause"):
+                self.app.laeuft = False
+            return
         if self.menue is None:
             self._knopf_merken(ev.key)
             if ev.key in self.app.opt.codes("ebenen"):
@@ -3689,6 +3819,9 @@ class Gefecht(Szene, LobbyTeil):
             self._endtafel(ziel)
         if self.menue is not None:
             self._menue_zeichnen(ziel)
+        if self.versionsfehler is not None:
+            self._versionsfehler_zeichnen(ziel)
+            return
         # Zuletzt und ueber allem: das Weiss einer Blendgranate. Es liegt
         # auch ueber der Anzeige - geblendet ist geblendet.
         self.befinden.blendung_zeichnen(ziel)
