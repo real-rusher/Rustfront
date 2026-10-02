@@ -120,15 +120,17 @@ DASH = dict(
 )
 
 KAMERA = dict(
-    nachlauf=11.0,            # je hoeher, desto straffer klebt sie am Spieler
+    # je hoeher, desto straffer klebt sie am Spieler. Bis 0.32.5 waren es
+    # 11: beim Laufen hing das Bild 10 Pixel hinterher und zog nach dem
+    # Anhalten sichtbar nach - mit Zoom vergroessert (gemeldet). Mit 15
+    # sind es 7.
+    nachlauf=15.0,
     maus_zug=0.26,            # wie weit sie in Blickrichtung vorlaeuft
     maus_max=54.0,
     # Experimentell, Barrierefreiheit "BLICK VORAUS" (seit 0.32, aus als
-    # Vorgabe): ein unsichtbarer Punkt so weit vor der Waffe, in
-    # Blickrichtung, ist die Bildmitte. Man sieht mehr von dem, was vor
-    # einem liegt, und weniger von dem dahinter. 110 Pixel sind ein gutes
-    # Drittel der halben Bildbreite - die Figur bleibt sicher im Bild.
-    blick_weite=110.0,
+    # Vorgabe): ein unsichtbarer Punkt vor der Waffe, in Blickrichtung,
+    # ist die Bildmitte. Wie weit vorn, stellt jeder selbst ein
+    # (einstellungen.py, kamera_blick_weite; Vorgabe 70, bis 0.32.5 fest 110).
     blick_nachlauf=6.0,       # weicher als sonst: Drehen soll nicht reissen
 )
 

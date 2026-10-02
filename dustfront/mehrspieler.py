@@ -811,6 +811,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Sichtweite (Mausrad): wohin der Zoom will, und die Flaechen, auf
         # die mit Zoom gezeichnet wird (siehe _zoom_zeichnen).
         self.zoom_ziel = K.ZOOM["start"]
+        self._zoom_weich = K.ZOOM["start"]   # der weich nachgezogene Wert
+        self._kamera_versatz = pygame.Vector2(0, 0)
         self._leinwand = None
         self._nebel = None
         self._seit_medkit = 0.0
@@ -3717,15 +3719,28 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Die Einstellung greift bei jedem Bild neu: wer das Wackeln
         # im Pausenmenue abschaltet, sieht es sofort stehen.
         self.kamera.anteil = self.app.opt.ruckel_anteil()
-        self.kamera.vorausschau = (K.KAMERA["blick_weite"]
-                                   if self.app.opt["kamera_blick"] else 0.0)
+        self.kamera.vorausschau = self.app.opt.blick_weite()
         # Der Zoom zieht weich nach - ein Sprung auf die doppelte Weite
         # in einem Bild verliert einen voellig.
-        z = self.kamera.zoom
+        z = self._zoom_weich
         z += (self.zoom_ziel - z) * min(1.0, K.ZOOM["weich"] * dt)
-        self.kamera.zoom = self.zoom_ziel if abs(self.zoom_ziel - z) < 0.004 else z
+        self._zoom_weich = self.zoom_ziel if abs(self.zoom_ziel - z) < 0.004 else z
+        # Gezeichnet wird in Stufen von 1/40. GRUND: Die Leinwand ist
+        # 640 x 360 mal Zoom, gerundet - und bei jedem anderen Zoom ergab
+        # das Rundungen in Breite und Hoehe, die nicht zueinander passten.
+        # Beim Zoomen wechselte das Seitenverhaeltnis darum in jedem Bild
+        # ein wenig, und das Bild wackelte zur Seite und nach oben. Bei
+        # Vielfachen von 1/40 ist die Leinwand 16 x 9 Pixel genau.
+        self.kamera.zoom = round(self._zoom_weich * 40.0) / 40.0
+        if not self.pausiert:
+            # Im Menue faehrt die Maus ueber die Eintraege - die Kamera
+            # soll ihr dabei nicht folgen.
+            self._kamera_versatz = ((self.app.eingabe.maus
+                                     - pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2))
+                                    * self.kamera.zoom)
         self.kamera.schritt(dt, self.ich.pos, self.ich.ziel,
-                            (ebene.pixel_breite, ebene.pixel_hoehe))
+                            (ebene.pixel_breite, ebene.pixel_hoehe),
+                            versatz=self._kamera_versatz)
 
     def _befinden_fuehren(self, dt: float) -> None:
         """Den roten Rand und den Herzschlag nachfuehren.
@@ -4246,7 +4261,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         if self.ich is None:
             return pygame.Vector2(self.kamera.pos)
         k = K.KAMERA
-        vor = pygame.Vector2(self.ich.ziel) - self.ich.pos
+        vor = pygame.Vector2(self._kamera_versatz) / (1.0 - k["maus_zug"])
         if vor.length() > k["maus_max"]:
             vor.scale_to_length(k["maus_max"])
         m = self.ich.pos + vor * k["maus_zug"]

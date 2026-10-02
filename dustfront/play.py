@@ -242,10 +242,12 @@ class Spiel(Szene):
         # Die Einstellung greift bei jedem Bild neu: wer das Wackeln
         # im Pausenmenue abschaltet, sieht es sofort stehen.
         self.kamera.anteil = self.app.opt.ruckel_anteil()
-        self.kamera.vorausschau = (K.KAMERA["blick_weite"]
-                                   if self.app.opt["kamera_blick"] else 0.0)
+        self.kamera.vorausschau = self.app.opt.blick_weite()
         self.kamera.schritt(dt, held.pos, held.ziel,
-                            (ebene.pixel_breite, ebene.pixel_hoehe))
+                            (ebene.pixel_breite, ebene.pixel_hoehe),
+                            versatz=(self.app.eingabe.maus
+                                     - pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2))
+                                    * self.kamera.zoom)
 
     # ---- Bild ---------------------------------------------------------
     def zeichnen(self, ziel, alpha: float) -> None:

@@ -72,6 +72,9 @@ VORGABE = {
     # Experimentell: die Kamera schaut in Blickrichtung voraus (siehe
     # Kamera.vorausschau). Aus als Vorgabe.
     "kamera_blick": False,
+    # Wie weit der Punkt vor der Waffe liegt, in Weltpixeln (seit 0.32.6,
+    # gemeldet: "noch ein bisschen weit nach vorne"). Vorher fest 110.
+    "kamera_blick_weite": 70,
 }
 
 # Welche Einstellungen zum **Spieler** gehoeren und nicht zum Geraet.
@@ -83,12 +86,14 @@ VORGABE = {
 # andere bleibt, wo es ist.
 KONTO_WERTE = ("bildschirm_ruckeln", "vignette", "partikel",
                "tracer", "tracer_weit", "ton_gesamt", "ton_effekte",
-               "ton_musik", "obere_ebenen", "blendung", "kamera_blick")
+               "ton_musik", "obere_ebenen", "blendung", "kamera_blick",
+               "kamera_blick_weite")
 
 AUFLOESUNGEN = ["960x540", "1280x720", "1600x900", "1920x1080", "2560x1440"]
 FENSTERMODI = ["fenster", "randlos", "vollbild"]
 PARTIKEL = ["wenig", "normal", "viel"]
 BLENDUNGEN = ["normal", "weiss", "schwarz"]
+BLICK_WEITEN = [40, 55, 70, 85, 100, 120, 150]
 RASTER = ["gefuellt", "ganzzahlig"]
 BILDRATEN = [0, 60, 75, 90, 120, 144, 165, 240]
 
@@ -102,6 +107,7 @@ BESCHRIFTUNG = {
     "bildrate": {0: "UNBEGRENZT"},
     "blendung": {"normal": "WIE VOM WERFER", "weiss": "NUR WEISS",
                  "schwarz": "NUR SCHWARZ"},
+    "kamera_blick_weite": {w: "%d PIXEL" % w for w in BLICK_WEITEN},
 }
 
 # ══════════════════════════════════════════════════ Tastenbelegung
@@ -208,6 +214,15 @@ class Einstellungen:
 
     def __setitem__(self, schluessel: str, wert) -> None:
         self.werte[schluessel] = wert
+
+    def blick_weite(self) -> float:
+        """Wie weit die Kamera vorausschaut, 0 wenn BLICK VORAUS aus ist."""
+        if not self["kamera_blick"]:
+            return 0.0
+        try:
+            return float(max(0, min(400, int(self["kamera_blick_weite"]))))
+        except (TypeError, ValueError):
+            return 70.0
 
     def ruckel_anteil(self) -> float:
         """Wie stark das Bild wackeln darf, 0.0 bis 1.0.

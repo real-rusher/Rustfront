@@ -82,7 +82,18 @@ class Kamera:
         self.ruckeln = min(r["max"], self.ruckeln + kraft)
 
     def schritt(self, dt: float, ziel: pygame.Vector2, blick: pygame.Vector2,
-                grenze: tuple[int, int]) -> None:
+                grenze: tuple[int, int], versatz=None) -> None:
+        """`versatz`: wo die Maus vom Bildmittelpunkt weg steht, in
+        Weltpixeln (seit 0.32.6). Ist er da, folgt der kleine Vorlauf zur
+        Maus ihm statt `blick`.
+
+        GRUND: `blick` ist der Weltpunkt unter der Maus - und der haengt
+        selbst an der Kamera. Bewegte sich die Kamera, wanderte der Punkt
+        mit, und die Kamera lief ihm ein Stueck hinterher; beim Zoomen
+        verschob sich der Punkt ausserdem mit dem Massstab. Das Bild zog
+        dann sichtbar zur Seite und fand sich erst nach einem Moment ein
+        (gemeldet). Der Abstand zur Bildmitte haengt an keinem von beiden.
+        """
         k = K.KAMERA
         vor = (blick - ziel)
         if self.vorausschau > 0.0:
@@ -94,11 +105,20 @@ class Kamera:
                 wunsch += vor.normalize() * self.vorausschau
             nachlauf = k["blick_nachlauf"]
         else:
+            if versatz is not None:
+                # Dieselbe Ruhelage wie frueher: dort galt
+                # vorlauf = zug * (versatz + vorlauf), also
+                # vorlauf = versatz * zug / (1 - zug).
+                vor = pygame.Vector2(versatz) / (1.0 - k["maus_zug"])
             if vor.length() > k["maus_max"]:
                 vor.scale_to_length(k["maus_max"])
             wunsch = ziel + vor * k["maus_zug"]
             nachlauf = k["nachlauf"]
         self.pos += (wunsch - self.pos) * min(1.0, nachlauf * dt)
+        if (wunsch - self.pos).length_squared() < 0.36:
+            # Den letzten halben Pixel nicht ausschleichen: die gerundete
+            # Ecke sprang sonst noch einmal, wenn man laengst stand.
+            self.pos.update(wunsch)
 
         self._sperre = max(0.0, self._sperre - dt)
         self.ruckeln = max(0.0, self.ruckeln

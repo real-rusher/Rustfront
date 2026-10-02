@@ -5543,7 +5543,7 @@ t0 = _zeit.perf_counter()
 for _ in range(10):
     wz.zeichnen(app.flaeche, 1.0)
 mit_zoom = (_zeit.perf_counter() - t0) / 10
-wz.zoom_ziel = 1.0; wz.kamera.zoom = 1.0
+wz.zoom_ziel = 1.0; wz.kamera.zoom = 1.0; wz._zoom_weich = 1.0
 t0 = _zeit.perf_counter()
 for _ in range(10):
     wz.zeichnen(app.flaeche, 1.0)
@@ -6224,16 +6224,17 @@ _l46.verlassen()
 # ── 0.32: Barrierefreiheit - Blendung einfarbig, Blick voraus ────────
 from dustfront.render import Kamera as _Kam47
 _k47 = _Kam47((1000, 1000))
+_weite47 = float(E.VORGABE["kamera_blick_weite"])
 for _ in range(600):
     _k47.schritt(K.FIXED_DT, pygame.Vector2(1000, 1000),
                  pygame.Vector2(1300, 1000), (4000, 4000))
 _ohne47 = _k47.pos.x - 1000
-_k47.vorausschau = K.KAMERA["blick_weite"]
+_k47.vorausschau = _weite47
 for _ in range(600):
     _k47.schritt(K.FIXED_DT, pygame.Vector2(1000, 1000),
                  pygame.Vector2(1300, 1000), (4000, 4000))
 pruef("Blick voraus: die Bildmitte liegt vor der Waffe",
-      abs(_k47.pos.x - 1000 - K.KAMERA["blick_weite"]) < 1.0
+      abs(_k47.pos.x - 1000 - _weite47) < 1.0
       and abs(_k47.pos.y - 1000) < 1.0, "%.1f statt %.1f vorher" % (
           _k47.pos.x - 1000, _ohne47))
 for _ in range(600):
@@ -6241,7 +6242,7 @@ for _ in range(600):
                  pygame.Vector2(1000 + 2, 1000 - 900), (4000, 4000))
 pruef("Nur die Richtung zaehlt, nicht wie weit die Maus weg ist",
       abs((_k47.pos - pygame.Vector2(1000, 1000)).length()
-          - K.KAMERA["blick_weite"]) < 1.0 and _k47.pos.y < 1000)
+          - _weite47) < 1.0 and _k47.pos.y < 1000)
 _w47, _g47 = gefechtspaar("pvp")
 _alt47 = app.opt["blendung"]
 for _art47, _farbe47 in (("schwarz", (0, 0, 0)), ("weiss", (255, 255, 255))):
@@ -6290,6 +6291,40 @@ pruef("Und steht oben auf festem Boden, nicht neben der Rampe im Nichts",
       and _gg52.pos.distance_to(_oben52) < 120,
       "Ebene %d, %.0f px vom Spieler" % (_gg52.ebene, _gg52.pos.distance_to(_oben52)))
 _w52.verlassen(); _g52.verlassen()
+
+# ── 0.32.6: Zoom ohne Wackeln, Kamera ohne Nachziehen ────────────────
+# Gemeldet: "wenn man reinzoomt und sich bewegt, oder raus und rein-
+# zoomt, ruckelt das Bild zur Seite oder hoch und findet sich erst nach
+# einem Moment ein."
+_w54, _g54 = gefechtspaar("pvp")
+_w54.ich.pos.update(_w54.welt.ebene(0).pixel_breite / 2, _w54.welt.ebene(0).pixel_hoehe / 2)
+app.eingabe.maus = pygame.Vector2(600, 40)     # Maus fest in einer Ecke
+_seiten = set()
+_w54.zoom_ziel = 0.75
+for _ in range(80):
+    _w54.ich.tempo.update(0, 0)
+    _w54.schritt(K.FIXED_DT)
+    _z = _w54.kamera.zoom
+    _seiten.add((round(K.GAME_W * _z), round(K.GAME_H * _z), K.GAME_W * _z * 9 == K.GAME_H * _z * 16))
+pruef("Beim Zoomen bleibt die Leinwand genau 16:9",
+      all(x[2] for x in _seiten) and all(a * 9 == b * 16 for a, b, _ in _seiten),
+      str(sorted(_seiten)[:4]))
+_ecken = []
+for _ in range(120):
+    _w54.ich.tempo.update(0, 0)
+    _w54.schritt(K.FIXED_DT)
+    _ecken.append(tuple(_w54.kamera.ecke))
+pruef("Danach steht das Bild still, ohne nachzuziehen",
+      len(set(_ecken[30:])) == 1, "%d verschiedene Ecken" % len(set(_ecken[30:])))
+_alt54 = app.opt["kamera_blick"], app.opt["kamera_blick_weite"]
+app.opt["kamera_blick"] = True; app.opt["kamera_blick_weite"] = 40
+pruef("BLICK VORAUS: die Weite kommt aus der Einstellung",
+      app.opt.blick_weite() == 40.0)
+app.opt["kamera_blick"] = False
+pruef("Und ist aus, solange BLICK VORAUS aus ist", app.opt.blick_weite() == 0.0)
+app.opt["kamera_blick"], app.opt["kamera_blick_weite"] = _alt54
+app.eingabe.maus = pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2)
+_w54.verlassen(); _g54.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

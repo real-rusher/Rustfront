@@ -441,6 +441,10 @@ HILFE = {
         "EIN UNSICHTBARER PUNKT VOR DER WAFFE IST DIE BILDMITTE - DU SIEHST",
         "MEHR VON DEM, WAS VOR DIR LIEGT. GEHÖRT ZUM KONTO.",
     ],
+    "kamera_blick_weite": [
+        "WIE WEIT DER PUNKT VOR DER WAFFE LIEGT, WENN BLICK VORAUS AN IST.",
+        "WENIGER: DIE FIGUR BLEIBT NÄHER AN DER MITTE. GEHÖRT ZUM KONTO.",
+    ],
     "reset": ["SETZT ALLE WERTE DIESER SEITEN AUF DIE VORGABE ZURÜCK."],
     "zurueck": ["ZURÜCK ZUM PAUSENMENÜ. GESPEICHERT IST SCHON ALLES."],
     "reiter_video": ["FENSTER, AUFLÖSUNG, BILDRATE, PIXELRASTER."],
@@ -578,8 +582,12 @@ class Einstellungen(Menue):
                       "bildschirm_ruckeln", o["bildschirm_ruckeln"]),
             ui.Schalter(self._reihe(zx, zy, zw, 2), "BLICK VORAUS",
                         "kamera_blick", o["kamera_blick"]),
+            ui.Wahl(self._reihe(zx, zy, zw, 3), "  WIE WEIT VORAUS",
+                    "kamera_blick_weite", E.BLICK_WEITEN,
+                    self._index(E.BLICK_WEITEN, o["kamera_blick_weite"]),
+                    E.BESCHRIFTUNG["kamera_blick_weite"]),
         ]
-        self._platzhalter(zx, zy, zw, 3, ("FARBEN FÜR FARBENBLINDE",
+        self._platzhalter(zx, zy, zw, 4, ("FARBEN FÜR FARBENBLINDE",
                                           "UNTERTITEL FÜR GERÄUSCHE",
                                           "SCHRIFTGRÖSSE"))
 
