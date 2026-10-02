@@ -1069,6 +1069,7 @@ class Spieler(Wesen):
     # Kein fester Name: die Figur zeigt die Waffe, die sie gerade traegt.
     # Siehe die Eigenschaft bild() weiter unten.
     faellt = True
+    faehrt_aufzug = True     # world.Welt.aufzug_pruefen
 
     def __init__(self, pos, ebene=0) -> None:
         self.max_leben = K.SPIELER["leben"]
@@ -1873,6 +1874,11 @@ class Spieler(Wesen):
 
 class Gegner(Wesen):
     fraktion = "feind"
+    # Gegner fahren nur, wenn der Aufzug auf ihrem Weg liegt
+    # (_treppe_ansteuern), nicht schon, weil sie hineingedraengt wurden.
+    # Gemessen auf STAUBTAL: ein Brecher, im Gedraenge vor der Tuer in
+    # die Kabine geschoben, fuhr hinauf und gleich wieder herunter.
+    faehrt_aufzug = False
 
     def __init__(self, pos, art: str, ebene=0, leben: float | None = None) -> None:
         d = K.gegner_daten(art)

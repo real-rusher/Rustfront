@@ -81,7 +81,11 @@ class Wegenetz:
         for i, e in enumerate(welt.ebenen):
             for ty in range(e.hoehe):
                 for tx in range(e.breite):
-                    rel = e.daten(tx, ty).get("treppe")
+                    # Ein Aufzug ist fuer den Weg eine Treppe: hinlaufen,
+                    # draufstehen, andere Ebene. Den Versatz beim
+                    # Aussteigen erledigt world.ebene_wechseln.
+                    daten = e.daten(tx, ty)
+                    rel = daten.get("treppe", daten.get("aufzug"))
                     if rel is None:
                         continue
                     ziel = i + rel

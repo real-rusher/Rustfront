@@ -62,6 +62,7 @@ class Spiel(Szene):
         self.blick_hoehe = float(self.welt.hoehe(self.blick))
         self._letzte_ebene = self.held.ebene
         self._ueberblendung = Ueberblendung()
+        self._held_zuletzt = pygame.Vector2(self.held.pos)
 
         self.welle = 0
         self.pause_rest = 2.0
@@ -238,6 +239,11 @@ class Spiel(Szene):
                 # (K.EBENENWECHSEL). Ein Sturz sinkt weiter mit.
                 self.blick_hoehe = float(self.welt.hoehe(held.ebene))
                 self._ueberblendung.starten()
+                # Aufzug: die Kamera geht den Schritt beim Aussteigen mit.
+                sprung = held.pos - self._held_zuletzt
+                if sprung.length_squared() <= (2 * K.TILE) ** 2:
+                    self.kamera.pos += sprung
+        self._held_zuletzt.update(held.pos)
         if self.blick != held.ebene:
             self.hinweis = "ANSICHT EBENE %d  [MAUSRAD]" % self.blick
 

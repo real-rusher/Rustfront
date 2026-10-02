@@ -1857,6 +1857,14 @@ braucht Rundrufe (Broadcast) im Netz; manche Firewalls und WLANs lassen die
 nicht durch, dann bleibt nur die Adresse von Hand (sie steht in jeder
 Lobby oben links).
 
+Nicht im Netz, aber ebenfalls zwischen den Rechnern: was beide **gleich**
+haben muessen. Der Gast laedt die Karte aus seinem eigenen Ordner, nur
+ihr Name kommt ueber das Netz.
+
+| Seit | Was | Wenn es nicht passt |
+| --- | --- | --- |
+| 0.32.11 | STAUBTAL hat zwei neue Kachelarten (Aufzug `^` und `v`) | eine alte Version kennt sie nicht und saehe dort Boden - darum wird die Version beim Beitreten verglichen, und ein alter Gast wird abgewiesen |
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:

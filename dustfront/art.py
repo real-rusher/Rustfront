@@ -271,6 +271,63 @@ def _luke():
     return s
 
 
+def _aufzug_pfeile(s, hoch: bool):
+    """Das Zeichen fuer einen Aufzug: zwei Pfeile, der der Fahrtrichtung
+    leuchtet. Tuerkis hinauf, Bernstein hinab - wie bei den Treppen,
+    damit niemand lernen muss, was die Farbe hier heisst."""
+    m = T // 2
+    an = K.C_TEAL if hoch else K.C_AMBER
+    aus = (70, 62, 52)
+    pygame.draw.polygon(s, an if hoch else aus,
+                        [(m, m - 9), (m - 5, m - 3), (m + 5, m - 3)])
+    pygame.draw.polygon(s, aus if hoch else an,
+                        [(m, m + 9), (m - 5, m + 3), (m + 5, m + 3)])
+
+
+@platzhalter("aufzug_tuer")
+def _aufzug_tuer():
+    """Unten: die Kabine, in die man aus dem Sand hineinlaeuft.
+
+    Dunkler Riffelblechboden zwischen zwei Stahlpfosten, damit sie sich
+    klar vom Fels daneben abhebt - wer sie sucht, muss sie von weitem
+    als Oeffnung erkennen, nicht als weiteren Felsbrocken.
+    """
+    s = _flaeche(T, T)
+    s.fill((34, 30, 27))
+    for y in range(3, T, 6):
+        for x in range(2 + (y // 6) % 2 * 3, T - 2, 6):
+            pygame.draw.line(s, (52, 46, 40), (x, y), (x + 2, y + 1))
+    # Pfosten oben und unten, mit Nieten
+    for y in (0, T - 3):
+        pygame.draw.rect(s, (88, 80, 70), (0, y, T, 3))
+        for x in range(3, T, 8):
+            s.set_at((x, y + 1), (150, 138, 116))
+    _aufzug_pfeile(s, True)
+    return s
+
+
+@platzhalter("aufzug_schacht")
+def _aufzug_schacht():
+    """Oben: der Schachtkopf auf dem Plateau, mit Warnstreifen am Rand."""
+    s = _flaeche(T, T)
+    s.fill((46, 40, 34))
+    # Gitter ueber dem Schacht
+    for i in range(5, T - 4, 5):
+        pygame.draw.line(s, (24, 20, 16), (i, 4), (i, T - 5))
+        pygame.draw.line(s, (70, 62, 52), (4, i), (T - 5, i))
+    # Warnstreifen, schraeg, als Rahmen
+    rahmen = _flaeche(T, T)
+    for i in range(-T, T * 2, 6):
+        pygame.draw.line(rahmen, K.C_AMBER, (i, 0), (i + T, T), 3)
+    innen = pygame.Rect(4, 4, T - 8, T - 8)
+    rahmen.fill((0, 0, 0, 0), innen)
+    s.blit(rahmen, (0, 0))
+    pygame.draw.rect(s, (24, 18, 12), innen, 1)
+    pygame.draw.rect(s, (24, 18, 12), s.get_rect(), 1)
+    _aufzug_pfeile(s, False)
+    return s
+
+
 # ──────────────────────────────── Figuren
 
 def _rand(s, farbe=(16, 11, 8)):

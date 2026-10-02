@@ -36,6 +36,8 @@ ZEICHEN = {
     "<": K.TREPPE_RUNTER,
     ">": K.TREPPE_HOCH,
     "o": K.LUKE,
+    "^": K.AUFZUG_HOCH,
+    "v": K.AUFZUG_RUNTER,
 }
 
 
@@ -574,6 +576,8 @@ class Welt:
         for w in self.wesen:
             if w.lebt:
                 w.schritt(dt)
+                if w.lebt:
+                    self.aufzug_pruefen(w)
         self.effekte_schritt(dt)
         for r in self.rauch:
             r.schritt(dt)
@@ -874,6 +878,14 @@ class Welt:
         dort nicht mehr weg. Ein Gegner, dem es noch nicht passt, geht
         weiter zur Mitte der Treppe und versucht es dort.
         """
+        if self.aufzug_unter(wesen) is not None:
+            raus = self.aufzug_ausgang(wesen, ziel)
+            if raus is None:
+                return False
+            wesen.ebene = ziel
+            wesen.pos.update(raus)
+            wesen.vorher.update(raus)
+            return True
         alt = wesen.ebene
         wesen.ebene = ziel
         if self.frei(wesen.pos, wesen.radius, ziel, loch_fest):
@@ -881,6 +893,70 @@ class Welt:
             return True
         wesen.ebene = alt
         return False
+
+    # ---- Aufzug (seit 0.32.11) ------------------------------------------
+    def aufzug_unter(self, wesen) -> int | None:
+        """Zielebene, wenn das Wesen in einer Aufzugkachel steht."""
+        e = self.ebene(wesen.ebene)
+        rel = e.daten(int(wesen.pos.x // K.TILE),
+                      int(wesen.pos.y // K.TILE)).get("aufzug")
+        if rel is None:
+            return None
+        ziel = wesen.ebene + rel
+        return ziel if 0 <= ziel < len(self.ebenen) else None
+
+    def aufzug_ausgang(self, wesen, ziel: int):
+        """Wo man nach dem Aufzug steht, oder None.
+
+        Eine Kachel weiter, in die Richtung, in die man lief - und zwar
+        als Verschiebung, nicht auf die Kachelmitte: wer am oberen Rand
+        der Tuer hineinging, kommt am oberen Rand heraus. Zusammen mit
+        der Ueberblendung (render.Ueberblendung) und der mitgeschobenen
+        Kamera sieht das aus wie ein Schritt durch die Tuer.
+
+        In Frage kommen nur die vier Nachbarn der Gegenstelle, die Boden
+        sind - kein Loch, keine Wand und kein Aufzug, sonst fuehre man
+        sofort zurueck. Gibt es keinen, bleibt man, wo man ist.
+        """
+        e = self.ebene(ziel)
+        tx, ty = int(wesen.pos.x // K.TILE), int(wesen.pos.y // K.TILE)
+        lauf = pygame.Vector2(getattr(wesen, "tempo", (0, 0)))
+        if lauf.length_squared() < 1.0:
+            lauf = pygame.Vector2(1, 0).rotate(getattr(wesen, "winkel", 0.0))
+        bester, beste_guete = None, -9.0
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = tx + dx, ty + dy
+            if (not e.begehbar(nx, ny) or e.loch(nx, ny)
+                    or e.daten(nx, ny).get("aufzug") is not None):
+                continue
+            richtung = pygame.Vector2(dx, dy)
+            for p in (wesen.pos + richtung * K.TILE,
+                      pygame.Vector2((nx + 0.5) * K.TILE, (ny + 0.5) * K.TILE)):
+                if (int(p.x // K.TILE), int(p.y // K.TILE)) != (nx, ny):
+                    continue
+                if self.frei(p, wesen.radius, ziel, loch_fest=True):
+                    guete = richtung.dot(lauf.normalize())
+                    if guete > beste_guete:
+                        bester, beste_guete = pygame.Vector2(p), guete
+                    break
+        return bester
+
+    def aufzug_pruefen(self, wesen) -> bool:
+        """Wer in einen Aufzug hineinlaeuft, faehrt - ohne Taste.
+
+        Nur, wer selbst laeuft: kein Sturz, kein Liegender, kein Boss.
+        Gegner fahren gar nicht von hier aus (`faehrt_aufzug` False):
+        sie nehmen den Aufzug wie eine Treppe in `_treppe_ansteuern`,
+        wenn er auf ihrem Weg liegt.
+        """
+        if (not getattr(wesen, "faehrt_aufzug", False) or wesen.flug > 0
+                or getattr(wesen, "am_boden", False)
+                or getattr(wesen, "ist_boss", False)):
+            return False
+        ziel = self.aufzug_unter(wesen)
+        if ziel is None:
+            return False
+        return self.ebene_wechseln(wesen, ziel, loch_fest=True)
 
 
 # ══════════════════════════════════════════════════════════════════

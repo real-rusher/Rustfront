@@ -818,6 +818,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._seit_muni = 0.0
         self._letzte_ebene = 0
         self._ueberblendung = Ueberblendung()
+        self._ich_zuletzt = pygame.Vector2(0, 0)
         self._flughoehen: dict[int, float] = {}
         # Pausenmenue: None = zu, sonst die gewaehlte Zeile.
         self.menue = None
@@ -3700,6 +3701,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 # aus (K.EBENENWECHSEL). Ein Sturz sinkt weiter mit.
                 self.blick_hoehe = float(self.welt.hoehe(self.ich.ebene))
                 self._ueberblendung.starten()
+                # Der Aufzug setzt eine Kachel weiter ab. Die Kamera geht
+                # den Schritt mit, damit die Figur im Bild stehen bleibt
+                # und nur die Umgebung ueberblendet - sonst huepfte sie.
+                sprung = self.ich.pos - self._ich_zuletzt
+                if sprung.length_squared() <= (2 * K.TILE) ** 2:
+                    self.kamera.pos += sprung
+        self._ich_zuletzt.update(self.ich.pos)
         if self._rad:
             self.blick = max(0, min(len(self.welt.ebenen) - 1,
                                     self.blick + (1 if self._rad > 0 else -1)))

@@ -71,7 +71,8 @@ class Minikarte:
                 art = e.kachel(tx, ty)
                 if art == K.LEER:
                     continue
-                if art in (K.TREPPE_HOCH, K.TREPPE_RUNTER, K.LUKE):
+                if art in (K.TREPPE_HOCH, K.TREPPE_RUNTER, K.LUKE,
+                           K.AUFZUG_HOCH, K.AUFZUG_RUNTER):
                     farbe = FARBE_TREPPE
                 elif e.fest(tx, ty):
                     farbe = FARBE_WAND

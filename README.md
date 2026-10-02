@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.32.10, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.32.11, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -600,6 +600,7 @@ darueber, dass Tabelle und gezeichnete Platzhalter sich decken.
 | `kiste` | 32x32 | Frachtkasten, blockiert nur Bewegung |
 | `treppe_hoch`, `treppe_runter` | 32x32 | Treppen, mit E zu benutzen |
 | `luke` | 32x32 | Luke nach unten |
+| `aufzug_tuer`, `aufzug_schacht` | 32x32 | Aufzug: Tuer unten im Fels, Schachtkopf oben; hineinlaufen genuegt |
 | `spieler` | 28x28 | die eigene Figur ohne bestimmte Waffe |
 | `spieler_repetierer` … `spieler_brecheisen` | 56x56 | die Figur mit der jeweiligen Waffe in der Hand |
 | `gegner_laeufer` | 28x28 | Laeufer |
@@ -727,6 +728,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 | 0.14.0 | Mehrspieler fertiggestellt: drei Spielarten, Aufhelfen, Wellen mit mehrspielertauglicher Gegner-KI, knappe Munition mit Nachschubkisten. Letzter Stand dieses Zweigs |
 | 0.16.0 | Mannschaften im Gefecht: TEAM, VERSUS mit einem Leben je Runde und Aufhelfen durch die eigenen Leute, HUEGEL mit sichtbarem Kreis in der Kartenmitte. Alles in `docs/MEHRSPIELER.md` beschrieben. Nur auf `multiplayer-test`; 0.15.0 gehoert dem Hauptzweig ohne Mehrspieler |
 | 0.17.0 | Rauchgranate als siebte Waffe; Granaten fallen ueber Kanten auf die Ebene darunter; Einstiegsschutz, Startmedkits und Medkit-Nachschub als Schalter beim Aufmachen. Dazu vier gemeldete Fehler behoben: kein Ton im Gefecht, Ziellinie des Gastes am Einstiegspunkt, Versetzung nach einem Sturztod, Granaten prallten an Loechern ab. Brecheisen toetet in zwei Treffern, Schrot reicht weiter und streut enger, Scharfschuetze weiter als das Bild breit ist |
+| 0.32.11 | **Aufzug auf STAUBTAL (Versuch)**: die Westrampe der KANZEL (grosses Plateau) ist jetzt eine Tuer unten im Fels mit dem Schachtkopf genau darueber. Hineinlaufen genuegt, ohne Taste; man kommt eine Kachel weiter auf der anderen Ebene heraus, in die Richtung, in die man lief, und die Kamera geht den Schritt mit - die Figur bleibt im Bild stehen (gemessen hoechstens 3 px), nur die Umgebung blendet ueber. Zurueck genauso: oben in den Schacht laufen, unten vor der Tuer heraus. Gegner nehmen ihn, wenn er auf ihrem Weg liegt (gemessen: keine Umsetzungen, alle ausser den Speiern kommen an), aber nicht, wenn sie nur hineingedraengt werden; Bosse nie. Die anderen Plateaus haben weiter Rampen, zum Vergleichen. Netz: kein neuer Port und keine neue Nachricht, der Wechsel kommt wie jeder Ebenenwechsel ueber die gewohnte Meldung. Aber die Karte hat zwei neue Kachelarten: Gastgeber und Gast brauchen dieselbe Version (wird beim Beitreten geprueft) |
 | 0.32.10 | **Ebenenwechsel ohne Aussetzer**: nach Treppe oder Luke war man bis jetzt eine halbe Sekunde unsichtbar (nur der Laser blieb), und die Helligkeit zog nach. Grund: die Ansicht glitt langsam zur neuen Hoehe, und solange galt die eigene Etage als "darueber" (ausgeblendet) oder "darunter" (abgedunkelt). Jetzt springt die Ansicht sofort, und das letzte Bild der alten Ebene blendet in 0,22 s aus. Stuerze sinken weiter mit der Figur. Netz: keine Aenderung, nur Darstellung beim eigenen Rechner |
 | 0.32.9 | **Brecheisen-Schwung**: die Figur haelt beim Schlag jetzt wirklich das alte Brecheisen aus der Schnellleiste mit beiden Haenden, die Arme schwingen mit (9 Bilder ueber den Schwungbogen); die Waffe verschwindet fuer den Schwung ganz und das Eisen bleibt danach noch 0,14 s in der Hand, damit man es sieht. Die alte rostige Linie und der helle Block sind weg, nur eine schwache Punktspur der Spitze bleibt. Netz: keine Aenderung (das vorhandene Schlagfeld wird genutzt) |
 | 0.32.8 | **Knall der Blendgranate**: deutlich leiser mit Abstand (bei 300 Pixeln rund zwei Drittel, ab 500 Pixeln knapp die Haelfte der gewoehnlichen Daempfung) und noch einmal halb so laut, wer wegschaut; ganz nah (2 Kacheln) voll; nie leiser als hoerbar. Gilt fuer den Standardknall und fuer den Ton aus der Spielerkosmetik. **Barrierefreiheit**: neue Zeile BLENDGRANATE TON (wie vom Werfer / nur Standard), getrennt vom Bild - das eine betrifft das Auge, das andere das Ohr |

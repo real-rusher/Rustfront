@@ -369,6 +369,8 @@ BILD_MASS = {
     "treppe_hoch":      (TILE, TILE),
     "treppe_runter":    (TILE, TILE),
     "luke":             (TILE, TILE),
+    "aufzug_tuer":      (TILE, TILE),
+    "aufzug_schacht":   (TILE, TILE),
     # Figuren, quadratisch und nach rechts schauend. Die Figur mit Waffe
     # braucht mehr Flaeche als die Figur allein, sonst ragt der Lauf der
     # Scharfschuetzenwaffe hinaus.
@@ -1035,7 +1037,10 @@ TRACER = dict(
 # fest      blockiert Bewegung
 # sicht     blockiert Schuesse und Sicht
 # treppe    Zielebene relativ zur aktuellen, sonst None
-LEER, BODEN, GITTER, WAND, KISTE, TREPPE_HOCH, TREPPE_RUNTER, LUKE = range(8)
+# aufzug    wie treppe, aber ohne Taste: wer hineinlaeuft, faehrt
+#           (seit 0.32.11, world.Welt.aufzug_pruefen)
+LEER, BODEN, GITTER, WAND, KISTE, TREPPE_HOCH, TREPPE_RUNTER, LUKE, \
+    AUFZUG_HOCH, AUFZUG_RUNTER = range(10)
 
 KACHELN = {
     # Ein Loch: man kann darueber hinwegschiessen und hineinfallen, aber es
@@ -1052,6 +1057,14 @@ KACHELN = {
                         treppe=-1),
     LUKE:          dict(name="luke",     fest=False, sicht=False, bild="luke",
                         treppe=-1),
+    # Der Aufzug: unten eine Tuer im Fels, oben der Schachtkopf genau
+    # darueber. Man laeuft hinein und kommt eine Kachel weiter auf der
+    # anderen Ebene heraus - in die Richtung, in die man lief. Auf der
+    # Gegenstelle landet man nie, sonst fuehre man gleich zurueck.
+    AUFZUG_HOCH:   dict(name="aufzug",   fest=False, sicht=False, bild="aufzug_tuer",
+                        aufzug=+1),
+    AUFZUG_RUNTER: dict(name="aufzug",   fest=False, sicht=False, bild="aufzug_schacht",
+                        aufzug=-1),
 }
 
 # ══════════════════════════════════════════════════ INHALTE: Waffen
