@@ -167,6 +167,46 @@ class Kamera:
         return (pygame.Vector2(weltpunkt) - self.ecke) / self.zoom
 
 
+class Ueberblendung:
+    """Das letzte Weltbild, das nach einem Ebenenwechsel ausblendet.
+
+    Die Ansicht springt beim Wechsel ueber Treppe oder Aufzug sofort auf
+    die neue Hoehe (siehe K.EBENENWECHSEL). Ein harter Schnitt waere
+    aber genauso unruhig wie das Nachziehen vorher - also liegt fuer
+    einen Augenblick das alte Bild darueber und wird durchsichtig.
+
+    Gemerkt wird jedes Bild, aber nur die Welt, nicht die Anzeige: sonst
+    stuende die Lebensleiste kurz doppelt. Waehrend des Ausblendens
+    bleibt das alte Bild stehen - wuerde es weiter gemerkt, blendete es
+    sich selbst immer wieder ein und verschwaende viel spaeter.
+    """
+
+    def __init__(self) -> None:
+        self.bild: pygame.Surface | None = None
+        self.rest = 0.0
+
+    def merken(self, ziel: pygame.Surface) -> None:
+        if self.rest > 0:
+            return
+        if self.bild is None or self.bild.get_size() != ziel.get_size():
+            self.bild = pygame.Surface(ziel.get_size())
+        self.bild.blit(ziel, (0, 0))
+
+    def starten(self) -> None:
+        if self.bild is not None:
+            self.rest = K.EBENENWECHSEL["ueberblenden"]
+
+    def schritt(self, dt: float) -> None:
+        self.rest = max(0.0, self.rest - dt)
+
+    def zeichnen(self, ziel: pygame.Surface) -> None:
+        if self.rest <= 0 or self.bild is None:
+            return
+        t = self.rest / K.EBENENWECHSEL["ueberblenden"]
+        self.bild.set_alpha(int(255 * t * t * (3 - 2 * t)))
+        ziel.blit(self.bild, (0, 0))
+
+
 class Renderer:
     def __init__(self, bilder) -> None:
         self.bilder = bilder

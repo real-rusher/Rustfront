@@ -974,6 +974,17 @@ MUNITION = dict(
 #   1 -> 2   eine Etage im selben Rumpf, deutlich enger
 EBENEN_HOEHE = [0, 118, 182, 238, 288]
 
+# Ebenenwechsel ueber Treppe, Luke oder Aufzug (nicht durch einen Sturz).
+# Bis 0.32.9 zog die Ansicht in rund einer halben Sekunde zur neuen Hoehe
+# nach. Solange sie unterwegs war, galt die eigene Ebene als "darueber"
+# oder "darunter": hinauf wurde sie ausgestanzt - die Figur war weg, nur
+# der Laser blieb -, hinab war sie abgedunkelt und wurde erst langsam
+# hell. Jetzt springt die Ansicht sofort, und das letzte Bild der alten
+# Ebene blendet ueber diese Zeit aus.
+EBENENWECHSEL = dict(
+    ueberblenden=0.22,    # Sekunden, bis das alte Bild ganz weg ist
+)
+
 PERSPEKTIVE = dict(
     brennweite=430.0,     # je kleiner, desto staerker schrumpft die Tiefe
     dunkel=128,           # Helligkeit der Ebene darunter (255 = unveraendert)

@@ -24,7 +24,7 @@ from .entities import Aufsammler, Gegner, Spieler, wolke
 from .font import SCHRIFT
 from .inventar import Inventar
 from .menues import Pause
-from .render import Befinden, Kamera, Renderer
+from .render import Befinden, Kamera, Renderer, Ueberblendung
 from .world import freier_punkt, testkarte
 
 
@@ -61,6 +61,7 @@ class Spiel(Szene):
         self.blick = self.held.ebene
         self.blick_hoehe = float(self.welt.hoehe(self.blick))
         self._letzte_ebene = self.held.ebene
+        self._ueberblendung = Ueberblendung()
 
         self.welle = 0
         self.pause_rest = 2.0
@@ -228,9 +229,15 @@ class Spiel(Szene):
                     self.pause_rest = K.WELLE_PAUSE
 
         # Wechselt die Figur die Ebene, folgt die Ansicht ihr nach
+        self._ueberblendung.schritt(dt)
         if held.ebene != self._letzte_ebene:
             self._letzte_ebene = held.ebene
             self.blick = held.ebene
+            if held.flug <= 0:
+                # Treppe oder Luke: sofort dort, das alte Bild blendet aus
+                # (K.EBENENWECHSEL). Ein Sturz sinkt weiter mit.
+                self.blick_hoehe = float(self.welt.hoehe(held.ebene))
+                self._ueberblendung.starten()
         if self.blick != held.ebene:
             self.hinweis = "ANSICHT EBENE %d  [MAUSRAD]" % self.blick
 
@@ -259,6 +266,8 @@ class Spiel(Szene):
         self.renderer.vignette_an = bool(self.app.opt["vignette"])
         self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, alpha,
                                     self.blick_hoehe, blick=self.blick)
+        self._ueberblendung.zeichnen(ziel)
+        self._ueberblendung.merken(ziel)
         # Ziellinie, Streukegel und Nahkampfbogen gehoeren zu der Ebene, auf
         # der die Figur steht. Schaut man mit dem Mausrad eine Etage hoeher
         # oder tiefer, haben sie dort nichts zu suchen - sie zeigten sonst

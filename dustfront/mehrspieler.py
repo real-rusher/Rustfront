@@ -67,7 +67,7 @@ from .core import Szene
 from .entities import (Aufsammler, Brandflaeche, Gegner, Geschoss, Granate,
                        Rakete, Rauchwolke, Spieler, wolke)
 from .font import SCHRIFT
-from .render import Befinden, Kamera, Renderer
+from .render import Befinden, Kamera, Renderer, Ueberblendung
 from .world import Welt, freier_punkt, testkarte
 
 
@@ -817,6 +817,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._seit_medkit = 0.0
         self._seit_muni = 0.0
         self._letzte_ebene = 0
+        self._ueberblendung = Ueberblendung()
         self._flughoehen: dict[int, float] = {}
         # Pausenmenue: None = zu, sonst die gewaehlte Zeile.
         self.menue = None
@@ -3689,10 +3690,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._eigenes_zielen()
         self._bereich_melden()
         self._befinden_fuehren(dt)
+        self._ueberblendung.schritt(dt)
         if self.ich.ebene != self._letzte_ebene:
             self._letzte_ebene = self.ich.ebene
             self.blick = self.ich.ebene
             self.blick_rest = 0.0
+            if self.ich.flug <= 0:
+                # Treppe, Luke, Aufzug: sofort dort, das alte Bild blendet
+                # aus (K.EBENENWECHSEL). Ein Sturz sinkt weiter mit.
+                self.blick_hoehe = float(self.welt.hoehe(self.ich.ebene))
+                self._ueberblendung.starten()
         if self._rad:
             self.blick = max(0, min(len(self.welt.ebenen) - 1,
                                     self.blick + (1 if self._rad > 0 else -1)))
@@ -4201,6 +4208,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._welt_bild(ziel, misch)
         else:
             self._zoom_zeichnen(ziel, misch)
+        self._ueberblendung.zeichnen(ziel)
+        self._ueberblendung.merken(ziel)
         self._namen_zeichnen(ziel)
         self._randpfeile(ziel)
         self._erfassung_zeichnen(ziel)

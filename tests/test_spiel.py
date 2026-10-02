@@ -301,6 +301,29 @@ bild("spiel_2_ebene1.png")
 zurueck = szene.welt.treppe_unter(held)
 pruef("Rueckweg vorhanden", zurueck == 0)
 
+# Seit 0.32.10: die Ansicht springt beim Treppenwechsel sofort mit. Bis
+# dahin zog sie eine halbe Sekunde nach, und so lange galt die eigene
+# Ebene als "darueber" (ausgestanzt, Figur weg) oder "darunter"
+# (abgedunkelt). Gemessen wird das erste Bild nach dem Wechsel - in
+# beide Richtungen.
+for _von, _nach in ((1, 0), (0, 1)):
+    held.ebene = _von
+    sim(0.6)
+    pruef("Wechsel %d -> %d klappt" % (_von, _nach),
+          szene.welt.ebene_wechseln(held, _nach))
+    sim(K.FIXED_DT * 1.5)
+    _dz = szene.blick_hoehe - szene.welt.hoehe(held.ebene)
+    pruef("Ansicht steht nach %d -> %d im ersten Bild auf der neuen Ebene"
+          % (_von, _nach), abs(_dz) < 1.0, "dz %.1f" % _dz)
+    pruef("Das alte Bild blendet aus (%d -> %d)" % (_von, _nach),
+          szene._ueberblendung.rest > 0)
+    bild("spiel_2_wechsel.png")
+    sim(K.EBENENWECHSEL["ueberblenden"] + 0.05)
+    pruef("Nach %.2f s ist das alte Bild weg" % K.EBENENWECHSEL["ueberblenden"],
+          szene._ueberblendung.rest == 0)
+held.ebene = 1
+sim(0.1)
+
 # Loch in Ebene 1: Ebene 0 scheint durch
 e1 = szene.welt.ebene(1)
 pruef("Ebene 1 hat Loecher", any(k == K.LEER for k in e1.kacheln[e1.breite:-e1.breite]))
@@ -4293,6 +4316,22 @@ wo_w.obere_zeigen = False
 pruef("Wer herunterfaellt, bleibt sichtbar",
       bild_mit(0, 60.0, ueber) != leer_o)
 faller.flug = 0.0
+# Genau das traf bis 0.32.9 einen selbst nach der Treppe: man war oben,
+# die Ansicht noch unten, und die eigene Etage wurde ausgestanzt - eine
+# halbe Sekunde lang nur der Laser. Jetzt steht die Ansicht im ersten
+# Bild oben, und wer dort steht, ist zu sehen.
+ich_o.ebene = 1
+wo_w.schritt(K.FIXED_DT)
+pruef("Mehrspieler: nach dem Wechsel nach oben steht die Ansicht sofort dort",
+      abs(wo_w.blick_hoehe - wo_w.welt.hoehe(1)) < 1.0,
+      "%.1f" % wo_w.blick_hoehe)
+pruef("Mehrspieler: das alte Bild blendet aus", wo_w._ueberblendung.rest > 0)
+wo_w._ueberblendung.rest = 0.0
+pruef("Mehrspieler: oben sieht man im ersten Bild, wer dort steht",
+      bild_mit(1, 0.0, ueber) != bild_mit(1, 0.0, weit_weg))
+ich_o.ebene = 0
+wo_w.schritt(K.FIXED_DT)
+wo_w._ueberblendung.rest = 0.0
 wo_w.verlassen(); wo_g.verlassen()
 
 # ── Medkit in der Hand ───────────────────────────────────────────────
