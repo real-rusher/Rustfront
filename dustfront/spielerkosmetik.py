@@ -613,12 +613,16 @@ class KosmetikTeil:
             self.kosmetiken[von] = k
 
     # ---- Die Blendgranate -------------------------------------------
-    def kosmetik_blitz(self, von, staerke: float, laut: float) -> bool:
+    def kosmetik_blitz(self, von, staerke: float, laut: float,
+                       ton: bool = True, bild: bool = True) -> bool:
         """Zuendet eine Blendgranate von `von`: eigener Ton und eigenes Bild.
 
-        Gibt zurueck, ob die Kosmetik gegriffen hat - dann spielt der
-        Aufrufer den gewoehnlichen Knall nicht. `von` ist beim Gastgeber
-        der Kaempfer, beim Gast seine Nummer aus der Meldung.
+        Gibt zurueck, ob der Ton der Kosmetik gespielt wurde - dann spielt
+        der Aufrufer den gewoehnlichen Knall nicht. `von` ist beim
+        Gastgeber der Kaempfer, beim Gast seine Nummer aus der Meldung.
+        `ton` und `bild` schalten die beiden Haelften einzeln ab
+        (Barrierefreiheit, seit 0.32.7) - wer fremde Toene nicht will,
+        hoert den gewoehnlichen Knall und sieht das Bild trotzdem.
         """
         if not self.kosmetik_aktiv:
             return False
@@ -626,11 +630,13 @@ class KosmetikTeil:
         k = self.kosmetik_von(nummer if isinstance(nummer, int) else None)
         if k is None:
             return False
-        klang = k.klang()
-        if klang is not None and laut > 0.0:
-            self.app.klaenge.ton_spielen(klang, laut)
-        if k.bild is not None and staerke > 0.0:
+        if bild and k.bild is not None and staerke > 0.0:
             self.kos_zeigen = k
+        klang = k.klang() if ton else None
+        if klang is None:
+            return False
+        if laut > 0.0:
+            self.app.klaenge.ton_spielen(klang, laut)
         return True
 
     def _kosmetik_bild_zeichnen(self, ziel) -> None:

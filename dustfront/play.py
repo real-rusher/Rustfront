@@ -95,7 +95,11 @@ class Spiel(Szene):
         if staerke > 0.0:
             self.befinden.blenden(staerke)
             self.app.klaenge.spielen(K.skin("blend_pfeifen"), 0.35 + 0.5 * staerke)
-        return False
+        # Der Knall: leiser mit Abstand und Wegschauen (blend_ton_wert).
+        laut = welt_modul.blend_ton_wert(pos, ebene, self.held)
+        if laut > 0.0:
+            self.app.klaenge.spielen(K.skin("blend_knall"), laut)
+        return True
 
     def _ruckeln(self, kraft: float, anlass: str = "", pos=None,
                  ebene: int = 0, quelle=None) -> None:

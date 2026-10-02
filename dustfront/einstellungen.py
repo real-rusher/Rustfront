@@ -69,6 +69,12 @@ VORGABE = {
     # ohne fremdes Bild - fuer alle, denen ein greller Blitz oder fremde
     # Bilder zu viel sind.
     "blendung": "normal",
+    # Und der Ton dazu, getrennt (seit 0.32.7): "werfer" spielt den Ton
+    # aus der Spielerkosmetik des Werfers, "standard" immer den
+    # gewoehnlichen Knall. Getrennt, weil das eine das Auge betrifft und
+    # das andere das Ohr - wer das eine nicht verträgt, will das andere
+    # vielleicht trotzdem.
+    "blendung_ton": "werfer",
     # Experimentell: die Kamera schaut in Blickrichtung voraus (siehe
     # Kamera.vorausschau). Aus als Vorgabe.
     "kamera_blick": False,
@@ -87,12 +93,13 @@ VORGABE = {
 KONTO_WERTE = ("bildschirm_ruckeln", "vignette", "partikel",
                "tracer", "tracer_weit", "ton_gesamt", "ton_effekte",
                "ton_musik", "obere_ebenen", "blendung", "kamera_blick",
-               "kamera_blick_weite")
+               "kamera_blick_weite", "blendung_ton")
 
 AUFLOESUNGEN = ["960x540", "1280x720", "1600x900", "1920x1080", "2560x1440"]
 FENSTERMODI = ["fenster", "randlos", "vollbild"]
 PARTIKEL = ["wenig", "normal", "viel"]
 BLENDUNGEN = ["normal", "weiss", "schwarz"]
+BLEND_TOENE = ["werfer", "standard"]
 BLICK_WEITEN = [40, 55, 70, 85, 100, 120, 150]
 RASTER = ["gefuellt", "ganzzahlig"]
 BILDRATEN = [0, 60, 75, 90, 120, 144, 165, 240]
@@ -108,6 +115,7 @@ BESCHRIFTUNG = {
     "blendung": {"normal": "WIE VOM WERFER", "weiss": "NUR WEISS",
                  "schwarz": "NUR SCHWARZ"},
     "kamera_blick_weite": {w: "%d PIXEL" % w for w in BLICK_WEITEN},
+    "blendung_ton": {"werfer": "WIE VOM WERFER", "standard": "NUR STANDARD"},
 }
 
 # ══════════════════════════════════════════════════ Tastenbelegung

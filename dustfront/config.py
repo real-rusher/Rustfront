@@ -1680,6 +1680,16 @@ BLENDEN = dict(
     funke_dauer=0.22,
     funke_gross=13.0,
     ton_dauer=2.2,        # so lange klingt das Pfeifen im Ohr nach
+    # Wie laut der Knall ist (seit 0.32.7, gemeldet: "deutlich leiser, wenn
+    # man weiter weg ist oder nicht hinschaut - aber immer noch hoerbar").
+    # Zur gewoehnlichen Entfernungsdaempfung (AUDIO) kommen zwei Faktoren:
+    # bis `rundum` ist er voll; bis `ton_weite` sinkt er auf `ton_fern`,
+    # und wer wegschaut, hoert ihn mit `ton_abgewandt`. Nie leiser als
+    # `ton_mindest` - wer ihn ueberhaupt hoeren kann, soll ihn erkennen.
+    ton_weite=500.0,
+    ton_fern=0.45,
+    ton_abgewandt=0.5,
+    ton_mindest=0.12,
 )
 
 # ══════════════════════════════════════════════════ SKINS

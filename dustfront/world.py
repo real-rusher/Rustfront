@@ -123,6 +123,32 @@ def blend_wert(pos, ebene: int, ich, welt=None) -> float:
     return wert if wert >= b["schwelle"] else 0.0
 
 
+def blend_ton_wert(pos, ebene: int, ich) -> float:
+    """Wie laut der Knall einer Blendgranate bei diesem Zuschauer ist.
+
+    Die Entfernungsdaempfung aller Toene (klang_wert), dazu leiser mit der
+    Entfernung und leiser, wer wegschaut - ausser ganz nah (`rundum`),
+    dort wirkt die Granate in jede Richtung und klingt auch so.
+    """
+    b = K.BLENDEN
+    grund = klang_wert(1.0, pos, ebene, ich)
+    if grund <= 0.0 or ich is None or pos is None:
+        return grund
+    pos = pygame.Vector2(pos)
+    weg = pos.distance_to(ich.pos)
+    if weg <= b["rundum"]:
+        return grund
+    anteil = max(0.0, min(1.0, 1.0 - (weg - b["rundum"])
+                          / max(1.0, b["ton_weite"] - b["rundum"])))
+    faktor = b["ton_fern"] + (1.0 - b["ton_fern"]) * anteil
+    ab = pos - ich.pos
+    richtung = math.degrees(math.atan2(ab.y, ab.x))
+    delta = abs((richtung - getattr(ich, "winkel", 0.0) + 180) % 360 - 180)
+    if delta > b["blickwinkel"] * 0.5:
+        faktor *= b["ton_abgewandt"]
+    return max(min(grund, b["ton_mindest"]), grund * faktor)
+
+
 def klang_wert(lautstaerke: float, pos=None, ebene: int = 0, ich=None) -> float:
     """Wie laut ein Ton bei diesem Zuschauer ankommt.
 

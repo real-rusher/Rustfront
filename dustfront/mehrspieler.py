@@ -929,15 +929,23 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         if staerke > 0.0:
             self.befinden.blenden(staerke)
         # Spielerkosmetik des Werfers: sein Ton statt Knall und Pfeifen,
-        # sein Bild im Weiss. Gehoert wird der Ton wie ein Knall - laut,
-        # wer nah ist, leise, wer weit weg ist, gar nicht auf einer
-        # anderen Ebene. Ohne Kosmetik bleibt alles wie bisher.
-        laut = welt_modul.klang_wert(1.0, pos, ebene, self.ich)
-        if self.kosmetik_blitz(von, staerke, laut):
+        # sein Bild im Weiss. Gehoert wird der Ton wie der Knall (seit
+        # 0.32.7 deutlich leiser, wer weiter weg steht oder wegschaut,
+        # blend_ton_wert). Barrierefreiheit, nur bei einem selbst: das
+        # fremde Bild und der fremde Ton lassen sich getrennt abschalten.
+        laut = welt_modul.blend_ton_wert(pos, ebene, self.ich)
+        opt = self.app.opt
+        if self.kosmetik_blitz(von, staerke, laut,
+                               ton=opt["blendung_ton"] != "standard",
+                               bild=opt["blendung"] == "normal"):
             return True
+        # Den Knall selbst spielen statt der Welt zu ueberlassen: die
+        # kennt nur die gewoehnliche Entfernungsdaempfung.
+        if laut > 0.0:
+            self.app.klaenge.spielen(K.skin("blend_knall"), laut)
         if staerke > 0.0:
             self.app.klaenge.spielen(K.skin("blend_pfeifen"), 0.35 + 0.5 * staerke)
-        return False
+        return True
 
     def _ruckeln(self, kraft: float, anlass: str = "", pos=None,
                  ebene: int = 0, quelle=None) -> None:

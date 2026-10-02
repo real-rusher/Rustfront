@@ -6326,6 +6326,53 @@ app.opt["kamera_blick"], app.opt["kamera_blick_weite"] = _alt54
 app.eingabe.maus = pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2)
 _w54.verlassen(); _g54.verlassen()
 
+# ── 0.32.7: Knall der Blendgranate leiser mit Abstand und Wegschauen ─
+from dustfront import world as _W56
+class _Ohr:
+    ebene = 0
+    winkel = 0.0                      # schaut nach rechts
+    pos = pygame.Vector2(1000, 1000)
+_o = _Ohr()
+_nah = _W56.blend_ton_wert(pygame.Vector2(1040, 1000), 0, _o)
+_mitte_hin = _W56.blend_ton_wert(pygame.Vector2(1300, 1000), 0, _o)
+_mitte_weg = _W56.blend_ton_wert(pygame.Vector2(700, 1000), 0, _o)
+_fern = _W56.blend_ton_wert(pygame.Vector2(1900, 1000), 0, _o)
+pruef("Ganz nah ist der Knall voll", abs(_nah - 1.0) < 1e-6, "%.2f" % _nah)
+pruef("Weiter weg deutlich leiser, als die Entfernung allein es macht",
+      _mitte_hin < 0.75 * _W56.klang_wert(1.0, pygame.Vector2(1300, 1000), 0, _o),
+      "%.2f" % _mitte_hin)
+pruef("Wer wegschaut, hoert ihn noch leiser", _mitte_weg < _mitte_hin * 0.6,
+      "%.2f / %.2f" % (_mitte_weg, _mitte_hin))
+pruef("Aber man hoert ihn immer noch", _fern >= min(
+      _W56.klang_wert(1.0, pygame.Vector2(1900, 1000), 0, _o), K.BLENDEN["ton_mindest"]) > 0,
+      "%.2f" % _fern)
+
+# Fremder Blendton und fremdes Blendbild lassen sich getrennt abschalten.
+_w56, _g56 = gefechtspaar("pvp")
+class _Kos56:
+    bild = pygame.Surface((4, 4))
+    def klang(self):
+        return "ton"
+_w56.kosmetik_von = lambda nr: _Kos56()
+_aktiv_alt56 = type(_w56).kosmetik_aktiv
+type(_w56).kosmetik_aktiv = property(lambda self: True)
+_gespielt56 = []
+_ton_alt56 = _w56.app.klaenge.ton_spielen
+_w56.app.klaenge.ton_spielen = lambda klang, laut: _gespielt56.append(laut)
+try:
+    _w56.kos_zeigen = None
+    _r1 = _w56.kosmetik_blitz(1, 0.8, 0.5, ton=False, bild=True)
+    pruef("Ohne fremden Ton: der Knall bleibt der eigene, das Bild kommt trotzdem",
+          _r1 is False and _w56.kos_zeigen is not None and not _gespielt56)
+    _w56.kos_zeigen = None
+    _r2 = _w56.kosmetik_blitz(1, 0.8, 0.5, ton=True, bild=False)
+    pruef("Ohne fremdes Bild: der fremde Ton spielt, das Bild nicht",
+          _r2 is True and _w56.kos_zeigen is None and _gespielt56 == [0.5])
+finally:
+    type(_w56).kosmetik_aktiv = _aktiv_alt56
+    _w56.app.klaenge.ton_spielen = _ton_alt56
+_w56.verlassen(); _g56.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

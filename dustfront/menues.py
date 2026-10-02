@@ -441,6 +441,11 @@ HILFE = {
         "EIN UNSICHTBARER PUNKT VOR DER WAFFE IST DIE BILDMITTE - DU SIEHST",
         "MEHR VON DEM, WAS VOR DIR LIEGT. GEHÖRT ZUM KONTO.",
     ],
+    "blendung_ton": [
+        "WIE EINE BLENDGRANATE BEI DIR KLINGT. WIE VOM WERFER: SEIN EIGENER",
+        "TON (SPIELERKOSMETIK). NUR STANDARD: IMMER DER GEWÖHNLICHE KNALL.",
+        "GILT NUR BEI DIR. DAS BILD STELLST DU EINE ZEILE DARÜBER EIN.",
+    ],
     "kamera_blick_weite": [
         "WIE WEIT DER PUNKT VOR DER WAFFE LIEGT, WENN BLICK VORAUS AN IST.",
         "WENIGER: DIE FIGUR BLEIBT NÄHER AN DER MITTE. GEHÖRT ZUM KONTO.",
@@ -578,16 +583,19 @@ class Einstellungen(Menue):
             ui.Wahl(self._reihe(zx, zy, zw, 0), "BLENDGRANATE", "blendung",
                     E.BLENDUNGEN, self._index(E.BLENDUNGEN, o["blendung"]),
                     E.BESCHRIFTUNG["blendung"]),
-            ui.Regler(self._reihe(zx, zy, zw, 1), "BILDWACKELN",
+            ui.Wahl(self._reihe(zx, zy, zw, 1), "BLENDGRANATE TON", "blendung_ton",
+                    E.BLEND_TOENE, self._index(E.BLEND_TOENE, o["blendung_ton"]),
+                    E.BESCHRIFTUNG["blendung_ton"]),
+            ui.Regler(self._reihe(zx, zy, zw, 2), "BILDWACKELN",
                       "bildschirm_ruckeln", o["bildschirm_ruckeln"]),
-            ui.Schalter(self._reihe(zx, zy, zw, 2), "BLICK VORAUS",
+            ui.Schalter(self._reihe(zx, zy, zw, 3), "BLICK VORAUS",
                         "kamera_blick", o["kamera_blick"]),
-            ui.Wahl(self._reihe(zx, zy, zw, 3), "  WIE WEIT VORAUS",
+            ui.Wahl(self._reihe(zx, zy, zw, 4), "  WIE WEIT VORAUS",
                     "kamera_blick_weite", E.BLICK_WEITEN,
                     self._index(E.BLICK_WEITEN, o["kamera_blick_weite"]),
                     E.BESCHRIFTUNG["kamera_blick_weite"]),
         ]
-        self._platzhalter(zx, zy, zw, 4, ("FARBEN FÜR FARBENBLINDE",
+        self._platzhalter(zx, zy, zw, 5, ("FARBEN FÜR FARBENBLINDE",
                                           "UNTERTITEL FÜR GERÄUSCHE",
                                           "SCHRIFTGRÖSSE"))
 
