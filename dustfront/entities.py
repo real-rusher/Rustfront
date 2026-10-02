@@ -2052,11 +2052,19 @@ class Gegner(Wesen):
         punkt, rest = wege.schritt_zu(nr, self.pos)
         self.weg_rest = rest
         self.weg_nr = nr
-        if rest == 0 and self.treppen_sperre <= 0:
-            _eb, _tx, _ty, ziel_ebene = wege.treppen[nr]
-            if self.welt.ebene_wechseln(self, ziel_ebene):
-                self.treppen_sperre = 1.0
-                self.weg_rest = -1
+        _eb, tx, ty, ziel_ebene = wege.treppen[nr]
+        # Gewechselt wird nur **auf** der Treppe. Hier stand `rest == 0` -
+        # aber `schritt_zu` gibt den Rest der Nachbarkachel zurueck, auf
+        # die es als naechstes geht, und der ist schon eine Kachel VOR der
+        # Treppe null. Die Gegner wechselten also schraeg neben der Rampe
+        # die Ebene, standen oben im Nichts neben der Rampe, kamen nicht
+        # mehr weg und wurden nach ein paar Sekunden von der Haengerwache
+        # umgesetzt - vor den Augen der Spieler (gemeldet: "laufen nicht
+        # wirklich auf die Pads", "despawnen in Sicht").
+        if (wege.kachel(self.pos) == (tx, ty) and self.treppen_sperre <= 0
+                and self.welt.ebene_wechseln(self, ziel_ebene, loch_fest=True)):
+            self.treppen_sperre = 1.0
+            self.weg_rest = -1
         return punkt
 
     # ---- Fernkampf ------------------------------------------------------

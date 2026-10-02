@@ -473,8 +473,18 @@ def _figur(groesse, rumpf, rumpf_dk, akzent, breit=False, waffe=None,
         pygame.draw.line(s, rumpf_dk, (c + 1, c + 5), (c + 8, c + 3), 3)
     else:
         arm = tuple(int(d + (r - d) * ZOMBIE_ARMTON) for d, r in zip(rumpf_dk, rumpf))
-        pygame.draw.line(s, arm, (c + 1, c - 5), (c + 8, c - 4), 3)
-        pygame.draw.line(s, arm, (c + 1, c + 5), (c + 8, c + 4), 3)
+        # Ein Arm wird gezeichnet, der andere ist sein Spiegelbild (seit
+        # 0.32.6). Zwei Linien mit pygame.draw.line und Breite 3 werden
+        # nicht symmetrisch gezeichnet: der obere Arm lag eine Zeile weiter
+        # innen als der untere und sah aus, als wuechse er aus der Mitte
+        # (gemeldet). Gespiegelt wird um die Mitte der Schultern - die
+        # Ellipse reicht von c - 8 bis c + 7, gespiegelt wird also Zeile y
+        # auf 2c - 1 - y, und genau das tut ein Umklappen der ganzen
+        # Flaeche.
+        einer = _flaeche(groesse, groesse)
+        pygame.draw.line(einer, arm, (c + 1, c + 5), (c + 8, c + 4), 3)
+        s.blit(einer, (0, 0))
+        s.blit(pygame.transform.flip(einer, False, True), (0, 0))
     # Waffe: entweder die benannte aus der Tabelle oder der alte Stummel
     if waffe is not None:
         _hand_waffe(s, c, waffe)

@@ -938,6 +938,13 @@ GEGNER_MP = dict(
     stockt_ab=7.0,            # so lange ohne Fortschritt gilt als Haenger
     stockt_schritt=16.0,      # weniger Naeherung als das zaehlt nicht
     stockt_pruefung=1.0,      # so oft wird nachgesehen
+    # Umgesetzt wird nur, wen gerade niemand sehen kann - und zwar schon
+    # eine Weile nicht (seit 0.32.6, gemeldet: "despawnen in Sicht, auch
+    # wenn sie nur ganz kurz ausser Sicht geraten"). "Sehen" heisst: im
+    # Bildausschnitt irgendeines Spielers bei groesster Sichtweite, egal
+    # auf welcher Ebene - von einem Plateau sieht man auf den Sand.
+    unsichtbar_ab=5.0,        # so lange ausser Sicht, dann erst umsetzen
+    sicht_halb=(700.0, 400.0),  # halber Bildausschnitt bei Zoom 2, mit Rand
 )
 
 # Begrenzte Munition. Der Gastgeber schaltet sie beim Aufmachen an.

@@ -426,6 +426,14 @@ def sturz_quer(tasten, start):
     return None
 
 quer_ohne, quer_mit = [], []
+# Ohne Gegner: seit 0.32.6 finden sie zuverlaessig die Treppe hinauf und
+# standen dann genau dort, wo die Figur ins Loch laufen soll.
+from dustfront.entities import Gegner as _GegnerS
+for _g in szene.welt.wesen + szene.welt.neue:
+    if isinstance(_g, _GegnerS):
+        _g.lebt = False
+_pause_vorher = szene.pause_rest
+szene.pause_rest = 1e9                    # und keine neue Welle dazwischen
 for stelle in stellen[:4]:
     a = sturz_quer((), stelle)
     b = sturz_quer(("zurueck",), stelle)
@@ -433,6 +441,7 @@ for stelle in stellen[:4]:
         quer_ohne.append(abs(a.y)); quer_mit.append(abs(b.y))
 pruef("Stuerze zum Messen der Luftsteuerung", len(quer_mit) >= 2,
       "%d" % len(quer_mit))
+szene.pause_rest = _pause_vorher
 if quer_mit:
     schub = sum(quer_mit) / max(0.5, sum(quer_ohne))
     pruef("Im Sturz laesst sich die Figur steuern",
@@ -3753,11 +3762,27 @@ pruef("Ein gewoehnlicher Gegner aber schon - sonst faende sich der "
 # stand damit alles.
 w6.gegner_offen = []; w6.welle_rest = []
 opfer = [k for k in w6.kaempfer.values() if k.lebt][0]
-haenger = KampfGegner(opfer.pos + pygame.Vector2(700, 0), "laeufer",
+# Seit 0.32.6 erst, wenn ihn niemand sieht: zuerst steht er im Bild.
+haenger = KampfGegner(opfer.pos + pygame.Vector2(300, 0), "laeufer",
                       opfer.ebene, w6)
 w6.welt.dazu(haenger)
 haenger._ziel = opfer
-steht_bei = pygame.Vector2(opfer.pos + pygame.Vector2(700, 0))
+steht_bei = pygame.Vector2(opfer.pos + pygame.Vector2(300, 0))
+for _ in range(int((K.GEGNER_MP["stockt_ab"] + 4.0)
+                   / K.GEGNER_MP["stockt_pruefung"])):
+    haenger.pos.update(steht_bei)
+    haenger._haenger_pruefen(K.GEGNER_MP["stockt_pruefung"])
+pruef("Wer haengt, aber gesehen wird, bleibt stehen (kein Verschwinden in Sicht)",
+      haenger.pos.distance_to(steht_bei) < 1.0,
+      "%.0f px versetzt" % haenger.pos.distance_to(steht_bei))
+# Jetzt ausser Sicht - aber erst nach `unsichtbar_ab` Sekunden weg.
+steht_bei = pygame.Vector2(opfer.pos + pygame.Vector2(1500, 0))
+kurz_weg = False
+for _ in range(int(K.GEGNER_MP["unsichtbar_ab"] / K.GEGNER_MP["stockt_pruefung"]) - 1):
+    haenger.pos.update(steht_bei)
+    haenger._haenger_pruefen(K.GEGNER_MP["stockt_pruefung"])
+    kurz_weg = kurz_weg or haenger.pos.distance_to(steht_bei) > 1.0
+pruef("Kurz ausser Sicht reicht nicht", not kurz_weg)
 umgesetzt = False
 for _ in range(int((K.GEGNER_MP["stockt_ab"] + 2.0)
                    / K.GEGNER_MP["stockt_pruefung"])):
@@ -3767,7 +3792,7 @@ for _ in range(int((K.GEGNER_MP["stockt_ab"] + 2.0)
     haenger._haenger_pruefen(K.GEGNER_MP["stockt_pruefung"])
     umgesetzt = haenger.pos.distance_to(steht_bei) > 1.0
 pruef("Wer nicht ankommt, wird umgesetzt", umgesetzt,
-      "jetzt %.0f px vom Spieler statt 700"
+      "jetzt %.0f px vom Spieler statt 1500"
       % haenger.pos.distance_to(opfer.pos))
 pruef("Und zwar in das Band um die Spieler",
       haenger.pos.distance_to(opfer.pos) <= K.SPAWN["weit"] * 1.6,
@@ -6231,6 +6256,40 @@ for _art47, _farbe47 in (("schwarz", (0, 0, 0)), ("weiss", (255, 255, 255))):
     pruef("Und zeigt kein fremdes Bild", _g47.kos_zeigen is None)
 app.opt["blendung"] = _alt47
 _w47.verlassen(); _g47.verlassen()
+
+# ── 0.32.6: Gegner wechseln die Ebene nur AUF der Treppe ─────────────
+# Gemeldet: "laufen nicht wirklich auf die Pads", "despawnen in Sicht".
+# Gemessen: der Rest, bei dem gewechselt wurde, war der der Nachbarkachel -
+# sie wechselten schraeg neben der Rampe, standen oben im Nichts, kamen
+# nicht weg und wurden umgesetzt (15 Zombies, 90 s: 7 bis 11 Mal).
+_w52, _g52 = gefechtspaar("pve", karte="staubtal")
+_w52.pause_rest = 1e9
+for _x in list(_w52.welt.wesen):
+    if isinstance(_x, KampfGegner):
+        _x.lebt = False
+_w52.gegner_offen = []; _w52.welle_rest = []
+_n52 = _w52.welt.wege
+_e52, _tx52, _ty52, _z52 = _n52.treppen[0]
+_oben52 = _w52.welt.landeplatz(pygame.Vector2((_tx52 + 6.5) * 32, (_ty52 + .5) * 32), 9, _z52)
+_gg52 = KampfGegner(pygame.Vector2((_tx52 - 0.6) * 32, (_ty52 - 0.6) * 32), "brecher",
+                    _e52, _w52)
+_gg52.wartet = 0.0
+_w52.welt.dazu(_gg52); _w52.gegner_offen.append(_gg52)
+_wechsel52 = []
+for _ in range(int(12.0 / K.FIXED_DT)):
+    for _k in _w52.kaempfer.values():
+        _k.leben = _k.max_leben; _k.ebene = _z52; _k.pos.update(_oben52); _k.tempo.update(0, 0)
+    _vor = (_gg52.ebene, _n52.kachel(_gg52.pos))
+    _w52.schritt(K.FIXED_DT)
+    if _gg52.ebene != _vor[0]:
+        _wechsel52.append(_vor[1])
+pruef("Ein Gegner wechselt die Ebene nur auf der Treppe selbst",
+      _wechsel52 and all(t == (_tx52, _ty52) for t in _wechsel52), str(_wechsel52))
+pruef("Und steht oben auf festem Boden, nicht neben der Rampe im Nichts",
+      _gg52.ebene == _z52 and _w52.welt.frei(_gg52.pos, _gg52.radius, _z52, True)
+      and _gg52.pos.distance_to(_oben52) < 120,
+      "Ebene %d, %.0f px vom Spieler" % (_gg52.ebene, _gg52.pos.distance_to(_oben52)))
+_w52.verlassen(); _g52.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

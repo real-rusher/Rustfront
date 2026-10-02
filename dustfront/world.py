@@ -840,11 +840,17 @@ class Welt:
             self._wege = netz
         return netz
 
-    def ebene_wechseln(self, wesen, ziel: int) -> bool:
-        """Wechselt die Ebene, wenn der Platz dort frei ist."""
+    def ebene_wechseln(self, wesen, ziel: int, loch_fest: bool = False) -> bool:
+        """Wechselt die Ebene, wenn der Platz dort frei ist.
+
+        loch_fest: auch Loecher zaehlen als belegt. Fuer Gegner - sie laufen
+        nie in ein Loch; wer oben halb ueber dem Nichts ankaeme, kaeme
+        dort nicht mehr weg. Ein Gegner, dem es noch nicht passt, geht
+        weiter zur Mitte der Treppe und versucht es dort.
+        """
         alt = wesen.ebene
         wesen.ebene = ziel
-        if self.frei(wesen.pos, wesen.radius, ziel):
+        if self.frei(wesen.pos, wesen.radius, ziel, loch_fest):
             wesen.vorher.update(wesen.pos)
             return True
         wesen.ebene = alt

@@ -391,6 +391,7 @@ class KampfGegner(Gegner):
         self._bestes = 1e18
         self._stockt = 0.0
         self._pruef_rest = K.GEGNER_MP["stockt_pruefung"]
+        self._ungesehen = 0.0        # so lange schon ausser jeder Sicht
 
     def _haenger_pruefen(self, dt: float) -> None:
         """Wer nicht naeher kommt, wird umgesetzt.
@@ -413,6 +414,10 @@ class KampfGegner(Gegner):
             # In der Lobby bleibt jeder im Gehege - umgesetzt wuerde er
             # irgendwohin auf den Platz, wo er nichts zu suchen hat.
             return
+        if self._gefecht.sichtbar_fuer_jemanden(self.pos):
+            self._ungesehen = 0.0
+        else:
+            self._ungesehen += dt
         self._pruef_rest -= dt
         if self._pruef_rest > 0.0:
             return
@@ -463,6 +468,11 @@ class KampfGegner(Gegner):
             return
         self._stockt += g["stockt_pruefung"]
         if self._stockt < g["stockt_ab"]:
+            return
+        if self._ungesehen < g["unsichtbar_ab"]:
+            # Haengt, aber jemand sieht ihn (oder sah ihn eben noch). Dann
+            # bleibt er stehen, wo er ist - ein Gegner, der sich vor den
+            # Augen der Spieler in Luft aufloest, sieht nach Fehler aus.
             return
         ebene, pos = self._gefecht._spawnstelle(bei=ziel)
         self.pos.update(pos)
@@ -1925,6 +1935,21 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._meldung = str(text)
         self._meldung_rest = float(dauer)
         self.hinweis = self._meldung
+
+    def sichtbar_fuer_jemanden(self, pos) -> bool:
+        """Liegt die Stelle im Bild irgendeines Spielers?
+
+        Gerechnet mit der groessten Sichtweite und ohne Ebenen: wer auf
+        einem Plateau steht, sieht auf den Sand hinunter. Lieber einmal zu
+        oft "sichtbar" als ein Gegner, der vor jemandes Augen verschwindet.
+        """
+        bx, by = K.GEGNER_MP["sicht_halb"]
+        for k in self.kaempfer.values():
+            if not k.lebt:
+                continue
+            if abs(k.pos.x - pos.x) < bx and abs(k.pos.y - pos.y) < by:
+                return True
+        return False
 
     def _gastgeber_name(self) -> str:
         """Beim Gast: wie der Gastgeber heisst. Er hat immer die Nummer 0."""
