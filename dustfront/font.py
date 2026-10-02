@@ -71,6 +71,11 @@ _G = {
     # Munition: dort wird nichts abgezogen, und eine Zahl hinzuschreiben,
     # die nie kleiner wird, waere eine Luege.
     "\u221e": "00000/00000/01010/10101/01010/00000/00000",
+    # Ä Ö Ü stehen nur der Vollstaendigkeit halber hier. Gezeichnet werden
+    # sie seit 0.32 als voller Grundbuchstabe mit zwei Punkten **ueber**
+    # der Zeile (siehe _PUNKTE): in sieben Zeilen eingequetscht waren sie
+    # zwei Pixel kleiner als jeder andere Buchstabe, und ZURÜCK sah aus
+    # wie ZURuCK.
     "\u00c4": "01010/00000/01110/10001/11111/10001/10001",
     "\u00d6": "01010/00000/01110/10001/10001/10001/01110",
     "\u00dc": "01010/00000/10001/10001/10001/10001/01110",
@@ -82,6 +87,11 @@ _G = {
 # stand in jeder Fehlermeldung mit Klammer ein Fragezeichen.
 _TRANS = {"\u00e4": "\u00c4", "\u00f6": "\u00d6", "\u00fc": "\u00dc", "\u00df": "\u1e9e",
           "(": "[", ")": "]"}
+
+
+# Umlaut -> Grundbuchstabe. Die Punkte kommen zwei Pixel ueber die Zeile.
+_PUNKTE = {"\u00c4": "A", "\u00d6": "O", "\u00dc": "U"}
+UEBER = 2        # so viele Pixel (mal Skala) ragen die Punkte nach oben
 
 
 class Schrift:
@@ -103,12 +113,20 @@ class Schrift:
         if hit is not None:
             return hit
         t = self.vorbereiten(text)
-        s = pygame.Surface((max(1, self.breite(text, skala, abstand)), GH * skala),
-                           pygame.SRCALPHA)
+        # Mit Umlaut ist die Flaeche oben um UEBER hoeher; zeichnen() setzt
+        # sie entsprechend hoeher an, die Grundlinie bleibt, wo sie war.
+        oben = UEBER if any(c in _PUNKTE for c in t) else 0
+        s = pygame.Surface((max(1, self.breite(text, skala, abstand)),
+                            (GH + oben) * skala), pygame.SRCALPHA)
         schritt = (GW + abstand) * skala
         for i, ch in enumerate(t):
+            if ch in _PUNKTE:
+                for px in (1, 3):
+                    pygame.draw.rect(s, farbe, (i * schritt + px * skala, 0,
+                                                skala, skala))
+                ch = _PUNKTE[ch]
             rows = self._rows.get(ch) or self._rows["?"]
-            for ry, row in enumerate(rows):
+            for ry, row in enumerate(rows, oben):
                 lauf = 0
                 for rx in range(GW + 1):
                     an = rx < GW and row[rx] == "1"
@@ -130,6 +148,7 @@ class Schrift:
             x -= s.get_width()
         elif ausrichtung == "mitte":
             x -= s.get_width() // 2
+        y -= s.get_height() - GH * skala        # Umlautpunkte ragen nach oben
         if schatten is not None:
             ziel.blit(self.flaeche(text, schatten, skala, abstand), (x + skala, y + skala))
         ziel.blit(s, (x, y))

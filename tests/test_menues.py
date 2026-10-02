@@ -15,6 +15,7 @@ import os
 import shutil
 import sys
 import tempfile
+from pathlib import Path
 
 _WEG = tempfile.mkdtemp(prefix="dustfront_test_")
 os.environ["APPDATA"] = _WEG                       # Windows
@@ -341,6 +342,55 @@ schirm(M.Mitwirkende(app), "menue_6_mitwirkende.png", schritte=360)
 schirm(Inventar(app, szene), "menue_7_inventar.png")
 
 # ── Konto und Ausruestung ────────────────────────────────────────────
+# ── 0.32: Umlaute, Inventar, Hauptmenue teilt die Einstellungen ───────
+print("Umlaute, Inventar, Hauptmenue")
+from dustfront.font import SCHRIFT as _S, GH as _GH, UEBER as _UE
+_u = _S.flaeche("ZURÜCK", (255, 255, 255))
+_n = _S.flaeche("ZURUCK", (255, 255, 255))
+pruef("Ein Umlaut ist so gross wie die anderen Buchstaben, die Punkte ragen darueber",
+      _u.get_height() == _GH + _UE and _n.get_height() == _GH
+      and _u.get_at((_S.breite("ZUR") + 2, _UE + _GH - 1))[3] > 0,
+      "%d / %d" % (_u.get_height(), _n.get_height()))
+_t = pygame.Surface((80, 30), pygame.SRCALPHA)
+_S.zeichnen(_t, "Ü", 10, 12, (255, 255, 255))
+pruef("Und steht auf derselben Grundlinie",
+      _t.get_at((10, 12 + _GH - 1))[3] == 0 and _t.get_at((11, 12 + _GH - 1))[3] > 0
+      and _t.get_at((11, 12 - _UE))[3] > 0)
+
+_inv = Inventar(app, szene)
+_felder = [_inv.hotbar_feld(i) for i in range(len(K.HOTBAR))]
+from dustfront.inventar import TAFEL as _TAFEL
+pruef("Alle Hotbar-Plaetze passen in die Inventartafel",
+      all(_TAFEL.contains(f) for f in _felder), str(_felder[-1]))
+pruef("Die Waffenplaetze liegen ueber den zwei Hinweiszeilen",
+      max(f.bottom for f in _inv.plaetze) <= 54 + 136 - 22 - 2,
+      str(max(f.bottom for f in _inv.plaetze)))
+
+import importlib
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+RM = importlib.import_module("rustfront_menu")
+RM.SETTINGS_PATH = Path(_WEG) / "rustfront_settings.json"
+app.opt["bildrate"] = 144
+app.opt["ton_gesamt"] = 40
+app.opt["fenstermodus"] = "randlos"
+app.opt.speichern()
+_rm = RM.Settings()
+pruef("Das Hauptmenue zeigt die Werte aus dem Spiel",
+      RM.BILDRATEN[_rm.fps_index] == 144 and _rm.vol_master == 40 and _rm.fullscreen,
+      "%s / %s" % (RM.BILDRATEN[_rm.fps_index], _rm.vol_master))
+_rm.set("vol_sfx", 30)
+_neu = E.Einstellungen()
+pruef("Und schreibt, was man dort aendert, ins Spiel",
+      _neu["ton_effekte"] == 30, str(_neu["ton_effekte"]))
+pruef("Ohne etwas anderes umzustellen (RANDLOS bleibt RANDLOS)",
+      _neu["fenstermodus"] == "randlos" and _neu["bildrate"] == 144,
+      "%s / %s" % (_neu["fenstermodus"], _neu["bildrate"]))
+_zeilen = dict(RM.steuerung_zeilen())
+pruef("Die Steuerung im Hauptmenue ist die des Spiels",
+      _zeilen.get("NACHLADEN") == E.belegung_text(app.opt.tasten["nachladen"])
+      and "BAUEN" not in _zeilen, str(_zeilen))
+app.opt.zuruecksetzen_werte()
+
 print("Konto und Ausruestung")
 from dustfront import konto as KONTO_M
 from dustfront import ablage as ABLAGE

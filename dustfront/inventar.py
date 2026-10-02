@@ -37,7 +37,10 @@ from .font import SCHRIFT
 TAFEL = pygame.Rect(40, 22, 560, 316)
 SPALTE_Y = 54
 SPALTE_H = 136
-FELD_B, FELD_H = 56, 32          # ein Waffenplatz
+# Ein Waffenplatz. Seit es neun Plaetze sind (drei Reihen), sind sie
+# niedriger: mit 32 lag die dritte Reihe unter den zwei Hinweiszeilen.
+FELD_B, FELD_H = 56, 28
+FELD_ABSTAND = 4
 TASCHE_SPALTEN = 8
 
 
@@ -99,14 +102,15 @@ class Inventar(Szene):
 
     # ---- Aufbau ------------------------------------------------------
     def _plaetze_bauen(self) -> list[pygame.Rect]:
-        """Die sechs Waffenplaetze, drei nebeneinander, zwei uebereinander."""
+        """Die Waffenplaetze, drei nebeneinander, so viele Reihen wie noetig."""
         x0 = TAFEL.x + 16 + 150 + 8 + 3
         y0 = SPALTE_Y + 18
         raus = []
         for i in range(len(K.HOTBAR)):
             zeile, spalte = divmod(i, 3)
             raus.append(pygame.Rect(x0 + spalte * (FELD_B + 4),
-                                    y0 + zeile * (FELD_H + 6), FELD_B, FELD_H))
+                                    y0 + zeile * (FELD_H + FELD_ABSTAND),
+                                    FELD_B, FELD_H))
         return raus
 
     @property
@@ -114,8 +118,12 @@ class Inventar(Szene):
         return pygame.Rect(TAFEL.x + 16, TAFEL.bottom - 58, TAFEL.width - 32, 26)
 
     def hotbar_feld(self, i: int) -> pygame.Rect:
+        # So viele Felder, wie die Hotbar Plaetze hat. Hier stand fest 6 -
+        # aus der Zeit vor den Plaetzen 7 bis 9, die dann rechts aus der
+        # Tafel liefen.
         b = self.hotbar_band
-        br = (b.width - 5 * 4) // 6
+        n = max(1, len(K.HOTBAR))
+        br = (b.width - (n - 1) * 4) // n
         return pygame.Rect(b.x + i * (br + 4), b.y, br, b.height)
 
     # ---- Ablauf ------------------------------------------------------

@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.32.4"
+VERSION = "0.32.5"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -180,6 +180,12 @@ UP, DOWN, RIGHT, LEFT, DOT = "\u25b2", "\u25bc", "\u25ba", "\u25c4", "\u2022"
 
 _TRANS = {"\u00df": "\u1e9e", "\u00e4": "\u00c4", "\u00f6": "\u00d6", "\u00fc": "\u00dc"}
 
+# Umlaute werden als voller Grundbuchstabe mit zwei Punkten ueber der Zeile
+# gezeichnet. In sieben Zeilen eingequetscht waren sie zwei Pixel kleiner
+# als jeder andere Buchstabe - im grossen Menue sah ZURÜCK aus wie ZURuCK.
+_PUNKTE = {"\u00c4": "A", "\u00d6": "O", "\u00dc": "U"}
+UEBER = 2
+
 
 class PixelFont:
     """Rendert die eingebaute 5x7-Schrift, mit Cache."""
@@ -211,14 +217,19 @@ class PixelFont:
             return hit
         txt = self.prepare(text)
         w = max(1, self.width(text, scale, spacing))
-        surf = pygame.Surface((w, GH * scale), pygame.SRCALPHA)
+        oben = UEBER if any(c in _PUNKTE for c in txt) else 0
+        surf = pygame.Surface((w, (GH + oben) * scale), pygame.SRCALPHA)
         step = (GW + spacing) * scale
         for i, ch in enumerate(txt):
+            ox = i * step
+            if ch in _PUNKTE:
+                for px in (1, 3):
+                    pygame.draw.rect(surf, color, (ox + px * scale, 0, scale, scale))
+                ch = _PUNKTE[ch]
             rows = self._rows.get(ch)
             if rows is None:
                 rows = self._rows["?"]
-            ox = i * step
-            for ry, row in enumerate(rows):
+            for ry, row in enumerate(rows, oben):
                 run = 0
                 for rx in range(GW + 1):
                     on = rx < GW and row[rx] == "1"
@@ -241,6 +252,7 @@ class PixelFont:
             x -= surf.get_width()
         elif align == "center":
             x -= surf.get_width() // 2
+        y -= surf.get_height() - GH * scale     # Umlautpunkte ragen nach oben
         if shadow is not None:
             target.blit(self.render(text, shadow, scale, spacing), (x + scale, y + scale))
         target.blit(surf, (x, y))
@@ -277,7 +289,40 @@ def wrap(text: str, max_chars: int) -> list[str]:
 # --------------------------------------------------------------------------
 
 SKALIER_MODI = ["GEFÜLLT", "GANZZAHLIG"]
-BILDRATEN = [60, 120, 0]
+# Dieselben Stufen wie im Spiel (dustfront/einstellungen.py), damit beide
+# denselben Wert zeigen koennen. 0 = frei.
+BILDRATEN = [0, 60, 75, 90, 120, 144, 165, 240]
+
+# Was das Hauptmenue mit den Einstellungen des Spiels teilt (seit 0.32).
+# Bis dahin hatte es eine eigene Datei: wer hier die Bildrate stellte,
+# stellte sie im Spiel nicht, und umgekehrt. Jetzt ist die Datei des
+# Spiels die eine Quelle fuer diese fuenf; CRT-Filter, Intro und
+# Reaktorbrummen gibt es nur hier und bleiben in der eigenen Datei.
+#   menue-schluessel: (spiel-schluessel, menue -> spiel, spiel -> menue)
+GETEILT = {
+    "fullscreen": ("fenstermodus", None, lambda v: v != "fenster"),
+    "scale_mode": ("pixelraster",
+                   lambda v: "ganzzahlig" if v % 2 else "gefuellt",
+                   lambda v: 1 if v == "ganzzahlig" else 0),
+    "fps_index": ("bildrate",
+                  lambda v: BILDRATEN[v % len(BILDRATEN)],
+                  lambda v: BILDRATEN.index(v) if v in BILDRATEN else 0),
+    "vol_master": ("ton_gesamt", int, int),
+    "vol_sfx": ("ton_effekte", int, int),
+}
+
+
+def spiel_einstellungen():
+    """Die Einstellungen des Spiels, oder None, wenn das Paket fehlt.
+
+    Das Menue soll auch allein laufen (README) - dann bleibt es bei seiner
+    eigenen Datei.
+    """
+    try:
+        from dustfront.einstellungen import Einstellungen
+        return Einstellungen()
+    except Exception:          # Paket fehlt oder ist kaputt: allein weiter
+        return None
 SCHWIERIGKEITEN = ["LEICHT", "NORMAL", "SCHWER", "EISERN"]
 
 
@@ -318,6 +363,15 @@ class Settings:
                     self.data[k] = v
         except Exception:
             pass
+        # Die geteilten Werte kommen aus dem Spiel und gewinnen.
+        opt = spiel_einstellungen()
+        if opt is not None:
+            for k, (spiel_k, _hin, her) in GETEILT.items():
+                try:
+                    self.data[k] = her(opt[spiel_k])
+                except Exception:
+                    pass
+        self._geteilt_alt = {k: self.data[k] for k in GETEILT}
 
     def save(self):
         try:
@@ -325,6 +379,24 @@ class Settings:
                 json.dumps(self.data, indent=2, ensure_ascii=False), encoding="utf-8")
         except OSError:
             pass
+        # Nur was sich hier geaendert hat, geht ins Spiel. Sonst wuerde das
+        # Menue einen Wert ueberschreiben, den es gar nicht anzeigen kann -
+        # aus RANDLOS im Spiel wuerde VOLLBILD, nur weil man den Ton stellt.
+        alt = getattr(self, "_geteilt_alt", {})
+        geaendert = [k for k in GETEILT if self.data[k] != alt.get(k)]
+        if not geaendert:
+            return
+        opt = spiel_einstellungen()
+        if opt is None:
+            return
+        for k in geaendert:
+            spiel_k, hin, _her = GETEILT[k]
+            if k == "fullscreen":
+                opt[spiel_k] = "vollbild" if self.data[k] else "fenster"
+            else:
+                opt[spiel_k] = hin(self.data[k])
+        opt.speichern()
+        self._geteilt_alt = {k: self.data[k] for k in GETEILT}
 
 
 # --------------------------------------------------------------------------
@@ -1060,14 +1132,53 @@ REGIONEN = [
      {"KOLONNE": 0.2, "CHOR": 0.9, "WERFTEN": 0.2}),
 ]
 
+# Die Steuerung, wie sie im Spiel wirklich ist (seit 0.32). Vorher stand
+# hier eine Liste aus den ersten Entwuerfen - Bauen, Werkzeug, Fahr-Modus,
+# Autopilot -, die mit dem Spiel nichts mehr zu tun hatte. Jetzt werden
+# die Tasten aus der Belegung des Spiels gelesen; wer sie dort umlegt,
+# sieht sie hier umgelegt.
+#   (Beschriftung, Aktionen in der Belegung, fester Text ohne Belegung)
 STEUERUNG = [
-    ("LAUFEN", "W A S D"), ("INTERAGIEREN", "E"),
-    ("BAUEN", "B"), ("WERKZEUG", "Q"),
-    ("MODUS WECHSELN", "TAB"), ("ANSICHT / ZOOM", "MAUSRAD"),
-    ("DREHEN (FAHRT)", "A / D"), ("FAHRT", "W / S"),
-    ("BOOST", "SHIFT"), ("ZIELEN", "MAUS"),
-    ("AUTOPILOT", "H"), ("MENÜ", "ESC"),
+    ("LAUFEN", ("vor", "links", "zurueck", "rechts"), ""),
+    ("DASH", ("dash",), ""),
+    ("BENUTZEN / RUFEN", ("nutzen",), ""),
+    ("NACHLADEN", ("nachladen",), ""),
+    ("MEDKIT", ("heilen",), ""),
+    ("BRECHEISEN", ("nahkampf",), ""),
+    ("FEUERART", ("feuermodus",), ""),
+    ("INVENTAR", ("inventar",), ""),
+    ("SCHIESSEN", (), "MAUS LINKS"),
+    ("ZIELEN", (), "MAUS RECHTS"),
+    ("WAFFE WÄHLEN", (), "1 - 9"),
+    ("SICHTWEITE", (), "MAUSRAD"),
+    ("ZIELLINIE", ("tracer",), ""),
+    ("OBERE EBENEN", ("ebenen",), ""),
+    ("RUNDEN (MEHRSP.)", ("planen",), ""),
+    ("PAUSE", ("pause",), ""),
 ]
+
+
+def steuerung_zeilen() -> list[tuple[str, str]]:
+    """(Beschriftung, Tasten) - aus der Belegung des Spiels, wenn es da ist."""
+    opt = spiel_einstellungen()
+    raus = []
+    for text, aktionen, fest in STEUERUNG:
+        if fest or opt is None:
+            raus.append((text, fest or "-"))
+            continue
+        try:
+            from dustfront import einstellungen as E
+            if len(aktionen) == 4:
+                # WASD in einer Zeile statt vier: jeweils die erste Taste.
+                tasten = " ".join(E.taste_kurz(opt.tasten.get(a, ["?"])[0])
+                                  for a in aktionen)
+            else:
+                tasten = E.belegung_text(opt.tasten.get(aktionen[0], []))
+        except Exception:
+            tasten = "-"
+        raus.append((text, tasten))
+    return raus
+
 
 
 class Page:
@@ -1286,14 +1397,16 @@ class OptionsPage(Page):
             Cycle("PIXELRASTER", "scale_mode", SKALIER_MODI,
                   hints=["das bild füllt das fenster, seitenverhältnis bleibt.",
                          "nur ganze pixelvielfache. saubere kanten, schmalerer rand."]),
-            Cycle("BILDRATE", "fps_index", ["60", "120", "FREI"],
-                  hint="obergrenze für bilder pro sekunde."),
+            Cycle("BILDRATE", "fps_index",
+                  ["FREI" if b == 0 else str(b) for b in BILDRATEN],
+                  hint="obergrenze für bilder pro sekunde. gilt auch im spiel."),
             Toggle("CRT-FILTER", "crt", "scanlinien und leichtes flimmern."),
             Toggle("INTRO ZEIGEN", "splash",
                    "die splash-sequenz beim start. esc \u00fcberspringt sie immer."),
-            Slider("GESAMT", "vol_master", "hauptlautstärke."),
+            Slider("GESAMT", "vol_master", "hauptlautstärke. gilt auch im spiel."),
             Slider("REAKTORBRUMM", "vol_ambient", "der hintergrundton des wandlers."),
-            Slider("EFFEKTE", "vol_sfx", "klicks und bestätigungen."),
+            Slider("EFFEKTE", "vol_sfx",
+                   "klicks und bestätigungen, im spiel schüsse und treffer."),
             Spacer(6),
             Action("ZURÜCK", lambda a: a.goto("main"), ""),
         ]
@@ -1309,23 +1422,23 @@ class ControlsPage(Page):
 
     def draw_body(self, c, r):
         half = r.width // 2
-        FONT.draw(c, "AN BORD", r.x, r.y, C_TEAL, 1)
-        FONT.draw(c, "IM FAHR-MODUS", r.x + half, r.y, C_ORANGE, 1)
+        FONT.draw(c, "IM SPIEL", r.x, r.y, C_TEAL, 1)
+        FONT.draw(c, "MAUS UND MEHR", r.x + half, r.y, C_ORANGE, 1)
         pygame.draw.line(c, C_LINE_DK, (r.x, r.y + 9), (r.x + half - 12, r.y + 9))
         pygame.draw.line(c, C_LINE_DK, (r.x + half, r.y + 9), (r.right - 4, r.y + 9))
-        for i, (label, keys) in enumerate(STEUERUNG):
-            col = 0 if i < 6 else 1
-            row = i % 6
+        zeilen = steuerung_zeilen()
+        je = (len(zeilen) + 1) // 2
+        for i, (label, keys) in enumerate(zeilen):
+            col, row = divmod(i, je)
             x = r.x + col * half
-            y = r.y + 15 + row * 12
+            y = r.y + 14 + row * 9
             FONT.draw(c, label, x, y, C_MUTED, 1)
-            FONT.draw(c, keys, x + half - 16, y, C_CREAM, 1, align="right")
-        y2 = r.y + 94
+            FONT.draw(c, fit(keys, half - 16 - FONT.width(label) - 8, 1),
+                      x + half - 16, y, C_CREAM, 1, align="right")
+        y2 = r.y + 14 + je * 9 + 6
         pygame.draw.line(c, C_LINE_DK, (r.x, y2 - 5), (r.right - 4, y2 - 5))
-        FONT.draw(c, "TAB WECHSELT ZWISCHEN BEIDEN MODI, VON ÜBERALL AN BORD.",
+        FONT.draw(c, "UMLEGEN IM SPIEL: ESC - EINSTELLUNGEN - STEUERUNG.",
                   r.x, y2, C_AMBER, 1)
-        FONT.draw(c, "SCROLLEN BEWEGT NUR DIE ANSICHT, NIE DIE FIGUR.",
-                  r.x, y2 + 9, C_MUTED, 1)
 
 
 class QuitPage(Page):
@@ -1815,6 +1928,11 @@ def spiel_scene(window, app: App, result: dict) -> None:
     finally:
         # Auch wenn das Spiel mit einem Fehler aussteigt, soll das Menue
         # wieder erscheinen statt in einem toten Fenster zu enden.
+        # Was im Spiel eingestellt wurde (Bildrate, Ton ...), gilt jetzt
+        # auch hier: frisch lesen, bevor das Fenster neu aufgebaut wird.
+        app.settings.load()
+        app.audio.apply_volumes()
+        app.pages.pop("options", None)
         app.apply_display()
         pygame.event.clear()
         pygame.key.set_repeat()
