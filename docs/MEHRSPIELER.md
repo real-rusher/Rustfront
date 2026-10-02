@@ -1832,6 +1832,31 @@ Die Startdatei dafuer ist mit LAN-GASTGEBER weggefallen. Es geht ueber
 `python -m dustfront --host --online --passwort GEHEIM` (7.9); die anderen
 tragen die Adresse in der Lobbysuche unter ADRESSE ein.
 
+### Was im Netz wann dazukam (fuer die Fehlersuche)
+
+Gewuenscht: "Wenn du etwas hinzufuegst, was Auswirkungen auf das LAN hat,
+sag Bescheid - dann weiss ich, woran es liegt, wenn es spaeter nicht
+geht." Darum hier jede Aenderung daran, was das Spiel im Netz oeffnet oder
+schickt. **Neue Eintraege kommen unten dazu**, mit Version.
+
+| Seit | Wer | Richtung | Port | Wofuer | Wenn es blockiert ist |
+| --- | --- | --- | --- | --- | --- |
+| 0.13 | Gastgeber | eingehend | TCP 50505 | das Spiel selbst | niemand kann beitreten |
+| 0.13 | Gast | ausgehend | TCP 50505 | das Spiel selbst | Beitreten scheitert ("KEINE ANTWORT") |
+| 0.19 | Gastgeber mit `--online` | Router, UPnP (UDP 1900, HTTP) | - | Port im Router freigeben | nur Internet betroffen, LAN nicht |
+| 0.20 | alle mit Konto | ausgehend | HTTPS 443 | Supabase (Konto, Zahlen) | Spielen geht, Zahlen warten im Journal |
+| 0.32 | **jeder** (eigene Lobby) | eingehend | TCP 50505, bei Belegung bis 50512 | die eigene Lobby | man kann anderen beitreten, aber niemand einem selbst |
+| 0.32 | **jeder** (eigene Lobby) | eingehend | UDP 50504 | Antwort auf die Lobbysuche | die eigene Lobby steht bei anderen nicht in der Liste |
+| 0.32 | wer die Lobbysuche offen hat | ausgehend, Rundruf | UDP 50504 | Lobbys im Netz finden | Liste bleibt leer - Adresse von Hand geht weiter |
+
+Was seit 0.32 anders ist als bei den Playtests davor: Frueher oeffnete nur
+der Gastgeber einen Port, jetzt jeder (jeder sitzt in seiner eigenen
+Lobby). Darum kann die Firewall- oder Virenschutzabfrage jetzt bei allen
+erscheinen. Wegklicken schadet dem Beitreten nicht. Und die Lobbysuche
+braucht Rundrufe (Broadcast) im Netz; manche Firewalls und WLANs lassen die
+nicht durch, dann bleibt nur die Adresse von Hand (sie steht in jeder
+Lobby oben links).
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:

@@ -320,9 +320,11 @@ einmal die Tabelle aus [`docs/KONTO.md`](docs/KONTO.md), Abschnitt 5.6.
 Wie es verteilt wird: [`docs/MEHRSPIELER.md`](docs/MEHRSPIELER.md), 12c.
 
 Fuer eine LAN-Runde muessen alle im selben Netz sein - gleiches WLAN oder
-gleicher Switch. Eine Windows-Firewall fragt beim ersten Mal, ob Python
-ins Netz darf; das muss erlaubt werden, sonst findet niemand den
-Gastgeber.
+gleicher Switch. Eine Firewall fragt beim ersten Mal, ob Python ins Netz
+darf. Beim Gastgeber muss das erlaubt sein (TCP 50505, fuer die Lobbysuche
+UDP 50504), sonst findet ihn niemand; wer nur beitritt, braucht es nicht.
+Welche Ports das Spiel seit wann benutzt: [`docs/MEHRSPIELER.md`](docs/MEHRSPIELER.md),
+12g, "Was im Netz wann dazukam".
 
 ### Ueber das Internet
 
