@@ -1448,7 +1448,7 @@ class Spieler(Wesen):
         if self.nachlade_rest > 0 or self.heilt_rest > 0:
             return False
         self.nahkampf_rest = d["takt"]
-        self.schlag_zeigen = d.get("schwung", 0.26)
+        self.schlag_zeigen = d.get("schwung", 0.26) + K.NAHKAMPF["nachhalten"]
         self.schlagen(d)
         return True
 
@@ -1456,6 +1456,21 @@ class Spieler(Wesen):
     def schwingt(self) -> bool:
         """Laeuft gerade ein Schlag mit dem Brecheisen?"""
         return self.schlag_zeigen > 0 and self.nahkampf_rest > 0
+
+    def schwung_bild(self, vorsatz: str = "") -> str:
+        """Welches Bild der Schwungfolge gerade dran ist (seit 0.32.8).
+
+        Der Schwung laeuft schnell an und laeuft aus; danach haelt die
+        Figur das Eisen noch am Ende des Bogens (Nachhalten).
+        """
+        d = K.WAFFEN[K.NAHKAMPF["waffe"]]
+        dauer = d.get("schwung", 0.26)
+        lauf = self.schlag_zeigen - K.NAHKAMPF["nachhalten"]
+        f = 1.0 - max(0.0, min(1.0, lauf / dauer))
+        weg = 1.0 - (1.0 - f) * (1.0 - f)
+        i = int(round(weg * (K.SCHWUNG_BILDER - 1)))
+        name = "spieler_%sschwung_%d" % (vorsatz, i)
+        return name if name in K.BILD_MASS else "spieler_schwung_%d" % i
 
     @property
     def bild(self) -> str:
@@ -1469,7 +1484,7 @@ class Spieler(Wesen):
         # blosse Gestalt und darueber die Bewegung des Eisens. Das
         # Brecheisen selbst wird nie in der Hand gezeigt.
         if self.schwingt:
-            return "spieler"
+            return self.schwung_bild()
         if self.heilt_rest > 0:
             return "spieler_medkit"
         name = "spieler_" + self.waffe_name
@@ -1804,7 +1819,9 @@ class Spieler(Wesen):
         d = daten or self.waffe_daten
         if daten is None:
             self.takt = d["takt"]
-        self.schlag_zeigen = d.get("schwung", 0.26)
+        # Schwung und Nachhalten: das Eisen bleibt danach noch einen Moment
+        # in der Hand (K.NAHKAMPF["nachhalten"]).
+        self.schlag_zeigen = d.get("schwung", 0.26) + K.NAHKAMPF["nachhalten"]
         self.zaehlen("schuesse", 1.0, K.NAHKAMPF["waffe"])
         w = self.welt
         reich = d["reichweite"]

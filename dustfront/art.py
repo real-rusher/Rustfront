@@ -498,6 +498,64 @@ def _figur(groesse, rumpf, rumpf_dk, akzent, breit=False, waffe=None,
     return _rand(s)
 
 
+def _figur_schwung(rumpf, rumpf_dk, akzent, rel: float):
+    """Die Gestalt mitten im Schlag mit dem Brecheisen (seit 0.32.8).
+
+    Gemeldet: der Schwung sah billig aus (eine Linie mit einem Klotz), und
+    die Figur sah dabei aus, als haette sie die Waffe noch - die schlichte
+    Gestalt hatte noch den alten Gewehrstummel. Jetzt: keine Waffe, beide
+    Arme gehen zu einer Hand vorn, und in der liegt das Brecheisen aus der
+    alten Hotbar (`waffe_brecheisen`), um `rel` Grad gegen die Blickrichtung
+    gedreht. Die Arme laufen mit, der Kopf liegt obendrauf.
+    """
+    groesse = 64
+    s = _flaeche(groesse, groesse)
+    c = groesse // 2
+    hell = tuple(min(255, k + 34) for k in rumpf)
+    schulter = pygame.Rect(c - 7, c - 8, 14, 16)
+    pygame.draw.ellipse(s, rumpf_dk, schulter)
+    pygame.draw.ellipse(s, rumpf, schulter.inflate(-3, -3))
+    pygame.draw.ellipse(s, hell, schulter.inflate(-3, -3).move(0, -2), 1)
+    hand = pygame.Vector2(c + 1, c) + pygame.Vector2(12, 0).rotate(rel)
+    # Erst das Eisen, dann die Arme darueber: die Haende umfassen den Griff.
+    eisen = _waffe_brecheisen()
+    gedreht = pygame.transform.rotate(eisen, -rel)
+    # Gedreht wird um den Griff (5, 7.5 im Bild), nicht um die Bildmitte.
+    griff = pygame.Vector2(5 - eisen.get_width() / 2, 7.5 - eisen.get_height() / 2)
+    mitte = hand - griff.rotate(rel)
+    s.blit(gedreht, gedreht.get_rect(center=(round(mitte.x), round(mitte.y))))
+    for seite in (-5, 5):
+        pygame.draw.line(s, rumpf_dk, (c + 1, c + seite), hand, 3)
+    pygame.draw.circle(s, rumpf_dk, (round(hand.x), round(hand.y)), 2)
+    # Kopf
+    pygame.draw.circle(s, rumpf_dk, (c + 1, c), 5)
+    pygame.draw.circle(s, hell, (c + 1, c), 4)
+    pygame.draw.circle(s, akzent, (c + 3, c), 2)
+    return _rand(s)
+
+
+def schwung_winkel(i: int) -> float:
+    """Der Winkel des Eisens im Bild `i` (von K.SCHWUNG_BILDER)."""
+    halb = K.WAFFEN[K.NAHKAMPF["waffe"]]["winkel"] * 0.5
+    return -halb + 2 * halb * i / max(1, K.SCHWUNG_BILDER - 1)
+
+
+def _schwung_bild(i, kombi=None):
+    def zeichner():
+        if kombi is None:
+            return _figur_schwung(K.C_HULL, K.C_HULL_SH, K.C_TEAL, schwung_winkel(i))
+        return _figur_schwung(kombi["rumpf"], kombi["kante"], kombi["akzent"],
+                              schwung_winkel(i))
+    return zeichner
+
+
+for _i in range(K.SCHWUNG_BILDER):
+    platzhalter("spieler_schwung_%d" % _i)(_schwung_bild(_i))
+    for _kombi in K.TEAMS["kombi"]:
+        platzhalter("spieler_%s_schwung_%d" % (_kombi["name"].lower(), _i))(
+            _schwung_bild(_i, _kombi))
+
+
 @platzhalter("spieler")
 def _spieler():
     return _figur(28, K.C_HULL, K.C_HULL_SH, K.C_TEAL)

@@ -6373,6 +6373,29 @@ finally:
     _w56.app.klaenge.ton_spielen = _ton_alt56
 _w56.verlassen(); _g56.verlassen()
 
+# ── 0.32.8: Der Schlag mit dem Brecheisen als Figur mit Eisen in der Hand
+_w57, _g57 = gefechtspaar("pvp")
+_k57 = _w57.ich
+_vorher57 = _k57.bild
+_k57.nahkampf()
+_bilder57 = []
+for _ in range(int(0.5 / K.FIXED_DT)):
+    _bilder57.append(_k57.bild)
+    _w57.schritt(K.FIXED_DT)
+_schwung57 = [b for b in _bilder57 if "schwung" in b]
+pruef("Beim Schlag haelt die Figur das Brecheisen statt der Waffe",
+      _schwung57 and _bilder57[0] != _vorher57 and "schwung" in _bilder57[0],
+      "%s -> %s" % (_vorher57, _bilder57[0]))
+pruef("Und die Arme laufen mit: mehrere Bilder nacheinander",
+      len(set(_schwung57)) >= 5, str(sorted(set(_schwung57))))
+pruef("Das Eisen bleibt nach dem Schwung noch kurz in der Hand",
+      len(_schwung57) * K.FIXED_DT >= K.WAFFEN["brecheisen"]["schwung"]
+      + K.NAHKAMPF["nachhalten"] - 0.02, "%.2f s" % (len(_schwung57) * K.FIXED_DT))
+pruef("Danach ist die Waffe wieder da", _bilder57[-1] == _vorher57, _bilder57[-1])
+_e57 = app.bilder.bild(_schwung57[0])
+pruef("Jedes Schwungbild ist gezeichnet", _e57.get_size() == (64, 64))
+_w57.verlassen(); _g57.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

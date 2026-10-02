@@ -183,10 +183,9 @@ class Kaempfer(Spieler):
             name = "spieler_%sboden" % vorsatz
             return name if name in K.BILD_MASS else "spieler_boden"
         if self.schwingt:
-            # Waffe verstaut, nur die Gestalt - darueber zeichnet der
-            # Renderer die Bewegung des Eisens.
-            name = "spieler_%s" % vorsatz.rstrip("_") if vorsatz else "spieler"
-            return name if name in K.BILD_MASS else "spieler"
+            # Waffe verstaut, das Brecheisen in beiden Haenden (seit
+            # 0.32.8 als Bildfolge, siehe art._figur_schwung).
+            return self.schwung_bild(vorsatz)
         # Beim Anlegen eines Medkits haelt die Figur das Medkit, nicht die
         # Waffe - fuer alle sichtbar, der Gast bekommt heilt_rest mit.
         gehalten = "medkit" if self.heilt_rest > 0 else self.waffe_name

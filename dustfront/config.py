@@ -1400,6 +1400,16 @@ for _team in TEAMS["kombi"]:
     for _w in WAFFEN_HAND:
         BILD_MASS["spieler_%s_%s" % (_kurz, _w)] = BILD_MASS["spieler_" + _w]
 
+# Der Schlag mit dem Brecheisen als Figur (seit 0.32.8): die Gestalt haelt
+# das Eisen mit beiden Haenden und schwingt es - je ein Bild fuer einen
+# Winkel des Schwungs. Groesser als die gewoehnliche Figur, weil das Eisen
+# ueber sie hinausragt; gezeichnet wird mittig wie jede Figur.
+SCHWUNG_BILDER = 9
+for _i in range(SCHWUNG_BILDER):
+    BILD_MASS["spieler_schwung_%d" % _i] = (64, 64)
+    for _team in TEAMS["kombi"]:
+        BILD_MASS["spieler_%s_schwung_%d" % (_team["name"].lower(), _i)] = (64, 64)
+
 # Was der Spieler zu Beginn auf den Plaetzen 1 bis 6 traegt.
 #
 # Das Brecheisen steht **nicht** mehr darin. Es liegt auf einer eigenen
@@ -1537,6 +1547,12 @@ KONTO = dict(
 NAHKAMPF = dict(
     waffe="brecheisen",       # welcher Eintrag aus WAFFEN den Schlag macht
     sperrt_feuer=True,        # waehrend des Schwungs wird nicht geschossen
+    # So lange bleibt das Eisen nach dem Schwung noch in der Hand (seit
+    # 0.32.8, gemeldet: "die Waffe soll frueher versteckt werden - gerade
+    # sieht es aus, als haette man sie noch"). Der Schwung allein dauert
+    # 0.26 s; mit dem Nachhalten sieht man ihn auch, wenn man nicht
+    # gerade hinschaut.
+    nachhalten=0.14,
 )
 
 # Rauchgranate: eine Wand, durch die niemand durchsieht - auch nicht von

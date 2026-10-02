@@ -1267,30 +1267,30 @@ class Renderer:
         besser als eine duenne Kurve.
         """
         dauer = d.get("schwung", 0.26)
-        f = 1.0 - max(0.0, min(1.0, spieler.schlag_zeigen / dauer))
+        lauf = spieler.schlag_zeigen - K.NAHKAMPF["nachhalten"]
+        if lauf <= 0.0:
+            return                  # Nachhalten: das Eisen steht, keine Spur
+        f = 1.0 - max(0.0, min(1.0, lauf / dauer))
         halb = d["winkel"] * 0.5
-        reich = d["reichweite"]
         # Von -halb nach +halb, am Anfang schnell, am Ende auslaufend.
         weg = 1.0 - (1.0 - f) * (1.0 - f)
         jetzt = spieler.winkel - halb + 2 * halb * weg
+        # Seit 0.32.8 haelt die Figur selbst das Eisen (Bildfolge
+        # spieler_schwung_*). Hier bleibt nur die Spur der Spitze: ein paar
+        # blasse Punkte auf dem Bogen hinter ihr - die Bewegung, die das
+        # Auge zwischen zwei Bildern sonst verliert.
         linie = self._linie
         linie.fill((0, 0, 0, 0))
-        # Spur: ein paar Grad hinter der Schneide, immer blasser
-        for i in range(6):
-            zurueck = jetzt - (2 * halb) * 0.09 * i
+        spitze = 12.0 + 21.0          # Hand + Laenge des Eisens bis zur Klaue
+        for i in range(1, 7):
+            zurueck = jetzt - (2 * halb) * 0.07 * i
             if zurueck < spieler.winkel - halb:
                 break
-            deck = int(150 * (1.0 - i / 6.0) * (1.0 - f * 0.5))
+            deck = int(120 * (1.0 - i / 7.0) * (1.0 - f * 0.6))
             if deck <= 4:
                 continue
-            a = p + pygame.Vector2(reich * 0.35, 0).rotate(zurueck)
-            b = p + pygame.Vector2(reich, 0).rotate(zurueck)
-            pygame.draw.line(linie, (*K.C_MUTED, deck), a, b, 2)
-        # Die Schneide selbst, ein heller Klotz am Ende des Eisens
-        a = p + pygame.Vector2(reich * 0.3, 0).rotate(jetzt)
-        b = p + pygame.Vector2(reich, 0).rotate(jetzt)
-        pygame.draw.line(linie, (*K.C_RUST, 235), a, b, 3)
-        pygame.draw.rect(linie, (*K.C_CREAM, 245), (int(b.x) - 2, int(b.y) - 2, 4, 4))
+            q = p + pygame.Vector2(spitze, 0).rotate(zurueck)
+            pygame.draw.rect(linie, (*K.C_CREAM, deck), (int(q.x) - 1, int(q.y) - 1, 2, 2))
         ziel.blit(linie, (0, 0))
 
     # ---- HUD -------------------------------------------------------
