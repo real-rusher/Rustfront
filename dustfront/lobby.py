@@ -792,8 +792,8 @@ class Rundenplanung(Menue):
         if not self.darf:
             hilfe = hilfe or "NUR DER GASTGEBER KANN HIER ETWAS ÄNDERN"
         if hilfe:
-            SCHRIFT.zeichnen(ziel, hilfe, r.centerx, r.bottom - 34,
-                             K.C_MUTED, 1, ausrichtung="mitte")
+            SCHRIFT.zeichnen(ziel, ui.kuerzen(hilfe, r.width - 32), r.centerx,
+                             r.bottom - 34, K.C_MUTED, 1, ausrichtung="mitte")
         if not self.erweitert:
             # Was unter ERWEITERT verstellt ist, soll man auch in der
             # einfachen Ansicht erfahren.
