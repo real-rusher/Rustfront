@@ -366,14 +366,14 @@ class Pause(Menue):
         s = self.spiel
         r = pygame.Rect(K.GAME_W - 200 + int((1.0 - p) * 40), 20, 182, 70)
         ui.kasten(ziel, r, K.C_MUTED_DK, (12, 9, 7), 5)
-        SCHRIFT.zeichnen(ziel, "WELLE %d" % s.welle, r.x + 10, r.y + 8,
+        SCHRIFT.zeichnen(ziel, "WELLE %d" % s.welle, r.x + 10, r.y + 6,
                          K.C_AMBER, 2)
         SCHRIFT.zeichnen(ziel, "SCHROTT %d" % s.held.punkte, r.x + 10,
-                         r.y + 28, K.C_MUTED, 1)
+                         r.y + 26, K.C_MUTED, 1)
         SCHRIFT.zeichnen(ziel, "EBENE %d" % s.held.ebene, r.x + 10, r.y + 38,
                          K.C_MUTED, 1)
         SCHRIFT.zeichnen(ziel, "%s %s" % (K.PHASE, K.VERSION), r.x + 10,
-                         r.y + 54, K.C_MUTED_DK, 1)
+                         r.y + 50, K.C_MUTED_DK, 1)
 
     def fusstext(self) -> str:
         return "[ESC] WEITERSPIELEN"
@@ -673,7 +673,8 @@ class Einstellungen(Menue):
         for i, z in enumerate(zeilen[:3]):
             SCHRIFT.zeichnen(ziel, z, kasten_r.x + 8, kasten_r.y + 20 + i * 10,
                              K.C_MUTED, 1)
-        SCHRIFT.zeichnen(ziel, "ABLAGE  " + pfade.beschreibung(), r.x + 26,
+        SCHRIFT.zeichnen(ziel, ui.kuerzen("ABLAGE  " + pfade.beschreibung(),
+                                          r.width - 52), r.x + 26,
                          r.bottom - 112, K.C_MUTED_DK, 1)
 
     def taste(self, ev) -> None:
@@ -1153,8 +1154,8 @@ class Anmeldung(Menue):
             SCHRIFT.zeichnen(ziel, "EINEN AUGENBLICK ...", r.centerx, y,
                              K.C_AMBER, 1, 1, "mitte")
         elif konto.fehler:
-            SCHRIFT.zeichnen(ziel, konto.fehler[:44], r.centerx, y,
-                             K.C_RED, 1, 1, "mitte")
+            SCHRIFT.zeichnen(ziel, ui.kuerzen(konto.fehler, r.width - 24),
+                             r.centerx, y, K.C_RED, 1, 1, "mitte")
             # Beim Zertifikat dazu, was genau los ist und wer es
             # ausgestellt hat. Ohne Eingabeaufforderung ist das die
             # einzige Stelle, an der man es erfaehrt (docs/KONTO.md 9).
@@ -1165,8 +1166,9 @@ class Anmeldung(Menue):
                 if stand.get("aussteller"):
                     zeilen.append("VON: %s" % stand["aussteller"])
                 for i, zeile in enumerate(zeilen):
-                    SCHRIFT.zeichnen(ziel, zeile[:46], r.centerx, y + 10 + i * 9,
-                                     K.C_MUTED, 1, 1, "mitte")
+                    SCHRIFT.zeichnen(ziel, ui.kuerzen(zeile, r.width - 24),
+                                     r.centerx, y + 10 + i * 9, K.C_MUTED,
+                                     1, 1, "mitte")
         else:
             SCHRIFT.zeichnen(ziel, "OHNE KONTO ZÄHLT ALLES TROTZDEM MIT",
                              r.centerx, y, K.C_MUTED_DK, 1, 1, "mitte")

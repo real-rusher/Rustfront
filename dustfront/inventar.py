@@ -359,9 +359,11 @@ class Inventar(Szene):
         self._feldtitel(ziel, r, "ANGABEN")
         name = self.held.waffen[self.wahl]
         d = K.WAFFEN[name]
-        SCHRIFT.zeichnen(ziel, d["name"], r.x + 6, r.y + 20, K.C_CREAM, 1)
         art = {"schuss": "SCHUSSWAFFE", "wurf": "WURFWAFFE",
                "nahkampf": "NAHKAMPF"}[d["art"]]
+        art_w = SCHRIFT.breite(art, 1)
+        SCHRIFT.zeichnen(ziel, ui.kuerzen(d["name"], r.width - 12 - art_w - 6),
+                         r.x + 6, r.y + 20, K.C_CREAM, 1)
         SCHRIFT.zeichnen(ziel, art, r.right - 6, r.y + 20, K.C_MUTED_DK, 1,
                          1, "rechts")
 
