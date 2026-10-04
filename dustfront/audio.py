@@ -2,19 +2,11 @@
 DUSTFRONT - Ton
 ===============
 
-Dieselbe Idee wie bei den Bildern: `klang("schuss_repetierer")` sucht zuerst
-eine Datei, und nimmt nur dann den im Code erzeugten Platzhalter, wenn keine
-da ist.
-
-Gesucht wird in dieser Reihenfolge, im Ordner `assets/sfx`:
-
-    schuss_repetierer.wav
-    schuss_repetierer.ogg
-    schuss.wav                 (allgemeiner Rueckfall ohne Waffenname)
-    schuss.ogg
-
-Wenn du also spaeter eine Aufnahme schickst, legen wir sie als
-`assets/sfx/schuss_repetierer.wav` ab, und am Spielcode aendert sich nichts.
+Klangdateien liegen in `assets/sfx/<name>/`; WAV, OGG und MP3 werden geladen.
+Der Dateiname in diesem Ordner ist frei. Fuer `schuss_repetierer` hat eine
+Aufnahme in `assets/sfx/schuss_repetierer/` Vorrang vor der alten flachen
+Datei `assets/sfx/schuss_repetierer.wav` und dem allgemeinen Rueckfall
+`assets/sfx/schuss.wav`.
 
 Damit ein Dauerfeuer nicht wie ein Maschinengewehr aus einer einzigen Kopie
 klingt, gibt es von jedem Platzhalter drei Fassungen, aus denen zufaellig
@@ -37,6 +29,64 @@ RATE = 44100
 ENDUNGEN = K.ASSETS["ton_endungen"]
 
 _PLATZHALTER = {}
+
+# Die Quellen einiger Schussaufnahmen enthalten mehrere Schuesse in Folge.
+# Im Spiel kommt der Klang je abgegebenem Geschoss; deshalb wird daraus je
+# ein Schuss mit seinem kurzen Nachhall, statt dieselbe Salve zu ueberlagern.
+_SCHUSS_SEGMENTE = {
+    "u_f09vejvoga-gun-shot-350315.mp3": (
+        (0.12, 0.76), (1.38, 2.02), (2.21, 2.85), (3.47, 4.11),
+        (4.35, 4.99), (5.60, 6.24), (6.45, 7.09), (7.70, 8.34),
+    ),
+    "freesound_community-clean-machine-gun-burst-98224.mp3": tuple(
+        (max(0.0, start - 0.012), start + 0.105)
+        for start in (0.02, 0.11, 0.20, 0.29, 0.38, 0.47, 0.56, 0.65,
+                      0.74, 0.83, 0.92, 1.01, 1.10, 1.19, 1.28, 1.36)
+    ),
+}
+
+# Zeitfenster nach dem Abhoeren der Wellenform (Sekunden). Die laengeren
+# Originaldateien haben davor oder danach Stille bzw. bei Rauch einen langen
+# Hintergrundton, der nicht bei jedem Wurf wiederholt werden soll.
+_ZUSCHNITTE = {
+    "ribhavagrawal-woosh-230554.mp3": (0.38, 0.62),
+    "tmp_7901-951678082.mp3": (0.32, 0.94),
+    "grenade-explosion.mp3": (0.38, 1.82),
+    "freesound_community-glass-shatter-3-100155.mp3": (0.02, 0.34),
+    "gregorquendel-designed-fire-winds-swoosh-04-116788.mp3": (0.02, 1.45),
+    "smoke-grenade-sound-effect.mp3": (0.48, 1.18),
+    "freesound_community-069321_light-machine-gun-m249-39814.mp3": (0.04, 0.18),
+    "freesound_community-sniper-rifle-firing-shot-1-39789.mp3": (0.03, 1.48),
+    "yodguard-spear_thrust-6-382403.mp3": (0.0, 0.32),
+    "universfield-combat-impact-352458.mp3": (0.0, 0.36),
+    "universfield-hammer-steel-impact-454390.mp3": (0.0, 0.32),
+    "fighting.mp3": (0.20, 2.42),
+    "gta-v-wasted-death-sound.mp3": (0.0, 4.25),
+}
+
+
+def _ausschnitt(sound, start: float, ende: float):
+    """Schneidet PCM-Material im bereits initialisierten Mischerformat."""
+    try:
+        roh = sound.get_raw()
+        mixer = pygame.mixer.get_init()
+    except (pygame.error, AttributeError):
+        return sound
+    if not roh or mixer is None:
+        return sound
+    rate, form, kanaele = mixer
+    byte_pro_wert = abs(form) // 8
+    rahmen = max(1, kanaele * byte_pro_wert)
+    von = max(0, int(start * rate)) * rahmen
+    bis = min(len(roh), int(ende * rate) * rahmen)
+    von -= von % rahmen
+    bis -= bis % rahmen
+    if bis <= von:
+        return sound
+    try:
+        return pygame.mixer.Sound(buffer=roh[von:bis])
+    except pygame.error:
+        return sound
 
 
 def platzhalter_klang(name):
@@ -430,6 +480,56 @@ def _herzschlag(seed=0):
     return _mischen(erster + luecke + zweiter, koerper)
 
 
+@platzhalter_klang("reload")
+def _nachladen(seed=0):
+    """Zwei kurze Mechanik-Klicks mit einem kleinen metallischen Nachklang."""
+    klick = _rauschen(0.045, 0.6, 7200, 1800, 7.0, seed + 1, hp=True)
+    return _mischen(klick, [0.0] * int(RATE * 0.14) + klick,
+                    [0.0] * int(RATE * 0.20)
+                    + _schlag(720, 380, 0.12, 0.18, 8.0))
+
+
+@platzhalter_klang("downed_not_dead")
+def _gefallen(seed=0):
+    """Ein dumpfer Treffer und kurzer Atemstoss fuer den Fall zu Boden."""
+    return _mischen(_schlag(105, 48, 0.18, 0.72, 4.0),
+                    _rauschen(0.26, 0.22, 1200, 250, 3.0, seed + 2))
+
+
+@platzhalter_klang("smoke_grenade")
+def _rauchgranate(seed=0):
+    """Eine kleine Huelse, die aufsetzt und leise zu zischen beginnt."""
+    zischen = _rauschen(0.50, 0.30, 420, 1500, 1.8, seed + 1)
+    return _mischen(_schlag(440, 190, 0.12, 0.48, 4.8),
+                    [0.0] * int(RATE * 0.10) + zischen)
+
+
+@platzhalter_klang("rundenstart")
+def _rundenstart(seed=0):
+    """Ein knapper Doppelschlag, der den neuen Gefechtsbeginn markiert."""
+    return _mischen(_schlag(220, 110, 0.10, 0.48, 3.0),
+                    [0.0] * int(RATE * 0.12)
+                    + _schlag(330, 165, 0.12, 0.40, 3.0))
+
+
+@platzhalter_klang("won_match")
+def _sieg(seed=0):
+    """Ein kurzer aufsteigender Dreiklang fuer einen gewonnenen Durchgang."""
+    return _mischen(_schlag(523, 523, 0.12, 0.32, 2.0),
+                    [0.0] * int(RATE * 0.10)
+                    + _schlag(659, 659, 0.14, 0.30, 2.0),
+                    [0.0] * int(RATE * 0.20)
+                    + _schlag(784, 784, 0.20, 0.34, 2.0))
+
+
+@platzhalter_klang("lost_match")
+def _niederlage(seed=0):
+    """Ein kurzer fallender Zweiklang fuer eine verlorene Runde."""
+    return _mischen(_schlag(330, 330, 0.18, 0.35, 2.5),
+                    [0.0] * int(RATE * 0.16)
+                    + _schlag(220, 220, 0.24, 0.32, 2.5))
+
+
 # ══════════════════════════════════════════════════════════════════
 # Dumpf machen
 # ══════════════════════════════════════════════════════════════════
@@ -519,12 +619,29 @@ class Klaenge:
         gefunden = []
         # Aufnahmen liegen kuenftig je Klang in einem eigenen Ordner. Der
         # Dateiname ist dabei frei; sortiert bleibt die Auswahl reproduzierbar.
-        klang_ordner = self.ordner / name
-        if klang_ordner.is_dir():
-            for pfad in sorted(klang_ordner.iterdir()):
+        ordnernamen = [K.KLANG_ORDNER.get(name, name)]
+        if name not in ordnernamen:
+            ordnernamen.append(name)
+        wurzel = name.split("_")[0]
+        if wurzel not in ordnernamen:
+            ordnernamen.append(wurzel)
+        klang_ordner = [self.ordner / n for n in ordnernamen]
+        for quelle_ordner in klang_ordner:
+            if not quelle_ordner.is_dir():
+                continue
+            for pfad in sorted(quelle_ordner.iterdir()):
                 if pfad.is_file() and pfad.suffix.lower() in ENDUNGEN:
                     try:
-                        gefunden.append(pygame.mixer.Sound(str(pfad)))
+                        quelle = pygame.mixer.Sound(str(pfad))
+                        segmente = _SCHUSS_SEGMENTE.get(pfad.name)
+                        if segmente:
+                            gefunden.extend(_ausschnitt(quelle, start, ende)
+                                            for start, ende in segmente)
+                        elif pfad.name in _ZUSCHNITTE:
+                            gefunden.append(_ausschnitt(
+                                quelle, *_ZUSCHNITTE[pfad.name]))
+                        else:
+                            gefunden.append(quelle)
                         self.aus_datei.add(name)
                     except pygame.error as grund:
                         self.fehler.append("%s: %s" % (pfad.name, grund))

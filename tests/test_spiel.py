@@ -746,6 +746,37 @@ try:
         alle = [n for n in K.KLANG_NAMEN if not kl.klang(n)]
         pruef("Jeder Name in KLANG_NAMEN gibt einen Klang", not alle,
               ", ".join(alle))
+
+        # Die mitgelieferten MP3-Aufnahmen muessen geladen und auf die
+        # einzelnen Spielereignisse statt auf ihre lange Quellaufnahme
+        # zugeschnitten werden.
+        from pathlib import Path
+        aufnahmen = Klaenge(Path(__file__).resolve().parent.parent / "assets")
+        repetierer = aufnahmen.klang("schuss_repetierer")
+        pruef("MP3-Repetiereraufnahme wird in acht einzelne Schuesse geteilt",
+              "schuss_repetierer" in aufnahmen.aus_datei
+              and len(repetierer) == 8
+              and all(0.4 < s.get_length() < 0.7 for s in repetierer))
+        sturm = aufnahmen.klang("schuss_sturm")
+        pruef("Sturm-Burst liefert kurze Einzelknalle ohne Salven-Ende",
+              "schuss_sturm" in aufnahmen.aus_datei
+              and len(sturm) == 16
+              and all(0.08 < s.get_length() < 0.14 for s in sturm))
+        rauch = aufnahmen.klang("smoke_grenade")
+        pruef("Rauchgranatenaufnahme wird auf den Ereignisklang gekuerzt",
+              "smoke_grenade" in aufnahmen.aus_datei
+              and len(rauch) == 1
+              and 0.6 <= rauch[0].get_length() <= 0.8)
+        eingebaut = ("schuss_lmg", "schuss_scharf", "granate", "dash",
+                     "downed_not_dead", "nahkampf_schwung",
+                     "nahkampf_treffer_organisch",
+                     "nahkampf_treffer_metall", "molotov_glass",
+                     "molotov_whoosh", "reload", "rundenstart",
+                     "won_match", "lost_match")
+        fehlende = [n for n in eingebaut
+                    if not aufnahmen.klang(n) or n not in aufnahmen.aus_datei]
+        pruef("Alle weiteren MP3-Aufnahmen werden eingelesen", not fehlende,
+              ", ".join(fehlende))
     else:
         print("  --    Mixer nicht verfuegbar, Klangproben uebersprungen")
 

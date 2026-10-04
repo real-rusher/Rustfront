@@ -1887,6 +1887,12 @@ Netzpaket und Karten bleiben unveraendert.
 **0.32.16:** Windlinien bauen sich nacheinander auf und das Muendungsfeuer
 sitzt vor dem Lauf. Rein visuell; Netzpaket und Karten bleiben unveraendert.
 
+**0.32.18:** Das Gefecht meldet jetzt auch Nachladen, Zu-Boden-Gehen und den
+Rundenstart als Klangereignisse an Gaeste weiter. Der vorhandene Nahkampfeffekt
+enthaelt ausserdem die Trefferart (organisch/metallisch), damit der Gast den
+gleichen Einschlag wie der Gastgeber hoert. Kein neuer Port; wegen der neuen
+Ereignisse muessen Gastgeber und Gaeste dieselbe Version nutzen.
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:

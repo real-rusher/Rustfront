@@ -312,7 +312,7 @@ MEDKIT_BLICK = dict(
 # rechnet nur dann selbst, wenn keine da ist:
 #
 #     assets/<name>.png           Bild
-#     assets/sfx/<name>.wav       Klang
+#     assets/sfx/<name>/<datei>.wav, .ogg oder .mp3   Klang
 #
 # Eine hingelegte Datei ersetzt den Platzhalter, ohne dass eine Zeile Code
 # geaendert wird. Welche Namen es gibt, steht in BILD_MASS und KLANG_NAMEN
@@ -323,7 +323,7 @@ ASSETS = dict(
     ordner="assets",              # Name des Ordners neben dem Paket
     sfx="sfx",                    # Unterordner fuer die Klaenge
     bild_endungen=(".png", ".webp", ".bmp"),
-    ton_endungen=(".wav", ".ogg"),
+    ton_endungen=(".wav", ".ogg", ".mp3"),
     fassungen=8,                  # name_1 bis name_8 als Abwechslung
     platzhalter_fassungen=3,      # so viele Kopien je erzeugtem Klang
     vorlagen="assets_vorlage",    # dorthin schreibt --vorlagen
@@ -459,10 +459,21 @@ KLANG_NAMEN = (
     "granate",
     "sturz",                # Aufsetzen nach einem Fall
     "nahkampf",
+    "nahkampf_schwung",
+    "nahkampf_treffer_organisch",
+    "nahkampf_treffer_metall",
     "wurf",
     "medkit",
     "aufheben",
     "molotov",              # Glas zerbricht und Feuer faengt
+    "molotov_glass",
+    "molotov_whoosh",
+    "smoke_grenade",
+    "reload",
+    "rundenstart",
+    "won_match",
+    "lost_match",
+    "downed_not_dead",
     "blend",                # der Knall der Blendgranate
     "rakete",               # der Abschuss
     "erfasst",              # Ton, wenn die Erfassung steht
@@ -478,6 +489,16 @@ KLANG_NAMEN = (
     "menue",
     "menue_ok",
 )
+
+# Einige Aufnahmen sind absichtlich in Unterordnern nach Art sortiert.
+# Der Spielcode fragt weiter nach einem lesbaren Ereignisnamen.
+KLANG_ORDNER = {
+    "nahkampf_schwung": "nahkampf/into_air",
+    "nahkampf_treffer_organisch": "nahkampf/hit_organic",
+    "nahkampf_treffer_metall": "nahkampf/hit_metal",
+    "molotov_glass": "molotov/glass_shatter",
+    "molotov_whoosh": "molotov/fire_whoosh",
+}
 
 # Klaenge, die **nicht** gedaempft werden, wenn es einem schlecht geht.
 # Der eigene Herzschlag wird ja gerade lauter, nicht leiser, und die

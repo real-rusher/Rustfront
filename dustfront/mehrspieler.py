@@ -207,6 +207,9 @@ class Kaempfer(Spieler):
             self.revive_stand = 0.0
             self.feuert = False
             self.toeter = von
+            if self.welt is not None:
+                self.welt.klang("downed_not_dead", 0.75, self.pos,
+                                self.ebene)
             return
         super().sterben(von)
         self.toeter = von
@@ -750,6 +753,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self.boss = None            # der Boss dieser Welle, solange er lebt
         self.vorbei = False
         self.gewonnen = False
+        self._ende_ton_gespielt = False
         self.liste: list[dict] = []
         self.hinweis = ""
         self.blick = 0
@@ -960,7 +964,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     # selbst nach. Weitergereicht wird nur, was beim Gast sonst **fehlt** -
     # und das war mehr, als man denkt: die Ansage eines Bosses und den
     # Spuck des Speiers hat seit 0.26 kein Gast je gehoert.
-    NETZKLAENGE = ("speien", "boss_ansage", "dash", "wurf", "medkit", "ruf")
+    NETZKLAENGE = ("speien", "boss_ansage", "dash", "wurf", "medkit", "ruf",
+                   "reload", "downed_not_dead", "rundenstart")
 
     def _klang(self, name: str, lautstaerke: float = 1.0, pos=None,
                ebene: int | None = None) -> None:
@@ -1029,15 +1034,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                               int(ebene), round(winkel, 1), waffe])
 
     def _schlagknall_melden(self, pos, winkel: float, ebene: int,
-                            getroffen: bool = False, quelle=None) -> None:
+                            getroffen: bool = False, quelle=None,
+                            treffer_art: str = "organisch") -> None:
         self._in_wirkung = True
         try:
-            Welt.schlagknall(self.welt, pos, winkel, ebene, getroffen, quelle)
+            Welt.schlagknall(self.welt, pos, winkel, ebene, getroffen, quelle,
+                             treffer_art)
         finally:
             self._in_wirkung = False
         self._wirkung.append(["n", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(winkel, 1),
-                              1 if getroffen else 0])
+                              1 if getroffen else 0, treffer_art])
 
     def _raketenstart_melden(self, pos, winkel: float, ebene: int,
                              quelle=None, ziel=None) -> None:
@@ -1094,7 +1101,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                     winkel = float(e[4])
                 except (TypeError, ValueError):
                     continue
-                self.welt.schlagknall(pos, winkel, ebene, bool(e[5]))
+                treffer_art = str(e[6]) if len(e) > 6 else "organisch"
+                if treffer_art not in ("organisch", "metall"):
+                    treffer_art = "organisch"
+                self.welt.schlagknall(pos, winkel, ebene, bool(e[5]), None,
+                                      treffer_art)
             elif art == "k":
                 try:
                     laut = float(e[4])
@@ -2588,6 +2599,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         """Alle wieder auf die Beine, neue Plaetze, volle Magazine."""
         self.runde += 1
         self.runden_pause = 0.0
+        self.welt.klang("rundenstart", 0.7)
         # Neue Runde, neue Seiten - aber innerhalb der Runde bleiben sie.
         self._einstiegszonen_waehlen()
         for k in list(self.kaempfer.values()):
@@ -2817,6 +2829,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     def _runde_beenden(self, gewonnen: bool) -> None:
         self.vorbei = True
         self.gewonnen = gewonnen
+        self._match_ende_ton()
         self.liste = self._endstand()
         bestenliste.eintragen(self.liste)
         if self.ist_gastgeber:
@@ -2835,6 +2848,25 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                                     "partie": self.partie,
                                     "werte": self.endwerte})
         self._runde_buchen()
+
+    def _match_ende_ton(self) -> None:
+        """Spielt die Sieges- oder Niederlagenmeldung fuer diesen Rechner."""
+        if self._ende_ton_gespielt:
+            return
+        self._ende_ton_gespielt = True
+        if self.mit_teams and self.ich is not None:
+            gewonnen = (self.sieger_team >= 0
+                        and self.ich.team == self.sieger_team)
+        elif (self.ich is not None and self.gewonnen and self.kaempfer
+              and not self.regeln["revive"]):
+            bester = max(k.abschuesse for k in self.kaempfer.values())
+            fuehrende = [k for k in self.kaempfer.values()
+                         if k.abschuesse == bester]
+            gewonnen = len(fuehrende) == 1 and fuehrende[0] is self.ich
+        else:
+            gewonnen = self.gewonnen
+        self.app.klaenge.spielen("won_match" if gewonnen else "lost_match",
+                                 0.7)
 
     def _werte_aller(self) -> dict:
         """Die Zahlen jedes Spielers, nach Spielernummer.
@@ -3206,6 +3238,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 self.liste = [e for e in nachricht.get("liste", [])
                               if isinstance(e, dict)]
                 self.sieger_team = int(nachricht.get("sieger", -1))
+                self._match_ende_ton()
                 self._liste_uebernehmen(self.teampunkte,
                                         nachricht.get("teampunkte"), int)
                 bestenliste.eintragen(self.liste)
@@ -4113,6 +4146,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self.pause_rest = self.stufe["pause"]
         self.vorbei = False
         self.gewonnen = False
+        self._ende_ton_gespielt = False
         self.liste = []
         self.rest = self.ende_wert if self.ende_art == "zeit" else 0.0
         self.obere_zeigen = bool(self.app.opt["obere_ebenen"])
