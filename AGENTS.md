@@ -5,9 +5,12 @@ aendert, haelt sich an diese Regeln.
 
 ## Arbeitsweise
 
-* **Nie direkt auf `main` oder `multiplayer-test` pushen.** Immer auf einem
-  eigenen Branch arbeiten (z. B. `ki/<thema>`) und einen Pull Request
-  gegen `multiplayer-test` stellen. Der Besitzer prueft und uebernimmt.
+* **`main` bleibt geschuetzt:** Nie direkt auf `main` pushen.
+* KI-Agenten, deren Name **nicht Jules** ist, arbeiten direkt auf
+  `multiplayer-test` und pushen ihre fertigen Aenderungen dort als Commit.
+  **Jules** arbeitet auf einem eigenen Branch (z. B. `ki/<thema>`) und
+  stellt einen Pull Request gegen `multiplayer-test`; der Besitzer prueft
+  und uebernimmt ihn.
 * Kleine, gezielte Aenderungen. Nichts nebenbei umbauen oder umbenennen.
 * **Niemals einen geheimen Schluessel (Supabase secret/service key) in
   eine Datei schreiben.** Der Schluessel im Code ist der oeffentliche
