@@ -4442,6 +4442,11 @@ pruef("Die Figur mit Medkit gibt es, auch je Mannschaft",
       "spieler_medkit" in K.BILD_MASS and all(
           "spieler_%s_medkit" % t["name"].lower() in K.BILD_MASS
           for t in K.TEAMS["kombi"]))
+_medkit_figur = app.bilder.platzhalter("spieler_medkit")
+pruef("Die Medkit-Figur hat keine losen weissen Pixel am Rand",
+      all(_medkit_figur.get_at((x, y))[:3] != (236, 232, 220)
+          for x in range(_medkit_figur.get_width())
+          for y in range(_medkit_figur.get_height())))
 # Ein frisches Spiel: die Figur von oben ist laengst gestorben.
 sz_m = Spiel(app, seed=20250921)
 h_m = sz_m.held
@@ -6663,14 +6668,14 @@ held.dash_rest = K.DASH["dauer"] - K.FIXED_DT
 held.dash_bild_rest = held.dash_rest + K.DASH["bild_ausklang"]
 szene.renderer.wesen_zeichnen(_dash_flaeche_b, szene.welt, 0,
                               pygame.Vector2(0, 0), 1.0)
-pruef("Der Dashimpuls ist schon im ersten Bild an der Figur sichtbar",
+pruef("Die Windlinien sind schon im ersten Dashbild sichtbar",
       pygame.image.tobytes(_dash_flaeche_b, "RGBA") != _dash_still_b)
 _dash_flaeche_b.fill((0, 0, 0, 0))
 held.dash_rest = K.DASH["dauer"] * 0.5
 held.dash_bild_rest = K.DASH["dauer"] * 0.5 + K.DASH["bild_ausklang"]
 szene.renderer.wesen_zeichnen(_dash_flaeche_b, szene.welt, 0,
                               pygame.Vector2(0, 0), 1.0)
-pruef("Der laufende Dash zeichnet Spur und pixelige Nachbilder",
+pruef("Der laufende Dash zeichnet einen dezenten Windstoss",
       pygame.image.tobytes(_dash_flaeche_b, "RGBA") != _dash_still_b)
 _dash_flaeche_b.fill((0, 0, 0, 0))
 held.dash_rest = 0.0

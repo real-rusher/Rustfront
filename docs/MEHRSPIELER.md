@@ -1881,6 +1881,9 @@ Feld nicht und werden wie ueblich beim Beitritt abgewiesen.
 **0.32.14:** Die Dash-Animation wurde visuell ueberarbeitet. Das Netzpaket,
 die Karte und die Mehrspielerregeln bleiben unveraendert.
 
+**0.32.15:** Dash-Windlinien und Medkit-Pixelkorrektur sind rein visuell;
+Netzpaket und Karten bleiben unveraendert.
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:

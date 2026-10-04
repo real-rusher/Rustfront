@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.32.14, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.32.15, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -708,7 +708,8 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
-| 0.32.14 | **Dash-Animation neu gestaltet**: sofort sichtbarer Impulsring und Richtungs-Chevron an der Figur, nahe teamfarbene Nachbilder und gebrochene Staubschlieren. Rein visuell, keine Netz- oder Kartenänderung. |
+| 0.32.15 | **Dash und Medkit**: Der Dash zeichnet drei kleine, grauweisse Windlinien hinter der Figur. Am Medkit in der Hand wurden die losen weissen Pixel am Rand entfernt. Rein visuell, keine Netz- oder Kartenaenderung. |
+| 0.32.14 | **Dash-Animation neu gestaltet**: sofort sichtbarer Impulsring und Richtungs-Chevron an der Figur, nahe teamfarbene Nachbilder und gebrochene Staubschlieren. Rein visuell, keine Netz- oder Kartenaenderung. |
 | 0.32.13 | **Dash-Animation**: ein pixeliger Tuerkis- oder Teamfarben-Stoss mit zwei gefaerbten Nachbildern, gebrochenen Bewegungslinien, sichtbarem Absprung und kurzem Ausklang. Der Gast bekommt denselben Animationstakt vom Gastgeber; das Weltpaket hat dafuer ein neues Feld. Gastgeber und Gast muessen dieselbe Version nutzen. |
 | 0.32.12 | **Gameplay-Randfehler behoben**: Medkits heilen weder Tote noch Spieler am Boden und werden bei Waffenwechsel abgebrochen; ein Sturz beendet den Dash. Geschosse mit Nulltempo schlagen sicher ein, Kartenraender gelten nicht als Loecher und Raketen wechseln dort nicht die Ebene. Lange Menue- und UI-Texte werden innerhalb ihrer Felder gekuerzt. Mehrspieler: gleiches Verhalten fuer Gastgeber und Gast, keine Protokollaenderung; Gastgeber und Gast muessen dieselbe Version nutzen. |
 | 0.1.0 | Hauptmenue |

@@ -421,17 +421,13 @@ def _hand_waffe(s, c, name):
         return
 
     if d["aufbau"] == "koffer":                   # Medkit beim Anlegen
-        # Mit beiden Haenden vor der Brust, aufgeklappt: weiss, mit dem
-        # roten Kreuz, und ein Streifen Verband haengt heraus. Muss sich
-        # auf den ersten Blick von jeder Waffe unterscheiden - wer das
-        # sieht, weiss: der schiesst gerade nicht.
+        # Das kompakte Paket sitzt vor der Brust. Die lose weisse Lasche
+        # sah wie zwei fremde Pixel am Rand aus und gehoerte nicht dazu.
         pygame.draw.rect(s, (28, 22, 16), (hand - 1, c - 7, 11, 14))
         pygame.draw.rect(s, (214, 210, 196), (hand, c - 6, 9, 12))
         pygame.draw.rect(s, (168, 162, 148), (hand, c + 3, 9, 3))
         pygame.draw.rect(s, K.C_RED, (hand + 3, c - 4, 3, 7))
         pygame.draw.rect(s, K.C_RED, (hand + 1, c - 2, 7, 3))
-        pygame.draw.rect(s, (236, 232, 220), (hand + 9, c + 1, 4, 2))
-        pygame.draw.rect(s, (236, 232, 220), (hand + 12, c + 2, 2, 3))
         return
 
     if d["aufbau"] == "walze":                    # Blendgranate: glatte Walze

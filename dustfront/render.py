@@ -212,7 +212,6 @@ class Renderer:
         self.bilder = bilder
         self._dunkel: dict[tuple, pygame.Surface] = {}
         self._schatten_cache: dict[tuple, pygame.Surface] = {}
-        self._dash_nachbilder: dict[tuple, pygame.Surface] = {}
         self._tiefen: dict[int, pygame.Surface] = {}
         # Wie gross die Flaeche ist, auf die die Welt gezeichnet wird. Fast
         # immer das Bild selbst; mit Zoom (mehrspieler.py) eine groessere,
@@ -392,10 +391,9 @@ class Renderer:
                 pygame.draw.line(ziel, w.spur, p - r * 6, p, 1)
             if w.bild is None:
                 continue
-            dash_aktiv = (getattr(w, "dash_rest", 0.0) > 0.0
-                          or getattr(w, "dash_bild_rest", 0.0) > 0.0)
-            if getattr(w, "dash_rest", 0.0) > 0.0:
-                self.dash_zeichnen(ziel, p, w, dunkel, hintergrund=True)
+            if (getattr(w, "dash_rest", 0.0) > 0.0
+                    or getattr(w, "dash_bild_rest", 0.0) > 0.0):
+                self.dash_zeichnen(ziel, p, w)
             # Was ein Boss gleich tut, gehoert unter ihn und nicht auf
             # ihn - sonst verdeckt der Ring genau die Gestalt, die man
             # ansehen muss.
@@ -408,120 +406,42 @@ class Renderer:
                 s = s.copy()
                 s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
-            if dash_aktiv:
-                self.dash_zeichnen(ziel, p, w, dunkel, hintergrund=False)
             if dunkel is None and getattr(w, "fraktion", "") == "feind":
                 self.gegnerbalken(ziel, p, w)
 
-    def _dash_nachbild(self, name: str, winkel: float, farbe) -> pygame.Surface:
-        """Einmal gedreht und in Akzentfarbe gefaerbt, dann wiederverwenden."""
-        quelle = self.bilder.gedreht(name, winkel)
-        key = (id(quelle), tuple(farbe))
-        hit = self._dash_nachbilder.get(key)
-        if hit is None:
-            hit = quelle.copy()
-            hit.fill((*farbe, 255), special_flags=pygame.BLEND_RGBA_MULT)
-            if len(self._dash_nachbilder) > 240:
-                self._dash_nachbilder.clear()
-            self._dash_nachbilder[key] = hit
-        return hit
-
-    def dash_zeichnen(self, ziel, p, w, dunkel=None, hintergrund=True) -> None:
-        """Teamfarbener Dashimpuls mit Nachbildern und pixeligem Ausklang."""
+    def dash_zeichnen(self, ziel, p, w) -> None:
+        """Drei kurze, graue Windlinien ziehen dezent hinter der Figur her."""
         d = pygame.Vector2(getattr(w, "dash_richtung", (1, 0)))
         if d.length_squared() < 0.001:
             return
         d.normalize_ip()
         quer = pygame.Vector2(-d.y, d.x)
-        farbe = K.TEAMS["kombi"][0]["akzent"]
-        team = getattr(w, "team", -1)
-        if 0 <= team < len(K.TEAMS["kombi"]):
-            farbe = K.TEAMS["kombi"][team]["akzent"]
         p = pygame.Vector2(p)
         rest = max(0.0, float(getattr(w, "dash_rest", 0.0)))
         if rest > 0.0:
-            dauer = K.DASH["dauer"]
-            fort = 1.0 - min(1.0, rest / dauer)
-            if hintergrund:
-                # Echos liegen dicht an der Figur, damit sie auch bei der
-                # mitlaufenden Kamera wie ein unmittelbarer Bewegungsstoss wirken.
-                for lag, deckung in zip(K.DASH["bild_nachbilder"],
-                                        K.DASH["bild_deckkraft"]):
-                    vergangen_lag = min(fort * dauer, lag)
-                    echo_pos = p - d * (K.DASH["tempo"] * vergangen_lag)
-                    echo = self._dash_nachbild(w.bild, w.winkel, farbe)
-                    if dunkel is not None:
-                        echo = self.dunkel(echo, dunkel)
-                    alt = echo.get_alpha()
-                    echo.set_alpha(int(deckung * 1.5 * (1.0 - 0.15 * fort)))
-                    ziel.blit(echo, (round(echo_pos.x - echo.get_width() / 2),
-                                     round(echo_pos.y - echo.get_height() / 2)))
-                    echo.set_alpha(alt)
-
-                # Gebrochene Schlieren bleiben nahe an der Silhouette und
-                # nehmen dieselbe Akzentfarbe wie Fraktion und HUD auf.
-                for versatz, laenge, seite in ((12, 18, -6), (25, 13, 6),
-                                                (37, 8, -3)):
-                    mitte = p - d * versatz + quer * seite
-                    a = mitte - d * (laenge * 0.5)
-                    b = mitte + d * (laenge * 0.5)
-                    pygame.draw.line(ziel, K.C_HULL_SH,
-                                     (round(a.x), round(a.y)),
-                                     (round(b.x), round(b.y)), 3)
-                    a += quer
-                    b += quer
-                    pygame.draw.line(ziel, farbe,
-                                     (round(a.x), round(a.y)),
-                                     (round(b.x), round(b.y)), 1)
-                return
-
-            # Abgebrochener Impulsring und Pfeil sitzen sichtbar auf der
-            # Figur. Sie sind bereits im ersten Bild vollstaendig lesbar.
-            puls = 1.0 - abs(2.0 * fort - 1.0) * 0.28
-            radius = 16 + int(3 * (1.0 - fort))
-            for i in range(8):
-                if i in (0, 1, 4):
-                    continue
-                winkel = math.tau * i / 8.0 + fort * 0.35
-                richt = pygame.Vector2(math.cos(winkel), math.sin(winkel))
-                a = p + richt * (radius - 3)
-                b = p + richt * radius
-                pygame.draw.line(ziel, farbe,
-                                 (round(a.x), round(a.y)),
-                                 (round(b.x), round(b.y)),
-                                 2 if puls > 0.7 else 1)
-            vorne = p + d * 18
-            for seite in (-1, 1):
-                a = vorne - d * 7 + quer * (seite * 5)
-                pygame.draw.line(ziel, K.C_CREAM,
-                                 (round(a.x), round(a.y)),
-                                 (round(vorne.x), round(vorne.y)), 2)
-            if fort < 0.12:
-                r = 4 + int(8 * fort / 0.12)
-                pygame.draw.rect(ziel, farbe,
-                                 (round(p.x - r), round(p.y - 1), 2 * r, 2))
-                pygame.draw.rect(ziel, K.C_CREAM,
-                                 (round(p.x - 1), round(p.y - r), 2, 2 * r))
+            staerke = 1.0
+        else:
+            ausklang = K.DASH["bild_ausklang"]
+            staerke = min(1.0, max(0.0,
+                                  float(getattr(w, "dash_bild_rest", 0.0))
+                                  / max(0.01, ausklang)))
+        if staerke <= 0.0:
             return
 
-        ausklang = K.DASH["bild_ausklang"]
-        rest_bild = max(0.0, float(getattr(w, "dash_bild_rest", 0.0)))
-        if rest_bild <= 0.0:
-            return
-        f = min(1.0, rest_bild / ausklang)
-        alter = 1.0 - f
-        radius = 3 + int(8 * alter)
-        mitte = p + d * (4 * alter)
-        farbton = tuple(int(K.C_MUTED_DK[i] * (1.0 - f) + farbe[i] * f)
-                        for i in range(3))
-        for seite in (-1, 1):
-            q = mitte + quer * (seite * radius)
-            a, b = q - d * 3, q + d * 3
-            pygame.draw.line(ziel, farbton,
+        hell = K.DASH["bild_wind_hell"]
+        dunkel = K.DASH["bild_wind_dunkel"]
+        for i, (abstand, laenge, seite) in enumerate(zip(
+                K.DASH["bild_wind_abstand"], K.DASH["bild_wind_laenge"],
+                K.DASH["bild_wind_seite"])):
+            anteil = staerke * (1.0 - i * 0.18)
+            farbe = tuple(int(dunkel[c] + (hell[c] - dunkel[c]) * anteil)
+                          for c in range(3))
+            mitte = p - d * abstand + quer * seite
+            a = mitte - d * (laenge * 0.5)
+            b = mitte + d * (laenge * 0.5)
+            pygame.draw.line(ziel, farbe,
                              (round(a.x), round(a.y)),
                              (round(b.x), round(b.y)), 1)
-        q = mitte - d * radius
-        pygame.draw.rect(ziel, farbton, (round(q.x), round(q.y), 2, 2))
 
     def gegnerbalken(self, ziel, p, w) -> None:
         """Wie viel ein Gegner noch hat.
