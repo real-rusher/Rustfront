@@ -1865,6 +1865,14 @@ ihr Name kommt ueber das Netz.
 | --- | --- | --- |
 | 0.32.11 | STAUBTAL hat zwei neue Kachelarten (Aufzug `^` und `v`) | eine alte Version kennt sie nicht und saehe dort Boden - darum wird die Version beim Beitreten verglichen, und ein alter Gast wird abgewiesen |
 
+**0.32.12:** Gameplay-Randfehler im gemeinsamen Spielerkern behoben:
+verzoegerte Medkits heilen keine toten oder am Boden liegenden Spieler,
+Waffenwechsel bricht die Heilung ab, Stuerze beenden den Dash, und
+Geschosse mit Nulltempo loesen beim Treffer keinen Absturz aus. Kartenraender
+gelten nicht als Loecher, dadurch wechseln Raketen dort nicht ungewollt die
+Ebene. Das Drahtprotokoll bleibt gleich; Gastgeber und Gast muessen wegen
+des geaenderten Spielverhaltens dieselbe Version verwenden.
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:

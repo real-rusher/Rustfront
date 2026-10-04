@@ -331,8 +331,10 @@ class Geschoss(Wesen):
         self.lebt = False
         richtung = math.degrees(math.atan2(self.tempo.y, self.tempo.x))
         if ziel is not None:
-            schub = (pygame.Vector2(self.tempo).normalize()
-                     * K.TREFFER["rueckstoss"] * self.schub_anteil)
+            schub = None
+            if self.tempo.length_squared() > 0.001:
+                schub = (pygame.Vector2(self.tempo).normalize()
+                         * K.TREFFER["rueckstoss"] * self.schub_anteil)
             if hasattr(self.von, "zaehlen"):
                 self.von.zaehlen("treffer", 1.0, self.waffe)
                 treffer_ziel_buchen(self.von, ziel)
@@ -1548,8 +1550,12 @@ class Spieler(Wesen):
         if self.heilt_rest > 0:
             self.heilt_rest -= dt
             if self.heilt_rest <= 0:
-                self.leben = min(self.max_leben, self.leben + K.MEDKIT["heilt"])
-                wolke(self.welt, self.pos, 10, 60, 0.6, K.C_TEAL, self.ebene, 1)
+                self.heilt_rest = 0.0
+                if self.lebt and not getattr(self, "am_boden", False):
+                    self.leben = min(self.max_leben,
+                                     self.leben + K.MEDKIT["heilt"])
+                    wolke(self.welt, self.pos, 10, 60, 0.6, K.C_TEAL,
+                          self.ebene, 1)
 
         self.schlag_zeigen = max(0.0, self.schlag_zeigen - dt)
         self.nahkampf_rest = max(0.0, self.nahkampf_rest - dt)
@@ -1688,6 +1694,7 @@ class Spieler(Wesen):
         """
         self.nachlade_rest = 0.0
         self.fokus = 0.0
+        self.heilt_rest = 0.0
 
     def waffe_waehlen(self, index: int) -> None:
         """Waffe wechseln - immer, sofort, ohne Wartezeit.
@@ -1701,6 +1708,11 @@ class Spieler(Wesen):
         if 0 <= index < len(self.waffen) and index != self.waffe:
             self.waffe = index
             self.abbrechen()
+
+    def stuerzen(self) -> None:
+        # Ein Dash darf die langsamere Luftsteuerung nicht ueberstimmen.
+        self.dash_rest = 0.0
+        super().stuerzen()
 
     def heilen(self) -> bool:
         """Setzt ein Medkit an. Gibt zurueck, ob es losging."""

@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.32.11, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.32.12, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -708,6 +708,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.32.12 | **Gameplay-Randfehler behoben**: Medkits heilen weder Tote noch Spieler am Boden und werden bei Waffenwechsel abgebrochen; ein Sturz beendet den Dash. Geschosse mit Nulltempo schlagen sicher ein, Kartenraender gelten nicht als Loecher und Raketen wechseln dort nicht die Ebene. Lange Menue- und UI-Texte werden innerhalb ihrer Felder gekuerzt. Mehrspieler: gleiches Verhalten fuer Gastgeber und Gast, keine Protokollaenderung; Gastgeber und Gast muessen dieselbe Version nutzen. |
 | 0.1.0 | Hauptmenue |
 | 0.2.0 | Splash-Sequenz |
 | 0.2.1 | Vollbild und Rufzeichen-Eingabe repariert |

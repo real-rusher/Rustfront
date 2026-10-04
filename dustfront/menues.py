@@ -673,7 +673,8 @@ class Einstellungen(Menue):
         for i, z in enumerate(zeilen[:3]):
             SCHRIFT.zeichnen(ziel, z, kasten_r.x + 8, kasten_r.y + 20 + i * 10,
                              K.C_MUTED, 1)
-        SCHRIFT.zeichnen(ziel, "ABLAGE  " + pfade.beschreibung(), r.x + 26,
+        SCHRIFT.zeichnen(ziel, ui.kuerzen("ABLAGE  " + pfade.beschreibung(),
+                                         r.width - 52), r.x + 26,
                          r.bottom - 112, K.C_MUTED_DK, 1)
 
     def taste(self, ev) -> None:
@@ -1153,7 +1154,7 @@ class Anmeldung(Menue):
             SCHRIFT.zeichnen(ziel, "EINEN AUGENBLICK ...", r.centerx, y,
                              K.C_AMBER, 1, 1, "mitte")
         elif konto.fehler:
-            SCHRIFT.zeichnen(ziel, konto.fehler[:44], r.centerx, y,
+            SCHRIFT.zeichnen(ziel, ui.kuerzen(konto.fehler, r.width - 24), r.centerx, y,
                              K.C_RED, 1, 1, "mitte")
             # Beim Zertifikat dazu, was genau los ist und wer es
             # ausgestellt hat. Ohne Eingabeaufforderung ist das die

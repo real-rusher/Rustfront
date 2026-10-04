@@ -245,6 +245,8 @@ class Ebene:
         return self.fest(int(x // K.TILE), int(y // K.TILE))
 
     def loch(self, tx: int, ty: int) -> bool:
+        if not (0 <= tx < self.breite and 0 <= ty < self.hoehe):
+            return False
         return K.KACHELN[self.kachel(tx, ty)].get("loch", False)
 
     def begehbar(self, tx: int, ty: int) -> bool:

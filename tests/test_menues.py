@@ -68,6 +68,38 @@ szene = Spiel(app, seed=20250920)
 app.schieben(szene)
 held = szene.held
 
+# Lange Beschriftungen bleiben innerhalb ihrer UI-Felder.
+def ui_uebertritt(element, rect):
+    flaeche = pygame.Surface((260, 30), pygame.SRCALPHA)
+    element.zeichnen(flaeche)
+    for x in range(flaeche.get_width()):
+        for y in range(flaeche.get_height()):
+            if not rect.collidepoint(x, y) and flaeche.get_at((x, y)).a:
+                return True
+    return False
+
+
+_lang = "BESCHREIBUNG MIT EINEM ABSICHTLICH SEHR LANGEN TEXT " * 3
+_r_ui = pygame.Rect(20, 5, 220, 16)
+_ui_felder = [
+    ui.Knopf(_r_ui, _lang),
+    ui.Reiter(_r_ui, _lang),
+    ui.Regler(_r_ui, _lang, "lang", 50),
+    ui.Wahl(_r_ui, _lang, "lang", [_lang]),
+    ui.Schalter(_r_ui, _lang, "lang", True),
+    ui.Platzhalter(_r_ui, _lang),
+]
+pruef("Lange Beschriftungen bleiben in Knopf, Reiter und Einstellfeldern",
+      all(not ui_uebertritt(el, _r_ui) for el in _ui_felder))
+_spaltenbild = pygame.Surface((260, 30), pygame.SRCALPHA)
+ui.spalteneintrag(_spaltenbild, _r_ui, _lang, True, wert=_lang)
+_spalten_uebertritt = any(
+    _spaltenbild.get_at((x, y)).a
+    for x in range(_spaltenbild.get_width())
+    for y in range(_spaltenbild.get_height())
+    if not _r_ui.collidepoint(x, y))
+pruef("Lange Pausenzeileneintraege bleiben im Feld", not _spalten_uebertritt)
+
 pruef("Ablage liegt im Wegwerfordner", str(pfade.ordner() or "").startswith(_WEG),
       str(pfade.ordner()))
 

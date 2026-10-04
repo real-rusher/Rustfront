@@ -169,7 +169,8 @@ class Knopf(Element):
             # Markierung an der linken Kante, wie im Hauptmenue
             pygame.draw.rect(ziel, K.C_ORANGE, (r.x, r.y + 3, 2, r.height - 6))
             pfeil(ziel, r.x + 8, r.centery, K.C_AMBER, 1, 7)
-        SCHRIFT.zeichnen(ziel, self.text, r.centerx, r.centery - 3, schrift, 1,
+        SCHRIFT.zeichnen(ziel, kuerzen(self.text, r.width - 18),
+                         r.centerx, r.centery - 3, schrift, 1,
                          ausrichtung="mitte")
 
 
@@ -188,7 +189,12 @@ def spalteneintrag(ziel, r, text: str, aktiv: bool, gehen: bool = False,
     else:
         pygame.draw.rect(ziel, (20, 14, 10), r)
     farbe = K.C_CREAM if aktiv else (K.C_RED if gehen else K.C_MUTED)
-    SCHRIFT.zeichnen(ziel, text, r.x + 10, r.centery - 3, farbe, 1)
+    text_breite = r.width - 26
+    wert_breite = SCHRIFT.breite(wert, 1) if wert else 0
+    if wert and wert_breite <= r.width - SCHRIFT.breite(text, 1) - 26:
+        text_breite = r.width - wert_breite - 38
+    SCHRIFT.zeichnen(ziel, kuerzen(text, text_breite), r.x + 10,
+                     r.centery - 3, farbe, 1)
     # Der Wert nur, wenn er ganz passt. Abgeschnitten sagt er nichts.
     if wert and SCHRIFT.breite(wert, 1) <= r.width - SCHRIFT.breite(text, 1) - 26:
         SCHRIFT.zeichnen(ziel, wert, r.right - 6, r.centery - 3,
@@ -246,7 +252,8 @@ class Reiter(Element):
         else:
             kasten(ziel, r, K.C_MUTED_DK, (13, 9, 7), 3)
             farbe = K.C_MUTED
-        SCHRIFT.zeichnen(ziel, self.text, r.centerx, r.centery - 3, farbe, 1,
+        SCHRIFT.zeichnen(ziel, kuerzen(self.text, r.width - 8),
+                         r.centerx, r.centery - 3, farbe, 1,
                          ausrichtung="mitte")
         if self.aktiv:
             pygame.draw.line(ziel, K.C_AMBER, (r.x + 2, r.bottom),
@@ -284,7 +291,7 @@ class Regler(Element):
     def zeichnen(self, ziel) -> None:
         r = self.rect
         hell = self.ueber or self.zieht
-        SCHRIFT.zeichnen(ziel, self.text, r.x + 4, r.centery - 3,
+        SCHRIFT.zeichnen(ziel, kuerzen(self.text, 104), r.x + 4, r.centery - 3,
                          K.C_CREAM if hell else K.C_MUTED, 1)
         b = self.bahn
         gefuellt = int(round(self.wert / 100.0 * self.SEGMENTE))
@@ -350,15 +357,18 @@ class Wahl(Element):
     def zeichnen(self, ziel) -> None:
         r = self.rect
         hell = self.ueber
-        SCHRIFT.zeichnen(ziel, self.text, r.x + 4, r.centery - 3,
+        SCHRIFT.zeichnen(ziel, kuerzen(self.text, self.spalte - 8),
+                         r.x + 4, r.centery - 3,
                          K.C_CREAM if hell else K.C_MUTED, 1)
         lr, rr = self.links_rect(), self.rechts_rect()
         pfarbe = K.C_AMBER if hell else K.C_MUTED_DK
         pfeil(ziel, lr.centerx, lr.centery, pfarbe, -1, 7)
         pfeil(ziel, rr.centerx, rr.centery, pfarbe, 1, 7)
         mitte = (lr.right + rr.left) // 2
-        SCHRIFT.zeichnen(ziel, self.beschriftung(), mitte, r.centery - 3,
-                         K.C_CREAM if hell else K.C_MUTED, 1, ausrichtung="mitte")
+        SCHRIFT.zeichnen(ziel, kuerzen(self.beschriftung(),
+                                      max(0, rr.left - lr.right - 8)),
+                         mitte, r.centery - 3, K.C_CREAM if hell else K.C_MUTED,
+                         1, ausrichtung="mitte")
 
 
 class Schalter(Element):
@@ -374,7 +384,8 @@ class Schalter(Element):
     def zeichnen(self, ziel) -> None:
         r = self.rect
         hell = self.ueber
-        SCHRIFT.zeichnen(ziel, self.text, r.x + 4, r.centery - 3,
+        SCHRIFT.zeichnen(ziel, kuerzen(self.text, self.spalte - 8),
+                         r.x + 4, r.centery - 3,
                          K.C_CREAM if hell else K.C_MUTED, 1)
         k = pygame.Rect(r.x + self.spalte, r.y + 2, 26, r.height - 4)
         kasten(ziel, k, K.C_AMBER if self.an else K.C_MUTED_DK,
@@ -400,8 +411,10 @@ class Platzhalter(Element):
 
     def zeichnen(self, ziel) -> None:
         r = self.rect
-        SCHRIFT.zeichnen(ziel, self.text, r.x + 4, r.centery - 3,
-                         K.C_MUTED_DK, 1)
+        status_breite = SCHRIFT.breite("NICHT VERFÜGBAR", 1)
+        SCHRIFT.zeichnen(ziel, kuerzen(self.text,
+                                      r.width - status_breite - 16),
+                         r.x + 4, r.centery - 3, K.C_MUTED_DK, 1)
         SCHRIFT.zeichnen(ziel, "NICHT VERFÜGBAR", r.right - 4, r.centery - 3,
                          (70, 56, 44), 1, ausrichtung="rechts")
         pygame.draw.line(ziel, (40, 31, 23), (r.x + 4, r.bottom - 1),

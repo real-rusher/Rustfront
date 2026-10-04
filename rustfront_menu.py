@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.32.11"
+VERSION = "0.32.12"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -1306,6 +1306,8 @@ class Page:
         y = r.bottom + 8
         pygame.draw.line(c, C_LINE_DK, (r.x, y - 4), (r.x + 60, y - 4))
         for line in wrap(text, 46)[:2]:
+            if y + 7 >= VH - 20:
+                break
             FONT.draw(c, line, r.x + 1, y, C_MUTED, 1)
             y += 8
 
@@ -1318,7 +1320,7 @@ class Page:
 
 class MainPage(Page):
     key, tab = "main", "HAUPTMENÜ"
-    py = 112
+    py = 100
 
     def build(self):
         app = self.app

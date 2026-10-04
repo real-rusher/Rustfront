@@ -6582,6 +6582,58 @@ _e57 = app.bilder.bild(_schwung57[0])
 pruef("Jedes Schwungbild ist gezeichnet", _e57.get_size() == (64, 64))
 _w57.verlassen(); _g57.verlassen()
 
+# ── Gameplay-Randfaelle aus der systematischen Fehlerliste ───────────
+from dustfront.entities import Geschoss as _GeschossB, Rakete as _RaketeB
+
+held.leben = held.max_leben
+held.lebt = True
+held.heilt_rest = 0.001
+held.lebt = False
+held.schritt(K.FIXED_DT)
+pruef("Ein fertiges Medkit belebt keinen toten Spieler wieder",
+      held.leben == held.max_leben)
+held.lebt = True
+held.am_boden = True
+held.heilt_rest = 0.001
+held.schritt(K.FIXED_DT)
+pruef("Ein fertiges Medkit heilt keinen Spieler am Boden",
+      held.leben == held.max_leben)
+del held.am_boden
+
+held.heilt_rest = 0.5
+andere_waffe = (held.waffe + 1) % len(held.waffen)
+held.waffe_waehlen(andere_waffe)
+pruef("Waffenwechsel bricht ein angesetztes Medkit ab",
+      held.heilt_rest == 0.0)
+
+held.dash_rest = 0.1
+held.stuerzen()
+pruef("Ein Sturz beendet den laufenden Dash", held.dash_rest == 0.0)
+
+_ziel_b = Gegner(held.pos + pygame.Vector2(24, 0), "laeufer", held.ebene)
+szene.welt.dazu(_ziel_b)
+_schuss_b = _GeschossB(held.pos, 0, K.WAFFEN["repetierer"], held.ebene)
+_schuss_b.welt = szene.welt
+_schuss_b.tempo.update(0, 0)
+try:
+    _schuss_b.einschlag(_ziel_b)
+    _nulltreffer_b = not _schuss_b.lebt
+except ValueError:
+    _nulltreffer_b = False
+pruef("Ein Geschosstreffer mit Nulltempo stuerzt nicht ab", _nulltreffer_b)
+
+_ebene_b = szene.welt.ebene(0)
+pruef("Ausserhalb der Karte liegt kein Loch",
+      not _ebene_b.loch(-1, 0)
+      and not _ebene_b.loch(_ebene_b.breite, 0)
+      and not _ebene_b.loch(0, _ebene_b.hoehe))
+_rakete_b = _RaketeB((-K.TILE, K.TILE), 0, K.WAFFEN["rakete"], 1,
+                      ziel=held)
+_rakete_b.welt = szene.welt
+_rakete_b._ebene_wechseln()
+pruef("Eine Rakete faellt am Kartenrand nicht auf eine tiefere Ebene",
+      _rakete_b.ebene == 1)
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
