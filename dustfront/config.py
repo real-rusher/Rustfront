@@ -117,6 +117,11 @@ DASH = dict(
     sperre=0.30,              # frueher geht der naechste nicht
     auslauf=1.25,             # am Ende auf so viel Lauftempo abgefangen
     staub=10,                 # Staubwolken beim Absprung
+    bild_ausklang=0.12,       # kurzer Lichtstrich nach dem Stoss
+    bild_spur=62,             # Pixel hinter der Figur
+    bild_nachbilder=(0.032, 0.070),
+    bild_deckkraft=(104, 48),
+    bild_start=0.055,         # so lange bleibt der Absprung sichtbar
 )
 
 KAMERA = dict(

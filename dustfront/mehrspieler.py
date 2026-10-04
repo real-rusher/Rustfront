@@ -3010,6 +3010,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 # ob gerade einer laeuft (fuer die Spur hinter der Figur).
                 "dl": k.dash_ladungen, "dp": round(k.dash_laden, 2),
                 "dr": round(k.dash_rest, 2),
+                "df": round(k.dash_bild_rest, 3),
                 "wl": list(k.waffen),
                 "ml": [k.magazin.get(n, 0) for n in k.waffen],
                 "vl": [k.vorrat.get(n, 0) for n in k.waffen],
@@ -3417,6 +3418,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             k.dash_ladungen = int(eintrag.get("dl", K.DASH["ladungen"]))
             k.dash_laden = float(eintrag.get("dp", 0.0))
             k.dash_rest = float(eintrag.get("dr", 0.0))
+            k.dash_bild_rest = float(eintrag.get("df", 0.0))
             k.fokus = float(eintrag.get("fo", 0.0))
             k.zielt = bool(eintrag.get("zi", False))
             k.tracer = bool(eintrag.get("tr", False))

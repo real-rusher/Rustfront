@@ -4298,13 +4298,17 @@ wd, gd = gefechtspaar("pvp")
 gast_fig = wd.kaempfer[gd.meine_nummer]
 vorher_l = gast_fig.dash_ladungen
 gd._knoepfe.add("dash")
+_dash_gast_sieht = False
 for _ in range(20):
     wd.schritt(K.NETZ["takt"]); gd.schritt(K.NETZ["takt"])
+    _dash_gast_sieht = (_dash_gast_sieht or gd.ich.dash_bild_rest > 0.0)
 pruef("Der Dash des Gastes kommt beim Gastgeber an",
       gast_fig.dash_ladungen == vorher_l - 1,
       "%d statt %d" % (gast_fig.dash_ladungen, vorher_l - 1))
 pruef("Und der Gast sieht seine Ladungen",
       gd.ich.dash_ladungen == gast_fig.dash_ladungen)
+pruef("Die Dash-Animation des Gastgebers kommt beim Gast an",
+      _dash_gast_sieht)
 wd.verlassen(); gd.verlassen()
 
 # Eine Eingabezeile mit einem Tastendruck darf beim Stau nicht wegfallen.
@@ -6633,6 +6637,46 @@ _rakete_b.welt = szene.welt
 _rakete_b._ebene_wechseln()
 pruef("Eine Rakete faellt am Kartenrand nicht auf eine tiefere Ebene",
       _rakete_b.ebene == 1)
+
+_wesen_alt_b = szene.welt.wesen
+_zustand_dash_b = (held.pos.copy(), held.vorher.copy(), held.ebene,
+                   held.lebt, held.dash_rest, held.dash_bild_rest,
+                   held.dash_richtung.copy(), held.heilt_rest,
+                   held.schlag_zeigen, held.nahkampf_rest, held.waffe,
+                   held.flug)
+szene.welt.wesen = [held]
+held.pos.update(K.GAME_W / 2, K.GAME_H / 2)
+held.vorher.update(held.pos)
+held.ebene = 0
+held.lebt = True
+held.flug = 0.0
+held.heilt_rest = held.schlag_zeigen = held.nahkampf_rest = 0.0
+held.waffe = 0
+held.dash_richtung.update(1, 0)
+_dash_flaeche_b = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+held.dash_rest = held.dash_bild_rest = 0.0
+szene.renderer.wesen_zeichnen(_dash_flaeche_b, szene.welt, 0,
+                              pygame.Vector2(0, 0), 1.0)
+_dash_still_b = pygame.image.tobytes(_dash_flaeche_b, "RGBA")
+_dash_flaeche_b.fill((0, 0, 0, 0))
+held.dash_rest = K.DASH["dauer"] * 0.5
+held.dash_bild_rest = K.DASH["dauer"] * 0.5 + K.DASH["bild_ausklang"]
+szene.renderer.wesen_zeichnen(_dash_flaeche_b, szene.welt, 0,
+                              pygame.Vector2(0, 0), 1.0)
+pruef("Der laufende Dash zeichnet Spur und pixelige Nachbilder",
+      pygame.image.tobytes(_dash_flaeche_b, "RGBA") != _dash_still_b)
+_dash_flaeche_b.fill((0, 0, 0, 0))
+held.dash_rest = 0.0
+held.dash_bild_rest = K.DASH["bild_ausklang"] * 0.5
+szene.renderer.wesen_zeichnen(_dash_flaeche_b, szene.welt, 0,
+                              pygame.Vector2(0, 0), 1.0)
+pruef("Der Dash hinterlaesst einen kurzen Ausklang",
+      pygame.image.tobytes(_dash_flaeche_b, "RGBA") != _dash_still_b)
+held.pos, held.vorher, held.ebene, held.lebt = _zustand_dash_b[:4]
+(held.dash_rest, held.dash_bild_rest, held.dash_richtung,
+ held.heilt_rest, held.schlag_zeigen, held.nahkampf_rest,
+ held.waffe, held.flug) = _zustand_dash_b[4:]
+szene.welt.wesen = _wesen_alt_b
 
 print()
 print("FEHLER:", fails or "keine")

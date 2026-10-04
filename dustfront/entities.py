@@ -1099,6 +1099,7 @@ class Spieler(Wesen):
         self.dash_ladungen = K.DASH["ladungen"]
         self.dash_laden = 0.0
         self.dash_rest = 0.0          # so lange laeuft der Stoss noch
+        self.dash_bild_rest = 0.0     # Nachbild und Ausklang, auch fuer den Gast
         self.dash_sperre = 0.0
         self.dash_richtung = pygame.Vector2(1, 0)
         self.feuert = False
@@ -1557,6 +1558,8 @@ class Spieler(Wesen):
                     wolke(self.welt, self.pos, 10, 60, 0.6, K.C_TEAL,
                           self.ebene, 1)
 
+        self.dash_bild_rest = max(0.0, self.dash_bild_rest - dt)
+
         self.schlag_zeigen = max(0.0, self.schlag_zeigen - dt)
         self.nahkampf_rest = max(0.0, self.nahkampf_rest - dt)
         self.halte_zeit = self.halte_zeit + dt if self.feuert else 0.0
@@ -1667,6 +1670,7 @@ class Spieler(Wesen):
         richtung.normalize_ip()
         self.dash_richtung = richtung
         self.dash_rest = K.DASH["dauer"]
+        self.dash_bild_rest = K.DASH["dauer"] + K.DASH["bild_ausklang"]
         self.dash_sperre = K.DASH["sperre"]
         self.dash_ladungen -= 1
         w = self.welt
@@ -1712,6 +1716,8 @@ class Spieler(Wesen):
     def stuerzen(self) -> None:
         # Ein Dash darf die langsamere Luftsteuerung nicht ueberstimmen.
         self.dash_rest = 0.0
+        if self.dash_bild_rest > 0.0:
+            self.dash_bild_rest = K.DASH["bild_ausklang"]
         super().stuerzen()
 
     def heilen(self) -> bool:
