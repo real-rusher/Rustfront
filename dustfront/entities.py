@@ -1686,6 +1686,8 @@ class Spieler(Wesen):
             return
         if self.nachlade_rest <= 0 and self.magazin[self.waffe_name] < d["magazin"]:
             self.nachlade_rest = d["nachladen"]
+            if self.welt is not None:
+                self.welt.klang("reload", 0.55, self.pos, self.ebene)
 
     def abbrechen(self) -> None:
         """Beendet, was gerade laeuft, ohne es zu Ende zu bringen.
@@ -1846,6 +1848,7 @@ class Spieler(Wesen):
         reich = d["reichweite"]
         halb = d["winkel"] * 0.5
         getroffen = 0
+        treffer_art = "organisch"
         for ziel in list(w.nahe(self.pos, reich + 20, self.ebene)):
             if ziel is self or ziel.fraktion == self.fraktion or not ziel.lebt:
                 continue
@@ -1857,10 +1860,13 @@ class Spieler(Wesen):
                 continue
             schub = ab.normalize() * d["schub"] if ab.length_squared() > 0.01 else None
             ziel.schaden(d["schaden"], schub, self)
+            if getattr(ziel, "ist_boss", False):
+                treffer_art = "metall"
             self.zaehlen("kopftreffer", 1.0, K.NAHKAMPF["waffe"])
             getroffen += 1
         spitze = self.pos + pygame.Vector2(reich * 0.7, 0).rotate(self.winkel)
-        w.schlagknall(spitze, self.winkel, self.ebene, bool(getroffen), self)
+        w.schlagknall(spitze, self.winkel, self.ebene, bool(getroffen), self,
+                      treffer_art)
 
     # ---- Schaden -----------------------------------------------------
     def schaden(self, menge, schub=None, von=None) -> None:

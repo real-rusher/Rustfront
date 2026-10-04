@@ -1,11 +1,15 @@
 # assets/sfx — Klaenge
 
 Lege pro Klang die Aufnahme in den gleichnamigen Unterordner, zum Beispiel
-`assets/sfx/medkit/aufnahme.wav`. Der Dateiname darin ist frei; `.wav` und
-`.ogg` werden erkannt. Mehrere Dateien im Ordner sind ebenfalls moeglich und
-werden als zufaellige Fassungen verwendet. Ordneraufnahmen haben Vorrang vor
+`assets/sfx/medkit/aufnahme.wav`. Der Dateiname darin ist frei; `.wav`,
+`.ogg` und `.mp3` werden erkannt. Mehrere Dateien im Ordner sind ebenfalls
+moeglich und werden als zufaellige Fassungen verwendet. Ordneraufnahmen haben Vorrang vor
 den bisherigen flachen Dateien wie `assets/sfx/medkit.wav`; diese bleiben
 weiterhin unterstuetzt.
+
+Die beiliegenden MP3s sind vorlaeufige Playtest-Aufnahmen. Vor dem Release
+sollen alle Quellen und Nutzungsrechte geprueft und noetigenfalls die
+Aufnahmen ersetzt werden.
 
 ## Welche Namen es gibt
 
@@ -24,6 +28,15 @@ weiterhin unterstuetzt.
 | `aufheben` | etwas vom Boden genommen |
 | `menue` | Auswahl wandert |
 | `menue_ok` | Auswahl bestaetigt |
+| `downed_not_dead` | Spieler faellt im Mehrspieler zu Boden |
+| `reload` | Nachladen beginnt |
+| `rundenstart` | Mehrspieler-Runde startet |
+| `won_match` / `lost_match` | Mehrspieler-Match endet |
+| `smoke_grenade` | Rauchgranate zündet |
+| `nahkampf_schwung` | Brecheisen verfehlt |
+| `nahkampf_treffer_organisch` | Brecheisen trifft einen Gegner oder Spieler |
+| `nahkampf_treffer_metall` | Brecheisen trifft einen Boss |
+| `molotov_glass` / `molotov_whoosh` | Molotowflasche zerbricht und lodert auf |
 | `sturz` | Aufsetzen nach einem Fall |
 | `molotov` | Glas zerbricht und Feuer faengt |
 | `blend` | Knall der Blendgranate |
@@ -36,7 +49,11 @@ weiterhin unterstuetzt.
 | `ruf` | Spieler am Boden ruft nach Hilfe |
 | `herzschlag` | eigener Herzschlag bei wenig Leben |
 
-Die Liste steht als `KLANG_NAMEN` in `dustfront/config.py`.
+Die vollstaendige Liste steht als `KLANG_NAMEN` in `dustfront/config.py`.
+Einige Namen zeigen absichtlich auf Unterordner: Nahkampf und Molotow sind
+unter `nahkampf/` beziehungsweise `molotov/` nach Trefferart sortiert. Der
+Brecheisenschwung liegt im Ordner `nahkampf/into_air`. Die
+Zuordnung steht in `KLANG_ORDNER` in `dustfront/config.py`.
 `python -m dustfront --assets` sagt, welcher Name gerade aus einer Datei
 kommt.
 
@@ -62,9 +79,11 @@ erzeugt es sich drei leicht verschiedene Kopien selbst.
 
 ## Format
 
-44100 Hz, 16 Bit. Andere Raten nimmt pygame auch an, klingen aber
-verstimmt, weil der Mischer fest auf 44100 Hz laeuft (`RATE` in
-`dustfront/audio.py`).
+MP3 wird direkt vom pygame-ce-Mischer geladen; WAV und OGG bleiben ebenso
+gueltig. Der Mischer wandelt die Samplerate beim Laden um. Fuer kurze
+Spielgeraesche sind saubere Ein- und Ausblendungen wichtig: lange Stille am
+Anfang macht die Rueckmeldung traege, und ein mehrsekundiger Hintergrundton
+passt nicht in ein einzelnes Ereignis.
 
 Kurz halten und vorn ohne Stille anfangen: ein Schuss, der erst nach 50
 Millisekunden losgeht, fuehlt sich im Spiel traege an.

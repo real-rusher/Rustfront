@@ -378,7 +378,7 @@ class Welt:
         pos = pygame.Vector2(pos)
         if art == "rauch":
             wolke(self, pos, 12, 90, 0.6, K.RAUCH["toene"][0], ebene, 2)
-            self.klang("wurf", 0.8, pos, ebene)
+            self.klang("smoke_grenade", 0.8, pos, ebene)
             return
         if art == "blend":
             b = K.BLENDEN
@@ -408,7 +408,8 @@ class Welt:
             f = K.FEUER
             wolke(self, pos, 22, 210, 0.7, f["toene"][2], ebene, 2, "funke")
             wolke(self, pos, 10, 90, 0.5, f["toene"][1], ebene, 1, "funke")
-            self.klang("molotov", 0.9, pos, ebene)
+            self.klang("molotov_glass", 0.9, pos, ebene)
+            self.klang("molotov_whoosh", 0.28, pos, ebene)
             return
         wolke(self, pos, 26, 340, 0.5, (255, 212, 140), ebene, 2, "funke")
         wolke(self, pos, 18, 150, 0.9, K.C_MUTED_DK, ebene, 2, "staub")
@@ -455,7 +456,8 @@ class Welt:
         self.klang("rakete", 1.0, pos, ebene)
 
     def schlagknall(self, pos, winkel: float, ebene: int,
-                    getroffen: bool = False, quelle=None) -> None:
+                    getroffen: bool = False, quelle=None,
+                    treffer_art: str = "organisch") -> None:
         """Der Schwung des Brecheisens: Funken in einem Kegel und ein Ton."""
         from .entities import wolke
         d = K.WAFFEN["brecheisen"]
@@ -465,7 +467,12 @@ class Welt:
               d["winkel"], winkel, 7.0)
         self.ruckeln(d["kamera"] if getroffen else 0.8, "nahkampf", pos,
                      ebene, quelle)
-        self.klang("nahkampf", 0.7, pos, ebene)
+        if getroffen:
+            name = ("nahkampf_treffer_metall" if treffer_art == "metall"
+                    else "nahkampf_treffer_organisch")
+        else:
+            name = "nahkampf_schwung"
+        self.klang(name, 0.7, pos, ebene)
 
     def aufschlagring(self, pos, ebene: int, wucht: float = 1.0) -> None:
         """Ein Staubring, der vom Aufsetzpunkt nach aussen laeuft."""
