@@ -7,6 +7,10 @@ moeglich und werden als zufaellige Fassungen verwendet. Ordneraufnahmen haben Vo
 den bisherigen flachen Dateien wie `assets/sfx/medkit.wav`; diese bleiben
 weiterhin unterstuetzt.
 
+Zum unabhaengigen Anhoeren `python tools/soundboard.py` starten. Einzelne
+Klangereignisse lassen sich anklicken; MG-Dauerfeuer, MG-Salven und das
+Sturmgewehr laufen beim Gedrueckthalten im Spieltakt.
+
 Die beiliegenden MP3s sind vorlaeufige Playtest-Aufnahmen. Vor dem Release
 sollen alle Quellen und Nutzungsrechte geprueft und noetigenfalls die
 Aufnahmen ersetzt werden.

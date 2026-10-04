@@ -53,10 +53,16 @@ _ZUSCHNITTE = {
     "tmp_7901-951678082.mp3": (0.32, 0.94),
     "grenade-explosion.mp3": (0.38, 1.82),
     "freesound_community-glass-shatter-3-100155.mp3": (0.02, 0.34),
-    "gregorquendel-designed-fire-winds-swoosh-04-116788.mp3": (0.02, 1.45),
-    "smoke-grenade-sound-effect.mp3": (0.48, 1.18),
-    "freesound_community-069321_light-machine-gun-m249-39814.mp3": (0.04, 0.18),
-    "freesound_community-sniper-rifle-firing-shot-1-39789.mp3": (0.03, 1.48),
+    # Das Flaechenfeuer bleibt 7.5 Sekunden aktiv; die lange Aufnahme traegt
+    # das Lodern ueber diesen Zeitraum statt nur den kurzen Zuender.
+    "gregorquendel-designed-fire-winds-swoosh-04-116788.mp3": (0.0, 7.5),
+    # Der Rauch hat einen langen Gasstrom; der kurze Ausschnitt nahm genau
+    # diesen Hauptbestandteil heraus.
+    "smoke-grenade-sound-effect.mp3": (0.0, 9.143),
+    # Beide Aufnahmen enthalten Nachhall. Die kurzen alten Schnitte klangen
+    # wie abgebrochene Samples statt wie ein Schuss.
+    "freesound_community-069321_light-machine-gun-m249-39814.mp3": (0.0, 0.72),
+    "freesound_community-sniper-rifle-firing-shot-1-39789.mp3": (0.0, 2.8),
     "yodguard-spear_thrust-6-382403.mp3": (0.0, 0.32),
     "universfield-combat-impact-352458.mp3": (0.0, 0.36),
     "universfield-hammer-steel-impact-454390.mp3": (0.0, 0.32),

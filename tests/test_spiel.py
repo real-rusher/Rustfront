@@ -763,10 +763,20 @@ try:
               and len(sturm) == 16
               and all(0.08 < s.get_length() < 0.14 for s in sturm))
         rauch = aufnahmen.klang("smoke_grenade")
-        pruef("Rauchgranatenaufnahme wird auf den Ereignisklang gekuerzt",
+        pruef("Rauchgranate behaelt den langen Gasstrom der Aufnahme",
               "smoke_grenade" in aufnahmen.aus_datei
               and len(rauch) == 1
-              and 0.6 <= rauch[0].get_length() <= 0.8)
+              and rauch[0].get_length() >= 8.0)
+        mg = aufnahmen.klang("schuss_lmg")
+        pruef("MG-Einzelschuss behaelt seinen Ausklang",
+              len(mg) == 1 and 0.65 <= mg[0].get_length() <= 0.8)
+        scharf = aufnahmen.klang("schuss_scharf")
+        pruef("Scharfschuetzenschuss behaelt den laengeren Nachhall",
+              len(scharf) == 1 and 2.7 <= scharf[0].get_length() <= 2.9)
+        molotow = aufnahmen.klang("molotov_whoosh")
+        pruef("Molotowklang reicht ueber die Branddauer",
+              len(molotow) == 1
+              and abs(molotow[0].get_length() - K.FEUER["dauer"]) < 0.1)
         eingebaut = ("schuss_lmg", "schuss_scharf", "granate", "dash",
                      "downed_not_dead", "nahkampf_schwung",
                      "nahkampf_treffer_organisch",
