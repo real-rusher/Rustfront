@@ -392,9 +392,10 @@ class Renderer:
                 pygame.draw.line(ziel, w.spur, p - r * 6, p, 1)
             if w.bild is None:
                 continue
-            if (getattr(w, "dash_rest", 0.0) > 0.0
-                    or getattr(w, "dash_bild_rest", 0.0) > 0.0):
-                self.dash_zeichnen(ziel, p, w, dunkel)
+            dash_aktiv = (getattr(w, "dash_rest", 0.0) > 0.0
+                          or getattr(w, "dash_bild_rest", 0.0) > 0.0)
+            if getattr(w, "dash_rest", 0.0) > 0.0:
+                self.dash_zeichnen(ziel, p, w, dunkel, hintergrund=True)
             # Was ein Boss gleich tut, gehoert unter ihn und nicht auf
             # ihn - sonst verdeckt der Ring genau die Gestalt, die man
             # ansehen muss.
@@ -407,6 +408,8 @@ class Renderer:
                 s = s.copy()
                 s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
+            if dash_aktiv:
+                self.dash_zeichnen(ziel, p, w, dunkel, hintergrund=False)
             if dunkel is None and getattr(w, "fraktion", "") == "feind":
                 self.gegnerbalken(ziel, p, w)
 
@@ -423,14 +426,14 @@ class Renderer:
             self._dash_nachbilder[key] = hit
         return hit
 
-    def dash_zeichnen(self, ziel, p, w, dunkel=None) -> None:
-        """Pixelharte Beschleunigungsspur, zwei Nachbilder und ein Ausklang."""
+    def dash_zeichnen(self, ziel, p, w, dunkel=None, hintergrund=True) -> None:
+        """Teamfarbener Dashimpuls mit Nachbildern und pixeligem Ausklang."""
         d = pygame.Vector2(getattr(w, "dash_richtung", (1, 0)))
         if d.length_squared() < 0.001:
             return
         d.normalize_ip()
         quer = pygame.Vector2(-d.y, d.x)
-        farbe = K.C_TEAL
+        farbe = K.TEAMS["kombi"][0]["akzent"]
         team = getattr(w, "team", -1)
         if 0 <= team < len(K.TEAMS["kombi"]):
             farbe = K.TEAMS["kombi"][team]["akzent"]
@@ -439,63 +442,66 @@ class Renderer:
         if rest > 0.0:
             dauer = K.DASH["dauer"]
             fort = 1.0 - min(1.0, rest / dauer)
-            zurueck = min(K.DASH["bild_spur"],
-                          K.DASH["tempo"] * dauer * fort)
-            ende = p - d * 5
-            anfang = p - d * zurueck
-            if zurueck > 3:
-                pygame.draw.line(ziel, K.C_HULL_SH,
-                                 (round(anfang.x), round(anfang.y)),
-                                 (round(ende.x), round(ende.y)), 4)
-                pygame.draw.line(ziel, farbe,
-                                 (round((anfang + d * 2).x),
-                                  round((anfang + d * 2).y)),
-                                 (round((ende - d * 2).x),
-                                  round((ende - d * 2).y)), 2)
-                pygame.draw.line(ziel, K.C_CREAM,
-                                 (round((p - d * min(zurueck * 0.58, 30)).x),
-                                  round((p - d * min(zurueck * 0.58, 30)).y)),
-                                 (round((p - d * 9).x), round((p - d * 9).y)), 1)
-                for anteil, seite, laenge in ((0.24, -1, 5),
-                                               (0.52, 1, 7),
-                                               (0.78, -1, 4)):
-                    mitte = p - d * (zurueck * anteil) + quer * (seite * 3)
-                    a = mitte - d * laenge * 0.5
-                    b = mitte + d * laenge * 0.5
+            if hintergrund:
+                # Echos liegen dicht an der Figur, damit sie auch bei der
+                # mitlaufenden Kamera wie ein unmittelbarer Bewegungsstoss wirken.
+                for lag, deckung in zip(K.DASH["bild_nachbilder"],
+                                        K.DASH["bild_deckkraft"]):
+                    vergangen_lag = min(fort * dauer, lag)
+                    echo_pos = p - d * (K.DASH["tempo"] * vergangen_lag)
+                    echo = self._dash_nachbild(w.bild, w.winkel, farbe)
+                    if dunkel is not None:
+                        echo = self.dunkel(echo, dunkel)
+                    alt = echo.get_alpha()
+                    echo.set_alpha(int(deckung * 1.5 * (1.0 - 0.15 * fort)))
+                    ziel.blit(echo, (round(echo_pos.x - echo.get_width() / 2),
+                                     round(echo_pos.y - echo.get_height() / 2)))
+                    echo.set_alpha(alt)
+
+                # Gebrochene Schlieren bleiben nahe an der Silhouette und
+                # nehmen dieselbe Akzentfarbe wie Fraktion und HUD auf.
+                for versatz, laenge, seite in ((12, 18, -6), (25, 13, 6),
+                                                (37, 8, -3)):
+                    mitte = p - d * versatz + quer * seite
+                    a = mitte - d * (laenge * 0.5)
+                    b = mitte + d * (laenge * 0.5)
+                    pygame.draw.line(ziel, K.C_HULL_SH,
+                                     (round(a.x), round(a.y)),
+                                     (round(b.x), round(b.y)), 3)
+                    a += quer
+                    b += quer
                     pygame.draw.line(ziel, farbe,
                                      (round(a.x), round(a.y)),
                                      (round(b.x), round(b.y)), 1)
+                return
 
-            vergangen = dauer * fort
-            for lag, deckung in zip(K.DASH["bild_nachbilder"],
-                                    K.DASH["bild_deckkraft"]):
-                vergangen_lag = min(vergangen, lag)
-                if vergangen_lag <= 0.001:
+            # Abgebrochener Impulsring und Pfeil sitzen sichtbar auf der
+            # Figur. Sie sind bereits im ersten Bild vollstaendig lesbar.
+            puls = 1.0 - abs(2.0 * fort - 1.0) * 0.28
+            radius = 16 + int(3 * (1.0 - fort))
+            for i in range(8):
+                if i in (0, 1, 4):
                     continue
-                echo_pos = p - d * (K.DASH["tempo"] * vergangen_lag)
-                echo = self._dash_nachbild(w.bild, w.winkel, farbe)
-                if dunkel is not None:
-                    echo = self.dunkel(echo, dunkel)
-                alpha = int(deckung * (1.0 - 0.25 * fort))
-                alt = echo.get_alpha()
-                echo.set_alpha(alpha)
-                ziel.blit(echo, (round(echo_pos.x - echo.get_width() / 2),
-                                 round(echo_pos.y - echo.get_height() / 2)))
-                echo.set_alpha(alt)
-
-            start_zeit = K.DASH["bild_start"]
-            if vergangen < start_zeit:
-                f = vergangen / start_zeit
-                ursprung = p - d * (K.DASH["tempo"] * vergangen)
-                radius = 3 + int(7 * f)
-                farbton = tuple(int(K.C_MUTED_DK[i] * f + farbe[i] * (1.0 - f))
-                                for i in range(3))
-                for i in range(8):
-                    winkel = math.tau * i / 8.0
-                    q = ursprung + pygame.Vector2(math.cos(winkel),
-                                                  math.sin(winkel)) * radius
-                    pygame.draw.rect(ziel, farbton,
-                                     (round(q.x), round(q.y), 2, 2))
+                winkel = math.tau * i / 8.0 + fort * 0.35
+                richt = pygame.Vector2(math.cos(winkel), math.sin(winkel))
+                a = p + richt * (radius - 3)
+                b = p + richt * radius
+                pygame.draw.line(ziel, farbe,
+                                 (round(a.x), round(a.y)),
+                                 (round(b.x), round(b.y)),
+                                 2 if puls > 0.7 else 1)
+            vorne = p + d * 18
+            for seite in (-1, 1):
+                a = vorne - d * 7 + quer * (seite * 5)
+                pygame.draw.line(ziel, K.C_CREAM,
+                                 (round(a.x), round(a.y)),
+                                 (round(vorne.x), round(vorne.y)), 2)
+            if fort < 0.12:
+                r = 4 + int(8 * fort / 0.12)
+                pygame.draw.rect(ziel, farbe,
+                                 (round(p.x - r), round(p.y - 1), 2 * r, 2))
+                pygame.draw.rect(ziel, K.C_CREAM,
+                                 (round(p.x - 1), round(p.y - r), 2, 2 * r))
             return
 
         ausklang = K.DASH["bild_ausklang"]

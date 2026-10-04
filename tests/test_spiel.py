@@ -6659,6 +6659,13 @@ szene.renderer.wesen_zeichnen(_dash_flaeche_b, szene.welt, 0,
                               pygame.Vector2(0, 0), 1.0)
 _dash_still_b = pygame.image.tobytes(_dash_flaeche_b, "RGBA")
 _dash_flaeche_b.fill((0, 0, 0, 0))
+held.dash_rest = K.DASH["dauer"] - K.FIXED_DT
+held.dash_bild_rest = held.dash_rest + K.DASH["bild_ausklang"]
+szene.renderer.wesen_zeichnen(_dash_flaeche_b, szene.welt, 0,
+                              pygame.Vector2(0, 0), 1.0)
+pruef("Der Dashimpuls ist schon im ersten Bild an der Figur sichtbar",
+      pygame.image.tobytes(_dash_flaeche_b, "RGBA") != _dash_still_b)
+_dash_flaeche_b.fill((0, 0, 0, 0))
 held.dash_rest = K.DASH["dauer"] * 0.5
 held.dash_bild_rest = K.DASH["dauer"] * 0.5 + K.DASH["bild_ausklang"]
 szene.renderer.wesen_zeichnen(_dash_flaeche_b, szene.welt, 0,

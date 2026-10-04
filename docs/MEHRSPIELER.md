@@ -1878,6 +1878,9 @@ der Dash-Bildfolge. Damit zeichnet der Gast dieselben Nachbilder und den
 Ausklang wie der Gastgeber. Kein neuer Port; aeltere Versionen kennen das
 Feld nicht und werden wie ueblich beim Beitritt abgewiesen.
 
+**0.32.14:** Die Dash-Animation wurde visuell ueberarbeitet. Das Netzpaket,
+die Karte und die Mehrspielerregeln bleiben unveraendert.
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:
