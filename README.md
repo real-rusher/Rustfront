@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.32.16, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.32.17, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -551,14 +551,16 @@ ist:
 
 ```
 assets/<name>.png           Bild
-assets/sfx/<name>.wav       Klang
+assets/sfx/<klangname>/aufnahme.wav   Klang
 ```
 
 **Eine hingelegte Datei ersetzt den Platzhalter, ohne dass eine Zeile Code
 geaendert wird.** Kein Eintrag nachzutragen, keine Liste zu pflegen. Datei
 hinlegen, Spiel starten, fertig. Bei Bildern gehen auch `.webp` und `.bmp`,
 bei Klaengen auch `.ogg`; gesucht wird in dieser Reihenfolge, die erste
-gefundene gewinnt.
+gefundene gewinnt. Klangaufnahmen liegen in `assets/sfx/<klangname>/`; WAV und
+OGG sind erlaubt, und der Dateiname darin ist frei. Bisherige flache Dateien
+wie `assets/sfx/medkit.wav` bleiben als Rueckfall unterstuetzt.
 
 ### Der Weg von der leeren Datei ins Spiel
 
@@ -708,6 +710,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.32.17 | **Aufnahmeordner fuer alle 24 Klaenge**: Lege WAV- oder OGG-Dateien mit beliebigem Namen in `assets/sfx/<klangname>/`; mehrere Dateien pro Ordner dienen als zufaellige Fassungen. Bestehende flache Dateien bleiben als Rueckfall erhalten. Kein Netz- oder Kartenverhalten geaendert. |
 | 0.32.16 | **Dash und Schussbild**: die drei Windlinien bauen sich nacheinander auf; das Muendungsfeuer sitzt vor der Laufspitze. Der Lichtkern bleibt erhalten. Rein visuell, keine Netz- oder Kartenaenderung. |
 | 0.32.15 | **Dash und Medkit**: Der Dash zeichnet drei kleine, grauweisse Windlinien hinter der Figur. Am Medkit in der Hand wurden die losen weissen Pixel am Rand entfernt. Rein visuell, keine Netz- oder Kartenaenderung. |
 | 0.32.14 | **Dash-Animation neu gestaltet**: sofort sichtbarer Impulsring und Richtungs-Chevron an der Figur, nahe teamfarbene Nachbilder und gebrochene Staubschlieren. Rein visuell, keine Netz- oder Kartenaenderung. |

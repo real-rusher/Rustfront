@@ -728,10 +728,17 @@ try:
     with wave.open(str(sfx / "nahkampf.wav"), "wb") as f:
         f.setnchannels(2); f.setsampwidth(2); f.setframerate(44100)
         f.writeframes(b"\x00\x40" * 4410 * 2)
+    (sfx / "medkit").mkdir()
+    with wave.open(str(sfx / "medkit" / "meine_aufnahme.wav"), "wb") as f:
+        f.setnchannels(2); f.setsampwidth(2); f.setframerate(44100)
+        f.writeframes(b"\x00\x40" * 4410 * 2)
     kl = Klaenge(weg)
     if kl.ok:
         kl.klang("nahkampf")
         pruef("Klang kommt aus der Datei", "nahkampf" in kl.aus_datei)
+        kl.klang("medkit")
+        pruef("Beliebig benannte Aufnahme im Klangordner wird geladen",
+              "medkit" in kl.aus_datei)
         kl.klang("schuss_repetierer")
         pruef("Ohne Datei kommt der Klang aus dem Code",
               "schuss_repetierer" not in kl.aus_datei

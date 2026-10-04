@@ -1,8 +1,11 @@
 # assets/sfx — Klaenge
 
-Dieselbe Regel wie bei den Bildern eine Ebene hoeher: eine Datei
-`assets/sfx/<name>.wav` ersetzt den im Code berechneten Klang. Keine
-Codeaenderung noetig. `.ogg` geht auch.
+Lege pro Klang die Aufnahme in den gleichnamigen Unterordner, zum Beispiel
+`assets/sfx/medkit/aufnahme.wav`. Der Dateiname darin ist frei; `.wav` und
+`.ogg` werden erkannt. Mehrere Dateien im Ordner sind ebenfalls moeglich und
+werden als zufaellige Fassungen verwendet. Ordneraufnahmen haben Vorrang vor
+den bisherigen flachen Dateien wie `assets/sfx/medkit.wav`; diese bleiben
+weiterhin unterstuetzt.
 
 ## Welche Namen es gibt
 
@@ -13,6 +16,7 @@ Codeaenderung noetig. `.ogg` geht auch.
 | `schuss_schrot` | Schrot |
 | `schuss_scharf` | Scharfschuetze |
 | `schuss` | jede Schusswaffe, die keine eigene Datei hat |
+| `schuss_lmg` | leichtes Maschinengewehr |
 | `granate` | Einschlag der Granate |
 | `wurf` | die Granate verlaesst die Hand |
 | `nahkampf` | Brecheisen |
@@ -20,6 +24,17 @@ Codeaenderung noetig. `.ogg` geht auch.
 | `aufheben` | etwas vom Boden genommen |
 | `menue` | Auswahl wandert |
 | `menue_ok` | Auswahl bestaetigt |
+| `sturz` | Aufsetzen nach einem Fall |
+| `molotov` | Glas zerbricht und Feuer faengt |
+| `blend` | Knall der Blendgranate |
+| `rakete` | Raketenabschuss |
+| `erfasst` | Erfassung einer gelenkten Rakete steht |
+| `blend_pfeifen` | Pfeifen nach dem Blendknall |
+| `speien` | Speier spuckt |
+| `boss_ansage` | Boss kuendigt seinen Angriff an |
+| `dash` | kurzer Stoss beim Dash |
+| `ruf` | Spieler am Boden ruft nach Hilfe |
+| `herzschlag` | eigener Herzschlag bei wenig Leben |
 
 Die Liste steht als `KLANG_NAMEN` in `dustfront/config.py`.
 `python -m dustfront --assets` sagt, welcher Name gerade aus einer Datei
@@ -27,9 +42,10 @@ kommt.
 
 ## Gesucht wird in zwei Stufen
 
-Fuer `schuss_repetierer` schaut das Spiel erst nach
-`schuss_repetierer.wav`, dann nach `schuss.wav`. Eine einzige Datei
-`schuss.wav` deckt also alle Schusswaffen ab, bis eine eigene danebenliegt.
+Fuer `schuss_repetierer` schaut das Spiel erst in `schuss_repetierer/`, dann
+nach den bisherigen Dateien `schuss_repetierer.wav` und `schuss.wav`. Eine
+einzige Datei `schuss.wav` deckt also weiterhin alle Schusswaffen ab, bis
+eine eigene Aufnahme hinzukommt.
 
 ## Abwechslung
 

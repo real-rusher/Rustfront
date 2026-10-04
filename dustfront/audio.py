@@ -517,6 +517,19 @@ class Klaenge:
         if self.ordner is None or not self.ordner.is_dir():
             return []
         gefunden = []
+        # Aufnahmen liegen kuenftig je Klang in einem eigenen Ordner. Der
+        # Dateiname ist dabei frei; sortiert bleibt die Auswahl reproduzierbar.
+        klang_ordner = self.ordner / name
+        if klang_ordner.is_dir():
+            for pfad in sorted(klang_ordner.iterdir()):
+                if pfad.is_file() and pfad.suffix.lower() in ENDUNGEN:
+                    try:
+                        gefunden.append(pygame.mixer.Sound(str(pfad)))
+                        self.aus_datei.add(name)
+                    except pygame.error as grund:
+                        self.fehler.append("%s: %s" % (pfad.name, grund))
+            if gefunden:
+                return gefunden
         nummern = range(1, K.ASSETS["fassungen"] + 1)
         for kandidat in [name] + ["%s_%d" % (name, i) for i in nummern]:
             for endung in ENDUNGEN:
