@@ -1884,6 +1884,9 @@ die Karte und die Mehrspielerregeln bleiben unveraendert.
 **0.32.15:** Dash-Windlinien und Medkit-Pixelkorrektur sind rein visuell;
 Netzpaket und Karten bleiben unveraendert.
 
+**0.32.16:** Windlinien bauen sich nacheinander auf und das Muendungsfeuer
+sitzt vor dem Lauf. Rein visuell; Netzpaket und Karten bleiben unveraendert.
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:

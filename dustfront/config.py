@@ -118,11 +118,17 @@ DASH = dict(
     auslauf=1.25,             # am Ende auf so viel Lauftempo abgefangen
     staub=10,                 # Staubwolken beim Absprung
     bild_ausklang=0.08,       # Windfahne verblasst kurz nach dem Stoss
-    bild_wind_abstand=(12, 23, 34),
+    bild_wind_start=(0.0, 0.045, 0.090),
+    bild_wind_aufbau=0.04,
+    bild_wind_abstand=(22, 34, 46),
     bild_wind_laenge=(9, 7, 5),
     bild_wind_seite=(0, -4, 4),
     bild_wind_hell=(190, 190, 184),
     bild_wind_dunkel=(103, 99, 91),
+)
+
+MUENDUNGSFEUER = dict(
+    versatz=10.0,             # Lichtkern liegt vor der Laufspitze
 )
 
 KAMERA = dict(

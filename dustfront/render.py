@@ -418,27 +418,33 @@ class Renderer:
         quer = pygame.Vector2(-d.y, d.x)
         p = pygame.Vector2(p)
         rest = max(0.0, float(getattr(w, "dash_rest", 0.0)))
+        dauer = K.DASH["dauer"]
         if rest > 0.0:
+            vergangen = dauer - rest
             staerke = 1.0
         else:
             ausklang = K.DASH["bild_ausklang"]
-            staerke = min(1.0, max(0.0,
-                                  float(getattr(w, "dash_bild_rest", 0.0))
-                                  / max(0.01, ausklang)))
+            rest_bild = max(0.0, float(getattr(w, "dash_bild_rest", 0.0)))
+            staerke = min(1.0, rest_bild / max(0.01, ausklang))
+            vergangen = dauer + ausklang - rest_bild
         if staerke <= 0.0:
             return
 
         hell = K.DASH["bild_wind_hell"]
         dunkel = K.DASH["bild_wind_dunkel"]
-        for i, (abstand, laenge, seite) in enumerate(zip(
-                K.DASH["bild_wind_abstand"], K.DASH["bild_wind_laenge"],
-                K.DASH["bild_wind_seite"])):
-            anteil = staerke * (1.0 - i * 0.18)
+        aufbau = max(0.01, K.DASH["bild_wind_aufbau"])
+        for i, (start, abstand, laenge, seite) in enumerate(zip(
+                K.DASH["bild_wind_start"], K.DASH["bild_wind_abstand"],
+                K.DASH["bild_wind_laenge"], K.DASH["bild_wind_seite"])):
+            fort = min(1.0, max(0.0, (vergangen - start) / aufbau))
+            if fort <= 0.0:
+                continue
+            anteil = staerke * fort * (1.0 - i * 0.18)
             farbe = tuple(int(dunkel[c] + (hell[c] - dunkel[c]) * anteil)
                           for c in range(3))
-            mitte = p - d * abstand + quer * seite
-            a = mitte - d * (laenge * 0.5)
-            b = mitte + d * (laenge * 0.5)
+            sichtbar = max(2, int(round(laenge * fort)))
+            a = p - d * (abstand - laenge * 0.5) + quer * seite
+            b = a - d * sichtbar
             pygame.draw.line(ziel, farbe,
                              (round(a.x), round(a.y)),
                              (round(b.x), round(b.y)), 1)
@@ -569,7 +575,8 @@ class Renderer:
             if eb != index or rest <= 0:
                 continue
             s = self.bilder.gedreht("muendung", winkel)
-            p = pos - ecke
+            p = (pos + pygame.Vector2(K.MUENDUNGSFEUER["versatz"], 0)
+                 .rotate(winkel) - ecke)
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2),
                       special_flags=pygame.BLEND_RGB_ADD)
 

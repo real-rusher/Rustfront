@@ -6668,8 +6668,6 @@ held.dash_rest = K.DASH["dauer"] - K.FIXED_DT
 held.dash_bild_rest = held.dash_rest + K.DASH["bild_ausklang"]
 szene.renderer.wesen_zeichnen(_dash_flaeche_b, szene.welt, 0,
                               pygame.Vector2(0, 0), 1.0)
-pruef("Die Windlinien sind schon im ersten Dashbild sichtbar",
-      pygame.image.tobytes(_dash_flaeche_b, "RGBA") != _dash_still_b)
 _dash_flaeche_b.fill((0, 0, 0, 0))
 held.dash_rest = K.DASH["dauer"] * 0.5
 held.dash_bild_rest = K.DASH["dauer"] * 0.5 + K.DASH["bild_ausklang"]
@@ -6684,6 +6682,43 @@ szene.renderer.wesen_zeichnen(_dash_flaeche_b, szene.welt, 0,
                               pygame.Vector2(0, 0), 1.0)
 pruef("Der Dash hinterlaesst einen kurzen Ausklang",
       pygame.image.tobytes(_dash_flaeche_b, "RGBA") != _dash_still_b)
+
+class _WindprobeB:
+    dash_richtung = pygame.Vector2(1, 0)
+    dash_bild_rest = 0.0
+
+def _windbild_b(vergangen):
+    probe = _WindprobeB()
+    probe.dash_rest = K.DASH["dauer"] - vergangen
+    flaeche = pygame.Surface((160, 160), pygame.SRCALPHA)
+    szene.renderer.dash_zeichnen(flaeche, pygame.Vector2(100, 100), probe)
+    return flaeche
+
+_wind_erstes_b = _windbild_b(K.FIXED_DT)
+_wind_frueh_b = _windbild_b(0.015)
+_wind_mitte_b = _windbild_b(0.060)
+_wind_spaet_b = _windbild_b(0.120)
+pruef("Die erste Windlinie setzt schon im ersten Dashbild ein",
+      _wind_erstes_b.get_at((81, 100)).a > 0)
+pruef("Windlinien erscheinen gestaffelt statt gleichzeitig",
+      _wind_frueh_b.get_at((81, 100)).a > 0
+      and _wind_frueh_b.get_at((68, 96)).a == 0
+      and _wind_mitte_b.get_at((68, 96)).a > 0
+      and _wind_mitte_b.get_at((55, 104)).a == 0
+      and _wind_spaet_b.get_at((55, 104)).a > 0)
+
+class _Welt_mit_MuendungB:
+    muendungen = [(pygame.Vector2(40, 40), 0.0, 0, 0.055)]
+
+_muendungsbild_b = pygame.Surface((128, 80))
+_muendungsbild_b.fill((0, 0, 0))
+szene.renderer.muendungsfeuer(_muendungsbild_b, _Welt_mit_MuendungB(),
+                              pygame.Vector2(0, 0), 0)
+_helle_muendungs_x_b = [x for x in range(128) for y in range(80)
+                        if _muendungsbild_b.get_at((x, y))[:3] != (0, 0, 0)]
+pruef("Das Muendungsfeuer sitzt vor der Laufspitze",
+      _helle_muendungs_x_b and min(_helle_muendungs_x_b) >= 42)
+
 held.pos, held.vorher, held.ebene, held.lebt = _zustand_dash_b[:4]
 (held.dash_rest, held.dash_bild_rest, held.dash_richtung,
  held.heilt_rest, held.schlag_zeigen, held.nahkampf_rest,
