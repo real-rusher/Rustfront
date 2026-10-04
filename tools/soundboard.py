@@ -31,11 +31,16 @@ class Klangpruefer:
         self.flaeche = pygame.display.set_mode((BREITE, HOEHE), pygame.RESIZABLE)
         self.uhr = pygame.time.Clock()
         self.schriften = pygame.font.Font(None, 23), pygame.font.Font(None, 18)
-        self.klaenge = Klaenge(ROOT)
+        # `Klaenge` erwartet den Asset-Ordner selbst und haengt daran `sfx`.
+        # Der Projektordner liess die Suche irrtuemlich bei `<projekt>/sfx`
+        # beginnen und fuellte das Soundboard nur mit Platzhaltern.
+        self.klaenge = Klaenge(ROOT / K.ASSETS["ordner"])
         if not self.klaenge.ok:
             raise RuntimeError("Kein Audioausgabegeraet verfuegbar.")
         self.klaenge.gesamt = 1.0
         self.klaenge.effekte = 1.0
+        for name in K.KLANG_NAMEN:
+            self.klaenge.klang(name)
         self.knopfe = []
         self.gehalten = None
         self.naechster_schuss = 0
@@ -44,7 +49,9 @@ class Klangpruefer:
         self.salve_rest = 0
         self.salve_takt = 0.032
         self.salve_naechster = 0
-        self.melden = "Klick: einmal abspielen. Gedrueckt halten: automatische Waffe."
+        dateien = len(self.klaenge.aus_datei)
+        self.melden = "%d von %d Klaengen aus Audiodateien; Klick spielt, Halten feuert automatisch." % (
+            dateien, len(K.KLANG_NAMEN))
 
     def _knopf(self, rechteck, titel, aktion, untertitel=""):
         self.knopfe.append((pygame.Rect(rechteck), titel, aktion, untertitel))
@@ -57,7 +64,8 @@ class Klangpruefer:
             x = RAND + (i % 4) * (breite + ABSTAND)
             zeile = i // 4
             y = 56 + zeile * (KNOPF_H + ABSTAND)
-            self._knopf((x, y, breite, KNOPF_H), name,
+            quelle = "DATEI" if name in self.klaenge.aus_datei else "CODE"
+            self._knopf((x, y, breite, KNOPF_H), "%s  [%s]" % (name, quelle),
                         ("einmal", name), "Einzelklang")
         y = 56 + ((len(K.KLANG_NAMEN) + 3) // 4) * (KNOPF_H + ABSTAND) + 8
         self._knopf((RAND, y, 230, KNOPF_H), "MG – Dauerfeuer",
@@ -107,7 +115,9 @@ class Klangpruefer:
                             art, wert = aktion
                             if art == "einmal":
                                 self.klaenge.spielen(wert, 1.0)
-                                self.melden = "Abgespielt: " + wert
+                                quelle = ("Audiodatei" if wert in self.klaenge.aus_datei
+                                          else "Code-Platzhalter")
+                                self.melden = "%s: %s" % (quelle, wert)
                             else:
                                 self.gehalten = wert
                                 self.laufzeit = 0.0
