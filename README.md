@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.32.20, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.32.21, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -710,6 +710,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.32.21 | **Klaenge angepasst**: Der MG-Schuss nutzt wieder den alten kurzen Ausschnitt; die Nahkampf-Schwing- und Trefferklaenge laufen vollstaendiger aus. Rundenstart, Sieg und Niederlage sind im Soundboard direkt pruefbar. Kein Netz- oder Kartenverhalten geaendert. |
 | 0.32.20 | **Soundboard-Pfad korrigiert**: Das separate Soundboard sucht Aufnahmen nun in `assets/sfx` statt neben dem Projektordner. Es kennzeichnet pro Klang, ob eine Audiodatei oder ein Code-Platzhalter abgespielt wird. Kein Netz- oder Kartenverhalten geaendert. |
 | 0.32.19 | **Klangkorrekturen und separates Soundboard**: Nahkampf spielt nur noch den passenden Schwung-/Trefferklang; Rauch, MG, Scharfschuetze und Molotow erhalten passende Ausschnitte. `python tools/soundboard.py` startet unabhaengig vom Spiel und bietet Einzelklang, MG-Dauerfeuer, MG-Salve und Sturmgewehr bei Spieltempo. Mehrspieler: kein Protokollwechsel; Gastgeber und Gast verwenden denselben Klangstand. |
 | 0.32.18 | **Neue Spielklaenge eingebaut**: MP3-Aufnahmen werden geladen und Schussserien zu einzelnen Schuessen zugeschnitten. Neu zu hoeren: Nachladen, Zu-Boden-Gehen, Rauchgranate, Brecheisen-Schwung und Treffer, Rundenstart sowie Match-Sieg oder -Niederlage. Das Mehrspieler-Protokoll teilt die neuen Klangereignisse und Trefferart mit; Gastgeber und Gast brauchen dieselbe Version. |

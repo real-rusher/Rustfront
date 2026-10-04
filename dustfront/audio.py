@@ -59,13 +59,13 @@ _ZUSCHNITTE = {
     # Der Rauch hat einen langen Gasstrom; der kurze Ausschnitt nahm genau
     # diesen Hauptbestandteil heraus.
     "smoke-grenade-sound-effect.mp3": (0.0, 9.143),
-    # Beide Aufnahmen enthalten Nachhall. Die kurzen alten Schnitte klangen
-    # wie abgebrochene Samples statt wie ein Schuss.
-    "freesound_community-069321_light-machine-gun-m249-39814.mp3": (0.0, 0.72),
+    # Der vorherige Wechsel auf den langen Ausschnitt liess das MG-Sample
+    # anders klingen; der alte, knackige Schuss dauert rund 0,14 Sekunden.
+    "freesound_community-069321_light-machine-gun-m249-39814.mp3": (0.04, 0.18),
     "freesound_community-sniper-rifle-firing-shot-1-39789.mp3": (0.0, 2.8),
-    "yodguard-spear_thrust-6-382403.mp3": (0.0, 0.32),
-    "universfield-combat-impact-352458.mp3": (0.0, 0.36),
-    "universfield-hammer-steel-impact-454390.mp3": (0.0, 0.32),
+    "yodguard-spear_thrust-6-382403.mp3": (0.0, 0.72),
+    "universfield-combat-impact-352458.mp3": (0.0, 0.72),
+    "universfield-hammer-steel-impact-454390.mp3": (0.0, 0.72),
     "fighting.mp3": (0.20, 2.42),
     "gta-v-wasted-death-sound.mp3": (0.0, 4.25),
 }

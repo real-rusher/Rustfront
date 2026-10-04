@@ -74,6 +74,13 @@ class Klangpruefer:
                     ("halten", "lmg_salve"), "Halten fuer Spieltakt")
         self._knopf((RAND + 474, y, 180, KNOPF_H), "Sturmgewehr",
                     ("halten", "sturm"), "Gedrueckt halten")
+        y += KNOPF_H + ABSTAND
+        for i, name in enumerate(("rundenstart", "won_match", "lost_match")):
+            x = RAND + i * (breite + ABSTAND)
+            titel = {"rundenstart": "Rundenstart", "won_match": "Sieg",
+                     "lost_match": "Niederlage"}[name]
+            self._knopf((x, y, breite, KNOPF_H), titel, ("einmal", name),
+                        "Match-Ereignis")
 
     def _feuern(self, art):
         jetzt = pygame.time.get_ticks()
