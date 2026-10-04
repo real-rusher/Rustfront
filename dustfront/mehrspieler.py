@@ -1669,8 +1669,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 # Das Brecheisen liegt auf einer eigenen Taste und braucht
                 # keinen Waffenwechsel. Es schlaegt mit seinen eigenen
                 # Werten, egal was gerade in der Hand ist.
-                if k.nahkampf():
-                    self.welt.klang("nahkampf", 0.9)
+                # Der eigentliche Treffer oder Schwung wird in
+                # Spieler.schlagen -> Welt.schlagknall genau einmal gemeldet.
+                k.nahkampf()
 
         # Ziehen: gehalten, und solange es laeuft, gibt es nichts anderes.
         # Kein Schiessen und kein Aufhelfen - wer beide Haende an einem

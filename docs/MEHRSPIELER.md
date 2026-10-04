@@ -1893,6 +1893,12 @@ enthaelt ausserdem die Trefferart (organisch/metallisch), damit der Gast den
 gleichen Einschlag wie der Gastgeber hoert. Kein neuer Port; wegen der neuen
 Ereignisse muessen Gastgeber und Gaeste dieselbe Version nutzen.
 
+**0.32.19:** Der lokale Nahkampfeingabeweg spielt keinen zusaetzlichen
+Platzhalterklang mehr ab. Der Schwung- oder Trefferklang kommt wie zuvor aus
+dem gemeldeten Welt-Ereignis; das Paketformat und die Netzereignisse bleiben
+unveraendert. Gastgeber und Gast muessen wegen des Klangverhaltens dieselbe
+Spielversion verwenden.
+
 ## 13. Was fehlt
 
 **OFFEN**, bewusst, weil es ein Test war:
