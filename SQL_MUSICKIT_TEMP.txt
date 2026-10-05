@@ -1,0 +1,62 @@
+-- In Supabase im SQL Editor ausfuehren.
+
+create table if not exists public.kosmetik (
+  konto uuid primary key default auth.uid()
+    references auth.users(id) on delete cascade,
+  blend_ton text not null default '',
+  blend_bild text not null default '',
+  music_kit text not null default '',
+  geaendert timestamptz not null default now(),
+
+  constraint kosmetik_ton_groesse
+    check (octet_length(blend_ton) <= 540000),
+  constraint kosmetik_bild_groesse
+    check (octet_length(blend_bild) <= 210000),
+  constraint kosmetik_music_kit_groesse
+    check (octet_length(music_kit) <= 540000)
+);
+
+alter table public.kosmetik
+  add column if not exists music_kit text not null default '';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'kosmetik_music_kit_groesse'
+      and conrelid = 'public.kosmetik'::regclass
+  ) then
+    alter table public.kosmetik
+      add constraint kosmetik_music_kit_groesse
+      check (octet_length(music_kit) <= 540000);
+  end if;
+end
+$$;
+
+alter table public.kosmetik enable row level security;
+
+drop policy if exists "eigene kosmetik lesen" on public.kosmetik;
+drop policy if exists "eigene kosmetik anlegen" on public.kosmetik;
+drop policy if exists "eigene kosmetik aendern" on public.kosmetik;
+drop policy if exists "eigene kosmetik loeschen" on public.kosmetik;
+
+create policy "eigene kosmetik lesen"
+  on public.kosmetik for select
+  using (auth.uid() = konto);
+
+create policy "eigene kosmetik anlegen"
+  on public.kosmetik for insert
+  with check (auth.uid() = konto);
+
+create policy "eigene kosmetik aendern"
+  on public.kosmetik for update
+  using (auth.uid() = konto)
+  with check (auth.uid() = konto);
+
+create policy "eigene kosmetik loeschen"
+  on public.kosmetik for delete
+  using (auth.uid() = konto);
+
+grant select, insert, update, delete
+  on public.kosmetik to authenticated;
