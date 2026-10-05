@@ -50,7 +50,8 @@ def _wert(name: str, feld: str):
     """Ein Vergleichswert einer Waffe, oder None wenn er nicht gilt."""
     d = K.WAFFEN[name]
     if feld == "schaden":
-        return d["schaden"] * d.get("geschosse", 1)
+        # C4 ist ein Zuender ohne eigenen Einschlagsschaden.
+        return d.get("schaden", 0.0) * d.get("geschosse", 1)
     if feld == "takt":
         return 1.0 / d["takt"] if d.get("takt") else None
     if feld == "magazin":

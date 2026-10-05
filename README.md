@@ -1,14 +1,12 @@
 # DUSTFRONT
 
-Ein Top-Down-Spiel auf dem Kontinent Veld. Du steuerst einen modularen
-Wandler, baust ihn aus Schrott weiter aus und bewegst dich zwischen drei
-Fraktionen: der Kolonne, dem Chor und den Freien Werften. Beide Spielmodi
-teilen dieselbe 90-Grad-Draufsicht, du wechselst mit Tab zwischen "an Bord"
-und "Fahr-Modus".
+Ein Top-Down-Actionspiel mit Einzelspieler und Mehrspieler. Erkunde
+mehrstufige Karten, kämpfe gegen Gegner oder andere Spieler und passe
+Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.32.27, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.32.28, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -21,15 +19,16 @@ Nicolas, Nikolaus, Marlon, Alfred.
 | --- | --- |
 | Splash-Sequenz | fertig, fuenf Karten mit eigenem Ton |
 | Hauptmenue | fertig, inklusive Optionen und Spielstand |
-| Spielkern | steht: feste Zeitschritte, drei Ebenen, Kollision, Wellen |
-| Waffen | sieben Stueck, alle im Test nachgewiesen, jede in der Hand zu erkennen |
-| Hoehenebenen | drei, eine Etage nach oben sichtbar, viele Treppen, Sturz mit Steuerung in der Luft |
+| Spielkern | feste Zeitschritte, Kollision, Gegner-KI, Bosse und Wellen |
+| Waffen | Schuss-, Wurf- und Nahkampfwaffen, darunter MG, Raketenwerfer und C4 |
+| Karten | mehrstufige Karten mit Treppen, Luken und Aufzuegen |
 | Sturz | ohne Ruck: die Figur bleibt stehen, die Welt waechst unter ihr heran |
 | Inventar und Hotbar | fertig, Plaetze per Maus oder Tastatur umsortierbar |
-| Pause und Einstellungen | fertig: Anzeige, Ton, Steuerung, Mitwirkende |
-| Grafik-Einstellungen | Vignette, Wackeln und Partikel stehen; Licht, Wetter und Textursaetze sind vorgemerkt |
-| Texturen und Klaenge | noch alle im Code erzeugt; eine Datei in `assets/` ersetzt jedes Stueck, ohne Codeaenderung |
-| Ersetzbar sind | alle 36 Bilder, Kacheln und Figuren ebenso wie Schatten, Blut, Brandfleck und Vignette |
+| Pause und Einstellungen | Anzeige, Ton, Steuerung und Mitwirkende |
+| Grafik-Einstellungen | Vignette, Wackeln, Partikel, Zoom und Ebenenansicht |
+| Mehrspieler | LAN und Internet, Lobby, Rundenplan, Statistik und Bestenliste |
+| Konto | lokale Konten oder Supabase, Profile, Loadouts und Rundenstatistik |
+| Anpassung | Steuerung, Anzeige, Audio, eigene Spielerkosmetik und ersetzbare Assets |
 
 Der Spielkern gilt als tragfaehig: was jetzt noch dazukommt, haengt sich als
 weitere Szene, weiteres Wesen oder weitere Zeile in `config.py` an, statt
@@ -37,16 +36,9 @@ Bestehendes umzubauen.
 
 ## Wohin es geht
 
-**[`docs/KARTE.md`](docs/KARTE.md) ist der Weltenplan.** Dort steht
-vollstaendig, wie die Karte am Ende aufgebaut sein soll: die drei
-Massstaebe (Kontinent, Ort, Wandler), wie der Wandler in einen Ort
-gestempelt wird, wie die Sektoren und die vorrueckende Front funktionieren,
-was Fortschritt womit koppelt, und in welcher Reihenfolge das gebaut wird
-(Meilensteine M1 bis M9, von 0.12.0 bis 1.0.0).
-
-Gebaut ist davon noch nichts. Wer weitermacht, nimmt sich den naechsten
-Meilenstein aus Abschnitt 11 des Plans und liest vorher Abschnitt 3 ganz -
-dort steht die eine technische Entscheidung, an der alles andere haengt.
+[`docs/KARTE.md`](docs/KARTE.md) beschreibt den langfristigen Weltenplan
+und trennt geplante Systeme von dem, was im aktuellen Spiel bereits
+eingebaut ist.
 
 ## Starten
 
@@ -113,6 +105,7 @@ Testlauf ohne Fenster, legt Bilder zum Anschauen ab:
 ```
 python tests/test_spiel.py
 python tests/test_menues.py
+python -m dustfront --kontoseite && python tests/test_konto.py
 ```
 
 Beide bauen ihre Welt mit einem festen Seed auf und laufen deshalb jedes
@@ -121,10 +114,10 @@ der Test mit (`Spiel(app, seed=...)`). Eine Pruefung, die mal gruen und mal
 rot ist, sagt nichts, und man gewoehnt sich an, sie zu uebersehen.
 
 Gebraucht werden Python 3.8 bis 3.14 und pygame-ce (getestet mit 2.5.2 und
-2.5.8). Die Tests laufen unter 3.8 und 3.11; `tests/test_konto.py` prueft
-ausserdem, dass aller Quelltext gueltiges Python 3.8 ist.
-Sonst nichts: Schrift, Grafik und Ton entstehen zur Laufzeit, es liegen keine
-fertigen Bilder oder Klaenge im Repo. Wie man sie durch eigene ersetzt, steht
+2.5.8). Die Tests wurden unter Python 3.8 und 3.11 ausgefuehrt;
+`tests/test_konto.py` prueft ausserdem die Python-3.8-Syntax.
+Schrift und fehlende Grafik entstehen zur Laufzeit. Mitgelieferte und eigene
+Assets koennen die Platzhalter ersetzen. Wie das geht, steht
 unter [Texturen und Klaenge](#texturen-und-klaenge).
 
 ## Steuerung im Menue
@@ -156,6 +149,7 @@ der alten weggenommen.
 | Mausrad | Im Gefecht: Sichtweite (weiter weg oder naeher; ausserhalb des normalen Bildes Nebel). Im Einzelspiel: Ansicht eine Ebene hoch oder runter |
 | Strg + Mausrad, Bild hoch / Bild runter | Ansicht eine Ebene hoch oder runter (Gefecht) |
 | 1 bis 9 | Waffe waehlen |
+| F | Brecheisen |
 | R | Nachladen |
 | V | Feuerart wechseln (beim MG: Dauerfeuer oder Salve) |
 | H | Medkit |
@@ -170,7 +164,7 @@ der alten weggenommen.
 | F11 | Vollbild |
 | F3 | Debug-Anzeige |
 
-### Die sieben Waffen
+### Waffen
 
 | Waffe | Art | Eigenheit |
 | --- | --- | --- |
@@ -178,8 +172,13 @@ der alten weggenommen.
 | Sturmgewehr | Schuss | Rund 700 Schuss in der Minute, streut bei Dauerfeuer auf. |
 | Schrot | Schuss | Sieben Kugeln auf einmal. Enger gebuendelt und weiter reichend als frueher, aber nah immer noch deutlich haerter. |
 | Scharfschuetze | Schuss | Reicht weiter, als das Bild breit ist: ein Schuss endet an einer Wand, nicht an seiner Reichweite. Aus der Hueffte unbrauchbar. Rechte Maustaste halten zieht den Streifen in anderthalb Sekunden bis auf Ziellinienbreite zusammen. Gemessen: auf 300 Pixel trifft sie aus der Hueffte 8 Prozent der Schuesse, eingezielt 100. |
+| MG | Schuss | Dauerfeuer oder Salven; beim Halten wird es genauer. |
 | Granate | Wurf | Fliegt genau so weit, wie man zielt, zwischen 60 und 260 Pixeln. Rollt sie ueber eine Kante, faellt sie auf die Ebene darunter und zuendet erst dort. |
 | Rauchgranate | Wurf | Macht keinen Schaden, sondern eine Wand aus Rauch, und fliegt dafuer kuerzer als die Sprenggranate. Vierzehn Sekunden lang ist darin **nichts** zu sehen - keine Figur und kein Name, auch nicht von der Ebene darueber. |
+| Molotow | Wurf | Entzuendet beim Aufprall einen Bereich; das Feuer versperrt den Weg. |
+| Blendgranate | Wurf | Blendet nahe Spieler; eigene Spielerkosmetik kann Ton und Bild ersetzen. |
+| C4 | Sprengsatz | Kann platziert und per Fernzuendung gezuendet werden. |
+| Raketenwerfer | Schuss | Einmalige Kartenwaffe; der Gastgeber kann die Lenkung erlauben. |
 | Brecheisen | Nahkampf | Zwei Treffer toeten. Schlaegt in einem Kegel von 80 Grad und stoesst zurueck. Braucht keine Munition. |
 
 Die Munition haengt am Namen der Waffe, nicht an ihrem Platz. Umsortieren im
@@ -187,19 +186,17 @@ Inventar kostet also keine Patrone.
 
 ## Gefecht im LAN und ueber das Internet
 
-> **Dieser Zweig ist abgeschlossen und wird nicht mehr weiterentwickelt.**
-> Der Mehrspieler war ein Test. Er ist fertiggestellt und liegt auf dem
-> Zweig `multiplayer-test`; der Hauptzweig geht ohne ihn weiter, dem
-> Weltenplan in [`docs/KARTE.md`](docs/KARTE.md) nach.
+Mehrspieler wird direkt aus dem Hauptmenue gestartet. Gastgeber und Gaeste
+muessen dieselbe Spielversion verwenden. Details zu Lobby, Protokoll,
+Spielarten und Versionsgeschichte stehen in
+[`docs/MEHRSPIELER.md`](docs/MEHRSPIELER.md).
 
 Mehrere Leute auf einer Karte, in sechs Spielarten. Nach der Runde steht
 die Liste, und sie wandert in eine Bestenliste im Benutzerordner.
 
 **Alles im Einzelnen steht in
 [`docs/MEHRSPIELER.md`](docs/MEHRSPIELER.md):** Aufbau, Protokoll Feld fuer
-Feld, jede Zahl mit Begruendung, jeder Fehler, der beim Bauen aufgetreten
-ist, und eine Bauanleitung in zwoelf Schritten fuer den Tag, an dem der
-Mehrspieler zurueckkommen soll.
+Feld, Versionsgeschichte und Regeln fuer gemeinsames Spielen.
 
 | Spielart | Was passiert | Wie es endet |
 | --- | --- | --- |
@@ -210,10 +207,10 @@ Mehrspieler zurueckkommen soll.
 | **VERSUS** | Zwei Mannschaften, ein Leben je Runde, Aufhelfen durch die eigenen Leute | nach drei Rundensiegen |
 | **HUEGEL** | Zwei Mannschaften, ein sichtbarer Kreis in der Kartenmitte | wenn eine Mannschaft den Kreis vollgeladen hat |
 
-Alles aus dem Einzelspieler ist dabei: die sieben Waffen, drei Ebenen mit
-Treppen und Stuerzen, Ziellinie, Streukegel der Scharfschuetzenwaffe,
-Nahkampfbogen. Medkits liegen alle paar Sekunden neu aus, jeder kann sie
-nehmen.
+Die Einzelspieler-Systeme sind auch im Gefecht verfuegbar: Waffen,
+mehrstufige Karten, Treppen und Stuerze, Ziellinie, Streukegel,
+Nahkampfbogen und Medkits. Welche davon in einer Runde aktiv sind, haengt
+von Spielart und Gastgeberregeln ab.
 
 ### Koop: am Boden und wieder auf
 
@@ -377,7 +374,7 @@ gespielten Runden in VERSUS. `--online` versucht, den Port im Router freizugeben
 `--passwort WORT` setzt ein Kennwort - beides zusammen ist der Weg ueber
 das Internet.
 `--loadouts` laesst jeden sein eigenes Loadout tragen - zwei Waffen und
-eine Wurfwaffe statt aller sechs Plaetze; ohne den Schalter hat jeder
+eine Wurfwaffe statt der vollstaendigen Hotbar; ohne den Schalter hat jeder
 alles. Konten, Statistik und Loadouts stehen in
 [`docs/KONTO.md`](docs/KONTO.md).
 `--modus` ist `pvp`, `pve`, `pvpve`, `team`, `versus` oder `huegel`;
@@ -411,19 +408,6 @@ bei jedem selbst und sind reine Kosmetik.
 | `netz.py` | Verbindungen, Protokoll aus JSON-Zeilen, Gastgeber und Gast |
 | `mehrspieler.py` | Die Gefechtsszene, Punkte, Wiedereinstieg, Rundenende |
 | `bestenliste.py` | MVP-Punkte und Auszeichnungen ueber alle Runden, im Benutzerordner |
-
-### Was der Test noch nicht kann
-
-Ehrlich aufgezaehlt, damit niemand danach sucht.
-
-**Keine Vorhersage beim Gast.** Die eigene Figur laeuft erst los, wenn die
-Antwort des Gastgebers da ist - ein Hin- und Rueckweg. Ueber Kabel ist das
-unsichtbar, ueber WLAN spuerbar. Das ist der einzige Punkt, der sich nicht
-durch eine Kleinigkeit beheben laesst: dafuer muesste der Gast seine eigene
-Figur mitrechnen und beim Eintreffen der Wahrheit zurechtruecken.
-
-Ausserdem: kein Wiederverbinden nach einem Abbruch, keine Kartenwahl,
-keine Teams. Das Gefecht laeuft immer auf derselben Testkarte.
 
 ## Wie sich das Spiel anfuehlen soll
 
@@ -472,7 +456,7 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 
 | Datei | Inhalt |
 | --- | --- |
-| `config.py` | Alle Zahlen und Tabellen. Sonst steht nirgends eine freie Zahl. |
+| `config.py` | Zentrale Spielwerte, Waffen, Gegner, Karten- und Netzregeln |
 | `core.py` | Anwendung, Szenenstapel, feste Zeitschritte, Eingabe, Bildablage |
 | `world.py` | Ebenen, Kacheln, Kollision, Sichtlinien, Treppen, Abgruende |
 | `entities.py` | Spieler, Gegner, Geschosse, Granaten, Aufsammler |
@@ -486,7 +470,7 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `art.py`, `audio.py`, `font.py` | Grafik, Klang und Schrift, alles zur Laufzeit erzeugt |
 | `vorlagen.py` | Die beiden Werkzeuge `--vorlagen` und `--assets` |
 | `netz.py` | LAN-Verbindungen und Protokoll |
-| `mehrspieler.py` | Das LAN-Gefecht |
+| `mehrspieler.py` | LAN- und Internetgefechte |
 | `lobby.py` | Die Lobby und der Rundenplan |
 | `regeln.py` | Die Regeln eines Gefechts, an einer Stelle |
 | `anzeige.py` | Die Anzeige im Gefecht |
@@ -509,7 +493,7 @@ Daneben liegt `docs/`:
 | `KARTE.md` | Der Weltenplan: Kontinent, Orte, Wandler, Front, Meilensteine |
 | `MEHRSPIELER.md` | Der LAN-Mehrspieler vollstaendig: Aufbau, Protokoll, alle sechs Spielarten, jede Zahl, jeder aufgetretene Fehler, Bauanleitung zum Wiedereinbau |
 | `KONTO.md` | Konto, Statistik und Loadouts: warum Supabase, warum die Zahlen nicht auseinanderlaufen koennen, und wie man es in zehn Minuten aufsetzt |
-| `KOSMETIK.md` | Kisten, Skins, Musikkits und die zweite Siegtafel - fuenf Bilder, die Begruendung dazu, und der ehrliche Ueberschlag, was ein Einbau kosten wuerde. **Eingebaut ist davon nichts.** Die Spielerkosmetik der Blendgranate (0.28) ist etwas anderes - siehe oben |
+| `KOSMETIK.md` | Entwurf und Umfang der geplanten Kisten, Skins, Musikkits und Siegtafel; Spielerkosmetik fuer Blendgranaten ist separat eingebaut |
 
 ### Wo die Einstellungen liegen
 
@@ -590,39 +574,10 @@ Wer dauerhaft ein anderes Mass will, aendert die Zahl in `BILD_MASS` in
 `dustfront/config.py`. Das ist die eine Stelle dafuer, und ein Test wacht
 darueber, dass Tabelle und gezeichnete Platzhalter sich decken.
 
-| Name | Mass | Was es ist |
-| --- | --- | --- |
-| `leer` | 32x32 | Loch in der Ebene, man sieht hindurch |
-| `boden`, `boden_2`, `boden_3`, `boden_4` | 32x32 | Bodenplatten, zufaellig abgewechselt |
-| `gitter` | 32x32 | Gitterrost |
-| `wand` | 32x32 | feste Wand, blockiert Sicht und Schuss |
-| `kiste` | 32x32 | Frachtkasten, blockiert nur Bewegung |
-| `treppe_hoch`, `treppe_runter` | 32x32 | Treppen, mit E zu benutzen |
-| `luke` | 32x32 | Luke nach unten |
-| `aufzug_tuer`, `aufzug_schacht` | 32x32 | Aufzug: Tuer unten im Fels, Schachtkopf oben; hineinlaufen genuegt |
-| `spieler` | 28x28 | die eigene Figur ohne bestimmte Waffe |
-| `spieler_repetierer` … `spieler_brecheisen` | 56x56 | die Figur mit der jeweiligen Waffe in der Hand |
-| `gegner_laeufer` | 28x28 | Laeufer |
-| `gegner_brecher` | 36x36 | Brecher, der schwere Gegner |
-| `geschoss` | 8x4 | fliegende Kugel |
-| `muendung` | 20x20 | Muendungsfeuer, wird additiv gemischt |
-| `medkit` | 16x14 | Medkit am Boden |
-| `granate` | 10x10 | fliegende Granate |
-| `huelse` | 4x3 | ausgeworfene Patronenhuelse |
-| `waffe_repetierer` … `waffe_brecheisen` | 26x11 | die sechs Symbole in Hotbar und Inventar |
-| `schatten` | 48x24 | Fleck unter jedem Wesen |
-| `blut` | 26x26 | bleibt liegen, wo eines gestorben ist |
-| `brandfleck` | 156x156 | Russ, den eine Granate hinterlaesst |
-| `wandschatten` | 39x39 | was eine feste Kachel auf den Boden wirft |
-| `vignette` | 640x360 | Abdunkelung zum Bildrand |
-
-Die letzten fuenf haben kein festes Mass im Spiel: sie richten sich nach dem,
-was sie wirft — der Schatten nach dem Koerper, der Blutfleck nach dem Wesen,
-der Brandfleck nach dem Wirkungskreis. Das Mass in der Tabelle ist ihr
-**Basismass**, und das Spiel rechnet sie von dort auf die gebrauchte Groesse
-um, hart und ohne Weichzeichnen. Wer sie ersetzt, malt also eine Form, keine
-feste Groesse. Fuer welchen Wert das Basismass gilt, steht in `DEKAL` in
-`config.py`.
+Die vollstaendige Namens- und Groessentabelle ist `BILD_MASS` in
+`dustfront/config.py`; sie enthaelt auch team- und waffenspezifische Figuren,
+Schwungbilder, Effekte und HUD-Symbole. `--vorlagen` schreibt aus dieser
+Tabelle aktuelle Vorlagen mit den passenden Abmessungen.
 
 Die Klangnamen stehen als `KLANG_NAMEN` in `config.py` und in
 `assets/sfx/LIESMICH.md`, mit der Regel, wann welcher spielt.
@@ -698,8 +653,8 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Phase | Bedeutung |
 | --- | --- |
-| `PRE-ALPHA` | Einzelne Teile laufen, es gibt noch keine durchgehende Spielschleife. Hier stehen wir. |
-| `ALPHA` | Man kann eine Runde von Anfang bis Ende spielen, Inhalte fehlen noch. |
+| `PRE-ALPHA` | Einzelne Teile laufen, eine durchgehende Spielschleife fehlt. |
+| `ALPHA` | Man kann Runden von Anfang bis Ende spielen; Inhalte und Feinschliff fehlen noch. Hier steht das Projekt. |
 | `BETA` | Alle Inhalte sind drin, es geht nur noch um Fehler und Balance. |
 | `RELEASE` | Ab `1.0.0`. |
 
@@ -707,6 +662,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.32.28 | Inventar-Statistik verträgt Waffen ohne Schadenswert wie C4; der Import des Spiels bricht dadurch nicht mehr ab. Gastgeber und Gast brauchen dieselbe Version; kein Netzprotokoll und keine Karten geaendert. |
 | 0.32.27 | Brecher vergroessert; LMG-, Pumpgun- und Rauchgranatentoene erneuert; C4 mit Fernzuendung, Admin-Konsole, Wurfgranaten ohne Nachladepause und Direktstart ohne Intro ergaenzt. Gastgeber und Gast brauchen dieselbe Version fuer C4-Zustand, Admin-Befehle und den vergroesserten Brecher; Karten unveraendert. |
 | 0.32.26 | **Mehrspieler-Einstieg und Brecher**: Im Hauptmenue waehlt man beim Mehrspieler zwischen Lobby erstellen und beitreten. Der Brecher hat 95 Leben und sieht wie ein dunklerer Zombie ohne Bruststreifen aus. Gastgeber und Gaeste brauchen dieselbe Version, damit Gegnerwerte uebereinstimmen; kein Protokoll und keine Karten geaendert. |
 | 0.32.25 | **Ein gemeinsames Hauptmenue**: Einzelspieler, Mehrspieler, Optionen, Steuerung und Mitwirkende sind vom selben Start aus erreichbar. Nach einer Runde kehrt das Spiel ins Menue zurueck. Kein Netzprotokoll und keine Karten geaendert. |
@@ -813,9 +769,10 @@ Alle Stellschrauben stehen oben in der jeweiligen Datei.
 
 ## Technik
 
-**Keine Assets.** Die 5x7-Pixelschrift des Menues, die beiden Schriften der
-Splash-Sequenz, der Wandler, das Gelaende und saemtliche Klaenge werden im
-Code erzeugt. Das Repo bleibt dadurch winzig und es kann nichts fehlen.
+**Platzhalter und Assets.** Pixel-Schrift, Splash-Grafik und fehlende
+Spielgrafik werden im Code erzeugt. Vorhandene Bilder und Klaenge unter
+`assets/` beziehungsweise `assets/sfx/` ersetzen die passenden
+Platzhalter; eigene Dateien koennen dort ergaenzt werden.
 
 **Aufloesung.** Das Menue rendert auf 480x270, die Splash-Sequenz auf 320x180.
 Beides wird auf das Fenster hochskaliert, wahlweise fuellend oder nur in
