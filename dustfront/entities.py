@@ -1131,7 +1131,6 @@ class Spieler(Wesen):
     # Kein fester Name: die Figur zeigt die Waffe, die sie gerade traegt.
     # Siehe die Eigenschaft bild() weiter unten.
     faellt = True
-    faehrt_aufzug = True     # world.Welt.aufzug_pruefen
 
     def __init__(self, pos, ebene=0) -> None:
         self.max_leben = K.SPIELER["leben"]
@@ -1289,10 +1288,10 @@ class Spieler(Wesen):
         if name == "c4" and self.c4_ladungen:
             rest = self.c4_rest
             gemischt["name"] = "DETONATOR"
-            gemischt["kurz"] = "BEREIT" if rest <= 0 else "LADEN %.1f" % rest
+            gemischt["kurz"] = "BEREIT" if self.c4_bereit else "LADEN %.1f" % rest
         elif name == "c4" and self.c4_netz_rest >= 0:
             gemischt["name"] = "DETONATOR"
-            gemischt["kurz"] = ("BEREIT" if self.c4_netz_rest <= 0 else
+            gemischt["kurz"] = ("BEREIT" if self.c4_bereit else
                                  "LADEN %.1f" % self.c4_netz_rest)
         return gemischt
 
@@ -1307,8 +1306,15 @@ class Spieler(Wesen):
     def c4_rest(self) -> float:
         ladungen = self.c4_ladungen
         if ladungen:
-            return min(l.lade_rest for l in ladungen)
+            return max(l.lade_rest for l in ladungen)
         return self.c4_netz_rest
+
+    @property
+    def c4_bereit(self) -> bool:
+        ladungen = self.c4_ladungen
+        if ladungen:
+            return all(l.bereit for l in ladungen)
+        return self.c4_netz_rest == 0.0
 
     # ---- Raketenwerfer -------------------------------------------------
     def rpg_nehmen(self) -> bool:

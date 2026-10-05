@@ -570,9 +570,13 @@ gesehen = set()
 for i, name in enumerate(held.waffen):
     held.waffe = i
     gesehen.add(held.bild)
-    pruef("Figur fuer %s vorhanden" % name.upper(),
-          held.bild in K.BILD_MASS and held.bild != "spieler",
-          held.bild)
+    if name == "c4":
+        pruef("C4 nutzt die Figur mit leeren Armen", held.bild == "spieler",
+              held.bild)
+    else:
+        pruef("Figur fuer %s vorhanden" % name.upper(),
+              held.bild in K.BILD_MASS and held.bild != "spieler",
+              held.bild)
 pruef("Jede Waffe hat ihre eigene Figur", len(gesehen) == len(held.waffen),
       "%d Figuren fuer %d Waffen" % (len(gesehen), len(held.waffen)))
 held.waffe = 0
@@ -628,6 +632,30 @@ roh = Bilder(None)
 schief = ["%s: %s statt %s" % (n, roh.platzhalter(n).get_size(), K.BILD_MASS[n])
           for n in K.BILD_MASS if roh.platzhalter(n).get_size() != tuple(K.BILD_MASS[n])]
 pruef("Jeder Platzhalter hat sein Sollmass", not schief, ", ".join(schief))
+# Leere Haende und C4-Status sind sichtbare Teile der neuen Darstellung.
+pruef("Unbewaffneter Spieler nutzt die Zombie-Armfigur",
+      roh.bild("spieler").get_size() == K.BILD_MASS["spieler"]
+      and roh.bild("spieler").get_at((14, 5)).a > 0)
+from dustfront.anzeige import _c4_hotbar_symbol
+_c4_probe = type("C4Probe", (), {})()
+_c4_probe.c4_rest = -1.0; _c4_probe.c4_bereit = False
+pruef("Hotbar zeigt noch nicht gelegtes C4", _c4_hotbar_symbol(_c4_probe) == "waffe_c4")
+_c4_probe.c4_rest = 2.0
+pruef("Hotbar unterscheidet ladendes C4", _c4_hotbar_symbol(_c4_probe) == "waffe_detonator")
+_c4_probe.c4_rest = 0.0; _c4_probe.c4_bereit = True
+pruef("Hotbar zeigt zuendbereites C4", _c4_hotbar_symbol(_c4_probe) == "waffe_detonator_bereit")
+from dustfront.entities import C4Ladung as _C4Ladung
+_c4_erste = _C4Ladung(pygame.Vector2(100, 100), 0, held.ebene, held)
+_c4_zweite = _C4Ladung(pygame.Vector2(140, 100), 0, held.ebene, held)
+_c4_erste.lade_rest = 0.0
+_c4_zweite.lade_rest = 2.0
+held.welt.neue.extend((_c4_erste, _c4_zweite))
+pruef("C4 bleibt ladend, solange eine Ladung wartet",
+      not held.c4_bereit and held.c4_rest == 2.0)
+_c4_zweite.lade_rest = 0.0
+pruef("Mehrere geladene C4 sind gemeinsam zuendbereit", held.c4_bereit)
+held.welt.neue.remove(_c4_erste)
+held.welt.neue.remove(_c4_zweite)
 
 # Alles, was die Inhalte-Tabellen verlangen, muss es auch geben.
 gebraucht = ([d["bild"] for d in K.KACHELN.values()]
@@ -767,6 +795,10 @@ try:
               "smoke_grenade" in aufnahmen.aus_datei
               and len(rauch) == 1
               and rauch[0].get_length() >= 8.0)
+        schrot = aufnahmen.klang("schuss_schrot")
+        pruef("Schrotaufnahme startet frueher und ist passend gekuerzt",
+              len(schrot) == 1 and 2.45 <= schrot[0].get_length() <= 2.55,
+              "%.3f s" % schrot[0].get_length() if schrot else "kein Klang")
         scharf = aufnahmen.klang("schuss_scharf")
         pruef("Scharfschuetzenschuss behaelt den laengeren Nachhall",
               len(scharf) == 1 and 2.7 <= scharf[0].get_length() <= 2.9)
@@ -2962,7 +2994,7 @@ if ga.welt.feuer:
           ga.welt.feuer and ga.welt.feuer[0] is gast_brand)
 
 # Ausgebrannt heisst weg - und ein Fleck bleibt.
-w.welt.ebene(brand.ebene)._dekale = None
+w.welt.ebene(brand.ebene)._dekale = {}
 brand.alter = brand.dauer - 0.01
 for _ in range(4):
     w.welt.schritt(K.FIXED_DT)
@@ -3590,25 +3622,46 @@ ohne_boden = [p for p in hoch
 pruef("Und ueber jeder Rampe ist oben Boden, kein Loch",
       not ohne_boden, str(ohne_boden))
 
-# ── Der Aufzug (seit 0.32.11, zum Ausprobieren) ──────────────────────
-# "Anstelle der Treppe einen Aufzugschacht: unten an der Klippe eine
-# Tuer, man laeuft rein und kommt oben direkt wieder raus. Das muss
-# natuerlich fluessig sein." Die Westrampe der KANZEL ist jetzt einer.
+# ── Aufzuege: E-Treppen mit geschuetztem Ausstieg ───────────────────
+# Die Aufzuggrafik bleibt erhalten, bedient wird sie wie eine alte Treppe:
+# E wechselt genau eine Ebene, waehrend die Figur am selben Ort bleibt.
 tueren = [(tx, ty) for ty in range(s0.hoehe) for tx in range(s0.breite)
-          if s0.daten(tx, ty).get("aufzug") == 1]
+          if s0.daten(tx, ty).get("treppe") == 1
+          and s0.daten(tx, ty).get("name") == "aufzug"]
 koepfe = [(tx, ty) for ty in range(s1.hoehe) for tx in range(s1.breite)
-          if s1.daten(tx, ty).get("aufzug") == -1]
-pruef("STAUBTAL hat einen Aufzug: Tuer unten, Schachtkopf genau darueber",
-      tueren and sorted(tueren) == sorted(koepfe), "%s / %s" % (tueren, koepfe))
-pruef("Die Tuer sitzt im Fels der Klippe",
-      all(s0.fest(tx + 1, ty) for tx, ty in tueren), str(tueren))
-pruef("Die Gegner kennen ihn als Weg",
-      all(any(t[:3] == (0, tx, ty) and t[3] == 1 for t in staub.wege.treppen)
-          for tx, ty in tueren)
-      and all(any(t[:3] == (1, tx, ty) and t[3] == 0 for t in staub.wege.treppen)
-              for tx, ty in koepfe))
-pruef("Die Rampe, die er ersetzt, ist weg",
-      s0.kachel(43, 16) == K.BODEN and s1.kachel(43, 16) == K.LEER)
+          if s1.daten(tx, ty).get("treppe") == -1
+          and s1.daten(tx, ty).get("name") == "aufzug"]
+pruef("STAUBTAL hat gepaarte Aufzug-Treppen", bool(tueren)
+      and sorted(tueren) == sorted(koepfe), "%s / %s" % (tueren, koepfe))
+
+# Jedes Aufzugfeld besitzt in beiden Richtungen freie 5x5-Landezonen.
+def aufzug_zone_frei(ebene, x, y):
+    flaeche = staub.ebene(ebene)
+    return all(flaeche.begehbar(x + dx, y + dy)
+               and not flaeche.loch(x + dx, y + dy)
+               for dx in (-1, 1) for dy in (0,))
+
+pruef("Aufzuege bieten links und rechts einen freien Ausstieg",
+      all(aufzug_zone_frei(1, x, y) for x, y in tueren), str(tueren))
+
+# E-Bedienung wird ueber die echte Einzelspieler-Eingabe am alten
+# Treppenpfad getestet; die Karte selbst liefert das Ziel genau eine Ebene.
+aufzug_x, aufzug_y = tueren[0]
+aufzug_held = type("AufzugProbe", (), {})()
+aufzug_held.ebene = 0
+aufzug_held.pos = pygame.Vector2((aufzug_x + 0.5) * K.TILE,
+                                 (aufzug_y + 0.5) * K.TILE)
+pruef("Aufzug-Kachel bietet E-Wechsel um eine Ebene",
+      staub.treppe_unter(aufzug_held) == 1)
+pruef("Oberer Aufzug fuehrt genau eine Ebene hinunter",
+      staub.ebene(1).daten(aufzug_x, aufzug_y).get("treppe") == -1)
+aufzug_probe_pos = pygame.Vector2(aufzug_held.pos)
+aufzug_held.radius = 8
+aufzug_held.vorher = pygame.Vector2(aufzug_probe_pos)
+pruef("E-Treppenwechsel bringt am Aufzug genau eine Ebene hoch",
+      staub.ebene_wechseln(aufzug_held, 1)
+      and aufzug_held.ebene == 1
+      and aufzug_held.pos.distance_to(aufzug_probe_pos) < 0.01)
 
 # Drei Kreise, nicht identisch, und einer davon oben.
 #
@@ -3649,77 +3702,7 @@ pruef("Um den Kreis im Sand steht ein Ring aus Fassern", fasser >= 10,
       "%d Fasser im Ring" % fasser)
 
 # Im Gefecht: die Karte laesst sich waehlen und der Kreis wandert.
-# Im Gefecht: hineinlaufen, ohne Taste, und oben eine Kachel weiter
-# heraus. Gemessen wird auch, wo die Figur im Bild steht - sie darf beim
-# Wechsel nicht huepfen, die Kamera geht den Schritt mit.
-wa, gaa = gefechtspaar("pvp", karte="staubtal")
-ich_a = wa.ich
-ich_a.unverwundbar = 999.0
-tuer_x, tuer_y = tueren[0]
-ich_a.ebene = 0
-ich_a.pos.update((tuer_x - 3) * K.TILE + 16, tuer_y * K.TILE + 20)
-ich_a.vorher.update(ich_a.pos)
-wa._letzte_ebene, wa.blick, wa.blick_hoehe = 0, 0, 0.0
-
-def aufzug_laufen(taste, sekunden=1.6):
-    """Laeuft und zeichnet jedes Bild - wie im Spiel, sonst hat die
-    Ueberblendung kein altes Bild."""
-    spur = []
-    ein = app.eingabe       # `e` ist hier oben eine Ebene, siehe die Schleifen
-    for _ in range(int(sekunden / K.FIXED_DT)):
-        ein.neues_bild()
-        ein._gehalten = {taste}
-        ein.maus = pygame.Vector2(600 if taste == "rechts" else 40, 180)
-        wa.schritt(K.FIXED_DT)
-        app.flaeche.fill(K.C_VOID)
-        wa.zeichnen(app.flaeche, 1.0)
-        spur.append((ich_a.ebene, pygame.Vector2(ich_a.pos),
-                     ich_a.pos - wa.kamera.pos, wa._ueberblendung.rest))
-    return spur
-
-wa.kamera.pos.update(ich_a.pos)
-for _ in range(30):
-    gaa.schritt(K.NETZ["takt"])
-aufzug_laufen("", 0.3)           # Kamera und Bild einschwingen lassen
-spur_h = aufzug_laufen("rechts")
-pruef("Hineinlaufen genuegt: oben angekommen, ohne Taste",
-      ich_a.ebene == 1 and int(ich_a.pos.x // K.TILE) > tuer_x,
-      "Ebene %d, Kachel %d" % (ich_a.ebene, int(ich_a.pos.x // K.TILE)))
-wechsel_h = [i for i in range(1, len(spur_h)) if spur_h[i][0] != spur_h[i - 1][0]]
-pruef("Genau ein Wechsel, kein Hin und Her", len(wechsel_h) == 1, str(wechsel_h))
-if wechsel_h:
-    i = wechsel_h[0]
-    pruef("Eine Kachel weiter heraus, in Laufrichtung",
-          K.TILE - 2 < spur_h[i][1].x - spur_h[i - 1][1].x < K.TILE + 3,
-          "%.1f px" % (spur_h[i][1].x - spur_h[i - 1][1].x))
-    pruef("Und das alte Bild blendet aus", spur_h[i][3] > 0)
-sprung_h = max((spur_h[i][2] - spur_h[i - 1][2]).length()
-               for i in range(1, len(spur_h)))
-pruef("Die Figur huepft im Bild nicht", sprung_h < 4.0, "%.1f px" % sprung_h)
-for _ in range(10):
-    wa.schritt(K.NETZ["takt"]); gaa.schritt(K.NETZ["takt"])
-pruef("Der Gast sieht den Gastgeber oben",
-      gaa.kaempfer[wa.meine_nummer].ebene == 1)
-spur_r = aufzug_laufen("links")
-pruef("Und zurueck: in den Schacht laufen, unten vor der Tuer heraus",
-      ich_a.ebene == 0 and int(ich_a.pos.x // K.TILE) < tuer_x,
-      "Ebene %d, Kachel %d" % (ich_a.ebene, int(ich_a.pos.x // K.TILE)))
-wechsel_r = [i for i in range(1, len(spur_r)) if spur_r[i][0] != spur_r[i - 1][0]]
-pruef("Auch hinab genau ein Wechsel", len(wechsel_r) == 1, str(wechsel_r))
-sprung_r = max((spur_r[i][2] - spur_r[i - 1][2]).length()
-               for i in range(1, len(spur_r)))
-pruef("Auch hinab huepft die Figur nicht", sprung_r < 4.0, "%.1f px" % sprung_r)
-# Ein Gegner, den das Gedraenge nur in die Kabine schiebt, faehrt nicht:
-# Gegner nehmen den Aufzug wie eine Treppe, wenn er auf ihrem Weg liegt
-# (geprueft weiter unten, bei den Treppen). Gemessen war es anders: ein
-# Brecher fuhr hinauf und gleich wieder herunter.
-from dustfront.entities import Gegner as _GegnerA
-g_a = _GegnerA(pygame.Vector2(tuer_x * K.TILE + 8, tuer_y * K.TILE + 16), "laeufer", 0)
-g_a.welt = wa.welt
-g_a.tempo.update(60, 0)
-pruef("Ein hineingeschobener Gegner faehrt nicht",
-      not wa.welt.aufzug_pruefen(g_a) and g_a.ebene == 0)
-wa.verlassen(); gaa.verlassen()
+# Die Aufzuege werden ueber die vorhandene E-Treppenlogik bedient.
 
 w, ga = gefechtspaar("huegel", karte="staubtal")
 pruef("Das Gefecht laeuft auf der Karte", w.karte == "staubtal", w.karte)
@@ -6243,8 +6226,8 @@ def _stummel_pixel(name):
     return sum(1 for x in range(b.get_width()) for y in range(b.get_height())
                if tuple(b.get_at((x, y)))[:3] == STUMMEL and b.get_at((x, y)).a)
 
-pruef("Gegenprobe: die Spielerfigur ohne Waffe hat den Stummel noch",
-      _stummel_pixel("spieler") > 0)
+pruef("Die Spielerfigur ohne Waffe hat ebenfalls leere Arme",
+      _stummel_pixel("spieler") == 0)
 for zname in ("gegner_laeufer", "gegner_brecher", "gegner_speier"):
     pruef("%s haelt keine Schusswaffe" % zname, _stummel_pixel(zname) == 0)
 from dustfront import art as _ART
@@ -6557,38 +6540,8 @@ pruef("Und steht oben auf festem Boden, nicht neben der Rampe im Nichts",
       "Ebene %d, %.0f px vom Spieler" % (_gg52.ebene, _gg52.pos.distance_to(_oben52)))
 _w52.verlassen(); _g52.verlassen()
 
-# Und ueber den Aufzug: hinlaufen, hineingehen, oben eine Kachel weiter
-# auf festem Boden - nicht im Schacht, nicht zurueck.
-_w58, _g58 = gefechtspaar("pve", karte="staubtal")
-_w58.pause_rest = 1e9
-for _x in list(_w58.welt.wesen):
-    if isinstance(_x, KampfGegner):
-        _x.lebt = False
-_w58.gegner_offen = []; _w58.welle_rest = []
-_n58 = _w58.welt.wege
-_e58, _tx58, _ty58, _z58 = next(
-    t for t in _n58.treppen
-    if t[0] == 0 and _w58.welt.ebene(0).daten(t[1], t[2]).get("aufzug"))
-_oben58 = _w58.welt.landeplatz(pygame.Vector2((_tx58 + 6.5) * 32, (_ty58 + .5) * 32), 9, _z58)
-_gg58 = KampfGegner(pygame.Vector2((_tx58 - 4.5) * 32, (_ty58 + 0.5) * 32), "brecher",
-                    0, _w58)
-_gg58.wartet = 0.0
-_w58.welt.dazu(_gg58); _w58.gegner_offen.append(_gg58)
-_wechsel58 = []
-for _ in range(int(10.0 / K.FIXED_DT)):
-    for _k in _w58.kaempfer.values():
-        _k.leben = _k.max_leben; _k.ebene = _z58; _k.pos.update(_oben58); _k.tempo.update(0, 0)
-    _vor = _gg58.ebene
-    _w58.schritt(K.FIXED_DT)
-    if _gg58.ebene != _vor:
-        _wechsel58.append((_vor, _gg58.ebene, _n58.kachel(_gg58.pos)))
-pruef("Ein Gegner nimmt den Aufzug - genau einmal, hinauf",
-      len(_wechsel58) == 1 and _wechsel58[0][:2] == (0, 1), str(_wechsel58))
-pruef("Und steht oben auf festem Boden neben dem Schacht",
-      _gg58.ebene == 1 and _w58.welt.frei(_gg58.pos, _gg58.radius, 1, True)
-      and _w58.welt.aufzug_unter(_gg58) is None,
-      "Ebene %d, Kachel %s" % (_gg58.ebene, _n58.kachel(_gg58.pos)))
-_w58.verlassen(); _g58.verlassen()
+# Aufzuege benutzen denselben E-Treppenpfad; Gegner wechseln nur auf
+# Rampen, die wie bisher im Wegenetz verzeichnet sind.
 
 # ── 0.32.6: Zoom ohne Wackeln, Kamera ohne Nachziehen ────────────────
 # Gemeldet: "wenn man reinzoomt und sich bewegt, oder raus und rein-

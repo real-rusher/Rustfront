@@ -441,6 +441,7 @@ BILD_MASS = {
     "waffe_granate":    (26, 11),
     "waffe_c4":         (26, 11),
     "waffe_detonator":  (26, 11),
+    "waffe_detonator_bereit": (26, 11),
     "waffe_rauch":      (26, 11),
     "waffe_molotov":    (26, 11),
     "waffe_blend":      (26, 11),
@@ -1087,8 +1088,7 @@ TRACER = dict(
 # fest      blockiert Bewegung
 # sicht     blockiert Schuesse und Sicht
 # treppe    Zielebene relativ zur aktuellen, sonst None
-# aufzug    wie treppe, aber ohne Taste: wer hineinlaeuft, faehrt
-#           (seit 0.32.11, world.Welt.aufzug_pruefen)
+# aufzug    Aufzugbild mit Treppenbedienung: E bringt eine Ebene weiter.
 LEER, BODEN, GITTER, WAND, KISTE, TREPPE_HOCH, TREPPE_RUNTER, LUKE, \
     AUFZUG_HOCH, AUFZUG_RUNTER = range(10)
 
@@ -1107,14 +1107,12 @@ KACHELN = {
                         treppe=-1),
     LUKE:          dict(name="luke",     fest=False, sicht=False, bild="luke",
                         treppe=-1),
-    # Der Aufzug: unten eine Tuer im Fels, oben der Schachtkopf genau
-    # darueber. Man laeuft hinein und kommt eine Kachel weiter auf der
-    # anderen Ebene heraus - in die Richtung, in die man lief. Auf der
-    # Gegenstelle landet man nie, sonst fuehre man gleich zurueck.
+    # Die alten Aufzugbilder bleiben, die Bedienung nutzt wieder E und
+    # wechselt genau eine Ebene wie eine Treppe.
     AUFZUG_HOCH:   dict(name="aufzug",   fest=False, sicht=False, bild="aufzug_tuer",
-                        aufzug=+1),
+                        treppe=+1),
     AUFZUG_RUNTER: dict(name="aufzug",   fest=False, sicht=False, bild="aufzug_schacht",
-                        aufzug=-1),
+                        treppe=-1),
 }
 
 # ══════════════════════════════════════════════════ INHALTE: Waffen

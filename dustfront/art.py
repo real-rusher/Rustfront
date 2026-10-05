@@ -662,7 +662,7 @@ for _i in range(K.SCHWUNG_BILDER):
 
 @platzhalter("spieler")
 def _spieler():
-    return _figur(28, K.C_HULL, K.C_HULL_SH, K.C_TEAL)
+    return _figur(28, K.C_HULL, K.C_HULL_SH, K.C_TEAL, bewaffnet=False)
 
 
 # Eine Figur je Waffe. Damit sieht man der Gestalt an, was sie traegt,
@@ -1289,6 +1289,15 @@ def _waffe_detonator():
     pygame.draw.rect(s, (234, 85, 53), (11, 4, 4, 2))
     pygame.draw.line(s, (44, 48, 42), (7, 10), (4, 11), 1)
     pygame.draw.line(s, (44, 48, 42), (18, 10), (21, 11), 1)
+    return s
+
+
+@platzhalter("waffe_detonator_bereit")
+def _waffe_detonator_bereit():
+    s = _waffe_detonator()
+    pygame.draw.rect(s, (28, 104, 91), (10, 3, 6, 4))
+    pygame.draw.rect(s, (89, 246, 190), (11, 4, 4, 2))
+    pygame.draw.line(s, (151, 255, 218), (12, 3), (14, 3), 1)
     return s
 
 

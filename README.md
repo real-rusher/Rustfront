@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.33.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -672,6 +672,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.0 | Aufzuege wieder als E-Treppen mit einem Ebenenschritt und freien Schutzbereichen; C4-Hotbar zeigt Lade- und Zuendestatus, unbewaffnete Spieler haben leere Zombiearme, der Schrotknall startet frueher. | Gastgeber und Gast brauchen dieselbe Version und `karten/staubtal.txt`; kein Protokollwechsel. |
 | 0.33.0 | Neue spielbare Schnee-Karte `schnee_test.py` mit drei Höhenebenen, Schneefels-Plateaus im regulären 3D-Klippenrenderer und sichtbaren Laufspuren. Das Sand-Kachelmuster ist entfernt, der Schrotknall setzt ohne Anfangsstille ein, und die Aufzüge liegen am Plateau-Rand. Gastgeber und Gäste brauchen dieselbe Version und Kartendatei; kein Protokollwechsel. |
 | 0.32.30 | Erste separate Schnee-Skizze; in 0.33.0 als vollständige, normal spielbare Einzelspielerkarte neu umgesetzt. |
 | 0.32.29 | STAUBTAL stark vergrößert und am Lageplan ausgerichtet: 300 × 240 Kacheln mit drei nummerierten Hotzones, drei Plateauformen und acht geschützten Aufzügen. Hotzone 3 liegt in einem befestigten Hof. Gastgeber und Gast müssen dieselbe Version und Karte haben; kein Protokollwechsel. |

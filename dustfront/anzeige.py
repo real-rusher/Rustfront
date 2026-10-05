@@ -51,6 +51,16 @@ W, H = K.GAME_W, K.GAME_H
 SCHATTEN = (8, 6, 4)
 KASTEN = (11, 8, 6, 214)        # Fuellung der Anzeigekaesten, halb deckend
 
+
+def _c4_hotbar_symbol(ich) -> str:
+    """Das Symbol zeigt Sprengsatz, Ladestand oder zuendbereiten Schalter."""
+    rest = getattr(ich, "c4_rest", -1.0)
+    if rest < 0.0:
+        return "waffe_c4"
+    if getattr(ich, "c4_bereit", rest <= 0.0):
+        return "waffe_detonator_bereit"
+    return "waffe_detonator"
+
 # Die festen Orte. Hier und nur hier - wer etwas verschiebt, sieht auf
 # einen Blick, was noch in der Naehe liegt.
 UNTEN = H - 40                  # Oberkante der unteren Kaesten
@@ -460,13 +470,15 @@ class Anzeige:
             wd = K.WAFFEN[name]
             leer = bool(wd.get("magazin")) and not ich.magazin.get(name, 0) \
                 and (not g.knapp or not ich.vorrat.get(name, 0))
-            rahmen = (K.C_RED if leer and aktiv else
+            c4_bereit = (name == "c4" and _c4_hotbar_symbol(ich)
+                         == "waffe_detonator_bereit")
+            rahmen = (K.C_TEAL if c4_bereit else
+                      K.C_RED if leer and aktiv else
                       K.C_AMBER if aktiv else K.C_MUTED_DK)
             ui.kasten(ziel, r, rahmen, (34, 10, 8, 230) if leer else KASTEN, 3)
-            detonator = (name == "c4" and
-                         (getattr(ich, "c4_rest", -1.0) >= 0.0))
-            sym = g.renderer.bilder.bild(
-                "waffe_detonator" if detonator else "waffe_" + name)
+            symbol = (_c4_hotbar_symbol(ich) if name == "c4" else
+                      "waffe_" + name)
+            sym = g.renderer.bilder.bild(symbol)
             ziel.blit(sym, (r.centerx - sym.get_width() // 2,
                             r.centery - sym.get_height() // 2))
             SCHRIFT.zeichnen(ziel, "%d" % ((i + 1) % 10), r.x + 3, r.y + 2,

@@ -1,0 +1,111 @@
+DUSTFRONT – Arbeitsprotokoll vom 5. Oktober 2026
+================================================
+
+Ziel
+----
+Diese Aenderung stellt die STAUBTAL-Aufzuege wieder auf die alte Bedienung
+mit E-Taste um. Ein Druck wechselt genau eine Ebene, ohne die Figur seitlich
+zu versetzen. Die Bereiche an den oberen Aufzugsausgaengen sollen links und
+rechts begehbare Ausweichwege bieten. Zusaetzlich wurden der Schrotklang,
+die Figur ohne Waffe und die C4-Anzeige angepasst. Fuer alle neuen
+Verhaltensweisen wurden Tests ergaenzt.
+
+Ausgangszustand
+---------------
+Arbeitsbranch: multiplayer-test
+Ausgangscommit: 232b85f (Add playable snowfield map and fix terrain details)
+Projektvorgaben: Python 3.8 bis 3.14; Version und README bei jeder Aenderung
+fortschreiben; Karten-/Netzaenderungen in README und docs/MEHRSPIELER.md
+dokumentieren. Das Drahtprotokoll wurde nicht geaendert.
+
+Code- und Kartenarbeiten
+------------------------
+* dustfront/config.py: Die bisherigen Aufzugkacheln behalten ihr Aussehen,
+  tragen jetzt aber dieselben relativen Treppenziele (+1/-1) wie die alten
+  E-Treppen. Dadurch verwenden Einzelspieler und Mehrspieler den vorhandenen
+  E-Druck und wechseln nur eine Ebene.
+* dustfront/world.py: Automatisches Fahren beim Betreten, die gesonderte
+  Ausfahrtssuche und der automatische Aufzugsschritt wurden entfernt.
+* dustfront/entities.py: Das nicht mehr verwendete Spielerflag fuer
+  automatische Aufzuege wurde entfernt. Bei mehreren C4-Ladungen richtet
+  sich die Restzeit nach der laengsten Ladezeit; BEREIT erscheint erst, wenn
+  jede eigene Ladung gezuendet werden kann.
+* dustfront/anzeige.py und dustfront/art.py: Das C4-Hotbarfeld zeigt drei
+  Zustaende: gelegtes C4, ladenden Zuender und bereiten Zuender. Der bereite
+  Zustand hat ein eigenes gruene/tuerkises Symbol und einen tuerkisen Rahmen.
+  Spieler ohne Waffe erhalten die Figur mit leeren Armen.
+* dustfront/audio.py: Der Schrot-Ausschnitt beginnt bei 0,14 statt 0,28
+  Sekunden. Auch die Dateien aus dem CODEX-Sammelordner werden tatsaechlich
+  anhand der Schnitt-Tabelle gekuerzt; dieser Ladepfad hatte den zuvor
+  eingestellten Schnitt umgangen.
+* karten/staubtal.txt: Die sechs passenden Aufzugpaare haben neu gestaltete
+  Vorfelder; auf Ebene 1 sind direkt links und rechts der Ausgaenge
+  begehbare Felder angelegt. Die urspruenglichen Plateau- und
+  Aufzugsbildkacheln bleiben vorhanden.
+* karten/schneefeld.txt: Die ebenfalls uncommitteten Anpassungen der
+  Aufzugsbereiche auf der Schnee-Testkarte sind Bestandteil dieses
+  Arbeitsstands.
+* tests/test_spiel.py: Tests fuer Aufzugpaare, seitliche Ausstiege und einen
+  stationaeren Ein-Ebenen-Wechsel ergaenzt. Veraltete Tests fuer automatisches
+  Hineinlaufen entfernt. Dazu Tests fuer Spielerarme, Schrot-Ausschnitt und
+  C4-Anzeige inklusive mehrerer Ladungen ergaenzt.
+* rustfront_menu.py, README.md und docs/MEHRSPIELER.md: Version auf 0.34.0
+  erhoeht und den Karten-/Spielverhaltensaenderungen entsprechend dokumentiert.
+* KONTO.html wurde mit `python -m dustfront --kontoseite` neu erzeugt.
+
+Testlaeufe
+----------
+Alle Testlaeufe wurden am 5. Oktober 2026 auf pygame-ce 2.5.8, SDL 2.32.10
+und Python 3.14.2 ausgefuehrt. Eine Python-3.8-Laufzeit war in dieser
+Umgebung nicht verfuegbar.
+
+1. `python tests/test_spiel.py`
+   Der Lauf erreicht das Ende. Die neuen gezielten Pruefungen waren erfolgreich:
+   * Spieler ohne Waffe verwendet die Figur mit leeren Armen.
+   * C4-Symbol wechselt zwischen C4, Laden und bereit.
+   * Mehrere Ladungen bleiben bis zur letzten Ladezeit nicht zuendbereit.
+   * Schrotaufnahme wird auf 2,510 Sekunden geschnitten.
+   * Alle sechs Aufzugpaare stimmen ueberein.
+   * Oberer Ausgang ist links und rechts begehbar.
+   * Der Aufzug wechselt genau eine Ebene und behaelt die Position.
+
+   Der Gesamttest meldet weiterhin `FEHLER` bei folgenden bestehenden
+   Pruefungen, daher ist dieser Testlauf NICHT gruen:
+   * Klangtabelle: `lmg_salve` und `c4_explosion` liefern keinen Klang;
+     die Rauchgranatenaufnahme erfuellt die alte Erwartung von mindestens
+     acht Sekunden nicht.
+   * STAUBTAL-Grundriss: Begehbarkeit (36.445/72.000), obere Flaeche
+     (22.917), zehn begehbare Felder unter Plateaus und Fassring bei Kreis A.
+   * STAUBTAL-Gegnerwegtest: 0 von 4 Gegnern gehen zum Spieler auf Ebene 1.
+   * Rendering-/HUD-Pruefungen: Plateau-Abdeckung, Hotbar-Ueberdeckung und
+     Felswanddarstellung.
+   * Ein alter Gegner-Treppentest beobachtet keinen Ebenenwechsel und besteht
+     den anschliessenden Landetest nicht.
+
+   Diese Punkte wurden nicht durch Abschwaechen oder Abschalten der Tests
+   verborgen. Sie benoetigen separate Ursachenpruefung; ein gruener kompletter
+   Spieltest kann deshalb nicht bestaetigt werden.
+2. `python tests/test_menues.py` – `FEHLER: keine`.
+3. `python -m dustfront --kontoseite && python tests/test_konto.py` – Seite
+   geschrieben; `FEHLER: keine`.
+4. `python tests/test_admin_sql.py` – uebersprungen, da `initdb` und `psql`
+   nicht installiert sind; danach `FEHLER: keine`.
+5. `python tests/karte_bauen.py` – `FEHLER: keine`; beide Ebenen sind vom
+   Rampenfeld erreichbar.
+6. `python tests/kontoseite_browser.py` – uebersprungen, da Playwright fehlt.
+7. `git diff --check` – keine Whitespace-Fehler.
+
+Aufraeumen und Arbeitsgrenzen
+-----------------------------
+`Unbenannt.png`/`unbenannt.png` war im Workspace nicht vorhanden und musste
+nicht geloescht werden. Die bereits vorgefundenen Fremdaenderungen
+`SQL_MUSICKIT_TEMP.txt` (geloescht) und `omniroute.log` (untracked) wurden
+nicht in den Commit aufgenommen. Das Fehlen von Fehlern in einzelnen Tests
+ist kein Beweis fuer Fehlerfreiheit; insbesondere bleiben die oben genannten
+Spieltest-Fehler offen.
+
+Commit und Push
+---------------
+Commit: Restore E-operated elevators and status displays
+Branch: multiplayer-test
+Push: Das Ergebnis steht in der Abschlussmeldung zu diesem Arbeitsprotokoll.

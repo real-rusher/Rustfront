@@ -70,7 +70,7 @@ _ZUSCHNITTE = {
     "freesound_community-sniper-rifle-firing-shot-1-39789.mp3": (0.0, 2.8),
     # Die Aufnahme hat am Anfang rund 0,28 Sekunden digitale Stille; der
     # Schrotknall soll mit dem Schuss einsetzen, nicht erst danach.
-    "universfield-shotgun-blast-352038.mp3": (0.28, 2.65),
+    "universfield-shotgun-blast-352038.mp3": (0.14, 2.65),
     "yodguard-spear_thrust-6-382403.mp3": (0.0, 0.72),
     "universfield-combat-impact-352458.mp3": (0.0, 0.72),
     "universfield-hammer-steel-impact-454390.mp3": (0.0, 0.72),
@@ -631,7 +631,11 @@ class Klaenge:
             if pfad.is_file():
                 try:
                     self.aus_datei.add(name)
-                    return [pygame.mixer.Sound(str(pfad))]
+                    sound = pygame.mixer.Sound(str(pfad))
+                    zuschnitt = _ZUSCHNITTE.get(dateiname)
+                    if zuschnitt:
+                        sound = _ausschnitt(sound, *zuschnitt)
+                    return [sound]
                 except pygame.error as grund:
                     self.fehler.append("%s: %s" % (pfad.name, grund))
         gefunden = []
