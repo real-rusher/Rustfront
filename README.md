@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.32.29, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.32.30, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -163,6 +163,15 @@ der alten weggenommen.
 | Esc | Pausenmenü (im LAN-Gefecht läuft die Runde darunter weiter) |
 | F11 | Vollbild |
 | F3 | Debug-Anzeige |
+
+## Schnee-Gelaendetest
+
+Die eigenstaendige, vom Hauptspiel getrennte Plateau- und Schnee-Demo startet
+mit `python schnee_test.py`. Mit WASD oder den Pfeiltasten laeuft man ueber
+das Testfeld; Fussabdruecke bleiben sichtbar, praegen sich ab und verblassen
+langsam. Esc beendet die Demo. Die stilisierte Felsform mit Schneekappen,
+Eisadern, gestuften Flanken und Schneerinnen zeigt einen moeglichen Look fuer
+verschneite Plateaus.
 
 ### Waffen
 
@@ -663,6 +672,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.32.30 | Eigenständiger Schnee-Geländetest `python schnee_test.py`: begehbares Testfeld mit langsam verblassenden Fußabdrücken und einer pixeligen Studie aus Schneekappen, Eisadern, Felsstufen und Schneerinnen. Betrifft weder Netz noch Spielkarten des Hauptspiels. |
 | 0.32.29 | STAUBTAL stark vergrößert und am Lageplan ausgerichtet: 300 × 240 Kacheln mit drei nummerierten Hotzones, drei Plateauformen und acht geschützten Aufzügen. Hotzone 3 liegt in einem befestigten Hof. Gastgeber und Gast müssen dieselbe Version und Karte haben; kein Protokollwechsel. |
 | 0.32.28 | Inventar-Statistik verträgt Waffen ohne Schadenswert wie C4; der Import des Spiels bricht dadurch nicht mehr ab. Gastgeber und Gast brauchen dieselbe Version; kein Netzprotokoll und keine Karten geändert. |
 | 0.32.27 | Brecher vergrössert; LMG-, Pumpgun- und Rauchgranatentöne erneuert; C4 mit Fernzündung, Admin-Konsole, Wurfgranaten ohne Nachladepause und Direktstart ohne Intro ergänzt. Gastgeber und Gast brauchen dieselbe Version für C4-Zustand, Admin-Befehle und den vergrösserten Brecher; Karten unverändert. |
