@@ -375,6 +375,12 @@ BILD_MASS = {
     "sand_4":           (TILE, TILE),
     "sand_wand":        (TILE, TILE),
     "sand_kiste":       (TILE, TILE),
+    # Verschneiter Kachelsatz fuer die lokale Hoehenkarten-Demo.
+    "schnee":           (TILE, TILE),
+    "schnee_2":         (TILE, TILE),
+    "schnee_3":         (TILE, TILE),
+    "schnee_4":         (TILE, TILE),
+    "schnee_fels":      (TILE, TILE),
     "gitter":           (TILE, TILE),
     "wand":             (TILE, TILE),
     "kiste":            (TILE, TILE),

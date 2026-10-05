@@ -237,6 +237,9 @@ class Renderer:
         self._blut = bilder.bild("blut")
         self._wandschatten = bilder.bild("wandschatten")
         self._boden_namen = ("boden", "boden_2", "boden_3", "boden_4")
+        self._schneespur = pygame.Surface((10, 6), pygame.SRCALPHA)
+        pygame.draw.ellipse(self._schneespur, (67, 105, 128, 255),
+                            self._schneespur.get_rect())
 
     # ---- Vorgefertigtes -------------------------------------------
     def _passend(self, cache: dict, name: str, groesse, deckkraft: float = 1.0):
@@ -314,6 +317,8 @@ class Renderer:
         "": {},
         "wueste": {"boden": ("sand", "sand_2", "sand_3", "sand_4"),
                    "wand": "sand_wand", "kiste": "sand_kiste"},
+        "schnee": {"boden": ("schnee", "schnee_2", "schnee_3", "schnee_4"),
+                   "wand": "schnee_fels"},
     }
 
     def ebene_zeichnen(self, ziel, welt, index: int, ecke, dunkel: int | None) -> None:
@@ -349,6 +354,19 @@ class Renderer:
                 if dunkel is not None:
                     s = self.dunkel(s, dunkel)
                 ziel.blit(s, (tx * K.TILE - ecke.x, sy))
+
+        # Fussspuren liegen auf der Schneeschicht und altern mit der Welt.
+        # Ein fester Weltzeitstempel sorgt dafuer, dass Kamerawechsel und
+        # Ebene-Ansicht die Abdruecke nicht neu erzeugen oder auffrischen.
+        if getattr(welt, "satz", "") == "schnee":
+            for sx, sy, sebene, zeit in welt.schneespuren:
+                alter = welt.zeit - zeit
+                if sebene != index or alter >= 24.0:
+                    continue
+                alpha = max(0, int(115 * (1.0 - alter / 24.0)))
+                spur = self._schneespur.copy()
+                spur.set_alpha(alpha)
+                ziel.blit(spur, (int(sx - ecke.x - 5), int(sy - ecke.y - 3)))
 
         # Zweiter Durchgang: Schlagschatten, dann die festen Kacheln darueber
         sch = self._wandschatten
@@ -639,8 +657,10 @@ class Renderer:
             cache[index] = maske      # passt nicht aufeinander: alles zeigen
             return maske
         fest = {k: d["fest"] for k, d in K.KACHELN.items()}
+        tragend = (K.AUFZUG_HOCH, K.AUFZUG_RUNTER)
         for i, k in enumerate(oben.kacheln):
-            if k != K.LEER and not fest[unten.kacheln[i]]:
+            if k != K.LEER and not fest[unten.kacheln[i]] \
+                    and unten.kacheln[i] not in tragend:
                 maske[i] = 1
         # Zweiter Durchgang fuer Wand ueber Wand, gegen die erste Maske.
         erst = bytes(maske)

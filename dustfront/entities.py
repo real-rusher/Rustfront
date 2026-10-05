@@ -1697,8 +1697,19 @@ class Spieler(Wesen):
             self.zaehlen("strecke", gegangen)
             if self.weg > s["stiefel_abstand"]:
                 self.weg = 0.0
-                wolke(self.welt, self.pos + pygame.Vector2(0, 4), 2, 26, 0.34,
-                      K.C_MUTED_DK, self.ebene, 1, "staub", 360, 0, 6.0)
+                if getattr(self.welt, "satz", "") == "schnee":
+                    seit = pygame.Vector2(-self.tempo.y, self.tempo.x)
+                    if seit.length_squared() > 0:
+                        seit.scale_to_length(5.0)
+                    pos = self.pos - self.tempo.normalize() * 5 if self.tempo.length_squared() else self.pos
+                    for seite in (-1, 1):
+                        p = pos + seit * seite
+                        self.welt.schneespuren.append([p.x, p.y, self.ebene, self.welt.zeit])
+                    if len(self.welt.schneespuren) > 900:
+                        del self.welt.schneespuren[:100]
+                else:
+                    wolke(self.welt, self.pos + pygame.Vector2(0, 4), 2, 26, 0.34,
+                          K.C_MUTED_DK, self.ebene, 1, "staub", 360, 0, 6.0)
 
         # Nachladen und Feuern laufen immer weiter: beim Laufen, im Sturz
         # und beim Dash. Keine Handlung sperrt eine andere aus - siehe

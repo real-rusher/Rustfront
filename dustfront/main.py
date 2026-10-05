@@ -65,7 +65,7 @@ def starten(headless: bool = False, beenden: bool = True,
             return 1
         app.schieben(sitzung.LobbySuche(app, app.oben))
     else:
-        app.schieben(Spiel(app))
+        app.schieben(Spiel(app, karte=app.auftrag.get("karte")))
     app.laufen(beenden=beenden)
     return 0
 

@@ -301,6 +301,7 @@ class Welt:
         # Boden, Wand und Kiste gegen Sand, Fels und Fass. Steht als
         # `satz:` im Kopf der Kartendatei.
         self.satz = satz
+        self.schneespuren: list[list[float]] = []
         self.wesen: list = []
         self.neue: list = []
         self.partikel: list = []

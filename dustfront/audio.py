@@ -68,6 +68,9 @@ _ZUSCHNITTE = {
     # diesen Hauptbestandteil heraus.
     "smoke-grenade-sound-effect.mp3": (0.0, 9.143),
     "freesound_community-sniper-rifle-firing-shot-1-39789.mp3": (0.0, 2.8),
+    # Die Aufnahme hat am Anfang rund 0,28 Sekunden digitale Stille; der
+    # Schrotknall soll mit dem Schuss einsetzen, nicht erst danach.
+    "universfield-shotgun-blast-352038.mp3": (0.28, 2.65),
     "yodguard-spear_thrust-6-382403.mp3": (0.0, 0.72),
     "universfield-combat-impact-352458.mp3": (0.0, 0.72),
     "universfield-hammer-steel-impact-454390.mp3": (0.0, 0.72),

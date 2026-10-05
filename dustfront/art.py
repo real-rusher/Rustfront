@@ -102,7 +102,10 @@ def _boden4():
 
 def _sand_basis(seed):
     r = random.Random(seed)
-    ton = tuple(max(0, min(255, c + r.randrange(-3, 4))) for c in K.C_SAND)
+    # Abweichende Grundtoene pro Variante bildeten ein regelmaessiges
+    # Kachelmuster ueber grosse Sandflaechen. Die Varianten unterscheiden
+    # sich weiter durch ihre Riffel und Koerner, nicht durch ihre Flaeche.
+    ton = K.C_SAND
     s = _flaeche(T, T)
     s.fill(ton)
     # Riffel: flache Wellen, wie der Wind sie zieht.
@@ -125,6 +128,54 @@ def _sand_basis(seed):
         b, h = r.randrange(2, 4), r.randrange(2, 3)
         pygame.draw.rect(s, (86, 72, 52), (x, y + 1, b, h))
         pygame.draw.rect(s, (132, 114, 84), (x, y, b, 1))
+    return s
+
+
+def _schnee_basis(seed):
+    r = random.Random(seed)
+    ton = (177, 202, 213)
+    s = _flaeche(T, T)
+    s.fill(ton)
+    for _ in range(5):
+        x = r.randrange(2, T - 12)
+        y = r.randrange(3, T - 4)
+        laenge = r.randrange(5, 14)
+        farbe = r.choice(((201, 220, 226), (153, 182, 197), (190, 211, 220)))
+        pygame.draw.line(s, farbe, (x, y), (x + laenge, y - 1))
+    _koerner(s, (215, 231, 235), 21, seed + 1)
+    _koerner(s, (139, 169, 186), 11, seed + 2)
+    return s
+
+
+@platzhalter("schnee")
+def _schnee():
+    return _schnee_basis(401)
+
+
+@platzhalter("schnee_2")
+def _schnee2():
+    return _schnee_basis(409)
+
+
+@platzhalter("schnee_3")
+def _schnee3():
+    return _schnee_basis(419)
+
+
+@platzhalter("schnee_4")
+def _schnee4():
+    return _schnee_basis(431)
+
+
+@platzhalter("schnee_fels")
+def _schnee_fels():
+    s = _flaeche(T, T)
+    s.fill((54, 76, 93))
+    pygame.draw.rect(s, (107, 137, 154), (0, 0, T, 5))
+    pygame.draw.line(s, (160, 193, 205), (2, 1), (T - 3, 1), 1)
+    for y, x in ((8, 3), (14, 11), (20, 2), (26, 17)):
+        pygame.draw.line(s, (34, 53, 69), (x, y), (T - 4, y - 2), 2)
+    _koerner(s, (129, 160, 176), 20, 439)
     return s
 
 

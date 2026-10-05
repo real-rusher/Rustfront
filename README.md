@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.32.30, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.33.0, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -148,7 +148,7 @@ der alten weggenommen.
 | Maus rechts | Einzielen (bei der Scharfschützenwaffe) |
 | Mausrad | Im Gefecht: Sichtweite (weiter weg oder näher; ausserhalb des normalen Bildes Nebel). Im Einzelspiel: Ansicht eine Ebene hoch oder runter |
 | Strg + Mausrad, Bild hoch / Bild runter | Ansicht eine Ebene hoch oder runter (Gefecht) |
-| 1 bis 9 | Waffe wählen |
+| 1 bis 9, 0 | Waffe auf Platz 1 bis 10 wählen |
 | F | Brecheisen |
 | R | Nachladen |
 | V | Feuerart wechseln (beim MG: Dauerfeuer oder Salve) |
@@ -166,12 +166,12 @@ der alten weggenommen.
 
 ## Schnee-Gelaendetest
 
-Die eigenstaendige, vom Hauptspiel getrennte Plateau- und Schnee-Demo startet
-mit `python schnee_test.py`. Mit WASD oder den Pfeiltasten laeuft man ueber
-das Testfeld; Fussabdruecke bleiben sichtbar, praegen sich ab und verblassen
-langsam. Esc beendet die Demo. Die stilisierte Felsform mit Schneekappen,
-Eisadern, gestuften Flanken und Schneerinnen zeigt einen moeglichen Look fuer
-verschneite Plateaus.
+Die eigenstaendige, vom Hauptspiel getrennte Schnee-Karte startet mit
+`python schnee_test.py`. Das ist eine normale Einzelspielerpartie mit der
+ueblichen Steuerung, Waffen, Gegnern, Kollision, Ebenenwechseln und HUD. Die
+Karte hat drei Hoehenebenen, Schneefels-Plateaus und Schneerinnen. Laufspuren
+druecken sich sichtbar in den Schnee und verblassen nach und nach. Mit Esc
+oeffnet sich wie im Hauptspiel das Pausenmenue.
 
 ### Waffen
 
@@ -672,7 +672,8 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
-| 0.32.30 | Eigenständiger Schnee-Geländetest `python schnee_test.py`: begehbares Testfeld mit langsam verblassenden Fußabdrücken und einer pixeligen Studie aus Schneekappen, Eisadern, Felsstufen und Schneerinnen. Betrifft weder Netz noch Spielkarten des Hauptspiels. |
+| 0.33.0 | Neue spielbare Schnee-Karte `schnee_test.py` mit drei Höhenebenen, Schneefels-Plateaus im regulären 3D-Klippenrenderer und sichtbaren Laufspuren. Das Sand-Kachelmuster ist entfernt, der Schrotknall setzt ohne Anfangsstille ein, und die Aufzüge liegen am Plateau-Rand. Gastgeber und Gäste brauchen dieselbe Version und Kartendatei; kein Protokollwechsel. |
+| 0.32.30 | Erste separate Schnee-Skizze; in 0.33.0 als vollständige, normal spielbare Einzelspielerkarte neu umgesetzt. |
 | 0.32.29 | STAUBTAL stark vergrößert und am Lageplan ausgerichtet: 300 × 240 Kacheln mit drei nummerierten Hotzones, drei Plateauformen und acht geschützten Aufzügen. Hotzone 3 liegt in einem befestigten Hof. Gastgeber und Gast müssen dieselbe Version und Karte haben; kein Protokollwechsel. |
 | 0.32.28 | Inventar-Statistik verträgt Waffen ohne Schadenswert wie C4; der Import des Spiels bricht dadurch nicht mehr ab. Gastgeber und Gast brauchen dieselbe Version; kein Netzprotokoll und keine Karten geändert. |
 | 0.32.27 | Brecher vergrössert; LMG-, Pumpgun- und Rauchgranatentöne erneuert; C4 mit Fernzündung, Admin-Konsole, Wurfgranaten ohne Nachladepause und Direktstart ohne Intro ergänzt. Gastgeber und Gast brauchen dieselbe Version für C4-Zustand, Admin-Befehle und den vergrösserten Brecher; Karten unverändert. |

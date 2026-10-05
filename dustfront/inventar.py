@@ -37,9 +37,9 @@ from .font import SCHRIFT
 TAFEL = pygame.Rect(40, 22, 560, 316)
 SPALTE_Y = 54
 SPALTE_H = 136
-# Ein Waffenplatz. Seit es neun Plaetze sind (drei Reihen), sind sie
-# niedriger: mit 32 lag die dritte Reihe unter den zwei Hinweiszeilen.
-FELD_B, FELD_H = 56, 28
+# Zehn Plaetze brauchen vier Reihen. Die Hoehe haelt auch die letzte Reihe
+# oberhalb der Hinweiszeilen, statt sie in den Fuss der Tafel zu schieben.
+FELD_B, FELD_H = 56, 20
 FELD_ABSTAND = 4
 TASCHE_SPALTEN = 8
 

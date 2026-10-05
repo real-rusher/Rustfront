@@ -29,9 +29,10 @@ from .world import freier_punkt, testkarte
 
 
 class Spiel(Szene):
-    def __init__(self, app, seed=None) -> None:
+    def __init__(self, app, seed=None, karte=None) -> None:
         super().__init__(app)
         self.renderer = Renderer(app.bilder)
+        self.karte = karte
         # Im Spiel ohne Seed, damit jede Runde anders ausfaellt. Die Tests
         # geben einen festen mit: eine Pruefung, die mal gruen und mal rot
         # ist, sagt nichts, und man gewoehnt sich an, sie zu uebersehen.
@@ -40,9 +41,20 @@ class Spiel(Szene):
 
     # ---- Aufbau ------------------------------------------------------
     def neu_aufbauen(self) -> None:
-        self.welt = testkarte()
+        kopf = {}
+        if self.karte:
+            self.welt, kopf = welt_modul.karte_lesen(self.karte)
+        else:
+            self.welt = testkarte()
+        if self.welt is None:
+            self.welt = testkarte()
         self.kamera = Kamera()
-        start = freier_punkt(self.welt, 0, self.rnd)
+        start_text = kopf.get("start", "").replace(",", " ").split()
+        if len(start_text) == 2:
+            start = pygame.Vector2((int(start_text[0]) + 0.5) * K.TILE,
+                                   (int(start_text[1]) + 0.5) * K.TILE)
+        else:
+            start = freier_punkt(self.welt, 0, self.rnd)
         self.held = Spieler(start, 0)
         self.welt.dazu(self.held)
         self.welt.held = self.held
@@ -256,7 +268,7 @@ class Spiel(Szene):
                         held.waffe_daten["name"],
                         K.WAFFEN[held.waffe_name]["modus_daten"][neu_modus]["kurz"])
             for nr in range(1, K.HOTBAR_PLAETZE + 1):
-                if ((nr == 10 and ev.key == pygame.K_0)
+                if ((nr == 10 and e.gedrueckt("waffe10"))
                         or (nr < 10 and e.gedrueckt("waffe%d" % nr))):
                     held.waffe_waehlen(nr - 1)
             if e.gedrueckt("heilen"):
