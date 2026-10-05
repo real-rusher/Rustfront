@@ -553,8 +553,9 @@ def aus_argumenten(argumente: list[str]) -> int:
         if not daten["eintraege"]:
             print("  noch leer")
         for platz, e in enumerate(daten["eintraege"], 1):
-            print("  %2d. %-12s %4d Abschuesse  %4d Tode  %3d Runden"
-                  % (platz, e["name"], e["abschuesse"], e["tode"], e["runden"]))
+            print("  %2d. %-12s %6.1f MVP-Punkte  %3d MVP-Titel  %4d Abschuesse"
+                  % (platz, e["name"], e["mvp_punkte"], e["mvp_auszeichnungen"],
+                     e["abschuesse"]))
         return 0
     if "--kosmetik" in argumente:
         from .core import Bilder

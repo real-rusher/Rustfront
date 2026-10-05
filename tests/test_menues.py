@@ -304,20 +304,27 @@ pruef("und liegt im Wegwerfordner", _WEG in bestenliste.beschreibung(),
       bestenliste.beschreibung())
 
 daten = bestenliste.eintragen([
-    {"name": "MEISTER", "abschuesse": 7, "tode": 2},
-    {"name": "BESUCH", "abschuesse": 3, "tode": 5},
+    {"name": "MEISTER", "abschuesse": 7, "tode": 2,
+     "mvp_punkte": 90, "mvp": False},
+    {"name": "BESUCH", "abschuesse": 3, "tode": 5,
+     "mvp_punkte": 130, "mvp": True},
 ])
 pruef("Ergebnis wird eingetragen", len(daten["eintraege"]) == 2)
-pruef("Bester steht oben", daten["eintraege"][0]["name"] == "MEISTER",
+pruef("Die beste Rundenwertung steht oben", daten["eintraege"][0]["name"] == "BESUCH",
       daten["eintraege"][0]["name"])
 
 # Eine zweite Runde muss dazuzaehlen, nicht ersetzen
-daten = bestenliste.eintragen([{"name": "MEISTER", "abschuesse": 4, "tode": 1}])
+daten = bestenliste.eintragen([{"name": "MEISTER", "abschuesse": 4, "tode": 1,
+                                "mvp_punkte": 80, "mvp": True}])
 meister = [e for e in daten["eintraege"] if e["name"] == "MEISTER"][0]
-pruef("Runden werden zusammengezaehlt", meister["abschuesse"] == 11,
-      "%d Abschuesse, %d Runden" % (meister["abschuesse"], meister["runden"]))
+pruef("Abschuesse und MVP-Punkte werden zusammengezaehlt",
+      meister["abschuesse"] == 11 and meister["mvp_punkte"] == 170
+      and meister["mvp_auszeichnungen"] == 1,
+      "%d Abschuesse, %.1f MVP-Punkte, %d MVP-Auszeichnungen"
+      % (meister["abschuesse"], meister["mvp_punkte"], meister["mvp_auszeichnungen"]))
 pruef("Die Liste ueberlebt einen Neustart",
-      bestenliste.laden()["eintraege"][0]["abschuesse"] == 11)
+      bestenliste.laden()["eintraege"][0]["abschuesse"] == 11
+      and bestenliste.laden()["eintraege"][0]["mvp_punkte"] == 170)
 
 # Kaputte Datei darf nichts kosten
 from dustfront import pfade

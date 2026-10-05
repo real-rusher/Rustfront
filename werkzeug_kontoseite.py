@@ -27,8 +27,9 @@ steht im Quelltext. Eine Datei, kein Server, kein Installieren.
 
 Was die Seite **nicht** tut: sie rechnet nichts aus, was das Spiel
 rechnet. Sie zeigt an, was auf dem Server steht, und schreibt genau
-drei Sachen zurueck - den Anzeigenamen, die Loadouts und die eigene
-Spielerkosmetik (Ton und Bild der Blendgranate). Alles andere ist zu
+vier Sachen zurueck - den Anzeigenamen, die Loadouts, die eigene
+Spielerkosmetik (Ton und Bild der Blendgranate) und das Music Kit fuer
+Rundenergebnisse. Alles andere ist zu
 lesen und nicht zu aendern; Zahlen, die man selbst setzen kann, waeren
 keine Statistik mehr.
 

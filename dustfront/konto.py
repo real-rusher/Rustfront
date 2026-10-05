@@ -565,15 +565,16 @@ class Konto:
             return
         ton = str(antwort.daten.get("ton") or "")
         bild = str(antwort.daten.get("bild") or "")
-        if not ton and not bild:
+        music_kit = str(antwort.daten.get("music_kit") or "")
+        if not ton and not bild and not music_kit:
             self.kosmetik = None
             self.kosmetik_fehler = ""
             self._kosmetik_merken(None, "", "")
             return
         try:
-            self.kosmetik = spielerkosmetik.aus_konto(ton, bild)
+            self.kosmetik = spielerkosmetik.aus_konto(ton, bild, music_kit)
             self.kosmetik_fehler = ""
-            self._kosmetik_merken(self.kosmetik, ton, bild)
+            self._kosmetik_merken(self.kosmetik, ton, bild, music_kit)
         except ValueError as fehler:
             # Auf dem Server liegt jetzt etwas, das nicht gilt. Dann auch
             # nicht mehr das Alte von der Platte - sonst kaeme es beim
@@ -587,7 +588,8 @@ class Konto:
             return self._ordner / KOSMETIK_DATEI
         return pfade.datei(KOSMETIK_DATEI)
 
-    def _kosmetik_merken(self, kosmetik, ton: str, bild: str) -> None:
+    def _kosmetik_merken(self, kosmetik, ton: str, bild: str,
+                          music_kit: str = "") -> None:
         pfad = self._kosmetik_pfad()
         if pfad is None:
             return
@@ -598,7 +600,8 @@ class Konto:
                 return
             pfad.parent.mkdir(parents=True, exist_ok=True)
             pfad.write_text(json.dumps({"konto": self.kennung, "ton": ton,
-                                        "bild": bild}), encoding="utf-8")
+                                        "bild": bild, "music_kit": music_kit}),
+                            encoding="utf-8")
         except OSError:
             pass
 
@@ -613,7 +616,8 @@ class Konto:
             if not isinstance(daten, dict) or daten.get("konto") != self.kennung:
                 return
             self.kosmetik = spielerkosmetik.aus_konto(
-                str(daten.get("ton") or ""), str(daten.get("bild") or ""))
+                str(daten.get("ton") or ""), str(daten.get("bild") or ""),
+                str(daten.get("music_kit") or ""))
         except (OSError, ValueError):
             self.kosmetik = None
 

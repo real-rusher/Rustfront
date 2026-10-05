@@ -2831,6 +2831,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self.vorbei = True
         self.gewonnen = gewonnen
         self._match_ende_ton()
+        self.endwerte = self._mvp_werte()
         self.liste = self._endstand()
         bestenliste.eintragen(self.liste)
         if self.ist_gastgeber:
@@ -2841,7 +2842,6 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             # ein Gast die Meldung zweimal bekommt oder sein Abgleich
             # dreimal losgeht, ist damit gleichgueltig.
             self.partie = self.partie or ablage.kennung()
-            self.endwerte = self._werte_aller()
             self.gastgeber.an_alle({"t": "ende", "liste": self.liste,
                                     "gewonnen": gewonnen, "welle": self.welle,
                                     "sieger": self.sieger_team,
@@ -2866,6 +2866,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             gewonnen = len(fuehrende) == 1 and fuehrende[0] is self.ich
         else:
             gewonnen = self.gewonnen
+        konto = getattr(self.app, "konto", None)
+        kosmetik = getattr(konto, "kosmetik", None)
+        music = kosmetik.music_klang() if kosmetik is not None else None
+        if music is not None:
+            self.app.klaenge.ton_spielen(music, 0.7)
+            return
         self.app.klaenge.spielen("won_match" if gewonnen else "lost_match",
                                  0.7)
 
@@ -2880,6 +2886,33 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         Zahlen ablegen.
         """
         return {str(k.nummer): self._werte_von(k) for k in self.kaempfer.values()}
+
+    def _mvp_werte(self) -> dict:
+        """Rundenergebnisse mit einer vergleichbaren MVP-Wertung versehen."""
+        werte = self._werte_aller()
+        sieger = self.sieger_team
+        if not self.mit_teams and self.gewonnen and self.kaempfer:
+            bester = max(k.abschuesse for k in self.kaempfer.values())
+            fuehrende = [k for k in self.kaempfer.values()
+                         if k.abschuesse == bester]
+            sieger_nummer = (fuehrende[0].nummer if len(fuehrende) == 1
+                             else -1)
+        else:
+            sieger_nummer = -1
+        for nummer, eintrag in werte.items():
+            bonus = (35.0 if sieger >= 0 and eintrag["team"] == sieger
+                     else 35.0 if int(nummer) == sieger_nummer else 0.0)
+            eintrag["werte"]["mvp_punkte"] = bestenliste.mvp_punkte(
+                eintrag["werte"], bonus)
+        punkte = [e["werte"]["mvp_punkte"] for e in werte.values()]
+        hoechster = max(punkte) if punkte else 0.0
+        mvp = next((n for n, e in werte.items()
+                    if e["werte"]["mvp_punkte"] == hoechster), None)
+        for nummer, eintrag in werte.items():
+            eintrag["werte"]["mvp"] = int(nummer == mvp and hoechster > 0)
+            eintrag["werte"]["mvp_auszeichnungen"] = int(
+                nummer == mvp and hoechster > 0)
+        return werte
 
     def _werte_von(self, k) -> dict:
         """Die Zahlen eines Kaempfers, so wie sie gebucht werden."""
@@ -2940,8 +2973,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._gebucht = partie
         self._runde_gebucht = True
         if werte is None:
-            werte = (self._werte_von(self.ich) if self.ist_gastgeber
-                     else (self._zwischenstand or self._werte_von(self.ich)))
+            if self.ist_gastgeber:
+                werte = ((self.endwerte or {}).get(str(self.ich.nummer))
+                         or self._werte_von(self.ich))
+            else:
+                werte = (self._zwischenstand or self._werte_von(self.ich))
         zahlen = dict(werte.get("werte") or {})
         art = K.MODUS_ART.get(self.modus, "")
         if art in ("pvp", "pve"):
@@ -3016,7 +3052,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
 
     def _endstand(self) -> list[dict]:
         return bestenliste.sortiert(
-            [{"name": k.name, "abschuesse": k.abschuesse, "tode": k.tode}
+            [{"name": k.name, "abschuesse": k.abschuesse, "tode": k.tode,
+              "mvp_punkte": (self.endwerte or {}).get(str(k.nummer), {})
+              .get("werte", {}).get("mvp_punkte", 0),
+              "mvp": bool((self.endwerte or {}).get(str(k.nummer), {})
+                          .get("werte", {}).get("mvp", 0))}
              for k in self.kaempfer.values()])
 
     # ---- Weltmeldung ----------------------------------------------------
@@ -5099,13 +5139,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 "tode": int(werte.get("tode", 0)),
                 "waffe": self._lieblingswaffe(eintrag.get("waffen")),
                 "opfer": self._haeufigstes_opfer(eintrag.get("opfer")),
+                "mvp_punkte": float(werte.get("mvp_punkte", 0) or 0),
+                "mvp": bool(werte.get("mvp", 0)),
             })
         if not zeilen:
             for k in self.kaempfer.values():
                 zeilen.append({"nummer": k.nummer, "name": k.name,
                                "team": k.team, "abschuesse": k.abschuesse,
-                               "tode": k.tode, "waffe": "", "opfer": ""})
-        zeilen.sort(key=lambda z: (-z["abschuesse"], z["tode"], z["name"]))
+                               "tode": k.tode, "waffe": "", "opfer": "",
+                               "mvp_punkte": 0.0, "mvp": False})
+        zeilen.sort(key=lambda z: (-z["mvp_punkte"], -z["abschuesse"],
+                                   z["tode"], z["name"]))
         return zeilen
 
     @staticmethod
@@ -5200,12 +5244,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                        ausrichtung="mitte")
 
         zeilen = self._tafel_zeilen()
+        mvp = next((z for z in zeilen if z.get("mvp")), None)
+        if mvp is not None:
+            f.zeichnen(ziel, "MVP: %s  ·  %.0f PUNKTE" % (
+                mvp["name"], mvp["mvp_punkte"]), K.GAME_W // 2, 62,
+                K.C_AMBER, 1, ausrichtung="mitte")
         if self.mit_teams:
             breite = 300
             hoch = self._tafel_hoehe(max(
                 len([z for z in zeilen if z["team"] == 0]),
                 len([z for z in zeilen if z["team"] == 1])))
-            oben = max(72, (K.GAME_H - hoch) // 2)
+            oben = max(78, (K.GAME_H - hoch) // 2)
             for seite in range(2):
                 x = 10 + seite * (K.GAME_W - 2 * 10 - breite)
                 self._tafel_spalte(ziel, x, oben, breite,
@@ -5217,7 +5266,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                                    oben + hoch + 8, breite, ohne, -1)
         else:
             breite = 360
-            oben = max(72, (K.GAME_H - self._tafel_hoehe(len(zeilen))) // 2)
+            oben = max(78, (K.GAME_H - self._tafel_hoehe(len(zeilen))) // 2)
             self._tafel_spalte(ziel, (K.GAME_W - breite) // 2, oben, breite,
                                zeilen, -1)
         if self.plan_laeuft and self.plan_weiter >= 0:

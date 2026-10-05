@@ -455,7 +455,6 @@ KLANG_NAMEN = (
     "schuss_sturm",
     "schuss_schrot",
     "schuss_scharf",
-    "schuss_lmg",
     "granate",
     "sturz",                # Aufsetzen nach einem Fall
     "nahkampf",
@@ -1569,6 +1568,8 @@ WERTE = (
     ("spielzeit",     "SPIELZEIT",        "summe"),
     ("serie",         "BESTE SERIE",      "bestes"),
     ("abschuesse_r",  "BESTE RUNDE",      "bestes"),
+    ("mvp_punkte",    "MVP-PUNKTE",       "summe"),
+    ("mvp_auszeichnungen", "MVP-RUNDEN",   "summe"),
 )
 
 # Welche Spielart zu welcher Seite der Statistik gehoert (WERTE, *_pvp

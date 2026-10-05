@@ -54,7 +54,7 @@ Ausnahmen stehen in 2.4.
 | `dustfront/netz.py` | ~250 | Steckdosen, Verbindungen, JSON-Zeilen. Weiss nichts vom Spiel. |
 | `dustfront/mehrspieler.py` | ~1400 | Die Spielszene `Gefecht` und drei Wesen. Weiss alles vom Spiel. |
 | `dustfront/upnp.py` | ~250 | Der Weg durch den Router, fuer Runden ueber das Internet. Weiss nichts vom Spiel. |
-| `dustfront/bestenliste.py` | ~110 | Bestenliste im Benutzerordner. |
+| `dustfront/bestenliste.py` | ~150 | MVP-Punkte und Auszeichnungen ueber alle Runden im Benutzerordner. |
 | `dustfront/regeln.py` | ~380 | Seit 0.27: jede Regel einer Runde einmal - Name, Werte, wann sie gilt (12b). |
 | `dustfront/lobby.py` | ~690 | Seit 0.27: Lobby, Rundenplan und die Tafel dazu (12b). |
 | `dustfront/anzeige.py` | ~530 | Seit 0.27: die Anzeige im Gefecht (12b). |
@@ -1863,7 +1863,14 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.32.23 | Die Endmeldung enthaelt je Spieler die MVP-Punkte und MVP-Auszeichnung der Runde | Gastgeber und Gast brauchen dieselbe Version, sonst kennt der Gast die MVP-Zeile nicht |
 | 0.32.11 | STAUBTAL hat zwei neue Kachelarten (Aufzug `^` und `v`) | eine alte Version kennt sie nicht und saehe dort Boden - darum wird die Version beim Beitreten verglichen, und ein alter Gast wird abgewiesen |
+
+Das persoenliche Music Kit wird vom eigenen Konto geladen und nur auf dem
+eigenen Rechner fuer Sieg und Niederlage abgespielt. Es wird nicht ueber
+das Gefecht an andere verteilt. Auf dem Kontoserver muss vorher die neue
+Spalte samt Groessenpruefung aus `docs/KONTO.md`, Abschnitt 5.6, angelegt
+und die aktualisierte ADMIN-Funktion aus Abschnitt 5.8 eingespielt sein.
 
 **0.32.12:** Gameplay-Randfehler im gemeinsamen Spielerkern behoben:
 verzoegerte Medkits heilen keine toten oder am Boden liegenden Spieler,

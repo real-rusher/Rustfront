@@ -317,15 +317,16 @@ try:
           not p["ok"] and "ZWISCHENDURCH" in p["fehler"], p)
     pruef("Der Spieler sieht die neuen Loadouts",
           "VOM ADMIN" in sql("select loadouts::text from profil;", rolle="authenticated", wer=a))
-    p = rpc("admin_kosmetik_schreiben", W, a, "VE9O", "QklMRA==")
+    p = rpc("admin_kosmetik_schreiben", W, a, "VE9O", "QklMRA==", "TVVTSUM=")
     pruef("Kosmetik eines anderen setzen", p.get("ok") is True, p)
     p = rpc("admin_kosmetik", W, a)
-    pruef("... und lesen", p.get("ton") == "VE9O" and p.get("bild") == "QklMRA==", p)
-    p = rpc("admin_kosmetik_schreiben", W, a, "x" * 540001, "")
+    pruef("... Ton, Bild und Music Kit lesen", p.get("ton") == "VE9O"
+          and p.get("bild") == "QklMRA==" and p.get("music_kit") == "TVVTSUM=", p)
+    p = rpc("admin_kosmetik_schreiben", W, a, "x" * 540001, "", "")
     pruef("Zu gross wird abgelehnt, nicht abgeschnitten",
           not p["ok"] and "ZU GROSS" in p["fehler"]
           and rpc("admin_kosmetik", W, a)["ton"] == "VE9O", p.get("fehler"))
-    rpc("admin_kosmetik_schreiben", W, a, "", "")
+    rpc("admin_kosmetik_schreiben", W, a, "", "", "")
     pruef("Beides leer: die Zeile ist weg",
           sql("select count(*) from kosmetik;") == "0")
 
@@ -358,7 +359,7 @@ try:
     pruef("Ein Konto 'admin' laesst der Server nicht anlegen", "VORBEHALTEN" in f, f[-60:])
 
     print("\n-- Loeschen --")
-    rpc("admin_kosmetik_schreiben", W, b, "VE9O", "")
+    rpc("admin_kosmetik_schreiben", W, b, "VE9O", "", "")
     p = rpc("admin_loeschen", "falsch", b)
     pruef("Mit falschem Kennwort wird nichts geloescht",
           not p["ok"] and sql("select count(*) from auth.users where id = '%s';" % b) == "1")

@@ -8,8 +8,8 @@ den bisherigen flachen Dateien wie `assets/sfx/medkit.wav`; diese bleiben
 weiterhin unterstuetzt.
 
 Zum unabhaengigen Anhoeren `python tools/soundboard.py` starten. Einzelne
-Klangereignisse lassen sich anklicken; MG-Dauerfeuer, MG-Salven und das
-Sturmgewehr laufen beim Gedrueckthalten im Spieltakt.
+Klangereignisse lassen sich anklicken; das Sturmgewehr laeuft beim
+Gedrueckthalten im Spieltakt.
 
 Die beiliegenden MP3s sind vorlaeufige Playtest-Aufnahmen. Vor dem Release
 sollen alle Quellen und Nutzungsrechte geprueft und noetigenfalls die
@@ -24,7 +24,6 @@ Aufnahmen ersetzt werden.
 | `schuss_schrot` | Schrot |
 | `schuss_scharf` | Scharfschuetze |
 | `schuss` | jede Schusswaffe, die keine eigene Datei hat |
-| `schuss_lmg` | leichtes Maschinengewehr |
 | `granate` | Einschlag der Granate |
 | `wurf` | die Granate verlaesst die Hand |
 | `nahkampf` | Brecheisen |

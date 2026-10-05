@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.32.21, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.32.23, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -412,7 +412,7 @@ bei jedem selbst und sind reine Kosmetik.
 | --- | --- |
 | `netz.py` | Verbindungen, Protokoll aus JSON-Zeilen, Gastgeber und Gast |
 | `mehrspieler.py` | Die Gefechtsszene, Punkte, Wiedereinstieg, Rundenende |
-| `bestenliste.py` | Abschuesse ueber alle Runden, im Benutzerordner |
+| `bestenliste.py` | MVP-Punkte und Auszeichnungen ueber alle Runden, im Benutzerordner |
 
 ### Was der Test noch nicht kann
 
@@ -496,7 +496,7 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `minikarte.py` | Die Minikarte oben links |
 | `windows_tls.py` | Unter Windows: Zertifikate von Windows pruefen lassen |
 | `spielerkosmetik.py` | Eigener Ton und eigenes Bild fuer die Blendgranate: pruefen, verteilen, zeigen |
-| `bestenliste.py` | Abschuesse ueber alle Runden |
+| `bestenliste.py` | MVP-Punkte und Auszeichnungen ueber alle Runden |
 | `konto.py` | Anmeldung, Profil, Loadouts, das Journal der Runden |
 | `ablage.py` | Wo Konten und Zahlen liegen: Datei oder Server |
 
@@ -710,6 +710,8 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.32.23 | **Runden-MVP und Music Kit**: MVP-Punkte werten Abschuesse, Gegner und Bosse, Schaden, Trefferquote, Hilfen, Zielzeit, Medkits und Tode; Rundentafel und Bestenliste zeigen Punkte und Auszeichnungen. Eigener Kontoton wird fuer Sieg und Niederlage abgespielt; die Kontoseite benoetigt die neue `music_kit`-Spalte und RPC-Fassung aus `docs/KONTO.md`. Das Endpaket enthaelt die MVP-Wertung; Gastgeber und Gaeste brauchen dieselbe Version. Keine Karten geaendert. |
+| 0.32.22 | **LMG-Klang entfernt**: Das LMG spielt den Sturmgewehrklang; der eigene LMG-Klang und die Soundboard-Proben dafuer sind entfernt. Kein Netz- oder Kartenverhalten geaendert. |
 | 0.32.21 | **Klaenge angepasst**: Der MG-Schuss nutzt wieder den alten kurzen Ausschnitt; die Nahkampf-Schwing- und Trefferklaenge laufen vollstaendiger aus. Rundenstart, Sieg und Niederlage sind im Soundboard direkt pruefbar. Kein Netz- oder Kartenverhalten geaendert. |
 | 0.32.20 | **Soundboard-Pfad korrigiert**: Das separate Soundboard sucht Aufnahmen nun in `assets/sfx` statt neben dem Projektordner. Es kennzeichnet pro Klang, ob eine Audiodatei oder ein Code-Platzhalter abgespielt wird. Kein Netz- oder Kartenverhalten geaendert. |
 | 0.32.19 | **Klangkorrekturen und separates Soundboard**: Nahkampf spielt nur noch den passenden Schwung-/Trefferklang; Rauch, MG, Scharfschuetze und Molotow erhalten passende Ausschnitte. `python tools/soundboard.py` startet unabhaengig vom Spiel und bietet Einzelklang, MG-Dauerfeuer, MG-Salve und Sturmgewehr bei Spieltempo. Mehrspieler: kein Protokollwechsel; Gastgeber und Gast verwenden denselben Klangstand. |

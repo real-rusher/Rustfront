@@ -392,8 +392,9 @@ ist, soll es nicht erfragen muessen, sondern anklicken koennen.
 
 ### Was sie nicht kann, mit Absicht
 
-* **Zahlen aendern.** Geschrieben werden genau drei Sachen: der
-  Anzeigename, die Loadouts und die eigene Spielerkosmetik (5.6). Werte,
+* **Zahlen aendern.** Geschrieben werden genau vier Sachen: der
+  Anzeigename, die Loadouts, die eigene Spielerkosmetik und das Music Kit
+  (5.6). Werte,
   die man selbst setzen kann, waeren keine Statistik mehr.
 * **Das eigene Konto loeschen.** Das kann nur der ADMIN (5.8) - ohne
   *secret key*, der in keiner Datei stehen darf, die jemand herunterladen
@@ -450,10 +451,12 @@ ist, in `Stand`. Zwei Stellen, nicht zwanzig.
 
 ---
 
-### 5.6 Spielerkosmetik (seit 0.28)
+### 5.6 Spielerkosmetik (seit 0.28), Music Kit (seit 0.32.23)
 
-Eigener Ton und eigenes Bild fuer die Blendgranate, gemacht in der
-Kontoseite (Reiter KOSMETIK). Dafuer braucht es **eine weitere Tabelle**.
+Eigener Ton und eigenes Bild fuer die Blendgranate sowie ein persoenlicher
+Music-Kit-Ton fuer Sieg und Niederlage, gemacht in der Kontoseite (Reiter
+KOSMETIK). Das Music Kit nutzt den bearbeiteten Ton aus der Werkstatt und
+spielt ihn bei beiden Ergebnissen. Dafuer braucht es **eine weitere Tabelle**.
 Einmal im **SQL Editor** ausfuehren:
 
 ```sql
@@ -466,12 +469,24 @@ create table if not exists kosmetik (
              references auth.users(id) on delete cascade,
   blend_ton  text not null default '',   -- WAV, Base64
   blend_bild text not null default '',   -- PNG, Base64
+  music_kit  text not null default '',   -- eigener WAV-Ton fuer Sieg und Niederlage
   geaendert  timestamptz not null default now(),
   -- Die Grenzen stehen auch hier, nicht nur im Spiel: ein veraenderter
   -- Klient soll den Server nicht mit Megabytes fuellen koennen.
   constraint kosmetik_ton_groesse  check (octet_length(blend_ton)  <= 540000),
-  constraint kosmetik_bild_groesse check (octet_length(blend_bild) <= 210000)
+  constraint kosmetik_bild_groesse check (octet_length(blend_bild) <= 210000),
+  constraint kosmetik_music_kit_groesse check (octet_length(music_kit) <= 540000)
 );
+
+-- Einmal auch auf bereits vorhandenen Servern ausfuehren.
+alter table kosmetik add column if not exists music_kit text not null default '';
+do $$ begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'kosmetik_music_kit_groesse') then
+    alter table kosmetik add constraint kosmetik_music_kit_groesse
+      check (octet_length(music_kit) <= 540000);
+  end if;
+end $$;
 
 alter table kosmetik enable row level security;
 
@@ -773,7 +788,8 @@ begin
   if f is not null then return f; end if;
   select * into k from public.kosmetik where kosmetik.konto = admin_kosmetik.konto;
   return jsonb_build_object('ok', true, 'ton', coalesce(k.blend_ton, ''),
-                            'bild', coalesce(k.blend_bild, ''));
+                            'bild', coalesce(k.blend_bild, ''),
+                            'music_kit', coalesce(k.music_kit, ''));
 end $$;
 
 -- ── Aendern ───────────────────────────────────────────────────────
@@ -806,23 +822,28 @@ end $$;
 
 -- Beides leer heisst: weg damit. Die Groessengrenzen der Tabelle gelten
 -- auch hier - eine zu grosse Datei wird abgelehnt, nicht abgeschnitten.
+drop function if exists public.admin_kosmetik_schreiben(text, uuid, text, text);
 create or replace function public.admin_kosmetik_schreiben(wort text, konto uuid,
-                                                           ton text, bild text)
+                                                           ton text, bild text,
+                                                           music_kit text)
 returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare f jsonb;
 begin
   f := public.admin_darf(wort);
   if f is not null then return f; end if;
-  if coalesce(ton, '') = '' and coalesce(bild, '') = '' then
+  if coalesce(ton, '') = '' and coalesce(bild, '') = ''
+     and coalesce(music_kit, '') = '' then
     delete from public.kosmetik where kosmetik.konto = admin_kosmetik_schreiben.konto;
     return jsonb_build_object('ok', true);
   end if;
   begin
-    insert into public.kosmetik (konto, blend_ton, blend_bild, geaendert)
-    values (admin_kosmetik_schreiben.konto, coalesce(ton, ''), coalesce(bild, ''), now())
+    insert into public.kosmetik (konto, blend_ton, blend_bild, music_kit, geaendert)
+    values (admin_kosmetik_schreiben.konto, coalesce(ton, ''), coalesce(bild, ''),
+            coalesce(music_kit, ''), now())
     on conflict on constraint kosmetik_pkey do update
       set blend_ton = excluded.blend_ton, blend_bild = excluded.blend_bild,
+          music_kit = excluded.music_kit,
           geaendert = now();
   exception when check_violation then
     return jsonb_build_object('ok', false, 'fehler', 'ZU GROSS FUER DEN SERVER');
@@ -1134,4 +1155,3 @@ fuenfundzwanzig Jahren ab; wer sie erneuern will, nimmt aus
 `certifi.where()` dieselben Eintraege (die Namen stehen in der Datei als
 `# Label:`) und ersetzt die Datei. Die eigenen des Systems und die im
 Benutzerordner gelten weiter daneben.
-

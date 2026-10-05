@@ -767,9 +767,6 @@ try:
               "smoke_grenade" in aufnahmen.aus_datei
               and len(rauch) == 1
               and rauch[0].get_length() >= 8.0)
-        mg = aufnahmen.klang("schuss_lmg")
-        pruef("MG-Einzelschuss behaelt seinen Ausklang",
-              len(mg) == 1 and 0.65 <= mg[0].get_length() <= 0.8)
         scharf = aufnahmen.klang("schuss_scharf")
         pruef("Scharfschuetzenschuss behaelt den laengeren Nachhall",
               len(scharf) == 1 and 2.7 <= scharf[0].get_length() <= 2.9)
@@ -777,7 +774,7 @@ try:
         pruef("Molotowklang reicht ueber die Branddauer",
               len(molotow) == 1
               and abs(molotow[0].get_length() - K.FEUER["dauer"]) < 0.1)
-        eingebaut = ("schuss_lmg", "schuss_scharf", "granate", "dash",
+        eingebaut = ("schuss_scharf", "granate", "dash",
                      "downed_not_dead", "nahkampf_schwung",
                      "nahkampf_treffer_organisch",
                      "nahkampf_treffer_metall", "molotov_glass",
@@ -2763,6 +2760,14 @@ w.verlassen(); ga.verlassen()
 # Mannschaften links und rechts, in ihren Farben, je Zeile Abschuesse,
 # Tode, das Verhaeltnis der Runde, das Zeichen der meistbenutzten Waffe
 # und der am oeftesten Erledigte.
+from dustfront import bestenliste
+kampf = bestenliste.mvp_punkte({"abschuesse": 2, "schaden": 500,
+                                "treffer_spieler": 10, "tode": 1})
+zielspiel = bestenliste.mvp_punkte({"hilfen": 2, "zonenzeit": 120,
+                                    "medkits": 2})
+pruef("MVP wertet Kampf, Teamhilfe, Zielzeit und Ueberleben zusammen",
+      zielspiel > kampf and bestenliste.mvp_punkte({"abschuesse": 1}, 35)
+      > bestenliste.mvp_punkte({"abschuesse": 1}))
 w, ga = gefechtspaar("team")
 for i, n in enumerate(("ROTA", "ROTB", "BLAUA"), 2):
     if i not in w.kaempfer:
@@ -2774,7 +2779,8 @@ leute[0].zaehlen("schuesse", 90, "schrot")
 leute[0].opfer[leute[1].nummer] = 5
 leute[0].opfer[leute[-1].nummer] = 2
 leute[1].abschuesse, leute[1].tode = 2, 7
-w.endwerte = w._werte_aller()
+w.sieger_team = 0
+w.endwerte = w._mvp_werte()
 
 zeilen = w._tafel_zeilen()
 pruef("Die Tafel hat je Spieler eine Zeile",
@@ -2782,6 +2788,9 @@ pruef("Die Tafel hat je Spieler eine Zeile",
       % (len(zeilen), len(w.kaempfer)))
 pruef("Und ist nach Abschuessen sortiert",
       zeilen[0]["abschuesse"] >= zeilen[-1]["abschuesse"])
+pruef("Pro Runde ist genau ein MVP markiert und oben auf der Tafel",
+      sum(bool(z["mvp"]) for z in zeilen) == 1 and zeilen[0]["mvp"]
+      and zeilen[0]["mvp_punkte"] > 0)
 erste = next(z for z in zeilen if z["nummer"] == leute[0].nummer)
 pruef("Die meistbenutzte Waffe zaehlt nach Schuessen, nicht nach Abschuessen",
       erste["waffe"] == "schrot", erste["waffe"])
@@ -2822,6 +2831,33 @@ gast_zeilen = ga._tafel_zeilen()
 pruef("Der Gast baut dieselbe Tafel",
       [z["name"] for z in gast_zeilen] == [z["name"] for z in zeilen],
       str([z["name"] for z in gast_zeilen]))
+
+# Ein eingerichtetes Music Kit ersetzt auf jedem Rechner beide Ergebnis-Toene.
+from types import SimpleNamespace
+altes_konto = w.app._konto
+music_sentinel = object()
+w.app._konto = SimpleNamespace(kosmetik=SimpleNamespace(
+    music_klang=lambda: music_sentinel))
+klang_log = []
+alt_ton, alt_name = w.app.klaenge.ton_spielen, w.app.klaenge.spielen
+w.app.klaenge.ton_spielen = lambda ton, laut=1.0: klang_log.append(("kit", ton))
+w.app.klaenge.spielen = lambda name, laut=1.0: klang_log.append(("standard", name))
+w._ende_ton_gespielt = False; w.sieger_team = 0
+w._match_ende_ton()
+w._ende_ton_gespielt = False; w.sieger_team = 1
+w._match_ende_ton()
+pruef("Music Kit spielt denselben eigenen Track bei Sieg und Niederlage",
+      klang_log == [("kit", music_sentinel), ("kit", music_sentinel)])
+w.app._konto = SimpleNamespace(kosmetik=None)
+klang_log[:] = []
+w._ende_ton_gespielt = False; w.sieger_team = 0
+w._match_ende_ton()
+w._ende_ton_gespielt = False; w.sieger_team = 1
+w._match_ende_ton()
+pruef("Ohne Music Kit bleiben Sieg- und Niederlageton getrennt",
+      klang_log == [("standard", "won_match"), ("standard", "lost_match")])
+w.app.klaenge.ton_spielen, w.app.klaenge.spielen = alt_ton, alt_name
+w.app._konto = altes_konto
 w.verlassen(); ga.verlassen()
 
 # ── Molotow: brennender Boden, genau auf einer Ebene ────────────────
@@ -5163,6 +5199,15 @@ def spitzen(wav):
 m = fehler_von(SK.ton_lesen, wav_bauen(0.5))
 pruef("Ein zu kurzer Ton wird abgelehnt", "ZU KURZ" in m, m)
 pruef("Genau die Mindestlaenge geht", fehler_von(SK.ton_lesen, wav_bauen(GK["ton_min"])) == "")
+music_b64 = _b64.b64encode(wav_bauen(1.2)).decode("ascii")
+music_objekt = SK.aus_konto("", "", music_b64)
+pruef("Ein Music-Kit-Ton ist fuer das Konto allein gueltig",
+      not music_objekt.ton and bool(music_objekt.music_kit_roh))
+pruef("Ein Music Kit wird nicht an Mitspieler als Blendkosmetik verteilt",
+      "music_kit" not in music_objekt.text())
+if pygame.mixer.get_init() is not None:
+    pruef("Der Music-Kit-Ton laesst sich im Mixer bereitstellen",
+          music_objekt.music_klang() is not None)
 m = fehler_von(SK.ton_lesen, wav_bauen(GK["ton_max"] + 0.5, rate=11025))
 pruef("Ein zu langer Ton wird abgelehnt", "ZU LANG" in m, m)
 m = fehler_von(SK.ton_lesen, wav_bauen(1.5, breite=1))

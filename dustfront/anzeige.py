@@ -319,6 +319,7 @@ class Anzeige:
         from . import bestenliste
         reihe = bestenliste.sortiert(
             [{"name": k.name, "abschuesse": k.abschuesse, "tode": k.tode,
+              "mvp_punkte": bestenliste.mvp_punkte(k.werte_runde()),
               "k": k} for k in g.kaempfer.values()])
         zeigen = reihe[:5]
         if g.ich is not None and not any(e["k"] is g.ich for e in zeigen):

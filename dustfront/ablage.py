@@ -588,7 +588,7 @@ class LokaleAblage:
         prfg = self.sitzung_pruefen(sitzung)
         if not prfg:
             return prfg
-        return gut({"ton": "", "bild": ""})
+        return gut({"ton": "", "bild": "", "music_kit": ""})
 
 
 # ══════════════════════════════════════════════════ Netzablage
@@ -876,14 +876,15 @@ class NetzAblage:
         eine Viertelmegabyte Ton mitzuschicken waere Verschwendung.
         """
         antwort = self._rufen(
-            "/rest/v1/kosmetik?select=blend_ton,blend_bild&limit=1",
+            "/rest/v1/kosmetik?select=blend_ton,blend_bild,music_kit&limit=1",
             token=sitzung)
         if not antwort:
             return antwort
         zeilen = antwort.daten if isinstance(antwort.daten, list) else []
         zeile = zeilen[0] if zeilen and isinstance(zeilen[0], dict) else {}
         return gut({"ton": str(zeile.get("blend_ton") or ""),
-                    "bild": str(zeile.get("blend_bild") or "")})
+                    "bild": str(zeile.get("blend_bild") or ""),
+                    "music_kit": str(zeile.get("music_kit") or "")})
 
 
 def waehlen(lokal_erzwingen: bool = False):

@@ -69,10 +69,7 @@ class Klangpruefer:
                         ("einmal", name), "Einzelklang")
         y = 56 + ((len(K.KLANG_NAMEN) + 3) // 4) * (KNOPF_H + ABSTAND) + 8
         self._knopf((RAND, y, 230, KNOPF_H), "MG – Dauerfeuer",
-                    ("halten", "lmg_dauer"), "Gedrueckt halten")
-        self._knopf((RAND + 237, y, 230, KNOPF_H), "MG – Salve",
-                    ("halten", "lmg_salve"), "Halten fuer Spieltakt")
-        self._knopf((RAND + 474, y, 180, KNOPF_H), "Sturmgewehr",
+        self._knopf((RAND, y, 180, KNOPF_H), "Sturmgewehr",
                     ("halten", "sturm"), "Gedrueckt halten")
         y += KNOPF_H + ABSTAND
         for i, name in enumerate(("rundenstart", "won_match", "lost_match")):
@@ -84,28 +81,8 @@ class Klangpruefer:
 
     def _feuern(self, art):
         jetzt = pygame.time.get_ticks()
-        if art == "lmg_salve":
-            if jetzt < self.naechster_schuss:
-                return
-            daten = K.WAFFEN["lmg"]["modus_daten"]["salve"]
-            schuesse = int(K.WAFFEN["lmg"]["modus_daten"].get("salve", {}).get("salve", 3))
-            self.klaenge.spielen("schuss_lmg", 1.0)
-            self.salve_rest = max(0, schuesse - 1)
-            self.salve_takt = daten.get("salve_takt", 0.032)
-            self.salve_naechster = jetzt + int(self.salve_takt * 1000)
-            self.melden = "MG-Salve: %d Schuesse; Halten spielt alle %.1f s eine Salve" % (
-                schuesse, daten["takt"])
-            self.naechster_schuss = jetzt + int(daten["takt"] * 1000)
-            return
-        if art == "lmg_dauer":
-            d = K.WAFFEN["lmg"]["modus_daten"]["dauer"]
-            self.laufzeit += self.uhr.get_time() / 1000.0
-            takt = d["anlauf_takt"] + (d["takt"] - d["anlauf_takt"]) * min(
-                1.0, self.laufzeit / d["anlauf"])
-            name = "schuss_lmg"
-        else:
-            d = K.WAFFEN["sturm"]
-            takt, name = d["takt"], "schuss_sturm"
+        d = K.WAFFEN["sturm"]
+        takt, name = d["takt"], "schuss_sturm"
         if jetzt >= self.naechster_schuss:
             self.klaenge.spielen(name, 1.0)
             self.naechster_schuss = jetzt + max(1, int(takt * 1000))
@@ -128,8 +105,7 @@ class Klangpruefer:
                             else:
                                 self.gehalten = wert
                                 self.laufzeit = 0.0
-                                if wert != "lmg_salve":
-                                    self.naechster_schuss = 0
+                                self.naechster_schuss = 0
                                 self._feuern(wert)
                             break
                 if ereignis.type == pygame.MOUSEBUTTONUP and ereignis.button == 1:
@@ -138,10 +114,6 @@ class Klangpruefer:
             if self.gehalten:
                 self._feuern(self.gehalten)
             jetzt = pygame.time.get_ticks()
-            if self.salve_rest and jetzt >= self.salve_naechster:
-                self.klaenge.spielen("schuss_lmg", 1.0)
-                self.salve_rest -= 1
-                self.salve_naechster += max(1, int(self.salve_takt * 1000))
             self.flaeche.fill(HINTERGRUND)
             kopf, klein = self.schriften
             self.flaeche.blit(kopf.render("DUSTFRONT  /  KLANGPRUEFER", True, TEXT), (RAND, 12))

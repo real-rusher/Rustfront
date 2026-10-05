@@ -127,10 +127,10 @@ class Server:
         self.konten = {
             "k-1": {"anmeldename": "erster", "name": "ERSTER", "angelegt": 1700000000,
                     "profil": {"name": "ERSTER", "fassung": 3, "werte": {"bildschirm_ruckeln": 40},
-                               "loadouts": []}, "kosmetik": {"ton": "", "bild": ""}},
+                               "loadouts": []}, "kosmetik": {"ton": "", "bild": "", "music_kit": ""}},
             "k-2": {"anmeldename": "zweiter", "name": "ZWEITER", "angelegt": 1700000100,
                     "profil": {"name": "ZWEITER", "fassung": 1, "werte": {}, "loadouts": []},
-                    "kosmetik": {"ton": "", "bild": ""}},
+                    "kosmetik": {"ton": "", "bild": "", "music_kit": ""}},
         }
         self.admin_runden = [
             {"partie": "a1", "konto": "k-1", "gespielt": 2000, "modus": "pvp", "team": -1,
@@ -188,7 +188,8 @@ class Server:
         if name == "admin_kosmetik":
             return {"ok": True, **k["kosmetik"]}
         if name == "admin_kosmetik_schreiben":
-            k["kosmetik"] = {"ton": a["ton"], "bild": a["bild"]}
+            k["kosmetik"] = {"ton": a["ton"], "bild": a["bild"],
+                              "music_kit": a.get("music_kit", "")}
             return {"ok": True}
         if name == "admin_name_aendern":
             if a["neu"].lower() == "admin":
@@ -248,7 +249,8 @@ class Server:
                 daten = json.loads(anfrage.post_data or "{}")
                 self.geschrieben.append((weg, dict(anfrage.headers), daten))
                 self.kosmetik = {"blend_ton": daten.get("blend_ton", ""),
-                                 "blend_bild": daten.get("blend_bild", "")}
+                                 "blend_bild": daten.get("blend_bild", ""),
+                                 "music_kit": daten.get("music_kit", "")}
                 return route.fulfill(status=201, headers={"Access-Control-Allow-Origin": "*"})
             if methode == "DELETE":
                 self.geloescht += 1
@@ -417,6 +419,7 @@ with sync_playwright() as pw:
     s.screenshot(path=str(ordner / "kosmetik.png"), full_page=True)
 
     # ── Speichern ─────────────────────────────────────────────────────
+    s.get_by_text("MUSIC KIT: DIESER TON LÄUFT BEI SIEG UND NIEDERLAGE").click()
     s.get_by_role("button", name="SPEICHERN").click()
     pruef("Gespeichert", warten(s, "document.body.innerText.includes('GESPEICHERT - IM SPIEL')"),
           s.inner_text(".meldung") if s.locator(".meldung").count() else "")
@@ -426,7 +429,8 @@ with sync_playwright() as pw:
           "on_conflict=konto" in weg and "merge-duplicates" in koepfe.get("prefer", "")
           and daten.get("konto") == SITZUNG["kennung"], weg)
     try:
-        k_spiel = SK.aus_konto(daten.get("blend_ton", ""), daten.get("blend_bild", ""))
+        k_spiel = SK.aus_konto(daten.get("blend_ton", ""), daten.get("blend_bild", ""),
+                               daten.get("music_kit", ""))
         fehler = ""
     except ValueError as f:
         k_spiel, fehler = None, str(f)
@@ -444,13 +448,15 @@ with sync_playwright() as pw:
         pruef("Und es klingt im Spiel genau wie in der Vorschau",
               list(im_spiel) == vorschau, "%d / %d Proben" % (len(im_spiel), len(vorschau)))
         pruef("Die Groessen passen auch zur Tabelle (docs/KONTO.md 5.6)",
-              len(daten["blend_ton"]) <= 540000 and len(daten["blend_bild"]) <= 210000)
+              len(daten["blend_ton"]) <= 540000 and len(daten["blend_bild"]) <= 210000
+              and len(daten["music_kit"]) <= 540000)
 
     # ── Neu laden: das Gespeicherte ist da ────────────────────────────
     s.reload()
     s.get_by_role("button", name="KOSMETIK").click()
     pruef("Nach dem Neuladen steht der Ton als gespeichert da",
-          warten(s, "Werkstatt.server.tonFertig !== null && Werkstatt.server.bildFlaeche !== null"))
+          warten(s, "Werkstatt.server.tonFertig !== null && Werkstatt.server.bildFlaeche !== null "
+                     "&& Werkstatt.server.musicKit.length > 0"))
     gelage = s.evaluate("Werkstatt.server.bildLage")
     pruef("Auch das gespeicherte Bild steht an seinem Platz",
           k_spiel is not None and abs(gelage["x"] - k_spiel.lage["x"]) < 0.001
@@ -473,6 +479,7 @@ with sync_playwright() as pw:
     # ── Entfernen ─────────────────────────────────────────────────────
     s.get_by_role("button", name="TON ENTFERNEN").click()
     s.get_by_role("button", name="BILD ENTFERNEN").click()
+    s.get_by_role("button", name="MUSIC KIT ENTFERNEN").click()
     s.get_by_role("button", name="SPEICHERN").click()
     pruef("Beides entfernt: die Zeile wird geloescht",
           warten(s, "document.body.innerText.includes('ENTFERNT')") and server.geloescht == 1)

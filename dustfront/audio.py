@@ -59,9 +59,6 @@ _ZUSCHNITTE = {
     # Der Rauch hat einen langen Gasstrom; der kurze Ausschnitt nahm genau
     # diesen Hauptbestandteil heraus.
     "smoke-grenade-sound-effect.mp3": (0.0, 9.143),
-    # Der vorherige Wechsel auf den langen Ausschnitt liess das MG-Sample
-    # anders klingen; der alte, knackige Schuss dauert rund 0,14 Sekunden.
-    "freesound_community-069321_light-machine-gun-m249-39814.mp3": (0.04, 0.18),
     "freesound_community-sniper-rifle-firing-shot-1-39789.mp3": (0.0, 2.8),
     "yodguard-spear_thrust-6-382403.mp3": (0.0, 0.72),
     "universfield-combat-impact-352458.mp3": (0.0, 0.72),
@@ -299,23 +296,6 @@ def _molotov(seed=0):
     for i in range(n):
         lodern[i] *= min(1.0, (i / n) * 3.0) * (1.0 - i / n) ** 0.8
     return _mischen(glas, [0.0] * int(RATE * 0.03) + lodern)
-
-
-@platzhalter_klang("schuss_lmg")
-def _schuss_lmg(seed=0):
-    """Ein MG: tiefer und breiter als das Sturmgewehr, mit Nachhall.
-
-    Der Unterschied zum Sturmgewehr ist nicht die Lautstaerke, sondern
-    das Gewicht darunter. Ein tiefer Schlag traegt den Knall, und ein
-    langer dunkler Nachhall haengt daran - so klingt etwas, das auf einem
-    Zweibein steht und nicht in der Hand liegt.
-    """
-    return _mischen(
-        _rauschen(0.14, 0.95, 5200, 700, 3.0, seed + 1),
-        _rauschen(0.06, 0.45, 11000, 5000, 2.2, seed + 2, hp=True),
-        _schlag(120, 46, 0.16, 0.85, 3.0),
-        [0.0] * int(RATE * 0.02) + _rauschen(0.30, 0.22, 1800, 420, 2.4, seed + 3),
-    )
 
 
 @platzhalter_klang("rakete")

@@ -268,18 +268,23 @@ class Kosmetik:
     liefen auseinander.
     """
 
-    def __init__(self, ton: bytes = b"", bild: bytes = b"") -> None:
+    def __init__(self, ton: bytes = b"", bild: bytes = b"",
+                 music_kit: bytes = b"") -> None:
         self.ton_roh = bytes(ton) if ton else b""
         self.ton = ton_aufbereiten(self.ton_roh) if self.ton_roh else b""
+        self.music_kit_roh = bytes(music_kit) if music_kit else b""
+        self.music_kit = (ton_aufbereiten(self.music_kit_roh)
+                          if self.music_kit_roh else b"")
         self.bild_daten = bytes(bild) if bild else b""
         self.bild = bild_lesen(self.bild_daten) if self.bild_daten else None
         self.lage = (bild_lage(self.bild_daten, self.bild.get_size())
                      if self.bild is not None else None)
-        if not self.ton and self.bild is None:
+        if not self.ton and self.bild is None and not self.music_kit:
             raise ValueError("LEERE KOSMETIK")
         self.kennung = hashlib.sha1(self.ton_roh + b"|" + self.bild_daten
                                     ).hexdigest()[:16]
         self._klang = None
+        self._music_klang = None
 
     @property
     def dauer(self) -> float:
@@ -298,6 +303,18 @@ class Kosmetik:
             except pygame.error:
                 return None
         return self._klang
+
+    def music_klang(self):
+        """Den eigenen Rundensieg- oder Niederlageton bereitstellen."""
+        if not self.music_kit or pygame.mixer.get_init() is None:
+            return None
+        if self._music_klang is None:
+            try:
+                self._music_klang = pygame.mixer.Sound(
+                    file=io.BytesIO(self.music_kit))
+            except pygame.error:
+                return None
+        return self._music_klang
 
     def text(self) -> str:
         """So geht es durchs Netz: JSON mit Base64 darin."""
@@ -321,14 +338,16 @@ def aus_text(text: str) -> Kosmetik:
     return Kosmetik(ton, bild)
 
 
-def aus_konto(ton_b64: str, bild_b64: str) -> Kosmetik:
+def aus_konto(ton_b64: str, bild_b64: str,
+              music_kit_b64: str = "") -> Kosmetik:
     """Was der Server liefert (Base64) -> Kosmetik. Wirft ValueError."""
     try:
         ton = base64.b64decode(ton_b64 or "", validate=True)
         bild = base64.b64decode(bild_b64 or "", validate=True)
+        music_kit = base64.b64decode(music_kit_b64 or "", validate=True)
     except (ValueError, TypeError) as fehler:
         raise ValueError("KOSMETIK NICHT LESBAR") from fehler
-    return Kosmetik(ton, bild)
+    return Kosmetik(ton, bild, music_kit)
 
 
 class Sammler:
@@ -411,7 +430,12 @@ class KosmetikTeil:
     # ---- Wer was hat --------------------------------------------------
     def _eigene_kosmetik(self):
         konto = getattr(self.app, "konto", None)
-        return getattr(konto, "kosmetik", None)
+        kosmetik = getattr(konto, "kosmetik", None)
+        # Ein Music Kit gehoert nur diesem Rechner. Es wird nicht als
+        # Blendgranaten-Kosmetik an alle Rundenteilnehmer verteilt.
+        if kosmetik is not None and (kosmetik.ton or kosmetik.bild is not None):
+            return kosmetik
+        return None
 
     def kosmetik_von(self, nummer):
         """Die Kosmetik eines Spielers, wenn sie hier ist und gilt."""

@@ -433,7 +433,8 @@ class Welt:
               34, winkel, 8.0)
         daten = K.WAFFEN.get(waffe, {})
         self.ruckeln(daten.get("kamera", 1.0), "schuss", pos, ebene, quelle)
-        self.klang("schuss_" + waffe, K.AUDIO["schuss"], pos, ebene)
+        klang = "schuss_sturm" if waffe == "lmg" else "schuss_" + waffe
+        self.klang(klang, K.AUDIO["schuss"], pos, ebene)
 
     def raketenstart(self, pos, winkel: float, ebene: int, quelle=None,
                      ziel=None) -> None:

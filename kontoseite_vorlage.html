@@ -387,18 +387,19 @@ const Netz = {
 
   // ---- Spielerkosmetik: eine Zeile je Konto (docs/KONTO.md 5.6) ----
   async kosmetikLesen(marke){
-    const a = await this.rufen("/rest/v1/kosmetik?select=blend_ton,blend_bild&limit=1", {marke});
+    const a = await this.rufen("/rest/v1/kosmetik?select=blend_ton,blend_bild,music_kit&limit=1", {marke});
     if (!a.ok) return a;
     const z = Array.isArray(a.daten) && a.daten[0];
-    return {ok:true, daten:{ton: (z && z.blend_ton) || "", bild: (z && z.blend_bild) || ""}};
+    return {ok:true, daten:{ton: (z && z.blend_ton) || "", bild: (z && z.blend_bild) || "",
+                            musicKit: (z && z.music_kit) || ""}};
   },
 
   // Anlegen oder ueberschreiben in einem: gibt es die Zeile schon, wird
   // sie ersetzt (resolution=merge-duplicates), sonst angelegt.
-  async kosmetikSchreiben(marke, kennung, ton, bild){
+  async kosmetikSchreiben(marke, kennung, ton, bild, musicKit){
     return this.rufen("/rest/v1/kosmetik?on_conflict=konto", {
       marke, methode:"POST",
-      daten:{konto:kennung, blend_ton:ton, blend_bild:bild,
+      daten:{konto:kennung, blend_ton:ton, blend_bild:bild, music_kit:musicKit,
              geaendert:new Date().toISOString()},
       kopf:{"Prefer":"resolution=merge-duplicates,return=minimal"}});
   },
@@ -485,14 +486,16 @@ const Ziel = {
   async kosmetikLesen(){
     if (!this.admin) return mitSitzung((m) => Netz.kosmetikLesen(m));
     const a = await Admin.rufen("admin_kosmetik", {konto:Stand.sitzung.kennung});
-    return a.ok ? {ok:true, daten:{ton:a.daten.ton || "", bild:a.daten.bild || ""}} : a;
+    return a.ok ? {ok:true, daten:{ton:a.daten.ton || "", bild:a.daten.bild || "",
+                                   musicKit:a.daten.music_kit || ""}} : a;
   },
-  async kosmetikSchreiben(ton, bild){
+  async kosmetikSchreiben(ton, bild, musicKit){
     const kennung = Stand.sitzung.kennung;
     if (this.admin)
-      return Admin.rufen("admin_kosmetik_schreiben", {konto:kennung, ton:ton || "", bild:bild || ""});
-    return (ton || bild)
-      ? mitSitzung((m) => Netz.kosmetikSchreiben(m, kennung, ton, bild))
+      return Admin.rufen("admin_kosmetik_schreiben", {konto:kennung, ton:ton || "", bild:bild || "",
+                                                       music_kit:musicKit || ""});
+    return (ton || bild || musicKit)
+      ? mitSitzung((m) => Netz.kosmetikSchreiben(m, kennung, ton, bild, musicKit))
       : mitSitzung((m) => Netz.kosmetikLoeschen(m, kennung));
   },
 };
@@ -887,7 +890,8 @@ async function herunterladen(){
     konto: {name: Stand.sitzung.name, kennung: Stand.sitzung.kennung},
     profil: Stand.profil,
     gefechte: Stand.gefechte,
-    kosmetik: {blend_ton: Werkstatt.server.ton, blend_bild: Werkstatt.server.bild},
+    kosmetik: {blend_ton: Werkstatt.server.ton, blend_bild: Werkstatt.server.bild,
+               music_kit: Werkstatt.server.musicKit},
   };
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([JSON.stringify(alles, null, 2)],
@@ -1283,6 +1287,8 @@ const Werkstatt = {
   server: null,        // was auf dem Server liegt, siehe werkstattLeeren
   ton: null,           // der Ton in Arbeit, siehe tonUebernehmen
   tonWeg: false,       // den gespeicherten Ton beim Speichern entfernen
+  musicKitAktiv:false, // den bearbeiteten Ton fuer beide Rundenergebnisse nutzen
+  musicKitWeg:false,
   bild: null,          // das Bild in Arbeit, siehe bildUebernehmen
   bildWeg: false,
   klassisch: {},       // AudioBuffer der Klaenge aus dem Spiel
@@ -1292,9 +1298,10 @@ const Werkstatt = {
 
 function werkstattLeeren(){
   tonStoppen();
-  Werkstatt.server = {geladen:false, laedt:false, fehler:"", ton:"", bild:"",
+  Werkstatt.server = {geladen:false, laedt:false, fehler:"", ton:"", bild:"", musicKit:"",
                       tonFertig:null, bildFlaeche:null, bildLage:null};
   Werkstatt.ton = null; Werkstatt.tonWeg = false;
+  Werkstatt.musicKitAktiv = false; Werkstatt.musicKitWeg = false;
   Werkstatt.bild = null; Werkstatt.bildWeg = false;
 }
 
@@ -1440,6 +1447,20 @@ function tonSpielen(t){
 function tonStoppen(){
   if (Werkstatt._laeuft){ try{ Werkstatt._laeuft.stop(); }catch(e){} }
   Werkstatt._laeuft = null;
+  if (Werkstatt.musicAudio){
+    Werkstatt.musicAudio.pause(); Werkstatt.musicAudio.currentTime = 0;
+    Werkstatt.musicAudio = null;
+  }
+}
+
+function musicKitVorschau(){
+  const W = Werkstatt;
+  let daten = W.musicKitWeg ? "" : W.server.musicKit;
+  if (W.musicKitAktiv && W.ton && W.ton.wav) daten = zuBase64(W.ton.wav);
+  if (!daten) return sageUndZeichne("NOCH KEIN MUSIC KIT GESPEICHERT", "schlecht");
+  if (W.musicAudio){ W.musicAudio.pause(); W.musicAudio.currentTime = 0; }
+  W.musicAudio = new Audio("data:audio/wav;base64," + daten);
+  W.musicAudio.play().catch(() => sageUndZeichne("MUSIC KIT KANN NICHT ABGESPIELT WERDEN", "schlecht"));
 }
 
 // Was gerade gilt: der Ton in Arbeit, sonst der gespeicherte - beide so,
@@ -2105,6 +2126,8 @@ async function kosmetikLaden(){
   S.geladen = true;
   if (!a.ok){ S.fehler = kosmetikFehler(a.fehler); zeichnen(); return; }
   S.fehler = ""; S.ton = a.daten.ton; S.bild = a.daten.bild;
+  S.musicKit = a.daten.musicKit || "";
+  W.musicKitAktiv = !!S.musicKit; W.musicKitWeg = false;
   await serverAufbereiten();
   zeichnen();
 }
@@ -2112,11 +2135,17 @@ async function kosmetikLaden(){
 async function kosmetikSpeichern(){
   const W = Werkstatt, S = W.server;
   let ton = W.tonWeg ? "" : S.ton, bild = W.bildWeg ? "" : S.bild;
+  let musicKit = W.musicKitWeg ? "" : S.musicKit;
   if (W.ton){
     if (!W.ton.wav) return sageUndZeichne("DER TON WIRD NOCH GERECHNET - GLEICH NOCH EINMAL", "schlecht");
     if (W.ton.wav.length > KOS.ton_bytes) return sageUndZeichne("DER TON IST ZU GROSS", "schlecht");
     ton = zuBase64(W.ton.wav);
+    if (W.musicKitAktiv) musicKit = zuBase64(W.ton.wav);
   }
+  if (W.musicKitAktiv && W.ton && !W.ton.wav)
+    return sageUndZeichne("DER MUSIC-KIT-TON WIRD NOCH GERECHNET", "schlecht");
+  if (W.musicKitAktiv && !musicKit)
+    return sageUndZeichne("ERST OBEN EINEN TON ERSTELLEN ODER LADEN", "schlecht");
   if (W.bild){
     const png = await bildPng();
     if (!png) return sageUndZeichne("DAS BILD LIESS SICH NICHT SPEICHERN", "schlecht");
@@ -2125,10 +2154,11 @@ async function kosmetikSpeichern(){
     bild = zuBase64(png);
   }
   sageUndZeichne("SPEICHERE...", "arbeit");
-  const a = await Ziel.kosmetikSchreiben(ton, bild);
+  const a = await Ziel.kosmetikSchreiben(ton, bild, musicKit);
   if (!a.ok) return sageUndZeichne(kosmetikFehler(a.fehler), "schlecht");
-  S.ton = ton; S.bild = bild; S.fehler = "";
-  W.tonWeg = W.bildWeg = false;
+  S.ton = ton; S.bild = bild; S.musicKit = musicKit; S.fehler = "";
+  W.tonWeg = W.bildWeg = W.musicKitWeg = false;
+  W.musicKitAktiv = !!musicKit;
   if (W.ton) W.ton.gespeichert = W.ton.wav;
   if (W.bild) W.bild.gespeichert = W.bild.stand;
   await serverAufbereiten();
@@ -2208,6 +2238,25 @@ function seiteKosmetik(ziel){
     "nach einem kurzen Anlauf hält das Spiel ihn unter einer Linie, die bis zum " +
     "Ende auf null fällt. Was du unten hörst, ist schon so gerechnet.";
   kopf.appendChild(p);
+  const kitZeile = el("div", "zeile abstand");
+  const kitLabel = el("label", "klein creme");
+  const kitHaken = el("input");
+  kitHaken.type = "checkbox"; kitHaken.checked = W.musicKitAktiv;
+  kitHaken.addEventListener("change", () => {
+    W.musicKitAktiv = kitHaken.checked;
+    W.musicKitWeg = !kitHaken.checked && !!W.server.musicKit;
+    zeichnen();
+  });
+  anhaengen(kitLabel, kitHaken,
+    document.createTextNode(" MUSIC KIT: DIESER TON LÄUFT BEI SIEG UND NIEDERLAGE"));
+  kitZeile.appendChild(kitLabel);
+  kitZeile.appendChild(knopf("MUSIC KIT ANHÖREN", null, musicKitVorschau));
+  if (W.server.musicKit){
+    kitZeile.appendChild(knopf("MUSIC KIT ENTFERNEN", null, () => {
+      W.musicKitAktiv = false; W.musicKitWeg = true; zeichnen();
+    }));
+  }
+  kopf.appendChild(kitZeile);
   if (W.server.laedt || !W.server.geladen)
     kopf.appendChild(anhaengen(el("div", "meldung kante arbeit abstand"), el("span", null, "LADE...")));
   else if (W.server.fehler)
