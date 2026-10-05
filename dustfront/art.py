@@ -672,12 +672,8 @@ def _gegner_laeufer():
 
 @platzhalter("gegner_brecher")
 def _gegner_brecher():
-    s = _figur(36, (112, 70, 48), (48, 30, 20), K.C_RED, breit=True,
-               bewaffnet=False)
-    c = 18
-    pygame.draw.rect(s, (74, 48, 32), (c - 9, c - 12, 18, 4))
-    pygame.draw.rect(s, K.C_RUST, (c - 8, c - 11, 16, 2))
-    return s
+    return _figur(36, (88, 58, 42), (38, 27, 21), (106, 47, 33),
+                  breit=True, bewaffnet=False)
 
 
 # ── Die drei neuen Gegner

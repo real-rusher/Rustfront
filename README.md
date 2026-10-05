@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.32.23, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.32.26, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -55,18 +55,16 @@ dort steht die eine technische Entscheidung, an der alles andere haengt.
 | Was | Windows | macOS, Linux |
 | --- | --- | --- |
 | Das ganze Spiel, mit Menue und Intro | `DUSTFRONT.bat` | `DUSTFRONT.command` |
-| Direkt ins Spiel, zum Ausprobieren | `SPIELTEST.bat` | `SPIELTEST.command` |
-| Mehrspieler: direkt in die eigene Lobby | `MEHRSPIELER.bat` | `MEHRSPIELER.command` |
 
 Die Datei sucht sich Python selbst, installiert pygame-ce beim ersten Mal
 nach und startet dann. Geht etwas schief, bleibt das Fenster offen und sagt
 warum, statt kommentarlos zu verschwinden.
 
-**`SPIELTEST`** springt ohne Menue und ohne Intro direkt in eine Runde und
-schreibt die Steuerung ins Fenster. Zum schnellen Ausprobieren gedacht.
-**`DUSTFRONT`** ist der normale Weg: Intro, Hauptmenue, *NEUE KAMPAGNE*,
-und von dort geht es ins Spiel. Mit *AUFGEBEN* im Pausemenue kommt man
-zurueck ins Hauptmenue.
+**`DUSTFRONT`** ist der einzige Spielstarter: Intro, Hauptmenue und von dort
+direkt in Einzelspieler oder Mehrspieler. Beim Mehrspieler kann man eine
+Lobby erstellen oder einer vorhandenen beitreten. Optionen, Steuerung und
+Mitwirkende liegen ebenfalls im Hauptmenue. Mit *AUFGEBEN* im Pausemenue
+kommt man zurueck ins Hauptmenue.
 
 Unter macOS beim allerersten Mal Rechtsklick auf die Datei und dann
 *Oeffnen* waehlen - danach reicht der Doppelklick.
@@ -465,7 +463,6 @@ Aussen liegt das Menue, innen das Spiel. Beides laeuft auch einzeln.
 | --- | --- |
 | `DUSTFRONT.bat` | Startdatei zum Doppelklicken, Windows |
 | `DUSTFRONT.command` | Startdatei zum Doppelklicken, macOS und Linux |
-| `SPIELTEST.bat` | Direkt ins Spiel, Windows |
 | `SPIELTEST.command` | Direkt ins Spiel, macOS und Linux |
 | `rustfront_menu.py` | Hauptmenue, Kaltstart, Optionen, Spielstand, Einstiegspunkt |
 | `rustfront_splash.py` | Ablauf, Zeitdehnung und Klangsynthese der Splash-Sequenz |
@@ -710,6 +707,9 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.32.26 | **Mehrspieler-Einstieg und Brecher**: Im Hauptmenue waehlt man beim Mehrspieler zwischen Lobby erstellen und beitreten. Der Brecher hat 95 Leben und sieht wie ein dunklerer Zombie ohne Bruststreifen aus. Gastgeber und Gaeste brauchen dieselbe Version, damit Gegnerwerte uebereinstimmen; kein Protokoll und keine Karten geaendert. |
+| 0.32.25 | **Ein gemeinsames Hauptmenue**: Einzelspieler, Mehrspieler, Optionen, Steuerung und Mitwirkende sind vom selben Start aus erreichbar. Nach einer Runde kehrt das Spiel ins Menue zurueck. Kein Netzprotokoll und keine Karten geaendert. |
+| 0.32.24 | **RPG verstaerkt**: Der Raketenschaden steigt auf 150, der Explosionsradius auf 104 Weltpixel. Gastgeber und Gast muessen dieselbe Version nutzen, damit der Gefechtsschaden uebereinstimmt. Kein Drahtprotokoll und keine Karten geaendert. |
 | 0.32.23 | **Runden-MVP und Music Kit**: MVP-Punkte werten Abschuesse, Gegner und Bosse, Schaden, Trefferquote, Hilfen, Zielzeit, Medkits und Tode; Rundentafel und Bestenliste zeigen Punkte und Auszeichnungen. Eigener Kontoton wird fuer Sieg und Niederlage abgespielt; die Kontoseite benoetigt die neue `music_kit`-Spalte und RPC-Fassung aus `docs/KONTO.md`. Das Endpaket enthaelt die MVP-Wertung; Gastgeber und Gaeste brauchen dieselbe Version. Keine Karten geaendert. |
 | 0.32.22 | **LMG-Klang entfernt**: Das LMG spielt den Sturmgewehrklang; der eigene LMG-Klang und die Soundboard-Proben dafuer sind entfernt. Kein Netz- oder Kartenverhalten geaendert. |
 | 0.32.21 | **Klaenge angepasst**: Der MG-Schuss nutzt wieder den alten kurzen Ausschnitt; die Nahkampf-Schwing- und Trefferklaenge laufen vollstaendiger aus. Rundenstart, Sieg und Niederlage sind im Soundboard direkt pruefbar. Kein Netz- oder Kartenverhalten geaendert. |

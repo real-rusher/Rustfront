@@ -1318,8 +1318,8 @@ WAFFEN = {
     "rakete": dict(
         art="rakete",
         name="RAKETENWERFER",
-        schaden=140.0,
-        radius=96.0,          # Wirkungskreis
+        schaden=150.0,
+        radius=104.0,         # Wirkungskreis
         eigen_anteil=0.55,    # so viel davon bekommt man selbst ab
         takt=1.2,
         magazin=1,
@@ -1954,7 +1954,7 @@ GEGNER = {
     ),
     "brecher": dict(
         name="BRECHER",
-        leben=140.0,
+        leben=95.0,
         radius=13.0,
         tempo=44.0,
         beschleunigung=380.0,

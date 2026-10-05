@@ -61,8 +61,8 @@ Ausnahmen stehen in 2.4.
 | `dustfront/wege.py` | ~350 | Seit 0.27: Wegenetz ueber Treppen und Rampen fuer die Gegner (12b). |
 | `dustfront/config.py` | +150 | `NETZ`, `MODI`, `TEAMS`, `ZONE`, `VERSUS`, `GEFECHT`, `REVIVE`, `WELLEN_MP`, `GEGNER_MP`, `MUNITION`. |
 
-Dazu: zwei Startdateien (`MEHRSPIELER.bat/.command`, seit 0.32 statt
-der vier `LAN-GASTGEBER`/`LAN-GAST`), Schalter in `main.py`, die
+Dazu: der Einstieg ueber das Hauptmenue (`DUSTFRONT.bat/.command`),
+Schalter in `main.py`, die
 Lobbysuche (`lan.py`), das Umsteigen zwischen Lobbys (`sitzung.py`, beide
 12g) und die Pruefungen im Abschnitt "LAN-Gefecht" von
 `tests/test_spiel.py`.
@@ -1863,6 +1863,8 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.32.26 | Der Brecher hat 95 Leben und eine dunklere Gestalt ohne Bruststreifen | Gastgeber und Gast brauchen dieselbe Version, damit Gegnerwerte uebereinstimmen; kein Protokollwechsel |
+| 0.32.24 | RPG-Schaden und Explosionsradius wurden auf 150 und 104 Weltpixel erhoeht | Gastgeber und Gast brauchen dieselbe Version, damit Treffer gleich berechnet werden |
 | 0.32.23 | Die Endmeldung enthaelt je Spieler die MVP-Punkte und MVP-Auszeichnung der Runde | Gastgeber und Gast brauchen dieselbe Version, sonst kennt der Gast die MVP-Zeile nicht |
 | 0.32.11 | STAUBTAL hat zwei neue Kachelarten (Aufzug `^` und `v`) | eine alte Version kennt sie nicht und saehe dort Boden - darum wird die Version beim Beitreten verglichen, und ein alter Gast wird abgewiesen |
 
@@ -1952,9 +1954,9 @@ python -m dustfront --bestenliste
 ```
 
 `--modus` ist einer von `pvp pve pvpve team versus huegel`, `--ende` ist
-`zeit` oder `abschuesse`, `--knapp` begrenzt die Munition. Ohne
-Kommandozeile: `MEHRSPIELER.bat` bzw. `.command` - es geht ohne Fragen
-in die eigene Lobby, alles andere im Spiel (12g).
+`zeit` oder `abschuesse`, `--knapp` begrenzt die Munition. Zum Spielen
+ohne Kommandozeile `DUSTFRONT.bat` bzw. `.command` starten und im
+Hauptmenue MEHRSPIELER waehlen.
 
 ---
 

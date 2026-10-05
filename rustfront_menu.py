@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.32.23"
+VERSION = "0.32.26"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -1320,7 +1320,7 @@ class Page:
 
 class MainPage(Page):
     key, tab = "main", "HAUPTMENÜ"
-    py = 100
+    py = 65
 
     def build(self):
         app = self.app
@@ -1331,16 +1331,32 @@ class MainPage(Page):
                    hint=(f"letzter stand: {info.get('label', '')}" if has_save
                          else "kein spielstand gefunden. starte einen neuen auftrag."),
                    enabled=has_save, accent=C_TEAL),
-            Action("NEUER AUFTRAG", lambda a: a.goto("newgame"),
-                   "neue kampagne. region, schwierigkeit und rufzeichen wählen."),
-            Action("MEHRSPIELER", lambda a: a.start_game("mehrspieler"),
-                   "in die eigene lobby. von dort anderen lobbys im netz beitreten."),
+            Action("EINZELSPIELER", lambda a: a.goto("newgame"),
+                   "einzelspieler: region, schwierigkeit und rufzeichen wählen."),
+            Action("MEHRSPIELER", lambda a: a.goto("multiplayer"),
+                   "lobby erstellen oder einer lobby im netz beitreten."),
             Action("OPTIONEN", lambda a: a.goto("options"),
                    "bild, ton und darstellung anpassen."),
             Action("STEUERUNG", lambda a: a.goto("controls"),
                    "belegung für charakter- und fahr-modus."),
+            Action("MITWIRKENDE", lambda a: a.goto("credits"),
+                   "mitwirkende und projektangaben."),
             Action("BEENDEN", lambda a: a.goto("quit"),
                    "wandler abschalten und zurück zum schreibtisch."),
+        ]
+
+
+class MultiplayerPage(Page):
+    key, tab = "multiplayer", "MEHRSPIELER"
+    py = 91
+
+    def build(self):
+        self.items = [
+            Action("LOBBY ERSTELLEN", lambda a: a.start_game("mehrspieler"),
+                   "eigene lobby oeffnen und eine runde fuer alle starten."),
+            Action("LOBBY BEITRETEN", lambda a: a.start_game("mehrspieler_beitreten"),
+                   "lobbys im netz anzeigen und einer lobby beitreten."),
+            Action("ZURÜCK", lambda a: a.goto("main"), "zurueck ins hauptmenue."),
         ]
 
 
@@ -1386,6 +1402,22 @@ class NewGamePage(Page):
         pygame.draw.rect(c, (8, 6, 5), box)
         pygame.draw.rect(c, C_LINE_DK, box, 1)
         c.blit(prev, (box.x + 1, box.y + 1))
+
+
+class CreditsPage(Page):
+    key, tab = "credits", "MITWIRKENDE"
+    px, py, pw = 26, 86, 300
+    body_h = 76
+
+    def build(self):
+        self.items = [Action("ZURÜCK", lambda a: a.goto("main"), "zurück ins hauptmenü.")]
+
+    def draw_body(self, c, r):
+        FONT.draw(c, "DUSTFRONT", r.x, r.y, C_AMBER, 2)
+        FONT.draw(c, "EIN SPIEL VON", r.x, r.y + 22, C_MUTED, 1)
+        FONT.draw(c, "NICOLAS, NIKOLAUS, MARLON", r.x, r.y + 34, C_CREAM, 1)
+        FONT.draw(c, "UND ALFRED", r.x, r.y + 44, C_CREAM, 1)
+        FONT.draw(c, "PYTHON + PYGAME-CE", r.x, r.y + 62, C_TEAL, 1)
 
 
 class OptionsPage(Page):
@@ -1461,7 +1493,8 @@ class QuitPage(Page):
         super().draw(c)
 
 
-PAGES = {p.key: p for p in (MainPage, NewGamePage, OptionsPage, ControlsPage, QuitPage)}
+PAGES = {p.key: p for p in (MainPage, MultiplayerPage, NewGamePage, CreditsPage,
+                            OptionsPage, ControlsPage, QuitPage)}
 
 
 # --------------------------------------------------------------------------

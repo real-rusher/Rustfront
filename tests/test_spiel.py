@@ -3316,9 +3316,13 @@ pruef("Und es behindert das Lauftempo nicht",
 from dustfront.entities import Rakete
 from dustfront.mehrspieler import KampfBeute
 
+pruef("Der Brecher hat 95 Leben", K.GEGNER["brecher"]["leben"] == 95.0)
 w, ga = gefechtspaar("team", rpg=True)
 pruef("Der Gastgeber kann den Werfer einschalten", w.mit_rpg)
 pruef("Und der Gast erfaehrt es", ga.rpg_an, str(ga.rpg_an))
+pruef("Der RPG verursacht 150 Schaden mit etwas groesserem Explosionsradius",
+      K.WAFFEN["rakete"]["schaden"] == 150.0
+      and K.WAFFEN["rakete"]["radius"] == 104.0)
 aus = gefechtspaar("pvp")
 pruef("Ohne Schalter gibt es ihn nicht", not aus[0].mit_rpg)
 aus[0].verlassen(); aus[1].verlassen()
@@ -6245,7 +6249,7 @@ for zname in ("gegner_laeufer", "gegner_brecher", "gegner_speier"):
     pruef("%s haelt keine Schusswaffe" % zname, _stummel_pixel(zname) == 0)
 from dustfront import art as _ART
 _ZFARBEN = {"gegner_laeufer": ((128, 84, 58), (58, 36, 24)),
-            "gegner_brecher": ((112, 70, 48), (48, 30, 20))}
+            "gegner_brecher": ((88, 58, 42), (38, 27, 21))}
 for zname, (rumpf_z, dunkel_z) in _ZFARBEN.items():
     zb = _PLATZHALTER[zname]()
     zc = zb.get_width() // 2
@@ -6261,6 +6265,12 @@ for zname, (rumpf_z, dunkel_z) in _ZFARBEN.items():
           arm_z != dunkel_z and tuple(zb.get_at((zc + 5, zc)))[:3] == dunkel_z)
     pruef("%s: nicht laenger als beim Bewaffneten" % zname,
           zb.get_at((zc + 10, zc - 4)).a == 0 and zb.get_at((zc + 10, zc + 4)).a == 0)
+    if zname == "gegner_brecher":
+        pruef("Der Brecher hat keinen Bruststreifen mehr",
+              not any(zb.get_at((x, y)).a
+                      and tuple(zb.get_at((x, y)))[:3] == K.C_RUST
+                      for x in range(zb.get_width())
+                      for y in range(zb.get_height())))
 for zname in ("gegner_laeufer", "gegner_brecher"):
     zb = _PLATZHALTER[zname]()
     zc = zb.get_width() // 2

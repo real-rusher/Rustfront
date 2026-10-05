@@ -57,6 +57,13 @@ def starten(headless: bool = False, beenden: bool = True,
             print("Keine Lobby moeglich: die Ports ab %d sind alle belegt."
                   % K.NETZ["port"])
             return 1
+    elif app.auftrag.get("action") == "mehrspieler_beitreten":
+        from . import sitzung
+        if sitzung.eigene_lobby(app) is None:
+            print("Keine Lobby moeglich: die Ports ab %d sind alle belegt."
+                  % K.NETZ["port"])
+            return 1
+        app.schieben(sitzung.LobbySuche(app, app.oben))
     else:
         app.schieben(Spiel(app))
     app.laufen(beenden=beenden)
