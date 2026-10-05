@@ -30,6 +30,14 @@ ENDUNGEN = K.ASSETS["ton_endungen"]
 
 _PLATZHALTER = {}
 
+# Dateien aus dem Sammelordner bleiben einzelnen Ereignissen zugeordnet.
+_KLANG_DATEIEN = {
+    "lmg_salve": "dennish18-machine-gun-129928.mp3",
+    "schuss_schrot": "universfield-shotgun-blast-352038.mp3",
+    "c4_explosion": "dragon-studio-massive-explosion-2-397983.mp3",
+    "smoke_grenade": "freesound_community-smoke-bomb-6761.mp3",
+}
+
 # Die Quellen einiger Schussaufnahmen enthalten mehrere Schuesse in Folge.
 # Im Spiel kommt der Klang je abgegebenem Geschoss; deshalb wird daraus je
 # ein Schuss mit seinem kurzen Nachhall, statt dieselbe Salve zu ueberlagern.
@@ -198,6 +206,18 @@ def _schuss_sturm(seed=0):
         _rauschen(0.11, 0.9, 8000, 1400, 3.6, seed + 21),
         _rauschen(0.04, 0.5, 13000, 7000, 2.2, seed + 22, hp=True),
         _schlag(210, 84, 0.09, 0.55, 3.8),
+    )
+
+
+@platzhalter_klang("lmg_dauer")
+def _lmg_dauer(seed=0):
+    """Kurzer, weicher MG-Schuss mit leisem mechanischem Ausklang."""
+    return _mischen(
+        _rauschen(0.075, 0.72, 6200, 700, 2.4, seed + 81),
+        _rauschen(0.025, 0.24, 11500, 3800, 2.0, seed + 82, hp=True),
+        _schlag(175, 72, 0.13, 0.38, 2.2),
+        [0.0] * int(RATE * 0.025)
+        + _rauschen(0.11, 0.16, 1800, 430, 2.0, seed + 83),
     )
 
 
@@ -602,6 +622,15 @@ class Klaenge:
         """Alle passenden Dateien: name.wav, name_1.wav, name_2.ogg, ..."""
         if self.ordner is None or not self.ordner.is_dir():
             return []
+        dateiname = _KLANG_DATEIEN.get(name)
+        if dateiname:
+            pfad = self.ordner / "CODEX" / dateiname
+            if pfad.is_file():
+                try:
+                    self.aus_datei.add(name)
+                    return [pygame.mixer.Sound(str(pfad))]
+                except pygame.error as grund:
+                    self.fehler.append("%s: %s" % (pfad.name, grund))
         gefunden = []
         # Aufnahmen liegen kuenftig je Klang in einem eigenen Ordner. Der
         # Dateiname ist dabei frei; sortiert bleibt die Auswahl reproduzierbar.

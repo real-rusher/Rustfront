@@ -411,6 +411,14 @@ class Welt:
             self.klang("molotov_glass", 0.9, pos, ebene)
             self.klang("molotov_whoosh", 0.28, pos, ebene)
             return
+        if art == "c4":
+            wolke(self, pos, 42, 390, 0.75, (255, 224, 164), ebene, 2,
+                  "funke")
+            wolke(self, pos, 30, 190, 1.1, K.C_MUTED_DK, ebene, 2, "staub")
+            self.aufschlagring(pos, ebene, 1.6)
+            self.ruckeln(13.0, "explosion", pos, ebene)
+            self.klang("c4_explosion", 1.0, pos, ebene)
+            return
         wolke(self, pos, 26, 340, 0.5, (255, 212, 140), ebene, 2, "funke")
         wolke(self, pos, 18, 150, 0.9, K.C_MUTED_DK, ebene, 2, "staub")
         self.brandfleck(pos, ebene, radius)
@@ -433,7 +441,11 @@ class Welt:
               34, winkel, 8.0)
         daten = K.WAFFEN.get(waffe, {})
         self.ruckeln(daten.get("kamera", 1.0), "schuss", pos, ebene, quelle)
-        klang = "schuss_sturm" if waffe == "lmg" else "schuss_" + waffe
+        if waffe == "lmg":
+            klang = ("lmg_salve" if getattr(quelle, "modus", "dauer") == "salve"
+                     else "lmg_dauer")
+        else:
+            klang = "schuss_schrot" if waffe == "schrot" else "schuss_" + waffe
         self.klang(klang, K.AUDIO["schuss"], pos, ebene)
 
     def raketenstart(self, pos, winkel: float, ebene: int, quelle=None,

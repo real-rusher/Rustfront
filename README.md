@@ -8,7 +8,7 @@ und "Fahr-Modus".
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.32.26, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.32.27, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -707,6 +707,7 @@ Die Phase haengt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.32.27 | Brecher vergroessert; LMG-, Pumpgun- und Rauchgranatentoene erneuert; C4 mit Fernzuendung, Admin-Konsole, Wurfgranaten ohne Nachladepause und Direktstart ohne Intro ergaenzt. Gastgeber und Gast brauchen dieselbe Version fuer C4-Zustand, Admin-Befehle und den vergroesserten Brecher; Karten unveraendert. |
 | 0.32.26 | **Mehrspieler-Einstieg und Brecher**: Im Hauptmenue waehlt man beim Mehrspieler zwischen Lobby erstellen und beitreten. Der Brecher hat 95 Leben und sieht wie ein dunklerer Zombie ohne Bruststreifen aus. Gastgeber und Gaeste brauchen dieselbe Version, damit Gegnerwerte uebereinstimmen; kein Protokoll und keine Karten geaendert. |
 | 0.32.25 | **Ein gemeinsames Hauptmenue**: Einzelspieler, Mehrspieler, Optionen, Steuerung und Mitwirkende sind vom selben Start aus erreichbar. Nach einer Runde kehrt das Spiel ins Menue zurueck. Kein Netzprotokoll und keine Karten geaendert. |
 | 0.32.24 | **RPG verstaerkt**: Der Raketenschaden steigt auf 150, der Explosionsradius auf 104 Weltpixel. Gastgeber und Gast muessen dieselbe Version nutzen, damit der Gefechtsschaden uebereinstimmt. Kein Drahtprotokoll und keine Karten geaendert. |

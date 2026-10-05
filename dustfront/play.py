@@ -71,6 +71,7 @@ class Spiel(Szene):
         self.befinden = Befinden()
         self.tot_seit = 0.0
         self.hinweis = ""
+        self.admin_zeile = None
         self._heilte = 0.0
         self.befinden.zuruecksetzen()
         self.kamera.pos.update(self.held.pos)
@@ -145,7 +146,23 @@ class Spiel(Szene):
 
     # ---- Ablauf -------------------------------------------------------
     def ereignis(self, ev) -> None:
+        if self.admin_zeile is not None:
+            if ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_ESCAPE:
+                    self.admin_zeile = None
+                elif ev.key == pygame.K_RETURN:
+                    self._admin_befehl()
+                elif ev.key == pygame.K_BACKSPACE:
+                    self.admin_zeile = self.admin_zeile[:-1]
+                elif ev.unicode and ev.unicode.isprintable() and len(self.admin_zeile) < 100:
+                    self.admin_zeile += ev.unicode
+            return
         if ev.type != pygame.KEYDOWN:
+            return
+        konto = getattr(self.app, "_konto", None)
+        if ev.key == pygame.K_t and konto is not None and konto.angemeldet \
+                and konto.name.strip().lower() == "admin":
+            self.admin_zeile = ""
             return
         # Beide Schirme sind Szenen ueber dieser hier. Das Spiel rechnet
         # solange nicht weiter, bleibt aber sichtbar.
@@ -156,11 +173,69 @@ class Spiel(Szene):
             if self.held.lebt:
                 self.app.schieben(Inventar(self.app, self))
 
+    def _admin_befehl(self) -> None:
+        """Lokale Moderationsbefehle mit einfachen @-Zielgruppen."""
+        teile = self.admin_zeile.strip().split()
+        self.admin_zeile = None
+        if not teile:
+            return
+        befehl = teile[0].lower().lstrip("/")
+        zielwahl = teile[1].lower() if len(teile) > 1 else "@s"
+        try:
+            wert = float(teile[2]) if len(teile) > 2 else 100.0
+        except ValueError:
+            self.hinweis = "ADMIN: ZAHL UNGUELTIG"
+            return
+        spieler = [w for w in self.welt.wesen if getattr(w, "fraktion", "") == "mensch"]
+        alle = list(self.welt.wesen)
+        if zielwahl == "@e":
+            ziele = alle
+        elif zielwahl == "@a":
+            ziele = spieler
+        elif zielwahl == "@g":
+            mein_team = getattr(self.held, "team", -1)
+            ziele = ([w for w in spieler if getattr(w, "team", -1) != mein_team]
+                     if mein_team >= 0 else
+                     [w for w in alle if getattr(w, "fraktion", "") == "feind"])
+        elif zielwahl == "@t":
+            mein_team = getattr(self.held, "team", -1)
+            ziele = ([w for w in spieler if getattr(w, "team", -2) == mein_team]
+                     if mein_team >= 0 else [self.held])
+        elif zielwahl == "@s":
+            ziele = [self.held]
+        else:
+            ziele = [w for w in spieler if getattr(w, "name", "").lower() == zielwahl]
+        ziele = [w for w in ziele if w.lebt]
+        if befehl in ("heal", "heilen"):
+            for w in ziele:
+                w.leben = min(w.max_leben, w.leben + wert)
+        elif befehl in ("damage", "schaden"):
+            for w in ziele:
+                w.schaden(wert, None, self.held)
+        elif befehl in ("kill", "toeten", "töten"):
+            for w in ziele:
+                w.schaden(w.leben + 1, None, self.held)
+        elif befehl in ("speed", "tempo"):
+            for w in ziele:
+                w.tempo *= max(0.0, min(5.0, wert))
+        elif befehl in ("ammo", "munition"):
+            for w in ziele:
+                if hasattr(w, "magazin"):
+                    for name in w.magazin:
+                        w.magazin[name] = int(max(0, min(999, wert)))
+        else:
+            self.hinweis = "ADMIN: heal|damage|kill|speed|ammo @ziel [wert]"
+            return
+        self.hinweis = "ADMIN: %s (%d)" % (befehl.upper(), len(ziele))
+
     def schritt(self, dt: float) -> None:
         e = self.app.eingabe
         held = self.held
         self.schaden_blende = max(0.0, self.schaden_blende - dt * 2.2)
         self.hinweis = ""
+        if self.admin_zeile is not None:
+            held.feuert = False
+            return
 
         if held.lebt:
             held.will = e.richtung()
@@ -181,7 +256,8 @@ class Spiel(Szene):
                         held.waffe_daten["name"],
                         K.WAFFEN[held.waffe_name]["modus_daten"][neu_modus]["kurz"])
             for nr in range(1, K.HOTBAR_PLAETZE + 1):
-                if e.gedrueckt("waffe%d" % nr):
+                if ((nr == 10 and ev.key == pygame.K_0)
+                        or (nr < 10 and e.gedrueckt("waffe%d" % nr))):
                     held.waffe_waehlen(nr - 1)
             if e.gedrueckt("heilen"):
                 held.heilen()
@@ -292,6 +368,10 @@ class Spiel(Szene):
                           self.blick)
         if self.hinweis:
             self.renderer.hinweis(ziel, self.hinweis)
+        if self.admin_zeile is not None:
+            pygame.draw.rect(ziel, (12, 10, 9), (16, 12, K.GAME_W - 32, 28))
+            pygame.draw.rect(ziel, K.C_AMBER, (16, 12, K.GAME_W - 32, 28), 1)
+            SCHRIFT.zeichnen(ziel, "> " + self.admin_zeile, 24, 21, K.C_CREAM, 1)
         self.befinden.blendung_zeichnen(
             ziel, (0, 0, 0) if self.app.opt["blendung"] == "schwarz"
             else (255, 255, 255))

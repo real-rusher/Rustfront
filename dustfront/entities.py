@@ -501,6 +501,66 @@ class Granate(Wesen):
         w.kurz_langsam(0.05)
 
 
+class C4Ladung(Wesen):
+    """Klebt nach einem kurzen Wurf und wartet auf den Zuender."""
+
+    fraktion = "geschoss"
+    schiebt = False
+    trefferbar = False
+    schatten = True
+    radius = 4.0
+    bild = "c4_brick"
+
+    def __init__(self, pos, richtung: float, ebene: int, von=None,
+                 weite: float = 0.0) -> None:
+        super().__init__(pos, ebene)
+        self.von = von
+        self.winkel = richtung
+        self.restweg = min(K.C4["wurfweite"], max(0.0, float(weite)))
+        r = math.radians(richtung)
+        self.richtung = pygame.Vector2(math.cos(r), math.sin(r))
+        self.lade_rest = K.C4["ladezeit"]
+        self.haftend = self.restweg <= 0.0
+
+    def schritt(self, dt: float) -> None:
+        self.vorher.update(self.pos)
+        if not self.haftend:
+            schritt = min(self.restweg, K.C4["wurftempo"] * dt)
+            vorher = pygame.Vector2(self.pos)
+            stoss_x, stoss_y = self.welt.bewegen(
+                self, self.richtung.x * schritt, self.richtung.y * schritt)
+            self.restweg -= self.pos.distance_to(vorher)
+            if self.restweg <= 0.5 or stoss_x or stoss_y:
+                self.haftend = True
+        else:
+            self.lade_rest = max(0.0, self.lade_rest - dt)
+
+    @property
+    def bereit(self) -> bool:
+        return self.haftend and self.lade_rest <= 0.0
+
+    def detonieren(self) -> None:
+        if not self.lebt or not self.bereit:
+            return
+        self.lebt = False
+        w = self.welt
+        radius = K.C4["radius"]
+        for ziel in list(w.nahe(self.pos, radius + 30, self.ebene)):
+            if not ziel.lebt or ziel is self:
+                continue
+            delta = ziel.pos - self.pos
+            abstand = delta.length()
+            if abstand > radius + ziel.radius:
+                continue
+            anteil = 1.0 - 0.72 * min(1.0, abstand / radius)
+            schub = (delta.normalize() * K.C4["schub"] * anteil
+                     if abstand > 0.01 else None)
+            lebte = ziel.lebt
+            ziel.schaden(K.C4["schaden"] * anteil, schub, self.von)
+            abschuss_buchen(self.von, ziel, "c4", lebte)
+        w.explosion(self.pos, self.ebene, radius, "c4", von=self.von)
+
+
 class Rakete(Wesen):
     """Eine Rakete. Fliegt langsam, lenkt traege, zerlegt alles am Ende.
 
@@ -1080,6 +1140,8 @@ class Spieler(Wesen):
         self.waffen = list(K.HOTBAR)
         self.waffe = 0
         self.magazin = {w: K.WAFFEN[w]["magazin"] for w in self.waffen}
+        self._c4_feuert_alt = False
+        self.c4_netz_rest = -1.0
         self.fokus = 0.0              # 0 = aus der Hueffte, 1 = ganz ruhig
         self.zielt = False            # rechte Maustaste
         self.medkits = 1
@@ -1220,12 +1282,33 @@ class Spieler(Wesen):
         """
         name = self.waffen[self.waffe]
         d = K.WAFFEN[name]
-        modi = d.get("modus_daten")
-        if not modi:
-            return d
         gemischt = dict(d)
-        gemischt.update(modi.get(self.modus_von(name), {}))
+        modi = d.get("modus_daten")
+        if modi:
+            gemischt.update(modi.get(self.modus_von(name), {}))
+        if name == "c4" and self.c4_ladungen:
+            rest = self.c4_rest
+            gemischt["name"] = "DETONATOR"
+            gemischt["kurz"] = "BEREIT" if rest <= 0 else "LADEN %.1f" % rest
+        elif name == "c4" and self.c4_netz_rest >= 0:
+            gemischt["name"] = "DETONATOR"
+            gemischt["kurz"] = ("BEREIT" if self.c4_netz_rest <= 0 else
+                                 "LADEN %.1f" % self.c4_netz_rest)
         return gemischt
+
+    @property
+    def c4_ladungen(self) -> list:
+        if self.welt is None:
+            return []
+        return [w for w in self.welt.wesen + self.welt.neue
+                if isinstance(w, C4Ladung) and w.lebt and w.von is self]
+
+    @property
+    def c4_rest(self) -> float:
+        ladungen = self.c4_ladungen
+        if ladungen:
+            return min(l.lade_rest for l in ladungen)
+        return self.c4_netz_rest
 
     # ---- Raketenwerfer -------------------------------------------------
     def rpg_nehmen(self) -> bool:
@@ -1627,6 +1710,10 @@ class Spieler(Wesen):
             self.nachlade_rest -= dt
             if self.nachlade_rest <= 0:
                 self.magazin[self.waffe_name] = self.waffe_daten["magazin"]
+        elif self.waffe_name == "c4":
+            if self.feuert and not self._c4_feuert_alt and self.heilt_rest <= 0:
+                self.feuern()
+            self._c4_feuert_alt = self.feuert
         elif self.feuert and self.takt <= 0 and self.heilt_rest <= 0:
             self.feuern()
 
@@ -1682,7 +1769,7 @@ class Spieler(Wesen):
 
     def nachladen(self) -> None:
         d = self.waffe_daten
-        if not d.get("magazin"):
+        if not d.get("magazin") or d.get("art") in ("wurf", "c4"):
             return
         if self.nachlade_rest <= 0 and self.magazin[self.waffe_name] < d["magazin"]:
             self.nachlade_rest = d["nachladen"]
@@ -1739,9 +1826,36 @@ class Spieler(Wesen):
         if art == "nahkampf":
             self.schlagen()
             return
-        if self.magazin[self.waffe_name] <= 0:
-            self.nachladen()
+        if art == "c4":
+            ladungen = self.c4_ladungen
+            if ladungen:
+                if all(l.bereit for l in ladungen):
+                    for ladung in ladungen:
+                        ladung.detonieren()
+                    self.magazin["c4"] = 1
+                    self.c4_netz_rest = -1.0
+                return
+            if self.magazin.get("c4", 0) <= 0:
+                return
+            muendung = self.pos + pygame.Vector2(8, 0).rotate(self.winkel)
+            weite = min(K.C4["wurfweite"], self.pos.distance_to(self.ziel))
+            self.welt.dazu(C4Ladung(muendung, self.winkel, self.ebene, self, weite))
+            self.magazin["c4"] = 0
+            self.welt.ruckeln(0.6, "wurf", self.pos, self.ebene, self)
+            self.welt.klang("wurf", 0.5, self.pos, self.ebene)
+            self.zaehlen("granaten", 1.0, "c4")
             return
+        if self.magazin[self.waffe_name] <= 0:
+            if art == "wurf":
+                vorrat = getattr(self, "vorrat", {})
+                if vorrat.get(self.waffe_name, 0) > 0:
+                    self.magazin[self.waffe_name] = 1
+                    vorrat[self.waffe_name] -= 1
+                else:
+                    return
+            else:
+                self.nachladen()
+                return
         # Der Takt einer Waffe mit Anlauf haengt an der Drehzahl: am
         # Anfang langsam, bei voller Drehzahl schnell. Genau dadurch
         # bringt Antippen bei einem MG fast nichts - der erste Schuss

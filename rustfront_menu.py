@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.32.26"
+VERSION = "0.32.27"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -1897,8 +1897,6 @@ class App:
             w = FONT.width(SPIEL_TITEL, 5, 2)
             pygame.draw.rect(c, C_ORANGE, (x, y + 40, w, 2))
             pygame.draw.rect(c, C_AMBER, (x, y + 40, 44, 2))
-            FONT.draw(c, "WANDLER BAUEN. LAND NEHMEN. AM LEBEN BLEIBEN.",
-                      x + 1, y + 48, C_MUTED, 1)
         else:
             y = 24
             w = FONT.draw(c, SPIEL_TITEL, x, y, C_MUTED, 2, spacing=2)

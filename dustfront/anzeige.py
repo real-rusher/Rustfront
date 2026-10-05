@@ -463,12 +463,15 @@ class Anzeige:
             rahmen = (K.C_RED if leer and aktiv else
                       K.C_AMBER if aktiv else K.C_MUTED_DK)
             ui.kasten(ziel, r, rahmen, (34, 10, 8, 230) if leer else KASTEN, 3)
-            sym = g.renderer.bilder.bild("waffe_" + name)
+            detonator = (name == "c4" and
+                         (getattr(ich, "c4_rest", -1.0) >= 0.0))
+            sym = g.renderer.bilder.bild(
+                "waffe_detonator" if detonator else "waffe_" + name)
             ziel.blit(sym, (r.centerx - sym.get_width() // 2,
                             r.centery - sym.get_height() // 2))
-            SCHRIFT.zeichnen(ziel, "%d" % (i + 1), r.x + 3, r.y + 2,
+            SCHRIFT.zeichnen(ziel, "%d" % ((i + 1) % 10), r.x + 3, r.y + 2,
                              K.C_AMBER if aktiv else K.C_MUTED_DK, 1)
-            if g.knapp and wd.get("magazin"):
+            if (g.knapp or wd.get("art") == "wurf") and wd.get("magazin"):
                 vorrat = ich.vorrat.get(name, 0) + ich.magazin.get(name, 0)
                 _text(ziel, "%d" % vorrat, r.centerx, r.bottom + 2,
                       K.C_RED if not vorrat else

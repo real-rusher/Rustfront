@@ -672,7 +672,7 @@ def _gegner_laeufer():
 
 @platzhalter("gegner_brecher")
 def _gegner_brecher():
-    return _figur(36, (88, 58, 42), (38, 27, 21), (106, 47, 33),
+    return _figur(44, (88, 58, 42), (38, 27, 21), (106, 47, 33),
                   breit=True, bewaffnet=False)
 
 
@@ -1216,6 +1216,39 @@ def _waffe_lmg():
     pygame.draw.line(s, (40, 38, 32), (18, 3), (21, 0))    # Zweibein
     pygame.draw.line(s, (40, 38, 32), (18, 8), (21, 10))
     return s
+
+
+@platzhalter("waffe_c4")
+def _waffe_c4():
+    s = _flaeche(26, 11)
+    pygame.draw.rect(s, (30, 34, 31), (2, 2, 17, 8))
+    pygame.draw.rect(s, (74, 82, 66), (3, 3, 14, 6))
+    pygame.draw.rect(s, (120, 130, 95), (5, 4, 8, 3))
+    pygame.draw.line(s, (166, 54, 35), (19, 5), (23, 2), 2)
+    pygame.draw.rect(s, (48, 44, 38), (20, 6, 5, 3))
+    return s
+
+
+@platzhalter("waffe_detonator")
+def _waffe_detonator():
+    s = _flaeche(26, 11)
+    pygame.draw.rect(s, (30, 32, 31), (5, 1, 16, 10))
+    pygame.draw.rect(s, (76, 82, 74), (6, 2, 14, 8))
+    pygame.draw.rect(s, (190, 42, 30), (10, 3, 6, 4))
+    pygame.draw.rect(s, (234, 85, 53), (11, 4, 4, 2))
+    pygame.draw.line(s, (44, 48, 42), (7, 10), (4, 11), 1)
+    pygame.draw.line(s, (44, 48, 42), (18, 10), (21, 11), 1)
+    return s
+
+
+@platzhalter("c4_brick")
+def _c4_brick():
+    s = _flaeche(12, 8)
+    pygame.draw.rect(s, (29, 32, 28), (0, 1, 12, 7))
+    pygame.draw.rect(s, (73, 82, 64), (1, 0, 10, 6))
+    pygame.draw.rect(s, (111, 122, 88), (2, 1, 4, 2))
+    pygame.draw.line(s, (190, 48, 32), (8, 1), (10, 0), 1)
+    return _rand(s, (12, 9, 6))
 
 
 @platzhalter("waffe_blend")

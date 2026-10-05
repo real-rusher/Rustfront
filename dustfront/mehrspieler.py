@@ -64,7 +64,7 @@ from .lobby import LobbyTeil, lobby_regeln
 from .spielerkosmetik import KosmetikTeil
 from . import world as welt_modul
 from .core import Szene
-from .entities import (Aufsammler, Brandflaeche, Gegner, Geschoss, Granate,
+from .entities import (Aufsammler, Brandflaeche, C4Ladung, Gegner, Geschoss, Granate,
                        Rakete, Rauchwolke, Spieler, wolke)
 from .font import SCHRIFT
 from .render import Befinden, Kamera, Renderer, Ueberblendung
@@ -810,6 +810,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._in_wirkung = False      # siehe NETZKLAENGE
         self._knoepfe: set[str] = set()
         self._waffe_wunsch = -1
+        self._admin_zeile = None
+        self._admin_auftrag = ""
         self._rad = 0
         # Sichtweite (Mausrad): wohin der Zoom will, und die Flaechen, auf
         # die mit Zoom gezeichnet wird (siehe _zoom_zeichnen).
@@ -965,7 +967,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     # und das war mehr, als man denkt: die Ansage eines Bosses und den
     # Spuck des Speiers hat seit 0.26 kein Gast je gehoert.
     NETZKLAENGE = ("speien", "boss_ansage", "dash", "wurf", "medkit", "ruf",
-                   "reload", "downed_not_dead", "rundenstart")
+                   "reload", "downed_not_dead", "rundenstart", "c4_explosion",
+                   "lmg_dauer", "lmg_salve", "schuss_schrot", "smoke_grenade")
 
     def _klang(self, name: str, lautstaerke: float = 1.0, pos=None,
                ebene: int | None = None) -> None:
@@ -1549,7 +1552,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         if taste in tabelle.get("nutzen", ()):
             self._knoepfe.add("nutzen")
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
-            if taste in tabelle.get("waffe%d" % nr, ()):
+            if ((nr == 10 and taste == pygame.K_0)
+                    or taste in tabelle.get("waffe%d" % nr, ())):
                 self._waffe_wunsch = nr - 1
 
     def knoepfe_sammeln(self) -> None:
@@ -1566,12 +1570,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         if e.gedrueckt("nutzen"):
             self._knoepfe.add("nutzen")
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
-            if e.gedrueckt("waffe%d" % nr):
+            if nr < 10 and e.gedrueckt("waffe%d" % nr):
                 self._waffe_wunsch = nr - 1
 
     def _meine_eingabe(self) -> dict:
         e = self.app.eingabe
-        offen = self.pausiert
+        offen = self.pausiert or self._admin_zeile is not None
         if offen and self._ziel_zuletzt is not None:
             # GRUND: Im Menue faehrt die Maus ueber die Eintraege. Folgte
             # die Figur ihr, drehte sie sich dabei wild im Kreis - fuer
@@ -1596,9 +1600,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             "ziehen": False if offen else e.gehalten("ziehen"),
             "waffe": self._waffe_wunsch,
             "knoepfe": sorted(self._knoepfe),
+            "admin": self._admin_auftrag,
         }
         self._knoepfe.clear()
         self._waffe_wunsch = -1
+        self._admin_auftrag = ""
         return meldung
 
     def _anwenden(self, k: Kaempfer, ein: dict) -> None:
@@ -1609,6 +1615,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         """
         if not k.lebt:
             return
+        befehl = ein.get("admin")
+        if (isinstance(befehl, str) and befehl
+                and k.name.strip().lower() == "admin" and k.konto):
+            self._admin_befehl(k, befehl)
         try:
             will = pygame.Vector2(float(ein["will"][0]), float(ein["will"][1]))
             if will.length_squared() > 1.0:
@@ -3088,6 +3098,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 "ml": [k.magazin.get(n, 0) for n in k.waffen],
                 "vl": [k.vorrat.get(n, 0) for n in k.waffen],
                 "nl": round(k.nachlade_rest, 2),
+                "cr": round(k.c4_rest, 2),
                 "fo": round(k.fokus, 2), "zi": k.zielt,
                 "tr": k.tracer, "tw": k.tracer_weit,
                 "mk": k.medkits, "hr": round(k.heilt_rest, 2),
@@ -3138,7 +3149,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             # Blendgranate und Rakete eigene Bilder haben (Skins), kamen
             # sie beim Gast nie an: er sah nur die Explosion (gemeldet in
             # 0.30). Der Name geht als Bild mit, wie er ist.
-            if isinstance(w, (Geschoss, Granate, Rakete)):
+            if isinstance(w, (Geschoss, Granate, Rakete, C4Ladung)):
                 name = getattr(w, "bild", None) or "geschoss"
                 # Die Flughoehe muss mit: eine Granate, die eine Ebene
                 # tiefer faellt, haengt beim Gast sonst in der Luft. Und
@@ -3489,6 +3500,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                     except (TypeError, ValueError):
                         continue
             k.nachlade_rest = float(eintrag.get("nl", 0.0))
+            k.c4_netz_rest = float(eintrag.get("cr", -1.0))
             k.dash_ladungen = int(eintrag.get("dl", K.DASH["ladungen"]))
             k.dash_laden = float(eintrag.get("dp", 0.0))
             k.dash_rest = float(eintrag.get("dr", 0.0))
@@ -3981,7 +3993,71 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # beide Maustasten einmal oben waren (_meine_eingabe).
         self._feuer_sperre = True
 
+    def _admin_befehl(self, ausfuehrer: Kaempfer, zeile: str) -> None:
+        """Fuehrt einen Admin-Befehl nur auf dem autoritaeren Rechner aus."""
+        teile = zeile.strip().split()
+        if not teile:
+            return
+        befehl = teile[0].lower().lstrip("/")
+        zielname = teile[1].lower() if len(teile) > 1 else "@s"
+        try:
+            wert = float(teile[2]) if len(teile) > 2 else 100.0
+        except ValueError:
+            self.hinweis = "ADMIN: ZAHL UNGUELTIG"
+            return
+        spieler = list(self.kaempfer.values())
+        alle = list(self.welt.wesen)
+        if zielname == "@e":
+            ziele = alle
+        elif zielname == "@a":
+            ziele = spieler
+        elif zielname == "@s":
+            ziele = [ausfuehrer]
+        elif zielname == "@t":
+            ziele = ([p for p in spieler if p.team == ausfuehrer.team]
+                     if ausfuehrer.team >= 0 else [ausfuehrer])
+        elif zielname == "@g":
+            ziele = ([p for p in spieler if p.team != ausfuehrer.team]
+                     if self.mit_teams and ausfuehrer.team >= 0 else
+                     [w for w in alle if getattr(w, "fraktion", "") == "feind"])
+        else:
+            ziele = [p for p in spieler if p.name.lower() == zielname]
+        ziele = [w for w in ziele if w.lebt]
+        if befehl in ("heal", "heilen"):
+            for w in ziele:
+                w.leben = min(w.max_leben, w.leben + wert)
+        elif befehl in ("damage", "schaden"):
+            for w in ziele:
+                w.schaden(wert, None, ausfuehrer)
+        elif befehl in ("kill", "toeten", "töten"):
+            for w in ziele:
+                w.schaden(w.leben + 1, None, ausfuehrer)
+        elif befehl in ("speed", "tempo"):
+            for w in ziele:
+                w.tempo *= max(0.0, min(5.0, wert))
+        elif befehl in ("ammo", "munition"):
+            for w in ziele:
+                if hasattr(w, "magazin"):
+                    for name in w.magazin:
+                        w.magazin[name] = int(max(0, min(999, wert)))
+        else:
+            self.hinweis = "ADMIN: heal|damage|kill|speed|ammo @ziel [wert]"
+            return
+        self.hinweis = "ADMIN: %s (%d)" % (befehl.upper(), len(ziele))
+
     def ereignis(self, ev) -> None:
+        if self._admin_zeile is not None:
+            if ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_ESCAPE:
+                    self._admin_zeile = None
+                elif ev.key == pygame.K_RETURN:
+                    self._admin_auftrag = self._admin_zeile
+                    self._admin_zeile = None
+                elif ev.key == pygame.K_BACKSPACE:
+                    self._admin_zeile = self._admin_zeile[:-1]
+                elif ev.unicode and ev.unicode.isprintable() and len(self._admin_zeile) < 100:
+                    self._admin_zeile += ev.unicode
+            return
         if self.menue is not None and self.versionsfehler is None and ev.type in (
                 pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEWHEEL):
             # Im Menue gehoert die Maus dem Menue und nichts davon dem
@@ -4005,6 +4081,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 self.heim("FALSCHE VERSION - NICHT BEIGETRETEN")
             return
         if self.menue is None:
+            konto = getattr(self.app, "_konto", None)
+            if (ev.key == pygame.K_t and konto is not None
+                    and konto.angemeldet and konto.name.strip().lower() == "admin"):
+                self._admin_zeile = ""
+                return
             self._knopf_merken(ev.key)
             if ev.key in self.app.opt.codes("ebenen"):
                 self.obere_umschalten()
@@ -4332,6 +4413,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self.kos_zeigen = None
         else:
             self._kosmetik_bild_zeichnen(ziel)
+        if self._admin_zeile is not None:
+            pygame.draw.rect(ziel, (12, 10, 9), (16, 12, K.GAME_W - 32, 28))
+            pygame.draw.rect(ziel, K.C_AMBER, (16, 12, K.GAME_W - 32, 28), 1)
+            SCHRIFT.zeichnen(ziel, "> " + self._admin_zeile, 24, 21,
+                             K.C_CREAM, 1)
 
     def _welt_bild(self, ziel, misch: float) -> None:
         """Alles, was in Weltkoordinaten liegt: die Welt, beim Gast die

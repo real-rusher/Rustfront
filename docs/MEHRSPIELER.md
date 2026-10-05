@@ -1863,6 +1863,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.32.27 | C4-Ladungen, ihre 5-Sekunden-Ladezeit und Admin-Befehle laufen ueber die bestehende Welt- und Eingabemeldung; der Brecher hat eine vergroesserte Trefferflaeche | Gastgeber und Gaeste muessen dieselbe Version haben, sonst fehlen C4-Zuenderstatus oder Trefferabgleich |
 | 0.32.26 | Der Brecher hat 95 Leben und eine dunklere Gestalt ohne Bruststreifen | Gastgeber und Gast brauchen dieselbe Version, damit Gegnerwerte uebereinstimmen; kein Protokollwechsel |
 | 0.32.24 | RPG-Schaden und Explosionsradius wurden auf 150 und 104 Weltpixel erhoeht | Gastgeber und Gast brauchen dieselbe Version, damit Treffer gleich berechnet werden |
 | 0.32.23 | Die Endmeldung enthaelt je Spieler die MVP-Punkte und MVP-Auszeichnung der Runde | Gastgeber und Gast brauchen dieselbe Version, sonst kennt der Gast die MVP-Zeile nicht |

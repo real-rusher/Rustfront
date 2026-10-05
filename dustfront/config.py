@@ -401,7 +401,7 @@ BILD_MASS = {
     "spieler_medkit":     (56, 56),   # waehrend des Anlegens
     "spieler_boden":      (28, 28),   # wer am Boden liegt
     "gegner_laeufer":   (28, 28),
-    "gegner_brecher":   (36, 36),
+    "gegner_brecher":   (44, 44),
     "gegner_renner":    (24, 24),
     "gegner_speier":    (30, 30),
     "gegner_blaeher":   (34, 34),
@@ -418,6 +418,7 @@ BILD_MASS = {
     "medkit":           (16, 14),
     "munikiste":        (16, 14),
     "granate":          (10, 10),
+    "c4_brick":         (12, 8),
     "rauchgranate":     (10, 10),
     "molotov":          (10, 10),
     "blendgranate":     (10, 10),
@@ -432,6 +433,8 @@ BILD_MASS = {
     "waffe_lmg":        (26, 11),
     "waffe_rakete":     (26, 11),
     "waffe_granate":    (26, 11),
+    "waffe_c4":         (26, 11),
+    "waffe_detonator":  (26, 11),
     "waffe_rauch":      (26, 11),
     "waffe_molotov":    (26, 11),
     "waffe_blend":      (26, 11),
@@ -455,6 +458,9 @@ KLANG_NAMEN = (
     "schuss_sturm",
     "schuss_schrot",
     "schuss_scharf",
+    "lmg_salve",
+    "lmg_dauer",
+    "c4_explosion",
     "granate",
     "sturz",                # Aufsetzen nach einem Fall
     "nahkampf",
@@ -992,11 +998,17 @@ MUNITION = dict(
     # braucht.
     vorrat={"repetierer": 42, "sturm": 90, "schrot": 18, "scharf": 10,
             "lmg": 200, "granate": 3, "rauch": 2, "molotov": 2, "blend": 2,
+            "c4": 2,
             "brecheisen": 0},
     kiste_takt=14.0,          # Sekunden zwischen zwei Munitionskisten
     kiste_hoechstens=4,
     kiste_gibt=0.5,           # so viel vom vollen Vorrat gibt eine Kiste
 )
+
+# C4 ist ein kurzer Wurf ohne Abprallen. Der Zaehler startet erst, wenn
+# der Brick an Boden oder Wand klebt; so ist die Ladezeit sichtbar nutzbar.
+C4 = dict(wurfweite=76.0, wurftempo=260.0, ladezeit=5.0,
+          radius=158.0, schaden=210.0, schub=420.0)
 
 # ══════════════════════════════════════════════════ HOEHE
 
@@ -1354,6 +1366,16 @@ WAFFEN = {
         rueckstoss=0.0,
         huelsen=0,
     ),
+    "c4": dict(
+        art="c4",
+        name="C4",
+        magazin=1,
+        nachladen=0.0,
+        takt=0.25,
+        kamera=0.5,
+        rueckstoss=0.0,
+        huelsen=0,
+    ),
     "molotov": dict(
         art="wurf",
         name="MOLOTOW",
@@ -1473,13 +1495,13 @@ for _i in range(SCHWUNG_BILDER):
 # NAHKAMPF. Ein Werkzeug, das man im Gedraenge braucht, sollte keinen
 # Waffenwechsel kosten.
 HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "lmg", "granate",
-          "rauch", "molotov", "blend"]
+          "rauch", "molotov", "blend", "c4"]
 
 # So viele Plaetze kann die Hotbar hoechstens haben. Es sind die Tasten 1
 # bis 9 - mehr Plaetze sind keine Auswahl mehr, sondern eine Suche. Wer
 # mehr Waffen will, als hier hineinpassen, spielt mit Loadouts: zwei
 # Waffen und eine Wurfwaffe, und die Entscheidung faellt vor der Runde.
-HOTBAR_PLAETZE = 9
+HOTBAR_PLAETZE = 10
 
 # ══════════════════════════════════════════════════ AUSRUESTUNG
 #
@@ -1503,7 +1525,7 @@ LOADOUT = dict(
     # aus WAFFEN abgeleitet: was waehlbar ist, ist eine Spielentscheidung
     # und nicht dasselbe wie das, was es gibt.
     auswahl_waffen=("repetierer", "sturm", "schrot", "scharf", "lmg"),
-    auswahl_wuerfe=("granate", "rauch", "molotov", "blend"),
+    auswahl_wuerfe=("granate", "rauch", "molotov", "blend", "c4"),
     # Womit ein neues Loadout vorbelegt wird. Drei Stueck, damit man nach
     # dem ersten Anmelden gleich drei brauchbare Saetze hat und nicht vor
     # drei leeren Plaetzen sitzt.
@@ -1955,7 +1977,7 @@ GEGNER = {
     "brecher": dict(
         name="BRECHER",
         leben=95.0,
-        radius=13.0,
+        radius=17.0,
         tempo=44.0,
         beschleunigung=380.0,
         schaden=22.0,
