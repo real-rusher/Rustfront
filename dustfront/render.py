@@ -26,6 +26,7 @@ import pygame
 from . import art  # noqa: F401  registriert die Platzhalter-Bilder
 from . import config as K
 from .font import SCHRIFT
+from .world import DEKAL_PIXEL
 
 RND = random.Random(4711)
 
@@ -362,12 +363,23 @@ class Renderer:
             ziel.blit(s, (tx * K.TILE - ecke.x, sy))
         # Dekale liegen auf dem Boden
         d = e.dekale
-        if d is None:
+        if not d:
             return
-        if dunkel is None:
-            ziel.blit(d, (-ecke.x, -ecke.y))
-        else:
-            ziel.blit(self.dunkel(d, dunkel), (-ecke.x, -ecke.y))
+        dx0 = max(0, int(ecke.x // DEKAL_PIXEL))
+        dy0 = max(0, int(ecke.y // DEKAL_PIXEL))
+        dx1 = min((e.pixel_breite - 1) // DEKAL_PIXEL,
+                  int((ecke.x + zw) // DEKAL_PIXEL))
+        dy1 = min((e.pixel_hoehe - 1) // DEKAL_PIXEL,
+                  int((ecke.y + zh) // DEKAL_PIXEL))
+        for ky in range(dy0, dy1 + 1):
+            for kx in range(dx0, dx1 + 1):
+                q = d.get((kx, ky))
+                if q is None:
+                    continue
+                if dunkel is not None:
+                    q = self.dunkel(q, dunkel)
+                ziel.blit(q, (kx * DEKAL_PIXEL - ecke.x,
+                              ky * DEKAL_PIXEL - ecke.y))
 
     def wesen_zeichnen(self, ziel, welt, index, ecke, alpha, dunkel=None) -> None:
         liste = [w for w in welt.wesen if w.ebene == index and w.lebt]

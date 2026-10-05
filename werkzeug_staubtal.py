@@ -1,264 +1,209 @@
-"""Erzeugt die Karte STAUBTAL.
-
-Sehr gross, sehr leer, Wueste mit Wildwest-Einschlag. Was sie ausmacht:
-
-* **Flach.** Der Boden ist Sand, sonst nichts. Kein Gang, kein Labyrinth.
-* **Plateaus statt Etagen.** Die obere Ebene besteht aus drei Tafeln, und
-  unter jeder steht Fels - man kommt nicht darunter, nur hinauf.
-* **Drei Kreise, die nicht gleich sind.** Einer im offenen Sand, einer in
-  einer Halle, einer auf dem groessten Plateau.
-* **Man findet sie.** Jeder Kreis hat ein Wahrzeichen, das von weitem zu
-  sehen ist: ein Ring aus Fassern, eine Halle, ein Plateau.
-
-Die erzeugte Datei ist danach ganz normaler Text und von Hand
-weiterzubearbeiten - dieses Werkzeug setzt nur den ersten Stand.
-"""
-import math
+"""Erzeugt STAUBTAL aus dem grossen Grundriss und festen Landmarken."""
 from pathlib import Path
 
-B, H = 120, 80          # Kacheln. Bei 32 Pixeln sind das 3840 x 2560.
+B, H = 300, 240
+SAND, WAND, DECKUNG, LOCH = ".", "#", "X", "~"
 
-SAND, WAND, FASS, LEER = ".", "#", "X", " "
+# Die Rechtecke folgen dem WhatsApp-Grundriss: ein langes oberes Plateau,
+# zwei kleinere Plateaus unten und das hohe Plateau im Nordosten.
+PLATEAUS_1 = ((5, 5, 294, 83), (8, 161, 51, 232),
+              (214, 168, 263, 207))
+PLATEAU_2 = (220, 5, 286, 143)
 
-# Plateaus: (x0, y0, x1, y1, Rampen). Eine Rampe ist (x, y) auf der
-# unteren Ebene - dort steht die Treppe hinauf, und genau darueber die
-# Treppe hinunter.
-PLATEAUS = [
-    # Das grosse in der Mitte oben: darauf liegt der dritte Kreis.
-    dict(kasten=(44, 8, 76, 27), rampen=[(52, 28), (68, 28), (43, 16)]),
-    # Zwei kleinere an den Flanken, als Stellungen ueber der Ebene.
-    dict(kasten=(10, 44, 30, 62), rampen=[(31, 52), (20, 43)]),
-    dict(kasten=(88, 40, 108, 58), rampen=[(87, 48), (98, 59)]),
-]
+# Aufzuege aus dem Plan: sechs vom Sand auf Hoehe 1, zwei von Hoehe 1 auf 2.
+AUFZUEGE_01 = ((18, 82), (90, 82), (192, 82), (46, 190),
+               (210, 176), (273, 193))
+AUFZUEGE_12 = ((224, 29), (240, 137))
 
-# Gebaeude auf der Ebene: (x0, y0, x1, y1, Tueren). Eine Tuer ist ein
-# Loch in der Wand, angegeben als (x, y).
-GEBAEUDE = [
-    # Die Halle. Gross, mit zwei weiten Toren - darin liegt Kreis zwei.
-    dict(kasten=(80, 10, 108, 30),
-         tueren=[(80, 19), (80, 20), (80, 21), (94, 30), (95, 30), (96, 30),
-                 (108, 19), (108, 20)]),
-    # Vier Buden, ueber die Karte verteilt. Sie geben Deckung, mehr nicht.
-    dict(kasten=(16, 12, 26, 20), tueren=[(21, 20), (26, 16)]),
-    dict(kasten=(36, 60, 48, 70), tueren=[(42, 60), (36, 65)]),
-    dict(kasten=(62, 46, 72, 54), tueren=[(67, 46), (72, 50)]),
-    dict(kasten=(98, 66, 110, 74), tueren=[(104, 66), (98, 70)]),
-]
-
-# Die drei Kreise. `zeichen` ist die Marke in der Karte.
-KREISE = [
-    # 1. Offener Sand. Erkennbar an einem Ring aus Fassern.
-    dict(name="KESSEL", zeichen="A", ebene=0, mitte=(26, 33), ring=9),
-    # 2. In der Halle. Erkennbar an der Halle.
-    dict(name="DEPOT", zeichen="B", ebene=0, mitte=(94, 20), ring=0),
-    # 3. Auf dem grossen Plateau. Erkennbar am Plateau.
-    dict(name="KANZEL", zeichen="C", ebene=1, mitte=(60, 17), ring=0),
-]
-
-# Spawnstellen. Der Buchstabe Z in der Karte sagt: hier kommen Gegner
-# heraus, wenn jemand in der Naehe ist.
-#
-# Sie sind nicht gleichmaessig verteilt, sondern dort, wo es sich
-# erklaert - aus dem Dunkel unter den Plateaus, aus den Buden, aus dem
-# Depot. Auf offenem Sand steht keine: mitten im Freien aus dem Nichts
-# zu erscheinen sieht nach Fehler aus, hinter einer Bude hervorzukommen
-# nicht. Wo keine Marke passt, sucht das Spiel selbst eine Stelle im
-# Band um die Spieler (siehe K.SPAWN) - die Marken sind eine
-# Bevorzugung, keine Bedingung.
-SPAWNS = [
-    # Am Fuss der drei Plateaus, im Schatten der Felswand.
-    (42, 14, 0), (78, 22, 0), (60, 30, 0),
-    (8, 46, 0), (32, 58, 0), (20, 41, 0),
-    (86, 44, 0), (110, 54, 0), (98, 61, 0),
-    # An den Buden.
-    (14, 16, 0), (28, 22, 0), (34, 64, 0), (50, 68, 0),
-    (60, 50, 0), (74, 48, 0), (96, 70, 0), (112, 68, 0),
-    # Im Depot und an seinen Toren.
-    (82, 26, 0), (106, 14, 0), (92, 34, 0),
-    # Am Rand der Karte, wo die Mauer steht.
-    (6, 8, 0), (114, 8, 0), (6, 72, 0), (114, 74, 0), (60, 76, 0),
-    # Und oben auf den Plateaus - wenige, damit auch dort etwas kommt,
-    # wenn dort gekaempft wird.
-    (50, 12, 1), (70, 22, 1), (14, 48, 1), (26, 58, 1),
-    (92, 44, 1), (104, 54, 1),
-]
-
-# Fasser und Wracks im freien Feld. Ohne sie ist eine sehr grosse,
-# sehr flache Karte nur gross und flach.
-STREU = [
-    (34, 24, 4), (52, 38, 5), (70, 34, 3), (14, 68, 4), (56, 70, 5),
-    (86, 62, 3), (30, 8, 3), (100, 36, 4), (74, 8, 3), (12, 28, 3),
-    (46, 52, 4), (78, 70, 4), (110, 24, 3), (64, 62, 3), (22, 56, 3),
-]
+KREISE = (("A", 0, 150, 137), ("B", 1, 150, 48),
+          ("C", 0, 150, 197))
 
 
-def gitter(fuell):
-    return [[fuell] * B for _ in range(H)]
+def gitter(fuellung):
+    return [[fuellung] * B for _ in range(H)]
 
 
-def rechteck(g, kasten, zeichen, nur_rand=False):
-    x0, y0, x1, y1 = kasten
-    for y in range(y0, y1 + 1):
-        for x in range(x0, x1 + 1):
-            if not (0 <= x < B and 0 <= y < H):
-                continue
-            if nur_rand and not (x in (x0, x1) or y in (y0, y1)):
-                continue
-            g[y][x] = zeichen
+def in_bounds(x, y):
+    return 0 <= x < B and 0 <= y < H
 
 
-def streuen(g, cx, cy, r, zeichen=FASS, dichte=0.55):
-    """Ein paar Fasser um einen Punkt. Fest gewuerfelt, damit die Karte
-    auf jedem Rechner gleich aussieht - eine Karte ist eine Datei."""
-    for i in range(r * 3):
-        w = (i * 137) % 360
-        weit = 1 + (i * 7) % max(1, r)
-        x = int(cx + math.cos(math.radians(w)) * weit)
-        y = int(cy + math.sin(math.radians(w)) * weit * 0.8)
-        if not (1 <= x < B - 1 and 1 <= y < H - 1):
-            continue
-        if ((x * 73856093) ^ (y * 19349663)) % 100 < dichte * 100:
-            g[y][x] = zeichen
+def rechteck(g, x0, y0, x1, y1, zeichen, rand=False):
+    for y in range(max(0, y0), min(H, y1 + 1)):
+        for x in range(max(0, x0), min(B, x1 + 1)):
+            if not rand or x in (x0, x1) or y in (y0, y1):
+                g[y][x] = zeichen
 
 
-def ring(g, cx, cy, r, zeichen=FASS):
-    """Ein unterbrochener Kreis aus Fassern. Das Wahrzeichen im Sand:
-    man sieht ihn von weitem und weiss sofort, was er bedeutet."""
-    schritte = int(2 * math.pi * r)
-    for i in range(schritte):
-        w = i / schritte * 360.0
-        # Vier Luecken, damit man hinein- und hinauslaufen kann.
-        if (w % 90) < 26:
-            continue
-        x = int(round(cx + math.cos(math.radians(w)) * r))
-        y = int(round(cy + math.sin(math.radians(w)) * r * 0.82))
-        if 1 <= x < B - 1 and 1 <= y < H - 1:
-            g[y][x] = zeichen
+def haus(g, box, deuren=(), fuellung=SAND):
+    x0, y0, x1, y1 = box
+    rechteck(g, x0, y0, x1, y1, WAND, rand=True)
+    for x, y in deuren:
+        if in_bounds(x, y):
+            g[y][x] = fuellung
+
+
+def deckungsgruppe(g, cx, cy, ausdehnung=2):
+    """Zwei versetzte, sichtblockende Seitenbunker mit freiem Mittelgang."""
+    for seite in (-1, 1):
+        x = cx + seite * ausdehnung
+        for dy in (-2, -1, 1, 2):
+            if in_bounds(x, cy + dy):
+                g[cy + dy][x] = WAND
+        if in_bounds(cx + seite * (ausdehnung + 1), cy):
+            g[cy][cx + seite * (ausdehnung + 1)] = WAND
+        # Fassbarrikaden lassen eine zweite Deckungslinie hinter den Mauern.
+        for dx in (ausdehnung + 2, ausdehnung + 3):
+            if in_bounds(cx + seite * dx, cy - 1):
+                g[cy - 1][cx + seite * dx] = DECKUNG
+            if in_bounds(cx + seite * dx, cy + 1):
+                g[cy + 1][cx + seite * dx] = DECKUNG
+
+
+def plattform(g, box, fuellung=SAND):
+    x0, y0, x1, y1 = box
+    rechteck(g, x0, y0, x1, y1, fuellung)
+    # Gestaffelte Fasserbruestung, mit offenen Passagen an den Ecken.
+    for x in range(x0 + 2, x1 - 1, 4):
+        g[y0][x] = DECKUNG
+        g[y1][x] = DECKUNG
+    for y in range(y0 + 2, y1 - 1, 4):
+        g[y][x0] = DECKUNG
+        g[y][x1] = DECKUNG
 
 
 def bauen():
-    e0 = gitter(SAND)
-    e1 = gitter(LEER)
+    e0, e1, e2 = gitter(SAND), gitter(LOCH), gitter(LOCH)
+    rechteck(e0, 0, 0, B - 1, H - 1, WAND, rand=True)
 
-    # Rand: eine Mauer aus Fels rundum.
-    rechteck(e0, (0, 0, B - 1, H - 1), WAND, nur_rand=True)
+    # Hoehe 1 und 2 haben jeweils einen passenden Felsunterbau darunter.
+    for box in PLATEAUS_1:
+        plattform(e1, box)
+        rechteck(e0, *box, WAND)
+    plattform(e2, PLATEAU_2)
+    rechteck(e1, *PLATEAU_2, WAND)
+    rechteck(e0, *PLATEAU_2, WAND)
 
-    # Plateaus. Oben Boden, unten Fels - man kommt nicht darunter.
-    for p in PLATEAUS:
-        rechteck(e0, p["kasten"], WAND)
-        rechteck(e1, p["kasten"], SAND)
-        # Eine Bruestung aus Fassern am Rand des Plateaus, damit man die
-        # Kante sieht, bevor man darueber laeuft.
-        x0, y0, x1, y1 = p["kasten"]
-        for x in range(x0, x1 + 1, 3):
-            e1[y0][x] = FASS
-            e1[y1][x] = FASS
-        for y in range(y0, y1 + 1, 3):
-            e1[y][x0] = FASS
-            e1[y][x1] = FASS
+    # Die drei Aufzuege suedlich und oestlich der Plateaus bekommen
+    # begehbare Verbindungsstege auf Hoehe 1, wie im Plan eingezeichnet.
+    for box in ((206, 172, 218, 180), (259, 189, 276, 197),
+                (237, 137, 243, 168), (209, 27, 225, 31)):
+        rechteck(e1, *box, SAND)
+        rechteck(e0, *box, WAND)
 
-    # Rampen: unten hinauf, oben hinunter. Die Kachel darueber muss frei
-    # sein, sonst steht man nach dem Wechsel in einem Fass.
-    for p in PLATEAUS:
-        x0, y0, x1, y1 = p["kasten"]
-        for (rx, ry) in p["rampen"]:
-            e0[ry][rx] = ">"
-            # Die Treppe hinunter liegt **genau ueber** der Rampe, nicht
-            # auf der Tafel daneben. Ein Ebenenwechsel behaelt die Stelle -
-            # wer unten auf der Rampe steht, steht danach oben an derselben
-            # Stelle. Bis 0.27 lag die obere Treppe eine Kachel versetzt im
-            # Plateau, und ueber der Rampe war oben ein Loch: wer hinaufging,
-            # fiel sofort wieder hinunter. Alle sieben Rampen, seit STAUBTAL
-            # gibt - die Plateaus und damit der Kreis KANZEL waren nie zu
-            # erreichen. Die obere Treppe ist jetzt ein Absatz, der eine
-            # Kachel ueber die Kante ragt.
-            e1[ry][rx] = "<"
-            # Die Kachel am Rand, auf die man vom Absatz tritt, und ihre
-            # Nachbarn frei von Fassern - sonst endet die Rampe an einem.
-            zx = min(max(rx, x0), x1)
-            zy = min(max(ry, y0), y1)
-            for dy in (-1, 0, 1):
-                for dx in (-1, 0, 1):
-                    nx, ny = zx + dx, zy + dy
-                    if x0 <= nx <= x1 and y0 <= ny <= y1 and e1[ny][nx] == FASS:
-                        e1[ny][nx] = SAND
-            # Und unten davor freiraeumen.
-            for dy in (-1, 0, 1):
-                for dx in (-1, 0, 1):
-                    nx, ny = rx + dx, ry + dy
-                    if 0 < nx < B - 1 and 0 < ny < H - 1 and e0[ny][nx] == WAND:
-                        if not any(x0 <= nx <= x1 and y0 <= ny <= y1
-                                   for q in PLATEAUS
-                                   for x0, y0, x1, y1 in (q["kasten"],)):
-                            e0[ny][nx] = SAND
+    # Weite, gut lesbare Truemmerfelder. Die Mitte bleibt offen, damit die
+    # Groesse sichtbar und die drei Hotzones aus der Ferne auffindbar sind.
+    for box in (
+        (38, 108, 56, 111), (73, 116, 76, 136), (223, 98, 244, 101),
+        (30, 151, 47, 154), (69, 180, 72, 197), (229, 220, 249, 223),
+        (253, 113, 256, 129), (83, 214, 101, 217), (195, 111, 211, 114),
+    ):
+        rechteck(e0, *box, DECKUNG)
 
-    # Gebaeude.
-    for geb in GEBAEUDE:
-        rechteck(e0, geb["kasten"], WAND, nur_rand=True)
-        for (tx, ty) in geb["tueren"]:
-            if 0 <= tx < B and 0 <= ty < H:
-                e0[ty][tx] = SAND
+    # Hotzone 2: Aussenposten und Gassen, aber ein freier Platz um den Kreis.
+    haus(e0, (118, 28, 137, 39), ((127, 28), (118, 34)))
+    haus(e0, (163, 30, 182, 42), ((173, 42), (163, 35)))
+    rechteck(e0, 139, 25, 143, 35, DECKUNG)
+    rechteck(e0, 157, 42, 161, 55, DECKUNG)
+    rechteck(e0, 130, 59, 139, 61, WAND)
+    rechteck(e0, 162, 58, 171, 60, WAND)
 
-    # Streugut im freien Feld.
-    for (x, y, r) in STREU:
-        if e0[y][x] == SAND:
-            streuen(e0, x, y, r)
+    # Hotzone 1 bleibt ein offenes Sandfeld mit einzelnen Deckungsinseln.
+    for box in ((130, 126, 133, 132), (167, 143, 170, 149),
+                (137, 158, 143, 160), (157, 119, 162, 121)):
+        rechteck(e0, *box, DECKUNG)
 
-    # Die Kreise.
-    for kr in KREISE:
-        g = e0 if kr["ebene"] == 0 else e1
-        cx, cy = kr["mitte"]
-        if kr["ring"]:
-            ring(g, cx, cy, kr["ring"])
-        # Innen freiraeumen, damit man wirklich darin stehen kann.
-        for y in range(cy - 3, cy + 4):
-            for x in range(cx - 4, cx + 5):
-                if 0 < x < B - 1 and 0 < y < H - 1 and g[y][x] == FASS:
-                    g[y][x] = SAND
-        g[cy][cx] = kr["zeichen"]
+    # Hotzone 3 liegt in einem befestigten Aussenposten. Vier Gebaeude
+    # umschliessen einen begehbaren Hof; Tore und versetzte Barrikaden halten
+    # mehrere Wege offen. Die Zone selbst bleibt frei begehbar.
+    rechteck(e0, 95, 166, 205, 229, WAND, rand=True)
+    for x, y in ((148, 166), (152, 166), (95, 194), (95, 199),
+                 (205, 188), (205, 193), (145, 229), (155, 229)):
+        e0[y][x] = SAND
+    haus(e0, (105, 173, 130, 188), ((117, 188), (130, 180)))
+    haus(e0, (170, 172, 195, 187), ((182, 187), (170, 179)))
+    haus(e0, (104, 207, 130, 222), ((116, 207), (130, 216)))
+    haus(e0, (171, 207, 196, 222), ((183, 207), (171, 216)))
+    # Seitenwaende staffeln die Schusslinien in den Hof, ohne ihn zu sperren.
+    for box in ((134, 179, 136, 188), (164, 180, 166, 189),
+                (134, 207, 136, 217), (164, 206, 166, 217)):
+        rechteck(e0, *box, WAND)
+    for x, y in ((142, 190), (158, 190), (142, 204), (158, 204),
+                 (139, 197), (161, 197)):
+        e0[y][x] = DECKUNG
 
-    # Spawnmarken. Zuletzt, damit sie nichts ueberschreibt - und nur
-    # dort, wo wirklich Boden ist: eine Marke in einer Wand waere eine
-    # Stelle, an der nie etwas herauskommt, und das faellt niemandem auf.
-    gesetzt = 0
-    for (x, y, ebene) in SPAWNS:
-        g = e0 if ebene == 0 else e1
-        if not (0 < x < B - 1 and 0 < y < H - 1):
-            continue
-        if g[y][x] != SAND:
-            # Nachbarschaft absuchen, statt die Marke wegzuwerfen.
-            for (dx, dy) in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1),
-                             (2, 0), (-2, 0), (0, 2), (0, -2)):
-                if 0 < x + dx < B - 1 and 0 < y + dy < H - 1 \
-                        and g[y + dy][x + dx] == SAND:
-                    x, y = x + dx, y + dy
-                    break
-            else:
-                continue
-        g[y][x] = "Z"
-        gesetzt += 1
-    if gesetzt < len(SPAWNS) * 0.7:
-        raise SystemExit("Nur %d von %d Spawnmarken gesetzt - die Liste passt "
-                         "nicht mehr zum Grundriss." % (gesetzt, len(SPAWNS)))
+    # Gebaeude, Schuetzengraeben und Schrottinseln verteilen sich ueber das
+    # riesige Spielfeld, mit mehreren breiten Routen zwischen den Punkten.
+    for box, doors in (
+        ((25, 101, 42, 116), ((33, 101), (42, 109))),
+        ((92, 100, 107, 116), ((99, 116), (107, 108))),
+        ((257, 96, 278, 113), ((266, 96), (257, 106))),
+        ((31, 132, 47, 145), ((39, 145), (47, 137))),
+        ((254, 145, 276, 160), ((264, 145), (254, 153))),
+        ((61, 205, 78, 220), ((69, 205), (78, 213))),
+        ((222, 51, 236, 64), ((229, 64), (236, 57))),
+    ):
+        haus(e0, box, doors)
+    for box in (
+        (15, 121, 22, 123), (53, 91, 62, 93), (81, 153, 90, 155),
+        (214, 112, 222, 114), (282, 151, 285, 161), (25, 188, 33, 190),
+        (74, 225, 84, 227), (215, 151, 218, 160), (282, 216, 285, 226),
+        (122, 94, 129, 96), (183, 151, 191, 153), (267, 70, 277, 72),
+    ):
+        rechteck(e0, *box, DECKUNG)
 
-    return e0, e1
+    # Auf der oberen Etage setzen direkte Flankenbunker die Ausgaenge in
+    # Deckung: nach dem Hochfahren ist sofort ein Weg nach links oder rechts
+    # und dahinter jeweils ein Sichtschutz erreichbar.
+    for x, y in AUFZUEGE_01:
+        deckungsgruppe(e1, x, y, 2)
+    # Die hohen Plattformen haben dieselbe geschuetzte Ausstiegssituation.
+    for x, y in AUFZUEGE_12:
+        deckungsgruppe(e2, x, y, 2)
+
+    # Im Sand eine kleine Deckungskrone um jeden unteren Aufzugseingang.
+    for x, y in AUFZUEGE_01:
+        deckungsgruppe(e0, x, y, 3)
+
+    # Aufzugskacheln zuletzt setzen, damit keine Mauer ihre Verbindung kappt.
+    for x, y in AUFZUEGE_01:
+        e0[y][x] = "^"
+        e1[y][x] = "v"
+    for x, y in AUFZUEGE_12:
+        e1[y][x] = "^"
+        e2[y][x] = "v"
+
+    # Kreis A, B und C stehen in der Kartenreihenfolge. C sitzt im Hof.
+    for zeichen, ebene, x, y in KREISE:
+        (e0 if ebene == 0 else e1)[y][x] = zeichen
+
+    # Gegner erscheinen an festen Deckungs- und Gebaeudekanten, nie mitten
+    # auf offenem Sand. Oberhalb gibt es weitere Marken fuer Plateaukaempfe.
+    spawnpunkte = []
+    for x, y in ((12, 102), (48, 115), (83, 105), (110, 133), (190, 108),
+                 (245, 105), (281, 125), (57, 159), (88, 202), (215, 128),
+                 (278, 179), (38, 222), (88, 235), (214, 226), (280, 230),
+                 (108, 195), (191, 195), (126, 169), (174, 229)):
+        spawnpunkte.append((e0, x, y))
+    for x, y in ((14, 18), (80, 68), (131, 74), (180, 67), (205, 32),
+                 (279, 60), (20, 214), (40, 179), (235, 177), (255, 197)):
+        spawnpunkte.append((e1, x, y))
+    for x, y in ((230, 17), (275, 90), (229, 126)):
+        spawnpunkte.append((e2, x, y))
+    for g, x, y in spawnpunkte:
+        if g[y][x] == SAND:
+            g[y][x] = "Z"
+
+    return e0, e1, e2
 
 
 def schreiben(pfad):
-    e0, e1 = bauen()
+    ebenen = bauen()
     kopf = [
-        "# STAUBTAL - sehr gross, sehr leer, Wueste mit Wildwest-Einschlag.",
-        "#",
-        "# Die Ebene ist flach. Was sie gliedert, sind drei Plateaus und",
-        "# eine Handvoll Buden - und unter jedem Plateau steht Fels, man",
-        "# kommt also nicht darunter, nur hinauf.",
-        "#",
-        "# Marken: A KESSEL (offener Sand), B DEPOT (in der Halle),",
-        "#         C KANZEL (auf dem grossen Plateau).",
-        "#         Z ist eine Spawnstelle fuer Gegner - am Fuss der",
-        "#         Plateaus, an den Buden, an der Mauer. Im offenen Sand",
-        "#         steht keine: dort aus dem Nichts zu erscheinen sieht",
-        "#         nach Fehler aus.",
+        "# STAUBTAL - Wuestenkarte nach dem markierten Lageplan.",
+        "# 300 x 240 Kacheln; ein Rasterfeld entspricht einer Spielkachel.",
+        "# A, B und C sind Hotzones 1 bis 3; C liegt im befestigten Hof.",
+        "# ^ und v sind Aufzuege. Nach oben fuehrt der Ausgang in seitliche",
+        "# Deckung. X sind Fass-/Schrottbarrikaden, # sind sichtdichte Waende.",
         "",
         "name: STAUBTAL",
         "satz: wueste",
@@ -266,24 +211,21 @@ def schreiben(pfad):
         "",
     ]
     teile = ["\n".join(kopf)]
-    for i, g in enumerate((e0, e1)):
-        # **Nicht rstrippen.** Die Ebenen muessen gleich breit bleiben,
-        # sonst ist die obere schmaler als die untere, und alles, was an
-        # der Kartengroesse haengt - Kamera, Einstiegsplaetze - rechnet
-        # mit zwei verschiedenen Karten.
-        zeilen = ["".join(z).ljust(B) for z in g]
+    for i, g in enumerate(ebenen):
+        zeilen = ["".join(z) for z in g]
         teile.append("--- ebene %d ---\n" % i + "\n".join(zeilen) + "\n")
-    Path(pfad).write_text("\n".join(teile), encoding="utf-8")
-    return e0, e1
+    Path(pfad).write_text("\n".join(teile).rstrip("\n") + "\n",
+                          encoding="utf-8")
+    return ebenen
 
 
 if __name__ == "__main__":
     import sys
     ziel = sys.argv[1] if len(sys.argv) > 1 else "karten/staubtal.txt"
     Path(ziel).parent.mkdir(parents=True, exist_ok=True)
-    e0, e1 = schreiben(ziel)
+    ebenen = schreiben(ziel)
     print("geschrieben:", ziel)
-    print("Ebene 0: %d x %d, davon Sand %d" %
-          (B, H, sum(z.count(".") for z in ("".join(r) for r in e0))))
-    print("Ebene 1: Plateauflaeche %d Kacheln" %
-          sum(1 for r in e1 for c in r if c != " "))
+    print("Masse je Ebene: %d x %d Kacheln (%d x %d Pixel)" %
+          (B, H, B * 32, H * 32))
+    print("Hotzones: A, B, C; Aufzuege: %d" %
+          (len(AUFZUEGE_01) + len(AUFZUEGE_12)))

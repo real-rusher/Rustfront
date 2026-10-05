@@ -1863,6 +1863,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.32.29 | STAUBTAL wurde auf 300 × 240 Kacheln erweitert; Hotzones und Aufzuege liegen nach dem neuen Lageplan | Der Gast laedt Karten aus dem eigenen Ordner. Gastgeber und Gast brauchen deshalb dieselbe Version samt gleicher Kartendatei; das Drahtprotokoll blieb unveraendert |
 | 0.32.27 | C4-Ladungen, ihre 5-Sekunden-Ladezeit und Admin-Befehle laufen ueber die bestehende Welt- und Eingabemeldung; der Brecher hat eine vergroesserte Trefferflaeche | Gastgeber und Gaeste muessen dieselbe Version haben, sonst fehlen C4-Zuenderstatus oder Trefferabgleich |
 | 0.32.26 | Der Brecher hat 95 Leben und eine dunklere Gestalt ohne Bruststreifen | Gastgeber und Gast brauchen dieselbe Version, damit Gegnerwerte uebereinstimmen; kein Protokollwechsel |
 | 0.32.24 | RPG-Schaden und Explosionsradius wurden auf 150 und 104 Weltpixel erhoeht | Gastgeber und Gast brauchen dieselbe Version, damit Treffer gleich berechnet werden |

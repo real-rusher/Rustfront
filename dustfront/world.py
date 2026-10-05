@@ -38,7 +38,13 @@ ZEICHEN = {
     "o": K.LUKE,
     "^": K.AUFZUG_HOCH,
     "v": K.AUFZUG_RUNTER,
+    "~": K.LEER,
 }
+
+# Dekale werden in kleinen Flaechen abgelegt. Auf einer grossen Karte waere
+# eine einzige transparente Flaeche pro Ebene mehrere hundert Megabyte gross.
+DEKAL_KACHELN = 16
+DEKAL_PIXEL = DEKAL_KACHELN * K.TILE
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -176,12 +182,9 @@ class Ebene:
         self.breite, self.hoehe, self.index = breite, hoehe, index
         self.kacheln = [K.LEER] * (breite * hoehe)
         self.variante = [0] * (breite * hoehe)     # fuer abwechselnde Bodenbilder
-        # Dekale werden **traege** angelegt. Eine Ebene von 120 mal 80
-        # Kacheln ist 3840 mal 2560 Bildpunkte gross - als Flaeche mit
-        # Alphakanal sind das rund 39 Megabyte, je Ebene. Drei Ebenen
-        # waeren 118, und das noch bevor irgendwo ein Blutfleck liegt.
-        # Angelegt wird sie erst, wenn wirklich der erste hinkommt.
-        self._dekale = None
+        # Nur Kacheln mit Blut oder Brandflecken bekommen eine Flaeche. Eine
+        # grosse Karte belegt so Speicher an den bespielten Stellen.
+        self._dekale = {}
         self._marken: dict[str, list] = {}
 
     # ---- Aufbau ------------------------------------------------------
@@ -215,10 +218,10 @@ class Ebene:
 
     @property
     def dekale(self):
-        """Die Flaeche mit Blut- und Brandflecken, oder None.
+        """Die verwendeten Kachelflaechen mit Blut- und Brandflecken.
 
-        None heisst: es liegt noch keiner. Der Renderer prueft darauf und
-        spart sich dann den Blit - und die Karte spart sich den Speicher.
+        Leeres Dict heisst: es liegt noch keiner. Der Renderer zeichnet
+        nur die kleinen Ausschnitte, die im aktuellen Bild liegen.
         """
         return self._dekale
 
@@ -262,11 +265,29 @@ class Ebene:
 
     def dekal(self, bild: pygame.Surface, x: float, y: float) -> None:
         """Brandfleck, Blut, Einschlag. Bleibt liegen, kostet nichts."""
-        if self._dekale is None:
-            self._dekale = pygame.Surface(
-                (self.breite * K.TILE, self.hoehe * K.TILE), pygame.SRCALPHA)
-        self._dekale.blit(bild, (x - bild.get_width() / 2,
-                                 y - bild.get_height() / 2))
+        links = int(x - bild.get_width() / 2)
+        oben = int(y - bild.get_height() / 2)
+        rechts = links + bild.get_width()
+        unten = oben + bild.get_height()
+        kachel_links = max(0, links // DEKAL_PIXEL)
+        kachel_rechts = min(self.pixel_breite - 1, rechts - 1) // DEKAL_PIXEL
+        kachel_oben = max(0, oben // DEKAL_PIXEL)
+        kachel_unten = min(self.pixel_hoehe - 1, unten - 1) // DEKAL_PIXEL
+        for ky in range(kachel_oben, kachel_unten + 1):
+            for kx in range(kachel_links, kachel_rechts + 1):
+                schluessel = (kx, ky)
+                flaeche = self._dekale.get(schluessel)
+                if flaeche is None:
+                    flaeche = pygame.Surface((DEKAL_PIXEL, DEKAL_PIXEL),
+                                             pygame.SRCALPHA)
+                    self._dekale[schluessel] = flaeche
+                links_kachel, oben_kachel = kx * DEKAL_PIXEL, ky * DEKAL_PIXEL
+                x0, y0 = max(links, links_kachel), max(oben, oben_kachel)
+                x1 = min(rechts, links_kachel + DEKAL_PIXEL)
+                y1 = min(unten, oben_kachel + DEKAL_PIXEL)
+                quelle = pygame.Rect(x0 - links, y0 - oben,
+                                     x1 - x0, y1 - y0)
+                flaeche.blit(bild, (x0 - links_kachel, y0 - oben_kachel), quelle)
 
 
 class Welt:
