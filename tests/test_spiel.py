@@ -3731,6 +3731,21 @@ for ty in range(s0.hoehe):
             fasser_nah += 1
         elif weg_a < 800:
             fasser += 1
+# Hotzone 2 (B, auf dem Plateau) ist ein Aussenposten: Haeuser und
+# Deckung ringsum, der Kreis selbst frei. Bis 0.34.1 stand das alles auf
+# Ebene 0 im Fels, und B lag auf einer leeren Flaeche (seit 0.34.2).
+kreis_b = marken["B"][1]
+s_b = staub.ebene(marken["B"][0])
+_um_b = [(tx, ty) for ty in range(s_b.hoehe) for tx in range(s_b.breite)
+         if s_b.kachel(tx, ty) in (K.WAND, K.KISTE)
+         and pygame.Vector2((tx + .5) * K.TILE, (ty + .5) * K.TILE).distance_to(kreis_b)
+         < 40 * K.TILE]
+_im_b = [p for p in _um_b
+         if pygame.Vector2((p[0] + .5) * K.TILE, (p[1] + .5) * K.TILE).distance_to(kreis_b)
+         < K.ZONE["radius"] + K.TILE]
+pruef("Um den Kreis B steht ein Aussenposten, der Kreis selbst ist frei",
+      len(_um_b) >= 100 and not _im_b,
+      "%d Mauer- und Fassfelder im Umkreis, %d im Kreis" % (len(_um_b), len(_im_b)))
 pruef("Um den offenen Kreis A stehen Deckungsinseln, der Kreis selbst ist frei",
       fasser >= 10 and fasser_nah == 0,
       "%d Fass-Kacheln im Umkreis, %d direkt am Kreis" % (fasser, fasser_nah))

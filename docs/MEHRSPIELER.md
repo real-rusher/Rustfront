@@ -1863,6 +1863,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.2 | STAUBTAL: Aussenposten um Kreis B gebaut, Plateaustreifen im Nordosten entfernt | Gastgeber und Gast brauchen dieselbe Version und `karten/staubtal.txt`; kein Protokollwechsel |
 | 0.34.1 | STAUBTAL: drei untere Aufzuege und einige Felder korrigiert; SCHNEEFELD: zwei Aufzuege dazu; Brecher-Koerper schmaler; Gegner waehlen den naechsten Aufzug | Gastgeber und Gast brauchen dieselbe Version und dieselben Kartendateien; kein Protokollwechsel |
 | 0.34.0 | Aufzuege nutzen wieder E und wechseln genau eine Ebene; Schutzbereiche wurden neu gestaltet | Gastgeber und Gast brauchen dieselbe Version und `karten/staubtal.txt`; kein Protokollwechsel |
 | 0.33.0 | STAUBTAL-Aufzuege wurden an Plateau-Raender verschoben; dazu kam die lokale Einzelspielerkarte SCHNEEFELD | Gastgeber und Gast brauchen dieselbe Version und `karten/staubtal.txt`; kein Protokollwechsel. SCHNEEFELD wird nur lokal gestartet |

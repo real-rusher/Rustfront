@@ -137,6 +137,15 @@ for name in W.karten_liste():
     pruef("%s: jede Spawnstelle und jeder Kreis ist erreichbar" % name,
           not marken_weg, marken_weg[:6])
 
+    # Und ueberhaupt jedes begehbare Feld. Bis 0.34.2 gab es auf STAUBTAL
+    # einen 8 Kacheln breiten Plateaustreifen ohne Aufzug, und auf
+    # SCHNEEFELD zwei ganze Plateaus.
+    abgeschnitten = [(i, x, y) for i, e in enumerate(welt.ebenen)
+                     for y in range(e.hoehe) for x in range(e.breite)
+                     if _geh(e, x, y) and (i, x, y) not in da]
+    pruef("%s: jedes begehbare Feld ist erreichbar" % name, not abgeschnitten,
+          "%d Felder, z. B. %s" % (len(abgeschnitten), abgeschnitten[:4]))
+
     # Kein einzelnes Feld im Fels: ein begehbares Feld, um das herum
     # alles fest ist, ist immer ein Kartenfehler. Ausnahme: eine Treppe
     # (die Kabine eines Aufzugs ist ja nur eine Kachel).

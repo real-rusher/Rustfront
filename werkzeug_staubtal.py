@@ -5,9 +5,10 @@ nachgearbeitet (0.34.0 Aufzug-Vorfelder, 0.34.1 Gaenge zu den Aufzuegen
 im Fels, Fels statt einzelner Tuerfelder). Neu erzeugen ueberschreibt das;
 danach `python tests/test_pruefung.py` laufen lassen.
 
-Bekannt (0.34.1): die Haeuser von Hotzone 2 und zwei weitere Haeuser
-werden hier auf Ebene 0 gezeichnet, liegen aber unter einem Plateau -
-im Fels sind sie unsichtbar. Gemeint war vermutlich Ebene 1 bzw. 2.
+Bekannt: zwei Haeuser der allgemeinen Liste ((222, 51, ...) und
+(257, 96, ...)) werden auf Ebene 0 gezeichnet, liegen aber unter dem
+hohen Plateau - im Fels sind sie unsichtbar. Hotzone 2 lag bis 0.34.1
+genauso daneben und steht seit 0.34.2 auf Ebene 1 (hotzone2).
 """
 from pathlib import Path
 
@@ -16,7 +17,10 @@ SAND, WAND, DECKUNG, LOCH = ".", "#", "X", "~"
 
 # Die Rechtecke folgen dem WhatsApp-Grundriss: ein langes oberes Plateau,
 # zwei kleinere Plateaus unten und das hohe Plateau im Nordosten.
-PLATEAUS_1 = ((5, 5, 294, 83), (8, 161, 51, 232),
+# Das lange Plateau endet an der Ostseite des hohen (x 286). Bis 0.34.1
+# ging es bis x 294 weiter: ein 8 Kacheln breiter Streifen hinter dem hohen
+# Plateau, auf den kein Aufzug fuehrte.
+PLATEAUS_1 = ((5, 5, 286, 83), (8, 161, 51, 232),
               (214, 168, 263, 207))
 PLATEAU_2 = (220, 5, 286, 143)
 
@@ -69,6 +73,23 @@ def deckungsgruppe(g, cx, cy, ausdehnung=2):
                 g[cy + 1][cx + seite * dx] = DECKUNG
 
 
+def hotzone2(g):
+    """Hotzone 2 (Kreis B): Aussenposten und Gassen, ein freier Platz um
+    den Kreis.
+
+    B liegt auf dem langen Plateau, also gehoert das auf **Ebene 1**. Bis
+    0.34.1 wurde es auf Ebene 0 gezeichnet - dort ist unter dem Plateau
+    Fels, die Haeuser verschwanden darin, und nur ihre Tueren blieben als
+    einzelne Bodenfelder im Fels stehen.
+    """
+    haus(g, (118, 28, 137, 39), ((127, 28), (118, 34)))
+    haus(g, (163, 30, 182, 42), ((173, 42), (163, 35)))
+    rechteck(g, 139, 25, 143, 35, DECKUNG)
+    rechteck(g, 157, 42, 161, 55, DECKUNG)
+    rechteck(g, 130, 59, 139, 61, WAND)
+    rechteck(g, 162, 58, 171, 60, WAND)
+
+
 def plattform(g, box, fuellung=SAND):
     x0, y0, x1, y1 = box
     rechteck(g, x0, y0, x1, y1, fuellung)
@@ -109,13 +130,7 @@ def bauen():
     ):
         rechteck(e0, *box, DECKUNG)
 
-    # Hotzone 2: Aussenposten und Gassen, aber ein freier Platz um den Kreis.
-    haus(e0, (118, 28, 137, 39), ((127, 28), (118, 34)))
-    haus(e0, (163, 30, 182, 42), ((173, 42), (163, 35)))
-    rechteck(e0, 139, 25, 143, 35, DECKUNG)
-    rechteck(e0, 157, 42, 161, 55, DECKUNG)
-    rechteck(e0, 130, 59, 139, 61, WAND)
-    rechteck(e0, 162, 58, 171, 60, WAND)
+    hotzone2(e1)
 
     # Hotzone 1 bleibt ein offenes Sandfeld mit einzelnen Deckungsinseln.
     for box in ((130, 126, 133, 132), (167, 143, 170, 149),

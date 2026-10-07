@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.1, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.2, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -672,6 +672,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.2 | **STAUBTAL: Hotzone 2 gebaut.** Um den Kreis B auf dem langen Plateau steht jetzt der Aussenposten aus dem Lageplan: zwei Gebaeude mit Tueren, zwei Fassreihen als Gassen, zwei niedrige Mauern im Sueden; der Platz um den Kreis bleibt frei (naechste Deckung 7 Kacheln vom Mittelpunkt). Das Kartenwerkzeug hatte ihn auf Ebene 0 in den Fels gezeichnet. Der unerreichbare Plateaustreifen hinter dem hohen Plateau (8 Kacheln breit) ist entfernt; darunter ist jetzt Sand, der den Randgang im Osten verbreitert. `tests/test_pruefung.py` verlangt jetzt, dass auf jeder Karte jedes begehbare Feld erreichbar ist. Netz: kein Protokollwechsel, aber die Karte ist geaendert - Gastgeber und Gast brauchen dieselbe Version |
 | 0.34.1 | **Pruefung nach den KI-Aenderungen.** STAUBTAL: drei der sechs unteren Aufzuege lagen im Fels und waren nicht zu erreichen - das Suedwest-Plateau samt zwei Spawnstellen war abgeschnitten; jetzt fuehrt ein kurzer Gang zur Tuer. Einzelne Bodenfelder im Fels (Tueren von Haeusern, die unter dem Plateau verschwunden sind) sind wieder Fels. Gegner nehmen den naechsten Aufzug statt immer den westlichsten (vorher bis 70 Kacheln Umweg). Der **Brecher** ist im Koerper wieder schmaler als eine Kachel (Radius 17 -> 15, das Bild bleibt gross): mit 17 kam er durch keine Tuer und keinen Aufzug. MG-Salve: die Salvenaufnahme klingt einmal je Abzug statt dreifach uebereinander. MG-Salve und C4 haben einen Klang auch ohne die CODEX-Aufnahmen. Hotbar mit zehn Waffen ragt nicht mehr in den Waffenkasten. `tools/soundboard.py` startet wieder. SCHNEEFELD: alle drei Plateaus sind erreichbar. Neu: `tests/test_pruefung.py`. Netz: kein Protokollwechsel, aber geaenderte Karten und Brecher - Gastgeber und Gast brauchen dieselbe Version |
 | 0.34.0 | Aufzuege wieder als E-Treppen mit einem Ebenenschritt und freien Schutzbereichen; C4-Hotbar zeigt Lade- und Zuendestatus, unbewaffnete Spieler haben leere Zombiearme, der Schrotknall startet frueher. | Gastgeber und Gast brauchen dieselbe Version und `karten/staubtal.txt`; kein Protokollwechsel. |
 | 0.33.0 | Neue spielbare Schnee-Karte `schnee_test.py` mit drei Höhenebenen, Schneefels-Plateaus im regulären 3D-Klippenrenderer und sichtbaren Laufspuren. Das Sand-Kachelmuster ist entfernt, der Schrotknall setzt ohne Anfangsstille ein, und die Aufzüge liegen am Plateau-Rand. Gastgeber und Gäste brauchen dieselbe Version und Kartendatei; kein Protokollwechsel. |
