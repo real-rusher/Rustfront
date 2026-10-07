@@ -791,10 +791,15 @@ try:
               and len(sturm) == 16
               and all(0.08 < s.get_length() < 0.14 for s in sturm))
         rauch = aufnahmen.klang("smoke_grenade")
-        pruef("Rauchgranate behaelt den langen Gasstrom der Aufnahme",
+        # Seit 0.32.27 die neue Aufnahme aus dem CODEX-Ordner (rund 1,4 s)
+        # statt des neun Sekunden langen Gasstroms ("Rauchgranatentoene
+        # erneuert"). Geprueft wird, dass die neue genommen wird - nicht
+        # die alte, die noch im Klangordner liegt.
+        pruef("Rauchgranate nimmt die neue, kurze Aufnahme",
               "smoke_grenade" in aufnahmen.aus_datei
               and len(rauch) == 1
-              and rauch[0].get_length() >= 8.0)
+              and 0.8 <= rauch[0].get_length() <= 3.0,
+              "%.2f s" % (rauch[0].get_length() if rauch else -1))
         schrot = aufnahmen.klang("schuss_schrot")
         pruef("Schrotaufnahme startet frueher und ist passend gekuerzt",
               len(schrot) == 1 and 2.45 <= schrot[0].get_length() <= 2.55,
@@ -3581,26 +3586,50 @@ pruef("Sie ist sehr gross",
       % (s0.breite, s0.hoehe, s0.pixel_breite, s0.pixel_hoehe))
 begehbar = sum(1 for ty in range(s0.hoehe) for tx in range(s0.breite)
                if s0.begehbar(tx, ty))
-pruef("Und sehr leer", begehbar > s0.breite * s0.hoehe * 0.6,
-      "%d von %d Kacheln begehbar" % (begehbar, s0.breite * s0.hoehe))
+# Gezaehlt wird der Boden unter freiem Himmel. Seit 0.32.29 stehen die
+# Plateaus auf grossen Felsbloecken; mit ihnen gerechnet waere jede Karte
+# mit grossen Plateaus "voll", obwohl der Sand dazwischen leer ist.
+_himmel = [(tx, ty) for ty in range(s0.hoehe) for tx in range(s0.breite)
+           if s1.kachel(tx, ty) == K.LEER]
+_himmel_frei = sum(1 for p in _himmel if s0.begehbar(*p))
+pruef("Und sehr leer", _himmel_frei > len(_himmel) * 0.6,
+      "%d von %d Kacheln unter freiem Himmel begehbar"
+      % (_himmel_frei, len(_himmel)))
 
 # Plateaus: obere Ebene nur Tafeln, und unter jeder Tafel steht Fels.
 oben = sum(1 for ty in range(s1.hoehe) for tx in range(s1.breite)
            if s1.begehbar(tx, ty))
+# Tafeln heisst: wenige grosse zusammenhaengende Flaechen, fast nur
+# Innenfelder. Ein Gangnetz haette viele Stuecke und fast nur Rand.
+# (Bis 0.32.28 stand hier "weniger als ein Viertel der Kartenflaeche" -
+# die grossen Plateaus von 0.32.29 sind ein Drittel und trotzdem Tafeln.)
+_innen1 = sum(1 for ty in range(s1.hoehe) for tx in range(s1.breite)
+              if s1.begehbar(tx, ty) and not s1.loch(tx, ty)
+              and all(s1.begehbar(a, b) and not s1.loch(a, b)
+                      for a, b in ((tx + 1, ty), (tx - 1, ty),
+                                   (tx, ty + 1), (tx, ty - 1))))
 pruef("Die obere Ebene ist kein Gangnetz, sondern sind Tafeln",
-      0 < oben < s0.breite * s0.hoehe * 0.25,
-      "%d Kacheln oben gegen %d unten" % (oben, begehbar))
-darunter = 0
+      0 < oben < s0.breite * s0.hoehe * 0.5 and _innen1 > oben * 0.85,
+      "%d Kacheln oben, %d davon innen" % (oben, _innen1))
+# Ausnahme seit 0.32.29: die geschuetzten Aufzuege. Ihre Tuer liegt in
+# einer Nische oder einem kurzen Gang im Fels - darueber ist Plateau.
+# Erlaubt ist das nur in der Naehe eines Aufzugs; ein Feld irgendwo
+# sonst unter dem Plateau ist ein Kartenfehler (so lagen die Tueren der
+# Haeuser von Hotzone 2 einzeln im Fels).
+_aufzuege_s = [(tx, ty) for e in staub.ebenen for ty in range(e.hoehe)
+               for tx in range(e.breite) if e.daten(tx, ty).get("treppe")]
+darunter = []
 for ty in range(s1.hoehe):
     for tx in range(s1.breite):
         if not s1.begehbar(tx, ty):
             continue
         d0 = s0.daten(tx, ty)
         if (s0.begehbar(tx, ty) and d0.get("treppe") is None
-                and d0.get("aufzug") is None):
-            darunter += 1
-pruef("Unter die Plateaus kommt man nicht", darunter == 0,
-      "%d begehbare Kacheln unter einem Plateau" % darunter)
+                and not any(abs(tx - ax) <= 7 and abs(ty - ay) <= 7
+                            for ax, ay in _aufzuege_s)):
+            darunter.append((tx, ty))
+pruef("Unter die Plateaus kommt man nicht (ausser zum Aufzug)", not darunter,
+      "%d begehbare Kacheln unter einem Plateau: %s" % (len(darunter), darunter[:8]))
 
 # Und hinauf kommt man trotzdem.
 hoch = [(tx, ty) for ty in range(s0.hoehe) for tx in range(s0.breite)
@@ -3686,20 +3715,25 @@ pruef("Und einer liegt auf einem Plateau",
 pruef("Sie liegen weit auseinander",
       min(marken["A"][1].distance_to(marken[b][1]) for b in "BC") > 800,
       "%.0f px" % min(marken["A"][1].distance_to(marken[b][1]) for b in "BC"))
-# Selbsterklaerend heisst hier: um den Kreis im Sand steht ein Ring aus
-# Fassern, und die beiden anderen liegen in einer Halle bzw. auf einem
-# Plateau. Geprueft wird das Wahrzeichen des offenen Kreises.
+# Selbsterklaerend heisst hier: A ist das offene Sandfeld - frei um den
+# Kreis, mit Deckungsinseln drumherum. Bis 0.32.28 war das ein enger Ring
+# aus Fassern; der Lageplan von 0.32.29 macht daraus Inseln in 15 bis 25
+# Kacheln Abstand (werkzeug_staubtal.py, "Hotzone 1").
 kreis_a = marken["A"][1]
-fasser = 0
+fasser_nah = fasser = 0
 for ty in range(s0.hoehe):
     for tx in range(s0.breite):
         if s0.kachel(tx, ty) != K.KISTE:
             continue
         p = pygame.Vector2(tx * K.TILE + K.TILE / 2, ty * K.TILE + K.TILE / 2)
-        if 200 < p.distance_to(kreis_a) < 380:
+        weg_a = p.distance_to(kreis_a)
+        if weg_a < 150:
+            fasser_nah += 1
+        elif weg_a < 800:
             fasser += 1
-pruef("Um den Kreis im Sand steht ein Ring aus Fassern", fasser >= 10,
-      "%d Fasser im Ring" % fasser)
+pruef("Um den offenen Kreis A stehen Deckungsinseln, der Kreis selbst ist frei",
+      fasser >= 10 and fasser_nah == 0,
+      "%d Fass-Kacheln im Umkreis, %d direkt am Kreis" % (fasser, fasser_nah))
 
 # Im Gefecht: die Karte laesst sich waehlen und der Kreis wandert.
 # Die Aufzuege werden ueber die vorhandene E-Treppenlogik bedient.
@@ -4215,6 +4249,22 @@ for karte_w, ebene_w in (("staubtal", 1), ("", 2)):
     stelle = next((tx, ty) for ty in range(e_w.hoehe) for tx in range(e_w.breite)
                   if e_w.begehbar(tx, ty) and not e_w.loch(tx, ty)
                   and e_w.kachel(tx, ty) == K.BODEN and tx > e_w.breite // 2)
+    if karte_w == "staubtal":
+        # Seit 0.32.29 ist STAUBTAL 300 x 240 Kacheln gross. Die erste
+        # Kachel rechts der Mitte liegt dann am Nordrand des langen
+        # Plateaus, und 450 bis 900 Pixel davon gibt es unten nur den
+        # Randgang - der Weg von dort zum naechsten Aufzug ist mehrere
+        # hundert Kacheln lang und passt in keine 60 Sekunden. Gemeint ist
+        # "ueber die Treppe hinauf": also ein Ziel wenige Kacheln neben
+        # einem Aufzug, der von Ebene 0 heraufkommt.
+        _tr = [t for t in netz_w.treppen if t[0] == 0 and t[3] == ebene_w]
+        stelle = next(
+            (tx + dx * r, ty + dy * r)
+            for (_e, tx, ty, _z) in _tr for r in range(4, 8)
+            for dx, dy in ((0, -1), (-1, 0), (1, 0), (0, 1))
+            if e_w.begehbar(tx + dx * r, ty + dy * r)
+            and not e_w.loch(tx + dx * r, ty + dy * r)
+            and e_w.kachel(tx + dx * r, ty + dy * r) == K.BODEN)
     ziel_w = ww.welt.landeplatz(pygame.Vector2((stelle[0] + .5) * 32,
                                                (stelle[1] + .5) * 32), 9, ebene_w)
     for k in ww.kaempfer.values():
@@ -4419,13 +4469,19 @@ pruef("Arena: Boden ueber Wand bleibt", fels and not any(m_arena[i] for i in fel
 e0s, e1s = wo.ebene(0), wo.ebene(1)
 plateau = [i for i, k in enumerate(e1s.kacheln) if k != K.LEER]
 bleibt = sum(1 for i in plateau if not m_staub[i])
-# Seit 0.32.11 gehen auch die zwei Schachtkoepfe des Aufzugs: unter
-# ihnen ist die Tuer, und die soll man von unten sehen.
-pruef("STAUBTAL: die Plateaus bleiben, nur Rampen- und Schachtkoepfe gehen",
-      bleibt >= len(plateau) - 8 and all(
-          e1s.kacheln[i] in (K.TREPPE_RUNTER, K.AUFZUG_RUNTER)
-          for i in plateau if m_staub[i]),
-      "%d von %d bleiben" % (bleibt, len(plateau)))
+# Ausgeblendet werden duerfen nur die Treppen- und Schachtkoepfe und das
+# Plateau ueber den Aufzugnischen (seit 0.32.29): unter ihnen ist die Tuer
+# bzw. der Gang dorthin, und den soll man von unten sehen.
+_tr_s = [(i % e1s.breite, i // e1s.breite) for i, k in enumerate(e1s.kacheln)
+         if K.KACHELN[k].get("treppe") is not None]
+_weg_s = [i for i in plateau if m_staub[i]
+          and e1s.kacheln[i] not in (K.TREPPE_RUNTER, K.AUFZUG_RUNTER)
+          and not any(abs(i % e1s.breite - ax) <= 7
+                      and abs(i // e1s.breite - ay) <= 7 for ax, ay in _tr_s)]
+pruef("STAUBTAL: die Plateaus bleiben, nur Treppen und Aufzugnischen gehen",
+      bleibt >= len(plateau) * 0.99 and not _weg_s,
+      "%d von %d bleiben, sonst ausgeblendet: %s"
+      % (bleibt, len(plateau), [(i % e1s.breite, i // e1s.breite) for i in _weg_s][:8]))
 
 # Im Gefecht: aus zum Start, Q schaltet, nur beim eigenen Rechner.
 app.opt["obere_ebenen"] = False
@@ -6113,10 +6169,20 @@ def _kante_stimmt(ax, ay, bx, by, nx, ny):
 pruef("Jede Kante liegt genau am Rand eines Plateaus",
       all(_kante_stimmt(*kn) for kn in kanten))
 
-# Die Figur unten, suedlich vor dem grossen Plateau (Reihen 8 bis 27).
+# Die Figur unten, suedlich vor dem grossen Plateau. Wo dessen Nord- und
+# Suedrand liegen, steht in der Karte - bis 0.32.28 fest Reihe 8 und 27;
+# seit STAUBTAL 300 x 240 Kacheln gross ist, sind es 5 und 83, und die
+# Figur stand mitten im Fels.
+_spalte_p = 60
+_reihen_p = {ty for ty in range(e1p.hoehe) if _plateau_feld(_spalte_p, ty)}
+_nord_p = min(_reihen_p)
+_sued_p = _nord_p
+while _sued_p + 1 in _reihen_p:
+    _sued_p += 1
 ich_p = pw_w.ich
 ich_p.ebene = 0; ich_p.flug = 0.0
-ich_p.pos.update(60.5 * K.TILE, 31.5 * K.TILE); ich_p.vorher.update(ich_p.pos)
+ich_p.pos.update((_spalte_p + .5) * K.TILE, (_sued_p + 4.5) * K.TILE)
+ich_p.vorher.update(ich_p.pos)
 for _ in range(30):
     pw_w.schritt(K.FIXED_DT)
 pw_w.obere_zeigen = True
@@ -6134,9 +6200,9 @@ probe.fill((0, 0, 0, 0))
 anzahl_w = pw_r.klippen_zeichnen(probe, pw_welt, 1, ab_unten, ab_oben, False)
 pruef("Von unten werden Waende gezeichnet", anzahl_w > 0, str(anzahl_w))
 # Die Suedwand des grossen Plateaus: zwischen Deckelrand und Sockelrand.
-x_w = 60.5 * K.TILE
-y_sockel = (28 * K.TILE - ab_unten[0].y) * ab_unten[2]
-y_deckel = (28 * K.TILE - ab_oben[0].y) * ab_oben[2]
+x_w = (_spalte_p + .5) * K.TILE
+y_sockel = ((_sued_p + 1) * K.TILE - ab_unten[0].y) * ab_unten[2]
+y_deckel = ((_sued_p + 1) * K.TILE - ab_oben[0].y) * ab_oben[2]
 sx = int((x_w - ab_unten[0].x) * ab_unten[1])
 pruef("Der Deckelrand liegt weiter vom Auge weg als der Sockel",
       y_deckel < y_sockel - 4, "%.0f / %.0f" % (y_deckel, y_sockel))
@@ -6144,7 +6210,7 @@ mitte_w = int((y_deckel + y_sockel) / 2)
 pruef("Zwischen beiden steht die Felswand - keine Luft",
       probe.get_at((sx, mitte_w)).a == 255, str(probe.get_at((sx, mitte_w))))
 # Die Nordwand liegt hinter dem Plateau und unter seinem Deckel.
-y_nord = int((8 * K.TILE - ab_unten[0].y) * ab_unten[2]) - 2
+y_nord = int((_nord_p * K.TILE - ab_unten[0].y) * ab_unten[2]) - 2
 if 0 <= y_nord < pw_r.groesse[1]:
     pruef("Die abgewandte Wand wird nicht gezeichnet",
           probe.get_at((sx, y_nord)).a == 0)
@@ -6510,18 +6576,34 @@ for _x in list(_w52.welt.wesen):
         _x.lebt = False
 _w52.gegner_offen = []; _w52.welle_rest = []
 _n52 = _w52.welt.wege
-# Eine echte Rampe, die wie frueher die Westrampe der KANZEL von Westen
-# aufs Plateau fuehrt (Aufstellung unten: Gegner links davor, Spieler
-# rechts oben). Die Westrampe ist seit 0.32.11 der Aufzug, und der setzt
-# mit Absicht eine Kachel weiter ab - eigens geprueft weiter unten.
-_e52, _tx52, _ty52, _z52 = next(
-    t for t in _n52.treppen
-    if t[0] == 0 and _w52.welt.ebene(0).daten(t[1], t[2]).get("treppe") == 1
-    and _w52.welt.ebene(1).begehbar(t[1] + 1, t[2])
-    and not _w52.welt.ebene(1).loch(t[1] + 1, t[2]))
-_oben52 = _w52.welt.landeplatz(pygame.Vector2((_tx52 + 6.5) * 32, (_ty52 + .5) * 32), 9, _z52)
-_gg52 = KampfGegner(pygame.Vector2((_tx52 - 0.6) * 32, (_ty52 - 0.6) * 32), "brecher",
-                    _e52, _w52)
+# Die Aufstellung richtet sich nach der Treppe, nicht nach festen
+# Versaetzen: seit STAUBTAL 0.32.29 (300 x 240, Aufzuege im Fels) lag
+# "links oben neben der Rampe" mitten im Fels. Gesucht wird die Seite, von
+# der man unten heran- und oben weggeht, und der Gegner startet leicht
+# schraeg davor - genau so wechselten sie frueher neben der Treppe.
+def _frei_weg52(e, tx, ty, r_von, r_bis):
+    for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+        for r in range(r_von, r_bis):
+            if all(e.begehbar(tx + dx * i, ty + dy * i)
+                   and not e.loch(tx + dx * i, ty + dy * i)
+                   for i in range(1, r + 1)):
+                return (tx + dx * r, ty + dy * r), (dx, dy)
+    return None, None
+
+for _t52 in _n52.treppen:
+    _e52, _tx52, _ty52, _z52 = _t52
+    if _e52 != 0 or _z52 != 1:
+        continue
+    _unten52, _ri52 = _frei_weg52(_w52.welt.ebene(0), _tx52, _ty52, 3, 4)
+    _oben_k52, _ = _frei_weg52(_w52.welt.ebene(1), _tx52, _ty52, 5, 7)
+    if _unten52 and _oben_k52:
+        break
+_oben52 = _w52.welt.landeplatz(pygame.Vector2((_oben_k52[0] + .5) * 32,
+                                              (_oben_k52[1] + .5) * 32), 9, _z52)
+# Leicht schraeg versetzt, quer zur Anlaufrichtung.
+_gg52 = KampfGegner(pygame.Vector2((_unten52[0] + .5 + 0.4 * _ri52[1]) * 32,
+                                   (_unten52[1] + .5 + 0.4 * _ri52[0]) * 32),
+                    "brecher", _e52, _w52)
 _gg52.wartet = 0.0
 _w52.welt.dazu(_gg52); _w52.gegner_offen.append(_gg52)
 _wechsel52 = []

@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.0, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.1, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -672,6 +672,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.1 | **Pruefung nach den KI-Aenderungen.** STAUBTAL: drei der sechs unteren Aufzuege lagen im Fels und waren nicht zu erreichen - das Suedwest-Plateau samt zwei Spawnstellen war abgeschnitten; jetzt fuehrt ein kurzer Gang zur Tuer. Einzelne Bodenfelder im Fels (Tueren von Haeusern, die unter dem Plateau verschwunden sind) sind wieder Fels. Gegner nehmen den naechsten Aufzug statt immer den westlichsten (vorher bis 70 Kacheln Umweg). Der **Brecher** ist im Koerper wieder schmaler als eine Kachel (Radius 17 -> 15, das Bild bleibt gross): mit 17 kam er durch keine Tuer und keinen Aufzug. MG-Salve: die Salvenaufnahme klingt einmal je Abzug statt dreifach uebereinander. MG-Salve und C4 haben einen Klang auch ohne die CODEX-Aufnahmen. Hotbar mit zehn Waffen ragt nicht mehr in den Waffenkasten. `tools/soundboard.py` startet wieder. SCHNEEFELD: alle drei Plateaus sind erreichbar. Neu: `tests/test_pruefung.py`. Netz: kein Protokollwechsel, aber geaenderte Karten und Brecher - Gastgeber und Gast brauchen dieselbe Version |
 | 0.34.0 | Aufzuege wieder als E-Treppen mit einem Ebenenschritt und freien Schutzbereichen; C4-Hotbar zeigt Lade- und Zuendestatus, unbewaffnete Spieler haben leere Zombiearme, der Schrotknall startet frueher. | Gastgeber und Gast brauchen dieselbe Version und `karten/staubtal.txt`; kein Protokollwechsel. |
 | 0.33.0 | Neue spielbare Schnee-Karte `schnee_test.py` mit drei Höhenebenen, Schneefels-Plateaus im regulären 3D-Klippenrenderer und sichtbaren Laufspuren. Das Sand-Kachelmuster ist entfernt, der Schrotknall setzt ohne Anfangsstille ein, und die Aufzüge liegen am Plateau-Rand. Gastgeber und Gäste brauchen dieselbe Version und Kartendatei; kein Protokollwechsel. |
 | 0.32.30 | Erste separate Schnee-Skizze; in 0.33.0 als vollständige, normal spielbare Einzelspielerkarte neu umgesetzt. |

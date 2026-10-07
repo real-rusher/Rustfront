@@ -224,6 +224,12 @@ def _lmg_dauer(seed=0):
     )
 
 
+# Fuer die Salve gibt es nur die Aufnahme im CODEX-Ordner. Fehlt sie oder
+# laesst sie sich nicht lesen (MP3 je nach SDL-Fassung), blieb das MG im
+# Salvenmodus stumm - darum derselbe Schuss wie im Dauerfeuer als Rueckfall.
+platzhalter_klang("lmg_salve")(_lmg_dauer)
+
+
 @platzhalter_klang("schuss_scharf")
 def _schuss_scharf(seed=0):
     """Ein einzelner, sehr lauter Knall mit langem Nachhall."""
@@ -242,6 +248,20 @@ def _granate(seed=0):
         _schlag(90, 28, 0.9, 1.0, 1.8),
         _rauschen(0.8, 0.9, 5000, 160, 1.5, seed + 41),
         [0.0] * int(RATE * 0.04) + _rauschen(1.2, 0.45, 900, 120, 1.4, seed + 42),
+    )
+
+
+@platzhalter_klang("c4_explosion")
+def _c4_explosion(seed=0):
+    """Rueckfall fuer C4: wie die Granate, aber tiefer und laenger.
+
+    Auch hier gibt es sonst nur die Aufnahme im CODEX-Ordner; ohne sie
+    zuendete C4 lautlos.
+    """
+    return _mischen(
+        _schlag(70, 22, 1.2, 1.0, 1.6),
+        _rauschen(1.0, 1.0, 4200, 120, 1.4, seed + 91),
+        [0.0] * int(RATE * 0.06) + _rauschen(1.6, 0.5, 700, 90, 1.3, seed + 92),
     )
 
 

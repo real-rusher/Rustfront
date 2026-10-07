@@ -107,6 +107,9 @@ class Wegenetz:
             self._feld(nr)
         self._zielfelder: dict[tuple, list] = {}
         self._letztes_bild = -1
+        # Wie viele Treppen es von jedem Gebiet bis zu einem Zielgebiet
+        # noch sind, je Zielgebiet gemerkt (naechste_treppe).
+        self._spruenge_merk: dict[tuple, dict] = {}
 
     # ---- Grundlagen -----------------------------------------------------
     def _frei(self, ebene: int, tx: int, ty: int) -> bool:
@@ -189,28 +192,67 @@ class Wegenetz:
         z = self.gebiet_bei(ziel_ebene, ziel_pos)
         return a >= 0 and z >= 0 and a != z
 
+    def _spruenge_zu(self, ziel: tuple) -> dict:
+        """Je Gebiet: wie viele Treppen es bis zum Gebiet `ziel` noch sind.
+
+        Rueckwaerts-Breitensuche im Graphen der Gebiete, einmal je Ziel -
+        die Karte aendert sich nicht.
+        """
+        hit = self._spruenge_merk.get(ziel)
+        if hit is not None:
+            return hit
+        zurueck: dict[tuple, list] = {}
+        for von, liste in self.kanten.items():
+            for nach, _nr in liste:
+                zurueck.setdefault(nach, []).append(von)
+        weit = {ziel: 0}
+        offen = deque([ziel])
+        while offen:
+            k = offen.popleft()
+            for vor in zurueck.get(k, ()):
+                if vor not in weit:
+                    weit[vor] = weit[k] + 1
+                    offen.append(vor)
+        self._spruenge_merk[ziel] = weit
+        return weit
+
     def naechste_treppe(self, ebene: int, pos, ziel_ebene: int, ziel_pos):
         """Welche Treppe als naechste zu nehmen ist, oder None.
 
-        Breitensuche im Graphen der Gebiete - der hat ein paar Dutzend
-        Knoten, das kostet nichts.
+        Unter allen Treppen, die auf einem kuerzesten Weg durch die Gebiete
+        liegen, die mit dem kuerzesten Gang: zu Fuss bis zur Treppe plus
+        Luftlinie von dort zum Ziel.
+
+        Bis 0.34.0 war es die erste, die die Breitensuche fand - also die
+        erste in Lesereihenfolge der Karte. Solange jedes Plateau eine
+        Rampe hatte, war das dieselbe. Auf STAUBTAL 0.32.29 fuehren drei
+        Aufzuege vom Sand auf das lange Plateau, und alle Gegner liefen zum
+        westlichsten, auch wer direkt vor dem mittleren stand - 70 Kacheln
+        Umweg, und oft mehr, als die Haengerwache abwartet.
         """
         start = (ebene, self.gebiet_bei(ebene, pos))
         ziel = (ziel_ebene, self.gebiet_bei(ziel_ebene, ziel_pos))
         if start[1] < 0 or ziel[1] < 0 or start == ziel:
             return None
-        erste = {start: None}
-        offen = deque([start])
-        while offen:
-            knoten = offen.popleft()
-            if knoten == ziel:
-                break
-            for nachbar, nr in self.kanten.get(knoten, ()):
-                if nachbar in erste:
-                    continue
-                erste[nachbar] = erste[knoten] if erste[knoten] is not None else nr
-                offen.append(nachbar)
-        return erste.get(ziel)
+        spruenge = self._spruenge_zu(ziel)
+        noch = spruenge.get(start)
+        if noch is None:
+            return None
+        tx, ty = self.kachel(pos)
+        zx, zy = self.kachel(ziel_pos)
+        beste, beste_kosten = None, None
+        for nachbar, nr in self.kanten.get(start, ()):
+            if spruenge.get(nachbar) != noch - 1:
+                continue
+            feld = self._feld(nr)
+            hier = feld[ty * self.breite[ebene] + tx]
+            if hier < 0:
+                continue
+            _e, sx, sy, _z = self.treppen[nr]
+            kosten = hier + ((sx - zx) ** 2 + (sy - zy) ** 2) ** 0.5
+            if beste_kosten is None or kosten < beste_kosten:
+                beste, beste_kosten = nr, kosten
+        return beste
 
     # ---- Auf derselben Ebene ------------------------------------------
     def gerade_frei(self, ebene: int, von, nach, radius: float = 8.0) -> bool:

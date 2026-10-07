@@ -48,9 +48,10 @@ pip install pygame-ce
 python tests/test_spiel.py      # endet mit "FEHLER: keine"
 python tests/test_menues.py
 python -m dustfront --kontoseite && python tests/test_konto.py
+python tests/test_pruefung.py   # Syntax aller Dateien, Karten, Aufzuege
 ```
 
-Alle drei muessen mit `FEHLER: keine` enden. Fuer neues Verhalten einen
+Alle vier muessen mit `FEHLER: keine` enden. Fuer neues Verhalten einen
 Test in `tests/test_spiel.py` ergaenzen, im Stil der vorhandenen
 (`pruef("was gelten soll", bedingung, zusatz)`). Tests nie abschalten
 oder abschwaechen, damit sie gruen werden.

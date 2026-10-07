@@ -1,4 +1,14 @@
-"""Erzeugt STAUBTAL aus dem grossen Grundriss und festen Landmarken."""
+"""Erzeugt STAUBTAL aus dem grossen Grundriss und festen Landmarken.
+
+ACHTUNG: karten/staubtal.txt wurde nach dem Erzeugen von Hand
+nachgearbeitet (0.34.0 Aufzug-Vorfelder, 0.34.1 Gaenge zu den Aufzuegen
+im Fels, Fels statt einzelner Tuerfelder). Neu erzeugen ueberschreibt das;
+danach `python tests/test_pruefung.py` laufen lassen.
+
+Bekannt (0.34.1): die Haeuser von Hotzone 2 und zwei weitere Haeuser
+werden hier auf Ebene 0 gezeichnet, liegen aber unter einem Plateau -
+im Fels sind sie unsichtbar. Gemeint war vermutlich Ebene 1 bzw. 2.
+"""
 from pathlib import Path
 
 B, H = 300, 240

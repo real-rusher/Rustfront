@@ -68,7 +68,6 @@ class Klangpruefer:
             self._knopf((x, y, breite, KNOPF_H), "%s  [%s]" % (name, quelle),
                         ("einmal", name), "Einzelklang")
         y = 56 + ((len(K.KLANG_NAMEN) + 3) // 4) * (KNOPF_H + ABSTAND) + 8
-        self._knopf((RAND, y, 230, KNOPF_H), "MG – Dauerfeuer",
         self._knopf((RAND, y, 180, KNOPF_H), "Sturmgewehr",
                     ("halten", "sturm"), "Gedrueckt halten")
         y += KNOPF_H + ABSTAND

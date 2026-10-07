@@ -495,7 +495,16 @@ class Anzeige:
         return anzahl <= 4
 
     def _hotbar_mass(self, anzahl: int):
-        return (52, 22, 4) if self.hotbar_gross(anzahl) else (30, 20, 2)
+        if self.hotbar_gross(anzahl):
+            return 52, 22, 4
+        # Die Felder werden schmaler, wenn mehr Waffen dazukommen. Mit 30
+        # festen Pixeln passten neun Felder zwischen die beiden Kaesten;
+        # mit C4 (0.32.27) sind es zehn, und die Hotbar ragte drei Pixel
+        # in den Waffenkasten rechts. Die Waffenbilder sind 26 breit.
+        luecke = 2
+        platz = RECHTS.left - LINKS.right - 8
+        breite = min(30, (platz - (anzahl - 1) * luecke) // max(1, anzahl))
+        return max(26, breite), 20, luecke
 
     def hotbar_rechteck(self, anzahl: int) -> pygame.Rect:
         """Wo die Hotbar steht, ohne das Anheben des gewaehlten Platzes."""

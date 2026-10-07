@@ -466,6 +466,14 @@ class Welt:
         if waffe == "lmg":
             klang = ("lmg_salve" if getattr(quelle, "modus", "dauer") == "salve"
                      else "lmg_dauer")
+            # Die Salvenaufnahme ist schon eine ganze Salve (rund eine
+            # Sekunde). Je Geschoss abgespielt lagen drei davon fast
+            # gleichzeitig uebereinander - also nur beim ersten Schuss.
+            # Der erste ist der, nach dem noch alle uebrigen ausstehen.
+            salve = K.WAFFEN["lmg"]["modus_daten"]["salve"].get("salve", 1)
+            if (klang == "lmg_salve"
+                    and getattr(quelle, "salve_rest", salve - 1) < salve - 1):
+                return
         else:
             klang = "schuss_schrot" if waffe == "schrot" else "schuss_" + waffe
         self.klang(klang, K.AUDIO["schuss"], pos, ebene)

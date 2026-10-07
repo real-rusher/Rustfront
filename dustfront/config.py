@@ -1981,7 +1981,11 @@ GEGNER = {
     "brecher": dict(
         name="BRECHER",
         leben=95.0,
-        radius=17.0,
+        # 0.34.1: 17 -> 15. Das Bild bleibt gross (44 px), aber der Koerper
+        # muss unter einer halben Kachel bleiben: mit 17 (34 px breit) passte
+        # der Brecher durch keine einzige Tuer und keinen Aufzug (32 px) und
+        # kam auf STAUBTAL nie auf ein Plateau.
+        radius=15.0,
         tempo=44.0,
         beschleunigung=380.0,
         schaden=22.0,
