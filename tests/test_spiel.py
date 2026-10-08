@@ -1419,14 +1419,116 @@ opfer.lebt = False
 szene.welt.rauch = []
 szene.welt.schritt(K.FIXED_DT)
 
+# ── 0.34.3: Waende und Barrikaden stehen ─────────────────────────────
+# Gemeldet: "Barrikaden und Waende sollen von allen Perspektiven als solche
+# erkennbar sein." Bis dahin waren sie flache Kacheln: auf dem Plateau
+# sah eine Lehmmauer aus wie ein Weg. Jetzt haben sie eine Hoehe
+# (K.STEHEN) und werden wie die Plateaus in Perspektive gezeichnet.
+from dustfront import world as _W63
+from dustfront.render import Kamera as _Kam63
+
+def _stand_bild(zeilen, satz, kamera_kachel, hoehen=None):
+    """Eine kleine Welt aus Textzeilen, gezeichnet mit der Kamera ueber
+    `kamera_kachel`. `hoehen` setzt K.STEHEN zum Vergleich voruebergehend."""
+    welt_ = _W63.Welt([_W63.Ebene.aus_text(zeilen, 0)], satz=satz)
+    kam_ = _Kam63(pygame.Vector2((kamera_kachel[0] + .5) * K.TILE,
+                                 (kamera_kachel[1] + .5) * K.TILE))
+    alt_ = {n: dict(d) for n, d in K.STEHEN.items()}
+    try:
+        if hoehen is not None:
+            for d in K.STEHEN.values():
+                d["hoehe"] = hoehen
+        bild_ = pygame.Surface((K.GAME_W, K.GAME_H))
+        bild_.fill(K.C_VOID)
+        r_ = szene.renderer
+        r_.vignette_an = False
+        r_.welt_zeichnen(bild_, welt_, kam_, 1.0, 0.0, blick=0)
+    finally:
+        for n, d in alt_.items():
+            K.STEHEN[n].update(d)
+    return bild_, kam_
+
+_feld63 = ["." * 24 for _ in range(14)]
+_feld63[3] = "." * 6 + "#" + "." * 17        # eine Mauer oben links
+_feld63[7] = "." * 12 + "#" + "." * 11       # eine direkt unter dem Auge
+for _satz63 in ("", "wueste", "schnee"):
+    mit63, kam63 = _stand_bild(_feld63, _satz63, (12, 7))
+    ohne63, _ = _stand_bild(_feld63, _satz63, (12, 7), hoehen=0.0)
+    ecke63 = kam63.ecke
+    # Die Mauer oben links: ihre Sued- und Ostseite schauen zum Auge. Im
+    # Fussabdruck der Mauer, an der Suedostecke, steht jetzt die Seite.
+    sx63 = int(7 * K.TILE - ecke63.x) - 2
+    sy63 = int(4 * K.TILE - ecke63.y) - 2
+    pruef("Satz %r: eine Mauer abseits der Mitte zeigt die Seite zum Auge"
+          % (_satz63 or "standard"),
+          mit63.get_at((sx63, sy63)) != ohne63.get_at((sx63, sy63)),
+          "%s / %s" % (mit63.get_at((sx63, sy63)), ohne63.get_at((sx63, sy63))))
+    # Die Mauer direkt unter dem Auge: keine Seite, die Oberseite bleibt
+    # an ihrem Platz - ihr Rand liegt genau auf dem Kachelrand.
+    mx63 = int(12 * K.TILE - ecke63.x)
+    my63 = int(7 * K.TILE - ecke63.y)
+    pruef("Satz %r: unter dem Auge liegt die Oberseite genau auf der Kachel"
+          % (_satz63 or "standard"),
+          mit63.get_at((mx63 + 16, my63 + 16)) != mit63.get_at((mx63 - 3, my63 + 16)))
+
+# Die Oberseite hebt sich vom Boden daneben ab - in jedem Kartensatz.
+# Beim Schnee war der erste Entwurf eine weisse Kappe, und die verschwand
+# im Schnee am Boden.
+for _satz63, (boden63, wand63) in {"": ("boden", "wand"),
+                                   "wueste": ("sand", "sand_wand"),
+                                   "schnee": ("schnee", "schnee_fels")}.items():
+    def _hell63(name):
+        c = pygame.transform.average_color(szene.renderer.bilder.bild(name))
+        return 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
+    unterschied63 = abs(_hell63(boden63) - _hell63(wand63 + "_oben"))
+    pruef("Satz %r: Mauerkrone und Boden unterscheiden sich deutlich"
+          % (_satz63 or "standard"), unterschied63 > 25, "%.0f" % unterschied63)
+pruef("Jede stehende Kachel hat eine Oberseite zum Draufschauen",
+      all(szene.renderer.bilder.bild(n + "_oben") is not None for n in K.STEHEN))
+
+# Fass und Kiste: rund um sie herum ist Boden zu sehen, und sie stehen.
+_fass63 = ["." * 24 for _ in range(14)]
+_fass63[3] = "." * 6 + "X" + "." * 17
+mit63, kam63 = _stand_bild(_fass63, "wueste", (12, 7))
+ohne63, _ = _stand_bild(_fass63, "wueste", (12, 7), hoehen=0.0)
+ecke63 = kam63.ecke
+ecke_px63 = (int(6 * K.TILE - ecke63.x) + 1, int(3 * K.TILE - ecke63.y) + 1)
+pruef("Um das Fass herum liegt Sand, keine Kachelflaeche",
+      mit63.get_at(ecke_px63) == ohne63.get_at(ecke_px63))
+pruef("Das Fass hat einen Koerper zum Auge hin",
+      sum(1 for x_ in range(K.TILE) for y_ in range(K.TILE)
+          if mit63.get_at((int(6 * K.TILE - ecke63.x) + x_,
+                           int(3 * K.TILE - ecke63.y) + y_))
+          != ohne63.get_at((int(6 * K.TILE - ecke63.x) + x_,
+                            int(3 * K.TILE - ecke63.y) + y_))) > 20)
+
+# Blut liegt am Boden, nicht auf der Mauer: die Dekale kommen vor den
+# stehenden Kacheln (bis 0.34.2 danach).
+welt63 = _W63.Welt([_W63.Ebene.aus_text(_feld63, 0)], satz="wueste")
+klecks63 = pygame.Surface((24, 24), pygame.SRCALPHA)
+klecks63.fill((200, 0, 0, 255))
+vorher63, kam63 = _stand_bild(_feld63, "wueste", (12, 7))
+e63 = welt63.ebene(0)
+_aus_text_alt63 = _W63.Ebene.aus_text
+_W63.Ebene.aus_text = classmethod(lambda cls, z, i: e63)
+try:
+    e63.dekal(klecks63, 12.5 * K.TILE, 7.5 * K.TILE)
+    nachher63, _ = _stand_bild(_feld63, "wueste", (12, 7))
+finally:
+    _W63.Ebene.aus_text = _aus_text_alt63
+mitte63 = (int(12.5 * K.TILE - kam63.ecke.x), int(7.5 * K.TILE - kam63.ecke.y))
+pruef("Ein Blutfleck unter einer Mauer liegt nicht auf der Mauerkrone",
+      nachher63.get_at(mitte63) == vorher63.get_at(mitte63),
+      "%s / %s" % (nachher63.get_at(mitte63), vorher63.get_at(mitte63)))
+
 # ── Ebenen: nur eine nach oben ───────────────────────────────────────
 # Wer unten steht, soll die Etage ueber sich durchscheinen sehen - aber
 # nicht gleich drei Stockwerke uebereinander.
 gezeichnet = []
 echt = szene.renderer.ebene_zeichnen
-def merken(ziel, welt, index, ecke, dunkel):
+def merken(ziel, welt, index, ecke, dunkel, auge=None):
     gezeichnet.append(index)
-    return echt(ziel, welt, index, ecke, dunkel)
+    return echt(ziel, welt, index, ecke, dunkel, auge)
 szene.renderer.ebene_zeichnen = merken
 szene.blick = 0
 szene.blick_hoehe = 0.0

@@ -1400,6 +1400,93 @@ def _brandfleck():
     return s
 
 
+# ──────────────────────────────── Oberseiten stehender Kacheln
+#
+# Seit 0.34.3 stehen Waende und Barrikaden (K.STEHEN): die Seiten zeichnet
+# der Renderer, hier ist nur, was man von oben sieht. Bewusst deutlich
+# anders als der Boden daneben - heller Rand, dunkle Fugen -, denn genau
+# unter dem Auge gibt es keine Seite, die die Hoehe verraet.
+
+def _krone(grund, fuge, licht, schatten, seed, steine=True):
+    s = _flaeche(T, T)
+    s.fill(grund)
+    r = random.Random(seed)
+    if steine:
+        # Zwei Lagen versetzter Steine, wie eine Mauerkrone.
+        for reihe, y in enumerate((0, T // 2)):
+            pygame.draw.line(s, fuge, (0, y), (T - 1, y))
+            versatz = 0 if reihe == 0 else T // 4
+            for x in range(versatz, T, T // 2):
+                pygame.draw.line(s, fuge, (x, y), (x, y + T // 2 - 1))
+    _koerner(s, licht, 14, seed)
+    _koerner(s, schatten, 10, seed + 1)
+    for _ in range(3):
+        x, y = r.randrange(2, T - 6), r.randrange(2, T - 4)
+        pygame.draw.line(s, schatten, (x, y), (x + r.randrange(2, 5), y + 1))
+    # Keine Kante je Kachel: eine Mauer aus zehn Kacheln saehe sonst aus
+    # wie zehn Kisten. Die Kante zieht der Renderer um die ganze Mauer.
+    return s
+
+
+@platzhalter("wand_oben")
+def _wand_oben():
+    """Die Blechwand von oben: Plattenstoesse und Nieten."""
+    s = _krone(K.C_WAND_OBEN, K.C_WAND_KANTE, (128, 108, 82), (46, 37, 27),
+               71, steine=False)
+    for x in (4, T // 2 + 4, T - 5):
+        for y in (4, T - 5):
+            s.set_at((x, y), (150, 130, 100))
+    return s
+
+
+@platzhalter("sand_wand_oben")
+def _sand_wand_oben():
+    """Lehm von oben: Steinlagen, rotbrauner als der Sand daneben."""
+    return _krone((152, 116, 78), (92, 68, 46), (194, 160, 114), (82, 61, 42), 73)
+
+
+@platzhalter("schnee_fels_oben")
+def _schnee_fels_oben():
+    """Fels von oben, mit Schneeflecken. Dunkel wie der Fels selbst: eine
+    weisse Kappe (erster Versuch) war vom Schnee am Boden kaum zu trennen."""
+    s = _krone((70, 94, 112), (40, 58, 74), (120, 148, 166), (36, 52, 66), 77)
+    r = random.Random(79)
+    for _ in range(5):
+        x, y = r.randrange(1, T - 8), r.randrange(1, T - 5)
+        pygame.draw.ellipse(s, (205, 224, 232), (x, y, r.randrange(4, 8), r.randrange(2, 4)))
+    return s
+
+
+@platzhalter("kiste_oben")
+def _kiste_oben():
+    """Der Frachtkasten von oben: Deckel aus Brettern, Spannband, Ecken."""
+    b = 24
+    s = _flaeche(b, b)
+    s.fill(K.C_HULL)
+    for y in (6, 12, 18):
+        pygame.draw.line(s, K.C_HULL_DK, (1, y), (b - 2, y))
+    pygame.draw.rect(s, K.C_HULL_SH, (b // 2 - 1, 0, 3, b))
+    pygame.draw.rect(s, (150, 132, 96), (b // 2 - 1, 0, 1, b))
+    pygame.draw.rect(s, K.C_AMBER, (3, 3, 5, 2))
+    pygame.draw.rect(s, (22, 16, 11), s.get_rect(), 1)
+    pygame.draw.line(s, (206, 190, 150), (1, 1), (b - 2, 1))
+    return s
+
+
+@platzhalter("sand_kiste_oben")
+def _sand_kiste_oben():
+    """Das Fass von oben: runder Deckel, Rand, Spundloch."""
+    b = 22
+    s = _flaeche(b, b)
+    m = b // 2
+    pygame.draw.circle(s, (62, 50, 34), (m, m), m)
+    pygame.draw.circle(s, (132, 106, 66), (m, m), m - 2)
+    pygame.draw.circle(s, (100, 80, 52), (m, m), m - 5, 1)
+    pygame.draw.arc(s, (176, 148, 98), (2, 2, b - 4, b - 4), 1.6, 3.4, 1)
+    pygame.draw.circle(s, (40, 30, 20), (m + 4, m - 3), 2)
+    return s
+
+
 @platzhalter("wandschatten")
 def _wandschatten():
     """Schlagschatten, den eine feste Kachel auf den Boden wirft.

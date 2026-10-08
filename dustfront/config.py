@@ -453,6 +453,13 @@ BILD_MASS = {
     "blut":             (26, 26),
     "brandfleck":       (156, 156),
     "wandschatten":     (TILE + DEKAL["wand_versatz"], TILE + DEKAL["wand_versatz"]),
+    # Draufsicht auf die Oberseite stehender Kacheln (seit 0.34.3, siehe
+    # STEHEN). Die Kachelbilder darueber sind halb von vorn gemalt.
+    "wand_oben":        (TILE, TILE),
+    "sand_wand_oben":   (TILE, TILE),
+    "schnee_fels_oben": (TILE, TILE),
+    "kiste_oben":       (24, 24),
+    "sand_kiste_oben":  (22, 22),
     "vignette":         (GAME_W, GAME_H),
 }
 
@@ -1052,6 +1059,28 @@ PERSPEKTIVE = dict(
 # Die Felswand zwischen einem Plateau und dem Boden darunter (render.py,
 # Renderer.klippen). Ein Plateau ist ein Felsblock, kein schwebender
 # Deckel - bis 0.31 hing er versetzt und blass ueber seinem Sockel.
+# Waende und Barrikaden stehen (seit 0.34.3, render.Renderer.
+# _stehende_zeichnen). Bis dahin waren sie flache Kacheln wie der Boden:
+# von oben auf dem Plateau sah eine Lehmmauer aus wie ein Weg, und von
+# einer hoeheren Ebene aus war eine Wand unten nur ein dunkleres Feld.
+# Jetzt hat jede eine Hoehe in Welt-Pixeln und wird wie die Plateaus in
+# Perspektive gezeichnet: Oberseite vom Auge weg verschoben, dazwischen die
+# Seiten, die dem Auge zugewandt sind. Senkrecht unter dem Auge sieht man
+# keine Seite - dort traegt die Oberseite (Bild "<name>_oben") mit Kante.
+#
+# Schluessel ist der Bildname (Kartensatz beachtet), dann die Kachelart.
+#   hoehe    Welt-Pixel ueber dem Boden
+#   rahmen   (x, y, b, h) der Grundflaeche in der Kachel; der Rest ist Boden
+#   form     "block" (Kanten) oder "rund" (Fass)
+#   fugen    so viele Querlinien auf jeder Seite (Steinlagen, Fassreifen)
+STEHEN = {
+    "wand":       dict(hoehe=24.0, rahmen=(0, 0, 32, 32), form="block", fugen=2),
+    "sand_wand":  dict(hoehe=24.0, rahmen=(0, 0, 32, 32), form="block", fugen=2),
+    "schnee_fels": dict(hoehe=24.0, rahmen=(0, 0, 32, 32), form="block", fugen=2),
+    "kiste":      dict(hoehe=14.0, rahmen=(4, 4, 24, 24), form="block", fugen=1),
+    "sand_kiste": dict(hoehe=14.0, rahmen=(5, 5, 22, 22), form="rund", fugen=2),
+}
+
 KLIPPEN = dict(
     schichten=4,          # so viele Gesteinsbaender von oben nach unten
     abdunkeln=0.42,       # um so viel ist das unterste dunkler als das oberste

@@ -229,6 +229,8 @@ class Renderer:
         self._rauch_puffer: dict[tuple, tuple] = {}
         self._feuer_puffer: dict[int, tuple] = {}
         self._klippen_farbe: dict[str, tuple] = {}
+        self._seiten_farbe: dict[str, tuple] = {}
+        self._oberseiten: dict[tuple, pygame.Surface] = {}
         # Auch Schatten, Vignette und die Dekale kommen aus der Registratur:
         # eine Datei assets/vignette.png ersetzt sie genauso wie eine Kachel.
         # Gehalten werden sie hier, damit die Zeichenschleife nicht bei jedem
@@ -321,7 +323,11 @@ class Renderer:
                    "wand": "schnee_fels"},
     }
 
-    def ebene_zeichnen(self, ziel, welt, index: int, ecke, dunkel: int | None) -> None:
+    def ebene_zeichnen(self, ziel, welt, index: int, ecke, dunkel: int | None,
+                       auge: float | None = None) -> None:
+        """`auge`: wie hoch das Auge ueber dieser Ebene steht, in Welt-
+        Pixeln - fuer die Perspektive der stehenden Kacheln (K.STEHEN).
+        Ohne Angabe die Brennweite: die angeschaute Ebene."""
         e = welt.ebene(index)
         satz = self.SAETZE.get(getattr(welt, "satz", ""), {})
         boden_namen = satz.get("boden", self._boden_namen)
@@ -344,8 +350,17 @@ class Renderer:
                     continue
                 daten = K.KACHELN[kachel]
                 if daten["fest"]:
-                    fest.append((tx, ty,
-                                 satz.get(daten["bild"], daten["bild"]), sy))
+                    name_f = satz.get(daten["bild"], daten["bild"])
+                    fest.append((tx, ty, name_f, sy))
+                    st = self._stehend(name_f, daten)
+                    if st is None or st["rahmen"] == (0, 0, K.TILE, K.TILE):
+                        continue
+                    # Ein Fass oder eine Kiste steht auf Boden: der ist
+                    # rundherum zu sehen, also zuerst der Boden.
+                    s = bild(boden_namen[e.variante[zeile + tx]])
+                    if dunkel is not None:
+                        s = self.dunkel(s, dunkel)
+                    ziel.blit(s, (tx * K.TILE - ecke.x, sy))
                     continue
                 name = satz.get(daten["bild"], daten["bild"])
                 if kachel == K.BODEN:
@@ -368,21 +383,25 @@ class Renderer:
                 spur.set_alpha(alpha)
                 ziel.blit(spur, (int(sx - ecke.x - 5), int(sy - ecke.y - 3)))
 
+        # Dekale liegen auf dem Boden - also vor den Waenden. Bis 0.34.2
+        # kamen sie danach; bei flachen Waenden fiel das nicht auf, bei
+        # stehenden laege ein Blutfleck sonst auf der Mauerseite.
+        self._dekale_zeichnen(ziel, e, ecke, dunkel)
+
         # Zweiter Durchgang: Schlagschatten, dann die festen Kacheln darueber
         sch = self._wandschatten
         if dunkel is not None:
             sch = self.dunkel(sch, dunkel)
         for (tx, ty, name, sy) in fest:
             ziel.blit(sch, (tx * K.TILE - ecke.x, sy))
-        for (tx, ty, name, sy) in fest:
-            s = bild(name)
-            if dunkel is not None:
-                s = self.dunkel(s, dunkel)
-            ziel.blit(s, (tx * K.TILE - ecke.x, sy))
-        # Dekale liegen auf dem Boden
+        self._stehende_zeichnen(ziel, e, satz, fest, ecke, dunkel,
+                                K.PERSPEKTIVE["brennweite"] if auge is None else auge)
+
+    def _dekale_zeichnen(self, ziel, e, ecke, dunkel) -> None:
         d = e.dekale
         if not d:
             return
+        zw, zh = ziel.get_size()
         dx0 = max(0, int(ecke.x // DEKAL_PIXEL))
         dy0 = max(0, int(ecke.y // DEKAL_PIXEL))
         dx1 = min((e.pixel_breite - 1) // DEKAL_PIXEL,
@@ -398,6 +417,191 @@ class Renderer:
                     q = self.dunkel(q, dunkel)
                 ziel.blit(q, (kx * DEKAL_PIXEL - ecke.x,
                               ky * DEKAL_PIXEL - ecke.y))
+
+    # ---- Stehende Kacheln: Waende und Barrikaden mit Hoehe --------------
+    @staticmethod
+    def _stehend(name: str, daten: dict):
+        """Die Masse aus K.STEHEN fuer ein Kachelbild, oder None (flach)."""
+        return K.STEHEN.get(name) or K.STEHEN.get(daten.get("name", ""))
+
+    def _seitenfarbe(self, name: str) -> tuple:
+        """Grundfarbe der Seiten: das gemalte Kachelbild, gemittelt - so
+        passen sie zu dem, was man vorher von der Kachel kannte."""
+        hit = self._seiten_farbe.get(name)
+        if hit is None:
+            hit = tuple(pygame.transform.average_color(self.bilder.bild(name))[:3])
+            self._seiten_farbe[name] = hit
+        return hit
+
+    def _oberseite(self, name: str, breite: int, hoehe: int, dunkel):
+        """Das Bild der Oberseite in der Groesse, in der es gerade steht."""
+        schluessel = (name, breite, hoehe, dunkel)
+        hit = self._oberseiten.get(schluessel)
+        if hit is None:
+            try:
+                quelle = self.bilder.bild(name + "_oben")
+            except Exception:                   # noqa: BLE001
+                quelle = self.bilder.bild(name)
+            hit = pygame.transform.scale(quelle, (max(1, breite), max(1, hoehe)))
+            if dunkel is not None:
+                hit = self.dunkel(hit, dunkel)
+            if len(self._oberseiten) > 300:
+                self._oberseiten.clear()
+            self._oberseiten[schluessel] = hit
+        return hit
+
+    def _stehende_zeichnen(self, ziel, e, satz, fest, ecke, dunkel,
+                           auge: float) -> None:
+        """Waende und Barrikaden mit Hoehe, in Perspektive (K.STEHEN).
+
+        Dieselbe Rechnung wie fuer die Plateaus: ein Punkt in der Hoehe h
+        liegt vom Auge aus um den Faktor auge / (auge - h) weiter von der
+        Bildmitte weg als sein Fusspunkt. Die Oberseite rueckt also nach
+        aussen, und dazwischen sieht man genau die Seiten, die zur Mitte
+        schauen - links von einem eine Ostseite, oberhalb eine Suedseite.
+        Das Auge steht ueber der Mitte der Zielflaeche; das gilt fuer das
+        normale Bild wie fuer die Tiefenflaeche einer anderen Ebene.
+
+        Gezeichnet wird in zwei Schichten: erst alle Seiten von aussen nach
+        innen, dann alle Oberseiten. Eine Oberseite verdeckt so, was hinter
+        ihr steht, und keine Seite ragt ueber eine Oberseite.
+        """
+        T = K.TILE
+        zw, zh = ziel.get_size()
+        cx, cy = zw / 2.0, zh / 2.0
+        hell_f = 1.0 if dunkel is None else dunkel / 255.0
+        licht = {(0, 1): 0.82, (1, 0): 0.66, (-1, 0): 0.74, (0, -1): 0.56}
+        voll = (0, 0, T, T)
+        stehend_bei = {}
+        for (tx, ty, name, sy) in fest:
+            stehend_bei[(tx, ty)] = self._stehend(name, K.KACHELN[e.kachel(tx, ty)])
+
+        def nachbar_deckt(tx, ty, st):
+            # Eine Seite gibt es nicht, wo eine gleich hohe volle Kachel
+            # anschliesst - eine lange Mauer ist eine Mauer, nicht zwanzig.
+            n = stehend_bei.get((tx, ty))
+            if n is None:
+                daten = K.KACHELN[e.kachel(tx, ty)]
+                if not daten["fest"]:
+                    return False
+                n = self._stehend(satz.get(daten["bild"], daten["bild"]), daten)
+                if n is None:
+                    return True                 # flache feste Kachel: ohne Seite
+            return n["rahmen"] == voll and n["hoehe"] >= st["hoehe"]
+
+        seiten, oben, flach, kanten = [], [], [], []
+        for (tx, ty, name, sy) in fest:
+            st = stehend_bei[(tx, ty)]
+            if st is None:
+                flach.append((tx, ty, name, sy))
+                continue
+            rx, ry, rb, rh = st["rahmen"]
+            x0, y0 = tx * T - ecke.x + rx, sy + ry
+            x1, y1 = x0 + rb, y0 + rh
+            k = auge / max(1.0, auge - st["hoehe"])
+            ox0, oy0 = cx + (x0 - cx) * k, cy + (y0 - cy) * k
+            ox1, oy1 = cx + (x1 - cx) * k, cy + (y1 - cy) * k
+            weg = ((x0 + x1) / 2 - cx) ** 2 + ((y0 + y1) / 2 - cy) ** 2
+            grund = self._seitenfarbe(name)
+            if st["form"] == "rund":
+                seiten.append((weg, "rund", (x0, y0, x1, y1, ox0, oy0, ox1, oy1),
+                               grund, st))
+            else:
+                voll_k = st["rahmen"] == voll
+                # Je Seite einmal fragen, ob ein Nachbar sie verdeckt - im
+                # Fels unter einem Plateau sind das hunderte Kacheln je Bild.
+                if voll_k:
+                    offen_n = not nachbar_deckt(tx, ty - 1, st)
+                    offen_s = not nachbar_deckt(tx, ty + 1, st)
+                    offen_w = not nachbar_deckt(tx - 1, ty, st)
+                    offen_o = not nachbar_deckt(tx + 1, ty, st)
+                    if not (offen_n or offen_s or offen_w or offen_o):
+                        oben.append((weg, name, ox0, oy0, ox1, oy1, st))
+                        continue
+                else:
+                    offen_n = offen_s = offen_w = offen_o = True
+                offen = {(0, -1): offen_n, (0, 1): offen_s,
+                         (-1, 0): offen_w, (1, 0): offen_o}
+                # Die Kante der Oberseite: rundherum, wo die Mauer endet -
+                # oben und links im Licht, unten und rechts im Schatten.
+                rx_, ry_ = round(ox0), round(oy0)
+                rb_, rh_ = round(ox1) - rx_ - 1, round(oy1) - ry_ - 1
+                for (nx, ny), a_, b_ in (
+                        ((0, -1), (rx_, ry_), (rx_ + rb_, ry_)),
+                        ((-1, 0), (rx_, ry_), (rx_, ry_ + rh_)),
+                        ((0, 1), (rx_, ry_ + rh_), (rx_ + rb_, ry_ + rh_)),
+                        ((1, 0), (rx_ + rb_, ry_), (rx_ + rb_, ry_ + rh_))):
+                    if offen[(nx, ny)]:
+                        kanten.append((a_, b_, nx + ny < 0, grund))
+                for (nx, ny), basis, kopf, sichtbar in (
+                        ((0, -1), ((x0, y0), (x1, y0)), ((ox1, oy0), (ox0, oy0)),
+                         oy0 > y0 + 0.5),
+                        ((0, 1), ((x0, y1), (x1, y1)), ((ox1, oy1), (ox0, oy1)),
+                         oy1 < y1 - 0.5),
+                        ((-1, 0), ((x0, y0), (x0, y1)), ((ox0, oy1), (ox0, oy0)),
+                         ox0 > x0 + 0.5),
+                        ((1, 0), ((x1, y0), (x1, y1)), ((ox1, oy1), (ox1, oy0)),
+                         ox1 < x1 - 0.5)):
+                    if not sichtbar or not offen[(nx, ny)]:
+                        continue
+                    seiten.append((weg, "block", (basis, kopf),
+                                   grund, st, licht[(nx, ny)]))
+            oben.append((weg, name, ox0, oy0, ox1, oy1, st))
+
+        for (tx, ty, name, sy) in flach:
+            s = self.bilder.bild(name)
+            if dunkel is not None:
+                s = self.dunkel(s, dunkel)
+            ziel.blit(s, (tx * K.TILE - ecke.x, sy))
+
+        seiten.sort(key=lambda s_: -s_[0])
+        for eintrag in seiten:
+            if eintrag[1] == "block":
+                _w, _art, (basis, kopf), grund, st, l = eintrag
+                f = l * hell_f
+                farbe = tuple(int(c * f) for c in grund)
+                viereck = [basis[0], basis[1], kopf[0], kopf[1]]
+                pygame.draw.polygon(ziel, farbe, viereck)
+                # Querfugen: Steinlagen an der Mauer, Bretter an der Kiste.
+                fuge = tuple(int(c * f * 0.68) for c in grund)
+                n = st["fugen"]
+                for i in range(1, n + 1):
+                    t = i / (n + 1)
+                    a = (basis[0][0] + (kopf[1][0] - basis[0][0]) * t,
+                         basis[0][1] + (kopf[1][1] - basis[0][1]) * t)
+                    b = (basis[1][0] + (kopf[0][0] - basis[1][0]) * t,
+                         basis[1][1] + (kopf[0][1] - basis[1][1]) * t)
+                    pygame.draw.line(ziel, fuge, a, b, 1)
+                pygame.draw.line(ziel, tuple(int(c * f * 0.42) for c in grund),
+                                 basis[0], basis[1], 1)
+            else:
+                _w, _art, (x0, y0, x1, y1, ox0, oy0, ox1, oy1), grund, st = eintrag
+                # Ein Fass ist ein Zylinder: Kreise vom Fuss bis zum Deckel,
+                # unten dunkel, oben hell. Ein paar Kreise genuegen - der
+                # Versatz zwischen Fuss und Deckel ist nur ein paar Pixel.
+                fx, fy, fr = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2
+                kx, ky, kr = (ox0 + ox1) / 2, (oy0 + oy1) / 2, (ox1 - ox0) / 2
+                schritte = max(2, int(abs(kx - fx) + abs(ky - fy)) + 1)
+                n = st["fugen"]
+                reifen = {int(schritte * i / (n + 1)) for i in range(1, n + 1)}
+                for i in range(schritte + 1):
+                    t = i / schritte
+                    f = (0.45 + 0.4 * t) * hell_f
+                    if i in reifen:
+                        f *= 0.62
+                    pygame.draw.circle(ziel, tuple(int(c * f) for c in grund),
+                                       (round(fx + (kx - fx) * t), round(fy + (ky - fy) * t)),
+                                       max(1, round(fr + (kr - fr) * t)))
+
+        oben.sort(key=lambda o: -o[0])
+        for (_w, name, ox0, oy0, ox1, oy1, st) in oben:
+            x, y = round(ox0), round(oy0)
+            bild_o = self._oberseite(name, round(ox1) - x, round(oy1) - y, dunkel)
+            ziel.blit(bild_o, (x, y))
+        for a_, b_, im_licht, grund in kanten:
+            f = (1.45 if im_licht else 0.38) * hell_f
+            farbe = tuple(max(0, min(255, int(c * f))) for c in grund)
+            pygame.draw.line(ziel, farbe, a_, b_, 1)
 
     def wesen_zeichnen(self, ziel, welt, index, ecke, alpha, dunkel=None) -> None:
         liste = [w for w in welt.wesen if w.ebene == index and w.lebt]
@@ -948,7 +1152,8 @@ class Renderer:
                     max(48, int(p["dunkel"] * k)) / 255.0 if dz > 0 else 1.0)
 
             if abs(dz) < 1.0:                      # die angeschaute Ebene
-                self.ebene_zeichnen(ziel, welt, idx, ecke, None)
+                self.ebene_zeichnen(ziel, welt, idx, ecke, None,
+                                    p["brennweite"])
                 if boden is not None:
                     boden(ziel, idx, ecke)
                 if self.nur_gelaende:
@@ -965,7 +1170,11 @@ class Renderer:
             flaeche = self._tiefenflaeche(k)
             flaeche.fill((0, 0, 0, 0))
             u_ecke = abbildung[idx][0]
-            self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel)
+            # Das Auge steht ueber dieser Ebene um die Brennweite plus den
+            # Hoehenunterschied - von oben gesehen wirken Waende unten
+            # flacher, von unten die oben steiler.
+            self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel,
+                                max(60.0, p["brennweite"] + dz))
             if boden is not None:
                 boden(flaeche, idx, u_ecke)
             if not self.nur_gelaende:
