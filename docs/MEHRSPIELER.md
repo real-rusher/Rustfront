@@ -1863,6 +1863,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.5 | Der Gast zeichnet gemeldete Gegner, Beute und Geschosse in derselben Reihenfolge wie der Gastgeber (Mauern verdecken sie) | Nur Darstellung beim Gast, gleiche Daten, kein neues Feld; dieselbe Version wie immer |
 | 0.34.2 | STAUBTAL: Aussenposten um Kreis B gebaut, Plateaustreifen im Nordosten entfernt | Gastgeber und Gast brauchen dieselbe Version und `karten/staubtal.txt`; kein Protokollwechsel |
 | 0.34.1 | STAUBTAL: drei untere Aufzuege und einige Felder korrigiert; SCHNEEFELD: zwei Aufzuege dazu; Brecher-Koerper schmaler; Gegner waehlen den naechsten Aufzug | Gastgeber und Gast brauchen dieselbe Version und dieselben Kartendateien; kein Protokollwechsel |
 | 0.34.0 | Aufzuege nutzen wieder E und wechseln genau eine Ebene; Schutzbereiche wurden neu gestaltet | Gastgeber und Gast brauchen dieselbe Version und `karten/staubtal.txt`; kein Protokollwechsel |

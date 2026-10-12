@@ -1549,6 +1549,79 @@ pruef("Hinter einer Mauer verdeckt die Mauer die Figur",
 pruef("Vor der Mauer bleibt die Figur zu sehen",
       vorn64.get_at(_px64(_vorn64)) != leer64.get_at(_px64(_vorn64)))
 
+# 0.34.5: alles, was es in der Welt wirklich gaebe, verdeckt sich wie in
+# echter 3D - Anzeige (Balken, Zahlen) darf darueber liegen. Dieselbe
+# Mauer wie eben, das Auge ueber Kachel (12, 7).
+from dustfront.entities import Partikel as _P65, Geschoss as _Gs65, Gegner as _Gg65
+
+def _bild65(dinge=(), funken=(), figuren=None, anzeige=None):
+    welt_ = _W63.Welt([_W63.Ebene.aus_text(_mauer64, 0)], satz="wueste")
+    for d in dinge:
+        d.welt = welt_
+        d.vorher.update(d.pos)
+        welt_.wesen.append(d)
+    for (x_, y_) in funken:
+        welt_.partikel.append(_P65((x_, y_), (0, 0), 5.0, (255, 0, 255), 3,
+                                   "funke", 0.0, 0))
+    kam_ = _Kam63(pygame.Vector2(12.5 * K.TILE, 7.5 * K.TILE))
+    bild_ = pygame.Surface((K.GAME_W, K.GAME_H))
+    bild_.fill(K.C_VOID)
+    szene.renderer.vignette_an = False
+    szene.renderer.welt_zeichnen(bild_, welt_, kam_, 1.0, 0.0, blick=0,
+                                 figuren=figuren, anzeige=anzeige)
+    return bild_, kam_, welt_
+
+leer65, kam65, welt65 = _bild65()
+r65 = szene.renderer
+pruef("Ein Punkt am Boden hinter der Mauer ist verdeckt",
+      r65.verdeckt(welt65, 0, _hinten64, 0.0))
+pruef("In Laufhoehe knapp dahinter auch",
+      r65.verdeckt(welt65, 0, _hinten64, K.HOEHEN["lauf"]))
+pruef("Ueber der Mauerkante ist er zu sehen",
+      not r65.verdeckt(welt65, 0, _hinten64, K.STEHEN["sand_wand"]["hoehe"] + 6))
+pruef("Vor der Mauer ist nichts verdeckt",
+      not r65.verdeckt(welt65, 0, _vorn64, 0.0))
+
+def _anders65(bild_, p):
+    q = (int(p[0] - kam65.ecke.x), int(p[1] - kam65.ecke.y))
+    return bild_.get_at(q) != leer65.get_at(q)
+
+_daten65 = K.WAFFEN["repetierer"]
+kugel_h, _, _ = _bild65([_Gs65(pygame.Vector2(_hinten64), 0.0, _daten65, 0)])
+kugel_v, _, _ = _bild65([_Gs65(pygame.Vector2(_vorn64), 0.0, _daten65, 0)])
+pruef("Eine Kugel hinter der Mauer ist nicht zu sehen", not _anders65(kugel_h, _hinten64))
+pruef("Eine Kugel davor schon", _anders65(kugel_v, _vorn64))
+funke_h, _, _ = _bild65(funken=[_hinten64])
+funke_v, _, _ = _bild65(funken=[_vorn64])
+pruef("Funken hinter der Mauer sind verdeckt", not _anders65(funke_h, _hinten64))
+pruef("Funken davor nicht", _anders65(funke_v, _vorn64))
+
+# Der Lebensbalken ist Anzeige: er bleibt ueber der Mauer stehen, auch
+# wenn der Gegner selbst dahinter verschwindet.
+g65 = _Gg65(pygame.Vector2(_hinten64), "laeufer", 0)
+g65.leben = g65.max_leben * 0.4
+balken65, _, _ = _bild65([g65])
+g65b = _Gg65(pygame.Vector2(_hinten64), "laeufer", 0)
+heil65, _, _ = _bild65([g65b])
+_balken_y65 = int(_hinten64[1] - (g65.radius + 11) - kam65.ecke.y)
+pruef("Der Lebensbalken eines verdeckten Gegners liegt ueber der Mauer",
+      any(balken65.get_at((x_, _balken_y65)) != heil65.get_at((x_, _balken_y65))
+          for x_ in range(int(_hinten64[0] - kam65.ecke.x) - 9,
+                          int(_hinten64[0] - kam65.ecke.x) + 9)))
+
+# Der Gast zeichnet, was er nur gemeldet bekommt, ueber dieselben Haken:
+# was am Boden steht, verdeckt die Mauer; die Anzeige liegt obenauf.
+def _klecks65(farbe):
+    def zeichnen(flaeche, ebene, ecke):
+        flaeche.fill(farbe, (int(_hinten64[0] - ecke.x) - 2,
+                             int(_hinten64[1] - ecke.y) - 2, 5, 5))
+    return zeichnen
+gast_f, _, _ = _bild65(figuren=_klecks65((255, 0, 255)))
+gast_a, _, _ = _bild65(anzeige=_klecks65((255, 0, 255)))
+pruef("Beim Gast verdeckt die Mauer gemeldete Gegner dahinter",
+      not _anders65(gast_f, _hinten64))
+pruef("Seine Anzeige liegt ueber der Mauer", _anders65(gast_a, _hinten64))
+
 # ── Ebenen: nur eine nach oben ───────────────────────────────────────
 # Wer unten steht, soll die Etage ueber sich durchscheinen sehen - aber
 # nicht gleich drei Stockwerke uebereinander.

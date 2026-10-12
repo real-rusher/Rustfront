@@ -30,6 +30,10 @@ RND = random.Random(20260913)
 
 class Wesen:
     fraktion = "neutral"
+    # Hoehe ueber dem Boden fuer die Frage, ob eine Mauer es verdeckt
+    # (K.HOEHEN, render.Renderer.verdeckt). 0: steht oder liegt am Boden
+    # und wird mit den Figuren gezeichnet, vor den Mauern.
+    hoehe_bild = 0.0
     schiebt = True
     trefferbar = True
     bild = None
@@ -275,6 +279,7 @@ def treffer_ziel_buchen(von, ziel) -> None:
 
 class Geschoss(Wesen):
     fraktion = "geschoss"
+    hoehe_bild = K.HOEHEN["lauf"]   # fliegt in Laufhoehe
     schiebt = False
     trefferbar = False
     schatten = False
@@ -580,6 +585,7 @@ class Rakete(Wesen):
     """
 
     fraktion = "geschoss"
+    hoehe_bild = K.HOEHEN["lauf"]   # fliegt in Laufhoehe
     schiebt = False
     trefferbar = False
     schatten = True

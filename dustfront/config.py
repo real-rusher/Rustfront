@@ -1081,6 +1081,23 @@ STEHEN = {
     "sand_kiste": dict(hoehe=14.0, rahmen=(5, 5, 22, 22), form="rund", fugen=2),
 }
 
+# Wie hoch ueber dem Boden etwas in der Welt ist, in Welt-Pixeln (seit
+# 0.34.5). Gebraucht nur fuer die Frage, ob eine Mauer es verdeckt
+# (render.Renderer.verdeckt): was tiefer ist als die Mauer und vom Auge
+# aus dahinter liegt, ist nicht zu sehen; was darueber fliegt, schon.
+# Gezeichnet wird alles weiter an seinem Fusspunkt, wie die Figuren -
+# sonst saehe ein Treffer am Bildrand aus wie ein Fehlschuss.
+HOEHEN = dict(
+    lauf=12.0,            # Geschosse, Raketen, Muendungsfeuer: Laufhoehe
+    funke=10.0,           # Funken fliegen um die Treffer- und Laufhoehe
+    funke_dauer=10.0,
+    glitzer_dauer=10.0,
+    blut=6.0,
+    staub=3.0,            # Staub wirbelt knapp ueber dem Boden
+    huelse=0.0,           # Huelsen liegen am Boden
+    partikel=6.0,         # alles uebrige
+)
+
 KLIPPEN = dict(
     schichten=4,          # so viele Gesteinsbaender von oben nach unten
     abdunkeln=0.42,       # um so viel ist das unterste dunkler als das oberste

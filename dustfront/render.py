@@ -230,7 +230,11 @@ class Renderer:
         self._feuer_puffer: dict[int, tuple] = {}
         self._klippen_farbe: dict[str, tuple] = {}
         self._stehend_offen = None      # siehe stehende_nachholen
+        # Je Ebene: wo das Auge steht (Weltpunkt darunter und Hoehe ueber
+        # der Ebene), gemerkt beim Zeichnen der Ebene - fuer `verdeckt`.
+        self._augen: dict[int, tuple] = {}
         self._seiten_farbe: dict[str, tuple] = {}
+        self._hoechste_stehende = max(d["hoehe"] for d in K.STEHEN.values())
         self._oberseiten: dict[tuple, pygame.Surface] = {}
         # Auch Schatten, Vignette und die Dekale kommen aus der Registratur:
         # eine Datei assets/vignette.png ersetzt sie genauso wie eine Kachel.
@@ -400,12 +404,74 @@ class Renderer:
             sch = self.dunkel(sch, dunkel)
         for (tx, ty, name, sy) in fest:
             ziel.blit(sch, (tx * K.TILE - ecke.x, sy))
-        auftrag = (ziel, e, satz, fest, ecke, dunkel,
-                   K.PERSPEKTIVE["brennweite"] if auge is None else auge)
+        auge_h = K.PERSPEKTIVE["brennweite"] if auge is None else auge
+        self._augen[index] = (ecke.x + zw / 2.0, ecke.y + zh / 2.0, auge_h)
+        auftrag = (ziel, e, satz, fest, ecke, dunkel, auge_h)
         if aufschieben:
             self._stehend_offen = auftrag
         else:
             self._stehende_zeichnen(*auftrag)
+
+    def _stehend_an(self, welt, e, x: float, y: float):
+        """Die Masse der stehenden Kachel am Weltpunkt, wenn er in ihrer
+        Grundflaeche liegt - sonst None."""
+        T = K.TILE
+        tx, ty = int(x // T), int(y // T)
+        daten = K.KACHELN[e.kachel(tx, ty)]
+        if not daten["fest"]:
+            return None
+        satz = self.SAETZE.get(getattr(welt, "satz", ""), {})
+        st = self._stehend(satz.get(daten["bild"], daten["bild"]), daten)
+        if st is None:
+            return None
+        rx, ry, rb, rh = st["rahmen"]
+        lx, ly = x - tx * T - rx, y - ty * T - ry
+        if not (0 <= lx < rb and 0 <= ly < rh):
+            return None
+        if st["form"] == "rund":
+            mx, my = rb / 2.0, rh / 2.0
+            if (lx - mx) ** 2 + (ly - my) ** 2 > mx * mx:
+                return None
+        return st
+
+    def verdeckt(self, welt, index: int, pos, hoehe: float) -> bool:
+        """Verdeckt eine Mauer, Kiste oder ein Fass diesen Punkt vom Auge?
+
+        Ein Strahl vom Punkt (in `hoehe` ueber dem Boden) zum Auge: liegt
+        er irgendwo innerhalb einer stehenden Kachel tiefer als deren
+        Oberkante, sieht das Auge den Punkt nicht. Weil das Auge hoch steht
+        (die Brennweite, rund 430 Welt-Pixel), steigt der Strahl schnell:
+        nach ein paar Pixeln ist er ueber jeder Mauer, und nur dieses kurze
+        Stueck wird abgetastet.
+
+        Gebraucht fuer alles, was ueber dem Boden ist und klein genug, um
+        ganz oder gar nicht zu sehen zu sein - Geschosse, Funken,
+        Muendungsfeuer, was faellt. Figuren am Boden brauchen das nicht:
+        sie werden vor den Mauern gezeichnet und Pixel fuer Pixel von ihnen
+        verdeckt.
+        """
+        auge = self._augen.get(index)
+        if auge is None or not hasattr(welt, "ebene"):
+            return False                 # ohne Karte (Probewelt) nichts davor
+        ax, ay, ah = auge
+        hoechste = self._hoechste_stehende
+        if hoehe >= hoechste:
+            return False
+        dx, dy = ax - pos[0], ay - pos[1]
+        weit = math.hypot(dx, dy)
+        if weit < 1.0:
+            return False
+        bis = (hoechste - hoehe) / max(1.0, ah - hoehe)
+        # Jeden Pixel: mit groberen Schritten (erst 3 px) rutschte eine
+        # Kugel knapp hinter der Mauer durch die Luecke zwischen zwei Proben.
+        schritte = int(weit * bis) + 1
+        e = welt.ebene(index)
+        for i in range(1, schritte + 1):
+            t = bis * i / schritte
+            st = self._stehend_an(welt, e, pos[0] + dx * t, pos[1] + dy * t)
+            if st is not None and st["hoehe"] > hoehe + (ah - hoehe) * t:
+                return True
+        return False
 
     def stehende_nachholen(self) -> None:
         """Die mit `aufschieben` gemerkten Waende jetzt zeichnen.
@@ -628,7 +694,14 @@ class Renderer:
             pygame.draw.line(ziel, farbe, a_, b_, 1)
 
     def wesen_zeichnen(self, ziel, welt, index, ecke, alpha, dunkel=None) -> None:
-        liste = [w for w in welt.wesen if w.ebene == index and w.lebt]
+        """Was am Boden steht oder liegt: Figuren, Beute, Granaten.
+
+        Seit 0.34.5 ohne das, was fliegt (`hoehe_bild` > 0, also Geschosse
+        und Raketen) - das kommt nach den Mauern in `luft_zeichnen` - und
+        ohne die Lebensbalken: die sind Anzeige und gehoeren ueber die
+        Mauern (`balken_zeichnen`)."""
+        liste = [w for w in welt.wesen if w.ebene == index and w.lebt
+                 and w.hoehe_bild <= 0]
         liste.sort(key=lambda w: w.pos.y)
         for w in liste:
             p = boden = w.zeichenpos(alpha) - ecke  # Stelle, auf der es steht
@@ -664,8 +737,38 @@ class Renderer:
                 s = s.copy()
                 s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
-            if dunkel is None and getattr(w, "fraktion", "") == "feind":
-                self.gegnerbalken(ziel, p, w)
+
+    def balken_zeichnen(self, ziel, welt, index, ecke, alpha) -> None:
+        """Lebensbalken der Gegner - Anzeige, also ueber den Mauern."""
+        for w in welt.wesen:
+            if (w.ebene == index and w.lebt and w.flug <= 0
+                    and getattr(w, "fraktion", "") == "feind"):
+                self.gegnerbalken(ziel, w.zeichenpos(alpha) - ecke, w)
+
+    def luft_zeichnen(self, ziel, welt, index, ecke, alpha, dunkel=None) -> None:
+        """Was ueber dem Boden fliegt: Geschosse und Raketen, mit Spur.
+
+        Nach den Mauern, und nur, wenn keine Mauer davor steht (`verdeckt`).
+        Eine Kugel, die knapp hinter einer Mauer vorbeifliegt, ist nicht zu
+        sehen; eine, die vor ihr fliegt, schon.
+        """
+        for w in welt.wesen:
+            if w.ebene != index or not w.lebt or w.hoehe_bild <= 0 or w.flug > 0:
+                continue
+            wp = w.zeichenpos(alpha)
+            if self.verdeckt(welt, index, wp, w.hoehe_bild):
+                continue
+            p = wp - ecke
+            if w.spur is not None and w.tempo.length_squared() > 1:
+                r = w.tempo.normalize()
+                pygame.draw.line(ziel, (128, 80, 30), p - r * 17, p - r * 5, 1)
+                pygame.draw.line(ziel, w.spur, p - r * 6, p, 1)
+            if w.bild is None:
+                continue
+            s_ = self.bilder.gedreht(w.bild, w.winkel)
+            if dunkel is not None:
+                s_ = self.dunkel(s_, dunkel)
+            ziel.blit(s_, (p.x - s_.get_width() / 2, p.y - s_.get_height() / 2))
 
     def dash_zeichnen(self, ziel, p, w) -> None:
         """Drei kurze, graue Windlinien ziehen dezent hinter der Figur her."""
@@ -800,6 +903,8 @@ class Renderer:
         dz = blick_hoehe - (welt.hoehe(ebene) + flug)
         if dz < -p["ausblenden"]:
             return                            # zu weit ueber der Ansicht
+        if self.verdeckt(welt, ebene, pos, flug):
+            return                            # knapp ueber dem Boden hinter einer Mauer
         k = p["brennweite"] / max(60.0, p["brennweite"] + dz)
         s = self.bilder.gedreht(bild, winkel)
         if abs(k - 1.0) > p["massstab_schwelle"]:
@@ -813,10 +918,14 @@ class Renderer:
         ziel.blit(s, (b.x - s.get_width() / 2, b.y - s.get_height() / 2))
 
     def partikel_zeichnen(self, ziel, welt, index, ecke, alpha) -> None:
+        h = K.HOEHEN
         for p in welt.partikel:
             if p.ebene != index:
                 continue
-            q = p.zeichenpos(alpha) - ecke
+            wp = p.zeichenpos(alpha)
+            if self.verdeckt(welt, index, wp, h.get(p.art, h["partikel"])):
+                continue
+            q = wp - ecke
             f = max(0.0, p.leben / p.dauer)
             if p.art == "huelse":
                 s = self.bilder.gedreht("huelse", p.winkel)
@@ -832,9 +941,11 @@ class Renderer:
         for (pos, winkel, eb, rest) in welt.muendungen:
             if eb != index or rest <= 0:
                 continue
+            wp = pos + pygame.Vector2(K.MUENDUNGSFEUER["versatz"], 0).rotate(winkel)
+            if self.verdeckt(welt, index, wp, K.HOEHEN["lauf"]):
+                continue
             s = self.bilder.gedreht("muendung", winkel)
-            p = (pos + pygame.Vector2(K.MUENDUNGSFEUER["versatz"], 0)
-                 .rotate(winkel) - ecke)
+            p = wp - ecke
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2),
                       special_flags=pygame.BLEND_RGB_ADD)
 
@@ -1117,7 +1228,8 @@ class Renderer:
         return gezeichnet
 
     def welt_zeichnen(self, ziel, welt, kamera, alpha, blick_hoehe=None,
-                      boden=None, blick=None, oben_aus=False) -> None:
+                      boden=None, blick=None, oben_aus=False,
+                      figuren=None, luft=None, anzeige=None) -> None:
         """Zeichnet alle Ebenen relativ zu einer Ansichtshoehe.
 
         Die Ansicht haengt bewusst nicht an der Ebene der Figur, sondern an
@@ -1178,18 +1290,8 @@ class Renderer:
             if abs(dz) < 1.0:                      # die angeschaute Ebene
                 self.ebene_zeichnen(ziel, welt, idx, ecke, None,
                                     p["brennweite"], aufschieben=True)
-                if boden is not None:
-                    boden(ziel, idx, ecke)
-                if self.nur_gelaende:
-                    self.stehende_nachholen()
-                    continue
-                self.feuer_zeichnen(ziel, welt, idx, ecke, True)
-                self.wesen_zeichnen(ziel, welt, idx, ecke, alpha)
-                self.stehende_nachholen()
-                self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
-                self.muendungsfeuer(ziel, welt, ecke, idx)
-                self.rueckmeldung_zeichnen(ziel, welt, idx, ecke)
-                self.rauch_zeichnen(ziel, welt, idx, ecke, True)
+                self._ebene_inhalt(ziel, welt, idx, ecke, alpha, None, True,
+                                   boden, figuren, luft, anzeige)
                 continue
 
             dunkel = max(48, int(p["dunkel"] * k)) if dz > 0 else None
@@ -1201,18 +1303,8 @@ class Renderer:
             # flacher, von unten die oben steiler.
             self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel,
                                 max(60.0, p["brennweite"] + dz), aufschieben=True)
-            if boden is not None:
-                boden(flaeche, idx, u_ecke)
-            if self.nur_gelaende:
-                self.stehende_nachholen()
-            else:
-                self.feuer_zeichnen(flaeche, welt, idx, u_ecke, False)
-                self.wesen_zeichnen(flaeche, welt, idx, u_ecke, alpha, dunkel)
-                self.stehende_nachholen()
-                self.partikel_zeichnen(flaeche, welt, idx, u_ecke, alpha)
-                self.muendungsfeuer(flaeche, welt, u_ecke, idx)
-                self.rueckmeldung_zeichnen(flaeche, welt, idx, u_ecke)
-                self.rauch_zeichnen(flaeche, welt, idx, u_ecke, False)
+            self._ebene_inhalt(flaeche, welt, idx, u_ecke, alpha, dunkel, False,
+                               boden, figuren, luft, anzeige)
             if dz < 0 and idx > 0:
                 # Ueber Spielflaeche blendet die Etage aus (oder ist mit
                 # oben_aus ganz weg), damit sie den Gang darunter nicht
@@ -1242,6 +1334,47 @@ class Renderer:
         if self.vignette_an:
             ziel.blit(self._vignette, (0, 0))
 
+    def _ebene_inhalt(self, ziel, welt, idx, ecke, alpha, dunkel, eigene,
+                      boden, figuren, luft, anzeige) -> None:
+        """Alles auf einer Ebene, in der Reihenfolge, in der es sich in
+        einer echten Welt verdeckt (seit 0.34.5):
+
+        1. am Boden: Zonenkreis, Feuer, Staubringe, Figuren samt Schatten
+        2. die Mauern, Kisten und Faesser - sie verdecken Pixel fuer Pixel,
+           was am Boden hinter ihnen liegt
+        3. was fliegt: Geschosse, Funken, Muendungsfeuer - jeweils ganz,
+           wenn eine Mauer davorsteht (`verdeckt`), sonst ganz zu sehen
+        4. Rauch: die Wolke ist hoeher als jede Mauer und quillt darueber
+        5. Anzeige: Lebensbalken, Beute- und Schadenszahlen - darf ueber
+           allem liegen
+
+        `figuren`, `luft`, `anzeige` sind Aufrufe (flaeche, ebene, ecke)
+        fuer das, was der Gast nur gemeldet bekommt (mehrspieler.py) - so
+        verdeckt es sich bei ihm genauso wie beim Gastgeber.
+        """
+        if boden is not None:
+            boden(ziel, idx, ecke)
+        if self.nur_gelaende:
+            self.stehende_nachholen()
+            return
+        self.feuer_zeichnen(ziel, welt, idx, ecke, eigene)
+        self.ringe_zeichnen(ziel, welt, idx, ecke)
+        self.wesen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
+        if figuren is not None:
+            figuren(ziel, idx, ecke)
+        self.stehende_nachholen()
+        self.luft_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
+        self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
+        self.muendungsfeuer(ziel, welt, ecke, idx)
+        if luft is not None:
+            luft(ziel, idx, ecke)
+        self.rauch_zeichnen(ziel, welt, idx, ecke, eigene)
+        if dunkel is None:
+            self.balken_zeichnen(ziel, welt, idx, ecke, alpha)
+        self.aufschriften_zeichnen(ziel, welt, idx, ecke)
+        if anzeige is not None:
+            anzeige(ziel, idx, ecke)
+
     def _puffer(self, name: str) -> pygame.Surface:
         """Eine durchsichtige Hilfsflaeche in der Groesse, in der gerade
         gezeichnet wird. Mit Zoom ist das eine andere als ohne."""
@@ -1266,6 +1399,11 @@ class Renderer:
         besteht aus acht Kloetzen, die nach aussen wandern. Runde Verlaeufe
         passen nicht zu einem Spiel, das aus Kacheln gebaut ist.
         """
+        self.ringe_zeichnen(ziel, welt, index, ecke)
+        self.aufschriften_zeichnen(ziel, welt, index, ecke)
+
+    def ringe_zeichnen(self, ziel, welt, index: int, ecke) -> None:
+        """Staubringe: liegen am Boden, also vor den Mauern gezeichnet."""
         st = K.STURZ
         for (pos, ebene, rest, wucht) in welt.ringe:
             if ebene != index:
@@ -1284,6 +1422,8 @@ class Renderer:
                 ziel.blit(flaeche, (p.x + math.cos(a) * weite - klotz / 2,
                                     p.y + math.sin(a) * weite * 0.6 - klotz / 2))
 
+    def aufschriften_zeichnen(self, ziel, welt, index: int, ecke) -> None:
+        """Beute- und Schadenszahlen: Anzeige, ueber den Mauern."""
         b = K.BEUTE_ZEIGEN
         for (pos, ebene, text, farbe, rest) in welt.aufschriften:
             if ebene != index:

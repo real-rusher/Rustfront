@@ -4422,12 +4422,22 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     def _welt_bild(self, ziel, misch: float) -> None:
         """Alles, was in Weltkoordinaten liegt: die Welt, beim Gast die
         gemeldeten Wesen, Ziellinie und Streukegel."""
-        self.renderer.welt_zeichnen(ziel, self.welt, self.kamera, misch,
-                                    self.blick_hoehe, blick=self.blick,
-                                    boden=self._kreis_zeichnen,
-                                    oben_aus=not self.obere_zeigen)
-        if not self.ist_gastgeber:
-            self._fremdes_zeichnen(ziel, misch)
+        # Beim Gast kommt, was er nur gemeldet bekommt, an dieselben Stellen
+        # der Zeichenfolge wie beim Gastgeber - Gegner vor die Mauern,
+        # Geschosse dahinter mit Sichtpruefung, Balken obenauf. Bis 0.34.4
+        # lag alles davon ueber der ganzen Welt, auch ueber Mauern und
+        # Plateaus.
+        gast = not self.ist_gastgeber
+        self.renderer.welt_zeichnen(
+            ziel, self.welt, self.kamera, misch,
+            self.blick_hoehe, blick=self.blick,
+            boden=self._kreis_zeichnen,
+            oben_aus=not self.obere_zeigen,
+            figuren=(lambda f, i, e: self._fremde_figuren(f, i, e, misch)) if gast else None,
+            luft=(lambda f, i, e: self._fremde_luft(f, i, e, misch)) if gast else None,
+            anzeige=(lambda f, i, e: self._fremde_anzeige(f, i, e, misch)) if gast else None)
+        if gast:
+            self._fremde_fallende(ziel, misch)
         # Ziellinie und Streukegel nicht, solange man ein Medkit anlegt:
         # dann schiesst man nicht, und eine Linie saehe aus, als ob.
         if (self.ich is not None and self.ich.lebt and not self.ich.am_boden
@@ -4598,28 +4608,34 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         jetzt = int(radius * (0.25 + 0.75 * anteil))
         pygame.draw.circle(ziel, K.C_RED, (int(p.x), int(p.y)), max(2, jetzt), 2)
 
-    def _fremdes_zeichnen(self, ziel, misch: float = 1.0) -> None:
-        """Beim Gast gibt es keine echten Wesen dafuer, nur gemeldete Punkte.
+    # Was der Gast nur gemeldet bekommt: Gegner, Beute, Geschosse und
+    # geworfene Granaten. Ohne das fliegt einem eine Granate ins Gesicht,
+    # die man nie gesehen hat, und die Wellen sind unsichtbar. Gezeichnet
+    # wird es auf der angeschauten Ebene, in drei Schichten wie beim
+    # Gastgeber (render.Renderer._ebene_inhalt).
+    _LUFT_BILDER = ("geschoss", "flugrakete")
 
-        Gegner, Beute, Geschosse und geworfene Granaten. Ohne das fliegt
-        einem eine Granate ins Gesicht, die man nie gesehen hat, und die
-        Wellen sind unsichtbar.
-        """
-        ecke = self.kamera.ecke
+    @staticmethod
+    def _gemischt(x, y, vx, vy, misch):
+        # Zwischen der vorletzten und der letzten Meldung. Ohne das steht
+        # jeder Gegner die halbe Zeit, und eine Granate springt.
+        return vx + (x - vx) * misch, vy + (y - vy) * misch
+
+    def _fremde_figuren(self, ziel, ebene_i: int, ecke, misch: float) -> None:
+        """Am Boden: Beute, Gegner samt Schatten, liegende Granaten."""
+        if ebene_i != self.blick:
+            return
         for (x, y, ebene, bild) in self._fremde_beute:
-            if ebene != self.blick:
+            if ebene != ebene_i:
                 continue
             s = self.renderer.bilder.bild(bild)
             ziel.blit(s, (x - ecke.x - s.get_width() / 2,
                           y - ecke.y - s.get_height() / 2))
         for (x, y, winkel, ebene, art, anteil, _kn, vorlauf,
              vx, vy) in self._fremde_gegner:
-            if ebene != self.blick:
+            if ebene != ebene_i:
                 continue
-            # Zwischen der vorletzten und der letzten Meldung, wie bei
-            # den Geschossen. Ohne das steht jeder Gegner die halbe Zeit.
-            x = vx + (x - vx) * misch
-            y = vy + (y - vy) * misch
+            x, y = self._gemischt(x, y, vx, vy, misch)
             d = K.gegner_daten(art)
             s = self.renderer.bilder.gedreht(d.get("bild", "gegner_laeufer"), winkel)
             p = pygame.Vector2(x - ecke.x, y - ecke.y)
@@ -4629,34 +4645,57 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             if vorlauf > 0.0:
                 self._ankuendigung_zeichnen(ziel, p, d, vorlauf)
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
-            if anteil < 0.999:
-                boss = K.ist_boss(art)
-                breite = 34 if boss else 20
-                hoch = int(d.get("radius", 9)) + 11
-                pygame.draw.rect(ziel, (16, 11, 8),
-                                 (int(p.x) - breite // 2, int(p.y) - hoch,
-                                  breite, 3 if boss else 2))
-                pygame.draw.rect(ziel, K.C_AMBER if boss else K.C_RED,
-                                 (int(p.x) - breite // 2, int(p.y) - hoch,
-                                  int(breite * anteil), 3 if boss else 2))
         for (x, y, winkel, ebene, name, hoehe, _kn, vx, vy) in self._fremde_schuesse:
-            # Zwischen der vorletzten und der letzten Meldung. Ohne das
-            # steht eine Granate fuenf Bilder still und springt dann.
-            x = vx + (x - vx) * misch
-            y = vy + (y - vy) * misch
-            if hoehe > 0:
-                # Faellt gerade eine Ebene tiefer: mit dem Massstab ihrer
-                # eigenen Hoehe zeichnen, wie es der Gastgeber auch tut.
-                self.renderer.fliegendes(ziel, self.welt, self.kamera,
-                                         self.blick_hoehe,
-                                         pygame.Vector2(x, y), winkel, ebene,
-                                         hoehe, name)
+            if hoehe > 0 or ebene != ebene_i or name in self._LUFT_BILDER:
                 continue
-            if ebene != self.blick:
+            x, y = self._gemischt(x, y, vx, vy, misch)
+            s = self.renderer.bilder.gedreht(name, winkel)
+            ziel.blit(s, (x - ecke.x - s.get_width() / 2,
+                          y - ecke.y - s.get_height() / 2))
+
+    def _fremde_luft(self, ziel, ebene_i: int, ecke, misch: float) -> None:
+        """In Laufhoehe: Geschosse und Raketen - nur, wo keine Mauer davor."""
+        if ebene_i != self.blick:
+            return
+        for (x, y, winkel, ebene, name, hoehe, _kn, vx, vy) in self._fremde_schuesse:
+            if hoehe > 0 or ebene != ebene_i or name not in self._LUFT_BILDER:
+                continue
+            x, y = self._gemischt(x, y, vx, vy, misch)
+            if self.renderer.verdeckt(self.welt, ebene_i, (x, y), K.HOEHEN["lauf"]):
                 continue
             s = self.renderer.bilder.gedreht(name, winkel)
             ziel.blit(s, (x - ecke.x - s.get_width() / 2,
                           y - ecke.y - s.get_height() / 2))
+
+    def _fremde_anzeige(self, ziel, ebene_i: int, ecke, misch: float) -> None:
+        """Lebensbalken der gemeldeten Gegner - Anzeige, ueber den Mauern."""
+        if ebene_i != self.blick:
+            return
+        for (x, y, winkel, ebene, art, anteil, _kn, vorlauf,
+             vx, vy) in self._fremde_gegner:
+            if ebene != ebene_i or anteil >= 0.999:
+                continue
+            x, y = self._gemischt(x, y, vx, vy, misch)
+            d = K.gegner_daten(art)
+            boss = K.ist_boss(art)
+            breite = 34 if boss else 20
+            hoch = int(d.get("radius", 9)) + 11
+            px, py = int(x - ecke.x), int(y - ecke.y)
+            pygame.draw.rect(ziel, (16, 11, 8),
+                             (px - breite // 2, py - hoch, breite, 3 if boss else 2))
+            pygame.draw.rect(ziel, K.C_AMBER if boss else K.C_RED,
+                             (px - breite // 2, py - hoch,
+                              int(breite * anteil), 3 if boss else 2))
+
+    def _fremde_fallende(self, ziel, misch: float) -> None:
+        """Was gerade eine Ebene tiefer faellt: mit dem Massstab seiner
+        eigenen Hoehe, nach allen Ebenen - wie beim Gastgeber."""
+        for (x, y, winkel, ebene, name, hoehe, _kn, vx, vy) in self._fremde_schuesse:
+            if hoehe <= 0:
+                continue
+            x, y = self._gemischt(x, y, vx, vy, misch)
+            self.renderer.fliegendes(ziel, self.welt, self.kamera, self.blick_hoehe,
+                                     pygame.Vector2(x, y), winkel, ebene, hoehe, name)
 
     def _erfassung_zeichnen(self, ziel) -> None:
         """Der Ring um das erfasste Ziel - und die Warnung, wenn man es ist.
