@@ -229,6 +229,7 @@ class Renderer:
         self._rauch_puffer: dict[tuple, tuple] = {}
         self._feuer_puffer: dict[int, tuple] = {}
         self._klippen_farbe: dict[str, tuple] = {}
+        self._stehend_offen = None      # siehe stehende_nachholen
         self._seiten_farbe: dict[str, tuple] = {}
         self._oberseiten: dict[tuple, pygame.Surface] = {}
         # Auch Schatten, Vignette und die Dekale kommen aus der Registratur:
@@ -324,10 +325,15 @@ class Renderer:
     }
 
     def ebene_zeichnen(self, ziel, welt, index: int, ecke, dunkel: int | None,
-                       auge: float | None = None) -> None:
+                       auge: float | None = None,
+                       aufschieben: bool = False) -> None:
         """`auge`: wie hoch das Auge ueber dieser Ebene steht, in Welt-
         Pixeln - fuer die Perspektive der stehenden Kacheln (K.STEHEN).
-        Ohne Angabe die Brennweite: die angeschaute Ebene."""
+        Ohne Angabe die Brennweite: die angeschaute Ebene.
+
+        `aufschieben`: Waende und Barrikaden noch nicht zeichnen, sondern
+        merken - `stehende_nachholen` zeichnet sie nach den Figuren, damit
+        eine Mauer verdeckt, wer hinter ihr steht (seit 0.34.4)."""
         e = welt.ebene(index)
         satz = self.SAETZE.get(getattr(welt, "satz", ""), {})
         boden_namen = satz.get("boden", self._boden_namen)
@@ -394,8 +400,26 @@ class Renderer:
             sch = self.dunkel(sch, dunkel)
         for (tx, ty, name, sy) in fest:
             ziel.blit(sch, (tx * K.TILE - ecke.x, sy))
-        self._stehende_zeichnen(ziel, e, satz, fest, ecke, dunkel,
-                                K.PERSPEKTIVE["brennweite"] if auge is None else auge)
+        auftrag = (ziel, e, satz, fest, ecke, dunkel,
+                   K.PERSPEKTIVE["brennweite"] if auge is None else auge)
+        if aufschieben:
+            self._stehend_offen = auftrag
+        else:
+            self._stehende_zeichnen(*auftrag)
+
+    def stehende_nachholen(self) -> None:
+        """Die mit `aufschieben` gemerkten Waende jetzt zeichnen.
+
+        Eine Mauer hat Hoehe, eine Figur steht am Boden. Wer vom Auge aus
+        hinter einer Mauer steht, liegt im Bild unter ihrer Oberseite und
+        wird von ihr verdeckt - das ist so gewollt. Wer davor steht, liegt
+        nie darunter: Seiten und Oberseite reichen vom Fusspunkt der Mauer
+        nur nach aussen, vom Auge weg.
+        """
+        auftrag = getattr(self, "_stehend_offen", None)
+        self._stehend_offen = None
+        if auftrag is not None:
+            self._stehende_zeichnen(*auftrag)
 
     def _dekale_zeichnen(self, ziel, e, ecke, dunkel) -> None:
         d = e.dekale
@@ -1153,13 +1177,15 @@ class Renderer:
 
             if abs(dz) < 1.0:                      # die angeschaute Ebene
                 self.ebene_zeichnen(ziel, welt, idx, ecke, None,
-                                    p["brennweite"])
+                                    p["brennweite"], aufschieben=True)
                 if boden is not None:
                     boden(ziel, idx, ecke)
                 if self.nur_gelaende:
+                    self.stehende_nachholen()
                     continue
                 self.feuer_zeichnen(ziel, welt, idx, ecke, True)
                 self.wesen_zeichnen(ziel, welt, idx, ecke, alpha)
+                self.stehende_nachholen()
                 self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
                 self.muendungsfeuer(ziel, welt, ecke, idx)
                 self.rueckmeldung_zeichnen(ziel, welt, idx, ecke)
@@ -1174,12 +1200,15 @@ class Renderer:
             # Hoehenunterschied - von oben gesehen wirken Waende unten
             # flacher, von unten die oben steiler.
             self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel,
-                                max(60.0, p["brennweite"] + dz))
+                                max(60.0, p["brennweite"] + dz), aufschieben=True)
             if boden is not None:
                 boden(flaeche, idx, u_ecke)
-            if not self.nur_gelaende:
+            if self.nur_gelaende:
+                self.stehende_nachholen()
+            else:
                 self.feuer_zeichnen(flaeche, welt, idx, u_ecke, False)
                 self.wesen_zeichnen(flaeche, welt, idx, u_ecke, alpha, dunkel)
+                self.stehende_nachholen()
                 self.partikel_zeichnen(flaeche, welt, idx, u_ecke, alpha)
                 self.muendungsfeuer(flaeche, welt, u_ecke, idx)
                 self.rueckmeldung_zeichnen(flaeche, welt, idx, u_ecke)

@@ -1427,10 +1427,17 @@ szene.welt.schritt(K.FIXED_DT)
 from dustfront import world as _W63
 from dustfront.render import Kamera as _Kam63
 
-def _stand_bild(zeilen, satz, kamera_kachel, hoehen=None):
+def _stand_bild(zeilen, satz, kamera_kachel, hoehen=None, figur=None):
     """Eine kleine Welt aus Textzeilen, gezeichnet mit der Kamera ueber
-    `kamera_kachel`. `hoehen` setzt K.STEHEN zum Vergleich voruebergehend."""
+    `kamera_kachel`. `hoehen` setzt K.STEHEN zum Vergleich voruebergehend,
+    `figur` stellt einen Laeufer an diesen Weltpunkt."""
     welt_ = _W63.Welt([_W63.Ebene.aus_text(zeilen, 0)], satz=satz)
+    if figur is not None:
+        from dustfront.entities import Gegner as _G64
+        g_ = _G64(pygame.Vector2(figur), "laeufer", 0)
+        g_.welt = welt_
+        g_.vorher.update(g_.pos)
+        welt_.wesen.append(g_)
     kam_ = _Kam63(pygame.Vector2((kamera_kachel[0] + .5) * K.TILE,
                                  (kamera_kachel[1] + .5) * K.TILE))
     alt_ = {n: dict(d) for n, d in K.STEHEN.items()}
@@ -1521,14 +1528,35 @@ pruef("Ein Blutfleck unter einer Mauer liegt nicht auf der Mauerkrone",
       nachher63.get_at(mitte63) == vorher63.get_at(mitte63),
       "%s / %s" % (nachher63.get_at(mitte63), vorher63.get_at(mitte63)))
 
+# 0.34.4: Mauern verdecken, wer hinter ihnen steht ("diese Mauern duerfen
+# Leute verdecken"). Eine senkrechte Mauer weit links vom Auge, ein
+# Laeufer knapp dahinter (westlich, vom Auge weg) und einer knapp davor.
+_mauer64 = ["." * 24 for _ in range(14)]
+for _y64 in range(3, 11):
+    _mauer64[_y64] = "..." + "#" + "." * 20
+_hinten64 = (3 * K.TILE - 7, 7.5 * K.TILE)
+_vorn64 = (4 * K.TILE + 12, 7.5 * K.TILE)
+leer64, kam64 = _stand_bild(_mauer64, "wueste", (12, 7))
+hinten64, _ = _stand_bild(_mauer64, "wueste", (12, 7), figur=_hinten64)
+vorn64, _ = _stand_bild(_mauer64, "wueste", (12, 7), figur=_vorn64)
+
+def _px64(p):
+    return (int(p[0] - kam64.ecke.x), int(p[1] - kam64.ecke.y))
+
+pruef("Hinter einer Mauer verdeckt die Mauer die Figur",
+      hinten64.get_at(_px64(_hinten64)) == leer64.get_at(_px64(_hinten64)),
+      "%s / %s" % (hinten64.get_at(_px64(_hinten64)), leer64.get_at(_px64(_hinten64))))
+pruef("Vor der Mauer bleibt die Figur zu sehen",
+      vorn64.get_at(_px64(_vorn64)) != leer64.get_at(_px64(_vorn64)))
+
 # ── Ebenen: nur eine nach oben ───────────────────────────────────────
 # Wer unten steht, soll die Etage ueber sich durchscheinen sehen - aber
 # nicht gleich drei Stockwerke uebereinander.
 gezeichnet = []
 echt = szene.renderer.ebene_zeichnen
-def merken(ziel, welt, index, ecke, dunkel, auge=None):
+def merken(ziel, welt, index, ecke, dunkel, auge=None, aufschieben=False):
     gezeichnet.append(index)
-    return echt(ziel, welt, index, ecke, dunkel, auge)
+    return echt(ziel, welt, index, ecke, dunkel, auge, aufschieben)
 szene.renderer.ebene_zeichnen = merken
 szene.blick = 0
 szene.blick_hoehe = 0.0
