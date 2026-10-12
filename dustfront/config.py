@@ -375,6 +375,37 @@ BILD_MASS = {
     "sand_4":           (TILE, TILE),
     "sand_wand":        (TILE, TILE),
     "sand_kiste":       (TILE, TILE),
+    # Gelaende und Kleinkram (seit 0.34.6, siehe KACHELN). Die stehenden
+    # davon haben ausserdem ein Bild "<name>_oben" weiter unten.
+    "fels":             (TILE, TILE),
+    "fels_2":           (TILE, TILE),
+    "fels_3":           (TILE, TILE),
+    "brocken":          (TILE, TILE),
+    "brocken_2":        (TILE, TILE),
+    "brocken_3":        (TILE, TILE),
+    "sandsack":         (TILE, TILE),
+    "holzkiste":        (TILE, TILE),
+    "kaktus":           (TILE, TILE),
+    "schrott":          (TILE, TILE),
+    "schrott_2":        (TILE, TILE),
+    "schrott_3":        (TILE, TILE),
+    "piste":            (TILE, TILE),
+    "piste_2":          (TILE, TILE),
+    "piste_3":          (TILE, TILE),
+    "piste_4":          (TILE, TILE),
+    "kies":             (TILE, TILE),
+    "kies_2":           (TILE, TILE),
+    "kies_3":           (TILE, TILE),
+    "kies_4":           (TILE, TILE),
+    "pflaster":         (TILE, TILE),
+    "pflaster_2":       (TILE, TILE),
+    "pflaster_3":       (TILE, TILE),
+    "gestruepp":        (TILE, TILE),
+    "gestruepp_2":      (TILE, TILE),
+    "gestruepp_3":      (TILE, TILE),
+    "gestruepp_4":      (TILE, TILE),
+    "dielen":           (TILE, TILE),
+    "dielen_2":         (TILE, TILE),
     # Verschneiter Kachelsatz fuer die lokale Hoehenkarten-Demo.
     "schnee":           (TILE, TILE),
     "schnee_2":         (TILE, TILE),
@@ -460,6 +491,18 @@ BILD_MASS = {
     "schnee_fels_oben": (TILE, TILE),
     "kiste_oben":       (24, 24),
     "sand_kiste_oben":  (22, 22),
+    "fels_oben":        (TILE, TILE),
+    "fels_2_oben":      (TILE, TILE),
+    "fels_3_oben":      (TILE, TILE),
+    "brocken_oben":     (24, 24),
+    "brocken_2_oben":   (24, 24),
+    "brocken_3_oben":   (24, 24),
+    "sandsack_oben":    (TILE, TILE),
+    "holzkiste_oben":   (26, 26),
+    "kaktus_oben":      (18, 18),
+    "schrott_oben":     (TILE, TILE),
+    "schrott_2_oben":   (TILE, TILE),
+    "schrott_3_oben":   (TILE, TILE),
     "vignette":         (GAME_W, GAME_H),
 }
 
@@ -1079,6 +1122,15 @@ STEHEN = {
     "schnee_fels": dict(hoehe=24.0, rahmen=(0, 0, 32, 32), form="block", fugen=2),
     "kiste":      dict(hoehe=14.0, rahmen=(4, 4, 24, 24), form="block", fugen=1),
     "sand_kiste": dict(hoehe=14.0, rahmen=(5, 5, 22, 22), form="rund", fugen=2),
+    # Seit 0.34.6. Gewachsener Fels ist hoeher als eine Mauer - man sieht
+    # an der Hoehe, was gebaut und was gewachsen ist. Varianten (fels_2,
+    # schrott_3 ...) finden ihren Eintrag ueber den Namen der Kachelart.
+    "fels":       dict(hoehe=30.0, rahmen=(0, 0, 32, 32), form="block", fugen=3),
+    "brocken":    dict(hoehe=13.0, rahmen=(4, 4, 24, 24), form="rund", fugen=0),
+    "sandsack":   dict(hoehe=12.0, rahmen=(0, 0, 32, 32), form="block", fugen=1),
+    "holzkiste":  dict(hoehe=16.0, rahmen=(3, 3, 26, 26), form="block", fugen=2),
+    "kaktus":     dict(hoehe=20.0, rahmen=(7, 7, 18, 18), form="rund", fugen=0),
+    "schrott":    dict(hoehe=14.0, rahmen=(0, 0, 32, 32), form="block", fugen=1),
 }
 
 # Wie hoch ueber dem Boden etwas in der Welt ist, in Welt-Pixeln (seit
@@ -1135,8 +1187,14 @@ TRACER = dict(
 # sicht     blockiert Schuesse und Sicht
 # treppe    Zielebene relativ zur aktuellen, sonst None
 # aufzug    Aufzugbild mit Treppenbedienung: E bringt eine Ebene weiter.
+# bilder    mehrere Bilder einer Art, je Kachel eins nach ihrer Variante
+#           (Ebene.variante) - sonst sieht man ein Muster
+# weich     Bodenart ohne feste Kante (Piste, Kies): wo Sand angrenzt,
+#           franst der Sand in sie hinein, statt dass eine Kachelkante
+#           eine Linie zieht (render.Renderer._weicher_rand)
 LEER, BODEN, GITTER, WAND, KISTE, TREPPE_HOCH, TREPPE_RUNTER, LUKE, \
-    AUFZUG_HOCH, AUFZUG_RUNTER = range(10)
+    AUFZUG_HOCH, AUFZUG_RUNTER, FELS, BROCKEN, SANDSACK, HOLZKISTE, \
+    KAKTUS, SCHROTT, PISTE, KIES, PFLASTER, GESTRUEPP, DIELEN = range(21)
 
 KACHELN = {
     # Ein Loch: man kann darueber hinwegschiessen und hineinfallen, aber es
@@ -1159,6 +1217,30 @@ KACHELN = {
                         treppe=+1),
     AUFZUG_RUNTER: dict(name="aufzug",   fest=False, sicht=False, bild="aufzug_schacht",
                         treppe=-1),
+    # Seit 0.34.6 fuer STAUBTAL: Gelaende und Kleinkram, damit eine Karte
+    # nicht nur aus Sand, Mauer und Fass besteht. Gewachsener Fels ist
+    # hoch und sichtdicht wie eine Mauer; was niedriger ist als ein
+    # Mensch (Brocken, Sandsack, Kiste, Kaktus, Schrott), haelt auf wie
+    # das Fass, aber man schiesst darueber hinweg.
+    FELS:          dict(name="fels",     fest=True,  sicht=True,  bild="fels",
+                        bilder=("fels", "fels_2", "fels_3")),
+    BROCKEN:       dict(name="brocken",  fest=True,  sicht=False, bild="brocken",
+                        bilder=("brocken", "brocken_2", "brocken_3")),
+    SANDSACK:      dict(name="sandsack", fest=True,  sicht=False, bild="sandsack"),
+    HOLZKISTE:     dict(name="holzkiste", fest=True, sicht=False, bild="holzkiste"),
+    KAKTUS:        dict(name="kaktus",   fest=True,  sicht=False, bild="kaktus"),
+    SCHROTT:       dict(name="schrott",  fest=True,  sicht=False, bild="schrott",
+                        bilder=("schrott", "schrott_2", "schrott_3")),
+    PISTE:         dict(name="piste",    fest=False, sicht=False, bild="piste",
+                        bilder=("piste", "piste_2", "piste_3", "piste_4"), weich=True),
+    KIES:          dict(name="kies",     fest=False, sicht=False, bild="kies",
+                        bilder=("kies", "kies_2", "kies_3", "kies_4"), weich=True),
+    PFLASTER:      dict(name="pflaster", fest=False, sicht=False, bild="pflaster",
+                        bilder=("pflaster", "pflaster_2", "pflaster_3")),
+    GESTRUEPP:     dict(name="gestruepp", fest=False, sicht=False, bild="gestruepp",
+                        bilder=("gestruepp", "gestruepp_2", "gestruepp_3", "gestruepp_4")),
+    DIELEN:        dict(name="dielen",   fest=False, sicht=False, bild="dielen",
+                        bilder=("dielen", "dielen_2")),
 }
 
 # ══════════════════════════════════════════════════ INHALTE: Waffen

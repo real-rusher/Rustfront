@@ -236,6 +236,17 @@ class Renderer:
         self._seiten_farbe: dict[str, tuple] = {}
         self._hoechste_stehende = max(d["hoehe"] for d in K.STEHEN.values())
         self._oberseiten: dict[tuple, pygame.Surface] = {}
+        # Weiche Raender (seit 0.34.6, _weicher_rand). Was als Sand zaehlt:
+        # der Boden selbst, Gestruepp (liegt auf Sand) und alles, was auf
+        # Sand steht, ohne die ganze Kachel zu fuellen - Fass, Brocken,
+        # Kaktus.
+        self._weich: dict[tuple, pygame.Surface] = {}
+        voll = (0, 0, K.TILE, K.TILE)
+        self._grundartig = frozenset(
+            k for k, d in K.KACHELN.items()
+            if k in (K.BODEN, K.GESTRUEPP)
+            or (d["fest"] and K.STEHEN.get(d["name"]) is not None
+                and K.STEHEN[d["name"]]["rahmen"] != voll))
         # Auch Schatten, Vignette und die Dekale kommen aus der Registratur:
         # eine Datei assets/vignette.png ersetzt sie genauso wie eine Kachel.
         # Gehalten werden sie hier, damit die Zeichenschleife nicht bei jedem
@@ -322,8 +333,10 @@ class Renderer:
     # nicht aus.
     SAETZE = {
         "": {},
+        # "klippe": woraus die Wand zwischen Plateau und Boden ist. Seit
+        # 0.35 in der Wueste gewachsener Fels, nicht die Lehmmauer.
         "wueste": {"boden": ("sand", "sand_2", "sand_3", "sand_4"),
-                   "wand": "sand_wand", "kiste": "sand_kiste"},
+                   "wand": "sand_wand", "kiste": "sand_kiste", "klippe": "fels"},
         "schnee": {"boden": ("schnee", "schnee_2", "schnee_3", "schnee_4"),
                    "wand": "schnee_fels"},
     }
@@ -359,8 +372,12 @@ class Renderer:
                 if kachel == K.LEER:
                     continue
                 daten = K.KACHELN[kachel]
+                bilder = daten.get("bilder")
                 if daten["fest"]:
-                    name_f = satz.get(daten["bild"], daten["bild"])
+                    if bilder:
+                        name_f = bilder[e.variante[zeile + tx] % len(bilder)]
+                    else:
+                        name_f = satz.get(daten["bild"], daten["bild"])
                     fest.append((tx, ty, name_f, sy))
                     st = self._stehend(name_f, daten)
                     if st is None or st["rahmen"] == (0, 0, K.TILE, K.TILE):
@@ -375,7 +392,12 @@ class Renderer:
                 name = satz.get(daten["bild"], daten["bild"])
                 if kachel == K.BODEN:
                     name = boden_namen[e.variante[zeile + tx]]
-                s = bild(name)
+                elif bilder:
+                    name = bilder[e.variante[zeile + tx] % len(bilder)]
+                if daten.get("weich"):
+                    s = self._weicher_rand(name, e, tx, ty, boden_namen[0])
+                else:
+                    s = bild(name)
                 if dunkel is not None:
                     s = self.dunkel(s, dunkel)
                 ziel.blit(s, (tx * K.TILE - ecke.x, sy))
@@ -411,6 +433,49 @@ class Renderer:
             self._stehend_offen = auftrag
         else:
             self._stehende_zeichnen(*auftrag)
+
+    def _weicher_rand(self, name: str, e, tx: int, ty: int, grund_name: str):
+        """Das Bild einer weichen Bodenart (Piste, Kies), dort ausgefranst,
+        wo Sand angrenzt (seit 0.34.6).
+
+        Ohne das zog jede Kachelkante zwischen Piste und Sand eine gerade
+        Linie, und ein Weg, der schraeg lief, war eine Treppe aus
+        Quadraten. Jetzt greift der Sand an diesen Seiten ein paar Pixel
+        unregelmaessig hinein. An den Ecken ist die Tiefe immer gleich,
+        damit zwei Kacheln uebereinander ohne Sprung aneinanderpassen.
+        Je Bild und Nachbarschaft einmal gerechnet und gemerkt."""
+        maske = 0
+        for bit, (dx, dy) in enumerate(((0, -1), (1, 0), (0, 1), (-1, 0))):
+            if e.kachel(tx + dx, ty + dy) in self._grundartig:
+                maske |= 1 << bit
+        if not maske:
+            return self.bilder.bild(name)
+        schluessel = (name, grund_name, maske)
+        hit = self._weich.get(schluessel)
+        if hit is not None:
+            return hit
+        T = K.TILE
+        hit = self.bilder.bild(name).copy()
+        grund = self.bilder.bild(grund_name)
+        zufall = random.Random("%s|%s|%d" % (name, grund_name, maske))
+        for bit in range(4):
+            if not maske & (1 << bit):
+                continue
+            phase = zufall.uniform(0, math.tau)
+            for i in range(T):
+                # Tiefe: Welle plus Rauschen, zu den Ecken hin auf 3 px.
+                ende = min(i, T - 1 - i) / 6.0
+                welle = 3.5 + 2.5 * math.sin(i * 0.55 + phase) + zufall.uniform(-1.2, 1.2)
+                tiefe = 3.0 + (welle - 3.0) * min(1.0, ende)
+                for j in range(int(tiefe) + 1):
+                    if j == int(tiefe) and zufall.random() < 0.5:
+                        continue                # ein Pixel Uebergang, gestreut
+                    x, y = ((i, j), (T - 1 - j, i), (i, T - 1 - j), (j, i))[bit]
+                    hit.set_at((x, y), grund.get_at((x, y)))
+        if len(self._weich) > 1000:
+            self._weich.clear()
+        self._weich[schluessel] = hit
+        return hit
 
     def _stehend_an(self, welt, e, x: float, y: float):
         """Die Masse der stehenden Kachel am Weltpunkt, wenn er in ihrer
@@ -1159,11 +1224,13 @@ class Renderer:
         return ecke, self.groesse[0] / w, self.groesse[1] / h
 
     def _klippenfarbe(self, welt):
-        """Die Farbe des Felses: die Wandkachel des Kartensatzes, gemittelt."""
+        """Die Farbe des Felses: die Klippen- oder Wandkachel des
+        Kartensatzes, gemittelt."""
         satz = getattr(welt, "satz", "")
         hit = self._klippen_farbe.get(satz)
         if hit is None:
-            name = self.SAETZE.get(satz, {}).get("wand", "wand")
+            s = self.SAETZE.get(satz, {})
+            name = s.get("klippe", s.get("wand", "wand"))
             hit = tuple(pygame.transform.average_color(self.bilder.bild(name))[:3])
             self._klippen_farbe[satz] = hit
         return hit

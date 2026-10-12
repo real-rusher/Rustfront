@@ -331,5 +331,21 @@ pruef("Jeder Aufzug traegt Laeufer und Brecher, in beide Richtungen (%d Faelle)"
       % (2 * len(netz_w.treppen)), not haengt, haengt[:6])
 w.verlassen()
 
+
+# ── 7. STAUBTAL ist, was das Werkzeug erzeugt ────────────────────────
+# Bis 0.34 wurde karten/staubtal.txt nach dem Erzeugen von Hand
+# nachgebessert, und das Werkzeug haette beim naechsten Lauf alles wieder
+# ueberschrieben. Seit 0.34.6 ist die Datei genau die Ausgabe von
+# werkzeug_staubtal.py: wer die Karte aendern will, aendert das Werkzeug.
+print("\n-- STAUBTAL und sein Werkzeug")
+import werkzeug_staubtal  # noqa: E402
+
+_soll = werkzeug_staubtal.als_text(werkzeug_staubtal.bauen())
+_ist = (WURZEL / "karten" / "staubtal.txt").read_text(encoding="utf-8")
+_abweichend = [n for n, (a, b) in enumerate(zip(_soll.splitlines(), _ist.splitlines()))
+               if a != b]
+pruef("karten/staubtal.txt ist genau die Ausgabe von werkzeug_staubtal.py",
+      _soll == _ist, "%d Zeilen anders, erste: %s" % (len(_abweichend), _abweichend[:3]))
+
 print("\nFEHLER:", fails if fails else "keine")
 sys.exit(1 if fails else 0)

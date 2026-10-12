@@ -238,6 +238,348 @@ def _sand_kiste():
     return s
 
 
+# ──────────────────────────────── Gelaende und Kleinkram (seit 0.34.6)
+#
+# Fuer STAUBTAL: gewachsener Fels, Brocken, Kakteen, Pisten, Kies,
+# Gestruepp, Pflaster und Dielen, dazu Sandsaecke, Holzkisten und Schrott.
+# Fuer die stehenden (K.STEHEN) ist das Bild hier die Seitenansicht - der
+# Renderer nimmt daraus nur die Farbe der Seiten; was man von oben sieht,
+# steht weiter unten bei den Oberseiten. Darum fuellen diese Bilder die
+# ganze Kachel mit dem Stoff selbst und nicht mit Sand drumherum: sonst
+# waere ein Kaktus an den Seiten sandbraun.
+#
+# Bodenbilder halten Abstand zum Rand, wie der Sand: was bis an die Kante
+# laeuft, setzt sich beim Nachbarn fort und wird zur Linie.
+
+C_FELS_GRUND = (122, 86, 64)      # roter Sandstein, kein Lehm
+C_FELS_HELL = (164, 122, 92)
+C_FELS_DUNKEL = (74, 50, 38)
+
+
+def _fels_seite(seed):
+    """Sandstein von der Seite: schraege Baender, wie Schichten liegen."""
+    r = random.Random(seed)
+    s = _flaeche(T, T)
+    s.fill(C_FELS_GRUND)
+    y = r.randrange(2, 6)
+    while y < T:
+        dick = r.randrange(3, 7)
+        ton = r.choice(((132, 94, 70), (112, 78, 58), (128, 92, 66), (104, 72, 54)))
+        pygame.draw.rect(s, ton, (0, y, T, dick))
+        y += dick + r.randrange(1, 3)
+    for _ in range(4):
+        x, y = r.randrange(2, T - 8), r.randrange(3, T - 3)
+        pygame.draw.line(s, C_FELS_DUNKEL, (x, y), (x + r.randrange(3, 8), y + r.randrange(-1, 2)))
+    _koerner(s, C_FELS_HELL, 18, seed + 1)
+    _koerner(s, C_FELS_DUNKEL, 14, seed + 2)
+    return s
+
+
+@platzhalter("fels")
+def _fels():
+    return _fels_seite(601)
+
+
+@platzhalter("fels_2")
+def _fels2():
+    return _fels_seite(613)
+
+
+@platzhalter("fels_3")
+def _fels3():
+    return _fels_seite(631)
+
+
+@platzhalter("brocken_2")
+def _brocken2():
+    return _brocken()
+
+
+@platzhalter("brocken_3")
+def _brocken3():
+    return _brocken()
+
+
+@platzhalter("brocken")
+def _brocken():
+    """Ein Findling, grauer als der Sandstein: vom Hang gerollt."""
+    s = _flaeche(T, T)
+    s.fill((112, 100, 86))
+    for i in range(0, T, 6):
+        pygame.draw.line(s, (96, 84, 72), (0, i + 2), (T - 1, i + 4))
+    _koerner(s, (146, 132, 112), 20, 641)
+    _koerner(s, (70, 60, 50), 16, 642)
+    return s
+
+
+@platzhalter("sandsack")
+def _sandsack():
+    """Sandsaecke von der Seite: Jute, gestapelt, mit Naehten."""
+    s = _flaeche(T, T)
+    s.fill((142, 124, 86))
+    for reihe, y in enumerate(range(0, T, 8)):
+        versatz = 0 if reihe % 2 == 0 else 8
+        pygame.draw.line(s, (92, 78, 52), (0, y), (T - 1, y))
+        for x in range(versatz, T, 16):
+            pygame.draw.line(s, (92, 78, 52), (x, y), (x, y + 7))
+    _koerner(s, (170, 152, 110), 20, 651)
+    return s
+
+
+@platzhalter("holzkiste")
+def _holzkiste():
+    """Bretter von der Seite."""
+    s = _flaeche(T, T)
+    s.fill((134, 94, 56))
+    for y in range(0, T, 8):
+        pygame.draw.line(s, (84, 56, 32), (0, y), (T - 1, y))
+    _koerner(s, (160, 118, 74), 16, 661)
+    _koerner(s, (96, 64, 38), 16, 662)
+    return s
+
+
+@platzhalter("kaktus")
+def _kaktus():
+    """Ein Fasskaktus von der Seite: Rippen und Stacheln."""
+    s = _flaeche(T, T)
+    s.fill((72, 112, 60))
+    for x in range(2, T, 5):
+        pygame.draw.line(s, (50, 82, 42), (x, 0), (x, T - 1))
+        pygame.draw.line(s, (98, 140, 78), (x + 2, 0), (x + 2, T - 1))
+    _koerner(s, (206, 196, 150), 22, 671)
+    return s
+
+
+def _schrott_seite(seed):
+    """Verrostetes Blech von der Seite."""
+    r = random.Random(seed)
+    s = _flaeche(T, T)
+    s.fill((112, 68, 44))
+    for _ in range(5):
+        x, y = r.randrange(0, T - 10), r.randrange(0, T - 6)
+        pygame.draw.rect(s, r.choice(((88, 86, 88), (132, 78, 46), (70, 46, 34))),
+                         (x, y, r.randrange(6, 14), r.randrange(3, 7)))
+    _koerner(s, (160, 98, 58), 18, seed + 1)
+    _koerner(s, (48, 36, 30), 16, seed + 2)
+    return s
+
+
+@platzhalter("schrott")
+def _schrott():
+    return _schrott_seite(681)
+
+
+@platzhalter("schrott_2")
+def _schrott2():
+    return _schrott_seite(683)
+
+
+@platzhalter("schrott_3")
+def _schrott3():
+    return _schrott_seite(691)
+
+
+def _piste_basis(seed):
+    """Festgefahrene Piste: heller und glatter als der Sand, mit Steinchen
+    und feinen Rissen. Keine Spuren in eine Richtung - dieselbe Kachel
+    liegt in Wegen nach Norden wie nach Osten."""
+    r = random.Random(seed)
+    ton = (122, 102, 72)
+    s = _flaeche(T, T)
+    s.fill(ton)
+    for _ in range(r.randrange(3, 6)):            # hellere, glatte Flecken
+        x, y = r.randrange(2, T - 12), r.randrange(2, T - 9)
+        pygame.draw.ellipse(s, (130, 110, 79), (x, y, r.randrange(7, 13), r.randrange(4, 8)))
+    for _ in range(r.randrange(1, 3)):            # Trockenrisse
+        x, y = r.randrange(4, T - 10), r.randrange(4, T - 6)
+        for _i in range(r.randrange(2, 4)):
+            nx, ny = x + r.randrange(2, 5), y + r.randrange(-2, 3)
+            pygame.draw.line(s, (94, 76, 52), (x, y), (nx, ny))
+            x, y = nx, ny
+    _koerner(s, (136, 116, 84), 18, seed + 3)
+    _koerner(s, (98, 80, 56), 14, seed + 5)
+    for _ in range(r.randrange(1, 4)):            # Steinchen
+        x, y = r.randrange(3, T - 4), r.randrange(3, T - 4)
+        pygame.draw.rect(s, (84, 72, 58), (x, y + 1, 2, 1))
+        pygame.draw.rect(s, (150, 134, 106), (x, y, 2, 1))
+    return s
+
+
+@platzhalter("piste")
+def _piste():
+    return _piste_basis(701)
+
+
+@platzhalter("piste_2")
+def _piste2():
+    return _piste_basis(709)
+
+
+@platzhalter("piste_3")
+def _piste3():
+    return _piste_basis(719)
+
+
+@platzhalter("piste_4")
+def _piste4():
+    return _piste_basis(727)
+
+
+def _kies_basis(seed):
+    """Kies im trockenen Bachbett: Sand, darauf viele runde Steine."""
+    # Erster Versuch: 30 graue Kiesel je Kachel - aus der Naehe ein Muster
+    # aus lauter Schnoerkeln, das jede andere Flaeche uebertoente. Jetzt
+    # wenige, kleine, in Sandtoenen, und der Grund etwas dunkler und
+    # feiner: man sieht das Bachbett, ohne dass es schreit.
+    r = random.Random(seed)
+    s = _sand_basis(seed)
+    s.fill((232, 228, 226), special_flags=pygame.BLEND_RGB_MULT)
+    _koerner(s, (104, 92, 74), 40, seed + 11)
+    for _ in range(r.randrange(10, 16)):
+        x, y = r.randrange(2, T - 4), r.randrange(2, T - 4)
+        b = r.randrange(1, 4)
+        ton = r.choice(((128, 116, 98), (118, 104, 84), (138, 122, 98), (108, 98, 86)))
+        pygame.draw.rect(s, (62, 52, 40), (x, y + 1, b, 1))
+        pygame.draw.rect(s, ton, (x, y, b, 1 if b < 3 else 2))
+    return s
+
+
+@platzhalter("kies")
+def _kies():
+    return _kies_basis(731)
+
+
+@platzhalter("kies_2")
+def _kies2():
+    return _kies_basis(739)
+
+
+@platzhalter("kies_3")
+def _kies3():
+    return _kies_basis(743)
+
+
+@platzhalter("kies_4")
+def _kies4():
+    return _kies_basis(751)
+
+
+def _pflaster_basis(seed):
+    """Kopfsteinpflaster: runde, ausgetretene Steine, Sand dazwischen.
+
+    Der erste Versuch waren rechteckige Platten in Reihen - von oben
+    nicht von einer Mauerkrone zu unterscheiden, und ein gepflasterter
+    Platz sah aus wie ein Haus ohne Raeume. Runde Steine in losem Raster
+    sind eindeutig Boden. Die Steine bleiben innerhalb der Kachel, die
+    Fugen sind Sand: so stoesst Pflaster an Pflaster ohne Naht."""
+    # Zweiter Versuch: graue Steine mit harten Schatten waren als Platz
+    # zu laut. Jetzt warme Steine, kaum heller als der Sand, groessere
+    # und weniger (3 x 3 je Kachel) - man liest Pflaster, es drueckt nicht.
+    r = random.Random(seed)
+    s = _flaeche(T, T)
+    s.fill((90, 75, 54))                          # Sand in den Fugen
+    _koerner(s, (102, 86, 62), 24, seed + 3)
+    for gy in range(3):
+        for gx in range(3):
+            b, h = r.randrange(8, 11), r.randrange(7, 10)
+            x = gx * 11 + r.randrange(0, 11 - b + 1) - (1 if gx == 2 else 0)
+            y = gy * 11 + r.randrange(0, 11 - h + 1) - (1 if gy == 2 else 0)
+            ton = r.choice(((112, 96, 74), (116, 100, 78), (108, 93, 72), (114, 99, 79)))
+            pygame.draw.ellipse(s, (80, 66, 48), (x, y + 1, b, h))
+            pygame.draw.ellipse(s, ton, (x, y, b, h))
+            pygame.draw.line(s, tuple(c + 10 for c in ton), (x + 2, y + 1), (x + b - 3, y + 1))
+    for _ in range(r.randrange(0, 2)):            # ein Stein fehlt, Sand darin
+        x, y = r.randrange(2, T - 9), r.randrange(2, T - 8)
+        pygame.draw.ellipse(s, (96, 80, 58), (x, y, 8, 7))
+    return s
+
+
+@platzhalter("pflaster")
+def _pflaster():
+    return _pflaster_basis(761)
+
+
+@platzhalter("pflaster_2")
+def _pflaster2():
+    return _pflaster_basis(769)
+
+
+@platzhalter("pflaster_3")
+def _pflaster3():
+    return _pflaster_basis(773)
+
+
+def _gestruepp_basis(seed):
+    """Trockenes Gestruepp auf Sand. Der Grund ist der Sand selbst, darum
+    hat ein Gestrueppfeld keine Kante - es duennt einfach aus."""
+    r = random.Random(seed)
+    s = _sand_basis(seed)
+    for _ in range(r.randrange(2, 4)):
+        cx, cy = r.randrange(7, T - 7), r.randrange(7, T - 7)
+        groesse = r.randrange(4, 8)
+        pygame.draw.ellipse(s, (70, 58, 40), (cx - groesse + 2, cy - 1, groesse * 2, groesse))
+        for _i in range(r.randrange(9, 15)):
+            w = r.uniform(0, math.tau)
+            lang = r.uniform(groesse * 0.4, groesse)
+            ex, ey = cx + math.cos(w) * lang, cy + math.sin(w) * lang * 0.8
+            ton = r.choice(((112, 104, 60), (96, 90, 52), (128, 112, 66), (90, 70, 44)))
+            pygame.draw.line(s, ton, (cx, cy), (round(ex), round(ey)))
+            s.set_at((max(0, min(T - 1, round(ex))), max(0, min(T - 1, round(ey)))),
+                     (156, 146, 96))
+    return s
+
+
+@platzhalter("gestruepp")
+def _gestruepp():
+    return _gestruepp_basis(781)
+
+
+@platzhalter("gestruepp_2")
+def _gestruepp2():
+    return _gestruepp_basis(787)
+
+
+@platzhalter("gestruepp_3")
+def _gestruepp3():
+    return _gestruepp_basis(797)
+
+
+@platzhalter("gestruepp_4")
+def _gestruepp4():
+    return _gestruepp_basis(809)
+
+
+def _dielen_basis(seed):
+    """Holzdielen im Haus, quer gelegt, mit Naegeln und Staub."""
+    r = random.Random(seed)
+    s = _flaeche(T, T)
+    s.fill((106, 74, 46))
+    for y in range(0, T, 8):
+        ton = r.choice(((112, 78, 48), (100, 70, 44), (118, 84, 52), (104, 72, 42)))
+        pygame.draw.rect(s, ton, (0, y + 1, T, 7))
+        pygame.draw.line(s, (62, 42, 26), (0, y), (T - 1, y))
+        stoss = r.randrange(4, T - 4)             # Stoss zweier Bretter
+        pygame.draw.line(s, (70, 48, 30), (stoss, y + 1), (stoss, y + 7))
+        s.set_at((stoss - 2, y + 4), (150, 138, 116))
+        s.set_at((stoss + 2, y + 4), (150, 138, 116))
+        for _ in range(2):                        # Maserung
+            x = r.randrange(0, T - 8)
+            pygame.draw.line(s, (92, 62, 38), (x, y + r.randrange(2, 7)),
+                             (x + r.randrange(4, 9), y + r.randrange(2, 7)))
+    _koerner(s, (128, 106, 76), 10, seed + 1)        # Sand, hereingeweht
+    return s
+
+
+@platzhalter("dielen")
+def _dielen():
+    return _dielen_basis(821)
+
+
+@platzhalter("dielen_2")
+def _dielen2():
+    return _dielen_basis(827)
+
+
 @platzhalter("gitter")
 def _gitter():
     s = _boden_basis(13, K.C_BODEN_2, K.C_FUGE)
@@ -1485,6 +1827,202 @@ def _sand_kiste_oben():
     pygame.draw.arc(s, (176, 148, 98), (2, 2, b - 4, b - 4), 1.6, 3.4, 1)
     pygame.draw.circle(s, (40, 30, 20), (m + 4, m - 3), 2)
     return s
+
+
+def _fels_oben_basis(seed):
+    """Sandstein von oben (seit 0.34.6): Platten mit Rissen, Flechten und
+    Sand in den Mulden. Heller als die Seiten, die Sonne steht hoch."""
+    r = random.Random(seed)
+    s = _flaeche(T, T)
+    s.fill((136, 100, 76))
+    for _ in range(r.randrange(4, 7)):            # Platten, mal heller, mal dunkler
+        x, y = r.randrange(-6, T - 6), r.randrange(-6, T - 6)
+        ton = r.choice(((146, 108, 82), (126, 92, 70), (140, 104, 78), (120, 88, 68)))
+        pygame.draw.ellipse(s, ton, (x, y, r.randrange(10, 20), r.randrange(8, 16)))
+    for _ in range(r.randrange(2, 4)):            # Risse als Zickzack
+        x, y = r.randrange(2, T - 2), r.randrange(2, T - 2)
+        for _i in range(r.randrange(2, 5)):
+            nx = max(1, min(T - 2, x + r.randrange(-6, 7)))
+            ny = max(1, min(T - 2, y + r.randrange(-6, 7)))
+            pygame.draw.line(s, (88, 60, 44), (x, y), (nx, ny))
+            pygame.draw.line(s, (170, 130, 98), (x + 1, y), (nx + 1, ny))
+            x, y = nx, ny
+    if r.random() < 0.6:                          # Sand in einer Mulde
+        x, y = r.randrange(3, T - 12), r.randrange(3, T - 9)
+        pygame.draw.ellipse(s, K.C_SAND_KORN, (x, y, r.randrange(6, 11), r.randrange(4, 7)))
+    for _ in range(r.randrange(1, 4)):            # Flechten
+        x, y = r.randrange(2, T - 4), r.randrange(2, T - 4)
+        pygame.draw.circle(s, (126, 122, 92), (x, y), r.randrange(1, 3))
+    _koerner(s, (178, 140, 108), 14, seed + 1)
+    _koerner(s, (104, 72, 54), 12, seed + 2)
+    return s
+
+
+@platzhalter("fels_oben")
+def _fels_oben():
+    return _fels_oben_basis(901)
+
+
+@platzhalter("fels_2_oben")
+def _fels2_oben():
+    return _fels_oben_basis(907)
+
+
+@platzhalter("fels_3_oben")
+def _fels3_oben():
+    return _fels_oben_basis(919)
+
+
+def _brocken_oben_basis(seed, form):
+    """Ein Findling von oben, Licht von oben links. Drei Formen - rund,
+    laenglich, kantig -, sonst sieht man an jedem Hangfuss denselben Stein."""
+    r = random.Random(seed)
+    b = 24
+    s = _flaeche(b, b)
+    if form == 0:
+        aussen = (0, 0, b, b)
+    elif form == 1:
+        aussen = (0, 3, b, b - 6)
+    else:
+        aussen = (2, 1, b - 3, b - 2)
+    x, y, w, h = aussen
+    pygame.draw.ellipse(s, (70, 60, 50), aussen)
+    pygame.draw.ellipse(s, (118, 106, 92), (x + 1, y + 1, w - 2, h - 2))
+    pygame.draw.ellipse(s, (134, 122, 106), (x + 2, y + 2, w - 7, h - 7))
+    pygame.draw.ellipse(s, (156, 144, 126), (x + 4, y + 3, w // 2 - 1, h // 2 - 1))
+    if form == 2:                                  # eine abgeschlagene Kante
+        pygame.draw.polygon(s, (100, 90, 78), ((x + w - 7, y + 2), (x + w - 1, y + h // 2),
+                                               (x + w - 6, y + h // 2 + 2)))
+    mx = x + w // 2 + r.randrange(-2, 3)
+    pygame.draw.line(s, (84, 72, 60), (mx, y + 3), (mx + 3, y + h // 2))
+    pygame.draw.line(s, (84, 72, 60), (mx + 3, y + h // 2), (mx + 1, y + h - 5))
+    _koerner(s, (98, 88, 76), 6, seed + 1)
+    return s
+
+
+@platzhalter("brocken_oben")
+def _brocken_oben():
+    return _brocken_oben_basis(911, 0)
+
+
+@platzhalter("brocken_2_oben")
+def _brocken2_oben():
+    return _brocken_oben_basis(913, 1)
+
+
+@platzhalter("brocken_3_oben")
+def _brocken3_oben():
+    return _brocken_oben_basis(917, 2)
+
+
+@platzhalter("sandsack_oben")
+def _sandsack_oben():
+    """Sandsaecke von oben: versetzte Reihen praller Saecke."""
+    s = _flaeche(T, T)
+    s.fill((88, 74, 50))
+    for reihe, y in enumerate(range(0, T, 8)):
+        versatz = -7 if reihe % 2 else 0
+        for x in range(versatz, T, 15):
+            pygame.draw.rect(s, (148, 130, 92), (x + 1, y + 1, 13, 6), border_radius=3)
+            pygame.draw.line(s, (178, 160, 118), (x + 3, y + 2), (x + 11, y + 2))
+            pygame.draw.line(s, (112, 96, 66), (x + 3, y + 6), (x + 11, y + 6))
+    _koerner(s, (164, 146, 104), 10, 921)
+    return s
+
+
+@platzhalter("holzkiste_oben")
+def _holzkiste_oben():
+    """Die Holzkiste von oben: Rahmen, Deckelbretter, Eisenecken."""
+    b = 26
+    s = _flaeche(b, b)
+    s.fill((146, 104, 62))
+    for y in (6, 12, 18):
+        pygame.draw.line(s, (96, 64, 36), (3, y), (b - 4, y))
+    pygame.draw.rect(s, (110, 74, 42), s.get_rect(), 3)
+    pygame.draw.rect(s, (54, 36, 20), s.get_rect(), 1)
+    pygame.draw.line(s, (176, 134, 86), (1, 1), (b - 2, 1))
+    pygame.draw.line(s, (96, 64, 36), (4, b - 5), (b - 5, 4), 3)     # Querstrebe
+    pygame.draw.line(s, (164, 122, 78), (4, b - 6), (b - 6, 4))
+    for ex in (1, b - 4):
+        for ey in (1, b - 4):
+            pygame.draw.rect(s, (82, 80, 78), (ex, ey, 3, 3))
+    return s
+
+
+@platzhalter("kaktus_oben")
+def _kaktus_oben():
+    """Ein Fasskaktus von oben: Rippen sternfoermig, Stacheln, eine Bluete."""
+    b = 18
+    s = _flaeche(b, b)
+    m = b / 2.0
+    pygame.draw.circle(s, (40, 66, 34), (b // 2, b // 2), b // 2)
+    pygame.draw.circle(s, (80, 122, 64), (b // 2, b // 2), b // 2 - 1)
+    for i in range(10):
+        w = i * math.tau / 10
+        ax, ay = m + math.cos(w) * 2, m + math.sin(w) * 2
+        ex, ey = m + math.cos(w) * (m - 1.5), m + math.sin(w) * (m - 1.5)
+        pygame.draw.line(s, (54, 88, 46), (ax, ay), (ex, ey))
+        s.set_at((round(m + math.cos(w + 0.3) * (m - 2.5)),
+                  round(m + math.sin(w + 0.3) * (m - 2.5))), (222, 212, 168))
+    pygame.draw.circle(s, (104, 146, 80), (b // 2 - 2, b // 2 - 2), 2)
+    pygame.draw.circle(s, (226, 176, 64), (b // 2, b // 2), 2)       # Bluete
+    s.set_at((b // 2, b // 2), (238, 120, 96))
+    return s
+
+
+def _schrott_oben_basis(seed, art):
+    """Schrott von oben. art 0: eingedruecktes Autodach, 1: Reifen auf
+    Blech, 2: Wellblech. Rost ueberall, das ist der Sinn der Sache."""
+    # Kein Rahmen in der Kachel: ein Wrack aus sechs Kacheln soll ein
+    # Haufen sein, nicht sechs Kaesten (erster Versuch). Alles liegt
+    # kreuz und quer, und der Grundton ist bei allen dreien derselbe.
+    r = random.Random(seed)
+    s = _flaeche(T, T)
+    s.fill((100, 62, 42))
+    for _ in range(r.randrange(3, 6)):                            # Blechteile
+        x, y = r.randrange(-4, T - 6), r.randrange(-4, T - 6)
+        b, h = r.randrange(6, 14), r.randrange(4, 10)
+        ton = r.choice(((112, 70, 46), (86, 54, 38), (124, 80, 52), (92, 84, 80)))
+        pygame.draw.rect(s, (60, 40, 30), (x + 1, y + 1, b, h))
+        pygame.draw.rect(s, ton, (x, y, b, h))
+        pygame.draw.line(s, tuple(min(255, c + 22) for c in ton), (x, y), (x + b - 1, y))
+    if art == 1:                                                  # Reifen
+        for _ in range(2):
+            cx, cy = r.randrange(7, T - 7), r.randrange(7, T - 7)
+            pygame.draw.circle(s, (28, 26, 26), (cx, cy), 6)
+            pygame.draw.circle(s, (58, 54, 52), (cx, cy), 6, 1)
+            pygame.draw.circle(s, (86, 82, 78), (cx, cy), 2)
+    elif art == 2:                                                # Wellblech
+        x0, y0 = r.randrange(2, 10), r.randrange(2, 10)
+        for i in range(0, 16, 3):
+            pygame.draw.line(s, (120, 112, 104), (x0 + i, y0), (x0 + i + 4, y0 + 16))
+            pygame.draw.line(s, (76, 68, 64), (x0 + i + 1, y0), (x0 + i + 5, y0 + 16))
+    else:                                                         # Rohr
+        x, y = r.randrange(2, 8), r.randrange(6, T - 8)
+        pygame.draw.line(s, (58, 46, 40), (x, y + 2), (T - 3, y + 6), 3)
+        pygame.draw.line(s, (116, 104, 94), (x, y), (T - 3, y + 4), 2)
+    for _ in range(r.randrange(3, 6)):                            # Rost
+        x, y = r.randrange(0, T - 6), r.randrange(0, T - 6)
+        pygame.draw.ellipse(s, r.choice(((150, 76, 36), (110, 56, 30), (168, 96, 52))),
+                            (x, y, r.randrange(3, 8), r.randrange(2, 6)))
+    _koerner(s, (60, 40, 30), 18, seed + 1)
+    _koerner(s, (176, 118, 74), 10, seed + 2)
+    return s
+
+
+@platzhalter("schrott_oben")
+def _schrott_oben():
+    return _schrott_oben_basis(931, 0)
+
+
+@platzhalter("schrott_2_oben")
+def _schrott2_oben():
+    return _schrott_oben_basis(937, 1)
+
+
+@platzhalter("schrott_3_oben")
+def _schrott3_oben():
+    return _schrott_oben_basis(941, 2)
 
 
 @platzhalter("wandschatten")

@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.5, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.6, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -492,9 +492,28 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 
 Und `karten/` daneben: jede Karte eine Textdatei, ein Zeichen eine
 Kachel, die Ebenen hintereinander. `~` steht für ein Loch auf einer
-höheren Ebene, `^` und `v` verbinden die Aufzüge. `werkzeug_staubtal.py`
-erzeugt STAUBTAL neu, falls man am Grundriss etwas ändern will - danach
-ist die Datei ganz normaler Text und von Hand weiterzubearbeiten.
+höheren Ebene, `^` und `v` verbinden die Aufzüge. Grossbuchstaben sind
+Marken (`A B C` Kreise, `Z` Spawnstellen). Seit 0.34.6 gibt es dazu
+Gelände und Kleinkram:
+
+| Zeichen | Kachel | | Zeichen | Kachel |
+| --- | --- | --- | --- | --- |
+| `.` | Sand / Boden | | `r` | gewachsener Fels (hoch, hält Kugeln auf) |
+| `:` | Piste | | `b` | Felsbrocken |
+| `;` | Kies, Geröll | | `s` | Sandsäcke |
+| `"` | Gestrüpp | | `h` | Holzkiste |
+| `_` | Pflaster | | `k` | Kaktus |
+| `=` | Dielen | | `w` | Schrott, Wracks |
+| `#` | Mauer | | `X` | Fass |
+
+Brocken, Sandsäcke, Kisten, Kakteen, Schrott und Fässer halten auf, aber
+man schiesst darüber hinweg; Fels und Mauern halten auch Kugeln auf.
+
+STAUBTAL kommt vollständig aus `werkzeug_staubtal.py`: wer die Karte
+ändern will, ändert das Werkzeug und erzeugt sie neu
+(`python werkzeug_staubtal.py`). `tests/test_pruefung.py` prüft, dass die
+Datei genau dessen Ausgabe ist - von Hand nachgebesserte Stellen gingen
+beim nächsten Erzeugen verloren, so wie bis 0.34.
 
 Daneben liegt `docs/`:
 
@@ -672,6 +691,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.6 | **STAUBTAL von Grund auf neu, wie von Hand gebaut.** Gemeldet: "Bereiche, wo 50 verschiedene Fässer nebeneinander stehen" - es sollte natürlich aussehen. Die Tafelberge haben jetzt gezeichnete Ränder mit Buchten und Nasen und gehen am Kartenrand in eine Schluchtwand aus Fels über (kein Randgang mehr); ein Grat führt von der Südost-Tafel zur hohen Tafel. Gebaut sind **Westdorf** (Saloon, Laden, Sheriff, Kapellenruine, Schmiede, Wasserturm, Bretterstege), die **Kreuzung um A** (Tankstelle, Buswrack, Felsnase, eingestürzter Wasserturm, zwei Kontrollposten aus Sandsäcken), die **Funkstation um B** (Funkhaus, Baracke, Mast, Hofmauer mit Toren und Wachtürmen, Sandsacknester), das **Fort um C** (Mauer mit vier Toren, Ecktürmen und drei Breschen, Kantine, Stall, Lager, Kommandantur, gepflasterter Platz, Marktstände, Schiessstand), dazu Steinbruch mit Stollen, Ranch, Schrottplatz, ein abgebrannter Hof, eine Landepiste mit Hangar und einem abgestürzten Flugzeug, eine Missionsruine, ein Aussichtsturm und Scharfschützennester auf der hohen Tafel. Dazwischen Pisten mit Trampelpfaden zu den Türen, ein trockenes Bachbett, Geröll am Fuss der Wände und Natur in Gruppen - Felsfelder, Kakteenfluren, Buschland, kahler Sand. Fässer nur noch zu zweit bis viert. Dafür **elf neue Kachelarten** (Fels, Brocken, Sandsack, Holzkiste, Kaktus, Schrott, Piste, Kies, Pflaster, Gestrüpp, Dielen) mit eigenen Bildern und Höhen; Piste und Kies fransen zum Sand hin aus statt eine Kachelkante zu ziehen; eine Marke (Kreis, Spawnstelle) liegt auf dem Boden um sie herum statt als Sandfleck. Gemessen: alle acht Aufzüge tragen Läufer und Brecher, in grossen Wellen kommen 130 von 144 Gegnern an (alte Karte 125), keiner bleibt hängen; Bildzeit gleich oder besser. **Netz/LAN: kein Protokollwechsel, aber die Karte und die Kachelarten sind neu - Gastgeber und Gast brauchen dieselbe Version und dieselbe `karten/staubtal.txt`** (eine ältere Version läse die neuen Zeichen als Sand) |
 | 0.34.5 | **Alles verdeckt sich wie in einer echten 3D-Welt.** Gezeichnet wird je Ebene in dieser Reihenfolge: Boden (Zonenkreis, Feuer, Staubringe, Figuren mit Schatten), dann Mauern, Kisten, Faesser, dann was fliegt, dann Rauch, zuletzt Anzeige. Was fliegt (Geschosse, Raketen, Funken, Staub, Blut, Muendungsfeuer, was gerade faellt) hat eine Hoehe (`K.HOEHEN`, Laufhoehe 12, Mauern 24) und ist nur zu sehen, wenn vom Auge aus keine Mauer davorsteht - eine Kugel knapp hinter einer Mauer verschwindet, eine darueber nicht. Rauch quillt hoeher als jede Mauer und liegt darueber. Anzeige bleibt ueber allem: Lebensbalken (auch eines verdeckten Gegners), Beute- und Schadenszahlen, Namen, Ziellinie. **Gast:** gemeldete Gegner, Beute und Geschosse lagen bisher ueber der ganzen Welt, auch ueber Mauern und Plateaus; jetzt verdecken sie sich genau wie beim Gastgeber (`mehrspieler.py`, gleiche Daten, kein neues Feld). Kostet mit 400 Partikeln im Bild etwa 0,7 ms mehr. Netz: keine Aenderung |
 | 0.34.4 | **Mauern verdecken, wer hinter ihnen steht.** Waende, Kisten und Faesser werden jetzt nach den Figuren gezeichnet: wer vom Bildmittelpunkt aus gesehen hinter einer Mauer steht, verschwindet ganz oder teilweise hinter ihrer Oberseite. Wer davor steht, bleibt immer ganz zu sehen - die Mauer reicht im Bild nur von ihrem Fuss nach aussen. Spielerisch: ein Gegner knapp hinter einer Mauer am Bildrand kann jetzt bis etwa eine halbe Kachel weit verdeckt sein, obwohl das Spiel ihn als sichtbar zaehlt; gewollt. Netz: keine Aenderung, nur Darstellung |
 | 0.34.3 | **Waende und Barrikaden stehen.** Bis jetzt waren sie flache Kacheln wie der Boden - auf dem Plateau sah eine Lehmmauer aus wie ein Weg, von einer hoeheren Ebene aus war eine Wand unten nur ein dunkleres Feld. Jetzt haben sie eine Hoehe (Mauern 24, Faesser und Kisten 14 Welt-Pixel, `K.STEHEN`) und werden wie die Plateaus in Perspektive gezeichnet: die Oberseite rueckt vom Auge weg, dazwischen sieht man die Seiten, die zum Auge schauen - schattiert, mit Steinlagen bzw. Fassreifen. Von oben und von unten passt die Perspektive zur jeweiligen Ebene. Neue Draufsichten fuer Mauerkrone (Lehm, Blech, verschneiter Fels), Kistendeckel und Fassdeckel, mit einer Kante um die ganze Mauer statt um jede Kachel. Faesser sind runde Zylinder, um sie herum liegt Sand. Blutflecken liegen jetzt unter den Mauern statt darauf. Kostet je Bild etwa 1 bis 2 ms mehr (gemessen, am meisten ganz herausgezoomt im Hof). Netz: keine Aenderung, nur Darstellung |

@@ -1622,6 +1622,78 @@ pruef("Beim Gast verdeckt die Mauer gemeldete Gegner dahinter",
       not _anders65(gast_f, _hinten64))
 pruef("Seine Anzeige liegt ueber der Mauer", _anders65(gast_a, _hinten64))
 
+# ── 0.34.6: Gelaende und Kleinkram (fuer STAUBTAL) ─────────────────────
+# Gemeldet: "Bereiche, wo 50 verschiedene Faesser nebeneinander stehen" -
+# die Karte sollte aussehen wie von Hand gebaut. Dafuer gibt es Fels,
+# Brocken, Sandsaecke, Holzkisten, Kakteen, Schrott und die Bodenarten
+# Piste, Kies, Pflaster, Gestruepp und Dielen.
+from dustfront import core as _core66
+_neu66 = {"r": K.FELS, "b": K.BROCKEN, "s": K.SANDSACK, "h": K.HOLZKISTE,
+          "k": K.KAKTUS, "w": K.SCHROTT, ":": K.PISTE, ";": K.KIES,
+          "_": K.PFLASTER, '"': K.GESTRUEPP, "=": K.DIELEN}
+pruef("Jedes neue Kartenzeichen wird zu seiner Kachel",
+      all(_W63.ZEICHEN.get(z_) == k_ for z_, k_ in _neu66.items()))
+pruef("Keins ist ein Grossbuchstabe - die sind Marken",
+      not any(z_.isupper() for z_ in _neu66))
+_ohne_bild66 = []
+for _d66 in K.KACHELN.values():
+    for _n66 in _d66.get("bilder", (_d66["bild"],)):
+        for _name66 in ((_n66, _n66 + "_oben") if _n66 in K.STEHEN or _d66["name"] in K.STEHEN
+                        else (_n66,)):
+            if _name66 not in K.BILD_MASS or _name66 not in _core66._PLATZHALTER:
+                _ohne_bild66.append(_name66)
+pruef("Jedes Kachelbild (und jede Oberseite) hat ein Mass und einen Platzhalter",
+      not _ohne_bild66, _ohne_bild66)
+pruef("Gewachsener Fels steht und haelt Kugeln auf wie eine Mauer",
+      K.KACHELN[K.FELS]["fest"] and K.KACHELN[K.FELS]["sicht"]
+      and K.STEHEN["fels"]["hoehe"] > K.STEHEN["sand_wand"]["hoehe"])
+pruef("Brocken, Sandsack, Kiste, Kaktus, Schrott halten auf wie ein Fass",
+      all(K.KACHELN[k_]["fest"] and not K.KACHELN[k_]["sicht"]
+          for k_ in (K.BROCKEN, K.SANDSACK, K.HOLZKISTE, K.KAKTUS, K.SCHROTT)))
+pruef("Die neuen Bodenarten sind begehbar",
+      all(not K.KACHELN[k_]["fest"] and not K.KACHELN[k_].get("loch")
+          for k_ in (K.PISTE, K.KIES, K.PFLASTER, K.GESTRUEPP, K.DIELEN)))
+
+# Eine Kugel fliegt ueber den Sandsack hinweg und bleibt am Fels haengen.
+_schuss66 = _W63.Welt([_W63.Ebene.aus_text(["." * 20, "...s.....r" + "." * 10, "." * 20], 0)],
+                      satz="wueste")
+_kugel66 = _Gs65(pygame.Vector2(1.5 * K.TILE, 1.5 * K.TILE), 0.0, K.WAFFEN["repetierer"], 0)
+_kugel66.welt = _schuss66
+_kugel66.vorher.update(_kugel66.pos)
+_schuss66.wesen.append(_kugel66)
+for _ in range(120):
+    if not _kugel66.lebt:
+        break
+    _kugel66.schritt(K.FIXED_DT)
+pruef("Eine Kugel fliegt ueber den Sandsack und bleibt am Fels haengen",
+      not _kugel66.lebt and 8 * K.TILE < _kugel66.pos.x <= 9 * K.TILE,
+      "endet bei x %.0f" % _kugel66.pos.x)
+
+# Piste franst zum Sand hin aus, zur Piste daneben nicht. Bis dahin zog
+# jede Kachelkante eine Linie, und ein schraeger Weg war eine Treppe.
+_e66 = _W63.Ebene.aus_text(["....", ".::.", "...."], 0)
+_rand66 = szene.renderer._weicher_rand("piste", _e66, 1, 1, "sand")
+_voll66 = szene.renderer.bilder.bild("piste")
+pruef("Piste franst zum Sand hin aus",
+      sum(1 for x_ in range(K.TILE) for y_ in range(4)
+          if _rand66.get_at((x_, y_)) != _voll66.get_at((x_, y_))) > 20)
+pruef("... aber nicht zur Piste daneben",
+      all(_rand66.get_at((K.TILE - 1, y_)) == _voll66.get_at((K.TILE - 1, y_))
+          for y_ in range(8, K.TILE - 8)))
+pruef("... und ganz ohne Sand drumherum bleibt sie, wie sie ist",
+      szene.renderer._weicher_rand("piste", _W63.Ebene.aus_text([":::"] * 3, 0), 1, 1, "sand")
+      is _voll66)
+
+# Eine Marke liegt auf dem Boden, der um sie ist - mitten auf dem
+# Pflasterplatz kein Sandfleck (bis 0.34 wurde jede Marke zu Sand).
+_m66 = _W63.Ebene.aus_text(["___", "_A_", "___"], 0)
+pruef("Eine Marke auf dem Pflaster ist Pflaster",
+      _m66.kachel(1, 1) == K.PFLASTER and "A" in _m66.marken)
+pruef("Neben Mauern zaehlt nur der begehbare Boden",
+      _W63.Ebene.aus_text(["###", "#Z:", "###"], 0).kachel(1, 1) == K.PISTE)
+pruef("Ohne begehbaren Nachbarn bleibt es Sand",
+      _W63.Ebene.aus_text(["###", "#Z#", "###"], 0).kachel(1, 1) == K.BODEN)
+
 # ── Ebenen: nur eine nach oben ───────────────────────────────────────
 # Wer unten steht, soll die Etage ueber sich durchscheinen sehen - aber
 # nicht gleich drei Stockwerke uebereinander.
@@ -3952,6 +4024,41 @@ pruef("Um den Kreis B steht ein Aussenposten, der Kreis selbst ist frei",
 pruef("Um den offenen Kreis A stehen Deckungsinseln, der Kreis selbst ist frei",
       fasser >= 10 and fasser_nah == 0,
       "%d Fass-Kacheln im Umkreis, %d direkt am Kreis" % (fasser, fasser_nah))
+
+# 0.34.6: "Bereiche, wo 50 verschiedene Faesser nebeneinander stehen" -
+# Faesser stehen jetzt in kleinen Gruppen, wo jemand sie abgestellt hat.
+_gruppen_f = []
+for e in staub.ebenen:
+    _gesehen_f = set()
+    for ty in range(e.hoehe):
+        for tx in range(e.breite):
+            if e.kachel(tx, ty) != K.KISTE or (tx, ty) in _gesehen_f:
+                continue
+            _offen_f, _n_f = [(tx, ty)], 0
+            _gesehen_f.add((tx, ty))
+            while _offen_f:
+                a, b = _offen_f.pop()
+                _n_f += 1
+                for c, d in ((a + 1, b), (a - 1, b), (a, b + 1), (a, b - 1)):
+                    if e.kachel(c, d) == K.KISTE and (c, d) not in _gesehen_f:
+                        _gesehen_f.add((c, d))
+                        _offen_f.append((c, d))
+            _gruppen_f.append(_n_f)
+pruef("Faesser stehen in kleinen Gruppen, nie mehr als vier zusammen",
+      _gruppen_f and max(_gruppen_f) <= 4,
+      "%d Gruppen, die groesste %d" % (len(_gruppen_f), max(_gruppen_f or [0])))
+_arten_s = {e.kachel(tx, ty) for e in staub.ebenen
+            for ty in range(e.hoehe) for tx in range(e.breite)}
+_fehlen_s = [K.KACHELN[k_]["name"] for k_ in (K.FELS, K.BROCKEN, K.SANDSACK, K.HOLZKISTE,
+                                              K.KAKTUS, K.SCHROTT, K.PISTE, K.KIES,
+                                              K.PFLASTER, K.GESTRUEPP, K.DIELEN)
+             if k_ not in _arten_s]
+pruef("STAUBTAL hat Gelaende, nicht nur Sand, Mauer und Fass", not _fehlen_s, _fehlen_s)
+_unter_s = [(tx, ty) for ty in range(s1.hoehe) for tx in range(s1.breite)
+            if s1.kachel(tx, ty) != K.LEER and s0.daten(tx, ty).get("treppe") is None]
+_fels_s = sum(1 for p in _unter_s if s0.kachel(*p) == K.FELS)
+pruef("Unter den Tafeln ist gewachsener Fels, keine Lehmmauer",
+      _fels_s >= len(_unter_s) * 0.99, "%d von %d" % (_fels_s, len(_unter_s)))
 
 # Im Gefecht: die Karte laesst sich waehlen und der Kreis wandert.
 # Die Aufzuege werden ueber die vorhandene E-Treppenlogik bedient.
@@ -6360,8 +6467,19 @@ pw_welt = pw_w.welt
 kanten = pw_r.klippen(pw_welt, 1, False)
 pruef("Die Plateaus von STAUBTAL haben Kanten",
       len(kanten) > 0, "%d Strecken" % len(kanten))
+# Zusammengefasst heisst: nirgends beginnt eine Strecke genau dort, wo eine
+# andere mit derselben Blickrichtung endet - die beiden waeren eine. Bis
+# 0.34 stand hier "weniger als 80 Strecken"; da waren die Plateaus
+# Rechtecke. Seit 0.34.6 sind ihre Raender gezeichnet, mit Buchten und
+# Nasen, und eine schraege Felskante ist eine Treppe aus kurzen Stuecken -
+# das sind viele Strecken, aber keine davon ist zerstueckelt.
+_anfaenge_k = {(ax, ay, nx, ny) for (ax, ay, bx, by, nx, ny) in kanten}
+_zerstueckelt = [kn for kn in kanten if (kn[2], kn[3], kn[4], kn[5]) in _anfaenge_k]
+_kantenkacheln = sum(abs(kn[2] - kn[0]) + abs(kn[3] - kn[1]) for kn in kanten) // K.TILE
 pruef("... zu ganzen Waenden zusammengefasst, nicht Kachel fuer Kachel",
-      len(kanten) < 80, "%d Strecken" % len(kanten))
+      not _zerstueckelt and len(kanten) < _kantenkacheln,
+      "%d Strecken auf %d Kantenkacheln, %d haetten verbunden werden muessen"
+      % (len(kanten), _kantenkacheln, len(_zerstueckelt)))
 e1p = pw_welt.ebene(1)
 maske_p = pw_r.obermaske(pw_welt, 1)
 
@@ -6466,14 +6584,25 @@ pruef("Auch ausgeblendet bleibt das Plateau ein Block",
 # Was ueber Spielflaeche liegt, blendet weiter aus - nur das Plateau nicht.
 flaeche_p = pygame.Surface((4 * K.TILE, K.TILE), pygame.SRCALPHA)
 fels_i = next(i for i, k in enumerate(e1p.kacheln) if k != K.LEER and not maske_p[i])
-gang_i = next(i for i, k in enumerate(e1p.kacheln) if k != K.LEER and maske_p[i])
+# Ein Stueck Etage ueber Spielflaeche. Bis 0.34 hatte STAUBTAL solche
+# Stuecke ueber den Gaengen zu den Aufzuegen; seit 0.34.6 liegen alle Tueren
+# in der Felswand, und das Stueck kommt aus der Testkarte (Boden ueber
+# Boden).
+_gang_welt = pw_welt
+gang_i = next((i for i, k in enumerate(e1p.kacheln) if k != K.LEER and maske_p[i]), None)
+if gang_i is None:
+    _gang_welt = testkarte()
+    _gm = pw_r.obermaske(_gang_welt, 1)
+    gang_i = next(i for i, k in enumerate(_gang_welt.ebene(1).kacheln)
+                  if k != K.LEER and _gm[i])
 for i_, x_ in ((fels_i, 0), (gang_i, 2)):
     flaeche_p.fill((200, 180, 140, 255), (x_ * K.TILE, 0, K.TILE, K.TILE))
 # Die beiden Felder an ihre Stellen gerueckt: eine Ecke je Feld.
-for i_, x_ in ((fels_i, 0), (gang_i, 2)):
-    tx_, ty_ = i_ % e1p.breite, i_ // e1p.breite
+for i_, x_, welt_ in ((fels_i, 0, pw_welt), (gang_i, 2, _gang_welt)):
+    _b = welt_.ebene(1).breite
+    tx_, ty_ = i_ % _b, i_ // _b
     teil = flaeche_p.subsurface((x_ * K.TILE, 0, K.TILE, K.TILE))
-    pw_r._ausstanzen(teil, pw_welt, 1, pygame.Vector2(tx_ * K.TILE, ty_ * K.TILE),
+    pw_r._ausstanzen(teil, welt_, 1, pygame.Vector2(tx_ * K.TILE, ty_ * K.TILE),
                      (255, 255, 255, 64), pygame.BLEND_RGBA_MULT)
 pruef("Ueber Fels bleibt die Etage deckend",
       flaeche_p.get_at((K.TILE // 2, K.TILE // 2)).a == 255)

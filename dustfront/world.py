@@ -39,6 +39,19 @@ ZEICHEN = {
     "^": K.AUFZUG_HOCH,
     "v": K.AUFZUG_RUNTER,
     "~": K.LEER,
+    # Seit 0.34.6 (STAUBTAL): Gelaende und Kleinkram. Kleinbuchstaben und
+    # Satzzeichen - Grossbuchstaben sind Marken.
+    "r": K.FELS,
+    "b": K.BROCKEN,
+    "s": K.SANDSACK,
+    "h": K.HOLZKISTE,
+    "k": K.KAKTUS,
+    "w": K.SCHROTT,
+    ":": K.PISTE,
+    ";": K.KIES,
+    "_": K.PFLASTER,
+    '"': K.GESTRUEPP,
+    "=": K.DIELEN,
 }
 
 # Dekale werden in kleinen Flaechen abgelegt. Auf einer grossen Karte waere
@@ -209,7 +222,28 @@ class Ebene:
                 e.setzen(tx, ty, ZEICHEN.get(z, K.BODEN))
                 # gestreute Auswahl, sonst sieht man ein Muster im Boden
                 e.variante[ty * breite + tx] = ((tx * 73856093) ^ (ty * 19349663)) % 4
+        e._marken_boden()
         return e
+
+    def _marken_boden(self) -> None:
+        """Eine Marke liegt auf dem Boden, der um sie herum ist.
+
+        Bis 0.34 wurde jede Marke zu Sand. Seit es Pisten und Pflaster
+        gibt (0.34.6), lag dann mitten auf dem Platz um einen Kreis ein
+        einzelnes Sandfeld - und auf jeder Piste mit Spawnstelle ein
+        Fleck. Jetzt: die Bodenart, die unter den vier Nachbarn am
+        haeufigsten ist; ohne begehbaren Nachbarn bleibt es Sand."""
+        for stellen in self._marken.values():
+            for p in stellen:
+                tx, ty = int(p.x // K.TILE), int(p.y // K.TILE)
+                zaehlen = {}
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    k = self.kachel(tx + dx, ty + dy)
+                    d = K.KACHELN[k]
+                    if k != K.LEER and not d["fest"] and d.get("treppe") is None:
+                        zaehlen[k] = zaehlen.get(k, 0) + 1
+                if zaehlen:
+                    self.setzen(tx, ty, max(sorted(zaehlen), key=zaehlen.get))
 
     @property
     def marken(self) -> dict:
