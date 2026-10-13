@@ -4377,6 +4377,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._ueberblendung.zeichnen(ziel)
         self._ueberblendung.merken(ziel)
         self._namen_zeichnen(ziel)
+        self._kreispfeil(ziel)
         self._randpfeile(ziel)
         self._erfassung_zeichnen(ziel)
         # Der rote Rand liegt ueber der Welt, aber unter der Anzeige: die
@@ -4576,16 +4577,88 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         if not self.regeln["zone"] or ebene != self.zone_ebene:
             return
         z = K.ZONE
-        halter = self.zone_halter
-        if 0 <= halter < len(K.TEAMS["farben"]):
-            farbe = K.TEAMS["farben"][halter]
-            anteil = self.zone_stand[halter] / z["bis"]
-        else:
-            farbe = K.C_CREAM
-            anteil = max(self.zone_stand) / z["bis"] if self.zone_stand else 0.0
+        farbe, anteil = self._zonenfarbe()
         self.renderer.kreis_zone(flaeche, self.zone_mitte - ecke, z["radius"],
                                  farbe, anteil, self._zeit / z["puls"],
                                  z["ring"], z["fuellung"])
+        # Wohin er als naechstes zieht: ein ">" auf dem Boden (seit 0.34.8).
+        naechster = self._naechster_kreis()
+        if naechster is not None:
+            self.renderer.kreis_weiter(flaeche, self.zone_mitte - ecke, z["radius"],
+                                       naechster[1] - self.zone_mitte, farbe, self._zeit)
+
+    def _zonenfarbe(self):
+        """Farbe und Ladestand des Kreises: die des Teams, das gerade
+        haelt; haelt niemand, neutral - man soll auf einen Blick sehen, ob
+        er umkaempft ist oder laeuft. Pfeil am Rand und ">" haben dieselbe."""
+        z = K.ZONE
+        halter = self.zone_halter
+        if 0 <= halter < len(K.TEAMS["farben"]):
+            return K.TEAMS["farben"][halter], self.zone_stand[halter] / z["bis"]
+        anteil = max(self.zone_stand) / z["bis"] if self.zone_stand else 0.0
+        return K.C_CREAM, anteil
+
+    def _naechster_kreis(self):
+        """Der Kreis, zu dem dieser als naechstes zieht, oder None (nur
+        einer auf der Karte). Der Gast kennt die Kreise aus seiner
+        Kartendatei und die Nummer aus der Meldung - mehr braucht es nicht."""
+        if len(self.kreise) < 2:
+            return None
+        return self.kreise[(self.kreis_nr + 1) % len(self.kreise)]
+
+    def _randstelle(self, richtung, rand: float) -> pygame.Vector2:
+        """Wo ein Pfeil in `richtung` (von der Bildmitte aus) am Bildrand
+        sitzt: im Streifen zwischen oberer und unterer Anzeige, und nicht
+        auf der Minikarte."""
+        oben, unten = RAND_OBEN, K.GAME_H - RAND_UNTEN
+        mitte = pygame.Vector2(K.GAME_W / 2, (oben + unten) / 2)
+        halb = pygame.Vector2(K.GAME_W / 2 - rand, (unten - oben) / 2 - rand / 2)
+        teiler = max(abs(richtung.x) / halb.x, abs(richtung.y) / max(1.0, halb.y))
+        stelle = mitte + richtung / max(1e-6, teiler)
+        karte_unten = self.hud._karte_unten
+        if karte_unten and stelle.y < karte_unten + rand + 10 \
+                and stelle.x < K.MINIKARTE["links"] + K.MINIKARTE["breite"] + rand:
+            stelle.y = karte_unten + rand + 10
+        return stelle
+
+    def _kreispfeil(self, ziel) -> None:
+        """Wo der Kreis liegt, wenn man ihn nicht sieht (seit 0.34.8).
+
+        Ein grosser Pfeil in der Farbe des Kreises am Bildrand, dahinter
+        sein Name und - liegt er auf einer anderen Ebene - welche. Er
+        steht, sobald die Mitte des Kreises nicht im Bild ist oder der
+        Kreis auf einer anderen Ebene liegt als die, die man ansieht.
+        """
+        if self.ich is None or self.vorbei or not self.regeln.get("zone"):
+            return
+        z = K.ZONE
+        oben, unten = RAND_OBEN, K.GAME_H - RAND_UNTEN
+        p = self.kamera.zu_bild(self.zone_mitte)
+        if (self.zone_ebene == self.blick and 0 <= p.x <= K.GAME_W
+                and oben <= p.y <= unten):
+            return
+        mitte = pygame.Vector2(K.GAME_W / 2, (oben + unten) / 2)
+        richtung = p - mitte
+        if richtung.length_squared() < 1.0:
+            richtung = pygame.Vector2(0, -1)      # genau darueber oder darunter
+        stelle = self._randstelle(richtung, z["randpfeil_abstand"])
+        winkel = math.degrees(math.atan2(richtung.y, richtung.x))
+        farbe, _anteil = self._zonenfarbe()
+        g = z["randpfeil"] * (1.0 + 0.08 * math.sin(self._zeit * math.tau / z["puls"]))
+        # Pfeil mit Schaft, Spitze nach +x, um die Mitte gedreht.
+        form = [(g, 0), (-0.1 * g, 0.8 * g), (-0.1 * g, 0.32 * g), (-g, 0.32 * g),
+                (-g, -0.32 * g), (-0.1 * g, -0.32 * g), (-0.1 * g, -0.8 * g)]
+        punkte = [stelle + pygame.Vector2(x, y).rotate(winkel) for x, y in form]
+        pygame.draw.polygon(ziel, (16, 11, 8), [q + (1, 1) for q in punkte])
+        pygame.draw.polygon(ziel, (16, 11, 8), punkte, 3)
+        pygame.draw.polygon(ziel, farbe, punkte)
+        text = getattr(self, "zone_name", "") or ""
+        if self.zone_ebene != self.blick:
+            text = (text + " E%d" % self.zone_ebene).strip()
+        if text:
+            hinten = stelle - pygame.Vector2(g + 10, 0).rotate(winkel)
+            SCHRIFT.zeichnen(ziel, text, int(hinten.x), int(hinten.y) - 3,
+                             farbe, 1, ausrichtung="mitte")
 
     def _ankuendigung_zeichnen(self, ziel, p, daten, vorlauf) -> None:
         """Was ein Boss gleich tut, bevor er es tut.

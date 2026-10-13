@@ -1852,6 +1852,37 @@ class Renderer:
                             max(2, ring + 1))
         ziel.blit(flaeche, (m.x - r - rand, m.y - r - rand))
 
+    def kreis_weiter(self, ziel, mitte, radius: float, richtung, farbe,
+                     zeit: float = 0.0) -> None:
+        """Ein ">" im Kreis, das dorthin zeigt, wohin er als naechstes
+        zieht (seit 0.34.8). Liegt auf dem Boden wie der Kreis selbst,
+        also unter den Figuren, und rueckt sacht in seine Richtung vor -
+        so liest man es als Bewegung und nicht als Muster im Sand.
+
+        `mitte` ist schon in der Flaeche gerechnet, wie bei `kreis_zone`.
+        """
+        r = pygame.Vector2(richtung)
+        if r.length_squared() < 1.0 or radius < 4:
+            return
+        z = K.ZONE
+        winkel = math.degrees(math.atan2(r.y, r.x))
+        s = radius * z["weiter_groesse"]
+        d = z["weiter_dicke"]
+        vor = radius * (0.12 + 0.06 * math.sin(zeit * math.tau * 0.8))
+        # Ein dickes ">" mit der Spitze nach +x, dann gedreht.
+        form = [(-s * 0.5, -s), (-s * 0.5 + d, -s), (s * 0.5 + d, 0.0),
+                (-s * 0.5 + d, s), (-s * 0.5, s), (s * 0.5, 0.0)]
+        punkte = [pygame.Vector2(x + vor, y).rotate(winkel) for x, y in form]
+        rand = int(s + d + vor) + 4
+        flaeche = pygame.Surface((2 * rand, 2 * rand), pygame.SRCALPHA)
+        mp = pygame.Vector2(rand, rand)
+        pygame.draw.polygon(flaeche, (16, 11, 8, z["weiter_deckkraft"] // 2),
+                            [mp + p + (2, 2) for p in punkte])
+        pygame.draw.polygon(flaeche, (*farbe, z["weiter_deckkraft"]),
+                            [mp + p for p in punkte])
+        m = pygame.Vector2(mitte)
+        ziel.blit(flaeche, (m.x - rand, m.y - rand))
+
     def tracer(self, ziel, welt, kamera, spieler) -> None:
         """Zielhilfe: eine duenne Linie von der Waffe zum Mauszeiger.
 

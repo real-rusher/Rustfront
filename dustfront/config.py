@@ -744,6 +744,15 @@ ZONE = dict(
     # Mannschaften teilen sich auf und treffen sich nie. Einer, der
     # weiterzieht, haelt sie beisammen - man muss den Weg gehen.
     wechsel=75.0,
+    # Seit 0.34.8: wo der Kreis liegt und wohin er als naechstes zieht.
+    # Ist er nicht im Bild (oder auf einer anderen Ebene), zeigt ein
+    # grosser Pfeil in seiner Farbe am Bildrand auf ihn. Im Kreis liegt
+    # ein ">" auf dem Boden, das zum naechsten Kreis zeigt.
+    randpfeil=15.0,           # halbe Laenge des Pfeils am Rand, Bildpixel
+    randpfeil_abstand=22,     # so weit bleibt seine Mitte vom Bildrand weg
+    weiter_groesse=0.40,      # das ">" im Kreis, Anteil am Radius
+    weiter_dicke=9.0,         # seine Strichstaerke, Welt-Pixel
+    weiter_deckkraft=150,
 )
 
 # Die Lobby: wo man beim Aufmachen landet und nach jeder Runde.

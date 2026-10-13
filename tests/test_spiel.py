@@ -4101,6 +4101,70 @@ pruef("Der Gast steht auf demselben Kreis",
       ga.kreis_nr == w.kreis_nr
       and ga.zone_mitte.distance_to(w.zone_mitte) < 1.0,
       "%d gegen %d" % (ga.kreis_nr, w.kreis_nr))
+
+# 0.34.8: "In welcher Richtung die Hotzone ist, sollte durch einen grossen
+# Pfeil in der Farbe der Hotzone am Rand angezeigt werden. Die naechste
+# Position durch ein > in der Hotzone - die Richtung, in die sie geht."
+pruef("Der Gast kennt auch den naechsten Kreis",
+      ga._naechster_kreis() is not None
+      and ga._naechster_kreis()[1].distance_to(w._naechster_kreis()[1]) < 1.0)
+w._kreis_setzen(0)
+pruef("Der naechste Kreis ist der, zu dem er dann wirklich zieht",
+      w._naechster_kreis()[1] == w.kreise[1][1])
+
+def _zaehle68(bild_, farbe_):
+    return [(x_, y_) for x_ in range(0, K.GAME_W, 2) for y_ in range(0, K.GAME_H, 2)
+            if bild_.get_at((x_, y_))[:3] == farbe_]
+
+_ich68 = w.ich
+_farbe68 = w._zonenfarbe()[0]
+for _k68 in w.kaempfer.values():
+    _k68.ebene = w.zone_ebene
+# Weit weg westlich vom Kreis: der Pfeil sitzt am linken Rand.
+_ich68.pos.update(w.zone_mitte - pygame.Vector2(40 * K.TILE, 0))
+w.blick = w.zone_ebene
+w.kamera.pos.update(_ich68.pos); w.kamera.versatz.update(0, 0)
+w.kamera.zoom = 1.0
+_rand68 = pygame.Surface((K.GAME_W, K.GAME_H)); _rand68.fill((0, 0, 0))
+w._kreispfeil(_rand68)
+_px68 = _zaehle68(_rand68, _farbe68)
+pruef("Ist der Kreis nicht im Bild, zeigt ein grosser Pfeil in seiner Farbe auf ihn",
+      len(_px68) > 30, "%d Bildpunkte" % len(_px68))
+pruef("... am Rand auf seiner Seite (hier rechts)",
+      _px68 and min(x_ for x_, _y in _px68) > K.GAME_W * 0.8)
+w.zone_halter = 1
+_px68b = _zaehle68((lambda s_: (s_.fill((0, 0, 0)), w._kreispfeil(s_), s_)[2])(
+    pygame.Surface((K.GAME_W, K.GAME_H))), K.TEAMS["farben"][1])
+pruef("... und in der Farbe des Teams, das ihn haelt", len(_px68b) > 30)
+w.zone_halter = -1
+# Steht man im Kreis, braucht es keinen Pfeil.
+_ich68.pos.update(w.zone_mitte)
+w.kamera.pos.update(_ich68.pos)
+_drin68 = pygame.Surface((K.GAME_W, K.GAME_H)); _drin68.fill((0, 0, 0))
+w._kreispfeil(_drin68)
+pruef("Im Bild steht kein Pfeil", not _zaehle68(_drin68, _farbe68))
+# Eine Ebene hoeher: der Kreis ist nicht zu sehen, also wieder ein Pfeil.
+w.blick = w.zone_ebene + 1
+_e68 = pygame.Surface((K.GAME_W, K.GAME_H)); _e68.fill((0, 0, 0))
+w._kreispfeil(_e68)
+pruef("Auf einer anderen Ebene zeigt der Pfeil trotzdem", len(_zaehle68(_e68, _farbe68)) > 30)
+w.blick = w.zone_ebene
+
+# Das ">" im Kreis zeigt zum naechsten: seine Bildpunkte liegen auf der
+# Seite der Mitte, auf der der naechste Kreis liegt.
+_r68 = K.ZONE["radius"]
+for _ri68 in (pygame.Vector2(1, 0), pygame.Vector2(0, -1), pygame.Vector2(-1, 1)):
+    _f68 = pygame.Surface((int(4 * _r68), int(4 * _r68)), pygame.SRCALPHA)
+    _f68.fill((0, 0, 0, 0))
+    _m68 = pygame.Vector2(2 * _r68, 2 * _r68)
+    w.renderer.kreis_weiter(_f68, _m68, _r68, _ri68, (255, 0, 255), 0.0)
+    _pk68 = [pygame.Vector2(x_, y_) for x_ in range(_f68.get_width())
+             for y_ in range(_f68.get_height())
+             if _f68.get_at((x_, y_))[:3] == (255, 0, 255)]
+    _schwer68 = sum(_pk68, pygame.Vector2()) / max(1, len(_pk68))
+    pruef("Das > zeigt zum naechsten Kreis (Richtung %d,%d)" % (_ri68.x, _ri68.y),
+          len(_pk68) > 50 and (_schwer68 - _m68).dot(_ri68.normalize()) > _r68 * 0.1,
+          "%d Punkte, Schwerpunkt %s" % (len(_pk68), _schwer68 - _m68))
 w.verlassen(); ga.verlassen()
 
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
