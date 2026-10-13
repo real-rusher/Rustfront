@@ -347,5 +347,18 @@ _abweichend = [n for n, (a, b) in enumerate(zip(_soll.splitlines(), _ist.splitli
 pruef("karten/staubtal.txt ist genau die Ausgabe von werkzeug_staubtal.py",
       _soll == _ist, "%d Zeilen anders, erste: %s" % (len(_abweichend), _abweichend[:3]))
 
+# Und zwar immer dieselbe. In 0.34.6 entschied an zwei Stellen die
+# Reihenfolge einer Menge aus Zeichen, und die haengt an der Hash-Saat von
+# Python - je nach Lauf kam eine etwas andere Karte heraus (seit 0.34.7
+# fest). Darum einmal mit einer anderen Saat in einem eigenen Prozess.
+import subprocess  # noqa: E402
+
+_ziel = Path(tempfile.mkdtemp()) / "staubtal.txt"
+subprocess.run([sys.executable, str(WURZEL / "werkzeug_staubtal.py"), str(_ziel)],
+               cwd=str(WURZEL), env=dict(os.environ, PYTHONHASHSEED="4711"),
+               stdout=subprocess.DEVNULL, check=True)
+pruef("Das Werkzeug erzeugt mit jeder Hash-Saat dieselbe Karte",
+      _ziel.read_text(encoding="utf-8") == _ist)
+
 print("\nFEHLER:", fails if fails else "keine")
 sys.exit(1 if fails else 0)

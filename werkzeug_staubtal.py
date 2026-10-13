@@ -1310,7 +1310,7 @@ def reparieren(k: Karte):
                 for (_i, x, y) in stueck:
                     um = [k.an(i, x + dx, y + dy) for dx, dy in N4]
                     fest = [z for z in um if z in FEST]
-                    k.e[i][y][x] = max(set(fest), key=fest.count) if fest else BROCKEN
+                    k.e[i][y][x] = max(sorted(set(fest)), key=fest.count) if fest else BROCKEN
                 continue
             # Kuerzester Weg durch Hindernisse (nicht durch Fels) zum Rest
             vorher = {}
@@ -1357,7 +1357,7 @@ def einzelne_fuellen(k: Karte):
                 if not any(k.begehbar(i, x + dx, y + dy) for dx, dy in N4):
                     um = [k.an(i, x + dx, y + dy) for dx, dy in N4]
                     fest = [z for z in um if z in FEST]
-                    k.e[i][y][x] = max(set(fest), key=fest.count) if fest else BROCKEN
+                    k.e[i][y][x] = max(sorted(set(fest)), key=fest.count) if fest else BROCKEN
 
 
 def aufzuege_pruefen(k: Karte):

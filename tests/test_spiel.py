@@ -1696,7 +1696,9 @@ pruef("Ohne begehbaren Nachbarn bleibt es Sand",
 
 # ── Ebenen: nur eine nach oben ───────────────────────────────────────
 # Wer unten steht, soll die Etage ueber sich durchscheinen sehen - aber
-# nicht gleich drei Stockwerke uebereinander.
+# nicht gleich drei Stockwerke uebereinander. Ausnahme seit 0.34.7: eine
+# Tafel auf einem Felsblock (die hohe Tafel auf STAUBTAL, Abschnitt
+# "zwei Plateaus aufeinander"). Die Testkarte hat keine.
 gezeichnet = []
 echt = szene.renderer.ebene_zeichnen
 def merken(ziel, welt, index, ecke, dunkel, auge=None, aufschieben=False):
@@ -6626,6 +6628,65 @@ sued_rand = int((28 * K.TILE - kam.ecke.y) / 1.0) + 2
 pruef("Von oben liegt die Suedwand unter dem Deckel, nicht davor",
       not (0 <= sued_rand < pw_r.groesse[1])
       or probe.get_at((int(46 * K.TILE - kam.ecke.x), sued_rand)).a == 0)
+
+# ── 0.34.7: zwei Plateaus aufeinander, vom Tal aus ───────────────────
+# Gemeldet: von der untersten Ebene aus sah die hohe Tafel (Ebene 2 auf
+# ihrem Felssockel in Ebene 1) aus wie eine gewoehnliche - eine Wand,
+# oben nackter Fels. Gezeichnet wurde nur eine Etage nach oben. Jetzt
+# kommt eine hoehere dazu, wo sie auf einem geschlossenen Felsblock steht.
+from dustfront.world import Welt as _Welt67, Ebene as _Eb67
+# Probewelt 6 x 5: unten Fels, darueber in Ebene 1 ein Sockel aus Fels
+# (Spalten 0-4, Reihen 0-3), rechts daneben Boden, unten ein Loch.
+_probe67 = _Welt67([_Eb67.aus_text(["#####."] * 5, 0),
+                    _Eb67.aus_text(["#####."] * 4 + ["~~~~~~"], 1),
+                    _Eb67.aus_text(["......"] * 5, 2)])
+_m67 = pw_r.turm_auslassen(_probe67, 2, 0)
+pruef("Turm: Ebene 2 auf dem Felssockel gehoert dazu",
+      all(_m67[y_ * 6 + x_] == 0 for y_ in range(4) for x_ in range(5)))
+pruef("... ueber begehbarer Ebene 1 nicht", all(_m67[y_ * 6 + 5] for y_ in range(5)))
+pruef("... ueber einem Loch in Ebene 1 auch nicht", all(_m67[24 + x_] for x_ in range(6)))
+# Zu klein ist kein Turm: eine Mauer auf einer Mauer (der Aussenrand der
+# Testkarte) schwebte sonst als Rahmen ueber dem Bild.
+_klein67 = _Welt67([_Eb67.aus_text(["##....", "##....", "......"], 0),
+                    _Eb67.aus_text(["##....", "##....", "......"], 1),
+                    _Eb67.aus_text(["......"] * 3, 2)])
+pruef("... und ein Block mit weniger als %d Kacheln oben ist keiner"
+      % K.PERSPEKTIVE["turm_flaeche"], all(pw_r.turm_auslassen(_klein67, 2, 0)))
+
+_tm67 = pw_r.turm_auslassen(pw_welt, 2, 0)
+_e0_67 = pw_welt.ebene(0)
+_stand67 = next(((i % e1p.breite - 4, i // e1p.breite) for i, weg in enumerate(_tm67)
+                 if not weg and _e0_67.begehbar(i % e1p.breite - 4, i // e1p.breite)
+                 and all(_e0_67.begehbar(i % e1p.breite - d, i // e1p.breite)
+                         for d in range(4, 9))), None)
+pruef("STAUBTAL hat einen Turm, an den man unten herankommt", _stand67 is not None)
+if _stand67 is not None:
+    ich_p.ebene = 0; ich_p.flug = 0.0
+    ich_p.pos.update((_stand67[0] + .5) * K.TILE, (_stand67[1] + .5) * K.TILE)
+    ich_p.vorher.update(ich_p.pos)
+    for _ in range(30):
+        pw_w.schritt(K.FIXED_DT)
+    kam.pos.update(ich_p.pos)
+    kam.versatz.update(0, 0)
+    e2_67 = pw_welt.ebene(2)
+
+    def _bild67(art):
+        alt_ = list(e2_67.kacheln)
+        if art is not None:
+            e2_67.kacheln[:] = [art if k_ != K.LEER else k_ for k_ in e2_67.kacheln]
+        app.flaeche.fill(K.C_VOID)
+        pw_w.zeichnen(app.flaeche, 1.0)
+        e2_67.kacheln[:] = alt_
+        return app.flaeche.copy()
+
+    for _zeigen67 in (True, False):
+        pw_w.obere_zeigen = _zeigen67
+        _a67, _b67 = _bild67(None), _bild67(K.GITTER)
+        _anders67 = sum(1 for x_ in range(0, K.GAME_W, 4) for y_ in range(0, K.GAME_H, 4)
+                        if _a67.get_at((x_, y_)) != _b67.get_at((x_, y_)))
+        pruef("Vom Tal aus ist die Oberflaeche der hohen Tafel zu sehen (obere Ebene %s)"
+              % ("an" if _zeigen67 else "aus"), _anders67 > 50, "%d Proben anders" % _anders67)
+    pw_w.obere_zeigen = False
 pw_w.verlassen(); pw_g.verlassen()
 
 # ── Zombies tragen keine Schusswaffen (nach 0.31) ───────────────────

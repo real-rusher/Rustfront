@@ -1095,6 +1095,10 @@ PERSPEKTIVE = dict(
     dunst_staerke=0.42,
     tiefe_sichtbar=8,     # so viele Ebenen nach unten werden gezeichnet
     ausblenden=150.0,     # so weit ueber der Ansicht verschwindet eine Ebene
+    # Hoeher als eine Etage ueber der Ansicht wird nur gezeichnet, was auf
+    # einem geschlossenen Felsblock steht und oben so viele begehbare
+    # Kacheln hat - eine Tafel, kein Mauerrand (seit 0.34.7).
+    turm_flaeche=16,
     massstab_schwelle=0.02,   # ab so viel Abweichung wird ein Wesen im Sturz
                               # ueberhaupt umgerechnet
 )

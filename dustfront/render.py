@@ -1090,8 +1090,85 @@ class Renderer:
         cache[index] = maske
         return maske
 
+    def turm_auslassen(self, welt, index: int, blick: int) -> bytearray:
+        """Was von Ebene `index` weg muss, wenn man sie von `blick` aus
+        sieht und sie mehr als eine Etage hoeher liegt (seit 0.34.7).
+
+        Zu sehen ist dann nur, was auf einem durchgehenden Felsblock steht:
+        jede Etage dazwischen ist an dieser Stelle fest (oder die Kabine
+        eines Aufzugs, die im Fels sitzt). So steht die hohe Tafel vom Tal
+        aus als ein Block da, zwei Stufen hoch, mit ihrer Oberflaeche - und
+        es liegt trotzdem kein Stapel aus allen Stockwerken ueber dem Bild.
+        1 heisst: auslassen. Gemerkt an der Welt, die Karte aendert sich
+        nicht.
+        """
+        cache = welt.__dict__.setdefault("_turmmasken", {})
+        schluessel = (index, blick)
+        hit = cache.get(schluessel)
+        if hit is not None:
+            return hit
+        oben = welt.ebene(index)
+        dazwischen = [welt.ebene(j) for j in range(blick + 1, index)]
+        b, h = oben.breite, oben.hoehe
+        maske = bytearray(b'\x01') * (b * h)
+        if all((e.breite, e.hoehe) == (b, h) for e in dazwischen):
+            fest = {k: d["fest"] or d.get("treppe") is not None
+                    for k, d in K.KACHELN.items()}
+            for i, k in enumerate(oben.kacheln):
+                if k != K.LEER and all(e.kacheln[i] != K.LEER and fest[e.kacheln[i]]
+                                       for e in dazwischen):
+                    maske[i] = 0
+            # Ein Turm ist eine Tafel: oben muss man stehen koennen. Eine
+            # Mauer auf einer Mauer auf einer Mauer (der Aussenrand der
+            # Testkarte) waere sonst ein Rahmen, der ueber dem Bild
+            # schwebt - genau das, was die Obermaske verhindert. Darum
+            # bleiben nur Stuecke mit mindestens K.PERSPEKTIVE["turm_flaeche"]
+            # begehbaren Kacheln.
+            gesehen = bytearray(b * h)
+            for start in range(b * h):
+                if maske[start] or gesehen[start]:
+                    continue
+                stueck, offen = [start], [start]
+                gesehen[start] = 1
+                while offen:
+                    i = offen.pop()
+                    x, y = i % b, i // b
+                    for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                        j = ny * b + nx
+                        if 0 <= nx < b and 0 <= ny < h and not maske[j] and not gesehen[j]:
+                            gesehen[j] = 1
+                            stueck.append(j)
+                            offen.append(j)
+                begehbar = sum(1 for i in stueck if not K.KACHELN[oben.kacheln[i]]["fest"])
+                if begehbar < K.PERSPEKTIVE["turm_flaeche"]:
+                    for i in stueck:
+                        maske[i] = 1
+        # Grobe Uebersicht in Stuecken von 16 x 16 Kacheln: liegt ueberhaupt
+        # ein Turm im Bild? Meistens nicht, und dann kostet er nichts.
+        stuecke = set()
+        for i, weg in enumerate(maske):
+            if not weg:
+                stuecke.add(((i % b) // 16, (i // b) // 16))
+        cache[schluessel] = maske
+        cache[("stuecke",) + schluessel] = stuecke
+        return maske
+
+    def _turm_im_bild(self, welt, index: int, blick: int, ecke, k: float) -> bool:
+        self.turm_auslassen(welt, index, blick)
+        stuecke = welt.__dict__["_turmmasken"][("stuecke", index, blick)]
+        if not stuecke:
+            return False
+        s = 16 * K.TILE
+        w = self.groesse[0] / k + 2
+        h = self.groesse[1] / k + 2
+        for cy in range(int(ecke.y // s), int((ecke.y + h) // s) + 1):
+            for cx in range(int(ecke.x // s), int((ecke.x + w) // s) + 1):
+                if (cx, cy) in stuecke:
+                    return True
+        return False
+
     def _ausstanzen(self, flaeche, welt, index: int, ecke,
-                    farbe=(0, 0, 0, 0), modus: int = 0) -> None:
+                    farbe=(0, 0, 0, 0), modus: int = 0, maske=None) -> None:
         """Loescht aus der fertigen Ebene, was ueber Spielflaeche liegt.
 
         Mit `farbe` und `modus` = BLEND_RGBA_MULT wird es nicht geloescht,
@@ -1105,8 +1182,12 @@ class Renderer:
         `fliegende_zeichnen` gesondert und bleibt deshalb sichtbar.
         Zeilenweise zusammengefasst, damit es ein paar Dutzend Fuellungen
         je Bild sind und nicht einige hundert.
+
+        `maske`: statt der Obermaske eine andere (1 = weg), etwa die eines
+        Turms (`turm_auslassen`).
         """
-        maske = self.obermaske(welt, index)
+        if maske is None:
+            maske = self.obermaske(welt, index)
         e = welt.ebene(index)
         zw, zh = flaeche.get_size()
         t0x = max(0, int(ecke.x // K.TILE))
@@ -1339,19 +1420,34 @@ class Renderer:
         # zwei Ebenen brauchen beide Abbildungen.
         abbildung: dict[int, tuple] = {}
         for idx in range(len(welt.ebenen)):
-            if idx > blick + 1:
-                continue                  # hoechstens eine Etage nach oben
+            # Hoechstens eine Etage nach oben - ausser dort, wo eine hoehere
+            # Etage auf einem Felsblock steht, der bis zur Ansicht hinunter
+            # geschlossen ist (`turm_auslassen`, seit 0.34.7). Vom Tal aus
+            # sah die hohe Tafel sonst aus wie eine gewoehnliche: eine Wand,
+            # oben nackter Fels, und ihre Oberflaeche fehlte.
+            turm = idx > blick + 1
+            if turm and idx - 1 not in abbildung:
+                continue
             dz = blick_hoehe - welt.hoehe(idx)
-            if dz < -p["ausblenden"] or dz > p["brennweite"] * p["tiefe_sichtbar"]:
-                continue
-            sicht = 1.0 if dz >= 0 else max(0.0, 1.0 + dz / p["ausblenden"])
-            if sicht <= 0.01:
-                continue
+            if turm:
+                sicht = 1.0
+            else:
+                if dz < -p["ausblenden"] or dz > p["brennweite"] * p["tiefe_sichtbar"]:
+                    continue
+                sicht = 1.0 if dz >= 0 else max(0.0, 1.0 + dz / p["ausblenden"])
+                if sicht <= 0.01:
+                    continue
             k = p["brennweite"] / max(60.0, p["brennweite"] + dz)
-            abbildung[idx] = self._abbildung(kamera, k, dz)
+            ab = self._abbildung(kamera, k, dz)
+            if turm and not self._turm_im_bild(welt, idx, blick, ab[0], k):
+                continue
+            abbildung[idx] = ab
             if idx - 1 in abbildung:
+                # Bei einem Turm zaehlt alles, was nicht zum Block gehoert,
+                # als offen: die Wand steht ringsum, wo er aufhoert.
                 self.klippen_zeichnen(
-                    ziel, welt, idx, abbildung[idx - 1], abbildung[idx], oben_aus,
+                    ziel, welt, idx, abbildung[idx - 1], abbildung[idx],
+                    oben_aus or turm,
                     max(48, int(p["dunkel"] * k)) / 255.0 if dz > 0 else 1.0)
 
             if abs(dz) < 1.0:                      # die angeschaute Ebene
@@ -1379,7 +1475,12 @@ class Renderer:
                 # sie ist der Deckel des Felsblocks, und durch einen
                 # Felsblock sieht man nicht. Blass gezeichnet stand dort
                 # ein Geist ueber dem Sockel statt eines Plateaus.
-                if oben_aus:
+                if turm:
+                    # Nur der Block selbst; was ueber Spielflaeche einer
+                    # tieferen Etage liegt, bleibt ganz weg.
+                    self._ausstanzen(flaeche, welt, idx, u_ecke,
+                                     maske=self.turm_auslassen(welt, idx, blick))
+                elif oben_aus:
                     self._ausstanzen(flaeche, welt, idx, u_ecke)
                 elif sicht < 0.999:
                     self._ausstanzen(flaeche, welt, idx, u_ecke,
