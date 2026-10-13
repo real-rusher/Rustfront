@@ -769,7 +769,8 @@ class Renderer:
         # wird nicht noch einmal obendrauf gezeichnet.
         liste = [w for w in welt.wesen if w.ebene == index and w.lebt
                  and w.hoehe_bild <= 0 and not getattr(w, "im_fahrzeug", False)]
-        liste.sort(key=lambda w: w.pos.y)
+        # Was auf etwas anderem liegt (C4 auf dem Buggy), zuletzt.
+        liste.sort(key=lambda w: (getattr(w, "obenauf", False), w.pos.y))
         for w in liste:
             p = boden = w.zeichenpos(alpha) - ecke  # Stelle, auf der es steht
             schatten_bild = getattr(w, "schatten_bild", None)

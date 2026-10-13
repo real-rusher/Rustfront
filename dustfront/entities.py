@@ -526,6 +526,18 @@ class C4Ladung(Wesen):
         self.richtung = pygame.Vector2(math.cos(r), math.sin(r))
         self.lade_rest = K.C4["ladezeit"]
         self.haftend = self.restweg <= 0.0
+        # Woran sie klebt, wenn es etwas ist, das sich bewegt (ein Buggy,
+        # seit 0.34.11), und wo genau - in dessen eigener Ausrichtung,
+        # damit sie in der Kurve mitdreht und nicht ueber das Blech rutscht.
+        self.traeger = None
+        self._versatz = pygame.Vector2(0, 0)
+        self._dreh = 0.0
+
+    @property
+    def obenauf(self) -> bool:
+        """Auf einem Wagen wird sie nach ihm gezeichnet, sonst laege sie
+        je nach Fahrtrichtung mal unter dem Blech."""
+        return self.traeger is not None
 
     def schritt(self, dt: float) -> None:
         self.vorher.update(self.pos)
@@ -535,10 +547,36 @@ class C4Ladung(Wesen):
             stoss_x, stoss_y = self.welt.bewegen(
                 self, self.richtung.x * schritt, self.richtung.y * schritt)
             self.restweg -= self.pos.distance_to(vorher)
+            if self._ankleben():
+                return
             if self.restweg <= 0.5 or stoss_x or stoss_y:
                 self.haftend = True
         else:
             self.lade_rest = max(0.0, self.lade_rest - dt)
+            t = self.traeger
+            if t is not None:
+                if not t.lebt:
+                    self.traeger = None
+                else:
+                    self.pos.update(t.pos + self._versatz.rotate(t.winkel))
+                    self.winkel = t.winkel + self._dreh
+                    self.ebene = t.ebene
+
+    def _ankleben(self) -> bool:
+        """Im Flug an einen Wagen gestossen? Dann klebt sie dort."""
+        for w in self.welt.wesen:
+            if (getattr(w, "c4_haftet", False) and w.lebt
+                    and w.ebene == self.ebene and w.beruehrt(self.pos, self.radius)):
+                self.haftend = True
+                self.traeger = w
+                # Nicht mitten im Wagen, sondern dort, wo sie aufgekommen
+                # ist - etwas zur Mitte gezogen, damit sie auf dem Blech liegt.
+                rel = (self.pos - w.pos) * 0.7
+                self._versatz = rel.rotate(-w.winkel)
+                self._dreh = self.winkel - w.winkel
+                self.pos.update(w.pos + rel)
+                return True
+        return False
 
     @property
     def bereit(self) -> bool:

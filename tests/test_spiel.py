@@ -7596,6 +7596,133 @@ held.pos, held.vorher, held.ebene, held.lebt = _zustand_dash_b[:4]
  held.waffe, held.flug) = _zustand_dash_b[4:]
 szene.welt.wesen = _wesen_alt_b
 
+# ─────────────────────────────────────────────────────────────────────
+# 0.34.11: "Die Autos werden beim Host nicht angezeigt, nur bei den Gaesten.
+# Man kann noch keine Inputs da drin machen. Man soll auch C4 an das Auto
+# werfen koennen." Der Fehler steckte im echten Ablauf: aus der Lobby heraus
+# raeumte der Rundenstart die eben aufgestellten Buggys wieder weg. Die
+# Pruefungen von 0.34.9 fingen ohne Lobby an und sahen das nie.
+from dustfront.fahrzeug import Buggy as _Buggy71
+from dustfront.entities import C4Ladung as _C4_71
+
+w71, g71 = lobbypaar(modus="pvp", karte="staubtal")
+w71.plan_starten(0)
+netz_durchlassen(w71, g71, 10)
+pruef("Aus der Lobby gestartet: STAUBTAL laeuft", w71.karte == "staubtal"
+      and not w71.in_lobby and g71.karte == "staubtal", w71.karte)
+pruef("Beim Gastgeber stehen die Buggys in der Welt",
+      len(w71.fahrzeuge) == 3
+      and all(b_.lebt and b_ in w71.welt.wesen for b_ in w71.fahrzeuge),
+      str([(b_.lebt, b_ in w71.welt.wesen) for b_ in w71.fahrzeuge]))
+pruef("... und der Gast sieht dieselben drei", len(g71.fahrzeuge) == 3)
+
+# Der Gastgeber faehrt mit der Tastatur, wie im echten Spiel.
+def _bild71(n_=1):
+    """Wie die Spielschleife: je Bild erst die Eingabe auf neu, dann rechnen."""
+    for _ in range(n_):
+        w71.schritt(K.FIXED_DT)
+        app.eingabe.neues_bild()
+
+def _taste71(name_, runter_):
+    code_ = app.eingabe.tabelle[name_][0]
+    ev_ = pygame.event.Event(pygame.KEYDOWN if runter_ else pygame.KEYUP,
+                             key=code_, mod=0, unicode="", scancode=0)
+    app.eingabe.ereignis(ev_)
+    w71.ereignis(ev_)
+
+_ich71 = w71.ich
+_b71 = min(w71.fahrzeuge, key=lambda b_: b_.pos.x)
+_ich71.pos.update(_b71.ausstiegsorte(_ich71.radius)[0]); _ich71.vorher.update(_ich71.pos)
+_ich71.ebene = 0; _ich71.treppe_rest = 0.0
+_taste71("nutzen", True)
+_bild71()
+_taste71("nutzen", False)
+pruef("Der Gastgeber steigt mit E ein", _ich71.im_fahrzeug and _b71.fahrer is _ich71)
+_start71 = pygame.Vector2(_b71.pos)
+_taste71("vor", True)
+_bild71(120)
+_taste71("vor", False)
+pruef("... und faehrt mit W los", _b71.pos.distance_to(_start71) > 80
+      and _ich71.pos.distance_to(_b71.pos) < 1.0,
+      "%.0f px" % _b71.pos.distance_to(_start71))
+_taste71("nutzen", True)
+_bild71()
+_taste71("nutzen", False)
+pruef("... und steigt mit E wieder aus", not _ich71.im_fahrzeug and _b71.fahrer is None)
+app.eingabe.alles_loslassen()
+
+# Der Gast faehrt: E und W gehen als Eingabe zum Gastgeber.
+_gk71 = w71.kaempfer[g71.meine_nummer]
+_gb71 = max(w71.fahrzeuge, key=lambda b_: b_.pos.x)
+_gk71.pos.update(_gb71.ausstiegsorte(_gk71.radius)[0]); _gk71.vorher.update(_gk71.pos)
+_gk71.ebene = 0; _gk71.treppe_rest = 0.0
+_ich71.pos.update(_b71.pos + pygame.Vector2(0, 80)); _ich71.vorher.update(_ich71.pos)
+g71._knoepfe.add("nutzen")
+netz_durchlassen(w71, g71, 6)
+pruef("Der Gast steigt mit E ein", _gk71.im_fahrzeug and _gb71.fahrer is _gk71
+      and g71.ich.im_fahrzeug)
+_gstart71 = pygame.Vector2(_gb71.pos)
+_alt_ein71 = g71._meine_eingabe
+def _gas71():
+    d_ = _alt_ein71(); d_["will"] = [0.0, -1.0]; return d_
+g71._meine_eingabe = _gas71
+netz_durchlassen(w71, g71, 60)
+g71._meine_eingabe = _alt_ein71
+pruef("... und faehrt mit W los", _gb71.pos.distance_to(_gstart71) > 80,
+      "%.0f px" % _gb71.pos.distance_to(_gstart71))
+
+# C4 an den Wagen: sie klebt, faehrt mit und trifft den Fahrer zu 70 %.
+# Erst anhalten: der Gastgeber haelt das letzte Gas des Gastes, bis eine
+# neue Eingabe kommt.
+w71._anwenden(_gk71, {"will": [0.0, 0.0], "ziel": [0, 0], "knoepfe": []})
+_gb71.geschw.update(0, 0)
+_vorn71 = pygame.Vector2(1, 0).rotate(_gb71.winkel)
+_quer71 = pygame.Vector2(-_vorn71.y, _vorn71.x)
+_wurf71 = _gb71.pos + _quer71 * 50
+_c71 = _C4_71(pygame.Vector2(_wurf71), (-_quer71).as_polar()[1], 0, _ich71, weite=80)
+w71.welt.dazu(_c71)
+for _ in range(30):
+    w71.welt.schritt(K.FIXED_DT)
+    w71._fahrzeuge_nachziehen()
+pruef("C4 bleibt am Buggy kleben", _c71.traeger is _gb71 and _c71.haftend
+      and _gb71.beruehrt(_c71.pos, _c71.radius + 1))
+_rel71 = (_c71.pos - _gb71.pos).rotate(-_gb71.winkel)
+for _ in range(90):
+    w71._anwenden(_gk71, {"will": [0.7, -0.7], "ziel": [0, 0], "knoepfe": []})
+    w71.welt.schritt(K.FIXED_DT)
+    w71._fahrzeuge_nachziehen()
+pruef("... und faehrt mit, auch durch die Kurve",
+      ((_c71.pos - _gb71.pos).rotate(-_gb71.winkel) - _rel71).length() < 0.5
+      and _gb71.pos.distance_to(_gstart71) > 120)
+pruef("... und liegt beim Zeichnen obenauf", _c71.obenauf)
+netz_durchlassen(w71, g71, 4)
+pruef("Der Gast sieht die Ladung am Wagen",
+      any(n_ == "c4_brick" and pygame.Vector2(x_, y_).distance_to(_c71.pos) < 3
+          for (x_, y_, _w, _e, n_, _h, _k, _vx, _vy) in g71._fremde_schuesse))
+_gk71.unverwundbar = 0.0
+_gk71.leben = 1000.0
+_d71 = _gk71.pos.distance_to(_c71.pos)
+_c71.lade_rest = 0.0
+_c71.detonieren()
+_soll71 = (K.C4["schaden"] * (1.0 - 0.72 * min(1.0, _d71 / K.C4["radius"]))
+           * K.FAHRZEUG["schaden_anteil"])
+pruef("Der Fahrer bekommt 70 % der Ladung ab",
+      abs((1000.0 - _gk71.leben) - _soll71) < 0.01,
+      "%.1f statt %.1f" % (1000.0 - _gk71.leben, _soll71))
+pruef("Der Buggy bleibt heil und fahrbereit",
+      _gb71.lebt and _gb71 in w71.welt.wesen and _gb71.fahrer is _gk71)
+_gk71.leben = _gk71.max_leben
+
+# Die naechste Runde aus dem Plan: die Buggys bleiben, leer, am Platz.
+w71._runde_neu()
+w71.schritt(K.FIXED_DT)
+pruef("Nach einem Neustart stehen die Buggys leer an ihrem Platz",
+      len(w71.fahrzeuge) == 3
+      and all(b_.lebt and b_ in w71.welt.wesen and b_.fahrer is None
+              and b_.pos == b_.start[0] for b_ in w71.fahrzeuge)
+      and not _gk71.im_fahrzeug)
+w71.verlassen(); g71.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

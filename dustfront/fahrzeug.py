@@ -47,6 +47,10 @@ class Buggy(Wesen):
     schatten = False
     schatten_bild = "buggy_schatten"
     faellt = False
+    # C4 bleibt an ihm kleben und faehrt mit (seit 0.34.11, siehe
+    # entities.C4Ladung). Er selbst nimmt keinen Schaden davon, wer drin
+    # sitzt, schon.
+    c4_haftet = True
 
     def __init__(self, pos, ebene: int = 0, winkel: float = 0.0,
                  nur_bild: bool = False) -> None:
@@ -105,6 +109,11 @@ class Buggy(Wesen):
         winkel = self.winkel if winkel is None else winkel
         achse = pygame.Vector2(K.FAHRZEUG["achse"], 0).rotate(winkel)
         return (pos + achse, pos - achse)
+
+    def beruehrt(self, pos, radius: float) -> bool:
+        """Liegt ein Kreis an `pos` am Wagen an?"""
+        grenze = (self.radius + radius) ** 2
+        return any(c.distance_squared_to(pos) <= grenze for c in self.kreise())
 
     def passt(self, pos, winkel=None) -> bool:
         """Kann er hier stehen? Mauern, Loecher und alles Unverschiebbare

@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.10, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.11, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -693,6 +693,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.11 | **Buggy repariert, C4 klebt am Buggy.** Wurde eine Runde aus der Lobby gestartet (der Normalfall), räumte der Rundenstart die eben aufgestellten Buggys gleich wieder weg: beim Gastgeber waren sie verschwunden, bei den Gästen standen sie weiter da, und fahren ging bei niemandem. Jetzt bleiben sie und stehen zu jedem Rundenstart leer an ihrem Platz. Neu: **C4 bleibt am Buggy kleben**, fährt mit (auch durch die Kurve) und liegt oben auf dem Wagen. Geht sie hoch, bleibt der Buggy heil, der Fahrer bekommt wie sonst 70 % ab. **Netz/LAN: Gefecht geändert, keine neuen Felder** - der Gast sieht die Ladung über die gewohnte Meldung; beide brauchen 0.34.11 |
 | 0.34.10 | **Minikarte: Kreis und Buggys immer zu sehen.** Der Kreis (HÜGEL) steht jetzt auch auf der Minikarte, wenn er auf einer anderen Ebene liegt - dann blasser und mit einem kleinen Dreieck daneben, das nach oben oder unten zeigt; in der Farbe des Teams, das ihn hält, wie der Pfeil am Bildrand. Die Buggys stehen immer darauf, auf jeder Ebene und auch, wenn jemand fährt (ein Punkt in der Farbe des Fahrers, weiss für einen selbst), als kleines längliches Zeichen in Fahrtrichtung. Grössen in `K.MINIKARTE`. **Netz/LAN: nichts geändert** - alles, was die Minikarte braucht, kam schon mit der Weltmeldung von 0.34.9 |
 | 0.34.9 | **Ein Buggy auf STAUBTAL.** Drei kleine Wüstenbuggys stehen auf der Karte - an der Tankstelle, auf der Dorfstrasse von Westdorf und im Hof der Ranch (in der Karte ein `F`). E steigt ein und wieder aus; W gibt Gas, S bremst und fährt dann rückwärts, A/D lenken, aber nur, solange er rollt. Er rutscht in scharfen Kurven ein wenig, gleitet an Mauern entlang, prallt ab, wirbelt Staub auf und schiebt Leute und Zombies beiseite. Der Wagen ist **unzerstörbar** (Kugeln gehen an ihm vorbei); wer drin sitzt, bekommt **70 % vom Schaden** und wird nicht weggestossen. Am Steuer wird nicht geschossen. Zur neuen Runde stehen alle wieder leer an ihrem Platz. Neues Bild von oben in den Teamfarben des Fahrers, zwei neue Klänge (`buggy_tuer`, `buggy_aufprall`), Werte in `K.FAHRZEUG`. **Netz/LAN: geändert** - neue Felder in der Weltmeldung (`fahrzeuge`, je Spieler `fz`) und `karten/staubtal.txt` hat drei `F` bekommen; Gastgeber und Gast brauchen beide 0.34.9 |
 | 0.34.8 | **Wo der Kreis ist und wohin er zieht.** Ist der Kreis (HÜGEL) nicht im Bild oder auf einer anderen Ebene, zeigt ein grosser Pfeil in seiner Farbe am Bildrand auf ihn - neutral, solange niemand hält, sonst in der Farbe des haltenden Teams -, dahinter sein Name und gegebenenfalls die Ebene ("A E0"). Im Kreis liegt ein ">" auf dem Boden, das zum nächsten Kreis zeigt und sacht in dessen Richtung vorrückt. Grösse und Deckkraft in `K.ZONE`. **Netz/LAN: nichts geändert** - der Gast kennt die Kreise aus seiner Kartendatei und die Nummer des aktuellen aus der gewohnten Meldung |

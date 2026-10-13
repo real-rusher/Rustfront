@@ -1930,7 +1930,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             return None
         bester, abstand = None, K.FAHRZEUG["einsteigen"] ** 2
         for b in self.fahrzeuge:
-            if b.fahrer is not None or b.ebene != k.ebene or b.nur_bild:
+            if (b.fahrer is not None or b.ebene != k.ebene or b.nur_bild
+                    or not b.lebt):
                 continue
             d = b.pos.distance_squared_to(k.pos)
             if d <= abstand:
@@ -4542,8 +4543,18 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             g.lebt = False
         self.gegner_offen = []
         for x in list(self.welt.wesen) + list(self.welt.neue):
-            if not isinstance(x, Kaempfer):
+            # Die Buggys gehoeren zur Karte, nicht zur Runde (seit 0.34.11).
+            # Bis dahin wurden sie hier mit weggeraeumt - gleich nachdem
+            # der Kartenwechsel sie aufgestellt hatte. Beim Gastgeber
+            # waren sie dann weg und standen still, beim Gast standen sie
+            # weiter da (gemeldet: "beim Host nicht zu sehen, fahren geht
+            # nicht").
+            if not isinstance(x, (Kaempfer, Buggy)):
                 x.lebt = False
+        for b in self.fahrzeuge:
+            if b.fahrer is not None:
+                self._fahrzeug_loesen(b.fahrer)
+            b.zuruecksetzen()
         self.welt.rauch = []
         self.welt.feuer = []
         # Auch die Wirkungen, die noch nicht hinaus sind: sonst knallt
