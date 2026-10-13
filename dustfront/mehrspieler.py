@@ -47,6 +47,7 @@ sie mitschicken wollte, haette den zehnfachen Netzverkehr fuer nichts.
 
 from __future__ import annotations
 
+import copy
 import math
 import random
 
@@ -824,6 +825,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Gast Attrappen, die an die gemeldete Stelle gesetzt werden.
         self.fahrzeuge: list = []
         self._fahrhinweis_rest = 0.0  # so lange steht die Fahrhilfe noch da
+        # Das eigene Loadout, wie es zuletzt gemeldet (Gast) oder gesehen
+        # (Gastgeber) wurde - siehe _loadout_beobachten.
+        self._lo_zuletzt = None
         self._war_im_fahrzeug = False
         self._in_wirkung = False      # siehe NETZKLAENGE
         self._knoepfe: set[str] = set()
@@ -872,6 +876,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._welt_verdrahten()
         self._karte_geladen()
         self._fahrzeuge_aufstellen()
+        self._lo_zuletzt = copy.deepcopy(self.mein_loadout())
         self.wunsch = self._wunsch_lesen()
 
         if self.ist_gastgeber:
@@ -1887,6 +1892,30 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
 
     # ---- Schritt: Gastgeber -------------------------------------------
     # ---- Der Buggy (seit 0.34.9) ---------------------------------------
+    def _loadout_beobachten(self) -> None:
+        """Hat sich das eigene Loadout geaendert (Menue AUSRUESTUNG)?
+
+        Dann bekommt der Gastgeber es mitgeteilt, und man selbst einen
+        Hinweis, wann es gilt: ab dem naechsten Einstieg, nicht sofort -
+        sonst waere es ein kostenloser Waffenwechsel mitten im Gefecht,
+        ausgesucht nach dem Gegner, den man gerade vor sich hat. Beim
+        Gastgeber holt sich _loadout_anlegen das eigene ohnehin frisch.
+        """
+        lo = self.mein_loadout()
+        if lo == self._lo_zuletzt:
+            return
+        if not self.ist_gastgeber:
+            # Erst, wenn der Gastgeber einen angenommen hat. Vorher bleibt
+            # der alte Stand stehen, damit es danach noch einmal versucht
+            # wird - sonst ginge eine Aenderung waehrend des Verbindens
+            # verloren.
+            if not (self.gast.offen and self._kos_zugelassen):
+                return
+            self.gast.senden({"t": "loadout", "lo": lo})
+        self._lo_zuletzt = copy.deepcopy(lo)
+        if self.mit_loadouts and not self.in_lobby and not self.vorbei:
+            self.melden("AUSRÜSTUNG GILT AB DEM NÄCHSTEN EINSTIEG")
+
     def _fahrzeuge_aufstellen(self) -> None:
         """Auf jedes F der Karte einen Buggy stellen. Nur beim Gastgeber;
         der Gast bekommt seine mit der Weltmeldung.
@@ -2140,6 +2169,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 k = self.kaempfer.get(nummer)
                 if k is not None:
                     self._anwenden(k, nachricht)
+            elif art == "loadout":
+                # Der Gast hat sein Loadout im Spiel geaendert (seit
+                # 0.34.12). Bis dahin kannte der Gastgeber nur das aus dem
+                # "hallo" - jede spaetere Aenderung kam nie an, auch nicht
+                # zum naechsten Einstieg oder zur naechsten Runde.
+                k = self.kaempfer.get(nummer)
+                if k is not None:
+                    lo = konto_modul.loadout_saeubern(nachricht.get("lo"))
+                    if lo is not None:
+                        k.angemeldet = lo
             elif art in ("kos", "kos_hat", "kos_weg"):
                 # Spielerkosmetik - nur von dem, der schon dabei ist.
                 if nummer in self.kaempfer:
@@ -3454,6 +3493,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     # ---- Schritt: Gast -------------------------------------------------
     def _schritt_gast(self, dt: float) -> None:
         self.hinweis = ""
+        self._meldung_rest = max(0.0, self._meldung_rest - dt)
+        if self._meldung_rest > 0:
+            self.hinweis = self._meldung
         if self.versionsfehler is not None:
             self.hinweis = ""
             return
@@ -4031,6 +4073,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._schritt_gastgeber(dt)
         else:
             self._schritt_gast(dt)
+        self._loadout_beobachten()
 
         if not self.ist_gastgeber and self.plan_weiter > 0:
             # Beim Gast nur Anzeige: die Zahl auf der Siegtafel soll

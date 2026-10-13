@@ -217,6 +217,14 @@ gemeldeten Punktlisten, ohne Wesen dafuer anzulegen (`_fremdes_zeichnen`).
 | `waffe` | int | gewuenschte Waffe, `-1` = keine Aenderung |
 | `knoepfe` | Liste | einmalige Druecke seit dem letzten Paket: `nachladen`, `heilen`, `tracer`, `tracer_weit` |
 
+**`loadout`** - seit 0.34.12, wenn der Gast sein Loadout im Menue
+AUSRUESTUNG aendert. Der Gastgeber merkt es sich (`angemeldet`) und legt
+es beim naechsten Einstieg an, nicht sofort.
+
+```json
+{"t": "loadout", "lo": {"name": "STURM", "waffen": ["sturm", "schrot"], "wuerfe": ["granate"]}}
+```
+
 `nutzen` ist bewusst **gehalten** und nicht **gedrueckt**: Aufhelfen
 braucht Zeit. `knoepfe` ist bewusst eine Liste von Ereignissen - siehe
 12.1, das ist der wichtigste Fehler des ganzen Zweigs.
@@ -1863,6 +1871,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.12 | Neue Nachricht `loadout` (Gast -> Gastgeber): das im Spiel geaenderte Loadout, gilt ab dem naechsten Einstieg | Ein aelterer Gastgeber ignoriert sie, dann gilt weiter das Loadout vom Verbinden |
 | 0.34.11 | Buggys ueberstehen den Rundenstart aus der Lobby (vorher beim Gastgeber weggeraeumt, beim Gast weiter gemeldet); C4 klebt am Buggy und faehrt mit | Kein neues Feld; die Ladung kommt wie jede C4 ueber `schuesse`. Ein Gastgeber mit 0.34.9/0.34.10 meldet Buggys, die bei ihm nicht mehr existieren |
 | 0.34.9 | Buggys: neues Feld `fahrzeuge` in der Weltmeldung (`[x, y, winkel, ebene, kennung, fahrer_nummer oder -1, tempo]`), je Spieler `fz` (sitzt im Wagen); Eingabe unveraendert (W/S/A/D und E wie zu Fuss). `karten/staubtal.txt` hat drei `F`-Marken | Aeltere Gaeste sehen keine Buggys und den Fahrer frei schweben; deshalb ist die Version gleich zu halten (wird beim Verbinden ohnehin geprueft) |
 | 0.34.8 | Pfeil am Bildrand zum Kreis, ">" im Kreis zum naechsten | Nur Darstellung; der Gast leitet den naechsten Kreis aus Karte und `zk` ab, kein neues Feld |

@@ -7723,6 +7723,59 @@ pruef("Nach einem Neustart stehen die Buggys leer an ihrem Platz",
       and not _gk71.im_fahrzeug)
 w71.verlassen(); g71.verlassen()
 
+# ─────────────────────────────────────────────────────────────────────
+# 0.34.12: "C4 fuse time runter auf 3 s. Loadout bearbeiten in der Runde
+# geht noch nicht, wird nicht angewendet."
+from dustfront import konto as _KM72
+from dustfront.entities import C4Ladung as _C4_72
+pruef("C4 ist nach drei Sekunden scharf", K.C4["ladezeit"] == 3.0, str(K.C4["ladezeit"]))
+_c72 = _C4_72(pygame.Vector2(0, 0), 0.0, 0, None)       # ohne Wurf: klebt sofort
+_c72.welt = szene.welt
+for _ in range(int(2.9 / K.FIXED_DT)):
+    _c72.schritt(K.FIXED_DT)
+_noch72 = _c72.bereit
+for _ in range(int(0.2 / K.FIXED_DT)):
+    _c72.schritt(K.FIXED_DT)
+pruef("... nicht schon nach 2,9 s, aber nach 3,1 s", not _noch72 and _c72.bereit)
+
+# Gastgeber und Gast teilen hier dasselbe Konto (dieselbe App). Gewechselt
+# wird das gewaehlte Loadout, wie im Menue AUSRUESTUNG.
+_gew72 = app.konto.gewaehlt
+w72, g72 = gefechtspaar("pvp", regeln={"loadouts": "eigenes"})
+_alt72 = _KM72.hotbar_aus_loadout(app.konto.loadout)
+_neu_nr72 = next(i_ for i_, lo_ in enumerate(app.konto.loadouts)
+                 if _KM72.hotbar_aus_loadout(lo_) != _alt72)
+_neu72 = _KM72.hotbar_aus_loadout(app.konto.loadouts[_neu_nr72])
+_gk72 = w72.kaempfer[g72.meine_nummer]
+pruef("(Zu Beginn tragen beide das alte)",
+      _gk72.waffen == _alt72 and w72.ich.waffen == _alt72, str(_gk72.waffen))
+app.konto.gewaehlt = _neu_nr72
+netz_durchlassen(w72, g72, 6)
+pruef("Ein im Spiel geaendertes Loadout kommt beim Gastgeber an",
+      _gk72.angemeldet is not None
+      and _KM72.hotbar_aus_loadout(_gk72.angemeldet) == _neu72,
+      str(_gk72.angemeldet and _gk72.angemeldet.get("waffen")))
+pruef("... gilt aber nicht sofort (kein Waffenwechsel mitten im Gefecht)",
+      _gk72.waffen == _alt72 and w72.ich.waffen == _alt72)
+pruef("Beide sehen, ab wann es gilt",
+      "NÄCHSTEN EINSTIEG" in w72.hinweis and "NÄCHSTEN EINSTIEG" in g72.hinweis,
+      "%r / %r" % (w72.hinweis, g72.hinweis))
+w72._wieder_einsteigen(_gk72)
+w72._wieder_einsteigen(w72.ich)
+pruef("Beim naechsten Einstieg traegt der Gast das neue",
+      _gk72.waffen == _neu72, "%s statt %s" % (_gk72.waffen, _neu72))
+pruef("... und der Gastgeber auch", w72.ich.waffen == _neu72, str(w72.ich.waffen))
+netz_durchlassen(w72, g72, 6)
+pruef("... und der Gast sieht es in seiner Hotbar", g72.ich.waffen == _neu72,
+      str(g72.ich.waffen))
+w72.wunsch = dict(w72.wunsch, loadouts="eigenes")
+app.konto.gewaehlt = _gew72
+netz_durchlassen(w72, g72, 6)
+w72._runde_neu()
+pruef("Zur neuen Runde gilt es ebenso", _gk72.waffen == _alt72, str(_gk72.waffen))
+w72.verlassen(); g72.verlassen()
+app.konto.gewaehlt = _gew72
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -1103,7 +1103,9 @@ MUNITION = dict(
 
 # C4 ist ein kurzer Wurf ohne Abprallen. Der Zaehler startet erst, wenn
 # der Brick an Boden oder Wand klebt; so ist die Ladezeit sichtbar nutzbar.
-C4 = dict(wurfweite=76.0, wurftempo=260.0, ladezeit=5.0,
+# ladezeit: so lange nach dem Kleben, bis der Zuender sie hochgehen laesst
+# (seit 0.34.12 drei statt fuenf Sekunden).
+C4 = dict(wurfweite=76.0, wurftempo=260.0, ladezeit=3.0,
           radius=158.0, schaden=210.0, schub=420.0)
 
 # ══════════════════════════════════════════════════ HOEHE
