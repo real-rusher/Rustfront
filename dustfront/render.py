@@ -765,11 +765,21 @@ class Renderer:
         und Raketen) - das kommt nach den Mauern in `luft_zeichnen` - und
         ohne die Lebensbalken: die sind Anzeige und gehoeren ueber die
         Mauern (`balken_zeichnen`)."""
+        # Wer im Buggy sitzt, ist Teil von dessen Bild (seit 0.34.9) und
+        # wird nicht noch einmal obendrauf gezeichnet.
         liste = [w for w in welt.wesen if w.ebene == index and w.lebt
-                 and w.hoehe_bild <= 0]
+                 and w.hoehe_bild <= 0 and not getattr(w, "im_fahrzeug", False)]
         liste.sort(key=lambda w: w.pos.y)
         for w in liste:
             p = boden = w.zeichenpos(alpha) - ecke  # Stelle, auf der es steht
+            schatten_bild = getattr(w, "schatten_bild", None)
+            if schatten_bild:
+                # Ein eigener, mitgedrehter Schatten fuer alles, was nicht
+                # rund ist. Er faellt nach unten rechts wie der der Mauern,
+                # egal wohin das Wesen schaut.
+                sch = self.bilder.gedreht(schatten_bild, w.winkel)
+                ziel.blit(sch, (boden.x - sch.get_width() / 2 + 2,
+                                boden.y - sch.get_height() / 2 + 4))
             if w.schatten:
                 f = (1.0 if w.flug <= 0
                      else max(K.DEKAL["schatten_luft"], 1.0 - w.flug / 240.0))

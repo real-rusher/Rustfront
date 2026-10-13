@@ -544,6 +544,8 @@ KLANG_NAMEN = (
     "boss_ansage",          # ein Boss kuendigt an, was er gleich tut
     "dash",                 # der kurze Stoss
     "ruf",                  # wer am Boden liegt, ruft nach Hilfe
+    "buggy_tuer",           # in den Buggy und wieder heraus (seit 0.34.9)
+    "buggy_aufprall",       # der Buggy rumst gegen etwas
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -753,6 +755,34 @@ ZONE = dict(
     weiter_groesse=0.40,      # das ">" im Kreis, Anteil am Radius
     weiter_dicke=9.0,         # seine Strichstaerke, Welt-Pixel
     weiter_deckkraft=150,
+)
+
+# Der Buggy (seit 0.34.9, dustfront/fahrzeug.py). Steht, wo die Karte ein
+# F hat - auf STAUBTAL an der Tankstelle, in Westdorf und auf der Ranch.
+# Unzerstoerbar; wer drin sitzt, bekommt von jedem Schaden nur einen Teil
+# ab und wird nicht weggestossen. Gelenkt wird wie ein Auto: W/S Gas und
+# Bremse (rueckwaerts), A/D lenken. Geschossen wird am Steuer nicht.
+FAHRZEUG = dict(
+    marke="F",                # Buchstabe in der Karte, wo einer steht
+    hoechst=250.0,            # Pixel je Sekunde vorwaerts (zu Fuss 108)
+    rueckwaerts=95.0,
+    gas=240.0,                # Beschleunigung, Pixel je Sekunde im Quadrat
+    bremse=560.0,             # wenn man gegen die Fahrtrichtung drueckt
+    rollen=130.0,             # so schnell wird er ohne Gas langsamer
+    lenkung=170.0,            # Grad je Sekunde bei voller Fahrt
+    lenk_ab=70.0,             # darunter lenkt er schwaecher, im Stand gar nicht
+    griff=7.0,                # wie schnell seitliches Rutschen abklingt (1/s)
+    kreis=13.0,               # Radius der beiden Kreise, mit denen er anstoesst
+    achse=14.0,               # Abstand der Kreise von seiner Mitte
+    einsteigen=46.0,          # so nah muss man dran sein
+    schaden_anteil=0.7,       # so viel von jedem Schaden kommt beim Fahrer an
+    aufprall=0.25,            # so viel Tempo bleibt nach einem Aufprall (rueckwaerts)
+    aufprall_hart=140.0,      # ab diesem Tempo rumst es (Ton, Ruckeln)
+    staub_ab=80.0,            # ab diesem Tempo wirbelt er Staub auf
+    staub_takt=0.05,
+    staub_farbe=(206, 184, 142),  # heller als der Schrittstaub: er soll hinter dem Wagen stehen
+    staub_groesse=3,
+    hinweis_zeit=3.0,         # so lange steht "[E] AUSSTEIGEN" nach dem Einsteigen
 )
 
 # Die Lobby: wo man beim Aufmachen landet und nach jeder Runde.
@@ -1632,6 +1662,14 @@ for _i in range(SCHWUNG_BILDER):
     BILD_MASS["spieler_schwung_%d" % _i] = (64, 64)
     for _team in TEAMS["kombi"]:
         BILD_MASS["spieler_%s_schwung_%d" % (_team["name"].lower(), _i)] = (64, 64)
+
+# Der Buggy (seit 0.34.9, siehe FAHRZEUG): leer, mit Fahrer und mit einem
+# Fahrer im Helm seiner Mannschaft. Schaut wie jede Figur nach +x.
+BILD_MASS["buggy"] = (64, 64)
+BILD_MASS["buggy_fahrer"] = (64, 64)
+BILD_MASS["buggy_schatten"] = (64, 64)
+for _team in TEAMS["kombi"]:
+    BILD_MASS["buggy_%s_fahrer" % _team["name"].lower()] = (64, 64)
 
 # Was der Spieler zu Beginn auf den Plaetzen 1 bis 6 traegt.
 #

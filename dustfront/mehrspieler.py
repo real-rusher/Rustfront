@@ -66,6 +66,7 @@ from . import world as welt_modul
 from .core import Szene
 from .entities import (Aufsammler, Brandflaeche, C4Ladung, Gegner, Geschoss, Granate,
                        Rakete, Rauchwolke, Spieler, wolke)
+from .fahrzeug import Buggy
 from .font import SCHRIFT
 from .render import Befinden, Kamera, Renderer, Ueberblendung
 from .world import Welt, freier_punkt, testkarte
@@ -146,6 +147,11 @@ class Kaempfer(Spieler):
         # letzte noch zu sehen ist.
         self.ruf_sperre = 0.0
         self.ruf_zeigen = 0.0
+        # Der Buggy, in dem er sitzt (seit 0.34.9, beim Gastgeber), und
+        # ob er drinsitzt (bei beiden - der Gast bekommt es gemeldet und
+        # zeichnet die Figur dann nicht, sie ist Teil des Wagenbilds).
+        self.fahrzeug = None
+        self.im_fahrzeug = False
         # Munitionsvorrat
         self.knapp = knapp
         self.vorrat = {w: K.MUNITION["vorrat"].get(w, 0) for w in self.waffen}
@@ -220,6 +226,13 @@ class Kaempfer(Spieler):
         # Gefallenen ein Stueck weiter, und am Ende laege er ganz woanders
         # als dort, wo sein Team ihn zuletzt gesehen hat.
         if self.am_boden:
+            schub = None
+        # Im Buggy kommt nur ein Teil an, und weggestossen wird man nicht:
+        # der Wagen haelt einen fest (seit 0.34.9, K.FAHRZEUG). Hier und
+        # nicht beim Wagen, damit Statistik und Schadenszahl genau das
+        # zaehlen, was wirklich angekommen ist.
+        if self.im_fahrzeug:
+            menge = float(menge) * K.FAHRZEUG["schaden_anteil"]
             schub = None
         # In der Lobby entscheidet das Gefecht, wo es wehtut (lobby.py).
         # Gefragt wird die Welt, weil die Figur ihr Gefecht nicht kennt.
@@ -807,6 +820,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._heilte = 0.0
         self._fremde_beute: list[tuple] = []
         self._fremde_gegner: list[tuple] = []
+        # Die Buggys der Karte (seit 0.34.9). Beim Gastgeber echte, beim
+        # Gast Attrappen, die an die gemeldete Stelle gesetzt werden.
+        self.fahrzeuge: list = []
+        self._fahrhinweis_rest = 0.0  # so lange steht die Fahrhilfe noch da
+        self._war_im_fahrzeug = False
         self._in_wirkung = False      # siehe NETZKLAENGE
         self._knoepfe: set[str] = set()
         self._waffe_wunsch = -1
@@ -853,6 +871,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
 
         self._welt_verdrahten()
         self._karte_geladen()
+        self._fahrzeuge_aufstellen()
         self.wunsch = self._wunsch_lesen()
 
         if self.ist_gastgeber:
@@ -968,7 +987,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     # Spuck des Speiers hat seit 0.26 kein Gast je gehoert.
     NETZKLAENGE = ("speien", "boss_ansage", "dash", "wurf", "medkit", "ruf",
                    "reload", "downed_not_dead", "rundenstart", "c4_explosion",
-                   "lmg_dauer", "lmg_salve", "schuss_schrot", "smoke_grenade")
+                   "lmg_dauer", "lmg_salve", "schuss_schrot", "smoke_grenade",
+                   "buggy_tuer", "buggy_aufprall")
 
     def _klang(self, name: str, lautstaerke: float = 1.0, pos=None,
                ebene: int | None = None) -> None:
@@ -1650,6 +1670,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             # laesst sich immer wechseln, auch beim Helfen.
             k.waffe_waehlen(waffe)
 
+        if k.fahrzeug is not None:
+            self._fahren(k, will, ein)
+            return
+
         k.will = will
         # Waehrend des Schwungs ist die Waffe verstaut - dann wird auch
         # nicht geschossen. Sonst schluege man mit dem Eisen und feuerte
@@ -1728,6 +1752,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Jetzt zaehlt nur das Ereignis "E gedrueckt", das je Druck genau
         # einmal kommt. Die kurze Sperre bleibt gegen einen Doppeldruck.
         if not gedrueckt or k.treppe_rest > 0:
+            return
+        # Einsteigen geht vor der Treppe: wer neben einem Buggy auf einer
+        # Rampe steht, will eher fahren als hochgehen.
+        wagen = self._freier_buggy(k)
+        if wagen is not None:
+            self._einsteigen(k, wagen)
             return
         ziel_ebene = self.welt.treppe_unter(k)
         if ziel_ebene is not None and self.welt.ebene_wechseln(k, ziel_ebene):
@@ -1856,6 +1886,213 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self.welt.klang("ruf", 0.8, k.pos, k.ebene)
 
     # ---- Schritt: Gastgeber -------------------------------------------
+    # ---- Der Buggy (seit 0.34.9) ---------------------------------------
+    def _fahrzeuge_aufstellen(self) -> None:
+        """Auf jedes F der Karte einen Buggy stellen. Nur beim Gastgeber;
+        der Gast bekommt seine mit der Weltmeldung.
+
+        Die Richtung steht nicht in der Karte: er schaut dorthin, wo von
+        den vier Himmelsrichtungen am meisten Platz vor ihm ist - auf
+        einer Strasse also die Strasse entlang und nicht gegen die
+        naechste Hauswand."""
+        for k in self.kaempfer.values():
+            self._fahrzeug_loesen(k)
+        self.fahrzeuge = []
+        if not self.ist_gastgeber:
+            return
+        marke = K.FAHRZEUG["marke"]
+        for i, e in enumerate(self.welt.ebenen):
+            for punkt in e.marken.get(marke, ()):
+                b = Buggy(pygame.Vector2(punkt), i)
+                self.welt.dazu(b)
+                b.winkel = self._fahrzeug_richtung(b)
+                b.start = (pygame.Vector2(b.pos), b.ebene, b.winkel)
+                self.fahrzeuge.append(b)
+
+    @staticmethod
+    def _fahrzeug_richtung(b) -> float:
+        bester, weiteste = 0.0, -1
+        for winkel in (0.0, 90.0, 180.0, -90.0):
+            if not b.passt(b.pos, winkel):
+                continue
+            vorn = pygame.Vector2(1, 0).rotate(winkel)
+            weit = 0
+            while weit < 24 and b.passt(b.pos + vorn * (8 * (weit + 1)), winkel):
+                weit += 1
+            if weit > weiteste:
+                bester, weiteste = winkel, weit
+        return bester
+
+    def _freier_buggy(self, k: Kaempfer):
+        """Der naechste leere Buggy in Reichweite, oder None."""
+        if (k.am_boden or k.flug > 0 or k.sturz_rest > 0
+                or k.fahrzeug is not None):
+            return None
+        bester, abstand = None, K.FAHRZEUG["einsteigen"] ** 2
+        for b in self.fahrzeuge:
+            if b.fahrer is not None or b.ebene != k.ebene or b.nur_bild:
+                continue
+            d = b.pos.distance_squared_to(k.pos)
+            if d <= abstand:
+                bester, abstand = b, d
+        return bester
+
+    def _einsteigen(self, k: Kaempfer, b) -> None:
+        b.fahrer = k
+        b.gas = b.lenk = 0.0
+        k.fahrzeug = b
+        k.im_fahrzeug = True
+        # Am Steuer schiebt ihn niemand weg - er sitzt ja im Wagen.
+        k.schiebbar = False
+        self._loslassen(k)
+        k.hilft = None
+        k.feuert = False
+        k.zielt = False
+        k.dash_rest = 0.0
+        k.will.update(0, 0)
+        k.tempo.update(0, 0)
+        k.pos.update(b.pos)
+        k.treppe_rest = K.GEFECHT["treppe_takt"]
+        self.welt.klang("buggy_tuer", 0.8, b.pos, b.ebene)
+
+    def _fahrzeug_loesen(self, k: Kaempfer) -> None:
+        """Fahrer und Wagen trennen, ohne die Figur zu versetzen."""
+        b = getattr(k, "fahrzeug", None)
+        if b is not None and b.fahrer is k:
+            b.fahrer = None
+            b.gas = b.lenk = 0.0
+        k.fahrzeug = None
+        k.im_fahrzeug = False
+        k.schiebbar = True
+
+    def _aussteigen(self, k: Kaempfer) -> None:
+        """Raus aus dem Wagen, auf den ersten freien Platz daneben."""
+        b = k.fahrzeug
+        self._fahrzeug_loesen(k)
+        if b is None:
+            return
+        k.ebene = b.ebene
+        for p in b.ausstiegsorte(k.radius):
+            if self.welt.frei(p, k.radius, b.ebene, True):
+                k.pos.update(p)
+                break
+        # Kein Platz frei: dann bleibt er, wo der Wagen ist, und der
+        # schiebt ihn im naechsten Schritt selbst hinaus.
+        k.tempo.update(0, 0)
+        k.treppe_rest = K.GEFECHT["treppe_takt"]
+        self.welt.klang("buggy_tuer", 0.7, b.pos, b.ebene)
+
+    def _fahren(self, k: Kaempfer, will, ein: dict) -> None:
+        """Am Steuer: vor und zurueck sind Gas und Bremse, links und
+        rechts lenken. Geschossen, gedasht und geheilt wird nicht - die
+        Haende sind am Lenkrad. E steigt aus."""
+        b = k.fahrzeug
+        # Die Eingabe ist eine Richtung im Bild, W ist also y < 0.
+        b.gas = 1.0 if will.y < -0.3 else (-1.0 if will.y > 0.3 else 0.0)
+        b.lenk = 1.0 if will.x > 0.3 else (-1.0 if will.x < -0.3 else 0.0)
+        k.will.update(0, 0)
+        k.tempo.update(0, 0)
+        k.feuert = False
+        k.zielt = False
+        k.hilft = None
+        self._loslassen(k)
+        if self._e_gedrueckt(ein) and k.treppe_rest <= 0:
+            self._aussteigen(k)
+
+    def _fahrzeuge_nachziehen(self) -> None:
+        """Nach dem Weltschritt: jeder Fahrer sitzt dort, wo sein Wagen
+        jetzt steht. Wer nicht mehr fahren kann - tot, am Boden, gegangen
+        -, ist draussen."""
+        for b in self.fahrzeuge:
+            k = b.fahrer
+            if k is None:
+                continue
+            if k.fahrzeug is not b:
+                b.fahrer = None
+                b.gas = b.lenk = 0.0
+                continue
+            if not k.lebt or self.kaempfer.get(k.nummer) is not k:
+                self._fahrzeug_loesen(k)
+                continue
+            if k.am_boden:
+                # Wer am Steuer umfaellt, liegt neben dem Wagen - sonst
+                # koennte ihm niemand aufhelfen.
+                self._aussteigen(k)
+                continue
+            k.pos.update(b.pos)
+            k.ebene = b.ebene
+            k.tempo.update(0, 0)
+
+    def _fahrzeuge_uebernehmen(self, eintraege) -> None:
+        """Beim Gast: die gemeldeten Buggys hinstellen, mit Zwischenlage
+        wie bei den Gegnern (vorher -> jetzt)."""
+        if not isinstance(eintraege, list):
+            eintraege = []
+        alt = {getattr(b, "netz_kennung", 0): b for b in self.fahrzeuge}
+        neu = []
+        for e in eintraege:
+            try:
+                x, y = float(e[0]), float(e[1])
+                winkel, ebene = float(e[2]), int(e[3])
+                kennung, fahrer, fahrt = int(e[4]), int(e[5]), float(e[6])
+            except (TypeError, ValueError, IndexError, KeyError):
+                continue
+            b = alt.get(kennung)
+            if b is None:
+                b = Buggy(pygame.Vector2(x, y), ebene, winkel, nur_bild=True)
+                b.netz_kennung = kennung
+                b.welt = self.welt
+            else:
+                b.vorher.update(b.pos)
+                b.pos.update(x, y)
+            b.winkel = winkel
+            b.ebene = ebene
+            k = self.kaempfer.get(fahrer) if fahrer >= 0 else None
+            b.besetzt = fahrer >= 0
+            b.team = k.team if k is not None else -1
+            b.geschw = b.vorn * fahrt
+            neu.append(b)
+        self.fahrzeuge = neu
+
+    def _fahrhinweis_fuehren(self, dt: float) -> None:
+        """Nach dem Einsteigen steht kurz, wie man faehrt und aussteigt."""
+        drin = self.ich is not None and self.ich.im_fahrzeug
+        if drin and not self._war_im_fahrzeug:
+            self._fahrhinweis_rest = K.FAHRZEUG["hinweis_zeit"]
+        self._war_im_fahrzeug = drin
+        self._fahrhinweis_rest = (max(0.0, self._fahrhinweis_rest - dt)
+                                  if drin else 0.0)
+
+    def _fahrzeug_hinweis(self, ziel) -> None:
+        """Neben einem leeren Buggy in Reichweite: [E] EINSTEIGEN. Im
+        Wagen, die ersten Sekunden: wie man faehrt und wieder rauskommt."""
+        ich = self.ich
+        if ich is None or not ich.lebt or ich.am_boden or self.vorbei:
+            return
+        taste_e = self._tastenname("nutzen")
+        if ich.im_fahrzeug:
+            if self._fahrhinweis_rest <= 0.0:
+                return
+            p = self.kamera.zu_bild(ich.pos)
+            text = "[%s/%s] GAS  [%s/%s] LENKEN  [%s] AUSSTEIGEN" % (
+                self._tastenname("vor"), self._tastenname("zurueck"),
+                self._tastenname("links"), self._tastenname("rechts"), taste_e)
+            SCHRIFT.zeichnen(ziel, text, int(p.x), int(p.y) + 30, K.C_CREAM, 1,
+                             ausrichtung="mitte")
+            return
+        if ich.flug > 0 or ich.ebene != self.blick:
+            return
+        reichweite = K.FAHRZEUG["einsteigen"] ** 2
+        for b in self.fahrzeuge:
+            besetzt = b.fahrer is not None or b.besetzt
+            if (besetzt or b.ebene != ich.ebene
+                    or b.pos.distance_squared_to(ich.pos) > reichweite):
+                continue
+            p = self.kamera.zu_bild(b.pos)
+            SCHRIFT.zeichnen(ziel, "[%s] EINSTEIGEN" % taste_e, int(p.x),
+                             int(p.y) + 30, K.C_CREAM, 1, ausrichtung="mitte")
+            return
+
     def _schritt_gastgeber(self, dt: float) -> None:
         self.hinweis = ""
         self._meldung_rest = max(0.0, self._meldung_rest - dt)
@@ -1927,6 +2164,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._gegnerlast_zaehlen()
         self._rpg_regeln()
         self.welt.schritt(dt)
+        self._fahrzeuge_nachziehen()
         if self.in_lobby:
             self._lobby_munition()        # nach dem Schuss, siehe dort
         self._ziehen(dt)
@@ -2613,6 +2851,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self.welt.klang("rundenstart", 0.7)
         # Neue Runde, neue Seiten - aber innerhalb der Runde bleiben sie.
         self._einstiegszonen_waehlen()
+        # Die Buggys zurueck an ihre Plaetze, leer. Sonst stuende nach ein
+        # paar Runden jeder irgendwo, und wer weiss, wo sie stehen, waere
+        # im Vorteil.
+        for b in self.fahrzeuge:
+            if b.fahrer is not None:
+                self._fahrzeug_loesen(b.fahrer)
+            b.zuruecksetzen()
         for k in list(self.kaempfer.values()):
             k.raus = False
             self._wieder_einsteigen(k)
@@ -2771,6 +3016,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # man wuerde die Ausruestung nach dem Gegner aussuchen, den man
         # gerade vor sich hat, und die Entscheidung waere keine mehr.
         self._loadout_anlegen(k)
+        self._fahrzeug_loesen(k)
         k.pos.update(self._einstiegsort(k.team, ausser=k))
         k.vorher.update(k.pos)
         k.tempo.update(0, 0)
@@ -3122,6 +3368,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 # noch nachleuchtet.
                 "zg": -1 if k.zieht is None else k.zieht,
                 "rz": round(k.ruf_zeigen, 2),
+                # Sitzt er im Buggy? Dann zeichnet der Gast ihn nicht.
+                "fz": k.im_fahrzeug,
             })
         flug = []
         gegner = []
@@ -3176,8 +3424,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         brand = [[round(b.pos.x, 1), round(b.pos.y, 1), b.ebene,
                   round(b.radius, 1), round(b.alter, 2), b.kennung]
                  for b in self.welt.feuer if b.lebt]
+        # Die Buggys (seit 0.34.9): Ort, Richtung, Ebene, Kennung, wer am
+        # Steuer sitzt (-1 = niemand) und das Tempo in Fahrtrichtung - aus
+        # dem macht der Gast den Staub selbst.
+        wagen = [[round(b.pos.x, 1), round(b.pos.y, 1), round(b.winkel, 1),
+                  b.ebene, b.kennung,
+                  -1 if b.fahrer is None else b.fahrer.nummer,
+                  round(b.fahrt)]
+                 for b in self.fahrzeuge]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
-                "feuer": brand,
+                "feuer": brand, "fahrzeuge": wagen,
                 "wirkung": wirkung,
                 "spieler": spieler, "schuesse": flug, "beute": beute,
                 "gegner": gegner, "welle": self.welle,
@@ -3309,6 +3565,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Der Gast simuliert nichts, seine Rueckmeldungen muessen aber
         # trotzdem laufen: Staubringe und Aufschriften altern hier.
         self.welt.effekte_schritt(dt)
+        for b in self.fahrzeuge:
+            b.staub_gast(dt)
         self._aufsetzen_erkennen()
         if self.gast.offen:
             self._kosmetik_schritt()
@@ -3380,6 +3638,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         for k in self.kaempfer.values():
             self.welt.dazu(k)
         self._karte_geladen()
+        self._fahrzeuge_aufstellen()
         return True
 
     @staticmethod
@@ -3521,6 +3780,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             zieht = int(eintrag.get("zg", -1))
             k.zieht = None if zieht < 0 else zieht
             k.ruf_zeigen = float(eintrag.get("rz", 0.0))
+            k.im_fahrzeug = bool(eintrag.get("fz", False))
             k.rpg = bool(eintrag.get("rp", False))
             if k.rpg and k.waffen != ["rakete"]:
                 # Beim Gast wird nichts simuliert: die Waffe muss aus der
@@ -3545,7 +3805,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             k.erfasst = self.kaempfer.get(nr) if nr >= 0 else None
         # Der Renderer laeuft ueber welt.wesen: beim Gast wird die Liste
         # gesetzt statt simuliert.
-        self.welt.wesen = [k for k in self.kaempfer.values() if k.lebt]
+        self._fahrzeuge_uebernehmen(meldung.get("fahrzeuge", []))
+        self.welt.wesen = ([k for k in self.kaempfer.values() if k.lebt]
+                           + list(self.fahrzeuge))
         self.welt.neue = []
         if self.ich is not None:
             self.welt.held = self.ich
@@ -3778,6 +4040,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         if not self.ist_gastgeber:
             self._eigenes_zielen()
         self._bereich_melden()
+        self._fahrhinweis_fuehren(dt)
         self._befinden_fuehren(dt)
         self._ueberblendung.schritt(dt)
         if self.ich.ebene != self._letzte_ebene:
@@ -4377,6 +4640,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._ueberblendung.zeichnen(ziel)
         self._ueberblendung.merken(ziel)
         self._namen_zeichnen(ziel)
+        self._fahrzeug_hinweis(ziel)
         self._kreispfeil(ziel)
         self._randpfeile(ziel)
         self._erfassung_zeichnen(ziel)
@@ -4972,6 +5236,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 continue
             eigen = (k is self.ich)
             farbe = self._farbe_fuer(k, eigen)
+            if k.im_fahrzeug:
+                # Im Buggy steht alles ein Stueck hoeher, sonst laegen
+                # Name und Balken mitten auf dem Wagen.
+                p = p - pygame.Vector2(0, 12)
             SCHRIFT.zeichnen(ziel, k.name, int(p.x), int(p.y) - 26, farbe, 1,
                              ausrichtung="mitte")
             if self.schutz_an and k.unverwundbar > 0 and not k.am_boden:

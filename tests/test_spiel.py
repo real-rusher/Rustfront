@@ -4167,12 +4167,203 @@ for _ri68 in (pygame.Vector2(1, 0), pygame.Vector2(0, -1), pygame.Vector2(-1, 1)
           "%d Punkte, Schwerpunkt %s" % (len(_pk68), _schwer68 - _m68))
 w.verlassen(); ga.verlassen()
 
+# ─────────────────────────────────────────────────────────────────────
+# 0.34.9: "Bau mal einen kleinen Top-down-Buggy, der auf der Wuestenkarte
+# spawnt und mit dem man rumfahren kann. Unzerstoerbar, aber wer drin ist,
+# nimmt 70 % vom Schaden. Muss gut von oben aussehen."
+from dustfront.fahrzeug import Buggy
+
+_bilder69 = None
+w, ga = gefechtspaar("pvp", karte="staubtal")
+_bilder69 = w.renderer.bilder
+for _n69 in ("buggy", "buggy_fahrer", "buggy_rot_fahrer", "buggy_blau_fahrer",
+             "buggy_schatten"):
+    _s69 = _bilder69.bild(_n69)
+    _deckt69 = sum(1 for x_ in range(0, 64, 2) for y_ in range(0, 64, 2)
+                   if _s69.get_at((x_, y_))[3] > (40 if "schatten" in _n69 else 200))
+    pruef("Das Bild %s ist gezeichnet und nicht leer" % _n69,
+          _s69.get_size() == (64, 64) and _deckt69 > 60,
+          "%s, %d deckende Punkte" % (_s69.get_size(), _deckt69))
+pruef("Kein Buggybild fehlt", not [f for f in _bilder69.fehler if "buggy" in f],
+      str(_bilder69.fehler))
+_leer69 = _bilder69.bild("buggy")
+_voll69 = _bilder69.bild("buggy_rot_fahrer")
+pruef("Mit Fahrer sieht er anders aus als leer",
+      any(_leer69.get_at((x_, 32)) != _voll69.get_at((x_, 32)) for x_ in range(20, 36)))
+pruef("Er ist laenger als breit (schaut nach +x wie jede Figur)",
+      _leer69.get_bounding_rect().width > _leer69.get_bounding_rect().height + 10,
+      str(_leer69.get_bounding_rect()))
+
+pruef("Auf STAUBTAL stehen drei Buggys", len(w.fahrzeuge) == 3, str(len(w.fahrzeuge)))
+pruef("Alle im Tal, und jeder passt dorthin, wo er steht",
+      all(b.ebene == 0 and b.passt(b.pos) for b in w.fahrzeuge))
+pruef("Der Wagen ist kein Ziel fuer Kugeln",
+      all(not b.trefferbar for b in w.fahrzeuge))
+pruef("Ohne F in der Karte gibt es keinen (Lobby, Testkarte)",
+      all(not e.marken.get("F") for e in W.karte_lesen("lobby")[0].ebenen))
+
+fahrer69 = w.kaempfer[ga.meine_nummer]
+andere69 = w.kaempfer[0]
+b69 = min(w.fahrzeuge, key=lambda b_: b_.pos.x)       # der in Westdorf
+_e69 = {"will": [0.0, 0.0], "ziel": [b69.pos.x + 80, b69.pos.y],
+        "knoepfe": ["nutzen"]}
+
+def _hin69(k_, p_):
+    k_.pos.update(p_); k_.vorher.update(p_); k_.ebene = 0
+    k_.treppe_rest = 0.0; k_.tempo.update(0, 0)
+
+_hin69(fahrer69, b69.pos + pygame.Vector2(0, 200))
+w._anwenden(fahrer69, _e69)
+pruef("Weit weg steigt man nicht ein", not fahrer69.im_fahrzeug)
+_hin69(fahrer69, b69.ausstiegsorte(fahrer69.radius)[0])
+w._anwenden(fahrer69, _e69)
+pruef("Daneben steigt man mit E ein",
+      fahrer69.im_fahrzeug and b69.fahrer is fahrer69 and fahrer69.fahrzeug is b69)
+pruef("Der Fahrer sitzt im Wagen", fahrer69.pos.distance_to(b69.pos) < 1.0)
+_hin69(andere69, b69.ausstiegsorte(andere69.radius)[1])
+w._anwenden(andere69, dict(_e69, ziel=[andere69.pos.x, andere69.pos.y]))
+pruef("In einen besetzten steigt kein Zweiter",
+      not andere69.im_fahrzeug and b69.fahrer is fahrer69)
+_hin69(andere69, b69.pos + pygame.Vector2(0, 600))
+
+def _fahr69(will_, sekunden_, ziel_=None):
+    for _ in range(int(sekunden_ / K.FIXED_DT)):
+        w._anwenden(fahrer69, {"will": list(will_), "ziel": [0, 0], "knoepfe": [],
+                               "feuert": True})
+        w.welt.schritt(K.FIXED_DT)
+        w._fahrzeuge_nachziehen()
+        if ziel_ is not None:
+            ziel_.append((pygame.Vector2(b69.pos), b69.winkel,
+                          b69.passt(b69.pos, b69.winkel)))
+
+_start69, _w69 = pygame.Vector2(b69.pos), b69.winkel
+_lenk69 = []
+_fahr69((1.0, 0.0), 0.5, _lenk69)
+pruef("Im Stand lenkt er nicht (kein Drehen auf der Stelle)",
+      abs(b69.winkel - _w69) < 0.01 and b69.pos.distance_to(_start69) < 1.0,
+      "%.1f Grad" % (b69.winkel - _w69))
+_spur69 = []
+_fahr69((0.0, -1.0), 1.0, _spur69)
+_weg69 = b69.pos - _start69
+pruef("W gibt Gas: er faehrt in seine Richtung los",
+      _weg69.length() > 80 and _weg69.normalize().dot(pygame.Vector2(1, 0).rotate(_w69)) > 0.9,
+      "%.0f px" % _weg69.length())
+pruef("Er ist schneller als zu Fuss",
+      b69.geschw.length() > K.SPIELER["tempo"] * 1.5, "%.0f" % b69.geschw.length())
+pruef("Der Fahrer faehrt mit", fahrer69.pos.distance_to(b69.pos) < 1.0)
+pruef("Am Steuer wird nicht geschossen", not fahrer69.feuert)
+_w69b = b69.winkel
+_fahr69((0.7, -0.7), 0.4, _spur69)
+pruef("A/D lenken, solange er rollt",
+      abs((b69.winkel - _w69b + 180) % 360 - 180) > 25, "%.1f Grad" % (b69.winkel - _w69b))
+_fahr69((0.0, 1.0), 2.5, _spur69)
+pruef("S bremst und faehrt dann rueckwaerts", b69.fahrt < -20, "%.0f" % b69.fahrt)
+pruef("Er steckt dabei nie in einer Mauer", all(ok_ for _p, _w, ok_ in _spur69))
+
+# Gegen eine Mauer: er bleibt davor stehen und steckt nie darin.
+_wand69 = []
+b69.geschw.update(0, 0)
+for _wi69 in (0.0, 90.0, 180.0, -90.0):
+    b69.winkel = _wi69
+    if b69.passt(b69.pos):
+        break
+_fahr69((0.0, -1.0), 6.0, _wand69)
+_ende69 = [p_ for p_, _w, _ok in _wand69[-60:]]
+pruef("Gegen eine Mauer: nie darin", all(ok_ for _p, _w, ok_ in _wand69))
+pruef("... und irgendwann steht er davor (oder gleitet ab, aber nicht hindurch)",
+      all(w.welt.frei(c_, b69.radius, 0, True) for c_ in b69.kreise()))
+
+# Schaden: 70 % kommen beim Fahrer an, kein Stoss.
+fahrer69.unverwundbar = 0.0
+fahrer69.leben = 100.0
+fahrer69.tempo.update(0, 0)
+fahrer69.schaden(10.0, pygame.Vector2(400, 0), andere69)
+pruef("Im Buggy kommen 70 % vom Schaden an",
+      abs((100.0 - fahrer69.leben) - 10.0 * K.FAHRZEUG["schaden_anteil"]) < 1e-6
+      and abs(K.FAHRZEUG["schaden_anteil"] - 0.7) < 1e-9,
+      "%.2f" % (100.0 - fahrer69.leben))
+pruef("... und er wird nicht weggestossen", fahrer69.tempo.length() < 1e-6)
+andere69.unverwundbar = 0.0
+andere69.leben = 100.0
+andere69.schaden(10.0, None, fahrer69)
+pruef("Zu Fuss kommt der volle Schaden an", abs(andere69.leben - 90.0) < 1e-6)
+fahrer69.leben = fahrer69.max_leben
+b69.schaden(10000.0, None, andere69)
+w.welt._raster_bauen()
+pruef("Der Buggy selbst ist unzerstoerbar",
+      b69.lebt and b69 in w.welt.wesen and b69 not in list(w.welt.nahe(b69.pos, 60, 0)))
+pruef("Eine Kugel trifft am Wagen den Fahrer, nicht den Wagen",
+      w.welt.treffer(b69.pos, 2.0, 0, andere69.fraktion) is fahrer69)
+
+# Wer im Weg steht, wird beiseitegeschoben, nicht ueberfahren.
+b69.geschw.update(0, 0)
+b69.winkel = Gefecht._fahrzeug_richtung(b69)
+_vorn69 = pygame.Vector2(1, 0).rotate(b69.winkel)
+_hin69(andere69, b69.pos + _vorn69 * 60)
+_fahr69((0.0, -1.0), 0.8)
+_nah69 = min(c_.distance_to(andere69.pos) for c_ in b69.kreise())
+pruef("Wer vor dem Wagen steht, wird beiseitegeschoben",
+      _nah69 >= b69.radius + andere69.radius - 2.0, "%.1f" % _nah69)
+
+# Der Gast sieht ihn - mit Fahrer, und seine eigene Figur nicht extra.
+for _ in range(6):
+    w.schritt(K.FIXED_DT)
+    ga.schritt(K.FIXED_DT)
+_gb69 = [b_ for b_ in ga.fahrzeuge if b_.besetzt]
+pruef("Der Gast sieht alle drei Buggys", len(ga.fahrzeuge) == 3, str(len(ga.fahrzeuge)))
+pruef("... den besetzten an derselben Stelle",
+      len(_gb69) == 1 and _gb69[0].pos.distance_to(b69.pos) < 2.0,
+      str([b_.pos for b_ in _gb69]))
+pruef("... mit Fahrer im Bild", _gb69 and "fahrer" in _gb69[0].bild)
+pruef("Der Gast weiss, dass er im Wagen sitzt", ga.ich.im_fahrzeug)
+pruef("Die Buggys stehen beim Gast in der Welt (und werden gezeichnet)",
+      all(b_ in ga.welt.wesen for b_ in ga.fahrzeuge))
+_bild69 = pygame.Surface((K.GAME_W, K.GAME_H))
+ga.zeichnen(_bild69, 0.5)
+pruef("Der Gast zeichnet das ohne Fehler", True)
+ga._fahrhinweis_rest = 2.0
+_h69 = pygame.Surface((K.GAME_W, K.GAME_H)); _h69.fill((0, 0, 0))
+ga.kamera.pos.update(ga.ich.pos); ga.kamera.zoom = 1.0
+ga._fahrzeug_hinweis(_h69)
+pruef("Im Wagen steht kurz, wie man faehrt und aussteigt",
+      any(_h69.get_at((x_, y_))[:3] != (0, 0, 0)
+          for x_ in range(0, K.GAME_W, 3) for y_ in range(0, K.GAME_H, 3)))
+
+# Aussteigen mit E: daneben, nicht im Wagen.
+fahrer69.treppe_rest = 0.0
+w._anwenden(fahrer69, dict(_e69, ziel=[0, 0]))
+pruef("Mit E steigt man wieder aus",
+      not fahrer69.im_fahrzeug and b69.fahrer is None and fahrer69.fahrzeug is None)
+pruef("... und steht neben dem Wagen, nicht darin",
+      min(c_.distance_to(fahrer69.pos) for c_ in b69.kreise())
+      >= b69.radius + fahrer69.radius - 0.5
+      and w.welt.frei(fahrer69.pos, fahrer69.radius, 0, True))
+pruef("Ohne Fahrer rollt er aus und bleibt stehen",
+      (lambda: ([w.welt.schritt(K.FIXED_DT) for _ in range(400)],
+                b69.geschw.length() < 1.0)[1])())
+
+# Wer am Steuer stirbt, ist draussen; zur neuen Runde steht alles wieder.
+_hin69(fahrer69, b69.ausstiegsorte(fahrer69.radius)[0])
+w._anwenden(fahrer69, _e69)
+fahrer69.lebt = False
+w._fahrzeuge_nachziehen()
+pruef("Wer stirbt, sitzt nicht mehr im Wagen", b69.fahrer is None and not fahrer69.im_fahrzeug)
+fahrer69.lebt = True
+_hin69(fahrer69, b69.ausstiegsorte(fahrer69.radius)[0])
+w._anwenden(fahrer69, _e69)
+w._runde_aufbauen()
+pruef("Zur neuen Runde stehen alle Buggys leer an ihrem Platz",
+      all(b_.fahrer is None and b_.pos == b_.start[0] for b_ in w.fahrzeuge)
+      and not fahrer69.im_fahrzeug)
+w.verlassen(); ga.verlassen()
+
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
 pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)
 w2, _ga2 = gefechtspaar("pvp", karte="gibtsnicht")
 pruef("Das Gefecht laeuft trotzdem, auf der Testkarte",
       w2.karte == "" and len(w2.welt.ebenen) == 3, w2.karte)
+pruef("Dort steht kein Buggy", not w2.fahrzeuge)
 w2.verlassen(); _ga2.verlassen()
 
 # ─────────────────────────────────────────────────────────────────────

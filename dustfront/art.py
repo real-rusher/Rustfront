@@ -2050,3 +2050,241 @@ def _vignette():
         pygame.draw.rect(s, (0, 0, 0, a), (i, i, K.GAME_W - 2 * i,
                                            K.GAME_H - 2 * i), 1)
     return s
+
+
+# ──────────────────────────────── Der Buggy (seit 0.34.9)
+#
+# Gezeichnet wird in vierfacher Groesse und danach weich verkleinert: ein
+# Fahrzeug besteht aus vielen schmalen Rohren und Kanten, und Pixel fuer
+# Pixel gezeichnet zerfielen die bei 64 Pixeln zu Treppen. Die Masse unten
+# sind trotzdem in Bildpixeln angegeben (`_bp`), damit man sie mit der
+# Figur (etwa 24 Pixel) vergleichen kann. Er schaut nach +x wie jede Figur;
+# Licht von oben links wie bei den Mauern.
+
+_BUGGY_SS = 4
+BUGGY_LACK = (204, 156, 62)          # ausgeblichenes Gelb, passt in den Sand
+BUGGY_LACK_DK = (118, 82, 34)
+BUGGY_LACK_HELL = (236, 196, 112)
+BUGGY_ROHR = (156, 154, 148)
+BUGGY_ROHR_DK = (62, 60, 56)
+
+
+def _bp(x, y):
+    """Bildpixel (Mitte = 0, 0) in Punkte der grossen Zeichenflaeche."""
+    m = 32 * _BUGGY_SS
+    return (m + x * _BUGGY_SS, m + y * _BUGGY_SS)
+
+
+def _bp_rect(x, y, w, h):
+    return pygame.Rect(round(_bp(x, y)[0]), round(_bp(x, y)[1]),
+                       round(w * _BUGGY_SS), round(h * _BUGGY_SS))
+
+
+def _rohr(s, a, b, dicke=1.6, farbe=BUGGY_ROHR, kante=BUGGY_ROHR_DK):
+    """Ein Rohr von oben: dunkler Rand, heller Kern, runde Enden."""
+    for f, d in ((kante, dicke), (farbe, dicke * 0.55)):
+        breite = max(1, round(d * _BUGGY_SS))
+        pygame.draw.line(s, f, _bp(*a), _bp(*b), breite)
+        for p in (a, b):
+            pygame.draw.circle(s, f, _bp(*p), breite / 2)
+
+
+def _reifen(s, x, y, lang, breit):
+    """Ein Stollenreifen von oben: man sieht die Lauffläche mit Stollen."""
+    r = _bp_rect(x - lang / 2, y - breit / 2, lang, breit)
+    pygame.draw.rect(s, (22, 19, 17), r, border_radius=round(2.2 * _BUGGY_SS))
+    pygame.draw.rect(s, (46, 41, 37), r.inflate(-_BUGGY_SS, -_BUGGY_SS),
+                     border_radius=round(1.8 * _BUGGY_SS))
+    # Stollen quer zur Laufrichtung, abwechselnd versetzt
+    n = int(lang / 2)
+    for i in range(n):
+        sx = x - lang / 2 + 1.2 + i * (lang - 2.4) / max(1, n - 1)
+        off = 0.6 if i % 2 else -0.6
+        a = (sx, y - breit / 2 + 1.0 + max(0, off))
+        b = (sx, y + breit / 2 - 1.0 + min(0, off))
+        pygame.draw.line(s, (98, 90, 80), _bp(*a), _bp(*b), round(0.9 * _BUGGY_SS))
+    # Glanz der Flanke oben links
+    pygame.draw.line(s, (96, 88, 80), _bp(x - lang / 2 + 1.5, y - breit / 2 + 0.6),
+                     _bp(x + lang / 2 - 1.5, y - breit / 2 + 0.6),
+                     max(1, round(0.5 * _BUGGY_SS)))
+
+
+def _buggy_zeichnen(fahrer=None):
+    """Der Buggy von oben, leer oder mit Fahrer (`fahrer` = (rumpf, kante,
+    akzent) seiner Mannschaft)."""
+    ss = _BUGGY_SS
+    gross = _flaeche(64 * ss, 64 * ss)
+    s = gross
+    rnd = random.Random(3409)
+
+    # Achsen und Querlenker unter allem anderen
+    for vx, vy in ((15, 12), (-15, 13)):
+        for sy in (-1, 1):
+            _rohr(s, (vx - 3, sy * 6), (vx, sy * (vy - 2)), 1.6, (96, 92, 86))
+            _rohr(s, (vx + 3, sy * 6), (vx, sy * (vy - 2)), 1.6, (96, 92, 86))
+    # Reifen: hinten breiter, wie bei jedem Wuestenbuggy
+    for sy in (-1, 1):
+        _reifen(s, 15, sy * 12.5, 11, 6.5)
+        _reifen(s, -15, sy * 13, 13, 8)
+
+    # Wanne: vorn schmal, hinten breit, als Vieleck
+    umriss = [(23, -5), (21, -8), (12, -10), (4, -11), (-10, -11), (-19, -10),
+              (-21, -7), (-21, 7), (-19, 10), (-10, 11), (4, 11), (12, 10),
+              (21, 8), (23, 5)]
+    pygame.draw.polygon(s, BUGGY_LACK_DK, [_bp(*p) for p in umriss])
+    innen = [(x * 0.94 - 0.2, y * 0.86) for x, y in umriss]
+    pygame.draw.polygon(s, BUGGY_LACK, [_bp(*p) for p in innen])
+    # Licht von oben links: helle Kante an der oberen Seite, dunkle unten
+    pygame.draw.lines(s, BUGGY_LACK_HELL, False,
+                      [_bp(*p) for p in [(21, -6.6), (12, -8.4), (4, -9.2),
+                                         (-10, -9.2), (-18, -8.4)]],
+                      round(1.0 * ss))
+    pygame.draw.lines(s, (160, 116, 50), False,
+                      [_bp(*p) for p in [(21, 6.6), (12, 8.4), (4, 9.2),
+                                         (-10, 9.2), (-18, 8.4)]],
+                      round(1.0 * ss))
+    # Kotfluegel ueber den Vorderraedern
+    for sy in (-1, 1):
+        r = _bp_rect(10, sy * 10.5 - 2.2, 10, 4.4)
+        pygame.draw.ellipse(s, BUGGY_LACK_DK, r)
+        pygame.draw.ellipse(s, BUGGY_LACK if sy > 0 else BUGGY_LACK_HELL,
+                            r.inflate(-ss, -ss))
+    # Haube mit zwei dunklen Streifen - von oben das, was man zuerst sieht
+    for sy in (-1, 1):
+        pygame.draw.polygon(s, (58, 40, 26), [_bp(*p) for p in [
+            (21.5, sy * 1.2), (21.5, sy * 3.0), (7, sy * 3.6), (7, sy * 1.4)]])
+    pygame.draw.line(s, BUGGY_LACK_DK, _bp(7, -7.5), _bp(7, 7.5), round(0.8 * ss))
+    # Staub und abgeplatzter Lack
+    for _ in range(46):
+        x = rnd.uniform(-19, 21)
+        y = rnd.uniform(-8.5, 8.5)
+        f = rnd.choice([(170, 128, 58), (150, 108, 52), (214, 178, 112),
+                        (122, 84, 46)])
+        pygame.draw.circle(s, f, _bp(x, y), rnd.uniform(0.25, 0.6) * ss)
+
+    # Rammbuegel und Scheinwerfer
+    _rohr(s, (21.5, -8.5), (25, -6.5), 1.5)
+    _rohr(s, (25, -6.5), (25, 6.5), 1.5)
+    _rohr(s, (21.5, 8.5), (25, 6.5), 1.5)
+    _rohr(s, (23, -3), (25, -3), 1.1)
+    _rohr(s, (23, 3), (25, 3), 1.1)
+    for sy in (-1, 1):
+        pygame.draw.circle(s, (40, 34, 28), _bp(22.2, sy * 5.6), 1.9 * ss)
+        pygame.draw.circle(s, (255, 236, 170), _bp(22.4, sy * 5.6), 1.3 * ss)
+        pygame.draw.circle(s, (255, 255, 236), _bp(22.0, sy * 5.9), 0.55 * ss)
+
+    # Motor hinten, offen: Block, Rippen, Luftfilter, Auspuff
+    block = _bp_rect(-20, -6.5, 9, 13)
+    pygame.draw.rect(s, (40, 38, 36), block, border_radius=round(1.5 * ss))
+    pygame.draw.rect(s, (88, 84, 78), block.inflate(-ss, -ss),
+                     border_radius=round(1.2 * ss))
+    for i in range(5):
+        y = -4.8 + i * 2.4
+        pygame.draw.line(s, (58, 56, 52), _bp(-19, y), _bp(-12, y), round(0.7 * ss))
+    pygame.draw.circle(s, (30, 28, 26), _bp(-14.5, -3.2), 2.6 * ss)
+    pygame.draw.circle(s, (168, 52, 40), _bp(-14.5, -3.2), 2.0 * ss)
+    pygame.draw.circle(s, (210, 90, 70), _bp(-15.0, -3.7), 0.8 * ss)
+    for sy in (-1, 1):
+        _rohr(s, (-17, sy * 7.5), (-23.5, sy * 8.5), 1.7, (178, 172, 160), (52, 48, 44))
+        pygame.draw.circle(s, (20, 18, 16), _bp(-23.6, sy * 8.5), 0.6 * ss)
+    # Ersatzkanister quer hinter dem Sitz
+    pygame.draw.rect(s, (40, 50, 34), _bp_rect(-10.5, 2.5, 3.5, 6.5),
+                     border_radius=round(0.6 * ss))
+    pygame.draw.rect(s, (86, 104, 62), _bp_rect(-10.0, 3.0, 2.5, 5.5),
+                     border_radius=round(0.5 * ss))
+
+    # Cockpit
+    cockpit = _bp_rect(-9, -7.5, 15, 15)
+    pygame.draw.rect(s, (24, 20, 18), cockpit, border_radius=round(3 * ss))
+    pygame.draw.rect(s, (46, 40, 36), cockpit.inflate(-ss, -ss),
+                     border_radius=round(2.6 * ss))
+    # Armaturenbrett
+    pygame.draw.rect(s, (30, 28, 26), _bp_rect(4, -6, 1.8, 12),
+                     border_radius=round(0.6 * ss))
+    if fahrer is None:
+        # Sitzschale mit Kopfstuetze
+        pygame.draw.rect(s, (22, 18, 16), _bp_rect(-7.5, -4.5, 7, 9),
+                         border_radius=round(2 * ss))
+        pygame.draw.rect(s, (92, 62, 44), _bp_rect(-7, -4, 6, 8),
+                         border_radius=round(1.8 * ss))
+        pygame.draw.rect(s, (112, 78, 56), _bp_rect(-5, -2.5, 3.5, 5),
+                         border_radius=round(1 * ss))
+        # Gurte
+        for sy in (-1, 1):
+            pygame.draw.line(s, (176, 60, 44), _bp(-6.5, sy * 3.2),
+                             _bp(-1.5, sy * 1.2), round(0.8 * ss))
+    # Lenkrad: von oben ein schmales, schraeges Oval mit Speiche
+    pygame.draw.ellipse(s, (16, 14, 12), _bp_rect(1.4, -4.2, 2.6, 8.4))
+    pygame.draw.ellipse(s, (46, 40, 36), _bp_rect(2.0, -3.3, 1.4, 6.6))
+    pygame.draw.line(s, (16, 14, 12), _bp(2.7, 0), _bp(4.2, 0), round(0.9 * ss))
+
+    if fahrer is not None:
+        rumpf, kante, akzent = fahrer
+        hell = tuple(min(255, k + 34) for k in rumpf)
+        # Schultern quer, die Arme vorn am Lenkrad
+        sch = _bp_rect(-8, -6.6, 6.5, 13.2)
+        pygame.draw.ellipse(s, kante, sch)
+        pygame.draw.ellipse(s, rumpf, sch.inflate(-ss, -ss))
+        for sy in (-1, 1):
+            pygame.draw.line(s, kante, _bp(-4, sy * 4.6), _bp(2.6, sy * 3.0),
+                             round(2.0 * ss))
+            pygame.draw.line(s, rumpf, _bp(-4, sy * 4.6), _bp(2.4, sy * 3.0),
+                             round(1.1 * ss))
+            pygame.draw.circle(s, (34, 28, 24), _bp(2.7, sy * 3.0), 1.0 * ss)
+        # Helm mit Visier nach vorn
+        pygame.draw.circle(s, kante, _bp(-3.6, 0), 4.8 * ss)
+        pygame.draw.circle(s, rumpf, _bp(-3.6, 0), 4.0 * ss)
+        pygame.draw.circle(s, hell, _bp(-4.8, -1.2), 1.8 * ss)
+        visier = _bp_rect(-3.6 - 4.4, -4.4, 8.8, 8.8)
+        pygame.draw.arc(s, (28, 34, 42), visier, -1.05, 1.05, round(1.6 * ss))
+        pygame.draw.arc(s, akzent, visier.inflate(-ss, -ss), -0.5, 0.2,
+                        round(0.6 * ss))
+        # Mittelstreifen auf dem Helm, damit man die Blickrichtung sieht
+        pygame.draw.line(s, kante, _bp(-7.4, 0), _bp(-1.0, 0), round(0.7 * ss))
+
+    # Ueberrollkaefig ueber dem Fahrer: zwei Buegel und die Laengsrohre
+    for sy in (-1, 1):
+        _rohr(s, (-9, sy * 8.6), (5.5, sy * 7.6))
+        _rohr(s, (5.5, sy * 7.6), (11, sy * 5.0), 1.4)
+    _rohr(s, (-9, -8.6), (-9, 8.6), 2.0)
+    _rohr(s, (5.5, -7.6), (5.5, 7.6), 1.5)
+    _rohr(s, (11, -5.0), (11, 5.0), 1.4)
+    _rohr(s, (-9, -8.6), (-17, -6.5), 1.4)
+    _rohr(s, (-9, 8.6), (-17, 6.5), 1.4)
+
+    klein = pygame.transform.smoothscale(gross, (64, 64))
+    return _rand(klein)
+
+
+@platzhalter("buggy")
+def _buggy():
+    return _buggy_zeichnen()
+
+
+@platzhalter("buggy_fahrer")
+def _buggy_fahrer():
+    return _buggy_zeichnen((K.C_HULL, K.C_HULL_SH, K.C_TEAL))
+
+
+def _buggy_team(kombi):
+    def zeichner():
+        return _buggy_zeichnen((kombi["rumpf"], kombi["kante"], kombi["akzent"]))
+    return zeichner
+
+
+for _kombi in K.TEAMS["kombi"]:
+    platzhalter("buggy_%s_fahrer" % _kombi["name"].lower())(_buggy_team(_kombi))
+
+
+@platzhalter("buggy_schatten")
+def _buggy_schatten():
+    """Der weiche Schatten unter dem Buggy. Eigenes Bild, weil der runde
+    Schatten der Figuren unter einem laenglichen Wagen falsch aussieht; der
+    Zeichner dreht ihn mit und legt ihn nach unten rechts."""
+    s = _flaeche(64, 64)
+    pygame.draw.rect(s, (0, 0, 0, 120), (32 - 24, 32 - 14, 50, 28), border_radius=9)
+    # Weichzeichnen durch zweimal Verkleinern und wieder Vergroessern
+    for _ in range(2):
+        s = pygame.transform.smoothscale(pygame.transform.smoothscale(s, (16, 16)),
+                                         (64, 64))
+    return s

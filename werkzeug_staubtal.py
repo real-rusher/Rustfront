@@ -54,6 +54,7 @@ TREPPEN = frozenset(HOCH + RUNTER)
 # Worauf Natur und Kleinkram gestellt werden duerfen. Auf Piste, Pflaster
 # und Dielen nicht - ein Weg, auf dem ein Kaktus steht, ist kein Weg.
 NATURBODEN = frozenset(SAND + KIES + BUSCH)
+BODENARTEN = NATURBODEN | frozenset(PISTE + PFLASTER + DIELEN)
 N4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 # Die drei Kreise (HUEGEL): Name, Ebene, Mitte.
@@ -1248,6 +1249,52 @@ def marken(k: Karte, erreicht):
             k.e[i][bestes[1]][bestes[0]] = "Z"
 
 
+# Die Buggys (seit 0.34.9, dustfront/fahrzeug.py): an der Tankstelle, auf
+# der Dorfstrasse von Westdorf und im Hof der Ranch. Gesucht wird von der
+# Stelle aus in Ringen der naechste Platz, an dem ein Wagen quer (5 x 3
+# Kacheln) oder laengs (3 x 5) frei steht - unter freiem Himmel, nicht
+# in der Gasse eines Aufzugs, nicht auf einer anderen Marke.
+BUGGYS = ((169, 127), (27, 113), (268, 164))
+
+
+def _buggy_platz(k: Karte, x, y, erreicht) -> bool:
+    if (0, x, y) not in erreicht or k.e[0][y][x] not in BODENARTEN:
+        return False
+    for breit, hoch in ((2, 1), (1, 2)):
+        ok = True
+        for dy in range(-hoch, hoch + 1):
+            for dx in range(-breit, breit + 1):
+                px, py = x + dx, y + dy
+                z = k.an(0, px, py)
+                if (z is None or z not in BODENARTEN or (px, py) in k.frei[0]
+                        or k.an(1, px, py) not in (None, LOCH)):
+                    ok = False
+                    break
+            if not ok:
+                break
+        if ok:
+            return True
+    return False
+
+
+def buggys(k: Karte, erreicht):
+    for (sx, sy) in BUGGYS:
+        bestes = None
+        for r in range(0, 10):
+            for dy in range(-r, r + 1):
+                for dx in range(-r, r + 1):
+                    if max(abs(dx), abs(dy)) == r and _buggy_platz(k, sx + dx, sy + dy, erreicht):
+                        bestes = (sx + dx, sy + dy)
+                        break
+                if bestes:
+                    break
+            if bestes:
+                break
+        if bestes is None:
+            raise SystemExit("Kein Platz fuer einen Buggy bei %s" % ((sx, sy),))
+        k.e[0][bestes[1]][bestes[0]] = "F"
+
+
 # ══════════════════════════════════════════════════ 8. Pruefen und reparieren
 
 def stapeln(k: Karte):
@@ -1432,6 +1479,7 @@ def bauen() -> Karte:
     da = reparieren(k)
     aufzuege_pruefen(k)
     marken(k, da)
+    buggys(k, da)
     return k
 
 
@@ -1443,6 +1491,7 @@ KOPF = (
     "# Zeichen: . Sand  : Piste  ; Kies  \" Gestruepp  _ Pflaster  = Dielen",
     "#          # Mauer  r Fels  X Fass  b Brocken  s Sandsack  h Holzkiste",
     "#          k Kaktus  w Schrott  ^ v Aufzug (E)  ~ Luft  Z Spawnstelle",
+    "#          F Buggy (seit 0.34.9)",
     "",
     "name: STAUBTAL",
     "satz: wueste",

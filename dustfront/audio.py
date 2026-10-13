@@ -306,6 +306,28 @@ def _aufheben(seed=0):
                     _schlag(1320, 1760, 0.09, 0.18, 3.0))
 
 
+@platzhalter_klang("buggy_tuer")
+def _buggy_tuer(seed=0):
+    """Einsteigen oder Aussteigen: ein Rohr klappert gegen den Sitz, und
+    der Motor brummt kurz auf. Kein Motorgeraeusch im Dauerlauf - das
+    muesste je Wagen und Entfernung mitlaufen und waere mehr Laerm als
+    Nutzen."""
+    return _mischen(_schlag(260, 180, 0.08, 0.45, 4.0),
+                    _rauschen(0.05, 0.25, 6000, 2000, 5.0, seed + 91, hp=True),
+                    [0.0] * int(RATE * 0.07)
+                    + _schlag(62, 88, 0.30, 0.42, 1.6),
+                    [0.0] * int(RATE * 0.07)
+                    + _rauschen(0.30, 0.16, 300, 140, 1.8, seed + 92))
+
+
+@platzhalter_klang("buggy_aufprall")
+def _buggy_aufprall(seed=0):
+    """Der Buggy faehrt gegen etwas: Blech und ein dumpfer Schlag."""
+    return _mischen(_schlag(120, 52, 0.22, 0.8, 2.6),
+                    _rauschen(0.18, 0.45, 7000, 1500, 3.0, seed + 93, hp=True),
+                    _schlag(780, 520, 0.14, 0.18, 3.6))
+
+
 @platzhalter_klang("menue")
 def _menue(seed=0):
     return _schlag(660, 720, 0.05, 0.22, 3.0)

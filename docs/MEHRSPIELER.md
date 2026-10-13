@@ -1863,6 +1863,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.9 | Buggys: neues Feld `fahrzeuge` in der Weltmeldung (`[x, y, winkel, ebene, kennung, fahrer_nummer oder -1, tempo]`), je Spieler `fz` (sitzt im Wagen); Eingabe unveraendert (W/S/A/D und E wie zu Fuss). `karten/staubtal.txt` hat drei `F`-Marken | Aeltere Gaeste sehen keine Buggys und den Fahrer frei schweben; deshalb ist die Version gleich zu halten (wird beim Verbinden ohnehin geprueft) |
 | 0.34.8 | Pfeil am Bildrand zum Kreis, ">" im Kreis zum naechsten | Nur Darstellung; der Gast leitet den naechsten Kreis aus Karte und `zk` ab, kein neues Feld |
 | 0.34.7 | Vom Tal aus wird die hohe Tafel als Block mit Oberflaeche gezeichnet; `karten/staubtal.txt` an drei Kacheln geaendert (das Werkzeug erzeugt jetzt unabhaengig von der Hash-Saat dieselbe Karte) | Darstellung beim Gast genauso; kein neues Feld. Gastgeber und Gast brauchen dieselbe Version und Kartendatei |
 | 0.34.6 | STAUBTAL komplett neu (`karten/staubtal.txt`, erzeugt von `werkzeug_staubtal.py`), dazu elf neue Kachelarten mit eigenen Kartenzeichen (`r b s h k w : ; _ " =`) | Eine aeltere Version liest die neuen Zeichen als Sand: Fels, Brocken, Mauern aus Sandsaecken waeren bei ihr begehbar, beim Gastgeber nicht. Darum Gastgeber und Gast **dieselbe Version und dieselbe Kartendatei** (die Version wird beim Beitreten geprueft); kein Protokollwechsel, kein neues Feld |
