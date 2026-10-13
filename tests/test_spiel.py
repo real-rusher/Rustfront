@@ -4357,6 +4357,76 @@ pruef("Zur neuen Runde stehen alle Buggys leer an ihrem Platz",
       and not fahrer69.im_fahrzeug)
 w.verlassen(); ga.verlassen()
 
+# 0.34.10: "Auf der Minikarte soll man sehen, wo die Hotzone ist, auch wenn
+# sie nicht auf derselben Ebene ist, und Buggys sollen dort durchgehend zu
+# sehen sein, auch wenn sie gefahren werden."
+from dustfront import minikarte as MK
+
+w, ga = gefechtspaar("huegel", karte="staubtal")
+_mk70 = w.hud.minikarte
+
+def _karte70(g_):
+    f_ = pygame.Surface((K.GAME_W, K.GAME_H)); f_.fill((0, 0, 0))
+    g_.hud.minikarte.zeichnen(f_, g_)
+    return f_, g_.hud.minikarte.rechteck(g_.welt)
+
+def _punkte70(f_, r_, farbe_):
+    return [(x_, y_) for x_ in range(r_.left, r_.right) for y_ in range(r_.top, r_.bottom)
+            if f_.get_at((x_, y_))[:3] == tuple(farbe_)]
+
+def _buggy_da70(f_, r_, g_, b_, farbe_):
+    e_ = g_.welt.ebenen[0]
+    px_ = int(r_.x + b_.pos.x * r_.width / float(e_.pixel_breite))
+    py_ = int(r_.y + b_.pos.y * r_.height / float(e_.pixel_hoehe))
+    return any(f_.get_at((px_ + dx_, py_ + dy_))[:3] == tuple(farbe_)
+               for dx_ in range(-3, 4) for dy_ in range(-3, 4))
+
+w._kreis_setzen(next(i_ for i_, (e_, _p, _n) in enumerate(w.kreise) if e_ == 0))
+w.zone_halter = 0
+_farbe70 = K.TEAMS["farben"][0]
+w.ich.ebene = 0
+_f70, _r70 = _karte70(w)
+pruef("Auf derselben Ebene steht der Kreis auf der Minikarte",
+      len(_punkte70(_f70, _r70, _farbe70)) >= 6)
+w.ich.ebene = 1
+_f70, _r70 = _karte70(w)
+pruef("Auf einer anderen Ebene auch (mit Pfeil in seiner Farbe)",
+      len(_punkte70(_f70, _r70, _farbe70)) >= 3
+      and len(_punkte70(_f70, _r70, MK.Minikarte._blass(_farbe70))) >= 6)
+pruef("Auf einer anderen Ebene stehen die Buggys trotzdem darauf (blasser)",
+      all(_buggy_da70(_f70, _r70, w, b_, MK.Minikarte._blass(MK.FARBE_BUGGY))
+          for b_ in w.fahrzeuge))
+w.ich.ebene = 0
+_f70, _r70 = _karte70(w)
+pruef("Alle Buggys stehen auf der Minikarte",
+      len(w.fahrzeuge) == 3
+      and all(_buggy_da70(_f70, _r70, w, b_, MK.FARBE_BUGGY) for b_ in w.fahrzeuge))
+
+# Ein Gast steigt ein und faehrt weit weg: der Wagen bleibt auf der Karte,
+# beim Gastgeber wie beim Gast, an seiner neuen Stelle.
+_k70 = w.kaempfer[ga.meine_nummer]
+_b70 = w.fahrzeuge[0]
+_k70.pos.update(_b70.ausstiegsorte(_k70.radius)[0]); _k70.ebene = 0; _k70.treppe_rest = 0.0
+w._anwenden(_k70, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_alt70 = pygame.Vector2(_b70.pos)
+for _ in range(150):
+    w._anwenden(_k70, {"will": [0.0, -1.0], "ziel": [0, 0], "knoepfe": []})
+    w.welt.schritt(K.FIXED_DT)
+    w._fahrzeuge_nachziehen()
+pruef("(Er ist wirklich gefahren)", _b70.pos.distance_to(_alt70) > 150 and _k70.im_fahrzeug,
+      "%.0f px" % _b70.pos.distance_to(_alt70))
+_f70, _r70 = _karte70(w)
+pruef("Ein gefahrener Buggy steht beim Gastgeber auf der Karte, wo er ist",
+      _buggy_da70(_f70, _r70, w, _b70, MK.FARBE_BUGGY))
+for _ in range(6):
+    w.schritt(K.FIXED_DT)
+    ga.schritt(K.FIXED_DT)
+_f70g, _r70g = _karte70(ga)
+pruef("... und beim Gast, der ihn faehrt, auch",
+      len(ga.fahrzeuge) == 3
+      and all(_buggy_da70(_f70g, _r70g, ga, b_, MK.FARBE_BUGGY) for b_ in ga.fahrzeuge))
+w.verlassen(); ga.verlassen()
+
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
 pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)

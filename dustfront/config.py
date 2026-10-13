@@ -1866,6 +1866,13 @@ MINIKARTE = dict(
     hoehe=56,
     oben=8,
     links=8,
+    # Seit 0.34.10: der Kreis steht immer darauf, auch auf einer anderen
+    # Ebene, und nie kleiner als dieser Radius in Pixeln - auf STAUBTAL
+    # waere er sonst ein einzelner Punkt.
+    kreis_mindest=3,
+    # Die Buggys, als laengliches Zeichen in Fahrtrichtung (Pixel).
+    buggy_laenge=5,
+    buggy_breite=2.5,
 )
 
 # Spielerkosmetik: eigener Ton und eigenes Bild fuer die Blendgranate.
