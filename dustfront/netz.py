@@ -208,7 +208,8 @@ class Leitung:
 class Gastgeber:
     """Nimmt Verbindungen an und haelt sie. Rechnen tut die Spielszene."""
 
-    def __init__(self, port: int | None = None, online: bool = False) -> None:
+    def __init__(self, port: int | None = None, online: bool = False,
+                 nur_lokal: bool = False) -> None:
         # online=True heisst nur eines: versuche, den Router zu ueberreden,
         # den Port von aussen durchzulassen. Am Spiel selbst aendert es
         # nichts - es ist dieselbe Leitung, nur von weiter her.
@@ -217,7 +218,22 @@ class Gastgeber:
         self.port = int(port or K.NETZ["port"])
         self.leitungen: dict[int, Leitung] = {}
         self.naechste_id = 1
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # nur_lokal (seit 0.34.13): nur auf 127.0.0.1 lauschen. Dorthin
+        # verbindet sich der Tunnel (online.py), und eine Steckdose, die
+        # nur dort lauscht, loest unter Windows keine Firewall-Abfrage aus.
+        # Im LAN sieht einen dann niemand - das ist der Schalter IM LAN
+        # SICHTBAR (lan_setzen).
+        self.nur_lokal = bool(nur_lokal)
+        self.tunnel = None
+        self.sock = self._lauschen()
+        if self.online:
+            from .upnp import Freigabe
+            self.freigabe = Freigabe(self.port, eigene_adresse())
+            self.freigabe.oeffnen()
+
+    def _lauschen(self) -> socket.socket:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock = sock
         if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             # GRUND: Unter Windows heisst SO_REUSEADDR etwas anderes als
             # ueberall sonst - ein zweites Programm darf sich dann auf
@@ -230,16 +246,54 @@ class Gastgeber:
         else:
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            self.sock.bind(("", self.port))
+            self.sock.bind(("127.0.0.1" if self.nur_lokal else "", self.port))
         except OSError:
             self.sock.close()
             raise
         self.sock.listen(K.NETZ["warteschlange"])
         self.sock.setblocking(False)
-        if self.online:
-            from .upnp import Freigabe
-            self.freigabe = Freigabe(self.port, eigene_adresse())
-            self.freigabe.oeffnen()
+        return sock
+
+    def lan_setzen(self, an: bool) -> bool:
+        """Im LAN sichtbar oder nur fuer den Tunnel, im laufenden Spiel.
+
+        Nur die lauschende Steckdose wird getauscht, auf demselben Port -
+        wer schon drin ist, hat seine eigene Leitung und merkt nichts.
+        Gibt zurueck, ob es geklappt hat; sonst bleibt es, wie es war.
+        """
+        if an == (not self.nur_lokal):
+            return True
+        alt, alt_lokal = self.sock, self.nur_lokal
+        try:
+            alt.close()
+        except OSError:
+            pass
+        self.nur_lokal = not an
+        try:
+            self._lauschen()
+            return True
+        except OSError:
+            self.nur_lokal = alt_lokal
+            try:
+                self._lauschen()
+            except OSError:
+                pass
+            return False
+
+    def tunnel_setzen(self, an: bool) -> None:
+        """Den Online-Code an- oder abschalten (online.py)."""
+        if an and self.tunnel is None:
+            from .online import Tunnel
+            self.tunnel = Tunnel(self.port)
+        elif not an and self.tunnel is not None:
+            self.tunnel.schliessen()
+            self.tunnel = None
+
+    @property
+    def code(self) -> str:
+        """Der Online-Code, sobald der Tunnel steht, sonst leer."""
+        t = self.tunnel
+        return t.code if t is not None and t.bereit else ""
 
     @property
     def adresse(self) -> str:
@@ -255,6 +309,8 @@ class Gastgeber:
 
     def annehmen(self) -> list[int]:
         """Neue Gaeste hereinlassen. Gibt deren Nummern zurueck."""
+        if self.tunnel is not None:
+            self.tunnel.schritt()
         neu = []
         while True:
             bereit, _, _ = select.select([self.sock], [], [], 0)
@@ -314,6 +370,7 @@ class Gastgeber:
             self.sock.close()
         except OSError:
             pass
+        self.tunnel_setzen(False)
         if self.freigabe is not None:
             # Die Tuer im Router wieder zumachen. Wer das vergisst,
             # hinterlaesst eine offene Stelle, die bis zum naechsten
@@ -328,10 +385,13 @@ class Gastgeber:
 class Gast:
     """Verbindet sich mit einem Gastgeber."""
 
-    def __init__(self, wohin: str) -> None:
+    def __init__(self, wohin: str, zugang=None) -> None:
         wirt, port = adresse_lesen(wohin)
         self.fehler = ""
         self.leitung: Leitung | None = None
+        # Ueber einen Online-Code (online.Zugang): der gehoert zur Leitung
+        # und wird mit ihr geschlossen.
+        self.zugang = zugang
         try:
             sock = socket.create_connection((wirt, port),
                                             timeout=K.NETZ["wartezeit"])
@@ -348,11 +408,15 @@ class Gast:
         return self.leitung.senden(nachricht) if self.leitung else False
 
     def holen(self) -> list[dict]:
+        if self.zugang is not None:
+            self.zugang.schritt()
         return self.leitung.holen() if self.leitung else []
 
     def schliessen(self) -> None:
         if self.leitung:
             self.leitung.schliessen("selbst beendet")
+        if self.zugang is not None:
+            self.zugang.schliessen()
 
 
 # ══════════════════════════════════════════════════════════════════

@@ -59,6 +59,13 @@ VORGABE = {
     # heisst SPIELER (sitzung.spielername). Seit 0.32 fragt kein Starter
     # mehr im Terminal danach - eingetragen wird er in der Lobbysuche.
     "spielername": "",
+    # Netz (seit 0.34.13). Die eigene Lobby bekommt einen Online-Code
+    # (online.py) - an als Vorgabe, so kann jeder ohne Einstellung
+    # Freunde einladen. Im LAN sichtbar ist sie nur auf Wunsch: dafuer
+    # muss sie auf allen Netzkarten lauschen, und genau das loest unter
+    # Windows die Abfrage der Firewall aus.
+    "online_lobby": True,
+    "lan_offen": False,
     # Die Rundentafel zeigt erst die einfache Ansicht (regeln.EINFACH).
     # Wer einmal ERWEITERT gewaehlt hat, bekommt sie beim naechsten Mal
     # wieder - wer viel einstellt, soll nicht jedes Mal umschalten.

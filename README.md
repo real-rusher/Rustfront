@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.12, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.13, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -324,35 +324,50 @@ prüft das Spiel selbst, bei jedem Paket. Auf dem Server braucht es dafür
 einmal die Tabelle aus [`docs/KONTO.md`](docs/KONTO.md), Abschnitt 5.6.
 Wie es verteilt wird: [`docs/MEHRSPIELER.md`](docs/MEHRSPIELER.md), 12c.
 
-Für eine LAN-Runde müssen alle im selben Netz sein - gleiches WLAN oder
-gleicher Switch. Eine Firewall fragt beim ersten Mal, ob Python ins Netz
-darf. Beim Gastgeber muss das erlaubt sein (TCP 50505, für die Lobbysuche
-UDP 50504), sonst findet ihn niemand; wer nur beitritt, braucht es nicht.
-Welche Ports das Spiel seit wann benutzt: [`docs/MEHRSPIELER.md`](docs/MEHRSPIELER.md),
-12g, "Was im Netz wann dazukam".
+### Über das Internet: mit Code (seit 0.34.13)
 
-### Über das Internet
+Jede eigene Lobby bekommt von selbst einen **Code aus vier Wörtern**, zum
+Beispiel `GRAU-WOLF-TANZT-HEUTE`. Er steht in der Lobby oben links und im
+Pausenmenü unter *ONLINE-CODE* (auswählen kopiert ihn). Wer mitspielen
+will, öffnet *ANDERER LOBBY BEITRETEN*, fügt den Code mit Strg+V ein und
+drückt *BEITRETEN* - von überall, auch aus einem anderen Netz.
 
-Seit 0.32 gibt es dafür keine eigene Startdatei mehr; das Internet geht
-über die Kommandozeile: `python -m dustfront --host --online --passwort
-GEHEIM`. Das Spiel versucht dann, den Port im Router selbst freizugeben
-(UPnP), und sagt die Adresse an, die die anderen in der Lobbysuche unter
-*ADRESSE* eintippen.
+* **Nichts einzustellen.** Kein Router, keine Portfreigabe, keine Abfrage
+  der Windows-Firewall: niemand lauscht nach draussen. Gastgeber und Gast
+  verbinden sich beide nur ausgehend mit Cloudflare (kostenloser "Quick
+  Tunnel", ohne Konto). Das Programm dafür, `cloudflared`, liegt für
+  Windows und macOS in [`tools/cloudflared`](tools/cloudflared) bei, mit
+  Lizenz und Prüfsummen; das Spiel packt es beim ersten Mal selbst aus.
+* **Der Code gilt, solange die Lobby offen ist.** Startet sie neu (Spiel
+  neu, aus einer fremden Runde zurück), gibt es einen neuen.
+* **Wer den Code hat, kommt rein.** Für Fremde gibt es das Kennwort
+  (Kommandozeile `--passwort`).
+* **Es ist weiter weg als im LAN.** Der Gastgeber rechnet alles; ein Gast
+  sieht seine eigene Figur erst nach einem Hin- und Rückweg. Über
+  Cloudflare sind das in Deutschland meist zwanzig bis fünfzig
+  Millisekunden. Zielen folgt trotzdem sofort, das rechnet jeder bei sich.
+* **Ohne Gewähr von Cloudflare.** Quick Tunnels haben keine
+  Verfügbarkeitszusage. Fällt der Dienst aus, steht der Grund statt des
+  Codes da; im selben Netz geht es dann weiter über das LAN.
 
-Drei Dinge dazu, ehrlich:
+Abschalten lässt sich der Code unter *EINSTELLUNGEN > NETZ > ONLINE-LOBBY*.
 
-* **Es hängt am Router.** Viele Heimrouter können UPnP und haben es an,
-  dann geht es von allein. Manche können es nicht, und hinter einem
-  Mobilfunkanschluss oder in einem Wohnheim hilft es gar nichts. Klappt es
-  nicht, schreibt das Spiel genau hin, was von Hand einzutragen ist:
-  Protokoll TCP, Port, Zieladresse.
-* **Es wird ruckeliger als im LAN.** Der Gastgeber rechnet alles; ein Gast
-  sieht seine eigene Figur erst nach einem Hin- und Rückweg. Im LAN sind
-  das zwei Millisekunden, über das Internet eher dreissig bis hundert.
-  Zielen folgt trotzdem sofort, das rechnet jeder bei sich.
-* **Ein offener Port ist ein offener Port.** Wer die Adresse kennt, kann
-  mitspielen. Darum gehört `--passwort` dazu. Ohne eines
-  kommt jeder herein, der die Adresse hat.
+### Im eigenen Netz (LAN)
+
+Seit 0.34.13 ist die Lobby im LAN nur zu sehen, wenn man es will:
+*EINSTELLUNGEN > NETZ > IM LAN SICHTBAR*. Dann steht sie bei den anderen
+im selben Netz in der Liste und man sieht deren Lobbys - dafür fragt die
+Windows-Firewall beim ersten Mal, ob Python ins Netz darf (TCP 50505, für
+die Suche UDP 50504). Ohne den Schalter lauscht die Lobby nur auf
+127.0.0.1, und es fragt niemand; über den Code kommt man trotzdem herein,
+auch im selben Netz. Welche Ports das Spiel seit wann benutzt:
+[`docs/MEHRSPIELER.md`](docs/MEHRSPIELER.md), 12g, "Was im Netz wann
+dazukam".
+
+Der alte Weg über den Router steht weiter zur Verfügung: `python -m
+dustfront --host --online --passwort GEHEIM` lässt den Router den Port per
+UPnP freigeben (dann fragt auch die Firewall). Den Code braucht man dafür
+nicht.
 
 Wer lieber tippt:
 
@@ -481,6 +496,7 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `art.py`, `audio.py`, `font.py` | Grafik, Klang und Schrift, alles zur Laufzeit erzeugt |
 | `vorlagen.py` | Die beiden Werkzeuge `--vorlagen` und `--assets` |
 | `netz.py` | LAN-Verbindungen und Protokoll |
+| `online.py` | Über das Internet: Online-Code über Cloudflare (`tools/cloudflared`) |
 | `mehrspieler.py` | LAN- und Internetgefechte |
 | `lobby.py` | Die Lobby und der Rundenplan |
 | `regeln.py` | Die Regeln eines Gefechts, an einer Stelle |
@@ -693,6 +709,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.13 | **Online spielen mit Code - ohne Router, ohne Firewall-Abfrage.** Jede eigene Lobby bekommt einen Code aus vier Wörtern (oben links in der Lobby und im Pausenmenü unter ONLINE-CODE, auswählen kopiert ihn). Wer ihn unter ANDERER LOBBY BEITRETEN eingibt (Strg+V fügt ein), kommt von überall herein. Dahinter steckt ein kostenloser Quick Tunnel von Cloudflare: beide Seiten bauen nur ausgehende Verbindungen auf, die Lobby lauscht nur auf 127.0.0.1 - so muss am Router nichts freigegeben werden, und die Windows-Firewall fragt nicht. Das Programm `cloudflared` 2026.10.0 liegt für Windows und macOS in `tools/cloudflared` bei (Apache-2.0-Lizenz, Prüfsummen in `K.ONLINE`), das Spiel packt es beim ersten Mal selbst aus. **LAN jetzt nur auf Wunsch:** neuer Reiter EINSTELLUNGEN > NETZ mit ONLINE-LOBBY (an) und IM LAN SICHTBAR (aus); erst damit lauscht die Lobby im LAN, antwortet auf die Suche - und die Firewall fragt. Beides gilt sofort, wer drin ist, bleibt drin. Neu auch: Strg+V in jedem Textfeld. **Netz/LAN: geändert** - Protokoll gleich, aber die Lobby ist im LAN ohne den Schalter nicht mehr zu finden; beide brauchen 0.34.13 |
 | 0.34.12 | **C4 nach 3 s scharf, Loadout im Spiel ändern geht.** C4 lässt sich jetzt drei statt fünf Sekunden nach dem Aufkleben zünden (`K.C4["ladezeit"]`). Ein im Menü AUSRÜSTUNG geändertes Loadout kam bei einem Gast nie beim Gastgeber an - der kannte nur das vom Verbinden, und das galt auch beim nächsten Einstieg und in der nächsten Runde weiter. Jetzt geht jede Änderung sofort an den Gastgeber und gilt, wie im Menü angegeben, ab dem nächsten Einstieg (nicht mitten im Gefecht); beim Ändern steht kurz "AUSRÜSTUNG GILT AB DEM NÄCHSTEN EINSTIEG". **Netz/LAN: geändert** - neue Nachricht `loadout` vom Gast an den Gastgeber; beide brauchen 0.34.12 |
 | 0.34.11 | **Buggy repariert, C4 klebt am Buggy.** Wurde eine Runde aus der Lobby gestartet (der Normalfall), räumte der Rundenstart die eben aufgestellten Buggys gleich wieder weg: beim Gastgeber waren sie verschwunden, bei den Gästen standen sie weiter da, und fahren ging bei niemandem. Jetzt bleiben sie und stehen zu jedem Rundenstart leer an ihrem Platz. Neu: **C4 bleibt am Buggy kleben**, fährt mit (auch durch die Kurve) und liegt oben auf dem Wagen. Geht sie hoch, bleibt der Buggy heil, der Fahrer bekommt wie sonst 70 % ab. **Netz/LAN: Gefecht geändert, keine neuen Felder** - der Gast sieht die Ladung über die gewohnte Meldung; beide brauchen 0.34.11 |
 | 0.34.10 | **Minikarte: Kreis und Buggys immer zu sehen.** Der Kreis (HÜGEL) steht jetzt auch auf der Minikarte, wenn er auf einer anderen Ebene liegt - dann blasser und mit einem kleinen Dreieck daneben, das nach oben oder unten zeigt; in der Farbe des Teams, das ihn hält, wie der Pfeil am Bildrand. Die Buggys stehen immer darauf, auf jeder Ebene und auch, wenn jemand fährt (ein Punkt in der Farbe des Fahrers, weiss für einen selbst), als kleines längliches Zeichen in Fahrtrichtung. Grössen in `K.MINIKARTE`. **Netz/LAN: nichts geändert** - alles, was die Minikarte braucht, kam schon mit der Weltmeldung von 0.34.9 |

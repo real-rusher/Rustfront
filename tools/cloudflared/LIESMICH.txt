@@ -1,0 +1,45 @@
+cloudflared - fuer DUSTFRONT ueber das Internet
+==============================================
+
+Was das ist
+-----------
+cloudflared ist das offizielle Programm von Cloudflare fuer "Cloudflare
+Tunnel". DUSTFRONT benutzt es seit 0.34.13, damit man ueber das Internet
+zusammen spielen kann, ohne etwas am Router freizugeben und ohne dass die
+Windows-Firewall nachfragt (siehe dustfront/online.py und
+docs/MEHRSPIELER.md, Abschnitt 7.9).
+
+Man muss hier nichts tun. Das Spiel packt das passende Programm beim
+ersten Gebrauch selbst in seinen Datenordner aus und prueft die
+Pruefsumme.
+
+Fassung und Herkunft
+--------------------
+Fassung 2026.10.0, unveraendert von
+https://github.com/cloudflare/cloudflared/releases/tag/2026.10.0
+
+  cloudflared-windows-amd64.zip   enthaelt cloudflared.exe
+      (= cloudflared-windows-amd64.exe aus dem Release, nur gezippt)
+      SHA-256 der .exe:  86aee4017b26625cee8484c113558f48effa4cd47f7aa05fcf425604e5d2b23c
+  cloudflared-darwin-arm64.tgz    macOS mit Apple-Chip, wie im Release
+      SHA-256 des Archivs:   a2f79ff7b9420aa537d74af239f376da170bbabeb529aec416002adac6a72e70
+      SHA-256 des Programms: 72edfd3eea463aef4d5cb89e2e209cecb048cc756c2b01915de2e0ad7cb39830
+  cloudflared-darwin-amd64.tgz    macOS mit Intel-Chip, wie im Release
+      SHA-256 des Archivs:   903845b81828c8cb3c5d13d816a2de71c06a3da5785469df8eb0e1b736d92f9f
+      SHA-256 des Programms: 0560c9ab7281ac3f746055323623ed23bc0405b6dab9400474020cba33a978da
+
+Unter Linux wird ein installiertes cloudflared benutzt (Paketverwaltung),
+es liegt keines bei.
+
+Lizenz
+------
+cloudflared steht unter der Apache License 2.0 (Datei LICENSE in diesem
+Ordner, unveraendert aus dem Quelltext von cloudflared). Sie erlaubt,
+das Programm unveraendert weiterzugeben. Copyright Cloudflare, Inc.
+
+Neue Fassung einspielen
+-----------------------
+1. Die drei Dateien aus dem neuen Release holen (die .exe neu zippen,
+   Name darin: cloudflared.exe).
+2. In dustfront/config.py unter ONLINE die Fassung und die drei
+   Pruefsummen der ausgepackten Programme eintragen.

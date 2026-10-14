@@ -628,6 +628,38 @@ NETZ = dict(
     port_versuche=8,          # so viele Spielports ab `port` probiert die Lobby
 )
 
+# Spielen ueber das Internet (seit 0.34.13, dustfront/online.py).
+#
+# Weder Router noch Firewall muessen etwas erlauben: niemand lauscht nach
+# draussen. Der Gastgeber haengt seine Lobby an einen kostenlosen "Quick
+# Tunnel" von Cloudflare (Programm cloudflared, liegt in tools/cloudflared
+# bei) und bekommt dafuer einen Code aus vier Woertern. Wer den Code
+# eingibt, verbindet sich ueber dasselbe Programm - beide Seiten bauen nur
+# ausgehende Verbindungen auf, und was lokal lauscht, lauscht nur auf
+# 127.0.0.1. Genau das loest weder eine Freigabe im Router noch die
+# Abfrage der Windows-Firewall aus.
+ONLINE = dict(
+    version="2026.10.0",      # die mitgelieferte Fassung von cloudflared
+    ordner="tools/cloudflared",
+    # Was im Ordner liegt, je System: Archiv, Name darin, Pruefsumme des
+    # ausgepackten Programms. Ausgepackt wird beim ersten Gebrauch in den
+    # Datenordner (pfade.py) - so traegt die Datei keinen "aus dem Internet"-
+    # Vermerk, und weder SmartScreen noch Gatekeeper halten sie an.
+    pakete={
+        "windows-amd64": ("cloudflared-windows-amd64.zip", "cloudflared.exe",
+                          "86aee4017b26625cee8484c113558f48effa4cd47f7aa05fcf425604e5d2b23c"),
+        "darwin-arm64": ("cloudflared-darwin-arm64.tgz", "cloudflared",
+                         "72edfd3eea463aef4d5cb89e2e209cecb048cc756c2b01915de2e0ad7cb39830"),
+        "darwin-amd64": ("cloudflared-darwin-amd64.tgz", "cloudflared",
+                         "0560c9ab7281ac3f746055323623ed23bc0405b6dab9400474020cba33a978da"),
+    },
+    endung=".trycloudflare.com",
+    start_frist=40.0,         # so lange darf der Tunnel brauchen, bis der Code steht
+    zugang_frist=15.0,        # so lange darf der Zugang des Gastes brauchen
+    neustart_nach=20.0,       # ein abgebrochener Tunnel wird so viel spaeter neu versucht
+    neustart_hoechstens=3,    # so oft hintereinander, dann bleibt es beim Fehler
+)
+
 # Die drei Spielarten im Mehrspieler.
 #
 #   pvp     nur Spieler gegeneinander, endet nach Zeit oder Abschuessen

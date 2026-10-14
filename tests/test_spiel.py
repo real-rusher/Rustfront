@@ -7119,6 +7119,11 @@ from dustfront import lan as _lan45, sitzung as _s45
 from dustfront.core import App as _App45
 _app_a = _App45("A", None, headless=True)
 _app_b = _App45("B", None, headless=True)
+# Seit 0.34.13 sieht man sich im LAN nur mit IM LAN SICHTBAR (sonst lauscht
+# die Lobby nur auf 127.0.0.1 und fragt keine Firewall). Diese Pruefung ist
+# das LAN - beide schalten es ein, wie es ein Spieler im Menue taete.
+for _a45 in (_app_a, _app_b):
+    _a45.opt["lan_offen"] = True
 
 def _beide45(n=20):
     for _ in range(n):
@@ -7775,6 +7780,149 @@ w72._runde_neu()
 pruef("Zur neuen Runde gilt es ebenso", _gk72.waffen == _alt72, str(_gk72.waffen))
 w72.verlassen(); g72.verlassen()
 app.konto.gewaehlt = _gew72
+
+# ─────────────────────────────────────────────────────────────────────
+# 0.34.13: "Mach das wahre Online besser: nicht nur ueber LAN spielen. Darf
+# zusaetzliche Programme brauchen, solange sie in der zip auf dem Repo
+# liegen. Keine Einstellung am Router, kein Dialog der Windows-Firewall."
+# Statt cloudflared laeuft hier die Attrappe tests/attrappe_cloudflared.py:
+# dieselben Aufrufe, dieselben Zeilen, nur ohne Cloudflare dazwischen.
+import tempfile as _tf73
+from dustfront import online as _on73, sitzung as _s73
+from dustfront.einstellungen import VORGABE as _VG73
+from dustfront.core import App as _App73
+
+pruef("Codes werden erkannt, wie man sie bekommt",
+      _on73.code_lesen("Grau-Wolf-Tanzt-Heute") == "grau-wolf-tanzt-heute"
+      and _on73.code_lesen("https://grau-wolf-tanzt-heute.trycloudflare.com/")
+      == "grau-wolf-tanzt-heute"
+      and _on73.code_lesen(" grau-wolf-tanzt-heute.trycloudflare.com ")
+      == "grau-wolf-tanzt-heute")
+pruef("Adressen im LAN bleiben Adressen",
+      not _on73.code_lesen("192.168.0.5:50505") and not _on73.code_lesen("spiele-pc")
+      and not _on73.code_lesen("localhost") and not _on73.code_lesen(""))
+pruef("Vorgabe: Online-Code an, im LAN sichtbar aus (keine Firewall-Abfrage)",
+      _VG73["online_lobby"] is True and _VG73["lan_offen"] is False)
+
+_ordner73 = _tf73.mkdtemp()
+os.environ["ATTRAPPE_ORDNER"] = _ordner73
+os.environ["DUSTFRONT_CLOUDFLARED"] = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "attrappe_cloudflared.py")
+
+def _apps73(*apps, n=1):
+    for _ in range(n):
+        for _a in apps:
+            for _sz in list(_a._aktive()):
+                _sz.schritt(K.FIXED_DT)
+        time.sleep(0.004)
+
+def _bis73(bedingung, apps, sekunden=10.0):
+    ende = time.time() + sekunden
+    while time.time() < ende:
+        if bedingung():
+            return True
+        _apps73(*apps)
+    return bedingung()
+
+_app_c = _App73("C", None, headless=True)
+_app_d = _App73("D", None, headless=True)
+_neuer_port(); _pc73 = _port[0]
+_neuer_port(); _pd73 = _port[0]
+_lc73 = _s73.eigene_lobby(_app_c, headless_port=_pc73)
+_ld73 = _s73.eigene_lobby(_app_d, headless_port=_pd73)
+pruef("Ohne LAN lauscht die eigene Lobby nur auf 127.0.0.1",
+      _lc73.gastgeber.nur_lokal
+      and _lc73.gastgeber.sock.getsockname()[0] == "127.0.0.1",
+      str(_lc73.gastgeber.sock.getsockname()))
+pruef("... und oeffnet keine UDP-Steckdose fuer die LAN-Suche", _lc73.ansager is None)
+
+_lc73.gastgeber.tunnel_setzen(True)
+_code73 = "probe-tunnel-fuer-%d" % _pc73
+pruef("Der Tunnel steht und gibt einen Code",
+      _bis73(lambda: _lc73.gastgeber.code == _code73, [_app_c]),
+      "%s / %s" % (_lc73.gastgeber.code,
+                   _lc73.gastgeber.tunnel.beschreibung()))
+_menue73 = dict((s_, w_) for s_, _t, w_ in _lc73._menue_baut())
+pruef("Im Pausenmenue steht ONLINE-CODE zum Kopieren", _menue73.get("code") == "KOPIEREN",
+      str(_menue73.get("code")))
+from dustfront.sitzung import code_zeile as _cz73
+pruef("... und der Code selbst in der Zeile daneben", _cz73(_lc73) == _code73.upper(),
+      _cz73(_lc73))
+_lc73._menue_wirken("code", False, True)
+pruef("... und auswaehlen kopiert ihn (oder sagt ihn wenigstens)",
+      _code73.upper() in _lc73.hinweis, _lc73.hinweis)
+_bild73 = pygame.Surface((K.GAME_W, K.GAME_H))
+_lc73.zeichnen(_bild73, 0.5)
+
+_such73 = _s73.LobbySuche(_app_d, _ld73)
+_app_d.schieben(_such73)
+pruef("Ohne LAN sucht die Lobbysuche nicht im Netz", _such73.sucher is None)
+_such73.inhalt_zeichnen(_bild73)
+_such73.verbinden(_code73.upper(), "")
+pruef("Mit dem Code wartet sie auf den Zugang, ohne stehenzubleiben",
+      _such73._zugang is not None and _such73._verbinde is None)
+_drin73 = _bis73(lambda: len(_lc73.kaempfer) == 2
+                 and not _app_d.stapel[-1].ist_gastgeber, [_app_c, _app_d])
+_gast73 = _app_d.stapel[-1]
+pruef("D tritt mit dem Code der Lobby von C bei", _drin73,
+      "%d Kaempfer, oben %s" % (len(_lc73.kaempfer), type(_gast73).__name__))
+pruef("... angezeigt wird der Code, nicht die Adresse dahinter",
+      getattr(_gast73, "wohin", "") == _code73.upper(), getattr(_gast73, "wohin", ""))
+pruef("... und es ist dieselbe Leitung wie immer (Weltmeldungen kommen an)",
+      _bis73(lambda: _gast73.ich is not None, [_app_c, _app_d]))
+
+# IM LAN SICHTBAR im laufenden Spiel: die Lobby lauscht dann auf allen
+# Netzkarten und antwortet auf die Suche - wer drin ist, bleibt drin.
+_app_c.opt["lan_offen"] = True
+_lc73.netz_umstellen()
+pruef("LAN an: die Lobby lauscht auf allen Netzkarten, mit Ansager",
+      _lc73.gastgeber.sock.getsockname()[0] == "0.0.0.0" and _lc73.ansager is not None)
+_apps73(_app_c, _app_d, n=30)
+pruef("... und der Gast ist noch da", len(_lc73.kaempfer) == 2
+      and _gast73.gast.offen)
+_app_c.opt["lan_offen"] = False
+_lc73.netz_umstellen()
+pruef("LAN wieder aus: nur 127.0.0.1, kein Ansager",
+      _lc73.gastgeber.sock.getsockname()[0] == "127.0.0.1" and _lc73.ansager is None)
+
+# Ein falscher Code: zurueck in die eigene Lobby, mit dem Grund.
+_app_e = _App73("E", None, headless=True)
+_neuer_port(); _pe73 = _port[0]
+_le73 = _s73.eigene_lobby(_app_e, headless_port=_pe73)
+_such73e = _s73.LobbySuche(_app_e, _le73)
+_app_e.schieben(_such73e)
+_such73e.verbinden("gibt-es-gar-nicht", "")
+_heim73 = _bis73(lambda: _app_e.stapel
+                 and getattr(_app_e.stapel[-1], "ist_gastgeber", False)
+                 and _app_e.stapel[-1] is not _le73, [_app_e])
+pruef("Ein falscher Code fuehrt zurueck in die eigene Lobby", _heim73)
+pruef("... und sagt, woran es lag",
+      "NICHT ERREICHBAR" in (_app_e.stapel[-1].hinweis or ""),
+      _app_e.stapel[-1].hinweis)
+
+# Kommt Cloudflare nicht durch, steht der Grund da, nicht ein ewiges STARTET.
+os.environ["ATTRAPPE_KEIN_EDGE"] = "1"
+_t73 = _on73.Tunnel(_pc73 + 1)
+_bis73(lambda: _t73._p is not None and _t73.fehler, [], 5.0)
+_t73.schritt()
+pruef("Kein Weg zu Cloudflare: der Code ist da, aber nicht bereit, mit Grund",
+      _t73.zustand == "fehler" and not _t73.bereit
+      and "NICHT ERREICHBAR" in _t73.beschreibung(), _t73.beschreibung())
+_t73.schliessen()
+del os.environ["ATTRAPPE_KEIN_EDGE"]
+
+_app_c.opt["online_lobby"] = False
+_lc73.netz_umstellen()
+pruef("Online aus: kein Tunnel mehr", _lc73.gastgeber.tunnel is None)
+for _a73 in (_app_d, _app_e, _app_c):
+    for _sz73 in list(_a73.stapel):
+        if hasattr(_sz73, "verlassen"):
+            _sz73.verlassen()
+time.sleep(0.2)
+pruef("Kein cloudflared laeuft weiter, wenn alles zu ist",
+      not _on73._laufende, str(len(_on73._laufende)))
+_on73.alle_beenden()
+del os.environ["DUSTFRONT_CLOUDFLARED"]
 
 print()
 print("FEHLER:", fails or "keine")

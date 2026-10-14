@@ -457,6 +457,17 @@ HILFE = {
     "reiter_grafik": ["VIGNETTE, OBERE EBENEN UND WAS SPÄTER DAZUKOMMT."],
     "reiter_steuerung": ["DIE TASTENBELEGUNG."],
     "reiter_zugang": ["BLENDGRANATE, BILDWACKELN, KAMERA."],
+    "reiter_netz": ["ONLINE-CODE UND LAN."],
+    "online_lobby": [
+        "DEINE LOBBY BEKOMMT EINEN CODE AUS VIER WÖRTERN. WER IHN UNTER",
+        "MITSPIELEN EINGIBT, KOMMT ÜBER DAS INTERNET HEREIN - OHNE ROUTER-",
+        "ODER FIREWALL-EINSTELLUNG (ÜBER CLOUDFLARE, SIEHE TOOLS/CLOUDFLARED).",
+    ],
+    "lan_offen": [
+        "DEINE LOBBY STEHT BEI ANDEREN IM SELBEN NETZ IN DER LISTE, UND DU",
+        "SIEHST DEREN LOBBYS. DAFÜR FRAGT WINDOWS BEIM ERSTEN MAL NACH",
+        "(FIREWALL). AUS: NUR ÜBER DEN CODE, DANN FRAGT NIEMAND.",
+    ],
 }
 
 
@@ -464,7 +475,8 @@ HILFE = {
 # eine eigene Szene (die Tastenbelegung braucht die ganze Tafel); ihr
 # Reiter tauscht die Szene aus, und die Steuerung zeigt dieselben Reiter.
 SEITEN = [("VIDEO", "video"), ("AUDIO", "audio"), ("GRAFIK", "grafik"),
-          ("STEUERUNG", "steuerung"), ("BARRIEREFREIHEIT", "zugang")]
+          ("STEUERUNG", "steuerung"), ("BARRIEREFREIHEIT", "zugang"),
+          ("NETZ", "netz")]
 SEITE_STEUERUNG = 3
 
 
@@ -516,7 +528,8 @@ class Einstellungen(Menue):
         zx, zw = r.x + 26, r.width - 52
         zy = r.y + 56
         baue = {0: self._seite_video, 1: self._seite_audio,
-                2: self._seite_grafik, 4: self._seite_zugang}[self.seite]
+                2: self._seite_grafik, 4: self._seite_zugang,
+                5: self._seite_netz}[self.seite]
         baue(zx, zy, zw)
 
         # Fussknoepfe
@@ -599,6 +612,15 @@ class Einstellungen(Menue):
                                           "UNTERTITEL FÜR GERÄUSCHE",
                                           "SCHRIFTGRÖSSE"))
 
+    def _seite_netz(self, zx, zy, zw) -> None:
+        o = self.app.opt
+        self.elemente += [
+            ui.Schalter(self._reihe(zx, zy, zw, 0), "ONLINE-LOBBY",
+                        "online_lobby", o["online_lobby"]),
+            ui.Schalter(self._reihe(zx, zy, zw, 1), "IM LAN SICHTBAR",
+                        "lan_offen", o["lan_offen"]),
+        ]
+
     @staticmethod
     def _index(liste, wert) -> int:
         try:
@@ -650,6 +672,12 @@ class Einstellungen(Menue):
         if el.name in E.KONTO_WERTE:
             # Was zum Spieler gehoert, wandert mit dem Konto.
             self.app.konto_sichern()
+        if el.name in ("online_lobby", "lan_offen"):
+            # Gilt sofort, nicht erst in der naechsten Lobby: die eigene
+            # Lobby liegt im Stapel unter den Einstellungen.
+            for szene in getattr(self.app, "stapel", []):
+                if hasattr(szene, "netz_umstellen"):
+                    szene.netz_umstellen()
         if el.name in ("fenstermodus", "aufloesung", "bildrate", "pixelraster"):
             self.app.anzeige_uebernehmen()
             self.aufbauen()

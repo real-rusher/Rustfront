@@ -360,5 +360,30 @@ subprocess.run([sys.executable, str(WURZEL / "werkzeug_staubtal.py"), str(_ziel)
 pruef("Das Werkzeug erzeugt mit jeder Hash-Saat dieselbe Karte",
       _ziel.read_text(encoding="utf-8") == _ist)
 
+# ── cloudflared (seit 0.34.13): liegt es bei, und ist es das, was es sein soll?
+# Ausgepackt in einen leeren Ordner, genau wie beim Spieler, und mit der
+# Pruefsumme aus der config verglichen. Faengt ein vergessenes, kaputtes
+# oder ausgetauschtes Archiv, bevor es jemand herunterlaedt.
+from dustfront import online as _on  # noqa: E402
+from dustfront import pfade as _pf  # noqa: E402
+
+_ordner_cf = Path(tempfile.mkdtemp())
+_vorher_cf = _pf.ordner
+_pf.ordner = lambda: _ordner_cf
+try:
+    for _sys_cf, (_archiv, _name, _summe) in sorted(K.ONLINE["pakete"].items()):
+        _pfad_cf, _fehler_cf = _on._auspacken(_archiv, _name, _summe)
+        pruef("cloudflared fuer %s liegt bei und hat die richtige Pruefsumme"
+              % _sys_cf, bool(_pfad_cf) and os.access(_pfad_cf, os.X_OK)
+              or (bool(_pfad_cf) and os.name == "nt"), _fehler_cf)
+finally:
+    _pf.ordner = _vorher_cf
+pruef("Die Lizenz von cloudflared liegt dabei",
+      (WURZEL / K.ONLINE["ordner"] / "LICENSE").is_file()
+      and "Apache License" in (WURZEL / K.ONLINE["ordner"] / "LICENSE").read_text())
+pruef("Jedes Archiv ist kleiner als 50 MB (GitHub warnt darueber)",
+      all((WURZEL / K.ONLINE["ordner"] / a).stat().st_size < 50e6
+          for a, _n, _s in K.ONLINE["pakete"].values()))
+
 print("\nFEHLER:", fails if fails else "keine")
 sys.exit(1 if fails else 0)

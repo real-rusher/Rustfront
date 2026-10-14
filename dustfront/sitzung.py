@@ -28,6 +28,7 @@ import pygame
 from . import config as K
 from . import lan
 from . import netz
+from . import online
 from . import ui
 from .font import SCHRIFT
 from .menues import Menue, _mitte
@@ -72,14 +73,22 @@ def eigene_lobby(app, hinweis: str = "", headless_port: int | None = None):
 
     erster = int(headless_port or K.NETZ["port"])
     wirt = None
+    # Seit 0.34.13 lauscht die eigene Lobby nur auf 127.0.0.1, ausser
+    # IM LAN SICHTBAR ist an: so fragt die Windows-Firewall nie nach. Von
+    # aussen kommt man ueber den Online-Code herein (online.py).
+    lan_an = _wahl(app, "lan_offen")
     for versuch in range(1 if headless_port else K.NETZ["port_versuche"]):
         try:
-            wirt = netz.Gastgeber(erster + versuch)
+            wirt = netz.Gastgeber(erster + versuch, nur_lokal=not lan_an)
             break
         except OSError:
             continue
     if wirt is None:
         return None
+    # Die Pruefungen (headless_port) starten keinen Tunnel von selbst -
+    # sie sollen nicht davon abhaengen, ob irgendwo ein cloudflared liegt.
+    if _wahl(app, "online_lobby") and not headless_port:
+        wirt.tunnel_setzen(True)
     from . import regeln as R
     # Geplant ist zuerst die Standardrunde (K.STANDARDRUNDE): wer neu ist,
     # drueckt START und spielt etwas Vernuenftiges.
@@ -91,7 +100,17 @@ def eigene_lobby(app, hinweis: str = "", headless_port: int | None = None):
     return g
 
 
-def beitreten(app, adresse: str, passwort: str = "") -> str:
+def _wahl(app, name: str) -> bool:
+    """Eine Einstellung, und ihre Vorgabe, wenn es keine gibt."""
+    from .einstellungen import VORGABE
+    try:
+        return bool(app.opt[name])
+    except (KeyError, TypeError, AttributeError):
+        return bool(VORGABE.get(name))
+
+
+def beitreten(app, adresse: str, passwort: str = "", zugang=None,
+              anzeige: str = "") -> str:
     """Einer fremden Lobby beitreten. Gibt "" zurueck oder den Grund.
 
     Scheitert schon die Verbindung, bleibt alles, wie es war. Was danach
@@ -101,12 +120,13 @@ def beitreten(app, adresse: str, passwort: str = "") -> str:
     """
     from .mehrspieler import Gefecht
 
-    gast = netz.Gast(adresse)
+    gast = netz.Gast(adresse, zugang=zugang)
     if not gast.offen:
+        gast.schliessen()
         return gast.fehler or "KEINE VERBINDUNG"
     g = Gefecht(app, spielername(app), gast=gast, passwort=passwort,
                 heimkehr=True)
-    g.wohin = adresse
+    g.wohin = anzeige or adresse
     app.ersetzen(g)
     return ""
 
@@ -178,23 +198,31 @@ class LobbySuche(Menue):
     sind, fliegen also nicht hinaus, nur weil man sich umsieht.
     """
 
-    titel = "LOBBYS IM NETZ"
+    titel = "MITSPIELEN"
 
     def __init__(self, app, gefecht=None) -> None:
         self.gefecht = gefecht
         self.tafel = _mitte(440, 300)
         eigen = getattr(gefecht, "ansager", None)
-        self.sucher = lan.Sucher(ohne=eigen.kennung if eigen is not None else "")
+        # Im LAN gesucht wird nur, wenn IM LAN SICHTBAR an ist (seit
+        # 0.34.13): die Antworten kommen ueber eine UDP-Steckdose herein,
+        # und auch die kann unter Windows die Firewall-Abfrage ausloesen.
+        self.sucher = (lan.Sucher(ohne=eigen.kennung if eigen is not None else "")
+                       if _wahl(app, "lan_offen") else None)
         self._stand = None          # woran die Liste zuletzt gebaut wurde
         self.tippt = -1             # welches Textfeld dran ist, -1 = keines
         self._verbinde: tuple[str, str] | None = None
         self._verbinde_bild = 0
+        # Beitritt ueber einen Online-Code: der Zugang braucht ein paar
+        # Sekunden, bis er steht. So lange laeuft das Bild weiter.
+        self._zugang = None
+        self._zugang_wort = ""
         self.blatt = 0
         super().__init__(app)
 
     # ---- Aufbau -------------------------------------------------------
     def _liste(self) -> list[dict]:
-        return self.sucher.liste()
+        return self.sucher.liste() if self.sucher is not None else []
 
     def aufbauen(self) -> None:
         r = self.tafel
@@ -215,10 +243,10 @@ class LobbySuche(Menue):
         y = r.y + 44 + ZEILEN * 22 + 4
         konto = self.app._konto
         angemeldet = konto is not None and konto.angemeldet
-        neu.append(ui.Textfeld((bx, y, bw - 96, 17), "ADRESSE", "adresse",
-                               wert=alt.get("adresse", ""), laenge=40,
+        neu.append(ui.Textfeld((bx, y, bw - 96, 17), "CODE", "adresse",
+                               wert=alt.get("adresse", ""), laenge=72,
                                label_breite=70,
-                               erlaubt=lambda c: c.isalnum() or c in ".:-"))
+                               erlaubt=lambda c: c.isalnum() or c in ".:-/"))
         neu.append(ui.Knopf((bx + bw - 90, y, 90, 17), "BEITRETEN", "hand"))
         neu.append(ui.Textfeld((bx, y + 21, bw - 96, 17), "KENNWORT", "wort",
                                wert=alt.get("wort", ""), verdeckt=True,
@@ -230,6 +258,10 @@ class LobbySuche(Menue):
                 laenge=K.NETZ["namenslaenge"], label_breite=70,
                 erlaubt=lambda c: c.isalnum() or c in "-_"))
         neu.append(ui.Knopf((bx + bw - 90, y + 42, 90, 17), "ZURÜCK", "zurueck"))
+        g = self.gefecht
+        if g is not None and g.ist_gastgeber and g.gastgeber.tunnel is not None:
+            neu.append(ui.Knopf((bx + bw - 90, r.y + 24, 90, 15), "KOPIEREN",
+                                "kopieren"))
         self.elemente = neu
         felder = self.felder
         for j, f in enumerate(felder):
@@ -257,7 +289,9 @@ class LobbySuche(Menue):
         super().schritt(dt)
         for f in self.felder:
             f.schritt(dt)
-        self.sucher.schritt(dt)
+        if self.sucher is not None:
+            self.sucher.schritt(dt)
+        self._zugang_fuehren()
         stand = tuple((e["adresse"], e["spieler"], e["lobby"], e["modus"],
                        e["version"], e["passwort"]) for e in self._liste())
         if stand != self._stand:
@@ -276,6 +310,26 @@ class LobbySuche(Menue):
                 if grund:
                     self.sagen("KEINE VERBINDUNG: %s" % fehler_kurz(grund), 4.0)
 
+    def _zugang_fuehren(self) -> None:
+        """Steht der Zugang zum Code, wird beigetreten; scheitert er, gesagt."""
+        z = self._zugang
+        if z is None:
+            return
+        z.schritt()
+        if z.fehler:
+            self._zugang = None
+            z.schliessen()
+            self.sagen("KEINE VERBINDUNG: %s" % z.fehler, 5.0)
+            return
+        if not z.bereit:
+            return
+        self._zugang = None
+        self._name_merken()
+        grund = beitreten(self.app, z.adresse, self._zugang_wort, zugang=z,
+                          anzeige=z.code.upper())
+        if grund:
+            self.sagen("KEINE VERBINDUNG: %s" % fehler_kurz(grund), 5.0)
+
     def _name_merken(self) -> None:
         if not any(f.name == "name" for f in self.felder):
             return
@@ -286,7 +340,14 @@ class LobbySuche(Menue):
 
     def verbinden(self, adresse: str, passwort: str = "") -> None:
         if not adresse.strip():
-            self.sagen("ERST EINE ADRESSE EINGEBEN")
+            self.sagen("ERST DEN CODE DES GASTGEBERS EINGEBEN")
+            return
+        if self._zugang is not None:
+            return
+        code = online.code_lesen(adresse)
+        if code:
+            self._zugang = online.Zugang(code)
+            self._zugang_wort = passwort
             return
         self._verbinde = (adresse.strip(), passwort)
         self._verbinde_bild = 0
@@ -294,11 +355,17 @@ class LobbySuche(Menue):
     def verlassen(self) -> None:
         super().verlassen()
         self._name_merken()
-        self.sucher.schliessen()
+        if self.sucher is not None:
+            self.sucher.schliessen()
+        if self._zugang is not None:
+            self._zugang.schliessen()
+            self._zugang = None
 
     def ausloesen(self, el) -> None:
         if el.name == "zurueck":
             self.zurueck()
+        elif el.name == "kopieren":
+            self.sagen(code_kopieren(self.gefecht))
         elif el.name == "hand":
             self.verbinden(self._wert("adresse"), self._wert("wort"))
         elif el.name.startswith("lobby:"):
@@ -353,32 +420,65 @@ class LobbySuche(Menue):
         r = self.tafel
         g = self.gefecht
         if g is not None and g.ist_gastgeber:
-            eigen = "DEINE LOBBY: %s" % g.gastgeber.adresse
+            eigen = "DEIN CODE: %s" % code_zeile(g)
         else:
             eigen = "DEINE ADRESSE: %s" % netz.eigene_adresse()
-        SCHRIFT.zeichnen(ziel, eigen, r.centerx, r.y + 30, K.C_MUTED, 1, 1,
-                         "mitte")
+        SCHRIFT.zeichnen(ziel, ui.kuerzen(eigen, r.width - 140), r.x + 18,
+                         r.y + 30, K.C_AMBER if g is not None and g.ist_gastgeber
+                         and g.gastgeber.code else K.C_MUTED, 1)
         if not self._liste():
-            y = r.y + 44 + 2 * 22
-            SCHRIFT.zeichnen(ziel, "SUCHE ..." if self.sucher.sock is not None
-                             else "SUCHE GEHT HIER NICHT: %s"
-                             % self.sucher.fehler.upper()[:30],
-                             r.centerx, y, K.C_MUTED, 1, 1, "mitte")
-            SCHRIFT.zeichnen(ziel, "WER IM SELBEN NETZ DUSTFRONT OFFEN HAT,",
-                             r.centerx, y + 16, K.C_MUTED_DK, 1, 1, "mitte")
-            SCHRIFT.zeichnen(ziel, "ERSCHEINT HIER VON SELBST.",
-                             r.centerx, y + 26, K.C_MUTED_DK, 1, 1, "mitte")
+            y = r.y + 44 + 22
+            if self.sucher is None:
+                zeilen = ["CODE DES GASTGEBERS UNTEN EINGEBEN",
+                          "(EINFÜGEN MIT STRG+V) - GEHT ÜBER DAS INTERNET",
+                          "OHNE ROUTER- ODER FIREWALL-EINSTELLUNG.",
+                          "",
+                          "LOBBYS IM EIGENEN NETZ: EINSTELLUNGEN > NETZ >",
+                          "IM LAN SICHTBAR (DANN FRAGT WINDOWS EINMAL NACH)."]
+            else:
+                zeilen = ["SUCHE ..." if self.sucher.sock is not None
+                          else "SUCHE GEHT HIER NICHT: %s"
+                          % self.sucher.fehler.upper()[:30],
+                          "",
+                          "WER IM SELBEN NETZ DUSTFRONT OFFEN HAT,",
+                          "ERSCHEINT HIER VON SELBST. ÜBER DAS INTERNET:",
+                          "UNTEN DEN CODE DES GASTGEBERS EINGEBEN."]
+            for i, zeile in enumerate(zeilen):
+                SCHRIFT.zeichnen(ziel, zeile, r.centerx, y + i * 11,
+                                 K.C_MUTED if i == 0 else K.C_MUTED_DK, 1, 1,
+                                 "mitte")
         anzahl = len(self._liste())
         if anzahl > ZEILEN:
             SCHRIFT.zeichnen(ziel, "SEITE %d/%d  [BILD HOCH/RUNTER]"
                              % (self.blatt + 1, (anzahl - 1) // ZEILEN + 1),
                              r.right - 20, r.y + 30, K.C_MUTED_DK, 1, 1,
                              "rechts")
-        if self._verbinde is not None:
+        warten = (self._verbinde[0] if self._verbinde is not None
+                  else self._zugang.code.upper() if self._zugang is not None
+                  else "")
+        if warten:
             ui.schleier(ziel, 150)
-            SCHRIFT.zeichnen(ziel, "VERBINDE MIT %s ..." % self._verbinde[0],
+            SCHRIFT.zeichnen(ziel, "VERBINDE MIT %s ..." % warten,
                              K.GAME_W // 2, K.GAME_H // 2 - 4, K.C_AMBER, 1, 1,
                              "mitte")
 
     def fusstext(self) -> str:
-        return "[KLICK] BEITRETEN   [TAB] FELD   [ESC] ZURÜCK"
+        return "[KLICK] BEITRETEN   [TAB] FELD   [STRG+V] EINFÜGEN   [ESC] ZURÜCK"
+
+
+def code_zeile(g) -> str:
+    """Wie es um den Online-Code der eigenen Lobby steht, in einer Zeile."""
+    t = getattr(g.gastgeber, "tunnel", None) if g is not None else None
+    if t is None:
+        return "AUS (EINSTELLUNGEN > NETZ)"
+    return t.beschreibung()
+
+
+def code_kopieren(g) -> str:
+    """Den Code in die Zwischenablage. Gibt zurueck, was man sagen soll."""
+    code = g.gastgeber.code if g is not None and g.ist_gastgeber else ""
+    if not code:
+        return "NOCH KEIN CODE: %s" % code_zeile(g)
+    if online.kopieren(code):
+        return "CODE KOPIERT: %s" % code.upper()
+    return "CODE: %s" % code.upper()

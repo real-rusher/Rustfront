@@ -54,6 +54,8 @@ Ausnahmen stehen in 2.4.
 | `dustfront/netz.py` | ~250 | Steckdosen, Verbindungen, JSON-Zeilen. Weiss nichts vom Spiel. |
 | `dustfront/mehrspieler.py` | ~1400 | Die Spielszene `Gefecht` und drei Wesen. Weiss alles vom Spiel. |
 | `dustfront/upnp.py` | ~250 | Der Weg durch den Router, fuer Runden ueber das Internet. Weiss nichts vom Spiel. |
+| `dustfront/online.py` | ~480 | Seit 0.34.13: der Online-Code ueber Cloudflare (7.9). Weiss nichts vom Spiel. |
+| `tools/cloudflared/` | - | Seit 0.34.13: das Programm dafuer, Windows und macOS, mit Lizenz und Pruefsummen. |
 | `dustfront/bestenliste.py` | ~150 | MVP-Punkte und Auszeichnungen ueber alle Runden im Benutzerordner. |
 | `dustfront/regeln.py` | ~380 | Seit 0.27: jede Regel einer Runde einmal - Name, Werte, wann sie gilt (12b). |
 | `dustfront/lobby.py` | ~690 | Seit 0.27: Lobby, Rundenplan und die Tafel dazu (12b). |
@@ -576,6 +578,59 @@ Nummer bleibt dann, wie sie war.
 ---
 
 ### 7.9 Ueber das Internet
+
+**Seit 0.34.13: der Online-Code.** Gewuenscht: "nicht nur ueber LAN
+spielen ... keine Einstellung am Router und kein Dialog der
+Windows-Firewall". Beides loest dasselbe aus - jemand lauscht nach
+draussen. Also lauscht niemand mehr nach draussen:
+
+    Gastgeber                                                         Gast
+    Lobby auf 127.0.0.1:P <- cloudflared tunnel -> Cloudflare <- cloudflared access tcp
+                                                                 auf 127.0.0.1:Q <- Spiel
+
+* Die eigene Lobby lauscht nur auf **127.0.0.1** (`netz.Gastgeber(...,
+  nur_lokal=True)`). Daran fragt Windows nie nach.
+* `online.Tunnel` startet `cloudflared tunnel --protocol http2 --url
+  tcp://127.0.0.1:P`. Cloudflare vergibt einen Quick Tunnel
+  `wort-wort-wort-wort.trycloudflare.com` - die vier Woerter sind der
+  **Code**. Bereit ist er, wenn cloudflared "Registered tunnel connection"
+  schreibt. `--protocol http2` statt QUIC, weil eine UDP-Steckdose, auf der
+  Antworten ankommen, unter Windows die Firewall-Abfrage ausloesen kann.
+* Der Gast gibt den Code unter MITSPIELEN ein. `online.Zugang` startet
+  `cloudflared access tcp --hostname CODE.trycloudflare.com --url
+  127.0.0.1:Q`, wartet auf "Start Websocket listener" und verbindet das
+  Spiel ganz gewoehnlich mit 127.0.0.1:Q. **Ab da ist es dieselbe Leitung
+  wie im LAN** - dasselbe Protokoll, derselbe autoritative Gastgeber.
+* Beide Seiten bauen nur ausgehende Verbindungen auf (Cloudflare, Port 7844
+  und 443). Das geht durch jeden Heimrouter, auch hinter Mobilfunk.
+* Das Programm liegt in `tools/cloudflared` (Windows amd64, macOS arm64 und
+  amd64, Fassung 2026.10.0, Apache 2.0). Beim ersten Gebrauch wird es in
+  den Datenordner ausgepackt und mit der Pruefsumme aus `K.ONLINE`
+  verglichen; selbst ausgepackt traegt es keinen "aus dem Internet"-Vermerk,
+  SmartScreen und Gatekeeper halten es nicht an. Unter Windows haengt es in
+  einem Job-Objekt mit KILL_ON_JOB_CLOSE: stuerzt das Spiel ab, endet
+  cloudflared mit. `DUSTFRONT_CLOUDFLARED` zeigt auf ein anderes Programm
+  (die Pruefungen nehmen `tests/attrappe_cloudflared.py`).
+* Der Code wechselt mit jeder neuen Lobby (Quick Tunnels vergeben jedes Mal
+  einen neuen Namen). Bricht der Tunnel ab, startet er nach
+  `ONLINE["neustart_nach"]` Sekunden neu, hoechstens dreimal hintereinander.
+* Fehler stehen statt des Codes da, in Worten: CLOUDFLARE NICHT
+  ERREICHBAR, LOBBY NICHT ERREICHBAR - CODE FALSCH ODER ZU, ... Ein
+  falscher Code fuehrt zurueck in die eigene Lobby, mit dem Grund.
+
+**Was nicht geprueft werden konnte:** der Weg ueber Cloudflare selbst. Die
+Pruefungen laufen mit einer Attrappe, die dieselben Aufrufe und Zeilen hat
+und lokal weiterreicht; das echte cloudflared wurde nur bis zur Vergabe des
+Codes ausprobiert (der Rechner, auf dem gebaut wurde, kam nicht weiter ins
+Netz). Erster echter Versuch: zwei Rechner, verschiedene Netze.
+
+**Das LAN** ist seitdem ein Schalter: EINSTELLUNGEN > NETZ > IM LAN
+SICHTBAR. Erst damit lauscht die Lobby auf allen Netzkarten, und erst
+damit gibt es Ansager und Sucher (lan.py) - und die Firewall-Abfrage.
+Beide Schalter gelten sofort (`Gefecht.netz_umstellen`): die lauschende
+Steckdose wird auf demselben Port getauscht, wer drin ist, bleibt drin.
+
+Der alte Weg (bis 0.34.12 der einzige) folgt, er geht weiter:
 
 **FEST.** `--online` aendert am Spiel **nichts**. Es ist dieselbe Leitung,
 dasselbe Protokoll, derselbe autoritative Gastgeber - nur von weiter her.
@@ -1856,6 +1911,9 @@ schickt. **Neue Eintraege kommen unten dazu**, mit Version.
 | 0.32 | **jeder** (eigene Lobby) | eingehend | TCP 50505, bei Belegung bis 50512 | die eigene Lobby | man kann anderen beitreten, aber niemand einem selbst |
 | 0.32 | **jeder** (eigene Lobby) | eingehend | UDP 50504 | Antwort auf die Lobbysuche | die eigene Lobby steht bei anderen nicht in der Liste |
 | 0.32 | wer die Lobbysuche offen hat | ausgehend, Rundruf | UDP 50504 | Lobbys im Netz finden | Liste bleibt leer - Adresse von Hand geht weiter |
+| 0.34.13 | **jeder** (eigene Lobby) | nur 127.0.0.1 | TCP 50505 (bis 50512) | die eigene Lobby, fuer den Tunnel; die Zeilen 0.32 oben gelten nur noch mit IM LAN SICHTBAR | - (lokal, keine Firewall-Abfrage) |
+| 0.34.13 | Gastgeber mit Online-Code | ausgehend | HTTPS 443 (api.trycloudflare.com), TCP 7844 (Cloudflare) | den Quick Tunnel aufbauen | statt des Codes steht CLOUDFLARE NICHT ERREICHBAR; LAN geht weiter |
+| 0.34.13 | Gast mit Code | ausgehend | HTTPS 443 (CODE.trycloudflare.com); lokal 127.0.0.1, freier Port | zur Lobby hinter dem Code | LOBBY NICHT ERREICHBAR, zurueck in die eigene Lobby |
 
 Was seit 0.32 anders ist als bei den Playtests davor: Frueher oeffnete nur
 der Gastgeber einen Port, jetzt jeder (jeder sitzt in seiner eigenen
@@ -1871,6 +1929,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.13 | Online-Code ueber Cloudflare (7.9). Die eigene Lobby lauscht ohne IM LAN SICHTBAR nur auf 127.0.0.1, ohne Ansager; die Lobbysuche sucht dann nicht im LAN. Protokoll unveraendert | Ist eine Lobby im LAN nicht mehr zu finden: Schalter IM LAN SICHTBAR beim Gastgeber, oder den Code nehmen. Steht statt des Codes ein Fehler: siehe dessen Wortlaut (7.9) |
 | 0.34.12 | Neue Nachricht `loadout` (Gast -> Gastgeber): das im Spiel geaenderte Loadout, gilt ab dem naechsten Einstieg | Ein aelterer Gastgeber ignoriert sie, dann gilt weiter das Loadout vom Verbinden |
 | 0.34.11 | Buggys ueberstehen den Rundenstart aus der Lobby (vorher beim Gastgeber weggeraeumt, beim Gast weiter gemeldet); C4 klebt am Buggy und faehrt mit | Kein neues Feld; die Ladung kommt wie jede C4 ueber `schuesse`. Ein Gastgeber mit 0.34.9/0.34.10 meldet Buggys, die bei ihm nicht mehr existieren |
 | 0.34.9 | Buggys: neues Feld `fahrzeuge` in der Weltmeldung (`[x, y, winkel, ebene, kennung, fahrer_nummer oder -1, tempo]`), je Spieler `fz` (sitzt im Wagen); Eingabe unveraendert (W/S/A/D und E wie zu Fuss). `karten/staubtal.txt` hat drei `F`-Marken | Aeltere Gaeste sehen keine Buggys und den Fahrer frei schweben; deshalb ist die Version gleich zu halten (wird beim Verbinden ohnehin geprueft) |

@@ -171,7 +171,23 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
                     print("Ohne Kennwort (--passwort) kann jeder mitspielen,")
                     print("der die Adresse kennt.")
         else:
-            gast = netz.Gast(wohin)
+            from . import online
+            code = online.code_lesen(wohin)
+            if code:
+                # Ein Online-Code (seit 0.34.13): erst den Zugang abwarten.
+                import time
+                zugang = online.Zugang(code)
+                print("Verbinde ueber Cloudflare mit %s ..." % code)
+                while not zugang.bereit and not zugang.fehler:
+                    zugang.schritt()
+                    time.sleep(0.1)
+                if zugang.fehler:
+                    print("Kein Zugang: %s" % zugang.fehler)
+                    zugang.schliessen()
+                    return 1
+                gast = netz.Gast(zugang.adresse, zugang=zugang)
+            else:
+                gast = netz.Gast(wohin)
             if not gast.offen:
                 print("Keine Verbindung zu %s: %s" % (wohin, gast.fehler))
                 return 1

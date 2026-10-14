@@ -127,7 +127,18 @@ class Anzeige:
             # Lobby, und nicht die ganze Runde lang. Die Karte heisst hier
             # wie die Spielart; zweimal LOBBY sagt nichts.
             if g.ist_gastgeber:
-                _text(ziel, g.gastgeber.adresse, 10, y + 9, K.C_MUTED_DK)
+                # Seit 0.34.13 der Online-Code - mit ihm kommt man von
+                # ueberall herein. Die Adresse im LAN nur, wenn die Lobby
+                # dort ueberhaupt zu sehen ist.
+                code = g.gastgeber.code
+                if code:
+                    _text(ziel, "CODE: " + code.upper(), 10, y + 9, K.C_AMBER)
+                elif g.gastgeber.tunnel is not None:
+                    _text(ziel, "CODE: " + g.gastgeber.tunnel.beschreibung()[:30],
+                          10, y + 9, K.C_MUTED_DK)
+                if not g.gastgeber.nur_lokal:
+                    _text(ziel, "LAN: " + g.gastgeber.adresse, 10, y + 18,
+                          K.C_MUTED_DK)
             return
         karte = (g.karte_kopf.get("name") or g.karte or "TESTKARTE").upper()
         _text(ziel, karte, 10, y + 9, K.C_MUTED)

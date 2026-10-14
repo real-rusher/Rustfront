@@ -524,6 +524,20 @@ class Textfeld(Element):
         if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_TAB,
                       pygame.K_ESCAPE, pygame.K_UP, pygame.K_DOWN):
             return False
+        if ev.key == pygame.K_v and getattr(ev, "mod", 0) & (pygame.KMOD_CTRL
+                                                              | pygame.KMOD_META):
+            # Einfuegen (seit 0.34.13): einen Online-Code tippt niemand
+            # gern ab. Gefiltert wie getippt, Zeilenumbrueche fallen weg.
+            from .online import einfuegen
+            for zeichen in einfuegen().strip():
+                if not zeichen.isprintable():
+                    continue
+                if self.erlaubt is not None and not self.erlaubt(zeichen):
+                    continue
+                if len(self.wert) < self.laenge:
+                    self.wert += zeichen
+            self.blinken = 0.0
+            return True
         zeichen = getattr(ev, "unicode", "")
         if not zeichen or not zeichen.isprintable():
             return False

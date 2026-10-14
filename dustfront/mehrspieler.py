@@ -668,7 +668,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Gastgeber, und nicht in den Pruefungen - die sollen keinen
         # festen UDP-Port belegen.
         self.ansager = None
-        if ansagen and gastgeber is not None:
+        self._ansagen = bool(ansagen)
+        # Seit 0.34.13 nur, wenn die Lobby im LAN lauscht: wer nur auf
+        # 127.0.0.1 lauscht, ist im LAN ohnehin nicht zu erreichen, und der
+        # Ansager oeffnet eine UDP-Steckdose nach aussen - genau das, was
+        # die Firewall-Abfrage ausloest.
+        if ansagen and gastgeber is not None and not gastgeber.nur_lokal:
             from . import lan
             self.ansager = lan.Ansager()
         # Die Regeln der Runde, als eine Sammlung (siehe regeln.py). Die
@@ -1892,6 +1897,24 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
 
     # ---- Schritt: Gastgeber -------------------------------------------
     # ---- Der Buggy (seit 0.34.9) ---------------------------------------
+    def netz_umstellen(self) -> None:
+        """Die Einstellungen NETZ uebernehmen, ohne die Lobby zu schliessen
+        (seit 0.34.13). Wer schon drin ist, bleibt drin."""
+        if not self.ist_gastgeber:
+            return
+        o = self.app.opt
+        lan_an = bool(o["lan_offen"])
+        if not self.gastgeber.lan_setzen(lan_an):
+            self.melden("IM LAN GEHT GERADE NICHT: PORT %d BELEGT"
+                        % self.gastgeber.port)
+        if self._ansagen and not self.gastgeber.nur_lokal and self.ansager is None:
+            from . import lan
+            self.ansager = lan.Ansager()
+        elif self.gastgeber.nur_lokal and self.ansager is not None:
+            self.ansager.schliessen()
+            self.ansager = None
+        self.gastgeber.tunnel_setzen(bool(o["online_lobby"]))
+
     def _loadout_beobachten(self) -> None:
         """Hat sich das eigene Loadout geaendert (Menue AUSRUESTUNG)?
 
@@ -3507,7 +3530,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         if not self.gast.offen:
             self.hinweis = "VERBINDUNG VERLOREN  [ESC]"
             self._abbruch_buchen()          # mit dem letzten Zwischenstand
-            if self.heimkehr:
+            zugang = getattr(self.gast, "zugang", None)
+            if self.heimkehr and zugang is not None and zugang.fehler:
+                # Ueber einen Online-Code: cloudflared weiss meist genauer,
+                # woran es lag (Code falsch, Lobby zu, Cloudflare weg).
+                self.heim(zugang.fehler)
+            elif self.heimkehr:
                 # Der Gastgeber hat aufgehoert oder die Leitung ist weg.
                 # Zurueck in die eigene Lobby, mit dem Grund obendrauf.
                 self.heim("VERBINDUNG ZU %s VERLOREN"
@@ -4231,6 +4259,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         """
         eintraege = [("weiter", "WEITER", "")]
         konto = getattr(self.app, "konto", None)
+        if self.ist_gastgeber:
+            # Der Online-Code (seit 0.34.13) - auswaehlen kopiert ihn. Er
+            # selbst steht rechts im Kasten: vier Woerter passen nicht in
+            # die Spalte.
+            eintraege.append(("code", "ONLINE-CODE",
+                              "KOPIEREN" if self.gastgeber.code else ""))
         if self.in_lobby:
             if self.ist_gastgeber:
                 if self.kos_index:
@@ -4456,7 +4490,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     # gefaehrlich: ein Druck daneben haette das Gefecht beendet.
     TATEN = ("weiter", "raus", "teams", "neu", "ausruestung", "konto",
              "planen", "starten", "starten_kos", "lobby", "suchen",
-             "beenden", "einstellungen")
+             "beenden", "einstellungen", "code")
 
     def _menue_wirken(self, schluessel: str, vor: bool, waehlen: bool) -> None:
         if schluessel in self.TATEN and not waehlen:
@@ -4474,6 +4508,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             return
         if schluessel == "beenden":
             self.app.laeuft = False
+            return
+        if schluessel == "code":
+            from .sitzung import code_kopieren
+            self.melden(code_kopieren(self), 5.0)
             return
         if schluessel == "suchen":
             from .sitzung import LobbySuche
@@ -5407,7 +5445,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         "teams": "MITSPIELER SOFORT IN DIE ANDERE MANNSCHAFT.",
         "ausruestung": "DEINE LOADOUTS. GILT AB DEM NÄCHSTEN EINSTIEG.",
         "konto": "ANMELDEN, ABMELDEN, DEINE ZAHLEN.",
-        "einstellungen": "BILD, TON, STEUERUNG, BARRIEREFREIHEIT.",
+        "einstellungen": "BILD, TON, STEUERUNG, BARRIEREFREIHEIT, NETZ.",
+        "code": "KOPIERT DEN CODE. WER IHN UNTER MITSPIELEN EINGIBT, KOMMT REIN.",
         "suchen": "LOBBYS IM SELBEN NETZ - ANKLICKEN UND UMSTEIGEN.",
         "raus": "ZURÜCK IN DEINE EIGENE LOBBY.",
         "lobby": "BEENDET DIE RUNDE. ALLE GEHEN ZURÜCK IN DIE LOBBY.",
@@ -5551,9 +5590,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             naechste = self.plan_ausblick()
         zeilen.append((naechste, K.C_CREAM, 1))
         if self.ist_gastgeber:
+            from .sitzung import code_zeile
             zeilen.append(("", K.C_MUTED, 1))
-            zeilen.append(("ADRESSE  %s" % self.gastgeber.adresse,
-                           K.C_MUTED_DK, 1))
+            zeilen.append(("ONLINE-CODE", K.C_AMBER, 1))
+            zeilen.append((code_zeile(self),
+                           K.C_CREAM if self.gastgeber.code else K.C_MUTED, 1))
+            if not self.gastgeber.nur_lokal:
+                zeilen.append(("LAN  %s" % self.gastgeber.adresse,
+                               K.C_MUTED_DK, 1))
         hilfe = self.MENUE_HILFE.get(gewaehlt, "")
         # Hoehe ausrechnen, dann zeichnen: Text, der sich umbricht, zaehlt
         # mehrfach.
