@@ -17,8 +17,10 @@ Einstellung durch jeden Router und jede Firewall:
 
 * Der Gastgeber startet `cloudflared tunnel --url tcp://127.0.0.1:PORT`.
   Cloudflare vergibt dafuer einen "Quick Tunnel" mit zufaelligem Namen
-  aus vier Woertern (`wort-wort-wort-wort.trycloudflare.com`). Die vier
-  Woerter sind der **Code**, den man Freunden gibt.
+  aus vier englischen Woertern (etwa
+  `thermal-underlying-providers-toe.trycloudflare.com`). Die vier Woerter
+  sind der **Code**, den man Freunden gibt. Ausgesucht werden sie von
+  Cloudflare, nicht hier - darum Englisch.
 * Der Gast startet `cloudflared access tcp --hostname CODE... --url
   127.0.0.1:P` und verbindet sich mit dem Spiel ganz gewoehnlich mit
   127.0.0.1:P. Ab da ist es dieselbe Leitung wie im LAN (netz.py).

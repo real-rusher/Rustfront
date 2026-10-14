@@ -592,7 +592,8 @@ draussen. Also lauscht niemand mehr nach draussen:
   nur_lokal=True)`). Daran fragt Windows nie nach.
 * `online.Tunnel` startet `cloudflared tunnel --protocol http2 --url
   tcp://127.0.0.1:P`. Cloudflare vergibt einen Quick Tunnel
-  `wort-wort-wort-wort.trycloudflare.com` - die vier Woerter sind der
+  `thermal-underlying-providers-toe.trycloudflare.com` (die Woerter waehlt
+  Cloudflare, englisch) - die vier Woerter sind der
   **Code**. Bereit ist er, wenn cloudflared "Registered tunnel connection"
   schreibt. `--protocol http2` statt QUIC, weil eine UDP-Steckdose, auf der
   Antworten ankommen, unter Windows die Firewall-Abfrage ausloesen kann.
@@ -1929,6 +1930,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.14 | Nur Beispiele und Hilfetext: die Codes sind englisch (vergibt Cloudflare) | Nichts am Netz geaendert |
 | 0.34.13 | Online-Code ueber Cloudflare (7.9). Die eigene Lobby lauscht ohne IM LAN SICHTBAR nur auf 127.0.0.1, ohne Ansager; die Lobbysuche sucht dann nicht im LAN. Protokoll unveraendert | Ist eine Lobby im LAN nicht mehr zu finden: Schalter IM LAN SICHTBAR beim Gastgeber, oder den Code nehmen. Steht statt des Codes ein Fehler: siehe dessen Wortlaut (7.9) |
 | 0.34.12 | Neue Nachricht `loadout` (Gast -> Gastgeber): das im Spiel geaenderte Loadout, gilt ab dem naechsten Einstieg | Ein aelterer Gastgeber ignoriert sie, dann gilt weiter das Loadout vom Verbinden |
 | 0.34.11 | Buggys ueberstehen den Rundenstart aus der Lobby (vorher beim Gastgeber weggeraeumt, beim Gast weiter gemeldet); C4 klebt am Buggy und faehrt mit | Kein neues Feld; die Ladung kommt wie jede C4 ueber `schuesse`. Ein Gastgeber mit 0.34.9/0.34.10 meldet Buggys, die bei ihm nicht mehr existieren |

@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.13, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.14, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -326,8 +326,9 @@ Wie es verteilt wird: [`docs/MEHRSPIELER.md`](docs/MEHRSPIELER.md), 12c.
 
 ### Über das Internet: mit Code (seit 0.34.13)
 
-Jede eigene Lobby bekommt von selbst einen **Code aus vier Wörtern**, zum
-Beispiel `GRAU-WOLF-TANZT-HEUTE`. Er steht in der Lobby oben links und im
+Jede eigene Lobby bekommt von selbst einen **Code aus vier englischen
+Wörtern**, zum Beispiel `THERMAL-UNDERLYING-PROVIDERS-TOE` (die Wörter
+vergibt Cloudflare). Er steht in der Lobby oben links und im
 Pausenmenü unter *ONLINE-CODE* (auswählen kopiert ihn). Wer mitspielen
 will, öffnet *ANDERER LOBBY BEITRETEN*, fügt den Code mit Strg+V ein und
 drückt *BEITRETEN* - von überall, auch aus einem anderen Netz.
@@ -709,6 +710,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.14 | **Online-Code: englische Beispiele.** Die Wörter des Codes vergibt Cloudflare, und die sind englisch (z. B. `THERMAL-UNDERLYING-PROVIDERS-TOE`); deutsch waren nur die Beispiele in README, Hilfe und Testersatz - jetzt überall englisch, und die Hilfe unter EINSTELLUNGEN > NETZ sagt es. **Netz/LAN: nichts geändert** (Versionsnummer trotzdem neu, beide brauchen 0.34.14) |
 | 0.34.13 | **Online spielen mit Code - ohne Router, ohne Firewall-Abfrage.** Jede eigene Lobby bekommt einen Code aus vier Wörtern (oben links in der Lobby und im Pausenmenü unter ONLINE-CODE, auswählen kopiert ihn). Wer ihn unter ANDERER LOBBY BEITRETEN eingibt (Strg+V fügt ein), kommt von überall herein. Dahinter steckt ein kostenloser Quick Tunnel von Cloudflare: beide Seiten bauen nur ausgehende Verbindungen auf, die Lobby lauscht nur auf 127.0.0.1 - so muss am Router nichts freigegeben werden, und die Windows-Firewall fragt nicht. Das Programm `cloudflared` 2026.10.0 liegt für Windows und macOS in `tools/cloudflared` bei (Apache-2.0-Lizenz, Prüfsummen in `K.ONLINE`), das Spiel packt es beim ersten Mal selbst aus. **LAN jetzt nur auf Wunsch:** neuer Reiter EINSTELLUNGEN > NETZ mit ONLINE-LOBBY (an) und IM LAN SICHTBAR (aus); erst damit lauscht die Lobby im LAN, antwortet auf die Suche - und die Firewall fragt. Beides gilt sofort, wer drin ist, bleibt drin. Neu auch: Strg+V in jedem Textfeld. **Netz/LAN: geändert** - Protokoll gleich, aber die Lobby ist im LAN ohne den Schalter nicht mehr zu finden; beide brauchen 0.34.13 |
 | 0.34.12 | **C4 nach 3 s scharf, Loadout im Spiel ändern geht.** C4 lässt sich jetzt drei statt fünf Sekunden nach dem Aufkleben zünden (`K.C4["ladezeit"]`). Ein im Menü AUSRÜSTUNG geändertes Loadout kam bei einem Gast nie beim Gastgeber an - der kannte nur das vom Verbinden, und das galt auch beim nächsten Einstieg und in der nächsten Runde weiter. Jetzt geht jede Änderung sofort an den Gastgeber und gilt, wie im Menü angegeben, ab dem nächsten Einstieg (nicht mitten im Gefecht); beim Ändern steht kurz "AUSRÜSTUNG GILT AB DEM NÄCHSTEN EINSTIEG". **Netz/LAN: geändert** - neue Nachricht `loadout` vom Gast an den Gastgeber; beide brauchen 0.34.12 |
 | 0.34.11 | **Buggy repariert, C4 klebt am Buggy.** Wurde eine Runde aus der Lobby gestartet (der Normalfall), räumte der Rundenstart die eben aufgestellten Buggys gleich wieder weg: beim Gastgeber waren sie verschwunden, bei den Gästen standen sie weiter da, und fahren ging bei niemandem. Jetzt bleiben sie und stehen zu jedem Rundenstart leer an ihrem Platz. Neu: **C4 bleibt am Buggy kleben**, fährt mit (auch durch die Kurve) und liegt oben auf dem Wagen. Geht sie hoch, bleibt der Buggy heil, der Fahrer bekommt wie sonst 70 % ab. **Netz/LAN: Gefecht geändert, keine neuen Felder** - der Gast sieht die Ladung über die gewohnte Meldung; beide brauchen 0.34.11 |

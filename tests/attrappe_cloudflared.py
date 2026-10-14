@@ -55,7 +55,8 @@ def weiterreichen(a, b):
 
 def tunnel():
     port = int(wert("--url").rsplit(":", 1)[1])
-    code = "probe-tunnel-fuer-%d" % port
+    # Englisch wie bei Cloudflare (dort z. B. "thermal-underlying-providers-toe").
+    code = "sample-tunnel-for-%d" % port
     log("INF", "Requesting new quick Tunnel on trycloudflare.com...")
     time.sleep(0.2)
     log("INF", "|  https://%s%s   |" % (code, ENDUNG))

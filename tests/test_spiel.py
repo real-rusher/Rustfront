@@ -7793,11 +7793,12 @@ from dustfront.einstellungen import VORGABE as _VG73
 from dustfront.core import App as _App73
 
 pruef("Codes werden erkannt, wie man sie bekommt",
-      _on73.code_lesen("Grau-Wolf-Tanzt-Heute") == "grau-wolf-tanzt-heute"
-      and _on73.code_lesen("https://grau-wolf-tanzt-heute.trycloudflare.com/")
-      == "grau-wolf-tanzt-heute"
-      and _on73.code_lesen(" grau-wolf-tanzt-heute.trycloudflare.com ")
-      == "grau-wolf-tanzt-heute")
+      _on73.code_lesen("Thermal-Underlying-Providers-Toe")
+      == "thermal-underlying-providers-toe"
+      and _on73.code_lesen("https://thermal-underlying-providers-toe.trycloudflare.com/")
+      == "thermal-underlying-providers-toe"
+      and _on73.code_lesen(" diy-jane-pledge-statement.trycloudflare.com ")
+      == "diy-jane-pledge-statement")
 pruef("Adressen im LAN bleiben Adressen",
       not _on73.code_lesen("192.168.0.5:50505") and not _on73.code_lesen("spiele-pc")
       and not _on73.code_lesen("localhost") and not _on73.code_lesen(""))
@@ -7837,7 +7838,7 @@ pruef("Ohne LAN lauscht die eigene Lobby nur auf 127.0.0.1",
 pruef("... und oeffnet keine UDP-Steckdose fuer die LAN-Suche", _lc73.ansager is None)
 
 _lc73.gastgeber.tunnel_setzen(True)
-_code73 = "probe-tunnel-fuer-%d" % _pc73
+_code73 = "sample-tunnel-for-%d" % _pc73
 pruef("Der Tunnel steht und gibt einen Code",
       _bis73(lambda: _lc73.gastgeber.code == _code73, [_app_c]),
       "%s / %s" % (_lc73.gastgeber.code,
