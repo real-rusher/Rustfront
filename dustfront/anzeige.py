@@ -105,7 +105,10 @@ class Anzeige:
         self._punkte(ziel)
         ich = g.ich
         if ich is not None:
-            if ich.am_boden:
+            if g.mit_ball:
+                # Im Autoball gibt es nichts als den Wagen: nur der Boost.
+                self._boost(ziel, ich)
+            elif ich.am_boden:
                 self._am_boden(ziel, ich)
             elif not ich.lebt and not g.vorbei:
                 self._gefallen(ziel, ich)
@@ -153,7 +156,10 @@ class Anzeige:
         y = 6
         if g.mit_gegnern:
             y = self._welle(ziel, mitte, y)
-        if self._mit_uhr:
+        if g.mit_ball and g.ab_verlaengerung:
+            _text(ziel, "VERLÄNGERUNG", mitte, y + 2, K.C_RED, 2, "mitte")
+            y += 17
+        elif self._mit_uhr:
             minuten, sekunden = divmod(int(max(0.0, g.rest)), 60)
             gross = not g.mit_gegnern
             farbe = K.C_CREAM
@@ -171,7 +177,10 @@ class Anzeige:
                   mitte, y + 2, K.C_MUTED, 1, "mitte")
             y += 12
         if g.mit_teams:
-            self._mannschaften(ziel, mitte, y)
+            y = self._mannschaften(ziel, mitte, y)
+        if g.mit_ball and g.tore_ziel > 0:
+            _text(ziel, "BIS %d TORE" % g.tore_ziel, mitte, y, K.C_MUTED_DK, 1,
+                  "mitte")
 
     @property
     def _mit_uhr(self) -> bool:
@@ -342,6 +351,8 @@ class Anzeige:
             [{"name": k.name, "abschuesse": k.abschuesse, "tode": k.tode,
               "mvp_punkte": bestenliste.mvp_punkte(k.werte_runde()),
               "k": k} for k in g.kaempfer.values()])
+        if g.mit_ball:
+            reihe.sort(key=lambda e: -g.tore_von.get(e["k"].nummer, 0))
         zeigen = reihe[:5]
         if g.ich is not None and not any(e["k"] is g.ich for e in zeigen):
             zeigen = reihe[:4] + [e for e in reihe if e["k"] is g.ich]
@@ -361,6 +372,11 @@ class Anzeige:
             y = oben + i * 9
             _text(ziel, "%d %-9s" % (platz, wer.name[:9]), rechts - 42, y,
                   farbe, 1, "rechts")
+            if g.mit_ball:
+                # Im Autoball zaehlen Tore, nicht Abschuesse.
+                _text(ziel, "%d TORE" % g.tore_von.get(wer.nummer, 0), rechts, y,
+                      farbe, 1, "rechts")
+                continue
             _text(ziel, "%d/%d" % (e["abschuesse"], e["tode"]), rechts, y,
                   farbe, 1, "rechts")
 
@@ -454,6 +470,30 @@ class Anzeige:
         else:
             rechts = r.right - 6
         _text(ziel, "%d" % munition, rechts, r.y + 15, farbe, 2, "rechts")
+
+    # ---- Unten Mitte im Autoball: der Boost ------------------------------
+    def _boost(self, ziel, ich) -> None:
+        """Ein breiter Balken unten in der Mitte, wo sonst die Hotbar steht.
+        Der eigene Wagen ist der, in dem man sitzt."""
+        g = self.g
+        wagen = None
+        for b in g.fahrzeuge:
+            if b.fahrer is ich or (getattr(ich, "im_fahrzeug", False)
+                                   and b.pos.distance_squared_to(ich.pos) < 4.0):
+                wagen = b
+                break
+        if wagen is None:
+            return
+        voll = K.AUTOBALL["boost_voll"]
+        anteil = max(0.0, min(1.0, wagen.boost_vorrat / voll))
+        r = pygame.Rect(W // 2 - 90, H - 34, 180, 24)
+        ui.kasten(ziel, r, K.C_AMBER if wagen.boostet else K.C_MUTED_DK, KASTEN, 4)
+        _text(ziel, "BOOST [%s]" % g.ab_boost_taste(), r.x + 6, r.y + 4,
+              K.C_AMBER if wagen.boostet else K.C_MUTED)
+        _text(ziel, "%d" % int(wagen.boost_vorrat), r.right - 6, r.y + 4,
+              K.C_CREAM, 1, "rechts")
+        farbe = (255, 170, 70) if anteil >= K.AUTOBALL["boost_mindest"] / voll else K.C_RED
+        _balken(ziel, (r.x + 6, r.y + 14, r.width - 12, 5), anteil, farbe)
 
     # ---- Unten Mitte: die Hotbar --------------------------------------
     def _hotbar(self, ziel, ich) -> None:

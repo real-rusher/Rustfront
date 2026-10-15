@@ -61,6 +61,7 @@ from . import konto as konto_modul
 from . import netz
 from . import regeln as R
 from . import ui
+from .autoball import AutoballTeil
 from .lobby import LobbyTeil, lobby_regeln
 from .spielerkosmetik import KosmetikTeil
 from . import world as welt_modul
@@ -630,7 +631,7 @@ def _version_kleiner(a: str, b: str) -> bool:
     return teile(a) < teile(b)
 
 
-class Gefecht(Szene, LobbyTeil, KosmetikTeil):
+class Gefecht(Szene, LobbyTeil, KosmetikTeil, AutoballTeil):
     """Die Spielszene fuer den LAN-Test, beim Gastgeber wie beim Gast.
 
     Die Lobby und der Rundenplan stehen in lobby.py (LobbyTeil).
@@ -831,6 +832,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Gast Attrappen, die an die gemeldete Stelle gesetzt werden.
         self.fahrzeuge: list = []
         self._fahrhinweis_rest = 0.0  # so lange steht die Fahrhilfe noch da
+        # Autoball (seit 0.34.17, autoball.py): Ball, Tore, Anstoss.
+        self._ab_anlegen()
         # Das eigene Loadout, wie es zuletzt gemeldet (Gast) oder gesehen
         # (Gastgeber) wurde - siehe _loadout_beobachten.
         self._lo_zuletzt = None
@@ -895,6 +898,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._namen_merken(self.ich)
             if self.in_lobby:
                 self._lobby_bestuecken()
+            # Ohne Lobby gestartet (Pruefungen, --sofort) und Autoball:
+            # Ball und Wagen jetzt, sonst erst mit der Runde.
+            self._ab_runde_neu()
         else:
             self.gast.senden({"t": "hallo", "name": self.name,
                               "team": self.team_wunsch,
@@ -999,7 +1005,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     NETZKLAENGE = ("speien", "boss_ansage", "dash", "wurf", "medkit", "ruf",
                    "reload", "downed_not_dead", "rundenstart", "c4_explosion",
                    "lmg_dauer", "lmg_salve", "schuss_schrot", "smoke_grenade",
-                   "buggy_tuer", "buggy_aufprall", "buggy_rutschen")
+                   "buggy_tuer", "buggy_aufprall", "buggy_rutschen",
+                   "autoball_stoss", "autoball_tor", "autoball_boost",
+                   "autoball_pfiff")
 
     def _klang(self, name: str, lautstaerke: float = 1.0, pos=None,
                ebene: int | None = None) -> None:
@@ -1993,7 +2001,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 bester, abstand = b, d
         return bester
 
-    def _einsteigen(self, k: Kaempfer, b) -> None:
+    def _einsteigen(self, k: Kaempfer, b, ton: bool = True) -> None:
         b.fahrer = k
         b.gas = b.lenk = 0.0
         k.fahrzeug = b
@@ -2009,7 +2017,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         k.tempo.update(0, 0)
         k.pos.update(b.pos)
         k.treppe_rest = K.GEFECHT["treppe_takt"]
-        self.welt.klang("buggy_tuer", 0.8, b.pos, b.ebene)
+        if ton:
+            self.welt.klang("buggy_tuer", 0.8, b.pos, b.ebene)
 
     def _fahrzeug_loesen(self, k: Kaempfer) -> None:
         """Fahrer und Wagen trennen, ohne die Figur zu versetzen."""
@@ -2047,13 +2056,19 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         b.gas = 1.0 if will.y < -0.3 else (-1.0 if will.y > 0.3 else 0.0)
         b.lenk = 1.0 if will.x > 0.3 else (-1.0 if will.x < -0.3 else 0.0)
         b.handbremse = bool(ein.get("hb"))
+        # Autoball: die Feuertaste ist der Boost. Ausgestiegen wird nicht -
+        # zu Fuss zwischen den Wagen gaebe es nur Unfaelle.
+        b.boost = self.mit_ball and bool(ein.get("feuert"))
+        if self.mit_ball and (self.ab_anstoss > 0.0 or self.vorbei):
+            b.gas = b.lenk = 0.0
+            b.boost = False
         k.will.update(0, 0)
         k.tempo.update(0, 0)
         k.feuert = False
         k.zielt = False
         k.hilft = None
         self._loslassen(k)
-        if self._e_gedrueckt(ein) and k.treppe_rest <= 0:
+        if self._e_gedrueckt(ein) and k.treppe_rest <= 0 and not self.mit_ball:
             self._aussteigen(k)
 
     def _fahrzeuge_nachziehen(self) -> None:
@@ -2093,6 +2108,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 winkel, ebene = float(e[2]), int(e[3])
                 kennung, fahrer, fahrt = int(e[4]), int(e[5]), float(e[6])
                 rutschen = float(e[7]) if len(e) > 7 else 0.0
+                # Autoball (seit 0.34.17): Boostvorrat und ob er brennt.
+                vorrat = float(e[8]) if len(e) > 8 else 0.0
+                boostet = bool(e[9]) if len(e) > 9 else False
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
@@ -2110,6 +2128,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             b.team = k.team if k is not None else -1
             b.geschw = b.vorn * fahrt
             b.rutschen = max(0.0, min(1.0, rutschen))
+            b.boost_vorrat = max(0.0, min(K.AUTOBALL["boost_voll"], vorrat))
+            b.boostet = boostet
             neu.append(b)
         self.fahrzeuge = neu
 
@@ -2137,6 +2157,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 self._tastenname("vor"), self._tastenname("zurueck"),
                 self._tastenname("links"), self._tastenname("rechts"),
                 self._tastenname("dash"), taste_e)
+            if self.mit_ball:
+                text = self._ab_hinweis_text()
             SCHRIFT.zeichnen(ziel, text, int(p.x), int(p.y) + 30, K.C_CREAM, 1,
                              ausrichtung="mitte")
             return
@@ -2227,13 +2249,18 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             # Keine Wellen, keine Beute, kein Ende - nur das Gehege.
             self._lobby_schritt(dt)
         elif not self.vorbei:
-            self._beute_nachlegen(dt)
+            if self.mit_ball:
+                self._autoball(dt)
+            else:
+                self._beute_nachlegen(dt)
             self._wellen(dt)
             self._zone(dt)
             self._runden(dt)
         self._gegnerlast_zaehlen()
         self._rpg_regeln()
         self.welt.schritt(dt)
+        # Nach den Wagen und vor den Fahrern: Ball und Stoesse (autoball.py).
+        self._ab_physik(dt)
         self._fahrzeuge_nachziehen()
         if self.in_lobby:
             self._lobby_munition()        # nach dem Schuss, siehe dort
@@ -3031,7 +3058,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                     toeter.serie += 1
                     toeter.zaehler["serie"] = max(
                         toeter.zaehler.get("serie", 0), toeter.serie)
-                    if self.mit_teams and 0 <= toeter.team < len(self.teampunkte):
+                    if (self.mit_teams and not self.mit_ball
+                            and 0 <= toeter.team < len(self.teampunkte)):
                         # In "team" zaehlt der Abschuss fuer die Mannschaft.
                         # In "versus" nicht: dort zaehlen nur Rundensiege.
                         if not self.regeln["runden"]:
@@ -3112,6 +3140,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     def _ende_pruefen(self, dt: float) -> None:
         if self.vorbei or not self.kaempfer or self.in_lobby:
             return
+        if self.mit_ball:
+            return            # Uhr, Tore und Verlaengerung: _autoball
         # Zone und Runden beenden sich selbst, sobald ein Team am Ziel ist.
         if self.regeln["zone"] or self.regeln["runden"]:
             if self.ende_art == "zeit" and self.ende_wert > 0:
@@ -3506,7 +3536,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                   round(b.fahrt),
                   # Wie sehr er rutscht: daraus macht der Gast Spuren und
                   # Staub (seit 0.34.16).
-                  round(b.rutschen, 2)]
+                  round(b.rutschen, 2),
+                  # Autoball (seit 0.34.17): Boostvorrat und ob er brennt.
+                  int(b.boost_vorrat), 1 if b.boostet else 0]
                  for b in self.fahrzeuge]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
                 "feuer": brand, "fahrzeuge": wagen,
@@ -3524,7 +3556,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 "zk": self.kreis_nr,
                 "rn": self.runde, "rp": round(self.runden_pause, 1),
                 "rg": self.runden_gespielt, "rs": self.runde_sieger,
-                "st": self.sieger_team}
+                "st": self.sieger_team,
+                # Autoball: "ball" und "ab" (leer in jeder anderen Spielart).
+                **self._ab_meldung()}
 
     # ---- Schritt: Gast -------------------------------------------------
     def _schritt_gast(self, dt: float) -> None:
@@ -3723,6 +3757,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self.welt.dazu(k)
         self._karte_geladen()
         self._fahrzeuge_aufstellen()
+        # Der Ball gehoert zur alten Welt. Der Gastgeber stellt mit der
+        # Runde einen neuen auf, der Gast bekommt ihn gemeldet.
+        self.ball = None
         return True
 
     @staticmethod
@@ -3892,8 +3929,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Der Renderer laeuft ueber welt.wesen: beim Gast wird die Liste
         # gesetzt statt simuliert.
         self._fahrzeuge_uebernehmen(meldung.get("fahrzeuge", []))
+        self._ab_uebernehmen(meldung)
         self.welt.wesen = ([k for k in self.kaempfer.values() if k.lebt]
-                           + list(self.fahrzeuge))
+                           + list(self.fahrzeuge)
+                           + ([self.ball] if self.ball is not None else []))
         self.welt.neue = []
         if self.ich is not None:
             self.welt.held = self.ich
@@ -4201,7 +4240,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._kamera_versatz = ((self.app.eingabe.maus
                                      - pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2))
                                     * self.kamera.zoom)
-        self.kamera.schritt(dt, self.ich.pos, self.ich.ziel,
+        self.kamera.schritt(dt, self._ab_kamera_ziel(self.ich.pos), self.ich.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe),
                             versatz=self._kamera_versatz)
 
@@ -4690,6 +4729,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
 
         if self.in_lobby:
             self._lobby_bestuecken()
+        self._ab_runde_neu()
 
         if self.ist_gastgeber:
             self.gastgeber.an_alle(dict(self._willkommen(-1, None),
@@ -4752,6 +4792,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._namen_zeichnen(ziel)
         self._fahrzeug_hinweis(ziel)
         self._kreispfeil(ziel)
+        self._ab_ballpfeil(ziel)
         self._randpfeile(ziel)
         self._erfassung_zeichnen(ziel)
         if self.menue is None:
@@ -4771,6 +4812,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # und Hotbar sagen dann nichts mehr, und sie standen quer durch die
         # Siegtafel.
         if not self.vorbei:
+            self._ab_mitte_zeichnen(ziel)
             self._anzeige(ziel)
         else:
             self._endtafel(ziel)
@@ -4853,6 +4895,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         """Das normale Bild in Weltpixeln - ausserhalb liegt der Nebel.
         None, wenn nichts im Nebel liegt (Zoom 1 oder naeher)."""
         if self.kamera.zoom <= 1.0 + 0.004:
+            return None
+        if self.mit_ball:
+            # Autoball ist Sport, kein Versteckspiel: wer weiter wegzoomt,
+            # soll Ball und Wagen auch sehen (seit 0.34.17).
             return None
         mitte = self._sicht_mitte()
         r = pygame.Rect(0, 0, K.GAME_W, K.GAME_H)
@@ -4951,6 +4997,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         neutral - man soll auf einen Blick sehen, ob der Kreis umkaempft
         ist oder laeuft.
         """
+        self._ab_feld_zeichnen(flaeche, ebene, ecke)
         if not self.regeln["zone"] or ebene != self.zone_ebene:
             return
         z = K.ZONE
@@ -5892,6 +5939,23 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Bestenliste - deshalb "RUNDE" darunter und nicht mehr.
         sx = self._tafel_spalten(x, breite)
         kopfzeile = y + 6
+        if self.mit_ball:
+            # Autoball: nur die Tore. Abschuesse, Tode und Opfer gibt es
+            # dort nicht, sie stuenden als lauter Nullen da.
+            f.zeichnen(ziel, "TORE", sx["abschuesse"], kopfzeile, dunkel, 1, 1, "rechts")
+            zy = y + 18
+            for platz, z in enumerate(zeilen, 1):
+                eigen = (self.ich is not None and z["nummer"] == self.ich.nummer)
+                if eigen:
+                    pygame.draw.rect(ziel, (30, 22, 16), (x + 2, zy - 2, breite - 4, 11))
+                farbe = hell if eigen else (K.C_CREAM if platz == 1 else K.C_MUTED)
+                f.zeichnen(ziel, "%d" % platz, x + 6, zy, dunkel, 1)
+                f.zeichnen(ziel, ui.kuerzen(z["name"], sx["waffe"] - x - 20),
+                           x + 16, zy, farbe, 1)
+                f.zeichnen(ziel, "%d" % self.tore_von.get(z["nummer"], 0),
+                           sx["abschuesse"], zy, farbe, 1, 1, "rechts")
+                zy += 11
+            return
         f.zeichnen(ziel, "A", sx["abschuesse"], kopfzeile, dunkel, 1, 1, "rechts")
         f.zeichnen(ziel, "T", sx["tode"], kopfzeile, dunkel, 1, 1, "rechts")
         f.zeichnen(ziel, "K/D", sx["kd"], kopfzeile, dunkel, 1, 1, "rechts")

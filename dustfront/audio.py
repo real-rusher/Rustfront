@@ -364,6 +364,51 @@ def _buggy_aufprall(seed=0):
                     _schlag(780, 520, 0.14, 0.18, 3.6))
 
 
+@platzhalter_klang("autoball_stoss")
+def _autoball_stoss(seed=0):
+    """Ein Wagen trifft den Ball: ein hohler, praller Schlag - Gummi und
+    Luft, kein Blech."""
+    return _mischen(_schlag(170, 95, 0.16, 0.75, 3.4),
+                    _schlag(420, 300, 0.07, 0.25, 6.0),
+                    _rauschen(0.05, 0.22, 3000, 900, 6.0, seed + 101))
+
+
+@platzhalter_klang("autoball_tor")
+def _autoball_tor(seed=0):
+    """Tor: ein Horn in zwei Toenen, darunter ein Rauschen wie eine Menge."""
+    horn = []
+    n = int(RATE * 1.1)
+    for i in range(n):
+        p = i / n
+        f = 233.0 if p < 0.45 else 311.0
+        t = i / RATE
+        welle = sum(math.sin(2 * math.pi * f * k * t) / k for k in (1, 2, 3, 4))
+        huelle = min(1.0, (p % 0.45) * 40) * (1.0 - p) ** 0.6
+        horn.append(welle * 0.16 * huelle)
+    return _mischen(horn, _rauschen(1.4, 0.30, 2400, 1200, 1.1, seed + 102))
+
+
+@platzhalter_klang("autoball_boost")
+def _autoball_boost(seed=0):
+    """Der Schub zuendet: ein kurzes Fauchen."""
+    return _mischen(_rauschen(0.35, 0.40, 2600, 700, 2.4, seed + 103),
+                    _schlag(90, 140, 0.25, 0.30, 2.2))
+
+
+@platzhalter_klang("autoball_pfiff")
+def _autoball_pfiff(seed=0):
+    """Anstoss: ein Pfiff, leicht trillernd."""
+    proben = []
+    n = int(RATE * 0.45)
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        f = 2650.0 + 140.0 * math.sin(i / RATE * 2 * math.pi * 28)
+        phase += 2 * math.pi * f / RATE
+        proben.append(math.sin(phase) * 0.30 * min(1.0, p * 25) * min(1.0, (1 - p) * 8))
+    return proben
+
+
 @platzhalter_klang("menue")
 def _menue(seed=0):
     return _schlag(660, 720, 0.05, 0.22, 3.0)

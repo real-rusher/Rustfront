@@ -156,6 +156,12 @@ class Minikarte:
         # - sonst laege das eigene Zeichen genau darauf.
         for b in getattr(g, "fahrzeuge", ()):
             self._buggy(ziel, g, b, punkt(b.pos), int(b.ebene) != nr)
+        # Autoball (seit 0.34.17): der Ball, gross und hell, obenauf.
+        ball = getattr(g, "ball", None)
+        if ball is not None:
+            x, y = punkt(ball.pos)
+            pygame.draw.circle(ziel, FARBE_DUNKEL, (x, y), 4)
+            pygame.draw.circle(ziel, K.AUTOBALL["ball_farbe"], (x, y), 3)
 
         pygame.draw.rect(ziel, RAHMEN, r.inflate(4, 4), 1)
         return r

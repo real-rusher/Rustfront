@@ -8101,6 +8101,258 @@ pruef("Der Gast bekommt das Rutschen gemeldet (fuer Spuren und Staub)",
       _gb78 and abs(_gb78[0].rutschen - 0.9) < 1e-6, str([b_.rutschen for b_ in _gb78]))
 w78.verlassen(); g78.verlassen()
 
+# ── 0.34.17: Autoball - Rocket League von oben ──────────────────────
+# Gemeldet: "auch wenn zwei Autos an den extrem grossen Ball von zwei
+# verschiedenen Seiten ranfahren, soll er nicht irgendwie durch die
+# durchgehen". Darum zuerst das Spielfeld allein, unter Last.
+print("\n-- Autoball")
+from dustfront import regeln as _R79
+from dustfront import world as _W79
+from dustfront.fahrzeug import Buggy as _Buggy79
+from dustfront.autoball import (Ball as _Ball79, Spielfeld as _Feld79,
+                                ball_an_wagen as _bw79, wand_beruehrung as _wand79,
+                                wagen_an_wagen as _ww79, wagen_kasten as _kasten79)
+
+_d79 = _R79.vorgabe(modus="autoball")
+pruef("Autoball spielt auf seiner eigenen Karte ARENA", _d79["karte"] == "arena",
+      _d79["karte"])
+pruef("... und die ARENA steht bei keiner anderen Spielart zur Wahl",
+      "arena" not in _R79.NACH_NAME["karte"].werte(_R79.vorgabe(modus="team")))
+pruef("Autoball: 5 Minuten, bis 5 Tore, keine Ausruestung im Menue",
+      _d79["ende_wert"] == K.AUTOBALL["dauer"] and _d79["tore"] == K.AUTOBALL["tore"]
+      and not any(f_.gruppe in ("AUSRÜSTUNG", "EINSTIEG") for f_ in _R79.sichtbar(_d79)),
+      str([f_.schluessel for f_ in _R79.sichtbar(_d79)]))
+
+_welt79, _ = _W79.karte_lesen("arena")
+
+
+class _Fahrer79:
+    def __init__(self, n, t):
+        self.nummer, self.team = n, t
+
+
+def _feld79(ball_xy, wagen_def):
+    _welt79.wesen, _welt79.neue = [], []
+    ball = _Ball79(pygame.Vector2(ball_xy), 0)
+    _welt79.dazu(ball)
+    wagen = []
+    for i_, (x_, y_, w_) in enumerate(wagen_def):
+        b_ = _Buggy79(pygame.Vector2(x_, y_), 0, w_)
+        b_.mit_boost = b_.wagen_stoesse = True
+        b_.fahrer = _Fahrer79(i_, i_ % 2)
+        _welt79.dazu(b_)
+        wagen.append(b_)
+    _welt79.schritt(1e-6)
+    return ball, wagen
+
+
+def _im_wagen79(p, b):
+    hl_, hb_ = K.AUTOBALL["wagen_halb"]
+    m_, v_, q_ = _kasten79(b)
+    r_ = p - m_
+    return abs(r_.dot(v_)) < hl_ and abs(r_.dot(q_)) < hb_
+
+
+def _lauf79(ball, wagen, sekunden, steuer):
+    """Faehrt `sekunden` lang; `steuer(i, wagen)` setzt die Eingaben.
+    Gibt die schlimmsten Werte zurueck: Ueberlappung Ball-Wagen,
+    Ball-Wand, Wagen-Wagen, wie oft die Ballmitte in einem Wagen lag und
+    ob ein Wagen je in einer Wand stand."""
+    feld = _Feld79(_welt79)
+    schlimm = {"ball_wagen": 0.0, "ball_wand": 0.0, "wagen_wagen": 0.0,
+               "mitte_drin": 0, "wagen_in_wand": False}
+    for i_ in range(int(sekunden / K.FIXED_DT)):
+        steuer(i_, wagen)
+        _welt79.schritt(K.FIXED_DT)
+        feld.schritt(ball, wagen, K.FIXED_DT)
+        for b_ in wagen:
+            k_ = _bw79(ball.pos, ball.radius, b_)
+            if k_:
+                schlimm["ball_wagen"] = max(schlimm["ball_wagen"], k_[1])
+            if _im_wagen79(ball.pos, b_):
+                schlimm["mitte_drin"] += 1
+            if not b_.passt(b_.pos):
+                schlimm["wagen_in_wand"] = True
+        k_ = _wand79(_welt79, ball.pos, ball.radius, 0)
+        if k_:
+            schlimm["ball_wand"] = max(schlimm["ball_wand"], k_[1])
+        for a_ in range(len(wagen)):
+            for c_ in range(a_ + 1, len(wagen)):
+                k_ = _ww79(wagen[a_], wagen[c_])
+                if k_:
+                    schlimm["wagen_wagen"] = max(schlimm["wagen_wagen"], k_[1])
+    return schlimm
+
+
+def _vollgas79(i_, wagen):
+    for b_ in wagen:
+        b_.gas, b_.lenk, b_.boost, b_.boost_vorrat = 1.0, 0.0, True, 100.0
+
+
+def _dicht79(s, grenze=1.0):
+    return (s["ball_wagen"] < grenze and s["ball_wand"] < grenze
+            and s["mitte_drin"] == 0 and not s["wagen_in_wand"])
+
+
+# Der gemeldete Fall: zwei Wagen frontal von beiden Seiten, Vollgas und Boost.
+_ball79, _wg79 = _feld79((912, 496), [(712, 496, 0.0), (1112, 496, 180.0)])
+_s79 = _lauf79(_ball79, _wg79, 6.0, _vollgas79)
+pruef("Zwei Wagen von beiden Seiten mit Vollgas und Boost: der Ball geht nicht durch",
+      _dicht79(_s79) and _wg79[0].pos.x < _ball79.pos.x < _wg79[1].pos.x, str(_s79))
+# Dasselbe, aber der Ball haelt still - beide druecken ihn sechs Sekunden
+# lang zusammen (ein Ball, der nie ausweichen darf, ist der schwerste Fall).
+
+
+def _klemmen79(i_, wagen):
+    _vollgas79(i_, wagen)
+    _ball79.geschw.y = 0.0
+    _ball79.pos.y = 496.0
+
+
+_ball79, _wg79 = _feld79((912, 496), [(712, 496, 0.0), (1112, 496, 180.0)])
+_s79 = _lauf79(_ball79, _wg79, 6.0, _klemmen79)
+pruef("... auch eingeklemmt und dauernd gedrueckt: keine Ueberlappung, Ball bleibt zwischen ihnen",
+      _dicht79(_s79) and _wg79[0].pos.x < _ball79.pos.x < _wg79[1].pos.x,
+      "%s, Wagen bei %.0f und %.0f, Ball %.0f" % (_s79, _wg79[0].pos.x,
+                                               _wg79[1].pos.x, _ball79.pos.x))
+_ball79, _wg79 = _feld79((912, 32 + 46), [(912, 300, -90.0)])
+_s79 = _lauf79(_ball79, _wg79, 4.0, _vollgas79)
+pruef("Ein Wagen drueckt den Ball gegen die Wand: weder Ball noch Wagen gehen hinein",
+      _dicht79(_s79), str(_s79))
+_ball79, _wg79 = _feld79((252, 92), [(402, 92, 180.0), (252, 242, -90.0)])
+_s79 = _lauf79(_ball79, _wg79, 4.0, _vollgas79)
+pruef("Zwei Wagen druecken ihn in die Ecke: nichts geht hindurch", _dicht79(_s79), str(_s79))
+_ball79, _wg79 = _feld79((912, 496), [(712, 496, 0.0), (1112, 496, 180.0),
+                                      (912, 296, 90.0), (912, 696, -90.0)])
+_s79 = _lauf79(_ball79, _wg79, 5.0, _vollgas79)
+pruef("Vier Wagen von allen Seiten: nichts geht hindurch", _dicht79(_s79), str(_s79))
+
+# Zufall: sechs Wagen, die wild fahren und immer wieder auf den Ball zu.
+_rnd79 = random.Random(79)
+_def79 = []
+while len(_def79) < 6:
+    _x79, _y79 = _rnd79.uniform(260, 1560), _rnd79.uniform(90, 900)
+    if (all(math.hypot(_x79 - a_, _y79 - b_) > 70 for a_, b_, _ in _def79)
+            and math.hypot(_x79 - 912, _y79 - 496) > 120):
+        _def79.append((_x79, _y79, _rnd79.uniform(-180, 180)))
+_ball79, _wg79 = _feld79((912, 496), _def79)
+_plan79 = []
+
+
+def _wild79(i_, wagen):
+    if i_ % 40 == 0:
+        _plan79[:] = [(_rnd79.choice([1, 1, 1, 0, -1]), _rnd79.choice([-1, 0, 0, 1]),
+                       _rnd79.random() < 0.4, _rnd79.random() < 0.1) for _ in wagen]
+    for b_, (g_, l_, bo_, hb_) in zip(wagen, _plan79):
+        zum_ = _ball79.pos - b_.pos
+        d_ = (math.degrees(math.atan2(zum_.y, zum_.x)) - b_.winkel + 180) % 360 - 180
+        b_.gas = g_
+        b_.lenk = l_ if _rnd79.random() < 0.3 else (1 if d_ > 10 else -1 if d_ < -10 else 0)
+        b_.boost, b_.handbremse, b_.boost_vorrat = bo_, hb_, 100.0
+
+
+_s79 = _lauf79(_ball79, _wg79, 25.0, _wild79)
+pruef("25 s mit sechs wild fahrenden Wagen: der Ball geht nie durch einen Wagen oder eine Wand",
+      _dicht79(_s79) and _s79["wagen_wagen"] < 2.0, str(_s79))
+_ball79, _wg79 = _feld79((600, 496), [(900, 496, 90.0)])
+_ball79.geschw.update(K.AUTOBALL["ball_hoechst"], 0)
+_s79 = _lauf79(_ball79, _wg79, 1.0, lambda i_, w_: None)
+pruef("Mit Hoechsttempo gegen einen stehenden Wagen: er prallt ab, statt durchzugehen",
+      _dicht79(_s79) and _ball79.pos.x < _wg79[0].pos.x and _ball79.geschw.x <= 0,
+      "Ball %.0f, Wagen %.0f" % (_ball79.pos.x, _wg79[0].pos.x))
+_ball79, _wg79 = _feld79((500, 384), [])
+_ball79.geschw.from_polar((K.AUTOBALL["ball_hoechst"], 200))
+_s79 = _lauf79(_ball79, [], 1.5, lambda i_, w_: None)
+pruef("Mit Hoechsttempo an den Torpfosten: er springt ab", _s79["ball_wand"] < 1.0, str(_s79))
+_ball79, _wg79 = _feld79((912, 496), [(612, 496, 0.0)])
+_s79 = _lauf79(_ball79, _wg79, 2.0, _vollgas79)
+pruef("Ein Stoss mit Vollgas schiesst den Ball schneller weg, als der Wagen faehrt",
+      _ball79.geschw.length() > 250 or _ball79.pos.x > 1300,
+      "Ball %.0f px/s bei x %.0f" % (_ball79.geschw.length(), _ball79.pos.x))
+
+# Im Gefecht: Wagen fuer jeden, Anstoss, Tor, Eigentor, Ende, Verlaengerung.
+# Gastgeber und Gast laufen immer zusammen: liest der Gast nicht mit, laeuft
+# seine Leitung voll, und der Gastgeber wirft ihn hinaus.
+def _beide79(sekunden, w_, g_):
+    for _ in range(max(1, int(round(sekunden / K.NETZ["takt"])))):
+        w_.schritt(K.NETZ["takt"])
+        g_.schritt(K.NETZ["takt"])
+
+
+w79, g79 = gefechtspaar("autoball", regeln={"tore": 2})
+pruef("Autoball: jeder sitzt in seinem eigenen Wagen, auch der Gast",
+      len(w79.fahrzeuge) == 2 and all(k_.im_fahrzeug for k_ in w79.kaempfer.values())
+      and len({id(k_.fahrzeug) for k_ in w79.kaempfer.values()}) == 2)
+pruef("Der Gast sieht Ball und beide Wagen",
+      g79.ball is not None and len(g79.fahrzeuge) == 2 and g79.modus == "autoball")
+g79.kamera.zoom = 1.5
+pruef("Weit herausgezoomt liegt im Autoball kein Nebel ueber Ball und Wagen",
+      g79.sicht_welt() is None)
+g79.kamera.zoom = 1.0
+pruef("Zum Anstoss steht alles still (Countdown)", w79.ab_anstoss > 0.0)
+_k79 = w79.kaempfer[g79.meine_nummer]
+_b79 = _k79.fahrzeug
+_p79 = pygame.Vector2(_b79.pos)
+w79._anwenden(_k79, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+_beide79(0.25, w79, g79)
+pruef("... auch mit Gas faehrt waehrend des Countdowns niemand los",
+      _b79.pos.distance_to(_p79) < 0.5)
+_beide79(K.AUTOBALL["anstoss"], w79, g79)
+w79._anwenden(_k79, {"will": [0, -1], "ziel": [0, 0], "knoepfe": ["nutzen"],
+                     "feuert": True})
+pruef("Im Autoball steigt E nicht aus", _k79.fahrzeug is _b79)
+pruef("Die Feuertaste ist der Boost", _b79.boost is True)
+_vorrat79 = _b79.boost_vorrat
+for _ in range(30):
+    w79._anwenden(_k79, {"will": [0, -1], "ziel": [0, 0], "knoepfe": [], "feuert": True})
+    w79.schritt(K.FIXED_DT)
+pruef("... er brennt und verbraucht Vorrat", _b79.boostet and _b79.boost_vorrat < _vorrat79,
+      "%.1f -> %.1f" % (_vorrat79, _b79.boost_vorrat))
+# Ein Tor ins rechte Tor (BLAU verteidigt es) durch den Gastgeber (ROT).
+_ich79 = w79.kaempfer[0]
+w79.ball.beruehrt_von(_ich79.nummer, _ich79.team)
+w79.ball.pos.update(1500, 496)
+w79.ball.geschw.update(700, 0)
+_beide79(1.0, w79, g79)
+pruef("Tor: der Ball ganz im Tor zaehlt fuer die andere Mannschaft",
+      w79.teampunkte == [1, 0] and w79.tore_von.get(0) == 1, str(w79.teampunkte))
+pruef("... der Gast sieht den Stand und den Schuetzen",
+      g79.teampunkte == [1, 0] and g79.ab_schuetze == "WIRT" and g79.tore_von.get(0) == 1,
+      "%s %r" % (g79.teampunkte, g79.ab_schuetze))
+_beide79(K.AUTOBALL["tor_pause"], w79, g79)
+pruef("Nach dem Jubel: neuer Anstoss, Ball in der Mitte",
+      w79.ab_anstoss > 0 and w79.ball.pos.distance_to(w79._ab_mitte()) < 1.0)
+_beide79(K.AUTOBALL["anstoss"] + 0.3, w79, g79)
+# Eigentor des Gasts (BLAU) in sein eigenes Tor: zaehlt fuer ROT, ohne Schuetzen.
+w79.ball.beruehrt_von(_k79.nummer, _k79.team)
+w79.ball.pos.update(1500, 496)
+w79.ball.geschw.update(700, 0)
+_beide79(1.0, w79, g79)
+pruef("Ein Eigentor zaehlt fuer die andere Mannschaft, aber fuer keinen Schuetzen",
+      w79.teampunkte == [2, 0] and w79.ab_schuetze == "" and not w79.tore_von.get(_k79.nummer),
+      "%s %r" % (w79.teampunkte, w79.ab_schuetze))
+_beide79(K.AUTOBALL["tor_pause"] + 0.3, w79, g79)
+pruef("Bei der eingestellten Torzahl ist das Spiel aus, bei beiden",
+      w79.vorbei and g79.vorbei and w79.sieger_team == 0 and g79.sieger_team == 0)
+_flaeche79 = pygame.Surface((K.GAME_W, K.GAME_H))
+g79.zeichnen(_flaeche79, 0.5)
+w79.verlassen(); g79.verlassen()
+
+w79, g79 = gefechtspaar("autoball")
+_beide79(K.AUTOBALL["anstoss"] + 0.2, w79, g79)
+w79.rest = 0.05
+_beide79(0.2, w79, g79)
+pruef("Gleichstand nach der Zeit: Verlaengerung statt Ende, mit neuem Anstoss",
+      w79.ab_verlaengerung and not w79.vorbei and w79.ab_anstoss > 0)
+_beide79(K.AUTOBALL["anstoss"] + 0.2, w79, g79)
+w79.ball.pos.update(330, 496)
+w79.ball.geschw.update(-700, 0)
+_beide79(K.AUTOBALL["tor_pause"] + 1.0, w79, g79)
+pruef("... und das naechste Tor entscheidet", w79.vorbei and w79.sieger_team == 1
+      and g79.vorbei and g79.sieger_team == 1,
+      "%s, Sieger %d" % (w79.teampunkte, w79.sieger_team))
+w79.verlassen(); g79.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

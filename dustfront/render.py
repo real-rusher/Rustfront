@@ -792,6 +792,12 @@ class Renderer:
                 # nicht: es haengt zwischen den Ebenen und wird nach allen
                 # Ebenen gezeichnet, mit dem Massstab seiner eigenen Hoehe.
                 continue
+            eigen = getattr(w, "selbst_zeichnen", None)
+            if eigen is not None:
+                # Was sich selbst zeichnet statt eines Bildes - der Ball im
+                # Autoball (seit 0.34.17): sein Muster rollt mit.
+                eigen(ziel, p)
+                continue
             if w.spur is not None and w.tempo.length_squared() > 1:
                 r = w.tempo.normalize()
                 pygame.draw.line(ziel, (128, 80, 30), p - r * 17, p - r * 5, 1)

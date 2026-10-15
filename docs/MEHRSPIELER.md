@@ -472,6 +472,70 @@ Vorgabe 15; allein und ohne Gegenwehr gerechnet) und ob der Fortschritt
 kurzer Ausfall mehr wert als eine Minute im Kreis. Gemessen: 15,1 s bei
 15, 60,0 s bei 60.
 
+### 7.6b autoball - Rocket League von oben (seit 0.34.17)
+
+Gemeldet: "man soll mit den Autos quasi Rocket League in 2D spielen
+koennen ... auch wenn zwei Autos an den extrem grossen Ball von zwei
+verschiedenen Seiten ranfahren, soll er nicht irgendwie durch die
+durchgehen". Code in `dustfront/autoball.py`, Werte in `K.AUTOBALL`.
+
+**FEST.**
+
+* Nur auf der Karte **ARENA** (`karten/arena.txt`), und die ARENA nur bei
+  dieser Spielart (`regeln._karten`). Der Kartenkopf sagt, wo Ball
+  (`ball: M`), Anstossplaetze je Mannschaft (`anstoss_0: R`,
+  `anstoss_1: T`) und Torraeume (`tor_0`, `tor_1`, Kacheln, einschliesslich)
+  liegen. ROT verteidigt `tor_0` (links).
+* Jeder Kaempfer bekommt einen **eigenen Buggy** (`besitzer` = seine
+  Nummer), auch wer mitten im Spiel dazukommt; wer geht, nimmt ihn mit.
+  Aussteigen geht nicht, die Feuertaste ist der **Boost**.
+* Ein **Tor** zaehlt, wenn der Ball **ganz** im Torraum liegt. Gutgeschrieben
+  wird dem letzten Spieler der treffenden Mannschaft, der den Ball
+  beruehrt hat (`Ball.zuletzt`, `vorletzt`); ein Eigentor zaehlt fuer die
+  Mannschaft, aber fuer keinen Schuetzen. Tore je Spieler stehen in
+  `tore_von` - **nicht** in der Statistik des Kontos (dort gibt es keine
+  Spalte dafuer, und eine neue haette alle alten Runden schief gemacht).
+* Nach einem Tor `tor_pause` (3 s) Jubel, dann **Anstoss**: Ball in die
+  Mitte, jeder an seinen Platz (die naechsten Marken zuerst, nach
+  Spielernummer), `anstoss` (3 s) Countdown, waehrenddessen steht alles.
+  Die Uhr laeuft nur, solange gespielt wird.
+* Ende: `tore` (Regel, Vorgabe 5, 0 = nur die Zeit) oder die Spielzeit
+  (`ende_wert`, Vorgabe 300 s). Gleichstand nach der Zeit: **Verlaengerung**,
+  neuer Anstoss, das naechste Tor entscheidet.
+
+**Die Stoesse (`Spielfeld`).** Der Gastgeber rechnet sie nach dem
+Weltschritt, wenn die Wagen schon gefahren sind, und vor dem Nachziehen der
+Fahrer.
+
+1. Wagen an Wagen: je drei Kreise entlang der Laengsachse, Impuls mit
+   Drehung, Lage halb und halb (kann einer nicht, der andere alles).
+2. Der Ball wird in **Teilschritten** von hoechstens `teilschritt` (4 px)
+   bewegt. Je Teilschritt bis zu `durchgaenge` (8) Durchgaenge: Ball an
+   Wand (feste Kacheln und Loecher; die Wand gibt nie nach), Ball an jedem
+   Wagen (Wagen als gedrehtes Rechteck 50 x 30, Lage nach Masse
+   aufgeteilt, nur wohin der Wagen passt).
+3. Was danach noch ueberlappt (`rest_ueberlapp`), **klemmt**: dann weicht
+   der Wagen ganz, und kann er das nicht, geht er an seine Stelle vom
+   Anfang des Schritts zurueck. Zuletzt noch einmal die Waende.
+
+**GRUND.** Ein Wagen ist 30 px breit, der Ball hat 44 px Radius. Damit
+seine Mitte auf die andere Seite eines Wagens kaeme, muesste er in einem
+Teilschritt ueber 59 px tief eindringen - er dringt hoechstens 4 ein, plus
+die gut 3 px, die ein Wagen je Schritt mit Boost faehrt. Durchtunneln geht
+damit schon geometrisch nicht. Der Loeser sorgt dafuer, dass auch keine
+Ueberlappung stehen bleibt: gemessen hoechstens 0,14 px, mit sechs wild
+fahrenden Wagen ueber 25 s (`tests/test_spiel.py`, Abschnitt Autoball).
+
+Stoesse sind Impulse mit der Drehung des Wagens am Beruehrpunkt (Masse
+2,5 : 1, Abprall 0,6) und etwas Reibung: wer den Ball mit der Ecke trifft,
+schiebt ihn schraeg und dreht sich selbst ein wenig. Ein Stoss mit Vollgas
+schiesst den Ball schneller weg, als der Wagen faehrt.
+
+**Beim Gast.** Er bekommt Ball und Stand mit der Weltmeldung (`ball`,
+`ab`) und den Boost je Buggy in `fahrzeuge`. Er rechnet nichts davon
+nach; das Rollen des Musters und die Torfunken macht er aus der
+gemeldeten Bewegung und dem steigenden Stand selbst - beides nur Bild.
+
 ---
 
 ### 7.7 Was der Gastgeber sonst noch stellt
@@ -1930,6 +1994,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.17 | AUTOBALL (7.6b): neue Spielart `autoball` mit Regel `tore` und eigener Karte `karten/arena.txt` (Kopf: `ball`, `anstoss_0`, `anstoss_1`, `tor_0`, `tor_1`). In der Weltmeldung neu `ball` = `[x, y, ebene, vx, vy]` und `ab` = `[Anstoss-Rest, Jubel-Rest, Verlaengerung 0/1, Torteam, Schuetze, {Nummer: Tore}]`, beide nur im Autoball. In `fahrzeuge` je Buggy ein neunter und zehnter Wert: Boostvorrat (0 bis 100) und ob der Boost brennt (0/1). Der Boost ist `feuert` aus der gewohnten Eingabe | Die Versionspruefung weist einen aelteren Gast ab - ihm fehlten Spielart, Karte und Ball. Ein aelterer Gastgeber bietet AUTOBALL gar nicht an |
 | 0.34.16 | Buggy mit Driften: in der Eingabe des Gasts das Feld `hb` (Handbremse, Dash-Taste gehalten); in `fahrzeuge` je Buggy ein achter Wert `rutschen` (0 bis 1), aus dem der Gast Reifenspuren und Staub zeichnet | Ein aelterer Gast schickt kein `hb`: er kann im Buggy nicht handbremsen. Ein aelterer Gastgeber schickt keinen achten Wert: der Gast sieht keine Reifenspuren an fremden Buggys |
 | 0.34.15 | Trefferzeichen: je Spieler `tz` und `tk` in der Weltmeldung - wie oft er getroffen und erledigt hat, als Zaehler. Der Gast zeigt sein X, wenn seine Zahl steigt | Ein aelterer Gastgeber schickt die Felder nicht: dann sieht der Gast kein Zeichen, sonst aendert sich nichts |
 | 0.34.14 | Nur Beispiele und Hilfetext: die Codes sind englisch (vergibt Cloudflare) | Nichts am Netz geaendert |

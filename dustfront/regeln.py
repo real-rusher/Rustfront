@@ -50,7 +50,13 @@ def _karten(d, u):
         liste = list(world.karten_liste())
     # Die Lobby ist kein Schauplatz fuer eine Runde - sie ist der Ort
     # dazwischen. Gueltig ist sie trotzdem (siehe `erlaubt`).
-    return [""] + [k for k in liste if k != K.LOBBY["karte"]]
+    # Autoball (seit 0.34.17) hat seine eigene Karte, und nur die: Tore und
+    # Anstossplaetze stehen nur dort. Umgekehrt ist die ARENA fuer jede
+    # andere Spielart nur ein leerer Platz ohne Deckung.
+    arena = K.AUTOBALL["karte"]
+    if _regeln(d).get("ball"):
+        return [arena] if arena in liste else [""]
+    return [""] + [k for k in liste if k not in (K.LOBBY["karte"], arena)]
 
 
 def _abschuesse_werte():
@@ -93,7 +99,7 @@ def _endet_selbst(d):
     (pve), wenn niemand mehr steht. Nur die anderen fragen, wann Schluss ist.
     """
     r = _regeln(d)
-    return r["zone"] or r["revive"] or r["runden"]
+    return r["zone"] or r["revive"] or r["runden"] or r.get("ball", False)
 
 
 def _mit_notbremse(d):
@@ -104,7 +110,12 @@ def _mit_notbremse(d):
     gute Runde abpfeift, waere eine Strafe fuers Gutsein.
     """
     r = _regeln(d)
-    return r["zone"] or r["runden"]
+    return r["zone"] or r["runden"] or r.get("ball", False)
+
+
+def _ohne_ball(d):
+    """Ausruestung gibt es im Autoball nicht - man sitzt im Wagen."""
+    return not _regeln(d).get("ball", False)
 
 
 class Feld:
@@ -179,6 +190,8 @@ def _ende_vorgabe(d):
     Als Hoechstdauer (versus, huegel) zehn Minuten - so stand es im
     Startskript, und fuenf reichen fuer fuenf Versusrunden nicht.
     """
+    if _regeln(d).get("ball"):
+        return int(K.AUTOBALL["dauer"])
     if _mit_notbremse(d):
         return 600
     if d.get("ende_art", "zeit") == "zeit":
@@ -208,12 +221,19 @@ FELDER = (
          text=lambda v, d, u: "ZEIT" if v == "zeit" else "ABSCHÜSSEN",
          gilt=lambda d: not _endet_selbst(d), rund=True),
     Feld("ende_wert",
-         lambda d: "HÖCHSTDAUER" if _mit_notbremse(d) else "UND ZWAR BEI",
+         lambda d: ("SPIELZEIT" if _regeln(d).get("ball")
+                    else "HÖCHSTDAUER" if _mit_notbremse(d) else "UND ZWAR BEI"),
          "RUNDE", _ende_vorgabe, _ende_werte,
          text=lambda v, d, u: ("%d MIN" % round(v / 60)
                                if d.get("ende_art") == "zeit" else "%d" % v),
          gilt=lambda d: not _endet_selbst(d) or _mit_notbremse(d), zahl=True,
          einzug=lambda d: not _mit_notbremse(d)),
+    Feld("tore", "TORE ZUM SIEG", "RUNDE", K.AUTOBALL["tore"],
+         lambda d, u: K.AUTOBALL["tore_werte"],
+         text=lambda v, d, u: "NUR ZEIT" if not v else "%d" % v,
+         gilt=lambda d: _regeln(d).get("ball", False), zahl=True,
+         hilfe="WER SO VIELE TORE HAT, GEWINNT SOFORT. "
+               "GLEICHSTAND NACH DER ZEIT: VERLÄNGERUNG."),
     Feld("huegel_zeit", "HALTEZEIT", "RUNDE", K.ZONE["haltezeit"],
          lambda d, u: K.ZONE["haltezeiten"],
          text=lambda v, d, u: "%d S" % v,
@@ -237,29 +257,32 @@ FELDER = (
          lambda d, u: K.GEFECHT["loadout_arten"],
          text=lambda v, d, u: {"alles": "JEDER HAT ALLES",
                                "eigenes": "EIGENES LOADOUT",
-                               "gleich": "EINES FÜR ALLE"}[v], rund=True),
+                               "gleich": "EINES FÜR ALLE"}[v], rund=True,
+         gilt=_ohne_ball),
     Feld("loadout_nr", "LOADOUT", "AUSRÜSTUNG", 0, _loadout_nummern,
-         text=_loadout_name, gilt=lambda d: d.get("loadouts") == "gleich",
+         text=_loadout_name,
+         gilt=lambda d: _ohne_ball(d) and d.get("loadouts") == "gleich",
          rund=True, einzug=True,
          hilfe="EINES DEINER LOADOUTS - DAS TRAGEN ALLE."),
-    Feld("knapp", "MUNITION KNAPP", "AUSRÜSTUNG", False, None, schalter=True),
+    Feld("knapp", "MUNITION KNAPP", "AUSRÜSTUNG", False, None, schalter=True,
+         gilt=_ohne_ball),
     Feld("medkits", "MEDKITS BEIM EINSTIEG", "AUSRÜSTUNG",
          K.GEFECHT["start_medkits"],
          lambda d, u: range(0, K.GEFECHT["start_medkits_hoechstens"] + 1),
-         zahl=True),
+         zahl=True, gilt=_ohne_ball),
     Feld("medkit_spawn", "MEDKITS AUF DER KARTE", "AUSRÜSTUNG",
-         K.GEFECHT["medkits_spawnen"], None, schalter=True),
+         K.GEFECHT["medkits_spawnen"], None, schalter=True, gilt=_ohne_ball),
     Feld("rpg", "RAKETENWERFER", "AUSRÜSTUNG", K.GEFECHT["rpg"], None,
-         schalter=True),
+         schalter=True, gilt=_ohne_ball),
     Feld("rpg_lenkung", "MIT ZIELERFASSUNG", "AUSRÜSTUNG",
          K.GEFECHT["rpg_lenkung"], None, schalter=True, einzug=True,
-         gilt=lambda d: bool(d.get("rpg"))),
+         gilt=lambda d: _ohne_ball(d) and bool(d.get("rpg"))),
     Feld("mg_schub", "MG-RÜCKSTOSS SCHIEBT", "AUSRÜSTUNG", False, None,
-         schalter=True,
+         schalter=True, gilt=_ohne_ball,
          hilfe="AUS: DAS MG MACHT NUR LANGSAM. AN: JEDER SCHUSS SCHIEBT ZURÜCK."),
     # ── Der Einstieg
     Feld("schutz", "EINSTIEGSSCHUTZ", "EINSTIEG", K.GEFECHT["schutz_an"],
-         None, schalter=True),
+         None, schalter=True, gilt=_ohne_ball),
     # ── Spielerkosmetik (spielerkosmetik.py). Steht in keinem Menue: der
     # Gastgeber entscheidet es beim Start - MIT oder OHNE KOSMETIK -, und
     # mit Kosmetik geht es erst, wenn alle alles geladen haben. Hier steht
@@ -276,7 +299,7 @@ NACH_NAME = {f.schluessel: f for f in FELDER}
 # Karte, Dauer und Ausruestung sehen und nicht sechzehn Zeilen. Alles
 # andere steht unter ERWEITERT und behaelt dort seinen Wert, auch wenn
 # es gerade nicht zu sehen ist.
-EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert",
+EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert", "tore",
            "huegel_zeit", "schwierigkeit", "loadouts", "loadout_nr")
 for _f in FELDER:
     _f.einfach = _f.schluessel in EINFACH
@@ -427,6 +450,10 @@ def kurz(d: dict, umfeld=None) -> str:
     r = _regeln(d)
     if r["runden"]:
         teile.append("%d RUNDEN" % d["runden"])
+    elif r.get("ball"):
+        teile.append(anzeige(d, "ende_wert", umfeld))
+        if d.get("tore"):
+            teile.append("%d TORE" % d["tore"])
     elif r["zone"]:
         teile.append("%d S" % d["huegel_zeit"])
     elif not _endet_selbst(d):

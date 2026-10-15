@@ -564,6 +564,10 @@ KLANG_NAMEN = (
     "buggy_tuer",           # in den Buggy und wieder heraus (seit 0.34.9)
     "buggy_aufprall",       # der Buggy rumst gegen etwas
     "buggy_rutschen",       # die Reifen quietschen, wenn er rutscht (seit 0.34.16)
+    "autoball_stoss",       # ein Wagen trifft den Ball (seit 0.34.17)
+    "autoball_tor",         # Tor! Horn und Jubel
+    "autoball_boost",       # der Raketenschub zuendet
+    "autoball_pfiff",       # Anstoss
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -709,6 +713,13 @@ MODI = {
     "huegel": dict(name="HÜGEL", gegner=False, beute=True,  revive=False,
                    teams=True,  runden=False, zone=True,
                    hinweis="Haltet den Kreis in der Mitte."),
+    # Seit 0.34.17 (autoball.py): jeder im eigenen Buggy, ein grosser Ball,
+    # zwei Tore - Rocket League von oben. "ball" ist der Schalter, an dem
+    # das Gefecht es erkennt; die anderen Spielarten haben ihn nicht und
+    # werden mit .get gefragt.
+    "autoball": dict(name="AUTOBALL", gegner=False, beute=False, revive=False,
+                     teams=True, runden=False, zone=False, ball=True,
+                     hinweis="Im Buggy den Ball ins fremde Tor."),
     # Keine Spielart, die man waehlt, sondern der Ort dazwischen: hier
     # landet man beim Aufmachen und nach jeder Runde (siehe LOBBY).
     # "gegner" steht an, weil es im Gehege Zombies gibt - Wellen gibt es
@@ -868,6 +879,67 @@ FAHRZEUG = dict(
     staub_farbe=(206, 184, 142),  # heller als der Schrittstaub: er soll hinter dem Wagen stehen
     staub_groesse=3,
     hinweis_zeit=3.0,         # so lange steht "[E] AUSSTEIGEN" nach dem Einsteigen
+)
+
+# Autoball (seit 0.34.17, dustfront/autoball.py): Rocket League von oben.
+# Jeder sitzt in seinem eigenen Buggy, zwei Mannschaften, ein grosser Ball,
+# zwei Tore. Gespielt wird auf der eigenen Karte ARENA.
+#
+# Massen sind Verhaeltnisse: der Wagen ist schwerer als der Ball, darum
+# fliegt der Ball nach einem Stoss schneller weiter, als der Wagen fuhr
+# (bei 2,5 : 1 und Abprall 0,6 etwa 1,15-fach), und der Wagen wird nur
+# etwas gebremst. Tempo in Pixel je Sekunde.
+AUTOBALL = dict(
+    karte="arena",            # die Karte dieser Spielart (karten/arena.txt)
+    ball_radius=44.0,         # gross: knapp doppelt so lang wie ein Buggy breit ist
+    ball_masse=1.0,
+    wagen_masse=2.5,
+    ball_hoechst=950.0,       # schneller fliegt er nie
+    ball_rollen=38.0,         # so viel langsamer je Sekunde, gleichmaessig
+    ball_luft=0.22,           # dazu dieser Anteil des Tempos je Sekunde
+    abprall_wand=0.72,        # so viel Tempo bleibt senkrecht zur Wand
+    abprall_wagen=0.6,        # Ball an Wagen, senkrecht zur Beruehrung
+    abprall_wagen_wagen=0.35,  # Wagen an Wagen
+    reibung_wagen=0.15,       # wie sehr ein Wagen den Ball seitlich mitnimmt
+    # Der Wagen als Rechteck (halbe Laenge, halbe Breite), wie das Bild:
+    # Rammbuegel bis Auspuff 50, Reifen aussen 30.
+    wagen_halb=(25.0, 15.0),
+    # Wagen an Wagen: drei Kreise entlang der Laengsachse.
+    wagen_kreise=(-10.0, 0.0, 10.0),
+    wagen_kreis=15.0,
+    # Der Ball wird in Teilschritten bewegt, keiner laenger als das. Mit
+    # dem grossen Radius kann er so durch nichts hindurch (GRUND fuer die
+    # kleine Zahl: siehe autoball.Spielfeld).
+    teilschritt=4.0,
+    durchgaenge=8,            # so oft je Teilschritt werden die Stoesse geloest
+    rest_ueberlapp=0.5,       # mehr Ueberlappung loest die letzte Stufe hart
+    # Der Boost (linke Maustaste): ein Raketenschub, unabhaengig von den
+    # Reifen - er dreht keine Raeder durch.
+    boost_voll=100.0,
+    boost_verbrauch=34.0,     # je Sekunde gedrueckt
+    boost_laden=11.0,         # je Sekunde ohne
+    boost_kraft=620.0,        # Schub im Stand, nimmt bis boost_hoechst ab
+    boost_hoechst=470.0,
+    boost_mindest=6.0,        # darunter zuendet er nicht neu (kein Flackern)
+    boost_takt=0.03,          # so oft fliegen Funken aus dem Auspuff
+    # Ablauf
+    anstoss=3.0,              # Sekunden Countdown vor jedem Anstoss
+    tor_pause=3.0,            # so lange wird nach einem Tor gejubelt
+    dauer=300,                # Vorgabe der Spielzeit (Sekunden)
+    tore=5,                   # Vorgabe: so viele Tore gewinnen sofort
+    tore_werte=(0, 1, 2, 3, 4, 5, 7, 10, 15),   # 0 = nur die Zeit zaehlt
+    # Die Kamera schaut ein Stueck zum Ball hin (Ballkamera), hoechstens so
+    # weit - der eigene Wagen bleibt im Bild.
+    kamera_zug=0.35,
+    kamera_max=150.0,
+    # Bild
+    ball_farbe=(236, 230, 214),
+    ball_flecken=(46, 40, 36),
+    ball_kante=(40, 32, 26),
+    linie=(232, 220, 196, 70),   # Mittellinie, Anstosskreis, Torraum
+    linie_dicke=3,
+    tor_flaeche=48,           # Deckkraft der Torflaeche in Teamfarbe
+    jubel_funken=60,
 )
 
 # Die Lobby: wo man beim Aufmachen landet und nach jeder Runde.

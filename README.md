@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.16, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.17, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -156,6 +156,7 @@ der alten weggenommen.
 | E | Treppe benutzen, aufhelfen, in den Buggy ein- und aussteigen; am Boden: rufen |
 | W/S, A/D im Buggy | Gas und Bremse (dann rückwärts), lenken - nur solange er rollt |
 | Shift im Buggy | Handbremse: das Heck bricht aus, zum Driften |
+| Maus links im AUTOBALL | Boost |
 | G | Gefallenen Mitspieler ziehen (Gefecht) |
 | Q | Obere Ebenen ein- oder ausblenden (Gefecht) |
 | P | Runden einstellen, in der Lobby (Gefecht) |
@@ -202,7 +203,7 @@ müssen dieselbe Spielversion verwenden. Details zu Lobby, Protokoll,
 Spielarten und Versionsgeschichte stehen in
 [`docs/MEHRSPIELER.md`](docs/MEHRSPIELER.md).
 
-Mehrere Leute auf einer Karte, in sechs Spielarten. Nach der Runde steht
+Mehrere Leute auf einer Karte, in sieben Spielarten. Nach der Runde steht
 die Liste, und sie wandert in eine Bestenliste im Benutzerordner.
 
 **Alles im Einzelnen steht in
@@ -217,6 +218,7 @@ Feld, Versionsgeschichte und Regeln für gemeinsames Spielen.
 | **TEAM** | Zwei Mannschaften, Abschüsse zählen für die Mannschaft | nach Zeit oder 30 Teamabschüssen |
 | **VERSUS** | Zwei Mannschaften, ein Leben je Runde, Aufhelfen durch die eigenen Leute | nach drei Rundensiegen |
 | **HÜGEL** | Zwei Mannschaften, ein sichtbarer Kreis in der Kartenmitte | wenn eine Mannschaft den Kreis vollgeladen hat |
+| **AUTOBALL** | Rocket League von oben: jeder im eigenen Buggy, ein grosser Ball, zwei Tore (Karte ARENA) | nach 5 Toren oder 5 Minuten; Gleichstand: Verlängerung, das nächste Tor entscheidet |
 
 Die Einzelspieler-Systeme sind auch im Gefecht verfügbar: Waffen,
 mehrstufige Karten, Treppen und Stürze, Ziellinie, Streukegel,
@@ -263,6 +265,37 @@ langsam. Genau das macht den Kreis zu dem Ort, an dem man sich trifft,
 statt ihn abwechselnd leerzuräumen. Der Kreis wird in den Boden gezeichnet
 und nicht darüber: die Figuren stehen sichtbar darauf, und von einer
 höheren Ebene aus sieht man ihn unten liegen, klein und im Dunst.
+
+### AUTOBALL: Rocket League von oben
+
+Jeder sitzt in seinem **eigenen Buggy**, zwei Mannschaften, ein **grosser
+Ball** (88 Pixel, fast doppelt so lang wie ein Buggy) und links und rechts
+ein Tor. Gespielt wird auf der eigenen Karte **ARENA**, nur dort. Gefahren
+wird wie sonst auch (W/S, A/D, Shift als Handbremse zum Driften), dazu
+kommt der **Boost auf der linken Maustaste**: ein Raketenschub, der den
+Balken unten leert und sich von selbst langsam wieder füllt. Aussteigen
+gibt es nicht, geschossen wird nicht.
+
+Ein **Tor** zählt, wenn der Ball **ganz** im Tor liegt. Dann wird drei
+Sekunden gejubelt (wer getroffen hat, steht gross im Bild; ein Eigentor
+zählt für die andere Mannschaft, aber für keinen Schützen), danach stellt
+sich jeder an seinen Platz und es gibt einen **Anstoss mit Countdown**.
+Die Uhr steht dabei, wie im Vorbild. Wer zuerst die eingestellte Zahl
+Tore hat (Vorgabe 5, 0 = nur die Zeit), gewinnt; steht es nach der Zeit
+gleich, gibt es **Verlängerung**, und das nächste Tor entscheidet.
+
+Die Kamera schaut ein Stück zum Ball hin, ein Pfeil am Bildrand zeigt auf
+ihn, wenn er nicht im Bild ist, und auf der Minikarte ist er immer zu
+sehen.
+
+**Der Ball geht durch nichts hindurch** - auch nicht, wenn zwei Wagen
+mit Vollgas und Boost von beiden Seiten in ihn hineinfahren, ihn gegen
+die Wand oder in eine Ecke drücken. Er wird in Teilschritten von höchstens
+4 Pixeln bewegt, und alle Berührungen (Ball-Wand, Ball-Wagen, Wagen-Wagen)
+werden je Teilschritt mehrfach gelöst; klemmt er, weichen die Wagen,
+nicht der Ball. Geprüft in `tests/test_spiel.py`, auch mit sechs wild
+fahrenden Wagen: höchstens Bruchteile eines Pixels Überlappung. Alle
+Werte in `K.AUTOBALL`, die Physik in `dustfront/autoball.py`.
 
 ### Gegner, die mit mehreren Spielern zurechtkommen
 
@@ -404,7 +437,7 @@ das Internet.
 eine Wurfwaffe statt der vollständigen Hotbar; ohne den Schalter hat jeder
 alles. Konten, Statistik und Loadouts stehen in
 [`docs/KONTO.md`](docs/KONTO.md).
-`--modus` ist `pvp`, `pve`, `pvpve`, `team`, `versus` oder `huegel`;
+`--modus` ist `pvp`, `pve`, `pvpve`, `team`, `versus`, `huegel` oder `autoball`;
 `--ende` ist `zeit` oder `abschuesse`, `--wert` die Sekunden
 beziehungsweise Abschüsse. Bei `versus` und `huegel` ist die Zeit nur die
 Notbremse - beide enden von selbst.
@@ -488,6 +521,7 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `world.py` | Ebenen, Kacheln, Kollision, Sichtlinien, Treppen, Abgründe |
 | `entities.py` | Spieler, Gegner, Geschosse, Granaten, Aufsammler |
 | `fahrzeug.py` | Der Buggy: Fahren, Anstossen, Staub |
+| `autoball.py` | AUTOBALL: der Ball, die Stösse zwischen Ball, Wagen und Wänden, Tore und Anstoss |
 | `render.py` | Kamera, Tiefenwirkung, Schatten, Ziellinie, HUD |
 | `play.py` | Die Spielregel: Wellen, Tod, Neustart |
 | `menues.py` | Pause, Einstellungen, Steuerung, Mitwirkende |
@@ -711,6 +745,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.17 | **AUTOBALL: Rocket League von oben.** Neue Spielart mit eigener Karte **ARENA**: jeder sitzt in seinem eigenen Buggy, zwei Mannschaften, ein grosser Ball, zwei Tore. Neu ist der **Boost** (linke Maustaste, Balken unten), dazu Anstoss mit Countdown, Torjubel mit Schützen (Eigentore zählen für die andere Mannschaft), Uhr, die bei Tor und Anstoss steht, Ziel 5 Tore oder 5 Minuten, bei Gleichstand Verlängerung mit Golden Goal. Ballkamera, Pfeil am Rand und Ball auf der Minikarte, Linien und Torräume in Teamfarbe auf dem Boden, vier neue Klänge (`autoball_stoss`, `autoball_tor`, `autoball_boost`, `autoball_pfiff`). Die Stösse sind echte Impulse mit Drehung; **der Ball geht durch nichts hindurch**, auch nicht, wenn zwei Wagen ihn von beiden Seiten zusammendrücken oder gegen Wand und Ecke klemmen (Teilschritte von höchstens 4 Pixeln, Löser mit mehreren Durchgängen, klemmt er, weichen die Wagen; geprüft mit sechs wild fahrenden Wagen). Werte in `K.AUTOBALL`, Physik in `dustfront/autoball.py`. Andere Spielarten unverändert; die ARENA steht nur bei AUTOBALL zur Wahl. **Netz/LAN: geändert** - neue Spielart in den Regeln (`modus` `autoball`, neue Regel `tore`), neue Karte `karten/arena.txt`, in der Weltmeldung neu `ball` und `ab` (Ball, Anstoss, Jubel, Verlängerung, Schütze, Tore je Spieler) und je Buggy in `fahrzeuge` zwei Werte mehr (Boostvorrat, Boost an); der Gast schickt nichts Neues (der Boost ist `feuert`). Gastgeber und Gast brauchen beide 0.34.17 |
 | 0.34.16 | **Buggy fährt sich echter, mit Driften.** Neues Fahrmodell mit Reifen: vorne und hinten haftet jede Achse nur bis zu einer Grenze, darüber rutscht sie und greift schwächer (Schräglauf). Wer schnell voll einlenkt oder mit Vollgas aus der Kurve beschleunigt, bringt das Heck zum Ausbrechen und hält den Drift mit Gas und Lenkung; Heckantrieb, beim Anfahren drehen die Räder kurz durch. Neu **Shift = Handbremse** im Buggy: das Heck kommt herum, für enge Kehren. Ein leichtes automatisches Gegenlenken fängt den Wagen, lässt man die Lenkung los, richtet er sich wieder gerade aus. Beim Rutschen bleiben **Reifenspuren** im Sand liegen, und die Reifen quietschen (neuer Klang `buggy_rutschen`). Alle Werte in `K.FAHRZEUG` (die alten `gas`, `lenkung`, `lenk_ab`, `griff` sind ersetzt). **Netz/LAN: geändert** - der Gast schickt ein neues Feld `hb` (Handbremse) in seiner Eingabe, und in `fahrzeuge` steht je Buggy ein achter Wert (wie stark er rutscht, für Spuren und Staub beim Gast); beide brauchen 0.34.16 |
 | 0.34.15 | **Trefferzeichen.** Trifft man einen Gegner, springt am Mauszeiger kurz ein weisses X auf und es tickt; erledigt oder umgeworfen heisst: ein grösseres rotes X und ein tieferer zweiter Ton. Nur der Schütze sieht und hört es, auch als Gast und im Einzelspiel; Treffer an sich selbst und an den eigenen Leuten zählen nicht, Feuer und Schrot tickt nicht dutzendfach (`K.TREFFERMARKE`). Zwei neue Klänge (`trefferzeichen`, `trefferzeichen_toedlich`). **Netz/LAN: geändert** - je Spieler zwei neue Felder in der Weltmeldung (`tz`, `tk`, die Zähler seiner Treffer); beide brauchen 0.34.15 |
 | 0.34.14 | **Online-Code: englische Beispiele.** Die Wörter des Codes vergibt Cloudflare, und die sind englisch (z. B. `THERMAL-UNDERLYING-PROVIDERS-TOE`); deutsch waren nur die Beispiele in README, Hilfe und Testersatz - jetzt überall englisch, und die Hilfe unter EINSTELLUNGEN > NETZ sagt es. **Netz/LAN: nichts geändert** (Versionsnummer trotzdem neu, beide brauchen 0.34.14) |

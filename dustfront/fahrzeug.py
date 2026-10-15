@@ -115,6 +115,18 @@ class Buggy(Wesen):
         self.besetzt = False
         self.team = -1
         self._staub_rest = 0.0
+        # Autoball (seit 0.34.17, autoball.py). `mit_boost`: dieser Wagen hat
+        # einen Raketenschub; `boost` ist die Taste, `boostet` ob er gerade
+        # brennt. `wagen_stoesse`: das Spielfeld loest Wagen an Wagen selbst,
+        # andere Fahrer sind dann kein Hindernis fuer `passt`. `besitzer`:
+        # die Spielernummer, wenn der Wagen jemandem gehoert.
+        self.mit_boost = False
+        self.boost = False
+        self.boostet = False
+        self.boost_vorrat = 0.0
+        self.wagen_stoesse = False
+        self.besitzer = None
+        self._boost_rest = 0.0
 
     # ---- Bild ---------------------------------------------------------
     @property
@@ -176,6 +188,12 @@ class Buggy(Wesen):
                     or getattr(a, "schiebbar", True)
                     or getattr(a, "am_boden", False)):
                 continue
+            if self.wagen_stoesse and getattr(a, "im_fahrzeug", False):
+                # Ein anderer Fahrer ist Teil seines Wagens, und Wagen an
+                # Wagen rechnet das Spielfeld (autoball.Spielfeld) mit
+                # Impuls. Als Hindernis hier hielte sein Kreis zwei Wagen,
+                # die sich beruehren, fuer immer aneinander fest.
+                continue
             for c in kreise:
                 if c.distance_squared_to(a.pos) < (r + a.radius) ** 2:
                     return False
@@ -187,9 +205,10 @@ class Buggy(Wesen):
         if self.nur_bild or self.welt is None:
             return
         fahrer = self.fahrer is not None
+        self._boost_fuehren(dt, fahrer)
         self._physik(dt, self.gas if fahrer else 0.0,
                      self.lenk if fahrer else 0.0,
-                     bool(self.handbremse) and fahrer)
+                     bool(self.handbremse) and fahrer, self.boostet)
         # Drehen nur, wenn er danach noch passt - sonst klemmte er sich an
         # einer Mauer fest. Stattdessen verliert er die Drehung.
         neu = (self.winkel + math.degrees(self.gier * dt) + 180.0) % 360.0 - 180.0
@@ -203,8 +222,46 @@ class Buggy(Wesen):
         self._staub(dt)
         self._spuren()
         self._quietschen(dt)
+        self._flamme(dt)
 
-    def _physik(self, dt: float, gas: float, lenk: float, handbremse: bool) -> None:
+    def _boost_fuehren(self, dt: float, fahrer: bool) -> None:
+        """Brennt der Boost? Er braucht Vorrat; leer geht er aus und zuendet
+        erst wieder ab einem kleinen Rest - sonst flackerte er an der Null.
+        Ohne Druck laedt er langsam nach."""
+        if not self.mit_boost:
+            self.boostet = False
+            return
+        a = K.AUTOBALL
+        will = bool(self.boost) and fahrer
+        if will and (self.boostet or self.boost_vorrat >= a["boost_mindest"]):
+            if not self.boostet and self.welt is not None:
+                self.welt.klang("autoball_boost", 0.45, self.pos, self.ebene)
+            self.boostet = self.boost_vorrat > 0.0
+            self.boost_vorrat = max(0.0, self.boost_vorrat - a["boost_verbrauch"] * dt)
+        else:
+            self.boostet = False
+            self.boost_vorrat = min(a["boost_voll"],
+                                    self.boost_vorrat + a["boost_laden"] * dt)
+
+    def _flamme(self, dt: float) -> None:
+        """Funken aus dem Auspuff, solange der Boost brennt - beim Gast
+        aus dem gemeldeten `boostet`."""
+        if not self.boostet or self.welt is None:
+            self._boost_rest = 0.0
+            return
+        self._boost_rest -= dt
+        if self._boost_rest > 0.0:
+            return
+        self._boost_rest = K.AUTOBALL["boost_takt"]
+        hinten = self.pos - self.vorn * 25
+        richtung = self.winkel + 180.0
+        wolke(self.welt, hinten, 3, 160, 0.28, (255, 196, 92), self.ebene, 2,
+              "funke", 30, richtung, 4.0)
+        wolke(self.welt, hinten, 2, 90, 0.35, (255, 120, 50), self.ebene, 2,
+              "funke", 50, richtung, 4.0)
+
+    def _physik(self, dt: float, gas: float, lenk: float, handbremse: bool,
+                boost: bool = False) -> None:
         """Ein Schritt Einspurmodell: Kraefte an Vorder- und Hinterachse,
         daraus Beschleunigung und Drehung. Je Masse gerechnet."""
         f = K.FAHRZEUG
@@ -252,6 +309,11 @@ class Buggy(Wesen):
             fx -= math.copysign(durch, antrieb) * 0.5     # was durchdreht, schiebt nicht
         if handbremse:
             fx -= math.copysign(min(f["handbremse_bremse"], abs(vx) / dt), vx)
+        if boost:
+            # Ein Raketenschub nach vorn. Er greift nicht ueber die Reifen,
+            # steht darum nicht in `antrieb` und dreht nichts durch.
+            ab = K.AUTOBALL
+            fx += ab["boost_kraft"] * max(0.0, 1.0 - max(0.0, vx) / ab["boost_hoechst"])
 
         # Quer: Schraeglauf an beiden Achsen, Seitenkraft bis zur Grenze.
         a, b = f["achse_vorn"], f["achse_hinten"]
@@ -400,6 +462,7 @@ class Buggy(Wesen):
         Tempo und Rutschen. Gequietscht wird beim Gastgeber (NETZKLAENGE)."""
         self._staub(dt)
         self._spuren()
+        self._flamme(dt)
 
     def _radstellen(self) -> list:
         """Wo die Raeder den Boden beruehren: hinten links, hinten rechts,
@@ -456,6 +519,7 @@ class Buggy(Wesen):
         self.gas = self.lenk = 0.0
         self.gier = self.lenkwinkel = self.rutschen = 0.0
         self.handbremse = False
+        self.boost = self.boostet = False
         self._spur_letzte.clear()
 
     def ausstiegsorte(self, radius: float) -> list:
