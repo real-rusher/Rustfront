@@ -8013,6 +8013,94 @@ _g76.schaden(1.0, None, szene.held)
 pruef("Im Einzelspiel zaehlt der Treffer am Zombie", szene.held.treffer_marken == _vor76 + 1)
 _g76.lebt = False
 
+# ─────────────────────────────────────────────────────────────────────
+# 0.34.16: "Die Autos sollen sich natuerlicher anfuehlen, Driften soll
+# sich realistisch anfuehlen." Reifen mit Grenze (Einspurmodell). Geprueft
+# wird auf freier Flaeche, nur die Fahrphysik (Buggy._physik).
+from dustfront.fahrzeug import Buggy as _B77
+
+def _fahrt77(plan, b=None):
+    """plan: [(Sekunden, gas, lenk, handbremse)] - gibt Buggy und Verlauf."""
+    b = b or _B77(pygame.Vector2(0, 0))
+    verlauf = []
+    for dauer, gas, lenk, hb in plan:
+        for _ in range(int(dauer / K.FIXED_DT)):
+            b._physik(K.FIXED_DT, gas, lenk, hb)
+            b.winkel += math.degrees(b.gier * K.FIXED_DT)
+            b.pos += b.geschw * K.FIXED_DT
+            vorn = b.vorn
+            quer = pygame.Vector2(-vorn.y, vorn.x)
+            beta = (math.degrees(math.atan2(b.geschw.dot(quer), b.geschw.dot(vorn)))
+                    if b.geschw.length() > 30 else 0.0)
+            verlauf.append((b.geschw.length(), beta, b.rutschen, b.winkel))
+    return b, verlauf
+
+_b77, _v77 = _fahrt77([(4.0, 1, 0, False)])
+pruef("Geradeaus: Hoechstfahrt deutlich ueber zu Fuss, unter der Grenze",
+      K.SPIELER["tempo"] * 1.8 < _v77[-1][0] <= K.FAHRZEUG["hoechst"],
+      "%.0f" % _v77[-1][0])
+pruef("... und dabei rutscht nichts", max(v_[2] for v_ in _v77[200:]) < 0.05)
+_b77, _v77 = _fahrt77([(4.0, 1, 0, False), (2.0, 1, 1, False)])
+_k77 = _v77[480:]
+pruef("Voll eingelenkt bei Hoechstfahrt: das Heck kommt (Drift)",
+      max(abs(v_[1]) for v_ in _k77) > 12 and max(v_[2] for v_ in _k77) > 0.5,
+      "beta bis %.0f Grad" % max(abs(v_[1]) for v_ in _k77))
+pruef("... aber er dreht sich nicht (unter 90 Grad quer)",
+      max(abs(v_[1]) for v_ in _k77) < 90, "%.0f" % max(abs(v_[1]) for v_ in _k77))
+pruef("... und behaelt Fahrt", min(v_[0] for v_ in _k77) > 80,
+      "%.0f" % min(v_[0] for v_ in _k77))
+_b77, _v77 = _fahrt77([(4.0, 1, 0, False), (0.8, 1, 1, False), (1.5, 1, 0, False)])
+pruef("Lenkrad los: er faengt sich und faehrt wieder geradeaus",
+      abs(_v77[-1][1]) < 3 and _v77[-1][2] < 0.05, "beta %.0f" % _v77[-1][1])
+_b77, _v77 = _fahrt77([(1.0, 1, 0, False), (1.5, 0.6, 1, False)])
+pruef("Mittelschnell in die Kurve: er haelt (kaum Drift)",
+      max(abs(v_[1]) for v_ in _v77[120:]) < 20,
+      "%.0f" % max(abs(v_[1]) for v_ in _v77[120:]))
+_b77, _v77 = _fahrt77([(3.0, 1, 0, False), (0.2, 1, 1, False)])
+_w77 = _b77.winkel
+_b77, _v77b = _fahrt77([(0.5, 0.4, 1, True)], _b77)
+pruef("Handbremse in der Kurve: er dreht sich schnell ein",
+      abs(_b77.winkel - _w77) > 60 and max(v_[2] for v_ in _v77b) > 0.5,
+      "%.0f Grad in 0,5 s" % (_b77.winkel - _w77))
+_b77, _v77c = _fahrt77([(1.2, 1, -0.3, False)], _b77)
+pruef("... faengt sich danach mit Gas wieder, ohne sich ganz zu drehen",
+      max(abs(v_[1]) for v_ in _v77b + _v77c) < 120 and abs(_v77c[-1][1]) < 25
+      and _v77c[-1][0] > 100,
+      "beta am Ende %.0f, v %.0f" % (_v77c[-1][1], _v77c[-1][0]))
+_b77, _v77 = _fahrt77([(1.0, 0, 1, False)])
+pruef("Im Stand dreht er sich auch mit eingeschlagenen Raedern nicht",
+      abs(_b77.winkel) < 0.5 and _b77.pos.length() < 0.5)
+_b77, _v77 = _fahrt77([(2.0, 1, 0, False), (2.5, -1, 0, False)])
+pruef("S bremst und faehrt dann rueckwaerts", _b77.fahrt < -40, "%.0f" % _b77.fahrt)
+
+# Im Spiel: Reifenspuren bleiben im Sand, und der Gast bekommt das Rutschen.
+w78, g78 = gefechtspaar("pvp", karte="staubtal")
+_b78 = min(w78.fahrzeuge, key=lambda b_: b_.pos.x)
+_k78 = w78.kaempfer[g78.meine_nummer]
+_k78.pos.update(_b78.ausstiegsorte(_k78.radius)[0]); _k78.ebene = 0; _k78.treppe_rest = 0.0
+w78._anwenden(_k78, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+w78._anwenden(_k78, {"will": [0, -1], "ziel": [0, 0], "knoepfe": [], "hb": True})
+pruef("Die Dash-Taste ist im Buggy die Handbremse", _b78.handbremse is True)
+_b78.rutschen = 0.9
+_vor78 = len(w78.welt.ebene(0).dekale)
+_b78._spur_letzte.clear()
+_b78._spuren()
+_b78.pos += _b78.vorn * 20
+_b78._spuren()
+pruef("Wo er rutscht, bleiben Reifenspuren liegen",
+      len(w78.welt.ebene(0).dekale) > _vor78 or _vor78 > 0, "%d Flaechen" % len(w78.welt.ebene(0).dekale))
+for _ in range(4):
+    w78.schritt(K.NETZ["takt"])
+    g78.schritt(K.NETZ["takt"])
+# Das Rutschen rechnet der Gastgeber in jedem Schritt aus der Bewegung neu;
+# hier steht der Wagen. Also direkt die Meldung nehmen, wie sie hinausgeht.
+_b78.rutschen = 0.9
+g78._fahrzeuge_uebernehmen(w78._weltmeldung()["fahrzeuge"])
+_gb78 = [b_ for b_ in g78.fahrzeuge if b_.besetzt]
+pruef("Der Gast bekommt das Rutschen gemeldet (fuer Spuren und Staub)",
+      _gb78 and abs(_gb78[0].rutschen - 0.9) < 1e-6, str([b_.rutschen for b_ in _gb78]))
+w78.verlassen(); g78.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -5,7 +5,27 @@ DUSTFRONT - Der Buggy (seit 0.34.9)
 Ein kleiner Wuestenbuggy, der dort steht, wo die Karte ein F hat. Man
 steigt mit E ein und wieder aus; gelenkt wird wie ein Auto, nicht wie die
 Figur: W gibt Gas, S bremst und faehrt dann rueckwaerts, A und D lenken -
-und gelenkt wird nur, solange er rollt.
+und gelenkt wird nur, solange er rollt. Shift ist die Handbremse.
+
+**Fahren (seit 0.34.16).** Gemeldet: "natuerlicher, Driften soll sich
+realistisch anfuehlen". Vorher drehte er mit festen Grad je Sekunde, und
+was seitlich rutschte, klang einfach ab - ein Wagen auf Schienen mit einem
+Hauch Wischen. Jetzt ein Einspurmodell, wie es Rennspiele benutzen: eine
+Vorder- und eine Hinterachse, jede mit einem Reifen, der seitlich mit dem
+Schraeglauf mehr Kraft aufbaut - bis zu seiner Grenze. Darueber rutscht
+er und haelt weniger (`gleiten`). Hinten haelt er weniger als vorn, Gas
+kostet hinten Seitengriff (Heckantrieb), die Handbremse noch mehr. Daraus
+folgt das Driften von selbst: in der schnellen Kurve kommt das Heck, mit
+der Handbremse kommt es sofort.
+
+Zwei Hilfen, ohne die es sich mit Tasten nicht fahren liesse: er lenkt
+einen Teil des Driftwinkels selbst gegen (`gegenlenken`), und ab einem
+Driftwinkel dreht ihn eine Stuetze zurueck, statt ihn sich drehen zu
+lassen. Eine Tastatur kennt nur voll oder nichts; ein Fahrer mit Lenkrad
+wuerde genau das mit den Haenden tun.
+
+Wo er rutscht, bleiben Reifenspuren im Sand, Staub fliegt, und die Reifen
+quietschen - beim Gast genauso, aus dem gemeldeten `rutschen`.
 
 **Unzerstoerbar.** Der Wagen selbst ist kein Ziel (`trefferbar = False`):
 Kugeln, Splitter und Feuer gehen an ihm vorbei auf das, was darin sitzt.
@@ -30,8 +50,24 @@ import math
 import pygame
 
 from . import config as K
-from .core import naehern
 from .entities import Wesen, wolke
+
+
+_SPURPUNKTE: dict = {}
+
+
+def _spurpunkt(deck: int) -> pygame.Surface:
+    """Ein Punkt Reifenspur: dunkel, halb durchsichtig, 3 x 3 Pixel. Je
+    Deckkraft einmal gebaut - es sind viele, und alle gleich."""
+    deck = max(0, min(255, deck // 10 * 10))
+    s = _SPURPUNKTE.get(deck)
+    if s is None:
+        s = pygame.Surface((3, 3), pygame.SRCALPHA)
+        s.fill((52, 40, 28, deck))
+        s.set_at((0, 0), (0, 0, 0, 0))
+        s.set_at((2, 2), (0, 0, 0, 0))
+        _SPURPUNKTE[deck] = s
+    return s
 
 
 class Buggy(Wesen):
@@ -61,7 +97,15 @@ class Buggy(Wesen):
         self.fahrer = None            # der Kaempfer am Steuer, beim Gastgeber
         self.gas = 0.0                # -1 bis 1, aus W und S
         self.lenk = 0.0               # -1 bis 1, aus A und D
+        self.handbremse = False       # Shift
         self.geschw = pygame.Vector2(0, 0)
+        self.gier = 0.0               # Drehung um sich selbst, Radiant je Sekunde
+        self.lenkwinkel = 0.0         # Radeinschlag jetzt, Radiant (+ = rechts)
+        # 0 bis 1: wie sehr er gerade rutscht. Treibt Spuren, Staub und
+        # Quietschen, und geht so an den Gast.
+        self.rutschen = 0.0
+        self._spur_letzte: dict = {}
+        self._quietsch_rest = 0.0
         # Wo er zu Beginn stand. Zu jeder neuen Runde kommt er dorthin
         # zurueck, sonst steht nach drei Runden jeder Buggy irgendwo.
         self.start = (pygame.Vector2(pos), int(ebene), float(winkel))
@@ -142,48 +186,125 @@ class Buggy(Wesen):
         super().schritt(dt)
         if self.nur_bild or self.welt is None:
             return
-        f = K.FAHRZEUG
         fahrer = self.fahrer is not None
-        gas = self.gas if fahrer else 0.0
-        lenk = self.lenk if fahrer else 0.0
-
-        # Lenken. Im Stand gar nicht, langsam nur ein wenig - ein Auto
-        # dreht sich nicht auf der Stelle. Rueckwaerts andersherum, wie
-        # bei jedem Wagen. Gedreht wird nur, wenn er danach noch passt;
-        # sonst klemmt er sich an einer Mauer fest.
-        fahrt = self.fahrt
-        if lenk:
-            anteil = min(1.0, abs(fahrt) / f["lenk_ab"])
-            dreh = f["lenkung"] * lenk * anteil * dt * (1.0 if fahrt >= 0 else -1.0)
-            neu = (self.winkel + dreh + 180.0) % 360.0 - 180.0
-            if dreh and self.passt(self.pos, neu):
-                self.winkel = neu
-
-        # Das Tempo in die neue Richtung zerlegen: was quer liegt, rutscht
-        # und klingt mit dem Griff der Reifen ab. Daher das kleine
-        # Driften in scharfen Kurven.
-        vorn = self.vorn
-        quer = pygame.Vector2(-vorn.y, vorn.x)
-        laengs = self.geschw.dot(vorn)
-        seitlich = self.geschw.dot(quer) * math.exp(-f["griff"] * dt)
-        if gas > 0.0:
-            if laengs < 0.0:
-                laengs = min(0.0, laengs + f["bremse"] * dt)
-            elif laengs < f["hoechst"]:
-                laengs = min(f["hoechst"], laengs + f["gas"] * gas * dt)
-        elif gas < 0.0:
-            if laengs > 0.0:
-                laengs = max(0.0, laengs - f["bremse"] * dt)
-            elif laengs > -f["rueckwaerts"]:
-                laengs = max(-f["rueckwaerts"], laengs + f["gas"] * gas * dt)
+        self._physik(dt, self.gas if fahrer else 0.0,
+                     self.lenk if fahrer else 0.0,
+                     bool(self.handbremse) and fahrer)
+        # Drehen nur, wenn er danach noch passt - sonst klemmte er sich an
+        # einer Mauer fest. Stattdessen verliert er die Drehung.
+        neu = (self.winkel + math.degrees(self.gier * dt) + 180.0) % 360.0 - 180.0
+        if self.passt(self.pos, neu):
+            self.winkel = neu
         else:
-            laengs = naehern(laengs, 0.0, f["rollen"] * dt)
-        self.geschw = vorn * laengs + quer * seitlich
-
+            self.gier *= -0.2
         self._fahren(dt)
         self.tempo.update(self.geschw)
         self._beiseite_schieben()
         self._staub(dt)
+        self._spuren()
+        self._quietschen(dt)
+
+    def _physik(self, dt: float, gas: float, lenk: float, handbremse: bool) -> None:
+        """Ein Schritt Einspurmodell: Kraefte an Vorder- und Hinterachse,
+        daraus Beschleunigung und Drehung. Je Masse gerechnet."""
+        f = K.FAHRZEUG
+        vorn = self.vorn
+        quer = pygame.Vector2(-vorn.y, vorn.x)        # rechts in Fahrtrichtung
+        vx = self.geschw.dot(vorn)
+        vy = self.geschw.dot(quer)
+        tempo = self.geschw.length()
+
+        # Lenkung: schnell, aber nicht sofort; bei Fahrt weniger Einschlag.
+        # Dazu lenkt er einen Teil des Driftwinkels selbst gegen.
+        lenk_max = math.radians(f["lenk_max"])
+        ziel = lenk * lenk_max * (1.0 - f["lenk_abfall"]
+                                  * min(1.0, abs(vx) / f["hoechst"]))
+        if tempo > 40.0 and vx > 0.0:
+            # GRUND fuer mehr ohne Lenktaste: mit Gas haelt ein Drift sich
+            # sonst selbst - Heckantrieb und Gegenlenken im Gleichgewicht,
+            # gemessen 31 Grad quer, endlos. Mit Lenkrad realistisch, mit
+            # Tasten heisst Loslassen aber "geradeaus".
+            gegen = f["gegenlenken"] if lenk else f["gegenlenken_los"]
+            ziel += gegen * math.atan2(vy, vx)
+            ziel = max(-lenk_max, min(lenk_max, ziel))
+        schritt = math.radians(f["lenk_tempo"]) * dt
+        self.lenkwinkel += max(-schritt, min(schritt, ziel - self.lenkwinkel))
+        dl = self.lenkwinkel
+
+        # Laengs: Motor, Bremse, Rollen, Luft. Angetrieben wird hinten.
+        fx = 0.0
+        if gas > 0.0:
+            if vx < -5.0:
+                fx += f["bremse"]
+            else:
+                fx += f["motor"] * gas * max(0.0, 1.0 - max(0.0, vx) / f["hoechst"])
+        elif gas < 0.0:
+            if vx > 5.0:
+                fx -= f["bremse"]
+            else:
+                fx -= f["motor"] * 0.6 * max(0.0, 1.0 - max(0.0, -vx) / f["rueckwaerts"])
+        else:
+            fx -= math.copysign(min(f["rollen"], abs(vx) / dt), vx)
+        fx -= f["luft"] * vx * abs(vx)
+        antrieb = fx if gas != 0.0 else 0.0
+        durch = max(0.0, abs(antrieb) - f["griff_hinten"] * f["durchdrehen"])
+        if durch > 0.0:
+            fx -= math.copysign(durch, antrieb) * 0.5     # was durchdreht, schiebt nicht
+        if handbremse:
+            fx -= math.copysign(min(f["handbremse_bremse"], abs(vx) / dt), vx)
+
+        # Quer: Schraeglauf an beiden Achsen, Seitenkraft bis zur Grenze.
+        a, b = f["achse_vorn"], f["achse_hinten"]
+        vy_vorn = vy + self.gier * a
+        quer_vorn = -math.sin(dl) * vx + math.cos(dl) * vy_vorn
+        laengs_vorn = math.cos(dl) * vx + math.sin(dl) * vy_vorn
+        a_vorn = math.atan2(quer_vorn, max(abs(laengs_vorn), f["v_min"]))
+        a_hinten = math.atan2(vy - self.gier * b, max(abs(vx), f["v_min"]))
+        spitze = math.radians(f["schlupf_spitze"])
+
+        def griff(schraeg):
+            ueber = max(0.0, abs(schraeg) - spitze)
+            return 1.0 - (1.0 - f["gleiten"]) * min(1.0, ueber / 0.35)
+
+        g_vorn = f["griff_vorn"] * griff(a_vorn)
+        g_hinten = f["griff_hinten"] * griff(a_hinten)
+        if handbremse:
+            g_hinten *= f["handbremse_griff"]
+        kreis = f["antrieb_kreis"] if lenk else f["antrieb_kreis_los"]
+        g_hinten = math.sqrt(max(0.0, g_hinten ** 2 - min(g_hinten, abs(antrieb)) ** 2
+                                 * kreis))
+        if durch > 0.0:
+            g_hinten *= f["gleiten"]
+        k_vorn = max(-g_vorn, min(g_vorn, -f["steif"] * a_vorn))
+        k_hinten = max(-g_hinten, min(g_hinten, -f["steif"] * a_hinten))
+
+        ax = fx - math.sin(dl) * k_vorn
+        ay = math.cos(dl) * k_vorn + k_hinten
+        self.geschw += (vorn * ax + quer * ay) * dt
+        moment = a * math.cos(dl) * k_vorn - b * k_hinten
+        # Die Driftstuetze (siehe oben): dreht ihn zurueck, bevor er sich dreht.
+        # Auch ueber 90 Grad hinaus - gerade dann, sonst dreht er sich ganz.
+        # Rueckwaerts gefahren wird nicht gestuetzt (gas < 0, vx < 0).
+        if tempo > 40.0 and not (gas < 0.0 and vx < 0.0):
+            beta = math.atan2(vy, vx)
+            ueber = abs(beta) - math.radians(f["drift_grenze_hb" if handbremse
+                                               else "drift_grenze"])
+            if ueber > 0.0:
+                moment += math.copysign(1.0, beta) * f["drift_stuetze"] * ueber \
+                    * min(1.0, tempo / 120.0)
+        self.gier += moment / f["traegheit"] * dt
+        if tempo < 8.0 and gas == 0.0:
+            # Fast stehend: ausrollen lassen, nicht zittern.
+            self.geschw *= 0.9
+            self.gier *= 0.8
+
+        schlupf = max(abs(vy - self.gier * b), abs(quer_vorn))
+        self.rutschen = max(0.0, min(1.0, (schlupf - 25.0) / 90.0))
+        if durch > 0.0 and gas > 0.0:
+            # Anfahren mit durchdrehenden Raedern zeichnet auch.
+            self.rutschen = max(self.rutschen, min(1.0, durch / 200.0))
+        if handbremse and tempo > 30.0:
+            self.rutschen = max(self.rutschen, 0.6)
 
     def _fahren(self, dt: float) -> None:
         """In kleinen Schritten vorwaerts. An einer Mauer gleitet er
@@ -213,6 +334,7 @@ class Buggy(Wesen):
             else:
                 stoss = max(stoss, self.geschw.length())
                 self.geschw *= -f["aufprall"]
+                self.gier *= 0.3
                 break
         if stoss >= f["aufprall_hart"]:
             w = self.welt
@@ -274,8 +396,53 @@ class Buggy(Wesen):
                   self.ebene, f["staub_groesse"], "staub", 70, richtung, 2.5)
 
     def staub_gast(self, dt: float) -> None:
-        """Beim Gast: derselbe Staub, aus dem gemeldeten Tempo."""
+        """Beim Gast: derselbe Staub, dieselben Spuren - aus dem gemeldeten
+        Tempo und Rutschen. Gequietscht wird beim Gastgeber (NETZKLAENGE)."""
         self._staub(dt)
+        self._spuren()
+
+    def _radstellen(self) -> list:
+        """Wo die Raeder den Boden beruehren: hinten links, hinten rechts,
+        vorn links, vorn rechts."""
+        vorn = self.vorn
+        quer = pygame.Vector2(-vorn.y, vorn.x)
+        return [self.pos - vorn * 15 - quer * 12, self.pos - vorn * 15 + quer * 12,
+                self.pos + vorn * 15 - quer * 11, self.pos + vorn * 15 + quer * 11]
+
+    def _spuren(self) -> None:
+        """Reifenspuren im Sand, wo er rutscht. Sie bleiben liegen (Dekal),
+        wie Blut und Brandflecken - man sieht hinterher, wo gedriftet wurde."""
+        f = K.FAHRZEUG
+        if self.welt is None or self.rutschen < f["spur_ab"]:
+            self._spur_letzte.clear()
+            return
+        ebene = self.welt.ebene(self.ebene)
+        stellen = self._radstellen()
+        # Vorn nur, wenn er richtig quer steht - sonst rollen sie.
+        welche = range(4) if self.rutschen > 0.7 else range(2)
+        deck = int(40 + 70 * self.rutschen)
+        for i in welche:
+            p = stellen[i]
+            letzte = self._spur_letzte.get(i)
+            if letzte is None:
+                self._spur_letzte[i] = pygame.Vector2(p)
+                continue
+            weg = p.distance_to(letzte)
+            if weg < f["spur_abstand"]:
+                continue
+            schritte = min(12, int(weg / f["spur_abstand"]))
+            for s in range(1, schritte + 1):
+                q = letzte.lerp(p, s / schritte)
+                ebene.dekal(_spurpunkt(deck), q.x, q.y)
+            self._spur_letzte[i] = pygame.Vector2(p)
+
+    def _quietschen(self, dt: float) -> None:
+        f = K.FAHRZEUG
+        self._quietsch_rest = max(0.0, self._quietsch_rest - dt)
+        if self.rutschen >= f["quietschen_ab"] and self._quietsch_rest <= 0.0:
+            self._quietsch_rest = f["quietschen_pause"]
+            self.welt.klang("buggy_rutschen", 0.35 + 0.5 * self.rutschen,
+                            self.pos, self.ebene)
 
     def zuruecksetzen(self) -> None:
         """Zurueck an den Platz vom Rundenbeginn, stehend und leer."""
@@ -287,6 +454,9 @@ class Buggy(Wesen):
         self.geschw.update(0, 0)
         self.tempo.update(0, 0)
         self.gas = self.lenk = 0.0
+        self.gier = self.lenkwinkel = self.rutschen = 0.0
+        self.handbremse = False
+        self._spur_letzte.clear()
 
     def ausstiegsorte(self, radius: float) -> list:
         """Wo man aussteigen kann, der Reihe nach: links, rechts, hinten,

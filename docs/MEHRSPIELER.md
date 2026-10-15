@@ -1930,6 +1930,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.16 | Buggy mit Driften: in der Eingabe des Gasts das Feld `hb` (Handbremse, Dash-Taste gehalten); in `fahrzeuge` je Buggy ein achter Wert `rutschen` (0 bis 1), aus dem der Gast Reifenspuren und Staub zeichnet | Ein aelterer Gast schickt kein `hb`: er kann im Buggy nicht handbremsen. Ein aelterer Gastgeber schickt keinen achten Wert: der Gast sieht keine Reifenspuren an fremden Buggys |
 | 0.34.15 | Trefferzeichen: je Spieler `tz` und `tk` in der Weltmeldung - wie oft er getroffen und erledigt hat, als Zaehler. Der Gast zeigt sein X, wenn seine Zahl steigt | Ein aelterer Gastgeber schickt die Felder nicht: dann sieht der Gast kein Zeichen, sonst aendert sich nichts |
 | 0.34.14 | Nur Beispiele und Hilfetext: die Codes sind englisch (vergibt Cloudflare) | Nichts am Netz geaendert |
 | 0.34.13 | Online-Code ueber Cloudflare (7.9). Die eigene Lobby lauscht ohne IM LAN SICHTBAR nur auf 127.0.0.1, ohne Ansager; die Lobbysuche sucht dann nicht im LAN. Protokoll unveraendert | Ist eine Lobby im LAN nicht mehr zu finden: Schalter IM LAN SICHTBAR beim Gastgeber, oder den Code nehmen. Steht statt des Codes ein Fehler: siehe dessen Wortlaut (7.9) |

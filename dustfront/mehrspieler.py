@@ -999,7 +999,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
     NETZKLAENGE = ("speien", "boss_ansage", "dash", "wurf", "medkit", "ruf",
                    "reload", "downed_not_dead", "rundenstart", "c4_explosion",
                    "lmg_dauer", "lmg_salve", "schuss_schrot", "smoke_grenade",
-                   "buggy_tuer", "buggy_aufprall")
+                   "buggy_tuer", "buggy_aufprall", "buggy_rutschen")
 
     def _klang(self, name: str, lautstaerke: float = 1.0, pos=None,
                ebene: int | None = None) -> None:
@@ -1629,6 +1629,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             # haengen beide daran, und Aufhelfen braucht Zeit.
             "nutzen": False if offen else e.gehalten("nutzen"),
             "ziehen": False if offen else e.gehalten("ziehen"),
+            # Die Dash-Taste gehalten: im Buggy die Handbremse (seit 0.34.16).
+            "hb": False if offen else e.gehalten("dash"),
             "waffe": self._waffe_wunsch,
             "knoepfe": sorted(self._knoepfe),
             "admin": self._admin_auftrag,
@@ -2044,6 +2046,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Die Eingabe ist eine Richtung im Bild, W ist also y < 0.
         b.gas = 1.0 if will.y < -0.3 else (-1.0 if will.y > 0.3 else 0.0)
         b.lenk = 1.0 if will.x > 0.3 else (-1.0 if will.x < -0.3 else 0.0)
+        b.handbremse = bool(ein.get("hb"))
         k.will.update(0, 0)
         k.tempo.update(0, 0)
         k.feuert = False
@@ -2089,6 +2092,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 x, y = float(e[0]), float(e[1])
                 winkel, ebene = float(e[2]), int(e[3])
                 kennung, fahrer, fahrt = int(e[4]), int(e[5]), float(e[6])
+                rutschen = float(e[7]) if len(e) > 7 else 0.0
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
@@ -2105,6 +2109,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             b.besetzt = fahrer >= 0
             b.team = k.team if k is not None else -1
             b.geschw = b.vorn * fahrt
+            b.rutschen = max(0.0, min(1.0, rutschen))
             neu.append(b)
         self.fahrzeuge = neu
 
@@ -2128,9 +2133,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             if self._fahrhinweis_rest <= 0.0:
                 return
             p = self.kamera.zu_bild(ich.pos)
-            text = "[%s/%s] GAS  [%s/%s] LENKEN  [%s] AUSSTEIGEN" % (
+            text = "[%s/%s] GAS  [%s/%s] LENKEN  [%s] HANDBREMSE  [%s] AUSSTEIGEN" % (
                 self._tastenname("vor"), self._tastenname("zurueck"),
-                self._tastenname("links"), self._tastenname("rechts"), taste_e)
+                self._tastenname("links"), self._tastenname("rechts"),
+                self._tastenname("dash"), taste_e)
             SCHRIFT.zeichnen(ziel, text, int(p.x), int(p.y) + 30, K.C_CREAM, 1,
                              ausrichtung="mitte")
             return
@@ -3497,7 +3503,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         wagen = [[round(b.pos.x, 1), round(b.pos.y, 1), round(b.winkel, 1),
                   b.ebene, b.kennung,
                   -1 if b.fahrer is None else b.fahrer.nummer,
-                  round(b.fahrt)]
+                  round(b.fahrt),
+                  # Wie sehr er rutscht: daraus macht der Gast Spuren und
+                  # Staub (seit 0.34.16).
+                  round(b.rutschen, 2)]
                  for b in self.fahrzeuge]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
                 "feuer": brand, "fahrzeuge": wagen,

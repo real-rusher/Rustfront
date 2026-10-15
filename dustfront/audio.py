@@ -338,6 +338,24 @@ def _buggy_tuer(seed=0):
                     + _rauschen(0.30, 0.16, 300, 140, 1.8, seed + 92))
 
 
+@platzhalter_klang("buggy_rutschen")
+def _buggy_rutschen(seed=0):
+    """Reifen, die ueber Sand und Kies rutschen: ein raues, schmales
+    Rauschen mit einem hohen Ton darin, das abschwillt. Kein Asphalt-
+    Quietschen - im Sand klingt es eher nach Schaben."""
+    r = random.Random(seed + 97)
+    n = int(RATE * 0.42)
+    ton = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        f = 1350.0 + 220.0 * math.sin(p * 31.0) + r.uniform(-60, 60)
+        phase += 2 * math.pi * f / RATE
+        ton.append(math.sin(phase) * 0.16 * (1 - p) ** 1.5 * min(1.0, p * 12))
+    return _mischen(ton, _rauschen(0.42, 0.42, 5200, 2600, 1.6, seed + 98, hp=True),
+                    _rauschen(0.30, 0.20, 900, 400, 2.2, seed + 99))
+
+
 @platzhalter_klang("buggy_aufprall")
 def _buggy_aufprall(seed=0):
     """Der Buggy faehrt gegen etwas: Blech und ein dumpfer Schlag."""

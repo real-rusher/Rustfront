@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.15, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.16, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -155,6 +155,7 @@ der alten weggenommen.
 | H | Medkit |
 | E | Treppe benutzen, aufhelfen, in den Buggy ein- und aussteigen; am Boden: rufen |
 | W/S, A/D im Buggy | Gas und Bremse (dann rückwärts), lenken - nur solange er rollt |
+| Shift im Buggy | Handbremse: das Heck bricht aus, zum Driften |
 | G | Gefallenen Mitspieler ziehen (Gefecht) |
 | Q | Obere Ebenen ein- oder ausblenden (Gefecht) |
 | P | Runden einstellen, in der Lobby (Gefecht) |
@@ -710,6 +711,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.16 | **Buggy fährt sich echter, mit Driften.** Neues Fahrmodell mit Reifen: vorne und hinten haftet jede Achse nur bis zu einer Grenze, darüber rutscht sie und greift schwächer (Schräglauf). Wer schnell voll einlenkt oder mit Vollgas aus der Kurve beschleunigt, bringt das Heck zum Ausbrechen und hält den Drift mit Gas und Lenkung; Heckantrieb, beim Anfahren drehen die Räder kurz durch. Neu **Shift = Handbremse** im Buggy: das Heck kommt herum, für enge Kehren. Ein leichtes automatisches Gegenlenken fängt den Wagen, lässt man die Lenkung los, richtet er sich wieder gerade aus. Beim Rutschen bleiben **Reifenspuren** im Sand liegen, und die Reifen quietschen (neuer Klang `buggy_rutschen`). Alle Werte in `K.FAHRZEUG` (die alten `gas`, `lenkung`, `lenk_ab`, `griff` sind ersetzt). **Netz/LAN: geändert** - der Gast schickt ein neues Feld `hb` (Handbremse) in seiner Eingabe, und in `fahrzeuge` steht je Buggy ein achter Wert (wie stark er rutscht, für Spuren und Staub beim Gast); beide brauchen 0.34.16 |
 | 0.34.15 | **Trefferzeichen.** Trifft man einen Gegner, springt am Mauszeiger kurz ein weisses X auf und es tickt; erledigt oder umgeworfen heisst: ein grösseres rotes X und ein tieferer zweiter Ton. Nur der Schütze sieht und hört es, auch als Gast und im Einzelspiel; Treffer an sich selbst und an den eigenen Leuten zählen nicht, Feuer und Schrot tickt nicht dutzendfach (`K.TREFFERMARKE`). Zwei neue Klänge (`trefferzeichen`, `trefferzeichen_toedlich`). **Netz/LAN: geändert** - je Spieler zwei neue Felder in der Weltmeldung (`tz`, `tk`, die Zähler seiner Treffer); beide brauchen 0.34.15 |
 | 0.34.14 | **Online-Code: englische Beispiele.** Die Wörter des Codes vergibt Cloudflare, und die sind englisch (z. B. `THERMAL-UNDERLYING-PROVIDERS-TOE`); deutsch waren nur die Beispiele in README, Hilfe und Testersatz - jetzt überall englisch, und die Hilfe unter EINSTELLUNGEN > NETZ sagt es. **Netz/LAN: nichts geändert** (Versionsnummer trotzdem neu, beide brauchen 0.34.14) |
 | 0.34.13 | **Online spielen mit Code - ohne Router, ohne Firewall-Abfrage.** Jede eigene Lobby bekommt einen Code aus vier Wörtern (oben links in der Lobby und im Pausenmenü unter ONLINE-CODE, auswählen kopiert ihn). Wer ihn unter ANDERER LOBBY BEITRETEN eingibt (Strg+V fügt ein), kommt von überall herein. Dahinter steckt ein kostenloser Quick Tunnel von Cloudflare: beide Seiten bauen nur ausgehende Verbindungen auf, die Lobby lauscht nur auf 127.0.0.1 - so muss am Router nichts freigegeben werden, und die Windows-Firewall fragt nicht. Das Programm `cloudflared` 2026.10.0 liegt für Windows und macOS in `tools/cloudflared` bei (Apache-2.0-Lizenz, Prüfsummen in `K.ONLINE`), das Spiel packt es beim ersten Mal selbst aus. **LAN jetzt nur auf Wunsch:** neuer Reiter EINSTELLUNGEN > NETZ mit ONLINE-LOBBY (an) und IM LAN SICHTBAR (aus); erst damit lauscht die Lobby im LAN, antwortet auf die Suche - und die Firewall fragt. Beides gilt sofort, wer drin ist, bleibt drin. Neu auch: Strg+V in jedem Textfeld. **Netz/LAN: geändert** - Protokoll gleich, aber die Lobby ist im LAN ohne den Schalter nicht mehr zu finden; beide brauchen 0.34.13 |

@@ -563,6 +563,7 @@ KLANG_NAMEN = (
     "trefferzeichen_toedlich",   # eigener Treffer, der erledigt
     "buggy_tuer",           # in den Buggy und wieder heraus (seit 0.34.9)
     "buggy_aufprall",       # der Buggy rumst gegen etwas
+    "buggy_rutschen",       # die Reifen quietschen, wenn er rutscht (seit 0.34.16)
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -810,17 +811,52 @@ ZONE = dict(
 # F hat - auf STAUBTAL an der Tankstelle, in Westdorf und auf der Ranch.
 # Unzerstoerbar; wer drin sitzt, bekommt von jedem Schaden nur einen Teil
 # ab und wird nicht weggestossen. Gelenkt wird wie ein Auto: W/S Gas und
-# Bremse (rueckwaerts), A/D lenken. Geschossen wird am Steuer nicht.
+# Bremse (rueckwaerts), A/D lenken, Shift ist die Handbremse (seit
+# 0.34.16). Geschossen wird am Steuer nicht.
+#
+# Seit 0.34.16 faehrt er mit Reifen, die seitlich nur so viel halten,
+# wie sie koennen (Einspurmodell, siehe Buggy._physik): wird es mehr,
+# rutscht er. Alle Kraefte hier je Masse, also Pixel je Sekunde im
+# Quadrat. Abgestimmt in einer Simulation gegen diese Ziele: voll
+# eingelenkt bei Hoechstfahrt bricht das Heck langsam aus und faengt sich
+# (kein Dreher), die Handbremse dreht ihn um gut 150 Grad, ohne dass er
+# stehen bleibt, und in mittelschnellen Kurven haelt er.
 FAHRZEUG = dict(
     marke="F",                # Buchstabe in der Karte, wo einer steht
-    hoechst=250.0,            # Pixel je Sekunde vorwaerts (zu Fuss 108)
+    hoechst=250.0,            # bis hierher zieht der Motor (wirklich: ~220, Luft)
     rueckwaerts=95.0,
-    gas=240.0,                # Beschleunigung, Pixel je Sekunde im Quadrat
-    bremse=560.0,             # wenn man gegen die Fahrtrichtung drueckt
-    rollen=130.0,             # so schnell wird er ohne Gas langsamer
-    lenkung=170.0,            # Grad je Sekunde bei voller Fahrt
-    lenk_ab=70.0,             # darunter lenkt er schwaecher, im Stand gar nicht
-    griff=7.0,                # wie schnell seitliches Rutschen abklingt (1/s)
+    motor=420.0,              # Antrieb hinten, im Stand; nimmt mit dem Tempo ab
+    bremse=520.0,             # wenn man gegen die Fahrtrichtung drueckt
+    rollen=55.0,              # so schnell wird er ohne Gas langsamer
+    luft=0.0011,              # Luftwiderstand, waechst mit dem Tempo im Quadrat
+    lenk_max=32.0,            # Grad Radeinschlag im Stand
+    lenk_abfall=0.5,          # bei Hoechstfahrt nur noch die Haelfte davon
+    lenk_tempo=290.0,         # so schnell drehen die Raeder ein (Grad je Sekunde)
+    achse_vorn=12.0,          # Abstand der Achsen von der Mitte (Pixel)
+    achse_hinten=12.0,
+    traegheit=230.0,          # wie traege er sich um sich selbst dreht
+    griff_vorn=420.0,         # so viel Seitenkraft halten die Vorderraeder
+    griff_hinten=300.0,       # die hinteren weniger: das Heck kommt zuerst
+    steif=3600.0,             # Seitenkraft je Radiant Schraeglauf, bis zur Grenze
+    schlupf_spitze=9.0,       # Grad Schraeglauf, ab dem ein Reifen rutscht
+    gleiten=0.75,             # so viel Griff bleibt beim Rutschen
+    handbremse_griff=0.45,    # so viel Seitengriff haben die blockierten Hinterraeder
+    handbremse_bremse=110.0,
+    antrieb_kreis=1.0,        # wie sehr Gas den Seitengriff hinten kostet
+    durchdrehen=1.0,          # mehr Antrieb als Griff x das: die Raeder drehen durch
+    gegenlenken=0.5,          # so viel des Driftwinkels lenkt er selbst gegen
+    # Ohne Lenktaste: mehr Gegenlenken und weniger Heckschub - losgelassen
+    # heisst "geradeaus", sonst haelt das Gas ihn ewig im Drift (siehe 0.34.16).
+    gegenlenken_los=1.2,
+    antrieb_kreis_los=0.25,
+    drift_grenze=29.0,        # ab diesem Driftwinkel (Grad) faengt ihn die Stuetze
+    drift_grenze_hb=69.0,     # mit Handbremse erst hier
+    drift_stuetze=30000.0,    # wie kraeftig sie zurueckdreht
+    v_min=55.0,               # unter diesem Tempo rechnet der Schraeglauf ruhiger
+    spur_ab=0.25,             # ab so viel Rutschen bleiben Reifenspuren (0 bis 1)
+    spur_abstand=2.5,         # Pixel zwischen zwei Spurpunkten
+    quietschen_ab=0.5,        # ab so viel Rutschen quietschen die Reifen
+    quietschen_pause=0.6,
     kreis=13.0,               # Radius der beiden Kreise, mit denen er anstoesst
     achse=14.0,               # Abstand der Kreise von seiner Mitte
     einsteigen=46.0,          # so nah muss man dran sein
