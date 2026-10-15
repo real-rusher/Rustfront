@@ -306,6 +306,24 @@ def _aufheben(seed=0):
                     _schlag(1320, 1760, 0.09, 0.18, 3.0))
 
 
+@platzhalter_klang("trefferzeichen")
+def _trefferzeichen(seed=0):
+    """Der eigene Treffer: ein kurzes, helles Ticken. Hoch und trocken,
+    damit es durch Schuesse und Explosionen hindurch zu hoeren ist, ohne
+    laut zu sein."""
+    return _mischen(_schlag(2600, 2100, 0.035, 0.32, 7.0),
+                    _rauschen(0.025, 0.18, 9000, 4000, 6.0, seed + 95, hp=True))
+
+
+@platzhalter_klang("trefferzeichen_toedlich")
+def _trefferzeichen_toedlich(seed=0):
+    """Erledigt: dasselbe Ticken, dahinter ein tieferer zweiter Schlag."""
+    return _mischen(_schlag(2600, 2100, 0.035, 0.30, 7.0),
+                    [0.0] * int(RATE * 0.05)
+                    + _schlag(900, 620, 0.12, 0.38, 3.5),
+                    _rauschen(0.03, 0.16, 9000, 4000, 6.0, seed + 96, hp=True))
+
+
 @platzhalter_klang("buggy_tuer")
 def _buggy_tuer(seed=0):
     """Einsteigen oder Aussteigen: ein Rohr klappert gegen den Sitz, und

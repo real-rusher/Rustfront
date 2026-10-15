@@ -1930,6 +1930,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.15 | Trefferzeichen: je Spieler `tz` und `tk` in der Weltmeldung - wie oft er getroffen und erledigt hat, als Zaehler. Der Gast zeigt sein X, wenn seine Zahl steigt | Ein aelterer Gastgeber schickt die Felder nicht: dann sieht der Gast kein Zeichen, sonst aendert sich nichts |
 | 0.34.14 | Nur Beispiele und Hilfetext: die Codes sind englisch (vergibt Cloudflare) | Nichts am Netz geaendert |
 | 0.34.13 | Online-Code ueber Cloudflare (7.9). Die eigene Lobby lauscht ohne IM LAN SICHTBAR nur auf 127.0.0.1, ohne Ansager; die Lobbysuche sucht dann nicht im LAN. Protokoll unveraendert | Ist eine Lobby im LAN nicht mehr zu finden: Schalter IM LAN SICHTBAR beim Gastgeber, oder den Code nehmen. Steht statt des Codes ein Fehler: siehe dessen Wortlaut (7.9) |
 | 0.34.12 | Neue Nachricht `loadout` (Gast -> Gastgeber): das im Spiel geaenderte Loadout, gilt ab dem naechsten Einstieg | Ein aelterer Gastgeber ignoriert sie, dann gilt weiter das Loadout vom Verbinden |

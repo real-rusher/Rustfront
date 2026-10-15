@@ -69,7 +69,7 @@ from .entities import (Aufsammler, Brandflaeche, C4Ladung, Gegner, Geschoss, Gra
                        Rakete, Rauchwolke, Spieler, wolke)
 from .fahrzeug import Buggy
 from .font import SCHRIFT
-from .render import Befinden, Kamera, Renderer, Ueberblendung
+from .render import Befinden, Kamera, Renderer, Trefferzeichen, Ueberblendung
 from .world import Welt, freier_punkt, testkarte
 
 
@@ -819,6 +819,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Gelesen wird nur das eigene Leben; beim Gast steht es genauso in
         # der Weltmeldung wie beim Gastgeber in seiner eigenen Figur.
         self.befinden = Befinden()
+        self.trefferzeichen = Trefferzeichen()
         self.hud = Anzeige(self)
         self._kosmetik_anlegen()
         self._gegner_rest = 0        # beim Gast: so meldet es der Gastgeber
@@ -3433,6 +3434,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 "rz": round(k.ruf_zeigen, 2),
                 # Sitzt er im Buggy? Dann zeichnet der Gast ihn nicht.
                 "fz": k.im_fahrzeug,
+                # Eigene Treffer und Erledigte, als Zaehler - daraus macht
+                # der Gast sein Trefferzeichen (render.Trefferzeichen).
+                "tz": k.treffer_marken, "tk": k.toedlich_marken,
             })
         flug = []
         gegner = []
@@ -3852,6 +3856,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             k.zieht = None if zieht < 0 else zieht
             k.ruf_zeigen = float(eintrag.get("rz", 0.0))
             k.im_fahrzeug = bool(eintrag.get("fz", False))
+            k.treffer_marken = int(eintrag.get("tz", 0))
+            k.toedlich_marken = int(eintrag.get("tk", 0))
             k.rpg = bool(eintrag.get("rp", False))
             if k.rpg and k.waffen != ["rakete"]:
                 # Beim Gast wird nichts simuliert: die Waffe muss aus der
@@ -4113,6 +4119,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._eigenes_zielen()
         self._bereich_melden()
         self._fahrhinweis_fuehren(dt)
+        ton = self.trefferzeichen.beobachten(self.ich, dt)
+        if ton:
+            self.app.klaenge.spielen(ton, K.TREFFERMARKE["laut"])
         self._befinden_fuehren(dt)
         self._ueberblendung.schritt(dt)
         if self.ich.ebene != self._letzte_ebene:
@@ -4736,6 +4745,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._kreispfeil(ziel)
         self._randpfeile(ziel)
         self._erfassung_zeichnen(ziel)
+        if self.menue is None:
+            # Am Zeiger, also dort, wo man hinschaut (render.Trefferzeichen).
+            self.trefferzeichen.zeichnen(ziel, self.app.eingabe.maus)
         # Der rote Rand liegt ueber der Welt, aber unter der Anzeige: die
         # Zahlen sollen lesbar bleiben, auch wenn es einem schlecht geht.
         self.befinden.zeichnen(ziel)

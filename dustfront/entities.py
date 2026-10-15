@@ -171,6 +171,7 @@ class Wesen:
                 von=None) -> None:
         if not self.lebt or self.leben <= 0:
             return
+        stand_vorher = not getattr(self, "am_boden", False)
         # Nur der Schaden, der wirklich angekommen ist. Wer einen mit
         # 3 Leben mit einer Granate erwischt, hat 3 Schaden gemacht und
         # nicht 78 - sonst sagt die Zahl nichts.
@@ -186,6 +187,15 @@ class Wesen:
                 self.zaehlen("schaden_ein", angekommen)
         if self.leben <= 0:
             self.sterben(von)
+        # Das Trefferzeichen des Schuetzen (seit 0.34.15). Nicht fuer sich
+        # selbst und nicht fuer die eigenen Leute - eine Rueckmeldung fuer
+        # den Granatwurf ins eigene Team waere eine Belohnung dafuer.
+        melden = getattr(von, "treffer_melden", None)
+        if (angekommen > 0 and melden is not None and von is not self
+                and getattr(von, "fraktion", None) != self.fraktion):
+            umgeworfen = stand_vorher and (not self.lebt
+                                          or getattr(self, "am_boden", False))
+            melden(self, umgeworfen)
 
     def sterben(self, von=None) -> None:
         self.lebt = False
@@ -1209,6 +1219,12 @@ class Spieler(Wesen):
         self.dash_richtung = pygame.Vector2(1, 0)
         self.feuert = False
         self.punkte = 0
+        # Wie oft dieser Spieler getroffen und erledigt hat - als Zaehler,
+        # damit der Gast es ueber das Netz bekommt, ohne dass ein Treffer
+        # zwischen zwei Meldungen verloren geht (TREFFERMARKE).
+        self.treffer_marken = 0
+        self.toedlich_marken = 0
+        self._marke_zeit = -1.0
         self.tracer = False           # Zielhilfe an oder aus
         # Die Linie laeuft standardmaessig ueber den Mauszeiger hinaus bis
         # zur naechsten Wand. So sieht man, was man wirklich treffen wuerde,
@@ -1779,6 +1795,18 @@ class Spieler(Wesen):
             self.feuern()
 
     # ---- Waffe -------------------------------------------------------
+    def treffer_melden(self, ziel, toedlich: bool) -> None:
+        """Ein eigener Treffer ist angekommen (Wesen.schaden)."""
+        jetzt = getattr(self.welt, "zeit", 0.0)
+        if toedlich:
+            self.toedlich_marken += 1
+        elif jetzt - self._marke_zeit >= K.TREFFERMARKE["abstand"] \
+                or jetzt < self._marke_zeit:
+            self.treffer_marken += 1
+        else:
+            return
+        self._marke_zeit = jetzt
+
     # ---- Dash -----------------------------------------------------------
     def _dash_laden(self, dt: float) -> None:
         """Die Ladungen fuellen sich nacheinander wieder auf."""

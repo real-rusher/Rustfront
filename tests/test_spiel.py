@@ -7925,6 +7925,94 @@ pruef("Kein cloudflared laeuft weiter, wenn alles zu ist",
 _on73.alle_beenden()
 del os.environ["DUSTFRONT_CLOUDFLARED"]
 
+# ─────────────────────────────────────────────────────────────────────
+# 0.34.15: "Hit animations - irgendwas, was klar symbolisiert, wenn man
+# einen Gegner trifft." Ein X am Mauszeiger (render.Trefferzeichen), rot
+# und groesser, wenn der Treffer erledigt; dazu ein Ticken.
+w74, g74 = gefechtspaar("pvp")
+_wk74 = w74.kaempfer[0]
+_gk74 = w74.kaempfer[g74.meine_nummer]
+for _k74 in (_wk74, _gk74):
+    _k74.unverwundbar = 0.0
+    _k74.leben = 100.0
+_gk74.schaden(10.0, None, _wk74)
+pruef("Ein Treffer zaehlt beim Schuetzen", _wk74.treffer_marken == 1
+      and _wk74.toedlich_marken == 0, "%d/%d" % (_wk74.treffer_marken,
+                                                 _wk74.toedlich_marken))
+_gk74.schaden(1.0, None, _wk74)
+pruef("Zwei Treffer im selben Augenblick (Schrot, Feuer) zaehlen einmal",
+      _wk74.treffer_marken == 1)
+_wk74.schaden(5.0, None, _wk74)
+pruef("Sich selbst treffen zaehlt nicht", _wk74.treffer_marken == 1)
+w74.schritt(K.FIXED_DT)
+pruef("Beim Gastgeber springt das Zeichen auf", w74.trefferzeichen.rest > 0
+      and not w74.trefferzeichen.toedlich)
+_bild74 = pygame.Surface((K.GAME_W, K.GAME_H)); _bild74.fill((0, 0, 0))
+_maus74 = pygame.Vector2(300, 180)
+w74.trefferzeichen.zeichnen(_bild74, _maus74)
+_hell74 = [(x_, y_) for x_ in range(280, 321) for y_ in range(160, 201)
+           if _bild74.get_at((x_, y_))[:3] == (255, 250, 236)]
+pruef("... als helles X um den Zeiger, die Mitte bleibt frei",
+      len(_hell74) > 8 and _bild74.get_at((300, 180))[:3] == (0, 0, 0)
+      # Jeder helle Punkt liegt auf einer der Diagonalen (Strichbreite
+      # mit eingerechnet) - also wirklich ein X und kein Kreis oder Kasten.
+      and all(abs(abs(x_ - 300) - abs(y_ - 180)) <= 4 for x_, y_ in _hell74)
+      and all(max(abs(x_ - 300), abs(y_ - 180)) >= 3 for x_, y_ in _hell74),
+      "%d Punkte" % len(_hell74))
+w74.welt.zeit += 1.0
+_gk74.leben = 3.0
+_gk74.schaden(10.0, None, _wk74)
+w74.schritt(K.FIXED_DT)
+pruef("Ein Treffer, der erledigt, zaehlt als toedlich", _wk74.toedlich_marken == 1)
+pruef("... und das Zeichen wird rot und bleibt laenger",
+      w74.trefferzeichen.toedlich
+      and w74.trefferzeichen.dauer == K.TREFFERMARKE["dauer_toedlich"])
+_bild74.fill((0, 0, 0))
+w74.trefferzeichen.zeichnen(_bild74, _maus74)
+pruef("... in Rot zu sehen",
+      any(_bild74.get_at((x_, y_))[:3] == K.C_RED
+          for x_ in range(275, 326) for y_ in range(155, 206)))
+# Der Gast trifft: sein Zaehler kommt mit der Weltmeldung, sein Zeichen
+# springt bei ihm auf.
+w74._wieder_einsteigen(_gk74)
+_wk74.unverwundbar = 0.0
+_wk74.leben = 100.0
+w74.welt.zeit += 1.0
+_wk74.schaden(10.0, None, _gk74)
+_auf74 = False
+for _ in range(8):
+    w74.schritt(K.NETZ["takt"])
+    g74.schritt(K.NETZ["takt"])
+    _auf74 = _auf74 or g74.trefferzeichen.rest > 0
+pruef("Der Gast bekommt seinen Treffer gemeldet", g74.ich.treffer_marken == 1,
+      str(g74.ich.treffer_marken))
+pruef("... und sieht sein Zeichen", _auf74)
+from dustfront.render import Trefferzeichen as _TZ74
+_neu74 = _TZ74()
+_neu74.beobachten(g74.ich, K.FIXED_DT)
+pruef("Wer neu hinschaut, sieht kein altes Zeichen (erst merken, dann zaehlen)",
+      _neu74.rest == 0.0)
+w74.verlassen(); g74.verlassen()
+
+# Eigene Leute: kein Zeichen, auch nicht durch eine Granate.
+w75, g75 = gefechtspaar("pve")
+_a75, _b75 = w75.kaempfer[0], w75.kaempfer[g75.meine_nummer]
+_b75.unverwundbar = 0.0
+_b75.schaden(10.0, None, _a75)
+pruef("Wer die eigenen Leute trifft, bekommt kein Zeichen",
+      _a75.treffer_marken == 0 and _a75.toedlich_marken == 0)
+w75.verlassen(); g75.verlassen()
+
+# Auch im Einzelspiel.
+from dustfront.entities import Gegner as _G76
+_g76 = _G76(szene.held.pos + pygame.Vector2(60, 0), "laeufer", szene.held.ebene)
+szene.welt.dazu(_g76)
+_vor76 = szene.held.treffer_marken
+szene.welt.zeit += 1.0
+_g76.schaden(1.0, None, szene.held)
+pruef("Im Einzelspiel zaehlt der Treffer am Zombie", szene.held.treffer_marken == _vor76 + 1)
+_g76.lebt = False
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

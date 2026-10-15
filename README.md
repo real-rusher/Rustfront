@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.14, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.15, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -710,6 +710,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.15 | **Trefferzeichen.** Trifft man einen Gegner, springt am Mauszeiger kurz ein weisses X auf und es tickt; erledigt oder umgeworfen heisst: ein grösseres rotes X und ein tieferer zweiter Ton. Nur der Schütze sieht und hört es, auch als Gast und im Einzelspiel; Treffer an sich selbst und an den eigenen Leuten zählen nicht, Feuer und Schrot tickt nicht dutzendfach (`K.TREFFERMARKE`). Zwei neue Klänge (`trefferzeichen`, `trefferzeichen_toedlich`). **Netz/LAN: geändert** - je Spieler zwei neue Felder in der Weltmeldung (`tz`, `tk`, die Zähler seiner Treffer); beide brauchen 0.34.15 |
 | 0.34.14 | **Online-Code: englische Beispiele.** Die Wörter des Codes vergibt Cloudflare, und die sind englisch (z. B. `THERMAL-UNDERLYING-PROVIDERS-TOE`); deutsch waren nur die Beispiele in README, Hilfe und Testersatz - jetzt überall englisch, und die Hilfe unter EINSTELLUNGEN > NETZ sagt es. **Netz/LAN: nichts geändert** (Versionsnummer trotzdem neu, beide brauchen 0.34.14) |
 | 0.34.13 | **Online spielen mit Code - ohne Router, ohne Firewall-Abfrage.** Jede eigene Lobby bekommt einen Code aus vier Wörtern (oben links in der Lobby und im Pausenmenü unter ONLINE-CODE, auswählen kopiert ihn). Wer ihn unter ANDERER LOBBY BEITRETEN eingibt (Strg+V fügt ein), kommt von überall herein. Dahinter steckt ein kostenloser Quick Tunnel von Cloudflare: beide Seiten bauen nur ausgehende Verbindungen auf, die Lobby lauscht nur auf 127.0.0.1 - so muss am Router nichts freigegeben werden, und die Windows-Firewall fragt nicht. Das Programm `cloudflared` 2026.10.0 liegt für Windows und macOS in `tools/cloudflared` bei (Apache-2.0-Lizenz, Prüfsummen in `K.ONLINE`), das Spiel packt es beim ersten Mal selbst aus. **LAN jetzt nur auf Wunsch:** neuer Reiter EINSTELLUNGEN > NETZ mit ONLINE-LOBBY (an) und IM LAN SICHTBAR (aus); erst damit lauscht die Lobby im LAN, antwortet auf die Suche - und die Firewall fragt. Beides gilt sofort, wer drin ist, bleibt drin. Neu auch: Strg+V in jedem Textfeld. **Netz/LAN: geändert** - Protokoll gleich, aber die Lobby ist im LAN ohne den Schalter nicht mehr zu finden; beide brauchen 0.34.13 |
 | 0.34.12 | **C4 nach 3 s scharf, Loadout im Spiel ändern geht.** C4 lässt sich jetzt drei statt fünf Sekunden nach dem Aufkleben zünden (`K.C4["ladezeit"]`). Ein im Menü AUSRÜSTUNG geändertes Loadout kam bei einem Gast nie beim Gastgeber an - der kannte nur das vom Verbinden, und das galt auch beim nächsten Einstieg und in der nächsten Runde weiter. Jetzt geht jede Änderung sofort an den Gastgeber und gilt, wie im Menü angegeben, ab dem nächsten Einstieg (nicht mitten im Gefecht); beim Ändern steht kurz "AUSRÜSTUNG GILT AB DEM NÄCHSTEN EINSTIEG". **Netz/LAN: geändert** - neue Nachricht `loadout` vom Gast an den Gastgeber; beide brauchen 0.34.12 |

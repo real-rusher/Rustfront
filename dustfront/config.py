@@ -224,6 +224,21 @@ TREFFER = dict(
     zeitlupe=0.045,           # kurze Verlangsamung beim Toeten
 )
 
+# Das Trefferzeichen (seit 0.34.15): trifft man einen Gegner, springt am
+# Mauszeiger kurz ein X auf, und es tickt. Erledigt (oder umgeworfen)
+# heisst: ein groesseres rotes X und ein tieferer Ton. Nur der Schuetze
+# sieht und hoert es - es ist seine Rueckmeldung, nicht die des Ziels.
+TREFFERMARKE = dict(
+    dauer=0.20,               # Sekunden fuer ein gewoehnliches Zeichen
+    dauer_toedlich=0.45,
+    abstand=0.06,             # schneller hintereinander zaehlt nicht neu (Feuer, Schrot)
+    luecke=6,                 # Abstand der Striche vom Zeiger, in Bildpixeln
+    laenge=5,
+    laenge_toedlich=7,
+    pop=0.5,                  # so viel groesser springt es auf
+    laut=0.55,                # Lautstaerke des Tons
+)
+
 # ══════════════════════════════════════════════════ BEFINDEN
 #
 # Wie es einem geht, ohne dass man auf eine Zahl schaut.
@@ -544,6 +559,8 @@ KLANG_NAMEN = (
     "boss_ansage",          # ein Boss kuendigt an, was er gleich tut
     "dash",                 # der kurze Stoss
     "ruf",                  # wer am Boden liegt, ruft nach Hilfe
+    "trefferzeichen",       # eigener Treffer (seit 0.34.15)
+    "trefferzeichen_toedlich",   # eigener Treffer, der erledigt
     "buggy_tuer",           # in den Buggy und wieder heraus (seit 0.34.9)
     "buggy_aufprall",       # der Buggy rumst gegen etwas
 

@@ -2209,6 +2209,86 @@ class Renderer:
 # Befinden: wie es einem geht, ohne dass man auf eine Zahl schaut
 # ══════════════════════════════════════════════════════════════════
 
+class Trefferzeichen:
+    """Das X am Mauszeiger, wenn ein eigener Treffer ankommt (seit 0.34.15).
+
+    Gemeldet: "irgendwas, was klar symbolisiert, wenn man einen Gegner
+    trifft". Der Getroffene blitzte zwar schon kurz auf - aber nur dort, wo
+    er steht, und das ist im Gedraenge, hinter Rauch oder am Bildrand nicht
+    da, wo man hinschaut. Hingeschaut wird auf den Zeiger. Dort springt
+    jetzt ein X auf: weiss je Treffer, rot und groesser, wenn er erledigt
+    oder umwirft. Dazu ein Ticken, nur fuer den Schuetzen.
+
+    Gezaehlt wird am Spieler (Spieler.treffer_melden), hier wird nur
+    verglichen. GRUND: Beim Gast kommen die Zaehler mit der Weltmeldung,
+    und ein Zaehler verliert keinen Treffer, der zwischen zwei Meldungen
+    passiert - ein Ereignis koennte das.
+    """
+
+    def __init__(self) -> None:
+        self.rest = 0.0
+        self.dauer = 1.0
+        self.toedlich = False
+        self._wer = None
+        self._t = 0
+        self._k = 0
+
+    def beobachten(self, spieler, dt: float) -> str:
+        """Einmal je Schritt. Gibt den Ton zurueck, der jetzt dran ist, oder ""."""
+        self.rest = max(0.0, self.rest - dt)
+        if spieler is None:
+            return ""
+        t = int(getattr(spieler, "treffer_marken", 0))
+        k = int(getattr(spieler, "toedlich_marken", 0))
+        if spieler is not self._wer or t < self._t or k < self._k:
+            # Neue Figur oder neue Zaehlung: nur merken, nichts zeigen.
+            self._wer, self._t, self._k = spieler, t, k
+            return ""
+        ton = ""
+        m = K.TREFFERMARKE
+        if k > self._k:
+            self.toedlich, self.dauer = True, m["dauer_toedlich"]
+            self.rest = self.dauer
+            ton = "trefferzeichen_toedlich"
+        elif t > self._t and not (self.toedlich and self.rest > m["dauer"]):
+            # Ein gewoehnlicher Treffer ueberdeckt ein frisches rotes X
+            # nicht - das soll man sehen.
+            self.toedlich, self.dauer = False, m["dauer"]
+            self.rest = self.dauer
+            ton = "trefferzeichen"
+        self._t, self._k = t, k
+        return ton
+
+    def zeichnen(self, ziel, pos) -> None:
+        if self.rest <= 0.0:
+            return
+        m = K.TREFFERMARKE
+        f = self.rest / max(1e-6, self.dauer)          # 1 -> 0
+        # Erst aufspringen, dann stehen, dann verblassen.
+        gross = 1.0 + m["pop"] * max(0.0, (f - 0.7) / 0.3)
+        deck = 255 if f > 0.35 else int(255 * f / 0.35)
+        laenge = m["laenge_toedlich"] if self.toedlich else m["laenge"]
+        farbe = K.C_RED if self.toedlich else (255, 250, 236)
+        rand = int(laenge * gross + m["luecke"] * gross) + 4
+        s = pygame.Surface((2 * rand, 2 * rand), pygame.SRCALPHA)
+        c = pygame.Vector2(rand, rand)
+        for sx, sy in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+            d = pygame.Vector2(sx, sy).normalize()
+            a = c + d * (m["luecke"] * gross)
+            b = c + d * ((m["luecke"] + laenge) * gross)
+            # Als Vieleck, nicht als dicke Linie: pygame setzt die Breite
+            # schraeger Linien einseitig daneben, der dunkle Rand laege
+            # dann nur auf einer Seite. Der Rand macht das X auf Sand,
+            # Rauch und Feuer gleich lesbar.
+            quer = pygame.Vector2(-d.y, d.x)
+            for f_farbe, breit, vor in (((16, 11, 8), 1.9, 1.0), (farbe, 0.9, 0.0)):
+                a2, b2 = a - d * vor, b + d * vor
+                pygame.draw.polygon(s, f_farbe, [a2 + quer * breit, b2 + quer * breit,
+                                                 b2 - quer * breit, a2 - quer * breit])
+        s.set_alpha(deck)
+        ziel.blit(s, (int(pos[0]) - rand, int(pos[1]) - rand))
+
+
 class Befinden:
     """Roter Rand, Herzschlag, dumpfe Welt - und das Medkit dagegen.
 

@@ -24,7 +24,7 @@ from .entities import Aufsammler, Gegner, Spieler, wolke
 from .font import SCHRIFT
 from .inventar import Inventar
 from .menues import Pause
-from .render import Befinden, Kamera, Renderer, Ueberblendung
+from .render import Befinden, Kamera, Renderer, Trefferzeichen, Ueberblendung
 from .world import freier_punkt, testkarte
 
 
@@ -81,6 +81,7 @@ class Spiel(Szene):
         self.offen: list = []
         self.schaden_blende = 0.0
         self.befinden = Befinden()
+        self.trefferzeichen = Trefferzeichen()
         self.tot_seit = 0.0
         self.hinweis = ""
         self.admin_zeile = None
@@ -297,6 +298,9 @@ class Spiel(Szene):
                 return
 
         self.welt.schritt(dt)
+        ton = self.trefferzeichen.beobachten(held, dt)
+        if ton:
+            self.app.klaenge.spielen(ton, K.TREFFERMARKE["laut"])
         if held.leben < vorher_leben:
             self.schaden_blende = 1.0
             self.befinden.treffer((vorher_leben - held.leben) / 40.0)
@@ -369,6 +373,7 @@ class Spiel(Szene):
         if self.blick == self.held.ebene and self.held.heilt_rest <= 0:
             self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.held)
             self.renderer.tracer(ziel, self.welt, self.kamera, self.held)
+        self.trefferzeichen.zeichnen(ziel, self.app.eingabe.maus)
         self.renderer.schaden_blende(ziel, self.schaden_blende)
         self.befinden.zeichnen(ziel)
 
