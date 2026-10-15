@@ -472,6 +472,63 @@ Vorgabe 15; allein und ohne Gegenwehr gerechnet) und ob der Fortschritt
 kurzer Ausfall mehr wert als eine Minute im Kreis. Gemessen: 15,1 s bei
 15, 60,0 s bei 60.
 
+### 7.6c Bots, Gegner auf der Minikarte, kaputte Buggys (seit 0.34.18)
+
+**Bots** (`dustfront/bots.py`, `K.BOTS`). Gemeldet: "optionale schwache
+bots ... die gleichmaessig die teams auffuellen und objectives machen ...
+keinen aimbot bzw unfaire Vorteile".
+
+**FEST.**
+
+* Regel `bots`: wie viele Spieler es insgesamt sein sollen (0 = aus), nur
+  in Spielarten mit `beute` (pvp, pvpve, team, versus, huegel), nie in
+  der Lobby. Mit Mannschaften je Mannschaft `ceil(Zahl / 2)`, mindestens
+  so viele, wie Menschen darin sind. Nachgezaehlt wird jede Sekunde und
+  sofort, wenn ein Mensch dazukommt (`_bots_fuehren`); zur neuen Runde
+  gehen alle Bots und die neue stellt ihre auf, nachdem die Menschen
+  eingeteilt sind.
+* Ein Bot ist ein `Kaempfer` mit Nummer ab `nummer_ab` (100), `ist_bot`
+  und einem `BotHirn`. Er hat keine Leitung: an ihn geht nichts hinaus,
+  Spielerkosmetik zaehlt ihn nicht mit, und `sichtbar_fuer_jemanden`
+  (Zombies umsetzen, Buggys neu aufstellen) fragt nur Menschen.
+* Er schickt je Schritt eine Eingabemeldung wie ein Gast, und der
+  Gastgeber legt sie mit `_anwenden` an. Er kann nur, was diese Meldung
+  kann - und dort ist ihm das Einsteigen in Buggys gesperrt.
+* Loadout zu jedem Leben neu gewuerfelt (`bot_loadout`), ohne C4; bei
+  "eines fuer alle" das vorgegebene, C4 durch eine andere Wurfwaffe
+  ersetzt. Raketenwerfer hebt er nicht auf.
+* Kein Buchen, keine Bestenliste (`bot` in der Endliste), Abschuesse an
+  ihm zaehlen wie jeder andere.
+
+**Wie er spielt.** Wahrnehmen alle `takt` (0,1 s): Gegner auf seiner
+Ebene, in `sicht`, mit `Welt.sicht_frei` und nicht im Rauchkern; dazu
+Schuesse in `gehoer` (ungefaehrer Ort) und wer ihn zuletzt getroffen hat.
+Zielen: Reaktionszeit, Drehtempo `dreh`, Zielfehler von `fehler_start` auf
+`fehler_min` ueber `fehler_abbau`, auf die Stelle, an der der Gegner jetzt
+steht - kein Vorhalten. Feuerstoesse mit Pausen, oft im Stehen. Bewegen:
+Wunschabstand je Waffe, seitliches Ausweichen; Wege ueber das Wegenetz der
+Zombies (`wege.py`) samt Treppen und Aufzuegen (E nur auf dem Feld). Nie
+in ein Loch, und wer haengt, weicht aus. Aufgaben: HUEGEL der Kreis, VERSUS
+aufhelfen, sonst Kreise, Seite der anderen und Zufall; nur mit
+`gegner_karte` auch, wo die Minikarte Gegner zeigt.
+
+**GRUND.** Gemessen (`tests/test_spiel.py`): erster Schuss nach der
+Reaktionszeit, nie schneller als `dreh`, gegen einen Stehenden rund die
+Haelfte Treffer, gegen einen, der quer laeuft, kaum welche.
+
+**Gegner auf der Minikarte.** Regel `gegner_karte`: feindliche Spieler und
+Bots als rote Punkte. Eine Regel des Gastgebers und keine Vorliebe, damit
+alle dasselbe sehen.
+
+**Kaputte Buggys.** Der Wagen ist seit 0.34.18 ein Ziel (`trefferbar`);
+wer drinsitzt, ist es so lange nicht, der Wagen reicht jeden Treffer an
+ihn weiter (dort 70 %, ausser von den eigenen Leuten). Bei null Leben:
+Explosion (Schaden im Umkreis), der Fahrer kommt heraus und bekommt
+`fahrer_schaden`, das Wrack brennt `wrack_zeit`, `neu_nach` spaeter steht
+ein neuer Wagen auf Ebene 0, weit weg von allen und moeglichst ausser
+Sicht (`_fahrzeuge_erneuern`). Zur neuen Runde stehen wieder die Wagen
+aus der Karte, alle heil.
+
 ---
 
 ### 7.7 Was der Gastgeber sonst noch stellt
@@ -1930,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.18 | Bots, Gegner auf der Minikarte, kaputte Buggys (7.6c): neue Regeln `bots` (Zahl, 0 = aus) und `gegner_karte` (an/aus); je Spieler `bo` (ist ein Bot; Bots haben Nummern ab 100 und keine Leitung); in `fahrzeuge` je Buggy ein neunter Wert, das Leben von 0 bis 1 (0 = Wrack). STAUBTAL hat zwei `F` mehr | Die Versionspruefung weist einen aelteren Gast ab. Ohne sie saehe er Bots als gewoehnliche Spieler, keine Wracks und drei statt fuenf Buggys an falschen Stellen |
 | 0.34.16 | Buggy mit Driften: in der Eingabe des Gasts das Feld `hb` (Handbremse, Dash-Taste gehalten); in `fahrzeuge` je Buggy ein achter Wert `rutschen` (0 bis 1), aus dem der Gast Reifenspuren und Staub zeichnet | Ein aelterer Gast schickt kein `hb`: er kann im Buggy nicht handbremsen. Ein aelterer Gastgeber schickt keinen achten Wert: der Gast sieht keine Reifenspuren an fremden Buggys |
 | 0.34.15 | Trefferzeichen: je Spieler `tz` und `tk` in der Weltmeldung - wie oft er getroffen und erledigt hat, als Zaehler. Der Gast zeigt sein X, wenn seine Zahl steigt | Ein aelterer Gastgeber schickt die Felder nicht: dann sieht der Gast kein Zeichen, sonst aendert sich nichts |
 | 0.34.14 | Nur Beispiele und Hilfetext: die Codes sind englisch (vergibt Cloudflare) | Nichts am Netz geaendert |

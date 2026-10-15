@@ -350,14 +350,20 @@ class Geschoss(Wesen):
             if self.tempo.length_squared() > 0.001:
                 schub = (pygame.Vector2(self.tempo).normalize()
                          * K.TREFFER["rueckstoss"] * self.schub_anteil)
-            if hasattr(self.von, "zaehlen"):
+            # Ein Wagen (seit 0.34.18) ist ein Ziel, aber kein Treffer fuer
+            # die Statistik - die zaehlt Spieler und Gegner.
+            if hasattr(self.von, "zaehlen") and getattr(ziel, "zaehlt_treffer", True):
                 self.von.zaehlen("treffer", 1.0, self.waffe)
                 treffer_ziel_buchen(self.von, ziel)
             lebte = ziel.lebt
             ziel.schaden(self.schaden_wert, schub, self.von)
             abschuss_buchen(self.von, ziel, self.waffe, lebte)
-            wolke(self.welt, self.pos, 6, 150, 0.22, K.C_BLUT, self.ebene, 1,
-                  "blut", 110, richtung, 5.0)
+            if getattr(ziel, "treffer_art", "") == "metall":
+                wolke(self.welt, self.pos, 5, 170, 0.18, (255, 222, 150), self.ebene,
+                      1, "funke", 120, richtung + 180, 5.0)
+            else:
+                wolke(self.welt, self.pos, 6, 150, 0.22, K.C_BLUT, self.ebene, 1,
+                      "blut", 110, richtung, 5.0)
         else:
             wolke(self.welt, self.pos, 5, 190, 0.18, (232, 196, 140), self.ebene,
                   1, "funke", 130, richtung + 180, 6.0)
@@ -1456,7 +1462,7 @@ class Spieler(Wesen):
         for ziel in w.wesen:
             if ziel is self or not getattr(ziel, "lebt", False):
                 continue
-            if not getattr(ziel, "trefferbar", False):
+            if not getattr(ziel, "trefferbar", False) or getattr(ziel, "kaputt", False):
                 continue
             if ziel.fraktion == self.fraktion:
                 continue
@@ -2063,9 +2069,10 @@ class Spieler(Wesen):
                 continue
             schub = ab.normalize() * d["schub"] if ab.length_squared() > 0.01 else None
             ziel.schaden(d["schaden"], schub, self)
-            if getattr(ziel, "ist_boss", False):
+            if getattr(ziel, "ist_boss", False) or getattr(ziel, "treffer_art", "") == "metall":
                 treffer_art = "metall"
-            self.zaehlen("kopftreffer", 1.0, K.NAHKAMPF["waffe"])
+            if getattr(ziel, "zaehlt_treffer", True):
+                self.zaehlen("kopftreffer", 1.0, K.NAHKAMPF["waffe"])
             getroffen += 1
         spitze = self.pos + pygame.Vector2(reich * 0.7, 0).rotate(self.winkel)
         w.schlagknall(spitze, self.winkel, self.ebene, bool(getroffen), self,

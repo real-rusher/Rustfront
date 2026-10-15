@@ -1250,11 +1250,13 @@ def marken(k: Karte, erreicht):
 
 
 # Die Buggys (seit 0.34.9, dustfront/fahrzeug.py): an der Tankstelle, auf
-# der Dorfstrasse von Westdorf und im Hof der Ranch. Gesucht wird von der
+# der Dorfstrasse von Westdorf und im Hof der Ranch; seit 0.34.18 dazu
+# einer westlich der Kreuzung A und einer vor dem Fort (C) - gemeldet: "es
+# soll auf staubtal 5 autos geben". Gesucht wird von der
 # Stelle aus in Ringen der naechste Platz, an dem ein Wagen quer (5 x 3
 # Kacheln) oder laengs (3 x 5) frei steht - unter freiem Himmel, nicht
 # in der Gasse eines Aufzugs, nicht auf einer anderen Marke.
-BUGGYS = ((169, 127), (27, 113), (268, 164))
+BUGGYS = ((169, 127), (27, 113), (268, 164), (128, 137), (176, 192))
 
 
 def _buggy_platz(k: Karte, x, y, erreicht) -> bool:

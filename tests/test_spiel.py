@@ -4194,11 +4194,13 @@ pruef("Er ist laenger als breit (schaut nach +x wie jede Figur)",
       _leer69.get_bounding_rect().width > _leer69.get_bounding_rect().height + 10,
       str(_leer69.get_bounding_rect()))
 
-pruef("Auf STAUBTAL stehen drei Buggys", len(w.fahrzeuge) == 3, str(len(w.fahrzeuge)))
+# Seit 0.34.18 fuenf (gemeldet: "es soll auf staubtal 5 autos geben").
+pruef("Auf STAUBTAL stehen fuenf Buggys", len(w.fahrzeuge) == 5, str(len(w.fahrzeuge)))
 pruef("Alle im Tal, und jeder passt dorthin, wo er steht",
       all(b.ebene == 0 and b.passt(b.pos) for b in w.fahrzeuge))
-pruef("Der Wagen ist kein Ziel fuer Kugeln",
-      all(not b.trefferbar for b in w.fahrzeuge))
+# Seit 0.34.18 geht er kaputt - und ist darum ein Ziel.
+pruef("Der Wagen ist ein Ziel fuer Kugeln",
+      all(b.trefferbar for b in w.fahrzeuge))
 pruef("Ohne F in der Karte gibt es keinen (Lobby, Testkarte)",
       all(not e.marken.get("F") for e in W.karte_lesen("lobby")[0].ebenen))
 
@@ -4288,12 +4290,19 @@ andere69.leben = 100.0
 andere69.schaden(10.0, None, fahrer69)
 pruef("Zu Fuss kommt der volle Schaden an", abs(andere69.leben - 90.0) < 1e-6)
 fahrer69.leben = fahrer69.max_leben
-b69.schaden(10000.0, None, andere69)
+# Seit 0.34.18 nimmt der Wagen den Treffer und reicht ihn an den Fahrer
+# weiter (der dann wie oben 70 % abbekommt). Bis dahin ging die Kugel am
+# unzerstoerbaren Wagen vorbei auf den Fahrer.
+b69.schaden(30.0, None, andere69)
 w.welt._raster_bauen()
-pruef("Der Buggy selbst ist unzerstoerbar",
-      b69.lebt and b69 in w.welt.wesen and b69 not in list(w.welt.nahe(b69.pos, 60, 0)))
-pruef("Eine Kugel trifft am Wagen den Fahrer, nicht den Wagen",
-      w.welt.treffer(b69.pos, 2.0, 0, andere69.fraktion) is fahrer69)
+pruef("Ein Treffer am Buggy: er nimmt Schaden, der Fahrer 70 Prozent davon",
+      b69.lebt and not b69.kaputt and b69.leben == b69.max_leben - 30.0
+      and abs((fahrer69.max_leben - fahrer69.leben) - 30.0 * 0.7) < 1e-6,
+      "Wagen %.0f, Fahrer %.1f" % (b69.leben, fahrer69.leben))
+pruef("Eine Kugel trifft am Wagen den Wagen, nicht den Fahrer daneben",
+      w.welt.treffer(b69.pos, 2.0, 0, andere69.fraktion) is b69)
+b69.leben = b69.max_leben
+fahrer69.leben = fahrer69.max_leben
 
 # Wer im Weg steht, wird beiseitegeschoben, nicht ueberfahren.
 b69.geschw.update(0, 0)
@@ -4310,7 +4319,7 @@ for _ in range(6):
     w.schritt(K.FIXED_DT)
     ga.schritt(K.FIXED_DT)
 _gb69 = [b_ for b_ in ga.fahrzeuge if b_.besetzt]
-pruef("Der Gast sieht alle drei Buggys", len(ga.fahrzeuge) == 3, str(len(ga.fahrzeuge)))
+pruef("Der Gast sieht alle fuenf Buggys", len(ga.fahrzeuge) == 5, str(len(ga.fahrzeuge)))
 pruef("... den besetzten an derselben Stelle",
       len(_gb69) == 1 and _gb69[0].pos.distance_to(b69.pos) < 2.0,
       str([b_.pos for b_ in _gb69]))
@@ -4399,7 +4408,7 @@ pruef("Auf einer anderen Ebene stehen die Buggys trotzdem darauf (blasser)",
 w.ich.ebene = 0
 _f70, _r70 = _karte70(w)
 pruef("Alle Buggys stehen auf der Minikarte",
-      len(w.fahrzeuge) == 3
+      len(w.fahrzeuge) == 5
       and all(_buggy_da70(_f70, _r70, w, b_, MK.FARBE_BUGGY) for b_ in w.fahrzeuge))
 
 # Ein Gast steigt ein und faehrt weit weg: der Wagen bleibt auf der Karte,
@@ -4423,7 +4432,7 @@ for _ in range(6):
     ga.schritt(K.FIXED_DT)
 _f70g, _r70g = _karte70(ga)
 pruef("... und beim Gast, der ihn faehrt, auch",
-      len(ga.fahrzeuge) == 3
+      len(ga.fahrzeuge) == 5
       and all(_buggy_da70(_f70g, _r70g, ga, b_, MK.FARBE_BUGGY) for b_ in ga.fahrzeuge))
 w.verlassen(); ga.verlassen()
 
@@ -7616,10 +7625,10 @@ netz_durchlassen(w71, g71, 10)
 pruef("Aus der Lobby gestartet: STAUBTAL laeuft", w71.karte == "staubtal"
       and not w71.in_lobby and g71.karte == "staubtal", w71.karte)
 pruef("Beim Gastgeber stehen die Buggys in der Welt",
-      len(w71.fahrzeuge) == 3
+      len(w71.fahrzeuge) == 5
       and all(b_.lebt and b_ in w71.welt.wesen for b_ in w71.fahrzeuge),
       str([(b_.lebt, b_ in w71.welt.wesen) for b_ in w71.fahrzeuge]))
-pruef("... und der Gast sieht dieselben drei", len(g71.fahrzeuge) == 3)
+pruef("... und der Gast sieht dieselben fuenf", len(g71.fahrzeuge) == 5)
 
 # Der Gastgeber faehrt mit der Tastatur, wie im echten Spiel.
 def _bild71(n_=1):
@@ -7722,7 +7731,7 @@ _gk71.leben = _gk71.max_leben
 w71._runde_neu()
 w71.schritt(K.FIXED_DT)
 pruef("Nach einem Neustart stehen die Buggys leer an ihrem Platz",
-      len(w71.fahrzeuge) == 3
+      len(w71.fahrzeuge) == 5
       and all(b_.lebt and b_ in w71.welt.wesen and b_.fahrer is None
               and b_.pos == b_.start[0] for b_ in w71.fahrzeuge)
       and not _gk71.im_fahrzeug)
@@ -8100,6 +8109,261 @@ _gb78 = [b_ for b_ in g78.fahrzeuge if b_.besetzt]
 pruef("Der Gast bekommt das Rutschen gemeldet (fuer Spuren und Staub)",
       _gb78 and abs(_gb78[0].rutschen - 0.9) < 1e-6, str([b_.rutschen for b_ in _gb78]))
 w78.verlassen(); g78.verlassen()
+
+# ── 0.34.18: Bots, Gegner auf der Minikarte, Buggys gehen kaputt ─────
+print("\n-- Bots")
+from dustfront import regeln as _R80
+from dustfront.bots import BotHirn as _Hirn80
+from dustfront.minikarte import Minikarte as _Mk80, FARBE_FEIND as _FEIND80
+from dustfront.entities import Geschoss as _Gs80
+
+
+def _beide80(sekunden, w_, g_):
+    for _ in range(max(1, int(round(sekunden / K.NETZ["takt"])))):
+        w_.schritt(K.NETZ["takt"])
+        g_.schritt(K.NETZ["takt"])
+
+
+pruef("Die Regel BOTS gilt in PVP-Runden, nicht in PVE",
+      any(f_.schluessel == "bots" for f_ in _R80.sichtbar(_R80.vorgabe(modus="team")))
+      and not any(f_.schluessel == "bots" for f_ in _R80.sichtbar(_R80.vorgabe(modus="pve"))))
+pruef("Bots und Gegner auf der Minikarte sind von Haus aus aus",
+      _R80.vorgabe(modus="team")["bots"] == 0
+      and _R80.vorgabe(modus="team")["gegner_karte"] is False)
+
+w80, g80 = gefechtspaar("team", regeln={"bots": 6})
+_bots80 = w80._bots()
+_teams80 = [sum(1 for k_ in w80.kaempfer.values() if k_.team == i_) for i_ in (0, 1)]
+pruef("TEAM bis 6: zwei Menschen und vier Bots, gleichmaessig 3 zu 3",
+      len(_bots80) == 4 and _teams80 == [3, 3], "%d Bots, Teams %s" % (len(_bots80), _teams80))
+pruef("Kein Bot traegt C4, jeder zwei Waffen und eine Wurfwaffe",
+      all("c4" not in k_.waffen and len(k_.waffen) == 3 for k_ in _bots80),
+      str([k_.waffen for k_ in _bots80]))
+_beide80(0.5, w80, g80)
+pruef("Der Gast sieht die Bots als Spieler, als Bots gekennzeichnet",
+      sum(1 for k_ in g80.kaempfer.values() if k_.ist_bot) == 4)
+pruef("Bots kommen nicht in die Bestenliste (gekennzeichnet in der Endliste)",
+      all(e_["bot"] == (e_["name"].startswith("BOT-")) for e_ in w80._endstand()))
+# Ein dritter Mensch kommt: ein Bot macht ihm Platz.
+_n80 = netz.Gast("127.0.0.1:%d" % _port[0])
+_g3_80 = Gefecht(app, "DRITTER", gast=_n80)
+for _ in range(int(1.5 / K.NETZ["takt"])):
+    w80.schritt(K.NETZ["takt"]); g80.schritt(K.NETZ["takt"]); _g3_80.schritt(K.NETZ["takt"])
+_teams80 = [sum(1 for k_ in w80.kaempfer.values() if k_.team == i_) for i_ in (0, 1)]
+pruef("Kommt ein Mensch dazu, geht ein Bot - es bleibt 3 zu 3",
+      len(w80._bots()) == 3 and _teams80 == [3, 3], "%d Bots, Teams %s" % (len(w80._bots()), _teams80))
+_g3_80.verlassen()
+# Zurueck in die Lobby: keine Bots.
+from dustfront.lobby import lobby_regeln as _lobby80
+w80.wunsch = _lobby80()
+w80._runde_neu()
+pruef("In der Lobby gibt es keine Bots", not w80._bots() and w80.in_lobby)
+w80.verlassen(); g80.verlassen()
+
+_n80 = netz.Gastgeber(_neuer_port())
+w80 = Gefecht(app, "WIRT", gastgeber=_n80, modus="pvp", seed=80, regeln={"bots": 4})
+pruef("PVP bis 4, allein: drei Bots", len(w80._bots()) == 3)
+w80.verlassen()
+
+# Fairness. Ein Bot sieht nicht durch Waende, reagiert nicht sofort,
+# schwenkt nicht schneller als erlaubt und trifft einen, der quer laeuft,
+# deutlich seltener als einen, der stillsteht.
+_n80 = netz.Gastgeber(_neuer_port())
+w80 = Gefecht(app, "WIRT", gastgeber=_n80, modus="team", seed=3, regeln={"bots": 2})
+_bot80 = w80._bots()[0]
+_ich80 = w80.ich
+
+
+def _stelle80(abstand, frei=True):
+    for a_ in range(0, 360, 10):
+        p_ = _bot80.pos + pygame.Vector2(abstand, 0).rotate(a_)
+        if not w80.welt.frei(p_, 9, 0, True):
+            continue
+        if w80.welt.sicht_frei(_bot80.pos, p_, 0) == frei:
+            return p_
+    return None
+
+
+_hinter80 = _stelle80(110, frei=False)
+if _hinter80 is not None:
+    _ich80.pos.update(_hinter80)
+    pruef("Ein Bot sieht nicht durch die Wand", not _bot80.hirn.sieht(_ich80))
+_frei80 = _stelle80(200)
+_ich80.pos.update(_frei80)
+_ich80.unverwundbar = 1e9
+_bot80.hirn.neues_leben()
+_bot80.hirn.blick = _winkel80 = math.degrees(math.atan2(*(reversed(list(_frei80 - _bot80.pos))))) + 180
+_erster80 = None
+_dreh80 = 0.0
+_alt80 = _bot80.hirn.blick
+for i_ in range(int(3.0 / K.FIXED_DT)):
+    _ich80.pos.update(_frei80)
+    _ich80.tempo.update(0, 0)
+    vor_ = _bot80.zaehler.get("schuesse", 0)
+    w80.schritt(K.FIXED_DT)
+    _dreh80 = max(_dreh80, abs((_bot80.hirn.blick - _alt80 + 180) % 360 - 180) / K.FIXED_DT)
+    _alt80 = _bot80.hirn.blick
+    if _erster80 is None and _bot80.zaehler.get("schuesse", 0) > vor_:
+        _erster80 = i_ * K.FIXED_DT
+pruef("Ein Bot schiesst nicht sofort: erst nach seiner Reaktionszeit",
+      _erster80 is not None and _erster80 >= K.BOTS["reaktion"][0],
+      "erster Schuss nach %s s" % _erster80)
+pruef("Sein Fadenkreuz schwenkt nicht schneller als erlaubt (kein Schnappen)",
+      _dreh80 <= K.BOTS["dreh"] + 1.0, "%.0f Grad/s" % _dreh80)
+
+
+def _quote80(quer, sekunden=12.0):
+    """Trefferquote des Bots auf den Wirt, der still steht oder quer laeuft."""
+    _bot80.zaehler_leeren()
+    _bot80.hirn.neues_leben()
+    hin_ = _frei80 - _bot80.pos
+    q_ = pygame.Vector2(-hin_.y, hin_.x).normalize()
+    for i_ in range(int(sekunden / K.FIXED_DT)):
+        t_ = i_ * K.FIXED_DT
+        versatz = (math.sin(t_ * 108.0 / 50.0) * 50.0) if quer else 0.0
+        p_ = _frei80 + q_ * versatz
+        if w80.welt.frei(p_, 9, 0, True):
+            _ich80.pos.update(p_)
+        _ich80.tempo.update(0, 0)
+        _bot80.leben = _bot80.max_leben
+        for n_ in _bot80.waffen:
+            if K.WAFFEN[n_].get("art") == "schuss":
+                _bot80.magazin[n_] = max(_bot80.magazin[n_], 1)
+        w80.schritt(K.FIXED_DT)
+    s_ = _bot80.zaehler.get("schuesse", 0)
+    return (_bot80.zaehler.get("treffer", 0) / s_) if s_ else 0.0, s_
+
+
+_still80, _ss80 = _quote80(False)
+_quer80, _sq80 = _quote80(True)
+pruef("Gegen einen, der still steht, trifft ein Bot (er ist nicht nutzlos)",
+      _ss80 > 0 and _still80 > 0.25, "%.0f %% von %d" % (_still80 * 100, _ss80))
+pruef("Gegen einen, der quer laeuft, trifft er deutlich seltener (kein Vorhalten)",
+      _quer80 < _still80 * 0.8, "%.0f %% gegen %.0f %%" % (_quer80 * 100, _still80 * 100))
+# Blendgranate: er sieht nichts mehr.
+_bot80.hirn.blenden(2.0)
+pruef("Eine Blendgranate blendet auch einen Bot", not _bot80.hirn.sieht(_ich80))
+w80.verlassen()
+
+# Ohne Munition: das Brecheisen.
+_n80 = netz.Gastgeber(_neuer_port())
+w80 = Gefecht(app, "WIRT", gastgeber=_n80, modus="team", seed=3, knapp=True, regeln={"bots": 2})
+_bot80 = w80._bots()[0]
+for n_ in _bot80.waffen:
+    _bot80.magazin[n_] = 0
+    _bot80.vorrat[n_] = 0
+_ich80 = w80.ich
+_ich80.pos.update(_stelle80(120))
+_ich80.max_leben = _ich80.leben = 5000
+_ich80.unverwundbar = 0.0
+_bot80.unverwundbar = 0.0
+_schlaege80 = 0
+for _ in range(int(8.0 / K.FIXED_DT)):
+    vor_ = _bot80.nahkampf_rest
+    w80.schritt(K.FIXED_DT)
+    if _bot80.nahkampf_rest > vor_:
+        _schlaege80 += 1
+pruef("Ohne Munition geht ein Bot mit dem Brecheisen los und trifft",
+      _schlaege80 >= 3 and _ich80.leben < 5000, "%d Schlaege, Leben %.0f" % (_schlaege80, _ich80.leben))
+w80.verlassen()
+
+# Treppen: ein Bot findet auf eine andere Ebene.
+_n80 = netz.Gastgeber(_neuer_port())
+w80 = Gefecht(app, "WIRT", gastgeber=_n80, modus="team", seed=5, regeln={"bots": 2})
+_bot80 = w80._bots()[0]
+_bot80.hirn.sieht = lambda w_: False      # nur der Weg zaehlt hier
+_oben80 = freier_punkt(w80.welt, 1, random.Random(5))
+for _ in range(int(40.0 / K.FIXED_DT)):
+    _bot80.hirn.verdacht = (pygame.Vector2(_oben80), 1, w80.welt.zeit + 5.0)
+    _bot80.hirn.ziel = None
+    w80.schritt(K.FIXED_DT)
+    if _bot80.ebene == 1:
+        break
+pruef("Ein Bot nimmt die Treppe, um auf eine andere Ebene zu kommen",
+      _bot80.ebene == 1, "Ebene %d" % _bot80.ebene)
+w80.verlassen()
+
+# Kein Buggy fuer Bots.
+_n80 = netz.Gastgeber(_neuer_port())
+w80 = Gefecht(app, "WIRT", gastgeber=_n80, modus="pvp", karte="staubtal", seed=4, regeln={"bots": 2})
+_bot80 = w80._bots()[0]
+_wg80 = w80.fahrzeuge[0]
+pruef("STAUBTAL hat fuenf Buggys", len(w80.fahrzeuge) == 5, str(len(w80.fahrzeuge)))
+_bot80.pos.update(_wg80.ausstiegsorte(_bot80.radius)[0])
+_bot80.ebene = _wg80.ebene
+_bot80.treppe_rest = 0.0
+w80._anwenden(_bot80, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Ein Bot steigt nicht in einen Buggy", not _bot80.im_fahrzeug)
+# Zurueck auf freies Feld - neben dem Buggy laege sein Punkt unter dem des Wagens.
+_bot80.pos.update(freier_punkt(w80.welt, 0, random.Random(80)))
+# Gegner auf der Minikarte: nur mit der Regel.
+
+
+def _feindpunkte80(an):
+    w80.regelwerk["gegner_karte"] = an
+    f_ = pygame.Surface((K.GAME_W, K.GAME_H))
+    f_.fill((0, 0, 0))
+    _Mk80().zeichnen(f_, w80)
+    r_ = _Mk80().rechteck(w80.welt)
+    return sum(1 for x_ in range(r_.left, r_.right) for y_ in range(r_.top, r_.bottom)
+               if f_.get_at((x_, y_))[:3] == _FEIND80)
+
+
+pruef("Gegner stehen nur mit der Regel auf der Minikarte",
+      _feindpunkte80(False) == 0 and _feindpunkte80(True) > 0)
+w80.verlassen()
+
+print("\n-- Buggys gehen kaputt")
+w80, g80 = gefechtspaar("team", karte="staubtal")
+_gk80 = w80.kaempfer[g80.meine_nummer]
+_wg80 = w80.fahrzeuge[0]
+_gk80.pos.update(_wg80.ausstiegsorte(_gk80.radius)[0])
+_gk80.ebene = _wg80.ebene
+_gk80.treppe_rest = 0.0
+_gk80.unverwundbar = 0.0
+w80._anwenden(_gk80, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Im Buggy ist der Fahrer selbst kein Ziel mehr - der Wagen ist es",
+      _gk80.im_fahrzeug and not _gk80.trefferbar and _wg80.trefferbar)
+_ich80 = w80.ich
+_vor80 = (_wg80.leben, _gk80.leben)
+w80.welt.dazu(_Gs80(_wg80.pos + pygame.Vector2(-30, 0), 0.0, K.WAFFEN["sturm"],
+                    _wg80.ebene, _ich80, "sturm"))
+_beide80(0.1, w80, g80)
+pruef("Ein Schuss auf den Wagen: der Wagen nimmt Schaden, der Fahrer 70 Prozent",
+      _wg80.leben < _vor80[0]
+      and abs((_vor80[1] - _gk80.leben) - K.WAFFEN["sturm"]["schaden"] * 0.7) < 0.5,
+      "Wagen %.0f, Fahrer %.1f" % (_wg80.leben, _gk80.leben))
+pruef("... und zaehlt nicht als Treffer in der Statistik",
+      _ich80.zaehler.get("treffer", 0) == 0)
+_mit80 = [k_ for k_ in w80.kaempfer.values() if k_.team == _gk80.team and k_ is not _gk80]
+if _mit80:
+    _vor80 = _gk80.leben
+    _wg80.schaden(20, None, _mit80[0])
+    pruef("Die eigenen Leute verletzen den Fahrer nicht", _gk80.leben == _vor80)
+_gk80.leben = 500.0
+_wg80.schaden(K.FAHRZEUG["leben"], None, _ich80)
+_beide80(0.3, w80, g80)
+pruef("Kaputt: Wrack, Fahrer draussen und verletzt",
+      _wg80.kaputt and _wg80.bild == "buggy_wrack" and not _gk80.im_fahrzeug
+      and _gk80.trefferbar and _gk80.leben < 500.0, "Leben %.0f" % _gk80.leben)
+pruef("Der Gast sieht das Wrack", any(b_.kaputt for b_ in g80.fahrzeuge))
+w80._anwenden(_gk80, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("In ein Wrack steigt niemand ein", not _gk80.im_fahrzeug)
+_beide80(K.FAHRZEUG["wrack_zeit"] + 0.3, w80, g80)
+pruef("Nach der Brennzeit ist das Wrack weg", len(w80.fahrzeuge) == 4)
+_beide80(K.FAHRZEUG["neu_nach"] + 1.5, w80, g80)
+_neu80 = w80.fahrzeuge[-1]
+pruef("Spaeter steht irgendwo ein neuer Wagen, heil und an einem freien Platz",
+      len(w80.fahrzeuge) == 5 and not _neu80.kaputt and _neu80.passt(_neu80.pos)
+      and _neu80.pos.distance_to(_wg80.start[0]) > 1.0 and len(g80.fahrzeuge) == 5)
+w80.fahrzeuge[1].schaden(K.FAHRZEUG["leben"], None, _ich80)
+w80.wunsch = dict(w80.regelwerk)
+w80._runde_neu()
+_beide80(0.3, w80, g80)
+pruef("Zur neuen Runde stehen wieder alle fuenf heil an ihren Plaetzen",
+      len(w80.fahrzeuge) == 5 and all(not b_.kaputt and b_.leben == b_.max_leben
+                                      for b_ in w80.fahrzeuge))
+w80.verlassen(); g80.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

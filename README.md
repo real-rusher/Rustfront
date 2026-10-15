@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.16, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.18, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -153,7 +153,7 @@ der alten weggenommen.
 | R | Nachladen |
 | V | Feuerart wechseln (beim MG: Dauerfeuer oder Salve) |
 | H | Medkit |
-| E | Treppe benutzen, aufhelfen, in den Buggy ein- und aussteigen; am Boden: rufen |
+| E | Treppe benutzen, aufhelfen, in den Buggy ein- und aussteigen; am Boden: rufen. Buggys gehen kaputt: dann fliegt man heraus |
 | W/S, A/D im Buggy | Gas und Bremse (dann rückwärts), lenken - nur solange er rollt |
 | Shift im Buggy | Handbremse: das Heck bricht aus, zum Driften |
 | G | Gefallenen Mitspieler ziehen (Gefecht) |
@@ -263,6 +263,40 @@ langsam. Genau das macht den Kreis zu dem Ort, an dem man sich trifft,
 statt ihn abwechselnd leerzuräumen. Der Kreis wird in den Boden gezeichnet
 und nicht darüber: die Figuren stehen sichtbar darauf, und von einer
 höheren Ebene aus sieht man ihn unten liegen, klein und im Dunst.
+
+### Bots
+
+In jeder Runde mit PVP-Anteil (PVP, PVPVE, TEAM, VERSUS, HÜGEL) kann der
+Gastgeber **Bots** zuschalten: Regel **BOTS AUFFÜLLEN BIS** (aus, 2 bis 12
+Spieler). Sie füllen auf die Zahl auf, mit Mannschaften gleichmässig;
+kommt ein Mensch dazu, geht ein Bot. In der Lobby gibt es keine.
+
+Die Bots sind bewusst **schwach und fair**. Sie spielen mit genau der
+Eingabe, die ein Gast schicken würde (Laufrichtung, Mauszeiger,
+Feuertaste), und haben keine Sonderrechte:
+
+* Sie sehen nur in ihrer Sichtweite (etwa eine halbe Bildbreite), nicht
+  durch Wände und nicht durch Rauch. Blendgranaten blenden sie genauso.
+* Sie brauchen eine Reaktionszeit, bevor sie auf ein neues Ziel schiessen,
+  und schwenken das Fadenkreuz nicht schneller als eine Hand die Maus.
+* Sie zielen erst ungenau und dann besser, halten aber nie vor. Wer quer
+  läuft, wird oft verfehlt.
+* Sie schiessen in Feuerstössen, bleiben dabei oft stehen und hören
+  Schüsse in der Nähe.
+
+Sie erledigen die Aufgabe der Spielart: In HÜGEL gehen sie in den Kreis,
+in VERSUS helfen sie gefallenen Mitspielern auf, sonst suchen sie Gegner.
+Sie nehmen Treppen und Aufzüge, laden nach, legen in Ruhe ein Medkit an
+und werfen ab und zu ihre Wurfwaffe. Ist alle Munition weg, gehen sie mit
+dem Brecheisen los. Ihr Loadout wird zu jedem Leben neu gewürfelt: zwei
+Waffen und eine Wurfwaffe. Bei EINES FÜR ALLE tragen sie das vorgegebene.
+**Nie C4**, keinen Raketenwerfer, und **sie fahren keine Buggys**.
+
+Für Bots wird nichts gebucht, und sie kommen in keine Bestenliste. Wer
+einen Bot erledigt, bekommt den Abschuss aber wie jeden anderen.
+
+Ebenfalls neu als Regel: **GEGNER AUF DER MINIKARTE**. Dann stehen
+feindliche Spieler und Bots als rote Punkte darauf, für alle gleich.
 
 ### Gegner, die mit mehreren Spielern zurechtkommen
 
@@ -487,7 +521,8 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `core.py` | Anwendung, Szenenstapel, feste Zeitschritte, Eingabe, Bildablage |
 | `world.py` | Ebenen, Kacheln, Kollision, Sichtlinien, Treppen, Abgründe |
 | `entities.py` | Spieler, Gegner, Geschosse, Granaten, Aufsammler |
-| `fahrzeug.py` | Der Buggy: Fahren, Anstossen, Staub |
+| `fahrzeug.py` | Der Buggy: Fahren, Anstossen, Staub, Kaputtgehen |
+| `bots.py` | Die Bots: was sie sehen, wie sie zielen und laufen, das Auffüllen |
 | `render.py` | Kamera, Tiefenwirkung, Schatten, Ziellinie, HUD |
 | `play.py` | Die Spielregel: Wellen, Tod, Neustart |
 | `menues.py` | Pause, Einstellungen, Steuerung, Mitwirkende |
@@ -711,6 +746,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.18 | **Bots, Gegner auf der Minikarte, Buggys gehen kaputt.** **Bots:** neue Regel BOTS AUFFÜLLEN BIS (2 bis 12 Spieler) für alle Runden mit PVP-Anteil. Die Bots füllen gleichmässig auf und machen Platz, wenn ein Mensch kommt. Sie sind schwach, aber nicht dumm: Sie kämpfen mit zur Waffe passendem Abstand und seitlichem Ausweichen, gehen in HÜGEL in den Kreis, helfen in VERSUS auf, suchen sonst Gegner, nehmen Treppen und Aufzüge, laden nach, heilen und werfen. Ohne Munition nehmen sie das Brecheisen. Kein Aimbot: Sie benutzen dieselbe Eingabe wie ein Gast, haben nur Sicht auf die eigene Umgebung (nicht durch Wände und Rauch, Blendgranaten wirken), brauchen eine Reaktionszeit, haben ein begrenztes Drehtempo und Zielfehler, und sie halten nie vor. Zufälliges Loadout je Leben, nie C4, kein Raketenwerfer, kein Buggy. Keine Buchung, keine Bestenliste (`dustfront/bots.py`, `K.BOTS`). **Minikarte:** neue Regel GEGNER AUF DER MINIKARTE (aus). **Buggys:** gehen jetzt kaputt (420 Leben). Treffer gehen auf den Wagen, und der reicht sie an den Fahrer weiter (70 % wie bisher, Freundfeuer nicht). Ein leerer Wagen ist damit auch Deckung, Treffer am Blech zählen nicht in die Trefferstatistik. Bei null Leben explodiert er: Schaden im Umkreis, der Fahrer fliegt heraus und bekommt etwas ab. Das Wrack brennt 9 s, 12 s später steht irgendwo auf der Karte ein neuer Wagen, möglichst ausser Sicht. Neues Bild `buggy_wrack`, Lebensbalken über beschädigten Wagen. Wagen stossen jetzt auch an anderen Wagen an. Zur neuen Runde stehen wieder alle heil an ihrem Platz. **STAUBTAL hat 5 Buggys** (neu westlich der Kreuzung A und vor dem Fort). **Netz/LAN: geändert** - neue Regeln `bots` und `gegner_karte`, je Spieler das Feld `bo` (ein Bot), in `fahrzeuge` je Buggy ein neunter Wert (Leben 0 bis 1, 0 = Wrack), und `karten/staubtal.txt` hat zwei `F` mehr; Gastgeber und Gast brauchen beide 0.34.18 (0.34.17 ist der Autoball-Stand auf `rocket-liga`) |
 | 0.34.16 | **Buggy fährt sich echter, mit Driften.** Neues Fahrmodell mit Reifen: vorne und hinten haftet jede Achse nur bis zu einer Grenze, darüber rutscht sie und greift schwächer (Schräglauf). Wer schnell voll einlenkt oder mit Vollgas aus der Kurve beschleunigt, bringt das Heck zum Ausbrechen und hält den Drift mit Gas und Lenkung; Heckantrieb, beim Anfahren drehen die Räder kurz durch. Neu **Shift = Handbremse** im Buggy: das Heck kommt herum, für enge Kehren. Ein leichtes automatisches Gegenlenken fängt den Wagen, lässt man die Lenkung los, richtet er sich wieder gerade aus. Beim Rutschen bleiben **Reifenspuren** im Sand liegen, und die Reifen quietschen (neuer Klang `buggy_rutschen`). Alle Werte in `K.FAHRZEUG` (die alten `gas`, `lenkung`, `lenk_ab`, `griff` sind ersetzt). **Netz/LAN: geändert** - der Gast schickt ein neues Feld `hb` (Handbremse) in seiner Eingabe, und in `fahrzeuge` steht je Buggy ein achter Wert (wie stark er rutscht, für Spuren und Staub beim Gast); beide brauchen 0.34.16 |
 | 0.34.15 | **Trefferzeichen.** Trifft man einen Gegner, springt am Mauszeiger kurz ein weisses X auf und es tickt; erledigt oder umgeworfen heisst: ein grösseres rotes X und ein tieferer zweiter Ton. Nur der Schütze sieht und hört es, auch als Gast und im Einzelspiel; Treffer an sich selbst und an den eigenen Leuten zählen nicht, Feuer und Schrot tickt nicht dutzendfach (`K.TREFFERMARKE`). Zwei neue Klänge (`trefferzeichen`, `trefferzeichen_toedlich`). **Netz/LAN: geändert** - je Spieler zwei neue Felder in der Weltmeldung (`tz`, `tk`, die Zähler seiner Treffer); beide brauchen 0.34.15 |
 | 0.34.14 | **Online-Code: englische Beispiele.** Die Wörter des Codes vergibt Cloudflare, und die sind englisch (z. B. `THERMAL-UNDERLYING-PROVIDERS-TOE`); deutsch waren nur die Beispiele in README, Hilfe und Testersatz - jetzt überall englisch, und die Hilfe unter EINSTELLUNGEN > NETZ sagt es. **Netz/LAN: nichts geändert** (Versionsnummer trotzdem neu, beide brauchen 0.34.14) |

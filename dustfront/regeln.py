@@ -223,6 +223,21 @@ FELDER = (
          K.ZONE["verfall_an"], None, schalter=True, einzug=True,
          gilt=lambda d: _regeln(d)["zone"],
          hilfe="SINKT DER STAND, WENN KEINER HÄLT?"),
+    # Seit 0.34.18: feindliche Spieler (und Bots) stehen auf der Minikarte.
+    # Eine Regel des Gastgebers und keine Vorliebe jedes Einzelnen: wer es
+    # fuer sich allein einschalten koennte, saehe, was die anderen nicht
+    # sehen.
+    Feld("gegner_karte", "GEGNER AUF DER MINIKARTE", "RUNDE", False, None,
+         schalter=True, gilt=lambda d: _regeln(d)["beute"],
+         hilfe="FEINDLICHE SPIELER UND BOTS STEHEN ALS ROTE PUNKTE AUF DER MINIKARTE."),
+    # Seit 0.34.18: Bots fuellen auf (bots.py). Die Zahl ist, wie viele es
+    # insgesamt sein sollen - mit Mannschaften gleichmaessig verteilt. Wer
+    # dazukommt, verdraengt einen Bot.
+    Feld("bots", "BOTS AUFFÜLLEN BIS", "RUNDE", 0,
+         lambda d, u: K.BOTS["auffuellen"],
+         text=lambda v, d, u: "AUS" if not v else "%d SPIELER" % v,
+         gilt=lambda d: _regeln(d)["beute"],
+         hilfe="SCHWACHE BOTS FÜLLEN DIE RUNDE AUF - GLEICH VIELE JE MANNSCHAFT."),
     # ── Die Gegner
     Feld("schwierigkeit", "SCHWIERIGKEIT", "GEGNER", K.SCHWIERIGKEIT_VORGABE,
          lambda d, u: K.SCHWIERIGKEIT,
@@ -276,7 +291,7 @@ NACH_NAME = {f.schluessel: f for f in FELDER}
 # Karte, Dauer und Ausruestung sehen und nicht sechzehn Zeilen. Alles
 # andere steht unter ERWEITERT und behaelt dort seinen Wert, auch wenn
 # es gerade nicht zu sehen ist.
-EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert",
+EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert", "bots",
            "huegel_zeit", "schwierigkeit", "loadouts", "loadout_nr")
 for _f in FELDER:
     _f.einfach = _f.schluessel in EINFACH

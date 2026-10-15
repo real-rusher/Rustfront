@@ -44,6 +44,7 @@ FARBE_BODEN = (58, 46, 34)
 FARBE_WAND = (126, 104, 78)
 FARBE_TREPPE = (72, 150, 140)
 FARBE_GEGNER = (226, 72, 52)
+FARBE_FEIND = (255, 64, 64)       # feindliche Spieler (Regel gegner_karte)
 FARBE_BUGGY = (214, 166, 70)
 FARBE_DUNKEL = (16, 11, 8)
 RAHMEN = (84, 66, 48)
@@ -136,6 +137,18 @@ class Minikarte:
                 px, py = punkt(pygame.Vector2(x, y))
                 pygame.draw.rect(ziel, FARBE_GEGNER, (px - 1, py - 1, 2, 2))
 
+        # Feindliche Spieler und Bots, wenn der Gastgeber es so eingestellt
+        # hat (Regel "gegner_karte", seit 0.34.18) - unter den eigenen.
+        if (getattr(g, "regelwerk", None) or {}).get("gegner_karte"):
+            for k in g.kaempfer.values():
+                if k is ich or not k.lebt or k.fraktion == ich.fraktion:
+                    continue
+                if int(k.ebene) != nr or getattr(k, "raus", False):
+                    continue
+                px, py = punkt(k.pos)
+                pygame.draw.rect(ziel, FARBE_DUNKEL, (px - 2, py - 2, 4, 4))
+                pygame.draw.rect(ziel, FARBE_FEIND, (px - 1, py - 1, 3, 3))
+
         # Die eigenen Leute, dann man selbst obenauf.
         for k in g.kaempfer.values():
             if k is ich or not k.lebt and not k.am_boden:
@@ -155,6 +168,8 @@ class Minikarte:
         # gezeichnet, damit man den eigenen auch sieht, wenn man drinsitzt
         # - sonst laege das eigene Zeichen genau darauf.
         for b in getattr(g, "fahrzeuge", ()):
+            if getattr(b, "kaputt", False):
+                continue            # ein Wrack ist kein Wagen mehr (0.34.18)
             self._buggy(ziel, g, b, punkt(b.pos), int(b.ebene) != nr)
 
         pygame.draw.rect(ziel, RAHMEN, r.inflate(4, 4), 1)

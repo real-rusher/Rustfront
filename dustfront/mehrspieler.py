@@ -61,6 +61,7 @@ from . import konto as konto_modul
 from . import netz
 from . import regeln as R
 from . import ui
+from .bots import BotTeil
 from .lobby import LobbyTeil, lobby_regeln
 from .spielerkosmetik import KosmetikTeil
 from . import world as welt_modul
@@ -84,6 +85,11 @@ class Kaempfer(Spieler):
     Seite an, er kann am Boden liegen statt zu sterben, und er hat einen
     Munitionsvorrat ausserhalb des Magazins.
     """
+
+    # Ein Bot (seit 0.34.18, bots.py)? Dann hat er ein Hirn statt einer
+    # Leitung. Beim Gast kommt das mit der Weltmeldung ("bo").
+    ist_bot = False
+    hirn = None
 
     def __init__(self, pos, ebene: int, nummer: int, name: str,
                  fraktion: str, knapp: bool = False, team: int = -1,
@@ -240,6 +246,10 @@ class Kaempfer(Spieler):
         pruefen = getattr(self.welt, "darf_treffen", None)
         if pruefen is not None and not pruefen(self, von):
             return
+        # Wer zuletzt getroffen hat - ein Bot dreht sich dorthin (bots.py),
+        # wie ein Mensch, der sieht, woher die Kugeln kommen.
+        if von is not None and von is not self:
+            self.zuletzt_von = von
         super().schaden(menge, schub, von)
 
     def zeichenpos(self, alpha: float) -> pygame.Vector2:
@@ -345,7 +355,8 @@ class KampfBeute(Aufsammler):
             elif self.art == "rakete":
                 # Wer schon einen traegt, laesst ihn liegen. Sonst waere
                 # der Werfer einmal in der Runde eben doch zweimal da.
-                genommen = k.rpg_nehmen()
+                # Bots lassen ihn liegen (seit 0.34.18): sie sind schwach.
+                genommen = False if k.ist_bot else k.rpg_nehmen()
             if genommen:
                 self.lebt = False
                 k.zaehlen("beute")
@@ -630,7 +641,7 @@ def _version_kleiner(a: str, b: str) -> bool:
     return teile(a) < teile(b)
 
 
-class Gefecht(Szene, LobbyTeil, KosmetikTeil):
+class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     """Die Spielszene fuer den LAN-Test, beim Gastgeber wie beim Gast.
 
     Die Lobby und der Rundenplan stehen in lobby.py (LobbyTeil).
@@ -729,6 +740,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # der Gastgeber zufaellig eingestiegen ist, und eine Pruefung, die
         # mal gruen und mal rot ist, sagt nichts.
         self.rnd = random.Random(seed)
+        # Die Bots wuerfeln mit eigenem Zufall: was sie tun, soll nicht
+        # verschieben, wo die anderen einsteigen (Pruefungen mit Seed).
+        self._bot_seed = None if seed is None else seed + 7
+        self._bots_anlegen()
         self.renderer = Renderer(app.bilder)
         # Die Karte. Ohne Namen die eingebaute Testkarte; sonst eine
         # Datei aus `karten/`. Faellt sie aus, laeuft die Runde trotzdem -
@@ -831,6 +846,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         # Gast Attrappen, die an die gemeldete Stelle gesetzt werden.
         self.fahrzeuge: list = []
         self._fahrhinweis_rest = 0.0  # so lange steht die Fahrhilfe noch da
+        # Zerstoerte Buggys (seit 0.34.18): je einer die Sekunden, bis
+        # irgendwo auf der Karte ein neuer steht.
+        self._fahrzeug_warte: list = []
         # Das eigene Loadout, wie es zuletzt gemeldet (Gast) oder gesehen
         # (Gastgeber) wurde - siehe _loadout_beobachten.
         self._lo_zuletzt = None
@@ -895,6 +913,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._namen_merken(self.ich)
             if self.in_lobby:
                 self._lobby_bestuecken()
+            # Ohne Lobby gestartet (Pruefungen, --sofort): die Bots gleich.
+            self._bots_fuehren(0.0, sofort=True)
         else:
             self.gast.senden({"t": "hallo", "name": self.name,
                               "team": self.team_wunsch,
@@ -965,6 +985,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         staerke = welt_modul.blend_wert(pos, ebene, self.ich, self.welt)
         if staerke > 0.0:
             self.befinden.blenden(staerke)
+        # Bots blendet sie genauso (seit 0.34.18) - nach derselben Rechnung
+        # und so lange, wie ein Mensch nichts saehe. Sonst waere die
+        # Blendgranate gegen sie wirkungslos, und das waere ein Vorteil.
+        for k in self._bots():
+            st = welt_modul.blend_wert(pos, ebene, k, self.welt)
+            if st > 0.0 and k.hirn is not None:
+                b = K.BLENDEN
+                k.hirn.blenden(b["mindest"] + (b["dauer"] - b["mindest"]) * st)
         # Spielerkosmetik des Werfers: sein Ton statt Knall und Pfeifen,
         # sein Bild im Weiss. Gehoert wird der Ton wie der Knall (seit
         # 0.32.7 deutlich leiser, wer weiter weg steht oder wegschaut,
@@ -1041,6 +1069,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._wirkung.append(["x", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(radius, 1), str(art),
                               int(getattr(von, "nummer", -1))])
+        self._bot_hoert(pos, ebene, von)
 
     def schadenszahl(self, pos, ebene: int, menge: float,
                      dx: float = 0.0, dy: float = 0.0) -> None:
@@ -1066,6 +1095,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             self._in_wirkung = False
         self._wirkung.append(["s", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(winkel, 1), waffe])
+        self._bot_hoert(pos, ebene, quelle)
 
     def _schlagknall_melden(self, pos, winkel: float, ebene: int,
                             getroffen: bool = False, quelle=None,
@@ -1415,6 +1445,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self.kaempfer[nummer] = k
         self.welt.dazu(k)
         self._namen_merken(k)
+        # Bots gleich neu zaehlen: ein Mensch mehr heisst ein Bot weniger,
+        # und das nicht erst in einer Sekunde (seit 0.34.18).
+        self._bots_rest = 0.0
         return k
 
     def _rpg_regeln(self) -> None:
@@ -1435,6 +1468,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         Regelwechsel mit drei Plaetzen herum, waehrend alle anderen sechs
         haben.
         """
+        if k.ist_bot:
+            self._bot_loadout_anlegen(k)
+            return
         if self.mit_loadouts:
             # Der Gastgeber kennt das Loadout jedes Gastes von dessen
             # Anmeldung; sein eigenes holt er sich frisch, damit eine
@@ -1768,7 +1804,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             return
         # Einsteigen geht vor der Treppe: wer neben einem Buggy auf einer
         # Rampe steht, will eher fahren als hochgehen.
-        wagen = self._freier_buggy(k)
+        # Bots fahren nicht (gemeldet: "Sie sollen keine autos fahren
+        # koennen") - ihr E nimmt nur Treppen und Aufzuege.
+        wagen = None if k.ist_bot else self._freier_buggy(k)
         if wagen is not None:
             self._einsteigen(k, wagen)
             return
@@ -1986,7 +2024,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         bester, abstand = None, K.FAHRZEUG["einsteigen"] ** 2
         for b in self.fahrzeuge:
             if (b.fahrer is not None or b.ebene != k.ebene or b.nur_bild
-                    or not b.lebt):
+                    or not b.lebt or b.kaputt):
                 continue
             d = b.pos.distance_squared_to(k.pos)
             if d <= abstand:
@@ -2000,6 +2038,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         k.im_fahrzeug = True
         # Am Steuer schiebt ihn niemand weg - er sitzt ja im Wagen.
         k.schiebbar = False
+        # Und er ist kein eigenes Ziel mehr: getroffen wird der Wagen, und
+        # der reicht es an ihn weiter (seit 0.34.18, fahrzeug.Buggy.schaden).
+        k.trefferbar = False
         self._loslassen(k)
         k.hilft = None
         k.feuert = False
@@ -2020,6 +2061,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         k.fahrzeug = None
         k.im_fahrzeug = False
         k.schiebbar = True
+        k.trefferbar = True
 
     def _aussteigen(self, k: Kaempfer) -> None:
         """Raus aus dem Wagen, auf den ersten freien Platz daneben."""
@@ -2071,6 +2113,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             if not k.lebt or self.kaempfer.get(k.nummer) is not k:
                 self._fahrzeug_loesen(k)
                 continue
+            if b.kaputt:
+                # Der Wagen ist hochgegangen: heraus, und etwas abbekommen
+                # - von dem, der ihn erledigt hat. Die eigenen Leute
+                # verletzen einander nicht (siehe Buggy.schaden).
+                self._aussteigen(k)
+                von = b.kaputt_von
+                if von is None or getattr(von, "fraktion", None) != k.fraktion or von is k:
+                    k.schaden(K.FAHRZEUG["fahrer_schaden"], None, von)
+                continue
             if k.am_boden:
                 # Wer am Steuer umfaellt, liegt neben dem Wagen - sonst
                 # koennte ihm niemand aufhelfen.
@@ -2079,6 +2130,85 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             k.pos.update(b.pos)
             k.ebene = b.ebene
             k.tempo.update(0, 0)
+
+    def _fahrzeuge_erneuern(self, dt: float) -> None:
+        """Ausgebrannte Wracks wegraeumen und spaeter irgendwo einen neuen
+        Wagen hinstellen (seit 0.34.18). Gemeldet: "respawnen random auf der
+        map". Irgendwo heisst: auf der untersten Ebene, wo er passt, weit
+        weg von allen und moeglichst dort, wo ihn gerade niemand sieht - ein
+        Wagen, der vor den eigenen Augen aus dem Nichts erscheint, sieht
+        nach Fehler aus."""
+        f = K.FAHRZEUG
+        for b in list(self.fahrzeuge):
+            if b.kaputt and b.wrack_rest <= 0.0 and b.fahrer is None:
+                b.lebt = False
+                self.fahrzeuge.remove(b)
+                self._fahrzeug_warte.append(f["neu_nach"])
+        if not self._fahrzeug_warte:
+            return
+        self._fahrzeug_warte = [t - dt for t in self._fahrzeug_warte]
+        if self._fahrzeug_warte[0] > 0.0:
+            return
+        platz = self._fahrzeug_platz()
+        if platz is None:
+            self._fahrzeug_warte[0] = 1.0       # in einer Sekunde noch einmal
+            return
+        self._fahrzeug_warte.pop(0)
+        pos, winkel = platz
+        b = Buggy(pos, 0, winkel)
+        self.welt.dazu(b)
+        b.start = (pygame.Vector2(pos), 0, winkel)
+        self.fahrzeuge.append(b)
+
+    def _fahrzeug_platz(self):
+        """(Ort, Richtung) fuer einen neuen Wagen, oder None."""
+        abstand = K.FAHRZEUG["neu_abstand"]
+        probe = Buggy(pygame.Vector2(0, 0), 0)
+        probe.welt = self.welt
+        notfall = None
+        for versuch in range(80):
+            p = freier_punkt(self.welt, 0, self.rnd)
+            probe.pos.update(p)
+            winkel = self._fahrzeug_richtung(probe)
+            if not probe.passt(p, winkel):
+                continue
+            if any(b.lebt and b.pos.distance_to(p) < 80 for b in self.fahrzeuge):
+                continue
+            if notfall is None:
+                notfall = (pygame.Vector2(p), winkel)
+            if any(k.lebt and k.pos.distance_to(p) < abstand
+                   for k in self.kaempfer.values()):
+                continue
+            if self.sichtbar_fuer_jemanden(p):
+                continue
+            return pygame.Vector2(p), winkel
+        return notfall
+
+    def _fahrzeuge_neu_aufstellen(self) -> None:
+        """Zu jeder neuen Runde: alle Wagen wieder heil an ihre Plaetze aus
+        der Karte - auch die, die in der letzten Runde kaputt gingen."""
+        for b in self.fahrzeuge:
+            if b.fahrer is not None:
+                self._fahrzeug_loesen(b.fahrer)
+            b.lebt = False
+        self._fahrzeug_warte = []
+        self._fahrzeuge_aufstellen()
+
+    def _fahrzeug_balken(self, ziel) -> None:
+        """Ueber einem beschaedigten Wagen ein kleiner Balken - wie viel er
+        noch aushaelt, fuer Fahrer und Angreifer gleich."""
+        breite = K.FAHRZEUG["balken_breite"]
+        for b in self.fahrzeuge:
+            anteil = b.leben_anteil
+            if b.kaputt or anteil >= 0.999 or b.ebene != self.blick:
+                continue
+            p = self.kamera.zu_bild(b.pos)
+            if not (-40 < p.x < K.GAME_W + 40 and -40 < p.y < K.GAME_H + 40):
+                continue
+            x, y = int(p.x - breite / 2), int(p.y - 24)
+            pygame.draw.rect(ziel, (12, 9, 7), (x - 1, y - 1, breite + 2, 5))
+            farbe = K.C_AMBER if anteil > 0.35 else K.C_RED
+            pygame.draw.rect(ziel, farbe, (x, y, max(1, int(breite * anteil)), 3))
 
     def _fahrzeuge_uebernehmen(self, eintraege) -> None:
         """Beim Gast: die gemeldeten Buggys hinstellen, mit Zwischenlage
@@ -2093,6 +2223,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 winkel, ebene = float(e[2]), int(e[3])
                 kennung, fahrer, fahrt = int(e[4]), int(e[5]), float(e[6])
                 rutschen = float(e[7]) if len(e) > 7 else 0.0
+                anteil = float(e[8]) if len(e) > 8 else 1.0
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
@@ -2110,6 +2241,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             b.team = k.team if k is not None else -1
             b.geschw = b.vorn * fahrt
             b.rutschen = max(0.0, min(1.0, rutschen))
+            # Leben (seit 0.34.18): fuer den Balken und das Wrack.
+            b.anteil = max(0.0, min(1.0, anteil))
+            b.kaputt = b.anteil <= 0.0
             neu.append(b)
         self.fahrzeuge = neu
 
@@ -2145,7 +2279,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         reichweite = K.FAHRZEUG["einsteigen"] ** 2
         for b in self.fahrzeuge:
             besetzt = b.fahrer is not None or b.besetzt
-            if (besetzt or b.ebene != ich.ebene
+            if (besetzt or b.kaputt or b.ebene != ich.ebene
                     or b.pos.distance_squared_to(ich.pos) > reichweite):
                 continue
             p = self.kamera.zu_bild(b.pos)
@@ -2221,6 +2355,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
 
         if self.ich is not None:
             self._anwenden(self.ich, self._meine_eingabe())
+        # Bots: nachzaehlen, dann jeder seine Eingabe wie ein Gast.
+        self._bots_fuehren(dt)
+        self._bots_steuern(dt)
         self._kosmetik_schritt()
 
         if self.in_lobby:
@@ -2235,6 +2372,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._rpg_regeln()
         self.welt.schritt(dt)
         self._fahrzeuge_nachziehen()
+        self._fahrzeuge_erneuern(dt)
         if self.in_lobby:
             self._lobby_munition()        # nach dem Schuss, siehe dort
         self._ziehen(dt)
@@ -2286,7 +2424,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         """
         bx, by = K.GEGNER_MP["sicht_halb"]
         for k in self.kaempfer.values():
-            if not k.lebt:
+            # Bots schauen auf keinen Bildschirm (seit 0.34.18).
+            if not k.lebt or k.ist_bot:
                 continue
             if abs(k.pos.x - pos.x) < bx and abs(k.pos.y - pos.y) < by:
                 return True
@@ -2921,13 +3060,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self.welt.klang("rundenstart", 0.7)
         # Neue Runde, neue Seiten - aber innerhalb der Runde bleiben sie.
         self._einstiegszonen_waehlen()
-        # Die Buggys zurueck an ihre Plaetze, leer. Sonst stuende nach ein
-        # paar Runden jeder irgendwo, und wer weiss, wo sie stehen, waere
-        # im Vorteil.
-        for b in self.fahrzeuge:
-            if b.fahrer is not None:
-                self._fahrzeug_loesen(b.fahrer)
-            b.zuruecksetzen()
+        # Die Buggys zurueck an ihre Plaetze, leer und heil. Sonst stuende
+        # nach ein paar Runden jeder irgendwo, und wer weiss, wo sie
+        # stehen, waere im Vorteil.
+        self._fahrzeuge_neu_aufstellen()
         for k in list(self.kaempfer.values()):
             k.raus = False
             self._wieder_einsteigen(k)
@@ -3107,6 +3243,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._magazine_fuellen(k)
         if k not in self.welt.wesen and k not in self.welt.neue:
             self.welt.dazu(k)
+        if k.hirn is not None:
+            k.hirn.neues_leben()
 
     # ---- Ende ----------------------------------------------------------
     def _ende_pruefen(self, dt: float) -> None:
@@ -3159,7 +3297,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._match_ende_ton()
         self.endwerte = self._mvp_werte()
         self.liste = self._endstand()
-        bestenliste.eintragen(self.liste)
+        # Bots kommen in keine Bestenliste (seit 0.34.18).
+        bestenliste.eintragen([e for e in self.liste if not e.get("bot")])
         if self.ist_gastgeber:
             # Die Partiekennung vergibt **nur** der Gastgeber, und sie geht
             # an alle. Das ist der ganze Trick gegen auseinanderlaufende
@@ -3372,13 +3511,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             return
         self._seit_zwischenstand = 0.0
         for k in self.kaempfer.values():
-            if k is not self.ich:
+            if k is not self.ich and not k.ist_bot:
                 self.gastgeber.an_einen(k.nummer, {"t": "stand",
                                                    "w": self._werte_von(k)})
 
     def _endstand(self) -> list[dict]:
         return bestenliste.sortiert(
             [{"name": k.name, "abschuesse": k.abschuesse, "tode": k.tode,
+              "bot": k.ist_bot,
               "mvp_punkte": (self.endwerte or {}).get(str(k.nummer), {})
               .get("werte", {}).get("mvp_punkte", 0),
               "mvp": bool((self.endwerte or {}).get(str(k.nummer), {})
@@ -3443,6 +3583,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 # Eigene Treffer und Erledigte, als Zaehler - daraus macht
                 # der Gast sein Trefferzeichen (render.Trefferzeichen).
                 "tz": k.treffer_marken, "tk": k.toedlich_marken,
+                # Ein Bot (seit 0.34.18): fuer die Bestenliste des Gasts.
+                "bo": k.ist_bot,
             })
         flug = []
         gegner = []
@@ -3506,7 +3648,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                   round(b.fahrt),
                   # Wie sehr er rutscht: daraus macht der Gast Spuren und
                   # Staub (seit 0.34.16).
-                  round(b.rutschen, 2)]
+                  round(b.rutschen, 2),
+                  # Wie viel er noch aushaelt, 0 = Wrack (seit 0.34.18).
+                  round(b.leben_anteil, 2)]
                  for b in self.fahrzeuge]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
                 "feuer": brand, "fahrzeuge": wagen,
@@ -3633,7 +3777,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
                 self._match_ende_ton()
                 self._liste_uebernehmen(self.teampunkte,
                                         nachricht.get("teampunkte"), int)
-                bestenliste.eintragen(self.liste)
+                # Bots kommen in keine Bestenliste (seit 0.34.18).
+                bestenliste.eintragen([e for e in self.liste if not e.get("bot")])
                 # Die Zahlen rechnet der Gastgeber, der Gast traegt nur
                 # seine eigenen ein - unter der Kennung, die von dort
                 # kommt. Damit legen beide dieselbe Runde ab, und die
@@ -3866,6 +4011,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             k.ruf_zeigen = float(eintrag.get("rz", 0.0))
             k.im_fahrzeug = bool(eintrag.get("fz", False))
             k.treffer_marken = int(eintrag.get("tz", 0))
+            k.ist_bot = bool(eintrag.get("bo", False))
             k.toedlich_marken = int(eintrag.get("tk", 0))
             k.rpg = bool(eintrag.get("rp", False))
             if k.rpg and k.waffen != ["rakete"]:
@@ -4650,10 +4796,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             # nicht").
             if not isinstance(x, (Kaempfer, Buggy)):
                 x.lebt = False
-        for b in self.fahrzeuge:
-            if b.fahrer is not None:
-                self._fahrzeug_loesen(b.fahrer)
-            b.zuruecksetzen()
+        # Kaputte inklusive: zur neuen Runde stehen alle wieder heil da.
+        self._fahrzeuge_neu_aufstellen()
         self.welt.rauch = []
         self.welt.feuer = []
         # Auch die Wirkungen, die noch nicht hinaus sind: sonst knallt
@@ -4674,6 +4818,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
             k.rpg_ablegen()
             self._loadout_anlegen(k)
 
+        # Die Bots der alten Runde gehen; die neue stellt ihre eigenen auf,
+        # nachdem die Menschen eingeteilt sind.
+        self._bots_alle_weg()
         self._teams_ausgleichen()
         self._einstiegszonen_waehlen()
         for k in self.kaempfer.values():
@@ -4690,6 +4837,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
 
         if self.in_lobby:
             self._lobby_bestuecken()
+        self._bots_fuehren(0.0, sofort=True)
 
         if self.ist_gastgeber:
             self.gastgeber.an_alle(dict(self._willkommen(-1, None),
@@ -4750,6 +4898,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil):
         self._ueberblendung.zeichnen(ziel)
         self._ueberblendung.merken(ziel)
         self._namen_zeichnen(ziel)
+        self._fahrzeug_balken(ziel)
         self._fahrzeug_hinweis(ziel)
         self._kreispfeil(ziel)
         self._randpfeile(ziel)

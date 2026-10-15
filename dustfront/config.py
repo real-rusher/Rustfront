@@ -809,7 +809,7 @@ ZONE = dict(
 
 # Der Buggy (seit 0.34.9, dustfront/fahrzeug.py). Steht, wo die Karte ein
 # F hat - auf STAUBTAL an der Tankstelle, in Westdorf und auf der Ranch.
-# Unzerstoerbar; wer drin sitzt, bekommt von jedem Schaden nur einen Teil
+# Seit 0.34.18 zerstoerbar (siehe unten); wer drin sitzt, bekommt von jedem Schaden nur einen Teil
 # ab und wird nicht weggestossen. Gelenkt wird wie ein Auto: W/S Gas und
 # Bremse (rueckwaerts), A/D lenken, Shift ist die Handbremse (seit
 # 0.34.16). Geschossen wird am Steuer nicht.
@@ -868,6 +868,61 @@ FAHRZEUG = dict(
     staub_farbe=(206, 184, 142),  # heller als der Schrittstaub: er soll hinter dem Wagen stehen
     staub_groesse=3,
     hinweis_zeit=3.0,         # so lange steht "[E] AUSSTEIGEN" nach dem Einsteigen
+    # Seit 0.34.18 geht er kaputt (gemeldet: "autos sollen kaputt gehen
+    # koennen und dann respawnen random auf der map"). Ein Sturmgewehr
+    # braucht ein Magazin und mehr, eine Granate rund sechs Treffer.
+    leben=420.0,
+    explosion_radius=70.0,    # wenn er hochgeht
+    explosion_schaden=70.0,   # in der Mitte, nach aussen weniger
+    fahrer_schaden=55.0,      # was der Fahrer abbekommt (vor den 70 %)
+    wrack_zeit=9.0,           # so lange brennt das Wrack, dann ist er weg
+    neu_nach=12.0,            # und so viel spaeter steht irgendwo ein neuer
+    neu_abstand=320.0,        # so weit von jedem Spieler weg (Weltpixel)
+    rauch_takt=0.12,          # Qualm aus dem Wrack
+    balken_breite=26,         # Lebensbalken ueber einem beschaedigten Wagen
+)
+
+# Bots (seit 0.34.18, dustfront/bots.py). Gemeldet: "optionale schwache
+# bots ... die gleichmaessig die teams auffuellen und objectives machen und
+# versuchen gegner zu eliminieren ... keinen aimbot bzw unfaire Vorteile".
+#
+# Ein Bot spielt mit genau dem, was ein Mensch hat: er schickt dieselbe
+# Eingabe wie ein Gast (Laufrichtung, Mauszeiger, Feuertaste ...), und der
+# Gastgeber rechnet sie wie jede andere. Er sieht nur, was in Sichtweite
+# und nicht hinter einer Wand oder im Rauch steht, braucht eine Weile, bis
+# er reagiert, schwenkt sein Fadenkreuz nicht schneller als eine Hand die
+# Maus und zielt erst ungenau, dann besser - nie vorhaltend. Das Spiel
+# streut seine Schuesse wie die aller anderen.
+BOTS = dict(
+    nummer_ab=100,            # Spielernummern ab hier sind Bots
+    auffuellen=(0, 2, 4, 6, 8, 10, 12),   # Regel "bots": 0 = keine
+    namen=("KARL", "HEINZ", "ERNA", "FRIEDA", "OTTO", "GRETE", "WILLI",
+           "HILDE", "FRITZ", "ELSE", "KURT", "LOTTE", "EMIL", "BERTA"),
+    takt=0.1,                 # so oft sieht und entscheidet er neu (s)
+    sicht=330.0,              # so weit sieht er (halbe Bildbreite ist 320)
+    reaktion=(0.45, 0.85),    # bis zum ersten Schuss auf ein neues Ziel (s)
+    reaktion_hinten=0.35,     # dazu, wenn es von hinten kommt
+    dreh=230.0,               # so schnell schwenkt er das Fadenkreuz (Grad/s)
+    fehler_start=48.0,        # Zielfehler beim ersten Sehen, auf 250 px (px)
+    fehler_min=13.0,          # bestenfalls, nach langem Verfolgen
+    fehler_abbau=1.6,         # Sekunden, bis er sich deutlich gefangen hat
+    feuerstoss=(0.25, 0.6),   # so lange haelt er den Abzug ...
+    feuerpause=(0.3, 0.65),   # ... und so lange laesst er los
+    still_beim_schiessen=0.45,  # so oft bleibt er beim Schiessen stehen
+    gehoer=460.0,             # Schuesse in dieser Entfernung hoert er
+    gedaechtnis=4.0,          # so lange sucht er dort, wo er einen zuletzt sah
+    wunschabstand=dict(repetierer=230.0, sturm=200.0, lmg=240.0,
+                       schrot=105.0, scharf=320.0),
+    reichweite=dict(repetierer=330.0, sturm=320.0, lmg=330.0,
+                    schrot=185.0, scharf=330.0),
+    nahkampf_ab=34.0,         # so nah, dann schlaegt er mit dem Brecheisen
+    wurf_pause=(10.0, 18.0),  # zwischen zwei Wuerfen
+    wurf_weite=(90.0, 230.0),
+    heilen_unter=45.0,        # Leben, ab dem er ein Medkit anlegt ...
+    heilen_ruhe=1.5,          # ... wenn er so lange niemanden gesehen hat
+    dash_pause=4.0,
+    stockt_nach=1.2,          # so lange kaum vom Fleck: er weicht aus
+    verwalten_takt=1.0,       # so oft wird nachgezaehlt, ob Bots fehlen
 )
 
 # Die Lobby: wo man beim Aufmachen landet und nach jeder Runde.
@@ -1755,6 +1810,7 @@ for _i in range(SCHWUNG_BILDER):
 BILD_MASS["buggy"] = (64, 64)
 BILD_MASS["buggy_fahrer"] = (64, 64)
 BILD_MASS["buggy_schatten"] = (64, 64)
+BILD_MASS["buggy_wrack"] = (64, 64)
 for _team in TEAMS["kombi"]:
     BILD_MASS["buggy_%s_fahrer" % _team["name"].lower()] = (64, 64)
 

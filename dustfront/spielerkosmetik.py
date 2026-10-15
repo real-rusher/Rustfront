@@ -461,7 +461,9 @@ class KosmetikTeil:
         if self.ist_gastgeber:
             noetig = da = 0
             for gast in self.kaempfer:
-                if gast == 0:
+                # Bots (seit 0.34.18) haben keinen Rechner, der etwas laden
+                # koennte - sie zaehlen hier nicht mit.
+                if gast == 0 or self._ist_bot(gast):
                     continue
                 hat = self.kos_stand.get(gast, {})
                 for wer, kennung in self.kos_index.items():
@@ -502,7 +504,7 @@ class KosmetikTeil:
                     self.kos_index[0] = kennung
                     self._kos_index_melden()
                     for gast in self.kaempfer:
-                        if gast != 0:
+                        if gast != 0 and not self._ist_bot(gast):
                             self._kos_schicken(gast, 0, eigen)
                 else:
                     self._kos_schicken(None, None, eigen)
@@ -593,7 +595,7 @@ class KosmetikTeil:
         self.kos_index[nummer] = k.kennung
         self._kos_index_melden()
         for gast in self.kaempfer:
-            if gast not in (0, nummer):
+            if gast not in (0, nummer) and not self._ist_bot(gast):
                 self._kos_schicken(gast, nummer, k)
 
     def _kos_teil_nehmen(self, von: int, nachricht: dict):

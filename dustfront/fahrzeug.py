@@ -27,11 +27,17 @@ wuerde genau das mit den Haenden tun.
 Wo er rutscht, bleiben Reifenspuren im Sand, Staub fliegt, und die Reifen
 quietschen - beim Gast genauso, aus dem gemeldeten `rutschen`.
 
-**Unzerstoerbar.** Der Wagen selbst ist kein Ziel (`trefferbar = False`):
-Kugeln, Splitter und Feuer gehen an ihm vorbei auf das, was darin sitzt.
-Wer am Steuer sitzt, bekommt von jedem Schaden nur einen Teil ab
-(K.FAHRZEUG["schaden_anteil"]) und wird nicht weggestossen - das rechnet
-der Kaempfer selbst (mehrspieler.Kaempfer.schaden).
+**Zerstoerbar (seit 0.34.18).** Bis dahin war er unzerstoerbar und kein
+Ziel. Gemeldet: "autos sollen kaputt gehen koennen und dann respawnen random
+auf der map". Jetzt ist der Wagen selbst das Ziel (`trefferbar`): Kugeln,
+Splitter, Feuer und Schlaege treffen ihn - und damit auch Deckung, wenn er
+leer dasteht. Wer am Steuer sitzt, ist solange selbst kein Ziel; der Wagen
+reicht jeden Treffer an ihn weiter, und dort kommt wie bisher nur ein Teil
+an (K.FAHRZEUG["schaden_anteil"], mehrspieler.Kaempfer.schaden). Bei null
+Leben geht er hoch: Explosion, Schaden im Umkreis, der Fahrer fliegt heraus
+und bekommt etwas ab. Das Wrack brennt eine Weile (`wrack_zeit`), dann ist
+es weg, und etwas spaeter steht irgendwo auf der Karte ein neuer Wagen -
+das Gefecht sucht den Platz (Gefecht._fahrzeuge_erneuern).
 
 **Wer rechnet.** Wie alles im Gefecht der Gastgeber. Beim Gast steht ein
 Buggy mit `nur_bild = True`: er wird an die gemeldete Stelle gesetzt und
@@ -72,9 +78,13 @@ def _spurpunkt(deck: int) -> pygame.Surface:
 
 class Buggy(Wesen):
     fraktion = "neutral"
-    # Kein Ziel fuer Kugeln: er soll nicht kaputtgehen, und eine Kugel, die
-    # an einem leeren Wagen haengen bliebe, waere Deckung zum Mitnehmen.
-    trefferbar = False
+    # Seit 0.34.18 ein Ziel (siehe oben).
+    trefferbar = True
+    # Treffer am Blech zaehlen nicht als Treffer in der Statistik (die
+    # zaehlt, wie oft man Spieler und Gegner trifft), und es spritzen
+    # Funken statt Blut.
+    zaehlt_treffer = False
+    treffer_art = "metall"
     # Die weiche Abstossung der Welt kennt nur Kreise. Wer im Weg steht,
     # schiebt der Buggy selbst beiseite (_beiseite_schieben).
     schiebt = False
@@ -90,6 +100,7 @@ class Buggy(Wesen):
 
     def __init__(self, pos, ebene: int = 0, winkel: float = 0.0,
                  nur_bild: bool = False) -> None:
+        self.max_leben = K.FAHRZEUG["leben"]
         super().__init__(pos, ebene)
         f = K.FAHRZEUG
         self.radius = f["kreis"]
@@ -115,10 +126,20 @@ class Buggy(Wesen):
         self.besetzt = False
         self.team = -1
         self._staub_rest = 0.0
+        # Kaputt (seit 0.34.18): ein Wrack, das noch `wrack_rest` brennt.
+        # `kaputt_von` hat ihn erledigt - der bekommt auch den Fahrer.
+        # `anteil` ist beim Gast das gemeldete Leben (0 bis 1).
+        self.kaputt = False
+        self.kaputt_von = None
+        self.wrack_rest = 0.0
+        self.anteil = 1.0
+        self._rauch_rest = 0.0
 
     # ---- Bild ---------------------------------------------------------
     @property
     def bild(self) -> str:
+        if self.kaputt:
+            return "buggy_wrack"
         if self.fahrer is not None:
             besetzt, team = True, getattr(self.fahrer, "team", -1)
         else:
@@ -140,11 +161,76 @@ class Buggy(Wesen):
         """Tempo in Fahrtrichtung, rueckwaerts negativ."""
         return self.geschw.dot(self.vorn)
 
+    @property
+    def leben_anteil(self) -> float:
+        if self.nur_bild:
+            return self.anteil
+        return max(0.0, self.leben / self.max_leben)
+
     def schaden(self, menge, schub=None, von=None) -> None:
-        """Unzerstoerbar. Kein Ziel trifft ihn absichtlich (trefferbar),
-        und sollte doch einmal etwas Schaden auf ihn rechnen, kommt nichts
-        an - er bleibt stehen, so lange die Runde dauert."""
-        return
+        """Ein Treffer am Wagen. Was drinsitzt, bekommt ihn auch - so wie
+        bisher, als die Kugeln am Wagen vorbei auf den Fahrer gingen, nur
+        dass jetzt auch das Blech etwas abbekommt. Die eigenen Leute treffen
+        den Wagen, aber nicht den Fahrer: Freundfeuer gibt es sonst nicht.
+        Weggestossen wird er nicht, `schub` bleibt ungenutzt."""
+        if self.kaputt or self.nur_bild or not self.lebt:
+            return
+        menge = float(menge)
+        if menge <= 0.0:
+            return
+        k = self.fahrer
+        if (k is not None and k.lebt and von is not k
+                and (von is None or getattr(von, "fraktion", None) != k.fraktion)):
+            k.schaden(menge, None, von)
+        self.leben -= menge
+        self.blitz = K.TREFFER["blitz"]
+        if self.leben <= 0.0:
+            self._zerstoeren(von)
+
+    def _zerstoeren(self, von) -> None:
+        """Er geht hoch. Der Fahrer wird vom Gefecht herausgeholt
+        (`kaputt` ist das Zeichen dafuer), alles im Umkreis bekommt
+        Schaden."""
+        f = K.FAHRZEUG
+        self.kaputt = True
+        self.kaputt_von = von
+        self.leben = 0.0
+        # Im Raster bleibt er: das Wrack haelt andere Wagen auf. Kugeln
+        # gehen trotzdem hindurch - Welt.treffer nimmt nur, wer noch Leben hat.
+        self.wrack_rest = f["wrack_zeit"]
+        self.gas = self.lenk = 0.0
+        self.handbremse = False
+        w = self.welt
+        if w is None:
+            return
+        r = f["explosion_radius"]
+        w.explosion(self.pos, self.ebene, r, "spreng", von)
+        w.klang("c4_explosion", 0.8, self.pos, self.ebene)
+        for ding in list(w.nahe(self.pos, r + 30, self.ebene)):
+            if (ding is self or ding is self.fahrer or not ding.lebt
+                    or not getattr(ding, "trefferbar", False)):
+                continue
+            weit = self.pos.distance_to(ding.pos)
+            if weit >= r:
+                continue
+            anteil = 1.0 - weit / r
+            schub = ding.pos - self.pos
+            if schub.length_squared() > 0.01:
+                schub = schub.normalize() * 240 * anteil
+            ding.schaden(f["explosion_schaden"] * anteil, schub, von)
+
+    def wrack_qualm(self, dt: float) -> None:
+        """Das Wrack qualmt und glimmt - beim Gastgeber und beim Gast."""
+        if not self.kaputt or self.welt is None:
+            return
+        self._rauch_rest -= dt
+        if self._rauch_rest > 0.0:
+            return
+        self._rauch_rest = K.FAHRZEUG["rauch_takt"]
+        wolke(self.welt, self.pos - self.vorn * 10, 1, 26, 1.6, (52, 48, 46),
+              self.ebene, 3, "staub", 60, -90.0, 0.8)
+        wolke(self.welt, self.pos - self.vorn * 14, 1, 40, 0.5, (255, 140, 50),
+              self.ebene, 1, "funke", 90, -90.0, 2.0)
 
     # ---- Anstossen ----------------------------------------------------
     def kreise(self, pos=None, winkel=None) -> tuple:
@@ -172,6 +258,14 @@ class Buggy(Wesen):
             if not w.frei(c, r, self.ebene, True):
                 return False
         for a in w.nahe(pos, K.FAHRZEUG["achse"] + r + 40, self.ebene):
+            if isinstance(a, Buggy) and a is not self:
+                # Andere Wagen: Kreis an Kreis (seit 0.34.18 stehen sie im
+                # Raster, weil man sie treffen kann - vorher hielt nur der
+                # Fahrer des anderen Wagens einen auf, ein leerer gar nicht).
+                if any(c.distance_squared_to(d) < (2 * r) ** 2
+                       for c in kreise for d in a.kreise()):
+                    return False
+                continue
             if (a is self.fahrer or not a.lebt or a.flug > 0
                     or getattr(a, "schiebbar", True)
                     or getattr(a, "am_boden", False)):
@@ -186,7 +280,10 @@ class Buggy(Wesen):
         super().schritt(dt)
         if self.nur_bild or self.welt is None:
             return
-        fahrer = self.fahrer is not None
+        if self.kaputt:
+            self.wrack_rest = max(0.0, self.wrack_rest - dt)
+            self.wrack_qualm(dt)
+        fahrer = self.fahrer is not None and not self.kaputt
         self._physik(dt, self.gas if fahrer else 0.0,
                      self.lenk if fahrer else 0.0,
                      bool(self.handbremse) and fahrer)
@@ -400,6 +497,7 @@ class Buggy(Wesen):
         Tempo und Rutschen. Gequietscht wird beim Gastgeber (NETZKLAENGE)."""
         self._staub(dt)
         self._spuren()
+        self.wrack_qualm(dt)
 
     def _radstellen(self) -> list:
         """Wo die Raeder den Boden beruehren: hinten links, hinten rechts,
@@ -457,6 +555,10 @@ class Buggy(Wesen):
         self.gier = self.lenkwinkel = self.rutschen = 0.0
         self.handbremse = False
         self._spur_letzte.clear()
+        self.leben = self.max_leben
+        self.kaputt = False
+        self.kaputt_von = None
+        self.wrack_rest = 0.0
 
     def ausstiegsorte(self, radius: float) -> list:
         """Wo man aussteigen kann, der Reihe nach: links, rechts, hinten,

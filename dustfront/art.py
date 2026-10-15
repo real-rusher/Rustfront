@@ -2276,6 +2276,31 @@ for _kombi in K.TEAMS["kombi"]:
     platzhalter("buggy_%s_fahrer" % _kombi["name"].lower())(_buggy_team(_kombi))
 
 
+@platzhalter("buggy_wrack")
+def _buggy_wrack():
+    """Der ausgebrannte Buggy (seit 0.34.18): derselbe Wagen, verkohlt -
+    man soll ihn wiedererkennen, nur eben als das, was von ihm uebrig ist."""
+    s = _buggy_zeichnen().copy()
+    # Verkohlen: alles dunkler, die Farbe weitgehend weg.
+    s.fill((70, 62, 58, 255), special_flags=pygame.BLEND_RGBA_MULT)
+    schicht = _flaeche(64, 64)
+    rnd = random.Random(3418)
+    for _ in range(26):
+        x, y = rnd.uniform(-20, 20), rnd.uniform(-9, 9)
+        f = rnd.choice([(18, 16, 14), (34, 30, 28), (52, 44, 38), (120, 60, 30)])
+        pygame.draw.circle(schicht, f + (255,), (32 + int(x), 32 + int(y)),
+                           rnd.randint(1, 3))
+    # Glut im Motorraum
+    pygame.draw.circle(schicht, (200, 90, 30, 255), (17, 30), 2)
+    pygame.draw.circle(schicht, (255, 170, 60, 255), (17, 30), 1)
+    # Flecken nur, wo Wagen ist: die Deckkraft des Originals als Maske.
+    maske = _buggy_zeichnen().copy()
+    maske.fill((255, 255, 255, 0), special_flags=pygame.BLEND_RGBA_MAX)
+    schicht.blit(maske, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    s.blit(schicht, (0, 0))
+    return s
+
+
 @platzhalter("buggy_schatten")
 def _buggy_schatten():
     """Der weiche Schatten unter dem Buggy. Eigenes Bild, weil der runde
