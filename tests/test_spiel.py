@@ -8247,15 +8247,22 @@ def _quote80(quer, sekunden=12.0):
                 _bot80.magazin[n_] = max(_bot80.magazin[n_], 1)
         w80.schritt(K.FIXED_DT)
     s_ = _bot80.zaehler.get("schuesse", 0)
-    return (_bot80.zaehler.get("treffer", 0) / s_) if s_ else 0.0, s_
+    t_ = _bot80.zaehler.get("treffer", 0)
+    return (t_ / s_) if s_ else 0.0, s_, t_
 
 
-_still80, _ss80 = _quote80(False)
-_quer80, _sq80 = _quote80(True)
+_still80, _ss80, _ts80 = _quote80(False)
+_quer80, _sq80, _tq80 = _quote80(True)
 pruef("Gegen einen, der still steht, trifft ein Bot (er ist nicht nutzlos)",
       _ss80 > 0 and _still80 > 0.25, "%.0f %% von %d" % (_still80 * 100, _ss80))
+# Gezaehlt werden die Treffer in derselben Zeit, nicht die Quote je
+# Schuss: gegen den, der quer laeuft, schiesst der Bot nur ein-, zweimal
+# (das Fadenkreuz kommt nicht hinterher), und eine Quote aus zwei
+# Schuessen ist 0 oder 50 Prozent, je nach Zufall (seit 0.34.19).
 pruef("Gegen einen, der quer laeuft, trifft er deutlich seltener (kein Vorhalten)",
-      _quer80 < _still80 * 0.8, "%.0f %% gegen %.0f %%" % (_quer80 * 100, _still80 * 100))
+      _tq80 < _ts80 * 0.8,
+      "%d Treffer gegen %d (Quote %.0f %% aus %d gegen %.0f %% aus %d)"
+      % (_tq80, _ts80, _quer80 * 100, _sq80, _still80 * 100, _ss80))
 # Blendgranate: er sieht nichts mehr.
 _bot80.hirn.blenden(2.0)
 pruef("Eine Blendgranate blendet auch einen Bot", not _bot80.hirn.sieht(_ich80))
