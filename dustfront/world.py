@@ -707,21 +707,60 @@ class Welt:
         return bestes
 
     # ---- Kollision ----------------------------------------------------
+    def huelle(self, kachel: int) -> tuple:
+        """Was an einer festen Kachel wirklich aufhaelt: (Form, x, y, b, h)
+        in der Kachel, Form "block" oder "rund".
+
+        Seit 0.34.19 die Grundflaeche aus K.STEHEN - dieselbe, die auch
+        gezeichnet wird. Bis dahin hielt jede feste Kachel als ganzes
+        Quadrat auf: an einem Kaktus von 18 Pixeln blieb man 7 Pixel vor
+        seinem Rand in der Luft haengen (gemeldet). Mauern, Fels und alles
+        ohne Eintrag fuellen die Kachel weiter ganz."""
+        cache = self.__dict__.setdefault("_huellen", {})
+        hit = cache.get(kachel)
+        if hit is None:
+            daten = K.KACHELN[kachel]
+            satz = K.KARTENSAETZE.get(getattr(self, "satz", ""), {})
+            name = satz.get(daten["bild"], daten["bild"])
+            st = K.STEHEN.get(name) or K.STEHEN.get(daten.get("name", ""))
+            if st is None:
+                hit = ("block", 0, 0, K.TILE, K.TILE)
+            else:
+                hit = (st["form"],) + tuple(st["rahmen"])
+            cache[kachel] = hit
+        return hit
+
     def frei(self, pos: pygame.Vector2, radius: float, ebene: int,
              loch_fest: bool = False) -> bool:
-        """loch_fest: Loecher zaehlen als Wand. Fuer alles, was nicht fallen soll."""
+        """loch_fest: Loecher zaehlen als Wand. Fuer alles, was nicht fallen soll.
+
+        Feste Kacheln halten mit ihrer Grundflaeche auf (`huelle`), Loecher
+        mit der ganzen Kachel."""
         e = self.ebene(ebene)
         t0x = int((pos.x - radius) // K.TILE)
         t1x = int((pos.x + radius) // K.TILE)
         t0y = int((pos.y - radius) // K.TILE)
         t1y = int((pos.y + radius) // K.TILE)
+        r2 = radius * radius
         for ty in range(t0y, t1y + 1):
             for tx in range(t0x, t1x + 1):
-                if not (e.fest(tx, ty) or (loch_fest and e.loch(tx, ty))):
+                kachel = e.kachel(tx, ty)
+                if K.KACHELN[kachel]["fest"]:
+                    form, rx, ry, rb, rh = self.huelle(kachel)
+                elif loch_fest and e.loch(tx, ty):
+                    form, rx, ry, rb, rh = "block", 0, 0, K.TILE, K.TILE
+                else:
                     continue
-                nx = max(tx * K.TILE, min(pos.x, tx * K.TILE + K.TILE))
-                ny = max(ty * K.TILE, min(pos.y, ty * K.TILE + K.TILE))
-                if (pos.x - nx) ** 2 + (pos.y - ny) ** 2 < radius * radius:
+                x0, y0 = tx * K.TILE + rx, ty * K.TILE + ry
+                if form == "rund":
+                    mx, my = x0 + rb / 2.0, y0 + rh / 2.0
+                    grenze = radius + rb / 2.0
+                    if (pos.x - mx) ** 2 + (pos.y - my) ** 2 < grenze * grenze:
+                        return False
+                    continue
+                nx = max(x0, min(pos.x, x0 + rb))
+                ny = max(y0, min(pos.y, y0 + rh))
+                if (pos.x - nx) ** 2 + (pos.y - ny) ** 2 < r2:
                     return False
         return True
 

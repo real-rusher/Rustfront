@@ -3550,6 +3550,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 "dl": k.dash_ladungen, "dp": round(k.dash_laden, 2),
                 "dr": round(k.dash_rest, 2),
                 "df": round(k.dash_bild_rest, 3),
+                # Wohin der Dash geht (seit 0.34.19). Fehlte bis dahin: beim
+                # Gast zeigten die Windlinien darum immer nach rechts, egal
+                # wohin jemand dashte (gemeldet).
+                "dw": [round(k.dash_richtung.x, 2), round(k.dash_richtung.y, 2)],
                 "wl": list(k.waffen),
                 "ml": [k.magazin.get(n, 0) for n in k.waffen],
                 "vl": [k.vorrat.get(n, 0) for n in k.waffen],
@@ -3993,6 +3997,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             k.dash_laden = float(eintrag.get("dp", 0.0))
             k.dash_rest = float(eintrag.get("dr", 0.0))
             k.dash_bild_rest = float(eintrag.get("df", 0.0))
+            richtung = eintrag.get("dw")
+            if isinstance(richtung, list) and len(richtung) == 2:
+                try:
+                    d = pygame.Vector2(float(richtung[0]), float(richtung[1]))
+                    if d.length_squared() > 0.01:
+                        k.dash_richtung = d
+                except (TypeError, ValueError):
+                    pass
             k.fokus = float(eintrag.get("fo", 0.0))
             k.zielt = bool(eintrag.get("zi", False))
             k.tracer = bool(eintrag.get("tr", False))

@@ -5125,8 +5125,14 @@ pruef("Arena: Boden ueber Boden wird ausgeblendet",
       "%d Kacheln" % len(boden_ueber_boden))
 fels = [i for i, k in enumerate(e1a.kacheln)
         if k == K.BODEN and K.KACHELN[e0a.kacheln[i]]["fest"]]
-pruef("Arena: Boden ueber Wand bleibt", fels and not any(m_arena[i] for i in fels),
-      "%d Kacheln" % len(fels))
+# Seit 0.34.19: die Stege ueber einzelnen Mauern und Kisten sind kein
+# Plateau und blenden mit aus. Bis dahin blieben sie stehen - schmale
+# Saeulen und Streifen mitten im Bild (gemeldet).
+pruef("Arena: Boden ueber einer einzelnen Mauer oder Kiste blendet mit aus",
+      fels and all(m_arena[i] for i in fels), "%d Kacheln" % len(fels))
+pruef("... und die Arena hat dann keine Klippen mehr",
+      not wo_rd.klippen(arena, 1, True) and not wo_rd.klippen(arena, 1, False),
+      str(len(wo_rd.klippen(arena, 1, True))))
 e0s, e1s = wo.ebene(0), wo.ebene(1)
 plateau = [i for i, k in enumerate(e1s.kacheln) if k != K.LEER]
 bleibt = sum(1 for i in plateau if not m_staub[i])
@@ -5143,6 +5149,16 @@ pruef("STAUBTAL: die Plateaus bleiben, nur Treppen und Aufzugnischen gehen",
       bleibt >= len(plateau) * 0.99 and not _weg_s,
       "%d von %d bleiben, sonst ausgeblendet: %s"
       % (bleibt, len(plateau), [(i % e1s.breite, i // e1s.breite) for i in _weg_s][:8]))
+_schnee = W.karte_lesen("schneefeld")[0]
+_m_schnee = wo_rd.obermaske(_schnee, 1)
+_e0n, _e1n = _schnee.ebene(0), _schnee.ebene(1)
+_auf_fels_n = [i for i, k in enumerate(_e1n.kacheln)
+               if k != K.LEER and not K.KACHELN[k]["fest"]
+               and K.KACHELN[_e0n.kacheln[i]]["fest"]]
+pruef("SCHNEEFELD: die kleinen Plateaus sind gross genug und bleiben",
+      _auf_fels_n and not any(_m_schnee[i] for i in _auf_fels_n),
+      "%d von %d ausgeblendet" % (sum(1 for i in _auf_fels_n if _m_schnee[i]),
+                                  len(_auf_fels_n)))
 
 # Im Gefecht: aus zum Start, Q schaltet, nur beim eigenen Rechner.
 app.opt["obere_ebenen"] = False
@@ -8364,6 +8380,87 @@ pruef("Zur neuen Runde stehen wieder alle fuenf heil an ihren Plaetzen",
       len(w80.fahrzeuge) == 5 and all(not b_.kaputt and b_.leben == b_.max_leben
                                       for b_ in w80.fahrzeuge))
 w80.verlassen(); g80.verlassen()
+
+print("\n-- Dash-Richtung beim Gast (0.34.19)")
+w81, g81 = gefechtspaar("pvp")
+_beide80(0.5, w81, g81)
+_ich81 = w81.ich
+_ich81.will.update(0, -1)
+_ich81.dash_ladungen = max(1, _ich81.dash_ladungen)
+_ich81.dash_sperre = 0.0
+pruef("Der Gastgeber dasht nach oben", _ich81.dashen()
+      and _ich81.dash_richtung.y < -0.9, str(_ich81.dash_richtung))
+_beide80(0.1, w81, g81)
+_bei_gast81 = g81.kaempfer.get(w81.meine_nummer)
+pruef("Beim Gast zeigen die Windlinien auch nach oben, nicht nach rechts",
+      _bei_gast81 is not None and _bei_gast81.dash_richtung.y < -0.9,
+      str(getattr(_bei_gast81, "dash_richtung", None)))
+w81.verlassen(); g81.verlassen()
+
+print("\n-- Kleine Hindernisse halten nur mit ihrer Grundflaeche auf (0.34.19)")
+_sw81 = W.karte_lesen("staubtal")[0]
+_e81 = _sw81.ebene(0)
+_kaktus81 = None
+for _i81, _k81 in enumerate(_e81.kacheln):
+    if _k81 != K.KAKTUS:
+        continue
+    _tx81, _ty81 = _i81 % _e81.breite, _i81 // _e81.breite
+    if all(not K.KACHELN[_e81.kachel(_tx81 + dx_, _ty81 + dy_)]["fest"]
+           and _e81.kachel(_tx81 + dx_, _ty81 + dy_) != K.LEER
+           for dx_ in (-1, 0, 1) for dy_ in (-1, 0, 1) if dx_ or dy_):
+        _kaktus81 = (_tx81, _ty81)
+        break
+pruef("STAUBTAL hat einen Kaktus mit freiem Boden rundherum", _kaktus81 is not None)
+if _kaktus81:
+    _r81 = 10.0
+    _st81 = K.STEHEN["kaktus"]
+    _mitte81 = pygame.Vector2(_kaktus81[0] * K.TILE + _st81["rahmen"][0] + _st81["rahmen"][2] / 2,
+                              _kaktus81[1] * K.TILE + _st81["rahmen"][1] + _st81["rahmen"][3] / 2)
+    _grenze81 = _r81 + _st81["rahmen"][2] / 2
+    pruef("Am Kaktus kommt man bis an seinen Rand, nicht nur bis an die Kachel",
+          _sw81.frei(_mitte81 + pygame.Vector2(-_grenze81 - 0.5, 0), _r81, 0)
+          and _sw81.frei(_mitte81 + pygame.Vector2(0, _grenze81 + 0.5), _r81, 0))
+    pruef("... in ihn hinein aber nicht",
+          not _sw81.frei(_mitte81 + pygame.Vector2(-_grenze81 + 1.0, 0), _r81, 0))
+    import types as _ty_mod81
+    _wesen81 = _ty_mod81.SimpleNamespace(
+        pos=_mitte81 + pygame.Vector2(-60, 0), radius=_r81, ebene=0,
+        vorher=pygame.Vector2(), faellt=False)
+    for _ in range(40):
+        _sw81.bewegen(_wesen81, 3.0, 0.0)
+    _abstand81 = _wesen81.pos.distance_to(_mitte81)
+    pruef("Wer auf den Kaktus zulaeuft, bleibt erst an ihm stehen",
+          _grenze81 - 0.5 <= _abstand81 <= _grenze81 + 3.5,
+          "%.1f Pixel von der Mitte, Grenze %.1f" % (_abstand81, _grenze81))
+    _sch81 = szene.renderer._kleinschatten(_st81, None)
+    pruef("Der Schatten des Kaktus ist rund, kein Quadrat um die Kachel",
+          _sch81.get_at((1, 1)).a == 0 and _sch81.get_at((K.TILE - 2, 1)).a == 0
+          and _sch81.get_at((K.TILE // 2, K.TILE // 2)).a > 0)
+
+_tk81 = testkarte()
+_e81 = _tk81.ebene(0)
+_wand81 = next(i for i, k in enumerate(_e81.kacheln) if k == K.WAND
+               and _e81.kachel(i % _e81.breite - 1, i // _e81.breite) == K.BODEN)
+_wx81, _wy81 = _wand81 % _e81.breite, _wand81 // _e81.breite
+_vor_wand81 = pygame.Vector2(_wx81 * K.TILE - 9.0, _wy81 * K.TILE + 16)
+pruef("Eine Mauer haelt weiter mit der ganzen Kachel auf",
+      not _tk81.frei(_vor_wand81, 10.0, 0) and _tk81.frei(_vor_wand81 + pygame.Vector2(-2, 0), 10.0, 0))
+_kiste81 = next(i for i, k in enumerate(_e81.kacheln) if k == K.KISTE)
+_kx81, _ky81 = _kiste81 % _e81.breite, _kiste81 // _e81.breite
+_ra81 = K.STEHEN["kiste"]["rahmen"]
+_vor_kiste81 = pygame.Vector2(_kx81 * K.TILE + _ra81[0] - 10.5, _ky81 * K.TILE + 16)
+pruef("Eine Kiste haelt mit ihrem Rahmen auf, nicht mit der Kachel",
+      _tk81.frei(_vor_kiste81, 10.0, 0)
+      and not _tk81.frei(_vor_kiste81 + pygame.Vector2(1.5, 0), 10.0, 0))
+_wueste81 = W.Welt([W.Ebene.aus_text(W.KARTE_E0, 0)], satz="wueste")
+_sk81 = K.STEHEN["sand_kiste"]["rahmen"]
+# Schraeg vor der Ecke: bei einem Quadrat stiesse man an, an der runden
+# Sandkiste geht es vorbei.
+_ecke81 = pygame.Vector2(_kx81 * K.TILE + _sk81[0], _ky81 * K.TILE + _sk81[1])
+_schraeg81 = _ecke81 + pygame.Vector2(-5.0, -5.0)
+pruef("Die Sandkiste der Wueste ist rund: an ihrer Ecke kommt man vorbei",
+      _wueste81.frei(_schraeg81, 10.0, 0) and not _tk81.frei(_schraeg81 + pygame.Vector2(-1, -1), 10.0, 0),
+      str(_wueste81.huelle(K.KISTE)))
 
 print()
 print("FEHLER:", fails or "keine")

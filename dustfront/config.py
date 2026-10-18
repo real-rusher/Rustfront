@@ -1280,6 +1280,12 @@ PERSPEKTIVE = dict(
     # einem geschlossenen Felsblock steht und oben so viele begehbare
     # Kacheln hat - eine Tafel, kein Mauerrand (seit 0.34.7).
     turm_flaeche=16,
+    # Ein Plateau braucht oben mindestens so viele begehbare Kacheln. Ein
+    # kleineres Stueck Etage ueber einer Mauer oder Kiste (die Stege der
+    # Testkarte) ist ein Steg und kein Felsblock: es blendet mit der Etage
+    # aus, statt als schmale Saeule stehen zu bleiben (seit 0.34.19).
+    # Die kleinsten echten Plateaus (SCHNEEFELD) haben ueber 100.
+    plateau_flaeche=16,
     massstab_schwelle=0.02,   # ab so viel Abweichung wird ein Wesen im Sturz
                               # ueberhaupt umgerechnet
 )
@@ -1298,7 +1304,10 @@ PERSPEKTIVE = dict(
 #
 # Schluessel ist der Bildname (Kartensatz beachtet), dann die Kachelart.
 #   hoehe    Welt-Pixel ueber dem Boden
-#   rahmen   (x, y, b, h) der Grundflaeche in der Kachel; der Rest ist Boden
+#   rahmen   (x, y, b, h) der Grundflaeche in der Kachel; der Rest ist Boden.
+#            Seit 0.34.19 haelt nur sie auf (world.Welt.frei): an einen
+#            Kaktus kommt man so nah heran, wie er gross ist, nicht bis zur
+#            Kachelkante. Ihr Schatten hat dieselbe Form.
 #   form     "block" (Kanten) oder "rund" (Fass)
 #   fugen    so viele Querlinien auf jeder Seite (Steinlagen, Fassreifen)
 STEHEN = {
@@ -1316,6 +1325,20 @@ STEHEN = {
     "holzkiste":  dict(hoehe=16.0, rahmen=(3, 3, 26, 26), form="block", fugen=2),
     "kaktus":     dict(hoehe=20.0, rahmen=(7, 7, 18, 18), form="rund", fugen=0),
     "schrott":    dict(hoehe=14.0, rahmen=(0, 0, 32, 32), form="block", fugen=1),
+}
+
+# Kartensaetze: welche Bilder eine Karte statt der gewoehnlichen nimmt
+# (Kopf "satz:"). Seit 0.34.19 hier statt im Renderer: auch die Kollision
+# braucht sie - eine Kiste ist in der Wueste ein rundes Fass und haelt
+# darum rund auf (world.Welt.huelle).
+KARTENSAETZE = {
+    "": {},
+    # "klippe": woraus die Wand zwischen Plateau und Boden ist. Seit
+    # 0.35 in der Wueste gewachsener Fels, nicht die Lehmmauer.
+    "wueste": {"boden": ("sand", "sand_2", "sand_3", "sand_4"),
+               "wand": "sand_wand", "kiste": "sand_kiste", "klippe": "fels"},
+    "schnee": {"boden": ("schnee", "schnee_2", "schnee_3", "schnee_4"),
+               "wand": "schnee_fels"},
 }
 
 # Wie hoch ueber dem Boden etwas in der Welt ist, in Welt-Pixeln (seit

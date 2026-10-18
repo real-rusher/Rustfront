@@ -331,15 +331,9 @@ class Renderer:
     # Kopf der Kartendatei. Was hier nicht steht, bleibt beim Standard;
     # eine Karte mit unbekanntem Satz sieht also aus wie immer und faellt
     # nicht aus.
-    SAETZE = {
-        "": {},
-        # "klippe": woraus die Wand zwischen Plateau und Boden ist. Seit
-        # 0.35 in der Wueste gewachsener Fels, nicht die Lehmmauer.
-        "wueste": {"boden": ("sand", "sand_2", "sand_3", "sand_4"),
-                   "wand": "sand_wand", "kiste": "sand_kiste", "klippe": "fels"},
-        "schnee": {"boden": ("schnee", "schnee_2", "schnee_3", "schnee_4"),
-                   "wand": "schnee_fels"},
-    }
+    # Die Kartensaetze stehen seit 0.34.19 in config (K.KARTENSAETZE), weil
+    # auch die Kollision sie braucht.
+    SAETZE = K.KARTENSAETZE
 
     def ebene_zeichnen(self, ziel, welt, index: int, ecke, dunkel: int | None,
                        auge: float | None = None,
@@ -425,6 +419,14 @@ class Renderer:
         if dunkel is not None:
             sch = self.dunkel(sch, dunkel)
         for (tx, ty, name, sy) in fest:
+            st = self._stehend(name, K.KACHELN[e.kachel(tx, ty)])
+            if st is not None and st["rahmen"] != (0, 0, K.TILE, K.TILE):
+                # Ein Kaktus, ein Fass, eine Kiste: der Schatten hat ihre Form.
+                # Bis 0.34.18 warf jedes Hindernis den Schatten der ganzen
+                # Kachel - ein dunkles Quadrat um den Kaktus, das aussah, als
+                # stuende ein Block darunter (gemeldet).
+                ziel.blit(self._kleinschatten(st, dunkel), (tx * K.TILE - ecke.x, sy))
+                continue
             ziel.blit(sch, (tx * K.TILE - ecke.x, sy))
         auge_h = K.PERSPEKTIVE["brennweite"] if auge is None else auge
         self._augen[index] = (ecke.x + zw / 2.0, ecke.y + zh / 2.0, auge_h)
@@ -433,6 +435,30 @@ class Renderer:
             self._stehend_offen = auftrag
         else:
             self._stehende_zeichnen(*auftrag)
+
+    def _kleinschatten(self, st: dict, dunkel):
+        """Der Schlagschatten eines Hindernisses in seiner eigenen Form
+        (Kreis oder Rechteck aus K.STEHEN), nach unten rechts wie der der
+        Mauern - je Form und Helligkeit einmal gebaut."""
+        schluessel = (st["form"], st["rahmen"], dunkel)
+        cache = self.__dict__.setdefault("_kleinschatten_cache", {})
+        hit = cache.get(schluessel)
+        if hit is None:
+            versatz = K.DEKAL["wand_versatz"]
+            T = K.TILE
+            hit = pygame.Surface((T + versatz, T + versatz), pygame.SRCALPHA)
+            rx, ry, rb, rh = st["rahmen"]
+            for i in range(versatz):
+                a = int(96 * (1 - i / versatz) ** 1.4)
+                r = pygame.Rect(rx + i, ry + i, rb, rh)
+                if st["form"] == "rund":
+                    pygame.draw.ellipse(hit, (0, 0, 0, a), r)
+                else:
+                    pygame.draw.rect(hit, (0, 0, 0, a), r, border_radius=2)
+            if dunkel is not None:
+                hit = self.dunkel(hit, dunkel)
+            cache[schluessel] = hit
+        return hit
 
     def _weicher_rand(self, name: str, e, tx: int, ty: int, grund_name: str):
         """Das Bild einer weichen Bodenart (Piste, Kies), dort ausgefranst,
@@ -1077,6 +1103,33 @@ class Renderer:
             if k != K.LEER and not fest[unten.kacheln[i]] \
                     and unten.kacheln[i] not in tragend:
                 maske[i] = 1
+        # Kleine Stuecke sind kein Plateau. Auf der Testkarte liegen Stege
+        # der oberen Etage ueber einzelnen Mauern und Kisten; jede solche
+        # Kachel blieb stehen, waehrend der Steg rundherum ausblendete -
+        # mit Klippen bis hinunter eine schwebende Saeule, ein Streifen
+        # quer durchs Bild (gemeldet nach 0.34.18). Gezaehlt wird nur der
+        # begehbare Boden, und nur er geht mit; die Mauern daneben nimmt
+        # der Durchgang danach mit, wenn kein sichtbarer Boden mehr bleibt.
+        gesehen = bytearray(b * h)
+        for start in range(b * h):
+            if gesehen[start] or maske[start] or oben.kacheln[start] == K.LEER:
+                continue
+            stueck, offen = [start], [start]
+            gesehen[start] = 1
+            while offen:
+                i = offen.pop()
+                x, y = i % b, i // b
+                for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    j = ny * b + nx
+                    if 0 <= nx < b and 0 <= ny < h and not gesehen[j] \
+                            and not maske[j] and oben.kacheln[j] != K.LEER:
+                        gesehen[j] = 1
+                        stueck.append(j)
+                        offen.append(j)
+            begehbar = [i for i in stueck if not fest[oben.kacheln[i]]]
+            if len(begehbar) < K.PERSPEKTIVE["plateau_flaeche"]:
+                for i in begehbar:
+                    maske[i] = 1
         # Zweiter Durchgang fuer Wand ueber Wand, gegen die erste Maske.
         erst = bytes(maske)
         for ty in range(h):
