@@ -337,27 +337,33 @@ class Touchsteuerung:
             self._overlay = pygame.Surface(ziel.get_size(), pygame.SRCALPHA)
         o = self._overlay
         o.fill((0, 0, 0, 0))
+        # Die Deckkraft steckt in jeder Farbe selbst, nicht in set_alpha der
+        # ganzen Flaeche. GRUND: pygame-ce 2.5.6 auf dem iPhone rechnet eine
+        # Flaeche mit eigenem Alpha je Pixel UND set_alpha falsch - alles
+        # Dunkle darunter wurde schwarz, Boden, Figuren und Schrift waren
+        # weg, solange die Sticks zu sehen waren (gemeldet nach 0.34.20).
+        # Alpha je Pixel allein benutzt jede Figur im Spiel; das geht dort.
+        a = int(T["deckkraft"])
+        hell = (*K.C_CREAM, a)
+        dunkel = (*K.C_MUTED_DK, a)
         r = int(T["stick_radius"])
-        hell = (*K.C_CREAM, 255)
-        dunkel = (*K.C_MUTED_DK, 255)
         for f in self.finger.values():
             if f["rolle"] not in ("links", "rechts"):
                 continue
             s, j = f["start"], f["jetzt"]
-            pygame.draw.circle(o, (*K.C_VOID, 150), (round(s.x), round(s.y)), r)
+            pygame.draw.circle(o, (*K.C_VOID, a * 150 // 255), (round(s.x), round(s.y)), r)
             pygame.draw.circle(o, hell, (round(s.x), round(s.y)), r, 2)
             v = j - s
             if v.length() > r:
                 v.scale_to_length(r)
-            farbe = (*K.C_ORANGE, 255) if (f["rolle"] == "rechts" and self.feuert) else hell
+            farbe = (*K.C_ORANGE, a) if (f["rolle"] == "rechts" and self.feuert) else hell
             pygame.draw.circle(o, farbe, (round(s.x + v.x), round(s.y + v.y)), r // 2)
         unten = {f["knopf"] for f in self.finger.values() if f["rolle"] == "knopf"}
         kr = int(T["knopf_radius"])
         for i, (aktion, text, mitte, art) in enumerate(T["knoepfe"]):
             an = i in unten or (art == "umschalten" and self.zielen_an)
-            pygame.draw.circle(o, (*(K.C_AMBER if an else K.C_VOID), 255), mitte, kr)
+            pygame.draw.circle(o, (*(K.C_AMBER if an else K.C_VOID), a), mitte, kr)
             pygame.draw.circle(o, hell if an else dunkel, mitte, kr, 2)
             SCHRIFT.zeichnen(o, text, mitte[0], mitte[1] - 3,
                              K.C_VOID if an else K.C_CREAM, 1, ausrichtung="mitte")
-        o.set_alpha(T["deckkraft"])
         ziel.blit(o, (0, 0))

@@ -8655,6 +8655,18 @@ _flaeche82 = pygame.Surface((K.GAME_W, K.GAME_H))
 _tapp82.touch.zeichnen(_flaeche82)
 pruef("Sticks und Knoepfe werden gezeichnet",
       _flaeche82.get_at(_knopf82("dash")) != (0, 0, 0, 255))
+# 0.34.21: auf dem iPhone war das Spiel schwarz, solange die Knoepfe zu
+# sehen waren (Alpha je Pixel UND set_alpha auf einer Flaeche rechnet
+# pygame-ce 2.5.6 dort falsch). Die Ebene der Knoepfe benutzt darum nur
+# noch Alpha je Pixel - und laesst stehen, wo nichts von ihr liegt.
+_flaeche82.fill((70, 55, 40))
+_tapp82.touch.zeichnen(_flaeche82)
+pruef("Die Knoepfe kommen ohne set_alpha aus (das machte das iPhone schwarz)",
+      _tapp82.touch._overlay.get_alpha() in (None, 255),
+      str(_tapp82.touch._overlay.get_alpha()))
+pruef("... und wo kein Knopf liegt, bleibt das Bild, wie es ist",
+      tuple(_flaeche82.get_at((200, 150)))[:3] == (70, 55, 40),
+      str(_flaeche82.get_at((200, 150))))
 _tapp82.werfen()
 
 
