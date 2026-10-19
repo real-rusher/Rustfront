@@ -41,6 +41,7 @@ import wave
 import pygame
 
 from . import config as K
+from . import plattform
 
 G = K.SPIELERKOSMETIK
 
@@ -695,7 +696,6 @@ class KosmetikTeil:
             except (pygame.error, ValueError):
                 gross = pygame.transform.scale(k.bild, (ziel_b, ziel_h))
             self._kos_gross = (k, gross)
-        s = self._kos_gross[1]
-        s.set_alpha(int(255 * min(1.0, blend * 1.4)))
+        s = plattform.deckkraft(self._kos_gross[1], 255 * min(1.0, blend * 1.4))
         ziel.blit(s, (int(k.lage["x"] * K.GAME_W - s.get_width() / 2),
                       int(k.lage["y"] * K.GAME_H - s.get_height() / 2)))

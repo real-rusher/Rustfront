@@ -301,6 +301,31 @@ class Buggy(Wesen):
         self._spuren()
         self._quietschen(dt)
 
+    def stick_steuern(self, richtung) -> tuple:
+        """(Gas, Lenkung) aus einer Richtung im Bild, fuer einen Stick.
+
+        W/A/S/D auf einen Stick gelegt fuehlte sich falsch an (gemeldet):
+        nach rechts gedrueckt lenkte er nach rechts *von sich aus*, also
+        bei einem Wagen, der nach unten faehrt, im Bild nach links. Hier
+        zeigt der Stick, wohin es gehen soll - wie beim Laufen. Er lenkt
+        dorthin, gibt so viel Gas, wie weit der Stick gedrueckt ist, und
+        wendet, wenn es hinter ihn geht. Fast genau entgegen bremst er,
+        und steht er fast, faehrt er rueckwaerts."""
+        f = K.FAHRZEUG
+        r = pygame.Vector2(richtung)
+        staerke = min(1.0, r.length())
+        if staerke < f["stick_tot"]:
+            return 0.0, 0.0
+        soll = math.degrees(math.atan2(r.y, r.x))
+        ab = (soll - self.winkel + 180.0) % 360.0 - 180.0
+        if abs(ab) >= f["stick_zurueck"]:
+            if self.fahrt > f["stick_bremsen_ab"]:
+                return -1.0, 0.0                       # erst bremsen
+            return -staerke, 0.0                       # dann rueckwaerts
+        lenk = max(-1.0, min(1.0, ab / f["stick_voll_lenken"]))
+        gas = staerke if abs(ab) < f["stick_wenden"] else staerke * 0.5
+        return gas, lenk
+
     def _physik(self, dt: float, gas: float, lenk: float, handbremse: bool) -> None:
         """Ein Schritt Einspurmodell: Kraefte an Vorder- und Hinterachse,
         daraus Beschleunigung und Drehung. Je Masse gerechnet."""

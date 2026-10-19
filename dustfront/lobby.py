@@ -32,6 +32,7 @@ from __future__ import annotations
 import pygame
 
 from . import config as K
+from . import plattform
 from . import regeln as R
 from . import ui
 from .font import SCHRIFT
@@ -144,8 +145,8 @@ class LobbyTeil:
             for y in range(4, r.height - 4, 12):
                 pygame.draw.rect(flaeche, strich, (3, y, 2, 6))
                 pygame.draw.rect(flaeche, strich, (r.width - 5, y, 2, 6))
-            schrift = SCHRIFT.flaeche(NAMEN[name], farbe, 3)
-            schrift.set_alpha(58)
+            # Eine Kopie: die Flaeche kommt aus dem Vorrat der Schrift.
+            schrift = plattform.deckkraft(SCHRIFT.flaeche(NAMEN[name], farbe, 3), 58)
             y = (r.height - K.TILE * 2 - schrift.get_height()
                  if name == "stand" else K.TILE * 2)
             flaeche.blit(schrift, ((r.width - schrift.get_width()) // 2, y))
@@ -156,8 +157,7 @@ class LobbyTeil:
         # Der Platz selbst bekommt seinen Namen, mitten in der Freiflaeche.
         platz = self._platz_mitte()
         if platz is not None:
-            schrift = SCHRIFT.flaeche("LOBBY", K.C_MUTED, 3)
-            schrift.set_alpha(40)
+            schrift = plattform.deckkraft(SCHRIFT.flaeche("LOBBY", K.C_MUTED, 3), 40)
             e.dekal(schrift, platz.x, platz.y)
 
     def _platz_mitte(self):

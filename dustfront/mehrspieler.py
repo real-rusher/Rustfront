@@ -1241,6 +1241,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             return None
         return self.kamera.zu_bild(self.ich.pos)
 
+    def touch_hotbar(self) -> list:
+        """Wo die Plaetze der Hotbar stehen - antippen waehlt die Waffe."""
+        if self.ich is None or self.ich.im_fahrzeug:
+            return []
+        return self.hud.hotbar_plaetze(len(self.ich.waffen))
+
     def touch_waffen(self) -> tuple:
         """(welche Waffe gerade, wie viele) - fuer den Knopf WFF."""
         if self.ich is None:
@@ -1673,7 +1679,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             # Eingaben vom Spiel fernhalten.
             ziel = self._ziel_zuletzt
         else:
-            ziel = self.kamera.zu_welt(e.maus)
+            ziel = e.ziel_welt(self.kamera, self.ich.pos if self.ich else (0, 0))
             self._ziel_zuletzt = pygame.Vector2(ziel)
         if self._feuer_sperre and not (e.gehalten("feuer") or e.gehalten("zweit")):
             self._feuer_sperre = False
@@ -1690,6 +1696,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             "ziehen": False if offen else e.gehalten("ziehen"),
             # Die Dash-Taste gehalten: im Buggy die Handbremse (seit 0.34.16).
             "hb": False if offen else e.gehalten("dash"),
+            # Kommt "will" von einem Stick? Dann lenkt der Wagen anders (_fahren).
+            "rl": e.analog is not None,
             "waffe": self._waffe_wunsch,
             "knoepfe": sorted(self._knoepfe),
             "admin": self._admin_auftrag,
@@ -2108,9 +2116,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         rechts lenken. Geschossen, gedasht und geheilt wird nicht - die
         Haende sind am Lenkrad. E steigt aus."""
         b = k.fahrzeug
-        # Die Eingabe ist eine Richtung im Bild, W ist also y < 0.
-        b.gas = 1.0 if will.y < -0.3 else (-1.0 if will.y > 0.3 else 0.0)
-        b.lenk = 1.0 if will.x > 0.3 else (-1.0 if will.x < -0.3 else 0.0)
+        if ein.get("rl"):
+            # Ein Stick (Touch, seit 0.34.22): der Wagen faehrt dorthin,
+            # wohin er zeigt (fahrzeug.Buggy.stick_steuern).
+            b.gas, b.lenk = b.stick_steuern(will)
+        else:
+            # Die Eingabe ist eine Richtung im Bild, W ist also y < 0.
+            b.gas = 1.0 if will.y < -0.3 else (-1.0 if will.y > 0.3 else 0.0)
+            b.lenk = 1.0 if will.x > 0.3 else (-1.0 if will.x < -0.3 else 0.0)
         b.handbremse = bool(ein.get("hb"))
         k.will.update(0, 0)
         k.tempo.update(0, 0)
@@ -4379,9 +4392,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         if not self.pausiert:
             # Im Menue faehrt die Maus ueber die Eintraege - die Kamera
             # soll ihr dabei nicht folgen.
-            self._kamera_versatz = ((self.app.eingabe.maus
-                                     - pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2))
-                                    * self.kamera.zoom)
+            self._kamera_versatz = self.app.eingabe.blick_versatz(self.kamera)
         self.kamera.schritt(dt, self.ich.pos, self.ich.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe),
                             versatz=self._kamera_versatz)
@@ -4433,7 +4444,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         """
         if self.pausiert:
             return                  # im Menue zielt man nicht (_meine_eingabe)
-        ziel = self.kamera.zu_welt(self.app.eingabe.maus)
+        ziel = self.app.eingabe.ziel_welt(self.kamera, self.ich.pos)
         self.ich.ziel = ziel
         ab = ziel - self.ich.pos
         if ab.length_squared() > 1:

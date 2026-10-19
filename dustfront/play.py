@@ -266,7 +266,7 @@ class Spiel(Szene):
             held.will = e.richtung()
             if e.gedrueckt("dash"):
                 held.dashen()
-            held.ziel = self.kamera.zu_welt(e.maus)
+            held.ziel = e.ziel_welt(self.kamera, held.pos)
             held.feuert = e.gehalten("feuer")
             if e.gedrueckt("nachladen"):
                 held.nachladen()
@@ -366,9 +366,7 @@ class Spiel(Szene):
         self.kamera.vorausschau = self.app.opt.blick_weite()
         self.kamera.schritt(dt, held.pos, held.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe),
-                            versatz=(self.app.eingabe.maus
-                                     - pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2))
-                                    * self.kamera.zoom)
+                            versatz=self.app.eingabe.blick_versatz(self.kamera))
 
     # ---- Bild ---------------------------------------------------------
     def zeichnen(self, ziel, alpha: float) -> None:

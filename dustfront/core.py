@@ -95,6 +95,12 @@ class Eingabe:
         # Ein Stick statt WASD (touch.py, seit 0.34.20): der Bewegungswunsch
         # mit seiner Laenge, 0 bis 1. None heisst Tastatur.
         self.analog: pygame.Vector2 | None = None
+        # Der rechte Stick (seit 0.34.22): wohin gezielt wird, als Versatz
+        # von der eigenen Figur in Pixeln des Bildes. None heisst Maus.
+        # GRUND: Aus dem Mauspunkt gerechnet hing das Ziel an der Kamera,
+        # und die folgt selbst dem Ziel - beim Laufen wackelte es, mit dem
+        # Scharfschuetzengewehr deutlich (gemeldet).
+        self.ziel_versatz: pygame.Vector2 | None = None
 
     def neues_bild(self) -> None:
         self._gedrueckt.clear()
@@ -148,6 +154,19 @@ class Eingabe:
         if v.length_squared() > 1e-6:
             v.normalize_ip()
         return v
+
+    def ziel_welt(self, kamera, figur) -> pygame.Vector2:
+        """Der Zielpunkt in der Welt: unter der Maus, oder mit dem Stick
+        von der Figur aus."""
+        if self.ziel_versatz is not None:
+            return pygame.Vector2(figur) + self.ziel_versatz * kamera.zoom
+        return kamera.zu_welt(self.maus)
+
+    def blick_versatz(self, kamera) -> pygame.Vector2:
+        """Wie weit die Kamera in Blickrichtung vorausschaut (Welt-Pixel)."""
+        if self.ziel_versatz is not None:
+            return self.ziel_versatz * kamera.zoom
+        return (self.maus - pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2)) * kamera.zoom
 
     def tabelle_setzen(self, tabelle: dict) -> None:
         """Nach einer Aenderung im Menue neu uebernehmen."""

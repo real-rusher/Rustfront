@@ -58,6 +58,7 @@ class Touchsteuerung:
         self.analog = pygame.Vector2(0, 0)
         self.zielrichtung = pygame.Vector2(1, 0)
         self.zielanteil = 0.0
+        self._weite = T["ziel_nah"]
         self.feuert = False
         self._feuerte = False
         self.zielen_an = False
@@ -65,6 +66,7 @@ class Touchsteuerung:
         self._gehaltene: set = set()      # Knoepfe der Art "halten", die unten sind
         self._spielte = False
         self._zwei_y = None               # Blaettern mit zwei Fingern im Menue
+        self._zoom_abstand = None         # Zoomen mit zwei Fingern im Spiel
         self._overlay = None
 
     # ---- Wo und was ---------------------------------------------------
@@ -144,10 +146,25 @@ class Touchsteuerung:
                 self.finger[fid] = {"rolle": "knopf", "knopf": knopf,
                                     "start": p, "jetzt": p}
                 return self._knopf_runter(knopf)
+            platz = self._hotbar_an(p)
+            if platz is not None:
+                # Ein Platz der Hotbar: diese Waffe, sofort (seit 0.34.22).
+                self.finger[fid] = {"rolle": "hotbar", "start": p, "jetzt": p}
+                aktion = "waffe%d" % (platz + 1)
+                return self._druck(aktion, True) + self._druck(aktion, False)
             links = p.x < K.GAME_W * T["links_bis"]
             rolle = "links" if links else "rechts"
-            if any(f["rolle"] == rolle for f in self.finger.values()):
-                return []              # ein zweiter Finger auf derselben Seite
+            schon = [g for g in self.finger.values() if g["rolle"] == rolle]
+            if schon:
+                # Ein zweiter Finger auf derselben Seite: zoomen wie auf
+                # einer Karte (seit 0.34.22). Der Stick dieser Seite
+                # wird dafuer losgelassen - mit zwei Fingern zielt und
+                # laeuft niemand.
+                schon[0]["rolle"] = "zoom"
+                self.finger[fid] = {"rolle": "zoom", "start": p, "jetzt": p}
+                self._zoom_abstand = schon[0]["jetzt"].distance_to(p)
+                self._sticks_rechnen()
+                return []
             self.finger[fid] = {"rolle": rolle, "start": p, "jetzt": p}
             return []
         f = self.finger.get(fid)
@@ -155,14 +172,55 @@ class Touchsteuerung:
             return []
         if ev.type == pygame.FINGERMOTION:
             f["jetzt"] = p
+            if f["rolle"] == "zoom":
+                return self._zoomen()
             self._sticks_rechnen()
             return []
         # FINGERUP
         del self.finger[fid]
         if f["rolle"] == "knopf":
             return self._knopf_hoch(f["knopf"])
+        if f["rolle"] == "zoom":
+            # Der andere Finger zoomt nicht mehr und wird auch kein Stick:
+            # er laege sonst irgendwo mitten im Zug.
+            for g in self.finger.values():
+                if g["rolle"] == "zoom":
+                    g["rolle"] = "ruht"
+            self._zoom_abstand = None
         self._sticks_rechnen()
         return []
+
+    def _zoomen(self) -> list:
+        """Zwei Finger auseinander: naeher heran, zusammen: weiter weg - als
+        Rad-Rasten, wie das Mausrad am Rechner (Gefecht.zoom_stufe)."""
+        zwei = [g["jetzt"] for g in self.finger.values() if g["rolle"] == "zoom"]
+        if len(zwei) != 2 or self._zoom_abstand is None:
+            return []
+        abstand = zwei[0].distance_to(zwei[1])
+        raus = []
+        while abs(abstand - self._zoom_abstand) >= T["zoom_schritt"]:
+            schritt = 1 if abstand > self._zoom_abstand else -1
+            self._zoom_abstand += schritt * T["zoom_schritt"]
+            raus.append(pygame.event.Event(
+                pygame.MOUSEWHEEL, x=0, y=schritt, flipped=False,
+                precise_x=0.0, precise_y=float(schritt), touch=False, which=0))
+        return raus
+
+    def _hotbar_an(self, p):
+        """Welcher Platz der Hotbar unter dem Finger liegt, oder None. Die
+        Szene sagt, wo die Plaetze stehen (`touch_hotbar`)."""
+        frage = getattr(self.app.oben, "touch_hotbar", None)
+        if frage is None:
+            return None
+        try:
+            plaetze = frage() or []
+        except Exception:                          # noqa: BLE001
+            return None
+        for i, r in enumerate(plaetze):
+            # Etwas groesser als gezeichnet: die Felder sind nur 20 hoch.
+            if pygame.Rect(r).inflate(2, T["hotbar_zugabe"]).collidepoint(p):
+                return i
+        return None
 
     def _knopf_runter(self, i: int) -> list:
         aktion, _t, _m, art = T["knoepfe"][i]
@@ -267,13 +325,22 @@ class Touchsteuerung:
         raus = self._modus_pruefen()
         if not self._spielte:
             e.analog = None
+            e.ziel_versatz = None
             return raus
         e.analog = pygame.Vector2(self.analog)
-        mitte = self._mitte()
-        weite = T["ziel_nah"] + (T["ziel_weit"] - T["ziel_nah"]) * min(1.0, self.zielanteil)
-        if self.zielanteil <= 0.0:
+        if self.zielanteil > 0.0:
+            weite = T["ziel_nah"] + (T["ziel_weit"] - T["ziel_nah"]) * min(1.0, self.zielanteil)
+            self._weite = weite
+        elif self.zielen_an:
+            # Mit ZIEL bleibt der Blick, wo er war, auch ohne Daumen auf dem
+            # Stick: sonst sprang die Kamera zurueck, sobald man ihn hob.
+            weite = self._weite
+        else:
             weite = T["ziel_nah"]
-        e.maus = mitte + self.zielrichtung * weite
+        # Gezielt wird von der Figur aus (Eingabe.ziel_welt). Der Mauspunkt
+        # bleibt fuer das Trefferzeichen, das dort erscheint, wo man zielt.
+        e.ziel_versatz = self.zielrichtung * weite
+        e.maus = self._mitte() + e.ziel_versatz
         self._halten(e, "feuer", self.feuert, self._feuerte)
         self._feuerte = self.feuert
         self._halten(e, "zweit", self.zielen_an, self._zielte)
@@ -312,6 +379,7 @@ class Touchsteuerung:
             raus += self._druck(aktion, False)
         self._gehaltene.clear()
         self.finger.clear()
+        self._zoom_abstand = None
         self.analog.update(0, 0)
         self.feuert = False
         self.zielanteil = 0.0

@@ -698,6 +698,8 @@ TOUCH = dict(
     knopf_radius=19.0,
     deckkraft=110,            # 0 bis 255, so sichtbar liegen Sticks und Knoepfe
     zwei_finger_rad=22.0,     # so weit schieben zwei Finger im Menue fuer eine Rad-Raste
+    zoom_schritt=26.0,        # so viel weiter oder enger zwei Finger fuer eine Zoomstufe
+    hotbar_zugabe=14,         # so viel hoeher als gezeichnet nimmt ein Hotbar-Platz Finger an
     # In Menues ein kleiner ESC-Knopf oben rechts: manche Schirme (Inventar,
     # Rundentafel) verlaesst man sonst nur mit der Escape-Taste.
     esc_mitte=(624, 14),
@@ -914,6 +916,13 @@ FAHRZEUG = dict(
     staub_farbe=(206, 184, 142),  # heller als der Schrittstaub: er soll hinter dem Wagen stehen
     staub_groesse=3,
     hinweis_zeit=3.0,         # so lange steht "[E] AUSSTEIGEN" nach dem Einsteigen
+    # Mit einem Stick (Touch, seit 0.34.22) faehrt er dorthin, wohin der
+    # Stick zeigt, statt W/A/S/D nachzuahmen (fahrzeug.Buggy.stick_steuern).
+    stick_tot=0.2,            # so wenig gedrueckt tut noch nichts
+    stick_voll_lenken=40.0,   # Grad Abweichung, ab der voll eingeschlagen wird
+    stick_wenden=110.0,       # Grad: weiter weg wird nur halb Gas gegeben, er wendet
+    stick_zurueck=150.0,      # Grad: fast entgegen heisst bremsen, im Stand rueckwaerts
+    stick_bremsen_ab=50.0,    # bis zu diesem Tempo faehrt er dann rueckwaerts
     # Seit 0.34.18 geht er kaputt (gemeldet: "autos sollen kaputt gehen
     # koennen und dann respawnen random auf der map"). Ein Sturmgewehr
     # braucht ein Magazin und mehr, eine Granate rund sechs Treffer.

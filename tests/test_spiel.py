@@ -8632,6 +8632,103 @@ _finger82(pygame.FINGERDOWN, 5, *_knopf82("zweit"))
 _finger82(pygame.FINGERUP, 5, *_knopf82("zweit"))
 pruef("... und geht dann aus", not _tapp82.eingabe.gehalten("zweit"))
 
+# 0.34.22: Gezielt wird von der Figur aus, nicht ueber die Kamera (beim
+# Laufen wackelte das Ziel, mit dem Scharfschuetzengewehr deutlich).
+_finger82(pygame.FINGERDOWN, 21, 450, 150)
+_finger82(pygame.FINGERMOTION, 21, 450 + K.TOUCH["stick_radius"] * 0.3, 150)
+_zv82 = _tapp82.eingabe.ziel_versatz
+_ziel82 = _tapp82.eingabe.ziel_welt(_tw82.kamera, _tw82.ich.pos)
+pruef("Der rechte Stick zielt von der Figur aus (nach rechts), ohne Umweg ueber die Kamera",
+      _zv82 is not None and _zv82.x > 20 and abs(_zv82.y) < 1
+      and (_ziel82 - _tw82.ich.pos).distance_to(_zv82 * _tw82.kamera.zoom) < 0.01,
+      "%s / %s" % (_zv82, _ziel82 - _tw82.ich.pos))
+_finger82(pygame.FINGERUP, 21, 450, 150)
+pruef("... und die Maus am Rechner zielt wie immer (ohne Stick kein Versatz)",
+      App("OHNE2", None, headless=True).eingabe.ziel_versatz is None)
+_tapp82.touch.zielen_an = True
+_finger82(pygame.FINGERDOWN, 22, 450, 150)
+_finger82(pygame.FINGERMOTION, 22, 450 + K.TOUCH["stick_radius"], 150)
+_weit82 = _tapp82.eingabe.ziel_versatz.length()
+_finger82(pygame.FINGERUP, 22, 450 + K.TOUCH["stick_radius"], 150)
+pruef("Mit ZIEL bleibt der Blick weit, wenn der Daumen den Stick loslaesst",
+      abs(_tapp82.eingabe.ziel_versatz.length() - _weit82) < 0.01
+      and _weit82 > K.TOUCH["ziel_nah"] + 50, "%.0f" % _weit82)
+_tapp82.touch.zielen_an = False
+_tapp82.ereignisse()
+
+# Zoomen mit zwei Fingern auf derselben Seite.
+_zoom82 = _tw82.zoom_ziel
+_finger82(pygame.FINGERDOWN, 23, 120, 200)
+_finger82(pygame.FINGERDOWN, 24, 160, 200)
+_finger82(pygame.FINGERMOTION, 24, 160 + K.TOUCH["zoom_schritt"] * 1.2, 200)
+pruef("Zwei Finger auseinander zoomen naeher heran", _tw82.zoom_ziel < _zoom82,
+      "%.2f -> %.2f" % (_zoom82, _tw82.zoom_ziel))
+pruef("... und dabei laeuft die Figur nicht", _tapp82.eingabe.richtung().length() < 0.01)
+_finger82(pygame.FINGERMOTION, 24, 160 - K.TOUCH["zoom_schritt"] * 1.5, 200)
+pruef("... zusammen wieder weiter weg", _tw82.zoom_ziel >= _zoom82,
+      "%.2f" % _tw82.zoom_ziel)
+_finger82(pygame.FINGERUP, 24, 100, 200)
+_finger82(pygame.FINGERMOTION, 23, 200, 200)
+pruef("Der Finger, der liegen bleibt, wird kein Stick mitten im Zug",
+      _tapp82.eingabe.richtung().length() < 0.01)
+_finger82(pygame.FINGERUP, 23, 200, 200)
+
+# Die Hotbar antippen.
+_plaetze82 = _tw82.touch_hotbar()
+pruef("Die Szene sagt, wo die Plaetze der Hotbar stehen",
+      len(_plaetze82) == len(_tw82.ich.waffen) and len(_plaetze82) >= 3, str(len(_plaetze82)))
+_finger82(pygame.FINGERDOWN, 25, *_plaetze82[2].center)
+pruef("Den dritten Platz antippen waehlt die dritte Waffe", _tw82._waffe_wunsch == 2,
+      str(_tw82._waffe_wunsch))
+_finger82(pygame.FINGERUP, 25, *_plaetze82[2].center)
+pruef("... und schiesst dabei nicht", not _tapp82.eingabe.gehalten("feuer"))
+_tw82._waffe_wunsch = -1
+_finger82(pygame.FINGERDOWN, 26, *_plaetze82[-1].midtop)
+pruef("... auch knapp darueber getroffen (die Felder sind nur 20 hoch)",
+      _tw82._waffe_wunsch == len(_plaetze82) - 1, str(_tw82._waffe_wunsch))
+_finger82(pygame.FINGERUP, 26, *_plaetze82[-1].midtop)
+
+# Im Auto mit dem Stick: er faehrt dorthin, wohin der Stick zeigt.
+from dustfront.fahrzeug import Buggy as _Buggy82
+_b82 = _Buggy82(pygame.Vector2(200, 200), 0, winkel=0.0)
+_g82, _l82 = _b82.stick_steuern(pygame.Vector2(0, 1))
+pruef("Auto nach rechts gerichtet, Stick nach unten: Gas und rechts einschlagen",
+      _g82 > 0.4 and _l82 > 0.9, "%.2f %.2f" % (_g82, _l82))
+_g82, _l82 = _b82.stick_steuern(pygame.Vector2(1, 0))
+pruef("Stick in Fahrtrichtung: Vollgas geradeaus", _g82 == 1.0 and _l82 == 0.0)
+_g82, _l82 = _b82.stick_steuern(pygame.Vector2(-1, 0))
+pruef("Stick genau entgegen, im Stand: rueckwaerts", _g82 < 0 and _l82 == 0.0)
+_b82.geschw.update(200, 0)
+pruef("... in voller Fahrt: erst bremsen", _b82.stick_steuern(pygame.Vector2(-1, 0)) == (-1.0, 0.0))
+_b82.winkel = 90.0
+_g82, _l82 = _b82.stick_steuern(pygame.Vector2(1, 0))
+pruef("Auto nach unten, Stick nach rechts: im Bild nach rechts heisst links einschlagen",
+      _l82 < -0.9, "%.2f" % _l82)
+pruef("Ein halb gedrueckter Stick gibt halb Gas",
+      abs(_b82.stick_steuern(pygame.Vector2(0, 0.5))[0] - 0.5) < 0.01)
+_tapp82.eingabe.analog = pygame.Vector2(0.3, 0)
+pruef("Die Eingabe sagt dem Gastgeber, dass sie von einem Stick kommt",
+      _tw82._meine_eingabe().get("rl") is True)
+
+# Das Trefferzeichen: auf dem iPhone ein schwarzes Viereck dahinter.
+from dustfront.render import Trefferzeichen as _Tz82
+_tz82 = _Tz82()
+_tz82.dauer, _tz82.rest = 1.0, 0.2           # blasst gerade aus
+_grund82 = pygame.Surface((K.GAME_W, K.GAME_H))
+_grund82.fill((70, 55, 40))
+_tz82.zeichnen(_grund82, (300, 180))
+_m82 = K.TREFFERMARKE
+_rand82 = int(_m82["laenge"] + _m82["luecke"]) + 4
+pruef("Kein Viereck hinter dem Trefferzeichen: neben dem X bleibt das Bild",
+      tuple(_grund82.get_at((300 - _rand82 + 1, 180)))[:3] == (70, 55, 40)
+      and tuple(_grund82.get_at((300, 180 - _rand82 + 1)))[:3] == (70, 55, 40))
+_s82 = pygame.Surface((4, 4), pygame.SRCALPHA)
+_s82.fill((200, 100, 50, 200))
+_d82 = _pf82.deckkraft(_s82, 128)
+pruef("Durchsichtig zeichnen ohne set_alpha: das Alpha je Pixel wird kleiner",
+      _d82.get_alpha() in (None, 255) and 95 <= _d82.get_at((1, 1)).a <= 105
+      and _s82.get_at((1, 1)).a == 200, str(_d82.get_at((1, 1))))
+
 # Pause: alles loslassen, die Finger werden wieder zur Maus.
 _finger82(pygame.FINGERDOWN, 6, 100, 250)
 _finger82(pygame.FINGERMOTION, 6, 140, 250)

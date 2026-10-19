@@ -524,6 +524,12 @@ class Anzeige:
         y = HOTBAR_Y + (0 if self.hotbar_gross(anzahl) else 2)
         return pygame.Rect((W - gesamt) // 2, y, gesamt, bh)
 
+    def hotbar_plaetze(self, anzahl: int) -> list:
+        """Die Rechtecke der einzelnen Plaetze - zum Antippen (touch.py)."""
+        bw, bh, luecke = self._hotbar_mass(anzahl)
+        r = self.hotbar_rechteck(anzahl)
+        return [pygame.Rect(r.x + i * (bw + luecke), r.y, bw, bh) for i in range(anzahl)]
+
     def _hotbar_titel(self, ich) -> str:
         """Was ueber der Hotbar steht: welches Loadout, oder der Werfer."""
         g = self.g

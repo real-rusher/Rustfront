@@ -133,3 +133,32 @@ def text_umsetzen(ereignisse) -> list:
             continue
         raus.append(ev)
     return raus
+
+
+# ══════════════════════════════════════════════════════════════════
+# Durchsichtig zeichnen
+# ══════════════════════════════════════════════════════════════════
+
+def deckkraft(flaeche, wert: int, kopie: bool = True):
+    """Eine Flaeche, die mit `wert` (0 bis 255) Deckkraft gezeichnet wird.
+
+    Statt `set_alpha` auf eine Flaeche mit Alpha je Pixel: das rechnet
+    pygame-ce 2.5.6 auf dem iPhone falsch. Auf undurchsichtigem Grund
+    wurde aus allem Durchsichtigen ein schwarzes Viereck - hinter dem
+    Trefferzeichen, und solange die Knoepfe lagen, ueber dem ganzen Bild
+    (gemeldet nach 0.34.20). Hier wird das Alpha je Pixel selbst
+    verkleinert; das Ergebnis ist am Rechner dasselbe.
+
+    `kopie=False` aendert die Flaeche selbst - nur fuer eine, die gerade
+    erst fuer dieses Bild gebaut wurde. Eine gemerkte Flaeche (Schrift aus
+    dem Vorrat) bliebe sonst fuer immer blass.
+    """
+    wert = max(0, min(255, int(wert)))
+    if not flaeche.get_flags() & pygame.SRCALPHA:
+        flaeche.set_alpha(wert)          # ohne Alpha je Pixel geht es ueberall
+        return flaeche
+    if wert >= 255:
+        return flaeche
+    s = flaeche.copy() if kopie else flaeche
+    s.fill((255, 255, 255, wert), special_flags=pygame.BLEND_RGBA_MULT)
+    return s

@@ -25,6 +25,7 @@ import pygame
 
 from . import art  # noqa: F401  registriert die Platzhalter-Bilder
 from . import config as K
+from . import plattform
 from .font import SCHRIFT
 from .world import DEKAL_PIXEL
 
@@ -405,8 +406,7 @@ class Renderer:
                 if sebene != index or alter >= 24.0:
                     continue
                 alpha = max(0, int(115 * (1.0 - alter / 24.0)))
-                spur = self._schneespur.copy()
-                spur.set_alpha(alpha)
+                spur = plattform.deckkraft(self._schneespur, alpha)
                 ziel.blit(spur, (int(sx - ecke.x - 5), int(sy - ecke.y - 3)))
 
         # Dekale liegen auf dem Boden - also vor den Waenden. Bis 0.34.2
@@ -1553,7 +1553,7 @@ class Renderer:
                 sicht = 1.0
             skaliert = pygame.transform.scale(flaeche, self.groesse)
             if sicht < 0.999:
-                skaliert.set_alpha(int(255 * sicht))
+                skaliert = plattform.deckkraft(skaliert, 255 * sicht, kopie=False)
             ziel.blit(skaliert, (0, 0))
             if dz > 0:
                 a = int(255 * p["dunst_staerke"] * (1.0 - k))
@@ -2338,7 +2338,8 @@ class Trefferzeichen:
                 a2, b2 = a - d * vor, b + d * vor
                 pygame.draw.polygon(s, f_farbe, [a2 + quer * breit, b2 + quer * breit,
                                                  b2 - quer * breit, a2 - quer * breit])
-        s.set_alpha(deck)
+        # Nicht set_alpha: auf dem iPhone ein schwarzes Viereck dahinter.
+        s = plattform.deckkraft(s, deck, kopie=False)
         ziel.blit(s, (int(pos[0]) - rand, int(pos[1]) - rand))
 
 
