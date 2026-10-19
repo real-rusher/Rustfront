@@ -1,6 +1,6 @@
 # DUSTFRONT auf iPhone und iPad
 
-Seit 0.34.20, Branch `ios-port`. Ein echter Port: auf dem iPhone läuft
+Seit 0.34.20, in `multiplayer-test` seit 0.34.24. Ein echter Port: auf dem iPhone läuft
 derselbe Python-Code wie am Rechner, mit pygame-ce. Nichts wird
 nachgebaut oder gestreamt. Was sich unterscheidet, steht in
 `dustfront/plattform.py` an einer Stelle.
@@ -29,7 +29,8 @@ Einmal vorbereiten:
 Dann im Spielordner im Terminal:
 
 ```
-git checkout ios-port
+git checkout multiplayer-test
+git pull
 BUNDLE_ID=de.deinname.dustfront ios/bauen.sh
 ```
 
@@ -55,9 +56,10 @@ In Xcode:
    Allgemein → VPN und Geräteverwaltung* dem eigenen Entwicklerzertifikat
    vertrauen.
 
-Hat sich das Spiel geändert (neuer Stand des Branches), einfach
-`ios/bauen.sh` noch einmal laufen lassen und in Xcode wieder auf Run.
-Die Vorlage wird nicht neu geladen, Team und Einstellungen bleiben.
+Hat sich das Spiel geändert, `git pull` und `ios/bauen.sh` noch einmal
+laufen lassen, dann in Xcode wieder auf Run. Die Vorlage wird nicht neu
+geladen. Das Team unter *Signing & Capabilities* kann danach leer sein
+(pygame-ios setzt die Projektdatei zurück) - dann einfach wieder wählen.
 
 Ohne iPhone geht es auch im Simulator: als Ziel ein iPhone-Simulator
 wählen. Die Finger sind dort die Maus. Mehrere Finger gleichzeitig gehen
@@ -89,9 +91,7 @@ Größen und Lagen der Knöpfe stehen in `dustfront/config.py` unter `TOUCH`.
 ## Crossplay
 
 iPhone und Rechner spielen zusammen. Beide brauchen **dieselbe Version**
-(sie steht unten im Hauptmenü). Der Rechner nimmt dafür denselben Stand
-wie das iPhone, also diesen Branch, bis er in `multiplayer-test`
-übernommen ist.
+(sie steht unten im Hauptmenü), also denselben Stand von `multiplayer-test`.
 
 | | iPhone als Gast | iPhone als Gastgeber |
 | --- | --- | --- |
@@ -115,21 +115,23 @@ wie das iPhone, also diesen Branch, bis er in `multiplayer-test`
   Hand geht immer. Beim ersten Mal fragt iOS, ob DUSTFRONT ins lokale Netz
   darf: **Erlauben**, sonst geht auch das nicht.
 
-## Was noch nicht getestet ist
+## Was getestet ist
 
-Gebaut und geprüft wurde alles auf Linux. Dort laufen die Touch-Steuerung
-mit nachgestellten Fingern und der WebSocket-Weg gegen einen nachgestellten
-Cloudflare-Server (`tests/test_spiel.py`, Abschnitt iOS). Die Prüfungen
-laufen auch unter Python 3.13 mit pygame-ce 2.5.6, also mit genau den
-Fassungen der Vorlage. Auf einem echten iPhone lief es noch nicht. Was
-dort zuerst anzusehen ist:
+Gespielt auf einem iPhone 12 mini (seit 0.34.21): Steuerung, Menüs,
+Hotbar, Zoom, Buggy. Die Fehler von dort sind behoben - das schwarze Bild
+beim Spielen und das schwarze Viereck hinter dem Trefferzeichen (beides
+`set_alpha` auf Flächen mit Alpha je Pixel, siehe `plattform.deckkraft`).
+Neue Zeichnungen mit Durchsichtigkeit darum immer über `plattform.deckkraft`
+und nie mit `set_alpha` auf einer Fläche mit Alpha je Pixel - am Rechner
+sieht man den Fehler nicht.
 
-* ob pygame-ios die Bildschirmtastatur so öffnet, wie SDL es verspricht,
-  und ob ein Wort aus der Zwischenablage ankommt,
-* ob Cloudflare den WebSocket ohne cloudflared genauso annimmt (der
-  Handschlag ist derselbe, gemessen mit einem Prüfserver),
-* wie flüssig es auf älteren iPhones läuft (Bildrate in den Einstellungen),
-* ob die Knöpfe gut unter den Daumen liegen.
+Am Rechner prüfen die Tests (`tests/test_spiel.py`, Abschnitt iOS) die
+Touch-Steuerung mit nachgestellten Fingern und den Weg zum Online-Code
+ohne cloudflared gegen einen nachgestellten Cloudflare-Server, auch unter
+Python 3.13 mit pygame-ce 2.5.6 wie in der Vorlage.
+
+Noch nicht ausprobiert: ein echtes iPad (im Simulator geht es), und
+ältere iPhones (Bildrate in den Einstellungen).
 
 Fehler erscheinen in Xcode unten in der Konsole, wenn die App per Kabel
 läuft.

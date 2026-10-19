@@ -2,7 +2,7 @@
 DUSTFRONT - Worauf das Spiel gerade laeuft
 ==========================================
 
-Seit 0.34.20, fuer den Port auf iOS (Branch `ios-port`, siehe
+Seit 0.34.20, fuer den Port auf iOS (siehe
 `ios/LIESMICH.md`). Was dort anders ist, steht hier an einer Stelle,
 damit der Spielcode nicht an zwanzig Orten `sys.platform` fragt:
 
