@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.26, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.27, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -315,6 +315,13 @@ mit dem Brecheisen los. Sie haben so viel Leben wie ein Spieler. Das
 Loadout wird zu jedem Leben neu gewürfelt; bei EINES FÜR ALLE tragen sie
 das vorgegebene (mit höchstens einer Wurfwaffe).
 **Nie C4**, keinen Raketenwerfer, und **sie fahren keine Buggys**.
+
+**Funk und Taktik** (seit 0.34.27): Bots sagen kurz vor einer Aktion an,
+was sie vorhaben – als kleiner Untertitel über ihnen, mit Mannschaften nur
+für die eigene. Sie flankieren einen Gegner hinter Deckung, halten ihn
+derweil nieder (Feuer auf die Stelle neben seiner Deckung), geben
+Kameraden Feuerschutz, die nachladen, angeschlagen sind oder flankieren,
+und stürmen zu zweit oder zu dritt: sammeln außer Sicht, Granate, REIN.
 
 Für Bots wird nichts gebucht, und sie kommen in keine Bestenliste. Wer
 einen Bot erledigt, bekommt den Abschuss aber wie jeden anderen.
@@ -775,6 +782,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.27 | **Bots funken und spielen taktisch.** Kurz vor einer Aktion sagen Bots an, was sie vorhaben – als kleiner Untertitel über ihnen (KONTAKT!, ICH FLANKIERE!, HALTE IHN UNTEN!, FEUERSCHUTZ!, NACHLADEN!, GRANATE!, SAMMELN AM EINGANG!, REIN, REIN, REIN! …); mit Mannschaften sieht das nur die eigene. **Flankieren:** Steht ein Gegner hinter einer Kiste oder ist er hinter einer Mauer verschwunden, geht einer seitlich herum, an eine Stelle mit freier Schussbahn. **Niederhalten:** Ein anderer schießt derweil auf die Stelle direkt neben der Deckung (oder auf die Deckung), damit der Gegner unten bleibt; Bots, an denen Kugeln knapp vorbeifliegen, gehen selbst in Deckung und zielen schlechter. **Feuerschutz:** Gegner bei einem Kameraden, der nachlädt, angeschlagen ist, am Boden liegt oder flankiert, haben Vorrang – das gilt für Bots und Spieler. **Stürmen:** Zwei oder mehr Bots, die wissen, wo ein Gegner steckt, sammeln sich außer Sicht, auf REIN wirft der Erste seine Granate und alle gehen zugleich hinein. Zahlen in `config.py` unter `BOTS` (`funk`, `flanke_*`, `druck_*`, `sturm_*`), die Taktik steht in `dustfront/bottaktik.py`. **Netz/LAN: geändert** (je Spieler `fk`/`fr`, der Funkspruch) – Gastgeber und Gäste brauchen diese Version. |
 | 0.34.26 | **Bots mit Team-Manager, Deckung, und Hindernisse halten Kugeln.** Bots haben jetzt zwei verschiedene Waffen und eine Granate, die sie einmal pro Leben werfen; sie heben weder Medkits noch Munition auf, haben immer begrenzte Munition und gehen in den Nahkampf, wenn alles verschossen ist. Zum Nachladen und angeschlagen gehen sie hinter die nächste Mauer oder Kiste, in eine Kiste in der Schusslinie schießen sie nicht. In HÜGEL geht der Kreis vor: sie kämpfen auf dem Weg dorthin. Neu ist der **Team-Manager** für den Gastgeber (Pausenmenü → TEAMS UND BOTS, auch aus der Rundentafel): Auffüllen bis, Bots fest in ROT und BLAU (ohne Mannschaften: Bots dazu), Spieler in eine Mannschaft setzen – in der Lobby für die nächste Runde, im Gefecht sofort. **Alle Hindernisse mit Bild halten jetzt Kugeln und Raketen auf** (Kisten, Fässer, Sandsäcke, Kakteen, Brocken, Schrott), an ihrer Grundfläche. Granaten, Raketen, C4 und platzende Buggys treffen hinter einem Hindernis abgeschwächt, hinter einer Mauer kaum noch; eine Blendgranate hinter einer Kiste blendet schwächer (Werte in `config.py` unter `DECKUNG`). **Netz/LAN: geändert** (neue Regeln, Kugeln halten an Hindernissen) – Gastgeber und Gäste brauchen diese Version. |
 | 0.34.25 | **Figuren in 3D wie die Hindernisse.** Spieler, Mitspieler, Bots, Gegner und Bosse, die Zielpuppen, der Buggy und die Beute am Boden stehen jetzt in derselben Perspektive wie Kisten, Mauern und Plateaus: das Bild der Figur ist ihr Deckel und rückt mit ihrer Höhe von der Bildmitte weg, darunter steht eine Seitenwand in ihrer eigenen Farbe, unten dunkler, oben heller. Am Bildrand sieht man die Seite, in der Mitte steht man genau darüber. Bosse ragen höher als kleine Gegner. Höhen und Helligkeiten in `config.py` unter `FIGUREN_3D` (`an=False` schaltet es ab). Nur das Bild: getroffen wird wie bisher, Namen und Lebensbalken bleiben am Boden. Netz/LAN: unverändert (der Gast zeichnet gemeldete Gegner und Beute genauso), trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.24 | **iOS-Port in `multiplayer-test` übernommen.** Alles aus dem Branch `ios-port` (0.34.20 bis 0.34.23) gilt jetzt hier: die App für iPhone und iPad (`ios/bauen.sh`, Anleitung `ios/LIESMICH.md`), Touch-Steuerung, der Weg zum Online-Code ohne cloudflared. Am Rechner (Windows, macOS, Linux) startet das Spiel unverändert mit Maus und Tastatur: die Touch-Steuerung gilt nur auf iOS oder mit `DUSTFRONT_TOUCH=1`. Nur Doku geändert. Netz/LAN: unverändert gegenüber 0.34.23; Crossplay braucht auf allen Geräten 0.34.24 |

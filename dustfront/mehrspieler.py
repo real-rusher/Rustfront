@@ -156,6 +156,10 @@ class Kaempfer(Spieler):
         # letzte noch zu sehen ist.
         self.ruf_sperre = 0.0
         self.ruf_zeigen = 0.0
+        # Funkspruch eines Bots (seit 0.34.27): was ueber ihm steht, und
+        # wie lange noch. Der Gast bekommt beides mit der Weltmeldung.
+        self.funk = ""
+        self.funk_rest = 0.0
         # Der Buggy, in dem er sitzt (seit 0.34.9, beim Gastgeber), und
         # ob er drinsitzt (bei beiden - der Gast bekommt es gemeldet und
         # zeichnet die Figur dann nicht, sie ist Teil des Wagenbilds).
@@ -294,6 +298,7 @@ class Kaempfer(Spieler):
         self.ruf_zeigen = max(0.0, self.ruf_zeigen - dt)
         if not self.am_boden:
             self.ruf_zeigen = 0.0
+        self.funk_rest = max(0.0, self.funk_rest - dt)
         vorher = self.magazin.get(self.waffe_name, 0)
         war_am_laden = self.nachlade_rest > 0
         super().schritt(dt)
@@ -3645,6 +3650,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 "tz": k.treffer_marken, "tk": k.toedlich_marken,
                 # Ein Bot (seit 0.34.18): fuer die Bestenliste des Gasts.
                 "bo": k.ist_bot,
+                # Sein Funkspruch (seit 0.34.27), nur solange er steht.
+                "fk": k.funk if k.funk_rest > 0.0 else "",
+                "fr": round(k.funk_rest, 1),
             })
         flug = []
         gegner = []
@@ -4080,6 +4088,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             k.im_fahrzeug = bool(eintrag.get("fz", False))
             k.treffer_marken = int(eintrag.get("tz", 0))
             k.ist_bot = bool(eintrag.get("bo", False))
+            k.funk = str(eintrag.get("fk", "") or "")[:K.BOTS["funk_laenge"]]
+            k.funk_rest = float(eintrag.get("fr", 0.0)) if k.funk else 0.0
             k.toedlich_marken = int(eintrag.get("tk", 0))
             k.rpg = bool(eintrag.get("rp", False))
             if k.rpg and k.waffen != ["rakete"]:
@@ -5663,6 +5673,35 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             SCHRIFT.zeichnen(ziel, text, int(hinten.x), int(hinten.y) - 3,
                              farbe, 1, ausrichtung="mitte")
 
+    def _funk_hoerbar(self, k) -> bool:
+        """Wer einen Funkspruch mitbekommt (seit 0.34.27): mit Mannschaften
+        nur die eigene - sonst wuesste der Gegner, wo gleich flankiert
+        wird. Ohne Mannschaften alle; dort spricht ohnehin keiner mit
+        jemandem, und es zeigt, was der Bot vorhat."""
+        if not self.mit_teams or K.BOTS["funk_fuer_alle"]:
+            return True
+        return self.ich is not None and k.team == self.ich.team
+
+    def _funk_zeichnen(self, ziel, k, p) -> None:
+        """Ein Funkspruch als kleiner Untertitel ueber Name und Schutzleiste.
+        Ein dunkles Kaestchen dahinter, damit er auf hellem Sand lesbar
+        bleibt; die letzten Zehntel blendet die Schrift zum Kasten hin aus,
+        statt hart zu verschwinden."""
+        text = k.funk
+        breite = SCHRIFT.breite(text) + 6
+        x = int(p.x) - breite // 2
+        y = int(p.y) - 46
+        rect = pygame.Rect(x, y, breite, 11)
+        pygame.draw.rect(ziel, (14, 10, 8), rect)
+        kombi = (K.TEAMS["kombi"][k.team] if self.mit_teams
+                 and 0 <= k.team < len(K.TEAMS["kombi"]) else None)
+        rand = kombi["hud"] if kombi else K.C_MUTED
+        pygame.draw.rect(ziel, rand, rect, 1)
+        anteil = max(0.0, min(1.0, k.funk_rest / 0.35))
+        farbe = tuple(int(14 + (c - 14) * anteil) for c in K.C_CREAM[:3])
+        SCHRIFT.zeichnen(ziel, text, int(p.x), y + 2, farbe, 1,
+                         ausrichtung="mitte")
+
     def _namen_zeichnen(self, ziel) -> None:
         """Ueber jedem Mitspieler sein Name, sein Leben und sein Schutz.
 
@@ -5691,6 +5730,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 p = p - pygame.Vector2(0, 12)
             SCHRIFT.zeichnen(ziel, k.name, int(p.x), int(p.y) - 26, farbe, 1,
                              ausrichtung="mitte")
+            if k.funk and k.funk_rest > 0.0 and self._funk_hoerbar(k):
+                self._funk_zeichnen(ziel, k, p)
             if self.schutz_an and k.unverwundbar > 0 and not k.am_boden:
                 # Eine Leiste, solange der Einstiegsschutz haelt, und ein
                 # Ring um die Figur. Ohne beides sieht man nur, dass

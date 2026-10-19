@@ -9436,6 +9436,211 @@ if _start85 is not None:
           % (_abstand85, _bot85.pos.distance_to(w85.zone_mitte), _kaempfte85))
 w85.verlassen()
 
+# 0.34.27: "Lass die Bots Callouts kurz vor Aktionen geben, die als kleine
+# Untertitel ueber ihnen angezeigt werden. Sie sollen auch taktische
+# Aktionen durchfuehren, wie flankieren, suppression ..., breaching (in
+# Kooperation mit anderen Bots) und Feuerschutz fuer andere Bots und
+# Spieler des Teams."
+print("\n-- Bots: Funk und Taktik (0.34.27)")
+from dustfront import bottaktik as _BT86
+from dustfront.entities import Geschoss as _Gs86
+
+w86, g86 = gefechtspaar("team", regeln={"bots_t0": 2, "bots_t1": 2})
+_eigen86 = [b_ for b_ in w86._bots() if b_.team == w86.ich.team]
+_fremd86 = [b_ for b_ in w86._bots() if b_.team != w86.ich.team]
+_a86 = _eigen86[0]
+_a86.hirn.funk_sperre = 0.0
+_a86.hirn.funk_zuletzt = {}
+pruef("Ein Bot sagt an, was er vorhat",
+      _a86.hirn.funken("flanke") and _a86.funk in K.BOTS["funk"]["flanke"]
+      and _a86.funk_rest == K.BOTS["funk_dauer"], _a86.funk)
+pruef("... und redet nicht ununterbrochen", not _a86.hirn.funken("kontakt"), "")
+pruef("... ausser bei etwas Wichtigem (Granate, REIN)",
+      _a86.hirn.funken("granate", wichtig=True) and _a86.funk in K.BOTS["funk"]["granate"], "")
+_beide80(0.4, w86, g86)
+_beim_gast86 = g86.kaempfer.get(_a86.nummer)
+pruef("Der Gast bekommt den Funkspruch mit der Weltmeldung",
+      _beim_gast86 is not None and _beim_gast86.funk == _a86.funk
+      and _beim_gast86.funk_rest > 0, "%r" % (getattr(_beim_gast86, "funk", None),))
+pruef("Mit Mannschaften liest nur die eigene mit",
+      w86._funk_hoerbar(_a86) and not w86._funk_hoerbar(_fremd86[0]), "")
+for _ in range(int((K.BOTS["funk_dauer"] + 0.3) / K.FIXED_DT)):
+    _a86.schritt(K.FIXED_DT)
+pruef("Nach seiner Dauer ist der Spruch weg", _a86.funk_rest == 0.0, "")
+
+# Niedergehalten: eine Kugel knapp vorbei.
+_b86 = _eigen86[1]
+_b86.hirn.unterdrueckt = 0.0
+_b86.hirn.funk_sperre = 0.0
+_b86.hirn.funk_zuletzt = {}
+_kugel86 = _Gs86(_b86.pos + pygame.Vector2(0, 14), 0.0, K.WAFFEN["sturm"],
+                 _b86.ebene, von=_fremd86[0])
+w86.welt.wesen.append(_kugel86)
+_kugel86.welt = w86.welt
+_BT86.unterdrueckung_pruefen(w86)
+pruef("Eine Kugel knapp vorbei haelt einen Bot nieder, und er sagt es",
+      _b86.hirn.unterdrueckt > 0 and _b86.funk in K.BOTS["funk"]["beschuss"],
+      "%.1f %r" % (_b86.hirn.unterdrueckt, _b86.funk))
+_kugel86.lebt = False
+w86.verlassen(); g86.verlassen()
+
+
+def _freie_flaeche86(welt, rnd, breite=9, hoehe=5):
+    """Eine freie, ebene Flaeche auf Ebene 0 (in Kacheln), fuer eine
+    gebaute Szene mitten in einer echten Karte."""
+    e_ = welt.ebene(0)
+    for _ in range(4000):
+        tx_ = rnd.randrange(2, e_.breite - breite - 2)
+        ty_ = rnd.randrange(2, e_.hoehe - hoehe - 2)
+        if all(K.KACHELN[e_.kachel(x_, y_)]["name"] == "boden"
+               for x_ in range(tx_, tx_ + breite) for y_ in range(ty_, ty_ + hoehe)):
+            return tx_, ty_
+    return None
+
+
+# Hinter einer Kiste: einer flankiert, der andere haelt nieder.
+w86 = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_neuer_port()), modus="team",
+              karte="staubtal", seed=86, regeln={"bots_t0": 2, "bots_t1": 2})
+_ich86 = w86.ich
+_ich86.unverwundbar = 1e9
+_ich86.max_leben = _ich86.leben = 1e6
+_freund86 = [b_ for b_ in w86._bots() if b_.team != _ich86.team]
+_rest86 = [b_ for b_ in w86._bots() if b_.team == _ich86.team]
+_platz86 = _freie_flaeche86(w86.welt, random.Random(86), 12, 7)
+if _platz86 is not None:
+    for b_ in _rest86:
+        b_.lebt = False                 # nur die Szene zaehlt
+    _tx86, _ty86 = _platz86
+    w86.welt.ebene(0).setzen(_tx86 + 7, _ty86 + 3, K.KISTE)
+    _T86 = K.TILE
+    _kiste86 = pygame.Vector2((_tx86 + 7.5) * _T86, (_ty86 + 3.5) * _T86)
+    _ich_ort86 = _kiste86 + pygame.Vector2(_T86 * 1.0, 0)
+    _orte86 = [_kiste86 + pygame.Vector2(-_T86 * 5, -_T86 * 1.2),
+               _kiste86 + pygame.Vector2(-_T86 * 5, _T86 * 1.2)]
+    _rollen86 = {"flanke": set(), "druck": set()}
+    _druckschuesse86 = 0
+    for i_, b_ in enumerate(_freund86):
+        b_.pos.update(_orte86[i_]); b_.vorher.update(b_.pos); b_.ebene = 0
+        b_.unverwundbar = 1e9
+        b_.hirn.neues_leben()
+    for _ in range(int(4.0 / K.FIXED_DT)):
+        _ich86.pos.update(_ich_ort86); _ich86.vorher.update(_ich_ort86); _ich86.ebene = 0
+        _ich86.tempo.update(0, 0)
+        vor_ = [b_.zaehler.get("schuesse", 0) for b_ in _freund86]
+        w86.schritt(K.FIXED_DT)
+        for j_, b_ in enumerate(_freund86):
+            if b_.hirn.taktik is not None:
+                _rollen86["flanke"].add(b_.nummer)
+            if b_.hirn.druck_rest > 0:
+                _rollen86["druck"].add(b_.nummer)
+                if b_.zaehler.get("schuesse", 0) > vor_[j_]:
+                    _druckschuesse86 += 1
+    pruef("Gegner hinter einer Kiste: einer flankiert, einer haelt nieder",
+          _rollen86["flanke"] and _rollen86["druck"]
+          and _rollen86["flanke"] != _rollen86["druck"],
+          str(_rollen86))
+    pruef("... und wer niederhaelt, schiesst dabei auch", _druckschuesse86 > 0,
+          "%d Schuesse" % _druckschuesse86)
+    # Wohin: neben die Kiste, wo die Bahn frei ist.
+    _h86 = _freund86[0].hirn
+    _freund86[0].pos.update(_orte86[0])
+    _dp86 = _h86.druckpunkt(_ich_ort86, 0)
+    pruef("Der Punkt zum Niederhalten liegt neben der Deckung, mit freier Bahn",
+          _dp86.distance_to(_ich_ort86) <= max(K.BOTS["druck_versatz"]) + 1
+          and w86.welt.deckung(_freund86[0].pos, _dp86, 0) == ""
+          and not w86.welt.schuss_halt(_dp86, 0),
+          str(_dp86))
+    _fp86 = _h86.flankenpunkt(_ich_ort86, 0)
+    pruef("Der Flankenpunkt hat freie Bahn zum Gegner, seitlich von ihm",
+          _fp86 is not None and w86.welt.deckung(_fp86, _ich_ort86, 0) == ""
+          and min(K.BOTS["flanke_radien"]) - 1 <= _fp86.distance_to(_ich_ort86)
+          <= max(K.BOTS["flanke_radien"]) + 1, str(_fp86))
+else:
+    pruef("Auf STAUBTAL gibt es eine freie Flaeche fuer die Szene", False, "")
+w86.verlassen()
+
+# Feuerschutz: der Gegner bei dem Kameraden, der nachlaedt, geht vor.
+w86 = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_neuer_port()), modus="team",
+              karte="staubtal", seed=87, regeln={"bots_t0": 1, "bots_t1": 2})
+_ich86 = w86.ich
+_wache86 = [b_ for b_ in w86._bots() if b_.team == _ich86.team][0]
+_feinde86 = [b_ for b_ in w86._bots() if b_.team != _ich86.team]
+_platz86 = _freie_flaeche86(w86.welt, random.Random(87), 14, 12)
+if _platz86 is not None:
+    _p86 = pygame.Vector2((_platz86[0] + 3) * K.TILE, (_platz86[1] + 3) * K.TILE)
+    _wache86.pos.update(_p86)
+    _ich86.pos.update(_p86 + pygame.Vector2(0, 150))
+    _feinde86[0].pos.update(_ich86.pos + pygame.Vector2(150, 0))      # beim Kameraden
+    _feinde86[1].pos.update(_p86 + pygame.Vector2(130, -60))          # naeher an der Wache
+    for x_ in [_wache86, _ich86] + _feinde86:
+        x_.ebene = 0
+        x_.vorher.update(x_.pos)
+    _ich86.nachlade_rest = 1.5
+    _wache86.hirn.neues_leben()
+    _wache86.hirn._wahrnehmen()
+    pruef("Feuerschutz: der Gegner beim Kameraden, der nachlaedt, geht vor",
+          _wache86.hirn.ziel is _feinde86[0]
+          and _wache86.funk in K.BOTS["funk"]["feuerschutz"],
+          "%s %r" % (getattr(_wache86.hirn.ziel, "name", None), _wache86.funk))
+    _ich86.nachlade_rest = 0.0
+    _wache86.hirn.neues_leben()
+    _wache86.hirn._wahrnehmen()
+    pruef("... ohne das der naechste", _wache86.hirn.ziel is _feinde86[1],
+          str(getattr(_wache86.hirn.ziel, "name", None)))
+else:
+    pruef("Auf STAUBTAL gibt es eine freie Flaeche fuer die Szene", False, "")
+w86.verlassen()
+
+# Stuermen: zwei Bots wissen, wo einer steckt, und sehen ihn nicht.
+w86 = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_neuer_port()), modus="team",
+              karte="staubtal", seed=88, regeln={"bots_t0": 0, "bots_t1": 2})
+_ich86 = w86.ich
+_trupp86 = [b_ for b_ in w86._bots() if b_.team != _ich86.team]
+_plan86 = None
+_rnd86 = random.Random(88)
+for _ in range(300):
+    ort_ = freier_punkt(w86.welt, 0, _rnd86)
+    s_ = _trupp86[0].hirn.sammelpunkt(ort_, 0)
+    if s_ is None:
+        continue
+    _ich86.pos.update(ort_); _ich86.ebene = 0
+    for i_, b_ in enumerate(_trupp86):
+        b_.pos.update(s_ + pygame.Vector2(30 * i_, 0))
+        b_.vorher.update(b_.pos); b_.ebene = 0
+        b_.hirn.neues_leben()
+        b_.hirn.gesehen[_ich86] = (pygame.Vector2(ort_), 0, w86.welt.zeit)
+    w86._sturm_pause = {}
+    w86._sturm_takt = 0.0
+    _BT86.stuerme_fuehren(w86, K.FIXED_DT)
+    if w86._stuerme:
+        _plan86 = w86._stuerme[0]
+        break
+pruef("Zwei Bots, die wissen, wo einer steckt, planen einen Sturm",
+      _plan86 is not None and set(_plan86["mitglieder"]) == set(_trupp86)
+      and all(b_.hirn.sturm is _plan86 for b_ in _trupp86), "")
+if _plan86 is not None:
+    pruef("Gesammelt wird ausser Sicht des Gegners",
+          not w86.welt.sicht_frei(_plan86["sammel"], _plan86["ziel"], 0), "")
+    pruef("... und der Erste sagt es an",
+          _trupp86[0].funk in K.BOTS["funk"]["sammeln"], repr(_trupp86[0].funk))
+    _plan86["bereit"] = {b_.nummer for b_ in _trupp86}
+    w86._sturm_takt = 0.0
+    _BT86.stuerme_fuehren(w86, K.FIXED_DT)
+    pruef("Sind alle da: REIN - und der Erste wirft vorher seine Granate",
+          _plan86["phase"] == "rein" and _trupp86[0].funk in K.BOTS["funk"]["rein"]
+          and _trupp86[0].hirn.sturm_wurf is not None,
+          "%s %r" % (_plan86["phase"], _trupp86[0].funk))
+    _ein86 = {"knoepfe": [], "waffe": -1}
+    _will86, _blick86, _ = _trupp86[1].hirn.taktik_sturm(K.FIXED_DT, _ein86)
+    pruef("... und die anderen gehen mit hinein, Richtung Ziel",
+          _will86.length_squared() > 0.1, str(_will86))
+    for b_ in _trupp86:
+        b_.lebt = False
+    w86._sturm_takt = 0.0
+    _BT86.stuerme_fuehren(w86, K.FIXED_DT)
+    pruef("Ist der Trupp gefallen, ist der Plan vorbei", not w86._stuerme, "")
+w86.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

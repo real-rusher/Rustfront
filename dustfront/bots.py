@@ -55,6 +55,10 @@ getroffen wird, geht er hinter die naechste Mauer oder Kiste, die ihn vom
 Gegner trennt (`_deckung`). Steht eine Kiste in seiner Schusslinie, schiesst
 er nicht hinein, sondern geht zur Seite, bis er freie Bahn hat.
 
+**Funk und Taktik (seit 0.34.27).** Er sagt an, was er vorhat, flankiert,
+haelt nieder, gibt Feuerschutz und stuermt mit anderen Bots - siehe
+bottaktik.py.
+
 **Was er hat (seit 0.34.26).** Gemeldet: "Die Bots sollen jeweils zwei
 verschiedene Waffen haben ... auch eine Granate haben, aber jeweils nur in
 ihrem Leben eine werfen koennen ... keine Medkits oder Munition einsammeln,
@@ -89,6 +93,7 @@ import pygame
 
 from . import config as K
 from . import konto as konto_modul
+from .bottaktik import Taktik, braucht_schutz, stuerme_fuehren, unterdrueckung_pruefen
 
 
 def _winkel_zu(von, nach) -> float:
@@ -118,8 +123,9 @@ def bot_loadout(rnd, fest=None) -> dict:
     return {"name": "BOT", "waffen": waffen, "wuerfe": [rnd.choice(wuerfe)]}
 
 
-class BotHirn:
-    """Was ein Bot denkt. Liefert je Schritt eine Eingabemeldung."""
+class BotHirn(Taktik):
+    """Was ein Bot denkt. Liefert je Schritt eine Eingabemeldung. Funk und
+    Taktik (flankieren, niederhalten, stuermen) stehen in bottaktik.py."""
 
     def __init__(self, gefecht, k, rnd) -> None:
         self.g = gefecht
@@ -166,6 +172,7 @@ class BotHirn:
         self.deckung_pause = 0.0      # so lange keine neue Deckung (angeschlagen)
         self.deckung_suche = 0.0      # so lange gilt der gefundene Ort
         self.linie = ""               # was zwischen ihm und dem Ziel steht
+        self.taktik_anlegen()
 
     def blenden(self, dauer: float) -> None:
         """Eine Blendgranate hat ihn erwischt: er sieht nichts, verliert
@@ -210,6 +217,12 @@ class BotHirn:
             self.getroffen_rest = 2.0
             self._getroffen()
         self.leben_vorher = k.leben
+        # Nachladen ansagen - dann wissen die anderen, dass sie ihn decken
+        # muessen (bottaktik.braucht_schutz).
+        laedt = k.nachlade_rest > 0.0
+        if laedt and not self.laden_vorher and self.ziel is not None:
+            self.funken("nachladen")
+        self.laden_vorher = laedt
 
         helfen = self._wem_helfen()
         kaempft = self.ziel is not None and self.ziel_ok(self.ziel)
@@ -224,7 +237,21 @@ class BotHirn:
         elif helfen is not None:
             will, ziel_punkt = self._helfen(helfen, ein)
         else:
-            will, ziel_punkt = self._unterwegs(dt, ein)
+            # Ohne Gegner im Blick: der Sturm der Mannschaft, dann der eben
+            # verschwundene Gegner (niederhalten, flankieren), dann der
+            # gewoehnliche Weg. In HUEGEL geht ausserhalb des Kreises der
+            # Kreis vor - hinterherlaufen kann man spaeter.
+            plan = self.taktik_sturm(dt, ein)
+            zone = self._zone()
+            draussen = zone is not None and (k.ebene != zone[1] or k.pos.distance_to(zone[0])
+                                             > K.ZONE["radius"])
+            ohne = None if plan is not None or draussen else self.taktik_ohne_sicht(dt, ein)
+            if plan is not None:
+                will, ziel_punkt, feuern = plan
+            elif ohne is not None:
+                will, ziel_punkt, feuern = ohne
+            else:
+                will, ziel_punkt = self._unterwegs(dt, ein)
 
         will = self._sicher(will)
         will = self._nicht_stecken(dt, will)
@@ -252,6 +279,7 @@ class BotHirn:
                      "getroffen_rest", "deckung_rest", "deckung_pause",
                      "deckung_suche"):
             setattr(self, name, max(0.0, getattr(self, name) - dt))
+        self.taktik_zeiten(dt)
         if self.ziel is None:
             self.ruhe += dt
         else:
@@ -320,8 +348,12 @@ class BotHirn:
         self.ziel = None
         if sichtbar:
             zone = self._zone()
+            # Feuerschutz: wer einem Kameraden zu nahe kommt, der gerade
+            # nachlaedt, liegt oder flankiert, ist zuerst dran.
+            schuetzlinge = [x for x in self.kameraden() if braucht_schutz(x)]
             def wert(w):
                 d = k.pos.distance_to(w.pos)
+                d -= self.schutz_bonus(w, schuetzlinge)[0]
                 if getattr(w, "am_boden", False):
                     d += 260.0                # erst, wer noch steht
                 # HUEGEL: wer im Kreis steht, nimmt ihn uns weg.
@@ -330,6 +362,7 @@ class BotHirn:
                     d -= 150.0
                 return d
             neu = min(sichtbar, key=wert)
+            self.feuerschutz_fuer = self.schutz_bonus(neu, schuetzlinge)[1]
             self._neues_ziel(neu, neu is alt)
             self.linie = self.g.welt.deckung(k.pos, neu.pos, k.ebene)
             return
@@ -346,6 +379,7 @@ class BotHirn:
         self.ziel = w
         if gleiches:
             return                            # kurz verdeckt, wieder da
+        self.funken("feuerschutz" if self.feuerschutz_fuer is not None else "kontakt")
         self.reaktion_rest = self.rnd.uniform(*b["reaktion"])
         if abs(_winkel_diff(self.blick, _winkel_zu(self.k.pos, w.pos))) > 100:
             self.reaktion_rest += b["reaktion_hinten"]
@@ -421,6 +455,8 @@ class BotHirn:
         massstab = max(0.5, min(2.0, abstand / 250.0))
         fehler = max(b["fehler_min"], b["fehler_start"]
                      * math.exp(-self.fehler_zeit / b["fehler_abbau"]))
+        if self.unterdrueckt > 0.0:
+            fehler *= b["unterdrueckt_fehler"]   # Kugeln um die Ohren
         self.fehler.rotate_ip(self.rnd.uniform(-40, 40) * dt * 3)
         ziel_punkt = z.pos + self.fehler * (fehler * massstab)
 
@@ -432,6 +468,7 @@ class BotHirn:
         if self._wurf_moeglich(abstand, waffe is None) and sichtbar:
             self.wurf_phase = 0.45
             self.wurf_rest = self.rnd.uniform(*b["wurf_pause"])
+            self.funken("granate", wichtig=True)
             return self._werfen(dt, ein, z)
         if waffe is None:
             return self._nahkampf(ein, z, abstand)
@@ -445,8 +482,17 @@ class BotHirn:
         # Bewegen: Abstand halten, seitlich ausweichen - oder in Deckung.
         will = self._kampfbewegung(abstand, z, ein)
         versteckt = self._deckung(z, ein)
+        taktik = None
+        druck = False
         if versteckt is not None:
             will = versteckt
+        else:
+            # Flankieren oder niederhalten (bottaktik.py).
+            taktik = self.taktik_im_kampf(z, sichtbar, ein)
+            if taktik is not None:
+                will, punkt, druck = taktik
+                if punkt is not None:
+                    ziel_punkt = punkt
 
         # Schiessen: nach der Reaktion, wenn das Fadenkreuz in der Naehe
         # ist, in Stoessen.
@@ -459,12 +505,18 @@ class BotHirn:
                                           max(1.0, abstand))) + 3.0
         bereit = (sichtbar and self.reaktion_rest <= 0.0 and abstand <= reich
                   and k.nachlade_rest <= 0)
-        if self.linie == "hindernis":
+        if druck:
+            # Niederhalten: auf die Stelle neben seiner Deckung, auch ohne
+            # ihn zu treffen. Das Fadenkreuz muss genau dort sein.
+            bereit = (self.reaktion_rest <= 0.0 and abstand <= reich
+                      and k.nachlade_rest <= 0)
+            erlaubt = 6.0
+        elif self.linie == "hindernis":
             # Eine Kiste in der Schusslinie haelt jede Kugel auf (seit
             # 0.34.26). Hineinschiessen waere Munition verschenken: er
             # geht zur Seite, bis er freie Bahn hat.
             bereit = False
-            if versteckt is None:
+            if versteckt is None and taktik is None:
                 hin = z.pos - k.pos
                 if hin.length_squared() > 1.0:
                     hin = hin.normalize()
@@ -502,6 +554,7 @@ class BotHirn:
         zone = self._zone()
         if zone is not None and (k.ebene != zone[1] or k.pos.distance_to(zone[0])
                                  > K.ZONE["radius"] * 0.75):
+            self.funken("kreis")
             will = self._weg_richtung(zone[0], zone[1], ein) * 0.85 + quer * 0.2
         elif abstand > wunsch + 40:
             # Heran - um Waende herum, wenn noetig.
@@ -542,6 +595,11 @@ class BotHirn:
                 and k.leben < b["deckung_leben"]):
             self.deckung_rest = b["deckung_zeit"]
             self.deckung_pause = b["deckung_pause"]
+            self.funken("getroffen")
+        # Niedergehalten (Kugeln knapp vorbei, seit 0.34.27): unten bleiben,
+        # solange es pfeift. Genau das will, wer niederhaelt.
+        if self.unterdrueckt > 0.0:
+            self.deckung_rest = max(self.deckung_rest, self.unterdrueckt)
         if not laedt and self.deckung_rest <= 0.0:
             self.deckung_ort = None
             return None
@@ -589,6 +647,7 @@ class BotHirn:
         """Keine Munition mehr: mit dem Brecheisen hin und zuschlagen."""
         k = self.k
         b = K.BOTS
+        self.funken("leer")
         will = self._weg_richtung(z.pos, z.ebene)
         if abstand <= b["nahkampf_ab"] + getattr(z, "radius", 9.0):
             if self.reaktion_rest <= 0.0:
@@ -664,6 +723,7 @@ class BotHirn:
 
     def _helfen(self, x, ein: dict):
         k = self.k
+        self.funken("helfen")
         if x.ebene == k.ebene and k.pos.distance_to(x.pos) <= K.REVIVE["reichweite"] - 4:
             ein["nutzen"] = True
             return pygame.Vector2(0, 0), pygame.Vector2(x.pos)
@@ -688,6 +748,8 @@ class BotHirn:
             mitte, ebene = g.zone_mitte, g.zone_ebene
             if k.ebene != ebene or k.pos.distance_to(mitte) > K.ZONE["radius"] * 0.7:
                 ziel = (pygame.Vector2(mitte), ebene)
+                if k.ebene != ebene or k.pos.distance_to(mitte) > K.ZONE["radius"] * 2.0:
+                    self.funken("kreis")
             else:
                 if self.streif_rest <= 0.0 or self.streifzug is None:
                     p = pygame.Vector2(mitte) + pygame.Vector2(
@@ -841,6 +903,11 @@ class BotTeil:
     def _bots_anlegen(self) -> None:
         self._bot_rnd = random.Random(getattr(self, "_bot_seed", None))
         self._bots_rest = 0.0
+        # Absprachen der Mannschaften (bottaktik.py): wer flankiert, wer
+        # haelt nieder, wer stuermt gerade mit wem.
+        self._bot_rollen = {}
+        self._stuerme = []
+        self._sturm_pause = {}
         # Schuesse, die die Bots hoeren: (Ort, Ebene, Zeit, Fraktion).
         self._bot_geraeusche: list = []
 
@@ -1009,6 +1076,9 @@ class BotTeil:
         """Jeder Bot schickt seine Eingabe, wie ein Gast."""
         jetzt = self.welt.zeit
         self._bot_geraeusche = [g for g in self._bot_geraeusche if jetzt - g[2] < 2.0]
+        if self._bots():
+            unterdrueckung_pruefen(self)
+            stuerme_fuehren(self, dt)
         for k in self._bots():
             hirn = getattr(k, "hirn", None)
             if hirn is None:

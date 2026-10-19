@@ -984,6 +984,51 @@ BOTS = dict(
     deckung_zeit=2.5,         # so lange bleibt er dann versteckt ...
     deckung_pause=7.0,        # ... und so lange danach nicht wieder
     deckung_radien=(40.0, 70.0, 105.0, 150.0),  # so weit sucht er, naechste zuerst
+    # ── Funk (seit 0.34.27, bottaktik.py). Kurz vor einer Aktion sagt der
+    # Bot an, was er vorhat - als Untertitel ueber ihm, mit Mannschaften
+    # nur fuer die eigene. Je Anlass mehrere Saetze, damit es nicht wie
+    # ein Automat klingt.
+    funk=dict(
+        kontakt=("KONTAKT!", "FEIND GESICHTET!", "DA VORNE!"),
+        flanke=("ICH FLANKIERE!", "GEHE AUSSEN HERUM!", "NEHME DIE SEITE!"),
+        druck=("HALTE IHN UNTEN!", "NIEDERHALTEN!", "BLEIB IN DECKUNG, DU!"),
+        feuerschutz=("FEUERSCHUTZ!", "ICH DECKE DICH!", "GEH, ICH HAB IHN!"),
+        nachladen=("NACHLADEN!", "LADE NACH - DECKT MICH!"),
+        granate=("GRANATE!", "GRANATE RAUS!"),
+        sammeln=("SAMMELN AM EINGANG!", "STAPELN - AUF MEIN ZEICHEN!"),
+        bereit=("BEREIT!", "IN POSITION!"),
+        rein=("REIN, REIN, REIN!", "LOS, STÜRMEN!"),
+        getroffen=("BIN GETROFFEN!", "MUSS IN DECKUNG!"),
+        beschuss=("UNTER BESCHUSS!", "KOPF RUNTER!"),
+        leer=("KEINE MUNITION!", "NUR NOCH DAS EISEN!"),
+        helfen=("ICH HOLE DICH!", "HALT DURCH!"),
+        kreis=("ZUM KREIS!", "NEHMT DEN KREIS!"),
+    ),
+    funk_dauer=1.9,           # so lange steht ein Spruch (s)
+    funk_abstand=2.2,         # so lange schweigt er danach mindestens
+    funk_wiederholen=7.0,     # derselbe Anlass erst wieder nach so langer Zeit
+    funk_fuer_alle=False,     # True: auch die andere Mannschaft liest mit
+    funk_laenge=32,           # laengster Spruch, den der Gast annimmt
+    # ── Taktik (seit 0.34.27, bottaktik.py)
+    flanke_radien=(130.0, 175.0, 220.0),  # so weit vom Gegner sucht er die Flanke
+    flanke_zeit=7.0,          # laenger dauert kein Flankieren
+    flanke_pause=8.0,         # danach so lange kein neues
+    druck_zeit=2.6,           # so lange haelt er einen nieder
+    druck_pause=3.5,
+    druck_versatz=(14.0, 22.0, 30.0),  # neben der Deckung, auf die er schiesst
+    druck_rest=0.35,          # niederhalten nur, solange mehr als so viel Munition bleibt
+    gedaechtnis_taktik=3.5,   # so frisch muss ein gesehener Gegner sein
+    feuerschutz_weite=230.0,  # so nah an einem Kameraden, der Schutz braucht
+    feuerschutz_bonus=150.0,  # so viel lieber nimmt er dann diesen Gegner
+    unterdrueckt_weite=26.0,  # so knapp muss eine Kugel an ihm vorbei
+    unterdrueckt_zeit=1.4,    # so lange bleibt er dann unten und zielt schlechter
+    unterdrueckt_fehler=1.8,  # x Zielfehler, solange er unterdrueckt ist
+    sturm_takt=0.5,           # so oft planen die Bots einer Mannschaft gemeinsam
+    sturm_weite=320.0,        # so nah muessen die Bots beieinander sein
+    sturm_sammel=(70.0, 110.0, 150.0),  # Sammelpunkt so weit vom Ziel, ausser Sicht
+    sturm_sammeln_zeit=7.0,   # laenger wird nicht gewartet
+    sturm_rein_zeit=4.5,      # so lange stuermen sie
+    sturm_pause=12.0,         # danach so lange kein neuer Sturm in der Mannschaft
     dash_pause=4.0,
     stockt_nach=1.2,          # so lange kaum vom Fleck: er weicht aus
     verwalten_takt=1.0,       # so oft wird nachgezaehlt, ob Bots fehlen
