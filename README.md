@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.24, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.25, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -757,6 +757,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.25 | **Figuren in 3D wie die Hindernisse.** Spieler, Mitspieler, Bots, Gegner und Bosse, die Zielpuppen, der Buggy und die Beute am Boden stehen jetzt in derselben Perspektive wie Kisten, Mauern und Plateaus: das Bild der Figur ist ihr Deckel und rückt mit ihrer Höhe von der Bildmitte weg, darunter steht eine Seitenwand in ihrer eigenen Farbe, unten dunkler, oben heller. Am Bildrand sieht man die Seite, in der Mitte steht man genau darüber. Bosse ragen höher als kleine Gegner. Höhen und Helligkeiten in `config.py` unter `FIGUREN_3D` (`an=False` schaltet es ab). Nur das Bild: getroffen wird wie bisher, Namen und Lebensbalken bleiben am Boden. Netz/LAN: unverändert (der Gast zeichnet gemeldete Gegner und Beute genauso), trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.24 | **iOS-Port in `multiplayer-test` übernommen.** Alles aus dem Branch `ios-port` (0.34.20 bis 0.34.23) gilt jetzt hier: die App für iPhone und iPad (`ios/bauen.sh`, Anleitung `ios/LIESMICH.md`), Touch-Steuerung, der Weg zum Online-Code ohne cloudflared. Am Rechner (Windows, macOS, Linux) startet das Spiel unverändert mit Maus und Tastatur: die Touch-Steuerung gilt nur auf iOS oder mit `DUSTFRONT_TOUCH=1`. Nur Doku geändert. Netz/LAN: unverändert gegenüber 0.34.23; Crossplay braucht auf allen Geräten 0.34.24 |
 | 0.34.23 | **iOS: eigenes App-Symbol und Startbild.** Statt des Logos von pygame-ce zeigt die App jetzt ein eigenes Zeichen: den Stern mit seinen drei Umlaufbahnen aus dem Intro, ohne Uhr und Flügel, neu und größer gezeichnet mit den Pinseln des Intros (`ios/logo_bauen.py`, Bilder in `ios/bilder`). Der Startbildschirm zeigt das Zeichen mit dem Schriftzug in der Schrift des Hauptmenüs. `ios/bauen.sh` setzt beides ein, den Startbildschirm über `UILaunchScreen` in der Info.plist. Am Spiel ändert sich nichts. Netz/LAN: unverändert |
 | 0.34.22 | **iPhone: Trefferzeichen, Auto, Zielen, Zoom, Hotbar.** Hinter dem Trefferzeichen stand auf dem iPhone ein schwarzes Viereck - derselbe Fehler wie beim schwarzen Bild in 0.34.21 (Alpha je Pixel und `set_alpha` zusammen). Jetzt geht das überall über `plattform.deckkraft`, auch bei Schneespuren, der ausblendenden oberen Etage, dem Kosmetikbild der Blendgranate und der Bodenschrift der Lobby. **Auto mit dem Stick:** fährt dorthin, wohin der Stick zeigt, statt W/A/S/D nachzuahmen; halb gedrückt halb Gas, genau entgegen erst bremsen, dann rückwärts (`Buggy.stick_steuern`, Werte in `K.FAHRZEUG`). **Zielen:** der rechte Stick zielt von der Figur aus statt über die Kamera - beim Laufen wackelte das Ziel, mit dem Scharfschützengewehr deutlich; mit ZIEL bleibt der Blick weit, auch wenn der Daumen loslässt. **Zoom mit zwei Fingern** auf derselben Seite. **Hotbar antippen** wählt die Waffe sofort. **Netz/LAN: geändert** - in der Eingabe des Gasts das neue Feld `rl` (die Richtung kommt von einem Stick); beide brauchen 0.34.22 |

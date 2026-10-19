@@ -93,6 +93,7 @@ class Buggy(Wesen):
     schatten = False
     schatten_bild = "buggy_schatten"
     faellt = False
+    hoehe_3d = K.FIGUREN_3D["buggy"]
     # C4 bleibt an ihm kleben und faehrt mit (seit 0.34.11, siehe
     # entities.C4Ladung). Er selbst nimmt keinen Schaden davon, wer drin
     # sitzt, schon.

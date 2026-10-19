@@ -42,6 +42,9 @@ class Wesen:
     max_leben = 1.0
     schatten = True
     faellt = False           # True = kann in Loecher stuerzen
+    # Wie hoch das Bild in Perspektive steht (K.FIGUREN_3D, seit 0.34.25).
+    # 0: flach, wie Geschosse, Granaten und C4.
+    hoehe_3d = 0.0
 
     # Eine laufende Nummer je Wesen. Gebraucht wird sie vom Gast: er
     # bekommt sechzigmal in der Sekunde eine Liste fliegender Dinge und
@@ -1161,6 +1164,7 @@ class Aufsammler(Wesen):
     schiebt = False
     trefferbar = False
     radius = 8.0
+    hoehe_3d = K.FIGUREN_3D["beute"]
 
     def __init__(self, pos, art: str, ebene: int = 0) -> None:
         super().__init__(pos, ebene)
@@ -1188,6 +1192,7 @@ class Aufsammler(Wesen):
 
 class Spieler(Wesen):
     fraktion = "mensch"
+    hoehe_3d = K.FIGUREN_3D["spieler"]
     # Kein fester Name: die Figur zeigt die Waffe, die sie gerade traegt.
     # Siehe die Eigenschaft bild() weiter unten.
     faellt = True
@@ -2106,6 +2111,17 @@ class Spieler(Wesen):
 # Gegner
 # ══════════════════════════════════════════════════════════════════
 
+def gegner_hoehe_3d(daten: dict) -> float:
+    """Wie hoch ein Gegner in Perspektive steht: aus seiner Groesse, oder
+    `hoehe_3d` in seinen Daten. Gebraucht beim Gastgeber (Gegner) und beim
+    Gast, der Gegner nur gemeldet bekommt (mehrspieler._fremde_figuren)."""
+    f = K.FIGUREN_3D
+    if daten.get("hoehe_3d") is not None:
+        return float(daten["hoehe_3d"])
+    return max(f["gegner_min"], min(f["gegner_max"],
+                                    float(daten.get("radius", 9)) * f["gegner_je_radius"]))
+
+
 class Gegner(Wesen):
     fraktion = "feind"
     # Gegner fahren nur, wenn der Aufzug auf ihrem Weg liegt
@@ -2125,6 +2141,7 @@ class Gegner(Wesen):
         self.leben = self.max_leben
         self.radius = d["radius"]
         self.bild = d["bild"]
+        self.hoehe_3d = gegner_hoehe_3d(d)
         self.schlag_rest = 0.0
         self.letzte_sicht = None
         self.wartet = RND.uniform(0.0, 0.4)

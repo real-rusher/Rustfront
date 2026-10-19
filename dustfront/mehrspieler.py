@@ -68,7 +68,7 @@ from .spielerkosmetik import KosmetikTeil
 from . import world as welt_modul
 from .core import Szene
 from .entities import (Aufsammler, Brandflaeche, C4Ladung, Gegner, Geschoss, Granate,
-                       Rakete, Rauchwolke, Spieler, wolke)
+                       Rakete, Rauchwolke, Spieler, gegner_hoehe_3d, wolke)
 from .fahrzeug import Buggy
 from .font import SCHRIFT
 from .render import Befinden, Kamera, Renderer, Trefferzeichen, Ueberblendung
@@ -5275,8 +5275,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             if ebene != ebene_i:
                 continue
             s = self.renderer.bilder.bild(bild)
-            ziel.blit(s, (x - ecke.x - s.get_width() / 2,
-                          y - ecke.y - s.get_height() / 2))
+            self.renderer.figur_zeichnen(
+                ziel, s, pygame.Vector2(x - ecke.x, y - ecke.y),
+                K.FIGUREN_3D["beute"], ebene_i)
         for (x, y, winkel, ebene, art, anteil, _kn, vorlauf,
              vx, vy) in self._fremde_gegner:
             if ebene != ebene_i:
@@ -5290,7 +5291,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                             p.y - sch.get_height() / 2 + 3))
             if vorlauf > 0.0:
                 self._ankuendigung_zeichnen(ziel, p, d, vorlauf)
-            ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
+            # Mit Hoehe wie beim Gastgeber (seit 0.34.25).
+            self.renderer.figur_zeichnen(ziel, s, p, gegner_hoehe_3d(d), ebene_i)
         for (x, y, winkel, ebene, name, hoehe, _kn, vx, vy) in self._fremde_schuesse:
             if hoehe > 0 or ebene != ebene_i or name in self._LUFT_BILDER:
                 continue

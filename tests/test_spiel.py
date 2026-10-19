@@ -9000,6 +9000,81 @@ os.environ.pop("DUSTFRONT_TOUCH", None)
 if _alt_touch82 is not None:
     os.environ["DUSTFRONT_TOUCH"] = _alt_touch82
 
+# 0.34.25: "dieses 3D-Rendern, was jetzt gerade bei zum Beispiel Plateaus
+# oder Hindernissen verwendet wird ... beim Spieler, bei den Zielen, beim
+# Auto und so weiter einbaust, sodass es wirklich ueberall drin ist"
+print("\n-- Figuren in 3D wie die Hindernisse (0.34.25)")
+from dustfront.render import Renderer as _R83
+from dustfront.entities import (Spieler as _Sp83, Gegner as _Gg83,
+                                Aufsammler as _Auf83, gegner_hoehe_3d as _gh83)
+from dustfront.fahrzeug import Buggy as _Bg83
+_f83 = K.FIGUREN_3D
+pruef("Spieler, Buggy, Beute und Gegner haben eine Hoehe, Geschosse nicht",
+      _Sp83.hoehe_3d > 0 and _Bg83.hoehe_3d > 0 and _Auf83.hoehe_3d > 0
+      and _gh83({"radius": 9}) > 0 and _Gg83.hoehe_3d == 0.0
+      and EN.Geschoss.hoehe_3d == 0.0,
+      "%s %s %s %s" % (_Sp83.hoehe_3d, _Bg83.hoehe_3d, _Auf83.hoehe_3d,
+                       _gh83({"radius": 9})))
+pruef("Bosse ragen hoeher als kleine Gegner, aber nicht ueber die Grenze",
+      _gh83({"radius": 9}) < _gh83({"radius": 18}) <= _f83["gegner_max"]
+      and _gh83({"radius": 99}) == _f83["gegner_max"]
+      and _gh83({"radius": 1}) == _f83["gegner_min"]
+      and _gh83({"radius": 9, "hoehe_3d": 3}) == 3.0, "")
+_r83 = _R83(app.bilder)
+_z83 = pygame.Surface((200, 200))
+_b83 = pygame.Surface((20, 20), pygame.SRCALPHA)
+pygame.draw.circle(_b83, (200, 60, 60, 255), (10, 10), 8)
+
+
+def _zeichne83(hoehe, p):
+    _z83.fill((0, 0, 0))
+    _r83.figur_zeichnen(_z83, _b83, pygame.Vector2(p), hoehe, 0, _b83)
+    # Der Deckel ist das Bild selbst (genau seine Farbe), die Seite nicht.
+    rot = [(x, y) for x in range(200) for y in range(200)
+           if tuple(_z83.get_at((x, y)))[:3] == (200, 60, 60)]
+    andere = [(x, y) for x in range(200) for y in range(200)
+              if tuple(_z83.get_at((x, y)))[:3] not in ((200, 60, 60), (0, 0, 0))]
+    return rot, andere
+
+
+_rot83, _seite83 = _zeichne83(0, (20, 20))
+pruef("Ohne Hoehe: das Bild genau an seiner Stelle, ohne Seitenwand",
+      not _seite83 and abs(sum(x for x, _ in _rot83) / len(_rot83) - 20) < 1, "")
+_rot83, _seite83 = _zeichne83(_f83["spieler"], (20, 20))
+_mx83 = sum(x for x, _ in _rot83) / len(_rot83)
+_my83 = sum(y for _, y in _rot83) / len(_rot83)
+pruef("Am Rand oben links: der Deckel rueckt von der Mitte weg, nach oben links",
+      _mx83 < 19.5 and _my83 < 19.5, "%.1f %.1f" % (_mx83, _my83))
+pruef("... und darunter steht eine dunklere Seitenwand in der Farbe der Figur",
+      len(_seite83) > 10 and all(_z83.get_at(q)[1] < 60 for q in _seite83[:20]),
+      "%d Pixel" % len(_seite83))
+_rot83, _seite83 = _zeichne83(_f83["spieler"], (100, 100))
+pruef("In der Bildmitte sieht man genau von oben: keine Seite, kein Versatz",
+      not _seite83 and abs(sum(x for x, _ in _rot83) / len(_rot83) - 100) < 1,
+      "%d Seitenpixel" % len(_seite83))
+# Die Figuren auf 76 x 76 haben viel leeren Rand. Zaehlte der mit, waere
+# die Seitenwand fast schwarz (so war es im ersten Versuch).
+_gross83 = pygame.Surface((76, 76), pygame.SRCALPHA)
+pygame.draw.circle(_gross83, (200, 180, 120, 255), (38, 38), 6)
+_sw83, _ = _r83._seite(_gross83, 1.0)
+_farbe83 = _sw83.get_at((_sw83.get_width() // 2, _sw83.get_height() // 2))
+pruef("Die Seitenwand hat die Farbe der Figur, nicht die des leeren Randes",
+      all(abs(a - b) <= 8 for a, b in zip(_farbe83[:3], (200, 180, 120)))
+      and _farbe83[3] == 255, str(_farbe83))
+pruef("... und ist nur so gross wie ihr Umriss (Tempo)",
+      _sw83.get_width() <= 14 and _sw83.get_height() <= 14, str(_sw83.get_size()))
+_sw83b, _ = _r83._seite(_gross83, 1.0)
+pruef("... und wird je Bild nur einmal gebaut", _sw83b is _sw83, "")
+_rot83, _ = _zeichne83(_f83["spieler"], (20, 20))
+pruef("Die Quelle bleibt danach nicht gesperrt (sonst Absturz beim Blitten)",
+      not _b83.get_locked(), "")
+# Beim Gast kommen Gegner nur als Meldung; sie stehen genauso hoch wie
+# beim Gastgeber.
+_art83 = sorted(K.GEGNER)[0]
+_gg83 = _Gg83(pygame.Vector2(0, 0), _art83)
+pruef("Ein Gegner steht beim Gastgeber so hoch wie beim Gast",
+      _gg83.hoehe_3d == _gh83(K.gegner_daten(_art83)) > 0, _art83)
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

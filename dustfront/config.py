@@ -1413,6 +1413,26 @@ HOEHEN = dict(
     partikel=6.0,         # alles uebrige
 )
 
+# Figuren mit Hoehe (seit 0.34.25, render.Renderer.figur_zeichnen): wie die
+# stehenden Kacheln (STEHEN) in Perspektive - das Bild der Figur ist ihr
+# Deckel und rueckt mit der Hoehe von der Bildmitte weg, darunter liegen
+# dunklere Schichten als Seitenwand. Am Bildrand sieht man die Seite, in
+# der Mitte steht man genau darueber. Hoehen in Welt-Pixeln wie bei STEHEN
+# (Kiste 14, Kaktus 20). Nur das Bild: getroffen wird wie bisher.
+FIGUREN_3D = dict(
+    an=True,
+    spieler=15.0,             # Spieler, Mitspieler, Bots
+    buggy=11.0,
+    beute=4.0,                # Medkit und was sonst am Boden liegt
+    gegner_je_radius=1.5,     # Gegner: Hoehe aus ihrer Groesse ...
+    gegner_min=10.0,
+    gegner_max=30.0,          # ... die Bosse ragen am weitesten
+    seite_unten=0.45,         # Helligkeit der Seitenwand am Boden (x mittlere Farbe)
+    seite_oben=0.85,          # ... und unter dem Deckel
+    seite_stufen=4,           # so viele Helligkeiten dazwischen
+    schichten_max=10,         # Seitenwand aus hoechstens so vielen Schichten (Tempo)
+)
+
 KLIPPEN = dict(
     schichten=4,          # so viele Gesteinsbaender von oben nach unten
     abdunkeln=0.42,       # um so viel ist das unterste dunkler als das oberste

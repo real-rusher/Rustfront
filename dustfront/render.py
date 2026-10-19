@@ -832,13 +832,108 @@ class Renderer:
             # ansehen muss.
             if getattr(w, "f_vorlauf", 0.0) > 0.0:
                 self.ankuendigung(ziel, p, w)
-            s = self.bilder.gedreht(w.bild, w.winkel)
+            roh = self.bilder.gedreht(w.bild, w.winkel)
+            s = roh
             if dunkel is not None:
                 s = self.dunkel(s, dunkel)
             elif w.blitz > 0:
                 s = s.copy()
                 s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
-            ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
+            self.figur_zeichnen(ziel, s, p, getattr(w, "hoehe_3d", 0.0), index,
+                                roh, dunkel)
+
+    def figur_zeichnen(self, ziel, s, p, hoehe: float, index: int,
+                       roh=None, dunkel=None) -> None:
+        """Ein Bild mit Hoehe zeichnen, in derselben Perspektive wie die
+        stehenden Kacheln (seit 0.34.25, K.FIGUREN_3D).
+
+        Ein Punkt in der Hoehe h liegt vom Auge aus um auge / (auge - h)
+        weiter von der Bildmitte weg als sein Fusspunkt (siehe
+        `_stehende_zeichnen`). Das Bild ist der Deckel und kommt dorthin;
+        von der Stelle am Boden bis darunter liegen Schichten seines
+        Umrisses, unten dunkel, oben heller - die Seitenwand. In der Mitte
+        des Bildes liegt alles uebereinander, und man sieht die Figur von
+        oben, wie jede Kiste dort auch.
+
+        `roh`: das Bild ohne Abdunkeln und Aufblitzen - daraus kommt die
+        Seitenwand. Sie soll nicht mitblitzen, und so wird sie je Bild
+        nur einmal gebaut statt in jedem Bild neu.
+        """
+        f3 = K.FIGUREN_3D
+        w2, h2 = s.get_width() / 2, s.get_height() / 2
+        if hoehe <= 0 or not f3["an"]:
+            ziel.blit(s, (p.x - w2, p.y - h2))
+            return
+        auge = self._augen.get(index)
+        auge_h = auge[2] if auge is not None else K.PERSPEKTIVE["brennweite"]
+        zw, zh = ziel.get_size()
+        mitte = pygame.Vector2(zw / 2.0, zh / 2.0)
+        k = auge_h / max(1.0, auge_h - hoehe)
+        oben = mitte + (pygame.Vector2(p) - mitte) * k
+        weg = oben - p
+        # Eine Schicht je Pixel Versatz, aber hoechstens `schichten_max`:
+        # eine Horde am Bildrand kostete sonst auf dem iPhone spuerbar
+        # Zeit. Die Luecken von da an liegen innerhalb des Umrisses, den
+        # die Nachbarschichten ohnehin decken.
+        schritte = min(int(max(abs(weg.x), abs(weg.y))), f3["schichten_max"])
+        if schritte >= 1:
+            quelle = roh if roh is not None else s
+            stufen = f3["seite_stufen"]
+            for i in range(schritte):
+                t = i / schritte
+                # Unten dunkel, unter dem Deckel heller - wie die Mauern.
+                stufe = min(stufen - 1, int(t * stufen))
+                hell = f3["seite_unten"] + (f3["seite_oben"] - f3["seite_unten"]) \
+                    * stufe / max(1, stufen - 1)
+                seite, rand = self._seite(quelle, round(hell, 3), dunkel)
+                ziel.blit(seite, (p.x + weg.x * t - w2 + rand[0],
+                                  p.y + weg.y * t - h2 + rand[1]))
+        ziel.blit(s, (oben.x - w2, oben.y - h2))
+
+    def _seite(self, s, hell: float, dunkel=None):
+        """Eine Schicht der Seitenwand: der Umriss des Bildes, gefuellt mit
+        seiner mittleren Farbe - wie die Seiten der Mauern (`_seitenfarbe`).
+        Das abgedunkelte Bild selbst sah als Wand verschmiert aus: jedes
+        Muster darin wurde zu Streifen.
+
+        Gemerkt je Bild - zusammen mit dem Bild selbst, damit eine neue
+        Flaeche, die zufaellig dieselbe id bekommt, nicht die alte Seite
+        erbt. Gibt die Schicht und ihre Lage im Bild zurueck."""
+        cache = self.__dict__.setdefault("_seiten_3d", {})
+        schluessel = (id(s), hell, dunkel)
+        hit = cache.get(schluessel)
+        if hit is not None and hit[0] is s:
+            return hit[1]
+        # GRUND fuer die Kopie: average_color laesst die Flaeche gesperrt
+        # zurueck, und das Bild selbst wird gleich danach geblittet.
+        q = s.copy()
+        maske = pygame.mask.from_surface(q, 60)
+        # Nur das Rechteck um den Umriss: die Bilder der Figuren haben viel
+        # leeren Rand (Platz zum Drehen), und jede Schicht wird geblittet.
+        rand = maske.get_bounding_rects()
+        rand = rand[0].unionall(rand[1:]) if rand else pygame.Rect(0, 0, 1, 1)
+        # Mittel nur ueber den Umriss: average_color zaehlt die
+        # durchsichtigen Pixel mit (auch mit consider_alpha), und eine
+        # Figur auf 76 x 76 mit viel Rand wurde so fast schwarz. Gemessen
+        # im Rechteck um den Umriss, weil average_color ganze Zahlen
+        # liefert - ueber das ganze Bild verschluckte das den Farbton.
+        voll = maske.count()
+        if voll == 0:
+            grund = (0, 0, 0)
+        else:
+            nur = maske.to_surface(setsurface=q, unsetcolor=(0, 0, 0, 255))
+            summe = pygame.transform.average_color(nur, rand)[:3]
+            anteil = voll / float(rand.width * rand.height)
+            grund = tuple(min(255, c / anteil) for c in summe)
+        f = hell * (1.0 if dunkel is None else dunkel / 255.0)
+        farbe = tuple(max(0, min(255, int(c * f))) for c in grund) + (255,)
+        seite = maske.to_surface(setcolor=farbe, unsetcolor=(0, 0, 0, 0))
+        seite = seite.subsurface(rand).copy()
+        ergebnis = (seite, rand.topleft)
+        if len(cache) > 900:
+            cache.clear()
+        cache[schluessel] = (s, ergebnis)
+        return ergebnis
 
     def balken_zeichnen(self, ziel, welt, index, ecke, alpha) -> None:
         """Lebensbalken der Gegner - Anzeige, also ueber den Mauern."""
