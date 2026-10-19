@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.34.19"
+VERSION = "0.34.20"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -69,6 +69,24 @@ except NameError:                  # interaktiv gestartet
     BASE_DIR = Path.cwd()
 SETTINGS_PATH = BASE_DIR / "rustfront_settings.json"
 SAVE_PATH = BASE_DIR / "rustfront_save.json"
+
+# Auf iOS (seit 0.34.20) liegt dieser Ordner im App-Paket und ist
+# schreibgeschuetzt. Dann kommen beide Dateien in den Datenordner des
+# Spiels (dustfront/pfade.py). Fehlt das Paket, bleibt das Menue allein
+# lauffaehig - wie immer. Geladen wird das Paket hier nur auf iOS oder mit
+# DUSTFRONT_TOUCH: sonst kaeme es schon beim Start des Menues mit allem
+# Drum und Dran, statt erst beim ersten Spiel.
+_plattform = None
+if sys.platform == "ios" or os.environ.get("DUSTFRONT_TOUCH", "") not in ("", "0"):
+    try:
+        from dustfront import plattform as _plattform
+    except ImportError:
+        _plattform = None
+if _plattform is not None and _plattform.IOS:
+    from dustfront import pfade as _pfade
+    if _pfade.ordner() is not None:
+        SETTINGS_PATH = _pfade.ordner() / "rustfront_settings.json"
+        SAVE_PATH = _pfade.ordner() / "rustfront_save.json"
 
 # --------------------------------------------------------------------------
 # Palette (uebernommen aus den Mockups V2)
@@ -1613,7 +1631,9 @@ class App:
             self.compute_viewport()
             return
 
-        if self.settings.fullscreen:
+        if _plattform is not None and _plattform.nur_vollbild():
+            versuche = [((0, 0), pygame.FULLSCREEN)]
+        elif self.settings.fullscreen:
             desk = self.desktop_size()
             # Kein pygame.SCALED: das mischt sich schlecht mit dem eigenen
             # Hochskalieren und mit spaeteren Fenstermodi.
@@ -1923,11 +1943,19 @@ class App:
             fps = BILDRATEN[self.settings.fps_index % len(BILDRATEN)]
             dt = clock.tick(fps if fps else 0) / 1000.0
             dt = min(dt, 0.05)
-            for event in pygame.event.get():
+            ereignisse = pygame.event.get()
+            if _plattform is not None:
+                # Bildschirmtastatur auf iOS: Zeichen kommen als TEXTINPUT.
+                ereignisse = _plattform.text_umsetzen(ereignisse)
+            for event in ereignisse:
                 self.handle(event)
             self.update(dt)
             self.draw()
             self.present()
+            if _plattform is not None:
+                if self.text_target is not None:
+                    _plattform.tastatur_wuenschen()
+                _plattform.tastatur_abgleichen()
         return self.result
 
 

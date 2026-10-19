@@ -8469,6 +8469,428 @@ pruef("Die Sandkiste der Wueste ist rund: an ihrer Ecke kommt man vorbei",
       _wueste81.frei(_schraeg81, 10.0, 0) and not _tk81.frei(_schraeg81 + pygame.Vector2(-1, -1), 10.0, 0),
       str(_wueste81.huelle(K.KISTE)))
 
+# ─────────────────────────────────────────────────────────────────────
+# 0.34.20: "Ich moechte das Ganze auch auf iOS und iPadOS rueberbekommen
+# ... einen tatsaechlich echten Port, dass der Code dort ausgefuehrt wird.
+# Und dass es halt auch Crossplay-kompatibel ist."
+# Hier laeuft kein iPhone. Geprueft wird, was dort anders ist: Finger
+# statt Maus (DUSTFRONT_TOUCH), Zeichen als TEXTINPUT, der Datenordner,
+# und der Weg zum Online-Code ohne cloudflared - gegen eine Attrappe von
+# Cloudflare, die tut, was der Tunnel tut: WebSocket rein, TCP raus.
+print("\n-- iOS: Plattform, Touch, Tastatur, Weg ohne cloudflared (0.34.20)")
+import base64 as _b64_82, hashlib as _hl82, socket as _so82, struct as _st82, threading as _th82
+from dustfront import plattform as _pf82, pfade as _pfade82, touch as _touch82
+from dustfront import wszugang as _ws82, ui as _ui82
+from dustfront import online as _on82
+
+pruef("Auf diesem Rechner ist kein iOS", not _pf82.IOS and _pf82.prozesse_erlaubt())
+_alt_touch82 = os.environ.pop("DUSTFRONT_TOUCH", None)
+pruef("Ohne DUSTFRONT_TOUCH bleibt es bei Maus und Tastatur",
+      not _pf82.touch_an() and App("OHNE", None, headless=True).touch is None)
+os.environ["DUSTFRONT_TOUCH"] = "1"
+pruef("Mit DUSTFRONT_TOUCH=1 gilt die Touch-Steuerung", _pf82.touch_an())
+
+_alt_plattform82 = sys.platform
+try:
+    sys.platform = "ios"
+    _ios_ordner82 = _pfade82._system_ordner()
+finally:
+    sys.platform = _alt_plattform82
+pruef("Auf iOS liegen Einstellungen im Behaelter der App, nicht im App-Paket",
+      _ios_ordner82.parts[-3:] == ("Library", "Application Support", "Dustfront"),
+      str(_ios_ordner82))
+
+# Bildschirmtastatur: Zeichen kommen als TEXTINPUT, und ein Feld liest
+# KEYDOWN.unicode. Solange die Tastatur offen ist, wird umgesetzt.
+_pf82._offen = True
+_um82 = _pf82.text_umsetzen([
+    pygame.event.Event(pygame.KEYDOWN, key=pygame.K_a, mod=0, scancode=4, unicode="a"),
+    pygame.event.Event(pygame.TEXTINPUT, text="a"),
+    pygame.event.Event(pygame.TEXTINPUT, text="bc-d"),
+    pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE, mod=0, scancode=42,
+                       unicode="\b")])
+pruef("Ein Wort aus der Zwischenablage wird Zeichen fuer Zeichen getippt, nichts doppelt",
+      [e.unicode for e in _um82 if e.type == pygame.KEYDOWN and e.key == 0]
+      == ["a", "b", "c", "-", "d"]
+      and sum(1 for e in _um82 if e.type == pygame.KEYDOWN) == 6
+      and _um82[-1].key == pygame.K_BACKSPACE, str([(e.type, getattr(e, "unicode", "")) for e in _um82]))
+_tf82 = _ui82.Textfeld((10, 10, 200, 18), "CODE", "adresse")
+for _e82 in _um82:
+    if _e82.type == pygame.KEYDOWN:
+        _tf82.tippen(_e82)
+pruef("... und kommt so im Textfeld an (die Ruecktaste nimmt eines weg)",
+      _tf82.wert == "abc-", _tf82.wert)
+_pf82._offen = False
+pruef("Ist die Tastatur zu, bleibt alles, wie es ist",
+      len(_pf82.text_umsetzen([pygame.event.Event(pygame.TEXTINPUT, text="x")])) == 1)
+_tf82.aktiv = True
+_tf82.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)))
+pruef("Ein Textfeld, das dran ist, verlangt die Tastatur", _pf82._gewuenscht)
+_pf82.tastatur_abgleichen()
+pruef("... und sie geht auf", _pf82.tastatur_offen())
+_pf82.tastatur_abgleichen()
+pruef("... und wieder zu, sobald kein Feld mehr dran ist", not _pf82.tastatur_offen())
+
+# Die Steuerung in einem Gefecht. Die Finger kommen, wie SDL sie meldet:
+# als Anteil des Fensters.
+_tapp82 = App("IPHONE", None, headless=True)
+pruef("Die App bringt die Touch-Steuerung mit",
+      isinstance(_tapp82.touch, _touch82.Touchsteuerung))
+_neuer_port()
+_tw82 = Gefecht(_tapp82, "IPHONE", gastgeber=netz.Gastgeber(_port[0]), modus="pvp",
+                seed=82)
+_tapp82.schieben(_tw82)
+
+
+def _finger82(art, fid, gx, gy, a_=None):
+    a_ = a_ or _tapp82
+    fw_, fh_ = a_.fenster.get_size()
+    p_ = a_.zu_fenster((gx, gy, 1, 1))
+    pygame.event.post(pygame.event.Event(art, finger_id=fid, touch_id=1, x=p_.x / fw_,
+                                         y=p_.y / fh_, dx=0.0, dy=0.0, pressure=1.0))
+    a_.ereignisse()
+
+
+pygame.event.clear()
+_tapp82.ereignisse()
+pruef("Im Gefecht gehoeren die Finger der Steuerung", _tapp82.touch.spielt())
+_start82 = pygame.Vector2(_tw82.ich.pos)
+_finger82(pygame.FINGERDOWN, 1, 100, 250)
+_finger82(pygame.FINGERMOTION, 1, 100 + K.TOUCH["stick_radius"], 250)
+pruef("Der linke Stick, ganz nach rechts gezogen: volle Kraft nach rechts",
+      _tapp82.eingabe.richtung().distance_to(pygame.Vector2(1, 0)) < 0.01,
+      str(_tapp82.eingabe.richtung()))
+for _ in range(60):
+    _tapp82.ereignisse()
+    _tw82.schritt(K.FIXED_DT)
+pruef("... und die Figur laeuft nach rechts", _tw82.ich.pos.x - _start82.x > 20
+      and abs(_tw82.ich.pos.y - _start82.y) < 2, str(_tw82.ich.pos - _start82))
+_finger82(pygame.FINGERMOTION, 1, 100 + K.TOUCH["stick_radius"] * 0.4, 250)
+_halb82 = _tapp82.eingabe.richtung().length()
+pruef("Halb gezogen geht man langsamer", 0.2 < _halb82 < 0.8, "%.2f" % _halb82)
+_finger82(pygame.FINGERUP, 1, 100, 250)
+pruef("Losgelassen steht man", _tapp82.eingabe.richtung().length() < 0.01)
+
+_finger82(pygame.FINGERDOWN, 2, 450, 150)
+_finger82(pygame.FINGERMOTION, 2, 450, 150 - K.TOUCH["stick_radius"] * 0.3)
+_mitte82 = _tw82.touch_mitte()
+pruef("Der rechte Stick leicht gezogen zielt nur",
+      not _tapp82.eingabe.gehalten("feuer")
+      and _tapp82.eingabe.maus.y < _mitte82.y - 20
+      and abs(_tapp82.eingabe.maus.x - _mitte82.x) < 1, str(_tapp82.eingabe.maus))
+_finger82(pygame.FINGERMOTION, 2, 450, 150 - K.TOUCH["stick_radius"])
+pruef("... weiter gezogen schiesst er auch, und zielt weiter weg",
+      _tapp82.eingabe.gehalten("feuer") and _tapp82.eingabe.gedrueckt("feuer")
+      and _mitte82.y - _tapp82.eingabe.maus.y > K.TOUCH["ziel_weit"] - 1,
+      str(_tapp82.eingabe.maus))
+_tw82.schritt(K.FIXED_DT)
+pruef("Die Figur schaut, wohin der Stick zeigt (nach oben)",
+      abs(((_tw82.ich.winkel + 90) + 180) % 360 - 180) < 3, "%.1f" % _tw82.ich.winkel)
+_finger82(pygame.FINGERUP, 2, 450, 120)
+pruef("Losgelassen schiesst er nicht mehr", not _tapp82.eingabe.gehalten("feuer")
+      and _tapp82.eingabe.losgelassen("feuer"))
+
+# Die Maus, die SDL aus einem Finger macht, darf im Spiel nicht schiessen.
+pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(900, 300), button=1,
+                                     touch=True, window=None))
+_tapp82.ereignisse()
+pruef("Ein Finger ist im Spiel keine Maus (sonst schoesse jeder Tipp)",
+      not _tapp82.eingabe.gehalten("feuer"))
+pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(900, 300), button=1,
+                                     touch=False, window=None))
+_tapp82.ereignisse()
+pruef("... eine echte Maus schon (iPad mit Maus)", _tapp82.eingabe.gehalten("feuer"))
+pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONUP, pos=(900, 300), button=1,
+                                     touch=False, window=None))
+_tapp82.ereignisse()
+
+
+def _knopf82(aktion):
+    return next(k_[2] for k_ in K.TOUCH["knoepfe"] if k_[0] == aktion)
+
+
+_d82 = _knopf82("dash")
+_finger82(pygame.FINGERDOWN, 3, *_d82)
+pruef("DASH gedrueckt ist die gehaltene Dash-Taste (im Buggy die Handbremse)",
+      _tapp82.eingabe.gehalten("dash") and "dash" in _tw82._knoepfe, str(_tw82._knoepfe))
+_finger82(pygame.FINGERUP, 3, *_d82)
+pruef("... und losgelassen wieder los", not _tapp82.eingabe.gehalten("dash"))
+_tw82.ich.waffe = 0
+_finger82(pygame.FINGERDOWN, 4, *_knopf82("waffe"))
+pruef("WFF waehlt die naechste Waffe der Hotbar", _tw82._waffe_wunsch == 1,
+      str(_tw82._waffe_wunsch))
+_finger82(pygame.FINGERUP, 4, *_knopf82("waffe"))
+_tw82.ich.waffe = len(_tw82.ich.waffen) - 1
+_finger82(pygame.FINGERDOWN, 4, *_knopf82("waffe"))
+pruef("... nach der letzten wieder die erste", _tw82._waffe_wunsch == 0,
+      str(_tw82._waffe_wunsch))
+_finger82(pygame.FINGERUP, 4, *_knopf82("waffe"))
+_finger82(pygame.FINGERDOWN, 5, *_knopf82("zweit"))
+_finger82(pygame.FINGERUP, 5, *_knopf82("zweit"))
+pruef("ZIEL bleibt an, bis man es wieder drueckt", _tapp82.eingabe.gehalten("zweit"))
+_finger82(pygame.FINGERDOWN, 5, *_knopf82("zweit"))
+_finger82(pygame.FINGERUP, 5, *_knopf82("zweit"))
+pruef("... und geht dann aus", not _tapp82.eingabe.gehalten("zweit"))
+
+# Pause: alles loslassen, die Finger werden wieder zur Maus.
+_finger82(pygame.FINGERDOWN, 6, 100, 250)
+_finger82(pygame.FINGERMOTION, 6, 140, 250)
+_finger82(pygame.FINGERDOWN, 7, *_knopf82("pause"))
+_finger82(pygame.FINGERUP, 7, *_knopf82("pause"))
+pruef("II oeffnet das Pausenmenue", _tw82.menue is not None)
+pruef("... und was der Daumen hielt, ist losgelassen (die Figur laeuft nicht weiter)",
+      _tapp82.eingabe.richtung().length() < 0.01 and not _tapp82.touch.spielt())
+_finger82(pygame.FINGERUP, 6, 140, 250)
+_esc_fenster82 = _tapp82.zu_fenster((*K.TOUCH["esc_mitte"], 1, 1)).topleft
+pruef("Im Menue ist ein Finger wieder die Maus - nur nicht auf dem ESC-Knopf",
+      not _tapp82.touch.schluckt(pygame.event.Event(
+          pygame.MOUSEBUTTONDOWN, pos=(640, 360), button=1, touch=True))
+      and _tapp82.touch.schluckt(pygame.event.Event(
+          pygame.MOUSEBUTTONDOWN, pos=_esc_fenster82, button=1, touch=True)))
+_finger82(pygame.FINGERDOWN, 8, *K.TOUCH["esc_mitte"])
+_finger82(pygame.FINGERUP, 8, *K.TOUCH["esc_mitte"])
+pruef("Der ESC-Knopf schliesst das Menue wieder", _tw82.menue is None
+      and _tapp82.touch.spielt())
+_flaeche82 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tapp82.touch.zeichnen(_flaeche82)
+pruef("Sticks und Knoepfe werden gezeichnet",
+      _flaeche82.get_at(_knopf82("dash")) != (0, 0, 0, 255))
+_tapp82.werfen()
+
+
+# Der Weg ohne cloudflared. Die Attrappe von Cloudflare nimmt einen
+# WebSocket an - nur fuer den richtigen Code, sonst 404 wie Cloudflare -
+# und reicht die Bytes an eine TCP-Adresse weiter, wie der Tunnel des
+# Gastgebers an dessen Lobby.
+class _CfAttrappe82:
+    def __init__(self, code, ziel_port):
+        self.code = code
+        self.ziel_port = ziel_port
+        self.koepfe = []
+        self.rahmenarten = set()
+        self.sock = _so82.socket()
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen(8)
+        self.sock.settimeout(0.2)
+        self.port = self.sock.getsockname()[1]
+        self.zu = False
+        _th82.Thread(target=self._annehmen, daemon=True).start()
+
+    def _annehmen(self):
+        while not self.zu:
+            try:
+                c, _ = self.sock.accept()
+            except OSError:
+                continue
+            c.settimeout(None)
+            _th82.Thread(target=self._einer, args=(c,), daemon=True).start()
+
+    def _einer(self, c):
+        puffer = b""
+        while b"\r\n\r\n" not in puffer:
+            stueck = c.recv(4096)
+            if not stueck:
+                return
+            puffer += stueck
+        kopf, rest = puffer.split(b"\r\n\r\n", 1)
+        self.koepfe.append(kopf.decode("latin-1"))
+        felder = {}
+        for z in kopf.split(b"\r\n")[1:]:
+            k, _, v = z.partition(b":")
+            felder[k.strip().lower()] = v.strip()
+        if not felder.get(b"host", b"").startswith(self.code.encode() + b"."):
+            c.sendall(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
+            c.close()
+            return
+        antwort = _b64_82.b64encode(_hl82.sha1(
+            felder[b"sec-websocket-key"] + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())
+        c.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+                  b"Connection: Upgrade\r\nSec-WebSocket-Accept: " + antwort + b"\r\n\r\n")
+        t = _so82.create_connection(("127.0.0.1", self.ziel_port))
+        stand = {"p": rest}
+
+        def lesen(n):
+            while len(stand["p"]) < n:
+                d = c.recv(65536)
+                if not d:
+                    raise EOFError
+                stand["p"] += d
+            r, stand["p"] = stand["p"][:n], stand["p"][n:]
+            return r
+
+        def hoch():
+            try:
+                while True:
+                    b1, b2 = lesen(2)
+                    n = b2 & 0x7F
+                    if n == 126:
+                        n = _st82.unpack(">H", lesen(2))[0]
+                    elif n == 127:
+                        n = _st82.unpack(">Q", lesen(8))[0]
+                    maske = lesen(4) if b2 & 0x80 else None
+                    daten = lesen(n)
+                    if maske:
+                        daten = bytes(b ^ maske[i % 4] for i, b in enumerate(daten))
+                    self.rahmenarten.add((b1 & 0x0F, bool(maske)))
+                    if b1 & 0x0F == 8:
+                        break
+                    if b1 & 0x0F == 2:
+                        t.sendall(daten)
+            except (EOFError, OSError):
+                pass
+            t.close()
+
+        def runter():
+            try:
+                c.sendall(bytes([0x89, 0]))        # ein Ping, wie Cloudflare ab und zu
+                while True:
+                    d = t.recv(65536)
+                    if not d:
+                        break
+                    n = len(d)
+                    k = bytes([0x82, n]) if n < 126 else (
+                        bytes([0x82, 126]) + _st82.pack(">H", n) if n < 65536
+                        else bytes([0x82, 127]) + _st82.pack(">Q", n))
+                    c.sendall(k + d)
+            except OSError:
+                pass
+            c.close()
+
+        _th82.Thread(target=hoch, daemon=True).start()
+        _th82.Thread(target=runter, daemon=True).start()
+
+    def schliessen(self):
+        self.zu = True
+        self.sock.close()
+
+
+_echo82 = _so82.socket()
+_echo82.bind(("127.0.0.1", 0))
+_echo82.listen(4)
+
+
+def _echo_dienst82():
+    while True:
+        try:
+            c_, _ = _echo82.accept()
+        except OSError:
+            return
+        def einer(c_=c_):
+            while True:
+                d_ = c_.recv(65536)
+                if not d_:
+                    break
+                c_.sendall(d_.upper())
+        _th82.Thread(target=einer, daemon=True).start()
+
+
+_th82.Thread(target=_echo_dienst82, daemon=True).start()
+_cf82 = _CfAttrappe82("echo-test-lobby-code", _echo82.getsockname()[1])
+_falsch82 = _ws82.WsZugang("wrong-test-lobby-code", ziel=("127.0.0.1", _cf82.port), tls=False)
+_ws82.warten(_falsch82, 5)
+pruef("Ein falscher Code: Cloudflare antwortet 404, und das steht da, bevor das Spiel anklopft",
+      not _falsch82.bereit and "CODE FALSCH" in _falsch82.fehler, _falsch82.fehler)
+_falsch82.schliessen()
+_zug82 = _ws82.WsZugang("echo-test-lobby-code", ziel=("127.0.0.1", _cf82.port), tls=False)
+pruef("Mit dem richtigen Code steht der Weg", _ws82.warten(_zug82, 5), _zug82.fehler)
+_k82 = _cf82.koepfe[-1].split("\r\n")
+pruef("Der Handschlag ist der von cloudflared (GET /, dieselben Kopfzeilen)",
+      _k82[0] == "GET / HTTP/1.1"
+      and {z.split(":")[0] for z in _k82[1:]} == {"Host", "User-Agent", "Connection",
+                                                  "Sec-WebSocket-Key",
+                                                  "Sec-WebSocket-Version", "Upgrade"}
+      and "User-Agent: cloudflared/%s" % K.ONLINE["version"] in _k82, str(_k82))
+_c82 = _so82.create_connection(("127.0.0.1", _zug82.port), timeout=5)
+_c82.sendall(b"hallo")
+_an82 = b""
+while len(_an82) < 5:
+    _an82 += _c82.recv(100)
+pruef("Bytes gehen hin und her, unveraendert", _an82 == b"HALLO", repr(_an82))
+_gross82 = bytes(random.Random(82).randrange(97, 123) for _ in range(70000))
+_c82.sendall(_gross82)
+_an82 = b""
+while len(_an82) < len(_gross82):
+    _an82 += _c82.recv(65536)
+pruef("... auch 70 KB am Stueck, in mehreren Rahmen", _an82 == _gross82.upper())
+pruef("... und das iPhone schickt nur maskierte Daten-Rahmen und beantwortet Pings",
+      (2, True) in _cf82.rahmenarten and (0xA, True) in _cf82.rahmenarten
+      and all(m for _a, m in _cf82.rahmenarten), str(_cf82.rahmenarten))
+_c82.close()
+_zug82.schliessen()
+_cf82.schliessen()
+
+os.environ["DUSTFRONT_WS_ZUGANG"] = "1"
+_wahl82 = _on82.Zugang("some-other-test-code")
+os.environ.pop("DUSTFRONT_WS_ZUGANG", None)
+pruef("Wo kein Programm starten darf (oder es erzwungen wird), nimmt der Gast diesen Weg",
+      isinstance(_wahl82, _ws82.WsZugang))
+_wahl82.schliessen()
+_on82.geraet.prozesse_erlaubt, _alt_pe82 = (lambda: False), _on82.geraet.prozesse_erlaubt
+_tun82 = _on82.Tunnel(1)
+_on82.geraet.prozesse_erlaubt = _alt_pe82
+pruef("Auf iOS gibt es keinen Tunnel, und die Lobby sagt warum",
+      _tun82.zustand == "fehler" and "IOS" in _tun82.beschreibung(), _tun82.beschreibung())
+
+# Crossplay: ein Gastgeber am Rechner, ein Gast mit Fingern, der ueber den
+# Code und den Weg ohne cloudflared kommt.
+_neuer_port()
+_hp82 = _port[0]
+_wirt82 = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_hp82), modus="pvp", seed=83)
+_cfx82 = _CfAttrappe82("crossplay-test-lobby-code", _hp82)
+_zx82 = _ws82.WsZugang("crossplay-test-lobby-code", ziel=("127.0.0.1", _cfx82.port),
+                       tls=False)
+pruef("Der Gast findet ueber den Code zum Gastgeber", _ws82.warten(_zx82, 5), _zx82.fehler)
+_iapp82 = App("IPHONE2", None, headless=True)
+_gast82 = Gefecht(_iapp82, "IPHONE", gast=netz.Gast(_zx82.adresse, zugang=_zx82))
+_iapp82.schieben(_gast82)
+
+
+def _beide82(sekunden):
+    for _ in range(max(1, int(round(sekunden / K.NETZ["takt"])))):
+        _iapp82.ereignisse()
+        _wirt82.schritt(K.NETZ["takt"])
+        _gast82.schritt(K.NETZ["takt"])
+        time.sleep(0.002)
+
+
+_beide82(1.0)
+_ende82 = time.time() + 8
+while _gast82.ich is None and time.time() < _ende82:
+    _beide82(0.2)
+pruef("Er ist drin: der Gastgeber kennt ihn, er sieht sich selbst",
+      _gast82.ich is not None and len(_wirt82.kaempfer) == 2,
+      "%d Kaempfer" % len(_wirt82.kaempfer))
+_drin82 = _gast82.ich is not None and len(_wirt82.kaempfer) == 2
+if _drin82:
+    _beim_wirt82 = _wirt82.kaempfer[_gast82.meine_nummer]
+    _beim_wirt82.unverwundbar = 1e9
+    _vorher82 = pygame.Vector2(_beim_wirt82.pos)
+    _finger82(pygame.FINGERDOWN, 11, 100, 250, _iapp82)
+    _finger82(pygame.FINGERMOTION, 11, 100, 250 + K.TOUCH["stick_radius"], _iapp82)
+    _beide82(0.8)
+    pruef("Der Daumen auf dem iPhone bewegt die Figur beim Gastgeber (nach unten)",
+          _beim_wirt82.pos.y - _vorher82.y > 15 and abs(_beim_wirt82.pos.x - _vorher82.x) < 3,
+          str(_beim_wirt82.pos - _vorher82))
+    _finger82(pygame.FINGERUP, 11, 100, 250, _iapp82)
+    _schuesse82 = _beim_wirt82.zaehler.get("schuesse", 0)
+    _beim_wirt82.magazin[_beim_wirt82.waffe_name] = 30
+    _finger82(pygame.FINGERDOWN, 12, 450, 180, _iapp82)
+    _finger82(pygame.FINGERMOTION, 12, 450 + K.TOUCH["stick_radius"], 180, _iapp82)
+    _beide82(0.8)
+    pruef("... und der rechte Stick schiesst dort, nach rechts",
+          _beim_wirt82.zaehler.get("schuesse", 0) > _schuesse82
+          and abs(((_beim_wirt82.winkel + 180) % 360) - 180) < 10,
+          "%s Schuesse, Winkel %.0f" % (_beim_wirt82.zaehler.get("schuesse", 0),
+                                         _beim_wirt82.winkel))
+    _finger82(pygame.FINGERUP, 12, 450, 180, _iapp82)
+_iapp82.werfen()
+_wirt82.verlassen()
+_cfx82.schliessen()
+_zx82.schliessen()
+os.environ.pop("DUSTFRONT_TOUCH", None)
+if _alt_touch82 is not None:
+    os.environ["DUSTFRONT_TOUCH"] = _alt_touch82
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

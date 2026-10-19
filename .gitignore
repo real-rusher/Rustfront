@@ -12,3 +12,6 @@ kosmetik_vorschau/
 # Erzeugt von "python -m dustfront --vorlagen", jederzeit neu herstellbar
 assets_vorlage/
 daten/
+
+# Das Xcode-Projekt fuer iOS, erzeugt von ios/bauen.sh (gross, jederzeit neu)
+/ios/build/

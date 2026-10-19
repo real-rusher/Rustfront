@@ -11,6 +11,7 @@ Stattdessen benutzt jedes System seinen eigenen Platz dafuer:
     Windows   %APPDATA%\\Dustfront
               C:\\Users\\<name>\\AppData\\Roaming\\Dustfront
     macOS     ~/Library/Application Support/Dustfront
+    iOS       <App-Behaelter>/Library/Application Support/Dustfront
     Linux     $XDG_CONFIG_HOME/dustfront, sonst ~/.config/dustfront
 
 **Tragbarer Betrieb.** Liegt eine Datei `portable.txt` neben dem Paket, wird
@@ -50,7 +51,10 @@ def _system_ordner() -> Path:
         if wurzel:
             return Path(wurzel) / NAME
         return Path.home() / "AppData" / "Roaming" / NAME
-    if sys.platform == "darwin":
+    # iOS (seit 0.34.20): das Zuhause ist der Behaelter der App, und der
+    # Spielordner liegt im App-Paket - das ist schreibgeschuetzt. Python
+    # meldet dort ab 3.13 "ios", nicht "darwin".
+    if sys.platform in ("darwin", "ios"):
         return Path.home() / "Library" / "Application Support" / NAME
     wurzel = os.environ.get("XDG_CONFIG_HOME")
     if wurzel:

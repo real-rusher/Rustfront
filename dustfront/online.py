@@ -70,6 +70,9 @@ import zipfile
 from pathlib import Path
 
 from . import config as K
+# "geraet" und nicht "plattform": so heisst hier schon die Funktion, die das
+# passende cloudflared-Archiv waehlt.
+from . import plattform as geraet
 from . import pfade
 
 O = K.ONLINE
@@ -403,6 +406,11 @@ class Tunnel:
 
     def _starten(self) -> None:
         self.code, self.bereit, self.fehler = "", False, ""
+        if not geraet.prozesse_erlaubt():
+            # iOS (seit 0.34.20): kein zweites Programm, also kein Tunnel.
+            # Beitreten geht (wszugang.py), aufmachen nur im LAN.
+            self.fehler = "AUF IOS NUR BEITRETEN - LAN GEHT"
+            return
         pfad, fehler = programm()
         if not pfad:
             self.fehler = fehler
@@ -482,7 +490,22 @@ class Tunnel:
 # Gast: der Zugang
 # ══════════════════════════════════════════════════════════════════
 
-class Zugang:
+def Zugang(code: str):
+    """Der Weg eines Gastes zu einem Code - mit cloudflared, oder ohne.
+
+    Ohne (wszugang.py, seit 0.34.20): auf iOS, wo kein zweites Programm
+    starten darf, und ueberall, wo cloudflared fehlt (etwa unter Linux,
+    wo keines beiliegt). Mit DUSTFRONT_WS_ZUGANG=1 auch sonst - zum
+    Ausprobieren, ob der Weg eines iPhones durchkommt.
+    """
+    erzwungen = os.environ.get("DUSTFRONT_WS_ZUGANG", "") not in ("", "0")
+    if erzwungen or not geraet.prozesse_erlaubt() or not programm()[0]:
+        from .wszugang import WsZugang
+        return WsZugang(code)
+    return CloudflaredZugang(code)
+
+
+class CloudflaredZugang:
     """Der Weg eines Gastes zu einem Code: ein Port auf 127.0.0.1.
 
     `adresse` ist das, womit sich netz.Gast verbinden soll, sobald

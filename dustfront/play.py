@@ -18,6 +18,7 @@ import random
 import pygame
 
 from . import config as K
+from . import plattform
 from . import world as welt_modul
 from .core import Szene
 from .entities import Aufsammler, Gegner, Spieler, wolke
@@ -158,6 +159,17 @@ class Spiel(Szene):
         return sum(1 for g in self.offen if g.lebt)
 
     # ---- Ablauf -------------------------------------------------------
+    # ---- Touch-Steuerung (touch.py, seit 0.34.20) ------------------------
+    @property
+    def touch_spielt(self) -> bool:
+        return self.admin_zeile is None and self.held.lebt
+
+    def touch_mitte(self):
+        return self.kamera.zu_bild(self.held.pos)
+
+    def touch_waffen(self) -> tuple:
+        return int(self.held.waffe), max(1, len(self.held.waffen))
+
     def ereignis(self, ev) -> None:
         if self.admin_zeile is not None:
             if ev.type == pygame.KEYDOWN:
@@ -386,6 +398,7 @@ class Spiel(Szene):
         if self.hinweis:
             self.renderer.hinweis(ziel, self.hinweis)
         if self.admin_zeile is not None:
+            plattform.tastatur_wuenschen((16, 12, K.GAME_W - 32, 28))
             pygame.draw.rect(ziel, (12, 10, 9), (16, 12, K.GAME_W - 32, 28))
             pygame.draw.rect(ziel, K.C_AMBER, (16, 12, K.GAME_W - 32, 28), 1)
             SCHRIFT.zeichnen(ziel, "> " + self.admin_zeile, 24, 21, K.C_CREAM, 1)

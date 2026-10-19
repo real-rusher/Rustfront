@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.19, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.20, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -60,6 +60,10 @@ kommt man zurück ins Hauptmenü.
 
 Unter macOS beim allerersten Mal Rechtsklick auf die Datei und dann
 *Öffnen* wählen - danach reicht der Doppelklick.
+
+**iPhone und iPad** (Branch `ios-port`): derselbe Code als App, mit
+Touch-Steuerung und Crossplay. Gebaut wird sie auf einem Mac mit Xcode:
+`ios/bauen.sh`, Schritt für Schritt in [`ios/LIESMICH.md`](ios/LIESMICH.md).
 
 **Verknüpfung auf den Desktop** (Windows): Rechtsklick auf
 `DUSTFRONT.bat`, dann *Senden an* und *Desktop (Verknüpfung erstellen)*.
@@ -509,6 +513,8 @@ Aussen liegt das Menü, innen das Spiel. Beides läuft auch einzeln.
 | `DUSTFRONT.bat` | Startdatei zum Doppelklicken, Windows |
 | `DUSTFRONT.command` | Startdatei zum Doppelklicken, macOS und Linux |
 | `SPIELTEST.command` | Direkt ins Spiel, macOS und Linux |
+| `ios/bauen.sh` | Baut auf dem Mac die App für iPhone und iPad (Anleitung `ios/LIESMICH.md`) |
+| `ios/start.py` | Einstieg der App auf iOS |
 | `rustfront_menu.py` | Hauptmenü, Kaltstart, Optionen, Spielstand, Einstiegspunkt |
 | `rustfront_splash.py` | Ablauf, Zeitdehnung und Klangsynthese der Splash-Sequenz |
 | `splash_engine.py` | Zeichenwerk der Splash-Sequenz, portiert aus der Web-Fassung |
@@ -534,6 +540,9 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `vorlagen.py` | Die beiden Werkzeuge `--vorlagen` und `--assets` |
 | `netz.py` | LAN-Verbindungen und Protokoll |
 | `online.py` | Über das Internet: Online-Code über Cloudflare (`tools/cloudflared`) |
+| `wszugang.py` | Weg eines Gastes zum Online-Code ohne cloudflared (iOS, Linux) |
+| `plattform.py` | Was auf iOS anders ist: kein zweites Programm, Touch, Bildschirmtastatur |
+| `touch.py` | Touch-Steuerung: zwei Sticks und Knöpfe |
 | `mehrspieler.py` | LAN- und Internetgefechte |
 | `lobby.py` | Die Lobby und der Rundenplan |
 | `regeln.py` | Die Regeln eines Gefechts, an einer Stelle |
@@ -746,6 +755,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.20 | **Port auf iPhone und iPad (Branch `ios-port`).** Derselbe Python-Code läuft als App, mit pygame-ce 2.5.6 und Python 3.13 aus [pygame-ios](https://github.com/seekerluke/pygame-ios); gebaut wird auf dem Mac mit `ios/bauen.sh` (Anleitung: `ios/LIESMICH.md`). **Touch-Steuerung** (`dustfront/touch.py`, Masse in `K.TOUCH`): links ein Stick zum Laufen (analog), rechts einer zum Zielen, der ab halbem Weg schießt und mit seiner Weite die Wurfweite bestimmt, dazu Knöpfe für Dash, E, R, F, Medkit, nächste Waffe, Zielen, Pause, Ebenen und Inventar. In Menüs ist ein Finger die Maus, zwei Finger blättern, ein kleiner ESC-Knopf hilft, wo es sonst nur die Escape-Taste gibt. Auf dem Rechner zum Ausprobieren mit `DUSTFRONT_TOUCH=1`. **Bildschirmtastatur** öffnet sich in Textfeldern, Einfügen geht (`dustfront/plattform.py`). Einstellungen liegen auf iOS im Behälter der App. **Online-Code ohne cloudflared** (`dustfront/wszugang.py`): auf iOS darf keine App ein zweites Programm starten, darum baut der Gast den Weg zum Code selbst - ein WebSocket zu Cloudflare mit denselben Kopfzeilen wie cloudflared. Genauso überall, wo cloudflared fehlt (Linux). Gastgeber mit Code geht auf iOS nicht, im LAN schon. Geprüft mit nachgestellten Fingern und einer Attrappe von Cloudflare, die ganze Testreihe auch unter Python 3.13 mit pygame-ce 2.5.6; auf einem echten iPhone lief es noch nicht. **Netz/LAN: geändert** - das Protokoll im Spiel ist gleich, neu ist der Weg eines Gastes zum Online-Code ohne cloudflared; Gastgeber und Gast brauchen beide 0.34.20, also für Crossplay auch der Rechner diesen Branch |
 | 0.34.19 | **Dash-Richtung, kleine Hindernisse, Ebenen der TESTKARTE.** **Dash:** Beim Gast zeigten die Windlinien eines Dashs immer nach rechts, egal wohin jemand dashte - die Richtung kam nie über das Netz. Jetzt kommt sie mit. **Hindernisse:** Kaktus, Brocken, Kisten und Fässer werfen keinen Schatten in Form der ganzen Kachel mehr (das dunkle Quadrat, das wie ein Block darunter aussah), sondern einen in ihrer eigenen Form. Sie halten auch nur noch mit ihrer Grundfläche auf, runde wie ein Kreis: an einen Kaktus kommt man bis an den Rand heran, statt schon an der Kachel stehen zu bleiben. Mauern und Fels halten weiter mit der ganzen Kachel auf (`Welt.huelle`, `K.KARTENSAETZE`). **TESTKARTE:** Die Stege der oberen Etage über einzelnen Mauern und Kisten galten als Plateau und blieben stehen, wenn die Etage ausblendete - schwebende Säulen und Streifen quer durchs Bild. Ein Plateau braucht jetzt mindestens 16 begehbare Kacheln (`K.PERSPEKTIVE["plateau_flaeche"]`); STAUBTAL und SCHNEEFELD bleiben, wie sie sind. **Netz/LAN: geändert** - je Spieler das neue Feld `dw` (Dash-Richtung), und die Kollision an Hindernissen ist eine andere; Gastgeber und Gast brauchen beide 0.34.19 |
 | 0.34.18 | **Bots, Gegner auf der Minikarte, Buggys gehen kaputt.** **Bots:** neue Regel BOTS AUFFÜLLEN BIS (2 bis 12 Spieler) für alle Runden mit PVP-Anteil. Die Bots füllen gleichmässig auf und machen Platz, wenn ein Mensch kommt. Sie sind schwach, aber nicht dumm: Sie kämpfen mit zur Waffe passendem Abstand und seitlichem Ausweichen, gehen in HÜGEL in den Kreis, helfen in VERSUS auf, suchen sonst Gegner, nehmen Treppen und Aufzüge, laden nach, heilen und werfen. Ohne Munition nehmen sie das Brecheisen. Kein Aimbot: Sie benutzen dieselbe Eingabe wie ein Gast, haben nur Sicht auf die eigene Umgebung (nicht durch Wände und Rauch, Blendgranaten wirken), brauchen eine Reaktionszeit, haben ein begrenztes Drehtempo und Zielfehler, und sie halten nie vor. Zufälliges Loadout je Leben, nie C4, kein Raketenwerfer, kein Buggy. Keine Buchung, keine Bestenliste (`dustfront/bots.py`, `K.BOTS`). **Minikarte:** neue Regel GEGNER AUF DER MINIKARTE (aus). **Buggys:** gehen jetzt kaputt (420 Leben). Treffer gehen auf den Wagen, und der reicht sie an den Fahrer weiter (70 % wie bisher, Freundfeuer nicht). Ein leerer Wagen ist damit auch Deckung, Treffer am Blech zählen nicht in die Trefferstatistik. Bei null Leben explodiert er: Schaden im Umkreis, der Fahrer fliegt heraus und bekommt etwas ab. Das Wrack brennt 9 s, 12 s später steht irgendwo auf der Karte ein neuer Wagen, möglichst ausser Sicht. Neues Bild `buggy_wrack`, Lebensbalken über beschädigten Wagen. Wagen stossen jetzt auch an anderen Wagen an. Zur neuen Runde stehen wieder alle heil an ihrem Platz. **STAUBTAL hat 5 Buggys** (neu westlich der Kreuzung A und vor dem Fort). **Netz/LAN: geändert** - neue Regeln `bots` und `gegner_karte`, je Spieler das Feld `bo` (ein Bot), in `fahrzeuge` je Buggy ein neunter Wert (Leben 0 bis 1, 0 = Wrack), und `karten/staubtal.txt` hat zwei `F` mehr; Gastgeber und Gast brauchen beide 0.34.18 (0.34.17 ist der Autoball-Stand auf `rocket-liga`) |
 | 0.34.16 | **Buggy fährt sich echter, mit Driften.** Neues Fahrmodell mit Reifen: vorne und hinten haftet jede Achse nur bis zu einer Grenze, darüber rutscht sie und greift schwächer (Schräglauf). Wer schnell voll einlenkt oder mit Vollgas aus der Kurve beschleunigt, bringt das Heck zum Ausbrechen und hält den Drift mit Gas und Lenkung; Heckantrieb, beim Anfahren drehen die Räder kurz durch. Neu **Shift = Handbremse** im Buggy: das Heck kommt herum, für enge Kehren. Ein leichtes automatisches Gegenlenken fängt den Wagen, lässt man die Lenkung los, richtet er sich wieder gerade aus. Beim Rutschen bleiben **Reifenspuren** im Sand liegen, und die Reifen quietschen (neuer Klang `buggy_rutschen`). Alle Werte in `K.FAHRZEUG` (die alten `gas`, `lenkung`, `lenk_ab`, `griff` sind ersetzt). **Netz/LAN: geändert** - der Gast schickt ein neues Feld `hb` (Handbremse) in seiner Eingabe, und in `fahrzeuge` steht je Buggy ein achter Wert (wie stark er rutscht, für Spuren und Staub beim Gast); beide brauchen 0.34.16 |

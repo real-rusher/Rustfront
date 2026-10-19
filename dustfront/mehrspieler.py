@@ -55,6 +55,7 @@ import pygame
 
 from . import bestenliste
 from . import config as K
+from . import plattform
 from . import ablage
 from .anzeige import RAND_OBEN, RAND_UNTEN, Anzeige
 from . import konto as konto_modul
@@ -1223,6 +1224,28 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         # das darf es nicht laehmen.
         stapel = getattr(self.app, "stapel", [])
         return self in stapel and stapel[-1] is not self
+
+    # ---- Touch-Steuerung (touch.py, seit 0.34.20) ------------------------
+    @property
+    def touch_spielt(self) -> bool:
+        """Gehoeren die Finger gerade der Steuerung? Nicht im Menue, nicht
+        in der Admin-Zeile und nicht vor der Tafel einer falschen Version -
+        dort tippt man auf Eintraege."""
+        return (not self.pausiert and self._admin_zeile is None
+                and self.versionsfehler is None and self.ich is not None)
+
+    def touch_mitte(self):
+        """Wo die eigene Figur auf dem Bild steht - von dort aus zielt der
+        rechte Stick."""
+        if self.ich is None:
+            return None
+        return self.kamera.zu_bild(self.ich.pos)
+
+    def touch_waffen(self) -> tuple:
+        """(welche Waffe gerade, wie viele) - fuer den Knopf WFF."""
+        if self.ich is None:
+            return 0, 1
+        return int(self.ich.waffe), max(1, len(self.ich.waffen))
 
     @property
     def mit_rpg(self) -> bool:
@@ -4953,6 +4976,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         else:
             self._kosmetik_bild_zeichnen(ziel)
         if self._admin_zeile is not None:
+            plattform.tastatur_wuenschen((16, 12, K.GAME_W - 32, 28))
             pygame.draw.rect(ziel, (12, 10, 9), (16, 12, K.GAME_W - 32, 28))
             pygame.draw.rect(ziel, K.C_AMBER, (16, 12, K.GAME_W - 32, 28), 1)
             SCHRIFT.zeichnen(ziel, "> " + self._admin_zeile, 24, 21,

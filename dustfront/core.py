@@ -34,6 +34,7 @@ from pathlib import Path
 import pygame
 
 from . import config as K
+from . import plattform
 from .audio import Klaenge
 from .einstellungen import Einstellungen
 
@@ -91,6 +92,9 @@ class Eingabe:
         self._losgelassen: set[str] = set()
         self.maus = pygame.Vector2(0, 0)      # in Spielkoordinaten der Flaeche
         self.rad = 0
+        # Ein Stick statt WASD (touch.py, seit 0.34.20): der Bewegungswunsch
+        # mit seiner Laenge, 0 bis 1. None heisst Tastatur.
+        self.analog: pygame.Vector2 | None = None
 
     def neues_bild(self) -> None:
         self._gedrueckt.clear()
@@ -131,7 +135,13 @@ class Eingabe:
         return name in self._losgelassen
 
     def richtung(self) -> pygame.Vector2:
-        """Bewegungswunsch als Vektor der Laenge 0 oder 1."""
+        """Bewegungswunsch als Vektor der Laenge 0 oder 1 - mit einem Stick
+        auch dazwischen: halb gedrueckt heisst langsamer gehen."""
+        if self.analog is not None and self.analog.length_squared() > 1e-6:
+            v = pygame.Vector2(self.analog)
+            if v.length_squared() > 1.0:
+                v.normalize_ip()
+            return v
         v = pygame.Vector2(
             (1 if self.gehalten("rechts") else 0) - (1 if self.gehalten("links") else 0),
             (1 if self.gehalten("zurueck") else 0) - (1 if self.gehalten("vor") else 0))
@@ -327,6 +337,13 @@ class App:
         self.anzeige_setzen()
         pygame.display.set_caption(titel)
         self.flaeche = self.flaeche.convert()
+        # Finger statt Maus und Tastatur (seit 0.34.20): auf iOS immer, auf
+        # dem Rechner mit DUSTFRONT_TOUCH=1.
+        self.touch = None
+        if plattform.touch_an():
+            from .touch import Touchsteuerung
+            self.touch = Touchsteuerung(self)
+        plattform.zu_fenster = self.zu_fenster
 
         self.bilder = Bilder(asset_ordner)
         self.klaenge = Klaenge(asset_ordner)
@@ -380,7 +397,10 @@ class App:
             self.viewport_rechnen()
             return
         modus = self.opt["fenstermodus"] if self.vollbild else "fenster"
-        if modus == "randlos":
+        if plattform.nur_vollbild():
+            # iOS: der ganze Bildschirm, in der Groesse, die er hat.
+            versuche = [((0, 0), pygame.FULLSCREEN)]
+        elif modus == "randlos":
             versuche = [(self.desktop_groesse(), pygame.NOFRAME),
                         (self.desktop_groesse(), pygame.FULLSCREEN)]
         elif modus == "vollbild":
@@ -429,6 +449,8 @@ class App:
         self.viewport = pygame.Rect((fw - w) // 2, (fh - h) // 2, w, h)
 
     def vollbild_wechseln(self) -> None:
+        if plattform.nur_vollbild():
+            return
         self.opt["fenstermodus"] = ("fenster" if self.opt["fenstermodus"] != "fenster"
                                     else "vollbild")
         self.opt.speichern()
@@ -438,6 +460,14 @@ class App:
         """Fensterkoordinate in Koordinate der Spielflaeche."""
         return pygame.Vector2((pos[0] - self.viewport.x) / self.skala,
                               (pos[1] - self.viewport.y) / self.skala)
+
+    def zu_fenster(self, rect) -> pygame.Rect:
+        """Ein Rechteck der Spielflaeche im Fenster (fuer die Tastatur)."""
+        r = pygame.Rect(rect)
+        return pygame.Rect(round(self.viewport.x + r.x * self.skala),
+                           round(self.viewport.y + r.y * self.skala),
+                           max(1, round(r.width * self.skala)),
+                           max(1, round(r.height * self.skala)))
 
     # ---- Szenenstapel -----------------------------------------------
     def schieben(self, szene: Szene) -> None:
@@ -460,7 +490,20 @@ class App:
     # ---- Schleife ---------------------------------------------------
     def ereignisse(self) -> None:
         self.eingabe.neues_bild()
-        for ev in pygame.event.get():
+        touch = self.touch
+        for ev in plattform.text_umsetzen(pygame.event.get()):
+            if touch is not None:
+                if ev.type in (pygame.FINGERDOWN, pygame.FINGERUP, pygame.FINGERMOTION):
+                    for neu in touch.ereignis(ev):
+                        self._weiterreichen(neu)
+                    continue
+                if getattr(ev, "touch", False) and ev.type in (
+                        pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
+                        pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL) \
+                        and touch.schluckt(ev):
+                    # Die Maus, die SDL aus einem Finger macht: im Spiel
+                    # gehoert der Finger der Steuerung (touch.py).
+                    continue
             if ev.type == pygame.QUIT:
                 self.laeuft = False
                 return
@@ -471,6 +514,11 @@ class App:
                 # die Figur lief weiter, schoss weiter, und beim Gast nahm
                 # ein festhaengendes E immer wieder die Treppe.
                 self.eingabe.alles_loslassen()
+                if touch is not None:
+                    # Auf iOS: die App geht in den Hintergrund. Finger, die
+                    # dabei lagen, melden sich nie mehr ab.
+                    for neu in touch.alles_los():
+                        self._weiterreichen(neu)
                 continue
             if ev.type in (pygame.WINDOWSIZECHANGED, pygame.VIDEORESIZE):
                 surf = pygame.display.get_surface()
@@ -487,10 +535,19 @@ class App:
                 if ev.key in self.eingabe.tabelle.get("debug", ()):
                     self.debug = not self.debug
                     continue
-            self.eingabe.ereignis(ev)
-            if self.oben is not None:
-                self.oben.ereignis(ev)
+            self._weiterreichen(ev)
         self.eingabe.maus = self.zu_spiel(pygame.mouse.get_pos())
+        if touch is not None:
+            # Die Sticks nach allem, was in diesem Bild kam: Zielpunkt,
+            # Laufen und Feuer stehen jetzt fest. Beim Wechsel zwischen
+            # Spiel und Menue kommt hier zurueck, was loszulassen ist.
+            for neu in touch.bild():
+                self._weiterreichen(neu)
+
+    def _weiterreichen(self, ev) -> None:
+        self.eingabe.ereignis(ev)
+        if self.oben is not None:
+            self.oben.ereignis(ev)
 
     def laufen(self, beenden: bool = True) -> None:
         """Die Spielschleife.
@@ -531,7 +588,10 @@ class App:
             self.flaeche.fill(K.C_VOID)
             for szene in self._sichtbar():
                 szene.zeichnen(self.flaeche, alpha)
+            if self.touch is not None:
+                self.touch.zeichnen(self.flaeche)
             self.ausgeben()
+            plattform.tastatur_abgleichen()
         if not self.laeuft:
             self._fenster_zu()
         self.klaenge.stille()

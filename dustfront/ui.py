@@ -25,6 +25,7 @@ from __future__ import annotations
 import pygame
 
 from . import config as K
+from . import plattform
 from .font import SCHRIFT
 
 RUHIG, UEBER, GEDRUECKT, GESPERRT = range(4)
@@ -553,6 +554,9 @@ class Textfeld(Element):
 
     def zeichnen(self, ziel) -> None:
         r = self.rect
+        if self.aktiv:
+            # Auf iOS die Bildschirmtastatur (plattform.py, seit 0.34.20).
+            plattform.tastatur_wuenschen(self.feld_rect)
         hell = self.aktiv or self.ueber
         SCHRIFT.zeichnen(ziel, kuerzen(self.text, self.label_breite - 8),
                          r.x + 4, r.centery - 3,

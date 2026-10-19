@@ -676,6 +676,52 @@ ONLINE = dict(
     zugang_frist=15.0,        # so lange darf der Zugang des Gastes brauchen
     neustart_nach=20.0,       # ein abgebrochener Tunnel wird so viel spaeter neu versucht
     neustart_hoechstens=3,    # so oft hintereinander, dann bleibt es beim Fehler
+    # Der Weg eines Gastes ohne cloudflared (seit 0.34.20, wszugang.py):
+    # dasselbe, was `cloudflared access tcp` tut, in Python. Auf iOS darf
+    # ein Spiel kein zweites Programm starten.
+    ws_frist=12.0,            # so lange darf der Handschlag mit Cloudflare dauern
+    ws_block=16384,           # so viele Bytes liest der Weg je Durchgang
+)
+
+# Touch-Steuerung (seit 0.34.20, dustfront/touch.py). An auf iOS, auf dem
+# Rechner mit DUSTFRONT_TOUCH=1 zum Ausprobieren. Masse in Pixeln der
+# Spielflaeche (640 x 360); auf einem iPhone ist ein Pixel davon etwa ein
+# Punkt, und Apple empfiehlt Ziele ab 44 Punkten.
+TOUCH = dict(
+    stick_radius=34.0,        # so weit reicht ein Stick bis zum Anschlag
+    tot=0.18,                 # Anteil des Radius, der noch nichts tut
+    voll_ab=0.72,             # ab diesem Anteil laeuft man mit voller Kraft
+    feuer_ab=0.55,            # der rechte Stick schiesst ab diesem Anteil
+    ziel_nah=55.0,            # Abstand des Zielpunkts bei leicht gedruecktem Stick
+    ziel_weit=190.0,          # ... und am Anschlag (Wurfweite einer Granate)
+    links_bis=0.42,           # der linke Stick nimmt Finger bis hier (Anteil der Breite)
+    knopf_radius=19.0,
+    deckkraft=110,            # 0 bis 255, so sichtbar liegen Sticks und Knoepfe
+    zwei_finger_rad=22.0,     # so weit schieben zwei Finger im Menue fuer eine Rad-Raste
+    # In Menues ein kleiner ESC-Knopf oben rechts: manche Schirme (Inventar,
+    # Rundentafel) verlaesst man sonst nur mit der Escape-Taste.
+    esc_mitte=(624, 14),
+    esc_radius=11.0,
+    # Die Knoepfe: Aktion (wie in K.TASTEN der Einstellungen), Aufschrift,
+    # Mitte auf der Spielflaeche, Art. Oben rechts bleibt frei: dort steht
+    # die Ebenenanzeige (E0, E1, E2) und darunter der Punktestand.
+    # "halten" haelt die Taste, solange der Finger liegt (Dash ist im Buggy
+    # die Handbremse, Nutzen hilft auf);
+    # "druck" ist ein kurzer Druck; "waffe" schaltet zur naechsten Waffe;
+    # "umschalten" haelt die Taste bis zum naechsten Druck (Zielen mit dem
+    # Scharfschuetzengewehr).
+    knoepfe=(
+        ("pause",     "II",   (568, 22),  "druck"),
+        ("ebenen",    "EBN",  (526, 22),  "druck"),
+        ("inventar",  "INV",  (484, 22),  "druck"),       # nur allein (Testkarte)
+        ("dash",      "DASH", (596, 232), "halten"),
+        ("nachladen", "R",    (552, 268), "druck"),
+        ("nutzen",    "E",    (596, 186), "halten"),
+        ("heilen",    "+",    (508, 290), "druck"),
+        ("nahkampf",  "F",    (552, 222), "druck"),
+        ("waffe",     "WFF",  (596, 278), "waffe"),
+        ("zweit",     "ZIEL", (552, 176), "umschalten"),
+    ),
 )
 
 # Die drei Spielarten im Mehrspieler.
