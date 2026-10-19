@@ -8206,7 +8206,11 @@ def _stelle80(abstand, frei=True):
         p_ = _bot80.pos + pygame.Vector2(abstand, 0).rotate(a_)
         if not w80.welt.frei(p_, 9, 0, True):
             continue
-        if w80.welt.sicht_frei(_bot80.pos, p_, 0) == frei:
+        # Frei heisst seit 0.34.26 auch: keine Kiste dazwischen - an der
+        # bleibt jede Kugel haengen, und der Bot schiesst nicht hinein.
+        if frei and w80.welt.deckung(_bot80.pos, p_, 0) == "":
+            return p_
+        if not frei and not w80.welt.sicht_frei(_bot80.pos, p_, 0):
             return p_
     return None
 
