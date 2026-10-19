@@ -951,6 +951,7 @@ FAHRZEUG = dict(
 BOTS = dict(
     nummer_ab=100,            # Spielernummern ab hier sind Bots
     auffuellen=(0, 2, 4, 6, 8, 10, 12),   # Regel "bots": 0 = keine
+    je_team_hoechstens=8,     # Regeln "bots_t0" ... und "bots_dazu" (seit 0.34.26)
     namen=("KARL", "HEINZ", "ERNA", "FRIEDA", "OTTO", "GRETE", "WILLI",
            "HILDE", "FRITZ", "ELSE", "KURT", "LOTTE", "EMIL", "BERTA"),
     takt=0.1,                 # so oft sieht und entscheidet er neu (s)
@@ -973,8 +974,16 @@ BOTS = dict(
     nahkampf_ab=34.0,         # so nah, dann schlaegt er mit dem Brecheisen
     wurf_pause=(10.0, 18.0),  # zwischen zwei Wuerfen
     wurf_weite=(90.0, 230.0),
-    heilen_unter=45.0,        # Leben, ab dem er ein Medkit anlegt ...
-    heilen_ruhe=1.5,          # ... wenn er so lange niemanden gesehen hat
+    # Seit 0.34.26: eine Granate je Leben, keine Medkits, nichts aufheben,
+    # immer begrenzte Munition - ist alles weg, geht er in den Nahkampf.
+    wurf_arten=("granate",),  # daraus wird seine eine Wurfwaffe gewuerfelt
+    wuerfe_je_leben=1,
+    vorrat_anteil=1.0,        # x der Reserve aus MUNITION["vorrat"]
+    # Deckung (seit 0.34.26): zum Nachladen immer, angeschlagen kurz.
+    deckung_leben=40.0,       # darunter, und gerade getroffen: weg aus der Linie
+    deckung_zeit=2.5,         # so lange bleibt er dann versteckt ...
+    deckung_pause=7.0,        # ... und so lange danach nicht wieder
+    deckung_radien=(40.0, 70.0, 105.0, 150.0),  # so weit sucht er, naechste zuerst
     dash_pause=4.0,
     stockt_nach=1.2,          # so lange kaum vom Fleck: er weicht aus
     verwalten_takt=1.0,       # so oft wird nachgezaehlt, ob Bots fehlen
@@ -1382,6 +1391,22 @@ STEHEN = {
     "schrott":    dict(hoehe=14.0, rahmen=(0, 0, 32, 32), form="block", fugen=1),
 }
 
+# Deckung (seit 0.34.26, world.Welt.schuss_halt / deckung). Jede feste
+# Kachel haelt eine Kugel auf, mit ihrer Grundflaeche aus STEHEN - bis
+# dahin nur Mauern und Fels. Gemeldet: "Alles, was eine Art Textur hat und
+# etwas blocken sollte, sollte auch Schuesse blocken. So etwas wie die
+# Explosion einer Granate sollte aber leicht durchgehen. Und eine
+# Blendgranate sollte dadurch nur abgeschwaecht werden."
+# Anteile dessen, was hinter einem Hindernis (Kiste, Sandsack, Fass) oder
+# einer Mauer noch ankommt. Granate, Rakete, C4 und ein platzender Buggy;
+# der Stampfer-Boss trifft weiter auch hinter Deckung (mit Absicht).
+DECKUNG = dict(
+    explosion_frei=1.0,
+    explosion_hindernis=0.55,
+    explosion_wand=0.2,       # bis 0.34.25 ging die Druckwelle ganz durch
+    blend_hindernis=0.6,      # die Mauer haelt den Blitz weiter ganz ab
+)
+
 # Kartensaetze: welche Bilder eine Karte statt der gewoehnlichen nimmt
 # (Kopf "satz:"). Seit 0.34.19 hier statt im Renderer: auch die Kollision
 # braucht sie - eine Kiste ist in der Wueste ein rundes Fass und haelt
@@ -1504,7 +1529,8 @@ KACHELN = {
     # nicht nur aus Sand, Mauer und Fass besteht. Gewachsener Fels ist
     # hoch und sichtdicht wie eine Mauer; was niedriger ist als ein
     # Mensch (Brocken, Sandsack, Kiste, Kaktus, Schrott), haelt auf wie
-    # das Fass, aber man schiesst darueber hinweg.
+    # das Fass und verdeckt nicht. Bis 0.34.25 schoss man darueber hinweg;
+    # seit 0.34.26 haelt es Kugeln auf wie alles Feste (DECKUNG).
     FELS:          dict(name="fels",     fest=True,  sicht=True,  bild="fels",
                         bilder=("fels", "fels_2", "fels_3")),
     BROCKEN:       dict(name="brocken",  fest=True,  sicht=False, bild="brocken",

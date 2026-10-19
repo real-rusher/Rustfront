@@ -238,6 +238,24 @@ FELDER = (
          text=lambda v, d, u: "AUS" if not v else "%d SPIELER" % v,
          gilt=lambda d: _regeln(d)["beute"],
          hilfe="SCHWACHE BOTS FÜLLEN DIE RUNDE AUF - GLEICH VIELE JE MANNSCHAFT."),
+) + tuple(
+    # Seit 0.34.26: Bots fest in eine Mannschaft, egal wie viele Menschen
+    # dort sind (Team-Manager im Pausenmenue). Gemeldet: "Sie sollen auf
+    # Wahl zu jedem Team hinzugefuegt werden koennen." Je Mannschaft eine
+    # Regel, damit es mit einer dritten Mannschaft (K.TEAMS) von selbst
+    # mitwaechst. Mit AUFFUELLEN zusammen gilt das Groessere.
+    Feld("bots_t%d" % _i, "BOTS IN %s" % _n, "RUNDE", 0,
+         lambda d, u: range(0, K.BOTS["je_team_hoechstens"] + 1), zahl=True,
+         text=lambda v, d, u: "KEINE" if not v else str(v),
+         gilt=lambda d: _regeln(d)["beute"] and _regeln(d)["teams"],
+         hilfe="SO VIELE BOTS SPIELEN IMMER IN DIESER MANNSCHAFT MIT.")
+    for _i, _n in enumerate(K.TEAMS["namen"])
+) + (
+    Feld("bots_dazu", "BOTS DAZU", "RUNDE", 0,
+         lambda d, u: range(0, K.BOTS["je_team_hoechstens"] + 1), zahl=True,
+         text=lambda v, d, u: "KEINE" if not v else str(v),
+         gilt=lambda d: _regeln(d)["beute"] and not _regeln(d)["teams"],
+         hilfe="SO VIELE BOTS SPIELEN IMMER MIT, JEDER GEGEN JEDEN."),
     # ── Die Gegner
     Feld("schwierigkeit", "SCHWIERIGKEIT", "GEGNER", K.SCHWIERIGKEIT_VORGABE,
          lambda d, u: K.SCHWIERIGKEIT,

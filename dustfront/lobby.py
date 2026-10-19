@@ -650,6 +650,11 @@ class Rundenplanung(Menue):
         self.elemente.append(ui.Knopf(
             (r.right - 16 - 96 - 104, oben, 100, 14), "STANDARDRUNDE",
             "standard", gesperrt=not self.darf))
+        # Seit 0.34.26: der Team-Manager (Pausenmenue) auch von hier aus.
+        if self.darf:
+            self.elemente.append(ui.Knopf(
+                (r.right - 16 - 96 - 104 - 104, oben, 100, 14), "TEAMS UND BOTS",
+                "teams"))
         y = r.bottom - 58
         self.elemente.append(ui.Knopf(
             (r.x + 16, y, 150, 16),
@@ -681,6 +686,11 @@ class Rundenplanung(Menue):
         name = el.name
         if name == "zurueck":
             self.zurueck()
+            return
+        if name == "teams":
+            self.app.werfen()
+            g._menue_auf()
+            g.menue_teams = True
             return
         if name == "planen":
             g.plan_offen = not g.plan_offen
@@ -782,6 +792,8 @@ class Rundenplanung(Menue):
         elif el is not None and el.name == "ansicht":
             hilfe = ("NUR DAS WICHTIGSTE ZEIGEN" if self.erweitert
                      else "ALLE REGELN: MUNITION, MEDKITS, SCHUTZ, RAKETEN ...")
+        elif el is not None and el.name == "teams":
+            hilfe = "BOTS JE MANNSCHAFT, AUFFÜLLEN, SPIELER EINTEILEN"
         elif el is not None and el.name == "standard":
             hilfe = "%s - FÜR DEN ANFANG DAS RICHTIGE" % R.kurz(
                 R.standardrunde(g._umfeld()), g._umfeld())

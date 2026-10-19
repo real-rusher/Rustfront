@@ -127,8 +127,15 @@ def blend_wert(pos, ebene: int, ich, welt=None) -> float:
     weg = pos.distance_to(ich.pos)
     if weg >= b["weite"]:
         return 0.0
-    if welt is not None and not welt.sicht_frei(ich.pos, pos, int(ebene)):
-        return 0.0
+    deckung = 1.0
+    if welt is not None:
+        hinter = welt.deckung(ich.pos, pos, int(ebene))
+        if hinter == "wand":
+            return 0.0
+        if hinter:
+            # Seit 0.34.26: eine Kiste dazwischen schwaecht den Blitz nur
+            # ab - er scheint darueber und daran vorbei.
+            deckung = K.DECKUNG["blend_hindernis"]
     if weg <= b["nah"]:
         naehe = 1.0
     else:
@@ -140,7 +147,7 @@ def blend_wert(pos, ebene: int, ich, welt=None) -> float:
         delta = abs((richtung - getattr(ich, "winkel", 0.0) + 180) % 360 - 180)
         if delta > b["blickwinkel"] * 0.5:
             hin = b["abgewandt"]
-    wert = max(0.0, min(1.0, naehe * hin))
+    wert = max(0.0, min(1.0, naehe * hin * deckung))
     return wert if wert >= b["schwelle"] else 0.0
 
 
@@ -868,14 +875,68 @@ class Welt:
         return False
 
     def strahl(self, von, richtung, laenge: float, ebene: int):
-        """Erster Punkt auf der Linie, an dem etwas im Weg steht."""
-        e = self.ebene(ebene)
-        schritte = max(1, int(laenge / (K.TILE * 0.4)))
+        """Erster Punkt auf der Linie, an dem etwas im Weg steht - dort,
+        wo auch eine Kugel haelt (`schuss_halt`)."""
+        schritte = max(1, int(laenge / 4.0))
         for i in range(1, schritte + 1):
             p = von + richtung * (laenge * i / schritte)
-            if e.sichtdicht(int(p.x // K.TILE), int(p.y // K.TILE)):
+            if self.schuss_halt(p, ebene):
                 return von + richtung * (laenge * (i - 1) / schritte)
         return von + richtung * laenge
+
+    def schuss_halt(self, pos, ebene: int, radius: float = 0.0) -> bool:
+        """Haelt etwas an dieser Stelle eine Kugel auf?
+
+        Seit 0.34.26 jede feste Kachel, mit ihrer Grundflaeche (`huelle`),
+        nicht mehr nur die sichtdichten. Gemeldet: "sehr, sehr viele
+        Hindernisse, auch zum Beispiel auf der Wuestenmap, lassen Schuesse
+        durch. Alles, was eine Art Textur hat und etwas blocken sollte,
+        sollte auch Schuesse blocken." Bis dahin flog eine Kugel durch
+        Kisten, Sandsaecke, Faesser, Kakteen und Schrott - man stand
+        dahinter und war doch nicht in Deckung."""
+        e = self.ebene(ebene)
+        tx, ty = int(pos.x // K.TILE), int(pos.y // K.TILE)
+        kachel = e.kachel(tx, ty)
+        d = K.KACHELN[kachel]
+        if d["sicht"]:
+            return True
+        if not d["fest"]:
+            return False
+        form, rx, ry, rb, rh = self.huelle(kachel)
+        x0, y0 = tx * K.TILE + rx, ty * K.TILE + ry
+        if form == "rund":
+            mx, my = x0 + rb / 2.0, y0 + rh / 2.0
+            grenze = radius + rb / 2.0
+            return (pos.x - mx) ** 2 + (pos.y - my) ** 2 < grenze * grenze
+        return (x0 - radius <= pos.x < x0 + rb + radius
+                and y0 - radius <= pos.y < y0 + rh + radius)
+
+    def deckung(self, von, nach, ebene: int) -> str:
+        """Was zwischen zwei Punkten steht: "" (nichts), "hindernis"
+        (Kiste, Sandsack, Fass ...) oder "wand" (sichtdicht).
+
+        Fuer Explosionen und Blendgranaten (seit 0.34.26): eine Kugel haelt
+        jedes Hindernis auf, eine Druckwelle geht abgeschwaecht darueber
+        und daran vorbei (K.DECKUNG). Abgetastet in Schritten von 4
+        Pixeln; die beiden Enden zaehlen nicht - wer neben einer Kiste
+        steht, steht nicht hinter ihr."""
+        von = pygame.Vector2(von)
+        nach = pygame.Vector2(nach)
+        if not self.sicht_frei(von, nach, ebene):
+            return "wand"
+        laenge = von.distance_to(nach)
+        schritte = int(laenge / 4.0)
+        if schritte < 2:
+            return ""
+        for i in range(1, schritte):
+            p = von.lerp(nach, i / float(schritte))
+            if self.schuss_halt(p, ebene):
+                return "hindernis"
+        return ""
+
+    def deckung_anteil(self, von, nach, ebene: int) -> float:
+        """Wie viel einer Explosion bei `nach` ankommt (K.DECKUNG)."""
+        return K.DECKUNG["explosion_" + (self.deckung(von, nach, ebene) or "frei")]
 
     def boden_unter(self, pos, ebene: int) -> int:
         """Erste Ebene unterhalb, die an dieser Stelle wirklich Boden hat."""

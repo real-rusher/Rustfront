@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.25, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.26, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -275,7 +275,16 @@ höheren Ebene aus sieht man ihn unten liegen, klein und im Dunst.
 In jeder Runde mit PVP-Anteil (PVP, PVPVE, TEAM, VERSUS, HÜGEL) kann der
 Gastgeber **Bots** zuschalten: Regel **BOTS AUFFÜLLEN BIS** (aus, 2 bis 12
 Spieler). Sie füllen auf die Zahl auf, mit Mannschaften gleichmässig;
-kommt ein Mensch dazu, geht ein Bot. In der Lobby gibt es keine.
+kommt ein Mensch dazu, geht ein Bot. Seit 0.34.26 lassen sich Bots auch
+fest in eine Mannschaft stellen (**BOTS IN ROT / BLAU**, ohne Mannschaften
+**BOTS DAZU**, je 0 bis 8); mit Auffüllen zusammen gilt die grössere Zahl.
+In der Lobby gibt es keine.
+
+**Team-Manager** (seit 0.34.26): Pausenmenü → **TEAMS UND BOTS** (oder der
+Knopf auf der Rundentafel, Taste P). Dort stellt der Gastgeber Auffüllen
+und Bots je Mannschaft ein und setzt Spieler in eine Mannschaft. In der
+Lobby gilt das für die nächste Runde, im Gefecht sofort: ein Spieler
+wechselt und steigt bei der neuen Mannschaft ein, Bots kommen und gehen.
 
 Die Bots sind bewusst **schwach und fair**. Sie spielen mit genau der
 Eingabe, die ein Gast schicken würde (Laufrichtung, Mauszeiger,
@@ -290,12 +299,21 @@ Feuertaste), und haben keine Sonderrechte:
 * Sie schiessen in Feuerstössen, bleiben dabei oft stehen und hören
   Schüsse in der Nähe.
 
-Sie erledigen die Aufgabe der Spielart: In HÜGEL gehen sie in den Kreis,
-in VERSUS helfen sie gefallenen Mitspielern auf, sonst suchen sie Gegner.
-Sie nehmen Treppen und Aufzüge, laden nach, legen in Ruhe ein Medkit an
-und werfen ab und zu ihre Wurfwaffe. Ist alle Munition weg, gehen sie mit
-dem Brecheisen los. Ihr Loadout wird zu jedem Leben neu gewürfelt: zwei
-Waffen und eine Wurfwaffe. Bei EINES FÜR ALLE tragen sie das vorgegebene.
+Sie erledigen die Aufgabe der Spielart: In HÜGEL gehen sie in den Kreis
+(der geht vor - sie kämpfen auf dem Weg dorthin), in VERSUS helfen sie
+gefallenen Mitspielern auf, sonst suchen sie Gegner. Sie nehmen Treppen
+und Aufzüge und wechseln je nach Abstand zwischen ihren beiden Waffen.
+Zum Nachladen und wenn sie angeschlagen getroffen werden, gehen sie in
+**Deckung** hinter die nächste Mauer oder Kiste; in eine Kiste in der
+Schusslinie schiessen sie nicht, sie gehen zur Seite.
+
+Ausrüstung (seit 0.34.26): zwei verschiedene Waffen, **eine Granate pro
+Leben**, die gewöhnliche Reserve und **kein Medkit**. Sie heben nichts
+auf, und ihre Munition ist immer begrenzt, auch wenn die Runde etwas
+anderes sagt. Ist alles verschossen und die Granate geworfen, gehen sie
+mit dem Brecheisen los. Sie haben so viel Leben wie ein Spieler. Das
+Loadout wird zu jedem Leben neu gewürfelt; bei EINES FÜR ALLE tragen sie
+das vorgegebene (mit höchstens einer Wurfwaffe).
 **Nie C4**, keinen Raketenwerfer, und **sie fahren keine Buggys**.
 
 Für Bots wird nichts gebucht, und sie kommen in keine Bestenliste. Wer
@@ -757,6 +775,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.26 | **Bots mit Team-Manager, Deckung, und Hindernisse halten Kugeln.** Bots haben jetzt zwei verschiedene Waffen und eine Granate, die sie einmal pro Leben werfen; sie heben weder Medkits noch Munition auf, haben immer begrenzte Munition und gehen in den Nahkampf, wenn alles verschossen ist. Zum Nachladen und angeschlagen gehen sie hinter die nächste Mauer oder Kiste, in eine Kiste in der Schusslinie schießen sie nicht. In HÜGEL geht der Kreis vor: sie kämpfen auf dem Weg dorthin. Neu ist der **Team-Manager** für den Gastgeber (Pausenmenü → TEAMS UND BOTS, auch aus der Rundentafel): Auffüllen bis, Bots fest in ROT und BLAU (ohne Mannschaften: Bots dazu), Spieler in eine Mannschaft setzen – in der Lobby für die nächste Runde, im Gefecht sofort. **Alle Hindernisse mit Bild halten jetzt Kugeln und Raketen auf** (Kisten, Fässer, Sandsäcke, Kakteen, Brocken, Schrott), an ihrer Grundfläche. Granaten, Raketen, C4 und platzende Buggys treffen hinter einem Hindernis abgeschwächt, hinter einer Mauer kaum noch; eine Blendgranate hinter einer Kiste blendet schwächer (Werte in `config.py` unter `DECKUNG`). **Netz/LAN: geändert** (neue Regeln, Kugeln halten an Hindernissen) – Gastgeber und Gäste brauchen diese Version. |
 | 0.34.25 | **Figuren in 3D wie die Hindernisse.** Spieler, Mitspieler, Bots, Gegner und Bosse, die Zielpuppen, der Buggy und die Beute am Boden stehen jetzt in derselben Perspektive wie Kisten, Mauern und Plateaus: das Bild der Figur ist ihr Deckel und rückt mit ihrer Höhe von der Bildmitte weg, darunter steht eine Seitenwand in ihrer eigenen Farbe, unten dunkler, oben heller. Am Bildrand sieht man die Seite, in der Mitte steht man genau darüber. Bosse ragen höher als kleine Gegner. Höhen und Helligkeiten in `config.py` unter `FIGUREN_3D` (`an=False` schaltet es ab). Nur das Bild: getroffen wird wie bisher, Namen und Lebensbalken bleiben am Boden. Netz/LAN: unverändert (der Gast zeichnet gemeldete Gegner und Beute genauso), trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.24 | **iOS-Port in `multiplayer-test` übernommen.** Alles aus dem Branch `ios-port` (0.34.20 bis 0.34.23) gilt jetzt hier: die App für iPhone und iPad (`ios/bauen.sh`, Anleitung `ios/LIESMICH.md`), Touch-Steuerung, der Weg zum Online-Code ohne cloudflared. Am Rechner (Windows, macOS, Linux) startet das Spiel unverändert mit Maus und Tastatur: die Touch-Steuerung gilt nur auf iOS oder mit `DUSTFRONT_TOUCH=1`. Nur Doku geändert. Netz/LAN: unverändert gegenüber 0.34.23; Crossplay braucht auf allen Geräten 0.34.24 |
 | 0.34.23 | **iOS: eigenes App-Symbol und Startbild.** Statt des Logos von pygame-ce zeigt die App jetzt ein eigenes Zeichen: den Stern mit seinen drei Umlaufbahnen aus dem Intro, ohne Uhr und Flügel, neu und größer gezeichnet mit den Pinseln des Intros (`ios/logo_bauen.py`, Bilder in `ios/bilder`). Der Startbildschirm zeigt das Zeichen mit dem Schriftzug in der Schrift des Hauptmenüs. `ios/bauen.sh` setzt beides ein, den Startbildschirm über `UILaunchScreen` in der Info.plist. Am Spiel ändert sich nichts. Netz/LAN: unverändert |

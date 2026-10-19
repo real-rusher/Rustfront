@@ -611,7 +611,7 @@ naechste Runde an einer Stelle ein:
 | RUNDE STARTEN (MIT / OHNE KOSMETIK) | Gastgeber, Lobby | sofort |
 | NAECHSTE RUNDE EINSTELLEN / ANSEHEN | alle | oeffnet die Tafel (12b) |
 | RUNDE NEU STARTEN | Gastgeber, Runde | sofort, setzt alles zurueck |
-| MANNSCHAFTEN | Gastgeber, Teams | **sofort** |
+| TEAMS UND BOTS (bis 0.34.25 MANNSCHAFTEN) | Gastgeber, Lobby und Runden mit PVP-Anteil | in der Lobby fuer die naechste Runde, sonst **sofort** |
 | AUSRUESTUNG, KONTO, EINSTELLUNGEN | alle | Szene darueber |
 | ANDERER LOBBY BEITRETEN | Lobby | Lobbysuche (12g) |
 | LOBBY / GEFECHT VERLASSEN | Gast | in die eigene Lobby (12g) |
@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.26 | Neue Regeln `bots_t0`, `bots_t1` (Bots fest in ROT / BLAU) und `bots_dazu` (ohne Mannschaften), Zahl 0 bis 8, im Plan und in den Regeln wie `bots`; der Team-Manager des Gastgebers (Pausenmenue, TEAMS UND BOTS) setzt sie und die Mannschaft eines Spielers (`tm` in der Weltmeldung, wie bisher). Ausserdem halten alle festen Kacheln Kugeln auf (`Welt.schuss_halt`), und Explosion und Blendgranate werden hinter Hindernissen gedaempft (`Welt.deckung`, K.DECKUNG) - der Gast rechnet seine Geschosse damit genauso wie der Gastgeber | Die Versionspruefung weist ab. Ein aelterer Gast saehe Kugeln durch Kisten fliegen, die beim Gastgeber laengst haengen geblieben sind, und kennt die neuen Regeln nicht |
 | 0.34.22 | In der Eingabe des Gasts `rl` (True, wenn `will` von einem Stick kommt - Touch). Im Buggy lenkt der Gastgeber dann in Richtung des Sticks (`Buggy.stick_steuern`) statt wie mit W/A/S/D | Die Versionspruefung weist ab. Ohne das Feld faehrt ein iPhone-Spieler den Buggy, als druecke er W/A/S/D |
 | 0.34.20 | iOS-Port (Branch `ios-port`): ein Gast kann einem Online-Code ohne cloudflared beitreten (`wszugang.py`) - ein WebSocket zu `CODE.trycloudflare.com`, darin roh die Bytes des Spiels, wie bei `cloudflared access tcp`. Der Gastgeber sieht keinen Unterschied. Auf iOS kein Gastgeber mit Code (die Lobby sagt AUF IOS NUR BEITRETEN), im LAN schon; die Lobbysuche per Rundruf braucht auf iOS eine Sonderberechtigung von Apple und bleibt dort leer | Die Versionspruefung weist ab, wer nicht 0.34.20 hat. Kommt ein iPhone mit richtigem Code nicht durch (ZUGANG / CODE FALSCH), am Rechner mit `DUSTFRONT_WS_ZUGANG=1` gegenpruefen: geht es dort auch nicht, liegt es am Weg und nicht am iPhone |
 | 0.34.19 | Je Spieler `dw` in der Weltmeldung: die Dash-Richtung als [x, y]. Ausserdem halten kleine Hindernisse (Kaktus, Brocken, Kisten, Faesser) nur noch mit ihrer Grundflaeche auf (`Welt.huelle`), der Gast sagt seine Bewegung damit genauso voraus wie der Gastgeber | Die Versionspruefung weist einen aelteren Gast ab. Ohne sie zeigten seine Windlinien immer nach rechts, und an jedem Kaktus zoege ihn der Gastgeber ein Stueck zurueck |

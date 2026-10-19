@@ -214,7 +214,7 @@ class Buggy(Wesen):
             weit = self.pos.distance_to(ding.pos)
             if weit >= r:
                 continue
-            anteil = 1.0 - weit / r
+            anteil = (1.0 - weit / r) * w.deckung_anteil(self.pos, ding.pos, self.ebene)
             schub = ding.pos - self.pos
             if schub.length_squared() > 0.01:
                 schub = schub.normalize() * 240 * anteil

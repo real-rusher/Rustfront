@@ -43,18 +43,37 @@ Regeln.
 
 **Was er tut.** Er kaempft, wenn er jemanden sieht, haelt dabei einen zur
 Waffe passenden Abstand und weicht seitlich aus. Sonst arbeitet er an der
-Aufgabe der Spielart: in HUEGEL geht er in den Kreis und bleibt dort, in
+Aufgabe der Spielart: in HUEGEL geht er in den Kreis und bleibt dort - der
+Kreis geht vor, auch im Kampf (er schiesst auf dem Weg dorthin) -, in
 VERSUS hilft er gefallenen Mitspielern auf, sonst sucht er Gegner - dort,
 wo er zuletzt einen sah oder hoerte, oder auf der Karte. Er nimmt Treppen
-und Aufzuege (dasselbe Wegenetz wie die Zombies), legt ein Medkit an, wenn
-es ruhig ist, wirft ab und zu, was er dabeihat, und laedt nach. Ist alle
-Munition weg (nur mit knapper Munition moeglich), geht er mit dem
-Brecheisen auf den naechsten los.
+und Aufzuege (dasselbe Wegenetz wie die Zombies), wechselt zwischen seinen
+beiden Waffen je nach Abstand und laedt nach.
+
+**Deckung (seit 0.34.26).** Zum Nachladen und wenn er angeschlagen ist und
+getroffen wird, geht er hinter die naechste Mauer oder Kiste, die ihn vom
+Gegner trennt (`_deckung`). Steht eine Kiste in seiner Schusslinie, schiesst
+er nicht hinein, sondern geht zur Seite, bis er freie Bahn hat.
+
+**Was er hat (seit 0.34.26).** Gemeldet: "Die Bots sollen jeweils zwei
+verschiedene Waffen haben ... auch eine Granate haben, aber jeweils nur in
+ihrem Leben eine werfen koennen ... keine Medkits oder Munition einsammeln,
+sondern wenn ihre Munition und Granaten aufgebraucht sind, einfach in den
+Nahkampf gehen." Also: zwei verschiedene Waffen, eine Granate, die
+gewoehnliche Reserve und kein Medkit - immer mit knapper Munition, egal was
+die Runde sagt. Aufgehoben wird nichts. Ist alles weg, geht er mit dem
+Brecheisen auf den naechsten los. Sein Leben ist das eines Spielers.
 
 **Was er nicht darf.** Kein C4 (auch nicht, wenn der Gastgeber eines fuer
 alle vorgibt), keinen Raketenwerfer aufheben, nicht in einen Buggy steigen.
-Sein Loadout wird zu jedem Leben neu gewuerfelt: zwei Waffen und eine
-Wurfwaffe - ausser bei "eines fuer alle", dann traegt er das wie jeder.
+Sein Loadout wird zu jedem Leben neu gewuerfelt - ausser bei "eines fuer
+alle", dann traegt er das wie jeder (mit hoechstens einer Wurfwaffe).
+
+**Wie viele.** Zwei Regeln, es gilt die groessere Zahl: AUFFUELLEN BIS
+macht die Mannschaften gleich gross, BOTS IN ROT / BLAU (ohne Mannschaften:
+BOTS DAZU) stellt so viele fest dazu. Beides stellt der Gastgeber im
+Team-Manager ein (Pausenmenue, TEAMS UND BOTS), vor der Runde oder mitten
+darin.
 
 **Wer rechnet.** Nur der Gastgeber. Beim Gast ist ein Bot ein Spieler wie
 jeder andere in der Weltmeldung (mit `bo` gekennzeichnet). Gebucht wird
@@ -83,20 +102,20 @@ def _winkel_diff(a: float, b: float) -> float:
 
 
 def bot_loadout(rnd, fest=None) -> dict:
-    """Ein Loadout fuer einen Bot: zwei Waffen und eine Wurfwaffe, zufaellig
-    - oder das vorgegebene ("eines fuer alle"). C4 nie."""
+    """Ein Loadout fuer einen Bot: zwei verschiedene Waffen und eine
+    Granate (K.BOTS["wurf_arten"]) - oder das vorgegebene ("eines fuer
+    alle"), dann aber auch nur mit einer Wurfwaffe. C4 nie."""
     lo = K.LOADOUT
-    wuerfe = [w for w in lo["auswahl_wuerfe"] if w != "c4"]
+    wuerfe = [w for w in K.BOTS["wurf_arten"] if w != "c4"]
     if fest:
         raus = konto_modul.loadout_saeubern(fest) or {}
         raus = dict(raus)
-        raus["wuerfe"] = [w for w in raus.get("wuerfe", []) if w != "c4"]
+        raus["wuerfe"] = [w for w in raus.get("wuerfe", []) if w != "c4"][:1]
         if not raus["wuerfe"]:
             raus["wuerfe"] = [rnd.choice(wuerfe)]
         return raus
-    waffen = rnd.sample(list(lo["auswahl_waffen"]), lo["waffen"])
-    return {"name": "BOT", "waffen": waffen,
-            "wuerfe": [rnd.choice(wuerfe) for _ in range(lo["wuerfe"])]}
+    waffen = rnd.sample(list(lo["auswahl_waffen"]), 2)
+    return {"name": "BOT", "waffen": waffen, "wuerfe": [rnd.choice(wuerfe)]}
 
 
 class BotHirn:
@@ -141,6 +160,12 @@ class BotHirn:
         self.leben_vorher = k.leben
         self.ruf_rest = 0.0
         self.geblendet = 0.0          # so lange sieht er nichts (Blendgranate)
+        self.getroffen_rest = 0.0     # so lange ist der letzte Treffer her
+        self.deckung_ort = None       # wo er sich gerade versteckt
+        self.deckung_rest = 0.0       # so lange bleibt er noch dort
+        self.deckung_pause = 0.0      # so lange keine neue Deckung (angeschlagen)
+        self.deckung_suche = 0.0      # so lange gilt der gefundene Ort
+        self.linie = ""               # was zwischen ihm und dem Ziel steht
 
     def blenden(self, dauer: float) -> None:
         """Eine Blendgranate hat ihn erwischt: er sieht nichts, verliert
@@ -182,17 +207,19 @@ class BotHirn:
 
         # Getroffen worden: dorthin schauen, woher es kam.
         if k.leben < self.leben_vorher - 0.5:
+            self.getroffen_rest = 2.0
             self._getroffen()
         self.leben_vorher = k.leben
 
-        # Medkit, wenn es ruhig ist.
-        b = K.BOTS
-        if (k.leben < b["heilen_unter"] and k.medkits > 0 and k.heilt_rest <= 0
-                and self.ruhe >= b["heilen_ruhe"]):
-            ein["knoepfe"].append("heilen")
-
         helfen = self._wem_helfen()
-        if self.ziel is not None and self.ziel_ok(self.ziel):
+        kaempft = self.ziel is not None and self.ziel_ok(self.ziel)
+        # Aufhelfen ist in VERSUS die Aufgabe: liegt einer nah und ist der
+        # Gegner nicht gerade dicht dran, geht das vor.
+        if (kaempft and helfen is not None
+                and k.pos.distance_to(helfen.pos) < 160.0
+                and k.pos.distance_to(self.ziel.pos) > 260.0):
+            kaempft = False
+        if kaempft:
             will, ziel_punkt, feuern, zielt = self._kaempfen(dt, ein)
         elif helfen is not None:
             will, ziel_punkt = self._helfen(helfen, ein)
@@ -221,7 +248,9 @@ class BotHirn:
     def _zeiten(self, dt: float) -> None:
         for name in ("reaktion_rest", "stoss_rest", "pause_rest", "seite_rest",
                      "wurf_rest", "dash_rest", "waffen_rest", "weg_rest",
-                     "streif_rest", "ausweich_rest", "geblendet"):
+                     "streif_rest", "ausweich_rest", "geblendet",
+                     "getroffen_rest", "deckung_rest", "deckung_pause",
+                     "deckung_suche"):
             setattr(self, name, max(0.0, getattr(self, name) - dt))
         if self.ziel is None:
             self.ruhe += dt
@@ -285,17 +314,24 @@ class BotHirn:
             if jetzt - self.gesehen[w][2] > K.BOTS["gedaechtnis"] or not w.lebt:
                 del self.gesehen[w]
         if self.ziel is not None and self.ziel in sichtbar:
+            self.linie = self.g.welt.deckung(k.pos, self.ziel.pos, k.ebene)
             return                            # er bleibt dran
         alt = self.ziel
         self.ziel = None
         if sichtbar:
+            zone = self._zone()
             def wert(w):
                 d = k.pos.distance_to(w.pos)
                 if getattr(w, "am_boden", False):
                     d += 260.0                # erst, wer noch steht
+                # HUEGEL: wer im Kreis steht, nimmt ihn uns weg.
+                if zone is not None and w.ebene == zone[1] \
+                        and w.pos.distance_to(zone[0]) <= K.ZONE["radius"]:
+                    d -= 150.0
                 return d
             neu = min(sichtbar, key=wert)
             self._neues_ziel(neu, neu is alt)
+            self.linie = self.g.welt.deckung(k.pos, neu.pos, k.ebene)
             return
         # Niemand zu sehen: wo er zuletzt jemanden sah, sonst was er hoerte.
         if alt is not None and alt in self.gesehen:
@@ -392,12 +428,13 @@ class BotHirn:
         if self.wurf_phase > 0.0:
             return self._werfen(dt, ein, z)
         waffe = self._beste_waffe(abstand)
-        if waffe is None:
-            return self._nahkampf(ein, z, abstand)
-        if self._wurf_moeglich(abstand) and sichtbar:
+        # Erst die Granate, dann - wenn auch die weg ist - das Brecheisen.
+        if self._wurf_moeglich(abstand, waffe is None) and sichtbar:
             self.wurf_phase = 0.45
             self.wurf_rest = self.rnd.uniform(*b["wurf_pause"])
             return self._werfen(dt, ein, z)
+        if waffe is None:
+            return self._nahkampf(ein, z, abstand)
         nr, name = waffe
         if nr != k.waffe and self.waffen_rest <= 0.0 and k.nachlade_rest <= 0:
             ein["waffe"] = nr
@@ -405,8 +442,11 @@ class BotHirn:
         if k.magazin.get(k.waffe_name, 0) <= 0 and k.nachlade_rest <= 0:
             ein["knoepfe"].append("nachladen")
 
-        # Bewegen: Abstand halten, seitlich ausweichen.
-        will = self._kampfbewegung(abstand, z)
+        # Bewegen: Abstand halten, seitlich ausweichen - oder in Deckung.
+        will = self._kampfbewegung(abstand, z, ein)
+        versteckt = self._deckung(z, ein)
+        if versteckt is not None:
+            will = versteckt
 
         # Schiessen: nach der Reaktion, wenn das Fadenkreuz in der Naehe
         # ist, in Stoessen.
@@ -419,6 +459,16 @@ class BotHirn:
                                           max(1.0, abstand))) + 3.0
         bereit = (sichtbar and self.reaktion_rest <= 0.0 and abstand <= reich
                   and k.nachlade_rest <= 0)
+        if self.linie == "hindernis":
+            # Eine Kiste in der Schusslinie haelt jede Kugel auf (seit
+            # 0.34.26). Hineinschiessen waere Munition verschenken: er
+            # geht zur Seite, bis er freie Bahn hat.
+            bereit = False
+            if versteckt is None:
+                hin = z.pos - k.pos
+                if hin.length_squared() > 1.0:
+                    hin = hin.normalize()
+                    will = pygame.Vector2(-hin.y, hin.x) * self.seite * 0.9 + hin * 0.3
         if name == "scharf" and sichtbar and abstand > 90:
             zielt = True
             bereit = bereit and k.fokus >= 0.8
@@ -430,13 +480,12 @@ class BotHirn:
                 feuern = True
                 if self.stoss_rest <= dt:
                     self.pause_rest = self.rnd.uniform(*b["feuerpause"])
-        if feuern and self.still:
+        if feuern and self.still and versteckt is None:
             will = pygame.Vector2(0, 0)
         return will, ziel_punkt, feuern, zielt
 
-    def _kampfbewegung(self, abstand: float, z):
+    def _kampfbewegung(self, abstand: float, z, ein: dict | None = None):
         k = self.k
-        g = self.g
         if self.seite_rest <= 0.0:
             self.seite_rest = self.rnd.uniform(0.7, 1.6)
             if self.rnd.random() < 0.55:
@@ -447,7 +496,14 @@ class BotHirn:
             hin = pygame.Vector2(1, 0)
         hin = hin.normalize()
         quer = pygame.Vector2(-hin.y, hin.x) * self.seite
-        if abstand > wunsch + 40:
+        # HUEGEL: der Kreis geht vor. Wer draussen ist, kaempft auf dem Weg
+        # dorthin - auch ueber die Treppe -, statt dem Gegner nachzulaufen
+        # (seit 0.34.26; vorher zog es ihn nur auf derselben Ebene hin).
+        zone = self._zone()
+        if zone is not None and (k.ebene != zone[1] or k.pos.distance_to(zone[0])
+                                 > K.ZONE["radius"] * 0.75):
+            will = self._weg_richtung(zone[0], zone[1], ein) * 0.85 + quer * 0.2
+        elif abstand > wunsch + 40:
             # Heran - um Waende herum, wenn noetig.
             weg = self._weg_richtung(z.pos, z.ebene)
             will = weg * 0.9 + quer * 0.25
@@ -455,14 +511,79 @@ class BotHirn:
             will = -hin * 0.8 + quer * 0.45
         else:
             will = quer * 0.85 + hin * 0.1
-        # HUEGEL: im Kreis bleiben, auch im Kampf.
-        if g.regeln.get("zone") and k.ebene == g.zone_ebene:
-            zum_kreis = g.zone_mitte - k.pos
-            if zum_kreis.length() > K.ZONE["radius"] * 0.8:
-                will = will * 0.4 + zum_kreis.normalize() * 0.8
         if will.length_squared() > 1.0:
             will = will.normalize()
         return will
+
+    def _zone(self):
+        """(Mitte, Ebene) des Kreises, wenn HUEGEL gespielt wird."""
+        g = self.g
+        if not g.regeln.get("zone"):
+            return None
+        return pygame.Vector2(g.zone_mitte), g.zone_ebene
+
+    def _deckung(self, z, ein: dict):
+        """In Deckung gehen (seit 0.34.26): zum Nachladen, und wenn er
+        angeschlagen ist und gerade getroffen wird. Gibt die Laufrichtung
+        dorthin zurueck - oder None, wenn er nicht in Deckung will oder
+        keine findet.
+
+        Deckung ist eine Stelle in der Naehe, zwischen der und dem Gegner
+        eine Mauer oder ein Hindernis steht (Welt.deckung) - dieselbe
+        Rechnung, mit der eine Kugel dort haengen bleibt. Gesucht wird in
+        Ringen um ihn herum, der naechste Ring zuerst, und nur, wo er
+        geradewegs hinkommt. Angeschlagen versteckt er sich nur kurz und
+        danach eine Weile nicht wieder: Medkits hat er keine, und wer sich
+        dauerhaft versteckt, verliert den Kreis."""
+        k = self.k
+        b = K.BOTS
+        laedt = k.nachlade_rest > 0
+        if (not laedt and self.deckung_pause <= 0.0 and self.getroffen_rest > 0.0
+                and k.leben < b["deckung_leben"]):
+            self.deckung_rest = b["deckung_zeit"]
+            self.deckung_pause = b["deckung_pause"]
+        if not laedt and self.deckung_rest <= 0.0:
+            self.deckung_ort = None
+            return None
+        if self.deckung_ort is None or self.deckung_suche <= 0.0:
+            self.deckung_ort = self._deckung_suchen(pygame.Vector2(z.pos))
+            self.deckung_suche = 0.6
+        if self.deckung_ort is None:
+            return None
+        d = self.deckung_ort - k.pos
+        if d.length() < 4.0:
+            return pygame.Vector2(0, 0)
+        return d.normalize()
+
+    def _deckung_suchen(self, gefahr):
+        k = self.k
+        welt = self.g.welt
+        zone = self._zone()
+        hin = gefahr - k.pos
+        quer = (pygame.Vector2(-hin.y, hin.x).normalize() * (k.radius - 2)
+                if hin.length_squared() > 1.0 else pygame.Vector2(0, 0))
+        start = self.rnd.uniform(0.0, 30.0)
+        for r in K.BOTS["deckung_radien"]:
+            bestes, beste = None, 1e9
+            for i in range(12):
+                p = k.pos + pygame.Vector2(r, 0).rotate(start + i * 30.0)
+                if not welt.frei(p, k.radius + 2, k.ebene, True):
+                    continue
+                # Ganz verdeckt: Mitte und beide Seiten der Figur.
+                if any(welt.deckung(gefahr, q, k.ebene) == ""
+                       for q in (p, p + quer, p - quer)):
+                    continue
+                if not welt.wege.gerade_frei(k.ebene, k.pos, p, k.radius + 1):
+                    continue
+                wert = p.distance_to(k.pos) - 0.3 * p.distance_to(gefahr)
+                if zone is not None and k.ebene == zone[1] \
+                        and p.distance_to(zone[0]) > K.ZONE["radius"]:
+                    wert += 200.0             # lieber im Kreis bleiben
+                if wert < beste:
+                    bestes, beste = p, wert
+            if bestes is not None:
+                return bestes
+        return None
 
     def _nahkampf(self, ein: dict, z, abstand: float):
         """Keine Munition mehr: mit dem Brecheisen hin und zuschlagen."""
@@ -488,8 +609,10 @@ class BotHirn:
                 return i
         return -1
 
-    def _wurf_moeglich(self, abstand: float) -> bool:
-        if self.wurf_rest > 0.0 or self.reaktion_rest > 0.0:
+    def _wurf_moeglich(self, abstand: float, leer: bool = False) -> bool:
+        """`leer`: keine Munition mehr - dann wirft er, was er noch hat,
+        ohne die Pause zwischen zwei Wuerfen abzuwarten."""
+        if (self.wurf_rest > 0.0 and not leer) or self.reaktion_rest > 0.0:
             return False
         nah, weit = K.BOTS["wurf_weite"]
         if not (nah <= abstand <= weit):
@@ -500,8 +623,8 @@ class BotHirn:
         name = self.k.waffen[self.wurf_platz]
         if name == "rauch":
             # Rauch nur, wenn es eng wird: als Deckung zum Rueckzug.
-            return self.k.leben < 45.0
-        return self.rnd.random() < 0.5
+            return self.k.leben < 45.0 or leer
+        return leer or self.rnd.random() < 0.5
 
     def _werfen(self, dt: float, ein: dict, z):
         """Wurfwaffe nehmen, kurz zielen, werfen, zurueck zur Waffe."""
@@ -573,10 +696,6 @@ class BotHirn:
                     self.streifzug = (p, ebene)
                     self.streif_rest = self.rnd.uniform(1.5, 3.0)
                 ziel = self.streifzug
-        if ziel is None:
-            beute = self._beute_ziel()
-            if beute is not None:
-                ziel = beute
         if ziel is None and self.verdacht is not None and self.verdacht[2] >= jetzt:
             ort, ebene, _bis = self.verdacht
             if k.ebene == ebene and k.pos.distance_to(ort) < 30:
@@ -595,26 +714,6 @@ class BotHirn:
         if self.verdacht is not None and self.verdacht[2] >= jetzt:
             blick = pygame.Vector2(self.verdacht[0])
         return will, blick
-
-    def _beute_ziel(self):
-        """Ein Medkit oder eine Munitionskiste in Sicht, wenn er sie braucht."""
-        k = self.k
-        from .mehrspieler import KampfBeute
-        braucht = set()
-        if k.medkits <= 0 and k.leben < 70:
-            braucht.add("medkit")
-        if k.knapp and len(self._waffen_mit_munition()) < 2:
-            braucht.add("munition")
-        if not braucht:
-            return None
-        bestes, beste = None, K.BOTS["sicht"]
-        for w in self.g.welt.wesen:
-            if (isinstance(w, KampfBeute) and w.lebt and w.art in braucht
-                    and w.ebene == k.ebene):
-                d = k.pos.distance_to(w.pos)
-                if d < beste and self.g.welt.sicht_frei(k.pos, w.pos, k.ebene):
-                    bestes, beste = (pygame.Vector2(w.pos), w.ebene), d
-        return bestes
 
     def _streifziel(self):
         """Irgendwohin, wo Gegner sein koennten: die Kreise und Spawnstellen
@@ -752,30 +851,54 @@ class BotTeil:
             return False
 
     @property
+    def bots_aktiv(self) -> bool:
+        """Bots gibt es nur in Runden mit Gegnern aus Fleisch und Blut
+        (pvp, team, versus, huegel) - nicht in der Lobby, nicht in pve."""
+        return not self.in_lobby and bool(self.regeln.get("beute"))
+
+    @property
     def bots_soll(self) -> int:
         """Wie viele Spieler es mit Bots insgesamt sein sollen, 0 = keine."""
-        if self.in_lobby or not self.regeln.get("beute"):
+        if not self.bots_aktiv:
             return 0
         return int(self.regelwerk.get("bots", 0) or 0)
+
+    def bots_fest(self, team: int) -> int:
+        """Wie viele Bots fest in dieser Mannschaft spielen (-1: ohne
+        Mannschaften), unabhaengig von den Menschen (seit 0.34.26)."""
+        if not self.bots_aktiv:
+            return 0
+        schluessel = "bots_dazu" if team < 0 else "bots_t%d" % team
+        try:
+            return max(0, int(self.regelwerk.get(schluessel, 0) or 0))
+        except (TypeError, ValueError):
+            return 0
 
     def _bots(self) -> list:
         return [k for k in self.kaempfer.values() if getattr(k, "ist_bot", False)]
 
     def _bot_fehlen(self) -> list:
         """Je Mannschaft (oder ohne: -1), wie viele Bots dazu sollen -
-        negativ: so viele zu viel."""
+        negativ: so viele zu viel.
+
+        Zwei Regeln, und es gilt die groessere Zahl: AUFFUELLEN BIS
+        (`bots`) macht die Mannschaften gleich gross, BOTS IN ROT/BLAU
+        (`bots_t0` ...) stellt so viele Bots fest in eine Mannschaft."""
         soll = self.bots_soll
         menschen = [k for k in self.kaempfer.values() if not getattr(k, "ist_bot", False)]
         bots = self._bots()
         if not self.mit_teams:
-            return [(-1, max(0, soll - len(menschen)) - len(bots))]
+            braucht = max(max(0, soll - len(menschen)) if soll else 0,
+                          self.bots_fest(-1))
+            return [(-1, braucht - len(bots))]
         anzahl = len(K.TEAMS["namen"])
         je_team = [sum(1 for k in menschen if k.team == i) for i in range(anzahl)]
         ziel = max([-(-soll // anzahl)] + je_team) if soll else 0
         raus = []
         for i in range(anzahl):
             da = sum(1 for k in bots if k.team == i)
-            raus.append((i, (ziel - je_team[i]) - da if soll else -da))
+            braucht = max((ziel - je_team[i]) if soll else 0, self.bots_fest(i))
+            raus.append((i, braucht - da))
         return raus
 
     def _bots_fuehren(self, dt: float, sofort: bool = False) -> None:
@@ -788,7 +911,8 @@ class BotTeil:
         if not sofort and self._bots_rest > 0.0:
             return
         self._bots_rest = K.BOTS["verwalten_takt"]
-        for _ in range(4 * len(K.BOTS["auffuellen"]) + 8):
+        for _ in range(4 * len(K.BOTS["auffuellen"])
+                       + K.BOTS["je_team_hoechstens"] * (len(K.TEAMS["namen"]) + 1) + 8):
             plan = self._bot_fehlen()
             fehlt = [t for t, n in plan if n > 0]
             zu_viel = [t for t, n in plan if n < 0]
@@ -819,7 +943,7 @@ class BotTeil:
         namen = [n for n in K.BOTS["namen"] if "BOT-" + n not in vergeben]
         name = "BOT-" + (self._bot_rnd.choice(namen) if namen else str(nummer - 99))
         k = Kaempfer(self._einstiegsort(team), 0, nummer, name,
-                     self._fraktion_fuer(nummer, team), knapp=self.knapp,
+                     self._fraktion_fuer(nummer, team), knapp=True,
                      team=team)
         k.ist_bot = True
         k.angemeldet = None
@@ -827,7 +951,7 @@ class BotTeil:
         k.konto = ""
         self._regeln_anlegen(k)
         k.unverwundbar = self.schutz_zeit
-        k.medkits = self.start_medkits
+        k.medkits = 0
         self.kaempfer[nummer] = k
         self.welt.dazu(k)
         self._namen_merken(k)
@@ -853,8 +977,33 @@ class BotTeil:
         k.loadout = lo
         k.waffen = plaetze
         k.waffe = 0
-        k.magazin = {w: K.WAFFEN[w]["magazin"] for w in plaetze}
-        k.vorrat = {w: K.MUNITION["vorrat"].get(w, 0) for w in plaetze}
+        self._bot_munition(k)
+
+    def _bot_munition(self, k) -> None:
+        """Was ein Bot zu Beginn eines Lebens dabeihat (seit 0.34.26).
+
+        Gemeldet: "Die sollen auch eine Granate haben, aber jeweils nur in
+        ihrem Leben eine werfen koennen ... die sollen keine Medkits oder
+        Munition einsammeln, sondern wenn ihre Munition und Granaten
+        aufgebraucht sind, sollen sie einfach in den Nahkampf gehen."
+        Darum immer knapp, egal was die Runde sagt: volle Magazine und ein
+        Vorrat (`vorrat_anteil` des gewoehnlichen), eine Wurfwaffe ohne
+        Nachschub, kein Medkit. Mit unbegrenzter Munition kaeme der
+        Nahkampf nie."""
+        b = K.BOTS
+        k.knapp = True
+        k.medkits = 0
+        k.magazin = {}
+        k.vorrat = {}
+        for w in k.waffen:
+            d = K.WAFFEN[w]
+            if d.get("art") == "wurf":
+                k.magazin[w] = b["wuerfe_je_leben"]
+                k.vorrat[w] = 0
+            else:
+                k.magazin[w] = d["magazin"]
+                k.vorrat[w] = int(round(K.MUNITION["vorrat"].get(w, 0)
+                                        * b["vorrat_anteil"]))
 
     def _bots_steuern(self, dt: float) -> None:
         """Jeder Bot schickt seine Eingabe, wie ein Gast."""

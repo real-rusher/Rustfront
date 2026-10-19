@@ -90,6 +90,7 @@ class Kaempfer(Spieler):
     # Ein Bot (seit 0.34.18, bots.py)? Dann hat er ein Hirn statt einer
     # Leitung. Beim Gast kommt das mit der Weltmeldung ("bo").
     ist_bot = False
+    team_fest = False         # vom Gastgeber eingeteilt (Team-Manager, seit 0.34.26)
     hirn = None
 
     def __init__(self, pos, ebene: int, nummer: int, name: str,
@@ -345,6 +346,10 @@ class KampfBeute(Aufsammler):
         for k in list(self._kaempfer.values()):
             if not k.lebt or k.am_boden or k.ebene != self.ebene:
                 continue
+            # Bots heben nichts auf (seit 0.34.26): kein Medkit, keine
+            # Munition. Ist alles verschossen, gehen sie in den Nahkampf.
+            if k.ist_bot:
+                continue
             if self.pos.distance_to(k.pos) > self.radius + k.radius + 3:
                 continue
             genommen = False
@@ -356,8 +361,7 @@ class KampfBeute(Aufsammler):
             elif self.art == "rakete":
                 # Wer schon einen traegt, laesst ihn liegen. Sonst waere
                 # der Werfer einmal in der Runde eben doch zweimal da.
-                # Bots lassen ihn liegen (seit 0.34.18): sie sind schwach.
-                genommen = False if k.ist_bot else k.rpg_nehmen()
+                genommen = k.rpg_nehmen()
             if genommen:
                 self.lebt = False
                 k.zaehlen("beute")
@@ -1408,7 +1412,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         if not self.mit_teams:
             return
         anzahl = len(K.TEAMS["namen"])
-        leute = sorted(self.kaempfer.values(), key=lambda k: k.nummer)
+        # Nur Menschen: Bots stellt `_bots_fuehren` danach dorthin, wo sie
+        # fehlen (seit 0.34.26). Vorher wurden auch sie verschoben, und ein
+        # Bot, den der Gastgeber fest in ROT haben wollte, landete in BLAU.
+        leute = sorted((k for k in self.kaempfer.values()
+                        if not getattr(k, "ist_bot", False)),
+                       key=lambda k: k.nummer)
         # Wer noch keine Mannschaft hat - etwa, weil er aus der Lobby kommt,
         # wo es keine gibt -, bekommt zuerst die, die er sich beim
         # Verbinden gewuenscht hat, und sonst die kleinere. Vorher landeten
@@ -1429,13 +1438,19 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             k.team = groessen.index(min(groessen))
         # So lange den Groessten verkleinern, bis der Unterschied hoechstens
         # eins ist. Das endet immer, weil jeder Schritt ihn verringert.
+        # Wen der Gastgeber im Team-Manager eingeteilt hat (`team_fest`),
+        # der bleibt, wo er ist - auch wenn es dann ungleich steht. Das hat
+        # er so gewollt.
         for _ in range(len(leute) + 1):
             gruppen = [[k for k in leute if k.team == i] for i in range(anzahl)]
             groesste = max(range(anzahl), key=lambda i: len(gruppen[i]))
             kleinste = min(range(anzahl), key=lambda i: len(gruppen[i]))
             if len(gruppen[groesste]) - len(gruppen[kleinste]) <= 1:
                 break
-            gruppen[groesste][-1].team = kleinste
+            frei = [k for k in gruppen[groesste] if not getattr(k, "team_fest", False)]
+            if not frei:
+                break
+            frei[-1].team = kleinste
 
     def _fraktion_fuer(self, nummer: int, team: int = -1) -> str:
         """Wer wen treffen kann.
@@ -3238,7 +3253,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         nie in die Lage, aus dem Vorrat nachladen zu muessen; der blieb
         voll, und weil er voll blieb, liess sich auch keine
         Munitionskiste aufheben. Zwei gemeldete Fehler, eine Ursache.
+
+        Bots haben ihre eigene Rechnung (`_bot_munition`).
         """
+        if k.ist_bot:
+            self._bot_munition(k)
+            return
         if not self.knapp:
             k.magazin = {w: K.WAFFEN[w]["magazin"] for w in k.waffen}
             return
@@ -3275,7 +3295,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         k.boden_rest = 0.0
         k.revive_stand = 0.0
         k.unverwundbar = self.schutz_zeit
-        k.medkits = max(k.medkits, self.start_medkits)
+        k.medkits = 0 if k.ist_bot else max(k.medkits, self.start_medkits)
         self._magazine_fuellen(k)
         if k not in self.welt.wesen and k not in self.welt.neue:
             self.welt.dazu(k)
@@ -4488,13 +4508,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                     eintraege.append(("starten", "RUNDE STARTEN",
                                       R.kurz(self.plan[0], self._umfeld())))
                 eintraege.append(("planen", "RUNDE EINSTELLEN", ""))
+                eintraege.append(("teams", "TEAMS UND BOTS", ""))
             else:
                 eintraege.append(("planen", "NÄCHSTE RUNDE ANSEHEN", ""))
         elif self.ist_gastgeber:
             eintraege.append(("planen", "NÄCHSTE RUNDE EINSTELLEN", ""))
             eintraege.append(("neu", "RUNDE NEU STARTEN", ""))
-            if self.mit_teams:
-                eintraege.append(("teams", "MANNSCHAFTEN", ""))
+            if self.mit_teams or self.regeln.get("beute"):
+                eintraege.append(("teams", "TEAMS UND BOTS", ""))
         else:
             eintraege.append(("planen", "NÄCHSTE RUNDE ANSEHEN", ""))
         eintraege.append(("ausruestung", "AUSRÜSTUNG",
@@ -4766,19 +4787,135 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self._menue_zu()
             self.lobby_betreten()
 
+    # ── Team-Manager (seit 0.34.26) ──────────────────────────────────
+    #
+    # Gemeldet: "Fuegt dafuer auch einen Team-Manager-Editor fuer den Host
+    # hinzu, im Spiel oder vor dem Spiel." Aus der Unterseite MANNSCHAFTEN
+    # des Pausenmenues, die bis dahin nur Spieler umsetzen konnte. Jetzt
+    # auch: Bots auffuellen, Bots fest in jede Mannschaft (oder ohne
+    # Mannschaften dazu), und das schon in der Lobby fuer die naechste
+    # Runde. In der Lobby verstellt sie den Plan (der geht an alle), im
+    # Gefecht die laufende Runde - sofort, ohne Neustart.
+
+    def _tm_regeln(self) -> dict:
+        """Die Regeln, die der Team-Manager zeigt und verstellt."""
+        if self.in_lobby:
+            return self.plan[0] if self.plan else {}
+        return self.regelwerk
+
+    def _tm_teams(self) -> bool:
+        if not self.in_lobby:
+            return self.mit_teams
+        return bool(K.MODI.get(self._tm_regeln().get("modus"), {}).get("teams"))
+
+    def _tm_bots(self) -> bool:
+        """Gibt es in der gezeigten Runde ueberhaupt Bots?"""
+        if not self.in_lobby:
+            return bool(self.regeln.get("beute"))
+        return bool(K.MODI.get(self._tm_regeln().get("modus"), {}).get("beute"))
+
+    def _tm_menschen(self) -> list:
+        return sorted((k for k in self.kaempfer.values()
+                       if not getattr(k, "ist_bot", False)),
+                      key=lambda k: k.nummer)
+
+    def _tm_zeilen(self) -> list:
+        """Die Zeilen der Tafel: (Art, Wert). Art ist "fuellen", "bots"
+        (Wert: Mannschaft, -1 ohne) oder "mensch" (Wert: Nummer)."""
+        zeilen = []
+        if self._tm_bots():
+            zeilen.append(("fuellen", None))
+            if self._tm_teams():
+                zeilen += [("bots", i) for i in range(len(K.TEAMS["namen"]))]
+            else:
+                zeilen.append(("bots", -1))
+        if self._tm_teams():
+            zeilen += [("mensch", k.nummer) for k in self._tm_menschen()]
+        return zeilen
+
+    def _tm_setzen(self, schluessel: str, wert) -> None:
+        """Eine Bot-Regel setzen: in der Lobby im Plan, sonst sofort."""
+        if self.in_lobby:
+            self.plan_verstellen(0, schluessel, wert)
+            return
+        self.regelwerk[schluessel] = wert
+        # Auch im Plan, damit die Runde beim naechsten Durchlauf (Schleife)
+        # wieder so aussieht.
+        if self.plan_laeuft and 0 <= self.plan_pos < len(self.plan):
+            self.plan_verstellen(self.plan_pos, schluessel, wert)
+        self._bots_fuehren(0.0, sofort=True)
+
+    def tm_verstellen(self, zeile: tuple, schritt: int) -> None:
+        """Eine Zeile des Team-Managers einen Schritt weiter (oder zurueck)."""
+        if not self.ist_gastgeber:
+            return
+        art, wert = zeile
+        d = self._tm_regeln()
+        if art == "fuellen":
+            werte = list(K.BOTS["auffuellen"])
+            jetzt = int(d.get("bots", 0) or 0)
+            i = werte.index(jetzt) if jetzt in werte else 0
+            self._tm_setzen("bots", werte[max(0, min(len(werte) - 1, i + schritt))])
+        elif art == "bots":
+            schluessel = "bots_dazu" if wert < 0 else "bots_t%d" % wert
+            jetzt = int(d.get(schluessel, 0) or 0)
+            self._tm_setzen(schluessel, max(0, min(K.BOTS["je_team_hoechstens"],
+                                                   jetzt + schritt)))
+        elif art == "mensch":
+            k = self.kaempfer.get(wert)
+            if k is None:
+                return
+            anzahl = len(K.TEAMS["namen"])
+            if self.in_lobby:
+                # Vor der Runde: AUTOMATISCH, dann jede Mannschaft der Reihe
+                # nach. Gilt, sobald die naechste Runde Mannschaften hat.
+                wahl = list(range(-1, anzahl))
+                jetzt = k.team_wunsch if k.team_wunsch in wahl else -1
+                neu = wahl[(wahl.index(jetzt) + schritt) % len(wahl)]
+                k.team_wunsch = neu
+                k.team_fest = neu >= 0
+            else:
+                neu = (k.team + schritt) % anzahl
+                self._team_setzen(k, neu)
+                k.team_wunsch = neu
+                k.team_fest = True
+                self._bots_fuehren(0.0, sofort=True)
+
+    def tm_text(self, zeile: tuple) -> tuple:
+        """(Beschriftung, Wert, Farbe des Werts) einer Zeile."""
+        art, wert = zeile
+        d = self._tm_regeln()
+        if art == "fuellen":
+            v = int(d.get("bots", 0) or 0)
+            return "AUFFÜLLEN BIS", ("AUS" if not v else "%d SPIELER" % v), K.C_CREAM
+        if art == "bots":
+            if wert < 0:
+                v = int(d.get("bots_dazu", 0) or 0)
+                return "BOTS DAZU", ("KEINE" if not v else str(v)), K.C_CREAM
+            v = int(d.get("bots_t%d" % wert, 0) or 0)
+            return ("BOTS IN %s" % K.TEAMS["namen"][wert],
+                    ("KEINE" if not v else str(v)), K.TEAMS["farben"][wert])
+        k = self.kaempfer.get(wert)
+        if k is None:
+            return "", "", K.C_MUTED
+        team = k.team_wunsch if self.in_lobby else k.team
+        if 0 <= team < len(K.TEAMS["namen"]):
+            return k.name, K.TEAMS["namen"][team], K.TEAMS["farben"][team]
+        return k.name, "AUTOMATISCH", K.C_MUTED
+
     def _menue_teams_taste(self, hoch, runter, links, rechts, waehlen) -> None:
-        leute = sorted(self.kaempfer.values(), key=lambda k: k.nummer)
-        if not leute:
+        zeilen = self._tm_zeilen()
+        if not zeilen:
             self.menue_teams = False
             return
         if hoch or runter:
             self.menue_zeile = (self.menue_zeile
-                                + (1 if runter else -1)) % len(leute)
+                                + (1 if runter else -1)) % len(zeilen)
             self.app.klaenge.spielen("menue", 0.4)
             return
         if links or rechts or waehlen:
-            k = leute[max(0, min(len(leute) - 1, self.menue_zeile))]
-            self._team_setzen(k, (k.team + 1) % len(K.TEAMS["namen"]))
+            zeile = zeilen[max(0, min(len(zeilen) - 1, self.menue_zeile))]
+            self.tm_verstellen(zeile, -1 if links else 1)
             self.app.klaenge.spielen("menue_ok", 0.5)
 
     def _team_setzen(self, k, team: int) -> None:
@@ -4872,7 +5009,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         for k in self.kaempfer.values():
             k.abschuesse = 0
             k.tode = 0
-            k.knapp = self.knapp
+            # Bots haben immer begrenzte Munition (seit 0.34.26).
+            k.knapp = self.knapp or k.ist_bot
             k.vorrat = {v: K.MUNITION["vorrat"].get(v, 0) for v in k.waffen}
             if not self.mit_teams:
                 k.team = -1
@@ -5679,8 +5817,22 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 for i in range(len(self._menue_baut()))]
 
     def _teams_flaechen(self) -> list:
-        leute = sorted(self.kaempfer.values(), key=lambda k: k.nummer)
-        return [pygame.Rect(140, 83 + i * 15, 360, 13) for i in range(len(leute))]
+        """Je Zeile des Team-Managers ihr Rechteck. Bot-Zeilen und Spieler
+        stehen in zwei Bloecken mit etwas Luft dazwischen."""
+        raus = []
+        zeilen = self._tm_zeilen()
+        # Bei vielen Spielern enger, damit alles auf die Tafel passt.
+        platz = K.GAME_H - 52 + 8 - 64 - 86 - 14
+        schritt = max(10, min(15, platz // max(1, len(zeilen))))
+        y = 86
+        vorher = None
+        for art, _wert in zeilen:
+            if vorher is not None and (art == "mensch") != (vorher == "mensch"):
+                y += 14
+            raus.append(pygame.Rect(140, y - 3, 360, min(13, schritt - 1)))
+            y += schritt
+            vorher = art
+        return raus
 
     def _menue_maus(self, ev) -> None:
         """Die Maus im Menue: zeigen waehlt, Linksklick loest aus.
@@ -5697,7 +5849,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 if r.collidepoint(pos):
                     self.menue_zeile = i
                     if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-                        self._menue_taste(pygame.K_RETURN)
+                        # Links vom Wert ("<") zurueck, sonst weiter.
+                        self._menue_taste(pygame.K_LEFT if pos[0] < r.right - 70
+                                          and pos[0] >= r.right - 110
+                                          else pygame.K_RETURN)
                     break
             if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 3:
                 self.menue_teams = False
@@ -5854,34 +6009,88 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
 
     def _menue_teams_zeichnen(self, ziel) -> None:
         f = SCHRIFT
-        f.zeichnen(ziel, "MANNSCHAFTEN", K.GAME_W // 2, 34, K.C_AMBER, 3,
+        mitte = K.GAME_W // 2
+        # Eine deckende Tafel: Lobbykopf, Hotbar und Punktestand lagen
+        # sonst unter der Schrift und machten sie unleserlich.
+        tafel = pygame.Rect(110, 8, K.GAME_W - 220, K.GAME_H - 52)
+        ui.kasten(ziel, tafel, K.C_MUTED_DK, (12, 9, 7), 5)
+        f.zeichnen(ziel, "TEAMS UND BOTS", mitte, 24, K.C_AMBER, 3,
                    ausrichtung="mitte")
-        f.zeichnen(ziel, "ENTER ODER PFEILE VERSCHIEBEN - SOFORT",
-                   K.GAME_W // 2, 58, K.C_MUTED_DK, 1, ausrichtung="mitte")
-        leute = sorted(self.kaempfer.values(), key=lambda k: k.nummer)
-        if leute:
-            self.menue_zeile = max(0, min(len(leute) - 1, self.menue_zeile))
-        y = 86
-        for i, k in enumerate(leute):
+        if self.in_lobby:
+            unter = "NÄCHSTE RUNDE: " + R.kurz(self._tm_regeln(), self._umfeld())
+        else:
+            unter = "GILT SOFORT, IN DER LAUFENDEN RUNDE"
+        f.zeichnen(ziel, ui.kuerzen(unter, 440), mitte, 48, K.C_MUTED, 1,
+                   ausrichtung="mitte")
+        f.zeichnen(ziel, "PFEILE ODER KLICK: VERSTELLEN", mitte, 60,
+                   K.C_MUTED_DK, 1, ausrichtung="mitte")
+        zeilen = self._tm_zeilen()
+        flaechen = self._teams_flaechen()
+        if zeilen:
+            self.menue_zeile = max(0, min(len(zeilen) - 1, self.menue_zeile))
+        else:
+            f.zeichnen(ziel, "IN DIESER SPIELART GIBT ES WEDER BOTS NOCH MANNSCHAFTEN",
+                       mitte, 100, K.C_MUTED, 1, ausrichtung="mitte")
+        for i, (zeile, r) in enumerate(zip(zeilen, flaechen)):
             aktiv = (i == self.menue_zeile)
             if aktiv:
-                pygame.draw.rect(ziel, (24, 17, 12), (140, y - 3, 360, 13))
-                pygame.draw.rect(ziel, K.C_AMBER, (140, y - 3, 3, 13))
-            f.zeichnen(ziel, k.name, 154, y,
+                pygame.draw.rect(ziel, (24, 17, 12), r)
+                pygame.draw.rect(ziel, K.C_AMBER, (r.x, r.y, 3, r.h))
+            name, wert, farbe = self.tm_text(zeile)
+            if zeile[0] == "mensch":
+                k = self.kaempfer.get(zeile[1])
+                if k is not None and k.team_fest:
+                    name += "  (FEST)"
+            f.zeichnen(ziel, name, r.x + 14, r.y + 3,
                        K.C_CREAM if aktiv else K.C_MUTED, 1)
-            if 0 <= k.team < len(K.TEAMS["namen"]):
-                f.zeichnen(ziel, K.TEAMS["namen"][k.team], 490, y,
-                           K.TEAMS["farben"][k.team], 1, ausrichtung="rechts")
-            y += 15
-        # Wie es gerade steht, damit man sieht, ob man gerade ausgleicht
-        groessen = [0] * len(K.TEAMS["namen"])
-        for k in leute:
-            if 0 <= k.team < len(groessen):
-                groessen[k.team] += 1
-        f.zeichnen(ziel, "  ".join("%s %d" % (n, g)
-                                   for n, g in zip(K.TEAMS["namen"], groessen)),
-                   K.GAME_W // 2, y + 10, K.C_MUTED, 1, ausrichtung="mitte")
-        f.zeichnen(ziel, "[ESC] ZURÜCK", K.GAME_W // 2, K.GAME_H - 22,
+            f.zeichnen(ziel, "<", r.right - 100, r.y + 3,
+                       K.C_AMBER if aktiv else K.C_MUTED_DK, 1)
+            f.zeichnen(ziel, wert, r.right - 52, r.y + 3, farbe, 1,
+                       ausrichtung="mitte")
+            f.zeichnen(ziel, ">", r.right - 10, r.y + 3,
+                       K.C_AMBER if aktiv else K.C_MUTED_DK, 1)
+        y = (flaechen[-1].bottom + 14) if flaechen else 120
+        # Wie es steht: Menschen und Bots je Mannschaft.
+        if self._tm_teams():
+            teile = []
+            for i, n in enumerate(K.TEAMS["namen"]):
+                if self.in_lobby:
+                    menschen = sum(1 for k in self._tm_menschen() if k.team_wunsch == i)
+                    teile.append("%s %d" % (n, menschen))
+                else:
+                    menschen = sum(1 for k in self._tm_menschen() if k.team == i)
+                    bots = sum(1 for k in self._bots() if k.team == i)
+                    teile.append("%s %d + %d BOTS" % (n, menschen, bots))
+            f.zeichnen(ziel, "   ".join(teile), mitte, y, K.C_MUTED, 1,
+                       ausrichtung="mitte")
+        elif not self.in_lobby and self._tm_bots():
+            f.zeichnen(ziel, "%d SPIELER, %d BOTS" % (len(self._tm_menschen()),
+                                                     len(self._bots())),
+                       mitte, y, K.C_MUTED, 1, ausrichtung="mitte")
+        # Was die gewaehlte Zeile tut.
+        hilfe = ""
+        if zeilen:
+            art = zeilen[self.menue_zeile][0]
+            hilfe = {
+                "fuellen": "MACHT DIE MANNSCHAFTEN MIT BOTS GLEICH GROSS. WER DAZUKOMMT, VERDRÄNGT EINEN BOT.",
+                "bots": "SO VIELE BOTS SPIELEN HIER IMMER MIT. MIT AUFFÜLLEN GILT DIE GRÖSSERE ZAHL.",
+                "mensch": ("IN DIESE MANNSCHAFT KOMMT ER IN DER NÄCHSTEN RUNDE."
+                           if self.in_lobby else "WECHSELT SOFORT UND STEIGT BEI DER NEUEN MANNSCHAFT EIN."),
+            }.get(art, "")
+        if hilfe:
+            # Zwei Zeilen, wenn noetig - die Tafel ist schmaler als das Bild.
+            worte, zeilen_h, jetzt = hilfe.split(), [], ""
+            for w in worte:
+                if f.breite(jetzt + " " + w) > tafel.width - 30 and jetzt:
+                    zeilen_h.append(jetzt)
+                    jetzt = w
+                else:
+                    jetzt = (jetzt + " " + w).strip()
+            zeilen_h.append(jetzt)
+            for j, z in enumerate(zeilen_h[-2:]):
+                f.zeichnen(ziel, z, mitte, tafel.bottom - 40 + j * 11,
+                           K.C_TEAL, 1, ausrichtung="mitte")
+        f.zeichnen(ziel, "[ESC] ZURÜCK", mitte, tafel.bottom - 14,
                    K.C_MUTED_DK, 1, ausrichtung="mitte")
 
     # ── Siegtafel ────────────────────────────────────────────────────

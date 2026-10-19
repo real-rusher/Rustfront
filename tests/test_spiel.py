@@ -70,15 +70,24 @@ pruef("hat automatisch nachgeladen", held.magazin["repetierer"] > 0)
 # internen Liste - was zaehlt, ist ob es trifft.
 from dustfront.entities import Gegner
 
-def freies_feld():
-    """Ein Punkt mit viel Platz nach rechts, fuer die Schussbahnen."""
-    for kx in range(4, szene.welt.ebene(0).breite - 12):
-        p = pygame.Vector2(kx*K.TILE+16, 12*K.TILE+16)
-        weit = pygame.Vector2(p.x + 260, p.y)
-        if (szene.welt.frei(p, held.radius, 0)
-                and szene.welt.frei(weit, 12, 0)
-                and szene.welt.sicht_frei(p, weit, 0)):
-            return p
+def freies_feld(weite=260):
+    """Ein Punkt mit viel Platz nach rechts, fuer die Schussbahnen.
+
+    Seit 0.34.26 haelt jede Kiste eine Kugel auf (Welt.schuss_halt). Frei
+    heisst darum: nichts dazwischen (Welt.deckung), nicht nur freie
+    Sicht - und so weit, wie der Schuss reichen soll."""
+    e0 = szene.welt.ebene(0)
+    zeilen = [12] + [z for z in range(3, e0.hoehe - 3) if z != 12]
+    for ky in zeilen:
+        for kx in range(4, e0.breite - 4):
+            p = pygame.Vector2(kx*K.TILE+16, ky*K.TILE+16)
+            weit = pygame.Vector2(p.x + weite, p.y)
+            if weit.x >= e0.pixel_breite - K.TILE:
+                break
+            if (szene.welt.frei(p, held.radius, 0)
+                    and szene.welt.frei(weit, 12, 0)
+                    and szene.welt.deckung(p, weit, 0) == ""):
+                return p
     return pygame.Vector2(10*K.TILE+16, 12*K.TILE+16)
 
 def probe(waffe, entfernung, dauer=1.4, halten=()):
@@ -90,7 +99,7 @@ def probe(waffe, entfernung, dauer=1.4, halten=()):
             g.lebt = False
     szene.welt.schritt(K.FIXED_DT)
     held.unverwundbar = 999.0        # sonst misst man fremde Treffer mit
-    start = freies_feld()
+    start = freies_feld(max(260, entfernung + 20))
     held.pos.update(start); held.tempo.update(0, 0); held.ebene = 0
     held.takt = 0.0; held.nachlade_rest = 0.0; held.fokus = 0.0
     held.feuert = False; held.will.update(0, 0)   # kein Dauerfeuer von vorhin
@@ -1654,7 +1663,9 @@ pruef("Die neuen Bodenarten sind begehbar",
       all(not K.KACHELN[k_]["fest"] and not K.KACHELN[k_].get("loch")
           for k_ in (K.PISTE, K.KIES, K.PFLASTER, K.GESTRUEPP, K.DIELEN)))
 
-# Eine Kugel fliegt ueber den Sandsack hinweg und bleibt am Fels haengen.
+# Bis 0.34.25 flog eine Kugel ueber den Sandsack hinweg. Seit 0.34.26
+# haelt jedes Hindernis Kugeln auf (gemeldet: "Alles, was eine Art Textur
+# hat und etwas blocken sollte, sollte auch Schuesse blocken").
 _schuss66 = _W63.Welt([_W63.Ebene.aus_text(["." * 20, "...s.....r" + "." * 10, "." * 20], 0)],
                       satz="wueste")
 _kugel66 = _Gs65(pygame.Vector2(1.5 * K.TILE, 1.5 * K.TILE), 0.0, K.WAFFEN["repetierer"], 0)
@@ -1665,8 +1676,8 @@ for _ in range(120):
     if not _kugel66.lebt:
         break
     _kugel66.schritt(K.FIXED_DT)
-pruef("Eine Kugel fliegt ueber den Sandsack und bleibt am Fels haengen",
-      not _kugel66.lebt and 8 * K.TILE < _kugel66.pos.x <= 9 * K.TILE,
+pruef("Eine Kugel bleibt am Sandsack haengen, nicht erst am Fels",
+      not _kugel66.lebt and 2 * K.TILE < _kugel66.pos.x <= 3 * K.TILE + 1,
       "endet bei x %.0f" % _kugel66.pos.x)
 
 # Piste franst zum Sand hin aus, zur Piste daneben nicht. Bis dahin zog
@@ -8242,9 +8253,12 @@ def _quote80(quer, sekunden=12.0):
             _ich80.pos.update(p_)
         _ich80.tempo.update(0, 0)
         _bot80.leben = _bot80.max_leben
+        # Volle Magazine: gemessen wird das Zielen. Seit 0.34.26 geht ein
+        # Bot zum Nachladen in Deckung, und ein leeres Magazin hiesse hier
+        # Deckungsgaenge statt Schuesse - mal mehr, mal weniger.
         for n_ in _bot80.waffen:
             if K.WAFFEN[n_].get("art") == "schuss":
-                _bot80.magazin[n_] = max(_bot80.magazin[n_], 1)
+                _bot80.magazin[n_] = K.WAFFEN[n_]["magazin"]
         w80.schritt(K.FIXED_DT)
     s_ = _bot80.zaehler.get("schuesse", 0)
     t_ = _bot80.zaehler.get("treffer", 0)
@@ -9074,6 +9088,341 @@ _art83 = sorted(K.GEGNER)[0]
 _gg83 = _Gg83(pygame.Vector2(0, 0), _art83)
 pruef("Ein Gegner steht beim Gastgeber so hoch wie beim Gast",
       _gg83.hoehe_3d == _gh83(K.gegner_daten(_art83)) > 0, _art83)
+
+# 0.34.26: "sehr, sehr viele Hindernisse, auch zum Beispiel auf der
+# Wuestenmap, auch auf anderen Maps, Schuesse durchlassen. Alles, was eine
+# Art Textur hat und etwas blocken sollte, sollte auch Schuesse blocken. So
+# etwas wie die Explosion einer Granate sollte aber leicht durchgehen. Und
+# eine Blendgranate sollte dadurch nur abgeschwaecht werden."
+print("\n-- Deckung: Hindernisse halten Kugeln, daempfen Explosion und Blitz (0.34.26)")
+from dustfront import world as _W84
+from dustfront.entities import Geschoss as _Gs84, Granate as _Gr84
+
+
+def _kugel84(zeile, satz="", y=None):
+    welt_ = _W84.Welt([_W84.Ebene.aus_text(["." * 14, zeile, "." * 14], 0)], satz=satz)
+    y = 1.5 * K.TILE if y is None else y
+    kugel = _Gs84(pygame.Vector2(0.5 * K.TILE, y), 0.0, K.WAFFEN["repetierer"], 0)
+    kugel.welt = welt_
+    kugel.vorher.update(kugel.pos)
+    welt_.wesen.append(kugel)
+    for _ in range(200):
+        if not kugel.lebt:
+            break
+        kugel.schritt(K.FIXED_DT)
+    return kugel
+
+
+_falsch84 = []
+for _z84 in "Xbshkwr#":
+    for _satz84 in ("", "wueste", "schnee"):
+        _k84 = _kugel84("....%s........." % _z84, _satz84)
+        if _k84.lebt or not (3 * K.TILE <= _k84.pos.x < 5 * K.TILE):
+            _falsch84.append("%s/%s: x %.0f" % (_z84, _satz84 or "-", _k84.pos.x))
+pruef("Jedes Hindernis mit Bild haelt die Kugel auf, auf jedem Kartensatz",
+      not _falsch84, ", ".join(_falsch84))
+pruef("... und wo nichts steht, fliegt sie bis zum Ende ihrer Reichweite",
+      _kugel84("." * 14).pos.x > 10 * K.TILE, "")
+# Ein Kaktus fuellt seine Kachel nicht (18 von 32 Pixeln, seit 0.34.19
+# haelt er nur so gross auf). Eine Kugel am Kachelrand geht vorbei.
+_rand84 = _kugel84("....k.........", y=1 * K.TILE + 3)
+pruef("Gehalten wird an der Grundflaeche, nicht an der Kachel: am Kaktus vorbei",
+      _rand84.pos.x > 6 * K.TILE, "x %.0f" % _rand84.pos.x)
+
+_welt84 = _W84.Welt([_W84.Ebene.aus_text(["............",
+                                          "..X.........",
+                                          "......#.....",
+                                          "............"], 0)])
+_T84 = K.TILE
+_v84 = lambda x, y: pygame.Vector2(x * _T84, y * _T84)
+pruef("Deckung: frei, hinter einer Kiste, hinter einer Mauer",
+      _welt84.deckung(_v84(0.5, 0.5), _v84(5.5, 0.5), 0) == ""
+      and _welt84.deckung(_v84(0.5, 1.5), _v84(4.5, 1.5), 0) == "hindernis"
+      and _welt84.deckung(_v84(4.5, 2.5), _v84(8.5, 2.5), 0) == "wand",
+      "%s / %s / %s" % (_welt84.deckung(_v84(0.5, 0.5), _v84(5.5, 0.5), 0),
+                        _welt84.deckung(_v84(0.5, 1.5), _v84(4.5, 1.5), 0),
+                        _welt84.deckung(_v84(4.5, 2.5), _v84(8.5, 2.5), 0)))
+pruef("Wer neben der Kiste steht, steht nicht hinter ihr",
+      _welt84.deckung(_v84(1.5, 1.5), _v84(1.5, 3.5), 0) == "", "")
+
+
+def _granate84(ziel_pos):
+    """Schaden einer Granate, die bei (0.5, 1.5) Kacheln zuendet."""
+    welt_ = _W84.Welt([_W84.Ebene.aus_text(["............",
+                                            "..X.........",
+                                            "............",
+                                            "............",
+                                            "............"], 0)])
+    opfer = _Spieler(ziel_pos, 0)
+    opfer.welt = welt_
+    opfer.unverwundbar = 0.0
+    welt_.wesen.append(opfer)
+    gr = _Gr84(_v84(0.5, 1.5), 0.0, K.WAFFEN["granate"], 0)
+    gr.welt = welt_
+    welt_.wesen.append(gr)
+    welt_._raster_bauen()
+    vorher = opfer.leben
+    gr.zuenden()
+    return vorher - opfer.leben
+
+
+# Gleich weit weg (84 Pixel): einmal hinter der Kiste, einmal frei darunter.
+_offen84 = _granate84(_v84(0.5, 1.5) + pygame.Vector2(0, 84))
+_hinter84 = _granate84(_v84(0.5, 1.5) + pygame.Vector2(84, 0))
+pruef("Eine Granate trifft hinter einer Kiste schwaecher, aber sie trifft",
+      0 < _hinter84 < _offen84 * 0.9,
+      "offen %.0f, hinter der Kiste %.0f" % (_offen84, _hinter84))
+pruef("Hinter einer Mauer kommt noch weniger an als hinter einer Kiste",
+      K.DECKUNG["explosion_wand"] < K.DECKUNG["explosion_hindernis"] < 1.0, "")
+
+
+class _Blick84:
+    def __init__(self, pos):
+        self.pos = pygame.Vector2(pos)
+        self.ebene = 0
+        self.winkel = 180.0                   # schaut nach links, zum Blitz
+
+
+_blitz84 = _v84(0.5, 1.5)
+_frei84 = _W84.blend_wert(_blitz84 + pygame.Vector2(0, -1 * _T84), 0,
+                          _Blick84(_v84(3.5, 0.5)), _welt84)
+_kiste84 = _W84.blend_wert(_blitz84, 0, _Blick84(_v84(3.5, 1.5)), _welt84)
+pruef("Eine Blendgranate hinter einer Kiste blendet schwaecher, aber sie blendet",
+      0 < _kiste84 < _frei84, "frei %.2f, hinter der Kiste %.2f" % (_frei84, _kiste84))
+pruef("... hinter einer Mauer gar nicht",
+      _W84.blend_wert(_v84(4.5, 2.5), 0, _Blick84(_v84(8.5, 2.5)), _welt84) == 0.0, "")
+
+# 0.34.26: "Bots ... jeweils zwei verschiedene Waffen ... eine Granate, aber
+# jeweils nur in ihrem Leben eine werfen koennen ... dieselben Leben wie
+# Spieler ... keine Medkits oder Munition einsammeln, sondern wenn ihre
+# Munition und Granaten aufgebraucht sind, einfach in den Nahkampf ... in
+# Deckung gehen ... Ziele priorisieren, wie zum Beispiel die Hotzone ...
+# auf Wahl zu jedem Team hinzugefuegt ... Team-Manager-Editor fuer den Host"
+print("\n-- Bots: Ausruestung, Deckung, Zielvorrang, Team-Manager (0.34.26)")
+from dustfront.bots import bot_loadout as _blo85
+from dustfront.mehrspieler import KampfBeute as _Beute85
+_rnd85 = random.Random(85)
+_los85 = [_blo85(_rnd85) for _ in range(60)]
+pruef("Jeder Bot hat zwei verschiedene Waffen und genau eine Granate, nie C4",
+      all(len(set(l_["waffen"])) == 2 and l_["wuerfe"] == ["granate"] for l_ in _los85),
+      str(_los85[:2]))
+_fest85 = _blo85(_rnd85, {"name": "X", "waffen": ["sturm", "schrot"],
+                          "wuerfe": ["blend", "rauch"]})
+pruef("Auch bei EINES FUER ALLE nur eine Wurfwaffe",
+      len(_fest85["wuerfe"]) == 1 and "c4" not in _fest85["wuerfe"], str(_fest85))
+
+w85, g85 = gefechtspaar("team", regeln={"bots": 4}, knapp=False)
+_bot85 = w85._bots()[0]
+
+
+def _ausgeruestet85(k_):
+    wuerfe_ = [n_ for n_ in k_.waffen if K.WAFFEN[n_].get("art") == "wurf"]
+    schuss_ = [n_ for n_ in k_.waffen if K.WAFFEN[n_].get("art") == "schuss"]
+    return (len(wuerfe_) == 1 and k_.magazin[wuerfe_[0]] == 1
+            and k_.vorrat.get(wuerfe_[0], 0) == 0 and len(schuss_) == 2
+            and all(k_.vorrat[n_] > 0 for n_ in schuss_)
+            and k_.medkits == 0 and k_.knapp)
+
+
+pruef("Eine Granate ohne Nachschub, Reserve fuer die Waffen, kein Medkit, Munition knapp",
+      _ausgeruestet85(_bot85),
+      "%s %s %s Medkits %d" % (_bot85.waffen, _bot85.magazin, _bot85.vorrat, _bot85.medkits))
+pruef("... obwohl die Runde unbegrenzte Munition hat (sonst kaeme der Nahkampf nie)",
+      not w85.knapp and _bot85.knapp)
+pruef("Ein Bot hat dieselben Leben wie ein Spieler",
+      _bot85.max_leben == w85.ich.max_leben, "%s / %s" % (_bot85.max_leben, w85.ich.max_leben))
+_bot85.lebt = False
+_bot85.wieder_in = 0.0
+w85._wieder_einsteigen(_bot85)
+pruef("Nach dem Wiedereinstieg genauso: wieder eine Granate, kein Medkit",
+      _ausgeruestet85(_bot85), "%s %s" % (_bot85.magazin, _bot85.medkits))
+# Die Granate kommt nicht wieder, auch nicht mit Nachladen.
+_gr85 = [i_ for i_, n_ in enumerate(_bot85.waffen) if n_ == "granate"][0]
+_bot85.magazin["granate"] = 0
+_bot85.waffe = _gr85
+_bot85.nachladen()
+for _ in range(int(5.0 / K.FIXED_DT)):
+    _bot85.schritt(K.FIXED_DT)
+pruef("Ist die Granate geworfen, laedt er keine neue nach",
+      _bot85.magazin["granate"] == 0 and _bot85.hirn._wurf_platz() < 0,
+      str(_bot85.magazin))
+_bot85.waffe = 0
+# Beute: liegt direkt unter ihm, er nimmt sie nicht.
+_bot85.medkits = 0
+for _art85 in ("medkit", "munition"):
+    _b85 = _Beute85(pygame.Vector2(_bot85.pos), _art85, _bot85.ebene, w85.kaempfer)
+    w85.welt.dazu(_b85)
+    _vorher85 = dict(_bot85.vorrat)
+    for _ in range(10):
+        _b85.schritt(K.FIXED_DT)
+    pruef("Ein Bot hebt kein %s auf" % _art85,
+          _b85.lebt and _bot85.medkits == 0 and _bot85.vorrat == _vorher85, "")
+    _b85.lebt = False
+
+# Team-Manager im Gefecht: Bots fest in eine Mannschaft, sofort.
+w85.regelwerk["bots"] = 0
+w85._bots_fuehren(0.0, sofort=True)
+pruef("AUFFUELLEN AUS und keine festen Bots: keine Bots", not w85._bots(),
+      str(len(w85._bots())))
+w85.tm_verstellen(("bots", 1), +1)
+w85.tm_verstellen(("bots", 1), +1)
+_je85 = [sum(1 for k_ in w85._bots() if k_.team == i_) for i_ in (0, 1)]
+pruef("Team-Manager: zwei Bots in BLAU, sofort, und keiner in ROT",
+      _je85 == [0, 2] and w85.regelwerk["bots_t1"] == 2, str(_je85))
+w85.tm_verstellen(("fuellen", None), +1)          # bis 2 Spieler
+w85.tm_verstellen(("fuellen", None), +1)          # bis 4 Spieler
+_je85 = [sum(1 for k_ in w85.kaempfer.values() if k_.team == i_) for i_ in (0, 1)]
+# Erwartet: jede Mannschaft wird auf 2 aufgefuellt (4 Spieler auf zwei
+# Seiten, oder so viele Menschen, wie die groessere hat), BLAU hat dazu
+# mindestens seine zwei festen Bots neben den Menschen.
+_m85 = [sum(1 for k_ in w85._tm_menschen() if k_.team == i_) for i_ in (0, 1)]
+_ziel85 = max([2] + _m85)
+_soll85 = [max(_ziel85, _m85[0]), max(_ziel85, _m85[1] + 2)]
+pruef("Mit AUFFUELLEN gilt die groessere Zahl (BLAU hat seine zwei fest)",
+      _je85 == _soll85, "%s statt %s, Menschen %s" % (_je85, _soll85, _m85))
+_ich85 = w85.ich
+_alt85 = _ich85.team
+w85.tm_verstellen(("mensch", _ich85.nummer), +1)
+pruef("Team-Manager: ein Spieler wechselt sofort, mit Fraktion, und bleibt fest",
+      _ich85.team != _alt85 and _ich85.team_fest
+      and _ich85.fraktion == w85._fraktion_fuer(_ich85.nummer, _ich85.team), "")
+w85._teams_ausgleichen()
+pruef("... das Ausgleichen rührt ihn nicht an", _ich85.team != _alt85, "")
+_beide80(0.6, w85, g85)
+_beim_gast85 = g85.kaempfer.get(_ich85.nummer)
+pruef("Der Gast sieht ihn in der neuen Mannschaft",
+      _beim_gast85 is not None and _beim_gast85.team == _ich85.team, "")
+pruef("Die Regeln kennen BOTS IN ROT / BLAU und BOTS DAZU, mit Grenze",
+      _R80.saeubern({"modus": "team", "bots_t0": 99})["bots_t0"] == K.BOTS["je_team_hoechstens"]
+      and any(f_.schluessel == "bots_t1" for f_ in _R80.sichtbar(_R80.vorgabe(modus="team")))
+      and any(f_.schluessel == "bots_dazu" for f_ in _R80.sichtbar(_R80.vorgabe(modus="pvp")))
+      and not any(f_.schluessel.startswith("bots_t") for f_ in _R80.sichtbar(_R80.vorgabe(modus="pvp"))),
+      "")
+
+# Team-Manager in der Lobby: verstellt den Plan, und der gilt beim Start.
+w85.lobby_betreten()
+w85.plan[0] = _R80.saeubern(dict(w85.plan[0], modus="team", bots=0), w85._umfeld())
+pruef("Der Team-Manager gibt es in der Lobby, mit Bot-Zeilen fuer die naechste Runde",
+      ("bots", 0) in w85._tm_zeilen() and ("mensch", _ich85.nummer) in w85._tm_zeilen(),
+      str(w85._tm_zeilen()))
+w85.tm_verstellen(("bots", 0), +1)
+w85.tm_verstellen(("bots", 0), +1)
+w85.tm_verstellen(("bots", 0), +1)
+_ich85.team_wunsch, _ich85.team_fest = -1, False
+w85.tm_verstellen(("mensch", _ich85.nummer), +1)     # AUTOMATISCH -> ROT
+pruef("In der Lobby geht es in den Plan und an den Wunsch des Spielers",
+      w85.plan[0]["bots_t0"] == 3 and _ich85.team_wunsch == 0 and _ich85.team_fest, "")
+w85.plan_starten(0)
+_je85 = [sum(1 for k_ in w85._bots() if k_.team == i_) for i_ in (0, 1)]
+pruef("Beim Start: drei Bots in ROT, und der Spieler steht, wo der Gastgeber ihn wollte",
+      _je85 == [3, 0] and _ich85.team == 0, "%s, Spieler in %d" % (_je85, _ich85.team))
+w85.verlassen(); g85.verlassen()
+
+# Ohne Mannschaften: BOTS DAZU.
+w85 = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_neuer_port()), modus="pvp",
+              seed=85, regeln={"bots_dazu": 3})
+pruef("PVP mit BOTS DAZU 3: drei Bots, jeder gegen jeden", len(w85._bots()) == 3
+      and len({k_.fraktion for k_ in w85.kaempfer.values()}) == 4, str(len(w85._bots())))
+w85.verlassen()
+
+# Deckung: zum Nachladen hinter die Kiste.
+_dw85 = _W84.Welt([_W84.Ebene.aus_text(["...............",
+                                        "...............",
+                                        "......X........",
+                                        "...............",
+                                        "..............."], 0)])
+w85 = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_neuer_port()), modus="team",
+              seed=85, regeln={"bots_t0": 1})
+_bot85 = w85._bots()[0]
+
+
+class _GDeckung85:
+    """Ein Gefecht in klein: nur die Welt und was das Hirn davon fragt."""
+    welt = _dw85
+    regeln = {"zone": False}
+
+
+_h85 = _Hirn80(_GDeckung85(), _bot85, random.Random(85))
+_bot85.pos.update(_v84(5.5, 2.5))
+_bot85.ebene = 0
+_feind85 = _v84(12.5, 2.5)
+_ort85 = _h85._deckung_suchen(_feind85)
+pruef("Deckung: er findet eine Stelle, an der die Kiste ihn vom Gegner trennt",
+      _ort85 is not None and _dw85.deckung(_feind85, _ort85, 0) != ""
+      and _ort85.distance_to(_bot85.pos) <= max(K.BOTS["deckung_radien"]) + 1,
+      str(_ort85))
+_bot85.nachlade_rest = 1.0
+
+
+class _Ziel85:
+    pos = _feind85
+    ebene = 0
+
+
+pruef("... und will dorthin, solange er nachlaedt",
+      _h85._deckung(_Ziel85(), {"knoepfe": []}) is not None, "")
+_bot85.nachlade_rest = 0.0
+_h85.deckung_rest = 0.0
+pruef("... und ohne Grund nicht", _h85._deckung(_Ziel85(), {"knoepfe": []}) is None, "")
+w85.verlassen()
+
+# Kiste in der Schusslinie: er schiesst nicht hinein.
+w85 = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_neuer_port()), modus="team",
+              seed=3, regeln={"bots": 2})
+_bot85 = w85._bots()[0]
+_ich85 = w85.ich
+_ich85.unverwundbar = 1e9
+_blockiert85 = 0
+_frei_schuesse85 = 0
+for i_ in range(int(6.0 / K.FIXED_DT)):
+    linie_ = _bot85.hirn.linie if _bot85.hirn.ziel is _ich85 else ""
+    vor_ = _bot85.zaehler.get("schuesse", 0)
+    w85.schritt(K.FIXED_DT)
+    if _bot85.zaehler.get("schuesse", 0) > vor_:
+        if linie_ == "hindernis":
+            _blockiert85 += 1
+        else:
+            _frei_schuesse85 += 1
+pruef("Steht eine Kiste in der Schusslinie, schiesst ein Bot nicht hinein",
+      _blockiert85 == 0, "%d Schuesse in die Kiste" % _blockiert85)
+w85.verlassen()
+
+# HUEGEL: der Kreis geht vor - auch wenn ein Gegner zu sehen ist.
+w85 = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_neuer_port()), modus="huegel",
+              seed=85, regeln={"bots_t1": 1})
+_bot85 = [k_ for k_ in w85._bots()][0]
+_ich85 = w85.ich
+_ich85.unverwundbar = 1e9
+_bot85.unverwundbar = 1e9
+_bot85.ebene = w85.zone_ebene
+_start85 = None
+for _ in range(400):
+    p_ = freier_punkt(w85.welt, w85.zone_ebene, random.Random(_))
+    if 260 < p_.distance_to(w85.zone_mitte) < 420:
+        _start85 = p_
+        break
+if _start85 is not None:
+    _bot85.pos.update(_start85)
+    _bot85.vorher.update(_start85)
+    _bot85.hirn.neues_leben()
+    _abstand85 = _start85.distance_to(w85.zone_mitte)
+    _kaempfte85 = 0
+    for _ in range(int(8.0 / K.FIXED_DT)):
+        # Der Gegner steht immer auf der anderen Seite, weg vom Kreis.
+        weg_ = (_bot85.pos - w85.zone_mitte)
+        if weg_.length_squared() > 1:
+            p_ = _bot85.pos + weg_.normalize() * 120
+            if w85.welt.frei(p_, 9, _bot85.ebene, True):
+                _ich85.pos.update(p_)
+                _ich85.ebene = _bot85.ebene
+        w85.schritt(K.FIXED_DT)
+        if _bot85.hirn.ziel is _ich85:
+            _kaempfte85 += 1
+    pruef("HUEGEL: ein Bot geht in den Kreis, statt dem Gegner nachzulaufen",
+          _bot85.pos.distance_to(w85.zone_mitte) < _abstand85 - 100,
+          "von %.0f auf %.0f, %d Schritte im Kampf"
+          % (_abstand85, _bot85.pos.distance_to(w85.zone_mitte), _kaempfte85))
+w85.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

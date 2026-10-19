@@ -328,7 +328,6 @@ class Geschoss(Wesen):
         # Unterteilen, damit nichts durch Waende oder Gegner fliegt
         schritte = max(1, int(strecke / 6.0))
         teil = weg / schritte
-        e = self.welt.ebene(self.ebene)
         for _ in range(schritte):
             self.pos += teil
             self.rest -= teil.length()
@@ -337,7 +336,8 @@ class Geschoss(Wesen):
             if ziel is not None and ziel is not self.von:
                 self.einschlag(ziel)
                 return
-            if e.sichtdicht(int(self.pos.x // K.TILE), int(self.pos.y // K.TILE)):
+            # Jede feste Kachel haelt die Kugel auf (seit 0.34.26).
+            if self.welt.schuss_halt(self.pos, self.ebene, self.radius):
                 self.pos -= teil
                 self.einschlag(None)
                 return
@@ -515,8 +515,10 @@ class Granate(Wesen):
             entfernung = ab.length()
             if entfernung > r + ziel.radius:
                 continue
-            # volle Wucht in der Mitte, am Rand ein Viertel
+            # volle Wucht in der Mitte, am Rand ein Viertel - hinter
+            # Deckung weniger (seit 0.34.26)
             anteil = 1.0 - 0.75 * min(1.0, entfernung / r)
+            anteil *= w.deckung_anteil(self.pos, ziel.pos, self.ebene)
             schub = (ab.normalize() * 320 * anteil) if entfernung > 0.01 else None
             lebte = ziel.lebt
             ziel.schaden(d["schaden"] * anteil, schub, self.von)
@@ -615,6 +617,7 @@ class C4Ladung(Wesen):
             if abstand > radius + ziel.radius:
                 continue
             anteil = 1.0 - 0.72 * min(1.0, abstand / radius)
+            anteil *= w.deckung_anteil(self.pos, ziel.pos, self.ebene)
             schub = (delta.normalize() * K.C4["schub"] * anteil
                      if abstand > 0.01 else None)
             lebte = ziel.lebt
@@ -682,7 +685,6 @@ class Rakete(Wesen):
         # In Stuecken, damit sie bei ihrem Tempo nichts durchfliegt.
         schritte = max(1, int(strecke / 6.0))
         teil = weg / schritte
-        e = self.welt.ebene(self.ebene)
         for _ in range(schritte):
             self.pos += teil
             getroffen = self.welt.treffer(self.pos, self.radius, self.ebene,
@@ -690,7 +692,7 @@ class Rakete(Wesen):
             if getroffen is not None and getroffen is not self.von:
                 self.einschlag(getroffen)
                 return
-            if e.sichtdicht(int(self.pos.x // K.TILE), int(self.pos.y // K.TILE)):
+            if self.welt.schuss_halt(self.pos, self.ebene, self.radius):
                 self.pos -= teil
                 self.einschlag(None)
                 return
@@ -763,6 +765,7 @@ class Rakete(Wesen):
             else:
                 anteil = 1.0
             anteil *= 1.0 - 0.7 * min(1.0, entfernung / r)
+            anteil *= w.deckung_anteil(self.pos, ziel.pos, self.ebene)
             schub = (ab.normalize() * 420 * anteil) if entfernung > 0.01 else None
             lebte = ziel.lebt
             ziel.schaden(d["schaden"] * anteil, schub, schuetze)
