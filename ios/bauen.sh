@@ -121,6 +121,73 @@ if [ -n "$BUNDLE_ID" ]; then
     done < <(find "$VORLAGE" -name project.pbxproj)
 fi
 
+# ---- App-Symbol und Startbildschirm ------------------------------------
+# Statt des Logos von pygame-ce das Zeichen von DUSTFRONT (ios/bilder,
+# erzeugt mit ios/logo_bauen.py). Der Startbildschirm kommt nicht mehr aus
+# der Storyboard-Datei der Vorlage, sondern aus der Info.plist
+# (UILaunchScreen, ab iOS 14): Bild und Hintergrundfarbe aus dem
+# Asset-Katalog. GRUND: Wie die Vorlage ihren Startbildschirm baut, kann
+# sich mit jeder Fassung aendern - dieser Weg haengt nicht davon ab.
+BILDER="$SPIEL/ios/bilder"
+KATALOG="$(find "$VORLAGE" -name "*.xcassets" -type d -not -path "*/Support/*" | head -n 1)"
+if [ -n "$KATALOG" ]; then
+    SYMBOL="$KATALOG/AppIcon.appiconset"
+    rm -rf "$SYMBOL"
+    mkdir -p "$SYMBOL"
+    cp "$BILDER/AppIcon.png" "$SYMBOL/AppIcon.png"
+    cat > "$SYMBOL/Contents.json" <<'JSON'
+{
+  "images" : [
+    { "filename" : "AppIcon.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+    START="$KATALOG/Startbild.imageset"
+    mkdir -p "$START"
+    cp "$BILDER/Startbild.png" "$START/Startbild.png"
+    # Als @3x: 960 Pixel breit sind dann 320 Punkte, auf jedem iPhone und
+    # iPad gut mittig und nicht randvoll.
+    cat > "$START/Contents.json" <<'JSON'
+{
+  "images" : [
+    { "filename" : "Startbild.png", "idiom" : "universal", "scale" : "3x" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+    mkdir -p "$KATALOG/Starthimmel.colorset"
+    # Derselbe Nachthimmel wie hinter dem Zeichen (8, 13, 21).
+    cat > "$KATALOG/Starthimmel.colorset/Contents.json" <<'JSON'
+{
+  "colors" : [
+    { "color" : { "color-space" : "srgb", "components" : {
+        "alpha" : "1.000", "red" : "0.031", "green" : "0.051", "blue" : "0.082" } },
+      "idiom" : "universal" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+    while IFS= read -r plist; do
+        "$PB" -c "Print :CFBundleExecutable" "$plist" >/dev/null 2>&1 || continue
+        case "$plist" in *.framework/*|*.xcframework/*) continue ;; esac
+        "$PB" -c "Delete :UILaunchStoryboardName" "$plist" 2>/dev/null || true
+        "$PB" -c "Delete :UILaunchScreen" "$plist" 2>/dev/null || true
+        "$PB" -c "Add :UILaunchScreen dict" "$plist"
+        "$PB" -c "Add :UILaunchScreen:UIImageName string Startbild" "$plist"
+        "$PB" -c "Add :UILaunchScreen:UIColorName string Starthimmel" "$plist"
+    done < <(find "$VORLAGE" -name "*Info.plist" -not -path "*/Support/*")
+    # Ohne das nimmt Xcode die Storyboard-Datei aus den Build-Einstellungen
+    # und ueberschreibt den Eintrag oben wieder.
+    while IFS= read -r pbx; do
+        sed -i '' -E "/INFOPLIST_KEY_UILaunchStoryboardName = [^;]*;/d" "$pbx"
+        sed -i '' -E "s/ASSETCATALOG_COMPILER_APPICON_NAME = [^;]+;/ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;/" "$pbx"
+    done < <(find "$VORLAGE" -name project.pbxproj)
+    echo "  App-Symbol und Startbild: DUSTFRONT"
+else
+    echo "  WARNUNG: kein Asset-Katalog gefunden - App-Symbol bleibt das der Vorlage."
+fi
+
 # ---- Mindestens iOS 15 -------------------------------------------------
 # Die Vorlage verlangt iOS 13. Aktuelle Xcode-Fassungen bauen nur noch ab
 # iOS 15 und brechen sonst mit "IPHONEOS_DEPLOYMENT_TARGET is set to 13.0"

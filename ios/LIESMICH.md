@@ -42,6 +42,8 @@ dafür. Das Skript:
 * lädt beim ersten Mal die Vorlage (gut 200 MB) und baut das Xcode-Projekt,
 * stellt in der `Info.plist` Querformat, Vollbild, den Namen DUSTFRONT
   und die Begründung für das lokale Netz ein,
+* setzt das App-Symbol und den Startbildschirm von DUSTFRONT ein (Bilder in `ios/bilder`, neu zu erzeugen mit
+  `python ios/logo_bauen.py`),
 * öffnet Xcode.
 
 In Xcode:
