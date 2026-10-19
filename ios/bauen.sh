@@ -121,6 +121,14 @@ if [ -n "$BUNDLE_ID" ]; then
     done < <(find "$VORLAGE" -name project.pbxproj)
 fi
 
+# ---- Mindestens iOS 15 -------------------------------------------------
+# Die Vorlage verlangt iOS 13. Aktuelle Xcode-Fassungen bauen nur noch ab
+# iOS 15 und brechen sonst mit "IPHONEOS_DEPLOYMENT_TARGET is set to 13.0"
+# ab (gemeldet). Jedes iPhone ab dem XS kann iOS 15 und mehr.
+while IFS= read -r pbx; do
+    sed -i '' -E "s/IPHONEOS_DEPLOYMENT_TARGET = 1[0-4](\.[0-9]+)?;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/" "$pbx"
+done < <(find "$VORLAGE" -name project.pbxproj)
+
 PROJEKT="$(find "$VORLAGE" -maxdepth 3 -name "*.xcodeproj" | head -n 1)"
 [ -n "$PROJEKT" ] || abbrechen "Kein .xcodeproj gefunden in $VORLAGE."
 echo
