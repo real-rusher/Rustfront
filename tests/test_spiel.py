@@ -8247,6 +8247,11 @@ def _quote80(quer, sekunden=12.0):
     """Trefferquote des Bots auf den Wirt, der still steht oder quer laeuft."""
     _bot80.zaehler_leeren()
     _bot80.hirn.neues_leben()
+    # Der Bot bleibt an seinem Platz und wirft nicht (seit 0.34.26): er
+    # geht sonst vor Kisten zur Seite oder hinter Deckung und wirft seine
+    # Granate - gemessen wuerde dann, wie oft er das Ziel neu suchen muss,
+    # nicht, wie er zielt.
+    platz_ = pygame.Vector2(_bot80.pos)
     hin_ = _frei80 - _bot80.pos
     q_ = pygame.Vector2(-hin_.y, hin_.x).normalize()
     for i_ in range(int(sekunden / K.FIXED_DT)):
@@ -8257,6 +8262,9 @@ def _quote80(quer, sekunden=12.0):
             _ich80.pos.update(p_)
         _ich80.tempo.update(0, 0)
         _bot80.leben = _bot80.max_leben
+        _bot80.pos.update(platz_)
+        _bot80.tempo.update(0, 0)
+        _bot80.hirn.wurf_rest = 99.0
         # Volle Magazine: gemessen wird das Zielen. Seit 0.34.26 geht ein
         # Bot zum Nachladen in Deckung, und ein leeres Magazin hiesse hier
         # Deckungsgaenge statt Schuesse - mal mehr, mal weniger.
