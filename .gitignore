@@ -15,3 +15,5 @@ daten/
 
 # Das Xcode-Projekt fuer iOS, erzeugt von ios/bauen.sh (gross, jederzeit neu)
 /ios/build/
+# Videos von "python werkzeug_aufnahme.py", jederzeit neu herstellbar
+/aufnahmen/

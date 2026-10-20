@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.31, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.32, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -570,6 +570,7 @@ Aussen liegt das Menü, innen das Spiel. Beides läuft auch einzeln.
 | `DUSTFRONT.bat` | Startdatei zum Doppelklicken, Windows |
 | `DUSTFRONT.command` | Startdatei zum Doppelklicken, macOS und Linux |
 | `SPIELTEST.command` | Direkt ins Spiel, macOS und Linux |
+| `werkzeug_aufnahme.py` | Nimmt Gefechte aus dem Testmodus als Video auf (braucht ffmpeg) |
 | `ios/bauen.sh` | Baut auf dem Mac die App für iPhone und iPad (Anleitung `ios/LIESMICH.md`) |
 | `ios/start.py` | Einstieg der App auf iOS |
 | `rustfront_menu.py` | Hauptmenü, Kaltstart, Optionen, Spielstand, Einstiegspunkt |
@@ -822,6 +823,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.32 | **Gefechte als Video: `werkzeug_aufnahme.py`.** Rechnet fünf Szenen im Testmodus ohne Fenster (GOAP gegen klassisch, Flanke, Zombiewelle, Koloss, Hügel) und schreibt sie mit ffmpeg als MP4 nach `aufnahmen/` (1280 × 720, 30 Bilder je Sekunde). Dafür im Testmenü neu: **SAUBERE ANSICHT** – nur die Welt und über jedem Kopf, was er gerade tut (GOAP-Aktion oder Zustand der klassischen KI), ohne Ziffernblock, Tafeln, Linien und Funk; Beschriftungen in einem Rudel rücken auseinander. Herausgezoomt zeichnet sie das ganze Bild ohne Nebel – vorher fehlten am Rand Figuren ganz. Außerdem passt das Testmenü wieder in seinen Kasten, und drei Tests wackeln nicht mehr: der Schusstest am Anfang suchte seine Bahn noch ohne Rücksicht auf Kisten (die halten seit 0.34.26 Kugeln auf), der GOAP-Bot-Test fand neben einem zufälligen Einstiegsort manchmal keine freie Stelle, und der Speier-Vergleich hing an einem einzigen Lauf. Netz/LAN: unverändert, trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.31 | Zwei Fehler der GOAP-Bots, gefunden in aufgenommenen Testgefechten: Sah ein Bot seinen Gegner hinter einer Kiste, meldete „suchen“ sofort fertig, „angreifen“ ging nicht, und er stand im Feuer, während er immer wieder dasselbe plante – jetzt geht er zur Seite, bis die Bahn frei ist. Und in HÜGEL blieb er stehen und kämpfte, sobald er einen Gegner sah – jetzt geht draußen der Kreis vor (`wesen/bots.txt`: KREIS 82, NACHLADEN 85), gekämpft wird auf dem Weg. Netz/LAN: unverändert, trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.30 | **Zombies und Bosse mit zielorientierter KI** (Schritt 3 aus `docs/KI.md`). Neue Regel **GEGNER-KI: KLASSISCH / GOAP** (Spielarten mit Gegnern, erweitert): Zombies laufen hin und schlagen zu, Speier halten Abstand und spucken, ohne Ziel schlurfen sie herum statt zu stehen; ein Boss lauert, wenn sein Ziel auf einer anderen Ebene ist, und zieht angeschlagen seine Fähigkeit vor (mit vollem Vorlauf). Die Brut denkt wie ihre Mutter. Daten in `wesen/zombies.txt`; jede Spezies sagt jetzt mit `hirn:`, welche Verhalten sie benutzen darf, und die Prüfung achtet darauf. Testmodus: HIRN auch bei Gegnern und Bossen, Gedanken und KURZ-Ansicht auch für sie. Der Einzelspieler bleibt klassisch. **Netz/LAN: geändert** (neue Regel `gegner_ki`), alle Geräte brauchen dieselbe Version. |
 | 0.34.29 | **Zielorientierte KI (GOAP), der Kern.** Wesen wählen das dringendste Ziel und planen dafür selbst eine Folge von Aktionen („erst in Deckung, dann nachladen“) – Ziele, Aktionen, Spezies und Merkmale (Mut, Disziplin) stehen als Text in `wesen/*.txt`, wie die Karten, und lassen sich ohne Programmieren ändern. Die Bots des Mehrspielers können ihn schon benutzen: neue Regel **BOT-KI: KLASSISCH / GOAP** (Rundentafel, erweitert); die klassische KI bleibt Vorgabe. Fairness wie bisher: Sehen, Zielen, Reaktion sind dieselben. Testmodus: Spawner-Einstellung HIRN, Gedankenansicht (Taste 8 zweimal), Ziel erzwingen, KI-Daten neu laden. Der ganze Plan bis zur Kampagne steht in `docs/KI.md`. **Netz/LAN: geändert** (neue Regel `bot_ki`), alle Geräte brauchen dieselbe Version. |

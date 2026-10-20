@@ -287,6 +287,9 @@ class Testmodus(Gefecht):
         self.beute_an = bool(z.get("beute_an", False))
         self.blend_beobachter = bool(z.get("blend_beobachter", False))
         self.ruckeln_beobachter = bool(z.get("ruckeln_beobachter", False))
+        # Saubere Ansicht (seit 0.34.32): nur die Welt und ueber jedem Kopf,
+        # was er gerade tut - fuer Aufnahmen (werkzeug_aufnahme.py).
+        self.sauber = bool(z.get("sauber", False))
         self._sp_werte = dict(z.get("sp_werte", {}))
         self._sp_nr = int(z.get("sp_nr", 0))
         self._welt_schritte = 1
@@ -978,7 +981,9 @@ class Testmodus(Gefecht):
                 return
 
     # ── Testmenue ──────────────────────────────────────────────────
-    MENUE = pygame.Rect(150, 40, 340, 266)
+    # Hoch genug fuer alle Zeilen (seit 0.34.32 geprueft: mit den Zeilen aus
+    # 0.34.29 lief das Menue unten aus seinem Kasten).
+    MENUE = pygame.Rect(150, 22, 340, 316)
 
     def _menue_zeilen(self) -> list:
         """(Schluessel, Beschriftung, Wert) - was im Testmenue steht."""
@@ -1003,6 +1008,7 @@ class Testmodus(Gefecht):
             ("beute", "BEUTE NACHLEGEN", "AN" if self.beute_an else "AUS"),
             ("blend", "BEOBACHTER BLENDEN", "AN" if self.blend_beobachter else "AUS"),
             ("ruckeln", "BEOBACHTER RUCKELN", "AN" if self.ruckeln_beobachter else "AUS"),
+            ("sauber", "SAUBERE ANSICHT (NUR AKTIONEN)", "AN" if self.sauber else "AUS"),
             ("einstellungen", "EINSTELLUNGEN", ""),
             ("hauptmenue", "ZUM HAUPTMENÜ", ""),
         ]
@@ -1026,7 +1032,7 @@ class Testmodus(Gefecht):
                     flug_nr=self.flug_nr, wiedereinstieg=self.wiedereinstieg,
                     wellen_an=self.wellen_an, beute_an=self.beute_an,
                     blend_beobachter=self.blend_beobachter,
-                    ruckeln_beobachter=self.ruckeln_beobachter,
+                    ruckeln_beobachter=self.ruckeln_beobachter, sauber=self.sauber,
                     sp_werte=self._sp_werte, sp_nr=self._sp_nr)
 
     def menue_wirken(self, schluessel: str, schritt: int = 1, ausloesen: bool = False) -> None:
@@ -1065,6 +1071,8 @@ class Testmodus(Gefecht):
             self.blend_beobachter = not self.blend_beobachter
         elif schluessel == "ruckeln":
             self.ruckeln_beobachter = not self.ruckeln_beobachter
+        elif schluessel == "sauber":
+            self.sauber = not self.sauber
         elif schluessel == "einstellungen" and ausloesen:
             from .menues import Einstellungen
             self.menue_offen = False
@@ -1109,8 +1117,9 @@ class Testmodus(Gefecht):
 
     # ── Zeichnen ───────────────────────────────────────────────────
     def _funk_hoerbar(self, k) -> bool:
-        """Der Beobachter liest den Funk beider Mannschaften mit."""
-        return True
+        """Der Beobachter liest den Funk beider Mannschaften mit - ausser in
+        der sauberen Ansicht: dort steht ueber dem Kopf nur die Aktion."""
+        return not self.sauber
 
     def _welt_bild(self, ziel, misch: float) -> None:
         if not self.beobachter:
@@ -1128,8 +1137,25 @@ class Testmodus(Gefecht):
         if not self.beobachter:
             super()._anzeige(ziel)
 
+    def sicht_welt(self):
+        """In der sauberen Ansicht kein Nebel: herausgezoomt zeichnet das
+        Gefecht Figuren sonst nur im normalen Bild um den Beobachter - am
+        Rand fehlten sie in den ersten Aufnahmen ganz."""
+        if self.sauber:
+            return None
+        return super().sicht_welt()
+
     def zeichnen(self, ziel, alpha: float) -> None:
         super().zeichnen(ziel, alpha)
+        if self.sauber:
+            # Nur die Welt und die Aktionen. Spawner und Menue bleiben
+            # bedienbar, wenn man sie oeffnet (Esc, Taste 4).
+            self._aktionen_zeichnen(ziel)
+            if self.spawner_offen:
+                self._spawner_zeichnen(ziel)
+            if self.menue_offen:
+                self._testmenue_zeichnen(ziel)
+            return
         if self.info:
             self._info_zeichnen(ziel)
         if self.info == 2:
@@ -1198,6 +1224,71 @@ class Testmodus(Gefecht):
                              r.bottom - 10, K.C_CREAM if an else K.C_MUTED, 1,
                              ausrichtung="mitte")
 
+    @staticmethod
+    def _klassisch_zustand(h) -> str:
+        """Was ein Bot mit der klassischen KI gerade tut, in einem Wort."""
+        zustand = "UNTERWEGS"
+        if h.ziel is not None:
+            zustand = "KAMPF"
+        if h.druck_rest > 0:
+            zustand = "DRUCK"
+        if h.taktik is not None:
+            zustand = "FLANKE"
+        if h.deckung_ort is not None:
+            zustand = "DECKUNG"
+        if h.sturm is not None:
+            zustand = "STURM:%s" % h.sturm["phase"].upper()
+        return zustand
+
+    def aktion_text(self, w) -> str:
+        """Was ein Wesen gerade tut, fuer die saubere Ansicht: bei GOAP die
+        Aktion, bei einem klassischen Bot sein Zustand, sonst nichts."""
+        h = getattr(w, "hirn", None)
+        if h is None or self.ki_stopp or getattr(w, "ki_aus", False):
+            return ""
+        gehirn = getattr(h, "gehirn", None)
+        if gehirn is not None:
+            return gehirn.aktion.name.replace("_", " ").upper() if gehirn.aktion else ""
+        if getattr(w, "ist_bot", False):
+            return self._klassisch_zustand(h)
+        return ""
+
+    def _aktionen_zeichnen(self, ziel) -> list:
+        """Ueber jedem Kopf, was er gerade tut - in einem dunklen Feld, damit
+        es auf Sand und Fels gleich gut lesbar ist. Liegen zwei Felder
+        aufeinander (ein Rudel), rueckt das spaetere hoch; findet es keinen
+        Platz, faellt es weg - lieber eines weniger als ein Knaeuel."""
+        kam = self.kamera
+        belegt = []
+        # Bots zuerst: wird es eng, faellt eher ein Zombie aus einem Rudel weg.
+        for w in sorted(self.welt.wesen,
+                        key=lambda w: (not getattr(w, "ist_bot", False), -w.pos.y)):
+            if not w.lebt or w.ebene != self.blick:
+                continue
+            text = self.aktion_text(w)
+            if not text:
+                continue
+            p = kam.zu_bild(w.pos)
+            # Ueber dem Namensschild der Bots, bei Gegnern ueber dem Balken.
+            hoch = 30 if getattr(w, "ist_bot", False) else 22
+            x, y = int(p.x), int(p.y - getattr(w, "radius", 8) / kam.zoom) - hoch
+            b = SCHRIFT.breite(text) + 6
+            feld = pygame.Rect(x - b // 2, y - 2, b, 10)
+            for _ in range(K.TESTMODUS["aktion_ausweichen"]):
+                if feld.collidelist(belegt) < 0:
+                    break
+                feld.y -= 11
+            if feld.collidelist(belegt) >= 0:
+                continue
+            belegt.append(feld)
+            y = feld.y + 2
+            pygame.draw.rect(ziel, (10, 8, 7), feld)
+            team = getattr(w, "team", -1)
+            farbe = ((255, 196, 150) if team == 0 else (170, 210, 255) if team == 1
+                     else (230, 150, 140))
+            SCHRIFT.zeichnen(ziel, text, x, y, farbe, 1, ausrichtung="mitte")
+        return belegt
+
     def _info_zeichnen(self, ziel) -> None:
         """Was die KI gerade denkt: Linien zu Ziel, Flanke, Deckung und
         Sammelpunkt, darueber der Zustand."""
@@ -1207,20 +1298,14 @@ class Testmodus(Gefecht):
                 continue
             h = k.hirn
             p = kam.zu_bild(k.pos)
-            zustand = "UNTERWEGS"
+            zustand = self._klassisch_zustand(h)
             if h.ziel is not None:
-                zustand = "KAMPF"
                 pygame.draw.line(ziel, K.C_RED, p, kam.zu_bild(h.ziel.pos), 1)
-            if h.druck_rest > 0:
-                zustand = "DRUCK"
             if h.taktik is not None:
-                zustand = "FLANKE"
                 pygame.draw.line(ziel, K.C_AMBER, p, kam.zu_bild(h.taktik["ort"]), 1)
             if h.deckung_ort is not None:
-                zustand = "DECKUNG"
                 pygame.draw.line(ziel, K.C_TEAL, p, kam.zu_bild(h.deckung_ort), 1)
             if h.sturm is not None:
-                zustand = "STURM:%s" % h.sturm["phase"].upper()
                 pygame.draw.line(ziel, (120, 170, 255), p, kam.zu_bild(h.sturm["sammel"]), 1)
             gehirn = getattr(h, "gehirn", None)
             if gehirn is not None:

@@ -73,7 +73,17 @@ Figur in der Gedankenansicht ein Ziel aufzwingen, links/rechts blaettert,
 "-" laesst sie wieder frei denken), jeder Gottmodus einzeln (unverwundbar,
 unsterblich, unsichtbar fuer KI, unendlich Munition), Wiedereinstieg
 toter Figuren, Zombiewellen, Beute nachlegen, Blenden und Ruckeln des
-Beobachters, die gewoehnlichen Einstellungen, zurueck zum Hauptmenue.
+Beobachters, SAUBERE ANSICHT (nur die Welt und ueber jedem Kopf die
+Aktion - kein Ziffernblock, keine Tafeln, kein Funk, herausgezoomt ohne
+Nebel; fuer Aufnahmen), die gewoehnlichen Einstellungen, zurueck zum
+Hauptmenue.
+
+## Aufnahmen
+
+`python werkzeug_aufnahme.py` rechnet fertige Szenen im Testmodus und
+schreibt sie als Video nach `aufnahmen/` (braucht ffmpeg); `--liste`
+zeigt die Szenen, Namen dahinter nehmen nur diese auf. Eine neue Szene ist
+eine Funktion `szene_NAME` und ein Eintrag in `SZENEN`.
 
 ## Was nicht passiert
 
@@ -89,6 +99,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.32 | Testmenue SAUBERE ANSICHT; `werkzeug_aufnahme.py` nimmt Szenen als Video auf |
 | 0.34.31 | Nichts Neues zum Ausprobieren; zwei GOAP-Fehler behoben, die die Gedankenansicht in Aufnahmen gezeigt hat (SUCHEN hinter einer Kiste, der Kreis in HUEGEL) |
 | 0.34.30 | Zombies und Bosse mit GOAP: Spawner GEGNER/BOSSE mit HIRN, KURZ zeigt `ZIEL > AKTION` auch ueber ihnen, GEDANKEN, ZIEL ERZWINGEN und KI-DATEN NEU LADEN gelten fuer sie mit |
 | 0.34.29 | Zielorientierte KI: Spawner BOT mit HIRN KLASSISCH / GOAP, INFO-Stufe GEDANKEN (Taste 8 zweimal), Testmenue ZIEL ERZWINGEN und KI-DATEN NEU LADEN |

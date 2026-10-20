@@ -897,9 +897,13 @@ stelle = None
 for _ in range(300):
     kandidat = freier_punkt(host.welt, 0, host.rnd)
     gegenueber = pygame.Vector2(kandidat.x + 140, kandidat.y)
+    # Seit 0.34.26 haelt jede Kiste eine Kugel auf, ohne die Sicht zu
+    # versperren: frei heisst darum auch "nichts dazwischen" (deckung).
+    # Ohne das traf der Schuss je nach Zufallsstelle nie (bis 0.34.32).
     if (host.welt.frei(kandidat, a.radius, 0)
             and host.welt.frei(gegenueber, b.radius, 0)
-            and host.welt.sicht_frei(kandidat, gegenueber, 0)):
+            and host.welt.sicht_frei(kandidat, gegenueber, 0)
+            and host.welt.deckung(kandidat, gegenueber, 0) == ""):
         stelle = (kandidat, gegenueber)
         break
 pruef("Freies Schussfeld gefunden", stelle is not None)
@@ -9982,18 +9986,20 @@ _e88 = _tm._eintrag("BOT")
 pruef("Spawner: der BOT hat die Einstellung HIRN (KLASSISCH / GOAP)",
       "hirn" in _e88.optionen and _TM87.OPTIONEN["hirn"][1]() == list(K.GOAP["arten"]), "")
 _tm._sp_werte["BOT"] = {"hirn": list(K.GOAP["arten"]).index("goap")}
-_a88 = _tm._einstiegsort(0)
-_b88 = None
-for r_ in (240, 200, 280, 170):
-    for w_ in range(0, 360, 15):
-        p_ = _a88 + pygame.Vector2(r_, 0).rotate(w_)
-        # Freie Sicht: sie sollen kaempfen, nicht einander suchen.
-        if (_tm.welt.frei(p_, 14, 0, True) and _tm.welt.frei(p_ + pygame.Vector2(0, 24), 14, 0, True)
-                and _tm.welt.deckung(_a88, p_, 0) == ""):
-            _b88 = p_
-            break
-    if _b88 is not None:
+# Zwei Stellen mit freier Sicht: sie sollen kaempfen, nicht einander
+# suchen. Seit 0.34.32 irgendwo auf der Karte - neben dem (zufaelligen)
+# Einstiegsort von ROT gab es manchmal keine, und der Test brach ab.
+_r88 = random.Random(88)
+_a88 = _b88 = None
+for _ in range(4000):
+    a_ = pygame.Vector2(freier_punkt(_tm.welt, 0, _r88))
+    p_ = a_ + pygame.Vector2(_r88.choice((170, 200, 240)), 0).rotate(_r88.uniform(0, 360))
+    if (_tm.welt.frei(a_, 14, 0, True) and _tm.welt.frei(a_ + pygame.Vector2(0, 24), 14, 0, True)
+            and _tm.welt.frei(p_, 14, 0, True) and _tm.welt.frei(p_ + pygame.Vector2(0, 24), 14, 0, True)
+            and _tm.welt.deckung(a_, p_, 0) == ""):
+        _a88, _b88 = a_, p_
         break
+pruef("(zwei Stellen mit freier Sicht fuer das Gefecht)", _b88 is not None, "")
 _rot88 = _tm.spawnen(_e88, pos=_a88, ebene=0)
 _rot88 = [k_ for k_ in _tm._bots()]
 pruef("... der Spawner setzt mit HIRN GOAP einen planenden Bot",
@@ -10127,8 +10133,15 @@ def _angriff89(art, hirn, sekunden=10.0):
 
 
 for art_, soll_ in (("laeufer", {"hinlaufen", "zuschlagen"}), ("speier", {"spucken"})):
-    _klassisch89, _a89, _g89 = _angriff89(art_, "klassisch")
-    _goap89, _a89, _g89 = _angriff89(art_, "goap")
+    # Sechs Laeufe je Seite zusammen (seit 0.34.32): ein einzelner Speier
+    # streut zwischen 0 und 56 Schaden (14 je Treffer), klassisch wie GOAP
+    # - verglichen wird, wie viel sie treffen, nicht wer einmal Glueck hatte.
+    _klassisch89, _goap89, _a89 = 0.0, 0.0, set()
+    for _ in range(6):
+        _klassisch89 += _angriff89(art_, "klassisch")[0]
+        _s89, _neu89, _g89 = _angriff89(art_, "goap")
+        _goap89 += _s89
+        _a89 |= _neu89
     pruef("GOAP-%s: plant %s und trifft etwa so viel wie der klassische"
           % (art_.upper(), " + ".join(sorted(soll_))),
           soll_ <= _a89 and _goap89 > 0 and 0.5 * _klassisch89 <= _goap89 <= 1.6 * _klassisch89,
@@ -10220,6 +10233,71 @@ pruef("HUEGEL: ausserhalb des Kreises geht der Kreis vor, auch mit einem Gegner 
       > _bot90.hirn.gehirn.dringlichkeiten.get("feind_ausschalten", 0), str(sorted(_ziele90)))
 _tm.zone_aus()
 _tm.verlassen()
+
+# 0.34.32: "Teils war das Rendering fehlerhaft, manche Bots waren zum Teil
+# unsichtbar. Ich will alles im Sichtfeld perfekt sehen. Nimm die Sachen
+# aus der Testansicht aus dem Video raus und zeig mir nur die jeweilige
+# Aktion ueber den Koepfen." Die saubere Ansicht und werkzeug_aufnahme.py.
+print("\n-- Saubere Ansicht und Aufnahmen (0.34.32)")
+_tm = _TM87.Testmodus(app, karte="staubtal")
+pruef("Das Testmenue passt in seinen Kasten, jede Zeile",
+      all(_tm.MENUE.contains(r_) for r_ in _tm._menue_flaechen()),
+      "%d Zeilen, unterste bei %d, Kasten bis %d" % (len(_tm._menue_flaechen()),
+                                                    _tm._menue_flaechen()[-1].bottom,
+                                                    _tm.MENUE.bottom))
+_tm.zoom_ziel = _tm._zoom_weich = 1.5
+_tm.schritt(_D87)
+pruef("Herausgezoomt zeichnet der Testmodus sonst nur im normalen Bild Figuren (Nebel)",
+      _tm.sicht_welt() is not None, "")
+_tm.menue_wirken("sauber")
+pruef("SAUBERE ANSICHT im Testmenue: an, und herausgezoomt kein Nebel mehr - "
+      "jede Figur im Bild wird gezeichnet",
+      _tm.sauber and _tm.sicht_welt() is None, "")
+_bot91 = _tm.bot_setzen(_feld89[0], 0, {"team": 0, "hirn": "goap"})
+_alt91 = _tm.bot_setzen(_feld89[0] + pygame.Vector2(0, 40), 0, {"team": 0, "hirn": "klassisch"})
+_feind91 = _tm.bot_setzen(_feld89[1], 0, {"team": 1, "hirn": "goap"})
+_sim87(int(1.0 / _D87))
+pruef("... ueber dem Kopf steht die Aktion (GOAP) oder der Zustand (klassisch)",
+      _tm.aktion_text(_bot91) == (_bot91.hirn.gehirn.aktion.name.replace("_", " ").upper()
+                                  if _bot91.hirn.gehirn.aktion else "")
+      and (_tm.aktion_text(_alt91) in ("UNTERWEGS", "KAMPF", "DRUCK", "FLANKE", "DECKUNG")
+           or _tm.aktion_text(_alt91).startswith("STURM")),
+      "%r / %r" % (_tm.aktion_text(_bot91), _tm.aktion_text(_alt91)))
+pruef("... kein Funk: ueber dem Kopf nur die Aktion", not _tm._funk_hoerbar(_bot91), "")
+for i_ in range(8):
+    _tm.gegner_setzen("laeufer", _feld89[1] + pygame.Vector2(2 * i_, 0), 0,
+                      {"ki": True, "hirn": "goap"})
+_sim87(int(0.5 / _D87))
+_bild91 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm.zeichnen(_bild91, 1.0)
+_felder91 = _tm._aktionen_zeichnen(_bild91)
+pruef("... auch in einem Rudel liegt keine Beschriftung auf einer anderen",
+      _felder91 and not any(a_.colliderect(b_) for i_, a_ in enumerate(_felder91)
+                            for b_ in _felder91[i_ + 1:]), "%d Felder" % len(_felder91))
+_k91 = _tm.zustand()
+pruef("... und sie bleibt ueber einen Kartenwechsel", _k91.get("sauber") is True, "")
+_tm.menue_wirken("sauber")
+pruef("... aus: Funk und Nebel wie vorher", _tm._funk_hoerbar(_bot91) and _tm.sicht_welt() is not None, "")
+_tm.verlassen()
+
+import werkzeug_aufnahme as _WA91
+_fehler91 = []
+for n_, (datei_, szene_) in _WA91.SZENEN.items():
+    try:
+        tm_ = _WA91.testmodus_fuer_aufnahme(app, 1.0)
+        titel_, wer_, ende_, sek_, zoom_ = szene_(tm_, random.Random(91))
+        for _ in range(30):
+            tm_.schritt(_D87)
+        tm_.zeichnen(_bild91, 1.0)
+        if not (wer_ and titel_ and sek_ > 0 and zoom_ >= 1.0 and not ende_()):
+            _fehler91.append(n_)
+        tm_.verlassen()
+    except Exception as err_:
+        _fehler91.append("%s: %r" % (n_, err_))
+pruef("werkzeug_aufnahme.py: jede Szene baut sich auf, laeuft und zeichnet (ohne ffmpeg)",
+      not _fehler91 and len(_WA91.SZENEN) >= 5, str(_fehler91))
+pruef("... 30 Bilder je Sekunde aus 120 Rechenschritten",
+      _WA91.SCHRITTE_JE_BILD == 4, str(_WA91.SCHRITTE_JE_BILD))
 
 print()
 print("FEHLER:", fails or "keine")

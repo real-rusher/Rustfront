@@ -1,0 +1,255 @@
+"""
+DUSTFRONT - Gefechte aus dem Testmodus als Video aufnehmen (seit 0.34.32)
+=========================================================================
+
+    python werkzeug_aufnahme.py                  alle Szenen nach aufnahmen/
+    python werkzeug_aufnahme.py duell boss       nur diese
+    python werkzeug_aufnahme.py --liste          welche es gibt
+    python werkzeug_aufnahme.py --ordner X ...   woanders hin
+
+Jede Szene ist ein echtes Gefecht im Testmodus (dustfront/testmodus.py),
+ohne Fenster gerechnet und Bild fuer Bild gezeichnet: 120 Rechenschritte
+je Sekunde wie im Spiel, jedes vierte Bild aufgenommen (30 Bilder je
+Sekunde), auf 1280 x 720 vergroessert. Gezeigt wird die SAUBERE ANSICHT
+des Testmodus: nur die Welt und ueber jedem Kopf, was er gerade tut (bei
+GOAP die Aktion, siehe docs/KI.md). Die Kamera folgt der Mitte aller, die
+noch stehen.
+
+Braucht ffmpeg im Pfad (macOS: `brew install ffmpeg`, Linux: Paketverwaltung,
+Windows: ffmpeg.org). Eine neue Szene ist eine Funktion `szene_NAME`, die
+die Figuren setzt, und ein Eintrag in `SZENEN`.
+
+Gebaut, weil der Besitzer die zielorientierte KI "in Aktion sehen" wollte,
+ohne selbst zu spielen - und weil die ersten Aufnahmen gleich zwei Fehler
+zeigten, die kein Test gefunden hatte (0.34.31).
+"""
+
+from __future__ import annotations
+
+import os
+import random
+import shutil
+import subprocess
+import sys
+
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import pygame  # noqa: E402
+
+from dustfront import config as K  # noqa: E402
+from dustfront.world import freier_punkt  # noqa: E402
+
+BREITE, HOEHE = 1280, 720
+BILDER_JE_SEKUNDE = 30
+# 120 Rechenschritte je Sekunde (K.FIXED_DT), jeder vierte wird ein Bild.
+SCHRITTE_JE_BILD = max(1, int(round(1.0 / (K.FIXED_DT * BILDER_JE_SEKUNDE))))
+NACHLAUF = 2.0                  # so lange laeuft das Bild nach dem Ende weiter (s)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Hilfen fuer die Szenen
+# ══════════════════════════════════════════════════════════════════
+
+def stelle(tm, rnd, abstand: float, art: str = "", versuche: int = 20000):
+    """Zwei freie Punkte auf Ebene 0 im Abstand. `art` ist, was zwischen
+    ihnen steht (Welt.deckung): "" freie Sicht, "hindernis" eine Kiste."""
+    for _ in range(versuche):
+        a = pygame.Vector2(freier_punkt(tm.welt, 0, rnd))
+        b = a + pygame.Vector2(abstand, 0).rotate(rnd.uniform(0.0, 360.0))
+        if not (tm.welt.frei(a, 30, 0, True) and tm.welt.frei(b, 30, 0, True)):
+            continue
+        if tm.welt.deckung(a, b, 0) != art:
+            continue
+        return a, b
+    raise RuntimeError("Keine passende Stelle auf der Karte gefunden")
+
+
+def kreis(mitte, n: int, abstand: float = 26.0) -> list:
+    """n Plaetze um eine Mitte, damit niemand auf dem anderen steht."""
+    if n <= 1:
+        return [pygame.Vector2(mitte)]
+    return [mitte + pygame.Vector2(abstand, 0).rotate(i * 360.0 / n + 15.0)
+            for i in range(n)]
+
+
+def alle_weg(*gruppen):
+    """Ende, sobald eine der Gruppen ganz liegt."""
+    return lambda: any(all(not w.lebt for w in g) for g in gruppen)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Die Szenen. Jede setzt ihre Figuren und gibt zurueck:
+# (Titel, Teilnehmer fuer die Kamera, Ende-Bedingung, Sekunden, Zoom)
+# ══════════════════════════════════════════════════════════════════
+
+def szene_duell(tm, rnd):
+    a, b = stelle(tm, rnd, 300, "hindernis")
+    rot = [tm.bot_setzen(p, 0, {"team": 0, "hirn": "goap"}) for p in kreis(a, 3)]
+    blau = [tm.bot_setzen(p, 0, {"team": 1, "hirn": "klassisch"}) for p in kreis(b, 3)]
+    return ("GOAP-Bots (rot) gegen klassische Bots (blau), 3 gegen 3",
+            rot + blau, alle_weg(rot, blau), 50, 1.5)
+
+
+def szene_flanke(tm, rnd):
+    a, b = stelle(tm, rnd, 230, "hindernis")
+    rot = [tm.bot_setzen(p, 0, {"team": 0, "hirn": "goap"}) for p in kreis(a, 2, 30)]
+    blau = [tm.bot_setzen(b, 0, {"team": 1, "hirn": "klassisch", "leben": 2.0})]
+    return ("Zwei GOAP-Bots gegen einen hinter der Kiste (doppeltes Leben)",
+            rot + blau, alle_weg(rot, blau), 40, 1.25)
+
+
+def szene_welle(tm, rnd):
+    a, b = stelle(tm, rnd, 280, "")
+    c = a - (b - a)
+    if not tm.welt.frei(c, 30, 0, True):
+        c = pygame.Vector2(b)
+    rot = [tm.bot_setzen(p, 0, {"team": 0, "hirn": "goap"}) for p in kreis(a, 3)]
+    arten = ["laeufer"] * 7 + ["renner"] * 4 + ["speier"] * 2 + ["blaeher"] * 2 + ["brecher"] * 2
+    zombies = []
+    for seite in (b, c):
+        for art in arten:
+            p = seite + pygame.Vector2(rnd.uniform(-80, 80), rnd.uniform(-80, 80))
+            if not tm.welt.frei(p, 16, 0, True):
+                p = pygame.Vector2(seite)
+            zombies.append(tm.gegner_setzen(art, p, 0, {"ki": True, "hirn": "goap"}))
+    # Die Kamera folgt den Bots: 34 Zombies ziehen die Mitte sonst ins Leere.
+    return ("Drei GOAP-Bots gegen 34 GOAP-Zombies von zwei Seiten",
+            rot, alle_weg(rot, zombies), 60, 1.75)
+
+
+def szene_boss(tm, rnd):
+    a, b = stelle(tm, rnd, 300, "")
+    rot = [tm.bot_setzen(p, 0, {"team": 0, "hirn": "goap"}) for p in kreis(a, 4, 30)]
+    boss = tm.gegner_setzen("koloss", b, 0, {"ki": True, "hirn": "goap", "leben": 5.0})
+    return ("Vier GOAP-Bots gegen den Koloss (GOAP, fuenffaches Leben)",
+            rot + [boss], alle_weg(rot, [boss]), 60, 1.5)
+
+
+def szene_huegel(tm, rnd):
+    a, b = stelle(tm, rnd, 720, "")
+    tm.zone_setzen((a + b) / 2, 0)
+    # Doppeltes Leben: im Kreis prallen alle auf einmal aufeinander, mit
+    # gewoehnlichem Leben war es nach sieben Sekunden vorbei.
+    rot = [tm.bot_setzen(p, 0, {"team": 0, "hirn": "goap", "leben": 2.0}) for p in kreis(a, 4, 30)]
+    blau = [tm.bot_setzen(p, 0, {"team": 1, "hirn": "goap", "leben": 2.0}) for p in kreis(b, 4, 30)]
+    return ("Huegel: GOAP gegen GOAP um den Kreis, 4 gegen 4 (doppeltes Leben)",
+            rot + blau, alle_weg(rot, blau), 60, 1.5)
+
+
+# Name -> (Dateiname, Szene). Die Nummer im Dateinamen ist die Reihenfolge.
+SZENEN = {
+    "duell": ("1_goap_gegen_klassisch", szene_duell),
+    "flanke": ("2_flanke_und_niederhalten", szene_flanke),
+    "welle": ("3_zombiewelle", szene_welle),
+    "boss": ("4_boss_koloss", szene_boss),
+    "huegel": ("5_kampf_um_den_kreis", szene_huegel),
+}
+
+
+# ══════════════════════════════════════════════════════════════════
+# Aufnehmen
+# ══════════════════════════════════════════════════════════════════
+
+def testmodus_fuer_aufnahme(app, zoom: float):
+    """Ein Testmodus, wie ihn eine Aufnahme braucht: saubere Ansicht,
+    tote Figuren steigen nicht wieder ein, fester Zoom."""
+    from dustfront import testmodus
+    tm = testmodus.Testmodus(app, karte="staubtal")
+    tm.sauber = True
+    tm.wiedereinstieg = False
+    tm.zoom_ziel = zoom
+    tm._zoom_weich = zoom
+    tm._geist.ebene = 0
+    tm.blick = 0
+    return tm
+
+
+def _mitte(wesen):
+    lebende = [w for w in wesen if w.lebt and w.ebene == 0]
+    if not lebende:
+        return None
+    return sum((pygame.Vector2(w.pos) for w in lebende), pygame.Vector2()) / len(lebende)
+
+
+def aufnehmen(app, name: str, ordner: str, seed: int | None = None) -> str:
+    """Eine Szene rechnen und als MP4 schreiben. Gibt den Pfad zurueck."""
+    datei, szene = SZENEN[name]
+    rnd = random.Random(seed if seed is not None else sum(map(ord, name)))
+    # Erst mit Zoom 1 aufbauen (die Szene setzt die Figuren), dann den
+    # Zoom der Szene einstellen.
+    tm = testmodus_fuer_aufnahme(app, 1.0)
+    titel, kamera_auf, ende, sekunden, zoom = szene(tm, rnd)
+    tm.zoom_ziel = zoom
+    tm._zoom_weich = zoom
+    g = tm._geist
+    m = _mitte(kamera_auf)
+    if m is not None:
+        g.pos.update(m)
+    pfad = os.path.join(ordner, datei + ".mp4")
+    ff = subprocess.Popen(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
+         "-s", "%dx%d" % (BREITE, HOEHE), "-r", str(BILDER_JE_SEKUNDE), "-i", "-",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "medium", pfad],
+        stdin=subprocess.PIPE)
+    bild = pygame.Surface((K.GAME_W, K.GAME_H))
+    gross = pygame.Surface((BREITE, HOEHE))
+    schluss = None
+    bilder = 0
+    try:
+        for nr in range(int(sekunden * BILDER_JE_SEKUNDE)):
+            for _ in range(SCHRITTE_JE_BILD):
+                tm.schritt(K.FIXED_DT)
+            m = _mitte(kamera_auf)
+            if m is not None:
+                # Weich nachziehen: ein Sprung, wenn einer faellt, ist unruhig.
+                g.pos += (m - g.pos) * 0.06
+                g.vorher.update(g.pos)
+                g.ziel = pygame.Vector2(g.pos)
+            tm.blick = 0
+            tm.zeichnen(bild, 1.0)
+            pygame.transform.scale(bild, (BREITE, HOEHE), gross)
+            ff.stdin.write(pygame.image.tobytes(gross, "RGB"))
+            bilder += 1
+            if schluss is None and ende():
+                schluss = nr + int(NACHLAUF * BILDER_JE_SEKUNDE)
+            if schluss is not None and nr >= schluss:
+                break
+    finally:
+        ff.stdin.close()
+        ff.wait()
+        tm.verlassen()
+    print("%-8s %5.1f s  %s  (%s)" % (name, bilder / float(BILDER_JE_SEKUNDE), pfad, titel),
+          flush=True)
+    return pfad
+
+
+def main(argv) -> int:
+    if "--liste" in argv:
+        for name, (datei, szene) in SZENEN.items():
+            print("%-8s %s" % (name, datei))
+        return 0
+    ordner = "aufnahmen"
+    if "--ordner" in argv:
+        i = argv.index("--ordner")
+        ordner = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
+    namen = [a for a in argv if not a.startswith("--")] or list(SZENEN)
+    falsch = [n for n in namen if n not in SZENEN]
+    if falsch:
+        print("Unbekannte Szene: %s (--liste zeigt alle)" % ", ".join(falsch))
+        return 2
+    if shutil.which("ffmpeg") is None:
+        print("ffmpeg fehlt - ohne es laesst sich kein Video schreiben.")
+        return 2
+    os.makedirs(ordner, exist_ok=True)
+    from dustfront.core import App
+    app = App("aufnahme", None, headless=True)
+    for n in namen:
+        aufnehmen(app, n, ordner)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

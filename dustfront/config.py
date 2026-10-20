@@ -1052,6 +1052,7 @@ TESTMODUS = dict(
     leben=(1.0, 0.5, 0.25, 0.1, 2.0, 5.0, 10.0),
     greifen=40.0,             # so nah am Mauszeiger wird eine Figur genommen/geloescht
     figur_ab=300,             # Spielernummern der gespawnten Puppen und Figuren
+    aktion_ausweichen=3,      # saubere Ansicht: so oft rueckt eine Aktion hoch, wenn es eng ist
 )
 
 # Zielorientierte KI (seit 0.34.29, goap.py, bot_goap.py, Daten in wesen/).
