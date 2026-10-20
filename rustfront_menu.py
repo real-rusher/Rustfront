@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.34.27"
+VERSION = "0.34.28"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -1353,6 +1353,15 @@ class MainPage(Page):
                    "einzelspieler: region, schwierigkeit und rufzeichen wählen."),
             Action("MEHRSPIELER", lambda a: a.goto("multiplayer"),
                    "lobby erstellen oder einer lobby im netz beitreten."),
+        ]
+        # Der Testmodus (seit 0.34.28): nur mit Tastatur und Ziffernblock,
+        # also nicht auf iPhone und iPad.
+        if _plattform is None or (not _plattform.IOS and not _plattform.touch_an()):
+            self.items.append(
+                Action("TESTMODUS", lambda a: a.start_game("testmodus"),
+                       "zum ausprobieren: beobachter, ziffernblock, spawner.",
+                       accent=C_TEAL))
+        self.items += [
             Action("OPTIONEN", lambda a: a.goto("options"),
                    "bild, ton und darstellung anpassen."),
             Action("STEUERUNG", lambda a: a.goto("controls"),
@@ -1980,7 +1989,7 @@ def spiel_scene(window, app: App, result: dict) -> None:
         placeholder_scene(window, app, result)
         return
 
-    if result.get("action") != "mehrspieler":
+    if result.get("action") not in ("mehrspieler", "mehrspieler_beitreten", "testmodus"):
         # Der Mehrspieler hat keinen Spielstand; FORTSETZEN soll weiter
         # auf den letzten Auftrag zeigen.
         app.write_save()

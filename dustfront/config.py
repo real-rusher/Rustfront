@@ -1034,6 +1034,26 @@ BOTS = dict(
     verwalten_takt=1.0,       # so oft wird nachgezaehlt, ob Bots fehlen
 )
 
+# Der Testmodus (seit 0.34.28, testmodus.py): aus dem Hauptmenue, zum
+# schnellen Ausprobieren neuer Sachen. Man fliegt als Beobachter, den
+# nichts in der Welt wahrnimmt, und steuert alles ueber den Ziffernblock.
+# Gemeldet: "ein temporaerer Testmodus, wo ich neue Features schneller
+# testen kann ... alles mit Fokus auf Effizienz und Kontrolle statt auf
+# Verstaendlichkeit und Gefuehl." Nicht auf iOS (kein Ziffernblock).
+TESTMODUS = dict(
+    port=50620,               # lauscht nur lokal, ab hier der erste freie Port
+    flug=(500.0, 1100.0, 2400.0),   # Flugtempo des Beobachters (px/s), waehlbar
+    turbo=3.0,                # x Flugtempo mit gehaltener Umschalttaste
+    zeitfaktoren=(0.1, 0.25, 0.5, 1.0, 2.0, 4.0),
+    einzelschritt=12,         # so viele Rechenschritte macht EIN SCHRITT (1/10 s)
+    hoechstens_schritte=8,    # mehr Rechenschritte je Bild auch im Zeitraffer nicht
+    anzahlen=(1, 2, 3, 4, 5, 8, 10, 15, 20, 30, 50),
+    streuungen=(0, 16, 32, 64, 128, 256),
+    leben=(1.0, 0.5, 0.25, 0.1, 2.0, 5.0, 10.0),
+    greifen=40.0,             # so nah am Mauszeiger wird eine Figur genommen/geloescht
+    figur_ab=300,             # Spielernummern der gespawnten Puppen und Figuren
+)
+
 # Die Lobby: wo man beim Aufmachen landet und nach jeder Runde.
 #
 # Drei Bereiche, in der Kartendatei als Rechtecke im Kopf eingetragen:

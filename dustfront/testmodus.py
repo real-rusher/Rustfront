@@ -1,0 +1,1278 @@
+"""
+DUSTFRONT - Testmodus (seit 0.34.28)
+====================================
+
+Gemeldet: "Mach mir bitte einen separaten Gamemode, den man aus dem
+Hauptmenue waehlt. Das soll quasi ein temporaerer Testmodus sein, wo ich
+neue Features schneller testen kann ... im Spectator-Modus spawnen ... mit
+extrem hoher Geschwindigkeit ueber die Map fliegen ... ELEMENTAR, dass
+NICHTS in der kompletten Welt, auch spaeter nicht, mich wahrnehmen oder
+beeinflussen kann ... alle Spezialaktionen ueber das Numpad ... das Numpad
+soll immer on screen angezeigt werden ... alles mit Fokus auf Effizienz
+und Kontrolle statt auf Verstaendlichkeit und Gefuehl."
+
+Ein Gefecht (mehrspieler.Gefecht) als Gastgeber, das nur lokal lauscht
+und ein Zufallskennwort hat - beitreten kann niemand. Gebucht wird nichts
+(`_runde_buchen` und `_abbruch_buchen` sind leer): Statistiken sollen nie
+auseinanderlaufen, und ein Test ist keine Runde.
+
+**Der Beobachter.** Die eigene Figur des Gastgebers wird nach dem
+Anlegen sofort wieder aus der Welt (`welt.wesen`) und aus der
+Kaempferliste (`kaempfer`) genommen. Alles, was in diesem Spiel etwas
+wahrnimmt oder trifft, schaut in eine dieser beiden Listen - Kugeln und
+Explosionen ins Raster der Welt, Bots und Gegner in die Kaempfer, Beute
+auch. Die Figur ist danach nur noch der Punkt, dem die Kamera folgt, und
+kann von nichts gefunden werden, auch nicht von etwas, das spaeter dazu
+kommt. Blendgranaten und Kameraruckeln treffen den Beobachter auch nicht
+(abschaltbar, `blend_beobachter` / `ruckeln_beobachter`).
+
+**Die Zeit.** Gerechnet wird in festen Schritten wie immer; der Zeitfaktor
+sagt nur, wie viele davon je Bild laufen (Zeitlupe laesst Bilder aus,
+Zeitraffer rechnet mehrere). Steht die Zeit, laeuft gar nichts - kein
+Wesen, kein Partikel, keine Uhr eines Bots. Kamera, Menues und Spawner
+laufen weiter, und was man dann spawnt, steht sofort in der Welt.
+
+**Steuerung** (alles auch per Klick auf den Ziffernblock am Bildrand):
+
+    0  Zeit an/aus            .  ein Schritt (1/10 s)
+    +  schneller              -  langsamer
+    /  KI an/aus             *  alles weg (ausser der eigenen Figur)
+    7  Ebene runter           9  Ebene hoch           8  Info an/aus
+    4  Spawner                5  nochmal spawnen      6  Gottmodus weiter
+    1  Bot am Zeiger          2  Puppe am Zeiger      3  Figur uebernehmen
+    Enter  loeschen, was am Zeiger liegt
+    NUM (angeklickt)  Testmenue
+    Esc  Testmenue (Karte, Einstellungen, Gottmodus einzeln, Hauptmenue)
+    W A S D  fliegen, Umschalt  schneller, Mausrad  Sichtweite
+
+**Neue Features gehoeren hierher.** Was ab 0.34.28 neu ins Spiel kommt,
+muss hier ausprobierbar sein: als Eintrag im Spawner (`EINTRAEGE`), als
+Taste oder als Zeile im Testmenue. Siehe AGENTS.md und docs/TESTMODUS.md.
+"""
+
+from __future__ import annotations
+
+import random
+import types
+
+import pygame
+
+from . import config as K
+from . import konto as konto_modul
+from . import netz
+from . import plattform
+from . import ui
+from .anzeige import Anzeige
+from .entities import Granate
+from .fahrzeug import Buggy
+from .font import SCHRIFT
+from .mehrspieler import Gefecht, Kaempfer, KampfBeute, KampfGegner
+
+
+def verfuegbar() -> bool:
+    """Den Testmodus gibt es nur mit Tastatur und Ziffernblock - nicht auf
+    iPhone und iPad, und nicht mit der Touch-Steuerung."""
+    return not plattform.IOS and not plattform.touch_an()
+
+
+# ══════════════════════════════════════════════════════════════════
+# Der Ziffernblock
+# ══════════════════════════════════════════════════════════════════
+
+# (Taste, Spalte, Zeile, Breite, Hoehe, Aufschrift auf der Taste)
+# Wie ein echter Ziffernblock: + und Enter sind zwei Zeilen hoch, die 0
+# zwei Spalten breit.
+TASTEN = (
+    ("num", 0, 0, 1, 1, "NUM"),
+    ("/", 1, 0, 1, 1, "/"), ("*", 2, 0, 1, 1, "*"), ("-", 3, 0, 1, 1, "-"),
+    ("7", 0, 1, 1, 1, "7"), ("8", 1, 1, 1, 1, "8"), ("9", 2, 1, 1, 1, "9"),
+    ("+", 3, 1, 1, 2, "+"),
+    ("4", 0, 2, 1, 1, "4"), ("5", 1, 2, 1, 1, "5"), ("6", 2, 2, 1, 1, "6"),
+    ("1", 0, 3, 1, 1, "1"), ("2", 1, 3, 1, 1, "2"), ("3", 2, 3, 1, 1, "3"),
+    ("enter", 3, 3, 1, 2, "ENT"),
+    ("0", 0, 4, 2, 1, "0"), (".", 2, 4, 1, 1, "."),
+)
+
+# pygame-Taste -> Name im Ziffernblock. Ueber den Tastencode und, falls
+# der fehlt, ueber den Scancode: mit ausgeschaltetem NumLock schicken
+# manche Systeme statt KP_7 ein HOME, der Scancode bleibt aber derselbe.
+_CODES = {
+    pygame.K_KP0: "0", pygame.K_KP1: "1", pygame.K_KP2: "2", pygame.K_KP3: "3",
+    pygame.K_KP4: "4", pygame.K_KP5: "5", pygame.K_KP6: "6", pygame.K_KP7: "7",
+    pygame.K_KP8: "8", pygame.K_KP9: "9", pygame.K_KP_PERIOD: ".",
+    pygame.K_KP_PLUS: "+", pygame.K_KP_MINUS: "-", pygame.K_KP_MULTIPLY: "*",
+    pygame.K_KP_DIVIDE: "/", pygame.K_KP_ENTER: "enter",
+}
+_SCANCODES = {}
+for _name, _taste in (("0", "KP_0"), ("1", "KP_1"), ("2", "KP_2"), ("3", "KP_3"),
+                      ("4", "KP_4"), ("5", "KP_5"), ("6", "KP_6"), ("7", "KP_7"),
+                      ("8", "KP_8"), ("9", "KP_9"), (".", "KP_PERIOD"),
+                      ("+", "KP_PLUS"), ("-", "KP_MINUS"), ("*", "KP_MULTIPLY"),
+                      ("/", "KP_DIVIDE"), ("enter", "KP_ENTER")):
+    _code = getattr(pygame, "KSCAN_" + _taste, None)
+    if _code is not None:
+        _SCANCODES[_code] = _name
+
+
+def numpad_name(ev):
+    """Welche Taste des Ziffernblocks ein KEYDOWN ist, oder None."""
+    name = _CODES.get(getattr(ev, "key", None))
+    if name is None:
+        name = _SCANCODES.get(getattr(ev, "scancode", None))
+    return name
+
+
+# Gottmodus. Die Stufen, durch die die 6 schaltet; einzeln an und aus im
+# Testmenue. Gilt fuer die Figur, die man gerade steuert.
+GOTT = (
+    ("AUS", frozenset()),
+    ("UNVERWUNDBAR", frozenset({"unverwundbar"})),
+    ("UNSTERBLICH", frozenset({"unsterblich"})),
+    ("UNSICHTBAR", frozenset({"unsichtbar"})),
+    ("ALLES", frozenset({"unverwundbar", "unsichtbar", "munition"})),
+)
+GOTT_ARTEN = (
+    ("unverwundbar", "UNVERWUNDBAR", "KEIN SCHADEN, KEIN RÜCKSTOSS"),
+    ("unsterblich", "UNSTERBLICH", "NIMMT SCHADEN, FÄLLT NIE UNTER 1 LEBEN"),
+    ("unsichtbar", "UNSICHTBAR FÜR KI", "BOTS UND GEGNER NEHMEN DICH NICHT WAHR"),
+    ("munition", "UNENDLICH MUNITION", "MAGAZIN UND VORRAT BLEIBEN VOLL"),
+)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Der Spawner
+# ══════════════════════════════════════════════════════════════════
+
+def _team_text(v) -> str:
+    return K.TEAMS["namen"][v] if 0 <= v < len(K.TEAMS["namen"]) else "FREI"
+
+
+# Einstellungen, die ein Eintrag haben kann: (Beschriftung, Werte, Text).
+OPTIONEN = {
+    "anzahl": ("ANZAHL", lambda: list(K.TESTMODUS["anzahlen"]), str),
+    "streuung": ("STREUUNG", lambda: list(K.TESTMODUS["streuungen"]),
+                 lambda v: "%d PX" % v),
+    "team": ("TEAM", lambda: list(range(len(K.TEAMS["namen"]))) + [-1], _team_text),
+    "waffe": ("WAFFE", lambda: ["zufall"] + list(K.LOADOUT["auswahl_waffen"]),
+              lambda v: "ZUFALL" if v == "zufall" else K.WAFFEN[v]["name"]),
+    "leben": ("LEBEN", lambda: list(K.TESTMODUS["leben"]),
+              lambda v: "%d %%" % round(v * 100)),
+    "ki": ("KI", lambda: [True, False], lambda v: "AN" if v else "AUS"),
+    "winkel": ("RICHTUNG", lambda: [0, 90, 180, 270], lambda v: "%d GRAD" % v),
+    "zuender": ("ZÜNDER", lambda: ["liegt", "sofort"],
+                lambda v: "LIEGT, ZÜNDET" if v == "liegt" else "SOFORT"),
+}
+
+
+class Eintrag:
+    """Ein Ding, das der Spawner setzen kann."""
+
+    def __init__(self, name: str, gruppe: str, optionen, setzen, mehrfach=True):
+        self.name = name
+        self.gruppe = gruppe
+        self.optionen = tuple(optionen)
+        self.setzen = setzen          # setzen(testmodus, pos, ebene, werte)
+        self.mehrfach = mehrfach      # einmal je Anzahl (sonst einmal ueberhaupt)
+
+
+def eintraege() -> list:
+    """Alles, was sich spawnen laesst - in Gruppen, in Menuereihenfolge.
+
+    HIER GEHOERT JEDES NEUE DING HIN (seit 0.34.28, siehe AGENTS.md):
+    eine neue Gegnerart, Waffe, Wurfwaffe, Beute oder ein neues Objekt
+    bekommt einen Eintrag, damit es sich im Testmodus setzen laesst.
+    Gegner, Bosse und Zielpuppen kommen von selbst aus der Tabelle."""
+    raus = [
+        Eintrag("BOT", "FIGUREN", ("anzahl", "streuung", "team", "waffe", "leben"),
+                lambda t, p, e, w: t.bot_setzen(p, e, w)),
+        Eintrag("SPIELER, STEHT", "FIGUREN", ("anzahl", "streuung", "team", "leben"),
+                lambda t, p, e, w: t.puppe_setzen(p, e, w)),
+        Eintrag("SPIELER, ICH", "FIGUREN", ("team", "leben"),
+                lambda t, p, e, w: t.ich_setzen(p, e, w), mehrfach=False),
+    ]
+    for art in sorted(K.GEGNER):
+        raus.append(Eintrag(K.GEGNER[art].get("name", art.upper()), "GEGNER",
+                            ("anzahl", "streuung", "leben", "ki"),
+                            _gegner_setzer(art)))
+    for art in sorted(K.BOSSE):
+        raus.append(Eintrag(K.BOSSE[art].get("name", art.upper()), "BOSSE",
+                            ("anzahl", "streuung", "leben", "ki"),
+                            _gegner_setzer(art)))
+    for art in sorted(K.UEBUNG):
+        raus.append(Eintrag(K.UEBUNG[art].get("name", art.upper()), "ZIELE",
+                            ("anzahl", "streuung"), _gegner_setzer(art)))
+    raus += [
+        Eintrag("BUGGY", "OBJEKTE", ("anzahl", "streuung", "winkel"),
+                lambda t, p, e, w: t.buggy_setzen(p, e, w)),
+        Eintrag("HOTZONE HIER", "OBJEKTE", (),
+                lambda t, p, e, w: t.zone_setzen(p, e), mehrfach=False),
+        Eintrag("HOTZONE AUS", "OBJEKTE", (),
+                lambda t, p, e, w: t.zone_aus(), mehrfach=False),
+        Eintrag("MEDKIT", "BEUTE", ("anzahl", "streuung"), _beute_setzer("medkit")),
+        Eintrag("MUNITIONSKISTE", "BEUTE", ("anzahl", "streuung"),
+                _beute_setzer("munition")),
+        Eintrag("RAKETENWERFER", "BEUTE", ("anzahl", "streuung"),
+                _beute_setzer("rakete")),
+    ]
+    for art in ("granate", "rauch", "molotov", "blend"):
+        raus.append(Eintrag(K.WAFFEN[art]["name"], "WURF",
+                            ("anzahl", "streuung", "zuender"), _wurf_setzer(art)))
+    return raus
+
+
+def _gegner_setzer(art):
+    return lambda t, p, e, w: t.gegner_setzen(art, p, e, w)
+
+
+def _beute_setzer(art):
+    return lambda t, p, e, w: t.beute_setzen(art, p, e)
+
+
+def _wurf_setzer(art):
+    return lambda t, p, e, w: t.wurf_setzen(art, p, e, w)
+
+
+def _schaden_mit_gott(k, menge, schub=None, von=None):
+    """Statt Kaempfer.schaden, solange der Testmodus die Figur steuert:
+    UNSTERBLICH laesst das Leben nie unter 1 fallen."""
+    tm = getattr(k, "_testmodus", None)
+    if tm is not None and tm.ich is k and not tm.beobachter and "unsterblich" in tm.gott:
+        menge = min(float(menge), max(0.0, k.leben - 1.0))
+    type(k).schaden(k, menge, schub, von)
+
+
+class _TestAnzeige(Anzeige):
+    """Die gewoehnliche Anzeige der gesteuerten Figur, ohne Rundenuhr und
+    ohne Wellenzaehler - beides heisst im Testmodus nichts (Wellen nur,
+    wenn sie im Testmenue an sind)."""
+
+    @property
+    def _mit_uhr(self) -> bool:
+        return False
+
+    def _welle(self, ziel, mitte, y) -> int:
+        if not getattr(self.g, "wellen_an", False):
+            return y
+        return super()._welle(ziel, mitte, y)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Das Gefecht
+# ══════════════════════════════════════════════════════════════════
+
+class Testmodus(Gefecht):
+    """Ein Gefecht zum Ausprobieren. Siehe oben."""
+
+    ki_stopp = False
+
+    def __init__(self, app, karte: str = "staubtal", zustand: dict | None = None) -> None:
+        z = dict(zustand or {})
+        # Was den Kartenwechsel ueberlebt (Zeitfaktor, Gottmodus ...).
+        self.zeit_stopp = bool(z.get("zeit_stopp", False))
+        self.faktor_nr = int(z.get("faktor_nr", list(K.TESTMODUS["zeitfaktoren"]).index(1.0)))
+        self.ki_stopp = bool(z.get("ki_stopp", False))
+        self.gott = frozenset(z.get("gott", ()))
+        self.info = bool(z.get("info", True))
+        self.flug_nr = int(z.get("flug_nr", 1))
+        self.wiedereinstieg = bool(z.get("wiedereinstieg", True))
+        self.wellen_an = bool(z.get("wellen_an", False))
+        self.beute_an = bool(z.get("beute_an", False))
+        self.blend_beobachter = bool(z.get("blend_beobachter", False))
+        self.ruckeln_beobachter = bool(z.get("ruckeln_beobachter", False))
+        self._sp_werte = dict(z.get("sp_werte", {}))
+        self._sp_nr = int(z.get("sp_nr", 0))
+        self._welt_schritte = 1
+        self._einzel = 0
+        self._konto = 0.0
+        self._zone_an = False
+        self.beobachter = True
+        self.spawner_offen = False
+        self.menue_offen = False
+        self._sp_fokus = "liste"
+        self._sp_opt = 0
+        self._tm_zeile = 0
+        self._zeiger_welt = pygame.Vector2(0, 0)
+        self._zuletzt = None          # der zuletzt gespawnte Eintrag (Taste 5)
+        self._meldung_tm = ""
+        self._meldung_tm_rest = 0.0
+        self._naechste_figur = K.TESTMODUS["figur_ab"]
+        self.eintraege = eintraege()
+        wirt = None
+        for versuch in range(20):
+            try:
+                wirt = netz.Gastgeber(K.TESTMODUS["port"] + versuch, nur_lokal=True)
+                break
+            except OSError:
+                continue
+        if wirt is None:
+            raise OSError("Kein freier Port fuer den Testmodus")
+        super().__init__(app, "BEOBACHTER", gastgeber=wirt, modus="team",
+                         karte=karte, lobby=False, heimkehr=False,
+                         passwort="%08x" % random.getrandbits(32),
+                         regeln={"bots": 0, "schutz": False})
+        # Der Beobachter: aus Welt und Kaempferliste heraus (siehe oben).
+        self._geist = self.ich
+        self.kaempfer.pop(self._geist.nummer, None)
+        self.welt.neue[:] = [w for w in self.welt.neue if w is not self._geist]
+        self.welt.wesen[:] = [w for w in self.welt.wesen if w is not self._geist]
+        self._geist.ebene = 0
+        self._geist.unverwundbar = 0.0
+        self.hud = _TestAnzeige(self)
+        self.melde("TESTMODUS - ZIFFERNBLOCK STEUERT, ESC FÜR DAS MENÜ")
+
+    # ── Was ein Test nicht tut ─────────────────────────────────────
+    def _start_masken(self) -> None:
+        """Keine Anmeldung, kein Loadout-Dialog."""
+
+    def _runde_buchen(self, werte=None, abgebrochen: bool = False, *a, **kw):
+        """Nichts buchen: ein Test ist keine Runde."""
+
+    def _abbruch_buchen(self) -> None:
+        pass
+
+    def _zwischenstand_schicken(self, dt: float) -> None:
+        pass
+
+    def _bots_fuehren(self, dt: float, sofort: bool = False) -> None:
+        """Bots kommen nur aus dem Spawner."""
+
+    def _ende_pruefen(self, dt: float) -> None:
+        pass
+
+    def _runden(self, dt: float) -> None:
+        pass
+
+    def _wellen(self, dt: float) -> None:
+        if self.wellen_an:
+            super()._wellen(dt)
+
+    def _beute_nachlegen(self, dt: float) -> None:
+        if self.beute_an:
+            super()._beute_nachlegen(dt)
+
+    def _regeln_setzen(self, d: dict) -> None:
+        """Wie ein TEAM-Gefecht, aber mit Gegnern und ohne Kreis, bis einer
+        gesetzt wird. Eine eigene Kopie: K.MODI selbst bleibt unberuehrt."""
+        super()._regeln_setzen(d)
+        self.regeln = dict(K.MODI["team"])
+        self.regeln.update(gegner=True, zone=bool(getattr(self, "_zone_an", False)))
+
+    # ── Der Beobachter wird von nichts beruehrt ────────────────────
+    def _blitz(self, pos, ebene: int, von=None) -> bool:
+        if not self.beobachter or self.blend_beobachter:
+            return super()._blitz(pos, ebene, von)
+        # Nur die Bots: sie sollen geblendet werden wie immer.
+        from . import world as welt_modul
+        b = K.BLENDEN
+        for k in self._bots():
+            st = welt_modul.blend_wert(pos, ebene, k, self.welt)
+            if st > 0.0 and k.hirn is not None:
+                k.hirn.blenden(b["mindest"] + (b["dauer"] - b["mindest"]) * st)
+        return False
+
+    def _ruckeln(self, kraft: float, anlass: str = "", pos=None,
+                 ebene: int = 0, quelle=None) -> None:
+        if self.beobachter and not self.ruckeln_beobachter:
+            return
+        super()._ruckeln(kraft, anlass, pos, ebene, quelle)
+
+    def _meine_eingabe(self) -> dict:
+        ein = super()._meine_eingabe()
+        if self.beobachter or self._tm_offen:
+            ein.update(will=[0.0, 0.0], feuert=False, zielt=False, nutzen=False,
+                       ziehen=False, hb=False, knoepfe=[], waffe=-1)
+        return ein
+
+    @property
+    def _tm_offen(self) -> bool:
+        return self.spawner_offen or self.menue_offen
+
+    @property
+    def pausiert(self) -> bool:
+        return self._tm_offen or Gefecht.pausiert.fget(self)
+
+    def _bots_steuern(self, dt: float) -> None:
+        if not self.ki_stopp:
+            super()._bots_steuern(dt)
+            return
+        # KI aus: jeder Bot steht und tut nichts - dieselbe Eingabe wie
+        # ein Gast, der die Hand von der Tastatur nimmt.
+        for k in self._bots():
+            self._anwenden(k, {"t": "ein", "will": [0.0, 0.0],
+                               "ziel": [k.ziel.x, k.ziel.y], "feuert": False,
+                               "zielt": False, "knoepfe": []})
+
+    def _tote_abrechnen(self, dt: float) -> None:
+        super()._tote_abrechnen(dt)
+        if self.wiedereinstieg:
+            return
+        for nummer, k in list(self.kaempfer.items()):
+            if not k.lebt and k.abgerechnet:
+                self.kaempfer.pop(nummer, None)
+                if k is self.ich:
+                    self.beobachten()
+
+    # ── Die Zeit ───────────────────────────────────────────────────
+    @property
+    def zeitfaktor(self) -> float:
+        f = K.TESTMODUS["zeitfaktoren"]
+        return float(f[max(0, min(len(f) - 1, self.faktor_nr))])
+
+    def schritt(self, dt: float) -> None:
+        self._meldung_tm_rest = max(0.0, self._meldung_tm_rest - dt)
+        self._fliegen(dt)
+        self._gott_anwenden()
+        if self.zeit_stopp:
+            n, self._einzel = self._einzel, 0
+        else:
+            self._konto += dt * self.zeitfaktor
+            n = int(self._konto / dt + 1e-9)
+            self._konto -= n * dt
+        self._welt_schritte = min(n, max(K.TESTMODUS["hoechstens_schritte"],
+                                         K.TESTMODUS["einzelschritt"]))
+        super().schritt(dt)
+        self._gott_anwenden()
+
+    def _schritt_gastgeber(self, dt: float) -> None:
+        """So oft rechnen, wie der Zeitfaktor sagt - auch keinmal."""
+        n = self._welt_schritte
+        if n <= 0:
+            # Die Leitung bleibt offen, gerechnet wird nichts.
+            self.gastgeber.annehmen()
+            for _nummer, _nachricht in self.gastgeber.holen():
+                pass
+            self.hinweis = self._meldung_tm if self._meldung_tm_rest > 0 else ""
+            return
+        for _ in range(n):
+            super()._schritt_gastgeber(dt)
+        if self._meldung_tm_rest > 0:
+            self.hinweis = self._meldung_tm
+
+    def melde(self, text: str, dauer: float = 2.5) -> None:
+        self._meldung_tm = text
+        self._meldung_tm_rest = dauer
+        self.hinweis = text
+
+    # ── Fliegen ────────────────────────────────────────────────────
+    def _fliegen(self, dt: float) -> None:
+        e = self.app.eingabe
+        if not self._tm_offen and self.menue is None:
+            self._zeiger_welt = pygame.Vector2(e.ziel_welt(self.kamera, self.ich.pos))
+        if not self.beobachter or self._tm_offen or self.menue is not None:
+            return
+        g = self._geist
+        richtung = e.richtung()
+        tempo = K.TESTMODUS["flug"][self.flug_nr % len(K.TESTMODUS["flug"])]
+        if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+            tempo *= K.TESTMODUS["turbo"]
+        # Mit Zoom fliegt man im Bild gleich schnell: weiter herausgezoomt
+        # ist die Welt kleiner, also muss man in ihr schneller sein.
+        tempo *= max(1.0, self.kamera.zoom)
+        g.pos += richtung * tempo * dt
+        ebene = self.welt.ebene(g.ebene)
+        g.pos.x = max(0.0, min(float(ebene.pixel_breite), g.pos.x))
+        g.pos.y = max(0.0, min(float(ebene.pixel_hoehe), g.pos.y))
+        g.vorher.update(g.pos)
+        # Kein Vorausschauen zur Maus: die Kamera bleibt, wo man hinfliegt.
+        g.ziel = pygame.Vector2(g.pos)
+
+    # ── Figuren uebernehmen ────────────────────────────────────────
+    def uebernehmen(self, k) -> None:
+        """Eine Figur steuern. War sie ein Bot, ruht sein Hirn so lange."""
+        if not self.beobachter:
+            self.beobachten()
+        if getattr(k, "ist_bot", False):
+            k._bot_hirn = k.hirn
+            k.hirn = None
+            k.ist_bot = False
+        k._testmodus = self
+        k.schaden = types.MethodType(_schaden_mit_gott, k)
+        self._geist.pos.update(k.pos)
+        self.ich = k
+        self.meine_nummer = k.nummer
+        self.beobachter = False
+        self.blick = k.ebene
+        self.melde("DU STEUERST %s - 3: ZURÜCK ZUM BEOBACHTER" % k.name)
+
+    def beobachten(self) -> None:
+        """Zurueck zum Beobachter. Ein Bot bekommt sein Hirn zurueck, eine
+        Figur ohne Hirn bleibt stehen, wo sie ist."""
+        k = self.ich
+        if k is not None and k is not self._geist:
+            self._gott_aufheben(k)
+            hirn = getattr(k, "_bot_hirn", None)
+            if hirn is not None:
+                k.hirn = hirn
+                k.ist_bot = True
+                k._bot_hirn = None
+                hirn.neues_leben()
+            self._geist.pos.update(k.pos)
+            self._geist.ebene = k.ebene
+        self.ich = self._geist
+        self.meine_nummer = self._geist.nummer
+        self.beobachter = True
+        self.melde("BEOBACHTER")
+
+    def _gott_anwenden(self) -> None:
+        k = self.ich
+        if self.beobachter or k is None:
+            return
+        if "unverwundbar" in self.gott:
+            k.unverwundbar = max(k.unverwundbar, 0.5)
+        elif getattr(k, "_gott_unverwundbar", False):
+            k.unverwundbar = 0.0
+        k._gott_unverwundbar = "unverwundbar" in self.gott
+        k.ki_unsichtbar = "unsichtbar" in self.gott
+        if "munition" in self.gott:
+            for name in k.waffen:
+                d = K.WAFFEN[name]
+                if d.get("magazin"):
+                    k.magazin[name] = d["magazin"]
+                k.vorrat[name] = max(k.vorrat.get(name, 0),
+                                     K.MUNITION["vorrat"].get(name, 0))
+
+    def _gott_aufheben(self, k) -> None:
+        if getattr(k, "_gott_unverwundbar", False):
+            k.unverwundbar = 0.0
+        k._gott_unverwundbar = False
+        k.ki_unsichtbar = False
+
+    # ── Setzen ─────────────────────────────────────────────────────
+    def _einsetzen(self, w) -> None:
+        """In die Welt - sofort, auch wenn die Zeit steht."""
+        self.welt.dazu(w)
+        self.welt.wesen.extend(self.welt.neue)
+        self.welt.neue.clear()
+
+    def _stelle(self, pos, ebene: int, radius: float, streuung: float, rnd):
+        p = pygame.Vector2(pos)
+        if streuung > 0:
+            p += pygame.Vector2(rnd.uniform(0, streuung), 0).rotate(rnd.uniform(0, 360))
+        if not self.welt.frei(p, radius, ebene, True):
+            p = pygame.Vector2(self.welt.landeplatz(p, radius, ebene))
+        return p
+
+    def _figur_platz(self, k, pos, ebene: int) -> None:
+        k.pos.update(pos)
+        k.vorher.update(pos)
+        k.ebene = ebene
+        k.tempo.update(0, 0)
+        k.unverwundbar = 0.0
+
+    def _figur_einstellen(self, k, team: int, leben: float) -> None:
+        k.team = team
+        k.team_wunsch = team
+        k.team_fest = True
+        k.fraktion = self._fraktion_fuer(k.nummer, team)
+        k.max_leben = K.SPIELER["leben"] * float(leben)
+        k.leben = k.max_leben
+
+    def bot_setzen(self, pos, ebene: int, w: dict):
+        k = self._bot_dazu(w.get("team", 0))
+        self._figur_einstellen(k, w.get("team", 0), w.get("leben", 1.0))
+        if w.get("waffe", "zufall") != "zufall":
+            andere = [x for x in K.LOADOUT["auswahl_waffen"] if x != w["waffe"]]
+            lo = {"name": "BOT", "waffen": [w["waffe"], self._bot_rnd.choice(andere)],
+                  "wuerfe": ["granate"]}
+            k.loadout = lo
+            k.waffen = konto_modul.hotbar_aus_loadout(lo)
+            k.waffe = k.waffen.index(w["waffe"])
+            self._bot_munition(k)
+        self._figur_platz(k, pos, ebene)
+        self.welt.wesen.extend(self.welt.neue)
+        self.welt.neue.clear()
+        k.hirn.neues_leben()
+        return k
+
+    def puppe_setzen(self, pos, ebene: int, w: dict, name: str = ""):
+        nummer = self._naechste_figur
+        while nummer in self.kaempfer:
+            nummer += 1
+        self._naechste_figur = nummer + 1
+        k = self._dazu(nummer, name or "PUPPE %d" % (nummer - K.TESTMODUS["figur_ab"] + 1),
+                       w.get("team", 0), None)
+        self._figur_einstellen(k, w.get("team", 0), w.get("leben", 1.0))
+        self._figur_platz(k, pos, ebene)
+        self.welt.wesen.extend(self.welt.neue)
+        self.welt.neue.clear()
+        return k
+
+    def ich_setzen(self, pos, ebene: int, w: dict):
+        k = self.puppe_setzen(pos, ebene, w, name="ICH")
+        self.uebernehmen(k)
+        return k
+
+    def gegner_setzen(self, art: str, pos, ebene: int, w: dict):
+        g = KampfGegner(pygame.Vector2(pos), art, ebene, self)
+        g.max_leben *= float(w.get("leben", 1.0))
+        g.leben = g.max_leben
+        g.ki_aus = not w.get("ki", True)
+        self._einsetzen(g)
+        if K.ist_boss(art):
+            self.boss = g
+        return g
+
+    def buggy_setzen(self, pos, ebene: int, w: dict):
+        b = Buggy(pygame.Vector2(pos), ebene, float(w.get("winkel", 0)))
+        b.start = (pygame.Vector2(b.pos), b.ebene, b.winkel)
+        self.fahrzeuge.append(b)
+        self._einsetzen(b)
+        return b
+
+    def beute_setzen(self, art: str, pos, ebene: int):
+        b = KampfBeute(pygame.Vector2(pos), art, ebene, self.kaempfer)
+        self._einsetzen(b)
+        return b
+
+    def wurf_setzen(self, art: str, pos, ebene: int, w: dict):
+        gr = Granate(pygame.Vector2(pos), 0.0, K.WAFFEN[art], ebene, von=None, weite=0.0)
+        if w.get("zuender") == "sofort":
+            gr.welt = self.welt
+            gr.zuenden()
+            return gr
+        self._einsetzen(gr)
+        return gr
+
+    def zone_setzen(self, pos, ebene: int) -> None:
+        """Den Kreis hierher. Ab jetzt wird um ihn gekaempft wie in HUEGEL,
+        und die Bots wollen hinein."""
+        self._zone_an = True
+        self.regeln["zone"] = True
+        self.kreise = [(ebene, pygame.Vector2(pos), "T")]
+        self.kreis_nr = 0
+        self.kreis_rest = 1e9         # er wandert nicht
+        self._kreis_setzen(0)
+        self.zone_stand = [0.0] * len(K.TEAMS["namen"])
+        self.zone_halter = -1
+
+    def zone_aus(self) -> None:
+        self._zone_an = False
+        self.regeln["zone"] = False
+
+    def spawnen(self, eintrag=None, pos=None, ebene=None) -> list:
+        """Den Eintrag so oft setzen, wie eingestellt ist. Gibt zurueck,
+        was gesetzt wurde."""
+        eintrag = eintrag or self.eintraege[self._sp_nr]
+        pos = pygame.Vector2(self._zeiger_welt if pos is None else pos)
+        ebene = self.blick if ebene is None else ebene
+        w = self.werte(eintrag)
+        anzahl = int(w.get("anzahl", 1)) if eintrag.mehrfach else 1
+        rnd = random.Random()
+        raus = []
+        for _ in range(anzahl):
+            p = self._stelle(pos, ebene, 12.0, float(w.get("streuung", 0)), rnd)
+            ding = eintrag.setzen(self, p, ebene, w)
+            if ding is not None:
+                raus.append(ding)
+        self._zuletzt = eintrag
+        self.melde("%d x %s" % (max(1, len(raus)), eintrag.name))
+        return raus
+
+    def werte(self, eintrag) -> dict:
+        """Die eingestellten Werte eines Eintrags (Schluessel -> Wert)."""
+        gemerkt = self._sp_werte.setdefault(eintrag.name, {})
+        raus = {}
+        for o in eintrag.optionen:
+            werte = OPTIONEN[o][1]()
+            i = gemerkt.get(o, 0)
+            raus[o] = werte[max(0, min(len(werte) - 1, i))]
+        return raus
+
+    def wert_verstellen(self, eintrag, option: str, schritt: int) -> None:
+        gemerkt = self._sp_werte.setdefault(eintrag.name, {})
+        werte = OPTIONEN[option][1]()
+        gemerkt[option] = (gemerkt.get(option, 0) + schritt) % len(werte)
+
+    # ── Wegnehmen ──────────────────────────────────────────────────
+    def alles_weg(self) -> None:
+        """Alles aus der Welt ausser der Figur, die man steuert."""
+        bleibt = None if self.beobachter else self.ich
+        for w in self.welt.wesen + self.welt.neue:
+            if w is not bleibt:
+                w.lebt = False
+        self.welt.neue.clear()
+        self.welt.wesen[:] = [w for w in self.welt.wesen if w is bleibt]
+        for nummer, k in list(self.kaempfer.items()):
+            if k is not bleibt:
+                self.kaempfer.pop(nummer, None)
+        self.fahrzeuge = []
+        self._fahrzeug_warte = []
+        self.welt.feuer.clear()
+        self.welt.rauch.clear()
+        self.welt.partikel.clear()
+        self.welt.muendungen.clear()
+        self.gegner_offen = []
+        self.welle_rest = []
+        self.boss = None
+        self._stuerme = []
+        self._bot_rollen = {}
+        self.zone_aus()
+        self.melde("ALLES WEG")
+
+    def am_zeiger(self, pos=None):
+        """Das Wesen, das dem Zeiger am naechsten liegt (auf der angeschauten
+        Ebene), oder None."""
+        pos = pygame.Vector2(self._zeiger_welt if pos is None else pos)
+        bestes, weite = None, K.TESTMODUS["greifen"]
+        for w in self.welt.wesen + self.welt.neue:
+            if not w.lebt or w is self.ich or w.ebene != self.blick:
+                continue
+            d = w.pos.distance_to(pos) - getattr(w, "radius", 0.0)
+            if d < weite:
+                bestes, weite = w, d
+        return bestes
+
+    def loeschen(self, w) -> None:
+        w.lebt = False
+        self.welt.wesen[:] = [x for x in self.welt.wesen if x is not w]
+        self.welt.neue[:] = [x for x in self.welt.neue if x is not w]
+        for nummer, k in list(self.kaempfer.items()):
+            if k is w:
+                self.kaempfer.pop(nummer, None)
+        if w in self.fahrzeuge:
+            self.fahrzeuge.remove(w)
+        if w is self.boss:
+            self.boss = None
+
+    # ── Der Ziffernblock ───────────────────────────────────────────
+    def taste(self, name: str) -> None:
+        """Eine Taste des Ziffernblocks - gedrueckt oder angeklickt."""
+        f = K.TESTMODUS
+        if name == "0":
+            self.zeit_stopp = not self.zeit_stopp
+            self.melde("ZEIT STEHT" if self.zeit_stopp else "ZEIT LÄUFT")
+        elif name == ".":
+            self.zeit_stopp = True
+            self._einzel = f["einzelschritt"]
+            self.melde("EIN SCHRITT")
+        elif name in ("+", "-"):
+            n = len(f["zeitfaktoren"])
+            self.faktor_nr = max(0, min(n - 1, self.faktor_nr + (1 if name == "+" else -1)))
+            self.melde("ZEIT x%g" % self.zeitfaktor)
+        elif name == "/":
+            self.ki_stopp = not self.ki_stopp
+            self.melde("KI STEHT" if self.ki_stopp else "KI LÄUFT")
+        elif name == "*":
+            self.alles_weg()
+        elif name in ("7", "9"):
+            schritt = 1 if name == "9" else -1
+            if self.beobachter:
+                g = self._geist
+                g.ebene = max(0, min(len(self.welt.ebenen) - 1, g.ebene + schritt))
+                self.melde("EBENE %d" % g.ebene)
+            else:
+                self._rad += schritt
+        elif name == "8":
+            self.info = not self.info
+        elif name == "4":
+            self.spawner_offen = not self.spawner_offen
+            self.menue_offen = False
+        elif name == "5":
+            self.spawnen(self._zuletzt or self.eintraege[self._sp_nr])
+        elif name == "6":
+            stufen = [s for _n, s in GOTT]
+            i = stufen.index(self.gott) if self.gott in stufen else 0
+            self.gott = stufen[(i + 1) % len(stufen)]
+            self.melde("GOTT: %s" % self.gott_name())
+        elif name == "1":
+            self._schnell_figur("BOT")
+        elif name == "2":
+            self._schnell_figur("SPIELER, STEHT")
+        elif name == "3":
+            if not self.beobachter:
+                self.beobachten()
+            else:
+                w = self.am_zeiger()
+                if isinstance(w, Kaempfer):
+                    self.uebernehmen(w)
+                else:
+                    self.spawnen(self._eintrag("SPIELER, ICH"))
+        elif name == "num":
+            # Die NumLock-Taste selbst schaltet nur NumLock; angeklickt
+            # oeffnet das Feld das Testmenue (wie Esc).
+            self.menue_offen = not self.menue_offen
+            self.spawner_offen = False
+        elif name == "enter":
+            w = self.am_zeiger()
+            if w is not None:
+                self.loeschen(w)
+                self.melde("GELÖSCHT: %s" % getattr(w, "name", type(w).__name__.upper()))
+
+    def _eintrag(self, name: str):
+        for e in self.eintraege:
+            if e.name == name:
+                return e
+        return self.eintraege[0]
+
+    def _schnell_figur(self, name: str) -> None:
+        """1 und 2: eine einzelne Figur, mit den Einstellungen aus dem
+        Spawner, aber immer nur eine."""
+        e = self._eintrag(name)
+        w = self.werte(e)
+        p = self._stelle(self._zeiger_welt, self.blick, 12.0, 0.0, random.Random())
+        e.setzen(self, p, self.blick, w)
+        self.melde("1 x %s (%s)" % (name, _team_text(w.get("team", 0))))
+
+    def gott_name(self) -> str:
+        for name, stufe in GOTT:
+            if stufe == self.gott:
+                return name
+        return "+".join(sorted(self.gott)).upper() or "AUS"
+
+    def _tastentext(self, name: str) -> tuple:
+        """(Aufschrift, an?) einer Taste des Ziffernblocks."""
+        if name == "0":
+            return ("ZEIT STEHT" if self.zeit_stopp else "ZEIT LÄUFT"), self.zeit_stopp
+        if name == "/":
+            return ("KI AUS" if self.ki_stopp else "KI AN"), self.ki_stopp
+        if name == "8":
+            return "INFO", self.info
+        if name == "6":
+            return "GOTT", bool(self.gott)
+        if name == "4":
+            return "SPAWN", self.spawner_offen
+        if name == "num":
+            return "MENÜ", self.menue_offen
+        if name == "3":
+            return ("BEOB." if not self.beobachter else "ICH"), not self.beobachter
+        # Hoechstens sechs Zeichen: mehr passt nicht auf eine Taste.
+        return {"*": "LEEREN", "-": "ZEIT-", "+": "ZEIT+",
+                "7": "EBENE-", "9": "EBENE+", "5": "WIEDER", "1": "BOT",
+                "2": "PUPPE", "enter": "ENTF", ".": "EINZEL"}.get(name, ""), False
+
+    def tasten_flaechen(self) -> list:
+        """(Name, Rechteck) je Taste, am rechten Bildrand."""
+        b, h, l = 44, 22, 2
+        x0 = K.GAME_W - 4 * b - 3 * l - 4
+        y0 = 104
+        raus = []
+        for name, sp, ze, br, ho, _a in TASTEN:
+            raus.append((name, pygame.Rect(x0 + sp * (b + l), y0 + ze * (h + l),
+                                           br * b + (br - 1) * l, ho * h + (ho - 1) * l)))
+        return raus
+
+    # ── Ereignisse ─────────────────────────────────────────────────
+    def ereignis(self, ev) -> None:
+        if ev.type == pygame.KEYDOWN:
+            name = numpad_name(ev)
+            if name is not None:
+                self.taste(name)
+                return
+            if ev.key in self.app.opt.codes("pause") and self.menue is None:
+                if self.spawner_offen:
+                    self.spawner_offen = False
+                else:
+                    self.menue_offen = not self.menue_offen
+                return
+            if self.spawner_offen:
+                self._spawner_taste(ev)
+                return
+            if self.menue_offen:
+                self._menue_taste_tm(ev)
+                return
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button in (1, 3):
+            pos = self.app.zu_spiel(ev.pos)
+            for name, r in self.tasten_flaechen():
+                if r.collidepoint(pos):
+                    if ev.button == 1:
+                        self.taste(name)
+                    self._feuer_sperre = True     # der Klick ist kein Schuss
+                    return
+            if self.spawner_offen:
+                self._spawner_maus(ev, pos)
+                return
+            if self.menue_offen:
+                self._menue_maus_tm(ev, pos)
+                return
+        if self._tm_offen and ev.type in (pygame.MOUSEWHEEL, pygame.MOUSEBUTTONDOWN):
+            return
+        super().ereignis(ev)
+
+    # ── Spawner: Bedienung ─────────────────────────────────────────
+    SPAWNER = pygame.Rect(6, 96, 300, 258)
+
+    def _spawner_zeilen(self) -> list:
+        """("kopf", Gruppe) oder ("eintrag", Nummer), in Menuereihenfolge."""
+        raus, gruppe = [], None
+        for i, e in enumerate(self.eintraege):
+            if e.gruppe != gruppe:
+                gruppe = e.gruppe
+                raus.append(("kopf", gruppe))
+            raus.append(("eintrag", i))
+        return raus
+
+    def _spawner_taste(self, ev) -> None:
+        e = self.eintraege[self._sp_nr]
+        hoch = ev.key in (pygame.K_UP, pygame.K_w)
+        runter = ev.key in (pygame.K_DOWN, pygame.K_s)
+        links = ev.key in (pygame.K_LEFT, pygame.K_a)
+        rechts = ev.key in (pygame.K_RIGHT, pygame.K_d)
+        if ev.key == pygame.K_TAB:
+            self._sp_fokus = "optionen" if (self._sp_fokus == "liste" and e.optionen) else "liste"
+            self._sp_opt = 0
+        elif ev.key in (pygame.K_RETURN, pygame.K_SPACE):
+            self.spawnen(e)
+        elif self._sp_fokus == "liste":
+            if hoch or runter:
+                self._sp_nr = (self._sp_nr + (1 if runter else -1)) % len(self.eintraege)
+            elif rechts and e.optionen:
+                self._sp_fokus = "optionen"
+                self._sp_opt = 0
+        else:
+            if not e.optionen:
+                self._sp_fokus = "liste"
+            elif hoch or runter:
+                self._sp_opt = (self._sp_opt + (1 if runter else -1)) % len(e.optionen)
+            elif links or rechts:
+                self.wert_verstellen(e, e.optionen[self._sp_opt], 1 if rechts else -1)
+
+    def _spawner_flaechen(self) -> tuple:
+        """(Zeilen der Liste als (Nummer, Rechteck), Optionen als
+        (Schluessel, Rechteck))."""
+        r = self.SPAWNER
+        zeilen = self._spawner_zeilen()
+        sichtbar = (r.height - 40) // 10
+        wo = next((i for i, z in enumerate(zeilen) if z == ("eintrag", self._sp_nr)), 0)
+        anfang = max(0, min(len(zeilen) - sichtbar, wo - sichtbar // 2))
+        liste = []
+        for j, z in enumerate(zeilen[anfang:anfang + sichtbar]):
+            liste.append((z, pygame.Rect(r.x + 6, r.y + 22 + j * 10, 146, 10)))
+        e = self.eintraege[self._sp_nr]
+        optionen = [(o, pygame.Rect(r.x + 158, r.y + 34 + i * 12, 136, 11))
+                    for i, o in enumerate(e.optionen)]
+        return liste, optionen
+
+    def _spawner_maus(self, ev, pos) -> None:
+        r = self.SPAWNER
+        if not r.collidepoint(pos):
+            if ev.button == 1:
+                # Ein Klick in die Welt: dort spawnen.
+                welt = self.kamera.zu_welt(pos)
+                self._zeiger_welt = pygame.Vector2(welt)
+                self.spawnen(pos=welt)
+                self._feuer_sperre = True
+            return
+        liste, optionen = self._spawner_flaechen()
+        for z, rr in liste:
+            if rr.collidepoint(pos) and z[0] == "eintrag":
+                self._sp_nr = z[1]
+                self._sp_fokus = "liste"
+                return
+        e = self.eintraege[self._sp_nr]
+        for i, (o, rr) in enumerate(optionen):
+            if rr.collidepoint(pos):
+                self._sp_fokus = "optionen"
+                self._sp_opt = i
+                self.wert_verstellen(e, o, 1 if ev.button == 1 else -1)
+                return
+
+    # ── Testmenue ──────────────────────────────────────────────────
+    MENUE = pygame.Rect(150, 40, 340, 266)
+
+    def _menue_zeilen(self) -> list:
+        """(Schluessel, Beschriftung, Wert) - was im Testmenue steht."""
+        karte = self._karten()[self._karte_nr()]
+        raus = [
+            ("karte", "KARTE (ENTER LÄDT)", (karte or "testkarte").upper()),
+            ("neu", "NEU LADEN", ""),
+            ("zeit", "ZEIT", "STEHT" if self.zeit_stopp else "LÄUFT"),
+            ("faktor", "ZEITFAKTOR", "x%g" % self.zeitfaktor),
+            ("ki", "KI", "STOP" if self.ki_stopp else "AN"),
+            ("flug", "FLUGTEMPO", "%d PX/S" % K.TESTMODUS["flug"][self.flug_nr % len(K.TESTMODUS["flug"])]),
+        ]
+        for schluessel, name, _hilfe in GOTT_ARTEN:
+            raus.append(("gott:" + schluessel, "GOTT: " + name,
+                         "AN" if schluessel in self.gott else "AUS"))
+        raus += [
+            ("wieder", "WIEDEREINSTIEG", "AN" if self.wiedereinstieg else "AUS"),
+            ("wellen", "ZOMBIEWELLEN", "AN" if self.wellen_an else "AUS"),
+            ("beute", "BEUTE NACHLEGEN", "AN" if self.beute_an else "AUS"),
+            ("blend", "BEOBACHTER BLENDEN", "AN" if self.blend_beobachter else "AUS"),
+            ("ruckeln", "BEOBACHTER RUCKELN", "AN" if self.ruckeln_beobachter else "AUS"),
+            ("einstellungen", "EINSTELLUNGEN", ""),
+            ("hauptmenue", "ZUM HAUPTMENÜ", ""),
+        ]
+        return raus
+
+    def _karten(self) -> list:
+        from . import world as welt_modul
+        return [""] + list(welt_modul.karten_liste())
+
+    def _karte_nr(self) -> int:
+        karten = self._karten()
+        wahl = getattr(self, "_karte_wahl", None)
+        if wahl is None:
+            wahl = self.karte if self.karte in karten else ""
+        return karten.index(wahl) if wahl in karten else 0
+
+    def zustand(self) -> dict:
+        """Was ueber einen Kartenwechsel erhalten bleibt."""
+        return dict(zeit_stopp=self.zeit_stopp, faktor_nr=self.faktor_nr,
+                    ki_stopp=self.ki_stopp, gott=sorted(self.gott), info=self.info,
+                    flug_nr=self.flug_nr, wiedereinstieg=self.wiedereinstieg,
+                    wellen_an=self.wellen_an, beute_an=self.beute_an,
+                    blend_beobachter=self.blend_beobachter,
+                    ruckeln_beobachter=self.ruckeln_beobachter,
+                    sp_werte=self._sp_werte, sp_nr=self._sp_nr)
+
+    def menue_wirken(self, schluessel: str, schritt: int = 1, ausloesen: bool = False) -> None:
+        if schluessel == "karte":
+            karten = self._karten()
+            if ausloesen:
+                self.karte_laden(karten[self._karte_nr()])
+                return
+            self._karte_wahl = karten[(self._karte_nr() + schritt) % len(karten)]
+        elif schluessel == "neu" and ausloesen:
+            self.karte_laden(self.karte)
+        elif schluessel == "zeit":
+            self.taste("0")
+        elif schluessel == "faktor":
+            self.taste("+" if schritt > 0 else "-")
+        elif schluessel == "ki":
+            self.taste("/")
+        elif schluessel == "flug":
+            self.flug_nr = (self.flug_nr + schritt) % len(K.TESTMODUS["flug"])
+        elif schluessel.startswith("gott:"):
+            art = schluessel[5:]
+            self.gott = frozenset(self.gott ^ {art})
+        elif schluessel == "wieder":
+            self.wiedereinstieg = not self.wiedereinstieg
+        elif schluessel == "wellen":
+            self.wellen_an = not self.wellen_an
+        elif schluessel == "beute":
+            self.beute_an = not self.beute_an
+        elif schluessel == "blend":
+            self.blend_beobachter = not self.blend_beobachter
+        elif schluessel == "ruckeln":
+            self.ruckeln_beobachter = not self.ruckeln_beobachter
+        elif schluessel == "einstellungen" and ausloesen:
+            from .menues import Einstellungen
+            self.menue_offen = False
+            self.app.schieben(Einstellungen(self.app))
+        elif schluessel == "hauptmenue" and ausloesen:
+            self.app.laeuft = False
+
+    def karte_laden(self, karte: str) -> None:
+        """Eine andere Karte (oder dieselbe frisch): ein neuer Testmodus mit
+        denselben Einstellungen."""
+        neu = Testmodus(self.app, karte=karte, zustand=self.zustand())
+        self.app.ersetzen(neu)
+
+    def _menue_taste_tm(self, ev) -> None:
+        zeilen = self._menue_zeilen()
+        self._tm_zeile = max(0, min(len(zeilen) - 1, self._tm_zeile))
+        schluessel = zeilen[self._tm_zeile][0]
+        if ev.key in (pygame.K_UP, pygame.K_w):
+            self._tm_zeile = (self._tm_zeile - 1) % len(zeilen)
+        elif ev.key in (pygame.K_DOWN, pygame.K_s):
+            self._tm_zeile = (self._tm_zeile + 1) % len(zeilen)
+        elif ev.key in (pygame.K_LEFT, pygame.K_a):
+            self.menue_wirken(schluessel, -1)
+        elif ev.key in (pygame.K_RIGHT, pygame.K_d):
+            self.menue_wirken(schluessel, 1)
+        elif ev.key in (pygame.K_RETURN, pygame.K_SPACE):
+            self.menue_wirken(schluessel, 1, ausloesen=True)
+
+    def _menue_flaechen(self) -> list:
+        r = self.MENUE
+        return [pygame.Rect(r.x + 8, r.y + 26 + i * 12, r.width - 16, 11)
+                for i in range(len(self._menue_zeilen()))]
+
+    def _menue_maus_tm(self, ev, pos) -> None:
+        zeilen = self._menue_zeilen()
+        for i, rr in enumerate(self._menue_flaechen()):
+            if rr.collidepoint(pos):
+                self._tm_zeile = i
+                self.menue_wirken(zeilen[i][0], 1 if ev.button == 1 else -1,
+                                  ausloesen=ev.button == 1)
+                return
+
+    # ── Zeichnen ───────────────────────────────────────────────────
+    def _funk_hoerbar(self, k) -> bool:
+        """Der Beobachter liest den Funk beider Mannschaften mit."""
+        return True
+
+    def _welt_bild(self, ziel, misch: float) -> None:
+        if not self.beobachter:
+            super()._welt_bild(ziel, misch)
+            return
+        # Keine Ziellinie am Beobachter: er hat keine Waffe in der Welt.
+        g = self._geist
+        g.lebt = False
+        try:
+            super()._welt_bild(ziel, misch)
+        finally:
+            g.lebt = True
+
+    def _anzeige(self, ziel) -> None:
+        if not self.beobachter:
+            super()._anzeige(ziel)
+
+    def zeichnen(self, ziel, alpha: float) -> None:
+        super().zeichnen(ziel, alpha)
+        if self.info:
+            self._info_zeichnen(ziel)
+        self._zeiger_zeichnen(ziel)
+        self._status_zeichnen(ziel)
+        self._numpad_zeichnen(ziel)
+        if self.spawner_offen:
+            self._spawner_zeichnen(ziel)
+        if self.menue_offen:
+            self._testmenue_zeichnen(ziel)
+
+    def _zeiger_zeichnen(self, ziel) -> None:
+        """Wo gespawnt wird: ein Fadenkreuz mit Weltkoordinaten."""
+        p = self.kamera.zu_bild(self._zeiger_welt)
+        x, y = int(p.x), int(p.y)
+        pygame.draw.line(ziel, K.C_AMBER, (x - 6, y), (x - 2, y))
+        pygame.draw.line(ziel, K.C_AMBER, (x + 2, y), (x + 6, y))
+        pygame.draw.line(ziel, K.C_AMBER, (x, y - 6), (x, y - 2))
+        pygame.draw.line(ziel, K.C_AMBER, (x, y + 2), (x, y + 6))
+        SCHRIFT.zeichnen(ziel, "%d,%d E%d" % (self._zeiger_welt.x, self._zeiger_welt.y,
+                                               self.blick), x + 8, y + 4, K.C_MUTED, 1)
+        w = self.am_zeiger()
+        if w is not None:
+            q = self.kamera.zu_bild(w.pos)
+            pygame.draw.circle(ziel, K.C_RED, (int(q.x), int(q.y)),
+                               int(getattr(w, "radius", 8) / self.kamera.zoom) + 4, 1)
+
+    def _status_zeichnen(self, ziel) -> None:
+        bots = len(self._bots())
+        gegner = sum(1 for w in self.welt.wesen
+                     if isinstance(w, KampfGegner) and w.lebt)
+        zeilen = [
+            ("TESTMODUS", K.C_AMBER),
+            ("ZEIT %s x%g" % ("STEHT" if self.zeit_stopp else "LÄUFT", self.zeitfaktor),
+             K.C_RED if self.zeit_stopp else K.C_CREAM),
+            ("KI %s" % ("STOP" if self.ki_stopp else "AN"),
+             K.C_RED if self.ki_stopp else K.C_CREAM),
+            ("GOTT %s" % self.gott_name(), K.C_TEAL if self.gott else K.C_MUTED),
+            (("BEOBACHTER E%d" % self._geist.ebene) if self.beobachter
+             else ("STEUERE %s" % self.ich.name), K.C_CREAM),
+            ("BOTS %d  GEGNER %d  WESEN %d" % (bots, gegner, len(self.welt.wesen)),
+             K.C_MUTED),
+        ]
+        # Als Beobachter oben rechts, wo sonst nichts steht; mit Figur
+        # links unter der Minikarte (rechts oben steht dann die Rangliste).
+        if self.beobachter:
+            x, y = K.GAME_W - 186, 30
+        elif self.spawner_offen:
+            return
+        else:
+            x, y = 6, 100
+        for text, farbe in zeilen:
+            SCHRIFT.zeichnen(ziel, text, x, y, farbe, 1)
+            y += 10
+
+    def _numpad_zeichnen(self, ziel) -> None:
+        for name, r in self.tasten_flaechen():
+            text, an = self._tastentext(name)
+            glyph = next(a for n, *_x, a in TASTEN if n == name)
+            pygame.draw.rect(ziel, (24, 30, 26) if an else (12, 10, 9), r)
+            pygame.draw.rect(ziel, K.C_TEAL if an else K.C_MUTED_DK, r, 1)
+            SCHRIFT.zeichnen(ziel, glyph, r.x + 3, r.y + 2,
+                             K.C_AMBER if an else K.C_MUTED, 1)
+            SCHRIFT.zeichnen(ziel, ui.kuerzen(text, r.width - 4), r.centerx,
+                             r.bottom - 10, K.C_CREAM if an else K.C_MUTED, 1,
+                             ausrichtung="mitte")
+
+    def _info_zeichnen(self, ziel) -> None:
+        """Was die KI gerade denkt: Linien zu Ziel, Flanke, Deckung und
+        Sammelpunkt, darueber der Zustand."""
+        kam = self.kamera
+        for k in self._bots():
+            if k.ebene != self.blick or not k.lebt or k.hirn is None:
+                continue
+            h = k.hirn
+            p = kam.zu_bild(k.pos)
+            zustand = "UNTERWEGS"
+            if h.ziel is not None:
+                zustand = "KAMPF"
+                pygame.draw.line(ziel, K.C_RED, p, kam.zu_bild(h.ziel.pos), 1)
+            if h.druck_rest > 0:
+                zustand = "DRUCK"
+            if h.taktik is not None:
+                zustand = "FLANKE"
+                pygame.draw.line(ziel, K.C_AMBER, p, kam.zu_bild(h.taktik["ort"]), 1)
+            if h.deckung_ort is not None:
+                zustand = "DECKUNG"
+                pygame.draw.line(ziel, K.C_TEAL, p, kam.zu_bild(h.deckung_ort), 1)
+            if h.sturm is not None:
+                zustand = "STURM:%s" % h.sturm["phase"].upper()
+                pygame.draw.line(ziel, (120, 170, 255), p, kam.zu_bild(h.sturm["sammel"]), 1)
+            if h.unterdrueckt > 0:
+                zustand += " (NIEDERGEH.)"
+            SCHRIFT.zeichnen(ziel, zustand, int(p.x), int(p.y) + 14, K.C_AMBER, 1,
+                             ausrichtung="mitte")
+        for w in self.welt.wesen:
+            if isinstance(w, KampfGegner) and w.lebt and w.ebene == self.blick:
+                ziel_w = getattr(w, "_ziel", None)
+                if ziel_w is not None and ziel_w.lebt:
+                    pygame.draw.line(ziel, (150, 40, 40), kam.zu_bild(w.pos),
+                                     kam.zu_bild(ziel_w.pos), 1)
+                if w.ki_aus or self.ki_stopp:
+                    q = kam.zu_bild(w.pos)
+                    SCHRIFT.zeichnen(ziel, "KI AUS", int(q.x), int(q.y) + 12,
+                                     K.C_MUTED, 1, ausrichtung="mitte")
+
+    def _spawner_zeichnen(self, ziel) -> None:
+        r = self.SPAWNER
+        ui.kasten(ziel, r, K.C_AMBER, (10, 8, 7), 4)
+        SCHRIFT.zeichnen(ziel, "SPAWNER", r.x + 6, r.y + 6, K.C_AMBER, 1)
+        SCHRIFT.zeichnen(ziel, "ZEIT STEHT - SPAWNEN GEHT TROTZDEM" if self.zeit_stopp else "",
+                         r.x + 60, r.y + 6, K.C_MUTED, 1)
+        liste, optionen = self._spawner_flaechen()
+        for z, rr in liste:
+            if z[0] == "kopf":
+                SCHRIFT.zeichnen(ziel, z[1], rr.x, rr.y + 1, K.C_MUTED_DK, 1)
+                continue
+            e = self.eintraege[z[1]]
+            aktiv = z[1] == self._sp_nr
+            if aktiv:
+                pygame.draw.rect(ziel, (34, 24, 16), rr)
+                if self._sp_fokus == "liste":
+                    pygame.draw.rect(ziel, K.C_AMBER, (rr.x, rr.y, 2, rr.h))
+            SCHRIFT.zeichnen(ziel, ui.kuerzen(e.name, rr.width - 12), rr.x + 6, rr.y + 1,
+                             K.C_CREAM if aktiv else K.C_MUTED, 1)
+        e = self.eintraege[self._sp_nr]
+        SCHRIFT.zeichnen(ziel, ui.kuerzen(e.name, 136), r.x + 158, r.y + 22, K.C_AMBER, 1)
+        w = self.werte(e)
+        for i, (o, rr) in enumerate(optionen):
+            aktiv = self._sp_fokus == "optionen" and i == self._sp_opt
+            if aktiv:
+                pygame.draw.rect(ziel, (34, 24, 16), rr)
+            name, _werte, text = OPTIONEN[o]
+            SCHRIFT.zeichnen(ziel, name, rr.x + 2, rr.y + 2,
+                             K.C_CREAM if aktiv else K.C_MUTED, 1)
+            SCHRIFT.zeichnen(ziel, ui.kuerzen(text(w[o]), 70), rr.right - 2, rr.y + 2,
+                             K.C_AMBER if aktiv else K.C_CREAM, 1, ausrichtung="rechts")
+        if not e.optionen:
+            SCHRIFT.zeichnen(ziel, "KEINE EINSTELLUNGEN", r.x + 158, r.y + 36, K.C_MUTED_DK, 1)
+        for i, text in enumerate(("ENTER / KLICK IN DIE WELT: SPAWNEN",
+                                  "PFEILE: WAHL  TAB: EINSTELLUNGEN  4/ESC: ZU")):
+            SCHRIFT.zeichnen(ziel, text, r.x + 6, r.bottom - 22 + i * 10, K.C_MUTED, 1)
+
+    def _testmenue_zeichnen(self, ziel) -> None:
+        r = self.MENUE
+        ui.kasten(ziel, r, K.C_AMBER, (10, 8, 7), 4)
+        SCHRIFT.zeichnen(ziel, "TESTMENÜ", r.x + 8, r.y + 8, K.C_AMBER, 1)
+        SCHRIFT.zeichnen(ziel, "PFEILE/KLICK, ENTER LÖST AUS", r.right - 8, r.y + 8,
+                         K.C_MUTED_DK, 1, ausrichtung="rechts")
+        zeilen = self._menue_zeilen()
+        for i, ((schluessel, name, wert), rr) in enumerate(zip(zeilen, self._menue_flaechen())):
+            aktiv = i == self._tm_zeile
+            if aktiv:
+                pygame.draw.rect(ziel, (34, 24, 16), rr)
+                pygame.draw.rect(ziel, K.C_AMBER, (rr.x, rr.y, 2, rr.h))
+            SCHRIFT.zeichnen(ziel, name, rr.x + 6, rr.y + 2,
+                             K.C_CREAM if aktiv else K.C_MUTED, 1)
+            SCHRIFT.zeichnen(ziel, wert, rr.right - 4, rr.y + 2,
+                             K.C_AMBER if aktiv else K.C_CREAM, 1, ausrichtung="rechts")
+        hilfe = ""
+        schluessel = zeilen[max(0, min(len(zeilen) - 1, self._tm_zeile))][0]
+        for art, _n, text in GOTT_ARTEN:
+            if schluessel == "gott:" + art:
+                hilfe = text
+        if hilfe:
+            SCHRIFT.zeichnen(ziel, hilfe, r.centerx, r.bottom - 12, K.C_TEAL, 1,
+                             ausrichtung="mitte")

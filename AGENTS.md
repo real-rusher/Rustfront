@@ -41,6 +41,30 @@ aendert, haelt sich an diese Regeln.
   eintragen.
 * Statistiken (Konto, Bestenliste) duerfen nie auseinanderlaufen.
 
+## Testmodus: jedes neue Feature gehoert hinein
+
+Seit 0.34.28 gibt es den **Testmodus** (`dustfront/testmodus.py`, im
+Hauptmenue TESTMODUS, oder `python -m dustfront --testmodus`). Ab jetzt
+gilt fuer **jedes neue Feature**:
+
+* Was sich in die Welt setzen laesst (neue Gegner, Waffen, Wurfwaffen,
+  Beute, Fahrzeuge, Objekte, Spielarten-Ziele wie der Kreis), bekommt
+  einen **Eintrag im Spawner**: `eintraege()` in `testmodus.py`, mit den
+  Einstellungen, die es braucht (`OPTIONEN`). Gegner, Bosse und
+  Zielpuppen kommen von selbst aus den Tabellen in `config.py`.
+* Was sich einschalten oder ausloesen laesst (neue Regeln, neue KI,
+  neue Zustaende), bekommt eine **Zeile im Testmenue** (`_menue_zeilen` /
+  `menue_wirken`) oder eine **Taste** auf dem Ziffernblock (`TASTEN`,
+  `taste`). Auf jeder Taste steht, was sie tut.
+* Was eine KI neu tut, zeigt die **INFO-Ansicht** (Taste 8,
+  `_info_zeichnen`) - Linie oder Zustandstext.
+* Der Beobachter darf von nichts wahrgenommen oder beeinflusst werden:
+  er steht nie in `welt.wesen` und nie in `kaempfer`. Wer neue
+  Wahrnehmung baut, fragt diese Listen (oder `ki_unsichtbar`) und nie
+  `self.ich` des Gefechts.
+* Dazu ein Test in `tests/test_spiel.py`, Abschnitt Testmodus, und eine
+  Zeile in `docs/TESTMODUS.md`.
+
 ## Pruefen vor dem Pull Request
 
 ```

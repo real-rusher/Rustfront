@@ -4,6 +4,8 @@ DUSTFRONT - Einstieg
 
     python -m dustfront                Spiel starten
     python -m dustfront --lobby        in die eigene Lobby (Mehrspieler)
+    python -m dustfront --testmodus    der Testmodus (testmodus.py), auch
+                                       mit --karte NAME
     python -m dustfront --host ...     LAN-Runde aufmachen, siehe README
                                        (startet in der Lobby; --sofort
                                        ueberspringt sie)
@@ -64,6 +66,12 @@ def starten(headless: bool = False, beenden: bool = True,
                   % K.NETZ["port"])
             return 1
         app.schieben(sitzung.LobbySuche(app, app.oben))
+    elif app.auftrag.get("action") == "testmodus":
+        from . import testmodus
+        if not testmodus.verfuegbar():
+            print("Den Testmodus gibt es nur mit Tastatur (nicht auf iOS).")
+            return 1
+        app.schieben(testmodus.Testmodus(app, karte=app.auftrag.get("karte") or "staubtal"))
     else:
         app.schieben(Spiel(app, karte=app.auftrag.get("karte")))
     app.laufen(beenden=beenden)
@@ -523,6 +531,9 @@ def aus_argumenten(argumente: list[str]) -> int:
 
     if "--lobby" in argumente:
         return lobby()
+    if "--testmodus" in argumente:
+        return starten(auftrag={"action": "testmodus",
+                                "karte": wert("--karte", "staubtal")})
     if "--host" in argumente:
         modus = wert("--modus", K.MODUS_VORGABE).strip().lower()
         waehlbar = [m for m in K.MODI if not K.MODI[m].get("lobby")]

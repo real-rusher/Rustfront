@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.27, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.28, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -171,6 +171,24 @@ der alten weggenommen.
 | Esc | Pausenmenü (im LAN-Gefecht läuft die Runde darunter weiter) |
 | F11 | Vollbild |
 | F3 | Debug-Anzeige |
+
+## Testmodus
+
+Seit 0.34.28: im Hauptmenü **TESTMODUS** (oder `python -m dustfront
+--testmodus`), zum schnellen Ausprobieren neuer Sachen – nicht auf iPhone
+und iPad. Man fliegt als **Beobachter** über die Karte (W A S D, Umschalt
+schneller), den **nichts** in der Welt wahrnimmt oder trifft. Alles läuft
+über den **Ziffernblock**, der immer am rechten Rand steht, jede Taste mit
+ihrer Wirkung, und sich auch anklicken lässt: Zeit anhalten (0), ein
+Schritt (.), Zeitfaktor (+ / −), KI aus (/), alles weg (*), Ebene (7 / 9),
+KI-Ansicht (8), **Spawner** (4) für Figuren, alle Gegner und Bosse,
+Buggys, Hotzone, Beute und Wurfwaffen mit Anzahl und Einstellungen – auch
+bei angehaltener Zeit –, nochmal spawnen (5), Gottmodus (6), Bot (1),
+stehender Spieler (2), Figur übernehmen (3), löschen (Enter). Esc öffnet
+das Testmenü: Karte, Zeit, KI, Gottmodi einzeln, Wiedereinstieg, Wellen,
+Einstellungen. Gebucht wird nichts. Alles Weitere in
+[docs/TESTMODUS.md](docs/TESTMODUS.md). **Jedes neue Feature muss dort
+ausprobierbar sein** (siehe `AGENTS.md`).
 
 ## Schnee-Gelaendetest
 
@@ -556,6 +574,8 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `entities.py` | Spieler, Gegner, Geschosse, Granaten, Aufsammler |
 | `fahrzeug.py` | Der Buggy: Fahren, Anstossen, Staub, Kaputtgehen |
 | `bots.py` | Die Bots: was sie sehen, wie sie zielen und laufen, das Auffüllen |
+| `bottaktik.py` | Funk und Taktik der Bots: flankieren, niederhalten, Feuerschutz, stürmen |
+| `testmodus.py` | Der Testmodus: Beobachter, Ziffernblock, Spawner, Gottmodi (docs/TESTMODUS.md) |
 | `render.py` | Kamera, Tiefenwirkung, Schatten, Ziellinie, HUD |
 | `play.py` | Die Spielregel: Wellen, Tod, Neustart |
 | `menues.py` | Pause, Einstellungen, Steuerung, Mitwirkende |
@@ -782,6 +802,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.28 | **Testmodus.** Neuer Eintrag im Hauptmenü (nicht auf iOS): Beobachter, der mit hoher Geschwindigkeit über die Karte fliegt und von nichts in der Welt wahrgenommen oder getroffen wird; alle Spezialaktionen auf dem Ziffernblock, der immer sichtbar und anklickbar am Rand steht (Zeit anhalten, Einzelschritt, Zeitfaktor x0,1 bis x4, KI aus, alles weg, Ebene, KI-Ansicht mit Zielen, Flanken, Deckung und Sturm, Spawner, nochmal spawnen, Gottmodus, Bot, stehender Spieler, Figur übernehmen, löschen). Spawner für Figuren (Bot, stehender Spieler, selbst gesteuert), alle Gegner und Bosse, Zielpuppe, Buggy, Hotzone, Beute und Wurfwaffen, mit Anzahl, Streuung, Team, Waffe, Leben, KI und Zünder – auch bei angehaltener Zeit. Gottmodi: unverwundbar, unsterblich, unsichtbar für KI, unendlich Munition. Testmenü (Esc) mit Kartenwahl und allen Schaltern. Nichts wird gebucht. Neue Regel in `AGENTS.md`: jedes neue Feature gehört in den Testmodus und den Spawner (`docs/TESTMODUS.md`). Netz/LAN: unverändert, trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.27 | **Bots funken und spielen taktisch.** Kurz vor einer Aktion sagen Bots an, was sie vorhaben – als kleiner Untertitel über ihnen (KONTAKT!, ICH FLANKIERE!, HALTE IHN UNTEN!, FEUERSCHUTZ!, NACHLADEN!, GRANATE!, SAMMELN AM EINGANG!, REIN, REIN, REIN! …); mit Mannschaften sieht das nur die eigene. **Flankieren:** Steht ein Gegner hinter einer Kiste oder ist er hinter einer Mauer verschwunden, geht einer seitlich herum, an eine Stelle mit freier Schussbahn. **Niederhalten:** Ein anderer schießt derweil auf die Stelle direkt neben der Deckung (oder auf die Deckung), damit der Gegner unten bleibt; Bots, an denen Kugeln knapp vorbeifliegen, gehen selbst in Deckung und zielen schlechter. **Feuerschutz:** Gegner bei einem Kameraden, der nachlädt, angeschlagen ist, am Boden liegt oder flankiert, haben Vorrang – das gilt für Bots und Spieler. **Stürmen:** Zwei oder mehr Bots, die wissen, wo ein Gegner steckt, sammeln sich außer Sicht, auf REIN wirft der Erste seine Granate und alle gehen zugleich hinein. Zahlen in `config.py` unter `BOTS` (`funk`, `flanke_*`, `druck_*`, `sturm_*`), die Taktik steht in `dustfront/bottaktik.py`. **Netz/LAN: geändert** (je Spieler `fk`/`fr`, der Funkspruch) – Gastgeber und Gäste brauchen diese Version. |
 | 0.34.26 | **Bots mit Team-Manager, Deckung, und Hindernisse halten Kugeln.** Bots haben jetzt zwei verschiedene Waffen und eine Granate, die sie einmal pro Leben werfen; sie heben weder Medkits noch Munition auf, haben immer begrenzte Munition und gehen in den Nahkampf, wenn alles verschossen ist. Zum Nachladen und angeschlagen gehen sie hinter die nächste Mauer oder Kiste, in eine Kiste in der Schusslinie schießen sie nicht. In HÜGEL geht der Kreis vor: sie kämpfen auf dem Weg dorthin. Neu ist der **Team-Manager** für den Gastgeber (Pausenmenü → TEAMS UND BOTS, auch aus der Rundentafel): Auffüllen bis, Bots fest in ROT und BLAU (ohne Mannschaften: Bots dazu), Spieler in eine Mannschaft setzen – in der Lobby für die nächste Runde, im Gefecht sofort. **Alle Hindernisse mit Bild halten jetzt Kugeln und Raketen auf** (Kisten, Fässer, Sandsäcke, Kakteen, Brocken, Schrott), an ihrer Grundfläche. Granaten, Raketen, C4 und platzende Buggys treffen hinter einem Hindernis abgeschwächt, hinter einer Mauer kaum noch; eine Blendgranate hinter einer Kiste blendet schwächer (Werte in `config.py` unter `DECKUNG`). **Netz/LAN: geändert** (neue Regeln, Kugeln halten an Hindernissen) – Gastgeber und Gäste brauchen diese Version. |
 | 0.34.25 | **Figuren in 3D wie die Hindernisse.** Spieler, Mitspieler, Bots, Gegner und Bosse, die Zielpuppen, der Buggy und die Beute am Boden stehen jetzt in derselben Perspektive wie Kisten, Mauern und Plateaus: das Bild der Figur ist ihr Deckel und rückt mit ihrer Höhe von der Bildmitte weg, darunter steht eine Seitenwand in ihrer eigenen Farbe, unten dunkler, oben heller. Am Bildrand sieht man die Seite, in der Mitte steht man genau darüber. Bosse ragen höher als kleine Gegner. Höhen und Helligkeiten in `config.py` unter `FIGUREN_3D` (`an=False` schaltet es ab). Nur das Bild: getroffen wird wie bisher, Namen und Lebensbalken bleiben am Boden. Netz/LAN: unverändert (der Gast zeichnet gemeldete Gegner und Beute genauso), trotzdem brauchen alle Geräte dieselbe Version. |

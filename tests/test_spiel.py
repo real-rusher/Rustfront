@@ -9641,6 +9641,234 @@ if _plan86 is not None:
     pruef("Ist der Trupp gefallen, ist der Plan vorbei", not w86._stuerme, "")
 w86.verlassen()
 
+# 0.34.28: "Mach mir bitte einen separaten Gamemode, den man aus dem
+# Hauptmenue waehlt ... Testmodus ... spectator ... ELEMENTAR, dass NICHTS
+# in der kompletten Welt, auch spaeter nicht, mich wahrnehmen oder
+# beeinflussen kann ... alle Spezialaktionen ueber das Numpad ... Zeit fuer
+# ALLES stoppen, alle KI stoppen, alle Entities eliminieren, einen Player
+# Character spawnen ... Spawner-Menue fuer quasi alles ... auch spawnen,
+# waehrend die Zeit gestoppt ist ... verschiedene Arten von Godmode."
+print("\n-- Testmodus (0.34.28)")
+from dustfront import testmodus as _TM87
+from dustfront.mehrspieler import KampfGegner as _KG87, Kaempfer as _Kae87
+from dustfront.entities import Granate as _Gr87, Geschoss as _Gs87
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_geist87 = _tm._geist
+_D87 = K.FIXED_DT
+
+
+def _sim87(n):
+    for _ in range(n):
+        _tm.schritt(_D87)
+
+
+_sim87(5)
+pruef("Der Beobachter steht in keiner Liste der Welt",
+      _geist87 not in _tm.welt.wesen and _geist87 not in _tm.welt.neue
+      and _geist87 not in _tm.kaempfer.values() and _tm.beobachter, "")
+pruef("Den Testmodus gibt es am Rechner, nicht mit Touch",
+      _TM87.verfuegbar(), "")
+_alt87 = os.environ.get("DUSTFRONT_TOUCH")
+os.environ["DUSTFRONT_TOUCH"] = "1"
+pruef("... mit Touch-Steuerung (iOS) nicht", not _TM87.verfuegbar(), "")
+if _alt87 is None:
+    os.environ.pop("DUSTFRONT_TOUCH", None)
+else:
+    os.environ["DUSTFRONT_TOUCH"] = _alt87
+
+# Eine freie Stelle und den Beobachter mitten hinein.
+_ort87 = freier_punkt(_tm.welt, 0, random.Random(87))
+_geist87.pos.update(_ort87)
+_geist87.ebene = 0
+_sim87(3)
+_tm._zeiger_welt = pygame.Vector2(_ort87)
+
+# Der Ziffernblock: Tastencodes und Scancodes.
+_ev87 = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_KP0, scancode=0, mod=0, unicode="")
+pruef("Numpad 0 ist die Zeit", _TM87.numpad_name(_ev87) == "0", "")
+_ev87 = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_HOME,
+                           scancode=getattr(pygame, "KSCAN_KP_7", -1), mod=0, unicode="")
+pruef("... auch mit NumLock aus (Scancode statt Taste)", _TM87.numpad_name(_ev87) == "7", "")
+from dustfront.font import SCHRIFT as _SCHRIFT87
+_zu_lang87 = [_tm._tastentext(n_)[0] for n_, r_ in _tm.tasten_flaechen()
+              if not _tm._tastentext(n_)[0]
+              or _SCHRIFT87.breite(_tm._tastentext(n_)[0]) > r_.width - 4]
+pruef("Jede Taste des Ziffernblocks hat eine Aufschrift, die auf die Taste passt",
+      not _zu_lang87, str(_zu_lang87))
+
+# Spawner: jeder Eintrag laesst sich setzen - bei laufender und bei
+# stehender Zeit.
+_fehler87 = []
+for _stehend87 in (False, True):
+    _tm.zeit_stopp = _stehend87
+    for e_ in _tm.eintraege:
+        if e_.name == "SPIELER, ICH":
+            continue
+        try:
+            _tm.spawnen(e_, pos=_ort87, ebene=0)
+            _sim87(2)
+        except Exception as err_:
+            _fehler87.append("%s: %r" % (e_.name, err_))
+_tm.zeit_stopp = False
+pruef("Jeder Eintrag im Spawner laesst sich setzen, auch bei stehender Zeit",
+      not _fehler87, "; ".join(_fehler87[:4]))
+_sim87(30)
+pruef("... und der Beobachter steht danach immer noch in keiner Liste",
+      _geist87 not in _tm.welt.wesen and _geist87 not in _tm.kaempfer.values(), "")
+
+_tm.alles_weg()
+pruef("LEEREN: nichts mehr in der Welt",
+      not _tm.welt.wesen and not _tm.kaempfer and not _tm.fahrzeuge
+      and not _tm.welt.feuer and not _tm.welt.rauch, str(len(_tm.welt.wesen)))
+
+# Anzahl und Einstellungen.
+_laeufer87 = _tm._eintrag(K.GEGNER["laeufer"]["name"])
+_tm._sp_werte[_laeufer87.name] = {"anzahl": list(K.TESTMODUS["anzahlen"]).index(3)}
+_neu87 = _tm.spawnen(_laeufer87, pos=_ort87, ebene=0)
+pruef("ANZAHL 3 setzt drei", len(_neu87) == 3 and all(isinstance(g_, _KG87) for g_ in _neu87),
+      str(len(_neu87)))
+
+# Nichts nimmt den Beobachter wahr. Gegner und Bots mitten um ihn herum,
+# eine Granate zu seinen Fuessen, eine Blendgranate vor der Nase.
+_tm.alles_weg()
+_bot_a87 = _tm.bot_setzen(_ort87 + pygame.Vector2(40, 0), 0, {"team": 0})
+_bot_b87 = _tm.bot_setzen(_ort87 + pygame.Vector2(-40, 0), 0, {"team": 1})
+_zombie87 = _tm.gegner_setzen("laeufer", _ort87 + pygame.Vector2(0, 30), 0, {"ki": True})
+_tm.wurf_setzen("granate", _ort87, 0, {"zuender": "sofort"})
+_tm.wurf_setzen("blend", _ort87, 0, {"zuender": "sofort"})
+_leben87 = _geist87.leben
+_gesehen87 = False
+for _ in range(int(3.0 / _D87)):
+    _tm.schritt(_D87)
+    for b_ in (_bot_a87, _bot_b87):
+        if b_.hirn is not None and (b_.hirn.ziel is _geist87 or _geist87 in b_.hirn.gesehen):
+            _gesehen87 = True
+    if getattr(_zombie87, "_ziel", None) is _geist87:
+        _gesehen87 = True
+pruef("Kein Bot und kein Gegner nimmt den Beobachter je wahr", not _gesehen87, "")
+pruef("Eine Granate zu seinen Fuessen tut ihm nichts, eine Blendgranate blendet ihn nicht",
+      _geist87.leben == _leben87 and _tm.befinden.blend == 0.0,
+      "Leben %.0f, Blendung %.2f" % (_geist87.leben, _tm.befinden.blend))
+
+# Die Zeit.
+_tm.taste("0")
+_z87 = _tm.welt.zeit
+_p87 = pygame.Vector2(_bot_a87.pos)
+_sim87(60)
+pruef("ZEIT STEHT: nichts bewegt sich, die Weltzeit steht",
+      _tm.welt.zeit == _z87 and _bot_a87.pos == _p87, "%.3f" % (_tm.welt.zeit - _z87))
+_vorher87 = len(_tm.welt.wesen)
+_tm.gegner_setzen("renner", _ort87 + pygame.Vector2(60, 60), 0, {"ki": True})
+pruef("... und gespawnt wird trotzdem, sofort sichtbar",
+      len(_tm.welt.wesen) == _vorher87 + 1, "")
+_tm.taste(".")
+_sim87(1)
+pruef("EINZEL rechnet genau einen kleinen Schritt",
+      abs(_tm.welt.zeit - _z87 - K.TESTMODUS["einzelschritt"] * _D87) < 1e-6,
+      "%.4f" % (_tm.welt.zeit - _z87))
+_tm.taste("0")
+_tm.faktor_nr = list(K.TESTMODUS["zeitfaktoren"]).index(2.0)
+_z87 = _tm.welt.zeit
+_sim87(60)
+pruef("ZEIT x2 rechnet doppelt so schnell", abs((_tm.welt.zeit - _z87) - 120 * _D87) < 1e-6,
+      "%.3f" % (_tm.welt.zeit - _z87))
+_tm.faktor_nr = list(K.TESTMODUS["zeitfaktoren"]).index(0.5)
+_z87 = _tm.welt.zeit
+_sim87(60)
+pruef("... x0,5 halb so schnell", abs((_tm.welt.zeit - _z87) - 30 * _D87) < 1e-6,
+      "%.3f" % (_tm.welt.zeit - _z87))
+_tm.faktor_nr = list(K.TESTMODUS["zeitfaktoren"]).index(1.0)
+
+# KI aus.
+_tm.alles_weg()
+_bot87 = _tm.bot_setzen(_ort87 + pygame.Vector2(60, 0), 0, {"team": 0})
+_feind87 = _tm.bot_setzen(_ort87 + pygame.Vector2(-60, 0), 0, {"team": 1})
+_zombie87 = _tm.gegner_setzen("laeufer", _ort87 + pygame.Vector2(0, 80), 0, {"ki": True})
+_tm.taste("/")
+_orte87 = [pygame.Vector2(x_.pos) for x_ in (_bot87, _feind87, _zombie87)]
+_schuesse87 = _bot87.zaehler.get("schuesse", 0) + _feind87.zaehler.get("schuesse", 0)
+_sim87(int(2.0 / _D87))
+pruef("KI AUS: Bots und Gegner stehen still und schiessen nicht",
+      all(x_.pos.distance_to(o_) < 1.0 for x_, o_ in zip((_bot87, _feind87, _zombie87), _orte87))
+      and _bot87.zaehler.get("schuesse", 0) + _feind87.zaehler.get("schuesse", 0) == _schuesse87,
+      str([round(x_.pos.distance_to(o_), 1) for x_, o_ in zip((_bot87, _feind87, _zombie87), _orte87)]))
+_tm.taste("/")
+_sim87(int(2.0 / _D87))
+pruef("... und mit KI AN wieder los", _zombie87.pos.distance_to(_orte87[2]) > 5.0
+      or not _zombie87.lebt, "")
+
+# Uebernehmen, Gottmodus, zurueck.
+_tm.alles_weg()
+_bot87 = _tm.bot_setzen(_ort87, 0, {"team": 0})
+_tm._zeiger_welt = pygame.Vector2(_bot87.pos)
+_tm.blick = 0
+_tm.taste("3")
+pruef("3 am Zeiger uebernimmt den Bot: er hat kein Hirn mehr, die Kamera folgt ihm",
+      _tm.ich is _bot87 and not _tm.beobachter and _bot87.hirn is None
+      and not _bot87.ist_bot, "")
+_tm.gott = frozenset({"unverwundbar"})
+_sim87(2)
+_l87 = _bot87.leben
+_bot87.schaden(50, None, None)
+pruef("GOTT UNVERWUNDBAR: kein Schaden", _bot87.leben == _l87, "%.0f" % _bot87.leben)
+_tm.gott = frozenset({"unsterblich"})
+_sim87(2)
+_bot87.schaden(500, None, None)
+pruef("GOTT UNSTERBLICH: Schaden ja, aber nie unter 1",
+      _bot87.lebt and 0.5 <= _bot87.leben <= 1.0, "%.1f" % _bot87.leben)
+_bot87.leben = _bot87.max_leben
+_tm.gott = frozenset({"unsichtbar", "munition"})
+_feind87 = _tm.bot_setzen(_ort87 + pygame.Vector2(100, 0), 0, {"team": 1})
+_name87 = _bot87.waffe_name
+_bot87.magazin[_name87] = 0
+_gesehen87 = False
+for _ in range(int(2.0 / _D87)):
+    _tm.schritt(_D87)
+    if _feind87.hirn.ziel is _bot87:
+        _gesehen87 = True
+pruef("GOTT UNSICHTBAR: der feindliche Bot nimmt die gesteuerte Figur nicht wahr",
+      not _gesehen87, "")
+pruef("GOTT MUNITION: das Magazin bleibt voll",
+      _bot87.magazin[_name87] == K.WAFFEN[_name87]["magazin"], str(_bot87.magazin))
+_tm.taste("3")
+pruef("3 noch einmal: zurueck zum Beobachter, der Bot hat sein Hirn wieder",
+      _tm.beobachter and _tm.ich is _geist87 and _bot87.hirn is not None
+      and _bot87.ist_bot and not getattr(_bot87, "ki_unsichtbar", False), "")
+_tm.gott = frozenset()
+
+# Loeschen am Zeiger.
+_tm._zeiger_welt = pygame.Vector2(_feind87.pos)
+_tm.taste("enter")
+pruef("ENTF loescht, was am Zeiger liegt",
+      not _feind87.lebt and _feind87 not in _tm.welt.wesen
+      and _feind87 not in _tm.kaempfer.values(), "")
+
+# Hotzone.
+_tm.zone_setzen(_ort87, 0)
+pruef("HOTZONE HIER: der Kreis liegt am Zeiger, und gekaempft wird um ihn",
+      _tm.regeln["zone"] and _tm.zone_mitte == _ort87 and K.MODI["team"]["zone"] is False, "")
+_tm.zone_aus()
+
+# Kartenwechsel behaelt die Einstellungen.
+_tm.gott = frozenset({"munition"})
+_tm.ki_stopp = True
+app.schieben(_tm)
+_tm.karte_laden("")
+_tm2 = app.oben
+pruef("Eine andere Karte laden: neuer Testmodus, dieselben Einstellungen",
+      isinstance(_tm2, _TM87.Testmodus) and _tm2 is not _tm and _tm2.karte == ""
+      and _tm2.ki_stopp and _tm2.gott == frozenset({"munition"}), "")
+pruef("Gebucht wird im Testmodus nichts",
+      _TM87.Testmodus._runde_buchen(_tm2) is None and _TM87.Testmodus._abbruch_buchen(_tm2) is None, "")
+_bild87 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm2.spawner_offen = True
+_tm2.zeichnen(_bild87, 1.0)
+_tm2.spawner_offen = False
+_tm2.menue_offen = True
+_tm2.zeichnen(_bild87, 1.0)
+pruef("Spawner und Testmenue lassen sich zeichnen", True, "")
+app.werfen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

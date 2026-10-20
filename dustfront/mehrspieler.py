@@ -68,7 +68,7 @@ from .spielerkosmetik import KosmetikTeil
 from . import world as welt_modul
 from .core import Szene
 from .entities import (Aufsammler, Brandflaeche, C4Ladung, Gegner, Geschoss, Granate,
-                       Rakete, Rauchwolke, Spieler, gegner_hoehe_3d, wolke)
+                       Rakete, Rauchwolke, Spieler, Wesen, gegner_hoehe_3d, wolke)
 from .fahrzeug import Buggy
 from .font import SCHRIFT
 from .render import Befinden, Kamera, Renderer, Trefferzeichen, Ueberblendung
@@ -398,6 +398,9 @@ class KampfGegner(Gegner):
     einen Gefallenen herum, statt die Helfer anzugreifen.
     """
 
+    # Im Testmodus einzeln abschaltbar (Spawner, KI AUS).
+    ki_aus = False
+
     def __init__(self, pos, art: str, ebene: int, gefecht,
                  leben: float | None = None) -> None:
         super().__init__(pos, art, ebene, leben=leben)
@@ -542,8 +545,8 @@ class KampfGegner(Gegner):
         bestes, bester_wert = None, 1e18
         lobby = getattr(self._gefecht, "in_lobby", False)
         for k in self._gefecht.kaempfer.values():
-            if not k.lebt:
-                continue
+            if not k.lebt or getattr(k, "ki_unsichtbar", False):
+                continue            # Gottmodus UNSICHTBAR (testmodus.py)
             if lobby and not self._gefecht.im_bereich(k, "pve"):
                 continue       # im Gehege jagt er nur, wer drin ist
             if self.ist_boss and k.ebene != self.ebene:
@@ -574,6 +577,11 @@ class KampfGegner(Gegner):
         # Stueck entfernen.
         if self.ist_puppe:
             self._puppe_schritt(dt)
+            return
+        if self.ki_aus or getattr(self._gefecht, "ki_stopp", False):
+            # KI angehalten (Testmodus, seit 0.34.28): nur noch Physik -
+            # ausrollen, Rueckstoss, Sturz. Kein Ziel, kein Schritt.
+            Wesen.schritt(self, dt)
             return
         vorher = self.welt.held
         self.welt.held = self._ziel_waehlen(dt)
@@ -2481,7 +2489,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         bx, by = K.GEGNER_MP["sicht_halb"]
         for k in self.kaempfer.values():
             # Bots schauen auf keinen Bildschirm (seit 0.34.18).
-            if not k.lebt or k.ist_bot:
+            if not k.lebt or k.ist_bot or getattr(k, "ki_unsichtbar", False):
                 continue
             if abs(k.pos.x - pos.x) < bx and abs(k.pos.y - pos.y) < by:
                 return True

@@ -297,6 +297,8 @@ class BotHirn(Taktik):
             return False
         if getattr(w, "raus", False) or getattr(w, "ist_puppe", False):
             return False
+        if getattr(w, "ki_unsichtbar", False):
+            return False                  # Gottmodus UNSICHTBAR (testmodus.py)
         return hasattr(w, "nummer") or getattr(w, "fraktion", "") == "feind"
 
     def ziel_ok(self, w) -> bool:
