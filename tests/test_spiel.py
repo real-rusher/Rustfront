@@ -10186,6 +10186,39 @@ _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
 _tm.ki_daten_laden()
 pruef("... zeichnen und KI-DATEN NEU LADEN gehen auch fuer ihn",
       _boss89.hirn.gehirn is not None, "")
+
+# 0.34.31: zwei Fehler, gefunden in den Aufnahmen der Gefechte.
+print("\n-- GOAP, aus den Aufnahmen (0.34.31)")
+_tm.alles_weg()
+_bot90 = _tm.bot_setzen(_feld89[0], 0, {"team": 0, "hirn": "goap"})
+_feind90 = _tm.puppe_setzen(_feld89[1], 0, {"team": 1})
+_h90 = _bot90.hirn
+_h90.ziel = _feind90
+_h90.gesehen[_feind90] = (pygame.Vector2(_feind90.pos), 0, _tm.welt.zeit)
+_h90.linie = "hindernis"
+_ein90 = {"t": "ein", "will": [0.0, 0.0], "ziel": [0.0, 0.0], "feuert": False, "zielt": False,
+          "nutzen": False, "ziehen": False, "hb": False, "waffe": -1, "knoepfe": [], "admin": ""}
+_r90 = _h90.tun_suchen(_D87, _ein90)
+pruef("SUCHEN mit sichtbarem Gegner hinter einer Kiste: er geht zur Seite, statt 'fertig' "
+      "zu melden und im Feuer stehen zu bleiben",
+      _r90[4] == "laeuft" and _r90[0].length() > 0.1, "%s %s" % (_r90[4], _r90[0]))
+_h90.linie = ""
+pruef("... mit freier Linie ist Suchen fertig", _h90.tun_suchen(_D87, _ein90)[4] == "fertig", "")
+
+_tm.alles_weg()
+_tm.zone_setzen(_feld89[0] + (_feld89[0] - _feld89[1]) * 1.5, 0)
+_bot90 = _tm.bot_setzen(_feld89[0], 0, {"team": 0, "hirn": "goap"})
+_feind90 = _tm.puppe_setzen(_feld89[1], 0, {"team": 1})
+_ziele90 = set()
+for _ in range(int(2.0 / _D87)):
+    _tm.schritt(_D87)
+    if _bot90.hirn.gehirn.ziel is not None:
+        _ziele90.add(_bot90.hirn.gehirn.ziel.name)
+pruef("HUEGEL: ausserhalb des Kreises geht der Kreis vor, auch mit einem Gegner im Blick",
+      "kreis" in _ziele90 and "feind_ausschalten" not in _ziele90
+      and _bot90.hirn.gehirn.dringlichkeiten.get("kreis", 0)
+      > _bot90.hirn.gehirn.dringlichkeiten.get("feind_ausschalten", 0), str(sorted(_ziele90)))
+_tm.zone_aus()
 _tm.verlassen()
 
 print()

@@ -281,7 +281,14 @@ class GoapHirn(BotHirn):
     def tun_suchen(self, dt, ein):
         z = self.ziel
         if z is not None and self.ziel_ok(z):
-            return _nichts("fertig")
+            if self.linie == "":
+                return _nichts("fertig")
+            # Er sieht ihn, aber eine Kiste steht dazwischen. "Fertig" hiesse
+            # hier: angreifen geht nicht (keine freie Linie), also wieder
+            # suchen, wieder fertig - und er stand dabei still im Feuer
+            # (gesehen in der Aufnahme, 0.34.31). Die Kampfbewegung geht
+            # zur Seite, bis die Bahn frei ist.
+            return self._kaempfen(dt, ein) + ("laeuft",)
         will, punkt = self._unterwegs(dt, ein)
         return will, punkt, False, False, "laeuft"
 

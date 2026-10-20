@@ -37,7 +37,7 @@ info: Angeschlagen und getroffen, oder niedergehalten: weg aus der Linie.
 
 [ziel nachladen]
 will: !magazin_leer
-dringlich: 80 * magazin_leer * munition_da
+dringlich: 85 * magazin_leer * munition_da
 info: Ein leeres Magazin muss voll, bevor er weiterkaempft.
 
 [ziel aufhelfen]
@@ -52,7 +52,11 @@ info: Die Mannschaft stuermt gemeinsam (bottaktik.stuerme_fuehren).
 
 [ziel kreis]
 will: im_kreis
-dringlich: 57 * zone_aktiv
+# Ueber feind_ausschalten (bis 80): draussen geht der Kreis vor, auch wenn
+# er einen Gegner sieht - zum_kreis kaempft auf dem Weg. Mit 57 blieb er
+# stehen und kaempfte, wo er war (gesehen in der Aufnahme, 0.34.31).
+# Ueberleben und Nachladen gehen weiter vor.
+dringlich: 82 * zone_aktiv
 info: HUEGEL: Der Kreis geht vor - gekaempft wird auf dem Weg dorthin.
 
 [ziel feuerschutz]

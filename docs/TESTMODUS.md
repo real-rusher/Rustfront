@@ -89,6 +89,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.31 | Nichts Neues zum Ausprobieren; zwei GOAP-Fehler behoben, die die Gedankenansicht in Aufnahmen gezeigt hat (SUCHEN hinter einer Kiste, der Kreis in HUEGEL) |
 | 0.34.30 | Zombies und Bosse mit GOAP: Spawner GEGNER/BOSSE mit HIRN, KURZ zeigt `ZIEL > AKTION` auch ueber ihnen, GEDANKEN, ZIEL ERZWINGEN und KI-DATEN NEU LADEN gelten fuer sie mit |
 | 0.34.29 | Zielorientierte KI: Spawner BOT mit HIRN KLASSISCH / GOAP, INFO-Stufe GEDANKEN (Taste 8 zweimal), Testmenue ZIEL ERZWINGEN und KI-DATEN NEU LADEN |
 | 0.34.28 | Der Testmodus selbst: Beobachter, Ziffernblock, Spawner fuer Figuren, alle Gegner und Bosse, Zielpuppe, Buggy, Hotzone, Beute und Wurfwaffen; Gottmodi; INFO-Ansicht fuer Bots (auch Flanke, Niederhalten, Sturm aus 0.34.27) |
