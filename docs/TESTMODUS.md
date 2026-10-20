@@ -82,8 +82,9 @@ Hauptmenue.
 ## Aufnahmen
 
 `python werkzeug_aufnahme.py` rechnet fertige Szenen im Testmodus und
-schreibt sie als Video nach `aufnahmen/` (braucht ffmpeg); `--liste`
-zeigt die Szenen, Namen dahinter nehmen nur diese auf. Eine neue Szene ist
+schreibt sie als Video mit Ton nach `aufnahmen/` (braucht ffmpeg); `--liste`
+zeigt die Szenen, Namen dahinter nehmen nur diese auf. `--zeitlupe` legt je
+Szene eine Fassung in halbem Tempo dazu, `--ohne-ton` laesst den Ton weg. Eine neue Szene ist
 eine Funktion `szene_NAME` und ein Eintrag in `SZENEN`.
 
 ## Was nicht passiert
@@ -100,6 +101,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.35 | `werkzeug_aufnahme.py` mit Ton (`Tonband`) und `--zeitlupe` |
 | 0.34.34 | Kein eigener Eintrag: ENTF-TASTE TOETET loest jetzt Fleck und Todeslaut aus (die Leiche ist wieder draussen) |
 | 0.34.33 | Testmenue ENTF-TASTE: LOESCHT / TOETET - jeden Tod am Zeiger ausloesen; Szene `tod` in `werkzeug_aufnahme.py` |
 | 0.34.32 | Testmenue SAUBERE ANSICHT; `werkzeug_aufnahme.py` nimmt Szenen als Video auf |

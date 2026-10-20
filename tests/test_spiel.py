@@ -10143,12 +10143,18 @@ for art_, soll_ in (("laeufer", {"hinlaufen", "zuschlagen"}), ("speier", {"spuck
 
 _tm.alles_weg()
 _g89 = _tm.gegner_setzen("laeufer", _feld89[0], 0, {"ki": True, "hirn": "goap"})
-_p89 = pygame.Vector2(_g89.pos)
-_sim87(int(6.0 / _D87))
+# Gemessen wird die Strecke, nicht der Abstand zum Start (seit 0.34.35):
+# wer herumirrt, kommt auch mal dorthin zurueck, wo er anfing - der Abstand
+# allein war dann nach sechs Sekunden manchmal nur 10 px.
+_weg89 = 0.0
+for _ in range(int(6.0 / _D87)):
+    _p89 = pygame.Vector2(_g89.pos)
+    _tm.schritt(_D87)
+    _weg89 += _g89.pos.distance_to(_p89)
 pruef("Ohne Ziel irrt ein GOAP-Zombie langsam herum, statt zu stehen",
       _g89.hirn.gehirn.ziel is not None and _g89.hirn.gehirn.ziel.name == "herumirren"
-      and _g89.pos.distance_to(_p89) > 15.0,
-      "%s, %.0f px" % (_g89.hirn.gehirn.ziel, _g89.pos.distance_to(_p89)))
+      and _weg89 > 40.0,
+      "%s, %.0f px gelaufen" % (_g89.hirn.gehirn.ziel, _weg89))
 pruef("... und nimmt dabei den Beobachter nicht wahr", _g89._ziel is None, "")
 
 # Der Boss: lauert, wenn sein Ziel auf einer anderen Ebene ist, und zieht
@@ -10294,6 +10300,30 @@ pruef("werkzeug_aufnahme.py: jede Szene baut sich auf, laeuft und zeichnet (ohne
       not _fehler91 and len(_WA91.SZENEN) >= 5, str(_fehler91))
 pruef("... 30 Bilder je Sekunde aus 120 Rechenschritten",
       _WA91.SCHRITTE_JE_BILD == 4, str(_WA91.SCHRITTE_JE_BILD))
+
+# 0.34.35: "Und mit Sound. Und wie waere es, wenn du mir die auch
+# verlangsamst? ... jeweils noch eine 0,5-Speed-Version dazu."
+import tempfile as _tf94
+_band94 = _WA91.Tonband(app.klaenge, lambda: 0.25)
+app.klaenge.spielen("tod", 1.0)
+app.klaenge.spielen("schuss_sturm", 0.5)
+_ereig94 = list(_band94.ereignisse)
+_band94.abhaengen()
+pruef("Tonband: schreibt mit, was gespielt wuerde (Zeit, Klang, Lautstaerke) - "
+      "und gibt das Abspielen danach zurueck",
+      len(_ereig94) == 2 and _ereig94[0][0] == 0.25 and "spielen" not in app.klaenge.__dict__,
+      str(len(_ereig94)))
+_wav94 = os.path.join(_tf94.mkdtemp(), "ton.wav")
+_ok94 = _band94.wav(_wav94, 1.0)
+import wave as _wave94
+from array import array as _arr94
+with _wave94.open(_wav94, "rb") as w_:
+    _rate94, _n94 = w_.getframerate(), w_.getnframes()
+    _proben94 = _arr94("h", w_.readframes(_n94))
+pruef("... und mischt daraus eine Tonspur: eine Sekunde, laut genug, nicht uebersteuert",
+      _ok94 and _n94 == _rate94 and max(abs(v_) for v_ in _proben94) > 1000
+      and max(abs(v_) for v_ in _proben94[:int(0.2 * _rate94) * 2]) == 0,
+      "%d Proben, Spitze %d" % (_n94, max(abs(v_) for v_ in _proben94)))
 
 # 0.34.33: "Bau bitte fuer wirklich jede Entity eine Death Animation ein,
 # gerade kann ich nie sicher sein, ob die einfach verschwinden oder ob die

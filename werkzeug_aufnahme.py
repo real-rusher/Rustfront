@@ -6,6 +6,8 @@ DUSTFRONT - Gefechte aus dem Testmodus als Video aufnehmen (seit 0.34.32)
     python werkzeug_aufnahme.py duell boss       nur diese
     python werkzeug_aufnahme.py --liste          welche es gibt
     python werkzeug_aufnahme.py --ordner X ...   woanders hin
+    python werkzeug_aufnahme.py --zeitlupe ...   dazu je eine Fassung in halbem Tempo
+    python werkzeug_aufnahme.py --ohne-ton ...   ohne Tonspur
 
 Jede Szene ist ein echtes Gefecht im Testmodus (dustfront/testmodus.py),
 ohne Fenster gerechnet und Bild fuer Bild gezeichnet: 120 Rechenschritte
@@ -14,6 +16,14 @@ Sekunde), auf 1280 x 720 vergroessert. Gezeigt wird die SAUBERE ANSICHT
 des Testmodus: nur die Welt und ueber jedem Kopf, was er gerade tut (bei
 GOAP die Aktion, siehe docs/KI.md). Die Kamera folgt der Mitte aller, die
 noch stehen.
+
+Mit Ton (seit 0.34.35): ohne Fenster spielt das Spiel nichts ab, also
+schreibt `Tonband` mit, welcher Klang wann wie laut gespielt wuerde - mit
+derselben Entfernungsrechnung wie im Spiel, gehoert vom Beobachter aus -
+und mischt daraus eine Tonspur. Die Zeitlupe ist echt: es wird doppelt so
+dicht gezeichnet (60 Bilder je Spielsekunde), die normale Fassung nimmt
+jedes zweite, die Zeitlupe alle, der Ton laeuft halb so schnell bei
+gleicher Tonhoehe.
 
 Braucht ffmpeg im Pfad (macOS: `brew install ffmpeg`, Linux: Paketverwaltung,
 Windows: ffmpeg.org). Eine neue Szene ist eine Funktion `szene_NAME`, die
@@ -26,11 +36,15 @@ zeigten, die kein Test gefunden hatte (0.34.31).
 
 from __future__ import annotations
 
+import math
 import os
 import random
 import shutil
 import subprocess
 import sys
+import tempfile
+import wave
+from array import array
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -184,6 +198,85 @@ SZENEN = {
 
 
 # ══════════════════════════════════════════════════════════════════
+# Der Ton
+# ══════════════════════════════════════════════════════════════════
+
+class Tonband:
+    """Haengt sich vor `Klaenge.spielen` und schreibt mit, statt abzuspielen:
+    (Zeit, Klang, Lautstaerke). `wav` mischt daraus eine Tonspur.
+
+    Gemischt wird in reinem Python (ohne numpy, wie das ganze Spiel). Eine
+    Minute Gefecht mit ein paar hundert Schuessen dauert so einige
+    Sekunden - fuer ein Werkzeug, das ohnehin Minuten rechnet, genug."""
+
+    def __init__(self, klaenge, uhr) -> None:
+        self.k = klaenge
+        self.uhr = uhr                      # gibt die Zeit im Video zurueck (s)
+        self.ereignisse: list = []
+        klaenge.spielen = self.spielen      # an der Instanz, nicht an der Klasse
+
+    def spielen(self, name: str, lautstaerke: float = 1.0) -> None:
+        fassungen = self.k.klang(name)
+        if not fassungen:
+            return
+        laut = max(0.0, min(1.0, lautstaerke * self.k.gesamt * self.k.effekte))
+        if laut <= 0.0:
+            return
+        s = fassungen[self.k.rnd.randrange(len(fassungen))]
+        self.ereignisse.append((self.uhr(), s, laut))
+
+    def abhaengen(self) -> None:
+        self.k.__dict__.pop("spielen", None)
+
+    def wav(self, pfad: str, dauer: float) -> bool:
+        """Die Tonspur schreiben. False, wenn es keinen Mixer gibt."""
+        init = pygame.mixer.get_init()
+        if not init or init[1] != -16:
+            return False
+        rate, _groesse, kanaele = init
+        n = int(dauer * rate) * kanaele
+        mix = array("d", bytes(8 * n))
+        roh_je = {}
+        for zeit, s, laut in self.ereignisse:
+            roh = roh_je.get(id(s))
+            if roh is None:
+                roh = roh_je[id(s)] = array("h", s.get_raw())
+            o = int(zeit * rate) * kanaele
+            if o >= n:
+                continue
+            ende = min(n, o + len(roh))
+            mix[o:ende] = array("d", [a + b * laut for a, b in zip(mix[o:ende], roh)])
+        # Weich begrenzen statt hart abschneiden: zehn Schuesse auf einmal
+        # sollen laut sein, nicht kratzen.
+        voll = 32767.0
+        aus = array("h", [int(voll * math.tanh(v / voll)) for v in mix])
+        with wave.open(pfad, "wb") as w:
+            w.setnchannels(kanaele)
+            w.setsampwidth(2)
+            w.setframerate(rate)
+            w.writeframes(aus.tobytes())
+        return True
+
+
+def _video_schreiber(pfad: str):
+    return subprocess.Popen(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
+         "-s", "%dx%d" % (BREITE, HOEHE), "-r", str(BILDER_JE_SEKUNDE), "-i", "-",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "medium", pfad],
+        stdin=subprocess.PIPE)
+
+
+def _ton_dazu(video: str, ton: str, ziel: str, tempo: float = 1.0) -> None:
+    """Bild und Ton zusammen in eine Datei; mit `tempo` 0.5 halb so schnell
+    bei gleicher Tonhoehe (atempo)."""
+    befehl = ["ffmpeg", "-y", "-loglevel", "error", "-i", video, "-i", ton,
+              "-c:v", "copy", "-c:a", "aac", "-b:a", "160k"]
+    if tempo != 1.0:
+        befehl += ["-filter:a", "atempo=%g" % tempo]
+    subprocess.run(befehl + ["-shortest", ziel], check=True)
+
+
+# ══════════════════════════════════════════════════════════════════
 # Aufnehmen
 # ══════════════════════════════════════════════════════════════════
 
@@ -208,8 +301,10 @@ def _mitte(wesen):
     return sum((pygame.Vector2(w.pos) for w in lebende), pygame.Vector2()) / len(lebende)
 
 
-def aufnehmen(app, name: str, ordner: str, seed: int | None = None) -> str:
-    """Eine Szene rechnen und als MP4 schreiben. Gibt den Pfad zurueck."""
+def aufnehmen(app, name: str, ordner: str, seed: int | None = None,
+              zeitlupe: bool = False, ton: bool = True) -> list:
+    """Eine Szene rechnen und als MP4 schreiben (mit `zeitlupe` dazu eine
+    Fassung in halbem Tempo). Gibt die Pfade zurueck."""
     datei, szene = SZENEN[name]
     rnd = random.Random(seed if seed is not None else sum(map(ord, name)))
     # Erst mit Zoom 1 aufbauen (die Szene setzt die Figuren), dann den
@@ -224,47 +319,84 @@ def aufnehmen(app, name: str, ordner: str, seed: int | None = None) -> str:
     m = _mitte(kamera_auf)
     if m is not None:
         g.pos.update(m)
-    pfad = os.path.join(ordner, datei + ".mp4")
-    ff = subprocess.Popen(
-        ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
-         "-s", "%dx%d" % (BREITE, HOEHE), "-r", str(BILDER_JE_SEKUNDE), "-i", "-",
-         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "medium", pfad],
-        stdin=subprocess.PIPE)
+    zwischen = tempfile.mkdtemp(prefix="aufnahme_")
+    normal_roh = os.path.join(zwischen, "normal.mp4")
+    lupe_roh = os.path.join(zwischen, "zeitlupe.mp4")
+    ff = _video_schreiber(normal_roh)
+    ff_lupe = _video_schreiber(lupe_roh) if zeitlupe else None
+    uhr = {"t": 0.0}
+    band = Tonband(app.klaenge, lambda: uhr["t"]) if ton else None
     bild = pygame.Surface((K.GAME_W, K.GAME_H))
     gross = pygame.Surface((BREITE, HOEHE))
     schluss = None
     bilder = 0
+    # Je Bild der normalen Fassung zwei Haelften: die erste nur fuer die
+    # Zeitlupe, die zweite fuer beide.
+    haelfte = max(1, SCHRITTE_JE_BILD // 2)
     try:
         for nr in range(int(sekunden * BILDER_JE_SEKUNDE)):
             if jedes_bild is not None:
                 jedes_bild()
-            # Die Kamera schaut ein Stueck zur Maus voraus. Ohne Fenster
-            # stuende die bei (0, 0), und das Bild rutschte nach links oben.
-            app.eingabe.maus = pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2)
-            for _ in range(SCHRITTE_JE_BILD):
-                tm.schritt(K.FIXED_DT)
-            m = _mitte(kamera_auf)
-            if m is not None:
-                # Weich nachziehen: ein Sprung, wenn einer faellt, ist unruhig.
-                g.pos += (m - g.pos) * 0.06
-                g.vorher.update(g.pos)
-                g.ziel = pygame.Vector2(g.pos)
-            tm.blick = 0
-            tm.zeichnen(bild, 1.0)
-            pygame.transform.scale(bild, (BREITE, HOEHE), gross)
-            ff.stdin.write(pygame.image.tobytes(gross, "RGB"))
+            for teil in (0, 1):
+                if teil == 0 and ff_lupe is None:
+                    schritte = SCHRITTE_JE_BILD
+                else:
+                    schritte = haelfte if teil == 0 else SCHRITTE_JE_BILD - haelfte
+                # Die Kamera schaut ein Stueck zur Maus voraus. Ohne Fenster
+                # stuende die bei (0, 0), und das Bild rutschte nach links oben.
+                app.eingabe.maus = pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2)
+                for _ in range(schritte):
+                    tm.schritt(K.FIXED_DT)
+                    uhr["t"] += K.FIXED_DT
+                m = _mitte(kamera_auf)
+                if m is not None:
+                    # Weich nachziehen: ein Sprung, wenn einer faellt, ist unruhig.
+                    g.pos += (m - g.pos) * (0.06 * schritte / SCHRITTE_JE_BILD)
+                    g.vorher.update(g.pos)
+                    g.ziel = pygame.Vector2(g.pos)
+                if teil == 0 and ff_lupe is None:
+                    continue
+                tm.blick = 0
+                tm.zeichnen(bild, 1.0)
+                pygame.transform.scale(bild, (BREITE, HOEHE), gross)
+                roh = pygame.image.tobytes(gross, "RGB")
+                if ff_lupe is not None:
+                    ff_lupe.stdin.write(roh)
+                if teil == 1:
+                    ff.stdin.write(roh)
+                if ff_lupe is None:
+                    break
             bilder += 1
             if schluss is None and ende():
                 schluss = nr + int(NACHLAUF * BILDER_JE_SEKUNDE)
             if schluss is not None and nr >= schluss:
                 break
     finally:
-        ff.stdin.close()
-        ff.wait()
+        for f in (ff, ff_lupe):
+            if f is not None:
+                f.stdin.close()
+                f.wait()
+        if band is not None:
+            band.abhaengen()
         tm.verlassen()
-    print("%-8s %5.1f s  %s  (%s)" % (name, bilder / float(BILDER_JE_SEKUNDE), pfad, titel),
+    pfade = [os.path.join(ordner, datei + ".mp4")]
+    if zeitlupe:
+        pfade.append(os.path.join(ordner, datei + "_zeitlupe.mp4"))
+    tonspur = os.path.join(zwischen, "ton.wav")
+    mit_ton = band is not None and band.wav(tonspur, uhr["t"])
+    for roh, ziel, tempo in ((normal_roh, pfade[0], 1.0), (lupe_roh, pfade[-1], 0.5)):
+        if tempo != 1.0 and not zeitlupe:
+            continue
+        if mit_ton:
+            _ton_dazu(roh, tonspur, ziel, tempo)
+        else:
+            shutil.copyfile(roh, ziel)
+    shutil.rmtree(zwischen, ignore_errors=True)
+    print("%-8s %5.1f s  %d Klaenge  %s  (%s)"
+          % (name, bilder / float(BILDER_JE_SEKUNDE),
+             len(band.ereignisse) if band is not None else 0, ", ".join(pfade), titel),
           flush=True)
-    return pfad
+    return pfade
 
 
 def main(argv) -> int:
@@ -277,6 +409,8 @@ def main(argv) -> int:
         i = argv.index("--ordner")
         ordner = argv[i + 1]
         argv = argv[:i] + argv[i + 2:]
+    zeitlupe = "--zeitlupe" in argv
+    ton = "--ohne-ton" not in argv
     namen = [a for a in argv if not a.startswith("--")] or list(SZENEN)
     falsch = [n for n in namen if n not in SZENEN]
     if falsch:
@@ -289,7 +423,7 @@ def main(argv) -> int:
     from dustfront.core import App
     app = App("aufnahme", None, headless=True)
     for n in namen:
-        aufnehmen(app, n, ordner)
+        aufnehmen(app, n, ordner, zeitlupe=zeitlupe, ton=ton)
     return 0
 
 
