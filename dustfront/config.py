@@ -1064,8 +1064,12 @@ GOAP = dict(
     vorsprung=8.0,            # das laufende Ziel gewinnt bei Gleichstand um so viel
     sperre=2.0,               # eine gescheiterte Aktion so lange nicht einplanen (s)
     protokoll=40,             # so viele Zeilen merkt sich ein Gehirn (Testmodus)
-    arten=("klassisch", "goap"),   # die Regel BOT-KI
+    arten=("klassisch", "goap"),   # die Regeln BOT-KI und GEGNER-KI
     spezies_bot="mp_bot",     # welche Spezies aus wesen/ ein Bot des Mehrspielers ist
+    # Gegner (seit 0.34.30, gegner_goap.py)
+    gegner_angeschlagen=0.5,  # unter so viel seines Lebens ist ein Gegner angeschlagen
+    wandern_weite=160.0,      # so weit schlurft ein Zombie ohne Ziel auf einmal (px)
+    wandern_tempo=0.45,       # ... mit so viel seines Tempos
 )
 
 # Die Lobby: wo man beim Aufmachen landet und nach jeder Runde.

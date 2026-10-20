@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.29, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.30, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -196,8 +196,8 @@ Einstellungen. Gebucht wird nichts. Alles Weitere in
 [docs/TESTMODUS.md](docs/TESTMODUS.md). **Jedes neue Feature muss dort
 ausprobierbar sein** (siehe `AGENTS.md`).
 
-Seit 0.34.29 auch die **zielorientierte KI**: im Spawner beim BOT die
-Einstellung HIRN auf GOAP stellen; Taste 8 zweimal zeigt links die
+Seit 0.34.29 auch die **zielorientierte KI**: im Spawner beim BOT (seit
+0.34.30 auch bei Gegnern und Bossen) die Einstellung HIRN auf GOAP stellen; Taste 8 zweimal zeigt links die
 **Gedanken** der GOAP-Figur am Zeiger (Merkmale, Ziele mit Dringlichkeit,
 Plan, Fakten, Protokoll). Im Testmenü: ZIEL ERZWINGEN und KI-DATEN NEU
 LADEN (nach einer Änderung an `wesen/*.txt`).
@@ -590,6 +590,7 @@ Das Spiel selbst liegt im Paket `dustfront/`:
 | `goap.py` | Zielorientierte KI, der Kern: Ziele, Aktionen, Planer, Gehirn (docs/KI.md) |
 | `wesen_daten.py` | Spezies, Ziele und Aktionen aus `wesen/*.txt` lesen und prüfen |
 | `bot_goap.py` | Die Bots mit zielorientierter KI (Regel BOT-KI: GOAP) |
+| `gegner_goap.py` | Zombies und Bosse mit zielorientierter KI (Regel GEGNER-KI: GOAP) |
 | `testmodus.py` | Der Testmodus: Beobachter, Ziffernblock, Spawner, Gottmodi (docs/TESTMODUS.md) |
 | `render.py` | Kamera, Tiefenwirkung, Schatten, Ziellinie, HUD |
 | `play.py` | Die Spielregel: Wellen, Tod, Neustart |
@@ -821,6 +822,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.30 | **Zombies und Bosse mit zielorientierter KI** (Schritt 3 aus `docs/KI.md`). Neue Regel **GEGNER-KI: KLASSISCH / GOAP** (Spielarten mit Gegnern, erweitert): Zombies laufen hin und schlagen zu, Speier halten Abstand und spucken, ohne Ziel schlurfen sie herum statt zu stehen; ein Boss lauert, wenn sein Ziel auf einer anderen Ebene ist, und zieht angeschlagen seine Fähigkeit vor (mit vollem Vorlauf). Die Brut denkt wie ihre Mutter. Daten in `wesen/zombies.txt`; jede Spezies sagt jetzt mit `hirn:`, welche Verhalten sie benutzen darf, und die Prüfung achtet darauf. Testmodus: HIRN auch bei Gegnern und Bossen, Gedanken und KURZ-Ansicht auch für sie. Der Einzelspieler bleibt klassisch. **Netz/LAN: geändert** (neue Regel `gegner_ki`), alle Geräte brauchen dieselbe Version. |
 | 0.34.29 | **Zielorientierte KI (GOAP), der Kern.** Wesen wählen das dringendste Ziel und planen dafür selbst eine Folge von Aktionen („erst in Deckung, dann nachladen“) – Ziele, Aktionen, Spezies und Merkmale (Mut, Disziplin) stehen als Text in `wesen/*.txt`, wie die Karten, und lassen sich ohne Programmieren ändern. Die Bots des Mehrspielers können ihn schon benutzen: neue Regel **BOT-KI: KLASSISCH / GOAP** (Rundentafel, erweitert); die klassische KI bleibt Vorgabe. Fairness wie bisher: Sehen, Zielen, Reaktion sind dieselben. Testmodus: Spawner-Einstellung HIRN, Gedankenansicht (Taste 8 zweimal), Ziel erzwingen, KI-Daten neu laden. Der ganze Plan bis zur Kampagne steht in `docs/KI.md`. **Netz/LAN: geändert** (neue Regel `bot_ki`), alle Geräte brauchen dieselbe Version. |
 | 0.34.28 | **Testmodus.** Neuer Eintrag im Hauptmenü (nicht auf iOS): Beobachter, der mit hoher Geschwindigkeit über die Karte fliegt und von nichts in der Welt wahrgenommen oder getroffen wird; alle Spezialaktionen auf dem Ziffernblock, der immer sichtbar und anklickbar am Rand steht (Zeit anhalten, Einzelschritt, Zeitfaktor x0,1 bis x4, KI aus, alles weg, Ebene, KI-Ansicht mit Zielen, Flanken, Deckung und Sturm, Spawner, nochmal spawnen, Gottmodus, Bot, stehender Spieler, Figur übernehmen, löschen). Spawner für Figuren (Bot, stehender Spieler, selbst gesteuert), alle Gegner und Bosse, Zielpuppe, Buggy, Hotzone, Beute und Wurfwaffen, mit Anzahl, Streuung, Team, Waffe, Leben, KI und Zünder – auch bei angehaltener Zeit. Gottmodi: unverwundbar, unsterblich, unsichtbar für KI, unendlich Munition. Testmenü (Esc) mit Kartenwahl und allen Schaltern. Nichts wird gebucht. Neue Regel in `AGENTS.md`: jedes neue Feature gehört in den Testmodus und den Spawner (`docs/TESTMODUS.md`). Netz/LAN: unverändert, trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.27 | **Bots funken und spielen taktisch.** Kurz vor einer Aktion sagen Bots an, was sie vorhaben – als kleiner Untertitel über ihnen (KONTAKT!, ICH FLANKIERE!, HALTE IHN UNTEN!, FEUERSCHUTZ!, NACHLADEN!, GRANATE!, SAMMELN AM EINGANG!, REIN, REIN, REIN! …); mit Mannschaften sieht das nur die eigene. **Flankieren:** Steht ein Gegner hinter einer Kiste oder ist er hinter einer Mauer verschwunden, geht einer seitlich herum, an eine Stelle mit freier Schussbahn. **Niederhalten:** Ein anderer schießt derweil auf die Stelle direkt neben der Deckung (oder auf die Deckung), damit der Gegner unten bleibt; Bots, an denen Kugeln knapp vorbeifliegen, gehen selbst in Deckung und zielen schlechter. **Feuerschutz:** Gegner bei einem Kameraden, der nachlädt, angeschlagen ist, am Boden liegt oder flankiert, haben Vorrang – das gilt für Bots und Spieler. **Stürmen:** Zwei oder mehr Bots, die wissen, wo ein Gegner steckt, sammeln sich außer Sicht, auf REIN wirft der Erste seine Granate und alle gehen zugleich hinein. Zahlen in `config.py` unter `BOTS` (`funk`, `flanke_*`, `druck_*`, `sturm_*`), die Taktik steht in `dustfront/bottaktik.py`. **Netz/LAN: geändert** (je Spieler `fk`/`fr`, der Funkspruch) – Gastgeber und Gäste brauchen diese Version. |

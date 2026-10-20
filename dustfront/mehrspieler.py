@@ -400,6 +400,8 @@ class KampfGegner(Gegner):
 
     # Im Testmodus einzeln abschaltbar (Spawner, KI AUS).
     ki_aus = False
+    # Zielorientierte KI (gegner_goap.py, seit 0.34.30), sonst None.
+    hirn = None
 
     def __init__(self, pos, art: str, ebene: int, gefecht,
                  leben: float | None = None) -> None:
@@ -432,6 +434,22 @@ class KampfGegner(Gegner):
         self._stockt = 0.0
         self._pruef_rest = K.GEGNER_MP["stockt_pruefung"]
         self._ungesehen = 0.0        # so lange schon ausser jeder Sicht
+        regelwerk = getattr(gefecht, "regelwerk", None) or {}
+        if not self.ist_puppe and regelwerk.get("gegner_ki") == "goap":
+            self.hirn_setzen("goap")
+
+    def hirn_setzen(self, art: str) -> None:
+        """"goap": zielorientiert (gegner_goap.py), sonst klassisch."""
+        if art == "goap" and not self.ist_puppe:
+            from .gegner_goap import GegnerHirn
+            self.hirn = GegnerHirn(self, rnd=getattr(self._gefecht, "_bot_rnd", None))
+        else:
+            self.hirn = None
+
+    def _wohin(self, dt: float):
+        if self.hirn is not None:
+            return self.hirn.wohin(dt)
+        return super()._wohin(dt)
 
     def _haenger_pruefen(self, dt: float) -> None:
         """Wer nicht naeher kommt, wird umgesetzt.
@@ -532,6 +550,8 @@ class KampfGegner(Gegner):
         KampfGegner suchte sie sich kein Ziel unter mehreren Spielern.
         """
         kind = KampfGegner(punkt, art, self.ebene, self._gefecht)
+        if self.hirn is not None and kind.hirn is None:
+            kind.hirn_setzen("goap")      # die Brut denkt wie die Mutter
         self._gefecht.gegner_offen.append(kind)
         return kind
 

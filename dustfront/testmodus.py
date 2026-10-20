@@ -199,11 +199,11 @@ def eintraege() -> list:
     ]
     for art in sorted(K.GEGNER):
         raus.append(Eintrag(K.GEGNER[art].get("name", art.upper()), "GEGNER",
-                            ("anzahl", "streuung", "leben", "ki"),
+                            ("anzahl", "streuung", "leben", "ki", "hirn"),
                             _gegner_setzer(art)))
     for art in sorted(K.BOSSE):
         raus.append(Eintrag(K.BOSSE[art].get("name", art.upper()), "BOSSE",
-                            ("anzahl", "streuung", "leben", "ki"),
+                            ("anzahl", "streuung", "leben", "ki", "hirn"),
                             _gegner_setzer(art)))
     for art in sorted(K.UEBUNG):
         raus.append(Eintrag(K.UEBUNG[art].get("name", art.upper()), "ZIELE",
@@ -615,6 +615,8 @@ class Testmodus(Gefecht):
         g.max_leben *= float(w.get("leben", 1.0))
         g.leben = g.max_leben
         g.ki_aus = not w.get("ki", True)
+        if w.get("hirn"):
+            g.hirn_setzen(w["hirn"])
         self._einsetzen(g)
         if K.ist_boss(art):
             self.boss = g
@@ -1236,28 +1238,34 @@ class Testmodus(Gefecht):
                 if ziel_w is not None and ziel_w.lebt:
                     pygame.draw.line(ziel, (150, 40, 40), kam.zu_bild(w.pos),
                                      kam.zu_bild(ziel_w.pos), 1)
+                q = kam.zu_bild(w.pos)
                 if w.ki_aus or self.ki_stopp:
-                    q = kam.zu_bild(w.pos)
                     SCHRIFT.zeichnen(ziel, "KI AUS", int(q.x), int(q.y) + 12,
                                      K.C_MUTED, 1, ausrichtung="mitte")
+                elif w.hirn is not None and w.hirn.gehirn is not None:
+                    gh = w.hirn.gehirn
+                    SCHRIFT.zeichnen(ziel, "%s > %s" % (
+                        gh.ziel.name.upper() if gh.ziel else "-",
+                        gh.aktion.name.upper() if gh.aktion else "-"),
+                        int(q.x), int(q.y) + 12, (200, 120, 110), 1, ausrichtung="mitte")
 
     # ── Gedanken (GOAP, seit 0.34.29) ─────────────────────────────────
+    def _denkende(self) -> list:
+        """Alles mit einem GOAP-Gehirn: Bots und (seit 0.34.30) Gegner."""
+        return [w for w in self.welt.wesen
+                if w.lebt and getattr(getattr(w, "hirn", None), "gehirn", None) is not None]
+
     def denker(self):
         """Wessen Gedanken die INFO zeigt: die GOAP-Figur am Zeiger, sonst
         die zuletzt gezeigte, sonst die erste, die es gibt."""
         w = self.am_zeiger()
         if w is not None and getattr(getattr(w, "hirn", None), "gehirn", None) is not None:
             self._denker = w
-        d = self._denker
-        if d is not None and d.lebt and getattr(d, "hirn", None) is not None \
-                and d in self.kaempfer.values():
-            return d
-        for k in self._bots():
-            if k.lebt and getattr(k.hirn, "gehirn", None) is not None:
-                self._denker = k
-                return k
-        self._denker = None
-        return None
+        denkende = self._denkende()
+        if self._denker in denkende:
+            return self._denker
+        self._denker = denkende[0] if denkende else None
+        return self._denker
 
     def _erzwungen_text(self) -> str:
         d = self._denker
@@ -1271,14 +1279,15 @@ class Testmodus(Gefecht):
         oder wieder frei denken lassen ("-")."""
         d = self.denker()
         if d is None:
-            self.melde("KEINE GOAP-FIGUR (BOT MIT HIRN GOAP SPAWNEN)")
+            self.melde("KEINE GOAP-FIGUR (BOT ODER GEGNER MIT HIRN GOAP)")
             return
         gehirn = d.hirn.gehirn
         namen = [None] + [z.name for z in gehirn.ziele]
         i = namen.index(gehirn.erzwungen) if gehirn.erzwungen in namen else 0
         gehirn.erzwungen = namen[(i + schritt) % len(namen)]
         gehirn.plan = []
-        self.melde("%s: ZIEL %s" % (d.name, (gehirn.erzwungen or "FREI").upper()))
+        self.melde("%s: ZIEL %s" % (getattr(d, "name", None) or d.art.upper(),
+                                     (gehirn.erzwungen or "FREI").upper()))
 
     def ki_daten_laden(self) -> None:
         """wesen/*.txt neu lesen und jeder GOAP-Figur ein neues Gehirn
@@ -1286,10 +1295,9 @@ class Testmodus(Gefecht):
         from . import wesen_daten
         d = wesen_daten.neu_laden()
         n = 0
-        for k in self._bots():
-            if getattr(k.hirn, "gehirn", None) is not None:
-                k.hirn.gehirn_neu()
-                n += 1
+        for w in self._denkende():
+            w.hirn.gehirn_neu()
+            n += 1
         fehler = wesen_daten.pruefen(d)
         self.melde("KI-DATEN: %d FEHLER" % len(fehler) if fehler
                    else "KI-DATEN NEU GELADEN (%d FIGUREN)" % n)
@@ -1300,7 +1308,7 @@ class Testmodus(Gefecht):
         d = self.denker()
         r = pygame.Rect(4, 28, 252, K.GAME_H - 56)
         if d is None:
-            SCHRIFT.zeichnen(ziel, "GEDANKEN: KEINE GOAP-FIGUR - BOT MIT HIRN GOAP",
+            SCHRIFT.zeichnen(ziel, "GEDANKEN: KEINE GOAP-FIGUR - HIRN GOAP SPAWNEN",
                              r.x + 2, r.y, K.C_MUTED, 1)
             return
         h = d.hirn
@@ -1320,7 +1328,8 @@ class Testmodus(Gefecht):
                              x + einzug, y, farbe, 1)
             y += 9
 
-        zeile("%s - %s" % (d.name, h.spezies.upper()), K.C_AMBER)
+        name = getattr(d, "name", None) or d.daten.get("name", d.art.upper())
+        zeile("%s - %s" % (name, h.spezies.upper()), K.C_AMBER)
         zeile("  ".join("%s %.2f" % (n, v) for n, v in sorted(gehirn.merkmale.items())),
               K.C_MUTED)
         if gehirn.erzwungen:

@@ -9944,8 +9944,8 @@ pruef("... ein erzwungenes Ziel gilt, egal wie dringlich (Testmodus)",
 
 # Die Daten.
 pruef("wesen/*.txt laesst sich lesen, jeder Verweis und jedes Verhalten stimmt",
-      not _WD88.pruefen(_WD88.neu_laden(), tut=_BG88.TUN),
-      "; ".join(_WD88.pruefen(tut=_BG88.TUN)[:3]))
+      not _WD88.pruefen(_WD88.neu_laden()),
+      "; ".join(_WD88.pruefen()[:3]))
 pruef("... mit der Spezies der Mehrspieler-Bots",
       K.GOAP["spezies_bot"] in _WD88.daten().spezies, "")
 _d88 = _WD88.Daten()
@@ -10052,6 +10052,140 @@ _alt88 = _denker88.hirn.gehirn
 _tm.ki_daten_laden()
 pruef("KI-DATEN NEU LADEN gibt jeder GOAP-Figur ein neues Gehirn",
       _denker88.hirn.gehirn is not _alt88 and _denker88.hirn.merkmale == _alt88.merkmale, "")
+_tm.verlassen()
+
+# 0.34.30: Schritt 3 aus docs/KI.md - Zombies und Bosse auf GOAP, als Test
+# fuer dumme Wesen. Sie sollen sich spielen wie bisher.
+print("\n-- Zombies und Bosse mit GOAP (0.34.30)")
+from dustfront import gegner_goap as _GG89
+from dustfront.mehrspieler import KampfGegner as _KG89
+_sp89 = {a_: _GG89.spezies_fuer(a_) for a_ in ("laeufer", "renner", "speier", "koloss", "mutter")}
+pruef("Spezies: Zombie, Speier, Boss - aus der Art",
+      _sp89 == {"laeufer": "zombie", "renner": "zombie", "speier": "speier",
+                "koloss": "boss", "mutter": "boss"}, str(_sp89))
+_d89 = _WD88.Daten()
+_WD88.aus_text("[spezies renner]\nhirn: gegner\n", _d89)
+pruef("... und eine Spezies mit dem Namen der Art geht vor (nur ein Block in der Datei)",
+      _GG89.spezies_fuer("renner", _d89) == "renner" and _GG89.spezies_fuer("laeufer", _d89) == "zombie", "")
+pruef("Jede Spezies in wesen/ kennt nur Verhalten ihres Hirns (bot / gegner)",
+      not _WD88.pruefen(_WD88.neu_laden()), "; ".join(_WD88.pruefen()[:3]))
+_d89f = _WD88.Daten()
+_WD88.aus_text("[aktion schiessen]\ntut: kaempfen\n[spezies z]\nhirn: gegner\naktionen: schiessen\n"
+               "[spezies q]\nhirn: rakete\n", _d89f)
+_f89 = _WD88.pruefen(_d89f)
+pruef("... ein Zombie mit dem Verhalten eines Bots und ein unbekanntes Hirn fallen auf",
+      any("kennt hirn gegner nicht" in f_ for f_ in _f89) and any("unbekanntes hirn" in f_ for f_ in _f89),
+      str(_f89))
+
+pruef("Regel GEGNER-KI: klassisch ist die Vorgabe, gilt nur mit Gegnern",
+      _RG88.vorgabe()["gegner_ki"] == "klassisch"
+      and "gegner_ki" in [f_.schluessel for f_ in _RG88.sichtbar(_RG88.vorgabe(modus="pve"))]
+      and "gegner_ki" not in [f_.schluessel for f_ in _RG88.sichtbar(_RG88.vorgabe(modus="pvp"))], "")
+_n89 = netz.Gastgeber(_neuer_port())
+_w89 = Gefecht(app, "WIRT", gastgeber=_n89, modus="pve", seed=89, regeln={"gegner_ki": "goap"})
+_g89 = _KG89(pygame.Vector2(_w89.ich.pos), "mutter", 0, _w89)
+_kind89 = _g89._brut_erzeugen(pygame.Vector2(_w89.ich.pos), "laeufer")
+pruef("... mit GOAP denkt jeder neue Gegner zielorientiert, auch die Brut",
+      isinstance(_g89.hirn, _GG89.GegnerHirn) and isinstance(_kind89.hirn, _GG89.GegnerHirn)
+      and _g89.hirn.spezies == "boss", "")
+pruef("... die Zielpuppe nie", _KG89(pygame.Vector2(0, 0), "puppe", 0, _w89).hirn is None, "")
+_w89.verlassen()
+_n89 = netz.Gastgeber(_neuer_port())
+_w89 = Gefecht(app, "WIRT", gastgeber=_n89, modus="pve", seed=89)
+pruef("... ohne die Regel klassisch wie bisher",
+      _KG89(pygame.Vector2(_w89.ich.pos), "laeufer", 0, _w89).hirn is None, "")
+_w89.verlassen()
+
+# Im Testmodus, auf freiem Feld: hin und zuschlagen, spucken, herumirren.
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm.wiedereinstieg = False
+pruef("Spawner: Gegner und Bosse haben die Einstellung HIRN",
+      all("hirn" in e_.optionen for e_ in _tm.eintraege if e_.gruppe in ("GEGNER", "BOSSE")), "")
+_r89 = random.Random(89)
+_feld89 = None
+for _ in range(4000):
+    a_ = pygame.Vector2(freier_punkt(_tm.welt, 0, _r89))
+    b_ = a_ + pygame.Vector2(170, 0)
+    if (_tm.welt.frei(a_, 24, 0, True) and _tm.welt.frei(b_, 34, 0, True)
+            and _tm.welt.frei((a_ + b_) / 2, 34, 0, True) and _tm.welt.deckung(a_, b_, 0) == ""):
+        _feld89 = (a_, b_)
+        break
+pruef("(eine freie Bahn fuer die Zombie-Tests)", _feld89 is not None, "")
+
+
+def _angriff89(art, hirn, sekunden=10.0):
+    _tm.alles_weg()
+    p_ = _tm.puppe_setzen(_feld89[0], 0, {"team": 0, "leben": 10.0})
+    g_ = _tm.gegner_setzen(art, _feld89[1], 0, {"ki": True, "hirn": hirn})
+    l_ = p_.leben
+    aktionen_ = set()
+    for _ in range(int(sekunden / _D87)):
+        _tm.schritt(_D87)
+        if g_.hirn is not None and g_.hirn.gehirn.aktion is not None:
+            aktionen_.add(g_.hirn.gehirn.aktion.name)
+    return l_ - p_.leben, aktionen_, g_
+
+
+for art_, soll_ in (("laeufer", {"hinlaufen", "zuschlagen"}), ("speier", {"spucken"})):
+    _klassisch89, _a89, _g89 = _angriff89(art_, "klassisch")
+    _goap89, _a89, _g89 = _angriff89(art_, "goap")
+    pruef("GOAP-%s: plant %s und trifft etwa so viel wie der klassische"
+          % (art_.upper(), " + ".join(sorted(soll_))),
+          soll_ <= _a89 and _goap89 > 0 and 0.5 * _klassisch89 <= _goap89 <= 1.6 * _klassisch89,
+          "GOAP %.0f, klassisch %.0f, %s" % (_goap89, _klassisch89, sorted(_a89)))
+
+_tm.alles_weg()
+_g89 = _tm.gegner_setzen("laeufer", _feld89[0], 0, {"ki": True, "hirn": "goap"})
+_p89 = pygame.Vector2(_g89.pos)
+_sim87(int(6.0 / _D87))
+pruef("Ohne Ziel irrt ein GOAP-Zombie langsam herum, statt zu stehen",
+      _g89.hirn.gehirn.ziel is not None and _g89.hirn.gehirn.ziel.name == "herumirren"
+      and _g89.pos.distance_to(_p89) > 15.0,
+      "%s, %.0f px" % (_g89.hirn.gehirn.ziel, _g89.pos.distance_to(_p89)))
+pruef("... und nimmt dabei den Beobachter nicht wahr", _g89._ziel is None, "")
+
+# Der Boss: lauert, wenn sein Ziel auf einer anderen Ebene ist, und zieht
+# angeschlagen seine Faehigkeit vor.
+_tm.alles_weg()
+_puppe89 = _tm.puppe_setzen(_feld89[0], 0, {"team": 0, "leben": 10.0})
+_boss89 = _tm.gegner_setzen("koloss", _feld89[1], 0, {"ki": True, "hirn": "goap"})
+_ort89 = pygame.Vector2(_boss89.pos)
+for _ in range(int(2.0 / _D87)):
+    # Jeden Schritt: ueber der Bahn ist auf Ebene 1 kein Boden, die Puppe
+    # fiele sonst gleich wieder herunter.
+    _puppe89.ebene = 1
+    _tm.schritt(_D87)
+pruef("GOAP-Boss: Ziel auf einer anderen Ebene - er lauert und wechselt nicht",
+      _boss89.hirn.gehirn.ziel is not None and _boss89.hirn.gehirn.ziel.name == "lauern"
+      and _boss89.ebene == 0, str(_boss89.hirn.gehirn.ziel))
+_puppe89.ebene = 0
+_boss89.leben = _boss89.max_leben * 0.3
+_boss89.f_rest = _boss89.faehigkeit["takt"] * 0.4
+_boss89.f_vorlauf = 0.0
+_angesagt89 = False
+for _ in range(int(0.5 / _D87)):
+    _tm.schritt(_D87)
+    _angesagt89 = _angesagt89 or _boss89.f_vorlauf > 0.0
+pruef("... angeschlagen zieht er seine Faehigkeit vor - mit vollem Vorlauf (Phase zwei)",
+      _angesagt89 and "faehigkeit_vorziehen" in [t_.split(": ")[-1].split(" ")[0]
+                                                  for _z, t_ in _boss89.hirn.gehirn.protokoll
+                                                  if t_.startswith("PLAN")],
+      str(list(_boss89.hirn.gehirn.protokoll)[-4:]))
+
+# Testmodus: KI STOP haelt auch sie an, und ihre Gedanken lassen sich zeigen.
+_tm.taste("/")
+_ort89 = pygame.Vector2(_boss89.pos)
+_sim87(int(1.0 / _D87))
+pruef("KI STOP haelt auch GOAP-Gegner an", _boss89.pos.distance_to(_ort89) < 1.0, "")
+_tm.taste("/")
+_tm._zeiger_welt = pygame.Vector2(_boss89.pos)
+_tm.blick = _boss89.ebene
+pruef("Gedanken: gezeigt wird der GOAP-Gegner am Zeiger", _tm.denker() is _boss89, "")
+_tm.info = 2
+_tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+_tm.ki_daten_laden()
+pruef("... zeichnen und KI-DATEN NEU LADEN gehen auch fuer ihn",
+      _boss89.hirn.gehirn is not None, "")
 _tm.verlassen()
 
 print()

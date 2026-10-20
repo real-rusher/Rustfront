@@ -2174,21 +2174,34 @@ class Gegner(Wesen):
         self.brut = []          # was die Mutter gerufen hat, fuer das Limit
         self.weg_rest = -1      # Kacheln bis zur naechsten Treppe, -1: kein Weg
         self.weg_nr = -1        # welche Treppe gerade angesteuert wird
+        self.lauf_anteil = 1.0  # so viel seines Tempos (GOAP: herumschlurfen)
 
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
-        d = self.daten
         self.schlag_rest = max(0.0, self.schlag_rest - dt)
         if self.sturz_rest > 0:
             return          # im Fall: kein Laufen, kein Schlagen
+        self.treppen_sperre = max(0.0, self.treppen_sperre - dt)
+        self.weg_rest = -1
+        ziel = self._wohin(dt)
+
+        if self.wartet > 0:
+            self.wartet -= dt
+            ziel = None
+        self._laufen(dt, ziel)
+
+    def _wohin(self, dt: float):
+        """Was er jetzt will: der Punkt, auf den er zulaeuft (oder None),
+        und nebenbei Schlagen, Spucken, Faehigkeit. Seit 0.34.30 eine
+        eigene Methode - die zielorientierte KI (gegner_goap.py) ersetzt
+        genau diesen Teil und behaelt das Laufen."""
+        d = self.daten
         held = self.welt.held
 
         # Sie laufen immer los. Ist das Ziel nur ueber eine Treppe zu
         # erreichen, gehen sie den Weg dorthin (wege.py); ein Boss nicht,
         # der wartet auf seiner Ebene.
         ziel = None
-        self.treppen_sperre = max(0.0, self.treppen_sperre - dt)
-        self.weg_rest = -1
         wege = None
         if held is not None and held.lebt and not self.ist_boss:
             wege = self.welt.wege
@@ -2225,11 +2238,12 @@ class Gegner(Wesen):
                           if wohin is not None else False)
                 if naeher and self.welt.ebene_wechseln(self, wohin):
                     self.treppen_sperre = 1.2
+        return ziel
 
-        if self.wartet > 0:
-            self.wartet -= dt
-            ziel = None
-
+    def _laufen(self, dt: float, ziel) -> None:
+        """Auf den Punkt zu (None: stehen bleiben), mit Ausweichen,
+        Rueckstoss und Auseinanderdruecken."""
+        d = self.daten
         if ziel is not None:
             richtung = ziel - self.pos
             if richtung.length_squared() > 1:
@@ -2240,7 +2254,7 @@ class Gegner(Wesen):
                 if self.weg_rest < 0:
                     richtung = self.ausweichen(richtung)
                 self.winkel = math.degrees(math.atan2(richtung.y, richtung.x))
-            soll = richtung * d["tempo"]
+            soll = richtung * (d["tempo"] * self.lauf_anteil)
         else:
             soll = pygame.Vector2(0, 0)
 

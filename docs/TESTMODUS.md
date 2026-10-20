@@ -58,7 +58,7 @@ setzt, steht sofort da.
 | Gruppe | Eintraege | Einstellungen |
 | --- | --- | --- |
 | FIGUREN | Bot, Spieler (steht), Spieler (ich) | Anzahl, Streuung, Team (ROT, BLAU, FREI), Waffe, Leben; beim Bot HIRN (KLASSISCH / GOAP, docs/KI.md) |
-| GEGNER, BOSSE | jede Art aus `K.GEGNER` und `K.BOSSE` | Anzahl, Streuung, Leben, KI an/aus |
+| GEGNER, BOSSE | jede Art aus `K.GEGNER` und `K.BOSSE` | Anzahl, Streuung, Leben, KI an/aus, HIRN (KLASSISCH / GOAP) |
 | ZIELE | die Zielpuppe | Anzahl, Streuung |
 | OBJEKTE | Buggy, Hotzone hier, Hotzone aus | Anzahl, Streuung, Richtung |
 | BEUTE | Medkit, Munitionskiste, Raketenwerfer | Anzahl, Streuung |
@@ -89,5 +89,6 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.30 | Zombies und Bosse mit GOAP: Spawner GEGNER/BOSSE mit HIRN, KURZ zeigt `ZIEL > AKTION` auch ueber ihnen, GEDANKEN, ZIEL ERZWINGEN und KI-DATEN NEU LADEN gelten fuer sie mit |
 | 0.34.29 | Zielorientierte KI: Spawner BOT mit HIRN KLASSISCH / GOAP, INFO-Stufe GEDANKEN (Taste 8 zweimal), Testmenue ZIEL ERZWINGEN und KI-DATEN NEU LADEN |
 | 0.34.28 | Der Testmodus selbst: Beobachter, Ziffernblock, Spawner fuer Figuren, alle Gegner und Bosse, Zielpuppe, Buggy, Hotzone, Beute und Wurfwaffen; Gottmodi; INFO-Ansicht fuer Bots (auch Flanke, Niederhalten, Sturm aus 0.34.27) |

@@ -11,7 +11,7 @@ der KI weiterbaut. Wer anfaengt, liest Abschnitt 1 (was steht), 3 (wie es
 gebaut ist) und den Schritt in Abschnitt 6, der dran ist. Abschnitt 2 ist
 die Richtschnur, an der sich jeder Schritt messen lassen muss.
 
-**Stand beim Schreiben:** Version 0.34.29. Es gibt noch keine Kampagne,
+**Stand beim Schreiben:** Version 0.34.29, Schritt 3 in 0.34.30. Es gibt noch keine Kampagne,
 keine grosse Karte, keine Berufe, Orte, Fraktionen und keine richtigen
 NPCs - und im Mehrspieler laesst sich das meiste davon nicht sinnvoll
 einbauen. Darum kommt jetzt **nur der Kern** (Schritte 1 und 2), so dass
@@ -20,15 +20,16 @@ man ihn im Testmodus arbeiten sieht. Alles andere folgt mit der Kampagne.
 
 ---
 
-## 1. Was schon steht (0.34.29)
+## 1. Was schon steht (0.34.29 und 0.34.30)
 
 | Teil | Datei | Was es tut |
 | --- | --- | --- |
 | Kern | `dustfront/goap.py` | Ausdruecke (sicher, ohne Code), Ziele, Aktionen, Planer (A*), Gehirn mit Protokoll |
 | Daten | `dustfront/wesen_daten.py`, `wesen/*.txt` | Spezies, Ziele, Aktionen als Text wie die Karten; Laden, Pruefen, Neuladen |
 | Bots | `dustfront/bot_goap.py`, `wesen/bots.txt` | `GoapHirn`: die Mehrspieler-Bots planen, statt einer festen Reihenfolge zu folgen |
-| Regel | `regeln.py`, Feld `bot_ki` | BOT-KI: KLASSISCH / GOAP (Rundentafel, ERWEITERT) |
-| Testmodus | `testmodus.py` | Spawner BOT mit HIRN KLASSISCH/GOAP; Taste 8 zweimal: GEDANKEN; Testmenue: KI-DATEN NEU LADEN, ZIEL ERZWINGEN |
+| Gegner (0.34.30) | `dustfront/gegner_goap.py`, `wesen/zombies.txt` | `GegnerHirn`: Zombies, Speier und Bosse des Mehrspielers; ersetzt nur `Gegner._wohin` |
+| Regeln | `regeln.py`, Felder `bot_ki`, `gegner_ki` | BOT-KI und GEGNER-KI: KLASSISCH / GOAP (Rundentafel, ERWEITERT) |
+| Testmodus | `testmodus.py` | Spawner BOT, GEGNER und BOSSE mit HIRN KLASSISCH/GOAP; Taste 8 zweimal: GEDANKEN; Testmenue: KI-DATEN NEU LADEN, ZIEL ERZWINGEN |
 | Pruefung | `tests/test_pruefung.py`, `tests/test_spiel.py` | Daten lesen sich, jeder Verweis und jedes Verhalten stimmt; Planer, Gehirn, Bots, Gedanken |
 
 **So sieht man es:** Hauptmenue, TESTMODUS. Taste 4 (Spawner), BOT, mit
@@ -258,6 +259,7 @@ info: ...
 
 [spezies mp_bot]
 name: BOT
+hirn: bot
 ziele: ueberleben, nachladen, ...
 aktionen: angreifen, flankieren, ...
 merkmal mut: 0.2 0.9
@@ -272,11 +274,12 @@ info: ...
 | `braucht` | aktion | Fakten, die gelten muessen, damit die Aktion geht |
 | `macht` | aktion | Fakten, die danach gelten (fuer den Planer) |
 | `kosten` | aktion | Rechnung: wie teuer (der Planer nimmt die billigste Folge) |
-| `tut` | aktion | welches Verhalten (`bot_goap.TUN`); fehlt es, der Name |
+| `tut` | aktion | welches Verhalten (`bot_goap.TUN`, `gegner_goap.TUN`); fehlt es, der Name |
 | `funk` | aktion | Anlass in `K.BOTS["funk"]`, der beim Beginn angesagt wird |
 | `ziele`, `aktionen` | spezies | was diese Spezies kennt |
 | `merkmal NAME: VON BIS` | spezies | jedes Wesen wuerfelt seinen Wert dazwischen |
 | `name` | spezies | Anzeige |
+| `hirn` | spezies | `bot` oder `gegner`: welches Hirn, und damit welche `tut:` erlaubt sind |
 | `info` | alle | Erklaerung, steht im Testmodus |
 
 **Rechnungen** (`goap.Ausdruck`): Zahlen, Namen (Fakten sind 1 oder 0,
@@ -292,10 +295,10 @@ bis ihr Verhalten "fertig" meldet.
 Fehler kosten nur ihren Block und stehen mit Datei und Zeile in
 `wesen_daten.pruefen()`; `tests/test_pruefung.py` haelt das sauber.
 
-### 4.1 Die Fakten der Mehrspieler-Bots
+### 4.1 Die Fakten der Mehrspieler-Bots und der Gegner
 
-Stehen oben in `wesen/bots.txt` und werden in `GoapHirn.fuehlen`
-ausgerechnet. Wer einen neuen Fakt braucht, traegt ihn an beiden Stellen
+Stehen oben in `wesen/bots.txt` (ausgerechnet in `GoapHirn.fuehlen`) und
+in `wesen/zombies.txt` (`GegnerHirn.fuehlen`). Wer einen neuen Fakt braucht, traegt ihn an beiden Stellen
 ein.
 
 ---
@@ -306,7 +309,8 @@ ein.
 | --- | --- |
 | Ein Ziel oder eine Aktion aus vorhandenen Fakten und Verhalten | nur `wesen/*.txt`, im Testmodus KI-DATEN NEU LADEN |
 | Ein neuer Fakt | `fuehlen()` der Wesenart (heute `bot_goap.py`) + Kopf der Datendatei |
-| Ein neues Verhalten | eine Methode `tun_NAME` in `bot_goap.py` (oder dem Hirn der Wesenart); `TUN` findet sie von selbst |
+| Ein neues Verhalten | eine Methode `tun_NAME` in `bot_goap.py` oder `gegner_goap.py`; `TUN` findet sie von selbst |
+| Ein neues Hirn (eine neue Wesenart) | eine Klasse mit `fuehlen`, `tun_*` und `TUN`, eingetragen in `wesen_daten.hirne()` |
 | Eine neue Spezies | ein `[spezies ...]`-Block; wer sie benutzt, uebergibt ihren Namen dem Hirn |
 | Neue Zahlen zum Einstellen | `K.GOAP` in `config.py` |
 
@@ -324,7 +328,7 @@ Jeder Schritt ist eine eigene Version, jeder im Testmodus sichtbar.
 | --- | --- | --- |
 | 1 | Kern: Planer, Gehirn, Datenformat, Pruefung, Gedankenansicht | **fertig, 0.34.29** |
 | 2 | Mehrspieler-Bots auf GOAP, als Regel BOT-KI neben der klassischen | **fertig, 0.34.29** |
-| 3 | Zombies und Bosse auf GOAP: dumme Wesen, Spezies-Dateien | offen |
+| 3 | Zombies und Bosse auf GOAP: dumme Wesen, Spezies-Dateien | **fertig, 0.34.30** (Mehrspieler; der Einzelspieler bleibt klassisch) |
 | 4 | Persoenlichkeit, Moral, Fehler aus Merkmalen, Symbole und Haltung | offen |
 | 5 | Wissen und Kommunikation; Zeitleiste; Aufnahme und Wiedergabe | offen |
 | 6 | Anfuehrer, Befehle, Raenge (auch fuer den Spieler) | offen |
@@ -333,6 +337,28 @@ Jeder Schritt ist eine eigene Version, jeder im Testmodus sichtbar.
 | 9 | Weltsimulation: Hunderte NPCs, Detailstufen, Fahrzeuge, Mechs, Geschuetze, Bauen | wartet, LOD erst wenn noetig |
 
 ### Schritt 3 - Zombies und Bosse ("bau jetzt die Zombies auf GOAP")
+
+**Gebaut in 0.34.30**, so:
+
+* `Gegner.schritt` ist geteilt in `_wohin` (Entscheidung, wohin und ob
+  er zuschlaegt) und `_laufen` (Bewegung). `KampfGegner.hirn`
+  (`gegner_goap.GegnerHirn`) ersetzt nur `_wohin`. Wen er jagt, waehlt er
+  wie bisher (`_ziel_waehlen`).
+* `wesen/zombies.txt`: Spezies `zombie` (hinlaufen, zuschlagen, ohne Ziel
+  herumirren), `speier` (in Spuckweite gehen, spucken), `boss` (lauern,
+  wenn das Ziel auf einer anderen Ebene ist; angeschlagen die Faehigkeit
+  vorziehen - zweite Phase). Gibt es eine Spezies mit dem Namen einer
+  Art, gilt diese (`gegner_goap.spezies_fuer`).
+* Die Faehigkeit eines Bosses ist ein **Reflex**: sie zaehlt ihren Takt
+  neben dem Plan her. Ohne das waere ein GOAP-Boss schwaecher.
+* Jede Spezies sagt mit `hirn: bot` oder `hirn: gegner`, welche Verhalten
+  ihre Aktionen haben duerfen; `wesen_daten.pruefen` prueft das.
+* Regel GEGNER-KI (Spielarten mit Gegnern), die Brut denkt wie ihre
+  Mutter, die Zielpuppe nie. Spawner: HIRN bei GEGNER und BOSSE.
+* Der Einzelspieler (`entities.Gegner`, `play.py`) bleibt klassisch - er
+  hat keine Regeln; das kommt mit der Kampagne.
+
+Der urspruengliche Entwurf:
 
 * `KampfGegner` (und `entities.Gegner` im Einzelspieler) bekommen ein
   optionales Hirn wie die Bots: `gegner_goap.py` mit `fuehlen()` (ziel

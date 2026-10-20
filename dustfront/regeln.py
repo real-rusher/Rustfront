@@ -274,6 +274,14 @@ FELDER = (
     Feld("bosse", "BOSSE", "GEGNER", True, None, schalter=True,
          gilt=lambda d: _regeln(d)["gegner"],
          hilfe="JEDE FÜNFTE WELLE EIN BOSS - ODER KEINER."),
+    # Seit 0.34.30: Zombies und Bosse mit der zielorientierten KI
+    # (gegner_goap.py, docs/KI.md Schritt 3) - wie BOT-KI eine Regel neben
+    # der klassischen.
+    Feld("gegner_ki", "GEGNER-KI", "GEGNER", "klassisch",
+         lambda d, u: K.GOAP["arten"],
+         text=lambda v, d, u: v.upper(), rund=True,
+         gilt=lambda d: _regeln(d)["gegner"],
+         hilfe="KLASSISCH: WIE IMMER. GOAP: ZIELE UND PLÄNE (WESEN/ZOMBIES.TXT)."),
     # ── Die Ausruestung
     Feld("loadouts", "AUSRÜSTUNG", "AUSRÜSTUNG", K.GEFECHT["loadouts"],
          lambda d, u: K.GEFECHT["loadout_arten"],

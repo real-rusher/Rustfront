@@ -1,0 +1,116 @@
+# DUSTFRONT - Zombies und Bosse als zielorientierte KI (seit 0.34.30)
+#
+# Gilt mit der Regel GEGNER-KI: GOAP (Rundentafel, ERWEITERT, Spielarten
+# mit Gegnern) und im Testmodus (Spawner, GEGNER/BOSSE, HIRN: GOAP). Die
+# klassische KI (entities.Gegner._wohin) bleibt daneben. Planung:
+# docs/KI.md, Schritt 3. Wen ein Gegner jagt, waehlt er wie bisher
+# (mehrspieler.KampfGegner._ziel_waehlen).
+#
+# Welche Spezies ein Gegner ist (gegner_goap.spezies_fuer): eine mit dem
+# Namen seiner Art, wenn es sie gibt (etwa [spezies renner]) - sonst boss,
+# speier oder zombie.
+#
+# Fakten (gegner_goap.GegnerHirn.fuehlen):
+#   ziel_da              es gibt jemanden, den er jagt
+#   ziel_gleiche_ebene   ... auf seiner Ebene
+#   ziel_nah             ... in Schlagweite
+#   kann_spucken         er hat einen Fernangriff (Speier)
+#   im_band              ... und das Ziel ist in Reichweite und Sicht
+#   boss                 er ist ein Boss
+#   faehigkeit_bereit    seine Faehigkeit ist halb aufgeladen und nicht angekuendigt
+#   angeschlagen         weniger als K.GOAP["gegner_angeschlagen"] seines Lebens
+# Ziel-Fakten, die nie wahr werden: ziel_besiegt, gewuetet
+# Zahlen: leben (0 bis 1), abstand (zum Ziel auf seiner Ebene, sonst 9999)
+# Merkmale: unruhe (wie sehr es ihn ohne Ziel herumtreibt)
+
+# ── Ziele ─────────────────────────────────────────────────────────────
+
+[ziel fressen]
+will: ziel_besiegt
+dringlich: 50 * ziel_da
+info: Wen er jagt, will er erwischen. Mehr denkt ein Zombie nicht.
+
+[ziel herumirren]
+will: ziel_da
+dringlich: 4 + 6 * unruhe
+info: Niemand da: schlurfen, bis einer kommt.
+
+[ziel wueten]
+will: gewuetet
+dringlich: 70 * boss * angeschlagen * faehigkeit_bereit * ziel_gleiche_ebene
+info: Ein angeschlagener Boss setzt seine Faehigkeit frueher ein - die zweite Phase.
+
+[ziel lauern]
+will: ziel_gleiche_ebene
+dringlich: 60 * boss * ziel_da * (1 - ziel_gleiche_ebene)
+info: Ein Boss wechselt die Ebene nicht. Er wartet - wer ihn will, kommt herunter.
+
+# ── Aktionen ──────────────────────────────────────────────────────────
+
+[aktion hinlaufen]
+braucht: ziel_da
+macht: ziel_nah
+kosten: 2
+tut: hinlaufen
+info: Der Weg zum Ziel, ueber Treppen wenn noetig, um Hindernisse herum.
+
+[aktion zuschlagen]
+braucht: ziel_nah
+macht: ziel_besiegt
+kosten: 1
+tut: zuschlagen
+
+[aktion in_spuckweite]
+braucht: ziel_da, kann_spucken
+macht: im_band
+kosten: 1
+tut: hinlaufen
+
+[aktion spucken]
+braucht: im_band, kann_spucken
+macht: ziel_besiegt
+kosten: 0.5
+tut: spucken
+info: Auf Abstand bleiben und spucken; wer ihn bedraengt, vor dem weicht er zurueck.
+
+[aktion wandern]
+macht: ziel_da
+kosten: 1
+tut: wandern
+
+[aktion warten]
+braucht: boss, ziel_da
+macht: ziel_gleiche_ebene
+kosten: 1
+tut: lauern
+
+[aktion faehigkeit_vorziehen]
+braucht: boss, faehigkeit_bereit, ziel_gleiche_ebene
+macht: gewuetet
+kosten: 1
+tut: wueten
+
+# ── Die Spezies ───────────────────────────────────────────────────────
+
+[spezies zombie]
+name: ZOMBIE
+hirn: gegner
+ziele: fressen, herumirren
+aktionen: hinlaufen, zuschlagen, wandern
+merkmal unruhe: 0.0 1.0
+info: Laeufer, Brecher, Renner, Blaeher - hin und zuschlagen.
+
+[spezies speier]
+name: SPEIER
+hirn: gegner
+ziele: fressen, herumirren
+aktionen: hinlaufen, zuschlagen, in_spuckweite, spucken, wandern
+merkmal unruhe: 0.0 0.6
+info: Will gar nicht heran: Abstand halten und spucken.
+
+[spezies boss]
+name: BOSS
+hirn: gegner
+ziele: wueten, lauern, fressen
+aktionen: hinlaufen, zuschlagen, warten, faehigkeit_vorziehen
+info: Koloss, Mutter, Brandstifter. Die Faehigkeit laeuft als Reflex mit; angeschlagen zieht er sie vor.

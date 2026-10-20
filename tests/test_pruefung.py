@@ -173,8 +173,9 @@ pruef("Jeder Gegner, der Treppen nimmt, passt durch eine Kachel breite Tuer",
 
 # ── 3b. Wesen-Daten (zielorientierte KI, seit 0.34.29) ───────────────
 print("\n-- Wesen")
-from dustfront import bot_goap, wesen_daten
-_wesen_fehler = wesen_daten.pruefen(wesen_daten.neu_laden(), tut=bot_goap.TUN)
+from dustfront import wesen_daten
+# Seit 0.34.30 je Spezies gegen die Verhalten ihres Hirns (bot, gegner).
+_wesen_fehler = wesen_daten.pruefen(wesen_daten.neu_laden())
 pruef("wesen/*.txt: jeder Block liest sich, jeder Verweis und jedes Verhalten stimmt",
       not _wesen_fehler, _wesen_fehler[:6])
 

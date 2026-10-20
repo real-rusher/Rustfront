@@ -24,6 +24,7 @@ Das Format, ein Block je Ding:
 
     [spezies mp_bot]
     name: BOT
+    hirn: bot
     ziele: nachladen, ...
     aktionen: nachladen_in_deckung, ...
     merkmal mut: 0.3 0.9
@@ -33,7 +34,10 @@ Das Format, ein Block je Ding:
   die Bots: bot_goap.py, und oben in `wesen/bots.txt`).
 * `dringlich`, `kosten`: eine Rechnung (goap.Ausdruck) aus Fakten (1/0),
   Zahlen (`leben`, `abstand` ...) und Merkmalen.
-* `tut`: welches Verhalten die Aktion ausfuehrt (bot_goap.TUN).
+* `tut`: welches Verhalten die Aktion ausfuehrt (bot_goap.TUN,
+  gegner_goap.TUN).
+* `hirn` (Spezies): welches Hirn sie benutzt, `bot` oder `gegner` - und
+  damit, welche Verhalten ihre Aktionen haben duerfen (`hirne`).
 * `merkmal NAME: VON BIS`: jedes Wesen wuerfelt seinen Wert dazwischen.
 
 Ein Name darf in mehreren Dateien nur einmal vorkommen.
@@ -53,6 +57,7 @@ class Spezies:
         self.ziele: list[str] = []
         self.aktionen: list[str] = []
         self.merkmale: dict[str, tuple] = {}
+        self.hirn = ""
         self.info = ""
 
     def merkmale_wuerfeln(self, rnd) -> dict:
@@ -105,6 +110,7 @@ def aus_text(text: str, daten: Daten, datei: str = "") -> None:
                 ding.ziele = [x.strip() for x in felder.get("ziele", "").split(",") if x.strip()]
                 ding.aktionen = [x.strip() for x in felder.get("aktionen", "").split(",") if x.strip()]
                 ding.info = felder.get("info", "")
+                ding.hirn = felder.get("hirn", "")
                 for schluessel, wert in felder.items():
                     if schluessel.startswith("merkmal "):
                         teile = wert.split()
@@ -174,18 +180,34 @@ def neu_laden() -> Daten:
     return _GELADEN
 
 
-def pruefen(d: Daten | None = None, tut=None) -> list[str]:
+def hirne() -> dict:
+    """Welche Verhalten (`tut:`) jede Art von Hirn kennt."""
+    from . import bot_goap, gegner_goap
+    return {"bot": bot_goap.TUN, "gegner": gegner_goap.TUN}
+
+
+def pruefen(d: Daten | None = None, tut=None, hirne_=None) -> list[str]:
     """Was an den Daten nicht stimmt: Lesefehler, Verweise auf Ziele oder
-    Aktionen, die es nicht gibt, und Verhalten (`tut`), die keiner kennt."""
+    Aktionen, die es nicht gibt, ein unbekanntes Hirn, und Aktionen einer
+    Spezies, deren Verhalten ihr Hirn nicht kennt. `tut` prueft dazu jede
+    Aktion gegen eine feste Liste."""
     d = daten() if d is None else d
+    hirne_ = hirne() if hirne_ is None else hirne_
     fehler = list(d.fehler)
     for sp in d.spezies.values():
+        kennt = hirne_.get(sp.hirn)
+        if kennt is None:
+            fehler.append("spezies %s: unbekanntes hirn '%s' (%s)"
+                          % (sp.name, sp.hirn, ", ".join(sorted(hirne_))))
         for z in sp.ziele:
             if z not in d.ziele:
                 fehler.append("spezies %s: Ziel %s gibt es nicht" % (sp.name, z))
         for a in sp.aktionen:
             if a not in d.aktionen:
                 fehler.append("spezies %s: Aktion %s gibt es nicht" % (sp.name, a))
+            elif kennt is not None and d.aktionen[a].tut not in kennt:
+                fehler.append("spezies %s: Aktion %s tut '%s', das kennt hirn %s nicht"
+                              % (sp.name, a, d.aktionen[a].tut, sp.hirn))
     if tut is not None:
         for a in d.aktionen.values():
             if a.tut not in tut:

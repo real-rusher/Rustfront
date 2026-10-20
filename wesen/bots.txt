@@ -154,6 +154,7 @@ tut: sturm
 
 [spezies mp_bot]
 name: BOT
+hirn: bot
 ziele: ueberleben, nachladen, aufhelfen, stuermen, kreis, feuerschutz, feind_ausschalten, suchen
 aktionen: angreifen, flankieren, niederhalten, nahkampf, suchen, deckung, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, aufhelfen, stuermen
 merkmal mut: 0.2 0.9
