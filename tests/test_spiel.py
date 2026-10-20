@@ -10285,8 +10285,10 @@ _fehler91 = []
 for n_, (datei_, szene_) in _WA91.SZENEN.items():
     try:
         tm_ = _WA91.testmodus_fuer_aufnahme(app, 1.0)
-        titel_, wer_, ende_, sek_, zoom_ = szene_(tm_, random.Random(91))
+        titel_, wer_, ende_, sek_, zoom_, *rest_ = szene_(tm_, random.Random(91))
         for _ in range(30):
+            if rest_:
+                rest_[0]()             # was die Szene vor jedem Bild tut
             tm_.schritt(_D87)
         tm_.zeichnen(_bild91, 1.0)
         if not (wer_ and titel_ and sek_ > 0 and zoom_ >= 1.0 and not ende_()):
@@ -10298,6 +10300,137 @@ pruef("werkzeug_aufnahme.py: jede Szene baut sich auf, laeuft und zeichnet (ohne
       not _fehler91 and len(_WA91.SZENEN) >= 5, str(_fehler91))
 pruef("... 30 Bilder je Sekunde aus 120 Rechenschritten",
       _WA91.SCHRITTE_JE_BILD == 4, str(_WA91.SCHRITTE_JE_BILD))
+
+# 0.34.33: "Bau bitte fuer wirklich jede Entity eine Death Animation ein,
+# gerade kann ich nie sicher sein, ob die einfach verschwinden oder ob die
+# tot sind. Also Death Animation und einen Blutfleck auf dem Boden, je nach
+# Entity anderes Blut."
+print("\n-- Tod: Leiche, Lache, Blut je Art (0.34.33)")
+from dustfront.entities import Leiche as _Lei92, tod_art as _todart92
+_arten92 = [a_ for a_ in list(K.GEGNER) + list(K.BOSSE) if a_ not in K.UEBUNG]
+_fehlt92 = [a_ for a_ in _arten92 + ["spieler"] if a_ not in K.TOD["wesen"]]
+_falsch92 = [(a_, st_, bl_) for a_, (st_, bl_) in K.TOD["wesen"].items()
+             if st_ not in K.TOD["stile"] or bl_ not in K.BLUT]
+pruef("Jede Gegnerart, jeder Boss und die Figuren haben ihren Tod und ihr Blut",
+      not _fehlt92 and not _falsch92, "%s %s" % (_fehlt92, _falsch92))
+pruef("... und das Blut ist nicht ueberall dasselbe",
+      len({bl_ for _st, bl_ in K.TOD["wesen"].values()}) >= 5, "")
+
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm.wiedereinstieg = False
+_flecken92 = []
+_alt_fleck92 = _tm.welt.blutfleck
+
+
+def _fleck_merken92(pos, ebene, radius, art="mensch", variante=0):
+    _flecken92.append(art)
+    _alt_fleck92(pos, ebene, radius, art, variante)
+
+
+_tm.welt.blutfleck = _fleck_merken92
+_ort92 = pygame.Vector2(_feld89[0])
+_opfer92 = [_tm.gegner_setzen(a_, _ort92 + pygame.Vector2(30 * i_, 0), 0, {"ki": False})
+            for i_, a_ in enumerate(_arten92)]
+_opfer92.append(_tm.bot_setzen(_ort92 + pygame.Vector2(0, 40), 0, {"team": 0}))
+_opfer92.append(_tm.puppe_setzen(_ort92 + pygame.Vector2(40, 40), 0, {"team": 1}))
+_sim87(3)
+for w_ in _opfer92:
+    if w_.lebt:          # der Blaeher reisst beim Platzen vielleicht schon wen mit
+        w_.leben = 0.0
+        w_.sterben(None)
+_leichen92 = list(_tm.welt.leichen)
+_erwartet92 = sorted(_todart92(w_) for w_ in _opfer92)
+pruef("Wer stirbt, hinterlaesst eine Leiche - jede Art mit ihrem Stil und Blut",
+      sorted((x_.stil, x_.blut) for x_ in _leichen92) == _erwartet92
+      and all(x_.bild for x_ in _leichen92),
+      "%d Leichen fuer %d Tote" % (len(_leichen92), len(_opfer92)))
+pruef("... die Leiche ist kein Wesen: keine KI sieht sie, nichts stoesst oder trifft sie",
+      not any(isinstance(w_, _Lei92) for w_ in _tm.welt.wesen + _tm.welt.neue)
+      and not any(isinstance(k_, _Lei92) for k_ in _tm.kaempfer.values()), "")
+_bild92 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm._geist.pos.update(_ort92)
+_fehler92 = []
+for _ in range(int((K.TOD["blut_wachsen"] + 0.2) / (4 * _D87))):
+    for _i in range(4):
+        _tm.schritt(_D87)
+    try:
+        _tm.zeichnen(_bild92, 1.0)
+    except Exception as err_:
+        _fehler92.append(repr(err_))
+pruef("Jede Art faellt, liegt und vergeht ohne Fehler im Bild", not _fehler92, str(_fehler92[:2]))
+pruef("Unter jeder Leiche waechst eine Lache und geht als Fleck in den Boden - im Blut ihrer Art",
+      sorted(_flecken92) == sorted(bl_ for _st, bl_ in _erwartet92), str(sorted(_flecken92)))
+_liegend92 = [x_ for x_ in _tm.welt.leichen if x_.stil != "platzen"]
+pruef("... und die Leiche liegt danach noch da, man sieht, dass er tot ist",
+      len(_liegend92) == len([1 for st_, _b in _erwartet92 if st_ != "platzen"])
+      and all(x_.fortschritt() >= 1.0 for x_ in _liegend92), "")
+_lang92 = max(K.TOD["stile"][st_]["fall"] + K.TOD["stile"][st_]["liegen"]
+              + K.TOD["stile"][st_]["vergehen"] for st_, _b in _erwartet92)
+_sim87(int((_lang92 + 0.5) / _D87))
+pruef("Nach ihrer Zeit sind die Leichen weg, die Flecken bleiben",
+      not _tm.welt.leichen and len(_flecken92) == len(_opfer92), "")
+
+_farben92 = {}
+for bl_ in K.BLUT:
+    f_ = _tm.renderer.blutfleck(9.0, bl_)
+    _farben92[bl_] = tuple(f_.get_at((f_.get_width() // 2, f_.get_height() // 2)))[:3]
+pruef("Der Fleck hat je Blut seine Farbe", len(set(_farben92.values())) == len(K.BLUT),
+      str(_farben92))
+_v92 = [_tm.renderer.blutfleck(9.0, "zombie", v_) for v_ in range(8)]
+pruef("... und liegt in acht Formen da, nicht jeder gleich",
+      len({pygame.image.tobytes(v_, "RGBA") for v_ in _v92}) >= 4, "")
+
+# ENTF: loeschen (verschwindet) oder toeten (stirbt) - jetzt sieht man's.
+_tm.welt.leichen.clear()
+_g92 = _tm.gegner_setzen("laeufer", _ort92, 0, {"ki": False})
+_sim87(2)
+_tm._zeiger_welt = pygame.Vector2(_g92.pos)
+_tm.blick = 0
+_tm.taste("enter")
+pruef("ENTF LOESCHT: weg, ohne Leiche", not _g92.lebt and not _tm.welt.leichen, "")
+_tm.menue_wirken("entf")
+_g92 = _tm.gegner_setzen("speier", _ort92, 0, {"ki": False})
+_sim87(2)
+_tm._zeiger_welt = pygame.Vector2(_g92.pos)
+_tm.taste("enter")
+pruef("ENTF TOETET (Testmenue): er stirbt, mit Leiche und seinem Blut",
+      not _g92.lebt and [(x_.stil, x_.blut) for x_ in _tm.welt.leichen] == [("zerfliessen", "saeure")]
+      and _tm._tastentext("enter")[0] == "TÖTEN", "")
+_tm.alles_weg()
+pruef("LEEREN nimmt auch die Leichen mit", not _tm.welt.leichen, "")
+_tm.verlassen()
+
+# Im Netz: der Gast bekommt den Tod gemeldet und legt Leiche und Fleck selbst.
+w92, g92 = gefechtspaar("pve")
+_ort92 = pygame.Vector2(w92.ich.pos) + pygame.Vector2(60, 0)
+_z92 = KampfGegner(_ort92, "speier", w92.ich.ebene, w92)
+w92.welt.dazu(_z92)
+for _ in range(6):
+    w92.schritt(K.NETZ["takt"])
+    g92.schritt(K.NETZ["takt"])
+g92.welt.leichen.clear()
+_z92.schaden(_z92.leben + 50, None, w92.ich)
+for _ in range(6):
+    w92.schritt(K.NETZ["takt"])
+    g92.schritt(K.NETZ["takt"])
+_gl92 = [x_ for x_ in g92.welt.leichen if x_.stil == "zerfliessen"]
+pruef("Netz: der Gast sieht den Tod - Leiche mit Bild, Stil und Blut wie beim Gastgeber",
+      len(_gl92) == 1 and _gl92[0].blut == "saeure" and _gl92[0].bild == _z92.bild
+      and _gl92[0].pos.distance_to(_z92.pos) < 2.0,
+      str([(x_.stil, x_.blut, x_.bild) for x_ in g92.welt.leichen]))
+_falsch92 = [["d", 10.0, 10.0, 0, 0.0, "<script>", "umfallen|mensch|9.0|0"],
+             ["d", 10.0, 10.0, 0, 0.0, "gegner_laeufer", "kaputt"],
+             ["d", 10.0, 10.0, 0, 0.0, "gegner_laeufer", "quatsch|quatsch|1e9|0"]]
+_vorher92 = len(g92.welt.leichen)
+g92._wirkung_nachspielen(_falsch92)
+_neu92 = g92.welt.leichen[_vorher92:]
+pruef("... eine kaputte Meldung kostet hoechstens sich selbst: unbekanntes Bild ohne Bild, "
+      "unbekannter Stil und unbekanntes Blut auf die Vorgabe, Groesse begrenzt",
+      len(_neu92) == 2 and _neu92[0].bild is None and _neu92[1].stil == "umfallen"
+      and _neu92[1].blut == "mensch" and _neu92[1].radius <= 60.0,
+      str([(x_.bild, x_.stil, x_.blut, x_.radius) for x_ in _neu92]))
+w92.verlassen()
+g92.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

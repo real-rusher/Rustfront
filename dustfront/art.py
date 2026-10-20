@@ -1712,14 +1712,29 @@ def _schatten():
 
 @platzhalter("blut")
 def _blut():
-    """Was liegen bleibt, wo ein Wesen gestorben ist."""
+    """Was liegen bleibt, wo ein Wesen gestorben ist: eine Lache in der
+    Mitte, Spritzer drumherum (seit 0.34.33, vorher nur verstreute Punkte).
+
+    Schattiert wird nur ueber die Deckkraft, nicht ueber die Farbe: der
+    Renderer faerbt den Fleck je Blut um (K.BLUT) und behaelt dabei nur
+    das Alpha - eine dunklere Mitte aus Farbe ginge dabei verloren."""
     w, h = K.BILD_MASS["blut"]
     s = _flaeche(w, h)
     r = random.Random(9)
-    for _ in range(14):
-        x, y = r.randrange(4, w - 4), r.randrange(4, h - 4)
-        pygame.draw.circle(s, (*K.C_BLUT, r.randrange(70, 150)), (x, y),
-                           r.randrange(1, 5))
+    mx, my = w / 2.0, h / 2.0
+    # Der Rand der Lache zuerst, duenn, dann die dichte Mitte darauf.
+    for deck, anzahl, groesse in ((120, 7, (7, 12)), (205, 5, (5, 9))):
+        for _ in range(anzahl):
+            bw, bh = r.randrange(*groesse), r.randrange(groesse[0] - 1, groesse[1] - 2)
+            x, y = mx + r.uniform(-3.5, 3.5), my + r.uniform(-3.0, 3.0)
+            pygame.draw.ellipse(s, (*K.C_BLUT, deck),
+                                (int(x - bw / 2), int(y - bh / 2), bw, bh))
+    for _ in range(11):
+        winkel = r.uniform(0.0, 6.283)
+        weit = r.uniform(7.5, min(mx, my) - 1.5)
+        x, y = mx + math.cos(winkel) * weit, my + math.sin(winkel) * weit
+        pygame.draw.circle(s, (*K.C_BLUT, r.randrange(110, 200)), (int(x), int(y)),
+                           r.randrange(1, 3))
     return s
 
 

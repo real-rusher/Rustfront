@@ -346,6 +346,8 @@ class Welt:
         self.wesen: list = []
         self.neue: list = []
         self.partikel: list = []
+        # Leichen (seit 0.34.33, entities.Leiche): nur Bild, keine Wesen.
+        self.leichen: list = []
         self._raster: dict[tuple, list] = {}
         self.zeit = 0.0
         self.held = None                 # setzt die Spielszene
@@ -386,8 +388,31 @@ class Welt:
     def kurz_langsam(self, sekunden: float) -> None:
         pass
 
-    def blutfleck(self, pos, ebene: int, radius: float) -> None:
+    def blutfleck(self, pos, ebene: int, radius: float, art: str = "mensch",
+                  variante: int = 0) -> None:
+        """Ein Fleck in den Boden. `art` ist das Blut (K.BLUT), `variante`
+        dreht und spiegelt die Form, damit nicht jeder Fleck gleich aussieht.
+        Die Szene haengt sich hier ein."""
         pass
+
+    def tod(self, pos, ebene: int, winkel: float, bild, stil: str, blut: str,
+            radius: float, fall_winkel: float) -> None:
+        """Ein Wesen ist gestorben (entities.tod_zeigen): Spritzer und eine
+        Leiche, die faellt, liegt und vergeht. Beim Gastgeber haengt sich
+        das Gefecht davor und meldet es den Gaesten (Meldung "d") - die
+        rufen dann genau diese Funktion in ihrer eigenen Welt auf."""
+        from .entities import Leiche, wolke
+        b = K.BLUT.get(blut, K.BLUT["mensch"])
+        t = K.TOD
+        groesse = 2 if radius >= 12 else 1
+        wolke(self, pos, t["spritzer"], 170, 0.6, b["spritzer"], ebene, groesse, "blut",
+              streuung=200.0, richtung=fall_winkel)
+        self.leichen.append(Leiche(pos, ebene, winkel, bild, stil, blut, radius,
+                                   fall_winkel))
+        # Zu viele auf einmal (eine ganze Welle): die aeltesten gehen zuerst.
+        lebende = [x for x in self.leichen if x.lebt]
+        for alt in lebende[:max(0, len(lebende) - t["hoechstens"])]:
+            alt.vergehen_jetzt()
 
     def klang(self, name: str, lautstaerke: float = 1.0, pos=None,
               ebene: int | None = None) -> None:
@@ -608,6 +633,10 @@ class Welt:
             p.schritt(dt)
         if any(not p.lebt for p in self.partikel):
             self.partikel = [p for p in self.partikel if p.lebt]
+        for x in self.leichen:
+            x.schritt(dt, self)
+        if any(not x.lebt for x in self.leichen):
+            self.leichen = [x for x in self.leichen if x.lebt]
         # Beim Gast altert das Feuer hier mit, ohne Welt: er bekommt die
         # Flaechen gemeldet und soll sie zuengeln sehen, aber niemandem
         # Schaden machen - das rechnet der Gastgeber.

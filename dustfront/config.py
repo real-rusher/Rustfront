@@ -364,6 +364,74 @@ DEKAL = dict(
     wand_versatz=7,           # so weit faellt der Schlagschatten einer Wand
 )
 
+# Blut je Art (seit 0.34.33). Gemeldet: "je nach Entity anderes Blut."
+# `farbe` faerbt den Fleck am Boden (das Bild "blut" gibt die Form - wer es
+# ersetzt, behaelt seine Form, die Farbe kommt von hier; "mensch" bleibt
+# ungefaerbt, so wie gemalt), `spritzer` die Tropfen beim Tod, `groesse`
+# macht den Fleck groesser als der Koerper allein.
+BLUT = {
+    "mensch":  dict(farbe=None,           spritzer=(128, 26, 20), groesse=1.15),
+    "zombie":  dict(farbe=(78, 40, 24),   spritzer=(96, 52, 30),  groesse=1.1),
+    "saeure":  dict(farbe=(88, 150, 40),  spritzer=(132, 196, 64), groesse=1.35),
+    "galle":   dict(farbe=(170, 142, 44), spritzer=(214, 186, 70), groesse=1.6),
+    "koloss":  dict(farbe=(52, 16, 14),   spritzer=(80, 24, 20),  groesse=1.25),
+    "brut":    dict(farbe=(92, 50, 110),  spritzer=(136, 80, 156), groesse=1.3),
+    "asche":   dict(farbe=(40, 36, 34),   spritzer=(255, 140, 40), groesse=1.2),
+}
+
+# Wie Wesen sterben (seit 0.34.33). Gemeldet: "gerade kann ich nie sicher
+# sein, ob die einfach verschwinden oder ob die tot sind." Wer stirbt,
+# hinterlaesst eine Leiche (entities.Leiche): sie faellt (`fall` Sekunden),
+# liegt (`liegen`), waehrend darunter das Blut waechst, und vergeht dann
+# (`vergehen`). Der Fleck bleibt. Wer nur verschwindet (Testmodus ENTF,
+# ein Bot verlaesst die Runde), hinterlaesst nichts - genau daran sieht
+# man den Unterschied.
+TOD = dict(
+    stile=dict(
+        # Ein Mensch, ein Laeufer: zur Seite kippen, ein Stueck rutschen.
+        # `lang`/`quer`: liegend ist er in Fallrichtung laenger und quer
+        # dazu flacher - von oben ist das der Unterschied zwischen Stehen
+        # und Liegen; eine Drehung allein sieht man einer runden Figur
+        # kaum an. `ruck`: so viel groesser im Augenblick des Treffers.
+        # `staub`: so viele Staubkoerner, wenn er aufschlaegt.
+        umfallen=dict(fall=0.35, liegen=6.0, vergehen=1.2, drehen=60.0,
+                      rutschen=7.0, dunkel=0.55, skala=0.95, lang=1.4, quer=0.68,
+                      ruck=0.15, staub=4),
+        # Gross und schwer: langsam in sich zusammen, kaum Drehung.
+        zusammensacken=dict(fall=0.9, liegen=9.0, vergehen=1.6, drehen=25.0,
+                            rutschen=3.0, dunkel=0.5, skala=0.88, lang=1.2, quer=0.78,
+                            ruck=0.08, staub=14),
+        # Der Speier zerlaeuft zu einer Pfuetze aus Saeure.
+        zerfliessen=dict(fall=0.7, liegen=2.5, vergehen=1.0, drehen=0.0,
+                         rutschen=0.0, dunkel=0.75, skala=1.0, lang=1.45, quer=0.3,
+                         ruck=0.1, staub=0),
+        # Der Blaeher blaeht sich noch einmal auf und ist weg.
+        platzen=dict(fall=0.14, liegen=0.0, vergehen=0.0, drehen=0.0,
+                     rutschen=0.0, dunkel=1.0, skala=1.5, lang=1.0, quer=1.0,
+                     ruck=0.0, staub=0),
+        # Der Brandstifter verkohlt und zerfaellt zu Asche, mit Glut.
+        verbrennen=dict(fall=0.8, liegen=3.0, vergehen=1.4, drehen=20.0,
+                        rutschen=2.0, dunkel=0.12, skala=0.85, lang=1.25, quer=0.7,
+                        ruck=0.1, staub=6, glut=14),
+    ),
+    # Wer wie stirbt und was er hinterlaesst: (Stil, Blut). Jede Art aus
+    # GEGNER und BOSSE muss hier stehen - tests/test_spiel.py prueft das.
+    wesen={
+        "spieler": ("umfallen", "mensch"),
+        "laeufer": ("umfallen", "zombie"),
+        "renner": ("umfallen", "zombie"),
+        "brecher": ("zusammensacken", "zombie"),
+        "speier": ("zerfliessen", "saeure"),
+        "blaeher": ("platzen", "galle"),
+        "koloss": ("zusammensacken", "koloss"),
+        "mutter": ("zusammensacken", "brut"),
+        "brandstifter": ("verbrennen", "asche"),
+    },
+    blut_wachsen=1.1,         # so lange waechst die Lache unter der Leiche (s)
+    spritzer=18,              # Tropfen beim Tod
+    hoechstens=80,            # mehr Leichen auf einmal: die aeltesten vergehen sofort
+)
+
 # Sollmass jedes Bildes in Pixeln.
 #
 # Eine Datei darf in jeder Aufloesung gemalt sein: passt sie nicht auf das

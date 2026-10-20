@@ -290,6 +290,9 @@ class Testmodus(Gefecht):
         # Saubere Ansicht (seit 0.34.32): nur die Welt und ueber jedem Kopf,
         # was er gerade tut - fuer Aufnahmen (werkzeug_aufnahme.py).
         self.sauber = bool(z.get("sauber", False))
+        # Was ENTF mit dem tut, was am Zeiger liegt (seit 0.34.33): loeschen
+        # (verschwindet, keine Leiche) oder toeten (stirbt wie im Spiel).
+        self.entf_toetet = bool(z.get("entf_toetet", False))
         self._sp_werte = dict(z.get("sp_werte", {}))
         self._sp_nr = int(z.get("sp_nr", 0))
         self._welt_schritte = 1
@@ -713,6 +716,7 @@ class Testmodus(Gefecht):
         self.welt.feuer.clear()
         self.welt.rauch.clear()
         self.welt.partikel.clear()
+        self.welt.leichen.clear()
         self.welt.muendungen.clear()
         self.gegner_offen = []
         self.welle_rest = []
@@ -734,6 +738,25 @@ class Testmodus(Gefecht):
             if d < weite:
                 bestes, weite = w, d
         return bestes
+
+    def toeten(self, w) -> bool:
+        """Sterben lassen wie im Spiel - mit Leiche und Fleck (seit 0.34.33).
+        Ein Buggy geht hoch. Was nicht sterben kann (Zielpuppe, Beute, eine
+        Granate), gibt False zurueck und wird stattdessen geloescht."""
+        if getattr(w, "ist_puppe", False):
+            return False
+        if isinstance(w, Buggy):
+            if not w.kaputt:
+                w._zerstoeren(None)
+            return True
+        if not isinstance(w, (Kaempfer, KampfGegner)):
+            return False
+        for _ in range(2):
+            # Zweimal: mit AUFHELFEN liegt einer nach dem ersten Mal nur.
+            if w.lebt:
+                w.leben = 0.0
+                w.sterben(None)
+        return True
 
     def loeschen(self, w) -> None:
         w.lebt = False
@@ -809,8 +832,12 @@ class Testmodus(Gefecht):
         elif name == "enter":
             w = self.am_zeiger()
             if w is not None:
-                self.loeschen(w)
-                self.melde("GELÖSCHT: %s" % getattr(w, "name", type(w).__name__.upper()))
+                name_w = getattr(w, "name", None) or getattr(w, "art", type(w).__name__).upper()
+                if self.entf_toetet and self.toeten(w):
+                    self.melde("GETÖTET: %s" % name_w)
+                else:
+                    self.loeschen(w)
+                    self.melde("GELÖSCHT: %s" % name_w)
 
     def _eintrag(self, name: str):
         for e in self.eintraege:
@@ -852,7 +879,8 @@ class Testmodus(Gefecht):
         # Hoechstens sechs Zeichen: mehr passt nicht auf eine Taste.
         return {"*": "LEEREN", "-": "ZEIT-", "+": "ZEIT+",
                 "7": "EBENE-", "9": "EBENE+", "5": "WIEDER", "1": "BOT",
-                "2": "PUPPE", "enter": "ENTF", ".": "EINZEL"}.get(name, ""), False
+                "2": "PUPPE", "enter": "TÖTEN" if self.entf_toetet else "ENTF",
+                ".": "EINZEL"}.get(name, ""), False
 
     def tasten_flaechen(self) -> list:
         """(Name, Rechteck) je Taste, am rechten Bildrand."""
@@ -1009,6 +1037,7 @@ class Testmodus(Gefecht):
             ("blend", "BEOBACHTER BLENDEN", "AN" if self.blend_beobachter else "AUS"),
             ("ruckeln", "BEOBACHTER RUCKELN", "AN" if self.ruckeln_beobachter else "AUS"),
             ("sauber", "SAUBERE ANSICHT (NUR AKTIONEN)", "AN" if self.sauber else "AUS"),
+            ("entf", "ENTF-TASTE", "TÖTET" if self.entf_toetet else "LÖSCHT"),
             ("einstellungen", "EINSTELLUNGEN", ""),
             ("hauptmenue", "ZUM HAUPTMENÜ", ""),
         ]
@@ -1033,6 +1062,7 @@ class Testmodus(Gefecht):
                     wellen_an=self.wellen_an, beute_an=self.beute_an,
                     blend_beobachter=self.blend_beobachter,
                     ruckeln_beobachter=self.ruckeln_beobachter, sauber=self.sauber,
+                    entf_toetet=self.entf_toetet,
                     sp_werte=self._sp_werte, sp_nr=self._sp_nr)
 
     def menue_wirken(self, schluessel: str, schritt: int = 1, ausloesen: bool = False) -> None:
@@ -1073,6 +1103,8 @@ class Testmodus(Gefecht):
             self.ruckeln_beobachter = not self.ruckeln_beobachter
         elif schluessel == "sauber":
             self.sauber = not self.sauber
+        elif schluessel == "entf":
+            self.entf_toetet = not self.entf_toetet
         elif schluessel == "einstellungen" and ausloesen:
             from .menues import Einstellungen
             self.menue_offen = False

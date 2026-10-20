@@ -138,6 +138,40 @@ def szene_huegel(tm, rnd):
             rot + blau, alle_weg(rot, blau), 60, 1.5)
 
 
+def szene_tod(tm, rnd):
+    """Jede Art stirbt einmal, eine nach der anderen (seit 0.34.33): Leiche,
+    Lache und Blut je Art. Steht still, damit man jeden Tod sieht."""
+    arten = ["laeufer", "renner", "brecher", "speier", "blaeher",
+             "koloss", "mutter", "brandstifter"]
+    abstand = 50
+    for _ in range(20000):
+        a = pygame.Vector2(freier_punkt(tm.welt, 0, rnd))
+        reihe = [a + pygame.Vector2(i * abstand, 0) for i in range(len(arten) + 2)]
+        if all(tm.welt.frei(p, 34, 0, True) for p in reihe):
+            break
+    else:
+        raise RuntimeError("Keine freie Reihe gefunden")
+    tm.ki_stopp = True                 # alle stehen still, bis sie dran sind
+    opfer = [tm.gegner_setzen(art, reihe[i + 2], 0, {"ki": False}) for i, art in enumerate(arten)]
+    opfer = [tm.bot_setzen(reihe[0], 0, {"team": 0}),
+             tm.bot_setzen(reihe[1], 0, {"team": 1})] + opfer
+    # Die Kamera schaut auf die Mitte der Reihe, nicht auf die Lebenden:
+    # sonst wanderte sie mit jedem Tod ein Stueck weiter.
+    anker = type("Anker", (), {})()
+    anker.pos, anker.ebene, anker.lebt = sum(reihe, pygame.Vector2()) / len(reihe), 0, True
+    uhr = {"t": 0.0, "nr": 0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        if uhr["nr"] < len(opfer) and uhr["t"] >= 1.0 + 1.1 * uhr["nr"]:
+            tm.toeten(opfer[uhr["nr"]])
+            uhr["nr"] += 1
+
+    return ("Jede Art stirbt einmal: Leiche, Lache und Blut je Art",
+            [anker], lambda: uhr["nr"] >= len(opfer) and uhr["t"] > 1.1 * len(opfer) + 9.0,
+            30, 1.0, jedes_bild)
+
+
 # Name -> (Dateiname, Szene). Die Nummer im Dateinamen ist die Reihenfolge.
 SZENEN = {
     "duell": ("1_goap_gegen_klassisch", szene_duell),
@@ -145,6 +179,7 @@ SZENEN = {
     "welle": ("3_zombiewelle", szene_welle),
     "boss": ("4_boss_koloss", szene_boss),
     "huegel": ("5_kampf_um_den_kreis", szene_huegel),
+    "tod": ("6_jeder_tod", szene_tod),
 }
 
 
@@ -180,7 +215,9 @@ def aufnehmen(app, name: str, ordner: str, seed: int | None = None) -> str:
     # Erst mit Zoom 1 aufbauen (die Szene setzt die Figuren), dann den
     # Zoom der Szene einstellen.
     tm = testmodus_fuer_aufnahme(app, 1.0)
-    titel, kamera_auf, ende, sekunden, zoom = szene(tm, rnd)
+    titel, kamera_auf, ende, sekunden, zoom, *rest = szene(tm, rnd)
+    # Optional ein sechster Teil: was vor jedem Bild geschehen soll.
+    jedes_bild = rest[0] if rest else None
     tm.zoom_ziel = zoom
     tm._zoom_weich = zoom
     g = tm._geist
@@ -199,6 +236,11 @@ def aufnehmen(app, name: str, ordner: str, seed: int | None = None) -> str:
     bilder = 0
     try:
         for nr in range(int(sekunden * BILDER_JE_SEKUNDE)):
+            if jedes_bild is not None:
+                jedes_bild()
+            # Die Kamera schaut ein Stueck zur Maus voraus. Ohne Fenster
+            # stuende die bei (0, 0), und das Bild rutschte nach links oben.
+            app.eingabe.maus = pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2)
             for _ in range(SCHRITTE_JE_BILD):
                 tm.schritt(K.FIXED_DT)
             m = _mitte(kamera_auf)

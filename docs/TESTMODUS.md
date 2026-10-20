@@ -44,7 +44,7 @@ Tasten lassen sich auch **anklicken** (fuer Tastaturen ohne Ziffernblock).
 | 1 | Ein Bot am Zeiger (Team und Waffe aus dem Spawner) |
 | 2 | Ein Spieler am Zeiger, der nichts tut |
 | 3 | Die Figur am Zeiger uebernehmen (ein Bot ruht so lange) - oder eine neue; noch einmal: zurueck zum Beobachter |
-| Enter | Loeschen, was am Zeiger liegt |
+| Enter | Loeschen, was am Zeiger liegt - oder, mit ENTF-TASTE: TOETET im Testmenue, toeten: es stirbt wie im Spiel, mit Leiche und Blut (ein Buggy geht hoch) |
 | NUM (anklicken) / Esc | Testmenue |
 
 ## Der Spawner (Taste 4)
@@ -75,7 +75,8 @@ unsterblich, unsichtbar fuer KI, unendlich Munition), Wiedereinstieg
 toter Figuren, Zombiewellen, Beute nachlegen, Blenden und Ruckeln des
 Beobachters, SAUBERE ANSICHT (nur die Welt und ueber jedem Kopf die
 Aktion - kein Ziffernblock, keine Tafeln, kein Funk, herausgezoomt ohne
-Nebel; fuer Aufnahmen), die gewoehnlichen Einstellungen, zurueck zum
+Nebel; fuer Aufnahmen), ENTF-TASTE (LOESCHT: weg ohne Spur; TOETET:
+stirbt mit Leiche und Blut), die gewoehnlichen Einstellungen, zurueck zum
 Hauptmenue.
 
 ## Aufnahmen
@@ -99,6 +100,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.33 | Testmenue ENTF-TASTE: LOESCHT / TOETET - jede Todesanimation am Zeiger ausloesen; LEEREN nimmt die Leichen mit; Szene `tod` in `werkzeug_aufnahme.py` |
 | 0.34.32 | Testmenue SAUBERE ANSICHT; `werkzeug_aufnahme.py` nimmt Szenen als Video auf |
 | 0.34.31 | Nichts Neues zum Ausprobieren; zwei GOAP-Fehler behoben, die die Gedankenansicht in Aufnahmen gezeigt hat (SUCHEN hinter einer Kiste, der Kreis in HUEGEL) |
 | 0.34.30 | Zombies und Bosse mit GOAP: Spawner GEGNER/BOSSE mit HIRN, KURZ zeigt `ZIEL > AKTION` auch ueber ihnen, GEDANKEN, ZIEL ERZWINGEN und KI-DATEN NEU LADEN gelten fuer sie mit |

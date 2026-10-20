@@ -1004,9 +1004,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self.welt.schussknall = self._schussknall_melden
             self.welt.schlagknall = self._schlagknall_melden
             self.welt.raketenstart = self._raketenstart_melden
+            self.welt.tod = self._tod_melden
 
-    def _blutfleck(self, pos, ebene: int, radius: float) -> None:
-        self.welt.ebene(ebene).dekal(self.renderer.blutfleck(radius),
+    def _blutfleck(self, pos, ebene: int, radius: float, art: str = "mensch",
+                   variante: int = 0) -> None:
+        self.welt.ebene(ebene).dekal(self.renderer.blutfleck(radius, art, variante),
                                      pos.x, pos.y)
 
     def _brandfleck(self, pos, ebene: int, radius: float) -> None:
@@ -1158,6 +1160,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._wirkung.append(["r", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(winkel, 1), 0])
 
+    def _tod_melden(self, pos, ebene: int, winkel: float, bild, stil: str, blut: str,
+                    radius: float, fall_winkel: float) -> None:
+        """Ein Tod (seit 0.34.33): Leiche, Lache und Spritzer beim Gastgeber
+        und als Meldung "d" bei jedem Gast. Vorher verschwand ein Gegner
+        beim Gast einfach aus der Weltmeldung - einen Fleck bekam er nie."""
+        self._in_wirkung = True
+        try:
+            Welt.tod(self.welt, pos, ebene, winkel, bild, stil, blut, radius, fall_winkel)
+        finally:
+            self._in_wirkung = False
+        self._wirkung.append(["d", round(pos.x, 1), round(pos.y, 1), int(ebene),
+                              round(winkel, 1), str(bild or ""),
+                              "%s|%s|%.1f|%.0f" % (stil, blut, radius, fall_winkel)])
+
     def _wirkung_nachspielen(self, eintraege) -> None:
         """Beim Gast: die gemeldeten Wirkungen in der eigenen Welt ausloesen.
 
@@ -1230,6 +1246,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 text = str(e[5])[:6]
                 if text.isdigit():
                     self.welt.aufschrift(pos, ebene, text, K.C_AMBER)
+            elif art == "d" and len(e) == 7:
+                # Ein Tod. Nur Bilder, die es gibt, und Stil und Blut aus
+                # den Tabellen - der Rest faellt auf die Vorgabe zurueck.
+                try:
+                    winkel = float(e[4])
+                    stil, blut, radius, fall = str(e[6]).split("|")
+                    radius = max(2.0, min(60.0, float(radius)))
+                    fall = float(fall)
+                except (TypeError, ValueError):
+                    continue
+                bild = str(e[5])
+                if bild not in K.BILD_MASS:
+                    bild = None
+                self.welt.tod(pos, ebene, winkel, bild, stil, blut, radius, fall)
 
     # ---- Grundsaetzliches --------------------------------------------
     @property

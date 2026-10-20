@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.33 | Neue Wirkung `d` (ein Tod): Ort, Ebene, Blickwinkel, Bildname und "Stil|Blut|Radius|Fallwinkel". Der Gast ruft damit `Welt.tod` in seiner eigenen Welt auf - Leiche, Lache, Spritzer und am Ende der Fleck entstehen bei ihm selbst. Unbekannte Bilder, Stile und Blutarten fallen auf die Vorgabe zurueck, der Radius ist begrenzt | Die Versionspruefung weist ab. Ein aelterer Gast saehe Gegner weiter einfach verschwinden |
 | 0.34.30 | Neue Regel `gegner_ki` ("klassisch" / "goap"), gilt in Spielarten mit Gegnern. Die zielorientierte KI der Gegner (gegner_goap.py) rechnet nur der Gastgeber; ueber das Netz geht nichts Neues. `wesen/zombies.txt` braucht nur der Gastgeber | Die Versionspruefung weist ab. Ein aelterer Gast kennt die Regel nicht |
 | 0.34.29 | Neue Regel `bot_ki` ("klassisch" / "goap"), im Plan und in den Regeln wie `bots`. Die zielorientierte KI (bot_goap.py) rechnet nur der Gastgeber; ueber das Netz geht von ihr nichts Neues. Die Daten `wesen/*.txt` braucht nur der Gastgeber | Die Versionspruefung weist ab. Ein aelterer Gast kennt die Regel nicht und zeigte sie nicht an |
 | 0.34.27 | Je Spieler `fk` (Funkspruch eines Bots, Text, leer wenn keiner) und `fr` (wie lange er noch steht) in der Weltmeldung. Der Gast zeichnet ihn als Untertitel; die Taktik der Bots (bottaktik.py) rechnet nur der Gastgeber | Die Versionspruefung weist ab. Ein aelterer Gast saehe die Sprueche nicht |
