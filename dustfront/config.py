@@ -381,55 +381,27 @@ BLUT = {
 
 # Wie Wesen sterben (seit 0.34.33). Gemeldet: "gerade kann ich nie sicher
 # sein, ob die einfach verschwinden oder ob die tot sind." Wer stirbt,
-# hinterlaesst eine Leiche (entities.Leiche): sie faellt (`fall` Sekunden),
-# liegt (`liegen`), waehrend darunter das Blut waechst, und vergeht dann
-# (`vergehen`). Der Fleck bleibt. Wer nur verschwindet (Testmodus ENTF,
-# ein Bot verlaesst die Runde), hinterlaesst nichts - genau daran sieht
-# man den Unterschied.
+# hinterlaesst Spritzer, einen Fleck im Blut seiner Art und einen Todeslaut
+# (Klang "tod"). Wer nur verschwindet (Testmodus ENTF, ein Bot verlaesst
+# die Runde), hinterlaesst nichts. Die Leiche, die 0.34.33 noch umfallen
+# liess, ist seit 0.34.34 wieder draussen ("Der Fleck reicht").
 TOD = dict(
-    stile=dict(
-        # Ein Mensch, ein Laeufer: zur Seite kippen, ein Stueck rutschen.
-        # `lang`/`quer`: liegend ist er in Fallrichtung laenger und quer
-        # dazu flacher - von oben ist das der Unterschied zwischen Stehen
-        # und Liegen; eine Drehung allein sieht man einer runden Figur
-        # kaum an. `ruck`: so viel groesser im Augenblick des Treffers.
-        # `staub`: so viele Staubkoerner, wenn er aufschlaegt.
-        umfallen=dict(fall=0.35, liegen=6.0, vergehen=1.2, drehen=60.0,
-                      rutschen=7.0, dunkel=0.55, skala=0.95, lang=1.4, quer=0.68,
-                      ruck=0.15, staub=4),
-        # Gross und schwer: langsam in sich zusammen, kaum Drehung.
-        zusammensacken=dict(fall=0.9, liegen=9.0, vergehen=1.6, drehen=25.0,
-                            rutschen=3.0, dunkel=0.5, skala=0.88, lang=1.2, quer=0.78,
-                            ruck=0.08, staub=14),
-        # Der Speier zerlaeuft zu einer Pfuetze aus Saeure.
-        zerfliessen=dict(fall=0.7, liegen=2.5, vergehen=1.0, drehen=0.0,
-                         rutschen=0.0, dunkel=0.75, skala=1.0, lang=1.45, quer=0.3,
-                         ruck=0.1, staub=0),
-        # Der Blaeher blaeht sich noch einmal auf und ist weg.
-        platzen=dict(fall=0.14, liegen=0.0, vergehen=0.0, drehen=0.0,
-                     rutschen=0.0, dunkel=1.0, skala=1.5, lang=1.0, quer=1.0,
-                     ruck=0.0, staub=0),
-        # Der Brandstifter verkohlt und zerfaellt zu Asche, mit Glut.
-        verbrennen=dict(fall=0.8, liegen=3.0, vergehen=1.4, drehen=20.0,
-                        rutschen=2.0, dunkel=0.12, skala=0.85, lang=1.25, quer=0.7,
-                        ruck=0.1, staub=6, glut=14),
-    ),
-    # Wer wie stirbt und was er hinterlaesst: (Stil, Blut). Jede Art aus
-    # GEGNER und BOSSE muss hier stehen - tests/test_spiel.py prueft das.
+    # Wer welches Blut hat. Jede Art aus GEGNER und BOSSE muss hier stehen -
+    # tests/test_spiel.py prueft das.
     wesen={
-        "spieler": ("umfallen", "mensch"),
-        "laeufer": ("umfallen", "zombie"),
-        "renner": ("umfallen", "zombie"),
-        "brecher": ("zusammensacken", "zombie"),
-        "speier": ("zerfliessen", "saeure"),
-        "blaeher": ("platzen", "galle"),
-        "koloss": ("zusammensacken", "koloss"),
-        "mutter": ("zusammensacken", "brut"),
-        "brandstifter": ("verbrennen", "asche"),
+        "spieler": "mensch",
+        "laeufer": "zombie",
+        "renner": "zombie",
+        "brecher": "zombie",
+        "speier": "saeure",
+        "blaeher": "galle",
+        "koloss": "koloss",
+        "mutter": "brut",
+        "brandstifter": "asche",
     },
-    blut_wachsen=1.1,         # so lange waechst die Lache unter der Leiche (s)
     spritzer=18,              # Tropfen beim Tod
-    hoechstens=80,            # mehr Leichen auf einmal: die aeltesten vergehen sofort
+    laut=0.7,                 # Lautstaerke des Todeslauts ...
+    laut_gross=0.95,          # ... und bei einem grossen Wesen (Radius ab 14)
 )
 
 # Sollmass jedes Bildes in Pixeln.
@@ -619,6 +591,7 @@ KLANG_NAMEN = (
     "won_match",
     "lost_match",
     "downed_not_dead",
+    "tod",                  # wer stirbt (seit 0.34.34)
     "blend",                # der Knall der Blendgranate
     "rakete",               # der Abschuss
     "erfasst",              # Ton, wenn die Erfassung steht
@@ -1020,8 +993,72 @@ BOTS = dict(
     nummer_ab=100,            # Spielernummern ab hier sind Bots
     auffuellen=(0, 2, 4, 6, 8, 10, 12),   # Regel "bots": 0 = keine
     je_team_hoechstens=8,     # Regeln "bots_t0" ... und "bots_dazu" (seit 0.34.26)
-    namen=("KARL", "HEINZ", "ERNA", "FRIEDA", "OTTO", "GRETE", "WILLI",
-           "HILDE", "FRITZ", "ELSE", "KURT", "LOTTE", "EMIL", "BERTA"),
+    # Rufnamen wie die Operators in Militaer-Shootern (seit 0.34.34,
+    # gemeldet: "eine LANGE Liste von Namen ... so Tags wie Ghost,
+    # Chimera"). Nur allgemeine Woerter - Tiere, Wetter, Waffen, Mythen,
+    # das Funkalphabet -, keine Namen bestimmter Spielfiguren. Hoechstens
+    # zehn Buchstaben, damit "BOT-" davor ueber den Kopf passt.
+    namen=(
+           "GHOST", "CHIMERA", "REAPER", "VIPER", "WRAITH", "SPECTRE",
+           "PHANTOM", "NOMAD", "RONIN", "HAVOC", "RAVEN", "FALCON", "HAWK",
+           "EAGLE", "KESTREL", "HARRIER", "OSPREY", "CONDOR", "VULTURE",
+           "SHRIKE", "MERLIN", "TALON", "RAPTOR", "COBRA", "MAMBA", "ADDER",
+           "ASP", "PYTHON", "KRAIT", "SIDEWINDER", "RATTLER", "SCORPION",
+           "TARANTULA", "HORNET", "WASP", "MANTIS", "LOCUST", "JACKAL",
+           "HYENA", "COYOTE", "WOLF", "LOBO", "WARG", "DINGO", "BADGER",
+           "WOLVERINE", "GRIZZLY", "KODIAK", "BISON", "RHINO", "MAMMOTH",
+           "BULL", "RAM", "STAG", "LYNX", "OCELOT", "JAGUAR", "PANTHER",
+           "PUMA", "COUGAR", "LEOPARD", "TIGER", "SABRE", "FANG", "CLAW",
+           "ORCA", "SHARK", "MAKO", "BARRACUDA", "PIRANHA", "KRAKEN",
+           "LEVIATHAN", "HYDRA", "GORGON", "MEDUSA", "CERBERUS", "MINOTAUR",
+           "GRIFFIN", "BASILISK", "MANTICORE", "WYVERN", "DRAKE", "WYRM",
+           "GOLEM", "TITAN", "ATLAS", "ARES", "ODIN", "THOR", "LOKI",
+           "FENRIR", "VALKYRIE", "BANSHEE", "REVENANT", "SHADE", "SHADOW",
+           "SPOOK", "ECHO", "CROW", "ROOK", "MAGPIE", "NIGHTJAR", "OWL",
+           "KITE", "HERON", "ALBATROSS", "STORM", "THUNDER", "BLITZ",
+           "TEMPEST", "CYCLONE", "TYPHOON", "MONSOON", "BLIZZARD",
+           "AVALANCHE", "GLACIER", "FROST", "RIME", "SLEET", "HAIL", "EMBER",
+           "CINDER", "ASH", "SOOT", "BLAZE", "INFERNO", "PYRO", "SCORCH",
+           "FLARE", "NAPALM", "MAGMA", "FLINT", "STEEL", "IRON", "COBALT",
+           "CHROME", "TITANIUM", "TUNGSTEN", "CARBON", "ONYX", "OBSIDIAN",
+           "GRANITE", "BASALT", "QUARTZ", "SLATE", "GRAVEL", "RUST", "DUST",
+           "SANDSTORM", "MIRAGE", "DUNE", "SIROCCO", "RAMPART", "BASTION",
+           "BULWARK", "AEGIS", "SENTRY", "WARDEN", "WATCHMAN", "SENTINEL",
+           "VANGUARD", "OUTRIDER", "RANGER", "SCOUT", "TRACKER", "HUNTER",
+           "STALKER", "PROWLER", "LURKER", "DEADEYE", "BULLSEYE",
+           "CROSSHAIR", "TRIGGER", "HAMMER", "ANVIL", "MALLET", "SLEDGE",
+           "HATCHET", "CLEAVER", "MACHETE", "DAGGER", "STILETTO", "KUKRI",
+           "BAYONET", "SPEAR", "LANCE", "PIKE", "HALBERD", "ARROW", "BOLT",
+           "DART", "JAVELIN", "HARPOON", "GRAPPLE", "ANCHOR", "RUDDER",
+           "BALLAST", "TORPEDO", "SONAR", "RADAR", "VECTOR", "NEXUS",
+           "CIPHER", "ENIGMA", "RIDDLE", "PARADOX", "ZERO", "NULL", "VOID",
+           "NADIR", "ZENITH", "APEX", "PRIME", "OMEGA", "ALPHA", "SIGMA",
+           "DELTA", "GAMMA", "KAPPA", "THETA", "ZETA", "TANGO", "FOXTROT",
+           "BRAVO", "ROMEO", "SIERRA", "VICTOR", "WHISKEY", "XRAY", "YANKEE",
+           "ZULU", "KILO", "LIMA", "OSCAR", "HOTEL", "JULIET", "QUEBEC",
+           "NOVEMBER", "CHARLIE", "DOZER", "BULLDOZER", "TANK", "BRICK",
+           "BOULDER", "CRATER", "MORTAR", "SHRAPNEL", "CORDITE", "SULFUR",
+           "NITRO", "THERMITE", "FUSE", "DETONATOR", "BREACHER", "SAPPER",
+           "MEDIC", "PADRE", "DOC", "PATCH", "STITCH", "SPLINT", "MAVERICK",
+           "ROGUE", "OUTLAW", "BANDIT", "RENEGADE", "MARAUDER", "RAIDER",
+           "CORSAIR", "BUCCANEER", "VIKING", "SPARTAN", "TROJAN",
+           "CENTURION", "LEGION", "GLADIATOR", "SAMURAI", "SHOGUN",
+           "SHINOBI", "KUNAI", "KATANA", "OUTCAST", "EXILE", "PILGRIM",
+           "DRIFTER", "WANDERER", "VAGABOND", "HERMIT", "MONK", "PREACHER",
+           "DEACON", "BISHOP", "KNIGHT", "JOKER", "JESTER", "ACE", "DEUCE",
+           "SPADE", "CHAOS", "ANARCHY", "MAYHEM", "RIOT", "FURY", "WRATH",
+           "RAGE", "SPITE", "MALICE", "VENOM", "TOXIN", "PLAGUE", "BLIGHT",
+           "HUSK", "GRIM", "DIRGE", "REQUIEM", "ELEGY", "OMEN", "PROPHET",
+           "ORACLE", "SAGE", "WARLOCK", "HEX", "SIGIL", "RUNE", "TOTEM",
+           "RELIC", "NEON", "LASER", "PLASMA", "ION", "PHOTON", "QUANTUM",
+           "FUSION", "ISOTOPE", "URANIUM", "RADIUM", "XENON", "ARGON",
+           "KRYPTON", "OZONE", "STATIC", "GLITCH", "BYTE", "PIXEL", "VERTEX",
+           "CIRCUIT", "DIODE", "SPARK", "VOLT", "DYNAMO", "TURBINE",
+           "PISTON", "GEAR", "COG", "RIVET", "FORGE", "FOUNDRY", "CRUCIBLE",
+           "POLARIS", "SIRIUS", "VEGA", "RIGEL", "ORION", "NOVA", "PULSAR",
+           "QUASAR", "COMET", "METEOR", "ECLIPSE", "AURORA", "NEBULA",
+           "GRAVITY", "HOLLOW", "WIDOW", "SPIDER", "HOUND", "MASTIFF",
+           "MONGOOSE", "SKULL", "BONES"),
     takt=0.1,                 # so oft sieht und entscheidet er neu (s)
     sicht=330.0,              # so weit sieht er (halbe Bildbreite ist 320)
     reaktion=(0.45, 0.85),    # bis zum ersten Schuss auf ein neues Ziel (s)
@@ -1596,14 +1633,12 @@ HOEHEN = dict(
 # dunklere Schichten als Seitenwand. Am Bildrand sieht man die Seite, in
 # der Mitte steht man genau darueber. Hoehen in Welt-Pixeln wie bei STEHEN
 # (Kiste 14, Kaktus 20). Nur das Bild: getroffen wird wie bisher.
+# Seit 0.34.34 nur noch fuer Gegenstaende: Figuren (Spieler, Bots, Gegner,
+# Bosse) sind wieder flach - gemeldet: "das ist doch nicht so gut".
 FIGUREN_3D = dict(
     an=True,
-    spieler=15.0,             # Spieler, Mitspieler, Bots
     buggy=11.0,
     beute=4.0,                # Medkit und was sonst am Boden liegt
-    gegner_je_radius=1.5,     # Gegner: Hoehe aus ihrer Groesse ...
-    gegner_min=10.0,
-    gegner_max=30.0,          # ... die Bosse ragen am weitesten
     seite_unten=0.45,         # Helligkeit der Seitenwand am Boden (x mittlere Farbe)
     seite_oben=0.85,          # ... und unter dem Deckel
     seite_stufen=4,           # so viele Helligkeiten dazwischen

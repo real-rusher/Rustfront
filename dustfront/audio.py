@@ -583,6 +583,17 @@ def _gefallen(seed=0):
                     _rauschen(0.26, 0.22, 1200, 250, 3.0, seed + 2))
 
 
+@platzhalter_klang("tod")
+def _tod(seed=0):
+    """Wer stirbt (seit 0.34.34): ein schwerer, nasser Aufschlag und ein
+    letzter, abfallender Atemzug. Tiefer und laenger als "downed_not_dead",
+    damit man hoert, dass es diesmal vorbei ist."""
+    return _mischen(_schlag(82, 34, 0.30, 0.85, 3.2),
+                    _rauschen(0.12, 0.30, 2600, 400, 6.0, seed + 3),
+                    [0.0] * int(RATE * 0.08)
+                    + _rauschen(0.42, 0.18, 900, 140, 2.2, seed + 7))
+
+
 @platzhalter_klang("smoke_grenade")
 def _rauchgranate(seed=0):
     """Eine kleine Huelse, die aufsetzt und leise zu zischen beginnt."""

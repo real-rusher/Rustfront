@@ -337,90 +337,6 @@ class Renderer:
             self._fleck_art[key] = hit
         return hit
 
-    # ---- Leichen (seit 0.34.33) -----------------------------------------
-    def leichen_zeichnen(self, ziel, welt, index, ecke, dunkel=None) -> None:
-        """Wer gestorben ist (entities.Leiche): erst die Lache, die unter
-        ihm waechst, dann er selbst, wie er faellt, liegt und vergeht. Am
-        Boden, also vor den Mauern - die verdecken ihn wie jede Figur."""
-        for x in getattr(welt, "leichen", ()):
-            if x.ebene != index or not x.lebt:
-                continue
-            p = x.pos - ecke
-            if not x.fleck:
-                f = x.lache()
-                if f > 0.05:
-                    pool = self.blutfleck(x.radius * K.BLUT[x.blut]["groesse"], x.blut,
-                                          x.variante)
-                    b, h = pool.get_size()
-                    s = pygame.transform.scale(pool, (max(1, int(b * f)), max(1, int(h * f))))
-                    if dunkel is not None:
-                        s.fill((dunkel, dunkel, dunkel), special_flags=pygame.BLEND_RGB_MULT)
-                    ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
-            a = x.deckkraft()
-            if x.bild is None or a <= 0.0:
-                continue
-            s = self._leichenbild(x)
-            if s is None:
-                continue
-            if dunkel is not None:
-                if s is x._bild:
-                    s = self.dunkel(s, dunkel)
-                else:
-                    s.fill((dunkel, dunkel, dunkel), special_flags=pygame.BLEND_RGB_MULT)
-            if a < 0.999:
-                s = plattform.deckkraft(s, int(255 * a))
-            e = 1.0 - (1.0 - x.fortschritt()) ** 2
-            v = x.richtung * (x.daten["rutschen"] * e)
-            ziel.blit(s, (p.x + v.x - s.get_width() / 2, p.y + v.y - s.get_height() / 2))
-
-    def _leichenbild(self, x):
-        """Das Bild der Leiche in diesem Augenblick. Liegt sie, aendert es
-        sich nicht mehr und wird an ihr gemerkt."""
-        t = x.fortschritt()
-        if t >= 1.0 and x._bild is not None:
-            return x._bild
-        try:
-            roh = self.bilder.gedreht(x.bild, x.winkel)
-        except (KeyError, pygame.error):
-            return None
-        d = x.daten
-        e = 1.0 - (1.0 - t) ** 2          # schnell los, sanft am Boden
-        # Der Ruck des Treffers: im ersten Viertel kurz groesser.
-        ruck = d["ruck"] * math.sin(math.pi * min(1.0, t / 0.25)) if t < 0.25 else 0.0
-        s = pygame.transform.rotozoom(roh, -x.seite * d["drehen"] * e,
-                                      (1.0 + (d["skala"] - 1.0) * e) * (1.0 + ruck))
-        lang = 1.0 + (d["lang"] - 1.0) * e
-        quer = 1.0 + (d["quer"] - 1.0) * e
-        if abs(lang - 1.0) > 0.01 or abs(quer - 1.0) > 0.01:
-            # Liegen: in Fallrichtung strecken, quer dazu stauchen. Dafuer
-            # die Fallrichtung auf die x-Achse drehen, strecken, zurueck.
-            s = pygame.transform.rotate(s, x.fall_winkel)
-            b, h = s.get_size()
-            s = pygame.transform.scale(s, (max(1, int(b * lang)), max(1, int(h * quer))))
-            s = pygame.transform.rotate(s, -x.fall_winkel)
-        m = 1.0 - (1.0 - d["dunkel"]) * e
-        if x.stil == "zerfliessen":
-            # Zur Farbe der Saeure hin, waehrend er zerlaeuft.
-            c = K.BLUT[x.blut]["spritzer"]
-            s.fill(tuple(int(m * (255 - (255 - min(255, int(k * 1.5))) * e)) for k in c),
-                   special_flags=pygame.BLEND_RGB_MULT)
-        else:
-            g = int(255 * m)
-            s.fill((g, g, g), special_flags=pygame.BLEND_RGB_MULT)
-        if x.stil == "platzen":
-            w = int(200 * e)
-            s.fill((w, w, int(w * 0.6)), special_flags=pygame.BLEND_RGB_ADD)
-        elif x.stil == "verbrennen" and t < 1.0:
-            # Erst glueht er auf, dann ist er schwarz.
-            r = int(150 * (1.0 - e))
-            s.fill((r, r // 3, 0), special_flags=pygame.BLEND_RGB_ADD)
-        if x.alter < 0.08:
-            # Der Treffer, der ihn umwirft: ein kurzes Aufleuchten wie jeder Treffer.
-            s.fill((150, 150, 150), special_flags=pygame.BLEND_RGB_ADD)
-        if t >= 1.0 and x.alter >= 0.08:
-            x._bild = s
-        return s
-
     def brandfleck(self, radius: float) -> pygame.Surface:
         """Russfleck, den eine Granate hinterlaesst."""
         k = max(0.2, float(radius) / K.DEKAL["brand_radius"])
@@ -1796,8 +1712,6 @@ class Renderer:
         if self.nur_gelaende:
             self.stehende_nachholen()
             return
-        # Leichen liegen am Boden, unter allem, was noch steht.
-        self.leichen_zeichnen(ziel, welt, idx, ecke, dunkel)
         self.feuer_zeichnen(ziel, welt, idx, ecke, eigene)
         self.ringe_zeichnen(ziel, welt, idx, ecke)
         self.wesen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)

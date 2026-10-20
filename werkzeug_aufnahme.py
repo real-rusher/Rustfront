@@ -139,8 +139,8 @@ def szene_huegel(tm, rnd):
 
 
 def szene_tod(tm, rnd):
-    """Jede Art stirbt einmal, eine nach der anderen (seit 0.34.33): Leiche,
-    Lache und Blut je Art. Steht still, damit man jeden Tod sieht."""
+    """Jede Art stirbt einmal, eine nach der anderen (seit 0.34.33): Fleck und
+    Blut je Art. Steht still, damit man jeden Tod sieht."""
     arten = ["laeufer", "renner", "brecher", "speier", "blaeher",
              "koloss", "mutter", "brandstifter"]
     abstand = 50
@@ -167,7 +167,7 @@ def szene_tod(tm, rnd):
             tm.toeten(opfer[uhr["nr"]])
             uhr["nr"] += 1
 
-    return ("Jede Art stirbt einmal: Leiche, Lache und Blut je Art",
+    return ("Jede Art stirbt einmal: Fleck und Blut je Art",
             [anker], lambda: uhr["nr"] >= len(opfer) and uhr["t"] > 1.1 * len(opfer) + 9.0,
             30, 1.0, jedes_bild)
 

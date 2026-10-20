@@ -68,7 +68,7 @@ from .spielerkosmetik import KosmetikTeil
 from . import world as welt_modul
 from .core import Szene
 from .entities import (Aufsammler, Brandflaeche, C4Ladung, Gegner, Geschoss, Granate,
-                       Rakete, Rauchwolke, Spieler, Wesen, gegner_hoehe_3d, wolke)
+                       Rakete, Rauchwolke, Spieler, Wesen, wolke)
 from .fahrzeug import Buggy
 from .font import SCHRIFT
 from .render import Befinden, Kamera, Renderer, Trefferzeichen, Ueberblendung
@@ -1160,19 +1160,19 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._wirkung.append(["r", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(winkel, 1), 0])
 
-    def _tod_melden(self, pos, ebene: int, winkel: float, bild, stil: str, blut: str,
-                    radius: float, fall_winkel: float) -> None:
-        """Ein Tod (seit 0.34.33): Leiche, Lache und Spritzer beim Gastgeber
-        und als Meldung "d" bei jedem Gast. Vorher verschwand ein Gegner
-        beim Gast einfach aus der Weltmeldung - einen Fleck bekam er nie."""
+    def _tod_melden(self, pos, ebene: int, blut: str, radius: float,
+                    fall_winkel: float) -> None:
+        """Ein Tod (seit 0.34.33): Fleck, Spritzer und Todeslaut beim
+        Gastgeber und als Meldung "d" bei jedem Gast. Vorher verschwand ein
+        Gegner beim Gast einfach aus der Weltmeldung - einen Fleck bekam er
+        nie, und hoeren konnte er es auch nicht."""
         self._in_wirkung = True
         try:
-            Welt.tod(self.welt, pos, ebene, winkel, bild, stil, blut, radius, fall_winkel)
+            Welt.tod(self.welt, pos, ebene, blut, radius, fall_winkel)
         finally:
             self._in_wirkung = False
         self._wirkung.append(["d", round(pos.x, 1), round(pos.y, 1), int(ebene),
-                              round(winkel, 1), str(bild or ""),
-                              "%s|%s|%.1f|%.0f" % (stil, blut, radius, fall_winkel)])
+                              round(fall_winkel), str(blut), round(radius, 1)])
 
     def _wirkung_nachspielen(self, eintraege) -> None:
         """Beim Gast: die gemeldeten Wirkungen in der eigenen Welt ausloesen.
@@ -1247,19 +1247,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 if text.isdigit():
                     self.welt.aufschrift(pos, ebene, text, K.C_AMBER)
             elif art == "d" and len(e) == 7:
-                # Ein Tod. Nur Bilder, die es gibt, und Stil und Blut aus
-                # den Tabellen - der Rest faellt auf die Vorgabe zurueck.
+                # Ein Tod. Das Blut aus der Tabelle (Welt.tod faellt sonst auf
+                # "mensch" zurueck), die Groesse begrenzt.
                 try:
-                    winkel = float(e[4])
-                    stil, blut, radius, fall = str(e[6]).split("|")
-                    radius = max(2.0, min(60.0, float(radius)))
-                    fall = float(fall)
+                    fall = float(e[4])
+                    radius = max(2.0, min(60.0, float(e[6])))
                 except (TypeError, ValueError):
                     continue
-                bild = str(e[5])
-                if bild not in K.BILD_MASS:
-                    bild = None
-                self.welt.tod(pos, ebene, winkel, bild, stil, blut, radius, fall)
+                self.welt.tod(pos, ebene, str(e[5])[:12], radius, fall)
 
     # ---- Grundsaetzliches --------------------------------------------
     @property
@@ -5497,8 +5492,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                             p.y - sch.get_height() / 2 + 3))
             if vorlauf > 0.0:
                 self._ankuendigung_zeichnen(ziel, p, d, vorlauf)
-            # Mit Hoehe wie beim Gastgeber (seit 0.34.25).
-            self.renderer.figur_zeichnen(ziel, s, p, gegner_hoehe_3d(d), ebene_i)
+            # Flach wie beim Gastgeber (seit 0.34.34 wieder ohne Hoehe).
+            ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
         for (x, y, winkel, ebene, name, hoehe, _kn, vx, vy) in self._fremde_schuesse:
             if hoehe > 0 or ebene != ebene_i or name in self._LUFT_BILDER:
                 continue

@@ -9033,23 +9033,23 @@ if _alt_touch82 is not None:
 # 0.34.25: "dieses 3D-Rendern, was jetzt gerade bei zum Beispiel Plateaus
 # oder Hindernissen verwendet wird ... beim Spieler, bei den Zielen, beim
 # Auto und so weiter einbaust, sodass es wirklich ueberall drin ist"
-print("\n-- Figuren in 3D wie die Hindernisse (0.34.25)")
+# 0.34.34: "Entfern mal das 3D-Rendering bei Figuren, das ist doch nicht
+# so gut." Figuren sind wieder flach; Buggy und Beute behalten ihre Hoehe.
+print("\n-- 3D nur fuer Gegenstaende, Figuren flach (0.34.25, 0.34.34)")
 from dustfront.render import Renderer as _R83
 from dustfront.entities import (Spieler as _Sp83, Gegner as _Gg83,
-                                Aufsammler as _Auf83, gegner_hoehe_3d as _gh83)
+                                Aufsammler as _Auf83)
 from dustfront.fahrzeug import Buggy as _Bg83
+from dustfront.mehrspieler import Kaempfer as _Kae83
 _f83 = K.FIGUREN_3D
-pruef("Spieler, Buggy, Beute und Gegner haben eine Hoehe, Geschosse nicht",
-      _Sp83.hoehe_3d > 0 and _Bg83.hoehe_3d > 0 and _Auf83.hoehe_3d > 0
-      and _gh83({"radius": 9}) > 0 and _Gg83.hoehe_3d == 0.0
+pruef("Buggy und Beute haben eine Hoehe; Spieler, Bots und Geschosse nicht",
+      _Bg83.hoehe_3d > 0 and _Auf83.hoehe_3d > 0
+      and _Sp83.hoehe_3d == 0.0 and _Kae83.hoehe_3d == 0.0 and _Gg83.hoehe_3d == 0.0
       and EN.Geschoss.hoehe_3d == 0.0,
-      "%s %s %s %s" % (_Sp83.hoehe_3d, _Bg83.hoehe_3d, _Auf83.hoehe_3d,
-                       _gh83({"radius": 9})))
-pruef("Bosse ragen hoeher als kleine Gegner, aber nicht ueber die Grenze",
-      _gh83({"radius": 9}) < _gh83({"radius": 18}) <= _f83["gegner_max"]
-      and _gh83({"radius": 99}) == _f83["gegner_max"]
-      and _gh83({"radius": 1}) == _f83["gegner_min"]
-      and _gh83({"radius": 9, "hoehe_3d": 3}) == 3.0, "")
+      "%s %s %s %s" % (_Sp83.hoehe_3d, _Bg83.hoehe_3d, _Auf83.hoehe_3d, _Kae83.hoehe_3d))
+_flach83 = [a_ for a_ in list(K.GEGNER) + list(K.BOSSE)
+            if _Gg83(pygame.Vector2(0, 0), a_).hoehe_3d != 0.0]
+pruef("... und kein Gegner und kein Boss steht in 3D", not _flach83, str(_flach83))
 _r83 = _R83(app.bilder)
 _z83 = pygame.Surface((200, 200))
 _b83 = pygame.Surface((20, 20), pygame.SRCALPHA)
@@ -9070,7 +9070,7 @@ def _zeichne83(hoehe, p):
 _rot83, _seite83 = _zeichne83(0, (20, 20))
 pruef("Ohne Hoehe: das Bild genau an seiner Stelle, ohne Seitenwand",
       not _seite83 and abs(sum(x for x, _ in _rot83) / len(_rot83) - 20) < 1, "")
-_rot83, _seite83 = _zeichne83(_f83["spieler"], (20, 20))
+_rot83, _seite83 = _zeichne83(_f83["buggy"], (20, 20))
 _mx83 = sum(x for x, _ in _rot83) / len(_rot83)
 _my83 = sum(y for _, y in _rot83) / len(_rot83)
 pruef("Am Rand oben links: der Deckel rueckt von der Mitte weg, nach oben links",
@@ -9078,7 +9078,7 @@ pruef("Am Rand oben links: der Deckel rueckt von der Mitte weg, nach oben links"
 pruef("... und darunter steht eine dunklere Seitenwand in der Farbe der Figur",
       len(_seite83) > 10 and all(_z83.get_at(q)[1] < 60 for q in _seite83[:20]),
       "%d Pixel" % len(_seite83))
-_rot83, _seite83 = _zeichne83(_f83["spieler"], (100, 100))
+_rot83, _seite83 = _zeichne83(_f83["buggy"], (100, 100))
 pruef("In der Bildmitte sieht man genau von oben: keine Seite, kein Versatz",
       not _seite83 and abs(sum(x for x, _ in _rot83) / len(_rot83) - 100) < 1,
       "%d Seitenpixel" % len(_seite83))
@@ -9095,15 +9095,9 @@ pruef("... und ist nur so gross wie ihr Umriss (Tempo)",
       _sw83.get_width() <= 14 and _sw83.get_height() <= 14, str(_sw83.get_size()))
 _sw83b, _ = _r83._seite(_gross83, 1.0)
 pruef("... und wird je Bild nur einmal gebaut", _sw83b is _sw83, "")
-_rot83, _ = _zeichne83(_f83["spieler"], (20, 20))
+_rot83, _ = _zeichne83(_f83["buggy"], (20, 20))
 pruef("Die Quelle bleibt danach nicht gesperrt (sonst Absturz beim Blitten)",
       not _b83.get_locked(), "")
-# Beim Gast kommen Gegner nur als Meldung; sie stehen genauso hoch wie
-# beim Gastgeber.
-_art83 = sorted(K.GEGNER)[0]
-_gg83 = _Gg83(pygame.Vector2(0, 0), _art83)
-pruef("Ein Gegner steht beim Gastgeber so hoch wie beim Gast",
-      _gg83.hoehe_3d == _gh83(K.gegner_daten(_art83)) > 0, _art83)
 
 # 0.34.26: "sehr, sehr viele Hindernisse, auch zum Beispiel auf der
 # Wuestenmap, auch auf anderen Maps, Schuesse durchlassen. Alles, was eine
@@ -10304,22 +10298,28 @@ pruef("... 30 Bilder je Sekunde aus 120 Rechenschritten",
 # 0.34.33: "Bau bitte fuer wirklich jede Entity eine Death Animation ein,
 # gerade kann ich nie sicher sein, ob die einfach verschwinden oder ob die
 # tot sind. Also Death Animation und einen Blutfleck auf dem Boden, je nach
-# Entity anderes Blut."
-print("\n-- Tod: Leiche, Lache, Blut je Art (0.34.33)")
-from dustfront.entities import Leiche as _Lei92, tod_art as _todart92
+# Entity anderes Blut." 0.34.34: "Der Fleck reicht, Animation muss nicht
+# sein. Ein Death Sound reicht mir."
+print("\n-- Tod: Fleck je Blut und Todeslaut (0.34.33, 0.34.34)")
+from dustfront.entities import tod_blut as _todblut92
 _arten92 = [a_ for a_ in list(K.GEGNER) + list(K.BOSSE) if a_ not in K.UEBUNG]
 _fehlt92 = [a_ for a_ in _arten92 + ["spieler"] if a_ not in K.TOD["wesen"]]
-_falsch92 = [(a_, st_, bl_) for a_, (st_, bl_) in K.TOD["wesen"].items()
-             if st_ not in K.TOD["stile"] or bl_ not in K.BLUT]
-pruef("Jede Gegnerart, jeder Boss und die Figuren haben ihren Tod und ihr Blut",
+_falsch92 = [(a_, bl_) for a_, bl_ in K.TOD["wesen"].items() if bl_ not in K.BLUT]
+pruef("Jede Gegnerart, jeder Boss und die Figuren haben ihr Blut",
       not _fehlt92 and not _falsch92, "%s %s" % (_fehlt92, _falsch92))
 pruef("... und das Blut ist nicht ueberall dasselbe",
-      len({bl_ for _st, bl_ in K.TOD["wesen"].values()}) >= 5, "")
+      len(set(K.TOD["wesen"].values())) >= 5, "")
+from dustfront import audio as _AU92
+pruef("Den Todeslaut gibt es, auch ohne Datei (Platzhalter)",
+      "tod" in K.KLANG_NAMEN and "tod" in _AU92._PLATZHALTER
+      and len(_AU92._PLATZHALTER["tod"]()) > 1000, "")
 
 _tm = _TM87.Testmodus(app, karte="staubtal")
 _tm.wiedereinstieg = False
 _flecken92 = []
+_laute92 = []
 _alt_fleck92 = _tm.welt.blutfleck
+_alt_klang92 = _tm.welt.klang
 
 
 def _fleck_merken92(pos, ebene, radius, art="mensch", variante=0):
@@ -10327,48 +10327,34 @@ def _fleck_merken92(pos, ebene, radius, art="mensch", variante=0):
     _alt_fleck92(pos, ebene, radius, art, variante)
 
 
+def _klang_merken92(name, laut=1.0, pos=None, ebene=None):
+    _laute92.append(name)
+    _alt_klang92(name, laut, pos, ebene)
+
+
 _tm.welt.blutfleck = _fleck_merken92
+_tm.welt.klang = _klang_merken92
 _ort92 = pygame.Vector2(_feld89[0])
 _opfer92 = [_tm.gegner_setzen(a_, _ort92 + pygame.Vector2(30 * i_, 0), 0, {"ki": False})
             for i_, a_ in enumerate(_arten92)]
 _opfer92.append(_tm.bot_setzen(_ort92 + pygame.Vector2(0, 40), 0, {"team": 0}))
 _opfer92.append(_tm.puppe_setzen(_ort92 + pygame.Vector2(40, 40), 0, {"team": 1}))
 _sim87(3)
+del _flecken92[:], _laute92[:]
 for w_ in _opfer92:
     if w_.lebt:          # der Blaeher reisst beim Platzen vielleicht schon wen mit
         w_.leben = 0.0
         w_.sterben(None)
-_leichen92 = list(_tm.welt.leichen)
-_erwartet92 = sorted(_todart92(w_) for w_ in _opfer92)
-pruef("Wer stirbt, hinterlaesst eine Leiche - jede Art mit ihrem Stil und Blut",
-      sorted((x_.stil, x_.blut) for x_ in _leichen92) == _erwartet92
-      and all(x_.bild for x_ in _leichen92),
-      "%d Leichen fuer %d Tote" % (len(_leichen92), len(_opfer92)))
-pruef("... die Leiche ist kein Wesen: keine KI sieht sie, nichts stoesst oder trifft sie",
-      not any(isinstance(w_, _Lei92) for w_ in _tm.welt.wesen + _tm.welt.neue)
-      and not any(isinstance(k_, _Lei92) for k_ in _tm.kaempfer.values()), "")
+pruef("Wer stirbt, hinterlaesst sofort einen Fleck - im Blut seiner Art",
+      sorted(_flecken92) == sorted(_todblut92(w_) for w_ in _opfer92), str(sorted(_flecken92)))
+pruef("... und man hoert es: je Tod ein Todeslaut",
+      _laute92.count("tod") == len(_opfer92), "%d Laute fuer %d Tote" % (_laute92.count("tod"),
+                                                                       len(_opfer92)))
+_sim87(3)
 _bild92 = pygame.Surface((K.GAME_W, K.GAME_H))
-_tm._geist.pos.update(_ort92)
-_fehler92 = []
-for _ in range(int((K.TOD["blut_wachsen"] + 0.2) / (4 * _D87))):
-    for _i in range(4):
-        _tm.schritt(_D87)
-    try:
-        _tm.zeichnen(_bild92, 1.0)
-    except Exception as err_:
-        _fehler92.append(repr(err_))
-pruef("Jede Art faellt, liegt und vergeht ohne Fehler im Bild", not _fehler92, str(_fehler92[:2]))
-pruef("Unter jeder Leiche waechst eine Lache und geht als Fleck in den Boden - im Blut ihrer Art",
-      sorted(_flecken92) == sorted(bl_ for _st, bl_ in _erwartet92), str(sorted(_flecken92)))
-_liegend92 = [x_ for x_ in _tm.welt.leichen if x_.stil != "platzen"]
-pruef("... und die Leiche liegt danach noch da, man sieht, dass er tot ist",
-      len(_liegend92) == len([1 for st_, _b in _erwartet92 if st_ != "platzen"])
-      and all(x_.fortschritt() >= 1.0 for x_ in _liegend92), "")
-_lang92 = max(K.TOD["stile"][st_]["fall"] + K.TOD["stile"][st_]["liegen"]
-              + K.TOD["stile"][st_]["vergehen"] for st_, _b in _erwartet92)
-_sim87(int((_lang92 + 0.5) / _D87))
-pruef("Nach ihrer Zeit sind die Leichen weg, die Flecken bleiben",
-      not _tm.welt.leichen and len(_flecken92) == len(_opfer92), "")
+_tm.zeichnen(_bild92, 1.0)
+pruef("... keine Leiche, keine Animation: die Toten sind aus der Welt",
+      not any(w_ in _tm.welt.wesen for w_ in _opfer92) and not hasattr(_tm.welt, "leichen"), "")
 
 _farben92 = {}
 for bl_ in K.BLUT:
@@ -10381,26 +10367,25 @@ pruef("... und liegt in acht Formen da, nicht jeder gleich",
       len({pygame.image.tobytes(v_, "RGBA") for v_ in _v92}) >= 4, "")
 
 # ENTF: loeschen (verschwindet) oder toeten (stirbt) - jetzt sieht man's.
-_tm.welt.leichen.clear()
 _g92 = _tm.gegner_setzen("laeufer", _ort92, 0, {"ki": False})
 _sim87(2)
+del _flecken92[:], _laute92[:]
 _tm._zeiger_welt = pygame.Vector2(_g92.pos)
 _tm.blick = 0
 _tm.taste("enter")
-pruef("ENTF LOESCHT: weg, ohne Leiche", not _g92.lebt and not _tm.welt.leichen, "")
+pruef("ENTF LOESCHT: weg, ohne Fleck und ohne Laut",
+      not _g92.lebt and not _flecken92 and "tod" not in _laute92, "")
 _tm.menue_wirken("entf")
 _g92 = _tm.gegner_setzen("speier", _ort92, 0, {"ki": False})
 _sim87(2)
 _tm._zeiger_welt = pygame.Vector2(_g92.pos)
 _tm.taste("enter")
-pruef("ENTF TOETET (Testmenue): er stirbt, mit Leiche und seinem Blut",
-      not _g92.lebt and [(x_.stil, x_.blut) for x_ in _tm.welt.leichen] == [("zerfliessen", "saeure")]
-      and _tm._tastentext("enter")[0] == "TÖTEN", "")
-_tm.alles_weg()
-pruef("LEEREN nimmt auch die Leichen mit", not _tm.welt.leichen, "")
+pruef("ENTF TOETET (Testmenue): er stirbt, mit seinem Blut und dem Todeslaut",
+      not _g92.lebt and _flecken92 == ["saeure"] and "tod" in _laute92
+      and _tm._tastentext("enter")[0] == "TÖTEN", str(_flecken92))
 _tm.verlassen()
 
-# Im Netz: der Gast bekommt den Tod gemeldet und legt Leiche und Fleck selbst.
+# Im Netz: der Gast bekommt den Tod gemeldet und legt Fleck und Laut selbst.
 w92, g92 = gefechtspaar("pve")
 _ort92 = pygame.Vector2(w92.ich.pos) + pygame.Vector2(60, 0)
 _z92 = KampfGegner(_ort92, "speier", w92.ich.ebene, w92)
@@ -10408,29 +10393,47 @@ w92.welt.dazu(_z92)
 for _ in range(6):
     w92.schritt(K.NETZ["takt"])
     g92.schritt(K.NETZ["takt"])
-g92.welt.leichen.clear()
+_gf92, _gk92 = [], []
+_galt_f92, _galt_k92 = g92.welt.blutfleck, g92.welt.klang
+g92.welt.blutfleck = lambda pos, eb, r, art="mensch", v=0: (_gf92.append((art, r)),
+                                                           _galt_f92(pos, eb, r, art, v))
+g92.welt.klang = lambda name, laut=1.0, pos=None, eb=None: (_gk92.append(name),
+                                                          _galt_k92(name, laut, pos, eb))
 _z92.schaden(_z92.leben + 50, None, w92.ich)
 for _ in range(6):
     w92.schritt(K.NETZ["takt"])
     g92.schritt(K.NETZ["takt"])
-_gl92 = [x_ for x_ in g92.welt.leichen if x_.stil == "zerfliessen"]
-pruef("Netz: der Gast sieht den Tod - Leiche mit Bild, Stil und Blut wie beim Gastgeber",
-      len(_gl92) == 1 and _gl92[0].blut == "saeure" and _gl92[0].bild == _z92.bild
-      and _gl92[0].pos.distance_to(_z92.pos) < 2.0,
-      str([(x_.stil, x_.blut, x_.bild) for x_ in g92.welt.leichen]))
-_falsch92 = [["d", 10.0, 10.0, 0, 0.0, "<script>", "umfallen|mensch|9.0|0"],
-             ["d", 10.0, 10.0, 0, 0.0, "gegner_laeufer", "kaputt"],
-             ["d", 10.0, 10.0, 0, 0.0, "gegner_laeufer", "quatsch|quatsch|1e9|0"]]
-_vorher92 = len(g92.welt.leichen)
-g92._wirkung_nachspielen(_falsch92)
-_neu92 = g92.welt.leichen[_vorher92:]
-pruef("... eine kaputte Meldung kostet hoechstens sich selbst: unbekanntes Bild ohne Bild, "
-      "unbekannter Stil und unbekanntes Blut auf die Vorgabe, Groesse begrenzt",
-      len(_neu92) == 2 and _neu92[0].bild is None and _neu92[1].stil == "umfallen"
-      and _neu92[1].blut == "mensch" and _neu92[1].radius <= 60.0,
-      str([(x_.bild, x_.stil, x_.blut, x_.radius) for x_ in _neu92]))
+pruef("Netz: der Gast sieht den Fleck im Blut des Speiers und hoert den Todeslaut",
+      [a_ for a_, _r in _gf92] == ["saeure"] and "tod" in _gk92, "%s %s" % (_gf92, _gk92))
+del _gf92[:]
+g92._wirkung_nachspielen([["d", 10.0, 10.0, 0, 0, "<script>", 9.0],
+                          ["d", 10.0, 10.0, 0, 0, "zombie", "kaputt"],
+                          ["d", 10.0, 10.0, 0, 0, "zombie", 1e9]])
+pruef("... eine kaputte Meldung kostet hoechstens sich selbst: unbekanntes Blut wird "
+      "\"mensch\", die Groesse ist begrenzt",
+      len(_gf92) == 2 and _gf92[0][0] == "mensch" and _gf92[1][0] == "zombie"
+      and _gf92[1][1] <= 60.0 * max(b_["groesse"] for b_ in K.BLUT.values()), str(_gf92))
 w92.verlassen()
 g92.verlassen()
+
+# 0.34.34: "Bau dir mal eine LANGE Liste an Namen von Operators aus CoD oder
+# Battlefield oder so aehnlich zusammen, damit die Bots bessere Namen haben.
+# Also so Tags sollen die quasi haben (Ghost, Chimera usw usw)."
+print("\n-- Rufnamen der Bots (0.34.34)")
+_n93 = K.BOTS["namen"]
+pruef("Eine lange Liste von Rufnamen, jeder nur einmal",
+      len(_n93) >= 300 and len(set(_n93)) == len(_n93), "%d Namen" % len(_n93))
+pruef("... nur Grossbuchstaben, hoechstens zehn - passt mit BOT- ueber den Kopf",
+      all(n_.isalpha() and n_.isupper() and len(n_) <= 10 for n_ in _n93),
+      str([n_ for n_ in _n93 if not (n_.isalpha() and n_.isupper() and len(n_) <= 10)][:5]))
+pruef("... darunter GHOST und CHIMERA", "GHOST" in _n93 and "CHIMERA" in _n93, "")
+_n93_ = netz.Gastgeber(_neuer_port())
+_w93 = Gefecht(app, "WIRT", gastgeber=_n93_, modus="pvp", seed=93, regeln={"bots": 10})
+_bn93 = [k_.name for k_ in _w93._bots()]
+pruef("Bots heissen BOT- und ein Rufname aus der Liste, keiner doppelt",
+      _bn93 and all(n_.startswith("BOT-") and n_[4:] in _n93 for n_ in _bn93)
+      and len(set(_bn93)) == len(_bn93), str(_bn93))
+_w93.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

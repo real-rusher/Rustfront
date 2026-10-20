@@ -43,7 +43,9 @@ class Wesen:
     schatten = True
     faellt = False           # True = kann in Loecher stuerzen
     # Wie hoch das Bild in Perspektive steht (K.FIGUREN_3D, seit 0.34.25).
-    # 0: flach, wie Geschosse, Granaten und C4.
+    # 0: flach. Seit 0.34.34 sind alle Figuren - Spieler, Bots, Gegner -
+    # wieder flach (gemeldet: "Entfern mal das 3D-Rendering bei Figuren,
+    # das ist doch nicht so gut"); Hoehe haben nur noch Buggy und Beute.
     hoehe_3d = 0.0
 
     # Eine laufende Nummer je Wesen. Gebraucht wird sie vom Gast: er
@@ -254,109 +256,8 @@ def wolke(welt, pos, anzahl, tempo, dauer, farbe, ebene, groesse=1,
 # Der Tod (seit 0.34.33)
 # ══════════════════════════════════════════════════════════════════
 
-class Leiche:
-    """Was von einem Wesen bleibt, das gestorben ist: sein letztes Bild,
-    das umfaellt, eine Weile liegt und vergeht, und darunter eine Lache,
-    die waechst und am Ende als Fleck in den Boden geht (Welt.blutfleck).
-
-    Kein Wesen: sie steht nicht in `welt.wesen`, stoesst niemanden, ist
-    nicht zu treffen und fuer keine KI zu sehen - sie liegt nur in
-    `welt.leichen` und wird gezeichnet (render.leichen_zeichnen). Beim Gast
-    entsteht sie aus der Meldung "d" (mehrspieler._tod_melden) und rechnet
-    dort genauso, ohne dass etwas uebertragen werden muss als der Anfang.
-    """
-
-    __slots__ = ("pos", "ebene", "winkel", "bild", "stil", "blut", "radius",
-                 "richtung", "fall_winkel", "seite", "variante", "alter", "liegen",
-                 "fleck", "gelandet", "lebt", "glut_rest", "_bild")
-
-    def __init__(self, pos, ebene: int, winkel: float, bild, stil: str, blut: str,
-                 radius: float, fall_winkel: float) -> None:
-        self.pos = pygame.Vector2(pos)
-        self.ebene = int(ebene)
-        self.winkel = float(winkel)
-        self.bild = bild
-        self.stil = stil if stil in K.TOD["stile"] else "umfallen"
-        self.blut = blut if blut in K.BLUT else "mensch"
-        self.radius = float(radius)
-        self.fall_winkel = float(fall_winkel)
-        self.richtung = pygame.Vector2(1, 0).rotate(fall_winkel)
-        # Seite und Form des Flecks aus dem Ort statt aus dem Zufall: so
-        # faellt dieselbe Leiche beim Gast genauso wie beim Gastgeber.
-        h = int(abs(self.pos.x) * 7 + abs(self.pos.y) * 13)
-        self.seite = 1.0 if h % 2 else -1.0
-        self.variante = h % 8
-        self.alter = 0.0
-        self.liegen = self.daten["liegen"]
-        self.fleck = False             # schon als Dekal im Boden?
-        self.gelandet = False          # schon aufgeschlagen (Staub)?
-        self.lebt = True
-        self.glut_rest = 0.0
-        self._bild = None              # Zwischenablage des Renderers
-
-    @property
-    def daten(self) -> dict:
-        return K.TOD["stile"][self.stil]
-
-    @property
-    def dauer(self) -> float:
-        d = self.daten
-        return d["fall"] + self.liegen + d["vergehen"]
-
-    def fortschritt(self) -> float:
-        """0 bis 1: wie weit er schon umgefallen ist."""
-        f = self.daten["fall"]
-        return 1.0 if f <= 0.0 else min(1.0, self.alter / f)
-
-    def deckkraft(self) -> float:
-        """1, solange er liegt, dann gegen 0."""
-        d = self.daten
-        rest = self.dauer - self.alter
-        if d["vergehen"] <= 0.0:
-            return 1.0 if rest > 0.0 else 0.0
-        return max(0.0, min(1.0, rest / d["vergehen"]))
-
-    def lache(self) -> float:
-        """0 bis 1: wie gross die Lache unter ihm schon ist."""
-        if self.fleck:
-            return 1.0
-        return min(1.0, self.alter / max(0.01, K.TOD["blut_wachsen"]))
-
-    def vergehen_jetzt(self) -> None:
-        """Zu viele Leichen: diese geht gleich, statt weiter zu liegen."""
-        d = self.daten
-        self.liegen = max(0.0, min(self.liegen, self.alter - d["fall"]))
-
-    def schritt(self, dt: float, welt) -> None:
-        self.alter += dt
-        if not self.gelandet and self.alter >= self.daten["fall"]:
-            self.gelandet = True
-            if self.daten["staub"]:
-                wolke(welt, self.pos + self.richtung * self.radius * 0.6,
-                      self.daten["staub"], 70 + 4 * self.radius, 0.6, K.C_MUTED_DK,
-                      self.ebene, 2 if self.radius >= 14 else 1, "staub")
-        if not self.fleck and (self.alter >= K.TOD["blut_wachsen"]
-                               or self.alter >= self.dauer):
-            # Die Lache ist ausgewachsen: als Fleck in den Boden.
-            self.fleck = True
-            welt.blutfleck(self.pos, self.ebene,
-                           self.radius * K.BLUT[self.blut]["groesse"],
-                           self.blut, self.variante)
-        glut = self.daten.get("glut", 0)
-        if glut and self.alter < self.daten["fall"] + self.liegen:
-            # Der Brandstifter glimmt, waehrend er verkohlt.
-            self.glut_rest -= dt
-            if self.glut_rest <= 0.0:
-                self.glut_rest = 1.0 / glut
-                wolke(welt, self.pos + pygame.Vector2(RND.uniform(-self.radius, self.radius),
-                                                      RND.uniform(-self.radius, self.radius)),
-                      1, 40, 0.6, K.BLUT["asche"]["spritzer"], self.ebene, 1, "funke")
-        if self.alter >= self.dauer:
-            self.lebt = False
-
-
-def tod_art(w) -> tuple:
-    """(Stil, Blut) eines Wesens aus K.TOD["wesen"]: Gegner nach ihrer Art,
+def tod_blut(w) -> str:
+    """Das Blut eines Wesens aus K.TOD["wesen"]: Gegner nach ihrer Art,
     alle Figuren (Spieler, Bots) als "spieler"."""
     t = K.TOD["wesen"]
     art = getattr(w, "art", None)
@@ -364,25 +265,22 @@ def tod_art(w) -> tuple:
         return t[art]
     if isinstance(w, Spieler):
         return t["spieler"]
-    return t.get("laeufer", ("umfallen", "zombie"))
+    return t.get("laeufer", "zombie")
 
 
 def tod_zeigen(w, von=None) -> None:
-    """Ein Wesen ist gestorben: die Welt soll es sehen (Welt.tod). Es faellt
-    vom Toeter weg, ohne Toeter in seine Blickrichtung."""
+    """Ein Wesen ist gestorben: Fleck, Spritzer und Todeslaut (Welt.tod).
+    Die Spritzer fliegen vom Toeter weg, ohne Toeter in Blickrichtung."""
     welt = w.welt
     if welt is None:
         return
-    stil, blut = tod_art(w)
     weg = None
     quelle = getattr(von, "von", von)        # bei einem Geschoss der Schuetze
     if quelle is not None and hasattr(quelle, "pos"):
         weg = w.pos - quelle.pos
     if weg is None or weg.length_squared() < 1.0:
         weg = pygame.Vector2(1, 0).rotate(w.winkel)
-    bild = w.bild if isinstance(getattr(w, "bild", None), str) else None
-    welt.tod(w.pos, w.ebene, float(w.winkel), bild, stil, blut,
-             float(getattr(w, "radius", 9.0)),
+    welt.tod(w.pos, w.ebene, tod_blut(w), float(getattr(w, "radius", 9.0)),
              math.degrees(math.atan2(weg.y, weg.x)))
 
 
@@ -1331,7 +1229,6 @@ class Aufsammler(Wesen):
 
 class Spieler(Wesen):
     fraktion = "mensch"
-    hoehe_3d = K.FIGUREN_3D["spieler"]
     # Kein fester Name: die Figur zeigt die Waffe, die sie gerade traegt.
     # Siehe die Eigenschaft bild() weiter unten.
     faellt = True
@@ -2250,17 +2147,6 @@ class Spieler(Wesen):
 # Gegner
 # ══════════════════════════════════════════════════════════════════
 
-def gegner_hoehe_3d(daten: dict) -> float:
-    """Wie hoch ein Gegner in Perspektive steht: aus seiner Groesse, oder
-    `hoehe_3d` in seinen Daten. Gebraucht beim Gastgeber (Gegner) und beim
-    Gast, der Gegner nur gemeldet bekommt (mehrspieler._fremde_figuren)."""
-    f = K.FIGUREN_3D
-    if daten.get("hoehe_3d") is not None:
-        return float(daten["hoehe_3d"])
-    return max(f["gegner_min"], min(f["gegner_max"],
-                                    float(daten.get("radius", 9)) * f["gegner_je_radius"]))
-
-
 class Gegner(Wesen):
     fraktion = "feind"
     # Gegner fahren nur, wenn der Aufzug auf ihrem Weg liegt
@@ -2280,7 +2166,6 @@ class Gegner(Wesen):
         self.leben = self.max_leben
         self.radius = d["radius"]
         self.bild = d["bild"]
-        self.hoehe_3d = gegner_hoehe_3d(d)
         self.schlag_rest = 0.0
         self.letzte_sicht = None
         self.wartet = RND.uniform(0.0, 0.4)

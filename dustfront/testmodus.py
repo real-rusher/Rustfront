@@ -716,7 +716,6 @@ class Testmodus(Gefecht):
         self.welt.feuer.clear()
         self.welt.rauch.clear()
         self.welt.partikel.clear()
-        self.welt.leichen.clear()
         self.welt.muendungen.clear()
         self.gegner_offen = []
         self.welle_rest = []
@@ -740,7 +739,7 @@ class Testmodus(Gefecht):
         return bestes
 
     def toeten(self, w) -> bool:
-        """Sterben lassen wie im Spiel - mit Leiche und Fleck (seit 0.34.33).
+        """Sterben lassen wie im Spiel - mit Fleck und Todeslaut (seit 0.34.33).
         Ein Buggy geht hoch. Was nicht sterben kann (Zielpuppe, Beute, eine
         Granate), gibt False zurueck und wird stattdessen geloescht."""
         if getattr(w, "ist_puppe", False):

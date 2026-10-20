@@ -346,8 +346,6 @@ class Welt:
         self.wesen: list = []
         self.neue: list = []
         self.partikel: list = []
-        # Leichen (seit 0.34.33, entities.Leiche): nur Bild, keine Wesen.
-        self.leichen: list = []
         self._raster: dict[tuple, list] = {}
         self.zeit = 0.0
         self.held = None                 # setzt die Spielszene
@@ -395,24 +393,27 @@ class Welt:
         Die Szene haengt sich hier ein."""
         pass
 
-    def tod(self, pos, ebene: int, winkel: float, bild, stil: str, blut: str,
-            radius: float, fall_winkel: float) -> None:
-        """Ein Wesen ist gestorben (entities.tod_zeigen): Spritzer und eine
-        Leiche, die faellt, liegt und vergeht. Beim Gastgeber haengt sich
-        das Gefecht davor und meldet es den Gaesten (Meldung "d") - die
-        rufen dann genau diese Funktion in ihrer eigenen Welt auf."""
-        from .entities import Leiche, wolke
+    def tod(self, pos, ebene: int, blut: str, radius: float, fall_winkel: float) -> None:
+        """Ein Wesen ist gestorben (entities.tod_zeigen): Spritzer, ein Fleck
+        im Blut seiner Art (K.BLUT) und der Todeslaut. Beim Gastgeber haengt
+        sich das Gefecht davor und meldet es den Gaesten (Meldung "d") - die
+        rufen dann genau diese Funktion in ihrer eigenen Welt auf.
+
+        0.34.33 hatte hier noch eine Leiche, die umfiel und eine Weile lag;
+        seit 0.34.34 nicht mehr (gemeldet: "Der Fleck reicht, Animation muss
+        nicht sein. Ein Death Sound reicht mir.")."""
+        from .entities import wolke
         b = K.BLUT.get(blut, K.BLUT["mensch"])
+        if blut not in K.BLUT:
+            blut = "mensch"
         t = K.TOD
-        groesse = 2 if radius >= 12 else 1
-        wolke(self, pos, t["spritzer"], 170, 0.6, b["spritzer"], ebene, groesse, "blut",
-              streuung=200.0, richtung=fall_winkel)
-        self.leichen.append(Leiche(pos, ebene, winkel, bild, stil, blut, radius,
-                                   fall_winkel))
-        # Zu viele auf einmal (eine ganze Welle): die aeltesten gehen zuerst.
-        lebende = [x for x in self.leichen if x.lebt]
-        for alt in lebende[:max(0, len(lebende) - t["hoechstens"])]:
-            alt.vergehen_jetzt()
+        wolke(self, pos, t["spritzer"], 170, 0.6, b["spritzer"], ebene,
+              2 if radius >= 12 else 1, "blut", streuung=200.0, richtung=fall_winkel)
+        # Die Form aus dem Ort statt aus dem Zufall: so liegt derselbe Fleck
+        # beim Gast genauso da wie beim Gastgeber.
+        variante = int(abs(pos.x) * 7 + abs(pos.y) * 13) % 8
+        self.blutfleck(pos, ebene, radius * b["groesse"], blut, variante)
+        self.klang("tod", t["laut_gross"] if radius >= 14 else t["laut"], pos, ebene)
 
     def klang(self, name: str, lautstaerke: float = 1.0, pos=None,
               ebene: int | None = None) -> None:
@@ -633,10 +634,6 @@ class Welt:
             p.schritt(dt)
         if any(not p.lebt for p in self.partikel):
             self.partikel = [p for p in self.partikel if p.lebt]
-        for x in self.leichen:
-            x.schritt(dt, self)
-        if any(not x.lebt for x in self.leichen):
-            self.leichen = [x for x in self.leichen if x.lebt]
         # Beim Gast altert das Feuer hier mit, ohne Welt: er bekommt die
         # Flaechen gemeldet und soll sie zuengeln sehen, aber niemandem
         # Schaden machen - das rechnet der Gastgeber.
