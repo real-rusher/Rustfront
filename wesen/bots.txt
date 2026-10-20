@@ -1,0 +1,161 @@
+# DUSTFRONT - die Bots des Mehrspielers als zielorientierte KI (seit 0.34.29)
+#
+# Gilt mit der Regel BOT-KI: GOAP (Rundentafel, ERWEITERT) und im Testmodus
+# (Spawner, BOT, HIRN: GOAP). Die klassische KI (bots.py) bleibt daneben,
+# bis diese hier besser ist. Format: siehe dustfront/wesen_daten.py,
+# Planung: docs/KI.md.
+#
+# Fakten, die ein Bot ueber sich weiss (bot_goap.GoapHirn._fuehlen):
+#   feind_sichtbar       er sieht einen Gegner auf seiner Ebene
+#   linie_frei           ... und zwischen ihnen haelt nichts die Kugel auf
+#   feind_bekannt        er sieht einen oder hat eben noch einen gesehen
+#   munition_da          irgendeine Waffe hat noch Munition
+#   magazin_leer         das Magazin der Waffe in der Hand ist leer (oder er laedt)
+#   granate_da           er hat seine Granate noch
+#   angeschlagen         weniger als K.BOTS["deckung_leben"] Leben
+#   getroffen            in den letzten zwei Sekunden getroffen
+#   unterdrueckt         Kugeln pfeifen knapp an ihm vorbei
+#   in_deckung           er steht an einer Stelle, die ihn vom Gegner trennt
+#   kamerad_liegt        ein Kamerad liegt am Boden (VERSUS)
+#   kamerad_braucht_schutz  ein Kamerad laedt, ist angeschlagen, liegt oder flankiert
+#   kamerad_flankiert    ein anderer flankiert den Gegner, den er kennt
+#   flanke_frei          er darf flankieren (keiner sonst, keine Pause)
+#   zone_aktiv           es gibt einen Kreis (HUEGEL)
+#   im_kreis             er steht darin
+#   sturm_plan           er ist Teil eines Sturms seiner Mannschaft
+# Ziel-Fakten, die nie wahr werden, sondern nur das Ziel benennen:
+#   feind_besiegt, kamerad_geschuetzt, sturm_fertig
+# Zahlen: leben (0 bis 1), abstand (zum Gegner, sonst 9999)
+# Merkmale (je Bot gewuerfelt): mut, disziplin
+
+# ── Ziele ─────────────────────────────────────────────────────────────
+
+[ziel ueberleben]
+will: in_deckung
+dringlich: 90 * angeschlagen * getroffen * (1.3 - mut) + 70 * unterdrueckt * (1.2 - mut)
+info: Angeschlagen und getroffen, oder niedergehalten: weg aus der Linie.
+
+[ziel nachladen]
+will: !magazin_leer
+dringlich: 80 * magazin_leer * munition_da
+info: Ein leeres Magazin muss voll, bevor er weiterkaempft.
+
+[ziel aufhelfen]
+will: !kamerad_liegt
+dringlich: kamerad_liegt * (64 - 40 * (abstand < 260))
+info: VERSUS: Gefallene Kameraden hochholen, wenn kein Gegner dicht dran ist.
+
+[ziel stuermen]
+will: sturm_fertig
+dringlich: 60 * sturm_plan
+info: Die Mannschaft stuermt gemeinsam (bottaktik.stuerme_fuehren).
+
+[ziel kreis]
+will: im_kreis
+dringlich: 57 * zone_aktiv
+info: HUEGEL: Der Kreis geht vor - gekaempft wird auf dem Weg dorthin.
+
+[ziel feuerschutz]
+will: kamerad_geschuetzt
+dringlich: 52 * kamerad_braucht_schutz * feind_bekannt * (1 - feind_sichtbar) * (0.5 + disziplin)
+info: Ein Kamerad braucht Schutz und der Gegner ist in Deckung: niederhalten.
+
+[ziel feind_ausschalten]
+will: feind_besiegt
+dringlich: 50 * feind_sichtbar + 30 * feind_bekannt
+info: Den Gegner, den er sieht oder eben sah, ausschalten.
+
+[ziel suchen]
+will: feind_sichtbar
+dringlich: 10
+info: Nichts los: Gegner suchen - wo er einen hoerte, sonst auf der Karte.
+
+# ── Aktionen ──────────────────────────────────────────────────────────
+
+[aktion angreifen]
+braucht: feind_sichtbar, linie_frei, munition_da
+macht: feind_besiegt
+kosten: 1
+tut: kaempfen
+info: Kaempfen wie die klassische KI: Abstand, Ausweichen, Feuerstoesse, Granate.
+
+[aktion flankieren]
+braucht: feind_bekannt, !linie_frei, flanke_frei, munition_da
+macht: feind_sichtbar, linie_frei
+kosten: 3 - mut
+tut: flankieren
+funk: flanke
+
+[aktion niederhalten]
+braucht: feind_bekannt, munition_da
+macht: kamerad_geschuetzt, feind_besiegt
+kosten: 4
+tut: niederhalten
+funk: druck
+info: Neben die Deckung schiessen. Fuer den Gegner nur zweite Wahl nach der Flanke.
+
+[aktion nahkampf]
+braucht: feind_sichtbar, !munition_da
+macht: feind_besiegt
+kosten: 2
+tut: nahkampf
+funk: leer
+
+[aktion suchen]
+macht: feind_sichtbar, linie_frei, feind_bekannt
+kosten: 5
+tut: suchen
+
+[aktion deckung]
+macht: in_deckung
+kosten: 1 + mut
+tut: deckung
+
+[aktion nachladen_in_deckung]
+braucht: in_deckung, magazin_leer
+macht: !magazin_leer
+kosten: 1
+tut: nachladen
+funk: nachladen
+
+[aktion nachladen_ohne_feind]
+braucht: !feind_bekannt, magazin_leer
+macht: !magazin_leer
+kosten: 1
+tut: nachladen
+
+[aktion nachladen_offen]
+braucht: magazin_leer
+macht: !magazin_leer
+kosten: 6 - 3 * mut
+tut: nachladen
+info: Ohne Deckung nachladen - wer mutig ist, tut das eher.
+
+[aktion zum_kreis]
+macht: im_kreis
+kosten: 2
+tut: zum_kreis
+funk: kreis
+
+[aktion aufhelfen]
+braucht: kamerad_liegt
+macht: !kamerad_liegt
+kosten: 1
+tut: helfen
+funk: helfen
+
+[aktion stuermen]
+braucht: sturm_plan
+macht: sturm_fertig
+kosten: 1
+tut: sturm
+
+# ── Die Spezies ───────────────────────────────────────────────────────
+
+[spezies mp_bot]
+name: BOT
+ziele: ueberleben, nachladen, aufhelfen, stuermen, kreis, feuerschutz, feind_ausschalten, suchen
+aktionen: angreifen, flankieren, niederhalten, nahkampf, suchen, deckung, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, aufhelfen, stuermen
+merkmal mut: 0.2 0.9
+merkmal disziplin: 0.3 1.0
+info: Ein Bot des Mehrspielers - etwas schlechter als ein Mensch, fair wie immer.

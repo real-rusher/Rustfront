@@ -37,7 +37,7 @@ Tasten lassen sich auch **anklicken** (fuer Tastaturen ohne Ziffernblock).
 | / | KI aus / an - Bots und Gegner stehen, schiessen und schlagen nicht |
 | * | Leeren: alles weg ausser der Figur, die man gerade steuert |
 | 7 / 9 | Ebene runter / hoch |
-| 8 | INFO: was die KI denkt (Linien zu Ziel, Flanke, Deckung, Sammelpunkt; Zustand ueber jedem Bot, Ziel jedes Gegners) |
+| 8 | INFO: AUS, KURZ, GEDANKEN. KURZ: was die KI denkt (Linien zu Ziel, Flanke, Deckung, Sammelpunkt; Zustand ueber jedem Bot, bei GOAP `ZIEL > AKTION`; Ziel jedes Gegners). GEDANKEN: dazu links die GOAP-Figur am Zeiger - Merkmale, jedes Ziel mit Dringlichkeit, Plan, wahre Fakten, Zahlen, Protokoll |
 | 4 | Spawner auf / zu |
 | 5 | Den zuletzt gespawnten Eintrag noch einmal am Zeiger |
 | 6 | Gottmodus: AUS, UNVERWUNDBAR, UNSTERBLICH, UNSICHTBAR, ALLES |
@@ -57,7 +57,7 @@ setzt, steht sofort da.
 
 | Gruppe | Eintraege | Einstellungen |
 | --- | --- | --- |
-| FIGUREN | Bot, Spieler (steht), Spieler (ich) | Anzahl, Streuung, Team (ROT, BLAU, FREI), Waffe, Leben |
+| FIGUREN | Bot, Spieler (steht), Spieler (ich) | Anzahl, Streuung, Team (ROT, BLAU, FREI), Waffe, Leben; beim Bot HIRN (KLASSISCH / GOAP, docs/KI.md) |
 | GEGNER, BOSSE | jede Art aus `K.GEGNER` und `K.BOSSE` | Anzahl, Streuung, Leben, KI an/aus |
 | ZIELE | die Zielpuppe | Anzahl, Streuung |
 | OBJEKTE | Buggy, Hotzone hier, Hotzone aus | Anzahl, Streuung, Richtung |
@@ -67,7 +67,10 @@ setzt, steht sofort da.
 ## Das Testmenue (Esc)
 
 Karte (Enter laedt, die Einstellungen bleiben), neu laden, Zeit,
-Zeitfaktor, KI, Flugtempo, jeder Gottmodus einzeln (unverwundbar,
+Zeitfaktor, KI, Flugtempo, INFO, KI-DATEN NEU LADEN (liest `wesen/*.txt`
+neu und gibt jeder GOAP-Figur ein neues Gehirn), ZIEL ERZWINGEN (der
+Figur in der Gedankenansicht ein Ziel aufzwingen, links/rechts blaettert,
+"-" laesst sie wieder frei denken), jeder Gottmodus einzeln (unverwundbar,
 unsterblich, unsichtbar fuer KI, unendlich Munition), Wiedereinstieg
 toter Figuren, Zombiewellen, Beute nachlegen, Blenden und Ruckeln des
 Beobachters, die gewoehnlichen Einstellungen, zurueck zum Hauptmenue.
@@ -86,4 +89,5 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.29 | Zielorientierte KI: Spawner BOT mit HIRN KLASSISCH / GOAP, INFO-Stufe GEDANKEN (Taste 8 zweimal), Testmenue ZIEL ERZWINGEN und KI-DATEN NEU LADEN |
 | 0.34.28 | Der Testmodus selbst: Beobachter, Ziffernblock, Spawner fuer Figuren, alle Gegner und Bosse, Zielpuppe, Buggy, Hotzone, Beute und Wurfwaffen; Gottmodi; INFO-Ansicht fuer Bots (auch Flanke, Niederhalten, Sturm aus 0.34.27) |

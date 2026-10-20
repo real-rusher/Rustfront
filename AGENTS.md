@@ -65,6 +65,14 @@ gilt fuer **jedes neue Feature**:
 * Dazu ein Test in `tests/test_spiel.py`, Abschnitt Testmodus, und eine
   Zeile in `docs/TESTMODUS.md`.
 
+## KI der Wesen
+
+Der Plan fuer die KI aller Wesen (zielorientiert, GOAP) steht in
+`docs/KI.md`, mit allen Wuenschen des Besitzers und einem Fahrplan in
+Schritten. Wer gesagt bekommt "bau jetzt Schritt N ein", liest dort
+zuerst Abschnitt 2 und den Schritt. Ziele, Aktionen und Spezies gehoeren
+in `wesen/*.txt`, nicht in den Code.
+
 ## Pruefen vor dem Pull Request
 
 ```

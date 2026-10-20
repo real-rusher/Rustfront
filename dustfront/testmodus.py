@@ -66,6 +66,7 @@ from .anzeige import Anzeige
 from .entities import Granate
 from .fahrzeug import Buggy
 from .font import SCHRIFT
+from .goap import erfuellt as goap_erfuellt
 from .mehrspieler import Gefecht, Kaempfer, KampfBeute, KampfGegner
 
 
@@ -161,7 +162,13 @@ OPTIONEN = {
     "winkel": ("RICHTUNG", lambda: [0, 90, 180, 270], lambda v: "%d GRAD" % v),
     "zuender": ("ZÜNDER", lambda: ["liegt", "sofort"],
                 lambda v: "LIEGT, ZÜNDET" if v == "liegt" else "SOFORT"),
+    # Seit 0.34.29: klassische oder zielorientierte KI (bot_goap.py).
+    "hirn": ("HIRN", lambda: list(K.GOAP["arten"]), lambda v: v.upper()),
 }
+
+# Taste 8 schaltet durch: aus, kurz (Linien und Zustand), Gedanken (dazu
+# links die Ziele, der Plan und das Protokoll einer GOAP-Figur).
+INFO_STUFEN = ("AUS", "KURZ", "GEDANKEN")
 
 
 class Eintrag:
@@ -183,7 +190,7 @@ def eintraege() -> list:
     bekommt einen Eintrag, damit es sich im Testmodus setzen laesst.
     Gegner, Bosse und Zielpuppen kommen von selbst aus der Tabelle."""
     raus = [
-        Eintrag("BOT", "FIGUREN", ("anzahl", "streuung", "team", "waffe", "leben"),
+        Eintrag("BOT", "FIGUREN", ("anzahl", "streuung", "team", "waffe", "leben", "hirn"),
                 lambda t, p, e, w: t.bot_setzen(p, e, w)),
         Eintrag("SPIELER, STEHT", "FIGUREN", ("anzahl", "streuung", "team", "leben"),
                 lambda t, p, e, w: t.puppe_setzen(p, e, w)),
@@ -272,7 +279,8 @@ class Testmodus(Gefecht):
         self.faktor_nr = int(z.get("faktor_nr", list(K.TESTMODUS["zeitfaktoren"]).index(1.0)))
         self.ki_stopp = bool(z.get("ki_stopp", False))
         self.gott = frozenset(z.get("gott", ()))
-        self.info = bool(z.get("info", True))
+        self.info = int(z.get("info", 1)) % len(INFO_STUFEN)
+        self._denker = None           # wessen Gedanken die INFO zeigt
         self.flug_nr = int(z.get("flug_nr", 1))
         self.wiedereinstieg = bool(z.get("wiedereinstieg", True))
         self.wellen_an = bool(z.get("wellen_an", False))
@@ -568,7 +576,7 @@ class Testmodus(Gefecht):
         k.leben = k.max_leben
 
     def bot_setzen(self, pos, ebene: int, w: dict):
-        k = self._bot_dazu(w.get("team", 0))
+        k = self._bot_dazu(w.get("team", 0), w.get("hirn"))
         self._figur_einstellen(k, w.get("team", 0), w.get("leben", 1.0))
         if w.get("waffe", "zufall") != "zufall":
             andere = [x for x in K.LOADOUT["auswahl_waffen"] if x != w["waffe"]]
@@ -763,7 +771,8 @@ class Testmodus(Gefecht):
             else:
                 self._rad += schritt
         elif name == "8":
-            self.info = not self.info
+            self.info = (self.info + 1) % len(INFO_STUFEN)
+            self.melde("INFO: %s" % INFO_STUFEN[self.info])
         elif name == "4":
             self.spawner_offen = not self.spawner_offen
             self.menue_offen = False
@@ -826,7 +835,7 @@ class Testmodus(Gefecht):
         if name == "/":
             return ("KI AUS" if self.ki_stopp else "KI AN"), self.ki_stopp
         if name == "8":
-            return "INFO", self.info
+            return ("DENKT" if self.info == 2 else "INFO"), bool(self.info)
         if name == "6":
             return "GOTT", bool(self.gott)
         if name == "4":
@@ -979,6 +988,9 @@ class Testmodus(Gefecht):
             ("faktor", "ZEITFAKTOR", "x%g" % self.zeitfaktor),
             ("ki", "KI", "STOP" if self.ki_stopp else "AN"),
             ("flug", "FLUGTEMPO", "%d PX/S" % K.TESTMODUS["flug"][self.flug_nr % len(K.TESTMODUS["flug"])]),
+            ("info", "INFO (TASTE 8)", INFO_STUFEN[self.info]),
+            ("ki_daten", "KI-DATEN NEU LADEN (WESEN/)", ""),
+            ("erzwingen", "ZIEL ERZWINGEN (GEDANKEN)", self._erzwungen_text()),
         ]
         for schluessel, name, _hilfe in GOTT_ARTEN:
             raus.append(("gott:" + schluessel, "GOTT: " + name,
@@ -1032,6 +1044,12 @@ class Testmodus(Gefecht):
             self.taste("/")
         elif schluessel == "flug":
             self.flug_nr = (self.flug_nr + schritt) % len(K.TESTMODUS["flug"])
+        elif schluessel == "info":
+            self.info = (self.info + schritt) % len(INFO_STUFEN)
+        elif schluessel == "ki_daten" and ausloesen:
+            self.ki_daten_laden()
+        elif schluessel == "erzwingen":
+            self.ziel_erzwingen(schritt)
         elif schluessel.startswith("gott:"):
             art = schluessel[5:]
             self.gott = frozenset(self.gott ^ {art})
@@ -1112,6 +1130,8 @@ class Testmodus(Gefecht):
         super().zeichnen(ziel, alpha)
         if self.info:
             self._info_zeichnen(ziel)
+        if self.info == 2:
+            self._gedanken_zeichnen(ziel)
         self._zeiger_zeichnen(ziel)
         self._status_zeichnen(ziel)
         self._numpad_zeichnen(ziel)
@@ -1200,6 +1220,12 @@ class Testmodus(Gefecht):
             if h.sturm is not None:
                 zustand = "STURM:%s" % h.sturm["phase"].upper()
                 pygame.draw.line(ziel, (120, 170, 255), p, kam.zu_bild(h.sturm["sammel"]), 1)
+            gehirn = getattr(h, "gehirn", None)
+            if gehirn is not None:
+                # GOAP: was er will und was er dafuer gerade tut.
+                zustand = "%s > %s" % (
+                    gehirn.ziel.name.upper() if gehirn.ziel else "-",
+                    gehirn.aktion.name.upper() if gehirn.aktion else "-")
             if h.unterdrueckt > 0:
                 zustand += " (NIEDERGEH.)"
             SCHRIFT.zeichnen(ziel, zustand, int(p.x), int(p.y) + 14, K.C_AMBER, 1,
@@ -1214,6 +1240,120 @@ class Testmodus(Gefecht):
                     q = kam.zu_bild(w.pos)
                     SCHRIFT.zeichnen(ziel, "KI AUS", int(q.x), int(q.y) + 12,
                                      K.C_MUTED, 1, ausrichtung="mitte")
+
+    # ── Gedanken (GOAP, seit 0.34.29) ─────────────────────────────────
+    def denker(self):
+        """Wessen Gedanken die INFO zeigt: die GOAP-Figur am Zeiger, sonst
+        die zuletzt gezeigte, sonst die erste, die es gibt."""
+        w = self.am_zeiger()
+        if w is not None and getattr(getattr(w, "hirn", None), "gehirn", None) is not None:
+            self._denker = w
+        d = self._denker
+        if d is not None and d.lebt and getattr(d, "hirn", None) is not None \
+                and d in self.kaempfer.values():
+            return d
+        for k in self._bots():
+            if k.lebt and getattr(k.hirn, "gehirn", None) is not None:
+                self._denker = k
+                return k
+        self._denker = None
+        return None
+
+    def _erzwungen_text(self) -> str:
+        d = self._denker
+        gehirn = getattr(getattr(d, "hirn", None), "gehirn", None)
+        if gehirn is None:
+            return "KEINE GOAP-FIGUR"
+        return (gehirn.erzwungen or "-").upper()
+
+    def ziel_erzwingen(self, schritt: int = 1) -> None:
+        """Der gezeigten Figur ein Ziel aufzwingen, egal wie dringlich -
+        oder wieder frei denken lassen ("-")."""
+        d = self.denker()
+        if d is None:
+            self.melde("KEINE GOAP-FIGUR (BOT MIT HIRN GOAP SPAWNEN)")
+            return
+        gehirn = d.hirn.gehirn
+        namen = [None] + [z.name for z in gehirn.ziele]
+        i = namen.index(gehirn.erzwungen) if gehirn.erzwungen in namen else 0
+        gehirn.erzwungen = namen[(i + schritt) % len(namen)]
+        gehirn.plan = []
+        self.melde("%s: ZIEL %s" % (d.name, (gehirn.erzwungen or "FREI").upper()))
+
+    def ki_daten_laden(self) -> None:
+        """wesen/*.txt neu lesen und jeder GOAP-Figur ein neues Gehirn
+        geben - aendern und ausprobieren, ohne neu zu starten."""
+        from . import wesen_daten
+        d = wesen_daten.neu_laden()
+        n = 0
+        for k in self._bots():
+            if getattr(k.hirn, "gehirn", None) is not None:
+                k.hirn.gehirn_neu()
+                n += 1
+        fehler = wesen_daten.pruefen(d)
+        self.melde("KI-DATEN: %d FEHLER" % len(fehler) if fehler
+                   else "KI-DATEN NEU GELADEN (%d FIGUREN)" % n)
+
+    def _gedanken_zeichnen(self, ziel) -> None:
+        """Links: Merkmale, Ziele mit Dringlichkeit, Plan, Fakten und das
+        Protokoll der GOAP-Figur, die gerade gezeigt wird."""
+        d = self.denker()
+        r = pygame.Rect(4, 28, 252, K.GAME_H - 56)
+        if d is None:
+            SCHRIFT.zeichnen(ziel, "GEDANKEN: KEINE GOAP-FIGUR - BOT MIT HIRN GOAP",
+                             r.x + 2, r.y, K.C_MUTED, 1)
+            return
+        h = d.hirn
+        gehirn = h.gehirn
+        bild = pygame.Surface(r.size, pygame.SRCALPHA)
+        bild.fill((8, 6, 5, 200))
+        ziel.blit(bild, r.topleft)
+        pygame.draw.rect(ziel, K.C_MUTED_DK, r, 1)
+        x, y = r.x + 4, r.y + 4
+        breit = r.width - 8
+
+        def zeile(text, farbe=K.C_CREAM, einzug=0):
+            nonlocal y
+            if y > r.bottom - 10:
+                return
+            SCHRIFT.zeichnen(ziel, ui.kuerzen(text.replace("_", " "), breit - einzug),
+                             x + einzug, y, farbe, 1)
+            y += 9
+
+        zeile("%s - %s" % (d.name, h.spezies.upper()), K.C_AMBER)
+        zeile("  ".join("%s %.2f" % (n, v) for n, v in sorted(gehirn.merkmale.items())),
+              K.C_MUTED)
+        if gehirn.erzwungen:
+            zeile("ERZWUNGEN: %s" % gehirn.erzwungen, K.C_RED)
+        zeile("PLAN: %s" % (" > ".join(a.name for a in gehirn.plan) or "-"), K.C_TEAL)
+        y += 3
+        zeile("ZIELE", K.C_MUTED_DK)
+        for z in sorted(gehirn.ziele, key=lambda z: -gehirn.dringlichkeiten.get(z.name, 0.0)):
+            wert = gehirn.dringlichkeiten.get(z.name, 0.0)
+            erledigt = goap_erfuellt(gehirn.fakten, z.will)
+            farbe = (K.C_AMBER if z is gehirn.ziel else
+                     K.C_MUTED_DK if wert <= 0 or erledigt else K.C_CREAM)
+            zeile("%s %3d %s%s" % (">" if z is gehirn.ziel else " ", round(wert), z.name,
+                                   "  (ERFÜLLT)" if erledigt and wert > 0 else ""), farbe, 4)
+        y += 3
+        zeile("FAKTEN", K.C_MUTED_DK)
+        wahr = [n for n, v in sorted(gehirn.fakten.items()) if v]
+        stueck = ""
+        for n in wahr:
+            probe = (stueck + "  " + n) if stueck else n
+            if SCHRIFT.breite(probe.replace("_", " ")) > breit - 4:
+                zeile(stueck, K.C_CREAM, 4)
+                stueck = n
+            else:
+                stueck = probe
+        zeile(stueck or "-", K.C_CREAM, 4)
+        zeile("  ".join("%s %.2f" % (n, v) if v < 100 else "%s %d" % (n, v)
+                        for n, v in sorted(gehirn.werte.items())), K.C_MUTED, 4)
+        y += 3
+        zeile("PROTOKOLL", K.C_MUTED_DK)
+        platz = max(0, (r.bottom - 10 - y) // 9)
+        for zeit, text in list(gehirn.protokoll)[-platz:] if platz else ():
+            zeile("%6.1f %s" % (zeit, text), K.C_MUTED, 4)
 
     def _spawner_zeichnen(self, ziel) -> None:
         r = self.SPAWNER

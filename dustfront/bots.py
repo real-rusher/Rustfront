@@ -207,11 +207,6 @@ class BotHirn(Taktik):
             self.denk_rest = K.BOTS["takt"]
             self._wahrnehmen()
 
-        will = pygame.Vector2(0, 0)
-        ziel_punkt = None            # wohin das Fadenkreuz will
-        feuern = False
-        zielt = False
-
         # Getroffen worden: dorthin schauen, woher es kam.
         if k.leben < self.leben_vorher - 0.5:
             self.getroffen_rest = 2.0
@@ -224,6 +219,39 @@ class BotHirn(Taktik):
             self.funken("nachladen")
         self.laden_vorher = laedt
 
+        will, ziel_punkt, feuern, zielt = self._entscheiden(dt, ein)
+
+        will = self._sicher(will)
+        will = self._nicht_stecken(dt, will)
+
+        # Fadenkreuz: schwenkt, springt nicht.
+        if ziel_punkt is None:
+            ziel_punkt = k.pos + (will * 120 if will.length_squared() > 0.01
+                                  else pygame.Vector2(1, 0).rotate(self.blick) * 120)
+        soll = _winkel_zu(k.pos, ziel_punkt)
+        ab = _winkel_diff(self.blick, soll)
+        schritt = K.BOTS["dreh"] * dt
+        self.blick += max(-schritt, min(schritt, ab))
+        weit = max(40.0, k.pos.distance_to(ziel_punkt))
+        maus = k.pos + pygame.Vector2(1, 0).rotate(self.blick) * weit
+        ein["ziel"] = [round(maus.x, 1), round(maus.y, 1)]
+        ein["will"] = [round(will.x, 2), round(will.y, 2)]
+        ein["feuert"] = bool(feuern)
+        ein["zielt"] = bool(zielt)
+        return ein
+
+    def _entscheiden(self, dt: float, ein: dict):
+        """Was er jetzt tut: (Laufrichtung, Zielpunkt, feuern, zielen).
+
+        Die klassische Entscheidung als feste Reihenfolge. Seit 0.34.29
+        eine eigene Methode: die zielorientierte KI (bot_goap.GoapHirn)
+        ersetzt genau diesen Teil und behaelt alles andere - Sehen,
+        Zielen, Feuerstoesse, Wege."""
+        k = self.k
+        will = pygame.Vector2(0, 0)
+        ziel_punkt = None            # wohin das Fadenkreuz will
+        feuern = False
+        zielt = False
         helfen = self._wem_helfen()
         kaempft = self.ziel is not None and self.ziel_ok(self.ziel)
         # Aufhelfen ist in VERSUS die Aufgabe: liegt einer nah und ist der
@@ -252,25 +280,7 @@ class BotHirn(Taktik):
                 will, ziel_punkt, feuern = ohne
             else:
                 will, ziel_punkt = self._unterwegs(dt, ein)
-
-        will = self._sicher(will)
-        will = self._nicht_stecken(dt, will)
-
-        # Fadenkreuz: schwenkt, springt nicht.
-        if ziel_punkt is None:
-            ziel_punkt = k.pos + (will * 120 if will.length_squared() > 0.01
-                                  else pygame.Vector2(1, 0).rotate(self.blick) * 120)
-        soll = _winkel_zu(k.pos, ziel_punkt)
-        ab = _winkel_diff(self.blick, soll)
-        schritt = K.BOTS["dreh"] * dt
-        self.blick += max(-schritt, min(schritt, ab))
-        weit = max(40.0, k.pos.distance_to(ziel_punkt))
-        maus = k.pos + pygame.Vector2(1, 0).rotate(self.blick) * weit
-        ein["ziel"] = [round(maus.x, 1), round(maus.y, 1)]
-        ein["will"] = [round(will.x, 2), round(will.y, 2)]
-        ein["feuert"] = bool(feuern)
-        ein["zielt"] = bool(zielt)
-        return ein
+        return will, ziel_punkt, feuern, zielt
 
     def _zeiten(self, dt: float) -> None:
         for name in ("reaktion_rest", "stoss_rest", "pause_rest", "seite_rest",
@@ -1000,10 +1010,11 @@ class BotTeil:
             else:
                 break
 
-    def _bot_dazu(self, team: int):
+    def _bot_dazu(self, team: int, hirn: str | None = None):
         """Ein Bot in genau diese Mannschaft - nicht ueber _team_fuer, das
         jeden in die kleinere steckt und dabei das Auffuellen durcheinander
-        braechte."""
+        braechte. `hirn` ("klassisch"/"goap") geht vor der Regel BOT-KI -
+        der Testmodus stellt beide nebeneinander."""
         from .mehrspieler import Kaempfer
         nummer = K.BOTS["nummer_ab"]
         while nummer in self.kaempfer:
@@ -1024,7 +1035,13 @@ class BotTeil:
         self.kaempfer[nummer] = k
         self.welt.dazu(k)
         self._namen_merken(k)
-        k.hirn = BotHirn(self, k, self._bot_rnd)
+        if hirn is None:
+            hirn = self.regelwerk.get("bot_ki", "klassisch")
+        if hirn == "goap":
+            from .bot_goap import GoapHirn
+            k.hirn = GoapHirn(self, k, self._bot_rnd, K.GOAP["spezies_bot"])
+        else:
+            k.hirn = BotHirn(self, k, self._bot_rnd)
         self._loadout_anlegen(k)
         self._magazine_fuellen(k)
         return k

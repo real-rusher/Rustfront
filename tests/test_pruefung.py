@@ -171,6 +171,14 @@ pruef("Jeder Gegner, der Treppen nimmt, passt durch eine Kachel breite Tuer",
       not zu_breit, zu_breit)
 
 
+# ── 3b. Wesen-Daten (zielorientierte KI, seit 0.34.29) ───────────────
+print("\n-- Wesen")
+from dustfront import bot_goap, wesen_daten
+_wesen_fehler = wesen_daten.pruefen(wesen_daten.neu_laden(), tut=bot_goap.TUN)
+pruef("wesen/*.txt: jeder Block liest sich, jeder Verweis und jedes Verhalten stimmt",
+      not _wesen_fehler, _wesen_fehler[:6])
+
+
 # ── 4. Klaenge ───────────────────────────────────────────────────────
 print("\n-- Klaenge")
 import tempfile  # noqa: E402

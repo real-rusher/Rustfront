@@ -1054,6 +1054,20 @@ TESTMODUS = dict(
     figur_ab=300,             # Spielernummern der gespawnten Puppen und Figuren
 )
 
+# Zielorientierte KI (seit 0.34.29, goap.py, bot_goap.py, Daten in wesen/).
+# Was spaeter noch kommt, steht in docs/KI.md.
+GOAP = dict(
+    tiefe=6,                  # hoechstens so viele Aktionen in einem Plan
+    knoten=400,               # hoechstens so viele Zustaende je Planung
+    neu_planen=0.6,           # spaetestens nach so vielen Sekunden neu planen (s)
+    takt=0.1,                 # so oft denkt ein Wesen (s), dazwischen handelt es
+    vorsprung=8.0,            # das laufende Ziel gewinnt bei Gleichstand um so viel
+    sperre=2.0,               # eine gescheiterte Aktion so lange nicht einplanen (s)
+    protokoll=40,             # so viele Zeilen merkt sich ein Gehirn (Testmodus)
+    arten=("klassisch", "goap"),   # die Regel BOT-KI
+    spezies_bot="mp_bot",     # welche Spezies aus wesen/ ein Bot des Mehrspielers ist
+)
+
 # Die Lobby: wo man beim Aufmachen landet und nach jeder Runde.
 #
 # Drei Bereiche, in der Kartendatei als Rechtecke im Kopf eingetragen:

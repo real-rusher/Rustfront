@@ -9869,6 +9869,191 @@ _tm2.zeichnen(_bild87, 1.0)
 pruef("Spawner und Testmenue lassen sich zeichnen", True, "")
 app.werfen()
 
+# 0.34.29: "Der Core soll schon jetzt gebaut werden, sodass ich das ganze
+# schonmal im Testmodus in Aktion sehen kann." Zielorientierte KI: der
+# Kern (goap.py), die Daten (wesen/), die Bots damit (bot_goap.py) und
+# ihre Gedanken im Testmodus. Planung: docs/KI.md.
+print("\n-- Zielorientierte KI (0.34.29)")
+from dustfront import goap as _GO88, wesen_daten as _WD88, bot_goap as _BG88
+from dustfront import regeln as _RG88
+
+# Ausdruecke: rechnen, ja - Code ausfuehren, nie.
+pruef("Ein Ausdruck rechnet mit Fakten, Zahlen und Merkmalen",
+      _GO88.Ausdruck("80 * a * b + max(0, 3 - mut)").wert({"a": 1, "b": 1, "mut": 1}) == 82.0, "")
+pruef("... ein unbekannter Name ist 0", _GO88.Ausdruck("5 * gibts_nicht + 1").wert({}) == 1.0, "")
+_boese88 = []
+for t_ in ("__import__('os')", "a.b", "'text'", "open('x')", "[1, 2]", "lambda: 1", "a[0]",
+           "(1).__class__"):
+    try:
+        _GO88.Ausdruck(t_)
+        _boese88.append(t_)
+    except (ValueError, SyntaxError):
+        pass
+pruef("... und alles andere wird beim Laden abgelehnt (kein Code aus Datendateien)",
+      not _boese88, str(_boese88))
+
+# Der Planer findet Kombinationen selbst.
+_akt88 = [_GO88.Aktion("deckung", "", "in_deckung", "2"),
+          _GO88.Aktion("laden_deckung", "in_deckung, leer", "!leer", "1"),
+          _GO88.Aktion("laden_ohne", "!feind, leer", "!leer", "1"),
+          _GO88.Aktion("laden_offen", "leer", "!leer", "6")]
+_plan88 = _GO88.planen({"leer": True, "feind": True}, {"leer": False}, _akt88)
+pruef("Planer: mit Gegner erst in Deckung, dann nachladen",
+      [a_.name for a_ in _plan88] == ["deckung", "laden_deckung"], str(_plan88))
+_plan88 = _GO88.planen({"leer": True}, {"leer": False}, _akt88)
+pruef("... ohne Gegner gleich", [a_.name for a_ in _plan88] == ["laden_ohne"], str(_plan88))
+pruef("... schon erfuellt: leerer Plan, unmoeglich: None",
+      _GO88.planen({}, {"leer": False}, _akt88) == []
+      and _GO88.planen({}, {"fliegt": True}, _akt88) is None, "")
+_kette88 = [_GO88.Aktion("s%d" % i_, "f%d" % i_, "f%d" % (i_ + 1), "1") for i_ in range(10)]
+pruef("... und mehr als TIEFE Schritte plant er nicht",
+      _GO88.planen({"f0": True}, {"f10": True}, _kette88) is None
+      and len(_GO88.planen({"f0": True}, {"f4": True}, _kette88)) == 4, "")
+pruef("... Kosten aus Merkmalen: der Mutige laedt offen, der Vorsichtige in Deckung",
+      [a_.name for a_ in _GO88.planen({"leer": True, "feind": True}, {"leer": False},
+                                      [_akt88[0], _akt88[1],
+                                       _GO88.Aktion("offen", "leer", "!leer", "6 - 5 * mut")],
+                                      {"mut": 0.9})] == ["offen"]
+      and [a_.name for a_ in _GO88.planen({"leer": True, "feind": True}, {"leer": False},
+                                          [_akt88[0], _akt88[1],
+                                           _GO88.Aktion("offen", "leer", "!leer", "6 - 5 * mut")],
+                                          {"mut": 0.1})] == ["deckung", "laden_deckung"], "")
+
+# Das Gehirn: waehlt das dringendste Ziel, haelt es gegen Wackeln, und
+# eine gescheiterte Aktion bleibt eine Weile draussen.
+_hirn88 = _GO88.Gehirn([_GO88.Ziel("laden", "!leer", "50 * leer"),
+                        _GO88.Ziel("kampf", "besiegt", "45 + gereizt")],
+                       _akt88 + [_GO88.Aktion("schiessen", "", "besiegt", "1")])
+_a88 = _hirn88.denken(0.0, {"leer": True, "feind": True}, {"gereizt": 0})
+pruef("Gehirn: das dringendste Ziel, der erste Schritt seines Plans",
+      _hirn88.ziel.name == "laden" and _a88.name == "deckung", str(_a88))
+_hirn88.denken(0.1, {"leer": True, "feind": True}, {"gereizt": 7})
+pruef("... ein knapp dringenderes Ziel verdraengt das laufende nicht (Vorsprung)",
+      _hirn88.ziel.name == "laden", _hirn88.ziel.name)
+_hirn88.melden("gescheitert")
+_a88 = _hirn88.denken(0.2, {"leer": True, "feind": True}, {"gereizt": 0})
+pruef("... gescheitert: ohne diese Aktion neu geplant",
+      _a88.name == "laden_offen" and "GESCHEITERT: deckung" in [t_ for _z, t_ in _hirn88.protokoll],
+      str(_a88))
+_a88 = _hirn88.denken(0.2 + K.GOAP["sperre"] + 0.1, {"leer": True, "feind": True}, {"gereizt": 0})
+pruef("... und nach der Sperre wieder mit", _a88.name == "deckung", str(_a88))
+_hirn88.erzwungen = "kampf"
+_a88 = _hirn88.denken(5.0, {"leer": True, "feind": True}, {"gereizt": 0})
+pruef("... ein erzwungenes Ziel gilt, egal wie dringlich (Testmodus)",
+      _hirn88.ziel.name == "kampf" and _a88.name == "schiessen", str(_a88))
+
+# Die Daten.
+pruef("wesen/*.txt laesst sich lesen, jeder Verweis und jedes Verhalten stimmt",
+      not _WD88.pruefen(_WD88.neu_laden(), tut=_BG88.TUN),
+      "; ".join(_WD88.pruefen(tut=_BG88.TUN)[:3]))
+pruef("... mit der Spezies der Mehrspieler-Bots",
+      K.GOAP["spezies_bot"] in _WD88.daten().spezies, "")
+_d88 = _WD88.Daten()
+_WD88.aus_text("[ziel gut]\nwill: a\n\n[aktion kaputt]\nkosten: 3 +\n\nzeile ohne block\n"
+               "[aktion gut]\nmacht: a\n[spezies s]\nziele: gut, fehlt\naktionen: gut\n"
+               "merkmal mut: 0.9 0.1\n", _d88, "probe.txt")
+_f88 = _WD88.pruefen(_d88)
+pruef("Ein Fehler in den Daten kostet nur seinen Block - mit Datei und Zeile gemeldet",
+      "gut" in _d88.ziele and "gut" in _d88.aktionen and "kaputt" not in _d88.aktionen
+      and any("probe.txt:4" in f_ for f_ in _f88) and any("fehlt" in f_ for f_ in _f88)
+      and _d88.spezies["s"].merkmale["mut"] == (0.1, 0.9), str(_f88))
+
+# Die Regel BOT-KI.
+pruef("Regel BOT-KI: klassisch ist die Vorgabe, GOAP waehlbar",
+      _RG88.vorgabe()["bot_ki"] == "klassisch"
+      and _RG88.saeubern({"bot_ki": "goap"})["bot_ki"] == "goap"
+      and _RG88.saeubern({"bot_ki": "unsinn"})["bot_ki"] == "klassisch", "")
+_n88 = netz.Gastgeber(_neuer_port())
+_w88 = Gefecht(app, "WIRT", gastgeber=_n88, modus="team", seed=88,
+               regeln={"bots": 4, "bot_ki": "goap"})
+pruef("... mit GOAP denken alle Bots der Runde zielorientiert",
+      _w88._bots() and all(isinstance(b_.hirn, _BG88.GoapHirn) for b_ in _w88._bots()),
+      str([type(b_.hirn).__name__ for b_ in _w88._bots()]))
+_w88.verlassen()
+_n88 = netz.Gastgeber(_neuer_port())
+_w88 = Gefecht(app, "WIRT", gastgeber=_n88, modus="team", seed=88, regeln={"bots": 4})
+pruef("... ohne die Regel klassisch wie bisher",
+      _w88._bots() and not any(isinstance(b_.hirn, _BG88.GoapHirn) for b_ in _w88._bots()), "")
+_w88.verlassen()
+
+# Im Testmodus: GOAP gegen klassisch, auf kurze Entfernung.
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_e88 = _tm._eintrag("BOT")
+pruef("Spawner: der BOT hat die Einstellung HIRN (KLASSISCH / GOAP)",
+      "hirn" in _e88.optionen and _TM87.OPTIONEN["hirn"][1]() == list(K.GOAP["arten"]), "")
+_tm._sp_werte["BOT"] = {"hirn": list(K.GOAP["arten"]).index("goap")}
+_a88 = _tm._einstiegsort(0)
+_b88 = None
+for r_ in (240, 200, 280, 170):
+    for w_ in range(0, 360, 15):
+        p_ = _a88 + pygame.Vector2(r_, 0).rotate(w_)
+        # Freie Sicht: sie sollen kaempfen, nicht einander suchen.
+        if (_tm.welt.frei(p_, 14, 0, True) and _tm.welt.frei(p_ + pygame.Vector2(0, 24), 14, 0, True)
+                and _tm.welt.deckung(_a88, p_, 0) == ""):
+            _b88 = p_
+            break
+    if _b88 is not None:
+        break
+_rot88 = _tm.spawnen(_e88, pos=_a88, ebene=0)
+_rot88 = [k_ for k_ in _tm._bots()]
+pruef("... der Spawner setzt mit HIRN GOAP einen planenden Bot",
+      _rot88 and all(isinstance(k_.hirn, _BG88.GoapHirn) for k_ in _rot88), "")
+_rot88 += [_tm.bot_setzen(_a88 + pygame.Vector2(0, 24), 0, {"team": 0, "hirn": "goap"})]
+_blau88 = [_tm.bot_setzen(_b88 + pygame.Vector2(0, 24 * i_), 0, {"team": 1, "hirn": "klassisch"})
+           for i_ in range(2)]
+_tm.wiedereinstieg = False
+_geist88 = _tm._geist
+_geist88.pos.update(_a88 + pygame.Vector2(20, 0))
+_geist88.ebene = 0
+_aktionen88 = set()
+_ziele88 = set()
+_gesehen88 = False
+for _ in range(int(30.0 / _D87)):
+    _tm.schritt(_D87)
+    for k_ in _rot88:
+        g_ = k_.hirn.gehirn if k_.hirn is not None else None
+        if g_ is not None and k_.lebt:
+            if g_.aktion is not None:
+                _aktionen88.add(g_.aktion.name)
+            if g_.ziel is not None:
+                _ziele88.add(g_.ziel.name)
+        if k_.hirn is not None and (k_.hirn.ziel is _geist88 or _geist88 in k_.hirn.gesehen):
+            _gesehen88 = True
+_schuesse88 = sum(k_.zaehler.get("schuesse", 0) for k_ in _rot88)
+pruef("GOAP-Bots planen, greifen an und schiessen",
+      "angreifen" in _aktionen88 and "feind_ausschalten" in _ziele88 and _schuesse88 > 0,
+      "Aktionen %s, Schuesse %d" % (sorted(_aktionen88), _schuesse88))
+pruef("... und auch sie nehmen den Beobachter nie wahr", not _gesehen88, "")
+
+# Die Gedanken: Taste 8 schaltet durch AUS, KURZ, GEDANKEN.
+_tm.info = 0
+_stufen88 = []
+for _ in range(3):
+    _tm.taste("8")
+    _stufen88.append(_tm.info)
+pruef("Taste 8: KURZ, GEDANKEN, AUS", _stufen88 == [1, 2, 0], str(_stufen88))
+_denker88 = next((k_ for k_ in _rot88 if k_.lebt), None) or _tm.bot_setzen(
+    _a88, 0, {"team": 0, "hirn": "goap"})
+_tm._zeiger_welt = pygame.Vector2(_denker88.pos)
+_tm.blick = _denker88.ebene
+pruef("... gezeigt wird die GOAP-Figur am Zeiger", _tm.denker() is _denker88, "")
+_tm.info = 2
+_bild88 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm.zeichnen(_bild88, 1.0)
+pruef("... und ihre Gedanken lassen sich zeichnen", True, "")
+_tm.ziel_erzwingen(1)
+_zwang88 = _denker88.hirn.gehirn.erzwungen
+pruef("ZIEL ERZWINGEN: das erste Ziel der Liste", _zwang88 == _denker88.hirn.gehirn.ziele[0].name,
+      str(_zwang88))
+for _ in range(len(_denker88.hirn.gehirn.ziele)):
+    _tm.ziel_erzwingen(1)
+pruef("... einmal ganz herum wieder frei", _denker88.hirn.gehirn.erzwungen is None, "")
+_alt88 = _denker88.hirn.gehirn
+_tm.ki_daten_laden()
+pruef("KI-DATEN NEU LADEN gibt jeder GOAP-Figur ein neues Gehirn",
+      _denker88.hirn.gehirn is not _alt88 and _denker88.hirn.merkmale == _alt88.merkmale, "")
+_tm.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

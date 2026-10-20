@@ -256,6 +256,15 @@ FELDER = (
          text=lambda v, d, u: "KEINE" if not v else str(v),
          gilt=lambda d: _regeln(d)["beute"] and not _regeln(d)["teams"],
          hilfe="SO VIELE BOTS SPIELEN IMMER MIT, JEDER GEGEN JEDEN."),
+    # Seit 0.34.29: die zielorientierte KI (bot_goap.py, docs/KI.md) neben
+    # der klassischen. Eine Regel und kein Umbau: so laesst sich beides in
+    # derselben Runde vergleichen, und die klassische bleibt, bis die neue
+    # in allem besser ist.
+    Feld("bot_ki", "BOT-KI", "RUNDE", "klassisch",
+         lambda d, u: K.GOAP["arten"],
+         text=lambda v, d, u: v.upper(), rund=True,
+         gilt=lambda d: _regeln(d)["beute"],
+         hilfe="KLASSISCH: FESTE REIHENFOLGE. GOAP: ZIELE UND PLÄNE (WESEN/BOTS.TXT)."),
     # ── Die Gegner
     Feld("schwierigkeit", "SCHWIERIGKEIT", "GEGNER", K.SCHWIERIGKEIT_VORGABE,
          lambda d, u: K.SCHWIERIGKEIT,

@@ -63,7 +63,7 @@ echo "  Spielcode wird zusammengestellt ..."
 mkdir -p "$STUFE"
 find "$STUFE" -mindepth 1 -maxdepth 1 ! -name pygame-ios-template -exec rm -rf {} +
 rsync -a --exclude "__pycache__" --exclude "*.pyc" \
-    dustfront assets karten "$STUFE/"
+    dustfront assets karten wesen "$STUFE/"
 cp rustfront_menu.py rustfront_splash.py splash_engine.py "$STUFE/"
 cp ios/start.py "$STUFE/start.py"
 
