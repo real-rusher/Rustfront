@@ -1139,3 +1139,38 @@ Paketen (0.34.38 bis 0.34.41), jedes mit Version und Test.
   sicher, rot: zu gefaehrlich) mit der Zahl der Gegner, die ihn sehen,
   und Linien von den Rettern; GEDANKEN zeigt GESCHWAECHT. Aufnahme:
   Szene `bergen`.
+
+### 11.4 Paket 4 (0.34.41): Igel und Engstellen
+
+* **Igel** (Rundumverteidigung): kommen die Gegner aus Richtungen, zwischen
+  denen keine Luecke groesser als 160 Grad ist (`Trupp.luecke`, wer schon
+  eingeigelt ist, bleibt es bis 220 Grad), sucht der Trupp in 170 px einen
+  Platz, um den herum moeglichst viel Deckung steht
+  (`trupp.deckung_ringsum`, acht Richtungen) und der nicht dicht an einem
+  Gegner liegt. Dort ein Ring, gleichmaessig nach den Winkeln verteilt,
+  die die Leute schon haben (keiner laeuft quer hindurch); steht eine
+  Stelle in der Deckung, rueckt er in seiner Richtung naeher zur Mitte. Der
+  Anfuehrer steht in der Mitte, jeder schaut nach aussen in seinen Sektor.
+* **Engstelle**: gegen eine Horde Nahkaempfer (mindestens vier, oder
+  doppelt so viele wie der Trupp) sucht er zwischen sich und der Horde
+  einen Durchgang, der schmaler als 84 px und laengs offen ist
+  (`trupp.breite_an`), und haelt 120 px dahinter im Bogen, alle mit Blick
+  in den Durchgang. Ohne Engstelle kaempft er wie sonst.
+* **GOAP**: Fakten `trupp_igel`, `trupp_engstelle`; Ziel sektor_halten
+  (Aktion sektor_halten: an den Platz, dann in den Sektor schauen, einem
+  Geraeusch darin nachsehen). Flankieren wird dort teuer, Nachsetzen faellt
+  weg - niemand verlaesst den Ring. Wer auftaucht, ist fuer angreifen,
+  und gekaempft wird von der Stellung aus.
+* **Testmodus**: TRUPP: IGEL HIER (einigeln am Zeiger, auch ohne Gegner);
+  INFO zeigt den Igelplatz, die Engstelle mit ihrer Breite und kurze
+  Striche fuer jede Blickrichtung. Aufnahmen: `igel`, `engstelle`.
+
+### 11.5 Was noch offen ist
+
+* Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
+  es keine Trupps.
+* Gelaendewissen ist gemessen, nicht markiert: Engstellen und Igelplaetze
+  findet der Trupp selbst. Fuer die Kampagne (Schritt 7) waeren
+  Markierungen in `karten/*.txt` genauer (Days Gone: Verteidigungszone,
+  Heimatbereich, Befestigung).
+* Die Fraktionsfuehrer-Ebene (Killzone: wie viele Trupps wohin) fehlt noch.

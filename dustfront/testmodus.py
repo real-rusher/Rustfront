@@ -213,6 +213,10 @@ def eintraege() -> list:
                 lambda t, p, e, w: t.trupp_auftrag("angriff", p, e, w), mehrfach=False),
         Eintrag("TRUPP: FREI", "TRUPPS", ("team",),
                 lambda t, p, e, w: t.trupp_auftrag("frei", p, e, w), mehrfach=False),
+        # Seit 0.34.41: einigeln, wo der Zeiger ist (sonst nur, wenn er
+        # von allen Seiten bedroht wird).
+        Eintrag("TRUPP: IGEL HIER", "TRUPPS", ("team",),
+                lambda t, p, e, w: t.trupp_auftrag("igel", p, e, w), mehrfach=False),
     ]
     for art in sorted(K.GEGNER):
         raus.append(Eintrag(K.GEGNER[art].get("name", art.upper()), "GEGNER",
@@ -1608,6 +1612,27 @@ class Testmodus(Gefecht):
                 pq = kam.zu_bild(q)
                 pygame.draw.rect(ziel, farbe, (int(pq.x) - 2, int(pq.y) - 2, 4, 4), 1)
                 pygame.draw.line(ziel, (90, 80, 70), kam.zu_bild(m.pos), pq, 1)
+            if t.zustand == "igel" and t.igel is not None and t.igel["ebene"] == self.blick:
+                # Der Platz, an dem er sich einigelt (seit 0.34.41).
+                q = kam.zu_bild(t.igel["ort"])
+                pygame.draw.circle(ziel, farbe, (int(q.x), int(q.y)), 8, 1)
+                SCHRIFT.zeichnen(ziel, "IGEL", int(q.x), int(q.y) - 4, farbe, 1, ausrichtung="mitte")
+            if t.zustand == "engstelle" and t.enge is not None and t.enge["ebene"] == self.blick:
+                e_ = t.enge
+                q = kam.zu_bild(e_["ort"])
+                quer = pygame.Vector2(-e_["achse"].y, e_["achse"].x) * (e_["breite"] / 2)
+                pygame.draw.line(ziel, K.C_RED, kam.zu_bild(e_["ort"] + quer),
+                                 kam.zu_bild(e_["ort"] - quer), 2)
+                SCHRIFT.zeichnen(ziel, "ENGSTELLE %d PX" % e_["breite"], int(q.x), int(q.y) + 6,
+                                 K.C_RED, 1, ausrichtung="mitte")
+            for m in leute:
+                bl = t.blick_fuer(m)
+                if bl is not None:
+                    a_ = kam.zu_bild(m.pos)
+                    r_ = (bl - m.pos)
+                    if r_.length_squared() > 1.0:
+                        pygame.draw.line(ziel, (120, 110, 70), a_,
+                                         kam.zu_bild(m.pos + r_.normalize() * 28), 1)
             b = t.bergung
             if b is not None and b["opfer"].ebene == self.blick:
                 # Wer liegt, und ob der Trupp es fuer sicher genug haelt, ihn

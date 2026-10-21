@@ -1300,6 +1300,26 @@ TRUPP = dict(
     # GEMISCHT im Spawner: die ersten Leute bekommen diese Waffen, der Rest
     # das Sturmgewehr - damit jede Rolle (8.4) einmal da ist.
     mischung=("lmg", "schrot", "scharf"),
+    # Seit 0.34.41: Rundumverteidigung (Igel) und Engstellen.
+    igel_ab=3,                # so viele Gegner muessen es mindestens sein
+    igel_luecke=160.0,        # groesste Luecke zwischen ihren Richtungen: darunter umzingelt (Grad)
+    igel_luecke_raus=220.0,   # ... und erst ab so viel ist man es nicht mehr
+    igel_weite=420.0,         # Gegner so nah zaehlen
+    igel_suche=170.0,         # so weit um den Trupp sucht er einen Platz zum Einigeln
+    igel_raster=24.0,
+    igel_platz_frei=22.0,     # so viel Platz muss dort sein
+    igel_deckung=(34.0, 52.0, 70.0),   # so nah muss Deckung um den Platz stehen
+    igel_feind_abstand=140.0,  # naeher an einem Gegner kein Platz zum Einigeln
+    igel_ring=26.0,           # Ring um den Platz: so viel ...
+    igel_ring_je=6.0,         # ... und so viel mehr je Mann
+    platz_gilt=6.0,           # so lange gilt ein gefundener Platz, dann neu suchen (s)
+    horde_ab=4,               # so viele Nahkaempfer (Zombies): eine Horde
+    enge_suche=340.0,         # so weit Richtung Horde sucht er eine Engstelle
+    enge_raster=24.0,
+    enge_breite=84.0,         # schmaler als das: eine Engstelle (px)
+    enge_offen=110.0,         # so weit muss es entlang des Durchgangs offen sein
+    enge_abstand=120.0,       # so weit hinter der Engstelle halten sie
+    enge_abstand_quer=40.0,   # so weit nebeneinander im Bogen
 )
 
 # Die Lobby: wo man beim Aufmachen landet und nach jeder Runde.

@@ -47,6 +47,8 @@
 #   antwort_offen        ein anderer rief um Hilfe, wir haben zugesagt, aber noch nicht geantwortet
 #   hilfe_zugesagt       wir sind unterwegs zu einem anderen Trupp
 #   rauch_da             er hat eine Rauchgranate
+#   trupp_igel           der Trupp igelt sich ein (von allen Seiten bedroht, seit 0.34.41)
+#   trupp_engstelle      der Trupp haelt eine Engstelle gegen eine Horde (seit 0.34.41)
 # Seit 0.34.40, Bergen (Testmodus: VERWUNDETE BOTS):
 #   bei_kamerad          er steht neben dem, den er bergen soll
 #   kamerad_gedeckt      der Liegende ist vor jedem bekannten Gegner gedeckt (oder im Rauch)
@@ -165,6 +167,15 @@ dringlich: 74 * hilfe_zugesagt * (1 - feind_sichtbar) * (1 - 0.6 * feind_bekannt
 bindung: 2
 info: Zu einem Trupp, der um Hilfe gerufen hat - wenn die eigenen Gegner erledigt sind.
 
+[ziel sektor_halten]
+will: sektor_gesichert
+# Eingeigelt oder an der Engstelle: an seinem Platz bleiben und seine
+# Richtung im Blick behalten - nicht flankieren, nicht nachsetzen, nicht
+# suchen gehen. Wer auftaucht, ist fuer feind_ausschalten (80).
+dringlich: 72 * min(1, trupp_igel + trupp_engstelle) * (1 - feind_sichtbar)
+bindung: 1.5
+info: Im Igel oder an der Engstelle seinen Sektor halten.
+
 [ziel trupp_halten]
 will: in_formation
 # An seiner Stellung bleiben: im Kampf seine Bahn, sonst die Linie. Wer
@@ -208,7 +219,7 @@ info: Ein Kamerad braucht Schutz und der Gegner ist in Deckung: niederhalten.
 will: feind_sichtbar
 # Uebermut: zuversichtlich und wenig Disziplin - er jagt dem nach, der
 # eben verschwand, statt in Deckung zu warten. Ein Anfuehrer tut das nicht.
-dringlich: 70 * (zuversicht > 0.7) * (1.2 - disziplin) * feind_bekannt * (1 - feind_sichtbar) * (1 - ist_fuehrer) * (1 - geschwaecht)
+dringlich: 70 * (zuversicht > 0.7) * (1.2 - disziplin) * feind_bekannt * (1 - feind_sichtbar) * (1 - ist_fuehrer) * (1 - geschwaecht) * (1 - min(1, trupp_igel + trupp_engstelle))
 bindung: 2
 info: Uebermut: dem Gegner hinterher, ohne Deckung.
 
@@ -262,7 +273,7 @@ tut: werfen
 [aktion flankieren]
 braucht: feind_bekannt, !linie_frei, flanke_frei, munition_da
 macht: feind_sichtbar, linie_frei
-kosten: 3 - mut + 5 * ist_fuehrer + 4 * geschwaecht
+kosten: 3 - mut + 5 * ist_fuehrer + 4 * geschwaecht + 8 * min(1, trupp_igel + trupp_engstelle)
 tut: flankieren
 funk: flanke
 
@@ -400,6 +411,11 @@ macht: bei_hilfe
 kosten: 1
 tut: verlegen
 
+[aktion sektor_halten]
+macht: sektor_gesichert
+kosten: 1
+tut: sektor
+
 [aktion zur_stelle]
 macht: in_formation
 kosten: 1
@@ -410,8 +426,8 @@ tut: zur_stelle
 [spezies mp_bot]
 name: BOT
 hirn: bot
-ziele: granate_ausweichen, panik, ueberleben, nachladen, kamerad_bergen, verstaerkung_rufen, funk_antworten, lage_melden, rauch_legen, rueckzug, druck, zu_hilfe, trupp_halten, stuermen, kreis, gruppe_bekaempfen, feuerschutz, nachsetzen, feind_ausschalten, suchen
-aktionen: ausweichen, fliehen, angreifen, dauerfeuer, granate_werfen, flankieren, niederhalten, nahkampf, suchen, nachsetzen, deckung, abwarten, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, zum_kameraden, kamerad_ziehen, aufhelfen, aufhelfen_offen, stuermen, funk_hilfe, funk_zusage, funk_lage, rauch_werfen, welle, verlegen, zur_stelle
+ziele: granate_ausweichen, panik, ueberleben, nachladen, kamerad_bergen, verstaerkung_rufen, funk_antworten, lage_melden, rauch_legen, rueckzug, druck, zu_hilfe, sektor_halten, trupp_halten, stuermen, kreis, gruppe_bekaempfen, feuerschutz, nachsetzen, feind_ausschalten, suchen
+aktionen: ausweichen, fliehen, angreifen, dauerfeuer, granate_werfen, flankieren, niederhalten, nahkampf, suchen, nachsetzen, deckung, abwarten, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, zum_kameraden, kamerad_ziehen, aufhelfen, aufhelfen_offen, stuermen, funk_hilfe, funk_zusage, funk_lage, rauch_werfen, welle, verlegen, zur_stelle, sektor_halten
 merkmal mut: 0.2 0.9
 merkmal disziplin: 0.3 1.0
 # Drill (seit 0.34.38): wie ausgebildet er ist. Wenig fuer die Bots des

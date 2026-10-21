@@ -112,6 +112,10 @@ class Trupp:
         self.suche_ort = None         # wohin der Trupp ohne Kontakt geht
         self.hilfe = None             # dict(fuer, ort, ebene, zugesagt, geantwortet)
         self.bergung = None           # dict(opfer, retter, sicher, bedrohung) - seit 0.34.40
+        # Seit 0.34.41: Rundumverteidigung und Engstellen.
+        self.igel = None              # dict(ort, ebene, bis): wo sich der Trupp einigelt
+        self.enge = None              # dict(ort, halte, achse, breite, ebene, bis): die Engstelle
+        self.blicke: dict = {}        # Nummer -> Ort, wohin er schauen soll (sein Sektor)
         self.gerufen_bis = -1e9       # so lange gilt unser eigener Hilferuf
         self.gemeldet = None          # was wir zuletzt gemeldet haben
         self.gemeldet_zeit = -1e9
@@ -217,7 +221,24 @@ class Trupp:
             self.zustand = "ruhe"
             return
         halten = self.auftrag["art"] == "halten" and self.auftrag["ort"] is not None
-        if not self.lage:
+        if self.auftrag["art"] == "igel" and self.auftrag["ort"] is not None:
+            # Testmodus TRUPP: IGEL HIER - einigeln, wo es befohlen ist.
+            self.igel = dict(ort=pygame.Vector2(self.auftrag["ort"]),
+                             ebene=self.auftrag.get("ebene", leute[0].ebene), bis=jetzt + 1e9)
+            neu = "igel"
+        elif self.lage and self.umzingelt(leute):
+            # Von allen Seiten: einigeln - lieber an einem Platz mit Deckung
+            # ringsum, jeder schaut in seine Richtung.
+            neu = "igel"
+            if self.igel is None or jetzt > self.igel["bis"]:
+                self.igel = self._igel_platz(leute)
+        elif self.lage and self._horde(leute):
+            # Eine Horde Nahkaempfer (Zombies): an einer Engstelle halten,
+            # wenn es eine gibt - sonst wie immer.
+            if self.enge is None or jetzt > self.enge["bis"]:
+                self.enge = self._engstelle_suchen(leute)
+            neu = "engstelle" if self.enge is not None else ("halten" if halten else "feuerkampf")
+        elif not self.lage:
             neu = "halten" if halten else "suchen"
         elif halten and self.auftrag.get("wichtig"):
             neu = "halten"          # eine wichtige Stellung gibt man nicht auf
@@ -227,7 +248,10 @@ class Trupp:
             neu = "druck"
         else:
             neu = "halten" if halten else "feuerkampf"
-        if neu != self.zustand and jetzt - self._zustand_seit >= t["zustand_halten"]:
+        if neu != self.zustand and (jetzt - self._zustand_seit >= t["zustand_halten"]
+                                    or neu == "igel"):
+            if neu != "igel" and self.auftrag["art"] != "igel":
+                self.igel = None
             self.zustand = neu
             self._zustand_seit = jetzt
             self.welle = set()
@@ -293,6 +317,13 @@ class Trupp:
         t = K.TRUPP
         self.stellungen = {}
         if not leute:
+            return
+        self.blicke = {}
+        if self.zustand == "igel" and self.igel is not None:
+            self._ring(leute)
+            return
+        if self.zustand == "engstelle" and self.enge is not None:
+            self._bogen(leute)
             return
         f = self.front
         if f is None:
@@ -399,6 +430,163 @@ class Trupp:
                     p -= f["richtung"] * ueber
             self._welle_ziel[m.nummer] = self._frei(p, m)
             self.stellungen[m.nummer] = self._welle_ziel[m.nummer]
+
+    # ── Igel und Engstelle (seit 0.34.41) ───────────────────────────
+    def umzingelt(self, leute) -> bool:
+        """Kommen die Gegner von (fast) allen Seiten? Die groesste Luecke
+        zwischen ihren Richtungen ist kleiner als `igel_luecke` Grad - wer
+        sich schon eingeigelt hat, bleibt es bis `igel_luecke_raus`: sonst
+        loeste er den Ring, sobald einer kurz aus dem Blick ist."""
+        grenze = K.TRUPP["igel_luecke_raus" if self.zustand == "igel" else "igel_luecke"]
+        return self.luecke(leute) < grenze
+
+    def luecke(self, leute) -> float:
+        """Die groesste Luecke zwischen den Richtungen, aus denen Gegner
+        kommen (Grad); 360, wenn es zu wenige sind."""
+        if not leute:
+            return 360.0
+        ebene = leute[0].ebene
+        mitte = sum((pygame.Vector2(m.pos) for m in leute), pygame.Vector2(0, 0)) / len(leute)
+        feinde = [o for o, e, _w in self.feinde(ebene)
+                  if o.distance_to(mitte) <= K.TRUPP["igel_weite"]]
+        if len(feinde) < K.TRUPP["igel_ab"]:
+            return 360.0
+        winkel = sorted(math.degrees(math.atan2(o.y - mitte.y, o.x - mitte.x)) % 360.0
+                        for o in feinde)
+        luecken = [b - a for a, b in zip(winkel, winkel[1:])] + [winkel[0] + 360.0 - winkel[-1]]
+        return max(luecken)
+
+    def _horde(self, leute) -> bool:
+        """Viele, die nur im Nahkampf gefaehrlich sind (Zombies ohne Fernangriff)."""
+        nah = [w for w in self.lage if not hasattr(w, "nummer") and not getattr(w, "fern", None)]
+        return len(nah) >= max(K.TRUPP["horde_ab"], 2 * len(leute))
+
+    def _igel_platz(self, leute) -> dict:
+        """Wo sich der Trupp einigelt: in der Naehe ein Platz, um den herum
+        moeglichst viel Deckung steht (ein Hof, eine Ecke zwischen Kisten),
+        nicht dicht an einem Gegner. Gemeldet: "wenn es ein Gebiet gibt, was
+        von Deckung umgeben ist, dass sie sich da drinnen quasi zurueckziehen
+        und eine Art kleine Position aufbauen." """
+        t = K.TRUPP
+        welt = self.g.welt
+        ebene = leute[0].ebene
+        mitte = sum((pygame.Vector2(m.pos) for m in leute), pygame.Vector2(0, 0)) / len(leute)
+        feinde = [o for o, e, _w in self.feinde(ebene)]
+        bestes, beste = pygame.Vector2(mitte), 1e9
+        schritt = t["igel_raster"]
+        n = int(t["igel_suche"] // schritt)
+        for i in range(-n, n + 1):
+            for j in range(-n, n + 1):
+                p = mitte + pygame.Vector2(i * schritt, j * schritt)
+                if p.distance_to(mitte) > t["igel_suche"]:
+                    continue
+                if not welt.frei(p, t["igel_platz_frei"], ebene, True):
+                    continue
+                wert = 0.4 * p.distance_to(mitte) - 55.0 * deckung_ringsum(welt, p, ebene)
+                if feinde:
+                    nah = min(o.distance_to(p) for o in feinde)
+                    if nah < t["igel_feind_abstand"]:
+                        wert += 400.0
+                if wert < beste:
+                    bestes, beste = p, wert
+        return dict(ort=bestes, ebene=ebene, bis=self.g.welt.zeit + t["platz_gilt"])
+
+    def _ring(self, leute) -> None:
+        """Im Ring um den Platz, jeder schaut nach aussen; der Anfuehrer in
+        der Mitte. Die Plaetze nach dem Winkel vergeben, den jeder schon
+        hat - so laeuft keiner quer durch den Ring."""
+        t = K.TRUPP
+        ort = self.igel["ort"]
+        andere = [m for m in leute if m is not self.fuehrer]
+        if self.fuehrer in leute:
+            self.stellungen[self.fuehrer.nummer] = self._frei(ort, self.fuehrer)
+        if not andere:
+            return
+        andere.sort(key=lambda m: math.atan2(m.pos.y - ort.y, m.pos.x - ort.x))
+        radius = t["igel_ring"] + t["igel_ring_je"] * len(andere)
+        start = math.degrees(math.atan2(andere[0].pos.y - ort.y, andere[0].pos.x - ort.x))
+        welt = self.g.welt
+        for i, m in enumerate(andere):
+            richtung = pygame.Vector2(1, 0).rotate(start + i * 360.0 / len(andere))
+            # Steht dort Deckung (darum wurde der Platz ja gewaehlt), naeher
+            # zur Mitte in derselben Richtung - nicht irgendwohin daneben,
+            # sonst stuenden zwei auf derselben Seite.
+            p = None
+            for anteil in (1.0, 0.75, 0.5, 0.3):
+                q = ort + richtung * (radius * anteil)
+                if welt.frei(q, m.radius + 2, self.igel["ebene"], True):
+                    p = q
+                    break
+            self.stellungen[m.nummer] = p if p is not None else self._frei(ort + richtung * radius, m)
+            self.blicke[m.nummer] = ort + richtung * (radius + 200.0)
+
+    def _engstelle_suchen(self, leute):
+        """Eine Engstelle zwischen dem Trupp und der Horde: ein schmaler Durchgang
+        (`breite_an`), den sie herkommen muessen. Gehalten wird ein Stueck
+        dahinter, auf der eigenen Seite. None, wenn es keine gibt."""
+        t = K.TRUPP
+        welt = self.g.welt
+        ebene = leute[0].ebene
+        mitte = sum((pygame.Vector2(m.pos) for m in leute), pygame.Vector2(0, 0)) / len(leute)
+        feinde = [o for o, e, w in self.feinde(ebene)]
+        if not feinde:
+            return None
+        feind = sum(feinde, pygame.Vector2(0, 0)) / len(feinde)
+        hin = feind - mitte
+        if hin.length_squared() < 1.0:
+            return None
+        richtung = hin.normalize()
+        bestes, beste = None, 1e9
+        schritt = t["enge_raster"]
+        n = int(t["enge_suche"] // schritt)
+        for i in range(-n, n + 1):
+            for j in range(-n, n + 1):
+                p = mitte + pygame.Vector2(i * schritt, j * schritt)
+                vor = (p - mitte).dot(richtung)
+                if vor < 0 or p.distance_to(mitte) > t["enge_suche"]:
+                    continue
+                if (feind - p).dot(richtung) < 0:
+                    continue          # hinter den Zombies hilft keine Engstelle
+                if not welt.frei(p, 8.0, ebene, True):
+                    continue
+                breite, achse = breite_an(welt, p, ebene)
+                if breite > t["enge_breite"]:
+                    continue
+                wert = breite + 0.35 * p.distance_to(mitte)
+                if wert < beste:
+                    bestes, beste = (p, breite, achse), wert
+        if bestes is None:
+            return None
+        p, breite, achse = bestes
+        if achse.dot(mitte - p) < 0:
+            achse = -achse            # die Achse zeigt zum Trupp
+        halte = p + achse * t["enge_abstand"]
+        return dict(ort=p, halte=pygame.Vector2(halte), achse=achse, breite=breite,
+                    ebene=ebene, bis=self.g.welt.zeit + t["platz_gilt"])
+
+    def _bogen(self, leute) -> None:
+        """Hinter der Engstelle im Bogen, alle schauen in den Durchgang -
+        so muessen die Zombies einzeln hindurch."""
+        t = K.TRUPP
+        e = self.enge
+        quer = pygame.Vector2(-e["achse"].y, e["achse"].x)
+        andere = [m for m in leute if m is not self.fuehrer]
+        andere.sort(key=lambda m: (m.pos - e["halte"]).dot(quer))
+        n = len(andere)
+        for i, m in enumerate(andere):
+            seitlich = (i - (n - 1) / 2.0) * t["enge_abstand_quer"]
+            # Die Aeusseren etwas weiter vor: ein Bogen um den Durchgang.
+            vor = -abs(seitlich) * 0.25
+            p = e["halte"] + quer * seitlich + e["achse"] * (-vor)
+            self.stellungen[m.nummer] = self._frei(p, m)
+            self.blicke[m.nummer] = pygame.Vector2(e["ort"])
+        if self.fuehrer in leute:
+            self.stellungen[self.fuehrer.nummer] = self._frei(
+                e["halte"] + e["achse"] * t["fuehrer_tiefe"] * 0.6, self.fuehrer)
+            self.blicke[self.fuehrer.nummer] = pygame.Vector2(e["ort"])
+
+    def blick_fuer(self, k):
+        return self.blicke.get(k.nummer)
 
     def ziel_ort(self):
         """Wohin der Trupp ohne Kontakt geht: zur Hilfe, zum Auftrag, zu dem,
@@ -590,6 +778,44 @@ def sieht_durch_rauch(welt, a, b, ebene) -> bool:
         if any(r.ebene == ebene and r.deckt(p, ebene) for r in welt.rauch):
             return False
     return True
+
+
+def deckung_ringsum(welt, p, ebene) -> int:
+    """In wie vielen von acht Richtungen steht nah um `p` etwas, das Kugeln
+    aufhaelt - ein Mass dafuer, wie gut man sich dort einigeln kann."""
+    n = 0
+    for i in range(8):
+        d = pygame.Vector2(1, 0).rotate(i * 45.0)
+        if any(welt.schuss_halt(p + d * r, ebene) for r in K.TRUPP["igel_deckung"]):
+            n += 1
+    return n
+
+
+def breite_an(welt, p, ebene):
+    """Wie breit ist es an `p`? (schmalste Breite, Achse des Durchgangs).
+    Gemessen in vier Richtungen bis zur naechsten Wand oder Kiste; die
+    Achse steht quer zur schmalsten Richtung. Ein Durchgang muss in
+    Richtung seiner Achse weit offen sein - sonst ist es eine Sackgasse."""
+    schritt = 6.0
+    weit = K.TRUPP["enge_offen"]
+
+    def frei_bis(d):
+        s = 0.0
+        while s < weit:
+            if not welt.frei(p + d * (s + schritt), 6.0, ebene, True):
+                return s
+            s += schritt
+        return weit
+
+    beste, achse = 1e9, pygame.Vector2(1, 0)
+    for winkel in (0.0, 45.0, 90.0, 135.0):
+        d = pygame.Vector2(1, 0).rotate(winkel)
+        breite = frei_bis(d) + frei_bis(-d)
+        if breite < beste:
+            beste, achse = breite, pygame.Vector2(-d.y, d.x)
+    if frei_bis(achse) + frei_bis(-achse) < 2 * weit - 2 * schritt:
+        return 1e9, achse              # kein Durchgang, eine Sackgasse
+    return beste, achse
 
 
 def trupps(g) -> list:

@@ -430,7 +430,8 @@ class GoapHirn(BotHirn):
                     in_formation=True, trupp_rueckzug=False, trupp_druck=False,
                     trupp_halten=False, welle_dran=False, flanke_rolle=False,
                     trupp_unterlegen=False, hilfe_gerufen=False, lage_neu=False,
-                    antwort_offen=False, hilfe_zugesagt=False, rauch_da=False)
+                    antwort_offen=False, hilfe_zugesagt=False, rauch_da=False,
+                    trupp_igel=False, trupp_engstelle=False)
         rauch = self._rauch_platz() >= 0
         if t is None or len(t.lebende()) < 2 or k not in t.lebende():
             leer["rauch_da"] = rauch
@@ -455,6 +456,8 @@ class GoapHirn(BotHirn):
             antwort_offen=fuehrer and funk and t.antwort_offen(),
             hilfe_zugesagt=t.hilfe is not None and bool(t.hilfe.get("zugesagt")),
             rauch_da=rauch,
+            trupp_igel=t.zustand == "igel",
+            trupp_engstelle=t.zustand == "engstelle",
         )
 
     # ── Bergen (seit 0.34.40) ─────────────────────────────────────
@@ -1142,6 +1145,23 @@ class GoapHirn(BotHirn):
             punkt = self.druckpunkt(gefahr[0], gefahr[1])
             return pygame.Vector2(0, 0), punkt, self._abdruecken(dt, punkt, ein), False, "laeuft"
         return _nichts("laeuft")
+
+    def tun_sektor(self, dt, ein):
+        """Igel und Engstelle: an seine Stellung im Ring (oder im Bogen),
+        dann dort bleiben und in seinen Sektor schauen. Wer dort auftaucht,
+        ist fuer angreifen - das Ziel kommt von selbst, sobald er ihn sieht."""
+        t = self.trupp
+        if t is None or t.zustand not in ("igel", "engstelle"):
+            return _nichts("fertig")
+        k = self.k
+        p = t.stellung(k)
+        if p is not None and k.pos.distance_to(p) > K.TRUPP["stellung_weite"] * 0.6:
+            return self._hin_und_kaempfen(dt, ein, p) + ("laeuft",)
+        blick = t.blick_fuer(k)
+        ort = self.unerklaert()
+        if ort is not None and blick is not None and (ort - k.pos).dot(blick - k.pos) > 0:
+            blick = ort                       # etwas in seinem Sektor: dorthin
+        return pygame.Vector2(0, 0), (pygame.Vector2(blick) if blick else None), False, False, "laeuft"
 
     def tun_verlegen(self, dt, ein):
         """Zu einem anderen Trupp, der um Hilfe gerufen hat: der Anfuehrer

@@ -11037,6 +11037,111 @@ for i_ in (1, 2):
     _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
 _tm.verlassen()
 
+# 0.34.41: "wenn der eine Trupp umzingelt ist, dann soll er ein Gebiet kurz
+# sichern und sich weiter in das zurueckziehen, sodass sie alle Seiten
+# abwehren koennen ... dass sie bestimmte Chokepoints gegen Zombies halten,
+# dass sie sich, wenn es ein Gebiet gibt, was von Deckung umgeben ist, da
+# drinnen eine Art kleine Position aufbauen."
+print("\n-- Igel und Engstellen (0.34.41)")
+from dustfront import trupp as _TR97
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm.wiedereinstieg = False
+_r97 = random.Random(97)
+_a97 = _seiten97 = None
+for _ in range(20000):
+    a_ = pygame.Vector2(freier_punkt(_tm.welt, 0, _r97))
+    s_ = [a_ + pygame.Vector2(250, 0).rotate(w_) for w_ in (0, 120, 240)]
+    if (all(_tm.welt.frei(p_, 30, 0, True) for p_ in [a_] + s_)
+            and all(_tm.welt.sicht_frei(a_, p_, 0) for p_ in s_)):
+        _a97, _seiten97 = a_, s_
+        break
+pruef("(eine Stelle mit freier Sicht nach drei Seiten)", _a97 is not None, "")
+_tr97 = _tm.trupp_setzen(_a97, 0, {"groesse": 5, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+_leute97 = _tr97.lebende()
+_t97 = _tm.welt.zeit
+_dummy97 = [type("F", (), {"lebt": True, "pos": p_, "ebene": 0})() for p_ in _seiten97]
+_tr97.lage = {d_: [pygame.Vector2(d_.pos), 0, _t97] for d_ in _dummy97}
+_um97 = _tr97.umzingelt(_leute97)
+_tr97.lage = {d_: [pygame.Vector2(_seiten97[0]) + pygame.Vector2(0, 20 * i_), 0, _t97]
+              for i_, d_ in enumerate(_dummy97)}
+pruef("Umzingelt: Gegner von drei Seiten ja, alle von einer Seite nein",
+      _um97 and not _tr97.umzingelt(_leute97), "")
+_tr97.lage = {}
+_fe97 = [_tm.puppe_setzen(p_ + pygame.Vector2(0, 26 * i_), 0, {"team": 1, "leben": 10.0})
+         for p_ in _seiten97 for i_ in range(2)]
+for f_ in _fe97:
+    f_.unverwundbar = 1e9
+_zust97 = set()
+for _ in range(int(4.0 / _D87)):
+    _tm.schritt(_D87)
+    _zust97.add(_tr97.zustand)
+_ig97 = _tr97.igel
+pruef("Von drei Seiten bedroht: der Trupp igelt sich ein",
+      "igel" in _zust97 and _ig97 is not None, str(sorted(_zust97)))
+_ring97 = [_tr97.stellung(m_) for m_ in _tr97.lebende() if m_ is not _tr97.fuehrer]
+_winkel97 = sorted(math.degrees(math.atan2(q_.y - _ig97["ort"].y, q_.x - _ig97["ort"].x)) % 360
+                   for q_ in _ring97 if q_ is not None)
+_luecke97 = max([b_ - a_ for a_, b_ in zip(_winkel97, _winkel97[1:])]
+                + [_winkel97[0] + 360 - _winkel97[-1]]) if _winkel97 else 360
+pruef("... im Ring um den Platz, ringsum verteilt, der Anfuehrer in der Mitte",
+      len(_winkel97) == len(_tr97.lebende()) - 1 and _luecke97 < 150
+      and _tr97.stellung(_tr97.fuehrer).distance_to(_ig97["ort"]) < 20,
+      "Winkel %s" % [round(w_) for w_ in _winkel97])
+_aus97 = [(_tr97.blick_fuer(m_) - _ig97["ort"]).dot(_tr97.stellung(m_) - _ig97["ort"]) > 0
+          for m_ in _tr97.lebende() if m_ is not _tr97.fuehrer]
+pruef("... und jeder schaut nach aussen, in seinen Sektor", _aus97 and all(_aus97), str(_aus97))
+_fak97 = next(m_ for m_ in _tr97.lebende() if m_ is not _tr97.fuehrer).hirn.fuehlen()[0]
+pruef("... als Fakt: trupp_igel; flankieren ist dann teuer (niemand verlaesst den Ring)",
+      _fak97["trupp_igel"] and _WD88.daten().aktionen["flankieren"].kosten.wert(
+          {"trupp_igel": 1, "mut": 0.5}) > 8, "")
+_tm.alles_weg()
+_tr97 = _tm.trupp_setzen(_a97, 0, {"groesse": 3, "team": 0, "fuehrer": "funk"})
+_tm.trupp_auftrag("igel", _a97 + pygame.Vector2(30, 0), 0, {"team": 0})
+_sim87(int(0.6 / _D87))
+pruef("TRUPP: IGEL HIER: einigeln am Zeiger, auch ohne Gegner",
+      _tr97.zustand == "igel" and _tr97.igel["ort"].distance_to(_a97 + pygame.Vector2(30, 0)) < 1, "")
+
+# Deckung ringsum und Engstellen: aus der Karte gemessen.
+_offen97 = _TR97.deckung_ringsum(_tm.welt, _a97, 0)
+_eng97 = None
+for _ in range(40000):
+    p_ = pygame.Vector2(freier_punkt(_tm.welt, 0, _r97))
+    b_, ax_ = _TR97.breite_an(_tm.welt, p_, 0)
+    if b_ <= 70:
+        a_, z_ = p_ + ax_ * 170, p_ - ax_ * 430
+        if _tm.welt.frei(a_, 30, 0, True) and _tm.welt.frei(z_, 40, 0, True):
+            _eng97 = (p_, b_, ax_, a_, z_)
+            break
+pruef("(eine Engstelle auf der Karte)", _eng97 is not None, "")
+pruef("Breite: an der Engstelle schmal, auf freiem Feld nicht",
+      _eng97[1] <= 70 and _TR97.breite_an(_tm.welt, _a97, 0)[0] > K.TRUPP["enge_breite"],
+      "%.0f / %.0f" % (_eng97[1], _TR97.breite_an(_tm.welt, _a97, 0)[0]))
+pruef("Auf freiem Feld steht ringsum kaum Deckung", _offen97 <= 2, str(_offen97))
+
+# Eine Horde: halten hinter der Engstelle.
+_tm.alles_weg()
+_p97, _b97, _ax97, _ta97, _tz97 = _eng97
+_tr97 = _tm.trupp_setzen(_ta97, 0, {"groesse": 4, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+_zo97 = [_tm.gegner_setzen("laeufer", _tz97 + pygame.Vector2(_r97.uniform(-50, 50), _r97.uniform(-50, 50)),
+                           0, {"ki": False}) for _ in range(10)]
+_tr97.lage = {z_: [pygame.Vector2(z_.pos), 0, _tm.welt.zeit] for z_ in _zo97}
+_tr97._zustand_seit = -1e9
+_tr97._zuversicht(_tr97.lebende())
+_tr97._zustand_waehlen(_tr97.lebende())
+_en97 = _tr97.enge
+pruef("Eine Horde Zombies: der Trupp haelt an einer Engstelle zwischen sich und ihr",
+      _tr97.zustand == "engstelle" and _en97 is not None and _en97["breite"] <= K.TRUPP["enge_breite"],
+      "%s %s" % (_tr97.zustand, _en97 and round(_en97["breite"])))
+_tr97._stellungen(_tr97.lebende())
+_seite97 = [(_tr97.stellung(m_) - _en97["ort"]).dot(_en97["achse"]) > 0 for m_ in _tr97.lebende()]
+pruef("... alle stehen auf ihrer Seite der Engstelle und schauen hinein",
+      all(_seite97) and all(_tr97.blick_fuer(m_) == _en97["ort"] for m_ in _tr97.lebende()), str(_seite97))
+for i_ in (1, 2):
+    _tm.info = i_
+    _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+pruef("... INFO zeigt Igel, Engstelle und Blickrichtungen (zeichnen geht)", True, "")
+_tm.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

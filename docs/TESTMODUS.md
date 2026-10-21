@@ -63,7 +63,7 @@ setzt, steht sofort da.
 | OBJEKTE | Buggy, Hotzone hier, Hotzone aus | Anzahl, Streuung, Richtung |
 | BEUTE | Medkit, Munitionskiste, Raketenwerfer | Anzahl, Streuung |
 | WURF | Granate, Rauch, Molotow, Blendgranate | Anzahl, Streuung, Zuender (liegt / sofort) |
-| TRUPPS | Trupp; Halten hier, Angriff hier, Frei (fuer den naechsten Trupp der Mannschaft) | Groesse, Team, Anfuehrer (mit Funk / ohne Funk / keiner), Waffen (gemischt / zufall), Leben; beim Halten: wichtig |
+| TRUPPS | Trupp; Halten hier, Angriff hier, Frei, Igel hier (fuer den naechsten Trupp der Mannschaft) | Groesse, Team, Anfuehrer (mit Funk / ohne Funk / keiner), Waffen (gemischt / zufall), Leben; beim Halten: wichtig |
 
 ## Das Testmenue (Esc)
 
@@ -105,6 +105,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.41 | Spawner TRUPP: IGEL HIER (einigeln am Zeiger); INFO zeigt Igelplatz, Engstelle mit Breite und die Blickrichtung jedes Manns; Szenen `igel` und `engstelle` |
 | 0.34.40 | Testmenue VERWUNDETE BOTS (vorgegeben AN): Bots fallen erst zu Boden, werden geborgen (Rauch, in Deckung ziehen, aufhelfen) und einmal wiederbelebt, danach geschwaecht; der zweite Tod hinterlaesst eine andere Leiche, die nach sechs Sekunden verschwindet. ENTF TOETET legt einen Bot erst hin. INFO zeigt die Bergung (Kreis, Bedrohung, Retter); GEDANKEN zeigt GESCHWAECHT; Szene `bergen` |
 | 0.34.39 | Spawner-Gruppe TRUPPS: TRUPP (Groesse, Team, Anfuehrer mit/ohne Funk/keiner, Waffen gemischt/zufall, Leben), TRUPP: HALTEN HIER (wichtig), TRUPP: ANGRIFF HIER, TRUPP: FREI; INFO zeigt Frontlinie, Stellungen, Zustand und die letzten Funksprueche, ein Funkspruch steht mit Balken ueber dem, der funkt (auch in der sauberen Ansicht); GEDANKEN mit Rolle und Lage im Trupp; Szenen `trupp` und `hilferuf` in `werkzeug_aufnahme.py` |
 | 0.34.38 | INFO KURZ zeigt unter jedem GOAP-Bot Stress (Balken), Zuversicht (P B N Z H), PANIK/SCHRECK und Kreise mit Linien zu dem, was er hoert; GEDANKEN zeigt Stress, Zuversicht, Panik, Schreck, eingeschossen, Bindung und Bedenkzeit; Testmenue INNENLEBEN (PANIK, STRESS +0,3, KAMERAD FAELLT, GRANATE NEBEN IHM, RUHE) fuer die gezeigte Figur |

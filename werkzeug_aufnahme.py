@@ -250,6 +250,46 @@ def szene_bergen(tm, rnd):
             and uhr["t"] > 12.0 or all(not f.lebt for f in feinde), 45, 1.5, jedes_bild)
 
 
+def szene_igel(tm, rnd):
+    """Seit 0.34.41: Gegner von drei Seiten - der Trupp igelt sich ein, an
+    einem Platz mit Deckung ringsum, jeder schaut nach aussen."""
+    for _ in range(20000):
+        a = pygame.Vector2(freier_punkt(tm.welt, 0, rnd))
+        seiten = [a + pygame.Vector2(270, 0).rotate(w + rnd.uniform(0, 120)) for w in (0, 120, 240)]
+        if all(tm.welt.frei(p, 30, 0, True) for p in [a] + seiten):
+            break
+    trupp = tm.trupp_setzen(a, 0, {"groesse": 5, "team": 0, "fuehrer": "funk", "mischung": "gemischt",
+                                   "leben": 2.0})
+    feinde = [tm.bot_setzen(p, 0, {"team": 1, "hirn": "goap"}) for s_ in seiten for p in kreis(s_, 2, 26)]
+    return ("Von drei Seiten: der Trupp igelt sich ein (doppeltes Leben)",
+            trupp.mitglieder, alle_weg(trupp.mitglieder, feinde), 60, 1.75)
+
+
+def szene_engstelle(tm, rnd):
+    """Seit 0.34.41: eine Zombiehorde kommt, der Trupp haelt hinter einer
+    Engstelle, durch die sie einzeln muessen."""
+    from dustfront.trupp import breite_an
+    for _ in range(40000):
+        p = pygame.Vector2(freier_punkt(tm.welt, 0, rnd))
+        breite, achse = breite_an(tm.welt, p, 0)
+        if breite > 70:
+            continue
+        a, z = p + achse * 170, p - achse * 430
+        if tm.welt.frei(a, 30, 0, True) and tm.welt.frei(z, 40, 0, True):
+            break
+    else:
+        raise RuntimeError("Keine Engstelle auf der Karte gefunden")
+    trupp = tm.trupp_setzen(a, 0, {"groesse": 4, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+    zombies = []
+    for art in ["laeufer"] * 14 + ["renner"] * 4 + ["brecher"] * 2:
+        q = z + pygame.Vector2(rnd.uniform(-70, 70), rnd.uniform(-70, 70))
+        if not tm.welt.frei(q, 16, 0, True):
+            q = pygame.Vector2(z)
+        zombies.append(tm.gegner_setzen(art, q, 0, {"ki": True, "hirn": "klassisch"}))
+    return ("Eine Horde: der Trupp haelt hinter der Engstelle",
+            trupp.mitglieder, alle_weg(trupp.mitglieder, zombies), 60, 1.75)
+
+
 # Name -> (Dateiname, Szene). Die Nummer im Dateinamen ist die Reihenfolge.
 SZENEN = {
     "duell": ("1_goap_gegen_klassisch", szene_duell),
@@ -261,6 +301,8 @@ SZENEN = {
     "trupp": ("7_trupp_gegen_trupp", szene_trupp),
     "hilferuf": ("8_hilferuf_ueber_funk", szene_hilferuf),
     "bergen": ("9_bergen_und_wiederbeleben", szene_bergen),
+    "igel": ("10_igel_von_drei_seiten", szene_igel),
+    "engstelle": ("11_engstelle_gegen_horde", szene_engstelle),
 }
 
 
