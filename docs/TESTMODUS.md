@@ -105,6 +105,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.42 | Kein "[E] AUF" mehr ueber Liegenden, solange man Beobachter ist |
 | 0.34.41 | Spawner TRUPP: IGEL HIER (einigeln am Zeiger); INFO zeigt Igelplatz, Engstelle mit Breite und die Blickrichtung jedes Manns; Szenen `igel` und `engstelle` |
 | 0.34.40 | Testmenue VERWUNDETE BOTS (vorgegeben AN): Bots fallen erst zu Boden, werden geborgen (Rauch, in Deckung ziehen, aufhelfen) und einmal wiederbelebt, danach geschwaecht; der zweite Tod hinterlaesst eine andere Leiche, die nach sechs Sekunden verschwindet. ENTF TOETET legt einen Bot erst hin. INFO zeigt die Bergung (Kreis, Bedrohung, Retter); GEDANKEN zeigt GESCHWAECHT; Szene `bergen` |
 | 0.34.39 | Spawner-Gruppe TRUPPS: TRUPP (Groesse, Team, Anfuehrer mit/ohne Funk/keiner, Waffen gemischt/zufall, Leben), TRUPP: HALTEN HIER (wichtig), TRUPP: ANGRIFF HIER, TRUPP: FREI; INFO zeigt Frontlinie, Stellungen, Zustand und die letzten Funksprueche, ein Funkspruch steht mit Balken ueber dem, der funkt (auch in der sauberen Ansicht); GEDANKEN mit Rolle und Lage im Trupp; Szenen `trupp` und `hilferuf` in `werkzeug_aufnahme.py` |

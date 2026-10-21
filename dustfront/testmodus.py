@@ -442,6 +442,13 @@ class Testmodus(Gefecht):
         steigt mehr von selbst ein (Gefecht._tote_abrechnen)."""
         return bool(getattr(self, "verwundete", False)) or super().bergen_an()
 
+    def _verbuendet(self, k) -> bool:
+        """Der Beobachter hilft niemandem auf - also auch kein "[E] AUF"
+        ueber einem Liegenden (seit 0.34.41, gesehen in der Aufnahme)."""
+        if self.beobachter:
+            return False
+        return super()._verbuendet(k)
+
     def _regeln_anlegen(self, k) -> None:
         super()._regeln_anlegen(k)
         k.revive_an = (bool(getattr(self, "verwundete", False)) and getattr(k, "ist_bot", False)

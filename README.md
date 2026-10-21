@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.41, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.42, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -823,6 +823,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.42 | Testmodus: Über einem liegenden Bot stand für den Beobachter „[E] AUF [G] ZIEHEN“, als könne er helfen (gesehen in der Aufnahme). Die Szene `bergen` gibt den Gegnern mehr Leben, damit man die ganze Bergung sieht. Netz/LAN: unverändert; trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.41 | **Bots wie Menschen, Teil 4: Gelände.** Kommen die Gegner von allen Seiten, igelt sich ein Trupp ein: an einem Platz mit Deckung ringsum, im Ring, jeder schaut in seinen Sektor, der Anführer in der Mitte, und keiner verlässt den Ring. Gegen eine Zombie-Horde sucht der Trupp eine Engstelle zwischen sich und den Zombies und hält dahinter im Bogen. Testmodus: TRUPP: IGEL HIER, INFO zeigt Igelplatz, Engstelle und Blickrichtungen; Aufnahmen `igel` und `engstelle`. Netz/LAN: unverändert (Trupps nur im Testmodus); trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.40 | **Bots wie Menschen, Teil 3: Verwundete.** Im Testmodus (Testmenü VERWUNDETE BOTS, vorgegeben an) fallen Bots erst zu Boden. Der Trupp bestimmt ein, zwei Retter und holt den Verwundeten nur, wenn es sicher genug scheint; dafür legt der Anführer Rauch. Dann ziehen sie ihn in Deckung und helfen ihm auf, während die anderen decken. Das geht einmal: Danach ist er geschwächt (weniger Leben, langsamer, zielt schlechter, hält Abstand), und fällt er wieder, bleibt eine andere Leiche liegen, die nach ein paar Sekunden verschwindet. ENTF TÖTET legt einen Bot erst hin. Aufnahme `bergen`. Netz/LAN: unverändert; trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.39 | **Bots wie Menschen, Teil 2: Trupps.** Im Testmodus lassen sich ganze Trupps spawnen (Spawner TRUPPS), mit einem Anführer (Repetierer, Rauchgranate, auf Wunsch Funkgerät), der in der Mitte und hinten bleibt und den die anderen zuerst schützen. Der Trupp teilt, was einer in Sprechweite sagt, steht in Bahnen an einer Frontlinie statt in einer Reihe, zieht sich in Wellen zurück oder drückt mit Flanke nach vorn, sucht in breiter Linie und hält auf Befehl eine Stellung. Über Funk melden die Anführer die Lage und rufen um Hilfe; wer selbst wenig Gegner hat, sagt zu, erledigt seine und kommt. Alles bleibt GOAP: der Anführer ist ein Bot mit anderen Zielen und ohne Funk oder allein ein Bot wie jeder andere. Testmodus zeigt Front, Stellungen und Funk; Aufnahmen `trupp` und `hilferuf`. Netz/LAN: unverändert (Trupps nur im Testmodus); trotzdem brauchen alle Geräte dieselbe Version. |

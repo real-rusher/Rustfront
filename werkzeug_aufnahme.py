@@ -234,7 +234,9 @@ def szene_bergen(tm, rnd):
     tm.verwundete_setzen(True)
     trupp = tm.trupp_setzen(a, 0, {"groesse": 4, "team": 0, "fuehrer": "funk",
                                    "mischung": "gemischt", "leben": 2.0})
-    feinde = [tm.puppe_setzen(b + pygame.Vector2(0, 30 * i), 0, {"team": 1, "leben": 4.0})
+    # Zehnfaches Leben: mit vierfachem waren sie nach acht Sekunden erledigt,
+    # bevor man die Bergung ganz sah.
+    feinde = [tm.puppe_setzen(b + pygame.Vector2(0, 30 * i), 0, {"team": 1, "leben": 10.0})
               for i in range(2)]
     opfer = next(m for m in trupp.mitglieder if m is not trupp.fuehrer)
     uhr = {"t": 0.0}

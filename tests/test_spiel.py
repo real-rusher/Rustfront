@@ -11022,6 +11022,12 @@ pruef("Rauch auf der Linie verdeckt den Liegenden", _frei96
       and not _TR96.sieht_durch_rauch(_tm.welt, _a96, _b96, 0), "")
 _tm.welt.rauch.clear()
 
+_tm.alles_weg()
+_lieg96 = _tm.bot_setzen(_a96, 0, {"team": 0, "hirn": "goap"})
+_tm.toeten(_lieg96)
+pruef("Ueber einem Liegenden steht fuer den Beobachter kein \"[E] AUF\" (seit 0.34.42)",
+      _lieg96.am_boden and _tm.beobachter and not _tm._verbuendet(_lieg96), "")
+
 # Aus: wie vorher - wer faellt, ist tot, ohne Leiche.
 _tm.alles_weg()
 _tm.menue_wirken("verwundete")
