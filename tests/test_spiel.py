@@ -10882,8 +10882,12 @@ _start95 = _br95.fuehrer.pos.distance_to(_a95)
 # 14 s mit dem Funk von 0.34.39 (2,2 s je Spruch); seit 0.34.48 dauert ein
 # Spruch laenger, und vorher zieht sich der Anfuehrer zurueck.
 _fenster95 = 14.0 + 1.5 * (K.TRUPP["funk_dauer"] - 2.2) + K.TRUPP["funk_weg_zeit"]
+_sendet95 = False
 for _ in range(int(_fenster95 / _D87)):
     _tm.schritt(_D87)
+    _fl95 = _al95.fuehrer.hirn.funk_laeuft
+    if _fl95 is not None and _fl95.get("phase") == "senden" and _al95.fuehrer.tempo.length() < 5.0:
+        _sendet95 = True
 _netz95 = getattr(_tm, "_funknetz", [])
 _arten95 = [(s_.trupp.name, s_.art) for s_ in _netz95]
 pruef("Funk: ALPHA ist in der Unterzahl an einer wichtigen Stellung und ruft um Hilfe",
@@ -10894,8 +10898,10 @@ pruef("... und ist unterwegs zu ALPHA",
       _br95.fuehrer.pos.distance_to(_a95) < _start95 - 60,
       "%.0f -> %.0f px, %s" % (_start95, _br95.fuehrer.pos.distance_to(_a95),
                                list(_br95.fuehrer.hirn.gehirn.protokoll)[-6:]))
-pruef("... ein Spruch dauert: er stand dabei (FUNK > im Protokoll)",
-      any(t_.startswith("PLAN: funk_hilfe") for _z, t_ in _al95.fuehrer.hirn.gehirn.protokoll), "")
+# Seit 0.34.48 dauert das Funken laenger, und das Protokoll (begrenzt)
+# behielt den Plan nicht bis zum Ende: geprueft wird darum unterwegs.
+pruef("... ein Spruch dauert: er stand dabei und sprach",
+      _sendet95, "")
 pruef("Wer selbst unterlegen ist, sagt nicht zu", not _al95.hilfe_pruefen(_netz95[0]), "")
 
 # Ohne Funkgeraet und ohne Leute ist der Anfuehrer ein Bot wie jeder andere.
@@ -11418,7 +11424,7 @@ for dy_ in range(2, 9):
     _e100.setzen(_tx100 + 15, _ty100 + dy_, K.WAND)       # eine Mauer weiter hinten
 _feind100 = _tm.puppe_setzen(_v100(2, 5), 0, {"team": 1, "leben": 10.0})
 _feind100.unverwundbar = 1e9
-_b100 = _tm.bot_setzen(_v100(9, 5), 0, {"team": 0, "hirn": "goap"})
+_b100 = _tm.bot_setzen(_v100(9, 5), 0, {"team": 0, "hirn": "goap", "waffe": "sturm"})
 _b100.unverwundbar = 1e9
 _h100 = _b100.hirn
 _tm.ki_stopp = True
