@@ -338,6 +338,12 @@ Jeder Schritt ist eine eigene Version, jeder im Testmodus sichtbar.
 
 ### Schritt 3 - Zombies und Bosse ("bau jetzt die Zombies auf GOAP")
 
+**Entscheidung des Besitzers (0.34.36): Zombies und Bosse bleiben vorerst
+klassisch.** "Die brauchen erstmal kein GOAP." Der Code bleibt, Vorgabe
+ist KLASSISCH (Regel GEGNER-KI, Spawner HIRN), auch in den Aufnahmen.
+Weiter geht es mit den Bots und spaeter den Menschen der Kampagne
+(Abschnitt 8).
+
 **Gebaut in 0.34.30**, so:
 
 * `Gegner.schritt` ist geteilt in `_wohin` (Entscheidung, wohin und ob
@@ -485,3 +491,215 @@ Der urspruengliche Entwurf:
   befragt (`welt.wesen`, `kaempfer`), und neue Wahrnehmung fragt genau
   diese Listen (AGENTS.md).
 * **Keine Rechnung in den Daten, die Code ausfuehrt** (4).
+
+---
+
+## 8. Menschen im Gefecht (Entwurf, 0.34.36)
+
+Gemeldet nach den Aufnahmen: "Ich finde das GOAP jetzt noch nicht so
+ueberzeugend ... wie du das genau machen wuerdest, dass sie wirklich wie
+Menschen agieren. Also nicht wie die Spieler im Spiel, sondern wie als
+wuerden sie in dieser Welt leben, in normalen Combat-Situationen, auch
+wenn sie keine Vorgeschichte und kein Leben haben. Dass sie Panik haben,
+dass sie uebermuetig werden, dass sie nicht perfekt agieren ... mit einem
+Maschinengewehr, schon voll am Feuern ... eher nicht ihre Position
+verlassen, sondern eher noch niederhalten ... mit einer Shotgun eher
+naeher rangehen und eher die sind, die stuermen ... eher mit ihrem Team
+zusammen irgendwo reingehen, als dass sie alleine eine Rolle ausfuellen."
+
+Das ist **Schritt 4 (Moral) plus ein Teil von Schritt 6 (Trupp)** aus dem
+Fahrplan, so zugeschnitten, dass er schon im Mehrspieler geht - ohne
+Welt, ohne Vorgeschichte. Auftrag spaeter: "bau jetzt Abschnitt 8A ein"
+usw.
+
+### 8.1 Warum es heute nicht ueberzeugt
+
+* **Es ist zu richtig.** GOAP nimmt immer den billigsten Plan. Menschen
+  im Gefecht nehmen den, der sich gerade richtig anfuehlt - und der
+  haengt an Angst, Zuversicht und Gewohnheit, nicht an einer Rechnung.
+* **Es gibt kein Innenleben.** Ein Bot hat zwei Merkmale (Mut,
+  Disziplin) und sonst nur die Lage. Was eben passiert ist (der Kamerad
+  neben ihm faellt), aendert nichts an ihm.
+* **Jeder spielt allein.** Rollen (Flanke, Druck) werden einzeln
+  vergeben; ein Trupp, der zusammen vorgeht, entsteht nur zufaellig.
+* **Die Waffe sagt nichts ueber den Menschen.** Wer ein MG hat, verhaelt
+  sich wie jeder andere, nur mit anderem Abstand.
+* **Nichts ist traege.** Neu geplant wird alle 0,6 s; ein Mensch bleibt
+  bei dem, was er angefangen hat, oft laenger als klug.
+
+### 8.2 Aufbau: drei Ebenen
+
+1. **Trupp** (2 bis 4 Mann, einer fuehrt): kennt wenige **Truppplaene** -
+   vorruecken in Spruengen (einer bewegt sich, der andere deckt),
+   Feuerkampf halten, Stellung stuermen (sammeln, Granate, Spitzenmann
+   zuerst, die anderen dicht dahinter), Rueckzug unter Feuerschutz.
+   Gebaut als kleine HTN (hierarchische Aufgaben), wie Killzone 2 und
+   Decima es tun (Abschnitt 9). Der Truppfuehrer verteilt Rollen als
+   **Auftraege**: ein Ziel mit hoher Dringlichkeit beim Einzelnen - der es
+   nach Disziplin, Stress und Zuversicht annimmt oder nicht. Wissen geht
+   nur ueber Funk und Sicht (Abschnitt 7).
+2. **Einzelner**: waehlt sein Ziel mit **Nutzenkurven** (Utility, wie
+   Dave Marks IAUS) statt mit festen Dringlichkeiten: jede Ueberlegung
+   ("wie nah ist der Gegner", "wie gestresst bin ich", "wie voll ist das
+   Magazin") ist eine Kurve von 0 bis 1, das Produkt ist die
+   Dringlichkeit. Ausgefuehrt wird mit GOAP wie jetzt, aber mit kurzen
+   Plaenen (2 bis 4 Schritte, so lang wie bei Killzone 3 gemessen).
+3. **Koerper**: Sehen, Hoeren, Zielen, Reaktion - wie heute, aber vom
+   Innenleben beeinflusst (8.3, 8.6).
+
+### 8.3 Innenleben: Stress und Zuversicht
+
+Zwei Zahlen je Mensch, 0 bis 1, die **Ereignisse** veraendern und die
+mit der Zeit zurueckgehen:
+
+| Ereignis | Stress | Zuversicht |
+| --- | --- | --- |
+| Kugel knapp vorbei (Unterdrueckung, gibt es schon) | + | |
+| selbst getroffen | ++ | - |
+| Kamerad faellt (gesehen oder gefunkt) | ++ | -- |
+| von der Seite oder hinten beschossen | ++ | - |
+| Granate in der Naehe | +++ | |
+| Gegner ausgeschaltet | - | ++ |
+| Ueberzahl (eigene Leute in Sicht) | - | + |
+| Truppfuehrer in der Naehe | - (daempft) | + |
+| in Deckung, Ruhe | baut ab | |
+
+Daraus Zustaende - Schwellen haengen an den Merkmalen (Mut, Disziplin,
+Geduld, Jaehzorn), die je Mensch gewuerfelt sind:
+
+* **Panik** (Stress ueber der Schwelle, die der Mut setzt): weg vom
+  Gegner zu den eigenen Leuten oder in Deckung, blind feuern (grosse
+  Streuung), zu frueh nachladen, Auftraege ignorieren. Funk: "ICH BIN
+  RAUS!", "WO SEID IHR?".
+* **Zoegern** (Stress springt ploetzlich): eine halbe Sekunde stehen,
+  bevor er reagiert - die menschliche Schrecksekunde.
+* **Uebermut** (Zuversicht hoch, Disziplin niedrig): verlaesst die
+  Deckung, jagt einem Fliehenden hinterher, stuermt allein, laedt offen
+  nach. Genau der Fehler, den ein Spieler bestrafen kann.
+* **Wut** (Kamerad fiel durch X): X wird Ziel Nummer eins, er nimmt mehr
+  Risiko.
+* **Ansteckung**: Panik und Uebermut springen im Trupp ueber - wer
+  sieht, dass einer wegrennt, bekommt Stress dazu.
+
+Alle Zahlen nach `config.py` (`K.MORAL`), Schwellen und Kurven in
+`wesen/*.txt`.
+
+### 8.4 Die Waffe macht die Rolle
+
+| Waffe | Rolle | Verhalten |
+| --- | --- | --- |
+| MG | Stuetzpunkt | Sucht Deckung mit Schussfeld und bleibt. Ist es **eingeschossen** (laeuft der Feuerstoss schon eine Weile), wird jede Bewegung teuer: lieber weiter niederhalten als die Stellung aufgeben. Bewegt sich nur bei Granate, Flanke oder leerem Gurt. |
+| Schrotflinte | Spitzenmann | Will nah heran, geht beim Sturm vorne, wartet aber auf den Partner, statt allein loszurennen. Auf Abstand sucht er Deckung naeher am Gegner. |
+| Scharfschuetzenwaffe | Ueberwachung | Bleibt weit weg, wechselt nach zwei, drei Schuessen die Stellung, meidet den Nahkampf, meldet Gegner per Funk. |
+| Sturmgewehr | Allrounder | Flankiert - mit Partner -, deckt den Spitzenmann. |
+| Repetierer | Schuetze | Wie das Sturmgewehr, laenger zielen, weniger Bewegung. |
+
+In den Daten: Fakten wie `waffe_mg`, `eingeschossen`, `waffe_schrot` und
+Kosten/Dringlichkeiten, die damit rechnen (`kosten: 2 + 6 * eingeschossen`
+fuer `stellung_wechseln`). Kein Sonderfall im Code.
+
+### 8.5 Lieber zusammen als allein
+
+* **Partner**: Jeder hat einen Partner im Trupp. Flankieren und
+  Vorruecken nur zu zweit - einer bewegt sich, der andere deckt.
+* **Allein?** Dann zuerst Anschluss suchen ("zum Trupp"), statt eine
+  Rolle allein auszufuellen - ausser im Uebermut.
+* **Sturm als Trupp**: sammeln (gibt es schon), der Spitzenmann (am
+  liebsten die Schrotflinte) zuerst, der Zweite wirft vorher, die
+  anderen dicht dahinter, je einer schaut in eine andere Richtung.
+* **Feuerschutz** (gibt es schon) wird Teil des Truppplans statt einer
+  Einzelentscheidung.
+
+### 8.6 Nicht perfekt - aber aus Gruenden
+
+Fehler kommen aus dem Zustand, nicht aus einem Wuerfel (2.11):
+
+* **Unscharfe Wahl**: unter Stress waehlt er nicht immer das beste Ziel,
+  sondern eines der guten (Auswahl mit "Temperatur", die mit dem Stress
+  steigt).
+* **Tunnelblick**: unter Stress sieht er zur Seite schlechter - darum
+  wirkt eine Flanke.
+* **Fehleinschaetzung**: unter Stress haelt er den Gegner fuer mehr, als
+  er ist (das Wissen aus Schritt 5 wird unsicherer).
+* **Traegheit**: was er angefangen hat, macht er laenger, als klug ist -
+  der Vorsprung des laufenden Ziels (`K.GOAP["vorsprung"]`) haengt an
+  Geduld und Stress.
+* **Reaktion** wird mit Stress langsamer, mit Erfahrung im Gefecht (eine
+  Runde lang) schneller.
+
+Fairness bleibt: Sehen, Zielen, Drehgrenze wie heute. Die Schwierigkeit
+verschiebt nur die Verteilung der Merkmale (2.11).
+
+### 8.7 Sichtbar machen
+
+Funk passend zum Zustand, ein kleines Zeichen ueber dem Kopf (Angst,
+Wut), im Testmodus Balken fuer Stress und Zuversicht in der
+Gedankenansicht, Werte setzen und Ereignisse ausloesen ("Kamerad
+faellt"), und Aufnahmen mit `werkzeug_aufnahme.py` zum Vergleichen.
+
+### 8.8 Reihenfolge
+
+| Teil | Was | Netz |
+| --- | --- | --- |
+| **8A** | Stress, Zuversicht, Ereignisse; Panik, Zoegern, Uebermut, Wut; Funk und Anzeige | Zeichen ueber dem Kopf: ein Feld in der Weltmeldung |
+| **8B** | Waffenrollen: MG eingeschossen bleibt und haelt nieder, Schrot vorne, Scharfschuetze ueberwacht und wechselt | nichts |
+| **8C** | Partner und Trupp: Flanke zu zweit, Spruenge, Truppsturm mit Rollen (HTN) | nichts |
+| **8D** | Unvollkommenheit: unscharfe Wahl, Tunnelblick, Fehleinschaetzung, Traegheit | nichts |
+
+Jeder Teil wird gemessen: Aufnahmen GOAP gegen klassisch, und die
+Fairness-Tests (Treffen quer laufender Ziele, Reaktion) muessen bleiben.
+
+---
+
+## 9. Lernmaterial (gesammelt 0.34.36)
+
+Zum Weiterlesen, sortiert nach Thema. Kostenlos, wenn nicht anders
+gesagt.
+
+**Planung, wie sie in Spielen wirklich laeuft**
+* Jeff Orkin, *Three States and a Plan: The A.I. of F.E.A.R.* (GDC 2006) -
+  der Ursprung von GOAP in Spielen, mit Trupp-Tricks:
+  https://pages.cs.wisc.edu/~dyer/cs540/handouts/gdc2006_orkin_jeff_fear.pdf
+* Remco Verweij, *A Hierarchically-Layered Multiplayer Bot System for a
+  First-Person Shooter* (Killzone 2, 2007) - genau unser Fall:
+  Mehrspieler-Bots mit Trupp- und Einzelebene:
+  https://www.guerrilla-games.com/media/News/Files/VUA07_Verweij_Hierarchically-Layered-MP-Bot_System.pdf
+* Guerrilla, *HTN Planning in Decima* (Horizon, Killzone):
+  https://www.guerrilla-games.com/read/htn-planning-in-decima
+* *SquadSmart* - HTN fuer ganze Trupps mit Abstimmung:
+  https://ojs.aaai.org/index.php/AIIDE/article/view/18775
+
+**Entscheiden mit Nutzenkurven (Utility)**
+* Dave Mark, *Infinite Axis Utility System* (Guild Wars 2):
+  https://gameai.com/iaus.php
+* Dave Mark, GDC: *Embracing the Dark Art of Mathematical Modeling in AI*:
+  https://gdcvault.com/play/1015421/Embracing-the-Dark-Art-of
+* Buch (kostet): Dave Mark, *Behavioral Mathematics for Game AI*.
+
+**Sammelbaende und Kanaele**
+* *Game AI Pro* 1 bis 3 und Online Edition, Kapitel frei als PDF - darin
+  u. a. *Squad Coordination in Days Gone* und *Choosing Effective
+  Utility-Based Considerations*: https://gameaipro.com/
+* Tommy Thompson, *AI and Games* (YouTube) - Fallstudien zur KI echter
+  Spiele, verstaendlich erklaert:
+  https://80.lv/articles/ai-and-games-a-channel-about-artificial-intelligence-in-games/
+* Buch (kostet): Ian Millington, *AI for Games* - das Lehrbuch.
+
+**Gefuehle, Stress, Moral**
+* *Modelling Stress Levels in Combat NPCs* (Abertay, 2024) - Stress nach
+  menschlichen Stressreaktionen, mit Spielertest:
+  https://rke.abertay.ac.uk/en/publications/modelling-stress-levels-in-combat-npcs/
+* Square Enix, GDC AI Summit: *Driving Emotionally Expressive NPCs*
+  (Gefuehl, Stimmung, Persoenlichkeit, Zuneigung):
+  https://gdcvault.com/play/1027102/AI-Summit-Driving-Emotionally-Expressive
+
+**Weltbau und simulierte Leben (fuer Schritt 7 bis 9)**
+* Tanya X. Short und Tarn Adams (Hg.), *Procedural Storytelling in Game
+  Design* (kostet) - u. a. *Generating Histories* und das Kapitel zu Dwarf
+  Fortress: https://www.routledge.com/Procedural-Storytelling-in-Game-Design-1st-Edition/Short-Adams/p/book/9781138595309
+* Wie Dwarf Fortress gebaut ist (Interview):
+  https://stackoverflow.blog/2021/12/31/700000-lines-of-code-20-years-and-one-developer-how-dwarf-fortress-is-built/
+* *Shadows of Doubt* Devblogs - eine ganze Stadt mit Tagesablaeufen,
+  Detailstufen nach Naehe zum Spieler:
+  https://colepowered.com/?p=34142 und
+  https://colepowered.itch.io/shadows/devlog/189689/shadows-of-doubt-devblog-23-generating-citizens-part-1

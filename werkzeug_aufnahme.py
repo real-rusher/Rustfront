@@ -127,17 +127,19 @@ def szene_welle(tm, rnd):
             p = seite + pygame.Vector2(rnd.uniform(-80, 80), rnd.uniform(-80, 80))
             if not tm.welt.frei(p, 16, 0, True):
                 p = pygame.Vector2(seite)
-            zombies.append(tm.gegner_setzen(art, p, 0, {"ki": True, "hirn": "goap"}))
+            # Zombies klassisch (seit 0.34.36, Entscheidung des Besitzers: sie
+            # brauchen vorerst kein GOAP).
+            zombies.append(tm.gegner_setzen(art, p, 0, {"ki": True, "hirn": "klassisch"}))
     # Die Kamera folgt den Bots: 34 Zombies ziehen die Mitte sonst ins Leere.
-    return ("Drei GOAP-Bots gegen 34 GOAP-Zombies von zwei Seiten",
+    return ("Drei GOAP-Bots gegen 34 Zombies von zwei Seiten",
             rot, alle_weg(rot, zombies), 60, 1.75)
 
 
 def szene_boss(tm, rnd):
     a, b = stelle(tm, rnd, 300, "")
     rot = [tm.bot_setzen(p, 0, {"team": 0, "hirn": "goap"}) for p in kreis(a, 4, 30)]
-    boss = tm.gegner_setzen("koloss", b, 0, {"ki": True, "hirn": "goap", "leben": 5.0})
-    return ("Vier GOAP-Bots gegen den Koloss (GOAP, fuenffaches Leben)",
+    boss = tm.gegner_setzen("koloss", b, 0, {"ki": True, "hirn": "klassisch", "leben": 5.0})
+    return ("Vier GOAP-Bots gegen den Koloss (klassisch, fuenffaches Leben)",
             rot + [boss], alle_weg(rot, [boss]), 60, 1.5)
 
 
