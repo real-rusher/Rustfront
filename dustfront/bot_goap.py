@@ -592,6 +592,12 @@ class GoapHirn(BotHirn):
         jedem bekannten Gegner gedeckt ist und die er geradewegs erreicht."""
         k = self.k
         welt = self.g.welt
+        wege = welt.wege
+        # Zu Fuss gemessen, nicht geradeaus: hinter eine Mauer geht es nur
+        # um sie herum (seit 0.34.48 - vorher fand er dort nie einen Platz
+        # und half ihm im Freien auf).
+        _s, feld = wege.feld_zu(x.ebene, x.pos)
+        breite = wege.breite[x.ebene]
         bestes, beste = None, 1e9
         for r in K.VERWUNDET["deckung_radien"]:
             for i in range(12):
@@ -600,9 +606,11 @@ class GoapHirn(BotHirn):
                     continue
                 if not self.fest_gedeckt(p, x.ebene):
                     continue
-                if not welt.wege.gerade_frei(x.ebene, x.pos, p, k.radius + 1):
+                tx, ty = wege.kachel(p)
+                schritte = feld[ty * breite + tx] if 0 <= tx < breite and 0 <= ty < wege.hoehe[x.ebene] else -1
+                if schritte < 0 or schritte * K.TILE > r * 1.8 + K.TILE:
                     continue
-                wert = p.distance_to(x.pos) + 0.5 * p.distance_to(k.pos)
+                wert = schritte * K.TILE + 0.5 * p.distance_to(k.pos)
                 orte = self.feind_orte()
                 if orte and welt.deckung(sum(orte, pygame.Vector2(0, 0)) / len(orte), p, x.ebene) == "wand":
                     wert -= K.BOTS["deckung_wand"]    # hinter eine Mauer, lieber als hinter ein Fass
@@ -1236,25 +1244,38 @@ class GoapHirn(BotHirn):
         mitte = sum(orte, pygame.Vector2(0, 0)) / len(orte)
         jetzt_weit = min(o.distance_to(k.pos) for o in orte)
         bestes, beste = None, 1e9
-        for r in K.BOTS["wechsel_radien"]:
-            for i in range(12):
-                p = k.pos + pygame.Vector2(r, 0).rotate(i * 30.0)
+        nah, fern, schritt = K.BOTS["wechsel_weg"]
+        wege = welt.wege
+        _s, feld = wege.feld_zu(k.ebene, k.pos)     # zu Fuss, um Mauern herum
+        breite, hoehe = wege.breite[k.ebene], wege.hoehe[k.ebene]
+        # In jeder Richtung in kleinen Schritten, bis zur ersten Stelle, die
+        # dicht gedeckt ist: dicht hinter einer Mauer ist nur ein schmaler
+        # Streifen, den wenige grosse Ringe nie trafen.
+        for i in range(16):
+            richtung = pygame.Vector2(1, 0).rotate(i * 22.5)
+            r = nah
+            while r <= fern:
+                p = k.pos + richtung * r
+                r += schritt
                 if not welt.frei(p, k.radius + 2, k.ebene, True):
                     continue
                 weit = min(o.distance_to(p) for o in orte)
                 if weit < jetzt_weit + K.BOTS["wechsel_weiter"]:
                     continue
                 if any(_abstand_zur_strecke(o, k.pos, p) < 90.0 for o in orte):
-                    continue                  # nicht am Gegner vorbei
-                if not welt.wege.gerade_frei(k.ebene, k.pos, p, k.radius + 1):
-                    continue
+                    break                     # nicht am Gegner vorbei - und weiter erst recht nicht
                 if not all(self.dicht_gedeckt(p, o) for o in orte):
                     continue
-                wert = 0.5 * r - 0.4 * weit
+                tx, ty = wege.kachel(p)
+                schritte = feld[ty * breite + tx] if 0 <= tx < breite and 0 <= ty < hoehe else -1
+                if schritte < 0 or schritte * K.TILE > fern * 1.5:
+                    break
+                wert = 0.5 * schritte * K.TILE - 0.4 * weit
                 if welt.deckung(mitte, p, k.ebene) == "wand":
                     wert -= K.BOTS["deckung_wand"]
                 if wert < beste:
                     bestes, beste = p, wert
+                break
         return bestes
 
     def tun_deckung_wechseln(self, dt, ein):
@@ -1588,7 +1609,10 @@ class GoapHirn(BotHirn):
             if self.wurf_platz < 0:
                 return _nichts("gescheitert")
             weit = K.WAFFEN[k.waffen[self.wurf_platz]]["wurf_max"] * 0.9
-            if k.pos.distance_to(soll) > weit:
+            # Zu weit, oder etwas steht im Weg (seine eigene Deckung): erst
+            # dorthin, wo er frei werfen kann - sonst brach vorn_zu den Wurf
+            # bei jedem Bild ab und er stand ewig da (gesehen in der Aufnahme).
+            if k.pos.distance_to(soll) > weit or self.g.welt.deckung(k.pos, soll, k.ebene) != "":
                 return self._weg_richtung(soll, k.ebene, ein), pygame.Vector2(gefahr[0]), False, False, "laeuft"
             self.wurf_phase = 0.45
             self.sagen("RAUCH!", wichtig=True)

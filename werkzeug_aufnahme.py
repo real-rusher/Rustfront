@@ -312,6 +312,7 @@ def szene_deckung(tm, rnd):
     for dy in range(1, 8):
         if dy != 4:                       # eine Luecke, durch die man sieht
             ebene.setzen(wand_x, ty + dy, K.KISTE)
+    tm.welt._wege = None                  # neu rechnen, siehe setzen
     hinten = pygame.Vector2((wand_x + 1.6) * T, (ty + 4.5) * T)
     vorn = pygame.Vector2((wand_x - 6.5) * T, (ty + 4.5) * T)
     tm.verwundete_setzen(True)
@@ -364,6 +365,9 @@ def setzen(tm, tx, ty, punkte, art):
     e = tm.welt.ebene(0)
     for x, y in punkte:
         e.setzen(tx + x, ty + y, art)
+    # Das Wegenetz rechnet die Welt nur einmal (Welt.wege) - ohne das liefen
+    # die Bots geradewegs gegen die neue Mauer (gesehen in der Aufnahme).
+    tm.welt._wege = None
 
 
 def kennen(eigene, andere, tm):
@@ -402,22 +406,23 @@ def szene_panik(tm, rnd):
     setzen(tm, tx, ty, [(15, y) for y in range(3, 9)], K.WAND)
     tm.verwundete_setzen(True)
     anteile = (1.0, 0.45, 0.15)
-    rot = [tm.bot_setzen(v(9, 2 + 3 * i), 0, {"team": 0, "hirn": "goap"}) for i in range(3)]
-    blau = [tm.bot_setzen(v(2, 3 + 2 * i), 0, {"team": 1, "hirn": "goap", "leben": 2.0}) for i in range(3)]
+    # Dreifaches Leben fuer Rot: sonst lagen zwei schon, bevor die Panik kam.
+    rot = [tm.bot_setzen(v(9, 2 + 3 * i), 0, {"team": 0, "hirn": "goap", "leben": 3.0}) for i in range(3)]
+    blau = [tm.bot_setzen(v(2, 3 + 2 * i), 0, {"team": 1, "hirn": "goap", "leben": 1.5}) for i in range(3)]
     kennen(rot, blau, tm)
     kennen(blau, rot, tm)
     uhr = {"t": 0.0}
 
     def jedes_bild():
         uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
-        if uhr["t"] >= 4.0 and not uhr.get("panik"):
+        if uhr["t"] >= 3.0 and not uhr.get("panik"):
             uhr["panik"] = True
             for b, anteil in zip(rot, anteile):
                 if b.lebt and not getattr(b, "am_boden", False):
                     b.leben = b.max_leben * anteil
                     b.hirn.innen.panik_setzen(6.0)
 
-    return ("Panik: bleiben (gesund), Deckung wechseln (angeschlagen), fliehen",
+    return ("Panik: je nach Lage bleiben, Deckung wechseln oder fliehen",
             rot + blau, alle_weg(rot, blau), 30, 1.5, jedes_bild)
 
 

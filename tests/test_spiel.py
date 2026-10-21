@@ -4860,6 +4860,8 @@ pruef("Wer zieht, geht langsamer",
 _zu_z = liegt.pos - zieher.pos
 _ab_z = (zieher.winkel - math.degrees(math.atan2(_zu_z.y, _zu_z.x)) + 180) % 360 - 180
 _hb_z = pygame.Surface((K.GAME_W, K.GAME_H))
+wz.kamera.pos.update(zieher.pos)
+wz.kamera.ruckeln = 0.0
 wz._haende_zeichnen(_hb_z)
 _mitte_z = wz.kamera.zu_bild((zieher.pos + liegt.pos) / 2)
 _arm_z = any(tuple(_hb_z.get_at((int(_mitte_z.x) + dx_, int(_mitte_z.y) + dy_)))[:3] == K.C_HULL_SH
@@ -10877,7 +10879,10 @@ for m_ in _al95.mitglieder:
 _feinde95 = [_tm.puppe_setzen(_b95 + pygame.Vector2(0, 22 * i_), 0, {"team": 1, "leben": 10.0})
              for i_ in range(7)]
 _start95 = _br95.fuehrer.pos.distance_to(_a95)
-for _ in range(int(14.0 / _D87)):
+# 14 s mit dem Funk von 0.34.39 (2,2 s je Spruch); seit 0.34.48 dauert ein
+# Spruch laenger, und vorher zieht sich der Anfuehrer zurueck.
+_fenster95 = 14.0 + 1.5 * (K.TRUPP["funk_dauer"] - 2.2) + K.TRUPP["funk_weg_zeit"]
+for _ in range(int(_fenster95 / _D87)):
     _tm.schritt(_D87)
 _netz95 = getattr(_tm, "_funknetz", [])
 _arten95 = [(s_.trupp.name, s_.art) for s_ in _netz95]

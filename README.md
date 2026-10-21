@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.48, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.49, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -823,6 +823,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.49 | Fehler aus den neuen Aufnahmen behoben: Der Anführer stand ewig bei RAUCH WERFEN hinter der Mauer (der Wurf wäre gegen sie gegangen) - jetzt geht er erst dorthin, wo er frei werfen kann. Bergeplatz und bessere Deckung unter Panik werden zu Fuß gemessen (um Mauern herum) und fein abgesucht; vorher fanden die Bots dahinter nie einen Platz und halfen im Freien auf oder rannten weg. Aufnahmen: das Wegenetz wird nach dem Bauen neu gerechnet. Netz/LAN: unverändert; trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.48 | **Bots, Teil 7.** In Deckung ist ein Bot nur noch dicht hinter ihr, nicht mehr weit dahinter; liegt eine Deckung zu nah am Gegner für seine Waffe, sucht er eine weiter hinten. Panik: bleiben (gesund, der Trupp rückt vor), in eine bessere Deckung wechseln (angeschlagen) oder fliehen (schwer getroffen, der Trupp zieht sich zurück). Verwundete werden erst hinter feste Deckung gezogen, nicht im Rauch wiederbelebt. **Wiederbeleben dauert 5,5 s (war 3)**: wer zieht oder aufhilft, hält den Gefallenen sichtbar mit beiden Armen (beim Aufhelfen mit Verband, der im Takt drückt), um ihn ein Ring, wie weit es ist - die Figur selbst (der Skin) bleibt, das Zieh-Bild aus 0.34.43 ist wieder weg. Funk (Testmodus): der Anführer zieht sich erst 300 px vom Gegner zurück, ein Spruch dauert 6 s, und wer ihn dabei trifft oder dicht vor ihm steht, unterbricht ihn. Funkwellen rot, gestrichelt und drehend. Neue Aufnahmen `mauer`, `panik`, `bergen_mauer`, `ueberfall`. Netz/LAN: **geändert** - das Wiederbeleben dauert länger (Regel AUFHELFEN), die Arme zeichnet auch der Gast; alle Geräte brauchen dieselbe Version. |
 | 0.34.47 | Aufnahme `deckung`: Blau hat dreifaches Leben, sonst war die Szene nach acht Sekunden vorbei. Netz/LAN: unverändert; trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.46 | **Bots, Teil 6.** Wer am Boden liegt, ist kein Ziel mehr: Bots bringen höchstens den laufenden Feuerstoß zu Ende und nehmen dann den, der noch steht (das gilt auch im Spiel für liegende Spieler). Wer selbst zu Boden geht, denkt nicht weiter - im Testmodus steht über ihm VERWUNDET statt FLANKIEREN. Rauch kommt genau auf den Verwundeten (beim Rückzug auf den Trupp), nicht mehr zwischen ihn und den Gegner. Bots ziehen volle Deckung (Mauern) Fässern vor und setzen sich lieber an Mauerenden, von denen aus sie sich herauslehnen können. Steht die eigene Deckung direkt vor ihnen, schießen und werfen sie nicht hinein. Testmodus: Funkwellen rot, klein und am Boden unter dem Funker. Netz/LAN: über das Netz geht nichts Neues; Untertitel zeichnet auch der Gast nicht mehr. Das Verhalten der Bots ist anders, alle Geräte brauchen dieselbe Version. |
