@@ -1049,10 +1049,53 @@ def _boden_team(kombi):
     return zeichner
 
 
+def _blass(farbe, anteil: float = 0.55):
+    """Eine Farbe zum Grau hin - die Leiche hat kaum noch Farbe."""
+    grau = sum(farbe[:3]) // 3
+    return tuple(int(c + (grau - c) * anteil) * 3 // 4 for c in farbe[:3])
+
+
+def _figur_leiche(rumpf=None, kante=None):
+    """Die zweite Leiche (seit 0.34.40, Testmodus): wer nach dem
+    Wiederbeleben noch einmal faellt, liegt anders da als beim ersten Mal -
+    ausgestreckt, Arme und Beine weit, blass, in einer groesseren, dunkleren
+    Lache - und ist nach ein paar Sekunden weg. Gemeldet: "eine neue
+    Leiche, die ein bisschen anders aussieht als die erste"."""
+    rumpf = _blass(rumpf or K.C_HULL_DK)
+    kante = _blass(kante or K.C_HULL_SH)
+    s = _flaeche(28, 28)
+    c = 14
+    pygame.draw.ellipse(s, (40, 14, 12), (2, 6, 24, 17))          # grosse Lache
+    pygame.draw.ellipse(s, (54, 18, 15), (5, 9, 18, 11))
+    koerper = pygame.Rect(c - 7, c - 4, 14, 8)
+    pygame.draw.ellipse(s, kante, koerper)
+    pygame.draw.ellipse(s, rumpf, koerper.inflate(-3, -3))
+    pygame.draw.circle(s, rumpf, (c - 9, c - 1), 4)               # Kopf zur Seite
+    pygame.draw.circle(s, kante, (c - 9, c - 1), 4, 1)
+    for a, b in (((c - 3, c - 3), (c - 6, c - 11)),               # Arme weit
+                 ((c - 3, c + 3), (c - 5, c + 11)),
+                 ((c + 5, c - 2), (c + 12, c - 7)),               # Beine gespreizt
+                 ((c + 5, c + 2), (c + 12, c + 8))):
+        pygame.draw.line(s, kante, a, b, 3)
+    return _rand(s, (12, 8, 6))
+
+
+@platzhalter("leiche")
+def _leiche():
+    return _figur_leiche()
+
+
+def _leiche_team(kombi):
+    def zeichner():
+        return _figur_leiche(kombi["rumpf"], kombi["kante"])
+    return zeichner
+
+
 for _kombi in K.TEAMS["kombi"]:
     _kurz = _kombi["name"].lower()
     platzhalter("spieler_" + _kurz)(_spieler_team(_kombi))
     platzhalter("spieler_%s_boden" % _kurz)(_boden_team(_kombi))
+    platzhalter("leiche_%s" % _kurz)(_leiche_team(_kombi))
     for _waffe in K.WAFFEN_HAND:
         platzhalter("spieler_%s_%s" % (_kurz, _waffe))(
             _spieler_team(_kombi, _waffe))

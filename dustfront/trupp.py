@@ -111,6 +111,7 @@ class Trupp:
         self.geister: dict = {}       # Nummer -> Ort, wo ein Flankierer war (Days Gone)
         self.suche_ort = None         # wohin der Trupp ohne Kontakt geht
         self.hilfe = None             # dict(fuer, ort, ebene, zugesagt, geantwortet)
+        self.bergung = None           # dict(opfer, retter, sicher, bedrohung) - seit 0.34.40
         self.gerufen_bis = -1e9       # so lange gilt unser eigener Hilferuf
         self.gemeldet = None          # was wir zuletzt gemeldet haben
         self.gemeldet_zeit = -1e9
@@ -159,6 +160,7 @@ class Trupp:
         self._front_rechnen(leute)
         self._stellungen(leute)
         self._hilfe_auswerten()
+        self._bergung_planen(leute)
 
     def _lage_sammeln(self, leute) -> None:
         """Wer einen Gegner sieht und jemanden im Trupp in Sprechweite hat,
@@ -529,6 +531,65 @@ class Trupp:
 
     def stellung(self, k):
         return self.stellungen.get(k.nummer)
+
+    # ── Bergen (seit 0.34.40) ─────────────────────────────────────
+    def _bergung_planen(self, leute) -> None:
+        """Liegt einer, sucht der Trupp ein, zwei Retter aus - die naechsten,
+        nicht den Anfuehrer, keinen Geschwaechten -, die anderen decken. Ob
+        es sicher genug ist, sagt die Lage: sieht ihn kein Gegner (oder
+        liegt Rauch auf ihm), oder ist der Trupp zuversichtlich genug, um
+        es gegen die durchzuziehen, die ihn sehen. Gemeldet: "nur, wenn es
+        recht sicher erscheint oder die Bots sich sicher sind, dass sie in
+        der Lage sind, das als Team durchzuziehen." """
+        g = self.g
+        v = K.VERWUNDET
+        liegen = [m for m in self.mitglieder
+                  if m.lebt and getattr(m, "am_boden", False) and g.kaempfer.get(m.nummer) is m]
+        b = self.bergung
+        if b is not None and b["opfer"] not in liegen:
+            self.bergung = b = None
+        if not liegen or not leute:
+            self.bergung = None
+            return
+        if b is None:
+            mitte = sum((pygame.Vector2(m.pos) for m in leute), pygame.Vector2(0, 0)) / len(leute)
+            opfer = min(liegen, key=lambda m: m.pos.distance_to(mitte))
+            b = self.bergung = dict(opfer=opfer, retter=set(), sicher=False, bedrohung=0)
+        opfer = b["opfer"]
+        welt = g.welt
+        n = 0
+        for o, e, _w in self.feinde(opfer.ebene):
+            if (o.distance_to(opfer.pos) <= v["bedrohung"]
+                    and sieht_durch_rauch(welt, o, opfer.pos, e)):
+                n += 1
+        b["bedrohung"] = n
+        b["sicher"] = (n == 0 or self.zuversicht >= 4
+                       or (self.zuversicht >= 2 and n <= max(0, len(leute) - 2)))
+        da = {m.nummer for m in leute}
+        retter = {r for r in b["retter"] if r in da}
+        soll = min(v["retter"], max(1, len(leute) - 1))
+        frei = sorted((m for m in leute if m.nummer not in retter),
+                      key=lambda m: (m is self.fuehrer and len(leute) > 1,
+                                     bool(getattr(m.hirn, "geschwaecht", False)),
+                                     m.pos.distance_to(opfer.pos)))
+        while len(retter) < soll and frei:
+            retter.add(frei.pop(0).nummer)
+        b["retter"] = retter
+
+
+def sieht_durch_rauch(welt, a, b, ebene) -> bool:
+    """Freie Sicht von a nach b - ohne Mauer und ohne Rauch auf der Linie
+    (seit 0.34.40: Rauch zwischen einem Liegenden und dem Gegner macht das
+    Bergen sicher)."""
+    if not welt.sicht_frei(a, b, ebene):
+        return False
+    a = pygame.Vector2(a)
+    b = pygame.Vector2(b)
+    for t in (0.25, 0.5, 0.75, 1.0):
+        p = a + (b - a) * t
+        if any(r.ebene == ebene and r.deckt(p, ebene) for r in welt.rauch):
+            return False
+    return True
 
 
 def trupps(g) -> list:

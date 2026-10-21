@@ -51,7 +51,7 @@ from .bots import BotHirn
 from .bottaktik import braucht_schutz, rolle_frei
 from .entities import Granate
 from .innenleben import Innenleben, zuversicht_rechnen
-from .trupp import richtung_wort
+from .trupp import richtung_wort, sieht_durch_rauch
 
 
 def _nichts(status: str):
@@ -167,10 +167,13 @@ class GoapHirn(BotHirn):
                 self.innen.ereignis("seite")
 
     def fehler_faktor(self) -> float:
-        """Unter Stress zittert die Hand, in Panik schiesst er fast blind."""
+        """Unter Stress zittert die Hand, in Panik schiesst er fast blind -
+        und wer eben wiederbelebt wurde, zielt schlechter (0.34.40)."""
         f = 1.0 + 0.8 * self.innen.stress
         if self.innen.panik:
             f *= 2.5
+        if self.geschwaecht:
+            f *= K.VERWUNDET["danach_fehler"]
         return f
 
     # ── Sinne ─────────────────────────────────────────────────────
@@ -408,6 +411,8 @@ class GoapHirn(BotHirn):
             ziel_fast_tot=sichtbar and ziel_leben < 0.3,
         )
         fakten.update(self._trupp_fakten())
+        fakten.update(self._bergung_fakten())
+        fakten["geschwaecht"] = self.geschwaecht
         werte = dict(leben=k.leben / max(1.0, k.max_leben),
                      abstand=k.pos.distance_to(gefahr[0]) if gefahr else 9999.0,
                      stress=round(innen.stress, 3),
@@ -451,6 +456,91 @@ class GoapHirn(BotHirn):
             hilfe_zugesagt=t.hilfe is not None and bool(t.hilfe.get("zugesagt")),
             rauch_da=rauch,
         )
+
+    # ── Bergen (seit 0.34.40) ─────────────────────────────────────
+    def _opfer(self):
+        """Wen er bergen soll: im Trupp den, den der Trupp birgt; sonst den
+        naechsten Gefallenen seiner Mannschaft."""
+        t = self.trupp
+        if t is not None and t.bergung is not None:
+            x = t.bergung["opfer"]
+            if x.lebt and getattr(x, "am_boden", False):
+                return x
+        return self._wem_helfen()
+
+    def bedrohung(self, x) -> int:
+        """Wie viele Gegner, von denen er weiss, den Liegenden sehen - nah
+        genug und ohne Rauch dazwischen."""
+        welt = self.g.welt
+        n = 0
+        for o in self.feind_orte():
+            if o.distance_to(x.pos) > K.VERWUNDET["bedrohung"]:
+                continue
+            if sieht_durch_rauch(welt, o, x.pos, x.ebene):
+                n += 1
+        return n
+
+    def _im_rauch(self, pos, ebene) -> bool:
+        return any(r.ebene == ebene and r.deckt(pos, ebene) for r in self.g.welt.rauch)
+
+    def gedeckt(self, pos, ebene) -> bool:
+        """Liegt diese Stelle vor jedem Gegner, den er kennt, in Deckung
+        (oder im Rauch)?"""
+        if self._im_rauch(pos, ebene):
+            return True
+        welt = self.g.welt
+        for o in self.feind_orte():
+            if o.distance_to(pos) <= K.VERWUNDET["bedrohung"] * 1.5 \
+                    and welt.deckung(o, pos, ebene) == "" and sieht_durch_rauch(welt, o, pos, ebene):
+                return False
+        return True
+
+    def _bergung_fakten(self) -> dict:
+        k = self.k
+        x = self._opfer()
+        if x is None:
+            return dict(bei_kamerad=False, kamerad_gedeckt=False, ich_berge=False,
+                        bergen_sicher=False, bergung_laeuft=False)
+        t = self.trupp
+        if t is not None and t.bergung is not None and t.bergung["opfer"] is x:
+            ich = k.nummer in t.bergung["retter"]
+            sicher = t.bergung["sicher"]
+        else:
+            # Ohne Trupp: die zwei, die am naechsten sind, und nur, wenn ihn
+            # keiner sieht - ausser er ist sich seiner Sache sehr sicher.
+            naechste = sorted((m for m in self.kameraden() + [k]
+                               if not getattr(m, "am_boden", False) and m.ebene == x.ebene),
+                              key=lambda m: m.pos.distance_to(x.pos))
+            ich = k in naechste[:K.VERWUNDET["retter"]]
+            sicher = self.bedrohung(x) == 0 or self.innen.stufe >= 3
+        laeuft = any(getattr(m, "zieht", None) == x.nummer or getattr(m, "hilft", None) == x.nummer
+                     for m in self.kameraden() + [k])
+        return dict(bei_kamerad=x.ebene == k.ebene
+                    and k.pos.distance_to(x.pos) <= K.REVIVE["reichweite"] - 4,
+                    kamerad_gedeckt=self.gedeckt(x.pos, x.ebene),
+                    ich_berge=ich, bergen_sicher=sicher, bergung_laeuft=laeuft)
+
+    def bergeplatz(self, x):
+        """Wohin er den Liegenden zieht: die naechste Stelle um ihn, die vor
+        jedem bekannten Gegner gedeckt ist und die er geradewegs erreicht."""
+        k = self.k
+        welt = self.g.welt
+        bestes, beste = None, 1e9
+        for r in K.VERWUNDET["deckung_radien"]:
+            for i in range(12):
+                p = x.pos + pygame.Vector2(r, 0).rotate(i * 30.0)
+                if not welt.frei(p, k.radius + 2, x.ebene, True):
+                    continue
+                if not self.gedeckt(p, x.ebene):
+                    continue
+                if not welt.wege.gerade_frei(x.ebene, x.pos, p, k.radius + 1):
+                    continue
+                wert = p.distance_to(x.pos) + 0.5 * p.distance_to(k.pos)
+                if wert < beste:
+                    bestes, beste = p, wert
+            if bestes is not None:
+                return bestes
+        return None
 
     def _rauch_platz(self) -> int:
         k = self.k
@@ -937,7 +1027,7 @@ class GoapHirn(BotHirn):
         return self._weg_richtung(zone[0], zone[1], ein), None, False, False, "laeuft"
 
     def tun_helfen(self, dt, ein):
-        x = self._wem_helfen()
+        x = self._opfer()
         if x is None:
             return _nichts("fertig")
         will, punkt = self._helfen(x, ein)
@@ -968,6 +1058,48 @@ class GoapHirn(BotHirn):
         will, punkt = self._unterwegs(dt, ein)
         return will, punkt, False, False, "laeuft"
 
+
+    # ── Bergen (seit 0.34.40) ─────────────────────────────────────
+    def tun_zum_kameraden(self, dt, ein):
+        """Hin zu dem, der liegt."""
+        k = self.k
+        x = self._opfer()
+        if x is None:
+            return _nichts("fertig")
+        if x.ebene == k.ebene and k.pos.distance_to(x.pos) <= K.REVIVE["reichweite"] - 6:
+            return _nichts("fertig")
+        will = self._weg_richtung(x.pos, x.ebene, ein)
+        gefahr = self._gefahr()
+        return will, (gefahr[0] if gefahr else None), False, False, "laeuft"
+
+    def tun_ziehen(self, dt, ein):
+        """Den Liegenden an eine gedeckte Stelle ziehen. Er haengt an einer
+        kurzen Leine hinter ihm (Gefecht._ziehen), also geht er ein Stueck
+        ueber die Stelle hinaus. Beide Haende am Kameraden: kein Schuss."""
+        k = self.k
+        x = self._opfer()
+        if x is None:
+            self._berge_ort = None
+            return _nichts("fertig")
+        if self.gedeckt(x.pos, x.ebene):
+            self._berge_ort = None
+            return _nichts("fertig")
+        ort = getattr(self, "_berge_ort", None)
+        if ort is None or not self.gedeckt(ort, x.ebene):
+            ort = self._berge_ort = self.bergeplatz(x)
+        if ort is None:
+            return _nichts("gescheitert")
+        if k.pos.distance_to(x.pos) > K.REVIVE["reichweite"] - 2 and k.zieht is None:
+            return self._weg_richtung(x.pos, x.ebene, ein), None, False, False, "laeuft"
+        ein["ziehen"] = True
+        weg = ort - x.pos
+        if weg.length() < 8.0:
+            self._berge_ort = None
+            return _nichts("fertig")
+        hin = ort + weg.normalize() * K.ZIEHEN["leine"]
+        will = self._weg_richtung(hin, x.ebene, ein)
+        gefahr = self._gefahr()
+        return will, (gefahr[0] if gefahr else None), False, False, "laeuft"
 
     # ── Aktionen im Trupp (seit 0.34.39) ─────────────────────────
     def _hin_und_kaempfen(self, dt, ein, p, ebene=None):
@@ -1055,11 +1187,18 @@ class GoapHirn(BotHirn):
 
     def tun_rauch(self, dt, ein):
         """Rauch zwischen den Trupp und den Gegner - als Deckung beim
-        Rueckzug. Geworfen wird wie jede Wurfwaffe (bots._werfen)."""
+        Rueckzug, und beim Bergen zwischen den Liegenden und den Gegner.
+        Geworfen wird wie jede Wurfwaffe (bots._werfen)."""
         k = self.k
         gefahr = self._gefahr()
         if gefahr is None:
             return _nichts("gescheitert")
+        x = self._opfer()
+        if x is not None and self.gehirn.fakten.get("kamerad_liegt"):
+            # _werfen legt Rauch auf 40 Prozent des Weges - so liegt er gut
+            # ein Drittel vom Liegenden zum Gegner hin.
+            soll = x.pos + (gefahr[0] - x.pos) * 0.35
+            gefahr = (k.pos + (soll - k.pos) / 0.4, gefahr[1], gefahr[2])
         if self.wurf_phase <= 0.0:
             self.wurf_platz = self._rauch_platz()
             if self.wurf_platz < 0:

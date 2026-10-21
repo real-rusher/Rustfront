@@ -89,6 +89,10 @@ def braucht_schutz(x) -> bool:
     """Braucht dieser Kamerad gerade Feuerschutz?"""
     if getattr(x, "am_boden", False) or getattr(x, "nachlade_rest", 0.0) > 0.0:
         return True
+    # Wer einen Gefallenen zieht oder ihm aufhilft, hat keine Hand frei
+    # (seit 0.34.40): die anderen decken ihn.
+    if getattr(x, "zieht", None) is not None or getattr(x, "hilft", None) is not None:
+        return True
     if getattr(x, "leben", 100.0) < K.BOTS["deckung_leben"]:
         return True
     hirn = getattr(x, "hirn", None)

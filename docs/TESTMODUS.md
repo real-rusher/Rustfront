@@ -79,8 +79,9 @@ toter Figuren, Zombiewellen, Beute nachlegen, Blenden und Ruckeln des
 Beobachters, SAUBERE ANSICHT (nur die Welt und ueber jedem Kopf die
 Aktion - kein Ziffernblock, keine Tafeln, kein Funk, herausgezoomt ohne
 Nebel; fuer Aufnahmen), ENTF-TASTE (LOESCHT: weg ohne Spur; TOETET:
-stirbt mit Fleck und Todeslaut), die gewoehnlichen Einstellungen, zurueck zum
-Hauptmenue.
+stirbt mit Fleck und Todeslaut), VERWUNDETE BOTS (Bots liegen erst und
+koennen einmal geborgen und wiederbelebt werden), die gewoehnlichen
+Einstellungen, zurueck zum Hauptmenue.
 
 ## Aufnahmen
 
@@ -104,6 +105,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.40 | Testmenue VERWUNDETE BOTS (vorgegeben AN): Bots fallen erst zu Boden, werden geborgen (Rauch, in Deckung ziehen, aufhelfen) und einmal wiederbelebt, danach geschwaecht; der zweite Tod hinterlaesst eine andere Leiche, die nach sechs Sekunden verschwindet. ENTF TOETET legt einen Bot erst hin. INFO zeigt die Bergung (Kreis, Bedrohung, Retter); GEDANKEN zeigt GESCHWAECHT; Szene `bergen` |
 | 0.34.39 | Spawner-Gruppe TRUPPS: TRUPP (Groesse, Team, Anfuehrer mit/ohne Funk/keiner, Waffen gemischt/zufall, Leben), TRUPP: HALTEN HIER (wichtig), TRUPP: ANGRIFF HIER, TRUPP: FREI; INFO zeigt Frontlinie, Stellungen, Zustand und die letzten Funksprueche, ein Funkspruch steht mit Balken ueber dem, der funkt (auch in der sauberen Ansicht); GEDANKEN mit Rolle und Lage im Trupp; Szenen `trupp` und `hilferuf` in `werkzeug_aufnahme.py` |
 | 0.34.38 | INFO KURZ zeigt unter jedem GOAP-Bot Stress (Balken), Zuversicht (P B N Z H), PANIK/SCHRECK und Kreise mit Linien zu dem, was er hoert; GEDANKEN zeigt Stress, Zuversicht, Panik, Schreck, eingeschossen, Bindung und Bedenkzeit; Testmenue INNENLEBEN (PANIK, STRESS +0,3, KAMERAD FAELLT, GRANATE NEBEN IHM, RUHE) fuer die gezeigte Figur |
 | 0.34.35 | `werkzeug_aufnahme.py` mit Ton (`Tonband`) und `--zeitlupe` |

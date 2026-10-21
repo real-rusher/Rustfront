@@ -47,6 +47,13 @@
 #   antwort_offen        ein anderer rief um Hilfe, wir haben zugesagt, aber noch nicht geantwortet
 #   hilfe_zugesagt       wir sind unterwegs zu einem anderen Trupp
 #   rauch_da             er hat eine Rauchgranate
+# Seit 0.34.40, Bergen (Testmodus: VERWUNDETE BOTS):
+#   bei_kamerad          er steht neben dem, den er bergen soll
+#   kamerad_gedeckt      der Liegende ist vor jedem bekannten Gegner gedeckt (oder im Rauch)
+#   ich_berge            er ist einer der Retter (im Trupp bestimmt, sonst die zwei naechsten)
+#   bergen_sicher        es scheint sicher genug, ihn zu holen
+#   bergung_laeuft       einer zieht ihn gerade oder hilft ihm auf
+#   geschwaecht          er wurde wiederbelebt: weniger Leben, langsamer, zielt schlechter
 # Ziel-Fakten, die nie wahr werden, sondern nur das Ziel benennen:
 #   feind_besiegt, kamerad_geschuetzt, sturm_fertig, gruppe_getroffen, sicher,
 #   welle_fertig, bei_hilfe, gemeldet, geantwortet, rauch_liegt
@@ -82,7 +89,7 @@ will: in_deckung, beruhigt
 # gleich erledigt, bleibt draussen. Ganz knapp am Ende hat er Rang 1.
 # Der Anfuehrer will mehr als die anderen ueberleben (0.34.39).
 rang: (stress > 0.85) + angeschlagen * getroffen * (leben < 0.25)
-dringlich: (110 * stress + 45 * angeschlagen * getroffen) * (1.3 - mut) * (1.4 - 0.4 * zuversicht) * (1 - 0.6 * eingeschossen * waffe_mg) * (1 - 0.5 * ziel_fast_tot) * (1 + 0.35 * ist_fuehrer)
+dringlich: (110 * stress + 45 * angeschlagen * getroffen) * (1.3 - mut) * (1.4 - 0.4 * zuversicht) * (1 - 0.6 * eingeschossen * waffe_mg) * (1 - 0.5 * ziel_fast_tot) * (1 + 0.35 * ist_fuehrer + 0.3 * geschwaecht)
 bindung: 1.0 + 2 * disziplin
 info: Gestresst oder schwer getroffen: in Deckung, bis er sich gefangen hat.
 
@@ -93,11 +100,17 @@ dringlich: 85 * magazin_leer * munition_da
 bindung: 0.5
 info: Ein leeres Magazin muss voll, bevor er weiterkaempft.
 
-[ziel aufhelfen]
+[ziel kamerad_bergen]
 will: !kamerad_liegt
-dringlich: kamerad_liegt * (64 - 40 * (abstand < 260))
-bindung: 2
-info: VERSUS: Gefallene Kameraden hochholen, wenn kein Gegner dicht dran ist.
+# Seit 0.34.40 (vorher: aufhelfen, nur wenn kein Gegner dicht dran war).
+# Nur wer dran ist, und nur, wenn es sicher genug scheint - erst in
+# Deckung ziehen, dann aufhelfen; die anderen decken (feuerschutz).
+# Ist es sicher (oft erst durch den Rauch), hat es Rang 1 - so lange haelt
+# der Rauch nicht, dass der Retter erst seinen Feuerstoss zu Ende bringt.
+rang: kamerad_liegt * ich_berge * bergen_sicher
+dringlich: kamerad_liegt * ich_berge * bergen_sicher * (72 + 20 * disziplin) * (1 - 0.5 * geschwaecht)
+bindung: 3
+info: Einen gefallenen Kameraden in Sicherheit ziehen und aufhelfen.
 
 [ziel verstaerkung_rufen]
 will: hilfe_gerufen
@@ -125,8 +138,9 @@ info: Hat sich viel geaendert, meldet der Anfuehrer es den anderen Trupps.
 
 [ziel rauch_legen]
 will: rauch_liegt
-# Der Anfuehrer deckt den Rueckzug mit seinem Rauch.
-dringlich: 80 * rauch_da * ist_fuehrer * trupp_rueckzug * feind_bekannt
+# Der Anfuehrer deckt den Rueckzug mit seinem Rauch - und das Bergen: liegt
+# einer im Blick der Gegner, macht erst der Rauch es sicher genug.
+dringlich: 92 * rauch_da * ist_fuehrer * min(1, trupp_rueckzug + kamerad_liegt) * feind_bekannt
 bindung: 1
 info: Rauch zwischen Trupp und Gegner, wenn sie sich zurueckziehen.
 
@@ -140,7 +154,7 @@ info: Rueckzug in Wellen: die Haelfte zieht, die andere deckt.
 
 [ziel druck]
 will: welle_fertig
-dringlich: 86 * trupp_druck * (0.45 + mut) * (1 - 0.6 * ist_fuehrer) + 90 * flanke_rolle
+dringlich: 86 * trupp_druck * (0.45 + mut) * (1 - 0.6 * ist_fuehrer) * (1 - 0.7 * geschwaecht) + 90 * flanke_rolle
 bindung: 2
 info: Druck in Wellen, die Aeusseren flankieren.
 
@@ -162,7 +176,7 @@ info: Im Trupp an seinem Platz bleiben - in Sprechweite.
 
 [ziel stuermen]
 will: sturm_fertig
-dringlich: 60 * sturm_plan
+dringlich: 60 * sturm_plan * (1 - 0.8 * geschwaecht)
 bindung: 2
 info: Die Mannschaft stuermt gemeinsam (bottaktik.stuerme_fuehren).
 
@@ -194,7 +208,7 @@ info: Ein Kamerad braucht Schutz und der Gegner ist in Deckung: niederhalten.
 will: feind_sichtbar
 # Uebermut: zuversichtlich und wenig Disziplin - er jagt dem nach, der
 # eben verschwand, statt in Deckung zu warten. Ein Anfuehrer tut das nicht.
-dringlich: 70 * (zuversicht > 0.7) * (1.2 - disziplin) * feind_bekannt * (1 - feind_sichtbar) * (1 - ist_fuehrer)
+dringlich: 70 * (zuversicht > 0.7) * (1.2 - disziplin) * feind_bekannt * (1 - feind_sichtbar) * (1 - ist_fuehrer) * (1 - geschwaecht)
 bindung: 2
 info: Uebermut: dem Gegner hinterher, ohne Deckung.
 
@@ -248,7 +262,7 @@ tut: werfen
 [aktion flankieren]
 braucht: feind_bekannt, !linie_frei, flanke_frei, munition_da
 macht: feind_sichtbar, linie_frei
-kosten: 3 - mut + 5 * ist_fuehrer
+kosten: 3 - mut + 5 * ist_fuehrer + 4 * geschwaecht
 tut: flankieren
 funk: flanke
 
@@ -317,12 +331,32 @@ kosten: 2
 tut: zum_kreis
 funk: kreis
 
-[aktion aufhelfen]
+[aktion zum_kameraden]
 braucht: kamerad_liegt
+macht: bei_kamerad
+kosten: 1
+tut: zum_kameraden
+funk: helfen
+
+[aktion kamerad_ziehen]
+braucht: bei_kamerad, !kamerad_gedeckt
+macht: kamerad_gedeckt
+kosten: 2
+tut: ziehen
+info: Den Liegenden an eine gedeckte Stelle ziehen - ohne Hand frei zum Schiessen.
+
+[aktion aufhelfen]
+braucht: bei_kamerad, kamerad_gedeckt
 macht: !kamerad_liegt
 kosten: 1
 tut: helfen
-funk: helfen
+
+[aktion aufhelfen_offen]
+braucht: bei_kamerad
+macht: !kamerad_liegt
+kosten: 4 + 6 * feind_bekannt
+tut: helfen
+info: Wo keine Deckung zu finden ist, hilft er ihm eben dort auf.
 
 [aktion stuermen]
 braucht: sturm_plan
@@ -376,8 +410,8 @@ tut: zur_stelle
 [spezies mp_bot]
 name: BOT
 hirn: bot
-ziele: granate_ausweichen, panik, ueberleben, nachladen, aufhelfen, verstaerkung_rufen, funk_antworten, lage_melden, rauch_legen, rueckzug, druck, zu_hilfe, trupp_halten, stuermen, kreis, gruppe_bekaempfen, feuerschutz, nachsetzen, feind_ausschalten, suchen
-aktionen: ausweichen, fliehen, angreifen, dauerfeuer, granate_werfen, flankieren, niederhalten, nahkampf, suchen, nachsetzen, deckung, abwarten, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, aufhelfen, stuermen, funk_hilfe, funk_zusage, funk_lage, rauch_werfen, welle, verlegen, zur_stelle
+ziele: granate_ausweichen, panik, ueberleben, nachladen, kamerad_bergen, verstaerkung_rufen, funk_antworten, lage_melden, rauch_legen, rueckzug, druck, zu_hilfe, trupp_halten, stuermen, kreis, gruppe_bekaempfen, feuerschutz, nachsetzen, feind_ausschalten, suchen
+aktionen: ausweichen, fliehen, angreifen, dauerfeuer, granate_werfen, flankieren, niederhalten, nahkampf, suchen, nachsetzen, deckung, abwarten, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, zum_kameraden, kamerad_ziehen, aufhelfen, aufhelfen_offen, stuermen, funk_hilfe, funk_zusage, funk_lage, rauch_werfen, welle, verlegen, zur_stelle
 merkmal mut: 0.2 0.9
 merkmal disziplin: 0.3 1.0
 # Drill (seit 0.34.38): wie ausgebildet er ist. Wenig fuer die Bots des

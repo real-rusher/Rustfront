@@ -1773,6 +1773,8 @@ class Spieler(Wesen):
         if getattr(self, "zieht", None) is not None:
             # Wer jemanden zieht, ebenso.
             luft *= K.ZIEHEN["tempo"]
+        # Wer wiederbelebt wurde, geht langsamer (seit 0.34.40, Testmodus).
+        luft *= getattr(self, "tempo_anteil", 1.0)
         self._dash_laden(dt)
         ziel_tempo = self.will * s["tempo"] * luft
         rate = (s["beschleunigung"] if self.will.length_squared() > 0

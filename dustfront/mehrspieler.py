@@ -1948,9 +1948,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             return True
         return helfer.team == liegender.team
 
+    def bergen_an(self) -> bool:
+        """Darf man Gefallene aufheben und ziehen? Mit der Regel AUFHELFEN -
+        im Testmodus auch ohne (seit 0.34.40, VERWUNDETE BOTS)."""
+        return bool(self.regeln["revive"])
+
     def _wem_helfen(self, k: Kaempfer):
         """Der naechste Gefallene in Reichweite, oder None."""
-        if not self.regeln["revive"]:
+        if not self.bergen_an():
             return None
         naechster, beste = None, K.REVIVE["reichweite"]
         for anderer in self.kaempfer.values():
@@ -1973,7 +1978,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         Wer schon gezogen wird, faellt raus: zu zweit an einem zu zerren,
         ergaebe einen Koerper, der zwischen zwei Leuten zittert.
         """
-        if not self.regeln["revive"]:
+        if not self.bergen_an():
             return None
         naechster, beste = None, K.REVIVE["reichweite"]
         for anderer in self.kaempfer.values():
@@ -3218,7 +3223,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
 
     # ---- Am Boden und wieder auf ---------------------------------------
     def _revive(self, dt: float) -> None:
-        if not self.regeln["revive"]:
+        # bergen_an statt der Regel (seit 0.34.40): im Testmodus liegen Bots
+        # auch ohne AUFHELFEN - und muessen dann auch aufstehen oder
+        # verbluten koennen.
+        if not self.bergen_an():
             return
         # Wer hilft wem? Erst sammeln, dann anwenden - sonst haengt das
         # Ergebnis an der Reihenfolge im Woerterbuch.
@@ -5647,7 +5655,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
 
     def _verbuendet(self, k) -> bool:
         """Gehoert er zu mir - so, dass ich ihm aufhelfen koennte?"""
-        if self.ich is None or k is self.ich or not self.regeln["revive"]:
+        if self.ich is None or k is self.ich or not self.bergen_an():
             return False
         return (not self.mit_teams) or k.team == self.ich.team
 

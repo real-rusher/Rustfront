@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.40 | Nichts Neues ueber das Netz. Ob man aufhelfen und ziehen darf, fragt das Gefecht jetzt `bergen_an()` (im Spiel dasselbe wie die Regel AUFHELFEN, im Testmodus auch mit VERWUNDETE BOTS). Eine Figur hat `tempo_anteil` (1, im Testmodus nach dem Wiederbeleben weniger) - der Gastgeber rechnet es, der Gast sieht nur die Bewegung | Die Versionspruefung weist ab |
 | 0.34.39 | Nichts Neues ueber das Netz. Trupps, Sprechen und Funk gibt es nur im Testmodus; im Gefecht rechnet der Gastgeber dafuer nur nach, ob es Trupps gibt (sonst nichts). Was ein Bot sagt, geht wie jeder Funkspruch eines Bots mit der Weltmeldung (`fk`) | Die Versionspruefung weist ab |
 | 0.34.38 | Nichts Neues ueber das Netz. Die Bots rechnet nur der Gastgeber; geaendert hat sich ihr Verhalten (MG haelt laenger, kein Dash, Granate lieber in Gruppen, wer sie trifft, wird ihr Ziel, Explosionen hoeren sie weiter), mit GOAP dazu Innenleben, Bindung und Hoeren. `wesen/bots.txt` braucht nur der Gastgeber | Die Versionspruefung weist ab. Mischen ginge technisch, aber die Bots kaempften je nach Gastgeber anders |
 | 0.34.34 | Die Wirkung `d` (ein Tod) ist kuerzer: Ort, Ebene, Fallwinkel, Blut, Radius. Der Gast ruft damit `Welt.tod` auf - Spritzer, Fleck und Todeslaut; eine Leiche gibt es nicht mehr | Die Versionspruefung weist ab. Ein Gast von 0.34.33 laese die neue Meldung falsch |

@@ -492,6 +492,7 @@ BILD_MASS = {
     "spieler_brecheisen": (56, 56),
     "spieler_medkit":     (56, 56),   # waehrend des Anlegens
     "spieler_boden":      (28, 28),   # wer am Boden liegt
+    "leiche":             (28, 28),   # eine Leiche, die bald verschwindet (Testmodus, 0.34.40)
     "gegner_laeufer":   (28, 28),
     "gegner_brecher":   (44, 44),
     "gegner_renner":    (24, 24),
@@ -1444,6 +1445,26 @@ REVIVE = dict(
     kriechen=0.35,            # so viel Tempo hat man am Boden noch
 )
 
+# Verwundete Bots im Testmodus (seit 0.34.40, Testmenue VERWUNDETE BOTS).
+# Gemeldet: "dass immer Leichen von toten Gegnern gedroppt werden, nur bei
+# den Bots ... die auch wiederbelebt werden koennen, aber dass die Bots
+# priorisieren, sie erst in Sicherheit zu ziehen ... das soll nur einmal
+# gehen. Danach eine neue Leiche, die ein bisschen anders aussieht und nach
+# ein paar Sekunden despawnt. Und ein reanimierter Bot soll schwaecher sein,
+# sich langsamer bewegen."
+VERWUNDET = dict(
+    boden_zeit=45.0,          # so lange liegt einer, bis er verblutet (s)
+    leiche_zeit=6.0,          # so lange liegt die zweite Leiche, dann ist sie weg (s)
+    danach_max=0.6,           # x Hoechstleben nach dem Wiederbeleben
+    danach_tempo=0.75,        # x Lauftempo
+    danach_fehler=1.4,        # x Zielfehler
+    danach_abstand=80.0,      # so viel mehr Abstand haelt er (Aufgaben auf Distanz)
+    bedrohung=320.0,          # Gegner so nah an einem Liegenden, die ihn sehen, bedrohen die Bergung
+    retter=2,                 # hoechstens so viele ziehen und helfen
+    deckung_radien=(60.0, 100.0, 140.0),   # so weit sucht ein Retter Deckung fuer den Liegenden
+    rauch_nah=70.0,           # Rauch so nah am Liegenden: die Bergung ist gedeckt
+)
+
 # Wellen im Mehrspieler. Anders als im Einzelspieler waechst die Welle mit
 # der Zahl der Spieler - sonst ist dieselbe Welle zu viert ein Spaziergang.
 WELLEN_MP = dict(
@@ -2226,6 +2247,7 @@ for _team in TEAMS["kombi"]:
     _kurz = _team["name"].lower()
     BILD_MASS["spieler_%s" % _kurz] = BILD_MASS["spieler"]
     BILD_MASS["spieler_%s_boden" % _kurz] = BILD_MASS["spieler_boden"]
+    BILD_MASS["leiche_%s" % _kurz] = BILD_MASS["spieler_boden"]
     for _w in WAFFEN_HAND:
         BILD_MASS["spieler_%s_%s" % (_kurz, _w)] = BILD_MASS["spieler_" + _w]
 

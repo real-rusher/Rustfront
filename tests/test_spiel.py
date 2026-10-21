@@ -10350,6 +10350,9 @@ pruef("Den Todeslaut gibt es, auch ohne Datei (Platzhalter)",
 
 _tm = _TM87.Testmodus(app, karte="staubtal")
 _tm.wiedereinstieg = False
+# Gestorben wird hier beim ersten Mal (seit 0.34.40 fallen Bots im Testmodus
+# sonst erst zu Boden, VERWUNDETE BOTS) - geprueft wird der Tod selbst.
+_tm.verwundete_setzen(False)
 _flecken92 = []
 _laute92 = []
 _alt_fleck92 = _tm.welt.blutfleck
@@ -10896,6 +10899,142 @@ pruef("... INFO zeigt Front, Stellungen, Zustand und Funk; Funk auch in der saub
 _tm.alles_weg()
 pruef("ALLES WEG nimmt auch die Trupps und den Funk", not _TR95.trupps(_tm)
       and not getattr(_tm, "_funknetz", None), "")
+_tm.verlassen()
+
+# 0.34.40: "dass immer Leichen von toten Gegnern schon gedroppt werden, nur
+# bei den Bots ... die auch wiederbelebt werden koennen, aber dass die Bots
+# priorisieren, sie erst in Sicherheit zu ziehen ... Deckung geben, waehrend
+# ein oder zwei Bots vorruecken ... nur einmal ... danach eine neue Leiche,
+# die ein bisschen anders aussieht und nach ein paar Sekunden despawnt ...
+# ein reanimierter Bot soll schwaecher sein, sich langsamer bewegen ... nur
+# wenn es recht sicher erscheint."
+print("\n-- Verwundete Bots: liegen, bergen, wiederbeleben (0.34.40)")
+from dustfront.testmodus import Leiche as _Leiche96
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm.wiedereinstieg = False
+pruef("Testmenue: VERWUNDETE BOTS, vorgegeben AN, bleibt ueber einen Kartenwechsel",
+      any(z_[0] == "verwundete" and z_[2] == "AN" for z_ in _tm._menue_zeilen())
+      and _tm.zustand().get("verwundete") is True, "")
+_r96 = random.Random(96)
+_a96 = _b96 = None
+for _ in range(8000):
+    a_ = pygame.Vector2(freier_punkt(_tm.welt, 0, _r96))
+    b_ = a_ + pygame.Vector2(260, 0).rotate(_r96.uniform(0, 360))
+    if all(_tm.welt.frei(p_, 30, 0, True) for p_ in (a_, b_)) and _tm.welt.deckung(a_, b_, 0) == "":
+        _a96, _b96 = a_, b_
+        break
+_bot96 = _tm.bot_setzen(_a96, 0, {"team": 0, "hirn": "goap"})
+_pup96 = _tm.puppe_setzen(_a96 + pygame.Vector2(40, 0), 0, {"team": 0})
+pruef("... nur Bots fallen zu Boden, Spielerfiguren nicht",
+      _bot96.revive_an and not _pup96.revive_an, "")
+_tm.toeten(_bot96)
+pruef("Gefallen: er liegt (die erste Leiche, mit Lache) - lebt noch, ist zu retten",
+      _bot96.lebt and _bot96.am_boden and _bot96.bild == "spieler_rot_boden", _bot96.bild)
+_tm.toeten(_bot96)
+_sim87(2)
+_lei96 = [w_ for w_ in _tm.welt.wesen if isinstance(w_, _Leiche96)]
+pruef("... nochmal: tot - und eine zweite Leiche, die anders aussieht",
+      not _bot96.lebt and len(_lei96) == 1 and _lei96[0].bild == "leiche_rot"
+      and "leiche_rot" in K.BILD_MASS and _tm.renderer.bilder.gedreht("leiche_rot", 0.0) is not None,
+      str([l_.bild for l_ in _lei96]))
+_sim87(int((K.VERWUNDET["leiche_zeit"] + 0.5) / _D87))
+pruef("... sie ist nach ein paar Sekunden weg",
+      not any(isinstance(w_, _Leiche96) for w_ in _tm.welt.wesen), "")
+
+# Ohne Gefahr: hin, aufhelfen - danach geschwaecht, und nur einmal.
+_tm.alles_weg()
+_tr96 = _tm.trupp_setzen(_a96, 0, {"groesse": 3, "team": 0, "fuehrer": "funk", "mischung": "zufall"})
+_sim87(int(1.0 / _D87))
+_opfer96 = next(m_ for m_ in _tr96.mitglieder if m_ is not _tr96.fuehrer)
+_voll96 = _opfer96.max_leben
+_tm.toeten(_opfer96)
+_akt96 = set()
+for _ in range(int(14.0 / _D87)):
+    _tm.schritt(_D87)
+    for m_ in _tr96.mitglieder:
+        if m_.lebt and m_.hirn.gehirn.aktion is not None:
+            _akt96.add(m_.hirn.gehirn.aktion.name)
+    if not _opfer96.am_boden:
+        break
+pruef("Ohne Gegner in Sicht: einer geht hin und hilft auf",
+      _opfer96.lebt and not _opfer96.am_boden and "aufhelfen" in _akt96, str(sorted(_akt96)))
+pruef("... danach ist er geschwaecht: weniger Leben, langsamer, haelt Abstand",
+      _opfer96.max_leben < _voll96 * 0.7 and _opfer96.tempo_anteil < 1.0
+      and _opfer96.hirn.geschwaecht and _opfer96.hirn.abstand_mehr > 0
+      and _opfer96.hirn._trupp_fakten() is not None and _opfer96.hirn.fuehlen()[0]["geschwaecht"],
+      "%.0f/%.0f, Tempo %.2f" % (_opfer96.max_leben, _voll96, _opfer96.tempo_anteil))
+pruef("... und das ging nur einmal: der naechste Fall ist der letzte",
+      not _opfer96.revive_an and _opfer96.wiederbelebt, "")
+_tm._wieder_einsteigen(_opfer96)
+pruef("Ein neues Leben macht ihn wieder ganz (und wieder einmal rettbar)",
+      _opfer96.max_leben == _voll96 and _opfer96.tempo_anteil == 1.0
+      and _opfer96.revive_an and not _opfer96.hirn.geschwaecht, "")
+
+# Mit Gegnern, die ihn sehen: zu gefaehrlich - bis der Rauch liegt.
+_tm.alles_weg()
+_tr96 = _tm.trupp_setzen(_a96, 0, {"groesse": 4, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+_fe96 = [_tm.puppe_setzen(_b96 + pygame.Vector2(0, 30 * i_), 0, {"team": 1, "leben": 10.0})
+         for i_ in range(2)]
+for f_ in _fe96:
+    f_.unverwundbar = 1e9
+_sim87(int(1.5 / _D87))
+_opfer96 = next(m_ for m_ in _tr96.mitglieder if m_ is not _tr96.fuehrer)
+_tm.toeten(_opfer96)
+_sim87(int(0.5 / _D87))
+_b96_ = _tr96.bergung
+pruef("Zwei Gegner sehen ihn: der Trupp haelt das Bergen fuer zu gefaehrlich, bestimmt aber "
+      "schon die Retter (nicht den Anfuehrer)",
+      _b96_ is not None and not _b96_["sicher"] and _b96_["bedrohung"] >= 1
+      and 1 <= len(_b96_["retter"]) <= K.VERWUNDET["retter"]
+      and _tr96.fuehrer.nummer not in _b96_["retter"], str(_b96_))
+pruef("... der Anfuehrer will Rauch legen, um es sicher zu machen",
+      _tr96.fuehrer.hirn.gehirn.dringlichkeiten.get("rauch_legen", 0) > 0,
+      str(_tr96.fuehrer.hirn.gehirn.dringlichkeiten.get("rauch_legen")))
+_akt96 = set()
+_erst96 = None          # war es sicher, als einer anfing zu ziehen oder aufzuhelfen?
+for _ in range(int(30.0 / _D87)):
+    _tm.schritt(_D87)
+    for m_ in _tr96.mitglieder:
+        if m_.lebt and m_.hirn.gehirn.aktion is not None:
+            n_ = m_.hirn.gehirn.aktion.name
+            _akt96.add((m_ is _tr96.fuehrer, n_))
+            if _erst96 is None and n_ in ("kamerad_ziehen", "aufhelfen", "aufhelfen_offen") \
+                    and _tr96.bergung is not None:
+                _erst96 = _tr96.bergung["sicher"]
+    if not _opfer96.am_boden:
+        break
+pruef("... geholt wird erst, wenn es sicher genug ist (Rauch oder ein zuversichtlicher Trupp) - "
+      "dann steht er wieder",
+      _erst96 is True and (False, "zum_kameraden") in _akt96
+      and _opfer96.lebt and not _opfer96.am_boden,
+      "%s, sicher beim Anfang: %s, liegt %s" % (sorted(_akt96), _erst96, _opfer96.am_boden))
+
+# Rauch auf der Sichtlinie zaehlt (trupp.sieht_durch_rauch).
+from dustfront.entities import Rauchwolke as _RW96
+from dustfront import trupp as _TR96
+_tm.alles_weg()
+_frei96 = _TR96.sieht_durch_rauch(_tm.welt, _a96, _b96, 0)
+_tm.welt.rauch.append(_RW96((_a96 + _b96) / 2, 0))
+for _ in range(int(3.0 / _D87)):
+    for r_ in _tm.welt.rauch:
+        r_.schritt(_D87)
+pruef("Rauch auf der Linie verdeckt den Liegenden", _frei96
+      and not _TR96.sieht_durch_rauch(_tm.welt, _a96, _b96, 0), "")
+_tm.welt.rauch.clear()
+
+# Aus: wie vorher - wer faellt, ist tot, ohne Leiche.
+_tm.alles_weg()
+_tm.menue_wirken("verwundete")
+_bot96 = _tm.bot_setzen(_a96, 0, {"team": 0, "hirn": "goap"})
+_tm.toeten(_bot96)
+_sim87(2)
+pruef("VERWUNDETE BOTS AUS: tot beim ersten Mal, keine Leiche",
+      not _tm.verwundete and not _bot96.lebt
+      and not any(isinstance(w_, _Leiche96) for w_ in _tm.welt.wesen), "")
+_tm.menue_wirken("verwundete")
+for i_ in (1, 2):
+    _tm.info = i_
+    _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
 _tm.verlassen()
 
 print()

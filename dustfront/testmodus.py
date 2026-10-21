@@ -63,7 +63,7 @@ from . import netz
 from . import plattform
 from . import ui
 from .anzeige import Anzeige
-from .entities import Granate
+from .entities import Granate, Wesen
 from .fahrzeug import Buggy
 from .font import SCHRIFT
 from .goap import erfuellt as goap_erfuellt
@@ -256,6 +256,52 @@ def _wurf_setzer(art):
     return lambda t, p, e, w: t.wurf_setzen(art, p, e, w)
 
 
+class Leiche(Wesen):
+    """Die zweite Leiche eines Bots (seit 0.34.40, VERWUNDETE BOTS): wer
+    nach dem Wiederbeleben noch einmal faellt - oder am Boden verblutet -,
+    bleibt so liegen (ein eigenes Bild, art._figur_leiche) und ist nach
+    K.VERWUNDET["leiche_zeit"] weg. Nichts nimmt sie wahr, nichts trifft sie."""
+
+    fraktion = "leiche"
+    schiebt = False
+    trefferbar = False
+    schatten = False
+    radius = 8.0
+
+    def __init__(self, pos, ebene: int, team: int, winkel: float) -> None:
+        super().__init__(pos, ebene)
+        teams = K.TEAMS["kombi"]
+        self.bild = ("leiche_%s" % teams[team]["name"].lower()
+                     if 0 <= team < len(teams) else "leiche")
+        self.winkel = winkel
+        self.rest = K.VERWUNDET["leiche_zeit"]
+
+    def schritt(self, dt: float) -> None:
+        self.rest -= dt
+        if self.rest <= 0.0:
+            self.lebt = False
+
+    def schaden(self, menge, schub=None, von=None) -> None:
+        """Eine Leiche nimmt keinen Schaden mehr."""
+
+
+def _aufhelfen_einmal(k) -> None:
+    """Statt Kaempfer.aufhelfen bei Bots mit VERWUNDETE BOTS: einmal geht
+    es - danach ist er geschwaecht (weniger Leben, langsamer, zielt
+    schlechter, haelt Abstand), und der naechste Fall ist der letzte."""
+    type(k).aufhelfen(k)
+    v = K.VERWUNDET
+    k.wiederbelebt = True
+    k.revive_an = False
+    k.max_leben = getattr(k, "_max_leben_voll", k.max_leben) * v["danach_max"]
+    k.leben = min(k.leben, k.max_leben)
+    k.tempo_anteil = v["danach_tempo"]
+    hirn = getattr(k, "hirn", None)
+    if hirn is not None:
+        hirn.geschwaecht = True
+        hirn.abstand_mehr = v["danach_abstand"]
+
+
 def _schaden_mit_gott(k, menge, schub=None, von=None):
     """Statt Kaempfer.schaden, solange der Testmodus die Figur steuert:
     UNSTERBLICH laesst das Leben nie unter 1 fallen."""
@@ -311,6 +357,10 @@ class Testmodus(Gefecht):
         # Was ENTF mit dem tut, was am Zeiger liegt (seit 0.34.33): loeschen
         # (verschwindet, keine Leiche) oder toeten (stirbt wie im Spiel).
         self.entf_toetet = bool(z.get("entf_toetet", False))
+        # Verwundete Bots (seit 0.34.40): ein Bot faellt erst zu Boden und
+        # kann einmal gerettet werden. Gemeldet: "im Testmodus mal so, dass
+        # immer Leichen ... gedroppt werden, nur bei den Bots".
+        self.verwundete = bool(z.get("verwundete", True))
         self._sp_werte = dict(z.get("sp_werte", {}))
         self._sp_nr = int(z.get("sp_nr", 0))
         self._welt_schritte = 1
@@ -382,6 +432,33 @@ class Testmodus(Gefecht):
         if self.beute_an:
             super()._beute_nachlegen(dt)
 
+    def bergen_an(self) -> bool:
+        """Mit VERWUNDETE BOTS darf man Gefallene ziehen und aufheben, auch
+        ohne die Regel AUFHELFEN - die abzuschalten hiesse sonst: keiner
+        steigt mehr von selbst ein (Gefecht._tote_abrechnen)."""
+        return bool(getattr(self, "verwundete", False)) or super().bergen_an()
+
+    def _regeln_anlegen(self, k) -> None:
+        super()._regeln_anlegen(k)
+        k.revive_an = (bool(getattr(self, "verwundete", False)) and getattr(k, "ist_bot", False)
+                       and not getattr(k, "wiederbelebt", False))
+        k.boden_zeit = K.VERWUNDET["boden_zeit"]
+
+    def verwundete_setzen(self, an: bool) -> None:
+        """VERWUNDETE BOTS an oder aus - fuer alle Bots, die schon da sind."""
+        self.verwundete = bool(an)
+        for k in self._bots():
+            k.revive_an = self.verwundete and not getattr(k, "wiederbelebt", False)
+
+    def _wieder_einsteigen(self, k) -> None:
+        """Ein neues Leben: wieder ganz, und wieder einmal zu retten."""
+        k.wiederbelebt = False
+        k.tempo_anteil = 1.0
+        if hasattr(k, "_max_leben_voll"):
+            k.max_leben = k._max_leben_voll
+        super()._wieder_einsteigen(k)
+        k.revive_an = self.verwundete and getattr(k, "ist_bot", False)
+
     def _regeln_setzen(self, d: dict) -> None:
         """Wie ein TEAM-Gefecht, aber mit Gegnern und ohne Kreis, bis einer
         gesetzt wird. Eine eigene Kopie: K.MODI selbst bleibt unberuehrt."""
@@ -435,6 +512,14 @@ class Testmodus(Gefecht):
                                "zielt": False, "knoepfe": []})
 
     def _tote_abrechnen(self, dt: float) -> None:
+        if self.verwundete:
+            # Wer jetzt erst richtig tot ist, bleibt als Leiche liegen -
+            # ein paar Sekunden lang (Leiche).
+            for k in self.kaempfer.values():
+                if (not k.lebt and not k.abgerechnet and getattr(k, "ist_bot", False)
+                        and getattr(k, "_leiche_gelegt", None) is not k.tode):
+                    k._leiche_gelegt = k.tode
+                    self._einsetzen(Leiche(k.pos, k.ebene, k.team, k.winkel))
         super()._tote_abrechnen(dt)
         if self.wiedereinstieg:
             return
@@ -614,6 +699,9 @@ class Testmodus(Gefecht):
         self.welt.wesen.extend(self.welt.neue)
         self.welt.neue.clear()
         k.hirn.neues_leben()
+        k._max_leben_voll = k.max_leben
+        k.aufhelfen = types.MethodType(_aufhelfen_einmal, k)
+        k.revive_an = self.verwundete
         return k
 
     def trupp_setzen(self, pos, ebene: int, w: dict):
@@ -828,6 +916,13 @@ class Testmodus(Gefecht):
             return True
         if not isinstance(w, (Kaempfer, KampfGegner)):
             return False
+        if (self.verwundete and getattr(w, "revive_an", False) and w.lebt
+                and not getattr(w, "am_boden", False)):
+            # Mit VERWUNDETE BOTS erst zu Boden - nochmal ENTF, und er ist tot.
+            # So laesst sich das Bergen ausprobieren.
+            w.leben = 0.0
+            w.sterben(None)
+            return True
         for _ in range(2):
             # Zweimal: mit AUFHELFEN liegt einer nach dem ersten Mal nur.
             if w.lebt:
@@ -1117,6 +1212,7 @@ class Testmodus(Gefecht):
             ("ruckeln", "BEOBACHTER RUCKELN", "AN" if self.ruckeln_beobachter else "AUS"),
             ("sauber", "SAUBERE ANSICHT (NUR AKTIONEN)", "AN" if self.sauber else "AUS"),
             ("entf", "ENTF-TASTE", "TÖTET" if self.entf_toetet else "LÖSCHT"),
+            ("verwundete", "VERWUNDETE BOTS (LIEGEN, BERGEN)", "AN" if self.verwundete else "AUS"),
             ("einstellungen", "EINSTELLUNGEN", ""),
             ("hauptmenue", "ZUM HAUPTMENÜ", ""),
         ]
@@ -1141,7 +1237,7 @@ class Testmodus(Gefecht):
                     wellen_an=self.wellen_an, beute_an=self.beute_an,
                     blend_beobachter=self.blend_beobachter,
                     ruckeln_beobachter=self.ruckeln_beobachter, sauber=self.sauber,
-                    entf_toetet=self.entf_toetet,
+                    entf_toetet=self.entf_toetet, verwundete=self.verwundete,
                     sp_werte=self._sp_werte, sp_nr=self._sp_nr)
 
     def menue_wirken(self, schluessel: str, schritt: int = 1, ausloesen: bool = False) -> None:
@@ -1189,6 +1285,8 @@ class Testmodus(Gefecht):
             self.sauber = not self.sauber
         elif schluessel == "entf":
             self.entf_toetet = not self.entf_toetet
+        elif schluessel == "verwundete":
+            self.verwundete_setzen(not self.verwundete)
         elif schluessel == "einstellungen" and ausloesen:
             from .menues import Einstellungen
             self.menue_offen = False
@@ -1510,6 +1608,19 @@ class Testmodus(Gefecht):
                 pq = kam.zu_bild(q)
                 pygame.draw.rect(ziel, farbe, (int(pq.x) - 2, int(pq.y) - 2, 4, 4), 1)
                 pygame.draw.line(ziel, (90, 80, 70), kam.zu_bild(m.pos), pq, 1)
+            b = t.bergung
+            if b is not None and b["opfer"].ebene == self.blick:
+                # Wer liegt, und ob der Trupp es fuer sicher genug haelt, ihn
+                # zu holen (seit 0.34.40); Linien von den Rettern zu ihm.
+                q = kam.zu_bild(b["opfer"].pos)
+                farbe_b = K.C_TEAL if b["sicher"] else K.C_RED
+                pygame.draw.circle(ziel, farbe_b, (int(q.x), int(q.y)), 14, 1)
+                for m in leute:
+                    if m.nummer in b["retter"]:
+                        pygame.draw.line(ziel, farbe_b, kam.zu_bild(m.pos), q, 1)
+                SCHRIFT.zeichnen(ziel, "BERGEN: %s (%d)" % ("SICHER" if b["sicher"] else "ZU GEFÄHRLICH",
+                                                            b["bedrohung"]),
+                                 int(q.x), int(q.y) + 16, farbe_b, 1, ausrichtung="mitte")
             fuehrer = t.fuehrer if t.fuehrer in leute else leute[0]
             p = kam.zu_bild(fuehrer.pos)
             text = "%s %s%s" % (t.name, t.zustand.upper(),
@@ -1671,9 +1782,10 @@ class Testmodus(Gefecht):
             zeile("PANIK %.1f  SCHRECK %.1f  EINGESCH. %.1f  ZULETZT %s" % (
                 innen.panik_rest, innen.schreck_rest, innen.eingeschossen,
                 innen.zuletzt or "-"), K.C_MUTED)
-            zeile("GEBUNDEN %.1f  BEDENKT %.1f  GEHOERT %d" % (
+            zeile("GEBUNDEN %.1f  BEDENKT %.1f  GEHOERT %d%s" % (
                 gehirn.gebunden, getattr(h, "_bedenk_rest", 0.0),
-                len(getattr(h, "lagebild", ()))), K.C_MUTED)
+                len(getattr(h, "lagebild", ())),
+                "  GESCHWÄCHT" if getattr(h, "geschwaecht", False) else ""), K.C_MUTED)
         t = getattr(h, "trupp", None)
         if t is not None:
             rolle = ("ANFÜHRER" if t.fuehrer is d else

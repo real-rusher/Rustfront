@@ -89,8 +89,10 @@ def kreis(mitte, n: int, abstand: float = 26.0) -> list:
 
 
 def alle_weg(*gruppen):
-    """Ende, sobald eine der Gruppen ganz liegt."""
-    return lambda: any(all(not w.lebt for w in g) for g in gruppen)
+    """Ende, sobald eine der Gruppen ganz liegt - tot oder am Boden (seit
+    0.34.40 fallen Bots im Testmodus erst zu Boden)."""
+    return lambda: any(all(not w.lebt or getattr(w, "am_boden", False) for w in g)
+                       for g in gruppen)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -224,6 +226,30 @@ def szene_hilferuf(tm, rnd):
             80, 2.25)
 
 
+def szene_bergen(tm, rnd):
+    """Seit 0.34.40: einer aus dem Trupp liegt im Blick der Gegner. Der
+    Anfuehrer legt Rauch, zwei ziehen ihn in Deckung und helfen ihm auf,
+    die anderen decken. Danach ist er geschwaecht."""
+    a, b = stelle(tm, rnd, 280, "")
+    tm.verwundete_setzen(True)
+    trupp = tm.trupp_setzen(a, 0, {"groesse": 4, "team": 0, "fuehrer": "funk",
+                                   "mischung": "gemischt", "leben": 2.0})
+    feinde = [tm.puppe_setzen(b + pygame.Vector2(0, 30 * i), 0, {"team": 1, "leben": 4.0})
+              for i in range(2)]
+    opfer = next(m for m in trupp.mitglieder if m is not trupp.fuehrer)
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        if uhr["t"] >= 1.5 and not uhr.get("gefallen"):
+            uhr["gefallen"] = True
+            tm.toeten(opfer)
+
+    return ("Bergen: einer faellt, Rauch, in Deckung ziehen, aufhelfen",
+            trupp.mitglieder, lambda: uhr.get("gefallen") and opfer.lebt and not opfer.am_boden
+            and uhr["t"] > 12.0 or all(not f.lebt for f in feinde), 45, 1.5, jedes_bild)
+
+
 # Name -> (Dateiname, Szene). Die Nummer im Dateinamen ist die Reihenfolge.
 SZENEN = {
     "duell": ("1_goap_gegen_klassisch", szene_duell),
@@ -234,6 +260,7 @@ SZENEN = {
     "tod": ("6_jeder_tod", szene_tod),
     "trupp": ("7_trupp_gegen_trupp", szene_trupp),
     "hilferuf": ("8_hilferuf_ueber_funk", szene_hilferuf),
+    "bergen": ("9_bergen_und_wiederbeleben", szene_bergen),
 }
 
 

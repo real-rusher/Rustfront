@@ -172,6 +172,10 @@ class BotHirn(Taktik):
         self.deckung_pause = 0.0      # so lange keine neue Deckung (angeschlagen)
         self.deckung_suche = 0.0      # so lange gilt der gefundene Ort
         self.linie = ""               # was zwischen ihm und dem Ziel steht
+        # Wiederbelebt und geschwaecht (seit 0.34.40, Testmodus): er haelt
+        # mehr Abstand - Aufgaben auf Distanz.
+        self.geschwaecht = False
+        self.abstand_mehr = 0.0
         self.taktik_anlegen()
 
     def blenden(self, dauer: float) -> None:
@@ -637,7 +641,7 @@ class BotHirn(Taktik):
             self.seite_rest = self.rnd.uniform(0.7, 1.6)
             if self.rnd.random() < 0.55:
                 self.seite = -self.seite
-        wunsch = K.BOTS["wunschabstand"].get(k.waffe_name, 220.0)
+        wunsch = K.BOTS["wunschabstand"].get(k.waffe_name, 220.0) + self.abstand_mehr
         hin = z.pos - k.pos
         if hin.length_squared() < 1.0:
             hin = pygame.Vector2(1, 0)
@@ -820,7 +824,8 @@ class BotHirn(Taktik):
     def _wem_helfen(self):
         g = self.g
         k = self.k
-        if not g.regeln.get("revive") or not g.mit_teams:
+        bergen = g.bergen_an() if hasattr(g, "bergen_an") else g.regeln.get("revive")
+        if not bergen or not g.mit_teams:
             return None
         bester, weite = None, 700.0
         for x in g.kaempfer.values():

@@ -1105,3 +1105,37 @@ Paketen (0.34.38 bis 0.34.41), jedes mit Version und Test.
   ueber sich (auch in der sauberen Ansicht). GEDANKEN zeigt Rolle,
   Zustand, Zuversicht, Lage und Hilfe. Aufnahmen: Szenen `trupp` und
   `hilferuf`.
+
+### 11.3 Paket 3 (0.34.40): Verwundete, Bergen, Wiederbeleben (Testmodus)
+
+* **Testmenue VERWUNDETE BOTS** (vorgegeben AN): ein Bot faellt erst zu
+  Boden - die erste Leiche, mit Lache, noch zu retten (er verblutet nach
+  `K.VERWUNDET["boden_zeit"]`). Spielerfiguren und Zombies nicht. Nur
+  einmal: wer wiederbelebt wurde und noch einmal faellt, ist tot und
+  liegt als zweite Leiche da (anders gezeichnet - ausgestreckt, blass,
+  groessere Lache; `testmodus.Leiche`), die nach sechs Sekunden weg ist.
+  ENTF TOETET legt einen Bot erst hin, ein zweites ENTF toetet ihn.
+* **Der Trupp plant die Bergung** (`Trupp._bergung_planen`): er bestimmt
+  ein, zwei Retter (die naechsten, nicht den Anfuehrer, keinen
+  Geschwaechten) und rechnet, wie viele bekannte Gegner den Liegenden
+  sehen - durch Rauch nicht (`trupp.sieht_durch_rauch`). Sicher genug ist
+  es, wenn ihn keiner sieht, oder der Trupp zuversichtlich genug ist, es
+  gegen die durchzuziehen, die ihn sehen. Ohne Trupp: die zwei naechsten,
+  nur wenn ihn keiner sieht (oder einer sehr zuversichtlich ist).
+* **Ziel kamerad_bergen** (Rang 1, sobald es sicher ist - der Rauch haelt
+  nicht ewig): zum_kameraden, kamerad_ziehen (an die naechste Stelle, die
+  vor jedem bekannten Gegner gedeckt ist; beide Haende am Kameraden, kein
+  Schuss), aufhelfen - oder aufhelfen_offen, wo keine Deckung zu finden
+  ist. Die anderen decken: wer zieht oder aufhilft, braucht Schutz
+  (`braucht_schutz`), also nehmen sie zuerst, wer ihm nahe ist, und
+  halten nieder. Der Anfuehrer legt Rauch zwischen den Liegenden und die
+  Gegner (rauch_legen, auch beim Rueckzug).
+* **Geschwaecht nach dem Wiederbeleben**: 60 Prozent Leben, 75 Prozent
+  Tempo, 1,4 x Zielfehler, 80 px mehr Abstand (Aufgaben auf Distanz),
+  im Trupp weiter hinten, flankiert und stuermt kaum, setzt nicht nach,
+  will mehr ueberleben, wird nicht Retter. Ein neues Leben macht ihn
+  wieder ganz.
+* **Testmodus**: INFO zeigt um den Liegenden einen Kreis (tuerkis:
+  sicher, rot: zu gefaehrlich) mit der Zahl der Gegner, die ihn sehen,
+  und Linien von den Rettern; GEDANKEN zeigt GESCHWAECHT. Aufnahme:
+  Szene `bergen`.
