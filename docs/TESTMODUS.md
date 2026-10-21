@@ -70,7 +70,9 @@ Karte (Enter laedt, die Einstellungen bleiben), neu laden, Zeit,
 Zeitfaktor, KI, Flugtempo, INFO, KI-DATEN NEU LADEN (liest `wesen/*.txt`
 neu und gibt jeder GOAP-Figur ein neues Gehirn), ZIEL ERZWINGEN (der
 Figur in der Gedankenansicht ein Ziel aufzwingen, links/rechts blaettert,
-"-" laesst sie wieder frei denken), jeder Gottmodus einzeln (unverwundbar,
+"-" laesst sie wieder frei denken), INNENLEBEN (links/rechts waehlt, Enter
+loest es an der gezeigten GOAP-Figur aus: Panik, Stress, Kamerad faellt,
+Granate neben ihm, Ruhe), jeder Gottmodus einzeln (unverwundbar,
 unsterblich, unsichtbar fuer KI, unendlich Munition), Wiedereinstieg
 toter Figuren, Zombiewellen, Beute nachlegen, Blenden und Ruckeln des
 Beobachters, SAUBERE ANSICHT (nur die Welt und ueber jedem Kopf die
@@ -101,6 +103,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.38 | INFO KURZ zeigt unter jedem GOAP-Bot Stress (Balken), Zuversicht (P B N Z H), PANIK/SCHRECK und Kreise mit Linien zu dem, was er hoert; GEDANKEN zeigt Stress, Zuversicht, Panik, Schreck, eingeschossen, Bindung und Bedenkzeit; Testmenue INNENLEBEN (PANIK, STRESS +0,3, KAMERAD FAELLT, GRANATE NEBEN IHM, RUHE) fuer die gezeigte Figur |
 | 0.34.35 | `werkzeug_aufnahme.py` mit Ton (`Tonband`) und `--zeitlupe` |
 | 0.34.34 | Kein eigener Eintrag: ENTF-TASTE TOETET loest jetzt Fleck und Todeslaut aus (die Leiche ist wieder draussen) |
 | 0.34.33 | Testmenue ENTF-TASTE: LOESCHT / TOETET - jeden Tod am Zeiger ausloesen; Szene `tod` in `werkzeug_aufnahme.py` |

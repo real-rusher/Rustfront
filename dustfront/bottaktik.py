@@ -127,6 +127,10 @@ class Taktik:
                      "unterdrueckt"):
             setattr(self, name, max(0.0, getattr(self, name) - dt))
 
+    def kugel_vorbei(self) -> None:
+        """Eine Kugel pfeift knapp an ihm vorbei. Die klassische KI merkt
+        sich das nur als `unterdrueckt`; das GOAP-Hirn bekommt Stress."""
+
     # ── Funk ────────────────────────────────────────────────────────
     def funken(self, anlass: str, wichtig: bool = False) -> bool:
         """Einen Satz zu diesem Anlass ansagen. `wichtig` (Granate, REIN)
@@ -411,10 +415,12 @@ class Taktik:
         if abs(_winkel_diff(self.blick, _winkel_zu(k.pos, punkt))) > 6.0:
             return False
         if self.stoss_rest <= 0.0 and self.pause_rest <= 0.0:
-            self.stoss_rest = self.rnd.uniform(*b["feuerstoss"])
+            # Je Waffe wie im Kampf (seit 0.34.38): ein MG haelt man auch
+            # beim Niederhalten lange.
+            self.stoss_rest, self._pause_naechste, _still = self._stoss()
         if self.stoss_rest > 0.0:
             if self.stoss_rest <= dt:
-                self.pause_rest = self.rnd.uniform(*b["feuerpause"])
+                self.pause_rest = self._pause_naechste
             return True
         return False
 
@@ -556,3 +562,4 @@ def unterdrueckung_pruefen(g) -> None:
                 if x.hirn.unterdrueckt <= 0.0:
                     x.hirn.funken("beschuss")
                 x.hirn.unterdrueckt = K.BOTS["unterdrueckt_zeit"]
+                x.hirn.kugel_vorbei()

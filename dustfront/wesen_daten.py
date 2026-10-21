@@ -14,6 +14,8 @@ Das Format, ein Block je Ding:
     will: !magazin_leer
     dringlich: 80 * magazin_leer * munition_da
     info: Ein leeres Magazin ist das Erste, was weg muss.
+    rang: 1
+    bindung: 0.5 + disziplin
 
     [aktion nachladen_in_deckung]
     braucht: in_deckung, magazin_leer
@@ -34,6 +36,9 @@ Das Format, ein Block je Ding:
   die Bots: bot_goap.py, und oben in `wesen/bots.txt`).
 * `dringlich`, `kosten`: eine Rechnung (goap.Ausdruck) aus Fakten (1/0),
   Zahlen (`leben`, `abstand` ...) und Merkmalen.
+* `rang`, `bindung` (Ziel, seit 0.34.38, beide Rechnungen, Vorgabe 0): ein
+  hoeherer Rang unterbricht jederzeit; ein gleicher erst, wenn das laufende
+  Ziel `bindung` Sekunden lang verfolgt wurde (goap.Ziel).
 * `tut`: welches Verhalten die Aktion ausfuehrt (bot_goap.TUN,
   gegner_goap.TUN).
 * `hirn` (Spezies): welches Hirn sie benutzt, `bot` oder `gegner` - und
@@ -71,12 +76,12 @@ class Daten:
         self.spezies: dict = {}
         self.fehler: list[str] = []
 
-    def gehirn(self, spezies: str, merkmale: dict):
+    def gehirn(self, spezies: str, merkmale: dict, rnd=None):
         """Ein frisches Gehirn fuer ein Wesen dieser Spezies."""
         sp = self.spezies[spezies]
         return goap.Gehirn([self.ziele[z] for z in sp.ziele if z in self.ziele],
                            [self.aktionen[a] for a in sp.aktionen if a in self.aktionen],
-                           merkmale)
+                           merkmale, rnd)
 
 
 def ordner() -> Path:
@@ -97,7 +102,8 @@ def aus_text(text: str, daten: Daten, datei: str = "") -> None:
         try:
             if art == "ziel":
                 ding = goap.Ziel(name, felder.get("will", ""), felder.get("dringlich", "0"),
-                                 felder.get("info", ""))
+                                 felder.get("info", ""), felder.get("rang", "0"),
+                                 felder.get("bindung", "0"))
                 ziel_dict = daten.ziele
             elif art == "aktion":
                 ding = goap.Aktion(name, felder.get("braucht", ""), felder.get("macht", ""),

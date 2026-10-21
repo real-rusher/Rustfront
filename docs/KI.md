@@ -974,3 +974,86 @@ Bereiche statt Wegsuche fuer jede Frage.
    Spieler am meisten (Killzone: fast alle sahen das Zusammenspiel).
 3. **8B** Waffenrollen - danach fast nur Daten.
 4. **8D** Dual Utility und Zielgenauigkeit je Schwierigkeit.
+
+---
+
+## 11. Gebaut: Menschen im Gefecht (ab 0.34.38)
+
+Auftrag (gekuerzt): "Das MG feuert nie laenger als ein paar Schuesse ...
+sie sollen mehr Commitment zu ihren Aufgaben zeigen ... ein Mensch
+entscheidet nicht die ganze Zeit und fuehrt es sofort aus ... bei 20
+Gegnern eher Granaten oder Dauerfeuer ... besser hoeren ... vor Granaten
+weglaufen, und da kann die Panik ueberhand nehmen ... keine Dashes ...
+nicht in eine Gruppe Gegner laufen, um in Deckung zu gehen ... alles
+weiter auf dem GOAP-Framework." Dazu Trupps mit Anfuehrer und Funk,
+Bergen und Wiederbeleben, Rundumverteidigung und Engstellen - in vier
+Paketen (0.34.38 bis 0.34.41), jedes mit Version und Test.
+
+### 11.1 Paket 1 (0.34.38): Innenleben, Bindung, Feuer, Hoeren
+
+* **Rang und Bindung** (goap.Ziel, Felder `rang:` und `bindung:` in
+  `wesen/*.txt`): Rang 3 Granate, 2 Panik, 1 was keinen Aufschub duldet
+  (leeres Magazin, Stress ueber 0,85), 0 alles andere. Ein hoeherer Rang
+  unterbricht sofort; ein gleicher erst, wenn das laufende Ziel `bindung`
+  Sekunden lang verfolgt wurde - die Bindung waechst mit der Disziplin.
+* **Dual Utility** (goap.Gehirn._unscharf, Dill): bei einer neuen Wahl
+  und unter Stress wuerfelt er unter den Zielen des hoechsten Rangs, die
+  nah am besten liegen (`K.GOAP["unschaerfe_weite"]`).
+* **Innenleben** (innenleben.py, Zahlen in `K.MORAL`): Stress aus
+  Ereignissen (Kugel vorbei, Treffer, von der Seite, Kamerad faellt,
+  Granate, Geraeusch; ein Abschuss beruhigt), gedaempft von Disziplin und
+  Drill, Abbau in Deckung schneller. Zuversicht nach Days Gone aus den
+  Staerken (`bot_goap.staerke`): eigene Seite in der Naehe (mal deren
+  Zuversicht) plus Abschuesse gegen gesehene und gehoerte Gegner plus
+  Verluste, fuenf Stufen. Panik ab Stress 0,8 plus Mut (weniger, wenn die
+  Seite verliert), Dauer kuerzer mit Drill. Schreck bei einem Sprung:
+  einen Augenblick nichts tun.
+* **Neues Merkmal `drill`** (0,1 bis 0,45 fuer `mp_bot`): spaetere
+  Soldaten bekommen mehr - sie bleiben bei ihrem Ziel und fangen sich
+  schneller. Kein Sonderfall im Code, nur ein anderer Bereich in den
+  Daten.
+* **Bedenkzeit**: wechselt das Ziel (ohne hoeheren Rang), macht er
+  0,1 bis 0,4 s (mit Stress laenger, mit Drill kuerzer) weiter, was er tat.
+* **Deckung entscheidet der Stress, nicht jede Kugel**: `_kaempfen` hat
+  `mit_deckung`; das GOAP-Hirn schaltet den alten Reflex ab. Ziel
+  ueberleben will `in_deckung, beruhigt` (Aktionen deckung, abwarten).
+  Wer das MG am Laufen hat (`eingeschossen`) oder den Gegner gleich
+  erledigt (`ziel_fast_tot`), bleibt draussen.
+* **Feuer je Waffe** (`K.BOTS["feuer"]`): das MG 1,8 bis 3,4 s Stoss
+  (vorher hoechstens 0,6 s - es kam nie ueber seinen Anlauf von 1,15 s),
+  im Stoss fuehrt er die Garbe nach statt loszulassen, und er nimmt das
+  MG auch auf mittlere Weite (`waffe_vorzug`). Gilt auch fuer die
+  klassische KI.
+* **Gruppen**: stehen mehrere beisammen (`gruppe_um`), schiesst er
+  ungefaehr in die Richtung und schwenkt ueber sie (Flaechenfeuer), mit
+  laengeren Stoessen; die Granate geht in die Mitte, und fuer einen
+  einzelnen hebt er sie eher auf. GOAP-Ziel gruppe_bekaempfen mit den
+  Aktionen granate_werfen und dauerfeuer.
+* **Hoeren** (`lagebild`): Schuesse (460 px), Explosionen (820 px) und
+  Schritte (rennend 150 px, gehend 70 px, durch eine Wand 60 Prozent
+  davon), alles ungefaehr. Er schaut zum Unerklaerten (Umschauen), sucht
+  dort, und die gehoerten Gegner zaehlen fuer Zuversicht und Deckung.
+* **Umschauen**: alle 2,5 bis 5,5 s (unter Stress seltener -
+  Tunnelblick) schaut er kurz weg vom Ziel; danach muss er sich neu
+  einzielen.
+* **Deckung mit Ueberblick** (`_deckung_wert`): keine Stelle naeher als
+  110 px an einem anderen bekannten Gegner, Aufschlag fuer einen Weg an
+  einem vorbei und fuer jeden, gegen den sie nicht deckt. In Panik nur der
+  eine.
+* **Getroffen von einem anderen**: er wechselt zu dem, der schiesst
+  (auch klassisch), nicht mitten im Stoss.
+* **Granaten**: Ziel granate_ausweichen (Rang 3), Aktion ausweichen -
+  weg, geradewegs. Stress dazu, Panik kann folgen.
+* **Panik**: Ziel panik (Rang 2), Aktion fliehen - weg von den Gegnern,
+  zu Kameraden, die weiter weg stehen; wer ihm zu nahe kommt, bekommt
+  einen Stoss blind hinterher.
+* **Uebermut**: Ziel nachsetzen (zuversichtlich, wenig Disziplin) -
+  dorthin, wo der Gegner verschwand, ohne Deckung. Nachladen im Offenen
+  wird mit Zuversicht billiger.
+* **Kein Dash** mehr, auch klassisch.
+* **Testmodus**: INFO KURZ zeigt unter jedem GOAP-Bot den Stress als
+  Balken, die Zuversicht als Buchstaben (P B N Z H), PANIK oder SCHRECK,
+  und Kreise mit Linien zu dem, was er hoert. GEDANKEN zeigt Stress,
+  Zuversicht, Panik, Schreck, eingeschossen, Bindung und Bedenkzeit.
+  Testmenue INNENLEBEN: PANIK, STRESS +0,3, KAMERAD FAELLT, GRANATE NEBEN
+  IHM, RUHE fuer die gezeigte Figur.

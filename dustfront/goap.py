@@ -129,10 +129,20 @@ class Aktion:
 
 
 class Ziel:
-    def __init__(self, name: str, will=None, dringlich="0", info: str = "") -> None:
+    """`rang` und `bindung` seit 0.34.38 (Dual Utility nach Dill, docs/KI.md
+    Abschnitt 10): ein Ziel mit hoeherem Rang unterbricht jederzeit; eines
+    mit gleichem Rang muss warten, bis das laufende `bindung` Sekunden lang
+    verfolgt wurde. So bleibt ein Mensch bei dem, was er angefangen hat,
+    statt bei jedem Wackeln der Lage umzuschwenken - nur eine Granate vor
+    den Fuessen reisst ihn sofort heraus."""
+
+    def __init__(self, name: str, will=None, dringlich="0", info: str = "",
+                 rang="0", bindung="0") -> None:
         self.name = name
         self.will = will if isinstance(will, dict) else bedingungen(will)
         self.dringlich = dringlich if isinstance(dringlich, Ausdruck) else Ausdruck(dringlich)
+        self.rang = rang if isinstance(rang, Ausdruck) else Ausdruck(rang)
+        self.bindung = bindung if isinstance(bindung, Ausdruck) else Ausdruck(bindung)
         self.info = info
 
     def __repr__(self) -> str:
@@ -209,20 +219,33 @@ class Gehirn:
     und fuehrt die zurueckgegebene Aktion aus; ist sie fertig oder geht
     sie nicht, sagt er es mit `melden`."""
 
-    def __init__(self, ziele, aktionen, merkmale: dict | None = None) -> None:
+    def __init__(self, ziele, aktionen, merkmale: dict | None = None, rnd=None) -> None:
         self.ziele = list(ziele)
         self.aktionen = list(aktionen)
         self.merkmale = dict(merkmale or {})
+        # Ohne Zufall waehlt es immer das Dringendste. Mit Zufall und dem
+        # Wert `unschaerfe` (0 bis 1) waehlt es unter den guten Zielen des
+        # hoechsten Rangs nach Gewicht - aber nie eines, das weit unter dem
+        # besten liegt (Dual Utility, docs/KI.md 10.2).
+        self.rnd = rnd
         self.fakten: dict = {}
         self.werte: dict = {}
         self.dringlichkeiten: dict = {}
+        self.raenge: dict = {}
         self.ziel = None
         self.plan: list = []
         self.erzwungen = None           # Testmodus: dieses Ziel, egal wie dringlich
         self.protokoll = deque(maxlen=K.GOAP["protokoll"])
         self._sperre: dict = {}          # Aktion -> bis wann sie nicht geplant wird
         self._neu_planen_bis = 0.0
+        self._gebunden_bis = 0.0         # vorher wechselt er nur fuer einen hoeheren Rang
+        self.gewechselt = False          # hat der letzte Denkschritt das Ziel gewechselt?
         self._jetzt = 0.0
+
+    @property
+    def gebunden(self) -> float:
+        """So lange haelt er sein Ziel noch gegen gleichrangige (s)."""
+        return max(0.0, self._gebunden_bis - self._jetzt)
 
     @property
     def aktion(self):
@@ -247,20 +270,35 @@ class Gehirn:
         self.fakten = dict(fakten)
         self.werte = dict(werte or {})
         namen = self._namen()
+        self.gewechselt = False
         self.dringlichkeiten = {z.name: z.dringlich.wert(namen) for z in self.ziele}
-        # Kandidaten: was dringlich ist und noch nicht gilt, das Dringendste
-        # zuerst. Das laufende Ziel bekommt einen Vorsprung, damit es nicht
-        # bei jedem Wackeln der Zahlen wechselt.
+        self.raenge = {z.name: z.rang.wert(namen) for z in self.ziele}
+        # Kandidaten: was dringlich ist und noch nicht gilt - der hoechste
+        # Rang zuerst, darin das Dringendste. Das laufende Ziel bekommt
+        # einen Vorsprung, damit es nicht bei jedem Wackeln der Zahlen
+        # wechselt.
         offen = [z for z in self.ziele
                  if self.dringlichkeiten[z.name] > 0 and not erfuellt(self.fakten, z.will)]
         if self.erzwungen is not None:
             offen = [z for z in self.ziele if z.name == self.erzwungen] or offen
 
-        def rang(z):
+        def wert(z):
             d = self.dringlichkeiten[z.name]
-            return d + (g["vorsprung"] if z is self.ziel else 0.0)
+            return (self.raenge[z.name], d + (g["vorsprung"] if z is self.ziel else 0.0))
 
-        offen.sort(key=rang, reverse=True)
+        offen.sort(key=wert, reverse=True)
+        laufend = self.ziel if self.ziel in offen else None
+        if laufend is not None and jetzt < self._gebunden_bis and self.erzwungen is None:
+            # Gebunden: nur ein hoeherer Rang kommt vor das laufende Ziel.
+            # Hat das laufende keinen Plan mehr, geht es mit dem Rest weiter.
+            r = self.raenge[laufend.name]
+            hoeher = [z for z in offen if self.raenge[z.name] > r]
+            offen = hoeher + [laufend] + [z for z in offen if z not in hoeher and z is not laufend]
+        elif (laufend is None and self.rnd is not None and self.erzwungen is None
+              and len(offen) > 1):
+            # Gewuerfelt wird nur bei einer neuen Wahl - sonst wuerfelte er
+            # jeden Denkschritt neu und sprang zwischen zwei Zielen hin und her.
+            offen = self._unscharf(offen)
         # Was vom Plan schon erledigt ist, faellt weg.
         while self.plan and self.plan[0].macht and erfuellt(self.fakten, self.plan[0].macht):
             self.log("FERTIG: %s" % self.plan[0].name)
@@ -273,6 +311,8 @@ class Gehirn:
             if plan:
                 if z is not self.ziel:
                     self.log("ZIEL: %s (%d)" % (z.name, round(self.dringlichkeiten[z.name])))
+                    self.gewechselt = self.ziel is not None
+                    self._gebunden_bis = jetzt + max(0.0, z.bindung.wert(namen))
                 if [a.name for a in plan] != [a.name for a in self.plan]:
                     self.log("PLAN: %s" % " > ".join(a.name for a in plan))
                 self.ziel = z
@@ -285,6 +325,31 @@ class Gehirn:
         self.ziel = None
         self.plan = []
         return None
+
+    def _unscharf(self, offen: list) -> list:
+        """Dual Utility: im hoechsten Rang nur, was nah am Besten liegt,
+        und darunter nach Gewicht gewuerfelt. Je groesser die Unschaerfe
+        (Stress), desto weiter darf es vom Besten weg sein - er macht unter
+        Druck Fehler, aber keine voellig dummen."""
+        u = max(0.0, min(1.0, float(self.werte.get("unschaerfe", 0.0))))
+        if u <= 0.0:
+            return offen
+        oben = self.raenge[offen[0].name]
+        gruppe = [z for z in offen if self.raenge[z.name] == oben]
+        bestes = max(self.dringlichkeiten[z.name] for z in gruppe)
+        grenze = bestes * (1.0 - K.GOAP["unschaerfe_weite"] * u)
+        gute = [z for z in gruppe if self.dringlichkeiten[z.name] >= grenze]
+        if len(gute) < 2:
+            return offen
+        summe = sum(self.dringlichkeiten[z.name] for z in gute)
+        wurf = self.rnd.uniform(0.0, summe)
+        wahl = gute[-1]
+        for z in gute:
+            wurf -= self.dringlichkeiten[z.name]
+            if wurf <= 0.0:
+                wahl = z
+                break
+        return [wahl] + [z for z in offen if z is not wahl]
 
     def _planen(self, ziel, namen: dict):
         jetzt = self._jetzt

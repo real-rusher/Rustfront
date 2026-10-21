@@ -8224,6 +8224,10 @@ if _hinter80 is not None:
     _ich80.pos.update(_hinter80)
     pruef("Ein Bot sieht nicht durch die Wand", not _bot80.hirn.sieht(_ich80))
 _frei80 = _stelle80(200)
+# Von hier aus ist die Bahn frei - gemessen wird spaeter von genau hier
+# (seit 0.34.38): im Reaktionstest geht der Bot ein paar Schritte, und
+# stand er danach hinter einer Kiste, schoss er in sie hinein.
+_platz80 = pygame.Vector2(_bot80.pos)
 _ich80.pos.update(_frei80)
 _ich80.unverwundbar = 1e9
 _bot80.hirn.neues_leben()
@@ -8255,8 +8259,8 @@ def _quote80(quer, sekunden=12.0):
     # geht sonst vor Kisten zur Seite oder hinter Deckung und wirft seine
     # Granate - gemessen wuerde dann, wie oft er das Ziel neu suchen muss,
     # nicht, wie er zielt.
-    platz_ = pygame.Vector2(_bot80.pos)
-    hin_ = _frei80 - _bot80.pos
+    platz_ = pygame.Vector2(_platz80)
+    hin_ = _frei80 - platz_
     q_ = pygame.Vector2(-hin_.y, hin_.x).normalize()
     for i_ in range(int(sekunden / K.FIXED_DT)):
         t_ = i_ * K.FIXED_DT
@@ -10464,6 +10468,249 @@ pruef("Bots heissen BOT- und ein Rufname aus der Liste, keiner doppelt",
       _bn93 and all(n_.startswith("BOT-") and n_[4:] in _n93 for n_ in _bn93)
       and len(set(_bn93)) == len(_bn93), str(_bn93))
 _w93.verlassen()
+
+# 0.34.38: "Sie sollen etwas mehr Commitment zu ihren Aufgaben zeigen ... das
+# MG sollten sie priorisieren, dass sie wirklich laenger schiessen ... besser
+# hoeren ... vor Granaten weglaufen, und da kann auch mal die Panik ueberhand
+# nehmen ... Dashes sollen sie nicht haben." Innenleben, Rang und Bindung.
+print("\n-- Innenleben, Bindung, Hoeren, Granaten (0.34.38)")
+from dustfront import innenleben as _IL94
+
+# Rang und Bindung im Gehirn (goap.Ziel).
+_akt94 = [_GO88.Aktion("a", "", "fa", "1"), _GO88.Aktion("b", "", "fb", "1"),
+          _GO88.Aktion("c", "", "fc", "1")]
+_hirn94 = _GO88.Gehirn([_GO88.Ziel("eins", "fa", "50", bindung="2"),
+                        _GO88.Ziel("zwei", "fb", "40 + x"),
+                        _GO88.Ziel("not", "fc", "10 * n", rang="2 * n")], _akt94)
+_hirn94.denken(0.0, {}, {"x": 0, "n": 0})
+_hirn94.denken(0.5, {}, {"x": 30, "n": 0})
+pruef("Bindung: ein dringenderes Ziel gleichen Rangs wartet, bis die Bindung um ist",
+      _hirn94.ziel.name == "eins" and _hirn94.gebunden > 1.0, str(_hirn94.ziel))
+_hirn94.denken(2.2, {}, {"x": 30, "n": 0})
+pruef("... danach wechselt er", _hirn94.ziel.name == "zwei" and _hirn94.gewechselt, "")
+_hirn94.denken(2.3, {}, {"x": 30, "n": 1})
+pruef("... ein hoeherer Rang unterbricht sofort, auch wenn er weniger dringlich ist",
+      _hirn94.ziel.name == "not", str(_hirn94.ziel))
+_lese94 = _WD88.Daten()
+_WD88.aus_text("[ziel z]\nwill: a\ndringlich: 5\nrang: 1 + panik\nbindung: 2 * disziplin\n", _lese94)
+pruef("... beide kommen aus den Daten (rang:, bindung:)",
+      _lese94.ziele["z"].rang.wert({"panik": 1}) == 2.0
+      and _lese94.ziele["z"].bindung.wert({"disziplin": 0.5}) == 1.0, "")
+
+# Dual Utility: mit Zufall und Unschaerfe unter den guten, nie ein schlechtes.
+import collections as _co94
+_gew94 = _co94.Counter()
+for i_ in range(200):
+    h_ = _GO88.Gehirn([_GO88.Ziel("gut", "fa", "60"), _GO88.Ziel("fast", "fb", "52"),
+                       _GO88.Ziel("schlecht", "fc", "20")], _akt94, rnd=random.Random(i_))
+    h_.denken(0.0, {}, {"unschaerfe": 1.0})
+    _gew94[h_.ziel.name] += 1
+pruef("Unscharfe Wahl: unter Stress mal das zweitbeste, nie das schlechte",
+      _gew94["gut"] > _gew94["fast"] > 20 and _gew94["schlecht"] == 0, str(dict(_gew94)))
+h_ = _GO88.Gehirn([_GO88.Ziel("gut", "fa", "60"), _GO88.Ziel("fast", "fb", "52")], _akt94,
+                  rnd=random.Random(1))
+pruef("... ohne Stress immer das beste",
+      all(h_.denken(t_, {}, {"unschaerfe": 0.0}) and h_.ziel.name == "gut" for t_ in range(5)), "")
+
+# Innenleben: Stress, Panik, Drill, Zuversicht.
+_r94 = random.Random(94)
+_i94 = _IL94.Innenleben({"mut": 0.5, "disziplin": 0.3, "drill": 0.0}, _r94)
+_i94.ereignis("vorbei")
+_s1_94 = _i94.stress
+_i94.ereignis("vorbei")
+pruef("Stress: eine Kugel knapp vorbei zaehlt, dieselbe Garbe nicht zwanzigmal",
+      _s1_94 > 0 and _i94.stress == _s1_94, "%.3f %.3f" % (_s1_94, _i94.stress))
+_d94 = _IL94.Innenleben({"mut": 0.5, "disziplin": 1.0, "drill": 1.0}, _r94)
+_i94.ereignis("kamerad")
+_d94.ereignis("kamerad")
+pruef("... Disziplin und Drill daempfen, was ankommt", _d94.stress < _i94.stress * 0.6,
+      "%.2f %.2f" % (_d94.stress, _i94.stress))
+for _ in range(6):
+    _i94.ereignis("kamerad")
+    _i94.schritt(0.3, False, False)
+pruef("... zu viel davon: Panik", _i94.panik, "Stress %.2f" % _i94.stress)
+_dauer94 = []
+for drill_ in (0.0, 1.0):
+    i_ = _IL94.Innenleben({"mut": 0.5, "disziplin": 0.5, "drill": drill_}, random.Random(3))
+    i_.stress = 0.99
+    i_._panik_pruefen()
+    _dauer94.append(i_.panik_rest)
+pruef("... mit Drill ist sie kuerzer", _dauer94[1] < _dauer94[0] * 0.6, str(_dauer94))
+_i94.beruhigen()
+_i94.stress = 0.5
+for _ in range(20):
+    _i94.schritt(0.1, True, False)
+_in94 = _i94.stress
+_i94.stress = 0.5
+for _ in range(20):
+    _i94.schritt(0.1, False, False)
+pruef("... und geht von selbst zurueck, in Deckung schneller", _in94 < _i94.stress < 0.5,
+      "%.2f %.2f" % (_in94, _i94.stress))
+_q94 = _IL94.zuversicht_rechnen(1.0, [(1.0, 1.0)], [(1.0, 1.0)])
+_qp94 = _IL94.zuversicht_rechnen(1.0, [(1.0, 0.0)], [(1.0, 1.0)])
+pruef("Zuversicht wie in Days Gone: zwei gegen einen ist gut, ein panischer Kamerad zaehlt "
+      "fuer die andere Seite",
+      _q94 == 2.0 and _qp94 == 0.5 and _IL94.stufe_von(_q94) == 3 and _IL94.stufe_von(_qp94) == 1
+      and _IL94.zuversicht_rechnen(1.0, [], []) is None and _IL94.stufe_von(None) == 2,
+      "%.2f %.2f" % (_q94, _qp94))
+pruef("... wer schon zwei erwischt hat, ist zuversichtlicher",
+      _IL94.zuversicht_rechnen(1.0, [], [(1.0, 1.0)], getoetet=2.0)
+      > _IL94.zuversicht_rechnen(1.0, [], [(1.0, 1.0)]), "")
+
+# Das MG: Stoesse, die ueber den Anlauf hinausgehen.
+_mg94 = K.BOTS["feuer"]["lmg"]
+pruef("MG-Feuerstoss laenger als sein Anlauf im Dauerfeuer (1,15 s), und er steht dabei",
+      _mg94[0][0] > K.WAFFEN["lmg"]["modus_daten"]["dauer"]["anlauf"] and _mg94[2] >= 1.0,
+      str(_mg94))
+
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm.wiedereinstieg = False
+_a94, _b94 = pygame.Vector2(_feld89[0]), pygame.Vector2(_feld89[1])
+_mgbot94 = _tm.bot_setzen(_a94, 0, {"team": 0, "hirn": "goap", "waffe": "lmg"})
+_puppe94 = _tm.puppe_setzen(_b94, 0, {"team": 1, "leben": 10.0})
+_lauf94, _laengste94 = 0.0, 0.0
+for _ in range(int(8.0 / _D87)):
+    _tm.schritt(_D87)
+    _lauf94 = _lauf94 + _D87 if _mgbot94.feuert else 0.0
+    _laengste94 = max(_laengste94, _lauf94)
+pruef("Ein GOAP-Bot mit MG haelt lange drauf (laengster Stoss ueber 1,2 s)",
+      _laengste94 > 1.2 and _mgbot94.waffe_name == "lmg", "%.2f s" % _laengste94)
+pruef("... und bleibt am Gegner, der stehen bleibt (keine Flucht in Deckung)",
+      _mgbot94.hirn.gehirn.ziel is not None
+      and _mgbot94.hirn.gehirn.ziel.name in ("feind_ausschalten", "gruppe_bekaempfen", "nachladen"),
+      str(_mgbot94.hirn.gehirn.ziel))
+
+# Eine Kugel vorbei schickt ihn nicht mehr in Deckung - erst der Stress.
+_tm.alles_weg()
+_bot94 = _tm.bot_setzen(_a94, 0, {"team": 0, "hirn": "goap", "waffe": "sturm"})
+_puppe94 = _tm.puppe_setzen(_b94, 0, {"team": 1, "leben": 10.0})
+_sim87(int(1.5 / _D87))
+_bot94.hirn.kugel_vorbei()
+_bot94.hirn.unterdrueckt = K.BOTS["unterdrueckt_zeit"]
+_sim87(int(0.3 / _D87))
+pruef("Eine einzelne Kugel knapp vorbei: er kaempft weiter",
+      _bot94.hirn.gehirn.ziel.name != "ueberleben", str(_bot94.hirn.gehirn.ziel))
+_bot94.hirn.innen.stress = 0.95
+_bot94.hirn.innen.panik_rest = 0.0
+_bot94.hirn.innen.schreck_rest = 0.0
+_bot94.hirn.goap_rest = 0.0
+_sim87(int(0.3 / _D87))
+# Auf dem freien Feld gibt es keine Deckung: dann scheitert DECKUNG, und
+# bleibt der Stress, kommt die Panik. Beides heisst: er will weg.
+_will94 = [t_ for _z, t_ in _bot94.hirn.gehirn.protokoll
+           if t_.startswith(("ZIEL: ueberleben", "ZIEL: panik"))]
+pruef("... unter grossem Stress will er in Deckung (oder rennt in Panik)",
+      bool(_will94), str(list(_bot94.hirn.gehirn.protokoll)[-4:]))
+
+# Granate: wegrennen, vor allem anderen.
+_tm.alles_weg()
+_bot94 = _tm.bot_setzen(_a94, 0, {"team": 0, "hirn": "goap"})
+_puppe94 = _tm.puppe_setzen(_b94, 0, {"team": 1, "leben": 10.0})
+_sim87(int(1.0 / _D87))
+_gr94 = _tm.wurf_setzen("granate", _bot94.pos + pygame.Vector2(14, 0), 0, {"zuender": "liegt"})
+_gr94.rest = 1.0
+_vorher94 = _bot94.pos.distance_to(_gr94.pos)
+_ziele94 = set()
+_stress94 = 0.0
+for _ in range(int(0.8 / _D87)):
+    _tm.schritt(_D87)
+    _stress94 = max(_stress94, _bot94.hirn.innen.stress)
+    if _bot94.hirn.gehirn.ziel is not None:
+        _ziele94.add(_bot94.hirn.gehirn.ziel.name)
+pruef("Eine Granate neben ihm: er rennt weg (Ziel GRANATE AUSWEICHEN, Rang 3)",
+      "granate_ausweichen" in _ziele94 and _bot94.pos.distance_to(_gr94.pos) > _vorher94 + 25,
+      "%s, %.0f -> %.0f px" % (sorted(_ziele94), _vorher94, _bot94.pos.distance_to(_gr94.pos)))
+pruef("... und das macht Stress", _stress94 > 0.1 and _bot94.hirn.innen.zuletzt in ("granate", "panik"),
+      "%.2f %s" % (_stress94, _bot94.hirn.innen.zuletzt))
+
+# Hoeren: ein Schuss, den er nicht sieht, und Schritte hinter ihm.
+_tm.alles_weg()
+_bot94 = _tm.bot_setzen(_a94, 0, {"team": 0, "hirn": "goap"})
+_feind94 = _tm.puppe_setzen(_a94 + pygame.Vector2(0, 2000), 0, {"team": 1})
+_sim87(3)
+_ort94 = _a94 + pygame.Vector2(-300, 0)
+_tm._bot_hoert(_ort94, 0, _feind94)
+_sim87(int(0.25 / _D87))
+pruef("Hoeren: ein Schuss der anderen Seite kommt ins Lagebild, ungefaehr dort",
+      any(e_[0].distance_to(_ort94) < 90 for e_ in _bot94.hirn.lagebild)
+      and _bot94.hirn.gehirn.fakten.get("feind_gehoert"),
+      str([(round(e_[0].x), round(e_[0].y), e_[3]) for e_ in _bot94.hirn.lagebild]))
+_tm._bot_hoert(_a94 + pygame.Vector2(2000, 0), 0, _feind94)
+_sim87(int(0.25 / _D87))
+pruef("... einer weit weg nicht", not any(e_[0].distance_to(_a94) > 1500
+                                          for e_ in _bot94.hirn.lagebild), "")
+_bot94.hirn.lagebild = []
+# Neben dem Bot, wo er jetzt steht - dem Schuss eben ist er nachgegangen.
+_feind94.pos.update(_bot94.pos + pygame.Vector2(-80, 0))
+_feind94.ebene = 0
+for _ in range(6):
+    _feind94.tempo.update(-120, 0)
+    _bot94.hirn.gesehen.pop(_feind94, None)
+    _bot94.hirn.geblendet = 0.0
+    _bot94.hirn._lagebild_auffrischen()
+pruef("... ein Gegner, der in der Naehe rennt, ist zu hoeren",
+      any(e_[3] == "schritte" for e_ in _bot94.hirn.lagebild), "")
+
+# Deckung mit Ueberblick: nicht mitten zwischen andere Gegner, die er kennt.
+_tm.alles_weg()
+_bot94 = _tm.bot_setzen(_a94, 0, {"team": 0, "hirn": "goap"})
+_bot94.hirn.lagebild = [[_a94 + pygame.Vector2(0, 120), 0, _tm.welt.zeit, "schritte"]]
+_wert94 = _bot94.hirn._deckung_wert(_a94 + pygame.Vector2(0, 80), _a94 + pygame.Vector2(300, 0),
+                                    None)
+_frei94 = _bot94.hirn._deckung_wert(_a94 + pygame.Vector2(0, -60), _a94 + pygame.Vector2(300, 0),
+                                    None)
+pruef("Deckung mit Ueberblick: keine Stelle mitten zwischen anderen Gegnern, die er kennt",
+      _wert94 is None and _frei94 is not None, "%s %s" % (_wert94, _frei94))
+_bot94.hirn.innen.panik_setzen()
+pruef("... in Panik sieht er nur den einen (Tunnelblick)",
+      _bot94.hirn._deckung_wert(_a94 + pygame.Vector2(0, 80), _a94 + pygame.Vector2(300, 0), None)
+      is not None, "")
+
+# Kein Dash mehr - auch die klassische KI nicht.
+_tm.alles_weg()
+_kl94 = _tm.bot_setzen(_a94, 0, {"team": 0, "hirn": "klassisch"})
+_ziel94 = _tm.puppe_setzen(_a94 + pygame.Vector2(110, 0), 0, {"team": 1})
+_dash94 = False
+for _ in range(400):
+    ein_ = {"knoepfe": []}
+    _kl94.hirn._nahkampf(ein_, _ziel94, 110.0)
+    _dash94 = _dash94 or "dash" in ein_["knoepfe"]
+pruef("Bots dashen nicht mehr (auch die klassischen nicht)", not _dash94, "")
+
+# Wer ihn von der Seite trifft, wird sein Ziel.
+_tm.alles_weg()
+_bot94 = _tm.bot_setzen(_a94, 0, {"team": 0, "hirn": "goap"})
+# Zwei Gegner, beide in freier Sicht: einer auf der Bahn, einer daneben.
+_f1_94 = _tm.puppe_setzen(_b94, 0, {"team": 1, "leben": 10.0})
+_f2_94 = _tm.puppe_setzen((_a94 + _b94) / 2, 0, {"team": 1, "leben": 10.0})
+_bot94.hirn._wahrnehmen()
+_erst94 = _bot94.hirn.ziel
+_anderer94 = _f2_94 if _erst94 is _f1_94 else _f1_94
+_bot94.zuletzt_von = _anderer94
+_bot94.hirn.getroffen_rest = 2.0
+_bot94.hirn.stoss_rest = 0.0
+_bot94.hirn._wahrnehmen()
+pruef("Von einem anderen getroffen: er dreht sich zu dem, der schiesst",
+      _erst94 is not None and _bot94.hirn.ziel is _anderer94, "")
+
+# Testmodus: Innenleben anzeigen und verstellen.
+_tm._zeiger_welt = pygame.Vector2(_bot94.pos)
+_tm.blick = 0
+pruef("Testmenue: Zeile INNENLEBEN", any(z_[0] == "innen" for z_ in _tm._menue_zeilen()), "")
+_tm._innen_nr = 0
+_tm.menue_wirken("innen", 1, ausloesen=True)
+_bot94.hirn.goap_rest = 0.0
+_sim87(int(0.25 / _D87))
+pruef("... PANIK: die gezeigte Figur rennt (Ziel PANIK)",
+      _bot94.hirn.innen.panik and _bot94.hirn.gehirn.ziel is not None
+      and _bot94.hirn.gehirn.ziel.name == "panik", str(_bot94.hirn.gehirn.ziel))
+_tm.innen_wirken("ruhe")
+pruef("... RUHE: vorbei", not _bot94.hirn.innen.panik and _bot94.hirn.innen.stress == 0.0, "")
+for i_ in (1, 2):
+    _tm.info = i_
+    _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+pruef("... INFO zeigt Stress, Zuversicht und das Gehoerte (zeichnen geht)", True, "")
+_tm.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

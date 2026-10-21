@@ -5,17 +5,19 @@
 # bis diese hier besser ist. Format: siehe dustfront/wesen_daten.py,
 # Planung: docs/KI.md.
 #
-# Fakten, die ein Bot ueber sich weiss (bot_goap.GoapHirn._fuehlen):
+# Fakten, die ein Bot ueber sich weiss (bot_goap.GoapHirn.fuehlen):
 #   feind_sichtbar       er sieht einen Gegner auf seiner Ebene
 #   linie_frei           ... und zwischen ihnen haelt nichts die Kugel auf
 #   feind_bekannt        er sieht einen oder hat eben noch einen gesehen
+#   feind_gehoert        er hoert einen, den er nicht sieht (seit 0.34.38)
 #   munition_da          irgendeine Waffe hat noch Munition
 #   magazin_leer         das Magazin der Waffe in der Hand ist leer (oder er laedt)
-#   granate_da           er hat seine Granate noch
+#   granate_da           er hat seine Sprenggranate noch
 #   angeschlagen         weniger als K.BOTS["deckung_leben"] Leben
 #   getroffen            in den letzten zwei Sekunden getroffen
 #   unterdrueckt         Kugeln pfeifen knapp an ihm vorbei
 #   in_deckung           er steht an einer Stelle, die ihn vom Gegner trennt
+#   beruhigt             sein Stress ist unter 0,3 (seit 0.34.38)
 #   kamerad_liegt        ein Kamerad liegt am Boden (VERSUS)
 #   kamerad_braucht_schutz  ein Kamerad laedt, ist angeschlagen, liegt oder flankiert
 #   kamerad_flankiert    ein anderer flankiert den Gegner, den er kennt
@@ -23,31 +25,67 @@
 #   zone_aktiv           es gibt einen Kreis (HUEGEL)
 #   im_kreis             er steht darin
 #   sturm_plan           er ist Teil eines Sturms seiner Mannschaft
+# Seit 0.34.38 (innenleben.py, docs/KI.md 8.3):
+#   granate_nah          eine scharfe Granate liegt, die ihn erreicht
+#   panik                er ist in Panik
+#   eingeschossen        er feuert schon eine Weile ohne Pause
+#   waffe_mg, waffe_auto er haelt das MG / eine Waffe fuer Dauerfeuer
+#   feinde_gruppe        der Gegner, den er sieht, steht mit anderen beisammen
+#   ziel_fast_tot        der Gegner, den er sieht, hat kaum noch Leben
 # Ziel-Fakten, die nie wahr werden, sondern nur das Ziel benennen:
-#   feind_besiegt, kamerad_geschuetzt, sturm_fertig
-# Zahlen: leben (0 bis 1), abstand (zum Gegner, sonst 9999)
-# Merkmale (je Bot gewuerfelt): mut, disziplin
+#   feind_besiegt, kamerad_geschuetzt, sturm_fertig, gruppe_getroffen, sicher
+# Zahlen: leben (0 bis 1), abstand (zum Gegner, sonst 9999),
+#   stress (0 bis 1), zuversicht (0 panisch ... 0.5 neutral ... 1 heldenhaft)
+# Merkmale (je Bot gewuerfelt): mut, disziplin, drill
+#
+# Rang (seit 0.34.38): 3 Granate, 2 Panik, 1 was keinen Aufschub duldet,
+# 0 alles andere. Ein hoeherer Rang unterbricht sofort; ein gleicher erst,
+# wenn das laufende Ziel `bindung` Sekunden lang verfolgt wurde. Gemeldet:
+# "Sie sollen etwas mehr Commitment zu ihren Aufgaben zeigen. Sonst ist es
+# irgendwann quasi unmoeglich, Gegner zu toeten, weil diese direkt auf
+# alles reagieren."
 
 # ── Ziele ─────────────────────────────────────────────────────────────
 
+[ziel granate_ausweichen]
+will: !granate_nah
+rang: 3
+dringlich: 120 * granate_nah
+info: Eine Granate liegt neben ihm: weg - vor allem anderen.
+
+[ziel panik]
+will: sicher
+rang: 2
+dringlich: 100 * panik
+info: Panik: nur noch weg. Feuerschutz, Sturm, Kreis - alles egal.
+
 [ziel ueberleben]
-will: in_deckung
-dringlich: 90 * angeschlagen * getroffen * (1.3 - mut) + 70 * unterdrueckt * (1.2 - mut)
-info: Angeschlagen und getroffen, oder niedergehalten: weg aus der Linie.
+will: in_deckung, beruhigt
+# Nicht mehr jede Kugel (0.34.37: "unterdrueckt" allein reichte), sondern
+# der Stress, der sich aufbaut. Wer das MG am Laufen hat oder den Gegner
+# gleich erledigt, bleibt draussen. Ganz knapp am Ende hat er Rang 1.
+rang: (stress > 0.85) + angeschlagen * getroffen * (leben < 0.25)
+dringlich: (110 * stress + 45 * angeschlagen * getroffen) * (1.3 - mut) * (1.4 - 0.4 * zuversicht) * (1 - 0.6 * eingeschossen * waffe_mg) * (1 - 0.5 * ziel_fast_tot)
+bindung: 1.0 + 2 * disziplin
+info: Gestresst oder schwer getroffen: in Deckung, bis er sich gefangen hat.
 
 [ziel nachladen]
 will: !magazin_leer
+rang: 1
 dringlich: 85 * magazin_leer * munition_da
+bindung: 0.5
 info: Ein leeres Magazin muss voll, bevor er weiterkaempft.
 
 [ziel aufhelfen]
 will: !kamerad_liegt
 dringlich: kamerad_liegt * (64 - 40 * (abstand < 260))
+bindung: 2
 info: VERSUS: Gefallene Kameraden hochholen, wenn kein Gegner dicht dran ist.
 
 [ziel stuermen]
 will: sturm_fertig
 dringlich: 60 * sturm_plan
+bindung: 2
 info: Die Mannschaft stuermt gemeinsam (bottaktik.stuerme_fuehren).
 
 [ziel kreis]
@@ -57,31 +95,75 @@ will: im_kreis
 # stehen und kaempfte, wo er war (gesehen in der Aufnahme, 0.34.31).
 # Ueberleben und Nachladen gehen weiter vor.
 dringlich: 82 * zone_aktiv
+bindung: 1.5
 info: HUEGEL: Der Kreis geht vor - gekaempft wird auf dem Weg dorthin.
+
+[ziel gruppe_bekaempfen]
+will: gruppe_getroffen
+# Mehrere beisammen: Granate hinein oder mit Dauerfeuer darueber - statt
+# einen nach dem anderen (seit 0.34.38).
+dringlich: 88 * feinde_gruppe * feind_sichtbar
+bindung: 1.5 + disziplin
+info: Mehrere Gegner beisammen: was viele zugleich trifft.
 
 [ziel feuerschutz]
 will: kamerad_geschuetzt
 dringlich: 52 * kamerad_braucht_schutz * feind_bekannt * (1 - feind_sichtbar) * (0.5 + disziplin)
+bindung: 1.5
 info: Ein Kamerad braucht Schutz und der Gegner ist in Deckung: niederhalten.
+
+[ziel nachsetzen]
+will: feind_sichtbar
+# Uebermut: zuversichtlich und wenig Disziplin - er jagt dem nach, der
+# eben verschwand, statt in Deckung zu warten.
+dringlich: 70 * (zuversicht > 0.7) * (1.2 - disziplin) * feind_bekannt * (1 - feind_sichtbar)
+bindung: 2
+info: Uebermut: dem Gegner hinterher, ohne Deckung.
 
 [ziel feind_ausschalten]
 will: feind_besiegt
-dringlich: 50 * feind_sichtbar + 30 * feind_bekannt
+dringlich: 50 * feind_sichtbar + 30 * feind_bekannt + 25 * ziel_fast_tot
+bindung: 1.0 + 1.5 * disziplin
 info: Den Gegner, den er sieht oder eben sah, ausschalten.
 
 [ziel suchen]
 will: feind_sichtbar
-dringlich: 10
+dringlich: 10 + 15 * feind_gehoert
 info: Nichts los: Gegner suchen - wo er einen hoerte, sonst auf der Karte.
 
 # ── Aktionen ──────────────────────────────────────────────────────────
 
+[aktion ausweichen]
+braucht: granate_nah
+macht: !granate_nah
+kosten: 1
+tut: ausweichen
+
+[aktion fliehen]
+macht: sicher
+kosten: 1
+tut: fliehen
+
 [aktion angreifen]
 braucht: feind_sichtbar, linie_frei, munition_da
-macht: feind_besiegt
+macht: feind_besiegt, gruppe_getroffen
 kosten: 1
 tut: kaempfen
 info: Kaempfen wie die klassische KI: Abstand, Ausweichen, Feuerstoesse, Granate.
+
+[aktion dauerfeuer]
+braucht: feind_sichtbar, linie_frei, waffe_auto, munition_da
+macht: gruppe_getroffen
+kosten: 0.8 - 0.3 * waffe_mg
+tut: dauerfeuer
+funk: gruppe
+info: Stehen bleiben und lange ueber die Gruppe halten.
+
+[aktion granate_werfen]
+braucht: feind_sichtbar, granate_da
+macht: gruppe_getroffen
+kosten: 0.5
+tut: werfen
 
 [aktion flankieren]
 braucht: feind_bekannt, !linie_frei, flanke_frei, munition_da
@@ -110,10 +192,24 @@ macht: feind_sichtbar, linie_frei, feind_bekannt
 kosten: 5
 tut: suchen
 
+[aktion nachsetzen]
+braucht: feind_bekannt, !feind_sichtbar
+macht: feind_sichtbar
+kosten: 2
+tut: nachsetzen
+funk: uebermut
+
 [aktion deckung]
 macht: in_deckung
 kosten: 1 + mut
 tut: deckung
+
+[aktion abwarten]
+braucht: in_deckung
+macht: beruhigt
+kosten: 1
+tut: abwarten
+info: In der Deckung bleiben, bis der Stress nachlaesst - laengstens vier Sekunden.
 
 [aktion nachladen_in_deckung]
 braucht: in_deckung, magazin_leer
@@ -131,9 +227,9 @@ tut: nachladen
 [aktion nachladen_offen]
 braucht: magazin_leer
 macht: !magazin_leer
-kosten: 6 - 3 * mut
+kosten: 6 - 3 * mut - 2 * (zuversicht > 0.7)
 tut: nachladen
-info: Ohne Deckung nachladen - wer mutig ist, tut das eher.
+info: Ohne Deckung nachladen - wer mutig oder sich seiner Sache sicher ist, tut das eher.
 
 [aktion zum_kreis]
 macht: im_kreis
@@ -159,8 +255,12 @@ tut: sturm
 [spezies mp_bot]
 name: BOT
 hirn: bot
-ziele: ueberleben, nachladen, aufhelfen, stuermen, kreis, feuerschutz, feind_ausschalten, suchen
-aktionen: angreifen, flankieren, niederhalten, nahkampf, suchen, deckung, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, aufhelfen, stuermen
+ziele: granate_ausweichen, panik, ueberleben, nachladen, aufhelfen, stuermen, kreis, gruppe_bekaempfen, feuerschutz, nachsetzen, feind_ausschalten, suchen
+aktionen: ausweichen, fliehen, angreifen, dauerfeuer, granate_werfen, flankieren, niederhalten, nahkampf, suchen, nachsetzen, deckung, abwarten, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, aufhelfen, stuermen
 merkmal mut: 0.2 0.9
 merkmal disziplin: 0.3 1.0
+# Drill (seit 0.34.38): wie ausgebildet er ist. Wenig fuer die Bots des
+# Mehrspielers; spaetere Spezies (Soldaten) bekommen mehr - sie bleiben
+# eher bei ihrem Ziel und fangen sich schneller.
+merkmal drill: 0.1 0.45
 info: Ein Bot des Mehrspielers - etwas schlechter als ein Mensch, fair wie immer.

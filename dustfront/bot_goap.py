@@ -13,6 +13,27 @@ Hoeren, Zielen mit Fehler und Drehgrenze, Feuerstoesse, Wege, Treppen.
 Was eine Aktion **tut**, ist meist ein Stueck der klassischen KI
 (`TUN`); neu ist, wann sie es tut.
 
+**Ein Mensch, kein Rechner (seit 0.34.38).** Gemeldet: "Dadurch, dass die
+Gegner immer das Optimale ueberlegen, gehen sie aus der Deckung raus,
+geben dir ein paar Schuesse ab, werden beschossen ... selbst wenn der
+Gegner quasi tot ist, gehen sie dann eher in Deckung ... Ein Mensch
+entscheidet nicht die ganze Zeit und fuehrt es sofort aus." Darum:
+
+* **Innenleben** (innenleben.py): Stress und Zuversicht. Ereignisse -
+  Kugeln, Treffer, ein Kamerad faellt, eine Granate - aendern sie; daraus
+  Panik, Schreck, Uebermut. Wann er in Deckung geht, entscheidet der
+  Stress, nicht jede einzelne Kugel.
+* **Bindung**: ein Ziel haelt er eine Weile (goap.Ziel `bindung`), nur
+  ein hoeherer Rang (Granate, Panik) reisst ihn sofort heraus.
+* **Bedenkzeit**: wechselt er das Ziel, macht er noch kurz weiter, was er
+  tat, bevor er das Neue angeht.
+* **Hoeren** (`lagebild`): Schuesse, Explosionen und die Schritte eines
+  Gegners in der Naehe, auch hinter einer Wand. Er schaut dorthin und
+  sucht sich keine Deckung mitten zwischen Gegnern, die er kennt.
+* **Umschauen**: ab und zu schaut er weg vom Ziel; unter Stress seltener -
+  dann wirkt eine Flanke.
+* **Granaten**: liegt eine neben ihm, rennt er weg - vor allem anderen.
+
 Welche KI ein Bot hat, sagt die Regel BOT-KI (KLASSISCH / GOAP), im
 Testmodus der Spawner. Was er gerade denkt, zeigt der Testmodus (Taste 8,
 zweimal: Gedanken). Was spaeter noch kommt: docs/KI.md.
@@ -20,18 +41,55 @@ zweimal: Gedanken). Was spaeter noch kommt: docs/KI.md.
 
 from __future__ import annotations
 
+import math
+
 import pygame
 
 from . import config as K
 from . import wesen_daten
 from .bots import BotHirn
 from .bottaktik import braucht_schutz, rolle_frei
+from .entities import Granate
+from .innenleben import Innenleben, zuversicht_rechnen
 
 
 def _nichts(status: str):
     """Stehen, nichts tun - jedes Mal ein neuer Vektor, weil der Aufrufer
     die Laufrichtung weiterrechnet."""
     return pygame.Vector2(0, 0), None, False, False, status
+
+
+def _abstand_zur_strecke(p, a, b) -> float:
+    ab = b - a
+    lang = ab.length_squared()
+    if lang < 1.0:
+        return p.distance_to(a)
+    t = max(0.0, min(1.0, (p - a).dot(ab) / lang))
+    return p.distance_to(a + ab * t)
+
+
+def staerke(w) -> float:
+    """Wie viel einer im Gefecht zaehlt (s bei Days Gone): Leben, Waffe,
+    niedergehalten. Ein Zombie zaehlt nach seinem Leben, weniger als ein
+    Mensch mit Gewehr."""
+    m = K.MORAL
+    if not getattr(w, "lebt", False) or getattr(w, "am_boden", False):
+        return 0.0
+    if not hasattr(w, "nummer"):
+        return min(3.0, 0.25 + getattr(w, "max_leben", 60.0) / 260.0)
+    anteil = max(0.15, w.leben / max(1.0, w.max_leben))
+    s = anteil * m["staerke_waffe"].get(getattr(w, "waffe_name", ""), 1.0)
+    hirn = getattr(w, "hirn", None)
+    if hirn is not None and getattr(hirn, "unterdrueckt", 0.0) > 0.0:
+        s *= m["staerke_unterdrueckt"]
+    return s
+
+
+def faktor_von(w) -> float:
+    """Wie zuversichtlich einer wirkt: ein GOAP-Bot nach seinem
+    Innenleben, jeder andere neutral."""
+    innen = getattr(getattr(w, "hirn", None), "innen", None)
+    return innen.faktor if innen is not None else 1.0
 
 
 class GoapHirn(BotHirn):
@@ -49,6 +107,23 @@ class GoapHirn(BotHirn):
         super().neues_leben()
         self.gehirn_neu()
         self._deckung_platz = None    # wo er in Deckung gegangen ist
+        self.innen = Innenleben(self.merkmale or {}, self.rnd)
+        self.lagebild = []            # gehoerte Orte: [Ort, Ebene, Zeit, Art]
+        self._kameraden_da = {}       # Nummer -> Kaempfer, der eben noch stand
+        self._feinde_da = {}          # Wesen -> zuletzt gesehen, solange es lebt
+        self._abschuesse = []         # (Zeit, Staerke) der eigenen Seite in der Naehe
+        self._verluste = []
+        self._zuversicht_rest = 0.0
+        self._umschau_rest = self.rnd.uniform(*K.MORAL["umschau"])
+        self._umschau_bis = 0.0
+        self._umschau_punkt = None
+        self._bedenk_rest = 0.0
+        self._vorige = None           # die Aktion vor dem Wechsel (Bedenkzeit)
+        self._rang_vorher = 0.0
+        self._feuerte = False
+        self._flucht = None           # (Ort, bis wann)
+        self._panik_vorher = False
+        self._abwarten = 0.0          # so lange wartet er schon in der Deckung
 
     def gehirn_neu(self) -> None:
         """Ein frisches Gehirn aus den Daten - zu jedem Leben, und im
@@ -60,12 +135,37 @@ class GoapHirn(BotHirn):
             # bleibt es auch nach dem Wiedereinstieg.
             self.merkmale = sp.merkmale_wuerfeln(self.rnd) if sp else {}
         erzwungen = self.gehirn.erzwungen if self.gehirn is not None else None
-        self.gehirn = d.gehirn(self.spezies, self.merkmale) if sp else None
+        self.gehirn = d.gehirn(self.spezies, self.merkmale, self.rnd) if sp else None
         if self.gehirn is not None:
             self.gehirn.erzwungen = erzwungen
         self.goap_rest = 0.0
         self._aktion_lief = None
         self._druck_lief = False
+
+    # ── Ereignisse fuer das Innenleben ────────────────────────────
+    def kugel_vorbei(self) -> None:
+        self.innen.ereignis("vorbei")
+
+    def _getroffen(self) -> None:
+        super()._getroffen()
+        k = self.k
+        self.innen.ereignis("getroffen")
+        if k.leben < K.BOTS["deckung_leben"]:
+            self.innen.ereignis("angeschlagen")
+        von = getattr(k, "zuletzt_von", None)
+        von = getattr(von, "von", von)
+        if von is not None and hasattr(von, "pos"):
+            richtung = math.degrees(math.atan2(von.pos.y - k.pos.y, von.pos.x - k.pos.x))
+            ab = (richtung - self.blick + 180.0) % 360.0 - 180.0
+            if abs(ab) > 70.0:
+                self.innen.ereignis("seite")
+
+    def fehler_faktor(self) -> float:
+        """Unter Stress zittert die Hand, in Panik schiesst er fast blind."""
+        f = 1.0 + 0.8 * self.innen.stress
+        if self.innen.panik:
+            f *= 2.5
+        return f
 
     # ── Sinne ─────────────────────────────────────────────────────
     def _gefahr(self):
@@ -83,6 +183,171 @@ class GoapHirn(BotHirn):
         gefahr = self._gefahr()
         return gefahr is None or self.g.welt.deckung(gefahr[0], self.k.pos, self.k.ebene) != ""
 
+    def feind_orte(self, ohne=None) -> list:
+        """Alle Orte auf seiner Ebene, an denen er Gegner weiss: gesehen
+        (frisch) und gehoert. `ohne`: diesen Ort nicht."""
+        k = self.k
+        jetzt = self.g.welt.zeit
+        raus = []
+        for w, (ort, ebene, zeit) in self.gesehen.items():
+            if w.lebt and ebene == k.ebene and jetzt - zeit <= K.BOTS["gedaechtnis"]:
+                raus.append(pygame.Vector2(w.pos if jetzt - zeit < 0.2 else ort))
+        for ort, ebene, zeit, _art in self.lagebild:
+            if ebene == k.ebene and not any(ort.distance_to(o) < 60.0 for o in raus):
+                raus.append(pygame.Vector2(ort))
+        if ohne is not None:
+            raus = [o for o in raus if o.distance_to(ohne) > 30.0]
+        return raus
+
+    def _lagebild_auffrischen(self) -> None:
+        """Was er hoert: Schuesse und Knalle der anderen Seite, und die
+        Schritte eines Gegners in der Naehe - durch eine Wand nur naeher.
+        Alles nur ungefaehr, wie ein Mensch es hoert."""
+        k = self.k
+        b = K.BOTS
+        g = self.g
+        jetzt = g.welt.zeit
+        neu = []
+        for (ort, ebene, zeit, fraktion, weite) in getattr(g, "_bot_geraeusche", ()):
+            if jetzt - zeit > 0.25 or fraktion == k.fraktion:
+                continue
+            if k.pos.distance_to(ort) <= weite:
+                neu.append((ort, ebene, "schuss", 55.0))
+        if self.geblendet <= 0.0:
+            for w in self._kandidaten():
+                if w in self.gesehen and jetzt - self.gesehen[w][2] < 0.2:
+                    continue
+                tempo = getattr(w, "tempo", None)
+                v = tempo.length() if tempo is not None else 0.0
+                if v >= b["schritte_tempo"][0]:
+                    weite = b["schritte"][0]
+                elif v >= b["schritte_tempo"][1]:
+                    weite = b["schritte"][1]
+                else:
+                    continue
+                if w.ebene != k.ebene:
+                    continue
+                if not g.welt.sicht_frei(k.pos, w.pos, k.ebene):
+                    weite *= b["schritte_wand"]
+                if k.pos.distance_to(w.pos) <= weite:
+                    neu.append((w.pos, w.ebene, "schritte", 25.0))
+        for ort, ebene, art, unscharf in neu:
+            p = pygame.Vector2(ort) + pygame.Vector2(self.rnd.uniform(-unscharf, unscharf),
+                                                     self.rnd.uniform(-unscharf, unscharf))
+            for eintrag in self.lagebild:
+                if eintrag[1] == ebene and eintrag[0].distance_to(p) < 70.0:
+                    eintrag[0] = (eintrag[0] + p) / 2
+                    eintrag[2] = jetzt
+                    eintrag[3] = art
+                    break
+            else:
+                self.lagebild.append([p, int(ebene), jetzt, art])
+                if not self._erklaert(p, ebene):
+                    self.innen.ereignis("gehoert")
+                    self._umschau_rest = 0.0       # gleich hinsehen
+        self.lagebild = [e for e in self.lagebild if jetzt - e[2] <= b["lagebild"]][-12:]
+
+    def _erklaert(self, ort, ebene) -> bool:
+        """Sieht er dort schon einen Gegner? Dann ist das Geraeusch nichts Neues."""
+        jetzt = self.g.welt.zeit
+        for w, (o, e, zeit) in self.gesehen.items():
+            if e == ebene and jetzt - zeit < 0.5 and w.pos.distance_to(ort) < 90.0:
+                return True
+        return False
+
+    def unerklaert(self):
+        """Das frischeste Geraeusch, zu dem er keinen Gegner sieht - oder None."""
+        jetzt = self.g.welt.zeit
+        for ort, ebene, zeit, _art in reversed(self.lagebild):
+            if ebene == self.k.ebene and jetzt - zeit < 3.0 and not self._erklaert(ort, ebene):
+                return ort
+        return None
+
+    def granate_nah(self):
+        """Eine scharfe Granate (oder ein Molotow im Flug), die er sieht und
+        deren Wirkungskreis ihn erreicht: (Ort, Radius) - oder None."""
+        k = self.k
+        welt = self.g.welt
+        b = K.BOTS
+        if self.geblendet > 0.0:
+            return None
+        beste = None
+        for w in welt.wesen:
+            if not isinstance(w, Granate) or not w.lebt or w.ebene != k.ebene:
+                continue
+            d = w.daten
+            if d.get("rauch") or d.get("blend"):
+                continue
+            r = d.get("radius", 0.0) or (40.0 if d.get("feuer") else 0.0)
+            if r <= 0.0:
+                continue
+            ab = k.pos.distance_to(w.pos)
+            if ab > b["granate_sieht"] or ab > r + b["granate_abstand"]:
+                continue
+            if not welt.sicht_frei(k.pos, w.pos, k.ebene):
+                continue
+            if beste is None or ab < beste[2]:
+                beste = (pygame.Vector2(w.pos), r, ab)
+        return None if beste is None else beste[:2]
+
+    def _zuversicht_rechnen(self) -> None:
+        """Days Gone: eigene Seite gegen andere Seite, was er weiss."""
+        k = self.k
+        m = K.MORAL
+        jetzt = self.g.welt.zeit
+        weite = m["zuversicht_weite"]
+        freunde = [(staerke(x), faktor_von(x)) for x in self.kameraden()
+                   if x.ebene == k.ebene and x.pos.distance_to(k.pos) <= weite]
+        feinde = []
+        for w, (ort, ebene, zeit) in self.gesehen.items():
+            if not w.lebt or jetzt - zeit > K.BOTS["gedaechtnis"]:
+                continue
+            c = faktor_von(w)
+            # Wer auf ihn zustuermt, macht Eindruck (Days Gone: wer den
+            # Spieler angreifen laesst, belohnt ihn fuer Mut).
+            tempo = getattr(w, "tempo", None)
+            if tempo is not None and tempo.length() > 60.0:
+                hin = k.pos - w.pos
+                if hin.length_squared() > 1.0 and tempo.normalize().dot(hin.normalize()) > 0.6:
+                    c *= 1.3
+            feinde.append((staerke(w), c))
+        for ort, ebene, zeit, _art in self.lagebild:
+            if ebene == k.ebene and not self._erklaert(ort, ebene):
+                feinde.append((0.6, 1.0))     # gehoert, nicht gesehen: halb so schwer
+        abbau = m["verlust_abbau"]
+        getoetet = sum(s * math.exp(-(jetzt - t) / abbau) for t, s in self._abschuesse)
+        verloren = sum(s * math.exp(-(jetzt - t) / abbau) for t, s in self._verluste)
+        self.innen.zuversicht_setzen(zuversicht_rechnen(staerke(k), freunde, feinde,
+                                                        getoetet, verloren))
+
+    def _verluste_zaehlen(self) -> None:
+        """Wer von der eigenen Seite eben fiel, und wen sie erwischt hat."""
+        k = self.k
+        jetzt = self.g.welt.zeit
+        weite = K.MORAL["zuversicht_weite"]
+        da = {}
+        for x in self.kameraden():
+            if not getattr(x, "am_boden", False):
+                da[x.nummer] = x
+        for nummer, x in self._kameraden_da.items():
+            if nummer in da:
+                continue
+            if x.ebene == k.ebene and x.pos.distance_to(k.pos) <= weite * 1.4:
+                self._verluste.append((jetzt, max(0.5, staerke(x) or 1.0)))
+                self.innen.ereignis("kamerad")
+        self._kameraden_da = da
+        for w in list(self._feinde_da):
+            if not w.lebt or getattr(w, "am_boden", False):
+                ort = self._feinde_da.pop(w)
+                if ort.distance_to(k.pos) <= weite * 1.4:
+                    self._abschuesse.append((jetzt, 1.0))
+                    self.innen.ereignis("abschuss")
+        for w, (ort, ebene, zeit) in self.gesehen.items():
+            if w.lebt and jetzt - zeit < 1.0:
+                self._feinde_da[w] = pygame.Vector2(ort)
+        self._abschuesse = self._abschuesse[-10:]
+        self._verluste = self._verluste[-10:]
+
     def fuehlen(self):
         """(Fakten, Zahlen) - was er ueber seine Lage weiss. Welche es gibt,
         steht oben in wesen/bots.txt."""
@@ -98,17 +363,23 @@ class GoapHirn(BotHirn):
         magazin_leer = k.nachlade_rest > 0 or (d.get("art") == "schuss"
                                                and k.magazin.get(k.waffe_name, 0) <= 0)
         gegen = gefahr[2] if gefahr is not None else None
+        innen = self.innen
+        waffe = k.waffe_name
+        ziel_leben = (z.leben / max(1.0, getattr(z, "max_leben", 100.0))) if sichtbar else 1.0
         fakten = dict(
             feind_sichtbar=sichtbar,
             linie_frei=sichtbar and self.linie != "hindernis",
             feind_bekannt=gefahr is not None,
+            feind_gehoert=self.unerklaert() is not None,
             munition_da=bool(self._waffen_mit_munition()),
             magazin_leer=magazin_leer,
-            granate_da=self._wurf_platz() >= 0,
+            granate_da=self._wurf_platz() >= 0
+            and K.WAFFEN[k.waffen[self._wurf_platz()]].get("radius", 0.0) > 0.0,
             angeschlagen=k.leben < K.BOTS["deckung_leben"],
             getroffen=self.getroffen_rest > 0.0,
             unterdrueckt=self.unterdrueckt > 0.0,
             in_deckung=self._in_deckung(),
+            beruhigt=innen.stress < 0.3,
             kamerad_liegt=self._wem_helfen() is not None,
             kamerad_braucht_schutz=any(braucht_schutz(x) for x in self.kameraden()),
             kamerad_flankiert=gegen is not None and not rolle_frei(g, gegen, "flanke", k),
@@ -117,28 +388,92 @@ class GoapHirn(BotHirn):
             zone_aktiv=zone is not None,
             im_kreis=im_kreis,
             sturm_plan=self.sturm is not None,
+            granate_nah=self.granate_nah() is not None,
+            panik=innen.panik,
+            eingeschossen=innen.eingeschossen >= K.MORAL["eingeschossen_ab"],
+            waffe_mg=waffe == "lmg",
+            waffe_auto=waffe in K.BOTS["feuer"],
+            feinde_gruppe=sichtbar and len(self.gruppe_um(z)) >= 2,
+            ziel_fast_tot=sichtbar and ziel_leben < 0.3,
         )
         werte = dict(leben=k.leben / max(1.0, k.max_leben),
-                     abstand=k.pos.distance_to(gefahr[0]) if gefahr else 9999.0)
+                     abstand=k.pos.distance_to(gefahr[0]) if gefahr else 9999.0,
+                     stress=round(innen.stress, 3),
+                     zuversicht=innen.stufe / 4.0,
+                     unschaerfe=innen.unschaerfe())
         return fakten, werte
 
     # ── Entscheiden ───────────────────────────────────────────────
     def _entscheiden(self, dt: float, ein: dict):
         if self.gehirn is None:
             return super()._entscheiden(dt, ein)
+        innen = self.innen
+        innen.schritt(dt, self._in_deckung(), self._feuerte)
+        self._zuversicht_rest -= dt
         self.goap_rest -= dt
         if self.goap_rest <= 0.0 or self.gehirn.aktion is None:
             self.goap_rest = K.GOAP["takt"]
+            self._lagebild_auffrischen()
+            self._verluste_zaehlen()
+            if self._zuversicht_rest <= 0.0:
+                self._zuversicht_rest = 0.5
+                self._zuversicht_rechnen()
+            if self.granate_nah() is not None:
+                innen.ereignis("granate")
             fakten, werte = self.fuehlen()
+            vorher = self._aktion_lief
             self.gehirn.denken(self.g.welt.zeit, fakten, werte)
+            rang = self.gehirn.raenge.get(self.gehirn.ziel.name, 0.0) if self.gehirn.ziel else 0.0
+            if (self.gehirn.gewechselt and vorher is not None and rang <= self._rang_vorher
+                    and rang < 2):
+                # Bedenkzeit: kurz macht er weiter, was er tat - ein Mensch
+                # schaltet nicht im selben Augenblick um.
+                lo, hi = K.MORAL["bedenkzeit"]
+                drill = float(self.merkmale.get("drill", 0.0)) if self.merkmale else 0.0
+                self._bedenk_rest = (self.rnd.uniform(lo, hi) * (1.0 + innen.stress)
+                                     * (1.0 - 0.5 * drill))
+                self._vorige = vorher
+            elif rang >= 2:
+                self._bedenk_rest = 0.0
+            self._rang_vorher = rang
+        if innen.panik and not self._panik_vorher:
+            self.funken("panik", wichtig=True)
+        self._panik_vorher = innen.panik
+        # Schreck: einen Augenblick tut er gar nichts. Nur eine Granate
+        # vor den Fuessen und die Panik sind staerker.
+        if innen.erschrocken and not innen.panik and not self.gehirn.fakten.get("granate_nah"):
+            self._feuerte = False
+            gefahr = self._gefahr()
+            return pygame.Vector2(0, 0), (gefahr[0] if gefahr else None), False, False
+        will, punkt, feuern, zielt = self._handeln(dt, ein)
+        will, punkt, feuern = self._umschauen(dt, will, punkt, feuern)
+        self._feuerte = bool(feuern)
+        return will, punkt, feuern, zielt
+
+    def _handeln(self, dt: float, ein: dict):
         a = self.gehirn.aktion
+        if self._bedenk_rest > 0.0:
+            self._bedenk_rest -= dt
+            alt = self._vorige
+            tun = TUN.get(alt.tut) if alt is not None else None
+            if tun is not None:
+                will, punkt, feuern, zielt, status = tun(self, dt, ein)
+                if status == "laeuft":
+                    return will, punkt, feuern, zielt
+            self._vorige = None
+            gefahr = self._gefahr()
+            return pygame.Vector2(0, 0), (gefahr[0] if gefahr else None), False, False
         if a is None:
             # Nichts zu tun: herumgehen und suchen, wie die klassische KI.
             will, punkt = self._unterwegs(dt, ein)
+            ort = self.unerklaert()
+            if ort is not None:
+                punkt = pygame.Vector2(ort)
             return will, punkt, False, False
         if a is not self._aktion_lief:
             self._aktion_lief = a
             self._druck_lief = False
+            self._abwarten = 0.0
             if a.funk:
                 self.funken(a.funk)
             if a.tut == "deckung" and self.k.leben < K.BOTS["deckung_leben"]:
@@ -154,6 +489,58 @@ class GoapHirn(BotHirn):
             self.goap_rest = 0.0            # gleich neu denken
         return will, punkt, feuern, zielt
 
+    def _umschauen(self, dt: float, will, punkt, feuern):
+        """Ab und zu weg vom Ziel schauen - zu dem, was er hoert, oder zur
+        Seite. Nie mitten im Feuerstoss, nie in Panik; unter Stress seltener
+        (Tunnelblick). Waehrend er wegschaut, schiesst er nicht, und danach
+        muss er sich wieder einzielen."""
+        m = K.MORAL
+        jetzt = self.g.welt.zeit
+        if jetzt < self._umschau_bis and self._umschau_punkt is not None:
+            return will, pygame.Vector2(self._umschau_punkt), False
+        self._umschau_rest -= dt
+        if (self._umschau_rest > 0.0 or feuern or self.stoss_rest > 0.0 or self.innen.panik
+                or self.wurf_phase > 0.0):
+            return will, punkt, feuern
+        self._umschau_rest = self.rnd.uniform(*m["umschau"]) * (1.0 + 2.0 * self.innen.stress)
+        k = self.k
+        ort = self.unerklaert()
+        if ort is None:
+            gefahr = self._gefahr()
+            if gefahr is None:
+                return will, punkt, feuern
+            # Zur Seite: dorthin, wo keiner ist, von dem er weiss.
+            hin = gefahr[0] - k.pos
+            if hin.length_squared() < 1.0:
+                return will, punkt, feuern
+            ort = k.pos + hin.normalize().rotate(self.rnd.choice((-1, 1))
+                                                 * self.rnd.uniform(80.0, 150.0)) * 120.0
+        self._umschau_punkt = pygame.Vector2(ort)
+        self._umschau_bis = jetzt + self.rnd.uniform(*m["umschau_dauer"])
+        self.fehler_zeit *= 0.5
+        return will, pygame.Vector2(ort), False
+
+    # ── Deckung mit Ueberblick ────────────────────────────────────
+    def _deckung_wert(self, p, gefahr, zone):
+        """Wie bei der klassischen KI, dazu jeder andere Gegner, den er
+        kennt: keine Deckung mitten zwischen ihnen, keine, die zu einem
+        anderen offen ist, und kein Weg dorthin an ihnen vorbei. In Panik
+        sieht er nur den einen, vor dem er wegrennt (Tunnelblick)."""
+        wert = super()._deckung_wert(p, gefahr, zone)
+        if wert is None or self.innen.panik:
+            return wert
+        k = self.k
+        welt = self.g.welt
+        for o in self.feind_orte(ohne=gefahr):
+            d = p.distance_to(o)
+            if d < 110.0 and d < k.pos.distance_to(o):
+                return None                   # mitten hinein: nein
+            if _abstand_zur_strecke(o, k.pos, p) < 70.0:
+                wert += 260.0                 # der Weg fuehrt an ihm vorbei
+            if welt.deckung(o, p, k.ebene) == "":
+                wert += 90.0                  # gegen ihn deckt sie nicht
+        return wert
+
     # ── Was die Aktionen tun ──────────────────────────────────────
     # Jede gibt (Laufrichtung, Zielpunkt, feuern, zielen, Zustand) zurueck;
     # Zustand ist "laeuft", "fertig" oder "gescheitert".
@@ -162,7 +549,41 @@ class GoapHirn(BotHirn):
         z = self.ziel
         if z is None or not self.ziel_ok(z):
             return _nichts("fertig")
-        return self._kaempfen(dt, ein) + ("laeuft",)
+        return self._kaempfen(dt, ein, mit_deckung=False) + ("laeuft",)
+
+    def tun_dauerfeuer(self, dt, ein):
+        """Auf eine Gruppe halten: stehen bleiben, lange Stoesse, ueber die
+        ganze Gruppe schwenken (das Schwenken macht _kaempfen). Ohne Gruppe
+        ist es vorbei."""
+        z = self.ziel
+        if z is None or not self.ziel_ok(z):
+            return _nichts("fertig")
+        if len(self.gruppe_um(z)) < 2:
+            return _nichts("fertig")
+        will, punkt, feuern, zielt = self._kaempfen(dt, ein, mit_deckung=False)
+        if self.wurf_phase <= 0.0:
+            will = pygame.Vector2(0, 0)
+        return will, punkt, feuern, zielt, "laeuft"
+
+    def tun_werfen(self, dt, ein):
+        """Die Granate in eine Gruppe (in ihre Mitte, bots._werfen)."""
+        z = self.ziel
+        if self.wurf_phase <= 0.0:
+            if z is None or not self.ziel_ok(z):
+                return _nichts("gescheitert")
+            self.wurf_platz = self._wurf_platz()
+            nah, weit = K.BOTS["wurf_weite"]
+            if self.wurf_platz < 0 or not (nah <= self.k.pos.distance_to(z.pos) <= weit * 1.1):
+                return _nichts("gescheitert")
+            self.wurf_phase = 0.45
+            self.wurf_rest = self.rnd.uniform(*K.BOTS["wurf_pause"])
+            self.funken("granate", wichtig=True)
+        ziel = z if (z is not None and z.lebt) else None
+        if ziel is None:
+            self.wurf_phase = 0.0
+            return _nichts("gescheitert")
+        will, punkt, werfen, zielt = self._werfen(dt, ein, ziel)
+        return will, punkt, werfen, zielt, ("fertig" if werfen else "laeuft")
 
     def tun_nahkampf(self, dt, ein):
         z = self.ziel
@@ -228,6 +649,27 @@ class GoapHirn(BotHirn):
             return _nichts("fertig" if self._in_deckung() else "gescheitert")
         return d.normalize(), pygame.Vector2(gefahr[0]), False, False, "laeuft"
 
+    def tun_abwarten(self, dt, ein):
+        """In der Deckung bleiben, bis er sich gefangen hat - nachladen,
+        wenn es sich lohnt, und dorthin schauen, wo der Gegner war. Laenger
+        als `abwarten` haelt es keiner aus."""
+        k = self.k
+        if not self._in_deckung():
+            return _nichts("gescheitert")
+        if self.innen.stress < 0.3:
+            return _nichts("fertig")
+        self._abwarten += dt
+        if self._abwarten > 4.0:
+            self._abwarten = 0.0
+            return _nichts("fertig")
+        d = k.waffe_daten
+        if (d.get("art") == "schuss" and k.nachlade_rest <= 0
+                and k.magazin.get(k.waffe_name, 0) < d.get("magazin", 0) * 0.5
+                and (not k.knapp or k.vorrat.get(k.waffe_name, 0) > 0)):
+            ein["knoepfe"].append("nachladen")
+        gefahr = self._gefahr()
+        return pygame.Vector2(0, 0), (gefahr[0] if gefahr else None), False, False, "laeuft"
+
     def tun_nachladen(self, dt, ein):
         k = self.k
         name = k.waffe_name
@@ -250,6 +692,70 @@ class GoapHirn(BotHirn):
         ein["knoepfe"].append("nachladen")
         return _nichts("laeuft")
 
+    def tun_ausweichen(self, dt, ein):
+        """Weg von der Granate - geradewegs, so schnell es geht. Wohin, ist
+        egal, solange es weg ist; nur nicht in eine Wand."""
+        k = self.k
+        gr = self.granate_nah()
+        if gr is None:
+            return _nichts("fertig")
+        ort, _r = gr
+        weg = k.pos - ort
+        if weg.length_squared() < 1.0:
+            weg = pygame.Vector2(1, 0).rotate(self.rnd.uniform(0, 360))
+        self.funken("granate_weg", wichtig=True)
+        self.stoss_rest = 0.0
+        return weg.normalize(), None, False, False, "laeuft"
+
+    def tun_fliehen(self, dt, ein):
+        """Panik: weg vom Gegner, zu den eigenen Leuten, wenn welche da
+        sind, die weiter weg vom Gegner stehen. Wer ihm zu nahe kommt,
+        bekommt einen Stoss blind hinterher. Auftraege, Feuerschutz, der
+        Kreis - alles egal, bis die Panik vorbei ist."""
+        k = self.k
+        if not self.innen.panik:
+            self._flucht = None
+            return _nichts("fertig")
+        jetzt = self.g.welt.zeit
+        orte = self.feind_orte()
+        if self._flucht is None or jetzt > self._flucht[1]:
+            if orte:
+                mitte = sum(orte, pygame.Vector2(0, 0)) / len(orte)
+                weg = k.pos - mitte
+                if weg.length_squared() < 1.0:
+                    weg = pygame.Vector2(1, 0)
+                ziel = k.pos + weg.normalize() * 220.0
+                for x in self.kameraden():
+                    if x.ebene == k.ebene and x.pos.distance_to(mitte) > k.pos.distance_to(mitte):
+                        ziel = (ziel + x.pos) / 2
+                        break
+            else:
+                ziel = k.pos + pygame.Vector2(200, 0).rotate(self.rnd.uniform(0, 360))
+            self._flucht = (ziel, jetzt + 1.0)
+        will = self._weg_richtung(self._flucht[0], k.ebene, ein)
+        z = self.ziel
+        feuern = False
+        punkt = None
+        if z is not None and self.ziel_ok(z) and k.pos.distance_to(z.pos) < 140.0:
+            punkt = pygame.Vector2(z.pos)
+            feuern = self.rnd.random() < 0.5 and k.magazin.get(k.waffe_name, 0) > 0
+        return will, punkt, feuern, False, "laeuft"
+
+    def tun_nachsetzen(self, dt, ein):
+        """Uebermut: dorthin, wo er den Gegner zuletzt sah - geradewegs,
+        ohne Deckung, ohne auf die anderen zu warten."""
+        k = self.k
+        z = self.ziel
+        if z is not None and self.ziel_ok(z):
+            return _nichts("fertig")
+        gefahr = self.letzter_feind()
+        if gefahr is None:
+            return _nichts("gescheitert")
+        ort, ebene, _w = gefahr
+        if k.pos.distance_to(ort) < 24.0:
+            return _nichts("fertig")
+        return self._weg_richtung(ort, ebene, ein), pygame.Vector2(ort), False, False, "laeuft"
+
     def tun_zum_kreis(self, dt, ein):
         k = self.k
         zone = self._zone()
@@ -261,7 +767,7 @@ class GoapHirn(BotHirn):
         if z is not None and self.ziel_ok(z):
             # Kaempfen auf dem Weg: die Kampfbewegung zieht ihn ohnehin
             # zum Kreis (bots._kampfbewegung).
-            return self._kaempfen(dt, ein) + ("laeuft",)
+            return self._kaempfen(dt, ein, mit_deckung=False) + ("laeuft",)
         return self._weg_richtung(zone[0], zone[1], ein), None, False, False, "laeuft"
 
     def tun_helfen(self, dt, ein):
@@ -288,7 +794,11 @@ class GoapHirn(BotHirn):
             # suchen, wieder fertig - und er stand dabei still im Feuer
             # (gesehen in der Aufnahme, 0.34.31). Die Kampfbewegung geht
             # zur Seite, bis die Bahn frei ist.
-            return self._kaempfen(dt, ein) + ("laeuft",)
+            return self._kaempfen(dt, ein, mit_deckung=False) + ("laeuft",)
+        # Gehoert, aber nicht gesehen: dorthin, wo es war.
+        ort = self.unerklaert()
+        if ort is not None and self.verdacht is None:
+            self.verdacht = (pygame.Vector2(ort), self.k.ebene, self.g.welt.zeit + 3.0)
         will, punkt = self._unterwegs(dt, ein)
         return will, punkt, False, False, "laeuft"
 

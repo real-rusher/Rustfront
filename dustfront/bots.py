@@ -145,13 +145,13 @@ class BotHirn(Taktik):
         self.stoss_rest = 0.0         # Feuerstoss laeuft noch
         self.pause_rest = 0.0         # Feuerpause laeuft noch
         self.still = False            # bleibt er in diesem Stoss stehen?
+        self._pause_naechste = 0.3    # so lange die Pause nach diesem Stoss
         self.seite = self.rnd.choice((-1.0, 1.0))
         self.seite_rest = 0.0
         self.denk_rest = self.rnd.uniform(0.0, K.BOTS["takt"])
         self.wurf_rest = self.rnd.uniform(*K.BOTS["wurf_pause"]) * 0.5
         self.wurf_phase = 0.0         # > 0: zielt gerade zum Wurf
         self.wurf_platz = -1
-        self.dash_rest = 0.0
         self.waffen_rest = 0.0        # Sperre zwischen zwei Waffenwechseln
         self.wegpunkt = None          # Zwischenziel auf dem Weg
         self.weg_ziel = None          # (Ort, Ebene) des Weges
@@ -284,7 +284,7 @@ class BotHirn(Taktik):
 
     def _zeiten(self, dt: float) -> None:
         for name in ("reaktion_rest", "stoss_rest", "pause_rest", "seite_rest",
-                     "wurf_rest", "dash_rest", "waffen_rest", "weg_rest",
+                     "wurf_rest", "waffen_rest", "weg_rest",
                      "streif_rest", "ausweich_rest", "geblendet",
                      "getroffen_rest", "deckung_rest", "deckung_pause",
                      "deckung_suche"):
@@ -354,8 +354,20 @@ class BotHirn(Taktik):
             if jetzt - self.gesehen[w][2] > K.BOTS["gedaechtnis"] or not w.lebt:
                 del self.gesehen[w]
         if self.ziel is not None and self.ziel in sichtbar:
+            # Er bleibt dran - ausser ein anderer, den er sieht, hat ihn eben
+            # getroffen (seit 0.34.38). Wer von der Seite beschossen wird,
+            # dreht sich zu dem, der schiesst, statt stur auf den ersten zu
+            # halten. Mitten im Feuerstoss nicht: den bringt er zu Ende.
+            von = getattr(k, "zuletzt_von", None)
+            von = getattr(von, "von", von)
+            if (von is not None and von is not self.ziel and von in sichtbar
+                    and self.getroffen_rest > 1.6 and self.stoss_rest <= 0.0):
+                self.feuerschutz_fuer = None
+                self._neues_ziel(von, False)
+                self.linie = self.g.welt.deckung(k.pos, von.pos, k.ebene)
+                return
             self.linie = self.g.welt.deckung(k.pos, self.ziel.pos, k.ebene)
-            return                            # er bleibt dran
+            return
         alt = self.ziel
         self.ziel = None
         if sichtbar:
@@ -405,12 +417,12 @@ class BotHirn(Taktik):
         Ort - oder None."""
         k = self.k
         jetzt = self.g.welt.zeit
-        bestes, beste = None, K.BOTS["gehoer"]
-        for (ort, ebene, zeit, fraktion) in getattr(self.g, "_bot_geraeusche", ()):
+        bestes, beste = None, 1e9
+        for (ort, ebene, zeit, fraktion, weite) in getattr(self.g, "_bot_geraeusche", ()):
             if jetzt - zeit > 1.5 or fraktion == k.fraktion:
                 continue
             d = k.pos.distance_to(ort)
-            if d < beste:
+            if d < weite and d < beste:
                 bestes, beste = (ort, ebene), d
         if bestes is None:
             return None
@@ -453,10 +465,47 @@ class BotHirn(Taktik):
         if not liste:
             return None
         wunsch = K.BOTS["wunschabstand"]
+        vorzug = K.BOTS["waffe_vorzug"]
         return min(liste, key=lambda p: abs(wunsch.get(p[1], 220.0) - abstand)
+                   - vorzug.get(p[1], 0.0)
                    + (0 if self.k.magazin.get(p[1], 0) > 0 else 60))
 
-    def _kaempfen(self, dt: float, ein: dict):
+    def _stoss(self):
+        """(Stoss, Pause, still?) fuer die Waffe in der Hand - je Waffe aus
+        K.BOTS["feuer"], sonst die gewoehnlichen Werte."""
+        b = K.BOTS
+        eigen = b["feuer"].get(self.k.waffe_name)
+        if eigen is None:
+            return (self.rnd.uniform(*b["feuerstoss"]), self.rnd.uniform(*b["feuerpause"]),
+                    self.rnd.random() < b["still_beim_schiessen"])
+        stoss, pause, still = eigen
+        return (self.rnd.uniform(*stoss), self.rnd.uniform(*pause),
+                self.rnd.random() < still)
+
+    def fehler_faktor(self) -> float:
+        """x Zielfehler aus dem Zustand des Schuetzen - hier immer 1, das
+        GOAP-Hirn rechnet den Stress dazu (bot_goap.py)."""
+        return 1.0
+
+    def gruppe_um(self, z):
+        """Die Gegner, die mit `z` eine Gruppe bilden (er selbst dabei),
+        soweit er sie sieht oder eben sah - fuer Granate und Flaechenfeuer."""
+        weite = K.BOTS["flaeche_weite"]
+        jetzt = self.g.welt.zeit
+        raus = [z]
+        for w, (ort, ebene, zeit) in self.gesehen.items():
+            if w is z or not w.lebt or ebene != z.ebene or jetzt - zeit > 1.0:
+                continue
+            if getattr(w, "am_boden", False):
+                continue
+            if ort.distance_to(z.pos) <= weite:
+                raus.append(w)
+        return raus
+
+    def _kaempfen(self, dt: float, ein: dict, mit_deckung: bool = True):
+        """`mit_deckung` False (seit 0.34.38): wann er in Deckung geht,
+        entscheidet ein anderer (das GOAP-Gehirn) - nicht jede Kugel, die
+        vorbeipfeift."""
         k = self.k
         b = K.BOTS
         z = self.ziel
@@ -469,15 +518,27 @@ class BotHirn(Taktik):
                      * math.exp(-self.fehler_zeit / b["fehler_abbau"]))
         if self.unterdrueckt > 0.0:
             fehler *= b["unterdrueckt_fehler"]   # Kugeln um die Ohren
+        fehler *= self.fehler_faktor()
         self.fehler.rotate_ip(self.rnd.uniform(-40, 40) * dt * 3)
         ziel_punkt = z.pos + self.fehler * (fehler * massstab)
+        # Mehrere dicht beieinander: ungefaehr in die Richtung, hin und her
+        # ueber die Gruppe statt genau auf einen (seit 0.34.38).
+        gruppe = self.gruppe_um(z) if k.waffe_name in b["feuer"] else [z]
+        if len(gruppe) >= 2:
+            mitte = sum((pygame.Vector2(w.pos) for w in gruppe), pygame.Vector2(0, 0)) / len(gruppe)
+            breite = max(w.pos.distance_to(mitte) for w in gruppe) + 10.0
+            hin = mitte - k.pos
+            if hin.length_squared() > 1.0:
+                quer = pygame.Vector2(-hin.y, hin.x).normalize()
+                schwenk = math.sin(self.g.welt.zeit * b["flaeche_schwenk"] * math.tau)
+                ziel_punkt = mitte + quer * (schwenk * breite) + self.fehler * (fehler * 0.5)
 
         # Wurf: ab und zu, wenn es passt.
         if self.wurf_phase > 0.0:
             return self._werfen(dt, ein, z)
         waffe = self._beste_waffe(abstand)
         # Erst die Granate, dann - wenn auch die weg ist - das Brecheisen.
-        if self._wurf_moeglich(abstand, waffe is None) and sichtbar:
+        if self._wurf_moeglich(abstand, waffe is None, len(self.gruppe_um(z))) and sichtbar:
             self.wurf_phase = 0.45
             self.wurf_rest = self.rnd.uniform(*b["wurf_pause"])
             self.funken("granate", wichtig=True)
@@ -488,12 +549,16 @@ class BotHirn(Taktik):
         if nr != k.waffe and self.waffen_rest <= 0.0 and k.nachlade_rest <= 0:
             ein["waffe"] = nr
             self.waffen_rest = 1.2
-        if k.magazin.get(k.waffe_name, 0) <= 0 and k.nachlade_rest <= 0:
+        # Nur eine Schusswaffe laedt man nach. Mit der eben geworfenen
+        # Granate noch in der Hand hiess das sonst: 3,2 Sekunden Granate
+        # nachladen, statt die Waffe zu nehmen (gefunden 0.34.38).
+        if (k.magazin.get(k.waffe_name, 0) <= 0 and k.nachlade_rest <= 0
+                and nr == k.waffe and K.WAFFEN[k.waffe_name].get("art") == "schuss"):
             ein["knoepfe"].append("nachladen")
 
         # Bewegen: Abstand halten, seitlich ausweichen - oder in Deckung.
         will = self._kampfbewegung(abstand, z, ein)
-        versteckt = self._deckung(z, ein)
+        versteckt = self._deckung(z, ein) if mit_deckung else None
         taktik = None
         druck = False
         if versteckt is not None:
@@ -536,14 +601,26 @@ class BotHirn(Taktik):
         if name == "scharf" and sichtbar and abstand > 90:
             zielt = True
             bereit = bereit and k.fokus >= 0.8
+        if len(gruppe) >= 2 and not druck:
+            # Flaechenfeuer: das Fadenkreuz soll ueber der Gruppe liegen,
+            # nicht genau auf einem.
+            erlaubt = max(erlaubt, math.degrees(math.atan2(K.BOTS["flaeche_weite"],
+                                                           max(1.0, abstand))))
+        if self.stoss_rest > 0.0 and k.waffe_name in b["feuer"]:
+            # Laeuft der Stoss schon, haelt er drauf und fuehrt die Garbe
+            # nach, statt bei jedem Wackeln loszulassen - so schiesst man
+            # ein MG (seit 0.34.38), das sich ja nur langsam drehen laesst.
+            erlaubt *= 3.0
         if bereit and winkel_fehler <= erlaubt:
             if self.stoss_rest <= 0.0 and self.pause_rest <= 0.0:
-                self.stoss_rest = self.rnd.uniform(*b["feuerstoss"])
-                self.still = self.rnd.random() < b["still_beim_schiessen"]
+                stoss, self._pause_naechste, self.still = self._stoss()
+                if len(gruppe) >= 2:
+                    stoss *= b["dauerfeuer"]
+                self.stoss_rest = stoss
             if self.stoss_rest > 0.0:
                 feuern = True
                 if self.stoss_rest <= dt:
-                    self.pause_rest = self.rnd.uniform(*b["feuerpause"])
+                    self.pause_rest = self._pause_naechste
         if feuern and self.still and versteckt is None:
             will = pygame.Vector2(0, 0)
         return will, ziel_punkt, feuern, zielt
@@ -645,15 +722,23 @@ class BotHirn(Taktik):
                     continue
                 if not welt.wege.gerade_frei(k.ebene, k.pos, p, k.radius + 1):
                     continue
-                wert = p.distance_to(k.pos) - 0.3 * p.distance_to(gefahr)
-                if zone is not None and k.ebene == zone[1] \
-                        and p.distance_to(zone[0]) > K.ZONE["radius"]:
-                    wert += 200.0             # lieber im Kreis bleiben
-                if wert < beste:
+                wert = self._deckung_wert(p, gefahr, zone)
+                if wert is not None and wert < beste:
                     bestes, beste = p, wert
             if bestes is not None:
                 return bestes
         return None
+
+    def _deckung_wert(self, p, gefahr, zone):
+        """Wie gut diese Deckung ist (kleiner ist besser), oder None, wenn
+        sie nicht in Frage kommt. Das GOAP-Hirn rechnet hier alle Gegner
+        dazu, die es kennt (bot_goap.py)."""
+        k = self.k
+        wert = p.distance_to(k.pos) - 0.3 * p.distance_to(gefahr)
+        if zone is not None and k.ebene == zone[1] \
+                and p.distance_to(zone[0]) > K.ZONE["radius"]:
+            wert += 200.0             # lieber im Kreis bleiben
+        return wert
 
     def _nahkampf(self, ein: dict, z, abstand: float):
         """Keine Munition mehr: mit dem Brecheisen hin und zuschlagen."""
@@ -665,9 +750,8 @@ class BotHirn(Taktik):
             if self.reaktion_rest <= 0.0:
                 ein["knoepfe"].append("nahkampf")
             will = will * 0.3
-        elif 70.0 < abstand < 160.0 and self.dash_rest <= 0.0 and self.rnd.random() < 0.02:
-            ein["knoepfe"].append("dash")
-            self.dash_rest = b["dash_pause"]
+        # Kein Dash mehr (seit 0.34.38, gemeldet: "Dashes sollen sie nicht
+        # haben") - auch nicht auf dem Weg zum Schlag.
         return will, pygame.Vector2(z.pos), False, False
 
     def _wurf_platz(self) -> int:
@@ -680,9 +764,11 @@ class BotHirn(Taktik):
                 return i
         return -1
 
-    def _wurf_moeglich(self, abstand: float, leer: bool = False) -> bool:
+    def _wurf_moeglich(self, abstand: float, leer: bool = False, gruppe: int = 1) -> bool:
         """`leer`: keine Munition mehr - dann wirft er, was er noch hat,
-        ohne die Pause zwischen zwei Wuerfen abzuwarten."""
+        ohne die Pause zwischen zwei Wuerfen abzuwarten. `gruppe`: so viele
+        Gegner stehen dort beieinander - seine eine Granate hebt er sich
+        fuer so etwas auf (seit 0.34.38)."""
         if (self.wurf_rest > 0.0 and not leer) or self.reaktion_rest > 0.0:
             return False
         nah, weit = K.BOTS["wurf_weite"]
@@ -695,7 +781,9 @@ class BotHirn(Taktik):
         if name == "rauch":
             # Rauch nur, wenn es eng wird: als Deckung zum Rueckzug.
             return self.k.leben < 45.0 or leer
-        return leer or self.rnd.random() < 0.5
+        if gruppe >= 2:
+            return True
+        return leer or self.rnd.random() < 0.3
 
     def _werfen(self, dt: float, ein: dict, z):
         """Wurfwaffe nehmen, kurz zielen, werfen, zurueck zur Waffe."""
@@ -708,6 +796,10 @@ class BotHirn(Taktik):
         if k.waffe != nr:
             ein["waffe"] = nr
         ziel = pygame.Vector2(z.pos)
+        gruppe = self.gruppe_um(z) if hasattr(z, "lebt") else [z]
+        if len(gruppe) >= 2:
+            # In die Mitte der Gruppe - so trifft sie die meisten.
+            ziel = sum((pygame.Vector2(w.pos) for w in gruppe), pygame.Vector2(0, 0)) / len(gruppe)
         if k.waffen[nr] == "rauch":
             ziel = k.pos + (z.pos - k.pos) * 0.4
         werfen = self.wurf_phase <= 0.0 and k.waffe == nr
@@ -1104,12 +1196,14 @@ class BotTeil:
                 continue
             self._anwenden(k, hirn.eingabe(dt))
 
-    def _bot_hoert(self, pos, ebene: int, quelle) -> None:
-        """Ein Schuss oder Knall - fuer die Ohren der Bots."""
+    def _bot_hoert(self, pos, ebene: int, quelle, weite: float | None = None) -> None:
+        """Ein Schuss oder Knall - fuer die Ohren der Bots. `weite`: so weit
+        ist er zu hoeren (Vorgabe: ein Schuss)."""
         if not self._bots():
             return
         fraktion = getattr(getattr(quelle, "von", quelle), "fraktion", "")
         self._bot_geraeusche.append((pygame.Vector2(pos), int(ebene),
-                                     self.welt.zeit, fraktion))
+                                     self.welt.zeit, fraktion,
+                                     K.BOTS["gehoer"] if weite is None else float(weite)))
         if len(self._bot_geraeusche) > 40:
             del self._bot_geraeusche[:10]

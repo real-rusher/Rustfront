@@ -281,6 +281,7 @@ class Testmodus(Gefecht):
         self.gott = frozenset(z.get("gott", ()))
         self.info = int(z.get("info", 1)) % len(INFO_STUFEN)
         self._denker = None           # wessen Gedanken die INFO zeigt
+        self._innen_nr = 0            # was INNENLEBEN im Testmenue ausloest
         self.flug_nr = int(z.get("flug_nr", 1))
         self.wiedereinstieg = bool(z.get("wiedereinstieg", True))
         self.wellen_an = bool(z.get("wellen_an", False))
@@ -1025,6 +1026,8 @@ class Testmodus(Gefecht):
             ("info", "INFO (TASTE 8)", INFO_STUFEN[self.info]),
             ("ki_daten", "KI-DATEN NEU LADEN (WESEN/)", ""),
             ("erzwingen", "ZIEL ERZWINGEN (GEDANKEN)", self._erzwungen_text()),
+            ("innen", "INNENLEBEN (ENTER: AM GEZEIGTEN)",
+             self.INNEN_WAHL[self._innen_nr % len(self.INNEN_WAHL)][1]),
         ]
         for schluessel, name, _hilfe in GOTT_ARTEN:
             raus.append(("gott:" + schluessel, "GOTT: " + name,
@@ -1087,6 +1090,11 @@ class Testmodus(Gefecht):
             self.ki_daten_laden()
         elif schluessel == "erzwingen":
             self.ziel_erzwingen(schritt)
+        elif schluessel == "innen":
+            if ausloesen:
+                self.innen_wirken()
+            else:
+                self._innen_nr = (self._innen_nr + schritt) % len(self.INNEN_WAHL)
         elif schluessel.startswith("gott:"):
             art = schluessel[5:]
             self.gott = frozenset(self.gott ^ {art})
@@ -1348,6 +1356,9 @@ class Testmodus(Gefecht):
                 zustand += " (NIEDERGEH.)"
             SCHRIFT.zeichnen(ziel, zustand, int(p.x), int(p.y) + 14, K.C_AMBER, 1,
                              ausrichtung="mitte")
+            innen = getattr(h, "innen", None)
+            if innen is not None:
+                self._innen_zeichnen(ziel, h, innen, p)
         for w in self.welt.wesen:
             if isinstance(w, KampfGegner) and w.lebt and w.ebene == self.blick:
                 ziel_w = getattr(w, "_ziel", None)
@@ -1364,6 +1375,57 @@ class Testmodus(Gefecht):
                         gh.ziel.name.upper() if gh.ziel else "-",
                         gh.aktion.name.upper() if gh.aktion else "-"),
                         int(q.x), int(q.y) + 12, (200, 120, 110), 1, ausrichtung="mitte")
+
+    def _innen_zeichnen(self, ziel, h, innen, p) -> None:
+        """Seit 0.34.38: unter dem Zustand ein Balken fuer den Stress, die
+        Stufe der Zuversicht als Buchstabe, PANIK oder SCHRECK - und graue
+        Punkte, wo er etwas gehoert hat."""
+        kam = self.kamera
+        x, y = int(p.x) - 12, int(p.y) + 24
+        pygame.draw.rect(ziel, (30, 26, 22), (x, y, 24, 3))
+        breite = int(round(24 * innen.stress))
+        if breite > 0:
+            farbe = (K.C_TEAL if innen.stress < 0.4 else K.C_AMBER if innen.stress < 0.75
+                     else K.C_RED)
+            pygame.draw.rect(ziel, farbe, (x, y, breite, 3))
+        zeichen = innen.stufen_name()[0]
+        text = zeichen
+        if innen.panik:
+            text = "PANIK"
+        elif innen.erschrocken:
+            text = "SCHRECK"
+        SCHRIFT.zeichnen(ziel, text, x + 28, y - 3,
+                         K.C_RED if innen.panik or innen.erschrocken else K.C_MUTED, 1)
+        for ort, ebene, _zeit, _art in getattr(h, "lagebild", ()):
+            if ebene != self.blick:
+                continue
+            q = kam.zu_bild(ort)
+            pygame.draw.circle(ziel, (130, 130, 120), (int(q.x), int(q.y)), 3, 1)
+            pygame.draw.line(ziel, (70, 70, 64), p, q, 1)
+
+    # Was INNENLEBEN im Testmenue mit der gezeigten Figur tut (seit 0.34.38).
+    INNEN_WAHL = (("panik", "PANIK"), ("stress", "STRESS +0,3"), ("kamerad", "KAMERAD FÄLLT"),
+                  ("granate", "GRANATE NEBEN IHM"), ("ruhe", "RUHE"))
+
+    def innen_wirken(self, art: str | None = None) -> bool:
+        """Das Innenleben der gezeigten GOAP-Figur verstellen: Panik, Stress,
+        ein Ereignis - oder alles zur Ruhe. False ohne Bot mit Innenleben."""
+        d = self.denker()
+        innen = getattr(getattr(d, "hirn", None), "innen", None)
+        if innen is None:
+            self.melde("KEIN GOAP-BOT AM ZEIGER")
+            return False
+        art = art or self.INNEN_WAHL[self._innen_nr % len(self.INNEN_WAHL)][0]
+        if art == "panik":
+            innen.panik_setzen()
+        elif art == "stress":
+            innen.stress = min(1.0, innen.stress + 0.3)
+        elif art == "ruhe":
+            innen.beruhigen()
+        else:
+            innen.ereignis(art)
+        self.melde("%s: %s (STRESS %.2f)" % (d.name, art.upper(), innen.stress))
+        return True
 
     # ── Gedanken (GOAP, seit 0.34.29) ─────────────────────────────────
     def _denkende(self) -> list:
@@ -1450,6 +1512,18 @@ class Testmodus(Gefecht):
               K.C_MUTED)
         if gehirn.erzwungen:
             zeile("ERZWUNGEN: %s" % gehirn.erzwungen, K.C_RED)
+        innen = getattr(h, "innen", None)
+        if innen is not None:
+            v = innen.verhaeltnis
+            zeile("STRESS %.2f  ZUVERSICHT %s%s" % (
+                innen.stress, innen.stufen_name(), "" if v is None else " (%.2f)" % v),
+                K.C_RED if innen.panik else K.C_CREAM)
+            zeile("PANIK %.1f  SCHRECK %.1f  EINGESCH. %.1f  ZULETZT %s" % (
+                innen.panik_rest, innen.schreck_rest, innen.eingeschossen,
+                innen.zuletzt or "-"), K.C_MUTED)
+            zeile("GEBUNDEN %.1f  BEDENKT %.1f  GEHOERT %d" % (
+                gehirn.gebunden, getattr(h, "_bedenk_rest", 0.0),
+                len(getattr(h, "lagebild", ()))), K.C_MUTED)
         zeile("PLAN: %s" % (" > ".join(a.name for a in gehirn.plan) or "-"), K.C_TEAL)
         y += 3
         zeile("ZIELE", K.C_MUTED_DK)

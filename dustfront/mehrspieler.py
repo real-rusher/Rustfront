@@ -1109,7 +1109,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._wirkung.append(["x", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(radius, 1), str(art),
                               int(getattr(von, "nummer", -1))])
-        self._bot_hoert(pos, ebene, von)
+        self._bot_hoert(pos, ebene, von, K.BOTS["gehoer_knall"])
 
     def schadenszahl(self, pos, ebene: int, menge: float,
                      dx: float = 0.0, dy: float = 0.0) -> None:

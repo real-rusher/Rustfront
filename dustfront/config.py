@@ -1069,11 +1069,31 @@ BOTS = dict(
     fehler_abbau=1.6,         # Sekunden, bis er sich deutlich gefangen hat
     feuerstoss=(0.25, 0.6),   # so lange haelt er den Abzug ...
     feuerpause=(0.3, 0.65),   # ... und so lange laesst er los
+    # Je Waffe (seit 0.34.38): (Stoss, Pause, so oft steht er still).
+    # Gemeldet: "das MG feuert gerade nie laenger als ein paar Schuesse".
+    # Kein Wunder - im Dauerfeuer braucht es 1,15 s Anlauf, der Stoss war
+    # hoechstens 0,6 s lang. Jetzt haelt er es, wie man ein MG haelt.
+    feuer=dict(lmg=((1.8, 3.4), (0.35, 0.7), 1.0),
+               sturm=((0.35, 0.9), (0.25, 0.55), 0.5)),
+    dauerfeuer=1.7,           # x Stoss, wenn er auf eine Gruppe haelt
+    flaeche_weite=95.0,       # so nah beieinander sind Gegner eine Gruppe (px)
+    flaeche_schwenk=1.6,      # so schnell schwenkt er beim Flaechenfeuer hin und her (1/s)
     still_beim_schiessen=0.45,  # so oft bleibt er beim Schiessen stehen
     gehoer=460.0,             # Schuesse in dieser Entfernung hoert er
+    gehoer_knall=820.0,       # Explosionen (seit 0.34.38)
+    schritte=(150.0, 70.0),   # Schritte eines Gegners hoert er so weit: rennt er / geht er
+    schritte_tempo=(95.0, 25.0),   # ab so viel Tempo rennt / geht einer (px/s)
+    schritte_wand=0.6,        # durch eine Wand nur so weit davon
+    lagebild=6.0,             # so lange behaelt er einen gehoerten Ort im Kopf (s)
+    granate_sieht=260.0,      # eine liegende Granate bemerkt er so weit (seit 0.34.38)
+    granate_abstand=30.0,     # so weit ueber ihren Radius hinaus rennt er
     gedaechtnis=4.0,          # so lange sucht er dort, wo er einen zuletzt sah
     wunschabstand=dict(repetierer=230.0, sturm=200.0, lmg=240.0,
                        schrot=105.0, scharf=320.0),
+    # Wer ein MG hat, schiesst damit (seit 0.34.38): so viele Pixel
+    # Abstand nimmt er hin, bevor er lieber die andere Waffe nimmt. Vorher
+    # nahm der MG-Schuetze auf mittlere Weite das Sturmgewehr.
+    waffe_vorzug=dict(lmg=90.0),
     reichweite=dict(repetierer=330.0, sturm=320.0, lmg=330.0,
                     schrot=185.0, scharf=330.0),
     nahkampf_ab=34.0,         # so nah, dann schlaegt er mit dem Brecheisen
@@ -1108,6 +1128,12 @@ BOTS = dict(
         leer=("KEINE MUNITION!", "NUR NOCH DAS EISEN!"),
         helfen=("ICH HOLE DICH!", "HALT DURCH!"),
         kreis=("ZUM KREIS!", "NEHMT DEN KREIS!"),
+        # Seit 0.34.38: was er sagt, wenn das Innenleben ueberhand nimmt.
+        granate_weg=("GRANATE! WEG HIER!", "IN DECKUNG!"),
+        panik=("ICH BIN RAUS!", "WEG HIER!", "DAS SIND ZU VIELE!"),
+        uebermut=("ICH HAB IHN!", "DER IST FÄLLIG!", "HINTERHER!"),
+        gruppe=("DA SIND MEHRERE!", "GANZE GRUPPE!", "HALTET DRAUF!"),
+        gehoert=("DA WAR WAS!", "HÖRT IHR DAS?"),
     ),
     funk_dauer=1.9,           # so lange steht ein Spruch (s)
     funk_abstand=2.2,         # so lange schweigt er danach mindestens
@@ -1134,7 +1160,6 @@ BOTS = dict(
     sturm_sammeln_zeit=7.0,   # laenger wird nicht gewartet
     sturm_rein_zeit=4.5,      # so lange stuermen sie
     sturm_pause=12.0,         # danach so lange kein neuer Sturm in der Mannschaft
-    dash_pause=4.0,
     stockt_nach=1.2,          # so lange kaum vom Fleck: er weicht aus
     verwalten_takt=1.0,       # so oft wird nachgezaehlt, ob Bots fehlen
 )
@@ -1176,6 +1201,55 @@ GOAP = dict(
     gegner_angeschlagen=0.5,  # unter so viel seines Lebens ist ein Gegner angeschlagen
     wandern_weite=160.0,      # so weit schlurft ein Zombie ohne Ziel auf einmal (px)
     wandern_tempo=0.45,       # ... mit so viel seines Tempos
+    # Dual Utility (seit 0.34.38): bei voller Unschaerfe kommt noch in die
+    # Wahl, was so viel unter dem besten Ziel liegt (0.3 = 30 Prozent).
+    unschaerfe_weite=0.3,
+)
+
+# Das Innenleben der Bots (seit 0.34.38, innenleben.py): Stress und
+# Zuversicht, Panik und Schreck. Was ein Zustand bewirkt, steht als Ziel in
+# wesen/bots.txt; hier stehen nur die Zahlen.
+MORAL = dict(
+    # So viel Stress (0 bis 1) bringt ein Ereignis, bevor Disziplin und
+    # Drill daempfen. Negativ: es beruhigt.
+    stress=dict(vorbei=0.07,       # eine Kugel knapp vorbei
+                getroffen=0.16,    # selbst getroffen
+                angeschlagen=0.08,  # ... und dabei schon angeschlagen, dazu
+                seite=0.10,        # ... von der Seite oder von hinten, dazu
+                kamerad=0.22,      # ein Kamerad faellt in seiner Naehe
+                granate=0.30,      # eine Granate liegt neben ihm
+                gehoert=0.03,      # ein Gegner ist zu hoeren, den er nicht sieht
+                abschuss=-0.14),   # er (oder seine Seite in der Naehe) hat einen erwischt
+    # So lange zaehlt dasselbe Ereignis nicht noch einmal (s) - sonst waere
+    # eine MG-Garbe, die vorbeigeht, zwanzig Ereignisse.
+    sperren=dict(vorbei=0.3, gehoert=1.5, granate=0.8),
+    disziplin_daempft=0.45,   # bei Disziplin 1 kommt so viel weniger an
+    drill_daempft=0.35,       # bei Drill 1 so viel weniger
+    abbau=0.09,               # so viel Stress je Sekunde geht von selbst zurueck
+    abbau_deckung=0.2,        # ... in Deckung
+    drill_abbau=0.8,          # bei Drill 1 geht er so viel schneller zurueck (x 1,8)
+    panik_ab=0.8,             # ab so viel Stress (plus Mut) bricht Panik aus
+    panik_mut=0.15,
+    panik_verzweifelt=0.2,    # weniger, wenn die eigene Seite klar verliert
+    panik_dauer=(2.5, 4.5),   # so lange rennt er (s), vor Drill und Disziplin
+    panik_drill=0.6,          # Drill 1 macht sie so viel kuerzer
+    schreck_sprung=0.2,       # so viel Stress auf einmal: er erschrickt
+    schreck=(0.25, 0.55),     # ... und tut so lange nichts (s)
+    bedenkzeit=(0.12, 0.4),   # bevor er ein neues Ziel angeht (s), vor dem Stress
+    eingeschossen_ab=1.0,     # so lange feuert er schon: er ist eingeschossen (s)
+    eingeschossen_pause=1.2,  # so lange nicht gefeuert, und es ist vorbei
+    # Zuversicht wie in Days Gone: Verhaeltnis der Staerken, fuenf Stufen.
+    zuversicht_stufen=(0.45, 0.8, 1.45, 2.4),
+    zuversicht_namen=("PANISCH", "BESORGT", "NEUTRAL", "ZUVERSICHTLICH", "HELDENHAFT"),
+    zuversicht_faktor=(0.45, 0.75, 1.0, 1.2, 1.4),   # so zaehlt er fuer seine Seite
+    zuversicht_weite=420.0,   # Kameraden so nah zaehlen mit
+    staerke_waffe=dict(lmg=1.35, sturm=1.1, repetierer=1.0, schrot=0.95, scharf=1.1),
+    staerke_unterdrueckt=0.6,  # niedergehalten zaehlt er so viel
+    verlust_abbau=45.0,       # Abschuesse und Verluste klingen so langsam ab (s)
+    # Umschauen (seit 0.34.38): ab und zu schaut er weg vom Ziel - zu einem
+    # Geraeusch oder zur Seite. Unter Stress seltener (Tunnelblick).
+    umschau=(2.5, 5.5),       # so oft (s)
+    umschau_dauer=(0.3, 0.6),
 )
 
 # Die Lobby: wo man beim Aufmachen landet und nach jeder Runde.
