@@ -95,6 +95,13 @@ def braucht_schutz(x) -> bool:
     if hirn is not None:
         if (getattr(hirn, "taktik", None) or {}).get("art") == "flanke":
             return True
+        # Der Anfuehrer eines Trupps unter Feuer (seit 0.34.39): die
+        # anderen sollen ihm zuerst helfen.
+        trupp = getattr(hirn, "trupp", None)
+        if (trupp is not None and trupp.fuehrer is x
+                and (getattr(hirn, "getroffen_rest", 0.0) > 0.0
+                     or getattr(hirn, "unterdrueckt", 0.0) > 0.0)):
+            return True
         plan = getattr(hirn, "sturm", None)
         if plan is not None and plan.get("phase") == "rein":
             return True
@@ -126,6 +133,17 @@ class Taktik:
         for name in ("funk_sperre", "flanke_pause", "druck_rest", "druck_pause",
                      "unterdrueckt"):
             setattr(self, name, max(0.0, getattr(self, name) - dt))
+
+    def sagen(self, text: str, wichtig: bool = False) -> bool:
+        """Etwas Eigenes sagen (seit 0.34.39, Trupps): wie `funken`, aber
+        mit einem Satz, der aus der Lage entsteht ("ZWEI IM NORDEN!")."""
+        b = K.BOTS
+        if not text or (self.funk_sperre > 0.0 and not wichtig):
+            return False
+        self.k.funk = text[:b["funk_laenge"]]
+        self.k.funk_rest = b["funk_dauer"]
+        self.funk_sperre = b["funk_abstand"]
+        return True
 
     def kugel_vorbei(self) -> None:
         """Eine Kugel pfeift knapp an ihm vorbei. Die klassische KI merkt
@@ -504,10 +522,13 @@ def stuerme_fuehren(g, dt: float) -> None:
     for team in range(len(K.TEAMS["namen"])):
         if pausen.get(team, -1e9) > jetzt or any(p["team"] == team for p in stuerme):
             continue
+        # Wer in einem Trupp ist (seit 0.34.39), stuermt mit seinem Trupp,
+        # nicht mit irgendwem aus der Mannschaft.
         frei = [x for x in g._bots()
                 if x.team == team and x.lebt and not x.am_boden
                 and x.hirn is not None and x.hirn.sturm is None
-                and x.hirn.ziel is None and x.hirn.taktik is None]
+                and x.hirn.ziel is None and x.hirn.taktik is None
+                and getattr(x.hirn, "trupp", None) is None]
         for a in frei:
             hinweis = a.hirn.letzter_feind()
             if hinweis is None:

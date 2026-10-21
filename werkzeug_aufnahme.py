@@ -188,6 +188,42 @@ def szene_tod(tm, rnd):
             30, 1.0, jedes_bild)
 
 
+def szene_trupp(tm, rnd):
+    """Seit 0.34.39: zwei Trupps mit Anfuehrer gegeneinander - Bahnen,
+    Wellen, Flanke, der Anfuehrer hinten in der Mitte."""
+    a, b = stelle(tm, rnd, 420, "")
+    # Doppeltes Leben: mit gewoehnlichem war es in den ersten Aufnahmen nach
+    # sechs Sekunden vorbei - zu kurz, um Bahnen und Wellen zu sehen.
+    rot = tm.trupp_setzen(a, 0, {"groesse": 5, "team": 0, "fuehrer": "funk", "mischung": "gemischt",
+                                 "leben": 2.0})
+    blau = tm.trupp_setzen(b, 0, {"groesse": 5, "team": 1, "fuehrer": "funk", "mischung": "gemischt",
+                                  "leben": 2.0})
+    tm.trupp_auftrag("angriff", b, 0, {"team": 0})
+    tm.trupp_auftrag("angriff", a, 0, {"team": 1})
+    return ("Trupp gegen Trupp, je 5 mit Anfuehrer (Funk, doppeltes Leben)",
+            rot.mitglieder + blau.mitglieder, alle_weg(rot.mitglieder, blau.mitglieder), 70, 1.75)
+
+
+def szene_hilferuf(tm, rnd):
+    """Seit 0.34.39: ALPHA haelt eine wichtige Stellung gegen eine Uebermacht
+    und funkt um Hilfe; BRAVO hat nur einen Gegner, erledigt ihn, sagt zu
+    und kommt."""
+    a, b = stelle(tm, rnd, 300, "")
+    for _ in range(4000):
+        c, d = stelle(tm, rnd, 220, "")
+        if 520 < c.distance_to(a) < 900 and c.distance_to(b) > 450:
+            break
+    alpha = tm.trupp_setzen(a, 0, {"groesse": 4, "team": 0, "fuehrer": "funk", "mischung": "gemischt",
+                                   "leben": 2.0})
+    tm.trupp_auftrag("halten", a, 0, {"team": 0, "wichtig": True})
+    bravo = tm.trupp_setzen(c, 0, {"groesse": 4, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+    feinde = [tm.bot_setzen(p, 0, {"team": 1, "hirn": "goap"}) for p in kreis(b, 7, 34)]
+    feinde.append(tm.bot_setzen(d, 0, {"team": 1, "hirn": "goap"}))
+    return ("Hilferuf: ALPHA haelt gegen 7, BRAVO kommt zu Hilfe",
+            alpha.mitglieder + bravo.mitglieder, alle_weg(alpha.mitglieder + bravo.mitglieder, feinde),
+            80, 2.25)
+
+
 # Name -> (Dateiname, Szene). Die Nummer im Dateinamen ist die Reihenfolge.
 SZENEN = {
     "duell": ("1_goap_gegen_klassisch", szene_duell),
@@ -196,6 +232,8 @@ SZENEN = {
     "boss": ("4_boss_koloss", szene_boss),
     "huegel": ("5_kampf_um_den_kreis", szene_huegel),
     "tod": ("6_jeder_tod", szene_tod),
+    "trupp": ("7_trupp_gegen_trupp", szene_trupp),
+    "hilferuf": ("8_hilferuf_ueber_funk", szene_hilferuf),
 }
 
 

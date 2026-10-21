@@ -51,6 +51,7 @@ from .bots import BotHirn
 from .bottaktik import braucht_schutz, rolle_frei
 from .entities import Granate
 from .innenleben import Innenleben, zuversicht_rechnen
+from .trupp import richtung_wort
 
 
 def _nichts(status: str):
@@ -101,6 +102,9 @@ class GoapHirn(BotHirn):
         self.spezies = spezies
         self.merkmale = None
         self.gehirn = None
+        # Sein Trupp (seit 0.34.39, trupp.py) - gehoert zum Bot, nicht zum
+        # Leben, wie die Merkmale.
+        self.trupp = None
         super().__init__(gefecht, k, rnd)
 
     def neues_leben(self) -> None:
@@ -124,6 +128,8 @@ class GoapHirn(BotHirn):
         self._flucht = None           # (Ort, bis wann)
         self._panik_vorher = False
         self._abwarten = 0.0          # so lange wartet er schon in der Deckung
+        self.funk_laeuft = None       # dict(art, bis, text): er spricht gerade in sein Funkgeraet
+        self._rede_rest = self.rnd.uniform(3.0, 6.0)   # bis er beim Suchen etwas sagt
 
     def gehirn_neu(self) -> None:
         """Ein frisches Gehirn aus den Daten - zu jedem Leben, und im
@@ -185,13 +191,18 @@ class GoapHirn(BotHirn):
 
     def feind_orte(self, ohne=None) -> list:
         """Alle Orte auf seiner Ebene, an denen er Gegner weiss: gesehen
-        (frisch) und gehoert. `ohne`: diesen Ort nicht."""
+        (frisch), gehoert und - im Trupp - gesagt bekommen. `ohne`: diesen
+        Ort nicht."""
         k = self.k
         jetzt = self.g.welt.zeit
         raus = []
         for w, (ort, ebene, zeit) in self.gesehen.items():
             if w.lebt and ebene == k.ebene and jetzt - zeit <= K.BOTS["gedaechtnis"]:
                 raus.append(pygame.Vector2(w.pos if jetzt - zeit < 0.2 else ort))
+        if self.trupp is not None:
+            for ort, ebene, w in self.trupp.feinde(k.ebene):
+                if not any(ort.distance_to(o) < 40.0 for o in raus):
+                    raus.append(ort)
         for ort, ebene, zeit, _art in self.lagebild:
             if ebene == k.ebene and not any(ort.distance_to(o) < 60.0 for o in raus):
                 raus.append(pygame.Vector2(ort))
@@ -396,12 +407,165 @@ class GoapHirn(BotHirn):
             feinde_gruppe=sichtbar and len(self.gruppe_um(z)) >= 2,
             ziel_fast_tot=sichtbar and ziel_leben < 0.3,
         )
+        fakten.update(self._trupp_fakten())
         werte = dict(leben=k.leben / max(1.0, k.max_leben),
                      abstand=k.pos.distance_to(gefahr[0]) if gefahr else 9999.0,
                      stress=round(innen.stress, 3),
                      zuversicht=innen.stufe / 4.0,
                      unschaerfe=innen.unschaerfe())
         return fakten, werte
+
+    # ── Im Trupp (seit 0.34.39) ───────────────────────────────────
+    def _trupp_fakten(self) -> dict:
+        """Was er ueber seinen Trupp weiss. Ohne Trupp - oder als Letzter
+        uebrig - ist alles falsch, und er ist ein Bot wie jeder andere."""
+        t = self.trupp
+        k = self.k
+        leer = dict(im_trupp=False, ist_fuehrer=False, hat_funk=False, allein=False,
+                    in_formation=True, trupp_rueckzug=False, trupp_druck=False,
+                    trupp_halten=False, welle_dran=False, flanke_rolle=False,
+                    trupp_unterlegen=False, hilfe_gerufen=False, lage_neu=False,
+                    antwort_offen=False, hilfe_zugesagt=False, rauch_da=False)
+        rauch = self._rauch_platz() >= 0
+        if t is None or len(t.lebende()) < 2 or k not in t.lebende():
+            leer["rauch_da"] = rauch
+            return leer
+        fuehrer = t.fuehrt(k)
+        funk = bool(getattr(k, "funkgeraet", False))
+        p = t.stellung(k)
+        return dict(
+            im_trupp=True,
+            ist_fuehrer=fuehrer,
+            hat_funk=funk,
+            allein=not t.in_kontakt(k),
+            in_formation=p is None or k.pos.distance_to(p) <= K.TRUPP["stellung_weite"],
+            trupp_rueckzug=t.zustand == "rueckzug",
+            trupp_druck=t.zustand == "druck",
+            trupp_halten=t.zustand == "halten",
+            welle_dran=k.nummer in t.welle,
+            flanke_rolle=k.nummer in t.flanker,
+            trupp_unterlegen=t.unterlegen(),
+            hilfe_gerufen=t.hilfe_gerufen(),
+            lage_neu=fuehrer and funk and t.lage_neu(),
+            antwort_offen=fuehrer and funk and t.antwort_offen(),
+            hilfe_zugesagt=t.hilfe is not None and bool(t.hilfe.get("zugesagt")),
+            rauch_da=rauch,
+        )
+
+    def _rauch_platz(self) -> int:
+        k = self.k
+        for i, name in enumerate(k.waffen):
+            if K.WAFFEN[name].get("rauch") and (k.magazin.get(name, 0) > 0
+                                                or k.vorrat.get(name, 0) > 0):
+                return i
+        return -1
+
+    def _stellung(self):
+        t = self.trupp
+        if t is None or len(t.lebende()) < 2:
+            return None
+        return t.stellung(self.k)
+
+    def letzter_feind(self):
+        """Wen er zuletzt gesehen hat - oder, im Trupp, wen ihm einer
+        gesagt hat (die Lage des Trupps)."""
+        eigen = super().letzter_feind()
+        if eigen is not None or self.trupp is None:
+            return eigen
+        k = self.k
+        bester = None
+        for ort, ebene, w in self.trupp.feinde(k.ebene):
+            d = k.pos.distance_to(ort)
+            if bester is None or d < bester[0]:
+                bester = (d, (ort, ebene, w))
+        return None if bester is None else bester[1]
+
+    def _ziel_bonus(self, w) -> float:
+        """Im Trupp: wer dem Anfuehrer zu nahe kommt, zuerst - und lieber
+        der, auf den schon ein Kamerad schiesst (Feuer buendeln, Killzone)."""
+        t = self.trupp
+        if t is None:
+            return 0.0
+        bonus = 0.0
+        f = t.fuehrer
+        if (f is not None and f is not self.k and f.lebt and f.ebene == w.ebene
+                and f.pos.distance_to(w.pos) < K.TRUPP["fuehrer_schutz"]):
+            bonus += K.TRUPP["fuehrer_bonus"]
+        if any(getattr(m.hirn, "ziel", None) is w for m in t.lebende() if m is not self.k):
+            bonus += K.TRUPP["buendeln_bonus"]
+        return bonus
+
+    def _kampfbewegung(self, abstand: float, z, ein=None):
+        """Im Trupp kaempft er von seiner Stellung aus (seiner Bahn), statt
+        frei hin und her zu laufen - so stehen sie nebeneinander und nicht
+        in einer Reihe."""
+        p = self._stellung()
+        if p is None:
+            return super()._kampfbewegung(abstand, z, ein)
+        k = self.k
+        if k.pos.distance_to(p) > K.TRUPP["stellung_weite"]:
+            return self._weg_richtung(p, k.ebene, ein)
+        if self.seite_rest <= 0.0:
+            self.seite_rest = self.rnd.uniform(0.7, 1.6)
+            self.seite = -self.seite
+        hin = z.pos - k.pos
+        if hin.length_squared() < 1.0:
+            return pygame.Vector2(0, 0)
+        hin = hin.normalize()
+        return pygame.Vector2(-hin.y, hin.x) * self.seite * 0.35
+
+    def _unterwegs(self, dt: float, ein: dict):
+        """Ohne Kontakt im Trupp: die anderen gehen in breiter Linie neben
+        dem Anfuehrer und schauen nach aussen; der Anfuehrer geht vor und
+        wartet, wenn einer zurueckfaellt. Ab und zu sagt einer, was er
+        sieht - oder dass nichts ist."""
+        t = self.trupp
+        k = self.k
+        if t is None or len(t.lebende()) < 2 or k not in t.lebende():
+            return super()._unterwegs(dt, ein)
+        self.stoss_rest = 0.0
+        if k is t.fuehrer:
+            ziel = t.ziel_ort()
+            if ziel is not None:
+                will = self._weg_richtung(ziel, t.auftrag.get("ebene", k.ebene), ein)
+                if k.pos.distance_to(ziel) < 40.0:
+                    will = pygame.Vector2(0, 0)
+                blick = None
+            else:
+                will, blick = super()._unterwegs(dt, ein)
+            weit = K.TRUPP["linie_abstand"] * K.TRUPP["linie_warten"]
+            for m in t.lebende():
+                q = t.stellung(m)
+                if m is not k and q is not None and m.pos.distance_to(q) > weit:
+                    will = will * 0.2          # warten, bis sie aufschliessen
+                    break
+            return will, blick
+        p = t.stellung(k)
+        if p is None:
+            return super()._unterwegs(dt, ein)
+        will = pygame.Vector2(0, 0)
+        if k.pos.distance_to(p) > 10.0:
+            will = self._weg_richtung(p, k.ebene, ein)
+        # Nach aussen schauen: zur Seite, auf der er in der Linie steht.
+        f = t.fuehrer
+        blick = None
+        if f is not None and f.lebt:
+            aussen = k.pos - f.pos
+            if aussen.length_squared() > 1.0:
+                vor = pygame.Vector2(1, 0).rotate(f.hirn.blick)
+                blick = k.pos + (aussen.normalize() + vor).normalize() * 120.0
+        self._rede_rest -= dt
+        if self._rede_rest <= 0.0:
+            self._rede_rest = self.rnd.uniform(5.0, 9.0)
+            seite = "LINKS" if f is not None and (k.pos - f.pos).cross(
+                pygame.Vector2(1, 0).rotate(f.hirn.blick)) > 0 else "RECHTS"
+            ort = self.unerklaert()
+            if ort is not None:
+                self.sagen("DA WAR WAS, %s!" % richtung_wort(k.pos, ort))
+            else:
+                self.sagen(self.rnd.choice(("%s FREI." % seite, "NICHTS ZU SEHEN.",
+                                            "%s SAUBER." % seite)))
+        return will, blick
 
     # ── Entscheiden ───────────────────────────────────────────────
     def _entscheiden(self, dt: float, ein: dict):
@@ -474,6 +638,8 @@ class GoapHirn(BotHirn):
             self._aktion_lief = a
             self._druck_lief = False
             self._abwarten = 0.0
+            if not a.tut.startswith("funk"):
+                self.funk_laeuft = None       # unterbrochen: der Spruch ist nicht raus
             if a.funk:
                 self.funken(a.funk)
             if a.tut == "deckung" and self.k.leben < K.BOTS["deckung_leben"]:
@@ -801,6 +967,118 @@ class GoapHirn(BotHirn):
             self.verdacht = (pygame.Vector2(ort), self.k.ebene, self.g.welt.zeit + 3.0)
         will, punkt = self._unterwegs(dt, ein)
         return will, punkt, False, False, "laeuft"
+
+
+    # ── Aktionen im Trupp (seit 0.34.39) ─────────────────────────
+    def _hin_und_kaempfen(self, dt, ein, p, ebene=None):
+        """Zu einem Ort - und wenn er dabei einen Gegner frei vor sich hat,
+        schiesst er im Gehen."""
+        k = self.k
+        will = self._weg_richtung(p, k.ebene if ebene is None else ebene, ein)
+        z = self.ziel
+        if z is not None and self.ziel_ok(z) and self.linie == "":
+            _w, punkt, feuern, zielt = self._kaempfen(dt, ein, mit_deckung=False)
+            return will, punkt, feuern, zielt
+        gefahr = self._gefahr()
+        return will, (gefahr[0] if gefahr else None), False, False
+
+    def tun_zur_stelle(self, dt, ein):
+        """An seine Stellung im Trupp (seine Bahn, seinen Platz in der Linie)."""
+        p = self._stellung()
+        if p is None or self.k.pos.distance_to(p) <= K.TRUPP["stellung_weite"] * 0.6:
+            return _nichts("fertig")
+        return self._hin_und_kaempfen(dt, ein, p) + ("laeuft",)
+
+    def tun_welle(self, dt, ein):
+        """Rueckzug oder Druck in Wellen: wer dran ist, zieht an seine neue
+        Stellung (und schiesst dabei, wenn er kann); wer nicht dran ist,
+        deckt - kaempft von da, wo er steht, oder haelt nieder."""
+        t = self.trupp
+        if t is None or t.zustand not in ("rueckzug", "druck"):
+            return _nichts("fertig")
+        k = self.k
+        p = t.stellung(k)
+        if (k.nummer in t.welle or k.nummer in t.flanker) and p is not None \
+                and k.pos.distance_to(p) > K.TRUPP["stellung_weite"] * 0.6:
+            return self._hin_und_kaempfen(dt, ein, p) + ("laeuft",)
+        z = self.ziel
+        if z is not None and self.ziel_ok(z) and self.linie == "":
+            _w, punkt, feuern, zielt = self._kaempfen(dt, ein, mit_deckung=False)
+            return pygame.Vector2(0, 0), punkt, feuern, zielt, "laeuft"
+        gefahr = self._gefahr()
+        if gefahr is not None and self._munition_reicht():
+            punkt = self.druckpunkt(gefahr[0], gefahr[1])
+            return pygame.Vector2(0, 0), punkt, self._abdruecken(dt, punkt, ein), False, "laeuft"
+        return _nichts("laeuft")
+
+    def tun_verlegen(self, dt, ein):
+        """Zu einem anderen Trupp, der um Hilfe gerufen hat: der Anfuehrer
+        geht vor, die anderen in ihrer Linie hinterher (_unterwegs)."""
+        t = self.trupp
+        if t is None or t.hilfe is None:
+            return _nichts("fertig")
+        z = self.ziel
+        if z is not None and self.ziel_ok(z):
+            return _nichts("fertig")              # unterwegs Kontakt: erst der
+        will, punkt = self._unterwegs(dt, ein)
+        return will, punkt, False, False, "laeuft"
+
+    def _funken_tun(self, art: str):
+        """Ein Spruch ins Funkgeraet: er bleibt stehen und spricht, bis er
+        durch ist (K.TRUPP["funk_dauer"]). Erst dann haben ihn die anderen."""
+        t = self.trupp
+        k = self.k
+        if t is None or not getattr(k, "funkgeraet", False):
+            return _nichts("gescheitert")
+        jetzt = self.g.welt.zeit
+        laeuft = self.funk_laeuft
+        if laeuft is None or laeuft["art"] != art:
+            dauer = K.TRUPP["funk_dauer"] * (0.5 if art == "zusage" else 1.0)
+            self.funk_laeuft = laeuft = dict(art=art, bis=jetzt + dauer,
+                                             text=t.funk_text(art, (t.hilfe or {}).get("fuer")),
+                                             anfang=jetzt)
+        gefahr = self._gefahr()
+        if jetzt >= laeuft["bis"]:
+            t.funk_senden(art)
+            self.funk_laeuft = None
+            return _nichts("fertig")
+        return pygame.Vector2(0, 0), (gefahr[0] if gefahr else None), False, False, "laeuft"
+
+    def tun_funk_hilfe(self, dt, ein):
+        return self._funken_tun("hilfe")
+
+    def tun_funk_lage(self, dt, ein):
+        return self._funken_tun("lage")
+
+    def tun_funk_zusage(self, dt, ein):
+        return self._funken_tun("zusage")
+
+    def tun_rauch(self, dt, ein):
+        """Rauch zwischen den Trupp und den Gegner - als Deckung beim
+        Rueckzug. Geworfen wird wie jede Wurfwaffe (bots._werfen)."""
+        k = self.k
+        gefahr = self._gefahr()
+        if gefahr is None:
+            return _nichts("gescheitert")
+        if self.wurf_phase <= 0.0:
+            self.wurf_platz = self._rauch_platz()
+            if self.wurf_platz < 0:
+                return _nichts("gescheitert")
+            self.wurf_phase = 0.45
+            self.sagen("RAUCH!", wichtig=True)
+        ziel = _Stelle(gefahr[0], gefahr[1])
+        will, punkt, werfen, zielt = self._werfen(dt, ein, ziel)
+        return will, punkt, werfen, zielt, ("fertig" if werfen else "laeuft")
+
+
+class _Stelle:
+    """Ein Ort, auf den sich zielen laesst wie auf ein Wesen (pos, ebene)."""
+
+    radius = 9.0
+
+    def __init__(self, pos, ebene: int) -> None:
+        self.pos = pygame.Vector2(pos)
+        self.ebene = int(ebene)
 
 
 # Was `tut:` in wesen/bots.txt heissen darf, und was es dann tut.

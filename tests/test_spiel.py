@@ -10712,6 +10712,192 @@ for i_ in (1, 2):
 pruef("... INFO zeigt Stress, Zuversicht und das Gehoerte (zeichnen geht)", True, "")
 _tm.verlassen()
 
+# 0.34.39: "dass die Teams verschiedene Squad-Leader haben, die miteinander
+# ueber Funk kommunizieren ... wenn das eine Team sagt, wir sind in der
+# Unterzahl, wir halten aber eine wichtige Position, dann sollen sie nach
+# Hilfe rufen ... Die Squad-Leader sollen nur einen Repetierer und eine
+# Rauchgranate haben ... eher hinten bleiben ... beim Suchen nicht direkt
+# hintereinander laufen ... in Sprechreichweite bleiben."
+print("\n-- Trupps, Anfuehrer, Sprechen, Funk (0.34.39)")
+from dustfront import trupp as _TR95
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm.wiedereinstieg = False
+_r95 = random.Random(95)
+
+
+def _feld95(weite):
+    for _ in range(8000):
+        a_ = pygame.Vector2(freier_punkt(_tm.welt, 0, _r95))
+        b_ = a_ + pygame.Vector2(weite, 0).rotate(_r95.uniform(0, 360))
+        if (all(_tm.welt.frei(p_, 30, 0, True) for p_ in (a_, b_, (a_ + b_) / 2))
+                and _tm.welt.deckung(a_, b_, 0) == ""):
+            return a_, b_
+    return None
+
+
+_e95 = _tm._eintrag("TRUPP")
+pruef("Spawner: TRUPP mit Groesse, Team, Anfuehrer und Waffen; dazu HALTEN, ANGRIFF, FREI",
+      _e95.name == "TRUPP" and {"groesse", "team", "fuehrer", "mischung"} <= set(_e95.optionen)
+      and all(_tm._eintrag(n_).name == n_ for n_ in ("TRUPP: HALTEN HIER", "TRUPP: ANGRIFF HIER",
+                                                       "TRUPP: FREI")), "")
+_a95, _b95 = _feld95(320)
+_al95 = _tm.trupp_setzen(_a95, 0, {"groesse": 4, "team": 0, "fuehrer": "funk",
+                                   "mischung": "gemischt"})
+_f95 = _al95.fuehrer
+pruef("Ein Trupp aus vier GOAP-Bots, der Anfuehrer mit Repetierer, Rauch und Funkgeraet",
+      len(_al95.mitglieder) == 4 and all(isinstance(m_.hirn, _BG88.GoapHirn) for m_ in _al95.mitglieder)
+      and all(m_.hirn.trupp is _al95 for m_ in _al95.mitglieder)
+      and _f95.waffen == ["repetierer", "rauch"] and _f95.funkgeraet,
+      "%s %s" % (_f95.waffen, getattr(_f95, "funkgeraet", None)))
+pruef("... GEMISCHT: MG, Schrot und Scharfschuetze sind dabei",
+      {"lmg", "schrot", "scharf"} <= {w_ for m_ in _al95.mitglieder for w_ in m_.waffen}, "")
+_sim87(int(1.0 / _D87))
+_st95 = [_al95.stellung(m_) for m_ in _al95.mitglieder if m_ is not _f95]
+_abst95 = min(p_.distance_to(q_) for i_, p_ in enumerate(_st95) for q_ in _st95[i_ + 1:])
+pruef("Ohne Kontakt: eine breite Linie neben dem Anfuehrer, nicht hintereinander",
+      _al95.zustand == "suchen" and len(_st95) == 3 and _abst95 > 30
+      and all(p_.distance_to(_f95.pos) < K.TRUPP["sprech_weite"] for p_ in _st95),
+      "%s, engster Abstand %.0f" % (_al95.zustand, _abst95))
+_fak95 = _f95.hirn._trupp_fakten()
+pruef("... der Anfuehrer weiss, dass er fuehrt und Funk hat; die anderen nicht",
+      _fak95["ist_fuehrer"] and _fak95["hat_funk"]
+      and not any(m_.hirn._trupp_fakten()["ist_fuehrer"] for m_ in _al95.mitglieder if m_ is not _f95), "")
+
+# Wissen geht nur in Sprechweite.
+_feind95 = _tm.puppe_setzen(_b95, 0, {"team": 1, "leben": 10.0})
+_m95 = next(m_ for m_ in _al95.mitglieder if m_ is not _f95)
+_al95.lage = {}
+_m95.hirn.gesehen = {_feind95: (pygame.Vector2(_feind95.pos), 0, _tm.welt.zeit)}
+_al95._lage_sammeln(_al95.lebende())
+pruef("Sprechen: wer einen sieht und andere in Sprechweite hat, sagt es - dann weiss es der Trupp",
+      _feind95 in _al95.lage and _m95.funk.endswith("!"), _m95.funk)
+_weg95 = pygame.Vector2(_m95.pos)
+_m95.pos.update(_m95.pos + pygame.Vector2(K.TRUPP["sprech_weite"] * 3, 0))
+_al95.lage = {}
+_al95._lage_sammeln(_al95.lebende())
+pruef("... wer zu weit weg ist, dessen Wissen kommt nicht an",
+      _feind95 not in _al95.lage and not _al95.in_kontakt(_m95)
+      and _m95.hirn._trupp_fakten()["allein"], "")
+_m95.pos.update(_weg95)
+
+# Front und Bahnen: der Anfuehrer in der Mitte und tiefer.
+_al95.zustand = "feuerkampf"
+_al95._zustand_seit = _tm.welt.zeit
+_al95.lage = {_feind95: [pygame.Vector2(_feind95.pos), 0, _tm.welt.zeit]}
+_al95.front = None
+_al95._front_rechnen(_al95.lebende())
+_al95._stellungen(_al95.lebende())
+_fr95 = _al95.front
+_tief95 = {m_.nummer: (_fr95["linie"] - _al95.stellung(m_)).dot(_fr95["richtung"])
+           for m_ in _al95.mitglieder}
+_quer95 = sorted((_al95.stellung(m_) - _fr95["linie"]).dot(_fr95["quer"]) for m_ in _al95.mitglieder)
+pruef("Frontlinie: jeder hat seine Bahn, der Anfuehrer steht weiter hinten als die anderen",
+      _fr95 is not None and _tief95[_f95.nummer] > max(v_ for n_, v_ in _tief95.items()
+                                                          if n_ != _f95.nummer) - 1
+      and min(b_ - a_ for a_, b_ in zip(_quer95, _quer95[1:])) > 20, str(_tief95))
+
+# Zustaende aus der Zuversicht des Trupps.
+def _zustand95(stufe, auftrag="frei", wichtig=False):
+    for m_ in _al95.lebende():
+        m_.hirn.innen.stufe = stufe
+    _al95.auftrag = dict(art=auftrag, ort=pygame.Vector2(_a95) if auftrag != "frei" else None,
+                         ebene=0, wichtig=wichtig)
+    _al95._zustand_seit = -1e9
+    _al95._zuversicht(_al95.lebende())
+    _al95._zustand_waehlen(_al95.lebende())
+    return _al95.zustand
+
+
+pruef("Trupp besorgt: Rueckzug in Wellen; zuversichtlich: Druck; neutral: Feuerkampf",
+      _zustand95(1) == "rueckzug" and _zustand95(3) == "druck" and _zustand95(2) == "feuerkampf", "")
+pruef("... eine wichtige Stellung wird nicht aufgegeben, auch besorgt nicht",
+      _zustand95(1, "halten", True) == "halten", _al95.zustand)
+_zustand95(1)
+_al95._front_rechnen(_al95.lebende())
+_al95._stellungen(_al95.lebende())
+pruef("... im Rueckzug zieht die Haelfte, die andere deckt",
+      0 < len(_al95.welle) < len(_al95.lebende()), str(_al95.welle))
+_tm.alles_weg()
+
+# Funk: der eine haelt in der Unterzahl und ruft, der andere hat Ruhe und kommt.
+# Die Gegner in Sichtweite (330 px): wer haelt, geht nicht suchen.
+_a95, _b95 = _feld95(220)
+_c95 = None
+for _ in range(400):
+    f_ = _feld95(200)
+    if f_ is not None and 500 < f_[0].distance_to(_a95) < 1200 and f_[0].distance_to(_b95) > 500:
+        _c95 = f_[0]
+        break
+pruef("(Platz fuer zwei Trupps)", _c95 is not None, "")
+_al95 = _tm.trupp_setzen(_a95, 0, {"groesse": 3, "team": 0, "fuehrer": "funk", "mischung": "zufall"})
+_tm.trupp_auftrag("halten", _a95, 0, {"team": 0, "wichtig": True})
+_br95 = _tm.trupp_setzen(_c95, 0, {"groesse": 3, "team": 0, "fuehrer": "funk", "mischung": "zufall"})
+for m_ in _al95.mitglieder:
+    m_.unverwundbar = 1e9          # sie sollen funken, nicht gleich fallen
+_feinde95 = [_tm.puppe_setzen(_b95 + pygame.Vector2(0, 22 * i_), 0, {"team": 1, "leben": 10.0})
+             for i_ in range(7)]
+_start95 = _br95.fuehrer.pos.distance_to(_a95)
+for _ in range(int(14.0 / _D87)):
+    _tm.schritt(_D87)
+_netz95 = getattr(_tm, "_funknetz", [])
+_arten95 = [(s_.trupp.name, s_.art) for s_ in _netz95]
+pruef("Funk: ALPHA ist in der Unterzahl an einer wichtigen Stellung und ruft um Hilfe",
+      (_al95.name, "hilfe") in _arten95, str(_arten95))
+pruef("... BRAVO hat keine Gegner, sagt zu - und antwortet auch",
+      (_br95.name, "zusage") in _arten95, str(_arten95))
+pruef("... und ist unterwegs zu ALPHA",
+      _br95.fuehrer.pos.distance_to(_a95) < _start95 - 60,
+      "%.0f -> %.0f px, %s" % (_start95, _br95.fuehrer.pos.distance_to(_a95),
+                               list(_br95.fuehrer.hirn.gehirn.protokoll)[-6:]))
+pruef("... ein Spruch dauert: er stand dabei (FUNK > im Protokoll)",
+      any(t_.startswith("PLAN: funk_hilfe") for _z, t_ in _al95.fuehrer.hirn.gehirn.protokoll), "")
+pruef("Wer selbst unterlegen ist, sagt nicht zu", not _al95.hilfe_pruefen(_netz95[0]), "")
+
+# Ohne Funkgeraet und ohne Leute ist der Anfuehrer ein Bot wie jeder andere.
+_tm.alles_weg()
+_oh95 = _tm.trupp_setzen(_a95, 0, {"groesse": 3, "team": 0, "fuehrer": "ohne"})
+_fo95 = _oh95.fuehrer
+pruef("Anfuehrer OHNE FUNK: er fuehrt, aber funken ist fuer ihn kein Ziel",
+      not getattr(_fo95, "funkgeraet", False) and _fo95.hirn._trupp_fakten()["ist_fuehrer"]
+      and not _fo95.hirn._trupp_fakten()["hat_funk"], "")
+for m_ in _oh95.mitglieder:
+    if m_ is not _fo95:
+        _tm.loeschen(m_)
+_alle95 = _fo95.hirn._trupp_fakten()
+pruef("... allein uebrig: nichts mehr vom Trupp - dieselben Ziele wie jeder Bot",
+      not any(_alle95[n_] for n_ in ("im_trupp", "ist_fuehrer", "trupp_unterlegen", "allein")), "")
+
+# Die anderen nehmen zuerst, wer dem Anfuehrer zu nahe kommt.
+_tm.alles_weg()
+_tz95 = _tm.trupp_setzen(_a95, 0, {"groesse": 3, "team": 0, "fuehrer": "funk"})
+_mann95 = next(m_ for m_ in _tz95.mitglieder if m_ is not _tz95.fuehrer)
+_nah95 = _tm.puppe_setzen(_tz95.fuehrer.pos + pygame.Vector2(60, 0), 0, {"team": 1})
+_fern95 = _tm.puppe_setzen(_tz95.fuehrer.pos + pygame.Vector2(600, 0), 0, {"team": 1})
+pruef("Wer dem Anfuehrer zu nahe kommt, ist zuerst dran",
+      _mann95.hirn._ziel_bonus(_nah95) >= K.TRUPP["fuehrer_bonus"]
+      and _mann95.hirn._ziel_bonus(_fern95) == 0, "")
+
+# Testmodus: Auftraege, Anzeige.
+_tm.trupp_auftrag("halten", _a95 + pygame.Vector2(40, 0), 0, {"team": 0, "wichtig": True})
+pruef("TRUPP: HALTEN HIER gibt dem naechsten Trupp der Mannschaft den Auftrag",
+      _tz95.auftrag["art"] == "halten" and _tz95.auftrag["wichtig"], str(_tz95.auftrag))
+_tm.trupp_auftrag("frei", _a95, 0, {"team": 0})
+pruef("... FREI nimmt ihn wieder", _tz95.auftrag["art"] == "frei", "")
+_tz95.fuehrer.hirn.funk_laeuft = dict(art="lage", bis=_tm.welt.zeit + 1, anfang=_tm.welt.zeit,
+                                      text="PROBE")
+for i_ in (1, 2):
+    _tm.info = i_
+    _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+_tm.sauber = True
+_tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+_tm.sauber = False
+pruef("... INFO zeigt Front, Stellungen, Zustand und Funk; Funk auch in der sauberen Ansicht",
+      True, "")
+_tm.alles_weg()
+pruef("ALLES WEG nimmt auch die Trupps und den Funk", not _TR95.trupps(_tm)
+      and not getattr(_tm, "_funknetz", None), "")
+_tm.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.39 | Nichts Neues ueber das Netz. Trupps, Sprechen und Funk gibt es nur im Testmodus; im Gefecht rechnet der Gastgeber dafuer nur nach, ob es Trupps gibt (sonst nichts). Was ein Bot sagt, geht wie jeder Funkspruch eines Bots mit der Weltmeldung (`fk`) | Die Versionspruefung weist ab |
 | 0.34.38 | Nichts Neues ueber das Netz. Die Bots rechnet nur der Gastgeber; geaendert hat sich ihr Verhalten (MG haelt laenger, kein Dash, Granate lieber in Gruppen, wer sie trifft, wird ihr Ziel, Explosionen hoeren sie weiter), mit GOAP dazu Innenleben, Bindung und Hoeren. `wesen/bots.txt` braucht nur der Gastgeber | Die Versionspruefung weist ab. Mischen ginge technisch, aber die Bots kaempften je nach Gastgeber anders |
 | 0.34.34 | Die Wirkung `d` (ein Tod) ist kuerzer: Ort, Ebene, Fallwinkel, Blut, Radius. Der Gast ruft damit `Welt.tod` auf - Spritzer, Fleck und Todeslaut; eine Leiche gibt es nicht mehr | Die Versionspruefung weist ab. Ein Gast von 0.34.33 laese die neue Meldung falsch |
 | 0.34.33 | Neue Wirkung `d` (ein Tod): Ort, Ebene, Blickwinkel, Bildname und "Stil|Blut|Radius|Fallwinkel". Der Gast ruft damit `Welt.tod` in seiner eigenen Welt auf - Leiche, Lache, Spritzer und am Ende der Fleck entstehen bei ihm selbst. Unbekannte Bilder, Stile und Blutarten fallen auf die Vorgabe zurueck, der Radius ist begrenzt | Die Versionspruefung weist ab. Ein aelterer Gast saehe Gegner weiter einfach verschwinden |

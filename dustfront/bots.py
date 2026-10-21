@@ -378,6 +378,7 @@ class BotHirn(Taktik):
             def wert(w):
                 d = k.pos.distance_to(w.pos)
                 d -= self.schutz_bonus(w, schuetzlinge)[0]
+                d -= self._ziel_bonus(w)
                 if getattr(w, "am_boden", False):
                     d += 260.0                # erst, wer noch steht
                 # HUEGEL: wer im Kreis steht, nimmt ihn uns weg.
@@ -397,6 +398,11 @@ class BotHirn(Taktik):
         geraeusch = self._hoeren()
         if geraeusch is not None and (self.verdacht is None or self.verdacht[2] < jetzt):
             self.verdacht = geraeusch
+
+    def _ziel_bonus(self, w) -> float:
+        """So viel lieber nimmt er diesen Gegner (in Pixeln Abstand) - hier
+        nichts; im Trupp der, der den Anfuehrer bedroht (bot_goap.py)."""
+        return 0.0
 
     def _neues_ziel(self, w, gleiches: bool) -> None:
         b = K.BOTS
@@ -1190,6 +1196,9 @@ class BotTeil:
         if self._bots():
             unterdrueckung_pruefen(self)
             stuerme_fuehren(self, dt)
+            if getattr(self, "_trupps", None):
+                from .trupp import trupps_fuehren
+                trupps_fuehren(self, dt)
         for k in self._bots():
             hirn = getattr(k, "hirn", None)
             if hirn is None:

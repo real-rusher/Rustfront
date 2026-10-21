@@ -164,6 +164,13 @@ OPTIONEN = {
                 lambda v: "LIEGT, ZÜNDET" if v == "liegt" else "SOFORT"),
     # Seit 0.34.29: klassische oder zielorientierte KI (bot_goap.py).
     "hirn": ("HIRN", lambda: list(K.GOAP["arten"]), lambda v: v.upper()),
+    # Seit 0.34.39: Trupps (trupp.py).
+    "groesse": ("GRÖSSE", lambda: list(K.TRUPP["groessen"]), lambda v: "%d MANN" % v),
+    "fuehrer": ("ANFÜHRER", lambda: ["funk", "ohne", "keiner"],
+                lambda v: {"funk": "MIT FUNK", "ohne": "OHNE FUNK", "keiner": "KEINER"}[v]),
+    "mischung": ("WAFFEN", lambda: ["gemischt", "zufall"],
+                 lambda v: "GEMISCHT" if v == "gemischt" else "ZUFALL"),
+    "wichtig": ("WICHTIG", lambda: [True, False], lambda v: "JA" if v else "NEIN"),
 }
 
 # Taste 8 schaltet durch: aus, kurz (Linien und Zustand), Gedanken (dazu
@@ -196,6 +203,16 @@ def eintraege() -> list:
                 lambda t, p, e, w: t.puppe_setzen(p, e, w)),
         Eintrag("SPIELER, ICH", "FIGUREN", ("team", "leben"),
                 lambda t, p, e, w: t.ich_setzen(p, e, w), mehrfach=False),
+        # Seit 0.34.39: ein ganzer Trupp mit Anfuehrer (trupp.py), und was
+        # der naechste Trupp einer Mannschaft tun soll.
+        Eintrag("TRUPP", "TRUPPS", ("groesse", "team", "fuehrer", "mischung", "leben"),
+                lambda t, p, e, w: t.trupp_setzen(p, e, w), mehrfach=False),
+        Eintrag("TRUPP: HALTEN HIER", "TRUPPS", ("team", "wichtig"),
+                lambda t, p, e, w: t.trupp_auftrag("halten", p, e, w), mehrfach=False),
+        Eintrag("TRUPP: ANGRIFF HIER", "TRUPPS", ("team",),
+                lambda t, p, e, w: t.trupp_auftrag("angriff", p, e, w), mehrfach=False),
+        Eintrag("TRUPP: FREI", "TRUPPS", ("team",),
+                lambda t, p, e, w: t.trupp_auftrag("frei", p, e, w), mehrfach=False),
     ]
     for art in sorted(K.GEGNER):
         raus.append(Eintrag(K.GEGNER[art].get("name", art.upper()), "GEGNER",
@@ -599,6 +616,64 @@ class Testmodus(Gefecht):
         k.hirn.neues_leben()
         return k
 
+    def trupp_setzen(self, pos, ebene: int, w: dict):
+        """Ein Trupp aus GOAP-Bots mit einem Anfuehrer (seit 0.34.39). Der
+        Anfuehrer traegt einen Repetierer und eine Rauchgranate, mit FUNK
+        dazu das Funkgeraet. GEMISCHT: einer mit MG, einer mit Schrot, einer
+        mit Scharfschuetzengewehr, der Rest Sturmgewehr."""
+        from .trupp import Trupp, trupps
+        team = w.get("team", 0)
+        liste = trupps(self)
+        vergeben = {t.name for t in liste}
+        name = next((n for n in K.TRUPP["namen"] if n not in vergeben),
+                    "TRUPP %d" % (len(liste) + 1))
+        trupp = Trupp(self, team, name)
+        n = int(w.get("groesse", 4))
+        rnd = random.Random()
+        fuehrer = w.get("fuehrer", "funk")
+        for i in range(n):
+            p = self._stelle(pos + pygame.Vector2(26 * (i % 3) - 26, 26 * (i // 3)),
+                             ebene, 12.0, 0.0, rnd)
+            ist_fuehrer = i == 0 and fuehrer != "keiner"
+            waffe = "zufall"
+            if not ist_fuehrer and w.get("mischung", "gemischt") == "gemischt":
+                nr = i - (1 if fuehrer != "keiner" else 0)
+                mischung = K.TRUPP["mischung"]
+                waffe = mischung[nr] if nr < len(mischung) else "sturm"
+            k = self.bot_setzen(p, ebene, {"team": team, "hirn": "goap", "waffe": waffe,
+                                           "leben": w.get("leben", 1.0)})
+            if ist_fuehrer:
+                lo = dict(K.TRUPP["fuehrer_loadout"], name="BOT")
+                k.loadout = lo
+                k.waffen = konto_modul.hotbar_aus_loadout(lo)
+                k.waffe = 0
+                self._bot_munition(k)
+                k.funkgeraet = fuehrer == "funk"
+                trupp.fuehrer = k
+            k.hirn.trupp = trupp
+            trupp.mitglieder.append(k)
+        if trupp.fuehrer is None:
+            trupp.fuehrer = trupp.mitglieder[0]
+        liste.append(trupp)
+        return trupp
+
+    def trupp_auftrag(self, art: str, pos, ebene: int, w: dict):
+        """Dem naechsten Trupp der Mannschaft einen Auftrag: hier halten,
+        hierher angreifen, oder frei suchen."""
+        from .trupp import trupps
+        team = w.get("team", 0)
+        eigene = [t for t in trupps(self) if t.team == team and t.lebende()]
+        if not eigene:
+            self.melde("KEIN TRUPP IN %s" % _team_text(team))
+            return None
+        t = min(eigene, key=lambda t: t.lebende()[0].pos.distance_to(pos))
+        if art == "frei":
+            t.auftrag = dict(art="frei", ort=None, ebene=ebene, wichtig=False)
+        else:
+            t.auftrag = dict(art=art, ort=pygame.Vector2(pos), ebene=ebene,
+                             wichtig=bool(w.get("wichtig", False)) and art == "halten")
+        return t
+
     def puppe_setzen(self, pos, ebene: int, w: dict, name: str = ""):
         nummer = self._naechste_figur
         while nummer in self.kaempfer:
@@ -723,6 +798,8 @@ class Testmodus(Gefecht):
         self.boss = None
         self._stuerme = []
         self._bot_rollen = {}
+        self._trupps = []
+        self._funknetz = []
         self.zone_aus()
         self.melde("ALLES WEG")
 
@@ -1188,8 +1265,10 @@ class Testmodus(Gefecht):
         super().zeichnen(ziel, alpha)
         if self.sauber:
             # Nur die Welt und die Aktionen. Spawner und Menue bleiben
-            # bedienbar, wenn man sie oeffnet (Esc, Taste 4).
+            # bedienbar, wenn man sie oeffnet (Esc, Taste 4). Wer funkt,
+            # ist auch hier zu sehen (seit 0.34.39).
             self._aktionen_zeichnen(ziel)
+            self._funksprueche_zeichnen(ziel)
             if self.spawner_offen:
                 self._spawner_zeichnen(ziel)
             if self.menue_offen:
@@ -1197,6 +1276,9 @@ class Testmodus(Gefecht):
             return
         if self.info:
             self._info_zeichnen(ziel)
+            self._trupps_zeichnen(ziel)
+            self._funk_liste_zeichnen(ziel)
+        self._funksprueche_zeichnen(ziel)
         if self.info == 2:
             self._gedanken_zeichnen(ziel)
         self._zeiger_zeichnen(ziel)
@@ -1403,6 +1485,74 @@ class Testmodus(Gefecht):
             pygame.draw.circle(ziel, (130, 130, 120), (int(q.x), int(q.y)), 3, 1)
             pygame.draw.line(ziel, (70, 70, 64), p, q, 1)
 
+    # ── Trupps und Funk (seit 0.34.39) ──────────────────────────────
+    def _trupps_zeichnen(self, ziel) -> None:
+        """Je Trupp: die Frontlinie, fuer jeden seine Stellung (ein
+        kleines Kaestchen mit Linie), ueber dem Anfuehrer Name und Zustand."""
+        from .trupp import trupps
+        kam = self.kamera
+        for t in trupps(self):
+            leute = [m for m in t.lebende() if m.ebene == self.blick]
+            if not leute:
+                continue
+            farbe = (255, 196, 150) if t.team == 0 else (170, 210, 255)
+            f = t.front
+            if f is not None and f["ebene"] == self.blick:
+                a = kam.zu_bild(f["linie"] + f["quer"] * (f["breite"] / 2))
+                b = kam.zu_bild(f["linie"] - f["quer"] * (f["breite"] / 2))
+                pygame.draw.line(ziel, farbe, a, b, 1)
+                m_ = kam.zu_bild(f["linie"])
+                pygame.draw.line(ziel, farbe, m_, kam.zu_bild(f["linie"] + f["richtung"] * 20), 1)
+            for m in leute:
+                q = t.stellung(m)
+                if q is None:
+                    continue
+                pq = kam.zu_bild(q)
+                pygame.draw.rect(ziel, farbe, (int(pq.x) - 2, int(pq.y) - 2, 4, 4), 1)
+                pygame.draw.line(ziel, (90, 80, 70), kam.zu_bild(m.pos), pq, 1)
+            fuehrer = t.fuehrer if t.fuehrer in leute else leute[0]
+            p = kam.zu_bild(fuehrer.pos)
+            text = "%s %s%s" % (t.name, t.zustand.upper(),
+                                " (FUNK)" if getattr(fuehrer, "funkgeraet", False) else "")
+            if t.hilfe is not None:
+                text += " > %s" % t.hilfe["fuer"].name
+            SCHRIFT.zeichnen(ziel, text, int(p.x), int(p.y) + 34, farbe, 1, ausrichtung="mitte")
+
+    def _funksprueche_zeichnen(self, ziel) -> None:
+        """Wer gerade in sein Funkgeraet spricht: ueber ihm ein Kasten mit
+        dem Spruch und einem Balken, wie weit er ist. Erst wenn der voll
+        ist, haben ihn die anderen."""
+        kam = self.kamera
+        jetzt = self.welt.zeit
+        for k in self._bots():
+            laeuft = getattr(k.hirn, "funk_laeuft", None)
+            if laeuft is None or not k.lebt or k.ebene != self.blick:
+                continue
+            p = kam.zu_bild(k.pos)
+            text = "FUNK: " + laeuft["text"]
+            breite = SCHRIFT.breite(text) + 8
+            feld = pygame.Rect(int(p.x) - breite // 2, int(p.y) - 62, breite, 13)
+            pygame.draw.rect(ziel, (6, 18, 22), feld)
+            pygame.draw.rect(ziel, K.C_TEAL, feld, 1)
+            SCHRIFT.zeichnen(ziel, text, feld.centerx, feld.y + 2, K.C_TEAL, 1,
+                             ausrichtung="mitte")
+            dauer = max(0.01, laeuft["bis"] - laeuft["anfang"])
+            anteil = max(0.0, min(1.0, (jetzt - laeuft["anfang"]) / dauer))
+            pygame.draw.rect(ziel, K.C_TEAL, (feld.x, feld.bottom, int(breite * anteil), 2))
+
+    def _funk_liste_zeichnen(self, ziel) -> None:
+        """Unten links die letzten Funksprueche, der neueste unten."""
+        netz = getattr(self, "_funknetz", None) or []
+        if not netz or self.info == 2:
+            return
+        jetzt = self.welt.zeit
+        y = K.GAME_H - 14 - 10 * min(5, len(netz))
+        for spruch in netz[-5:]:
+            alt = jetzt - spruch.zeit
+            SCHRIFT.zeichnen(ziel, "%5.0fs  %s" % (-alt, spruch.text), 6, y,
+                             K.C_TEAL if alt < 4.0 else K.C_MUTED, 1)
+            y += 10
+
     # Was INNENLEBEN im Testmenue mit der gezeigten Figur tut (seit 0.34.38).
     INNEN_WAHL = (("panik", "PANIK"), ("stress", "STRESS +0,3"), ("kamerad", "KAMERAD FÄLLT"),
                   ("granate", "GRANATE NEBEN IHM"), ("ruhe", "RUHE"))
@@ -1524,6 +1674,14 @@ class Testmodus(Gefecht):
             zeile("GEBUNDEN %.1f  BEDENKT %.1f  GEHOERT %d" % (
                 gehirn.gebunden, getattr(h, "_bedenk_rest", 0.0),
                 len(getattr(h, "lagebild", ()))), K.C_MUTED)
+        t = getattr(h, "trupp", None)
+        if t is not None:
+            rolle = ("ANFÜHRER" if t.fuehrer is d else
+                     "FLANKE" if d.nummer in t.flanker else
+                     "WELLE" if d.nummer in t.welle else "MANN")
+            zeile("TRUPP %s: %s, %s, ZUV %d, LAGE %d%s" % (
+                t.name, rolle, t.zustand.upper(), t.zuversicht, len(t.lage),
+                ", HILFE > %s" % t.hilfe["fuer"].name if t.hilfe else ""), K.C_TEAL)
         zeile("PLAN: %s" % (" > ".join(a.name for a in gehirn.plan) or "-"), K.C_TEAL)
         y += 3
         zeile("ZIELE", K.C_MUTED_DK)

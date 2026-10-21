@@ -1252,6 +1252,55 @@ MORAL = dict(
     umschau_dauer=(0.3, 0.6),
 )
 
+# Trupps (seit 0.34.39, trupp.py): was ein Trupp gemeinsam weiss, wo jeder
+# steht, und der Funk zwischen den Anfuehrern. Bisher nur im Testmodus
+# (Spawner TRUPP).
+TRUPP = dict(
+    takt=0.25,                # so oft frischt ein Trupp auf, was er weiss (s)
+    sprech_weite=260.0,       # so weit hoert man einen, der spricht (px)
+    gedaechtnis=6.0,          # so lange behaelt der Trupp einen gemeldeten Gegner (s)
+    unterzahl=1.5,            # so viele Gegner je Mann: unterlegen
+    zustand_halten=2.0,       # so lange bleibt ein Zustand mindestens (s)
+    halten_weite=260.0,       # so nah an der Stellung: sie ist im Ruecken
+    niemandsland=130.0,       # so tief ist der Streifen vor dem Gegner, den keiner betritt
+    rand=40.0,                # so viel breiter als der Gegner ist die Front je Seite
+    # Weit genug, dass eine Granate (Radius 78) nicht drei auf einmal
+    # trifft - in den ersten Aufnahmen standen sie zu eng.
+    bahn_min=72.0,            # so breit ist eine Bahn mindestens
+    front_schwelle=40.0,      # erst ab so viel Weg ...
+    front_winkel=20.0,        # ... oder so viel Drehung bewegt sich die Front
+    fuehrer_tiefe=70.0,       # so viel weiter hinten steht der Anfuehrer
+    geschwaecht_tiefe=80.0,   # so viel weiter hinten ein Geschwaechter (0.34.40)
+    linie_abstand=68.0,       # ohne Kontakt: so weit auseinander in der Linie
+    linie_vor=30.0,           # ... und so weit vor dem Anfuehrer
+    linie_warten=2.6,         # x Abstand: so weit zurueck, und der Anfuehrer wartet
+    stellung_weite=28.0,      # so nah an seiner Stellung: er steht, wo er soll
+    flanke_vor=20.0,
+    flanke_ab=90.0,           # so nah an der Linie, und die Aeusseren flankieren
+    welle_zeit=2.6,           # so lange dauert eine Welle (s)
+    welle_weite=85.0,         # so weit zieht eine Welle
+    fuehrer_bonus=120.0,      # so viel lieber nimmt man Gegner nahe dem Anfuehrer
+    buendeln_bonus=40.0,      # ... und die, auf die ein Kamerad schon schiesst
+    fuehrer_schutz=230.0,     # so nah am Anfuehrer: ein Gegner bedroht ihn
+    # Funk zwischen den Anfuehrern.
+    funk_dauer=2.2,           # so lange dauert ein Spruch (s) - er steht dabei
+    funk_gedaechtnis=12,      # so viele Sprueche zeigt der Testmodus
+    melden_pause=8.0,         # so lange nach einer Meldung keine neue (s)
+    hilferuf_gilt=20.0,       # so lange gilt ein Hilferuf (s)
+    helfen_bis_feinde=2,      # mit hoechstens so vielen eigenen Gegnern hilft man
+    helfen_weite=1800.0,      # weiter weg hilft keiner
+    hilfe_hoechstens=45.0,    # laenger ist niemand unterwegs zu einem anderen (s)
+    angekommen=160.0,         # so nah dran: angekommen
+    namen=("ALPHA", "BRAVO", "CHARLIE", "DELTA", "ECHO", "FOXTROT", "GOLF", "HOTEL"),
+    groessen=(2, 3, 4, 5, 6, 8),
+    # Gemeldet: "Die Squad-Leader sollen nur einen Repetierer und eine
+    # Rauchgranate haben."
+    fuehrer_loadout=dict(waffen=["repetierer"], wuerfe=["rauch"]),
+    # GEMISCHT im Spawner: die ersten Leute bekommen diese Waffen, der Rest
+    # das Sturmgewehr - damit jede Rolle (8.4) einmal da ist.
+    mischung=("lmg", "schrot", "scharf"),
+)
+
 # Die Lobby: wo man beim Aufmachen landet und nach jeder Runde.
 #
 # Drei Bereiche, in der Kartendatei als Rechtecke im Kopf eingetragen:

@@ -1057,3 +1057,51 @@ Paketen (0.34.38 bis 0.34.41), jedes mit Version und Test.
   Zuversicht, Panik, Schreck, eingeschossen, Bindung und Bedenkzeit.
   Testmenue INNENLEBEN: PANIK, STRESS +0,3, KAMERAD FAELLT, GRANATE NEBEN
   IHM, RUHE fuer die gezeigte Figur.
+
+### 11.2 Paket 2 (0.34.39): Trupps, Anfuehrer, Sprechen, Funk
+
+* **Ein Trupp entscheidet nichts fuer seine Leute** (trupp.py). Er ist,
+  was alle gemeinsam wissen: die Lage (nur was einer in Sprechweite
+  gesagt hat - `K.TRUPP["sprech_weite"]` 260 px), die Zuversicht (Schnitt,
+  zur Mitte gerundet, Days Gone), daraus der Zustand (suchen, feuerkampf,
+  rueckzug, druck, halten), die Frontlinie mit Niemandsland und Bahnen,
+  die Wellen und die Flanker. Bei seinen Leuten kommt das als Fakten an
+  (`im_trupp`, `ist_fuehrer`, `trupp_rueckzug`, `welle_dran` ...); was sie
+  damit tun, sind Ziele in `wesen/bots.txt` - und Panik und Granaten gehen
+  weiter vor.
+* **Neue Ziele**: verstaerkung_rufen (Rang 1, nur wer fuehrt und Funk
+  hat und unterlegen ist), funk_antworten, lage_melden, rauch_legen
+  (Anfuehrer deckt den Rueckzug), rueckzug und druck (Aktion welle: wer
+  dran ist, zieht an seine neue Stellung, die anderen decken), zu_hilfe
+  (Aktion verlegen - erst wenn die eigenen Gegner erledigt sind),
+  trupp_halten (an seiner Stellung, dringend, wenn er allein ist).
+* **Der Anfuehrer ist ein Mensch wie die anderen** - mit anderen Zahlen:
+  er steht in der Mitte und tiefer (`fuehrer_tiefe`), will mehr
+  ueberleben, flankiert kaum, setzt nicht nach, und die anderen nehmen
+  zuerst, wer ihm zu nahe kommt (`fuehrer_bonus`), und schiessen lieber
+  auf den, auf den schon einer schiesst (`buendeln_bonus`). Ohne
+  Funkgeraet ist Funken kein Ziel, das er erreichen kann; allein uebrig
+  ist er ein Bot wie jeder andere. Faellt er, fuehrt der mit der meisten
+  Disziplin - ohne Funk.
+* **Sprechen**: wer einen neuen Gegner sieht und jemanden in Sprechweite
+  hat, sagt es ("ZWEI IM NORDEN!"); beim Suchen sagen sie, was sie sehen
+  ("LINKS FREI.", "DA WAR WAS, OSTEN!").
+* **Funk** (nur der Anfuehrer, nur im Testmodus): ein Spruch dauert
+  2,2 s (die Zusage halb so lang), er steht dabei. Danach haben ihn alle
+  Anfuehrer der Seite mit Funk. Ein Hilferuf wird nach der eigenen Lage
+  beantwortet (`Trupp.hilfe_pruefen`): wer selbst unterlegen ist oder mehr
+  als zwei Gegner hat oder eine wichtige Stellung haelt, sagt nicht zu;
+  sonst "VERSTANDEN, KOMMEN!" - erst die eigenen, dann hin. Angekommen
+  uebernimmt er, was die anderen wissen. Meldet der andere, dass es ruhig
+  ist, bleibt er weg.
+* **Suchen in breiter Linie**: ohne Kontakt gehen die anderen nebeneinander
+  vor dem Anfuehrer (`linie_abstand` 68 px) und schauen nach aussen, der
+  Anfuehrer wartet, wenn einer zurueckfaellt.
+* **Testmodus**: Spawner-Gruppe TRUPPS - TRUPP (Groesse, Team, Anfuehrer
+  MIT FUNK / OHNE FUNK / KEINER, Waffen GEMISCHT / ZUFALL, Leben), TRUPP:
+  HALTEN HIER (wichtig ja/nein), TRUPP: ANGRIFF HIER, TRUPP: FREI. INFO
+  zeigt Frontlinie, Stellungen, Name und Zustand des Trupps und unten
+  links die letzten Funksprueche; wer funkt, hat einen Kasten mit Balken
+  ueber sich (auch in der sauberen Ansicht). GEDANKEN zeigt Rolle,
+  Zustand, Zuversicht, Lage und Hilfe. Aufnahmen: Szenen `trupp` und
+  `hilferuf`.
