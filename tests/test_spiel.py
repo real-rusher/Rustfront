@@ -9652,6 +9652,24 @@ if _plan86 is not None:
     w86._sturm_takt = 0.0
     _BT86.stuerme_fuehren(w86, K.FIXED_DT)
     pruef("Ist der Trupp gefallen, ist der Plan vorbei", not w86._stuerme, "")
+    # Seit 0.34.44 nur in Ueberzahl: kennen sie zwei Gegner, bleiben sie.
+    for b_ in _trupp86:
+        b_.lebt = True
+    _zweiter86 = type("F", (), {"lebt": True, "pos": pygame.Vector2(ort_) + pygame.Vector2(40, 0),
+                                "ebene": 0})()
+    for b_ in _trupp86:
+        b_.hirn.gesehen[_zweiter86] = (pygame.Vector2(_zweiter86.pos), 0, w86.welt.zeit)
+    w86._sturm_pause = {}
+    w86._sturm_takt = 0.0
+    _BT86.stuerme_fuehren(w86, K.FIXED_DT)
+    _zwei86 = list(w86._stuerme)
+    for b_ in _trupp86:
+        b_.hirn.gesehen.pop(_zweiter86, None)
+    w86._sturm_pause = {}
+    w86._sturm_takt = 0.0
+    _BT86.stuerme_fuehren(w86, K.FIXED_DT)
+    pruef("Zwei gegen zwei stuermen nicht - nur in Ueberzahl (seit 0.34.44); gegen einen wieder",
+          not _zwei86 and bool(w86._stuerme), "%d / %d" % (len(_zwei86), len(w86._stuerme)))
 w86.verlassen()
 K.BOTS["callouts"] = _callouts86
 
@@ -11038,7 +11056,8 @@ _tm.alles_weg()
 _lieg96 = _tm.bot_setzen(_a96, 0, {"team": 0, "hirn": "goap"})
 _tm.toeten(_lieg96)
 pruef("Ueber einem Liegenden steht fuer den Beobachter kein \"[E] AUF\" (seit 0.34.42)",
-      _lieg96.am_boden and _tm.beobachter and not _tm._verbuendet(_lieg96), "")
+      _lieg96.am_boden and _tm.beobachter and not _tm._verbuendet(_lieg96)
+      and not _tm._darf_helfen(_tm.ich, _lieg96), "")
 
 # Aus: wie vorher - wer faellt, ist tot, ohne Leiche.
 _tm.alles_weg()

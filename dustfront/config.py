@@ -1185,6 +1185,7 @@ BOTS = dict(
     unterdrueckt_fehler=1.8,  # x Zielfehler, solange er unterdrueckt ist
     sturm_takt=0.5,           # so oft planen die Bots einer Mannschaft gemeinsam
     sturm_weite=320.0,        # so nah muessen die Bots beieinander sein
+    sturm_ueberzahl=1.5,      # so viel mehr muessen sie sein als die Gegner, die sie kennen
     sturm_sammel=(70.0, 110.0, 150.0),  # Sammelpunkt so weit vom Ziel, ausser Sicht
     sturm_sammeln_zeit=7.0,   # laenger wird nicht gewartet
     sturm_rein_zeit=4.5,      # so lange stuermen sie

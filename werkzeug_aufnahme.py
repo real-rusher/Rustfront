@@ -292,6 +292,57 @@ def szene_engstelle(tm, rnd):
             trupp.mitglieder, alle_weg(trupp.mitglieder, zombies), 60, 1.75)
 
 
+def szene_deckung(tm, rnd):
+    """Seit 0.34.43: Rot hinter einer Kistenwand kaempft aus der Deckung
+    (drin warten, herauslehnen, ein Stoss, zurueck), Blau kommt ueber das
+    freie Feld. Nach acht Sekunden bekommt einer von Rot Panik und
+    verkriecht sich, statt wegzurennen. Wer faellt, wird gezogen."""
+    T = K.TILE
+    ebene = tm.welt.ebene(0)
+    for _ in range(20000):
+        tx = rnd.randrange(2, ebene.breite - 22)
+        ty = rnd.randrange(2, ebene.hoehe - 12)
+        mitte = [pygame.Vector2((tx + x + 0.5) * T, (ty + y + 0.5) * T)
+                 for x in range(0, 20, 2) for y in range(0, 9, 2)]
+        if all(tm.welt.frei(p, 12, 0, True) for p in mitte):
+            break
+    else:
+        raise RuntimeError("Keine freie Flaeche fuer die Kistenwand gefunden")
+    wand_x = tx + 13
+    for dy in range(1, 8):
+        if dy != 4:                       # eine Luecke, durch die man sieht
+            ebene.setzen(wand_x, ty + dy, K.KISTE)
+    hinten = pygame.Vector2((wand_x + 1.6) * T, (ty + 4.5) * T)
+    vorn = pygame.Vector2((wand_x - 6.5) * T, (ty + 4.5) * T)
+    tm.verwundete_setzen(True)
+    rot = [tm.bot_setzen(hinten + pygame.Vector2(0, (i - 1) * T * 2.2), 0,
+                         {"team": 0, "hirn": "goap", "leben": 2.0}) for i in range(3)]
+    for b in rot:
+        b.hirn.merkmale["mut"] = min(b.hirn.merkmale.get("mut", 0.5), 0.45)
+    blau = [tm.bot_setzen(p, 0, {"team": 1, "hirn": "goap", "leben": 1.5}) for p in kreis(vorn, 3, 34)]
+    # Beide wissen voneinander: sonst zogen sie suchend auseinander, und
+    # die Kamera hing zwischen ihnen im Leeren.
+    for eigene, andere in ((rot, blau), (blau, rot)):
+        for b in eigene:
+            for x in andere:
+                b.hirn.gesehen[x] = (pygame.Vector2(x.pos), 0, tm.welt.zeit)
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        # Panik fuer einen, der gerade hinter den Kisten sitzt - wer im
+        # Freien steht, rennt zu Recht weg, das zeigt die Szene nicht.
+        if uhr["t"] >= 8.0 and not uhr.get("panik"):
+            for b in rot:
+                if b.lebt and not getattr(b, "am_boden", False) and b.hirn._in_deckung():
+                    uhr["panik"] = True
+                    b.hirn.innen.panik_setzen(5.0)
+                    break
+
+    return ("Deckung zuerst: aus der Deckung feuern, Panik = verkriechen",
+            rot + blau, alle_weg(rot, blau), 35, 1.5, jedes_bild)
+
+
 # Name -> (Dateiname, Szene). Die Nummer im Dateinamen ist die Reihenfolge.
 SZENEN = {
     "duell": ("1_goap_gegen_klassisch", szene_duell),
@@ -305,6 +356,7 @@ SZENEN = {
     "bergen": ("9_bergen_und_wiederbeleben", szene_bergen),
     "igel": ("10_igel_von_drei_seiten", szene_igel),
     "engstelle": ("11_engstelle_gegen_horde", szene_engstelle),
+    "deckung": ("12_deckung_zuerst", szene_deckung),
 }
 
 

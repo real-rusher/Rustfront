@@ -546,6 +546,14 @@ def stuerme_fuehren(g, dt: float) -> None:
                    and x.pos.distance_to(a.pos) < b["sturm_weite"]]
             if not mit:
                 continue
+            # Nur in Ueberzahl (seit 0.34.44): sonst stuermten drei gegen
+            # drei aus ihrer Deckung heraus, gesehen in der Aufnahme.
+            if hasattr(a.hirn, "feind_orte"):
+                bekannt = len(a.hirn.feind_orte())          # GOAP: auch gehoert und gesagt
+            else:
+                bekannt = sum(1 for w in a.hirn.gesehen if w.lebt)
+            if max(1, bekannt) * b["sturm_ueberzahl"] > len(mit[:3]) + 1:
+                continue
             sammel = a.hirn.sammelpunkt(ort, ebene)
             if sammel is None:
                 continue

@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.43, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.44, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -823,6 +823,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.44 | Bots stürmen nur noch in Überzahl (mindestens anderthalbmal so viele wie die Gegner, die sie kennen) - in der Aufnahme stürmten drei gegen drei aus ihrer Deckung. Testmodus: über einem Liegenden stand für den Beobachter weiter „[E] AUF [G] ZIEHEN“ (der Fix aus 0.34.42 traf nur die Randpfeile). Neue Aufnahme `deckung`. Netz/LAN: unverändert; die Bots rechnet nur der Gastgeber, trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.43 | **Ruhiger, wie in RimWorld.** Alle laufen langsamer (Spieler, Bots, Zombies, Bosse: 65 % des alten Tempos, das Verhältnis untereinander bleibt), Geschosse fliegen langsamer (80 %, gleiche Reichweite). Wer einen Gefallenen zieht, hat ein eigenes Bild: keine Waffe, beide Hände an ihm, der Blick zu ihm - und schießt nicht. Bots gehen zuerst in Deckung und kämpfen aus ihr heraus (drin warten, herauslehnen, ein Feuerstoß, zurück); nur die Mutigen, wer das MG am Laufen hat oder den Gegner gleich erledigt, greifen offen an. Trupp-Stellungen rücken hinter nahe Deckung. Panik in der Deckung: kein Wegrennen am Gegner vorbei, sondern in die beste gedeckte Ecke (im Haus die Ecke). Die Untertitel über den Bots sind aus. Testmodus: Funksprüche als Wellen, die vom Anführer ausgehen. Netz/LAN: **geändert im Gefecht** (Tempo von Figuren und Geschossen, Bots); über das Netz geht nichts Neues, aber alle Geräte brauchen dieselbe Version. |
 | 0.34.42 | Testmodus: Über einem liegenden Bot stand für den Beobachter „[E] AUF [G] ZIEHEN“, als könne er helfen (gesehen in der Aufnahme). Die Szene `bergen` gibt den Gegnern mehr Leben, damit man die ganze Bergung sieht. Netz/LAN: unverändert; trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.41 | **Bots wie Menschen, Teil 4: Gelände.** Kommen die Gegner von allen Seiten, igelt sich ein Trupp ein: an einem Platz mit Deckung ringsum, im Ring, jeder schaut in seinen Sektor, der Anführer in der Mitte, und keiner verlässt den Ring. Gegen eine Zombie-Horde sucht der Trupp eine Engstelle zwischen sich und den Zombies und hält dahinter im Bogen. Testmodus: TRUPP: IGEL HIER, INFO zeigt Igelplatz, Engstelle und Blickrichtungen; Aufnahmen `igel` und `engstelle`. Netz/LAN: unverändert (Trupps nur im Testmodus); trotzdem brauchen alle Geräte dieselbe Version. |

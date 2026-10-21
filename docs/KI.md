@@ -1198,6 +1198,9 @@ Gegner vorbeifuehren.
 * **Untertitel aus** (`K.BOTS["callouts"]`): gesprochen wird weiter (der
   Trupp teilt sein Wissen), es steht nur nicht mehr ueber dem Kopf.
 * **Funk im Testmodus** als Wellen vom Funker; wer empfaengt, blinkt.
+* **Sturm nur in Ueberzahl** (0.34.44, `stuerme_fuehren`): mindestens
+  `sturm_ueberzahl` (1,5) mal so viele wie die Gegner, die der Erste kennt -
+  sonst stuermten drei gegen drei aus ihrer Deckung.
 
 ### 11.6 Was noch offen ist
 

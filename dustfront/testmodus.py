@@ -449,6 +449,14 @@ class Testmodus(Gefecht):
             return False
         return super()._verbuendet(k)
 
+    def _darf_helfen(self, helfer, liegender) -> bool:
+        """Dasselbe fuer den Hinweis ueber dem Kopf: der fragt hier, nicht
+        _verbuendet - mit 0.34.42 stand "[E] AUF" darum weiter in der
+        Aufnahme (seit 0.34.44)."""
+        if self.beobachter and helfer is self.ich:
+            return False
+        return super()._darf_helfen(helfer, liegender)
+
     def _regeln_anlegen(self, k) -> None:
         super()._regeln_anlegen(k)
         k.revive_an = (bool(getattr(self, "verwundete", False)) and getattr(k, "ist_bot", False)
