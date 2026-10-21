@@ -534,7 +534,8 @@ usw.
    Feuerkampf halten, Stellung stuermen (sammeln, Granate, Spitzenmann
    zuerst, die anderen dicht dahinter), Rueckzug unter Feuerschutz.
    Gebaut als kleine HTN (hierarchische Aufgaben), wie Killzone 2 und
-   Decima es tun (Abschnitt 9). Der Truppfuehrer verteilt Rollen als
+   Decima es tun (Abschnitt 9) - nach dem Lesen der Quellen zuerst als
+   Truppzustaende mit Bedingungen, siehe 10.4. Der Truppfuehrer verteilt Rollen als
    **Auftraege**: ein Ziel mit hoher Dringlichkeit beim Einzelnen - der es
    nach Disziplin, Stress und Zuversicht annimmt oder nicht. Wissen geht
    nur ueber Funk und Sicht (Abschnitt 7).
@@ -660,7 +661,7 @@ gesagt.
 * Jeff Orkin, *Three States and a Plan: The A.I. of F.E.A.R.* (GDC 2006) -
   der Ursprung von GOAP in Spielen, mit Trupp-Tricks:
   https://pages.cs.wisc.edu/~dyer/cs540/handouts/gdc2006_orkin_jeff_fear.pdf
-* Remco Verweij, *A Hierarchically-Layered Multiplayer Bot System for a
+* Tim Verweij, *A Hierarchically-Layered Multiplayer Bot System for a
   First-Person Shooter* (Killzone 2, 2007) - genau unser Fall:
   Mehrspieler-Bots mit Trupp- und Einzelebene:
   https://www.guerrilla-games.com/media/News/Files/VUA07_Verweij_Hierarchically-Layered-MP-Bot_System.pdf
@@ -703,3 +704,273 @@ gesagt.
   Detailstufen nach Naehe zum Spieler:
   https://colepowered.com/?p=34142 und
   https://colepowered.itch.io/shadows/devlog/189689/shadows-of-doubt-devblog-23-generating-citizens-part-1
+
+---
+
+## 10. Was wir aus den Quellen nutzen (gelesen 0.34.37)
+
+Auftrag: "diese ganzen verschiedenen Artikel und Papers lesen ... und
+zusammenfassen, was wir davon nutzen koennen."
+
+**Ganz gelesen:** Orkin (F.E.A.R.), Verweij (Killzone 2, alle Kapitel),
+Karlsson (*Squad Coordination in Days Gone*), Lewis (*Choosing Effective
+Utility-Based Considerations*, Guild Wars 2), Dill (*Dual-Utility
+Reasoning*), Gorniak/Davis (*SquadSmart*), Dave Marks IAUS-Seite, die
+Devblogs von Shadows of Doubt und das Dwarf-Fortress-Interview.
+**Nur Zusammenfassung:** das Stress-Paper (Volltext gesperrt), Decima
+(Folien zu gross). **Nicht erreichbar:** der Square-Enix-Vortrag (GDC
+Vault in Wartung), Shadows-of-Doubt-Devblog 8 (leer). Das Buch
+*Procedural Storytelling* kostet und ist nicht gelesen.
+
+Neu im Lernmaterial (Abschnitt 9 nennt sie nur ueber gameaipro.com):
+* Karlsson, *Squad Coordination in Days Gone* (Game AI Pro Online 2021):
+  http://www.gameaipro.com/GameAIProOnlineEdition2021/GameAIProOnlineEdition2021_Chapter12_Squad_Coordination_in_Days_Gone.pdf
+* Lewis, *Choosing Effective Utility-Based Considerations* (Game AI Pro 3):
+  http://www.gameaipro.com/GameAIPro3/GameAIPro3_Chapter13_Choosing_Effective_Utility-Based_Considerations.pdf
+* Dill, *Dual-Utility Reasoning* (Game AI Pro 2):
+  http://www.gameaipro.com/GameAIPro2/GameAIPro2_Chapter03_Dual-Utility_Reasoning.pdf
+
+### 10.1 Die fuenf Lehren, die ueberall wiederkommen
+
+1. **Gut aussehen schlaegt richtig sein.** Days Gone sagt es woertlich:
+   das Ziel ist "good-looking combat", nicht das wirksamste Verhalten -
+   die KI laesst sich eine Weile flankieren, damit die Flanke des Spielers
+   sich lohnt, und Flankierer lassen hinten eine Luecke zum Rueckzug.
+   Killzone 2: die Bots waren der alten KI 159 zu 14 Runden ueberlegen
+   und wirkten trotzdem "robotisch". F.E.A.R.: die Spieler halten die KI
+   fuer klug, weil sie *sagt*, was sie tut ("Flankiert ihn!").
+2. **Ein Trupp-Gehirn ueber dem Einzelnen, und der Einzelne darf Nein
+   sagen.** Bei allen dreien gleich: der Trupp vergibt Rollen, der
+   Einzelne fuehrt sie aus, ausser etwas Dringenderes ist los (F.E.A.R.:
+   Flucht schlaegt Befehl; Days Gone: die Rolle steckt *an einer Stelle*
+   in der Rangfolge des Einzelnen, alles darueber gewinnt). Killzone 2
+   zeigt den Fehler: Befehle hatten den hoechsten Rang, also liefen die
+   Bots an Gegnern vorbei zum Kreis - das war die haeufigste Kritik der
+   Tester ("ignorierten Gegner, nutzten keine Deckung").
+3. **Eine Zahl fuer den Mut genuegt.** Days Gone steuert Angriff, Halten
+   und Rueckzug mit *einer* Groesse, der Zuversicht, aus dem
+   Kraefteverhaeltnis (10.2). Ansteckung (Panik reisst den Trupp mit,
+   wenige Mutige reissen ihn hoch) kommt von selbst aus der Formel.
+4. **Raum ordnen.** Ohne Ordnung stehen beide Seiten durcheinander,
+   Deckungen werden staendig ungueltig, und der Spieler erkennt nicht,
+   wer gewinnt. Days Gone loest das mit einer **Frontlinie**; Killzone
+   hatte keine und bekam "wie Ameisen, alle in einer Reihe".
+5. **Ruhe in die Entscheidung.** Jede Quelle hat eigene Bremsen gegen
+   Hin-und-her: Schwellen, bevor sich die Frontlinie bewegt; geglaettete
+   Werte; ein Bonus fuer die laufende Entscheidung; Laufzeit und
+   Abklingzeit je Aktion (Lewis); die laufende Aufgabe anpassen statt neu
+   planen (Killzone 2: neue Deckung, gleicher Plan). Unser
+   `K.GOAP["vorsprung"]` und `sperre` sind der Anfang davon.
+
+### 10.2 Je Quelle: was wir uebernehmen
+
+**Days Gone (Karlsson) - die wertvollste Quelle fuer 8A und 8C.**
+* **Zuversicht** in fuenf Stufen: panisch, besorgt, neutral, zuversichtlich,
+  heldenhaft. Berechnet je Mensch x:
+  `C(x) = (s_x + Summe c_f*s_f + Summe s_getoetet) / (Summe c_e*s_e + Summe s_verloren)`.
+  s ist die Staerke (Waffe, Panzerung, verwundet, niedergehalten), c der
+  Zuversichts-Faktor des anderen. Sein eigener Wert zaehlt *ohne* Faktor,
+  damit er nur die Lage spiegelt. Ein **Panischer zaehlt fuer den Gegner**,
+  das macht Panik ansteckend. Kills und Verluste bleiben am Trupp haengen
+  und klingen langsam ab (viel laenger als ein Gefecht). Die Formel ist
+  stabil und pendelt sich nach wenigen Durchlaeufen ein; die Stufen haben
+  Schwellen, also gibt es kein Flattern.
+* **Gegen den Spieler extra:** steht der Spieler still oder liegt in
+  Deckung, *steigt* die Zuversicht der KI (sie macht Druck); stuermt er,
+  greift er im Nahkampf an oder zielt er auf einen, *sinkt* sie. Wer
+  angreift, wird belohnt.
+* **Trupps** bilden sich von selbst: zwei Gleiche in Reichweite sind im
+  selben Trupp, Trupps verschmelzen und zerfallen nach Abstand.
+* **Frontlinie**: Richtung von der eigenen Mitte zur Gegnermitte; davor
+  ein **Niemandsland**, das keiner betritt; Breite nach der Breite des
+  Gegners, aber mindestens so, dass alle nebeneinander passen; jeder
+  bekommt eine **Bahn** (Lane) und sucht sich darin seinen Platz. Die
+  Linie bewegt sich erst ueber einer Schwelle und gleitet nach (schneller,
+  je groesser die Aenderung). Wer in Deckung ist, zaehlt mit dem Platz der
+  Deckung, nicht mit dem Schritt zur Seite beim Schiessen.
+* **Vier Truppzustaende**, gewaehlt nach Zuversicht: *Formieren* (wer
+  steht, schiesst, die anderen ruecken auf), *Feuerkampf* (neutral,
+  Abstand halten), *Rueckzug in Wellen* (besorgt oder schlechter: die
+  Haelfte, die vorn steht oder keine Deckung hat, geht kurz zurueck, die
+  andere deckt, dann umgekehrt), *Druck* (zuversichtlich: die Hinteren
+  ruecken auf, dann flankieren die Aeusseren zur naeheren Seite - hinten
+  bleibt eine Luecke).
+* **Feinheiten**: Flankierer zaehlen nicht zur Frontlinie und lassen
+  einen **Geist** an ihrem alten Platz, damit die Linie nicht kippt;
+  gegnerische Flankierer werden eine Zeit lang ignoriert, dann
+  beachtet. Scharfschuetzen und **Stuermer** (Nahkampf, Schrot) gehoeren
+  nicht in die Frontlinie - genau unsere Rollen aus 8.4. Rennt der
+  Spieler, schiesst die KI und wartet mit dem Stellungswechsel, bis er
+  stehen bleibt.
+* **Karten-Markierungen** fuer die Kampagne (Schritt 7): Verteidigungszone
+  mit weicher Grenze (draussen sinkt die Zuversicht langsam, darum
+  kehren sie von selbst zurueck), Heimatbereich (Rueckzug immer dorthin,
+  im Heimatbereich kein Rueckzug mehr), Befestigung (steht das Ziel in der
+  Todeszone, geh in die Stellung; immer mit Richtung).
+
+**Killzone 2 (Verweij)** - Aufbau und was schiefging.
+* Drei Ebenen: **Fraktionsfuehrer** (alle 6,7 s, versetzt zwischen den
+  Seiten, damit die Strategie nicht flattert), **Truppfuehrer**,
+  **Einzelner**. Trupps bis 4.
+* Truppablauf **sammeln -> angreifen -> halten**; Sammeln, sobald mehr als
+  die Haelfte da ist, an einem Punkt mit Deckung, Zeitgrenze = Ankunft
+  des Fernsten, wer allein ist, sammelt nicht; mehr als die Haelfte tot =
+  verloren, Ueberlebende kaempfen weiter, Wiedereinsteiger sammeln neu.
+* Abstimmung ohne Planer: **Feuer buendeln**, indem die Zielwahl den
+  Abstand der Kameraden zum Ziel mitrechnet; **Ausguckpunkte aufteilen**.
+* Einzelne: nie entspannt, laufen ohne Gegner mit voller Geschwindigkeit,
+  zielen wie ein durchschnittlicher Spieler ("schlechter sieht dumm aus,
+  besser fuehlt sich unfair an"), verteilen sich im Kreis.
+* Fraktionsfuehrer fuer Zonen-Spielarten: so viele Zonen angreifen, wie
+  zum Gewinnen noch fehlen (`ceil(N/2 + Rueckstand / (2 * Punkte je
+  Zone))`), lieber neutrale und nahe Ziele, Ziele behalten, gleichmaessig
+  teilen (4-3-1), Spaeher zu Zonen, die keiner angreift.
+* **Was die Tester sagten** (unsere Warnliste): Befehl vor Gefahr wirkt
+  dumm; alle laufen denselben Weg hintereinander ("Ameisen"); beim
+  Sammeln stehen alle still (eine Granate und der Trupp ist weg); keine
+  Ahnung von Engstellen - Menschen verteidigen die Zugaenge, nicht die
+  Mitte; gut fanden alle, dass die Bots *zusammen* kamen, und sie spielten
+  dadurch selbst mehr zusammen. Zielgenauigkeit fanden die einen
+  menschlich, die anderen unfair - also eine Einstellung, keine Konstante.
+* **Fairness durch den Aufbau**: der Planer sieht nur, was ein Daemon ihm
+  als Fakt hinlegt - das zwingt zu fragen, ob ein Mensch das wissen
+  koennte. Bei uns: Fakten nur aus Sicht, Gehoer und Funk (Abschnitt 7).
+
+**F.E.A.R. (Orkin)** - kleine Bausteine, Verhalten entsteht.
+* Ziele in Schichten ("seven-layer dip"): angreifen, ausweichen,
+  Deckung, blind aus der Deckung feuern, wenn man in der Deckung
+  getroffen wird, Hinterhalt, wenn die Deckung aufgeflogen ist. Regel:
+  **die Deckung nur verlassen, wenn sie bedroht ist und es eine andere
+  gibt.**
+* Fehlschlaege kommen ins Gedaechtnis und verteuern den Plan beim
+  naechsten Mal; Zielwahl (wen, mit welcher Waffe) geschieht *vor* dem
+  Planer.
+* Truppverhalten: Deckung nehmen (einer haelt nieder, die anderen gehen
+  in *verschiedene* Deckungen), Vorruecken von Deckung zu Deckung, Reihe
+  (jeder deckt den Vorderen, der Letzte nach hinten), Suche in Paaren.
+  Ablauf: Plaetze besetzen -> Befehle senden -> der Einzelne wiegt den
+  Befehl gegen eigene Ziele -> Erfolg pruefen.
+* **Flanke und Zange entstehen**, wenn Deckungen rund um ein Hindernis
+  vergeben werden - man muss sie nicht ausprogrammieren.
+* **Funk nach der Entscheidung**: der Satz beschreibt, was gerade
+  beschlossen wurde; Wechselreden zu zweit ("Status?" - "Alles ruhig");
+  Untaetigkeit erklaeren ("Ich komm hier nicht weg!"); auch Gespieltes
+  ("Brauche Verstaerkung!", wenn nur einer uebrig ist).
+
+**Lewis (Guild Wars 2)** - wie man Nutzenkurven waehlt.
+* Jede Ueberlegung: Eingang auf 0 bis 1 begrenzen ("Buchstuetzen"),
+  durch eine Kurve, alle multiplizieren; eine 0 streicht die ganze
+  Entscheidung (billige Ueberlegungen zuerst pruefen).
+* **Wenige fertige Kurven** statt freier Formeln - das kann jeder lesen.
+  Dazu zwei Standards gegen Wiederholung: **Laufzeit** (`1 - x^6`: nach
+  einer Weile faellt die Aktion weg) und **Abklingzeit** (`x^5`: erst kurz
+  vor Ablauf wieder voll).
+* Bei gleichen Werten flattert die Wahl: Bonus fuer die laufende
+  Entscheidung, Gewichte, Laufzeit/Abklingzeit - am besten aber **eine
+  weitere Ueberlegung**, die die beiden trennt.
+* Fragen wie ein Schauspieler: "warum wuerde ich das tun?" und dafuer
+  einen einfachen **Stellvertreter** suchen (eine feste Zeit statt einer
+  Rechnung) - Spieler erfinden die Begruendung selbst dazu.
+* Beispiele, die genau zu uns passen: *Sturmangriff* nur auf mittlere
+  Entfernung, nur wenn er gesund ist, nur nach vorn, und **nicht, wenn
+  schon genug Kameraden am Ziel sind** - der Spieler soll nicht von drei
+  Seiten ueberrannt werden.
+
+**Dill (Dual Utility)** - Zufall ohne Dummheit.
+* Jede Option hat **Rang** und **Gewicht**. Gewicht 0 = gestrichen; nur
+  der hoechste Rang zaehlt; was weit unter dem besten Gewicht liegt, faellt
+  weg; aus dem Rest wird **nach Gewicht gewuerfelt**. Zoo Tycoon 2:
+  Beduerfnisse Rang 0, auf dem Baum Rang 5, Vorfuehrung Rang 100,
+  Sterben Rang 1.000.000.
+
+**SquadSmart (Gorniak/Davis)** - Abstimmung im Trupp.
+* **Reservieren**: wer eine Deckung, ein Ziel oder einen Kameraden fuer
+  eine Aufgabe nimmt, sperrt sie, damit kein zweiter Plan sie doppelt
+  vergibt. **Warten auf**: "geh erst, wenn der andere fertig ist"
+  (Sturm erst nach dem Wurf). Wirkungen werden *gesehen*, nicht
+  angenommen - klappt etwas nicht, plant der Trupp es einfach wieder.
+* Erst gute Abfolge, dann Zweige: der erste passende Zweig gewinnt
+  (zu zweit festnehmen, sonst allein).
+
+**Dave Mark (IAUS)** - bestaetigt 8.2: Entscheidung = Verhalten in
+einem Zusammenhang (wen, wo), Ueberlegungen als Kurven, Produkt,
+Verhaltenspakete je Spezies. Passt zu `wesen/*.txt`.
+
+**Stress-Paper (Abertay)** - nur die Zusammenfassung: Wut, Angst, Schock
+als Stressreaktionen, im Spielertest mochten die Spieler es (80 % spielten
+laenger als geplant). Bestaetigt 8.3, keine neuen Zahlen.
+
+**Weltsimulation (fuer Schritt 7 bis 9):** Shadows of Doubt hat feste
+Tagesplaene verworfen (zu zerbrechlich) und auf Beduerfnisse umgestellt
+(essen, trinken, schlafen) - genau unser Schritt 8 mit GOAP. Genau
+gerechnet wird nur in der Naehe des Spielers, der Rest grob. Dwarf
+Fortress: Eigenschaften zusammenstecken statt Klassen vererben (das tun
+wir mit Spezies und Daten schon), Erreichbarkeit als vorberechnete
+Bereiche statt Wegsuche fuer jede Frage.
+
+### 10.3 Was sich am Plan aendert (Abschnitt 8)
+
+* **8A Innenleben:** *Zuversicht* nach der Days-Gone-Formel statt nur
+  aus der Ereignistabelle in 8.3, mit den fuenf Stufen und der
+  Spieler-Sonderregel. *Stress* bleibt fuer das Kurzfristige
+  (Unterdrueckung, Granate, getroffen) und treibt Zoegern und Panik;
+  Zuversicht treibt Angriff, Halten, Rueckzug und Uebermut. Kills und
+  Verluste haengen am Trupp und klingen langsam ab (im Mehrspieler: bis
+  Rundenende). Alle Zahlen nach `K.MORAL`.
+* **8B Waffenrollen:** als Ueberlegungen mit Kurven, nicht als
+  Sonderfall. MG *eingeschossen* = Laufzeit-Kurve andersherum (je laenger
+  er feuert, desto teurer der Stellungswechsel). Schrot = Stuermer, steht
+  nicht in der Frontlinie; Sturm nur, wenn nicht schon genug Kameraden am
+  Ziel sind (Lewis). Scharfschuetze ausserhalb der Frontlinie, wechselt
+  nach Schuessen (Abklingzeit).
+* **8C Trupp:** Trupps nach Abstand (Days Gone), hoechstens 4 (Killzone).
+  **Frontlinie mit Bahnen** gegen die Ameisenreihe. Truppzustaende
+  *formieren, Feuerkampf, Rueckzug in Wellen, Druck mit Flanke* nach der
+  Zuversicht. Sammeln *in Bewegung*, nicht stehend. Befehl als Rolle mit
+  festem Platz in der Rangfolge - Ueberleben und Gegner direkt vor ihm
+  bleiben darueber. Reservieren von Deckung und Ziel, "warten auf" fuer
+  den Sturm. Feuer buendeln ueber die Zielwahl. Fuer die Kreis-Spielart
+  spaeter ein Fraktionsfuehrer (wie viele, wer, wohin).
+* **8D Unvollkommenheit:** die "Temperatur" aus 8.6 wird **Dual
+  Utility**: Rang trennt Wichtiges (Granate ausweichen) von Normalem,
+  innerhalb des Rangs wird nach Gewicht gewuerfelt, und die Schwelle fuer
+  "zu schlecht, um gewuerfelt zu werden" sinkt mit dem Stress - so macht
+  er unter Druck Fehler, aber nie voellig dumme. Zielgenauigkeit als
+  Einstellung je Schwierigkeit (Killzone).
+* **Funk (8.7):** jeder Spruch folgt einer Entscheidung, dazu
+  Wechselreden und Saetze, die Untaetigkeit erklaeren (F.E.A.R.).
+* **Karten (spaeter):** Engstellen und Zugaenge je Karte in
+  `karten/*.txt` markieren; Verteidiger halten die Zugaenge (Killzone),
+  fuer die Kampagne Verteidigungszone, Heimatbereich, Befestigung (Days
+  Gone). Das betrifft die Karten und damit das Netz.
+
+### 10.4 Was wir bewusst *nicht* uebernehmen
+
+* **Keinen vollen HTN-Planer fuer den Trupp.** Verweijs eigenes Fazit:
+  das Truppverhalten haette es auch ohne Planer gegeben - es sind
+  Zustaende mit Wechselbedingungen, die Befehle schicken. Also zuerst
+  Truppzustaende in `wesen/*.txt` (Bedingung -> Zustand -> Rollen); ein
+  echter HTN erst, wenn Truppplaene mit mehreren Schritten noetig sind.
+* Kein Zeitscheiben-Planen und kein Uebersetzen der Daten in Code
+  (SquadSmart): unsere Plaene sind kurz, das Gehirn misst seine Zeit schon
+  (3.4).
+* Keine feste Faktenliste wie bei F.E.A.R. - unsere Fakten sind Namen
+  in den Daten, das bleibt.
+
+### 10.5 Wie wir messen
+
+* **Bot gegen Bot**, viele Runden ohne Bild, Ergebnis als
+  `(A - B) / (A + B)` (Killzone 2: symmetrisch und zeigt, wie knapp es
+  war). Seiten tauschen, weil keine Karte ganz gleich ist.
+* **Spieler fragen, ohne zu lenken:** nicht "war es lustig?", sondern
+  "wirkte es organisiert? klug? menschlich? wie schwer?" (Killzone 2).
+* **Aufnahmen** mit `werkzeug_aufnahme.py`: neue Szenen fuer Rueckzug in
+  Wellen, Flanke mit Luecke, MG haelt.
+
+### 10.6 Empfohlene Reihenfolge
+
+1. **8A** Zuversicht und Stress - alles andere haengt daran.
+2. **8C** Frontlinie, Bahnen und die vier Truppzustaende - das bemerken
+   Spieler am meisten (Killzone: fast alle sahen das Zusammenspiel).
+3. **8B** Waffenrollen - danach fast nur Daten.
+4. **8D** Dual Utility und Zielgenauigkeit je Schwierigkeit.

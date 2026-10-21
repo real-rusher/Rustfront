@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.36, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.37, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -823,6 +823,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.37 | `docs/KI.md` hat einen neuen Abschnitt **10. Was wir aus den Quellen nutzen**: F.E.A.R., die Killzone-2-Arbeit, *Squad Coordination in Days Gone*, Guild Wars 2 (Nutzenkurven), Dual Utility und SquadSmart gelesen und zusammengefasst – Zuversicht nach dem Kräfteverhältnis, Frontlinie mit Bahnen gegen die „Ameisenreihe“, Rückzug in Wellen, Befehl nicht über dem Überleben, Zufall nur unter guten Möglichkeiten; dazu, was wir bewusst nicht übernehmen, wie wir messen und in welcher Reihenfolge wir bauen. Netz/LAN: unverändert, trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.36 | Zombies und Bosse bleiben vorerst klassisch – auch in den Szenen von `werkzeug_aufnahme.py` (Regel und Spawner standen schon auf KLASSISCH). `docs/KI.md` hat zwei neue Abschnitte: **8. Menschen im Gefecht** – wie die Bots menschlich kämpfen sollen (Stress und Zuversicht, Panik, Zögern, Übermut, Wut; die Waffe prägt die Rolle – das eingeschossene MG bleibt und hält nieder, die Schrotflinte geht vorne; Partner und Trupp statt Einzelrollen; Fehler aus dem Zustand statt aus dem Würfel), in vier Teilen zum Bauen – und **9. Lernmaterial** zu Planung, Utility, Trupp-KI, Stress und Weltbau. Netz/LAN: unverändert, trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.35 | **Aufnahmen mit Ton und in Zeitlupe.** `werkzeug_aufnahme.py` schreibt jetzt mit, welcher Klang wann wie laut gespielt würde (gehört vom Beobachter aus, mit derselben Entfernungsrechnung wie im Spiel), und mischt daraus die Tonspur. Mit `--zeitlupe` kommt zu jeder Szene eine Fassung in halbem Tempo dazu – echt doppelt so dicht gezeichnet, nicht verdoppelte Bilder, der Ton halb so schnell bei gleicher Tonhöhe. `--ohne-ton` lässt den Ton weg. Dazu ein Test, der wackelte: der herumirrende Zombie wird jetzt an seiner Strecke gemessen, nicht am Abstand zum Start. Netz/LAN: unverändert, trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.34 | **Tod schlichter, Figuren flach, Bots mit Rufnamen.** Die Todesanimation aus 0.34.33 ist wieder draußen: wer stirbt, hinterlässt sofort Spritzer und den Fleck im Blut seiner Art – und man hört es, mit einem neuen Todeslaut (`tod`, als Datei ersetzbar unter `assets/sfx/tod.wav`). Die Figuren – Spieler, Bots, Gegner, Bosse – sind wieder flach; nur Buggy und herumliegende Beute behalten ihre Höhe. Die Bots heißen jetzt wie Operators: `BOT-GHOST`, `BOT-CHIMERA`, `BOT-REAPER` … aus einer Liste von 380 Rufnamen (`config.py`, `BOTS["namen"]`). **Netz/LAN: geändert** (die Meldung `d` für einen Tod ist kürzer geworden), alle Geräte brauchen dieselbe Version. |
