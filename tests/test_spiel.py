@@ -4855,6 +4855,12 @@ tempo_z = zieher.tempo.length()
 pruef("Wer zieht, geht langsamer",
       tempo_z < K.SPIELER["tempo"] * K.ZIEHEN["tempo"] + 3.0,
       "%.0f px/s" % tempo_z)
+# Seit 0.34.43: er haelt ihn sichtbar - eigenes Bild ohne Waffe, Blick zu ihm.
+_zu_z = liegt.pos - zieher.pos
+_ab_z = (zieher.winkel - math.degrees(math.atan2(_zu_z.y, _zu_z.x)) + 180) % 360 - 180
+pruef("Wer zieht, schaut zu ihm (nicht zur Maus) und hat das Bild mit beiden Haenden",
+      abs(_ab_z) < 3.0 and zieher.bild.endswith("zieht") and zieher.bild in K.BILD_MASS,
+      "%.1f Grad daneben, %s" % (_ab_z, zieher.bild))
 netz_durchlassen(wz, gz, 10)
 pruef("Der Gast weiss, dass er gezogen wird",
       gz.kaempfer.get(8) is not None and gz.kaempfer[8].zieht == liegt.nummer)
@@ -9446,6 +9452,11 @@ w85.verlassen()
 print("\n-- Bots: Funk und Taktik (0.34.27)")
 from dustfront import bottaktik as _BT86
 from dustfront.entities import Geschoss as _Gs86
+# Seit 0.34.43 stehen die Sprueche nicht mehr ueber den Koepfen
+# (K.BOTS["callouts"] aus). Geprueft wird hier, wie sie entstehen und beim
+# Gast ankommen - darum fuer diesen Abschnitt eingeschaltet.
+_callouts86 = K.BOTS["callouts"]
+K.BOTS["callouts"] = True
 
 w86, g86 = gefechtspaar("team", regeln={"bots_t0": 2, "bots_t1": 2})
 _eigen86 = [b_ for b_ in w86._bots() if b_.team == w86.ich.team]
@@ -9642,6 +9653,7 @@ if _plan86 is not None:
     _BT86.stuerme_fuehren(w86, K.FIXED_DT)
     pruef("Ist der Trupp gefallen, ist der Plan vorbei", not w86._stuerme, "")
 w86.verlassen()
+K.BOTS["callouts"] = _callouts86
 
 # 0.34.28: "Mach mir bitte einen separaten Gamemode, den man aus dem
 # Hauptmenue waehlt ... Testmodus ... spectator ... ELEMENTAR, dass NICHTS
@@ -10773,7 +10785,7 @@ _al95.lage = {}
 _m95.hirn.gesehen = {_feind95: (pygame.Vector2(_feind95.pos), 0, _tm.welt.zeit)}
 _al95._lage_sammeln(_al95.lebende())
 pruef("Sprechen: wer einen sieht und andere in Sprechweite hat, sagt es - dann weiss es der Trupp",
-      _feind95 in _al95.lage and _m95.funk.endswith("!"), _m95.funk)
+      _feind95 in _al95.lage and _m95.hirn.gesagt.endswith("!"), _m95.hirn.gesagt)
 _weg95 = pygame.Vector2(_m95.pos)
 _m95.pos.update(_m95.pos + pygame.Vector2(K.TRUPP["sprech_weite"] * 3, 0))
 _al95.lage = {}
@@ -11146,6 +11158,108 @@ for i_ in (1, 2):
     _tm.info = i_
     _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
 pruef("... INFO zeigt Igel, Engstelle und Blickrichtungen (zeichnen geht)", True, "")
+_tm.verlassen()
+
+print("\n-- Tempo, Deckung zuerst, Verkriechen, Funkwellen (0.34.43)")
+# Langsamer, damit man sieht, was geschieht (wie in RimWorld): alle laufen
+# mit demselben Faktor, die Geschosse fliegen langsamer, so weit wie vorher.
+pruef("Alle laufen langsamer: Spieler, Bots und Gegner mit demselben Faktor",
+      0.0 < K.BEWEGUNG["lauf"] < 1.0
+      and abs(K.SPIELER["tempo"] - 108.0 * K.BEWEGUNG["lauf"]) < 1e-6
+      and K.BOTS["schritte_tempo"][0] < K.SPIELER["tempo"],
+      "Spieler %.0f px/s" % K.SPIELER["tempo"])
+pruef("Geschosse fliegen langsamer, die Reichweite bleibt",
+      0.0 < K.BEWEGUNG["geschoss"] < 1.0
+      and abs(K.WAFFEN["sturm"]["tempo"] - 760.0 * K.BEWEGUNG["geschoss"]) < 1e-6
+      and K.WAFFEN["sturm"]["reichweite"] == 470.0,
+      "Sturm %.0f px/s" % K.WAFFEN["sturm"]["tempo"])
+pruef("Die Untertitel ueber den Bots sind aus (K.BOTS callouts)", not K.BOTS["callouts"], "")
+
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm.wiedereinstieg = False
+_platz98 = _freie_flaeche86(_tm.welt, random.Random(98), 14, 9)
+pruef("(eine freie Flaeche fuer die Kistenwand)", _platz98 is not None, "")
+_tx98, _ty98 = _platz98
+_T98 = K.TILE
+for dy_ in (3, 4, 5):
+    _tm.welt.ebene(0).setzen(_tx98 + 6, _ty98 + dy_, K.KISTE)
+_kiste98 = pygame.Vector2((_tx98 + 6.5) * _T98, (_ty98 + 4.5) * _T98)
+_bot98 = _tm.bot_setzen(_kiste98 + pygame.Vector2(_T98 * 1.1, 0), 0,
+                        {"team": 0, "hirn": "goap", "waffe": "sturm"})
+_bot98.hirn.merkmale["mut"] = 0.3
+_bot98.unverwundbar = 1e9
+_feind98 = _tm.puppe_setzen(_kiste98 - pygame.Vector2(_T98 * 6, 0), 0, {"team": 1, "leben": 10.0})
+_feind98.unverwundbar = 1e9
+# Er weiss, wo der Gegner steht (gesehen, ehe er hinter die Kisten ging).
+_bot98.hirn.gesehen[_feind98] = (pygame.Vector2(_feind98.pos), 0, _tm.welt.zeit)
+_start98 = pygame.Vector2(_bot98.pos)
+_schuesse98 = 0
+_weit98 = 0.0
+_schnell98 = 0.0
+for _ in range(int(6.0 / _D87)):
+    _bot98.hirn.innen.stress = 0.0
+    _tm.schritt(_D87)
+    _schuesse98 += 1 if _bot98.feuert else 0
+    _weit98 = max(_weit98, _bot98.pos.distance_to(_start98))
+    _schnell98 = max(_schnell98, _bot98.tempo.length())
+_plaene98 = [t_ for _z, t_ in _bot98.hirn.gehirn.protokoll if t_.startswith("PLAN:")]
+pruef("Ein vorsichtiger Bot neben einer Deckung kaempft aus ihr heraus",
+      any("aus_deckung_feuern" in t_ for t_ in _plaene98), str(_plaene98[-3:]))
+pruef("... er lehnt sich heraus und schiesst, bleibt aber dicht an seiner Deckung",
+      _schuesse98 > 0 and _weit98 < K.BOTS["lehnen_weite"] + 30,
+      "%d Bilder gefeuert, hoechstens %.0f px weg" % (_schuesse98, _weit98))
+pruef("... und laeuft nie schneller als das neue Spielertempo",
+      0.0 < _schnell98 <= K.SPIELER["tempo"] + 1.0, "%.0f px/s" % _schnell98)
+pruef("... die Kosten: ein Mutiger greift offen an, ein Vorsichtiger geht in Deckung",
+      _WD88.daten().aktionen["angreifen"].kosten.wert({"mut": 0.9}) < 2.0 + 0.9
+      and _WD88.daten().aktionen["angreifen"].kosten.wert({"mut": 0.3}) > 2.0 + 0.3, "")
+
+# Panik in der Deckung: nicht weglaufen, sondern in die beste Ecke.
+_bot98.hirn.innen.panik_setzen(3.0)
+_bot98.hirn.innen.stress = 1.0
+_bot98.hirn.goap_rest = 0.0
+_gedeckt98 = []
+_vorher98 = len(_bot98.hirn.gehirn.protokoll)
+for _ in range(int(2.0 / _D87)):
+    _tm.schritt(_D87)
+    _gedeckt98.append(_bot98.hirn.gedeckt(_bot98.pos, 0))
+_neu98 = [t_ for _z, t_ in list(_bot98.hirn.gehirn.protokoll)[_vorher98:]]
+pruef("Panik in der Deckung: er verkriecht sich, statt am Gegner vorbei zu rennen",
+      any(t_.startswith("PLAN: verkriechen") for t_ in _neu98)
+      and not any("fliehen" in t_ for t_ in _neu98), str(_neu98[:4]))
+pruef("... und verlaesst seine Deckung dabei nicht (am Ende gedeckt, nahe der Kisten)",
+      _gedeckt98[-1] and sum(_gedeckt98[len(_gedeckt98) // 2:]) == len(_gedeckt98) - len(_gedeckt98) // 2
+      and _bot98.pos.distance_to(_start98) < K.BOTS["ecke_radien"][-1] + 30,
+      "%d von %d Bildern gedeckt, %.0f px" % (sum(_gedeckt98), len(_gedeckt98),
+                                               _bot98.pos.distance_to(_start98)))
+
+# Ein Trupp stellt sich hinter die Kisten, nicht daneben ins Freie.
+_tm.alles_weg()
+_tr98 = _tm.trupp_setzen(_kiste98 + pygame.Vector2(_T98 * 3, 0), 0, {"groesse": 3, "team": 0})
+_p98 = _kiste98 + pygame.Vector2(_T98 * 1.1, _T98 * 2.6)     # neben der Wand, im Freien
+_m98 = _tr98.lebende()[0]
+_q98 = _tr98._deckung_nah(_p98, _m98, _feind98.pos if _feind98.lebt else _kiste98 - pygame.Vector2(_T98 * 6, 0))
+_gegen98 = _kiste98 - pygame.Vector2(_T98 * 6, 0)
+pruef("Eine Trupp-Stellung im Freien rueckt hinter die nahe Deckung",
+      not _tr98.gedeckt_hier(_p98, 0, _gegen98) and _tr98.gedeckt_hier(_q98, 0, _gegen98)
+      and _q98.distance_to(_p98) <= K.TRUPP["deckung_ringe"][-1] + 1,
+      "%.0f px verschoben" % _q98.distance_to(_p98))
+
+# Funkwellen: wer funkt, sendet Ringe (statt eines Kastens mit Text).
+_tm.alles_weg()
+_tr98 = _tm.trupp_setzen(_kiste98 + pygame.Vector2(_T98 * 3, 0), 0, {"groesse": 3, "team": 0, "fuehrer": "funk"})
+_f98 = _tr98.fuehrer
+_f98.hirn.funk_laeuft = {"anfang": _tm.welt.zeit - 0.5, "bis": _tm.welt.zeit + 1.0,
+                         "art": "hilfe", "text": "TEST"}
+_tr98.empfangen_zeit = _tm.welt.zeit
+_tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+_ring98 = pygame.Surface((90, 90))
+_tm._welle_ring(_ring98, pygame.Vector2(45, 45), 30.0 * _tm.kamera.zoom)
+_spaet98 = pygame.Surface((90, 90))
+_tm._welle_ring(_spaet98, pygame.Vector2(45, 45), (K.TESTMODUS["welle_weite"] + 5) * _tm.kamera.zoom)
+pruef("Funk: vom Funker gehen Wellen aus, die nach aussen vergehen",
+      pygame.transform.average_color(_ring98)[:3] != (0, 0, 0)
+      and pygame.transform.average_color(_spaet98)[:3] == (0, 0, 0), "")
 _tm.verlassen()
 
 print()

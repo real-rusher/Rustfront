@@ -1165,7 +1165,41 @@ Paketen (0.34.38 bis 0.34.41), jedes mit Version und Test.
   INFO zeigt den Igelplatz, die Engstelle mit ihrer Breite und kurze
   Striche fuer jede Blickrichtung. Aufnahmen: `igel`, `engstelle`.
 
-### 11.5 Was noch offen ist
+### 11.5 Paket 5 (0.34.43): Ruhiger, Deckung zuerst, Verkriechen
+
+Gemeldet nach den Aufnahmen: "zu schnell, nicht wirklich erkennbar ...
+ein bisschen wie RimWorld", "Bots blieben teils immer noch im Freien
+stehen und gruppierten sich dort", und Panik in der Deckung soll nicht am
+Gegner vorbeifuehren.
+
+* **Tempo**: `K.BEWEGUNG` - lauf 0,65 fuer alle Figuren (das Verhaeltnis
+  untereinander bleibt), geschoss 0,8 (gleiche Reichweite).
+* **Aus der Deckung** (Aktion aus_deckung_feuern, `tun_aus_deckung`): drin
+  warten (`lehnen_warten`, laenger unter Stress), zur Seite herauslehnen
+  (`lehnpunkt`: dicht neben der Deckung, freie Linie zum Gegner), einen
+  Feuerstoss - oder dorthin niederhalten, wo er war -, zurueck. Wer sich
+  herauslehnt, gilt noch als in Deckung (`lehnen_weite`).
+* **Deckung zuerst**: angreifen kostet `1,5 + 4 (1 - mut)`, weniger mit
+  laufendem MG oder fast totem Gegner. Deckung + aus_deckung_feuern kostet
+  `2 + mut` - nur die Mutigen greifen offen an. feind_ausschalten bindet
+  kuerzer (`0,6 + 0,8 disziplin`).
+* **Gesperrt nach Rang** (goap.py): scheitert eine Aktion, bleibt sie nur
+  fuer Ziele bis zu dem Rang gesperrt, fuer den sie scheiterte. Fand er
+  beim Angriff keine Deckung, sucht er sie trotzdem, wenn er ueberleben
+  muss.
+* **Trupp-Stellungen** rucken hinter nahe Deckung (`Trupp._deckung_nah`:
+  Ringe bis 64 px, ein Hindernis dicht vor ihm, die vorige Stellung bleibt,
+  solange sie deckt).
+* **Verkriechen** (Panik, schon in Deckung; Aktion verkriechen, kostet 0,5
+  gegen fliehen 1): die Stelle in bis zu 70 px mit der meisten Deckung
+  ringsum (`deckung_ringsum`, im Haus die Ecke), vor jedem bekannten
+  Gegner gedeckt, auf einem gedeckten Weg. Dort bleibt er, bis die Panik
+  vorbei ist; kommt einer nah, ein Stoss blind.
+* **Untertitel aus** (`K.BOTS["callouts"]`): gesprochen wird weiter (der
+  Trupp teilt sein Wissen), es steht nur nicht mehr ueber dem Kopf.
+* **Funk im Testmodus** als Wellen vom Funker; wer empfaengt, blinkt.
+
+### 11.6 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.

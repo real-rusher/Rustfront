@@ -132,6 +132,7 @@ class Taktik:
         self.sturm_wurf = None        # (Ort, Ebene): dorthin wirft er vor dem Sturm
         self.feuerschutz_fuer = None
         self.laden_vorher = False
+        self.gesagt = ""              # was er zuletzt gesagt hat (sagen)
 
     def taktik_zeiten(self, dt: float) -> None:
         for name in ("funk_sperre", "flanke_pause", "druck_rest", "druck_pause",
@@ -144,8 +145,10 @@ class Taktik:
         b = K.BOTS
         if not text or (self.funk_sperre > 0.0 and not wichtig):
             return False
-        self.k.funk = text[:b["funk_laenge"]]
-        self.k.funk_rest = b["funk_dauer"]
+        self.gesagt = text            # auch ohne Untertitel (K.BOTS["callouts"])
+        if b["callouts"]:
+            self.k.funk = text[:b["funk_laenge"]]
+            self.k.funk_rest = b["funk_dauer"]
         self.funk_sperre = b["funk_abstand"]
         return True
 
@@ -167,8 +170,9 @@ class Taktik:
                 return False
             if jetzt - self.funk_zuletzt.get(anlass, -1e9) < b["funk_wiederholen"]:
                 return False
-        self.k.funk = self.rnd.choice(saetze)[:b["funk_laenge"]]
-        self.k.funk_rest = b["funk_dauer"]
+        if b["callouts"]:
+            self.k.funk = self.rnd.choice(saetze)[:b["funk_laenge"]]
+            self.k.funk_rest = b["funk_dauer"]
         self.funk_sperre = b["funk_abstand"]
         self.funk_zuletzt[anlass] = jetzt
         return True

@@ -1049,6 +1049,43 @@ def _boden_team(kombi):
     return zeichner
 
 
+def _figur_zieht(rumpf, rumpf_dk, akzent):
+    """Wer einen Gefallenen zieht (seit 0.34.43): keine Waffe, beide Arme
+    lang nach vorn, die Haende zu - man soll sehen, dass er ihn haelt.
+    Gemeldet: "eine Animation fuer das Ziehen ... dass man die andere
+    Person wirklich haelt." Er schaut zu dem, den er zieht
+    (Gefecht._ziehen), die Arme reichen bis an ihn heran."""
+    groesse = K.BILD_MASS["spieler_zieht"][0]
+    s = _flaeche(groesse, groesse)
+    c = groesse // 2
+    hell = tuple(min(255, k + 34) for k in rumpf)
+    schulter = pygame.Rect(c - 7, c - 8, 14, 16)
+    pygame.draw.ellipse(s, rumpf_dk, schulter)
+    pygame.draw.ellipse(s, rumpf, schulter.inflate(-3, -3))
+    pygame.draw.ellipse(s, hell, schulter.inflate(-3, -3).move(0, -2), 1)
+    einer = _flaeche(groesse, groesse)
+    pygame.draw.line(einer, rumpf_dk, (c + 1, c + 6), (c + 13, c + 4), 3)   # Arm, lang
+    pygame.draw.circle(einer, hell, (c + 14, c + 4), 2)                    # Hand
+    pygame.draw.circle(einer, rumpf_dk, (c + 14, c + 4), 2, 1)
+    s.blit(einer, (0, 0))
+    s.blit(pygame.transform.flip(einer, False, True), (0, 0))
+    pygame.draw.circle(s, rumpf_dk, (c + 1, c), 5)                       # Kopf
+    pygame.draw.circle(s, hell, (c + 1, c), 4)
+    pygame.draw.circle(s, akzent, (c + 3, c), 2)
+    return _rand(s)
+
+
+@platzhalter("spieler_zieht")
+def _spieler_zieht():
+    return _figur_zieht(K.C_HULL, K.C_HULL_DK, K.C_AMBER)
+
+
+def _zieht_team(kombi):
+    def zeichner():
+        return _figur_zieht(kombi["rumpf"], kombi["kante"], kombi["akzent"])
+    return zeichner
+
+
 def _blass(farbe, anteil: float = 0.55):
     """Eine Farbe zum Grau hin - die Leiche hat kaum noch Farbe."""
     grau = sum(farbe[:3]) // 3
@@ -1096,6 +1133,7 @@ for _kombi in K.TEAMS["kombi"]:
     platzhalter("spieler_" + _kurz)(_spieler_team(_kombi))
     platzhalter("spieler_%s_boden" % _kurz)(_boden_team(_kombi))
     platzhalter("leiche_%s" % _kurz)(_leiche_team(_kombi))
+    platzhalter("spieler_%s_zieht" % _kurz)(_zieht_team(_kombi))
     for _waffe in K.WAFFEN_HAND:
         platzhalter("spieler_%s_%s" % (_kurz, _waffe))(
             _spieler_team(_kombi, _waffe))

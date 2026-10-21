@@ -201,6 +201,10 @@ class Kaempfer(Spieler):
         if self.am_boden:
             name = "spieler_%sboden" % vorsatz
             return name if name in K.BILD_MASS else "spieler_boden"
+        if self.zieht is not None:
+            # Beide Haende am Gefallenen, keine Waffe (seit 0.34.43).
+            name = "spieler_%szieht" % vorsatz
+            return name if name in K.BILD_MASS else "spieler_zieht"
         if self.schwingt:
             # Waffe verstaut, das Brecheisen in beiden Haenden (seit
             # 0.32.8 als Bildfolge, siehe art._figur_schwung).
@@ -2027,6 +2031,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             weg = opfer.pos - k.pos
             if weg.length_squared() < 0.01:
                 weg = pygame.Vector2(-1, 0)
+            # Er schaut zu dem, den er zieht, und geht rueckwaerts - so
+            # haelt man einen (seit 0.34.43). Das Bild dazu: art._figur_zieht.
+            k.winkel = math.degrees(math.atan2(weg.y, weg.x))
             ziel = k.pos + weg.normalize() * K.ZIEHEN["leine"]
             schritt = ziel - opfer.pos
             if schritt.length_squared() < 0.04:
@@ -4538,6 +4545,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         ziel = self.app.eingabe.ziel_welt(self.kamera, self.ich.pos)
         self.ich.ziel = ziel
         ab = ziel - self.ich.pos
+        opfer = self.kaempfer.get(self.ich.zieht) if self.ich.zieht is not None else None
+        if opfer is not None:
+            ab = opfer.pos - self.ich.pos     # wer zieht, schaut zu ihm (seit 0.34.43)
         if ab.length_squared() > 1:
             self.ich.winkel = math.degrees(math.atan2(ab.y, ab.x))
 

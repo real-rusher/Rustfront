@@ -82,7 +82,7 @@ info: Eine Granate liegt neben ihm: weg - vor allem anderen.
 will: sicher
 rang: 2
 dringlich: 100 * panik
-info: Panik: nur noch weg. Feuerschutz, Sturm, Kreis - alles egal.
+info: Panik: nur noch weg - oder, wer schon in Deckung ist, in ihre beste Ecke. Feuerschutz, Sturm, Kreis - alles egal.
 
 [ziel ueberleben]
 will: in_deckung, beruhigt
@@ -228,7 +228,9 @@ will: feind_besiegt
 # Wer fast erledigt ist, wird fertig gemacht (0.34.38) - nur nicht im
 # HUEGEL: dort geht der Kreis vor, und zum_kreis kaempft ohnehin auf dem Weg.
 dringlich: 50 * feind_sichtbar + 30 * feind_bekannt + 25 * ziel_fast_tot * (1 - zone_aktiv)
-bindung: 1.0 + 1.5 * disziplin
+# Kuerzer gebunden seit 0.34.43: sonst blieb er im Freien beim Angriff,
+# obwohl eine Deckung daneben stand.
+bindung: 0.6 + 0.8 * disziplin
 info: Den Gegner, den er sieht oder eben sah, ausschalten.
 
 [ziel suchen]
@@ -249,12 +251,30 @@ macht: sicher
 kosten: 1
 tut: fliehen
 
+[aktion verkriechen]
+braucht: in_deckung
+macht: sicher
+kosten: 0.5
+tut: verkriechen
+info: Panik in der Deckung: nicht am Gegner vorbei, sondern in die beste Ecke, die gedeckt erreichbar ist.
+
 [aktion angreifen]
 braucht: feind_sichtbar, linie_frei, munition_da
 macht: feind_besiegt, gruppe_getroffen
-kosten: 1
+# Seit 0.34.43 teurer als Deckung + aus_deckung_feuern (2 + mut), ausser
+# fuer die Mutigen, fuer den, der das MG am Laufen hat, und wenn der
+# Gegner gleich fertig ist: "Sie sollen schon priorisieren, in Deckung zu
+# gehen."
+kosten: 1.5 + 4 * (1 - mut) * (1 - eingeschossen * waffe_mg) * (1 - ziel_fast_tot)
 tut: kaempfen
 info: Kaempfen wie die klassische KI: Abstand, Ausweichen, Feuerstoesse, Granate.
+
+[aktion aus_deckung_feuern]
+braucht: in_deckung, feind_bekannt, munition_da
+macht: feind_besiegt, gruppe_getroffen
+kosten: 1
+tut: aus_deckung
+info: Aus der Deckung kaempfen: drin warten, zur Seite herauslehnen, ein Stoss, zurueck.
 
 [aktion dauerfeuer]
 braucht: feind_sichtbar, linie_frei, waffe_auto, munition_da
@@ -427,7 +447,7 @@ tut: zur_stelle
 name: BOT
 hirn: bot
 ziele: granate_ausweichen, panik, ueberleben, nachladen, kamerad_bergen, verstaerkung_rufen, funk_antworten, lage_melden, rauch_legen, rueckzug, druck, zu_hilfe, sektor_halten, trupp_halten, stuermen, kreis, gruppe_bekaempfen, feuerschutz, nachsetzen, feind_ausschalten, suchen
-aktionen: ausweichen, fliehen, angreifen, dauerfeuer, granate_werfen, flankieren, niederhalten, nahkampf, suchen, nachsetzen, deckung, abwarten, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, zum_kameraden, kamerad_ziehen, aufhelfen, aufhelfen_offen, stuermen, funk_hilfe, funk_zusage, funk_lage, rauch_werfen, welle, verlegen, zur_stelle, sektor_halten
+aktionen: ausweichen, fliehen, verkriechen, angreifen, aus_deckung_feuern, dauerfeuer, granate_werfen, flankieren, niederhalten, nahkampf, suchen, nachsetzen, deckung, abwarten, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, zum_kameraden, kamerad_ziehen, aufhelfen, aufhelfen_offen, stuermen, funk_hilfe, funk_zusage, funk_lage, rauch_werfen, welle, verlegen, zur_stelle, sektor_halten
 merkmal mut: 0.2 0.9
 merkmal disziplin: 0.3 1.0
 # Drill (seit 0.34.38): wie ausgebildet er ist. Wenig fuer die Bots des

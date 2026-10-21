@@ -236,7 +236,7 @@ class Gehirn:
         self.plan: list = []
         self.erzwungen = None           # Testmodus: dieses Ziel, egal wie dringlich
         self.protokoll = deque(maxlen=K.GOAP["protokoll"])
-        self._sperre: dict = {}          # Aktion -> bis wann sie nicht geplant wird
+        self._sperre: dict = {}          # Aktion -> (bis wann sie nicht geplant wird, Rang des Ziels)
         self._neu_planen_bis = 0.0
         self._gebunden_bis = 0.0         # vorher wechselt er nur fuer einen hoeheren Rang
         self.gewechselt = False          # hat der letzte Denkschritt das Ziel gewechselt?
@@ -353,7 +353,13 @@ class Gehirn:
 
     def _planen(self, ziel, namen: dict):
         jetzt = self._jetzt
-        moeglich = [a for a in self.aktionen if self._sperre.get(a.name, -1.0) <= jetzt]
+        rang = self.raenge.get(ziel.name, 0.0)
+        # Gesperrt nur fuer Ziele bis zu dem Rang, fuer den sie scheiterte:
+        # fand er beim Angriff keine Deckung, sucht er sie doch, wenn er
+        # ueberleben muss - sonst stuende er dann einfach im Freien.
+        moeglich = [a for a in self.aktionen
+                    if self._sperre.get(a.name, (-1.0, 0.0))[0] <= jetzt
+                    or rang > self._sperre[a.name][1]]
         return planen(self.fakten, ziel.will, moeglich, namen)
 
     def melden(self, status: str) -> None:
@@ -367,6 +373,7 @@ class Gehirn:
             self.plan.pop(0)
         else:
             self.log("GESCHEITERT: %s" % a.name)
-            self._sperre[a.name] = self._jetzt + K.GOAP["sperre"]
+            rang = self.raenge.get(self.ziel.name, 0.0) if self.ziel is not None else 0.0
+            self._sperre[a.name] = (self._jetzt + K.GOAP["sperre"], rang)
             self.plan = []
         self._neu_planen_bis = 0.0

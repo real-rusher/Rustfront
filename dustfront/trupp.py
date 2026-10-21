@@ -104,6 +104,7 @@ class Trupp:
         self.zuversicht = 2
         self.front = None             # dict(freund, feind, richtung, quer, linie, breite)
         self.stellungen: dict = {}    # Nummer -> Ort, an dem er stehen soll
+        self.stellungen_vorher: dict = {}
         self.welle: set = set()       # Nummern, die in dieser Welle ziehen
         self._welle_ziel: dict = {}   # ... und wohin
         self._welle_rest = 0.0
@@ -315,6 +316,7 @@ class Trupp:
         Mitte und tiefer. Ohne Kontakt: eine breite Linie um den
         Anfuehrer, nicht hintereinander."""
         t = K.TRUPP
+        self.stellungen_vorher = self.stellungen
         self.stellungen = {}
         if not leute:
             return
@@ -348,6 +350,8 @@ class Trupp:
             p = f["linie"] + f["quer"] * seitlich - f["richtung"] * tiefe
             if m.nummer in self.flanker:
                 p = self._flankenpunkt(m)
+            else:
+                p = self._deckung_nah(p, m, f["feind"])
             self.stellungen[m.nummer] = self._frei(p, m)
         self._wellen(leute)
 
@@ -373,6 +377,44 @@ class Trupp:
             p = fuehrer.pos + quer * seitlich + richtung * t["linie_vor"]
             self.stellungen[m.nummer] = self._frei(p, m)
         self.stellungen[fuehrer.nummer] = pygame.Vector2(fuehrer.pos)
+
+    def gedeckt_hier(self, p, ebene, feind) -> bool:
+        """Steht dicht vor dieser Stelle etwas zwischen ihr und dem Gegner?
+        Nur eine ferne Wand dazwischen zaehlt nicht - an die kann er sich
+        nicht anlehnen."""
+        welt = self.g.welt
+        hin = pygame.Vector2(feind) - p
+        if hin.length_squared() < 1.0:
+            return False
+        nah = p + hin.normalize() * K.TRUPP["deckung_nah"]
+        return welt.deckung(feind, p, ebene) != "" and welt.deckung(nah, p, ebene) != ""
+
+    def _deckung_nah(self, p, m, feind, halten: bool = True):
+        """Die Stellung an die naechste Deckung ruecken: wer eine Kiste in
+        der Naehe hat, stellt sich dahinter, nicht daneben ins Freie. Die
+        vorige Stellung bleibt, solange sie noch deckt - sonst rueckten sie
+        bei jedem Takt hin und her."""
+        welt = self.g.welt
+        p = pygame.Vector2(p)
+        # Wer in einer Welle zieht, soll wirklich weiter - nicht dort bleiben.
+        alt = self.stellungen_vorher.get(m.nummer) if halten else None
+        weit = K.TRUPP["deckung_ringe"][-1]
+        if (alt is not None and alt.distance_to(p) <= weit
+                and self.gedeckt_hier(alt, m.ebene, feind)):
+            return pygame.Vector2(alt)
+        if self.gedeckt_hier(p, m.ebene, feind):
+            return p
+        belegt = [q for n, q in self.stellungen.items() if n != m.nummer]
+        for r in K.TRUPP["deckung_ringe"]:
+            for i in range(8):
+                q = p + pygame.Vector2(r, 0).rotate(i * 45.0)
+                if not welt.frei(q, m.radius + 2, m.ebene, True):
+                    continue
+                if any(q.distance_to(b) < K.TRUPP["bahn_min"] * 0.5 for b in belegt):
+                    continue
+                if self.gedeckt_hier(q, m.ebene, feind):
+                    return q
+        return p
 
     def _frei(self, p, m):
         welt = self.g.welt
@@ -428,7 +470,7 @@ class Trupp:
                 ueber = (p - f["linie"]).dot(f["richtung"])
                 if ueber > 0:
                     p -= f["richtung"] * ueber
-            self._welle_ziel[m.nummer] = self._frei(p, m)
+            self._welle_ziel[m.nummer] = self._frei(self._deckung_nah(p, m, f["feind"], halten=False), m)
             self.stellungen[m.nummer] = self._welle_ziel[m.nummer]
 
     # ── Igel und Engstelle (seit 0.34.41) ───────────────────────────
@@ -673,6 +715,7 @@ class Trupp:
 
     def empfangen(self, spruch) -> None:
         self.funk_lage[spruch.trupp.name] = spruch
+        self.empfangen_zeit = self.g.welt.zeit      # fuer die Anzeige (Testmodus)
         if spruch.art == "hilfe":
             self.hilfe_pruefen(spruch)
         elif self.hilfe is not None and self.hilfe["fuer"] is spruch.trupp:

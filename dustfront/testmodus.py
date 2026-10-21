@@ -1662,26 +1662,44 @@ class Testmodus(Gefecht):
             SCHRIFT.zeichnen(ziel, text, int(p.x), int(p.y) + 34, farbe, 1, ausrichtung="mitte")
 
     def _funksprueche_zeichnen(self, ziel) -> None:
-        """Wer gerade in sein Funkgeraet spricht: ueber ihm ein Kasten mit
-        dem Spruch und einem Balken, wie weit er ist. Erst wenn der voll
-        ist, haben ihn die anderen."""
+        """Wer funkt, sendet Wellen (seit 0.34.43, vorher ein Kasten mit dem
+        Text). Gemeldet: "der Funkspruch, wenn der quasi durch ausgehende
+        Radiowellen von dem Anfuehrer ausgehen wuerde." Solange er spricht,
+        laufen Ringe von ihm weg; wer den Spruch bekommt, blinkt kurz mit
+        einem Ring. Was gesagt wurde, steht in INFO unten links."""
+        from .trupp import trupps
         kam = self.kamera
         jetzt = self.welt.zeit
+        t = K.TESTMODUS
         for k in self._bots():
             laeuft = getattr(k.hirn, "funk_laeuft", None)
             if laeuft is None or not k.lebt or k.ebene != self.blick:
                 continue
-            p = kam.zu_bild(k.pos)
-            text = "FUNK: " + laeuft["text"]
-            breite = SCHRIFT.breite(text) + 8
-            feld = pygame.Rect(int(p.x) - breite // 2, int(p.y) - 62, breite, 13)
-            pygame.draw.rect(ziel, (6, 18, 22), feld)
-            pygame.draw.rect(ziel, K.C_TEAL, feld, 1)
-            SCHRIFT.zeichnen(ziel, text, feld.centerx, feld.y + 2, K.C_TEAL, 1,
-                             ausrichtung="mitte")
-            dauer = max(0.01, laeuft["bis"] - laeuft["anfang"])
-            anteil = max(0.0, min(1.0, (jetzt - laeuft["anfang"]) / dauer))
-            pygame.draw.rect(ziel, K.C_TEAL, (feld.x, feld.bottom, int(breite * anteil), 2))
+            seit = jetzt - laeuft["anfang"]
+            for i in range(int(seit / t["welle_takt"]) + 1):
+                alter = seit - i * t["welle_takt"]
+                self._welle_ring(ziel, kam.zu_bild(k.pos), alter * t["welle_tempo"])
+        for tr in trupps(self):
+            alter = jetzt - getattr(tr, "empfangen_zeit", -1e9)
+            f = tr.fuehrer
+            if alter < t["empfang_zeigen"] and f is not None and f.lebt and f.ebene == self.blick:
+                self._welle_ring(ziel, kam.zu_bild(f.pos), 8.0 + alter * 40.0,
+                                 hoechst=8.0 + t["empfang_zeigen"] * 40.0)
+
+    def _welle_ring(self, ziel, p, radius: float, hoechst: float | None = None) -> None:
+        """Ein Ring der Funkwelle, der nach aussen blasser wird."""
+        hoechst = K.TESTMODUS["welle_weite"] if hoechst is None else hoechst
+        r = radius / max(0.5, self.kamera.zoom)
+        rmax = hoechst / max(0.5, self.kamera.zoom)
+        if r < 2 or r > rmax:
+            return
+        deck = int(200 * (1.0 - r / rmax))
+        if deck <= 0:
+            return
+        groesse = int(r) * 2 + 6
+        bild = pygame.Surface((groesse, groesse), pygame.SRCALPHA)
+        pygame.draw.circle(bild, K.C_TEAL + (deck,), (groesse // 2, groesse // 2), int(r), 2)
+        ziel.blit(bild, (int(p.x) - groesse // 2, int(p.y) - groesse // 2))
 
     def _funk_liste_zeichnen(self, ziel) -> None:
         """Unten links die letzten Funksprueche, der neueste unten."""

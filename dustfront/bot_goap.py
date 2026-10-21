@@ -128,6 +128,8 @@ class GoapHirn(BotHirn):
         self._flucht = None           # (Ort, bis wann)
         self._panik_vorher = False
         self._abwarten = 0.0          # so lange wartet er schon in der Deckung
+        self._lehnen = None           # aus der Deckung schiessen: dict(phase, platz, punkt, bis)
+        self._ecke = None             # Panik in Deckung: wohin er sich verkriecht
         self.funk_laeuft = None       # dict(art, bis, text): er spricht gerade in sein Funkgeraet
         self._rede_rest = self.rnd.uniform(3.0, 6.0)   # bis er beim Suchen etwas sagt
 
@@ -187,10 +189,26 @@ class GoapHirn(BotHirn):
 
     def _in_deckung(self) -> bool:
         p = self._deckung_platz
-        if p is None or self.k.pos.distance_to(p) > 20.0:
+        if p is None:
+            return False
+        # Wer gerade aus der Deckung heraus schiesst (tun_aus_deckung), steht
+        # ein Stueck daneben - und ist trotzdem in seiner Deckung.
+        lehnt = self._lehnen is not None and self._lehnen["platz"] == p
+        # Wer sich in Panik verkriecht (tun_verkriechen), geht nur einen Weg,
+        # der ganz gedeckt ist - auch der zaehlt noch als seine Deckung, sonst
+        # plante er mitten darin die Flucht.
+        kriecht = self._ecke is not None
+        weite = 20.0
+        if lehnt:
+            weite = K.BOTS["lehnen_weite"]
+        elif kriecht:
+            weite = K.BOTS["ecke_radien"][-1] + 20.0
+        if self.k.pos.distance_to(p) > weite:
             return False
         gefahr = self._gefahr()
-        return gefahr is None or self.g.welt.deckung(gefahr[0], self.k.pos, self.k.ebene) != ""
+        if lehnt or kriecht or gefahr is None:
+            return True
+        return self.g.welt.deckung(gefahr[0], self.k.pos, self.k.ebene) != ""
 
     def feind_orte(self, ohne=None) -> list:
         """Alle Orte auf seiner Ebene, an denen er Gegner weiss: gesehen
@@ -320,7 +338,7 @@ class GoapHirn(BotHirn):
             # Wer auf ihn zustuermt, macht Eindruck (Days Gone: wer den
             # Spieler angreifen laesst, belohnt ihn fuer Mut).
             tempo = getattr(w, "tempo", None)
-            if tempo is not None and tempo.length() > 60.0:
+            if tempo is not None and tempo.length() > 60.0 * K.BEWEGUNG["lauf"]:
                 hin = k.pos - w.pos
                 if hin.length_squared() > 1.0 and tempo.normalize().dot(hin.normalize()) > 0.6:
                     c *= 1.3
@@ -731,6 +749,10 @@ class GoapHirn(BotHirn):
             self._aktion_lief = a
             self._druck_lief = False
             self._abwarten = 0.0
+            if a.tut != "aus_deckung":
+                self._lehnen = None           # sonst zaehlte der Lehnpunkt weiter als Deckung
+            if a.tut != "verkriechen":
+                self._ecke = None
             if not a.tut.startswith("funk"):
                 self.funk_laeuft = None       # unterbrochen: der Spruch ist nicht raus
             if a.funk:
@@ -965,6 +987,144 @@ class GoapHirn(BotHirn):
         self.funken("granate_weg", wichtig=True)
         self.stoss_rest = 0.0
         return weg.normalize(), None, False, False, "laeuft"
+
+    # ── Aus der Deckung (seit 0.34.43) ───────────────────────────
+    def lehnpunkt(self, platz, gefahr):
+        """Eine Stelle dicht neben der Deckung, von der aus nichts zwischen
+        ihm und dem Gegner steht - dort lehnt er sich heraus."""
+        k = self.k
+        welt = self.g.welt
+        hin = gefahr - platz
+        if hin.length_squared() < 1.0:
+            return None
+        hin = hin.normalize()
+        quer = pygame.Vector2(-hin.y, hin.x)
+        for d in K.BOTS["lehnen_versatz"]:
+            for seite in (self.seite, -self.seite):
+                p = platz + quer * (seite * d) + hin * 4.0
+                if not welt.frei(p, k.radius + 1, k.ebene, True):
+                    continue
+                if not welt.wege.gerade_frei(k.ebene, platz, p, k.radius):
+                    continue
+                if welt.deckung(p, gefahr, k.ebene) == "":
+                    return p
+        return None
+
+    def tun_aus_deckung(self, dt, ein):
+        """Aus der Deckung kaempfen, wie man es tut: drin warten, sich zur
+        Seite herauslehnen, ein Feuerstoss, zurueck - und wieder. Gemeldet:
+        "Bots blieben teils immer noch im Freien stehen und gruppierten
+        sich dort. Sie sollen schon priorisieren, in Deckung zu gehen."
+        Sieht er den Gegner vom Lehnpunkt aus nicht mehr, haelt er dorthin
+        nieder, wo er war."""
+        k = self.k
+        b = K.BOTS
+        jetzt = self.g.welt.zeit
+        gefahr = self._gefahr()
+        platz = self._deckung_platz
+        if gefahr is None:
+            self._lehnen = None
+            return _nichts("fertig")
+        if platz is None:
+            return _nichts("gescheitert")
+        st = self._lehnen
+        if st is None or st["platz"] != platz:
+            st = self._lehnen = dict(phase="drin", platz=pygame.Vector2(platz), punkt=None,
+                                     bis=jetzt + self.rnd.uniform(*b["lehnen_warten"]) * 0.5,
+                                     geschossen=False)
+        ort = pygame.Vector2(gefahr[0])
+        if st["phase"] == "drin":
+            if k.pos.distance_to(platz) > 4.0:
+                return self._weg_richtung(platz, k.ebene, ein), ort, False, False, "laeuft"
+            if jetzt >= st["bis"]:
+                punkt = self.lehnpunkt(platz, ort)
+                if punkt is None:
+                    self._lehnen = None
+                    return _nichts("gescheitert")
+                st.update(phase="raus", punkt=punkt, bis=jetzt + b["lehnen_raus"], geschossen=False)
+            return pygame.Vector2(0, 0), ort, False, False, "laeuft"
+        if st["phase"] == "raus":
+            if k.pos.distance_to(st["punkt"]) > 4.0 and not st["geschossen"]:
+                return self._weg_richtung(st["punkt"], k.ebene, ein), ort, False, False, "laeuft"
+            z = self.ziel
+            if z is not None and self.ziel_ok(z) and self.linie == "":
+                _w, punkt, feuern, zielt = self._kaempfen(dt, ein, mit_deckung=False)
+                if feuern:
+                    st["geschossen"] = True
+                fertig = st["geschossen"] and self.stoss_rest <= 0.0
+                will = pygame.Vector2(0, 0)
+            else:
+                punkt = self.druckpunkt(ort, gefahr[1])
+                feuern = self._munition_reicht() and self._abdruecken(dt, punkt, ein)
+                if feuern:
+                    st["geschossen"] = True
+                fertig = st["geschossen"] and self.stoss_rest <= 0.0
+                zielt = False
+                will = pygame.Vector2(0, 0)
+            if fertig or jetzt >= st["bis"]:
+                st["phase"] = "zurueck"
+            return will, punkt, feuern, zielt, "laeuft"
+        # zurueck
+        if k.pos.distance_to(platz) > 4.0:
+            return self._weg_richtung(platz, k.ebene, ein), ort, False, False, "laeuft"
+        lo, hi = b["lehnen_warten"]
+        st.update(phase="drin", bis=jetzt + self.rnd.uniform(lo, hi) * (1.0 + self.innen.stress))
+        return pygame.Vector2(0, 0), ort, False, False, "laeuft"
+
+    def ecke(self):
+        """Panik in der Deckung: die beste Stelle in der Naehe, die er
+        erreicht, ohne die Deckung zu verlassen - dort, wo am meisten um ihn
+        herum steht (in einem Haus die Ecke) und er vor jedem bekannten
+        Gegner gedeckt ist. Gemeldet: "nicht probieren, am Gegner
+        vorbeizurennen, sondern sich an die krasseste Deckung begeben, die
+        sie erreichen koennen, ohne ihre bisherige Deckung zu verlassen." """
+        from .trupp import deckung_ringsum
+        k = self.k
+        welt = self.g.welt
+        orte = self.feind_orte()
+        bestes, beste = None, 1e9
+        for r in K.BOTS["ecke_radien"]:
+            for i in range(12):
+                p = k.pos + pygame.Vector2(r, 0).rotate(i * 30.0)
+                if not welt.frei(p, k.radius + 1, k.ebene, True):
+                    continue
+                if not welt.wege.gerade_frei(k.ebene, k.pos, p, k.radius):
+                    continue
+                # Auf dem ganzen Weg gedeckt: sonst verliesse er die Deckung.
+                if not (self.gedeckt(p, k.ebene) and self.gedeckt((k.pos + p) / 2, k.ebene)):
+                    continue
+                wert = -45.0 * deckung_ringsum(welt, p, k.ebene) + 0.4 * r
+                if orte:
+                    wert -= 0.3 * min(o.distance_to(p) for o in orte)
+                if wert < beste:
+                    bestes, beste = p, wert
+        return bestes
+
+    def tun_verkriechen(self, dt, ein):
+        """Panik, aber schon in Deckung: in die beste Ecke, und dort bleiben,
+        bis die Panik vorbei ist. Kommt einer zu nahe, ein Stoss blind."""
+        k = self.k
+        if not self.innen.panik:
+            self._ecke = None
+            return _nichts("fertig")
+        if self._ecke is None:
+            ecke = self.ecke()
+            # Keine bessere Ecke: zurueck an seine Deckung, nicht stehen
+            # bleiben, wo er sich gerade herauslehnt.
+            platz = self._deckung_platz if self._deckung_platz is not None else k.pos
+            self._ecke = ecke if ecke is not None else pygame.Vector2(platz)
+        will = pygame.Vector2(0, 0)
+        if k.pos.distance_to(self._ecke) > 4.0:
+            will = self._weg_richtung(self._ecke, k.ebene, ein)
+        else:
+            self._deckung_platz = pygame.Vector2(self._ecke)
+        z = self.ziel
+        feuern = False
+        punkt = None
+        if z is not None and self.ziel_ok(z) and k.pos.distance_to(z.pos) < 120.0:
+            punkt = pygame.Vector2(z.pos)
+            feuern = self.rnd.random() < 0.5 and k.magazin.get(k.waffe_name, 0) > 0
+        return will, punkt, feuern, False, "laeuft"
 
     def tun_fliehen(self, dt, ein):
         """Panik: weg vom Gegner, zu den eigenen Leuten, wenn welche da

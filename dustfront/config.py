@@ -85,9 +85,24 @@ C_BLUT = (96, 30, 22)
 # Treffen gemessen **schwerer**, nicht leichter: das Ziel steckt dann
 # laenger in einer Richtungsaenderung, und auf die kann man nicht
 # vorhalten (110 px/s mit 600 Beschleunigung: 19,6 % gegen 23,4 % mit 1250).
+# Tempo aller Figuren und Geschosse (seit 0.34.43). Gemeldet: "Das Ganze
+# erscheint mir ein bisschen zu schnell, nicht wirklich erkennbar ... ich
+# wollte, dass sich das ein bisschen wie RimWorld anschaut ... das
+# Bewegungstempo ist viel zu schnell. Mach das Bewegungstempo bei allen
+# langsamer, und dass die Shells ein kleines bisschen langsamer fliegen."
+# Die Zahlen unten (SPIELER, GEGNER, BOSSE, WAFFEN) bleiben, wie sie
+# abgestimmt sind; diese Faktoren gelten fuer alle zugleich, damit das
+# Verhaeltnis (der Renner ist schneller als ein Spieler ...) bleibt.
+BEWEGUNG = dict(
+    lauf=0.65,                # x Lauftempo von Spielern, Bots, Gegnern und Bossen
+    geschoss=0.8,             # x Tempo jedes Geschosses (die Reichweite bleibt)
+)
+
 SPIELER = dict(
     radius=9.0,
-    tempo=108.0,              # Pixel pro Sekunde bei vollem Lauf (war 132)
+    # Pixel pro Sekunde bei vollem Lauf (war 132, dann 108; seit 0.34.43 mal
+    # BEWEGUNG["lauf"])
+    tempo=108.0 * BEWEGUNG["lauf"],
     beschleunigung=1150.0,    # wie schnell das Tempo erreicht wird (war 1250)
     bremsung=1400.0,          # wie schnell er steht, wenn man loslaesst (war 1500)
     leben=100.0,
@@ -493,6 +508,7 @@ BILD_MASS = {
     "spieler_medkit":     (56, 56),   # waehrend des Anlegens
     "spieler_boden":      (28, 28),   # wer am Boden liegt
     "leiche":             (28, 28),   # eine Leiche, die bald verschwindet (Testmodus, 0.34.40)
+    "spieler_zieht":      (36, 36),   # wer einen Gefallenen zieht (0.34.43)
     "gegner_laeufer":   (28, 28),
     "gegner_brecher":   (44, 44),
     "gegner_renner":    (24, 24),
@@ -1083,10 +1099,17 @@ BOTS = dict(
     gehoer=460.0,             # Schuesse in dieser Entfernung hoert er
     gehoer_knall=820.0,       # Explosionen (seit 0.34.38)
     schritte=(150.0, 70.0),   # Schritte eines Gegners hoert er so weit: rennt er / geht er
-    schritte_tempo=(95.0, 25.0),   # ab so viel Tempo rennt / geht einer (px/s)
+    schritte_tempo=(95.0 * BEWEGUNG["lauf"], 25.0 * BEWEGUNG["lauf"]),   # ab so viel Tempo rennt / geht einer (px/s)
     schritte_wand=0.6,        # durch eine Wand nur so weit davon
     lagebild=6.0,             # so lange behaelt er einen gehoerten Ort im Kopf (s)
     granate_sieht=260.0,      # eine liegende Granate bemerkt er so weit (seit 0.34.38)
+    # Aus der Deckung schiessen (seit 0.34.43): drin warten, herauslehnen,
+    # ein Feuerstoss, zurueck.
+    lehnen_versatz=(16.0, 22.0, 28.0, 36.0),   # so weit neben der Deckung lehnt er sich heraus
+    lehnen_weite=48.0,        # so weit weg von seiner Deckung gilt er noch als darin
+    lehnen_warten=(0.6, 1.5),  # so lange bleibt er drin, mal (1 + Stress) (s)
+    lehnen_raus=2.2,          # laenger bleibt er nicht draussen (s)
+    ecke_radien=(14.0, 28.0, 42.0, 56.0, 70.0),   # Panik in Deckung: so weit sucht er eine Ecke
     granate_abstand=30.0,     # so weit ueber ihren Radius hinaus rennt er
     gedaechtnis=4.0,          # so lange sucht er dort, wo er einen zuletzt sah
     wunschabstand=dict(repetierer=230.0, sturm=200.0, lmg=240.0,
@@ -1136,6 +1159,11 @@ BOTS = dict(
         gruppe=("DA SIND MEHRERE!", "GANZE GRUPPE!", "HALTET DRAUF!"),
         gehoert=("DA WAR WAS!", "HÖRT IHR DAS?"),
     ),
+    # Seit 0.34.43 aus (gemeldet: "die Callouts gerade einmal rausnehmen,
+    # die brauchen wir gerade nicht"). Gesprochen wird trotzdem - wer im
+    # Trupp etwas sagt, teilt sein Wissen -, nur steht es nicht mehr ueber
+    # dem Kopf. True holt die Untertitel zurueck.
+    callouts=False,
     funk_dauer=1.9,           # so lange steht ein Spruch (s)
     funk_abstand=2.2,         # so lange schweigt er danach mindestens
     funk_wiederholen=7.0,     # derselbe Anlass erst wieder nach so langer Zeit
@@ -1184,6 +1212,11 @@ TESTMODUS = dict(
     greifen=40.0,             # so nah am Mauszeiger wird eine Figur genommen/geloescht
     figur_ab=300,             # Spielernummern der gespawnten Puppen und Figuren
     aktion_ausweichen=3,      # saubere Ansicht: so oft rueckt eine Aktion hoch, wenn es eng ist
+    # Funkwellen (seit 0.34.43): wer funkt, sendet Ringe.
+    welle_takt=0.35,          # so oft geht ein neuer Ring los (s)
+    welle_tempo=110.0,        # so schnell laeuft er nach aussen (px/s)
+    welle_weite=150.0,        # so weit, dann ist er weg
+    empfang_zeigen=0.8,       # so lange blinkt der, der den Spruch bekommt (s)
 )
 
 # Zielorientierte KI (seit 0.34.29, goap.py, bot_goap.py, Daten in wesen/).
@@ -1276,6 +1309,10 @@ TRUPP = dict(
     linie_vor=30.0,           # ... und so weit vor dem Anfuehrer
     linie_warten=2.6,         # x Abstand: so weit zurueck, und der Anfuehrer wartet
     stellung_weite=28.0,      # so nah an seiner Stellung: er steht, wo er soll
+    # Seit 0.34.43: steht eine Stellung im Freien, sucht der Trupp so weit
+    # herum Deckung gegen den Gegner ("Bots blieben im Freien stehen").
+    deckung_ringe=(20.0, 40.0, 64.0),
+    deckung_nah=36.0,         # so nah muss das Hindernis vor ihm sein
     flanke_vor=20.0,
     flanke_ab=90.0,           # so nah an der Linie, und die Aeusseren flankieren
     welle_zeit=2.6,           # so lange dauert eine Welle (s)
@@ -2225,6 +2262,11 @@ WAFFEN = {
 #   holz     True = brauner Schaft, False = Stahl
 #   aufbau   ein Merkmal obendrauf, siehe art.py:
 #            kammer | magazin | doppel | fernrohr | kugel | haken
+# Seit 0.34.43: jedes Geschoss fliegt mit BEWEGUNG["geschoss"] (siehe dort).
+for _w in WAFFEN.values():
+    if _w.get("art") == "schuss":
+        _w["tempo"] = _w["tempo"] * BEWEGUNG["geschoss"]
+
 WAFFEN_HAND = {
     "repetierer": dict(lauf=17, dicke=3, schaft=9, s_dicke=4, holz=True,
                        aufbau="kammer"),
@@ -2268,6 +2310,7 @@ for _team in TEAMS["kombi"]:
     BILD_MASS["spieler_%s" % _kurz] = BILD_MASS["spieler"]
     BILD_MASS["spieler_%s_boden" % _kurz] = BILD_MASS["spieler_boden"]
     BILD_MASS["leiche_%s" % _kurz] = BILD_MASS["spieler_boden"]
+    BILD_MASS["spieler_%s_zieht" % _kurz] = BILD_MASS["spieler_zieht"]
     for _w in WAFFEN_HAND:
         BILD_MASS["spieler_%s_%s" % (_kurz, _w)] = BILD_MASS["spieler_" + _w]
 
@@ -2960,6 +3003,10 @@ def ist_boss(art: str) -> bool:
 # Was nur im Schiessstand der Lobby steht. Eine eigene Tabelle und nicht
 # GEGNER, damit sie nie in eine Welle geraet und keine Pruefung, die ueber
 # "alle Gegner" geht, eine Puppe mitzaehlt, die sich nicht bewegt.
+# Seit 0.34.43: alle Gegner und Bosse laufen mit BEWEGUNG["lauf"] (siehe dort).
+for _g in list(GEGNER.values()) + list(BOSSE.values()):
+    _g["tempo"] = _g["tempo"] * BEWEGUNG["lauf"]
+
 UEBUNG = {
     "puppe": dict(
         name="PUPPE",
