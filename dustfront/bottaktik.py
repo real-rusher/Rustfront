@@ -557,7 +557,7 @@ def stuerme_fuehren(g, dt: float) -> None:
             sammel = a.hirn.sammelpunkt(ort, ebene)
             if sammel is None:
                 continue
-            plan = dict(team=team, mitglieder=[a] + mit[:3], ziel=pygame.Vector2(ort),
+            plan = dict(team=team, mitglieder=[a] + mit[:3], alle=[a] + mit[:3], ziel=pygame.Vector2(ort),
                         ebene=ebene, sammel=sammel, phase="sammeln",
                         sammeln_bis=jetzt + b["sturm_sammeln_zeit"],
                         bis=jetzt + b["sturm_sammeln_zeit"] + b["sturm_rein_zeit"] + 2.0)
@@ -572,7 +572,9 @@ def stuerme_fuehren(g, dt: float) -> None:
 
 def _sturm_ende(g, plan) -> None:
     plan["aus"] = True
-    for x in plan["mitglieder"]:
+    # Alle, nicht nur wer noch dabei ist: wer unterwegs fiel und wieder
+    # aufstand, hielte den alten Plan sonst fest und stuermte nie wieder.
+    for x in plan.get("alle", plan["mitglieder"]):
         if getattr(x, "hirn", None) is not None and x.hirn.sturm is plan:
             x.hirn.sturm = None
             x.hirn.sturm_wurf = None
