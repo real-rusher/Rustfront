@@ -319,7 +319,7 @@ def szene_deckung(tm, rnd):
                          {"team": 0, "hirn": "goap", "leben": 2.0}) for i in range(3)]
     for b in rot:
         b.hirn.merkmale["mut"] = min(b.hirn.merkmale.get("mut", 0.5), 0.45)
-    blau = [tm.bot_setzen(p, 0, {"team": 1, "hirn": "goap", "leben": 1.5}) for p in kreis(vorn, 3, 34)]
+    blau = [tm.bot_setzen(p, 0, {"team": 1, "hirn": "goap", "leben": 3.0}) for p in kreis(vorn, 3, 34)]
     # Beide wissen voneinander: sonst zogen sie suchend auseinander, und
     # die Kamera hing zwischen ihnen im Leeren.
     for eigene, andere in ((rot, blau), (blau, rot)):
