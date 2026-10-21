@@ -343,6 +343,128 @@ def szene_deckung(tm, rnd):
             rot + blau, alle_weg(rot, blau), 35, 1.5, jedes_bild)
 
 
+def flaeche(tm, rnd, breite: int, hoehe: int):
+    """Eine freie Flaeche auf Ebene 0, in Kacheln (links oben), fuer eine
+    gebaute Szene mitten in der Karte - und eine Hilfe, die eine Kachel
+    darin in einen Weltpunkt (ihre Mitte) umrechnet."""
+    T = K.TILE
+    e = tm.welt.ebene(0)
+    for _ in range(20000):
+        tx = rnd.randrange(2, e.breite - breite - 2)
+        ty = rnd.randrange(2, e.hoehe - hoehe - 2)
+        mitten = [pygame.Vector2((tx + x + 0.5) * T, (ty + y + 0.5) * T)
+                  for x in range(0, breite, 2) for y in range(0, hoehe, 2)]
+        if all(tm.welt.frei(p, 12, 0, True) for p in mitten):
+            return tx, ty, (lambda x, y: pygame.Vector2((tx + x + 0.5) * T, (ty + y + 0.5) * T))
+    raise RuntimeError("Keine freie Flaeche gefunden")
+
+
+def setzen(tm, tx, ty, punkte, art):
+    """Kacheln setzen (Mauer, Kiste) - `punkte` in Kacheln der Flaeche."""
+    e = tm.welt.ebene(0)
+    for x, y in punkte:
+        e.setzen(tx + x, ty + y, art)
+
+
+def kennen(eigene, andere, tm):
+    """Beide Seiten wissen voneinander - sonst ziehen sie suchend
+    auseinander, und die Kamera haengt zwischen ihnen im Leeren."""
+    for b in eigene:
+        for x in andere:
+            b.hirn.gesehen[x] = (pygame.Vector2(x.pos), 0, tm.welt.zeit)
+
+
+def szene_mauer(tm, rnd):
+    """Seit 0.34.48: volle Deckung zuerst. Rot hat eine Mauer vor sich und
+    einzelne Kisten daneben - sie gehen an die Mauerenden, dicht heran, und
+    lehnen sich von dort heraus, statt hinter die Kisten oder weit hinter
+    die Mauer."""
+    tx, ty, v = flaeche(tm, rnd, 20, 11)
+    setzen(tm, tx, ty, [(11, y) for y in range(3, 8)], K.WAND)
+    setzen(tm, tx, ty, [(14, 1), (14, 9), (7, 2), (7, 8)], K.KISTE)
+    rot = [tm.bot_setzen(v(17, 4 + i), 0, {"team": 0, "hirn": "goap", "leben": 2.0}) for i in range(3)]
+    for b in rot:
+        b.hirn.merkmale["mut"] = min(b.hirn.merkmale.get("mut", 0.5), 0.45)
+    blau = [tm.bot_setzen(v(1, 4 + i), 0, {"team": 1, "hirn": "goap", "leben": 2.0}) for i in range(3)]
+    kennen(rot, blau, tm)
+    kennen(blau, rot, tm)
+    return ("Volle Deckung: an die Mauerenden, dicht heran (rot)",
+            rot + blau, alle_weg(rot, blau), 40, 1.5)
+
+
+def szene_panik(tm, rnd):
+    """Seit 0.34.48: drei hinter Kisten, eine Mauer weiter hinten. Nach vier
+    Sekunden bekommen alle drei Panik - gesund bleibt einer und verkriecht
+    sich, angeschlagen wechseln sie hinter die Mauer, schwer getroffen
+    rennt einer, wenn es keine bessere Deckung gibt."""
+    tx, ty, v = flaeche(tm, rnd, 20, 11)
+    setzen(tm, tx, ty, [(8, y) for y in (2, 3, 5, 6, 8, 9)], K.KISTE)
+    setzen(tm, tx, ty, [(15, y) for y in range(3, 9)], K.WAND)
+    tm.verwundete_setzen(True)
+    anteile = (1.0, 0.45, 0.15)
+    rot = [tm.bot_setzen(v(9, 2 + 3 * i), 0, {"team": 0, "hirn": "goap"}) for i in range(3)]
+    blau = [tm.bot_setzen(v(2, 3 + 2 * i), 0, {"team": 1, "hirn": "goap", "leben": 2.0}) for i in range(3)]
+    kennen(rot, blau, tm)
+    kennen(blau, rot, tm)
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        if uhr["t"] >= 4.0 and not uhr.get("panik"):
+            uhr["panik"] = True
+            for b, anteil in zip(rot, anteile):
+                if b.lebt and not getattr(b, "am_boden", False):
+                    b.leben = b.max_leben * anteil
+                    b.hirn.innen.panik_setzen(6.0)
+
+    return ("Panik: bleiben (gesund), Deckung wechseln (angeschlagen), fliehen",
+            rot + blau, alle_weg(rot, blau), 30, 1.5, jedes_bild)
+
+
+def szene_bergen_mauer(tm, rnd):
+    """Seit 0.34.48: einer faellt im Freien. Rauch auf ihn, dann ziehen sie
+    ihn hinter die Mauer - erst dort helfen sie ihm auf (Arme, Verband,
+    Ring), die anderen decken."""
+    tx, ty, v = flaeche(tm, rnd, 20, 11)
+    setzen(tm, tx, ty, [(12, y) for y in range(2, 9)], K.WAND)
+    tm.verwundete_setzen(True)
+    trupp = tm.trupp_setzen(v(15, 5), 0, {"groesse": 4, "team": 0, "fuehrer": "funk",
+                                          "mischung": "gemischt", "leben": 2.0})
+    opfer = next(m for m in trupp.mitglieder if m is not trupp.fuehrer)
+    opfer.pos.update(v(8, 5))
+    opfer.vorher.update(opfer.pos)
+    feinde = [tm.puppe_setzen(v(1, 4 + 2 * i), 0, {"team": 1, "leben": 10.0}) for i in range(2)]
+    kennen(trupp.mitglieder, feinde, tm)
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        if uhr["t"] >= 1.0 and not uhr.get("gefallen"):
+            uhr["gefallen"] = True
+            tm.toeten(opfer)
+
+    return ("Bergen: Rauch auf ihn, hinter die Mauer ziehen, dort aufhelfen",
+            trupp.mitglieder, lambda: uhr.get("gefallen") and opfer.lebt and not opfer.am_boden
+            and uhr["t"] > 16.0 or all(not f.lebt for f in feinde), 45, 1.75, jedes_bild)
+
+
+def szene_ueberfall(tm, rnd):
+    """Seit 0.34.48: ein Trupp wird aus der Naehe ueberrascht. Der Anfuehrer
+    will um Hilfe funken, aber wer ihn trifft oder dicht vor ihm steht,
+    bricht den Spruch ab - der zweite Trupp erfaehrt nichts."""
+    a, b = stelle(tm, rnd, 170, "")
+    for _ in range(4000):
+        c, _d = stelle(tm, rnd, 220, "")
+        if 600 < c.distance_to(a) < 950:
+            break
+    alpha = tm.trupp_setzen(a, 0, {"groesse": 4, "team": 0, "fuehrer": "funk", "mischung": "gemischt",
+                                   "leben": 2.0})
+    bravo = tm.trupp_setzen(c, 0, {"groesse": 3, "team": 0, "fuehrer": "funk"})
+    feinde = [tm.bot_setzen(p, 0, {"team": 1, "hirn": "goap", "leben": 2.0}) for p in kreis(b, 6, 30)]
+    return ("Ueberfall: zu nah dran - der Hilferuf kommt nicht durch",
+            alpha.mitglieder + feinde, alle_weg(alpha.mitglieder, feinde), 40, 1.75)
+
+
 # Name -> (Dateiname, Szene). Die Nummer im Dateinamen ist die Reihenfolge.
 SZENEN = {
     "duell": ("1_goap_gegen_klassisch", szene_duell),
@@ -357,6 +479,10 @@ SZENEN = {
     "igel": ("10_igel_von_drei_seiten", szene_igel),
     "engstelle": ("11_engstelle_gegen_horde", szene_engstelle),
     "deckung": ("12_deckung_zuerst", szene_deckung),
+    "mauer": ("13_volle_deckung_mauer", szene_mauer),
+    "panik": ("14_panik_entscheidet", szene_panik),
+    "bergen_mauer": ("15_bergen_hinter_die_mauer", szene_bergen_mauer),
+    "ueberfall": ("16_ueberfall_ohne_funk", szene_ueberfall),
 }
 
 

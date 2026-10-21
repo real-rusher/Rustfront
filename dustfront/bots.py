@@ -748,7 +748,7 @@ class BotHirn(Taktik):
                 if not welt.wege.gerade_frei(k.ebene, k.pos, p, k.radius + 1):
                     continue
                 wert = self._deckung_wert(p, gefahr, zone)
-                if wert is not None and wert < beste:
+                if wert is not None and wert < 1e5 and wert < beste:
                     bestes, beste = p, wert
             if bestes is not None:
                 # Das GOAP-Hirn schaut einen Ring weiter: eine Mauer etwas

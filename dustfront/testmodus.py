@@ -52,6 +52,7 @@ Taste oder als Zeile im Testmenue. Siehe AGENTS.md und docs/TESTMODUS.md.
 
 from __future__ import annotations
 
+import math
 import random
 import types
 
@@ -1689,8 +1690,8 @@ class Testmodus(Gefecht):
         weg = t["welle_weite"] - t["welle_start"]
         for k in self._bots():
             laeuft = getattr(k.hirn, "funk_laeuft", None)
-            if laeuft is None or not k.lebt or k.ebene != ebene:
-                continue
+            if laeuft is None or not k.lebt or k.ebene != ebene or laeuft.get("phase") == "weg":
+                continue                      # erst, wenn er spricht (nicht auf dem Weg dorthin)
             seit = jetzt - laeuft["anfang"]
             for i in range(int(seit / t["welle_takt"]) + 1):
                 r = t["welle_start"] + (seit - i * t["welle_takt"]) * t["welle_tempo"]
@@ -1703,18 +1704,25 @@ class Testmodus(Gefecht):
                 self._welle_ring(flaeche, f.pos - ecke, r)
 
     def _welle_ring(self, flaeche, p, radius: float) -> bool:
-        """Ein Ring der Funkwelle in Weltpixeln, scharf wie die Figuren: rot,
-        nach aussen in den Farben des Spiels dunkler (rot, Rost, Erde), mit
-        einer dunklen Kante, damit er auf hellem Sand steht. False, wenn
-        er schon (oder noch) unsichtbar ist."""
+        """Ein Ring der Funkwelle in Weltpixeln, scharf wie die Figuren, mit
+        einer dunklen Kante. Seit 0.34.48 nur in Rot (hell, dann tiefer) und
+        gestrichelt, die Striche drehen sich - etwas abstrakt, damit man ihn
+        nicht fuer etwas in der Welt haelt (gemeldet: "eher rot ... etwas
+        abstrakt und von der Welt unterschiedlich"). False, wenn er schon
+        (oder noch) unsichtbar ist."""
         t = K.TESTMODUS
         if not (t["welle_start"] <= radius <= t["welle_weite"]):
             return False
         anteil = (radius - t["welle_start"]) / max(1.0, t["welle_weite"] - t["welle_start"])
-        farbe = K.C_RED if anteil < 0.45 else (K.C_RUST if anteil < 0.8 else K.C_MUTED_DK)
-        mitte = (int(p.x), int(p.y))
-        pygame.draw.circle(flaeche, K.C_WAND_KANTE, (mitte[0], mitte[1] + 1), int(radius), 1)
-        pygame.draw.circle(flaeche, farbe, mitte, int(radius), 1)
+        farbe = t["welle_farben"][min(len(t["welle_farben"]) - 1, int(anteil * len(t["welle_farben"])))]
+        r = int(radius)
+        n = t["welle_striche"]
+        dreh = self.welt.zeit * t["welle_dreh"]
+        for mitte, f, breite in (((int(p.x), int(p.y) + 1), K.C_VOID, 1), ((int(p.x), int(p.y)), farbe, 1)):
+            feld = pygame.Rect(mitte[0] - r, mitte[1] - r, 2 * r, 2 * r)
+            for i in range(n):
+                a = dreh + i * 2.0 * math.pi / n
+                pygame.draw.arc(flaeche, f, feld, a, a + math.pi / n, breite)
         return True
 
     def _funk_liste_zeichnen(self, ziel) -> None:

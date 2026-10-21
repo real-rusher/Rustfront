@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.48 | Nichts Neues ueber das Netz, aber das Gefecht ist anders: Wiederbeleben dauert `K.REVIVE["dauer"]` 5,5 s (war 3). Wer zieht oder aufhilft, bekommt Arme zum Gefallenen gezeichnet - der Gast weiss das aus `zg` und `hf`, die es schon gab. Die Bots (nur beim Gastgeber) gehen dicht an ihre Deckung | Die Versionspruefung weist ab. Gemischt dauerte das Aufhelfen je nach Gastgeber anders lang |
 | 0.34.46 | Nichts Neues ueber das Netz. Die Bots (nur beim Gastgeber) schiessen nicht mehr auf Liegende, auch nicht auf liegende Spieler, und nicht in ihre eigene Deckung. Untertitel (`fk`) zeichnet auch der Gast nur, wenn `K.BOTS["callouts"]` an ist | Die Versionspruefung weist ab |
 | 0.34.45 | Nichts Neues ueber das Netz. Ein Sturm gibt am Ende alle frei, die mitliefen, auch wer unterwegs fiel (nur beim Gastgeber) | Die Versionspruefung weist ab |
 | 0.34.44 | Nichts Neues ueber das Netz. Die Bots (nur beim Gastgeber) stuermen nur noch in Ueberzahl (`K.BOTS["sturm_ueberzahl"]`) | Die Versionspruefung weist ab |

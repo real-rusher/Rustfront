@@ -4855,11 +4855,18 @@ tempo_z = zieher.tempo.length()
 pruef("Wer zieht, geht langsamer",
       tempo_z < K.SPIELER["tempo"] * K.ZIEHEN["tempo"] + 3.0,
       "%.0f px/s" % tempo_z)
-# Seit 0.34.43: er haelt ihn sichtbar - eigenes Bild ohne Waffe, Blick zu ihm.
+# Seit 0.34.43: er haelt ihn sichtbar und schaut zu ihm. Seit 0.34.48 bleibt
+# sein Bild (der Skin), dazu kommen Arme bis zum Gefallenen (_haende_zeichnen).
 _zu_z = liegt.pos - zieher.pos
 _ab_z = (zieher.winkel - math.degrees(math.atan2(_zu_z.y, _zu_z.x)) + 180) % 360 - 180
-pruef("Wer zieht, schaut zu ihm (nicht zur Maus) und hat das Bild mit beiden Haenden",
-      abs(_ab_z) < 3.0 and zieher.bild.endswith("zieht") and zieher.bild in K.BILD_MASS,
+_hb_z = pygame.Surface((K.GAME_W, K.GAME_H))
+wz._haende_zeichnen(_hb_z)
+_mitte_z = wz.kamera.zu_bild((zieher.pos + liegt.pos) / 2)
+_arm_z = any(tuple(_hb_z.get_at((int(_mitte_z.x) + dx_, int(_mitte_z.y) + dy_)))[:3] == K.C_HULL_SH
+             for dx_ in range(-4, 5) for dy_ in range(-4, 5)
+             if 0 <= int(_mitte_z.x) + dx_ < K.GAME_W and 0 <= int(_mitte_z.y) + dy_ < K.GAME_H)
+pruef("Wer zieht, schaut zu ihm (nicht zur Maus); sein Bild bleibt, Arme reichen bis zum Gefallenen",
+      abs(_ab_z) < 3.0 and "zieht" not in zieher.bild and _arm_z,
       "%.1f Grad daneben, %s" % (_ab_z, zieher.bild))
 netz_durchlassen(wz, gz, 10)
 pruef("Der Gast weiss, dass er gezogen wird",
@@ -11276,7 +11283,7 @@ _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
 _boden98 = pygame.Surface((90, 90))
 _tm._kreis_zeichnen(_boden98, 0, _f98.pos - pygame.Vector2(45, 45))
 _rot98 = [(x_, y_) for x_ in range(90) for y_ in range(90)
-          if tuple(_boden98.get_at((x_, y_)))[:3] == K.C_RED]
+          if tuple(_boden98.get_at((x_, y_)))[:3] in K.TESTMODUS["welle_farben"]]
 _weit98 = max((math.hypot(x_ - 45, y_ - 45) for x_, y_ in _rot98), default=0.0)
 _spaet98 = pygame.Surface((90, 90))
 pruef("Funk: unter dem Funker gehen kleine rote Ringe aus, die nach aussen vergehen",
@@ -11387,6 +11394,121 @@ _b99.hirn.wurf_rest = 0.0
 _b99.hirn.reaktion_rest = 0.0
 pruef("... auch keine Granate (wurf_moeglich sagt nein)",
       not _b99.hirn._wurf_moeglich(_b99.pos.distance_to(_vor99), True, 3), "")
+_tm.verlassen()
+
+print("\n-- Dicht in Deckung, Panik waehlt, Bergen hinter feste Deckung, Funk mit Rueckzug (0.34.48)")
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm.wiedereinstieg = False
+_tm.verwundete_setzen(True)
+_platz100 = _freie_flaeche86(_tm.welt, random.Random(100), 18, 11)
+pruef("(eine freie Flaeche fuer die Szene)", _platz100 is not None, "")
+_tx100, _ty100 = _platz100
+_T100 = K.TILE
+def _v100(x_, y_):
+    return pygame.Vector2((_tx100 + x_ + 0.5) * _T100, (_ty100 + y_ + 0.5) * _T100)
+_e100 = _tm.welt.ebene(0)
+for dy_ in (4, 5, 6):
+    _e100.setzen(_tx100 + 8, _ty100 + dy_, K.KISTE)       # Kisten vorn
+for dy_ in range(2, 9):
+    _e100.setzen(_tx100 + 15, _ty100 + dy_, K.WAND)       # eine Mauer weiter hinten
+_feind100 = _tm.puppe_setzen(_v100(2, 5), 0, {"team": 1, "leben": 10.0})
+_feind100.unverwundbar = 1e9
+_b100 = _tm.bot_setzen(_v100(9, 5), 0, {"team": 0, "hirn": "goap"})
+_b100.unverwundbar = 1e9
+_h100 = _b100.hirn
+_tm.ki_stopp = True
+pruef("Dicht hinter den Kisten ist er gedeckt, drei Kacheln dahinter nicht mehr",
+      _h100.dicht_gedeckt(_v100(9, 5) - pygame.Vector2(_T100 * 0.2, 0), _feind100.pos)
+      and not _h100.dicht_gedeckt(_v100(12, 5), _feind100.pos)
+      and _tm.welt.deckung(_feind100.pos, _v100(12, 5), 0) != "", "")
+_nah100 = _h100._deckung_guete(_v100(9, 5), _v100(6, 5))
+_weit100 = _h100._deckung_guete(_v100(9, 5), _v100(2, 5))
+pruef("Eine Deckung dicht am Gegner (unter dem Abstand seiner Waffe) ist schlechter",
+      _nah100 > _weit100, "%.0f / %.0f" % (_nah100, _weit100))
+
+# Panik: bleiben, wechseln oder fliehen - nach Leben, Zuversicht und Trupp.
+_ak100 = _WD88.daten().aktionen
+def _wahl100(**w_):
+    werte_ = dict(leben=1.0, zuversicht=0.5, trupp_rueckzug=0, trupp_druck=0, mut=0.5)
+    werte_.update(w_)
+    k_ = {n_: _ak100[n_].kosten.wert(werte_) for n_ in ("verkriechen", "deckung_wechseln", "fliehen")}
+    return min(k_, key=k_.get)
+_wahlen100 = (_wahl100(trupp_druck=1), _wahl100(leben=0.25, zuversicht=0.3),
+              _wahl100(leben=0.2, zuversicht=0.3, trupp_rueckzug=1))
+pruef("Panik in Deckung: gesund und der Trupp rueckt vor - er bleibt; angeschlagen - bessere Deckung; "
+      "schwer getroffen beim Rueckzug - er rennt",
+      _wahlen100 == ("verkriechen", "deckung_wechseln", "fliehen"), str(_wahlen100))
+_h100.gesehen[_feind100] = (pygame.Vector2(_feind100.pos), 0, _tm.welt.zeit)
+_bd100 = _h100.bessere_deckung()
+pruef("... die bessere Deckung liegt weiter weg vom Gegner, dicht dahinter (hier: die Mauer)",
+      _bd100 is not None and _bd100.distance_to(_feind100.pos) > _b100.pos.distance_to(_feind100.pos) + 40
+      and _h100.dicht_gedeckt(_bd100, _feind100.pos)
+      and _tm.welt.deckung(_feind100.pos, _bd100, 0) == "wand", str(_bd100))
+
+# Bergen: nicht im Rauch aufhelfen, sondern erst hinter feste Deckung ziehen.
+from dustfront.entities import Rauchwolke as _RW100
+_lieg100 = _tm.bot_setzen(_v100(6, 2), 0, {"team": 0, "hirn": "goap"})
+_tm.toeten(_lieg100)
+_tm.welt.rauch.append(_RW100(pygame.Vector2(_lieg100.pos), 0))
+for _ in range(int(3.0 / _D87)):
+    for r_ in _tm.welt.rauch:
+        r_.schritt(_D87)
+pruef("Im Rauch ist ein Liegender verborgen, aber nicht fest gedeckt - aufgeholfen wird dort nicht",
+      _h100.gedeckt(_lieg100.pos, 0) and not _h100.fest_gedeckt(_lieg100.pos, 0)
+      and not _h100._bergung_fakten()["kamerad_gedeckt"], "")
+_tm.welt.rauch.clear()
+_bp100 = _h100.bergeplatz(_lieg100)
+pruef("... der Bergeplatz ist dicht hinter einer Deckung",
+      _bp100 is not None and _h100.fest_gedeckt(_bp100, 0), str(_bp100))
+
+# Wiederbeleben dauert laenger und ist zu sehen: Arme mit Verband, Ring.
+pruef("Wiederbeleben dauert laenger (wenigstens fuenf Sekunden)", K.REVIVE["dauer"] >= 5.0,
+      "%.1f s" % K.REVIVE["dauer"])
+_b100.pos.update(_lieg100.pos + pygame.Vector2(20, 0))
+_b100.hilft = _lieg100.nummer
+_lieg100.revive_stand = 0.4
+_tm.ki_stopp = False
+_tm.welt.zeit += 0.0
+_tm._revive(0.1)
+_zu100 = _lieg100.pos - _b100.pos
+_bild100 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm.kamera.pos.update(_lieg100.pos) if hasattr(_tm.kamera, "pos") else None
+_tm._haende_zeichnen(_bild100)
+_pl100 = _tm.kamera.zu_bild(_lieg100.pos)
+_farben100 = {tuple(_bild100.get_at((int(_pl100.x) + dx_, int(_pl100.y) + dy_)))[:3]
+              for dx_ in range(-16, 17) for dy_ in range(-16, 17)
+              if 0 <= int(_pl100.x) + dx_ < K.GAME_W and 0 <= int(_pl100.y) + dy_ < K.GAME_H}
+pruef("Wer aufhilft, schaut zum Liegenden; zu sehen: Verband (hell) und Fortschrittsring (tuerkis)",
+      abs((_b100.winkel - math.degrees(math.atan2(_zu100.y, _zu100.x)) + 180) % 360 - 180) < 3
+      and K.C_CREAM in _farben100 and K.C_TEAL in _farben100, "")
+_b100.hilft = None
+
+# Funk: erst zurueck an einen gedeckten Platz, dann lange sprechen; wer ihn
+# dabei trifft, unterbricht ihn.
+_tm.alles_weg()
+_tr100 = _tm.trupp_setzen(_v100(10, 5), 0, {"groesse": 3, "team": 0, "fuehrer": "funk"})
+_f100 = _tr100.fuehrer
+_f100.pos.update(_v100(9, 2))
+_g100 = _tm.puppe_setzen(_v100(4, 2), 0, {"team": 1, "leben": 10.0})
+_g100.unverwundbar = 1e9
+_fh100 = _f100.hirn
+_fh100.gesehen[_g100] = (pygame.Vector2(_g100.pos), 0, _tm.welt.zeit)
+_tm.ki_stopp = True
+_fh100._funken_tun("lage")
+_fl100 = _fh100.funk_laeuft
+pruef("Funk: mit einem Gegner dicht dran geht der Anfuehrer erst zurueck, an einen Platz weiter weg",
+      _fl100 is not None and _fl100["phase"] == "weg" and _fl100["ort"] is not None
+      and _fl100["ort"].distance_to(_g100.pos) > _f100.pos.distance_to(_g100.pos) + 60,
+      str(_fl100 and _fl100.get("ort")))
+_bw100 = pygame.Surface((200, 200))
+_tm._funkwellen_zeichnen(_bw100, 0, _f100.pos - pygame.Vector2(100, 100))
+pruef("... auf dem Weg dorthin funkt er noch nicht (keine Wellen)",
+      pygame.transform.average_color(_bw100)[:3] == (0, 0, 0), "")
+_fl100.update(phase="senden", anfang=_tm.welt.zeit, bis=_tm.welt.zeit + _fl100["dauer"], leben=_f100.leben)
+_f100.leben -= 5.0
+_r100 = _fh100._funken_tun("lage")
+pruef("... wird er beim Sprechen getroffen, ist der Spruch nicht raus",
+      _r100[-1] == "gescheitert" and _fh100.funk_laeuft is None and K.TRUPP["funk_dauer"] >= 5.0, "")
 _tm.verlassen()
 
 print()

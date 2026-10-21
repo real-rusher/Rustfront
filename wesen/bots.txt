@@ -246,17 +246,28 @@ macht: !granate_nah
 kosten: 1
 tut: ausweichen
 
+# Panik (seit 0.34.48): bleiben, eine bessere Deckung weiter hinten, oder
+# ganz weg - je nach Leben, Zuversicht und dem, was der Trupp tut. Gesund,
+# zuversichtlich, der Trupp rueckt vor: er bleibt. Angeschlagen: in eine
+# bessere Deckung. Der Trupp zieht sich zurueck und er ist schwer
+# getroffen: er rennt.
 [aktion fliehen]
 macht: sicher
-kosten: 1
+kosten: 0.8 + 1.5 * leben + 0.8 * trupp_druck - 0.6 * trupp_rueckzug
 tut: fliehen
 
 [aktion verkriechen]
 braucht: in_deckung
 macht: sicher
-kosten: 0.5
+kosten: 0.5 + 1.2 * (1 - leben) + 0.6 * (1 - zuversicht) + 0.8 * trupp_rueckzug
 tut: verkriechen
-info: Panik in der Deckung: nicht am Gegner vorbei, sondern in die beste Ecke, die gedeckt erreichbar ist.
+info: Panik in der Deckung: dort bleiben, in der besten Ecke, die gedeckt erreichbar ist.
+
+[aktion deckung_wechseln]
+macht: sicher
+kosten: 0.9 + 0.3 * leben + 0.6 * trupp_druck
+tut: deckung_wechseln
+info: Panik: in eine bessere Deckung weiter weg vom Gegner, auf einem Weg, der nicht an ihm vorbeifuehrt.
 
 [aktion angreifen]
 braucht: feind_sichtbar, linie_frei, munition_da
@@ -447,7 +458,7 @@ tut: zur_stelle
 name: BOT
 hirn: bot
 ziele: granate_ausweichen, panik, ueberleben, nachladen, kamerad_bergen, verstaerkung_rufen, funk_antworten, lage_melden, rauch_legen, rueckzug, druck, zu_hilfe, sektor_halten, trupp_halten, stuermen, kreis, gruppe_bekaempfen, feuerschutz, nachsetzen, feind_ausschalten, suchen
-aktionen: ausweichen, fliehen, verkriechen, angreifen, aus_deckung_feuern, dauerfeuer, granate_werfen, flankieren, niederhalten, nahkampf, suchen, nachsetzen, deckung, abwarten, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, zum_kameraden, kamerad_ziehen, aufhelfen, aufhelfen_offen, stuermen, funk_hilfe, funk_zusage, funk_lage, rauch_werfen, welle, verlegen, zur_stelle, sektor_halten
+aktionen: ausweichen, fliehen, verkriechen, deckung_wechseln, angreifen, aus_deckung_feuern, dauerfeuer, granate_werfen, flankieren, niederhalten, nahkampf, suchen, nachsetzen, deckung, abwarten, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, zum_kameraden, kamerad_ziehen, aufhelfen, aufhelfen_offen, stuermen, funk_hilfe, funk_zusage, funk_lage, rauch_werfen, welle, verlegen, zur_stelle, sektor_halten
 merkmal mut: 0.2 0.9
 merkmal disziplin: 0.3 1.0
 # Drill (seit 0.34.38): wie ausgebildet er ist. Wenig fuer die Bots des

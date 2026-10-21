@@ -1717,11 +1717,12 @@ class Spieler(Wesen):
         # auf der Stelle um, und genau das ist ihr Preis.
         # Wer am Boden liegt, dreht sich nicht mehr. Vorher folgte die
         # liegende Figur weiter der Maus und drehte sich am Boden im Kreis.
-        # Wer einen Gefallenen zieht, schaut zu ihm (Gefecht._ziehen), nicht
-        # zur Maus (seit 0.34.43).
+        # Wer einen Gefallenen zieht oder ihm aufhilft, schaut zu ihm
+        # (Gefecht._ziehen, _revive), nicht zur Maus (seit 0.34.43).
         if (self.ziel - self.pos).length_squared() > 1 \
                 and not getattr(self, "am_boden", False) \
-                and getattr(self, "zieht", None) is None:
+                and getattr(self, "zieht", None) is None \
+                and getattr(self, "hilft", None) is None:
             soll = math.degrees(math.atan2(self.ziel.y - self.pos.y,
                                            self.ziel.x - self.pos.x))
             grenze = self.dreh_grenze

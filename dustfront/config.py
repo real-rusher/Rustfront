@@ -508,7 +508,6 @@ BILD_MASS = {
     "spieler_medkit":     (56, 56),   # waehrend des Anlegens
     "spieler_boden":      (28, 28),   # wer am Boden liegt
     "leiche":             (28, 28),   # eine Leiche, die bald verschwindet (Testmodus, 0.34.40)
-    "spieler_zieht":      (36, 36),   # wer einen Gefallenen zieht (0.34.43)
     "gegner_laeufer":   (28, 28),
     "gegner_brecher":   (44, 44),
     "gegner_renner":    (24, 24),
@@ -1120,6 +1119,12 @@ BOTS = dict(
     deckung_belegt=20.0,      # so nah sitzt schon ein Kamerad ...
     deckung_belegt_strafe=60.0,   # ... und das kostet es
     vorn_frei=56.0,           # so weit vor ihm muss frei sein, sonst kein Schuss, kein Wurf
+    # Seit 0.34.48: in Deckung ist nur, wer dicht dahinter steht.
+    deckung_dicht=40.0,       # so nah vor ihm muss das Hindernis stehen
+    deckung_mindest=0.6,      # x Wunschabstand der Waffe: naeher am Gegner ist eine Deckung zu nah ...
+    deckung_zu_nah=1.5,       # ... und kostet je Pixel so viel
+    wechsel_radien=(70.0, 120.0, 170.0, 220.0),   # Panik: so weit sucht er eine bessere Deckung
+    wechsel_weiter=40.0,      # ... die so viel weiter vom Gegner weg ist
     granate_abstand=30.0,     # so weit ueber ihren Radius hinaus rennt er
     gedaechtnis=4.0,          # so lange sucht er dort, wo er einen zuletzt sah
     wunschabstand=dict(repetierer=230.0, sturm=200.0, lmg=240.0,
@@ -1143,7 +1148,7 @@ BOTS = dict(
     deckung_leben=40.0,       # darunter, und gerade getroffen: weg aus der Linie
     deckung_zeit=2.5,         # so lange bleibt er dann versteckt ...
     deckung_pause=7.0,        # ... und so lange danach nicht wieder
-    deckung_radien=(40.0, 70.0, 105.0, 150.0),  # so weit sucht er, naechste zuerst
+    deckung_radien=(40.0, 70.0, 105.0, 150.0, 200.0),  # so weit sucht er, naechste zuerst
     # ── Funk (seit 0.34.27, bottaktik.py). Kurz vor einer Aktion sagt der
     # Bot an, was er vorhat - als Untertitel ueber ihm, mit Mannschaften
     # nur fuer die eigene. Je Anlass mehrere Saetze, damit es nicht wie
@@ -1232,6 +1237,9 @@ TESTMODUS = dict(
     welle_start=11.0,         # hier beginnt er (knapp ausserhalb der Figur)
     welle_weite=26.0,         # so weit, dann ist er weg
     empfang_zeigen=0.6,       # so lange laeuft beim Empfaenger ein Ring nach innen (s)
+    welle_farben=((255, 72, 56), (226, 44, 40), (168, 26, 30)),   # innen hell, aussen tief
+    welle_striche=6,          # so viele Striche hat ein Ring (seit 0.34.48)
+    welle_dreh=1.6,           # so schnell drehen sie sich (Bogenmass je Sekunde)
 )
 
 # Zielorientierte KI (seit 0.34.29, goap.py, bot_goap.py, Daten in wesen/).
@@ -1336,7 +1344,15 @@ TRUPP = dict(
     buendeln_bonus=40.0,      # ... und die, auf die ein Kamerad schon schiesst
     fuehrer_schutz=230.0,     # so nah am Anfuehrer: ein Gegner bedroht ihn
     # Funk zwischen den Anfuehrern.
-    funk_dauer=2.2,           # so lange dauert ein Spruch (s) - er steht dabei
+    # Seit 0.34.48 viel laenger (war 2,2), und erst zieht er sich dafuer
+    # zurueck - gemeldet: "Funken geht viel zu schnell. Der Offizier soll
+    # sich eher wirklich zurueckziehen dafuer, so dass es moeglich ist, ein
+    # Team zu ueberraschen, sodass es nicht funken kann."
+    funk_dauer=6.0,           # so lange dauert ein Spruch (s) - er steht dabei
+    funk_abstand=300.0,       # so weit weg von jedem bekannten Gegner funkt er
+    funk_weg_radien=(60.0, 110.0, 160.0, 220.0),   # so weit sucht er dafuer einen Platz
+    funk_weg_zeit=8.0,        # laenger geht er nicht, dann funkt er, wo er ist
+    funk_stoer=240.0,         # sieht er einen Gegner so nah, bricht der Spruch ab
     funk_gedaechtnis=12,      # so viele Sprueche zeigt der Testmodus
     melden_pause=8.0,         # so lange nach einer Meldung keine neue (s)
     hilferuf_gilt=20.0,       # so lange gilt ein Hilferuf (s)
@@ -1510,7 +1526,10 @@ ZIEHEN = dict(
 REVIVE = dict(
     boden_leben=0.0,          # damit faengt man am Boden an
     boden_zeit=45.0,          # so lange haelt man durch, dann ist es vorbei
-    dauer=3.0,                # so lange muss ein Helfer danebenstehen
+    # Seit 0.34.48 laenger (war 3): gemeldet "dass das Wiederbeleben etwas
+    # bis deutlich laenger dauert und klarer sichtbar ist".
+    dauer=5.5,                # so lange muss ein Helfer danebenstehen
+    takt=5.0,                 # so schnell drueckt er dabei (Bogenmass je Sekunde, _haende_zeichnen)
     reichweite=28.0,          # so nah muss er sein
     danach_leben=40.0,        # mit so viel Leben steht man wieder auf
     schutz=2.0,               # Sekunden unverwundbar nach dem Aufstehen
@@ -1533,7 +1552,7 @@ VERWUNDET = dict(
     danach_abstand=80.0,      # so viel mehr Abstand haelt er (Aufgaben auf Distanz)
     bedrohung=320.0,          # Gegner so nah an einem Liegenden, die ihn sehen, bedrohen die Bergung
     retter=2,                 # hoechstens so viele ziehen und helfen
-    deckung_radien=(60.0, 100.0, 140.0),   # so weit sucht ein Retter Deckung fuer den Liegenden
+    deckung_radien=(60.0, 100.0, 140.0, 190.0, 240.0),   # so weit sucht ein Retter Deckung fuer den Liegenden
     rauch_nah=70.0,           # Rauch so nah am Liegenden: die Bergung ist gedeckt
 )
 
@@ -2325,7 +2344,6 @@ for _team in TEAMS["kombi"]:
     BILD_MASS["spieler_%s" % _kurz] = BILD_MASS["spieler"]
     BILD_MASS["spieler_%s_boden" % _kurz] = BILD_MASS["spieler_boden"]
     BILD_MASS["leiche_%s" % _kurz] = BILD_MASS["spieler_boden"]
-    BILD_MASS["spieler_%s_zieht" % _kurz] = BILD_MASS["spieler_zieht"]
     for _w in WAFFEN_HAND:
         BILD_MASS["spieler_%s_%s" % (_kurz, _w)] = BILD_MASS["spieler_" + _w]
 

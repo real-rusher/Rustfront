@@ -1221,7 +1221,25 @@ Gemeldet nach der Aufnahme `deckung`.
 * **Nicht in die eigene Deckung** (`vorn_zu`): steht in 56 px vor ihm etwas,
   das Kugeln aufhaelt, kein Schuss und kein Wurf.
 
-### 11.7 Was noch offen ist
+### 11.7 Paket 7 (0.34.48): Dicht an der Deckung, Panik waehlt, Funk dauert
+
+* **Dicht in Deckung** (`dicht_gedeckt`): ein Hindernis muss in 40 px vor
+  ihm stehen, nicht nur irgendwo zwischen ihm und dem Gegner. Eine Deckung
+  naeher am Gegner als 0,6 x Wunschabstand seiner Waffe kostet 1,5 je Pixel;
+  gesucht wird bis 200 px.
+* **Panik waehlt** (wesen/bots.txt): verkriechen `0,5 + 1,2 (1 - leben) +
+  0,6 (1 - zuversicht) + 0,8 trupp_rueckzug`, deckung_wechseln `0,9 + 0,3
+  leben + 0,6 trupp_druck` (`bessere_deckung`: 40 px weiter weg von jedem
+  Gegner, dicht gedeckt, nicht an ihm vorbei, lieber eine Mauer), fliehen
+  `0,8 + 1,5 leben + 0,8 trupp_druck - 0,6 trupp_rueckzug`.
+* **Bergen** (`fest_gedeckt`): kamerad_gedeckt heisst dicht gedeckt vor
+  jedem bekannten Gegner, ohne Rauch; der Bergeplatz liegt dort, lieber
+  hinter einer Mauer, bis 240 px weit.
+* **Funk** (`funkplatz`, `_funken_tun`): erst an einen Platz 300 px von
+  jedem bekannten Gegner (lieber gedeckt), dann 6 s sprechen; ein Treffer
+  oder ein Gegner in 240 px bricht ab (FUNK ABGEBROCHEN).
+
+### 11.8 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.

@@ -122,6 +122,7 @@ class GoapHirn(BotHirn):
         self._lehnen = None
         self._ecke = None
         self._flucht = None
+        self._wechsel = None
         self.funk_laeuft = None
         self.wurf_phase = 0.0
 
@@ -148,6 +149,7 @@ class GoapHirn(BotHirn):
         self._abwarten = 0.0          # so lange wartet er schon in der Deckung
         self._lehnen = None           # aus der Deckung schiessen: dict(phase, platz, punkt, bis)
         self._ecke = None             # Panik in Deckung: wohin er sich verkriecht
+        self._wechsel = None          # Panik: die bessere Deckung, zu der er laeuft (0.34.48)
         self.funk_laeuft = None       # dict(art, bis, text): er spricht gerade in sein Funkgeraet
         self._rede_rest = self.rnd.uniform(3.0, 6.0)   # bis er beim Suchen etwas sagt
 
@@ -226,7 +228,30 @@ class GoapHirn(BotHirn):
         gefahr = self._gefahr()
         if lehnt or kriecht or gefahr is None:
             return True
-        return self.g.welt.deckung(gefahr[0], self.k.pos, self.k.ebene) != ""
+        return self.dicht_gedeckt(self.k.pos, gefahr[0])
+
+    def dicht_gedeckt(self, p, gegen) -> bool:
+        """Steht die Deckung zwischen ihm und `gegen` dicht vor ihm? Weit
+        hinter einer Kiste, die nur irgendwo dazwischen steht, ist er nicht
+        in Deckung (seit 0.34.48, gemeldet: "dass sie trotzdem denken, dass
+        sie in Deckung sind, wenn sie recht weit hinter der Deckung stehen
+        ... sie sollen schon an die Deckung rangehen")."""
+        welt = self.g.welt
+        k = self.k
+        gegen = pygame.Vector2(gegen)
+        hin = gegen - p
+        if hin.length_squared() < 1.0:
+            return False
+        nah = p + hin.normalize() * min(hin.length(), K.BOTS["deckung_dicht"])
+        return welt.deckung(gegen, p, k.ebene) != "" and welt.deckung(nah, p, k.ebene) != ""
+
+    def fest_gedeckt(self, pos, ebene) -> bool:
+        """Dicht gedeckt vor jedem Gegner, den er kennt - ohne Rauch: dorthin
+        zieht er einen Verwundeten, bevor er ihm aufhilft (seit 0.34.48)."""
+        for o in self.feind_orte():
+            if o.distance_to(pos) <= K.BOTS["sicht"] and not self.dicht_gedeckt(pos, o):
+                return False
+        return True
 
     def feind_orte(self, ohne=None) -> list:
         """Alle Orte auf seiner Ebene, an denen er Gegner weiss: gesehen
@@ -556,7 +581,10 @@ class GoapHirn(BotHirn):
                      for m in self.kameraden() + [k])
         return dict(bei_kamerad=x.ebene == k.ebene
                     and k.pos.distance_to(x.pos) <= K.REVIVE["reichweite"] - 4,
-                    kamerad_gedeckt=self.gedeckt(x.pos, x.ebene),
+                    # Fest gedeckt, nicht nur im Rauch: erst dorthin ziehen, dann
+                    # aufhelfen (seit 0.34.48, gemeldet: "die Teammates immer
+                    # erst hinter eine gute und sichere Deckung bergen").
+                    kamerad_gedeckt=self.fest_gedeckt(x.pos, x.ebene),
                     ich_berge=ich, bergen_sicher=sicher, bergung_laeuft=laeuft)
 
     def bergeplatz(self, x):
@@ -570,11 +598,14 @@ class GoapHirn(BotHirn):
                 p = x.pos + pygame.Vector2(r, 0).rotate(i * 30.0)
                 if not welt.frei(p, k.radius + 2, x.ebene, True):
                     continue
-                if not self.gedeckt(p, x.ebene):
+                if not self.fest_gedeckt(p, x.ebene):
                     continue
                 if not welt.wege.gerade_frei(x.ebene, x.pos, p, k.radius + 1):
                     continue
                 wert = p.distance_to(x.pos) + 0.5 * p.distance_to(k.pos)
+                orte = self.feind_orte()
+                if orte and welt.deckung(sum(orte, pygame.Vector2(0, 0)) / len(orte), p, x.ebene) == "wand":
+                    wert -= K.BOTS["deckung_wand"]    # hinter eine Mauer, lieber als hinter ein Fass
                 if wert < beste:
                     bestes, beste = p, wert
             if bestes is not None:
@@ -777,6 +808,8 @@ class GoapHirn(BotHirn):
                 self._lehnen = None           # sonst zaehlte der Lehnpunkt weiter als Deckung
             if a.tut != "verkriechen":
                 self._ecke = None
+            if a.tut != "deckung_wechseln":
+                self._wechsel = None
             if not a.tut.startswith("funk"):
                 self.funk_laeuft = None       # unterbrochen: der Spruch ist nicht raus
             if a.funk:
@@ -859,7 +892,14 @@ class GoapHirn(BotHirn):
         k = self.k
         welt = self.g.welt
         gefahr = pygame.Vector2(gefahr)
+        if not self.dicht_gedeckt(p, gefahr):
+            return 1e6                        # nur hinter, nicht weit hinter einer Deckung
         wert = 0.0
+        # Zu nah am Gegner fuer seine Waffe: lieber eine weiter hinten.
+        nah = K.BOTS["wunschabstand"].get(k.waffe_name, 220.0) * b["deckung_mindest"]
+        d = p.distance_to(gefahr)
+        if d < nah:
+            wert += (nah - d) * b["deckung_zu_nah"]
         if welt.deckung(gefahr, p, k.ebene) == "wand":
             wert -= b["deckung_wand"]
         hin = gefahr - p
@@ -1184,6 +1224,59 @@ class GoapHirn(BotHirn):
             feuern = self.rnd.random() < 0.5 and k.magazin.get(k.waffe_name, 0) > 0
         return will, punkt, feuern, False, "laeuft"
 
+    def bessere_deckung(self):
+        """Panik: eine Deckung weiter weg von jedem Gegner, den er kennt,
+        dicht gedeckt vor allen, erreichbar auf geradem Weg, der an keinem
+        vorbeifuehrt - lieber eine Mauer (seit 0.34.48)."""
+        k = self.k
+        welt = self.g.welt
+        orte = self.feind_orte()
+        if not orte:
+            return None
+        mitte = sum(orte, pygame.Vector2(0, 0)) / len(orte)
+        jetzt_weit = min(o.distance_to(k.pos) for o in orte)
+        bestes, beste = None, 1e9
+        for r in K.BOTS["wechsel_radien"]:
+            for i in range(12):
+                p = k.pos + pygame.Vector2(r, 0).rotate(i * 30.0)
+                if not welt.frei(p, k.radius + 2, k.ebene, True):
+                    continue
+                weit = min(o.distance_to(p) for o in orte)
+                if weit < jetzt_weit + K.BOTS["wechsel_weiter"]:
+                    continue
+                if any(_abstand_zur_strecke(o, k.pos, p) < 90.0 for o in orte):
+                    continue                  # nicht am Gegner vorbei
+                if not welt.wege.gerade_frei(k.ebene, k.pos, p, k.radius + 1):
+                    continue
+                if not all(self.dicht_gedeckt(p, o) for o in orte):
+                    continue
+                wert = 0.5 * r - 0.4 * weit
+                if welt.deckung(mitte, p, k.ebene) == "wand":
+                    wert -= K.BOTS["deckung_wand"]
+                if wert < beste:
+                    bestes, beste = p, wert
+        return bestes
+
+    def tun_deckung_wechseln(self, dt, ein):
+        """Panik: hinueber in eine bessere Deckung, dann ist er dort sicher
+        (und verkriecht sich, wenn die Panik bleibt). Gibt es keine, ist es
+        gescheitert - dann bleibt er oder rennt."""
+        k = self.k
+        if not self.innen.panik:
+            self._wechsel = None
+            return _nichts("fertig")
+        if getattr(self, "_wechsel", None) is None:
+            self._wechsel = self.bessere_deckung()
+            if self._wechsel is None:
+                return _nichts("gescheitert")
+        if k.pos.distance_to(self._wechsel) < 5.0:
+            self._deckung_platz = pygame.Vector2(self._wechsel)
+            self._wechsel = None
+            return _nichts("fertig")
+        gefahr = self._gefahr()
+        return (self._weg_richtung(self._wechsel, k.ebene, ein),
+                (gefahr[0] if gefahr else None), False, False, "laeuft")
+
     def tun_fliehen(self, dt, ein):
         """Panik: weg vom Gegner, zu den eigenen Leuten, wenn welche da
         sind, die weiter weg vom Gegner stehen. Wer ihm zu nahe kommt,
@@ -1302,11 +1395,11 @@ class GoapHirn(BotHirn):
         if x is None:
             self._berge_ort = None
             return _nichts("fertig")
-        if self.gedeckt(x.pos, x.ebene):
+        if self.fest_gedeckt(x.pos, x.ebene):
             self._berge_ort = None
             return _nichts("fertig")
         ort = getattr(self, "_berge_ort", None)
-        if ort is None or not self.gedeckt(ort, x.ebene):
+        if ort is None or not self.fest_gedeckt(ort, x.ebene):
             ort = self._berge_ort = self.bergeplatz(x)
         if ort is None:
             return _nichts("gescheitert")
@@ -1393,26 +1486,80 @@ class GoapHirn(BotHirn):
         will, punkt = self._unterwegs(dt, ein)
         return will, punkt, False, False, "laeuft"
 
+    def funkplatz(self):
+        """Wo er in Ruhe funken kann: wenigstens `funk_abstand` von jedem
+        Gegner weg, den er kennt - lieber dort, wo er auch gedeckt ist -, auf
+        geradem Weg, der nicht an ihnen vorbeifuehrt. None: wo er steht, geht
+        es schon, oder es gibt keinen solchen Platz."""
+        k = self.k
+        welt = self.g.welt
+        t = K.TRUPP
+        orte = self.feind_orte()
+
+        def weit_genug(p):
+            return all(o.distance_to(p) >= t["funk_abstand"] for o in orte)
+
+        if not orte or weit_genug(k.pos):
+            return None
+        bestes, beste = None, 1e9
+        for r in t["funk_weg_radien"]:
+            for i in range(12):
+                p = k.pos + pygame.Vector2(r, 0).rotate(i * 30.0)
+                if not welt.frei(p, k.radius + 2, k.ebene, True) or not weit_genug(p):
+                    continue
+                if any(_abstand_zur_strecke(o, k.pos, p) < 110.0 for o in orte):
+                    continue
+                if not welt.wege.gerade_frei(k.ebene, k.pos, p, k.radius + 1):
+                    continue
+                wert = r - 0.3 * min(o.distance_to(p) for o in orte)
+                if all(self.dicht_gedeckt(p, o) for o in orte):
+                    wert -= K.BOTS["deckung_wand"]    # dort auch gedeckt: besser
+                if wert < beste:
+                    bestes, beste = p, wert
+            if bestes is not None:
+                return bestes
+        return None
+
     def _funken_tun(self, art: str):
-        """Ein Spruch ins Funkgeraet: er bleibt stehen und spricht, bis er
-        durch ist (K.TRUPP["funk_dauer"]). Erst dann haben ihn die anderen."""
+        """Ein Spruch ins Funkgeraet (seit 0.34.48 in zwei Teilen): erst
+        zieht er sich zurueck, an einen gedeckten Platz weit genug weg vom
+        Gegner (`funkplatz`), dann spricht er, bis er durch ist
+        (K.TRUPP["funk_dauer"]) - erst dann haben ihn die anderen. Trifft
+        ihn dabei eine Kugel oder sieht er einen Gegner dicht vor sich, ist
+        der Spruch nicht raus: wer einen Trupp ueberrascht, laesst ihn nicht
+        funken."""
         t = self.trupp
         k = self.k
         if t is None or not getattr(k, "funkgeraet", False):
             return _nichts("gescheitert")
+        T = K.TRUPP
         jetzt = self.g.welt.zeit
         laeuft = self.funk_laeuft
-        if laeuft is None or laeuft["art"] != art:
-            dauer = K.TRUPP["funk_dauer"] * (0.5 if art == "zusage" else 1.0)
-            self.funk_laeuft = laeuft = dict(art=art, bis=jetzt + dauer,
-                                             text=t.funk_text(art, (t.hilfe or {}).get("fuer")),
-                                             anfang=jetzt)
         gefahr = self._gefahr()
+        blick = gefahr[0] if gefahr else None
+        if laeuft is None or laeuft["art"] != art:
+            dauer = T["funk_dauer"] * (0.5 if art == "zusage" else 1.0)
+            self.funk_laeuft = laeuft = dict(art=art, dauer=dauer, phase="weg", ort=self.funkplatz(),
+                                             weg_bis=jetzt + T["funk_weg_zeit"],
+                                             text=t.funk_text(art, (t.hilfe or {}).get("fuer")),
+                                             anfang=jetzt, bis=jetzt + dauer, leben=k.leben)
+        if laeuft["phase"] == "weg":
+            ort = laeuft["ort"]
+            if ort is not None and k.pos.distance_to(ort) > 6.0 and jetzt < laeuft["weg_bis"]:
+                return self._weg_richtung(ort, k.ebene, ein=None), blick, False, False, "laeuft"
+            laeuft.update(phase="senden", anfang=jetzt, bis=jetzt + laeuft["dauer"], leben=k.leben)
+        z = self.ziel
+        nah = (z is not None and self.ziel_ok(z) and z in self.gesehen
+               and self.gesehen[z][2] >= jetzt - 0.3 and k.pos.distance_to(z.pos) < T["funk_stoer"])
+        if k.leben < laeuft["leben"] - 0.5 or nah:
+            self.funk_laeuft = None
+            self.gehirn.log("FUNK ABGEBROCHEN")
+            return _nichts("gescheitert")
         if jetzt >= laeuft["bis"]:
             t.funk_senden(art)
             self.funk_laeuft = None
             return _nichts("fertig")
-        return pygame.Vector2(0, 0), (gefahr[0] if gefahr else None), False, False, "laeuft"
+        return pygame.Vector2(0, 0), blick, False, False, "laeuft"
 
     def tun_funk_hilfe(self, dt, ein):
         return self._funken_tun("hilfe")

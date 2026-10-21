@@ -160,6 +160,7 @@ class Kaempfer(Spieler):
         # wie lange noch. Der Gast bekommt beides mit der Weltmeldung.
         self.funk = ""
         self.funk_rest = 0.0
+        self.hilf_zeit = 0.0          # so lange hilft er schon auf (seit 0.34.48)
         # Der Buggy, in dem er sitzt (seit 0.34.9, beim Gastgeber), und
         # ob er drinsitzt (bei beiden - der Gast bekommt es gemeldet und
         # zeichnet die Figur dann nicht, sie ist Teil des Wagenbilds).
@@ -201,10 +202,6 @@ class Kaempfer(Spieler):
         if self.am_boden:
             name = "spieler_%sboden" % vorsatz
             return name if name in K.BILD_MASS else "spieler_boden"
-        if self.zieht is not None:
-            # Beide Haende am Gefallenen, keine Waffe (seit 0.34.43).
-            name = "spieler_%szieht" % vorsatz
-            return name if name in K.BILD_MASS else "spieler_zieht"
         if self.schwingt:
             # Waffe verstaut, das Brecheisen in beiden Haenden (seit
             # 0.32.8 als Bildfolge, siehe art._figur_schwung).
@@ -303,6 +300,8 @@ class Kaempfer(Spieler):
         if not self.am_boden:
             self.ruf_zeigen = 0.0
         self.funk_rest = max(0.0, self.funk_rest - dt)
+        # Der Takt, in dem der Helfer drueckt (_haende_zeichnen).
+        self.hilf_zeit = self.hilf_zeit + dt if self.hilft is not None else 0.0
         vorher = self.magazin.get(self.waffe_name, 0)
         war_am_laden = self.nachlade_rest > 0
         super().schritt(dt)
@@ -2032,7 +2031,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             if weg.length_squared() < 0.01:
                 weg = pygame.Vector2(-1, 0)
             # Er schaut zu dem, den er zieht, und geht rueckwaerts - so
-            # haelt man einen (seit 0.34.43). Das Bild dazu: art._figur_zieht.
+            # haelt man einen (seit 0.34.43). Die Haende: _haende_zeichnen.
             k.winkel = math.degrees(math.atan2(weg.y, weg.x))
             ziel = k.pos + weg.normalize() * K.ZIEHEN["leine"]
             schritt = ziel - opfer.pos
@@ -3246,6 +3245,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 continue
             helfer = hilfe.get(k.nummer, 0)
             if helfer:
+                for helfer_k in self.kaempfer.values():
+                    if helfer_k.hilft == k.nummer and helfer_k.lebt:
+                        # Er schaut zu dem, dem er aufhilft (seit 0.34.48).
+                        hin = k.pos - helfer_k.pos
+                        if hin.length_squared() > 1.0:
+                            helfer_k.winkel = math.degrees(math.atan2(hin.y, hin.x))
                 # Zwei Helfer sind doppelt so schnell. Das belohnt, wenn
                 # sich die Mannschaft sammelt.
                 k.revive_stand += dt * helfer / k.revive_dauer
@@ -4545,9 +4550,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         ziel = self.app.eingabe.ziel_welt(self.kamera, self.ich.pos)
         self.ich.ziel = ziel
         ab = ziel - self.ich.pos
-        opfer = self.kaempfer.get(self.ich.zieht) if self.ich.zieht is not None else None
+        nr = self.ich.zieht if self.ich.zieht is not None else self.ich.hilft
+        opfer = self.kaempfer.get(nr) if nr is not None else None
         if opfer is not None:
-            ab = opfer.pos - self.ich.pos     # wer zieht, schaut zu ihm (seit 0.34.43)
+            ab = opfer.pos - self.ich.pos     # wer zieht oder aufhilft, schaut zu ihm (seit 0.34.43)
         if ab.length_squared() > 1:
             self.ich.winkel = math.degrees(math.atan2(ab.y, ab.x))
 
@@ -5162,6 +5168,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self._zoom_zeichnen(ziel, misch)
         self._ueberblendung.zeichnen(ziel)
         self._ueberblendung.merken(ziel)
+        self._haende_zeichnen(ziel)
         self._namen_zeichnen(ziel)
         self._fahrzeug_balken(ziel)
         self._fahrzeug_hinweis(ziel)
@@ -5772,6 +5779,63 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         farbe = tuple(int(14 + (c - 14) * anteil) for c in K.C_CREAM[:3])
         SCHRIFT.zeichnen(ziel, text, int(p.x), y + 2, farbe, 1,
                          ausrichtung="mitte")
+
+    def _haende_zeichnen(self, ziel) -> None:
+        """Wer zieht oder aufhilft, haelt den Gefallenen mit beiden Haenden
+        (seit 0.34.48): zwei Arme von ihm zum Liegenden, beim Aufhelfen mit
+        einem Verband dazwischen, der im Takt drueckt; um den Liegenden ein
+        Ring, wie weit es ist, und ein Kreuz. Ueber der Figur und nicht
+        statt ihr - das Bild der Figur ist ihr Skin und bleibt (gemeldet:
+        "eine neue kniende Animation geht nicht ... was nur die Arme von dem
+        Helfer veraendert")."""
+        z = 1.0 / max(0.5, self.kamera.zoom)
+        for k in self.kaempfer.values():
+            nr = k.zieht if k.zieht is not None else k.hilft
+            if nr is None or not k.lebt or k.am_boden or k.ebene != self.blick:
+                continue
+            opfer = self.kaempfer.get(nr)
+            if opfer is None or opfer.ebene != k.ebene:
+                continue
+            if self.welt.verdeckt(k.pos, k.ebene) or not self.im_licht(k.pos):
+                continue
+            a = self.kamera.zu_bild(k.pos)
+            b = self.kamera.zu_bild(opfer.pos)
+            d = b - a
+            if d.length_squared() < 1.0:
+                continue
+            r = d.normalize()
+            q = pygame.Vector2(-r.y, r.x)
+            hilft = k.zieht is None
+            reich = min(d.length() - 2.0 * z, 17.0 * z)
+            if hilft:
+                reich -= 2.5 * z * abs(math.sin(k.hilf_zeit * K.REVIVE["takt"]))
+            haende = []
+            for seite in (-1.0, 1.0):
+                schulter = a + q * (seite * 4.5 * z) + r * (2.0 * z)
+                hand = a + q * (seite * (2.5 if hilft else 3.5) * z) + r * reich
+                pygame.draw.line(ziel, K.C_HULL_SH, schulter, hand, max(2, int(3 * z)))
+                haende.append(hand)
+            for hand in haende:
+                pygame.draw.circle(ziel, K.C_HULL, (int(hand.x), int(hand.y)), max(1, int(2 * z)))
+            if hilft:
+                m = (haende[0] + haende[1]) / 2 + r * (1.5 * z)
+                g = max(3, int(3 * z))
+                pygame.draw.rect(ziel, K.C_CREAM, (int(m.x) - g, int(m.y) - g, 2 * g + 1, 2 * g + 1))
+                pygame.draw.line(ziel, K.C_TEAL, (int(m.x) - g + 1, int(m.y)), (int(m.x) + g - 1, int(m.y)))
+                pygame.draw.line(ziel, K.C_TEAL, (int(m.x), int(m.y) - g + 1), (int(m.x), int(m.y) + g - 1))
+        # Um jeden, dem gerade aufgeholfen wird: wie weit es ist.
+        for k in self.kaempfer.values():
+            if not (k.lebt and k.am_boden and k.revive_stand > 0.0 and k.ebene == self.blick):
+                continue
+            if self.welt.verdeckt(k.pos, k.ebene) or not self.im_licht(k.pos):
+                continue
+            p = self.kamera.zu_bild(k.pos)
+            radius = int(13 * z)
+            feld = pygame.Rect(int(p.x) - radius, int(p.y) - radius, radius * 2, radius * 2)
+            pygame.draw.circle(ziel, (16, 11, 8), (int(p.x), int(p.y)), radius, 3)
+            ende = math.radians(90.0)
+            anfang = ende - 2.0 * math.pi * min(1.0, k.revive_stand)
+            pygame.draw.arc(ziel, K.C_TEAL, feld, anfang, ende, 2)
 
     def _namen_zeichnen(self, ziel) -> None:
         """Ueber jedem Mitspieler sein Name, sein Leben und sein Schutz.
