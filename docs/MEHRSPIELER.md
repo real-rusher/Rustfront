@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.46 | Nichts Neues ueber das Netz. Die Bots (nur beim Gastgeber) schiessen nicht mehr auf Liegende, auch nicht auf liegende Spieler, und nicht in ihre eigene Deckung. Untertitel (`fk`) zeichnet auch der Gast nur, wenn `K.BOTS["callouts"]` an ist | Die Versionspruefung weist ab |
 | 0.34.45 | Nichts Neues ueber das Netz. Ein Sturm gibt am Ende alle frei, die mitliefen, auch wer unterwegs fiel (nur beim Gastgeber) | Die Versionspruefung weist ab |
 | 0.34.44 | Nichts Neues ueber das Netz. Die Bots (nur beim Gastgeber) stuermen nur noch in Ueberzahl (`K.BOTS["sturm_ueberzahl"]`) | Die Versionspruefung weist ab |
 | 0.34.43 | Nichts Neues ueber das Netz, aber das Gefecht ist anders: alle Figuren laufen mit `K.BEWEGUNG["lauf"]` (0,65), alle Geschosse fliegen mit `K.BEWEGUNG["geschoss"]` (0,8). Rechnen tut das der Gastgeber; der Gast sieht nur, was ankommt. Die Bots (nur beim Gastgeber) gehen zuerst in Deckung; ihre Untertitel (`fk`) bleiben leer. Wer zieht, schaut zu dem Gezogenen (auch die eigene Figur beim Gast, aus `zg`) | Die Versionspruefung weist ab. Gemischt liefe das Spiel je nach Gastgeber anders schnell |

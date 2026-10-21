@@ -144,7 +144,7 @@ will: rauch_liegt
 # einer im Blick der Gegner, macht erst der Rauch es sicher genug.
 dringlich: 92 * rauch_da * ist_fuehrer * min(1, trupp_rueckzug + kamerad_liegt) * feind_bekannt
 bindung: 1
-info: Rauch zwischen Trupp und Gegner, wenn sie sich zurueckziehen.
+info: Rauch genau dorthin, wo er gebraucht wird: auf den Liegenden, beim Rueckzug auf den Trupp.
 
 [ziel rueckzug]
 will: welle_fertig

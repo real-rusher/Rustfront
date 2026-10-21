@@ -11272,13 +11272,121 @@ _f98.hirn.funk_laeuft = {"anfang": _tm.welt.zeit - 0.5, "bis": _tm.welt.zeit + 1
                          "art": "hilfe", "text": "TEST"}
 _tr98.empfangen_zeit = _tm.welt.zeit
 _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
-_ring98 = pygame.Surface((90, 90))
-_tm._welle_ring(_ring98, pygame.Vector2(45, 45), 30.0 * _tm.kamera.zoom)
+# Seit 0.34.46 am Boden unter dem Funker, rot und klein.
+_boden98 = pygame.Surface((90, 90))
+_tm._kreis_zeichnen(_boden98, 0, _f98.pos - pygame.Vector2(45, 45))
+_rot98 = [(x_, y_) for x_ in range(90) for y_ in range(90)
+          if tuple(_boden98.get_at((x_, y_)))[:3] == K.C_RED]
+_weit98 = max((math.hypot(x_ - 45, y_ - 45) for x_, y_ in _rot98), default=0.0)
 _spaet98 = pygame.Surface((90, 90))
-_tm._welle_ring(_spaet98, pygame.Vector2(45, 45), (K.TESTMODUS["welle_weite"] + 5) * _tm.kamera.zoom)
-pruef("Funk: vom Funker gehen Wellen aus, die nach aussen vergehen",
-      pygame.transform.average_color(_ring98)[:3] != (0, 0, 0)
-      and pygame.transform.average_color(_spaet98)[:3] == (0, 0, 0), "")
+pruef("Funk: unter dem Funker gehen kleine rote Ringe aus, die nach aussen vergehen",
+      bool(_rot98) and _weit98 <= K.TESTMODUS["welle_weite"] + 1 and K.TESTMODUS["welle_weite"] <= 32
+      and not _tm._welle_ring(_spaet98, pygame.Vector2(45, 45), K.TESTMODUS["welle_weite"] + 5)
+      and pygame.transform.average_color(_spaet98)[:3] == (0, 0, 0),
+      "%d rote Punkte, bis %.0f px" % (len(_rot98), _weit98))
+_tm.verlassen()
+
+print("\n-- Liegende, Rauch genau, volle Deckung, nicht in die Deckung (0.34.46)")
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm.wiedereinstieg = False
+_tm.verwundete_setzen(True)
+_platz99 = _freie_flaeche86(_tm.welt, random.Random(99), 16, 11)
+pruef("(eine freie Flaeche fuer Mauer und Kiste)", _platz99 is not None, "")
+_tx99, _ty99 = _platz99
+_T99 = K.TILE
+def _v99(x_, y_):
+    return pygame.Vector2((_tx99 + x_ + 0.5) * _T99, (_ty99 + y_ + 0.5) * _T99)
+
+# Wer am Boden liegt, ist kein Ziel mehr: er nimmt den, der noch steht.
+_bot99 = _tm.bot_setzen(_v99(12, 2), 0, {"team": 0, "hirn": "goap"})
+_bot99.unverwundbar = 1e9
+_liegt99 = _tm.bot_setzen(_v99(6, 1), 0, {"team": 1, "hirn": "goap"})
+_steht99 = _tm.bot_setzen(_v99(5, 4), 0, {"team": 1, "hirn": "goap"})
+for f_ in (_liegt99, _steht99):
+    f_.unverwundbar = 1e9
+_tm.ki_stopp = True
+_tm.toeten(_liegt99)
+_bot99.hirn.ziel = _liegt99
+_bot99.hirn.stoss_rest = 0.0
+_bot99.hirn._wahrnehmen()
+pruef("Ein Ziel, das am Boden liegt, laesst er los und nimmt den, der noch steht",
+      _liegt99.am_boden and _bot99.hirn.ziel is _steht99, str(getattr(_bot99.hirn.ziel, "name", None)))
+_bot99.hirn.ziel = _liegt99
+_bot99.hirn.stoss_rest = 0.5
+_bot99.hirn._wahrnehmen()
+pruef("... nur den Feuerstoss, der laeuft, bringt er noch zu Ende",
+      _bot99.hirn.ziel is _liegt99, "")
+_steht99.pos.update(_v99(-30, -30))
+_bot99.hirn.stoss_rest = 0.0
+_bot99.hirn._wahrnehmen()
+pruef("... und liegt nur noch einer, schiesst er auf keinen",
+      _bot99.hirn.ziel is None, str(getattr(_bot99.hirn.ziel, "name", None)))
+
+# Wer liegt, denkt nicht mehr: kein Plan, kein FLANKIEREN ueber dem Kopf.
+_tm.ki_stopp = False
+_steht99.pos.update(_v99(5, 4))
+_sim87(int(1.0 / _D87))
+_plan99 = bool(_steht99.hirn.gehirn.plan)
+_tm.toeten(_steht99)
+_sim87(int(0.5 / _D87))
+pruef("Wer zu Boden geht, hat kein Ziel und keinen Plan mehr; ueber ihm steht VERWUNDET",
+      _plan99 and _steht99.am_boden and _steht99.hirn.gehirn.aktion is None
+      and _steht99.hirn.gehirn.ziel is None and _tm.aktion_text(_steht99) == "VERWUNDET",
+      "%s / %r" % (_steht99.hirn.gehirn.aktion, _tm.aktion_text(_steht99)))
+
+# Rauch genau auf den Liegenden (ein Stueck zum Gegner hin), nicht dazwischen.
+_tm.alles_weg()
+_tr99 = _tm.trupp_setzen(_v99(13, 5), 0, {"groesse": 3, "team": 0, "fuehrer": "funk"})
+_opfer99 = next(m_ for m_ in _tr99.lebende() if m_ is not _tr99.fuehrer)
+_opfer99.pos.update(_v99(10, 5))
+_tm.toeten(_opfer99)
+_fh99 = _tr99.fuehrer.hirn
+_fh99.gehirn.fakten = dict(_fh99.gehirn.fakten, kamerad_liegt=True)
+_feind99 = _v99(2, 5)
+_ort99 = _fh99.rauch_ort(_feind99)
+pruef("Rauch kommt auf den Liegenden, ein Stueck zum Gegner hin",
+      _opfer99.am_boden and _ort99.distance_to(_opfer99.pos) <= K.BOTS["rauch_vor"] + 1
+      and (_ort99 - _opfer99.pos).dot(_feind99 - _opfer99.pos) > 0,
+      "%.0f px vom Liegenden" % _ort99.distance_to(_opfer99.pos))
+_st99 = _BG88._Stelle(_ort99, 0)
+_st99.genau = True
+_fh99.wurf_platz = _fh99._rauch_platz()
+_ein99 = {"knoepfe": [], "waffe": -1}
+_wurf99 = _fh99._werfen(K.FIXED_DT, _ein99, _st99)
+pruef("... und so geworfen, genau dorthin (nicht auf 40 Prozent des Weges)",
+      _fh99.wurf_platz >= 0 and _wurf99[1].distance_to(_ort99) < 1.0, str(_wurf99[1]))
+_fh99.wurf_phase = 0.0
+
+# Volle Deckung vor halber: Mauer vor Fass, Mauerende vor Mauermitte.
+_tm.alles_weg()
+_e99 = _tm.welt.ebene(0)
+for dy_ in range(3, 10):
+    _e99.setzen(_tx99 + 8, _ty99 + dy_, K.WAND)
+_e99.setzen(_tx99 + 13, _ty99 + 0, K.KISTE)
+_gefahr99 = _v99(1, 6)
+_b99 = _tm.bot_setzen(_v99(11, 6), 0, {"team": 0, "hirn": "goap"})
+_mitte99 = _v99(9, 6)
+_ende99 = _v99(9, 9) + pygame.Vector2(0, _T99 * 0.25)
+_kiste99 = _v99(14, 0)
+# Die Kiste gegen einen Gegner, der genauso weit weg steht, ohne die Mauer dazwischen.
+_gu99 = {"mitte": _b99.hirn._deckung_guete(_mitte99, _gefahr99),
+         "ende": _b99.hirn._deckung_guete(_ende99, _gefahr99),
+         "kiste": _b99.hirn._deckung_guete(_kiste99, _kiste99 - pygame.Vector2(_T99 * 8, 0))}
+pruef("Volle Deckung zuerst: eine Mauer ist besser als eine einzelne Kiste, das Mauerende am besten",
+      _gu99["ende"] < _gu99["mitte"] < _gu99["kiste"],
+      ", ".join("%s %.0f" % (n_, w_) for n_, w_ in sorted(_gu99.items())))
+
+# Nicht in die eigene Deckung: die Kiste direkt vor ihm.
+_b99.pos.update(_v99(13, 0) + pygame.Vector2(_T99 * 0.95, 0))
+_vor99 = _v99(13, 0) - pygame.Vector2(_T99 * 4, 0)
+pruef("Steht seine Deckung direkt vor ihm, schiesst und wirft er nicht hinein",
+      _b99.hirn.vorn_zu(_vor99) and not _b99.hirn.vorn_zu(_b99.pos + pygame.Vector2(_T99 * 4, 0)), "")
+_puppe99 = _tm.puppe_setzen(_vor99, 0, {"team": 1, "leben": 10.0})
+_b99.hirn.ziel = _puppe99
+_b99.hirn.wurf_rest = 0.0
+_b99.hirn.reaktion_rest = 0.0
+pruef("... auch keine Granate (wurf_moeglich sagt nein)",
+      not _b99.hirn._wurf_moeglich(_b99.pos.distance_to(_vor99), True, 3), "")
 _tm.verlassen()
 
 print()

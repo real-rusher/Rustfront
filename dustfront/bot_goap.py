@@ -107,6 +107,24 @@ class GoapHirn(BotHirn):
         self.trupp = None
         super().__init__(gefecht, k, rnd)
 
+    def liegt(self) -> None:
+        """Am Boden: das Gehirn hat kein Ziel und keinen Plan mehr - er
+        stirbt, er flankiert nicht (seit 0.34.46, gemeldet: "da steht dann
+        immer noch, ich flankiere")."""
+        super().liegt()
+        if self.gehirn is not None and (self.gehirn.plan or self.gehirn.ziel is not None):
+            self.gehirn.log("AM BODEN")
+            self.gehirn.plan = []
+            self.gehirn.ziel = None
+        self._aktion_lief = None
+        self._vorige = None
+        self._bedenk_rest = 0.0
+        self._lehnen = None
+        self._ecke = None
+        self._flucht = None
+        self.funk_laeuft = None
+        self.wurf_phase = 0.0
+
     def neues_leben(self) -> None:
         super().neues_leben()
         self.gehirn_neu()
@@ -722,6 +740,12 @@ class GoapHirn(BotHirn):
             return pygame.Vector2(0, 0), (gefahr[0] if gefahr else None), False, False
         will, punkt, feuern, zielt = self._handeln(dt, ein)
         will, punkt, feuern = self._umschauen(dt, will, punkt, feuern)
+        if feuern and punkt is not None and self.vorn_zu(punkt):
+            # Die eigene Deckung steht davor: nicht hineinschiessen, keine
+            # Granate dagegen. Ein Wurf, der so nicht geht, faellt aus.
+            feuern = False
+            if self.wurf_phase > 0.0:
+                self.wurf_phase = 0.0
         self._feuerte = bool(feuern)
         return will, punkt, feuern, zielt
 
@@ -802,6 +826,7 @@ class GoapHirn(BotHirn):
         return will, pygame.Vector2(ort), False
 
     # ── Deckung mit Ueberblick ────────────────────────────────────
+    deckung_weiter = 1                # bots._deckung_suchen: einen Ring weiter
     def _deckung_wert(self, p, gefahr, zone):
         """Wie bei der klassischen KI, dazu jeder andere Gegner, den er
         kennt: keine Deckung mitten zwischen ihnen, keine, die zu einem
@@ -820,6 +845,37 @@ class GoapHirn(BotHirn):
                 wert += 260.0                 # der Weg fuehrt an ihm vorbei
             if welt.deckung(o, p, k.ebene) == "":
                 wert += 90.0                  # gegen ihn deckt sie nicht
+        return wert + self._deckung_guete(p, gefahr)
+
+    def _deckung_guete(self, p, gefahr) -> float:
+        """Volle Deckung vor halber (seit 0.34.46). Gemeldet: "sie sollen
+        eher volle Deckung wie Mauern priorisieren und sich dann an den
+        Endpunkten der Mauern splitten ... nicht jeder hinter einen Barrel."
+        Eine Mauer (sichtdicht) zaehlt mehr als ein Fass; eine Stelle, die
+        schon ein leicht flankierender Gegner trifft, weniger; eine, von der
+        aus er sich herauslehnen kann (Mauerende), mehr; und eine, an der
+        schon ein Kamerad sitzt, weniger."""
+        b = K.BOTS
+        k = self.k
+        welt = self.g.welt
+        gefahr = pygame.Vector2(gefahr)
+        wert = 0.0
+        if welt.deckung(gefahr, p, k.ebene) == "wand":
+            wert -= b["deckung_wand"]
+        hin = gefahr - p
+        for w in (-b["deckung_flanke_winkel"], b["deckung_flanke_winkel"]):
+            if welt.deckung(p + hin.rotate(w), p, k.ebene) == "":
+                wert += b["deckung_flanke"]
+        if self.lehnpunkt(p, gefahr) is not None:
+            wert -= b["deckung_ecke"]
+        for x in self.kameraden():
+            if x.ebene != k.ebene:
+                continue
+            platz = getattr(getattr(x, "hirn", None), "deckung_ort", None)
+            if platz is None:
+                platz = x.pos
+            if pygame.Vector2(platz).distance_to(p) < b["deckung_belegt"]:
+                wert += b["deckung_belegt_strafe"]
         return wert
 
     # ── Was die Aktionen tun ──────────────────────────────────────
@@ -856,6 +912,8 @@ class GoapHirn(BotHirn):
             nah, weit = K.BOTS["wurf_weite"]
             if self.wurf_platz < 0 or not (nah <= self.k.pos.distance_to(z.pos) <= weit * 1.1):
                 return _nichts("gescheitert")
+            if self.vorn_zu(z.pos):
+                return _nichts("gescheitert")     # erst aus der Deckung heraus
             self.wurf_phase = 0.45
             self.wurf_rest = self.rnd.uniform(*K.BOTS["wurf_pause"])
             self.funken("granate", wichtig=True)
@@ -1366,34 +1424,55 @@ class GoapHirn(BotHirn):
         return self._funken_tun("zusage")
 
     def tun_rauch(self, dt, ein):
-        """Rauch zwischen den Trupp und den Gegner - als Deckung beim
-        Rueckzug, und beim Bergen zwischen den Liegenden und den Gegner.
-        Geworfen wird wie jede Wurfwaffe (bots._werfen)."""
+        """Rauch genau dorthin, wo er gebraucht wird (seit 0.34.46): auf den
+        Liegenden - in den Rauch hinein sieht keiner, und die Retter sind
+        darin auch verborgen -, beim Rueckzug auf den Trupp selbst. Vorher
+        lag er zwischen dem Trupp und dem Gegner; gemeldet: "nicht einfach
+        nur zwischen Gegner und den Kameraden, das bringt ja nichts. Man
+        kann ja darueber hinwegschauen." Ist der Ort weiter als der Wurf,
+        geht er erst naeher heran. Geworfen wird wie jede Wurfwaffe."""
         k = self.k
         gefahr = self._gefahr()
         if gefahr is None:
             return _nichts("gescheitert")
-        x = self._opfer()
-        if x is not None and self.gehirn.fakten.get("kamerad_liegt"):
-            # _werfen legt Rauch auf 40 Prozent des Weges - so liegt er gut
-            # ein Drittel vom Liegenden zum Gegner hin.
-            soll = x.pos + (gefahr[0] - x.pos) * 0.35
-            gefahr = (k.pos + (soll - k.pos) / 0.4, gefahr[1], gefahr[2])
+        soll = self.rauch_ort(gefahr[0])
         if self.wurf_phase <= 0.0:
             self.wurf_platz = self._rauch_platz()
             if self.wurf_platz < 0:
                 return _nichts("gescheitert")
+            weit = K.WAFFEN[k.waffen[self.wurf_platz]]["wurf_max"] * 0.9
+            if k.pos.distance_to(soll) > weit:
+                return self._weg_richtung(soll, k.ebene, ein), pygame.Vector2(gefahr[0]), False, False, "laeuft"
             self.wurf_phase = 0.45
             self.sagen("RAUCH!", wichtig=True)
-        ziel = _Stelle(gefahr[0], gefahr[1])
+        ziel = _Stelle(soll, k.ebene)
+        ziel.genau = True                 # nicht auf 40 Prozent des Weges (bots._werfen)
         will, punkt, werfen, zielt = self._werfen(dt, ein, ziel)
         return will, punkt, werfen, zielt, ("fertig" if werfen else "laeuft")
+
+    def rauch_ort(self, gefahr):
+        """Wohin der Rauch gehoert: auf den Liegenden, ein Stueck zum Gegner
+        hin (dort laufen die Retter hinein); sonst auf die Mitte des
+        Trupps."""
+        k = self.k
+        x = self._opfer()
+        if x is not None and self.gehirn.fakten.get("kamerad_liegt"):
+            mitte = pygame.Vector2(x.pos)
+        else:
+            leute = self.trupp.lebende() if self.trupp is not None else [k]
+            leute = [m for m in leute if m.ebene == k.ebene] or [k]
+            mitte = sum((pygame.Vector2(m.pos) for m in leute), pygame.Vector2(0, 0)) / len(leute)
+        hin = pygame.Vector2(gefahr) - mitte
+        if hin.length_squared() > 1.0:
+            mitte += hin.normalize() * K.BOTS["rauch_vor"]
+        return mitte
 
 
 class _Stelle:
     """Ein Ort, auf den sich zielen laesst wie auf ein Wesen (pos, ebene)."""
 
     radius = 9.0
+    genau = False                     # True: Rauch genau hierhin (tun_rauch)
 
     def __init__(self, pos, ebene: int) -> None:
         self.pos = pygame.Vector2(pos)

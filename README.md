@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.45, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.46, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -823,6 +823,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.46 | **Bots, Teil 6.** Wer am Boden liegt, ist kein Ziel mehr: Bots bringen höchstens den laufenden Feuerstoß zu Ende und nehmen dann den, der noch steht (das gilt auch im Spiel für liegende Spieler). Wer selbst zu Boden geht, denkt nicht weiter - im Testmodus steht über ihm VERWUNDET statt FLANKIEREN. Rauch kommt genau auf den Verwundeten (beim Rückzug auf den Trupp), nicht mehr zwischen ihn und den Gegner. Bots ziehen volle Deckung (Mauern) Fässern vor und setzen sich lieber an Mauerenden, von denen aus sie sich herauslehnen können. Steht die eigene Deckung direkt vor ihnen, schießen und werfen sie nicht hinein. Testmodus: Funkwellen rot, klein und am Boden unter dem Funker. Netz/LAN: über das Netz geht nichts Neues; Untertitel zeichnet auch der Gast nicht mehr. Das Verhalten der Bots ist anders, alle Geräte brauchen dieselbe Version. |
 | 0.34.45 | Fehler behoben: Fiel ein Bot mitten im Sturm und stand wieder auf (Testmodus: wiederbelebt), hielt er den alten Sturm fest und stürmte nie wieder. Gefunden durch den neuen Test aus 0.34.44. Netz/LAN: unverändert; trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.44 | Bots stürmen nur noch in Überzahl (mindestens anderthalbmal so viele wie die Gegner, die sie kennen) - in der Aufnahme stürmten drei gegen drei aus ihrer Deckung. Testmodus: über einem Liegenden stand für den Beobachter weiter „[E] AUF [G] ZIEHEN“ (der Fix aus 0.34.42 traf nur die Randpfeile). Neue Aufnahme `deckung`. Netz/LAN: unverändert; die Bots rechnet nur der Gastgeber, trotzdem brauchen alle Geräte dieselbe Version. |
 | 0.34.43 | **Ruhiger, wie in RimWorld.** Alle laufen langsamer (Spieler, Bots, Zombies, Bosse: 65 % des alten Tempos, das Verhältnis untereinander bleibt), Geschosse fliegen langsamer (80 %, gleiche Reichweite). Wer einen Gefallenen zieht, hat ein eigenes Bild: keine Waffe, beide Hände an ihm, der Blick zu ihm - und schießt nicht. Bots gehen zuerst in Deckung und kämpfen aus ihr heraus (drin warten, herauslehnen, ein Feuerstoß, zurück); nur die Mutigen, wer das MG am Laufen hat oder den Gegner gleich erledigt, greifen offen an. Trupp-Stellungen rücken hinter nahe Deckung. Panik in der Deckung: kein Wegrennen am Gegner vorbei, sondern in die beste gedeckte Ecke (im Haus die Ecke). Die Untertitel über den Bots sind aus. Testmodus: Funksprüche als Wellen, die vom Anführer ausgehen. Netz/LAN: **geändert im Gefecht** (Tempo von Figuren und Geschossen, Bots); über das Netz geht nichts Neues, aber alle Geräte brauchen dieselbe Version. |

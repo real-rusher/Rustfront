@@ -1383,9 +1383,9 @@ class Testmodus(Gefecht):
         if self.sauber:
             # Nur die Welt und die Aktionen. Spawner und Menue bleiben
             # bedienbar, wenn man sie oeffnet (Esc, Taste 4). Wer funkt,
-            # ist auch hier zu sehen (seit 0.34.39).
+            # ist auch hier zu sehen (seit 0.34.39; die Wellen liegen seit 0.34.46
+            # am Boden, _funkwellen_zeichnen).
             self._aktionen_zeichnen(ziel)
-            self._funksprueche_zeichnen(ziel)
             if self.spawner_offen:
                 self._spawner_zeichnen(ziel)
             if self.menue_offen:
@@ -1395,7 +1395,6 @@ class Testmodus(Gefecht):
             self._info_zeichnen(ziel)
             self._trupps_zeichnen(ziel)
             self._funk_liste_zeichnen(ziel)
-        self._funksprueche_zeichnen(ziel)
         if self.info == 2:
             self._gedanken_zeichnen(ziel)
         self._zeiger_zeichnen(ziel)
@@ -1484,6 +1483,8 @@ class Testmodus(Gefecht):
         h = getattr(w, "hirn", None)
         if h is None or self.ki_stopp or getattr(w, "ki_aus", False):
             return ""
+        if getattr(w, "am_boden", False):
+            return "VERWUNDET"            # er denkt nicht mehr (seit 0.34.46)
         gehirn = getattr(h, "gehirn", None)
         if gehirn is not None:
             return gehirn.aktion.name.replace("_", " ").upper() if gehirn.aktion else ""
@@ -1669,45 +1670,52 @@ class Testmodus(Gefecht):
                 text += " > %s" % t.hilfe["fuer"].name
             SCHRIFT.zeichnen(ziel, text, int(p.x), int(p.y) + 34, farbe, 1, ausrichtung="mitte")
 
-    def _funksprueche_zeichnen(self, ziel) -> None:
-        """Wer funkt, sendet Wellen (seit 0.34.43, vorher ein Kasten mit dem
-        Text). Gemeldet: "der Funkspruch, wenn der quasi durch ausgehende
-        Radiowellen von dem Anfuehrer ausgehen wuerde." Solange er spricht,
-        laufen Ringe von ihm weg; wer den Spruch bekommt, blinkt kurz mit
-        einem Ring. Was gesagt wurde, steht in INFO unten links."""
+    def _kreis_zeichnen(self, flaeche, ebene: int, ecke) -> None:
+        """Auf den Boden jeder Ebene, noch unter die Figuren: dazu die
+        Funkwellen (seit 0.34.46)."""
+        super()._kreis_zeichnen(flaeche, ebene, ecke)
+        self._funkwellen_zeichnen(flaeche, ebene, ecke)
+
+    def _funkwellen_zeichnen(self, flaeche, ebene: int, ecke) -> None:
+        """Wer funkt, sendet Wellen (seit 0.34.43). Seit 0.34.46 klein, rot
+        und am Boden unter ihm, wie ein Teil der Figur. Gemeldet: "auf rot
+        und deutlich kleiner ... als Teil des Bots selber erkennbar ... ein
+        bisschen mehr zum Design passend". Solange er spricht, laufen Ringe
+        von ihm weg; beim Anfuehrer, der den Spruch bekommt, laeuft ein Ring
+        nach innen. Was gesagt wurde, steht in INFO unten links."""
         from .trupp import trupps
-        kam = self.kamera
         jetzt = self.welt.zeit
         t = K.TESTMODUS
+        weg = t["welle_weite"] - t["welle_start"]
         for k in self._bots():
             laeuft = getattr(k.hirn, "funk_laeuft", None)
-            if laeuft is None or not k.lebt or k.ebene != self.blick:
+            if laeuft is None or not k.lebt or k.ebene != ebene:
                 continue
             seit = jetzt - laeuft["anfang"]
             for i in range(int(seit / t["welle_takt"]) + 1):
-                alter = seit - i * t["welle_takt"]
-                self._welle_ring(ziel, kam.zu_bild(k.pos), alter * t["welle_tempo"])
+                r = t["welle_start"] + (seit - i * t["welle_takt"]) * t["welle_tempo"]
+                self._welle_ring(flaeche, k.pos - ecke, r)
         for tr in trupps(self):
             alter = jetzt - getattr(tr, "empfangen_zeit", -1e9)
             f = tr.fuehrer
-            if alter < t["empfang_zeigen"] and f is not None and f.lebt and f.ebene == self.blick:
-                self._welle_ring(ziel, kam.zu_bild(f.pos), 8.0 + alter * 40.0,
-                                 hoechst=8.0 + t["empfang_zeigen"] * 40.0)
+            if 0.0 <= alter < t["empfang_zeigen"] and f is not None and f.lebt and f.ebene == ebene:
+                r = t["welle_weite"] - weg * alter / t["empfang_zeigen"]
+                self._welle_ring(flaeche, f.pos - ecke, r)
 
-    def _welle_ring(self, ziel, p, radius: float, hoechst: float | None = None) -> None:
-        """Ein Ring der Funkwelle, der nach aussen blasser wird."""
-        hoechst = K.TESTMODUS["welle_weite"] if hoechst is None else hoechst
-        r = radius / max(0.5, self.kamera.zoom)
-        rmax = hoechst / max(0.5, self.kamera.zoom)
-        if r < 2 or r > rmax:
-            return
-        deck = int(200 * (1.0 - r / rmax))
-        if deck <= 0:
-            return
-        groesse = int(r) * 2 + 6
-        bild = pygame.Surface((groesse, groesse), pygame.SRCALPHA)
-        pygame.draw.circle(bild, K.C_TEAL + (deck,), (groesse // 2, groesse // 2), int(r), 2)
-        ziel.blit(bild, (int(p.x) - groesse // 2, int(p.y) - groesse // 2))
+    def _welle_ring(self, flaeche, p, radius: float) -> bool:
+        """Ein Ring der Funkwelle in Weltpixeln, scharf wie die Figuren: rot,
+        nach aussen in den Farben des Spiels dunkler (rot, Rost, Erde), mit
+        einer dunklen Kante, damit er auf hellem Sand steht. False, wenn
+        er schon (oder noch) unsichtbar ist."""
+        t = K.TESTMODUS
+        if not (t["welle_start"] <= radius <= t["welle_weite"]):
+            return False
+        anteil = (radius - t["welle_start"]) / max(1.0, t["welle_weite"] - t["welle_start"])
+        farbe = K.C_RED if anteil < 0.45 else (K.C_RUST if anteil < 0.8 else K.C_MUTED_DK)
+        mitte = (int(p.x), int(p.y))
+        pygame.draw.circle(flaeche, K.C_WAND_KANTE, (mitte[0], mitte[1] + 1), int(radius), 1)
+        pygame.draw.circle(flaeche, farbe, mitte, int(radius), 1)
+        return True
 
     def _funk_liste_zeichnen(self, ziel) -> None:
         """Unten links die letzten Funksprueche, der neueste unten."""

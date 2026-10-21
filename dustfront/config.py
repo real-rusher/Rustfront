@@ -1110,6 +1110,16 @@ BOTS = dict(
     lehnen_warten=(0.6, 1.5),  # so lange bleibt er drin, mal (1 + Stress) (s)
     lehnen_raus=2.2,          # laenger bleibt er nicht draussen (s)
     ecke_radien=(14.0, 28.0, 42.0, 56.0, 70.0),   # Panik in Deckung: so weit sucht er eine Ecke
+    # Volle Deckung vor halber (seit 0.34.46), in Pixeln Weg, die sie wert ist:
+    deckung_wand=70.0,        # eine Mauer statt eines Fasses
+    deckung_flanke_winkel=25.0,   # so weit seitlich darf der Gegner stehen ...
+    deckung_flanke=80.0,      # ... sonst kostet es das, je Seite
+    # Mehr als eine offene Flanke: am Mauerende sitzt er lieber als in der
+    # Mitte, von wo aus er nicht schiessen kann.
+    deckung_ecke=90.0,        # von hier aus kann er sich herauslehnen (Mauerende)
+    deckung_belegt=20.0,      # so nah sitzt schon ein Kamerad ...
+    deckung_belegt_strafe=60.0,   # ... und das kostet es
+    vorn_frei=56.0,           # so weit vor ihm muss frei sein, sonst kein Schuss, kein Wurf
     granate_abstand=30.0,     # so weit ueber ihren Radius hinaus rennt er
     gedaechtnis=4.0,          # so lange sucht er dort, wo er einen zuletzt sah
     wunschabstand=dict(repetierer=230.0, sturm=200.0, lmg=240.0,
@@ -1123,6 +1133,7 @@ BOTS = dict(
     nahkampf_ab=34.0,         # so nah, dann schlaegt er mit dem Brecheisen
     wurf_pause=(10.0, 18.0),  # zwischen zwei Wuerfen
     wurf_weite=(90.0, 230.0),
+    rauch_vor=18.0,           # Rauch liegt so weit vor dem Liegenden (zum Gegner hin, seit 0.34.46)
     # Seit 0.34.26: eine Granate je Leben, keine Medkits, nichts aufheben,
     # immer begrenzte Munition - ist alles weg, geht er in den Nahkampf.
     wurf_arten=("granate",),  # daraus wird seine eine Wurfwaffe gewuerfelt
@@ -1213,11 +1224,14 @@ TESTMODUS = dict(
     greifen=40.0,             # so nah am Mauszeiger wird eine Figur genommen/geloescht
     figur_ab=300,             # Spielernummern der gespawnten Puppen und Figuren
     aktion_ausweichen=3,      # saubere Ansicht: so oft rueckt eine Aktion hoch, wenn es eng ist
-    # Funkwellen (seit 0.34.43): wer funkt, sendet Ringe.
-    welle_takt=0.35,          # so oft geht ein neuer Ring los (s)
-    welle_tempo=110.0,        # so schnell laeuft er nach aussen (px/s)
-    welle_weite=150.0,        # so weit, dann ist er weg
-    empfang_zeigen=0.8,       # so lange blinkt der, der den Spruch bekommt (s)
+    # Funkwellen (seit 0.34.43, seit 0.34.46 rot, klein und am Boden unter
+    # dem Funker - gemeldet: "auf rot und deutlich kleiner ... als Teil des
+    # Bots selber erkennbar ... mehr zum Design passend").
+    welle_takt=0.45,          # so oft geht ein neuer Ring los (s)
+    welle_tempo=30.0,         # so schnell laeuft er nach aussen (px/s)
+    welle_start=11.0,         # hier beginnt er (knapp ausserhalb der Figur)
+    welle_weite=26.0,         # so weit, dann ist er weg
+    empfang_zeigen=0.6,       # so lange laeuft beim Empfaenger ein Ring nach innen (s)
 )
 
 # Zielorientierte KI (seit 0.34.29, goap.py, bot_goap.py, Daten in wesen/).

@@ -5801,7 +5801,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 p = p - pygame.Vector2(0, 12)
             SCHRIFT.zeichnen(ziel, k.name, int(p.x), int(p.y) - 26, farbe, 1,
                              ausrichtung="mitte")
-            if k.funk and k.funk_rest > 0.0 and self._funk_hoerbar(k):
+            # Auch was ein anderer Gastgeber noch schickt, bleibt weg, solange
+            # die Untertitel aus sind (seit 0.34.46).
+            if K.BOTS["callouts"] and k.funk and k.funk_rest > 0.0 and self._funk_hoerbar(k):
                 self._funk_zeichnen(ziel, k, p)
             if self.schutz_an and k.unverwundbar > 0 and not k.am_boden:
                 # Eine Leiste, solange der Einstiegsschutz haelt, und ein

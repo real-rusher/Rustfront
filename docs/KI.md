@@ -1202,7 +1202,26 @@ Gegner vorbeifuehren.
   `sturm_ueberzahl` (1,5) mal so viele wie die Gegner, die der Erste kennt -
   sonst stuermten drei gegen drei aus ihrer Deckung.
 
-### 11.6 Was noch offen ist
+### 11.6 Paket 6 (0.34.46): Liegende, Rauch genau, volle Deckung
+
+Gemeldet nach der Aufnahme `deckung`.
+
+* **Liegende sind kein Ziel** (`bots._wahrnehmen`): den laufenden
+  Feuerstoss bringt er zu Ende, dann nimmt er den, der noch steht; liegt
+  nur noch einer, schiesst er auf keinen. Wer selbst liegt, denkt nicht
+  (`liegt()`: kein Ziel, kein Plan, kein Sturm, keine Flanke).
+* **Rauch genau** (`rauch_ort`, `tun_rauch`): auf den Liegenden, 18 px zum
+  Gegner hin - in den Rauch hinein sieht keiner, und die Retter sind darin
+  verborgen; beim Rueckzug auf die Mitte des Trupps. Ist der Ort weiter als
+  der Wurf (165 px), geht der Anfuehrer erst naeher heran.
+* **Volle Deckung** (`_deckung_guete`): Mauer -70, je offene Flanke bei 25
+  Grad +80, Herauslehnen moeglich (Mauerende) -90, Kamerad schon dort +60.
+  Gesucht wird einen Ring weiter als bis zur ersten Deckung
+  (`deckung_weiter`) - die Mauer dahinter schlaegt das Fass daneben.
+* **Nicht in die eigene Deckung** (`vorn_zu`): steht in 56 px vor ihm etwas,
+  das Kugeln aufhaelt, kein Schuss und kein Wurf.
+
+### 11.7 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.

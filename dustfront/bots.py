@@ -199,7 +199,10 @@ class BotHirn(Taktik):
         if not k.lebt:
             return ein
         if k.am_boden:
-            # Am Boden bleibt nur das Rufen - wie bei einem Menschen.
+            # Am Boden bleibt nur das Rufen - wie bei einem Menschen. Was er
+            # vorhatte, ist vorbei (seit 0.34.46: in der Anzeige stand
+            # weiter FLANKIEREN).
+            self.liegt()
             self.ruf_rest -= dt
             if self.ruf_rest <= 0.0:
                 self.ruf_rest = 5.0
@@ -357,7 +360,11 @@ class BotHirn(Taktik):
         for w in list(self.gesehen):
             if jetzt - self.gesehen[w][2] > K.BOTS["gedaechtnis"] or not w.lebt:
                 del self.gesehen[w]
-        if self.ziel is not None and self.ziel in sichtbar:
+        # Wer am Boden liegt, ist kein Ziel mehr (seit 0.34.46, gemeldet:
+        # "sie feuern immer sehr lange auf Gegner, die schon am Boden sind").
+        # Den Feuerstoss, der laeuft, bringt er noch zu Ende.
+        liegt = self.ziel is not None and getattr(self.ziel, "am_boden", False)
+        if self.ziel is not None and self.ziel in sichtbar and not (liegt and self.stoss_rest <= 0.0):
             # Er bleibt dran - ausser ein anderer, den er sieht, hat ihn eben
             # getroffen (seit 0.34.38). Wer von der Seite beschossen wird,
             # dreht sich zu dem, der schiesst, statt stur auf den ersten zu
@@ -374,6 +381,7 @@ class BotHirn(Taktik):
             return
         alt = self.ziel
         self.ziel = None
+        sichtbar = [w for w in sichtbar if not getattr(w, "am_boden", False)]
         if sichtbar:
             zone = self._zone()
             # Feuerschutz: wer einem Kameraden zu nahe kommt, der gerade
@@ -383,8 +391,6 @@ class BotHirn(Taktik):
                 d = k.pos.distance_to(w.pos)
                 d -= self.schutz_bonus(w, schuetzlinge)[0]
                 d -= self._ziel_bonus(w)
-                if getattr(w, "am_boden", False):
-                    d += 260.0                # erst, wer noch steht
                 # HUEGEL: wer im Kreis steht, nimmt ihn uns weg.
                 if zone is not None and w.ebene == zone[1] \
                         and w.pos.distance_to(zone[0]) <= K.ZONE["radius"]:
@@ -396,12 +402,20 @@ class BotHirn(Taktik):
             self.linie = self.g.welt.deckung(k.pos, neu.pos, k.ebene)
             return
         # Niemand zu sehen: wo er zuletzt jemanden sah, sonst was er hoerte.
-        if alt is not None and alt in self.gesehen:
+        if alt is not None and alt in self.gesehen and not getattr(alt, "am_boden", False):
             ort, ebene, _t = self.gesehen[alt]
             self.verdacht = (ort, ebene, jetzt + K.BOTS["gedaechtnis"])
         geraeusch = self._hoeren()
         if geraeusch is not None and (self.verdacht is None or self.verdacht[2] < jetzt):
             self.verdacht = geraeusch
+
+    def liegt(self) -> None:
+        """Er ist zu Boden gegangen: kein Ziel, keine Taktik, kein Sturm."""
+        self.ziel = None
+        self.verdacht = None
+        self.taktik = None
+        self.deckung_ort = None
+        self.stoss_rest = 0.0
 
     def _ziel_bonus(self, w) -> float:
         """So viel lieber nimmt er diesen Gegner (in Pixeln Abstand) - hier
@@ -720,8 +734,9 @@ class BotHirn(Taktik):
         quer = (pygame.Vector2(-hin.y, hin.x).normalize() * (k.radius - 2)
                 if hin.length_squared() > 1.0 else pygame.Vector2(0, 0))
         start = self.rnd.uniform(0.0, 30.0)
+        bestes, beste = None, 1e9
+        noch = None                   # so viele Ringe schaut er noch weiter
         for r in K.BOTS["deckung_radien"]:
-            bestes, beste = None, 1e9
             for i in range(12):
                 p = k.pos + pygame.Vector2(r, 0).rotate(start + i * 30.0)
                 if not welt.frei(p, k.radius + 2, k.ebene, True):
@@ -736,8 +751,27 @@ class BotHirn(Taktik):
                 if wert is not None and wert < beste:
                     bestes, beste = p, wert
             if bestes is not None:
-                return bestes
-        return None
+                # Das GOAP-Hirn schaut einen Ring weiter: eine Mauer etwas
+                # dahinter ist besser als das Fass daneben (seit 0.34.46).
+                noch = self.deckung_weiter if noch is None else noch - 1
+                if noch <= 0:
+                    return bestes
+        return bestes
+
+    deckung_weiter = 0                # Ringe, die er nach der ersten Deckung noch absucht
+
+    def vorn_zu(self, punkt) -> bool:
+        """Steht dicht vor ihm, Richtung `punkt`, etwas, das Kugeln aufhaelt
+        - meist seine eigene Deckung? Dann schiesst und wirft er nicht
+        (seit 0.34.46, gemeldet: "dass sie dann gegen ihre Deckung schiessen
+        oder eine Granate gegen ihre Deckung werfen")."""
+        k = self.k
+        d = pygame.Vector2(punkt) - k.pos
+        laenge = d.length()
+        if laenge < 1.0:
+            return False
+        nah = k.pos + d * (min(laenge, K.BOTS["vorn_frei"]) / laenge)
+        return self.g.welt.deckung(k.pos, nah, k.ebene) != ""
 
     def _deckung_wert(self, p, gefahr, zone):
         """Wie gut diese Deckung ist (kleiner ist besser), oder None, wenn
@@ -787,6 +821,8 @@ class BotHirn(Taktik):
         self.wurf_platz = self._wurf_platz()
         if self.wurf_platz < 0:
             return False
+        if self.ziel is not None and self.vorn_zu(self.ziel.pos):
+            return False
         name = self.k.waffen[self.wurf_platz]
         if name == "rauch":
             # Rauch nur, wenn es eng wird: als Deckung zum Rueckzug.
@@ -810,7 +846,7 @@ class BotHirn(Taktik):
         if len(gruppe) >= 2:
             # In die Mitte der Gruppe - so trifft sie die meisten.
             ziel = sum((pygame.Vector2(w.pos) for w in gruppe), pygame.Vector2(0, 0)) / len(gruppe)
-        if k.waffen[nr] == "rauch":
+        if k.waffen[nr] == "rauch" and not getattr(z, "genau", False):
             ziel = k.pos + (z.pos - k.pos) * 0.4
         werfen = self.wurf_phase <= 0.0 and k.waffe == nr
         if werfen:

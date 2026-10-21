@@ -105,6 +105,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.46 | Funkwellen rot, klein, am Boden unter dem Funker (`_funkwellen_zeichnen`); ueber Liegenden steht VERWUNDET statt der letzten Aktion |
 | 0.34.44 | Wirklich kein "[E] AUF" mehr ueber Liegenden fuer den Beobachter (auch `_darf_helfen`); Szene `deckung` (aus der Deckung feuern, Panik = verkriechen) |
 | 0.34.43 | Funksprueche als Wellen vom Funker (Ringe, solange er spricht; wer den Spruch bekommt, blinkt); der Text steht weiter unten links. Neue Bot-Aktionen aus_deckung_feuern und verkriechen erscheinen in GEDANKEN; Panik ausloesen geht mit INNENLEBEN: PANIK |
 | 0.34.42 | Kein "[E] AUF" mehr ueber Liegenden, solange man Beobachter ist |
