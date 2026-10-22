@@ -11567,7 +11567,11 @@ pruef("... ein Platz, von dem aus beide vor ihm sind (oder er vor beiden gedeckt
       and min(p_.pos.distance_to(_up101) for p_ in _p101) >= min(p_.pos.distance_to(_b101.pos) for p_ in _p101) - 20,
       str(_up101))
 _tm.ki_stopp = False
-for _ in range(int(3.0 / _D87)):
+# So lange darf es dauern: zweimal die laengste Bedenkzeit (er wechselt
+# vielleicht erst ueber ein anderes Ziel), der weiteste Weg zum neuen Platz
+# im Lauftempo, eine Sekunde Spiel.
+_fenster101 = (2 * K.MORAL["bedenkzeit"][1] + K.BOTS["umstell_radien"][-1] * 1.8 / K.SPIELER["tempo"] + 1.0)
+for _ in range(int(_fenster101 / _D87)):
     for p_ in _p101:
         _h101.gesehen[p_] = (pygame.Vector2(p_.pos), 0, _tm.welt.zeit)
     _tm.schritt(_D87)
