@@ -98,6 +98,30 @@ BEWEGUNG = dict(
     geschoss=0.8,             # x Tempo jedes Geschosses (die Reichweite bleibt)
 )
 
+# Zurufe (seit 0.34.50): jeder Bot sagt den Bots in Sprechweite
+# (K.TRUPP["sprech_weite"]), was er sieht - nicht im selben Augenblick,
+# ein Satz dauert. Daneben der Funk der Anfuehrer (K.TRUPP["funk_dauer"]).
+# Gemeldet: "zwei separate Kommunikationssysteme ... alle Bots mit Bots in
+# der Naehe sprechen ... Das Sprechen muss dabei nicht instant sein."
+SPRECHEN = dict(
+    dauer=(0.8, 1.4),         # so lange dauert ein Zuruf, bis die anderen ihn haben (s)
+    wiederholen=6.0,          # denselben Gegner sagt er erst nach so langer Zeit wieder an
+    gedaechtnis=6.0,          # so lange weiss einer, was ihm zugerufen wurde
+    zeigen=12,                # so viele Zurufe zeigt der Testmodus unten links
+)
+
+# Sprinten (seit 0.34.50) - nur die Bots, der Spieler kann es (noch) nicht.
+# Gemeldet: "ein nettes Feature waere, dass die Bots sprinten koennen ...
+# mit einer bestimmten Sprintausdauer, in passenden Situationen, zum
+# Beispiel unter Panik, wenn eine Granate eingeschlagen ist."
+SPRINT = dict(
+    faktor=1.5,               # x Lauftempo beim Sprinten
+    dauer=3.0,                # so viele Sekunden reicht volle Ausdauer
+    erholung=0.25,            # so viel Ausdauer (Anteil) kommt je Sekunde ohne Sprint zurueck
+    mindest=0.35,             # so viel muss da sein, um einen Sprint zu beginnen
+    staub_takt=0.08,          # so oft wirbelt er Staub auf (s)
+)
+
 SPIELER = dict(
     radius=9.0,
     # Pixel pro Sekunde bei vollem Lauf (war 132, dann 108; seit 0.34.43 mal
@@ -1118,6 +1142,12 @@ BOTS = dict(
     deckung_ecke=90.0,        # von hier aus kann er sich herauslehnen (Mauerende)
     deckung_belegt=20.0,      # so nah sitzt schon ein Kamerad ...
     deckung_belegt_strafe=60.0,   # ... und das kostet es
+    deckung_trupp_weg=1.5,    # je Pixel weiter weg vom Trupp als K.TRUPP["zusammen"] (0.34.50)
+    # Nie von der Flanke (seit 0.34.50):
+    schuetze_merken=3.0,      # so lange weiss er, wer ihn getroffen hat (s)
+    schuetze_bonus=260.0,     # so viel lieber nimmt er den, der auf ihn schiesst (px)
+    flanke_spanne=80.0,       # stehen die Gegner weiter auseinander (Grad), ist er flankiert
+    umstell_radien=(40.0, 80.0, 120.0, 160.0),   # so weit sucht er einen Platz, von dem aus alle vor ihm sind
     vorn_frei=56.0,           # so weit vor ihm muss frei sein, sonst kein Schuss, kein Wurf
     # Seit 0.34.48: in Deckung ist nur, wer dicht dahinter steht.
     deckung_dicht=40.0,       # so nah vor ihm muss das Hindernis stehen
@@ -1127,6 +1157,7 @@ BOTS = dict(
     wechsel_weiter=40.0,      # ... die so viel weiter vom Gegner weg ist
     granate_abstand=30.0,     # so weit ueber ihren Radius hinaus rennt er
     gedaechtnis=4.0,          # so lange sucht er dort, wo er einen zuletzt sah
+    erinnerung=20.0,          # so lange weiss er noch, wo einer stand - fuers Bergen (0.34.50)
     wunschabstand=dict(repetierer=230.0, sturm=200.0, lmg=240.0,
                        schrot=105.0, scharf=320.0),
     # Wer ein MG hat, schiesst damit (seit 0.34.38): so viele Pixel
@@ -1232,10 +1263,12 @@ TESTMODUS = dict(
     # Funkwellen (seit 0.34.43, seit 0.34.46 rot, klein und am Boden unter
     # dem Funker - gemeldet: "auf rot und deutlich kleiner ... als Teil des
     # Bots selber erkennbar ... mehr zum Design passend").
+    # Seit 0.34.50 etwas groesser (war bis 26): "etwas groesser darf der
+    # Funk schon sein".
     welle_takt=0.45,          # so oft geht ein neuer Ring los (s)
-    welle_tempo=30.0,         # so schnell laeuft er nach aussen (px/s)
+    welle_tempo=40.0,         # so schnell laeuft er nach aussen (px/s)
     welle_start=11.0,         # hier beginnt er (knapp ausserhalb der Figur)
-    welle_weite=26.0,         # so weit, dann ist er weg
+    welle_weite=40.0,         # so weit, dann ist er weg
     empfang_zeigen=0.6,       # so lange laeuft beim Empfaenger ein Ring nach innen (s)
     welle_farben=((255, 72, 56), (226, 44, 40), (168, 26, 30)),   # innen hell, aussen tief
     welle_striche=6,          # so viele Striche hat ein Ring (seit 0.34.48)
@@ -1340,6 +1373,12 @@ TRUPP = dict(
     flanke_ab=90.0,           # so nah an der Linie, und die Aeusseren flankieren
     welle_zeit=2.6,           # so lange dauert eine Welle (s)
     welle_weite=85.0,         # so weit zieht eine Welle
+    # Seit 0.34.50: wer im Trupp ist, bleibt bei ihm - auch in Panik.
+    zusammen=170.0,           # so weit von der Mitte der anderen sucht er Deckung
+    abschnitt_luecke=60.0,    # so viele Grad zwischen zwei Gegnern: zwei Gruppen, die Front knickt
+    abschnitt_vor=40.0,       # so weit vor der Mitte steht jeder Abschnitt
+    abschnitt_bonus=150.0,    # so viel lieber nimmt einer die Gegner in seinem Abschnitt (px)
+    flucht_hinter=60.0,       # in Panik flieht er so weit hinter die Mitte der anderen
     fuehrer_bonus=120.0,      # so viel lieber nimmt man Gegner nahe dem Anfuehrer
     buendeln_bonus=40.0,      # ... und die, auf die ein Kamerad schon schiesst
     fuehrer_schutz=230.0,     # so nah am Anfuehrer: ein Gegner bedroht ihn
@@ -1554,6 +1593,7 @@ VERWUNDET = dict(
     retter=2,                 # hoechstens so viele ziehen und helfen
     deckung_radien=(60.0, 100.0, 140.0, 190.0, 240.0),   # so weit sucht ein Retter Deckung fuer den Liegenden
     rauch_nah=70.0,           # Rauch so nah am Liegenden: die Bergung ist gedeckt
+    dranbleiben=12.0,         # so lange bringen die Retter eine angefangene Bergung zu Ende (0.34.50)
 )
 
 # Wellen im Mehrspieler. Anders als im Einzelspieler waechst die Welle mit

@@ -11298,7 +11298,9 @@ _rot98 = [(x_, y_) for x_ in range(90) for y_ in range(90)
 _weit98 = max((math.hypot(x_ - 45, y_ - 45) for x_, y_ in _rot98), default=0.0)
 _spaet98 = pygame.Surface((90, 90))
 pruef("Funk: unter dem Funker gehen kleine rote Ringe aus, die nach aussen vergehen",
-      bool(_rot98) and _weit98 <= K.TESTMODUS["welle_weite"] + 1 and K.TESTMODUS["welle_weite"] <= 32
+      # Klein (0.34.46: "deutlich kleiner"), seit 0.34.50 wieder etwas groesser
+      # ("etwas groesser darf der Funk schon sein") - aber nie wieder 150.
+      bool(_rot98) and _weit98 <= K.TESTMODUS["welle_weite"] + 1 and K.TESTMODUS["welle_weite"] <= 48
       and not _tm._welle_ring(_spaet98, pygame.Vector2(45, 45), K.TESTMODUS["welle_weite"] + 5)
       and pygame.transform.average_color(_spaet98)[:3] == (0, 0, 0),
       "%d rote Punkte, bis %.0f px" % (len(_rot98), _weit98))
@@ -11520,6 +11522,176 @@ _f100.leben -= 5.0
 _r100 = _fh100._funken_tun("lage")
 pruef("... wird er beim Sprechen getroffen, ist der Spruch nicht raus",
       _r100[-1] == "gescheitert" and _fh100.funk_laeuft is None and K.TRUPP["funk_dauer"] >= 5.0, "")
+_tm.verlassen()
+
+print("\n-- Flanke, geknickte Front, Bergen mit Gedaechtnis, Sprint, Zurufe (0.34.50)")
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm.wiedereinstieg = False
+_tm.verwundete_setzen(True)
+_platz101 = _freie_flaeche86(_tm.welt, random.Random(101), 18, 11)
+pruef("(eine freie Flaeche fuer die Szene)", _platz101 is not None, "")
+_tx101, _ty101 = _platz101
+def _v101(x_, y_):
+    return pygame.Vector2((_tx101 + x_ + 0.5) * K.TILE, (_ty101 + y_ + 0.5) * K.TILE)
+
+# Zwei Gegner, 90 Grad auseinander: flankiert - er stellt sich so, dass
+# beide vor ihm sind.
+_b101 = _tm.bot_setzen(_v101(10, 6), 0, {"team": 0, "hirn": "goap", "waffe": "sturm"})
+_b101.unverwundbar = 1e9
+_p101 = [_tm.puppe_setzen(_v101(3, 6), 0, {"team": 1, "leben": 10.0}),
+         _tm.puppe_setzen(_v101(10, 0), 0, {"team": 1, "leben": 10.0})]
+for p_ in _p101:
+    p_.unverwundbar = 1e9
+_h101 = _b101.hirn
+for p_ in _p101:
+    _h101.gesehen[p_] = (pygame.Vector2(p_.pos), 0, _tm.welt.zeit)
+_tm.ki_stopp = True
+_sp101 = _h101._spanne(_b101.pos, _h101.bedrohungs_richtungen())
+pruef("Zwei Gegner, 90 Grad auseinander, er offen dazwischen: flankiert",
+      _sp101 > K.BOTS["flanke_spanne"] and _h101.flankiert(), "%.0f Grad" % _sp101)
+_up101 = _h101.umstellplatz()
+pruef("... ein Platz, von dem aus beide vor ihm sind (oder er vor beiden gedeckt), nicht naeher dran",
+      _up101 is not None
+      and (_h101._spanne(_up101, _h101.bedrohungs_richtungen()) <= K.BOTS["flanke_spanne"]
+           or all(_h101.dicht_gedeckt(_up101, p_.pos) for p_ in _p101))
+      and min(p_.pos.distance_to(_up101) for p_ in _p101) >= min(p_.pos.distance_to(_b101.pos) for p_ in _p101) - 20,
+      str(_up101))
+_tm.ki_stopp = False
+for _ in range(int(3.0 / _D87)):
+    for p_ in _p101:
+        _h101.gesehen[p_] = (pygame.Vector2(p_.pos), 0, _tm.welt.zeit)
+    _tm.schritt(_D87)
+_pl101 = [t_ for _z, t_ in _h101.gehirn.protokoll]
+pruef("... als Ziel FLANKE SICHERN (vor dem Kampf), und danach ist er es nicht mehr",
+      any(t_.startswith("ZIEL: flanke_sichern") for t_ in _pl101) and not _h101.flankiert(), str(_pl101[-4:]))
+
+# Wer auf ihn schiesst, ist sein Ziel - nicht der vorn.
+_tm.ki_stopp = True
+_h101.ziel = _p101[0]
+_h101.stoss_rest = 0.0
+_h101.beschossen_von[_p101[1]] = (pygame.Vector2(_p101[1].pos), 0, _tm.welt.zeit)
+for p_ in _p101:
+    _h101.gesehen[p_] = (pygame.Vector2(p_.pos), 0, _tm.welt.zeit)
+_h101._wahrnehmen()
+pruef("Wer ihn von der Seite trifft, wird sein Ziel, statt weiter auf den vorn zu schiessen",
+      _h101.ziel is _p101[1], str(getattr(_h101.ziel, "name", None)))
+
+# Geknickte Front: Gegner aus zwei Richtungen, je ein Teil schaut zu jeder.
+_tm.alles_weg()
+_tr101 = _tm.trupp_setzen(_v101(10, 6), 0, {"groesse": 5, "team": 0})
+_g101 = [_tm.puppe_setzen(_v101(2, 6), 0, {"team": 1, "leben": 10.0}),
+         _tm.puppe_setzen(_v101(10, 0), 0, {"team": 1, "leben": 10.0})]
+_tr101.lage = {w_: [pygame.Vector2(w_.pos), 0, _tm.welt.zeit] for w_ in _g101}
+_tr101._front_rechnen(_tr101.lebende())
+_tr101._stellungen(_tr101.lebende())
+_bl101 = [_tr101.blick_fuer(m_) for m_ in _tr101.lebende() if m_ is not _tr101.fuehrer]
+_zu101 = [min(range(2), key=lambda i_: b_.distance_to(_g101[i_].pos)) for b_ in _bl101 if b_ is not None]
+pruef("Gegner aus zwei Richtungen: die Front knickt, ein Teil schaut zu jeder Gruppe",
+      _tr101.abschnitte == 2 and len(_zu101) == 4 and set(_zu101) == {0, 1}, str(_zu101))
+
+# Bergen: wer hinter Rauch verschwindet, ist nicht vergessen.
+_tm.alles_weg()
+_eb101 = _tm.bot_setzen(_v101(12, 6), 0, {"team": 0, "hirn": "goap"})
+_ep101 = _tm.puppe_setzen(_v101(4, 6), 0, {"team": 1, "leben": 10.0})
+_eh101 = _eb101.hirn
+_eh101.gesehen[_ep101] = (pygame.Vector2(_ep101.pos), 0, _tm.welt.zeit)
+_eh101.erinnern()
+_eh101.gesehen.clear()
+pruef("Bergen: ein Gegner, den er nicht mehr sieht (Rauch), bedroht den Liegenden trotzdem",
+      not _eh101.fest_gedeckt(_v101(9, 6), 0) and _ep101 in _eh101.erinnerung, "")
+_fu101 = _tm.trupp_setzen(_v101(12, 3), 0, {"groesse": 2, "team": 0, "fuehrer": "funk"})
+_fh101 = _fu101.fuehrer.hirn
+pruef("... Rauch wirft ein GOAP-Bot nur gezielt, nie als Granate im Kampf",
+      _fh101._rauch_platz() >= 0 and _fh101._wurf_platz() < 0, "")
+_fh101.wurf_phase = 0.3
+_fh101._aktion_lief = None
+_fh101.gehirn.plan = [_WD88.daten().aktionen["angreifen"]]
+_fh101._handeln(_D87, {"knoepfe": [], "waffe": -1})
+pruef("... ein angefangener Wurf faellt aus, wenn die Aktion wechselt", _fh101.wurf_phase == 0.0, "")
+pruef("... ziehen kann nur einer (kamerad_ziehen braucht !anderer_zieht)",
+      any(not wert_ for n_, wert_ in _WD88.daten().aktionen["kamerad_ziehen"].braucht.items()
+          if n_ == "anderer_zieht"), "")
+
+# Beim Trupp bleiben: in Panik flieht keiner allein weg.
+_ak101 = _WD88.daten().aktionen
+_w101 = dict(leben=1.0, zuversicht=0.5, im_trupp=1, trupp_rueckzug=0)
+pruef("Im Trupp flieht keiner allein, solange der Trupp nicht zurueckgeht",
+      _ak101["fliehen"].kosten.wert(_w101) > _ak101["deckung_wechseln"].kosten.wert(_w101)
+      and _ak101["fliehen"].kosten.wert(dict(_w101, leben=0.2, trupp_rueckzug=1))
+      < _ak101["verkriechen"].kosten.wert(dict(_w101, leben=0.2, trupp_rueckzug=1)), "")
+_m101 = next(m_ for m_ in _fu101.lebende() if m_ is not _fu101.fuehrer)
+_m101.hirn.gesehen[_ep101] = (pygame.Vector2(_ep101.pos), 0, _tm.welt.zeit)
+_m101.hirn.innen.panik_setzen(3.0)
+_m101.hirn._flucht = None
+_m101.hirn.tun_fliehen(_D87, {"knoepfe": [], "waffe": -1})
+pruef("... in Panik flieht er zu seinen Leuten, knapp hinter sie",
+      _m101.hirn._flucht is not None
+      and _m101.hirn._flucht[0].distance_to(_m101.hirn.trupp_mitte()) <= K.TRUPP["flucht_hinter"] + 1, "")
+_m101.hirn.innen.panik_rest = 0.0
+
+# Sprinten: nur Bots, mit Ausdauer, mit Staub.
+_s101 = _tm.bot_setzen(_v101(6, 9), 0, {"team": 0, "hirn": "goap"})
+_s101.hirn.ki_aus = True if hasattr(_s101.hirn, "ki_aus") else None
+_tm.ki_stopp = True
+_ein101 = {"will": [1.0, 0.0], "ziel": [_s101.pos.x + 100, _s101.pos.y], "feuert": False,
+           "zielt": False, "nutzen": False, "ziehen": False, "waffe": -1, "knoepfe": [], "sprint": True}
+_tm._anwenden(_s101, _ein101)
+_teilchen101 = len(_tm.welt.partikel)
+_schnell101 = 0.0
+for _ in range(int(1.0 / _D87)):
+    _tm._anwenden(_s101, _ein101)
+    _s101.schritt(_D87)
+    _tm._sprint_staub(_D87)
+    _schnell101 = max(_schnell101, _s101.tempo.length())
+pruef("Ein Bot sprintet: schneller als das Lauftempo, die Ausdauer sinkt, er wirbelt Staub auf",
+      _s101.sprintet and _schnell101 > K.SPIELER["tempo"] * 1.2 and _s101.ausdauer < 0.8
+      and len(_tm.welt.partikel) > _teilchen101,
+      "%.0f px/s, Ausdauer %.2f" % (_schnell101, _s101.ausdauer))
+_s101.ausdauer = K.SPRINT["mindest"] * 0.5
+_s101.sprintet = False
+_tm._anwenden(_s101, _ein101)
+pruef("... mit zu wenig Ausdauer faengt er keinen Sprint an", not _s101.sprintet, "")
+_s101.sprintet = True
+_meld101 = [e_ for e_ in _tm._weltmeldung().get("spieler", []) if isinstance(e_, dict) and e_.get("i") == _s101.nummer]
+pruef("... und der Gast sieht es (sp in der Weltmeldung)", bool(_meld101) and _meld101[0].get("sp") == 1,
+      str(list(_tm._weltmeldung().keys())[:8]))
+_s101.sprintet = False
+_tm.menue_wirken("sprint")
+_s101.ausdauer = 1.0
+_tm._anwenden(_s101, _ein101)
+pruef("Testmenue BOTS SPRINTEN: aus - dann sprintet keiner", not _tm.bot_sprint and not _s101.sprintet, "")
+_tm.menue_wirken("sprint")
+_tm.ki_stopp = False
+
+# Zurufe: was einer sieht, haben die anderen erst, wenn der Satz durch ist.
+_tm.alles_weg()
+_za101 = _tm.bot_setzen(_v101(10, 3), 0, {"team": 0, "hirn": "goap"})
+_zb101 = _tm.bot_setzen(_v101(13, 3), 0, {"team": 0, "hirn": "goap"})
+_zp101 = _tm.puppe_setzen(_v101(3, 3), 0, {"team": 1, "leben": 10.0})
+_tm.ki_stopp = True
+_za101.hirn.gesehen[_zp101] = (pygame.Vector2(_zp101.pos), 0, _tm.welt.zeit)
+_za101.hirn.fuehlen()
+pruef("Zuruf: wer einen Gegner neu sieht, ruft es den anderen in Sprechweite zu",
+      _za101.hirn.zuruf is not None and _zp101 not in _zb101.hirn.zugerufen, "")
+_tm.welt.zeit += K.SPRECHEN["dauer"][1] + 0.05
+_za101.hirn._zuruf_fuehren()
+pruef("... erst wenn der Satz durch ist, weiss es der andere - und kennt dann den Gegner",
+      _zp101 in _zb101.hirn.zugerufen and _zb101.hirn.fuehlen()[0]["feind_bekannt"], "")
+pruef("... im Testmodus stehen Zurufe unten links (der Name und was er rief)",
+      bool(getattr(_tm, "_zurufnetz", [])) and _tm._zurufnetz[-1].name == _za101.name, "")
+_tm.alles_weg()
+_ta101 = _tm.trupp_setzen(_v101(4, 3), 0, {"groesse": 2, "team": 0, "fuehrer": "funk"})
+_tb101 = _tm.trupp_setzen(_v101(14, 8), 0, {"groesse": 2, "team": 0, "fuehrer": "funk"})
+_zq101 = _tm.puppe_setzen(_v101(1, 9), 0, {"team": 1, "leben": 10.0})
+_ta101.lage = {_zq101: [pygame.Vector2(_zq101.pos), 0, _tm.welt.zeit]}
+_ta101.funk_senden("lage")
+_zf101 = _tb101.fuehrer.hirn.zuruf
+pruef("Der Anfuehrer, der einen Funkspruch bekommt, sagt ihn seinem Trupp weiter (mit den Gegnern)",
+      _zf101 is not None and any(w_ is _zq101 for w_, _o, _e in _zf101["feinde"]), "")
+_bild101 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm.zeichnen(_bild101, 1.0)
+pruef("... die Sprechblase ueber ihm (zeichnen geht)", True, "")
+_tm.ki_stopp = False
 _tm.verlassen()
 
 print()

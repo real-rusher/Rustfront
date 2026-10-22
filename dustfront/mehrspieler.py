@@ -161,6 +161,9 @@ class Kaempfer(Spieler):
         self.funk = ""
         self.funk_rest = 0.0
         self.hilf_zeit = 0.0          # so lange hilft er schon auf (seit 0.34.48)
+        self.ausdauer = 1.0           # Sprint (seit 0.34.50, nur Bots): 1 voll, 0 leer
+        self.sprintet = False
+        self._staub_rest = 0.0
         # Der Buggy, in dem er sitzt (seit 0.34.9, beim Gastgeber), und
         # ob er drinsitzt (bei beiden - der Gast bekommt es gemeldet und
         # zeichnet die Figur dann nicht, sie ist Teil des Wagenbilds).
@@ -302,6 +305,13 @@ class Kaempfer(Spieler):
         self.funk_rest = max(0.0, self.funk_rest - dt)
         # Der Takt, in dem der Helfer drueckt (_haende_zeichnen).
         self.hilf_zeit = self.hilf_zeit + dt if self.hilft is not None else 0.0
+        sp = K.SPRINT
+        if self.sprintet:
+            self.ausdauer = max(0.0, self.ausdauer - dt / sp["dauer"])
+            if self.ausdauer <= 0.0:
+                self.sprintet = False
+        else:
+            self.ausdauer = min(1.0, self.ausdauer + dt * sp["erholung"])
         vorher = self.magazin.get(self.waffe_name, 0)
         war_am_laden = self.nachlade_rest > 0
         super().schritt(dt)
@@ -1831,6 +1841,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             return
 
         k.will = will
+        # Sprinten koennen nur Bots (seit 0.34.50) - der Gast schickt es
+        # nicht, und kaeme es doch, zaehlte es nicht. Wer zieht, hilft oder
+        # ein Medkit anlegt, sprintet nicht.
+        sprint = (bool(ein.get("sprint")) and getattr(k, "hirn", None) is not None
+                  and getattr(self, "bot_sprint", True)
+                  and will.length_squared() > 0.01 and k.zieht is None and k.hilft is None
+                  and k.heilt_rest <= 0)
+        k.sprintet = sprint and (k.sprintet or k.ausdauer >= K.SPRINT["mindest"]) and k.ausdauer > 0.0
         # Waehrend des Schwungs ist die Waffe verstaut - dann wird auch
         # nicht geschossen. Sonst schluege man mit dem Eisen und feuerte
         # zugleich eine Waffe ab, die man gar nicht in der Hand hat.
@@ -3715,6 +3733,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 # Ziehen und Rufen: wen er zieht, und wie lange sein Ruf
                 # noch nachleuchtet.
                 "zg": -1 if k.zieht is None else k.zieht,
+                "sp": 1 if k.sprintet else 0,
                 "rz": round(k.ruf_zeigen, 2),
                 # Sitzt er im Buggy? Dann zeichnet der Gast ihn nicht.
                 "fz": k.im_fahrzeug,
@@ -4157,6 +4176,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             k.hilft = None if hilft < 0 else hilft
             zieht = int(eintrag.get("zg", -1))
             k.zieht = None if zieht < 0 else zieht
+            k.sprintet = bool(eintrag.get("sp", 0))
             k.ruf_zeigen = float(eintrag.get("rz", 0.0))
             k.im_fahrzeug = bool(eintrag.get("fz", False))
             k.treffer_marken = int(eintrag.get("tz", 0))
@@ -4413,6 +4433,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self._schritt_gastgeber(dt)
         else:
             self._schritt_gast(dt)
+        self._sprint_staub(dt)
         self._loadout_beobachten()
 
         if not self.ist_gastgeber and self.plan_weiter > 0:
@@ -5779,6 +5800,22 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         farbe = tuple(int(14 + (c - 14) * anteil) for c in K.C_CREAM[:3])
         SCHRIFT.zeichnen(ziel, text, int(p.x), y + 2, farbe, 1,
                          ausrichtung="mitte")
+
+    def _sprint_staub(self, dt: float) -> None:
+        """Wer sprintet, wirbelt hinter sich Staub auf (seit 0.34.50) -
+        bei beiden, Gastgeber und Gast, jeder in seiner eigenen Welt."""
+        sp = K.SPRINT
+        for k in self.kaempfer.values():
+            if not (k.sprintet and k.lebt) or k.tempo.length_squared() < 400.0:
+                continue
+            k._staub_rest -= dt
+            if k._staub_rest > 0.0:
+                continue
+            k._staub_rest = sp["staub_takt"]
+            hinten = k.pos - k.tempo.normalize() * (k.radius - 1)
+            richtung = math.degrees(math.atan2(-k.tempo.y, -k.tempo.x))
+            wolke(self.welt, hinten, 2, 26, 0.45, K.C_SAND_KORN, k.ebene, 2,
+                  streuung=70.0, richtung=richtung)
 
     def _haende_zeichnen(self, ziel) -> None:
         """Wer zieht oder aufhilft, haelt den Gefallenen mit beiden Haenden

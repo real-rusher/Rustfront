@@ -470,6 +470,65 @@ def szene_ueberfall(tm, rnd):
             alpha.mitglieder + feinde, alle_weg(alpha.mitglieder, feinde), 40, 1.75)
 
 
+def szene_zange(tm, rnd):
+    """Seit 0.34.50: ein Trupp wird von zwei Seiten angegriffen. Die Front
+    knickt - ein Teil schaut zu jeder Gruppe -, und wer von der Seite
+    beschossen wird, nimmt den Schuetzen, statt weiter nach vorn zu
+    schiessen."""
+    tx, ty, v = flaeche(tm, rnd, 20, 12)
+    setzen(tm, tx, ty, [(6, 5), (6, 6), (10, 2), (11, 2), (13, 7)], K.KISTE)
+    rot = tm.trupp_setzen(v(10, 6), 0, {"groesse": 5, "team": 0, "fuehrer": "funk",
+                                         "mischung": "gemischt", "leben": 2.0})
+    west = [tm.bot_setzen(v(0, 5 + i), 0, {"team": 1, "hirn": "goap", "leben": 1.5}) for i in range(2)]
+    nord = [tm.bot_setzen(v(9 + 2 * i, 0), 0, {"team": 1, "hirn": "goap", "leben": 1.5}) for i in range(2)]
+    blau = west + nord
+    kennen(rot.mitglieder, blau, tm)
+    kennen(blau, rot.mitglieder, tm)
+    return ("Zange: Gegner von zwei Seiten - die Front knickt",
+            rot.mitglieder + blau, alle_weg(rot.mitglieder, blau), 40, 1.75)
+
+
+def szene_zuruf(tm, rnd):
+    """Seit 0.34.50: zwei Bots, einer sucht ein Stueck abseits. Der andere
+    sieht den Gegner und ruft es ihm zu (Sprechblase) - der Suchende hoert
+    auf und hilft."""
+    tx, ty, v = flaeche(tm, rnd, 20, 11)
+    setzen(tm, tx, ty, [(7, 3), (7, 4)], K.KISTE)
+    rot = [tm.bot_setzen(v(9, 4), 0, {"team": 0, "hirn": "goap"}),
+           tm.bot_setzen(v(15, 9), 0, {"team": 0, "hirn": "goap"})]
+    blau = [tm.bot_setzen(v(1, 3), 0, {"team": 1, "hirn": "goap", "leben": 2.0})]
+    return ("Zuruf: einer sieht ihn, sagt es - der andere hoert auf zu suchen",
+            rot + blau, alle_weg(rot, blau), 30, 1.5)
+
+
+def szene_bergen_puppen(tm, rnd):
+    """Seit 0.34.50, wie im Test des Besitzers: ein Trupp, zwei Puppen, einer
+    faellt. Rauch auf ihn, einer zieht ihn hinter die Mauer, die anderen
+    geben aus der Deckung Feuerschutz, dort helfen sie ihm auf."""
+    tx, ty, v = flaeche(tm, rnd, 20, 11)
+    setzen(tm, tx, ty, [(13, y) for y in range(2, 9)], K.WAND)
+    setzen(tm, tx, ty, [(15, 1), (15, 9)], K.KISTE)
+    tm.verwundete_setzen(True)
+    trupp = tm.trupp_setzen(v(15, 5), 0, {"groesse": 4, "team": 0, "fuehrer": "funk",
+                                          "mischung": "gemischt"})
+    feinde = [tm.puppe_setzen(v(2, 4 + 2 * i), 0, {"team": 1, "leben": 10.0}) for i in range(2)]
+    opfer = next(m for m in trupp.mitglieder if m is not trupp.fuehrer)
+    opfer.pos.update(v(9, 5))
+    opfer.vorher.update(opfer.pos)
+    kennen(trupp.mitglieder, feinde, tm)
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        if uhr["t"] >= 1.0 and not uhr.get("gefallen"):
+            uhr["gefallen"] = True
+            tm.toeten(opfer)
+
+    return ("Bergen gegen Puppen: Rauch, hinter die Mauer, Feuerschutz aus Deckung",
+            trupp.mitglieder, lambda: uhr.get("gefallen") and opfer.lebt and not opfer.am_boden
+            and uhr["t"] > 20.0, 45, 1.75, jedes_bild)
+
+
 # Name -> (Dateiname, Szene). Die Nummer im Dateinamen ist die Reihenfolge.
 SZENEN = {
     "duell": ("1_goap_gegen_klassisch", szene_duell),
@@ -488,6 +547,9 @@ SZENEN = {
     "panik": ("14_panik_entscheidet", szene_panik),
     "bergen_mauer": ("15_bergen_hinter_die_mauer", szene_bergen_mauer),
     "ueberfall": ("16_ueberfall_ohne_funk", szene_ueberfall),
+    "zange": ("17_zange_front_knickt", szene_zange),
+    "zuruf": ("18_zuruf_statt_suchen", szene_zuruf),
+    "bergen_puppen": ("19_bergen_gegen_puppen", szene_bergen_puppen),
 }
 
 

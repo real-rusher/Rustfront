@@ -366,6 +366,8 @@ class Testmodus(Gefecht):
         # kann einmal gerettet werden. Gemeldet: "im Testmodus mal so, dass
         # immer Leichen ... gedroppt werden, nur bei den Bots".
         self.verwundete = bool(z.get("verwundete", True))
+        # Sprinten der Bots (seit 0.34.50), zum Vergleichen abschaltbar.
+        self.bot_sprint = bool(z.get("bot_sprint", True))
         self._sp_werte = dict(z.get("sp_werte", {}))
         self._sp_nr = int(z.get("sp_nr", 0))
         self._welt_schritte = 1
@@ -1233,6 +1235,7 @@ class Testmodus(Gefecht):
             ("sauber", "SAUBERE ANSICHT (NUR AKTIONEN)", "AN" if self.sauber else "AUS"),
             ("entf", "ENTF-TASTE", "TÖTET" if self.entf_toetet else "LÖSCHT"),
             ("verwundete", "VERWUNDETE BOTS (LIEGEN, BERGEN)", "AN" if self.verwundete else "AUS"),
+            ("sprint", "BOTS SPRINTEN", "AN" if self.bot_sprint else "AUS"),
             ("einstellungen", "EINSTELLUNGEN", ""),
             ("hauptmenue", "ZUM HAUPTMENÜ", ""),
         ]
@@ -1258,6 +1261,7 @@ class Testmodus(Gefecht):
                     blend_beobachter=self.blend_beobachter,
                     ruckeln_beobachter=self.ruckeln_beobachter, sauber=self.sauber,
                     entf_toetet=self.entf_toetet, verwundete=self.verwundete,
+                    bot_sprint=self.bot_sprint,
                     sp_werte=self._sp_werte, sp_nr=self._sp_nr)
 
     def menue_wirken(self, schluessel: str, schritt: int = 1, ausloesen: bool = False) -> None:
@@ -1307,6 +1311,8 @@ class Testmodus(Gefecht):
             self.entf_toetet = not self.entf_toetet
         elif schluessel == "verwundete":
             self.verwundete_setzen(not self.verwundete)
+        elif schluessel == "sprint":
+            self.bot_sprint = not self.bot_sprint
         elif schluessel == "einstellungen" and ausloesen:
             from .menues import Einstellungen
             self.menue_offen = False
@@ -1387,11 +1393,13 @@ class Testmodus(Gefecht):
             # ist auch hier zu sehen (seit 0.34.39; die Wellen liegen seit 0.34.46
             # am Boden, _funkwellen_zeichnen).
             self._aktionen_zeichnen(ziel)
+            self._zurufe_zeichnen(ziel)
             if self.spawner_offen:
                 self._spawner_zeichnen(ziel)
             if self.menue_offen:
                 self._testmenue_zeichnen(ziel)
             return
+        self._zurufe_zeichnen(ziel)
         if self.info:
             self._info_zeichnen(ziel)
             self._trupps_zeichnen(ziel)
@@ -1555,8 +1563,17 @@ class Testmodus(Gefecht):
                     gehirn.aktion.name.upper() if gehirn.aktion else "-")
             if h.unterdrueckt > 0:
                 zustand += " (NIEDERGEH.)"
+            if hasattr(h, "flankiert") and h.flankiert():
+                zustand += " FLANKIERT"
             SCHRIFT.zeichnen(ziel, zustand, int(p.x), int(p.y) + 14, K.C_AMBER, 1,
                              ausrichtung="mitte")
+            # Seit 0.34.50: wer auf ihn schoss (orange), und die Ausdauer.
+            for w, (ort, ebene, _z) in getattr(h, "beschossen_von", {}).items():
+                if ebene == self.blick:
+                    pygame.draw.line(ziel, K.C_ORANGE, p, kam.zu_bild(ort), 1)
+            pygame.draw.rect(ziel, (30, 26, 22), (int(p.x) - 12, int(p.y) + 30, 24, 2))
+            pygame.draw.rect(ziel, K.C_CREAM if getattr(k, "sprintet", False) else K.C_MUTED,
+                             (int(p.x) - 12, int(p.y) + 30, int(round(24 * getattr(k, "ausdauer", 1.0))), 2))
             innen = getattr(h, "innen", None)
             if innen is not None:
                 self._innen_zeichnen(ziel, h, innen, p)
@@ -1725,17 +1742,37 @@ class Testmodus(Gefecht):
                 pygame.draw.arc(flaeche, f, feld, a, a + math.pi / n, breite)
         return True
 
+    def _zurufe_zeichnen(self, ziel) -> None:
+        """Wer gerade etwas zuruft (seit 0.34.50): eine kleine Sprechblase
+        mit drei Punkten ueber dem Kopf - kein Text, der steht unten links."""
+        kam = self.kamera
+        for k in self._bots():
+            if getattr(k.hirn, "zuruf", None) is None or not k.lebt or k.ebene != self.blick:
+                continue
+            if not self.im_licht(k.pos):
+                continue
+            p = kam.zu_bild(k.pos)
+            x, y = int(p.x) + 7, int(p.y) - 22
+            pygame.draw.rect(ziel, K.C_WAND_KANTE, (x - 1, y - 1, 13, 8))
+            pygame.draw.rect(ziel, K.C_CREAM, (x, y, 11, 6))
+            pygame.draw.polygon(ziel, K.C_CREAM, [(x + 1, y + 5), (x + 4, y + 5), (x, y + 8)])
+            for i in range(3):
+                pygame.draw.rect(ziel, K.C_WAND_KANTE, (x + 2 + i * 3, y + 2, 1, 2))
+
     def _funk_liste_zeichnen(self, ziel) -> None:
-        """Unten links die letzten Funksprueche, der neueste unten."""
-        netz = getattr(self, "_funknetz", None) or []
+        """Unten links die letzten Funksprueche und Zurufe (seit 0.34.50),
+        der neueste unten. Funk in Tuerkis, Zurufe hell mit dem Namen."""
+        netz = [(s_.zeit, s_.text, True) for s_ in (getattr(self, "_funknetz", None) or [])]
+        netz += [(z.zeit, "%s: %s" % (z.name, z.text), False) for z in (getattr(self, "_zurufnetz", None) or [])]
         if not netz or self.info == 2:
             return
+        netz.sort(key=lambda e: e[0])
         jetzt = self.welt.zeit
-        y = K.GAME_H - 14 - 10 * min(5, len(netz))
-        for spruch in netz[-5:]:
-            alt = jetzt - spruch.zeit
-            SCHRIFT.zeichnen(ziel, "%5.0fs  %s" % (-alt, spruch.text), 6, y,
-                             K.C_TEAL if alt < 4.0 else K.C_MUTED, 1)
+        y = K.GAME_H - 14 - 10 * min(6, len(netz))
+        for zeit, text, funk in netz[-6:]:
+            alt = jetzt - zeit
+            farbe = (K.C_TEAL if funk else K.C_CREAM) if alt < 4.0 else K.C_MUTED
+            SCHRIFT.zeichnen(ziel, "%5.0fs  %s" % (-alt, text), 6, y, farbe, 1)
             y += 10
 
     # Was INNENLEBEN im Testmenue mit der gezeigten Figur tut (seit 0.34.38).

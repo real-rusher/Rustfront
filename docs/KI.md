@@ -1239,7 +1239,45 @@ Gemeldet nach der Aufnahme `deckung`.
   jedem bekannten Gegner (lieber gedeckt), dann 6 s sprechen; ein Treffer
   oder ein Gegner in 240 px bricht ab (FUNK ABGEBROCHEN).
 
-### 11.8 Was noch offen ist
+### 11.8 Paket 8 (0.34.50): Flanke, geknickte Front, Sprint, Zurufe
+
+* **Nie von der Flanke**: wer ihn trifft (`beschossen_von`, drei Sekunden)
+  oder auf ihn zielt und schiesst, wird sein Ziel, sobald der laufende Stoss
+  durch ist (`_wahrnehmen`, `_ziel_bonus` +260). Fakt `flankiert`: die
+  Gegner stehen mehr als 80 Grad auseinander, und er ist nicht vor jedem
+  dicht gedeckt. Ziel flanke_sichern (Rang 1, 95), Aktion umstellen
+  (`umstellplatz`: bis 160 px, alle vor ihm oder vor allen gedeckt, nicht
+  naeher an einem, beim Trupp, nicht an einem vorbei).
+* **Geknickte Front** (`Trupp._abschnitte`): die bekannten Gegner nach
+  ihrer Richtung in Gruppen (Luecke ueber 60 Grad); je Gruppe wenigstens
+  einer, der Rest nach der Zahl der Gegner, in einer kurzen Linie quer zu
+  ihr, an Deckung gerueckt; jeder nimmt lieber die Gegner seines
+  Abschnitts (+150). Nicht im Rueckzug und beim Druck (Wellen).
+* **Bergen**: `erinnerung` (20 s) - wer hinter Rauch verschwindet, bedroht
+  den Liegenden weiter (`fest_gedeckt`, Trupp-Bedrohung); bis 480 px, nicht
+  nur so weit, wie er sieht. Eine angefangene Bergung bleibt sicher, solange
+  die Bedrohung nicht ueber die Zahl der Leute steigt (`dranbleiben` 12 s).
+  Ziehen kann nur einer (`anderer_zieht`); Feuerschutz auch aus der Deckung
+  (aus_deckung_feuern macht kamerad_geschuetzt). Rauch nie als Granate im
+  Kampf (`_wurf_platz` ohne Rauch); ein angefangener Wurf faellt beim
+  Aktionswechsel aus, und mit einer Wurfwaffe in der Hand drueckt nur eine
+  Wurfaktion ab.
+* **Beim Trupp bleiben**: Deckung hoechstens 170 px von der Mitte der
+  anderen (sonst 1,5 je Pixel), Panik-Deckung ebenso, Flucht knapp hinter
+  die anderen; fliehen kostet im Trupp 1,2 mehr, solange der Trupp nicht
+  zurueckgeht.
+* **Sprint** (`K.SPRINT`, nur Bots): x1,5, drei Sekunden Ausdauer, erholt
+  sich mit 0,25 je Sekunde, Staub hinter ihm. Wann: ausweichen immer,
+  fliehen und deckung_wechseln in Panik, umstellen und deckung, wenn er
+  getroffen, niedergehalten oder sehr gestresst ist.
+* **Zurufe** (`K.SPRECHEN`): wen er neu sieht und noch keiner sagte, ruft
+  er allen eigenen Bots in Sprechweite zu (0,8 bis 1,4 s); erst dann haben
+  sie es (`zugerufen`, sechs Sekunden) - und im Trupp der Trupp. Wer nichts
+  wusste, denkt sofort neu: aus suchen wird feind_ausschalten. Der
+  Anfuehrer sagt einen Funkspruch, den er bekommt, seinem Trupp weiter,
+  mit den Gegnern darin (`feinde_orte`).
+
+### 11.9 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.

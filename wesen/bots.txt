@@ -32,6 +32,7 @@
 #   waffe_mg, waffe_auto er haelt das MG / eine Waffe fuer Dauerfeuer
 #   feinde_gruppe        der Gegner, den er sieht, steht mit anderen beisammen
 #   ziel_fast_tot        der Gegner, den er sieht, hat kaum noch Leben
+#   flankiert            Gegner von zwei Seiten (mehr als 80 Grad), und er ist nicht vor jedem gedeckt (0.34.50)
 # Seit 0.34.39, im Trupp (trupp.py) - ohne Trupp oder als Letzter alle falsch:
 #   im_trupp             er ist in einem Trupp mit wenigstens einem anderen
 #   ist_fuehrer          er fuehrt ihn
@@ -55,6 +56,7 @@
 #   ich_berge            er ist einer der Retter (im Trupp bestimmt, sonst die zwei naechsten)
 #   bergen_sicher        es scheint sicher genug, ihn zu holen
 #   bergung_laeuft       einer zieht ihn gerade oder hilft ihm auf
+#   anderer_zieht        ein anderer zieht ihn schon (seit 0.34.50) - ziehen kann nur einer
 #   geschwaecht          er wurde wiederbelebt: weniger Leben, langsamer, zielt schlechter
 # Ziel-Fakten, die nie wahr werden, sondern nur das Ziel benennen:
 #   feind_besiegt, kamerad_geschuetzt, sturm_fertig, gruppe_getroffen, sicher,
@@ -83,6 +85,16 @@ will: sicher
 rang: 2
 dringlich: 100 * panik
 info: Panik: nur noch weg - oder, wer schon in Deckung ist, in ihre beste Ecke. Feuerschutz, Sturm, Kreis - alles egal.
+
+[ziel flanke_sichern]
+will: !flankiert
+# Seit 0.34.50. Gemeldet: "die Bots sollen wirklich darauf aufpassen, dass
+# sie nie von der Flanke angeschossen werden ... sich eine Position suchen,
+# wo sie beide Gegner noch sehen koennen." Rang 1: vor dem Feuerkampf.
+rang: flankiert
+dringlich: 95 * flankiert * (1 - 0.6 * ziel_fast_tot)
+bindung: 1.5
+info: Gegner von zwei Seiten: dorthin, wo alle vor ihm stehen (oder er vor jedem gedeckt ist).
 
 [ziel ueberleben]
 will: in_deckung, beruhigt
@@ -253,8 +265,16 @@ tut: ausweichen
 # getroffen: er rennt.
 [aktion fliehen]
 macht: sicher
-kosten: 0.8 + 1.5 * leben + 0.8 * trupp_druck - 0.6 * trupp_rueckzug
+# Im Trupp flieht keiner allein, solange der Trupp nicht zurueckgeht
+# (seit 0.34.50) - dann eher bleiben oder eine Deckung beim Trupp.
+kosten: 0.8 + 1.5 * leben + 0.8 * trupp_druck - 0.6 * trupp_rueckzug + 1.2 * im_trupp * (1 - trupp_rueckzug)
 tut: fliehen
+
+[aktion umstellen]
+macht: !flankiert
+kosten: 1
+tut: umstellen
+info: Hinueber an einen Platz, von dem aus alle Gegner vor ihm sind - im Gehen auf den, der auf ihn schiesst.
 
 [aktion verkriechen]
 braucht: in_deckung
@@ -282,7 +302,9 @@ info: Kaempfen wie die klassische KI: Abstand, Ausweichen, Feuerstoesse, Granate
 
 [aktion aus_deckung_feuern]
 braucht: in_deckung, feind_bekannt, munition_da
-macht: feind_besiegt, gruppe_getroffen
+# Auch Feuerschutz (seit 0.34.50): wer den Rettern Deckung gibt, tut es aus
+# der Deckung - vorher standen dafuer alle im Freien (niederhalten).
+macht: feind_besiegt, gruppe_getroffen, kamerad_geschuetzt
 kosten: 1
 tut: aus_deckung
 info: Aus der Deckung kaempfen: drin warten, zur Seite herauslehnen, ein Stoss, zurueck.
@@ -381,7 +403,7 @@ tut: zum_kameraden
 funk: helfen
 
 [aktion kamerad_ziehen]
-braucht: bei_kamerad, !kamerad_gedeckt
+braucht: bei_kamerad, !kamerad_gedeckt, !anderer_zieht
 macht: kamerad_gedeckt
 kosten: 2
 tut: ziehen
@@ -457,8 +479,8 @@ tut: zur_stelle
 [spezies mp_bot]
 name: BOT
 hirn: bot
-ziele: granate_ausweichen, panik, ueberleben, nachladen, kamerad_bergen, verstaerkung_rufen, funk_antworten, lage_melden, rauch_legen, rueckzug, druck, zu_hilfe, sektor_halten, trupp_halten, stuermen, kreis, gruppe_bekaempfen, feuerschutz, nachsetzen, feind_ausschalten, suchen
-aktionen: ausweichen, fliehen, verkriechen, deckung_wechseln, angreifen, aus_deckung_feuern, dauerfeuer, granate_werfen, flankieren, niederhalten, nahkampf, suchen, nachsetzen, deckung, abwarten, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, zum_kameraden, kamerad_ziehen, aufhelfen, aufhelfen_offen, stuermen, funk_hilfe, funk_zusage, funk_lage, rauch_werfen, welle, verlegen, zur_stelle, sektor_halten
+ziele: granate_ausweichen, panik, flanke_sichern, ueberleben, nachladen, kamerad_bergen, verstaerkung_rufen, funk_antworten, lage_melden, rauch_legen, rueckzug, druck, zu_hilfe, sektor_halten, trupp_halten, stuermen, kreis, gruppe_bekaempfen, feuerschutz, nachsetzen, feind_ausschalten, suchen
+aktionen: ausweichen, fliehen, verkriechen, deckung_wechseln, umstellen, angreifen, aus_deckung_feuern, dauerfeuer, granate_werfen, flankieren, niederhalten, nahkampf, suchen, nachsetzen, deckung, abwarten, nachladen_in_deckung, nachladen_ohne_feind, nachladen_offen, zum_kreis, zum_kameraden, kamerad_ziehen, aufhelfen, aufhelfen_offen, stuermen, funk_hilfe, funk_zusage, funk_lage, rauch_werfen, welle, verlegen, zur_stelle, sektor_halten
 merkmal mut: 0.2 0.9
 merkmal disziplin: 0.3 1.0
 # Drill (seit 0.34.38): wie ausgebildet er ist. Wenig fuer die Bots des

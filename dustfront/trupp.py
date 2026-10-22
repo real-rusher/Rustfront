@@ -105,6 +105,7 @@ class Trupp:
         self.front = None             # dict(freund, feind, richtung, quer, linie, breite)
         self.stellungen: dict = {}    # Nummer -> Ort, an dem er stehen soll
         self.stellungen_vorher: dict = {}
+        self.abschnitte = 1           # in so viele Richtungen schaut die Front (seit 0.34.50)
         self.welle: set = set()       # Nummern, die in dieser Welle ziehen
         self._welle_ziel: dict = {}   # ... und wohin
         self._welle_rest = 0.0
@@ -169,25 +170,22 @@ class Trupp:
 
     def _lage_sammeln(self, leute) -> None:
         """Wer einen Gegner sieht und jemanden im Trupp in Sprechweite hat,
-        sagt es - dann wissen es alle. Neue Gegner werden angesagt."""
+        haelt die anderen auf dem Laufenden. Neue Gegner kommen seit 0.34.50
+        nicht mehr sofort dazu: er ruft sie zu (GoapHirn._ansagen), und erst
+        wenn der Satz durch ist, weiss es der Trupp."""
         jetzt = self.g.welt.zeit
-        neu_je = {}
         for m in leute:
             if not self.in_kontakt(m):
                 continue
             for w, (ort, ebene, zeit) in m.hirn.gesehen.items():
                 if not w.lebt or jetzt - zeit > 0.4:
                     continue
-                if w not in self.lage:
-                    neu_je.setdefault(m, []).append(w)
-                self.lage[w] = [pygame.Vector2(w.pos), w.ebene, jetzt]
+                if w in self.lage or not hasattr(m.hirn, "zuruf_starten"):
+                    self.lage[w] = [pygame.Vector2(w.pos), w.ebene, jetzt]
         for w in list(self.lage):
             if not w.lebt or getattr(w, "am_boden", False) \
                     or jetzt - self.lage[w][2] > K.TRUPP["gedaechtnis"]:
                 del self.lage[w]
-        for m, neue in neu_je.items():
-            m.hirn.sagen("%s IM %s!" % (zahl_wort(len(neue)),
-                                       richtung_wort(m.pos, neue[0].pos)))
 
     def feinde(self, ebene=None) -> list:
         """(Ort, Ebene, Wesen) aller Gegner, die der Trupp kennt."""
@@ -318,6 +316,7 @@ class Trupp:
         t = K.TRUPP
         self.stellungen_vorher = self.stellungen
         self.stellungen = {}
+        self.abschnitte = 1
         if not leute:
             return
         self.blicke = {}
@@ -353,7 +352,88 @@ class Trupp:
             else:
                 p = self._deckung_nah(p, m, f["feind"])
             self.stellungen[m.nummer] = self._frei(p, m)
+        if self.zustand not in ("rueckzug", "druck"):
+            self._abschnitte(leute)
         self._wellen(leute)
+
+    def gruppen_nach_richtung(self, mitte, ebene) -> list:
+        """Die bekannten Gegner, nach ihrer Richtung von `mitte` aus in
+        Gruppen geteilt: wo zwischen zwei Richtungen mehr als
+        `abschnitt_luecke` Grad frei sind, beginnt eine neue. Je Gruppe
+        (Richtung als Einheitsvektor, Mitte, Zahl)."""
+        feinde = [o for o, e, _w in self.feinde(ebene) if o.distance_to(mitte) > 1.0]
+        if not feinde:
+            return []
+        paare = sorted(((math.degrees(math.atan2(o.y - mitte.y, o.x - mitte.x)) % 360.0, o)
+                        for o in feinde), key=lambda x: x[0])
+        luecke = K.TRUPP["abschnitt_luecke"]
+        gruppen = [[paare[0]]]
+        for vor, nach in zip(paare, paare[1:]):
+            if nach[0] - vor[0] > luecke:
+                gruppen.append([nach])
+            else:
+                gruppen[-1].append(nach)
+        # Ueber 360 Grad hinweg: die letzte gehoert zur ersten, wenn die
+        # Luecke dort klein ist.
+        if len(gruppen) > 1 and paare[0][0] + 360.0 - paare[-1][0] <= luecke:
+            gruppen[0] = gruppen.pop() + gruppen[0]
+        raus = []
+        for gr in gruppen:
+            m = sum((o for _w, o in gr), pygame.Vector2(0, 0)) / len(gr)
+            hin = m - mitte
+            raus.append((hin.normalize() if hin.length_squared() > 1.0 else pygame.Vector2(1, 0),
+                         m, len(gr)))
+        return raus
+
+    def _abschnitte(self, leute) -> None:
+        """Gegner aus mehreren Richtungen (seit 0.34.50): die Front knickt -
+        ein Teil des Trupps schaut zu jeder Gruppe, in einer kurzen Linie
+        quer zu ihr, an Deckung gerueckt; der Anfuehrer bleibt in der Mitte
+        dahinter. Gemeldet: "dass sich die Frontlinie stark anpasst ... wo
+        immer ein Teil der Front quasi zu jedem Gegner schaut". Die Leute
+        werden nach ihrer Richtung verteilt, damit keiner quer laeuft."""
+        t = K.TRUPP
+        f = self.front
+        ebene = f["ebene"]
+        mitte = pygame.Vector2(f["freund"])
+        gruppen = self.gruppen_nach_richtung(mitte, ebene)
+        andere = [m for m in leute if m is not self.fuehrer and m.nummer not in self.flanker]
+        if len(gruppen) < 2 or len(andere) < 2:
+            return
+        gruppen.sort(key=lambda g: math.atan2(g[0].y, g[0].x))
+        gruppen = gruppen[:len(andere)]
+        # Je Gruppe wenigstens einer, der Rest nach der Zahl der Gegner.
+        anteile = [1] * len(gruppen)
+        rest = len(andere) - len(gruppen)
+        gesamt = sum(g[2] for g in gruppen)
+        while rest > 0:
+            i = max(range(len(gruppen)), key=lambda j: gruppen[j][2] / gesamt - anteile[j] / len(andere))
+            anteile[i] += 1
+            rest -= 1
+        andere.sort(key=lambda m: math.atan2(m.pos.y - mitte.y, m.pos.x - mitte.x))
+        # Beim Sortieren nach dem Winkel faengt die Reihe irgendwo an: so
+        # drehen, dass der Erste zur ersten Gruppe am besten passt.
+        erste = math.degrees(math.atan2(gruppen[0][0].y, gruppen[0][0].x))
+        start = min(range(len(andere)), key=lambda i: abs(
+            (math.degrees(math.atan2(andere[i].pos.y - mitte.y, andere[i].pos.x - mitte.x)) - erste + 180) % 360 - 180))
+        andere = andere[start:] + andere[:start]
+        i = 0
+        hinten = pygame.Vector2(0, 0)
+        for (richtung, gmitte, _n), anzahl in zip(gruppen, anteile):
+            quer = pygame.Vector2(-richtung.y, richtung.x)
+            hinten -= richtung
+            for j in range(anzahl):
+                m = andere[i]
+                i += 1
+                seitlich = (j - (anzahl - 1) / 2.0) * t["bahn_min"]
+                p = mitte + richtung * t["abschnitt_vor"] + quer * seitlich
+                p = self._deckung_nah(p, m, gmitte)
+                self.stellungen[m.nummer] = self._frei(p, m)
+                self.blicke[m.nummer] = pygame.Vector2(gmitte)
+        if self.fuehrer in leute:
+            weg = hinten.normalize() if hinten.length_squared() > 0.01 else pygame.Vector2(0, 0)
+            self.stellungen[self.fuehrer.nummer] = self._frei(mitte + weg * t["fuehrer_tiefe"], self.fuehrer)
+        self.abschnitte = len(gruppen)
 
     def _linie_ohne_kontakt(self, leute) -> None:
         t = K.TRUPP
@@ -646,6 +726,9 @@ class Trupp:
         mitte = (sum((pygame.Vector2(m.pos) for m in leute), pygame.Vector2(0, 0)) / len(leute)
                  if leute else pygame.Vector2(0, 0))
         return dict(staerke=len(leute), feinde=len(self.lage), zuversicht=self.zuversicht,
+                    # Wer wo ist (seit 0.34.50): das sagt der, der den Spruch
+                    # bekommt, seinem Trupp weiter.
+                    feinde_orte=[(w, pygame.Vector2(o), e) for w, (o, e, _z) in self.lage.items()],
                     ort=pygame.Vector2(f["freund"] if f else mitte),
                     ebene=leute[0].ebene if leute else 0,
                     wichtig=bool(self.auftrag.get("wichtig")) and self.auftrag["art"] == "halten",
@@ -716,6 +799,15 @@ class Trupp:
     def empfangen(self, spruch) -> None:
         self.funk_lage[spruch.trupp.name] = spruch
         self.empfangen_zeit = self.g.welt.zeit      # fuer die Anzeige (Testmodus)
+        # Der Anfuehrer sagt seinem Trupp, was er ueber Funk gehoert hat -
+        # auch das dauert (seit 0.34.50, gemeldet: "Anfuehrer sollen dabei
+        # auch Informationen, die sie erhalten haben, an ihren Trupp erstmal
+        # weitergeben ueber das Sprechen").
+        f = self.fuehrer
+        if f is not None and f.lebt and hasattr(f.hirn, "zuruf_starten"):
+            feinde = [(w, o, e) for w, o, e in spruch.lage.get("feinde_orte", ()) if w.lebt]
+            worte = {"hilfe": "%s BRAUCHT HILFE!", "zusage": "%s KOMMT!", "lage": "FUNK VON %s."}
+            f.hirn.zuruf_starten(feinde, worte.get(spruch.art, "FUNK VON %s.") % spruch.trupp.name)
         if spruch.art == "hilfe":
             self.hilfe_pruefen(spruch)
         elif self.hilfe is not None and self.hilfe["fuer"] is spruch.trupp:
@@ -788,14 +880,36 @@ class Trupp:
             b = self.bergung = dict(opfer=opfer, retter=set(), sicher=False, bedrohung=0)
         opfer = b["opfer"]
         welt = g.welt
+        jetzt = welt.zeit
+        # Auch wen die Leute nur noch erinnern (seit 0.34.50): hinter dem
+        # Rauch vergass der Trupp die Gegner nach sechs Sekunden, und dann
+        # war es "sicher", bis sie wieder auftauchten.
+        orte = [o for o, e, _w in self.feinde(opfer.ebene)]
+        for m in leute:
+            for w, (o, e, _z) in getattr(m.hirn, "erinnerung", {}).items():
+                if e == opfer.ebene and not any(o.distance_to(q) < 40.0 for q in orte):
+                    orte.append(pygame.Vector2(o))
         n = 0
-        for o, e, _w in self.feinde(opfer.ebene):
+        for o in orte:
             if (o.distance_to(opfer.pos) <= v["bedrohung"]
-                    and sieht_durch_rauch(welt, o, opfer.pos, e)):
+                    and sieht_durch_rauch(welt, o, opfer.pos, opfer.ebene)):
                 n += 1
         b["bedrohung"] = n
-        b["sicher"] = (n == 0 or self.zuversicht >= 4
-                       or (self.zuversicht >= 2 and n <= max(0, len(leute) - 2)))
+        sicher = (n == 0 or self.zuversicht >= 4
+                  or (self.zuversicht >= 2 and n <= max(0, len(leute) - 2)))
+        if sicher and not b["sicher"]:
+            b["sicher_seit"] = jetzt
+        # Wer angefangen hat, bringt es zu Ende (seit 0.34.50): vorher brach
+        # die Bergung ab, sobald einer hinsah, und die Retter standen neben
+        # dem Liegenden im Freien. Nur eine deutlich groessere Bedrohung
+        # bricht sie ab.
+        laeuft = any(getattr(m, "zieht", None) == opfer.nummer or getattr(m, "hilft", None) == opfer.nummer
+                     or m.pos.distance_to(opfer.pos) <= K.REVIVE["reichweite"] for m in leute
+                     if m.nummer in b["retter"])
+        if (not sicher and b["sicher"] and laeuft and n <= len(leute)
+                and jetzt - b.get("sicher_seit", jetzt) < v["dranbleiben"]):
+            sicher = True
+        b["sicher"] = sicher
         da = {m.nummer for m in leute}
         retter = {r for r in b["retter"] if r in da}
         soll = min(v["retter"], max(1, len(leute) - 1))
