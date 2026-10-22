@@ -1236,8 +1236,9 @@ Gemeldet nach der Aufnahme `deckung`.
   jedem bekannten Gegner, ohne Rauch; der Bergeplatz liegt dort, lieber
   hinter einer Mauer, bis 240 px weit.
 * **Funk** (`funkplatz`, `_funken_tun`): erst an einen Platz 300 px von
-  jedem bekannten Gegner (lieber gedeckt), dann 6 s sprechen; ein Treffer
-  oder ein Gegner in 240 px bricht ab (FUNK ABGEBROCHEN).
+  jedem bekannten Gegner (lieber gedeckt), dann 6 s sprechen; ein Treffer,
+  ein Gegner in 150 px oder einer, der auf ihn schiesst, bricht ab (FUNK
+  ABGEBROCHEN; bis 0.34.50 jeder Gegner in Sicht bis 240 px).
 
 ### 11.8 Paket 8 (0.34.50): Flanke, geknickte Front, Sprint, Zurufe
 

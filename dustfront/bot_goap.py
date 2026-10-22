@@ -1944,9 +1944,15 @@ class GoapHirn(BotHirn):
             if ort is not None and k.pos.distance_to(ort) > 6.0 and jetzt < laeuft["weg_bis"]:
                 return self._weg_richtung(ort, k.ebene, ein=None), blick, False, False, "laeuft"
             laeuft.update(phase="senden", anfang=jetzt, bis=jetzt + laeuft["dauer"], leben=k.leben)
-        z = self.ziel
-        nah = (z is not None and self.ziel_ok(z) and z in self.gesehen
-               and self.gesehen[z][2] >= jetzt - 0.3 and k.pos.distance_to(z.pos) < T["funk_stoer"])
+        # Ueberrascht ist er, wenn einer dicht dran ist oder auf ihn schiesst
+        # - nicht schon, weil einer in Sicht steht.
+        nah = False
+        for w, (ort, ebene, zeit) in self.gesehen.items():
+            if not w.lebt or getattr(w, "am_boden", False) or jetzt - zeit > 0.3:
+                continue
+            if k.pos.distance_to(w.pos) < T["funk_stoer"] or self._schiesst_auf_mich(w):
+                nah = True
+                break
         if k.leben < laeuft["leben"] - 0.5 or nah:
             self.funk_laeuft = None
             self.gehirn.log("FUNK ABGEBROCHEN")

@@ -11243,20 +11243,24 @@ _start98 = pygame.Vector2(_bot98.pos)
 _schuesse98 = 0
 _weit98 = 0.0
 _schnell98 = 0.0
+_sprint98 = False
 for _ in range(int(6.0 / _D87)):
     _bot98.hirn.innen.stress = 0.0
     _tm.schritt(_D87)
     _schuesse98 += 1 if _bot98.feuert else 0
     _weit98 = max(_weit98, _bot98.pos.distance_to(_start98))
     _schnell98 = max(_schnell98, _bot98.tempo.length())
+    _sprint98 = _sprint98 or _bot98.sprintet
 _plaene98 = [t_ for _z, t_ in _bot98.hirn.gehirn.protokoll if t_.startswith("PLAN:")]
 pruef("Ein vorsichtiger Bot neben einer Deckung kaempft aus ihr heraus",
       any("aus_deckung_feuern" in t_ for t_ in _plaene98), str(_plaene98[-3:]))
 pruef("... er lehnt sich heraus und schiesst, bleibt aber dicht an seiner Deckung",
       _schuesse98 > 0 and _weit98 < K.BOTS["lehnen_weite"] + 30,
       "%d Bilder gefeuert, hoechstens %.0f px weg" % (_schuesse98, _weit98))
-pruef("... und laeuft nie schneller als das neue Spielertempo",
-      0.0 < _schnell98 <= K.SPIELER["tempo"] + 1.0, "%.0f px/s" % _schnell98)
+# Seit 0.34.50 duerfen Bots sprinten - dann um den Sprintfaktor schneller.
+pruef("... und laeuft nie schneller als das neue Spielertempo (sprintend: mal K.SPRINT faktor)",
+      0.0 < _schnell98 <= K.SPIELER["tempo"] * (K.SPRINT["faktor"] if _sprint98 else 1.0) + 1.0,
+      "%.0f px/s%s" % (_schnell98, ", sprintete" if _sprint98 else ""))
 pruef("... die Kosten: ein Mutiger greift offen an, ein Vorsichtiger geht in Deckung",
       _WD88.daten().aktionen["angreifen"].kosten.wert({"mut": 0.9}) < 2.0 + 0.9
       and _WD88.daten().aktionen["angreifen"].kosten.wert({"mut": 0.3}) > 2.0 + 0.3, "")
