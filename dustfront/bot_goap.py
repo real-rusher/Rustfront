@@ -1012,6 +1012,17 @@ class GoapHirn(BotHirn):
             if beste is not None and self.waffen_rest <= 0.0:
                 ein["waffe"] = beste[0]
                 self.waffen_rest = 0.4
+        if a is not None and a.tut in ("kaempfen", "dauerfeuer") and will.length_squared() > 0.01:
+            # Im Kampf nicht wieder in die Zange laufen (seit 0.34.50): ein
+            # Schritt, der die Gegner weiter auseinanderzieht als die Grenze,
+            # unterbleibt - sonst fuehrte ihn das Ausweichen gleich nach dem
+            # Umstellen wieder dorthin, wo er flankiert war.
+            orte = self.bedrohungs_richtungen()
+            if len(orte) >= 2:
+                vor = self.k.pos + will * 14.0
+                spanne = self._spanne(vor, orte)
+                if spanne > K.BOTS["flanke_spanne"] and spanne > self._spanne(self.k.pos, orte):
+                    will = pygame.Vector2(0, 0)
         if a is not None and self._sprint_lohnt(a.tut):
             ein["sprint"] = True
         if feuern and punkt is not None and self.vorn_zu(punkt):

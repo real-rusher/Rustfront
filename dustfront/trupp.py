@@ -634,10 +634,16 @@ class Trupp:
             # zur Mitte in derselben Richtung - nicht irgendwohin daneben,
             # sonst stuenden zwei auf derselben Seite.
             p = None
-            for anteil in (1.0, 0.75, 0.5, 0.3):
-                q = ort + richtung * (radius * anteil)
-                if welt.frei(q, m.radius + 2, self.igel["ebene"], True):
-                    p = q
+            # Erst in seiner Richtung, dann ein paar Grad daneben (seit
+            # 0.34.50) - sonst schob der Notbehelf ihn irgendwohin, und zwei
+            # standen auf derselben Seite.
+            for drehung in (0.0, 10.0, -10.0, 20.0, -20.0):
+                for anteil in (1.0, 0.75, 0.5, 0.3):
+                    q = ort + richtung.rotate(drehung) * (radius * anteil)
+                    if welt.frei(q, m.radius + 2, self.igel["ebene"], True):
+                        p = q
+                        break
+                if p is not None:
                     break
             self.stellungen[m.nummer] = p if p is not None else self._frei(ort + richtung * radius, m)
             self.blicke[m.nummer] = ort + richtung * (radius + 200.0)
@@ -899,14 +905,19 @@ class Trupp:
                   or (self.zuversicht >= 2 and n <= max(0, len(leute) - 2)))
         if sicher and not b["sicher"]:
             b["sicher_seit"] = jetzt
+            # Warum: weil keiner hinsah (ruhig) - oder nur aus Mut. Zu Ende
+            # gebracht wird nur, was ruhig begann; wer es aus Mut anfing,
+            # hoert auf, wenn der Mut weg ist.
+            b["ruhig"] = n == 0
         # Wer angefangen hat, bringt es zu Ende (seit 0.34.50): vorher brach
         # die Bergung ab, sobald einer hinsah, und die Retter standen neben
         # dem Liegenden im Freien. Nur eine deutlich groessere Bedrohung
         # bricht sie ab.
+        # Angefangen ist sie erst, wenn einer zieht oder aufhilft - nicht
+        # schon, weil einer neben dem steht, der eben neben ihm fiel.
         laeuft = any(getattr(m, "zieht", None) == opfer.nummer or getattr(m, "hilft", None) == opfer.nummer
-                     or m.pos.distance_to(opfer.pos) <= K.REVIVE["reichweite"] for m in leute
-                     if m.nummer in b["retter"])
-        if (not sicher and b["sicher"] and laeuft and n <= len(leute)
+                     for m in leute if m.nummer in b["retter"])
+        if (not sicher and b["sicher"] and b.get("ruhig") and laeuft and n <= len(leute)
                 and jetzt - b.get("sicher_seit", jetzt) < v["dranbleiben"]):
             sicher = True
         b["sicher"] = sicher
