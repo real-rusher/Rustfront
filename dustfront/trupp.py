@@ -807,7 +807,7 @@ class Trupp:
         if f is not None and f.lebt and hasattr(f.hirn, "zuruf_starten"):
             feinde = [(w, o, e) for w, o, e in spruch.lage.get("feinde_orte", ()) if w.lebt]
             worte = {"hilfe": "%s BRAUCHT HILFE!", "zusage": "%s KOMMT!", "lage": "FUNK VON %s."}
-            f.hirn.zuruf_starten(feinde, worte.get(spruch.art, "FUNK VON %s.") % spruch.trupp.name)
+            f.hirn.zuruf_starten(feinde, worte.get(spruch.art, "FUNK VON %s.") % spruch.trupp.name, funk=True)
         if spruch.art == "hilfe":
             self.hilfe_pruefen(spruch)
         elif self.hilfe is not None and self.hilfe["fuer"] is spruch.trupp:

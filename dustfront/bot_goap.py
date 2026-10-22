@@ -732,7 +732,7 @@ class GoapHirn(BotHirn):
                 and x.ebene == k.ebene and not getattr(x, "am_boden", False)
                 and x.pos.distance_to(k.pos) <= weite]
 
-    def zuruf_starten(self, feinde, text: str) -> None:
+    def zuruf_starten(self, feinde, text: str, funk: bool = False) -> None:
         """Er ruft den anderen etwas zu: wer wo ist. Haben werden sie es
         erst, wenn der Satz durch ist (K.SPRECHEN["dauer"]); laeuft schon
         einer, kommt es dazu."""
@@ -741,7 +741,7 @@ class GoapHirn(BotHirn):
             bekannt = {id(w) for w, _o, _e in self.zuruf["feinde"]}
             self.zuruf["feinde"] += [f for f in feinde if id(f[0]) not in bekannt]
             return
-        self.zuruf = dict(feinde=list(feinde), text=text, anfang=jetzt,
+        self.zuruf = dict(feinde=list(feinde), text=text, anfang=jetzt, funk=funk,
                           bis=jetzt + self.rnd.uniform(*K.SPRECHEN["dauer"]))
 
     def _zuruf_fuehren(self) -> None:
@@ -754,8 +754,11 @@ class GoapHirn(BotHirn):
         jetzt = self.g.welt.zeit
         self.sagen(z["text"], wichtig=True)
         t = self.trupp
+        # Was ueber Funk kam, wissen die Leute jetzt - es ist aber nicht die
+        # Lage am eigenen Trupp: sonst hielt sich ein Trupp ohne Gegner fuer
+        # unterlegen und rief selbst um Hilfe, statt zuzusagen.
         for w, ort, ebene in z["feinde"]:
-            if t is not None and w.lebt:
+            if t is not None and w.lebt and not z.get("funk"):
                 t.lage[w] = [pygame.Vector2(ort), ebene, jetzt]
         for x in self.hoerer():
             x.hirn.zuruf_hoeren(z["feinde"], self.k)
@@ -997,11 +1000,13 @@ class GoapHirn(BotHirn):
         a = self.gehirn.aktion
         will, punkt, feuern, zielt = self._handeln(dt, ein)
         will, punkt, feuern = self._umschauen(dt, will, punkt, feuern)
-        if (self.k.waffe_daten.get("art") == "wurf" and self.wurf_phase <= 0.0
-                and (a is None or a.tut not in ("rauch", "werfen"))):
-            # Eine Wurfwaffe in der Hand, aber keine Wurfaktion: zurueck zur
-            # Waffe, und nicht damit "schiessen" - sonst flog der Rauch fuer
-            # den Verwundeten beim naechsten Feuerstoss irgendwohin.
+        if (self.k.waffe_daten.get("rauch") and self.wurf_phase <= 0.0
+                and (a is None or a.tut != "rauch")):
+            # Die Rauchgranate in der Hand, aber keine Rauchaktion: zurueck
+            # zur Waffe, und nicht damit "schiessen" - sonst flog der Rauch
+            # fuer den Verwundeten beim naechsten Feuerstoss irgendwohin.
+            # Nur der Rauch: eine Sprenggranate wirft auch der Kampf selbst
+            # (bots._kaempfen), die darf er nicht verlieren.
             feuern = False
             beste = self._beste_waffe(self.k.pos.distance_to(punkt) if punkt is not None else 220.0)
             if beste is not None and self.waffen_rest <= 0.0:

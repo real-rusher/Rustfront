@@ -10811,14 +10811,24 @@ _m95 = next(m_ for m_ in _al95.mitglieder if m_ is not _f95)
 _al95.lage = {}
 _m95.hirn.gesehen = {_feind95: (pygame.Vector2(_feind95.pos), 0, _tm.welt.zeit)}
 _al95._lage_sammeln(_al95.lebende())
+# Seit 0.34.50 nicht mehr im selben Augenblick: er ruft es zu, und erst wenn
+# der Satz durch ist (K.SPRECHEN["dauer"]), weiss es der Trupp.
+_sofort95 = _feind95 in _al95.lage
+_m95.hirn._angesagt = {}
+_m95.hirn.zuruf = None
+_m95.hirn._ansagen()
+_tm.welt.zeit += K.SPRECHEN["dauer"][1] + 0.05
+_m95.hirn._zuruf_fuehren()
 pruef("Sprechen: wer einen sieht und andere in Sprechweite hat, sagt es - dann weiss es der Trupp",
-      _feind95 in _al95.lage and _m95.hirn.gesagt.endswith("!"), _m95.hirn.gesagt)
+      not _sofort95 and _feind95 in _al95.lage and _m95.hirn.gesagt.endswith("!"), _m95.hirn.gesagt)
 _weg95 = pygame.Vector2(_m95.pos)
 _m95.pos.update(_m95.pos + pygame.Vector2(K.TRUPP["sprech_weite"] * 3, 0))
 _al95.lage = {}
+_m95.hirn._angesagt = {}
+_m95.hirn._ansagen()
 _al95._lage_sammeln(_al95.lebende())
 pruef("... wer zu weit weg ist, dessen Wissen kommt nicht an",
-      _feind95 not in _al95.lage and not _al95.in_kontakt(_m95)
+      _feind95 not in _al95.lage and not _al95.in_kontakt(_m95) and _m95.hirn.zuruf is None
       and _m95.hirn._trupp_fakten()["allein"], "")
 _m95.pos.update(_weg95)
 

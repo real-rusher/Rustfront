@@ -1343,7 +1343,9 @@ class Testmodus(Gefecht):
 
     def _menue_flaechen(self) -> list:
         r = self.MENUE
-        return [pygame.Rect(r.x + 8, r.y + 26 + i * 12, r.width - 16, 11)
+        # 11 statt 12 Pixel je Zeile (seit 0.34.50): mit BOTS SPRINTEN passte
+        # die letzte Zeile sonst nicht mehr in den Kasten.
+        return [pygame.Rect(r.x + 8, r.y + 26 + i * 11, r.width - 16, 10)
                 for i in range(len(self._menue_zeilen()))]
 
     def _menue_maus_tm(self, ev, pos) -> None:

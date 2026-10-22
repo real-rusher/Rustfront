@@ -1260,8 +1260,8 @@ Gemeldet nach der Aufnahme `deckung`.
   Ziehen kann nur einer (`anderer_zieht`); Feuerschutz auch aus der Deckung
   (aus_deckung_feuern macht kamerad_geschuetzt). Rauch nie als Granate im
   Kampf (`_wurf_platz` ohne Rauch); ein angefangener Wurf faellt beim
-  Aktionswechsel aus, und mit einer Wurfwaffe in der Hand drueckt nur eine
-  Wurfaktion ab.
+  Aktionswechsel aus, und mit der Rauchgranate in der Hand drueckt nur
+  rauch_werfen ab (Sprenggranaten wirft auch der Kampf selbst).
 * **Beim Trupp bleiben**: Deckung hoechstens 170 px von der Mitte der
   anderen (sonst 1,5 je Pixel), Panik-Deckung ebenso, Flucht knapp hinter
   die anderen; fliehen kostet im Trupp 1,2 mehr, solange der Trupp nicht
