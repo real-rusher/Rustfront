@@ -627,10 +627,16 @@ class GoapHirn(BotHirn):
     def _bergung_fakten(self) -> dict:
         k = self.k
         x = self._opfer()
+        t = self.trupp
+        # Wird im Trupp einer geborgen und er ist nicht der Retter, bleibt er
+        # in Deckung (seit 0.34.53, gemeldet: "alle Bots haben ihre Deckung
+        # verlassen, um zu bergen") - auch wenn er selbst keinen Liegenden kennt.
+        halten = (t is not None and t.bergung is not None and len(t.lebende()) > 1
+                  and k.nummer not in t.bergung["retter"])
         if x is None:
             return dict(bei_kamerad=False, kamerad_gedeckt=False, ich_berge=False,
-                        bergen_sicher=False, bergung_laeuft=False, anderer_zieht=False)
-        t = self.trupp
+                        bergen_sicher=False, bergung_laeuft=False, anderer_zieht=False,
+                        bergung_halten=halten)
         if t is not None and t.bergung is not None and t.bergung["opfer"] is x:
             ich = k.nummer in t.bergung["retter"]
             sicher = t.bergung["sicher"]
@@ -654,7 +660,7 @@ class GoapHirn(BotHirn):
                     # erst hinter eine gute und sichere Deckung bergen").
                     kamerad_gedeckt=self.sicher_gedeckt(x.pos, x.ebene),
                     ich_berge=ich, bergen_sicher=sicher, bergung_laeuft=laeuft,
-                    anderer_zieht=anderer)
+                    anderer_zieht=anderer, bergung_halten=halten)
 
     def bergeplatz(self, x):
         """Wohin er den Liegenden zieht: die naechste Stelle um ihn, die vor
@@ -1369,7 +1375,13 @@ class GoapHirn(BotHirn):
                 return _nichts("gescheitert")
             self._druck_lief = True
         punkt = self.druckpunkt(ort, ebene)
-        return pygame.Vector2(0, 0), punkt, self._abdruecken(dt, punkt, ein), False, "laeuft"
+        will = pygame.Vector2(0, 0)
+        p = self._stellung()
+        if p is not None and self.trupp.gedeckt_hier(p, self.k.ebene, ort):
+            # Im Trupp haelt er aus seiner gedeckten Stellung nieder (seit
+            # 0.34.52) - nach dem Rauchwurf blieb er sonst im Freien stehen.
+            will = self._an_stelle(p, ein)
+        return will, punkt, self._abdruecken(dt, punkt, ein), False, "laeuft"
 
     def tun_deckung(self, dt, ein):
         k = self.k
@@ -1378,6 +1390,18 @@ class GoapHirn(BotHirn):
             # Vor niemandem in Deckung: wo er steht, ist er sicher genug.
             self._deckung_platz = pygame.Vector2(k.pos)
             return _nichts("fertig")
+        p = self._stellung()
+        if (p is not None and self.gehirn.fakten.get("bergung_halten")
+                and self.trupp.gedeckt_hier(p, k.ebene, gefahr[0])):
+            # Waehrend einer geborgen wird, in die Deckung, die der Trupp ihm
+            # gibt (seit 0.34.53) - nach dem Rauchwurf suchte er sich sonst
+            # eine eigene, weiter vorn, und lehnte sich von dort hinaus. Auf
+            # dem Weg dorthin, nicht geradeaus: oft steht die Mauer dazwischen.
+            self.deckung_ort = None
+            if k.pos.distance_to(p) <= K.TRUPP["deckung_genau"]:
+                self._deckung_platz = pygame.Vector2(k.pos)
+                return _nichts("fertig" if self._in_deckung() else "gescheitert")
+            return self._an_stelle(p, ein), pygame.Vector2(gefahr[0]), False, False, "laeuft"
         if self.deckung_ort is not None and self.deckung_suche <= 0.0 \
                 and self.dicht_gedeckt(self.deckung_ort, gefahr[0]):
             # Deckt der Platz noch, bleibt er (seit 0.34.52): kurz davor lag

@@ -105,6 +105,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.53 | INFO zeigt beim Bergen wie bisher den Retter; neu ist nur, dass es einer ist und die anderen ZUR STELLE/AUS DECKUNG in Deckung bleiben - zu sehen mit VERWUNDETE BOTS und Szene `bergen_puppen`; Verhaltens-Test `python tests/test_verhalten.py bergen` |
 | 0.34.52 | Mit festem Zufall (`tm._bot_rnd.seed(n)`) stellt der Testmodus jedes Mal dasselbe auf - Trupps, Spawner, Merkmale, Namen; darauf baut die neue Verhaltens-Suite `tests/test_verhalten.py` (Szenen nach der Schlacht, Schusslinie, Deckung, geknickte Front, Bergen, Last; einzeln: `python tests/test_verhalten.py bergen`) |
 | 0.34.51 | INFO zeigt bei geknickter Front jeden Abschnitt als eigene Linie mit Strich zu seiner Gruppe; `sauber_trupps` (fuer Aufnahmen): Trupps auch in der sauberen Ansicht; Szene `abschnitte` |
 | 0.34.50 | Testmenue BOTS SPRINTEN (AN/AUS); Sprechblase ueber dem, der gerade zuruft; Zurufe unten links (hell) neben dem Funk; INFO zeigt Ausdauer (Balken), FLANKIERT und eine orange Linie zu dem, der auf ihn schoss; neue Aktionen umstellen (Ziel flanke_sichern) in GEDANKEN |

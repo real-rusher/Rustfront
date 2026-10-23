@@ -168,6 +168,7 @@ class Trupp:
         self._stellungen(leute)
         self._hilfe_auswerten()
         self._bergung_planen(leute)
+        self._bergung_deckung(leute)
 
     def _lage_sammeln(self, leute) -> None:
         """Wer einen Gegner sieht und jemanden im Trupp in Sprechweite hat,
@@ -932,6 +933,7 @@ class Trupp:
             for w, (o, e, _z) in getattr(m.hirn, "erinnerung", {}).items():
                 if e == opfer.ebene and not any(o.distance_to(q) < 40.0 for q in orte):
                     orte.append(pygame.Vector2(o))
+        b["orte"] = orte
         n = 0
         for o in orte:
             if (o.distance_to(opfer.pos) <= v["bedrohung"]
@@ -968,6 +970,53 @@ class Trupp:
         while len(retter) < soll and frei:
             retter.add(frei.pop(0).nummer)
         b["retter"] = retter
+
+
+    def _bergung_deckung(self, leute) -> None:
+        """Waehrend einer geborgen wird, bleiben alle anderen in Deckung (seit
+        0.34.52): wer gedeckt steht, bleibt dort; wer im Freien steht - etwa
+        nach dem Rauchwurf -, geht zur naechsten Deckung. Gemeldet: "alle
+        Bots haben ihre Deckung verlassen, um zu bergen ... so viele wie
+        moeglich sollen eigentlich in Deckung bleiben." Der Retter selbst
+        laeuft los (bot_goap: kamerad_bergen)."""
+        b = self.bergung
+        if b is None or not b.get("orte"):
+            return
+        welt = self.g.welt
+        v = K.VERWUNDET
+        for m in leute:
+            if m.nummer in b["retter"] or m.ebene != b["opfer"].ebene:
+                continue
+            orte = [o for o in b["orte"] if o.distance_to(m.pos) <= v["bedrohung"] * 1.5]
+            if not orte:
+                continue
+            mitte = sum(orte, pygame.Vector2(0, 0)) / len(orte)
+
+            def gedeckt(p):
+                return all(welt.deckung(o, p, m.ebene) != "" for o in orte) \
+                    and self.gedeckt_hier(p, m.ebene, mitte)
+
+            # Wer gedeckt steht, bleibt dort - jeder Schritt waere einer zu viel.
+            if gedeckt(m.pos):
+                self.stellungen[m.nummer] = pygame.Vector2(m.pos)
+                continue
+            # Sonst bleibt, was eben noch deckte - sonst rueckten sie jeden Takt.
+            alt = self.stellungen_vorher.get(m.nummer)
+            if alt is not None and alt.distance_to(m.pos) <= v["halten_radien"][-1] and gedeckt(alt):
+                self.stellungen[m.nummer] = pygame.Vector2(alt)
+                continue
+            n = v["halten_richtungen"]
+            platz = None
+            for r in v["halten_radien"]:
+                for i in range(n):
+                    p = m.pos + pygame.Vector2(r, 0).rotate(i * 360.0 / n)
+                    if welt.frei(p, m.radius + 2, m.ebene, True) and gedeckt(p):
+                        if platz is None or p.distance_to(m.pos) < platz.distance_to(m.pos):
+                            platz = p
+                if platz is not None:
+                    break
+            if platz is not None:
+                self.stellungen[m.nummer] = an_deckung(welt, platz, m.radius, m.ebene, mitte)
 
 
 def sieht_durch_rauch(welt, a, b, ebene) -> bool:

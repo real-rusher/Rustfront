@@ -353,8 +353,11 @@ def abschnitte():
 
 # ══════════════════════════════════════════════════════════════════
 def bergen():
-    print("\n-- Bergen: der Naechste zieht ihn hinter die Mauer, dort hilft er auf")
+    print("\n-- Bergen: der Naechste zieht ihn hinter die Mauer, dort hilft er auf - die anderen bleiben in Deckung")
+    from dustfront.trupp import sieht_durch_rauch
     gelungen, gedeckt, gezogen, naechster = [], [], [], []
+    einer, andere_offen, werfer_offen = [], [], []
+    reicht = max(K.BOTS["reichweite"].values())
     for seed in SEEDS:
         tm = neu(seed)
         tx, ty, v = W.flaeche(tm, random.Random(seed), 20, 11)
@@ -370,11 +373,26 @@ def bergen():
         laufen(tm, 1.0)
         tm.toeten(opfer)
         nah = sorted((m for m in trupp.lebende() if m is not opfer and m is not trupp.fuehrer),
-                     key=lambda m: m.pos.distance_to(opfer.pos))[:2]
-        st = {"zieh": 0, "zieher": None, "hilf_ort": None}
+                     key=lambda m: m.pos.distance_to(opfer.pos))[:1]
+        st = {"zieh": 0, "zieher": None, "hilf_ort": None, "holen": set(), "werfer": set(), "offen": {}}
+
+        def offen(m, tm=tm, feinde=feinde):
+            # Offen ist, wen ein Gegner in Reichweite sieht und treffen kann.
+            return any(f.pos.distance_to(m.pos) <= reicht and tm.welt.deckung(f.pos, m.pos, 0) == ""
+                       and sieht_durch_rauch(tm.welt, f.pos, m.pos, 0) for f in feinde)
 
         def beobachten(trupp=trupp, opfer=opfer, st=st):
             for m in trupp.mitglieder:
+                if m is opfer or m.am_boden:
+                    continue
+                a = m.hirn.gehirn.aktion.name if m.hirn.gehirn.aktion else ""
+                if a in ("zum_kameraden", "kamerad_ziehen", "aufhelfen", "aufhelfen_offen") \
+                        or m.zieht == opfer.nummer or m.hilft == opfer.nummer:
+                    st["holen"].add(m.nummer)
+                if a == "rauch_werfen":
+                    st["werfer"].add(m.nummer)
+                if offen(m):
+                    st["offen"][m.nummer] = st["offen"].get(m.nummer, 0.0) + DT
                 if m.zieht == opfer.nummer:
                     st["zieh"] += 1
                     st["zieher"] = st["zieher"] or m
@@ -395,12 +413,23 @@ def bergen():
                                or f.pos.distance_to(st["hilf_ort"]) > reicht for f in feinde))
         gezogen.append(st["zieh"] * DT >= 1.0)
         naechster.append(st["zieher"] is not None and st["zieher"] in nah)
+        einer.append(len(st["holen"]) == 1)
+        andere_offen.append(max([t for n, t in st["offen"].items()
+                                 if n not in st["holen"] and n not in st["werfer"]] or [0.0]))
+        werfer_offen.append(max([st["offen"].get(n, 0.0) for n in st["werfer"]] or [0.0]))
         tm.verlassen()
     pruef("Der Verwundete steht nach hoechstens 30 Sekunden wieder (wenigstens 4 von 5)",
           anteil(gelungen) >= 0.8, str(gelungen))
     pruef("... aufgeholfen wird gedeckt vor jedem Gegner, der ihn treffen koennte", anteil(gedeckt) >= 0.8, str(gedeckt))
     pruef("... vorher wurde er wirklich gezogen (wenigstens eine Sekunde)", anteil(gezogen) >= 0.8, str(gezogen))
-    pruef("... und gezogen hat einer der beiden, die ihm am naechsten waren", anteil(naechster) >= 0.8, str(naechster))
+    pruef("... und gezogen hat der, der ihm am naechsten war (nicht der Anfuehrer)", anteil(naechster) >= 0.8, str(naechster))
+    # Gemeldet (0.34.53): "alle Bots haben ihre Deckung verlassen, um zu
+    # bergen" - das macht das Bergen zur Todesfalle.
+    pruef("Nur einer holt ihn - nicht der ganze Trupp", all(einer), str(einer))
+    pruef("... wer weder holt noch Rauch wirft, steht waehrenddessen nicht offen (hoechstens 0,5 s)",
+          all(t <= 0.5 for t in andere_offen), str([round(t, 1) for t in andere_offen]))
+    pruef("... und wer den Rauch wirft, steht nur kurz offen (hoechstens 3 s)",
+          all(t <= 3.0 for t in werfer_offen), str([round(t, 1) for t in werfer_offen]))
 
 
 # Einzeln: python tests/test_verhalten.py bergen abschnitte

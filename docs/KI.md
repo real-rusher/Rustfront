@@ -1319,7 +1319,17 @@ dann je Ursache behoben:
 * **Zufall**: `_bot_rnd` mit Seed macht den Testmodus wiederholbar -
   sonst waren Fehler nicht nachzustellen.
 
-### 11.11 Was noch offen ist
+### 11.11 Nachtrag (0.34.53): Bergen ohne Todesfalle
+
+Gemeldet: "alle Bots haben ihre Deckung verlassen, um zu bergen". Jetzt
+`VERWUNDET["retter"] = 1`; waehrend eine Bergung laeuft, setzt
+`Trupp._bergung_deckung` jedem anderen eine gedeckte Stellung (wer
+gedeckt steht, bleibt; sonst die naechste Deckung, an das Hindernis
+gerueckt). Die Tatsache `bergung_halten` sperrt nachsetzen, flankieren
+und suchen (wesen/bots.txt); `tun_deckung` und `tun_niederhalten` gehen
+dann auf dem Weg zur Trupp-Stellung, nicht geradeaus.
+
+### 11.12 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.

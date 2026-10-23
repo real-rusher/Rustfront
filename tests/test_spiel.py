@@ -11978,6 +11978,56 @@ for _ in range(2):
 pruef("Testmodus mit festem Zufall: dieselbe Aufstellung, dieselben Namen (Aufnahmen, Verhaltenstests)",
       _auf104[0] == _auf104[1], "")
 
+
+print("\n-- Bergen: einer holt ihn, die anderen bleiben in Deckung (0.34.53)")
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm._bot_rnd.seed(106)
+_tm.wiedereinstieg = False
+_tm.verwundete_setzen(True)
+_tx106, _ty106 = _freie_flaeche86(_tm.welt, random.Random(106), 18, 11)
+def _v106(x_, y_):
+    return pygame.Vector2((_tx106 + x_ + 0.5) * K.TILE, (_ty106 + y_ + 0.5) * K.TILE)
+for y_ in range(2, 9):
+    _tm.welt.ebene(0).setzen(_tx106 + 13, _ty106 + y_, K.WAND)
+_tm.welt._wege = None
+_tr106 = _tm.trupp_setzen(_v106(15, 5), 0, {"groesse": 4, "team": 0, "fuehrer": "funk"})
+_fe106 = [_tm.puppe_setzen(_v106(2, 4 + 2 * i_), 0, {"team": 1, "leben": 10.0}) for i_ in range(2)]
+for f_ in _fe106:
+    f_.unverwundbar = 1e9
+_op106 = next(m_ for m_ in _tr106.mitglieder if m_ is not _tr106.fuehrer)
+_op106.pos.update(_v106(9, 5))
+_tr106.lage = {w_: [pygame.Vector2(w_.pos), 0, _tm.welt.zeit] for w_ in _fe106}
+_tm.ki_stopp = True
+_tm.toeten(_op106)
+_frei106 = [m_ for m_ in _tr106.lebende() if m_ is not _tr106.fuehrer]
+_frei106[0].pos.update(_v106(14, 4))            # dicht hinter der Mauer
+_frei106[1].pos.update(_v106(10, 2))            # im Freien, wie nach einem Rauchwurf
+_tr106._takt = 0.0
+_tr106.schritt(_D87)
+_b106 = _tr106.bergung
+_naechst106 = min(_frei106, key=lambda m_: m_.pos.distance_to(_op106.pos))
+pruef("Ein Retter, nicht zwei - der Naechste, nicht der Anfuehrer",
+      K.VERWUNDET["retter"] == 1 and _b106 is not None and _b106["retter"] == {_naechst106.nummer},
+      str(_b106 and _b106["retter"]))
+_ruhig106 = [m_ for m_ in _tr106.lebende() if m_.nummer not in _b106["retter"]]
+def _gedeckt106(p_):
+    return all(_tm.welt.deckung(f_.pos, p_, 0) != "" for f_ in _fe106)
+pruef("... jeder andere bekommt eine gedeckte Stellung, solange er geborgen wird",
+      all(_tr106.stellung(m_) is not None and _gedeckt106(_tr106.stellung(m_)) for m_ in _ruhig106),
+      str([(m_.nummer, _tr106.stellung(m_)) for m_ in _ruhig106]))
+_hinten106 = next(m_ for m_ in _ruhig106 if m_.pos.distance_to(_v106(14, 4)) < 1.0) if any(
+    m_.pos.distance_to(_v106(14, 4)) < 1.0 for m_ in _ruhig106) else None
+pruef("... wer schon gedeckt steht, bleibt dort",
+      _hinten106 is None or _tr106.stellung(_hinten106).distance_to(_hinten106.pos) < 1.0, "")
+_fk106 = {m_.nummer: m_.hirn._bergung_fakten()["bergung_halten"] for m_ in _tr106.lebende()}
+pruef("... sie wissen es (bergung_halten), der Retter nicht",
+      all(_fk106[m_.nummer] for m_ in _ruhig106) and not any(_fk106[n_] for n_ in _b106["retter"]), str(_fk106))
+_ak106 = _WD88.daten().aktionen
+pruef("... und wer haelt, setzt nicht nach, flankiert nicht und geht nicht suchen",
+      all("bergung_halten" in str(getattr(_ak106[n_], "braucht", "")) for n_ in ("nachsetzen", "flankieren", "suchen")),
+      "")
+_tm.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

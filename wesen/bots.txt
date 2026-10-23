@@ -57,6 +57,8 @@
 #   bergen_sicher        es scheint sicher genug, ihn zu holen
 #   bergung_laeuft       einer zieht ihn gerade oder hilft ihm auf
 #   anderer_zieht        ein anderer zieht ihn schon (seit 0.34.50) - ziehen kann nur einer
+#   bergung_halten       im Trupp wird einer geborgen, und er ist nicht der Retter: er
+#                        bleibt in Deckung (seit 0.34.53) - kein Nachsetzen, Flankieren, Suchen
 #   geschwaecht          er wurde wiederbelebt: weniger Leben, langsamer, zielt schlechter
 # Ziel-Fakten, die nie wahr werden, sondern nur das Ziel benennen:
 #   feind_besiegt, kamerad_geschuetzt, sturm_fertig, gruppe_getroffen, sicher,
@@ -324,7 +326,7 @@ kosten: 0.5
 tut: werfen
 
 [aktion flankieren]
-braucht: feind_bekannt, !linie_frei, flanke_frei, munition_da
+braucht: feind_bekannt, !linie_frei, flanke_frei, munition_da, !bergung_halten
 macht: feind_sichtbar, linie_frei
 kosten: 3 - mut + 5 * ist_fuehrer + 4 * geschwaecht + 8 * min(1, trupp_igel + trupp_engstelle)
 tut: flankieren
@@ -346,12 +348,15 @@ tut: nahkampf
 funk: leer
 
 [aktion suchen]
+# Waehrend einer geborgen wird, geht keiner suchen (seit 0.34.53): die
+# anderen geben aus der Deckung Feuerschutz, statt mit hinaus zu laufen.
+braucht: !bergung_halten
 macht: feind_sichtbar, linie_frei, feind_bekannt
 kosten: 5
 tut: suchen
 
 [aktion nachsetzen]
-braucht: feind_bekannt, !feind_sichtbar
+braucht: feind_bekannt, !feind_sichtbar, !bergung_halten
 macht: feind_sichtbar
 kosten: 2
 tut: nachsetzen

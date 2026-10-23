@@ -1606,7 +1606,12 @@ VERWUNDET = dict(
     danach_fehler=1.4,        # x Zielfehler
     danach_abstand=80.0,      # so viel mehr Abstand haelt er (Aufgaben auf Distanz)
     bedrohung=320.0,          # Gegner so nah an einem Liegenden, die ihn sehen, bedrohen die Bergung
-    retter=2,                 # hoechstens so viele ziehen und helfen
+    # Einer holt ihn (seit 0.34.52, war 2), die anderen bleiben in Deckung -
+    # gemeldet: sonst "wuerden sie ja alle quasi einfach dann gekillt", und
+    # das Bergen waere eine Todesfalle.
+    retter=1,                 # hoechstens so viele ziehen und helfen
+    halten_radien=(36.0, 64.0, 100.0, 140.0, 190.0),   # so weit sucht, wer waehrenddessen in Deckung geht
+    halten_richtungen=16,
     deckung_radien=(60.0, 100.0, 140.0, 190.0, 240.0),   # so weit sucht ein Retter Deckung fuer den Liegenden
     rauch_nah=70.0,           # Rauch so nah am Liegenden: die Bergung ist gedeckt
     dranbleiben=12.0,         # so lange bringen die Retter eine angefangene Bergung zu Ende (0.34.50)
