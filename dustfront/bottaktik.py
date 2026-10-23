@@ -360,6 +360,11 @@ class Taktik:
         self.funken(anlass)
         return True
 
+    def druck_pause_faktor(self) -> float:
+        """x Pause zwischen zwei Stoessen beim Niederhalten - hier 1, beim
+        Feuerschutz fuer einen Retter kuerzer (bot_goap.py)."""
+        return 1.0
+
     def _munition_reicht(self) -> bool:
         """Niederhalten frisst Munition. Nur, solange mehr als `druck_rest`
         des Gewohnten bleibt - die letzten Schuss sind fuer Treffer."""
@@ -465,6 +470,7 @@ class Taktik:
             # Je Waffe wie im Kampf (seit 0.34.38): ein MG haelt man auch
             # beim Niederhalten lange.
             self.stoss_rest, self._pause_naechste, _still = self._stoss()
+            self._pause_naechste *= self.druck_pause_faktor()
         if self.stoss_rest > 0.0:
             if self.stoss_rest <= dt:
                 self.pause_rest = self._pause_naechste

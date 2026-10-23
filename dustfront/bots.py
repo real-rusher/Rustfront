@@ -245,6 +245,14 @@ class BotHirn(Taktik):
         if feuern and k.waffe_daten.get("art") == "schuss" and self.kamerad_im_weg(weit):
             feuern = False
         ein["ziel"] = [round(maus.x, 1), round(maus.y, 1)]
+        if (feuern and k.waffe_daten.get("art") == "schuss"
+                and self.g.welt.deckung(k.pos, pygame.Vector2(ein["ziel"]), k.ebene) == "wand"):
+            # Nie in eine Mauer (seit 0.34.54, gemeldet: "Bots versuchen oft
+            # durch Mauern zu schiessen") - sie haelt jede Kugel auf, und
+            # dahinter sieht er nichts. In eine Kiste ("hindernis") darf er
+            # weiter: so haelt er den nieder, der dahinter sitzt. Gefragt mit
+            # dem Punkt, der an die Figur geht (gerundet).
+            feuern = False
         ein["will"] = [round(will.x, 2), round(will.y, 2)]
         ein["feuert"] = bool(feuern)
         ein["zielt"] = bool(zielt)

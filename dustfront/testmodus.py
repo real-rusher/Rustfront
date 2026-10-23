@@ -372,6 +372,9 @@ class Testmodus(Gefecht):
         self.verwundete = bool(z.get("verwundete", True))
         # Sprinten der Bots (seit 0.34.50), zum Vergleichen abschaltbar.
         self.bot_sprint = bool(z.get("bot_sprint", True))
+        # Der Nebel jenseits des normalen Bildes (seit 0.34.54), abschaltbar:
+        # herausgezoomt sieht man dann jeden Gegner bis an den Rand.
+        self.nebel = bool(z.get("nebel", True))
         self._sp_werte = dict(z.get("sp_werte", {}))
         self._sp_nr = int(z.get("sp_nr", 0))
         self._welt_schritte = 1
@@ -1242,6 +1245,7 @@ class Testmodus(Gefecht):
             ("entf", "ENTF-TASTE", "TÖTET" if self.entf_toetet else "LÖSCHT"),
             ("verwundete", "VERWUNDETE BOTS (LIEGEN, BERGEN)", "AN" if self.verwundete else "AUS"),
             ("sprint", "BOTS SPRINTEN", "AN" if self.bot_sprint else "AUS"),
+            ("nebel", "NEBEL (SICHTWEITE)", "AN" if self.nebel else "AUS - ALLES SICHTBAR"),
             ("einstellungen", "EINSTELLUNGEN", ""),
             ("hauptmenue", "ZUM HAUPTMENÜ", ""),
         ]
@@ -1267,7 +1271,7 @@ class Testmodus(Gefecht):
                     blend_beobachter=self.blend_beobachter,
                     ruckeln_beobachter=self.ruckeln_beobachter, sauber=self.sauber,
                     entf_toetet=self.entf_toetet, verwundete=self.verwundete,
-                    bot_sprint=self.bot_sprint,
+                    bot_sprint=self.bot_sprint, nebel=self.nebel,
                     sp_werte=self._sp_werte, sp_nr=self._sp_nr)
 
     def menue_wirken(self, schluessel: str, schritt: int = 1, ausloesen: bool = False) -> None:
@@ -1319,6 +1323,8 @@ class Testmodus(Gefecht):
             self.verwundete_setzen(not self.verwundete)
         elif schluessel == "sprint":
             self.bot_sprint = not self.bot_sprint
+        elif schluessel == "nebel":
+            self.nebel = not self.nebel
         elif schluessel == "einstellungen" and ausloesen:
             from .menues import Einstellungen
             self.menue_offen = False
@@ -1388,8 +1394,10 @@ class Testmodus(Gefecht):
     def sicht_welt(self):
         """In der sauberen Ansicht kein Nebel: herausgezoomt zeichnet das
         Gefecht Figuren sonst nur im normalen Bild um den Beobachter - am
-        Rand fehlten sie in den ersten Aufnahmen ganz."""
-        if self.sauber:
+        Rand fehlten sie in den ersten Aufnahmen ganz. Ebenso mit NEBEL AUS
+        im Testmenue (seit 0.34.54): die Sichtweite reicht dann bis an den
+        Rand des Bildes, wie weit man auch herauszoomt."""
+        if self.sauber or not self.nebel:
             return None
         return super().sicht_welt()
 

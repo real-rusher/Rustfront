@@ -996,28 +996,51 @@ class Trupp:
                 return all(welt.deckung(o, p, m.ebene) != "" for o in orte) \
                     and self.gedeckt_hier(p, m.ebene, mitte)
 
-            # Wer gedeckt steht, bleibt dort - jeder Schritt waere einer zu viel.
+            # Wohin er Feuerschutz gibt (seit 0.34.54): auf den, der dem
+            # Liegenden am naechsten ist - der bedroht die Bergung am meisten.
+            schuetze = min(orte, key=lambda o: o.distance_to(b["opfer"].pos))
+            reicht = K.BOTS["reichweite"].get(m.waffe_name, 300.0)
+            lehnen = getattr(m.hirn, "lehnpunkt", None)
+
+            def schiesst(p):
+                # Von hier aus kann er sich herauslehnen und trifft ihn auch.
+                return (p.distance_to(schuetze) <= reicht and lehnen is not None
+                        and lehnen(p, schuetze) is not None)
+
+            def wert(p):
+                w = p.distance_to(m.pos)
+                if not schiesst(p):
+                    w += v["schutz_ohne_schuss"]
+                return w
+
+            # Wer gedeckt steht und von dort schiessen kann, bleibt - jeder
+            # Schritt waere einer zu viel. Sonst die naechste gedeckte Stelle,
+            # lieber eine, von der aus er Feuerschutz geben kann: gemeldet
+            # (0.34.54), hinter der langen Mauer sassen sie sicher, konnten
+            # aber nicht schiessen, und der Retter wurde abgeschossen.
+            kandidaten = []
             if gedeckt(m.pos):
-                self.stellungen[m.nummer] = pygame.Vector2(m.pos)
-                continue
-            # Sonst bleibt, was eben noch deckte - sonst rueckten sie jeden Takt.
+                if schiesst(m.pos):
+                    self.stellungen[m.nummer] = pygame.Vector2(m.pos)
+                    continue
+                kandidaten.append(pygame.Vector2(m.pos))
             alt = self.stellungen_vorher.get(m.nummer)
             if alt is not None and alt.distance_to(m.pos) <= v["halten_radien"][-1] and gedeckt(alt):
-                self.stellungen[m.nummer] = pygame.Vector2(alt)
-                continue
+                kandidaten.append(pygame.Vector2(alt))
             n = v["halten_richtungen"]
-            platz = None
             for r in v["halten_radien"]:
                 for i in range(n):
                     p = m.pos + pygame.Vector2(r, 0).rotate(i * 360.0 / n)
-                    if welt.frei(p, m.radius + 2, m.ebene, True) and gedeckt(p):
-                        if platz is None or p.distance_to(m.pos) < platz.distance_to(m.pos):
-                            platz = p
-                if platz is not None:
-                    break
-            if platz is not None:
-                self.stellungen[m.nummer] = an_deckung(welt, platz, m.radius, m.ebene, mitte)
-
+                    if not welt.frei(p, m.radius + 2, m.ebene, True):
+                        continue
+                    p = an_deckung(welt, p, m.radius, m.ebene, mitte)
+                    if gedeckt(p):
+                        kandidaten.append(p)
+            if kandidaten:
+                # Die vorige Stelle ein wenig lieber - sonst rueckten sie jeden Takt.
+                bestes = min(kandidaten, key=lambda p: wert(p) - (v["schutz_halten"] if alt is not None
+                                                                   and p.distance_to(alt) < 1.0 else 0.0))
+                self.stellungen[m.nummer] = bestes
 
 def sieht_durch_rauch(welt, a, b, ebene) -> bool:
     """Freie Sicht von a nach b - ohne Mauer und ohne Rauch auf der Linie

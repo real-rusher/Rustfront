@@ -156,6 +156,8 @@ info: Hat sich viel geaendert, meldet der Anfuehrer es den anderen Trupps.
 will: rauch_liegt
 # Der Anfuehrer deckt den Rueckzug mit seinem Rauch - und das Bergen: liegt
 # einer im Blick der Gegner, macht erst der Rauch es sicher genug.
+# Rang 1 beim Bergen (seit 0.34.54): sonst kaeme der Feuerschutz vor dem Rauch.
+rang: rauch_da * ist_fuehrer * kamerad_liegt * feind_bekannt
 dringlich: 92 * rauch_da * ist_fuehrer * min(1, trupp_rueckzug + kamerad_liegt) * feind_bekannt
 bindung: 1
 info: Rauch genau dorthin, wo er gebraucht wird: auf den Liegenden, beim Rueckzug auf den Trupp.
@@ -225,7 +227,13 @@ info: Mehrere Gegner beisammen: was viele zugleich trifft.
 
 [ziel feuerschutz]
 will: kamerad_geschuetzt
-dringlich: 52 * kamerad_braucht_schutz * feind_bekannt * (1 - feind_sichtbar) * (0.5 + disziplin)
+# Waehrend einer geborgen wird (seit 0.34.54), ist das die Aufgabe aller
+# anderen - Rang 1, vor Welle, Funk und Feuerkampf: aus der Deckung den
+# Gegner niederhalten, der den Retter treffen koennte. Gemeldet: "dann kommt
+# ein anderer raus und ich kann ihn einfach wieder anschiessen, werde dabei
+# nicht beschossen." Nachladen (85), Flanke (95), Panik und Granate gehen vor.
+rang: bergung_halten * feind_bekannt
+dringlich: 52 * kamerad_braucht_schutz * feind_bekannt * (1 - feind_sichtbar) * (0.5 + disziplin) * (1 - bergung_halten) + 80 * bergung_halten * feind_bekannt
 bindung: 1.5
 info: Ein Kamerad braucht Schutz und der Gegner ist in Deckung: niederhalten.
 

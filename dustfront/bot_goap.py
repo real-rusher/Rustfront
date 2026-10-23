@@ -192,6 +192,12 @@ class GoapHirn(BotHirn):
             # und von dort her darf er nicht offen stehen (flankiert).
             self.beschossen_von[von] = (pygame.Vector2(von.pos), getattr(von, "ebene", k.ebene),
                                         self.g.welt.zeit)
+            t = self.trupp
+            if t is not None and kampffaehig(von) and t.in_kontakt(k):
+                # Wer getroffen wird, schreit es heraus - woher, weiss dann
+                # jeder in Hoerweite (seit 0.34.54). Sonst schoss einer den
+                # Retter nieder, und die anderen wussten nichts von ihm.
+                t.lage[von] = [pygame.Vector2(von.pos), getattr(von, "ebene", k.ebene), self.g.welt.zeit]
         self.innen.ereignis("getroffen")
         if k.leben < K.BOTS["deckung_leben"]:
             self.innen.ereignis("angeschlagen")
@@ -216,11 +222,63 @@ class GoapHirn(BotHirn):
     # ── Sinne ─────────────────────────────────────────────────────
     def _gefahr(self):
         """Wo der Gegner ist, vor dem er sich in Acht nimmt: (Ort, Ebene,
-        Wesen) - der, den er sieht, sonst der zuletzt gesehene."""
+        Wesen) - der, den er sieht, sonst der zuletzt gesehene. Waehrend
+        einer geborgen wird, der, der den Retter treffen koennte (0.34.54)."""
         z = self.ziel
         if z is not None and self.ziel_ok(z):
             return pygame.Vector2(z.pos), z.ebene, z
+        if self.gehirn is not None and self.gehirn.fakten.get("bergung_halten"):
+            b = self.bergung_bedrohung()
+            if b is not None:
+                return b
         return self.letzter_feind()
+
+    def druck_pause_faktor(self) -> float:
+        """Feuerschutz fuer einen Retter (seit 0.34.54): kurze Pausen, damit
+        der Gegner den Kopf unten behaelt."""
+        if self.gehirn is not None and self.gehirn.fakten.get("bergung_halten"):
+            return K.BOTS["schutz_pause"]
+        return 1.0
+
+    def bedroht_bergung(self, ort, ebene) -> bool:
+        """Koennte, wer bei `ort` steht, den Retter oder den Liegenden
+        treffen? Nur im Trupp, waehrend einer geborgen wird."""
+        t = self.trupp
+        b = t.bergung if t is not None else None
+        if b is None:
+            return False
+        welt = self.g.welt
+        ziele = [b["opfer"]] + [m for m in t.lebende() if m.nummer in b["retter"]]
+        reicht = max(K.BOTS["reichweite"].values())
+        return any(x.ebene == ebene and x.pos.distance_to(ort) <= reicht
+                   and welt.deckung(ort, x.pos, ebene) == "" for x in ziele)
+
+    def bergung_bedrohung(self):
+        """Der bekannte Gegner, der den Retter oder den Liegenden treffen
+        koennte, der naechste zu ihm - (Ort, Ebene, Wesen) oder None."""
+        k = self.k
+        jetzt = self.g.welt.zeit
+        kandidaten = list(self.trupp.feinde(k.ebene)) if self.trupp is not None else []
+        for w, (ort, ebene, zeit) in self.gesehen.items():
+            if kampffaehig(w) and ebene == k.ebene and jetzt - zeit <= K.BOTS["gedaechtnis"]:
+                kandidaten.append((pygame.Vector2(w.pos if jetzt - zeit < 0.2 else ort), ebene, w))
+        # Wer schiesst, ist zu hoeren, auch hinter Mauer und Rauch: dorthin
+        # haelt er nieder, auch ohne ihn zu sehen.
+        freunde = [x.pos for x in self.kameraden() if x.ebene == k.ebene] + [k.pos]
+        for ort, ebene, zeit, art in self.lagebild:
+            if art == "schuss" and ebene == k.ebene and jetzt - zeit <= K.BOTS["schutz_hoeren"] \
+                    and all(ort.distance_to(f) > K.BOTS["schutz_fremd"] for f in freunde):
+                # Was mitten zwischen den eigenen Leuten knallte, war eine
+                # Granate, kein Schuetze - dorthin nicht (gesehen 0.34.54).
+                kandidaten.append((pygame.Vector2(ort), ebene, None))
+        bester = None
+        for ort, ebene, w in kandidaten:
+            if (w is not None and not kampffaehig(w)) or not self.bedroht_bergung(ort, ebene):
+                continue
+            d = k.pos.distance_to(ort)
+            if bester is None or d < bester[0]:
+                bester = (d, (pygame.Vector2(ort), ebene, w))
+        return None if bester is None else bester[1]
 
     def _in_deckung(self) -> bool:
         p = self._deckung_platz
@@ -945,6 +1003,8 @@ class GoapHirn(BotHirn):
             bonus += K.TRUPP["fuehrer_bonus"]
         if any(getattr(m.hirn, "ziel", None) is w for m in t.lebende() if m is not self.k):
             bonus += K.TRUPP["buendeln_bonus"]
+        if self.bedroht_bergung(w.pos, w.ebene):
+            bonus += K.TRUPP["bergung_bonus"]     # wer den Retter trifft, zuerst (0.34.54)
         blick = t.blick_fuer(self.k)
         if blick is not None and t.abschnitte > 1:
             # Geknickte Front (0.34.50): jeder nimmt die Gegner in seinem
@@ -1368,6 +1428,11 @@ class GoapHirn(BotHirn):
         if gefahr is None or not self._munition_reicht():
             return _nichts("gescheitert")
         ort, ebene, gegen = gefahr
+        if self.druck_rest <= 0.0 and self.gehirn.fakten.get("bergung_halten"):
+            # Feuerschutz fuer den Retter ohne Pause (seit 0.34.54): zwischen
+            # zwei Stoessen lagen sonst dreieinhalb Sekunden Ruhe.
+            self.druck_pause = 0.0
+            self._druck_lief = False
         if self.druck_rest <= 0.0:
             if self._druck_lief:
                 return _nichts("fertig")
@@ -1381,6 +1446,20 @@ class GoapHirn(BotHirn):
             # Im Trupp haelt er aus seiner gedeckten Stellung nieder (seit
             # 0.34.52) - nach dem Rauchwurf blieb er sonst im Freien stehen.
             will = self._an_stelle(p, ein)
+            if self.gehirn.fakten.get("bergung_halten") and (
+                    self.vorn_zu(punkt) or self.g.welt.deckung(self.k.pos, punkt, self.k.ebene) == "wand"):
+                # Feuerschutz fuer den Retter (seit 0.34.54): steht die eigene
+                # Deckung im Weg, lehnt er sich neben ihr heraus - halb in
+                # Deckung, statt in die Kiste zu zielen.
+                lp = self.lehnpunkt(p, ort)
+                if lp is not None:
+                    will = self._an_stelle(lp, ein)
+        if will.length_squared() < 0.01 and self.g.welt.deckung(self.k.pos, punkt, self.k.ebene) == "wand":
+            # Eine Mauer steht dazwischen, und er geht nirgendwohin, wo er
+            # schiessen koennte (seit 0.34.54): niederhalten geht so nicht -
+            # sonst zielte er nur stumm auf die Mauer, bis die Zeit um war.
+            self.druck_rest = 0.0
+            return _nichts("gescheitert")
         return will, punkt, self._abdruecken(dt, punkt, ein), False, "laeuft"
 
     def tun_deckung(self, dt, ein):
@@ -1564,7 +1643,10 @@ class GoapHirn(BotHirn):
         if k.pos.distance_to(platz) > 4.0:
             return self._weg_richtung(platz, k.ebene, ein), ort, False, False, "laeuft"
         lo, hi = b["lehnen_warten"]
-        st.update(phase="drin", bis=jetzt + self.rnd.uniform(lo, hi) * (1.0 + self.innen.stress))
+        warten = self.rnd.uniform(lo, hi) * (1.0 + self.innen.stress)
+        if self.gehirn.fakten.get("bergung_halten"):
+            warten *= b["schutz_warten"]      # Feuerschutz fuer den Retter: oefter heraus (0.34.54)
+        st.update(phase="drin", bis=jetzt + warten)
         return pygame.Vector2(0, 0), ort, False, False, "laeuft"
 
     def ecke(self):

@@ -1329,7 +1329,29 @@ gerueckt). Die Tatsache `bergung_halten` sperrt nachsetzen, flankieren
 und suchen (wesen/bots.txt); `tun_deckung` und `tun_niederhalten` gehen
 dann auf dem Weg zur Trupp-Stellung, nicht geradeaus.
 
-### 11.12 Was noch offen ist
+### 11.12 Nachtrag (0.34.54): Feuerschutz beim Bergen
+
+Gemeldet: "Dann kommt ein anderer raus und ich kann ihn einfach wieder
+anschiessen, werde dabei nicht beschossen." Das Ziel `feuerschutz` hat
+mit `bergung_halten` Rang 1 (Dringlichkeit 80: unter Nachladen 85 und
+Flanke 95; der Rauch fuer den Liegenden hat dann ebenfalls Rang 1, 92).
+Die Gefahr ist der, der Retter oder Liegenden treffen kann
+(`bedroht_bergung`, `bergung_bedrohung`), auch nur gehoert (Lagebild);
+wer getroffen wird, meldet den Schuetzen sofort in die Lage des Trupps.
+Ziel-Bonus `bergung_bonus`; beim Lehnen kuerzer drin (`schutz_warten`),
+beim Niederhalten kurze Pausen (`schutz_pause`) und keine Sperre
+zwischen zwei Druckphasen; steht die eigene Deckung im Weg, zum
+Lehnpunkt. `_bergung_deckung` waehlt gedeckte Plaetze, von denen aus
+er sich zum Schuetzen herauslehnen kann und die in Reichweite liegen.
+
+Nicht durch Mauern: `BotHirn.eingabe` laesst keinen Schuss los, wenn
+zwischen ihm und dem Punkt, auf den der Lauf zeigt, eine sichtdichte
+Wand steht (vorher 17 Prozent der Feuerbilder im Trupp-Gefecht); eine
+Kiste ("hindernis") bleibt erlaubt - Niederhalten. `tun_niederhalten`
+scheitert, wenn er nur auf eine Mauer zielen koennte und nirgendwohin
+geht, wo er schiessen kann.
+
+### 11.13 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.

@@ -70,14 +70,17 @@ class Schuesse:
     def __init__(self, tm, schuetzen):
         self.tm = tm
         self.schuetzen = set(id(s) for s in schuetzen)
-        self.gesehen = set(id(w) for w in tm.welt.wesen)
+        # Die Wesen selbst festhalten, nicht nur ihre id(): ein verschwundenes
+        # Geschoss gibt sonst seine Nummer frei, und ein neues mit derselben
+        # wurde uebersehen (unter Python 3.8 oft).
+        self.gesehen = {id(w): w for w in tm.welt.wesen}
         self.liste = []
 
     def schritt(self):
         for w in self.tm.welt.wesen:
             if id(w) in self.gesehen:
                 continue
-            self.gesehen.add(id(w))
+            self.gesehen[id(w)] = w
             if isinstance(w, Geschoss) and id(getattr(w, "von", None)) in self.schuetzen:
                 self.liste.append((self.tm.welt.zeit, w.von, pygame.Vector2(w.pos),
                                    pygame.Vector2(1, 0).rotate(w.winkel)))
@@ -391,7 +394,11 @@ def bergen():
                     st["holen"].add(m.nummer)
                 if a == "rauch_werfen":
                     st["werfer"].add(m.nummer)
-                if offen(m):
+                # Zum Feuerschutz darf er sich herauslehnen (seit 0.34.54,
+                # gemeldet: "dass sie Gegner davon abhalten, die Person, die
+                # gerade am Bergen ist, anzugreifen") - sonst nicht offen.
+                lehnt = (m.hirn._lehnen is not None and m.hirn._lehnen["phase"] == "raus") or m.feuert
+                if offen(m) and not lehnt:
                     st["offen"][m.nummer] = st["offen"].get(m.nummer, 0.0) + DT
                 if m.zieht == opfer.nummer:
                     st["zieh"] += 1
@@ -426,14 +433,116 @@ def bergen():
     # Gemeldet (0.34.53): "alle Bots haben ihre Deckung verlassen, um zu
     # bergen" - das macht das Bergen zur Todesfalle.
     pruef("Nur einer holt ihn - nicht der ganze Trupp", all(einer), str(einer))
-    pruef("... wer weder holt noch Rauch wirft, steht waehrenddessen nicht offen (hoechstens 0,5 s)",
+    pruef("... wer weder holt noch Rauch wirft, steht waehrenddessen nicht offen, ausser zum Feuern (hoechstens 0,5 s)",
           all(t <= 0.5 for t in andere_offen), str([round(t, 1) for t in andere_offen]))
-    pruef("... und wer den Rauch wirft, steht nur kurz offen (hoechstens 3 s)",
+    pruef("... und wer den Rauch wirft, steht nur kurz offen, ausser zum Feuern (hoechstens 3 s)",
           all(t <= 3.0 for t in werfer_offen), str([round(t, 1) for t in werfer_offen]))
 
 
+# ══════════════════════════════════════════════════════════════════
+def feuerschutz():
+    print("\n-- Feuerschutz beim Bergen: ein Gegner, der schiesst - die anderen halten ihn nieder")
+    # Gemeldet (0.34.54): "Wenn ich spiele, dann kann ich tatsaechlich einfach
+    # einen anschiessen, bis er stirbt. Dann kommt ein anderer raus und ich
+    # kann ihn einfach wieder anschiessen, werde dabei nicht beschossen."
+    from dustfront.trupp import sieht_durch_rauch
+    reicht = max(K.BOTS["reichweite"].values())
+    je_s, nieder, offen_anteil = [], [], []
+    for seed in SEEDS:
+        tm = neu(seed)
+        tx, ty, v = W.flaeche(tm, random.Random(seed), 20, 11)
+        W.setzen(tm, tx, ty, [(13, y) for y in range(2, 9)], K.WAND)
+        W.setzen(tm, tx, ty, [(14, 1), (14, 9)], K.KISTE)
+        trupp = tm.trupp_setzen(v(15, 5), 0, {"groesse": 4, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+        # Der Gegner steht fuer den Spieler: er schiesst, und er faellt nicht.
+        g = tm.bot_setzen(v(6, 2), 0, {"team": 1, "hirn": "goap", "waffe": "sturm"})
+        g.unverwundbar = 1e9
+        g.hirn.merkmale["mut"] = 0.9
+        opfer = next(m for m in trupp.mitglieder if m is not trupp.fuehrer)
+        opfer.pos.update(v(9, 5))
+        opfer.vorher.update(opfer.pos)
+        for m in trupp.mitglieder:
+            m.max_leben = m.leben = 2000.0      # sie spueren Treffer, fallen aber nicht
+        W.kennen(trupp.mitglieder, [g], tm)
+        W.kennen([g], trupp.mitglieder, tm)
+        laufen(tm, 1.0)
+        tm.toeten(opfer)
+        zaehler = Schuesse(tm, trupp.mitglieder)
+        gort, st = [], {"nieder": 0.0, "offen": 0.0, "da": 0.0}
+        for _ in range(int(20.0 / DT)):
+            n = len(zaehler.liste)
+            tm.schritt(DT)
+            zaehler.schritt()
+            gort += [pygame.Vector2(g.pos)] * (len(zaehler.liste) - n)
+            if getattr(g.hirn, "unterdrueckt", 0.0) > 0.0:
+                st["nieder"] += DT
+            b = trupp.bergung or {}
+            for m in trupp.lebende():
+                if m is opfer or m.nummer in b.get("retter", ()):
+                    continue
+                st["da"] += DT
+                lehnt = (m.hirn._lehnen is not None and m.hirn._lehnen["phase"] == "raus") or m.feuert
+                if (not lehnt and g.pos.distance_to(m.pos) <= reicht and tm.welt.deckung(g.pos, m.pos, 0) == ""
+                        and sieht_durch_rauch(tm.welt, g.pos, m.pos, 0)):
+                    st["offen"] += DT
+            if opfer.lebt and not opfer.am_boden:
+                break
+        dauer = max(1.0, tm.welt.zeit - 2.0)
+        retter = set((trupp.bergung or {}).get("retter", ()))
+        auf_ihn = [1 for (_z, w, p, r), go in zip(zaehler.liste, gort)
+                   if w.nummer not in retter and abs((r.angle_to(go - p) + 180.0) % 360.0 - 180.0) < 15.0]
+        je_s.append(len(auf_ihn) / dauer)
+        nieder.append(st["nieder"] / dauer)
+        offen_anteil.append(st["offen"] / max(1e-6, st["da"]))
+        tm.verlassen()
+    pruef("Die anderen schiessen auf den, der den Retter bedroht (im Schnitt wenigstens 0,8 Schuss je Sekunde, keiner unter 0,3)",
+          sum(je_s) / len(je_s) >= 0.8 and min(je_s) >= 0.3, str([round(x, 2) for x in je_s]))
+    pruef("... er ist dabei meist niedergehalten (wenigstens 40 Prozent der Zeit)",
+          sum(nieder) / len(nieder) >= 0.4, str([round(x, 2) for x in nieder]))
+    pruef("... und offen stehen sie nur zum Feuern - sonst hoechstens ein Viertel der Zeit",
+          sum(offen_anteil) / len(offen_anteil) <= 0.25, str([round(x, 2) for x in offen_anteil]))
+
+
+# ══════════════════════════════════════════════════════════════════
+def mauern():
+    print("\n-- Nicht durch Mauern: zwei Trupps, Mauern und Kisten dazwischen")
+    # Gemeldet (0.34.54): "Bots versuchen oft durch Mauern zu schiessen" -
+    # gemessen waren es 17 Prozent aller Bilder, in denen sie feuerten.
+    zahl = {"wand": 0, "hindernis": 0, "frei": 0}
+    alt = BO.BotHirn.eingabe
+
+    def eingabe(self, dt):
+        ein = alt(self, dt)
+        k = self.k
+        if ein.get("feuert") and k.waffe_daten.get("art") == "schuss":
+            d = self.g.welt.deckung(k.pos, pygame.Vector2(ein["ziel"]), k.ebene)
+            zahl[d or "frei"] += 1
+        return ein
+
+    BO.BotHirn.eingabe = eingabe
+    try:
+        for seed in SEEDS[:3]:
+            tm = neu(seed)
+            tx, ty, v = W.flaeche(tm, random.Random(seed), 24, 13)
+            W.setzen(tm, tx, ty, [(12, y) for y in (2, 3, 4, 8, 9, 10)] + [(7, 6), (17, 6)], K.WAND)
+            W.setzen(tm, tx, ty, [(9, 3), (15, 9)], K.KISTE)
+            a = tm.trupp_setzen(v(20, 6), 0, {"groesse": 5, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+            b = tm.trupp_setzen(v(4, 6), 0, {"groesse": 5, "team": 1, "fuehrer": "funk", "mischung": "gemischt"})
+            for m in a.mitglieder + b.mitglieder:
+                m.max_leben = m.leben = 1500.0
+            W.kennen(a.mitglieder, b.mitglieder, tm)
+            W.kennen(b.mitglieder, a.mitglieder, tm)
+            laufen(tm, 15.0)
+            tm.verlassen()
+    finally:
+        BO.BotHirn.eingabe = alt
+    pruef("Keiner feuert, wenn eine Mauer zwischen ihm und dem Punkt steht, auf den er zielt",
+          zahl["wand"] == 0, str(zahl))
+    pruef("... gefeuert wird trotzdem (das Gefecht findet statt)", zahl["frei"] > 500, str(zahl))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
-TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen]
+TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern]
 NUR = sys.argv[1:]
 for teil in TEILE:
     if not NUR or teil.__name__ in NUR:

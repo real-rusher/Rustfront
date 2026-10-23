@@ -1131,6 +1131,10 @@ BOTS = dict(
     lehnen_versatz=(16.0, 22.0, 28.0, 36.0),   # so weit neben der Deckung lehnt er sich heraus
     lehnen_weite=48.0,        # so weit weg von seiner Deckung gilt er noch als darin
     lehnen_warten=(0.6, 1.5),  # so lange bleibt er drin, mal (1 + Stress) (s)
+    schutz_warten=0.35,       # x lehnen_warten beim Feuerschutz fuer einen Retter (0.34.54)
+    schutz_pause=0.4,         # x Pause zwischen zwei Stoessen dabei
+    schutz_fremd=120.0,       # ... und so weit weg von den eigenen Leuten (px)
+    schutz_hoeren=2.0,        # so frisch muss ein gehoerter Schuss sein, damit er dorthin niederhaelt (s)
     lehnen_raus=2.2,          # laenger bleibt er nicht draussen (s)
     ecke_radien=(14.0, 28.0, 42.0, 56.0, 70.0),   # Panik in Deckung: so weit sucht er eine Ecke
     # Volle Deckung vor halber (seit 0.34.46), in Pixeln Weg, die sie wert ist:
@@ -1397,6 +1401,7 @@ TRUPP = dict(
     flucht_hinter=60.0,       # in Panik flieht er so weit hinter die Mitte der anderen
     fuehrer_bonus=120.0,      # so viel lieber nimmt man Gegner nahe dem Anfuehrer
     buendeln_bonus=40.0,      # ... und die, auf die ein Kamerad schon schiesst
+    bergung_bonus=300.0,      # ... und waehrend einer geborgen wird, wer Retter oder Liegenden treffen kann (0.34.54)
     fuehrer_schutz=230.0,     # so nah am Anfuehrer: ein Gegner bedroht ihn
     # Funk zwischen den Anfuehrern.
     # Seit 0.34.48 viel laenger (war 2,2), und erst zieht er sich dafuer
@@ -1612,6 +1617,8 @@ VERWUNDET = dict(
     retter=1,                 # hoechstens so viele ziehen und helfen
     halten_radien=(36.0, 64.0, 100.0, 140.0, 190.0),   # so weit sucht, wer waehrenddessen in Deckung geht
     halten_richtungen=16,
+    schutz_ohne_schuss=150.0,  # so viel Weg (px) ist ihm ein Platz wert, von dem aus er Feuerschutz geben kann (0.34.54)
+    schutz_halten=20.0,       # ... und so viel lieber bleibt er bei der vorigen Stelle
     deckung_radien=(60.0, 100.0, 140.0, 190.0, 240.0),   # so weit sucht ein Retter Deckung fuer den Liegenden
     rauch_nah=70.0,           # Rauch so nah am Liegenden: die Bergung ist gedeckt
     dranbleiben=12.0,         # so lange bringen die Retter eine angefangene Bergung zu Ende (0.34.50)

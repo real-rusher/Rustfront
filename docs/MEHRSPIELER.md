@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.54 | Nichts Neues ueber das Netz. Nur das Verhalten der Bots (Feuerschutz beim Bergen), das nur der Gastgeber rechnet | Die Versionspruefung weist ab |
 | 0.34.53 | Nichts Neues ueber das Netz. Nur das Verhalten der Bots beim Bergen (ein Retter, die anderen in Deckung), das nur der Gastgeber rechnet | Die Versionspruefung weist ab |
 | 0.34.52 | Nichts Neues ueber das Netz. Nur das Verhalten der Bots (Ziele, Abschnitte, Deckung, Bergen, Wurf), das nur der Gastgeber rechnet; dazu rutscht ein Gezogener beim Gastgeber an Ecken entlang - der Gast bekommt wie immer nur den Ort | Die Versionspruefung weist ab |
 | 0.34.51 | Nichts Neues ueber das Netz. Nur das Verhalten der Bots im Trupp (nur beim Gastgeber) | Die Versionspruefung weist ab |

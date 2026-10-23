@@ -11051,8 +11051,12 @@ pruef("Zwei Gegner sehen ihn: der Trupp haelt das Bergen fuer zu gefaehrlich, be
       _b96_ is not None and not _b96_["sicher"] and _b96_["bedrohung"] >= 1
       and 1 <= len(_b96_["retter"]) <= K.VERWUNDET["retter"]
       and _tr96.fuehrer.nummer not in _b96_["retter"], str(_b96_))
-pruef("... der Anfuehrer will Rauch legen, um es sicher zu machen",
-      _tr96.fuehrer.hirn.gehirn.dringlichkeiten.get("rauch_legen", 0) > 0,
+# Seit 0.34.54 hat der Rauch beim Bergen Rang 1: manchmal fliegt er nach
+# einer halben Sekunde schon - dann hat er keinen mehr, und das ist recht so.
+_rauch_fliegt96 = any(getattr(w_, "bild", "") == "rauchgranate" and w_.lebt for w_ in _tm.welt.wesen) \
+    or bool(_tm.welt.rauch)
+pruef("... der Anfuehrer will Rauch legen, um es sicher zu machen (oder hat ihn schon geworfen)",
+      _tr96.fuehrer.hirn.gehirn.dringlichkeiten.get("rauch_legen", 0) > 0 or _rauch_fliegt96,
       str(_tr96.fuehrer.hirn.gehirn.dringlichkeiten.get("rauch_legen")))
 _akt96 = set()
 _erst96 = None          # war es sicher, als einer anfing zu ziehen oder aufzuhelfen?
@@ -11069,7 +11073,7 @@ for _ in range(int(30.0 / _D87)):
         break
 pruef("... geholt wird erst, wenn es sicher genug ist (Rauch oder ein zuversichtlicher Trupp) - "
       "dann steht er wieder",
-      _erst96 is True and (False, "zum_kameraden") in _akt96
+      _erst96 is True and ((False, "zum_kameraden") in _akt96 or (False, "kamerad_ziehen") in _akt96)
       and _opfer96.lebt and not _opfer96.am_boden,
       "%s, sicher beim Anfang: %s, liegt %s" % (sorted(_akt96), _erst96, _opfer96.am_boden))
 
@@ -12026,6 +12030,97 @@ _ak106 = _WD88.daten().aktionen
 pruef("... und wer haelt, setzt nicht nach, flankiert nicht und geht nicht suchen",
       all("bergung_halten" in str(getattr(_ak106[n_], "braucht", "")) for n_ in ("nachsetzen", "flankieren", "suchen")),
       "")
+_tm.verlassen()
+
+
+print("\n-- Feuerschutz beim Bergen: wer den Retter bedroht, wird niedergehalten (0.34.54)")
+_zl107 = _WD88.daten().ziele
+def _zw107(ziel_, **f_):
+    w_ = {"bergung_halten": 0, "feind_bekannt": 0, "kamerad_braucht_schutz": 0, "feind_sichtbar": 0,
+          "disziplin": 0.5, "rauch_da": 0, "ist_fuehrer": 0, "kamerad_liegt": 0, "trupp_rueckzug": 0}
+    w_.update(f_)
+    z_ = _zl107[ziel_]
+    return z_.rang.wert(w_), z_.dringlich.wert(w_)
+_r107 = _zw107("feuerschutz", bergung_halten=1, feind_bekannt=1, feind_sichtbar=1)
+_n107 = _zw107("feuerschutz", kamerad_braucht_schutz=1, feind_bekannt=1)
+_rauch107 = _zw107("rauch_legen", rauch_da=1, ist_fuehrer=1, kamerad_liegt=1, feind_bekannt=1)
+pruef("Feuerschutz hat beim Bergen Rang 1 - auch wenn er den Gegner sieht - und bleibt unter dem Nachladen (85)",
+      _r107[0] == 1 and 0 < _r107[1] < 85 and _n107[0] == 0, "%s %s" % (_r107, _n107))
+pruef("... der Rauch fuer den Liegenden geht trotzdem vor (Rang 1, dringlicher)",
+      _rauch107[0] >= 1 and _rauch107[1] > _r107[1], str(_rauch107))
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm._bot_rnd.seed(107)
+_tm.wiedereinstieg = False
+_tm.verwundete_setzen(True)
+_tx107, _ty107 = _freie_flaeche86(_tm.welt, random.Random(107), 18, 11)
+def _v107(x_, y_):
+    return pygame.Vector2((_tx107 + x_ + 0.5) * K.TILE, (_ty107 + y_ + 0.5) * K.TILE)
+_tr107 = _tm.trupp_setzen(_v107(15, 5), 0, {"groesse": 3, "team": 0, "fuehrer": "funk"})
+_g107 = _tm.bot_setzen(_v107(5, 5), 0, {"team": 1, "hirn": "goap"})
+_tm.ki_stopp = True
+_op107 = next(m_ for m_ in _tr107.mitglieder if m_ is not _tr107.fuehrer)
+_op107.pos.update(_v107(9, 5))
+_tm.toeten(_op107)
+_an107 = [m_ for m_ in _tr107.lebende()]
+_tr107.bergung = dict(opfer=_op107, retter=set(), sicher=False, bedrohung=1, orte=[])
+_h107 = _an107[0].hirn
+pruef("Wer den Liegenden treffen kann, bedroht die Bergung - wer weiter weg steht, als eine Waffe reicht, nicht",
+      _h107.bedroht_bergung(_g107.pos, 0) and not _h107.bedroht_bergung(_op107.pos + pygame.Vector2(5000, 0), 0), "")
+_h107.lagebild = [[pygame.Vector2(_g107.pos) + pygame.Vector2(-10, 0), 0, _tm.welt.zeit, "schuss"]]
+_h107.gesehen.clear()
+_tr107.lage = {}
+_bg107 = _h107.bergung_bedrohung()
+pruef("... auch wen er nur schiessen hoert: dorthin haelt er nieder",
+      _bg107 is not None and _bg107[0].distance_to(_g107.pos) < 20.0 and _bg107[2] is None, str(_bg107))
+_h107.gehirn.fakten["bergung_halten"] = True
+pruef("... ohne die lange Pause zwischen zwei Stoessen", _h107.druck_pause_faktor() < 1.0,
+      str(_h107.druck_pause_faktor()))
+_h107.gehirn.fakten["bergung_halten"] = False
+_k107 = _an107[1]
+_k107.zuletzt_von = _g107
+_k107.hirn._getroffen()
+pruef("Wer getroffen wird, ruft es heraus: der Trupp weiss sofort, woher geschossen wurde",
+      _g107 in _tr107.lage and _tr107.lage[_g107][0].distance_to(_g107.pos) < 1.0, "")
+_tm.verlassen()
+
+
+print("\n-- Nicht durch Mauern, Kisten weiter niederhalten; Testmodus ohne Nebel (0.34.54)")
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm._bot_rnd.seed(108)
+_tm.wiedereinstieg = False
+_tx108, _ty108 = _freie_flaeche86(_tm.welt, random.Random(108), 16, 8)
+def _v108(x_, y_):
+    return pygame.Vector2((_tx108 + x_ + 0.5) * K.TILE, (_ty108 + y_ + 0.5) * K.TILE)
+_tm.welt.ebene(0).setzen(_tx108 + 8, _ty108 + 2, K.WAND)
+_tm.welt.ebene(0).setzen(_tx108 + 8, _ty108 + 5, K.KISTE)
+_tm.welt._wege = None
+_s108 = _tm.bot_setzen(_v108(12, 2), 0, {"team": 0, "hirn": "goap", "waffe": "sturm"})
+_tm.ki_stopp = True
+def _feuert108(punkt_):
+    h_ = _s108.hirn
+    _s108.pos.update(pygame.Vector2(punkt_.x + 6 * K.TILE, punkt_.y))
+    h_.blick = 180.0
+    h_.denk_rest = 1.0
+    alt_ = h_._entscheiden
+    h_._entscheiden = lambda dt_, ein_: (pygame.Vector2(0, 0), pygame.Vector2(punkt_), True, False)
+    try:
+        return bool(h_.eingabe(K.FIXED_DT)["feuert"])
+    finally:
+        h_._entscheiden = alt_
+_wand108 = _feuert108(_v108(4, 2))
+_kiste108 = _feuert108(_v108(4, 5))
+_frei108 = _feuert108(_v108(4, 7))
+pruef("Hinter einer Mauer: kein Schuss - hinter einer Kiste (niederhalten) und im Freien: ja",
+      not _wand108 and _kiste108 and _frei108, "%s %s %s" % (_wand108, _kiste108, _frei108))
+pruef("Testmenue: NEBEL (SICHTWEITE) ist eine Zeile, an wie im Spiel",
+      any(z_[0] == "nebel" for z_ in _tm._menue_zeilen()) and _tm.nebel, "")
+_tm.zoom_ziel = _tm.kamera.zoom = max(K.ZOOM["stufen"])
+_mit108 = _tm.sicht_welt()
+_tm.menue_wirken("nebel")
+_ohne108 = _tm.sicht_welt()
+pruef("... herausgezoomt liegt mit Nebel alles ausserhalb des normalen Bildes im Nebel, ohne ihn nichts",
+      _mit108 is not None and _ohne108 is None and not _tm.nebel and _tm.im_licht(_v108(500, 500)), "")
+pruef("... und der Schalter bleibt ueber einen Kartenwechsel erhalten", _tm.zustand()["nebel"] is False, "")
 _tm.verlassen()
 
 print()
