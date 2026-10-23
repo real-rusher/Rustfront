@@ -11978,6 +11978,19 @@ for _ in range(2):
 pruef("Testmodus mit festem Zufall: dieselbe Aufstellung, dieselben Namen (Aufnahmen, Verhaltenstests)",
       _auf104[0] == _auf104[1], "")
 
+# Taste ENDE / Randnebel (0.34.53)
+_tm106 = _TM87.Testmodus(app, karte="staubtal")
+_tm106.kamera.zoom = 1.5
+pruef("Testmodus: herausgezoomt ist sicht_welt() nicht None (Randnebel aktiv)",
+      _tm106.sicht_welt() is not None, "")
+_tm106.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_END))
+pruef("... Taste ENDE schaltet nebel_aus ein und sicht_welt() auf None (Randnebel aus)",
+      _tm106.nebel_aus and _tm106.sicht_welt() is None, "")
+_tm106.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_END))
+pruef("... nochmal ENDE schaltet den Randnebel wieder ein",
+      not _tm106.nebel_aus and _tm106.sicht_welt() is not None, "")
+_tm106.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

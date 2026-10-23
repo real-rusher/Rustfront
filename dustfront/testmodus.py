@@ -359,6 +359,8 @@ class Testmodus(Gefecht):
         # Saubere Ansicht (seit 0.34.32): nur die Welt und ueber jedem Kopf,
         # was er gerade tut - fuer Aufnahmen (werkzeug_aufnahme.py).
         self.sauber = bool(z.get("sauber", False))
+        # Randnebel ausschalten (seit 0.34.53): Taste ENDE oder Testmenue.
+        self.nebel_aus = bool(z.get("nebel_aus", False))
         # Aufnahmen koennen in der sauberen Ansicht die Trupps zeigen (seit
         # 0.34.51): Front, Stellungen, Blickrichtungen - fuer die Szene, die
         # die geknickte Front zeigt.
@@ -1100,6 +1102,10 @@ class Testmodus(Gefecht):
             if name is not None:
                 self.taste(name)
                 return
+            if ev.key == pygame.K_END:
+                self.nebel_aus = not self.nebel_aus
+                self.melde("RANDNEBEL AUS" if self.nebel_aus else "RANDNEBEL AN")
+                return
             if ev.key in self.app.opt.codes("pause") and self.menue is None:
                 if self.spawner_offen:
                     self.spawner_offen = False
@@ -1239,6 +1245,7 @@ class Testmodus(Gefecht):
             ("blend", "BEOBACHTER BLENDEN", "AN" if self.blend_beobachter else "AUS"),
             ("ruckeln", "BEOBACHTER RUCKELN", "AN" if self.ruckeln_beobachter else "AUS"),
             ("sauber", "SAUBERE ANSICHT (NUR AKTIONEN)", "AN" if self.sauber else "AUS"),
+            ("nebel", "RANDNEBEL (ENDE-TASTE)", "AUS" if self.nebel_aus else "AN"),
             ("entf", "ENTF-TASTE", "TÖTET" if self.entf_toetet else "LÖSCHT"),
             ("verwundete", "VERWUNDETE BOTS (LIEGEN, BERGEN)", "AN" if self.verwundete else "AUS"),
             ("sprint", "BOTS SPRINTEN", "AN" if self.bot_sprint else "AUS"),
@@ -1267,7 +1274,7 @@ class Testmodus(Gefecht):
                     blend_beobachter=self.blend_beobachter,
                     ruckeln_beobachter=self.ruckeln_beobachter, sauber=self.sauber,
                     entf_toetet=self.entf_toetet, verwundete=self.verwundete,
-                    bot_sprint=self.bot_sprint,
+                    bot_sprint=self.bot_sprint, nebel_aus=self.nebel_aus,
                     sp_werte=self._sp_werte, sp_nr=self._sp_nr)
 
     def menue_wirken(self, schluessel: str, schritt: int = 1, ausloesen: bool = False) -> None:
@@ -1313,6 +1320,9 @@ class Testmodus(Gefecht):
             self.ruckeln_beobachter = not self.ruckeln_beobachter
         elif schluessel == "sauber":
             self.sauber = not self.sauber
+        elif schluessel == "nebel":
+            self.nebel_aus = not self.nebel_aus
+            self.melde("RANDNEBEL AUS" if self.nebel_aus else "RANDNEBEL AN")
         elif schluessel == "entf":
             self.entf_toetet = not self.entf_toetet
         elif schluessel == "verwundete":
@@ -1386,10 +1396,10 @@ class Testmodus(Gefecht):
             super()._anzeige(ziel)
 
     def sicht_welt(self):
-        """In der sauberen Ansicht kein Nebel: herausgezoomt zeichnet das
-        Gefecht Figuren sonst nur im normalen Bild um den Beobachter - am
-        Rand fehlten sie in den ersten Aufnahmen ganz."""
-        if self.sauber:
+        """In der sauberen Ansicht oder per ENDE-Taste kein Nebel: herausgezoomt
+        zeichnet das Gefecht Figuren sonst nur im normalen Bild um den
+        Beobachter - am Rand fehlten sie in den ersten Aufnahmen ganz."""
+        if self.sauber or self.nebel_aus:
             return None
         return super().sicht_welt()
 

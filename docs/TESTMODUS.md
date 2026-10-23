@@ -78,7 +78,8 @@ unsterblich, unsichtbar fuer KI, unendlich Munition), Wiedereinstieg
 toter Figuren, Zombiewellen, Beute nachlegen, Blenden und Ruckeln des
 Beobachters, SAUBERE ANSICHT (nur die Welt und ueber jedem Kopf die
 Aktion - kein Ziffernblock, keine Tafeln, kein Funk, herausgezoomt ohne
-Nebel; fuer Aufnahmen), ENTF-TASTE (LOESCHT: weg ohne Spur; TOETET:
+Nebel; fuer Aufnahmen), RANDNEBEL (mit Taste ENDE oder im Testmenue den
+dunklen Randnebel beim Herauszoomen komplett ausschalten), ENTF-TASTE (LOESCHT: weg ohne Spur; TOETET:
 stirbt mit Fleck und Todeslaut), VERWUNDETE BOTS (Bots liegen erst und
 koennen einmal geborgen und wiederbelebt werden), die gewoehnlichen
 Einstellungen, zurueck zum Hauptmenue.
@@ -105,6 +106,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.53 | Taste ENDE (oder im Testmenue `RANDNEBEL`): dunklen Randnebel beim Herauszoomen komplett an- oder ausschalten |
 | 0.34.52 | Mit festem Zufall (`tm._bot_rnd.seed(n)`) stellt der Testmodus jedes Mal dasselbe auf - Trupps, Spawner, Merkmale, Namen; darauf baut die neue Verhaltens-Suite `tests/test_verhalten.py` (Szenen nach der Schlacht, Schusslinie, Deckung, geknickte Front, Bergen, Last; einzeln: `python tests/test_verhalten.py bergen`) |
 | 0.34.51 | INFO zeigt bei geknickter Front jeden Abschnitt als eigene Linie mit Strich zu seiner Gruppe; `sauber_trupps` (fuer Aufnahmen): Trupps auch in der sauberen Ansicht; Szene `abschnitte` |
 | 0.34.50 | Testmenue BOTS SPRINTEN (AN/AUS); Sprechblase ueber dem, der gerade zuruft; Zurufe unten links (hell) neben dem Funk; INFO zeigt Ausdauer (Balken), FLANKIERT und eine orange Linie zu dem, der auf ihn schoss; neue Aktionen umstellen (Ziel flanke_sichern) in GEDANKEN |
