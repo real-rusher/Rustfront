@@ -688,6 +688,9 @@ def aufnehmen(app, name: str, ordner: str, seed: int | None = None,
     # Erst mit Zoom 1 aufbauen (die Szene setzt die Figuren), dann den
     # Zoom der Szene einstellen.
     tm = testmodus_fuer_aufnahme(app, 1.0)
+    # Auch der Zufall der Bots (Merkmale, Namen, Aufstellung) steht fest
+    # (seit 0.34.52): dieselbe Szene ist jedes Mal dieselbe Aufnahme.
+    tm._bot_rnd.seed(seed if seed is not None else sum(map(ord, name)))
     titel, kamera_auf, ende, sekunden, zoom, *rest = szene(tm, rnd)
     # Optional ein sechster Teil: was vor jedem Bild geschehen soll.
     jedes_bild = rest[0] if rest else None

@@ -179,7 +179,7 @@ class Trupp:
             if not self.in_kontakt(m):
                 continue
             for w, (ort, ebene, zeit) in m.hirn.gesehen.items():
-                if not w.lebt or jetzt - zeit > 0.4:
+                if not w.lebt or getattr(w, "am_boden", False) or jetzt - zeit > 0.4:
                     continue
                 if w in self.lage or not hasattr(m.hirn, "zuruf_starten"):
                     self.lage[w] = [pygame.Vector2(w.pos), w.ebene, jetzt]
@@ -321,6 +321,7 @@ class Trupp:
         self.abschnitt_linien = []
         if not leute:
             return
+        self._blicke_vorher = self.blicke
         self.blicke = {}
         if self.zustand == "igel" and self.igel is not None:
             self._ring(leute)
@@ -412,26 +413,19 @@ class Trupp:
             i = max(range(len(gruppen)), key=lambda j: gruppen[j][2] / gesamt - anteile[j] / len(andere))
             anteile[i] += 1
             rest -= 1
-        andere.sort(key=lambda m: math.atan2(m.pos.y - mitte.y, m.pos.x - mitte.x))
-        # Beim Sortieren nach dem Winkel faengt die Reihe irgendwo an: so
-        # drehen, dass der Erste zur ersten Gruppe am besten passt.
-        erste = math.degrees(math.atan2(gruppen[0][0].y, gruppen[0][0].x))
-        start = min(range(len(andere)), key=lambda i: abs(
-            (math.degrees(math.atan2(andere[i].pos.y - mitte.y, andere[i].pos.x - mitte.x)) - erste + 180) % 360 - 180))
-        andere = andere[start:] + andere[:start]
-        i = 0
+        teile = self._abschnitt_leute(andere, gruppen, anteile, mitte)
         hinten = pygame.Vector2(0, 0)
         self.abschnitt_linien = []
-        for (richtung, gmitte, _n), anzahl in zip(gruppen, anteile):
+        for (richtung, gmitte, _n), anzahl, teil in zip(gruppen, anteile, teile):
             quer = pygame.Vector2(-richtung.y, richtung.x)
             hinten -= richtung
             # Fuer die Anzeige (Testmodus): jeder Abschnitt eine kurze Linie.
             self.abschnitt_linien.append(dict(mitte=mitte + richtung * t["abschnitt_vor"], quer=quer,
                                               richtung=richtung,
                                               breite=max(40.0, anzahl * t["bahn_min"])))
-            for j in range(anzahl):
-                m = andere[i]
-                i += 1
+            # Bahnen quer zur Gruppe nach der Lage: so laeuft keiner quer.
+            teil.sort(key=lambda m: (m.pos - mitte).dot(quer))
+            for j, m in enumerate(teil):
                 seitlich = (j - (anzahl - 1) / 2.0) * t["bahn_min"]
                 p = mitte + richtung * t["abschnitt_vor"] + quer * seitlich
                 p = self._deckung_nah(p, m, gmitte)
@@ -441,6 +435,41 @@ class Trupp:
             weg = hinten.normalize() if hinten.length_squared() > 0.01 else pygame.Vector2(0, 0)
             self.stellungen[self.fuehrer.nummer] = self._frei(mitte + weg * t["fuehrer_tiefe"], self.fuehrer)
         self.abschnitte = len(gruppen)
+
+    def _abschnitt_leute(self, andere, gruppen, anteile, mitte) -> list:
+        """Wer in welchen Abschnitt kommt: je Gruppe eine Liste. Wer schon
+        einen hatte, bleibt dort (seit 0.34.52) - vorher wurde jeden Takt nach
+        dem Winkel neu verteilt, und wer dabei die Gruppe wechselte, lief
+        quer durch die Stellung zur anderen Seite. Zu viele in einem
+        Abschnitt: die, deren Richtung am wenigsten passt, gehen."""
+        def abweichung(m, j):
+            a = m.pos - mitte
+            if a.length_squared() < 1.0:
+                return 0.0
+            return abs((a.angle_to(gruppen[j][0]) + 180.0) % 360.0 - 180.0)
+
+        vorher = getattr(self, "_blicke_vorher", {})
+        teile = [[] for _g in gruppen]
+        offen = []
+        for m in andere:
+            alt = vorher.get(m.nummer)
+            if alt is None:
+                offen.append(m)
+                continue
+            j = min(range(len(gruppen)), key=lambda i: gruppen[i][1].distance_to(alt))
+            teile[j].append(m)
+        for j, teil in enumerate(teile):
+            teil.sort(key=lambda m: abweichung(m, j))
+            while len(teil) > anteile[j]:
+                offen.append(teil.pop())
+        # Die Uebrigen dorthin, wo noch Platz ist und die Richtung am besten
+        # passt - wer am eindeutigsten zu einer Gruppe gehoert, zuerst.
+        offen.sort(key=lambda m: min(abweichung(m, j) for j in range(len(gruppen))))
+        for m in offen:
+            frei = [j for j in range(len(gruppen)) if len(teile[j]) < anteile[j]]
+            j = min(frei, key=lambda i: abweichung(m, i))
+            teile[j].append(m)
+        return teile
 
     def _linie_ohne_kontakt(self, leute) -> None:
         t = K.TRUPP
@@ -490,7 +519,7 @@ class Trupp:
                 and self.gedeckt_hier(alt, m.ebene, feind)):
             return pygame.Vector2(alt)
         if self.gedeckt_hier(p, m.ebene, feind):
-            return p
+            return an_deckung(welt, p, m.radius, m.ebene, feind)
         belegt = [q for n, q in self.stellungen.items() if n != m.nummer]
         for r in K.TRUPP["deckung_ringe"]:
             for i in range(8):
@@ -500,7 +529,7 @@ class Trupp:
                 if any(q.distance_to(b) < K.TRUPP["bahn_min"] * 0.5 for b in belegt):
                     continue
                 if self.gedeckt_hier(q, m.ebene, feind):
-                    return q
+                    return an_deckung(welt, q, m.radius, m.ebene, feind)
         return p
 
     def _frei(self, p, m):
@@ -643,8 +672,9 @@ class Trupp:
             p = None
             # Erst in seiner Richtung, dann ein paar Grad daneben (seit
             # 0.34.50) - sonst schob der Notbehelf ihn irgendwohin, und zwei
-            # standen auf derselben Seite.
-            for drehung in (0.0, 10.0, -10.0, 20.0, -20.0):
+            # standen auf derselben Seite. Bis 40 Grad (seit 0.34.52): stand
+            # ein Fels genau dort, landete er sonst 70 Grad daneben.
+            for drehung in (0.0, 10.0, -10.0, 20.0, -20.0, 30.0, -30.0, 40.0, -40.0):
                 for anteil in (1.0, 0.75, 0.5, 0.3):
                     q = ort + richtung.rotate(drehung) * (radius * anteil)
                     if welt.frei(q, m.radius + 2, self.igel["ebene"], True):
@@ -953,6 +983,28 @@ def sieht_durch_rauch(welt, a, b, ebene) -> bool:
         if any(r.ebene == ebene and r.deckt(p, ebene) for r in welt.rauch):
             return False
     return True
+
+
+def an_deckung(welt, p, radius: float, ebene: int, feind):
+    """Von einer gedeckten Stelle aus zum Gegner hin bis an das Hindernis:
+    so weit, wie die Figur noch frei steht und weiter ganz gedeckt ist (seit
+    0.34.52). Wer 30 px hinter einer Kiste steht, ist zwar gedeckt - aber
+    er sieht nicht so aus, und von der Seite trifft man ihn eher."""
+    p = pygame.Vector2(p)
+    hin = pygame.Vector2(feind) - p
+    if hin.length_squared() < 1.0:
+        return p
+    hin = hin.normalize()
+    quer = pygame.Vector2(-hin.y, hin.x) * (radius - 2.0)
+    schritt = K.TRUPP["anruecken_schritt"]
+    for _ in range(int(K.TRUPP["deckung_nah"] * 2 / schritt)):
+        q = p + hin * schritt
+        if not welt.frei(q, radius + 2.0, ebene, True):     # wie Trupp._frei
+            break
+        if any(welt.deckung(feind, x, ebene) == "" for x in (q, q + quer, q - quer)):
+            break
+        p = q
+    return p
 
 
 def deckung_ringsum(welt, p, ebene) -> int:

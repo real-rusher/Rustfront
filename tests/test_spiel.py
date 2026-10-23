@@ -10044,6 +10044,12 @@ pruef("... der Spawner setzt mit HIRN GOAP einen planenden Bot",
 _rot88 += [_tm.bot_setzen(_a88 + pygame.Vector2(0, 24), 0, {"team": 0, "hirn": "goap"})]
 _blau88 = [_tm.bot_setzen(_b88 + pygame.Vector2(0, 24 * i_), 0, {"team": 1, "hirn": "klassisch"})
            for i_ in range(2)]
+# Keiner geht zu Boden (seit 0.34.52): auf Liegende schiesst keiner mehr,
+# und warf ROT beide mit einer Granate um, war das Gefecht vorbei, bevor der
+# erste Schuss fiel - vorher fuellte das Niederhalten auf die Liegenden die
+# Schusszahl. So dauert das Gefecht die ganzen 30 Sekunden.
+for b_ in _blau88 + _rot88:
+    b_.unverwundbar = 1e9
 _tm.wiedereinstieg = False
 _geist88 = _tm._geist
 _geist88.pos.update(_a88 + pygame.Vector2(20, 0))
@@ -11348,8 +11354,10 @@ pruef("Ein Ziel, das am Boden liegt, laesst er los und nimmt den, der noch steht
 _bot99.hirn.ziel = _liegt99
 _bot99.hirn.stoss_rest = 0.5
 _bot99.hirn._wahrnehmen()
-pruef("... nur den Feuerstoss, der laeuft, bringt er noch zu Ende",
-      _bot99.hirn.ziel is _liegt99, "")
+# Bis 0.34.51 brachte er den laufenden Stoss zu Ende - ein Dauerfeuer hielt
+# so vier Sekunden auf den Liegenden. Seit 0.34.52 endet auch der.
+pruef("... auch den Feuerstoss, der laeuft, bricht er ab (seit 0.34.52)",
+      _bot99.hirn.ziel is not _liegt99 and _bot99.hirn.stoss_rest == 0.0, "")
 _steht99.pos.update(_v99(-30, -30))
 _bot99.hirn.stoss_rest = 0.0
 _bot99.hirn._wahrnehmen()
@@ -11745,6 +11753,230 @@ _tm.sauber_trupps = True
 _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
 pruef("Aufnahmen koennen in der sauberen Ansicht die Trupps zeigen (zeichnen geht)", True, "")
 _tm.verlassen()
+
+
+print("\n-- Liegende, Schusslinie, Abschnitt, Deckung, Wurf, Ziehen, Last (0.34.52)")
+# Die ganzen Szenen dazu stehen in tests/test_verhalten.py; hier je Ursache
+# eine kurze, feste Pruefung.
+from collections import deque as _deque103
+from dustfront.bottaktik import kampffaehig as _kf103
+from dustfront.trupp import an_deckung as _an103
+from dustfront import bots as _BO103
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm._bot_rnd.seed(103)
+_tm.wiedereinstieg = False
+_tm.verwundete_setzen(True)
+_tx103, _ty103 = _freie_flaeche86(_tm.welt, random.Random(103), 18, 10)
+def _v103(x_, y_):
+    return pygame.Vector2((_tx103 + x_) * K.TILE, (_ty103 + y_) * K.TILE)
+_a103 = _tm.bot_setzen(_v103(12.5, 2.5), 0, {"team": 0, "hirn": "goap"})
+_b103 = _tm.bot_setzen(_v103(4.5, 2.5), 0, {"team": 1, "hirn": "goap"})
+_tm.toeten(_b103)
+_h103 = _a103.hirn
+pruef("Wer liegt, ist kein Ziel und keine Gefahr (ziel_ok, kampffaehig)",
+      _b103.am_boden and not _h103.ziel_ok(_b103) and not _kf103(_b103), "")
+_h103.gesehen[_b103] = (pygame.Vector2(_b103.pos), 0, _tm.welt.zeit)
+_h103.zugerufen[_b103] = (pygame.Vector2(_b103.pos), 0, _tm.welt.zeit)
+pruef("... weder ein Feindort noch der letzte Feind - auch nicht zugerufen",
+      _h103.feind_orte() == [] and _h103.letzter_feind() is None, str(_h103.feind_orte()))
+_h103.ziel = _b103
+_h103.stoss_rest = 3.0
+_h103._wahrnehmen()
+pruef("... ein Dauerfeuer auf ihn endet beim naechsten Hinsehen, und er faellt aus dem Gedaechtnis",
+      _h103.ziel is None and _h103.stoss_rest == 0.0 and _b103 not in _h103.gesehen, "")
+_h103._feinde_da = {_b103: pygame.Vector2(_b103.pos)}
+_h103.gesehen[_b103] = (pygame.Vector2(_b103.pos), 0, _tm.welt.zeit)
+_vor103 = len(_h103._abschuesse)
+for _ in range(3):
+    _h103._verluste_zaehlen()
+pruef("... und zaehlt nur einmal als Abschuss, nicht jedes Bild wieder",
+      len(_h103._abschuesse) == _vor103 + 1, "%d -> %d" % (_vor103, len(_h103._abschuesse)))
+
+_c103 = _tm.puppe_setzen(_v103(8.5, 2.5), 0, {"team": 0, "leben": 10.0})
+_h103.blick = 180.0
+_quer103 = _h103.kamerad_im_weg(400.0)
+_h103.blick = 90.0
+_seit103 = _h103.kamerad_im_weg(400.0)
+_h103.blick = 180.0
+_nah103 = _h103.kamerad_im_weg(80.0)
+pruef("Ein Kamerad in der Schusslinie sperrt den Schuss - daneben nicht, und nicht hinter dem Ziel",
+      _quer103 and not _seit103 and not _nah103, "%s %s %s" % (_quer103, _seit103, _nah103))
+_c103.am_boden = True
+pruef("... wer liegt, ist unter der Bahn", not _h103.kamerad_im_weg(400.0), "")
+_c103.am_boden = False
+
+# Wegefeld: dieselben Abstaende wie die alte Breitensuche.
+def _bfs103(wege_, e_, tx_, ty_):
+    b_, h_ = wege_.breite[e_], wege_.hoehe[e_]
+    frei_ = wege_.begehbar[e_]
+    weit_ = [-1] * (b_ * h_)
+    if not (0 <= tx_ < b_ and 0 <= ty_ < h_):
+        return weit_
+    weit_[ty_ * b_ + tx_] = 0
+    offen_ = _deque103([ty_ * b_ + tx_])
+    while offen_:
+        i_ = offen_.popleft()
+        x_, y_ = i_ % b_, i_ // b_
+        for dx_, dy_ in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+            nx_, ny_ = x_ + dx_, y_ + dy_
+            if not (0 <= nx_ < b_ and 0 <= ny_ < h_):
+                continue
+            j_ = ny_ * b_ + nx_
+            if not frei_[j_] or weit_[j_] >= 0:
+                continue
+            if dx_ and dy_ and not (frei_[y_ * b_ + nx_] and frei_[ny_ * b_ + x_]):
+                continue
+            weit_[j_] = weit_[i_] + 1
+            offen_.append(j_)
+    return weit_
+_wg103 = _tm.welt.wege
+_r103 = random.Random(7)
+_gleich103 = True
+for _ in range(4):
+    _e103 = _r103.randrange(_wg103.ebenen)
+    _x103, _y103 = _r103.randrange(_wg103.breite[_e103]), _r103.randrange(_wg103.hoehe[_e103])
+    _gleich103 = _gleich103 and _wg103._ausbreiten(_e103, _x103, _y103) == _bfs103(_wg103, _e103, _x103, _y103)
+pruef("Wegefeld mit vorgerechneten Nachbarn: dieselben Schritte wie die alte Breitensuche",
+      _gleich103, "")
+
+# Deckung zwischen zwei Punkten: dasselbe wie das alte Abtasten.
+def _deckung103(welt_, von_, nach_, ebene_):
+    von_, nach_ = pygame.Vector2(von_), pygame.Vector2(nach_)
+    if not welt_.sicht_frei(von_, nach_, ebene_):
+        return "wand"
+    n_ = int(von_.distance_to(nach_) / 4.0)
+    if n_ < 2:
+        return ""
+    for i_ in range(1, n_):
+        if welt_.schuss_halt(von_.lerp(nach_, i_ / float(n_)), ebene_):
+            return "hindernis"
+    return ""
+_e0103 = _tm.welt.ebene(0)
+_ab103 = 0
+for _ in range(1500):
+    _p103 = pygame.Vector2(_r103.uniform(0, _e0103.breite * K.TILE), _r103.uniform(0, _e0103.hoehe * K.TILE))
+    _q103 = _p103 + pygame.Vector2(_r103.uniform(20, 400), 0).rotate(_r103.uniform(0, 360))
+    if _tm.welt.deckung(_p103, _q103, 0) != _deckung103(_tm.welt, _p103, _q103, 0):
+        _ab103 += 1
+pruef("Deckung ohne neuen Vektor je Punkt: dasselbe Ergebnis wie vorher (1500 Linien)", _ab103 == 0, str(_ab103))
+
+# An die Deckung ruecken.
+_wk103 = [(9, 1), (9, 2), (9, 3)]
+for x_, y_ in _wk103:
+    _e0103.setzen(_tx103 + x_, _ty103 + y_, K.KISTE)
+_tm.welt._wege = None
+_feind103 = _v103(3.5, 2.5)
+_st103 = _v103(11.6, 2.5)
+_dicht103 = _an103(_tm.welt, _st103, 9.0, 0, _feind103)
+_rand103 = (_tx103 + 10) * K.TILE
+pruef("Eine gedeckte Stellung rueckt bis an die Kiste heran und bleibt gedeckt",
+      _dicht103.x < _st103.x and _dicht103.x - _rand103 - 9.0 <= K.TRUPP["anruecken_schritt"] + 2.5
+      and _tm.welt.deckung(_feind103, _dicht103, 0) != "",
+      "Luecke %.1f px" % (_dicht103.x - _rand103 - 9.0))
+
+# Eine Wurfbahn, die eine Mauerecke streift: die Mitte frei, die Granate nicht.
+for y_ in range(3, 7):
+    _e0103.setzen(_tx103 + 15, _ty103 + y_, K.WAND)
+_tm.welt._wege = None
+_a103.pos.update(_v103(15.6, 2.5))
+_streift103 = _v103(11.58, 5.5)
+pruef("Wurfbahn: streift sie eine Mauerecke, gilt sie als zu - frei nur ganz frei",
+      _tm.welt.deckung(_a103.pos, _streift103, 0) == "" and not _h103.wurfbahn_frei(_streift103)
+      and _h103.wurfbahn_frei(_v103(11.5, 2.5)), "")
+
+# Werfen erst, wenn er zum Ziel schaut.
+_a103.waffen.append("rauch")
+_nr103 = len(_a103.waffen) - 1
+_a103.waffe = _nr103
+_h103.wurf_platz = _nr103
+_ziel103 = _BG88._Stelle(_v103(11.5, 2.5), 0)
+_ziel103.genau = True
+_h103.blick = 90.0
+_h103.wurf_phase = 0.01
+_warf103 = []
+for _ in range(int(0.5 / K.FIXED_DT)):
+    _warf103.append(_h103._werfen(K.FIXED_DT, {"knoepfe": []}, _ziel103)[2])
+_h103.blick = _BO103._winkel_zu(_a103.pos, _ziel103.pos)
+_dann103 = _h103._werfen(K.FIXED_DT, {"knoepfe": []}, _ziel103)[2]
+pruef("Eine Granate fliegt erst, wenn er zum Ziel schaut - nicht in die alte Blickrichtung",
+      not any(_warf103) and _dann103, "")
+_h103.blick = 90.0
+_h103.wurf_phase = 0.01
+_spaet103 = [_h103._werfen(K.FIXED_DT, {"knoepfe": []}, _ziel103)[2]
+             for _ in range(int((K.BOTS["wurf_warten"] + 0.3) / K.FIXED_DT))]
+pruef("... schaut er nie hin, wirft er nach hoechstens wurf_warten trotzdem (kein Haengenbleiben)",
+      any(_spaet103), "")
+_a103.waffen.pop()
+_a103.waffe = 0
+
+# Ziehen an einer Ecke: er rutscht an der Kiste entlang.
+_x103 = _tm.bot_setzen(_v103(9.5, 0.72), 0, {"team": 0, "hirn": "goap"})
+_z103 = _tm.puppe_setzen(_v103(10.3, 1.4), 0, {"team": 0, "leben": 10.0})
+_tm.toeten(_x103)
+_x103.pos.update(_v103(9.5, 0.72))
+_z103.zieht = _x103.nummer
+_vorher103 = pygame.Vector2(_x103.pos)
+_tm._ziehen(K.FIXED_DT)
+pruef("Ein Gezogener an einer Kistenecke rutscht an ihr entlang, statt haengen zu bleiben",
+      _x103.pos.x > _vorher103.x + 0.5 and _tm.welt.frei(_x103.pos, _x103.radius * 0.8, 0, True),
+      "%s -> %s" % (_vorher103, _x103.pos))
+_z103.zieht = None
+
+# Liegt einer still, rechnet niemand seine Bewegung.
+_zaehl103 = {"n": 0}
+_bew103 = _tm.welt.bewegen
+def _bewegen103(w_, dx_, dy_, _alt=_bew103):
+    if w_ is _x103:
+        _zaehl103["n"] += 1
+    return _alt(w_, dx_, dy_)
+_tm.welt.bewegen = _bewegen103
+_x103.tempo.update(0, 0)
+_x103.will.update(0, 0)
+for _ in range(10):
+    _x103.schritt(K.FIXED_DT)
+_tm.welt.bewegen = _bew103
+pruef("Wer still am Boden liegt, kostet keine Bewegung (world.bewegen wird nicht gefragt)",
+      _zaehl103["n"] == 0, str(_zaehl103["n"]))
+_tm.verlassen()
+
+# Abschnitt: zwei Gruppen enger als zwei Abschnitte breit.
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm._bot_rnd.seed(104)
+_tm.wiedereinstieg = False
+_tx104, _ty104 = _freie_flaeche86(_tm.welt, random.Random(104), 18, 11)
+def _v104(x_, y_):
+    return pygame.Vector2((_tx104 + x_ + 0.5) * K.TILE, (_ty104 + y_ + 0.5) * K.TILE)
+_tr104 = _tm.trupp_setzen(_v104(10, 7), 0, {"groesse": 3, "team": 0})
+_m104 = [m_ for m_ in _tr104.lebende() if m_ is not _tr104.fuehrer][0]
+_m104.pos.update(_v104(10, 7))
+_west104 = _m104.pos + pygame.Vector2(-300, 0)
+_nw104 = _m104.pos + pygame.Vector2(300, 0).rotate(180 + 65)
+_tr104.abschnitte = 2
+_tr104.blicke = {_m104.nummer: _west104, -1: _nw104}
+_zwischen104 = _m104.pos + pygame.Vector2(250, 0).rotate(180 + 55)
+pruef("Abschnitt: was der anderen Gruppe naeher ist, gehoert ihr - auch innerhalb der 70 Grad",
+      _m104.hirn.im_abschnitt(_west104 + pygame.Vector2(0, 30)) is True
+      and _m104.hirn.im_abschnitt(_zwischen104) is False, "")
+_gr104 = [(pygame.Vector2(-1, 0), _west104, 1), ((_nw104 - _m104.pos).normalize(), _nw104, 1)]
+_k104 = [m_ for m_ in _tr104.lebende() if m_ is not _tr104.fuehrer]
+_tr104._blicke_vorher = {_k104[0].nummer: _nw104, _k104[1].nummer: _west104}
+_k104[0].pos.update(_v104(8, 7))                # liegt naeher am Westen ...
+_k104[1].pos.update(_v104(9, 5))
+_teile104 = _tr104._abschnitt_leute(_k104, _gr104, [1, 1], _v104(10, 7))
+pruef("... und wer schon einen Abschnitt hat, behaelt ihn (kein Quer-durch-die-Stellung)",
+      _teile104[1] == [_k104[0]] and _teile104[0] == [_k104[1]], "")
+_tm.verlassen()
+
+# Mit festem Zufall stellt der Testmodus jedes Mal dasselbe auf.
+_auf104 = []
+for _ in range(2):
+    _tm = _TM87.Testmodus(app, karte="staubtal")
+    _tm._bot_rnd.seed(5)
+    _tr105 = _tm.trupp_setzen(_v104(10, 7), 0, {"groesse": 4, "team": 0})
+    _auf104.append([(round(m_.pos.x, 2), round(m_.pos.y, 2), m_.name) for m_ in _tr105.mitglieder])
+    _tm.verlassen()
+pruef("Testmodus mit festem Zufall: dieselbe Aufstellung, dieselben Namen (Aufnahmen, Verhaltenstests)",
+      _auf104[0] == _auf104[1], "")
 
 print()
 print("FEHLER:", fails or "keine")

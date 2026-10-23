@@ -85,6 +85,14 @@ def rolle_nehmen(g, gegner, art: str, k, dauer: float) -> None:
     rollen[(id(gegner), art)] = (k, g.welt.zeit + dauer)
 
 
+def kampffaehig(w) -> bool:
+    """Lebt `w` und steht noch? Wer am Boden liegt, ist keine Gefahr mehr -
+    an keiner Stelle (seit 0.34.52, gemeldet: nach grossen Schlachten
+    schossen sie "auf verwundete, am Boden liegende Gegner ... und
+    manchmal auf gar nichts")."""
+    return getattr(w, "lebt", False) and not getattr(w, "am_boden", False)
+
+
 def braucht_schutz(x) -> bool:
     """Braucht dieser Kamerad gerade Feuerschutz?"""
     if getattr(x, "am_boden", False) or getattr(x, "nachlade_rest", 0.0) > 0.0:
@@ -202,7 +210,7 @@ class Taktik:
         jetzt = self.g.welt.zeit
         bestes = None
         for w, (ort, ebene, zeit) in self.gesehen.items():
-            if not w.lebt or ebene != k.ebene:
+            if not kampffaehig(w) or ebene != k.ebene:
                 continue
             if jetzt - zeit > K.BOTS["gedaechtnis_taktik"]:
                 continue
@@ -221,6 +229,15 @@ class Taktik:
         hin = ort - k.pos
         if hin.length_squared() < 1.0:
             return ort
+        # Kurz gemerkt (seit 0.34.52): wer niederhaelt, fragte die Stelle
+        # jedes Bild neu ab - bis zu zehn Linien je Bot und Bild.
+        merk = self.__dict__.get("_druck_merk")
+        jetzt = welt.zeit
+        if (merk is not None and merk[0] == ebene and jetzt - merk[1] < K.BOTS["druck_merken"]
+                and merk[2].distance_squared_to(ort) < 64.0
+                and merk[3].distance_squared_to(k.pos) < 64.0):
+            return pygame.Vector2(merk[4])
+        raus = ort
         quer = pygame.Vector2(-hin.y, hin.x).normalize()
         for d in K.BOTS["druck_versatz"]:
             for seite in (self.seite, -self.seite):
@@ -228,8 +245,12 @@ class Taktik:
                 if welt.schuss_halt(p, ebene):
                     continue
                 if welt.deckung(k.pos, p, ebene) == "":
-                    return p
-        return ort
+                    raus = p
+                    break
+            if raus is not ort:
+                break
+        self._druck_merk = (ebene, jetzt, pygame.Vector2(ort), pygame.Vector2(k.pos), pygame.Vector2(raus))
+        return pygame.Vector2(raus)
 
     def flankenpunkt(self, ort, ebene: int):
         """Eine Stelle seitlich vom Gegner, von der aus nichts zwischen ihm
@@ -551,7 +572,7 @@ def stuerme_fuehren(g, dt: float) -> None:
             if hasattr(a.hirn, "feind_orte"):
                 bekannt = len(a.hirn.feind_orte())          # GOAP: auch gehoert und gesagt
             else:
-                bekannt = sum(1 for w in a.hirn.gesehen if w.lebt)
+                bekannt = sum(1 for w in a.hirn.gesehen if kampffaehig(w))
             if max(1, bekannt) * b["sturm_ueberzahl"] > len(mit[:3]) + 1:
                 continue
             sammel = a.hirn.sammelpunkt(ort, ebene)

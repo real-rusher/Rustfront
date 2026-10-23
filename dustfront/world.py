@@ -954,9 +954,39 @@ class Welt:
         schritte = int(laenge / 4.0)
         if schritte < 2:
             return ""
+        # Dasselbe wie schuss_halt an jedem Punkt, nur ohne neuen Vektor je
+        # Punkt und mit der Kachel gemerkt, solange die Linie in ihr bleibt:
+        # die Bots fragen das tausendfach je Sekunde (seit 0.34.52).
+        e = self.ebene(ebene)
+        T = K.TILE
+        tafel = K.KACHELN
+        x0, y0 = von.x, von.y
+        dx, dy = nach.x - x0, nach.y - y0
+        vorige = None
+        huelle = None
         for i in range(1, schritte):
-            p = von.lerp(nach, i / float(schritte))
-            if self.schuss_halt(p, ebene):
+            t = i / float(schritte)
+            px, py = x0 + dx * t, y0 + dy * t
+            tx, ty = int(px // T), int(py // T)
+            if (tx, ty) != vorige:
+                vorige = (tx, ty)
+                kachel = e.kachel(tx, ty)
+                d = tafel[kachel]
+                if d["sicht"]:
+                    return "hindernis"
+                if not d["fest"]:
+                    huelle = None
+                    continue
+                form, rx, ry, rb, rh = self.huelle(kachel)
+                huelle = (form, tx * T + rx, ty * T + ry, rb, rh)
+            if huelle is None:
+                continue
+            form, hx, hy, rb, rh = huelle
+            if form == "rund":
+                mx, my = hx + rb / 2.0, hy + rh / 2.0
+                if (px - mx) ** 2 + (py - my) ** 2 < (rb / 2.0) ** 2:
+                    return "hindernis"
+            elif hx <= px < hx + rb and hy <= py < hy + rh:
                 return "hindernis"
         return ""
 

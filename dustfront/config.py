@@ -1149,6 +1149,7 @@ BOTS = dict(
     flanke_spanne=80.0,       # stehen die Gegner weiter auseinander (Grad), ist er flankiert
     umstell_radien=(40.0, 80.0, 120.0, 160.0),   # so weit sucht er einen Platz, von dem aus alle vor ihm sind
     vorn_frei=56.0,           # so weit vor ihm muss frei sein, sonst kein Schuss, kein Wurf
+    kamerad_linie=16.0,       # so nah an der Schusslinie steht ein Kamerad: nicht schiessen (px)
     # Seit 0.34.48: in Deckung ist nur, wer dicht dahinter steht.
     deckung_dicht=40.0,       # so nah vor ihm muss das Hindernis stehen
     deckung_mindest=0.6,      # x Wunschabstand der Waffe: naeher am Gegner ist eine Deckung zu nah ...
@@ -1169,6 +1170,9 @@ BOTS = dict(
     nahkampf_ab=34.0,         # so nah, dann schlaegt er mit dem Brecheisen
     wurf_pause=(10.0, 18.0),  # zwischen zwei Wuerfen
     wurf_weite=(90.0, 230.0),
+    wurf_winkel=8.0,          # so genau muss er zum Ziel schauen, bevor er wirft (Grad, 0.34.52)
+    wurf_warten=1.0,          # ... hoechstens so lange wartet er darauf (s)
+    wurf_breite=6.0,          # so viel Platz braucht eine Granate neben ihrer Bahn (px, 0.34.52)
     rauch_vor=18.0,           # Rauch liegt so weit vor dem Liegenden (zum Gegner hin, seit 0.34.46)
     # Seit 0.34.26: eine Granate je Leben, keine Medkits, nichts aufheben,
     # immer begrenzte Munition - ist alles weg, geht er in den Nahkampf.
@@ -1223,6 +1227,7 @@ BOTS = dict(
     druck_zeit=2.6,           # so lange haelt er einen nieder
     druck_pause=3.5,
     druck_versatz=(14.0, 22.0, 30.0),  # neben der Deckung, auf die er schiesst
+    druck_merken=0.25,        # so lange gilt die Stelle, ohne neu zu suchen (s, seit 0.34.52)
     druck_rest=0.35,          # niederhalten nur, solange mehr als so viel Munition bleibt
     gedaechtnis_taktik=3.5,   # so frisch muss ein gesehener Gegner sein
     feuerschutz_weite=230.0,  # so nah an einem Kameraden, der Schutz braucht
@@ -1369,6 +1374,12 @@ TRUPP = dict(
     # herum Deckung gegen den Gegner ("Bots blieben im Freien stehen").
     deckung_ringe=(20.0, 40.0, 64.0),
     deckung_nah=36.0,         # so nah muss das Hindernis vor ihm sein
+    # Seit 0.34.52 rueckt eine gedeckte Stellung bis an das Hindernis heran,
+    # in Schritten von `anruecken_schritt` px, und dort steht er genau
+    # (`deckung_genau` px) - gemeldet: sie "haben sich wieder in einem
+    # gewissen Abstand zu den Deckungen gestellt".
+    anruecken_schritt=3.0,
+    deckung_genau=6.0,
     flanke_vor=20.0,
     flanke_ab=90.0,           # so nah an der Linie, und die Aeusseren flankieren
     welle_zeit=2.6,           # so lange dauert eine Welle (s)
@@ -1379,6 +1390,10 @@ TRUPP = dict(
     abschnitt_vor=90.0,       # so weit vor der Mitte steht jeder Abschnitt (war 40: man sah den Knick kaum)
     abschnitt_bonus=150.0,    # so viel lieber nimmt einer die Gegner in seinem Abschnitt (px)
     abschnitt_winkel=70.0,    # so weit neben seiner Blickrichtung ist es noch sein Abschnitt (Grad, 0.34.51)
+    # Seit 0.34.52 schiesst er aus seinem Abschnitt heraus nur auf den, der
+    # ihn beschiesst oder so nah ist (px) - sonst hielten alle auf die
+    # naechste Gruppe, und die andere Seite war offen (gemeldet).
+    abschnitt_nah=140.0,
     flucht_hinter=60.0,       # in Panik flieht er so weit hinter die Mitte der anderen
     fuehrer_bonus=120.0,      # so viel lieber nimmt man Gegner nahe dem Anfuehrer
     buendeln_bonus=40.0,      # ... und die, auf die ein Kamerad schon schiesst
@@ -1595,6 +1610,8 @@ VERWUNDET = dict(
     deckung_radien=(60.0, 100.0, 140.0, 190.0, 240.0),   # so weit sucht ein Retter Deckung fuer den Liegenden
     rauch_nah=70.0,           # Rauch so nah am Liegenden: die Bergung ist gedeckt
     dranbleiben=12.0,         # so lange bringen die Retter eine angefangene Bergung zu Ende (0.34.50)
+    deckung_rand=8.0,         # so weit daneben muss die Deckung auch noch halten (px, 0.34.52)
+    deckung_richtungen=24,    # in so vielen Richtungen je Ring sucht er (war 12: der Schatten einer Kiste fiel dazwischen)
 )
 
 # Wellen im Mehrspieler. Anders als im Einzelspieler waechst die Welle mit

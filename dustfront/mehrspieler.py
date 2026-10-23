@@ -2055,10 +2055,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             schritt = ziel - opfer.pos
             if schritt.length_squared() < 0.04:
                 continue
-            neu = opfer.pos + schritt
-            if self.welt.frei(neu, opfer.radius * 0.8, opfer.ebene, True):
-                opfer.vorher.update(opfer.pos)
-                opfer.pos.update(neu)
+            # Geht es geradewegs nicht, rutscht er an der Wand entlang - wie
+            # jeder, der laeuft (seit 0.34.52): sonst blieb er an einer
+            # Mauerecke haengen, und der Retter zog ins Leere.
+            for neu in (opfer.pos + schritt,
+                        opfer.pos + pygame.Vector2(schritt.x, 0),
+                        opfer.pos + pygame.Vector2(0, schritt.y)):
+                if self.welt.frei(neu, opfer.radius * 0.8, opfer.ebene, True):
+                    opfer.vorher.update(opfer.pos)
+                    opfer.pos.update(neu)
+                    break
 
     # ---- Rufen am Boden ---------------------------------------------------
     def _rufen(self, k: Kaempfer) -> None:

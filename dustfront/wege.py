@@ -102,6 +102,7 @@ class Wegenetz:
             if von[1] < 0 or nach[1] < 0:
                 continue
             self.kanten.setdefault(von, []).append((nach, nr))
+        self._nachbar_listen: dict[int, list] = {}
         self._felder: dict[int, list] = {}
         for nr in range(len(self.treppen)):
             self._feld(nr)
@@ -155,27 +156,63 @@ class Wegenetz:
         if nr in self._felder:
             return self._felder[nr]
         ebene, sx, sy, _ = self.treppen[nr]
+        weit = self._ausbreiten(ebene, sx, sy)
+        self._felder[nr] = weit
+        return weit
+
+    def _nachbarn(self, ebene: int) -> list:
+        """Je Kachel die Kacheln, in die man von dort aus geht - schraeg nur
+        an keiner Ecke vorbei. Einmal je Ebene gerechnet (seit 0.34.52): die
+        Breitensuche fragte sonst bei jedem Feld jede Kachel neu ab, 25 ms
+        auf STAUBTAL - mehr als ein ganzes Bild."""
+        fertig = self._nachbar_listen.get(ebene)
+        if fertig is not None:
+            return fertig
         b, h = self.breite[ebene], self.hoehe[ebene]
         frei = self.begehbar[ebene]
-        weit = [-1] * (b * h)
-        start = sy * b + sx
-        weit[start] = 0
-        offen = deque([start])
-        while offen:
-            i = offen.popleft()
+        liste = [()] * (b * h)
+        for i in range(b * h):
+            if not frei[i]:
+                continue
             x, y = i % b, i // b
+            raus = []
             for dx, dy in _NACHBARN:
                 nx, ny = x + dx, y + dy
                 if not (0 <= nx < b and 0 <= ny < h):
                     continue
                 j = ny * b + nx
-                if not frei[j] or weit[j] >= 0:
+                if not frei[j]:
                     continue
                 if dx and dy and not (frei[y * b + nx] and frei[ny * b + x]):
                     continue
-                weit[j] = weit[i] + 1
-                offen.append(j)
-        self._felder[nr] = weit
+                raus.append(j)
+            liste[i] = tuple(raus)
+        self._nachbar_listen[ebene] = liste
+        return liste
+
+    def _ausbreiten(self, ebene: int, tx: int, ty: int) -> list:
+        """Schritte zu Fuss von Kachel (tx, ty) bis zu jeder Kachel der
+        Ebene, -1 fuer unerreichbar."""
+        b, h = self.breite[ebene], self.hoehe[ebene]
+        weit = [-1] * (b * h)
+        if not (0 <= tx < b and 0 <= ty < h):
+            return weit
+        nachbarn = self._nachbarn(ebene)
+        start = ty * b + tx
+        weit[start] = 0
+        jetzt = [start]
+        schritt = 0
+        # Ring um Ring statt einer Warteschlange: jeder im Ring hat denselben
+        # Abstand, das spart je Kachel das Nachschlagen.
+        while jetzt:
+            schritt += 1
+            naechste = []
+            for i in jetzt:
+                for j in nachbarn[i]:
+                    if weit[j] < 0:
+                        weit[j] = schritt
+                        naechste.append(j)
+            jetzt = naechste
         return weit
 
     # ---- Fragen --------------------------------------------------------
@@ -308,27 +345,7 @@ class Wegenetz:
             if naechstes is not None:
                 return naechstes[1], naechstes[2]
         self._letztes_bild = bild
-        b, h = self.breite[ebene], self.hoehe[ebene]
-        frei = self.begehbar[ebene]
-        weit = [-1] * (b * h)
-        if 0 <= tx < b and 0 <= ty < h:
-            start = ty * b + tx
-            weit[start] = 0
-            offen = deque([start])
-            while offen:
-                i = offen.popleft()
-                x, y = i % b, i // b
-                for dx, dy in _NACHBARN:
-                    nx, ny = x + dx, y + dy
-                    if not (0 <= nx < b and 0 <= ny < h):
-                        continue
-                    j = ny * b + nx
-                    if not frei[j] or weit[j] >= 0:
-                        continue
-                    if dx and dy and not (frei[y * b + nx] and frei[ny * b + x]):
-                        continue
-                    weit[j] = weit[i] + 1
-                    offen.append(j)
+        weit = self._ausbreiten(ebene, tx, ty)
         if len(self._zielfelder) >= self._FELDER_ZIEL:
             self._zielfelder.pop(next(iter(self._zielfelder)))
         self._zielfelder[schluessel] = weit

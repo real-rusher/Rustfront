@@ -48,10 +48,10 @@ import pygame
 from . import config as K
 from . import wesen_daten
 from .bots import BotHirn
-from .bottaktik import braucht_schutz, rolle_frei
+from .bottaktik import braucht_schutz, kampffaehig, rolle_frei
 from .entities import Granate
 from .innenleben import Innenleben, zuversicht_rechnen
-from .trupp import richtung_wort, sieht_durch_rauch
+from .trupp import an_deckung, richtung_wort, sieht_durch_rauch
 
 
 def _nichts(status: str):
@@ -282,17 +282,29 @@ class GoapHirn(BotHirn):
                 raus.append(pygame.Vector2(ort))
         return raus
 
-    def fest_gedeckt(self, pos, ebene) -> bool:
+    def fest_gedeckt(self, pos, ebene, orte=None) -> bool:
         """Dicht gedeckt vor jedem Gegner, den er kennt oder an den er sich
         erinnert - ohne Rauch: dorthin zieht er einen Verwundeten, bevor er
         ihm aufhilft (seit 0.34.48)."""
         # So weit wie beim Bedrohen eines Liegenden (gedeckt): wer etwas
         # weiter weg steht als ein Bot sieht, trifft trotzdem noch - mit der
         # Sicht als Grenze galt einer nach drei Schritten als gedeckt.
-        for o in self.bedrohungs_orte():
+        for o in (self.bedrohungs_orte() if orte is None else orte):
             if o.distance_to(pos) <= K.VERWUNDET["bedrohung"] * 1.5 and not self.dicht_gedeckt(pos, o):
                 return False
         return True
+
+    def sicher_gedeckt(self, pos, ebene) -> bool:
+        """Fest gedeckt - und auch ein Stueck daneben noch (seit 0.34.52).
+        Wer genau auf der Kante lag, war ein Bild gedeckt und das naechste
+        nicht: der Retter suchte jedes Mal einen neuen Platz und zog ihn an
+        der Mauer vorbei ins Freie."""
+        orte = self.bedrohungs_orte()
+        r = K.VERWUNDET["deckung_rand"]
+        pos = pygame.Vector2(pos)
+        return all(self.fest_gedeckt(pos + d, ebene, orte)
+                   for d in (pygame.Vector2(0, 0), pygame.Vector2(r, 0), pygame.Vector2(-r, 0),
+                             pygame.Vector2(0, r), pygame.Vector2(0, -r)))
 
     def feind_orte(self, ohne=None) -> list:
         """Alle Orte auf seiner Ebene, an denen er Gegner weiss: gesehen
@@ -302,14 +314,14 @@ class GoapHirn(BotHirn):
         jetzt = self.g.welt.zeit
         raus = []
         for w, (ort, ebene, zeit) in self.gesehen.items():
-            if w.lebt and ebene == k.ebene and jetzt - zeit <= K.BOTS["gedaechtnis"]:
+            if kampffaehig(w) and ebene == k.ebene and jetzt - zeit <= K.BOTS["gedaechtnis"]:
                 raus.append(pygame.Vector2(w.pos if jetzt - zeit < 0.2 else ort))
         if self.trupp is not None:
             for ort, ebene, w in self.trupp.feinde(k.ebene):
                 if not any(ort.distance_to(o) < 40.0 for o in raus):
                     raus.append(ort)
         for w, (ort, ebene, zeit) in self.zugerufen.items():
-            if (w.lebt and ebene == k.ebene and jetzt - zeit <= K.SPRECHEN["gedaechtnis"]
+            if (kampffaehig(w) and ebene == k.ebene and jetzt - zeit <= K.SPRECHEN["gedaechtnis"]
                     and not any(ort.distance_to(o) < 40.0 for o in raus)):
                 raus.append(pygame.Vector2(ort))
         for ort, ebene, zeit, _art in self.lagebild:
@@ -420,7 +432,7 @@ class GoapHirn(BotHirn):
                    if x.ebene == k.ebene and x.pos.distance_to(k.pos) <= weite]
         feinde = []
         for w, (ort, ebene, zeit) in self.gesehen.items():
-            if not w.lebt or jetzt - zeit > K.BOTS["gedaechtnis"]:
+            if not kampffaehig(w) or jetzt - zeit > K.BOTS["gedaechtnis"]:
                 continue
             c = faktor_von(w)
             # Wer auf ihn zustuermt, macht Eindruck (Days Gone: wer den
@@ -463,7 +475,9 @@ class GoapHirn(BotHirn):
                     self._abschuesse.append((jetzt, 1.0))
                     self.innen.ereignis("abschuss")
         for w, (ort, ebene, zeit) in self.gesehen.items():
-            if w.lebt and jetzt - zeit < 1.0:
+            # Ein Liegender kam sonst jedes Bild wieder dazu - und zaehlte im
+            # naechsten wieder als Abschuss (gefunden 0.34.52).
+            if kampffaehig(w) and jetzt - zeit < 1.0:
                 self._feinde_da[w] = pygame.Vector2(ort)
         self._abschuesse = self._abschuesse[-10:]
         self._verluste = self._verluste[-10:]
@@ -477,7 +491,7 @@ class GoapHirn(BotHirn):
         self.erinnern()
         self._ansagen()
         for w in list(self.zugerufen):
-            if not w.lebt or self.g.welt.zeit - self.zugerufen[w][2] > K.SPRECHEN["gedaechtnis"]:
+            if not kampffaehig(w) or self.g.welt.zeit - self.zugerufen[w][2] > K.SPRECHEN["gedaechtnis"]:
                 del self.zugerufen[w]
         sichtbar = z is not None and self.ziel_ok(z)
         gefahr = self._gefahr()
@@ -638,7 +652,7 @@ class GoapHirn(BotHirn):
                     # Fest gedeckt, nicht nur im Rauch: erst dorthin ziehen, dann
                     # aufhelfen (seit 0.34.48, gemeldet: "die Teammates immer
                     # erst hinter eine gute und sichere Deckung bergen").
-                    kamerad_gedeckt=self.fest_gedeckt(x.pos, x.ebene),
+                    kamerad_gedeckt=self.sicher_gedeckt(x.pos, x.ebene),
                     ich_berge=ich, bergen_sicher=sicher, bergung_laeuft=laeuft,
                     anderer_zieht=anderer)
 
@@ -653,21 +667,29 @@ class GoapHirn(BotHirn):
         # und half ihm im Freien auf).
         _s, feld = wege.feld_zu(x.ebene, x.pos)
         breite = wege.breite[x.ebene]
+        orte = self.bedrohungs_orte()
+        mitte = sum(orte, pygame.Vector2(0, 0)) / len(orte) if orte else None
         bestes, beste = None, 1e9
+        n = K.VERWUNDET["deckung_richtungen"]
         for r in K.VERWUNDET["deckung_radien"]:
-            for i in range(12):
-                p = x.pos + pygame.Vector2(r, 0).rotate(i * 30.0)
+            for i in range(n):
+                p = x.pos + pygame.Vector2(r, 0).rotate(i * 360.0 / n)
                 if not welt.frei(p, k.radius + 2, x.ebene, True):
                     continue
-                if not self.fest_gedeckt(p, x.ebene):
+                if not self.fest_gedeckt(p, x.ebene, orte):
+                    continue
+                # An die Deckung heran (seit 0.34.52): mitten im Schatten
+                # haelt sie auch ein Stueck daneben noch (sicher_gedeckt).
+                if mitte is not None:
+                    p = an_deckung(welt, p, k.radius, x.ebene, mitte)
+                if not self.sicher_gedeckt(p, x.ebene):
                     continue
                 tx, ty = wege.kachel(p)
                 schritte = feld[ty * breite + tx] if 0 <= tx < breite and 0 <= ty < wege.hoehe[x.ebene] else -1
                 if schritte < 0 or schritte * K.TILE > r * 1.8 + K.TILE:
                     continue
                 wert = schritte * K.TILE + 0.5 * p.distance_to(k.pos)
-                orte = self.bedrohungs_orte()
-                if orte and welt.deckung(sum(orte, pygame.Vector2(0, 0)) / len(orte), p, x.ebene) == "wand":
+                if mitte is not None and welt.deckung(mitte, p, x.ebene) == "wand":
                     wert -= K.BOTS["deckung_wand"]    # hinter eine Mauer, lieber als hinter ein Fass
                 if wert < beste:
                     bestes, beste = p, wert
@@ -705,16 +727,23 @@ class GoapHirn(BotHirn):
         """Wen er zuletzt gesehen hat - oder, im Trupp, wen ihm einer
         gesagt hat (die Lage des Trupps)."""
         eigen = super().letzter_feind()
-        if eigen is not None:
+        if eigen is not None and self.im_abschnitt(eigen[0]) is not False:
             return eigen
         k = self.k
         jetzt = self.g.welt.zeit
         bester = None
         kandidaten = list(self.trupp.feinde(k.ebene)) if self.trupp is not None else []
+        if eigen is not None:
+            kandidaten.append(eigen)
         # Was ihm einer zugerufen hat (seit 0.34.50) - auch ohne Trupp.
         for w, (ort, ebene, zeit) in self.zugerufen.items():
-            if w.lebt and ebene == k.ebene and jetzt - zeit <= K.SPRECHEN["gedaechtnis"]:
+            if kampffaehig(w) and ebene == k.ebene and jetzt - zeit <= K.SPRECHEN["gedaechtnis"]:
                 kandidaten.append((pygame.Vector2(ort), ebene, w))
+        if eigen is not None:
+            # Geknickte Front (seit 0.34.52): der in seinem Abschnitt zuerst -
+            # sonst hielt er nieder, wohin schon die anderen schossen.
+            drin = [c for c in kandidaten if self.im_abschnitt(c[0])]
+            kandidaten = drin or kandidaten
         for ort, ebene, w in kandidaten:
             d = k.pos.distance_to(ort)
             if bester is None or d < bester[0]:
@@ -758,7 +787,7 @@ class GoapHirn(BotHirn):
         # Lage am eigenen Trupp: sonst hielt sich ein Trupp ohne Gegner fuer
         # unterlegen und rief selbst um Hilfe, statt zuzusagen.
         for w, ort, ebene in z["feinde"]:
-            if t is not None and w.lebt and not z.get("funk"):
+            if t is not None and kampffaehig(w) and not z.get("funk"):
                 t.lage[w] = [pygame.Vector2(ort), ebene, jetzt]
         for x in self.hoerer():
             x.hirn.zuruf_hoeren(z["feinde"], self.k)
@@ -772,7 +801,7 @@ class GoapHirn(BotHirn):
         jetzt = self.g.welt.zeit
         neu = False
         for w, ort, ebene in feinde:
-            if not w.lebt:
+            if not kampffaehig(w):
                 continue
             if w not in self.gesehen and w not in self.zugerufen:
                 neu = True
@@ -840,7 +869,7 @@ class GoapHirn(BotHirn):
         super()._wahrnehmen()
         jetzt = self.g.welt.zeit
         for w in list(self.beschossen_von):
-            if not w.lebt or jetzt - self.beschossen_von[w][2] > K.BOTS["schuetze_merken"]:
+            if not kampffaehig(w) or jetzt - self.beschossen_von[w][2] > K.BOTS["schuetze_merken"]:
                 del self.beschossen_von[w]
         if self.stoss_rest > 0.0:
             return
@@ -855,6 +884,46 @@ class GoapHirn(BotHirn):
                 self._neues_ziel(w, False)
                 self.linie = self.g.welt.deckung(k.pos, w.pos, k.ebene)
                 return
+
+    def im_abschnitt(self, ort):
+        """Liegt `ort` in seinem Abschnitt der geknickten Front? None, wenn
+        die Front nicht geknickt ist oder er keinen Abschnitt hat."""
+        t = self.trupp
+        if t is None or t.abschnitte <= 1:
+            return None
+        blick = t.blick_fuer(self.k)
+        if blick is None:
+            return None
+        k = self.k
+        b = pygame.Vector2(ort) - k.pos
+        if b.length_squared() < 1.0:
+            return True
+
+        def winkel(p):
+            a = pygame.Vector2(p) - k.pos
+            if a.length_squared() < 1.0:
+                return 0.0
+            return abs((a.angle_to(b) + 180.0) % 360.0 - 180.0)
+
+        eigen = winkel(blick)
+        if eigen > K.TRUPP["abschnitt_winkel"]:
+            return False
+        # Liegen zwei Gruppen enger beisammen als zwei Abschnitte breit sind,
+        # gehoert er zu der, zu der er naeher schaut.
+        return all(eigen <= winkel(p) for p in t.blicke.values() if p.distance_to(blick) > 1.0)
+
+    def _ziel_erlaubt(self, w) -> bool:
+        """Geknickte Front (seit 0.34.52): aus seinem Abschnitt heraus nur
+        auf den, der auf ihn schiesst oder ihm zu nahe kommt - solange er in
+        seinem Abschnitt Gegner weiss. Gemeldet: "Alle Bots haben in eine
+        bestimmte Richtung geschossen": wer zuerst ein Ziel hatte, behielt
+        es, auch nachdem die Front geknickt war."""
+        im = self.im_abschnitt(w.pos)
+        if im is None or im:
+            return True
+        if self._schiesst_auf_mich(w) or self.k.pos.distance_to(w.pos) < K.TRUPP["abschnitt_nah"]:
+            return True
+        return not any(self.im_abschnitt(o) for o in self.feind_orte())
 
     def _ziel_bonus(self, w) -> float:
         """Wer auf ihn schiesst, zuerst (seit 0.34.50). Im Trupp: wer dem
@@ -888,6 +957,10 @@ class GoapHirn(BotHirn):
         if p is None:
             return super()._kampfbewegung(abstand, z, ein)
         k = self.k
+        if self.trupp.gedeckt_hier(p, k.ebene, z.pos):
+            # Eine gedeckte Stellung (seit 0.34.52): genau dorthin und dort
+            # stehen - kein Hin und Her, das ihn aus der Deckung traegt.
+            return self._an_stelle(p, ein)
         if k.pos.distance_to(p) > K.TRUPP["stellung_weite"]:
             return self._weg_richtung(p, k.ebene, ein)
         if self.seite_rest <= 0.0:
@@ -898,6 +971,18 @@ class GoapHirn(BotHirn):
             return pygame.Vector2(0, 0)
         hin = hin.normalize()
         return pygame.Vector2(-hin.y, hin.x) * self.seite * 0.35
+
+    def _an_stelle(self, p, ein):
+        """Laufrichtung genau an eine Stelle: von weit her den Weg, die
+        letzten Pixel langsamer, damit er nicht darueber hinaus laeuft."""
+        k = self.k
+        d = pygame.Vector2(p) - k.pos
+        weit = d.length()
+        if weit <= K.TRUPP["deckung_genau"]:
+            return pygame.Vector2(0, 0)
+        if weit > K.TRUPP["stellung_weite"]:
+            return self._weg_richtung(p, k.ebene, ein)
+        return d / weit * max(0.35, min(1.0, weit / K.TRUPP["stellung_weite"]))
 
     def _unterwegs(self, dt: float, ein: dict):
         """Ohne Kontakt im Trupp: die anderen gehen in breiter Linie neben
@@ -1018,6 +1103,13 @@ class GoapHirn(BotHirn):
             # unterbleibt - sonst fuehrte ihn das Ausweichen gleich nach dem
             # Umstellen wieder dorthin, wo er flankiert war.
             orte = self.bedrohungs_richtungen()
+            p = self._stellung()
+            if p is not None and (p - self.k.pos).length_squared() > 1.0 \
+                    and will.dot((p - self.k.pos).normalize()) > 0.5:
+                # Zu seiner Stellung darf er (seit 0.34.52): die hat der Trupp
+                # fuer die geknickte Front gesetzt - sonst blieb er im Freien
+                # stehen, 130 px vor seiner Kiste.
+                orte = []
             if len(orte) >= 2:
                 vor = self.k.pos + will * 14.0
                 spanne = self._spanne(vor, orte)
@@ -1207,7 +1299,9 @@ class GoapHirn(BotHirn):
         if self.wurf_phase <= 0.0:
             will = pygame.Vector2(0, 0)
             p = self._stellung()
-            if p is not None and self.k.pos.distance_to(p) > K.TRUPP["stellung_weite"] * 1.5:
+            if p is not None and self.trupp.gedeckt_hier(p, self.k.ebene, z.pos):
+                will = self._an_stelle(p, ein)     # genau an die Deckung (0.34.52)
+            elif p is not None and self.k.pos.distance_to(p) > K.TRUPP["stellung_weite"] * 1.5:
                 # Im Trupp erst an seine Stellung (seit 0.34.51), dann stehend
                 # halten - sonst blieb er stehen, wo das Feuer begann.
                 will = self._weg_richtung(p, self.k.ebene, ein)
@@ -1284,9 +1378,18 @@ class GoapHirn(BotHirn):
             # Vor niemandem in Deckung: wo er steht, ist er sicher genug.
             self._deckung_platz = pygame.Vector2(k.pos)
             return _nichts("fertig")
+        if self.deckung_ort is not None and self.deckung_suche <= 0.0 \
+                and self.dicht_gedeckt(self.deckung_ort, gefahr[0]):
+            # Deckt der Platz noch, bleibt er (seit 0.34.52): kurz davor lag
+            # er schon innerhalb des kleinsten Suchrings, die neue Suche fand
+            # nichts, und er blieb eine Armlaenge vor der Kiste im Freien.
+            self.deckung_suche = 0.6
         if self.deckung_ort is None or self.deckung_suche <= 0.0:
             self.deckung_ort = self._deckung_suchen(pygame.Vector2(gefahr[0]))
             self.deckung_suche = 0.6
+            if self.deckung_ort is not None:
+                # Bis an das Hindernis (seit 0.34.52), nicht eine Armlaenge davor.
+                self.deckung_ort = an_deckung(self.g.welt, self.deckung_ort, k.radius, k.ebene, gefahr[0])
         if self.deckung_ort is None:
             return _nichts("gescheitert")
         d = self.deckung_ort - k.pos
@@ -1516,17 +1619,14 @@ class GoapHirn(BotHirn):
         orte = []
         # In einer geknickten Front (0.34.51) zaehlt nur, was in seinem
         # Abschnitt steht - die andere Gruppe hat ein Kamerad im Blick. Wer
-        # auf ihn schiesst, zaehlt immer.
-        t = self.trupp
-        blick = t.blick_fuer(k) if t is not None and t.abschnitte > 1 else None
+        # auf ihn schiesst, zaehlt immer. Welcher Abschnitt, entscheidet seit
+        # 0.34.52 dieselbe Regel wie beim Ziel (im_abschnitt): mit nur 70 Grad
+        # lagen zwei nahe Gruppen beide darin, und er stellte sich dauernd um.
         for w, (ort, ebene, zeit) in self.gesehen.items():
-            if w.lebt and not getattr(w, "am_boden", False) and ebene == k.ebene and jetzt - zeit < 2.0:
+            if kampffaehig(w) and ebene == k.ebene and jetzt - zeit < 2.0:
                 o = pygame.Vector2(w.pos if jetzt - zeit < 0.2 else ort)
-                if blick is not None:
-                    a, b = blick - k.pos, o - k.pos
-                    if (a.length_squared() > 1.0 and b.length_squared() > 1.0
-                            and abs((a.angle_to(b) + 180.0) % 360.0 - 180.0) > K.TRUPP["abschnitt_winkel"]):
-                        continue
+                if self.im_abschnitt(o) is False:
+                    continue
                 orte.append(o)
         for w, (ort, ebene, zeit) in self.beschossen_von.items():
             if ebene == k.ebene and not any(ort.distance_to(o) < 50.0 for o in orte):
@@ -1807,9 +1907,11 @@ class GoapHirn(BotHirn):
         if x is None:
             self._berge_ort = None
             return _nichts("fertig")
-        if self.fest_gedeckt(x.pos, x.ebene):
+        if self.sicher_gedeckt(x.pos, x.ebene):
             self._berge_ort = None
             return _nichts("fertig")
+        # Der Platz bleibt, solange er deckt - auch wenn er nicht mehr ganz
+        # sicher ist: lieber dorthin als dauernd woandershin.
         ort = getattr(self, "_berge_ort", None)
         if ort is None or not self.fest_gedeckt(ort, x.ebene):
             ort = self._berge_ort = self.bergeplatz(x)
@@ -2009,7 +2111,7 @@ class GoapHirn(BotHirn):
             # Zu weit, oder etwas steht im Weg (seine eigene Deckung): erst
             # dorthin, wo er frei werfen kann - sonst brach vorn_zu den Wurf
             # bei jedem Bild ab und er stand ewig da (gesehen in der Aufnahme).
-            if k.pos.distance_to(soll) > weit or self.g.welt.deckung(k.pos, soll, k.ebene) != "":
+            if k.pos.distance_to(soll) > weit or not self.wurfbahn_frei(soll):
                 return self._weg_richtung(soll, k.ebene, ein), pygame.Vector2(gefahr[0]), False, False, "laeuft"
             self.wurf_phase = 0.45
             self.sagen("RAUCH!", wichtig=True)
@@ -2017,6 +2119,20 @@ class GoapHirn(BotHirn):
         ziel.genau = True                 # nicht auf 40 Prozent des Weges (bots._werfen)
         will, punkt, werfen, zielt = self._werfen(dt, ein, ziel)
         return will, punkt, werfen, zielt, ("fertig" if werfen else "laeuft")
+
+    def wurfbahn_frei(self, nach) -> bool:
+        """Fliegt eine Granate von ihm bis `nach`, ohne anzustossen? Nicht
+        nur die Mitte, auch ihre Breite zu beiden Seiten (seit 0.34.52): wer
+        am Ende einer Mauer stand, streifte deren Ecke, und der Rauch prallte
+        drei Kacheln am Verwundeten vorbei."""
+        k = self.k
+        welt = self.g.welt
+        hin = pygame.Vector2(nach) - k.pos
+        if hin.length_squared() < 1.0:
+            return True
+        quer = pygame.Vector2(-hin.y, hin.x).normalize() * K.BOTS["wurf_breite"]
+        return all(welt.deckung(k.pos + q, pygame.Vector2(nach) + q, k.ebene) == ""
+                   for q in (pygame.Vector2(0, 0), quer, -quer))
 
     def rauch_ort(self, gefahr):
         """Wohin der Rauch gehoert: auf den Liegenden, ein Stueck zum Gegner

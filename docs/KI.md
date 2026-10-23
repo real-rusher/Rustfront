@@ -1286,7 +1286,40 @@ nur, was im eigenen Abschnitt steht (bis 70 Grad neben der Blickrichtung)
 sich um, und alle drangten in die Mitte. Abschnitte 90 px vor der Mitte;
 ein MG-Schuetze im Dauerfeuer geht erst an seine Stellung.
 
-### 11.10 Was noch offen ist
+### 11.10 Reparaturen (0.34.52): was die Verhaltens-Suite fand
+
+Gemessen mit `tests/test_verhalten.py` (ganze Szenen, mehrere Seeds),
+dann je Ursache behoben:
+
+* **Liegende**: `kampffaehig(w)` (bottaktik) - wer liegt, ist nirgends
+  Gegner: nicht in `gesehen`, nicht Ziel (`ziel_ok`), nicht in
+  `feind_orte`, `letzter_feind`, Zurufen, Lage, Kraeftevergleich. Ein
+  laufender Stoss endet beim naechsten Hinsehen. Vorher hielt der Stoss
+  das Ziel fest, und `_kaempfen` begann den naechsten, bevor
+  `_wahrnehmen` (alle `takt`) es losliess.
+* **Schusslinie**: `kamerad_im_weg` prueft dort, wohin der Lauf
+  wirklich zeigt (nach dem Schwenken), fuer beide KIs.
+* **Abschnitte**: `_ziel_erlaubt` - aus dem eigenen Abschnitt heraus nur
+  auf den, der schiesst oder nah ist (`abschnitt_nah`), solange im
+  eigenen Abschnitt Gegner bekannt sind. `im_abschnitt`: die naechste
+  Gruppe zaehlt, nicht nur 70 Grad - zwei Gruppen lagen sonst beide
+  darin. `_abschnitt_leute`: wer einen Abschnitt hatte, behaelt ihn.
+  Der Zangen-Schutz haelt den Schritt zur eigenen Stellung nicht mehr an.
+* **Deckung**: `an_deckung` (trupp) rueckt gedeckte Stellungen,
+  Deckungsplaetze und Bergeplaetze bis an das Hindernis; an einer
+  gedeckten Stellung steht er still (`_an_stelle`).
+* **Bergen**: geworfen wird erst, wenn er zum Ziel schaut
+  (`wurf_winkel`, hoechstens `wurf_warten`), und nur auf einer Bahn, die
+  in voller Breite frei ist (`wurfbahn_frei`). `sicher_gedeckt` (auch
+  8 px daneben noch) fuer den Bergeplatz und `kamerad_gedeckt`; der
+  Platz bleibt, solange er deckt. Der Gezogene rutscht an Ecken.
+* **Last**: Liegende werden nicht angesehen; still Liegende rechnen
+  keine Bewegung; `world.deckung` und `Wegenetz._ausbreiten` (Nachbarn
+  vorgerechnet) je rund 2,7-mal schneller; `druckpunkt` kurz gemerkt.
+* **Zufall**: `_bot_rnd` mit Seed macht den Testmodus wiederholbar -
+  sonst waren Fehler nicht nachzustellen.
+
+### 11.11 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.

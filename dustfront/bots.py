@@ -152,6 +152,7 @@ class BotHirn(Taktik):
         self.wurf_rest = self.rnd.uniform(*K.BOTS["wurf_pause"]) * 0.5
         self.wurf_phase = 0.0         # > 0: zielt gerade zum Wurf
         self.wurf_platz = -1
+        self._wurf_warten = 0.0       # so lange wartet er schon, bis er zum Ziel schaut
         self.waffen_rest = 0.0        # Sperre zwischen zwei Waffenwechseln
         self.wegpunkt = None          # Zwischenziel auf dem Weg
         self.weg_ziel = None          # (Ort, Ebene) des Weges
@@ -241,6 +242,8 @@ class BotHirn(Taktik):
         self.blick += max(-schritt, min(schritt, ab))
         weit = max(40.0, k.pos.distance_to(ziel_punkt))
         maus = k.pos + pygame.Vector2(1, 0).rotate(self.blick) * weit
+        if feuern and k.waffe_daten.get("art") == "schuss" and self.kamerad_im_weg(weit):
+            feuern = False
         ein["ziel"] = [round(maus.x, 1), round(maus.y, 1)]
         ein["will"] = [round(will.x, 2), round(will.y, 2)]
         ein["feuert"] = bool(feuern)
@@ -319,7 +322,10 @@ class BotHirn(Taktik):
         return hasattr(w, "nummer") or getattr(w, "fraktion", "") == "feind"
 
     def ziel_ok(self, w) -> bool:
-        return self.ist_feind(w) and w.ebene == self.k.ebene
+        # Wer liegt, ist kein Ziel (seit 0.34.52): sonst hielten Aktionen und
+        # Gefahr (bot_goap._gefahr) ihn fest, und das Niederhalten schoss
+        # Stoss um Stoss auf die Stelle, an der er lag.
+        return self.ist_feind(w) and w.ebene == self.k.ebene and not getattr(w, "am_boden", False)
 
     def _kandidaten(self) -> list:
         g = self.g
@@ -353,18 +359,27 @@ class BotHirn(Taktik):
         jetzt = self.g.welt.zeit
         sichtbar = []
         for w in self._kandidaten():
+            # Wer liegt, ist keine Gefahr mehr (bottaktik.kampffaehig): nicht
+            # hinsehen spart je Liegendem eine Sichtlinie (seit 0.34.52).
+            if getattr(w, "am_boden", False):
+                continue
             if self.sieht(w):
                 sichtbar.append(w)
                 self.gesehen[w] = (pygame.Vector2(w.pos), w.ebene, jetzt)
-        # Vergessen, was zu lange her ist.
+        # Vergessen, was zu lange her ist - und wer liegt.
         for w in list(self.gesehen):
-            if jetzt - self.gesehen[w][2] > K.BOTS["gedaechtnis"] or not w.lebt:
+            if (jetzt - self.gesehen[w][2] > K.BOTS["gedaechtnis"] or not w.lebt
+                    or getattr(w, "am_boden", False)):
                 del self.gesehen[w]
         # Wer am Boden liegt, ist kein Ziel mehr (seit 0.34.46, gemeldet:
         # "sie feuern immer sehr lange auf Gegner, die schon am Boden sind").
-        # Den Feuerstoss, der laeuft, bringt er noch zu Ende.
+        # Seit 0.34.52 endet auch der Stoss, der lief: ein Dauerfeuer hielt
+        # sonst vier Sekunden auf den Liegenden.
         liegt = self.ziel is not None and getattr(self.ziel, "am_boden", False)
-        if self.ziel is not None and self.ziel in sichtbar and not (liegt and self.stoss_rest <= 0.0):
+        if liegt:
+            self.stoss_rest = 0.0
+        if (self.ziel is not None and self.ziel in sichtbar and not liegt
+                and self._ziel_erlaubt(self.ziel)):
             # Er bleibt dran - ausser ein anderer, den er sieht, hat ihn eben
             # getroffen (seit 0.34.38). Wer von der Seite beschossen wird,
             # dreht sich zu dem, der schiesst, statt stur auf den ersten zu
@@ -381,7 +396,8 @@ class BotHirn(Taktik):
             return
         alt = self.ziel
         self.ziel = None
-        sichtbar = [w for w in sichtbar if not getattr(w, "am_boden", False)]
+        sichtbar = [w for w in sichtbar
+                    if not getattr(w, "am_boden", False) and self._ziel_erlaubt(w)]
         if sichtbar:
             zone = self._zone()
             # Feuerschutz: wer einem Kameraden zu nahe kommt, der gerade
@@ -416,6 +432,11 @@ class BotHirn(Taktik):
         self.taktik = None
         self.deckung_ort = None
         self.stoss_rest = 0.0
+
+    def _ziel_erlaubt(self, w) -> bool:
+        """Darf er auf diesen sichtbaren Gegner schiessen? Hier jeden - im
+        Trupp mit geknickter Front nur den in seinem Abschnitt (bot_goap.py)."""
+        return True
 
     def _ziel_bonus(self, w) -> float:
         """So viel lieber nimmt er diesen Gegner (in Pixeln Abstand) - hier
@@ -635,6 +656,11 @@ class BotHirn(Taktik):
             # nach, statt bei jedem Wackeln loszulassen - so schiesst man
             # ein MG (seit 0.34.38), das sich ja nur langsam drehen laesst.
             erlaubt *= 3.0
+        if getattr(z, "am_boden", False):
+            # Liegt er, kein neuer Stoss mehr: sonst begann jeder neue, bevor
+            # das Ziel beim naechsten Hinsehen (_wahrnehmen, alle `takt`) wegfiel.
+            self.stoss_rest = 0.0
+            bereit = False
         if bereit and winkel_fehler <= erlaubt:
             if self.stoss_rest <= 0.0 and self.pause_rest <= 0.0:
                 stoss, self._pause_naechste, self.still = self._stoss()
@@ -773,6 +799,24 @@ class BotHirn(Taktik):
         nah = k.pos + d * (min(laenge, K.BOTS["vorn_frei"]) / laenge)
         return self.g.welt.deckung(k.pos, nah, k.ebene) != ""
 
+    def kamerad_im_weg(self, weite: float) -> bool:
+        """Steht ein Kamerad dort, wohin der Lauf gerade zeigt, naeher als
+        `weite`? Dann schiesst er nicht (seit 0.34.52, gemeldet: sie
+        schossen "manchmal auf Teammates"). Wer liegt, ist unter der Bahn."""
+        k = self.k
+        hin = pygame.Vector2(1, 0).rotate(self.blick)
+        luecke = K.BOTS["kamerad_linie"]
+        for x in self.kameraden():
+            if x.ebene != k.ebene or getattr(x, "am_boden", False):
+                continue
+            d = x.pos - k.pos
+            vor = d.dot(hin)
+            if vor <= 0.0 or vor > weite + luecke:
+                continue
+            if abs(d.cross(hin)) < luecke + getattr(x, "radius", 9.0) * 0.5:
+                return True
+        return False
+
     def _deckung_wert(self, p, gefahr, zone):
         """Wie gut diese Deckung ist (kleiner ist besser), oder None, wenn
         sie nicht in Frage kommt. Das GOAP-Hirn rechnet hier alle Gegner
@@ -835,6 +879,8 @@ class BotHirn(Taktik):
         """Wurfwaffe nehmen, kurz zielen, werfen, zurueck zur Waffe."""
         k = self.k
         self.wurf_phase -= dt
+        if self.wurf_phase > 1e-3:
+            self._wurf_warten = 0.0           # ein neuer Wurf: noch nicht gewartet
         nr = self.wurf_platz
         if nr < 0 or nr >= len(k.waffen):
             self.wurf_phase = 0.0
@@ -849,9 +895,18 @@ class BotHirn(Taktik):
         if k.waffen[nr] == "rauch" and not getattr(z, "genau", False):
             ziel = k.pos + (z.pos - k.pos) * 0.4
         werfen = self.wurf_phase <= 0.0 and k.waffe == nr
+        if (werfen and self._wurf_warten < K.BOTS["wurf_warten"]
+                and abs(_winkel_diff(self.blick, _winkel_zu(k.pos, ziel))) > K.BOTS["wurf_winkel"]):
+            # Geworfen wird dorthin, wohin er schaut (seit 0.34.52): wer sich
+            # erst umdrehen muss, wartet - sonst flog der Rauch fuer den
+            # Verwundeten drei Kacheln an ihm vorbei (gemessen).
+            self._wurf_warten += dt
+            self.wurf_phase = 1e-4            # der Wurf laeuft noch: kein Umschauen
+            werfen = False
         if werfen:
             self.wurf_phase = 0.0
             self.waffen_rest = 0.0
+            self._wurf_warten = 0.0
         return pygame.Vector2(0, 0), ziel, werfen, False
 
     # ══════════════════════════════════════════════════════════════

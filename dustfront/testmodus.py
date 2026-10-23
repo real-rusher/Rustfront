@@ -743,7 +743,9 @@ class Testmodus(Gefecht):
                     "TRUPP %d" % (len(liste) + 1))
         trupp = Trupp(self, team, name)
         n = int(w.get("groesse", 4))
-        rnd = random.Random()
+        # Aus dem Zufall der Bots (seit 0.34.52): mit festem Seed ist dann
+        # auch die Aufstellung jedes Mal dieselbe (tests/test_verhalten.py).
+        rnd = random.Random(self._bot_rnd.random())
         fuehrer = w.get("fuehrer", "funk")
         for i in range(n):
             p = self._stelle(pos + pygame.Vector2(26 * (i % 3) - 26, 26 * (i // 3)),
@@ -863,7 +865,7 @@ class Testmodus(Gefecht):
         ebene = self.blick if ebene is None else ebene
         w = self.werte(eintrag)
         anzahl = int(w.get("anzahl", 1)) if eintrag.mehrfach else 1
-        rnd = random.Random()
+        rnd = random.Random(self._bot_rnd.random())     # wie trupp_setzen
         raus = []
         for _ in range(anzahl):
             p = self._stelle(pos, ebene, 12.0, float(w.get("streuung", 0)), rnd)

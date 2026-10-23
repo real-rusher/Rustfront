@@ -1802,9 +1802,16 @@ class Spieler(Wesen):
             self.tempo.x = naehern(self.tempo.x, ziel_tempo.x, rate * dt)
             self.tempo.y = naehern(self.tempo.y, ziel_tempo.y, rate * dt)
         vor = pygame.Vector2(self.pos)
-        self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
-        self.welt.auseinander(self)
-        self.welt.befreien(self)
+        # Wer still am Boden liegt, bewegt sich nicht und wird nicht geschoben
+        # (world.auseinander) - gezogen wird er nur auf freien Boden. Nach
+        # einer grossen Schlacht lagen sonst Dutzende, und jeder kostete so
+        # viel wie einer, der laeuft (seit 0.34.52, gemeldet: "die Framerate
+        # geht oft runter").
+        if not (getattr(self, "am_boden", False) and self.tempo.length_squared() < 0.01
+                and self.will.length_squared() < 0.01):
+            self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
+            self.welt.auseinander(self)
+            self.welt.befreien(self)
 
         if self.sturz_rest > 0:
             pass                         # in der Luft kein Staub, kein Loch
