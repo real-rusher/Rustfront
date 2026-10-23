@@ -1206,6 +1206,11 @@ class GoapHirn(BotHirn):
         will, punkt, feuern, zielt = self._kaempfen(dt, ein, mit_deckung=False)
         if self.wurf_phase <= 0.0:
             will = pygame.Vector2(0, 0)
+            p = self._stellung()
+            if p is not None and self.k.pos.distance_to(p) > K.TRUPP["stellung_weite"] * 1.5:
+                # Im Trupp erst an seine Stellung (seit 0.34.51), dann stehend
+                # halten - sonst blieb er stehen, wo das Feuer begann.
+                will = self._weg_richtung(p, self.k.ebene, ein)
         return will, punkt, feuern, zielt, "laeuft"
 
     def tun_werfen(self, dt, ein):
@@ -1509,9 +1514,20 @@ class GoapHirn(BotHirn):
         jetzt = self.g.welt.zeit
         p = k.pos if p is None else p
         orte = []
+        # In einer geknickten Front (0.34.51) zaehlt nur, was in seinem
+        # Abschnitt steht - die andere Gruppe hat ein Kamerad im Blick. Wer
+        # auf ihn schiesst, zaehlt immer.
+        t = self.trupp
+        blick = t.blick_fuer(k) if t is not None and t.abschnitte > 1 else None
         for w, (ort, ebene, zeit) in self.gesehen.items():
             if w.lebt and not getattr(w, "am_boden", False) and ebene == k.ebene and jetzt - zeit < 2.0:
-                orte.append(pygame.Vector2(w.pos if jetzt - zeit < 0.2 else ort))
+                o = pygame.Vector2(w.pos if jetzt - zeit < 0.2 else ort)
+                if blick is not None:
+                    a, b = blick - k.pos, o - k.pos
+                    if (a.length_squared() > 1.0 and b.length_squared() > 1.0
+                            and abs((a.angle_to(b) + 180.0) % 360.0 - 180.0) > K.TRUPP["abschnitt_winkel"]):
+                        continue
+                orte.append(o)
         for w, (ort, ebene, zeit) in self.beschossen_von.items():
             if ebene == k.ebene and not any(ort.distance_to(o) < 50.0 for o in orte):
                 orte.append(pygame.Vector2(ort))

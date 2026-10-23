@@ -359,6 +359,10 @@ class Testmodus(Gefecht):
         # Saubere Ansicht (seit 0.34.32): nur die Welt und ueber jedem Kopf,
         # was er gerade tut - fuer Aufnahmen (werkzeug_aufnahme.py).
         self.sauber = bool(z.get("sauber", False))
+        # Aufnahmen koennen in der sauberen Ansicht die Trupps zeigen (seit
+        # 0.34.51): Front, Stellungen, Blickrichtungen - fuer die Szene, die
+        # die geknickte Front zeigt.
+        self.sauber_trupps = False
         # Was ENTF mit dem tut, was am Zeiger liegt (seit 0.34.33): loeschen
         # (verschwindet, keine Leiche) oder toeten (stirbt wie im Spiel).
         self.entf_toetet = bool(z.get("entf_toetet", False))
@@ -1394,6 +1398,8 @@ class Testmodus(Gefecht):
             # bedienbar, wenn man sie oeffnet (Esc, Taste 4). Wer funkt,
             # ist auch hier zu sehen (seit 0.34.39; die Wellen liegen seit 0.34.46
             # am Boden, _funkwellen_zeichnen).
+            if self.sauber_trupps:
+                self._trupps_zeichnen(ziel)
             self._aktionen_zeichnen(ziel)
             self._zurufe_zeichnen(ziel)
             if self.spawner_offen:
@@ -1635,7 +1641,16 @@ class Testmodus(Gefecht):
                 continue
             farbe = (255, 196, 150) if t.team == 0 else (170, 210, 255)
             f = t.front
-            if f is not None and f["ebene"] == self.blick:
+            if t.abschnitte > 1 and f is not None and f["ebene"] == self.blick:
+                # Geknickte Front (0.34.50): jeder Abschnitt eine Linie mit
+                # einem Strich zu seiner Gruppe hin.
+                for ab in t.abschnitt_linien:
+                    a = kam.zu_bild(ab["mitte"] + ab["quer"] * (ab["breite"] / 2))
+                    b = kam.zu_bild(ab["mitte"] - ab["quer"] * (ab["breite"] / 2))
+                    pygame.draw.line(ziel, farbe, a, b, 2)
+                    m_ = kam.zu_bild(ab["mitte"])
+                    pygame.draw.line(ziel, farbe, m_, kam.zu_bild(ab["mitte"] + ab["richtung"] * 24), 1)
+            elif f is not None and f["ebene"] == self.blick:
                 a = kam.zu_bild(f["linie"] + f["quer"] * (f["breite"] / 2))
                 b = kam.zu_bild(f["linie"] - f["quer"] * (f["breite"] / 2))
                 pygame.draw.line(ziel, farbe, a, b, 1)

@@ -106,6 +106,7 @@ class Trupp:
         self.stellungen: dict = {}    # Nummer -> Ort, an dem er stehen soll
         self.stellungen_vorher: dict = {}
         self.abschnitte = 1           # in so viele Richtungen schaut die Front (seit 0.34.50)
+        self.abschnitt_linien: list = []
         self.welle: set = set()       # Nummern, die in dieser Welle ziehen
         self._welle_ziel: dict = {}   # ... und wohin
         self._welle_rest = 0.0
@@ -317,6 +318,7 @@ class Trupp:
         self.stellungen_vorher = self.stellungen
         self.stellungen = {}
         self.abschnitte = 1
+        self.abschnitt_linien = []
         if not leute:
             return
         self.blicke = {}
@@ -419,9 +421,14 @@ class Trupp:
         andere = andere[start:] + andere[:start]
         i = 0
         hinten = pygame.Vector2(0, 0)
+        self.abschnitt_linien = []
         for (richtung, gmitte, _n), anzahl in zip(gruppen, anteile):
             quer = pygame.Vector2(-richtung.y, richtung.x)
             hinten -= richtung
+            # Fuer die Anzeige (Testmodus): jeder Abschnitt eine kurze Linie.
+            self.abschnitt_linien.append(dict(mitte=mitte + richtung * t["abschnitt_vor"], quer=quer,
+                                              richtung=richtung,
+                                              breite=max(40.0, anzahl * t["bahn_min"])))
             for j in range(anzahl):
                 m = andere[i]
                 i += 1

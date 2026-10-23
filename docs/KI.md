@@ -1278,7 +1278,15 @@ Gemeldet nach der Aufnahme `deckung`.
   Anfuehrer sagt einen Funkspruch, den er bekommt, seinem Trupp weiter,
   mit den Gegnern darin (`feinde_orte`).
 
-### 11.9 Was noch offen ist
+### 11.9 Nachtrag (0.34.51): Flanke je Abschnitt
+
+In einer geknickten Front zaehlt fuer `flankiert` und den Schritt-Schutz
+nur, was im eigenen Abschnitt steht (bis 70 Grad neben der Blickrichtung)
+- und wer auf ihn schiesst. Sonst hielt sich jeder fuer flankiert, stellte
+sich um, und alle drangten in die Mitte. Abschnitte 90 px vor der Mitte;
+ein MG-Schuetze im Dauerfeuer geht erst an seine Stellung.
+
+### 11.10 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.

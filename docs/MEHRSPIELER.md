@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.51 | Nichts Neues ueber das Netz. Nur das Verhalten der Bots im Trupp (nur beim Gastgeber) | Die Versionspruefung weist ab |
 | 0.34.50 | **Neues Feld `sp`** je Kaempfer in der Weltmeldung (er sprintet): der Gast wirbelt damit den Staub hinter ihm selbst auf. Sprinten koennen nur Bots - ein `sprint` in der Eingabe eines Gasts zaehlt nicht. Sonst nur das Verhalten der Bots (nur beim Gastgeber) | Die Versionspruefung weist ab. Ein aelterer Gast saehe keinen Staub |
 | 0.34.49 | Nichts Neues ueber das Netz. Nur das Verhalten der Bots (Rauch, Bergeplatz, Panik), die nur der Gastgeber rechnet | Die Versionspruefung weist ab |
 | 0.34.48 | Nichts Neues ueber das Netz, aber das Gefecht ist anders: Wiederbeleben dauert `K.REVIVE["dauer"]` 5,5 s (war 3). Wer zieht oder aufhilft, bekommt Arme zum Gefallenen gezeichnet - der Gast weiss das aus `zg` und `hf`, die es schon gab. Die Bots (nur beim Gastgeber) gehen dicht an ihre Deckung | Die Versionspruefung weist ab. Gemischt dauerte das Aufhelfen je nach Gastgeber anders lang |

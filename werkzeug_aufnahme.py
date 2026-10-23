@@ -529,6 +529,27 @@ def szene_bergen_puppen(tm, rnd):
             and uhr["t"] > 20.0, 45, 1.75, jedes_bild)
 
 
+def szene_abschnitte(tm, rnd):
+    """Seit 0.34.51, ruhiger als `zange`: der Trupp haelt eine wichtige
+    Stellung (kein Rueckzug), die Gegner sind Puppen aus zwei Richtungen
+    (keiner schiesst zurueck, keine Panik). Die Front knickt: ein Teil
+    schaut nach Westen, einer nach Norden; zu sehen mit der Trupp-Anzeige
+    (Front, Stellungen, kurze Striche fuer die Blickrichtung)."""
+    tx, ty, v = flaeche(tm, rnd, 20, 12)
+    setzen(tm, tx, ty, [(7, 5), (7, 7), (11, 3), (13, 3)], K.KISTE)
+    tm.sauber_trupps = True
+    trupp = tm.trupp_setzen(v(11, 7), 0, {"groesse": 6, "team": 0, "fuehrer": "funk",
+                                          "mischung": "gemischt"})
+    tm.trupp_auftrag("halten", v(11, 7), 0, {"team": 0, "wichtig": True})
+    west = [tm.puppe_setzen(v(1, 5 + 2 * i), 0, {"team": 1, "leben": 10.0}) for i in range(3)]
+    nord = [tm.puppe_setzen(v(9 + 2 * i, 0), 0, {"team": 1, "leben": 10.0}) for i in range(3)]
+    for p in west + nord:
+        p.unverwundbar = 1e9
+    kennen(trupp.mitglieder, west + nord, tm)
+    return ("Geknickte Front: ein Teil nach Westen, einer nach Norden",
+            trupp.mitglieder, lambda: False, 25, 1.5)
+
+
 # Name -> (Dateiname, Szene). Die Nummer im Dateinamen ist die Reihenfolge.
 SZENEN = {
     "duell": ("1_goap_gegen_klassisch", szene_duell),
@@ -550,6 +571,7 @@ SZENEN = {
     "zange": ("17_zange_front_knickt", szene_zange),
     "zuruf": ("18_zuruf_statt_suchen", szene_zuruf),
     "bergen_puppen": ("19_bergen_gegen_puppen", szene_bergen_puppen),
+    "abschnitte": ("20_geknickte_front", szene_abschnitte),
 }
 
 

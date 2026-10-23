@@ -11712,6 +11712,40 @@ pruef("... die Sprechblase ueber ihm (zeichnen geht)", True, "")
 _tm.ki_stopp = False
 _tm.verlassen()
 
+print("\n-- Geknickte Front: Abschnitte sichtbar, Flanke je Abschnitt (0.34.51)")
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm.wiedereinstieg = False
+_platz102 = _freie_flaeche86(_tm.welt, random.Random(102), 18, 11)
+_tx102, _ty102 = _platz102
+def _v102(x_, y_):
+    return pygame.Vector2((_tx102 + x_ + 0.5) * K.TILE, (_ty102 + y_ + 0.5) * K.TILE)
+_tr102 = _tm.trupp_setzen(_v102(10, 7), 0, {"groesse": 5, "team": 0})
+_g102 = [_tm.puppe_setzen(_v102(1, 7), 0, {"team": 1, "leben": 10.0}),
+         _tm.puppe_setzen(_v102(10, 0), 0, {"team": 1, "leben": 10.0})]
+_tr102.lage = {w_: [pygame.Vector2(w_.pos), 0, _tm.welt.zeit] for w_ in _g102}
+_tr102._front_rechnen(_tr102.lebende())
+_tr102._stellungen(_tr102.lebende())
+pruef("Geknickte Front: zwei Abschnitte, jeder mit einer Linie fuer die Anzeige",
+      _tr102.abschnitte == 2 and len(_tr102.abschnitt_linien) == 2
+      and all(ab_["mitte"].distance_to(_tr102.front["freund"]) > K.TRUPP["abschnitt_vor"] - 1
+              for ab_ in _tr102.abschnitt_linien), "")
+_m102 = next(m_ for m_ in _tr102.lebende()
+             if m_ is not _tr102.fuehrer and _tr102.blick_fuer(m_) is not None
+             and _tr102.blick_fuer(m_).distance_to(_g102[0].pos) < 1.0)
+for w_ in _g102:
+    _m102.hirn.gesehen[w_] = (pygame.Vector2(w_.pos), 0, _tm.welt.zeit)
+_or102 = _m102.hirn.bedrohungs_richtungen()
+pruef("... wer nach Westen schaut, zaehlt fuer die Flanke nur den Westen - den Norden haelt ein Kamerad",
+      len(_or102) == 1 and _or102[0].distance_to(_g102[0].pos) < 1.0 and not _m102.hirn.flankiert(), str(_or102))
+_m102.hirn.beschossen_von[_g102[1]] = (pygame.Vector2(_g102[1].pos), 0, _tm.welt.zeit)
+pruef("... schiesst aber einer aus dem Norden auf ihn, zaehlt der doch",
+      len(_m102.hirn.bedrohungs_richtungen()) == 2, "")
+_tm.sauber = True
+_tm.sauber_trupps = True
+_tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+pruef("Aufnahmen koennen in der sauberen Ansicht die Trupps zeigen (zeichnen geht)", True, "")
+_tm.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

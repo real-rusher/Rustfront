@@ -1376,8 +1376,9 @@ TRUPP = dict(
     # Seit 0.34.50: wer im Trupp ist, bleibt bei ihm - auch in Panik.
     zusammen=170.0,           # so weit von der Mitte der anderen sucht er Deckung
     abschnitt_luecke=60.0,    # so viele Grad zwischen zwei Gegnern: zwei Gruppen, die Front knickt
-    abschnitt_vor=40.0,       # so weit vor der Mitte steht jeder Abschnitt
+    abschnitt_vor=90.0,       # so weit vor der Mitte steht jeder Abschnitt (war 40: man sah den Knick kaum)
     abschnitt_bonus=150.0,    # so viel lieber nimmt einer die Gegner in seinem Abschnitt (px)
+    abschnitt_winkel=70.0,    # so weit neben seiner Blickrichtung ist es noch sein Abschnitt (Grad, 0.34.51)
     flucht_hinter=60.0,       # in Panik flieht er so weit hinter die Mitte der anderen
     fuehrer_bonus=120.0,      # so viel lieber nimmt man Gegner nahe dem Anfuehrer
     buendeln_bonus=40.0,      # ... und die, auf die ein Kamerad schon schiesst
