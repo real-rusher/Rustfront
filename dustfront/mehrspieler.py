@@ -1885,10 +1885,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         # Kein Schiessen und kein Aufhelfen - wer beide Haende an einem
         # Gefallenen hat, hat keine frei. Das ist der Preis dafuer, ihn aus
         # der Schusslinie holen zu koennen.
+        hilft_vorher = k.hilft
         k.hilft = None
         if ein.get("ziehen"):
+            wen = ein.get("wen")
+            if k.zieht is not None and self._gemeint(wen) not in (None, self.kaempfer.get(k.zieht)):
+                self._loslassen(k)          # er hatte den falschen in der Hand
             opfer = (self.kaempfer.get(k.zieht) if k.zieht is not None
-                     else self._wen_ziehen(k))
+                     else self._wen_ziehen(k, wen))
             if opfer is not None and self._ziehen_moeglich(k, opfer):
                 k.zieht = opfer.nummer
                 opfer.gezogen_von = k.nummer
@@ -1901,7 +1905,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         gedrueckt = self._e_gedrueckt(ein)
         if not ein.get("nutzen") and not gedrueckt:
             return
-        opfer = self._wem_helfen(k) if ein.get("nutzen") else None
+        opfer = self._wem_helfen(k, ein.get("wen"), hilft_vorher) if ein.get("nutzen") else None
         if opfer is not None:
             k.hilft = opfer.nummer
             # Wer aufhilft, hat die Haende voll: er steht still und
@@ -1974,33 +1978,67 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         im Testmodus auch ohne (seit 0.34.40, VERWUNDETE BOTS)."""
         return bool(self.regeln["revive"])
 
-    def _wem_helfen(self, k: Kaempfer):
-        """Der naechste Gefallene in Reichweite, oder None."""
+    def _gemeint(self, wen):
+        """Wen eine Eingabe ausdruecklich meint ("wen", eine Nummer) - oder
+        None. Bots sagen es seit 0.34.55: lagen zwei nebeneinander, griff
+        der Helfer den naechsten statt den, den er bergen wollte, zog ihn
+        ein Stueck, merkte es, ging zurueck und griff wieder den falschen -
+        gemessen sekundenlang (gemeldet: "eine laengere zeit in der der
+        helfer neben dem kameraden steht oder rumlaeuft")."""
+        if isinstance(wen, bool) or not isinstance(wen, int):
+            return None
+        return self.kaempfer.get(wen)
+
+    def _wem_helfen(self, k: Kaempfer, wen=None, vorher=None):
+        """Der naechste Gefallene in Reichweite, oder None. Ist `wen` in
+        Reichweite und darf er ihm helfen, der. Wem er schon im Bild davor
+        half (`vorher`), dem hilft er noch `halten` Pixel weiter weg (seit
+        0.34.55): ein wenig Restschwung nach dem Hinknien trug ihn ueber die
+        Grenze, und er fing neu an, waehrend der Fortschritt verfiel."""
         if not self.bergen_an():
             return None
-        naechster, beste = None, K.REVIVE["reichweite"]
+        r = K.REVIVE
+
+        def weite(x):
+            return r["reichweite"] + (r["halten"] if x.nummer == vorher else 0.0)
+
+        x = self._gemeint(wen)
+        if x is not None:
+            # Wer jemanden meint, bekommt nie einen anderen - sonst griffe
+            # er wieder den falschen.
+            ok = (x is not k and x.lebt and x.am_boden and x.ebene == k.ebene
+                  and self._darf_helfen(k, x)
+                  and k.pos.distance_to(x.pos) <= weite(x))
+            return x if ok else None
+        naechster, beste = None, 1e9
         for anderer in self.kaempfer.values():
             if anderer is k or not anderer.am_boden or not anderer.lebt:
                 continue
             if anderer.ebene != k.ebene or not self._darf_helfen(k, anderer):
                 continue
             d = k.pos.distance_to(anderer.pos)
-            if d <= beste:
+            if d <= weite(anderer) and d < beste:
                 naechster, beste = anderer, d
         return naechster
 
     # ---- Ziehen ---------------------------------------------------------
-    def _wen_ziehen(self, k: Kaempfer):
+    def _wen_ziehen(self, k: Kaempfer, wen=None):
         """Wer sich ziehen laesst: dieselben Regeln wie beim Aufhelfen.
 
         Aus demselben Grund: wer einen Gefallenen aufheben duerfte, darf
         ihn auch aus der Schusslinie holen - und den Gegner, den man
         gerade umgelegt hat, darf man in beiden Faellen nicht anfassen.
         Wer schon gezogen wird, faellt raus: zu zweit an einem zu zerren,
-        ergaebe einen Koerper, der zwischen zwei Leuten zittert.
+        ergaebe einen Koerper, der zwischen zwei Leuten zittert. Ist `wen`
+        in Reichweite und ziehbar, der (siehe `_gemeint`).
         """
         if not self.bergen_an():
             return None
+        x = self._gemeint(wen)
+        if x is not None:
+            ok = (self._ziehen_moeglich(k, x) and x.gezogen_von in (None, k.nummer)
+                  and k.pos.distance_to(x.pos) <= K.REVIVE["reichweite"])
+            return x if ok else None
         naechster, beste = None, K.REVIVE["reichweite"]
         for anderer in self.kaempfer.values():
             if not self._ziehen_moeglich(k, anderer):
@@ -2536,7 +2574,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             # verteilt - und ungleich verteilte Meldungen sehen aus wie
             # springende Granaten.
             self._seit_senden -= K.NETZ["takt"]
-            self.gastgeber.an_alle(self._weltmeldung())
+            if self.gastgeber.leitungen:
+                self.gastgeber.an_alle(self._weltmeldung())
+            else:
+                # Ohne Gast liest die Meldung niemand, und gebaut kostet sie
+                # je Kaempfer ein grosses Woerterbuch - bei vielen Bots,
+                # auch liegenden, ein spuerbarer Teil des Bildes (seit
+                # 0.34.55, gemeldet: "die performance leidet noch immer
+                # unter vielen bots am boden"). Die Wirkungen leeren wie
+                # sonst, damit ein spaeter kommender Gast keine alten
+                # Explosionen sieht.
+                self._wirkung = []
 
     def _ansage(self) -> dict:
         """Was die Lobbysuche ueber diese Runde erfaehrt (lan.py).

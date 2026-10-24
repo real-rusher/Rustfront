@@ -59,6 +59,10 @@
 #   anderer_zieht        ein anderer zieht ihn schon (seit 0.34.50) - ziehen kann nur einer
 #   bergung_halten       im Trupp wird einer geborgen, und er ist nicht der Retter: er
 #                        bleibt in Deckung (seit 0.34.53) - kein Nachsetzen, Flankieren, Suchen
+#   hilft_schon          er hilft ihm schon auf (seit 0.34.55): nicht mehr zum Ziehen
+#   fast_fertig          ... und hat schon VERWUNDET["zu_ende"] geschafft: er bringt es zu Ende
+#   anderer_hilft        ein anderer hilft ihm schon auf (seit 0.34.55): nicht wegziehen, mithelfen
+#                        umschwenken - jede Unterbrechung kostet Fortschritt
 #   geschwaecht          er wurde wiederbelebt: weniger Leben, langsamer, zielt schlechter
 # Ziel-Fakten, die nie wahr werden, sondern nur das Ziel benennen:
 #   feind_besiegt, kamerad_geschuetzt, sturm_fertig, gruppe_getroffen, sicher,
@@ -123,7 +127,10 @@ will: !kamerad_liegt
 # Deckung ziehen, dann aufhelfen; die anderen decken (feuerschutz).
 # Ist es sicher (oft erst durch den Rauch), hat es Rang 1 - so lange haelt
 # der Rauch nicht, dass der Retter erst seinen Feuerstoss zu Ende bringt.
-rang: kamerad_liegt * ich_berge * bergen_sicher
+# Fast fertig (seit 0.34.55): Rang 3 - nur die Granate (120) geht dann noch
+# vor; Panik, Ueberleben und Flanke warten die eine Sekunde. Vorher liess er
+# bei neun Zehnteln los, um in Deckung zu gehen, und der Fortschritt verfiel.
+rang: kamerad_liegt * ich_berge * bergen_sicher * (1 + 2 * fast_fertig)
 dringlich: kamerad_liegt * ich_berge * bergen_sicher * (72 + 20 * disziplin) * (1 - 0.5 * geschwaecht)
 bindung: 3
 info: Einen gefallenen Kameraden in Sicherheit ziehen und aufhelfen.
@@ -257,7 +264,10 @@ info: Den Gegner, den er sieht oder eben sah, ausschalten.
 
 [ziel suchen]
 will: feind_sichtbar
-dringlich: 10 + 15 * feind_gehoert
+# Waehrend einer geborgen wird, gar nicht erst wollen (seit 0.34.55): die
+# Aktion suchen braucht dann !bergung_halten, und das Ziel lief jeden
+# Denkschritt vergeblich durch den Planer.
+dringlich: (10 + 15 * feind_gehoert) * (1 - bergung_halten)
 info: Nichts los: Gegner suchen - wo er einen hoerte, sonst auf der Karte.
 
 # ── Aktionen ──────────────────────────────────────────────────────────
@@ -416,7 +426,10 @@ tut: zum_kameraden
 funk: helfen
 
 [aktion kamerad_ziehen]
-braucht: bei_kamerad, !kamerad_gedeckt, !anderer_zieht
+# Wer schon aufhilft, zieht nicht mehr (seit 0.34.55): vorher plante er
+# mitten im Aufhelfen das Ziehen fuer billiger, liess los, das Ziehen
+# scheiterte, und er fing von vorn an - gemessen bis zu viermal.
+braucht: bei_kamerad, !kamerad_gedeckt, !anderer_zieht, !hilft_schon, !anderer_hilft
 macht: kamerad_gedeckt
 kosten: 2
 tut: ziehen

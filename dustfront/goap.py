@@ -176,7 +176,45 @@ def planen(fakten: dict, will: dict, aktionen, namen: dict | None = None,
 
     if gilt(start, will):
         return []
-    kosten = {a.name: max(0.01, a.kosten.wert(namen)) for a in aktionen}
+    # Fakten, die keine Aktion aendert, bleiben im ganzen Plan, wie sie sind.
+    # Wer sie anders braucht, kommt nie dran - also gleich weg damit, und
+    # das so lange, bis sich nichts mehr tut (mit ihm faellt vielleicht die
+    # einzige Aktion, die einen anderen Fakt aendert). Fehlt danach fuer
+    # einen Zielfakt jede Aktion, die ihn macht, gibt es keinen Weg. Ohne
+    # diese Vorpruefung lief die Suche bei einem unerreichbaren Ziel bis an
+    # `knoten` - gemessen 3 ms je Versuch, und ein Trupp, der eine Bergung
+    # absichert, versuchte "suchen" zehnmal je Sekunde und Bot (seit
+    # 0.34.55, gemeldet: "die performance leidet noch immer unter vielen
+    # bots am boden").
+    aktionen = list(aktionen)
+    while True:
+        veraenderlich = set()
+        for a in aktionen:
+            veraenderlich.update(a.macht)
+        bleiben = [a for a in aktionen
+                   if all((n in start) == v for n, v in a.braucht.items()
+                          if n not in veraenderlich)]
+        if len(bleiben) == len(aktionen):
+            break
+        aktionen = bleiben
+    # Und nur, was zum Ziel beitragen kann: eine Aktion, die keinen Fakt
+    # aendert, den das Ziel oder eine dieser Aktionen braucht, steht in
+    # keinem Plan, der ohne sie nicht auch ginge. Die Suche probierte sie
+    # sonst in jedem Zustand mit durch.
+    wichtig = set(will)
+    noetig: list = []
+    while True:
+        dazu = [a for a in aktionen if a not in noetig and wichtig.intersection(a.macht)]
+        if not dazu:
+            break
+        noetig += dazu
+        for a in dazu:
+            wichtig.update(a.braucht)
+    aktionen = [a for a in aktionen if a in noetig]
+    machbar = {(n, v) for a in aktionen for n, v in a.macht.items()}
+    if any((n in start) != v and (n, v) not in machbar for n, v in will.items()):
+        return None
+    kosten ={a.name: max(0.01, a.kosten.wert(namen)) for a in aktionen}
     offen = [(schaetzung(start), 0, 0.0, start, ())]
     besucht = {start: 0.0}
     nr = 0

@@ -541,8 +541,226 @@ def mauern():
     pruef("... gefeuert wird trotzdem (das Gefecht findet statt)", zahl["frei"] > 500, str(zahl))
 
 
+def beobachtet(tm, sekunden, beob):
+    """laufen() mit einem Beobachter, der `tm` kennt und je Schritt misst."""
+    if beob is not None:
+        beob.tm = tm
+    laufen(tm, sekunden, beob.schritt if beob is not None else None)
+
+
+def schlacht(seed, sekunden, beob=None):
+    """Drei Trupps gegen drei, frei auf einer Flaeche: am Ende liegen viele."""
+    tm = neu(seed)
+    tx, ty, v = W.flaeche(tm, random.Random(seed), 30, 16)
+    for i in range(3):
+        tm.trupp_setzen(v(24, 3 + i * 5), 0, {"groesse": 6, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+        tm.trupp_setzen(v(4, 3 + i * 5), 0, {"groesse": 6, "team": 1, "fuehrer": "funk", "mischung": "gemischt"})
+    beobachtet(tm, sekunden, beob)
+    return tm
+
+
+def planer():
+    """Gemeldet (0.34.55): "die performance leidet noch immer unter vielen
+    bots am boden". Gemessen: solange einer geborgen wurde, lief der Planer
+    fuer Ziele ohne Weg jedes Mal bis an seine Grenze (400 Zustaende, rund
+    3 ms) - im Mittel 170 bis 290 Zustaende je Plan, das Bild brauchte
+    doppelt so lange. Gezaehlt statt gestoppt, damit der Test nicht von der
+    Maschine abhaengt."""
+    print("\n== Der Planer bleibt billig, auch wenn viele liegen ==")
+    import dustfront.goap as G
+    import heapq
+    zahl = {"plaene": 0, "knoten": 0, "hoechstens": 0}
+
+    class Zaehler:
+        heappop = staticmethod(heapq.heappop)
+
+        @staticmethod
+        def heappush(liste, eintrag):
+            zahl["knoten"] += 1
+            heapq.heappush(liste, eintrag)
+
+    alt = G.planen
+
+    def planen(*a, **k):
+        vorher = zahl["knoten"]
+        zahl["plaene"] += 1
+        p = alt(*a, **k)
+        zahl["hoechstens"] = max(zahl["hoechstens"], zahl["knoten"] - vorher)
+        return p
+
+    G.heapq, G.planen = Zaehler, planen
+    liegend = []
+    try:
+        for seed in (31, 33):
+            tm = schlacht(seed, 30.0)
+            liegend.append(sum(1 for k in tm.kaempfer.values() if k.lebt and k.am_boden))
+            tm.verlassen()
+    finally:
+        G.heapq, G.planen = heapq, alt
+    schnitt = zahl["knoten"] / max(1, zahl["plaene"])
+    pruef("Im Gefecht mit vielen Liegenden braucht ein Plan im Mittel hoechstens 10 Zustaende",
+          schnitt <= 10.0, "%.1f je Plan, %s, liegend %s" % (schnitt, zahl, liegend))
+    pruef("... und keiner laeuft bis an die Grenze", zahl["hoechstens"] < K.GOAP["knoten"] / 4, str(zahl))
+    pruef("... es lagen dabei wirklich viele", sum(liegend) >= 8, str(liegend))
+
+
+def bergen_szene(seed, sekunden, beob=None):
+    """Wie in bergen(): ein Trupp hinter einer Mauer, einer liegt davor."""
+    tm = neu(seed)
+    tx, ty, v = W.flaeche(tm, random.Random(seed), 20, 11)
+    W.setzen(tm, tx, ty, [(13, y) for y in range(2, 9)], K.WAND)
+    trupp = tm.trupp_setzen(v(15, 5), 0, {"groesse": 4, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+    feinde = [tm.puppe_setzen(v(2, 4 + 2 * i), 0, {"team": 1, "leben": 10.0}) for i in range(2)]
+    for f in feinde:
+        f.unverwundbar = 1e9
+    opfer = next(m for m in trupp.mitglieder if m is not trupp.fuehrer)
+    opfer.pos.update(v(9, 5))
+    opfer.vorher.update(opfer.pos)
+    W.kennen(trupp.mitglieder, feinde, tm)
+    laufen(tm, 1.0)
+    tm.toeten(opfer)
+    beobachtet(tm, sekunden, beob)
+    return tm
+
+
+class Helfer:
+    """Was Helfer am Liegenden tun: wie lange einer, der bergen will,
+    in Reichweite steht, ohne zu ziehen oder aufzuhelfen; wie oft einer
+    das Aufhelfen nach der Haelfte abbricht; wie oft einer einen anderen
+    zieht oder aufhebt, als den, den er bergen will."""
+
+    def __init__(self):
+        self.tm = None
+        self.warten = {}
+        self.vorher = {}
+        self.ab_halb = 0
+        self.falsch = 0
+        self.ab_warum = []
+        self.fasste = {}
+        self.hilfen = 0
+
+    def schritt(self):
+        tm = self.tm
+        reich = K.REVIVE["reichweite"]
+        for k in tm.kaempfer.values():
+            alt = self.vorher.get(k.nummer)
+            jetzt = k.hilft if k.lebt and not k.am_boden else None
+            if alt is not None and jetzt != alt and k.lebt and not k.am_boden:
+                x = tm.kaempfer.get(alt)
+                g = getattr(getattr(k, "hirn", None), "gehirn", None)
+                warum = g.ziel.name if g is not None and g.ziel is not None else "-"
+                # Einer Granate weicht er aus - das ist kein Fehler.
+                if (x is not None and x.lebt and x.am_boden and x.revive_stand >= K.VERWUNDET["zu_ende"]
+                        and warum != "granate_ausweichen"):
+                    self.ab_halb += 1
+                    self.ab_warum.append(warum)
+            self.vorher[k.nummer] = jetzt
+            h = getattr(k, "hirn", None)
+            g = getattr(h, "gehirn", None)
+            if g is None or not k.lebt or k.am_boden:
+                continue
+            x = h._opfer()
+            if x is None:
+                continue
+            # Wen er neu anfasst: ist es ein anderer als der, den er bergen
+            # will, hat er den Falschen gegriffen. Gezaehlt wird das Zugreifen,
+            # nicht jedes Bild - im Bild, in dem einer aufsteht, wechselt sein
+            # Opfer schon, waehrend "hilft" noch auf dem alten steht.
+            fasst = k.zieht if k.zieht is not None else k.hilft
+            if fasst is not None and fasst != self.fasste.get((id(tm), k.nummer)) and fasst != x.nummer:
+                self.falsch += 1
+            self.fasste[(id(tm), k.nummer)] = fasst
+            if (g.ziel is not None and g.ziel.name == "kamerad_bergen" and x.ebene == k.ebene
+                    and k.pos.distance_to(x.pos) <= reich and k.zieht is None and k.hilft is None):
+                schluessel = (id(tm), k.nummer, x.nummer)
+                self.warten[schluessel] = self.warten.get(schluessel, 0.0) + DT
+
+
+def bergen_fluessig():
+    """Gemeldet (0.34.55): "Oft gibt es eine laengere zeit in der der
+    helfer neben dem kameraden steht oder rumlaeuft bevor er anfaengt ihn
+    zu ziehen oder wiederzubeleben." Gemessen waren es bis zu 18 s: lag ein
+    zweiter daneben, griff er den falschen, zog ihn ein Stueck, ging
+    zurueck und griff wieder den falschen; mitten im Aufhelfen plante er
+    das Ziehen fuer billiger und liess los; zwei Helfer schoben einander
+    an die Grenze der Reichweite und fielen abwechselnd heraus."""
+    print("\n-- Bergen fluessig: wer beim Liegenden ist, faengt an - und hoert nicht mittendrin auf")
+    h = Helfer()
+    for bau, seeds, dauer in ((bergen_szene, SEEDS, 25.0), (schlacht, (31, 33), 40.0)):
+        for seed in seeds:
+            tm = bau(seed, dauer, h)
+            h.hilfen += sum(int(getattr(x, "zaehler", {}).get("hilfen", 0)) for x in tm.kaempfer.values())
+            tm.verlassen()
+    am_laengsten = max(h.warten.values() or [0.0])
+    pruef("Wer bergen will und in Reichweite steht, faengt nach hoechstens einer Sekunde an",
+          am_laengsten <= 1.0, "laengstens %.2f s, %d Faelle" % (am_laengsten, len(h.warten)))
+    pruef("... keiner zieht oder hebt einen anderen als den, den er bergen will", h.falsch == 0, str(h.falsch))
+    # Vorher 6 bis 12 (Granaten nicht gezaehlt: denen weicht er aus).
+    pruef("... kaum einer hoert nach der Haelfte mit dem Aufhelfen auf (solange er steht und keiner Granate "
+          "ausweicht, hoechstens einmal)", h.ab_halb <= 1, "%d %s" % (h.ab_halb, h.ab_warum))
+    pruef("... und es wird wirklich aufgeholfen", h.hilfen >= 6, str(h.hilfen))
+
+
+class Drehungen:
+    """Zaehlt, wie oft sich ein Bot binnen drei Sekunden um wenigstens 330
+    Grad in eine Richtung dreht - und ob er dabei fast auf der Stelle stand
+    (weniger als 80 px vom Anfang des Fensters)."""
+
+    def __init__(self):
+        self.tm = None
+        self.spur = {}
+        self.stand = 0
+        self.alle = 0
+        self.wo = []
+
+    def schritt(self):
+        jetzt = self.tm.welt.zeit
+        for k in self.tm.kaempfer.values():
+            h = getattr(k, "hirn", None)
+            # Je Szene und Kaempfer: die Nummern beginnen in jeder Szene neu.
+            schluessel = (id(self.tm), k.nummer)
+            if h is None or not k.lebt or k.am_boden:
+                self.spur.pop(schluessel, None)
+                continue
+            s = self.spur.setdefault(schluessel, {"w": h.blick, "q": []})
+            d = (h.blick - s["w"] + 180.0) % 360.0 - 180.0
+            s["w"] = h.blick
+            s["q"].append((jetzt, d, pygame.Vector2(k.pos)))
+            while s["q"] and s["q"][0][0] < jetzt - 3.0:
+                s["q"].pop(0)
+            if abs(sum(x[1] for x in s["q"])) >= 330.0:
+                self.alle += 1
+                if s["q"][0][2].distance_to(k.pos) < 80.0:
+                    self.stand += 1
+                    g = getattr(h, "gehirn", None)
+                    self.wo.append("%s %.1f %s" % (k.name, jetzt, g.ziel.name if g and g.ziel else "-"))
+                s["q"] = []
+
+
+def drehen():
+    """Gemeldet (0.34.55): "teils drehen sich bots in verschiedensten
+    Situationen um 360 grad, wobei das nie irgendeinen vorteil oder sinn
+    hat." Gemessen in diesen Szenen vorher 7 bis 8 Mal, vier- bis
+    siebenmal davon fast auf der Stelle - der Blick folgte jedem
+    Trippelschritt zur Stellung, das Umschauen ging bis fast nach hinten und
+    kehrte "vorwaerts" zurueck, Geraeusche zogen den Blick vom Gegner weg,
+    den er gerade bekaempfte, und die Linie des Trupps schwenkte mit jedem
+    Blick des Anfuehrers. Danach 1 bis 2, im Stand 0 bis 1 (die Laeufe
+    streuen etwas, darum die Grenzen mit Abstand)."""
+    print("\n-- Keine ganzen Drehungen ohne Sinn")
+    d = Drehungen()
+    for seed in (11, 12, 13):
+        bergen_szene(seed, 25.0, d).verlassen()
+    for seed in (31, 32):
+        schlacht(seed, 40.0, d).verlassen()
+    pruef("Fast auf der Stelle dreht sich kaum einer einmal ganz um sich selbst (hoechstens zweimal in allen Szenen)",
+          d.stand <= 2, "%d: %s" % (d.stand, d.wo))
+    pruef("... und auch mit dem Laufen zusammen selten (hoechstens viermal, vorher 7 bis 8)", d.alle <= 4, str(d.alle))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
-TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern]
+TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
+         planer, bergen_fluessig, drehen]
 NUR = sys.argv[1:]
 for teil in TEILE:
     if not NUR or teil.__name__ in NUR:

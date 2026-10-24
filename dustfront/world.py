@@ -851,11 +851,14 @@ class Welt:
         # andere weicht den ganzen Weg aus. Vorher gab jeder die Haelfte
         # nach - und eine Puppe liess sich durch Hineinlaufen quer durch
         # den Schiessstand schieben (gemeldet nach 0.31).
-        fest_w = not getattr(wesen, "schiebbar", True)
+        # Wer einem aufhilft, kniet und haelt seinen Platz (seit 0.34.55):
+        # wer an ihm vorbeiging, schob ihn aus der Reichweite, und er fing
+        # neu an, waehrend der Fortschritt verfiel.
+        fest_w = not getattr(wesen, "schiebbar", True) or getattr(wesen, "hilft", None) is not None
         for a in self.nahe(wesen.pos, wesen.radius * 2, wesen.ebene):
             if a is wesen or not a.schiebt or getattr(a, "am_boden", False):
                 continue
-            fest_a = not getattr(a, "schiebbar", True)
+            fest_a = not getattr(a, "schiebbar", True) or getattr(a, "hilft", None) is not None
             if fest_w and fest_a:
                 continue
             d = wesen.pos - a.pos

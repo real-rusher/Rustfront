@@ -233,6 +233,44 @@ class GoapHirn(BotHirn):
                 return b
         return self.letzter_feind()
 
+    def _blick_ohne_ziel(self, will):
+        """Kennt er einen Gegner, behaelt er ihn im Blick, auch wenn er
+        gerade nichts anvisiert - wer sich umsetzt, ausweicht oder zur
+        Stellung geht, dreht ihm nicht den Ruecken zu (seit 0.34.55).
+        Vorher schaute er in die Laufrichtung, und mit dem Umschauen
+        dazwischen drehte er sich dabei oft einmal ganz um sich selbst
+        (gemeldet: "teils drehen sich bots ... um 360 grad, wobei das nie
+        irgendeinen vorteil oder sinn hat"). In Panik rennt er und schaut,
+        wohin er rennt.
+
+        Kennt er keinen, schaut er in seinen Sektor im Trupp, sonst - ohne
+        Kontakt - in die Richtung der Linie (die dreht sich traege), solange
+        er nicht entgegengesetzt laeuft; sonst dorthin, wo er etwas
+        vermutet. Erst wenn nichts davon passt, wohin er geht: wer langsam
+        einen Bogen zur Stellung lief, drehte sich sonst mit ihm."""
+        k = self.k
+        nah = K.BOTS["blick_gefahr_nah"]
+        gefahr = self._gefahr() if not self.innen.panik else None
+        if gefahr is not None and gefahr[1] == k.ebene and k.pos.distance_to(gefahr[0]) > nah:
+            return pygame.Vector2(gefahr[0])
+        if self.innen.panik:
+            return super()._blick_ohne_ziel(will)
+        t = self.trupp
+        if t is not None:
+            sektor = t.blicke.get(k.nummer)
+            if sektor is not None and k.pos.distance_to(sektor) > nah:
+                return pygame.Vector2(sektor)
+            richtung = getattr(t, "_linie_richtung", None)
+            if t.front is None and richtung is not None:
+                abweichung = abs((richtung.angle_to(will) + 180.0) % 360.0 - 180.0) \
+                    if will.length_squared() > 0.01 else 0.0
+                if abweichung <= K.BOTS["blick_linie_weit"]:
+                    return k.pos + richtung * 120
+        v = self.verdacht
+        if v is not None and v[1] == k.ebene and v[2] >= self.g.welt.zeit and k.pos.distance_to(v[0]) > nah:
+            return pygame.Vector2(v[0])
+        return super()._blick_ohne_ziel(will)
+
     def druck_pause_faktor(self) -> float:
         """Feuerschutz fuer einen Retter (seit 0.34.54): kurze Pausen, damit
         der Gegner den Kopf unten behaelt."""
@@ -258,6 +296,18 @@ class GoapHirn(BotHirn):
         koennte, der naechste zu ihm - (Ort, Ebene, Wesen) oder None."""
         k = self.k
         jetzt = self.g.welt.zeit
+        # Einen Denktakt lang gilt die Antwort: _gefahr fragt fast jeden
+        # Schritt, und jede Antwort kostet je Kandidat eine Sichtlinie zu
+        # Retter und Liegendem - gemessen der teuerste Teil eines Gefechts
+        # mit vielen Liegenden (seit 0.34.55).
+        merk = getattr(self, "_bedrohung_merk", None)
+        if merk is not None and 0.0 <= jetzt - merk[0] < K.BOTS["takt"]:
+            return merk[1]
+        wert = self._bergung_bedrohung_suchen(k, jetzt)
+        self._bedrohung_merk = (jetzt, wert)
+        return wert
+
+    def _bergung_bedrohung_suchen(self, k, jetzt):
         kandidaten = list(self.trupp.feinde(k.ebene)) if self.trupp is not None else []
         for w, (ort, ebene, zeit) in self.gesehen.items():
             if kampffaehig(w) and ebene == k.ebene and jetzt - zeit <= K.BOTS["gedaechtnis"]:
@@ -647,7 +697,15 @@ class GoapHirn(BotHirn):
     # ── Bergen (seit 0.34.40) ─────────────────────────────────────
     def _opfer(self):
         """Wen er bergen soll: im Trupp den, den der Trupp birgt; sonst den
-        naechsten Gefallenen seiner Mannschaft."""
+        naechsten Gefallenen seiner Mannschaft. Wen er schon zieht oder dem
+        er schon aufhilft, den zuerst (seit 0.34.55): fiel im eigenen Trupp
+        einer, liess er den fremden Liegenden bei sechs Zehnteln liegen und
+        lief zum eigenen."""
+        k = self.k
+        for nummer in (k.hilft, k.zieht):
+            x = self.g.kaempfer.get(nummer) if nummer is not None else None
+            if x is not None and x.lebt and getattr(x, "am_boden", False):
+                return x
         t = self.trupp
         if t is not None and t.bergung is not None:
             x = t.bergung["opfer"]
@@ -694,7 +752,8 @@ class GoapHirn(BotHirn):
         if x is None:
             return dict(bei_kamerad=False, kamerad_gedeckt=False, ich_berge=False,
                         bergen_sicher=False, bergung_laeuft=False, anderer_zieht=False,
-                        bergung_halten=halten)
+                        bergung_halten=halten, hilft_schon=False, fast_fertig=False,
+                        anderer_hilft=False)
         if t is not None and t.bergung is not None and t.bergung["opfer"] is x:
             ich = k.nummer in t.bergung["retter"]
             sicher = t.bergung["sicher"]
@@ -706,19 +765,37 @@ class GoapHirn(BotHirn):
                               key=lambda m: m.pos.distance_to(x.pos))
             ich = k in naechste[:K.VERWUNDET["retter"]]
             sicher = self.bedrohung(x) == 0 or self.innen.stufe >= 3
+        # Wer schon zieht oder aufhilft, bringt es zu Ende (seit 0.34.55):
+        # kam ein anderer naeher, war er nicht mehr "der Naechste" und ging
+        # mitten im Aufhelfen weg; tauchte ein Gegner auf, brach er bei neun
+        # Zehnteln ab, und der Fortschritt verfiel. Gemeldet: "eine laengere
+        # zeit in der der helfer neben dem kameraden steht oder rumlaeuft".
+        dran = k.zieht == x.nummer or k.hilft == x.nummer
+        ich = ich or dran
+        hilft_schon = k.hilft == x.nummer and x.revive_stand > 0.0
+        fast_fertig = hilft_schon and x.revive_stand >= K.VERWUNDET["zu_ende"]
+        if fast_fertig:
+            sicher = True
         laeuft = any(getattr(m, "zieht", None) == x.nummer or getattr(m, "hilft", None) == x.nummer
                      for m in self.kameraden() + [k])
         # Ziehen kann nur einer (seit 0.34.50): zogen beide, hing der zweite
         # bei kamerad_ziehen fest, statt ihnen Deckung zu geben.
         anderer = any(getattr(m, "zieht", None) == x.nummer for m in self.kameraden())
+        # Hilft ihm schon einer auf, zieht ihn keiner weg (seit 0.34.55) -
+        # sonst zog der eine ihn dem anderen unter den Haenden fort, und
+        # dessen Fortschritt verfiel. Mithelfen geht (doppelt so schnell).
+        anderer_hilft = any(getattr(m, "hilft", None) == x.nummer for m in self.kameraden())
         return dict(bei_kamerad=x.ebene == k.ebene
-                    and k.pos.distance_to(x.pos) <= K.REVIVE["reichweite"] - 4,
+                    and k.pos.distance_to(x.pos) <= K.REVIVE["reichweite"]
+                    + (K.REVIVE["halten"] - 1 if dran else -4),
                     # Fest gedeckt, nicht nur im Rauch: erst dorthin ziehen, dann
                     # aufhelfen (seit 0.34.48, gemeldet: "die Teammates immer
                     # erst hinter eine gute und sichere Deckung bergen").
                     kamerad_gedeckt=self.sicher_gedeckt(x.pos, x.ebene),
                     ich_berge=ich, bergen_sicher=sicher, bergung_laeuft=laeuft,
-                    anderer_zieht=anderer, bergung_halten=halten)
+                    anderer_zieht=anderer, bergung_halten=halten,
+                    hilft_schon=hilft_schon, fast_fertig=fast_fertig,
+                    anderer_hilft=anderer_hilft)
 
     def bergeplatz(self, x):
         """Wohin er den Liegenden zieht: die naechste Stelle um ihn, die vor
@@ -1253,6 +1330,18 @@ class GoapHirn(BotHirn):
         muss er sich wieder einzielen."""
         m = K.MORAL
         jetzt = self.g.welt.zeit
+        # Wer einen Gegner vor sich sieht und ihn bekaempft, schaut nicht weg
+        # (seit 0.34.55): ein Geraeusch nach dem anderen zog seinen Blick
+        # immer wieder zur Seite, gemessen anderthalb Sekunden lang, und
+        # dabei drehte er sich mehr als einmal ganz herum.
+        # Ebenso nicht, wer einen Kameraden zieht oder ihm aufhilft: er hat
+        # die Haende an ihm, und sein Blick gehoert dorthin.
+        z = self.ziel
+        if ((z is not None and self.ziel_ok(z) and self.gehirn is not None
+                and self.gehirn.fakten.get("feind_sichtbar"))
+                or self.k.hilft is not None or self.k.zieht is not None):
+            self._umschau_bis = 0.0
+            return will, punkt, feuern
         if jetzt < self._umschau_bis and self._umschau_punkt is not None:
             return will, pygame.Vector2(self._umschau_punkt), False
         self._umschau_rest -= dt
@@ -1270,8 +1359,11 @@ class GoapHirn(BotHirn):
             hin = gefahr[0] - k.pos
             if hin.length_squared() < 1.0:
                 return will, punkt, feuern
+            # Zur Flanke, nicht nach hinten (seit 0.34.55, vorher bis 150
+            # Grad): von fast hinten kehrte der Blick oft nicht zurueck,
+            # sondern lief weiter herum - eine ganze Drehung ohne Sinn.
             ort = k.pos + hin.normalize().rotate(self.rnd.choice((-1, 1))
-                                                 * self.rnd.uniform(80.0, 150.0)) * 120.0
+                                                 * self.rnd.uniform(*m["umschau_winkel"])) * 120.0
         self._umschau_punkt = pygame.Vector2(ort)
         self._umschau_bis = jetzt + self.rnd.uniform(*m["umschau_dauer"])
         self.fehler_zeit *= 0.5
@@ -2026,6 +2118,7 @@ class GoapHirn(BotHirn):
         if k.pos.distance_to(x.pos) > K.REVIVE["reichweite"] - 2 and k.zieht is None:
             return self._weg_richtung(x.pos, x.ebene, ein), None, False, False, "laeuft"
         ein["ziehen"] = True
+        ein["wen"] = x.nummer            # ihn, nicht den, der daneben liegt (0.34.55)
         weg = ort - x.pos
         if weg.length() < 8.0:
             self._berge_ort = None
@@ -2206,7 +2299,7 @@ class GoapHirn(BotHirn):
         geht er erst naeher heran. Geworfen wird wie jede Wurfwaffe."""
         k = self.k
         gefahr = self._gefahr()
-        if gefahr is None:
+        if gefahr is None or self.g.welt.zeit < getattr(self, "_rauch_pause_bis", 0.0):
             return _nichts("gescheitert")
         soll = self.rauch_ort(gefahr[0])
         if self.wurf_phase <= 0.0:
@@ -2218,7 +2311,21 @@ class GoapHirn(BotHirn):
             # dorthin, wo er frei werfen kann - sonst brach vorn_zu den Wurf
             # bei jedem Bild ab und er stand ewig da (gesehen in der Aufnahme).
             if k.pos.distance_to(soll) > weit or not self.wurfbahn_frei(soll):
+                # Hoechstens ein paar Sekunden dorthin (seit 0.34.55): hinter
+                # einer langen Mauer lief der Anfuehrer zwoelf Sekunden lang
+                # um sie herum, statt Feuerschutz zu geben - und der Retter
+                # stand allein. Dann eben ohne Rauch, eine Weile lang.
+                jetzt = self.g.welt.zeit
+                lauf = getattr(self, "_rauch_lauf", None)
+                if lauf is None or jetzt - lauf[1] > 0.5:
+                    lauf = (jetzt, jetzt)
+                self._rauch_lauf = (lauf[0], jetzt)
+                if jetzt - lauf[0] > K.BOTS["rauch_laufen"]:
+                    self._rauch_lauf = None
+                    self._rauch_pause_bis = jetzt + K.BOTS["rauch_pause"]
+                    return _nichts("gescheitert")
                 return self._weg_richtung(soll, k.ebene, ein), pygame.Vector2(gefahr[0]), False, False, "laeuft"
+            self._rauch_lauf = None
             self.wurf_phase = 0.45
             self.sagen("RAUCH!", wichtig=True)
         ziel = _Stelle(soll, k.ebene)

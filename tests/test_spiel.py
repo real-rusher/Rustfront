@@ -11071,9 +11071,13 @@ for _ in range(int(30.0 / _D87)):
                 _erst96 = _tr96.bergung["sicher"]
     if not _opfer96.am_boden:
         break
+# Wer schon in Reichweite liegt, dem hilft der Retter gleich auf: seit
+# 0.34.55 plant er mitten im Aufhelfen nicht mehr das Ziehen - vorher kam
+# kamerad_ziehen hier oft nur durch dieses Hin und Her in die Liste.
 pruef("... geholt wird erst, wenn es sicher genug ist (Rauch oder ein zuversichtlicher Trupp) - "
       "dann steht er wieder",
-      _erst96 is True and ((False, "zum_kameraden") in _akt96 or (False, "kamerad_ziehen") in _akt96)
+      _erst96 is True and any((False, n_) in _akt96 for n_ in ("zum_kameraden", "kamerad_ziehen",
+                                                              "aufhelfen", "aufhelfen_offen"))
       and _opfer96.lebt and not _opfer96.am_boden,
       "%s, sicher beim Anfang: %s, liegt %s" % (sorted(_akt96), _erst96, _opfer96.am_boden))
 
@@ -12121,6 +12125,228 @@ _ohne108 = _tm.sicht_welt()
 pruef("... herausgezoomt liegt mit Nebel alles ausserhalb des normalen Bildes im Nebel, ohne ihn nichts",
       _mit108 is not None and _ohne108 is None and not _tm.nebel and _tm.im_licht(_v108(500, 500)), "")
 pruef("... und der Schalter bleibt ueber einen Kartenwechsel erhalten", _tm.zustand()["nebel"] is False, "")
+_tm.verlassen()
+
+print("\n-- Last bei vielen Liegenden: Planer, Netzmeldung, Partikel (0.34.55)")
+from dustfront import goap as _G109
+import heapq as _hq109
+_knoten109 = [0]
+class _Zaehl109:
+    heappop = staticmethod(_hq109.heappop)
+    @staticmethod
+    def heappush(l_, e_):
+        _knoten109[0] += 1
+        _hq109.heappush(l_, e_)
+_G109.heapq = _Zaehl109
+try:
+    # Zwanzig Aktionen, die mit dem Ziel nichts zu tun haben, und eine, die
+    # es machte - aber nur ohne "halten", und "halten" aendert keiner.
+    _ak109 = [_G109.Aktion("laerm%d" % i_, braucht="", macht="l%d" % i_) for i_ in range(20)]
+    _ak109.append(_G109.Aktion("suchen", braucht="!halten", macht="gefunden"))
+    _p109 = _G109.planen({"halten": True}, {"gefunden": True}, _ak109)
+    _n109 = _knoten109[0]
+    pruef("Ein Ziel, dessen einzige Aktion einen Fakt braucht, den keiner aendert: sofort kein Plan",
+          _p109 is None and _n109 == 0, "%s, %d Zustaende" % (_p109, _n109))
+    _knoten109[0] = 0
+    _p109b = _G109.planen({}, {"gefunden": True}, _ak109)
+    pruef("... ohne den Fakt: der Plan wie immer, und die zwanzig fremden Aktionen nicht durchprobiert",
+          [a_.name for a_ in _p109b or []] == ["suchen"] and _knoten109[0] <= 2,
+          "%s, %d Zustaende" % (_p109b, _knoten109[0]))
+    _ak109b = [_G109.Aktion("hin", braucht="", macht="dort"),
+               _G109.Aktion("nehmen", braucht="dort", macht="hat"),
+               _G109.Aktion("laerm", braucht="", macht="l")]
+    _p109c = _G109.planen({}, {"hat": True}, _ak109b)
+    pruef("... was ein Vorgaenger braucht, bleibt dabei (hin > nehmen)",
+          [a_.name for a_ in _p109c or []] == ["hin", "nehmen"], str(_p109c))
+finally:
+    _G109.heapq = _hq109
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm._bot_rnd.seed(109)
+_tm.wiedereinstieg = False
+_tm._wirkung = [["x"]]
+_baut109 = [0]
+_alt109 = _tm._weltmeldung
+def _meld109():
+    _baut109[0] += 1
+    return _alt109()
+_tm._weltmeldung = _meld109
+for _ in range(10):
+    _tm.schritt(K.FIXED_DT)
+pruef("Ohne Gast wird die Netzmeldung nicht gebaut - die Wirkungen verfallen trotzdem",
+      _baut109[0] == 0 and _tm._wirkung == [] and not _tm.gastgeber.leitungen, str(_baut109))
+del _tm._weltmeldung
+_r109 = _tm.renderer
+_flaeche109 = pygame.Surface((K.GAME_W, K.GAME_H))
+_ecke109 = pygame.Vector2(_tm.kamera.ecke)
+_tm.welt.partikel[:] = [_P65(_ecke109 + pygame.Vector2(-5000, 300), (0, 0), 5.0, (200, 0, 0), art="funke"),
+                        _P65(_ecke109 + pygame.Vector2(200, 200), (0, 0), 5.0, (200, 0, 0), art="funke")]
+_geprueft109 = []
+_alt_v109 = _r109.verdeckt
+_r109.verdeckt = lambda welt_, i_, p_, h_: _geprueft109.append(pygame.Vector2(p_)) or False
+try:
+    _r109.partikel_zeichnen(_flaeche109, _tm.welt, 0, _ecke109, 1.0)
+finally:
+    del _r109.verdeckt
+pruef("Funken weit ausserhalb des Bildes werden nicht auf Mauern davor abgetastet, die im Bild schon",
+      len(_geprueft109) == 1 and _geprueft109[0].distance_to(_ecke109 + pygame.Vector2(200, 200)) < 1.0,
+      str(_geprueft109))
+_tm.verlassen()
+
+print("\n-- Helfer greift den Richtigen, bringt es zu Ende; kein Kreiseln (0.34.55)")
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm._bot_rnd.seed(110)
+_tm.wiedereinstieg = False
+_tm.verwundete_setzen(True)
+_tx110, _ty110 = _freie_flaeche86(_tm.welt, random.Random(110), 16, 9)
+def _v110(x_, y_):
+    return pygame.Vector2((_tx110 + x_ + 0.5) * K.TILE, (_ty110 + y_ + 0.5) * K.TILE)
+_h110 = _tm.bot_setzen(_v110(5, 4), 0, {"team": 0, "hirn": "goap"})
+_x110 = _tm.bot_setzen(_v110(7, 4), 0, {"team": 0, "hirn": "goap"})
+_y110 = _tm.bot_setzen(_v110(3, 4), 0, {"team": 0, "hirn": "goap"})
+_tm.ki_stopp = True
+_x110.pos.update(_h110.pos + pygame.Vector2(20, 0))
+_y110.pos.update(_h110.pos + pygame.Vector2(-12, 0))
+_tm.toeten(_x110)
+_tm.toeten(_y110)
+pruef("Zwei liegen nebeneinander: ohne Angabe wird der Naechste gezogen, mit Angabe der Gemeinte",
+      _tm._wen_ziehen(_h110) is _y110 and _tm._wen_ziehen(_h110, _x110.nummer) is _x110
+      and _tm._wem_helfen(_h110, _x110.nummer) is _x110, "")
+_x110.pos.update(_h110.pos + pygame.Vector2(60, 0))
+pruef("... ist der Gemeinte ausser Reichweite, greift er keinen anderen",
+      _tm._wen_ziehen(_h110, _x110.nummer) is None and _tm._wem_helfen(_h110, _x110.nummer) is None, "")
+_x110.pos.update(_h110.pos + pygame.Vector2(20, 0))
+_tm._anwenden(_h110, {"will": [0, 0], "ziel": [0, 0], "ziehen": True, "wen": _y110.nummer})
+_tm._anwenden(_h110, {"will": [0, 0], "ziel": [0, 0], "ziehen": True, "wen": _x110.nummer})
+pruef("... hat er den falschen in der Hand, laesst er ihn los und nimmt den Gemeinten",
+      _h110.zieht == _x110.nummer and _y110.gezogen_von is None, "%s %s" % (_h110.zieht, _y110.gezogen_von))
+_tm._anwenden(_h110, {"will": [0, 0], "ziel": [0, 0]})
+_tm.loeschen(_y110)
+_hh110 = _h110.hirn
+_ein110 = {"nutzen": False}
+_x110.pos.update(_h110.pos + pygame.Vector2(26, 0))
+_hh110._helfen(_x110, _ein110)
+_draussen110 = _ein110["nutzen"]
+_h110.hilft = _x110.nummer
+_ein110 = {"nutzen": False}
+_hh110._helfen(_x110, _ein110)
+pruef("Wer schon aufhilft, hilft bis an die Reichweite weiter (26 px: vorher nicht, dabei schon)",
+      not _draussen110 and _ein110["nutzen"] and _ein110.get("wen") == _x110.nummer, str(_ein110))
+_x110.revive_stand = 0.3
+_hh110.bedrohung = lambda x_: 3
+_f110 = _hh110._bergung_fakten()
+_x110.revive_stand = 0.6
+_f110b = _hh110._bergung_fakten()
+del _hh110.bedrohung
+pruef("... er hilft schon (hilft_schon), bleibt der Retter, und ab der Haelfte bringt er es zu Ende, auch wenn einer hinsieht",
+      _f110["hilft_schon"] and _f110["ich_berge"] and _f110["bei_kamerad"] and not _f110["bergen_sicher"]
+      and _f110b["bergen_sicher"], "%s / %s" % (_f110, _f110b))
+_ak110 = _hh110.gehirn.aktionen
+_fakt110 = {"kamerad_liegt": True, "bei_kamerad": True, "ich_berge": True}
+_p110a = _G109.planen(_fakt110, {"kamerad_liegt": False}, _ak110)
+_p110b = _G109.planen(dict(_fakt110, hilft_schon=True), {"kamerad_liegt": False}, _ak110)
+pruef("... und plant mitten im Aufhelfen nicht mehr das Ziehen (vorher: erst ziehen)",
+      [a_.name for a_ in _p110a or []][:1] == ["kamerad_ziehen"]
+      and [a_.name for a_ in _p110b or []] == ["aufhelfen_offen"], "%s / %s" % (_p110a, _p110b))
+_z110 = next(z_ for z_ in _hh110.gehirn.ziele if z_.name == "kamerad_bergen")
+_n110 = {"kamerad_liegt": 1, "ich_berge": 1, "bergen_sicher": 1, "fast_fertig": 0}
+_rang110 = _z110.rang.wert(_n110)
+_n110["fast_fertig"] = 1
+pruef("... fast fertig hat das Bergen Rang 3: nur die Granate geht dann noch vor",
+      _rang110 == 1 and _z110.rang.wert(_n110) == 3 and _f110b["fast_fertig"], str(_rang110))
+_x110.pos.update(_h110.pos + pygame.Vector2(K.REVIVE["reichweite"] + 2, 0))
+pruef("Das Gefecht laesst ihn weiterhelfen, wenn er ein Stueck hinausgerutscht ist - anfangen nur in Reichweite",
+      _tm._wem_helfen(_h110, _x110.nummer, _x110.nummer) is _x110
+      and _tm._wem_helfen(_h110, _x110.nummer) is None, "")
+_x110.pos.update(_h110.pos + pygame.Vector2(20, 0))
+_s110 = _tm.bot_setzen(_v110(9, 4), 0, {"team": 0, "hirn": "goap"})
+_s110.pos.update(_h110.pos + pygame.Vector2(0, 10))
+_vor110 = pygame.Vector2(_h110.pos)
+_tm.welt._raster_bauen()
+_tm.welt.auseinander(_s110)
+pruef("Wer aufhilft, kniet: ein anderer, der in ihn hineinlaeuft, schiebt ihn nicht weg",
+      _h110.pos == _vor110 and _s110.pos.distance_to(_h110.pos) > 10.5, str(_h110.pos - _vor110))
+_tm.loeschen(_s110)
+_w110 = _tm.bot_setzen(_v110(12, 4), 0, {"team": 0, "hirn": "goap"})
+_w110.pos.update(_h110.pos + pygame.Vector2(0, 200))
+_tm.toeten(_w110)
+pruef("Wem er schon aufhilft, bei dem bleibt er - auch wenn ein anderer naeher oder 'dran' ist",
+      _hh110._opfer() is _x110, str(_hh110._opfer()))
+_tm.loeschen(_w110)
+_hh110._umschau_bis = _tm.welt.zeit + 5.0
+_hh110._umschau_punkt = _h110.pos + pygame.Vector2(-300, 0)
+_us110 = _hh110._umschauen(K.FIXED_DT, pygame.Vector2(0, 0), pygame.Vector2(_x110.pos), False)
+pruef("Beim Aufhelfen schaut er nicht um - sein Blick bleibt beim Kameraden",
+      _us110[1] == _x110.pos and _hh110._umschau_bis == 0.0, str(_us110[1]))
+_h110.hilft = None
+_a110 = _tm.bot_setzen(_v110(12, 6), 0, {"team": 0, "hirn": "goap"})
+_a110.hilft = _x110.nummer
+_fa110 = _hh110._bergung_fakten()
+_pa110 = _G109.planen(dict(_fakt110, anderer_hilft=True), {"kamerad_liegt": False}, _ak110)
+_a110.hilft = None
+_tm.loeschen(_a110)
+pruef("Hilft ihm schon ein anderer auf, zieht er ihn nicht weg - er hilft mit",
+      _fa110["anderer_hilft"] and [a_.name for a_ in _pa110 or []] == ["aufhelfen_offen"],
+      "%s %s" % (_fa110.get("anderer_hilft"), _pa110))
+# Blick ohne Zielpunkt: kennt er einen Gegner, schaut er zu ihm.
+_gef110 = _h110.pos + pygame.Vector2(0, -300)
+_hh110._gefahr = lambda: (pygame.Vector2(_gef110), 0, None)
+pruef("Ohne Zielpunkt schaut er zum bekannten Gegner, nicht in die Laufrichtung",
+      _hh110._blick_ohne_ziel(pygame.Vector2(1, 0)).distance_to(_gef110) < 1.0, "")
+del _hh110._gefahr
+_hh110._gefahr = lambda: None
+_zeit110 = _tm.welt.zeit
+_hh110.blick = 0.0
+_richtungen110 = [pygame.Vector2(0, 1), pygame.Vector2(-1, 0), pygame.Vector2(0, -1), pygame.Vector2(1, 0)]
+_gedreht110 = []
+for i_ in range(8):
+    _tm.welt.zeit = _zeit110 + i_ * 0.15
+    p_ = _hh110._blick_ohne_ziel(_richtungen110[i_ % 4])
+    _gedreht110.append(round(math.degrees(math.atan2(p_.y - _h110.pos.y, p_.x - _h110.pos.x))))
+_tm.welt.zeit = _zeit110 + 2.0
+_hh110._blick_ohne_ziel(pygame.Vector2(0, 1))
+_tm.welt.zeit = _zeit110 + 2.5
+_lang110 = _hh110._blick_ohne_ziel(pygame.Vector2(0, 1))
+_tm.welt.zeit = _zeit110
+del _hh110._gefahr
+pruef("Trippelschritte in vier Richtungen drehen den Blick nicht - wer eine Weile in eine Richtung geht, schaut dorthin",
+      all(abs(w_) < 1 for w_ in _gedreht110) and (_lang110 - _h110.pos).angle_to(pygame.Vector2(0, 1)) == 0,
+      str(_gedreht110))
+# Rauch: findet er keine Stelle mit freier Wurfbahn, laesst er ihn nach
+# ein paar Sekunden - statt hinter einer langen Mauer herumzulaufen.
+_wi110 = next(i_ for i_, n_ in enumerate(_h110.waffen) if "wurf_max" in K.WAFFEN[n_])
+_hh110._gefahr = lambda: (pygame.Vector2(_h110.pos) + pygame.Vector2(300, 0), 0, None)
+_hh110.wurfbahn_frei = lambda nach_: False
+_hh110._rauch_platz = lambda: _wi110
+_status110 = []
+for t_ in [i_ * 0.4 for i_ in range(10)] + [7.0]:      # dicht hintereinander: ein Anlauf
+    _tm.welt.zeit = _zeit110 + 10.0 + t_
+    _status110.append(_hh110.tun_rauch(K.FIXED_DT, {"knoepfe": []})[4])
+_tm.welt.zeit = _zeit110
+del _hh110._gefahr, _hh110.wurfbahn_frei, _hh110._rauch_platz
+pruef("Ohne freie Wurfbahn geht er hoechstens rauch_laufen Sekunden dorthin, dann laesst er den Rauch eine Weile",
+      _status110 == ["laeuft"] * 8 + ["gescheitert"] * 3, str(_status110))
+_tm.verlassen()
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm._bot_rnd.seed(111)
+_tm.wiedereinstieg = False
+_tx111, _ty111 = _freie_flaeche86(_tm.welt, random.Random(111), 16, 9)
+_tr111 = _tm.trupp_setzen(pygame.Vector2((_tx111 + 8) * K.TILE, (_ty111 + 4) * K.TILE), 0,
+                          {"groesse": 4, "team": 0, "fuehrer": "funk"})
+_tm.ki_stopp = True
+_tr111.ziel_ort = lambda: None
+_l111 = _tr111.lebende()
+_tr111.fuehrer.hirn.blick = 0.0
+_tr111._linie_ohne_kontakt(_l111)
+_r0_111 = pygame.Vector2(_tr111._linie_richtung)
+_tr111.fuehrer.hirn.blick = 10.0
+_tr111._linie_ohne_kontakt(_l111)
+_r1_111 = pygame.Vector2(_tr111._linie_richtung)
+_tr111.fuehrer.hirn.blick = 150.0
+_tr111._linie_ohne_kontakt(_l111)
+_r2_111 = pygame.Vector2(_tr111._linie_richtung)
+pruef("Die Linie ohne Kontakt wackelt nicht mit jedem Blick des Anfuehrers und schwenkt nur langsam nach",
+      _r1_111 == _r0_111 and abs(_r1_111.angle_to(_r2_111)) <= K.TRUPP["linie_dreh"] + 0.01,
+      "%.1f %.1f" % (_r0_111.angle_to(_r1_111), _r1_111.angle_to(_r2_111)))
 _tm.verlassen()
 
 print()

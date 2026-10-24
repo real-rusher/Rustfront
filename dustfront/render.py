@@ -977,13 +977,18 @@ class Renderer:
         Eine Kugel, die knapp hinter einer Mauer vorbeifliegt, ist nicht zu
         sehen; eine, die vor ihr fliegt, schon.
         """
+        breite, hoehe = ziel.get_size()
         for w in welt.wesen:
             if w.ebene != index or not w.lebt or w.hoehe_bild <= 0 or w.flug > 0:
                 continue
             wp = w.zeichenpos(alpha)
+            p = wp - ecke
+            # Ausserhalb des Bildes gar nicht erst abtasten (wie bei den
+            # Partikeln, seit 0.34.55); 32 px Rand fuer Spur und Bild.
+            if not (-32 <= p.x < breite + 32 and -32 <= p.y < hoehe + 32):
+                continue
             if self.verdeckt(welt, index, wp, w.hoehe_bild):
                 continue
-            p = wp - ecke
             if w.spur is not None and w.tempo.length_squared() > 1:
                 r = w.tempo.normalize()
                 pygame.draw.line(ziel, (128, 80, 30), p - r * 17, p - r * 5, 1)
@@ -1144,13 +1149,20 @@ class Renderer:
 
     def partikel_zeichnen(self, ziel, welt, index, ecke, alpha) -> None:
         h = K.HOEHEN
+        breite, hoehe = ziel.get_size()
         for p in welt.partikel:
             if p.ebene != index:
                 continue
             wp = p.zeichenpos(alpha)
+            q = wp - ecke
+            # Erst ausserhalb des Bildes aussortieren: `verdeckt` tastet
+            # jeden Pixel bis zur Mauerhoehe ab und war gemessen der
+            # teuerste Teil des Bildes, auch fuer Funken und Huelsen weit
+            # ausserhalb (seit 0.34.55).
+            if not (-16 <= q.x < breite + 16 and -16 <= q.y < hoehe + 16):
+                continue
             if self.verdeckt(welt, index, wp, h.get(p.art, h["partikel"])):
                 continue
-            q = wp - ecke
             f = max(0.0, p.leben / p.dauer)
             if p.art == "huelse":
                 s = self.bilder.gedreht("huelse", p.winkel)

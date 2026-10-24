@@ -483,6 +483,20 @@ class Trupp:
                 richtung = hin.normalize()
         if richtung is None:
             richtung = pygame.Vector2(1, 0).rotate(fuehrer.hirn.blick)
+        # Die Linie dreht sich traege nach (seit 0.34.55): sie hing direkt
+        # am Blick des Anfuehrers, und jedes Umschauen schwenkte sie um bis
+        # zu 150 Grad - alle Stellungen sprangen, die Plaetze wurden neu
+        # verteilt, und jeder lief im Zickzack hinterher und drehte sich
+        # dabei mit seiner Laufrichtung im Kreis (gemeldet: "teils drehen
+        # sich bots ... um 360 grad").
+        alt = getattr(self, "_linie_richtung", None)
+        if alt is not None:
+            w = (alt.angle_to(richtung) + 180.0) % 360.0 - 180.0
+            if abs(w) < t["linie_ruhe"]:
+                richtung = pygame.Vector2(alt)
+            else:
+                richtung = alt.rotate(max(-t["linie_dreh"], min(t["linie_dreh"], w)))
+        self._linie_richtung = pygame.Vector2(richtung)
         quer = pygame.Vector2(-richtung.y, richtung.x)
         andere = [m for m in leute if m is not fuehrer]
         andere.sort(key=lambda m: (m.pos - fuehrer.pos).dot(quer))
@@ -1026,6 +1040,13 @@ class Trupp:
                 kandidaten.append(pygame.Vector2(m.pos))
             alt = self.stellungen_vorher.get(m.nummer)
             if alt is not None and alt.distance_to(m.pos) <= v["halten_radien"][-1] and gedeckt(alt):
+                if schiesst(alt):
+                    # Dorthin ist er schon unterwegs, und sie taugt noch:
+                    # nicht jeden Takt achtzig Stellen neu pruefen - das war
+                    # gemessen ein grosser Teil der Last, solange einer
+                    # geborgen wird (seit 0.34.55).
+                    self.stellungen[m.nummer] = pygame.Vector2(alt)
+                    continue
                 kandidaten.append(pygame.Vector2(alt))
             n = v["halten_richtungen"]
             for r in v["halten_radien"]:

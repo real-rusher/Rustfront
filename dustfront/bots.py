@@ -234,8 +234,7 @@ class BotHirn(Taktik):
 
         # Fadenkreuz: schwenkt, springt nicht.
         if ziel_punkt is None:
-            ziel_punkt = k.pos + (will * 120 if will.length_squared() > 0.01
-                                  else pygame.Vector2(1, 0).rotate(self.blick) * 120)
+            ziel_punkt = self._blick_ohne_ziel(will)
         soll = _winkel_zu(k.pos, ziel_punkt)
         ab = _winkel_diff(self.blick, soll)
         schritt = K.BOTS["dreh"] * dt
@@ -257,6 +256,28 @@ class BotHirn(Taktik):
         ein["feuert"] = bool(feuern)
         ein["zielt"] = bool(zielt)
         return ein
+
+    def _blick_ohne_ziel(self, will):
+        """Wohin er schaut, wenn er nichts anvisiert: wohin er geht - aber
+        erst, wenn er eine Weile in dieselbe Richtung geht -, sonst
+        geradeaus weiter. Vorher folgte der Blick jedem Trippelschritt zur
+        Stellung hin, und wer viermal in vier Richtungen trat, drehte sich
+        dabei fast auf der Stelle einmal ganz um sich selbst (seit 0.34.55,
+        gemeldet: "teils drehen sich bots in verschiedensten Situationen um
+        360 grad")."""
+        k = self.k
+        geradeaus = k.pos + pygame.Vector2(1, 0).rotate(self.blick) * 120
+        if will.length_squared() <= 0.01:
+            self._lauf_richtung = None
+            return geradeaus
+        jetzt = self.g.welt.zeit
+        alt = getattr(self, "_lauf_richtung", None)
+        if alt is None or abs(_winkel_diff(alt.as_polar()[1], will.as_polar()[1])) > K.BOTS["lauf_blick_winkel"]:
+            self._lauf_richtung = pygame.Vector2(will)
+            self._lauf_seit = jetzt
+        if jetzt - getattr(self, "_lauf_seit", jetzt) < K.BOTS["lauf_blick_ruhe"]:
+            return geradeaus
+        return k.pos + will * 120
 
     def _entscheiden(self, dt: float, ein: dict):
         """Was er jetzt tut: (Laufrichtung, Zielpunkt, feuern, zielen).
@@ -938,8 +959,14 @@ class BotHirn(Taktik):
     def _helfen(self, x, ein: dict):
         k = self.k
         self.funken("helfen")
-        if x.ebene == k.ebene and k.pos.distance_to(x.pos) <= K.REVIVE["reichweite"] - 4:
+        # Wer schon hilft, hilft ueber die Reichweite hinaus weiter, bis an
+        # die Haltezone des Gefechts (seit 0.34.55): zwei Helfer schoben
+        # einander genau auf die Grenze, und jeder fiel bei jedem Schubs
+        # heraus und fing neu an.
+        weite = K.REVIVE["reichweite"] + (K.REVIVE["halten"] - 1 if k.hilft == x.nummer else -4)
+        if x.ebene == k.ebene and k.pos.distance_to(x.pos) <= weite:
             ein["nutzen"] = True
+            ein["wen"] = x.nummer        # ihm, nicht dem, der zufaellig naeher liegt
             return pygame.Vector2(0, 0), pygame.Vector2(x.pos)
         return self._weg_richtung(x.pos, x.ebene), None
 

@@ -1135,6 +1135,12 @@ BOTS = dict(
     schutz_pause=0.4,         # x Pause zwischen zwei Stoessen dabei
     schutz_fremd=120.0,       # ... und so weit weg von den eigenen Leuten (px)
     schutz_hoeren=2.0,        # so frisch muss ein gehoerter Schuss sein, damit er dorthin niederhaelt (s)
+    blick_gefahr_nah=30.0,    # naeher als so viel: nicht zur Gefahr schauen, der Winkel springt sonst (px, 0.34.55)
+    lauf_blick_ruhe=0.4,      # so lange muss er in eine Richtung gehen, bevor er dorthin schaut (s, 0.34.55)
+    lauf_blick_winkel=35.0,   # ... und so viel darf sie dabei schwanken (Grad)
+    blick_linie_weit=110.0,   # ohne Kontakt in Richtung der Linie schauen, solange er nicht weiter davon weg geht (Grad)
+    rauch_laufen=3.0,         # so lange geht er hoechstens zu einer Stelle, von der er Rauch werfen kann (s, 0.34.55)
+    rauch_pause=8.0,          # ... findet er keine, laesst er den Rauch so lange (s)
     lehnen_raus=2.2,          # laenger bleibt er nicht draussen (s)
     ecke_radien=(14.0, 28.0, 42.0, 56.0, 70.0),   # Panik in Deckung: so weit sucht er eine Ecke
     # Volle Deckung vor halber (seit 0.34.46), in Pixeln Weg, die sie wert ist:
@@ -1349,6 +1355,7 @@ MORAL = dict(
     # Geraeusch oder zur Seite. Unter Stress seltener (Tunnelblick).
     umschau=(2.5, 5.5),       # so oft (s)
     umschau_dauer=(0.3, 0.6),
+    umschau_winkel=(70.0, 110.0),  # ... so weit neben die Gefahr (Grad; bis 0.34.54: 80 bis 150)
 )
 
 # Trupps (seit 0.34.39, trupp.py): was ein Trupp gemeinsam weiss, wo jeder
@@ -1372,6 +1379,8 @@ TRUPP = dict(
     geschwaecht_tiefe=80.0,   # so viel weiter hinten ein Geschwaechter (0.34.40)
     linie_abstand=68.0,       # ohne Kontakt: so weit auseinander in der Linie
     linie_vor=30.0,           # ... und so weit vor dem Anfuehrer
+    linie_ruhe=25.0,          # ... ihre Richtung folgt erst ab so viel Grad Unterschied (0.34.55)
+    linie_dreh=20.0,          # ... und dann hoechstens so viel Grad je Takt
     linie_warten=2.6,         # x Abstand: so weit zurueck, und der Anfuehrer wartet
     stellung_weite=28.0,      # so nah an seiner Stellung: er steht, wo er soll
     # Seit 0.34.43: steht eine Stellung im Freien, sucht der Trupp so weit
@@ -1591,6 +1600,7 @@ REVIVE = dict(
     dauer=5.5,                # so lange muss ein Helfer danebenstehen
     takt=5.0,                 # so schnell drueckt er dabei (Bogenmass je Sekunde, _haende_zeichnen)
     reichweite=28.0,          # so nah muss er sein
+    halten=4.0,               # wer schon hilft, darf so viel weiter weg sein (0.34.55)
     danach_leben=40.0,        # mit so viel Leben steht man wieder auf
     schutz=2.0,               # Sekunden unverwundbar nach dem Aufstehen
     kriechen=0.35,            # so viel Tempo hat man am Boden noch
@@ -1622,6 +1632,7 @@ VERWUNDET = dict(
     deckung_radien=(60.0, 100.0, 140.0, 190.0, 240.0),   # so weit sucht ein Retter Deckung fuer den Liegenden
     rauch_nah=70.0,           # Rauch so nah am Liegenden: die Bergung ist gedeckt
     dranbleiben=12.0,         # so lange bringen die Retter eine angefangene Bergung zu Ende (0.34.50)
+    zu_ende=0.5,              # ab so viel Fortschritt hilft er auf, auch wenn ein Gegner auftaucht (0.34.55)
     deckung_rand=8.0,         # so weit daneben muss die Deckung auch noch halten (px, 0.34.52)
     deckung_richtungen=24,    # in so vielen Richtungen je Ring sucht er (war 12: der Schatten einer Kiste fiel dazwischen)
 )

@@ -1762,6 +1762,14 @@ class Spieler(Wesen):
 
         self.schlag_zeigen = max(0.0, self.schlag_zeigen - dt)
         self.nahkampf_rest = max(0.0, self.nahkampf_rest - dt)
+        if (getattr(self, "am_boden", False) and self.tempo.length_squared() < 0.01
+                and self.will.length_squared() < 0.01 and self.sturz_rest <= 0):
+            # Wer still am Boden liegt, hat keine Waffe in der Hand, laeuft
+            # nicht und dasht nicht: nichts davon rechnen (seit 0.34.55,
+            # gemeldet: "die performance leidet noch immer unter vielen bots
+            # am boden"). Gezogen wird er von aussen (Gefecht._ziehen).
+            self.halte_zeit = 0.0
+            return
         self.halte_zeit = self.halte_zeit + dt if self.feuert else 0.0
         self._anlauf_fuehren(dt, wd)
         self._salve_fuehren(dt, wd)

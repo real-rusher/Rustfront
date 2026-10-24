@@ -1351,7 +1351,43 @@ Kiste ("hindernis") bleibt erlaubt - Niederhalten. `tun_niederhalten`
 scheitert, wenn er nur auf eine Mauer zielen koennte und nirgendwohin
 geht, wo er schiessen kann.
 
-### 11.13 Was noch offen ist
+### 11.13 Nachtrag (0.34.55): Planer, Bergen, Blick
+
+Gemeldet: "Oft gibt es eine laengere zeit in der der helfer neben dem
+kameraden steht oder rumlaeuft ... teils drehen sich bots ... um 360 grad
+... die performance leidet noch immer unter vielen bots am boden."
+
+Planer: `goap.planen` streicht vor der Suche Aktionen, die einen Fakt
+brauchen, den keine Aktion aendert (wiederholt, bis sich nichts mehr
+tut), und alle, die nichts zum Ziel beitragen (rueckwaerts vom Ziel ueber
+`macht` und `braucht`). Fehlt danach fuer einen Zielfakt jede Aktion, gibt
+es sofort keinen Plan. Vorher lief ein Ziel ohne Weg ("suchen" waehrend
+`bergung_halten`) jedes Mal bis an `knoten` - gemessen 3 ms je Versuch.
+`suchen` will waehrend `bergung_halten` ohnehin nicht mehr.
+
+Bergen: die Eingabe sagt mit `wen`, wem er aufhilft oder wen er zieht
+(`Gefecht._gemeint`); neuer Fakt `hilft_schon` - `kamerad_ziehen` braucht
+`!hilft_schon`, wer schon zieht oder hilft, bleibt `ich_berge`, und ab
+`VERWUNDET["zu_ende"]` Fortschritt gilt es als sicher, und `fast_fertig`
+hebt `kamerad_bergen` auf Rang 3 (nur `granate_ausweichen` mit 120 geht
+vor). `_opfer` nimmt zuerst den, den er schon zieht oder dem er hilft.
+Wer hilft, ist fuer `Welt.auseinander` fest (er kniet), und das Gefecht
+laesst ihn bis `REVIVE["halten"]` ueber die Reichweite hinaus
+weiterhelfen; der Bot rechnet mit derselben Zone. `tun_rauch` geht
+hoechstens `BOTS["rauch_laufen"]` Sekunden zu einer Stelle mit freier
+Wurfbahn, sonst laesst er den Rauch `rauch_pause` Sekunden lang.
+
+Blick: ohne Zielpunkt zur bekannten Gefahr (`GoapHirn._blick_ohne_ziel`,
+nicht in Panik), sonst in seinen Sektor (`Trupp.blicke`), ohne Kontakt in
+die Richtung der Linie (bis `blick_linie_weit` von der Laufrichtung), zum
+Verdacht, und erst zuletzt nach `lauf_blick_ruhe` in eine Laufrichtung;
+kein Umschauen beim Ziehen und Aufhelfen; `anderer_hilft` sperrt
+`kamerad_ziehen`;
+`umschau_winkel` 70 bis 110 Grad; kein Umschauen, solange er einen
+sichtbaren Gegner bekaempft; `Trupp._linie_ohne_kontakt` dreht sich nur
+um `linie_dreh` je Takt und erst ab `linie_ruhe`.
+
+### 11.14 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.

@@ -1564,6 +1564,12 @@ class Testmodus(Gefecht):
                 continue
             h = k.hirn
             p = kam.zu_bild(k.pos)
+            if getattr(k, "am_boden", False):
+                # Wer liegt, denkt nicht: nur das (seit 0.34.55) - die volle
+                # Anzeige je Liegendem kostete nach einer Schlacht spuerbar.
+                SCHRIFT.zeichnen(ziel, "VERWUNDET", int(p.x), int(p.y) + 14, K.C_AMBER, 1,
+                                 ausrichtung="mitte")
+                continue
             zustand = self._klassisch_zustand(h)
             if h.ziel is not None:
                 pygame.draw.line(ziel, K.C_RED, p, kam.zu_bild(h.ziel.pos), 1)
