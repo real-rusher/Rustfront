@@ -703,6 +703,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     # einen Gast nach K.NETZ["stumm_nach"] Sekunden ohne Lebenszeichen
     # hinaus. Gesteuert wird trotzdem nichts - siehe `pausiert`.
     weiterlaufen = True
+    # Bots fliehen in Panik nicht (seit 0.34.56): in einer Runde sah das fuer
+    # Spieler wie ein Fehler der KI aus (gemeldet: "in der kampagne ist das
+    # sinnvoll aber hier wirkt es fuer spieler wie ein bug"). Panik bleibt -
+    # sie verkriechen sich oder wechseln die Deckung. Die Kampagne schaltet
+    # es ein; im Testmodus steht es im Testmenue.
+    bot_fliehen = False
 
     def __init__(self, app, name: str, gastgeber=None, gast=None,
                  modus: str = K.MODUS_VORGABE, ende_art: str = "zeit",

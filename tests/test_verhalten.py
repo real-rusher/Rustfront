@@ -758,9 +758,42 @@ def drehen():
     pruef("... und auch mit dem Laufen zusammen selten (hoechstens viermal, vorher 7 bis 8)", d.alle <= 4, str(d.alle))
 
 
+class Flucht:
+    """Zaehlt Bilder, in denen ein Bot in Panik ist, und solche, in denen
+    er flieht."""
+
+    def __init__(self):
+        self.tm = None
+        self.panik = 0
+        self.flieht = 0
+
+    def schritt(self):
+        for k in self.tm.kaempfer.values():
+            g = getattr(getattr(k, "hirn", None), "gehirn", None)
+            if g is None or not k.lebt or k.am_boden:
+                continue
+            if k.hirn.innen.panik:
+                self.panik += 1
+            if g.aktion is not None and g.aktion.name == "fliehen":
+                self.flieht += 1
+
+
+def keine_flucht():
+    """Gemeldet (0.34.56): "Entfern fliehen bitte einmal aus dem ablauf in
+    runden, in der kampagne ist das sinnvoll aber hier wirkt es fuer
+    spieler wie ein bug oder fehlerhafte AI." Panik gibt es weiter - nur
+    rennt keiner weg."""
+    print("\n-- In Runden flieht keiner, auch in Panik nicht")
+    f = Flucht()
+    for seed in (31, 32):
+        schlacht(seed, 30.0, f).verlassen()
+    pruef("In zwei grossen Gefechten flieht kein Bot", f.flieht == 0, str(f.flieht))
+    pruef("... obwohl einige in Panik geraten (die Szene prueft also etwas)", f.panik > 0, str(f.panik))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
-         planer, bergen_fluessig, drehen]
+         planer, bergen_fluessig, drehen, keine_flucht]
 NUR = sys.argv[1:]
 for teil in TEILE:
     if not NUR or teil.__name__ in NUR:

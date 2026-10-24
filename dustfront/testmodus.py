@@ -375,6 +375,9 @@ class Testmodus(Gefecht):
         # Der Nebel jenseits des normalen Bildes (seit 0.34.54), abschaltbar:
         # herausgezoomt sieht man dann jeden Gegner bis an den Rand.
         self.nebel = bool(z.get("nebel", True))
+        # Flucht in Panik (seit 0.34.56): in Runden aus, wie im Spiel; zum
+        # Ansehen, wie es in der Kampagne waere, einschaltbar.
+        self.bot_fliehen = bool(z.get("bot_fliehen", False))
         self._sp_werte = dict(z.get("sp_werte", {}))
         self._sp_nr = int(z.get("sp_nr", 0))
         self._welt_schritte = 1
@@ -1214,7 +1217,9 @@ class Testmodus(Gefecht):
     # ── Testmenue ──────────────────────────────────────────────────
     # Hoch genug fuer alle Zeilen (seit 0.34.32 geprueft: mit den Zeilen aus
     # 0.34.29 lief das Menue unten aus seinem Kasten).
-    MENUE = pygame.Rect(150, 22, 340, 316)
+    # Hoeher und weiter oben (seit 0.34.56): mit BOTS FLIEHEN IN PANIK passten
+    # 27 Zeilen nicht mehr, und der Hilfetext unten lag auf der letzten.
+    MENUE = pygame.Rect(150, 14, 340, 334)
 
     def _menue_zeilen(self) -> list:
         """(Schluessel, Beschriftung, Wert) - was im Testmenue steht."""
@@ -1246,6 +1251,7 @@ class Testmodus(Gefecht):
             ("verwundete", "VERWUNDETE BOTS (LIEGEN, BERGEN)", "AN" if self.verwundete else "AUS"),
             ("sprint", "BOTS SPRINTEN", "AN" if self.bot_sprint else "AUS"),
             ("nebel", "NEBEL (SICHTWEITE)", "AN" if self.nebel else "AUS - ALLES SICHTBAR"),
+            ("fliehen", "BOTS FLIEHEN IN PANIK", "AN - WIE KAMPAGNE" if self.bot_fliehen else "AUS - WIE IN RUNDEN"),
             ("einstellungen", "EINSTELLUNGEN", ""),
             ("hauptmenue", "ZUM HAUPTMENÜ", ""),
         ]
@@ -1271,7 +1277,7 @@ class Testmodus(Gefecht):
                     blend_beobachter=self.blend_beobachter,
                     ruckeln_beobachter=self.ruckeln_beobachter, sauber=self.sauber,
                     entf_toetet=self.entf_toetet, verwundete=self.verwundete,
-                    bot_sprint=self.bot_sprint, nebel=self.nebel,
+                    bot_sprint=self.bot_sprint, nebel=self.nebel, bot_fliehen=self.bot_fliehen,
                     sp_werte=self._sp_werte, sp_nr=self._sp_nr)
 
     def menue_wirken(self, schluessel: str, schritt: int = 1, ausloesen: bool = False) -> None:
@@ -1325,6 +1331,8 @@ class Testmodus(Gefecht):
             self.bot_sprint = not self.bot_sprint
         elif schluessel == "nebel":
             self.nebel = not self.nebel
+        elif schluessel == "fliehen":
+            self.bot_fliehen = not self.bot_fliehen
         elif schluessel == "einstellungen" and ausloesen:
             from .menues import Einstellungen
             self.menue_offen = False

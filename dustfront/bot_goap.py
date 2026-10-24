@@ -637,6 +637,7 @@ class GoapHirn(BotHirn):
             sturm_plan=self.sturm is not None,
             granate_nah=self.granate_nah() is not None,
             panik=innen.panik,
+            darf_fliehen=bool(getattr(g, "bot_fliehen", False)),
             eingeschossen=innen.eingeschossen >= K.MORAL["eingeschossen_ab"],
             waffe_mg=waffe == "lmg",
             waffe_auto=waffe in K.BOTS["feuer"],

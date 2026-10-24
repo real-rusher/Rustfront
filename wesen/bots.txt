@@ -62,6 +62,7 @@
 #   hilft_schon          er hilft ihm schon auf (seit 0.34.55): nicht mehr zum Ziehen
 #   fast_fertig          ... und hat schon VERWUNDET["zu_ende"] geschafft: er bringt es zu Ende
 #   anderer_hilft        ein anderer hilft ihm schon auf (seit 0.34.55): nicht wegziehen, mithelfen
+#   darf_fliehen         das Spiel erlaubt Flucht in Panik (seit 0.34.56): Kampagne ja, Runden nein
 #                        umschwenken - jede Unterbrechung kostet Fortschritt
 #   geschwaecht          er wurde wiederbelebt: weniger Leben, langsamer, zielt schlechter
 # Ziel-Fakten, die nie wahr werden, sondern nur das Ziel benennen:
@@ -284,6 +285,9 @@ tut: ausweichen
 # bessere Deckung. Der Trupp zieht sich zurueck und er ist schwer
 # getroffen: er rennt.
 [aktion fliehen]
+# Nur, wo das Spiel es erlaubt (seit 0.34.56): in Runden nicht - dort sah
+# Wegrennen wie ein Fehler aus. Die Kampagne erlaubt es.
+braucht: darf_fliehen
 macht: sicher
 # Im Trupp flieht keiner allein, solange der Trupp nicht zurueckgeht
 # (seit 0.34.50) - dann eher bleiben oder eine Deckung beim Trupp.

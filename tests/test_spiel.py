@@ -10745,6 +10745,9 @@ pruef("Von einem anderen getroffen: er dreht sich zu dem, der schiesst",
 _tm._zeiger_welt = pygame.Vector2(_bot94.pos)
 _tm.blick = 0
 pruef("Testmenue: Zeile INNENLEBEN", any(z_[0] == "innen" for z_ in _tm._menue_zeilen()), "")
+# Im Freien und ohne Deckung in der Naehe bleibt in Panik nur Fliehen - das
+# gibt es in Runden seit 0.34.56 nicht mehr; geprueft wird hier die Taste.
+_tm.bot_fliehen = True
 _tm._innen_nr = 0
 _tm.menue_wirken("innen", 1, ausloesen=True)
 _bot94.hirn.goap_rest = 0.0
@@ -10754,6 +10757,7 @@ pruef("... PANIK: die gezeigte Figur rennt (Ziel PANIK)",
       and _bot94.hirn.gehirn.ziel.name == "panik", str(_bot94.hirn.gehirn.ziel))
 _tm.innen_wirken("ruhe")
 pruef("... RUHE: vorbei", not _bot94.hirn.innen.panik and _bot94.hirn.innen.stress == 0.0, "")
+_tm.bot_fliehen = False
 for i_ in (1, 2):
     _tm.info = i_
     _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
@@ -12347,6 +12351,30 @@ _r2_111 = pygame.Vector2(_tr111._linie_richtung)
 pruef("Die Linie ohne Kontakt wackelt nicht mit jedem Blick des Anfuehrers und schwenkt nur langsam nach",
       _r1_111 == _r0_111 and abs(_r1_111.angle_to(_r2_111)) <= K.TRUPP["linie_dreh"] + 0.01,
       "%.1f %.1f" % (_r0_111.angle_to(_r1_111), _r1_111.angle_to(_r2_111)))
+_tm.verlassen()
+
+print("\n-- In Runden flieht kein Bot in Panik (0.34.56)")
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm._bot_rnd.seed(112)
+_tm.wiedereinstieg = False
+_tx112, _ty112 = _freie_flaeche86(_tm.welt, random.Random(112), 12, 6)
+_b112 = _tm.bot_setzen(pygame.Vector2((_tx112 + 3) * K.TILE, (_ty112 + 3) * K.TILE), 0, {"team": 0, "hirn": "goap"})
+_tm.ki_stopp = True
+_ak112 = _b112.hirn.gehirn.aktionen
+_f112 = {"panik": True, "feind_bekannt": True}
+pruef("Ein Gefecht laesst Bots nicht fliehen; der Testmodus zeigt es wie in Runden",
+      not Gefecht.bot_fliehen and not _tm.bot_fliehen
+      and _b112.hirn.fuehlen()[0]["darf_fliehen"] is False, "")
+_p112 = _G109.planen(_f112, {"sicher": True}, _ak112)
+_p112b = _G109.planen(dict(_f112, darf_fliehen=True), {"sicher": True}, _ak112)
+pruef("... Panik im Freien: er wechselt die Deckung statt zu fliehen - wo es erlaubt ist, darf er fliehen",
+      [a_.name for a_ in _p112 or []] == ["deckung_wechseln"] and "fliehen" in [a_.name for a_ in _p112b or []],
+      "%s / %s" % (_p112, _p112b))
+pruef("Testmenue: BOTS FLIEHEN IN PANIK, AUS wie in Runden; einschaltbar wie in der Kampagne, bleibt ueber einen Kartenwechsel",
+      any(z_[0] == "fliehen" for z_ in _tm._menue_zeilen()), "")
+_tm.menue_wirken("fliehen")
+pruef("... AN: der Bot weiss es", _tm.bot_fliehen and _b112.hirn.fuehlen()[0]["darf_fliehen"]
+      and _tm.zustand()["bot_fliehen"] is True, "")
 _tm.verlassen()
 
 print()

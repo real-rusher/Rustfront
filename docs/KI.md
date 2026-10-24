@@ -1387,7 +1387,16 @@ kein Umschauen beim Ziehen und Aufhelfen; `anderer_hilft` sperrt
 sichtbaren Gegner bekaempft; `Trupp._linie_ohne_kontakt` dreht sich nur
 um `linie_dreh` je Takt und erst ab `linie_ruhe`.
 
-### 11.14 Was noch offen ist
+### 11.14 Nachtrag (0.34.56): Keine Flucht in Runden
+
+Gemeldet: "Entfern fliehen bitte einmal aus dem ablauf in runden, in der
+kampagne ist das sinnvoll aber hier wirkt es fuer spieler wie ein bug."
+Die Aktion `fliehen` braucht den neuen Fakt `darf_fliehen`, und den setzt
+nur ein Spiel mit `bot_fliehen` (Gefecht: aus; die Kampagne soll es
+einschalten, der Testmodus hat einen Schalter). Das Ziel `panik` bleibt:
+`verkriechen` in der Deckung, sonst `deckung_wechseln`.
+
+### 11.15 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.
