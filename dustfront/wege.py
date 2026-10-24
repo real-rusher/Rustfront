@@ -52,6 +52,53 @@ _NACHBARN = ((1, 0), (-1, 0), (0, 1), (0, -1),
              (1, 1), (1, -1), (-1, 1), (-1, -1))
 
 
+class Feld:
+    """Ein Abstandsfeld, das sich erst so weit ausbreitet, wie danach gefragt
+    wird (seit 0.34.57). Gefragt wird fast immer nach Kacheln nahe dem Ziel
+    - der Weg eines Bots, die Plaetze um einen Liegenden -, und die ganze
+    Ebene zu fluten kostete auf STAUBTAL 36 ms je Feld, mehrmals je Sekunde
+    ein ganzes Bild. Ein Wert ist -1, wenn die Kachel unerreichbar ist;
+    ob sie das ist, steht erst fest, wenn die Ausbreitung bei ihr war oder
+    alles erreicht hat."""
+
+    __slots__ = ("weit", "_ring", "_schritt", "_nachbarn")
+
+    def __init__(self, groesse: int, start: int, nachbarn) -> None:
+        self.weit = [-1] * groesse
+        self._nachbarn = nachbarn
+        if 0 <= start < groesse:
+            self.weit[start] = 0
+            self._ring = [start]
+        else:
+            self._ring = []
+        self._schritt = 0
+
+    def __getitem__(self, i: int) -> int:
+        w = self.weit[i]
+        if w < 0 and self._ring:
+            return self._bis(i)
+        return w
+
+    def _bis(self, ziel: int) -> int:
+        """Ring um Ring weiter, bis `ziel` erreicht ist oder nichts mehr."""
+        weit = self.weit
+        nachbarn = self._nachbarn
+        jetzt = self._ring
+        schritt = self._schritt
+        while jetzt and weit[ziel] < 0:
+            schritt += 1
+            naechste = []
+            for i in jetzt:
+                for j in nachbarn[i]:
+                    if weit[j] < 0:
+                        weit[j] = schritt
+                        naechste.append(j)
+            jetzt = naechste
+        self._ring = jetzt
+        self._schritt = schritt
+        return weit[ziel]
+
+
 class Wegenetz:
     """Gebiete, Treppen und Abstandsfelder einer Welt. Einmal gerechnet."""
 
@@ -321,7 +368,8 @@ class Wegenetz:
         Alle Gegner, die denselben Spieler jagen, teilen sich ein Feld.
         Neu gerechnet wird nur, wenn der Spieler auf eine andere Kachel
         tritt - und davon hoechstens die letzten `_FELDER_ZIEL` gemerkt.
-        Gemessen: rund 10 ms auf STAUBTAL, unter 1 ms auf der Testkarte.
+        Seit 0.34.57 ein `Feld`, das erst rechnet, wonach gefragt wird:
+        vorher die ganze Ebene, gemessen 36 ms auf STAUBTAL je Feld.
         """
         tx, ty = self.kachel(pos)
         schluessel = (ebene, tx, ty)
@@ -345,7 +393,9 @@ class Wegenetz:
             if naechstes is not None:
                 return naechstes[1], naechstes[2]
         self._letztes_bild = bild
-        weit = self._ausbreiten(ebene, tx, ty)
+        b, h = self.breite[ebene], self.hoehe[ebene]
+        start = ty * b + tx if 0 <= tx < b and 0 <= ty < h else -1
+        weit = Feld(b * h, start, self._nachbarn(ebene))
         if len(self._zielfelder) >= self._FELDER_ZIEL:
             self._zielfelder.pop(next(iter(self._zielfelder)))
         self._zielfelder[schluessel] = weit

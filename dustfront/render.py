@@ -30,6 +30,12 @@ from .font import SCHRIFT
 from .world import DEKAL_PIXEL
 
 RND = random.Random(4711)
+# Kacheln je Seite eines vorgezeichneten Bodenblocks (seit 0.34.57). 8 mal 32
+# Pixel: ein Blit deckt 64 Kacheln, und ein Block, der nur an einer Ecke ins
+# Bild ragt, kostet wenig. Gemerkt werden hoechstens BODEN_MERKEN Bloecke
+# (je 256 KB) - genug fuer alle Ebenen ganz herausgezoomt.
+BODEN_STUECK = 8
+BODEN_MERKEN = 320
 
 
 class Kamera:
@@ -212,7 +218,7 @@ class Ueberblendung:
 class Renderer:
     def __init__(self, bilder) -> None:
         self.bilder = bilder
-        self._dunkel: dict[tuple, pygame.Surface] = {}
+        self._dunkel: dict[tuple, tuple] = {}     # (Quelle, dunkle Fassung), siehe dunkel
         self._schatten_cache: dict[tuple, pygame.Surface] = {}
         self._tiefen: dict[int, pygame.Surface] = {}
         # Wie gross die Flaeche ist, auf die die Welt gezeichnet wird. Fast
@@ -236,6 +242,7 @@ class Renderer:
         # der Ebene), gemerkt beim Zeichnen der Ebene - fuer `verdeckt`.
         self._augen: dict[int, tuple] = {}
         self._seiten_farbe: dict[str, tuple] = {}
+        self._toene: dict[tuple, tuple] = {}     # siehe _stehende_zeichnen
         self._hoechste_stehende = max(d["hoehe"] for d in K.STEHEN.values())
         self._oberseiten: dict[tuple, pygame.Surface] = {}
         # Weiche Raender (seit 0.34.6, _weicher_rand). Was als Sand zaehlt:
@@ -243,6 +250,9 @@ class Renderer:
         # Sand steht, ohne die ganze Kachel zu fuellen - Fass, Brocken,
         # Kaktus.
         self._weich: dict[tuple, pygame.Surface] = {}
+        # Der Boden in Bloecken von BODEN_STUECK Kacheln, je Ebene und
+        # Helligkeit vorgezeichnet (seit 0.34.57, siehe _bodenstueck).
+        self._boden_stuecke: dict[tuple, tuple] = {}
         voll = (0, 0, K.TILE, K.TILE)
         self._grundartig = frozenset(
             k for k, d in K.KACHELN.items()
@@ -345,15 +355,20 @@ class Renderer:
                              (basis[0] * k, basis[1] * k))
 
     def dunkel(self, surf: pygame.Surface, staerke: int) -> pygame.Surface:
+        # Der Eintrag haelt das Quellbild fest (seit 0.34.57): sonst bekam
+        # ein neues Bild die id eines weggeworfenen - etwa einer skalierten
+        # Oberseite - und erhielt dessen dunkle Fassung. Gefunden beim
+        # pixelgenauen Vergleich: ein Ring um ein Fass auf der Ebene darunter.
         key = (id(surf), staerke)
         hit = self._dunkel.get(key)
-        if hit is None:
-            hit = surf.copy()
-            hit.fill((staerke, staerke, staerke), special_flags=pygame.BLEND_RGB_MULT)
+        if hit is None or hit[0] is not surf:
+            bild = surf.copy()
+            bild.fill((staerke, staerke, staerke), special_flags=pygame.BLEND_RGB_MULT)
             if len(self._dunkel) > 400:
                 self._dunkel.clear()
+            hit = (surf, bild)
             self._dunkel[key] = hit
-        return hit
+        return hit[1]
 
     # ---- Welt ------------------------------------------------------
     # Kachelsaetze. Der Name einer Karte sagt, welcher gilt - `satz` im
@@ -384,46 +399,23 @@ class Renderer:
         t0y = max(0, int(ecke.y // K.TILE))
         t1x = min(e.breite - 1, int((ecke.x + zw) // K.TILE))
         t1y = min(e.hoehe - 1, int((ecke.y + zh) // K.TILE))
-        bild = self.bilder.bild
+        # Erster Durchgang: alles Begehbare - aus vorgezeichneten Bloecken
+        # (seit 0.34.57). Vorher je Kachel ein Blit und ein paar
+        # Nachschlagungen, gemessen ein Viertel des ganzen Zeichnens.
+        C = BODEN_STUECK
         fest = []
-        # Erster Durchgang: alles Begehbare
-        for ty in range(t0y, t1y + 1):
-            zeile = ty * e.breite
-            sy = ty * K.TILE - ecke.y
-            for tx in range(t0x, t1x + 1):
-                kachel = e.kacheln[zeile + tx]
-                if kachel == K.LEER:
-                    continue
-                daten = K.KACHELN[kachel]
-                bilder = daten.get("bilder")
-                if daten["fest"]:
-                    if bilder:
-                        name_f = bilder[e.variante[zeile + tx] % len(bilder)]
-                    else:
-                        name_f = satz.get(daten["bild"], daten["bild"])
-                    fest.append((tx, ty, name_f, sy))
-                    st = self._stehend(name_f, daten)
-                    if st is None or st["rahmen"] == (0, 0, K.TILE, K.TILE):
-                        continue
-                    # Ein Fass oder eine Kiste steht auf Boden: der ist
-                    # rundherum zu sehen, also zuerst der Boden.
-                    s = bild(boden_namen[e.variante[zeile + tx]])
-                    if dunkel is not None:
-                        s = self.dunkel(s, dunkel)
-                    ziel.blit(s, (tx * K.TILE - ecke.x, sy))
-                    continue
-                name = satz.get(daten["bild"], daten["bild"])
-                if kachel == K.BODEN:
-                    name = boden_namen[e.variante[zeile + tx]]
-                elif bilder:
-                    name = bilder[e.variante[zeile + tx] % len(bilder)]
-                if daten.get("weich"):
-                    s = self._weicher_rand(name, e, tx, ty, boden_namen[0])
-                else:
-                    s = bild(name)
-                if dunkel is not None:
-                    s = self.dunkel(s, dunkel)
-                ziel.blit(s, (tx * K.TILE - ecke.x, sy))
+        for cy in range(t0y // C, t1y // C + 1):
+            for cx in range(t0x // C, t1x // C + 1):
+                stueck, stueck_fest = self._bodenstueck(welt, e, satz, boden_namen,
+                                                        cx, cy, dunkel)
+                if stueck is not None:
+                    ziel.blit(stueck, (cx * C * K.TILE - ecke.x, cy * C * K.TILE - ecke.y))
+                for (tx, ty, name_f) in stueck_fest:
+                    if t0x <= tx <= t1x and t0y <= ty <= t1y:
+                        fest.append((ty, tx, name_f))
+        # In der Reihenfolge wie vorher Kachel fuer Kachel: Zeile um Zeile.
+        fest.sort()
+        fest = [(tx, ty, name_f, ty * K.TILE - ecke.y) for (ty, tx, name_f) in fest]
 
         # Fussspuren liegen auf der Schneeschicht und altern mit der Welt.
         # Ein fester Weltzeitstempel sorgt dafuer, dass Kamerawechsel und
@@ -463,6 +455,79 @@ class Renderer:
             self._stehend_offen = auftrag
         else:
             self._stehende_zeichnen(*auftrag)
+
+    def _bodenstueck(self, welt, e, satz, boden_namen, cx: int, cy: int, dunkel):
+        """Ein Block Boden (BODEN_STUECK mal BODEN_STUECK Kacheln), fertig
+        gezeichnet: (Flaeche oder None, [(tx, ty, Bildname) fester Kacheln]).
+
+        Gemerkt, solange sich die Kacheln darin und rundherum nicht aendern -
+        geprueft an einem Abdruck der Kachelnummern bei jedem Aufruf, damit
+        auch eine Kachel auffaellt, die jemand direkt in `kacheln` schreibt
+        (die Tests tun das). Der Rand gehoert dazu: weiche Bodenarten franst
+        der Nachbar aus. Der Eintrag haelt seine Ebene fest, wie bei
+        `dunkel`: eine neue Ebene mit der id einer alten bekaeme sonst deren
+        Block."""
+        C = BODEN_STUECK
+        b, h = e.breite, e.hoehe
+        x0, y0 = cx * C, cy * C
+        x1, y1 = min(b, x0 + C), min(h, y0 + C)
+        kacheln = e.kacheln
+        ax0, ax1 = max(0, x0 - 1), min(b, x1 + 1)
+        abdruck = b"".join(bytes(kacheln[ty * b + ax0: ty * b + ax1])
+                           for ty in range(max(0, y0 - 1), min(h, y1 + 1)))
+        schluessel = (id(e), cx, cy, dunkel, getattr(welt, "satz", ""))
+        hit = self._boden_stuecke.get(schluessel)
+        if hit is not None and hit[3] is e and hit[0] == abdruck:
+            return hit[1], hit[2]
+        T = K.TILE
+        bild = self.bilder.bild
+        flaeche = None
+        fest = []
+        for ty in range(y0, y1):
+            zeile = ty * b
+            for tx in range(x0, x1):
+                kachel = kacheln[zeile + tx]
+                if kachel == K.LEER:
+                    continue
+                daten = K.KACHELN[kachel]
+                bilder = daten.get("bilder")
+                s = None
+                if daten["fest"]:
+                    if bilder:
+                        name_f = bilder[e.variante[zeile + tx] % len(bilder)]
+                    else:
+                        name_f = satz.get(daten["bild"], daten["bild"])
+                    fest.append((tx, ty, name_f))
+                    st = self._stehend(name_f, daten)
+                    if st is None or st["rahmen"] == (0, 0, T, T):
+                        continue
+                    # Ein Fass oder eine Kiste steht auf Boden: der ist
+                    # rundherum zu sehen, also zuerst der Boden.
+                    s = bild(boden_namen[e.variante[zeile + tx]])
+                else:
+                    name = satz.get(daten["bild"], daten["bild"])
+                    if kachel == K.BODEN:
+                        name = boden_namen[e.variante[zeile + tx]]
+                    elif bilder:
+                        name = bilder[e.variante[zeile + tx] % len(bilder)]
+                    if daten.get("weich"):
+                        s = self._weicher_rand(name, e, tx, ty, boden_namen[0])
+                    else:
+                        s = bild(name)
+                if flaeche is None:
+                    flaeche = pygame.Surface((C * T, C * T), pygame.SRCALPHA)
+                flaeche.blit(s, ((tx - x0) * T, (ty - y0) * T))
+        if flaeche is not None:
+            if dunkel is not None:
+                flaeche.fill((dunkel, dunkel, dunkel), special_flags=pygame.BLEND_RGB_MULT)
+            try:
+                flaeche = flaeche.convert_alpha()
+            except pygame.error:
+                pass                          # ohne Fenster (Tests): so lassen
+        if len(self._boden_stuecke) > BODEN_MERKEN:
+            self._boden_stuecke.clear()
+        self._boden_stuecke[schluessel] = (abdruck, flaeche, fest, e)
+        return flaeche, fest
 
     def _kleinschatten(self, st: dict, dunkel):
         """Der Schlagschatten eines Hindernisses in seiner eigenen Form
@@ -681,6 +746,20 @@ class Renderer:
         hell_f = 1.0 if dunkel is None else dunkel / 255.0
         licht = {(0, 1): 0.82, (1, 0): 0.66, (-1, 0): 0.74, (0, -1): 0.56}
         voll = (0, 0, T, T)
+        toene = self._toene
+        if len(toene) > 4000:
+            toene.clear()
+
+        def ton(grund, f, faktor=1.0):
+            # Dieselben wenigen Toene jedes Bild fuer hunderte Seiten und
+            # Fugen - gemerkt statt je Seite neu gerechnet (seit 0.34.57).
+            schluessel = (grund, f, faktor)
+            farbe = toene.get(schluessel)
+            if farbe is None:
+                farbe = tuple(max(0, min(255, int(c * f * faktor))) for c in grund)
+                toene[schluessel] = farbe
+            return farbe
+
         stehend_bei = {}
         for (tx, ty, name, sy) in fest:
             stehend_bei[(tx, ty)] = self._stehend(name, K.KACHELN[e.kachel(tx, ty)])
@@ -768,11 +847,10 @@ class Renderer:
             if eintrag[1] == "block":
                 _w, _art, (basis, kopf), grund, st, l = eintrag
                 f = l * hell_f
-                farbe = tuple(int(c * f) for c in grund)
                 viereck = [basis[0], basis[1], kopf[0], kopf[1]]
-                pygame.draw.polygon(ziel, farbe, viereck)
+                pygame.draw.polygon(ziel, ton(grund, f), viereck)
                 # Querfugen: Steinlagen an der Mauer, Bretter an der Kiste.
-                fuge = tuple(int(c * f * 0.68) for c in grund)
+                fuge = ton(grund, f, 0.68)
                 n = st["fugen"]
                 for i in range(1, n + 1):
                     t = i / (n + 1)
@@ -781,8 +859,7 @@ class Renderer:
                     b = (basis[1][0] + (kopf[0][0] - basis[1][0]) * t,
                          basis[1][1] + (kopf[0][1] - basis[1][1]) * t)
                     pygame.draw.line(ziel, fuge, a, b, 1)
-                pygame.draw.line(ziel, tuple(int(c * f * 0.42) for c in grund),
-                                 basis[0], basis[1], 1)
+                pygame.draw.line(ziel, ton(grund, f, 0.42), basis[0], basis[1], 1)
             else:
                 _w, _art, (x0, y0, x1, y1, ox0, oy0, ox1, oy1), grund, st = eintrag
                 # Ein Fass ist ein Zylinder: Kreise vom Fuss bis zum Deckel,
@@ -808,9 +885,7 @@ class Renderer:
             bild_o = self._oberseite(name, round(ox1) - x, round(oy1) - y, dunkel)
             ziel.blit(bild_o, (x, y))
         for a_, b_, im_licht, grund in kanten:
-            f = (1.45 if im_licht else 0.38) * hell_f
-            farbe = tuple(max(0, min(255, int(c * f))) for c in grund)
-            pygame.draw.line(ziel, farbe, a_, b_, 1)
+            pygame.draw.line(ziel, ton(grund, (1.45 if im_licht else 0.38) * hell_f), a_, b_, 1)
 
     def wesen_zeichnen(self, ziel, welt, index, ecke, alpha, dunkel=None) -> None:
         """Was am Boden steht oder liegt: Figuren, Beute, Granaten.

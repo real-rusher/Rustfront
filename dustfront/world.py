@@ -195,6 +195,25 @@ def klang_wert(lautstaerke: float, pos=None, ebene: int = 0, ich=None) -> float:
     return lautstaerke if lautstaerke >= a["leiseste"] else 0.0
 
 
+_TAFELN: list = []
+
+
+def _tafeln() -> tuple:
+    """Je Kachelnummer 2 (sichtdicht), 1 (fest, aber durchsichtig) oder 0,
+    als Tupel - fuer die Linien, die tausendfach je Bild verfolgt werden
+    (seit 0.34.57): ein Nachschlagen je Kachel statt zweier. Die
+    Kachelarten stehen fest; kommt eine dazu, wird neu gebaut (geprueft
+    an der Zahl, nicht am groessten Schluessel - das kostete je Linie mehr
+    als die Linie selbst)."""
+    if not _TAFELN or _TAFELN[0] != len(K.KACHELN):
+        n = max(K.KACHELN) + 1
+        leer = K.KACHELN[K.LEER]
+        art = tuple(2 if d["sicht"] else (1 if d["fest"] else 0)
+                    for d in (K.KACHELN.get(i, leer) for i in range(n)))
+        _TAFELN[:] = [len(K.KACHELN), art]
+    return _TAFELN[1]
+
+
 class Ebene:
     """Ein Kachelgitter auf einer Hoehe."""
 
@@ -951,12 +970,28 @@ class Welt:
         steht, steht nicht hinter ihr."""
         von = pygame.Vector2(von)
         nach = pygame.Vector2(nach)
-        if not self.sicht_frei(von, nach, ebene):
+        stuecke = []
+        frei, _fest = self._linie(von, nach, ebene, stuecke)
+        if not frei:
             return "wand"
+        if not stuecke:
+            # Keine feste Kachel auf der Linie: dann steht auch nichts im Weg
+            # (seit 0.34.57 ohne das Abtasten - der haeufigste Fall).
+            return ""
         laenge = von.distance_to(nach)
         schritte = int(laenge / 4.0)
         if schritte < 2:
             return ""
+        # Abgetastet wird nur, wo die Linie eine feste Kachel kreuzt (seit
+        # 0.34.57), mit einer Probe Rand zu jeder Seite - jede Probe
+        # dazwischen liegt in einer freien Kachel und haelt nichts auf. Vorher
+        # die ganze Linie: an einer Kiste vorbei zum fernen Gegner hundert
+        # Proben fuer zwei, die zaehlen. Welche Probe zuerst trifft, ist
+        # gleich - jede ergibt "hindernis".
+        proben = set()
+        for t0, t1 in stuecke:
+            proben.update(range(max(1, int(t0 * schritte) - 1),
+                                min(schritte - 1, int(t1 * schritte) + 2) + 1))
         # Dasselbe wie schuss_halt an jedem Punkt, nur ohne neuen Vektor je
         # Punkt und mit der Kachel gemerkt, solange die Linie in ihr bleibt:
         # die Bots fragen das tausendfach je Sekunde (seit 0.34.52).
@@ -967,7 +1002,7 @@ class Welt:
         dx, dy = nach.x - x0, nach.y - y0
         vorige = None
         huelle = None
-        for i in range(1, schritte):
+        for i in sorted(proben):
             t = i / float(schritte)
             px, py = x0 + dx * t, y0 + dy * t
             tx, ty = int(px // T), int(py // T)
@@ -1022,14 +1057,38 @@ class Welt:
         Die Startkachel zaehlt nicht (man steht ja darin), die Zielkachel
         schon - wie vorher.
         """
+        return self._linie(von, nach, ebene)[0]
+
+    def _linie(self, von, nach, ebene: int, stuecke=None) -> tuple:
+        """(frei, fest): Sicht wie `sicht_frei`, und ob dabei eine feste
+        Kachel (Kiste, Fass ...) auf der Linie liegt - die Startkachel und
+        bei einer Kachelecke beide Nachbarn eingeschlossen. In `stuecke`
+        (eine Liste, wenn angegeben) kommt fuer jede solche Kachel, von
+        wann bis wann die Linie in ihr liegt (0 bis 1 von `von` nach `nach`).
+
+        Seit 0.34.57 eine Verfolgung fuer beides und mit Tafeln je
+        Kachelart statt zweier Methodenaufrufe und eines Woerterbuchs je
+        Kachel: Sicht und Deckung fragen die Bots hunderttausendfach je
+        Minute, gemessen ein Drittel der ganzen Rechenzeit einer grossen
+        Schlacht."""
         e = self.ebene(ebene)
+        art = _tafeln()
+        kacheln = e.kacheln
+        b, h = e.breite, e.hoehe
+        leer_sicht = art[K.LEER] == 2
         T = float(K.TILE)
         x0, y0 = von.x / T, von.y / T
         x1, y1 = nach.x / T, nach.y / T
         dx, dy = x1 - x0, y1 - y0
-        if dx * dx + dy * dy < (1.0 / T) ** 2:
-            return True
         tx, ty = int(math.floor(x0)), int(math.floor(y0))
+        if 0 <= tx < b and 0 <= ty < h:
+            fest = art[kacheln[ty * b + tx]] != 0
+        else:
+            fest = art[K.LEER] != 0
+        if dx * dx + dy * dy < (1.0 / T) ** 2:
+            if fest and stuecke is not None:
+                stuecke.append((0.0, 1.0))
+            return True, fest
         sx = 1 if dx > 0 else -1
         sy = 1 if dy > 0 else -1
         unendlich = float("inf")
@@ -1047,10 +1106,23 @@ class Welt:
             tmy = (y0 - ty) * tdy
         else:
             tmy = unendlich
-        while min(tmx, tmy) <= 1.0:
+        if fest and stuecke is not None:
+            stuecke.append((0.0, tmx if tmx < tmy else tmy))
+        while (tmx if tmx < tmy else tmy) <= 1.0:
+            t_ein = tmx if tmx < tmy else tmy
             if abs(tmx - tmy) < 1e-9:
-                if e.sichtdicht(tx + sx, ty) or e.sichtdicht(tx, ty + sy):
-                    return False
+                # Genau durch eine Ecke: jede der beiden Nachbarkacheln sperrt.
+                for nx, ny in ((tx + sx, ty), (tx, ty + sy)):
+                    if 0 <= nx < b and 0 <= ny < h:
+                        z = art[kacheln[ny * b + nx]]
+                        if z:
+                            if z == 2:
+                                return False, fest
+                            fest = True
+                            if stuecke is not None:
+                                stuecke.append((t_ein, t_ein))
+                    elif leer_sicht:
+                        return False, fest
                 tx += sx
                 ty += sy
                 tmx += tdx
@@ -1061,9 +1133,17 @@ class Welt:
             else:
                 ty += sy
                 tmy += tdy
-            if e.sichtdicht(tx, ty):
-                return False
-        return True
+            if 0 <= tx < b and 0 <= ty < h:
+                z = art[kacheln[ty * b + tx]]
+                if z:
+                    if z == 2:
+                        return False, fest
+                    fest = True
+                    if stuecke is not None:
+                        stuecke.append((t_ein, tmx if tmx < tmy else tmy))
+            elif leer_sicht:
+                return False, fest
+        return True, fest
 
     # ---- Ebenenwechsel --------------------------------------------------
     def loch_unter(self, wesen) -> bool:

@@ -467,10 +467,16 @@ class GoapHirn(BotHirn):
                     continue
                 if w.ebene != k.ebene:
                     continue
-                if not g.welt.sicht_frei(k.pos, w.pos, k.ebene):
-                    weite *= b["schritte_wand"]
-                if k.pos.distance_to(w.pos) <= weite:
-                    neu.append((w.pos, w.ebene, "schritte", 25.0))
+                # Die Sichtlinie nur, wo sie etwas aendert: weiter weg hoert
+                # er ihn ohnehin nicht, naeher auch durch die Wand (seit
+                # 0.34.57 - vorher fuer jeden Laufenden auf der Karte).
+                d = k.pos.distance_to(w.pos)
+                if d > weite:
+                    continue
+                if (d > weite * b["schritte_wand"]
+                        and not g.welt.sicht_frei(k.pos, w.pos, k.ebene)):
+                    continue
+                neu.append((w.pos, w.ebene, "schritte", 25.0))
         for ort, ebene, art, unscharf in neu:
             p = pygame.Vector2(ort) + pygame.Vector2(self.rnd.uniform(-unscharf, unscharf),
                                                      self.rnd.uniform(-unscharf, unscharf))

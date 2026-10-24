@@ -105,6 +105,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.57 | Nichts Neues zum Einschalten - der Testmodus laeuft schneller, am deutlichsten mit vielen Trupps und VERWUNDETE BOTS (Bergung). Die Bots entscheiden wie vorher - Sicht und Deckung geben auf jede Frage dieselbe Antwort. Pruefungen im Abschnitt "Bildrate" von `tests/test_spiel.py` |
 | 0.34.56 | Testmenue BOTS FLIEHEN IN PANIK: AUS - WIE IN RUNDEN (Vorgabe) oder AN - WIE KAMPAGNE; bleibt ueber einen Kartenwechsel. Zu sehen mit INNENLEBEN PANIK auf einem Bot im Freien: AUS wechselt er die Deckung, AN rennt er weg (INFO GEDANKEN zeigt `darf_fliehen`). Verhaltens-Test `python tests/test_verhalten.py keine_flucht` |
 | 0.34.55 | Nichts Neues zum Einschalten - die Fehler sind behoben: mit VERWUNDETE BOTS und zwei Liegenden nebeneinander greift der Helfer den Richtigen, INFO (Stufe GEDANKEN) zeigt beim Aufhelfen den Fakt `hilft_schon`, und das Umschauen geht nur noch zur Flanke. Verhaltens-Tests `python tests/test_verhalten.py planer bergen_fluessig drehen` |
 | 0.34.54 | Testmenue NEBEL (SICHTWEITE): AUS - ALLES SICHTBAR hebt den Nebel jenseits des normalen Bildes auf, herausgezoomt sieht man jeden Gegner bis an den Rand (bleibt ueber einen Kartenwechsel). Feuerschutz beim Bergen zu sehen mit VERWUNDETE BOTS und einem Gegner, der schiesst (Bot oder selbst gesteuert): die anderen stehen auf AUS DECKUNG FEUERN / NIEDERHALTEN; Verhaltens-Test `python tests/test_verhalten.py feuerschutz` |

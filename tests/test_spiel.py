@@ -12377,6 +12377,215 @@ pruef("... AN: der Bot weiss es", _tm.bot_fliehen and _b112.hirn.fuehlen()[0]["d
       and _tm.zustand()["bot_fliehen"] is True, "")
 _tm.verlassen()
 
+print("\n-- Bildrate: Sichtlinien, Deckung, Wegfelder, Boden (0.34.57)")
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm._bot_rnd.seed(113)
+_tm.wiedereinstieg = False
+_w113 = _tm.welt
+
+
+def _dicht113(e_, x_, y_):
+    return bool(K.KACHELN[e_.kachel(x_, y_)]["sicht"])
+
+
+def _sicht113(von_, nach_, ebene_):
+    # Die Verfolgung wie bis 0.34.56: Kachel fuer Kachel, mit K.KACHELN.
+    e_ = _w113.ebene(ebene_)
+    T_ = float(K.TILE)
+    x0_, y0_ = von_.x / T_, von_.y / T_
+    dx_, dy_ = nach_.x / T_ - x0_, nach_.y / T_ - y0_
+    if dx_ * dx_ + dy_ * dy_ < (1.0 / T_) ** 2:
+        return True
+    tx_, ty_ = int(math.floor(x0_)), int(math.floor(y0_))
+    sx_, sy_ = (1 if dx_ > 0 else -1), (1 if dy_ > 0 else -1)
+    inf_ = float("inf")
+    tdx_ = abs(1.0 / dx_) if dx_ else inf_
+    tdy_ = abs(1.0 / dy_) if dy_ else inf_
+    tmx_ = ((tx_ + 1 - x0_) if dx_ > 0 else (x0_ - tx_)) * tdx_ if dx_ else inf_
+    tmy_ = ((ty_ + 1 - y0_) if dy_ > 0 else (y0_ - ty_)) * tdy_ if dy_ else inf_
+    while min(tmx_, tmy_) <= 1.0:
+        if abs(tmx_ - tmy_) < 1e-9:
+            if _dicht113(e_, tx_ + sx_, ty_) or _dicht113(e_, tx_, ty_ + sy_):
+                return False
+            tx_ += sx_
+            ty_ += sy_
+            tmx_ += tdx_
+            tmy_ += tdy_
+        elif tmx_ < tmy_:
+            tx_ += sx_
+            tmx_ += tdx_
+        else:
+            ty_ += sy_
+            tmy_ += tdy_
+        if _dicht113(e_, tx_, ty_):
+            return False
+    return True
+
+
+def _deckung113(von_, nach_, ebene_):
+    # Wie bis 0.34.56: jede Linie alle 4 px abgetastet, ohne Abkuerzung.
+    if not _sicht113(von_, nach_, ebene_):
+        return "wand"
+    e_ = _w113.ebene(ebene_)
+    schritte_ = int(von_.distance_to(nach_) / 4.0)
+    for i_ in range(1, schritte_):
+        t_ = i_ / float(schritte_)
+        px_, py_ = von_.x + (nach_.x - von_.x) * t_, von_.y + (nach_.y - von_.y) * t_
+        tx_, ty_ = int(px_ // K.TILE), int(py_ // K.TILE)
+        k_ = e_.kachel(tx_, ty_)
+        if K.KACHELN[k_]["sicht"]:
+            return "hindernis"
+        if not K.KACHELN[k_]["fest"]:
+            continue
+        form_, rx_, ry_, rb_, rh_ = _w113.huelle(k_)
+        hx_, hy_ = tx_ * K.TILE + rx_, ty_ * K.TILE + ry_
+        if form_ == "rund":
+            mx_, my_ = hx_ + rb_ / 2.0, hy_ + rh_ / 2.0
+            if (px_ - mx_) ** 2 + (py_ - my_) ** 2 < (rb_ / 2.0) ** 2:
+                return "hindernis"
+        elif hx_ <= px_ < hx_ + rb_ and hy_ <= py_ < hy_ + rh_:
+            return "hindernis"
+    return ""
+
+
+_rnd113 = random.Random(113)
+_e0_113 = _w113.ebene(0)
+_fest113 = [(i_ % _e0_113.breite, i_ // _e0_113.breite) for i_, k_ in enumerate(_e0_113.kacheln)
+            if K.KACHELN[k_]["fest"] and not K.KACHELN[k_]["sicht"]]
+_anders113, _arten113 = [], {"": 0, "hindernis": 0, "wand": 0}
+for i_ in range(3000):
+    eb_ = _rnd113.randrange(len(_w113.ebenen))
+    e_ = _w113.ebene(eb_)
+    if i_ % 2 and _fest113:
+        # Die Haelfte dicht an Kisten und Faessern vorbei - dort liegt der Unterschied.
+        fx_, fy_ = _rnd113.choice(_fest113)
+        eb_ = 0
+        mitte_ = pygame.Vector2((fx_ + 0.5) * K.TILE, (fy_ + 0.5) * K.TILE)
+        a_ = mitte_ + pygame.Vector2(_rnd113.uniform(-120, 120), _rnd113.uniform(-120, 120))
+        b_ = mitte_ + (mitte_ - a_) + pygame.Vector2(_rnd113.uniform(-12, 12), _rnd113.uniform(-12, 12))
+    else:
+        a_ = pygame.Vector2(_rnd113.uniform(0, e_.pixel_breite), _rnd113.uniform(0, e_.pixel_hoehe))
+        b_ = a_ + pygame.Vector2(_rnd113.uniform(-400, 400), _rnd113.uniform(-400, 400))
+    soll_ = (_sicht113(a_, b_, eb_), _deckung113(a_, b_, eb_))
+    ist_ = (_w113.sicht_frei(a_, b_, eb_), _w113.deckung(a_, b_, eb_))
+    _arten113[soll_[1]] += 1
+    if soll_ != ist_:
+        _anders113.append((tuple(a_), tuple(b_), eb_, soll_, ist_))
+pruef("Sicht und Deckung in einer Verfolgung mit Tafeln: auf 3000 Linien genau wie vorher",
+      not _anders113 and min(_arten113.values()) > 50, "%s %s" % (_arten113, _anders113[:2]))
+from dustfront import world as _WELT113
+_tafel113 = _WELT113._tafeln()
+pruef("... die Tafel kennt jede Kachelart: 2 sichtdicht, 1 fest, 0 frei",
+      all(_tafel113[n_] == (2 if d_["sicht"] else (1 if d_["fest"] else 0)) for n_, d_ in K.KACHELN.items()), "")
+
+# Wegfelder breiten sich nur so weit aus, wie gefragt wird.
+_wn113 = _w113.wege
+_b113, _h113 = _wn113.breite[0], _wn113.hoehe[0]
+_frei113 = [i_ for i_ in range(_b113 * _h113) if _wn113.begehbar[0][i_]]
+_gleich113, _klein113 = True, True
+for _ in range(3):
+    s_ = _rnd113.choice(_frei113)
+    _wn113._letztes_bild = None
+    _s_, f_ = _wn113.feld_zu(0, pygame.Vector2((s_ % _b113 + 0.5) * K.TILE, (s_ // _b113 + 0.5) * K.TILE))
+    f_[s_ + 1]
+    _klein113 = _klein113 and sum(1 for w_ in f_.weit if w_ >= 0) < len(_frei113) // 4
+    voll_ = _wn113._ausbreiten(0, s_ % _b113, s_ // _b113)
+    reihe_ = list(range(_b113 * _h113))
+    _rnd113.shuffle(reihe_)
+    _gleich113 = _gleich113 and all(f_[i_] == voll_[i_] for i_ in reihe_)
+pruef("Ein Wegfeld rechnet erst, wonach gefragt wird - und liefert in jeder Reihenfolge dasselbe wie die ganze Breitensuche",
+      _gleich113 and _klein113, "%s %s" % (_gleich113, _klein113))
+
+# Der Boden in Bloecken: eine geaenderte Kachel wird neu gezeichnet - eine
+# freie Bodenkachel mitten im Bild.
+_tx113b, _ty113b = _freie_flaeche86(_w113, random.Random(113), 14, 8)
+_tx113, _ty113 = _tx113b + 3, _ty113b + 3
+_r113 = _tm.renderer
+_ecke113 = pygame.Vector2(_tx113 * K.TILE - K.GAME_W // 2, _ty113 * K.TILE - K.GAME_H // 2)
+_bild113 = pygame.Surface((K.GAME_W, K.GAME_H))
+
+
+def _boden113():
+    _bild113.fill((0, 0, 0))
+    _r113.ebene_zeichnen(_bild113, _w113, 0, _ecke113, None, aufschieben=True)
+    _r113._stehend_offen = None
+    return pygame.image.tobytes(_bild113, "RGB")
+
+
+_vor113 = _boden113()
+_alt_k113 = _e0_113.kachel(_tx113, _ty113)
+_e0_113.kacheln[_ty113 * _e0_113.breite + _tx113] = K.LEER if _alt_k113 != K.LEER else K.BODEN
+_nach113 = _boden113()
+_r113._boden_stuecke.clear()
+_frisch113 = _boden113()
+_e0_113.kacheln[_ty113 * _e0_113.breite + _tx113] = _alt_k113
+pruef("Boden aus vorgezeichneten Bloecken: eine direkt geaenderte Kachel faellt auf, das Bild ist wie frisch gezeichnet",
+      _nach113 != _vor113 and _nach113 == _frisch113 and _boden113() == _vor113, "")
+_q113 = pygame.Surface((4, 4))
+_q113.fill((200, 100, 50))
+_z113 = pygame.Surface((4, 4))
+_z113.fill((10, 220, 30))
+_r113._dunkel[(id(_z113), 128)] = (_q113, _r113.dunkel(_q113, 128))
+_soll113 = _z113.copy()
+_soll113.fill((128, 128, 128), special_flags=pygame.BLEND_RGB_MULT)
+pruef("Ein abgedunkeltes Bild gehoert zu seiner Quelle - auch wenn unter ihrer id ein anderes gemerkt ist",
+      _r113.dunkel(_z113, 128).get_at((0, 0)) == _soll113.get_at((0, 0)), str(_r113.dunkel(_z113, 128).get_at((0, 0))))
+
+# Erst die billige Pruefung: Abstand vor Sichtlinie, kurze Linie vor langer.
+_tm.ki_stopp = True
+_h113 = _tm.bot_setzen(pygame.Vector2((_tx113b + 3.5) * K.TILE, (_ty113b + 4.5) * K.TILE), 0,
+                       {"team": 0, "hirn": "goap"})
+_f113 = _tm.bot_setzen(pygame.Vector2((_tx113b + 9.5) * K.TILE, (_ty113b + 4.5) * K.TILE), 0,
+                       {"team": 1, "hirn": "goap"})
+_sichtrufe113 = [0]
+_alt_sicht113 = _w113.sicht_frei
+_w113.sicht_frei = lambda *a_: _sichtrufe113.__setitem__(0, _sichtrufe113[0] + 1) or _alt_sicht113(*a_)
+_weite113 = K.BOTS["schritte"][0]
+_gehoert113 = []
+for abstand_ in (_weite113 * 2.0, _weite113 * 0.4, _weite113 * 0.8):
+    _sichtrufe113[0] = 0
+    _tm._bot_geraeusche = []           # die Schuesse von eben zaehlen hier nicht
+    _h113.hirn.lagebild = []
+    _h113.hirn.gesehen.clear()
+    _f113.pos.update(_h113.pos + pygame.Vector2(abstand_, 0))
+    _f113.tempo = pygame.Vector2(K.BOTS["schritte_tempo"][0] + 10.0, 0)
+    _h113.hirn._lagebild_auffrischen()
+    _gehoert113.append((_sichtrufe113[0], bool(_h113.hirn.lagebild)))
+del _w113.sicht_frei
+pruef("Schritte hoeren: zu weit weg und ganz nah ohne Sichtlinie, nur dazwischen eine - gehoert wie vorher",
+      _gehoert113 == [(0, False), (0, True), (1, True)], str(_gehoert113))
+_tr113 = _tm.trupp_setzen(pygame.Vector2((_tx113b + 5.5) * K.TILE, (_ty113b + 4.5) * K.TILE), 0,
+                          {"groesse": 2, "team": 0, "fuehrer": "funk"})
+_deckrufe113 = []
+_alt_deck113 = _w113.deckung
+_w113.deckung = lambda von_, nach_, e_: _deckrufe113.append(pygame.Vector2(von_)) or _alt_deck113(von_, nach_, e_)
+_p113 = pygame.Vector2(_h113.pos)
+_frei113b = _tr113.gedeckt_hier(_p113, 0, _p113 + pygame.Vector2(300, 0))
+del _w113.deckung
+pruef("Deckung im Freien: nur die kurze Linie wird verfolgt, die lange zum Gegner nicht mehr",
+      not _frei113b and len(_deckrufe113) == 1
+      and _deckrufe113[0].distance_to(_p113) <= K.TRUPP["deckung_nah"] + 0.5, str(_deckrufe113))
+_tm.verlassen()
+# Die Ausgabe ins Fenster: direkt in den Ausschnitt, der Rand gefuellt - auch
+# nach einem neuen set_mode und mit Rand oben und unten.
+_groesse113 = app.fenster.get_size()
+_aus113 = []
+for groesse_ in ((960, 540), (700, 600), (960, 540)):
+    app.fenster = pygame.display.set_mode(groesse_)
+    app.fenster.fill((255, 0, 255))
+    app.viewport_rechnen()
+    app.flaeche.fill((10, 20, 30))
+    pygame.draw.circle(app.flaeche, (200, 100, 50), (100, 100), 40)
+    app.ausgeben()
+    soll_ = pygame.Surface(groesse_)
+    soll_.fill(K.C_VOID)
+    soll_.blit(pygame.transform.scale(app.flaeche, app.viewport.size), app.viewport.topleft)
+    _aus113.append(pygame.image.tobytes(app.fenster, "RGB") == pygame.image.tobytes(soll_, "RGB"))
+app.fenster = pygame.display.set_mode(_groesse113)
+app.viewport_rechnen()
+pruef("Ausgabe ins Fenster ohne Zwischenflaeche: dasselbe Bild wie vorher, Rand gefuellt, auch nach set_mode",
+      all(_aus113), str(_aus113))
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

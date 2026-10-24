@@ -667,9 +667,26 @@ class App:
         return self.stapel[i:]
 
     def ausgeben(self) -> None:
-        self.fenster.fill(K.C_VOID)
-        self.fenster.blit(pygame.transform.scale(self.flaeche, self.viewport.size),
-                          self.viewport.topleft)
+        # Direkt in den Ausschnitt des Fensters skalieren und nur den Rand
+        # darum fuellen (seit 0.34.57). Vorher entstand jedes Bild eine neue
+        # Flaeche in voller Fenstergroesse, die dann noch einmal kopiert
+        # wurde - gemessen 6 ms je Bild bei 1920x1080, mehr als das Zeichnen
+        # der Welt. Der Ausschnitt wird jedes Bild neu genommen (kostet
+        # nichts) und nicht gemerkt: legt set_mode das Fenster neu an, zeigte
+        # ein gemerkter Ausschnitt auf Speicher, den es nicht mehr gibt.
+        f = self.fenster
+        vp = self.viewport
+        fb, fh = f.get_size()
+        if vp.left >= 0 and vp.top >= 0 and vp.right <= fb and vp.bottom <= fh:
+            for rand in ((0, 0, fb, vp.top), (0, vp.bottom, fb, fh - vp.bottom),
+                         (0, vp.top, vp.left, vp.height),
+                         (vp.right, vp.top, fb - vp.right, vp.height)):
+                if rand[2] > 0 and rand[3] > 0:
+                    f.fill(K.C_VOID, rand)
+            pygame.transform.scale(self.flaeche, vp.size, f.subsurface(vp))
+        else:
+            f.fill(K.C_VOID)
+            f.blit(pygame.transform.scale(self.flaeche, vp.size), vp.topleft)
         pygame.display.flip()
 
 

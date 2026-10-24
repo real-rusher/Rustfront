@@ -1396,7 +1396,42 @@ nur ein Spiel mit `bot_fliehen` (Gefecht: aus; die Kampagne soll es
 einschalten, der Testmodus hat einen Schalter). Das Ziel `panik` bleibt:
 `verkriechen` in der Deckung, sonst `deckung_wechseln`.
 
-### 11.15 Was noch offen ist
+### 11.15 Nachtrag (0.34.57): Schneller denken, gleich handeln
+
+Gemeldet: "Lokalisiere grosse performance kosten und reduziere sie alle."
+Was die KI dabei kostete, und was jetzt anders gerechnet wird - jedes Mal
+mit demselben Ergebnis: geprueft auf 200 000 Linien gegen den alten Stand
+und in einer ganzen Feuerschutz-Szene, in der alle 350 000 Fragen nach
+Deckung dieselbe Antwort bekamen.
+
+* `Welt.sicht_frei` und `Welt.deckung` teilen sich eine Verfolgung
+  (`_linie`) mit einer Tafel je Kachelart statt zweier Aufrufe und eines
+  Woerterbuchs je Kachel. `deckung` tastet nur noch dort alle 4 px ab, wo
+  die Linie eine feste Kachel kreuzt - vorher die ganze Linie bis zum
+  fernen Gegner. Zusammen rund dreimal so schnell; gefragt wird das
+  zehntausendfach je Sekunde.
+* `Wegenetz.feld_zu` breitet sich erst so weit aus, wie gefragt wird
+  (`wege.Feld`). Ein ganzes Feld kostete auf STAUBTAL 36 ms.
+* Die billige Pruefung zuerst: Schritte hoeren (`_lagebild_auffrischen`)
+  verfolgt die Sichtlinie nur, wo sie etwas aendert; `Trupp.gedeckt_hier`
+  prueft die kurze Linie vor der langen; `_bergung_deckung` sucht in
+  weiteren Ringen nicht mehr, wenn dort keine Stelle besser werden kann.
+
+Ausprobiert und verworfen: Bots, die ihre Eingabe nur jeden zweiten
+Schritt rechnen (wie ein Gast, der sie alle 1/60 s schickt). Das sparte
+rund 8 Prozent, aber der Feuerschutz beim Bergen wurde messbar schlechter
+- ueber acht Szenen 0,6 statt 1,1 Schuss je Sekunde auf den, der den
+Retter bedroht. Ebenso ein groberes Heranruecken in `an_deckung`: es
+sprang ueber Luecken im Schatten einer Kiste.
+
+Gefunden dabei: Die Zahlen der Verhaltens-Tests haengen auch vom Zufall
+des Prozesses ab. Python wuerfelt bei jedem Start die Reihenfolge in
+Mengen von Namen neu (`PYTHONHASHSEED`), und dieselbe Feuerschutz-Szene
+ergibt dann einmal 0,37 und einmal 0,63 Schuss je Sekunde - mit
+demselben Code. Ein Vergleich "vorher gegen nachher" braucht darum
+mehrere Seeds, nicht die genauen Zahlen eines Laufs.
+
+### 11.16 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.

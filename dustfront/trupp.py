@@ -518,7 +518,9 @@ class Trupp:
         if hin.length_squared() < 1.0:
             return False
         nah = p + hin.normalize() * K.TRUPP["deckung_nah"]
-        return welt.deckung(feind, p, ebene) != "" and welt.deckung(nah, p, ebene) != ""
+        # Die kurze Linie zuerst: sie scheitert meist und kostet nur einen
+        # Bruchteil der langen bis zum Gegner (seit 0.34.57).
+        return welt.deckung(nah, p, ebene) != "" and welt.deckung(feind, p, ebene) != ""
 
     def _deckung_nah(self, p, m, feind, halten: bool = True):
         """Die Stellung an die naechste Deckung ruecken: wer eine Kiste in
@@ -1007,8 +1009,10 @@ class Trupp:
             mitte = sum(orte, pygame.Vector2(0, 0)) / len(orte)
 
             def gedeckt(p):
-                return all(welt.deckung(o, p, m.ebene) != "" for o in orte) \
-                    and self.gedeckt_hier(p, m.ebene, mitte)
+                # Erst die nahe Deckung (meist schon nein), dann die langen
+                # Linien zu jedem Gegner (seit 0.34.57 in dieser Reihenfolge).
+                return self.gedeckt_hier(p, m.ebene, mitte) \
+                    and all(welt.deckung(o, p, m.ebene) != "" for o in orte)
 
             # Wohin er Feuerschutz gibt (seit 0.34.54): auf den, der dem
             # Liegenden am naechsten ist - der bedroht die Bergung am meisten.
@@ -1049,7 +1053,12 @@ class Trupp:
                     continue
                 kandidaten.append(pygame.Vector2(alt))
             n = v["halten_richtungen"]
+            ran = 2 * K.TRUPP["deckung_nah"]          # so weit schiebt an_deckung hoechstens
             for r in v["halten_radien"]:
+                # Weiter aussen wird keine Stelle besser, als die beste hier
+                # schon ist (Abstand plus Strafe): dann nicht mehr suchen.
+                if kandidaten and min(wert(p) for p in kandidaten) <= r - ran:
+                    break
                 for i in range(n):
                     p = m.pos + pygame.Vector2(r, 0).rotate(i * 360.0 / n)
                     if not welt.frei(p, m.radius + 2, m.ebene, True):

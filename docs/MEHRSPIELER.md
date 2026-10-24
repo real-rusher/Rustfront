@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.57 | Nichts Neues ueber das Netz. Schneller gerechnet und gezeichnet, mit denselben Ergebnissen: Sicht und Deckung, Wegfelder der Bots, Boden, Ausgabe ins Fenster. Sicht und Deckung geben den Bots auf jede Frage dieselbe Antwort wie in 0.34.56 | Die Versionspruefung weist ab |
 | 0.34.56 | Nichts Neues ueber das Netz. Bots fliehen in Runden nicht mehr in Panik (`Gefecht.bot_fliehen`), das rechnet nur der Gastgeber | Die Versionspruefung weist ab |
 | 0.34.55 | Die Eingabe (`ein`) kennt ein neues Feld `wen`: die Nummer dessen, dem man aufhilft oder den man zieht. Ist es gesetzt, nimmt der Gastgeber genau den (oder keinen), sonst wie bisher den naechsten. Nur Bots setzen es, ein Gast schickt es nicht. Wer schon aufhilft, darf 4 px ueber die Reichweite hinausrutschen (`REVIVE["halten"]`, rechnet der Gastgeber). Ohne Gast baut der Gastgeber die Weltmeldung nicht mehr | Die Versionspruefung weist ab |
 | 0.34.54 | Nichts Neues ueber das Netz. Nur das Verhalten der Bots (Feuerschutz beim Bergen), das nur der Gastgeber rechnet | Die Versionspruefung weist ab |
