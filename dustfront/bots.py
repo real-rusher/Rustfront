@@ -142,6 +142,8 @@ class BotHirn(Taktik):
         self.fehler = pygame.Vector2(0, 0)
         self.fehler_zeit = 0.0        # so lange verfolgt er das Ziel schon
         self.blick = float(k.winkel)  # wohin sein Fadenkreuz zeigt
+        self._drall = 0.0             # wie weit er sich zuletzt in eine Richtung drehte (Grad, klingt ab)
+        self._kehrt = 0.0             # in einer Kehrtwende: in welche Richtung er sich dreht (+1, -1)
         self.stoss_rest = 0.0         # Feuerstoss laeuft noch
         self.pause_rest = 0.0         # Feuerpause laeuft noch
         self.still = False            # bleibt er in diesem Stoss stehen?
@@ -237,8 +239,26 @@ class BotHirn(Taktik):
             ziel_punkt = self._blick_ohne_ziel(will)
         soll = _winkel_zu(k.pos, ziel_punkt)
         ab = _winkel_diff(self.blick, soll)
+        z = self.ziel
+        if abs(ab) > K.BOTS["kehrt_winkel"] and not (z is not None and self.ziel_ok(z)):
+            # Fast eine halbe Drehung: zurueck, wie er gekommen ist (seit
+            # 0.34.58). Bei einer halben Drehung ist die Richtung sonst Zufall,
+            # und zwei Kehrtwenden hintereinander wurden eine ganze Drehung um
+            # sich selbst. Die Richtung gilt, bis die Wende fast durch ist -
+            # sonst pendelte er bei einem Ziel genau hinter ihm hin und her.
+            # Auf einen Gegner schwenkt er weiter den kuerzesten Weg: dort
+            # zaehlt jede Zehntelsekunde (gemessen beim Feuerschutz).
+            if not self._kehrt:
+                self._kehrt = (-math.copysign(1.0, self._drall) if abs(self._drall) > 1.0
+                               else math.copysign(1.0, ab))
+            if self._kehrt * ab < 0.0:
+                ab += math.copysign(360.0, self._kehrt)
+        else:
+            self._kehrt = 0.0
         schritt = K.BOTS["dreh"] * dt
-        self.blick += max(-schritt, min(schritt, ab))
+        dreh = max(-schritt, min(schritt, ab))
+        self.blick += dreh
+        self._drall = self._drall * max(0.0, 1.0 - dt / K.BOTS["drall_zeit"]) + dreh
         weit = max(40.0, k.pos.distance_to(ziel_punkt))
         maus = k.pos + pygame.Vector2(1, 0).rotate(self.blick) * weit
         if feuern and k.waffe_daten.get("art") == "schuss" and self.kamerad_im_weg(weit):

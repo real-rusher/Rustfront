@@ -45,6 +45,7 @@ macht seine erst fertig und kommt dann.
 from __future__ import annotations
 
 import math
+from collections import deque
 
 import pygame
 
@@ -123,7 +124,27 @@ class Trupp:
         self.gemeldet = None          # was wir zuletzt gemeldet haben
         self.gemeldet_zeit = -1e9
         self.funk_lage: dict = {}     # Name eines anderen Trupps -> letzte Meldung
-        self._takt = 0.0
+        # Unterwegs ohne Kontakt (seit 0.34.58, _marsch).
+        self.marsch = False           # geht er gerade im Marsch (Keil oder Spur)?
+        self.marsch_richtung = None   # wohin der Anfuehrer geht, geglaettet
+        self.marsch_bezug = None      # wo der Anfuehrer stand, als die Plaetze gerechnet wurden
+        self.spur = deque(maxlen=K.TRUPP["spur_laenge"])   # wo der Anfuehrer ging
+        self.marsch_seite: dict = {}  # Nummer -> -1 links, 1 rechts, 0 hinten (wohin er beim Halt schaut)
+        self.marsch_vor: dict = {}    # Nummer -> wohin der Anfuehrer an seinem Platz auf der Spur ging
+        self.marsch_noch: set = set() # wessen Platz die Spur noch nicht erreicht hat: er wartet
+        self._abschnitt_merk: dict = {}   # Nummer -> Mitte der Gruppe, zu der er zuletzt schaute
+        self.spur_weit = 0.0          # so lang ist die Spur hinter dem Anfuehrer (auf seiner Ebene)
+        self._plaetze: dict = {}      # Nummer -> Platz im Keil (1, 2, ...), bleibt, wie er ist
+        self._kehrt = False           # der Anfuehrer hat kehrtgemacht: Plaetze neu verteilen
+        self.halt_bis = -1e9          # bis dahin sichert der Trupp an seinem Ziel
+        self.naechster_halt = None    # dann haelt er unterwegs zum Sichern an
+        self.besucht: dict = {}       # Feld (x, y, Ebene) -> wann der Anfuehrer dort war
+        # Jeder Trupp in seinem eigenen Takt (seit 0.34.58): alle zugleich
+        # angelegt, rechneten sonst alle im selben Schritt - waehrend einer
+        # Bergung gemessen bis zu 250 ms am Stueck, ein Einbruch auf unter
+        # 10 Bilder je Sekunde. Versetzt nach dem goldenen Schnitt, damit
+        # auch viele Trupps sich gleichmaessig verteilen.
+        self._takt = (len(trupps(g)) * 0.618034) % 1.0 * K.TRUPP["takt"]
 
     # ── Wer ───────────────────────────────────────────────────────
     def lebende(self) -> list:
@@ -161,6 +182,7 @@ class Trupp:
             # Faellt der Anfuehrer, fuehrt der Naechste - ohne Funkgeraet,
             # das hatte nur er.
             self.fuehrer = max(leute, key=lambda m: m.hirn.merkmale.get("disziplin", 0.5))
+        self._spur_merken(leute)
         self._lage_sammeln(leute)
         self._zuversicht(leute)
         self._zustand_waehlen(leute)
@@ -245,7 +267,11 @@ class Trupp:
             neu = "halten"          # eine wichtige Stellung gibt man nicht auf
         elif self.zuversicht <= 1:
             neu = "rueckzug"
-        elif self.zuversicht >= 3:
+        elif self.zuversicht >= 3 and getattr(self.g, "bot_uebermut", False):
+            # Ohne Uebermut (seit 0.34.58, Gefecht.bot_uebermut) drueckt ein
+            # starker Trupp nicht nach vorn, sondern bleibt im Feuerkampf an
+            # der Deckung. Seine Bergung entscheidet weiter die echte
+            # Zuversicht - die lief gut und soll so bleiben.
             neu = "druck"
         else:
             neu = "halten" if halten else "feuerkampf"
@@ -324,6 +350,7 @@ class Trupp:
             return
         self._blicke_vorher = self.blicke
         self.blicke = {}
+        self.marsch = False
         if self.zustand == "igel" and self.igel is not None:
             self._ring(leute)
             return
@@ -332,7 +359,13 @@ class Trupp:
             return
         f = self.front
         if f is None:
-            self._linie_ohne_kontakt(leute)
+            if self.zustand == "halten" or self.auftrag["art"] == "halten" \
+                    or self._kontakt_erwartet(leute):
+                # Eine Stellung halten oder gleich auf den Gegner treffen:
+                # die Linie, die nach vorn schaut.
+                self._linie_ohne_kontakt(leute)
+            else:
+                self._marsch(leute)
             return
         andere = [m for m in leute if m is not self.fuehrer]
         # Bahnen von links nach rechts, nach der Lage quer zur Richtung
@@ -342,7 +375,19 @@ class Trupp:
         if self.fuehrer in leute:
             reihe.insert(len(reihe) // 2, self.fuehrer)
         n = len(reihe)
+        ziehen = set()
+        if self.zustand in ("rueckzug", "druck") and self._welle_rest > 0.0 and self.welle:
+            # Wer gerade in einer Welle zieht, hat sein Ziel schon: das
+            # zuerst, damit die anderen nicht an dieselbe Stelle ruecken
+            # (seit 0.34.58 - im Rueckzug lag sonst jede dritte Stellung
+            # dicht an einer anderen).
+            for m in reihe:
+                if m.nummer in self.welle and m.nummer in self._welle_ziel:
+                    self.stellungen[m.nummer] = self._welle_ziel[m.nummer]
+                    ziehen.add(m.nummer)
         for i, m in enumerate(reihe):
+            if m.nummer in ziehen:
+                continue
             seitlich = (i - (n - 1) / 2.0) * (f["breite"] / max(1, n))
             wunsch = K.BOTS["wunschabstand"].get(m.waffe_name, 220.0)
             tiefe = max(0.0, wunsch - t["niemandsland"]) * 0.6
@@ -432,6 +477,7 @@ class Trupp:
                 p = self._deckung_nah(p, m, gmitte)
                 self.stellungen[m.nummer] = self._frei(p, m)
                 self.blicke[m.nummer] = pygame.Vector2(gmitte)
+                self._abschnitt_merk[m.nummer] = pygame.Vector2(gmitte)
         if self.fuehrer in leute:
             weg = hinten.normalize() if hinten.length_squared() > 0.01 else pygame.Vector2(0, 0)
             self.stellungen[self.fuehrer.nummer] = self._frei(mitte + weg * t["fuehrer_tiefe"], self.fuehrer)
@@ -453,7 +499,10 @@ class Trupp:
         teile = [[] for _g in gruppen]
         offen = []
         for m in andere:
-            alt = vorher.get(m.nummer)
+            # Auch ueber eine Pause, in der der Trupp nur eine Gruppe kannte
+            # (seit 0.34.58): sonst wurde danach neu verteilt, und mancher
+            # schaute ploetzlich zur anderen Seite.
+            alt = vorher.get(m.nummer) or self._abschnitt_merk.get(m.nummer)
             if alt is None:
                 offen.append(m)
                 continue
@@ -461,7 +510,10 @@ class Trupp:
             teile[j].append(m)
         for j, teil in enumerate(teile):
             teil.sort(key=lambda m: abweichung(m, j))
-            while len(teil) > anteile[j]:
+            # Einer zu viel darf bleiben (seit 0.34.58): kannte der Trupp
+            # kurz einen Gegner weniger, schickte ihn das sonst zur anderen
+            # Gruppe und gleich wieder zurueck.
+            while len(teil) > anteile[j] + 1:
                 offen.append(teil.pop())
         # Die Uebrigen dorthin, wo noch Platz ist und die Richtung am besten
         # passt - wer am eindeutigsten zu einer Gruppe gehoert, zuerst.
@@ -470,6 +522,13 @@ class Trupp:
             frei = [j for j in range(len(gruppen)) if len(teile[j]) < anteile[j]]
             j = min(frei, key=lambda i: abweichung(m, i))
             teile[j].append(m)
+        # Zu jeder Gruppe schaut aber wenigstens einer.
+        for j in range(len(gruppen)):
+            if not teile[j]:
+                spender = max(range(len(gruppen)), key=lambda i: len(teile[i]) - anteile[i])
+                m = min(teile[spender], key=lambda m: abweichung(m, j))
+                teile[spender].remove(m)
+                teile[j].append(m)
         return teile
 
     def _linie_ohne_kontakt(self, leute) -> None:
@@ -509,6 +568,184 @@ class Trupp:
             self.stellungen[m.nummer] = self._frei(p, m)
         self.stellungen[fuehrer.nummer] = pygame.Vector2(fuehrer.pos)
 
+    # ── Unterwegs ohne Kontakt (seit 0.34.58) ──────────────────────
+    def _kontakt_erwartet(self, leute) -> bool:
+        """Rechnet der Trupp gleich mit dem Gegner - nah am Angriffsziel
+        oder am Trupp, dem er hilft, er kennt Gegner (auf einer anderen
+        Ebene), oder der Anfuehrer hat in der Naehe etwas gehoert? Dann
+        entfaltet er sich zur Linie wie echte Trupps vor dem Kontakt. Im
+        Keil hineinzulaufen hiess: beim ersten Schuss stand der ganze Trupp
+        auf einem Fleck und klebte an denselben Kisten (gemessen)."""
+        fuehrer = self.fuehrer if self.fuehrer in leute else leute[0]
+        nah = K.TRUPP["entfalten_weite"]
+        if self.lage:
+            return True
+        ziel = self.ziel_ort()
+        if ziel is not None and self.auftrag["art"] != "frei" \
+                and fuehrer.pos.distance_to(ziel) < nah:
+            return True
+        if self.hilfe is not None and self.hilfe.get("zugesagt") \
+                and fuehrer.pos.distance_to(self.hilfe["ort"]) < nah:
+            return True
+        v = getattr(fuehrer.hirn, "verdacht", None)
+        return (v is not None and v[2] >= self.g.welt.zeit and v[1] == fuehrer.ebene
+                and fuehrer.pos.distance_to(v[0]) < nah)
+
+    def _spur_merken(self, leute) -> None:
+        """Je Takt: wo der Anfuehrer geht (seine Spur, fuer den Gaensemarsch
+        in engen Stellen) und welches Feld der Karte der Trupp gerade sieht
+        (zum Absuchen, Trupp.besucht)."""
+        f = self.fuehrer if self.fuehrer in leute else (leute[0] if leute else None)
+        if f is None:
+            return
+        if not self.spur or self.spur[-1][1] != f.ebene \
+                or self.spur[-1][0].distance_to(f.pos) > 6.0:
+            self.spur.append((pygame.Vector2(f.pos), f.ebene))
+        weit = 0.0
+        p = f.pos
+        for q, ebene in reversed(self.spur):
+            if ebene != f.ebene:
+                break
+            weit += p.distance_to(q)
+            p = q
+        self.spur_weit = weit
+        z = K.TRUPP["besuch_zelle"] * K.TILE
+        self.besucht[(int(f.pos.x // z), int(f.pos.y // z), f.ebene)] = self.g.welt.zeit
+
+    def _auf_spur(self, abstand: float, fuehrer):
+        """Der Punkt auf der Spur des Anfuehrers, `abstand` hinter ihm - dort,
+        wo er wirklich ging, also auch um Ecken herum."""
+        p = pygame.Vector2(fuehrer.pos)
+        rest = abstand
+        for q, ebene in reversed(self.spur):
+            if ebene != fuehrer.ebene:
+                break
+            d = p.distance_to(q)
+            if d >= rest:
+                return p + (q - p) * (rest / d)
+            rest -= d
+            p = pygame.Vector2(q)
+        richtung = self.marsch_richtung or pygame.Vector2(1, 0)
+        return p - richtung * rest
+
+    def _marsch_plaetze(self, fuehrer, richtung, n: int) -> list:
+        """Die Plaetze 1..n im Marsch: (Ort, Seite, Abstand auf der Spur,
+        Punkt auf der Spur, Richtung dort). Bis `marsch_keil` gehen alle im
+        Keil des Anfuehrers; sind es mehr, gehen vier in seinem Keil und die
+        anderen in kleinen Keilen zu fuenft dahinter. Ein Keil fuer zehn
+        Mann waere fast 300 Pixel breit, und bei jeder Wendung liefen die
+        Aeusseren weit.
+
+        Jede Reihe haengt an der Spur des Anfuehrers, quer zu der Richtung,
+        in die er dort ging: auf gerader Strecke der Keil, an einer Ecke
+        biegen die Reihen nacheinander dort ab, wo er abbog. Ein starrer
+        Keil drehte sich um ihn herum, die Hinteren liefen einen Bogen um
+        ihn und drehten sich dabei einmal ganz um sich selbst (gemessen)."""
+        t = K.TRUPP
+        plaetze = []
+        gruppen = [n] if n <= t["marsch_keil"] else [4] + [5] * ((n - 4 + 4) // 5)
+        for g, groesse in enumerate(gruppen):
+            anfang = g * t["gruppe_abstand"]
+            erster = 1 if g == 0 else 0     # der Erste eines hinteren Keils geht an dessen Spitze
+            for j in range(groesse):
+                if len(plaetze) >= n:
+                    break
+                i = j + erster
+                reihe = (i + 1) // 2
+                seite = 0 if i == 0 else (-1 if i % 2 else 1)
+                weit = anfang + reihe * t["marsch_abstand"]
+                mitte = self._auf_spur(weit, fuehrer)
+                vor = self._auf_spur(max(0.0, weit - 24.0), fuehrer) - mitte
+                vor = vor.normalize() if vor.length_squared() > 1.0 else pygame.Vector2(richtung)
+                q = pygame.Vector2(-vor.y, vor.x)
+                p = mitte + q * (seite * reihe * t["marsch_breite"])
+                plaetze.append((p, seite if seite else (1 if g % 2 else -1),
+                                (len(plaetze) + 1) * t["spur_abstand"], mitte, vor, weit))
+        return plaetze
+
+    def _marsch_richtung_fuehren(self, fuehrer):
+        """Wohin der Anfuehrer geht - aus seinem Tempo, und traege: an jeder
+        Ecke seines Weges schwenkte sonst der ganze Keil herum."""
+        t = K.TRUPP
+        if fuehrer.tempo.length() > t["marsch_mindest"]:
+            neu = fuehrer.tempo.normalize()
+            alt = self.marsch_richtung
+            if alt is None:
+                self.marsch_richtung = neu
+            else:
+                w = (alt.angle_to(neu) + 180.0) % 360.0 - 180.0
+                if abs(w) > t["marsch_kehrt"]:
+                    # Kehrt: nicht den ganzen Keil um ihn herumschwenken
+                    # (die Aeusseren liefen einen weiten Bogen), sondern
+                    # gleich neu aufstellen, jeder auf den naechsten Platz.
+                    self.marsch_richtung = neu
+                    self._kehrt = True
+                else:
+                    self.marsch_richtung = alt.rotate(max(-t["marsch_dreh"], min(t["marsch_dreh"], w)))
+        elif self.marsch_richtung is None:
+            ziel = self.ziel_ort()
+            streif = getattr(fuehrer.hirn, "streifzug", None)
+            if ziel is None and streif is not None and streif[1] == fuehrer.ebene:
+                ziel = streif[0]
+            hin = (pygame.Vector2(ziel) - fuehrer.pos) if ziel is not None else pygame.Vector2(0, 0)
+            self.marsch_richtung = (hin.normalize() if hin.length_squared() > 100.0
+                                    else pygame.Vector2(1, 0).rotate(fuehrer.hirn.blick))
+        return pygame.Vector2(self.marsch_richtung)
+
+    def _marsch(self, leute) -> None:
+        """Ohne Kontakt unterwegs (seit 0.34.58): ein Keil hinter dem
+        Anfuehrer - die Reihen nach hinten und zur Seite versetzt, links
+        und rechts abwechselnd. Wo ein Platz im Keil nicht frei ist oder
+        hinter einer Mauer laege (in Gaengen, zwischen Kisten), geht der
+        Mann auf der Spur des Anfuehrers, einer hinter dem anderen - wie
+        echte Trupps. Die Plaetze bleiben: wer links ging, geht links.
+
+        Gemeldet: ohne Gegner glitten sie schraeg alle zusammen in eine
+        Richtung, liefen im Gaensemarsch und bildeten eine Front, wo kein
+        Feind war - "es muss auch gut aussehen, wenn sie gerade kein Ziel
+        zum Abschiessen haben"."""
+        t = K.TRUPP
+        welt = self.g.welt
+        fuehrer = self.fuehrer if self.fuehrer in leute else leute[0]
+        richtung = self._marsch_richtung_fuehren(fuehrer)
+        # Die Blicklogik ohne Kontakt (GoapHirn._blick_ohne_ziel) schaut in
+        # diese Richtung - also dorthin, wohin der Trupp geht.
+        self._linie_richtung = pygame.Vector2(richtung)
+        self.marsch = True
+        andere = [m for m in leute if m is not fuehrer]
+        plaetze = self._marsch_plaetze(fuehrer, richtung, len(andere))
+        if self._kehrt or set(self._plaetze) != {m.nummer for m in andere}:
+            # Neu verteilen - nur wenn einer dazukam oder fehlt oder der
+            # Anfuehrer kehrtmachte -, so dass keiner weit laufen muss:
+            # immer das naechste Paar aus Mann und freiem Platz zuerst.
+            self._kehrt = False
+            paare = sorted((m.pos.distance_squared_to(plaetze[i][0]), m.nummer, i)
+                           for m in andere for i in range(len(plaetze)))
+            self._plaetze = {}
+            vergeben = set()
+            for _d, nummer, i in paare:
+                if nummer not in self._plaetze and i not in vergeben:
+                    self._plaetze[nummer] = i
+                    vergeben.add(i)
+        self.stellungen[fuehrer.nummer] = pygame.Vector2(fuehrer.pos)
+        self.marsch_bezug = pygame.Vector2(fuehrer.pos)
+        self.marsch_noch = set()
+        for m in andere:
+            i = self._plaetze[m.nummer]
+            p, seite, spur, mitte, vor, weit = plaetze[i]
+            self.marsch_vor[m.nummer] = vor
+            if weit > self.spur_weit + t["marsch_abstand"] * 0.5:
+                # So weit ist der Anfuehrer noch nicht gegangen (beim
+                # Losgehen): erst warten, dann einreihen - sein Platz waere
+                # nur geraten, und wer zu ihm lief, lief oft eine Schleife.
+                self.marsch_noch.add(m.nummer)
+            if not (welt.frei(p, m.radius + 2, m.ebene, True)
+                    and welt.wege.gerade_frei(m.ebene, mitte, p, m.radius + 1)):
+                p = self._auf_spur(spur, fuehrer)
+            self.stellungen[m.nummer] = self._frei(p, m)
+            # Beim Halt schaut jeder zu seiner Seite, der Letzte nach hinten.
+            self.marsch_seite[m.nummer] = 0 if (i == len(plaetze) - 1 and i >= 2) else seite
+
     def gedeckt_hier(self, p, ebene, feind) -> bool:
         """Steht dicht vor dieser Stelle etwas zwischen ihr und dem Gegner?
         Nur eine ferne Wand dazwischen zaehlt nicht - an die kann er sich
@@ -529,31 +766,59 @@ class Trupp:
         bei jedem Takt hin und her."""
         welt = self.g.welt
         p = pygame.Vector2(p)
+        # Wer schon eine Stellung hat (in diesem Takt vergeben): an dieselbe
+        # Kiste stellt sich kein Zweiter (seit 0.34.58). Vorher rueckten zwei
+        # Bahnen, 72 Pixel auseinander, an dieselbe Deckung, und das Ende der
+        # Kiste zog beide auf einen Fleck - im grossen Trupp jede zehnte
+        # Stellung.
+        belegt = [q for n, q in self.stellungen.items() if n != m.nummer]
+        nah = K.TRUPP["bahn_min"] * 0.5
+
+        def frei_von_anderen(q):
+            return all(q.distance_to(b) >= nah for b in belegt)
+
         # Wer in einer Welle zieht, soll wirklich weiter - nicht dort bleiben.
         alt = self.stellungen_vorher.get(m.nummer) if halten else None
         weit = K.TRUPP["deckung_ringe"][-1]
-        if (alt is not None and alt.distance_to(p) <= weit
+        if (alt is not None and alt.distance_to(p) <= weit and frei_von_anderen(alt)
                 and self.gedeckt_hier(alt, m.ebene, feind)):
             return pygame.Vector2(alt)
         if self.gedeckt_hier(p, m.ebene, feind):
-            return an_deckung(welt, p, m.radius, m.ebene, feind)
-        belegt = [q for n, q in self.stellungen.items() if n != m.nummer]
+            q = an_deckung(welt, p, m.radius, m.ebene, feind)
+            if frei_von_anderen(q):
+                return q
         for r in K.TRUPP["deckung_ringe"]:
             for i in range(8):
                 q = p + pygame.Vector2(r, 0).rotate(i * 45.0)
                 if not welt.frei(q, m.radius + 2, m.ebene, True):
                     continue
-                if any(q.distance_to(b) < K.TRUPP["bahn_min"] * 0.5 for b in belegt):
+                if not frei_von_anderen(q):
                     continue
                 if self.gedeckt_hier(q, m.ebene, feind):
-                    return an_deckung(welt, q, m.radius, m.ebene, feind)
+                    q = an_deckung(welt, q, m.radius, m.ebene, feind)
+                    if frei_von_anderen(q):
+                        return q
         return p
 
     def _frei(self, p, m):
         welt = self.g.welt
         if welt.frei(p, m.radius + 2, m.ebene, True):
             return pygame.Vector2(p)
-        return pygame.Vector2(welt.landeplatz(p, m.radius + 2, m.ebene))
+        q = pygame.Vector2(welt.landeplatz(p, m.radius + 2, m.ebene))
+        # Lagen mehrere Plaetze in derselben Mauer (die Linie wich in ein
+        # Haus zurueck), schob der Landeplatz alle auf denselben Fleck an
+        # ihrer Kante (seit 0.34.58): dann einen freien daneben.
+        nah = K.TRUPP["bahn_min"] * 0.5
+        belegt = [b for n, b in self.stellungen.items() if n != m.nummer]
+        if all(q.distance_to(b) >= nah for b in belegt):
+            return q
+        for r in (nah, nah * 2.0):
+            for i in range(8):
+                x = q + pygame.Vector2(r, 0).rotate(i * 45.0)
+                if (welt.frei(x, m.radius + 2, m.ebene, True)
+                        and all(x.distance_to(b) >= nah for b in belegt)):
+                    return x
+        return q
 
     def _flankenpunkt(self, m):
         """Seitlich des Gegners (Days Gone): auf der Seite, die ihm naeher
@@ -598,6 +863,12 @@ class Trupp:
         self._welle_ziel = {}
         for m in ziehen:
             p = m.pos + f["richtung"] * schritt
+            bahn = self.stellungen.get(m.nummer)
+            if bahn is not None and m.nummer not in self.flanker:
+                # Dabei seitlich in seine Bahn (seit 0.34.58): die Welle ging
+                # von dort aus, wo er stand - wer mit anderen an einer Kiste
+                # klebte, zog mit ihnen zusammen weiter.
+                p += f["quer"] * (bahn - m.pos).dot(f["quer"])
             if schritt > 0:
                 # Nie ins Niemandsland.
                 ueber = (p - f["linie"]).dot(f["richtung"])
@@ -1000,6 +1271,16 @@ class Trupp:
             return
         welt = self.g.welt
         v = K.VERWUNDET
+        # Wo in diesem Takt schon einer seine Stelle hat (seit 0.34.58): ein
+        # Zweiter setzt sich nicht auf denselben Fleck, sondern an die
+        # naechste Deckung - in grossen Trupps sassen sonst drei an derselben
+        # Kiste. Wer daneben gedeckt steht, bleibt wie bisher.
+        vergeben = []
+        fleck = K.TRUPP["fleck"]
+
+        def eng(p):
+            return any(p.distance_to(q) < fleck for q in vergeben)
+
         for m in leute:
             if m.nummer in b["retter"] or m.ebene != b["opfer"].ebene:
                 continue
@@ -1029,6 +1310,8 @@ class Trupp:
                 w = p.distance_to(m.pos)
                 if not schiesst(p):
                     w += v["schutz_ohne_schuss"]
+                if eng(p):
+                    w += K.TRUPP["fleck_strafe"]
                 return w
 
             # Wer gedeckt steht und von dort schiessen kann, bleibt - jeder
@@ -1038,18 +1321,20 @@ class Trupp:
             # aber nicht schiessen, und der Retter wurde abgeschossen.
             kandidaten = []
             if gedeckt(m.pos):
-                if schiesst(m.pos):
+                if schiesst(m.pos) and not eng(m.pos):
                     self.stellungen[m.nummer] = pygame.Vector2(m.pos)
+                    vergeben.append(self.stellungen[m.nummer])
                     continue
                 kandidaten.append(pygame.Vector2(m.pos))
             alt = self.stellungen_vorher.get(m.nummer)
             if alt is not None and alt.distance_to(m.pos) <= v["halten_radien"][-1] and gedeckt(alt):
-                if schiesst(alt):
+                if schiesst(alt) and not eng(alt):
                     # Dorthin ist er schon unterwegs, und sie taugt noch:
                     # nicht jeden Takt achtzig Stellen neu pruefen - das war
                     # gemessen ein grosser Teil der Last, solange einer
                     # geborgen wird (seit 0.34.55).
                     self.stellungen[m.nummer] = pygame.Vector2(alt)
+                    vergeben.append(self.stellungen[m.nummer])
                     continue
                 kandidaten.append(pygame.Vector2(alt))
             n = v["halten_richtungen"]
@@ -1071,6 +1356,7 @@ class Trupp:
                 bestes = min(kandidaten, key=lambda p: wert(p) - (v["schutz_halten"] if alt is not None
                                                                    and p.distance_to(alt) < 1.0 else 0.0))
                 self.stellungen[m.nummer] = bestes
+                vergeben.append(bestes)
 
 def sieht_durch_rauch(welt, a, b, ebene) -> bool:
     """Freie Sicht von a nach b - ohne Mauer und ohne Rauch auf der Linie

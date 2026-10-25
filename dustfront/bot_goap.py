@@ -159,6 +159,9 @@ class GoapHirn(BotHirn):
         self._angesagt = {}           # Wesen -> Zeit: wen er zuletzt angesagt hat
         self._umstellen = None        # wohin er geht, um nicht flankiert zu sein (0.34.50)
         self.funk_laeuft = None       # dict(art, bis, text): er spricht gerade in sein Funkgeraet
+        # Wie sein letzter Spruch ausging (seit 0.34.58): (Zeit, "durch" oder
+        # "abgebrochen") - der Testmodus zeigt es am Funker.
+        self.funk_ende = None
         self._rede_rest = self.rnd.uniform(3.0, 6.0)   # bis er beim Suchen etwas sagt
 
     def gehirn_neu(self) -> None:
@@ -187,9 +190,13 @@ class GoapHirn(BotHirn):
         k = self.k
         von = getattr(k, "zuletzt_von", None)
         von = getattr(von, "von", von)
-        if von is not None and hasattr(von, "pos") and von is not k and getattr(von, "lebt", False):
+        if (von is not None and hasattr(von, "pos") and von is not k and getattr(von, "lebt", False)
+                and self.ist_feind(von)):
             # Wer auf ihn schiesst (seit 0.34.50): den nimmt er als Naechsten,
-            # und von dort her darf er nicht offen stehen (flankiert).
+            # und von dort her darf er nicht offen stehen (flankiert). Nur ein
+            # Gegner (seit 0.34.58): traf ihn die Streuung eines Kameraden,
+            # stand der als Gegner in der Lage des Trupps, und ein Abschnitt
+            # schaute zu ihm.
             self.beschossen_von[von] = (pygame.Vector2(von.pos), getattr(von, "ebene", k.ebene),
                                         self.g.welt.zeit)
             t = self.trupp
@@ -657,9 +664,18 @@ class GoapHirn(BotHirn):
         werte = dict(leben=k.leben / max(1.0, k.max_leben),
                      abstand=k.pos.distance_to(gefahr[0]) if gefahr else 9999.0,
                      stress=round(innen.stress, 3),
-                     zuversicht=innen.stufe / 4.0,
+                     zuversicht=self._zuversicht_wert(),
                      unschaerfe=innen.unschaerfe())
         return fakten, werte
+
+    def _zuversicht_wert(self) -> float:
+        """Die Zuversicht fuer seine Entscheidungen, 0 bis 1. Ohne Uebermut
+        (Gefecht.bot_uebermut, seit 0.34.58) hoechstens neutral: Angst
+        zaehlt, Uebermut nicht."""
+        wert = self.innen.stufe / 4.0
+        if not getattr(self.g, "bot_uebermut", False):
+            wert = min(wert, 0.5)
+        return wert
 
     # ── Im Trupp (seit 0.34.39) ───────────────────────────────────
     def _trupp_fakten(self) -> dict:
@@ -672,7 +688,8 @@ class GoapHirn(BotHirn):
                     trupp_halten=False, welle_dran=False, flanke_rolle=False,
                     trupp_unterlegen=False, hilfe_gerufen=False, lage_neu=False,
                     antwort_offen=False, hilfe_zugesagt=False, rauch_da=False,
-                    trupp_igel=False, trupp_engstelle=False)
+                    trupp_igel=False, trupp_engstelle=False, funk_sendet=False,
+                    funk_fast_durch=False)
         rauch = self._rauch_platz() >= 0
         if t is None or len(t.lebende()) < 2 or k not in t.lebende():
             leer["rauch_da"] = rauch
@@ -685,7 +702,12 @@ class GoapHirn(BotHirn):
             ist_fuehrer=fuehrer,
             hat_funk=funk,
             allein=not t.in_kontakt(k),
-            in_formation=p is None or k.pos.distance_to(p) <= K.TRUPP["stellung_weite"],
+            # Im Marsch weiter (seit 0.34.58): wer ein paar Schritte neben
+            # seinem Platz im Keil ging, rannte sonst hin, blieb stehen und
+            # fiel wieder zurueck - Stop and Go.
+            in_formation=p is None or (k.pos.distance_to(p) <= K.TRUPP[
+                "marsch_toleranz" if t.marsch else "stellung_weite"]
+                and not (t.marsch and t.fuehrer is not None and t.fuehrer.ebene != k.ebene)),
             trupp_rueckzug=t.zustand == "rueckzug",
             trupp_druck=t.zustand == "druck",
             trupp_halten=t.zustand == "halten",
@@ -695,6 +717,16 @@ class GoapHirn(BotHirn):
             hilfe_gerufen=t.hilfe_gerufen(),
             lage_neu=fuehrer and funk and t.lage_neu(),
             antwort_offen=fuehrer and funk and t.antwort_offen(),
+            # Er spricht schon (seit 0.34.58): dann hebt bots.txt den Rang
+            # des Funkziels - vorher wuergte jede andere Aktion den Spruch ab,
+            # und durch kam im Gefecht praktisch keiner.
+            funk_sendet=funk and self.funk_laeuft is not None
+            and self.funk_laeuft.get("phase") == "senden",
+            # Fast durch: auch waehrend einer geborgen wird, spricht er zu
+            # Ende (bots.txt) - sonst kam beim Bergen kein Spruch mehr durch.
+            funk_fast_durch=funk and self.funk_laeuft is not None
+            and self.funk_laeuft.get("phase") == "senden"
+            and self.funk_laeuft["bis"] - self.g.welt.zeit <= K.TRUPP["funk_rest_vorrang"],
             hilfe_zugesagt=t.hilfe is not None and bool(t.hilfe.get("zugesagt")),
             rauch_da=rauch,
             trupp_igel=t.zustand == "igel",
@@ -1135,45 +1167,35 @@ class GoapHirn(BotHirn):
         return d / weit * max(0.35, min(1.0, weit / K.TRUPP["stellung_weite"]))
 
     def _unterwegs(self, dt: float, ein: dict):
-        """Ohne Kontakt im Trupp: die anderen gehen in breiter Linie neben
-        dem Anfuehrer und schauen nach aussen; der Anfuehrer geht vor und
-        wartet, wenn einer zurueckfaellt. Ab und zu sagt einer, was er
-        sieht - oder dass nichts ist."""
+        """Ohne Kontakt im Trupp: im Marsch (seit 0.34.58) geht der Anfuehrer
+        im Patrouillentempo vor, die anderen im Keil oder auf seiner Spur
+        hinterher (_marschieren), und am Ziel sichert der Trupp. Haelt er
+        eine Stellung, stehen sie in der Linie und schauen nach aussen. Ab
+        und zu sagt einer, was er sieht - oder dass nichts ist."""
         t = self.trupp
         k = self.k
         if t is None or len(t.lebende()) < 2 or k not in t.lebende():
             return super()._unterwegs(dt, ein)
         self.stoss_rest = 0.0
         if k is t.fuehrer:
-            ziel = t.ziel_ort()
-            if ziel is not None:
-                will = self._weg_richtung(ziel, t.auftrag.get("ebene", k.ebene), ein)
-                if k.pos.distance_to(ziel) < 40.0:
-                    will = pygame.Vector2(0, 0)
-                blick = None
-            else:
-                will, blick = super()._unterwegs(dt, ein)
-            weit = K.TRUPP["linie_abstand"] * K.TRUPP["linie_warten"]
-            for m in t.lebende():
-                q = t.stellung(m)
-                if m is not k and q is not None and m.pos.distance_to(q) > weit:
-                    will = will * 0.2          # warten, bis sie aufschliessen
-                    break
-            return will, blick
+            return self._fuehren(dt, ein)
         p = t.stellung(k)
         if p is None:
             return super()._unterwegs(dt, ein)
-        will = pygame.Vector2(0, 0)
-        if k.pos.distance_to(p) > 10.0:
-            will = self._weg_richtung(p, k.ebene, ein)
-        # Nach aussen schauen: zur Seite, auf der er in der Linie steht.
         f = t.fuehrer
-        blick = None
-        if f is not None and f.lebt:
-            aussen = k.pos - f.pos
-            if aussen.length_squared() > 1.0:
-                vor = pygame.Vector2(1, 0).rotate(f.hirn.blick)
-                blick = k.pos + (aussen.normalize() + vor).normalize() * 120.0
+        if t.marsch:
+            will, blick = self._marschieren(p, ein)
+        else:
+            will = pygame.Vector2(0, 0)
+            if k.pos.distance_to(p) > 10.0:
+                will = self._weg_richtung(p, k.ebene, ein)
+            # Nach aussen schauen: zur Seite, auf der er in der Linie steht.
+            blick = None
+            if f is not None and f.lebt:
+                aussen = k.pos - f.pos
+                if aussen.length_squared() > 1.0:
+                    vor = pygame.Vector2(1, 0).rotate(f.hirn.blick)
+                    blick = k.pos + (aussen.normalize() + vor).normalize() * 120.0
         self._rede_rest -= dt
         if self._rede_rest <= 0.0:
             self._rede_rest = self.rnd.uniform(5.0, 9.0)
@@ -1186,6 +1208,165 @@ class GoapHirn(BotHirn):
                 self.sagen(self.rnd.choice(("%s FREI." % seite, "NICHTS ZU SEHEN.",
                                             "%s SAUBER." % seite)))
         return will, blick
+
+    def _fuehren(self, dt: float, ein: dict):
+        """Der Anfuehrer ohne Kontakt: zum Ziel des Trupps oder auf Streife.
+        Im Marsch geht er im Patrouillentempo, am Streifziel haelt er an und
+        sichert, und faellt einer zurueck, geht er langsamer (seit 0.34.58).
+        Vorher ging er ohne Halt von Punkt zu Punkt, so schnell er konnte,
+        und blieb stehen, sobald einer weit zurueck war."""
+        t = self.trupp
+        k = self.k
+        tr = K.TRUPP
+        jetzt = self.g.welt.zeit
+        if t.marsch and t.halt_bis > jetzt:
+            # Sichern: stehen und nach vorn schauen, langsam hin und her -
+            # die anderen schauen derweil zur Seite und nach hinten. Ein
+            # bekannter Gegner geht vor (_blick_ohne_ziel).
+            if self._gefahr() is not None:
+                return pygame.Vector2(0, 0), None
+            r = t.marsch_richtung or pygame.Vector2(1, 0).rotate(self.blick)
+            schwenk = math.sin(jetzt * 0.9 + k.nummer) * 55.0
+            return pygame.Vector2(0, 0), k.pos + r.rotate(schwenk) * 120.0
+        eilt = t.hilfe is not None and t.hilfe.get("zugesagt")
+        if t.marsch and not eilt:
+            if t.naechster_halt is None:
+                t.naechster_halt = jetzt + self.rnd.uniform(*tr["halt_abstand"])
+            elif jetzt >= t.naechster_halt:
+                # Unterwegs ab und zu stehen bleiben und horchen, wie eine
+                # echte Streife - nicht nur am Ziel (das liegt oft weit weg).
+                t.naechster_halt = jetzt + self.rnd.uniform(*tr["halt_abstand"])
+                t.halt_bis = jetzt + self.rnd.uniform(*tr["halt_zeit"])
+                return pygame.Vector2(0, 0), None
+        ziel = t.ziel_ort()
+        if ziel is not None:
+            will = self._weg_richtung(ziel, t.auftrag.get("ebene", k.ebene), ein)
+            if k.pos.distance_to(ziel) < 40.0:
+                will = pygame.Vector2(0, 0)
+            blick = None
+        else:
+            s = self.streifzug
+            if (t.marsch and s is not None and k.ebene == s[1] and k.pos.distance_to(s[0]) < 40.0
+                    and not (self.verdacht is not None and self.verdacht[2] >= jetzt)):
+                # Angekommen: erst sichern, dann ein neues Ziel.
+                t.halt_bis = jetzt + self.rnd.uniform(*tr["halt_zeit"])
+                self.streifzug = None
+                return pygame.Vector2(0, 0), None
+            will, blick = super()._unterwegs(dt, ein)
+        if not t.marsch:
+            weit = tr["linie_abstand"] * tr["linie_warten"]
+            for m in t.lebende():
+                q = t.stellung(m)
+                if m is not k and q is not None and m.pos.distance_to(q) > weit:
+                    will = will * 0.2          # warten, bis sie aufschliessen
+                    break
+            return will, blick
+        if not eilt:
+            will = will * tr["marsch_tempo"]   # zur Hilfe eilt er, sonst geht er
+        # Warten nur auf die, die hinter ihrem Platz sind. Wer davor steht
+        # (nach einer Kehre), laesst ihn vorbei - wartete er auch auf die,
+        # verkeilten sich alle in engen Gaengen.
+        r = t.marsch_richtung or pygame.Vector2(1, 0).rotate(self.blick)
+        zurueck = 0.0
+        for m in t.lebende():
+            q = t.stellung(m)
+            if m is not k and m.ebene != k.ebene:
+                zurueck = max(zurueck, tr["marsch_warten"] + 1.0)   # kommt noch die Treppe herauf
+            elif m is not k and q is not None and (q - m.pos).dot(r) > 0.0:
+                zurueck = max(zurueck, m.pos.distance_to(q))
+        if zurueck > tr["linie_abstand"] * tr["linie_warten"]:
+            will = will * 0.2
+        elif zurueck > tr["marsch_warten"]:
+            will = will * 0.6
+        return will, blick
+
+    def _marschieren(self, p, ein):
+        """Im Marsch folgen (seit 0.34.58): so schnell wie der Anfuehrer geht
+        und dazu, was zum Platz fehlt - gleichmaessig statt Stop and Go.
+        Wer mit dem Trupp geht, schaut in die Marschrichtung, ein wenig zu
+        der Seite seines Platzes; wer quer oder zurueck geht, um
+        aufzuschliessen, schaut, wohin er geht - so gleitet keiner
+        seitwaerts. Steht der Trupp, schaut jeder in seinen Sektor: links,
+        rechts, der Letzte nach hinten.
+
+        Gemeldet: ohne Gegner "sliden sie komisch in bestimmten Richtungen
+        ... ohne irgendeine Koordination beim Laufen"."""
+        t = self.trupp
+        k = self.k
+        tr = K.TRUPP
+        f = t.fuehrer
+        if f is not None and f.lebt and f.ebene != k.ebene:
+            # Der Anfuehrer ging eine Treppe hinauf oder hinunter: ihm nach.
+            # Sein Platz laege hier unten in der Mauer des Hauses oben.
+            will = self._weg_richtung(f.pos, f.ebene, ein)
+            return will, (k.pos + will.normalize() * 120.0 if will.length_squared() > 0.01 else None)
+        if f is not None and t.marsch_bezug is not None:
+            # Der Platz geht mit dem Anfuehrer mit: gerechnet wird er nur
+            # je Takt des Trupps, und bis dahin ist er ein Stueck weiter.
+            mit_ihm = p + (f.pos - t.marsch_bezug)
+            if self.g.welt.frei(mit_ihm, k.radius + 2, k.ebene, True):
+                p = mit_ihm
+        hin = pygame.Vector2(p) - k.pos
+        weit = hin.length()
+        # Die Richtung an seinem Platz: wohin der Anfuehrer dort auf seiner
+        # Spur ging - um eine Ecke herum eine andere als vorn.
+        r = t.marsch_vor.get(k.nummer) or t.marsch_richtung or pygame.Vector2(1, 0).rotate(self.blick)
+        steht = f is None or not f.lebt or f.tempo.length() < tr["marsch_mindest"]
+        if (k.nummer in t.marsch_noch and f is not None and not steht
+                and k.pos.distance_to(f.pos) < tr["marsch_warten"] * 1.5):
+            # Der Anfuehrer geht gerade erst los: warten, bis die Spur bis zu
+            # seinem Platz reicht (Trupp.marsch_noch), dann einreihen.
+            will = pygame.Vector2(0, 0)
+        elif weit > tr["folgen_weite"] or not self.g.welt.wege.gerade_frei(k.ebene, k.pos, p, k.radius):
+            if t.halt_bis <= self.g.welt.zeit and hin.dot(r) < -0.3 * weit:
+                # Sein Platz liegt hinter ihm - der Anfuehrer kommt ihm nach
+                # einer Kehre (oder beim Losgehen) entgegen: stehen und ihn
+                # vorbeilassen, statt rueckwaerts durch die anderen oder im
+                # Bogen um ihn herum zu laufen (dabei drehte er sich einmal
+                # ganz um sich selbst).
+                will = pygame.Vector2(0, 0)
+            else:
+                will = self._weg_richtung(p, k.ebene, ein)
+        else:
+            mit = (f.tempo / K.SPIELER["tempo"]) if f is not None and f.lebt else pygame.Vector2(0, 0)
+            will = mit + hin / tr["folgen_weite"]
+            if weit < 4.0 and mit.length_squared() < 0.01:
+                will = pygame.Vector2(0, 0)
+            elif will.length_squared() > 1.0:
+                will.scale_to_length(1.0)
+        if self._gefahr() is not None:
+            return will, None                 # ein bekannter Gegner geht vor (_blick_ohne_ziel)
+        seite = t.marsch_seite.get(k.nummer, 1)
+        if steht and will.length_squared() < 0.04:
+            return will, k.pos + r.rotate(180.0 if seite == 0 else seite * 75.0) * 120.0
+        if will.length_squared() > 0.04 and abs((r.angle_to(will) + 180.0) % 360.0 - 180.0) > 40.0:
+            # Quer oder zurueck, um aufzuschliessen: wohin er geht.
+            return will, k.pos + will.normalize() * 120.0
+        # Mit dem Trupp: in die Marschrichtung, ein wenig zu seiner Seite -
+        # nicht jeder Wendung seines Weges nach (die Richtung dreht traege;
+        # folgte der Blick dem Weg, drehte sich mancher in einer Kurve des
+        # Anfuehrers einmal ganz um sich selbst).
+        return will, k.pos + r.rotate(seite * 20.0) * 120.0
+
+    def _streifziel(self):
+        """Ein Anfuehrer sucht die Karte ab (seit 0.34.58): von einigen
+        moeglichen Zielen das, wo sein Trupp am laengsten nicht war - nicht
+        immer wieder dieselben Ecken."""
+        t = self.trupp
+        if t is None or t.fuehrer is not self.k or len(t.lebende()) < 2:
+            return super()._streifziel()
+        z = K.TRUPP["besuch_zelle"] * K.TILE
+        jetzt = self.g.welt.zeit
+        alt = K.TRUPP["besuch_alt"]
+        bestes, beste = None, -1e9
+        for _ in range(5):
+            ort, ebene = super()._streifziel()
+            war = t.besucht.get((int(ort.x // z), int(ort.y // z), ebene))
+            wert = min(alt, jetzt - war) if war is not None else alt * 1.5
+            wert += self.rnd.uniform(0.0, alt * 0.3)
+            if wert > beste:
+                bestes, beste = (ort, ebene), wert
+        return bestes
 
     # ── Entscheiden ───────────────────────────────────────────────
     def _entscheiden(self, dt: float, ein: dict):
@@ -1314,7 +1495,7 @@ class GoapHirn(BotHirn):
                 # Rauch fuer den Verwundeten flog beim Funken irgendwohin).
                 self.wurf_phase = 0.0
             if not a.tut.startswith("funk"):
-                self.funk_laeuft = None       # unterbrochen: der Spruch ist nicht raus
+                self._funk_abbrechen()        # unterbrochen: der Spruch ist nicht raus
             if a.funk:
                 self.funken(a.funk)
             if a.tut == "deckung" and self.k.leben < K.BOTS["deckung_leben"]:
@@ -2151,7 +2332,21 @@ class GoapHirn(BotHirn):
     def tun_zur_stelle(self, dt, ein):
         """An seine Stellung im Trupp (seine Bahn, seinen Platz in der Linie)."""
         p = self._stellung()
-        if p is None or self.k.pos.distance_to(p) <= K.TRUPP["stellung_weite"] * 0.6:
+        if p is None:
+            return _nichts("fertig")
+        t = self.trupp
+        k = self.k
+        if t.marsch and self._gefahr() is None:
+            # Im Marsch aufschliessen wie beim Folgen (seit 0.34.58) - nicht
+            # hinrennen und stehen bleiben. Fertig erst auf der Ebene des
+            # Anfuehrers: sonst hiess es "fertig", gleich wieder "nicht in
+            # Formation", und er stand an der Treppe und zuckte.
+            f = t.fuehrer
+            if (f is None or f.ebene == k.ebene) and k.pos.distance_to(p) <= K.TRUPP["folgen_weite"]:
+                return _nichts("fertig")
+            will, blick = self._marschieren(p, ein)
+            return will, blick, False, False, "laeuft"
+        if k.pos.distance_to(p) <= K.TRUPP["stellung_weite"] * 0.6:
             return _nichts("fertig")
         return self._hin_und_kaempfen(dt, ein, p) + ("laeuft",)
 
@@ -2278,14 +2473,29 @@ class GoapHirn(BotHirn):
                 nah = True
                 break
         if k.leben < laeuft["leben"] - 0.5 or nah:
-            self.funk_laeuft = None
-            self.gehirn.log("FUNK ABGEBROCHEN")
+            self._funk_abbrechen()
             return _nichts("gescheitert")
         if jetzt >= laeuft["bis"]:
             t.funk_senden(art)
             self.funk_laeuft = None
+            # Durch (seit 0.34.58): ein Ton und ein Zeichen am Funker -
+            # gemeldet: man sah nie, ob ein Spruch ankam.
+            self.funk_ende = (jetzt, "durch")
+            self.g.welt.klang("funk_durch", 0.7, k.pos, k.ebene)
             return _nichts("fertig")
         return pygame.Vector2(0, 0), blick, False, False, "laeuft"
+
+    def _funk_abbrechen(self) -> None:
+        """Der Spruch ist nicht raus. Sprach er schon, sieht man es am
+        Funker (seit 0.34.58); auf dem Weg zum Funkplatz hatte noch keiner
+        etwas gehoert."""
+        laeuft = self.funk_laeuft
+        self.funk_laeuft = None
+        if laeuft is None:
+            return
+        self.gehirn.log("FUNK ABGEBROCHEN")
+        if laeuft.get("phase") == "senden" and self.k.lebt and not getattr(self.k, "am_boden", False):
+            self.funk_ende = (self.g.welt.zeit, "abgebrochen")
 
     def tun_funk_hilfe(self, dt, ein):
         return self._funken_tun("hilfe")

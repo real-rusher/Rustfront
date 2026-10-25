@@ -1364,6 +1364,21 @@ class Renderer:
         cache[index] = maske
         return maske
 
+    def ebenen_vorbereiten(self, welt) -> None:
+        """Masken und Klippen jeder Ebene vorab rechnen, fuer jede
+        Blickhoehe und beide Einstellungen der oberen Etage (seit 0.34.58).
+        Sie haengen nur an den Kacheln, und die aendern sich im Spiel nicht;
+        beim ersten Blick auf eine Ebene gerechnet, hielten sie das Bild
+        bis zu 0,9 s an."""
+        n = len(welt.ebenen)
+        for idx in range(1, n):
+            self.obermaske(welt, idx)
+            for oben_aus in (False, True):
+                self.klippen(welt, idx, oben_aus)
+        for blick in range(n):
+            for idx in range(blick + 2, n):
+                self.turm_auslassen(welt, idx, blick)
+
     def turm_auslassen(self, welt, index: int, blick: int) -> bytearray:
         """Was von Ebene `index` weg muss, wenn man sie von `blick` aus
         sieht und sie mehr als eine Etage hoeher liegt (seit 0.34.7).

@@ -51,6 +51,12 @@ def neu(seed):
     tm = TM.Testmodus(app, karte="staubtal")
     tm._bot_rnd.seed(seed)            # Merkmale, Namen, Aufstellung: jedes Mal dieselben
     ENT.RND.seed(seed)                # Streuung der Schuesse: unabhaengig vom Abschnitt davor
+    # Auch die Einstiegszonen der Mannschaften (seit 0.34.58): der Testmodus
+    # wuerfelt sie ohne festen Seed, und ein Bot auf Streife geht zur Zone
+    # der anderen - dieselbe Szene lief dann je nach Prozess anders (gesehen:
+    # Feuerschutz einmal 1,2, einmal 0,2 Schuss je Sekunde).
+    tm.rnd.seed(seed)
+    tm._einstiegszonen_waehlen()
     tm.wiedereinstieg = False
     tm.verwundete_setzen(True)
     return tm
@@ -791,9 +797,117 @@ def keine_flucht():
     pruef("... obwohl einige in Panik geraten (die Szene prueft also etwas)", f.panik > 0, str(f.panik))
 
 
+class Marsch:
+    """Misst einen Trupp ohne Gegner: wie oft einer seitwaerts gleitet
+    (Blick mehr als 60 Grad neben der Laufrichtung), wie oft einer vor dem
+    Anfuehrer geht, und wie oft der Trupp unterwegs sichert."""
+
+    def __init__(self):
+        self.tm = None
+        self.trupp = None
+        self.richtung = None
+        self.laufen = self.gleiten = self.vorn = self.gesamt = self.halte = 0
+        self._halt = False
+
+    def schritt(self):
+        tm = self.tm
+        if int(tm.welt.zeit / DT) % 6:
+            return
+        t = self.trupp
+        f = t.fuehrer
+        if f is None or not f.lebt:
+            return
+        halt = t.halt_bis > tm.welt.zeit
+        if halt and not self._halt:
+            self.halte += 1
+        self._halt = halt
+        if f.tempo.length() > 20.0:
+            r = f.tempo.normalize()
+            self.richtung = r if self.richtung is None else (self.richtung * 0.8 + r * 0.2).normalize()
+        for m in t.lebende():
+            if m.tempo.length() > 20.0:
+                self.laufen += 1
+                w = abs((pygame.Vector2(1, 0).rotate(m.winkel).angle_to(m.tempo) + 180.0) % 360.0 - 180.0)
+                self.gleiten += w > 60.0
+            if m is not f and self.richtung is not None and f.tempo.length() > 20.0:
+                self.gesamt += 1
+                self.vorn += (m.pos - f.pos).dot(self.richtung) > 10.0
+
+
+def marsch_szene(seed, groesse, sekunden, beob):
+    """Ein Trupp allein auf der Karte, ohne Auftrag: er geht auf Streife."""
+    tm = neu(seed)
+    tx, ty, v = W.flaeche(tm, random.Random(seed), 20, 12)
+    beob.trupp = tm.trupp_setzen(v(10, 6), 0, {"groesse": groesse, "team": 0, "fuehrer": "funk",
+                                               "mischung": "gemischt"})
+    beob.richtung = None
+    beob._halt = False
+    beobachtet(tm, sekunden, beob)
+    return tm
+
+
+def marsch():
+    """Gemeldet (0.34.58): ohne Gegner "sliden sie komisch in bestimmten
+    Richtungen ... alle zusammen, ohne irgendeine Koordination beim
+    Laufen, laufen alle Single-File hintereinander. Die Front zu bilden
+    machen sie auch, wenn keine Gegner da sind." Gemessen mit 0.34.57: mit
+    sechs Mann 50 bis 94 Prozent der Laufzeit seitwaerts geglitten, mit
+    zehn 47 bis 59, und mit zehn 37 bis 40 Prozent vor dem Anfuehrer.
+    Jetzt 4 bis 7 und 1 bis 7."""
+    print("\n-- Unterwegs ohne Gegner: im Keil hinter dem Anfuehrer, Blick in Laufrichtung, Sicherungshalte")
+    for groesse, seeds in ((6, (1, 2, 3)), (10, (1, 2))):
+        b = Marsch()
+        for seed in seeds:
+            marsch_szene(seed, groesse, 45.0, b).verlassen()
+        pruef("%d Mann: seitwaerts gleiten hoechstens 12 Prozent der Laufzeit" % groesse,
+              b.laufen > 200 and b.gleiten <= 0.12 * b.laufen, "%d von %d" % (b.gleiten, b.laufen))
+        pruef("... vor dem Anfuehrer hoechstens 12 Prozent", b.gesamt > 200 and b.vorn <= 0.12 * b.gesamt,
+              "%d von %d" % (b.vorn, b.gesamt))
+        pruef("... und unterwegs sichert der Trupp (wenigstens einmal je Lauf)", b.halte >= len(seeds), str(b.halte))
+
+
+def grosse_trupps():
+    """Gemeldet (0.34.58): "bei groesseren Trupps funktioniert das
+    Koordinieren ... irgendwie noch nicht so wirklich" - sie klebten an
+    denselben Kisten. Gemessen mit 0.34.57 in genau dieser Szene: 28
+    Prozent der Stellungen dichter als 22 px an einer anderen, die meisten
+    aus dem Feuerschutz beim Bergen, an derselben Hauswand oder in einer
+    Welle. Jetzt 6 bis 17 - die Laeufe streuen (PYTHONHASHSEED), darum die
+    Grenze mit Abstand."""
+    print("\n-- Grosse Trupps im Gefecht: keine zwei Stellungen auf einem Fleck")
+    zahl = {"dicht": 0, "alle": 0}
+    for seed in (1, 2):
+        tm = neu(seed)
+        a, b = W.stelle(tm, random.Random(seed), 480, "")
+        rot = tm.trupp_setzen(a, 0, {"groesse": 10, "team": 0, "fuehrer": "funk", "mischung": "gemischt",
+                                     "leben": 2.0})
+        blau = tm.trupp_setzen(b, 0, {"groesse": 10, "team": 1, "fuehrer": "funk", "mischung": "gemischt",
+                                      "leben": 2.0})
+        tm.trupp_auftrag("angriff", b, 0, {"team": 0})
+        tm.trupp_auftrag("angriff", a, 0, {"team": 1})
+
+        def messen(tm=tm, trupps=(rot, blau)):
+            if int(tm.welt.zeit / DT) % 30:
+                return
+            for t in trupps:
+                if t.front is None:
+                    continue
+                orte = [(m, t.stellung(m)) for m in t.lebende()
+                        if not getattr(m, "am_boden", False) and t.stellung(m) is not None]
+                for m, p in orte:
+                    zahl["alle"] += 1
+                    if any(p.distance_to(q) < 22.0 for x, q in orte if x is not m):
+                        zahl["dicht"] += 1
+
+        laufen(tm, 30.0, messen)
+        tm.verlassen()
+    pruef("Zehn gegen zehn: hoechstens jede fuenfte Stellung dichter als 22 px an einer anderen (vorher 28 Prozent)",
+          zahl["alle"] > 200 and zahl["dicht"] <= 0.20 * zahl["alle"], "%d von %d" % (zahl["dicht"], zahl["alle"]))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
-         planer, bergen_fluessig, drehen, keine_flucht]
+         planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps]
 NUR = sys.argv[1:]
 for teil in TEILE:
     if not NUR or teil.__name__ in NUR:

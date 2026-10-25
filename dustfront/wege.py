@@ -61,21 +61,30 @@ class Feld:
     ob sie das ist, steht erst fest, wenn die Ausbreitung bei ihr war oder
     alles erreicht hat."""
 
-    __slots__ = ("weit", "_ring", "_schritt", "_nachbarn")
+    __slots__ = ("weit", "_ring", "_schritt", "_nachbarn", "_gebiet", "_mein")
 
-    def __init__(self, groesse: int, start: int, nachbarn) -> None:
+    def __init__(self, groesse: int, start: int, nachbarn, gebiet=None) -> None:
         self.weit = [-1] * groesse
         self._nachbarn = nachbarn
+        # Die Gebiete der Ebene (Wegenetz.gebiet): was in einem anderen liegt
+        # - oder in keinem, eine Wand -, erreicht die Ausbreitung nie. Das
+        # steht sofort fest; vorher flutete die Frage danach die ganze Ebene
+        # (seit 0.34.58, gemessen ein Haenger von 36 ms je Feld).
+        self._gebiet = gebiet
         if 0 <= start < groesse:
             self.weit[start] = 0
             self._ring = [start]
+            self._mein = gebiet[start] if gebiet is not None else None
         else:
             self._ring = []
+            self._mein = None
         self._schritt = 0
 
     def __getitem__(self, i: int) -> int:
         w = self.weit[i]
         if w < 0 and self._ring:
+            if self._gebiet is not None and self._gebiet[i] != self._mein:
+                return -1
             return self._bis(i)
         return w
 
@@ -395,7 +404,7 @@ class Wegenetz:
         self._letztes_bild = bild
         b, h = self.breite[ebene], self.hoehe[ebene]
         start = ty * b + tx if 0 <= tx < b and 0 <= ty < h else -1
-        weit = Feld(b * h, start, self._nachbarn(ebene))
+        weit = Feld(b * h, start, self._nachbarn(ebene), self.gebiet[ebene])
         if len(self._zielfelder) >= self._FELDER_ZIEL:
             self._zielfelder.pop(next(iter(self._zielfelder)))
         self._zielfelder[schluessel] = weit

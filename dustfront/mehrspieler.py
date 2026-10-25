@@ -709,6 +709,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     # sie verkriechen sich oder wechseln die Deckung. Die Kampagne schaltet
     # es ein; im Testmodus steht es im Testmenue.
     bot_fliehen = False
+    # Kein Uebermut (seit 0.34.58): wer zuversichtlich ist, kaempft wie ein
+    # Neutraler - der Trupp drueckt nicht ungedeckt nach vorn, keiner setzt
+    # dem Gegner geradewegs nach, und Deckung ist ihm nicht weniger wert.
+    # Gemeldet: die Ueberzahl stellte sich ohne Deckung in einer Linie vor
+    # die Unterlegenen - gegen Bots ging das, gegen einen Spieler nicht.
+    # Angst wirkt weiter. Wie bot_fliehen: die Kampagne kann es einschalten,
+    # im Testmodus steht es im Testmenue.
+    bot_uebermut = False
 
     def __init__(self, app, name: str, gastgeber=None, gast=None,
                  modus: str = K.MODUS_VORGABE, ende_art: str = "zeit",
@@ -1024,6 +1032,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self.welt.schlagknall = self._schlagknall_melden
             self.welt.raketenstart = self._raketenstart_melden
             self.welt.tod = self._tod_melden
+        if not getattr(self.app, "headless", True):
+            # Was das Bild je Ebene einmal rechnet, gleich beim Laden (seit
+            # 0.34.58) - nicht erst beim ersten Blick auf eine andere Ebene,
+            # mitten im Gefecht (gemessen 0,3 bis 0,9 s am Stueck). Ohne
+            # Fenster (Tests) wie bisher beim ersten Zeichnen: Tests bauen
+            # ihre Szenen in die Karte, nachdem sie geladen ist.
+            self.renderer.ebenen_vorbereiten(self.welt)
 
     def _blutfleck(self, pos, ebene: int, radius: float, art: str = "mensch",
                    variante: int = 0) -> None:
@@ -3924,7 +3939,19 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         # bei null anfangen und nicht schon bei der Haelfte stehen.
         self._seit_paket += dt
 
-        for nachricht in self.gast.holen():
+        post = list(self.gast.holen())
+        # Kommen mehrere Weltmeldungen auf einmal - der Gast rechnet gerade
+        # langsam, oder der Gastgeber schickt im Schwall -, klingen ihre
+        # Wirkungen ueber die Zeit verteilt, die seit der letzten Meldung
+        # vergangen ist (seit 0.34.58). Vorher alle im selben Augenblick:
+        # aus einem Feuerstoss wurde ein Knall je Bild.
+        welten = sum(1 for n in post if isinstance(n, dict) and n.get("t") == "welt")
+        abstand = (min(self._seit_paket, K.AUDIO["versatz_max"]) / welten
+                   if welten else 0.0)
+        klaenge = self.app.klaenge
+        basis = klaenge.versatz
+        nr_welt = 0
+        for nachricht in post:
             art = nachricht.get("t")
             if art in ("willkommen", "neustart"):
                 if not self._version_vom_gastgeber(nachricht):
@@ -3957,7 +3984,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                     self.hinweis = "NEUE RUNDE: %s" % K.MODI[self.modus]["name"]
                     self.obere_zeigen = bool(self.app.opt["obere_ebenen"])
             elif art == "welt":
-                self._welt_uebernehmen(nachricht)
+                klaenge.versatz = basis + nr_welt * abstand
+                nr_welt += 1
+                try:
+                    self._welt_uebernehmen(nachricht)
+                finally:
+                    klaenge.versatz = basis
             elif art == "stand":
                 w = nachricht.get("w")
                 if isinstance(w, dict):

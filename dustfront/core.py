@@ -365,7 +365,15 @@ class App:
         plattform.zu_fenster = self.zu_fenster
 
         self.bilder = Bilder(asset_ordner)
-        self.klaenge = Klaenge(asset_ordner)
+        # Mit Fenster die geteilte Werkstatt, die alle Klaenge im Hintergrund
+        # baut (seit 0.34.58) - vorher hielt der erste Schuss jeder Waffe
+        # das Spiel bis zu 380 ms an. Ohne Fenster (Tests, Werkzeuge) eine
+        # eigene, die erst baut, wonach gefragt wird.
+        if headless:
+            self.klaenge = Klaenge(asset_ordner)
+        else:
+            self.klaenge = Klaenge.geteilt(asset_ordner)
+            self.klaenge.vorbauen()
         self.klaenge.lautstaerke_setzen(self.opt["ton_gesamt"] / 100.0,
                                         self.opt["ton_effekte"] / 100.0)
         self.eingabe = Eingabe(self.opt.tastentabelle())
@@ -580,6 +588,7 @@ class App:
             echt = self.uhr.tick(self.fps_grenze) / 1000.0
             self.fps = self.uhr.get_fps()
             echt = min(echt, 0.25)
+            bild_dauer = echt              # wirklich vergangen, ohne Zeitlupe
             if self.zeitlupe > 0.0:
                 self.zeitlupe -= echt
                 echt *= 0.25
@@ -593,15 +602,7 @@ class App:
             if self._konto is not None:
                 self._konto.schritt(echt)
 
-            self._rest += echt
-            schritte = 0
-            while self._rest >= K.FIXED_DT and schritte < K.MAX_SCHRITTE:
-                for szene in self._aktive():
-                    szene.schritt(K.FIXED_DT)
-                self._rest -= K.FIXED_DT
-                schritte += 1
-            if schritte == K.MAX_SCHRITTE:
-                self._rest = 0.0          # aufgelaufene Zeit verwerfen
+            self._rechnen(echt, bild_dauer)
 
             alpha = self._rest / K.FIXED_DT
             self.flaeche.fill(K.C_VOID)
@@ -615,7 +616,42 @@ class App:
             self._fenster_zu()
         self.klaenge.stille()
         if beenden:
+            self.klaenge.werkstatt_anhalten()
             pygame.quit()
+
+    def _rechnen(self, echt: float, bild_dauer: float) -> int:
+        """Die Rechenschritte eines Bildes: so viele feste Schritte, wie in
+        `echt` Spielzeit passen (hoechstens MAX_SCHRITTE). Gibt ihre Zahl
+        zurueck.
+
+        Die Schritte laufen im Block, das Bild zeigt erst ihr Ende. Ihre
+        Klaenge dagegen werden ueber die echte Dauer des Bildes verteilt
+        (`Klaenge.versatz`, seit 0.34.58): der k-te von n Schritten klingt
+        um k/n der Bilddauer spaeter. Vorher erklangen alle zugleich, und
+        bei 10 Bildern je Sekunde wurde aus einem Feuerstoss ein Knall je
+        Bild. Geteilt wird die echte Dauer, nicht die Spielzeit: laeuft das
+        Spiel unter MAX_SCHRITTE in Zeitlupe, klingt es im selben Takt, in
+        dem man es sieht."""
+        self._rest += echt
+        n, rest = 0, self._rest
+        while rest >= K.FIXED_DT and n < K.MAX_SCHRITTE:
+            rest -= K.FIXED_DT
+            n += 1
+        abstand = bild_dauer / n if n else 0.0
+        schritte = 0
+        try:
+            while self._rest >= K.FIXED_DT and schritte < K.MAX_SCHRITTE:
+                self.klaenge.versatz = schritte * abstand
+                for szene in self._aktive():
+                    szene.schritt(K.FIXED_DT)
+                self._rest -= K.FIXED_DT
+                schritte += 1
+        finally:
+            # Was zwischen den Bildern klingt (Menue, Tasten), sofort.
+            self.klaenge.versatz = 0.0
+        if schritte == K.MAX_SCHRITTE:
+            self._rest = 0.0          # aufgelaufene Zeit verwerfen
+        return schritte
 
     def _fenster_zu(self) -> None:
         """Das Fenster wurde geschlossen: aufraeumen, bevor alles weg ist.

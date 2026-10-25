@@ -1431,7 +1431,99 @@ ergibt dann einmal 0,37 und einmal 0,63 Schuss je Sekunde - mit
 demselben Code. Ein Vergleich "vorher gegen nachher" braucht darum
 mehrere Seeds, nicht die genauen Zahlen eines Laufs.
 
-### 11.16 Was noch offen ist
+### 11.16 Nachtrag (0.34.58): Unterwegs wie ein Trupp, Funk, Uebermut
+
+Gemeldet: ohne Gegner "sliden sie komisch in bestimmten Richtungen, auf
+diagonal in eine Richtung, alle zusammen, ohne irgendeine Koordination
+beim Laufen ... Die Front zu bilden machen sie auch, wenn keine Gegner da
+sind" - und es "muss auch gut aussehen, wenn sie gerade kein Ziel zum
+Abschiessen haben". Dazu: "bei groesseren Trupps funktioniert das
+Koordinieren ... noch nicht so wirklich", "nicht einmal gesehen, dass die
+Bots funken", und die Ueberzahl stellt sich ohne Deckung in einer Linie
+auf.
+
+* **Marsch** (`Trupp._marsch`, `_marsch_plaetze`): ohne Kontakt ein Keil
+  hinter dem Anfuehrer. Jede Reihe haengt an seiner Spur (`Trupp.spur`),
+  quer zu der Richtung, in die er dort ging - an einer Ecke biegen die
+  Reihen nacheinander dort ab, wo er abbog. Ein starrer Keil drehte sich
+  um ihn herum, und die Hinteren liefen einen Bogen. Wo ein Platz nicht
+  frei ist (Gaenge, Kisten), geht der Mann auf der Spur, einer hinter dem
+  anderen. Mehr als `marsch_keil`: vier im Keil des Anfuehrers, dahinter
+  kleine Keile zu fuenft, je `gruppe_abstand` auf der Spur. Die Plaetze
+  bleiben; neu verteilt wird nur, wenn einer dazukommt oder fehlt oder der
+  Anfuehrer kehrt macht (`marsch_kehrt`), dann nach dem kuerzesten Weg.
+  Beim Losgehen wartet jeder, bis die Spur seinen Platz erreicht
+  (`marsch_noch`) - sonst war der Platz geraten, und wer hinlief, lief oft
+  eine Schleife.
+* **Folgen** (`GoapHirn._marschieren`): so schnell wie der Anfuehrer und
+  dazu, was zum Platz fehlt (`folgen_weite`); weiter weg mit dem Weg. Kein
+  Stop and Go mehr: im Marsch gilt er bis `marsch_toleranz` als an seinem
+  Platz, und `zur_stelle` folgt dort genauso weich. Wer vor seinem Platz
+  steht, laesst den Anfuehrer vorbei. Geht der Anfuehrer eine Treppe
+  hinauf, folgen sie ihm - vorher lagen ihre Plaetze unten in der Mauer
+  des Hauses, und sie drueckten dagegen.
+* **Blick**: wer mit dem Trupp geht, in die Richtung an seinem Platz, 20
+  Grad zu seiner Seite; wer quer aufschliesst, wohin er geht; steht der
+  Trupp, jeder in seinen Sektor (links, rechts, der Letzte nach hinten).
+  Ein bekannter Gegner geht vor.
+* **Anfuehrer** (`GoapHirn._fuehren`): Patrouillentempo (`marsch_tempo`),
+  Sicherungshalte unterwegs (`halt_abstand`) und am Streifziel
+  (`halt_zeit`), dabei schaut er langsam hin und her. Er wartet nur auf
+  die, die hinter ihrem Platz sind. Streifziele: von fuenf moeglichen das,
+  wo der Trupp am laengsten nicht war (`Trupp.besucht`, `besuch_zelle`,
+  `besuch_alt`) - er sucht die Karte ab.
+* **Entfalten** (`_kontakt_erwartet`): kennt der Trupp Gegner, ist er nah
+  am Angriffsziel oder am Trupp, dem er hilft, oder hat der Anfuehrer in
+  der Naehe etwas gehoert (`entfalten_weite`), die Linie wie vorher;
+  "halten" ebenso. Im Keil in den Gegner zu laufen hiess: beim ersten
+  Schuss stand der ganze Trupp auf einem Fleck.
+* **Grosse Trupps im Gefecht**: an dieselbe Kiste stellt sich kein Zweiter
+  (`_deckung_nah`, `_frei`; beim Feuerschutz fuers Bergen keiner auf
+  denselben Fleck, `fleck`, `fleck_strafe` - weniger als ein Platz, von
+  dem aus er nicht schiessen kann; sonst bleibt das Bergen, wie es ist);
+  die Ziele einer laufenden Welle werden zuerst vergeben, und die Welle
+  zieht in die eigene Bahn statt von dort, wo er gerade klebte.
+  Ausprobiert und verworfen: ein Kamerad an einer Deckung schon ab 34
+  statt 20 px (`deckung_belegt`) - das aenderte am Klumpen nichts, aber
+  der Feuerschutz beim Bergen wurde schwaecher. Gemessen zehn gegen zehn,
+  acht Laeufe mit festem `PYTHONHASHSEED`: dicht beieinander (unter 22 px)
+  24 -> 18 Prozent; Stellungen dichter als 22 px an einer anderen 28 -> 6
+  bis 17 Prozent (`test_verhalten.py grosse_trupps`).
+* **Ein Kamerad ist kein Gegner**: wen die Streuung eines Kameraden traf,
+  der schrieb ihn als Gegner in die Lage des Trupps (seit 0.34.54) - ein
+  Abschnitt schaute dann zum eigenen Mann. Jetzt nur Gegner (`ist_feind`).
+* **Abschnitte**: wer zu welcher Gruppe schaut, bleibt ueber eine Pause
+  gemerkt, in der der Trupp nur eine Gruppe kannte (`_abschnitt_merk`),
+  und einer zu viel darf in seinem Abschnitt bleiben.
+* **Drehen** (`BotHirn`): ab `kehrt_winkel` dreht er sich zurueck, wie er
+  gekommen ist (`drall_zeit`). Bei einer halben Drehung war die Richtung
+  Zufall, und zwei Kehrtwenden hintereinander wurden eine ganze Drehung.
+* **Funk**: der Fakt `funk_sendet` hebt in `bots.txt` Rang und
+  Dringlichkeit der Funkziele, solange einer spricht - vorher wuergte jede
+  andere Aktion den Spruch ab, und im Gefecht kam praktisch keiner durch.
+  Waehrend einer geborgen wird, gilt das nur fuer einen Spruch, der fast
+  durch ist (`funk_fast_durch`, `funk_rest_vorrang`): sonst funkte der
+  Anfuehrer sechs Sekunden, statt den Retter zu decken (gemessen im
+  Feuerschutz-Test). Bricht ihn doch etwas ab, sagt `_funk_abbrechen` es. Durch: Klang
+  `funk_durch`, ein Haken am Funker, drei Ringe gehen aus; abgebrochen: ein
+  rotes Kreuz, ein Ring faellt in sich zusammen (`funk_zeichen`). Die Dauer
+  bleibt 6 s (Wunsch aus 0.34.48).
+* **Uebermut** (`Gefecht.bot_uebermut`, Testmenue BOTS UEBERMUETIG): aus.
+  Ohne ihn zaehlt die Zuversicht im Fakt hoechstens neutral, und kein
+  Trupp geht in "druck".
+
+Die Verhaltens-Tests laufen jetzt wirklich mit festem Zufall: der
+Testmodus wuerfelte die Einstiegszonen der Mannschaften ohne Seed, und ein
+Bot auf Streife geht zur Zone der anderen - dieselbe Feuerschutz-Szene gab
+dann je nach Prozess 1,2 oder 0,2 Schuss je Sekunde. `test_verhalten.neu`
+saet sie mit.
+
+Gemessen ohne Gegner, je drei Laeufe ueber 60 s: seitwaerts gleiten (Blick
+mehr als 60 Grad neben der Laufrichtung) mit sechs Mann 50 bis 94 -> 4 bis
+7 Prozent der Laufzeit, mit zehn 47 bis 59 -> 4 bis 6; vor dem Anfuehrer
+mit zehn 37 bis 40 -> 1 bis 5 Prozent (`test_verhalten.py marsch`).
+
+### 11.17 Was noch offen ist
 
 * Der Funk geht bisher nur zwischen Trupps im Testmodus; im Mehrspieler gibt
   es keine Trupps.

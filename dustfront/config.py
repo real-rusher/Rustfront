@@ -645,6 +645,7 @@ KLANG_NAMEN = (
     "buggy_tuer",           # in den Buggy und wieder heraus (seit 0.34.9)
     "buggy_aufprall",       # der Buggy rumst gegen etwas
     "buggy_rutschen",       # die Reifen quietschen, wenn er rutscht (seit 0.34.16)
+    "funk_durch",           # ein Funkspruch ist durch (seit 0.34.58)
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -679,6 +680,11 @@ AUDIO = dict(
     weit=1150.0,
     leiseste=0.06,            # darunter wird nichts mehr abgespielt
     fremde_ebene=0.45,
+    # Klaenge eines Bildes zeitrichtig (seit 0.34.58): jeder Rechenschritt
+    # klingt um seinen Anteil am Bild spaeter, statt alle auf einmal.
+    versatz_ab=0.004,         # kuerzer wird nicht verzoegert (s)
+    versatz_max=0.25,         # laenger auch nicht - so lang darf ein Bild hoechstens sein
+    kanaele=64,               # so viele Klaenge zugleich; dann weicht der aelteste
 )
 
 # Mass der Uebersichtstafel, die `--vorlagen` neben die Einzelbilder legt.
@@ -1138,6 +1144,8 @@ BOTS = dict(
     blick_gefahr_nah=30.0,    # naeher als so viel: nicht zur Gefahr schauen, der Winkel springt sonst (px, 0.34.55)
     lauf_blick_ruhe=0.4,      # so lange muss er in eine Richtung gehen, bevor er dorthin schaut (s, 0.34.55)
     lauf_blick_winkel=35.0,   # ... und so viel darf sie dabei schwanken (Grad)
+    kehrt_winkel=150.0,       # weiter herum dreht er sich zurueck, wie er gekommen ist (Grad, 0.34.58)
+    drall_zeit=3.0,           # ... gemerkt wird, wohin er sich drehte, so lange (s)
     blick_linie_weit=110.0,   # ohne Kontakt in Richtung der Linie schauen, solange er nicht weiter davon weg geht (Grad)
     rauch_laufen=3.0,         # so lange geht er hoechstens zu einer Stelle, von der er Rauch werfen kann (s, 0.34.55)
     rauch_pause=8.0,          # ... findet er keine, laesst er den Rauch so lange (s)
@@ -1269,6 +1277,10 @@ TESTMODUS = dict(
     zeitfaktoren=(0.1, 0.25, 0.5, 1.0, 2.0, 4.0),
     einzelschritt=12,         # so viele Rechenschritte macht EIN SCHRITT (1/10 s)
     hoechstens_schritte=8,    # mehr Rechenschritte je Bild auch im Zeitraffer nicht
+    # Testmenue BILDRATE (seit 0.34.58): das Spiel kuenstlich bremsen, um zu
+    # hoeren, ob die Klaenge auch bei wenigen Bildern im Takt kommen. 0 = wie
+    # in den Einstellungen.
+    bildraten=(0, 30, 15, 8, 4),
     anzahlen=(1, 2, 3, 4, 5, 8, 10, 15, 20, 30, 50),
     streuungen=(0, 16, 32, 64, 128, 256),
     leben=(1.0, 0.5, 0.25, 0.1, 2.0, 5.0, 10.0),
@@ -1285,6 +1297,7 @@ TESTMODUS = dict(
     welle_start=11.0,         # hier beginnt er (knapp ausserhalb der Figur)
     welle_weite=40.0,         # so weit, dann ist er weg
     empfang_zeigen=0.6,       # so lange laeuft beim Empfaenger ein Ring nach innen (s)
+    funk_blitz=0.6,           # so lange laeufen die Ringe, wenn ein Spruch durch ist oder abbricht (s, 0.34.58)
     welle_farben=((255, 72, 56), (226, 44, 40), (168, 26, 30)),   # innen hell, aussen tief
     welle_striche=6,          # so viele Striche hat ein Ring (seit 0.34.48)
     welle_dreh=1.6,           # so schnell drehen sie sich (Bogenmass je Sekunde)
@@ -1382,6 +1395,30 @@ TRUPP = dict(
     linie_ruhe=25.0,          # ... ihre Richtung folgt erst ab so viel Grad Unterschied (0.34.55)
     linie_dreh=20.0,          # ... und dann hoechstens so viel Grad je Takt
     linie_warten=2.6,         # x Abstand: so weit zurueck, und der Anfuehrer wartet
+    # Unterwegs ohne Kontakt (seit 0.34.58): ein Keil hinter dem Anfuehrer,
+    # wo Platz ist, sonst einer hinter dem anderen auf seiner Spur. Vorher
+    # eine breite Linie vor ihm - eine Front ohne Gegner, und wer seitlich
+    # zu seinem Platz lief und dabei nach aussen schaute, glitt (gemeldet).
+    marsch_abstand=32.0,      # im Keil: so weit hinter dem Vordermann je Reihe
+    marsch_breite=28.0,       # ... und so weit zur Seite je Reihe
+    spur_abstand=30.0,        # wo es eng ist: so weit hintereinander auf der Spur des Anfuehrers
+    marsch_keil=5,            # so viele gehen hoechstens im Keil des Anfuehrers; sind es mehr, ...
+    gruppe_abstand=110.0,     # ... folgen weitere kleine Keile (je bis zu 5) so weit dahinter auf seiner Spur
+    marsch_kehrt=100.0,       # dreht der Anfuehrer um mehr Grad um, werden die Plaetze neu verteilt
+    entfalten_weite=520.0,    # so nah am Angriffsziel (oder an einem Verdacht) entfaltet er sich zur Linie
+    fleck=22.0,               # naeher: zwei saessen beim Feuerschutz fuers Bergen auf einem Fleck (px, 0.34.58)
+    fleck_strafe=100.0,       # ... das kostet so viel Weg - weniger als ein Platz ohne Schuss (VERWUNDET["schutz_ohne_schuss"])
+    spur_laenge=48,           # so viele Punkte seiner Spur werden gemerkt (je Takt einer)
+    marsch_tempo=0.75,        # so schnell geht der Anfuehrer - die anderen holen auf, ohne zu rennen
+    marsch_dreh=15.0,         # die Marschrichtung dreht hoechstens so viel Grad je Takt
+    marsch_mindest=15.0,      # langsamer (px/s) gilt der Anfuehrer als stehend: die Richtung bleibt
+    marsch_toleranz=60.0,     # so weit darf einer im Marsch von seinem Platz sein, ohne hinzurennen
+    marsch_warten=95.0,       # ist einer weiter zurueck, geht der Anfuehrer langsamer
+    folgen_weite=40.0,        # naeher am Platz: weich mitgehen statt hinlaufen (px)
+    halt_zeit=(2.5, 4.5),     # am Ziel sichert der Trupp so lange, bevor er weiterzieht (s)
+    halt_abstand=(14.0, 26.0),  # ... und unterwegs alle so viele Sekunden einmal
+    besuch_zelle=10,          # die Karte absuchen: in Feldern von so vielen Kacheln ...
+    besuch_alt=90.0,          # ... und wo der Trupp so lange nicht war, lohnt es wieder (s)
     stellung_weite=28.0,      # so nah an seiner Stellung: er steht, wo er soll
     # Seit 0.34.43: steht eine Stellung im Freien, sucht der Trupp so weit
     # herum Deckung gegen den Gegner ("Bots blieben im Freien stehen").
@@ -1423,6 +1460,8 @@ TRUPP = dict(
     funk_weg_zeit=8.0,        # laenger geht er nicht, dann funkt er, wo er ist
     funk_stoer=150.0,         # sieht er einen Gegner so nah (oder schiesst einer auf ihn), bricht der Spruch ab
     funk_gedaechtnis=12,      # so viele Sprueche zeigt der Testmodus
+    funk_zeichen=1.4,         # so lange zeigt der Funker, ob sein Spruch durch ist oder abbrach (s, seit 0.34.58)
+    funk_rest_vorrang=2.0,    # waehrend einer geborgen wird, geht ein Spruch nur vor, wenn er so nah am Ende ist (s, 0.34.58)
     melden_pause=8.0,         # so lange nach einer Meldung keine neue (s)
     hilferuf_gilt=20.0,       # so lange gilt ein Hilferuf (s)
     helfen_bis_feinde=2,      # mit hoechstens so vielen eigenen Gegnern hilft man

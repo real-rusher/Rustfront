@@ -46,6 +46,8 @@
 #   hilfe_gerufen        der Trupp hat eben um Hilfe gefunkt
 #   lage_neu             es gibt Neues zu melden
 #   antwort_offen        ein anderer rief um Hilfe, wir haben zugesagt, aber noch nicht geantwortet
+#   funk_sendet          er spricht gerade in sein Funkgeraet (seit 0.34.58, nicht schon auf dem Weg dorthin)
+#   funk_fast_durch      ... und ist fast fertig (K.TRUPP["funk_rest_vorrang"])
 #   hilfe_zugesagt       wir sind unterwegs zu einem anderen Trupp
 #   rauch_da             er hat eine Rauchgranate
 #   trupp_igel           der Trupp igelt sich ein (von allen Seiten bedroht, seit 0.34.41)
@@ -141,8 +143,13 @@ will: hilfe_gerufen
 # Gemeldet: "wenn das eine Team sagt, wir sind in der Unterzahl ... dann
 # sollen sie nach Hilfe rufen." Nur wer fuehrt und ein Funkgeraet hat -
 # ohne das ist es einfach kein Ziel, das er erreichen kann.
-rang: hat_funk * ist_fuehrer * trupp_unterlegen
-dringlich: 92 * hat_funk * ist_fuehrer * trupp_unterlegen
+# Spricht er schon, Rang 2 (seit 0.34.58): vorher wuergte jedes andere Ziel
+# den Spruch ab, und im Gefecht kam praktisch keiner durch. Eine Granate
+# geht weiter vor, Panik und hoechster Stress auch - und waehrend einer
+# geborgen wird, Rauch und Feuerschutz, ausser der Spruch ist fast durch
+# (sonst funkte der Anfuehrer sechs Sekunden, statt den Retter zu decken).
+rang: hat_funk * ist_fuehrer * trupp_unterlegen * (1 + funk_sendet * min(1, 1 - bergung_halten + funk_fast_durch))
+dringlich: (92 + 40 * funk_sendet) * hat_funk * ist_fuehrer * trupp_unterlegen
 bindung: 3
 info: Der Anfuehrer funkt um Hilfe, wenn sein Trupp unterlegen ist.
 
@@ -150,13 +157,15 @@ info: Der Anfuehrer funkt um Hilfe, wenn sein Trupp unterlegen ist.
 will: geantwortet
 # Ueber dem Kampf (80): ein "Verstanden, kommen!" ist kurz, und der andere
 # wartet darauf.
-dringlich: 88 * hat_funk * ist_fuehrer * antwort_offen
+rang: 2 * funk_sendet * min(1, 1 - bergung_halten + funk_fast_durch)
+dringlich: (88 + 40 * funk_sendet) * hat_funk * ist_fuehrer * antwort_offen
 bindung: 3
 info: Ein anderer rief, wir kommen - das sagt er ihm auch.
 
 [ziel lage_melden]
 will: gemeldet
-dringlich: 46 * hat_funk * ist_fuehrer * lage_neu * (1 - feind_sichtbar * 0.5)
+rang: 2 * funk_sendet * min(1, 1 - bergung_halten + funk_fast_durch)
+dringlich: (46 + 40 * funk_sendet) * hat_funk * ist_fuehrer * lage_neu * (1 - feind_sichtbar * 0.5 * (1 - funk_sendet))
 bindung: 3
 info: Hat sich viel geaendert, meldet der Anfuehrer es den anderen Trupps.
 

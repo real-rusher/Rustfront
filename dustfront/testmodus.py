@@ -378,6 +378,12 @@ class Testmodus(Gefecht):
         # Flucht in Panik (seit 0.34.56): in Runden aus, wie im Spiel; zum
         # Ansehen, wie es in der Kampagne waere, einschaltbar.
         self.bot_fliehen = bool(z.get("bot_fliehen", False))
+        # Uebermut (seit 0.34.58): wie die Flucht in Runden aus, zum
+        # Vergleichen einschaltbar.
+        self.bot_uebermut = bool(z.get("bot_uebermut", False))
+        # Gebremste Bildrate (seit 0.34.58), zum Hoeren: kommen die Schuesse
+        # eines Feuerstosses auch bei 8 Bildern je Sekunde einzeln?
+        self.bildrate_nr = int(z.get("bildrate_nr", 0)) % len(K.TESTMODUS["bildraten"])
         self._sp_werte = dict(z.get("sp_werte", {}))
         self._sp_nr = int(z.get("sp_nr", 0))
         self._welt_schritte = 1
@@ -417,6 +423,8 @@ class Testmodus(Gefecht):
         self._geist.ebene = 0
         self._geist.unverwundbar = 0.0
         self.hud = _TestAnzeige(self)
+        if self.bildrate_nr:
+            self.bildrate_anwenden()        # ueber einen Kartenwechsel hinweg
         self.melde("TESTMODUS - ZIFFERNBLOCK STEUERT, ESC FÜR DAS MENÜ")
 
     # ── Was ein Test nicht tut ─────────────────────────────────────
@@ -461,6 +469,17 @@ class Testmodus(Gefecht):
         if self.beobachter:
             return False
         return super()._verbuendet(k)
+
+    def _rufen(self, k) -> None:
+        """Als Beobachter ruft keiner (seit 0.34.58): kein Ausrufezeichen,
+        kein Zucken, kein Ruf. Gemeldet: bei allen Teams zeigten die
+        Liegenden es die ganze Zeit an und spielten den Ton - fuer einen,
+        der niemandem aufhelfen kann. Steuert man eine Figur, rufen sie wie
+        im Spiel. Die Bots selbst hoeren den Ruf nicht; er ist nur fuer
+        Menschen."""
+        if self.beobachter:
+            return
+        super()._rufen(k)
 
     def _darf_helfen(self, helfer, liegender) -> bool:
         """Dasselbe fuer den Hinweis ueber dem Kopf: der fragt hier, nicht
@@ -1219,7 +1238,9 @@ class Testmodus(Gefecht):
     # 0.34.29 lief das Menue unten aus seinem Kasten).
     # Hoeher und weiter oben (seit 0.34.56): mit BOTS FLIEHEN IN PANIK passten
     # 27 Zeilen nicht mehr, und der Hilfetext unten lag auf der letzten.
-    MENUE = pygame.Rect(150, 14, 340, 334)
+    # Seit 0.34.58 oben hoeher und unten laenger: mit BOTS UEBERMUETIG und
+    # BILDRATE stand die letzte Zeile sonst auf dem Rahmen.
+    MENUE = pygame.Rect(150, 4, 340, 354)
 
     def _menue_zeilen(self) -> list:
         """(Schluessel, Beschriftung, Wert) - was im Testmenue steht."""
@@ -1252,6 +1273,8 @@ class Testmodus(Gefecht):
             ("sprint", "BOTS SPRINTEN", "AN" if self.bot_sprint else "AUS"),
             ("nebel", "NEBEL (SICHTWEITE)", "AN" if self.nebel else "AUS - ALLES SICHTBAR"),
             ("fliehen", "BOTS FLIEHEN IN PANIK", "AN - WIE KAMPAGNE" if self.bot_fliehen else "AUS - WIE IN RUNDEN"),
+            ("uebermut", "BOTS ÜBERMÜTIG", "AN - WIE KAMPAGNE" if self.bot_uebermut else "AUS - WIE IN RUNDEN"),
+            ("bildrate", "BILDRATE (KLÄNGE PRÜFEN)", self._bildrate_text()),
             ("einstellungen", "EINSTELLUNGEN", ""),
             ("hauptmenue", "ZUM HAUPTMENÜ", ""),
         ]
@@ -1278,7 +1301,18 @@ class Testmodus(Gefecht):
                     ruckeln_beobachter=self.ruckeln_beobachter, sauber=self.sauber,
                     entf_toetet=self.entf_toetet, verwundete=self.verwundete,
                     bot_sprint=self.bot_sprint, nebel=self.nebel, bot_fliehen=self.bot_fliehen,
+                    bot_uebermut=self.bot_uebermut, bildrate_nr=self.bildrate_nr,
                     sp_werte=self._sp_werte, sp_nr=self._sp_nr)
+
+    def _bildrate_text(self) -> str:
+        wert = K.TESTMODUS["bildraten"][self.bildrate_nr]
+        return "%d BILDER/S" % wert if wert else "WIE EINGESTELLT"
+
+    def bildrate_anwenden(self) -> None:
+        """Die Bremse aus dem Testmenue an die Spielschleife geben - oder,
+        auf WIE EINGESTELLT, die Grenze aus den Einstellungen zurueck."""
+        wert = K.TESTMODUS["bildraten"][self.bildrate_nr]
+        self.app.fps_grenze = wert or int(self.app.opt["bildrate"] or 0)
 
     def menue_wirken(self, schluessel: str, schritt: int = 1, ausloesen: bool = False) -> None:
         if schluessel == "karte":
@@ -1333,6 +1367,11 @@ class Testmodus(Gefecht):
             self.nebel = not self.nebel
         elif schluessel == "fliehen":
             self.bot_fliehen = not self.bot_fliehen
+        elif schluessel == "uebermut":
+            self.bot_uebermut = not self.bot_uebermut
+        elif schluessel == "bildrate":
+            self.bildrate_nr = (self.bildrate_nr + schritt) % len(K.TESTMODUS["bildraten"])
+            self.bildrate_anwenden()
         elif schluessel == "einstellungen" and ausloesen:
             from .menues import Einstellungen
             self.menue_offen = False
@@ -1409,8 +1448,25 @@ class Testmodus(Gefecht):
             return None
         return super().sicht_welt()
 
+    def welt_anteil(self, alpha: float) -> float:
+        """Wie weit die Welt zwischen ihrem letzten Schritt und dem naechsten
+        steht - fuer das Zeichnen zwischen `vorher` und `pos`.
+
+        Der Bildanteil der Spielschleife gilt nur, wenn die Welt jeden
+        Schritt mitrechnet. Steht die Zeit, rechnet sie gar nicht, und mit
+        dem springenden Bildanteil zuckten die Figuren zwischen ihren
+        beiden letzten Lagen hin und her (gemeldet, seit 0.34.58 behoben).
+        Unter Zeitfaktor 1 rechnet sie nur jeden soundsovielten Schritt:
+        dann zaehlt, wie weit der naechste Weltschritt angespart ist."""
+        if self.zeit_stopp:
+            return 1.0
+        f = self.zeitfaktor
+        if f < 1.0:
+            return max(0.0, min(1.0, (self._konto + alpha * K.FIXED_DT * f) / K.FIXED_DT))
+        return alpha
+
     def zeichnen(self, ziel, alpha: float) -> None:
-        super().zeichnen(ziel, alpha)
+        super().zeichnen(ziel, self.welt_anteil(alpha))
         if self.sauber:
             # Nur die Welt und die Aktionen. Spawner und Menue bleiben
             # bedienbar, wenn man sie oeffnet (Esc, Taste 4). Wer funkt,
@@ -1420,12 +1476,14 @@ class Testmodus(Gefecht):
                 self._trupps_zeichnen(ziel)
             self._aktionen_zeichnen(ziel)
             self._zurufe_zeichnen(ziel)
+            self._funk_zeichen_zeichnen(ziel)
             if self.spawner_offen:
                 self._spawner_zeichnen(ziel)
             if self.menue_offen:
                 self._testmenue_zeichnen(ziel)
             return
         self._zurufe_zeichnen(ziel)
+        self._funk_zeichen_zeichnen(ziel)
         if self.info:
             self._info_zeichnen(ziel)
             self._trupps_zeichnen(ziel)
@@ -1760,8 +1818,47 @@ class Testmodus(Gefecht):
             if 0.0 <= alter < t["empfang_zeigen"] and f is not None and f.lebt and f.ebene == ebene:
                 r = t["welle_weite"] - weg * alter / t["empfang_zeigen"]
                 self._welle_ring(flaeche, f.pos - ecke, r)
+        # Wie der Spruch ausging (seit 0.34.58, gemeldet: man sah nie, ob er
+        # ankam): durch - drei tuerkise Ringe schnell nach aussen; abgebrochen
+        # - der Ring faellt grau und zerrissen in sich zusammen.
+        for k in self._bots():
+            ende = getattr(k.hirn, "funk_ende", None)
+            if ende is None or not k.lebt or k.ebene != ebene:
+                continue
+            anteil = (jetzt - ende[0]) / t["funk_blitz"]
+            if not 0.0 <= anteil < 1.0:
+                continue
+            if ende[1] == "durch":
+                for i in range(3):
+                    r = t["welle_start"] + (anteil * 1.5 - i * 0.25) * weg
+                    self._welle_ring(flaeche, k.pos - ecke, r, K.C_TEAL)
+            else:
+                self._welle_ring(flaeche, k.pos - ecke, t["welle_weite"] - anteil * weg,
+                                 K.C_MUTED, striche=3)
 
-    def _welle_ring(self, flaeche, p, radius: float) -> bool:
+    def _funk_zeichen_zeichnen(self, ziel) -> None:
+        """Ueber dem Kopf des Funkers, eine Weile nach seinem Spruch (seit
+        0.34.58): ein tuerkiser Haken, wenn er durch ist, ein rotes Kreuz,
+        wenn er abbrach. Links neben der Sprechblase der Zurufe."""
+        kam = self.kamera
+        jetzt = self.welt.zeit
+        for k in self._bots():
+            ende = getattr(k.hirn, "funk_ende", None)
+            if ende is None or not k.lebt or k.ebene != self.blick:
+                continue
+            if not 0.0 <= jetzt - ende[0] < K.TRUPP["funk_zeichen"] or not self.im_licht(k.pos):
+                continue
+            p = kam.zu_bild(k.pos)
+            x, y = int(p.x) - 17, int(p.y) - 23
+            pygame.draw.rect(ziel, K.C_WAND_KANTE, (x - 1, y - 1, 11, 11))
+            pygame.draw.rect(ziel, (16, 11, 8), (x, y, 9, 9))
+            if ende[1] == "durch":
+                pygame.draw.lines(ziel, K.C_TEAL, False, [(x + 1, y + 4), (x + 3, y + 7), (x + 7, y + 1)], 2)
+            else:
+                pygame.draw.line(ziel, K.C_RED, (x + 1, y + 1), (x + 7, y + 7), 2)
+                pygame.draw.line(ziel, K.C_RED, (x + 7, y + 1), (x + 1, y + 7), 2)
+
+    def _welle_ring(self, flaeche, p, radius: float, farbe=None, striche: int | None = None) -> bool:
         """Ein Ring der Funkwelle in Weltpixeln, scharf wie die Figuren, mit
         einer dunklen Kante. Seit 0.34.48 nur in Rot (hell, dann tiefer) und
         gestrichelt, die Striche drehen sich - etwas abstrakt, damit man ihn
@@ -1772,9 +1869,10 @@ class Testmodus(Gefecht):
         if not (t["welle_start"] <= radius <= t["welle_weite"]):
             return False
         anteil = (radius - t["welle_start"]) / max(1.0, t["welle_weite"] - t["welle_start"])
-        farbe = t["welle_farben"][min(len(t["welle_farben"]) - 1, int(anteil * len(t["welle_farben"])))]
+        if farbe is None:
+            farbe = t["welle_farben"][min(len(t["welle_farben"]) - 1, int(anteil * len(t["welle_farben"])))]
         r = int(radius)
-        n = t["welle_striche"]
+        n = striche or t["welle_striche"]
         dreh = self.welt.zeit * t["welle_dreh"]
         for mitte, f, breite in (((int(p.x), int(p.y) + 1), K.C_VOID, 1), ((int(p.x), int(p.y)), farbe, 1)):
             feld = pygame.Rect(mitte[0] - r, mitte[1] - r, 2 * r, 2 * r)
@@ -1943,8 +2041,14 @@ class Testmodus(Gefecht):
             rolle = ("ANFÜHRER" if t.fuehrer is d else
                      "FLANKE" if d.nummer in t.flanker else
                      "WELLE" if d.nummer in t.welle else "MANN")
-            zeile("TRUPP %s: %s, %s, ZUV %d, LAGE %d%s" % (
-                t.name, rolle, t.zustand.upper(), t.zuversicht, len(t.lage),
+            # Im Marsch (seit 0.34.58): ob der Trupp gerade sichert und ob
+            # dieser Mann noch wartet, bis die Spur seinen Platz erreicht.
+            marsch = ""
+            if getattr(t, "marsch", False):
+                marsch = ", MARSCH" + (" (SICHERT)" if t.halt_bis > self.welt.zeit else "") \
+                    + (" (WARTET)" if d.nummer in t.marsch_noch else "")
+            zeile("TRUPP %s: %s, %s, ZUV %d, LAGE %d%s%s" % (
+                t.name, rolle, t.zustand.upper(), t.zuversicht, len(t.lage), marsch,
                 ", HILFE > %s" % t.hilfe["fuer"].name if t.hilfe else ""), K.C_TEAL)
         zeile("PLAN: %s" % (" > ".join(a.name for a in gehirn.plan) or "-"), K.C_TEAL)
         y += 3

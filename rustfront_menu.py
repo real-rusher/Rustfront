@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.34.57"
+VERSION = "0.34.58"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -2086,10 +2086,25 @@ def run_splash(app) -> str:
     return rustfront_splash.play(app)
 
 
+def _klaenge_vorbauen() -> None:
+    """Die Klaenge des Spiels schon im Menue bauen lassen (seit 0.34.58).
+
+    Bis dahin legte das Spiel jeden Klang beim ersten Abspielen an, und der
+    erste Schuss jeder Waffe hielt es bis zu 380 ms an. Erst nach dem
+    Splash, damit dessen Bild ruhig laeuft; das Spiel bekommt dieselbe
+    Werkstatt mit allem, was bis dahin fertig ist."""
+    try:
+        from dustfront.audio import im_hintergrund_bauen
+        im_hintergrund_bauen()
+    except Exception as err:        # ohne Spiel daneben: dann eben nicht
+        print("Klaenge nicht vorgebaut:", err)
+
+
 def main() -> int:
     app = build_app()
     run_splash(app)
     pygame.event.clear()
+    _klaenge_vorbauen()
     while True:
         result = app.run()
         if result["action"] == "quit":
@@ -2101,6 +2116,11 @@ def main() -> int:
         app.goto("main")
         app.audio.play("back")
     app.audio.shutdown()
+    try:
+        from dustfront.audio import alle_anhalten
+        alle_anhalten()
+    except Exception:               # noqa: BLE001
+        pass
     pygame.quit()
     print("Menue-Ergebnis:", result)
     return 0

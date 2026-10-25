@@ -19,6 +19,8 @@ from __future__ import annotations
 import array
 import math
 import random
+import threading
+import time
 from pathlib import Path
 
 import pygame
@@ -116,15 +118,22 @@ def platzhalter_klang(name):
 # ══════════════════════════════════════════════════════════════════
 
 def _rauschen(dur, vol, lp0, lp1, decay=2.4, seed=0, hp=False):
-    """Gefiltertes Rauschen. Der Knall eines Schusses ist im Kern genau das."""
+    """Gefiltertes Rauschen. Der Knall eines Schusses ist im Kern genau das.
+
+    Seit 0.34.58 mit lokalen Namen und `-1 + 2 * random()` statt
+    `uniform(-1, 1)` - das ist genau deren Rechnung, also dieselben
+    Proben, nur ohne zwei Aufrufe je Probe."""
     n = max(1, int(RATE * dur))
-    r = random.Random(seed)
+    zufall = random.Random(seed).random
+    exp = math.exp
+    minus_zwei_pi = -2 * math.pi
+    spanne = lp1 - lp0
     out = [0.0] * n
     y = prev = 0.0
     for i in range(n):
         p = i / n
-        k = 1 - math.exp(-2 * math.pi * (lp0 + (lp1 - lp0) * p) / RATE)
-        y += k * (r.uniform(-1.0, 1.0) - y)
+        k = 1 - exp(minus_zwei_pi * (lp0 + spanne * p) / RATE)
+        y += k * (-1.0 + 2.0 * zufall() - y)
         s = (y - prev) if hp else y
         prev = y
         out[i] = s * (1 - p) ** decay * vol
@@ -137,10 +146,11 @@ def _schlag(f0, f1, dur, vol, decay=3.0):
     out = [0.0] * n
     ph = 0.0
     tp = 2 * math.pi
+    sin = math.sin
     for i in range(n):
         p = i / n
         ph += tp * (f0 * (1 - p) + f1 * p) / RATE
-        out[i] = math.sin(ph) * (1 - p) ** decay * vol
+        out[i] = sin(ph) * (1 - p) ** decay * vol
     return out
 
 
@@ -148,8 +158,7 @@ def _mischen(*teile):
     n = max(len(t) for t in teile)
     out = [0.0] * n
     for t in teile:
-        for i, s in enumerate(t):
-            out[i] += s
+        out[:len(t)] = [a + s for a, s in zip(out, t)]
     return out
 
 
@@ -162,14 +171,20 @@ def _zu_sound(proben, gain=1.0):
     aus = min(n // 3, int(0.008 * RATE))          # kurzer Ausklang, sonst knackt es
     for i in range(aus):
         proben[n - 1 - i] *= i / aus
-    spitze = max(1e-6, max(abs(s) for s in proben))
+    spitze = max(1e-6, max(map(abs, proben)))
     norm = min(1.0, 0.94 / spitze) if spitze > 0.94 else 1.0
-    buf = array.array("h")
-    for s in proben:
-        v = int(max(-1.0, min(1.0, s * norm * gain)) * 31000)
-        buf.append(v)
-        if kanaele > 1:
-            buf.append(v)
+    # Eine Liste in einem Zug statt je Probe max, min und append (seit
+    # 0.34.58, dieselben Werte): das war gemessen die Haelfte der Zeit,
+    # die das Anlegen aller Klaenge kostete.
+    werte = array.array("h", [
+        int((-1.0 if (x := s * norm * gain) < -1.0 else (1.0 if x > 1.0 else x)) * 31000)
+        for s in proben])
+    if kanaele > 1:
+        buf = array.array("h", bytes(2 * kanaele * n))
+        for c in range(kanaele):
+            buf[c::kanaele] = werte
+    else:
+        buf = werte
     try:
         return pygame.mixer.Sound(buffer=buf.tobytes())
     except pygame.error:
@@ -428,6 +443,20 @@ def _erfasst(seed=0):
                     + _schlag(2080, 2080, 0.06, 0.32, 2.0))
 
 
+@platzhalter_klang("funk_durch")
+def _funk_durch(seed=0):
+    """Ein Funkspruch ist durch (seit 0.34.58): das kurze Rauschen beim
+    Loslassen der Sprechtaste, dann zwei tiefe Quittungstoene.
+
+    Tiefer und weicher als "erfasst", damit man beide nicht verwechselt -
+    der eine sagt "schiess", der andere nur "angekommen"."""
+    rauschen = _rauschen(0.07, 0.22, 2600, 1400, 1.2, seed, hp=True)
+    pause = [0.0] * int(RATE * 0.09)
+    return _mischen(rauschen,
+                    pause + _schlag(880, 880, 0.07, 0.3, 1.6),
+                    pause + [0.0] * int(RATE * 0.11) + _schlag(660, 660, 0.09, 0.3, 1.6))
+
+
 @platzhalter_klang("blend")
 def _blend(seed=0):
     """Der Knall einer Blendgranate: hart, hell, ohne Tiefe.
@@ -681,6 +710,27 @@ def dumpf_machen(sound, grenze: float = 620.0, gain: float = 0.72):
 # Registratur
 # ══════════════════════════════════════════════════════════════════
 
+# Je Asset-Ordner die eine Werkstatt, die das Spiel mit Fenster benutzt
+# (Klaenge.geteilt). Das Hauptmenue startet fuer jedes Spiel ein neues App;
+# ohne das hier baute jeder Spielstart alle Klaenge von vorn.
+_GETEILT: dict = {}
+
+
+def im_hintergrund_bauen() -> None:
+    """Fuer das Hauptmenue: die Klaenge des Spiels schon bauen lassen,
+    waehrend man im Menue steht (seit 0.34.58). Dieselbe Werkstatt
+    bekommt dann das Spiel."""
+    from .pfade import spielordner
+    p = spielordner() / K.ASSETS["ordner"]
+    Klaenge.geteilt(p if p.is_dir() else None).vorbauen()
+
+
+def alle_anhalten() -> None:
+    """Vor pygame.quit: jede geteilte Werkstatt anhalten."""
+    for k in list(_GETEILT.values()):
+        k.werkstatt_anhalten()
+
+
 class Klaenge:
     FASSUNGEN = K.ASSETS["platzhalter_fassungen"]
 
@@ -698,16 +748,49 @@ class Klaenge:
         # Wie dumpf die Welt gerade klingt, 0 bis 1. Gesetzt von der
         # Spielszene aus `Befinden.dumpf`; hier wird nur danach gehandelt.
         self.daempfung = 0.0
+        # Um wie viele Sekunden ein Klang, der jetzt kommt, spaeter
+        # erklingen soll (seit 0.34.58). Die Spielschleife setzt das vor
+        # jedem Rechenschritt eines Bildes (App.laufen): die Schritte laufen
+        # im Block, und ohne Versatz klangen alle Schuesse eines Bildes im
+        # selben Augenblick - bei niedriger Bildrate ein Knall je Bild.
+        self.versatz = 0.0
+        # Die Werkstatt (seit 0.34.58): ein Faden baut alle Klaenge vorab,
+        # statt dass der erste Schuss einer Waffe das Spiel anhaelt. `_baut`
+        # haelt je Name, was gerade gebaut wird - wer denselben Namen
+        # braucht, wartet darauf, statt ihn ein zweites Mal zu bauen.
+        self._schloss = threading.Lock()
+        self._baut: dict[str, threading.Event] = {}
+        self._faden: threading.Thread | None = None
+        self._halt = False
         try:
             pygame.mixer.init(frequency=RATE, size=-16, channels=2, buffer=512)
             self.ok = pygame.mixer.get_init() is not None
         except pygame.error:
             self.ok = False
+        self._format = pygame.mixer.get_init() if self.ok else None
         if self.ok:
             try:
-                pygame.mixer.set_num_channels(24)
+                pygame.mixer.set_num_channels(K.AUDIO["kanaele"])
             except pygame.error:
                 pass
+
+    @classmethod
+    def geteilt(cls, ordner: Path | None = None) -> "Klaenge":
+        """Die Werkstatt fuer diesen Asset-Ordner - einmal je Programmlauf,
+        solange der Mischer im selben Format laeuft. Was sie schon gebaut
+        hat, bleibt fuer das naechste Spiel."""
+        schluessel = str(ordner)
+        k = _GETEILT.get(schluessel)
+        if k is None or not k.ok or pygame.mixer.get_init() != k._format:
+            k = _GETEILT[schluessel] = cls(ordner)
+        else:
+            try:
+                pygame.mixer.set_num_channels(K.AUDIO["kanaele"])
+            except pygame.error:
+                pass
+            k.versatz = 0.0
+            k.daempfung = 0.0
+        return k
 
     # ---- Suchen und Bauen -------------------------------------------
     def _dateien(self, name: str) -> list[pygame.mixer.Sound]:
@@ -796,10 +879,87 @@ class Klaenge:
         if not self.ok:
             return []
         hit = self._cache.get(name)
-        if hit is None:
+        if hit is not None:
+            return hit
+        with self._schloss:
+            hit = self._cache.get(name)
+            if hit is not None:
+                return hit
+            fertig = self._baut.get(name)
+            selbst = fertig is None
+            if selbst:
+                fertig = self._baut[name] = threading.Event()
+        if not selbst:
+            # Die Werkstatt baut ihn gerade: auf genau diesen warten.
+            fertig.wait()
+            return self._cache.get(name) or []
+        try:
             hit = self._bauen(name)
             self._cache[name] = hit
+        finally:
+            # Auch wenn das Bauen scheitert: wer wartet, wartet nicht ewig,
+            # und der naechste Versuch baut neu.
+            with self._schloss:
+                self._baut.pop(name, None)
+            fertig.set()
         return hit
+
+    # ---- Werkstatt ---------------------------------------------------
+    def vorbauen(self, namen=None) -> None:
+        """Alle Klaenge im Hintergrund bauen, dann ihre dumpfen Fassungen.
+
+        Einen Klang anzulegen kostet gemessen 50 bis 380 ms - die Platzhalter
+        werden in Python Probe fuer Probe gerechnet, die Aufnahmen
+        entpackt und zugeschnitten. Bis 0.34.57 geschah das beim ersten
+        Abspielen, mitten im Gefecht: der erste Schuss jeder Waffe hielt
+        das Spiel an. Alles zusammen sind rund 2,3 s und 1,4 s fuer die
+        dumpfen Fassungen; im Faden faellt das ins Hauptmenue. Die Schuesse
+        zuerst - die braucht ein Gefecht am fruehesten."""
+        if not self.ok or self._faden is not None:
+            return
+        if namen is None:
+            namen = sorted(K.KLANG_NAMEN, key=lambda n: (
+                not (n.startswith("schuss") or n.startswith("lmg")), n))
+        namen = list(namen)
+
+        def arbeiten() -> None:
+            try:
+                for name in namen:
+                    if self._halt:
+                        return
+                    self.klang(name)
+                    time.sleep(0.001)        # dem Spiel Luft lassen
+                for name in namen:
+                    if self._halt:
+                        return
+                    if name in K.NIE_DUMPF or name in self._dumpf_cache:
+                        continue
+                    fassungen = self.klang(name)
+                    self._dumpf_cache[name] = ([dumpf_machen(fassungen[0])]
+                                               if fassungen else [])
+                    time.sleep(0.001)
+            except Exception:                 # noqa: BLE001
+                # Der Mischer ist schon zu, oder eine Datei ist kaputt: dann
+                # hoert die Werkstatt auf, und das Spiel baut selbst, wenn es
+                # den Klang braucht - mit demselben Fehler wie bisher.
+                return
+
+        self._faden = threading.Thread(target=arbeiten, name="klangwerkstatt",
+                                       daemon=True)
+        self._faden.start()
+
+    def werkstatt_warten(self, hoechstens: float | None = None) -> bool:
+        """Bis die Werkstatt fertig ist (Tests). True, wenn sie fertig ist."""
+        if self._faden is None:
+            return True
+        self._faden.join(hoechstens)
+        return not self._faden.is_alive()
+
+    def werkstatt_anhalten(self) -> None:
+        """Vor pygame.quit: die Werkstatt nach ihrem Klang aufhoeren lassen."""
+        self._halt = True
+        if self._faden is not None:
+            self._faden.join(1.0)
 
     def dumpf(self, name: str) -> list | None:
         """Dieselben Fassungen, nur gefiltert - **wenn sie schon da sind**.
@@ -878,26 +1038,53 @@ class Klaenge:
             return
         i = self.rnd.randrange(len(fassungen))
         d = 0.0 if name in K.NIE_DUMPF else self.daempfung
+        if d < 0.995:
+            self._abspielen(fassungen[i], laut * (1.0 - d))
+        if d > 0.005:
+            gefiltert = self.dumpf(name)
+            if gefiltert is None:
+                # Noch nicht gefiltert: dann eben nur leiser. Das ist
+                # schlechter, aber es ist da, und es ist nie ein Loch.
+                if d >= 0.995:
+                    self._abspielen(fassungen[i], laut * 0.45)
+            elif gefiltert:
+                self._abspielen(gefiltert[i % len(gefiltert)], laut * d)
+
+    def _abspielen(self, s, laut: float):
+        """Einen Klang auf einem eigenen Kanal abspielen, um `versatz` spaeter.
+
+        Die Lautstaerke gehoert dem Kanal, nicht dem Klang (seit 0.34.58):
+        `Sound.set_volume` gilt fuer jede laufende Kopie, und ein ferner
+        Schuss drehte den nahen, der noch nachhallte, mit leiser. Ist kein
+        Kanal frei, nimmt er den, der am laengsten spielt - dessen Nachhall
+        ist am leisesten -, statt den neuen Klang zu verschlucken.
+        Gibt den Kanal zurueck, oder None."""
         try:
-            if d < 0.995:
-                s = fassungen[i]
-                s.set_volume(laut * (1.0 - d))
-                s.play()
-            if d > 0.005:
-                gefiltert = self.dumpf(name)
-                if gefiltert is None:
-                    # Noch nicht gefiltert: dann eben nur leiser. Das ist
-                    # schlechter, aber es ist da, und es ist nie ein Loch.
-                    if d >= 0.995:
-                        s = fassungen[i]
-                        s.set_volume(laut * 0.45)
-                        s.play()
-                elif gefiltert:
-                    g = gefiltert[i % len(gefiltert)]
-                    g.set_volume(laut * d)
-                    g.play()
+            if self.versatz >= K.AUDIO["versatz_ab"]:
+                s = self._verzoegert(s, self.versatz)
+            kanal = pygame.mixer.find_channel(True)
+            if kanal is None:
+                return None
+            kanal.set_volume(laut)
+            kanal.play(s)
+            return kanal
         except pygame.error:
-            pass
+            return None
+
+    def _verzoegert(self, s, sekunden: float):
+        """Derselbe Klang mit so viel Stille davor, wie er warten soll.
+
+        Kein Faden und keine Uhr: der Mischer spielt die Stille einfach mit
+        ab, auf die Probe genau - auch wenn das Spiel selbst gerade haengt.
+        Kostet je Klang eine Kopie seiner Rohdaten (ein Schuss rund 20 bis
+        100 KB, weit unter einer Millisekunde)."""
+        init = pygame.mixer.get_init()
+        if not init or init[1] >= 0:
+            return s                           # Stille ist nur bei Vorzeichen 0
+        rate, form, kanaele = init
+        rahmen = kanaele * (abs(form) // 8)
+        stille = bytes(int(min(sekunden, K.AUDIO["versatz_max"]) * rate) * rahmen)
+        return pygame.mixer.Sound(buffer=stille + s.get_raw())
 
     def ton_spielen(self, ton, lautstaerke: float = 1.0) -> None:
         """Einen fertigen Ton abspielen, der nicht aus der Tabelle kommt.
@@ -913,11 +1100,7 @@ class Klaenge:
         laut *= 1.0 - 0.55 * self.daempfung
         if laut <= 0.0:
             return
-        try:
-            ton.set_volume(laut)
-            ton.play()
-        except pygame.error:
-            pass
+        self._abspielen(ton, laut)
 
     def stille(self) -> None:
         if self.ok:

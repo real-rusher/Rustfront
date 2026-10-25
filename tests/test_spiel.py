@@ -10870,8 +10870,16 @@ def _zustand95(stufe, auftrag="frei", wichtig=False):
     return _al95.zustand
 
 
-pruef("Trupp besorgt: Rueckzug in Wellen; zuversichtlich: Druck; neutral: Feuerkampf",
-      _zustand95(1) == "rueckzug" and _zustand95(3) == "druck" and _zustand95(2) == "feuerkampf", "")
+# Druck nur mit BOTS UEBERMUETIG (seit 0.34.58, gemeldet: die Ueberzahl
+# verliess die Deckung und stellte sich in einer Linie auf) - sonst bleibt
+# auch ein zuversichtlicher Trupp im Feuerkampf.
+_tm.bot_uebermut = True
+_ueber95 = _zustand95(3)
+_tm.bot_uebermut = False
+pruef("Trupp besorgt: Rueckzug in Wellen; zuversichtlich: Druck (nur uebermuetig); neutral: Feuerkampf",
+      _zustand95(1) == "rueckzug" and _ueber95 == "druck" and _zustand95(2) == "feuerkampf", _ueber95)
+pruef("... ohne Uebermut (Grundeinstellung) bleibt ein zuversichtlicher Trupp im Feuerkampf",
+      _zustand95(3) == "feuerkampf", _al95.zustand)
 pruef("... eine wichtige Stellung wird nicht aufgegeben, auch besorgt nicht",
       _zustand95(1, "halten", True) == "halten", _al95.zustand)
 _zustand95(1)
@@ -12585,6 +12593,367 @@ app.fenster = pygame.display.set_mode(_groesse113)
 app.viewport_rechnen()
 pruef("Ausgabe ins Fenster ohne Zwischenflaeche: dasselbe Bild wie vorher, Rand gefuellt, auch nach set_mode",
       all(_aus113), str(_aus113))
+
+# 0.34.58: "Das mit den geraeuschen bitte beheben, und dafuer sorgen das auch
+# bei extrem niedriger framrate die sounds alle korrekt abgespielt werden,
+# also das nicht nur ein sound pro bild kommt."
+print("\n-- Klaenge: vorgebaut, zeitrichtig, je auf eigenem Kanal (0.34.58)")
+from dustfront import audio as _AU114
+_kl114 = app.klaenge
+
+
+class _Takt114:
+    """Eine Szene, die nur mitschreibt, um wie viel ihre Klaenge versetzt waeren."""
+
+    def __init__(self):
+        self.v = []
+
+    def schritt(self, dt):
+        self.v.append(round(_kl114.versatz, 4))
+
+
+_sz114 = _Takt114()
+app._aktive = lambda: [_sz114]
+_rest114 = app._rest
+app._rest = 0.0
+_n10_114 = app._rechnen(0.1, 0.1)
+_v10_114 = list(_sz114.v)
+_sz114.v.clear()
+app._rest = 0.0
+_n60_114 = app._rechnen(1.0 / 60, 1.0 / 60)
+_v60_114 = list(_sz114.v)
+del app._aktive
+app._rest = _rest114
+_soll10_114 = [round(i_ * 0.1 / _n10_114, 4) for i_ in range(_n10_114)]
+pruef("Bei 10 Bildern je Sekunde klingen die Schritte eines Bildes ueber das Bild verteilt, nicht zugleich",
+      _n10_114 == K.MAX_SCHRITTE and _v10_114 == _soll10_114 and len(set(_v10_114)) == _n10_114
+      and _kl114.versatz == 0.0, str(_v10_114))
+pruef("... bei 60 Bildern je Sekunde die zwei Schritte eine Hundertzwanzigstel auseinander",
+      _v60_114 == [0.0, round(1.0 / 120, 4)], str(_v60_114))
+if _kl114.ok:
+    _gespielt114 = []
+
+    class _Kanal114:
+        def set_volume(self, v):
+            self.v = v
+
+        def play(self, s):
+            _gespielt114.append((self.v, s))
+
+    _finde114 = pygame.mixer.find_channel
+    pygame.mixer.find_channel = lambda force=False: _Kanal114()
+    _s114 = _kl114.klang("schuss_sturm")[0]
+    try:
+        _kl114.versatz = 0.05
+        _kl114._abspielen(_s114, 0.4)
+        _kl114.versatz = 0.0
+        _kl114._abspielen(_s114, 0.7)
+        _kl114._abspielen(_s114, 0.2)
+    finally:
+        pygame.mixer.find_channel = _finde114
+        _kl114.versatz = 0.0
+    (_l1_114, _v1_114), (_l2_114, _v2_114), (_l3_114, _v3_114) = _gespielt114
+    _rate114, _form114, _kan114 = pygame.mixer.get_init()
+    _still114 = int(0.05 * _rate114) * _kan114 * (abs(_form114) // 8)
+    pruef("Um 50 ms versetzt: derselbe Klang mit genau 50 ms Stille davor - der Mischer haelt den Takt",
+          _v1_114 is not _s114 and _v1_114.get_raw()[_still114:] == _s114.get_raw()
+          and not any(_v1_114.get_raw()[:_still114]) and _l1_114 == 0.4,
+          "%.3f s statt %.3f s" % (_v1_114.get_length(), _s114.get_length()))
+    pruef("... ohne Versatz der Klang selbst; die Lautstaerke gehoert dem Kanal, nicht dem Klang "
+          "(ein ferner Schuss dreht den nahen nicht mehr leiser)",
+          _v2_114 is _s114 and _v3_114 is _s114 and _l2_114 == 0.7 and _l3_114 == 0.2
+          and _s114.get_volume() == 1.0, "%s" % _s114.get_volume())
+    pygame.mixer.set_num_channels(2)
+    try:
+        _lang114 = _kl114.klang("blend_pfeifen")[0]
+        _kl114._abspielen(_lang114, 0.05)
+        _kl114._abspielen(_lang114, 0.05)
+        _voll114 = pygame.mixer.find_channel() is None      # wirklich beide belegt
+        _k3_114 = _kl114._abspielen(_s114, 0.05)
+        _ok3_114 = _voll114 and _k3_114 is not None and _k3_114.get_sound() is _s114
+    finally:
+        pygame.mixer.stop()
+        pygame.mixer.set_num_channels(K.AUDIO["kanaele"])
+    pruef("Sind alle Kanaele belegt, weicht der aelteste - der neue Klang faellt nicht aus", _ok3_114, "")
+    _kw114 = _AU114.Klaenge(None)
+    _gebaut114 = []
+    _bauen114 = _kw114._bauen
+
+    def _zaehlt114(n_):
+        _gebaut114.append(n_)
+        return _bauen114(n_)
+
+    _kw114._bauen = _zaehlt114
+    _namen114 = ["schuss_sturm", "tod", "menue"]
+    _kw114.vorbauen(_namen114)
+    _zugleich114 = [len(_kw114.klang(n_)) for n_ in _namen114]     # das Spiel fragt mitten hinein
+    _fertig114 = _kw114.werkstatt_warten(120)
+    pruef("Die Werkstatt baut im Hintergrund jeden Klang genau einmal - auch wenn das Spiel ihn zugleich braucht",
+          _fertig114 and sorted(_gebaut114) == sorted(_namen114) and all(_zugleich114), str(_gebaut114))
+    pruef("... danach die dumpfen Fassungen, nur nicht fuer das Menue",
+          set(_kw114._dumpf_cache) == {"schuss_sturm", "tod"}, str(sorted(_kw114._dumpf_cache)))
+    _g1_114 = _AU114.Klaenge.geteilt(None)
+    _g1_114.versatz, _g1_114.daempfung = 0.3, 0.5
+    _g2_114 = _AU114.Klaenge.geteilt(None)
+    pruef("Mit Fenster bekommt jedes Spiel dieselbe Werkstatt (schon im Hauptmenue angestossen), frisch eingestellt",
+          _g1_114 is _g2_114 and _g2_114.versatz == 0.0 and _g2_114.daempfung == 0.0
+          and app.klaenge is not _g2_114, "")
+    _AU114._GETEILT.clear()
+# Beim Gast: mehrere Weltmeldungen auf einmal klingen ueber die Zeit verteilt.
+_w114, _g114 = gefechtspaar("team")
+_post114 = []
+for _ in range(3):
+    _w114._wirkung = [["k", -99999.0, -99999.0, 0, 1.0, "reload"]]
+    _post114.append(json.loads(json.dumps(_w114._weltmeldung())))
+_gehoert114 = []
+app.klaenge.spielen = lambda n_, l_=1.0: _gehoert114.append((n_, round(app.klaenge.versatz, 4)))
+_g114.gast.holen = lambda: list(_post114)
+_g114._seit_paket = 0.06 - K.FIXED_DT
+try:
+    _g114.schritt(K.FIXED_DT)
+finally:
+    del app.klaenge.spielen
+    del _g114.gast.holen
+_nachlad114 = [v_ for n_, v_ in _gehoert114 if n_ == "reload"]
+pruef("Drei Weltmeldungen auf einmal beim Gast: ihre Klaenge kommen 20 ms auseinander statt zugleich",
+      _nachlad114 == [0.0, 0.02, 0.04] and app.klaenge.versatz == 0.0, str(_gehoert114))
+_w114.verlassen()
+_g114.verlassen()
+# Testmodus: die Bildrate bremsen, um es zu hoeren.
+_grenze114 = app.fps_grenze
+_tm = _TM87.Testmodus(app, karte="staubtal")
+pruef("Testmenue: BILDRATE (KLAENGE PRUEFEN), am Anfang wie eingestellt",
+      any(z_[0] == "bildrate" and z_[2] == "WIE EINGESTELLT" for z_ in _tm._menue_zeilen()), "")
+_tm.menue_wirken("bildrate")
+_b1_114 = app.fps_grenze
+_z114 = _tm.zustand()
+_tm.verlassen()
+app.fps_grenze = _grenze114
+_tm = _TM87.Testmodus(app, karte="staubtal", zustand=_z114)
+_b2_114 = app.fps_grenze
+for _ in range(len(K.TESTMODUS["bildraten"]) - 1):
+    _tm.menue_wirken("bildrate")
+pruef("... ENTER bremst auf %d Bilder je Sekunde, ueber einen Kartenwechsel hinweg, und rundum wieder wie eingestellt"
+      % K.TESTMODUS["bildraten"][1],
+      _b1_114 == _b2_114 == K.TESTMODUS["bildraten"][1] and _tm.bildrate_nr == 0
+      and app.fps_grenze == int(app.opt["bildrate"] or 0), "%s %s %s" % (_b1_114, _b2_114, app.fps_grenze))
+_tm.verlassen()
+app.fps_grenze = _grenze114
+
+
+print("\n-- Trupps unterwegs, grosse Trupps, Funk, Uebermut, Testmodus (0.34.58)")
+from dustfront import bot_goap as _BG115
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_tm._bot_rnd.seed(115)
+_tm.wiedereinstieg = False
+_fl115 = None
+for s_ in range(115, 160):
+    _fl115 = _freie_flaeche86(_tm.welt, random.Random(s_), 20, 12)
+    if _fl115 is not None:
+        break
+_tx115, _ty115 = _fl115
+
+
+def _v115(x_, y_):
+    return pygame.Vector2((_tx115 + x_ + 0.5) * K.TILE, (_ty115 + y_ + 0.5) * K.TILE)
+
+
+# Gemeldet: ohne Gegner glitten sie schraeg in eine Richtung, liefen im
+# Gaensemarsch und bildeten eine Front, wo kein Feind war.
+_t115 = _tm.trupp_setzen(_v115(12, 7), 0, {"groesse": 6, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+_gleiten115 = [0, 0]
+for i_ in range(int(10.0 / _D87)):
+    _tm.schritt(_D87)
+    if i_ * _D87 > 4.0 and i_ % 6 == 0:
+        for m_ in _t115.lebende():
+            if m_.tempo.length() > 20.0:
+                _gleiten115[1] += 1
+                _w_ = abs((pygame.Vector2(1, 0).rotate(m_.winkel).angle_to(m_.tempo) + 180.0) % 360.0 - 180.0)
+                _gleiten115[0] += _w_ > 60.0
+_f115 = _t115.fuehrer
+_r115 = pygame.Vector2(_t115.marsch_richtung or (1, 0))
+_andere115 = [m_ for m_ in _t115.lebende() if m_ is not _f115]
+_hinter115 = [round((_t115.stellung(m_) - _f115.pos).dot(_r115)) for m_ in _andere115]
+pruef("Ohne Gegner geht ein Trupp im Marsch: keine Front, die Plaetze hinter dem Anfuehrer",
+      _t115.marsch and _t115.front is None and all(h_ < 10 for h_ in _hinter115), str(_hinter115))
+_quer115 = [(_t115.stellung(m_) - _f115.pos).dot(pygame.Vector2(-_r115.y, _r115.x)) for m_ in _andere115]
+pruef("... im Keil, nicht alle in einer Reihe hintereinander",
+      max(_quer115) - min(_quer115) > 2 * K.TRUPP["marsch_breite"], str([round(q_) for q_ in _quer115]))
+pruef("... und wer geht, schaut, wohin er geht (seitwaerts gleiten hoechstens 15 Prozent)",
+      _gleiten115[1] > 50 and _gleiten115[0] <= 0.15 * _gleiten115[1], str(_gleiten115))
+pruef("... der Anfuehrer geht im Patrouillentempo, langsamer als er koennte",
+      _f115.tempo.length() <= K.SPIELER["tempo"] * K.TRUPP["marsch_tempo"] + 2.0, "%.0f px/s" % _f115.tempo.length())
+# Sichern: unterwegs haelt der Trupp, die anderen schauen zur Seite und nach hinten.
+_t115.naechster_halt = _tm.welt.zeit
+for _ in range(int(1.5 / _D87)):
+    _tm.schritt(_D87)
+_seiten115 = sorted(_t115.marsch_seite.get(m_.nummer) for m_ in _andere115)
+pruef("Unterwegs sichert der Trupp ab und zu: der Anfuehrer steht, jeder schaut in seinen Sektor (links, rechts, hinten)",
+      _t115.halt_bis > _tm.welt.zeit and _f115.tempo.length() < 5.0
+      and -1 in _seiten115 and 1 in _seiten115 and 0 in _seiten115, str(_seiten115))
+# Kehrt: neu aufstellen statt den Keil um ihn herumzuschwenken.
+_t115.marsch_richtung = pygame.Vector2(1, 0)
+_t115._kehrt = False
+_alt_tempo115 = pygame.Vector2(_f115.tempo)
+_f115.tempo.update(-60.0, 0.0)
+_neu115 = _t115._marsch_richtung_fuehren(_f115)
+_f115.tempo.update(_alt_tempo115)
+pruef("... macht der Anfuehrer kehrt, steht die Richtung gleich, und die Plaetze werden neu verteilt",
+      _neu115.x < -0.99 and _t115._kehrt, str(_neu115))
+# Grosse Trupps: kleine Keile hintereinander, kein Keil von 300 Pixeln.
+_pl115 = _t115._marsch_plaetze(_f115, pygame.Vector2(1, 0), 9)
+_breit115 = max(p_[0].distance_to(p_[3]) for p_ in _pl115)
+_pl5_115 = _t115._marsch_plaetze(_f115, pygame.Vector2(1, 0), 5)
+pruef("Zehn Mann: vier im Keil des Anfuehrers, dahinter kleine Keile - keiner weiter als zwei Reihen zur Seite",
+      len(_pl115) == 9 and _breit115 <= 2 * K.TRUPP["marsch_breite"] + 0.5
+      and max(p_[0].distance_to(p_[3]) for p_ in _pl5_115) > 2 * K.TRUPP["marsch_breite"],
+      "%.0f px" % _breit115)
+# Entfalten: nah am Angriffsziel die Linie, eine Stellung halten ebenso.
+_tm.trupp_auftrag("angriff", _f115.pos + _r115 * 300.0, 0, {"team": 0})
+_t115._takt = 0.0
+_t115.schritt(_D87)
+_linie115 = not _t115.marsch
+_tm.trupp_auftrag("halten", _f115.pos, 0, {"team": 0})
+_t115._takt = 0.0
+_t115.schritt(_D87)
+pruef("Nah am Angriffsziel entfaltet sich der Trupp zur Linie; wer eine Stellung haelt, steht in der Linie",
+      _linie115 and not _t115.marsch, "")
+_tm.trupp_auftrag("frei", _f115.pos, 0, {"team": 0})
+_tm.alles_weg()
+
+# Grosse Trupps im Gefecht: an dieselbe Kiste stellt sich kein Zweiter, und
+# ein Landeplatz in einer Mauer wird nicht zweimal vergeben.
+_t115 = _tm.trupp_setzen(_v115(16, 7), 0, {"groesse": 3, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+_m1_115, _m2_115 = [m_ for m_ in _t115.lebende() if m_ is not _t115.fuehrer][:2]
+for y_ in (6, 7, 8):
+    _tm.welt.ebene(0).setzen(_tx115 + 8, _ty115 + y_, K.KISTE)
+_tm.welt._wege = None
+_feind115 = _v115(1, 7)
+_p2_115 = _v115(9, 7) + pygame.Vector2(0, 20)
+# Der Erste hat schon genau den Fleck, an den die Kiste den Zweiten zoege.
+from dustfront.trupp import an_deckung as _an_deckung115
+_q1_115 = _an_deckung115(_tm.welt, _p2_115, _m2_115.radius, 0, _feind115)
+_t115.stellungen_vorher = {}
+_t115.stellungen = {_m1_115.nummer: pygame.Vector2(_q1_115)}
+_q2_115 = _t115._deckung_nah(_p2_115, _m2_115, _feind115)
+pruef("Zwei Bahnen an derselben Kiste: der Zweite rueckt an eine andere gedeckte Stelle, nicht auf den Fleck des Ersten",
+      _q2_115.distance_to(_q1_115) >= K.TRUPP["bahn_min"] * 0.5 - 0.5
+      and _t115.gedeckt_hier(_q2_115, 0, _feind115), "%s %s" % (_q1_115, _q2_115))
+_tm.welt.ebene(0).setzen(_tx115 + 4, _ty115 + 3, K.WAND)
+_mauer115 = _v115(4, 3)
+_platz115 = pygame.Vector2(_tm.welt.landeplatz(_mauer115, _m1_115.radius + 2, 0))
+_t115.stellungen = {_m1_115.nummer: _platz115}
+_x115 = _t115._frei(_mauer115, _m2_115)
+pruef("... und liegen zwei Plaetze in derselben Mauer, landen sie nicht auf demselben Fleck",
+      _x115.distance_to(_platz115) >= K.TRUPP["bahn_min"] * 0.5 - 0.5
+      and _tm.welt.frei(_x115, _m2_115.radius + 2, 0, True), "%s %s" % (_platz115, _x115))
+# Ein Kamerad ist kein Gegner, auch wenn seine Streuung trifft.
+_t115.lage = {}
+_m1_115.zuletzt_von = _m2_115
+_m1_115.hirn._getroffen()
+_puppe115 = _tm.puppe_setzen(_v115(2, 2), 0, {"team": 1, "leben": 10.0})
+_m2_115.zuletzt_von = _puppe115
+_m2_115.hirn._getroffen()
+pruef("Trifft die Streuung eines Kameraden, steht er nicht als Gegner in der Lage des Trupps - ein Gegner schon",
+      _m2_115 not in _t115.lage and _m2_115 not in _m1_115.hirn.beschossen_von and _puppe115 in _t115.lage,
+      str([w_.name for w_ in _t115.lage]))
+_tm.alles_weg()
+
+# Kehrtwende: zurueck, wie er gekommen ist, und ohne Pendeln ans Ziel.
+_b115 = _tm.bot_setzen(_v115(12, 7), 0, {"team": 0, "hirn": "goap"})
+_h115 = _b115.hirn
+_ziel115 = _b115.pos + pygame.Vector2(-120, 0).rotate(-4.0)       # fast genau hinter ihm
+_h115._entscheiden = lambda dt_, ein_: (pygame.Vector2(0, 0), pygame.Vector2(_ziel115), False, False)
+_h115.blick = 0.0
+_h115._drall = 300.0                    # eben hat er sich weit nach rechts gedreht ...
+_h115._kehrt = 0.0
+_blicke115 = []
+for _ in range(int(1.2 / _D87)):
+    _h115.eingabe(_D87)
+    _blicke115.append(_h115.blick)
+_rest115 = abs((math.degrees(math.atan2(_ziel115.y - _b115.pos.y, _ziel115.x - _b115.pos.x))
+                - _h115.blick + 180.0) % 360.0 - 180.0)
+pruef("Kehrtwende: er dreht zurueck, wie er gekommen ist (nicht den kuerzeren Weg weiter), und kommt ohne Pendeln an",
+      _blicke115[5] < 0.0 and _rest115 < 3.0 and all(b_ - a_ <= 0.01 for a_, b_ in zip(_blicke115, _blicke115[1:])),
+      "%.1f Grad Rest, %s" % (_rest115, [round(b_) for b_ in _blicke115[::20]]))
+del _h115._entscheiden
+_tm.alles_weg()
+
+# Funk: der Fakt funk_sendet, das Zeichen am Funker, der Klang.
+pruef("Funk: der Klang FUNK_DURCH ist da, und bots.txt kennt den Fakt funk_sendet",
+      "funk_durch" in K.KLANG_NAMEN and len(app.klaenge.klang("funk_durch")) > 0
+      and "funk_sendet" in open(os.path.join(os.path.dirname(os.path.abspath(K.__file__)), "..", "wesen", "bots.txt"),
+                                encoding="utf-8").read(), "")
+_t115 = _tm.trupp_setzen(_v115(12, 7), 0, {"groesse": 3, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+_fu115 = _t115.fuehrer
+_hf115 = _fu115.hirn
+_hf115.funk_laeuft = dict(art="hilfe", dauer=1.0, phase="senden", ort=None, weg_bis=0.0, text="",
+                          anfang=_tm.welt.zeit, bis=_tm.welt.zeit + 1.0, leben=_fu115.leben)
+_fk115 = _hf115._trupp_fakten()
+_hf115._funk_abbrechen()
+_ab115 = _hf115.funk_ende
+_hf115.funk_laeuft = dict(art="hilfe", dauer=0.0, phase="senden", ort=None, weg_bis=0.0, text="",
+                          anfang=_tm.welt.zeit, bis=_tm.welt.zeit, leben=_fu115.leben)
+_klaenge115 = []
+_alt_klang115 = _tm.welt.klang
+_tm.welt.klang = lambda n_, *a_, **k_: _klaenge115.append(n_)
+try:
+    _erg115 = _hf115._funken_tun("hilfe")
+finally:
+    _tm.welt.klang = _alt_klang115
+pruef("... wer spricht, weiss es (funk_sendet); bricht der Spruch ab, zeigt der Funker es; kommt er durch, mit Klang",
+      _fk115["funk_sendet"] and _ab115 is not None and _ab115[1] == "abgebrochen"
+      and _hf115.funk_ende[1] == "durch" and "funk_durch" in _klaenge115 and _erg115[-1] == "fertig",
+      "%s %s %s" % (_ab115, _hf115.funk_ende, _klaenge115))
+_tm.alles_weg()
+
+# Uebermut: aus wie Fliehen, im Testmenue einzuschalten.
+_z115 = [z_ for z_ in _tm._menue_zeilen() if z_[0] == "uebermut"]
+_b115 = _tm.bot_setzen(_v115(12, 7), 0, {"team": 0, "hirn": "goap"})
+_b115.hirn.innen.stufe = 4
+_aus115 = _b115.hirn._zuversicht_wert()
+_tm.menue_wirken("uebermut")
+_an115 = _b115.hirn._zuversicht_wert()
+_zz115 = _tm.zustand()
+_tm.menue_wirken("uebermut")
+pruef("Testmenue BOTS UEBERMUETIG: aus, bis man es einschaltet; aus zaehlt die Zuversicht hoechstens neutral",
+      len(_z115) == 1 and "AUS" in _z115[0][2] and _aus115 == 0.5 and _an115 == 1.0
+      and _zz115.get("bot_uebermut") is True and not _tm.bot_uebermut, "%s %s %s" % (_z115, _aus115, _an115))
+_tm.alles_weg()
+
+# ZEIT STEHT: Lebende zittern nicht, und als Beobachter ruft kein Liegender.
+_tm.zeit_stopp = True
+_st115 = _tm.welt_anteil(0.37)
+_tm.zeit_stopp = False
+pruef("ZEIT STEHT: das Bild steht auf dem letzten Stand (kein Hin und Her zwischen zwei Staenden)",
+      _st115 == 1.0 and abs(_tm.welt_anteil(0.37) - 0.37) < 1e-9, str(_st115))
+_tm.verwundete_setzen(True)
+_lieg115 = _tm.bot_setzen(_v115(12, 7), 0, {"team": 1, "hirn": "goap"})
+_tm.toeten(_lieg115)
+_lieg115.ruf_sperre = 0.0
+_klaenge115 = []
+_tm.welt.klang = lambda n_, *a_, **k_: _klaenge115.append(n_)
+try:
+    _tm.beobachter = True
+    _tm._rufen(_lieg115)
+    _still115 = (list(_klaenge115), _lieg115.ruf_zeigen)
+    _tm.beobachter = False
+    _tm._rufen(_lieg115)
+finally:
+    del _tm.welt.klang
+    _tm.beobachter = True
+pruef("Als Beobachter ruft kein Liegender (kein Ruf, kein Ausrufezeichen); steuert man eine Figur, ruft er",
+      getattr(_lieg115, "am_boden", False) and _still115[0] == [] and not _still115[1] > 0
+      and "ruf" in _klaenge115 and _lieg115.ruf_zeigen > 0, "%s %s" % (_still115, _klaenge115))
+_tm.verlassen()
+
+# Jeder Trupp in seinem Takt: nicht alle im selben Bild.
+_tm = _TM87.Testmodus(app, karte="staubtal")
+_takte115 = [round(_tm.trupp_setzen(_v115(4 + 6 * i_, 7), 0, {"groesse": 2, "team": i_ % 2})._takt, 4)
+             for i_ in range(3)]
+pruef("Mehrere Trupps denken nicht im selben Bild (kurze Einbrueche auf 10 Bilder je Sekunde)",
+      len(set(_takte115)) == 3, str(_takte115))
+_tm.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")
