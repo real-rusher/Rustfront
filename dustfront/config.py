@@ -2710,6 +2710,56 @@ WAFFEN_HAND = {
                        aufbau="koffer"),
 }
 
+# Die Waffen aus dem Waffenpaket (seit 0.34.61, `dustfront_waffen`, sechs
+# Runden mit dem Besitzer abgestimmt). Gezeichnet in art_waffen.py. Jede
+# bekommt eine Figur, die sie haelt (auch je Mannschaft und je Skin), und
+# ein Zeichen fuer die Hotbar - auch die, die noch nicht spielbar sind:
+# was davon schon schiesst, steht in WAFFEN. Die Hand zeichnet das Paket
+# selbst (aufbau "paket"), darum stehen hier keine Masse, nur der Name
+# (aus dem Paket; die drei Fraktionswaffen nach ihrer Fraktion).
+PAKET_HAND = {
+    "revolver": "REVOLVER", "zwillinge": "ZWILLINGE", "mp": "MASCHINENPISTOLE",
+    "bolzer": "BOLZENSCHUSSGERÄT", "praezision": "PRÄZISIONSGEWEHR",
+    "unterhebel": "UNTERHEBELGEWEHR", "nagler": "NAGLER", "doppelflinte": "DOPPELFLINTE",
+    "autoschrot": "AUTOSCHROT", "panzerbuechse": "PANZERBÜCHSE", "minigun": "MINIGUN",
+    "granatwerfer": "GRANATWERFER", "einwegwerfer": "EINWEG-RAKETENWERFER",
+    "raketenbuendel": "RAKETENBÜNDEL",
+    "spule": "SPULENGEWEHR", "kettenblitz": "KETTENBLITZ", "spiegellaser": "SPIEGELLASER",
+    "kugelblitz": "KUGELBLITZ", "flammenwerfer": "FLAMMENWERFER",
+    "gas": "GASGRANATE", "kuller": "KULLER", "haftladung": "HAFTLADUNG", "emp": "EMP-GRANATE",
+    "knaller": "KNALLER", "wurfmesser": "WURFMESSER", "schneeball": "SCHNEEBALL",
+    "hammer": "VORSCHLAGHAMMER", "speer": "SPEER", "kettensaege": "KETTENSÄGE",
+    "schockstab": "SCHOCKSTAB", "schlagring": "SCHLAGRING",
+    "sprengfalle": "SPRENGFALLE", "kraehenfuss": "KRÄHENFÜSSE", "geschuetz": "SELBSTSCHUSSANLAGE",
+    "kanister": "BENZINKANISTER", "sandsack": "SANDSACKWAND", "stacheldraht": "STACHELDRAHT",
+    "fernglas": "FERNGLAS", "spaehdrohne": "SPÄHDROHNE", "horcher": "HORCHPOSTEN",
+    "sanitasche": "SANITASCHE", "munbeutel": "MUNITIONSKISTE",
+    "auf_daempfer": "SCHALLDÄMPFER", "auf_fernrohr": "FERNROHR", "auf_trommel": "TROMMELMAGAZIN",
+    "auf_zweibein": "ZWEIBEIN", "auf_laser": "LASER", "auf_unterlauf": "UNTERLAUF-GRANATWERFER",
+    "goldene": "GOLDENE PISTOLE", "fraktion_k": "KOLONNE", "fraktion_c": "CHOR",
+    "fraktion_w": "FREIE WERFTEN",
+}
+# Zeichen fuer die Hotbar gibt es auch fuer Munition, Fahrzeugteile und
+# die Fundwaffen, die man nicht in der Hand haelt.
+PAKET_SYMBOLE = tuple(PAKET_HAND) + (
+    "mun_panzer", "mun_brand", "mun_hohl", "mun_leucht", "mun_leucht_rot",
+    "mun_leucht_gruen", "mun_leucht_gelb", "mun_unterschall",
+    "hecknebel", "nagelstreuer", "kartenwaffen",
+)
+# Was fliegt oder liegt: (Name, Mass). Nur, was schon gebraucht wird.
+PAKET_TEILE = {
+    "minirakete": (9, 5),       # Raketenbuendel
+    "granate40": (7, 7),        # Granatwerfer
+    "rohr_leer": (30, 9),       # das weggelegte Rohr des Einweg-Raketenwerfers
+}
+for _w in PAKET_HAND:
+    WAFFEN_HAND[_w] = dict(aufbau="paket")
+    BILD_MASS["spieler_" + _w] = BILD_MASS["spieler_sturm"]
+for _w in PAKET_SYMBOLE:
+    BILD_MASS["waffe_" + _w] = BILD_MASS["waffe_sturm"]
+for _w, _m in PAKET_TEILE.items():
+    BILD_MASS["teil_" + _w] = _m
+
 # Jede Mannschaft bekommt ihre eigene Fassung jeder Spielerfigur. Sie sind
 # damit einzeln durch eine Datei ersetzbar - wer `assets/spieler_rot_sturm.png`
 # hinlegt, bekommt genau die eine Figur ausgetauscht, und der Rest bleibt.

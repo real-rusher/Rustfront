@@ -738,6 +738,11 @@ def _rand(s, farbe=(16, 11, 8)):
     return rand
 
 
+# Die Waffen aus dem Waffenpaket zeichnen sich selbst (art_waffen.py, seit
+# 0.34.61): Name -> zeichner(s, c), ab der Hand bei x = c + 6 wie unten.
+HAND_ZEICHNER: dict = {}
+
+
 def _hand_waffe(s, c, name):
     """Zeichnet die getragene Waffe von oben, ab der Hand nach rechts.
 
@@ -747,6 +752,11 @@ def _hand_waffe(s, c, name):
     """
     d = K.WAFFEN_HAND.get(name)
     if d is None:
+        return
+    if d["aufbau"] == "paket":
+        zeichner = HAND_ZEICHNER.get(name)
+        if zeichner is not None:
+            zeichner(s, c)
         return
     hand = c + 6
     # Deutlich heller als der Boden (K.C_BODEN), sonst verschwindet die
@@ -2428,3 +2438,4 @@ def _panzergranate():
 # Buggys, die erst hier alle stehen.
 from . import art_fahrzeuge  # noqa: E402,F401
 from . import art_figuren  # noqa: E402,F401  Skins, NPCs, Tiere (seit 0.34.60)
+from . import art_waffen  # noqa: E402,F401  das Waffenpaket (seit 0.34.61)

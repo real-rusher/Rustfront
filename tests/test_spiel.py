@@ -4865,9 +4865,13 @@ pruef("Was nicht waehlbar ist, wird zur alten Figur (leer)",
 _bi60 = app.bilder
 _fehler60 = len(_bi60.fehler)
 _kaputt60 = []
+# Jede Waffe, die es vor dem Waffenpaket gab, fuer jedes Aussehen - die
+# 52 aus dem Paket (seit 0.34.61) prueft ihr eigener Abschnitt an einigen
+# Aussehen; alle mal alle waeren ueber 5000 Bilder.
+_alt60 = [w_ for w_ in K.WAFFEN_HAND if K.WAFFEN_HAND[w_]["aufbau"] != "paket"]
 for _sk60 in _wahl60:
     for _vs60 in ("", "rot_", "blau_"):
-        for _ge60 in [""] + list(K.WAFFEN_HAND):
+        for _ge60 in [""] + _alt60:
             _n60 = _FIG60.bildname(_sk60, _vs60, _ge60)
             _soll60 = K.BILD_MASS["spieler_" + _ge60] if _ge60 else K.BILD_MASS["spieler"]
             _b60 = _bi60.bild(_n60)
@@ -5019,6 +5023,48 @@ pruef("... ein NPC stirbt an einem Treffer, und ENTF toetet auch ein Tier",
 _tm60.verlassen()
 EN.RND.setstate(_rnd60)
 random.setstate(_zufall60)
+
+# ─────────────────────────────────────────────────────────────────────
+# Waffenbilder (seit 0.34.61): alle 58 Eintraege des Waffenpakets haben
+# ihr Bild - an der Hand (52, je Mannschaft und je Aussehen) und als
+# Zeichen in der Hotbar (63, mit Munition und Fahrzeugteilen).
+print("\n-- Waffenbilder aus dem Waffenpaket (0.34.61)")
+_bi61 = app.bilder
+_fehler61 = len(_bi61.fehler)
+pruef("52 Waffen in der Hand, 63 Zeichen, 3 Teile",
+      len(K.PAKET_HAND) == 52 and len(K.PAKET_SYMBOLE) == 63 and len(K.PAKET_TEILE) == 3
+      and all(K.WAFFEN_HAND[w_]["aufbau"] == "paket" for w_ in K.PAKET_HAND))
+_hand61 = {}
+for _w61 in K.PAKET_HAND:
+    for _vs61 in ("", "rot_", "blau_"):
+        _b61 = _bi61.bild("spieler_%s%s" % (_vs61, _w61))
+        _hand61["%s%s" % (_vs61, _w61)] = (_b61.get_size(), pygame.image.tobytes(_b61, "RGBA"))
+pruef("Jede haelt eine Figur, 56 x 56, und jede sieht anders aus",
+      all(m_ == (56, 56) for m_, _t in _hand61.values())
+      and len({t_ for _m, t_ in _hand61.values()}) == len(_hand61)
+      and len(_bi61.fehler) == _fehler61, str(len(_hand61)))
+_sym61 = [_bi61.bild("waffe_" + w_) for w_ in K.PAKET_SYMBOLE]
+pruef("Jede hat ein eigenes Zeichen fuer die Hotbar, 26 x 11",
+      all(b_.get_size() == (26, 11) and b_.get_bounding_rect().width >= 6 for b_ in _sym61)
+      and len({pygame.image.tobytes(b_, "RGBA") for b_ in _sym61}) == len(_sym61)
+      and len(_bi61.fehler) == _fehler61)
+pruef("Die Teile (Minirakete, 40-mm-Granate, leeres Rohr) in ihrer Groesse",
+      all(_bi61.bild("teil_" + n_).get_size() == tuple(m_) for n_, m_ in K.PAKET_TEILE.items()))
+pruef("Auch ein Skin haelt die neuen Waffen, in seiner Mannschaft",
+      _bi61.bild("skin_ghost_rot_revolver").get_size() == (56, 56)
+      and not _gleich60(_bi61.bild("skin_ghost_rot_revolver"), _bi61.bild("skin_ghost_rot_sturm"))
+      and not _gleich60(_bi61.bild("skin_ghost_rot_hammer"), _bi61.bild("skin_ghost_rot_revolver"))
+      and len(_bi61.fehler) == _fehler61)
+_tm61 = _TM59.Testmodus(app, karte="staubtal")
+_ein61 = _tm61._eintrag("FIGUR MIT WAFFE")
+pruef("Testmodus: WAFFENBILDER - eine Figur mit jeder der 52 Waffen",
+      _ein61 is not None and _ein61.gruppe == "WAFFENBILDER"
+      and _TM59.OPTIONEN["paket_waffe"][1]() == list(K.PAKET_HAND))
+_tm61._sp_werte["FIGUR MIT WAFFE"] = {"paket_waffe": list(K.PAKET_HAND).index("hammer"), "team": 1}
+_fw61 = _tm61.spawnen(_ein61, pos=freier_punkt(_tm61.welt, 0, random.Random(61)), ebene=0)
+pruef("... sie haelt sie in den Farben ihrer Mannschaft",
+      len(_fw61) == 1 and _fw61[0].bild == "spieler_blau_hammer", _fw61[0].bild if _fw61 else "")
+_tm61.verlassen()
 
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)

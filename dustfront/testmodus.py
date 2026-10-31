@@ -181,6 +181,9 @@ OPTIONEN = {
     # Wer selbst eine Figur steuert: als Vorgabe das eigene Aussehen.
     "aussehen_ich": ("AUSSEHEN", lambda: ["eigen", ""] + figuren.waehlbar(),
                      lambda v: "EIGENES" if v == "eigen" else figuren.name_zeigen(v)),
+    # Seit 0.34.61: jede Waffe aus dem Waffenpaket, auch die noch nicht
+    # spielbaren - zum Ansehen an einer Figur.
+    "paket_waffe": ("WAFFE", lambda: list(K.PAKET_HAND), lambda v: K.PAKET_HAND[v]),
     "stirnband": ("STIRNBAND", lambda: [""] + [K.bild_kennung(n) for n, _f in K.STIRNBAND_FARBEN],
                   lambda v: "VORGABE" if not v else
                   next(n for n, _f in K.STIRNBAND_FARBEN if K.bild_kennung(n) == v)),
@@ -282,6 +285,9 @@ def eintraege() -> list:
     for art in K.TIERE:
         raus.append(Eintrag(K.TIERE[art]["name"], "TIERE",
                             ("anzahl", "streuung", "farbe_" + art), _tier_setzer(art)))
+    # Seit 0.34.61: die Bilder aus dem Waffenpaket an einer stehenden Figur.
+    raus.append(Eintrag("FIGUR MIT WAFFE", "WAFFENBILDER", ("paket_waffe", "team", "winkel"),
+                        lambda t, p, e, w: t.waffenfigur_setzen(p, e, w), mehrfach=False))
     return raus
 
 
@@ -1026,6 +1032,19 @@ class Testmodus(Gefecht):
             bild = "npc_%s_%s" % (art, band) if band else "npc_" + art
             b = Bewohner(pos, ebene, bild, K.NPC["leben"], K.NPC["radius"], False,
                          float(w.get("winkel", 0)), saat)
+        self._einsetzen(b)
+        return b
+
+    def waffenfigur_setzen(self, pos, ebene: int, w: dict):
+        """Eine Figur, die eine Waffe aus dem Waffenpaket haelt (seit
+        0.34.61) - nur das Bild: sie steht, nimmt Schaden und faellt um
+        wie ein NPC, schiesst aber nicht."""
+        teams = K.TEAMS["kombi"]
+        team = w.get("team", 0)
+        vorsatz = teams[team]["name"].lower() + "_" if 0 <= team < len(teams) else ""
+        waffe = w.get("paket_waffe", next(iter(K.PAKET_HAND)))
+        b = Bewohner(pos, ebene, "spieler_%s%s" % (vorsatz, waffe), K.NPC["leben"],
+                     K.NPC["radius"], False, float(w.get("winkel", 0)))
         self._einsetzen(b)
         return b
 
