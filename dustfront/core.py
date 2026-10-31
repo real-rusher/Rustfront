@@ -184,6 +184,13 @@ class Eingabe:
 # ══════════════════════════════════════════════════════════════════
 
 _PLATZHALTER = {}
+# Zeichner fuer ganze Familien von Namen (seit 0.34.60): (Anfang, Zeichner).
+# Der Zeichner bekommt den vollen Namen und gibt eine Flaeche zurueck oder
+# None, wenn er ihn nicht kennt. GRUND: 31 Aussehen mal Mannschaft mal Waffe
+# waeren ueber tausend einzelne Eintraege - die meisten nie gebraucht.
+_MUSTER: list = []
+# Und ihr Sollmass: (Anfang, Funktion Name -> (b, h) oder None).
+_MUSTER_MASS: list = []
 
 
 def platzhalter(name):
@@ -192,6 +199,15 @@ def platzhalter(name):
         _PLATZHALTER[name] = fn
         return fn
     return deko
+
+
+def platzhalter_muster(anfang: str, zeichner, mass=None) -> None:
+    """Registriert einen Zeichner fuer alle Namen, die mit `anfang`
+    beginnen (siehe art_figuren.py). `mass(name)` sagt das Sollmass, damit
+    eine hingelegte Datei auch hier auf die richtige Groesse kommt."""
+    _MUSTER.append((anfang, zeichner))
+    if mass is not None:
+        _MUSTER_MASS.append((anfang, mass))
 
 
 class Bilder:
@@ -239,6 +255,12 @@ class Bilder:
     def mass(name: str) -> tuple[int, int] | None:
         """Das Sollmass des Bildes, oder None, wenn keines festgelegt ist."""
         m = K.BILD_MASS.get(name)
+        if not m:
+            for anfang, mass in _MUSTER_MASS:
+                if name.startswith(anfang):
+                    m = mass(name)
+                    if m:
+                        break
         return (int(m[0]), int(m[1])) if m else None
 
     def _laden(self, name: str) -> pygame.Surface | None:
@@ -276,6 +298,11 @@ class Bilder:
         """
         zeichner = _PLATZHALTER.get(name)
         if zeichner is None:
+            for anfang, muster in _MUSTER:
+                if name.startswith(anfang):
+                    surf = muster(name)
+                    if surf is not None:
+                        return surf
             soll = self.mass(name) or (K.TILE, K.TILE)
             surf = pygame.Surface(soll, pygame.SRCALPHA)
             surf.fill(K.C_FEHLT)                       # auffaellig fehlend

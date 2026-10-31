@@ -88,6 +88,10 @@ VORGABE = {
     # Wie weit der Punkt vor der Waffe liegt, in Weltpixeln (seit 0.32.6,
     # gemeldet: "noch ein bisschen weit nach vorne"). Vorher fest 110.
     "kamera_blick_weite": 70,
+    # Wie die eigene Figur aussieht (seit 0.34.60, Menue AUSRUESTUNG):
+    # eine Kennung aus K.FIGUREN, leer fuer die alte Figur. Alle anderen
+    # sehen es auch - es geht mit der Weltmeldung mit.
+    "aussehen": "",
 }
 
 # Welche Einstellungen zum **Spieler** gehoeren und nicht zum Geraet.
@@ -100,7 +104,7 @@ VORGABE = {
 KONTO_WERTE = ("bildschirm_ruckeln", "vignette", "partikel",
                "tracer", "tracer_weit", "ton_gesamt", "ton_effekte",
                "ton_musik", "obere_ebenen", "blendung", "kamera_blick",
-               "kamera_blick_weite", "blendung_ton")
+               "kamera_blick_weite", "blendung_ton", "aussehen")
 
 AUFLOESUNGEN = ["960x540", "1280x720", "1600x900", "1920x1080", "2560x1440"]
 FENSTERMODI = ["fenster", "randlos", "vollbild"]

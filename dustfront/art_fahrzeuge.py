@@ -670,6 +670,9 @@ def wanne_bild(bilder, art_name: str, winkel: float, ph_links: float,
 
 # Wer im Aufbau sitzt: Name des Bildes -> Farben.
 def _fahrer_zu(name: str):
+    if "_skin_" in name:
+        from . import art_figuren
+        return art_figuren.fahrer_aus_name(name)
     if name.endswith("_fahrer"):
         for kombi in K.TEAMS["kombi"]:
             if "_%s_fahrer" % kombi["name"].lower() in name:

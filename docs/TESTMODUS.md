@@ -57,12 +57,14 @@ setzt, steht sofort da.
 
 | Gruppe | Eintraege | Einstellungen |
 | --- | --- | --- |
-| FIGUREN | Bot, Spieler (steht), Spieler (ich) | Anzahl, Streuung, Team (ROT, BLAU, FREI), Waffe, Leben; beim Bot HIRN (KLASSISCH / GOAP, docs/KI.md) |
+| FIGUREN | Bot, Spieler (steht), Spieler (ich) | Anzahl, Streuung, Team (ROT, BLAU, FREI), Waffe, Leben, Aussehen (ZUFALL, STANDARD oder ein Skin; bei Spieler (ich) als Vorgabe EIGENES); beim Bot HIRN (KLASSISCH / GOAP, docs/KI.md) |
 | GEGNER, BOSSE | jede Art aus `K.GEGNER` und `K.BOSSE` | Anzahl, Streuung, Leben, KI an/aus, HIRN (KLASSISCH / GOAP) |
 | ZIELE | die Zielpuppe | Anzahl, Streuung |
 | OBJEKTE | Buggy, Panzer, Panzerwagen, Hotzone hier, Hotzone aus | Anzahl, Streuung, Richtung |
 | BEUTE | Medkit, Munitionskiste, Raketenwerfer | Anzahl, Streuung |
 | WURF | Granate, Rauch, Molotow, Blendgranate | Anzahl, Streuung, Zuender (liegt / sofort) |
+| NPC | Haendler, Aerztin, Wissenschaftler, Fluechtling, Pilger, Schmuggler, Hirte, Ueberlebende | Anzahl, Streuung, Richtung; bei der Ueberlebenden das Stirnband |
+| TIERE | Schaf, Ziege, Huhn | Anzahl, Streuung, Farbe (drei je Tier oder ZUFALL) |
 | TRUPPS | Trupp; Halten hier, Angriff hier, Frei, Igel hier (fuer den naechsten Trupp der Mannschaft) | Groesse, Team, Anfuehrer (mit Funk / ohne Funk / keiner), Waffen (gemischt / zufall), Leben; beim Halten: wichtig |
 
 ## Das Testmenue (Esc)
@@ -105,6 +107,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.60 | Skins, NPCs und Tiere aus dem Figurenpaket. FIGUREN: Einstellung AUSSEHEN (ZUFALL - beim Bot sein Soldat wie im Spiel -, STANDARD, oder einer der 29 Skins); SPIELER, ICH nimmt als Vorgabe das eigene Aussehen aus AUSRUESTUNG. Neue Gruppen NPC und TIERE: NPCs stehen (Verhalten kommt mit der Kampagne), Tiere laufen ein Stueck und bleiben stehen; die INFO-Ansicht (Taste 8) zeigt eine gruene Linie zum Laufziel und LAEUFT bzw. STEHT. Beide nehmen Schaden, sterben mit Fleck und Laut, ENTF toetet sie; niemand greift sie an (Fraktion `zivil`). Pruefungen im Abschnitt "Skins, NPCs und Tiere" von `tests/test_spiel.py` |
 | 0.34.59 | Spawner OBJEKTE: PANZER und PANZERWAGEN (Anzahl, Streuung, Richtung). Passt einer nicht an den Zeiger, sucht er den naechsten freien Platz. Zum Fahren eine Figur setzen (SPIELER, ICH, oder Taste 3) und mit E einsteigen: W/S fahren, A/D drehen, die Maus zielt, linke Maustaste Kanone bzw. Ring-MG, rechte Bug-MG. Zum Rammen GEGNER mit KI AUS vor die Front setzen. ENTF TOETET laesst ihn hochgehen (Wrack). Aufnahmen `panzer` und `panzerwagen` in `werkzeug_aufnahme.py`. Pruefungen im Abschnitt "Panzer und Panzerwagen" von `tests/test_spiel.py` |
 | 0.34.58 | Testmenue BILDRATE (KLAENGE PRUEFEN): WIE EINGESTELLT, 30, 15, 8 oder 4 BILDER/S; bleibt ueber einen Kartenwechsel. Zum Hoeren: einen Bot oder eine gesteuerte Figur mit Sturmgewehr oder LMG feuern lassen und die Bildrate senken - die Schuesse kommen im gleichmaessigen Takt, auch wenn das Spiel unter 24 Bildern in Zeitlupe laeuft. Pruefungen im Abschnitt "Klaenge" von `tests/test_spiel.py`. Testmenue BOTS UEBERMUETIG: AUS (Vorgabe) oder AN - wie FLIEHEN, bleibt ueber einen Kartenwechsel; AN geht ein zuversichtlicher Trupp in "druck" und verlaesst die Deckung (INFO zeigt beim Trupp Zustand und ZUV). Marsch: einen TRUPP ohne Gegner setzen - er geht im Keil hinter dem Anfuehrer, haelt ab und zu zum Sichern (die anderen schauen zur Seite und nach hinten), um Ecken der Spur nach; mit mehr als fuenf Mann in kleinen Keilen hintereinander. Ein ANGRIFF-Auftrag in der Naehe oder ein bekannter Gegner: die Linie. Die Trupp-Anzeige zeigt die Plaetze, INFO beim Trupp MARSCH, (SICHERT) waehrend eines Halts und (WARTET) bei dem, dessen Platz die Spur des Anfuehrers noch nicht erreicht hat. Funk: zu sehen mit zwei Trupps, einer in der Unterzahl - der Funker zeigt einen Haken und drei Ringe, wenn der Spruch durch ist (mit Klang), ein rotes Kreuz und einen Ring, der zusammenfaellt, wenn er abbricht. ZEIT STEHT: Lebende stehen still (vorher zitterten sie). Als Beobachter rufen Liegende nicht um Hilfe (kein "!", kein Zittern, kein Ruf), als Spieler weiter. Pruefungen im Abschnitt "Testmodus" von `tests/test_spiel.py` und `python tests/test_verhalten.py marsch` |
 | 0.34.57 | Nichts Neues zum Einschalten - der Testmodus laeuft schneller, am deutlichsten mit vielen Trupps und VERWUNDETE BOTS (Bergung). Die Bots entscheiden wie vorher - Sicht und Deckung geben auf jede Frage dieselbe Antwort. Pruefungen im Abschnitt "Bildrate" von `tests/test_spiel.py` |

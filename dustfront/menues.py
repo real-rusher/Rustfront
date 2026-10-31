@@ -25,6 +25,7 @@ import math
 
 import pygame
 
+from . import art_figuren as figuren
 from . import config as K
 from . import einstellungen as E
 from . import pfade
@@ -41,6 +42,21 @@ TAFEL_GROSS = pygame.Rect(64, 30, 512, 300)
 TAFEL_BREIT = pygame.Rect(16, 10, 608, 340)
 ZEILE_H = 16
 ZEILE_ABSTAND = 4
+
+
+def _umbrechen(text: str, breite: int) -> list:
+    """Woerter zu Zeilen, die in `breite` Pixel passen (Schrift 1)."""
+    zeilen, jetzt = [], ""
+    for wort in text.split():
+        probe = (jetzt + " " + wort).strip()
+        if jetzt and SCHRIFT.breite(probe) > breite:
+            zeilen.append(jetzt)
+            jetzt = wort
+        else:
+            jetzt = probe
+    if jetzt:
+        zeilen.append(jetzt)
+    return zeilen
 
 
 def _mitte(breite: int, hoehe: int) -> pygame.Rect:
@@ -1222,9 +1238,12 @@ class Ausruestung(Menue):
     """
 
     titel = "AUSRÜSTUNG"
+    # Links die Waehler, rechts (seit 0.34.60) die Vorschau des Aussehens.
+    LINKS = 272
+    VORSCHAU = 150
 
     def __init__(self, app, danach=None) -> None:
-        self.tafel = _mitte(316, 216)
+        self.tafel = _mitte(22 + self.LINKS + 18 + self.VORSCHAU + 14, 236)
         self.danach = danach
         super().__init__(app)
 
@@ -1237,7 +1256,7 @@ class Ausruestung(Menue):
         lo = K.LOADOUT
         konto = self.konto
         satz = konto.loadout
-        bx, bw = r.x + 22, r.width - 44
+        bx, bw = r.x + 22, self.LINKS
         y = r.y + 54
         self.elemente = [
             ui.Wahl((bx, y, bw, 16), "SATZ", "satz",
@@ -1264,6 +1283,14 @@ class Ausruestung(Menue):
                 "wurf%d" % nr, list(lo["auswahl_wuerfe"]),
                 list(lo["auswahl_wuerfe"]).index(jetzt),
                 {w: K.WAFFEN[w]["name"] for w in lo["auswahl_wuerfe"]}))
+        y += lo["wuerfe"] * 20 + 4
+        # Das Aussehen (seit 0.34.60). Haengt nicht am Satz: man ist
+        # derselbe, egal was man traegt.
+        aussehen = [""] + figuren.waehlbar()
+        jetzt = figuren.saeubern(self.app.opt["aussehen"])
+        self.elemente.append(ui.Wahl(
+            (bx, y, bw, 16), "AUSSEHEN", "aussehen", aussehen,
+            aussehen.index(jetzt), {k: figuren.name_zeigen(k) for k in aussehen}))
         self.elemente.append(
             ui.Knopf((bx, r.bottom - 40, bw, 20), "FERTIG", "fertig"))
 
@@ -1274,6 +1301,10 @@ class Ausruestung(Menue):
         Menue zumacht, hat nichts verloren.
         """
         konto = self.konto
+        if el.name == "aussehen":
+            self.app.opt["aussehen"] = el.wert
+            self.app.opt.speichern()
+            return
         if el.name == "satz":
             konto.loadout_waehlen(int(el.wert))
             self.aufbauen()
@@ -1320,17 +1351,19 @@ class Ausruestung(Menue):
     def inhalt_zeichnen(self, ziel) -> None:
         r = self.tafel
         satz = self.konto.loadout
-        SCHRIFT.zeichnen(ziel, "ZWEI WAFFEN UND EINE WURFWAFFE", r.centerx,
+        mitte = r.x + 22 + self.LINKS // 2
+        SCHRIFT.zeichnen(ziel, "ZWEI WAFFEN UND EINE WURFWAFFE", mitte,
                          r.y + 28, K.C_MUTED, 1, 1, "mitte")
         SCHRIFT.zeichnen(ziel, "DAS BRECHEISEN LIEGT AUF F UND IST IMMER DA",
-                         r.centerx, r.y + 38, K.C_MUTED_DK, 1, 1, "mitte")
+                         mitte, r.y + 38, K.C_MUTED_DK, 1, 1, "mitte")
         # Die drei Plaetze so zeigen, wie sie im Gefecht liegen. Wer die
         # Reihenfolge kennt, greift blind - und sieht hier, wo was liegt.
         from .konto import hotbar_aus_loadout
         plaetze = hotbar_aus_loadout(satz)
+        self._vorschau(ziel, plaetze[0] if plaetze else "")
         breite, luft = 82, 6
         gesamt = len(plaetze) * breite + (len(plaetze) - 1) * luft
-        x = r.centerx - gesamt // 2
+        x = mitte - gesamt // 2
         y = r.bottom - 66
         for i, waffe in enumerate(plaetze):
             kasten = pygame.Rect(x + i * (breite + luft), y, breite, 18)
@@ -1341,6 +1374,41 @@ class Ausruestung(Menue):
                                               breite - 14),
                              kasten.centerx + 3, kasten.centery - 3,
                              K.C_CREAM, 1, 1, "mitte")
+
+    def _vorschau(self, ziel, waffe: str) -> None:
+        """Rechts: wie man aussieht, mit der ersten Waffe in der Hand -
+        gross, darunter in beiden Mannschaften (die Neon-Markierung), und
+        was das Paket ueber die Figur sagt."""
+        r = self.tafel
+        feld = pygame.Rect(r.x + 22 + self.LINKS + 18, r.y + 24,
+                           self.VORSCHAU, r.height - 38)
+        ui.kasten(ziel, feld, K.C_MUTED_DK, (18, 13, 9), 3)
+        skin = figuren.saeubern(self.app.opt["aussehen"])
+        bilder = self.app.bilder
+
+        def name(vorsatz):
+            if skin:
+                n = figuren.bildname(skin, vorsatz, waffe)
+                return n if bilder.mass(n) else figuren.bildname(skin, vorsatz)
+            n = "spieler_%s%s" % (vorsatz, waffe)
+            return n if n in K.BILD_MASS else "spieler_" + vorsatz.rstrip("_")
+
+        SCHRIFT.zeichnen(ziel, figuren.name_zeigen(skin), feld.centerx,
+                         feld.y + 6, K.C_CREAM, 1, 1, "mitte")
+        gross = bilder.bild(name(""))
+        gross = pygame.transform.scale(gross, (gross.get_width() * 2,
+                                               gross.get_height() * 2))
+        ziel.blit(gross, gross.get_rect(center=(feld.centerx, feld.y + 56)))
+        for i, kombi in enumerate(K.TEAMS["kombi"][:2]):
+            klein = bilder.bild(name(kombi["name"].lower() + "_"))
+            ziel.blit(klein, klein.get_rect(
+                center=(feld.centerx + (i * 2 - 1) * 34, feld.y + 112)))
+        text = (K.FIGUREN[skin]["text"] if skin
+                else "DIE ALTE FIGUR, IN DEN FARBEN DER MANNSCHAFT")
+        y = feld.y + 140
+        for zeile in _umbrechen(text.upper(), feld.width - 12)[:5]:
+            SCHRIFT.zeichnen(ziel, zeile, feld.centerx, y, K.C_MUTED, 1, 1, "mitte")
+            y += 10
 
     def fusstext(self) -> str:
         return "[LINKS/RECHTS] ÄNDERN   [ESC] FERTIG"

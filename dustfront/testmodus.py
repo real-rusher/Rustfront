@@ -64,7 +64,8 @@ from . import netz
 from . import plattform
 from . import ui
 from .anzeige import Anzeige
-from .entities import Granate, Wesen
+from . import art_figuren as figuren
+from .entities import Granate, Wesen, tod_zeigen
 from . import fahrzeug as fahrzeug_modul
 from .fahrzeug import Buggy
 from .font import SCHRIFT
@@ -173,7 +174,22 @@ OPTIONEN = {
     "mischung": ("WAFFEN", lambda: ["gemischt", "zufall"],
                  lambda v: "GEMISCHT" if v == "gemischt" else "ZUFALL"),
     "wichtig": ("WICHTIG", lambda: [True, False], lambda v: "JA" if v else "NEIN"),
+    # Seit 0.34.60: das Aussehen einer Figur (art_figuren). ZUFALL ist bei
+    # Bots ein Soldat wie im Spiel, sonst irgendeins.
+    "aussehen": ("AUSSEHEN", lambda: ["zufall", ""] + figuren.waehlbar(),
+                 lambda v: "ZUFALL" if v == "zufall" else figuren.name_zeigen(v)),
+    # Wer selbst eine Figur steuert: als Vorgabe das eigene Aussehen.
+    "aussehen_ich": ("AUSSEHEN", lambda: ["eigen", ""] + figuren.waehlbar(),
+                     lambda v: "EIGENES" if v == "eigen" else figuren.name_zeigen(v)),
+    "stirnband": ("STIRNBAND", lambda: [""] + [K.bild_kennung(n) for n, _f in K.STIRNBAND_FARBEN],
+                  lambda v: "VORGABE" if not v else
+                  next(n for n, _f in K.STIRNBAND_FARBEN if K.bild_kennung(n) == v)),
 }
+# Je Tier eine eigene Farbwahl: jedes hat andere Farben.
+for _art_t, _tier in K.TIERE.items():
+    OPTIONEN["farbe_" + _art_t] = (
+        "FARBE", (lambda a=_art_t: list(range(len(K.TIERE[a]["farben"]))) + ["zufall"]),
+        (lambda v, a=_art_t: "ZUFALL" if v == "zufall" else K.TIERE[a]["farben"][v][0]))
 
 # Taste 8 schaltet durch: aus, kurz (Linien und Zustand), Gedanken (dazu
 # links die Ziele, der Plan und das Protokoll einer GOAP-Figur).
@@ -199,11 +215,13 @@ def eintraege() -> list:
     bekommt einen Eintrag, damit es sich im Testmodus setzen laesst.
     Gegner, Bosse und Zielpuppen kommen von selbst aus der Tabelle."""
     raus = [
-        Eintrag("BOT", "FIGUREN", ("anzahl", "streuung", "team", "waffe", "leben", "hirn"),
+        Eintrag("BOT", "FIGUREN", ("anzahl", "streuung", "team", "waffe", "leben", "hirn",
+                                   "aussehen"),
                 lambda t, p, e, w: t.bot_setzen(p, e, w)),
-        Eintrag("SPIELER, STEHT", "FIGUREN", ("anzahl", "streuung", "team", "leben"),
+        Eintrag("SPIELER, STEHT", "FIGUREN", ("anzahl", "streuung", "team", "leben",
+                                              "aussehen"),
                 lambda t, p, e, w: t.puppe_setzen(p, e, w)),
-        Eintrag("SPIELER, ICH", "FIGUREN", ("team", "leben"),
+        Eintrag("SPIELER, ICH", "FIGUREN", ("team", "leben", "aussehen_ich"),
                 lambda t, p, e, w: t.ich_setzen(p, e, w), mehrfach=False),
         # Seit 0.34.39: ein ganzer Trupp mit Anfuehrer (trupp.py), und was
         # der naechste Trupp einer Mannschaft tun soll.
@@ -253,6 +271,17 @@ def eintraege() -> list:
     for art in ("granate", "rauch", "molotov", "blend"):
         raus.append(Eintrag(K.WAFFEN[art]["name"], "WURF",
                             ("anzahl", "streuung", "zuender"), _wurf_setzer(art)))
+    # Seit 0.34.60: die NPCs und Tiere aus dem Figurenpaket. Sie stehen
+    # bzw. laufen herum, nehmen Schaden und sterben - mehr tun sie noch
+    # nicht (ihr Verhalten kommt mit der Kampagne, docs/KI.md).
+    for skin in K.FIGUREN_GRUPPEN["NPC"]:
+        raus.append(Eintrag(K.FIGUREN[skin]["name"], "NPC",
+                            ("anzahl", "streuung", "winkel")
+                            + (("stirnband",) if skin == "ueberlebende" else ()),
+                            _npc_setzer(skin)))
+    for art in K.TIERE:
+        raus.append(Eintrag(K.TIERE[art]["name"], "TIERE",
+                            ("anzahl", "streuung", "farbe_" + art), _tier_setzer(art)))
     return raus
 
 
@@ -266,6 +295,89 @@ def _beute_setzer(art):
 
 def _wurf_setzer(art):
     return lambda t, p, e, w: t.wurf_setzen(art, p, e, w)
+
+
+def _npc_setzer(skin):
+    return lambda t, p, e, w: t.bewohner_setzen("npc", skin, p, e, w)
+
+
+def _tier_setzer(art):
+    return lambda t, p, e, w: t.bewohner_setzen("tier", art, p, e, w)
+
+
+class Bewohner(Wesen):
+    """Ein NPC oder ein Tier aus dem Figurenpaket (seit 0.34.60, nur im
+    Testmodus). Ein NPC steht, ein Tier laeuft ein Stueck und bleibt
+    stehen (K.TIER_LAUFEN). Beide nehmen Schaden und sterben mit Fleck
+    und Laut (K.TOD["wesen"]["zivil"]).
+
+    Die Fraktion "zivil" gehoert zu niemandem: Bots und Gegner suchen ihre
+    Ziele in `kaempfer` und unter den Gegnern, dort steht ein Bewohner
+    nicht - er wird also nicht angegriffen, kann aber getroffen werden."""
+
+    fraktion = "zivil"
+    art = "zivil"                 # fuer entities.tod_blut
+
+    def __init__(self, pos, ebene: int, bild: str, leben: float, radius: float,
+                 tier: bool, winkel: float = 0.0, saat: int = 0) -> None:
+        super().__init__(pos, ebene)
+        self.bild = bild
+        self.max_leben = float(leben)
+        self.leben = self.max_leben
+        self.radius = float(radius)
+        self.tier = tier
+        self.winkel = float(winkel)
+        # Wohin das Tier gerade laeuft (None: es steht) - auch fuer die
+        # INFO-Ansicht.
+        self.ziel = None
+        self._rnd = random.Random(saat)
+        self.warten = self._rnd.uniform(*K.TIER_LAUFEN["pause"])
+        self._lauf = 0.0
+
+    def schritt(self, dt: float) -> None:
+        super().schritt(dt)
+        if not self.lebt or self.welt is None:
+            return
+        tl = K.TIER_LAUFEN
+        if self.tier:
+            self._laufen(dt, tl)
+        # Ein Stoss (Treffer, Explosion) klingt ab.
+        if self.tempo.length_squared() > 0.01:
+            self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
+            self.tempo *= max(0.0, 1.0 - tl["reibung"] * dt)
+
+    def _laufen(self, dt: float, tl: dict) -> None:
+        if self.ziel is None:
+            self.warten -= dt
+            if self.warten > 0.0:
+                return
+            weg = pygame.Vector2(self._rnd.uniform(*tl["weite"]), 0).rotate(
+                self._rnd.uniform(0, 360))
+            ziel = self.pos + weg
+            if self.welt.frei(ziel, self.radius, self.ebene, True):
+                self.ziel = ziel
+                self._lauf = self._rnd.uniform(*tl["tempo"])
+            else:
+                self.warten = 0.4
+            return
+        weg = self.ziel - self.pos
+        if weg.length() < 2.0:
+            self.ziel = None
+            self.warten = self._rnd.uniform(*tl["pause"])
+            return
+        self.winkel = math.degrees(math.atan2(weg.y, weg.x))
+        schritt = weg.normalize() * min(weg.length(), self._lauf * dt)
+        x_an, y_an = self.welt.bewegen(self, schritt.x, schritt.y)
+        if x_an or y_an:
+            # An eine Wand gelaufen: stehen bleiben, gleich etwas anderes.
+            self.ziel = None
+            self.warten = self._rnd.uniform(0.3, 1.0)
+
+    def sterben(self, von=None) -> None:
+        if not self.lebt:
+            return
+        self.lebt = False
+        tod_zeigen(self, von)
 
 
 class Leiche(Wesen):
@@ -745,6 +857,9 @@ class Testmodus(Gefecht):
     def bot_setzen(self, pos, ebene: int, w: dict):
         k = self._bot_dazu(w.get("team", 0), w.get("hirn"))
         self._figur_einstellen(k, w.get("team", 0), w.get("leben", 1.0))
+        # ZUFALL: der Soldat, den _bot_dazu ihm schon gegeben hat.
+        if w.get("aussehen", "zufall") != "zufall":
+            k.skin = figuren.saeubern(w["aussehen"])
         if w.get("waffe", "zufall") != "zufall":
             andere = [x for x in K.LOADOUT["auswahl_waffen"] if x != w["waffe"]]
             lo = {"name": "BOT", "waffen": [w["waffe"], self._bot_rnd.choice(andere)],
@@ -830,12 +945,21 @@ class Testmodus(Gefecht):
         k = self._dazu(nummer, name or "PUPPE %d" % (nummer - K.TESTMODUS["figur_ab"] + 1),
                        w.get("team", 0), None)
         self._figur_einstellen(k, w.get("team", 0), w.get("leben", 1.0))
+        aussehen = w.get("aussehen", "")
+        if aussehen == "zufall":
+            # Aus dem Namen, wie bei den Bots - ohne deren Zufall.
+            alle = figuren.waehlbar()
+            aussehen = random.Random(k.name).choice(alle) if alle else ""
+        k.skin = figuren.saeubern(aussehen)
         self._figur_platz(k, pos, ebene)
         self.welt.wesen.extend(self.welt.neue)
         self.welt.neue.clear()
         return k
 
     def ich_setzen(self, pos, ebene: int, w: dict):
+        w = dict(w)
+        ich = w.pop("aussehen_ich", "eigen")
+        w["aussehen"] = self.mein_aussehen() if ich == "eigen" else ich
         k = self.puppe_setzen(pos, ebene, w, name="ICH")
         self.uebernehmen(k)
         return k
@@ -881,6 +1005,27 @@ class Testmodus(Gefecht):
             b.aufbau = b.winkel
         b.start = (pygame.Vector2(b.pos), b.ebene, b.winkel)
         self.fahrzeuge.append(b)
+        self._einsetzen(b)
+        return b
+
+    def bewohner_setzen(self, gruppe: str, art: str, pos, ebene: int, w: dict):
+        """Ein NPC (`gruppe` "npc", `art` eine Kennung aus K.FIGUREN) oder ein
+        Tier ("tier", eine Art aus K.TIERE). Der Zufall kommt aus der
+        Stelle, nicht aus dem Zufall der Bots."""
+        saat = int(pos.x) * 7919 + int(pos.y)
+        if gruppe == "tier":
+            t = K.TIERE[art]
+            farbe = w.get("farbe_" + art, 0)
+            if farbe == "zufall":
+                farbe = random.Random(saat).randrange(len(t["farben"]))
+            b = Bewohner(pos, ebene, figuren.tier_bildname(art, int(farbe)),
+                         t["leben"], t["radius"], True,
+                         random.Random(saat + 1).uniform(0, 360), saat)
+        else:
+            band = w.get("stirnband", "") if art == "ueberlebende" else ""
+            bild = "npc_%s_%s" % (art, band) if band else "npc_" + art
+            b = Bewohner(pos, ebene, bild, K.NPC["leben"], K.NPC["radius"], False,
+                         float(w.get("winkel", 0)), saat)
         self._einsetzen(b)
         return b
 
@@ -998,6 +1143,10 @@ class Testmodus(Gefecht):
         if isinstance(w, Buggy):
             if not w.kaputt:
                 w._zerstoeren(None)
+            return True
+        if isinstance(w, Bewohner):
+            w.leben = 0.0
+            w.sterben(None)
             return True
         if not isinstance(w, (Kaempfer, KampfGegner)):
             return False
@@ -1700,6 +1849,15 @@ class Testmodus(Gefecht):
             if innen is not None:
                 self._innen_zeichnen(ziel, h, innen, p)
         for w in self.welt.wesen:
+            if isinstance(w, Bewohner) and w.tier and w.lebt and w.ebene == self.blick:
+                # Seit 0.34.60: wohin ein Tier gerade laeuft.
+                q = kam.zu_bild(w.pos)
+                if w.ziel is not None:
+                    pygame.draw.line(ziel, (150, 190, 120), q, kam.zu_bild(w.ziel), 1)
+                SCHRIFT.zeichnen(ziel, "LÄUFT" if w.ziel is not None else "STEHT",
+                                 int(q.x), int(q.y) + 10, (150, 190, 120), 1,
+                                 ausrichtung="mitte")
+                continue
             if isinstance(w, KampfGegner) and w.lebt and w.ebene == self.blick:
                 ziel_w = getattr(w, "_ziel", None)
                 if ziel_w is not None and ziel_w.lebt:

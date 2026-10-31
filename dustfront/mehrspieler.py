@@ -66,7 +66,8 @@ from .bots import BotTeil
 from .lobby import LobbyTeil, lobby_regeln
 from .spielerkosmetik import KosmetikTeil
 from . import world as welt_modul
-from .core import Szene
+from . import art_figuren as figuren
+from .core import Bilder, Szene
 from .entities import (Aufsammler, Brandflaeche, C4Ladung, Gegner, Geschoss, Granate,
                        Rakete, Rauchwolke, Spieler, Wesen, wolke)
 from . import fahrzeug as fahrzeug_modul
@@ -170,6 +171,10 @@ class Kaempfer(Spieler):
         # zeichnet die Figur dann nicht, sie ist Teil des Wagenbilds).
         self.fahrzeug = None
         self.im_fahrzeug = False
+        # Wie er aussieht (seit 0.34.60): eine Kennung aus K.FIGUREN, die
+        # art_figuren.saeubern durchgelassen hat, oder leer fuer die alte
+        # Figur. Geht mit der Weltmeldung an alle ("sk").
+        self.skin = ""
         # Munitionsvorrat
         self.knapp = knapp
         self.vorrat = {w: K.MUNITION["vorrat"].get(w, 0) for w in self.waffen}
@@ -206,13 +211,29 @@ class Kaempfer(Spieler):
         if self.am_boden:
             name = "spieler_%sboden" % vorsatz
             return name if name in K.BILD_MASS else "spieler_boden"
+        # Das gewaehlte Aussehen (seit 0.34.60, art_figuren): dieselben
+        # Bilder, nur als skin_<id>[_<team>][_<waffe>]. Die Mannschaft
+        # zeigt dort die Neon-Markierung statt der Farbe des Rumpfs.
+        skin = self.skin
         if self.schwingt:
             # Waffe verstaut, das Brecheisen in beiden Haenden (seit
             # 0.32.8 als Bildfolge, siehe art._figur_schwung).
+            if skin:
+                name = "%s_schwung_%d" % (figuren.bildname(skin, vorsatz),
+                                          self.schwung_nummer())
+                if Bilder.mass(name):
+                    return name
             return self.schwung_bild(vorsatz)
         # Beim Anlegen eines Medkits haelt die Figur das Medkit, nicht die
         # Waffe - fuer alle sichtbar, der Gast bekommt heilt_rest mit.
         gehalten = "medkit" if self.heilt_rest > 0 else self.waffe_name
+        if skin:
+            # Ohne Bild fuer diese Waffe (C4) die Figur mit dem Stummel -
+            # aber im eigenen Aussehen, nicht ploetzlich die alte.
+            for name in (figuren.bildname(skin, vorsatz, gehalten),
+                         figuren.bildname(skin, vorsatz)):
+                if Bilder.mass(name):
+                    return name
         name = "spieler_%s%s" % (vorsatz, gehalten)
         return name if name in K.BILD_MASS else super().bild
 
@@ -922,6 +943,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         # Das eigene Loadout, wie es zuletzt gemeldet (Gast) oder gesehen
         # (Gastgeber) wurde - siehe _loadout_beobachten.
         self._lo_zuletzt = None
+        # Ebenso das eigene Aussehen (seit 0.34.60, _aussehen_beobachten).
+        self._sk_zuletzt = ""
         self._war_im_fahrzeug = False
         self._in_wirkung = False      # siehe NETZKLAENGE
         self._knoepfe: set[str] = set()
@@ -971,6 +994,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._karte_geladen()
         self._fahrzeuge_aufstellen()
         self._lo_zuletzt = copy.deepcopy(self.mein_loadout())
+        self._sk_zuletzt = self.mein_aussehen()
         self.wunsch = self._wunsch_lesen()
 
         if self.ist_gastgeber:
@@ -980,6 +1004,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self.ich = self._dazu(0, self.name, self.team_wunsch,
                                   self.mein_loadout())
             self.ich.konto = self._meine_kontokennung()
+            self.ich.skin = self.mein_aussehen()
             self._namen_merken(self.ich)
             if self.in_lobby:
                 self._lobby_bestuecken()
@@ -998,7 +1023,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                               # Das Loadout geht mit der Anmeldung mit. Der
                               # Gastgeber legt die Figur an, also muss er zu
                               # diesem Zeitpunkt wissen, was sie traegt.
-                              "lo": self.mein_loadout()})
+                              "lo": self.mein_loadout(),
+                              # Und wie sie aussieht (seit 0.34.60).
+                              "sk": self.mein_aussehen()})
 
     def _welt_verdrahten(self) -> None:
         """Die Rueckmeldungen der Welt anschliessen: Ton, Ruckeln, Flecken.
@@ -1481,6 +1508,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         if konto is None:
             return None
         return konto.loadout
+
+    def mein_aussehen(self) -> str:
+        """Das eigene Aussehen aus den Einstellungen (Menue AUSRUESTUNG,
+        seit 0.34.60), leer fuer die alte Figur."""
+        opt = getattr(self.app, "opt", None)
+        if opt is None:
+            return ""
+        return figuren.saeubern(opt["aussehen"])
 
     @property
     def schutz_zeit(self) -> float:
@@ -2215,6 +2250,21 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         if self.mit_loadouts and not self.in_lobby and not self.vorbei:
             self.melden("AUSRÜSTUNG GILT AB DEM NÄCHSTEN EINSTIEG")
 
+    def _aussehen_beobachten(self) -> None:
+        """Hat sich das eigene Aussehen geaendert (Menue AUSRUESTUNG)?
+        Anders als das Loadout gilt es sofort: es ist nur ein Bild und kein
+        Vorteil. Der Gast meldet es, der Gastgeber setzt es selbst."""
+        sk = self.mein_aussehen()
+        if sk == self._sk_zuletzt:
+            return
+        if not self.ist_gastgeber:
+            if not (self.gast.offen and self._kos_zugelassen):
+                return
+            self.gast.senden({"t": "aussehen", "sk": sk})
+        elif self.ich is not None:
+            self.ich.skin = sk
+        self._sk_zuletzt = sk
+
     def _fahrzeuge_aufstellen(self) -> None:
         """Auf jedes F der Karte einen Buggy stellen. Nur beim Gastgeber;
         der Gast bekommt seine mit der Weltmeldung.
@@ -2508,6 +2558,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             k = self.kaempfer.get(fahrer) if fahrer >= 0 else None
             b.besetzt = fahrer >= 0
             b.team = k.team if k is not None else -1
+            b.skin = k.skin if k is not None else ""
             b.geschw = b.vorn * fahrt
             b.rutschen = max(0.0, min(1.0, rutschen))
             # Leben (seit 0.34.18): fuer den Balken und das Wrack.
@@ -2628,6 +2679,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                                    konto_modul.loadout_saeubern(
                                        nachricht.get("lo")))
                     k.konto = str(nachricht.get("kt") or "")[:64]
+                    k.skin = figuren.saeubern(nachricht.get("sk"))
                     self._namen_merken(k)
                     self.gastgeber.an_einen(nummer, self._willkommen(nummer, k))
                     # Und gleich den Plan: wer in die Lobby kommt, soll
@@ -2649,6 +2701,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                     lo = konto_modul.loadout_saeubern(nachricht.get("lo"))
                     if lo is not None:
                         k.angemeldet = lo
+            elif art == "aussehen":
+                # Ein anderes Aussehen (seit 0.34.60). Gilt sofort: es
+                # aendert nichts am Gefecht, nur das Bild.
+                k = self.kaempfer.get(nummer)
+                if k is not None:
+                    k.skin = figuren.saeubern(nachricht.get("sk"))
             elif art in ("kos", "kos_hat", "kos_weg"):
                 # Spielerkosmetik - nur von dem, der schon dabei ist.
                 if nummer in self.kaempfer:
@@ -3923,6 +3981,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 # Sein Funkspruch (seit 0.34.27), nur solange er steht.
                 "fk": k.funk if k.funk_rest > 0.0 else "",
                 "fr": round(k.funk_rest, 1),
+                # Sein Aussehen (seit 0.34.60), leer fuer die alte Figur.
+                "sk": k.skin,
             })
         flug = []
         gegner = []
@@ -4381,6 +4441,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             k.sprintet = bool(eintrag.get("sp", 0))
             k.ruf_zeigen = float(eintrag.get("rz", 0.0))
             k.im_fahrzeug = bool(eintrag.get("fz", False))
+            # Auch vom Gastgeber nur, was es gibt - ein unbekannter Name
+            # waere sonst ein rotes Fehlbild.
+            k.skin = figuren.saeubern(eintrag.get("sk", ""))
             k.treffer_marken = int(eintrag.get("tz", 0))
             k.ist_bot = bool(eintrag.get("bo", False))
             k.funk = str(eintrag.get("fk", "") or "")[:K.BOTS["funk_laenge"]]
@@ -4637,6 +4700,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self._schritt_gast(dt)
         self._sprint_staub(dt)
         self._loadout_beobachten()
+        self._aussehen_beobachten()
 
         if not self.ist_gastgeber and self.plan_weiter > 0:
             # Beim Gast nur Anzeige: die Zahl auf der Siegtafel soll

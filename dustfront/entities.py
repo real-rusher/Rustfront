@@ -1771,7 +1771,7 @@ class Spieler(Wesen):
         """Laeuft gerade ein Schlag mit dem Brecheisen?"""
         return self.schlag_zeigen > 0 and self.nahkampf_rest > 0
 
-    def schwung_bild(self, vorsatz: str = "") -> str:
+    def schwung_nummer(self) -> int:
         """Welches Bild der Schwungfolge gerade dran ist (seit 0.32.8).
 
         Der Schwung laeuft schnell an und laeuft aus; danach haelt die
@@ -1782,7 +1782,12 @@ class Spieler(Wesen):
         lauf = self.schlag_zeigen - K.NAHKAMPF["nachhalten"]
         f = 1.0 - max(0.0, min(1.0, lauf / dauer))
         weg = 1.0 - (1.0 - f) * (1.0 - f)
-        i = int(round(weg * (K.SCHWUNG_BILDER - 1)))
+        return int(round(weg * (K.SCHWUNG_BILDER - 1)))
+
+    def schwung_bild(self, vorsatz: str = "") -> str:
+        """Der Name des Schwungbilds (schwung_nummer), in den Farben der
+        Mannschaft, wenn es die gibt."""
+        i = self.schwung_nummer()
         name = "spieler_%sschwung_%d" % (vorsatz, i)
         return name if name in K.BILD_MASS else "spieler_schwung_%d" % i
 

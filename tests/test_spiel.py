@@ -4841,6 +4841,185 @@ _tm59.verlassen()
 EN.RND.setstate(_rnd59)
 random.setstate(_zufall59)
 
+# ─────────────────────────────────────────────────────────────────────
+# Skins (seit 0.34.60): 14 Operators und 17 Soldaten aus dem Figurenpaket.
+# Wer will, waehlt im Menue AUSRUESTUNG ein Aussehen; alle sehen es, auch
+# im Fahrzeug. Bots tragen Soldaten. Dazu NPCs und Tiere im Testmodus.
+print("\n-- Skins, NPCs und Tiere (0.34.60)")
+# Wie im Abschnitt davor: der Zufall der Wesen bleibt fuer spaeter, wie er war.
+_rnd60 = EN.RND.getstate()
+_zufall60 = random.getstate()
+from dustfront import art_figuren as _FIG60
+from dustfront import bots as _BOTS60
+
+_wahl60 = _FIG60.waehlbar()
+pruef("29 Aussehen sind waehlbar - ohne Schildtraeger und Panzerfahrer, die etwas Festes halten",
+      len(_wahl60) == 29 and "ghost" in _wahl60 and "wachposten" in _wahl60
+      and "schildtraeger" not in _wahl60 and "panzerfahrer" not in _wahl60
+      and not set(_wahl60) & set(K.FIGUREN_GRUPPEN["NPC"]), str(len(_wahl60)))
+pruef("Was nicht waehlbar ist, wird zur alten Figur (leer)",
+      [_FIG60.saeubern(x) for x in ("gibtsnicht", "hirte", "schildtraeger", None, 5,
+                                    "../ghost", "ghost")]
+      == ["", "", "", "", "", "", "ghost"])
+
+_bi60 = app.bilder
+_fehler60 = len(_bi60.fehler)
+_kaputt60 = []
+for _sk60 in _wahl60:
+    for _vs60 in ("", "rot_", "blau_"):
+        for _ge60 in [""] + list(K.WAFFEN_HAND):
+            _n60 = _FIG60.bildname(_sk60, _vs60, _ge60)
+            _soll60 = K.BILD_MASS["spieler_" + _ge60] if _ge60 else K.BILD_MASS["spieler"]
+            _b60 = _bi60.bild(_n60)
+            if _b60.get_size() != tuple(_soll60) or _b60.get_bounding_rect().width < 10:
+                _kaputt60.append(_n60)
+        for _i60 in range(K.SCHWUNG_BILDER):
+            _n60 = "%s_schwung_%d" % (_FIG60.bildname(_sk60, _vs60), _i60)
+            if _bi60.bild(_n60).get_size() != tuple(K.BILD_MASS["spieler_schwung_%d" % _i60]):
+                _kaputt60.append(_n60)
+pruef("Jedes Aussehen hat jede Figur: ohne und mit jeder Waffe, je Mannschaft, im Schwung",
+      not _kaputt60 and len(_bi60.fehler) == _fehler60, str(_kaputt60[:5]))
+
+
+def _gleich60(a, b):
+    return pygame.image.tobytes(a, "RGBA") == pygame.image.tobytes(b, "RGBA")
+
+
+pruef("Die Mannschaft sieht man an der Neon-Markierung (rot, blau, ohne: drei Bilder)",
+      not _gleich60(_bi60.bild("skin_ghost"), _bi60.bild("skin_ghost_rot"))
+      and not _gleich60(_bi60.bild("skin_ghost_rot"), _bi60.bild("skin_ghost_blau")))
+pruef("Ein Aussehen fuer eine Waffe, die es nicht gibt, ist kein Bild (zurueck zur Vorgabe)",
+      _bi60.mass("skin_ghost_gibtsnicht") is None and _bi60.mass("skin_schildtraeger_sturm") is None
+      and _bi60.mass("skin_ghost_schwung_99") is None)
+_ins60 = []
+for _gr60 in ("buggy", "panzer_turm", "panzerwagen_ring"):
+    _n60 = _FIG60.insassen_bildname(_gr60, "wolf", "rot_")
+    _b60 = _bi60.bild(_n60)
+    _ins60.append((_n60, _b60.get_size() == tuple(K.BILD_MASS[_gr60 + "_fahrer"])
+                   and not _gleich60(_b60, _bi60.bild(_gr60 + "_rot_fahrer"))))
+pruef("Im Fahrzeug sitzt man in seinem Aussehen (Buggy, Panzerturm, MG-Ring)",
+      all(ok_ for _n, ok_ in _ins60) and len(_bi60.fehler) == _fehler60, str(_ins60))
+_npc60 = _FIG60.npc_bildnamen()
+pruef("NPCs und Tiere sind feste Bilder in ihrer Groesse",
+      len(_npc60) == 8 + len(K.STIRNBAND_FARBEN)
+      and all(_bi60.bild(n_).get_size() == tuple(K.BILD_MASS["spieler"]) for n_ in _npc60)
+      and all(_bi60.bild(_FIG60.tier_bildname(a_, i_)).get_size() == tuple(t_["mass"])
+              for a_, t_ in K.TIERE.items() for i_ in range(len(t_["farben"])))
+      and len(_bi60.fehler) == _fehler60, str(_npc60))
+
+_soldaten60 = [x_ for x_ in _wahl60 if x_ in K.FIGUREN_GRUPPEN["SOLDAT"]]
+pruef("Ein Bot traegt einen Soldaten - zu seinem Namen immer denselben",
+      _BOTS60.bot_aussehen("BOT-KILO") in _soldaten60
+      and _BOTS60.bot_aussehen("BOT-KILO") == _BOTS60.bot_aussehen("BOT-KILO")
+      and len({_BOTS60.bot_aussehen("BOT-" + n_) for n_ in K.BOTS["namen"]}) > 3)
+
+# Im Gefecht: das Aussehen aus den Einstellungen geht mit dem "hallo" mit,
+# eine Aenderung gilt sofort, und der Gast sieht dasselbe.
+app.opt["aussehen"] = "raven"
+w, ga = _paar59("team", karte="staubtal")
+_gk60 = w.kaempfer.get(ga.meine_nummer)
+pruef("Gastgeber und Gast steigen in ihrem Aussehen ein",
+      w.ich.skin == "raven" and _gk60 is not None and _gk60.skin == "raven",
+      "%s %s" % (w.ich.skin, getattr(_gk60, "skin", None)))
+pruef("... und so zeigt die Figur es (skin_raven_<mannschaft>_<waffe>)",
+      w.ich.bild == _FIG60.bildname("raven", w.ich.team_vorsatz, w.ich.waffe_name),
+      w.ich.bild)
+app.opt["aussehen"] = "cobra"
+for _ in range(10):
+    w.schritt(K.NETZ["takt"])
+    ga.schritt(K.NETZ["takt"])
+pruef("Eine Aenderung im Menue gilt sofort, beim Gastgeber fuer beide",
+      w.ich.skin == "cobra" and _gk60.skin == "cobra", "%s %s" % (w.ich.skin, _gk60.skin))
+pruef("... und der Gast sieht es an beiden Figuren",
+      ga.kaempfer[0].skin == "cobra" and ga.ich.skin == "cobra"
+      and ga.kaempfer[0].bild.startswith("skin_cobra_"), ga.kaempfer[0].bild)
+ga.gast.senden({"t": "aussehen", "sk": "schildtraeger"})
+for _ in range(6):
+    w.schritt(K.NETZ["takt"])
+    ga.schritt(K.NETZ["takt"])
+pruef("Ein Aussehen, das keine Waffe zeigen kann, nimmt der Gastgeber nicht an",
+      _gk60.skin == "" and _gk60.bild.startswith("spieler_"), _gk60.bild)
+_bot60 = w._bot_dazu(1)
+for _ in range(6):
+    w.schritt(K.NETZ["takt"])
+    ga.schritt(K.NETZ["takt"])
+pruef("Bots tragen ihren Soldaten, auch beim Gast",
+      _bot60.skin in _soldaten60 and _bot60.skin == _BOTS60.bot_aussehen(_bot60.name)
+      and ga.kaempfer[_bot60.nummer].skin == _bot60.skin, _bot60.skin)
+_bu60 = next(b_ for b_ in w.fahrzeuge if b_.art == "buggy")
+w.ich.pos.update(_bu60.ausstiegsorte(9.0)[0])
+w._einsteigen(w.ich, _bu60)
+for _ in range(6):
+    w.schritt(K.NETZ["takt"])
+    ga.schritt(K.NETZ["takt"])
+_gbu60 = next((b_ for b_ in ga.fahrzeuge if b_.besetzt and b_.art == "buggy"), None)
+_soll60 = _FIG60.insassen_bildname("buggy", "cobra", w.ich.team_vorsatz)
+pruef("Im Buggy sitzt er in seinem Aussehen - beim Gastgeber und beim Gast",
+      _bu60.bild == _soll60 and _gbu60 is not None and _gbu60.bild == _soll60,
+      "%s %s" % (_bu60.bild, getattr(_gbu60, "bild", None)))
+app.opt["aussehen"] = ""
+w.verlassen(); ga.verlassen()
+
+# Testmodus (AGENTS.md): Aussehen je Figur, NPCs und Tiere im Spawner.
+_tm60 = _TM59.Testmodus(app, karte="staubtal")
+_gr60 = {}
+for e_ in _tm60.eintraege:
+    _gr60.setdefault(e_.gruppe, []).append(e_)
+pruef("Testmodus: 8 NPCs und 3 Tiere stehen im Spawner",
+      len(_gr60.get("NPC", [])) == 8 and [e_.name for e_ in _gr60.get("TIERE", [])]
+      == ["SCHAF", "ZIEGE", "HUHN"], str(sorted(_gr60)))
+pruef("... BOT und SPIELER haben ein AUSSEHEN, SPIELER, ICH als Vorgabe das eigene",
+      all("aussehen" in _tm60._eintrag(n_).optionen for n_ in ("BOT", "SPIELER, STEHT"))
+      and _tm60.werte(_tm60._eintrag("SPIELER, ICH"))["aussehen_ich"] == "eigen")
+_ort60 = freier_punkt(_tm60.welt, 0, random.Random(60))
+_b1_60 = _tm60.bot_setzen(_ort60, 0, {"team": 0, "aussehen": "ghost", "ki": True})
+_b2_60 = _tm60.bot_setzen(_ort60 + pygame.Vector2(24, 0), 0, {"team": 0})
+_p60 = _tm60.puppe_setzen(_ort60 + pygame.Vector2(0, 24), 0, {"team": 1, "aussehen": ""})
+pruef("... ein gewaehltes Aussehen gilt, ZUFALL ist beim Bot sein Soldat, leer die alte Figur",
+      _b1_60.skin == "ghost" and _b1_60.bild.startswith("skin_ghost_rot_")
+      and _b2_60.skin == _BOTS60.bot_aussehen(_b2_60.name)
+      and _p60.skin == "" and _p60.bild.startswith("spieler_blau_"),
+      "%s %s %s" % (_b1_60.bild, _b2_60.skin, _p60.bild))
+# Die Puppe der anderen Mannschaft wieder weg: die Bots sollen gleich
+# zeigen, dass sie NPCs und Tiere in Ruhe lassen - ohne Gegner daneben,
+# auf den sie schiessen und dabei einen Bewohner streifen koennten.
+_tm60.loeschen(_p60)
+_tm60._sp_werte["ÜBERLEBENDE"] = {"stirnband": 3}
+_ue60 = _tm60.spawnen(_tm60._eintrag("ÜBERLEBENDE"), pos=_ort60 + pygame.Vector2(-30, 0), ebene=0)
+pruef("... die Ueberlebende traegt das gewaehlte Stirnband",
+      len(_ue60) >= 1 and _ue60[0].bild == "npc_ueberlebende_tuerkis", _ue60[0].bild if _ue60 else "")
+_tm60._sp_werte["SCHAF"] = {"farbe_schaf": 1}
+_sf60 = _tm60.spawnen(_tm60._eintrag("SCHAF"), pos=_ort60 + pygame.Vector2(0, -40), ebene=0)[0]
+_sf_start60 = pygame.Vector2(_sf60.pos)
+_lief60 = False
+for _ in range(int(6.0 / K.FIXED_DT)):
+    _tm60.schritt(K.FIXED_DT)
+    _lief60 = _lief60 or _sf60.ziel is not None
+pruef("... ein Schaf in der gewaehlten Farbe laeuft herum und bleibt auf freiem Boden",
+      _sf60.bild == "tier_schaf_dunkel" and _lief60 and _sf60.lebt
+      and _sf60.pos.distance_to(_sf_start60) > 3.0
+      and _tm60.welt.frei(_sf60.pos, _sf60.radius - 1.0, 0, True),
+      "%s %.1f" % (_sf60.bild, _sf60.pos.distance_to(_sf_start60)))
+pruef("... niemand greift NPCs und Tiere an: sie gehoeren zu keiner Seite",
+      _ue60[0].lebt and _sf60.lebt and _ue60[0].fraktion == "zivil"
+      and _ue60[0] not in _tm60.kaempfer.values())
+_flaeche60 = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+_sf60.ziel = _sf60.pos + pygame.Vector2(30, 0)
+_tm60.blick = _sf60.ebene
+_tm60.kamera.pos.update(_sf60.pos)
+_tm60.kamera.versatz.update(0, 0)
+_tm60._info_zeichnen(_flaeche60)
+_rund60 = _flaeche60.get_bounding_rect()
+pruef("... die INFO-Ansicht zeigt, wohin ein Tier laeuft (Linie und LAEUFT)",
+      _rund60.width >= 20 and _rund60.collidepoint(K.GAME_W // 2 + 10, K.GAME_H // 2),
+      str(_rund60))
+_ue60[0].schaden(1000.0, None, _b1_60)
+pruef("... ein NPC stirbt an einem Treffer, und ENTF toetet auch ein Tier",
+      not _ue60[0].lebt and _tm60.toeten(_sf60) and not _sf60.lebt)
+_tm60.verlassen()
+EN.RND.setstate(_rnd60)
+random.setstate(_zufall60)
+
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
 pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)

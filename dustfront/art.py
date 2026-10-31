@@ -962,6 +962,18 @@ def _figur_schwung(rumpf, rumpf_dk, akzent, rel: float):
     pygame.draw.ellipse(s, rumpf_dk, schulter)
     pygame.draw.ellipse(s, rumpf, schulter.inflate(-3, -3))
     pygame.draw.ellipse(s, hell, schulter.inflate(-3, -3).move(0, -2), 1)
+    schwung_arme(s, c, rumpf_dk, rel)
+    # Kopf
+    pygame.draw.circle(s, rumpf_dk, (c + 1, c), 5)
+    pygame.draw.circle(s, hell, (c + 1, c), 4)
+    pygame.draw.circle(s, akzent, (c + 3, c), 2)
+    return _rand(s)
+
+
+def schwung_arme(s, c: int, kante, rel: float) -> None:
+    """Brecheisen und beide Arme zur Hand vorn, um `rel` Grad gedreht. Fuer
+    _figur_schwung und die Skins (art_figuren), seit 0.34.60 eine eigene
+    Funktion - damit jeder Skin denselben Schwung zeigt."""
     hand = pygame.Vector2(c + 1, c) + pygame.Vector2(12, 0).rotate(rel)
     # Erst das Eisen, dann die Arme darueber: die Haende umfassen den Griff.
     eisen = _waffe_brecheisen()
@@ -971,13 +983,8 @@ def _figur_schwung(rumpf, rumpf_dk, akzent, rel: float):
     mitte = hand - griff.rotate(rel)
     s.blit(gedreht, gedreht.get_rect(center=(round(mitte.x), round(mitte.y))))
     for seite in (-5, 5):
-        pygame.draw.line(s, rumpf_dk, (c + 1, c + seite), hand, 3)
-    pygame.draw.circle(s, rumpf_dk, (round(hand.x), round(hand.y)), 2)
-    # Kopf
-    pygame.draw.circle(s, rumpf_dk, (c + 1, c), 5)
-    pygame.draw.circle(s, hell, (c + 1, c), 4)
-    pygame.draw.circle(s, akzent, (c + 3, c), 2)
-    return _rand(s)
+        pygame.draw.line(s, kante, (c + 1, c + seite), hand, 3)
+    pygame.draw.circle(s, kante, (round(hand.x), round(hand.y)), 2)
 
 
 def schwung_winkel(i: int) -> float:
@@ -2175,7 +2182,13 @@ def _insasse(fahrer, groesse: int = 28, arme=8):
     `arme` die Laenge nach vorn oder None (der Kommandant in der Luke).
 
     Gemeldet mit dem Fahrzeugpaket: die Insassen sollen bei **allen**
-    Fahrzeugen Spielergroesse haben - der Fahrer des Buggys war kleiner."""
+    Fahrzeugen Spielergroesse haben - der Fahrer des Buggys war kleiner.
+
+    Seit 0.34.60 auch {"skin": id, "team": ...}: dann sitzt er in seinem
+    Aussehen drin (art_figuren.insasse)."""
+    if isinstance(fahrer, dict):
+        from . import art_figuren
+        return art_figuren.insasse(fahrer, arme)
     rumpf, kante, akzent = fahrer
     s = _flaeche(groesse, groesse)
     c = groesse // 2
@@ -2414,3 +2427,4 @@ def _panzergranate():
 # unten: art_fahrzeuge braucht `_rand`, `_insasse_auf` und die Farben des
 # Buggys, die erst hier alle stehen.
 from . import art_fahrzeuge  # noqa: E402,F401
+from . import art_figuren  # noqa: E402,F401  Skins, NPCs, Tiere (seit 0.34.60)

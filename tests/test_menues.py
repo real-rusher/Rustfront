@@ -519,6 +519,24 @@ pruef("Und die Waehler zeigen dann dessen Waffen",
       next(el for el in aus.elemente if el.name == "waffe0").wert
       == app.konto.loadout["waffen"][0])
 
+# Das Aussehen (seit 0.34.60): eine Zeile mehr, gilt sofort, liegt in den
+# Einstellungen und wandert mit dem Konto.
+pruef("AUSSEHEN steht unter den Waffen, als Vorgabe die alte Figur",
+      "aussehen" in waehler and next(el for el in aus.elemente
+                                     if el.name == "aussehen").wert == "", str(waehler))
+_aus = next(el for el in aus.elemente if el.name == "aussehen")
+_aus.index = _aus.optionen.index("wolf")
+aus.geaendert(_aus)
+pruef("Ein gewaehltes Aussehen steht sofort in den Einstellungen und auf der Platte",
+      app.opt["aussehen"] == "wolf" and E.Einstellungen()["aussehen"] == "wolf",
+      app.opt["aussehen"])
+pruef("Es wandert mit dem Konto", "aussehen" in E.KONTO_WERTE)
+pruef("Die Vorschau passt neben die Waehler (alles auf der Tafel, im Bild)",
+      K.GAME_W >= aus.tafel.right and aus.tafel.x >= 0
+      and all(aus.tafel.contains(el.rect) for el in aus.elemente))
+schirm(M.Ausruestung(app), "menue_9b_aussehen.png")
+_aus.index = 0
+aus.geaendert(_aus)
 pruef("Vorher wurde noch nie ausgeruestet", not app.konto.loadout_gewaehlt_je)
 taste(aus, pygame.K_ESCAPE)
 pruef("Nach dem Schliessen gilt es als erledigt",

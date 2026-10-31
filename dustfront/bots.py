@@ -106,6 +106,17 @@ def _winkel_diff(a: float, b: float) -> float:
     return (b - a + 180.0) % 360.0 - 180.0
 
 
+def bot_aussehen(name: str) -> str:
+    """Ein Bot traegt das Aussehen eines Soldaten (seit 0.34.60) - immer
+    dasselbe zu seinem Namen. GRUND fuer einen eigenen Zufall aus dem
+    Namen statt _bot_rnd: der Zufall der Bots entscheidet ueber ihr
+    Verhalten, und ein Bild soll keinen Wurf davon verbrauchen
+    (tests/test_verhalten.py laeuft mit festen Seeds)."""
+    from .art_figuren import waehlbar
+    soldaten = [s for s in waehlbar() if s in K.FIGUREN_GRUPPEN["SOLDAT"]]
+    return random.Random(name).choice(soldaten) if soldaten else ""
+
+
 def bot_loadout(rnd, fest=None) -> dict:
     """Ein Loadout fuer einen Bot: zwei verschiedene Waffen und eine
     Granate (K.BOTS["wurf_arten"]) - oder das vorgegebene ("eines fuer
@@ -1278,6 +1289,7 @@ class BotTeil:
         k.angemeldet = None
         k.team_wunsch = team
         k.konto = ""
+        k.skin = bot_aussehen(name)
         self._regeln_anlegen(k)
         k.unverwundbar = self.schutz_zeit
         k.medkits = 0

@@ -56,7 +56,7 @@ import math
 import pygame
 
 from . import config as K
-from .core import naehern
+from .core import Bilder, naehern
 from .entities import RND, Geschoss, Partikel, Wesen, abschuss_buchen, tod_blut, wolke
 
 
@@ -135,6 +135,9 @@ class Buggy(Wesen):
         # Gastgeber folgt beides aus `fahrer`.
         self.besetzt = False
         self.team = -1
+        # Und in welchem Aussehen (seit 0.34.60, art_figuren). Leer: die
+        # alte Figur in den Farben der Mannschaft.
+        self.skin = ""
         self._staub_rest = 0.0
         # Kaputt (seit 0.34.18): ein Wrack, das noch `wrack_rest` brennt.
         # `kaputt_von` hat ihn erledigt - der bekommt auch den Fahrer.
@@ -150,17 +153,33 @@ class Buggy(Wesen):
     def bild(self) -> str:
         if self.kaputt:
             return "buggy_wrack"
+        return self._insassen_bild("buggy")
+
+    def _insassen_bild(self, grund: str) -> str:
+        """Das Bild mit dem, der drinsitzt: leer, im Skin des Fahrers
+        (`grund`_skin_<id>[_<team>], seit 0.34.60), sonst in den Farben
+        seiner Mannschaft. Beim Gastgeber vom Fahrer, beim Gast gemeldet."""
         if self.fahrer is not None:
-            besetzt, team = True, getattr(self.fahrer, "team", -1)
+            besetzt = True
+            team = getattr(self.fahrer, "team", -1)
+            skin = getattr(self.fahrer, "skin", "")
         else:
-            besetzt, team = self.besetzt, self.team
+            besetzt, team, skin = self.besetzt, self.team, self.skin
         if not besetzt:
-            return "buggy"
-        if 0 <= team < len(K.TEAMS["kombi"]):
-            name = "buggy_%s_fahrer" % K.TEAMS["kombi"][team]["name"].lower()
+            return grund
+        kurz = (K.TEAMS["kombi"][team]["name"].lower()
+                if 0 <= team < len(K.TEAMS["kombi"]) else "")
+        if skin:
+            name = "%s_skin_%s%s" % (grund, skin, "_" + kurz if kurz else "")
+            # Nur wenn es das Muster gibt (art_figuren ist geladen) -
+            # ohne Zeichnung bliebe sonst ein rotes Fehlbild stehen.
+            if Bilder.mass(name):
+                return name
+        if kurz:
+            name = "%s_%s_fahrer" % (grund, kurz)
             if name in K.BILD_MASS:
                 return name
-        return "buggy_fahrer"
+        return grund + "_fahrer"
 
     @property
     def vorn(self) -> pygame.Vector2:
@@ -810,18 +829,9 @@ class Schwer(Buggy):
             self._zerstoeren(von)
 
     def aufbau_bild_name(self) -> str:
-        """Turm bzw. Ring: leer, mit Insasse, in den Farben seiner Mannschaft."""
-        if self.fahrer is not None:
-            besetzt, team = True, getattr(self.fahrer, "team", -1)
-        else:
-            besetzt, team = self.besetzt, self.team
-        if not besetzt:
-            return self.aufbau_name
-        if 0 <= team < len(K.TEAMS["kombi"]):
-            name = "%s_%s_fahrer" % (self.aufbau_name, K.TEAMS["kombi"][team]["name"].lower())
-            if name in K.BILD_MASS:
-                return name
-        return self.aufbau_name + "_fahrer"
+        """Turm bzw. Ring: leer, mit Insasse - in seinem Skin oder in den
+        Farben seiner Mannschaft (Buggy._insassen_bild)."""
+        return self._insassen_bild(self.aufbau_name)
 
     def aufbau_mitte(self, pos=None, winkel=None) -> pygame.Vector2:
         raise NotImplementedError

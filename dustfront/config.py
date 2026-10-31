@@ -437,6 +437,8 @@ TOD = dict(
         "koloss": "koloss",
         "mutter": "brut",
         "brandstifter": "asche",
+        # NPCs und Tiere im Testmodus (seit 0.34.60, testmodus.Bewohner).
+        "zivil": "mensch",
     },
     spritzer=18,              # Tropfen beim Tod
     laut=0.7,                 # Lautstaerke des Todeslauts ...
@@ -3103,6 +3105,149 @@ for _w in ("repetierer", "sturm", "schrot", "scharf", "lmg", "granate",
     SKIN_ROLLEN["%s_knall" % _w] = ("schuss_%s" % _w
                                     if "schuss_%s" % _w in KLANG_NAMEN
                                     else "schuss")
+
+# ══════════════════════════════════════════════════ FIGUREN (seit 0.34.60)
+#
+# Die Figuren aus dem Paket `dustfront_figuren` (vier Runden mit dem
+# Besitzer abgestimmt, alle auf "Behalten"): 14 Operators und 17 Soldaten
+# als Aussehen fuer Spieler und Bots, 8 NPCs und 3 Tiere fuer die Welt.
+# Gezeichnet in dustfront/art_figuren.py, im Stil von art._figur: 28 x 28,
+# Blick nach +x, Schultern 14 x 16, Kopf r 5. Hier stehen nur die Daten -
+# genau die Werte aus `designs.json` des Pakets.
+#
+#   rumpf, kante, akzent   wie bei art._figur
+#   kopf                   Helm, Kappe, Kapuze ... (art_figuren._kopf)
+#   kopffarbe, haut        Farben des Kopfes
+#   weste, westenfarbe     platten, schwer, kreuz, bandelier, granaten
+#   ruecken                Funkgeraet, Rucksack, Fallschirm ...
+#   arme                   waffe (Vorgabe): haelt, was er traegt. Sonst
+#                          etwas Festes (Schild, Pistole, Klemmbrett ...)
+#   tarn                   Farben der Tarnflecken
+#   ghillie, breit, rang, armbinde, offizier, brille, ausweis, nvg_an
+#
+# Gestaltungsregeln des Besitzers: Groesse wie die bestehenden Figuren,
+# keine Pflichtwaffe, keine Maentel, Soldaten bleiben gruen - die
+# Mannschaft zeigen helle Neon-Markierungen (FIGUREN_NEON), NPC-Haende
+# vorn, Gegenstaende nicht fest an der Figur.
+FIGUREN = {
+    # OPERATOR
+    "ghost": dict(name='GHOST', text='Totenkopf als Sichel vorn, nicht mehr nach oben schauend; Funkgerät', rumpf=(52, 54, 56), kante=(18, 18, 20), akzent=(226, 60, 44), kopf='totenkopf', ruecken='funk', weste='platten', westenfarbe=(36, 38, 40)),
+    "spectre": dict(name='SPECTRE', text='Dreiröhren-Nachtsicht, leuchtet', rumpf=(44, 50, 66), kante=(16, 18, 26), akzent=(120, 255, 140), kopf='nvg', kopffarbe=(58, 64, 78), nvg_an=True, tarn=((40, 44, 56), (28, 30, 38), (60, 64, 78)), weste='platten', westenfarbe=(30, 34, 44)),
+    "reaper": dict(name='REAPER', text='Kapuze, rote Augen, Plattenweste - ohne Umhang', rumpf=(72, 62, 58), kante=(22, 18, 18), akzent=(236, 50, 40), kopf='kapuze_augen', kopffarbe=(64, 54, 50), umhang=(54, 46, 44), weste='platten', westenfarbe=(46, 40, 38)),
+    "viper": dict(name='VIPER', text='Shemagh, Waldtarn, Brille', rumpf=(76, 88, 52), kante=(28, 34, 20), akzent=(200, 230, 90), kopf='shemagh', kopffarbe=(140, 132, 96), tarn=((70, 84, 48), (52, 60, 36), (110, 100, 64)), weste='kreuz'),
+    "nomad": dict(name='NOMAD', text='Boonie-Hut, großer Rucksack', rumpf=(168, 144, 102), kante=(66, 52, 32), akzent=(110, 170, 120), kopf='boonie', kopffarbe=(150, 128, 88), pack=(118, 104, 70), ruecken='rucksack', tarn=((170, 146, 102), (130, 106, 70), (186, 166, 124))),
+    "ronin": dict(name='RONIN', text='Rotes Stirnband, Klinge auf dem Rücken', rumpf=(78, 74, 76), kante=(24, 22, 24), akzent=(206, 52, 40), haut=(164, 118, 82), kopf='stirnband', kopffarbe=(30, 26, 24), ruecken='schwert'),
+    "havoc": dict(name='HAVOC', text='Schwere Panzerung, Visierhelm', rumpf=(78, 80, 74), kante=(24, 26, 24), akzent=(240, 160, 50), breit=True, kopf='visier', kopffarbe=(60, 62, 58), weste='schwer', westenfarbe=(46, 48, 44)),
+    "raven": dict(name='RAVEN', text='Rabenschwarz, Zweiröhren-NVG, ohne Umhang', rumpf=(64, 60, 72), kante=(18, 16, 22), akzent=(170, 120, 230), kopf='nvg2', kopffarbe=(58, 54, 66), umhang=(46, 42, 54), weste='platten', westenfarbe=(40, 38, 46)),
+    "falcon": dict(name='FALCON', text='Pilotenhelm, Fallschirm', rumpf=(104, 108, 92), kante=(38, 40, 32), akzent=(240, 190, 60), kopf='pilot', kopffarbe=(196, 196, 186), ruecken='fallschirm'),
+    "cobra": dict(name='COBRA', text='Barett, Funk, Kreuzgurte', rumpf=(88, 96, 58), kante=(32, 36, 20), akzent=(240, 210, 90), haut=(122, 84, 58), kopf='barett', kopffarbe=(40, 70, 40), ruecken='funk', weste='kreuz'),
+    "mantis": dict(name='MANTIS', text='Ghillie-Anzug, Scharfschütze', rumpf=(78, 90, 50), kante=(30, 36, 18), akzent=(200, 240, 120), ghillie=True, kopf='boonie', kopffarbe=(84, 92, 54), tarn=((70, 84, 48), (52, 60, 36), (110, 100, 64))),
+    "jackal": dict(name='JACKAL', text='Kappe verkehrt, Wüstentarn', rumpf=(176, 150, 106), kante=(70, 56, 36), akzent=(230, 120, 60), kopf='kappe_rueck', kopffarbe=(110, 94, 70), tarn=((170, 146, 102), (130, 106, 70), (186, 166, 124)), weste='platten', westenfarbe=(132, 112, 78)),
+    "wolf": dict(name='WOLF', text='Sturmhaube, Schneebrille, Headset - keine Haut', rumpf=(196, 200, 202), kante=(70, 74, 78), akzent=(90, 170, 230), kopf='headset_maske', kopffarbe=(214, 218, 220), tarn=((200, 204, 206), (150, 156, 160), (220, 222, 224)), weste='platten', westenfarbe=(150, 156, 160)),
+    "kestrel": dict(name='KESTREL', text='Helmkamera, Stadttarn', rumpf=(100, 102, 104), kante=(32, 34, 36), akzent=(255, 120, 60), kopf='kamera_helm', kopffarbe=(78, 80, 82), tarn=((96, 98, 100), (60, 62, 66), (130, 132, 132)), weste='platten', westenfarbe=(56, 58, 60)),
+    # SOLDAT
+    "rekrut": dict(name='REKRUT', text='Einfacher Helm, sonst nichts', rumpf=(112, 114, 76), kante=(40, 42, 24), akzent=(210, 200, 150), kopf='helm', kopffarbe=(96, 100, 64)),
+    "schuetze": dict(name='SCHÜTZE', text='Helm, Weste, Rucksack', rumpf=(104, 110, 70), kante=(38, 40, 22), akzent=(210, 200, 150), kopf='helm', kopffarbe=(90, 96, 60), ruecken='rucksack', tarn=((70, 84, 48), (52, 60, 36), (110, 100, 64)), weste='platten'),
+    "gefreiter": dict(name='GEFREITER', text='Rangabzeichen an den Schultern', rumpf=(104, 110, 70), kante=(38, 40, 22), akzent=(210, 200, 150), kopf='helm', kopffarbe=(90, 96, 60), rang=2, tarn=((70, 84, 48), (52, 60, 36), (110, 100, 64)), weste='platten'),
+    "mg_schuetze": dict(name='MG-SCHÜTZE', text='Breit, Patronengurt', rumpf=(98, 104, 66), kante=(34, 36, 20), akzent=(210, 200, 150), breit=True, kopf='helm', kopffarbe=(84, 90, 56), tarn=((70, 84, 48), (52, 60, 36), (110, 100, 64)), weste='bandelier'),
+    "funker": dict(name='FUNKER', text='Funkgerät mit Peitschenantenne', rumpf=(104, 110, 70), kante=(38, 40, 22), akzent=(210, 200, 150), kopf='kopfhoerer', kopffarbe=(70, 52, 34), ruecken='funk', tarn=((70, 84, 48), (52, 60, 36), (110, 100, 64))),
+    "sanitaeter": dict(name='SANITÄTER', text='Armbinde, Sanitätstasche', rumpf=(110, 112, 80), kante=(40, 42, 26), akzent=(230, 230, 220), armbinde=True, kopf='helm', kopffarbe=(96, 100, 66), ruecken='sani'),
+    "pionier": dict(name='PIONIER', text='Weste, Sprengladungen und Zündschnur am Rucksack', rumpf=(104, 100, 70), kante=(38, 36, 22), akzent=(230, 160, 50), arme='waffe', kopf='helm', kopffarbe=(88, 86, 58), ruecken='sprengpack', weste='platten'),
+    "grenadier": dict(name='GRENADIER', text='Granaten am Gurt', rumpf=(100, 106, 68), kante=(36, 38, 22), akzent=(220, 160, 60), kopf='helm', kopffarbe=(86, 92, 58), tarn=((70, 84, 48), (52, 60, 36), (110, 100, 64)), weste='granaten'),
+    "scharfschuetze": dict(name='SCHARFSCHÜTZE', text='Boonie, halber Ghillie', rumpf=(92, 100, 60), kante=(32, 36, 20), akzent=(200, 220, 140), ghillie=True, kopf='boonie', kopffarbe=(100, 104, 66)),
+    "offizier": dict(name='OFFIZIER', text='Feldmütze mit Abzeichen, Schulterklappen mit Sternen, Fernglas', rumpf=(104, 110, 70), kante=(38, 40, 22), akzent=(196, 196, 150), kopf='feldmuetze_offizier', kopffarbe=(84, 92, 58), offizier=True, ruecken='fernglas', tarn=((70, 84, 48), (52, 60, 36), (110, 100, 64)), weste='platten', westenfarbe=(76, 82, 52)),
+    "schildtraeger": dict(name='SCHILDTRÄGER', text='Großes gewölbtes Schild mit Sichtfenster', rumpf=(104, 110, 70), kante=(38, 40, 22), akzent=(150, 200, 200), alt_id='rhino', arme='schild', breit=True, kopf='visier', kopffarbe=(90, 96, 60), schildfarbe=(78, 86, 64), tarn=((70, 84, 48), (52, 60, 36), (110, 100, 64)), weste='schwer', westenfarbe=(70, 76, 46)),
+    "panzerfahrer": dict(name='PANZERFAHRER', text='Gepolsterte Haube, Brille', rumpf=(78, 76, 66), kante=(26, 24, 20), akzent=(140, 200, 220), arme='pistole', kopf='haube', kopffarbe=(84, 66, 46)),
+    "fallschirmjaeger": dict(name='FALLSCHIRMJÄGER', text='Rundhelm, Schirmpack', rumpf=(118, 108, 78), kante=(42, 38, 24), akzent=(200, 200, 150), kopf='helm', kopffarbe=(80, 84, 60), ruecken='fallschirm', tarn=((96, 90, 60), (140, 128, 92))),
+    "gebirgsjaeger": dict(name='GEBIRGSJÄGER', text='Winterweiß, Schlafrolle', rumpf=(200, 202, 200), kante=(72, 76, 78), akzent=(90, 140, 200), kopf='muetze', kopffarbe=(170, 172, 170), pack=(150, 150, 140), ruecken='rolle', tarn=((200, 204, 206), (150, 156, 160), (220, 222, 224))),
+    "wuestenschuetze": dict(name='WÜSTENSCHÜTZE', text='Shemagh, Sandtarn', rumpf=(172, 146, 104), kante=(68, 54, 34), akzent=(220, 120, 60), kopf='shemagh', kopffarbe=(196, 180, 140), tarn=((170, 146, 102), (130, 106, 70), (186, 166, 124)), weste='platten', westenfarbe=(140, 118, 80)),
+    "stadtkaempfer": dict(name='STADTKÄMPFER', text='Grautarn, Visier', rumpf=(100, 102, 104), kante=(34, 36, 38), akzent=(120, 200, 230), kopf='visier', kopffarbe=(70, 72, 76), tarn=((96, 98, 100), (60, 62, 66), (130, 132, 132)), weste='platten', westenfarbe=(60, 62, 66)),
+    "wachposten": dict(name='WACHPOSTEN', text='Mütze, Lampe an der Schulter - ohne Mantel', rumpf=(104, 110, 70), kante=(38, 40, 22), akzent=(230, 200, 120), arme='waffe', kopf='muetze', kopffarbe=(70, 76, 50), mantel=(80, 84, 62), ruecken='schulterlampe', tarn=((70, 84, 48), (52, 60, 36), (110, 100, 64))),
+    # NPC
+    "haendler": dict(name='HÄNDLER', text='Turban, riesiger Packen', rumpf=(150, 92, 54), kante=(56, 32, 18), akzent=(60, 140, 160), arme='vorne', haut=(122, 84, 58), kopf='turban', kopffarbe=(196, 180, 140), ruecken='riesen'),
+    "aerztin": dict(name='ÄRZTIN', text='OP-Kleidung, Armbinde, Klemmbrett, Tasche - ohne Kittel', rumpf=(92, 140, 132), kante=(30, 56, 52), akzent=(120, 180, 220), armbinde=True, arme='klemmbrett', kopf='zopf', kopffarbe=(110, 70, 40), mantel=(206, 202, 190), ruecken='sanitasche_klein'),
+    "wissenschaftler": dict(name='WISSENSCHAFTLER', text='Helles Hemd, Ausweis, Brille, Messgerät - ohne Kittel', rumpf=(196, 198, 196), kante=(84, 84, 80), akzent=(120, 200, 160), arme='geigerzaehler', ausweis=True, brille=True, haut=(214, 176, 140), kopf='glatze', mantel=(214, 214, 208)),
+    "fluechtling": dict(name='FLÜCHTLING', text='Kopftuch, Bündel auf dem Rücken', rumpf=(128, 102, 80), kante=(48, 36, 26), akzent=(200, 160, 110), arme='vorne', haut=(122, 84, 58), kopf='kopftuch', kopffarbe=(140, 70, 60), ruecken='buendel', umhang=(110, 86, 66)),
+    "pilger": dict(name='PILGER', text='Kapuze, Laterne, Deckenrolle - ohne Mantel', rumpf=(140, 116, 86), kante=(52, 40, 28), akzent=(250, 200, 90), arme='laterne', kopf='kapuze_offen', kopffarbe=(124, 100, 72), mantel=(130, 106, 78), pack=(110, 92, 64), ruecken='rolle'),
+    "schmuggler": dict(name='SCHMUGGLER', text='Lederjacke, Kappe, Kreuzgurte - ohne Kiste', rumpf=(84, 62, 48), kante=(28, 20, 16), akzent=(200, 160, 80), arme='vorne', haut=(122, 84, 58), kopf='kappe', kopffarbe=(44, 40, 38), mantel=(60, 52, 46), weste='kreuz'),
+    "hirte": dict(name='HIRTE', text='Kopftuch, Hirtentasche an der Seite', rumpf=(150, 128, 96), kante=(56, 46, 30), akzent=(150, 60, 50), arme='halb_vorne', haut=(122, 84, 58), kopf='kopftuch', kopffarbe=(200, 186, 150), ruecken='tasche', umhang=(120, 96, 70)),
+    "ueberlebende": dict(name='ÜBERLEBENDE', text='Senfgelbes Stirnband, Kanister', rumpf=(120, 96, 72), kante=(44, 34, 24), akzent=(206, 170, 64), arme='vorne', haut=(164, 118, 82), kopf='stirnband', kopffarbe=(70, 46, 30), ruecken='kanister'),
+}
+
+# Gruppen, in der Reihenfolge, in der das Paket sie zeigt.
+FIGUREN_GRUPPEN = {
+    "OPERATOR": ("ghost", "spectre", "reaper", "viper", "nomad", "ronin", "havoc", "raven",
+                 "falcon", "cobra", "mantis", "jackal", "wolf", "kestrel"),
+    "SOLDAT": ("rekrut", "schuetze", "gefreiter", "mg_schuetze", "funker", "sanitaeter",
+               "pionier", "grenadier", "scharfschuetze", "offizier", "schildtraeger",
+               "panzerfahrer", "fallschirmjaeger", "gebirgsjaeger", "wuestenschuetze",
+               "stadtkaempfer", "wachposten"),
+    "NPC": ("haendler", "aerztin", "wissenschaftler", "fluechtling", "pilger", "schmuggler",
+            "hirte", "ueberlebende"),
+}
+
+# Die Mannschaft an der Figur: zwei Neon-Streifen auf den Schultern und ein
+# Leuchtfleck am Hinterkopf, (Kern, Licht). Gemeldet: "Soldaten behalten
+# ihren gruenen Look" - umgefaerbt wird nichts.
+FIGUREN_NEON = {
+    "ROT": ((255, 70, 52), (255, 186, 160)),
+    "BLAU": ((52, 226, 255), (196, 250, 255)),
+}
+
+# Die UEBERLEBENDE bekommt ein zufaelliges Stirnband aus diesen Farben.
+STIRNBAND_FARBEN = (("SENF", (206, 170, 64)), ("OLIV", (110, 124, 66)),
+                    ("TÜRKIS", (64, 150, 150)), ("WEINROT", (140, 46, 56)),
+                    ("SCHWARZ", (40, 38, 38)), ("WEISS", (222, 218, 204)))
+
+# Die Tiere, je in drei Farben (die erste ist die Vorgabe). Eigene Masse:
+# das Huhn ist bewusst klein, etwa so lang, wie eine Figur breit ist.
+TIERE = {
+    "schaf": dict(name="SCHAF", mass=(26, 20), leben=30.0, radius=8.0, farben=(
+        ("WEISS", dict()),
+        ("DUNKEL", dict(wolle=(96, 84, 74), gesicht=(30, 26, 24), seed=3)),
+        ("GRAU", dict(wolle=(176, 172, 160), gesicht=(70, 62, 58), seed=5)))),
+    "ziege": dict(name="ZIEGE", mass=(28, 18), leben=26.0, radius=7.0, farben=(
+        ("BRAUN", dict()),
+        ("SCHWARZ", dict(fell=(54, 48, 44), fleck=(210, 200, 182), seed=4)),
+        ("SANDFARBEN", dict(fell=(196, 168, 120), fleck=(240, 232, 214), seed=6)))),
+    "huhn": dict(name="HUHN", mass=(14, 11), leben=6.0, radius=4.0, farben=(
+        ("BRAUN", dict()),
+        ("WEISS", dict(gefieder=(232, 228, 216), fluegel=(196, 190, 176),
+                       schwanz=(170, 164, 150))),
+        ("SCHWARZ", dict(gefieder=(52, 54, 56), fluegel=(34, 36, 40),
+                         schwanz=(24, 40, 36))))),
+}
+
+# NPCs in der Welt (Testmodus, seit 0.34.60): wie viel sie aushalten. Ihr
+# Verhalten kommt mit der Kampagne (docs/KI.md).
+NPC = dict(leben=60.0, radius=9.0)
+# Wie die Tiere herumlaufen (Testmodus): ein Stueck in eine Richtung, dann
+# eine Weile stehen. tempo in Pixeln je Sekunde, weite der Schritt, pause
+# (von, bis) in Sekunden. reibung bremst einen Stoss (Treffer, Explosion).
+TIER_LAUFEN = dict(tempo=(18.0, 30.0), weite=(16.0, 52.0), pause=(1.2, 4.5),
+                   reibung=7.0)
+
+
+def bild_kennung(text: str) -> str:
+    """Ein angezeigter Name als Teil eines Bildnamens: klein, ohne Umlaute
+    ("TÜRKIS" -> "tuerkis")."""
+    for a, b in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+        text = text.lower().replace(a, b)
+    return text.replace(" ", "_").replace("-", "_")
+
+
+# Die NPCs und Tiere sind feste Bilder (art_figuren.py). Die Skins der
+# Spieler dagegen stehen nicht hier: sie kommen aus einem Muster
+# (core.platzhalter_muster), sonst waeren es ueber tausend Eintraege.
+for _skin in FIGUREN_GRUPPEN["NPC"]:
+    BILD_MASS["npc_" + _skin] = BILD_MASS["spieler"]
+for _band, _f in STIRNBAND_FARBEN:
+    BILD_MASS["npc_ueberlebende_" + bild_kennung(_band)] = BILD_MASS["spieler"]
+for _art, _t in TIERE.items():
+    for _i, (_fn, _w) in enumerate(_t["farben"]):
+        BILD_MASS["tier_%s" % _art if _i == 0
+                  else "tier_%s_%s" % (_art, bild_kennung(_fn))] = _t["mass"]
+
 
 # Seltenheitsstufen. **Noch nicht eingebaut** - sie stehen hier, weil
 # die Farben an einer Stelle gehoeren und nicht in einem Entwurf.
