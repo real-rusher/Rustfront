@@ -2167,9 +2167,51 @@ def _reifen(s, x, y, lang, breit):
                      max(1, round(0.5 * _BUGGY_SS)))
 
 
+def _insasse(fahrer, groesse: int = 28, arme=8):
+    """Wer in einem Fahrzeug sitzt (seit 0.34.59): genau die Spielerfigur
+    aus `_figur` - Schultern 14 x 16, Kopf r 5, Visierpunkt -, Arme nach
+    vorn, nur ohne den Gewehrstummel. Was er haelt, gehoert zum Fahrzeug
+    (Lenkrad, MG-Griffe, Lukenrand). `fahrer` = (rumpf, kante, akzent),
+    `arme` die Laenge nach vorn oder None (der Kommandant in der Luke).
+
+    Gemeldet mit dem Fahrzeugpaket: die Insassen sollen bei **allen**
+    Fahrzeugen Spielergroesse haben - der Fahrer des Buggys war kleiner."""
+    rumpf, kante, akzent = fahrer
+    s = _flaeche(groesse, groesse)
+    c = groesse // 2
+    hell = tuple(min(255, k + 34) for k in rumpf)
+    schulter = pygame.Rect(c - 7, c - 8, 14, 16)
+    pygame.draw.ellipse(s, kante, schulter)
+    pygame.draw.ellipse(s, rumpf, schulter.inflate(-3, -3))
+    pygame.draw.ellipse(s, hell, schulter.inflate(-3, -3).move(0, -2), 1)
+    if arme:
+        pygame.draw.line(s, kante, (c + 1, c - 5), (c + arme, c - 3), 3)
+        pygame.draw.line(s, kante, (c + 1, c + 5), (c + arme, c + 3), 3)
+    pygame.draw.circle(s, kante, (c + 1, c), 5)
+    pygame.draw.circle(s, hell, (c + 1, c), 4)
+    pygame.draw.circle(s, akzent, (c + 3, c), 2)
+    return _rand(s)
+
+
+def _insasse_auf(gross, ss: int, mitte_px: int, fahrer, cx: float, cy: float,
+                 arme=8) -> None:
+    """Den Insassen pixelgenau auf eine ss-fach grosse Zeichenflaeche setzen.
+    (cx, cy) ist seine Mitte in Spielpixeln relativ zur Bildmitte.
+
+    GRUND fuer ganze Pixel und hartes Vergroessern: nach dem weichen
+    Verkleinern des Fahrzeugs steht er dann genau so da wie die Figur im
+    Spiel - weich mitverkleinert waere er ein verwaschener Fleck."""
+    f = _insasse(fahrer, arme=arme)
+    g = pygame.transform.scale(f, (f.get_width() * ss, f.get_height() * ss))
+    x = (mitte_px + round(cx) - f.get_width() // 2) * ss
+    y = (mitte_px + round(cy) - f.get_height() // 2) * ss
+    gross.blit(g, (x, y))
+
+
 def _buggy_zeichnen(fahrer=None):
     """Der Buggy von oben, leer oder mit Fahrer (`fahrer` = (rumpf, kante,
-    akzent) seiner Mannschaft)."""
+    akzent) seiner Mannschaft). Seit 0.34.59 sitzt die echte Spielerfigur
+    am Steuer (`_insasse_auf`), dafuer ist das Cockpit etwas groesser."""
     ss = _BUGGY_SS
     gross = _flaeche(64 * ss, 64 * ss)
     s = gross
@@ -2251,8 +2293,9 @@ def _buggy_zeichnen(fahrer=None):
     pygame.draw.rect(s, (86, 104, 62), _bp_rect(-10.0, 3.0, 2.5, 5.5),
                      border_radius=round(0.5 * ss))
 
-    # Cockpit
-    cockpit = _bp_rect(-9, -7.5, 15, 15)
+    # Cockpit - seit 0.34.59 groesser, damit die Figur in Spielergroesse
+    # hineinpasst (vorher -9, -7.5, 15, 15).
+    cockpit = _bp_rect(-11, -8.5, 17, 17)
     pygame.draw.rect(s, (24, 20, 18), cockpit, border_radius=round(3 * ss))
     pygame.draw.rect(s, (46, 40, 36), cockpit.inflate(-ss, -ss),
                      border_radius=round(2.6 * ss))
@@ -2277,28 +2320,8 @@ def _buggy_zeichnen(fahrer=None):
     pygame.draw.line(s, (16, 14, 12), _bp(2.7, 0), _bp(4.2, 0), round(0.9 * ss))
 
     if fahrer is not None:
-        rumpf, kante, akzent = fahrer
-        hell = tuple(min(255, k + 34) for k in rumpf)
-        # Schultern quer, die Arme vorn am Lenkrad
-        sch = _bp_rect(-8, -6.6, 6.5, 13.2)
-        pygame.draw.ellipse(s, kante, sch)
-        pygame.draw.ellipse(s, rumpf, sch.inflate(-ss, -ss))
-        for sy in (-1, 1):
-            pygame.draw.line(s, kante, _bp(-4, sy * 4.6), _bp(2.6, sy * 3.0),
-                             round(2.0 * ss))
-            pygame.draw.line(s, rumpf, _bp(-4, sy * 4.6), _bp(2.4, sy * 3.0),
-                             round(1.1 * ss))
-            pygame.draw.circle(s, (34, 28, 24), _bp(2.7, sy * 3.0), 1.0 * ss)
-        # Helm mit Visier nach vorn
-        pygame.draw.circle(s, kante, _bp(-3.6, 0), 4.8 * ss)
-        pygame.draw.circle(s, rumpf, _bp(-3.6, 0), 4.0 * ss)
-        pygame.draw.circle(s, hell, _bp(-4.8, -1.2), 1.8 * ss)
-        visier = _bp_rect(-3.6 - 4.4, -4.4, 8.8, 8.8)
-        pygame.draw.arc(s, (28, 34, 42), visier, -1.05, 1.05, round(1.6 * ss))
-        pygame.draw.arc(s, akzent, visier.inflate(-ss, -ss), -0.5, 0.2,
-                        round(0.6 * ss))
-        # Mittelstreifen auf dem Helm, damit man die Blickrichtung sieht
-        pygame.draw.line(s, kante, _bp(-7.4, 0), _bp(-1.0, 0), round(0.7 * ss))
+        # Die Spielerfigur selbst, Haende am Lenkrad (seit 0.34.59).
+        _insasse_auf(s, ss, 32, fahrer, -4, 0)
 
     # Ueberrollkaefig ueber dem Fahrer: zwei Buegel und die Laengsrohre
     for sy in (-1, 1):
@@ -2371,3 +2394,23 @@ def _buggy_schatten():
         s = pygame.transform.smoothscale(pygame.transform.smoothscale(s, (16, 16)),
                                          (64, 64))
     return s
+
+
+@platzhalter("panzergranate")
+def _panzergranate():
+    """Die Granate der Panzerkanone (seit 0.34.59): dicker als jede Kugel,
+    mit heller Spitze - die Leuchtspur dahinter zeichnet der Renderer."""
+    w, h = K.BILD_MASS["panzergranate"]
+    s = _flaeche(w, h)
+    pygame.draw.rect(s, (120, 74, 28), (0, 1, w - 2, h - 2))
+    pygame.draw.rect(s, K.C_AMBER, (3, 1, w - 5, h - 2))
+    pygame.draw.rect(s, (255, 244, 214), (w - 4, 2, 3, h - 4))
+    return s
+
+
+# Panzer und Panzerwagen zeichnen sich in einem eigenen Modul (seit
+# 0.34.59). Hier eingebunden, damit sie mit allen anderen Bildern
+# registriert sind, sobald art geladen ist. GRUND fuer den Platz ganz
+# unten: art_fahrzeuge braucht `_rand`, `_insasse_auf` und die Farben des
+# Buggys, die erst hier alle stehen.
+from . import art_fahrzeuge  # noqa: E402,F401

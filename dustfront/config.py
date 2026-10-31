@@ -646,6 +646,14 @@ KLANG_NAMEN = (
     "buggy_aufprall",       # der Buggy rumst gegen etwas
     "buggy_rutschen",       # die Reifen quietschen, wenn er rutscht (seit 0.34.16)
     "funk_durch",           # ein Funkspruch ist durch (seit 0.34.58)
+    # Panzer und Panzerwagen (seit 0.34.59) - Platzhalter, bis es Aufnahmen gibt.
+    "schuss_kanone",        # die Panzerkanone
+    "schuss_bug_mg",        # das Bug-MG des Panzers
+    "schuss_ring_mg",       # das MG im Ring des Panzerwagens
+    "panzer_einschlag",     # die Granate der Kanone schlaegt ein
+    "panzer_motor",         # Ketten und Motor, in einem Takt, solange er faehrt
+    "panzerwagen_motor",
+    "rammen",               # ein Fahrzeug rammt jemanden
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -1023,6 +1031,250 @@ FAHRZEUG = dict(
     rauch_takt=0.12,          # Qualm aus dem Wrack
     balken_breite=26,         # Lebensbalken ueber einem beschaedigten Wagen
 )
+
+# ── Panzer und Panzerwagen (seit 0.34.59) ──────────────────────────
+#
+# Entwurf aus dem Paket `rustfront_fahrzeuge` (README_IMMEDIATELY.md),
+# Grafik und Verhalten vom Besitzer abgenommen. Bilder in
+# dustfront/art_fahrzeuge.py, Fahren in dustfront/fahrzeug.py. Gemeldet
+# als Entscheidung: "einer steuert ein Fahrzeug" - der Fahrer faehrt mit
+# W A S D und zielt mit der Maus (Turm bzw. MG-Ring folgen ihr).
+#
+# Masse in Spielpixeln, ausser wo "Entwurf" steht (mal `groesse`).
+FAHRZEUG_BILD = dict(
+    # Wanne und Aufbau gegenueber dem ersten Entwurf. Der Besitzer hat
+    # 1,0, 1,2 und 1,4 gesehen und 1,4 genommen: dann haben die Insassen
+    # Spielergroesse. Kuppel, MG-Ring und Insasse wachsen NICHT mit.
+    groesse=1.4,
+    flaeche=128,              # Bildmass von Wanne und Turm
+    ring_flaeche=64,          # Bildmass des MG-Rings
+    kette_teilung=2.6,        # Entwurfspixel je Kettenglied
+    phasen=12,                # Stufen je Kettenglied (im Video so)
+    gedreht_speicher=96,      # so viele gedrehte Wannen und Tuerme merkt er sich
+)
+
+PANZER = dict(
+    marke="P",                # Buchstabe in der Karte
+    name="PANZER",
+    # Fahren: ein Kettenfahrzeug, kein Einspurmodell. Dreht auf der
+    # Stelle, driftet nicht. Zielwerte aus dem abgenommenen Video.
+    hoechst=45.0,             # px/s vorwaerts
+    rueckwaerts=26.0,
+    beschleunigung=55.0,
+    bremse=120.0,             # gegen die Fahrtrichtung gedrueckt
+    rollen=90.0,              # ohne Gas
+    drehen=80.0,              # Grad je Sekunde auf der Stelle
+    drehen_fahrt=0.55,        # bei Hoechstfahrt dreht er nur noch so viel davon
+    dreh_beschl=320.0,        # Grad je Sekunde im Quadrat
+    aufprall=0.0,             # so viel Tempo bleibt nach einem Aufprall (rueckwaerts)
+    aufprall_hart=40.0,       # ab diesem Tempo rumst es
+    # Fussabdruck als Rechteck (lokal, +x = vorn), aus dem Paket (RAMMEN)
+    vorn=44.0, hinten=-44.0, halb=29.7,
+    ketten_abstand=23.8,      # von der Mitte bis zur Kettenmitte (17 Entwurfspixel)
+    kette_teilung=3.64,       # Spielpixel je Glied: Weg je Kettenphase
+    spur_abstand=3.0,         # Kettenspuren im Sand, Pixel zwischen zwei Abdruecken
+    spur_deckkraft=46,
+    # Turm: dreht unabhaengig, ca. 50 bis 70 Grad je Sekunde
+    turm_vor=2.8,             # Drehpunkt so weit vor der Wannenmitte (2 Entwurfspixel)
+    turm_dreh=60.0,
+    muendung=51.3,            # Muendung der Kanone vor der Turmmitte (44 Turmpixel)
+    bug_mg=(46.9, 7.0),       # Muendung des Bug-MGs, in der Wanne (33,5 / 5)
+    ruecklauf=5.0,            # das Rohr faehrt nach dem Schuss so weit zurueck
+    ruecklauf_tempo=14.0,     # und kommt so schnell wieder vor (px/s)
+    ruck=1.5,                 # die Wanne ruckt so weit zurueck
+    ruck_tempo=10.0,
+    # Was er aushaelt. Kugeln zerkratzen nur den Lack (`kugel_anteil`),
+    # Granaten, Raketen, C4 und Kanonen wirken voll.
+    leben=700.0,
+    kugel_anteil=0.12,
+    fahrer_anteil=0.2,        # so viel von jedem Treffer kommt beim Kommandanten an
+    explosion_radius=96.0,
+    explosion_schaden=95.0,
+    fahrer_schaden=40.0,
+    wrack_zeit=14.0,
+    neu_nach=30.0,
+    einsteigen=60.0,          # so nah muss man an der Mitte sein
+    balken_breite=40,
+    motor_takt=0.42,          # so oft brummt der Motor, waehrend er faehrt (s)
+    # Mit einem Stick (Touch): wie beim Buggy (fahrzeug.Buggy.stick_steuern).
+    stick_tot=0.2,
+    stick_voll_lenken=40.0,
+    stick_wenden=110.0,
+    stick_zurueck=150.0,
+    stick_bremsen_ab=20.0,
+    # Rammen: Schaden nur ueber die Front und ab der Schwelle, in Leben:
+    # (Tempo - schwelle) * je_px. Im Paket in "Treffern" eines Laeufers
+    # (4 je Laeufer, 44 Leben) - hier umgerechnet: 1/25 Treffer = 0,44.
+    ramm_schwelle=20.0,
+    ramm_je_px=0.44,
+    ramm_stoss=1.2,
+    ramm_extra=40.0,
+)
+
+PANZERWAGEN = dict(
+    marke="L",
+    name="PANZERWAGEN",
+    # Gewuenscht "wie ein Striker": zieht zaeh an, wird dann sehr schnell,
+    # ist sehr schlecht lenkbar. Faehrt mit dem Einspurmodell des Buggys
+    # (Buggy._physik) - nur mit diesem zweiten Satz Werte. Abgestimmt
+    # gegen die Zielwerte aus dem Paket:
+    #   Beschleunigung a(v) = (motor + motor_wachsen * v) * (1 - (v/hoechst)^3)
+    #   -> 26 px/s nach 1,2 s, rund 240 px/s nach 5 s, hoechstens 320
+    #   Wenderadius wende_grund + wende_je_tempo * v (Buggy: rund 40)
+    hoechst=320.0,
+    rueckwaerts=60.0,
+    motor=15.0,
+    motor_wachsen=0.6,
+    bremse=260.0,
+    rollen=34.0,
+    luft=0.0,
+    wende_grund=160.0,
+    wende_je_tempo=1.0,
+    lenk_max=14.0,            # nur fuer die Stick-Steuerung und als Grenze
+    lenk_abfall=0.0,
+    lenk_tempo=70.0,
+    achse_vorn=25.2,          # Vorderachse 18 Entwurfspixel vor der Mitte
+    achse_hinten=19.0,        # zwischen den beiden Hinterachsen
+    traegheit=1100.0,
+    griff_vorn=560.0,
+    griff_hinten=500.0,
+    steif=5200.0,
+    schlupf_spitze=7.0,
+    gleiten=0.8,
+    handbremse_griff=0.55,
+    handbremse_bremse=120.0,
+    antrieb_kreis=0.6,
+    durchdrehen=1.0,
+    gegenlenken=0.4,
+    gegenlenken_los=1.0,
+    antrieb_kreis_los=0.25,
+    drift_grenze=24.0,
+    drift_grenze_hb=50.0,
+    drift_stuetze=60000.0,
+    v_min=55.0,
+    spur_ab=0.3,
+    spur_abstand=2.5,
+    quietschen_ab=0.55,
+    quietschen_pause=0.7,
+    aufprall=0.2,
+    aufprall_hart=120.0,
+    staub_ab=70.0,
+    staub_takt=0.05,
+    staub_farbe=(206, 184, 142),
+    staub_groesse=3,
+    staub_hinten=34.0,        # Staub hinter den Hinterachsen, nicht aus der Mitte
+    staub_quer=19.6,
+    unscharf_ab=72.0,         # ab diesem Tempo sind die Reifen verwischt (0,4 Stollen je Bild)
+    stick_tot=0.2,
+    stick_voll_lenken=40.0,
+    stick_wenden=110.0,
+    stick_zurueck=150.0,
+    stick_bremsen_ab=50.0,
+    # Fussabdruck aus dem Paket (RAMMEN), +x = vorn
+    vorn=47.6, hinten=-43.4, halb=24.5,
+    reifen_abstand=19.6,      # Reifenmitte von der Mitte (14 Entwurfspixel)
+    reifen_teilung=3.01,      # Spielpixel je Stollen
+    # Der MG-Ring: Mitte (-12,5 Entwurfspixel), dreht mit ca. 120 Grad je s
+    ring=(-17.5, 0.0),
+    ring_dreh=120.0,
+    ring_muendung=29.0,
+    ring_ruecklauf=1.5,
+    ring_ruecklauf_tempo=20.0,
+    leben=480.0,
+    kugel_anteil=0.35,
+    fahrer_anteil=0.45,       # der Schuetze steht im Ring, Kopf und Schultern frei
+    explosion_radius=84.0,
+    explosion_schaden=85.0,
+    fahrer_schaden=50.0,
+    wrack_zeit=12.0,
+    neu_nach=24.0,
+    einsteigen=56.0,
+    balken_breite=36,
+    motor_takt=0.36,
+    ramm_schwelle=40.0,
+    ramm_je_px=0.37,          # 1/30 Treffer eines Laeufers
+    ramm_stoss=1.35,
+    ramm_extra=30.0,
+)
+
+# Rammen und was danach fliegt (seit 0.34.59). Gilt fuer beide.
+RAMMEN = dict(
+    sperre=0.4,               # so lange kein zweiter Schaden vom selben Fahrzeug
+    # Wer beim Rammen stirbt, fliegt noch ein Stueck mit Drehung weiter
+    # und hinterlaesst einen Spritzer in Flugrichtung.
+    flug_kurz=0.12,
+    flug_lang=0.6,
+    flug_je_tempo=1.0 / 500.0,
+    flug_bremse=3.5,
+    flug_dreh=700.0,
+    wackeln=4.0,
+)
+
+# Der Einschlag der Panzerkanone (seit 0.34.59, entities.Feuerball). Aus
+# dem abgenommenen Video: groesser als Granate und C4, nichts davon rund.
+# Zeiten in Sekunden, Masse in Pixeln.
+FEUERBALL = dict(
+    ballen=9,                     # Glutballen, versetzt und zeitversetzt
+    ballen_streuung=11.0,
+    ballen_radius=(5.0, 12.0),
+    ballen_start=0.09,            # so spaet geht der letzte auf
+    ballen_dauer=(0.17, 0.34),
+    # Innen hell, aussen dunkel: (Anteil am Radius, Farbe)
+    glut=((1.0, (170, 70, 20)), (0.7, (240, 150, 50)), (0.38, (255, 238, 190))),
+    wolken=10,                    # dunkler Rauch danach
+    wolken_streuung=13.0,
+    wolke_klein=(3.0, 6.0),
+    wolke_gross=(9.0, 16.0),
+    wolke_start=(0.07, 0.24),
+    wolke_dauer=(1.15, 1.85),
+    wolke_deckkraft=105,
+    wind_x=(6.0, 12.0),           # Rauch treibt ab (px/s)
+    wind_y=(-6.0, -2.0),
+    rauch_farben=((52, 46, 42), (66, 58, 52), (40, 36, 33)),
+    dauer=2.2,                    # danach ist alles verflogen
+    krater=15.0,                  # Radius des Kraters im Boden
+    funken=60,
+    kamera=6.0,
+)
+
+# Die Waffen der Fahrzeuge. Nicht in WAFFEN: niemand traegt sie in der
+# Hotbar, und das Loadout soll sie nicht anbieten. Geschossen wird ueber
+# dieselben Geschosse und denselben Knall (Welt.schussknall).
+FAHRZEUG_WAFFEN = {
+    "kanone": dict(
+        name="KANONE",
+        schaden=150.0,        # bei einem Treffer, dazu die Druckwelle
+        flaeche=95.0,         # Druckwelle in der Mitte
+        radius=40.0,          # Flaechenschaden (im Paket 34 px)
+        tempo=700.0,          # Granate, mit dicker Leuchtspur
+        reichweite=900.0,
+        geschosse=1,
+        takt=2.6,             # Nachladen
+        kamera=4.0,
+        muendung=2.4,         # Muendungsblitz so viel groesser
+        schub=300.0,
+    ),
+    "bug_mg": dict(
+        name="BUG-MG",
+        schaden=13.0,
+        tempo=520.0,
+        reichweite=620.0,
+        geschosse=1,
+        takt=1.0 / 11.0,      # rund 11 Schuss je Sekunde
+        streuung=2.5,
+        kamera=0.6,
+    ),
+    "ring_mg": dict(
+        name="RING-MG",
+        schaden=13.0,
+        tempo=520.0,
+        reichweite=620.0,
+        geschosse=1,
+        takt=1.0 / 12.0,
+        streuung=2.0,
+        kamera=0.6,
+    ),
+}
 
 # Bots (seit 0.34.18, dustfront/bots.py). Gemeldet: "optionale schwache
 # bots ... die gleichmaessig die teams auffuellen und objectives machen und
@@ -2486,6 +2738,23 @@ BILD_MASS["buggy_wrack"] = (64, 64)
 for _team in TEAMS["kombi"]:
     BILD_MASS["buggy_%s_fahrer" % _team["name"].lower()] = (64, 64)
 
+# Panzer und Panzerwagen (seit 0.34.59, art_fahrzeuge.py). Wanne und Turm
+# bzw. MG-Ring sind getrennte Bilder: der Aufbau dreht sich fuer sich.
+# Leer, mit Insasse und mit einem Insassen je Mannschaft.
+_fz_n = FAHRZEUG_BILD["flaeche"]
+_fz_r = FAHRZEUG_BILD["ring_flaeche"]
+for _name in ("panzer", "panzer_turm", "panzer_turm_fahrer", "panzer_wrack",
+              "panzer_schatten", "panzerwagen", "panzerwagen_wrack",
+              "panzerwagen_schatten"):
+    BILD_MASS[_name] = (_fz_n, _fz_n)
+BILD_MASS["panzerwagen_ring"] = (_fz_r, _fz_r)
+BILD_MASS["panzerwagen_ring_fahrer"] = (_fz_r, _fz_r)
+for _team in TEAMS["kombi"]:
+    BILD_MASS["panzer_turm_%s_fahrer" % _team["name"].lower()] = (_fz_n, _fz_n)
+    BILD_MASS["panzerwagen_ring_%s_fahrer" % _team["name"].lower()] = (_fz_r, _fz_r)
+# Die Granate der Kanone, mit dicker Leuchtspur gezeichnet.
+BILD_MASS["panzergranate"] = (12, 6)
+
 # Was der Spieler zu Beginn auf den Plaetzen 1 bis 6 traegt.
 #
 # Das Brecheisen steht **nicht** mehr darin. Es liegt auf einer eigenen
@@ -2688,6 +2957,7 @@ MINIKARTE = dict(
     # Die Buggys, als laengliches Zeichen in Fahrtrichtung (Pixel).
     buggy_laenge=5,
     buggy_breite=2.5,
+    schwer_mass=1.6,          # Panzer und Panzerwagen so viel groesser (seit 0.34.59)
 )
 
 # Spielerkosmetik: eigener Ton und eigenes Bild fuer die Blendgranate.

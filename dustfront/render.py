@@ -898,10 +898,18 @@ class Renderer:
         # wird nicht noch einmal obendrauf gezeichnet.
         liste = [w for w in welt.wesen if w.ebene == index and w.lebt
                  and w.hoehe_bild <= 0 and not getattr(w, "im_fahrzeug", False)]
-        # Was auf etwas anderem liegt (C4 auf dem Buggy), zuletzt.
-        liste.sort(key=lambda w: (getattr(w, "obenauf", False), w.pos.y))
+        # Was auf etwas anderem liegt (C4 auf dem Buggy), zuletzt. Panzer und
+        # Panzerwagen (seit 0.34.59, `schicht` 0) vor allem anderen: ihre
+        # Wannen sind niedrig, und nach y sortiert lag alles, was noerdlich
+        # von ihnen steht, unter ihren Ketten. Ihre Tuerme kommen nach den
+        # Figuren (`aufbauten_zeichnen`).
+        liste.sort(key=lambda w: (getattr(w, "schicht", 1), getattr(w, "obenauf", False),
+                                  w.pos.y))
         for w in liste:
             p = boden = w.zeichenpos(alpha) - ecke  # Stelle, auf der es steht
+            if getattr(w, "zeichnet_selbst", False):
+                w.zeichnen_unten(self, ziel, p, dunkel)
+                continue
             schatten_bild = getattr(w, "schatten_bild", None)
             if schatten_bild:
                 # Ein eigener, mitgedrehter Schatten fuer alles, was nicht
@@ -1066,8 +1074,12 @@ class Renderer:
                 continue
             if w.spur is not None and w.tempo.length_squared() > 1:
                 r = w.tempo.normalize()
-                pygame.draw.line(ziel, (128, 80, 30), p - r * 17, p - r * 5, 1)
-                pygame.draw.line(ziel, w.spur, p - r * 6, p, 1)
+                # Die Granate der Panzerkanone zieht eine dicke, lange Spur
+                # (seit 0.34.59, `spur_dick`).
+                dick = getattr(w, "spur_dick", 1)
+                lang = 17 if dick <= 1 else 30
+                pygame.draw.line(ziel, (128, 80, 30), p - r * lang, p - r * 5, dick)
+                pygame.draw.line(ziel, w.spur, p - r * (6 + 4 * (dick - 1)), p, dick)
             if w.bild is None:
                 continue
             s_ = self.bilder.gedreht(w.bild, w.winkel)
@@ -1226,7 +1238,7 @@ class Renderer:
         h = K.HOEHEN
         breite, hoehe = ziel.get_size()
         for p in welt.partikel:
-            if p.ebene != index:
+            if p.ebene != index or p.art == "bodenstaub":
                 continue
             wp = p.zeichenpos(alpha)
             q = wp - ecke
@@ -1250,16 +1262,152 @@ class Renderer:
             pygame.draw.rect(ziel, farbe, (int(q.x), int(q.y), g, g))
 
     def muendungsfeuer(self, ziel, welt, ecke, index) -> None:
-        for (pos, winkel, eb, rest) in welt.muendungen:
+        for m in welt.muendungen:
+            pos, winkel, eb, rest = m[0], m[1], m[2], m[3]
             if eb != index or rest <= 0:
                 continue
-            wp = pos + pygame.Vector2(K.MUENDUNGSFEUER["versatz"], 0).rotate(winkel)
+            # Seit 0.34.59 mit Groesse: die Panzerkanone blitzt 2,4-mal so gross.
+            gross = m[4] if len(m) > 4 else 1.0
+            wp = pos + pygame.Vector2(K.MUENDUNGSFEUER["versatz"] * gross, 0).rotate(winkel)
             if self.verdeckt(welt, index, wp, K.HOEHEN["lauf"]):
                 continue
             s = self.bilder.gedreht("muendung", winkel)
+            if gross != 1.0:
+                s = self._gross_muendung(winkel, gross)
             p = wp - ecke
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2),
                       special_flags=pygame.BLEND_RGB_ADD)
+
+    # ---- Panzer und Panzerwagen (seit 0.34.59) ---------------------------
+    def _gross_muendung(self, winkel: float, gross: float) -> pygame.Surface:
+        cache = self.__dict__.setdefault("_muendung_gross", {})
+        k = int(round(winkel / 3.0)) * 3 % 360
+        schluessel = (k, round(gross, 2))
+        hit = cache.get(schluessel)
+        if hit is None:
+            roh = self.bilder.bild("muendung")
+            g = pygame.transform.smoothscale(
+                roh, (max(1, round(roh.get_width() * gross)),
+                      max(1, round(roh.get_height() * gross))))
+            hit = pygame.transform.rotate(g, -k)
+            if len(cache) > 240:
+                cache.clear()
+            cache[schluessel] = hit
+        return hit
+
+    def bodenstaub_zeichnen(self, ziel, welt, index, ecke, alpha) -> None:
+        """Staub, der am Boden bleibt und unter den Fahrzeugen liegt: die
+        Druckwelle der Kanone vor der Muendung (Welt.schussknall). Im Paket
+        gemeldet: er kam vorher aus der Mitte der Wanne."""
+        breite, hoehe = ziel.get_size()
+        for p in welt.partikel:
+            if p.art != "bodenstaub" or p.ebene != index:
+                continue
+            q = p.zeichenpos(alpha) - ecke
+            if not (-16 <= q.x < breite + 16 and -16 <= q.y < hoehe + 16):
+                continue
+            f = max(0.0, p.leben / p.dauer)
+            g = max(1, int(p.groesse * (0.4 + 0.6 * f)))
+            pygame.draw.rect(ziel, p.farbe, (int(q.x), int(q.y), g, g))
+
+    def aufbauten_zeichnen(self, ziel, welt, index, ecke, alpha, dunkel=None) -> None:
+        """Tuerme und MG-Ringe - nach allen Figuren: Rohr und MG liegen
+        ueber dem, der davor steht (die dritte Ebene aus dem Paket)."""
+        for w in welt.wesen:
+            if (w.ebene == index and w.lebt and getattr(w, "zeichnet_selbst", False)):
+                w.zeichnen_oben(self, ziel, w.zeichenpos(alpha) - ecke, dunkel)
+
+    def flugleichen_zeichnen(self, ziel, welt, index, ecke, alpha, dunkel=None) -> None:
+        """Wer nach dem Rammen noch fliegt (entities.Flugleiche)."""
+        for f in welt.flugleichen:
+            if f.ebene != index:
+                continue
+            s = self.bilder.gedreht(f.bild, f.winkel)
+            if dunkel is not None:
+                s = self.dunkel(s, dunkel)
+            p = f.zeichenpos(alpha) - ecke
+            ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
+
+    def feuerbaelle_zeichnen(self, ziel, welt, index, ecke, teil: str) -> None:
+        """Der Einschlag der Panzerkanone (entities.Feuerball). `teil`
+        "glut": die Glutballen, additiv. "rauch": der dunkle Rauch danach,
+        ueber allem anderen am Boden. Kreise je Ballen und Bild - es sind
+        wenige, und die Flaechen sind klein."""
+        f = K.FEUERBALL
+        for fb in welt.feuerbaelle:
+            if fb.ebene != index:
+                continue
+            mitte = fb.pos - ecke
+            if teil == "glut":
+                for versatz, radius, start, dauer in fb.ballen:
+                    t = fb.alter - start
+                    if t < 0.0 or t > dauer:
+                        continue
+                    anteil = t / dauer
+                    hell = (1.0 - anteil) ** 1.2
+                    for k, farbe in f["glut"]:
+                        rr = radius * k * (0.55 + 0.9 * min(1.0, anteil * 3.0)) \
+                            * (1.0 - 0.5 * anteil)
+                        if rr < 0.6:
+                            continue
+                        fb_farbe = tuple(int(c * hell) for c in farbe)
+                        n = int(rr) + 1
+                        fl = pygame.Surface((n * 2 + 1, n * 2 + 1))
+                        fl.fill((0, 0, 0))
+                        pygame.draw.circle(fl, fb_farbe, (n, n), rr)
+                        p = mitte + versatz
+                        ziel.blit(fl, (round(p.x - n), round(p.y - n)),
+                                  special_flags=pygame.BLEND_RGB_ADD)
+                continue
+            for versatz, r0, r1, start, dauer, tempo, farbe in fb.wolken:
+                t = fb.alter - start
+                if t < 0.0 or t > dauer:
+                    continue
+                anteil = t / dauer
+                rr = r0 + (r1 - r0) * math.sqrt(anteil)
+                deck = int(f["wolke_deckkraft"] * (1.0 - anteil) ** 1.5)
+                if deck <= 0:
+                    continue
+                n = int(rr) + 1
+                fl = pygame.Surface((n * 2 + 1, n * 2 + 1), pygame.SRCALPHA)
+                pygame.draw.circle(fl, tuple(farbe) + (deck,), (n, n), rr)
+                p = mitte + versatz + tempo * t
+                ziel.blit(fl, (round(p.x - n), round(p.y - n)))
+
+    def krater(self, radius: float, saat: int) -> pygame.Surface:
+        """Ein Krater als Bodendekal: kein Kreis, sondern ein Haufen
+        versetzter Kleckse, Strahlen unterschiedlicher Laenge und Brocken
+        (Paket, krater()). Je Saat einmal gebaut - acht Formen reichen."""
+        cache = self.__dict__.setdefault("_krater", {})
+        schluessel = (round(radius), int(saat) % 8)
+        hit = cache.get(schluessel)
+        if hit is not None:
+            return hit
+        r = float(radius)
+        rnd = random.Random(schluessel[1] * 977 + schluessel[0])
+        farbe = (18, 13, 9)
+        g = int(r * 3.2)
+        s = pygame.Surface((g * 2, g * 2), pygame.SRCALPHA)
+        c = pygame.Vector2(g, g)
+        for _ in range(int(10 + r)):
+            d = pygame.Vector2(rnd.uniform(0, r * 0.55), 0).rotate(rnd.uniform(0, 360))
+            pygame.draw.circle(s, farbe + (rnd.randint(30, 60),), c + d,
+                               rnd.uniform(r * 0.18, r * 0.5))
+        for _ in range(5):                       # dunkler, unregelmaessiger Kern
+            d = pygame.Vector2(rnd.uniform(0, r * 0.25), 0).rotate(rnd.uniform(0, 360))
+            pygame.draw.circle(s, farbe + (70,), c + d, rnd.uniform(r * 0.15, r * 0.3))
+        for _ in range(rnd.randint(9, 14)):      # Strahlen
+            a = rnd.uniform(0, 360)
+            p0 = c + pygame.Vector2(r * 0.3, 0).rotate(a)
+            p1 = c + pygame.Vector2(rnd.uniform(r * 0.7, r * 1.9), 0).rotate(a + rnd.uniform(-6, 6))
+            pygame.draw.line(s, farbe + (rnd.randint(25, 50),), p0, p1,
+                             max(1, round(rnd.uniform(1, 2.6))))
+        for _ in range(int(r * 1.5)):            # Brocken
+            d = pygame.Vector2(rnd.uniform(r * 0.4, r * 2.2), 0).rotate(rnd.uniform(0, 360))
+            pygame.draw.rect(s, farbe + (rnd.randint(50, 110),),
+                             (c.x + d.x, c.y + d.y, rnd.randint(1, 2), rnd.randint(1, 2)))
+        cache[schluessel] = s
+        return s
 
     def _tiefenflaeche(self, k: float) -> pygame.Surface:
         """Hilfsflaeche fuer eine tiefer liegende Ebene.
@@ -1816,15 +1964,20 @@ class Renderer:
             return
         self.feuer_zeichnen(ziel, welt, idx, ecke, eigene)
         self.ringe_zeichnen(ziel, welt, idx, ecke)
+        self.bodenstaub_zeichnen(ziel, welt, idx, ecke, alpha)
         self.wesen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         if figuren is not None:
             figuren(ziel, idx, ecke)
+        self.flugleichen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
+        self.aufbauten_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.stehende_nachholen()
         self.luft_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
+        self.feuerbaelle_zeichnen(ziel, welt, idx, ecke, "glut")
         self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
         self.muendungsfeuer(ziel, welt, ecke, idx)
         if luft is not None:
             luft(ziel, idx, ecke)
+        self.feuerbaelle_zeichnen(ziel, welt, idx, ecke, "rauch")
         self.rauch_zeichnen(ziel, welt, idx, ecke, eigene)
         if dunkel is None:
             self.balken_zeichnen(ziel, welt, idx, ecke, alpha)

@@ -1297,6 +1297,57 @@ def buggys(k: Karte, erreicht):
         k.e[0][bestes[1]][bestes[0]] = "F"
 
 
+# Panzer und Panzerwagen (seit 0.34.59): ein Panzer im Hof des Forts, ein
+# Panzerwagen auf der langen Piste westlich der Kreuzung - der braucht
+# Anlauf. Gesucht wird wie beim Buggy, nur mit mehr Platz: 7 x 5 Kacheln
+# (oder 5 x 7) frei unter freiem Himmel, weit genug weg von jeder anderen
+# Marke, damit er sich dort drehen kann.
+SCHWERE = (("P", (118, 197)), ("L", (80, 124)))
+
+
+def _schwer_platz(k: Karte, x, y, erreicht) -> bool:
+    if (0, x, y) not in erreicht or k.e[0][y][x] not in BODENARTEN:
+        return False
+    for breit, hoch in ((3, 2), (2, 3)):
+        ok = True
+        for dy in range(-hoch - 1, hoch + 2):
+            for dx in range(-breit - 1, breit + 2):
+                px, py = x + dx, y + dy
+                z = k.an(0, px, py)
+                if z is not None and z.isupper() and z != "X":
+                    ok = False                 # eine andere Marke zu nah
+                    break
+                if abs(dx) > breit or abs(dy) > hoch:
+                    continue
+                if (z is None or z not in BODENARTEN or (px, py) in k.frei[0]
+                        or k.an(1, px, py) not in (None, LOCH)):
+                    ok = False
+                    break
+            if not ok:
+                break
+        if ok:
+            return True
+    return False
+
+
+def schwere(k: Karte, erreicht):
+    for marke, (sx, sy) in SCHWERE:
+        bestes = None
+        for r in range(0, 16):
+            for dy in range(-r, r + 1):
+                for dx in range(-r, r + 1):
+                    if max(abs(dx), abs(dy)) == r and _schwer_platz(k, sx + dx, sy + dy, erreicht):
+                        bestes = (sx + dx, sy + dy)
+                        break
+                if bestes:
+                    break
+            if bestes:
+                break
+        if bestes is None:
+            raise SystemExit("Kein Platz fuer %s bei %s" % (marke, (sx, sy)))
+        k.e[0][bestes[1]][bestes[0]] = marke
+
+
 # ══════════════════════════════════════════════════ 8. Pruefen und reparieren
 
 def stapeln(k: Karte):
@@ -1482,6 +1533,7 @@ def bauen() -> Karte:
     aufzuege_pruefen(k)
     marken(k, da)
     buggys(k, da)
+    schwere(k, da)
     return k
 
 
@@ -1493,7 +1545,7 @@ KOPF = (
     "# Zeichen: . Sand  : Piste  ; Kies  \" Gestruepp  _ Pflaster  = Dielen",
     "#          # Mauer  r Fels  X Fass  b Brocken  s Sandsack  h Holzkiste",
     "#          k Kaktus  w Schrott  ^ v Aufzug (E)  ~ Luft  Z Spawnstelle",
-    "#          F Buggy (seit 0.34.9)",
+    "#          F Buggy (seit 0.34.9)  P Panzer  L Panzerwagen (seit 0.34.59)",
     "",
     "name: STAUBTAL",
     "satz: wueste",

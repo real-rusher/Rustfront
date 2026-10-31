@@ -69,6 +69,7 @@ from . import world as welt_modul
 from .core import Szene
 from .entities import (Aufsammler, Brandflaeche, C4Ladung, Gegner, Geschoss, Granate,
                        Rakete, Rauchwolke, Spieler, Wesen, wolke)
+from . import fahrzeug as fahrzeug_modul
 from .fahrzeug import Buggy
 from .font import SCHRIFT
 from .render import Befinden, Kamera, Renderer, Trefferzeichen, Ueberblendung
@@ -249,7 +250,11 @@ class Kaempfer(Spieler):
         # nicht beim Wagen, damit Statistik und Schadenszahl genau das
         # zaehlen, was wirklich angekommen ist.
         if self.im_fahrzeug:
-            menge = float(menge) * K.FAHRZEUG["schaden_anteil"]
+            # Wie viel ankommt, sagt das Fahrzeug (seit 0.34.59): im Panzer
+            # steht der Kommandant in der Luke, im Panzerwagen der Schuetze
+            # im offenen Ring.
+            anteil = getattr(self.fahrzeug, "fahrer_anteil", K.FAHRZEUG["schaden_anteil"])
+            menge = float(menge) * anteil
             schub = None
         # In der Lobby entscheidet das Gefecht, wo es wehtut (lobby.py).
         # Gefragt wird die Welt, weil die Figur ihr Gefecht nicht kennt.
@@ -1022,6 +1027,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self.welt.darf_treffen = self._darf_treffen
         self.welt.blutfleck = self._blutfleck
         self.welt.brandfleck = self._brandfleck
+        self.welt.krater = self._krater
         self.welt.blitz = self._blitz
         if self.ist_gastgeber:
             # Nur beim Gastgeber: was in der Welt an Wirkung entsteht,
@@ -1032,6 +1038,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self.welt.schlagknall = self._schlagknall_melden
             self.welt.raketenstart = self._raketenstart_melden
             self.welt.tod = self._tod_melden
+            self.welt.leichenflug = self._leichenflug_melden
         if not getattr(self.app, "headless", True):
             # Was das Bild je Ebene einmal rechnet, gleich beim Laden (seit
             # 0.34.58) - nicht erst beim ersten Blick auf eine andere Ebene,
@@ -1048,6 +1055,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     def _brandfleck(self, pos, ebene: int, radius: float) -> None:
         self.welt.ebene(ebene).dekal(self.renderer.brandfleck(radius),
                                      pos.x, pos.y)
+
+    def _krater(self, pos, ebene: int, radius: float, saat: int) -> None:
+        """Der Krater der Panzerkanone in den Boden (seit 0.34.59)."""
+        self.welt.ebene(ebene).dekal(self.renderer.krater(radius, saat), pos.x, pos.y)
 
     def _blitz(self, pos, ebene: int, von=None) -> bool:
         """Eine Blendgranate ist gezuendet. Blendet sie **mich**?
@@ -1101,7 +1112,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     NETZKLAENGE = ("speien", "boss_ansage", "dash", "wurf", "medkit", "ruf",
                    "reload", "downed_not_dead", "rundenstart", "c4_explosion",
                    "lmg_dauer", "lmg_salve", "schuss_schrot", "smoke_grenade",
-                   "buggy_tuer", "buggy_aufprall", "buggy_rutschen")
+                   "buggy_tuer", "buggy_aufprall", "buggy_rutschen",
+                   # Panzer und Panzerwagen (seit 0.34.59)
+                   "panzer_motor", "panzerwagen_motor", "rammen")
 
     def _klang(self, name: str, lautstaerke: float = 1.0, pos=None,
                ebene: int | None = None) -> None:
@@ -1208,6 +1221,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._wirkung.append(["d", round(pos.x, 1), round(pos.y, 1), int(ebene),
                               round(fall_winkel), str(blut), round(radius, 1)])
 
+    def _leichenflug_melden(self, pos, ebene: int, bild: str, winkel: float, tempo,
+                            dauer: float, dreh: float, blut: str, radius: float) -> None:
+        """Wer beim Rammen stirbt, fliegt (seit 0.34.59) - beim Gastgeber
+        und als Meldung "l" bei jedem Gast."""
+        Welt.leichenflug(self.welt, pos, ebene, bild, winkel, tempo, dauer, dreh,
+                         blut, radius)
+        self._wirkung.append(["l", round(pos.x, 1), round(pos.y, 1), int(ebene),
+                              [round(winkel, 1), round(tempo.x, 1), round(tempo.y, 1),
+                               round(dauer, 2), round(dreh), round(radius, 1)],
+                              str(bild), str(blut)])
+
     def _wirkung_nachspielen(self, eintraege) -> None:
         """Beim Gast: die gemeldeten Wirkungen in der eigenen Welt ausloesen.
 
@@ -1218,7 +1242,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         dann zu hoeren, aber ruckelt nicht.
         """
         for e in eintraege:
-            if not isinstance(e, (list, tuple)) or len(e) not in (6, 7):
+            if not isinstance(e, (list, tuple)) or len(e) not in (6, 7, 8):
                 continue
             try:
                 art = str(e[0])
@@ -1246,7 +1270,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 except (TypeError, ValueError):
                     continue
                 waffe = str(e[5])
-                if waffe in K.WAFFEN:
+                if waffe in K.WAFFEN or waffe in K.FAHRZEUG_WAFFEN:
                     self.welt.schussknall(pos, winkel, ebene, waffe)
             elif art == "n":
                 try:
@@ -1289,6 +1313,19 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 except (TypeError, ValueError):
                     continue
                 self.welt.tod(pos, ebene, str(e[5])[:12], radius, fall)
+            elif art == "l" and len(e) == 7:
+                # Fliegt nach dem Rammen (seit 0.34.59). Das Bild nur, wenn
+                # es das Spiel kennt - was hier ankommt, steht danach im Bild.
+                try:
+                    winkel, vx, vy, dauer, dreh, radius = (float(v) for v in e[4][:6])
+                except (TypeError, ValueError, IndexError):
+                    continue
+                bild = str(e[5])
+                if bild not in K.BILD_MASS:
+                    continue
+                self.welt.leichenflug(pos, ebene, bild, winkel, pygame.Vector2(vx, vy),
+                                      max(0.0, min(1.0, dauer)), dreh,
+                                      str(e[6])[:12], max(2.0, min(40.0, radius)))
 
     # ---- Grundsaetzliches --------------------------------------------
     @property
@@ -2191,14 +2228,18 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self.fahrzeuge = []
         if not self.ist_gastgeber:
             return
-        marke = K.FAHRZEUG["marke"]
-        for i, e in enumerate(self.welt.ebenen):
-            for punkt in e.marken.get(marke, ()):
-                b = Buggy(pygame.Vector2(punkt), i)
-                self.welt.dazu(b)
-                b.winkel = self._fahrzeug_richtung(b)
-                b.start = (pygame.Vector2(b.pos), b.ebene, b.winkel)
-                self.fahrzeuge.append(b)
+        # Seit 0.34.59 drei Arten, jede mit ihrem Buchstaben: F Buggy,
+        # P Panzer, L Panzerwagen (fahrzeug.marken).
+        for marke, art in fahrzeug_modul.marken():
+            for i, e in enumerate(self.welt.ebenen):
+                for punkt in e.marken.get(marke, ()):
+                    b = fahrzeug_modul.neu(art, punkt, i)
+                    self.welt.dazu(b)
+                    b.winkel = self._fahrzeug_richtung(b)
+                    if hasattr(b, "aufbau"):
+                        b.aufbau = b.winkel     # Turm und Ring schauen nach vorn
+                    b.start = (pygame.Vector2(b.pos), b.ebene, b.winkel)
+                    self.fahrzeuge.append(b)
 
     @staticmethod
     def _fahrzeug_richtung(b) -> float:
@@ -2219,13 +2260,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         if (k.am_boden or k.flug > 0 or k.sturz_rest > 0
                 or k.fahrzeug is not None):
             return None
-        bester, abstand = None, K.FAHRZEUG["einsteigen"] ** 2
+        bester, abstand = None, 1e18
         for b in self.fahrzeuge:
             if (b.fahrer is not None or b.ebene != k.ebene or b.nur_bild
                     or not b.lebt or b.kaputt):
                 continue
             d = b.pos.distance_squared_to(k.pos)
-            if d <= abstand:
+            # Jede Art hat ihre Reichweite: an einen Panzer kommt man nicht
+            # so nah heran wie an einen Buggy (seit 0.34.59).
+            if d <= b.werte["einsteigen"] ** 2 and d < abstand:
                 bester, abstand = b, d
         return bester
 
@@ -2256,6 +2299,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         if b is not None and b.fahrer is k:
             b.fahrer = None
             b.gas = b.lenk = 0.0
+            b.feuer = b.zweit = False
         k.fahrzeug = None
         k.im_fahrzeug = False
         k.schiebbar = True
@@ -2281,7 +2325,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     def _fahren(self, k: Kaempfer, will, ein: dict) -> None:
         """Am Steuer: vor und zurueck sind Gas und Bremse, links und
         rechts lenken. Geschossen, gedasht und geheilt wird nicht - die
-        Haende sind am Lenkrad. E steigt aus."""
+        Haende sind am Lenkrad. E steigt aus.
+
+        Panzer und Panzerwagen (seit 0.34.59): der Fahrer zielt mit der
+        Maus, Turm bzw. MG-Ring folgen ihr (k.ziel ist schon gesetzt). Die
+        linke Maustaste ist die Kanone bzw. das Ring-MG, die rechte das
+        Bug-MG des Panzers. Geschossen wird mit dem Fahrzeug, nicht mit
+        der eigenen Waffe."""
         b = k.fahrzeug
         if ein.get("rl"):
             # Ein Stick (Touch, seit 0.34.22): der Wagen faehrt dorthin,
@@ -2292,6 +2342,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             b.gas = 1.0 if will.y < -0.3 else (-1.0 if will.y > 0.3 else 0.0)
             b.lenk = 1.0 if will.x > 0.3 else (-1.0 if will.x < -0.3 else 0.0)
         b.handbremse = bool(ein.get("hb"))
+        if getattr(b, "rechteckig", False):
+            b.feuer = bool(ein.get("feuert"))
+            b.zweit = bool(ein.get("zielt"))
         k.will.update(0, 0)
         k.tempo.update(0, 0)
         k.feuert = False
@@ -2323,7 +2376,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 self._aussteigen(k)
                 von = b.kaputt_von
                 if von is None or getattr(von, "fraktion", None) != k.fraktion or von is k:
-                    k.schaden(K.FAHRZEUG["fahrer_schaden"], None, von)
+                    k.schaden(b.werte["fahrer_schaden"], None, von)
                 continue
             if k.am_boden:
                 # Wer am Steuer umfaellt, liegt neben dem Wagen - sonst
@@ -2341,32 +2394,35 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         weg von allen und moeglichst dort, wo ihn gerade niemand sieht - ein
         Wagen, der vor den eigenen Augen aus dem Nichts erscheint, sieht
         nach Fehler aus."""
-        f = K.FAHRZEUG
+        # Je Wrack eine Wartezeit und die Art (seit 0.34.59): ein Panzer
+        # kommt als Panzer wieder, nicht als Buggy.
         for b in list(self.fahrzeuge):
             if b.kaputt and b.wrack_rest <= 0.0 and b.fahrer is None:
                 b.lebt = False
                 self.fahrzeuge.remove(b)
-                self._fahrzeug_warte.append(f["neu_nach"])
+                self._fahrzeug_warte.append([b.werte["neu_nach"], b.art])
         if not self._fahrzeug_warte:
             return
-        self._fahrzeug_warte = [t - dt for t in self._fahrzeug_warte]
-        if self._fahrzeug_warte[0] > 0.0:
+        for eintrag in self._fahrzeug_warte:
+            eintrag[0] -= dt
+        if self._fahrzeug_warte[0][0] > 0.0:
             return
-        platz = self._fahrzeug_platz()
+        art = self._fahrzeug_warte[0][1]
+        platz = self._fahrzeug_platz(art)
         if platz is None:
-            self._fahrzeug_warte[0] = 1.0       # in einer Sekunde noch einmal
+            self._fahrzeug_warte[0][0] = 1.0    # in einer Sekunde noch einmal
             return
         self._fahrzeug_warte.pop(0)
         pos, winkel = platz
-        b = Buggy(pos, 0, winkel)
+        b = fahrzeug_modul.neu(art, pos, 0, winkel)
         self.welt.dazu(b)
         b.start = (pygame.Vector2(pos), 0, winkel)
         self.fahrzeuge.append(b)
 
-    def _fahrzeug_platz(self):
-        """(Ort, Richtung) fuer einen neuen Wagen, oder None."""
+    def _fahrzeug_platz(self, art: str = "buggy"):
+        """(Ort, Richtung) fuer einen neuen Wagen dieser Art, oder None."""
         abstand = K.FAHRZEUG["neu_abstand"]
-        probe = Buggy(pygame.Vector2(0, 0), 0)
+        probe = fahrzeug_modul.neu(art, (0, 0), 0)
         probe.welt = self.welt
         notfall = None
         for versuch in range(80):
@@ -2400,7 +2456,6 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     def _fahrzeug_balken(self, ziel) -> None:
         """Ueber einem beschaedigten Wagen ein kleiner Balken - wie viel er
         noch aushaelt, fuer Fahrer und Angreifer gleich."""
-        breite = K.FAHRZEUG["balken_breite"]
         for b in self.fahrzeuge:
             anteil = b.leben_anteil
             if b.kaputt or anteil >= 0.999 or b.ebene != self.blick:
@@ -2408,7 +2463,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             p = self.kamera.zu_bild(b.pos)
             if not (-40 < p.x < K.GAME_W + 40 and -40 < p.y < K.GAME_H + 40):
                 continue
-            x, y = int(p.x - breite / 2), int(p.y - 24)
+            breite = b.werte.get("balken_breite", K.FAHRZEUG["balken_breite"])
+            hoch = 24 if not getattr(b, "rechteckig", False) else int(b.huelle_radius) + 4
+            x, y = int(p.x - breite / 2), int(p.y - hoch)
             pygame.draw.rect(ziel, (12, 9, 7), (x - 1, y - 1, breite + 2, 5))
             farbe = K.C_AMBER if anteil > 0.35 else K.C_RED
             pygame.draw.rect(ziel, farbe, (x, y, max(1, int(breite * anteil)), 3))
@@ -2427,11 +2484,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 kennung, fahrer, fahrt = int(e[4]), int(e[5]), float(e[6])
                 rutschen = float(e[7]) if len(e) > 7 else 0.0
                 anteil = float(e[8]) if len(e) > 8 else 1.0
+                # Seit 0.34.59: Art, Aufbau (Turm/Ring), Ruecklauf, Drehung,
+                # und wie lange die Kanone noch laedt.
+                art = str(e[9]) if len(e) > 9 else "buggy"
+                aufbau = float(e[10]) if len(e) > 10 else winkel
+                ruecklauf = float(e[11]) if len(e) > 11 else 0.0
+                gier = float(e[12]) if len(e) > 12 else 0.0
+                laden = float(e[13]) if len(e) > 13 else 0.0
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
+            if b is not None and b.art != art:
+                b = None
             if b is None:
-                b = Buggy(pygame.Vector2(x, y), ebene, winkel, nur_bild=True)
+                b = fahrzeug_modul.neu(art, (x, y), ebene, winkel, nur_bild=True)
                 b.netz_kennung = kennung
                 b.welt = self.welt
             else:
@@ -2447,6 +2513,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             # Leben (seit 0.34.18): fuer den Balken und das Wrack.
             b.anteil = max(0.0, min(1.0, anteil))
             b.kaputt = b.anteil <= 0.0
+            if getattr(b, "rechteckig", False):
+                b.aufbau = aufbau
+                b.ruecklauf = max(0.0, min(8.0, ruecklauf))
+                b.gier = max(-10.0, min(10.0, gier))
+                b.takt["kanone"] = max(0.0, laden)
             neu.append(b)
         self.fahrzeuge = neu
 
@@ -2467,28 +2538,60 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             return
         taste_e = self._tastenname("nutzen")
         if ich.im_fahrzeug:
+            wagen = self._mein_wagen()
+            schwer = wagen is not None and getattr(wagen, "rechteckig", False)
+            p = self.kamera.zu_bild(ich.pos)
+            unten = int(wagen.huelle_radius) + 8 if schwer else 30
+            if schwer and wagen.art == "panzer" and not wagen.kaputt:
+                # Ob die Kanone geladen ist - die einzige Zahl, die man im
+                # Panzer wirklich braucht (seit 0.34.59).
+                rest = wagen.takt.get("kanone", 0.0)
+                text = "KANONE BEREIT" if rest <= 0.0 else "KANONE LÄDT %.1f" % rest
+                SCHRIFT.zeichnen(ziel, text, int(p.x), int(p.y) + unten,
+                                 K.C_AMBER if rest <= 0.0 else K.C_MUTED, 1,
+                                 ausrichtung="mitte")
+                unten += 10
             if self._fahrhinweis_rest <= 0.0:
                 return
-            p = self.kamera.zu_bild(ich.pos)
-            text = "[%s/%s] GAS  [%s/%s] LENKEN  [%s] HANDBREMSE  [%s] AUSSTEIGEN" % (
-                self._tastenname("vor"), self._tastenname("zurueck"),
-                self._tastenname("links"), self._tastenname("rechts"),
-                self._tastenname("dash"), taste_e)
-            SCHRIFT.zeichnen(ziel, text, int(p.x), int(p.y) + 30, K.C_CREAM, 1,
+            if schwer:
+                text = "[%s/%s] FAHREN  [%s/%s] DREHEN  [MAUS] ZIELEN  %s  [%s] AUSSTEIGEN" % (
+                    self._tastenname("vor"), self._tastenname("zurueck"),
+                    self._tastenname("links"), self._tastenname("rechts"),
+                    "[LMB] KANONE  [RMB] MG" if wagen.art == "panzer" else "[LMB] MG",
+                    taste_e)
+            else:
+                text = "[%s/%s] GAS  [%s/%s] LENKEN  [%s] HANDBREMSE  [%s] AUSSTEIGEN" % (
+                    self._tastenname("vor"), self._tastenname("zurueck"),
+                    self._tastenname("links"), self._tastenname("rechts"),
+                    self._tastenname("dash"), taste_e)
+            SCHRIFT.zeichnen(ziel, text, int(p.x), int(p.y) + unten, K.C_CREAM, 1,
                              ausrichtung="mitte")
             return
         if ich.flug > 0 or ich.ebene != self.blick:
             return
-        reichweite = K.FAHRZEUG["einsteigen"] ** 2
         for b in self.fahrzeuge:
             besetzt = b.fahrer is not None or b.besetzt
             if (besetzt or b.kaputt or b.ebene != ich.ebene
-                    or b.pos.distance_squared_to(ich.pos) > reichweite):
+                    or b.pos.distance_squared_to(ich.pos) > b.werte["einsteigen"] ** 2):
                 continue
             p = self.kamera.zu_bild(b.pos)
+            unten = int(b.huelle_radius) + 8 if getattr(b, "rechteckig", False) else 30
             SCHRIFT.zeichnen(ziel, "[%s] EINSTEIGEN" % taste_e, int(p.x),
-                             int(p.y) + 30, K.C_CREAM, 1, ausrichtung="mitte")
+                             int(p.y) + unten, K.C_CREAM, 1, ausrichtung="mitte")
             return
+
+    def _mein_wagen(self):
+        """Der Wagen, in dem man selbst sitzt - beim Gastgeber ueber den
+        Fahrer, beim Gast ueber den Ort (er bekommt nur `fz` gemeldet)."""
+        ich = self.ich
+        if ich is None or not ich.im_fahrzeug:
+            return None
+        if ich.fahrzeug is not None:
+            return ich.fahrzeug
+        for b in self.fahrzeuge:
+            if b.ebene == ich.ebene and b.pos.distance_squared_to(ich.pos) < 9.0:
+                return b
+        return None
 
     def _schritt_gastgeber(self, dt: float) -> None:
         self.hinweis = ""
@@ -3885,7 +3988,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                   # Staub (seit 0.34.16).
                   round(b.rutschen, 2),
                   # Wie viel er noch aushaelt, 0 = Wrack (seit 0.34.18).
-                  round(b.leben_anteil, 2)]
+                  round(b.leben_anteil, 2),
+                  # Seit 0.34.59: welche Art, wohin Turm bzw. Ring zeigen,
+                  # wie weit das Rohr zurueckgefahren ist, wie schnell er
+                  # dreht (daraus laufen beim Gast die Ketten) und wie lange
+                  # die Kanone noch laedt.
+                  b.art, round(getattr(b, "aufbau", b.winkel), 1),
+                  round(getattr(b, "ruecklauf", 0.0), 1), round(b.gier, 2),
+                  round(getattr(b, "takt", {}).get("kanone", 0.0), 1)]
                  for b in self.fahrzeuge]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
                 "feuer": brand, "fahrzeuge": wagen,

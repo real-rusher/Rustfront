@@ -379,6 +379,80 @@ def _buggy_aufprall(seed=0):
                     _schlag(780, 520, 0.14, 0.18, 3.6))
 
 
+@platzhalter_klang("schuss_kanone")
+def _schuss_kanone(seed=0):
+    """Die Panzerkanone (seit 0.34.59): ein sehr tiefer, harter Schlag mit
+    Druck und langem Nachhall - tiefer als jede Handwaffe."""
+    return _mischen(
+        _schlag(80, 26, 0.7, 1.0, 1.9),
+        _rauschen(0.5, 1.0, 5200, 200, 1.7, seed + 101),
+        _rauschen(0.06, 0.6, 11000, 4000, 2.0, seed + 102, hp=True),
+        [0.0] * int(RATE * 0.05) + _rauschen(1.1, 0.35, 900, 110, 1.5, seed + 103),
+    )
+
+
+@platzhalter_klang("schuss_bug_mg")
+def _schuss_bug_mg(seed=0):
+    """Bug-MG und Ring-MG: wie das MG zu Fuss, etwas dumpfer - es sitzt
+    in Blech."""
+    return _mischen(
+        _rauschen(0.08, 0.7, 5200, 600, 2.4, seed + 111),
+        _rauschen(0.025, 0.2, 10000, 3600, 2.0, seed + 112, hp=True),
+        _schlag(150, 64, 0.12, 0.42, 2.2),
+    )
+
+
+platzhalter_klang("schuss_ring_mg")(_schuss_bug_mg)
+
+
+@platzhalter_klang("panzer_einschlag")
+def _panzer_einschlag(seed=0):
+    """Der Einschlag der Kanone: groesser als Granate und C4."""
+    return _mischen(
+        _schlag(64, 20, 1.3, 1.0, 1.5),
+        _rauschen(1.1, 1.0, 4600, 110, 1.3, seed + 121),
+        [0.0] * int(RATE * 0.08) + _rauschen(1.8, 0.5, 650, 80, 1.2, seed + 122),
+    )
+
+
+@platzhalter_klang("panzer_motor")
+def _panzer_motor(seed=0):
+    """Ein Stueck Motor und Kette: tiefes Brummen, darin das Klacken der
+    Glieder. Kurz - es wird in einem Takt wiederholt, solange er faehrt."""
+    n = int(RATE * 0.45)
+    brumm = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        phase += 2 * math.pi * (46.0 + 6.0 * math.sin(p * 18.0)) / RATE
+        brumm.append(math.sin(phase) * 0.5 * min(1.0, p * 8) * (1 - p) ** 0.6)
+    klacken = []
+    for k in range(6):
+        klacken += [0.0] * int(RATE * 0.06) + _schlag(900, 500, 0.012, 0.18, 4.0)
+    return _mischen(brumm, klacken, _rauschen(0.45, 0.18, 500, 200, 0.8, seed + 131))
+
+
+@platzhalter_klang("panzerwagen_motor")
+def _panzerwagen_motor(seed=0):
+    """Ein schwerer Diesel, hoeher als der Panzer und ohne Kette."""
+    n = int(RATE * 0.38)
+    brumm = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        phase += 2 * math.pi * (68.0 + 10.0 * math.sin(p * 24.0)) / RATE
+        brumm.append(math.sin(phase) * 0.45 * min(1.0, p * 8) * (1 - p) ** 0.7)
+    return _mischen(brumm, _rauschen(0.38, 0.2, 800, 300, 0.9, seed + 141))
+
+
+@platzhalter_klang("rammen")
+def _rammen(seed=0):
+    """Ein Fahrzeug rammt jemanden: dumpfer Schlag, Blech."""
+    return _mischen(_schlag(110, 46, 0.26, 0.9, 2.4),
+                    _rauschen(0.2, 0.5, 4200, 900, 2.6, seed + 151),
+                    _schlag(620, 400, 0.12, 0.16, 3.4))
+
+
 @platzhalter_klang("menue")
 def _menue(seed=0):
     return _schlag(660, 720, 0.05, 0.22, 3.0)

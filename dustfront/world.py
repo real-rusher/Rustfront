@@ -382,6 +382,16 @@ class Welt:
         # nichts, es sagt nur, dass etwas passiert ist.
         self.ringe: list = []
         self.aufschriften: list = []
+        # Feuerbaelle der Panzerkanone und wer nach dem Rammen noch fliegt
+        # (seit 0.34.59). Reine Rueckmeldung wie die Ringe: beim Gast
+        # entstehen sie aus derselben Meldung (explosion, leichenflug).
+        self.feuerbaelle: list = []
+        self.flugleichen: list = []
+        # Was groesser ist als eine Zelle des Rasters (Panzer, Panzerwagen):
+        # steht nicht in den Zellen, sondern hier, und `nahe` fragt es
+        # einzeln - sonst fehlte ein Panzer, dessen Mitte zwei Zellen weg
+        # liegt, waehrend sein Heck schon im Kreis ist.
+        self._gross: list = []
 
     # ---- Rueckmeldungen an die Spielszene ------------------------------
     # Standardmaessig passiert nichts. Die Szene haengt sich hier ein, damit
@@ -447,6 +457,20 @@ class Welt:
 
     def brandfleck(self, pos, ebene: int, radius: float) -> None:
         pass
+
+    def krater(self, pos, ebene: int, radius: float, saat: int) -> None:
+        """Ein unregelmaessiger Krater im Boden (seit 0.34.59, Einschlag der
+        Panzerkanone). Die Szene haengt sich hier ein, wie beim Brandfleck."""
+        pass
+
+    def leichenflug(self, pos, ebene: int, bild: str, winkel: float, tempo,
+                    dauer: float, dreh: float, blut: str, radius: float) -> None:
+        """Wer beim Rammen stirbt, fliegt noch ein Stueck (seit 0.34.59).
+        Beim Gastgeber haengt sich das Gefecht davor und meldet es den
+        Gaesten - die rufen dann genau diese Funktion auf."""
+        from .entities import Flugleiche
+        self.flugleichen.append(Flugleiche(pos, ebene, bild, winkel, tempo,
+                                           dauer, dreh, blut, radius))
 
     def blitz(self, pos, ebene: int, von=None):
         """Hier hat es geblitzt. Wer davon geblendet wird, entscheidet
@@ -519,6 +543,25 @@ class Welt:
             self.klang("molotov_glass", 0.9, pos, ebene)
             self.klang("molotov_whoosh", 0.28, pos, ebene)
             return
+        if art == "panzer":
+            # Der Einschlag der Panzerkanone (seit 0.34.59): groesser als
+            # Granate und C4 - Feuerball aus versetzten Glutballen, danach
+            # dunkler Rauch, Funken, Staub, Holzsplitter und ein Krater, der
+            # nicht rund ist. Die Form kommt aus dem Ort, damit der Gast
+            # dasselbe sieht.
+            from .entities import Feuerball
+            f = K.FEUERBALL
+            saat = int(abs(pos.x) * 7 + abs(pos.y) * 13)
+            self.feuerbaelle.append(Feuerball(pos, ebene, saat))
+            wolke(self, pos, f["funken"], 420, 0.8, (255, 224, 164), ebene, 3, "funke")
+            wolke(self, pos, 24, 200, 1.1, K.C_MUTED_DK, ebene, 2, "staub")
+            wolke(self, pos, 20, 240, 1.0, (122, 86, 46), ebene, 2, "staub",
+                  reibung=2.0)
+            self.krater(pos, ebene, f["krater"], saat)
+            self.aufschlagring(pos, ebene, 1.4)
+            self.ruckeln(f["kamera"], "explosion", pos, ebene)
+            self.klang("panzer_einschlag", 1.0, pos, ebene)
+            return
         if art == "c4":
             wolke(self, pos, 42, 390, 0.75, (255, 224, 164), ebene, 2,
                   "funke")
@@ -544,10 +587,20 @@ class Welt:
         """
         from .entities import wolke
         pos = pygame.Vector2(pos)
-        self.muendung(pos, winkel, ebene)
-        wolke(self, pos, 3, 120, 0.12, (255, 226, 160), ebene, 1, "funke",
-              34, winkel, 8.0)
-        daten = K.WAFFEN.get(waffe, {})
+        daten = K.WAFFEN.get(waffe) or K.FAHRZEUG_WAFFEN.get(waffe, {})
+        gross = daten.get("muendung", 1.0)
+        self.muendung(pos, winkel, ebene, gross)
+        wolke(self, pos, int(3 * gross), 120 * gross, 0.12 * gross, (255, 226, 160),
+              ebene, 1, "funke", 34, winkel, 8.0)
+        if waffe == "kanone":
+            # Die Druckwelle wirbelt Sand am Boden vor der Muendung auf - und
+            # der liegt unter den Fahrzeugen, nicht in ihrer Mitte (gemeldet
+            # im Paket). "bodenstaub" zeichnet der Renderer vor den Wesen.
+            boden = pos - pygame.Vector2(K.PANZER["muendung"] * 0.15, 0).rotate(winkel)
+            wolke(self, boden, 26, 170, 0.9, K.C_SAND_KORN, ebene, 2, "bodenstaub",
+                  150, winkel)
+            wolke(self, boden, 10, 90, 1.1, K.C_SAND, ebene, 2, "bodenstaub",
+                  300, winkel + 180)
         self.ruckeln(daten.get("kamera", 1.0), "schuss", pos, ebene, quelle)
         if waffe == "lmg":
             klang = ("lmg_salve" if getattr(quelle, "modus", "dauer") == "salve"
@@ -653,6 +706,14 @@ class Welt:
             p.schritt(dt)
         if any(not p.lebt for p in self.partikel):
             self.partikel = [p for p in self.partikel if p.lebt]
+        if self.feuerbaelle:
+            for f in self.feuerbaelle:
+                f.schritt(dt)
+            self.feuerbaelle = [f for f in self.feuerbaelle if f.lebt]
+        if self.flugleichen:
+            for f in self.flugleichen:
+                f.schritt(dt, self)
+            self.flugleichen = [f for f in self.flugleichen if f.lebt]
         # Beim Gast altert das Feuer hier mit, ohne Welt: er bekommt die
         # Flaechen gemeldet und soll sie zuengeln sehen, aber niemandem
         # Schaden machen - das rechnet der Gastgeber.
@@ -676,8 +737,11 @@ class Welt:
                 return True
         return False
 
-    def muendung(self, pos, winkel: float, ebene: int) -> None:
-        self.muendungen.append([pygame.Vector2(pos), winkel, ebene, 0.055])
+    def muendung(self, pos, winkel: float, ebene: int, groesse: float = 1.0) -> None:
+        """Ein Muendungsblitz. `groesse` seit 0.34.59: die Kanone blitzt
+        2,4-mal so gross und etwas laenger."""
+        self.muendungen.append([pygame.Vector2(pos), winkel, ebene,
+                                0.055 * (1.0 + (groesse - 1.0) * 0.5), float(groesse)])
 
     # ---- Bestand -----------------------------------------------------
     def dazu(self, w):
@@ -731,28 +795,44 @@ class Welt:
     # ---- Nachbarschaft ------------------------------------------------
     def _raster_bauen(self) -> None:
         self._raster.clear()
+        self._gross = []
         for w in self.wesen:
             if not w.lebt or w.radius <= 0 or not w.trefferbar:
+                continue
+            if getattr(w, "huelle_radius", 0.0) > self.ZELLE * 0.5:
+                self._gross.append(w)
                 continue
             k = (int(w.pos.x // self.ZELLE), int(w.pos.y // self.ZELLE), w.ebene)
             self._raster.setdefault(k, []).append(w)
 
     def nahe(self, pos: pygame.Vector2, radius: float, ebene: int):
-        """Alle Wesen der Ebene, deren Zelle den Kreis beruehrt."""
+        """Alle Wesen der Ebene, deren Zelle den Kreis beruehrt - und die
+        grossen (Panzer, Panzerwagen), deren Huelle ihn beruehrt."""
         r = int(radius // self.ZELLE) + 1
         cx, cy = int(pos.x // self.ZELLE), int(pos.y // self.ZELLE)
         for gy in range(cy - r, cy + r + 1):
             for gx in range(cx - r, cx + r + 1):
                 for w in self._raster.get((gx, gy, ebene), ()):
                     yield w
+        for w in self._gross:
+            if (w.ebene == ebene and w.pos.distance_squared_to(pos)
+                    <= (radius + w.huelle_radius + self.ZELLE) ** 2):
+                yield w
 
     def treffer(self, pos: pygame.Vector2, radius: float, ebene: int, feind_von: str):
-        """Naechstes lebendes Ziel einer anderen Fraktion im Kreis."""
+        """Naechstes lebendes Ziel einer anderen Fraktion im Kreis.
+
+        Was rechteckig ist (Panzer, Panzerwagen, seit 0.34.59), wird an
+        seinem Rechteck getroffen und nicht an einem Kreis darum."""
         bestes, beste_d = None, 1e18
         for w in self.nahe(pos, radius + 24, ebene):
             if not w.lebt or w.fraktion == feind_von or w.leben <= 0:
                 continue
             d = pos.distance_squared_to(w.pos)
+            if getattr(w, "rechteckig", False):
+                if w.beruehrt(pos, radius) and d < beste_d:
+                    bestes, beste_d = w, d
+                continue
             grenze = (radius + w.radius) ** 2
             if d < grenze and d < beste_d:
                 bestes, beste_d = w, d

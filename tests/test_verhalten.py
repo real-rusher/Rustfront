@@ -59,6 +59,13 @@ def neu(seed):
     tm._einstiegszonen_waehlen()
     tm.wiedereinstieg = False
     tm.verwundete_setzen(True)
+    # Panzer und Panzerwagen (seit 0.34.59) stehen auf STAUBTAL dicht neben
+    # zwei der Schlachtflaechen: die Bots liefen gegen sie und schossen in
+    # ihr Blech, und die Szenen waren nicht mehr die, an denen die Grenzen
+    # hier gemessen sind. Um geparkte Fahrzeuge herumzugehen lernen die
+    # Bots noch nicht (wie beim Buggy) - diese Szenen pruefen ihre Taktik.
+    for b in [b for b in tm.fahrzeuge if getattr(b, "rechteckig", False)]:
+        tm.loeschen(b)
     return tm
 
 

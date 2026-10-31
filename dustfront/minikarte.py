@@ -207,7 +207,9 @@ class Minikarte:
         in der Farbe des Fahrers."""
         vorn = pygame.Vector2(1, 0).rotate(b.winkel)
         quer = pygame.Vector2(-vorn.y, vorn.x)
-        l, q = M["buggy_laenge"] / 2.0, M["buggy_breite"] / 2.0
+        # Panzer und Panzerwagen (seit 0.34.59) groesser als der Buggy.
+        gross = M["schwer_mass"] if getattr(b, "rechteckig", False) else 1.0
+        l, q = M["buggy_laenge"] / 2.0 * gross, M["buggy_breite"] / 2.0 * gross
         m = pygame.Vector2(mitte)
         ecken = [m + vorn * l + quer * q, m + vorn * l - quer * q,
                  m - vorn * l - quer * q, m - vorn * l + quer * q]

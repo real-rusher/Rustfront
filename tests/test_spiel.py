@@ -4210,7 +4210,17 @@ pruef("Er ist laenger als breit (schaut nach +x wie jede Figur)",
       str(_leer69.get_bounding_rect()))
 
 # Seit 0.34.18 fuenf (gemeldet: "es soll auf staubtal 5 autos geben").
-pruef("Auf STAUBTAL stehen fuenf Buggys", len(w.fahrzeuge) == 5, str(len(w.fahrzeuge)))
+# Seit 0.34.59 stehen dort auch ein Panzer und ein Panzerwagen - gezaehlt
+# werden hier die Buggys.
+_buggys69 = [b_ for b_ in w.fahrzeuge if b_.art == "buggy"]
+
+
+def _nb(liste_):
+    """Wie viele Buggys in einer Liste von Fahrzeugen (seit 0.34.59)."""
+    return sum(1 for b_ in liste_ if b_.art == "buggy")
+
+
+pruef("Auf STAUBTAL stehen fuenf Buggys", len(_buggys69) == 5, str(len(_buggys69)))
 pruef("Alle im Tal, und jeder passt dorthin, wo er steht",
       all(b.ebene == 0 and b.passt(b.pos) for b in w.fahrzeuge))
 # Seit 0.34.18 geht er kaputt - und ist darum ein Ziel.
@@ -4334,7 +4344,8 @@ for _ in range(6):
     w.schritt(K.FIXED_DT)
     ga.schritt(K.FIXED_DT)
 _gb69 = [b_ for b_ in ga.fahrzeuge if b_.besetzt]
-pruef("Der Gast sieht alle fuenf Buggys", len(ga.fahrzeuge) == 5, str(len(ga.fahrzeuge)))
+pruef("Der Gast sieht alle fuenf Buggys",
+      sum(1 for b_ in ga.fahrzeuge if b_.art == "buggy") == 5, str(len(ga.fahrzeuge)))
 pruef("... den besetzten an derselben Stelle",
       len(_gb69) == 1 and _gb69[0].pos.distance_to(b69.pos) < 2.0,
       str([b_.pos for b_ in _gb69]))
@@ -4423,7 +4434,7 @@ pruef("Auf einer anderen Ebene stehen die Buggys trotzdem darauf (blasser)",
 w.ich.ebene = 0
 _f70, _r70 = _karte70(w)
 pruef("Alle Buggys stehen auf der Minikarte",
-      len(w.fahrzeuge) == 5
+      sum(1 for b_ in w.fahrzeuge if b_.art == "buggy") == 5
       and all(_buggy_da70(_f70, _r70, w, b_, MK.FARBE_BUGGY) for b_ in w.fahrzeuge))
 
 # Ein Gast steigt ein und faehrt weit weg: der Wagen bleibt auf der Karte,
@@ -4447,9 +4458,388 @@ for _ in range(6):
     ga.schritt(K.FIXED_DT)
 _f70g, _r70g = _karte70(ga)
 pruef("... und beim Gast, der ihn faehrt, auch",
-      len(ga.fahrzeuge) == 5
+      sum(1 for b_ in ga.fahrzeuge if b_.art == "buggy") == 5
       and all(_buggy_da70(_f70g, _r70g, ga, b_, MK.FARBE_BUGGY) for b_ in ga.fahrzeuge))
 w.verlassen(); ga.verlassen()
+
+# ─────────────────────────────────────────────────────────────────────
+# 0.34.59: Panzer und Panzerwagen. Entwurf und Abnahme aus dem Paket
+# `rustfront_fahrzeuge` (README_IMMEDIATELY.md): Grafik, Insassen in
+# Spielergroesse, Ketten, Turm, Kanone mit Feuerball und Krater, Bug-MG,
+# Ring-MG, Rammen nur ueber die Front. Gemeldet als Entscheidung: einer
+# steuert ein Fahrzeug - fahren mit W A S D, zielen mit der Maus.
+print("\n-- Panzer und Panzerwagen (0.34.59)")
+# GRUND: Diese Pruefungen schiessen und rammen und verbrauchen dabei den
+# Zufall der Wesen (entities.RND). Spaetere Szenen haengen an diesem
+# Zufall; damit sie genau so laufen wie ohne diesen Abschnitt, wird sein
+# Stand am Ende zurueckgesetzt.
+_rnd59 = EN.RND.getstate()
+_zufall59 = random.getstate()
+# Aus demselben Grund eigene Ports: `gefechtspaar` zaehlt `_port` weiter,
+# und aus dem Port wird der Seed jedes spaeteren Gefechts.
+_port59 = [58900]
+
+
+def _paar59(modus, **kw):
+    import socket as _s59
+    while True:
+        _port59[0] += 1
+        probe_ = _s59.socket(_s59.AF_INET, _s59.SOCK_STREAM)
+        probe_.setsockopt(_s59.SOL_SOCKET, _s59.SO_REUSEADDR, 1)
+        try:
+            probe_.bind(("", _port59[0]))
+            break
+        except OSError:
+            continue
+        finally:
+            probe_.close()
+    wirt_ = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_port59[0]), modus=modus,
+                    seed=59, **kw)
+    gast_ = Gefecht(app, "BESUCH", gast=netz.Gast("127.0.0.1:%d" % _port59[0]))
+    for _ in range(30):
+        wirt_.schritt(K.NETZ["takt"])
+        gast_.schritt(K.NETZ["takt"])
+    return wirt_, gast_
+
+from dustfront import fahrzeug as _FZ59
+from dustfront import art as _ART59
+from dustfront.mehrspieler import KampfGegner as _KG59
+from dustfront.entities import Geschoss
+
+w, ga = _paar59("team", karte="staubtal")
+_bi59 = w.renderer.bilder
+for _n59 in ("panzer", "panzer_turm", "panzer_turm_fahrer", "panzer_turm_rot_fahrer",
+             "panzer_turm_blau_fahrer", "panzer_wrack", "panzer_schatten",
+             "panzerwagen", "panzerwagen_ring", "panzerwagen_ring_fahrer",
+             "panzerwagen_ring_rot_fahrer", "panzerwagen_ring_blau_fahrer",
+             "panzerwagen_wrack", "panzerwagen_schatten", "panzergranate"):
+    _s59 = _bi59.bild(_n59)
+    _r59 = _s59.get_bounding_rect()
+    pruef("Das Bild %s hat sein Mass und ist nicht leer" % _n59,
+          _s59.get_size() == tuple(K.BILD_MASS[_n59]) and _r59.width > 4 and _r59.height > 3,
+          "%s %s" % (_s59.get_size(), _r59))
+pruef("Kein Fahrzeugbild fehlt", not [f_ for f_ in _bi59.fehler if "panzer" in f_],
+      str(_bi59.fehler))
+_pzb59 = _bi59.bild("panzer").get_bounding_rect()
+_lwb59 = _bi59.bild("panzerwagen").get_bounding_rect()
+# Abgenommen: Groesse 1,4 (Panzer rund 87 x 59, Panzerwagen rund 90 x 42,
+# ohne Spiegel, Ersatzrad und Rand gemessen) - doppelt so lang wie der Buggy.
+_bub59 = _bi59.bild("buggy").get_bounding_rect()
+pruef("Groesse 1,4 wie abgenommen: rund 90 Pixel lang, fast doppelt so lang wie der Buggy",
+      86 <= _pzb59.width <= 98 and 56 <= _pzb59.height <= 66
+      and 86 <= _lwb59.width <= 100 and 40 <= _lwb59.height <= 54
+      and _pzb59.width > 1.6 * _bub59.width,
+      "%s %s, Buggy %s" % (_pzb59.size, _lwb59.size, _bub59.size))
+# Der Insasse ist die Spielerfigur, nur ohne Gewehr: links vom Gewehr
+# (bis x = c + 4) Pixel fuer Pixel gleich.
+_kombi59 = K.TEAMS["kombi"][0]
+_ins59 = _ART59._insasse((_kombi59["rumpf"], _kombi59["kante"], _kombi59["akzent"]))
+_fig59 = _ART59._figur(28, _kombi59["rumpf"], _kombi59["kante"], _kombi59["akzent"])
+pruef("Der Insasse ist die Spielerfigur (gleiche Schultern, gleicher Kopf)",
+      _ins59.get_size() == _fig59.get_size()
+      and all(_ins59.get_at((x_, y_)) == _fig59.get_at((x_, y_))
+              for x_ in range(0, 18) for y_ in range(28)))
+_t_leer59 = _bi59.bild("panzer_turm")
+_t_voll59 = _bi59.bild("panzer_turm_rot_fahrer")
+pruef("Mit Kommandant in der Luke sieht der Turm anders aus als leer",
+      any(_t_leer59.get_at((x_, y_)) != _t_voll59.get_at((x_, y_))
+          for x_ in range(54, 66) for y_ in range(54, 66)))
+
+_pz59 = next((b_ for b_ in w.fahrzeuge if b_.art == "panzer"), None)
+_lw59 = next((b_ for b_ in w.fahrzeuge if b_.art == "panzerwagen"), None)
+pruef("Auf STAUBTAL stehen ein Panzer (P) und ein Panzerwagen (L)",
+      _pz59 is not None and _lw59 is not None
+      and isinstance(_pz59, _FZ59.Panzer) and isinstance(_lw59, _FZ59.Panzerwagen))
+pruef("Beide passen dorthin, wo sie stehen, und sind Ziele",
+      _pz59.passt(_pz59.pos) and _lw59.passt(_lw59.pos)
+      and _pz59.trefferbar and _lw59.trefferbar)
+
+_k59 = w.kaempfer[ga.meine_nummer]
+_feind59 = w.kaempfer[0]
+_k59.unverwundbar = _feind59.unverwundbar = 0.0
+
+
+def _hin59(k_, p_):
+    k_.pos.update(p_); k_.vorher.update(p_); k_.ebene = 0
+    k_.treppe_rest = 0.0; k_.tempo.update(0, 0)
+
+
+def _fahr59(b_, will_, sekunden_, ziel_=None, feuert_=False, zielt_=False, je_=None):
+    for _ in range(int(sekunden_ / K.FIXED_DT)):
+        z_ = ziel_ if ziel_ is not None else b_.pos + pygame.Vector2(200, 0).rotate(b_.aufbau)
+        w._anwenden(_k59, {"will": list(will_), "ziel": [z_[0], z_[1]], "knoepfe": [],
+                           "feuert": feuert_, "zielt": zielt_})
+        w.welt.schritt(K.FIXED_DT)
+        w._fahrzeuge_nachziehen()
+        if je_ is not None:
+            je_()
+
+
+_hin59(_k59, _pz59.pos + pygame.Vector2(0, 300))
+w._anwenden(_k59, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Weit weg steigt man nicht in den Panzer", not _k59.im_fahrzeug)
+_hin59(_k59, _pz59.ausstiegsorte(_k59.radius)[0])
+w._anwenden(_k59, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Daneben steigt man mit E ein", _k59.im_fahrzeug and _pz59.fahrer is _k59)
+pruef("Der Turm zeigt den Insassen in der Farbe seiner Mannschaft",
+      _pz59.aufbau_bild_name() == "panzer_turm_%s_fahrer"
+      % K.TEAMS["kombi"][_k59.team]["name"].lower())
+
+# Erst drehen, damit er frei faehrt: auf der Stelle, ohne zu rutschen.
+_w0_59, _p0_59 = _pz59.winkel, pygame.Vector2(_pz59.pos)
+_ph59 = []
+_fahr59(_pz59, (1.0, 0.0), 1.0,
+        je_=lambda: _ph59.append((_pz59.ph_links, _pz59.ph_rechts)))
+_dreh59 = (_pz59.winkel - _w0_59 + 180) % 360 - 180
+pruef("Der Panzer dreht auf der Stelle (rund 80 Grad je Sekunde)",
+      55.0 < _dreh59 < 85.0 and _pz59.pos.distance_to(_p0_59) < 1.0,
+      "%.1f Grad, %.1f px" % (_dreh59, _pz59.pos.distance_to(_p0_59)))
+_dl59 = (_ph59[-1][0] - _ph59[-30][0] + 0.5) % 1.0 - 0.5
+_dr59 = (_ph59[-1][1] - _ph59[-30][1] + 0.5) % 1.0 - 0.5
+pruef("... und die Ketten laufen dabei gegeneinander", _dl59 * _dr59 < 0,
+      "%.2f %.2f" % (_dl59, _dr59))
+# Nun eine Richtung, in der er Platz hat, und Gas.
+_pz59.gier = 0.0
+_pz59.winkel = Gefecht._fahrzeug_richtung(_pz59)
+_p0_59 = pygame.Vector2(_pz59.pos)
+_fahr59(_pz59, (0.0, -1.0), 2.5)
+pruef("Er faehrt rund 45 px/s, kein Einspurmodell, nichts rutscht seitlich",
+      40.0 <= _pz59.fahrt <= 45.5 and abs(_pz59.geschw.dot(
+          pygame.Vector2(1, 0).rotate(_pz59.winkel + 90))) < 0.5,
+      "%.1f px/s" % _pz59.fahrt)
+_fahr59(_pz59, (0.0, 0.0), 1.5)
+
+# Der Turm folgt dem Zeiger mit seinem Tempo, unabhaengig von der Wanne.
+# Gezielt wird quer zur Wanne, in eine Richtung, in der die Kanone frei
+# schiessen kann (im Fort stehen Kisten und Sandsaecke).
+_wanne59 = _pz59.winkel
+
+
+def _frei_schiessen59(winkel_):
+    m_ = _pz59.aufbau_mitte()
+    return all(not w.welt.schuss_halt(m_ + pygame.Vector2(d_, 0).rotate(winkel_), 0, 3.0)
+               for d_ in range(50, 240, 4))
+
+
+_soll59 = next((_wanne59 + d_ for d_ in (90.0, -90.0, 60.0, -60.0, 120.0, -120.0)
+                if _frei_schiessen59(_wanne59 + d_)), _wanne59 + 90.0)
+_ziel59 = _pz59.aufbau_mitte() + pygame.Vector2(300, 0).rotate(_soll59)
+_a0_59 = _pz59.aufbau
+_fahr59(_pz59, (0.0, 0.0), 0.5, ziel_=_ziel59)
+_halb59 = abs((_pz59.aufbau - _a0_59 + 180) % 360 - 180)
+_fahr59(_pz59, (0.0, 0.0), 2.0, ziel_=_ziel59)
+pruef("Der Turm dreht zum Zeiger - nicht sofort (rund 60 Grad je Sekunde)",
+      20.0 < _halb59 < 40.0
+      and abs((_pz59.aufbau - _soll59 + 180) % 360 - 180) < 2.0
+      and abs(_pz59.winkel - _wanne59) < 0.5,
+      "nach 0,5 s %.1f Grad" % _halb59)
+
+# Kanone: ein Gegner vor dem Rohr.
+_hin59(_feind59, _pz59.aufbau_mitte() + pygame.Vector2(170, 0).rotate(_pz59.aufbau))
+_feind59.leben = _feind59.max_leben
+_vor59 = _feind59.leben
+_fahr59(_pz59, (0.0, 0.0), 0.05, ziel_=_feind59.pos, feuert_=True)
+_granaten59 = [g_ for g_ in w.welt.wesen + w.welt.neue
+               if isinstance(g_, _FZ59.Panzergranate)]
+pruef("Linke Maustaste: die Kanone feuert eine Granate, das Rohr faehrt zurueck",
+      len(_granaten59) == 1 and _pz59.ruecklauf > 3.0 and _pz59.ruck > 0.5)
+_fahr59(_pz59, (0.0, 0.0), 0.6, ziel_=_feind59.pos, feuert_=True)
+pruef("Die Granate trifft: Schaden, Feuerball und Rauch (Explosion \"panzer\")",
+      _feind59.leben < _vor59 - 100 and len(w.welt.feuerbaelle) == 1,
+      "%.0f -> %.0f" % (_vor59, _feind59.leben))
+pruef("Gehalten wird nachgeladen, nicht gleich wieder geschossen",
+      len([g_ for g_ in w.welt.wesen + w.welt.neue
+           if isinstance(g_, _FZ59.Panzergranate)]) == 0
+      and _pz59.takt.get("kanone", 0.0) > 1.0)
+_fb59 = w.welt.feuerbaelle[0]
+pruef("Der Feuerball ist kein Kreis: mehrere versetzte Glutballen und Rauchwolken",
+      len(_fb59.ballen) == K.FEUERBALL["ballen"]
+      and len({(round(v_.x), round(v_.y)) for v_, _r, _s, _d in _fb59.ballen}) > 5
+      and len(_fb59.wolken) == K.FEUERBALL["wolken"])
+_kr59 = w.renderer.krater(K.FEUERBALL["krater"], 7)
+_kreis59 = sum(1 for x_ in range(_kr59.get_width()) for y_ in range(_kr59.get_height())
+               if _kr59.get_at((x_, y_)).a > 0)
+pruef("Der Krater ist unregelmaessig (Kleckse, Strahlen, Brocken) und nicht leer",
+      _kreis59 > 200 and _kr59.get_size()[0] > 2 * K.FEUERBALL["krater"])
+pruef("Am Boden vor der Muendung liegt Staub, der unter den Fahrzeugen gezeichnet wird",
+      any(p_.art == "bodenstaub" for p_ in w.welt.partikel))
+
+# Rechte Maustaste: das Bug-MG schiesst in Fahrtrichtung, nicht zum Turm.
+_vorher59 = [g_ for g_ in w.welt.wesen if isinstance(g_, Geschoss)]
+_fahr59(_pz59, (0.0, 0.0), 0.5, ziel_=_ziel59, zielt_=True)
+_mg59 = [g_ for g_ in w.welt.wesen + w.welt.neue
+         if isinstance(g_, Geschoss) and g_.waffe == "bug_mg"]
+pruef("Das Bug-MG schiesst rund 11 Schuss je Sekunde in Fahrtrichtung",
+      4 <= len(_mg59) <= 7
+      and all(abs((g_.winkel - _pz59.winkel + 180) % 360 - 180) < 3.0 for g_ in _mg59),
+      str(len(_mg59)))
+
+# Panzerung: eine Kugel zerkratzt nur den Lack, der Kommandant bekommt 20 %.
+_ich59 = w.ich
+_pz59.leben = _pz59.max_leben
+_k59.leben = _k59.max_leben
+_vor59 = (_pz59.leben, _k59.leben)
+_gs59 = Geschoss(_pz59.pos + pygame.Vector2(-120, 0).rotate(_pz59.winkel), _pz59.winkel,
+                 K.WAFFEN["sturm"], 0, _ich59, "sturm")
+w.welt.dazu(_gs59)
+for _ in range(60):
+    w.welt.schritt(K.FIXED_DT)
+    if not _gs59.lebt:
+        break
+_ab59 = _vor59[0] - _pz59.leben
+pruef("Eine Kugel zerkratzt den Panzer nur (kugel_anteil)",
+      abs(_ab59 - K.WAFFEN["sturm"]["schaden"] * K.PANZER["kugel_anteil"]) < 0.01,
+      "%.2f" % _ab59)
+pruef("... beim Kommandanten in der Luke kommt sein Teil der ganzen Kugel an",
+      abs((_vor59[1] - _k59.leben) - K.WAFFEN["sturm"]["schaden"] * K.PANZER["fahrer_anteil"])
+      < 0.01, "%.2f" % (_vor59[1] - _k59.leben))
+
+# Der Gast sieht ihn: an derselben Stelle, mit Turmwinkel, Feuerball.
+for _ in range(6):
+    w.schritt(K.FIXED_DT)
+    ga.schritt(K.FIXED_DT)
+_gpz59 = [b_ for b_ in ga.fahrzeuge if b_.art == "panzer"]
+pruef("Der Gast sieht den Panzer mit seinem Turmwinkel",
+      len(_gpz59) == 1 and _gpz59[0].pos.distance_to(_pz59.pos) < 2.0
+      and abs((_gpz59[0].aufbau - _pz59.aufbau + 180) % 360 - 180) < 3.0
+      and "fahrer" in _gpz59[0].aufbau_bild_name(),
+      str([(b_.pos, b_.aufbau) for b_ in _gpz59]))
+pruef("... und den Feuerball der Kanone", len(ga.welt.feuerbaelle) >= 1)
+_bild59 = pygame.Surface((K.GAME_W, K.GAME_H))
+w.kamera.pos.update(_pz59.pos); ga.kamera.pos.update(_pz59.pos)
+w.zeichnen(_bild59, 0.5)
+ga.zeichnen(_bild59, 0.5)
+pruef("Gastgeber und Gast zeichnen ihn ohne Fehler", True)
+
+# Raus, und in den Panzerwagen.
+w._anwenden(_k59, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Mit E wieder hinaus, neben die Wanne",
+      not _k59.im_fahrzeug and _pz59.fahrer is None
+      and not _pz59.beruehrt(_k59.pos, _k59.radius - 1))
+_hin59(_k59, _lw59.ausstiegsorte(_k59.radius)[0])
+w._anwenden(_k59, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("In den Panzerwagen steigt man genauso ein", _k59.im_fahrzeug and _lw59.fahrer is _k59)
+_lw59.winkel = Gefecht._fahrzeug_richtung(_lw59)
+_lw59.aufbau = _lw59.winkel
+_fahr59(_lw59, (0.0, -1.0), 1.2)
+pruef("Der Panzerwagen zieht zaeh an: nach 1,2 s rund 26 px/s",
+      22.0 <= _lw59.fahrt <= 30.0, "%.1f px/s" % _lw59.fahrt)
+
+# Wenderadius und Hoechsttempo auf freiem Feld (eine eigene Welt ohne Mauern).
+from dustfront.world import Welt as _Welt59, Ebene as _Ebene59
+_frei59 = _Welt59([_Ebene59.aus_text(["." * 500 for _ in range(200)], 0)])
+
+
+class _Fahrer59:
+    team = -1
+    fraktion = "probe"
+    ziel = None
+    lebt = True
+
+
+_lwp59 = _FZ59.Panzerwagen(pygame.Vector2(300, 3200), 0, 0.0)
+_frei59.dazu(_lwp59)
+_lwp59.fahrer = _Fahrer59()
+_lwp59.gas = 1.0
+for _ in range(int(14.0 / K.FIXED_DT)):
+    _frei59.schritt(K.FIXED_DT)
+pruef("Er wird sehr schnell: hoechstens 320 px/s (Buggy 250)",
+      310.0 <= _lwp59.fahrt <= 321.0, "%.1f" % _lwp59.fahrt)
+_lwp59.pos.update(6000, 3200); _lwp59.winkel = 0.0; _lwp59.gier = 0.0
+_lwp59.geschw.update(150, 0); _lwp59.lenkwinkel = 0.0
+_lwp59.lenk = 1.0
+for _ in range(int(2.5 / K.FIXED_DT)):
+    _lwp59.gas = 1.0 if _lwp59.fahrt < 150 else 0.0
+    _frei59.schritt(K.FIXED_DT)
+_radius59 = _lwp59.fahrt / max(1e-6, _lwp59.gier)
+pruef("... und lenkt sehr schlecht: Wenderadius rund 160 + v (bei 150 px/s ~310)",
+      260.0 < _radius59 < 360.0, "%.0f px" % _radius59)
+
+# Rammen: ein Laeufer vorn bei voller Fahrt nimmt Schaden und fliegt; wer
+# seitlich steht, wird nur geschoben. Nach jedem Schritt steht niemand im
+# Fussabdruck.
+_lw59.geschw = _lw59.vorn * 220.0
+_z59 = _KG59(_lw59.pos + _lw59.vorn * 90.0, "laeufer", 0, w)
+_z59.ki_aus = True
+w.welt.dazu(_z59)
+_drin59 = []
+
+
+def _fussabdruck59(b_, z_):
+    l_ = b_.lokal(z_.pos)
+    f_ = b_.werte
+    return (f_["hinten"] < l_.x < f_["vorn"] and abs(l_.y) < f_["halb"]) and z_.lebt
+
+
+_fahr59(_lw59, (0.0, -1.0), 0.5, je_=lambda: _drin59.append(_fussabdruck59(_lw59, _z59)))
+pruef("Der Panzerwagen rammt einen Laeufer vorn: er stirbt und fliegt noch ein Stueck",
+      not _z59.lebt and (len(w.welt.flugleichen) >= 1 or _z59 not in w.welt.wesen),
+      "lebt %s, fliegt %d" % (_z59.lebt, len(w.welt.flugleichen)))
+pruef("Nach keinem Schritt stand er im Fussabdruck", not any(_drin59))
+_fahr59(_lw59, (0.0, 0.0), 1.0)
+_lw59.geschw = _lw59.vorn * 60.0
+_seite59 = _KG59(_lw59.pos + pygame.Vector2(0, -(K.PANZERWAGEN["halb"] + 6.0))
+                 .rotate(_lw59.winkel), "laeufer", 0, w)
+_seite59.ki_aus = True
+w.welt.dazu(_seite59)
+w.welt.schritt(K.FIXED_DT)
+_vor59 = _seite59.leben
+_drin59 = []
+_fahr59(_lw59, (1.0, -1.0), 0.6, je_=lambda: _drin59.append(_fussabdruck59(_lw59, _seite59)))
+pruef("Wer seitlich steht, wird nur beiseitegeschoben - ohne Schaden",
+      _seite59.lebt and _seite59.leben == _vor59 and not any(_drin59),
+      "%.1f -> %.1f" % (_vor59, _seite59.leben))
+
+# Das Ring-MG schiesst ueber das eigene Dach, ohne es zu treffen.
+_lw59.geschw.update(0, 0); _lw59.gier = 0.0
+_lw59.leben = _lw59.max_leben
+_hinten59 = _lw59.pos - _lw59.vorn * 200
+_fahr59(_lw59, (0.0, 0.0), 2.0, ziel_=_hinten59)
+_vor59 = _lw59.leben
+_fahr59(_lw59, (0.0, 0.0), 0.5, ziel_=_hinten59, feuert_=True)
+_ring59 = [g_ for g_ in w.welt.wesen + w.welt.neue
+           if isinstance(g_, Geschoss) and g_.waffe == "ring_mg"]
+pruef("Das Ring-MG schiesst nach hinten ueber das eigene Dach, ohne es zu treffen",
+      len(_ring59) >= 4 and _lw59.leben == _vor59, "%d Schuss" % len(_ring59))
+
+# Kaputt: Wrack, Fahrer draussen. Er kommt als Panzer wieder, nicht als Buggy.
+w._anwenden(_k59, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_pz59.schaden(_pz59.max_leben + 10, None, _ich59)
+pruef("Ein zerstoerter Panzer ist ein Wrack (eigenes Bild)",
+      _pz59.kaputt and _pz59.bild == "panzer_wrack")
+_beide59 = K.PANZER["wrack_zeit"] + K.PANZER["neu_nach"] + 2.0
+for _ in range(int(_beide59 / K.FIXED_DT)):
+    w.schritt(K.FIXED_DT)
+_neu59 = [b_ for b_ in w.fahrzeuge if b_.art == "panzer"]
+pruef("Spaeter steht wieder ein Panzer auf der Karte, heil",
+      len(_neu59) == 1 and _neu59[0] is not _pz59 and not _neu59[0].kaputt
+      and _neu59[0].passt(_neu59[0].pos))
+w.verlassen(); ga.verlassen()
+
+# Testmodus (AGENTS.md): beide stehen im Spawner, lassen sich setzen und
+# mit ENTF zerstoeren. Einsteigen geht dort wie im Spiel, mit einer Figur.
+from dustfront import testmodus as _TM59
+_tm59 = _TM59.Testmodus(app, karte="staubtal")
+_namen59 = [e_.name for e_ in _tm59.eintraege if e_.gruppe == "OBJEKTE"]
+pruef("Testmodus: PANZER und PANZERWAGEN stehen im Spawner (OBJEKTE)",
+      "PANZER" in _namen59 and "PANZERWAGEN" in _namen59, str(_namen59))
+_ort59 = freier_punkt(_tm59.welt, 0, random.Random(59))
+_gesetzt59 = _tm59.spawnen(_tm59._eintrag("PANZER"), pos=_ort59, ebene=0)
+_gesetzt59 += _tm59.spawnen(_tm59._eintrag("PANZERWAGEN"), pos=_ort59, ebene=0)
+pruef("... sie lassen sich setzen, jeder an einem Platz, an den er passt",
+      len(_gesetzt59) == 2 and all(b_ in _tm59.fahrzeuge and b_.passt(b_.pos)
+                                   for b_ in _gesetzt59)
+      and not _FZ59._vielecke_ueberlappen(_gesetzt59[0].ecken(), _gesetzt59[1].ecken()),
+      str([b_.pos for b_ in _gesetzt59]))
+_ich59 = _tm59.ich_setzen(_gesetzt59[0].ausstiegsorte(9.0)[0], 0, {"team": 0})
+_tm59._anwenden(_ich59, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("... man steigt mit einer Figur ein (SPIELER, ICH)",
+      _ich59.im_fahrzeug and _gesetzt59[0].fahrer is _ich59)
+pruef("... und ENTF zerstoert ihn: ein Wrack", _tm59.toeten(_gesetzt59[1])
+      and _gesetzt59[1].kaputt and _gesetzt59[1].bild == "panzerwagen_wrack")
+_tm59.verlassen()
+EN.RND.setstate(_rnd59)
+random.setstate(_zufall59)
 
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
@@ -7671,10 +8061,10 @@ netz_durchlassen(w71, g71, 10)
 pruef("Aus der Lobby gestartet: STAUBTAL laeuft", w71.karte == "staubtal"
       and not w71.in_lobby and g71.karte == "staubtal", w71.karte)
 pruef("Beim Gastgeber stehen die Buggys in der Welt",
-      len(w71.fahrzeuge) == 5
+      _nb(w71.fahrzeuge) == 5
       and all(b_.lebt and b_ in w71.welt.wesen for b_ in w71.fahrzeuge),
       str([(b_.lebt, b_ in w71.welt.wesen) for b_ in w71.fahrzeuge]))
-pruef("... und der Gast sieht dieselben fuenf", len(g71.fahrzeuge) == 5)
+pruef("... und der Gast sieht dieselben fuenf", _nb(g71.fahrzeuge) == 5)
 
 # Der Gastgeber faehrt mit der Tastatur, wie im echten Spiel.
 def _bild71(n_=1):
@@ -7777,7 +8167,7 @@ _gk71.leben = _gk71.max_leben
 w71._runde_neu()
 w71.schritt(K.FIXED_DT)
 pruef("Nach einem Neustart stehen die Buggys leer an ihrem Platz",
-      len(w71.fahrzeuge) == 5
+      _nb(w71.fahrzeuge) == 5
       and all(b_.lebt and b_ in w71.welt.wesen and b_.fahrer is None
               and b_.pos == b_.start[0] for b_ in w71.fahrzeuge)
       and not _gk71.im_fahrzeug)
@@ -8360,7 +8750,7 @@ _n80 = netz.Gastgeber(_neuer_port())
 w80 = Gefecht(app, "WIRT", gastgeber=_n80, modus="pvp", karte="staubtal", seed=4, regeln={"bots": 2})
 _bot80 = w80._bots()[0]
 _wg80 = w80.fahrzeuge[0]
-pruef("STAUBTAL hat fuenf Buggys", len(w80.fahrzeuge) == 5, str(len(w80.fahrzeuge)))
+pruef("STAUBTAL hat fuenf Buggys", _nb(w80.fahrzeuge) == 5, str(len(w80.fahrzeuge)))
 _bot80.pos.update(_wg80.ausstiegsorte(_bot80.radius)[0])
 _bot80.ebene = _wg80.ebene
 _bot80.treppe_rest = 0.0
@@ -8422,18 +8812,18 @@ pruef("Der Gast sieht das Wrack", any(b_.kaputt for b_ in g80.fahrzeuge))
 w80._anwenden(_gk80, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
 pruef("In ein Wrack steigt niemand ein", not _gk80.im_fahrzeug)
 _beide80(K.FAHRZEUG["wrack_zeit"] + 0.3, w80, g80)
-pruef("Nach der Brennzeit ist das Wrack weg", len(w80.fahrzeuge) == 4)
+pruef("Nach der Brennzeit ist das Wrack weg", _nb(w80.fahrzeuge) == 4)
 _beide80(K.FAHRZEUG["neu_nach"] + 1.5, w80, g80)
 _neu80 = w80.fahrzeuge[-1]
 pruef("Spaeter steht irgendwo ein neuer Wagen, heil und an einem freien Platz",
-      len(w80.fahrzeuge) == 5 and not _neu80.kaputt and _neu80.passt(_neu80.pos)
-      and _neu80.pos.distance_to(_wg80.start[0]) > 1.0 and len(g80.fahrzeuge) == 5)
+      _nb(w80.fahrzeuge) == 5 and not _neu80.kaputt and _neu80.passt(_neu80.pos)
+      and _neu80.pos.distance_to(_wg80.start[0]) > 1.0 and _nb(g80.fahrzeuge) == 5)
 w80.fahrzeuge[1].schaden(K.FAHRZEUG["leben"], None, _ich80)
 w80.wunsch = dict(w80.regelwerk)
 w80._runde_neu()
 _beide80(0.3, w80, g80)
 pruef("Zur neuen Runde stehen wieder alle fuenf heil an ihren Plaetzen",
-      len(w80.fahrzeuge) == 5 and all(not b_.kaputt and b_.leben == b_.max_leben
+      _nb(w80.fahrzeuge) == 5 and all(not b_.kaputt and b_.leben == b_.max_leben
                                       for b_ in w80.fahrzeuge))
 w80.verlassen(); g80.verlassen()
 

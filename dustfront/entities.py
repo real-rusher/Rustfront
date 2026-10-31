@@ -333,6 +333,10 @@ class Geschoss(Wesen):
     bild = "geschoss"
     spur = (250, 206, 128)
     radius = 2.0
+    # Das Fahrzeug, aus dem geschossen wurde (seit 0.34.59): das Ring-MG
+    # des Panzerwagens schiesst ueber das eigene Dach, und die Kugel soll
+    # nicht im eigenen Blech stecken bleiben.
+    traeger = None
 
     def __init__(self, pos, richtung: float, daten: dict, ebene: int,
                  von=None, waffe: str = "") -> None:
@@ -367,7 +371,7 @@ class Geschoss(Wesen):
             self.rest -= teil.length()
             ziel = self.welt.treffer(self.pos, self.radius, self.ebene,
                                      self.quelle_fraktion)
-            if ziel is not None and ziel is not self.von:
+            if ziel is not None and ziel is not self.von and ziel is not self.traeger:
                 self.einschlag(ziel)
                 return
             # Jede feste Kachel haelt die Kugel auf (seit 0.34.26).
@@ -393,7 +397,13 @@ class Geschoss(Wesen):
                 self.von.zaehlen("treffer", 1.0, self.waffe)
                 treffer_ziel_buchen(self.von, ziel)
             lebte = ziel.lebt
-            ziel.schaden(self.schaden_wert, schub, self.von)
+            if getattr(ziel, "rechteckig", False):
+                # Panzer und Panzerwagen (seit 0.34.59): eine Kugel zerkratzt
+                # nur den Lack (`kugel_anteil`) - wer im Turm oder im Ring
+                # steht, bekommt seinen Teil aber ganz ab.
+                ziel.schaden(self.schaden_wert, schub, self.von, kugel=True)
+            else:
+                ziel.schaden(self.schaden_wert, schub, self.von)
             abschuss_buchen(self.von, ziel, self.waffe, lebte)
             if getattr(ziel, "treffer_art", "") == "metall":
                 wolke(self.welt, self.pos, 5, 170, 0.18, (255, 222, 150), self.ebene,
@@ -1193,6 +1203,110 @@ class Rauchwolke:
 # ══════════════════════════════════════════════════════════════════
 # Aufsammler
 # ══════════════════════════════════════════════════════════════════
+
+class Feuerball:
+    """Der Einschlag der Panzerkanone (seit 0.34.59, Welt.explosion "panzer").
+
+    Kein Kreis, der waechst - gemeldet war das "nicht geil". Mehrere
+    versetzte Glutballen, die zeitversetzt aufgehen und verloeschen
+    (additiv gezeichnet: weiss, gelb, orange, dunkelrot), danach dunkler
+    Rauch aus rund zehn Wolken, der aufquillt und abtreibt. Die Zufallszahlen
+    kommen aus dem Ort (`saat`): beim Gast sieht derselbe Einschlag genauso
+    aus wie beim Gastgeber. Wie der Rauch kein Wesen - er stoesst niemanden
+    und ist nicht zu treffen.
+
+    Zeiten in Sekunden; im Paket waren es Bilder bei 60 je Sekunde.
+    """
+
+    __slots__ = ("pos", "ebene", "alter", "ballen", "wolken", "lebt")
+
+    def __init__(self, pos, ebene: int, saat: int, groesse: float = 1.0) -> None:
+        self.pos = pygame.Vector2(pos)
+        self.ebene = int(ebene)
+        self.alter = 0.0
+        self.lebt = True
+        r = random.Random(saat)
+        f = K.FEUERBALL
+        self.ballen = []
+        for _ in range(f["ballen"]):
+            versatz = pygame.Vector2(r.uniform(0, f["ballen_streuung"] * groesse), 0) \
+                .rotate(r.uniform(0, 360))
+            self.ballen.append((versatz, r.uniform(*f["ballen_radius"]) * groesse,
+                                r.uniform(0.0, f["ballen_start"]),
+                                r.uniform(*f["ballen_dauer"])))
+        wind = pygame.Vector2(r.uniform(*f["wind_x"]), r.uniform(*f["wind_y"]))
+        self.wolken = []
+        for _ in range(f["wolken"]):
+            versatz = pygame.Vector2(r.uniform(0, f["wolken_streuung"] * groesse), 0) \
+                .rotate(r.uniform(0, 360))
+            self.wolken.append((versatz, r.uniform(*f["wolke_klein"]) * groesse,
+                                r.uniform(*f["wolke_gross"]) * groesse,
+                                r.uniform(*f["wolke_start"]), r.uniform(*f["wolke_dauer"]),
+                                versatz * 0.6 + wind, r.choice(f["rauch_farben"])))
+
+    def schritt(self, dt: float) -> None:
+        self.alter += dt
+        if self.alter > K.FEUERBALL["dauer"]:
+            self.lebt = False
+
+
+class Flugleiche:
+    """Wer beim Rammen stirbt, fliegt noch ein Stueck (seit 0.34.59).
+
+    0,1 bis 0,6 Sekunden, mit Drehung, mit dem Stoss des Fahrzeugs - und
+    wird dabei aus jedem Fahrzeug hinausgeschoben, das ihm im Weg ist. Wo
+    sie landet, bleibt ein Spritzer in Flugrichtung. Nur Bild: niemand
+    trifft sie, und gezaehlt ist der Tod schon (Welt.leichenflug)."""
+
+    __slots__ = ("pos", "vorher", "ebene", "bild", "winkel", "tempo", "rest",
+                 "dreh", "blut", "radius", "lebt")
+
+    def __init__(self, pos, ebene: int, bild: str, winkel: float, tempo,
+                 dauer: float, dreh: float, blut: str, radius: float) -> None:
+        self.pos = pygame.Vector2(pos)
+        self.vorher = pygame.Vector2(pos)
+        self.ebene = int(ebene)
+        self.bild = str(bild)
+        self.winkel = float(winkel)
+        self.tempo = pygame.Vector2(tempo)
+        self.rest = float(dauer)
+        self.dreh = float(dreh)
+        self.blut = str(blut)
+        self.radius = float(radius)
+        self.lebt = True
+
+    def schritt(self, dt: float, welt) -> None:
+        self.vorher.update(self.pos)
+        self.pos += self.tempo * dt
+        self.tempo *= max(0.0, 1.0 - K.RAMMEN["flug_bremse"] * dt)
+        self.winkel += self.dreh * dt
+        # Auch fliegend nie im Fussabdruck eines Fahrzeugs (Paket,
+        # Stolperfalle 1): an der Seite mit der geringsten Tiefe hinaus.
+        for w in welt.wesen:
+            if getattr(w, "rechteckig", False) and w.ebene == self.ebene \
+                    and w.beruehrt(self.pos, self.radius):
+                f = w.werte
+                lok = w.lokal(self.pos)
+                r = self.radius
+                tiefe = {(1, 0): f["vorn"] + r - lok.x, (-1, 0): lok.x - (f["hinten"] - r),
+                         (0, -1): lok.y + f["halb"] + r, (0, 1): f["halb"] + r - lok.y}
+                n = min(tiefe, key=tiefe.get)
+                self.pos = w.pos + (lok + pygame.Vector2(n) * tiefe[n]).rotate(w.winkel)
+        self.rest -= dt
+        if self.rest <= 0.0:
+            self.lebt = False
+            richtung = math.degrees(math.atan2(self.tempo.y, self.tempo.x)) \
+                if self.tempo.length_squared() > 25 else 0.0
+            b = K.BLUT.get(self.blut, K.BLUT["mensch"])
+            wolke(welt, self.pos, 10, 90, 0.5, b["spritzer"], self.ebene, 2, "blut",
+                  80, richtung)
+            variante = int(abs(self.pos.x) * 7 + abs(self.pos.y) * 13) % 8
+            welt.blutfleck(self.pos + pygame.Vector2(self.radius * 0.6, 0).rotate(richtung),
+                           self.ebene, self.radius * 0.9, self.blut, variante)
+
+    def zeichenpos(self, alpha: float) -> pygame.Vector2:
+        return self.vorher.lerp(self.pos, alpha)
+
 
 class Aufsammler(Wesen):
     """Liegt herum, bis jemand darueber laeuft."""

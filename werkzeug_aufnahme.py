@@ -551,6 +551,91 @@ def szene_abschnitte(tm, rnd):
 
 
 # Name -> (Dateiname, Szene). Die Nummer im Dateinamen ist die Reihenfolge.
+def _feld_ganz_frei(tm, rnd, breite: int, hoehe: int):
+    """Wie `flaeche`, aber jede Kachel frei - ein Panzer braucht Platz, und
+    zwischen zwei Stichproben passt eine ganze Mauer (seit 0.34.59)."""
+    T = K.TILE
+    e = tm.welt.ebene(0)
+    for _ in range(40000):
+        tx = rnd.randrange(2, e.breite - breite - 2)
+        ty = rnd.randrange(2, e.hoehe - hoehe - 2)
+        if all(not K.KACHELN[e.kachel(tx + x, ty + y)]["fest"] and not e.loch(tx + x, ty + y)
+               for x in range(breite) for y in range(hoehe)):
+            return tx, ty, (lambda x, y: pygame.Vector2((tx + x + 0.5) * T, (ty + y + 0.5) * T))
+    raise RuntimeError("Keine ganz freie Flaeche gefunden")
+
+
+def _fahrer_in(tm, art: str, pos, winkel: float):
+    """Ein Fahrzeug und darin eine Figur, die nichts selbst tut - die Szene
+    gibt ihr die Eingabe (seit 0.34.59)."""
+    b = tm.fahrzeug_setzen(art, pos, 0, {"winkel": winkel})
+    k = tm.puppe_setzen(b.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="FAHRER")
+    tm._einsteigen(k, b)
+    return b, k
+
+
+def _steuern(tm, k, will, ziel, feuert=False, zielt=False):
+    tm._anwenden(k, {"will": list(will), "ziel": [ziel.x, ziel.y], "knoepfe": [],
+                     "feuert": feuert, "zielt": zielt})
+
+
+def szene_panzer(tm, rnd):
+    """Seit 0.34.59: der Panzer. Der Turm dreht zu einer Gruppe Laeufer,
+    die Kanone schlaegt ein (Feuerball, Rauch, Krater), dann haelt das
+    Bug-MG, und er faehrt langsam in den Rest hinein - vorn geschoben und
+    angeschlagen, seitlich nur beiseite."""
+    tx, ty, zelle = _feld_ganz_frei(tm, rnd, 26, 12)
+    start = zelle(4, 6)
+    b, k = _fahrer_in(tm, "panzer", start, 0.0)
+    gruppe = [tm.gegner_setzen("laeufer", zelle(16 + (i % 3) * 2, 3 + (i // 3) * 3), 0,
+                               {"ki": False}) for i in range(9)]
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        t = uhr["t"]
+        lebende = [g for g in gruppe if g.lebt]
+        ziel = lebende[0].pos if lebende else b.pos + b.vorn * 200
+        if t < 3.0:
+            _steuern(tm, k, (0, 0), zelle(16, 6), feuert=t > 2.2)
+        elif t < 5.0:
+            _steuern(tm, k, (0, 0), ziel, zielt=True)
+        else:
+            _steuern(tm, k, (0, -1), b.pos + b.vorn * 200, zielt=(t % 0.9) < 0.5)
+        if t > 5.0:
+            for g in lebende:
+                g.ki_aus = False
+
+    return ("Panzer: Turm, Kanone mit Feuerball und Krater, Bug-MG, Rammen",
+            [b], lambda: uhr["t"] > 16.0, 18, 1.5, jedes_bild)
+
+
+def szene_panzerwagen(tm, rnd):
+    """Seit 0.34.59: der Panzerwagen zieht zaeh an, wird sehr schnell und
+    rammt eine Gruppe; danach haelt der Schuetze mit dem Ring-MG drauf."""
+    tx, ty, zelle = _feld_ganz_frei(tm, rnd, 44, 10)
+    b, k = _fahrer_in(tm, "panzerwagen", zelle(3, 5), 0.0)
+    gruppe = [tm.gegner_setzen("laeufer", zelle(30 + (i % 3) * 2, 3 + (i // 3) * 2), 0,
+                               {"ki": False}) for i in range(7)]
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        t = uhr["t"]
+        lebende = [g for g in gruppe if g.lebt]
+        if t < 6.0:
+            _steuern(tm, k, (0, -1), b.pos + b.vorn * 300)
+        else:
+            ziel = lebende[0].pos if lebende else b.pos + b.vorn * 200
+            _steuern(tm, k, (0, 1) if b.fahrt > 5 else (0, 0), ziel,
+                     feuert=(t % 0.8) < 0.55)
+            for g in lebende:
+                g.ki_aus = False
+
+    return ("Panzerwagen: zaeh, schnell, rammt - dann das Ring-MG",
+            [b], lambda: uhr["t"] > 13.0, 15, 1.5, jedes_bild)
+
+
 SZENEN = {
     "duell": ("1_goap_gegen_klassisch", szene_duell),
     "flanke": ("2_flanke_und_niederhalten", szene_flanke),
@@ -572,6 +657,8 @@ SZENEN = {
     "zuruf": ("18_zuruf_statt_suchen", szene_zuruf),
     "bergen_puppen": ("19_bergen_gegen_puppen", szene_bergen_puppen),
     "abschnitte": ("20_geknickte_front", szene_abschnitte),
+    "panzer": ("21_panzer", szene_panzer),
+    "panzerwagen": ("22_panzerwagen", szene_panzerwagen),
 }
 
 

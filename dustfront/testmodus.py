@@ -65,6 +65,7 @@ from . import plattform
 from . import ui
 from .anzeige import Anzeige
 from .entities import Granate, Wesen
+from . import fahrzeug as fahrzeug_modul
 from .fahrzeug import Buggy
 from .font import SCHRIFT
 from .goap import erfuellt as goap_erfuellt
@@ -233,6 +234,12 @@ def eintraege() -> list:
     raus += [
         Eintrag("BUGGY", "OBJEKTE", ("anzahl", "streuung", "winkel"),
                 lambda t, p, e, w: t.buggy_setzen(p, e, w)),
+        # Seit 0.34.59: Panzer und Panzerwagen. Einsteigen mit E, wenn man
+        # eine Figur steuert (SPIELER, ICH oder Taste 3).
+        Eintrag("PANZER", "OBJEKTE", ("anzahl", "streuung", "winkel"),
+                lambda t, p, e, w: t.fahrzeug_setzen("panzer", p, e, w)),
+        Eintrag("PANZERWAGEN", "OBJEKTE", ("anzahl", "streuung", "winkel"),
+                lambda t, p, e, w: t.fahrzeug_setzen("panzerwagen", p, e, w)),
         Eintrag("HOTZONE HIER", "OBJEKTE", (),
                 lambda t, p, e, w: t.zone_setzen(p, e), mehrfach=False),
         Eintrag("HOTZONE AUS", "OBJEKTE", (),
@@ -846,7 +853,32 @@ class Testmodus(Gefecht):
         return g
 
     def buggy_setzen(self, pos, ebene: int, w: dict):
-        b = Buggy(pygame.Vector2(pos), ebene, float(w.get("winkel", 0)))
+        return self.fahrzeug_setzen("buggy", pos, ebene, w)
+
+    def fahrzeug_setzen(self, art: str, pos, ebene: int, w: dict):
+        """Ein Fahrzeug dieser Art (fahrzeug.ARTEN). Wo es nicht hinpasst,
+        sucht es den naechsten freien Platz in wachsenden Ringen - ein
+        Panzer ist groesser als die Stelle, die der Spawner prueft."""
+        b = fahrzeug_modul.neu(art, pos, ebene, float(w.get("winkel", 0)))
+        b.welt = self.welt
+        # Das Raster neu, bevor gesucht wird: ein eben gesetzter Wagen
+        # steht sonst erst nach dem naechsten Schritt darin, und der
+        # zweite landete genau auf dem ersten (gefunden mit dem Test).
+        self.welt._raster_bauen()
+        if not b.passt(b.pos):
+            for r in range(8, 200, 8):
+                frei = None
+                for i in range(16):
+                    p = pygame.Vector2(pos) + pygame.Vector2(r, 0).rotate(i * 22.5)
+                    if b.passt(p):
+                        frei = p
+                        break
+                if frei is not None:
+                    b.pos.update(frei)
+                    b.vorher.update(frei)
+                    break
+        if hasattr(b, "aufbau"):
+            b.aufbau = b.winkel
         b.start = (pygame.Vector2(b.pos), b.ebene, b.winkel)
         self.fahrzeuge.append(b)
         self._einsetzen(b)
