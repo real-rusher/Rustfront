@@ -180,6 +180,9 @@ class BotHirn(Taktik):
         self.leben_vorher = k.leben
         self.ruf_rest = 0.0
         self.geblendet = 0.0          # so lange sieht er nichts (Blendgranate)
+        # Gefahren (seit 0.34.70): Feuer, Gas, Fallen, Wuerfe.
+        self._gefahren = []
+        self.gefahr_rest = 0.0
         self.getroffen_rest = 0.0     # so lange ist der letzte Treffer her
         self.deckung_ort = None       # wo er sich gerade versteckt
         self.deckung_rest = 0.0       # so lange bleibt er noch dort
@@ -241,6 +244,16 @@ class BotHirn(Taktik):
         self.laden_vorher = laedt
 
         will, ziel_punkt, feuern, zielt = self._entscheiden(dt, ein)
+        feuern, zielt = self._abzug(feuern, zielt)
+        # Seit 0.34.70: steht er in Feuer, Gas oder am Rand einer Falle,
+        # geht er zuerst dort heraus - schiessen darf er dabei weiter.
+        self.gefahr_rest -= dt
+        if self.gefahr_rest <= 0.0:
+            self.gefahr_rest = K.BOTS["gefahr_takt"]
+            self._gefahren = self._gefahren_sammeln()
+        raus = self._gefahr_raus()
+        if raus is not None:
+            will = raus
 
         will = self._sicher(will)
         will = self._nicht_stecken(dt, will)
@@ -558,9 +571,15 @@ class BotHirn(Taktik):
         raus = []
         for i, name in enumerate(k.waffen):
             d = K.WAFFEN[name]
-            if d.get("art") != "schuss":
+            # Seit 0.34.70 alles, womit man kaempft (K.BOTS["kampf_arten"]):
+            # Werfer, Raketen, Chor-Waffen, Flammenwerfer, Nahkampf.
+            if d.get("art", "schuss") not in K.BOTS["kampf_arten"]:
                 continue
-            if k.magazin.get(name, 0) > 0 or not k.knapp or k.vorrat.get(name, 0) > 0:
+            if d.get("art") == "nahkampf" and (not d.get("magazin") or d.get("aufheben")):
+                raus.append((i, name))           # ein Schlag braucht keine Munition
+                continue
+            if (k.magazin.get(name, 0) > 0 or not k.knapp or k.vorrat.get(name, 0) > 0
+                    or d.get("kuehlt")):
                 raus.append((i, name))
         return raus
 
@@ -657,9 +676,22 @@ class BotHirn(Taktik):
         # Nur eine Schusswaffe laedt man nach. Mit der eben geworfenen
         # Granate noch in der Hand hiess das sonst: 3,2 Sekunden Granate
         # nachladen, statt die Waffe zu nehmen (gefunden 0.34.38).
+        wd = K.WAFFEN[k.waffe_name]
         if (k.magazin.get(k.waffe_name, 0) <= 0 and k.nachlade_rest <= 0
-                and nr == k.waffe and K.WAFFEN[k.waffe_name].get("art") == "schuss"):
+                and nr == k.waffe and wd.get("art", "schuss") in ("schuss", "werfer", "flamme",
+                                                                  "kugel", "strahl", "kette")
+                and wd.get("magazin") and not wd.get("aufheben")):
             ein["knoepfe"].append("nachladen")
+        if wd.get("art") == "nahkampf" and nr == k.waffe:
+            # Eine Nahkampfwaffe in der Hand (seit 0.34.70): hin und
+            # zuschlagen - Abstand halten oder Deckung suchen hiesse hier,
+            # nie zu treffen.
+            will = self._weg_richtung(z.pos, z.ebene)
+            nah = abstand <= wd.get("reichweite", 30.0) + getattr(z, "radius", 9.0)
+            if nah:
+                will = will * 0.3
+            return (will, pygame.Vector2(z.pos), nah and sichtbar and self.reaktion_rest <= 0.0,
+                    False)
 
         # Bewegen: Abstand halten, seitlich ausweichen - oder in Deckung.
         will = self._kampfbewegung(abstand, z, ein)
@@ -1130,12 +1162,15 @@ class BotHirn(Taktik):
 
     def _sicher(self, will):
         """Nicht in ein Loch und nicht gegen die Wand: die Richtung so weit
-        drehen, bis vor ihm Boden ist."""
+        drehen, bis vor ihm Boden ist. Seit 0.34.70 auch nicht in Feuer,
+        Gas, eine Falle, die er sieht, oder in Stacheldraht - lieber geht
+        er herum; nur wenn es gar keinen anderen Weg gibt, hinein."""
         if will.length_squared() < 0.01:
             return will
         k = self.k
         welt = self.g.welt
         e = welt.ebene(k.ebene)
+        notfall = None
         for dreh in (0, 30, -30, 60, -60, 100, -100, 150, -150):
             r = will.rotate(dreh)
             p = k.pos + r.normalize() * 16.0
@@ -1143,8 +1178,101 @@ class BotHirn(Taktik):
             if k.ebene > 0 and e.loch(tx, ty):
                 continue
             if welt.frei(p, k.radius, k.ebene, True):
+                if self._gefahr_bei(k.pos + r.normalize() * 26.0) and not self._gefahr_bei(k.pos):
+                    if notfall is None:
+                        notfall = r
+                    continue
                 return r
-        return pygame.Vector2(0, 0)
+        return notfall if notfall is not None else pygame.Vector2(0, 0)
+
+    # ---- Gefahren (seit 0.34.70) ---------------------------------------
+    def _gefahren_sammeln(self) -> list:
+        """Was auf seiner Ebene gefaehrlich ist: (Ort, Radius) - Feuer, Gas,
+        Fallen, die er sieht, Stacheldraht und scharfe Wuerfe, die er sieht.
+        Gefragt wird die Welt, nie der Beobachter (AGENTS.md)."""
+        k = self.k
+        welt = self.g.welt
+        rand = K.BOTS["gefahr_rand"]
+        raus = []
+        for b in welt.feuer:
+            if b.lebt and b.ebene == k.ebene and b.staerke > 0.15:
+                raus.append((pygame.Vector2(b.pos), b.radius + rand))
+        for g in getattr(welt, "gas", ()):
+            if g.lebt and g.ebene == k.ebene:
+                raus.append((pygame.Vector2(g.pos), g.radius + rand))
+        if self.geblendet > 0.0:
+            return raus                  # was fliegt und liegt, sieht er nicht
+        sicht = K.BOTS["granate_sieht"]
+        for w in welt.wesen:
+            if not w.lebt or w.ebene != k.ebene or w is k:
+                continue
+            art = getattr(w, "art", "")
+            if getattr(w, "ist_ausruestung", False):
+                if art == "stacheldraht":
+                    raus.append((pygame.Vector2(w.pos), K.AUSRUESTUNG["stacheldraht"]["laenge"] / 2))
+                elif art == "sprengfalle" and getattr(w, "fraktion", "") != k.fraktion \
+                        and (w.bild is not None or w.zuendet >= 0.0):
+                    raus.append((pygame.Vector2(w.pos), K.AUSRUESTUNG["sprengfalle"]["spreng_radius"]
+                                 if w.zuendet >= 0.0 else K.AUSRUESTUNG["sprengfalle"]["radius"] + rand))
+                continue
+            d = getattr(w, "daten", None)
+            if not isinstance(d, dict) or not hasattr(w, "zuenden"):
+                continue
+            if d.get("rauch") or d.get("blend") or d.get("knaller") or d.get("gerade"):
+                continue
+            r = d.get("radius", 0.0) or (40.0 if d.get("feuer") or d.get("gas") else 0.0)
+            if r <= 0.0 or k.pos.distance_to(w.pos) > sicht:
+                continue
+            raus.append((pygame.Vector2(w.pos), r + rand))
+        return raus
+
+    def _gefahr_bei(self, punkt) -> bool:
+        for ort, r in self._gefahren:
+            if ort.distance_squared_to(punkt) <= r * r:
+                return True
+        return False
+
+    def _gefahr_raus(self):
+        """Steht er in einer Gefahr: die Richtung hinaus (weg von allen,
+        in denen er steht). Sonst None."""
+        k = self.k
+        weg = pygame.Vector2(0, 0)
+        for ort, r in self._gefahren:
+            ab = k.pos - ort
+            if ab.length_squared() <= r * r:
+                weg += ab.normalize() if ab.length_squared() > 0.01 else pygame.Vector2(1, 0).rotate(
+                    self.rnd.uniform(0, 360))
+        if weg.length_squared() < 0.01:
+            return None
+        return weg.normalize()
+
+    def _abzug(self, feuern: bool, zielt: bool):
+        """Wie die Waffe in der Hand bedient wird (seit 0.34.70): mit dem
+        Nahkampf erst, wenn er nah genug ist; die Spule wird gehalten und
+        losgelassen, wenn sie voll ist; die Flamme nur in Reichweite."""
+        k = self.k
+        d = k.waffe_daten
+        art = d.get("art", "schuss")
+        z = self.ziel
+        abstand = k.pos.distance_to(z.pos) if z is not None else 9999.0
+        if art == "nahkampf":
+            feuern = feuern and abstand <= d.get("reichweite", 30.0) + getattr(z, "radius", 9.0)
+            zielt = False
+        elif art == "flamme":
+            feuern = feuern and abstand <= d["reichweite"]
+        elif art == "strahl":
+            # Einmal angefangen, haelt er, bis sie voll ist - dann ein Bild
+            # loslassen, das feuert. Feuerstoesse wie beim Gewehr luden sie
+            # nie ganz.
+            if k.ladung >= K.BOTS["spule_loslassen"]:
+                feuern = False
+            elif k.ladung > 0.0 and z is not None and z.lebt:
+                feuern = True
+        elif art == "kette":
+            # Ebenso: halten, bis der Blitz von selbst springt.
+            if k.ladung > 0.0 and z is not None and z.lebt:
+                feuern = True
+        return feuern, zielt
 
     def _nicht_stecken(self, dt: float, will):
         """Kommt er nicht vom Fleck, obwohl er will: kurz anders herum."""

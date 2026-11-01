@@ -6343,6 +6343,73 @@ pruef("Die Testmodus-Anzeige zeichnet Markierungen und Reichweiten ohne Fehler",
 EN.RND.setstate(_rnd69)
 random.setstate(_zufall69)
 
+# 0.34.70: Bots meiden Gefahren und kaempfen mit allen Waffen.
+print("\n-- Bots: Gefahren und neue Waffen (0.34.70)")
+_rnd70 = EN.RND.getstate()
+_zufall70 = random.getstate()
+_tm70 = _TM59.Testmodus(app, karte="staubtal")
+_tm70._bot_rnd.seed(70)
+_ort70 = freier_punkt(_tm70.welt, 0, random.Random(70))
+def _bot70(pos, waffe="zufall", team=0, hirn="goap"):
+    b_ = _tm70.bot_setzen(pos, 0, {"anzahl": 1, "streuung": 0, "team": team, "waffe": waffe,
+                                   "hirn": hirn})
+    return b_[0] if isinstance(b_, list) else b_
+def _laufen70(sek):
+    for _ in range(int(sek / K.FIXED_DT)):
+        _tm70.schritt(K.FIXED_DT)
+_tm70.ki_stopp = False
+for _hirn70 in ("goap", "klassisch"):
+    _b70 = _bot70(_ort70, hirn=_hirn70)
+    _f70 = EN.Brandflaeche(pygame.Vector2(_b70.pos), 0, radius=50.0, von=None)
+    _tm70.welt.feuer.append(_f70)
+    _laufen70(2.0)
+    pruef("Ein Bot (%s) im Feuer geht heraus" % _hirn70,
+          _b70.pos.distance_to(_f70.pos) > _f70.radius, "%.0f" % _b70.pos.distance_to(_f70.pos))
+    _tm70.welt.feuer.clear()
+    _b70.lebt = False
+    _tm70.kaempfer.pop(_b70.nummer, None)
+_b70 = _bot70(_ort70)
+_g70 = EN.Gaswolke(pygame.Vector2(_b70.pos), 0)
+_g70.alter = K.GAS["wachsen"]
+_tm70.welt.gas.append(_g70)
+_laufen70(2.5)
+pruef("... und aus dem Gas", _b70.pos.distance_to(_g70.pos) > _g70.radius,
+      "%.0f / %.0f" % (_b70.pos.distance_to(_g70.pos), _g70.radius))
+_tm70.welt.gas.clear()
+_b70.lebt = False
+_tm70.kaempfer.pop(_b70.nummer, None)
+# Er laeuft nicht in Feuer, das vor ihm liegt.
+_b70 = _bot70(_ort70)
+_hirn = _b70.hirn
+_hirn._gefahren = [(pygame.Vector2(_b70.pos) + pygame.Vector2(30, 0), 22.0)]
+_r70 = _hirn._sicher(pygame.Vector2(1, 0))
+pruef("... und laeuft nicht in Feuer, das vor ihm liegt",
+      _r70.length_squared() > 0 and not _hirn._gefahr_bei(_b70.pos + _r70.normalize() * 26.0))
+_b70.lebt = False
+_tm70.kaempfer.pop(_b70.nummer, None)
+# Neue Waffen: mit dem Hammer heran und zuschlagen, mit der Spule laden und loslassen.
+for _waffe70, _abstand70 in (("hammer", 150), ("spule", 220), ("flammenwerfer", 100),
+                             ("kettenblitz", 180)):
+    _b70 = _bot70(_ort70, waffe=_waffe70, team=0)
+    # Nur diese Waffe: sonst nimmt er, was besser zum Abstand passt.
+    _b70.waffen = [_waffe70]
+    _b70.waffe = 0
+    _b70.magazin[_waffe70] = K.WAFFEN[_waffe70].get("magazin", 0)
+    _z70 = _tm70.puppe_setzen(_b70.pos + pygame.Vector2(_abstand70, 0), 0,
+                              {"anzahl": 1, "streuung": 0, "team": 1})
+    _z70 = _z70[0] if isinstance(_z70, list) else _z70
+    _z70.leben = _z70.max_leben = 5000.0
+    _laufen70(5.0)
+    pruef("Ein Bot kaempft mit %s und trifft" % K.WAFFEN[_waffe70]["name"],
+          _z70.leben < _z70.max_leben and _b70.waffe_name == _waffe70,
+          "%.0f, %s" % (_z70.max_leben - _z70.leben, _b70.waffe_name))
+    _b70.lebt = _z70.lebt = False
+    _tm70.kaempfer.pop(_b70.nummer, None)
+    _tm70.kaempfer.pop(_z70.nummer, None)
+_tm70.verlassen()
+EN.RND.setstate(_rnd70)
+random.setstate(_zufall70)
+
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
 pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)

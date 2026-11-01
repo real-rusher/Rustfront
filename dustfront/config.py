@@ -1507,7 +1507,14 @@ BOTS = dict(
                        # der Testmodus eine davon gibt (siehe `waffen`).
                        revolver=230.0, zwillinge=170.0, mp=150.0,
                        praezision=330.0, unterhebel=230.0, panzerbuechse=380.0,
-                       doppelflinte=110.0, autoschrot=130.0, minigun=220.0),
+                       doppelflinte=110.0, autoschrot=130.0, minigun=220.0,
+                       # Seit 0.34.70: alle uebrigen Waffen, die ein Bot im
+                       # Testmodus (spaeter: in seiner Klasse) bekommen kann.
+                       granatwerfer=240.0, einwegwerfer=300.0, raketenbuendel=220.0,
+                       bolzer=26.0, nagler=200.0, hammer=24.0, schockstab=22.0,
+                       schlagring=16.0, kettensaege=20.0, wurfmesser=18.0, speer=44.0,
+                       spule=330.0, kettenblitz=200.0, spiegellaser=260.0,
+                       kugelblitz=240.0, flammenwerfer=90.0),
     # Wer ein MG hat, schiesst damit (seit 0.34.38): so viele Pixel
     # Abstand nimmt er hin, bevor er lieber die andere Waffe nimmt. Vorher
     # nahm der MG-Schuetze auf mittlere Weite das Sturmgewehr.
@@ -1516,7 +1523,20 @@ BOTS = dict(
                     schrot=185.0, scharf=330.0,
                     revolver=330.0, zwillinge=280.0, mp=260.0, praezision=330.0,
                     unterhebel=330.0, panzerbuechse=330.0, doppelflinte=170.0,
-                    autoschrot=190.0, minigun=330.0),
+                    autoschrot=190.0, minigun=330.0,
+                    granatwerfer=300.0, einwegwerfer=330.0, raketenbuendel=300.0,
+                    bolzer=44.0, nagler=300.0, hammer=40.0, schockstab=36.0,
+                    schlagring=26.0, kettensaege=32.0, wurfmesser=26.0, speer=62.0,
+                    spule=330.0, kettenblitz=300.0, spiegellaser=330.0,
+                    kugelblitz=330.0, flammenwerfer=125.0),
+    # Womit ein Bot kaempfen kann (seit 0.34.70): alles ausser Wurf und C4,
+    # die gehen ueber den Wurf (_werfen).
+    kampf_arten=("schuss", "werfer", "rakete", "strahl", "kette", "kugel", "flamme",
+                 "nahkampf"),
+    # Seit 0.34.70: wovor er sich in Acht nimmt, und wie weit.
+    gefahr_rand=12.0,         # so weit um Feuer, Gas und Fallen haelt er Abstand
+    gefahr_takt=0.15,         # so oft schaut er nach (s)
+    spule_loslassen=0.92,     # bei so viel Ladung laesst er los
     # Woraus ein Bot sein Loadout zieht (seit 0.34.62). Nur die alten fuenf:
     # mit Zweithand, Doppellauf, Bogen oder Einwegrohr kann die KI noch
     # nicht umgehen - und ein Bot mit einem Granatwerfer, den er nie

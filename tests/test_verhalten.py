@@ -912,9 +912,57 @@ def grosse_trupps():
           zahl["alle"] > 200 and zahl["dicht"] <= 0.20 * zahl["alle"], "%d von %d" % (zahl["dicht"], zahl["alle"]))
 
 
+class ImFeuer:
+    """Zaehlt, wie oft ein Bot in einer Brandflaeche steht (seit 0.34.70)."""
+
+    def __init__(self):
+        self.tm = None
+        self.drin = self.gesamt = 0
+
+    def schritt(self):
+        tm = self.tm
+        if int(tm.welt.zeit / DT) % 6:
+            return
+        for k in tm._bots():
+            if not k.lebt or k.am_boden:
+                continue
+            self.gesamt += 1
+            if any(b.lebt and b.ebene == k.ebene and b.brennt(k.pos, k.ebene) > 0.3
+                   for b in tm.welt.feuer):
+                self.drin += 1
+
+
+def gefahren():
+    """Gemeldet (0.34.63): "aeltere Sachen, die sie noch nicht erkennen,
+    sollten sie jetzt erkennen ... z.B. Molotow". Mitten in einer Schlacht
+    brennen immer wieder Flaechen; die Bots sollen darum herumgehen."""
+    print("\n-- Bots meiden brennenden Boden")
+    f = ImFeuer()
+    for seed in (41, 42, 43):
+        tm = neu(seed)
+        tx, ty, v = W.flaeche(tm, random.Random(seed), 30, 16)
+        for i in range(2):
+            tm.trupp_setzen(v(24, 4 + i * 6), 0, {"groesse": 5, "team": 0, "fuehrer": "funk",
+                                                 "mischung": "gemischt"})
+            tm.trupp_setzen(v(4, 4 + i * 6), 0, {"groesse": 5, "team": 1, "fuehrer": "funk",
+                                                "mischung": "gemischt"})
+        zufall = random.Random(seed)
+
+        def legen(tm=tm, zufall=zufall, v=v):
+            if int(tm.welt.zeit / DT) % int(2.0 / DT) == 0:
+                p = v(zufall.randint(8, 20), zufall.randint(2, 14))
+                tm.welt.feuer.append(ENT.Brandflaeche(pygame.Vector2(p), 0))
+            f.schritt()
+        f.tm = tm
+        laufen(tm, 20.0, legen)
+        tm.verlassen()
+    pruef("In drei Schlachten mit brennendem Boden steht kaum ein Bot im Feuer (unter 1,5 %; ohne Erkennung waren es 3,9 %)",
+          f.gesamt > 200 and f.drin <= 0.015 * f.gesamt, "%d von %d" % (f.drin, f.gesamt))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
-         planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps]
+         planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren]
 NUR = sys.argv[1:]
 for teil in TEILE:
     if not NUR or teil.__name__ in NUR:

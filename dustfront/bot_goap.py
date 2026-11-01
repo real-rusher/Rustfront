@@ -529,9 +529,10 @@ class GoapHirn(BotHirn):
             if not isinstance(w, Granate) or not w.lebt or w.ebene != k.ebene:
                 continue
             d = w.daten
-            if d.get("rauch") or d.get("blend"):
+            if d.get("rauch") or d.get("blend") or d.get("knaller") or d.get("gerade"):
                 continue
-            r = d.get("radius", 0.0) or (40.0 if d.get("feuer") else 0.0)
+            # Gas wie Feuer (seit 0.34.70): auch eine Gasdose meidet er.
+            r = d.get("radius", 0.0) or (40.0 if d.get("feuer") or d.get("gas") else 0.0)
             if r <= 0.0:
                 continue
             ab = k.pos.distance_to(w.pos)
