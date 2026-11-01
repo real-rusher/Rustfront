@@ -239,6 +239,10 @@ class Kaempfer(Spieler):
 
     # ---- Am Boden statt tot -------------------------------------------
     def sterben(self, von=None) -> None:
+        # Der Tank des Flammenwerfers geht vielleicht hoch (seit 0.34.68),
+        # schon beim Umfallen.
+        if not self.am_boden:
+            self.tank_pruefen()
         # Ein anderer Toeter, eine andere Waffe. Derselbe (die Bodenzeit
         # ist um) behaelt die, mit der er ihn umgeworfen hat.
         if von is not self.toeter:
@@ -1080,6 +1084,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self.welt.raketenstart = self._raketenstart_melden
             self.welt.tod = self._tod_melden
             self.welt.leichenflug = self._leichenflug_melden
+            self.welt.entladung = self._entladung_melden
             # Laerm (seit 0.34.66): Bots hoeren ihn wie einen Knall.
             self.welt.laerm = lambda pos, ebene, quelle=None, weite=600.0: \
                 self._bot_hoert(pos, ebene, quelle, weite)
@@ -1255,6 +1260,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._wirkung.append(["r", round(pos.x, 1), round(pos.y, 1),
                               int(ebene), round(winkel, 1), 0])
 
+    def _entladung_melden(self, punkte, ebene: int, art: str = "blitz") -> None:
+        """Strahl und Blitz der Chor-Waffen (seit 0.34.68) - beim Gastgeber
+        und als Meldung "b" bei jedem Gast (die Punkte flach als Liste)."""
+        Welt.entladung(self.welt, punkte, ebene, art)
+        flach = []
+        for p in punkte:
+            flach += [round(p[0], 1), round(p[1], 1)]
+        self._wirkung.append(["b", round(punkte[0][0], 1), round(punkte[0][1], 1),
+                              int(ebene), str(art), flach])
+
     def _tod_melden(self, pos, ebene: int, blut: str, radius: float,
                     fall_winkel: float) -> None:
         """Ein Tod (seit 0.34.33): Fleck, Spritzer und Todeslaut beim
@@ -1312,6 +1327,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 if len(e) == 7 and isinstance(e[6], int) and e[6] >= 0:
                     von = e[6]          # Nummer des Werfers
                 self.welt.explosion(pos, ebene, radius, wirkung, von)
+            elif art == "b":
+                # Strahl oder Blitz (seit 0.34.68).
+                try:
+                    flach = [float(z) for z in e[5]][:40]
+                except (TypeError, ValueError):
+                    continue
+                punkte = [pygame.Vector2(flach[i], flach[i + 1])
+                          for i in range(0, len(flach) - 1, 2)]
+                if len(punkte) >= 2 and str(e[4]) in K.ENTLADUNG["dauer"]:
+                    self.welt.entladung(punkte, ebene, str(e[4]))
             elif art == "s":
                 try:
                     winkel = float(e[4])
@@ -4007,6 +4032,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 # Zustaende (seit 0.34.66): betaeubt, gefroren, fest.
                 "zs": [round(k.betaeubt_rest, 1), round(k.gefroren_rest, 1),
                        round(k.fest_rest, 1)],
+                # Wie weit Spule oder Kettenblitz geladen sind (seit 0.34.68).
+                "ld": round(k.ladung, 2),
                 # Eigene Treffer und Erledigte, als Zaehler - daraus macht
                 # der Gast sein Trefferzeichen (render.Trefferzeichen).
                 "tz": k.treffer_marken, "tk": k.toedlich_marken,
@@ -4487,6 +4514,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             k.sprintet = bool(eintrag.get("sp", 0))
             k.ruf_zeigen = float(eintrag.get("rz", 0.0))
             k.im_fahrzeug = bool(eintrag.get("fz", False))
+            try:
+                k.ladung = max(0.0, min(1.0, float(eintrag.get("ld", 0.0))))
+            except (TypeError, ValueError):
+                k.ladung = 0.0
             zs = eintrag.get("zs")
             if isinstance(zs, list) and len(zs) == 3:
                 try:

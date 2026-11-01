@@ -382,6 +382,9 @@ class Welt:
         self.naegel: list = []
         # Gaswolken (seit 0.34.67, die Gasgranate).
         self.gas: list = []
+        # Strahlen und Blitze der Chor-Waffen (seit 0.34.68): je
+        # [Punkte, Ebene, Art, Rest, Dauer, Saat]. Nur Bild.
+        self.entladungen: list = []
         # Reine Rueckmeldung: Staubringe beim Aufsetzen und kurze
         # Aufschriften ueber aufgesammelter Beute. Beides entscheidet
         # nichts, es sagt nur, dass etwas passiert ist.
@@ -465,6 +468,14 @@ class Welt:
 
     def brandfleck(self, pos, ebene: int, radius: float) -> None:
         pass
+
+    def entladung(self, punkte, ebene: int, art: str = "blitz") -> None:
+        """Ein Strahl (Spule) oder Blitz (Kettenblitz, Kugelblitz) zwischen
+        den Punkten, fuer einen Augenblick (seit 0.34.68). Beim Gastgeber
+        haengt sich das Gefecht davor und meldet es den Gaesten."""
+        dauer = K.ENTLADUNG["dauer"].get(art, 0.2)
+        self.entladungen.append([[pygame.Vector2(p) for p in punkte], int(ebene), art,
+                                 dauer, dauer, int(abs(punkte[0][0]) * 13 + abs(punkte[-1][1]) * 7)])
 
     def laerm(self, pos, ebene: int, quelle=None, weite: float = 600.0) -> None:
         """Lauter Laerm an dieser Stelle (seit 0.34.66: Kettensaege, spaeter
@@ -561,6 +572,20 @@ class Welt:
             self.klang("molotov_glass", 0.9, pos, ebene)
             self.klang("molotov_whoosh", 0.28, pos, ebene)
             return
+        if art == "plasma":
+            # Der Kugelblitz platzt (seit 0.34.68): tuerkis statt Feuer, ein
+            # kurzer Schleier, Blitze nach aussen (Waffenpaket).
+            e = K.ENTLADUNG
+            wolke(self, pos, 30, 300, 0.5, e["tuerkis"], ebene, 2, "funke")
+            wolke(self, pos, 16, 120, 0.9, e["kern"], ebene, 1, "funke", reibung=1.6)
+            wolke(self, pos, 10, 60, 0.8, (60, 140, 150), ebene, 3, "staub")
+            for i in range(6):
+                ende = pos + pygame.Vector2(radius, 0).rotate(i * 60 + pos.x % 60)
+                self.entladung([pos, ende], ebene, "blitz")
+            self.aufschlagring(pos, ebene, 1.2)
+            self.ruckeln(4.0, "explosion", pos, ebene)
+            self.klang("blend", 0.6, pos, ebene)
+            return
         if art == "nagel":
             # Ein Nagel des Naglers bleibt in der Wand stecken (seit
             # 0.34.66). Hier ist `radius` die Richtung, in der er flog.
@@ -652,9 +677,19 @@ class Welt:
         nirgends, und zu hoeren war im ganzen Mehrspieler kein einziger
         Schuss ausser dem eigenen.
         """
-        from .entities import wolke
+        from .entities import RND, wolke
         pos = pygame.Vector2(pos)
         daten = K.WAFFEN.get(waffe) or K.FAHRZEUG_WAFFEN.get(waffe, {})
+        if daten.get("flamme"):
+            # Der Flammenwerfer (seit 0.34.68): kein Blitz, ein Strom vieler
+            # ueberlappender Flammen - innen fast weiss, aussen rot, ohne Qualm.
+            for farbe, anz, gr in (((255, 250, 220), 3, 3), ((255, 200, 90), 4, 4),
+                                   ((240, 110, 40), 4, 4), ((190, 50, 30), 2, 3)):
+                wolke(self, pos, anz, daten["reichweite"] * 3.8, 0.26, farbe, ebene, gr,
+                      "funke", daten["winkel"], winkel, 0.8)
+            if RND.random() < 0.12:
+                self.klang("molotov_whoosh", 0.35, pos, ebene)
+            return
         gross = daten.get("muendung", 1.0)
         self.muendung(pos, winkel, ebene, gross)
         wolke(self, pos, int(3 * gross), 120 * gross, 0.12 * gross, (255, 226, 160),
@@ -800,6 +835,10 @@ class Welt:
         if self.gas and not self._rechnet:
             for g in self.gas:
                 g.schritt(dt, None)
+        if self.entladungen:
+            for e in self.entladungen:
+                e[3] -= dt
+            self.entladungen = [e for e in self.entladungen if e[3] > 0]
         if self.muendungen:
             for m in self.muendungen:
                 m[3] -= dt

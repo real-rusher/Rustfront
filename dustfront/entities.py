@@ -415,6 +415,9 @@ class Geschoss(Wesen):
         # Der Nagler (seit 0.34.66): ein Nagel statt einer Leuchtspur, und
         # wer vor einer Wand getroffen wird, haengt fest.
         self.nagelt = bool(daten.get("nagelt", False))
+        # Der Spiegellaser (seit 0.34.68): so oft prallt er noch ab.
+        self.abprall = int(daten.get("abprall", 0))
+        self.abprall_faktor = float(daten.get("abprall_faktor", 1.0))
         if daten.get("bild_flug"):
             self.bild = daten["bild_flug"]
             self.spur = None
@@ -466,11 +469,30 @@ class Geschoss(Wesen):
             if self.welt.schuss_halt(self.pos, self.ebene, self.radius,
                                      self.durch_deckung):
                 self.pos -= teil
+                if self.abprall > 0:
+                    self._abprallen(teil)
+                    return
                 self.einschlag(None)
                 return
             if self.rest <= 0:
                 self.lebt = False
                 return
+
+    def _abprallen(self, teil) -> None:
+        """An der Wand gespiegelt: welche Achse stoesst an, die kehrt um.
+        Mit jedem Abprall staerker (Waffenpaket, SPIEGELLASER)."""
+        w = self.welt
+        x_stoesst = w.schuss_halt(self.pos + pygame.Vector2(teil.x, 0), self.ebene, self.radius)
+        y_stoesst = w.schuss_halt(self.pos + pygame.Vector2(0, teil.y), self.ebene, self.radius)
+        if x_stoesst or not y_stoesst:
+            self.tempo.x = -self.tempo.x
+        if y_stoesst or not x_stoesst:
+            self.tempo.y = -self.tempo.y
+        self.abprall -= 1
+        self.schaden_wert *= self.abprall_faktor
+        self.winkel = math.degrees(math.atan2(self.tempo.y, self.tempo.x))
+        self._durch_wen = []
+        wolke(w, self.pos, 6, 120, 0.2, K.ENTLADUNG["tuerkis"], self.ebene, 1, "funke")
 
     def einschlag(self, ziel) -> None:
         self.lebt = False
@@ -939,6 +961,99 @@ class Wurfkoerper(Granate):
         wer.magazin[self.waffe] = hat + 1
         self.lebt = False
         return True
+
+
+class Kugelblitz(Geschoss):
+    """Die Energiekugel des Kugelblitzes (seit 0.34.68). Langsam, gut zu
+    sehen; alle `zap_takt` Sekunden schlaegt sie Blitze in mehrere
+    Richtungen bis an ihre Reichweite (auch ohne Ziel, damit man die
+    Reichweite sieht) und trifft alles darin. Am Ende - Wand, Koerper oder
+    Reichweite - platzt sie gross (Welt.explosion "plasma")."""
+
+    radius = 6.0
+
+    def __init__(self, pos, richtung: float, daten: dict, ebene: int,
+                 von=None, waffe: str = "kugelblitz") -> None:
+        super().__init__(pos, richtung, daten, ebene, von, waffe)
+        self.daten = daten
+        self.bild = daten.get("bild_flug", "kugelblitz_flug")
+        self.spur = None
+        self._zap_rest = 0.1
+        self._dreh = RND.uniform(0, 360)
+
+    def schritt(self, dt: float) -> None:
+        self._zap_rest -= dt
+        if self._zap_rest <= 0.0 and self.welt is not None:
+            self._zap_rest = self.daten["zap_takt"]
+            self._zappen()
+        super().schritt(dt)
+
+    def _zappen(self) -> None:
+        d = self.daten
+        w = self.welt
+        r = d["zap_radius"]
+        getroffen = 0
+        for ziel in list(w.nahe(self.pos, r + 20.0, self.ebene)):
+            if (ziel is self or ziel is self.von or not ziel.lebt
+                    or getattr(ziel, "fraktion", "") in ("geschoss", self.quelle_fraktion)
+                    or not getattr(ziel, "trefferbar", True)):
+                continue
+            if ziel.pos.distance_to(self.pos) > r + ziel.radius:
+                continue
+            if not w.sicht_frei(self.pos, ziel.pos, self.ebene):
+                continue
+            lebte = ziel.lebt
+            schaden_an(ziel, d["schaden"], None, self.von, "kugel", self.pos)
+            abschuss_buchen(self.von, ziel, self.waffe, lebte)
+            w.entladung([self.pos, ziel.pos], self.ebene, "blitz")
+            getroffen += 1
+        # Und immer ein paar Blitze ins Leere, bis an die Reichweite.
+        for i in range(max(0, d["zap_strahlen"] - getroffen)):
+            self._dreh = (self._dreh + 137.0) % 360.0
+            ende = w.strahl(self.pos, pygame.Vector2(1, 0).rotate(self._dreh), r, self.ebene)
+            w.entladung([self.pos, ende], self.ebene, "blitz")
+
+    def einschlag(self, ziel) -> None:
+        self.lebt = False
+        self._platzen()
+
+    def _platzen(self) -> None:
+        if getattr(self, "_geplatzt", False):
+            return
+        self._geplatzt = True
+        d = self.daten
+        w = self.welt
+        r = d["platzen_radius"]
+        for ziel in list(w.nahe(self.pos, r + 30.0, self.ebene)):
+            if (ziel is self or not ziel.lebt or getattr(ziel, "fraktion", "") == "geschoss"
+                    or ziel.fraktion == self.quelle_fraktion and ziel is not self.von
+                    or not getattr(ziel, "trefferbar", True)):
+                continue
+            ab = ziel.pos - self.pos
+            weit = ab.length()
+            if weit > r + ziel.radius:
+                continue
+            anteil = (1.0 - 0.6 * min(1.0, weit / r)) * w.deckung_anteil(self.pos, ziel.pos,
+                                                                          self.ebene)
+            schub = ab.normalize() * 260.0 * anteil if weit > 0.01 else None
+            lebte = ziel.lebt
+            schaden_an(ziel, d["platzen_schaden"] * anteil, schub, self.von, "spreng", self.pos)
+            abschuss_buchen(self.von, ziel, self.waffe, lebte)
+        w.explosion(self.pos, self.ebene, r, "plasma", self.von)
+
+    @property
+    def lebt(self):
+        return self.__dict__.get("_lebt", True)
+
+    @lebt.setter
+    def lebt(self, wert):
+        # Auch am Ende der Reichweite platzt sie (Geschoss setzt dort nur
+        # lebt = False).
+        if not wert and self.__dict__.get("_lebt", True) and self.welt is not None:
+            self.__dict__["_lebt"] = False
+            self._platzen()
+            return
+        self.__dict__["_lebt"] = wert
 
 
 class Gaswolke:
@@ -2009,6 +2124,11 @@ class Spieler(Wesen):
         # Der Takt der zweiten Pistole bzw. des zweiten Laufs (seit 0.34.62,
         # K.WAFFEN "zweite_hand" und "beide_laeufe"): rechte Maustaste.
         self.takt2 = 0.0
+        # Energiewaffen (seit 0.34.68): wie weit aufgeladen (0 bis 1), und
+        # wann die naechste Ladung abgekuehlt ist.
+        self.ladung = 0.0
+        self._kuehl_rest = 0.0
+        self._flamme_rest = 0.0
         # Raketenwerfer. `rpg` heisst: er wird getragen, und dann traegt
         # man sonst nichts. `rpg_waffen` merkt sich, was vorher da war.
         self.rpg = False
@@ -2519,6 +2639,8 @@ class Spieler(Wesen):
         luft *= self.gewicht_tempo
         # Eine leichte Waffe macht flinker (seit 0.34.62, die MP).
         luft *= wd.get("tempo_faktor", 1.0)
+        if self.ladung > 0.0:
+            luft *= wd.get("tempo_beim_laden", 1.0)    # Spule, Kettenblitz (0.34.68)
         if self.heilt_rest > 0:
             # Wer ein Medkit anlegt, hat die Haende voll und geht langsamer.
             luft *= K.MEDKIT["tempo"]
@@ -2614,8 +2736,12 @@ class Spieler(Wesen):
             if self.feuert and not self._c4_feuert_alt and self.heilt_rest <= 0:
                 self.feuern()
             self._c4_feuert_alt = self.feuert
+        elif wd.get("art") in ("strahl", "kette"):
+            self._laden(dt, wd)
         elif self.feuert and self.takt <= 0 and self.heilt_rest <= 0:
             self.feuern()
+        if wd.get("kuehlt"):
+            self._abkuehlen(dt, wd)
         # Die rechte Maustaste als zweiter Abzug (seit 0.34.62): die zweite
         # Pistole der Zwillinge, beide Laeufe der Doppelflinte.
         if ((wd.get("zweite_hand") or wd.get("beide_laeufe") or wd.get("zweit"))
@@ -2749,6 +2875,22 @@ class Spieler(Wesen):
         art = d.get("art", "schuss")
         if art == "nahkampf":
             self.schlagen()
+            return
+        if art == "flamme":
+            self.takt = d["takt"]
+            self._flammen(d)
+            return
+        if art == "kugel" and self.magazin.get(self.waffe_name, 0) > 0:
+            # Der Kugelblitz (seit 0.34.68).
+            self.takt = d["takt"]
+            self.magazin[self.waffe_name] -= 1
+            muendung = self.pos + pygame.Vector2(16, 0).rotate(self.winkel)
+            self.welt.dazu(Kugelblitz(muendung, self.winkel, d, self.ebene, self,
+                                      self.waffe_name))
+            self.zaehlen("schuesse", 1.0, self.waffe_name)
+            self.welt.schussknall(muendung, self.winkel, self.ebene, self.waffe_name, self)
+            if self.magazin[self.waffe_name] <= 0:
+                self.nachladen()
             return
         if art == "c4":
             ladungen = self.c4_ladungen
@@ -3054,6 +3196,175 @@ class Spieler(Wesen):
             w.schlagknall(spitze, self.winkel, self.ebene, getroffen, self)
             w.laerm(self.pos, self.ebene, self, d.get("laerm", 600.0))
 
+    def _abkuehlen(self, dt: float, d: dict) -> None:
+        """Chor-Waffen werden heiss statt leer (seit 0.34.68): in Ruhe kommt
+        alle `abkuehlen` Sekunden eine Ladung zurueck."""
+        name = self.waffe_name
+        if self.feuert or self.ladung > 0.0 or self.nachlade_rest > 0:
+            self._kuehl_rest = d["abkuehlen"]
+            return
+        if self.magazin.get(name, 0) >= d["magazin"]:
+            return
+        self._kuehl_rest -= dt
+        if self._kuehl_rest <= 0.0:
+            self._kuehl_rest = d["abkuehlen"]
+            self.magazin[name] = self.magazin.get(name, 0) + 1
+
+    def _laden(self, dt: float, d: dict) -> None:
+        """Spulengewehr und Kettenblitz (seit 0.34.68): halten laedt auf.
+        Der Kettenblitz feuert, sobald er voll ist; das Spulengewehr beim
+        Loslassen, mit dem, was geladen ist."""
+        name = self.waffe_name
+        bereit = (self.takt <= 0 and self.heilt_rest <= 0
+                  and self.magazin.get(name, 0) > 0)
+        if self.feuert and bereit:
+            self.ladung = min(1.0, self.ladung + dt / d["ladezeit"])
+            if d["art"] == "kette" and self.ladung >= 1.0:
+                self._entladen(d, 1.0)
+            return
+        if self.ladung > 0.0 and d["art"] == "strahl" and bereit and self.ladung >= d["mindest"]:
+            self._entladen(d, self.ladung)
+        self.ladung = 0.0
+
+    def _entladen(self, d: dict, ladung: float) -> None:
+        name = self.waffe_name
+        self.ladung = 0.0
+        self.takt = d["takt"]
+        self.magazin[name] -= 1
+        if self.magazin[name] <= 0:
+            self.nachladen()        # ueberhitzt
+        self.zaehlen("schuesse", 1.0, name)
+        w = self.welt
+        muendung = self.pos + pygame.Vector2(14, 0).rotate(self.winkel)
+        richtung = pygame.Vector2(1, 0).rotate(self.winkel)
+        if d["art"] == "strahl":
+            self._spule(d, ladung, muendung, richtung)
+        else:
+            self._kettenblitz(d, muendung, richtung)
+        self.tempo -= richtung * self.rueckstoss_wert(d) * ladung
+        w.schussknall(muendung, self.winkel, self.ebene, name, self)
+
+    def _spule(self, d: dict, ladung: float, muendung, richtung) -> None:
+        """Ein Strahl ohne Flugzeit, durch Waende und durch jeden Koerper
+        auf der Linie."""
+        w = self.welt
+        reich = d["reichweite"]
+        ende = muendung + richtung * reich
+        getroffen = []
+        schritt = 6.0
+        n = int(reich / schritt)
+        for i in range(1, n + 1):
+            p = muendung + richtung * (i * schritt)
+            ziel = w.treffer(p, 4.0, self.ebene, self.fraktion)
+            if ziel is not None and ziel is not self and ziel not in getroffen:
+                getroffen.append(ziel)
+        for ziel in getroffen:
+            lebte = ziel.lebt
+            if hasattr(self, "zaehlen") and getattr(ziel, "zaehlt_treffer", True):
+                self.zaehlen("treffer", 1.0, self.waffe_name)
+                treffer_ziel_buchen(self, ziel)
+            schaden_an(ziel, d["schaden"] * ladung, richtung * 160.0 * ladung, self,
+                       d.get("schadensart"), muendung)
+            abschuss_buchen(self, ziel, self.waffe_name, lebte)
+        w.entladung([muendung, ende], self.ebene, "spule")
+
+    def _kettenblitz(self, d: dict, muendung, richtung) -> None:
+        """Der erste im Kegel vor ihm, dann von Koerper zu Koerper, jedesmal
+        schwaecher. Nur mit freier Sicht."""
+        w = self.welt
+        punkte = [pygame.Vector2(muendung)]
+        getroffen = []
+        jetzt = pygame.Vector2(muendung)
+        reich = d["reichweite"]
+        halb = d["kegel"]
+        menge = d["schaden"]
+        for sprung in range(d["spruenge"] + 1):
+            bestes, beste_weite = None, 1e9
+            weite_max = reich if sprung == 0 else d["sprung"]
+            for z in w.nahe(jetzt, weite_max + 30.0, self.ebene):
+                if (z is self or not z.lebt or z in getroffen
+                        or getattr(z, "fraktion", "") in ("geschoss", self.fraktion)
+                        or not getattr(z, "trefferbar", True)):
+                    continue
+                ab = z.pos - jetzt
+                weit = ab.length()
+                if weit > weite_max + z.radius or weit >= beste_weite:
+                    continue
+                if sprung == 0:
+                    delta = (math.degrees(math.atan2(ab.y, ab.x)) - self.winkel + 180) % 360 - 180
+                    if abs(delta) > halb:
+                        continue
+                if not w.sicht_frei(jetzt, z.pos, self.ebene):
+                    continue
+                bestes, beste_weite = z, weit
+            if bestes is None:
+                break
+            lebte = bestes.lebt
+            if getattr(bestes, "zaehlt_treffer", True):
+                self.zaehlen("treffer", 1.0, self.waffe_name)
+                treffer_ziel_buchen(self, bestes)
+            schaden_an(bestes, menge, None, self, d.get("schadensart"), jetzt)
+            abschuss_buchen(self, bestes, self.waffe_name, lebte)
+            getroffen.append(bestes)
+            jetzt = pygame.Vector2(bestes.pos)
+            punkte.append(jetzt)
+            menge *= d["abfall"]
+        if len(punkte) == 1:
+            punkte.append(w.strahl(muendung, richtung, reich * 0.6, self.ebene))
+        w.entladung(punkte, self.ebene, "blitz")
+
+    def _flammen(self, d: dict) -> None:
+        """Der Flammenwerfer (seit 0.34.68): ein Zug je `takt`. Schaden im
+        Kegel (Feuer, mit freier Sicht), brennende Streifen am Ende der
+        Flamme, Rauch in der Flamme loest sich auf."""
+        name = self.waffe_name
+        if self.magazin.get(name, 0) <= 0:
+            self.nachladen()
+            return
+        self.magazin[name] -= 1
+        w = self.welt
+        muendung = self.pos + pygame.Vector2(14, 0).rotate(self.winkel)
+        reich = d["reichweite"]
+        ende = w.strahl(muendung, pygame.Vector2(1, 0).rotate(self.winkel), reich, self.ebene)
+        for ziel in self._ziele_vorn(reich, d["winkel"]):
+            if not w.sicht_frei(muendung, ziel.pos, self.ebene):
+                continue
+            lebte = ziel.lebt
+            schaden_an(ziel, d["schaden"], None, self, "feuer", muendung)
+            abschuss_buchen(self, ziel, name, lebte)
+        self._flamme_rest -= d["takt"]
+        if self._flamme_rest <= 0.0:
+            self._flamme_rest = d["streifen_takt"]
+            self.zaehlen("schuesse", 1.0, name)
+            w.feuer.append(Brandflaeche(ende, self.ebene, radius=d["streifen_radius"],
+                                        dauer=d["streifen_dauer"], von=self))
+        for r in w.rauch:
+            if r.ebene == self.ebene and r.pos.distance_to(ende) < r.radius:
+                # Das Feuer frisst den Rauch: die Wolke loest sich auf.
+                r.alter = max(r.alter, r.dauer - K.RAUCH["abbau"] * d["rauch_fressen"])
+        w.schussknall(muendung, self.winkel, self.ebene, name, self)
+
+    def tank_pruefen(self) -> None:
+        """Wer mit dem Flammenwerfer faellt, dessen Tank geht vielleicht
+        hoch - wenn noch genug darin ist (seit 0.34.68)."""
+        d = K.WAFFEN.get(self.waffe_name, {})
+        if not d.get("flamme") or self.welt is None:
+            return
+        if self.magazin.get(self.waffe_name, 0) < d["magazin"] * d["tank_ab"]:
+            return
+        self.magazin[self.waffe_name] = 0
+        w = self.welt
+        r = d["tank_radius"]
+        for ziel in list(w.nahe(self.pos, r + 20.0, self.ebene)):
+            if ziel is self or not ziel.lebt or getattr(ziel, "fraktion", "") == "geschoss":
+                continue
+            weit = ziel.pos.distance_to(self.pos)
+            if weit <= r + ziel.radius:
+                schaden_an(ziel, d["tank_schaden"] * (1.0 - 0.5 * min(1.0, weit / r)), None,
+                           self, "feuer", self.pos)
+        w.feuer.append(Brandflaeche(self.pos, self.ebene, radius=r * 0.7, von=self))
+        w.explosion(self.pos, self.ebene, r, "feuer")
+
     def _werfen(self, d: dict) -> None:
         """Wurfmesser und Speer werfen (seit 0.34.67): gerade, und danach
         liegt das Ding am Boden, bis jemand es aufhebt."""
@@ -3113,6 +3424,7 @@ class Spieler(Wesen):
         super().schaden(menge, schub, von)
 
     def sterben(self, von=None) -> None:
+        self.tank_pruefen()
         super().sterben(von)
         tod_zeigen(self, von)
 

@@ -1731,6 +1731,25 @@ def _emp_flug_an():
     return s
 
 
+@platzhalter("laser_flug")
+def _laser_flug():
+    """Ein Schuss des Spiegellasers (seit 0.34.68): tuerkis, heller Kern."""
+    s = _flaeche(14, 3)
+    pygame.draw.rect(s, (60, 190, 190), (0, 0, 14, 3))
+    pygame.draw.line(s, (220, 255, 250), (1, 1), (13, 1))
+    return s
+
+
+@platzhalter("kugelblitz_flug")
+def _kugelblitz_flug():
+    """Die Energiekugel des Kugelblitzes (seit 0.34.68)."""
+    s = _flaeche(15, 15)
+    pygame.draw.circle(s, (40, 120, 130, 120), (7, 7), 7)
+    pygame.draw.circle(s, (90, 230, 220), (7, 7), 5)
+    pygame.draw.circle(s, (230, 255, 252), (7, 7), 3)
+    return s
+
+
 @platzhalter("haftladung_flug")
 def _haftladung_flug():
     """Die Haftladung (seit 0.34.65): ein gruener Klebering um eine

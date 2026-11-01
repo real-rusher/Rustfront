@@ -128,6 +128,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.68 | FIGUREN: WAFFE kennt Spulengewehr, Kettenblitz, Spiegellaser, Kugelblitz und Flammenwerfer (SPIELER, ICH; eine Puppe oder ein paar Zombies als Ziel). Pruefungen im Abschnitt "Energiewaffen und Flammenwerfer" von `tests/test_spiel.py` |
 | 0.34.67 | WURF: GASGRANATE, KULLER, KNALLER, SCHNEEBALL (Zuender liegt / sofort). FIGUREN: WAFFE kennt Wurfmesser und Speer (rechte Maustaste wirft, darueberlaufen hebt auf). Haftladung und EMP blinken. Pruefungen im Abschnitt "Wuerfe aus dem Waffenpaket" von `tests/test_spiel.py` |
 | 0.34.66 | FIGUREN: WAFFE kennt Vorschlaghammer, Schockstab, Schlagring, Kettensaege, Bolzenschussgeraet und Nagler (SPIELER, ICH zum Ausprobieren, eine Puppe als Ziel). Die INFO-Ansicht (Taste 8) zeigt bei Bots BETÄUBT, GEFROREN und FEST; ueber jeder Figur ist der Zustand auch ohne INFO zu sehen. Das NAGELFELD wirkt nur noch auf Reifen. Pruefungen im Abschnitt "Nahkampf, Bolzer, Nagler, Zustaende" von `tests/test_spiel.py` |
 | 0.34.65 | WURF: HAFTLADUNG (klebt an Fahrzeug oder Figur, faehrt mit) und EMP-GRANATE (legt Fahrzeuge still); OBJEKTE: NAGELFELD. Die INFO-Ansicht (Taste 8) zeigt unter jedem Fahrzeug Leben, den letzten Treffer (Schadensart, Seite, Anteil, was ankam), EMP- und Platt-Rest und die Ladungen fuer Hecknebel und Naegel. Am Steuer (SPIELER, ICH, dann E) wirft R Hecknebel und F den Nagelstreuer. Pruefungen im Abschnitt "Fahrzeug-Panzerung, Haftladung, EMP, Hecknebel, Nagelstreuer" von `tests/test_spiel.py` |

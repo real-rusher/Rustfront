@@ -564,6 +564,8 @@ BILD_MASS = {
     "speer_flug":       (30, 5),    # Speer im Flug und am Boden
     "schneeball_flug":  (7, 7),
     "gas_flug":         (9, 9),     # Gasgranate
+    "laser_flug":       (14, 3),    # Spiegellaser (seit 0.34.68)
+    "kugelblitz_flug":  (15, 15),   # Kugelblitz
     "haftladung_flug":  (9, 9),     # Haftladung im Flug und klebend (seit 0.34.65)
     "emp_flug":         (9, 9),     # EMP-Granate im Flug (seit 0.34.65)
     "emp_flug_an":      (9, 9),     # ... mit Licht (Blinken, seit 0.34.67)
@@ -3351,6 +3353,70 @@ WUERFE_PAKET = {
 }
 WAFFEN.update(WUERFE_PAKET)
 
+# Energiewaffen des Chors und der Flammenwerfer (seit 0.34.68). Statt
+# eines Magazins werden die Chor-Waffen heiss (`kuehlt`): jeder Schuss
+# verbraucht einen Teil, in Ruhe kommt alle `abkuehlen` Sekunden einer
+# zurueck; ist alles verbraucht, ueberhitzt sie und braucht `nachladen`.
+ENERGIE_PAKET = {
+    "spule": dict(
+        art="strahl", name="SPULENGEWEHR",
+        # Halten laedt auf (die Linie ist fuer alle zu sehen), Loslassen
+        # feuert einen Strahl ohne Flugzeit, der durch Waende geht. Voll
+        # geladen die staerkste Waffe des Spiels.
+        schaden=150.0, ladezeit=1.6, mindest=0.25, reichweite=900.0,
+        takt=0.6, magazin=4, nachladen=5.0, kuehlt=True, abkuehlen=2.4,
+        tempo_beim_laden=0.55, kamera=5.0, rueckstoss=60.0, huelsen=0,
+        streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
+        klang="schuss_scharf", muendung=1.2, schadensart="panzerbrechend"),
+    "kettenblitz": dict(
+        art="kette", name="KETTENBLITZ",
+        # Kurz aufladen, dann springt ein Blitz vom Getroffenen zum
+        # naechsten und wird dabei schwaecher. Die Waffe gegen Horden.
+        schaden=46.0, ladezeit=0.45, reichweite=320.0, kegel=14.0,
+        spruenge=5, sprung=120.0, abfall=0.72,
+        takt=0.25, magazin=8, nachladen=4.0, kuehlt=True, abkuehlen=1.2,
+        tempo_beim_laden=0.8, kamera=2.0, rueckstoss=0.0, huelsen=0,
+        streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
+        klang="blend", muendung=0.8, schadensart="kugel", tempo_faktor=0.92),
+    "spiegellaser": dict(
+        art="schuss", name="SPIEGELLASER",
+        # Prallt an Waenden ab und wird mit jedem Abprall staerker - die
+        # Waffe fuer Schuesse um die Ecke.
+        schaden=24.0, takt=0.3, magazin=10, nachladen=3.5, kuehlt=True, abkuehlen=0.7,
+        streuung=0.6, streuung_lauf=2.0, geschosse=1, tempo=900.0, reichweite=1300.0,
+        rueckstoss=0.0, kamera=0.8, huelsen=0, klang="schuss_scharf", muendung=0.6,
+        abprall=3, abprall_faktor=1.4, bild_flug="laser_flug"),
+    "kugelblitz": dict(
+        art="kugel", name="KUGELBLITZ",
+        # Eine langsame Kugel, die unterwegs staendig Blitze in mehrere
+        # Richtungen schlaegt (auch ohne Ziel, bis an ihre Reichweite) und
+        # am Ende gross platzt. Gut zu sehen, sperrt aber einen Gang.
+        schaden=13.0, zap_radius=86.0, zap_takt=0.22, zap_strahlen=4,
+        platzen_schaden=70.0, platzen_radius=96.0,
+        takt=1.6, magazin=2, nachladen=5.0, kuehlt=True, abkuehlen=4.0,
+        streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=120.0, reichweite=760.0,
+        rueckstoss=20.0, kamera=2.5, huelsen=0, klang="blend", muendung=1.0,
+        bild_flug="kugelblitz_flug"),
+    "flammenwerfer": dict(
+        art="flamme", name="FLAMMENWERFER",
+        # Ein Feuerstrom auf kurze Distanz. Laesst brennende Streifen am
+        # Boden, frisst Rauch, und wer den Traeger erwischt, bringt
+        # vielleicht seinen Tank zur Explosion.
+        # 4,5 je Zug, gut 75 je Sekunde, dazu der brennende Boden.
+        flamme=True, schaden=4.5, reichweite=130.0, winkel=24.0,
+        takt=0.06, magazin=120, nachladen=4.2,
+        streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
+        rueckstoss=0.0, kamera=0.4, huelsen=0, muendung=0.0,
+        streifen_takt=0.3, streifen_radius=20.0, streifen_dauer=4.0,
+        rauch_fressen=1.0, tank_ab=0.2, tank_radius=64.0, tank_schaden=45.0,
+        tempo_faktor=0.9),
+}
+WAFFEN.update(ENERGIE_PAKET)
+
+# Wie Strahl, Blitz und Plasma aussehen (seit 0.34.68, render).
+ENTLADUNG = dict(dauer={"spule": 0.22, "blitz": 0.16, "plasma": 0.3},
+                 tuerkis=(90, 230, 220), kern=(230, 255, 252))
+
 # Was gerade geworfen wird und liegen bleibt (seit 0.34.67): nach so
 # vielen Sekunden kommt es von selbst zum Werfer zurueck.
 WURFKOERPER = dict(zurueck=45.0)
@@ -3564,7 +3630,10 @@ LOADOUT = dict(
                     "bolzer", "nagler", "hammer", "schockstab", "schlagring",
                     "kettensaege",
                     # Stechen und werfen (seit 0.34.67)
-                    "wurfmesser", "speer"),
+                    "wurfmesser", "speer",
+                    # Energie und Feuer (seit 0.34.68)
+                    "spule", "kettenblitz", "spiegellaser", "kugelblitz",
+                    "flammenwerfer"),
     auswahl_wuerfe=("granate", "rauch", "molotov", "blend", "c4",
                     # Gegen Fahrzeuge (seit 0.34.65)
                     "haftladung", "emp",

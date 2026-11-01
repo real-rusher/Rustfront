@@ -1994,6 +1994,7 @@ class Renderer:
         if figuren is not None:
             figuren(ziel, idx, ecke)
         self.zustaende_zeichnen(ziel, welt, idx, ecke)
+        self.entladungen_zeichnen(ziel, welt, idx, ecke)
         self.flugleichen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.aufbauten_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.laser_zeichnen(ziel, welt, idx, ecke)
@@ -2072,6 +2073,54 @@ class Renderer:
                              int(p.y - 16 - b["steigt"] * f),
                              farbe if f < 0.7 else K.C_MUTED, 1,
                              ausrichtung="mitte")
+
+    def entladungen_zeichnen(self, ziel, welt, index: int, ecke) -> None:
+        """Strahl der Spule, Blitze von Kettenblitz und Kugelblitz (seit
+        0.34.68), und die Ladelinie, solange einer aufladt - die sieht auch
+        das Ziel (Waffenpaket: "zeigt ihre Linie, sodass das Ziel gewarnt ist")."""
+        e = K.ENTLADUNG
+        for w in welt.wesen:
+            ladung = getattr(w, "ladung", 0.0)
+            if ladung <= 0.0 or w.ebene != index or not w.lebt:
+                continue
+            d = K.WAFFEN.get(getattr(w, "waffe_name", ""), {})
+            if d.get("art") not in ("strahl", "kette"):
+                continue
+            start = w.pos + pygame.Vector2(14, 0).rotate(w.winkel) - ecke
+            if d["art"] == "strahl":
+                ende = start + pygame.Vector2(d["reichweite"], 0).rotate(w.winkel)
+                farbe = tuple(int(c * (0.35 + 0.65 * ladung)) for c in e["tuerkis"])
+                pygame.draw.line(ziel, farbe, start, ende, 1)
+            zufall = random.Random(int(welt.zeit * 30))
+            for _ in range(1 + int(ladung * 4)):
+                p = start + pygame.Vector2(zufall.uniform(-4, 4), zufall.uniform(-4, 4))
+                pygame.draw.line(ziel, e["kern"], start, p, 1)
+        for punkte, ebene, art, rest, dauer, saat in welt.entladungen:
+            if ebene != index:
+                continue
+            f = max(0.0, min(1.0, rest / max(0.01, dauer)))
+            pts = [p - ecke for p in punkte]
+            if art == "spule":
+                breite = max(1, int(5 * f))
+                pygame.draw.line(ziel, e["tuerkis"], pts[0], pts[-1], breite + 2)
+                pygame.draw.line(ziel, e["kern"], pts[0], pts[-1], max(1, breite - 1))
+                continue
+            # Ein Blitz: zwischen je zwei Punkten eine Zickzacklinie, die
+            # alle paar Bilder neu springt.
+            zufall = random.Random(saat + int(rest * 40))
+            for a, b in zip(pts, pts[1:]):
+                weg = b - a
+                laenge = weg.length()
+                if laenge < 1.0:
+                    continue
+                quer = pygame.Vector2(-weg.y, weg.x) / laenge
+                teile = max(2, int(laenge / 14))
+                linie = [a]
+                for i in range(1, teile):
+                    linie.append(a + weg * (i / teile) + quer * zufall.uniform(-6, 6))
+                linie.append(b)
+                pygame.draw.lines(ziel, e["tuerkis"], False, linie, 3 if f > 0.5 else 2)
+                pygame.draw.lines(ziel, e["kern"], False, linie, 1)
 
     def zustaende_zeichnen(self, ziel, welt, index: int, ecke) -> None:
         """Betaeubt, gefroren, festgenagelt (seit 0.34.66): ueber der Figur,

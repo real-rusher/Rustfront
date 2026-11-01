@@ -6090,6 +6090,123 @@ w.verlassen(); ga.verlassen()
 EN.RND.setstate(_rnd67)
 random.setstate(_zufall67)
 
+# 0.34.68: Spulengewehr, Kettenblitz, Spiegellaser, Kugelblitz, Flammenwerfer.
+print("\n-- Energiewaffen und Flammenwerfer (0.34.68)")
+_rnd68 = EN.RND.getstate()
+_zufall68 = random.getstate()
+_tm68 = _TM59.Testmodus(app, karte="staubtal")
+_ort68 = freier_punkt(_tm68.welt, 0, random.Random(68))
+_ich68 = _tm68.ich_setzen(_ort68, 0, {"team": 0, "waffe_figur": "spule"})
+_ich68 = _ich68[0] if isinstance(_ich68, list) else _ich68
+pruef("Die Energiewaffen und der Flammenwerfer sind waehlbar",
+      {"spule", "kettenblitz", "spiegellaser", "kugelblitz", "flammenwerfer"}
+      <= set(K.LOADOUT["auswahl_waffen"]))
+def _puppe68(dx, dy=0.0, leben=400.0):
+    p_ = _tm68.puppe_setzen(_ich68.pos + pygame.Vector2(dx, dy), 0,
+                            {"anzahl": 1, "streuung": 0, "team": 1, "leben": leben})
+    p_ = p_[0] if isinstance(p_, list) else p_
+    _tm68.welt.schritt(K.FIXED_DT)
+    p_.leben = p_.max_leben
+    return p_
+def _waffe68(name):
+    _ich68.waffen[0] = name
+    _ich68.magazin[name] = K.WAFFEN[name].get("magazin", 0)
+    _ich68.waffe = 0
+    _ich68.takt = _ich68.takt2 = 0.0
+    _ich68.nachlade_rest = 0.0
+    _ich68.ladung = 0.0
+    _ich68.ziel = _ich68.pos + pygame.Vector2(300, 0)
+    _ich68.winkel = 0.0
+def _halten68(sek, feuert=True):
+    for _ in range(int(sek / K.FIXED_DT)):
+        _ich68.feuert = feuert
+        _ich68.ziel = _ich68.pos + pygame.Vector2(300, 0)
+        _tm68.welt.schritt(K.FIXED_DT)
+    _ich68.feuert = False
+# Spule: laden, loslassen, durch zwei.
+_waffe68("spule")
+_a68, _b68 = _puppe68(80), _puppe68(160)
+_halten68(K.WAFFEN["spule"]["ladezeit"] + 0.1)
+pruef("Beim Laden des Spulengewehrs steht die Ladung (und die Linie ist zu sehen)",
+      _ich68.ladung >= 0.99 and _a68.leben == _a68.max_leben, "%.2f" % _ich68.ladung)
+_halten68(0.05, False)
+pruef("... Loslassen feuert durch beide, voll geladen sehr stark",
+      _a68.max_leben - _a68.leben > K.WAFFEN["spule"]["schaden"] * 0.95
+      and _b68.leben < _b68.max_leben and any(e[2] == "spule" for e in _tm68.welt.entladungen),
+      "%.0f / %.0f" % (_a68.max_leben - _a68.leben, _b68.max_leben - _b68.leben))
+pruef("... und wird heiss statt leer (kuehlt wieder ab)",
+      _ich68.magazin["spule"] == K.WAFFEN["spule"]["magazin"] - 1)
+_halten68(K.WAFFEN["spule"]["abkuehlen"] + 0.2, False)
+pruef("... in Ruhe kommt die Ladung zurueck", _ich68.magazin["spule"] == K.WAFFEN["spule"]["magazin"])
+_a68.lebt = _b68.lebt = False
+# Kettenblitz: springt von einem zum naechsten.
+_waffe68("kettenblitz")
+_ks68 = [_puppe68(100), _puppe68(170, 30), _puppe68(240, 0)]
+_halten68(K.WAFFEN["kettenblitz"]["ladezeit"] + 0.05)
+_ab68 = [z.max_leben - z.leben for z in _ks68]
+pruef("Der Kettenblitz springt von Koerper zu Koerper, jedesmal schwaecher",
+      all(a > 0 for a in _ab68) and _ab68[0] > _ab68[-1], str([round(a) for a in _ab68]))
+for z in _ks68:
+    z.lebt = False
+# Spiegellaser: prallt ab und wird staerker.
+_g68 = EN.Geschoss(_ich68.pos, 0.0, K.WAFFEN["spiegellaser"], 0, _ich68, "spiegellaser")
+_tm68.welt.dazu(_g68)
+_wert68 = _g68.schaden_wert
+_ab0 = _g68.abprall
+for _ in range(int(2.0 / K.FIXED_DT)):
+    _tm68.welt.schritt(K.FIXED_DT)
+    if _g68.abprall < _ab0 or not _g68.lebt:
+        break
+pruef("Der Spiegellaser prallt an der Wand ab und wird staerker",
+      _g68.abprall < _ab0 and _g68.schaden_wert > _wert68 and _g68.bild == "laser_flug",
+      "%d %.1f" % (_g68.abprall, _g68.schaden_wert))
+_g68.lebt = False
+# Kugelblitz: zappt unterwegs, platzt am Ende.
+_waffe68("kugelblitz")
+_k68 = _puppe68(60, 60)
+_ich68.feuern()
+_kb68 = [g for g in _tm68.welt.neue + _tm68.welt.wesen if isinstance(g, EN.Kugelblitz)][0]
+_halten68(0.8, False)
+pruef("Der Kugelblitz schlaegt unterwegs Blitze und trifft, wer in Reichweite ist",
+      _k68.leben < _k68.max_leben and any(e[2] == "blitz" for e in _tm68.welt.entladungen))
+_k68.lebt = False
+_halten68(K.WAFFEN["kugelblitz"]["reichweite"] / K.WAFFEN["kugelblitz"]["tempo"] + 0.5, False)
+pruef("... und platzt am Ende", not _kb68.lebt and getattr(_kb68, "_geplatzt", False))
+# Flammenwerfer: Schaden im Kegel, Brandstreifen, Tank.
+_waffe68("flammenwerfer")
+_f68 = _puppe68(70)
+_n68 = len(_tm68.welt.feuer)
+_halten68(1.0)
+pruef("Der Flammenwerfer brennt im Kegel und laesst Brandstreifen",
+      _f68.leben < _f68.max_leben and len(_tm68.welt.feuer) > _n68
+      and _ich68.magazin["flammenwerfer"] < K.WAFFEN["flammenwerfer"]["magazin"],
+      "%.0f, %d" % (_f68.max_leben - _f68.leben, len(_tm68.welt.feuer) - _n68))
+_f68.lebt = False
+_tr68 = _puppe68(0, -150, leben=10.0)
+_tr68.waffen[0] = "flammenwerfer"
+_tr68.waffe = 0
+_tr68.magazin["flammenwerfer"] = K.WAFFEN["flammenwerfer"]["magazin"]
+_nb68 = _puppe68(20, -150)
+_tr68.leben = 10.0
+_tr68.schaden(50.0, None, _ich68)
+pruef("Wer mit vollem Tank faellt, dessen Tank geht hoch",
+      _nb68.leben < _nb68.max_leben and _tr68.magazin["flammenwerfer"] == 0)
+_tm68.welt.feuer.clear()
+# Im Netz: Blitz und Ladung beim Gast.
+w, ga = _paar59("team", karte="staubtal")
+w.welt.entladung([pygame.Vector2(w.ich.pos), w.ich.pos + pygame.Vector2(80, 0)], w.ich.ebene, "blitz")
+w.ich.ladung = 0.5
+for _ in range(3):
+    w.schritt(K.NETZ["takt"])
+    ga.schritt(K.NETZ["takt"])
+_gk68 = ga.kaempfer.get(w.ich.nummer)
+pruef("Der Gast sieht den Blitz und die Ladelinie",
+      any(e[2] == "blitz" for e in ga.welt.entladungen)
+      and _gk68 is not None and _gk68.ladung > 0.0)
+w.verlassen(); ga.verlassen()
+EN.RND.setstate(_rnd68)
+random.setstate(_zufall68)
+
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
 pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)
