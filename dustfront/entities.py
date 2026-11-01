@@ -821,6 +821,10 @@ class Granate(Wesen):
                 if (getattr(b, "ist_fahrzeug", False) and b.lebt
                         and b.beruehrt(self.pos, e["radius"])):
                     b.emp_treffen(e["dauer"])
+                elif (getattr(b, "technik", False) and b.lebt
+                      and b.pos.distance_to(self.pos) <= e["radius"] + b.radius):
+                    # Geschuetz, Drohne, Horchposten (seit 0.34.69).
+                    b.emp_treffen(e["dauer"])
             w.explosion(self.pos, self.ebene, e["radius"], "emp")
             return
         r = d["radius"]
@@ -2641,6 +2645,10 @@ class Spieler(Wesen):
         luft *= wd.get("tempo_faktor", 1.0)
         if self.ladung > 0.0:
             luft *= wd.get("tempo_beim_laden", 1.0)    # Spule, Kettenblitz (0.34.68)
+        if getattr(self, "draht_rest", 0.0) > 0.0:
+            # Im Stacheldraht (seit 0.34.69, ausruestung).
+            self.draht_rest -= dt
+            luft *= K.AUSRUESTUNG["stacheldraht"]["tempo"]
         if self.heilt_rest > 0:
             # Wer ein Medkit anlegt, hat die Haende voll und geht langsamer.
             luft *= K.MEDKIT["tempo"]
@@ -3149,6 +3157,13 @@ class Spieler(Wesen):
                 self.zaehlen("kopftreffer", 1.0, name)
             getroffen += 1
         spitze = self.pos + pygame.Vector2(reich * 0.7, 0).rotate(self.winkel)
+        # Ein Schlag entschaerft eine Sprengfalle (seit 0.34.69, ausruestung).
+        # Ueber alle Wesen und nicht Welt.nahe: was niemanden stoesst und
+        # nicht zu treffen ist, steht nicht im Raster.
+        for a in w.wesen:
+            if (getattr(a, "entschaerfen", None) is not None and a.lebt
+                    and a.ebene == self.ebene and a.pos.distance_to(spitze) <= reich):
+                a.entschaerfen()
         w.schlagknall(spitze, self.winkel, self.ebene, bool(getroffen), self,
                       treffer_art)
 

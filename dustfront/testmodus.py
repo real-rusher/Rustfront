@@ -66,6 +66,7 @@ from . import ui
 from .anzeige import Anzeige
 from . import art_figuren as figuren
 from .entities import Granate, Nagelfeld, Wesen, tod_zeigen
+from . import ausruestung as ausruestung_modul
 from . import fahrzeug as fahrzeug_modul
 from .fahrzeug import Buggy
 from .font import SCHRIFT
@@ -286,6 +287,11 @@ def eintraege() -> list:
                 "gas", "kuller", "knaller", "schneeball"):
         raus.append(Eintrag(K.WAFFEN[art]["name"], "WURF",
                             ("anzahl", "streuung", "zuender"), _wurf_setzer(art)))
+    # Seit 0.34.69: Bauen, Fallen, Aufklaerung, Hilfe (ausruestung.py) -
+    # gemeldet "erstmal nur fuer den Testmodus". TEAM sagt, wem es gehoert.
+    for name, (_klasse, gruppe) in ausruestung_modul.ARTEN.items():
+        raus.append(Eintrag(name, gruppe, ("anzahl", "streuung", "team", "winkel"),
+                            (lambda n: lambda t, p, e, w: t.ausruestung_setzen(n, p, e, w))(name)))
     # Seit 0.34.60: die NPCs und Tiere aus dem Figurenpaket. Sie stehen
     # bzw. laufen herum, nehmen Schaden und sterben - mehr tun sie noch
     # nicht (ihr Verhalten kommt mit der Kampagne, docs/KI.md).
@@ -509,6 +515,9 @@ class Testmodus(Gefecht):
         self.verwundete = bool(z.get("verwundete", True))
         # Sprinten der Bots (seit 0.34.50), zum Vergleichen abschaltbar.
         self.bot_sprint = bool(z.get("bot_sprint", True))
+        # Das Fernglas (seit 0.34.69): die gesteuerte Figur markiert im
+        # Kegel zum Mauszeiger.
+        self.fernglas = bool(z.get("fernglas", False))
         # Der Nebel jenseits des normalen Bildes (seit 0.34.54), abschaltbar:
         # herausgezoomt sieht man dann jeden Gegner bis an den Rand.
         self.nebel = bool(z.get("nebel", True))
@@ -727,6 +736,7 @@ class Testmodus(Gefecht):
     def schritt(self, dt: float) -> None:
         self._meldung_tm_rest = max(0.0, self._meldung_tm_rest - dt)
         self._fliegen(dt)
+        self._aufklaeren(dt)
         self._gott_anwenden()
         if self.zeit_stopp:
             n, self._einzel = self._einzel, 0
@@ -738,6 +748,82 @@ class Testmodus(Gefecht):
                                          K.TESTMODUS["einzelschritt"]))
         super().schritt(dt)
         self._gott_anwenden()
+
+    def _aufklaeren(self, dt: float) -> None:
+        """Markierungen laufen ab; mit dem FERNGLAS (seit 0.34.69) markiert
+        die gesteuerte Figur jeden Gegner im Kegel zum Mauszeiger, den sie
+        sehen kann."""
+        if not self.zeit_stopp:
+            for w in self.welt.wesen:
+                if getattr(w, "markiert_rest", 0.0) > 0.0:
+                    w.markiert_rest = max(0.0, w.markiert_rest - dt * self.zeitfaktor)
+        k = self.ich
+        if not self.fernglas or k is None or self.beobachter or not k.lebt:
+            return
+        f = K.AUSRUESTUNG["fernglas"]
+        blick = k.ziel - k.pos
+        if blick.length_squared() < 1.0:
+            return
+        winkel = math.degrees(math.atan2(blick.y, blick.x))
+        for w in self.welt.nahe(k.pos, f["weite"], k.ebene):
+            if w is k or not ausruestung_modul.ist_gegner(w, k.fraktion):
+                continue
+            ab = w.pos - k.pos
+            if ab.length() > f["weite"]:
+                continue
+            delta = (math.degrees(math.atan2(ab.y, ab.x)) - winkel + 180) % 360 - 180
+            if abs(delta) <= f["kegel"] and self.welt.sicht_frei(k.pos, w.pos, k.ebene):
+                ausruestung_modul.markieren(w)
+
+    def _ausruestung_zeichnen(self, ziel) -> None:
+        """Markierte Gegner (eine rote Raute ueber ihnen), und in INFO auch
+        versteckte Fallen, die Reichweite von Geschuetz, Drohne und
+        Horchposten und der Kegel des Fernglases (seit 0.34.69)."""
+        kam = self.kamera
+        for w in self.welt.wesen:
+            if w.ebene != self.blick or not w.lebt:
+                continue
+            if getattr(w, "markiert_rest", 0.0) > 0.0:
+                p = kam.zu_bild(w.pos)
+                y = int(p.y) - int(w.radius) - 8
+                pygame.draw.polygon(ziel, K.C_RED, [(int(p.x), y - 4), (int(p.x) + 3, y),
+                                                    (int(p.x), y + 4), (int(p.x) - 3, y)], 1)
+            if not self.info or not getattr(w, "ist_ausruestung", False):
+                continue
+            p = kam.zu_bild(w.pos)
+            z = kam.zoom
+            if isinstance(w, ausruestung_modul.Sprengfalle):
+                if w.ausloeser == "draht":
+                    a, b = w.draht_enden()
+                    pygame.draw.line(ziel, K.C_AMBER, kam.zu_bild(a), kam.zu_bild(b), 1)
+                else:
+                    pygame.draw.circle(ziel, K.C_AMBER, p,
+                                       max(2, int(K.AUSRUESTUNG["sprengfalle"]["radius"] * z)), 1)
+            elif isinstance(w, ausruestung_modul.Geschuetz):
+                pygame.draw.circle(ziel, (150, 60, 50), p,
+                                   int(K.AUSRUESTUNG["geschuetz"]["reichweite"] * z), 1)
+                if w.ziel is not None and w.ziel.lebt:
+                    pygame.draw.line(ziel, K.C_RED, p, kam.zu_bild(w.ziel.pos), 1)
+                text = "EMP" if w.emp_rest > 0 else ("LÄDT" if w.nachlade_rest > 0 else
+                                                      "%d SCHUSS" % w.magazin)
+                SCHRIFT.zeichnen(ziel, text, int(p.x), int(p.y) + 14, K.C_AMBER, 1,
+                                 ausrichtung="mitte")
+            elif isinstance(w, ausruestung_modul.Drohne):
+                pygame.draw.circle(ziel, (120, 170, 255), p,
+                                   int(K.AUSRUESTUNG["drohne"]["sicht"] * z), 1)
+            elif isinstance(w, ausruestung_modul.Horchposten):
+                r = int(K.AUSRUESTUNG["horchposten"]["weite"] * z * (1.0 - w.welle / 0.6))
+                if w.welle > 0.0 and r > 2:
+                    pygame.draw.circle(ziel, K.C_TEAL, p, r, 1)
+        k = self.ich
+        if self.fernglas and k is not None and not self.beobachter and k.ebene == self.blick:
+            f = K.AUSRUESTUNG["fernglas"]
+            blick = k.ziel - k.pos
+            if blick.length_squared() > 1.0:
+                p = kam.zu_bild(k.pos)
+                for seite in (-1, 1):
+                    rand = k.pos + blick.normalize().rotate(f["kegel"] * seite) * f["weite"]
+                    pygame.draw.line(ziel, K.C_MUTED, p, kam.zu_bild(rand), 1)
 
     def _schritt_gastgeber(self, dt: float) -> None:
         """So oft rechnen, wie der Zeitfaktor sagt - auch keinmal."""
@@ -1088,6 +1174,15 @@ class Testmodus(Gefecht):
         b = KampfBeute(pygame.Vector2(pos), art, ebene, self.kaempfer)
         self._einsetzen(b)
         return b
+
+    def ausruestung_setzen(self, name: str, pos, ebene: int, w: dict) -> list:
+        """Bauen, Fallen, Aufklaerung, Hilfe (seit 0.34.69)."""
+        team = w.get("team", 0)
+        fraktion = "team%d" % team if team >= 0 else "frei"
+        dinge = ausruestung_modul.bauen(name, pos, ebene, fraktion, float(w.get("winkel", 0)))
+        for d in dinge:
+            self._einsetzen(d)
+        return dinge
 
     def nagelfeld_setzen(self, pos, ebene: int):
         n = Nagelfeld(pygame.Vector2(pos), ebene)
@@ -1572,6 +1667,7 @@ class Testmodus(Gefecht):
             ("entf", "ENTF-TASTE", "TÖTET" if self.entf_toetet else "LÖSCHT"),
             ("verwundete", "VERWUNDETE BOTS (LIEGEN, BERGEN)", "AN" if self.verwundete else "AUS"),
             ("sprint", "BOTS SPRINTEN", "AN" if self.bot_sprint else "AUS"),
+            ("fernglas", "FERNGLAS (MIT FIGUR)", "AN" if self.fernglas else "AUS"),
             ("nebel", "NEBEL (SICHTWEITE)", "AN" if self.nebel else "AUS - ALLES SICHTBAR"),
             ("fliehen", "BOTS FLIEHEN IN PANIK", "AN - WIE KAMPAGNE" if self.bot_fliehen else "AUS - WIE IN RUNDEN"),
             ("uebermut", "BOTS ÜBERMÜTIG", "AN - WIE KAMPAGNE" if self.bot_uebermut else "AUS - WIE IN RUNDEN"),
@@ -1601,7 +1697,7 @@ class Testmodus(Gefecht):
                     blend_beobachter=self.blend_beobachter,
                     ruckeln_beobachter=self.ruckeln_beobachter, sauber=self.sauber,
                     entf_toetet=self.entf_toetet, verwundete=self.verwundete,
-                    bot_sprint=self.bot_sprint, nebel=self.nebel, bot_fliehen=self.bot_fliehen,
+                    bot_sprint=self.bot_sprint, fernglas=self.fernglas, nebel=self.nebel, bot_fliehen=self.bot_fliehen,
                     bot_uebermut=self.bot_uebermut, bildrate_nr=self.bildrate_nr,
                     sp_werte=self._sp_werte, sp_nr=self._sp_nr)
 
@@ -1664,6 +1760,8 @@ class Testmodus(Gefecht):
             self.verwundete_setzen(not self.verwundete)
         elif schluessel == "sprint":
             self.bot_sprint = not self.bot_sprint
+        elif schluessel == "fernglas":
+            self.fernglas = not self.fernglas
         elif schluessel == "nebel":
             self.nebel = not self.nebel
         elif schluessel == "fliehen":
@@ -1704,9 +1802,13 @@ class Testmodus(Gefecht):
     def _menue_flaechen(self) -> list:
         r = self.MENUE
         # 11 statt 12 Pixel je Zeile (seit 0.34.50): mit BOTS SPRINTEN passte
-        # die letzte Zeile sonst nicht mehr in den Kasten.
-        return [pygame.Rect(r.x + 8, r.y + 26 + i * 11, r.width - 16, 10)
-                for i in range(len(self._menue_zeilen()))]
+        # die letzte Zeile sonst nicht mehr in den Kasten. Seit 0.34.69 (mit
+        # dem FERNGLAS) rueckt es enger, sobald die Zeilen nicht mehr passen -
+        # der Kasten selbst ist schon so hoch wie das Bild.
+        n = len(self._menue_zeilen())
+        schritt = min(11.0, (r.height - 30) / float(max(1, n)))
+        return [pygame.Rect(r.x + 8, r.y + 26 + int(i * schritt), r.width - 16, 10)
+                for i in range(n)]
 
     def _menue_maus_tm(self, ev, pos) -> None:
         zeilen = self._menue_zeilen()
@@ -1785,6 +1887,7 @@ class Testmodus(Gefecht):
             return
         self._zurufe_zeichnen(ziel)
         self._funk_zeichen_zeichnen(ziel)
+        self._ausruestung_zeichnen(ziel)
         if self.info:
             self._info_zeichnen(ziel)
             self._trupps_zeichnen(ziel)

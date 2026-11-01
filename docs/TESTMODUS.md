@@ -86,6 +86,7 @@ setzt, steht sofort da.
 | NPC | Haendler, Aerztin, Wissenschaftler, Fluechtling, Pilger, Schmuggler, Hirte, Ueberlebende | Anzahl, Streuung, Richtung; bei der Ueberlebenden das Stirnband |
 | TIERE | Schaf, Ziege, Huhn | Anzahl, Streuung, Farbe (drei je Tier oder ZUFALL) |
 | WAFFENBILDER | Figur mit Waffe (jede der 52 aus dem Waffenpaket) | Waffe, Team, Richtung |
+| BAUEN, FALLEN, AUFKLÄRUNG, HILFE | Sandsackwand, Stacheldraht; Sprengfalle (Platte, Draht), Selbstschussanlage, Benzinkanister; Spaehdrohne, Horchposten; Sanitasche, Munitionskiste (seit 0.34.69, nur im Testmodus) | Anzahl, Streuung, Team, Richtung |
 | TRUPPS | Trupp; Halten hier, Angriff hier, Frei, Igel hier (fuer den naechsten Trupp der Mannschaft) | Groesse, Team, Anfuehrer (mit Funk / ohne Funk / keiner), Waffen (gemischt / zufall), Leben; beim Halten: wichtig |
 
 ## Das Testmenue (Esc)
@@ -128,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.69 | Neue Spawner-Gruppen (TEAM: wem es gehoert, RICHTUNG): BAUEN (Sandsackwand, Stacheldraht), FALLEN (Sprengfalle mit Platte oder Draht, Selbstschussanlage, Benzinkanister), AUFKLÄRUNG (Spaehdrohne, Horchposten), HILFE (Sanitasche, Munitionskiste). Testmenue: FERNGLAS (mit Figur: markiert im Kegel zum Zeiger). Markierte Gegner zeigt eine rote Raute; INFO (Taste 8) zeigt versteckte Fallen, Draht, Reichweite und Ziel des Geschuetzes, den Kreis der Drohne und die Welle des Horchpostens. Pruefungen im Abschnitt "Bauen, Fallen, Aufklaerung, Hilfe im Testmodus" von `tests/test_spiel.py` |
 | 0.34.68 | FIGUREN: WAFFE kennt Spulengewehr, Kettenblitz, Spiegellaser, Kugelblitz und Flammenwerfer (SPIELER, ICH; eine Puppe oder ein paar Zombies als Ziel). Pruefungen im Abschnitt "Energiewaffen und Flammenwerfer" von `tests/test_spiel.py` |
 | 0.34.67 | WURF: GASGRANATE, KULLER, KNALLER, SCHNEEBALL (Zuender liegt / sofort). FIGUREN: WAFFE kennt Wurfmesser und Speer (rechte Maustaste wirft, darueberlaufen hebt auf). Haftladung und EMP blinken. Pruefungen im Abschnitt "Wuerfe aus dem Waffenpaket" von `tests/test_spiel.py` |
 | 0.34.66 | FIGUREN: WAFFE kennt Vorschlaghammer, Schockstab, Schlagring, Kettensaege, Bolzenschussgeraet und Nagler (SPIELER, ICH zum Ausprobieren, eine Puppe als Ziel). Die INFO-Ansicht (Taste 8) zeigt bei Bots BETÄUBT, GEFROREN und FEST; ueber jeder Figur ist der Zustand auch ohne INFO zu sehen. Das NAGELFELD wirkt nur noch auf Reifen. Pruefungen im Abschnitt "Nahkampf, Bolzer, Nagler, Zustaende" von `tests/test_spiel.py` |

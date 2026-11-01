@@ -1731,6 +1731,74 @@ def _emp_flug_an():
     return s
 
 
+@platzhalter("geschuetz_oben")
+def _geschuetz_oben():
+    """Die Selbstschussanlage von oben (seit 0.34.69): Dreibein, Kasten,
+    Lauf nach rechts (dorthin dreht sie sich)."""
+    s = _flaeche(20, 20)
+    for ende in ((2, 3), (2, 17), (17, 10)):
+        pygame.draw.line(s, (52, 52, 48), (10, 10), ende, 2)
+    pygame.draw.rect(s, (70, 76, 62), (5, 6, 9, 8))
+    pygame.draw.rect(s, (104, 112, 90), (6, 7, 7, 2))
+    pygame.draw.rect(s, (40, 40, 38), (13, 9, 7, 2))
+    s.set_at((9, 10), (220, 60, 50))
+    return _rand(s, (16, 12, 8))
+
+
+@platzhalter("kanister")
+def _kanister():
+    """Ein roter Benzinkanister von oben (seit 0.34.69)."""
+    s = _flaeche(12, 16)
+    pygame.draw.rect(s, (150, 36, 30), (1, 2, 10, 13))
+    pygame.draw.rect(s, (196, 60, 46), (2, 3, 8, 3))
+    pygame.draw.line(s, (100, 24, 20), (2, 8), (9, 13))
+    pygame.draw.rect(s, (60, 58, 54), (7, 0, 3, 3))
+    return _rand(s, (16, 12, 8))
+
+
+@platzhalter("stacheldraht")
+def _stacheldraht():
+    """Ein Streifen Stacheldraht (seit 0.34.69): zwei Schlingen mit Dornen."""
+    s = _flaeche(64, 10)
+    for y0 in (3, 6):
+        for x in range(0, 64, 2):
+            y = y0 + (1 if (x // 4) % 2 else -1)
+            s.set_at((x, max(0, min(9, y))), (140, 140, 136))
+    for x in range(3, 64, 6):
+        pygame.draw.line(s, (170, 170, 166), (x, 2), (x + 2, 7))
+    return s
+
+
+@platzhalter("sprengfalle_platte")
+def _sprengfalle_platte():
+    """Die Druckplatte im Boden (seit 0.34.69), nur aus der Naehe zu sehen."""
+    s = _flaeche(12, 12)
+    pygame.draw.rect(s, (74, 70, 52), (1, 1, 10, 10))
+    pygame.draw.rect(s, (96, 92, 70), (3, 3, 6, 6))
+    s.set_at((6, 6), (200, 60, 40))
+    return s
+
+
+@platzhalter("sprengfalle_draht")
+def _sprengfalle_draht():
+    """Die Ladung des Stolperdrahts (seit 0.34.69)."""
+    s = _flaeche(10, 8)
+    pygame.draw.rect(s, (84, 92, 58), (0, 1, 10, 6))
+    pygame.draw.rect(s, (60, 66, 42), (2, 2, 6, 4))
+    s.set_at((9, 4), (200, 200, 190))
+    return _rand(s, (16, 12, 8))
+
+
+@platzhalter("sanitasche")
+def _sanitasche():
+    """Die Sanitasche am Boden (seit 0.34.69): weiss mit rotem Kreuz."""
+    s = _flaeche(12, 10)
+    pygame.draw.rect(s, (220, 214, 200), (0, 1, 12, 9))
+    pygame.draw.rect(s, (190, 40, 36), (5, 2, 2, 7))
+    pygame.draw.rect(s, (190, 40, 36), (3, 4, 6, 2))
+    return _rand(s, (16, 12, 8))
+
+
 @platzhalter("laser_flug")
 def _laser_flug():
     """Ein Schuss des Spiegellasers (seit 0.34.68): tuerkis, heller Kern."""

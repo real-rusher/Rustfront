@@ -565,6 +565,12 @@ BILD_MASS = {
     "schneeball_flug":  (7, 7),
     "gas_flug":         (9, 9),     # Gasgranate
     "laser_flug":       (14, 3),    # Spiegellaser (seit 0.34.68)
+    "geschuetz_oben":   (20, 20),   # Selbstschussanlage (seit 0.34.69)
+    "kanister":         (12, 16),
+    "stacheldraht":     (64, 10),
+    "sprengfalle_platte": (12, 12),
+    "sprengfalle_draht": (10, 8),
+    "sanitasche":       (12, 10),
     "kugelblitz_flug":  (15, 15),   # Kugelblitz
     "haftladung_flug":  (9, 9),     # Haftladung im Flug und klebend (seit 0.34.65)
     "emp_flug":         (9, 9),     # EMP-Granate im Flug (seit 0.34.65)
@@ -3315,6 +3321,26 @@ WAFFEN = {
     ),
 }
 
+# Bauen, Fallen, Aufklaerung, Sanitasche, Munitionskiste (seit 0.34.69,
+# dustfront/ausruestung.py). Gemeldet: "erstmal nur fuer den Testmodus" -
+# darum stehen sie nur im Spawner und gehen nicht ueber das Netz.
+AUSRUESTUNG = dict(
+    sandsack=dict(leben=320.0, radius=11.0, stuecke=3, abstand=20.0),
+    stacheldraht=dict(laenge=64.0, breite=10.0, tempo=0.35, schaden=12.0),
+    sprengfalle=dict(radius=14.0, verzoegerung=0.45, spreng_radius=82.0,
+                     schaden=95.0, draht=80.0, sehen=70.0),
+    geschuetz=dict(leben=220.0, radius=10.0, reichweite=430.0, dreh=150.0,
+                   kegel=6.0, takt=0.16, streuung=3.0, schaden=10.0, tempo=640.0,
+                   magazin=60, nachladen=4.0),
+    kanister=dict(leben=18.0, radius=7.0, brand_radius=74.0, schaden=40.0),
+    drohne=dict(leben=60.0, radius=9.0, kreis=90.0, tempo=1.3, sicht=260.0, fallen=1.2),
+    horchposten=dict(leben=80.0, radius=8.0, weite=300.0, takt=1.0, bewegt=20.0),
+    fernglas=dict(weite=700.0, kegel=18.0, kamera=0.45),
+    markiert=2.5,             # so lange bleibt ein entdeckter Gegner markiert
+    sanitasche=dict(radius=40.0, heilt=35.0, dauer=5.0, ladungen=3),
+    munitionskiste=dict(radius=26.0, ladungen=4, pause=8.0),
+)
+
 # Wurfwaffen aus dem Paket (seit 0.34.67). Sie stehen in WAFFEN wie die
 # Granate (art "wurf"); was sie besonders macht, steht hier.
 WUERFE_PAKET = {
@@ -3529,6 +3555,11 @@ PAKET_TEILE = {
     "rohr_leer": (30, 9),       # das weggelegte Rohr des Einweg-Raketenwerfers
     "kuller_wurf": (8, 8),      # Kuller (seit 0.34.67)
     "knaller_wurf": (12, 12),   # Knaller (seit 0.34.67)
+    # Bauen, Fallen, Aufklaerung (seit 0.34.69, erst im Testmodus)
+    "horcher_k": (16, 16),
+    "sackwand": (14, 34),
+    "drohne_a": (22, 22),
+    "drohne_b": (22, 22),
 }
 for _w in PAKET_HAND:
     WAFFEN_HAND[_w] = dict(aufbau="paket")

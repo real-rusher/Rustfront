@@ -655,16 +655,21 @@ class KampfGegner(Gegner):
             # Betaeubt oder gefroren (seit 0.34.66): nur noch Physik.
             Wesen.schritt(self, dt)
             return
-        stand = pygame.Vector2(self.pos) if self.fest_rest > 0.0 else None
+        draht = getattr(self, "draht_rest", 0.0) > 0.0
+        stand = pygame.Vector2(self.pos) if self.fest_rest > 0.0 or draht else None
         vorher = self.welt.held
         self.welt.held = self._ziel_waehlen(dt)
         try:
             super().schritt(dt)
         finally:
             self.welt.held = vorher
-        if stand is not None:
+        if stand is not None and self.fest_rest > 0.0:
             # Festgenagelt: er schlaegt noch, aber vom Fleck kommt er nicht.
             self.pos.update(stand)
+        elif stand is not None:
+            # Im Stacheldraht (seit 0.34.69): nur ein Teil des Wegs.
+            self.draht_rest -= dt
+            self.pos.update(stand + (self.pos - stand) * K.AUSRUESTUNG["stacheldraht"]["tempo"])
         self._haenger_pruefen(dt)
         if getattr(self._gefecht, "in_lobby", False):
             self._gefecht._im_gehege_halten(self)

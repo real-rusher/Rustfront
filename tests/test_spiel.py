@@ -5034,9 +5034,10 @@ random.setstate(_zufall60)
 print("\n-- Waffenbilder aus dem Waffenpaket (0.34.61)")
 _bi61 = app.bilder
 _fehler61 = len(_bi61.fehler)
-# Seit 0.34.67 fuenf Teile: Kuller und Knaller fliegen als Teil.
-pruef("52 Waffen in der Hand, 63 Zeichen, 5 Teile",
-      len(K.PAKET_HAND) == 52 and len(K.PAKET_SYMBOLE) == 63 and len(K.PAKET_TEILE) == 5
+# Seit 0.34.67 fuenf Teile: Kuller und Knaller fliegen als Teil; seit
+# 0.34.69 neun (Horchposten, Sandsackwand, Drohne in zwei Bildern).
+pruef("52 Waffen in der Hand, 63 Zeichen, 9 Teile",
+      len(K.PAKET_HAND) == 52 and len(K.PAKET_SYMBOLE) == 63 and len(K.PAKET_TEILE) == 9
       and all(K.WAFFEN_HAND[w_]["aufbau"] == "paket" for w_ in K.PAKET_HAND))
 _hand61 = {}
 for _w61 in K.PAKET_HAND:
@@ -6206,6 +6207,141 @@ pruef("Der Gast sieht den Blitz und die Ladelinie",
 w.verlassen(); ga.verlassen()
 EN.RND.setstate(_rnd68)
 random.setstate(_zufall68)
+
+# 0.34.69: Bauen, Fallen, Aufklaerung, Sanitasche, Munitionskiste (Testmodus).
+print("\n-- Bauen, Fallen, Aufklaerung, Hilfe im Testmodus (0.34.69)")
+from dustfront import ausruestung as _AU69
+_rnd69 = EN.RND.getstate()
+_zufall69 = random.getstate()
+_tm69 = _TM59.Testmodus(app, karte="staubtal")
+_ort69 = freier_punkt(_tm69.welt, 0, random.Random(69))
+_namen69 = {e.name for e in _TM59.eintraege()}
+pruef("Alles aus Bauen, Fallen, Aufklaerung und Hilfe steht im Spawner",
+      set(_AU69.ARTEN) <= _namen69)
+def _setze69(name, dx, dy=0.0, team=0, winkel=0.0):
+    d_ = _tm69.ausruestung_setzen(name, _ort69 + pygame.Vector2(dx, dy), 0,
+                                  {"team": team, "winkel": winkel})
+    return d_
+def _puppe69(pos, team=1):
+    p_ = _tm69.puppe_setzen(pos, 0, {"anzahl": 1, "streuung": 0, "team": team})
+    p_ = p_[0] if isinstance(p_, list) else p_
+    return p_
+def _laufen69(sek):
+    for _ in range(int(sek / K.FIXED_DT)):
+        _tm69.welt.schritt(K.FIXED_DT)
+# Sandsackwand haelt Kugeln auf.
+_sw69 = _setze69("SANDSACKWAND", 60)
+_ziel69 = _puppe69(_ort69 + pygame.Vector2(120, 0))
+_laufen69(0.05)
+_g69 = EN.Geschoss(_ort69 + pygame.Vector2(10, 0), 0.0, K.WAFFEN["sturm"], 0, None, "sturm")
+_g69.quelle_fraktion = "team1x"
+_tm69.welt.dazu(_g69)
+_laufen69(0.5)
+pruef("Die Sandsackwand faengt die Kugel ab",
+      _ziel69.leben == _ziel69.max_leben and any(s.leben < s.max_leben for s in _sw69))
+for s in _sw69:
+    s.lebt = False
+_ziel69.lebt = False
+# Stacheldraht macht langsam.
+_sd69 = _setze69("STACHELDRAHT", 0, 200, winkel=90.0)[0]
+_fig69 = _puppe69(_sd69.pos)
+_laufen69(0.05)
+_fig69.will.update(1, 0)
+_fig69.schritt(K.FIXED_DT)
+pruef("Im Stacheldraht ist man langsam", getattr(_fig69, "draht_rest", 0.0) > 0.0)
+_fig69.lebt = False
+_sd69.lebt = False
+# Sprengfalle: Gegner tritt drauf, kurz danach knallt es; Brecheisen entschaerft.
+_sf69 = _setze69("SPRENGFALLE (PLATTE)", 0, -200, team=0)[0]
+_laufen69(0.05)
+pruef("Die Sprengfalle ist versteckt, solange niemand nahe ist", _sf69.bild is None)
+_op69 = _puppe69(_sf69.pos + pygame.Vector2(5, 0), team=1)
+_op69.leben = _op69.max_leben = 300.0
+_laufen69(0.1)
+pruef("... ein Gegner loest sie aus, und es bleibt ein Augenblick",
+      _sf69.zuendet > 0.0 and _sf69.lebt and _op69.leben == _op69.max_leben)
+_laufen69(K.AUSRUESTUNG["sprengfalle"]["verzoegerung"] + 0.1)
+pruef("... dann knallt es", not _sf69.lebt and _op69.leben < _op69.max_leben)
+_op69.lebt = False
+_sf2_69 = _setze69("SPRENGFALLE (DRAHT)", 300, 0, team=0)[0]
+_ich69 = _tm69.ich_setzen(_sf2_69.pos + pygame.Vector2(-26, 0), 0, {"team": 1})
+_ich69 = _ich69[0] if isinstance(_ich69, list) else _ich69
+_laufen69(0.05)
+_ich69.winkel = 0.0
+_ich69.ziel = _ich69.pos + pygame.Vector2(100, 0)
+_ich69.nahkampf()
+pruef("Ein Schlag mit dem Brecheisen entschaerft sie", not _sf2_69.lebt and _sf2_69.entschaerft)
+# Selbstschussanlage schiesst auf Gegner, EMP legt sie still.
+_ge69 = _setze69("SELBSTSCHUSSANLAGE", -300, 0, team=0)[0]
+_feind69 = _puppe69(_ge69.pos + pygame.Vector2(150, 0), team=1)
+_feind69.leben = _feind69.max_leben = 2000.0
+_laufen69(1.5)
+pruef("Die Selbstschussanlage dreht sich zum Gegner und trifft",
+      _feind69.leben < _feind69.max_leben, "%.0f" % (_feind69.max_leben - _feind69.leben))
+_emp69 = EN.Granate(_ge69.pos, 0.0, K.WAFFEN["emp"], 0, None, 0.0)
+_emp69.welt = _tm69.welt
+_emp69.zuenden()
+_laufen69(0.4)                 # was schon fliegt, darf noch ankommen
+_vor69 = _feind69.leben
+_laufen69(1.0)
+pruef("... ein EMP legt sie still", _ge69.emp_rest > 0.0 and _feind69.leben == _vor69)
+_ge69.lebt = False
+# Benzinkanister: ein Treffer, Feuer.
+_ka69 = _setze69("BENZINKANISTER", -300, 200)[0]
+_laufen69(0.05)
+_n69 = len(_tm69.welt.feuer)
+_ka69.schaden(30.0, None, None)
+pruef("Ein Treffer, und der Benzinkanister brennt", not _ka69.lebt and len(_tm69.welt.feuer) > _n69)
+_tm69.welt.feuer.clear()
+# Aufklaerung: Drohne und Horchposten markieren; EMP holt die Drohne herunter.
+_dr69 = _setze69("SPÄHDROHNE", 0, 400, team=0)[0]
+_ho69 = _setze69("HORCHPOSTEN", 200, 400, team=0)[0]
+_ziel2_69 = _puppe69(_dr69.pos + pygame.Vector2(60, 0), team=1)
+_ziel2_69.leben = _ziel2_69.max_leben = 2000.0
+_laufen69(0.3)
+pruef("Die Spaehdrohne markiert, wen sie sieht", getattr(_ziel2_69, "markiert_rest", 0.0) > 0.0)
+_emp69 = EN.Granate(_dr69.pos, 0.0, K.WAFFEN["emp"], 0, None, 0.0)
+_emp69.welt = _tm69.welt
+_emp69.zuenden()
+pruef("... ein EMP holt sie herunter", not _dr69.lebt)
+_ziel2_69.markiert_rest = 0.0
+_ziel2_69.pos.update(_ho69.pos + pygame.Vector2(100, 0))
+_laufen69(0.05)                # erst dann steht sie im Raster (Welt.nahe)
+_ziel2_69.tempo.update(80, 0)
+_ho69._takt = 0.0
+_ho69.emp_rest = 0.0           # der EMP fuer die Drohne hat ihn mit erwischt
+_ho69.schritt(K.FIXED_DT)
+pruef("Der Horchposten markiert, wer sich bewegt", _ziel2_69.markiert_rest > 0.0)
+_ziel2_69.lebt = False
+_ho69.lebt = False
+# Sanitasche heilt, Munitionskiste fuellt.
+_ich69.leben = 30.0
+_ich69.pos.update(_ort69 + pygame.Vector2(0, -400))
+_st69 = _setze69("SANITASCHE", 0, -400, team=1)[0]
+_laufen69(K.AUSRUESTUNG["sanitasche"]["dauer"] + 0.2)
+pruef("Die Sanitasche heilt ueber ein paar Sekunden",
+      _ich69.leben >= 30.0 + K.AUSRUESTUNG["sanitasche"]["heilt"] * 0.9, "%.0f" % _ich69.leben)
+_mk69 = _setze69("MUNITIONSKISTE (STEHT)", 0, -400)[0]
+_w69 = _ich69.waffen[0]
+_ich69.magazin[_w69] = 0
+_laufen69(0.1)
+pruef("Die Munitionskiste fuellt die Waffen",
+      _ich69.magazin[_w69] == K.WAFFEN[_w69]["magazin"] and _mk69.ladungen < K.AUSRUESTUNG["munitionskiste"]["ladungen"])
+# Fernglas: markiert im Kegel.
+_tm69.fernglas = True
+_fz69 = _puppe69(_ich69.pos + pygame.Vector2(300, 0), team=0)
+_laufen69(0.05)
+_ich69.ziel = _ich69.pos + pygame.Vector2(300, 0)
+_tm69._aufklaeren(K.FIXED_DT)
+pruef("Mit dem Fernglas markiert die Figur, wen sie im Kegel sieht",
+      getattr(_fz69, "markiert_rest", 0.0) > 0.0 or not _tm69.welt.sicht_frei(_ich69.pos, _fz69.pos, 0))
+_tm69.fernglas = False
+_bild69 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm69.info = 1
+_tm69.zeichnen(_bild69, 1.0)
+pruef("Die Testmodus-Anzeige zeichnet Markierungen und Reichweiten ohne Fehler", True)
+EN.RND.setstate(_rnd69)
+random.setstate(_zufall69)
 
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
