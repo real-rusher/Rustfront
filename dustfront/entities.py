@@ -542,6 +542,12 @@ class Granate(Wesen):
     schatten = True
     radius = 3.0
     bild = "granate"
+    # Seit 0.34.67 (Blinken, Knaller, Kuller) - als Klassenwerte, weil die
+    # Werfergranate Granate.__init__ nicht durchlaeuft.
+    _alter = 0.0
+    knallt = 0.0
+    _knall_rest = 0.0
+    traeger = None
     # Wie der Spieler: Loecher sind fuer sie keine Wand. Ohne das prallte
     # eine Granate an der Kante eines Lochs ab wie an einem Mauerstueck
     # und blieb oben liegen - eine Etage ueber dem, den sie treffen sollte.
@@ -566,8 +572,16 @@ class Granate(Wesen):
             self.bild = "haftladung_flug"
         elif daten.get("emp"):
             self.bild = "emp_flug"
+        elif daten.get("bild_flug"):
+            self.bild = daten["bild_flug"]       # Gas, Kuller, Knaller (seit 0.34.67)
         else:
             self.bild = "granate"
+        # Blinken (seit 0.34.67): das Bild wechselt, darum sieht es auch der
+        # Gast - der bekommt nur den Bildnamen.
+        self._bild_aus = self.bild
+        self._alter = 0.0
+        self.knallt = 0.0          # Knaller: so lange macht er noch Laerm
+        self._knall_rest = 0.0
         # Haftladung (seit 0.34.65): woran sie klebt, und wo darauf.
         self.traeger = None
         self._versatz = pygame.Vector2(0, 0)
@@ -586,6 +600,16 @@ class Granate(Wesen):
     def schritt(self, dt: float) -> None:
         self.vorher.update(self.pos)
         self.rest -= dt
+        self._alter += dt
+        d = self.daten
+        if d.get("blinkt"):
+            self._blinken()
+        if self.knallt > 0.0:
+            self._knallen(dt)
+            return
+        if d.get("kuller") and self._alter >= d["scharf_nach"] and self._jemand_nah():
+            self.zuenden()
+            return
         if self.daten.get("haftet") and self._haften(dt):
             return
         self.winkel += self.dreh * dt
@@ -607,6 +631,50 @@ class Granate(Wesen):
         # Zielebene an, waehrend die Granate im Bild noch in der Luft ist.
         if self.rest <= 0 and self.sturz_rest <= 0:
             self.zuenden()
+
+    def _blinken(self) -> None:
+        """Immer schneller, je naeher die Zuendung (Haftladung, EMP)."""
+        gesamt = max(0.1, self.daten["flugzeit"])
+        rest = max(0.0, self.rest) / gesamt
+        takt = 0.12 + 0.6 * rest            # Sekunden je Blinken
+        an = (self._alter % takt) < takt * 0.4
+        self.bild = self._bild_aus + "_an" if an else self._bild_aus
+
+    def _jemand_nah(self) -> bool:
+        """Der Kuller: ist jemand ausser dem Werfer und seinen Leuten nahe?"""
+        r = self.daten["naehe"]
+        eigene = getattr(self.von, "fraktion", None)
+        for a in self.welt.nahe(self.pos, r + 30.0, self.ebene):
+            if (a is self or a is self.von or not a.lebt
+                    or not getattr(a, "trefferbar", False)
+                    or getattr(a, "fraktion", "") in ("geschoss", eigene)):
+                continue
+            if a.pos.distance_to(self.pos) <= r + a.radius:
+                return True
+        return False
+
+    def _knallen(self, dt: float) -> None:
+        """Der Knaller: Knall um Knall, mit Blitz, und Bots hoeren hin.
+        Schussknall und Laerm gehen ueber die Welt, also auch zum Gast."""
+        d = self.daten
+        self.knallt -= dt
+        self.tempo.update(0, 0)
+        if self.knallt <= 0.0:
+            self.lebt = False
+            return
+        self._knall_rest -= dt
+        if self._knall_rest > 0.0:
+            return
+        self._knall_rest = RND.uniform(*d["knall_takt"])
+        w = self.welt
+        winkel = RND.uniform(-180, 180)
+        w.schussknall(self.pos + pygame.Vector2(4, 0).rotate(winkel), winkel, self.ebene,
+                      "knaller", None)
+        # Der Knaller huepft dabei ein wenig.
+        self.pos += pygame.Vector2(RND.uniform(1.0, 3.0), 0).rotate(winkel)
+        if not w.frei(self.pos, self.radius, self.ebene):
+            self.pos.update(self.vorher)
+        w.laerm(self.pos, self.ebene, None, d["laerm"])
 
     def _haften(self, dt: float) -> bool:
         """Die Haftladung: klebt sie schon, faehrt sie mit ihrem Traeger und
@@ -713,6 +781,16 @@ class Granate(Wesen):
             w.feuer.append(Brandflaeche(self.pos, self.ebene, von=self.von))
             w.explosion(self.pos, self.ebene, 0.0, "feuer")
             return
+        if d.get("knaller"):
+            # Seit 0.34.67: er zuendet nicht, er faengt an zu knallen.
+            self.lebt = True
+            self.knallt = d["knall_dauer"]
+            return
+        if d.get("gas"):
+            # Seit 0.34.67: eine Gaswolke, die langsam waechst.
+            w.gas.append(Gaswolke(self.pos, self.ebene, von=self.von))
+            w.klang("smoke_grenade", 0.6, self.pos, self.ebene)
+            return
         if d.get("emp"):
             # Seit 0.34.65: jedes Fahrzeug im Kreis steht still. Kein
             # Schaden, keine Mannschaftsfrage - Elektronik kennt keine.
@@ -748,6 +826,170 @@ class Granate(Wesen):
             abschuss_buchen(self.von, ziel, getattr(self, "waffe", "granate"), lebte)
         w.explosion(self.pos, self.ebene, r, d.get("explosion", "spreng"))
         w.kurz_langsam(0.05)
+
+
+class Wurfkoerper(Granate):
+    """Was gerade fliegt (seit 0.34.67): Wurfmesser, Speer, Schneeball.
+
+    Kein Bogen, kein Rollen (Waffenpaket, GRUNDREGELN 3): es fliegt mit
+    festem Tempo bis zur Weite, trifft den ersten Koerper oder bleibt an
+    der Wand liegen. Was `aufheben` hat, liegt danach am Boden, bis es
+    jemand mit dieser Waffe aufhebt - nach `K.WURFKOERPER["zurueck"]`
+    Sekunden kommt es von selbst zum Werfer zurueck, damit nichts fuer
+    immer verloren ist. Der Schneeball zerfaellt."""
+
+    def __init__(self, pos, richtung: float, daten: dict, ebene: int, von=None,
+                 weite: float = 200.0, waffe: str = "") -> None:
+        Wesen.__init__(self, pos, ebene)
+        self.daten = daten
+        self.von = von
+        self.waffe = waffe
+        self.winkel = richtung
+        self.bild = daten.get("bild_flug", "granate")
+        self._bild_aus = self.bild
+        self.traeger = None
+        self.knallt = 0.0
+        self._alter = 0.0
+        self.quelle_fraktion = von.fraktion if von is not None else "neutral"
+        tempo = daten.get("wurf_tempo", 450.0)
+        self.tempo = pygame.Vector2(tempo, 0).rotate(richtung)
+        self.weg = float(weite)
+        self.liegt = False
+        self.rest = 1e9
+        self.dreh = 0.0
+
+    def schritt(self, dt: float) -> None:
+        self.vorher.update(self.pos)
+        self._alter += dt
+        if self.liegt:
+            self._liegen()
+            return
+        w = self.welt
+        strecke = self.tempo.length() * dt
+        schritte = max(1, int(strecke / 5.0))
+        teil = self.tempo * dt / schritte
+        for _ in range(schritte):
+            self.pos += teil
+            self.weg -= teil.length()
+            ziel = w.treffer(self.pos, self.radius + 2.0, self.ebene, self.quelle_fraktion)
+            if ziel is not None and ziel is not self.von:
+                self._treffen(ziel)
+                return
+            if w.schuss_halt(self.pos, self.ebene, self.radius):
+                self.pos -= teil
+                self._hinlegen()
+                return
+            if self.weg <= 0.0:
+                self._hinlegen()
+                return
+
+    def _treffen(self, ziel) -> None:
+        d = self.daten
+        menge = d.get("wurf_schaden", d.get("schaden", 0.0))
+        schub = pygame.Vector2(self.tempo).normalize() * 90.0
+        lebte = ziel.lebt
+        if hasattr(self.von, "zaehlen") and getattr(ziel, "zaehlt_treffer", True):
+            self.von.zaehlen("treffer", 1.0, self.waffe)
+            treffer_ziel_buchen(self.von, ziel)
+        schaden_an(ziel, menge, schub, self.von, "nahkampf", self.pos - self.tempo * 0.05)
+        abschuss_buchen(self.von, ziel, self.waffe, lebte)
+        if d.get("kaelte"):
+            # Der Schneeball: wer oft genug getroffen wird, friert ein.
+            jetzt = self.welt.zeit
+            if jetzt - getattr(ziel, "_kaelte_zeit", -1e9) > d["kaelte_fenster"]:
+                ziel._kaelte = 0
+            ziel._kaelte = getattr(ziel, "_kaelte", 0) + d["kaelte"]
+            ziel._kaelte_zeit = jetzt
+            if ziel._kaelte >= d["kaelte_bis"]:
+                ziel._kaelte = 0
+                zustand_setzen(ziel, "gefroren", d["gefroren"])
+        elif getattr(ziel, "treffer_art", "") != "metall":
+            wolke(self.welt, self.pos, 6, 140, 0.22, K.C_BLUT, self.ebene, 1, "blut")
+        self._hinlegen()
+
+    def _hinlegen(self) -> None:
+        if not self.daten.get("aufheben"):
+            # Der Schneeball zerfaellt.
+            wolke(self.welt, self.pos, 8, 80, 0.4, (236, 240, 248), self.ebene, 1, "staub")
+            self.lebt = False
+            return
+        self.liegt = True
+        self.tempo.update(0, 0)
+        self._alter = 0.0
+
+    def _liegen(self) -> None:
+        """Wer diese Waffe traegt und darueber laeuft, hebt es auf."""
+        for a in self.welt.nahe(self.pos, 24.0, self.ebene):
+            if not getattr(a, "lebt", False) or self.waffe not in getattr(a, "waffen", ()):
+                continue
+            if getattr(a, "am_boden", False) or a.pos.distance_to(self.pos) > 16.0:
+                continue
+            if self._zurueck_an(a):
+                self.welt.klang("aufheben", 0.6, self.pos, self.ebene)
+                return
+        if self._alter >= K.WURFKOERPER["zurueck"] and self.von is not None:
+            self._zurueck_an(self.von)
+            self.lebt = False
+
+    def _zurueck_an(self, wer) -> bool:
+        voll = self.daten.get("magazin", 1)
+        hat = wer.magazin.get(self.waffe, 0)
+        if hat >= voll:
+            return False
+        wer.magazin[self.waffe] = hat + 1
+        self.lebt = False
+        return True
+
+
+class Gaswolke:
+    """Die Wolke der Gasgranate (seit 0.34.67). Wie die Brandflaeche kein
+    Wesen: sie liegt flach am Boden, waechst langsam und schadet, solange
+    man drinsteht. Zombies atmen nicht (`K.GAS["verschont"]`), Fahrzeuge
+    auch nicht - wer drinsitzt, ist geschuetzt."""
+
+    __slots__ = ("pos", "ebene", "dauer", "alter", "lebt", "kennung", "von")
+    _naechste_kennung = 0
+
+    def __init__(self, pos, ebene: int, von=None, kennung: int | None = None,
+                 alter: float = 0.0) -> None:
+        self.pos = pygame.Vector2(pos)
+        self.ebene = int(ebene)
+        self.dauer = float(K.GAS["dauer"])
+        self.alter = float(alter)
+        self.lebt = True
+        self.von = von
+        if kennung is None:
+            Gaswolke._naechste_kennung += 1
+            kennung = Gaswolke._naechste_kennung
+        self.kennung = int(kennung)
+
+    @property
+    def radius(self) -> float:
+        g = K.GAS
+        f = min(1.0, self.alter / max(0.1, g["wachsen"]))
+        r = g["anfang"] + (g["radius"] - g["anfang"]) * f
+        # Am Ende zieht sie sich wieder zusammen.
+        rest = self.dauer - self.alter
+        if rest < 2.0:
+            r *= max(0.2, rest / 2.0)
+        return r
+
+    def schritt(self, dt: float, welt=None) -> None:
+        self.alter += dt
+        if self.alter >= self.dauer:
+            self.lebt = False
+            return
+        if welt is None:
+            return
+        g = K.GAS
+        r = self.radius
+        for ziel in list(welt.nahe(self.pos, r + 20.0, self.ebene)):
+            if (not ziel.lebt or getattr(ziel, "fraktion", "") in ("geschoss", g["verschont"])
+                    or getattr(ziel, "ist_fahrzeug", False) or getattr(ziel, "im_fahrzeug", False)
+                    or not getattr(ziel, "trefferbar", False)):
+                continue
+            if ziel.pos.distance_to(self.pos) <= r:
+                ziel.schaden(g["schaden"] * dt, None, self.von)
 
 
 class Werfergranate(Granate):
@@ -2445,7 +2687,9 @@ class Spieler(Wesen):
 
     def nachladen(self) -> None:
         d = self.waffe_daten
-        if not d.get("magazin") or d.get("art") in ("wurf", "c4"):
+        # Was man wirft und wieder aufhebt (Wurfmesser, Speer), laedt man
+        # nicht nach (seit 0.34.67).
+        if not d.get("magazin") or d.get("art") in ("wurf", "c4") or d.get("aufheben"):
             return
         if self.nachlade_rest <= 0 and self.magazin[self.waffe_name] < d["magazin"]:
             self.nachlade_rest = d["nachladen"]
@@ -2566,7 +2810,13 @@ class Spieler(Wesen):
             # Sie fliegt dorthin, wo man hinzeigt, nicht immer gleich weit.
             weite = min(d["wurf_max"], max(d["wurf_min"],
                                            self.pos.distance_to(self.ziel)))
-            gr = Granate(muendung, self.winkel, d, self.ebene, self, weite)
+            if d.get("gerade"):
+                # Gerade Wuerfe (seit 0.34.67): der Schneeball fliegt wie
+                # ein Geschoss, ohne Bogen und ohne zu rollen.
+                gr = Wurfkoerper(muendung, self.winkel, d, self.ebene, self, weite,
+                                 self.waffe_name)
+            else:
+                gr = Granate(muendung, self.winkel, d, self.ebene, self, weite)
             # Fuer die Statistik je Waffe (Haftladung, EMP ...).
             gr.waffe = self.waffe_name
             self.welt.dazu(gr)
@@ -2646,6 +2896,9 @@ class Spieler(Wesen):
         if d.get("zweit") == "bodenschlag":
             if self.takt <= 0:
                 self._bodenschlag(d)
+            return
+        if d.get("zweit") == "werfen":
+            self._werfen(d)
             return
         name = self.waffe_name
         hat = self.magazin.get(name, 0)
@@ -2800,6 +3053,21 @@ class Spieler(Wesen):
             self.zaehlen("schuesse", 1.0, name)
             w.schlagknall(spitze, self.winkel, self.ebene, getroffen, self)
             w.laerm(self.pos, self.ebene, self, d.get("laerm", 600.0))
+
+    def _werfen(self, d: dict) -> None:
+        """Wurfmesser und Speer werfen (seit 0.34.67): gerade, und danach
+        liegt das Ding am Boden, bis jemand es aufhebt."""
+        name = self.waffe_name
+        if self.takt > 0 or self.magazin.get(name, 0) <= 0:
+            return
+        self.magazin[name] -= 1
+        self.takt = self.takt2 = d["wurf_takt"]
+        muendung = self.pos + pygame.Vector2(12, 0).rotate(self.winkel)
+        weite = min(d["wurf_weite"], max(30.0, self.pos.distance_to(self.ziel)))
+        self.welt.dazu(Wurfkoerper(muendung, self.winkel, d, self.ebene, self, weite, name))
+        self.zaehlen("schuesse", 1.0, name)
+        if not d.get("lautlos"):
+            self.welt.klang("wurf", 0.5, self.pos, self.ebene)
 
     def _bodenschlag(self, d: dict) -> None:
         """Der Hammer auf den Boden (seit 0.34.66): alles ringsum fliegt

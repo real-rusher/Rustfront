@@ -380,6 +380,8 @@ class Welt:
         # Nagelfelder (seit 0.34.65, der Nagelstreuer): aus demselben Grund
         # eine eigene Liste.
         self.naegel: list = []
+        # Gaswolken (seit 0.34.67, die Gasgranate).
+        self.gas: list = []
         # Reine Rueckmeldung: Staubringe beim Aufsetzen und kurze
         # Aufschriften ueber aufgesammelter Beute. Beides entscheidet
         # nichts, es sagt nur, dass etwas passiert ist.
@@ -795,6 +797,9 @@ class Welt:
         if self.naegel and not self._rechnet:
             for n in self.naegel:
                 n.schritt(dt, None)
+        if self.gas and not self._rechnet:
+            for g in self.gas:
+                g.schritt(dt, None)
         if self.muendungen:
             for m in self.muendungen:
                 m[3] -= dt
@@ -868,6 +873,10 @@ class Welt:
             n.schritt(dt, self)
         if any(not n.lebt for n in self.naegel):
             self.naegel = [n for n in self.naegel if n.lebt]
+        for g in self.gas:
+            g.schritt(dt, self)
+        if any(not g.lebt for g in self.gas):
+            self.gas = [g for g in self.gas if g.lebt]
         if any(not w.lebt for w in self.wesen):
             self.wesen = [w for w in self.wesen if w.lebt]
 

@@ -280,8 +280,10 @@ def eintraege() -> list:
         Eintrag("RAKETENWERFER", "BEUTE", ("anzahl", "streuung"),
                 _beute_setzer("rakete")),
     ]
-    # Haftladung und EMP-Granate seit 0.34.65.
-    for art in ("granate", "rauch", "molotov", "blend", "haftladung", "emp"):
+    # Haftladung und EMP-Granate seit 0.34.65, Gas, Kuller, Knaller und
+    # Schneeball seit 0.34.67.
+    for art in ("granate", "rauch", "molotov", "blend", "haftladung", "emp",
+                "gas", "kuller", "knaller", "schneeball"):
         raus.append(Eintrag(K.WAFFEN[art]["name"], "WURF",
                             ("anzahl", "streuung", "zuender"), _wurf_setzer(art)))
     # Seit 0.34.60: die NPCs und Tiere aus dem Figurenpaket. Sie stehen
@@ -1167,6 +1169,7 @@ class Testmodus(Gefecht):
         self._fahrzeug_warte = []
         self.welt.feuer.clear()
         self.welt.naegel.clear()
+        self.welt.gas.clear()
         self.welt.rauch.clear()
         self.welt.partikel.clear()
         self.welt.muendungen.clear()

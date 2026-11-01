@@ -82,7 +82,7 @@ setzt, steht sofort da.
 | ZIELE | die Zielpuppe | Anzahl, Streuung |
 | OBJEKTE | Buggy, Panzer, Panzerwagen, Nagelfeld, Hotzone hier, Hotzone aus | Anzahl, Streuung, Richtung |
 | BEUTE | Medkit, Munitionskiste, Raketenwerfer | Anzahl, Streuung |
-| WURF | Granate, Rauch, Molotow, Blendgranate, Haftladung, EMP-Granate | Anzahl, Streuung, Zuender (liegt / sofort) |
+| WURF | Granate, Rauch, Molotow, Blendgranate, Haftladung, EMP-Granate, Gasgranate, Kuller, Knaller, Schneeball | Anzahl, Streuung, Zuender (liegt / sofort) |
 | NPC | Haendler, Aerztin, Wissenschaftler, Fluechtling, Pilger, Schmuggler, Hirte, Ueberlebende | Anzahl, Streuung, Richtung; bei der Ueberlebenden das Stirnband |
 | TIERE | Schaf, Ziege, Huhn | Anzahl, Streuung, Farbe (drei je Tier oder ZUFALL) |
 | WAFFENBILDER | Figur mit Waffe (jede der 52 aus dem Waffenpaket) | Waffe, Team, Richtung |
@@ -128,6 +128,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.67 | WURF: GASGRANATE, KULLER, KNALLER, SCHNEEBALL (Zuender liegt / sofort). FIGUREN: WAFFE kennt Wurfmesser und Speer (rechte Maustaste wirft, darueberlaufen hebt auf). Haftladung und EMP blinken. Pruefungen im Abschnitt "Wuerfe aus dem Waffenpaket" von `tests/test_spiel.py` |
 | 0.34.66 | FIGUREN: WAFFE kennt Vorschlaghammer, Schockstab, Schlagring, Kettensaege, Bolzenschussgeraet und Nagler (SPIELER, ICH zum Ausprobieren, eine Puppe als Ziel). Die INFO-Ansicht (Taste 8) zeigt bei Bots BETÄUBT, GEFROREN und FEST; ueber jeder Figur ist der Zustand auch ohne INFO zu sehen. Das NAGELFELD wirkt nur noch auf Reifen. Pruefungen im Abschnitt "Nahkampf, Bolzer, Nagler, Zustaende" von `tests/test_spiel.py` |
 | 0.34.65 | WURF: HAFTLADUNG (klebt an Fahrzeug oder Figur, faehrt mit) und EMP-GRANATE (legt Fahrzeuge still); OBJEKTE: NAGELFELD. Die INFO-Ansicht (Taste 8) zeigt unter jedem Fahrzeug Leben, den letzten Treffer (Schadensart, Seite, Anteil, was ankam), EMP- und Platt-Rest und die Ladungen fuer Hecknebel und Naegel. Am Steuer (SPIELER, ICH, dann E) wirft R Hecknebel und F den Nagelstreuer. Pruefungen im Abschnitt "Fahrzeug-Panzerung, Haftladung, EMP, Hecknebel, Nagelstreuer" von `tests/test_spiel.py` |
 | 0.34.63 | Der Testmodus auf iPhone und iPad (und am Rechner mit `DUSTFRONT_TOUCH=1`), siehe "Mit Touch" oben: Ziffernblock antippen, linker Stick fliegt, rechter bewegt den Zeiger; Spawner und Testmenue mit dem Finger (links auf eine Einstellung: zurueck), zwei Finger blaettern im Spawner; mit Figur klappt der Ziffernblock unter NUM. Neu auch am Rechner: das Mausrad blaettert in der Liste des Spawners, und `DUSTFRONT_START=testmodus` startet gleich im Testmodus. Pruefungen im Abschnitt "Testmodus mit Touch" von `tests/test_spiel.py` |

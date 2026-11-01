@@ -1675,6 +1675,62 @@ def _nagel_steckt():
     return s
 
 
+@platzhalter("wurfmesser_flug")
+def _wurfmesser_flug():
+    """Wurfmesser im Flug und am Boden (seit 0.34.67): Griff und Klinge."""
+    s = _flaeche(13, 5)
+    pygame.draw.rect(s, (40, 36, 32), (0, 1, 4, 3))
+    pygame.draw.rect(s, (120, 124, 130), (4, 0, 1, 5))
+    pygame.draw.polygon(s, (196, 200, 208), [(5, 1), (11, 1), (12, 2), (5, 3)])
+    pygame.draw.line(s, (236, 240, 246), (5, 1), (10, 1))
+    return s
+
+
+@platzhalter("speer_flug")
+def _speer_flug():
+    """Der Speer (seit 0.34.67): langer Holzschaft, Eisenspitze."""
+    s = _flaeche(30, 5)
+    pygame.draw.rect(s, (120, 86, 52), (0, 2, 24, 1))
+    pygame.draw.rect(s, (156, 116, 72), (0, 1, 24, 1))
+    pygame.draw.polygon(s, (150, 154, 160), [(23, 0), (29, 2), (23, 4)])
+    return s
+
+
+@platzhalter("schneeball_flug")
+def _schneeball_flug():
+    s = _flaeche(7, 7)
+    pygame.draw.circle(s, (196, 202, 212), (3, 3), 3)
+    pygame.draw.circle(s, (244, 246, 252), (2, 2), 2)
+    return s
+
+
+@platzhalter("gas_flug")
+def _gas_flug():
+    """Die Gasdose (seit 0.34.67): olivgruen mit gelbem Band."""
+    s = _flaeche(9, 9)
+    pygame.draw.rect(s, (70, 78, 44), (1, 1, 7, 7))
+    pygame.draw.rect(s, (104, 116, 64), (2, 2, 5, 5))
+    pygame.draw.rect(s, (200, 214, 80), (1, 4, 7, 1))
+    return s
+
+
+@platzhalter("haftladung_flug_an")
+def _haftladung_flug_an():
+    """Die Haftladung, wenn ihr Licht aufblinkt (seit 0.34.67)."""
+    s = _haftladung_flug().copy()
+    pygame.draw.circle(s, (255, 70, 50), (4, 4), 2)
+    s.set_at((4, 3), (255, 200, 180))
+    return s
+
+
+@platzhalter("emp_flug_an")
+def _emp_flug_an():
+    s = _emp_flug().copy()
+    pygame.draw.circle(s, (140, 240, 255), (4, 4), 2)
+    s.set_at((4, 3), (240, 255, 255))
+    return s
+
+
 @platzhalter("haftladung_flug")
 def _haftladung_flug():
     """Die Haftladung (seit 0.34.65): ein gruener Klebering um eine

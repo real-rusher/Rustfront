@@ -1987,6 +1987,7 @@ class Renderer:
             return
         self.feuer_zeichnen(ziel, welt, idx, ecke, eigene)
         self.naegel_zeichnen(ziel, welt, idx, ecke)
+        self.gas_zeichnen(ziel, welt, idx, ecke)
         self.ringe_zeichnen(ziel, welt, idx, ecke)
         self.bodenstaub_zeichnen(ziel, welt, idx, ecke, alpha)
         self.wesen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
@@ -2098,6 +2099,38 @@ class Renderer:
             if f > 0.0:
                 pygame.draw.line(ziel, (150, 152, 156), (x - 3, y + r), (x + 3, y + r))
                 pygame.draw.line(ziel, (150, 152, 156), (x, y + r - 3), (x, y + r + 2))
+
+    def gas_zeichnen(self, ziel, welt, index: int, ecke) -> None:
+        """Gaswolken (seit 0.34.67): durchscheinend gelbgruen, flach am
+        Boden, mit dunkleren Schlieren und kleinen Blasen (Waffenpaket).
+        Die Schlieren liegen fest (aus der Kennung), sie wandern langsam."""
+        gase = getattr(welt, "gas", None)
+        if not gase:
+            return
+        g = K.GAS
+        for wolke_ in gase:
+            if wolke_.ebene != index or not wolke_.lebt:
+                continue
+            r = int(wolke_.radius)
+            if r < 2:
+                continue
+            flaeche = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
+            pygame.draw.circle(flaeche, g["farbe"] + (70,), (r + 1, r + 1), r)
+            pygame.draw.circle(flaeche, g["farbe"] + (40,), (r + 1, r + 1), int(r * 0.7))
+            zufall = random.Random(wolke_.kennung * 977)
+            for i in range(7):
+                a = zufall.uniform(0, math.tau) + welt.zeit * 0.15 * (1 if i % 2 else -1)
+                d = r * zufall.uniform(0.2, 0.7)
+                pygame.draw.circle(flaeche, g["dunkel"] + (55,),
+                                   (int(r + 1 + math.cos(a) * d), int(r + 1 + math.sin(a) * d)),
+                                   max(2, int(r * zufall.uniform(0.15, 0.3))))
+            for i in range(5):
+                a = zufall.uniform(0, math.tau)
+                d = r * ((zufall.random() + welt.zeit * 0.3) % 1.0) * 0.9
+                flaeche.set_at((int(r + 1 + math.cos(a) * d), int(r + 1 + math.sin(a) * d)),
+                               (230, 240, 160, 150))
+            ziel.blit(flaeche, (int(wolke_.pos.x - ecke.x) - r - 1,
+                                int(wolke_.pos.y - ecke.y) - r - 1))
 
     def naegel_zeichnen(self, ziel, welt, index: int, ecke) -> None:
         """Nagelfelder (seit 0.34.65) am Boden, unter den Figuren. Die

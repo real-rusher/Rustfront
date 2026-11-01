@@ -68,7 +68,7 @@ from .spielerkosmetik import KosmetikTeil
 from . import world as welt_modul
 from . import art_figuren as figuren
 from .core import Bilder, Szene
-from .entities import (Aufsammler, Brandflaeche, C4Ladung, Nagelfeld, Gegner, Geschoss, Granate,
+from .entities import (Aufsammler, Brandflaeche, C4Ladung, Gaswolke, Nagelfeld, Gegner, Geschoss, Granate,
                        Rakete, Rauchwolke, Spieler, Wesen, wolke)
 from . import fahrzeug as fahrzeug_modul
 from .fahrzeug import Buggy
@@ -4098,8 +4098,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         naegel = [[round(n.pos.x, 1), round(n.pos.y, 1), n.ebene,
                    round(n.alter, 1), n.kennung]
                   for n in self.welt.naegel if n.lebt]
+        # Gaswolken (seit 0.34.67): Ort, Ebene, Alter, Kennung.
+        gas = [[round(g.pos.x, 1), round(g.pos.y, 1), g.ebene, round(g.alter, 1), g.kennung]
+               for g in self.welt.gas if g.lebt]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
-                "feuer": brand, "fahrzeuge": wagen, "naegel": naegel,
+                "feuer": brand, "fahrzeuge": wagen, "naegel": naegel, "gas": gas,
                 "wirkung": wirkung,
                 "spieler": spieler, "schuesse": flug, "beute": beute,
                 "gegner": gegner, "welle": self.welle,
@@ -4188,6 +4191,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                     self.welt.rauch = []
                     self.welt.feuer = []
                     self.welt.naegel = []
+                    self.welt.gas = []
                     self._fremde_beute = []
                     self._fremde_gegner = []
                     self._fremde_schuesse = []
@@ -4533,6 +4537,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._rauch_uebernehmen(meldung.get("rauch", []))
         self._feuer_uebernehmen(meldung.get("feuer", []))
         self._naegel_uebernehmen(meldung.get("naegel", []))
+        self._gas_uebernehmen(meldung.get("gas", []))
         self._wirkung_nachspielen(meldung.get("wirkung", []))
         self._fremde_beute = [tuple(b) for b in meldung.get("beute", [])
                               if isinstance(b, (list, tuple)) and len(b) == 4]
@@ -4627,6 +4632,23 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             n.alter = alter
             neu.append(n)
         self.welt.naegel = neu
+
+    def _gas_uebernehmen(self, eintraege) -> None:
+        """Gaswolken beim Gast (seit 0.34.67), wie die Nagelfelder."""
+        vorhanden = {g.kennung: g for g in self.welt.gas}
+        neu = []
+        for e in eintraege if isinstance(eintraege, list) else []:
+            try:
+                x, y, ebene = float(e[0]), float(e[1]), int(e[2])
+                alter, kennung = float(e[3]), int(e[4])
+            except (TypeError, ValueError, IndexError):
+                continue
+            g = vorhanden.get(kennung)
+            if g is None:
+                g = Gaswolke(pygame.Vector2(x, y), ebene, kennung=kennung, alter=alter)
+            g.alter = alter
+            neu.append(g)
+        self.welt.gas = neu
 
     def _feuer_uebernehmen(self, eintraege) -> None:
         """Brandflaechen beim Gast nachfuehren, ohne sie neu zu bauen.
@@ -5426,6 +5448,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self.welt.rauch = []
         self.welt.feuer = []
         self.welt.naegel = []
+        self.welt.gas = []
         # Auch die Wirkungen, die noch nicht hinaus sind: sonst knallt
         # bei den Gaesten im ersten Bild der neuen Runde noch die letzte
         # Granate der alten.

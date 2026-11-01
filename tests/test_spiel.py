@@ -5034,8 +5034,9 @@ random.setstate(_zufall60)
 print("\n-- Waffenbilder aus dem Waffenpaket (0.34.61)")
 _bi61 = app.bilder
 _fehler61 = len(_bi61.fehler)
-pruef("52 Waffen in der Hand, 63 Zeichen, 3 Teile",
-      len(K.PAKET_HAND) == 52 and len(K.PAKET_SYMBOLE) == 63 and len(K.PAKET_TEILE) == 3
+# Seit 0.34.67 fuenf Teile: Kuller und Knaller fliegen als Teil.
+pruef("52 Waffen in der Hand, 63 Zeichen, 5 Teile",
+      len(K.PAKET_HAND) == 52 and len(K.PAKET_SYMBOLE) == 63 and len(K.PAKET_TEILE) == 5
       and all(K.WAFFEN_HAND[w_]["aufbau"] == "paket" for w_ in K.PAKET_HAND))
 _hand61 = {}
 for _w61 in K.PAKET_HAND:
@@ -5960,6 +5961,134 @@ pruef("Der Gast sieht, dass der Gastgeber betaeubt ist",
 w.verlassen(); ga.verlassen()
 EN.RND.setstate(_rnd66)
 random.setstate(_zufall66)
+
+# 0.34.67: Gas, Kuller, Knaller, Wurfmesser, Speer, Schneeball, Blinken.
+print("\n-- Wuerfe aus dem Waffenpaket (0.34.67)")
+_rnd67 = EN.RND.getstate()
+_zufall67 = random.getstate()
+_tm67 = _TM59.Testmodus(app, karte="staubtal")
+_ort67 = freier_punkt(_tm67.welt, 0, random.Random(67))
+_ich67 = _tm67.ich_setzen(_ort67, 0, {"team": 0, "waffe_figur": "wurfmesser"})
+_ich67 = _ich67[0] if isinstance(_ich67, list) else _ich67
+pruef("Die neuen Wuerfe sind waehlbar und im Spawner",
+      {"gas", "kuller", "knaller", "schneeball"} <= set(K.LOADOUT["auswahl_wuerfe"])
+      and {"wurfmesser", "speer"} <= set(K.LOADOUT["auswahl_waffen"])
+      and {"GASGRANATE", "KULLER", "KNALLER", "SCHNEEBALL"} <= {e.name for e in _TM59.eintraege()})
+def _puppe67(dx, dy=0.0, leben=400.0, team=1):
+    p_ = _tm67.puppe_setzen(_ich67.pos + pygame.Vector2(dx, dy), 0,
+                            {"anzahl": 1, "streuung": 0, "team": team, "leben": leben})
+    p_ = p_[0] if isinstance(p_, list) else p_
+    _tm67.welt.schritt(K.FIXED_DT)
+    p_.leben = p_.max_leben
+    return p_
+def _waffe67(name):
+    _ich67.waffen[0] = name
+    _ich67.magazin[name] = K.WAFFEN[name].get("magazin", 0)
+    _ich67.waffe = 0
+    _ich67.takt = _ich67.takt2 = 0.0
+    _ich67.nachlade_rest = 0.0
+    _ich67.winkel = 0.0
+    _ich67.ziel = _ich67.pos + pygame.Vector2(200, 0)
+def _laufen67(sek):
+    for _ in range(int(sek / K.FIXED_DT)):
+        _tm67.welt.schritt(K.FIXED_DT)
+# Wurfmesser: rechts werfen, trifft, liegt, wird aufgehoben.
+_waffe67("wurfmesser")
+_z67 = _puppe67(90)
+_ich67.ziel = _ich67.pos + pygame.Vector2(200, 0)
+_ich67.winkel = 0.0
+_ich67._werfen(K.WAFFEN["wurfmesser"])
+_laufen67(0.5)
+_m67 = [g for g in _tm67.welt.wesen if isinstance(g, EN.Wurfkoerper)]
+pruef("Das geworfene Messer trifft und bleibt liegen",
+      _z67.max_leben - _z67.leben >= K.WAFFEN["wurfmesser"]["wurf_schaden"] - 0.1
+      and len(_m67) == 1 and _m67[0].liegt
+      and _ich67.magazin["wurfmesser"] == K.WAFFEN["wurfmesser"]["magazin"] - 1,
+      "%.0f, %d" % (_z67.max_leben - _z67.leben, len(_m67)))
+_z67.lebt = False
+_ich67.pos.update(_m67[0].pos)
+_laufen67(0.1)
+pruef("... und wer darueber laeuft, hebt es auf",
+      not _m67[0].lebt and _ich67.magazin["wurfmesser"] == K.WAFFEN["wurfmesser"]["magazin"])
+_ich67.nachladen()
+pruef("Wurfmesser laedt man nicht nach", _ich67.nachlade_rest <= 0.0)
+# Schneeball: dreimal getroffen, eingefroren.
+_waffe67("schneeball")
+_z67 = _puppe67(80)
+for _ in range(3):
+    _ich67.takt = 0.0
+    _ich67.ziel = _ich67.pos + pygame.Vector2(200, 0)
+    _ich67.winkel = 0.0
+    _ich67.feuern()
+    _laufen67(0.4)
+pruef("Drei Schneebaelle, und er friert ein", _z67.gefroren_rest > 0.0,
+      "%.1f" % _z67.gefroren_rest)
+_z67.lebt = False
+# Kuller: rollt, zuendet, sobald jemand nahe kommt.
+_waffe67("kuller")
+_ich67.ziel = _ich67.pos + pygame.Vector2(260, 0)
+_ich67.takt = 0.0
+_ich67.feuern()
+_ku67 = [g for g in _tm67.welt.neue + _tm67.welt.wesen if isinstance(g, EN.Granate)
+         and g.daten.get("kuller")][0]
+_laufen67(2.5)
+pruef("Der Kuller liegt still und zuendet nicht von selbst", _ku67.lebt)
+_z67 = _puppe67(0, 0)
+_z67.pos.update(_ku67.pos + pygame.Vector2(20, 0))
+_laufen67(0.2)
+pruef("... aber sobald jemand nahe kommt", not _ku67.lebt and _z67.leben < _z67.max_leben)
+_z67.lebt = False
+# Knaller: knallt eine Weile, und Bots hoeren das.
+_bot67 = _tm67.bot_setzen(_ich67.pos + pygame.Vector2(0, -300), 0,
+                          {"anzahl": 1, "streuung": 0, "team": 1})
+_knal67 = EN.Granate(_ich67.pos + pygame.Vector2(60, 0), 0.0, K.WAFFEN["knaller"], 0, None, 0.0)
+_tm67.welt.dazu(_knal67)
+_vor67 = len(_tm67._bot_geraeusche)
+_laufen67(K.WAFFEN["knaller"]["flugzeit"] + 2.0)
+pruef("Der Knaller knallt eine Weile, und die Bots hoeren es",
+      _knal67.lebt and _knal67.knallt > 0.0 and len(_tm67._bot_geraeusche) > _vor67,
+      "%d" % (len(_tm67._bot_geraeusche) - _vor67))
+_laufen67(K.WAFFEN["knaller"]["knall_dauer"])
+pruef("... und ist danach weg", not _knal67.lebt)
+for _b67 in (_bot67 if isinstance(_bot67, list) else [_bot67]):
+    _b67.lebt = False
+# Gas: waechst, schadet Figuren, nicht Zombies.
+_g67 = EN.Gaswolke(_ich67.pos + pygame.Vector2(0, 120), 0)
+_tm67.welt.gas.append(_g67)
+_figur67 = _puppe67(0, 120)
+_zombie67 = _tm67.eintraege_art = None
+_zs67 = _TM59._gegner_setzer("laeufer")(_tm67, _ich67.pos + pygame.Vector2(10, 125), 0,
+                                          {"anzahl": 1, "streuung": 0, "ki": "aus"})
+_zs67 = _zs67[0] if isinstance(_zs67, list) else _zs67
+_tm67.welt.schritt(K.FIXED_DT)
+_zl67 = _zs67.leben
+_laufen67(1.0)
+pruef("Gas schadet Figuren, Zombies atmen nicht",
+      _figur67.leben < _figur67.max_leben and _zs67.leben == _zl67,
+      "%.1f / %.1f" % (_figur67.max_leben - _figur67.leben, _zl67 - _zs67.leben))
+pruef("... und die Wolke waechst", _g67.radius > K.GAS["anfang"] + 5)
+_tm67.welt.gas.clear()
+# Haftladung und EMP blinken (das Bild wechselt - so sieht es auch der Gast).
+_hl67 = EN.Granate(_ich67.pos, 0.0, K.WAFFEN["haftladung"], 0, None, 0.0)
+_hl67.welt = _tm67.welt
+_bilder67 = set()
+for _ in range(120):
+    _hl67.rest -= K.FIXED_DT
+    _hl67._alter += K.FIXED_DT
+    _hl67._blinken()
+    _bilder67.add(_hl67.bild)
+pruef("Die Haftladung blinkt", _bilder67 == {"haftladung_flug", "haftladung_flug_an"})
+# Im Netz: Gas beim Gast.
+w, ga = _paar59("team", karte="staubtal")
+_wg67 = EN.Gaswolke(pygame.Vector2(w.ich.pos), w.ich.ebene)
+w.welt.gas.append(_wg67)
+for _ in range(4):
+    w.schritt(K.NETZ["takt"])
+    ga.schritt(K.NETZ["takt"])
+pruef("Der Gast sieht die Gaswolke", any(g.kennung == _wg67.kennung for g in ga.welt.gas))
+w.verlassen(); ga.verlassen()
+EN.RND.setstate(_rnd67)
+random.setstate(_zufall67)
 
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)

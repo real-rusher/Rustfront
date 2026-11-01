@@ -560,8 +560,14 @@ BILD_MASS = {
     "minirakete_flug":  (18, 8),    # Raketenbuendel im Flug (seit 0.34.64)
     "nagel_flug":       (9, 3),     # ein Nagel des Naglers im Flug (seit 0.34.66)
     "nagel_steckt":     (7, 3),     # und wo er stecken bleibt
+    "wurfmesser_flug":  (13, 5),    # Wurfmesser im Flug und am Boden (seit 0.34.67)
+    "speer_flug":       (30, 5),    # Speer im Flug und am Boden
+    "schneeball_flug":  (7, 7),
+    "gas_flug":         (9, 9),     # Gasgranate
     "haftladung_flug":  (9, 9),     # Haftladung im Flug und klebend (seit 0.34.65)
     "emp_flug":         (9, 9),     # EMP-Granate im Flug (seit 0.34.65)
+    "emp_flug_an":      (9, 9),     # ... mit Licht (Blinken, seit 0.34.67)
+    "haftladung_flug_an": (9, 9),
     "nagel":            (5, 5),     # ein Kraehenfuss im Nagelfeld (seit 0.34.65)
     "rpg_kiste":        (18, 14),
     "huelse":           (4, 3),
@@ -1281,7 +1287,7 @@ PANZER_SEITEN = dict(vorn=0.75, seite=1.0, hinten=1.4,
 
 # EMP-Granate (seit 0.34.65): legt Motor, Lenkung und Waffen jedes
 # Fahrzeugs im Kreis still. Kein Schaden, an Figuren nichts.
-EMP = dict(radius=96.0, dauer=4.5, funken_takt=0.09)
+EMP = dict(radius=130.0, dauer=4.5, funken_takt=0.09)
 
 # Was ein Fahrzeug hinten heraus werfen kann (seit 0.34.65). Der Fahrer
 # loest es mit R (Hecknebel) bzw. F (Nagelstreuer) aus - die Tasten, die
@@ -3082,10 +3088,14 @@ WAFFEN = {
         takt=1.0,
         magazin=2,
         nachladen=3.8,
+        # Seit 0.34.67 nach dem Paket: "viel laengere Zeit zur Explosion,
+        # weiterer Flug ... primaer gegen Fahrzeuge". Sie blinkt immer
+        # schneller (render, `blinkt`).
         wurf_min=40.0,
-        wurf_max=170.0,       # schwer: kuerzer als eine Granate
+        wurf_max=240.0,
         reibung=2.2,          # und sie rollt kaum
-        flugzeit=2.2,         # Zeit genug, damit der Wagen sie mitnimmt
+        flugzeit=5.0,
+        blinkt=True,
         kamera=5.0,
         rueckstoss=0.0,
         huelsen=0,
@@ -3102,10 +3112,13 @@ WAFFEN = {
         takt=0.9,
         magazin=1,
         nachladen=4.5,
+        # Paket: "laengerer Wurf, laengere Zeit zur Explosion, groesserer
+        # Radius" (seit 0.34.67), mit schneller werdendem Blinken.
         wurf_min=60.0,
-        wurf_max=240.0,
+        wurf_max=300.0,
         reibung=1.3,
-        flugzeit=1.2,
+        flugzeit=2.0,
+        blinkt=True,
         kamera=1.5,
         rueckstoss=0.0,
         huelsen=0,
@@ -3204,6 +3217,56 @@ WAFFEN = {
         laerm=620.0,          # so weit hoeren Bots sie
         tempo_faktor=0.92,
     ),
+    "wurfmesser": dict(
+        art="nahkampf",
+        name="WURFMESSER",
+        # Lautlos. Links zustechen, rechts werfen - geworfen bleibt es
+        # liegen und muss wieder aufgehoben werden (`aufheben`).
+        schaden=46.0,
+        takt=0.42,
+        reichweite=28.0,
+        winkel=50.0,
+        schwung=0.14,
+        schub=80.0,
+        kamera=0.8,
+        rueckstoss=0.0,
+        magazin=3,            # so viele Messer zum Werfen
+        nachladen=0.0,
+        huelsen=0,
+        tempo_faktor=1.06,
+        zweit="werfen",
+        aufheben=True,
+        wurf_schaden=62.0,
+        wurf_tempo=520.0,
+        wurf_weite=300.0,
+        wurf_takt=0.5,
+        bild_flug="wurfmesser_flug",
+        lautlos=True,
+    ),
+    "speer": dict(
+        art="nahkampf",
+        name="SPEER",
+        # Grosse Reichweite, aber schmal. Geworfen liegt er am Boden, bis
+        # man ihn holt.
+        schaden=50.0,
+        takt=0.75,
+        reichweite=66.0,
+        winkel=22.0,
+        schwung=0.25,
+        schub=200.0,
+        kamera=1.6,
+        rueckstoss=0.0,
+        magazin=1,
+        nachladen=0.0,
+        huelsen=0,
+        zweit="werfen",
+        aufheben=True,
+        wurf_schaden=95.0,
+        wurf_tempo=470.0,
+        wurf_weite=420.0,
+        wurf_takt=0.8,
+        bild_flug="speer_flug",
+    ),
     "bolzer": dict(
         art="schuss",
         name="BOLZENSCHUSSGERÄT",
@@ -3249,6 +3312,52 @@ WAFFEN = {
         bild_flug="nagel_flug",
     ),
 }
+
+# Wurfwaffen aus dem Paket (seit 0.34.67). Sie stehen in WAFFEN wie die
+# Granate (art "wurf"); was sie besonders macht, steht hier.
+WUERFE_PAKET = {
+    "gas": dict(
+        art="wurf", name="GASGRANATE",
+        # Eine giftige Wolke, die langsam waechst und schadet, solange man
+        # drinsteht. Zombies atmen nicht (Fraktion "feind").
+        gas=True, schaden=0.0, radius=0.0, takt=0.9, magazin=1, nachladen=4.0,
+        wurf_min=60.0, wurf_max=230.0, reibung=1.4, flugzeit=1.3,
+        kamera=0.8, rueckstoss=0.0, huelsen=0, bild_flug="gas_flug"),
+    "kuller": dict(
+        art="wurf", name="KULLER",
+        # Klein und unscheinbar, gerade gerollt. Zuendet, sobald jemand
+        # nahe kommt, sonst nach einer Weile.
+        kuller=True, schaden=72.0, radius=70.0, takt=0.9, magazin=2, nachladen=3.6,
+        wurf_min=80.0, wurf_max=520.0, reibung=0.35, flugzeit=9.0,
+        kamera=6.0, rueckstoss=0.0, huelsen=0, bild_flug="teil_kuller_wurf",
+        scharf_nach=0.5, naehe=34.0),
+    "knaller": dict(
+        art="wurf", name="KNALLER",
+        # Macht eine Weile Laerm wie ein Gefecht. Bots hoeren das und sehen
+        # nach - so lockt oder taeuscht man sie.
+        knaller=True, schaden=0.0, radius=0.0, takt=0.9, magazin=2, nachladen=3.0,
+        wurf_min=60.0, wurf_max=260.0, reibung=1.4, flugzeit=1.2,
+        kamera=0.3, rueckstoss=0.0, huelsen=0, bild_flug="teil_knaller_wurf",
+        klang="schuss_sturm", muendung=0.5, knall_dauer=6.0,
+        knall_takt=(0.08, 0.35), laerm=900.0),
+    "schneeball": dict(
+        art="wurf", name="SCHNEEBALL",
+        # Harmlos, aber wer oft getroffen wird, friert kurz ein. Fliegt
+        # gerade wie ein Messer.
+        gerade=True, schaden=3.0, radius=0.0, takt=0.35, magazin=5, nachladen=1.6,
+        wurf_min=40.0, wurf_max=330.0, wurf_tempo=430.0, reibung=0.0, flugzeit=2.0,
+        kamera=0.2, rueckstoss=0.0, huelsen=0, bild_flug="schneeball_flug",
+        kaelte=1, kaelte_bis=3, kaelte_fenster=4.0, gefroren=1.4),
+}
+WAFFEN.update(WUERFE_PAKET)
+
+# Was gerade geworfen wird und liegen bleibt (seit 0.34.67): nach so
+# vielen Sekunden kommt es von selbst zum Werfer zurueck.
+WURFKOERPER = dict(zurueck=45.0)
+
+# Die Gaswolke der Gasgranate (seit 0.34.67).
+GAS = dict(radius=86.0, anfang=22.0, wachsen=3.0, dauer=13.0, schaden=9.0,
+           farbe=(196, 214, 92), dunkel=(150, 170, 60), verschont="feind")
 
 # Zustaende (seit 0.34.66, entities.zustand_setzen).
 ZUSTAENDE = dict(
@@ -3352,6 +3461,8 @@ PAKET_TEILE = {
     "minirakete": (9, 5),       # Raketenbuendel
     "granate40": (7, 7),        # Granatwerfer
     "rohr_leer": (30, 9),       # das weggelegte Rohr des Einweg-Raketenwerfers
+    "kuller_wurf": (8, 8),      # Kuller (seit 0.34.67)
+    "knaller_wurf": (12, 12),   # Knaller (seit 0.34.67)
 }
 for _w in PAKET_HAND:
     WAFFEN_HAND[_w] = dict(aufbau="paket")
@@ -3451,10 +3562,14 @@ LOADOUT = dict(
                     "granatwerfer", "einwegwerfer", "raketenbuendel",
                     # Nahkampf und Werkzeug (seit 0.34.66)
                     "bolzer", "nagler", "hammer", "schockstab", "schlagring",
-                    "kettensaege"),
+                    "kettensaege",
+                    # Stechen und werfen (seit 0.34.67)
+                    "wurfmesser", "speer"),
     auswahl_wuerfe=("granate", "rauch", "molotov", "blend", "c4",
                     # Gegen Fahrzeuge (seit 0.34.65)
-                    "haftladung", "emp"),
+                    "haftladung", "emp",
+                    # Aus dem Waffenpaket (seit 0.34.67)
+                    "gas", "kuller", "knaller", "schneeball"),
     # Womit ein neues Loadout vorbelegt wird. Drei Stueck, damit man nach
     # dem ersten Anmelden gleich drei brauchbare Saetze hat und nicht vor
     # drei leeren Plaetzen sitzt.
