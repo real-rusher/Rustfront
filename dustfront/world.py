@@ -584,12 +584,13 @@ class Welt:
                 self.entladung([pos, ende], ebene, "blitz")
             self.aufschlagring(pos, ebene, 1.2)
             self.ruckeln(4.0, "explosion", pos, ebene)
-            self.klang("blend", 0.6, pos, ebene)
+            self.klang("plasma", 0.8, pos, ebene)
             return
         if art == "nagel":
             # Ein Nagel des Naglers bleibt in der Wand stecken (seit
             # 0.34.66). Hier ist `radius` die Richtung, in der er flog.
             self.bild_dekal("nagel_steckt", pos, ebene, radius)
+            self.klang("nagel_wand", 0.35, pos, ebene)
             return
         if art == "boden":
             # Der Bodenschlag des Hammers (seit 0.34.66): Staub, ein Ring,
@@ -600,7 +601,7 @@ class Welt:
             self.aufschlagring(pos, ebene, 1.4)
             self.krater(pos, ebene, radius * 0.25, int(abs(pos.x) * 7 + abs(pos.y) * 13))
             self.ruckeln(5.0, "explosion", pos, ebene)
-            self.klang("sturz", 1.0, pos, ebene)
+            self.klang("hammer_boden", 1.0, pos, ebene)
             return
         if art == "emp":
             # Die EMP-Granate (seit 0.34.65): kein Feuer, kein Krater - ein
@@ -612,7 +613,7 @@ class Welt:
             wolke(self, pos, 20, 260, 0.45, (200, 240, 255), ebene, 2, "funke")
             wolke(self, pos, 10, 120, 0.8, (90, 170, 230), ebene, 1, "funke")
             self.aufschlagring(pos, ebene, 1.2)
-            self.klang("blend", 0.35, pos, ebene)
+            self.klang("emp", 0.8, pos, ebene)
             return
         if art in ("panzer", "c4", "spreng", "klein", "feuer"):
             self.lichtblitz(pos, ebene, max(radius, 40.0 if art != "klein" else 20.0)
@@ -688,7 +689,7 @@ class Welt:
                 wolke(self, pos, anz, daten["reichweite"] * 3.8, 0.26, farbe, ebene, gr,
                       "funke", daten["winkel"], winkel, 0.8)
             if RND.random() < 0.12:
-                self.klang("molotov_whoosh", 0.35, pos, ebene)
+                self.klang("flammenwerfer", 0.5, pos, ebene)
             return
         gross = daten.get("muendung", 1.0)
         self.muendung(pos, winkel, ebene, gross)

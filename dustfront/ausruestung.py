@@ -198,7 +198,7 @@ class Sprengfalle(Ausruestung):
                 continue
             if self._beruehrt(a):
                 self.zuendet = s["verzoegerung"]
-                self.welt.klang("erfasst", 0.8, self.pos, self.ebene)
+                self.welt.klang("falle_klick", 0.9, self.pos, self.ebene)
                 return
 
     def _knall(self) -> None:
@@ -340,6 +340,8 @@ class Drohne(Ausruestung):
         self.pos.update(neu)
         self._takt += dt
         self.bild = "teil_drohne_a" if int(self._takt * 20) % 2 else "teil_drohne_b"
+        if int((self._takt - dt) / 0.5) != int(self._takt / 0.5):
+            self.welt.klang("drohne", 0.25, self.pos, self.ebene)
         for a in self.welt.nahe(self.pos, d["sicht"], self.ebene):
             if (a is not self and ist_gegner(a, self.fraktion)
                     and a.pos.distance_to(self.pos) <= d["sicht"]):
@@ -374,6 +376,7 @@ class Horchposten(Ausruestung):
             return
         self._takt = h["takt"]
         self.welle = 0.6
+        self.welt.klang("horchposten", 0.3, self.pos, self.ebene)
         for a in self.welt.nahe(self.pos, h["weite"], self.ebene):
             if (a is not self and ist_gegner(a, self.fraktion)
                     and a.pos.distance_to(self.pos) <= h["weite"]

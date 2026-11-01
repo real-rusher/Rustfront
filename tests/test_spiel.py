@@ -6497,6 +6497,31 @@ _tm71.verlassen()
 EN.RND.setstate(_rnd71)
 random.setstate(_zufall71)
 
+# 0.34.72: Klaenge fuer alles Neue.
+print("\n-- Klaenge fuer Waffenpaket, Fahrzeuge und Ausruestung (0.34.72)")
+from dustfront import audio as _AU72
+_neu72 = ("schuss_revolver", "schuss_mp", "schuss_minigun", "schuss_panzerbuechse",
+          "schuss_doppelflinte", "schuss_granatwerfer", "schuss_bolzer", "schuss_nagler",
+          "schuss_spule", "spule_laden", "schuss_kettenblitz", "schuss_spiegellaser",
+          "schuss_kugelblitz", "plasma", "flammenwerfer", "kettensaege", "hammer_boden",
+          "schock", "schlag_faust", "knaller", "emp", "piepen", "klebt", "gas", "schneeball",
+          "wurf_leise", "nagel_wand", "falle_klick", "drohne", "horchposten", "emp_aus",
+          "reifen_platt", "schild")
+pruef("Jeder neue Klang steht in KLANG_NAMEN und hat einen eigenen Platzhalter",
+      all(n in K.KLANG_NAMEN and n in _AU72._PLATZHALTER for n in _neu72))
+_eigen72 = {"revolver", "mp", "minigun", "panzerbuechse", "doppelflinte", "granatwerfer",
+            "bolzer", "nagler", "knaller", "spule", "kettenblitz", "spiegellaser", "kugelblitz"}
+pruef("Die Waffen aus dem Paket klingen nach sich selbst, nicht nach einer alten Waffe",
+      all(K.WAFFEN[w].get("klang") in _neu72 for w in _eigen72),
+      str([w for w in _eigen72 if K.WAFFEN[w].get("klang") not in _neu72]))
+from dustfront.mehrspieler import Gefecht as _GF72
+pruef("Was nur der Gastgeber ausloest, geht als Klang an die Gaeste",
+      all(n in _GF72.NETZKLAENGE for n in ("kettensaege", "piepen", "klebt", "schock",
+                                           "emp_aus", "reifen_platt", "schild", "spule_laden")))
+_kl72 = app.klaenge
+pruef("... und jeder klingt", all(len(_kl72.klang(n)) > 0 for n in _neu72),
+      str([n for n in _neu72 if not _kl72.klang(n)]))
+
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
 pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)

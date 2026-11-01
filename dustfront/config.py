@@ -677,6 +677,17 @@ KLANG_NAMEN = (
     "panzerwagen_motor",
     "rammen",               # ein Fahrzeug rammt jemanden
 
+    # Seit 0.34.72 (gemeldet: "Klaenge kannst du mal alle erzeugen"): die
+    # Waffen aus dem Paket, Fahrzeuge und Ausruestung. Jeder hat einen
+    # eigenen Platzhalter in audio.py, bis es Aufnahmen gibt.
+    "schuss_revolver", "schuss_mp", "schuss_minigun", "schuss_panzerbuechse",
+    "schuss_doppelflinte", "schuss_granatwerfer", "schuss_bolzer", "schuss_nagler",
+    "schuss_spule", "spule_laden", "schuss_kettenblitz", "schuss_spiegellaser",
+    "schuss_kugelblitz", "plasma", "flammenwerfer", "kettensaege", "hammer_boden",
+    "schock", "schlag_faust", "knaller", "emp", "piepen", "klebt", "gas",
+    "schneeball", "wurf_leise", "nagel_wand", "falle_klick", "drohne", "horchposten",
+    "emp_aus", "reifen_platt", "schild",
+
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
     "herzschlag",
@@ -2851,7 +2862,7 @@ WAFFEN = {
         rueckstoss=55.0,
         kamera=2.6,
         huelsen=0,            # die Huelsen bleiben in der Trommel
-        klang="schuss_repetierer",
+        klang="schuss_revolver",
         modi=("gezielt", "faechern"),
         modus_daten={
             "gezielt": dict(kurz="GEZIELT"),
@@ -2899,7 +2910,7 @@ WAFFEN = {
         rueckstoss=10.0,
         kamera=0.7,
         huelsen=1,
-        klang="schuss_sturm",
+        klang="schuss_mp",
         tempo_faktor=1.08,
     ),
     "praezision": dict(
@@ -2965,7 +2976,7 @@ WAFFEN = {
         kamera=6.0,
         huelsen=1,
         muendung=1.6,
-        klang="schuss_scharf",
+        klang="schuss_panzerbuechse",
         durchschlag=3,
         durch_deckung=True,
         gegen_fahrzeug=True,
@@ -2988,7 +2999,7 @@ WAFFEN = {
         kamera=4.2,
         huelsen=0,
         muendung=1.3,
-        klang="schuss_schrot",
+        klang="schuss_doppelflinte",
         beide_laeufe=True,
     ),
     "autoschrot": dict(
@@ -3034,7 +3045,7 @@ WAFFEN = {
         streuung_lauf=4.0,
         gewicht_tempo=0.2,
         gewicht_drehen=42.0,
-        klang="lmg_dauer",
+        klang="schuss_minigun",
     ),
     "granatwerfer": dict(
         art="werfer",
@@ -3062,7 +3073,7 @@ WAFFEN = {
         rueckstoss=70.0,
         huelsen=0,
         muendung=1.4,
-        klang="schuss_schrot",
+        klang="schuss_granatwerfer",
     ),
     "einwegwerfer": dict(
         art="rakete",
@@ -3330,7 +3341,7 @@ WAFFEN = {
         kamera=2.2,
         huelsen=0,
         stoss=2.0,
-        klang="schuss_repetierer",
+        klang="schuss_bolzer",
         muendung=0.4,
     ),
     "nagler": dict(
@@ -3351,7 +3362,7 @@ WAFFEN = {
         rueckstoss=8.0,
         kamera=0.6,
         huelsen=0,
-        klang="schuss",
+        klang="schuss_nagler",
         muendung=0.3,
         bild_flug="nagel_flug",
     ),
@@ -3432,7 +3443,7 @@ WUERFE_PAKET = {
         knaller=True, schaden=0.0, radius=0.0, takt=0.9, magazin=2, nachladen=3.0,
         wurf_min=60.0, wurf_max=260.0, reibung=1.4, flugzeit=1.2,
         kamera=0.3, rueckstoss=0.0, huelsen=0, bild_flug="teil_knaller_wurf",
-        klang="schuss_sturm", muendung=0.5, knall_dauer=6.0,
+        klang="knaller", muendung=0.5, knall_dauer=6.0,
         knall_takt=(0.08, 0.35), laerm=900.0),
     "schneeball": dict(
         art="wurf", name="SCHNEEBALL",
@@ -3459,7 +3470,7 @@ ENERGIE_PAKET = {
         takt=0.6, magazin=4, nachladen=5.0, kuehlt=True, abkuehlen=2.4,
         tempo_beim_laden=0.55, kamera=5.0, rueckstoss=60.0, huelsen=0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
-        klang="schuss_scharf", muendung=1.2, schadensart="panzerbrechend"),
+        klang="schuss_spule", muendung=1.2, schadensart="panzerbrechend"),
     "kettenblitz": dict(
         art="kette", name="KETTENBLITZ",
         # Kurz aufladen, dann springt ein Blitz vom Getroffenen zum
@@ -3469,14 +3480,14 @@ ENERGIE_PAKET = {
         takt=0.25, magazin=8, nachladen=4.0, kuehlt=True, abkuehlen=1.2,
         tempo_beim_laden=0.8, kamera=2.0, rueckstoss=0.0, huelsen=0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
-        klang="blend", muendung=0.8, schadensart="kugel", tempo_faktor=0.92),
+        klang="schuss_kettenblitz", muendung=0.8, schadensart="kugel", tempo_faktor=0.92),
     "spiegellaser": dict(
         art="schuss", name="SPIEGELLASER",
         # Prallt an Waenden ab und wird mit jedem Abprall staerker - die
         # Waffe fuer Schuesse um die Ecke.
         schaden=24.0, takt=0.3, magazin=10, nachladen=3.5, kuehlt=True, abkuehlen=0.7,
         streuung=0.6, streuung_lauf=2.0, geschosse=1, tempo=900.0, reichweite=1300.0,
-        rueckstoss=0.0, kamera=0.8, huelsen=0, klang="schuss_scharf", muendung=0.6,
+        rueckstoss=0.0, kamera=0.8, huelsen=0, klang="schuss_spiegellaser", muendung=0.6,
         abprall=3, abprall_faktor=1.4, bild_flug="laser_flug"),
     "kugelblitz": dict(
         art="kugel", name="KUGELBLITZ",
@@ -3487,7 +3498,7 @@ ENERGIE_PAKET = {
         platzen_schaden=70.0, platzen_radius=96.0,
         takt=1.6, magazin=2, nachladen=5.0, kuehlt=True, abkuehlen=4.0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=120.0, reichweite=760.0,
-        rueckstoss=20.0, kamera=2.5, huelsen=0, klang="blend", muendung=1.0,
+        rueckstoss=20.0, kamera=2.5, huelsen=0, klang="schuss_kugelblitz", muendung=1.0,
         bild_flug="kugelblitz_flug"),
     "flammenwerfer": dict(
         art="flamme", name="FLAMMENWERFER",

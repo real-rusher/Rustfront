@@ -51,6 +51,11 @@ Aufnahmen ersetzt werden.
 | `dash` | kurzer Stoss beim Dash |
 | `ruf` | Spieler am Boden ruft nach Hilfe |
 | `herzschlag` | eigener Herzschlag bei wenig Leben |
+| `schuss_revolver`, `schuss_mp`, `schuss_minigun`, `schuss_panzerbuechse`, `schuss_doppelflinte`, `schuss_granatwerfer`, `schuss_bolzer`, `schuss_nagler` | die Schusswaffen aus dem Waffenpaket (seit 0.34.72) |
+| `schuss_spule`, `spule_laden`, `schuss_kettenblitz`, `schuss_spiegellaser`, `schuss_kugelblitz`, `plasma` | Chor-Waffen: Schuss, Aufladen, Platzen des Kugelblitzes |
+| `flammenwerfer`, `kettensaege`, `hammer_boden`, `schock`, `schlag_faust` | Flammenwerfer, Kettensaege, Bodenschlag, Schockstab, Schlagring |
+| `knaller`, `emp`, `piepen`, `klebt`, `gas`, `schneeball`, `wurf_leise`, `nagel_wand` | Wuerfe: Boeller, EMP-Entladung, Piepen der Haftladung, Ankleben, Gas, Schneeball, Wurfmesser, Nagel in der Wand |
+| `falle_klick`, `drohne`, `horchposten`, `emp_aus`, `reifen_platt`, `schild` | Sprengfalle, Spaehdrohne, Horchposten, Fahrzeug faellt aus, Reifen platzt, Kugel am Schild |
 
 Die vollstaendige Liste steht als `KLANG_NAMEN` in `dustfront/config.py`.
 Einige Namen zeigen absichtlich auf Unterordner: Nahkampf und Molotow sind

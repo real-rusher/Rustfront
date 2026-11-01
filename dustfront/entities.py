@@ -660,7 +660,12 @@ class Granate(Wesen):
         rest = max(0.0, self.rest) / gesamt
         takt = 0.12 + 0.6 * rest            # Sekunden je Blinken
         an = (self._alter % takt) < takt * 0.4
-        self.bild = self._bild_aus + "_an" if an else self._bild_aus
+        neu = self._bild_aus + "_an" if an else self._bild_aus
+        if an and neu != self.bild and self.welt is not None:
+            # Bei jedem Aufleuchten ein Piepen (Waffenpaket: "wer beklebt
+            # wird, hoert ein Piepen"), seit 0.34.72.
+            self.welt.klang("piepen", 0.3, self.pos, self.ebene)
+        self.bild = neu
 
     def _jemand_nah(self) -> bool:
         """Der Kuller: ist jemand ausser dem Werfer und seinen Leuten nahe?"""
@@ -722,7 +727,7 @@ class Granate(Wesen):
                 rel = (self.pos - a.pos) * 0.75
                 self._versatz = rel.rotate(-getattr(a, "winkel", 0.0))
                 self.tempo.update(0, 0)
-                w.klang("aufheben", 0.5, self.pos, self.ebene)
+                w.klang("klebt", 0.7, self.pos, self.ebene)
                 break
             if t is None:
                 return False
@@ -811,7 +816,7 @@ class Granate(Wesen):
         if d.get("gas"):
             # Seit 0.34.67: eine Gaswolke, die langsam waechst.
             w.gas.append(Gaswolke(self.pos, self.ebene, von=self.von))
-            w.klang("smoke_grenade", 0.6, self.pos, self.ebene)
+            w.klang("gas", 0.7, self.pos, self.ebene)
             return
         if d.get("emp"):
             # Seit 0.34.65: jedes Fahrzeug im Kreis steht still. Kein
@@ -920,6 +925,7 @@ class Wurfkoerper(Granate):
         schaden_an(ziel, menge, schub, self.von, "nahkampf", self.pos - self.tempo * 0.05)
         abschuss_buchen(self.von, ziel, self.waffe, lebte)
         if d.get("kaelte"):
+            self.welt.klang("schneeball", 0.6, self.pos, self.ebene)
             # Der Schneeball: wer oft genug getroffen wird, friert ein.
             jetzt = self.welt.zeit
             if jetzt - getattr(ziel, "_kaelte_zeit", -1e9) > d["kaelte_fenster"]:
@@ -936,6 +942,7 @@ class Wurfkoerper(Granate):
     def _hinlegen(self) -> None:
         if not self.daten.get("aufheben"):
             # Der Schneeball zerfaellt.
+            self.welt.klang("schneeball", 0.4, self.pos, self.ebene)
             wolke(self.welt, self.pos, 8, 80, 0.4, (236, 240, 248), self.ebene, 1, "staub")
             self.lebt = False
             return
@@ -3153,6 +3160,9 @@ class Spieler(Wesen):
             abschuss_buchen(self, ziel, name, lebte)
             if d.get("betaeubt"):
                 zustand_setzen(ziel, "betaeubt", d["betaeubt"])
+                w.klang("schock", 0.8, ziel.pos, self.ebene)
+            elif d.get("dash_faktor"):
+                w.klang("schlag_faust", 0.7, ziel.pos, self.ebene)
             if getattr(ziel, "ist_boss", False) or getattr(ziel, "treffer_art", "") == "metall":
                 treffer_art = "metall"
             if getattr(ziel, "zaehlt_treffer", True):
@@ -3211,6 +3221,7 @@ class Spieler(Wesen):
             self._saege_rest = 0.33
             self.zaehlen("schuesse", 1.0, name)
             w.schlagknall(spitze, self.winkel, self.ebene, getroffen, self)
+            w.klang("kettensaege", 0.8, self.pos, self.ebene)
             w.laerm(self.pos, self.ebene, self, d.get("laerm", 600.0))
 
     def _abkuehlen(self, dt: float, d: dict) -> None:
@@ -3235,6 +3246,8 @@ class Spieler(Wesen):
         bereit = (self.takt <= 0 and self.heilt_rest <= 0
                   and self.magazin.get(name, 0) > 0)
         if self.feuert and bereit:
+            if self.ladung <= 0.0 and d["art"] == "strahl":
+                self.welt.klang("spule_laden", 0.6, self.pos, self.ebene)
             self.ladung = min(1.0, self.ladung + dt / d["ladezeit"])
             if d["art"] == "kette" and self.ladung >= 1.0:
                 self._entladen(d, 1.0)
@@ -3394,8 +3407,7 @@ class Spieler(Wesen):
         weite = min(d["wurf_weite"], max(30.0, self.pos.distance_to(self.ziel)))
         self.welt.dazu(Wurfkoerper(muendung, self.winkel, d, self.ebene, self, weite, name))
         self.zaehlen("schuesse", 1.0, name)
-        if not d.get("lautlos"):
-            self.welt.klang("wurf", 0.5, self.pos, self.ebene)
+        self.welt.klang("wurf_leise" if d.get("lautlos") else "wurf", 0.5, self.pos, self.ebene)
 
     def _bodenschlag(self, d: dict) -> None:
         """Der Hammer auf den Boden (seit 0.34.66): alles ringsum fliegt

@@ -277,6 +277,8 @@ class Buggy(Wesen):
         """Ein EMP: Motor, Lenkung und Waffen fallen fuer `dauer` aus."""
         if self.kaputt or self.nur_bild:
             return
+        if self.emp_rest <= 0.0 and self.welt is not None:
+            self.welt.klang("emp_aus", 0.8, self.pos, self.ebene)
         self.emp_rest = max(self.emp_rest, float(dauer))
 
     def platt_treffen(self, dauer: float) -> None:
@@ -284,7 +286,7 @@ class Buggy(Wesen):
             return
         self.platt_rest = max(self.platt_rest, float(dauer))
         if self.welt is not None:
-            self.welt.klang("buggy_aufprall", 0.5, self.pos, self.ebene)
+            self.welt.klang("reifen_platt", 0.8, self.pos, self.ebene)
 
     def hilfe_auffuellen(self) -> None:
         """Volle Ladungen fuer das, was diese Art hinten heraus werfen kann."""

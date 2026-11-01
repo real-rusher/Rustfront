@@ -723,6 +723,280 @@ def _sieg(seed=0):
                     + _schlag(784, 784, 0.20, 0.34, 2.0))
 
 
+# ══════════════════════════════════════════════════════════════════
+# Klaenge fuer das Waffenpaket, die Fahrzeuge und die Ausruestung
+# (seit 0.34.72). Gemeldet: "Klaenge kannst du mal alle erzeugen." Jeder
+# ist eigens gebaut, damit man im Gefecht hoert, was da kommt - bis es
+# Aufnahmen gibt (assets/sfx/<name>/ hat Vorrang).
+# ══════════════════════════════════════════════════════════════════
+
+def _still(dur):
+    return [0.0] * max(0, int(RATE * dur))
+
+
+def _summen(f0, f1, dur, vol, decay=1.0, rau=0.35, seed=0):
+    """Ein schnarrender Ton (fast ein Rechteck): Motoren, Strom, Saegen."""
+    n = max(1, int(RATE * dur))
+    zufall = random.Random(seed).random
+    out = [0.0] * n
+    ph = 0.0
+    tp = 2 * math.pi
+    for i in range(n):
+        p = i / n
+        ph += tp * (f0 * (1 - p) + f1 * p) / RATE
+        roh = math.sin(ph)
+        eckig = 1.0 if roh > 0 else -1.0
+        out[i] = ((roh * (1 - rau) + eckig * rau) + (zufall() - 0.5) * 0.2) \
+            * (1 - p) ** decay * vol
+    return out
+
+
+def _knistern(dur, vol, dichte=0.02, seed=0):
+    """Viele kurze Knackser hintereinander: Strom, Feuer, Funken."""
+    n = max(1, int(RATE * dur))
+    zufall = random.Random(seed)
+    out = [0.0] * n
+    i = 0
+    while i < n:
+        laenge = int(RATE * zufall.uniform(0.002, 0.008))
+        staerke = zufall.uniform(0.3, 1.0) * vol * (1 - i / n)
+        for j in range(min(laenge, n - i)):
+            out[i + j] += (zufall.random() * 2 - 1) * staerke * (1 - j / max(1, laenge))
+        i += int(RATE * zufall.uniform(dichte * 0.3, dichte * 1.7))
+    return out
+
+
+@platzhalter_klang("schuss_revolver")
+def _schuss_revolver(seed=0):
+    """Schwerer als der Repetierer, mit langem Nachhall der Trommel."""
+    return _mischen(
+        _rauschen(0.30, 1.0, 6000, 400, 2.2, seed + 1),
+        _schlag(140, 50, 0.24, 0.85, 2.4),
+        _still(0.02) + _rauschen(0.35, 0.22, 2000, 400, 2.0, seed + 2))
+
+
+@platzhalter_klang("schuss_mp")
+def _schuss_mp(seed=0):
+    """Kurz, hell, leicht - fuer sehr schnelles Feuer."""
+    return _mischen(_rauschen(0.07, 0.75, 9000, 2200, 3.8, seed + 3),
+                    _schlag(260, 120, 0.06, 0.4, 4.0))
+
+
+@platzhalter_klang("schuss_minigun")
+def _schuss_minigun(seed=0):
+    """Ein Ratschen, dicht genug fuer 16 Schuss in der Sekunde."""
+    return _mischen(_rauschen(0.05, 0.7, 7000, 1500, 3.0, seed + 4),
+                    _summen(380, 300, 0.05, 0.18, 1.0, 0.5, seed + 5))
+
+
+@platzhalter_klang("schuss_panzerbuechse")
+def _schuss_panzerbuechse(seed=0):
+    """Ein schwerer, peitschender Knall mit Muendungsbremse."""
+    return _mischen(
+        _rauschen(0.7, 1.0, 5000, 160, 1.6, seed + 6),
+        _schlag(110, 34, 0.45, 1.0, 2.0),
+        _rauschen(0.08, 0.6, 13000, 6000, 1.6, seed + 7, hp=True),
+        _still(0.05) + _rauschen(0.9, 0.3, 1200, 160, 1.6, seed + 8))
+
+
+@platzhalter_klang("schuss_doppelflinte")
+def _schuss_doppelflinte(seed=0):
+    """Tiefer und breiter als das Schrot."""
+    return _mischen(_rauschen(0.42, 1.0, 3600, 260, 2.0, seed + 9),
+                    _schlag(100, 36, 0.36, 0.95, 2.4))
+
+
+@platzhalter_klang("schuss_granatwerfer")
+def _schuss_granatwerfer(seed=0):
+    """Das dumpfe "Blupp" eines 40-mm-Werfers."""
+    return _mischen(_schlag(170, 70, 0.18, 0.95, 2.0),
+                    _rauschen(0.12, 0.35, 1800, 300, 2.4, seed + 10))
+
+
+@platzhalter_klang("schuss_bolzer")
+def _schuss_bolzer(seed=0):
+    """Druckluft und ein Bolzen, der vorschnellt und zurueckfaehrt."""
+    return _mischen(_rauschen(0.08, 0.6, 5000, 2000, 2.0, seed + 11, hp=True),
+                    _schlag(320, 140, 0.07, 0.8, 3.0),
+                    _still(0.06) + _schlag(500, 300, 0.05, 0.4, 3.0))
+
+
+@platzhalter_klang("schuss_nagler")
+def _schuss_nagler(seed=0):
+    """Pneumatisches Klacken."""
+    return _mischen(_rauschen(0.04, 0.45, 6000, 2600, 3.0, seed + 12, hp=True),
+                    _schlag(900, 600, 0.03, 0.4, 4.0))
+
+
+@platzhalter_klang("schuss_spule")
+def _schuss_spule(seed=0):
+    """Ein Strahl ohne Flugzeit: ein Krachen und ein hohes Singen."""
+    return _mischen(_rauschen(0.18, 1.0, 12000, 3000, 2.4, seed + 13, hp=True),
+                    _schlag(1800, 400, 0.35, 0.6, 1.4),
+                    _summen(90, 60, 0.4, 0.4, 2.0, 0.3, seed + 14))
+
+
+@platzhalter_klang("spule_laden")
+def _spule_laden(seed=0):
+    """Das Summen beim Aufladen - das Ziel soll es hoeren."""
+    return _summen(180, 720, 0.6, 0.3, 0.2, 0.25, seed + 15)
+
+
+@platzhalter_klang("schuss_kettenblitz")
+def _schuss_kettenblitz(seed=0):
+    """Elektrisches Knistern, das springt."""
+    return _mischen(_knistern(0.35, 0.9, 0.012, seed + 16),
+                    _summen(120, 80, 0.3, 0.3, 1.6, 0.6, seed + 17))
+
+
+@platzhalter_klang("schuss_spiegellaser")
+def _schuss_spiegellaser(seed=0):
+    """Ein kurzes, fallendes Zischen."""
+    return _mischen(_schlag(2600, 700, 0.14, 0.6, 1.6),
+                    _rauschen(0.06, 0.3, 12000, 8000, 2.0, seed + 18, hp=True))
+
+
+@platzhalter_klang("schuss_kugelblitz")
+def _schuss_kugelblitz(seed=0):
+    """Ein tiefes Wummern, als loese sich etwas Schweres."""
+    return _mischen(_summen(70, 110, 0.5, 0.6, 1.2, 0.3, seed + 19),
+                    _knistern(0.4, 0.4, 0.03, seed + 20))
+
+
+@platzhalter_klang("plasma")
+def _plasma(seed=0):
+    """Der Kugelblitz platzt: Knall, Knistern, ein Nachsingen."""
+    return _mischen(_rauschen(0.5, 0.9, 7000, 600, 1.8, seed + 21),
+                    _knistern(0.8, 0.8, 0.015, seed + 22),
+                    _schlag(600, 120, 0.6, 0.5, 1.4))
+
+
+@platzhalter_klang("flammenwerfer")
+def _flammenwerfer(seed=0):
+    """Ein Fauchen: tiefes Rauschen mit Knistern darin."""
+    return _mischen(_rauschen(0.45, 0.7, 900, 1600, 0.6, seed + 23),
+                    _knistern(0.45, 0.35, 0.03, seed + 24))
+
+
+@platzhalter_klang("kettensaege")
+def _kettensaege(seed=0):
+    """Ein Zweitakter unter Last."""
+    return _mischen(_summen(110, 130, 0.35, 0.6, 0.2, 0.7, seed + 25),
+                    _rauschen(0.35, 0.25, 4000, 3000, 0.4, seed + 26, hp=True))
+
+
+@platzhalter_klang("hammer_boden")
+def _hammer_boden(seed=0):
+    """Der Bodenschlag: sehr tief, mit Steinknirschen."""
+    return _mischen(_schlag(80, 30, 0.5, 1.0, 1.8),
+                    _rauschen(0.5, 0.6, 2400, 200, 1.6, seed + 27),
+                    _knistern(0.3, 0.3, 0.02, seed + 28))
+
+
+@platzhalter_klang("schock")
+def _schock(seed=0):
+    """Der Schockstab: ein harter Funke."""
+    return _mischen(_knistern(0.16, 1.0, 0.006, seed + 29),
+                    _summen(300, 260, 0.16, 0.4, 1.0, 0.8, seed + 30))
+
+
+@platzhalter_klang("schlag_faust")
+def _schlag_faust(seed=0):
+    """Schlagring: ein kurzer, dumpfer Treffer."""
+    return _mischen(_schlag(220, 90, 0.07, 0.8, 3.0),
+                    _rauschen(0.05, 0.4, 2400, 900, 3.0, seed + 31))
+
+
+@platzhalter_klang("knaller")
+def _knaller(seed=0):
+    """Der Knaller (Waffenpaket: "komplett neue Sounds"): ein Boeller -
+    heller und duenner als jeder Schuss, mit Papierrascheln."""
+    return _mischen(_rauschen(0.09, 1.0, 11000, 3000, 3.0, seed + 32, hp=True),
+                    _schlag(700, 300, 0.05, 0.5, 4.0),
+                    _still(0.02) + _knistern(0.12, 0.25, 0.01, seed + 33))
+
+
+@platzhalter_klang("emp")
+def _emp(seed=0):
+    """Die EMP-Entladung: ein Absacken mit Knistern."""
+    return _mischen(_summen(900, 40, 0.7, 0.6, 1.2, 0.5, seed + 34),
+                    _knistern(0.6, 0.6, 0.01, seed + 35))
+
+
+@platzhalter_klang("piepen")
+def _piepen(seed=0):
+    """Das Piepen der Haftladung und der EMP-Granate, kurz und hoch."""
+    return _schlag(2400, 2400, 0.06, 0.45, 0.6)
+
+
+@platzhalter_klang("klebt")
+def _klebt(seed=0):
+    """Die Haftladung klebt: ein satter Schmatz auf Blech."""
+    return _mischen(_schlag(260, 140, 0.08, 0.6, 3.0),
+                    _rauschen(0.06, 0.3, 1800, 600, 3.0, seed + 36))
+
+
+@platzhalter_klang("gas")
+def _gas(seed=0):
+    """Die Gasdose zischt."""
+    return _rauschen(1.2, 0.45, 6000, 4000, 0.8, seed + 37, hp=True)
+
+
+@platzhalter_klang("schneeball")
+def _schneeball(seed=0):
+    return _rauschen(0.12, 0.5, 2000, 600, 2.5, seed + 38)
+
+
+@platzhalter_klang("wurf_leise")
+def _wurf_leise(seed=0):
+    """Das Wurfmesser: ein leises Sirren, kaum zu hoeren."""
+    return _rauschen(0.18, 0.18, 3000, 7000, 1.8, seed + 39, hp=True)
+
+
+@platzhalter_klang("nagel_wand")
+def _nagel_wand(seed=0):
+    return _schlag(1600, 1100, 0.04, 0.3, 4.0)
+
+
+@platzhalter_klang("falle_klick")
+def _falle_klick(seed=0):
+    """Wer den Ausloeser spuert: ein Klicken - jetzt springen."""
+    return _mischen(_schlag(1800, 1500, 0.03, 0.6, 4.0),
+                    _still(0.05) + _schlag(1200, 1000, 0.03, 0.4, 4.0))
+
+
+@platzhalter_klang("drohne")
+def _drohne(seed=0):
+    """Rotoren: ein hohes, schwankendes Surren."""
+    return _summen(320, 340, 0.5, 0.25, 0.1, 0.5, seed + 40)
+
+
+@platzhalter_klang("horchposten")
+def _horchposten(seed=0):
+    """Ein Sonar-Ping."""
+    return _schlag(1300, 1250, 0.4, 0.35, 2.4)
+
+
+@platzhalter_klang("emp_aus")
+def _emp_aus(seed=0):
+    """Ein Fahrzeug faellt aus: der Motor stirbt ab."""
+    return _summen(110, 30, 0.6, 0.5, 1.4, 0.6, seed + 41)
+
+
+@platzhalter_klang("reifen_platt")
+def _reifen_platt(seed=0):
+    """Ein Reifen platzt auf den Kraehenfuessen."""
+    return _mischen(_rauschen(0.08, 0.8, 7000, 2000, 2.6, seed + 42),
+                    _still(0.03) + _rauschen(0.5, 0.3, 3000, 1200, 1.2, seed + 43, hp=True))
+
+
+@platzhalter_klang("schild")
+def _schild(seed=0):
+    """Eine Kugel prallt am Schild ab."""
+    return _mischen(_schlag(2000, 1300, 0.1, 0.4, 3.0),
+                    _rauschen(0.05, 0.3, 9000, 5000, 3.0, seed + 44, hp=True))
+
+
 @platzhalter_klang("lost_match")
 def _niederlage(seed=0):
     """Ein kurzer fallender Zweiklang fuer eine verlorene Runde."""

@@ -280,6 +280,7 @@ class Kaempfer(Spieler):
                 if ab <= K.SCHILD["winkel"]:
                     menge = float(menge) * K.SCHILD["anteil"]
                     schub = None
+                    self.welt.klang("schild", 0.5, self.pos, self.ebene)
                     wolke(self.welt, self.pos + pygame.Vector2(10, 0).rotate(self.winkel), 3, 120,
                           0.15, (255, 222, 150), self.ebene, 1, "funke")
         # Im Buggy kommt nur ein Teil an, und weggestossen wird man nicht:
@@ -1184,7 +1185,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                    "lmg_dauer", "lmg_salve", "schuss_schrot", "smoke_grenade",
                    "buggy_tuer", "buggy_aufprall", "buggy_rutschen",
                    # Panzer und Panzerwagen (seit 0.34.59)
-                   "panzer_motor", "panzerwagen_motor", "rammen")
+                   "panzer_motor", "panzerwagen_motor", "rammen",
+                   # Waffenpaket, Fahrzeuge, Ausruestung (seit 0.34.72): was
+                   # nur der Gastgeber ausloest, muss der Gast gemeldet bekommen.
+                   "spule_laden", "kettensaege", "schock", "schlag_faust", "piepen",
+                   "klebt", "gas", "schneeball", "wurf_leise", "emp_aus", "reifen_platt",
+                   "schild", "falle_klick", "drohne", "horchposten")
 
     def _klang(self, name: str, lautstaerke: float = 1.0, pos=None,
                ebene: int | None = None) -> None:
