@@ -503,8 +503,9 @@ an.ausloesen(ui.Knopf((0, 0, 1, 1), "", "ausruestung"))
 aus = app.oben
 pruef("AUSRUESTUNG oeffnet sich", isinstance(aus, M.Ausruestung))
 waehler = [el.name for el in aus.elemente]
-pruef("Ein Satz, zwei Waffen, eine Wurfwaffe",
-      waehler[:4] == ["satz", "waffe0", "waffe1", "wurf0"], str(waehler))
+# Seit 0.34.73 steht die Klasse zwischen Satz und Waffen.
+pruef("Ein Satz, eine Klasse, zwei Waffen, eine Wurfwaffe",
+      waehler[:5] == ["satz", "klasse", "waffe0", "waffe1", "wurf0"], str(waehler))
 
 w0 = next(el for el in aus.elemente if el.name == "waffe0")
 w0.index = list(K.LOADOUT["auswahl_waffen"]).index("scharf")

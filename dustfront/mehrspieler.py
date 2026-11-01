@@ -65,6 +65,7 @@ from . import ui
 from .bots import BotTeil
 from .lobby import LobbyTeil, lobby_regeln
 from .spielerkosmetik import KosmetikTeil
+from . import klassen as klassen_modul
 from . import world as welt_modul
 from . import art_figuren as figuren
 from .core import Bilder, Szene
@@ -110,6 +111,8 @@ class Kaempfer(Spieler):
                 self.waffe = 0
                 self.magazin = {w: K.WAFFEN[w]["magazin"] for w in self.waffen}
         self.loadout = dict(loadout) if loadout else None
+        # Die Klasse (seit 0.34.73): Vorteile aus dem Satz.
+        klassen_modul.anwenden(self)
         self.fraktion = fraktion
         self.nummer = nummer
         self.name = name
@@ -754,6 +757,10 @@ def _version_kleiner(a: str, b: str) -> bool:
 
 
 class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
+    # Die Faehigkeiten der Klassen (Taste C, seit 0.34.73) legen Dinge aus
+    # ausruestung.py hin, die noch nicht ueber das Netz gehen: erst der
+    # Testmodus schaltet sie ein.
+    faehigkeiten_an = False
     """Die Spielszene fuer den LAN-Test, beim Gastgeber wie beim Gast.
 
     Die Lobby und der Rundenplan stehen in lobby.py (LobbyTeil).
@@ -1767,6 +1774,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         k.waffe = 0
         k.magazin = {w: K.WAFFEN[w]["magazin"] for w in plaetze}
         k.vorrat = {w: K.MUNITION["vorrat"].get(w, 0) for w in plaetze}
+        klassen_modul.anwenden(k)
 
     def _regeln_anlegen(self, k: Kaempfer) -> None:
         """Was die Spielart am einzelnen Kaempfer aendert."""
@@ -1881,7 +1889,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     # und eine Taste, die in der einen Liste steht und in der anderen
     # fehlt, geht genau dann nicht, wenn es darauf ankommt.
     DRUECKE = ("nachladen", "heilen", "tracer", "tracer_weit",
-               "nahkampf", "feuermodus", "dash")
+               "nahkampf", "feuermodus", "dash", "faehigkeit")
 
     def _knopf_merken(self, taste) -> None:
         """Einen Tastendruck aufheben, bis das naechste Paket rausgeht."""
@@ -2035,6 +2043,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 # Gastgeber - sonst schoesse der Gast im Dauerfeuer,
                 # waehrend der Gastgeber eine Salve rechnet.
                 k.modus_wechseln()
+            if "faehigkeit" in knoepfe:
+                # Die Faehigkeit der Klasse (seit 0.34.73, Taste C).
+                was = klassen_modul.faehigkeit_nutzen(self, k)
+                if was and k is self.ich:
+                    self.hinweis = was
             if "nahkampf" in knoepfe:
                 # Das Brecheisen liegt auf einer eigenen Taste und braucht
                 # keinen Waffenwechsel. Es schlaegt mit seinen eigenen
@@ -3590,7 +3603,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                             helfer_k.winkel = math.degrees(math.atan2(hin.y, hin.x))
                 # Zwei Helfer sind doppelt so schnell. Das belohnt, wenn
                 # sich die Mannschaft sammelt.
-                k.revive_stand += dt * helfer / k.revive_dauer
+                # Der Sanitaeter hilft schneller auf (seit 0.34.73).
+                schnell = max((1.0 / getattr(h, "aufhelf_faktor", 1.0)
+                               for h in self.kaempfer.values()
+                               if h.hilft == k.nummer and h.lebt), default=1.0)
+                k.revive_stand += dt * helfer * schnell / k.revive_dauer
                 if k.revive_stand >= 1.0:
                     k.aufhelfen()
                     wolke(self.welt, k.pos, 10, 70, 0.5, K.C_TEAL, k.ebene, 1)
@@ -4006,6 +4023,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 "w": round(k.winkel, 1), "e": k.ebene,
                 "f": round(k.flug, 1),
                 "l": round(max(0.0, k.leben), 1),
+                # Wie viel er hoechstens hat - mit Klasse nicht mehr immer
+                # SPIELER["leben"] (seit 0.34.73).
+                "lm": round(k.max_leben, 1),
                 "b": k.waffe_name, "a": k.abschuesse, "d": k.tode,
                 "v": k.lebt,
                 "m": k.magazin.get(k.waffe_name, 0),
@@ -4475,6 +4495,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             k.ebene = int(eintrag.get("e", 0))
             k.flug = float(eintrag.get("f", 0.0))
             k.leben = float(eintrag.get("l", 0.0))
+            try:
+                k.max_leben = max(1.0, float(eintrag.get("lm", K.SPIELER["leben"])))
+            except (TypeError, ValueError):
+                pass
             k.abschuesse = int(eintrag.get("a", 0))
             k.tode = int(eintrag.get("d", 0))
             k.lebt = bool(eintrag.get("v", True))

@@ -161,6 +161,7 @@ TASTEN_VORGABE = [
     ("waffe10",     "PLATZ 0",          ["0"]),
     ("feuermodus",  "FEUERART",         ["v"]),
     ("nahkampf",    "BRECHEISEN",       ["f"]),
+    ("faehigkeit",  "FÄHIGKEIT (KLASSE)", ["c"]),
     ("tracer",      "ZIELLINIE",        ["t"]),
     ("tracer_weit", "LINIE VERLÄNGERN", ["z"]),
     ("pause",       "PAUSE",            ["escape"]),

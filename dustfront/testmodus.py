@@ -173,6 +173,9 @@ OPTIONEN = {
     # Seit 0.34.39: Trupps (trupp.py).
     "groesse": ("GRÖSSE", lambda: list(K.TRUPP["groessen"]), lambda v: "%d MANN" % v),
     "vorlage": ("VORLAGE", lambda: list(K.TRUPP_VORLAGEN), lambda v: v),
+    # Seit 0.34.73: die Klasse (K.KLASSEN) - Waffen, Vorteile, Faehigkeit (C).
+    "klasse": ("KLASSE", lambda: [""] + list(K.KLASSEN),
+               lambda v: K.KLASSEN[v]["name"] if v in K.KLASSEN else "KEINE"),
     "fahrzeug": ("FAHRZEUG", lambda: ["panzer", "panzerwagen", "buggy"],
                  lambda v: v.upper()),
     "fuehrer": ("ANFÜHRER", lambda: ["funk", "ohne", "keiner"],
@@ -229,7 +232,7 @@ def eintraege() -> list:
     Gegner, Bosse und Zielpuppen kommen von selbst aus der Tabelle."""
     raus = [
         Eintrag("BOT", "FIGUREN", ("anzahl", "streuung", "team", "waffe", "leben", "hirn",
-                                   "aussehen"),
+                                   "aussehen", "klasse"),
                 lambda t, p, e, w: t.bot_setzen(p, e, w)),
         # Seit 0.34.71: wer faehrt und wer das Schild traegt.
         Eintrag("FAHRER MIT FAHRZEUG", "FIGUREN", ("fahrzeug", "team", "hirn", "winkel"),
@@ -241,7 +244,8 @@ def eintraege() -> list:
         Eintrag("SPIELER, STEHT", "FIGUREN", ("anzahl", "streuung", "team", "leben",
                                               "waffe_figur", "aussehen"),
                 lambda t, p, e, w: t.puppe_setzen(p, e, w)),
-        Eintrag("SPIELER, ICH", "FIGUREN", ("team", "leben", "waffe_figur", "aussehen_ich"),
+        Eintrag("SPIELER, ICH", "FIGUREN", ("team", "leben", "waffe_figur", "aussehen_ich",
+                                            "klasse"),
                 lambda t, p, e, w: t.ich_setzen(p, e, w), mehrfach=False),
         # Seit 0.34.39: ein ganzer Trupp mit Anfuehrer (trupp.py), und was
         # der naechste Trupp einer Mannschaft tun soll.
@@ -509,6 +513,9 @@ class Testmodus(Gefecht):
         self._innen_nr = 0            # was INNENLEBEN im Testmenue ausloest
         self.flug_nr = int(z.get("flug_nr", 1))
         self.wiedereinstieg = bool(z.get("wiedereinstieg", True))
+        # Faehigkeiten der Klassen (Taste C, seit 0.34.73) - wie Bauen und
+        # Fallen erst im Testmodus.
+        self.faehigkeiten_an = True
         self.wellen_an = bool(z.get("wellen_an", False))
         self.beute_an = bool(z.get("beute_an", False))
         self.blend_beobachter = bool(z.get("blend_beobachter", False))
@@ -993,6 +1000,8 @@ class Testmodus(Gefecht):
             k.waffen = konto_modul.hotbar_aus_loadout(lo)
             k.waffe = k.waffen.index(w["waffe"])
             self._bot_munition(k)
+        if w.get("klasse"):
+            self.klasse_geben(k, w["klasse"])
         self._figur_platz(k, pos, ebene)
         self.welt.wesen.extend(self.welt.neue)
         self.welt.neue.clear()
@@ -1169,10 +1178,30 @@ class Testmodus(Gefecht):
     def ich_setzen(self, pos, ebene: int, w: dict):
         w = dict(w)
         ich = w.pop("aussehen_ich", "eigen")
+        klasse = w.pop("klasse", "")
         w["aussehen"] = self.mein_aussehen() if ich == "eigen" else ich
         k = self.puppe_setzen(pos, ebene, w, name="ICH")
+        if klasse:
+            self.klasse_geben(k, klasse)
         self.uebernehmen(k)
         return k
+
+    def klasse_geben(self, k, klasse: str) -> None:
+        """Eine Klasse (seit 0.34.73): ihr Satz - die erste Waffe aus WAFFE,
+        wenn sie zur Klasse gehoert, sonst die ersten beiden der Klasse -,
+        ihre Vorteile und die Faehigkeit auf C."""
+        vorher = [w for w in getattr(k, "waffen", ()) if K.WAFFEN.get(w, {}).get("art") != "wurf"]
+        lo = konto_modul.loadout_saeubern({"name": "TEST", "klasse": klasse,
+                                           "waffen": vorher[:1], "wuerfe": []})
+        k.loadout = lo
+        k.angemeldet = dict(lo)
+        k.waffen = konto_modul.hotbar_aus_loadout(lo)
+        k.waffe = 0
+        k.magazin = {n: K.WAFFEN[n]["magazin"] for n in k.waffen}
+        k.vorrat = {n: K.MUNITION["vorrat"].get(n, 0) for n in k.waffen}
+        from . import klassen as klassen_modul
+        klassen_modul.anwenden(k)
+        k.leben = k.max_leben
 
     def gegner_setzen(self, art: str, pos, ebene: int, w: dict):
         g = KampfGegner(pygame.Vector2(pos), art, ebene, self)

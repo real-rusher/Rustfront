@@ -90,21 +90,34 @@ def loadout_saeubern(roh) -> dict | None:
     lo = K.LOADOUT
     name = "".join(c for c in str(roh.get("name", "")).strip().upper()
                    if c.isalnum() or c in " -_")[:lo["namenslaenge"]]
+    # Die Klasse (seit 0.34.73): "" ist FREI wie bisher. Sie bestimmt,
+    # woraus gewaehlt werden darf - was nicht zu ihr passt, faellt heraus.
+    klasse = roh.get("klasse", "")
+    if not isinstance(klasse, str) or klasse not in K.KLASSEN:
+        klasse = ""
+    from . import klassen as klassen_modul
+    erlaubt_w = klassen_modul.waffen_von(klasse)
+    erlaubt_g = klassen_modul.wuerfe_von(klasse)
     waffen = [w for w in (roh.get("waffen") or [])
-              if isinstance(w, str) and w in lo["auswahl_waffen"]]
+              if isinstance(w, str) and w in erlaubt_w]
     wuerfe = [w for w in (roh.get("wuerfe") or [])
-              if isinstance(w, str) and w in lo["auswahl_wuerfe"]]
+              if isinstance(w, str) and w in erlaubt_g]
     # Doppeltes entfernen, Reihenfolge behalten.
     waffen = list(dict.fromkeys(waffen))[:lo["waffen"]]
     wuerfe = list(dict.fromkeys(wuerfe))[:lo["wuerfe"]]
-    for auswahl, liste, anzahl in ((lo["auswahl_waffen"], waffen, lo["waffen"]),
-                                   (lo["auswahl_wuerfe"], wuerfe, lo["wuerfe"])):
+    for auswahl, liste, anzahl in ((erlaubt_w, waffen, lo["waffen"]),
+                                   (erlaubt_g, wuerfe, lo["wuerfe"])):
         for wahl in auswahl:
             if len(liste) >= anzahl:
                 break
             if wahl not in liste:
                 liste.append(wahl)
-    return {"name": name or "SATZ", "waffen": waffen, "wuerfe": wuerfe}
+    raus = {"name": name or "SATZ", "waffen": waffen, "wuerfe": wuerfe}
+    if klasse:
+        # Nur mit Klasse ein eigener Eintrag: ein Satz ohne sieht aus wie
+        # vor 0.34.73, und aeltere Fassungen lesen ihn wie bisher.
+        raus["klasse"] = klasse
+    return raus
 
 
 def loadout_vorlagen() -> list[dict]:

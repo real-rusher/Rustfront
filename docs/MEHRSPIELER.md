@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.73 | Der Satz (`lo` bei der Anmeldung) traegt `klasse` (fehlt sie, ist es FREI wie bisher); der Gastgeber wendet die Vorteile der Klasse an. Je Spieler das Feld `lm` (Hoechstleben). Neuer Druck `faehigkeit` in den Knoepfen (Taste C), im Gefecht noch ohne Wirkung | Die Versionspruefung weist ab. Ein aelterer Gastgeber kennt keine Klassen und gaebe jedem den freien Satz |
 | 0.34.72 | `NETZKLAENGE` (Wirkung `k`) kennt 15 neue Namen: spule_laden, kettensaege, schock, schlag_faust, piepen, klebt, gas, schneeball, wurf_leise, emp_aus, reifen_platt, schild, falle_klick, drohne, horchposten | Die Versionspruefung weist ab. Ein aelterer Gast verwirft die neuen Namen und hoert sie nicht |
 | 0.34.71 | Nichts Neues im Netz. `mehrspieler.py` laesst Bots mit `darf_fahren` einsteigen und kennt das Schild (`schild`) im Schaden eines Kaempfers - beides setzt nur der Testmodus; im Gefecht fahren Bots weiter nicht | - |
 | 0.34.68 | Neue Wirkung `b` (Strahl der Spule bzw. Blitz: x, y, Ebene, Art `spule`/`blitz`, Punkte flach als Liste). Je Spieler das Feld `ld` (Ladung von Spule und Kettenblitz, fuer die Ladelinie). In der Wirkung `x` die Art `plasma`. Bilder im Flug `laser_flug`, `kugelblitz_flug`. Der Flammenwerfer geht als Schussknall `s` mit der Waffe `flammenwerfer` - der Gast macht daraus die Flammen | Die Versionspruefung weist ab. Ein aelterer Gast saehe keine Strahlen und Fehlbilder |

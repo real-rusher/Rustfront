@@ -340,9 +340,15 @@ def schaden_an(ziel, menge, schub=None, von=None, art=None, herkunft=None,
     Wesen selbst brauchen keine neue Unterschrift. `fahrzeug_menge`
     ersetzt `menge` am Blech (Haftladung)."""
     if getattr(ziel, "ist_fahrzeug", False):
-        ziel.schaden(menge if fahrzeug_menge is None else fahrzeug_menge,
-                     schub, von, art=art, herkunft=herkunft)
+        m = menge if fahrzeug_menge is None else fahrzeug_menge
+        # Die Klassen (seit 0.34.73): Pionier und Panzerjaeger treffen Blech
+        # haerter; wer als Fahrer drinsitzt, schuetzt sein Fahrzeug.
+        m *= getattr(von, "fahrzeug_bonus", 1.0)
+        m *= getattr(getattr(ziel, "fahrer", None), "fahrzeug_schutz", 1.0)
+        ziel.schaden(m, schub, von, art=art, herkunft=herkunft)
     else:
+        if art == "feuer":
+            menge *= getattr(ziel, "feuer_schutz", 1.0)   # Flammentrupp (0.34.73)
         ziel.schaden(menge, schub, von)
 
 
@@ -393,6 +399,8 @@ class Geschoss(Wesen):
         r = math.radians(richtung)
         self.tempo = pygame.Vector2(math.cos(r), math.sin(r)) * daten["tempo"]
         self.schaden_wert = daten["schaden"]
+        # Gegen Blech ein anderer Wert (seit 0.34.73, die Panzerbuechse).
+        self.fahrzeug_wert = daten.get("fahrzeug_schaden")
         self.rest = daten["reichweite"]
         self.von = von
         # Der Stoss auf das Ziel gilt je Schuss, nicht je Kugel: vorher
@@ -530,7 +538,7 @@ class Geschoss(Wesen):
         herkunft = None
         if self.tempo.length_squared() > 0.001:
             herkunft = self.pos - pygame.Vector2(self.tempo).normalize() * 40.0
-        schaden_an(ziel, menge, schub, self.von, art, herkunft)
+        schaden_an(ziel, menge, schub, self.von, art, herkunft, self.fahrzeug_wert)
         abschuss_buchen(self.von, ziel, self.waffe, lebte)
         if self.nagelt and ziel.lebt and self.tempo.length_squared() > 0.001:
             z = K.ZUSTAENDE
@@ -2578,6 +2586,10 @@ class Spieler(Wesen):
         self.unverwundbar = max(0.0, self.unverwundbar - dt)
         self.takt = max(0.0, self.takt - dt)
         self.takt2 = max(0.0, self.takt2 - dt)
+        rest = getattr(self, "faehigkeit_rest", None)
+        if rest:
+            for art in list(rest):              # Faehigkeit der Klasse (0.34.73)
+                rest[art] = max(0.0, rest[art] - dt)
         # Blickrichtung. Normalerweise sofort - die Figur schaut dorthin,
         # wo die Maus steht, und zwar ohne Verzoegerung. Eine schwere
         # Waffe begrenzt das: mit dem MG im Anschlag dreht man sich nicht
@@ -2654,6 +2666,7 @@ class Spieler(Wesen):
             luft *= wd.get("tempo_beim_laden", 1.0)    # Spule, Kettenblitz (0.34.68)
         if getattr(self, "schild", False):
             luft *= K.SCHILD["tempo"]           # Schildtraeger (seit 0.34.71)
+        luft *= getattr(self, "klassen_tempo", 1.0)   # die Klasse (seit 0.34.73)
         if getattr(self, "draht_rest", 0.0) > 0.0:
             # Im Stacheldraht (seit 0.34.69, ausruestung).
             self.draht_rest -= dt
@@ -2835,7 +2848,8 @@ class Spieler(Wesen):
         if not d.get("magazin") or d.get("art") in ("wurf", "c4") or d.get("aufheben"):
             return
         if self.nachlade_rest <= 0 and self.magazin[self.waffe_name] < d["magazin"]:
-            self.nachlade_rest = d["nachladen"]
+            # Der Schuetze laedt schneller (seit 0.34.73, Klasse).
+            self.nachlade_rest = d["nachladen"] * getattr(self, "nachlade_faktor", 1.0)
             if self.welt is not None:
                 self.welt.klang("reload", 0.55, self.pos, self.ebene)
 
@@ -3235,7 +3249,7 @@ class Spieler(Wesen):
             return
         self._kuehl_rest -= dt
         if self._kuehl_rest <= 0.0:
-            self._kuehl_rest = d["abkuehlen"]
+            self._kuehl_rest = d["abkuehlen"] * getattr(self, "kuehl_faktor", 1.0)
             self.magazin[name] = self.magazin.get(name, 0) + 1
 
     def _laden(self, dt: float, d: dict) -> None:

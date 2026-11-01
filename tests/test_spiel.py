@@ -5290,7 +5290,8 @@ for _wf62 in ("sturm", "panzerbuechse"):
 # panzerbrechend, und der Schuss kommt von hinten (er startet in der Mitte
 # und fliegt nach vorn, K.PANZER_SEITEN).
 pruef("... am Panzer geht sie durchs Blech (panzerbrechend), das Sturmgewehr kratzt nur",
-      abs(_pb62 - K.WAFFEN["panzerbuechse"]["schaden"] * K.PANZERUNG["panzer"]["panzerbrechend"]
+      abs(_pb62 - K.WAFFEN["panzerbuechse"].get("fahrzeug_schaden", K.WAFFEN["panzerbuechse"]["schaden"])
+          * K.PANZERUNG["panzer"]["panzerbrechend"]
           * K.PANZER_SEITEN["hinten"]) < 0.01
       and _sturm62 < K.WAFFEN["sturm"]["schaden"] * 0.5 and _pb62 > 10 * _sturm62,
       "%.1f / %.1f" % (_pb62, _sturm62))
@@ -6521,6 +6522,111 @@ pruef("Was nur der Gastgeber ausloest, geht als Klang an die Gaeste",
 _kl72 = app.klaenge
 pruef("... und jeder klingt", all(len(_kl72.klang(n)) > 0 for n in _neu72),
       str([n for n in _neu72 if not _kl72.klang(n)]))
+
+# 0.34.73: Balancing - keine Waffe ueber den anderen.
+print("\n-- Balancing (0.34.73)")
+def _kennzahlen73(name):
+    d = K.WAFFEN[name]
+    art = d.get("art", "schuss")
+    schaden = d.get("schaden", 0.0) * d.get("geschosse", 1)
+    takt = d.get("takt", 1.0)
+    if art in ("strahl", "kette"):
+        takt = d["ladezeit"] + d["takt"]
+    if name == "lmg":
+        takt = d["modus_daten"]["dauer"]["takt"]
+    je_s = schaden / max(0.01, takt)
+    mag = d.get("magazin", 0)
+    if mag and not d.get("kuehlt") and art != "nahkampf":
+        dauer = mag * schaden / (mag * takt + d.get("nachladen", 0.0))
+    else:
+        dauer = je_s
+    stueck = math.ceil(K.SPIELER["leben"] / max(0.1, schaden))
+    return je_s, dauer, stueck
+_kampf73 = [n for n, d in K.WAFFEN.items() if d.get("art", "schuss") in
+            ("schuss", "werfer", "strahl", "kette", "kugel", "flamme", "nahkampf")]
+_sturm73 = _kennzahlen73("sturm")
+_zu_viel73 = [n for n in _kampf73 if _kennzahlen73(n)[1] > 1.35 * _sturm73[1]]
+pruef("Keine Waffe macht im Dauerfeuer mehr als ein Drittel mehr Schaden als das Sturmgewehr",
+      not _zu_viel73, str(_zu_viel73))
+# Ein Treffer, der toetet, nur mit einem Preis: aus naechster Naehe, voll
+# geladen und sichtbar (Spule), oder als Rakete.
+_ein_schuss73 = [n for n in _kampf73 if _kennzahlen73(n)[2] <= 1
+                 and K.WAFFEN[n].get("reichweite", 0) > 60
+                 and K.WAFFEN[n].get("art") not in ("strahl",)]
+pruef("Was mit einem Treffer toetet, reicht nicht weit (oder muss sichtbar laden)",
+      not _ein_schuss73, str(_ein_schuss73))
+pruef("Die Pistole (Repetierer) macht nicht mehr Schaden als vorher",
+      K.WAFFEN["repetierer"]["schaden"] <= 26.0)
+pruef("Die Panzerbuechse ist gegen Fahrzeuge stark, gegen Figuren nicht mehr ein Treffer",
+      K.WAFFEN["panzerbuechse"]["fahrzeug_schaden"] >= 2 * K.WAFFEN["panzerbuechse"]["schaden"]
+      and K.WAFFEN["panzerbuechse"]["schaden"] < K.SPIELER["leben"])
+
+# 0.34.73: Klassen.
+print("\n-- Klassen (0.34.73)")
+from dustfront import konto as _KO73, klassen as _KL73, ausruestung as _AU73
+_rnd73 = EN.RND.getstate()
+_zufall73 = random.getstate()
+pruef("Viele Klassen, jede mit mehreren Waffen und Wurfwaffen zur Wahl",
+      len(K.KLASSEN) >= 10 and all(len(_KL73.waffen_von(k_)) >= 3 and len(_KL73.wuerfe_von(k_)) >= 2
+                                   for k_ in K.KLASSEN))
+pruef("Keine Klasse darf alles waehlen",
+      all(len(_KL73.waffen_von(k_)) < len(K.LOADOUT["auswahl_waffen"]) for k_ in K.KLASSEN))
+_alt73 = _KO73.loadout_saeubern({"name": "ALT", "waffen": ["lmg", "scharf"], "wuerfe": ["c4"]})
+pruef("Ein Satz ohne Klasse bleibt, wie er war (FREI)",
+      _alt73 == {"name": "ALT", "waffen": ["lmg", "scharf"], "wuerfe": ["c4"]}, str(_alt73))
+_lo73 = _KO73.loadout_saeubern({"name": "SANI", "klasse": "sanitaeter",
+                                "waffen": ["lmg", "mp"], "wuerfe": ["c4"]})
+pruef("Mit Klasse fallen fremde Waffen heraus und werden aus ihrer Auswahl aufgefuellt",
+      _lo73["klasse"] == "sanitaeter" and "lmg" not in _lo73["waffen"] and "mp" in _lo73["waffen"]
+      and len(_lo73["waffen"]) == 2 and _lo73["wuerfe"][0] in K.KLASSEN["sanitaeter"]["wuerfe"],
+      str(_lo73))
+pruef("Eine unbekannte Klasse wird FREI",
+      "klasse" not in _KO73.loadout_saeubern({"name": "X", "klasse": "zauberer"}))
+_tm73 = _TM59.Testmodus(app, karte="staubtal")
+_ort73 = freier_punkt(_tm73.welt, 0, random.Random(73))
+_ich73 = _tm73.ich_setzen(_ort73, 0, {"team": 0, "klasse": "nahkaempfer"})
+pruef("Der Nahkaempfer hat mehr Leben und Nahkampfwaffen",
+      abs(_ich73.max_leben - K.SPIELER["leben"] * K.KLASSEN["nahkaempfer"]["leben"]) < 0.01
+      and _ich73.leben == _ich73.max_leben
+      and all(w in K.KLASSEN["nahkaempfer"]["waffen"] or K.WAFFEN[w]["art"] == "wurf"
+              for w in _ich73.waffen), str(_ich73.waffen))
+_tm73.klasse_geben(_ich73, "flammentrupp")
+_ich73.leben = _ich73.max_leben
+EN.schaden_an(_ich73, 10.0, None, None, "feuer")
+pruef("Der Flammentrupp haelt Feuer besser aus",
+      abs((_ich73.max_leben - _ich73.leben) - 10.0 * K.KLASSEN["flammentrupp"]["feuer"]) < 0.01)
+_tm73.klasse_geben(_ich73, "panzerjaeger")
+_pw73 = _tm73.fahrzeug_setzen("panzerwagen", _ort73 + pygame.Vector2(0, 200), 0, {"winkel": 0})
+_pw73.leben = _pw73.max_leben
+EN.schaden_an(_pw73, 100.0, None, _ich73, None)
+pruef("Der Panzerjaeger trifft Fahrzeuge haerter",
+      abs((_pw73.max_leben - _pw73.leben) - 100.0 * K.KLASSEN["panzerjaeger"]["fahrzeug"]) < 0.01)
+# Faehigkeit auf C: der Sanitaeter wirft eine Sanitasche, dann Pause.
+_tm73.klasse_geben(_ich73, "sanitaeter")
+_n73 = len([w for w in _tm73.welt.wesen + _tm73.welt.neue if isinstance(w, _AU73.Sanitasche)])
+_was73 = _KL73.faehigkeit_nutzen(_tm73, _ich73)
+_n73b = len([w for w in _tm73.welt.wesen + _tm73.welt.neue if isinstance(w, _AU73.Sanitasche)])
+pruef("Taste C: der Sanitaeter wirft eine Sanitasche", _was73 == "SANITASCHE" and _n73b == _n73 + 1)
+pruef("... dann erst nach der Pause wieder", _KL73.faehigkeit_nutzen(_tm73, _ich73) == "")
+pruef("Die Taste C ist belegt und geht als Druck an den Gastgeber",
+      "faehigkeit" in _TM59.Testmodus.DRUECKE and app.eingabe.tabelle.get("faehigkeit"))
+_tm73.klasse_geben(_ich73, "schildtraeger")
+pruef("Der Schildtraeger traegt das Schild", _ich73.schild)
+_tm73.verlassen()
+# Im Gefecht: Vorteile ja, Faehigkeit (noch) nicht; der Gast kennt das Hoechstleben.
+w, ga = _paar59("team", karte="staubtal")
+w.ich.loadout = _KO73.loadout_saeubern({"name": "N", "klasse": "nahkaempfer"})
+_KL73.anwenden(w.ich)
+pruef("Im Gefecht legt C (noch) nichts hin", _KL73.faehigkeit_nutzen(w, w.ich) == "")
+for _ in range(4):
+    w.schritt(K.NETZ["takt"])
+    ga.schritt(K.NETZ["takt"])
+_gk73 = ga.kaempfer.get(w.ich.nummer)
+pruef("Der Gast kennt das Hoechstleben der Klasse",
+      _gk73 is not None and abs(_gk73.max_leben - w.ich.max_leben) < 0.1)
+w.verlassen(); ga.verlassen()
+EN.RND.setstate(_rnd73)
+random.setstate(_zufall73)
 
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)

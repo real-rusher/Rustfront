@@ -74,6 +74,7 @@ TASTEN = {
     "ansicht_runter": [pygame.K_PAGEDOWN],
     "heilen":   [pygame.K_h],
     "nahkampf": [pygame.K_f],
+    "faehigkeit": [pygame.K_c],     # Faehigkeit der Klasse (seit 0.34.73)
     "inventar": [pygame.K_TAB],
     "pause":    [pygame.K_ESCAPE],
     "debug":    [pygame.K_F3],

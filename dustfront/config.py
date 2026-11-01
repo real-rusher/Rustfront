@@ -2919,7 +2919,8 @@ WAFFEN = {
         # Halbautomat zwischen Repetierer und Scharfschuetze. Rechte
         # Maustaste schliesst den Kegel zu einer Linie; jeder Schuss
         # oeffnet ihn nur ein kleines Stueck (gemeldet in Runde 5 und 6).
-        schaden=38.0,
+        # 0.34.73: 38 -> 34, und die Reichweite 1200 -> 900 (siehe unten). Sie soll zwischen Repetierer und Scharfschuetze liegen, nicht neben dem Scharfschuetzen.
+        schaden=34.0,
         takt=0.26,
         magazin=10,
         nachladen=2.3,
@@ -2932,7 +2933,7 @@ WAFFEN = {
         streuung_lauf=3.0,
         geschosse=1,
         tempo=1000.0,
-        reichweite=1200.0,
+        reichweite=900.0,
         rueckstoss=45.0,
         kamera=2.2,
         huelsen=1,
@@ -2963,7 +2964,8 @@ WAFFEN = {
         # Durch leichte Deckung und mehrere Koerper, stark gegen Fahrzeuge.
         # Der Ziellaser verraet den Schuetzen, nach einem Fehlschuss ist er
         # lange wehrlos.
-        schaden=120.0,
+        # 0.34.73: 120 -> 70 gegen Figuren (zwei Treffer), gegen Fahrzeuge `fahrzeug_schaden`. Sie toetete auf 1600 px mit einem Schuss und war damit besser als der Scharfschuetze; gedacht ist sie gegen Fahrzeuge und grosse Gegner.
+        schaden=70.0,
         takt=0.8,
         magazin=1,
         nachladen=3.2,
@@ -2979,6 +2981,7 @@ WAFFEN = {
         klang="schuss_panzerbuechse",
         durchschlag=3,
         durch_deckung=True,
+        fahrzeug_schaden=160.0,
         gegen_fahrzeug=True,
         laser=True,
     ),
@@ -2986,7 +2989,8 @@ WAFFEN = {
         art="schuss",
         name="DOPPELFLINTE",
         # Linke Maustaste ein Lauf, rechte beide auf einmal. Danach lange laden.
-        schaden=15.0,
+        # 0.34.73: 15 -> 11 je Kugel. Ein Lauf (8 x 15 = 120) toetete aus der Naehe mit einem Schuss; jetzt braucht es beide Laeufe.
+        schaden=11.0,
         takt=0.22,
         magazin=2,
         nachladen=2.4,
@@ -3007,7 +3011,8 @@ WAFFEN = {
         name="AUTOSCHROT",
         # Halbautomatisch: schwaecher je Schuss als Schrot, dafuer schnell
         # hintereinander - Druck statt Wucht, eine Gruppe wird zurueckgedraengt.
-        schaden=9.0,
+        # 0.34.73: 9 -> 7 je Kugel. 225 je Sekunde aus der Naehe war mehr als jede Waffe ausser der Minigun.
+        schaden=7.0,
         takt=0.24,
         magazin=8,
         nachladen=2.8,
@@ -3028,7 +3033,8 @@ WAFFEN = {
         # Anlauf, dann Dauerfeuer. Der Traeger steht fast und dreht kaum.
         # Das Paket sagt "kein Nachladen": ein Gurt, der so lange haelt
         # wie ein Gefecht, und sein Wechsel dauert.
-        schaden=12.0,
+        # 0.34.73 (Balancing): 12 -> 9. Bei voller Drehzahl 300 Schaden je Sekunde, im Dauerfeuer 173 - fast doppelt so viel wie das Sturmgewehr.
+        schaden=9.0,
         tempo=950.0,
         reichweite=700.0,
         magazin=240,
@@ -3368,6 +3374,83 @@ WAFFEN = {
     ),
 }
 
+# ══════════════════════════════════════════════════ KLASSEN (seit 0.34.73)
+#
+# Gemeldet: "Klassensystem ... sehr viele Klassen, jede mit auswaehlbaren
+# Waffen (nicht alle), Spezialfaehigkeiten/Buffs (Sanitaeter wirft
+# Sanitaetstaschen, Supporter schwere stationaere Waffen + Munitionskisten)
+# ... nicht jede Klasse nur eine Waffe/Granate."
+#
+# Jeder Satz der Ausruestung hat eine Klasse. FREI (Kennung "") ist die
+# alte Ausruestung ohne Klasse: jede Waffe, kein Vorteil - so bleiben alle
+# gespeicherten Saetze gueltig. Je Klasse:
+#
+#   waffen, wuerfe   woraus gewaehlt werden darf (je mehrere)
+#   leben            x Leben          tempo     x Lauftempo
+#   nachladen        x Nachladezeit   kuehlen   x Abkuehlzeit (Chor)
+#   feuer            x Schaden durch Feuer      fahrzeug  x Schaden an Fahrzeugen
+#   aufhelfen        x Zeit zum Aufhelfen       medkits   + Medkits
+#   schild           traegt das Schild (SCHILD)
+#   faehigkeit       was die Taste C hinlegt (ausruestung.py) und wie oft
+#                    (Sekunden Pause). Wie Bauen und Fallen erst im
+#                    Testmodus; im Gefecht wirken nur die Vorteile.
+KLASSEN = {
+    "schuetze": dict(name="SCHÜTZE", text="Allrounder, laedt schneller",
+                     waffen=("sturm", "repetierer", "mp", "unterhebel", "revolver"),
+                     wuerfe=("granate", "rauch", "blend"), nachladen=0.85,
+                     faehigkeit=(("munitionskiste", 40.0),)),
+    "sanitaeter": dict(name="SANITÄTER", text="Wirft Sanitaschen, hilft schneller auf",
+                       waffen=("mp", "repetierer", "revolver", "zwillinge", "autoschrot"),
+                       wuerfe=("rauch", "blend", "granate"), aufhelfen=0.6, medkits=1,
+                       faehigkeit=(("sanitasche", 20.0),)),
+    "unterstuetzer": dict(name="UNTERSTÜTZER", text="Schwere Waffen, Munitionskiste, Selbstschussanlage",
+                          waffen=("lmg", "minigun", "autoschrot", "sturm"),
+                          wuerfe=("granate", "rauch", "kuller"), tempo=0.94, leben=1.1,
+                          faehigkeit=(("munitionskiste", 30.0), ("geschuetz", 60.0))),
+    "scharfschuetze": dict(name="SCHARFSCHÜTZE", text="Weit und genau, markiert mit dem Fernglas",
+                           waffen=("scharf", "praezision", "unterhebel", "repetierer", "revolver"),
+                           wuerfe=("rauch", "knaller", "blend"), leben=0.9,
+                           faehigkeit=(("horchposten", 45.0),)),
+    "pionier": dict(name="PIONIER", text="Sprengt und baut: Fallen, Sandsaecke, mehr gegen Blech",
+                    waffen=("schrot", "autoschrot", "nagler", "bolzer", "sturm"),
+                    wuerfe=("c4", "haftladung", "granate"), fahrzeug=1.2,
+                    faehigkeit=(("sprengfalle", 25.0), ("sandsackwand", 30.0))),
+    "panzerjaeger": dict(name="PANZERJÄGER", text="Gegen Fahrzeuge gebaut",
+                         waffen=("panzerbuechse", "einwegwerfer", "raketenbuendel", "repetierer", "mp"),
+                         wuerfe=("haftladung", "emp", "granate"), fahrzeug=1.3, tempo=0.95,
+                         faehigkeit=(("kraehenfuesse", 25.0),)),
+    "grenadier": dict(name="GRENADIER", text="Werfer und Granaten, eine Granate mehr",
+                      waffen=("granatwerfer", "sturm", "mp", "doppelflinte"),
+                      wuerfe=("granate", "kuller", "gas", "molotov"), granaten=1,
+                      faehigkeit=(("sandsackwand", 35.0),)),
+    "flammentrupp": dict(name="FLAMMENTRUPP", text="Feuer und Nahdistanz, haelt Feuer besser aus",
+                         waffen=("flammenwerfer", "doppelflinte", "schrot", "autoschrot"),
+                         wuerfe=("molotov", "gas", "rauch"), feuer=0.4, leben=1.1,
+                         faehigkeit=(("kanister", 25.0),)),
+    "spaeher": dict(name="SPÄHER", text="Schnell, leise, mit Spaehdrohne",
+                    waffen=("mp", "zwillinge", "revolver", "praezision", "wurfmesser"),
+                    wuerfe=("blend", "knaller", "emp"), tempo=1.1, leben=0.9,
+                    faehigkeit=(("drohne", 45.0),)),
+    "nahkaempfer": dict(name="NAHKÄMPFER", text="Mehr Leben, Nahkampfwaffen, Stacheldraht",
+                        waffen=("hammer", "schlagring", "kettensaege", "speer", "wurfmesser",
+                                "schockstab", "schrot"),
+                        wuerfe=("rauch", "blend", "schneeball"), leben=1.25, tempo=1.05,
+                        faehigkeit=(("stacheldraht", 30.0),)),
+    "techniker": dict(name="TECHNIKER", text="Chor-Waffen kuehlen schneller, Horchposten",
+                      waffen=("spule", "kettenblitz", "spiegellaser", "kugelblitz", "nagler"),
+                      wuerfe=("emp", "blend", "haftladung"), kuehlen=0.75,
+                      faehigkeit=(("horchposten", 35.0), ("geschuetz", 70.0))),
+    "schildtraeger": dict(name="SCHILDTRÄGER", text="Grosses Schild vorn, Pistole",
+                          waffen=("repetierer", "revolver", "bolzer", "schockstab"),
+                          wuerfe=("blend", "rauch", "granate"), schild=True, leben=1.1,
+                          faehigkeit=(("sandsackwand", 30.0),)),
+    "fahrer": dict(name="FAHRER", text="Fahrzeuge halten mehr aus, Kraehenfuesse",
+                   waffen=("mp", "repetierer", "zwillinge", "autoschrot"),
+                   wuerfe=("rauch", "emp", "granate"), fahrzeug_schutz=0.85,
+                   faehigkeit=(("kraehenfuesse", 20.0),)),
+}
+KLASSE_FREI = dict(name="FREI", text="Ohne Klasse: jede Waffe, kein Vorteil")
+
 # Der Schildtraeger (seit 0.34.71, erst im Testmodus): ein grosses Schild
 # vorn. Was von vorn kommt (die Richtung zum Schuetzen), haelt es zum
 # groessten Teil ab; dafuer ist er langsamer und traegt nur eine Pistole.
@@ -3494,7 +3577,7 @@ ENERGIE_PAKET = {
         # Eine langsame Kugel, die unterwegs staendig Blitze in mehrere
         # Richtungen schlaegt (auch ohne Ziel, bis an ihre Reichweite) und
         # am Ende gross platzt. Gut zu sehen, sperrt aber einen Gang.
-        schaden=13.0, zap_radius=86.0, zap_takt=0.22, zap_strahlen=4,
+        schaden=18.0, zap_radius=86.0, zap_takt=0.22, zap_strahlen=4,
         platzen_schaden=70.0, platzen_radius=96.0,
         takt=1.6, magazin=2, nachladen=5.0, kuehlt=True, abkuehlen=4.0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=120.0, reichweite=760.0,

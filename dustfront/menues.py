@@ -1243,7 +1243,9 @@ class Ausruestung(Menue):
     VORSCHAU = 150
 
     def __init__(self, app, danach=None) -> None:
-        self.tafel = _mitte(22 + self.LINKS + 18 + self.VORSCHAU + 14, 236)
+        # 236 -> 280 (seit 0.34.73): eine Zeile fuer die Klasse und eine
+        # fuer das, was sie kann.
+        self.tafel = _mitte(22 + self.LINKS + 18 + self.VORSCHAU + 14, 280)
         self.danach = danach
         super().__init__(app)
 
@@ -1266,23 +1268,37 @@ class Ausruestung(Menue):
                      for i in range(len(konto.loadouts))}),
         ]
         y += 24
+        # Die Klasse (seit 0.34.73): sie bestimmt, woraus die Waffen und
+        # die Wurfwaffe gewaehlt werden.
+        from . import klassen as klassen_modul
+        klasse = satz.get("klasse", "")
+        alle_klassen = [""] + list(K.KLASSEN)
+        self.elemente.append(ui.Wahl(
+            (bx, y, bw, 16), "KLASSE", "klasse", alle_klassen,
+            alle_klassen.index(klasse) if klasse in alle_klassen else 0,
+            {kl: klassen_modul.name(kl) for kl in alle_klassen}))
+        y += 24
+        auswahl_w = list(klassen_modul.waffen_von(klasse))
+        auswahl_g = list(klassen_modul.wuerfe_von(klasse))
         for nr in range(lo["waffen"]):
             jetzt = (satz["waffen"][nr] if nr < len(satz["waffen"])
-                     else lo["auswahl_waffen"][0])
+                     else auswahl_w[0])
+            if jetzt not in auswahl_w:
+                jetzt = auswahl_w[0]
             self.elemente.append(ui.Wahl(
                 (bx, y + nr * 20, bw, 16), "WAFFE %d" % (nr + 1),
-                "waffe%d" % nr, list(lo["auswahl_waffen"]),
-                list(lo["auswahl_waffen"]).index(jetzt),
-                {w: K.WAFFEN[w]["name"] for w in lo["auswahl_waffen"]}))
+                "waffe%d" % nr, auswahl_w, auswahl_w.index(jetzt),
+                {w: K.WAFFEN[w]["name"] for w in auswahl_w}))
         y += lo["waffen"] * 20
         for nr in range(lo["wuerfe"]):
             jetzt = (satz["wuerfe"][nr] if nr < len(satz["wuerfe"])
-                     else lo["auswahl_wuerfe"][0])
+                     else auswahl_g[0])
+            if jetzt not in auswahl_g:
+                jetzt = auswahl_g[0]
             self.elemente.append(ui.Wahl(
                 (bx, y + nr * 20, bw, 16), "WURFWAFFE",
-                "wurf%d" % nr, list(lo["auswahl_wuerfe"]),
-                list(lo["auswahl_wuerfe"]).index(jetzt),
-                {w: K.WAFFEN[w]["name"] for w in lo["auswahl_wuerfe"]}))
+                "wurf%d" % nr, auswahl_g, auswahl_g.index(jetzt),
+                {w: K.WAFFEN[w]["name"] for w in auswahl_g}))
         y += lo["wuerfe"] * 20 + 4
         # Das Aussehen (seit 0.34.60). Haengt nicht am Satz: man ist
         # derselbe, egal was man traegt.
@@ -1311,25 +1327,37 @@ class Ausruestung(Menue):
             self.wahl = 0
             return
         lo = K.LOADOUT
+        from . import klassen as klassen_modul
         waffen, wuerfe = [], []
+        klasse = ""
         for e in self.elemente:
             if e.name.startswith("waffe"):
                 waffen.append(e.wert)
             elif e.name.startswith("wurf"):
                 wuerfe.append(e.wert)
+            elif e.name == "klasse":
+                klasse = e.wert
+        if el.name == "klasse":
+            # Eine andere Klasse: Waffen, die sie nicht hat, fallen heraus
+            # (konto.loadout_saeubern fuellt aus ihrer Auswahl auf).
+            alt = konto.loadout
+            konto.loadout_setzen(konto.gewaehlt, {"name": alt["name"], "klasse": klasse,
+                                                  "waffen": waffen, "wuerfe": wuerfe})
+            self.aufbauen()
+            return
         # Zwei gleiche Waffen waeren ein Platz weniger, kein Vorteil. Die
         # zweite rutscht darum auf die naechste freie.
         sauber = []
         for w in waffen:
             if w in sauber:
-                for anderer in lo["auswahl_waffen"]:
+                for anderer in klassen_modul.waffen_von(klasse):
                     if anderer not in sauber:
                         w = anderer
                         break
             sauber.append(w)
         alt = konto.loadout
         konto.loadout_setzen(konto.gewaehlt,
-                             {"name": alt["name"], "waffen": sauber,
+                             {"name": alt["name"], "klasse": klasse, "waffen": sauber,
                               "wuerfe": wuerfe})
         if sauber != waffen:
             self.aufbauen()
@@ -1356,6 +1384,15 @@ class Ausruestung(Menue):
                          r.y + 28, K.C_MUTED, 1, 1, "mitte")
         SCHRIFT.zeichnen(ziel, "DAS BRECHEISEN LIEGT AUF F UND IST IMMER DA",
                          mitte, r.y + 38, K.C_MUTED_DK, 1, 1, "mitte")
+        # Was die Klasse kann (seit 0.34.73), unter dem Aussehen.
+        from . import klassen as klassen_modul
+        d = klassen_modul.daten(satz.get("klasse", ""))
+        text = d["text"].upper()
+        if d.get("faehigkeit"):
+            text += " - C: " + ", ".join(klassen_modul.FAEHIGKEIT_NAMEN.get(a, a.upper())
+                                         for a, _ in d["faehigkeit"])
+        SCHRIFT.zeichnen(ziel, ui.kuerzen(text, self.LINKS), mitte, r.bottom - 84,
+                         K.C_AMBER, 1, 1, "mitte")
         # Die drei Plaetze so zeigen, wie sie im Gefecht liegen. Wer die
         # Reihenfolge kennt, greift blind - und sieht hier, wo was liegt.
         from .konto import hotbar_aus_loadout
