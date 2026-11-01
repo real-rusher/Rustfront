@@ -5457,6 +5457,164 @@ w.verlassen(); ga.verlassen()
 EN.RND.setstate(_rnd62)
 random.setstate(_zufall62)
 
+# ─────────────────────────────────────────────────────────────────────
+# Testmodus mit Touch (seit 0.34.63): auf iPhone und iPad. Der Ziffernblock
+# wird angetippt (vor den Sticks), der linke Stick fliegt, Spawner und
+# Testmenue gehen mit dem Finger. Steuert man eine Figur, klappt der
+# Ziffernblock unter die Taste NUM, damit die Knoepfe frei liegen.
+print("\n-- Testmodus mit Touch (0.34.63)")
+_rnd63 = EN.RND.getstate()
+_zufall63 = random.getstate()
+from dustfront import testmodus as _TM63
+_alt_touch63 = os.environ.get("DUSTFRONT_TOUCH")
+os.environ["DUSTFRONT_TOUCH"] = "1"
+_app63 = App("IPAD", None, headless=True)
+_tm63 = _TM63.Testmodus(_app63, karte="staubtal")
+_app63.schieben(_tm63)
+pygame.event.clear()
+_app63.ereignisse()
+
+
+def _finger63(art, fid, gx, gy):
+    fw_, fh_ = _app63.fenster.get_size()
+    p_ = _app63.zu_fenster((gx, gy, 1, 1))
+    pygame.event.post(pygame.event.Event(art, finger_id=fid, touch_id=1, x=p_.x / fw_,
+                                         y=p_.y / fh_, dx=0.0, dy=0.0, pressure=1.0))
+    _app63.ereignisse()
+
+
+def _tippen63(fid, p_):
+    _finger63(pygame.FINGERDOWN, fid, p_[0], p_[1])
+    _finger63(pygame.FINGERUP, fid, p_[0], p_[1])
+
+
+def _klick63(p_, knopf_=1):
+    """Im Spawner und im Testmenue macht SDL aus dem Finger eine Maus."""
+    w_ = _app63.zu_fenster((p_[0], p_[1], 1, 1))
+    pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(w_.x, w_.y),
+                                         button=knopf_, touch=False))
+    pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONUP, pos=(w_.x, w_.y),
+                                         button=knopf_, touch=False))
+    _app63.ereignisse()
+
+
+def _taste63(name_):
+    return next(r_ for n_, r_ in _tm63.tasten_flaechen() if n_ == name_).center
+
+
+pruef("Testmodus mit Touch: es gibt ihn, und die Finger gehoeren dem Beobachter",
+      _TM63.verfuegbar() and _app63.touch is not None and _app63.touch.spielt()
+      and _tm63.beobachter)
+pruef("... der Beobachter hat nur Pause und Ebenen als Knoepfe, der Ziffernblock ist ganz da",
+      _tm63.touch_knoepfe() == ("pause", "ebenen") and not _tm63.numpad_klein
+      and len(_tm63.tasten_flaechen()) == len(_TM63.TASTEN))
+_p63 = _taste63("0")
+_finger63(pygame.FINGERDOWN, 1, _p63[0], _p63[1])
+_rolle63 = _app63.touch.finger.get(1, {}).get("rolle")
+_finger63(pygame.FINGERMOTION, 1, _p63[0] - 30, _p63[1])
+_ruht63 = _app63.eingabe.richtung().length() < 0.01
+_finger63(pygame.FINGERUP, 1, _p63[0] - 30, _p63[1])
+pruef("Eine Taste des Ziffernblocks antippen wirkt (0: Zeit steht) - und wird kein Stick",
+      _tm63.zeit_stopp and _rolle63 == "szene" and _ruht63, str(_rolle63))
+_tippen63(2, _taste63("0"))
+_ort63 = pygame.Vector2(_tm63._geist.pos)
+_finger63(pygame.FINGERDOWN, 3, 100, 250)
+_finger63(pygame.FINGERMOTION, 3, 100 + K.TOUCH["stick_radius"], 250)
+for _ in range(30):
+    _app63.ereignisse()
+    _tm63.schritt(K.FIXED_DT)
+_finger63(pygame.FINGERUP, 3, 100 + K.TOUCH["stick_radius"], 250)
+pruef("Der linke Stick fliegt den Beobachter", _tm63._geist.pos.x - _ort63.x > 50,
+      str(_tm63._geist.pos - _ort63))
+
+_tippen63(4, _taste63("4"))
+pruef("4 antippen oeffnet den Spawner; dort ist der Finger wieder die Maus",
+      _tm63.spawner_offen and not _app63.touch.spielt())
+_vor63 = len(_tm63.kaempfer)
+_klick63((520, 300))
+pruef("... ein Tipp in die Welt setzt dort, was gewaehlt ist (BOT)",
+      len(_tm63.kaempfer) == _vor63 + 1, "%d -> %d" % (_vor63, len(_tm63.kaempfer)))
+_e63 = _tm63.eintraege[_tm63._sp_nr]
+_liste63, _opt63 = _tm63._spawner_flaechen()
+_r63 = _opt63[0][1]
+_klick63((_r63.x + 4, _r63.centery))
+_hinten63 = _tm63._sp_werte[_e63.name][_e63.optionen[0]]
+_klick63((_r63.right - 4, _r63.centery))
+_vorn63 = _tm63._sp_werte[_e63.name][_e63.optionen[0]]
+pruef("... links auf eine Einstellung getippt blaettert zurueck, rechts vor",
+      _hinten63 == len(_TM63.OPTIONEN[_e63.optionen[0]][1]()) - 1 and _vorn63 == 0,
+      "%d / %d" % (_hinten63, _vorn63))
+_nr63 = _tm63._sp_nr
+pygame.event.post(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=-1, flipped=False,
+                                     precise_x=0.0, precise_y=-1.0, touch=False, which=0))
+_app63.ereignisse()
+pruef("... zwei Finger (Rad) blaettern in der Liste",
+      _tm63._sp_nr == (_nr63 + 1) % len(_tm63.eintraege))
+_tippen63(5, K.TOUCH["esc_mitte"])
+pruef("... und ESC schliesst ihn", not _tm63.spawner_offen and _app63.touch.spielt())
+
+
+
+def _doppel63(p_, maus_zuerst_):
+    """Ein Tipp, wie iOS ihn meldet: als Finger und als Maus daraus."""
+    w_ = _app63.zu_fenster((p_[0], p_[1], 1, 1))
+    fw_, fh_ = _app63.fenster.get_size()
+    maus_ = [pygame.event.Event(t_, pos=(w_.x, w_.y), button=1, touch=True)
+             for t_ in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP)]
+    finger_ = [pygame.event.Event(t_, finger_id=9, touch_id=1, x=w_.x / fw_, y=w_.y / fh_,
+                                  dx=0.0, dy=0.0, pressure=1.0)
+               for t_ in (pygame.FINGERDOWN, pygame.FINGERUP)]
+    erst_, dann_ = (maus_, finger_) if maus_zuerst_ else (finger_, maus_)
+    for e_ in (erst_[0], dann_[0], erst_[1], dann_[1]):
+        pygame.event.post(e_)
+    _app63.ereignisse()
+
+
+_zu63 = []
+for _maus63 in (False, True, True, False):
+    _doppel63(_taste63("4"), _maus63)
+    _zu63.append(_tm63.spawner_offen)
+pruef("Ein Tipp kommt auf iOS als Finger und als Maus - der Spawner geht trotzdem nur einmal auf oder zu",
+      _zu63 == [True, False, True, False], str(_zu63))
+_vor63 = _tm63.zeit_stopp
+_tippen63(10, _taste63("0"))
+_tippen63(11, _taste63("0"))
+pruef("... und wer schnell zweimal tippt, tippt zweimal", _tm63.zeit_stopp == _vor63)
+_bot63 = next(k_ for k_ in _tm63.kaempfer.values() if getattr(k_, "ist_bot", False))
+_tm63.uebernehmen(_bot63)
+_app63.ereignisse()
+pruef("Steuert man eine Figur, klappt der Ziffernblock zu NUM, und alle Knoepfe gelten",
+      _tm63.numpad_klein and [n_ for n_, _r in _tm63.tasten_flaechen()] == ["num_auf"]
+      and _tm63.touch_knoepfe() is None)
+_k63 = [r_ for n_, r_ in _tm63.tasten_flaechen()][0]
+
+
+def _abstand63(r_, m_):
+    """Wie weit der Punkt m_ vom Rechteck r_ weg ist (0: darin)."""
+    nx_ = max(r_.left, min(m_[0], r_.right))
+    ny_ = max(r_.top, min(m_[1], r_.bottom))
+    return math.hypot(m_[0] - nx_, m_[1] - ny_)
+
+
+pruef("... NUM liegt nicht unter einem Knopf der Touch-Steuerung (auch nicht mit Zugabe)",
+      all(_abstand63(_k63, m_) > K.TOUCH["knopf_radius"] * 1.25
+          for _a, _t, m_, _art in K.TOUCH["knoepfe"]),
+      str(min(_abstand63(_k63, m_) for _a, _t, m_, _art in K.TOUCH["knoepfe"])))
+_tippen63(6, _k63.center)
+pruef("... NUM antippen klappt ihn auf, dann gilt nur noch Pause",
+      not _tm63.numpad_klein and len(_tm63.tasten_flaechen()) == len(_TM63.TASTEN) + 1
+      and _tm63.touch_knoepfe() == ("pause",))
+_tippen63(7, _taste63("3"))
+pruef("... und 3 (BEOB.) fuehrt zurueck zum Beobachter", _tm63.beobachter)
+_app63.werfen()
+_tm63.verlassen()
+if _alt_touch63 is None:
+    os.environ.pop("DUSTFRONT_TOUCH", None)
+else:
+    os.environ["DUSTFRONT_TOUCH"] = _alt_touch63
+EN.RND.setstate(_rnd63)
+random.setstate(_zufall63)
+
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
 pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)
@@ -10713,11 +10871,14 @@ _sim87(5)
 pruef("Der Beobachter steht in keiner Liste der Welt",
       _geist87 not in _tm.welt.wesen and _geist87 not in _tm.welt.neue
       and _geist87 not in _tm.kaempfer.values() and _tm.beobachter, "")
-pruef("Den Testmodus gibt es am Rechner, nicht mit Touch",
+pruef("Den Testmodus gibt es am Rechner",
       _TM87.verfuegbar(), "")
 _alt87 = os.environ.get("DUSTFRONT_TOUCH")
 os.environ["DUSTFRONT_TOUCH"] = "1"
-pruef("... mit Touch-Steuerung (iOS) nicht", not _TM87.verfuegbar(), "")
+# Bis 0.34.62 gab es ihn mit Touch nicht; seit 0.34.63 auch auf iPhone
+# und iPad (gewuenscht). Wie er dort bedient wird, prueft der Abschnitt
+# "Testmodus mit Touch".
+pruef("... und seit 0.34.63 auch mit Touch-Steuerung (iOS)", _TM87.verfuegbar(), "")
 if _alt87 is None:
     os.environ.pop("DUSTFRONT_TOUCH", None)
 else:

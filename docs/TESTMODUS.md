@@ -7,9 +7,29 @@ aus dem Hauptmenue (**TESTMODUS**) oder mit
 python -m dustfront --testmodus [--karte NAME]
 ```
 
-Nicht auf iPhone und iPad: bedient wird er ueber den Ziffernblock und
-die Maus. Alles steht in `dustfront/testmodus.py`, die Zahlen in
+Am Rechner wird er ueber den Ziffernblock und die Maus bedient, seit
+0.34.63 auch auf iPhone und iPad mit dem Finger (siehe "Mit Touch"
+unten). Alles steht in `dustfront/testmodus.py`, die Zahlen in
 `dustfront/config.py` unter `TESTMODUS`.
+
+## Mit Touch (iPhone, iPad, seit 0.34.63)
+
+Am Rechner zum Ausprobieren mit `DUSTFRONT_TOUCH=1`.
+
+| Was | Wie |
+| --- | --- |
+| Ziffernblock | antippen, wie mit der Maus. Ein Finger auf einer Taste wird nie ein Stick |
+| Fliegen | linker Stick (linke Bildhaelfte, wie Laufen im Spiel) |
+| Zeiger (wo 1, 2, 5, 3 und ENTF wirken) | rechter Stick |
+| Zoomen | zwei Finger auf derselben Seite auseinander oder zusammen |
+| Spawner (4) | Eintrag antippen; in die Welt tippen setzt ihn dort. Eine Einstellung rechts antippen: vor, im linken Drittel: zurueck (`K.TESTMODUS["touch_zurueck"]`). Zwei Finger blaettern in der Liste. ESC oben rechts schliesst |
+| Testmenue | NUM (MENUE) oder II; Zeilen antippen wie die Einstellungen im Spawner |
+| Eine Figur steuern (3) | wie im Spiel, mit allen Knoepfen. Der Ziffernblock klappt dann unter die Taste **NUM** oben (`K.TESTMODUS["touch_num"]`), sonst laege er unter Dash, E und Zielen. NUM klappt ihn auf und zu |
+
+Der Beobachter hat nur die Knoepfe II (Testmenue) und EBN (obere Ebenen) -
+Nachladen oder Dash braucht er nicht. Direkt im Testmodus starten:
+`ios/aufspielen.sh --testmodus` (setzt `DUSTFRONT_START=testmodus`, das
+geht am Rechner genauso).
 
 ## Der Beobachter
 
@@ -108,6 +128,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.63 | Der Testmodus auf iPhone und iPad (und am Rechner mit `DUSTFRONT_TOUCH=1`), siehe "Mit Touch" oben: Ziffernblock antippen, linker Stick fliegt, rechter bewegt den Zeiger; Spawner und Testmenue mit dem Finger (links auf eine Einstellung: zurueck), zwei Finger blaettern im Spawner; mit Figur klappt der Ziffernblock unter NUM. Neu auch am Rechner: das Mausrad blaettert in der Liste des Spawners, und `DUSTFRONT_START=testmodus` startet gleich im Testmodus. Pruefungen im Abschnitt "Testmodus mit Touch" von `tests/test_spiel.py` |
 | 0.34.62 | FIGUREN: SPIELER, STEHT und SPIELER, ICH haben eine WAFFE - ALLE ist die Hotbar wie bisher, jede andere Wahl ein Loadout mit dieser Waffe vorn (dazu Sturmgewehr und Granate), auch eine der zwoelf neuen. So laesst sich jede neue Waffe selbst ausprobieren (SPIELER, ICH) oder an einer Puppe zeigen. BOT kann die neuen ebenfalls tragen (WAFFE), schiesst aber nur mit Schusswaffen. Pruefungen im Abschnitt "Die Waffen aus dem Waffenpaket, spielbar" von `tests/test_spiel.py` |
 | 0.34.61 | Spawner WAFFENBILDER: FIGUR MIT WAFFE - eine stehende Figur, die eine der 52 Waffen aus dem Waffenpaket haelt (WAFFE, TEAM, RICHTUNG). Nur das Bild: sie schiesst nicht, faellt aber um wie ein NPC. Pruefungen im Abschnitt "Waffenbilder aus dem Waffenpaket" von `tests/test_spiel.py` |
 | 0.34.60 | Skins, NPCs und Tiere aus dem Figurenpaket. FIGUREN: Einstellung AUSSEHEN (ZUFALL - beim Bot sein Soldat wie im Spiel -, STANDARD, oder einer der 29 Skins); SPIELER, ICH nimmt als Vorgabe das eigene Aussehen aus AUSRUESTUNG. Neue Gruppen NPC und TIERE: NPCs stehen (Verhalten kommt mit der Kampagne), Tiere laufen ein Stueck und bleiben stehen; die INFO-Ansicht (Taste 8) zeigt eine gruene Linie zum Laufziel und LAEUFT bzw. STEHT. Beide nehmen Schaden, sterben mit Fleck und Laut, ENTF toetet sie; niemand greift sie an (Fraktion `zivil`). Pruefungen im Abschnitt "Skins, NPCs und Tiere" von `tests/test_spiel.py` |

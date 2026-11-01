@@ -16,6 +16,9 @@
 #  Erneut aufrufen, wenn sich das Spiel geaendert hat: die Vorlage wird
 #  nicht neu geladen, nur der Spielcode in der App ersetzt. Team und
 #  Einstellungen in Xcode bleiben dabei stehen.
+#
+#  Ganz ohne Klicken (bauen, aufspielen, starten): ios/aufspielen.sh.
+#  Mit OHNE_XCODE=1 oeffnet dieses Skript Xcode am Ende nicht.
 # ============================================================
 set -euo pipefail
 
@@ -200,6 +203,13 @@ PROJEKT="$(find "$VORLAGE" -maxdepth 3 -name "*.xcodeproj" | head -n 1)"
 [ -n "$PROJEKT" ] || abbrechen "Kein .xcodeproj gefunden in $VORLAGE."
 echo
 echo "  Fertig: $PROJEKT"
+# OHNE_XCODE=1: nur bauen, Xcode nicht oeffnen - so ruft ios/aufspielen.sh
+# dieses Skript auf (seit 0.34.63) und spielt die App selbst auf.
+if [ -n "${OHNE_XCODE:-}" ]; then
+    echo
+    exit 0
+fi
 echo "  In Xcode: Team waehlen (Signing & Capabilities), iPhone waehlen, Run."
+echo "  Oder ohne Klicken: ios/aufspielen.sh"
 echo
 open "$PROJEKT" || true

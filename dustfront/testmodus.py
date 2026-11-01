@@ -74,9 +74,11 @@ from .mehrspieler import Gefecht, Kaempfer, KampfBeute, KampfGegner
 
 
 def verfuegbar() -> bool:
-    """Den Testmodus gibt es nur mit Tastatur und Ziffernblock - nicht auf
-    iPhone und iPad, und nicht mit der Touch-Steuerung."""
-    return not plattform.IOS and not plattform.touch_an()
+    """Den Testmodus gibt es ueberall (seit 0.34.63 auch auf iPhone und iPad).
+    Mit Touch: der Ziffernblock wird angetippt, der linke Stick fliegt, der
+    rechte bewegt den Zeiger, Spawner und Testmenue sind mit dem Finger zu
+    bedienen (siehe touch_tippen, touch_knoepfe)."""
+    return True
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -521,6 +523,7 @@ class Testmodus(Gefecht):
         self._zone_an = False
         self.beobachter = True
         self.spawner_offen = False
+        self._num_auf = False         # Ziffernblock auf Touch mit Figur aufgeklappt
         self.menue_offen = False
         self._sp_fokus = "liste"
         self._sp_opt = 0
@@ -789,6 +792,9 @@ class Testmodus(Gefecht):
         self.meine_nummer = k.nummer
         self.beobachter = False
         self.blick = k.ebene
+        # Auf Touch klappt der Ziffernblock zu: die Knoepfe der Figur liegen
+        # dort, wo er steht (NUM oben klappt ihn wieder auf).
+        self._num_auf = False
         self.melde("DU STEUERST %s - 3: ZURÜCK ZUM BEOBACHTER" % k.name)
 
     def beobachten(self) -> None:
@@ -1273,6 +1279,8 @@ class Testmodus(Gefecht):
                     self.uebernehmen(w)
                 else:
                     self.spawnen(self._eintrag("SPIELER, ICH"))
+        elif name == "num_auf":
+            self._num_auf = not self._num_auf
         elif name == "num":
             # Die NumLock-Taste selbst schaltet nur NumLock; angeklickt
             # oeffnet das Feld das Testmenue (wie Esc).
@@ -1325,22 +1333,69 @@ class Testmodus(Gefecht):
             return "MENÜ", self.menue_offen
         if name == "3":
             return ("BEOB." if not self.beobachter else "ICH"), not self.beobachter
+        if name == "num_auf":
+            return "NUM", self._num_auf
         # Hoechstens sechs Zeichen: mehr passt nicht auf eine Taste.
         return {"*": "LEEREN", "-": "ZEIT-", "+": "ZEIT+",
                 "7": "EBENE-", "9": "EBENE+", "5": "WIEDER", "1": "BOT",
                 "2": "PUPPE", "enter": "TÖTEN" if self.entf_toetet else "ENTF",
                 ".": "EINZEL"}.get(name, ""), False
 
+    @property
+    def numpad_klein(self) -> bool:
+        """Auf Touch mit einer Figur: der Ziffernblock ist zu, bis man NUM
+        antippt (seit 0.34.63). Er laege sonst unter den Knoepfen fuer
+        Dash, E und Zielen."""
+        return (plattform.touch_an() and not self.beobachter
+                and not self._num_auf)
+
     def tasten_flaechen(self) -> list:
-        """(Name, Rechteck) je Taste, am rechten Bildrand."""
+        """(Name, Rechteck) je Taste, am rechten Bildrand. Auf Touch mit einer
+        Figur dazu die Taste NUM oben ("num_auf"), die ihn auf- und zuklappt."""
+        raus = []
+        if plattform.touch_an() and not self.beobachter:
+            raus.append(("num_auf", pygame.Rect(K.TESTMODUS["touch_num"])))
+            if self.numpad_klein:
+                return raus
         b, h, l = 44, 22, 2
         x0 = K.GAME_W - 4 * b - 3 * l - 4
         y0 = 104
-        raus = []
         for name, sp, ze, br, ho, _a in TASTEN:
             raus.append((name, pygame.Rect(x0 + sp * (b + l), y0 + ze * (h + l),
                                            br * b + (br - 1) * l, ho * h + (ho - 1) * l)))
         return raus
+
+    # ── Touch (seit 0.34.63) ───────────────────────────────────────
+    def touch_tippen(self, punkt) -> bool:
+        """Ein Finger (touch.py), im Spiel wie in Spawner und Testmenue: auf
+        einer Taste des Ziffernblocks gehoert er ihr, nicht dem Stick
+        darunter. Die Maus, die iOS aus demselben Finger macht, laesst
+        `ereignis` dort liegen - GRUND: sonst kaeme jeder Tipp zweimal an,
+        und je nach Reihenfolge ginge der Spawner auf und gleich wieder zu."""
+        for name, r in self.tasten_flaechen():
+            if r.collidepoint(punkt):
+                self.taste(name)
+                return True
+        return False
+
+    def touch_knoepfe(self):
+        """Welche Touch-Knoepfe gelten: der Beobachter braucht nur Pause
+        (das Testmenue) und die oberen Ebenen; mit offenem Ziffernblock
+        auch eine Figur nur Pause - die anderen lagen unter den Tasten."""
+        if self.beobachter:
+            return ("pause", "ebenen")
+        if self._num_auf:
+            return ("pause",)
+        return None
+
+    def _touch_schritt(self, ev, pos, r) -> int:
+        """Vor oder zurueck beim Antippen einer Einstellung: ohne rechte
+        Maustaste zaehlt auf Touch das linke Drittel als zurueck."""
+        if ev.button != 1:
+            return -1
+        if plattform.touch_an() and pos[0] < r.x + r.width * K.TESTMODUS["touch_zurueck"]:
+            return -1
+        return 1
 
     # ── Ereignisse ─────────────────────────────────────────────────
     def ereignis(self, ev) -> None:
@@ -1363,9 +1418,12 @@ class Testmodus(Gefecht):
                 return
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button in (1, 3):
             pos = self.app.zu_spiel(ev.pos)
+            # Aus einem Finger gemacht? Den Tipp auf den Ziffernblock hat der
+            # Finger schon (touch_tippen).
+            aus_finger = getattr(ev, "touch", False) and self.app.touch is not None
             for name, r in self.tasten_flaechen():
                 if r.collidepoint(pos):
-                    if ev.button == 1:
+                    if ev.button == 1 and not aus_finger:
                         self.taste(name)
                     self._feuer_sperre = True     # der Klick ist kein Schuss
                     return
@@ -1375,6 +1433,12 @@ class Testmodus(Gefecht):
             if self.menue_offen:
                 self._menue_maus_tm(ev, pos)
                 return
+        if self.spawner_offen and ev.type == pygame.MOUSEWHEEL and ev.y:
+            # Blaettern in der Liste - am Rechner mit dem Rad, auf Touch mit
+            # zwei Fingern (seit 0.34.63).
+            self._sp_nr = (self._sp_nr - (1 if ev.y > 0 else -1)) % len(self.eintraege)
+            self._sp_fokus = "liste"
+            return
         if self._tm_offen and ev.type in (pygame.MOUSEWHEEL, pygame.MOUSEBUTTONDOWN):
             return
         super().ereignis(ev)
@@ -1454,7 +1518,7 @@ class Testmodus(Gefecht):
             if rr.collidepoint(pos):
                 self._sp_fokus = "optionen"
                 self._sp_opt = i
-                self.wert_verstellen(e, o, 1 if ev.button == 1 else -1)
+                self.wert_verstellen(e, o, self._touch_schritt(ev, pos, rr))
                 return
 
     # ── Testmenue ──────────────────────────────────────────────────
@@ -1636,8 +1700,8 @@ class Testmodus(Gefecht):
         for i, rr in enumerate(self._menue_flaechen()):
             if rr.collidepoint(pos):
                 self._tm_zeile = i
-                self.menue_wirken(zeilen[i][0], 1 if ev.button == 1 else -1,
-                                  ausloesen=ev.button == 1)
+                schritt = self._touch_schritt(ev, pos, rr)
+                self.menue_wirken(zeilen[i][0], schritt, ausloesen=schritt > 0)
                 return
 
     # ── Zeichnen ───────────────────────────────────────────────────
@@ -1769,6 +1833,12 @@ class Testmodus(Gefecht):
     def _numpad_zeichnen(self, ziel) -> None:
         for name, r in self.tasten_flaechen():
             text, an = self._tastentext(name)
+            if name == "num_auf":
+                pygame.draw.rect(ziel, (24, 30, 26) if an else (12, 10, 9), r)
+                pygame.draw.rect(ziel, K.C_TEAL if an else K.C_MUTED_DK, r, 1)
+                SCHRIFT.zeichnen(ziel, text, r.centerx, r.centery - 3,
+                                 K.C_CREAM if an else K.C_MUTED, 1, ausrichtung="mitte")
+                continue
             glyph = next(a for n, *_x, a in TASTEN if n == name)
             pygame.draw.rect(ziel, (24, 30, 26) if an else (12, 10, 9), r)
             pygame.draw.rect(ziel, K.C_TEAL if an else K.C_MUTED_DK, r, 1)

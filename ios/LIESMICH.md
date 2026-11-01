@@ -9,6 +9,39 @@ Grundlage ist [pygame-ios](https://github.com/seekerluke/pygame-ios)
 (MIT-Lizenz). Es bringt ein Xcode-Projekt mit Python 3.13, pygame-ce 2.5.6
 und SDL2 als fertige Bibliotheken mit und legt den Spielcode hinein.
 
+## Am schnellsten: ein Befehl (seit 0.34.63)
+
+Ist alles unten unter *Einmal vorbereiten* erledigt, reicht im Spielordner:
+
+```
+git pull
+ios/aufspielen.sh               # bauen, aufs Geraet spielen, starten
+ios/aufspielen.sh --testmodus   # ... und gleich im Testmodus
+```
+
+Das Skript baut das Xcode-Projekt (mit `ios/bauen.sh`), sucht das per Kabel
+angesteckte iPhone oder iPad, findet das Entwicklerteam (aus dem
+Entwicklerzertifikat im Schlüsselbund oder aus *Xcode → Settings →
+Accounts*), signiert automatisch, spielt die App auf und startet sie. Kein
+Klick in Xcode. Gebraucht wird Xcode 15 oder neuer (für `devicectl`).
+
+| Aufruf | Was |
+| --- | --- |
+| `ios/aufspielen.sh --liste` | welche Geräte angesteckt sind, mit Entwicklermodus |
+| `GERAET="iPad von Anna" ios/aufspielen.sh` | ein bestimmtes Gerät (Name oder UDID), wenn mehrere dran sind |
+| `ios/aufspielen.sh --nur-aufspielen` | nicht neu bauen, nur noch einmal aufspielen und starten |
+| `KARTE=wueste ios/aufspielen.sh --testmodus` | Testmodus auf einer anderen Karte |
+| `ios/aufspielen.sh --xcode` | wie früher: bauen und Xcode öffnen |
+| `BUNDLE_ID=... TEAM_ID=... ios/aufspielen.sh` | Bundle-ID oder Team selbst festlegen |
+
+Bundle-ID und Team merkt sich das Skript in `ios/build`. Ohne Angabe ist
+die Bundle-ID `de.dustfront.<Benutzername am Mac>`. Klappt das Signieren
+nicht, öffnet es Xcode mit dem Projekt und schreibt dazu, woran es lag (keine
+Apple-ID in Xcode, Bundle-ID vergeben, Entwicklermodus aus, Gerät gesperrt).
+Beim allerersten Start auf dem Gerät muss man dem eigenen Zertifikat noch
+vertrauen (*Einstellungen → Allgemein → VPN und Geräteverwaltung*), dann
+`ios/aufspielen.sh --nur-aufspielen`.
+
 ## Bauen (auf dem Mac)
 
 Einmal vorbereiten:
@@ -88,6 +121,18 @@ gewohnten Belegung.
 
 Größen und Lagen der Knöpfe stehen in `dustfront/config.py` unter `TOUCH`.
 
+## Testmodus (seit 0.34.63)
+
+Im Hauptmenü unter TESTMODUS, oder gleich beim Start mit
+`ios/aufspielen.sh --testmodus`. Der Ziffernblock wird angetippt, der
+linke Stick fliegt den Beobachter, der rechte bewegt den Zeiger (dort
+setzen 1, 2 und 5 und dort löscht ENTF). Spawner (4) und Testmenü (NUM)
+gehen mit dem Finger: in die Welt tippen setzt den gewählten Eintrag,
+eine Einstellung im linken Drittel antippen blättert zurück. Steuert man
+eine Figur (3), hat sie alle Knöpfe wie im Spiel, und der Ziffernblock
+klappt unter die Taste NUM oben. Alles Weitere: `docs/TESTMODUS.md`,
+Abschnitt "Mit Touch".
+
 ## Crossplay
 
 iPhone und Rechner spielen zusammen. Beide brauchen **dieselbe Version**
@@ -132,6 +177,13 @@ Python 3.13 mit pygame-ce 2.5.6 wie in der Vorlage.
 
 Noch nicht ausprobiert: ein echtes iPad (im Simulator geht es), und
 ältere iPhones (Bildrate in den Einstellungen).
+
+Der Testmodus mit Touch (seit 0.34.63) ist am Rechner mit nachgestellten
+Fingern geprüft (Abschnitt "Testmodus mit Touch"), auf einem echten Gerät
+noch nicht. `ios/aufspielen.sh` ist gegen nachgestellte Werkzeuge
+durchgespielt (Geräteliste von devicectl, Zertifikat, xcodebuild, Fehlerfälle),
+aber noch nicht auf einem echten Mac gelaufen - wer es als Erster benutzt:
+Fehler stehen im Terminal und ausführlich in `ios/build/xcodebuild.log`.
 
 Fehler erscheinen in Xcode unten in der Konsole, wenn die App per Kabel
 läuft.

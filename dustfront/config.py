@@ -1568,6 +1568,13 @@ TESTMODUS = dict(
     welle_farben=((255, 72, 56), (226, 44, 40), (168, 26, 30)),   # innen hell, aussen tief
     welle_striche=6,          # so viele Striche hat ein Ring (seit 0.34.48)
     welle_dreh=1.6,           # so schnell drehen sie sich (Bogenmass je Sekunde)
+    # Auf iPhone und iPad (seit 0.34.63): steuert man eine Figur, liegt der
+    # Ziffernblock unter den Knoepfen der Touch-Steuerung. Dann steht dort
+    # nur diese eine Taste NUM, die ihn aufklappt (x, y, Breite, Hoehe).
+    touch_num=(414, 10, 44, 24),
+    # Im Spawner und im Testmenue: wer auf das linke Drittel einer
+    # Einstellung tippt, blaettert zurueck (es gibt keine rechte Maustaste).
+    touch_zurueck=0.35,
 )
 
 # Zielorientierte KI (seit 0.34.29, goap.py, bot_goap.py, Daten in wesen/).

@@ -35,6 +35,15 @@ nichts daneben:
 
 Dadurch braucht der Gastgeber nichts davon zu wissen: was ankommt, sieht
 aus wie von einem Spieler mit Tastatur. Das ist der Kern von Crossplay.
+
+**Was die Szene mitreden darf** (seit 0.34.63, fuer den Testmodus):
+
+* `touch_tippen(punkt)` - eine eigene Flaeche, die vor Sticks und Knoepfen
+  dran ist, im Spiel wie im Menue (der Ziffernblock). Gibt die Szene True
+  zurueck, gehoert ihr der Finger; die Maus, die SDL aus ihm macht, muss
+  die Szene dort dann selbst liegen lassen (`ev.touch`).
+* `touch_knoepfe()` - welche Knoepfe gerade gelten (Aktionen), oder None
+  fuer alle. Ein Beobachter braucht kein Nachladen und keinen Dash.
 """
 
 from __future__ import annotations
@@ -96,10 +105,23 @@ class Touchsteuerung:
         fw, fh = self.app.fenster.get_size()
         return self.app.zu_spiel((float(ev.x) * fw, float(ev.y) * fh))
 
+    def _gueltige(self):
+        """Die Aktionen der Knoepfe, die die Szene gerade zeigt - None: alle."""
+        frage = getattr(self.app.oben, "touch_knoepfe", None)
+        if frage is None:
+            return None
+        try:
+            return frage()
+        except Exception:                          # noqa: BLE001
+            return None
+
     def _knopf_an(self, p) -> int | None:
         r = T["knopf_radius"] * 1.25          # etwas Spiel fuer den Daumen
         beste, beste_d = None, r * r
-        for i, (_a, _t, mitte, _art) in enumerate(T["knoepfe"]):
+        gilt = self._gueltige()
+        for i, (aktion, _t, mitte, _art) in enumerate(T["knoepfe"]):
+            if gilt is not None and aktion not in gilt:
+                continue
             d = (p[0] - mitte[0]) ** 2 + (p[1] - mitte[1]) ** 2
             if d <= beste_d:
                 beste, beste_d = i, d
@@ -141,6 +163,11 @@ class Touchsteuerung:
         fid = ev.finger_id
         p = self._punkt(ev)
         if ev.type == pygame.FINGERDOWN:
+            if self._szene_tippt(p):
+                # Der Finger gehoert der Szene (der Ziffernblock im
+                # Testmodus): kein Stick, kein Knopf, auch nicht beim Ziehen.
+                self.finger[fid] = {"rolle": "szene", "start": p, "jetzt": p}
+                return []
             knopf = self._knopf_an(p)
             if knopf is not None:
                 self.finger[fid] = {"rolle": "knopf", "knopf": knopf,
@@ -189,6 +216,15 @@ class Touchsteuerung:
             self._zoom_abstand = None
         self._sticks_rechnen()
         return []
+
+    def _szene_tippt(self, p) -> bool:
+        frage = getattr(self.app.oben, "touch_tippen", None)
+        if frage is None:
+            return False
+        try:
+            return bool(frage(p))
+        except Exception:                          # noqa: BLE001
+            return False
 
     def _zoomen(self) -> list:
         """Zwei Finger auseinander: naeher heran, zusammen: weiter weg - als
@@ -291,6 +327,12 @@ class Touchsteuerung:
         den einzelnen Finger macht SDL selbst zur Maus."""
         if ev.type == pygame.FINGERDOWN and self._auf_esc(self._punkt(ev)):
             return self._druck("pause", True) + self._druck("pause", False)
+        if ev.type == pygame.FINGERDOWN and self._szene_tippt(self._punkt(ev)):
+            # Eine eigene Flaeche der Szene, auch im Menue (der Ziffernblock
+            # neben dem Spawner). Sie ist dann fuer diesen Finger zustaendig.
+            self.finger[ev.finger_id] = {"rolle": "szene", "start": None,
+                                         "jetzt": pygame.Vector2(ev.x, ev.y)}
+            return []
         if ev.type == pygame.FINGERDOWN:
             self.finger[ev.finger_id] = {"rolle": "menue", "start": None,
                                          "jetzt": pygame.Vector2(ev.x, ev.y)}
@@ -428,7 +470,10 @@ class Touchsteuerung:
             pygame.draw.circle(o, farbe, (round(s.x + v.x), round(s.y + v.y)), r // 2)
         unten = {f["knopf"] for f in self.finger.values() if f["rolle"] == "knopf"}
         kr = int(T["knopf_radius"])
+        gilt = self._gueltige()
         for i, (aktion, text, mitte, art) in enumerate(T["knoepfe"]):
+            if gilt is not None and aktion not in gilt:
+                continue
             an = i in unten or (art == "umschalten" and self.zielen_an)
             pygame.draw.circle(o, (*(K.C_AMBER if an else K.C_VOID), a), mitte, kr)
             pygame.draw.circle(o, hell if an else dunkel, mitte, kr, 2)

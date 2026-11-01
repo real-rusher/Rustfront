@@ -430,6 +430,20 @@ pruef("Die Steuerung im Hauptmenue ist die des Spiels",
       and "BAUEN" not in _zeilen, str(_zeilen))
 app.opt.zuruecksetzen_werte()
 
+# Direkt in den Testmodus (seit 0.34.63): so startet ios/aufspielen.sh
+# --testmodus die App auf dem iPhone oder iPad.
+_alt_start = os.environ.pop("DUSTFRONT_START", None)
+pruef("Ohne DUSTFRONT_START beginnt das Spiel im Hauptmenue", RM._startauftrag() is None)
+os.environ["DUSTFRONT_START"] = "testmodus"
+os.environ["DUSTFRONT_KARTE"] = "Wueste"
+pruef("Mit DUSTFRONT_START=testmodus gleich im Testmodus, auf der gewuenschten Karte",
+      RM._startauftrag() == {"action": "testmodus", "karte": "wueste"}, str(RM._startauftrag()))
+os.environ.pop("DUSTFRONT_KARTE", None)
+pruef("... ohne Karte auf STAUBTAL", RM._startauftrag()["karte"] == "staubtal")
+os.environ.pop("DUSTFRONT_START", None)
+if _alt_start is not None:
+    os.environ["DUSTFRONT_START"] = _alt_start
+
 print("Konto und Ausruestung")
 from dustfront import konto as KONTO_M
 from dustfront import ablage as ABLAGE

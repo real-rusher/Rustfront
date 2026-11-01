@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.34.62"
+VERSION = "0.34.63"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -1354,13 +1354,12 @@ class MainPage(Page):
             Action("MEHRSPIELER", lambda a: a.goto("multiplayer"),
                    "lobby erstellen oder einer lobby im netz beitreten."),
         ]
-        # Der Testmodus (seit 0.34.28): nur mit Tastatur und Ziffernblock,
-        # also nicht auf iPhone und iPad.
-        if _plattform is None or (not _plattform.IOS and not _plattform.touch_an()):
-            self.items.append(
-                Action("TESTMODUS", lambda a: a.start_game("testmodus"),
-                       "zum ausprobieren: beobachter, ziffernblock, spawner.",
-                       accent=C_TEAL))
+        # Der Testmodus (seit 0.34.28), seit 0.34.63 auch auf iPhone und
+        # iPad: dort wird der Ziffernblock angetippt.
+        self.items.append(
+            Action("TESTMODUS", lambda a: a.start_game("testmodus"),
+                   "zum ausprobieren: beobachter, ziffernblock, spawner.",
+                   accent=C_TEAL))
         self.items += [
             Action("OPTIONEN", lambda a: a.goto("options"),
                    "bild, ton und darstellung anpassen."),
@@ -2100,11 +2099,29 @@ def _klaenge_vorbauen() -> None:
         print("Klaenge nicht vorgebaut:", err)
 
 
+def _startauftrag() -> dict | None:
+    """Gleich in den Testmodus statt ins Hauptmenue (seit 0.34.63), wenn
+    DUSTFRONT_START=testmodus gesetzt ist - so startet ios/aufspielen.sh
+    --testmodus die App auf dem iPhone oder iPad. Danach geht es wie
+    sonst ins Hauptmenue."""
+    if os.environ.get("DUSTFRONT_START", "").strip().lower() == "testmodus":
+        return {"action": "testmodus",
+                "karte": os.environ.get("DUSTFRONT_KARTE", "").strip().lower() or "staubtal"}
+    return None
+
+
 def main() -> int:
     app = build_app()
     run_splash(app)
     pygame.event.clear()
     _klaenge_vorbauen()
+    auftrag = _startauftrag()
+    if auftrag is not None:
+        spiel_scene(app.window, app, auftrag)
+        app.running = True
+        app.fade, app.fade_dir, app.pending = 1.0, -1, None
+        app.pages.pop("main", None)
+        app.goto("main")
     while True:
         result = app.run()
         if result["action"] == "quit":
