@@ -377,6 +377,9 @@ class Welt:
         # sie sind keine Wesen, stossen niemanden und sind nicht zu
         # treffen - sie liegen auf ihrer Ebene und nehmen den Ort.
         self.feuer: list = []
+        # Nagelfelder (seit 0.34.65, der Nagelstreuer): aus demselben Grund
+        # eine eigene Liste.
+        self.naegel: list = []
         # Reine Rueckmeldung: Staubringe beim Aufsetzen und kurze
         # Aufschriften ueber aufgesammelter Beute. Beides entscheidet
         # nichts, es sagt nur, dass etwas passiert ist.
@@ -545,6 +548,18 @@ class Welt:
             wolke(self, pos, 10, 90, 0.5, f["toene"][1], ebene, 1, "funke")
             self.klang("molotov_glass", 0.9, pos, ebene)
             self.klang("molotov_whoosh", 0.28, pos, ebene)
+            return
+        if art == "emp":
+            # Die EMP-Granate (seit 0.34.65): kein Feuer, kein Krater - ein
+            # blauer Kranz, der den Kreis zeigt, in dem Fahrzeuge ausfallen.
+            for i in range(28):
+                winkel = i * 360.0 / 28
+                p = pos + pygame.Vector2(radius * 0.9, 0).rotate(winkel)
+                wolke(self, p, 1, 40, 0.5, (150, 220, 255), ebene, 1, "funke")
+            wolke(self, pos, 20, 260, 0.45, (200, 240, 255), ebene, 2, "funke")
+            wolke(self, pos, 10, 120, 0.8, (90, 170, 230), ebene, 1, "funke")
+            self.aufschlagring(pos, ebene, 1.2)
+            self.klang("blend", 0.35, pos, ebene)
             return
         if art in ("panzer", "c4", "spreng", "klein", "feuer"):
             self.lichtblitz(pos, ebene, max(radius, 40.0 if art != "klein" else 20.0)
@@ -751,6 +766,9 @@ class Welt:
         if self.feuer and not self._rechnet:
             for b in self.feuer:
                 b.schritt(dt, None)
+        if self.naegel and not self._rechnet:
+            for n in self.naegel:
+                n.schritt(dt, None)
         if self.muendungen:
             for m in self.muendungen:
                 m[3] -= dt
@@ -820,6 +838,10 @@ class Welt:
             b.schritt(dt, self)
         if any(not b.lebt for b in self.feuer):
             self.feuer = [b for b in self.feuer if b.lebt]
+        for n in self.naegel:
+            n.schritt(dt, self)
+        if any(not n.lebt for n in self.naegel):
+            self.naegel = [n for n in self.naegel if n.lebt]
         if any(not w.lebt for w in self.wesen):
             self.wesen = [w for w in self.wesen if w.lebt]
 

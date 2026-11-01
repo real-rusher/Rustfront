@@ -1656,6 +1656,40 @@ def _minirakete_flug():
     return _rand(s, (16, 12, 8))
 
 
+@platzhalter("haftladung_flug")
+def _haftladung_flug():
+    """Die Haftladung (seit 0.34.65): ein gruener Klebering um eine
+    dunkle Ladung mit rotem Licht - so sieht man sie auch am Blech."""
+    s = _flaeche(9, 9)
+    pygame.draw.circle(s, (126, 168, 80), (4, 4), 4)
+    pygame.draw.circle(s, (40, 44, 40), (4, 4), 3)
+    pygame.draw.circle(s, (70, 76, 68), (3, 3), 1)
+    s.set_at((5, 5), (230, 60, 50))
+    return s
+
+
+@platzhalter("emp_flug")
+def _emp_flug():
+    """Die EMP-Granate (seit 0.34.65): Keramik mit blauem Kern."""
+    s = _flaeche(9, 9)
+    pygame.draw.circle(s, (60, 64, 72), (4, 4), 4)
+    pygame.draw.circle(s, (176, 180, 186), (4, 4), 3)
+    pygame.draw.circle(s, (80, 200, 230), (4, 4), 1)
+    s.set_at((4, 3), (200, 250, 255))
+    return s
+
+
+@platzhalter("nagel")
+def _nagel():
+    """Ein Kraehenfuss (seit 0.34.65): drei Spitzen, eine nach oben."""
+    s = _flaeche(5, 5)
+    pygame.draw.line(s, (120, 122, 124), (0, 4), (2, 2))
+    pygame.draw.line(s, (120, 122, 124), (4, 4), (2, 2))
+    pygame.draw.line(s, (150, 152, 154), (2, 0), (2, 2))
+    s.set_at((2, 2), (200, 202, 204))
+    return s
+
+
 @platzhalter("rpg_kiste")
 def _rpg_kiste():
     s = _flaeche(18, 14)

@@ -310,6 +310,22 @@ def abschuss_buchen(von, ziel, waffe: str, lebte: bool) -> None:
             von.zaehlen("boss_abschuesse")
 
 
+def schaden_an(ziel, menge, schub=None, von=None, art=None, herkunft=None,
+               fahrzeug_menge=None) -> None:
+    """Ein Treffer mit Schadensart (seit 0.34.65, K.PANZERUNG).
+
+    Nur Fahrzeuge (`ist_fahrzeug`) fragen nach der Art und danach, woher
+    der Treffer kam; alles andere bekommt `menge` wie bisher. Darum geht
+    jeder Treffer, der einen Wagen treffen kann, hier durch - und die
+    Wesen selbst brauchen keine neue Unterschrift. `fahrzeug_menge`
+    ersetzt `menge` am Blech (Haftladung)."""
+    if getattr(ziel, "ist_fahrzeug", False):
+        ziel.schaden(menge if fahrzeug_menge is None else fahrzeug_menge,
+                     schub, von, art=art, herkunft=herkunft)
+    else:
+        ziel.schaden(menge, schub, von)
+
+
 def treffer_ziel_buchen(von, ziel) -> None:
     """Ein Treffer, getrennt danach, ob er einen Spieler oder einen Zombie traf."""
     if not hasattr(von, "zaehlen"):
@@ -364,6 +380,9 @@ class Geschoss(Wesen):
         self.durch = int(daten.get("durchschlag", 0))
         self.durch_deckung = bool(daten.get("durch_deckung", False))
         self.gegen_fahrzeug = bool(daten.get("gegen_fahrzeug", False))
+        # Welche Zeile von K.PANZERUNG gilt (seit 0.34.65).
+        self.schadensart = daten.get("schadensart") or (
+            "panzerbrechend" if self.gegen_fahrzeug else "kugel")
         self.stoss = float(daten.get("stoss", 1.0))
         self._durch_wen: list = []
 
@@ -439,14 +458,15 @@ class Geschoss(Wesen):
             treffer_ziel_buchen(self.von, ziel)
         lebte = ziel.lebt
         menge = self.schaden_jetzt()
-        if getattr(ziel, "rechteckig", False):
-            # Panzer und Panzerwagen (seit 0.34.59): eine Kugel zerkratzt
-            # nur den Lack (`kugel_anteil`) - wer im Turm oder im Ring
-            # steht, bekommt seinen Teil aber ganz ab. Die Panzerbuechse
-            # (seit 0.34.62) geht durchs Blech: voller Schaden.
-            ziel.schaden(menge, schub, self.von, kugel=not self.gegen_fahrzeug)
-        else:
-            ziel.schaden(menge, schub, self.von)
+        # Am Fahrzeug zaehlt die Art (seit 0.34.65, K.PANZERUNG): eine
+        # Kugel zerkratzt den Panzer nur - wer im Turm oder im Ring steht,
+        # bekommt seinen Teil aber ganz ab. Die Panzerbuechse geht durchs
+        # Blech. Die Herkunft ist der Weg zurueck, den sie gekommen ist.
+        art = self.schadensart
+        herkunft = None
+        if self.tempo.length_squared() > 0.001:
+            herkunft = self.pos - pygame.Vector2(self.tempo).normalize() * 40.0
+        schaden_an(ziel, menge, schub, self.von, art, herkunft)
         abschuss_buchen(self.von, ziel, self.waffe, lebte)
         if getattr(ziel, "treffer_art", "") == "metall":
             wolke(self.welt, self.pos, 5, 170, 0.18, (255, 222, 150), self.ebene,
@@ -494,8 +514,15 @@ class Granate(Wesen):
             self.bild = K.skin("molotov_flug")
         elif daten.get("blend"):
             self.bild = K.skin("blend_flug")
+        elif daten.get("haftet"):
+            self.bild = "haftladung_flug"
+        elif daten.get("emp"):
+            self.bild = "emp_flug"
         else:
             self.bild = "granate"
+        # Haftladung (seit 0.34.65): woran sie klebt, und wo darauf.
+        self.traeger = None
+        self._versatz = pygame.Vector2(0, 0)
         self.rest = daten["flugzeit"]
         self.dreh = RND.uniform(-700, 700)
         # Anfangstempo so waehlen, dass sie nach der Reibung genau auf der
@@ -511,6 +538,8 @@ class Granate(Wesen):
     def schritt(self, dt: float) -> None:
         self.vorher.update(self.pos)
         self.rest -= dt
+        if self.daten.get("haftet") and self._haften(dt):
+            return
         self.winkel += self.dreh * dt
         if self.sturz_rest > 0:
             self.sturz_schritt(dt)
@@ -530,6 +559,46 @@ class Granate(Wesen):
         # Zielebene an, waehrend die Granate im Bild noch in der Luft ist.
         if self.rest <= 0 and self.sturz_rest <= 0:
             self.zuenden()
+
+    def _haften(self, dt: float) -> bool:
+        """Die Haftladung: klebt sie schon, faehrt sie mit ihrem Traeger und
+        zuendet nach ihrer Zeit. Sonst sucht sie, woran sie stoesst - jedes
+        trefferbare Wesen ausser dem Werfer. True: der Schritt ist erledigt."""
+        w = self.welt
+        t = self.traeger
+        if t is None:
+            for a in w.nahe(self.pos, self.radius + 40.0, self.ebene):
+                if (a is self or a is self.von or not a.lebt
+                        or not getattr(a, "trefferbar", False)
+                        or getattr(a, "fraktion", "") == "geschoss"):
+                    continue
+                if getattr(a, "ist_fahrzeug", False):
+                    if not a.beruehrt(self.pos, self.radius):
+                        continue
+                elif a.pos.distance_to(self.pos) > a.radius + self.radius:
+                    continue
+                # Fahrer kleben am Wagen, nicht an sich selbst.
+                if getattr(a, "im_fahrzeug", False) and getattr(a, "fahrzeug", None) is not None:
+                    a = a.fahrzeug
+                self.traeger = t = a
+                rel = (self.pos - a.pos) * 0.75
+                self._versatz = rel.rotate(-getattr(a, "winkel", 0.0))
+                self.tempo.update(0, 0)
+                w.klang("aufheben", 0.5, self.pos, self.ebene)
+                break
+            if t is None:
+                return False
+        if not t.lebt or t.ebene != self.ebene and not getattr(t, "ist_fahrzeug", False):
+            # Der Traeger ist weg: sie faellt, wo sie war, und zuendet dort.
+            self.traeger = None
+            self.tempo.update(0, 0)
+            return False
+        self.ebene = t.ebene
+        self.pos.update(t.pos + self._versatz.rotate(getattr(t, "winkel", 0.0)))
+        self.tempo.update(0, 0)
+        if self.rest <= 0:
+            self.zuenden()
+        return True
 
     def stuerzen(self) -> None:
         """Ueber die Kante: sie fliegt weiter, wie sie geworfen wurde.
@@ -596,7 +665,19 @@ class Granate(Wesen):
             w.feuer.append(Brandflaeche(self.pos, self.ebene, von=self.von))
             w.explosion(self.pos, self.ebene, 0.0, "feuer")
             return
+        if d.get("emp"):
+            # Seit 0.34.65: jedes Fahrzeug im Kreis steht still. Kein
+            # Schaden, keine Mannschaftsfrage - Elektronik kennt keine.
+            e = K.EMP
+            for b in list(w.nahe(self.pos, e["radius"] + 80.0, self.ebene)):
+                if (getattr(b, "ist_fahrzeug", False) and b.lebt
+                        and b.beruehrt(self.pos, e["radius"])):
+                    b.emp_treffen(e["dauer"])
+            w.explosion(self.pos, self.ebene, e["radius"], "emp")
+            return
         r = d["radius"]
+        art = d.get("schadensart", "spreng")
+        fz = d.get("fahrzeug_schaden")
         for ziel in list(w.nahe(self.pos, r + 30, self.ebene)):
             if not ziel.lebt or ziel is self:
                 continue
@@ -610,9 +691,14 @@ class Granate(Wesen):
             anteil *= w.deckung_anteil(self.pos, ziel.pos, self.ebene)
             schub = (ab.normalize() * 320 * anteil) if entfernung > 0.01 else None
             lebte = ziel.lebt
-            ziel.schaden(d["schaden"] * anteil, schub, self.von)
+            # Klebt sie am Wagen, wirkt sie ganz - auch wenn seine Mitte
+            # weiter weg liegt als ihr Kreis.
+            if ziel is getattr(self, "traeger", None):
+                anteil = 1.0
+            schaden_an(ziel, d["schaden"] * anteil, schub, self.von, art, self.pos,
+                       None if fz is None else fz * anteil)
             abschuss_buchen(self.von, ziel, getattr(self, "waffe", "granate"), lebte)
-        w.explosion(self.pos, self.ebene, r)
+        w.explosion(self.pos, self.ebene, r, d.get("explosion", "spreng"))
         w.kurz_langsam(0.05)
 
 
@@ -776,7 +862,8 @@ class C4Ladung(Wesen):
             schub = (delta.normalize() * K.C4["schub"] * anteil
                      if abstand > 0.01 else None)
             lebte = ziel.lebt
-            ziel.schaden(K.C4["schaden"] * anteil, schub, self.von)
+            schaden_an(ziel, K.C4["schaden"] * anteil, schub, self.von, "hohlladung",
+                       self.pos)
             abschuss_buchen(self.von, ziel, "c4", lebte)
         w.explosion(self.pos, self.ebene, radius, "c4", von=self.von)
 
@@ -942,7 +1029,8 @@ class Rakete(Wesen):
             anteil *= w.deckung_anteil(self.pos, ziel.pos, self.ebene)
             schub = (ab.normalize() * 420 * anteil) if entfernung > 0.01 else None
             lebte = ziel.lebt
-            ziel.schaden(d["schaden"] * anteil, schub, schuetze)
+            schaden_an(ziel, d["schaden"] * anteil, schub, schuetze,
+                       d.get("schadensart", "hohlladung"), self.pos - self.tempo * 0.1)
             abschuss_buchen(schuetze, ziel, self.waffe, lebte)
         w.explosion(self.pos, self.ebene, r, d.get("explosion", "spreng"))
         w.kurz_langsam(0.06)
@@ -1046,7 +1134,7 @@ class Brandflaeche:
                 continue
             anteil = self.brennt(ziel.pos, ziel.ebene)
             if anteil > 0.0:
-                ziel.schaden(f["schaden"] * anteil * dt, None, self.von)
+                schaden_an(ziel, f["schaden"] * anteil * dt, None, self.von, "feuer")
         # Funken steigen auf. Sie sind das, was ein Feuer von einem
         # roten Fleck unterscheidet.
         self._funkenrest += f["funken"] * self.staerke * dt
@@ -1156,6 +1244,81 @@ def _gitterwert(x: float, y: float, masche: float, saat: int) -> float:
     oben = a + (b - a) * sx
     unten = c + (d - c) * sx
     return oben + (unten - oben) * sy
+
+
+class Nagelfeld:
+    """Naegel und Kraehenfuesse hinter einem Wagen (seit 0.34.65, der
+    Nagelstreuer). Wie die Brandflaeche kein Wesen: sie liegt nur da.
+
+    Reifen gehen darin platt - der Wagen wird fuer `platt_dauer` langsam
+    und nimmt etwas Schaden, einmal je Ueberfahrt. Ketten (der Panzer)
+    rollen darueber. Figuren werden langsam und bluten ein wenig, solange
+    sie darin stehen."""
+
+    __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt",
+                 "kennung", "von", "saat")
+    _naechste_kennung = 0
+
+    def __init__(self, pos, ebene: int, von=None, kennung: int | None = None,
+                 alter: float = 0.0) -> None:
+        n = K.NAEGEL
+        self.pos = pygame.Vector2(pos)
+        self.ebene = int(ebene)
+        self.radius = float(n["radius"])
+        self.dauer = float(n["dauer"])
+        self.alter = float(alter)
+        self.lebt = True
+        self.von = von
+        if kennung is None:
+            Nagelfeld._naechste_kennung += 1
+            kennung = Nagelfeld._naechste_kennung
+        self.kennung = int(kennung)
+        # Wo die einzelnen Naegel liegen, folgt aus der Kennung - beim
+        # Gast also genau so wie beim Gastgeber, ohne dass es mitgeht.
+        self.saat = self.kennung * 7919
+
+    def schritt(self, dt: float, welt=None) -> None:
+        self.alter += dt
+        if self.alter >= self.dauer:
+            self.lebt = False
+            return
+        if welt is None:
+            return
+        n = K.NAEGEL
+        for ziel in list(welt.nahe(self.pos, self.radius + 40.0, self.ebene)):
+            if not ziel.lebt or getattr(ziel, "fraktion", "") == "geschoss":
+                continue
+            if getattr(ziel, "ist_fahrzeug", False):
+                if (ziel.art in n["ketten"] or getattr(ziel, "platt_rest", 0.0) > 0.0
+                        or abs(ziel.fahrt) < 25.0
+                        or not ziel.beruehrt(self.pos, self.radius)):
+                    continue
+                ziel.platt_treffen(n["platt_dauer"])
+                schaden_an(ziel, n["platt_schaden"], None, self.von)
+                continue
+            if (not getattr(ziel, "trefferbar", False) or getattr(ziel, "flug", 0.0) > 0
+                    or getattr(ziel, "im_fahrzeug", False)
+                    or ziel.pos.distance_to(self.pos) > self.radius + ziel.radius):
+                continue
+            # Die eigenen Leute wissen, wo sie liegen.
+            if (self.von is not None and ziel is not self.von
+                    and getattr(ziel, "fraktion", None) == getattr(self.von, "fraktion", "")
+                    and getattr(self.von, "fraktion", "") not in ("neutral", "")):
+                continue
+            ziel.naegel_rest = 0.25
+            if abs(getattr(ziel, "tempo", pygame.Vector2()).length()) > 10.0:
+                ziel.schaden(n["schaden"] * dt, None, self.von)
+
+    def stellen(self) -> list:
+        """Wo die einzelnen Naegel liegen: (x, y, Winkel), immer gleich."""
+        r = random.Random(self.saat)
+        raus = []
+        for _ in range(K.NAEGEL["anzahl"]):
+            a = r.uniform(0, math.tau)
+            d = self.radius * math.sqrt(r.random()) * 0.9
+            raus.append((self.pos.x + math.cos(a) * d, self.pos.y + math.sin(a) * d,
+                         r.uniform(0, 360)))
+        return raus
 
 
 class Rauchwolke:
@@ -2076,6 +2239,10 @@ class Spieler(Wesen):
             luft *= K.ZIEHEN["tempo"]
         # Wer wiederbelebt wurde, geht langsamer (seit 0.34.40, Testmodus).
         luft *= getattr(self, "tempo_anteil", 1.0)
+        # Wer in einem Nagelfeld steht, ebenso (seit 0.34.65, Nagelfeld).
+        if getattr(self, "naegel_rest", 0.0) > 0.0:
+            self.naegel_rest -= dt
+            luft *= K.NAEGEL["tempo"]
         if getattr(self, "sprintet", False):
             luft *= K.SPRINT["faktor"]        # Bots sprinten (seit 0.34.50)
         self._dash_laden(dt)
@@ -2356,8 +2523,10 @@ class Spieler(Wesen):
             # Sie fliegt dorthin, wo man hinzeigt, nicht immer gleich weit.
             weite = min(d["wurf_max"], max(d["wurf_min"],
                                            self.pos.distance_to(self.ziel)))
-            self.welt.dazu(Granate(muendung, self.winkel, d, self.ebene, self,
-                                   weite))
+            gr = Granate(muendung, self.winkel, d, self.ebene, self, weite)
+            # Fuer die Statistik je Waffe (Haftladung, EMP ...).
+            gr.waffe = self.waffe_name
+            self.welt.dazu(gr)
             self.welt.ruckeln(1.2, "wurf", self.pos, self.ebene, self)
             self.welt.klang("wurf", 0.6, self.pos, self.ebene)
             self.zaehlen("rauchwolken" if d.get("rauch") else "granaten",
@@ -2516,7 +2685,7 @@ class Spieler(Wesen):
             if abs(delta) > halb:
                 continue
             schub = ab.normalize() * d["schub"] if ab.length_squared() > 0.01 else None
-            ziel.schaden(d["schaden"], schub, self)
+            schaden_an(ziel, d["schaden"], schub, self, "nahkampf", self.pos)
             if getattr(ziel, "ist_boss", False) or getattr(ziel, "treffer_art", "") == "metall":
                 treffer_art = "metall"
             if getattr(ziel, "zaehlt_treffer", True):
@@ -2881,7 +3050,7 @@ class Gegner(Wesen):
                 schub = ding.pos - self.pos
                 if schub.length_squared() > 0.01:
                     schub = schub.normalize() * 260 * anteil
-                ding.schaden(f["schaden"] * anteil, schub, self)
+                schaden_an(ding, f["schaden"] * anteil, schub, self, "spreng", self.pos)
         elif art == "brut":
             self.brut = [g for g in self.brut if g.lebt]
             if len(self.brut) >= f["hoechstens"]:
@@ -2961,7 +3130,7 @@ class Gegner(Wesen):
             schub = ding.pos - self.pos
             if schub.length_squared() > 0.01:
                 schub = schub.normalize() * 220 * anteil
-            ding.schaden(p["schaden"] * anteil, schub, self)
+            schaden_an(ding, p["schaden"] * anteil, schub, self, "spreng", self.pos)
         if p.get("zuendet"):
             # `verschont="feind"`, und zwar nach einer Messung: ohne das
             # toetete das Feuer eines einzigen Blaehers alle fuenf
@@ -2991,7 +3160,7 @@ class Gegner(Wesen):
         schub = ziel.pos - self.pos
         if schub.length_squared() > 0.01:
             schub = schub.normalize() * 150
-        ziel.schaden(self.daten["schaden"], schub, self)
+        schaden_an(ziel, self.daten["schaden"], schub, self, "nahkampf", self.pos)
         wolke(self.welt, (self.pos + ziel.pos) / 2, 5, 150, 0.2, K.C_ORANGE,
               self.ebene, 1, "funke")
 

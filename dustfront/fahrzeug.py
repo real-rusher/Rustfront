@@ -57,7 +57,8 @@ import pygame
 
 from . import config as K
 from .core import Bilder, naehern
-from .entities import RND, Geschoss, Partikel, Wesen, abschuss_buchen, tod_blut, wolke
+from .entities import (RND, Geschoss, Nagelfeld, Partikel, Rauchwolke, Wesen, abschuss_buchen,
+                       schaden_an, tod_blut, wolke)
 
 
 _SPURPUNKTE: dict = {}
@@ -104,6 +105,9 @@ class Buggy(Wesen):
     # entities.C4Ladung). Er selbst nimmt keinen Schaden davon, wer drin
     # sitzt, schon.
     c4_haftet = True
+    # Seit 0.34.65: ein Fahrzeug fragt bei jedem Treffer nach der Art
+    # (K.PANZERUNG, entities.schaden_an).
+    ist_fahrzeug = True
     # Wie er hochgeht: der Buggy wie eine Granate, Panzer und Panzerwagen
     # mit dem Feuerball der Kanone (Welt.explosion, seit 0.34.59).
     explosion_art = "spreng"
@@ -138,6 +142,16 @@ class Buggy(Wesen):
         # Und in welchem Aussehen (seit 0.34.60, art_figuren). Leer: die
         # alte Figur in den Farben der Mannschaft.
         self.skin = ""
+        # Seit 0.34.65: wie lange ein EMP ihn noch stilllegt, wie lange die
+        # Reifen noch platt sind, was er hinten heraus werfen kann, und
+        # was ihn zuletzt traf (fuer die INFO-Ansicht des Testmodus).
+        self.emp_rest = 0.0
+        self.platt_rest = 0.0
+        self._emp_funken = 0.0
+        self.hilfe = {}
+        self.hilfe_takt = {}
+        self.hilfe_auffuellen()
+        self.letzter_treffer = None
         self._staub_rest = 0.0
         # Kaputt (seit 0.34.18): ein Wrack, das noch `wrack_rest` brennt.
         # `kaputt_von` hat ihn erledigt - der bekommt auch den Fahrer.
@@ -196,25 +210,125 @@ class Buggy(Wesen):
             return self.anteil
         return max(0.0, self.leben / self.max_leben)
 
-    def schaden(self, menge, schub=None, von=None) -> None:
-        """Ein Treffer am Wagen. Was drinsitzt, bekommt ihn auch - so wie
-        bisher, als die Kugeln am Wagen vorbei auf den Fahrer gingen, nur
-        dass jetzt auch das Blech etwas abbekommt. Die eigenen Leute treffen
-        den Wagen, aber nicht den Fahrer: Freundfeuer gibt es sonst nicht.
-        Weggestossen wird er nicht, `schub` bleibt ungenutzt."""
+    def seite(self, herkunft) -> str:
+        """Von wo ein Treffer kommt: "vorn", "seite" oder "hinten"."""
+        if herkunft is None:
+            return "seite"
+        d = pygame.Vector2(herkunft) - self.pos
+        if d.length_squared() < 1.0:
+            return "seite"
+        s = K.PANZER_SEITEN
+        winkel = abs(self.vorn.angle_to(d))
+        winkel = min(winkel, 360.0 - winkel)
+        if winkel <= s["vorn_bis"]:
+            return "vorn"
+        if winkel >= s["hinten_ab"]:
+            return "hinten"
+        return "seite"
+
+    def panzerung(self, art, herkunft=None) -> float:
+        """So viel eines Treffers dieser Art kommt am Blech an (K.PANZERUNG,
+        K.PANZER_SEITEN). Ohne Art: alles."""
+        if art is None:
+            return 1.0
+        anteil = float(K.PANZERUNG.get(self.art, {}).get(art, 1.0))
+        s = K.PANZER_SEITEN
+        if art not in s["ohne"]:
+            anteil *= s[self.seite(herkunft)]
+        return anteil
+
+    @property
+    def kugel_anteil(self) -> float:
+        """So viel einer Kugel kommt von der Seite am Blech an."""
+        return float(K.PANZERUNG.get(self.art, {}).get("kugel", 1.0))
+
+    def schaden(self, menge, schub=None, von=None, kugel: bool = False,
+                art=None, herkunft=None) -> None:
+        """Ein Treffer am Wagen. Was drinsitzt, bekommt ihn auch (seinen
+        Teil nimmt Kaempfer.schaden, `fahrer_anteil`) - die Panzerung
+        schuetzt das Fahrzeug, nicht den Mann in der Luke. Die eigenen
+        Leute treffen den Wagen, aber nicht den Fahrer: Freundfeuer gibt es
+        sonst nicht. Weggestossen wird er nicht, `schub` bleibt ungenutzt.
+
+        Seit 0.34.65 mit Art und Herkunft (K.PANZERUNG): eine Kugel
+        zerkratzt den Panzer nur, eine Hohlladung geht durch, und hinten
+        ist das Blech duenner als vorn. `kugel` ist die alte Schreibweise
+        fuer art="kugel"."""
         if self.kaputt or self.nur_bild or not self.lebt:
             return
         menge = float(menge)
         if menge <= 0.0:
             return
+        if art is None and kugel:
+            art = "kugel"
         k = self.fahrer
         if (k is not None and k.lebt and von is not k
                 and (von is None or getattr(von, "fraktion", None) != k.fraktion)):
             k.schaden(menge, None, von)
-        self.leben -= menge
+        anteil = self.panzerung(art, herkunft)
+        self.leben -= menge * anteil
+        self.letzter_treffer = (art or "-", self.seite(herkunft), anteil, menge * anteil)
         self.blitz = K.TREFFER["blitz"]
         if self.leben <= 0.0:
             self._zerstoeren(von)
+
+    # ---- EMP, Reifen, Heckhilfen (seit 0.34.65) ----------------------
+    def emp_treffen(self, dauer: float) -> None:
+        """Ein EMP: Motor, Lenkung und Waffen fallen fuer `dauer` aus."""
+        if self.kaputt or self.nur_bild:
+            return
+        self.emp_rest = max(self.emp_rest, float(dauer))
+
+    def platt_treffen(self, dauer: float) -> None:
+        if self.kaputt or self.nur_bild:
+            return
+        self.platt_rest = max(self.platt_rest, float(dauer))
+        if self.welt is not None:
+            self.welt.klang("buggy_aufprall", 0.5, self.pos, self.ebene)
+
+    def hilfe_auffuellen(self) -> None:
+        """Volle Ladungen fuer das, was diese Art hinten heraus werfen kann."""
+        self.hilfe = {n: int(h["ladungen"]) for n, h in K.FAHRZEUG_HILFE.items()
+                      if self.art in h["arten"]}
+        self.hilfe_takt = {}
+
+    def heck(self, weiter: float = 0.0) -> pygame.Vector2:
+        """Ein Punkt hinter dem Wagen."""
+        f = self.werte
+        hinten = f.get("hinten", -(f.get("achse", 14.0) + f.get("kreis", 13.0)))
+        return self.pos + self.vorn * (hinten - 6.0 - weiter)
+
+    def hilfe_nutzen(self, name: str) -> bool:
+        """Hecknebel oder Nagelstreuer ausloesen. False: geht gerade nicht
+        (keine Ladung, noch im Takt, EMP, Wrack, diese Art hat es nicht)."""
+        w = self.welt
+        if (w is None or self.kaputt or self.nur_bild or self.emp_rest > 0.0
+                or self.hilfe.get(name, 0) <= 0 or self.hilfe_takt.get(name, 0.0) > 0.0):
+            return False
+        h = K.FAHRZEUG_HILFE[name]
+        self.hilfe[name] -= 1
+        self.hilfe_takt[name] = h["takt"]
+        if name == "hecknebel":
+            for i in range(h["wolken"]):
+                w.rauch.append(Rauchwolke(self.heck(h["abstand"] * i), self.ebene,
+                                          radius=h["radius"], dauer=h["dauer"]))
+            w.explosion(self.heck(), self.ebene, 0.0, "rauch")
+        elif name == "nagelstreuer":
+            w.naegel.append(Nagelfeld(self.heck(K.NAEGEL["radius"] * 0.6), self.ebene,
+                                      von=self.fahrer))
+            w.klang("aufheben", 0.7, self.pos, self.ebene)
+        return True
+
+    def _emp_funkeln(self, dt: float) -> None:
+        """Blaue Funken, solange der EMP wirkt - beim Gastgeber und beim Gast."""
+        if self.emp_rest <= 0.0 or self.kaputt or self.welt is None:
+            return
+        self._emp_funken -= dt
+        if self._emp_funken > 0.0:
+            return
+        self._emp_funken = K.EMP["funken_takt"]
+        stelle = self.pos + pygame.Vector2(RND.uniform(-14, 14), RND.uniform(-10, 10)).rotate(self.winkel)
+        wolke(self.welt, stelle, 2, 70, 0.25, (150, 220, 255), self.ebene, 1, "funke")
 
     def _zerstoeren(self, von) -> None:
         """Er geht hoch. Der Fahrer wird vom Gefecht herausgeholt
@@ -246,7 +360,7 @@ class Buggy(Wesen):
             schub = ding.pos - self.pos
             if schub.length_squared() > 0.01:
                 schub = schub.normalize() * 240 * anteil
-            ding.schaden(f["explosion_schaden"] * anteil, schub, von)
+            schaden_an(ding, f["explosion_schaden"] * anteil, schub, von, "spreng", self.pos)
 
     def wrack_qualm(self, dt: float) -> None:
         """Das Wrack qualmt und glimmt - beim Gastgeber und beim Gast."""
@@ -317,10 +431,24 @@ class Buggy(Wesen):
         if self.kaputt:
             self.wrack_rest = max(0.0, self.wrack_rest - dt)
             self.wrack_qualm(dt)
-        fahrer = self.fahrer is not None and not self.kaputt
+        for n in list(self.hilfe_takt):
+            self.hilfe_takt[n] = max(0.0, self.hilfe_takt[n] - dt)
+        self.platt_rest = max(0.0, self.platt_rest - dt)
+        # Ein EMP legt alles still: kein Gas, keine Lenkung (seit 0.34.65).
+        # Rollen und gebremst werden geht weiter - die Physik bleibt.
+        stromlos = self.emp_rest > 0.0
+        if stromlos:
+            self.emp_rest = max(0.0, self.emp_rest - dt)
+            self._emp_funkeln(dt)
+        fahrer = self.fahrer is not None and not self.kaputt and not stromlos
         self._physik(dt, self.gas if fahrer else 0.0,
                      self.lenk if fahrer else 0.0,
                      bool(self.handbremse) and fahrer)
+        if self.platt_rest > 0.0:
+            # Platte Reifen: mehr als einen Teil des Hoechsttempos gibt es nicht.
+            hoechst = self.werte["hoechst"] * K.NAEGEL["platt_tempo"]
+            if self.geschw.length() > hoechst:
+                self.geschw.scale_to_length(hoechst)
         self._drehen(dt)
         self._fahren(dt)
         self.tempo.update(self.geschw)
@@ -575,6 +703,9 @@ class Buggy(Wesen):
         self._staub(dt)
         self._spuren()
         self.wrack_qualm(dt)
+        if self.emp_rest > 0.0:
+            self.emp_rest = max(0.0, self.emp_rest - dt)
+            self._emp_funkeln(dt)
 
     def _radstellen(self) -> list:
         """Wo die Raeder den Boden beruehren: hinten links, hinten rechts,
@@ -636,6 +767,8 @@ class Buggy(Wesen):
         self.kaputt = False
         self.kaputt_von = None
         self.wrack_rest = 0.0
+        self.emp_rest = self.platt_rest = 0.0
+        self.hilfe_auffuellen()
 
     def ausstiegsorte(self, radius: float) -> list:
         """Wo man aussteigen kann, der Reihe nach: links, rechts, hinten,
@@ -668,8 +801,8 @@ class Buggy(Wesen):
 #   Mauszeiger des Fahrers mit ihrem eigenen Tempo, unabhaengig von der
 #   Wanne (Weltwinkel `aufbau`). Gemeldet als Entscheidung: einer steuert
 #   ein Fahrzeug - er faehrt und schiesst.
-# * **Panzerung.** Kugeln kommen nur zum Teil an (`kugel_anteil`), was
-#   explodiert, voll.
+# * **Panzerung.** Seit 0.34.65 je Schadensart und Seite (K.PANZERUNG,
+#   Buggy.panzerung): Kugeln zerkratzen nur, Hohlladungen gehen durch.
 # * **Drei Zeichenebenen.** Erst Schatten und Wanne (Ketten und Raeder sind
 #   niedrig), dann die Figuren, dann Turm und Ring (render.py). Sonst lag
 #   alles, was noerdlich von ihm steht, unter seinen Ketten.
@@ -740,7 +873,10 @@ class Panzergranate(Geschoss):
             lebte = ziel.lebt
             if hasattr(self.von, "zaehlen") and getattr(ziel, "zaehlt_treffer", True):
                 self.von.zaehlen("treffer", 1.0, self.waffe)
-            ziel.schaden(d["schaden"], schub, self.von)
+            herkunft = None
+            if self.tempo.length_squared() > 0.01:
+                herkunft = self.pos - pygame.Vector2(self.tempo).normalize() * 40.0
+            schaden_an(ziel, d["schaden"], schub, self.von, "panzerbrechend", herkunft)
             abschuss_buchen(self.von, ziel, self.waffe, lebte)
         r = d["radius"]
         for a in list(w.nahe(self.pos, r + 60, self.ebene)):
@@ -754,7 +890,7 @@ class Panzergranate(Geschoss):
             anteil *= w.deckung_anteil(self.pos, a.pos, self.ebene)
             schub = ab.normalize() * d["schub"] * anteil if weit > 0.01 else None
             lebte = a.lebt
-            a.schaden(d["flaeche"] * anteil, schub, self.von)
+            schaden_an(a, d["flaeche"] * anteil, schub, self.von, "spreng", self.pos)
             abschuss_buchen(self.von, a, self.waffe, lebte)
         w.explosion(self.pos, self.ebene, r, "panzer", self.von)
 
@@ -799,34 +935,8 @@ class Schwer(Buggy):
         return float(self.werte["fahrer_anteil"])
 
     @property
-    def kugel_anteil(self) -> float:
-        """So viel einer Kugel kommt am Blech an (Geschoss.einschlag)."""
-        return float(self.werte["kugel_anteil"])
-
-    @property
     def bild(self) -> str:
         return "%s_wrack" % self.art if self.kaputt else self.art
-
-    def schaden(self, menge, schub=None, von=None, kugel: bool = False) -> None:
-        """Wie beim Buggy: der Insasse bekommt seinen Teil (Kaempfer.schaden
-        nimmt `fahrer_anteil`), die eigenen Leute verletzen ihn nicht. Neu:
-        eine Kugel (`kugel`) zerkratzt das Blech nur - am Fahrzeug kommt
-        `kugel_anteil` an, beim Insassen sein voller Teil. So hat auch
-        jemand mit Sturmgewehr gegen einen Panzer eine Antwort: auf die
-        Luke halten."""
-        if self.kaputt or self.nur_bild or not self.lebt:
-            return
-        menge = float(menge)
-        if menge <= 0.0:
-            return
-        k = self.fahrer
-        if (k is not None and k.lebt and von is not k
-                and (von is None or getattr(von, "fraktion", None) != k.fraktion)):
-            k.schaden(menge, None, von)
-        self.leben -= menge * (self.kugel_anteil if kugel else 1.0)
-        self.blitz = K.TREFFER["blitz"]
-        if self.leben <= 0.0:
-            self._zerstoeren(von)
 
     def aufbau_bild_name(self) -> str:
         """Turm bzw. Ring: leer, mit Insasse - in seinem Skin oder in den
@@ -958,9 +1068,12 @@ class Schwer(Buggy):
         self._ketten(dt)
         if self.kaputt:
             return
-        self._aufbau_fuehren(dt)
         for k in list(self.takt):
             self.takt[k] = max(0.0, self.takt[k] - dt)
+        if self.emp_rest > 0.0:
+            # Stromlos: der Turm steht, die Waffen schweigen (seit 0.34.65).
+            return
+        self._aufbau_fuehren(dt)
         if self.fahrer is not None:
             self._schiessen()
             self._motor(dt)
@@ -1071,7 +1184,8 @@ class Schwer(Buggy):
                 quer = pygame.Vector2(0, seite_y * (0.45 + 0.6 * abs(lok.y) / f["halb"]))
                 stoss = (nw + quer.rotate(self.winkel)) * (vn * f["ramm_stoss"] + f["ramm_extra"])
                 lebte = a.lebt
-                a.schaden((vn - f["ramm_schwelle"]) * f["ramm_je_px"], stoss, k)
+                schaden_an(a, (vn - f["ramm_schwelle"]) * f["ramm_je_px"], stoss, k, "ramm",
+                           self.pos)
                 abschuss_buchen(k, a, "rammen", lebte)
                 if lebte and not a.lebt and getattr(a, "bild", None):
                     dauer = min(r_["flug_lang"], r_["flug_kurz"] + stoss.length() * r_["flug_je_tempo"])

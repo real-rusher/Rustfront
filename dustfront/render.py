@@ -1986,6 +1986,7 @@ class Renderer:
             self.stehende_nachholen()
             return
         self.feuer_zeichnen(ziel, welt, idx, ecke, eigene)
+        self.naegel_zeichnen(ziel, welt, idx, ecke)
         self.ringe_zeichnen(ziel, welt, idx, ecke)
         self.bodenstaub_zeichnen(ziel, welt, idx, ecke, alpha)
         self.wesen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
@@ -2069,6 +2070,23 @@ class Renderer:
                              int(p.y - 16 - b["steigt"] * f),
                              farbe if f < 0.7 else K.C_MUTED, 1,
                              ausrichtung="mitte")
+
+    def naegel_zeichnen(self, ziel, welt, index: int, ecke) -> None:
+        """Nagelfelder (seit 0.34.65) am Boden, unter den Figuren. Die
+        Naegel liegen fest (Nagelfeld.stellen); zum Ende hin verblassen
+        sie nicht - wer drueberfaehrt, soll sie bis zuletzt sehen."""
+        naegel = getattr(welt, "naegel", None)
+        if not naegel:
+            return
+        breite, hoehe = ziel.get_size()
+        for n in naegel:
+            if n.ebene != index or not n.lebt:
+                continue
+            for x, y, winkel in n.stellen():
+                sx, sy = x - ecke.x, y - ecke.y
+                if -4 <= sx <= breite + 4 and -4 <= sy <= hoehe + 4:
+                    b = self.bilder.gedreht("nagel", winkel)
+                    ziel.blit(b, (sx - b.get_width() // 2, sy - b.get_height() // 2))
 
     def feuer_zeichnen(self, ziel, welt, index: int, ecke,
                        eigene_ebene: bool = True) -> None:

@@ -4687,8 +4687,11 @@ for _ in range(60):
     if not _gs59.lebt:
         break
 _ab59 = _vor59[0] - _pz59.leben
-pruef("Eine Kugel zerkratzt den Panzer nur (kugel_anteil)",
-      abs(_ab59 - K.WAFFEN["sturm"]["schaden"] * K.PANZER["kugel_anteil"]) < 0.01,
+# Seit 0.34.65 aus K.PANZERUNG, und sie kommt von hinten (dort ist das
+# Blech duenner, K.PANZER_SEITEN).
+pruef("Eine Kugel zerkratzt den Panzer nur (Panzerung, von hinten)",
+      abs(_ab59 - K.WAFFEN["sturm"]["schaden"] * K.PANZERUNG["panzer"]["kugel"]
+          * K.PANZER_SEITEN["hinten"]) < 0.01,
       "%.2f" % _ab59)
 pruef("... beim Kommandanten in der Luke kommt sein Teil der ganzen Kugel an",
       abs((_vor59[1] - _k59.leben) - K.WAFFEN["sturm"]["schaden"] * K.PANZER["fahrer_anteil"])
@@ -5281,9 +5284,14 @@ for _wf62 in ("sturm", "panzerbuechse"):
         _sturm62 = _vor62 - _pz62.leben
     else:
         _pb62 = _vor62 - _pz62.leben
-pruef("... am Panzer voller Schaden, das Sturmgewehr kratzt nur",
-      abs(_pb62 - K.WAFFEN["panzerbuechse"]["schaden"]) < 0.01
-      and _sturm62 < K.WAFFEN["sturm"]["schaden"] * 0.5, "%.1f / %.1f" % (_pb62, _sturm62))
+# Seit 0.34.65 mit Panzerung je Schadensart: die Panzerbuechse ist
+# panzerbrechend, und der Schuss kommt von hinten (er startet in der Mitte
+# und fliegt nach vorn, K.PANZER_SEITEN).
+pruef("... am Panzer geht sie durchs Blech (panzerbrechend), das Sturmgewehr kratzt nur",
+      abs(_pb62 - K.WAFFEN["panzerbuechse"]["schaden"] * K.PANZERUNG["panzer"]["panzerbrechend"]
+          * K.PANZER_SEITEN["hinten"]) < 0.01
+      and _sturm62 < K.WAFFEN["sturm"]["schaden"] * 0.5 and _pb62 > 10 * _sturm62,
+      "%.1f / %.1f" % (_pb62, _sturm62))
 _k62.magazin["panzerbuechse"] = 1
 _tm62.kamera.pos.update(_k62.pos)
 _tm62.kamera.versatz.update(0, 0)
@@ -5652,6 +5660,161 @@ pruef("Ein Buggy wird auch am Heck getroffen, nicht nur 13 Pixel um die Mitte",
 _tm64.verlassen()
 EN.RND.setstate(_rnd64)
 random.setstate(_zufall64)
+
+from dustfront.entities import Nagelfeld as _Nagelfeld65
+
+# 0.34.65: Panzerung je Schadensart und Seite, Lebenspunkte, Haftladung,
+# EMP-Granate, Hecknebel, Nagelstreuer.
+print("\n-- Fahrzeug-Panzerung, Haftladung, EMP, Hecknebel, Nagelstreuer (0.34.65)")
+_rnd65 = EN.RND.getstate()
+_zufall65 = random.getstate()
+_tm65 = _TM59.Testmodus(app, karte="staubtal")
+_ort65 = freier_punkt(_tm65.welt, 0, random.Random(65))
+pruef("Drei Fahrzeuge, drei verschiedene Lebenspunkte",
+      len({K.FAHRZEUG["leben"], K.PANZERWAGEN["leben"], K.PANZER["leben"]}) == 3
+      and K.FAHRZEUG["leben"] < K.PANZERWAGEN["leben"] < K.PANZER["leben"])
+pruef("Jede Fahrzeugart hat eine Panzerung fuer jede Schadensart",
+      all(set(K.PANZERUNG[a]) == set(K.PANZERUNG["buggy"])
+          for a in ("buggy", "panzerwagen", "panzer")))
+_pz65 = _tm65.fahrzeug_setzen("panzer", _ort65, 0, {"anzahl": 1, "streuung": 0, "winkel": 0})
+_pz65 = _pz65[0] if isinstance(_pz65, list) else _pz65
+_pz65.winkel = 0.0
+_vorn65 = _pz65.pos + pygame.Vector2(200, 0)
+_hinten65 = _pz65.pos - pygame.Vector2(200, 0)
+_seite65 = _pz65.pos + pygame.Vector2(0, 200)
+pruef("Die Seite eines Treffers folgt aus seiner Herkunft",
+      (_pz65.seite(_vorn65), _pz65.seite(_hinten65), _pz65.seite(_seite65))
+      == ("vorn", "hinten", "seite"))
+def _ab65(art, her=None, menge=100.0):
+    _pz65.leben = _pz65.max_leben
+    _pz65.schaden(menge, None, None, art=art, herkunft=her)
+    return _pz65.max_leben - _pz65.leben
+pruef("Am Panzer: Hohlladung > Panzerbrechend > Spreng > Kugel > Feuer",
+      _ab65("hohlladung") > _ab65("panzerbrechend") > _ab65("spreng") > _ab65("kugel")
+      > _ab65("feuer"), str([round(_ab65(a), 1) for a in ("hohlladung", "panzerbrechend",
+                                                          "spreng", "kugel", "feuer")]))
+pruef("Von hinten mehr als von vorn",
+      _ab65("hohlladung", _hinten65) > _ab65("hohlladung", _seite65)
+      > _ab65("hohlladung", _vorn65))
+pruef("Ohne Art kommt alles an (Befehle, Testmodus)", abs(_ab65(None) - 100.0) < 0.01)
+_bg65 = _tm65.buggy_setzen(_ort65 + pygame.Vector2(0, 160), 0, {"anzahl": 1, "streuung": 0,
+                                                              "winkel": 0})
+_bg65 = _bg65[0] if isinstance(_bg65, list) else _bg65
+_bg65.leben = _bg65.max_leben
+_bg65.schaden(100.0, None, None, art="kugel", herkunft=_bg65.pos + pygame.Vector2(0, 50))
+pruef("Ein Buggy hat kaum Panzerung: eine Kugel kommt ganz an",
+      abs(_bg65.max_leben - _bg65.leben - 100.0) < 0.01, "%.1f" % (_bg65.max_leben - _bg65.leben))
+
+# Haftladung: klebt am Wagen, faehrt mit, zuendet dort.
+_pz65.leben = _pz65.max_leben
+_hl65 = EN.Granate(_pz65.pos + pygame.Vector2(0, -60), 90.0, K.WAFFEN["haftladung"], 0, None, 60.0)
+_tm65.welt.dazu(_hl65)
+_geklebt65 = False
+for _ in range(int(K.WAFFEN["haftladung"]["flugzeit"] / K.FIXED_DT) + 60):
+    _tm65.welt.schritt(K.FIXED_DT)
+    if _hl65.traeger is _pz65:
+        _geklebt65 = True
+        _pz65.pos.x += 1.0     # er faehrt weiter
+    if not _hl65.lebt:
+        break
+pruef("Die Haftladung klebt am Panzer und faehrt mit", _geklebt65)
+pruef("... und reisst ihm ein grosses Stueck heraus (Hohlladung)",
+      _pz65.max_leben - _pz65.leben > K.WAFFEN["haftladung"]["fahrzeug_schaden"] * 0.9,
+      "%.0f" % (_pz65.max_leben - _pz65.leben))
+pruef("Haftladung und EMP-Granate stehen in der Loadout-Auswahl und im Spawner",
+      {"haftladung", "emp"} <= set(K.LOADOUT["auswahl_wuerfe"])
+      and {"HAFTLADUNG", "EMP-GRANATE"} <= {e.name for e in _TM59.eintraege()})
+
+# EMP: der Panzer steht still, schiesst nicht, und es geht vorbei.
+_pz65.leben = _pz65.max_leben
+# Zurueck auf den Platz, in eine Richtung, in der vor ihm frei ist.
+_pz65.pos.update(_ort65)
+for _w65 in (0.0, 90.0, 180.0, -90.0):
+    _pz65.winkel = _w65
+    if _pz65.passt(_pz65.pos + _pz65.vorn * 60.0):
+        break
+_emp65 = EN.Granate(_pz65.pos + pygame.Vector2(0, -40), 90.0, K.WAFFEN["emp"], 0, None, 0.0)
+_tm65.welt.dazu(_emp65)
+for _ in range(int(K.WAFFEN["emp"]["flugzeit"] / K.FIXED_DT) + 10):
+    _tm65.welt.schritt(K.FIXED_DT)
+pruef("Die EMP-Granate legt den Panzer still, ohne Schaden",
+      _pz65.emp_rest > 0.0 and _pz65.leben == _pz65.max_leben, "%.1f" % _pz65.emp_rest)
+_wesen65 = _tm65.welt.wesen
+_fahrer65 = _tm65.bot_setzen(_pz65.pos + pygame.Vector2(0, 80), 0,
+                             {"anzahl": 1, "streuung": 0, "team": 0})
+_fahrer65 = _fahrer65[0] if isinstance(_fahrer65, list) else _fahrer65
+_pz65.fahrer = _fahrer65
+_pz65.gas, _pz65.feuer = 1.0, True
+_x65 = pygame.Vector2(_pz65.pos)
+_n65 = len([g for g in _tm65.welt.wesen + _tm65.welt.neue if g.__class__.__name__ == "Panzergranate"])
+for _ in range(30):
+    _pz65.gas, _pz65.feuer = 1.0, True
+    _pz65.schritt(K.FIXED_DT)
+_n65b = len([g for g in _tm65.welt.wesen + _tm65.welt.neue if g.__class__.__name__ == "Panzergranate"])
+pruef("... stromlos faehrt er nicht und die Kanone schweigt",
+      _pz65.pos.distance_to(_x65) < 1.0 and _n65b == _n65,
+      "%.1f px, %d Granaten" % (_pz65.pos.distance_to(_x65), _n65b - _n65))
+_pz65.emp_rest = 0.01
+for _ in range(120):
+    _pz65.gas = 1.0
+    _pz65.schritt(K.FIXED_DT)
+pruef("... nach dem EMP faehrt er wieder", _pz65.pos.distance_to(_x65) > 1.0,
+      "%.1f" % _pz65.pos.distance_to(_x65))
+_pz65.fahrer = None
+_pz65.gas, _pz65.feuer = 0.0, False
+
+# Hecknebel und Nagelstreuer: Ladungen, Rauch hinten, Naegel machen platt.
+_bg65.leben = _bg65.max_leben
+_r65 = len(_tm65.welt.rauch)
+pruef("Der Buggy wirft Hecknebel: Rauch hinter ihm",
+      _bg65.hilfe_nutzen("hecknebel") and len(_tm65.welt.rauch) > _r65
+      and all(r.pos.distance_to(_bg65.heck()) < 80 for r in _tm65.welt.rauch[_r65:]))
+pruef("... nicht gleich noch einmal (Takt)", not _bg65.hilfe_nutzen("hecknebel"))
+pruef("Der Panzer hat keinen Nagelstreuer, der Buggy schon",
+      "nagelstreuer" not in _pz65.hilfe and _bg65.hilfe.get("nagelstreuer", 0) > 0)
+_nf65 = _Nagelfeld65(_bg65.pos + pygame.Vector2(60, 0), 0)
+_tm65.welt.naegel.append(_nf65)
+_bg65.geschw.update(200, 0)
+_bg65.winkel = 0.0
+_vor65 = _bg65.leben
+for _ in range(40):
+    _tm65.welt.schritt(K.FIXED_DT)
+    _bg65.geschw.update(max(_bg65.geschw.x, 60), 0)
+pruef("Ueber Naegel: Reifen platt, Schaden, langsam",
+      _bg65.platt_rest > 0.0 and _bg65.leben < _vor65
+      and _bg65.geschw.length() <= K.FAHRZEUG["hoechst"] * K.NAEGEL["platt_tempo"] + 0.5,
+      "%.1f s, %.0f" % (_bg65.platt_rest, _vor65 - _bg65.leben))
+_tm65.welt.naegel.clear()
+
+# Im Netz: der Gast sieht das Nagelfeld (an derselben Stelle, dieselben
+# Naegel) und dass ein Wagen stromlos ist.
+w, ga = _paar59("team", karte="staubtal")
+_wb65 = w.fahrzeuge[0]
+_wb65.emp_treffen(K.EMP["dauer"])
+_wn65 = _Nagelfeld65(pygame.Vector2(w.ich.pos) + pygame.Vector2(90, 0), w.ich.ebene, von=w.ich)
+w.welt.naegel.append(_wn65)
+for _ in range(8):
+    w.schritt(K.NETZ["takt"])
+    ga.schritt(K.NETZ["takt"])
+_gn65 = [n for n in ga.welt.naegel if n.kennung == _wn65.kennung]
+pruef("Der Gast sieht das Nagelfeld, mit denselben Naegeln",
+      len(_gn65) == 1 and _gn65[0].stellen() == _wn65.stellen())
+_gb65 = [b for b in ga.fahrzeuge if getattr(b, "netz_kennung", -1) == _wb65.kennung]
+pruef("... und dass der Wagen vom EMP stillgelegt ist",
+      len(_gb65) == 1 and _gb65[0].emp_rest > 0.0,
+      str([round(b.emp_rest, 1) for b in _gb65]))
+# Am Steuer: R wirft Nebel, F streut Naegel (Gefecht._fahren).
+_wb65.emp_rest = 0.0
+w._einsteigen(w.ich, _wb65)
+_rauch65, _nae65 = len(w.welt.rauch), len(w.welt.naegel)
+w._fahren(w.ich, pygame.Vector2(0, 0), {"knoepfe": ["nachladen", "nahkampf"]})
+pruef("Am Steuer wirft R Hecknebel und F den Nagelstreuer",
+      len(w.welt.rauch) > _rauch65 and len(w.welt.naegel) == _nae65 + 1,
+      "%d Rauch, %d Naegel" % (len(w.welt.rauch) - _rauch65, len(w.welt.naegel) - _nae65))
+w._aussteigen(w.ich)
+w.verlassen(); ga.verlassen()
+EN.RND.setstate(_rnd65)
+random.setstate(_zufall65)
 
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)

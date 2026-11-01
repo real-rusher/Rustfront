@@ -65,7 +65,7 @@ from . import plattform
 from . import ui
 from .anzeige import Anzeige
 from . import art_figuren as figuren
-from .entities import Granate, Wesen, tod_zeigen
+from .entities import Granate, Nagelfeld, Wesen, tod_zeigen
 from . import fahrzeug as fahrzeug_modul
 from .fahrzeug import Buggy
 from .font import SCHRIFT
@@ -267,6 +267,9 @@ def eintraege() -> list:
                 lambda t, p, e, w: t.fahrzeug_setzen("panzer", p, e, w)),
         Eintrag("PANZERWAGEN", "OBJEKTE", ("anzahl", "streuung", "winkel"),
                 lambda t, p, e, w: t.fahrzeug_setzen("panzerwagen", p, e, w)),
+        # Seit 0.34.65: was der Nagelstreuer eines Wagens hinterlaesst.
+        Eintrag("NAGELFELD", "OBJEKTE", ("anzahl", "streuung"),
+                lambda t, p, e, w: t.nagelfeld_setzen(p, e)),
         Eintrag("HOTZONE HIER", "OBJEKTE", (),
                 lambda t, p, e, w: t.zone_setzen(p, e), mehrfach=False),
         Eintrag("HOTZONE AUS", "OBJEKTE", (),
@@ -277,7 +280,8 @@ def eintraege() -> list:
         Eintrag("RAKETENWERFER", "BEUTE", ("anzahl", "streuung"),
                 _beute_setzer("rakete")),
     ]
-    for art in ("granate", "rauch", "molotov", "blend"):
+    # Haftladung und EMP-Granate seit 0.34.65.
+    for art in ("granate", "rauch", "molotov", "blend", "haftladung", "emp"):
         raus.append(Eintrag(K.WAFFEN[art]["name"], "WURF",
                             ("anzahl", "streuung", "zuender"), _wurf_setzer(art)))
     # Seit 0.34.60: die NPCs und Tiere aus dem Figurenpaket. Sie stehen
@@ -1083,6 +1087,11 @@ class Testmodus(Gefecht):
         self._einsetzen(b)
         return b
 
+    def nagelfeld_setzen(self, pos, ebene: int):
+        n = Nagelfeld(pygame.Vector2(pos), ebene)
+        self.welt.naegel.append(n)
+        return n
+
     def wurf_setzen(self, art: str, pos, ebene: int, w: dict):
         gr = Granate(pygame.Vector2(pos), 0.0, K.WAFFEN[art], ebene, von=None, weite=0.0)
         if w.get("zuender") == "sofort":
@@ -1157,6 +1166,7 @@ class Testmodus(Gefecht):
         self.fahrzeuge = []
         self._fahrzeug_warte = []
         self.welt.feuer.clear()
+        self.welt.naegel.clear()
         self.welt.rauch.clear()
         self.welt.partikel.clear()
         self.welt.muendungen.clear()
@@ -1986,6 +1996,28 @@ class Testmodus(Gefecht):
                         gh.ziel.name.upper() if gh.ziel else "-",
                         gh.aktion.name.upper() if gh.aktion else "-"),
                         int(q.x), int(q.y) + 12, (200, 120, 110), 1, ausrichtung="mitte")
+        # Seit 0.34.65: Fahrzeuge - Leben, der letzte Treffer (Art, Seite,
+        # Anteil, was ankam), EMP, platte Reifen und die Heckhilfen.
+        for b in self.fahrzeuge:
+            if b.ebene != self.blick or b.kaputt:
+                continue
+            q = kam.zu_bild(b.pos)
+            zeilen = ["%d/%d" % (round(b.leben), round(b.max_leben))]
+            t = b.letzter_treffer
+            if t is not None:
+                zeilen.append("%s %s x%.2f = %.0f" % (t[0].upper(), t[1].upper(), t[2], t[3]))
+            zustand = []
+            if b.emp_rest > 0.0:
+                zustand.append("EMP %.1f" % b.emp_rest)
+            if b.platt_rest > 0.0:
+                zustand.append("PLATT %.1f" % b.platt_rest)
+            for n, zahl in sorted(b.hilfe.items()):
+                zustand.append("%s %d" % ("NEBEL" if n == "hecknebel" else "NÄGEL", zahl))
+            if zustand:
+                zeilen.append(" ".join(zustand))
+            for i, z in enumerate(zeilen):
+                SCHRIFT.zeichnen(ziel, z, int(q.x), int(q.y) + 30 + 9 * i, (150, 200, 230), 1,
+                                 ausrichtung="mitte")
 
     def _innen_zeichnen(self, ziel, h, innen, p) -> None:
         """Seit 0.34.38: unter dem Zustand ein Balken fuer den Stress, die

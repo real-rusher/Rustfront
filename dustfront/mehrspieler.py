@@ -68,7 +68,7 @@ from .spielerkosmetik import KosmetikTeil
 from . import world as welt_modul
 from . import art_figuren as figuren
 from .core import Bilder, Szene
-from .entities import (Aufsammler, Brandflaeche, C4Ladung, Gegner, Geschoss, Granate,
+from .entities import (Aufsammler, Brandflaeche, C4Ladung, Nagelfeld, Gegner, Geschoss, Granate,
                        Rakete, Rauchwolke, Spieler, Wesen, wolke)
 from . import fahrzeug as fahrzeug_modul
 from .fahrzeug import Buggy
@@ -2400,6 +2400,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         if getattr(b, "rechteckig", False):
             b.feuer = bool(ein.get("feuert"))
             b.zweit = bool(ein.get("zielt"))
+        # Seit 0.34.65: was hinten heraus geht, auf den Tasten, die am
+        # Steuer sonst nichts tun - R wirft Nebel, F streut Naegel.
+        knoepfe = ein.get("knoepfe") or []
+        if isinstance(knoepfe, list):
+            if "nachladen" in knoepfe:
+                b.hilfe_nutzen("hecknebel")
+            if "nahkampf" in knoepfe:
+                b.hilfe_nutzen("nagelstreuer")
         k.will.update(0, 0)
         k.tempo.update(0, 0)
         k.feuert = False
@@ -2546,6 +2554,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 ruecklauf = float(e[11]) if len(e) > 11 else 0.0
                 gier = float(e[12]) if len(e) > 12 else 0.0
                 laden = float(e[13]) if len(e) > 13 else 0.0
+                emp = float(e[14]) if len(e) > 14 else 0.0
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
@@ -2569,6 +2578,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             # Leben (seit 0.34.18): fuer den Balken und das Wrack.
             b.anteil = max(0.0, min(1.0, anteil))
             b.kaputt = b.anteil <= 0.0
+            b.emp_rest = max(0.0, min(30.0, emp))
             if getattr(b, "rechteckig", False):
                 b.aufbau = aufbau
                 b.ruecklauf = max(0.0, min(8.0, ruecklauf))
@@ -4060,10 +4070,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                   # die Kanone noch laedt.
                   b.art, round(getattr(b, "aufbau", b.winkel), 1),
                   round(getattr(b, "ruecklauf", 0.0), 1), round(b.gier, 2),
-                  round(getattr(b, "takt", {}).get("kanone", 0.0), 1)]
+                  round(getattr(b, "takt", {}).get("kanone", 0.0), 1),
+                  # Seit 0.34.65: wie lange ein EMP ihn noch stilllegt.
+                  round(b.emp_rest, 1)]
                  for b in self.fahrzeuge]
+        # Nagelfelder (seit 0.34.65): wo die Naegel liegen, folgt aus der
+        # Kennung (entities.Nagelfeld.stellen).
+        naegel = [[round(n.pos.x, 1), round(n.pos.y, 1), n.ebene,
+                   round(n.alter, 1), n.kennung]
+                  for n in self.welt.naegel if n.lebt]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
-                "feuer": brand, "fahrzeuge": wagen,
+                "feuer": brand, "fahrzeuge": wagen, "naegel": naegel,
                 "wirkung": wirkung,
                 "spieler": spieler, "schuesse": flug, "beute": beute,
                 "gegner": gegner, "welle": self.welle,
@@ -4151,6 +4168,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                     self.liste = []
                     self.welt.rauch = []
                     self.welt.feuer = []
+                    self.welt.naegel = []
                     self._fremde_beute = []
                     self._fremde_gegner = []
                     self._fremde_schuesse = []
@@ -4488,6 +4506,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._fliegendes_uebernehmen(meldung.get("schuesse", []))
         self._rauch_uebernehmen(meldung.get("rauch", []))
         self._feuer_uebernehmen(meldung.get("feuer", []))
+        self._naegel_uebernehmen(meldung.get("naegel", []))
         self._wirkung_nachspielen(meldung.get("wirkung", []))
         self._fremde_beute = [tuple(b) for b in meldung.get("beute", [])
                               if isinstance(b, (list, tuple)) and len(b) == 4]
@@ -4564,6 +4583,24 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             vx, vy = (alt[0], alt[1]) if alt is not None else (x, y)
             raus.append((x, y, winkel, ebene, name, hoehe, kennung, vx, vy))
         self._fremde_schuesse = raus
+
+    def _naegel_uebernehmen(self, eintraege) -> None:
+        """Nagelfelder beim Gast (seit 0.34.65): nur Ort und Alter, die
+        Naegel selbst legt die Kennung. Schaden rechnet der Gastgeber."""
+        vorhanden = {n.kennung: n for n in self.welt.naegel}
+        neu = []
+        for e in eintraege if isinstance(eintraege, list) else []:
+            try:
+                x, y, ebene = float(e[0]), float(e[1]), int(e[2])
+                alter, kennung = float(e[3]), int(e[4])
+            except (TypeError, ValueError, IndexError):
+                continue
+            n = vorhanden.get(kennung)
+            if n is None:
+                n = Nagelfeld(pygame.Vector2(x, y), ebene, kennung=kennung, alter=alter)
+            n.alter = alter
+            neu.append(n)
+        self.welt.naegel = neu
 
     def _feuer_uebernehmen(self, eintraege) -> None:
         """Brandflaechen beim Gast nachfuehren, ohne sie neu zu bauen.
@@ -5362,6 +5399,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._fahrzeuge_neu_aufstellen()
         self.welt.rauch = []
         self.welt.feuer = []
+        self.welt.naegel = []
         # Auch die Wirkungen, die noch nicht hinaus sind: sonst knallt
         # bei den Gaesten im ersten Bild der neuen Runde noch die letzte
         # Granate der alten.

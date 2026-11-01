@@ -80,9 +80,9 @@ setzt, steht sofort da.
 | FIGUREN | Bot, Spieler (steht), Spieler (ich) | Anzahl, Streuung, Team (ROT, BLAU, FREI), Waffe (auch fuer Spieler, seit 0.34.62), Leben, Aussehen (ZUFALL, STANDARD oder ein Skin; bei Spieler (ich) als Vorgabe EIGENES); beim Bot HIRN (KLASSISCH / GOAP, docs/KI.md) |
 | GEGNER, BOSSE | jede Art aus `K.GEGNER` und `K.BOSSE` | Anzahl, Streuung, Leben, KI an/aus, HIRN (KLASSISCH / GOAP) |
 | ZIELE | die Zielpuppe | Anzahl, Streuung |
-| OBJEKTE | Buggy, Panzer, Panzerwagen, Hotzone hier, Hotzone aus | Anzahl, Streuung, Richtung |
+| OBJEKTE | Buggy, Panzer, Panzerwagen, Nagelfeld, Hotzone hier, Hotzone aus | Anzahl, Streuung, Richtung |
 | BEUTE | Medkit, Munitionskiste, Raketenwerfer | Anzahl, Streuung |
-| WURF | Granate, Rauch, Molotow, Blendgranate | Anzahl, Streuung, Zuender (liegt / sofort) |
+| WURF | Granate, Rauch, Molotow, Blendgranate, Haftladung, EMP-Granate | Anzahl, Streuung, Zuender (liegt / sofort) |
 | NPC | Haendler, Aerztin, Wissenschaftler, Fluechtling, Pilger, Schmuggler, Hirte, Ueberlebende | Anzahl, Streuung, Richtung; bei der Ueberlebenden das Stirnband |
 | TIERE | Schaf, Ziege, Huhn | Anzahl, Streuung, Farbe (drei je Tier oder ZUFALL) |
 | WAFFENBILDER | Figur mit Waffe (jede der 52 aus dem Waffenpaket) | Waffe, Team, Richtung |
@@ -128,6 +128,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.65 | WURF: HAFTLADUNG (klebt an Fahrzeug oder Figur, faehrt mit) und EMP-GRANATE (legt Fahrzeuge still); OBJEKTE: NAGELFELD. Die INFO-Ansicht (Taste 8) zeigt unter jedem Fahrzeug Leben, den letzten Treffer (Schadensart, Seite, Anteil, was ankam), EMP- und Platt-Rest und die Ladungen fuer Hecknebel und Naegel. Am Steuer (SPIELER, ICH, dann E) wirft R Hecknebel und F den Nagelstreuer. Pruefungen im Abschnitt "Fahrzeug-Panzerung, Haftladung, EMP, Hecknebel, Nagelstreuer" von `tests/test_spiel.py` |
 | 0.34.63 | Der Testmodus auf iPhone und iPad (und am Rechner mit `DUSTFRONT_TOUCH=1`), siehe "Mit Touch" oben: Ziffernblock antippen, linker Stick fliegt, rechter bewegt den Zeiger; Spawner und Testmenue mit dem Finger (links auf eine Einstellung: zurueck), zwei Finger blaettern im Spawner; mit Figur klappt der Ziffernblock unter NUM. Neu auch am Rechner: das Mausrad blaettert in der Liste des Spawners, und `DUSTFRONT_START=testmodus` startet gleich im Testmodus. Pruefungen im Abschnitt "Testmodus mit Touch" von `tests/test_spiel.py` |
 | 0.34.62 | FIGUREN: SPIELER, STEHT und SPIELER, ICH haben eine WAFFE - ALLE ist die Hotbar wie bisher, jede andere Wahl ein Loadout mit dieser Waffe vorn (dazu Sturmgewehr und Granate), auch eine der zwoelf neuen. So laesst sich jede neue Waffe selbst ausprobieren (SPIELER, ICH) oder an einer Puppe zeigen. BOT kann die neuen ebenfalls tragen (WAFFE), schiesst aber nur mit Schusswaffen. Pruefungen im Abschnitt "Die Waffen aus dem Waffenpaket, spielbar" von `tests/test_spiel.py` |
 | 0.34.61 | Spawner WAFFENBILDER: FIGUR MIT WAFFE - eine stehende Figur, die eine der 52 Waffen aus dem Waffenpaket haelt (WAFFE, TEAM, RICHTUNG). Nur das Bild: sie schiesst nicht, faellt aber um wie ein NPC. Pruefungen im Abschnitt "Waffenbilder aus dem Waffenpaket" von `tests/test_spiel.py` |

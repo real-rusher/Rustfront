@@ -558,6 +558,9 @@ BILD_MASS = {
     "blendgranate":     (10, 10),
     "flugrakete":       (16, 8),
     "minirakete_flug":  (18, 8),    # Raketenbuendel im Flug (seit 0.34.64)
+    "haftladung_flug":  (9, 9),     # Haftladung im Flug und klebend (seit 0.34.65)
+    "emp_flug":         (9, 9),     # EMP-Granate im Flug (seit 0.34.65)
+    "nagel":            (5, 5),     # ein Kraehenfuss im Nagelfeld (seit 0.34.65)
     "rpg_kiste":        (18, 14),
     "huelse":           (4, 3),
     # Waffensymbole fuer Hotbar und Inventar, Seitenansicht nach rechts
@@ -1022,9 +1025,10 @@ FAHRZEUG = dict(
     stick_zurueck=150.0,      # Grad: fast entgegen heisst bremsen, im Stand rueckwaerts
     stick_bremsen_ab=50.0,    # bis zu diesem Tempo faehrt er dann rueckwaerts
     # Seit 0.34.18 geht er kaputt (gemeldet: "autos sollen kaputt gehen
-    # koennen und dann respawnen random auf der map"). Ein Sturmgewehr
-    # braucht ein Magazin und mehr, eine Granate rund sechs Treffer.
-    leben=420.0,
+    # koennen und dann respawnen random auf der map"). Seit 0.34.65 mit
+    # Panzerung (PANZERUNG): ein Sturmgewehr braucht rund 24 Treffer, eine
+    # Granate fuenf, eine Rakete zwei.
+    leben=380.0,
     explosion_radius=70.0,    # wenn er hochgeht
     explosion_schaden=70.0,   # in der Mitte, nach aussen weniger
     fahrer_schaden=55.0,      # was der Fahrer abbekommt (vor den 70 %)
@@ -1086,10 +1090,9 @@ PANZER = dict(
     ruecklauf_tempo=14.0,     # und kommt so schnell wieder vor (px/s)
     ruck=1.5,                 # die Wanne ruckt so weit zurueck
     ruck_tempo=10.0,
-    # Was er aushaelt. Kugeln zerkratzen nur den Lack (`kugel_anteil`),
-    # Granaten, Raketen, C4 und Kanonen wirken voll.
-    leben=700.0,
-    kugel_anteil=0.12,
+    # Was er aushaelt. Wie viel von welchem Treffer ankommt, steht seit
+    # 0.34.65 in PANZERUNG (Kugeln zerkratzen nur den Lack).
+    leben=950.0,
     fahrer_anteil=0.2,        # so viel von jedem Treffer kommt beim Kommandanten an
     explosion_radius=96.0,
     explosion_schaden=95.0,
@@ -1183,8 +1186,7 @@ PANZERWAGEN = dict(
     ring_muendung=29.0,
     ring_ruecklauf=1.5,
     ring_ruecklauf_tempo=20.0,
-    leben=480.0,
-    kugel_anteil=0.35,
+    leben=620.0,              # wie viel ankommt: PANZERUNG
     fahrer_anteil=0.45,       # der Schuetze steht im Ring, Kopf und Schultern frei
     explosion_radius=84.0,
     explosion_schaden=85.0,
@@ -1243,6 +1245,56 @@ FEUERBALL = dict(
 # Die Waffen der Fahrzeuge. Nicht in WAFFEN: niemand traegt sie in der
 # Hotbar, und das Loadout soll sie nicht anbieten. Geschossen wird ueber
 # dieselben Geschosse und denselben Knall (Welt.schussknall).
+# ── Panzerung und Schadensarten (seit 0.34.65) ─────────────────────
+#
+# Gemeldet: "verschiedenen Schaden, verschiedene Health Pools,
+# verschiedene Panzerungen und die ganzen Waffen und Granaten gegen
+# Fahrzeuge". Jeder Treffer an einem Fahrzeug hat eine Art, und jede
+# Fahrzeugart nimmt davon ihren Anteil. Figuren kennen keine Arten: an
+# ihnen kommt immer alles an.
+#
+#   kugel           Gewehre, MPs, MGs - zerkratzen Blech
+#   panzerbrechend  Panzerbuechse, Kanone - gehen durch
+#   spreng          Granaten, Druckwellen - wirken auf Flaeche, nicht durch
+#   hohlladung      Raketen, Haftladung, C4 - dafuer gebaut
+#   feuer           Molotow, brennender Boden - Blech brennt nicht
+#   nahkampf        Brecheisen, Krallen
+#   ramm            Rammen
+#
+# Ohne Art (alte Aufrufe, Testmodus, Befehle) kommt alles an.
+PANZERUNG = {
+    "buggy": dict(kugel=1.0, panzerbrechend=1.3, spreng=1.0, hohlladung=1.5,
+                  feuer=0.6, nahkampf=0.5, ramm=1.0),
+    "panzerwagen": dict(kugel=0.35, panzerbrechend=1.0, spreng=0.7, hohlladung=1.4,
+                        feuer=0.25, nahkampf=0.15, ramm=0.6),
+    "panzer": dict(kugel=0.12, panzerbrechend=0.85, spreng=0.45, hohlladung=1.35,
+                   feuer=0.1, nahkampf=0.05, ramm=0.4),
+}
+# Woher ein Treffer kommt: vorn ist das Blech am dicksten, hinten am
+# duennsten. Gilt fuer Treffer, die eine Richtung haben (alles ausser
+# Feuer); Grenzen in Grad zwischen Fahrtrichtung und Herkunft.
+PANZER_SEITEN = dict(vorn=0.75, seite=1.0, hinten=1.4,
+                     vorn_bis=50.0, hinten_ab=130.0,
+                     ohne=("feuer",))
+
+# EMP-Granate (seit 0.34.65): legt Motor, Lenkung und Waffen jedes
+# Fahrzeugs im Kreis still. Kein Schaden, an Figuren nichts.
+EMP = dict(radius=96.0, dauer=4.5, funken_takt=0.09)
+
+# Was ein Fahrzeug hinten heraus werfen kann (seit 0.34.65). Der Fahrer
+# loest es mit R (Hecknebel) bzw. F (Nagelstreuer) aus - die Tasten, die
+# am Steuer sonst nichts tun. Ladungen je Leben des Fahrzeugs.
+FAHRZEUG_HILFE = dict(
+    hecknebel=dict(ladungen=2, takt=6.0, wolken=3, abstand=26.0, radius=58.0,
+                   dauer=9.0, arten=("buggy", "panzerwagen", "panzer")),
+    nagelstreuer=dict(ladungen=2, takt=4.0, arten=("buggy", "panzerwagen")),
+)
+# Das Nagelfeld hinter dem Wagen: Reifen gehen platt (der Wagen wird
+# langsam), Figuren werden langsam und bluten etwas. Ketten stoert es nicht.
+NAEGEL = dict(radius=34.0, dauer=22.0, schaden=9.0, tempo=0.55,
+              platt_dauer=6.0, platt_tempo=0.5, platt_schaden=30.0,
+              ketten=("panzer",), anzahl=16)
+
 FAHRZEUG_WAFFEN = {
     "kanone": dict(
         name="KANONE",
@@ -3004,6 +3056,56 @@ WAFFEN = {
         # gemeldet: "nicht wirklich als Raketen erkennbar" (0.34.64).
         bild="minirakete_flug",
         explosion="klein",
+        # Kleine Sprengkoepfe, keine Hohlladung: gegen Blech schwach.
+        schadensart="spreng",
+    ),
+
+    # ── Gegen Fahrzeuge (seit 0.34.65) ─────────────────────────────────
+    #
+    # `schadensart` sagt, welche Zeile von PANZERUNG gilt (ohne: Granaten
+    # "spreng", Raketen "hohlladung", Kugeln "kugel"). `fahrzeug_schaden`
+    # ersetzt `schaden`, wenn ein Fahrzeug getroffen wird.
+    "haftladung": dict(
+        art="wurf",
+        name="HAFTLADUNG",
+        # Klebt an allem, was sie im Flug beruehrt - Wagen, Figur, Boss -
+        # und faehrt mit. Gegen Figuren eine kleine Granate, gegen Blech
+        # das Staerkste, was man werfen kann.
+        haftet=True,
+        schaden=48.0,
+        fahrzeug_schaden=190.0,
+        schadensart="hohlladung",
+        radius=46.0,
+        takt=1.0,
+        magazin=2,
+        nachladen=3.8,
+        wurf_min=40.0,
+        wurf_max=170.0,       # schwer: kuerzer als eine Granate
+        reibung=2.2,          # und sie rollt kaum
+        flugzeit=2.2,         # Zeit genug, damit der Wagen sie mitnimmt
+        kamera=5.0,
+        rueckstoss=0.0,
+        huelsen=0,
+        explosion="klein",
+    ),
+    "emp": dict(
+        art="wurf",
+        name="EMP-GRANATE",
+        # Kein Schaden. Jedes Fahrzeug im Kreis steht still (EMP), ohne
+        # Motor, ohne Lenkung, ohne Waffen - Zeit fuer die Haftladung.
+        emp=True,
+        schaden=0.0,
+        radius=0.0,
+        takt=0.9,
+        magazin=1,
+        nachladen=4.5,
+        wurf_min=60.0,
+        wurf_max=240.0,
+        reibung=1.3,
+        flugzeit=1.2,
+        kamera=1.5,
+        rueckstoss=0.0,
+        huelsen=0,
     ),
 }
 
@@ -3198,7 +3300,9 @@ LOADOUT = dict(
                     "revolver", "zwillinge", "mp", "praezision", "unterhebel",
                     "panzerbuechse", "doppelflinte", "autoschrot", "minigun",
                     "granatwerfer", "einwegwerfer", "raketenbuendel"),
-    auswahl_wuerfe=("granate", "rauch", "molotov", "blend", "c4"),
+    auswahl_wuerfe=("granate", "rauch", "molotov", "blend", "c4",
+                    # Gegen Fahrzeuge (seit 0.34.65)
+                    "haftladung", "emp"),
     # Womit ein neues Loadout vorbelegt wird. Drei Stueck, damit man nach
     # dem ersten Anmelden gleich drei brauchbare Saetze hat und nicht vor
     # drei leeren Plaetzen sitzt.
