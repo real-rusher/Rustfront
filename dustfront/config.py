@@ -1537,6 +1537,22 @@ BOTS = dict(
     gefahr_rand=12.0,         # so weit um Feuer, Gas und Fallen haelt er Abstand
     gefahr_takt=0.15,         # so oft schaut er nach (s)
     spule_loslassen=0.92,     # bei so viel Ladung laesst er los
+    # Bots am Steuer (seit 0.34.71, nur wem der Testmodus es erlaubt -
+    # im Gefecht fahren Bots weiter nicht, so gemeldet).
+    fahren=dict(
+        abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0),  # so weit bleibt er stehen
+        suchen=700.0,         # so weit sucht ein Fahrer ohne Fahrzeug nach einem
+        kanone_winkel=5.0,    # so genau muss der Turm zeigen
+        mg_winkel=10.0,
+        steckt_nach=1.2,      # so lange ohne Fahrt, dann setzt er zurueck
+        zurueck=1.0,          # so lange
+        raus_unter=0.15,      # unter so viel Leben steigt er aus
+        fehler=14.0,          # Zielfehler am Ziel (px)
+        # Aus Turm und Ring sieht man weiter als zu Fuss (330): die Kanone
+        # reicht 900, und ein Panzer, der seine Gegner nicht sieht, ist nur
+        # ein Hindernis (gemessen: Gegner auf 730 px blieben ungesehen).
+        sicht=dict(panzer=720.0, panzerwagen=560.0, buggy=380.0),
+    ),
     # Woraus ein Bot sein Loadout zieht (seit 0.34.62). Nur die alten fuenf:
     # mit Zweithand, Doppellauf, Bogen oder Einwegrohr kann die KI noch
     # nicht umgehen - und ein Bot mit einem Granatwerfer, den er nie
@@ -3339,6 +3355,36 @@ WAFFEN = {
         muendung=0.3,
         bild_flug="nagel_flug",
     ),
+}
+
+# Der Schildtraeger (seit 0.34.71, erst im Testmodus): ein grosses Schild
+# vorn. Was von vorn kommt (die Richtung zum Schuetzen), haelt es zum
+# groessten Teil ab; dafuer ist er langsamer und traegt nur eine Pistole.
+SCHILD = dict(winkel=60.0, anteil=0.15, tempo=0.82, waffe="repetierer")
+
+# Trupp-Vorlagen fuer den Testmodus (seit 0.34.71). Gemeldet: "Trupp mit
+# Panzer oder Armored Truck, Schildtraeger ... Skins fuer jedes
+# Truppmitglied ... weiterhin Standard-Trupps". Je Mitglied: (Aussehen,
+# Waffe, Wurfwaffe, Schild?); das erste fuehrt den Trupp (mit Funk). Ein
+# Fahrzeug bekommt seinen eigenen Fahrer, der nicht zum Trupp gehoert.
+TRUPP_VORLAGEN = {
+    "PANZERZUG": dict(fahrzeug="panzer", fahrer="panzerfahrer", mitglieder=(
+        ("offizier", "repetierer", "rauch", False), ("grenadier", "granatwerfer", "granate", False),
+        ("pionier", "sturm", "haftladung", False), ("mg_schuetze", "lmg", "granate", False))),
+    "MOT. SCHÜTZEN": dict(fahrzeug="panzerwagen", fahrer="panzerfahrer", mitglieder=(
+        ("gefreiter", "sturm", "rauch", False), ("schuetze", "sturm", "granate", False),
+        ("sanitaeter", "mp", "rauch", False), ("scharfschuetze", "scharf", "blend", False))),
+    "SCHILDWALL": dict(fahrzeug="", fahrer="", mitglieder=(
+        ("offizier", "repetierer", "rauch", False), ("schildtraeger", "repetierer", "blend", True),
+        ("schildtraeger", "repetierer", "blend", True), ("stadtkaempfer", "schrot", "granate", False),
+        ("grenadier", "granatwerfer", "granate", False))),
+    "SPÄHTRUPP": dict(fahrzeug="buggy", fahrer="wuestenschuetze", mitglieder=(
+        ("funker", "praezision", "rauch", False), ("scharfschuetze", "scharf", "rauch", False),
+        ("wachposten", "mp", "emp", False))),
+    "STURMTRUPP": dict(fahrzeug="", fahrer="", mitglieder=(
+        ("fallschirmjaeger", "sturm", "blend", False), ("stadtkaempfer", "autoschrot", "granate", False),
+        ("fallschirmjaeger", "mp", "granate", False), ("pionier", "flammenwerfer", "molotov", False),
+        ("gebirgsjaeger", "lmg", "rauch", False))),
 }
 
 # Bauen, Fallen, Aufklaerung, Sanitasche, Munitionskiste (seit 0.34.69,

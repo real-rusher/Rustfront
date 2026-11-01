@@ -180,6 +180,7 @@ class BotHirn(Taktik):
         self.leben_vorher = k.leben
         self.ruf_rest = 0.0
         self.geblendet = 0.0          # so lange sieht er nichts (Blendgranate)
+        self.streif_ort = None        # wohin er faehrt, wenn er niemanden sieht (0.34.71)
         # Gefahren (seit 0.34.70): Feuer, Gas, Fallen, Wuerfe.
         self._gefahren = []
         self.gefahr_rest = 0.0
@@ -230,6 +231,14 @@ class BotHirn(Taktik):
         if self.denk_rest <= 0.0:
             self.denk_rest = K.BOTS["takt"]
             self._wahrnehmen()
+        # Am Steuer (seit 0.34.71) - und wer fahren darf, aber keinen Wagen
+        # hat, geht zum naechsten freien.
+        if k.fahrzeug is not None:
+            return self._am_steuer(dt, ein)
+        if getattr(k, "darf_fahren", False):
+            hin = self._zum_fahrzeug(ein)
+            if hin is not None:
+                return hin
 
         # Getroffen worden: dorthin schauen, woher es kam.
         if k.leben < self.leben_vorher - 0.5:
@@ -416,7 +425,10 @@ class BotHirn(Taktik):
             return False
         if w.ebene != k.ebene or getattr(w, "flug", 0.0) > 0:
             return False
-        if k.pos.distance_to(w.pos) > K.BOTS["sicht"]:
+        weite = K.BOTS["sicht"]
+        if k.fahrzeug is not None:
+            weite = K.BOTS["fahren"]["sicht"].get(k.fahrzeug.art, weite)
+        if k.pos.distance_to(w.pos) > weite:
             return False
         welt = self.g.welt
         if not welt.sicht_frei(k.pos, w.pos, k.ebene):
@@ -1159,6 +1171,84 @@ class BotHirn(Taktik):
         if abs(wohin - ebene) < abs(k.ebene - ebene):
             if "nutzen" not in ein["knoepfe"]:
                 ein["knoepfe"].append("nutzen")
+
+    # ---- Fahren (seit 0.34.71) ------------------------------------------
+    def _zum_fahrzeug(self, ein: dict):
+        """Ein Fahrer ohne Fahrzeug: zum naechsten freien und einsteigen.
+        Sieht er gerade einen Gegner, kaempft er erst (None)."""
+        k = self.k
+        if self.ziel is not None and self.ziel_ok(self.ziel):
+            return None
+        f = K.BOTS["fahren"]
+        bester, weite = None, f["suchen"]
+        for b in getattr(self.g, "fahrzeuge", ()):
+            if b.fahrer is not None or b.kaputt or b.nur_bild or b.ebene != k.ebene:
+                continue
+            d = b.pos.distance_to(k.pos)
+            if d < weite:
+                bester, weite = b, d
+        if bester is None:
+            return None
+        if weite <= bester.werte["einsteigen"] - 4.0:
+            ein["knoepfe"].append("nutzen")
+            return ein
+        will = self._sicher(self._weg_richtung(bester.pos, bester.ebene, ein))
+        ein["will"] = [round(will.x, 2), round(will.y, 2)]
+        ein["ziel"] = [round(bester.pos.x, 1), round(bester.pos.y, 1)]
+        return ein
+
+    def _am_steuer(self, dt: float, ein: dict) -> dict:
+        """Fahren mit dem Stick (wie am Touch: der Wagen faehrt dorthin, wohin
+        die Eingabe zeigt, fahrzeug.Buggy.stick_steuern), zielen mit dem
+        Zeiger (Turm bzw. Ring folgen ihm), schiessen, wenn der Turm steht."""
+        k = self.k
+        b = k.fahrzeug
+        f = K.BOTS["fahren"]
+        ein["rl"] = True
+        if b.kaputt or b.leben < b.max_leben * f["raus_unter"]:
+            ein["knoepfe"].append("nutzen")          # raus, bevor er hochgeht
+            return ein
+        z = self.ziel if self.ziel is not None and self.ziel_ok(self.ziel) else None
+        will = pygame.Vector2(0, 0)
+        if z is not None:
+            abstand = k.pos.distance_to(z.pos)
+            if abstand > f["abstand"].get(b.art, 200.0):
+                will = self._weg_richtung(z.pos, z.ebene)
+            ziel = pygame.Vector2(z.pos) + self.fehler * f["fehler"]
+        else:
+            if self.streif_ort is None or k.pos.distance_to(self.streif_ort[0]) < 80.0:
+                self.streif_ort = self._streifziel()
+            will = self._weg_richtung(self.streif_ort[0], self.streif_ort[1])
+            ziel = k.pos + b.vorn * 200.0
+        # Steckt er fest (Gas, aber keine Fahrt): ein Stueck zurueck.
+        self._fahr_steckt = getattr(self, "_fahr_steckt", 0.0)
+        self._fahr_zurueck = max(0.0, getattr(self, "_fahr_zurueck", 0.0) - dt)
+        if will.length_squared() > 0.01 and abs(b.fahrt) < 15.0:
+            self._fahr_steckt += dt
+        else:
+            self._fahr_steckt = 0.0
+        if self._fahr_steckt > f["steckt_nach"]:
+            self._fahr_steckt = 0.0
+            self._fahr_zurueck = f["zurueck"]
+        if self._fahr_zurueck > 0.0:
+            will = -b.vorn
+        ein["will"] = [round(will.x, 2), round(will.y, 2)]
+        ein["ziel"] = [round(ziel.x, 1), round(ziel.y, 1)]
+        if z is not None and getattr(b, "rechteckig", False) and self.reaktion_rest <= 0.0:
+            mitte = b.aufbau_mitte()
+            weg = z.pos - mitte
+            soll = math.degrees(math.atan2(weg.y, weg.x))
+            frei = self.g.welt.sicht_frei(mitte, z.pos, b.ebene)
+            reich = (K.FAHRZEUG_WAFFEN["kanone"]["reichweite"] if b.art == "panzer"
+                     else K.FAHRZEUG_WAFFEN["ring_mg"]["reichweite"])
+            if frei and weg.length() <= reich:
+                ein["feuert"] = abs(_winkel_diff(b.aufbau, soll)) <= (
+                    f["kanone_winkel"] if b.art == "panzer" else f["mg_winkel"])
+                if b.art == "panzer":
+                    vorn = math.degrees(math.atan2(b.vorn.y, b.vorn.x))
+                    ein["zielt"] = (abs(_winkel_diff(vorn, soll)) <= f["mg_winkel"]
+                                    and weg.length() <= K.FAHRZEUG_WAFFEN["bug_mg"]["reichweite"])
+        return ein
 
     def _sicher(self, will):
         """Nicht in ein Loch und nicht gegen die Wand: die Richtung so weit

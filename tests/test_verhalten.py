@@ -960,9 +960,36 @@ def gefahren():
           f.gesamt > 200 and f.drin <= 0.015 * f.gesamt, "%d von %d" % (f.drin, f.gesamt))
 
 
+def panzer_bot():
+    """Gemeldet (0.34.63): "Mach mir mal das Bot Fahrzeuge steuern." Ein
+    Bot am Steuer eines Panzers gegen einen Trupp: er faehrt, dreht den
+    Turm und schiesst - in jeder Szene."""
+    print("\n-- Ein Bot faehrt den Panzer und kaempft")
+    from dustfront.fahrzeug import Panzergranate
+    for seed in (51, 52, 53):
+        tm = neu(seed)
+        tx, ty, v = W.flaeche(tm, random.Random(seed), 30, 16)
+        fahrer = tm.fahrer_setzen(v(26, 8), 0, {"team": 0, "fahrzeug": "panzer", "winkel": 180.0})
+        pz = fahrer.fahrzeug
+        tm.trupp_setzen(v(4, 6), 0, {"groesse": 5, "team": 1, "fuehrer": "funk",
+                                     "mischung": "gemischt"})
+        start = pygame.Vector2(pz.pos)
+        zahl = {"schuss": 0, "weg": 0.0}
+
+        def messen(tm=tm, pz=pz, zahl=zahl):
+            zahl["schuss"] += sum(1 for g in tm.welt.neue if isinstance(g, Panzergranate))
+            zahl["weg"] = max(zahl["weg"], pz.pos.distance_to(start))
+        laufen(tm, 20.0, messen)
+        tm.verlassen()
+        pruef("Seed %d: der Bot faehrt den Panzer und schiesst mit der Kanone" % seed,
+              zahl["schuss"] >= 2 and zahl["weg"] > 20.0,
+              "%d Schuss, %.0f px" % (zahl["schuss"], zahl["weg"]))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
-         planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren]
+         planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
+         panzer_bot]
 NUR = sys.argv[1:]
 for teil in TEILE:
     if not NUR or teil.__name__ in NUR:

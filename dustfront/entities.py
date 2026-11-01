@@ -2645,6 +2645,8 @@ class Spieler(Wesen):
         luft *= wd.get("tempo_faktor", 1.0)
         if self.ladung > 0.0:
             luft *= wd.get("tempo_beim_laden", 1.0)    # Spule, Kettenblitz (0.34.68)
+        if getattr(self, "schild", False):
+            luft *= K.SCHILD["tempo"]           # Schildtraeger (seit 0.34.71)
         if getattr(self, "draht_rest", 0.0) > 0.0:
             # Im Stacheldraht (seit 0.34.69, ausruestung).
             self.draht_rest -= dt

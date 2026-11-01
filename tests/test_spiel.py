@@ -6410,6 +6410,93 @@ _tm70.verlassen()
 EN.RND.setstate(_rnd70)
 random.setstate(_zufall70)
 
+# 0.34.71: Bots am Steuer, Schildtraeger, Trupp-Vorlagen.
+print("\n-- Bots fahren, Schildtraeger, Trupp-Vorlagen (0.34.71)")
+_rnd71 = EN.RND.getstate()
+_zufall71 = random.getstate()
+_tm71 = _TM59.Testmodus(app, karte="staubtal")
+_tm71._bot_rnd.seed(71)
+_ort71 = freier_punkt(_tm71.welt, 0, random.Random(71))
+_namen71 = {e.name for e in _TM59.eintraege()}
+pruef("Fahrer mit und ohne Fahrzeug, Schildtraeger und Trupp-Vorlagen im Spawner",
+      {"FAHRER MIT FAHRZEUG", "FAHRER OHNE FAHRZEUG", "SCHILDTRÄGER", "TRUPP AUS VORLAGE"}
+      <= _namen71 and "TRUPP" in _namen71)
+def _laufen71(sek):
+    for _ in range(int(sek / K.FIXED_DT)):
+        _tm71.schritt(K.FIXED_DT)
+# Ein Panzerfahrer mit Panzer: sieht er einen Gegner, dreht der Turm und die Kanone schiesst.
+_fa71 = _tm71.fahrer_setzen(_ort71, 0, {"team": 0, "fahrzeug": "panzer", "winkel": 0.0})
+_pz71 = _fa71.fahrzeug
+pruef("Der Panzerfahrer sitzt im Panzer, im Aussehen des Panzerfahrers",
+      _pz71 is not None and _pz71.fahrer is _fa71 and _fa71.skin == "panzerfahrer")
+_z71 = _tm71.puppe_setzen(_pz71.pos + pygame.Vector2(0, -250), 0,
+                          {"anzahl": 1, "streuung": 0, "team": 1})
+_z71 = _z71[0] if isinstance(_z71, list) else _z71
+_z71.leben = _z71.max_leben = 5000.0
+_n71 = [0]
+from dustfront.fahrzeug import Panzergranate as _PG71
+def _zaehle71():
+    _n71[0] += sum(1 for g in _tm71.welt.neue if isinstance(g, _PG71))
+for _ in range(int(6.0 / K.FIXED_DT)):
+    _tm71.schritt(K.FIXED_DT)
+    _zaehle71()
+pruef("... der Turm dreht zum Gegner, die Kanone schiesst und trifft",
+      _n71[0] >= 1 and _z71.leben < _z71.max_leben, "%d Schuss, %.0f" % (_n71[0], _z71.max_leben - _z71.leben))
+_z71.lebt = False
+_tm71.kaempfer.pop(_z71.nummer, None)
+# Ohne Gegner faehrt er los.
+_start71 = pygame.Vector2(_pz71.pos)
+_laufen71(5.0)
+pruef("... ohne Gegner faehrt er los", _pz71.pos.distance_to(_start71) > 40.0,
+      "%.0f px" % _pz71.pos.distance_to(_start71))
+# Ein Fahrer ohne Fahrzeug geht zum naechsten freien und steigt ein.
+_bg71 = _tm71.fahrzeug_setzen("buggy", _ort71 + pygame.Vector2(0, 260), 0, {"winkel": 0.0})
+_fo71 = _tm71.fahrer_setzen(_bg71.pos + pygame.Vector2(120, 0), 0, {"team": 0}, mit_fahrzeug=False)
+_laufen71(6.0)
+pruef("Ein Fahrer ohne Fahrzeug geht zum Buggy und steigt ein", _fo71.fahrzeug is _bg71,
+      "%s, %.0f px" % (_fo71.fahrzeug, _fo71.pos.distance_to(_bg71.pos)))
+pruef("Andere Bots steigen weiter nicht ein (im Gefecht fahren Bots nicht)",
+      not any(getattr(k, "fahrzeug", None) is not None and not getattr(k, "darf_fahren", False)
+              for k in _tm71._bots()))
+# Schildtraeger: von vorn haelt das Schild, von hinten nicht.
+_st71 = _tm71.schildtraeger_setzen(_ort71 + pygame.Vector2(-300, 0), 0, {"team": 1})
+_st71.winkel = 0.0
+_sch71 = _tm71.puppe_setzen(_st71.pos + pygame.Vector2(100, 0), 0, {"anzahl": 1, "streuung": 0, "team": 0})
+_sch71 = _sch71[0] if isinstance(_sch71, list) else _sch71
+_st71.leben = _st71.max_leben
+_st71.schaden(40.0, None, _sch71)
+_vorn71 = _st71.max_leben - _st71.leben
+_st71.leben = _st71.max_leben
+_st71.winkel = 180.0
+_st71.schaden(40.0, None, _sch71)
+_hinten71 = _st71.max_leben - _st71.leben
+pruef("Das Schild haelt ab, was von vorn kommt, von hinten nicht",
+      _vorn71 < 40.0 * 0.3 and _hinten71 > 30.0, "%.0f / %.0f" % (_vorn71, _hinten71))
+pruef("... er traegt eine Pistole und das Schild-Aussehen",
+      _st71.waffe_name == K.SCHILD["waffe"] and _st71.skin == "schildtraeger")
+# Trupp aus Vorlage: jedes Mitglied im eigenen Aussehen, mit Fahrzeug.
+for _vn71, _v71 in K.TRUPP_VORLAGEN.items():
+    _vor71 = len(_tm71.fahrzeuge)
+    _tr71 = _tm71.vorlage_setzen(_ort71 + pygame.Vector2(0, -500), 0, {"vorlage": _vn71, "team": 1})
+    _ok71 = ([m.skin for m in _tr71.mitglieder] == [x[0] for x in _v71["mitglieder"]]
+             and [m.waffe_name for m in _tr71.mitglieder] == [x[1] for x in _v71["mitglieder"]]
+             and [bool(getattr(m, "schild", False)) for m in _tr71.mitglieder]
+             == [x[3] for x in _v71["mitglieder"]]
+             and _tr71.fuehrer is _tr71.mitglieder[0])
+    if _v71["fahrzeug"]:
+        _neu71 = _tm71.fahrzeuge[_vor71:]
+        _ok71 = (_ok71 and len(_neu71) == 1 and _neu71[0].art == _v71["fahrzeug"]
+                 and _neu71[0].fahrer is not None and _neu71[0].fahrer.skin == _v71["fahrer"])
+    pruef("Vorlage %s: Aussehen, Waffen, Schilde%s stimmen" % (
+        _vn71, ", Fahrzeug mit Fahrer" if _v71["fahrzeug"] else ""), _ok71)
+_laufen71(1.0)
+_bild71 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm71.info = 1
+_tm71.zeichnen(_bild71, 1.0)
+_tm71.verlassen()
+EN.RND.setstate(_rnd71)
+random.setstate(_zufall71)
+
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
 pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)

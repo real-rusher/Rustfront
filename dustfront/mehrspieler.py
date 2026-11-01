@@ -270,6 +270,18 @@ class Kaempfer(Spieler):
         # als dort, wo sein Team ihn zuletzt gesehen hat.
         if self.am_boden:
             schub = None
+        # Das Schild (seit 0.34.71, K.SCHILD): was aus der Richtung kommt,
+        # in die er schaut, haelt es zum groessten Teil ab.
+        if getattr(self, "schild", False) and von is not None and von is not self \
+                and not self.am_boden and self.welt is not None:
+            weg = pygame.Vector2(getattr(von, "pos", self.pos)) - self.pos
+            if weg.length_squared() > 1.0:
+                ab = abs((math.degrees(math.atan2(weg.y, weg.x)) - self.winkel + 180) % 360 - 180)
+                if ab <= K.SCHILD["winkel"]:
+                    menge = float(menge) * K.SCHILD["anteil"]
+                    schub = None
+                    wolke(self.welt, self.pos + pygame.Vector2(10, 0).rotate(self.winkel), 3, 120,
+                          0.15, (255, 222, 150), self.ebene, 1, "funke")
         # Im Buggy kommt nur ein Teil an, und weggestossen wird man nicht:
         # der Wagen haelt einen fest (seit 0.34.9, K.FAHRZEUG). Hier und
         # nicht beim Wagen, damit Statistik und Schadenszahl genau das
@@ -2078,8 +2090,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         # Einsteigen geht vor der Treppe: wer neben einem Buggy auf einer
         # Rampe steht, will eher fahren als hochgehen.
         # Bots fahren nicht (gemeldet: "Sie sollen keine autos fahren
-        # koennen") - ihr E nimmt nur Treppen und Aufzuege.
-        wagen = None if k.ist_bot else self._freier_buggy(k)
+        # koennen") - ihr E nimmt nur Treppen und Aufzuege. Seit 0.34.71
+        # duerfen es die, denen der Testmodus es erlaubt (`darf_fahren`,
+        # gemeldet: "Mach mir mal das Bot Fahrzeuge steuern ... in den
+        # Testmodus").
+        darf = not k.ist_bot or getattr(k, "darf_fahren", False)
+        wagen = self._freier_buggy(k) if darf else None
         if wagen is not None:
             self._einsteigen(k, wagen)
             return

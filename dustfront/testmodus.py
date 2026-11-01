@@ -172,6 +172,9 @@ OPTIONEN = {
     "hirn": ("HIRN", lambda: list(K.GOAP["arten"]), lambda v: v.upper()),
     # Seit 0.34.39: Trupps (trupp.py).
     "groesse": ("GRÖSSE", lambda: list(K.TRUPP["groessen"]), lambda v: "%d MANN" % v),
+    "vorlage": ("VORLAGE", lambda: list(K.TRUPP_VORLAGEN), lambda v: v),
+    "fahrzeug": ("FAHRZEUG", lambda: ["panzer", "panzerwagen", "buggy"],
+                 lambda v: v.upper()),
     "fuehrer": ("ANFÜHRER", lambda: ["funk", "ohne", "keiner"],
                 lambda v: {"funk": "MIT FUNK", "ohne": "OHNE FUNK", "keiner": "KEINER"}[v]),
     "mischung": ("WAFFEN", lambda: ["gemischt", "zufall"],
@@ -228,6 +231,13 @@ def eintraege() -> list:
         Eintrag("BOT", "FIGUREN", ("anzahl", "streuung", "team", "waffe", "leben", "hirn",
                                    "aussehen"),
                 lambda t, p, e, w: t.bot_setzen(p, e, w)),
+        # Seit 0.34.71: wer faehrt und wer das Schild traegt.
+        Eintrag("FAHRER MIT FAHRZEUG", "FIGUREN", ("fahrzeug", "team", "hirn", "winkel"),
+                lambda t, p, e, w: t.fahrer_setzen(p, e, w, mit_fahrzeug=True)),
+        Eintrag("FAHRER OHNE FAHRZEUG", "FIGUREN", ("team", "hirn"),
+                lambda t, p, e, w: t.fahrer_setzen(p, e, w, mit_fahrzeug=False)),
+        Eintrag("SCHILDTRÄGER", "FIGUREN", ("anzahl", "streuung", "team", "hirn", "leben"),
+                lambda t, p, e, w: t.schildtraeger_setzen(p, e, w)),
         Eintrag("SPIELER, STEHT", "FIGUREN", ("anzahl", "streuung", "team", "leben",
                                               "waffe_figur", "aussehen"),
                 lambda t, p, e, w: t.puppe_setzen(p, e, w)),
@@ -237,6 +247,10 @@ def eintraege() -> list:
         # der naechste Trupp einer Mannschaft tun soll.
         Eintrag("TRUPP", "TRUPPS", ("groesse", "team", "fuehrer", "mischung", "leben"),
                 lambda t, p, e, w: t.trupp_setzen(p, e, w), mehrfach=False),
+        # Seit 0.34.71: Trupps aus Vorlagen - mit Fahrzeug, Schildtraegern,
+        # jedes Mitglied in seinem Aussehen. Der Standard-Trupp bleibt.
+        Eintrag("TRUPP AUS VORLAGE", "TRUPPS", ("vorlage", "team", "leben"),
+                lambda t, p, e, w: t.vorlage_setzen(p, e, w), mehrfach=False),
         Eintrag("TRUPP: HALTEN HIER", "TRUPPS", ("team", "wichtig"),
                 lambda t, p, e, w: t.trupp_auftrag("halten", p, e, w), mehrfach=False),
         Eintrag("TRUPP: ANGRIFF HIER", "TRUPPS", ("team",),
@@ -1029,6 +1043,74 @@ class Testmodus(Gefecht):
         if trupp.fuehrer is None:
             trupp.fuehrer = trupp.mitglieder[0]
         liste.append(trupp)
+        return trupp
+
+    def fahrer_setzen(self, pos, ebene: int, w: dict, mit_fahrzeug: bool = True):
+        """Ein Bot, der fahren darf (seit 0.34.71) - im Aussehen des
+        Panzerfahrers. Mit Fahrzeug sitzt er gleich drin; ohne geht er zum
+        naechsten freien (bots.BotHirn._zum_fahrzeug)."""
+        k = self.bot_setzen(pos, ebene, {"team": w.get("team", 0), "hirn": w.get("hirn", "goap"),
+                                         "aussehen": "panzerfahrer"})
+        k.darf_fahren = True
+        # Direkt und nicht ueber figuren.saeubern: der Panzerfahrer haelt im
+        # Bild fest eine Pistole und ist darum fuer Spieler nicht waehlbar.
+        # Im Testmodus (ohne Netz) soll man ihn aber sehen.
+        k.skin = "panzerfahrer"
+        if mit_fahrzeug:
+            b = self.fahrzeug_setzen(w.get("fahrzeug", "panzer"), pos, ebene, w)
+            self._einsteigen(k, b)
+        return k
+
+    def schildtraeger_setzen(self, pos, ebene: int, w: dict):
+        """Ein Bot mit grossem Schild und Pistole (seit 0.34.71, K.SCHILD)."""
+        k = self.bot_setzen(pos, ebene, {"team": w.get("team", 0), "hirn": w.get("hirn", "goap"),
+                                         "aussehen": "schildtraeger", "waffe": K.SCHILD["waffe"],
+                                         "leben": w.get("leben", 1.0)})
+        k.schild = True
+        k.skin = "schildtraeger"     # wie beim Fahrer: das Schild ist fest im Bild
+        return k
+
+    def vorlage_setzen(self, pos, ebene: int, w: dict):
+        """Ein Trupp aus einer Vorlage (K.TRUPP_VORLAGEN, seit 0.34.71): jedes
+        Mitglied mit Aussehen, Waffe und Wurfwaffe, Schildtraeger mit
+        Schild, und - wenn die Vorlage eines hat - ein Fahrzeug mit Fahrer."""
+        from .trupp import Trupp, trupps
+        v = K.TRUPP_VORLAGEN[w.get("vorlage", next(iter(K.TRUPP_VORLAGEN)))]
+        team = w.get("team", 0)
+        liste = trupps(self)
+        vergeben = {t.name for t in liste}
+        name = next((n for n in K.TRUPP["namen"] if n not in vergeben),
+                    "TRUPP %d" % (len(liste) + 1))
+        trupp = Trupp(self, team, name)
+        rnd = random.Random(self._bot_rnd.random())
+        for i, (aussehen, waffe, wurf, schild) in enumerate(v["mitglieder"]):
+            p = self._stelle(pos + pygame.Vector2(26 * (i % 3) - 26, 26 * (i // 3)),
+                             ebene, 12.0, 0.0, rnd)
+            k = self.bot_setzen(p, ebene, {"team": team, "hirn": "goap", "waffe": waffe,
+                                           "aussehen": aussehen, "leben": w.get("leben", 1.0)})
+            lo = {"name": "BOT", "waffen": [waffe] + [x for x in k.loadout["waffen"]
+                                                      if x != waffe][:1],
+                  "wuerfe": [wurf]}
+            k.loadout = lo
+            k.waffen = konto_modul.hotbar_aus_loadout(lo)
+            k.waffe = k.waffen.index(waffe)
+            self._bot_munition(k)
+            k.skin = aussehen if aussehen in K.FIGUREN else k.skin
+            if schild:
+                k.schild = True
+            if i == 0:
+                k.funkgeraet = True
+                trupp.fuehrer = k
+            k.hirn.trupp = trupp
+            trupp.mitglieder.append(k)
+        liste.append(trupp)
+        if v["fahrzeug"]:
+            hinten = pygame.Vector2(pos) + pygame.Vector2(0, 90)
+            self.fahrer_setzen(hinten, ebene, {"team": team, "fahrzeug": v["fahrzeug"],
+                                               "winkel": 0.0}, mit_fahrzeug=True)
+            fahrer = self.fahrzeuge[-1].fahrer
+            if fahrer is not None and v["fahrer"]:
+                fahrer.skin = v["fahrer"]
         return trupp
 
     def trupp_auftrag(self, art: str, pos, ebene: int, w: dict):
@@ -2065,6 +2147,15 @@ class Testmodus(Gefecht):
                 zustand += " (NIEDERGEH.)"
             if hasattr(h, "flankiert") and h.flankiert():
                 zustand += " FLANKIERT"
+            # Seit 0.34.71: wer faehrt, wer ein Schild traegt.
+            if k.fahrzeug is not None:
+                zustand = "FÄHRT %s" % k.fahrzeug.art.upper()
+                if h.ziel is not None:
+                    zustand += " > ZIEL"
+            elif getattr(k, "darf_fahren", False) and h.ziel is None:
+                zustand += " (SUCHT FAHRZEUG)"
+            if getattr(k, "schild", False):
+                zustand += " SCHILD"
             # Seit 0.34.66: was ihn gerade festhaelt.
             if k.betaeubt_rest > 0.0:
                 zustand += " BETÄUBT"

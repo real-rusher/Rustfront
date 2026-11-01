@@ -77,7 +77,7 @@ setzt, steht sofort da.
 
 | Gruppe | Eintraege | Einstellungen |
 | --- | --- | --- |
-| FIGUREN | Bot, Spieler (steht), Spieler (ich) | Anzahl, Streuung, Team (ROT, BLAU, FREI), Waffe (auch fuer Spieler, seit 0.34.62), Leben, Aussehen (ZUFALL, STANDARD oder ein Skin; bei Spieler (ich) als Vorgabe EIGENES); beim Bot HIRN (KLASSISCH / GOAP, docs/KI.md) |
+| FIGUREN | Bot, Fahrer mit / ohne Fahrzeug, Schildträger, Spieler (steht), Spieler (ich) | Anzahl, Streuung, Team (ROT, BLAU, FREI), Waffe (auch fuer Spieler, seit 0.34.62), Leben, Aussehen (ZUFALL, STANDARD oder ein Skin; bei Spieler (ich) als Vorgabe EIGENES); beim Bot HIRN (KLASSISCH / GOAP, docs/KI.md) |
 | GEGNER, BOSSE | jede Art aus `K.GEGNER` und `K.BOSSE` | Anzahl, Streuung, Leben, KI an/aus, HIRN (KLASSISCH / GOAP) |
 | ZIELE | die Zielpuppe | Anzahl, Streuung |
 | OBJEKTE | Buggy, Panzer, Panzerwagen, Nagelfeld, Hotzone hier, Hotzone aus | Anzahl, Streuung, Richtung |
@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.71 | FIGUREN: FAHRER MIT FAHRZEUG (Panzer, Panzerwagen oder Buggy, der Bot sitzt am Steuer und kaempft), FAHRER OHNE FAHRZEUG (geht zum naechsten freien und steigt ein), SCHILDTRÄGER (Schild von vorn, Pistole). TRUPPS: TRUPP AUS VORLAGE (PANZERZUG, MOT. SCHÜTZEN, SCHILDWALL, SPÄHTRUPP, STURMTRUPP; jedes Mitglied mit eigenem Aussehen, Waffe und Wurfwaffe, mit Fahrzeug samt Fahrer). Die INFO-Ansicht zeigt FÄHRT ..., SUCHT FAHRZEUG und SCHILD. Pruefungen im Abschnitt "Bots fahren, Schildtraeger, Trupp-Vorlagen" von `tests/test_spiel.py` und "Ein Bot faehrt den Panzer und kaempft" in `tests/test_verhalten.py` |
 | 0.34.70 | BOT: WAFFE kennt jetzt alle Waffen, und der Bot kaempft damit (Nahkampf heran, Spule voll laden, Flamme in Reichweite). Bots meiden Feuer, Gas, entdeckte Fallen, Stacheldraht und scharfe Wuerfe - zu sehen, wenn man eine Brandflaeche oder Gaswolke (WURF, Zuender sofort) auf sie setzt. Pruefungen im Abschnitt "Bots: Gefahren und neue Waffen" von `tests/test_spiel.py` und "Bots meiden brennenden Boden" in `tests/test_verhalten.py` |
 | 0.34.69 | Neue Spawner-Gruppen (TEAM: wem es gehoert, RICHTUNG): BAUEN (Sandsackwand, Stacheldraht), FALLEN (Sprengfalle mit Platte oder Draht, Selbstschussanlage, Benzinkanister), AUFKLÄRUNG (Spaehdrohne, Horchposten), HILFE (Sanitasche, Munitionskiste). Testmenue: FERNGLAS (mit Figur: markiert im Kegel zum Zeiger). Markierte Gegner zeigt eine rote Raute; INFO (Taste 8) zeigt versteckte Fallen, Draht, Reichweite und Ziel des Geschuetzes, den Kreis der Drohne und die Welle des Horchpostens. Pruefungen im Abschnitt "Bauen, Fallen, Aufklaerung, Hilfe im Testmodus" von `tests/test_spiel.py` |
 | 0.34.68 | FIGUREN: WAFFE kennt Spulengewehr, Kettenblitz, Spiegellaser, Kugelblitz und Flammenwerfer (SPIELER, ICH; eine Puppe oder ein paar Zombies als Ziel). Pruefungen im Abschnitt "Energiewaffen und Flammenwerfer" von `tests/test_spiel.py` |
