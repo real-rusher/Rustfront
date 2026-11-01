@@ -647,12 +647,20 @@ class KampfGegner(Gegner):
             # ausrollen, Rueckstoss, Sturz. Kein Ziel, kein Schritt.
             Wesen.schritt(self, dt)
             return
+        if self.gelaehmt:
+            # Betaeubt oder gefroren (seit 0.34.66): nur noch Physik.
+            Wesen.schritt(self, dt)
+            return
+        stand = pygame.Vector2(self.pos) if self.fest_rest > 0.0 else None
         vorher = self.welt.held
         self.welt.held = self._ziel_waehlen(dt)
         try:
             super().schritt(dt)
         finally:
             self.welt.held = vorher
+        if stand is not None:
+            # Festgenagelt: er schlaegt noch, aber vom Fleck kommt er nicht.
+            self.pos.update(stand)
         self._haenger_pruefen(dt)
         if getattr(self._gefecht, "in_lobby", False):
             self._gefecht._im_gehege_halten(self)
@@ -1061,6 +1069,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self.welt.brandfleck = self._brandfleck
         self.welt.krater = self._krater
         self.welt.blitz = self._blitz
+        self.welt.bild_dekal = self._bild_dekal
         if self.ist_gastgeber:
             # Nur beim Gastgeber: was in der Welt an Wirkung entsteht,
             # wird zusaetzlich mitgeschrieben und geht als Meldung an die
@@ -1071,6 +1080,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self.welt.raketenstart = self._raketenstart_melden
             self.welt.tod = self._tod_melden
             self.welt.leichenflug = self._leichenflug_melden
+            # Laerm (seit 0.34.66): Bots hoeren ihn wie einen Knall.
+            self.welt.laerm = lambda pos, ebene, quelle=None, weite=600.0: \
+                self._bot_hoert(pos, ebene, quelle, weite)
         if not getattr(self.app, "headless", True):
             # Was das Bild je Ebene einmal rechnet, gleich beim Laden (seit
             # 0.34.58) - nicht erst beim ersten Blick auf eine andere Ebene,
@@ -1087,6 +1099,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     def _brandfleck(self, pos, ebene: int, radius: float) -> None:
         self.welt.ebene(ebene).dekal(self.renderer.brandfleck(radius),
                                      pos.x, pos.y)
+
+    def _bild_dekal(self, name: str, pos, ebene: int, winkel: float = 0.0) -> None:
+        """Ein kleines Bild in den Boden (seit 0.34.66, Naegel)."""
+        self.welt.ebene(ebene).dekal(self.renderer.bilder.gedreht(name, winkel), pos.x, pos.y)
 
     def _krater(self, pos, ebene: int, radius: float, saat: int) -> None:
         """Der Krater der Panzerkanone in den Boden (seit 0.34.59)."""
@@ -3988,6 +4004,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 "rz": round(k.ruf_zeigen, 2),
                 # Sitzt er im Buggy? Dann zeichnet der Gast ihn nicht.
                 "fz": k.im_fahrzeug,
+                # Zustaende (seit 0.34.66): betaeubt, gefroren, fest.
+                "zs": [round(k.betaeubt_rest, 1), round(k.gefroren_rest, 1),
+                       round(k.fest_rest, 1)],
                 # Eigene Treffer und Erledigte, als Zaehler - daraus macht
                 # der Gast sein Trefferzeichen (render.Trefferzeichen).
                 "tz": k.treffer_marken, "tk": k.toedlich_marken,
@@ -4464,6 +4483,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             k.sprintet = bool(eintrag.get("sp", 0))
             k.ruf_zeigen = float(eintrag.get("rz", 0.0))
             k.im_fahrzeug = bool(eintrag.get("fz", False))
+            zs = eintrag.get("zs")
+            if isinstance(zs, list) and len(zs) == 3:
+                try:
+                    k.betaeubt_rest, k.gefroren_rest, k.fest_rest = (
+                        max(0.0, float(z)) for z in zs)
+                except (TypeError, ValueError):
+                    pass
             # Auch vom Gastgeber nur, was es gibt - ein unbekannter Name
             # waere sonst ein rotes Fehlbild.
             k.skin = figuren.saeubern(eintrag.get("sk", ""))

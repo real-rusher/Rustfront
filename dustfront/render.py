@@ -1992,6 +1992,7 @@ class Renderer:
         self.wesen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         if figuren is not None:
             figuren(ziel, idx, ecke)
+        self.zustaende_zeichnen(ziel, welt, idx, ecke)
         self.flugleichen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.aufbauten_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.laser_zeichnen(ziel, welt, idx, ecke)
@@ -2070,6 +2071,33 @@ class Renderer:
                              int(p.y - 16 - b["steigt"] * f),
                              farbe if f < 0.7 else K.C_MUTED, 1,
                              ausrichtung="mitte")
+
+    def zustaende_zeichnen(self, ziel, welt, index: int, ecke) -> None:
+        """Betaeubt, gefroren, festgenagelt (seit 0.34.66): ueber der Figur,
+        damit man sieht, warum sie stillsteht."""
+        zeit = welt.zeit
+        for w in welt.wesen:
+            if w.ebene != index or not w.lebt:
+                continue
+            b, g, f = w.betaeubt_rest, w.gefroren_rest, w.fest_rest
+            if b <= 0.0 and g <= 0.0 and f <= 0.0:
+                continue
+            x, y = int(w.pos.x - ecke.x), int(w.pos.y - ecke.y)
+            r = int(getattr(w, "radius", 8.0)) + 3
+            if g > 0.0:
+                pygame.draw.circle(ziel, (170, 220, 255), (x, y), r, 1)
+                pygame.draw.circle(ziel, (230, 245, 255), (x - r // 2, y - r // 2), 1)
+            if b > 0.0:
+                # Drei Funken kreisen ueber dem Kopf.
+                for i in range(3):
+                    a = zeit * 6.0 + i * 2.094
+                    px = x + int(math.cos(a) * (r - 1))
+                    py = y - r + int(math.sin(a) * 3)
+                    pygame.draw.rect(ziel, (255, 236, 120) if i else (150, 220, 255),
+                                     (px, py, 2, 2))
+            if f > 0.0:
+                pygame.draw.line(ziel, (150, 152, 156), (x - 3, y + r), (x + 3, y + r))
+                pygame.draw.line(ziel, (150, 152, 156), (x, y + r - 3), (x, y + r + 2))
 
     def naegel_zeichnen(self, ziel, welt, index: int, ecke) -> None:
         """Nagelfelder (seit 0.34.65) am Boden, unter den Figuren. Die

@@ -1656,6 +1656,25 @@ def _minirakete_flug():
     return _rand(s, (16, 12, 8))
 
 
+@platzhalter("nagel_flug")
+def _nagel_flug():
+    """Ein Nagel des Naglers im Flug (seit 0.34.66): Schaft und Kopf."""
+    s = _flaeche(9, 3)
+    pygame.draw.line(s, (150, 152, 156), (1, 1), (7, 1))
+    pygame.draw.line(s, (96, 98, 102), (0, 0), (0, 2))
+    s.set_at((8, 1), (200, 204, 210))
+    return s
+
+
+@platzhalter("nagel_steckt")
+def _nagel_steckt():
+    """Ein Nagel, der in der Wand steckt: nur der Kopf und ein Stueck."""
+    s = _flaeche(7, 3)
+    pygame.draw.line(s, (120, 122, 126), (0, 1), (4, 1))
+    pygame.draw.line(s, (60, 62, 66), (4, 0), (4, 2))
+    return s
+
+
 @platzhalter("haftladung_flug")
 def _haftladung_flug():
     """Die Haftladung (seit 0.34.65): ein gruener Klebering um eine

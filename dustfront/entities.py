@@ -47,6 +47,12 @@ class Wesen:
     # wieder flach (gemeldet: "Entfern mal das 3D-Rendering bei Figuren,
     # das ist doch nicht so gut"); Hoehe haben nur noch Buggy und Beute.
     hoehe_3d = 0.0
+    # Zustaende (seit 0.34.66, zustand_setzen): betaeubt (Schockstab) und
+    # gefroren (Schneeball) laehmen ganz - kein Laufen, kein Schiessen,
+    # kein Schlagen; fest (Nagler, Kettensaege) haelt nur am Ort.
+    betaeubt_rest = 0.0
+    gefroren_rest = 0.0
+    fest_rest = 0.0
 
     # Eine laufende Nummer je Wesen. Gebraucht wird sie vom Gast: er
     # bekommt sechzigmal in der Sekunde eine Liste fliegender Dinge und
@@ -83,6 +89,20 @@ class Wesen:
             self.blitz -= dt
         if self.sturz_rest > 0:
             self.sturz_schritt(dt)
+        if self.betaeubt_rest > 0.0 or self.gefroren_rest > 0.0 or self.fest_rest > 0.0:
+            self.betaeubt_rest = max(0.0, self.betaeubt_rest - dt)
+            self.gefroren_rest = max(0.0, self.gefroren_rest - dt)
+            self.fest_rest = max(0.0, self.fest_rest - dt)
+
+    @property
+    def gelaehmt(self) -> bool:
+        """Betaeubt oder gefroren: tut gar nichts (seit 0.34.66)."""
+        return self.betaeubt_rest > 0.0 or self.gefroren_rest > 0.0
+
+    @property
+    def gehalten(self) -> bool:
+        """Kommt nicht vom Fleck: gelaehmt oder festgenagelt."""
+        return self.gelaehmt or self.fest_rest > 0.0
 
     # ---- Sturz --------------------------------------------------------
     def stuerzen(self) -> None:
@@ -326,6 +346,18 @@ def schaden_an(ziel, menge, schub=None, von=None, art=None, herkunft=None,
         ziel.schaden(menge, schub, von)
 
 
+def zustand_setzen(ziel, art: str, dauer: float) -> None:
+    """Betaeubt, gefroren oder fest (seit 0.34.66). Fahrzeuge kennen das
+    nicht (die haben den EMP), Bosse halten nur die Haelfte aus - sonst
+    waere ein Schockstab das Ende jedes Bosskampfs."""
+    if getattr(ziel, "ist_fahrzeug", False) or not getattr(ziel, "lebt", False):
+        return
+    if getattr(ziel, "ist_boss", False):
+        dauer *= K.ZUSTAENDE["boss_anteil"]
+    name = art + "_rest"
+    setattr(ziel, name, max(getattr(ziel, name, 0.0), float(dauer)))
+
+
 def treffer_ziel_buchen(von, ziel) -> None:
     """Ein Treffer, getrennt danach, ob er einen Spieler oder einen Zombie traf."""
     if not hasattr(von, "zaehlen"):
@@ -380,6 +412,12 @@ class Geschoss(Wesen):
         self.durch = int(daten.get("durchschlag", 0))
         self.durch_deckung = bool(daten.get("durch_deckung", False))
         self.gegen_fahrzeug = bool(daten.get("gegen_fahrzeug", False))
+        # Der Nagler (seit 0.34.66): ein Nagel statt einer Leuchtspur, und
+        # wer vor einer Wand getroffen wird, haengt fest.
+        self.nagelt = bool(daten.get("nagelt", False))
+        if daten.get("bild_flug"):
+            self.bild = daten["bild_flug"]
+            self.spur = None
         # Welche Zeile von K.PANZERUNG gilt (seit 0.34.65).
         self.schadensart = daten.get("schadensart") or (
             "panzerbrechend" if self.gegen_fahrzeug else "kugel")
@@ -442,6 +480,10 @@ class Geschoss(Wesen):
         else:
             wolke(self.welt, self.pos, 5, 190, 0.18, (232, 196, 140), self.ebene,
                   1, "funke", 130, richtung + 180, 6.0)
+            if self.nagelt:
+                # Der Nagel bleibt in der Wand stecken (Welt.explosion "nagel":
+                # der Radius ist dort die Richtung - so geht sie beim Gast mit).
+                self.welt.explosion(self.pos, self.ebene, richtung, "nagel")
 
     def treffen(self, ziel) -> None:
         """Was ein Treffer anrichtet - beim Einschlag und bei jedem Koerper,
@@ -468,6 +510,12 @@ class Geschoss(Wesen):
             herkunft = self.pos - pygame.Vector2(self.tempo).normalize() * 40.0
         schaden_an(ziel, menge, schub, self.von, art, herkunft)
         abschuss_buchen(self.von, ziel, self.waffe, lebte)
+        if self.nagelt and ziel.lebt and self.tempo.length_squared() > 0.001:
+            z = K.ZUSTAENDE
+            hinter = (ziel.pos + pygame.Vector2(self.tempo).normalize()
+                      * (getattr(ziel, "radius", 8.0) + z["nagel_wand"]))
+            if self.welt.schuss_halt(hinter, ziel.ebene, 2.0):
+                zustand_setzen(ziel, "fest", z["genagelt"])
         if getattr(ziel, "treffer_art", "") == "metall":
             wolke(self.welt, self.pos, 5, 170, 0.18, (255, 222, 150), self.ebene,
                   1, "funke", 120, richtung + 180, 5.0)
@@ -1252,8 +1300,8 @@ class Nagelfeld:
 
     Reifen gehen darin platt - der Wagen wird fuer `platt_dauer` langsam
     und nimmt etwas Schaden, einmal je Ueberfahrt. Ketten (der Panzer)
-    rollen darueber. Figuren werden langsam und bluten ein wenig, solange
-    sie darin stehen."""
+    rollen darueber. Auf Wesen wirkt es nicht: so hat es der Besitzer fuer
+    die Kraehenfuesse festgelegt ("kein Effekt bei Wesen", Waffenpaket)."""
 
     __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt",
                  "kennung", "von", "saat")
@@ -1295,19 +1343,6 @@ class Nagelfeld:
                     continue
                 ziel.platt_treffen(n["platt_dauer"])
                 schaden_an(ziel, n["platt_schaden"], None, self.von)
-                continue
-            if (not getattr(ziel, "trefferbar", False) or getattr(ziel, "flug", 0.0) > 0
-                    or getattr(ziel, "im_fahrzeug", False)
-                    or ziel.pos.distance_to(self.pos) > self.radius + ziel.radius):
-                continue
-            # Die eigenen Leute wissen, wo sie liegen.
-            if (self.von is not None and ziel is not self.von
-                    and getattr(ziel, "fraktion", None) == getattr(self.von, "fraktion", "")
-                    and getattr(self.von, "fraktion", "") not in ("neutral", "")):
-                continue
-            ziel.naegel_rest = 0.25
-            if abs(getattr(ziel, "tempo", pygame.Vector2()).length()) > 10.0:
-                ziel.schaden(n["schaden"] * dt, None, self.von)
 
     def stellen(self) -> list:
         """Wo die einzelnen Naegel liegen: (x, y, Winkel), immer gleich."""
@@ -2087,7 +2122,7 @@ class Spieler(Wesen):
         und wer nichts in der Hand hat, schiesst auch nicht.
         """
         d = K.WAFFEN.get(K.NAHKAMPF["waffe"])
-        if d is None or self.nahkampf_rest > 0 or self.schlag_zeigen > 0:
+        if d is None or self.nahkampf_rest > 0 or self.schlag_zeigen > 0 or self.gelaehmt:
             return False
         if self.nachlade_rest > 0 or self.heilt_rest > 0:
             return False
@@ -2158,6 +2193,15 @@ class Spieler(Wesen):
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
         s = K.SPIELER
+        # Zustaende (seit 0.34.66): gelaehmt tut er nichts, festgenagelt
+        # schiesst er noch, laeuft aber nicht. Die Eingabe kommt jedes Bild
+        # neu (Gefecht), darum genuegt es, sie hier zu loeschen.
+        if self.gehalten:
+            self.will.update(0, 0)
+            self.dash_rest = 0.0
+            if self.gelaehmt:
+                self.feuert = False
+                self.zielt = False
         self.unverwundbar = max(0.0, self.unverwundbar - dt)
         self.takt = max(0.0, self.takt - dt)
         self.takt2 = max(0.0, self.takt2 - dt)
@@ -2209,6 +2253,8 @@ class Spieler(Wesen):
                           self.ebene, 1)
 
         self.dash_bild_rest = max(0.0, self.dash_bild_rest - dt)
+        # Wie lange der letzte Dash her ist (Schlagring, seit 0.34.66).
+        self._seit_dash = 0.0 if self.dash_rest > 0 else getattr(self, "_seit_dash", 9.0) + dt
 
         self.schlag_zeigen = max(0.0, self.schlag_zeigen - dt)
         self.nahkampf_rest = max(0.0, self.nahkampf_rest - dt)
@@ -2239,10 +2285,6 @@ class Spieler(Wesen):
             luft *= K.ZIEHEN["tempo"]
         # Wer wiederbelebt wurde, geht langsamer (seit 0.34.40, Testmodus).
         luft *= getattr(self, "tempo_anteil", 1.0)
-        # Wer in einem Nagelfeld steht, ebenso (seit 0.34.65, Nagelfeld).
-        if getattr(self, "naegel_rest", 0.0) > 0.0:
-            self.naegel_rest -= dt
-            luft *= K.NAEGEL["tempo"]
         if getattr(self, "sprintet", False):
             luft *= K.SPRINT["faktor"]        # Bots sprinten (seit 0.34.50)
         self._dash_laden(dt)
@@ -2334,8 +2376,9 @@ class Spieler(Wesen):
             self.feuern()
         # Die rechte Maustaste als zweiter Abzug (seit 0.34.62): die zweite
         # Pistole der Zwillinge, beide Laeufe der Doppelflinte.
-        if ((wd.get("zweite_hand") or wd.get("beide_laeufe")) and self.zielt
-                and self.takt2 <= 0 and self.nachlade_rest <= 0 and self.heilt_rest <= 0):
+        if ((wd.get("zweite_hand") or wd.get("beide_laeufe") or wd.get("zweit"))
+                and self.zielt and self.takt2 <= 0
+                and self.nachlade_rest <= 0 and self.heilt_rest <= 0):
             self._zweit_feuern(wd)
 
     # ---- Waffe -------------------------------------------------------
@@ -2381,7 +2424,7 @@ class Spieler(Wesen):
         man sich fuer etwas anderes entschieden, und der Dash waere ein
         Ausweg, der diese Entscheidung nichts kosten laesst.
         """
-        if not self.kann_dashen:
+        if not self.kann_dashen or self.gehalten:
             return False
         richtung = pygame.Vector2(self.will)
         if richtung.length_squared() < 0.01:
@@ -2600,6 +2643,10 @@ class Spieler(Wesen):
     def _zweit_feuern(self, d: dict) -> None:
         """Rechte Maustaste: die zweite Pistole (Zwillinge, eigener Takt,
         aus der anderen Hand) oder beide Laeufe auf einmal (Doppelflinte)."""
+        if d.get("zweit") == "bodenschlag":
+            if self.takt <= 0:
+                self._bodenschlag(d)
+            return
         name = self.waffe_name
         hat = self.magazin.get(name, 0)
         if hat <= 0:
@@ -2664,17 +2711,28 @@ class Spieler(Wesen):
         eigenen Taste, der ja gerade nicht die gewaehlte Waffe benutzt.
         """
         d = daten or self.waffe_daten
+        # Mit welcher Waffe: das Brecheisen auf F, sonst die gehaltene
+        # (Hammer, Schockstab, Schlagring, Kettensaege - seit 0.34.66).
+        name = K.NAHKAMPF["waffe"] if daten is not None else self.waffe_name
         if daten is None:
             self.takt = d["takt"]
+        if d.get("saege"):
+            self._saegen(d, name)
+            return
         # Schwung und Nachhalten: das Eisen bleibt danach noch einen Moment
         # in der Hand (K.NAHKAMPF["nachhalten"]).
         self.schlag_zeigen = d.get("schwung", 0.26) + K.NAHKAMPF["nachhalten"]
-        self.zaehlen("schuesse", 1.0, K.NAHKAMPF["waffe"])
+        self.zaehlen("schuesse", 1.0, name)
         w = self.welt
         reich = d["reichweite"]
         halb = d["winkel"] * 0.5
         getroffen = 0
         treffer_art = "organisch"
+        menge = d["schaden"]
+        if d.get("dash_faktor") and (self.dash_rest > 0.0 or getattr(self, "_seit_dash", 9.0)
+                                     <= d.get("dash_fenster", 0.3)):
+            # Der Schlagring: ein Schlag aus dem Dash trifft haerter.
+            menge *= d["dash_faktor"]
         for ziel in list(w.nahe(self.pos, reich + 20, self.ebene)):
             if ziel is self or ziel.fraktion == self.fraktion or not ziel.lebt:
                 continue
@@ -2685,15 +2743,87 @@ class Spieler(Wesen):
             if abs(delta) > halb:
                 continue
             schub = ab.normalize() * d["schub"] if ab.length_squared() > 0.01 else None
-            schaden_an(ziel, d["schaden"], schub, self, "nahkampf", self.pos)
+            lebte = ziel.lebt
+            schaden_an(ziel, menge, schub, self, "nahkampf", self.pos)
+            abschuss_buchen(self, ziel, name, lebte)
+            if d.get("betaeubt"):
+                zustand_setzen(ziel, "betaeubt", d["betaeubt"])
             if getattr(ziel, "ist_boss", False) or getattr(ziel, "treffer_art", "") == "metall":
                 treffer_art = "metall"
             if getattr(ziel, "zaehlt_treffer", True):
-                self.zaehlen("kopftreffer", 1.0, K.NAHKAMPF["waffe"])
+                self.zaehlen("kopftreffer", 1.0, name)
             getroffen += 1
         spitze = self.pos + pygame.Vector2(reich * 0.7, 0).rotate(self.winkel)
         w.schlagknall(spitze, self.winkel, self.ebene, bool(getroffen), self,
                       treffer_art)
+
+    def _ziele_vorn(self, reich: float, winkel: float) -> list:
+        """Wer im Kegel vor ihm steht (nicht er selbst, nicht die eigenen)."""
+        raus = []
+        halb = winkel * 0.5
+        for ziel in list(self.welt.nahe(self.pos, reich + 20, self.ebene)):
+            if (ziel is self or ziel.fraktion == self.fraktion or not ziel.lebt
+                    or ziel.fraktion == "geschoss" or not getattr(ziel, "trefferbar", True)):
+                continue
+            ab = ziel.pos - self.pos
+            if ab.length() > reich + ziel.radius:
+                continue
+            delta = (math.degrees(math.atan2(ab.y, ab.x)) - self.winkel + 180) % 360 - 180
+            if abs(delta) <= halb:
+                raus.append(ziel)
+        return raus
+
+    def _saegen(self, d: dict, name: str) -> None:
+        """Die Kettensaege (seit 0.34.66): ein Zug je `takt`, solange die
+        Taste gehalten wird. Wen sie beruehrt, den haelt sie fest. Sie ist
+        laut - Bots hoeren sie weit (Welt.laerm)."""
+        if self.magazin.get(name, 0) <= 0:
+            self.nachladen()
+            return
+        self.magazin[name] -= 1
+        w = self.welt
+        spitze = self.pos + pygame.Vector2(d["reichweite"] * 0.8, 0).rotate(self.winkel)
+        getroffen = False
+        for ziel in self._ziele_vorn(d["reichweite"], d["winkel"]):
+            lebte = ziel.lebt
+            schaden_an(ziel, d["schaden"], None, self, "nahkampf", self.pos)
+            abschuss_buchen(self, ziel, name, lebte)
+            zustand_setzen(ziel, "fest", K.ZUSTAENDE["saege_fest"])
+            getroffen = True
+        farbe = K.C_BLUT if getroffen else (255, 214, 140)
+        wolke(w, spitze, 3, 120, 0.18, farbe, self.ebene, 1,
+              "blut" if getroffen else "funke", 60, self.winkel + 90, 6.0)
+        self._saege_rest = getattr(self, "_saege_rest", 0.0) - d["takt"]
+        if self._saege_rest <= 0.0:
+            # Nicht jeden Zug: der Laerm und der Ton gehen dreimal je Sekunde.
+            self._saege_rest = 0.33
+            self.zaehlen("schuesse", 1.0, name)
+            w.schlagknall(spitze, self.winkel, self.ebene, getroffen, self)
+            w.laerm(self.pos, self.ebene, self, d.get("laerm", 600.0))
+
+    def _bodenschlag(self, d: dict) -> None:
+        """Der Hammer auf den Boden (seit 0.34.66): alles ringsum fliegt
+        weg, die eigenen Leute nicht."""
+        self.takt = self.takt2 = d["boden_takt"]
+        self.schlag_zeigen = d.get("schwung", 0.3) + K.NAHKAMPF["nachhalten"]
+        w = self.welt
+        mitte = self.pos + pygame.Vector2(14, 0).rotate(self.winkel)
+        r = d["boden_radius"]
+        self.zaehlen("schuesse", 1.0, self.waffe_name)
+        for ziel in list(w.nahe(mitte, r + 20, self.ebene)):
+            if (ziel is self or ziel.fraktion == self.fraktion or not ziel.lebt
+                    or ziel.fraktion == "geschoss" or not getattr(ziel, "trefferbar", True)):
+                continue
+            ab = ziel.pos - mitte
+            weit = ab.length()
+            if weit > r + ziel.radius:
+                continue
+            anteil = 1.0 - 0.5 * min(1.0, weit / r)
+            schub = ab.normalize() * d["boden_schub"] * anteil if weit > 0.01 else None
+            lebte = ziel.lebt
+            schaden_an(ziel, d["boden_schaden"] * anteil, schub, self, "nahkampf", mitte)
+            abschuss_buchen(self, ziel, self.waffe_name, lebte)
+        w.explosion(mitte, self.ebene, r, "boden", self)
 
     # ---- Schaden -----------------------------------------------------
     def schaden(self, menge, schub=None, von=None) -> None:

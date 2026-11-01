@@ -5816,6 +5816,151 @@ w.verlassen(); ga.verlassen()
 EN.RND.setstate(_rnd65)
 random.setstate(_zufall65)
 
+# 0.34.66: Nahkampfwaffen, Bolzer, Nagler, Zustaende, Nagelfeld ohne Wesen.
+print("\n-- Nahkampf, Bolzer, Nagler, Zustaende (0.34.66)")
+_rnd66 = EN.RND.getstate()
+_zufall66 = random.getstate()
+_tm66 = _TM59.Testmodus(app, karte="staubtal")
+_ort66 = freier_punkt(_tm66.welt, 0, random.Random(66))
+_ich66 = _tm66.ich_setzen(_ort66, 0, {"team": 0, "waffe_figur": "hammer"})
+_ich66 = _ich66[0] if isinstance(_ich66, list) else _ich66
+pruef("Die neuen Waffen sind in der Ausruestung waehlbar",
+      {"bolzer", "nagler", "hammer", "schockstab", "schlagring", "kettensaege"}
+      <= set(K.LOADOUT["auswahl_waffen"]))
+def _puppe66(dx, dy=0.0, leben=400.0):
+    p_ = _tm66.puppe_setzen(_ich66.pos + pygame.Vector2(dx, dy), 0,
+                            {"anzahl": 1, "streuung": 0, "team": 1, "leben": leben})
+    p_ = p_[0] if isinstance(p_, list) else p_
+    _tm66.welt.schritt(K.FIXED_DT)     # erst dann steht sie im Raster (Welt.nahe)
+    p_.leben = p_.max_leben
+    return p_
+def _waffe66(name):
+    _ich66.waffen[0] = name
+    _ich66.magazin[name] = K.WAFFEN[name].get("magazin", 0)
+    _ich66.waffe = 0
+    _ich66.takt = _ich66.takt2 = 0.0
+    _ich66.nachlade_rest = 0.0
+    _ich66.winkel = 0.0
+    _ich66.ziel = _ich66.pos + pygame.Vector2(100, 0)
+_waffe66("schockstab")
+_z66 = _puppe66(24)
+_ich66.feuern()
+pruef("Der Schockstab betaeubt: wenig Schaden, aber gelaehmt",
+      _z66.gelaehmt and _z66.max_leben - _z66.leben <= K.WAFFEN["schockstab"]["schaden"] + 0.1,
+      "%.1f s" % _z66.betaeubt_rest)
+_z66.feuert = True
+_z66.will.update(1, 0)
+_z66.tempo.update(0, 0)          # der Rueckstoss des Schlags zaehlt nicht
+_p66 = pygame.Vector2(_z66.pos)
+for _ in range(10):
+    _z66.feuert = True
+    _z66.will.update(1, 0)
+    _z66.schritt(K.FIXED_DT)
+pruef("... und ein Betaeubter laeuft und schiesst nicht",
+      _z66.pos.distance_to(_p66) < 1.0 and not _z66.feuert)
+_z66.lebt = False
+_waffe66("schlagring")
+_z66 = _puppe66(20)
+_ich66.feuern()
+_normal66 = _z66.max_leben - _z66.leben
+_z66.leben = _z66.max_leben
+_ich66.takt = 0.0
+_ich66._seit_dash = 0.05
+_ich66.feuern()
+_dash66 = _z66.max_leben - _z66.leben
+pruef("Der Schlagring trifft aus dem Dash haerter",
+      _dash66 > _normal66 * 2.0 and _normal66 > 0, "%.0f / %.0f" % (_normal66, _dash66))
+_z66.lebt = False
+_waffe66("hammer")
+_zs66 = [_puppe66(30, dy) for dy in (-30, 0, 30)]
+_ich66.zielt = True
+_ich66.feuert = False
+_ich66.schritt(K.FIXED_DT)
+_ich66.zielt = False
+pruef("Der Hammer haut rechts auf den Boden: alle ringsum nehmen Schaden und fliegen",
+      all(z_.leben < z_.max_leben and z_.tempo.length() > 50 for z_ in _zs66),
+      str([round(z_.max_leben - z_.leben) for z_ in _zs66]))
+for z_ in _zs66:
+    z_.lebt = False
+_waffe66("kettensaege")
+_z66 = _puppe66(22)
+_vor66 = _z66.leben
+_mag66 = _ich66.magazin["kettensaege"]
+for _ in range(int(0.5 / K.FIXED_DT)):
+    _ich66.feuert = True
+    _ich66.schritt(K.FIXED_DT)
+_ich66.feuert = False
+pruef("Die Kettensaege schadet, solange sie laeuft, haelt fest und braucht Treibstoff",
+      _vor66 - _z66.leben > 3 * K.WAFFEN["kettensaege"]["schaden"] and _z66.fest_rest > 0
+      and _ich66.magazin["kettensaege"] < _mag66,
+      "%.0f, %d" % (_vor66 - _z66.leben, _mag66 - _ich66.magazin["kettensaege"]))
+_z66.lebt = False
+_waffe66("bolzer")
+_nah66 = _puppe66(30)
+_weit66 = _puppe66(0, 120)
+_ich66.feuern()
+_ich66.winkel = 90.0
+_ich66.takt = 0.0
+_ich66.magazin["bolzer"] = 1
+for _ in range(30):
+    _tm66.welt.schritt(K.FIXED_DT)
+pruef("Der Bolzer trifft aus naechster Naehe hart",
+      _nah66.max_leben - _nah66.leben >= K.WAFFEN["bolzer"]["schaden"] - 0.1,
+      "%.0f" % (_nah66.max_leben - _nah66.leben))
+_ich66.feuern()
+for _ in range(30):
+    _tm66.welt.schritt(K.FIXED_DT)
+pruef("... aber reicht nicht weit", _weit66.leben == _weit66.max_leben)
+_nah66.lebt = _weit66.lebt = False
+# Nagler: vor einer Wand haengt man fest.
+_wand66 = None
+_eb66 = _tm66.welt.ebene(0)
+for _ty in range(4, 200):
+    for _tx in range(4, 200):
+        _d66 = K.KACHELN[_eb66.kachel(_tx, _ty)]
+        _l66 = K.KACHELN[_eb66.kachel(_tx - 1, _ty)]
+        _l266 = K.KACHELN[_eb66.kachel(_tx - 4, _ty)]
+        if _d66["fest"] and not _d66["sicht"] and not _l66["fest"] and not _l266["fest"] \
+                and not K.KACHELN[_eb66.kachel(_tx - 6, _ty)]["fest"]:
+            _wand66 = pygame.Vector2(_tx * K.TILE, (_ty + 0.5) * K.TILE)
+            break
+    if _wand66 is not None:
+        break
+_ich66.pos.update(_wand66 - pygame.Vector2(K.TILE * 5, 0))
+_waffe66("nagler")
+_zn66 = _puppe66(K.TILE * 5 - 10)
+_ich66.feuern()
+for _ in range(int(0.5 / K.FIXED_DT)):
+    _tm66.welt.schritt(K.FIXED_DT)
+pruef("Der Nagler naegelt an die Wand (fest)", _zn66.fest_rest > 0.0,
+      "%s %s" % (_zn66.pos, _wand66))
+pruef("Naegel fliegen als Nagel, nicht als Leuchtspur",
+      EN.Geschoss(_ich66.pos, 0, K.WAFFEN["nagler"], 0, _ich66, "nagler").bild == "nagel_flug")
+# Nagelfeld: Figuren laufen ungehindert darueber (Waffenpaket).
+_zn66.lebt = False
+_nf66 = EN.Nagelfeld(_ich66.pos, 0)
+_tm66.welt.naegel.append(_nf66)
+_ich66.leben = _ich66.max_leben
+_ich66.fest_rest = 0.0
+for _ in range(30):
+    _ich66.will.update(1, 0)
+    _tm66.welt.schritt(K.FIXED_DT)
+pruef("Ueber Kraehenfuesse laufen Figuren ungehindert (kein Schaden)",
+      _ich66.leben == _ich66.max_leben)
+_tm66.welt.naegel.clear()
+# Im Netz: der Gast sieht, dass jemand betaeubt ist.
+w, ga = _paar59("team", karte="staubtal")
+w.ich.betaeubt_rest = 1.0
+for _ in range(4):
+    w.schritt(K.NETZ["takt"])
+    ga.schritt(K.NETZ["takt"])
+_gk66 = ga.kaempfer.get(w.ich.nummer)
+pruef("Der Gast sieht, dass der Gastgeber betaeubt ist",
+      _gk66 is not None and _gk66.betaeubt_rest > 0.0)
+w.verlassen(); ga.verlassen()
+EN.RND.setstate(_rnd66)
+random.setstate(_zufall66)
+
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
 pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)

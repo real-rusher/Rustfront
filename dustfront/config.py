@@ -558,6 +558,8 @@ BILD_MASS = {
     "blendgranate":     (10, 10),
     "flugrakete":       (16, 8),
     "minirakete_flug":  (18, 8),    # Raketenbuendel im Flug (seit 0.34.64)
+    "nagel_flug":       (9, 3),     # ein Nagel des Naglers im Flug (seit 0.34.66)
+    "nagel_steckt":     (7, 3),     # und wo er stecken bleibt
     "haftladung_flug":  (9, 9),     # Haftladung im Flug und klebend (seit 0.34.65)
     "emp_flug":         (9, 9),     # EMP-Granate im Flug (seit 0.34.65)
     "nagel":            (5, 5),     # ein Kraehenfuss im Nagelfeld (seit 0.34.65)
@@ -1290,8 +1292,9 @@ FAHRZEUG_HILFE = dict(
     nagelstreuer=dict(ladungen=2, takt=4.0, arten=("buggy", "panzerwagen")),
 )
 # Das Nagelfeld hinter dem Wagen: Reifen gehen platt (der Wagen wird
-# langsam), Figuren werden langsam und bluten etwas. Ketten stoert es nicht.
-NAEGEL = dict(radius=34.0, dauer=22.0, schaden=9.0, tempo=0.55,
+# langsam). Ketten stoert es nicht, Wesen auch nicht (Waffenpaket,
+# KRAEHENFUESSE: "kein Effekt bei Wesen").
+NAEGEL = dict(radius=34.0, dauer=22.0,
               platt_dauer=6.0, platt_tempo=0.5, platt_schaden=30.0,
               ketten=("panzer",), anzahl=16)
 
@@ -3107,7 +3110,153 @@ WAFFEN = {
         rueckstoss=0.0,
         huelsen=0,
     ),
+
+    # ── Nahkampf und Werkzeug (seit 0.34.66) ───────────────────────────
+    #
+    # Aus dem Waffenpaket. Nahkampfwaffen liegen auf einem Platz der
+    # Hotbar wie eine Schusswaffe (das Brecheisen bleibt auf F). Neue
+    # Schalter:
+    #
+    #   zweit            was die rechte Maustaste tut ("bodenschlag")
+    #   betaeubt         so lange ist der Getroffene gelaehmt (ZUSTAENDE)
+    #   dash_faktor      so viel staerker trifft ein Schlag aus dem Dash
+    #   saege            Dauerschaden, solange gehalten (Treibstoff = Magazin)
+    #   nagelt           wer vor einer Wand getroffen wird, haengt fest
+    #   bild_flug        das Bild im Flug statt der Leuchtspur
+    "hammer": dict(
+        art="nahkampf",
+        name="VORSCHLAGHAMMER",
+        # Langsam und schwer. Links ein Schlag, rechts auf den Boden: alles
+        # ringsum fliegt weg, wie beim Stampfer des Koloss.
+        schaden=72.0,
+        takt=1.05,
+        reichweite=42.0,
+        winkel=80.0,
+        schwung=0.4,
+        schub=420.0,
+        kamera=3.5,
+        rueckstoss=0.0,
+        magazin=0,
+        nachladen=0.0,
+        huelsen=0,
+        tempo_faktor=0.9,
+        zweit="bodenschlag",
+        boden_schaden=40.0,
+        boden_radius=74.0,
+        boden_schub=520.0,
+        boden_takt=1.8,
+    ),
+    "schockstab": dict(
+        art="nahkampf",
+        name="SCHOCKSTAB",
+        # Wenig Schaden, aber der Getroffene steht kurz still: kein
+        # Schiessen, kein Ausweichen.
+        schaden=14.0,
+        takt=0.85,
+        reichweite=38.0,
+        winkel=60.0,
+        schwung=0.22,
+        schub=60.0,
+        kamera=1.5,
+        rueckstoss=0.0,
+        magazin=0,
+        nachladen=0.0,
+        huelsen=0,
+        betaeubt=1.4,
+        tempo_faktor=1.04,
+    ),
+    "schlagring": dict(
+        art="nahkampf",
+        name="SCHLAGRING",
+        # Sehr schnell und sehr nah. Aus dem Dash heraus trifft er hart.
+        schaden=19.0,
+        takt=0.28,
+        reichweite=26.0,
+        winkel=70.0,
+        schwung=0.12,
+        schub=120.0,
+        kamera=1.2,
+        rueckstoss=0.0,
+        magazin=0,
+        nachladen=0.0,
+        huelsen=0,
+        dash_faktor=2.6,
+        dash_fenster=0.3,     # so lange nach dem Dash zaehlt er als "aus dem Dash"
+        tempo_faktor=1.1,
+    ),
+    "kettensaege": dict(
+        art="nahkampf",
+        name="KETTENSÄGE",
+        # Schadet, solange sie das Ziel beruehrt, und haelt es fest. Laut:
+        # jeder in der Naehe hoert, wo sie laeuft. Braucht Treibstoff.
+        saege=True,
+        schaden=11.0,         # je Zug (`takt`)
+        takt=0.1,
+        reichweite=34.0,
+        winkel=50.0,
+        schwung=0.1,
+        schub=30.0,
+        kamera=0.6,
+        rueckstoss=0.0,
+        magazin=90,           # Treibstoff fuer 9 Sekunden
+        nachladen=3.4,
+        huelsen=0,
+        laerm=620.0,          # so weit hoeren Bots sie
+        tempo_faktor=0.92,
+    ),
+    "bolzer": dict(
+        art="schuss",
+        name="BOLZENSCHUSSGERÄT",
+        # Aus dem Schlachthaus: nur aus allernaechster Naehe, dann sehr
+        # stark und ohne Ruecksicht auf Deckung.
+        schaden=105.0,
+        takt=0.5,
+        magazin=1,
+        nachladen=1.3,
+        streuung=0.0,
+        streuung_lauf=0.0,
+        geschosse=1,
+        tempo=1600.0,
+        reichweite=46.0,
+        durch_deckung=True,
+        rueckstoss=40.0,
+        kamera=2.2,
+        huelsen=0,
+        stoss=2.0,
+        klang="schuss_repetierer",
+        muendung=0.4,
+    ),
+    "nagler": dict(
+        art="schuss",
+        name="NAGLER",
+        # Langsame Naegel, denen man ausweichen kann. Wer dicht vor einer
+        # Wand getroffen wird, haengt fest; die Naegel bleiben stecken.
+        nagelt=True,
+        schaden=20.0,
+        takt=0.16,
+        magazin=36,
+        nachladen=2.8,
+        streuung=2.2,
+        streuung_lauf=3.0,
+        geschosse=1,
+        tempo=340.0,
+        reichweite=520.0,
+        rueckstoss=8.0,
+        kamera=0.6,
+        huelsen=0,
+        klang="schuss",
+        muendung=0.3,
+        bild_flug="nagel_flug",
+    ),
 }
+
+# Zustaende (seit 0.34.66, entities.zustand_setzen).
+ZUSTAENDE = dict(
+    boss_anteil=0.5,          # Bosse halten nur so viel davon aus
+    genagelt=1.1,             # so lange haengt fest, wen der Nagler an die Wand naegelt
+    nagel_wand=14.0,          # so nah muss die Wand hinter ihm sein
+    saege_fest=0.25,          # so lange haelt die Kettensaege fest (je Zug erneuert)
+)
 
 # Wie eine Waffe in der Hand der Figur aussieht, von oben gesehen.
 #
@@ -3299,7 +3448,10 @@ LOADOUT = dict(
                     # Aus dem Waffenpaket (seit 0.34.62)
                     "revolver", "zwillinge", "mp", "praezision", "unterhebel",
                     "panzerbuechse", "doppelflinte", "autoschrot", "minigun",
-                    "granatwerfer", "einwegwerfer", "raketenbuendel"),
+                    "granatwerfer", "einwegwerfer", "raketenbuendel",
+                    # Nahkampf und Werkzeug (seit 0.34.66)
+                    "bolzer", "nagler", "hammer", "schockstab", "schlagring",
+                    "kettensaege"),
     auswahl_wuerfe=("granate", "rauch", "molotov", "blend", "c4",
                     # Gegen Fahrzeuge (seit 0.34.65)
                     "haftladung", "emp"),

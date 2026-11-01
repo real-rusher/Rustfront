@@ -464,6 +464,16 @@ class Welt:
     def brandfleck(self, pos, ebene: int, radius: float) -> None:
         pass
 
+    def laerm(self, pos, ebene: int, quelle=None, weite: float = 600.0) -> None:
+        """Lauter Laerm an dieser Stelle (seit 0.34.66: Kettensaege, spaeter
+        der Knaller). Wer ihn hoert, entscheidet das Gefecht (Bots)."""
+        pass
+
+    def bild_dekal(self, name: str, pos, ebene: int, winkel: float = 0.0) -> None:
+        """Ein kleines Bild bleibt am Boden (seit 0.34.66: Naegel in der
+        Wand). Die Szene haengt sich hier ein, wie beim Brandfleck."""
+        pass
+
     def krater(self, pos, ebene: int, radius: float, saat: int) -> None:
         """Ein unregelmaessiger Krater im Boden (seit 0.34.59, Einschlag der
         Panzerkanone). Die Szene haengt sich hier ein, wie beim Brandfleck."""
@@ -548,6 +558,22 @@ class Welt:
             wolke(self, pos, 10, 90, 0.5, f["toene"][1], ebene, 1, "funke")
             self.klang("molotov_glass", 0.9, pos, ebene)
             self.klang("molotov_whoosh", 0.28, pos, ebene)
+            return
+        if art == "nagel":
+            # Ein Nagel des Naglers bleibt in der Wand stecken (seit
+            # 0.34.66). Hier ist `radius` die Richtung, in der er flog.
+            self.bild_dekal("nagel_steckt", pos, ebene, radius)
+            return
+        if art == "boden":
+            # Der Bodenschlag des Hammers (seit 0.34.66): Staub, ein Ring,
+            # Risse (ein kleiner Krater) und ein dumpfer Schlag.
+            wolke(self, pos, 22, 170, 0.6, K.C_MUTED_DK, ebene, 2, "staub")
+            wolke(self, pos, 10, 220, 0.35, (122, 86, 46), ebene, 1, "staub",
+                  reibung=2.0)
+            self.aufschlagring(pos, ebene, 1.4)
+            self.krater(pos, ebene, radius * 0.25, int(abs(pos.x) * 7 + abs(pos.y) * 13))
+            self.ruckeln(5.0, "explosion", pos, ebene)
+            self.klang("sturz", 1.0, pos, ebene)
             return
         if art == "emp":
             # Die EMP-Granate (seit 0.34.65): kein Feuer, kein Krater - ein

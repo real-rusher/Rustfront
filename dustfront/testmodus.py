@@ -1959,6 +1959,13 @@ class Testmodus(Gefecht):
                 zustand += " (NIEDERGEH.)"
             if hasattr(h, "flankiert") and h.flankiert():
                 zustand += " FLANKIERT"
+            # Seit 0.34.66: was ihn gerade festhaelt.
+            if k.betaeubt_rest > 0.0:
+                zustand += " BETÄUBT"
+            if k.gefroren_rest > 0.0:
+                zustand += " GEFROREN"
+            if k.fest_rest > 0.0:
+                zustand += " FEST"
             SCHRIFT.zeichnen(ziel, zustand, int(p.x), int(p.y) + 14, K.C_AMBER, 1,
                              ausrichtung="mitte")
             # Seit 0.34.50: wer auf ihn schoss (orange), und die Ausdauer.
