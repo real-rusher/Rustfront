@@ -557,6 +557,7 @@ BILD_MASS = {
     "molotov":          (10, 10),
     "blendgranate":     (10, 10),
     "flugrakete":       (16, 8),
+    "minirakete_flug":  (18, 8),    # Raketenbuendel im Flug (seit 0.34.64)
     "rpg_kiste":        (18, 14),
     "huelse":           (4, 3),
     # Waffensymbole fuer Hotbar und Inventar, Seitenansicht nach rechts
@@ -2135,6 +2136,18 @@ MUNITION = dict(
 LASER = dict(farbe=(232, 44, 32), staerke=120, punkt=(255, 96, 70), ab=30.0,
              weite=900.0)
 
+# Kurzer heller Blitz bei jeder Explosion (seit 0.34.64, gemeldet: die
+# kleinen Explosionen des Raketenbuendels waren kaum zu erkennen). dauer
+# in Sekunden, je_radius: so gross im Verhaeltnis zum Wirkungskreis,
+# mindestens/hoechstens in Pixeln.
+LICHTBLITZ = dict(dauer=0.11, je_radius=0.9, mindestens=22.0, hoechstens=120.0,
+                  farbe=(255, 214, 150), kern=(255, 250, 230))
+
+# Was im Bogen fliegt (seit 0.34.64): die Hoehe zeigt sich als Groesse UND
+# als Versatz nach oben im Bild - gemeldet: "die Flugkurve geht nach unten
+# auf dem Bildschirm, sollte nach oben gehen". `hoch` Pixel je Pixel Hoehe.
+BOGEN = dict(bilder=("teil_granate40",), hoch=0.55)
+
 # Das leere Rohr des Einweg-Raketenwerfers (seit 0.34.62): so lange liegt
 # es nach dem Ausrutschen, so lange qualmt es hinten, wie oft eine
 # Rauchflocke kommt und wie weit hinter der Mitte das offene Ende liegt.
@@ -2987,7 +3000,10 @@ WAFFEN = {
         streuung=6.0,
         schlingern=16.0,      # Grad hin und her
         schlinger_takt=9.0,   # wie schnell (Bogenmass je Sekunde)
-        bild="teil_minirakete",
+        # Im Flug groesser als das Teil im Paket, mit Flossen und Flamme -
+        # gemeldet: "nicht wirklich als Raketen erkennbar" (0.34.64).
+        bild="minirakete_flug",
+        explosion="klein",
     ),
 }
 

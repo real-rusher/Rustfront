@@ -1640,6 +1640,22 @@ def _flugrakete():
     return _rand(s, (16, 12, 8))
 
 
+@platzhalter("minirakete_flug")
+def _minirakete_flug():
+    """Eine Rakete des Raketenbuendels im Flug (seit 0.34.64): schlanker
+    Koerper, rote Spitze, Flossen hinten und eine helle Flamme - so liest man
+    sie als Rakete und nicht als Splitter."""
+    s = _flaeche(18, 8)
+    pygame.draw.rect(s, (255, 236, 170), (0, 3, 3, 2))       # Flamme
+    pygame.draw.rect(s, (255, 150, 60), (2, 3, 2, 2))
+    pygame.draw.polygon(s, (60, 58, 50), [(5, 3), (3, 0), (7, 3)])     # Flossen
+    pygame.draw.polygon(s, (60, 58, 50), [(5, 4), (3, 7), (7, 4)])
+    pygame.draw.rect(s, (150, 146, 130), (4, 2, 10, 4))      # Koerper
+    pygame.draw.rect(s, (196, 192, 176), (4, 2, 10, 1))
+    pygame.draw.polygon(s, (200, 70, 44), [(14, 2), (17, 4), (14, 5)])   # Spitze
+    return _rand(s, (16, 12, 8))
+
+
 @platzhalter("rpg_kiste")
 def _rpg_kiste():
     s = _flaeche(18, 14)

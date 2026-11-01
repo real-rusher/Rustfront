@@ -1232,6 +1232,11 @@ class Renderer:
             s = s.copy()
             s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
         b = self._bildpunkt(pos, kamera, k)
+        if bild in K.BOGEN["bilder"]:
+            # Im Bogen geworfen (seit 0.34.64): je hoeher, desto weiter oben
+            # im Bild - wie ein Wurf, den man von schraeg oben sieht. Der
+            # Schatten bleibt am Boden.
+            b.y -= flug * K.BOGEN["hoch"] / max(0.2, kamera.zoom)
         ziel.blit(s, (b.x - s.get_width() / 2, b.y - s.get_height() / 2))
 
     def partikel_zeichnen(self, ziel, welt, index, ecke, alpha) -> None:
@@ -1327,6 +1332,24 @@ class Renderer:
                 s = self.dunkel(s, dunkel)
             p = f.zeichenpos(alpha) - ecke
             ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2))
+
+    def lichtblitze_zeichnen(self, ziel, welt, index, ecke) -> None:
+        """Der kurze Blitz einer Explosion (seit 0.34.64): zwei Kreise,
+        additiv, die in K.LICHTBLITZ["dauer"] verloeschen."""
+        lb = K.LICHTBLITZ
+        for pos, ebene, r, rest, dauer in welt.lichtblitze:
+            if ebene != index:
+                continue
+            f = max(0.0, rest / dauer)
+            n = int(r) + 2
+            fl = pygame.Surface((n * 2, n * 2))
+            fl.fill((0, 0, 0))
+            aussen = tuple(int(c * f * 0.55) for c in lb["farbe"])
+            innen = tuple(int(c * f) for c in lb["kern"])
+            pygame.draw.circle(fl, aussen, (n, n), max(1, int(r * (0.7 + 0.3 * f))))
+            pygame.draw.circle(fl, innen, (n, n), max(1, int(r * 0.4 * f)))
+            m = pos - ecke
+            ziel.blit(fl, (m.x - n, m.y - n), special_flags=pygame.BLEND_RGB_ADD)
 
     def feuerbaelle_zeichnen(self, ziel, welt, index, ecke, teil: str) -> None:
         """Der Einschlag der Panzerkanone (entities.Feuerball). `teil`
@@ -1975,6 +1998,7 @@ class Renderer:
         self.luft_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.feuerbaelle_zeichnen(ziel, welt, idx, ecke, "glut")
         self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
+        self.lichtblitze_zeichnen(ziel, welt, idx, ecke)
         self.muendungsfeuer(ziel, welt, ecke, idx)
         if luft is not None:
             luft(ziel, idx, ecke)

@@ -944,7 +944,7 @@ class Rakete(Wesen):
             lebte = ziel.lebt
             ziel.schaden(d["schaden"] * anteil, schub, schuetze)
             abschuss_buchen(schuetze, ziel, self.waffe, lebte)
-        w.explosion(self.pos, self.ebene, r)
+        w.explosion(self.pos, self.ebene, r, d.get("explosion", "spreng"))
         w.kurz_langsam(0.06)
 
 

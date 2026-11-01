@@ -387,6 +387,9 @@ class Welt:
         # entstehen sie aus derselben Meldung (explosion, leichenflug).
         self.feuerbaelle: list = []
         self.flugleichen: list = []
+        # Kurze helle Blitze bei Explosionen (seit 0.34.64): [Ort, Ebene,
+        # Radius, Rest, Dauer]. Beim Gast aus derselben Explosion.
+        self.lichtblitze: list = []
         # Was groesser ist als eine Zelle des Rasters (Panzer, Panzerwagen):
         # steht nicht in den Zellen, sondern hier, und `nahe` fragt es
         # einzeln - sonst fehlte ein Panzer, dessen Mitte zwei Zellen weg
@@ -543,6 +546,20 @@ class Welt:
             self.klang("molotov_glass", 0.9, pos, ebene)
             self.klang("molotov_whoosh", 0.28, pos, ebene)
             return
+        if art in ("panzer", "c4", "spreng", "klein", "feuer"):
+            self.lichtblitz(pos, ebene, max(radius, 40.0 if art != "klein" else 20.0)
+                            * (1.6 if art in ("panzer", "c4") else 1.0))
+        if art == "klein":
+            # Die kleinen Raketen des Raketenbuendels (seit 0.34.64): ein
+            # heller Blitz, ein Kranz Funken, wenig Rauch, ein kleiner Ring -
+            # sechs davon hintereinander sollen sechs Schlaege sein.
+            wolke(self, pos, 18, 300, 0.4, (255, 220, 150), ebene, 2, "funke")
+            wolke(self, pos, 8, 110, 0.6, K.C_MUTED_DK, ebene, 2, "staub")
+            self.aufschlagring(pos, ebene, 0.7)
+            self.brandfleck(pos, ebene, radius * 0.6)
+            self.ruckeln(2.5, "explosion", pos, ebene)
+            self.klang("granate", 0.6, pos, ebene)
+            return
         if art == "panzer":
             # Der Einschlag der Panzerkanone (seit 0.34.59): groesser als
             # Granate und C4 - Feuerball aus versetzten Glutballen, danach
@@ -575,6 +592,13 @@ class Welt:
         self.brandfleck(pos, ebene, radius)
         self.ruckeln(K.WAFFEN["granate"]["kamera"], "explosion", pos, ebene)
         self.klang("granate", 1.0, pos, ebene)
+
+    def lichtblitz(self, pos, ebene: int, radius: float) -> None:
+        """Ein kurzer heller Blitz (K.LICHTBLITZ), gezeichnet additiv
+        ueber dem Boden - jede Explosion soll man auf einen Blick sehen."""
+        lb = K.LICHTBLITZ
+        r = max(lb["mindestens"], min(lb["hoechstens"], radius * lb["je_radius"]))
+        self.lichtblitze.append([pygame.Vector2(pos), int(ebene), r, lb["dauer"], lb["dauer"]])
 
     def schussknall(self, pos, winkel: float, ebene: int, waffe: str,
                     quelle=None) -> None:
@@ -709,6 +733,10 @@ class Welt:
             p.schritt(dt)
         if any(not p.lebt for p in self.partikel):
             self.partikel = [p for p in self.partikel if p.lebt]
+        if self.lichtblitze:
+            for b in self.lichtblitze:
+                b[3] -= dt
+            self.lichtblitze = [b for b in self.lichtblitze if b[3] > 0]
         if self.feuerbaelle:
             for f in self.feuerbaelle:
                 f.schritt(dt)
@@ -832,7 +860,10 @@ class Welt:
             if not w.lebt or w.fraktion == feind_von or w.leben <= 0:
                 continue
             d = pos.distance_squared_to(w.pos)
-            if getattr(w, "rechteckig", False):
+            if getattr(w, "rechteckig", False) or getattr(w, "c4_haftet", False):
+                # Auch der Buggy (seit 0.34.64) an seiner ganzen Laenge (zwei
+                # Kreise), nicht nur 13 Pixel um die Mitte: ein fahrender
+                # Buggy war sonst kaum zu treffen (gefunden in einer Aufnahme).
                 if w.beruehrt(pos, radius) and d < beste_d:
                     bestes, beste_d = w, d
                 continue

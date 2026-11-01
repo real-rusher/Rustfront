@@ -5449,7 +5449,7 @@ for _wf62 in ("granatwerfer", "raketenbuendel", "einwegwerfer"):
     _gast62(1.0)
 pruef("Der Gast sieht die neuen Waffen in der Hand", _bild62.endswith("_einwegwerfer"), _bild62)
 pruef("... die 40-mm-Granate im Bogen und die kleinen Raketen",
-      "teil_granate40" in _namen62 and _hoehe_gast62[0] > 20.0 and "teil_minirakete" in _namen62,
+      "teil_granate40" in _namen62 and _hoehe_gast62[0] > 20.0 and "minirakete_flug" in _namen62,
       "%s %.0f" % (sorted(_namen62), _hoehe_gast62[0]))
 pruef("... und das abgelegte Rohr", any(f_.bild == "teil_rohr_leer" for f_ in ga.welt.flugleichen))
 w._meine_eingabe = _alt_ein62
@@ -5614,6 +5614,44 @@ else:
     os.environ["DUSTFRONT_TOUCH"] = _alt_touch63
 EN.RND.setstate(_rnd63)
 random.setstate(_zufall63)
+
+# ─────────────────────────────────────────────────────────────────────
+# 0.34.64: Bogen nach oben, Raketen als Raketen, Blitz bei Explosionen,
+# Buggy an seiner ganzen Laenge getroffen.
+print("\n-- Granatwerfer-Bogen, Raketen, Explosionsblitze, Buggy-Treffer (0.34.64)")
+_rnd64 = EN.RND.getstate()
+_zufall64 = random.getstate()
+_tm64 = _TM59.Testmodus(app, karte="staubtal")
+_ort64 = freier_punkt(_tm64.welt, 0, random.Random(64))
+_tm64.kamera.pos.update(_ort64)
+_tm64.kamera.versatz.update(0, 0)
+_hoehe64 = []
+for _f64 in (0.5, 60.0):
+    _fl64 = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+    _tm64.renderer.fliegendes(_fl64, _tm64.welt, _tm64.kamera, _tm64.blick_hoehe,
+                              pygame.Vector2(_ort64), 0.0, 0, _f64, "teil_granate40")
+    _hoehe64.append(_fl64.get_bounding_rect().centery)
+pruef("Eine Granate im Bogen steht hoeher im Bild, je hoeher sie fliegt (nicht tiefer)",
+      _hoehe64[1] < _hoehe64[0] - 15, str(_hoehe64))
+pruef("Die Raketen des Buendels fliegen als eigenes Bild mit Flossen und Flamme, "
+      "und explodieren als eigene Art",
+      K.WAFFEN["raketenbuendel"]["bild"] == "minirakete_flug"
+      and app.bilder.bild("minirakete_flug").get_size() == (18, 8)
+      and K.WAFFEN["raketenbuendel"]["explosion"] == "klein")
+_tm64.welt.explosion(_ort64, 0, 40.0, "klein")
+_blitz64 = len(_tm64.welt.lichtblitze)
+for _ in range(int(0.2 / K.FIXED_DT)):
+    _tm64.welt.schritt(K.FIXED_DT)
+pruef("Jede Explosion blitzt kurz auf und ist dann weg",
+      _blitz64 == 1 and not _tm64.welt.lichtblitze, str(_blitz64))
+_bu64 = _tm64.fahrzeug_setzen("buggy", _ort64 + pygame.Vector2(0, 120), 0, {"winkel": 0})
+_tm64.welt._raster_bauen()
+_heck64 = _bu64.pos - pygame.Vector2(K.FAHRZEUG["achse"] + 8, 0)
+pruef("Ein Buggy wird auch am Heck getroffen, nicht nur 13 Pixel um die Mitte",
+      _tm64.welt.treffer(_heck64, 2.0, 0, "spieler") is _bu64)
+_tm64.verlassen()
+EN.RND.setstate(_rnd64)
+random.setstate(_zufall64)
 
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
