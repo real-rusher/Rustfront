@@ -1970,6 +1970,7 @@ class Renderer:
             figuren(ziel, idx, ecke)
         self.flugleichen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.aufbauten_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
+        self.laser_zeichnen(ziel, welt, idx, ecke)
         self.stehende_nachholen()
         self.luft_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.feuerbaelle_zeichnen(ziel, welt, idx, ecke, "glut")
@@ -2354,6 +2355,32 @@ class Renderer:
         ziel.blit(linie, (0, 0))
         pygame.draw.rect(ziel, t["punkt"], (int(b.x) - 1, int(b.y) - 1, 3, 3))
 
+    def laser_zeichnen(self, ziel, welt, index: int, ecke) -> None:
+        """Der Ziellaser der Panzerbuechse (seit 0.34.62): jeder sieht ihn,
+        bei jedem, der sie haelt - er verraet den Schuetzen. Bis zur ersten
+        Mauer, hoechstens K.LASER["weite"]."""
+        t = K.LASER
+        linie = None
+        for w in welt.wesen:
+            if (w.ebene != index or not w.lebt or not hasattr(w, "waffe_daten")
+                    or getattr(w, "am_boden", False) or getattr(w, "im_fahrzeug", False)
+                    or getattr(w, "schwingt", False) or not w.waffen):
+                continue
+            if not K.WAFFEN.get(w.waffe_name, {}).get("laser"):
+                continue
+            richtung = pygame.Vector2(1, 0).rotate(w.winkel)
+            muendung = w.pos + richtung * t["ab"]
+            ende = welt.strahl(muendung, richtung, t["weite"], index)
+            if linie is None:
+                linie = self._linie
+                linie.fill((0, 0, 0, 0))
+            pygame.draw.line(linie, (*t["farbe"], t["staerke"]), muendung - ecke,
+                             ende - ecke, 1)
+            b = ende - ecke
+            pygame.draw.rect(linie, (*t["punkt"], 230), (int(b.x) - 1, int(b.y) - 1, 2, 2))
+        if linie is not None:
+            ziel.blit(linie, (0, 0))
+
     def zielhilfen(self, ziel, welt, kamera, spieler) -> None:
         """Streukegel der Scharfschuetzenwaffe und der Nahkampfbogen."""
         if not spieler.lebt:
@@ -2373,7 +2400,9 @@ class Renderer:
             for vz in (-1, 1):
                 b = a + pygame.Vector2(weite, 0).rotate(spieler.winkel + halb * vz)
                 pygame.draw.line(linie, (*K.C_AMBER, deck), a, b, 1)
-            if spieler.fokus > 0.55:      # ruhig genug fuer die Mittellinie
+            # Ruhig genug fuer die Mittellinie - nicht beim Praezisionsgewehr
+            # (seit 0.34.62, gemeldet: "die weisse Linie raus").
+            if spieler.fokus > 0.55 and d.get("fokus_mittellinie", True):
                 b = a + pygame.Vector2(weite, 0).rotate(spieler.winkel)
                 pygame.draw.line(linie, (*K.C_CREAM, int(60 + 120 * spieler.fokus)),
                                  a, b, 1)

@@ -132,9 +132,16 @@ def hotbar_aus_loadout(lo: dict) -> list[str]:
     Die Reihenfolge folgt HOTBAR und nicht der Reihenfolge im Loadout:
     wer sich daran gewoehnt hat, dass die Schrotflinte rechts von dem
     Sturmgewehr liegt, soll sie nicht plaetzeweise suchen muessen.
+
+    Seit 0.34.62 erst die Waffen in der Reihenfolge der Auswahl, dann die
+    Wurfwaffen wie in HOTBAR. Fuer die alten fuenf ist das dieselbe Folge;
+    die Waffen aus dem Waffenpaket stehen nicht in HOTBAR (die hat nur zehn
+    Plaetze) und fielen sonst einfach heraus.
     """
     dabei = set(lo.get("waffen") or []) | set(lo.get("wuerfe") or [])
-    return [w for w in K.HOTBAR if w in dabei]
+    waffen = list(K.LOADOUT["auswahl_waffen"])
+    folge = waffen + [w for w in K.HOTBAR if w not in waffen]
+    return [w for w in folge if w in dabei]
 
 
 # ══════════════════════════════════════════════════ Journal

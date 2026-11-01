@@ -57,7 +57,7 @@ setzt, steht sofort da.
 
 | Gruppe | Eintraege | Einstellungen |
 | --- | --- | --- |
-| FIGUREN | Bot, Spieler (steht), Spieler (ich) | Anzahl, Streuung, Team (ROT, BLAU, FREI), Waffe, Leben, Aussehen (ZUFALL, STANDARD oder ein Skin; bei Spieler (ich) als Vorgabe EIGENES); beim Bot HIRN (KLASSISCH / GOAP, docs/KI.md) |
+| FIGUREN | Bot, Spieler (steht), Spieler (ich) | Anzahl, Streuung, Team (ROT, BLAU, FREI), Waffe (auch fuer Spieler, seit 0.34.62), Leben, Aussehen (ZUFALL, STANDARD oder ein Skin; bei Spieler (ich) als Vorgabe EIGENES); beim Bot HIRN (KLASSISCH / GOAP, docs/KI.md) |
 | GEGNER, BOSSE | jede Art aus `K.GEGNER` und `K.BOSSE` | Anzahl, Streuung, Leben, KI an/aus, HIRN (KLASSISCH / GOAP) |
 | ZIELE | die Zielpuppe | Anzahl, Streuung |
 | OBJEKTE | Buggy, Panzer, Panzerwagen, Hotzone hier, Hotzone aus | Anzahl, Streuung, Richtung |
@@ -108,6 +108,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.62 | FIGUREN: SPIELER, STEHT und SPIELER, ICH haben eine WAFFE - ALLE ist die Hotbar wie bisher, jede andere Wahl ein Loadout mit dieser Waffe vorn (dazu Sturmgewehr und Granate), auch eine der zwoelf neuen. So laesst sich jede neue Waffe selbst ausprobieren (SPIELER, ICH) oder an einer Puppe zeigen. BOT kann die neuen ebenfalls tragen (WAFFE), schiesst aber nur mit Schusswaffen. Pruefungen im Abschnitt "Die Waffen aus dem Waffenpaket, spielbar" von `tests/test_spiel.py` |
 | 0.34.61 | Spawner WAFFENBILDER: FIGUR MIT WAFFE - eine stehende Figur, die eine der 52 Waffen aus dem Waffenpaket haelt (WAFFE, TEAM, RICHTUNG). Nur das Bild: sie schiesst nicht, faellt aber um wie ein NPC. Pruefungen im Abschnitt "Waffenbilder aus dem Waffenpaket" von `tests/test_spiel.py` |
 | 0.34.60 | Skins, NPCs und Tiere aus dem Figurenpaket. FIGUREN: Einstellung AUSSEHEN (ZUFALL - beim Bot sein Soldat wie im Spiel -, STANDARD, oder einer der 29 Skins); SPIELER, ICH nimmt als Vorgabe das eigene Aussehen aus AUSRUESTUNG. Neue Gruppen NPC und TIERE: NPCs stehen (Verhalten kommt mit der Kampagne), Tiere laufen ein Stueck und bleiben stehen; die INFO-Ansicht (Taste 8) zeigt eine gruene Linie zum Laufziel und LAEUFT bzw. STEHT. Beide nehmen Schaden, sterben mit Fleck und Laut, ENTF toetet sie; niemand greift sie an (Fraktion `zivil`). Pruefungen im Abschnitt "Skins, NPCs und Tiere" von `tests/test_spiel.py` |
 | 0.34.59 | Spawner OBJEKTE: PANZER und PANZERWAGEN (Anzahl, Streuung, Richtung). Passt einer nicht an den Zeiger, sucht er den naechsten freien Platz. Zum Fahren eine Figur setzen (SPIELER, ICH, oder Taste 3) und mit E einsteigen: W/S fahren, A/D drehen, die Maus zielt, linke Maustaste Kanone bzw. Ring-MG, rechte Bug-MG. Zum Rammen GEGNER mit KI AUS vor die Front setzen. ENTF TOETET laesst ihn hochgehen (Wrack). Aufnahmen `panzer` und `panzerwagen` in `werkzeug_aufnahme.py`. Pruefungen im Abschnitt "Panzer und Panzerwagen" von `tests/test_spiel.py` |

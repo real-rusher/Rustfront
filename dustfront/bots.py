@@ -120,8 +120,8 @@ def bot_aussehen(name: str) -> str:
 def bot_loadout(rnd, fest=None) -> dict:
     """Ein Loadout fuer einen Bot: zwei verschiedene Waffen und eine
     Granate (K.BOTS["wurf_arten"]) - oder das vorgegebene ("eines fuer
-    alle"), dann aber auch nur mit einer Wurfwaffe. C4 nie."""
-    lo = K.LOADOUT
+    alle"), dann aber auch nur mit einer Wurfwaffe. C4 nie. Die Waffen
+    kommen aus K.BOTS["waffen"], nicht aus der Auswahl der Spieler."""
     wuerfe = [w for w in K.BOTS["wurf_arten"] if w != "c4"]
     if fest:
         raus = konto_modul.loadout_saeubern(fest) or {}
@@ -130,7 +130,7 @@ def bot_loadout(rnd, fest=None) -> dict:
         if not raus["wuerfe"]:
             raus["wuerfe"] = [rnd.choice(wuerfe)]
         return raus
-    waffen = rnd.sample(list(lo["auswahl_waffen"]), 2)
+    waffen = rnd.sample(list(K.BOTS["waffen"]), 2)
     return {"name": "BOT", "waffen": waffen, "wuerfe": [rnd.choice(wuerfe)]}
 
 

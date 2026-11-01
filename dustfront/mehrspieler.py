@@ -338,22 +338,27 @@ class Kaempfer(Spieler):
                 self.sprintet = False
         else:
             self.ausdauer = min(1.0, self.ausdauer + dt * sp["erholung"])
-        vorher = self.magazin.get(self.waffe_name, 0)
+        name = self.waffe_name
+        vorher = self.magazin.get(name, 0)
         war_am_laden = self.nachlade_rest > 0
         super().schritt(dt)
-        if not (self.knapp and war_am_laden and self.nachlade_rest <= 0):
+        if not (self.knapp and war_am_laden) or self.waffe_name != name:
             return
-        # Der Spielkern hat das Magazin eben randvoll gemacht. Bei knapper
+        # Der Spielkern hat das Magazin eben aufgefuellt - randvoll, oder
+        # um eine Patrone (seit 0.34.62, nachladen_einzeln). Bei knapper
         # Munition wird das nachtraeglich bezahlt: nur so viel, wie der
         # Vorrat hergibt. Das nachher zu verrechnen ist einfacher, als in
         # entities.py einzugreifen - und dieser Zweig soll den Kern nicht
         # anfassen.
-        name = self.waffe_name
-        gebraucht = K.WAFFEN[name]["magazin"] - vorher
+        gebraucht = self.magazin.get(name, 0) - vorher
+        if gebraucht <= 0:
+            return
         hat = self.vorrat.get(name, 0)
         gibt = max(0, min(gebraucht, hat))
         self.magazin[name] = vorher + gibt
         self.vorrat[name] = hat - gibt
+        if gibt <= 0 or self.vorrat[name] <= 0:
+            self.nachlade_rest = 0.0          # nichts mehr da: aufhoeren
 
     def auffuellen(self, anteil: float) -> bool:
         """Munitionskiste aufgesammelt. False, wenn schon alles voll ist."""

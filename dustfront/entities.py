@@ -356,6 +356,27 @@ class Geschoss(Wesen):
         # und dann landete der Treffer bei der falschen.
         self.waffe = waffe
         self.quelle_fraktion = von.fraktion if von else "neutral"
+        # Was die Waffe am Geschoss besonders macht (seit 0.34.62, siehe
+        # K.WAFFEN): Schadensabfall, Durchschlag, Stoss, Blech.
+        self.reichweite = float(daten["reichweite"])
+        self.abfall_ab = daten.get("abfall_ab")
+        self.abfall_rest = float(daten.get("abfall_rest", 1.0))
+        self.durch = int(daten.get("durchschlag", 0))
+        self.durch_deckung = bool(daten.get("durch_deckung", False))
+        self.gegen_fahrzeug = bool(daten.get("gegen_fahrzeug", False))
+        self.stoss = float(daten.get("stoss", 1.0))
+        self._durch_wen: list = []
+
+    def schaden_jetzt(self) -> float:
+        """Der Schaden auf der Strecke, die das Geschoss schon flog: ab
+        `abfall_ab` linear weniger, bis `abfall_rest` am Ende (die MP)."""
+        if self.abfall_ab is None:
+            return self.schaden_wert
+        weit = self.reichweite - self.rest
+        if weit <= self.abfall_ab:
+            return self.schaden_wert
+        f = min(1.0, (weit - self.abfall_ab) / max(1.0, self.reichweite - self.abfall_ab))
+        return self.schaden_wert * (1.0 - (1.0 - self.abfall_rest) * f)
 
     def schritt(self, dt: float) -> None:
         self.vorher.update(self.pos)
@@ -371,11 +392,22 @@ class Geschoss(Wesen):
             self.rest -= teil.length()
             ziel = self.welt.treffer(self.pos, self.radius, self.ebene,
                                      self.quelle_fraktion)
-            if ziel is not None and ziel is not self.von and ziel is not self.traeger:
+            if (ziel is not None and ziel is not self.von and ziel is not self.traeger
+                    and ziel not in self._durch_wen):
+                if self.durch > 0 and not getattr(ziel, "rechteckig", False):
+                    # Durchschlag (seit 0.34.62): treffen und weiterfliegen.
+                    # Jeden nur einmal - sonst traefe sie ihn in jedem
+                    # Teilschritt, solange sie in ihm steckt.
+                    self.durch -= 1
+                    self._durch_wen.append(ziel)
+                    self.treffen(ziel)
+                    continue
                 self.einschlag(ziel)
                 return
-            # Jede feste Kachel haelt die Kugel auf (seit 0.34.26).
-            if self.welt.schuss_halt(self.pos, self.ebene, self.radius):
+            # Jede feste Kachel haelt die Kugel auf (seit 0.34.26) - die
+            # Panzerbuechse nur eine Mauer (seit 0.34.62).
+            if self.welt.schuss_halt(self.pos, self.ebene, self.radius,
+                                     self.durch_deckung):
                 self.pos -= teil
                 self.einschlag(None)
                 return
@@ -387,33 +419,46 @@ class Geschoss(Wesen):
         self.lebt = False
         richtung = math.degrees(math.atan2(self.tempo.y, self.tempo.x))
         if ziel is not None:
-            schub = None
-            if self.tempo.length_squared() > 0.001:
-                schub = (pygame.Vector2(self.tempo).normalize()
-                         * K.TREFFER["rueckstoss"] * self.schub_anteil)
-            # Ein Wagen (seit 0.34.18) ist ein Ziel, aber kein Treffer fuer
-            # die Statistik - die zaehlt Spieler und Gegner.
-            if hasattr(self.von, "zaehlen") and getattr(ziel, "zaehlt_treffer", True):
-                self.von.zaehlen("treffer", 1.0, self.waffe)
-                treffer_ziel_buchen(self.von, ziel)
-            lebte = ziel.lebt
-            if getattr(ziel, "rechteckig", False):
-                # Panzer und Panzerwagen (seit 0.34.59): eine Kugel zerkratzt
-                # nur den Lack (`kugel_anteil`) - wer im Turm oder im Ring
-                # steht, bekommt seinen Teil aber ganz ab.
-                ziel.schaden(self.schaden_wert, schub, self.von, kugel=True)
-            else:
-                ziel.schaden(self.schaden_wert, schub, self.von)
-            abschuss_buchen(self.von, ziel, self.waffe, lebte)
-            if getattr(ziel, "treffer_art", "") == "metall":
-                wolke(self.welt, self.pos, 5, 170, 0.18, (255, 222, 150), self.ebene,
-                      1, "funke", 120, richtung + 180, 5.0)
-            else:
-                wolke(self.welt, self.pos, 6, 150, 0.22, K.C_BLUT, self.ebene, 1,
-                      "blut", 110, richtung, 5.0)
+            self.treffen(ziel)
         else:
             wolke(self.welt, self.pos, 5, 190, 0.18, (232, 196, 140), self.ebene,
                   1, "funke", 130, richtung + 180, 6.0)
+
+    def treffen(self, ziel) -> None:
+        """Was ein Treffer anrichtet - beim Einschlag und bei jedem Koerper,
+        durch den ein Durchschlag geht (seit 0.34.62 eine eigene Methode)."""
+        richtung = math.degrees(math.atan2(self.tempo.y, self.tempo.x))
+        schub = None
+        if self.tempo.length_squared() > 0.001:
+            schub = (pygame.Vector2(self.tempo).normalize()
+                     * K.TREFFER["rueckstoss"] * self.schub_anteil * self.stoss)
+        # Ein Wagen (seit 0.34.18) ist ein Ziel, aber kein Treffer fuer
+        # die Statistik - die zaehlt Spieler und Gegner.
+        if hasattr(self.von, "zaehlen") and getattr(ziel, "zaehlt_treffer", True):
+            self.von.zaehlen("treffer", 1.0, self.waffe)
+            treffer_ziel_buchen(self.von, ziel)
+        lebte = ziel.lebt
+        menge = self.schaden_jetzt()
+        if getattr(ziel, "rechteckig", False):
+            # Panzer und Panzerwagen (seit 0.34.59): eine Kugel zerkratzt
+            # nur den Lack (`kugel_anteil`) - wer im Turm oder im Ring
+            # steht, bekommt seinen Teil aber ganz ab. Die Panzerbuechse
+            # (seit 0.34.62) geht durchs Blech: voller Schaden.
+            ziel.schaden(menge, schub, self.von, kugel=not self.gegen_fahrzeug)
+        else:
+            ziel.schaden(menge, schub, self.von)
+        abschuss_buchen(self.von, ziel, self.waffe, lebte)
+        if getattr(ziel, "treffer_art", "") == "metall":
+            wolke(self.welt, self.pos, 5, 170, 0.18, (255, 222, 150), self.ebene,
+                  1, "funke", 120, richtung + 180, 5.0)
+        else:
+            wolke(self.welt, self.pos, 6, 150, 0.22, K.C_BLUT, self.ebene, 1,
+                  "blut", 110, richtung, 5.0)
+            if self.durch > 0 or self._durch_wen:
+                # Der Austritt ist groesser als der Einschuss, in
+                # Flugrichtung (Paket: "Einschuss klein, Austritt gross").
+                wolke(self.welt, self.pos + pygame.Vector2(6, 0).rotate(richtung), 9,
+                      190, 0.3, K.C_BLUT, self.ebene, 2, "blut", 70, richtung, 6.0)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -566,9 +611,75 @@ class Granate(Wesen):
             schub = (ab.normalize() * 320 * anteil) if entfernung > 0.01 else None
             lebte = ziel.lebt
             ziel.schaden(d["schaden"] * anteil, schub, self.von)
-            abschuss_buchen(self.von, ziel, "granate", lebte)
+            abschuss_buchen(self.von, ziel, getattr(self, "waffe", "granate"), lebte)
         w.explosion(self.pos, self.ebene, r)
         w.kurz_langsam(0.05)
+
+
+class Werfergranate(Granate):
+    """Die 40-mm-Granate des Granatwerfers (seit 0.34.62).
+
+    Fliegt in einem Bogen bis zu der Weite, auf die gezielt wurde - die
+    Hoehe sieht man nur daran, dass sie groesser wird (`flug`, gezeichnet
+    wie alles in der Luft). Hoch genug geht sie ueber Kisten und Sandsaecke
+    hinweg, nie ueber eine Mauer und nie eine Ebene hinauf. Trifft sie
+    unterwegs tief genug einen Koerper, zuendet sie sofort; sonst landet
+    sie, rollt kurz aus und zuendet nach `zuender` Sekunden wie eine
+    Granate (Granate.schritt und Granate.zuenden)."""
+
+    bild = "teil_granate40"
+
+    def __init__(self, pos, richtung: float, daten: dict, ebene: int, von=None,
+                 weite: float = 200.0, waffe: str = "granatwerfer") -> None:
+        Wesen.__init__(self, pos, ebene)
+        self.daten = daten
+        self.von = von
+        self.waffe = waffe
+        self.winkel = richtung
+        self.bild = "teil_granate40"
+        self.quelle_fraktion = von.fraktion if von else "neutral"
+        self.dauer = max(0.05, float(weite) / daten["tempo"])
+        self.zeit = 0.0
+        self.liegt = False
+        self.rest = daten["zuender"]
+        self.dreh = 0.0
+        self.tempo = pygame.Vector2(daten["tempo"], 0).rotate(richtung)
+
+    def schritt(self, dt: float) -> None:
+        if self.liegt:
+            super().schritt(dt)
+            return
+        self.vorher.update(self.pos)
+        d = self.daten
+        self.zeit = min(self.dauer, self.zeit + dt)
+        f = self.zeit / self.dauer
+        self.flug = 4.0 * d["bogen"] * f * (1.0 - f)
+        weg = self.tempo * dt
+        schritte = max(1, int(weg.length() / 4.0))
+        teil = weg / schritte
+        for _ in range(schritte):
+            self.pos += teil
+            if self.flug <= d["koerper_hoehe"]:
+                ziel = self.welt.treffer(self.pos, self.radius, self.ebene,
+                                         self.quelle_fraktion)
+                if ziel is not None and ziel is not self.von:
+                    self.flug = 0.0
+                    self.zuenden()
+                    return
+            # Eine Mauer haelt sie immer auf, niedrige Deckung nur dicht
+            # ueber dem Boden. Dort zuendet sie, wo sie anschlaegt.
+            if self.welt.schuss_halt(self.pos, self.ebene, self.radius,
+                                     self.flug > d["deckung_hoehe"]):
+                self.pos -= teil
+                self.flug = 0.0
+                self.zuenden()
+                return
+        if f >= 1.0:
+            # Gelandet: ab hier eine Granate, die ausrollt und zuendet.
+            self.flug = 0.0
+            self.liegt = True
+            self.tempo *= d["ausrollen"]
+            wolke(self.welt, self.pos, 4, 60, 0.3, K.C_MUTED_DK, self.ebene, 1, "staub")
 
 
 class C4Ladung(Wesen):
@@ -698,13 +809,21 @@ class Rakete(Wesen):
     faellt = False          # sie faellt nicht, sie fliegt
 
     def __init__(self, pos, richtung: float, daten: dict, ebene: int,
-                 von=None, ziel=None) -> None:
+                 von=None, ziel=None, waffe: str = "rakete") -> None:
         super().__init__(pos, ebene)
         self.daten = daten
         self.von = von
         self.winkel = richtung
         self.rest = daten["flugzeit"]
         self.weg = 0.0
+        # Womit sie abgeschossen wurde (seit 0.34.62: auch Einwegrohr und
+        # Raketenbuendel), fuer die Statistik - und wie sie aussieht.
+        self.waffe = waffe
+        self.bild = daten.get("bild", "flugrakete")
+        # Schlingern (das Raketenbuendel): die Richtung pendelt um die
+        # Schussrichtung, jede Rakete mit eigenem Takt.
+        self.grund_winkel = richtung
+        self.schlinger_phase = RND.uniform(0, 2 * math.pi)
         # Wen sie sucht. None heisst: sie fliegt geradeaus.
         self.ziel = ziel
         self.quelle_fraktion = von.fraktion if von else "neutral"
@@ -718,6 +837,7 @@ class Rakete(Wesen):
             self.einschlag(None)
             return
         self._lenken(dt)
+        self._schlingern(dt)
         self._ebene_wechseln()
 
         weg = self.tempo * dt
@@ -754,6 +874,16 @@ class Rakete(Wesen):
         diff = (soll - self.winkel + 180) % 360 - 180
         hoechstens = self.daten["lenk_dreh"] * dt
         self.winkel += max(-hoechstens, min(hoechstens, diff))
+        self.tempo = pygame.Vector2(self.daten["tempo"], 0).rotate(self.winkel)
+
+    def _schlingern(self, dt: float) -> None:
+        """Unruhiger Flug (seit 0.34.62): die Richtung pendelt um die
+        Schussrichtung - nah trifft sie, weit weg streut sie wild."""
+        weite = self.daten.get("schlingern")
+        if not weite or self.ziel is not None:
+            return
+        self.schlinger_phase += self.daten.get("schlinger_takt", 8.0) * dt
+        self.winkel = self.grund_winkel + weite * math.sin(self.schlinger_phase)
         self.tempo = pygame.Vector2(self.daten["tempo"], 0).rotate(self.winkel)
 
     def _ebene_wechseln(self) -> None:
@@ -813,7 +943,7 @@ class Rakete(Wesen):
             schub = (ab.normalize() * 420 * anteil) if entfernung > 0.01 else None
             lebte = ziel.lebt
             ziel.schaden(d["schaden"] * anteil, schub, schuetze)
-            abschuss_buchen(schuetze, ziel, "rakete", lebte)
+            abschuss_buchen(schuetze, ziel, self.waffe, lebte)
         w.explosion(self.pos, self.ebene, r)
         w.kurz_langsam(0.06)
 
@@ -1256,10 +1386,14 @@ class Flugleiche:
     0,1 bis 0,6 Sekunden, mit Drehung, mit dem Stoss des Fahrzeugs - und
     wird dabei aus jedem Fahrzeug hinausgeschoben, das ihm im Weg ist. Wo
     sie landet, bleibt ein Spritzer in Flugrichtung. Nur Bild: niemand
-    trifft sie, und gezaehlt ist der Tod schon (Welt.leichenflug)."""
+    trifft sie, und gezaehlt ist der Tod schon (Welt.leichenflug).
+
+    Ohne Blut (`blut` leer, seit 0.34.62) ist es ein Gegenstand - das leere
+    Rohr des Einweg-Raketenwerfers: es rutscht aus, bleibt K.ROHR["liegen"]
+    Sekunden liegen und qualmt hinten noch eine Weile."""
 
     __slots__ = ("pos", "vorher", "ebene", "bild", "winkel", "tempo", "rest",
-                 "dreh", "blut", "radius", "lebt")
+                 "dreh", "blut", "radius", "lebt", "_qualm")
 
     def __init__(self, pos, ebene: int, bild: str, winkel: float, tempo,
                  dauer: float, dreh: float, blut: str, radius: float) -> None:
@@ -1274,9 +1408,13 @@ class Flugleiche:
         self.blut = str(blut)
         self.radius = float(radius)
         self.lebt = True
+        self._qualm = 0.0
 
     def schritt(self, dt: float, welt) -> None:
         self.vorher.update(self.pos)
+        if not self.blut and self.rest <= 0.0:
+            self._liegen(dt, welt)
+            return
         self.pos += self.tempo * dt
         self.tempo *= max(0.0, 1.0 - K.RAMMEN["flug_bremse"] * dt)
         self.winkel += self.dreh * dt
@@ -1293,6 +1431,9 @@ class Flugleiche:
                 n = min(tiefe, key=tiefe.get)
                 self.pos = w.pos + (lok + pygame.Vector2(n) * tiefe[n]).rotate(w.winkel)
         self.rest -= dt
+        if not self.blut:
+            self._qualmen(dt, welt)
+            return
         if self.rest <= 0.0:
             self.lebt = False
             richtung = math.degrees(math.atan2(self.tempo.y, self.tempo.x)) \
@@ -1303,6 +1444,26 @@ class Flugleiche:
             variante = int(abs(self.pos.x) * 7 + abs(self.pos.y) * 13) % 8
             welt.blutfleck(self.pos + pygame.Vector2(self.radius * 0.6, 0).rotate(richtung),
                            self.ebene, self.radius * 0.9, self.blut, variante)
+
+    def _liegen(self, dt: float, welt) -> None:
+        """Ein Gegenstand liegt: er qualmt noch und ist dann weg."""
+        self.rest -= dt
+        if self.rest <= -K.ROHR["liegen"]:
+            self.lebt = False
+            return
+        if self.rest > -K.ROHR["qualm"]:
+            self._qualmen(dt, welt)
+
+    def _qualmen(self, dt: float, welt) -> None:
+        """Duenner Rauch aus dem hinteren, offenen Ende."""
+        self._qualm -= dt
+        if self._qualm > 0.0:
+            return
+        self._qualm = K.ROHR["qualm_takt"]
+        hinten = self.pos - pygame.Vector2(K.ROHR["hinten"], 0).rotate(self.winkel)
+        welt.partikel.append(Partikel(
+            hinten, (RND.uniform(-8, 8), RND.uniform(-22, -10)),
+            RND.uniform(0.5, 0.9), K.C_MUTED, 1, "staub", 2.2, self.ebene))
 
     def zeichenpos(self, alpha: float) -> pygame.Vector2:
         return self.vorher.lerp(self.pos, alpha)
@@ -1405,6 +1566,9 @@ class Spieler(Wesen):
         self.anlauf = 0.0
         self.salve_rest = 0           # wie viele Schuss die Salve noch hat
         self.salve_takt = 0.0
+        # Der Takt der zweiten Pistole bzw. des zweiten Laufs (seit 0.34.62,
+        # K.WAFFEN "zweite_hand" und "beide_laeufe"): rechte Maustaste.
+        self.takt2 = 0.0
         # Raketenwerfer. `rpg` heisst: er wird getragen, und dann traegt
         # man sonst nichts. `rpg_waffen` merkt sich, was vorher da war.
         self.rpg = False
@@ -1714,7 +1878,10 @@ class Spieler(Wesen):
             return
         self.salve_rest -= 1
         self.salve_takt = d.get("salve_takt", 0.03)
-        self._schuss_abgeben(d)
+        if d.get("art") == "rakete":
+            self._rakete_abgeben(d)
+        else:
+            self._schuss_abgeben(d)
 
     # ---- Betriebsarten -------------------------------------------------
     def modus_von(self, waffe: str) -> str:
@@ -1830,6 +1997,7 @@ class Spieler(Wesen):
         s = K.SPIELER
         self.unverwundbar = max(0.0, self.unverwundbar - dt)
         self.takt = max(0.0, self.takt - dt)
+        self.takt2 = max(0.0, self.takt2 - dt)
         # Blickrichtung. Normalerweise sofort - die Figur schaut dorthin,
         # wo die Maus steht, und zwar ohne Verzoegerung. Eine schwere
         # Waffe begrenzt das: mit dem MG im Anschlag dreht man sich nicht
@@ -1898,6 +2066,8 @@ class Spieler(Wesen):
         if fd:
             luft *= 1.0 - (1.0 - wd.get("fokus_tempo", 1.0)) * self.fokus
         luft *= self.gewicht_tempo
+        # Eine leichte Waffe macht flinker (seit 0.34.62, die MP).
+        luft *= wd.get("tempo_faktor", 1.0)
         if self.heilt_rest > 0:
             # Wer ein Medkit anlegt, hat die Haende voll und geht langsamer.
             luft *= K.MEDKIT["tempo"]
@@ -1972,16 +2142,34 @@ class Spieler(Wesen):
         # wird, hat die Figur es in der Hand und nicht die Waffe, und das
         # sieht man ihr an. Was sie nicht haelt, schiesst nicht. Das
         # Nachladen laeuft dabei weiter - es ist ein Zaehler, kein Griff.
-        if self.nachlade_rest > 0:
+        einzeln = wd.get("nachladen_einzeln")
+        if (self.nachlade_rest > 0 and einzeln and self.feuert and self.takt <= 0
+                and self.heilt_rest <= 0 and self.magazin.get(self.waffe_name, 0) > 0):
+            # Patrone fuer Patrone (seit 0.34.62, Unterhebel): ein Schuss
+            # unterbricht das Laden, was schon drin ist, bleibt drin.
+            self.nachlade_rest = 0.0
+            self.feuern()
+        elif self.nachlade_rest > 0:
             self.nachlade_rest -= dt
             if self.nachlade_rest <= 0:
-                self.magazin[self.waffe_name] = self.waffe_daten["magazin"]
+                name = self.waffe_name
+                if einzeln:
+                    self.magazin[name] = min(wd["magazin"], self.magazin.get(name, 0) + 1)
+                    if self.magazin[name] < wd["magazin"]:
+                        self.nachlade_rest = wd["nachladen"]    # die naechste
+                else:
+                    self.magazin[name] = self.waffe_daten["magazin"]
         elif self.waffe_name == "c4":
             if self.feuert and not self._c4_feuert_alt and self.heilt_rest <= 0:
                 self.feuern()
             self._c4_feuert_alt = self.feuert
         elif self.feuert and self.takt <= 0 and self.heilt_rest <= 0:
             self.feuern()
+        # Die rechte Maustaste als zweiter Abzug (seit 0.34.62): die zweite
+        # Pistole der Zwillinge, beide Laeufe der Doppelflinte.
+        if ((wd.get("zweite_hand") or wd.get("beide_laeufe")) and self.zielt
+                and self.takt2 <= 0 and self.nachlade_rest <= 0 and self.heilt_rest <= 0):
+            self._zweit_feuern(wd)
 
     # ---- Waffe -------------------------------------------------------
     def treffer_melden(self, ziel, toedlich: bool) -> None:
@@ -2079,6 +2267,10 @@ class Spieler(Wesen):
         if 0 <= index < len(self.waffen) and index != self.waffe:
             self.waffe = index
             self.abbrechen()
+            # Eine angefangene Salve gehoert zur alten Waffe (seit 0.34.62:
+            # sechs Raketen ueber eine halbe Sekunde liefen sonst mit der
+            # neuen weiter).
+            self.salve_rest = 0
 
     def stuerzen(self) -> None:
         # Ein Dash darf die langsamere Luftsteuerung nicht ueberstimmen.
@@ -2145,20 +2337,17 @@ class Spieler(Wesen):
             self.takt = d["takt"]
 
         if art == "rakete":
-            self.magazin[self.waffe_name] -= 1
-            muendung = self.pos + pygame.Vector2(18, 0).rotate(self.winkel)
-            ziel = self.erfasst if self.erfassung >= 1.0 else None
-            streuung = d.get("streuung", 0.0)
-            richtung = self.winkel + RND.uniform(-streuung, streuung)
-            self.welt.dazu(Rakete(muendung, richtung, d, self.ebene, self,
-                                  ziel))
-            self.tempo -= pygame.Vector2(d.get("rueckstoss", 0.0),
-                                         0).rotate(self.winkel)
-            self.welt.raketenstart(muendung, self.winkel, self.ebene, self,
-                                   ziel)
-            self.zaehlen("granaten", 1.0, "rakete")
-            # Rohr leer: zurueck zu dem, was man vorher trug.
-            self.rpg_ablegen()
+            # Ein Raketenbuendel (seit 0.34.62) schiesst eine Salve wie das
+            # MG: die erste sofort, den Rest holt _salve_fuehren nach.
+            salve = d.get("salve")
+            if salve and salve > 1:
+                self.salve_rest = salve - 1
+                self.salve_takt = d.get("salve_takt", 0.1)
+            self._rakete_abgeben(d)
+            return
+
+        if art == "werfer":
+            self._werfer_abgeben(d)
             return
 
         if art == "wurf":
@@ -2185,17 +2374,91 @@ class Spieler(Wesen):
             self.salve_takt = d.get("salve_takt", 0.03)
         self._schuss_abgeben(d)
 
-    def _schuss_abgeben(self, d: dict) -> None:
+    def _rakete_abgeben(self, d: dict) -> None:
+        """Eine Rakete: Munition, Rakete, Rueckstoss, Abschuss. Eigene
+        Methode seit 0.34.62, weil das Raketenbuendel sie je Salve
+        mehrfach braucht."""
+        name = self.waffe_name
+        if self.magazin.get(name, 0) <= 0:
+            self.salve_rest = 0
+            return
+        self.magazin[name] -= 1
+        muendung = self.pos + pygame.Vector2(18, 0).rotate(self.winkel)
+        ziel = self.erfasst if self.erfassung >= 1.0 else None
+        streuung = d.get("streuung", 0.0)
+        richtung = self.winkel + RND.uniform(-streuung, streuung)
+        self.welt.dazu(Rakete(muendung, richtung, d, self.ebene, self,
+                              ziel, name))
+        self.tempo -= pygame.Vector2(d.get("rueckstoss", 0.0),
+                                     0).rotate(self.winkel)
+        self.welt.raketenstart(muendung, self.winkel, self.ebene, self,
+                               ziel)
+        self.zaehlen("granaten", 1.0, name)
+        if d.get("einweg") and self.magazin.get(name, 0) <= 0:
+            self._rohr_ablegen(name)
+        # Rohr leer: zurueck zu dem, was man vorher trug.
+        self.rpg_ablegen()
+
+    def _rohr_ablegen(self, name: str) -> None:
+        """Das leere Einwegrohr (seit 0.34.62): zur Seite abgelegt, es
+        rutscht aus und qualmt hinten noch (Welt.leichenflug, so sieht es
+        auch jeder Gast). Danach die naechste Waffe, die noch schiesst."""
+        seite = pygame.Vector2(0, 1).rotate(self.winkel)
+        self.welt.leichenflug(self.pos + seite * 10, self.ebene, "teil_rohr_leer",
+                              self.winkel, seite * 110 + self.tempo * 0.5,
+                              0.5, RND.uniform(-90, 90), "", 4.0)
+        for i, w in enumerate(self.waffen):
+            if w != name and K.WAFFEN[w].get("art") in ("schuss", "werfer", "rakete"):
+                self.waffe_waehlen(i)
+                return
+
+    def _werfer_abgeben(self, d: dict) -> None:
+        """Eine Granate aus dem Granatwerfer (seit 0.34.62): im Bogen bis
+        zum Zeiger, zwischen wurf_min und wurf_max."""
+        name = self.waffe_name
+        self.magazin[name] -= 1
+        muendung = self.pos + pygame.Vector2(16, 0).rotate(self.winkel)
+        # Ab der Muendung gerechnet: sie soll am Zeiger landen, nicht 16
+        # Pixel dahinter.
+        weite = min(d["wurf_max"], max(d["wurf_min"], muendung.distance_to(self.ziel)))
+        streuung = d.get("streuung", 0.0)
+        richtung = self.winkel + RND.uniform(-streuung, streuung)
+        self.welt.dazu(Werfergranate(muendung, richtung, d, self.ebene, self, weite, name))
+        self.tempo -= pygame.Vector2(d.get("rueckstoss", 0.0), 0).rotate(self.winkel)
+        self.welt.schussknall(muendung, self.winkel, self.ebene, name, self)
+        self.zaehlen("granaten", 1.0, name)
+
+    def _zweit_feuern(self, d: dict) -> None:
+        """Rechte Maustaste: die zweite Pistole (Zwillinge, eigener Takt,
+        aus der anderen Hand) oder beide Laeufe auf einmal (Doppelflinte)."""
+        name = self.waffe_name
+        hat = self.magazin.get(name, 0)
+        if hat <= 0:
+            self.nachladen()
+            return
+        if d.get("beide_laeufe"):
+            self.takt = self.takt2 = d["takt"]
+            self._schuss_abgeben(d, laeufe=min(2, hat))
+            return
+        self.takt2 = d["takt"]
+        self._schuss_abgeben(d, seite=-d.get("hand_abstand", 4.0))
+
+    def _schuss_abgeben(self, d: dict, seite: float = 0.0, laeufe: int = 1) -> None:
         """Ein einzelner Schuss: Munition, Geschoss, Rueckstoss, Knall.
 
         Eigene Methode, weil eine Salve sie mehrfach braucht - und weil
-        `feuern` sonst nicht mehr zu lesen waere.
+        `feuern` sonst nicht mehr zu lesen waere. `seite`: so weit neben
+        der Mitte liegt die Muendung (die zwei Pistolen der Zwillinge),
+        `laeufe`: so viele Laeufe auf einmal (die Doppelflinte).
         """
         if self.magazin.get(self.waffe_name, 0) <= 0:
             self.salve_rest = 0
             return
-        self.magazin[self.waffe_name] -= 1
-        muendung = self.pos + pygame.Vector2(14, 0).rotate(self.winkel)
+        if d.get("zweite_hand") and not seite:
+            seite = d.get("hand_abstand", 4.0)       # linke Maustaste: rechte Hand
+        self.magazin[self.waffe_name] -= laeufe
+        muendung = (self.pos + pygame.Vector2(14, 0).rotate(self.winkel)
+                    + pygame.Vector2(0, seite).rotate(self.winkel))
 
         # Ein Abzug ist ein Schuss, auch bei Schrot mit acht Kuegelchen:
         # sonst laesst sich die Treffergenauigkeit einer Schrotflinte nicht
@@ -2204,16 +2467,18 @@ class Spieler(Wesen):
         streuung = self.streuung_jetzt
         if d.get("streuung_dauerfeuer"):
             streuung += d["streuung_dauerfeuer"] * min(1.0, self.halte_zeit)
-        for _ in range(d["geschosse"]):
+        for _ in range(d["geschosse"] * laeufe):
             a = self.winkel + RND.uniform(-streuung, streuung)
             self.welt.dazu(Geschoss(muendung, a, d, self.ebene, self,
                                     self.waffe_name))
-        self.fokus *= 0.25            # der Schuss reisst die Waffe hoch
+        # Der Schuss reisst die Waffe hoch. Wie weit, hat die Waffe (seit
+        # 0.34.62): das Praezisionsgewehr bleibt fast auf der Linie.
+        self.fokus *= d.get("fokus_schuss", 0.25)
 
         # Rueckstoss auf den Schuetzen. Blitz, Funken, Knall und der Schlag
         # auf die Kamera stehen zusammen in Welt.schussknall - dort, wo sie
         # auch ein Gast nachspielen kann, der selbst nichts rechnet.
-        self.tempo -= pygame.Vector2(self.rueckstoss_wert(d), 0).rotate(self.winkel)
+        self.tempo -= pygame.Vector2(self.rueckstoss_wert(d) * laeufe, 0).rotate(self.winkel)
         self.welt.schussknall(muendung, self.winkel, self.ebene,
                               self.waffe_name, self)
         for _ in range(d["huelsen"]):

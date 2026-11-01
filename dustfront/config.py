@@ -1432,13 +1432,26 @@ BOTS = dict(
     gedaechtnis=4.0,          # so lange sucht er dort, wo er einen zuletzt sah
     erinnerung=20.0,          # so lange weiss er noch, wo einer stand - fuers Bergen (0.34.50)
     wunschabstand=dict(repetierer=230.0, sturm=200.0, lmg=240.0,
-                       schrot=105.0, scharf=320.0),
+                       schrot=105.0, scharf=320.0,
+                       # Aus dem Waffenpaket (seit 0.34.62) - fuer Bots, denen
+                       # der Testmodus eine davon gibt (siehe `waffen`).
+                       revolver=230.0, zwillinge=170.0, mp=150.0,
+                       praezision=330.0, unterhebel=230.0, panzerbuechse=380.0,
+                       doppelflinte=110.0, autoschrot=130.0, minigun=220.0),
     # Wer ein MG hat, schiesst damit (seit 0.34.38): so viele Pixel
     # Abstand nimmt er hin, bevor er lieber die andere Waffe nimmt. Vorher
     # nahm der MG-Schuetze auf mittlere Weite das Sturmgewehr.
     waffe_vorzug=dict(lmg=90.0),
     reichweite=dict(repetierer=330.0, sturm=320.0, lmg=330.0,
-                    schrot=185.0, scharf=330.0),
+                    schrot=185.0, scharf=330.0,
+                    revolver=330.0, zwillinge=280.0, mp=260.0, praezision=330.0,
+                    unterhebel=330.0, panzerbuechse=330.0, doppelflinte=170.0,
+                    autoschrot=190.0, minigun=330.0),
+    # Woraus ein Bot sein Loadout zieht (seit 0.34.62). Nur die alten fuenf:
+    # mit Zweithand, Doppellauf, Bogen oder Einwegrohr kann die KI noch
+    # nicht umgehen - und ein Bot mit einem Granatwerfer, den er nie
+    # benutzt, waere nur ein Bot mit einer Waffe weniger.
+    waffen=("repetierer", "sturm", "schrot", "scharf", "lmg"),
     nahkampf_ab=34.0,         # so nah, dann schlaegt er mit dem Brecheisen
     wurf_pause=(10.0, 18.0),  # zwischen zwei Wuerfen
     wurf_weite=(90.0, 230.0),
@@ -2097,11 +2110,28 @@ MUNITION = dict(
     vorrat={"repetierer": 42, "sturm": 90, "schrot": 18, "scharf": 10,
             "lmg": 200, "granate": 3, "rauch": 2, "molotov": 2, "blend": 2,
             "c4": 2,
-            "brecheisen": 0},
+            "brecheisen": 0,
+            # Aus dem Waffenpaket (seit 0.34.62), ebenfalls rund drei
+            # Nachladungen. Das Einwegrohr hat keinen Vorrat: eines ist eines.
+            "revolver": 24, "zwillinge": 72, "mp": 96, "praezision": 30,
+            "unterhebel": 28, "panzerbuechse": 6, "doppelflinte": 12,
+            "autoschrot": 24, "minigun": 240, "granatwerfer": 6,
+            "einwegwerfer": 0, "raketenbuendel": 12},
     kiste_takt=14.0,          # Sekunden zwischen zwei Munitionskisten
     kiste_hoechstens=4,
     kiste_gibt=0.5,           # so viel vom vollen Vorrat gibt eine Kiste
 )
+
+# Der Ziellaser der Panzerbuechse (seit 0.34.62), fuer alle sichtbar:
+# Farbe und Deckkraft der Linie, der Punkt am Ende, wie weit vor der Figur
+# er anfaengt und wie weit er hoechstens reicht.
+LASER = dict(farbe=(232, 44, 32), staerke=120, punkt=(255, 96, 70), ab=30.0,
+             weite=900.0)
+
+# Das leere Rohr des Einweg-Raketenwerfers (seit 0.34.62): so lange liegt
+# es nach dem Ausrutschen, so lange qualmt es hinten, wie oft eine
+# Rauchflocke kommt und wie weit hinter der Mitte das offene Ende liegt.
+ROHR = dict(liegen=8.0, qualm=2.5, qualm_takt=0.09, hinten=13.0)
 
 # C4 ist ein kurzer Wurf ohne Abprallen. Der Zaehler startet erst, wenn
 # der Brick an Boden oder Wand klebt; so ist die Ladezeit sichtbar nutzbar.
@@ -2655,6 +2685,303 @@ WAFFEN = {
         nachladen=0.0,
         huelsen=0,
     ),
+
+    # ── Aus dem Waffenpaket (seit 0.34.62) ─────────────────────────────
+    #
+    # Zwoelf Eintraege aus `dustfront_waffen` (Schusswaffen und Werfer).
+    # Die Zahlen sind ein erster Vorschlag: das Paket laesst sie bewusst
+    # offen ("Werte mit dem Besitzer entscheiden"). Neu gegenueber den
+    # alten Waffen sind nur Schalter, die der Code liest:
+    #
+    #   klang            welcher Schussklang (sonst "schuss_<name>")
+    #   zweite_hand      rechte Maustaste feuert die zweite Waffe (eigener Takt)
+    #   beide_laeufe     rechte Maustaste feuert beide Laeufe auf einmal
+    #   nachladen_einzeln  `nachladen` ist die Zeit je Patrone; ein Schuss
+    #                    unterbricht das Laden
+    #   abfall_ab, abfall_rest  ab dieser Strecke wird der Schaden kleiner,
+    #                    bis auf diesen Anteil am Ende der Reichweite
+    #   tempo_faktor     so viel schneller laeuft, wer sie traegt
+    #   fokus_schuss     so viel vom Zielen bleibt nach einem Schuss (sonst 0.25)
+    #   fokus_mittellinie  die helle Linie in der Mitte des Kegels
+    #   durchschlag      durch so viele Koerper geht ein Schuss
+    #   durch_deckung    niedrige Deckung (Kisten, Sandsaecke) haelt ihn nicht
+    #   gegen_fahrzeug   voller Schaden am Blech statt kugel_anteil
+    #   laser            ein Ziellaser, den alle sehen
+    #   stoss            so viel staerker schiebt ein Treffer
+    #   einweg           ein Schuss, danach liegt das Rohr am Boden
+    #   schlingern       so viele Grad pendelt eine Rakete hin und her
+    "revolver": dict(
+        art="schuss",
+        name="REVOLVER",
+        # Wenige, schwere Schuesse. Fächern leert die Trommel auf einmal.
+        schaden=40.0,
+        takt=0.38,
+        magazin=6,
+        nachladen=2.6,        # das Nachladen dauert
+        streuung=1.0,
+        streuung_lauf=3.2,
+        geschosse=1,
+        tempo=740.0,
+        reichweite=620.0,
+        rueckstoss=55.0,
+        kamera=2.6,
+        huelsen=0,            # die Huelsen bleiben in der Trommel
+        klang="schuss_repetierer",
+        modi=("gezielt", "faechern"),
+        modus_daten={
+            "gezielt": dict(kurz="GEZIELT"),
+            "faechern": dict(kurz="FÄCHERN", takt=0.9, salve=6, salve_takt=0.07,
+                             streuung=8.0, streuung_lauf=9.0),
+        },
+    ),
+    "zwillinge": dict(
+        art="schuss",
+        name="ZWILLINGE",
+        # Eine Pistole je Maustaste, jede mit eigenem Takt. Wer abwechselnd
+        # drueckt, schiesst doppelt so schnell - aber nie genau.
+        schaden=17.0,
+        takt=0.2,
+        magazin=24,           # zwoelf je Pistole
+        nachladen=2.2,
+        streuung=3.0,
+        streuung_lauf=3.6,
+        geschosse=1,
+        tempo=700.0,
+        reichweite=420.0,
+        rueckstoss=16.0,
+        kamera=1.0,
+        huelsen=1,
+        klang="schuss",
+        zweite_hand=True,
+        hand_abstand=4.0,     # so weit liegt jede Muendung neben der Mitte
+    ),
+    "mp": dict(
+        art="schuss",
+        name="MASCHINENPISTOLE",
+        # Fuer schnelle Vorstoesse: sehr schnell, im Laufen genau, macht
+        # flinker - und verliert auf Distanz deutlich.
+        schaden=11.0,
+        takt=0.065,
+        magazin=32,
+        nachladen=1.8,
+        streuung=3.0,
+        streuung_lauf=1.2,
+        geschosse=1,
+        tempo=640.0,
+        reichweite=400.0,
+        abfall_ab=160.0,
+        abfall_rest=0.45,
+        rueckstoss=10.0,
+        kamera=0.7,
+        huelsen=1,
+        klang="schuss_sturm",
+        tempo_faktor=1.08,
+    ),
+    "praezision": dict(
+        art="schuss",
+        name="PRÄZISIONSGEWEHR",
+        # Halbautomat zwischen Repetierer und Scharfschuetze. Rechte
+        # Maustaste schliesst den Kegel zu einer Linie; jeder Schuss
+        # oeffnet ihn nur ein kleines Stueck (gemeldet in Runde 5 und 6).
+        schaden=38.0,
+        takt=0.26,
+        magazin=10,
+        nachladen=2.3,
+        streuung=7.0,
+        fokus_streuung=0.0,
+        fokus_dauer=0.9,
+        fokus_tempo=0.6,
+        fokus_schuss=0.88,
+        fokus_mittellinie=False,
+        streuung_lauf=3.0,
+        geschosse=1,
+        tempo=1000.0,
+        reichweite=1200.0,
+        rueckstoss=45.0,
+        kamera=2.2,
+        huelsen=1,
+        klang="schuss_repetierer",
+    ),
+    "unterhebel": dict(
+        art="schuss",
+        name="UNTERHEBELGEWEHR",
+        # Patrone fuer Patrone geladen; wer schiesst, unterbricht das Laden.
+        schaden=33.0,
+        takt=0.48,
+        magazin=7,
+        nachladen=0.42,       # je Patrone
+        nachladen_einzeln=True,
+        streuung=1.3,
+        streuung_lauf=3.0,
+        geschosse=1,
+        tempo=720.0,
+        reichweite=600.0,
+        rueckstoss=45.0,
+        kamera=1.8,
+        huelsen=1,
+        klang="schuss_repetierer",
+    ),
+    "panzerbuechse": dict(
+        art="schuss",
+        name="PANZERBÜCHSE",
+        # Durch leichte Deckung und mehrere Koerper, stark gegen Fahrzeuge.
+        # Der Ziellaser verraet den Schuetzen, nach einem Fehlschuss ist er
+        # lange wehrlos.
+        schaden=120.0,
+        takt=0.8,
+        magazin=1,
+        nachladen=3.2,
+        streuung=0.3,
+        streuung_lauf=6.0,
+        geschosse=1,
+        tempo=1500.0,
+        reichweite=1600.0,
+        rueckstoss=170.0,
+        kamera=6.0,
+        huelsen=1,
+        muendung=1.6,
+        klang="schuss_scharf",
+        durchschlag=3,
+        durch_deckung=True,
+        gegen_fahrzeug=True,
+        laser=True,
+    ),
+    "doppelflinte": dict(
+        art="schuss",
+        name="DOPPELFLINTE",
+        # Linke Maustaste ein Lauf, rechte beide auf einmal. Danach lange laden.
+        schaden=15.0,
+        takt=0.22,
+        magazin=2,
+        nachladen=2.4,
+        streuung=6.0,
+        streuung_lauf=3.0,
+        geschosse=8,
+        tempo=560.0,
+        reichweite=250.0,
+        rueckstoss=150.0,     # je Lauf
+        kamera=4.2,
+        huelsen=0,
+        muendung=1.3,
+        klang="schuss_schrot",
+        beide_laeufe=True,
+    ),
+    "autoschrot": dict(
+        art="schuss",
+        name="AUTOSCHROT",
+        # Halbautomatisch: schwaecher je Schuss als Schrot, dafuer schnell
+        # hintereinander - Druck statt Wucht, eine Gruppe wird zurueckgedraengt.
+        schaden=9.0,
+        takt=0.24,
+        magazin=8,
+        nachladen=2.8,
+        streuung=6.5,
+        streuung_lauf=3.2,
+        geschosse=6,
+        tempo=540.0,
+        reichweite=270.0,
+        rueckstoss=60.0,
+        kamera=2.6,
+        huelsen=1,
+        klang="schuss_schrot",
+        stoss=2.4,
+    ),
+    "minigun": dict(
+        art="schuss",
+        name="MINIGUN",
+        # Anlauf, dann Dauerfeuer. Der Traeger steht fast und dreht kaum.
+        # Das Paket sagt "kein Nachladen": ein Gurt, der so lange haelt
+        # wie ein Gefecht, und sein Wechsel dauert.
+        schaden=12.0,
+        tempo=950.0,
+        reichweite=700.0,
+        magazin=240,
+        nachladen=7.0,
+        geschosse=1,
+        huelsen=1,
+        kamera=0.9,
+        rueckstoss=2.0,
+        takt=0.04,            # bei voller Drehzahl
+        anlauf_takt=0.32,     # und am Anfang
+        anlauf=1.5,
+        anlauf_abbau=2.2,
+        streuung=6.0,
+        streuung_lauf=4.0,
+        gewicht_tempo=0.2,
+        gewicht_drehen=42.0,
+        klang="lmg_dauer",
+    ),
+    "granatwerfer": dict(
+        art="werfer",
+        name="GRANATWERFER",
+        # Granaten im Bogen bis zum Zeiger, ueber Kisten und Sandsaecke
+        # hinweg, nie eine Ebene hinauf. Die Hoehe sieht man nur daran,
+        # dass sie groesser wird. Ein Koerper laesst sie sofort zuenden.
+        schaden=82.0,
+        radius=72.0,
+        takt=0.9,
+        magazin=1,
+        nachladen=2.0,
+        wurf_min=70.0,
+        wurf_max=430.0,
+        reichweite=430.0,
+        tempo=400.0,          # Pixel je Sekunde ueber den Boden
+        bogen=70.0,           # so hoch steigt sie in der Mitte
+        koerper_hoehe=26.0,   # darunter trifft sie einen Koerper
+        deckung_hoehe=18.0,   # darunter haelt sie niedrige Deckung auf
+        zuender=0.7,          # so lange liegt sie, bevor sie zuendet
+        ausrollen=0.12,       # so viel vom Tempo bleibt beim Aufsetzen
+        reibung=5.0,          # und so schnell rollt sie aus
+        streuung=1.5,
+        kamera=3.0,
+        rueckstoss=70.0,
+        huelsen=0,
+        muendung=1.4,
+        klang="schuss_schrot",
+    ),
+    "einwegwerfer": dict(
+        art="rakete",
+        name="EINWEG-RAKETENWERFER",
+        # Ungelenkt, ein einziger Schuss, danach liegt das Rohr am Boden.
+        einweg=True,
+        schaden=140.0,
+        radius=96.0,
+        eigen_anteil=0.55,
+        takt=1.0,
+        magazin=1,
+        nachladen=0.0,
+        tempo=360.0,
+        reichweite=1600.0,
+        flugzeit=4.6,
+        kamera=8.0,
+        rueckstoss=90.0,
+        huelsen=0,
+        streuung=0.8,
+    ),
+    "raketenbuendel": dict(
+        art="rakete",
+        name="RAKETENBÜNDEL",
+        # Sechs kleine, ungelenkte Raketen kurz nacheinander, die unruhig
+        # fliegen: nah verheerend, auf Distanz wild gestreut.
+        schaden=38.0,
+        radius=40.0,
+        eigen_anteil=0.5,
+        takt=1.4,
+        magazin=6,
+        nachladen=3.6,
+        salve=6,
+        salve_takt=0.11,
+        tempo=300.0,
+        reichweite=900.0,
+        flugzeit=3.2,
+        kamera=2.5,
+        rueckstoss=30.0,
+        huelsen=0,
+        streuung=6.0,
+        schlingern=16.0,      # Grad hin und her
+        schlinger_takt=9.0,   # wie schnell (Bogenmass je Sekunde)
+        bild="teil_minirakete",
+    ),
 }
 
 # Wie eine Waffe in der Hand der Figur aussieht, von oben gesehen.
@@ -2843,7 +3170,11 @@ LOADOUT = dict(
     # Woraus gewaehlt werden darf. Bewusst als eigene Listen und nicht
     # aus WAFFEN abgeleitet: was waehlbar ist, ist eine Spielentscheidung
     # und nicht dasselbe wie das, was es gibt.
-    auswahl_waffen=("repetierer", "sturm", "schrot", "scharf", "lmg"),
+    auswahl_waffen=("repetierer", "sturm", "schrot", "scharf", "lmg",
+                    # Aus dem Waffenpaket (seit 0.34.62)
+                    "revolver", "zwillinge", "mp", "praezision", "unterhebel",
+                    "panzerbuechse", "doppelflinte", "autoschrot", "minigun",
+                    "granatwerfer", "einwegwerfer", "raketenbuendel"),
     auswahl_wuerfe=("granate", "rauch", "molotov", "blend", "c4"),
     # Womit ein neues Loadout vorbelegt wird. Drei Stueck, damit man nach
     # dem ersten Anmelden gleich drei brauchbare Saetze hat und nicht vor

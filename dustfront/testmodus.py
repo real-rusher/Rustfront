@@ -184,6 +184,10 @@ OPTIONEN = {
     # Seit 0.34.61: jede Waffe aus dem Waffenpaket, auch die noch nicht
     # spielbaren - zum Ansehen an einer Figur.
     "paket_waffe": ("WAFFE", lambda: list(K.PAKET_HAND), lambda v: K.PAKET_HAND[v]),
+    # Seit 0.34.62: womit eine Spielerfigur anfaengt - ALLE ist die Hotbar
+    # wie sonst, jede andere Wahl ein Loadout mit dieser Waffe vorn.
+    "waffe_figur": ("WAFFE", lambda: ["alle"] + list(K.LOADOUT["auswahl_waffen"]),
+                    lambda v: "ALLE (HOTBAR)" if v == "alle" else K.WAFFEN[v]["name"]),
     "stirnband": ("STIRNBAND", lambda: [""] + [K.bild_kennung(n) for n, _f in K.STIRNBAND_FARBEN],
                   lambda v: "VORGABE" if not v else
                   next(n for n, _f in K.STIRNBAND_FARBEN if K.bild_kennung(n) == v)),
@@ -222,9 +226,9 @@ def eintraege() -> list:
                                    "aussehen"),
                 lambda t, p, e, w: t.bot_setzen(p, e, w)),
         Eintrag("SPIELER, STEHT", "FIGUREN", ("anzahl", "streuung", "team", "leben",
-                                              "aussehen"),
+                                              "waffe_figur", "aussehen"),
                 lambda t, p, e, w: t.puppe_setzen(p, e, w)),
-        Eintrag("SPIELER, ICH", "FIGUREN", ("team", "leben", "aussehen_ich"),
+        Eintrag("SPIELER, ICH", "FIGUREN", ("team", "leben", "waffe_figur", "aussehen_ich"),
                 lambda t, p, e, w: t.ich_setzen(p, e, w), mehrfach=False),
         # Seit 0.34.39: ein ganzer Trupp mit Anfuehrer (trupp.py), und was
         # der naechste Trupp einer Mannschaft tun soll.
@@ -867,7 +871,10 @@ class Testmodus(Gefecht):
         if w.get("aussehen", "zufall") != "zufall":
             k.skin = figuren.saeubern(w["aussehen"])
         if w.get("waffe", "zufall") != "zufall":
-            andere = [x for x in K.LOADOUT["auswahl_waffen"] if x != w["waffe"]]
+            # Die zweite aus den Waffen der Bots (seit 0.34.62): mit den
+            # neuen in der Auswahl hielt ein Bot sonst oft eine, mit der er
+            # nicht umgehen kann - und jede Szene mit festem Seed lief anders.
+            andere = [x for x in K.BOTS["waffen"] if x != w["waffe"]]
             lo = {"name": "BOT", "waffen": [w["waffe"], self._bot_rnd.choice(andere)],
                   "wuerfe": ["granate"]}
             k.loadout = lo
@@ -957,10 +964,27 @@ class Testmodus(Gefecht):
             alle = figuren.waehlbar()
             aussehen = random.Random(k.name).choice(alle) if alle else ""
         k.skin = figuren.saeubern(aussehen)
+        self._waffe_geben(k, w.get("waffe_figur", "alle"))
         self._figur_platz(k, pos, ebene)
         self.welt.wesen.extend(self.welt.neue)
         self.welt.neue.clear()
         return k
+
+    def _waffe_geben(self, k, waffe: str) -> None:
+        """Eine Spielerfigur mit dieser Waffe vorn (seit 0.34.62), dazu das
+        Sturmgewehr (oder der Repetierer) und eine Granate - volle
+        Magazine, voller Vorrat. Gemerkt als ihr Loadout, damit sie die
+        Waffe nach dem Wiedereinstieg wieder hat."""
+        if not waffe or waffe == "alle" or waffe not in K.WAFFEN:
+            return
+        zweite = "sturm" if waffe != "sturm" else "repetierer"
+        lo = {"name": "TEST", "waffen": [waffe, zweite], "wuerfe": ["granate"]}
+        k.loadout = lo
+        k.angemeldet = dict(lo)
+        k.waffen = konto_modul.hotbar_aus_loadout(lo)
+        k.waffe = k.waffen.index(waffe)
+        k.magazin = {n: K.WAFFEN[n]["magazin"] for n in k.waffen}
+        k.vorrat = {n: K.MUNITION["vorrat"].get(n, 0) for n in k.waffen}
 
     def ich_setzen(self, pos, ebene: int, w: dict):
         w = dict(w)

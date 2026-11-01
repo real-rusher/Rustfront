@@ -614,7 +614,10 @@ class Welt:
                     and getattr(quelle, "salve_rest", salve - 1) < salve - 1):
                 return
         else:
-            klang = "schuss_schrot" if waffe == "schrot" else "schuss_" + waffe
+            # Eine Waffe aus dem Waffenpaket (seit 0.34.62) sagt selbst, wie
+            # sie klingt - bis es eigene Aufnahmen gibt, wie eine verwandte.
+            klang = daten.get("klang") or (
+                "schuss_schrot" if waffe == "schrot" else "schuss_" + waffe)
         self.klang(klang, K.AUDIO["schuss"], pos, ebene)
 
     def raketenstart(self, pos, winkel: float, ebene: int, quelle=None,
@@ -1012,7 +1015,8 @@ class Welt:
                 return von + richtung * (laenge * (i - 1) / schritte)
         return von + richtung * laenge
 
-    def schuss_halt(self, pos, ebene: int, radius: float = 0.0) -> bool:
+    def schuss_halt(self, pos, ebene: int, radius: float = 0.0,
+                    nur_hoch: bool = False) -> bool:
         """Haelt etwas an dieser Stelle eine Kugel auf?
 
         Seit 0.34.26 jede feste Kachel, mit ihrer Grundflaeche (`huelle`),
@@ -1021,14 +1025,17 @@ class Welt:
         durch. Alles, was eine Art Textur hat und etwas blocken sollte,
         sollte auch Schuesse blocken." Bis dahin flog eine Kugel durch
         Kisten, Sandsaecke, Faesser, Kakteen und Schrott - man stand
-        dahinter und war doch nicht in Deckung."""
+        dahinter und war doch nicht in Deckung.
+
+        `nur_hoch` (seit 0.34.62): nur, was auch die Sicht nimmt (Mauern) -
+        fuer die Panzerbuechse, die durch Kisten und Sandsaecke geht."""
         e = self.ebene(ebene)
         tx, ty = int(pos.x // K.TILE), int(pos.y // K.TILE)
         kachel = e.kachel(tx, ty)
         d = K.KACHELN[kachel]
         if d["sicht"]:
             return True
-        if not d["fest"]:
+        if not d["fest"] or nur_hoch:
             return False
         form, rx, ry, rb, rh = self.huelle(kachel)
         x0, y0 = tx * K.TILE + rx, ty * K.TILE + ry

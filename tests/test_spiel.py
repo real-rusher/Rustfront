@@ -5066,6 +5066,397 @@ pruef("... sie haelt sie in den Farben ihrer Mannschaft",
       len(_fw61) == 1 and _fw61[0].bild == "spieler_blau_hammer", _fw61[0].bild if _fw61 else "")
 _tm61.verlassen()
 
+# ─────────────────────────────────────────────────────────────────────
+# Die Waffen aus dem Waffenpaket, spielbar (seit 0.34.62): zwoelf
+# Schusswaffen und Werfer im Loadout. Geprueft wird, was jede anders macht
+# als die alten - an Puppen im Testmodus, die schiessen, und am Ende im
+# Gefecht zwischen Gastgeber und Gast.
+print("\n-- Die Waffen aus dem Waffenpaket, spielbar (0.34.62)")
+_rnd62 = EN.RND.getstate()
+_zufall62 = random.getstate()
+from dustfront import konto as _KO62
+from dustfront import bots as _BOTS62
+from dustfront import fahrzeug as _FZ62
+_neu62 = ("revolver", "zwillinge", "mp", "praezision", "unterhebel", "panzerbuechse",
+          "doppelflinte", "autoschrot", "minigun", "granatwerfer", "einwegwerfer",
+          "raketenbuendel")
+pruef("Zwoelf neue Waffen stehen in der Auswahl der Loadouts, mit Namen und Vorrat",
+      all(w_ in K.LOADOUT["auswahl_waffen"] and K.WAFFEN[w_]["name"]
+          and w_ in K.MUNITION["vorrat"] for w_ in _neu62))
+pruef("Ein Loadout mit neuen Waffen behaelt sie in der Hotbar (vorher fielen sie heraus)",
+      _KO62.hotbar_aus_loadout({"waffen": ["raketenbuendel", "revolver"], "wuerfe": ["rauch"]})
+      == ["revolver", "raketenbuendel", "rauch"])
+pruef("... und die alten bleiben in ihrer Reihenfolge",
+      _KO62.hotbar_aus_loadout({"waffen": ["schrot", "sturm"], "wuerfe": ["blend"]})
+      == ["sturm", "schrot", "blend"])
+_r62 = random.Random(62)
+pruef("Bots ziehen weiter nur die alten fuenf (die KI kennt die neuen Griffe nicht)",
+      all(set(_BOTS62.bot_loadout(_r62)["waffen"]) <= set(K.BOTS["waffen"]) for _ in range(40))
+      and set(K.BOTS["waffen"]) == {"repetierer", "sturm", "schrot", "scharf", "lmg"})
+
+_tm62 = _TM59.Testmodus(app, karte="staubtal")
+_ort62 = freier_punkt(_tm62.welt, 0, random.Random(62))
+
+
+def _frei62(p_, r_=12.0):
+    return _tm62.welt.frei(pygame.Vector2(p_), r_, 0, True)
+
+
+# Eine freie Bahn nach rechts, 360 Pixel lang: dort stehen Schuetze und Ziele.
+for _ in range(400):
+    if all(_frei62(_ort62 + pygame.Vector2(x_, 0), 14.0) for x_ in range(-40, 361, 10)):
+        break
+    _ort62 = freier_punkt(_tm62.welt, 0, _r62)
+
+
+def _leeren62():
+    for k_ in list(_tm62.kaempfer.values()):
+        _tm62.loeschen(k_)
+        _tm62.kaempfer.pop(k_.nummer, None)
+    for w_ in list(_tm62.welt.wesen):
+        if isinstance(w_, (EN.Geschoss, EN.Granate, EN.Rakete)):
+            _tm62.loeschen(w_)
+
+
+def _schuetze62(waffe_, dx_=0.0):
+    k_ = _tm62.puppe_setzen(_ort62 + pygame.Vector2(dx_, 0), 0,
+                            {"team": 0, "waffe_figur": waffe_, "aussehen": ""})
+    k_.unverwundbar = 0.0
+    return k_
+
+
+def _ziel62(dx_, dy_=0.0, team_=1):
+    k_ = _tm62.puppe_setzen(_ort62 + pygame.Vector2(dx_, dy_), 0, {"team": team_, "aussehen": ""})
+    k_.unverwundbar = 0.0
+    k_.revive_an = False
+    return k_
+
+
+def _lauf62(k_, sekunden_, ziel_=None, feuert_=False, zielt_=False, will_=(0, 0), je_=None):
+    for _ in range(int(round(sekunden_ / K.FIXED_DT))):
+        z_ = ziel_ if ziel_ is not None else k_.pos + pygame.Vector2(300, 0)
+        _tm62._anwenden(k_, {"will": list(will_), "ziel": [z_[0], z_[1]], "knoepfe": [],
+                             "feuert": feuert_, "zielt": zielt_})
+        _tm62.schritt(K.FIXED_DT)
+        if je_ is not None:
+            je_()
+
+
+def _alle62():
+    # Was eben erst abgefeuert wurde, steht bis zum naechsten Schritt noch
+    # in `neue`.
+    return list(_tm62.welt.wesen) + list(_tm62.welt.neue)
+
+
+def _geschosse62():
+    return [w_ for w_ in _alle62() if isinstance(w_, EN.Geschoss) and w_.lebt]
+
+
+_bt62 = [_tm62.bot_setzen(_ort62, 0, {"team": 0, "waffe": w_})
+         for w_ in ("sturm", "revolver", "granatwerfer")]
+pruef("Testmodus: ein Bot mit gewaehlter Waffe bekommt als zweite eine der alten fuenf",
+      all(b_.loadout["waffen"][0] == w_ and b_.loadout["waffen"][1] in K.BOTS["waffen"]
+          for b_, w_ in zip(_bt62, ("sturm", "revolver", "granatwerfer"))),
+      str([b_.loadout["waffen"] for b_ in _bt62]))
+pruef("Testmodus: SPIELER, STEHT und SPIELER, ICH bekommen eine WAFFE (ALLE ist die Hotbar)",
+      "waffe_figur" in _tm62._eintrag("SPIELER, STEHT").optionen
+      and "waffe_figur" in _tm62._eintrag("SPIELER, ICH").optionen
+      and _TM59.OPTIONEN["waffe_figur"][1]()[0] == "alle")
+
+# Revolver: gezielt einzeln, Faechern leert die Trommel auf einen Druck.
+_leeren62()
+_k62 = _schuetze62("revolver")
+pruef("Der Revolver haelt der Figur in der Hand, sechs in der Trommel",
+      _k62.waffe_name == "revolver" and _k62.magazin["revolver"] == 6
+      and _k62.bild.endswith("_revolver"), _k62.bild)
+_lauf62(_k62, 0.05, feuert_=True)
+_lauf62(_k62, 0.3)
+_einzeln62 = 6 - _k62.magazin["revolver"]
+_k62.modus_wechseln()
+_k62.takt = 0.0
+_lauf62(_k62, 0.05, feuert_=True)
+_lauf62(_k62, 0.5)
+pruef("Revolver: ein Druck gezielt ist ein Schuss, ein Druck FAECHERN leert die Trommel",
+      _einzeln62 == 1 and _k62.magazin["revolver"] == 0 and _k62.modus_von("revolver") == "faechern",
+      "%d, Rest %d" % (_einzeln62, _k62.magazin["revolver"]))
+
+# Zwillinge: die rechte Maustaste ist die zweite Pistole.
+_leeren62()
+_k62 = _schuetze62("zwillinge")
+_lauf62(_k62, 1.0, feuert_=True)
+_eine62 = 24 - _k62.magazin["zwillinge"]
+_k62.magazin["zwillinge"] = 24
+_seiten62 = set()
+_lauf62(_k62, 1.0, feuert_=True, zielt_=True,
+        je_=lambda: _seiten62.update(round((g_.pos - _k62.pos).rotate(-_k62.winkel).y)
+                                     for g_ in _geschosse62() if g_.von is _k62
+                                     and g_.pos.distance_to(_k62.pos) < 30))
+_beide62 = 24 - _k62.magazin["zwillinge"]
+pruef("Zwillinge: mit beiden Maustasten doppelt so viele Schuesse, aus zwei Haenden",
+      _beide62 >= 2 * _eine62 - 1 and min(_seiten62, default=0) < 0 < max(_seiten62, default=0),
+      "%d / %d, %s" % (_eine62, _beide62, sorted(_seiten62)))
+
+# MP: flinker und auf Distanz schwaecher.
+_g62 = EN.Geschoss(pygame.Vector2(0, 0), 0.0, K.WAFFEN["mp"], 0, None, "mp")
+_nah62 = _g62.schaden_jetzt()
+_g62.rest = 0.0
+_weit62 = _g62.schaden_jetzt()
+pruef("MP: nah voller Schaden, am Ende der Reichweite nur noch ein Teil",
+      _nah62 == K.WAFFEN["mp"]["schaden"]
+      and abs(_weit62 - K.WAFFEN["mp"]["schaden"] * K.WAFFEN["mp"]["abfall_rest"]) < 0.01,
+      "%.1f / %.1f" % (_nah62, _weit62))
+_leeren62()
+_a62 = _schuetze62("mp")
+_b62 = _schuetze62("sturm", 0.0)
+_b62.pos.y += 40
+_start62 = (pygame.Vector2(_a62.pos), pygame.Vector2(_b62.pos))
+for _ in range(int(1.0 / K.FIXED_DT)):
+    for k_ in (_a62, _b62):
+        _tm62._anwenden(k_, {"will": [0, 1], "ziel": [k_.pos.x + 300, k_.pos.y], "knoepfe": []})
+    _tm62.schritt(K.FIXED_DT)
+pruef("MP: wer sie traegt, laeuft schneller als mit dem Sturmgewehr",
+      _a62.pos.distance_to(_start62[0]) > _b62.pos.distance_to(_start62[1]) * 1.04,
+      "%.0f / %.0f" % (_a62.pos.distance_to(_start62[0]), _b62.pos.distance_to(_start62[1])))
+
+# Praezisionsgewehr: der Kegel schliesst sich zu einer Linie, ein Schuss
+# oeffnet ihn nur ein kleines Stueck - ohne weisse Mittellinie.
+_leeren62()
+_k62 = _schuetze62("praezision")
+_lauf62(_k62, 1.2, zielt_=True)
+_zu62 = _k62.streuung_jetzt
+_lauf62(_k62, K.FIXED_DT, zielt_=True, feuert_=True)
+pruef("Praezisionsgewehr: gezielt eine Linie, nach dem Schuss noch fast zu, ohne Mittellinie",
+      _zu62 < 0.05 and _k62.fokus > 0.8 and not K.WAFFEN["praezision"]["fokus_mittellinie"],
+      "%.2f Grad, Fokus %.2f" % (_zu62, _k62.fokus))
+
+# Unterhebel: Patrone fuer Patrone, ein Schuss unterbricht das Laden.
+_leeren62()
+_k62 = _schuetze62("unterhebel")
+_k62.magazin["unterhebel"] = 2
+_k62.nachladen()
+_lauf62(_k62, K.WAFFEN["unterhebel"]["nachladen"] + 0.05)
+_eine_dazu62 = _k62.magazin["unterhebel"]
+_lauf62(_k62, K.FIXED_DT, feuert_=True)
+pruef("Unterhebel: je Patrone geladen, ein Schuss unterbricht das Laden",
+      _eine_dazu62 == 3 and _k62.magazin["unterhebel"] == 2 and _k62.nachlade_rest <= 0.0,
+      "%d -> %d, %.2f" % (_eine_dazu62, _k62.magazin["unterhebel"], _k62.nachlade_rest))
+_k62.knapp = True
+_k62.vorrat["unterhebel"] = 1
+_k62.magazin["unterhebel"] = 0
+_k62.nachladen()
+_lauf62(_k62, 4 * K.WAFFEN["unterhebel"]["nachladen"])
+pruef("... mit knapper Munition kostet jede Patrone Vorrat, und ohne Vorrat ist Schluss",
+      _k62.magazin["unterhebel"] == 1 and _k62.vorrat["unterhebel"] == 0
+      and _k62.nachlade_rest <= 0.0, "%d, %d" % (_k62.magazin["unterhebel"], _k62.vorrat["unterhebel"]))
+
+# Panzerbuechse: durch drei Koerper, durch niedrige Deckung, voll ins Blech,
+# und der Laser.
+_leeren62()
+_k62 = _schuetze62("panzerbuechse")
+_ziele62 = [_ziel62(90 + 40 * i_) for i_ in range(3)]
+_lauf62(_k62, K.FIXED_DT, ziel_=_ziele62[0].pos, feuert_=True)
+_lauf62(_k62, 0.4)
+pruef("Panzerbuechse: ein Schuss geht durch drei Koerper",
+      all(z_.leben < z_.max_leben for z_ in _ziele62), str([round(z_.leben) for z_ in _ziele62]))
+_kiste62 = None
+for _ty in range(_tm62.welt.ebene(0).hoehe if hasattr(_tm62.welt.ebene(0), "hoehe") else 120):
+    for _tx in range(120):
+        _d62 = K.KACHELN[_tm62.welt.ebene(0).kachel(_tx, _ty)]
+        if _d62["fest"] and not _d62["sicht"]:
+            _kiste62 = pygame.Vector2((_tx + 0.5) * K.TILE, (_ty + 0.5) * K.TILE)
+            break
+    if _kiste62 is not None:
+        break
+pruef("... niedrige Deckung haelt sie nicht auf, eine Mauer schon",
+      _kiste62 is not None and _tm62.welt.schuss_halt(_kiste62, 0, 2.0)
+      and not _tm62.welt.schuss_halt(_kiste62, 0, 2.0, True), str(_kiste62))
+_pz62 = _FZ62.neu("panzer", _ort62 + pygame.Vector2(0, 400), 0, 0.0)
+_pz62.welt = _tm62.welt
+for _wf62 in ("sturm", "panzerbuechse"):
+    _vor62 = _pz62.leben
+    _g62 = EN.Geschoss(_pz62.pos, 0.0, K.WAFFEN[_wf62], 0, _k62, _wf62)
+    _g62.welt = _tm62.welt
+    _g62.treffen(_pz62)
+    if _wf62 == "sturm":
+        _sturm62 = _vor62 - _pz62.leben
+    else:
+        _pb62 = _vor62 - _pz62.leben
+pruef("... am Panzer voller Schaden, das Sturmgewehr kratzt nur",
+      abs(_pb62 - K.WAFFEN["panzerbuechse"]["schaden"]) < 0.01
+      and _sturm62 < K.WAFFEN["sturm"]["schaden"] * 0.5, "%.1f / %.1f" % (_pb62, _sturm62))
+_k62.magazin["panzerbuechse"] = 1
+_tm62.kamera.pos.update(_k62.pos)
+_tm62.kamera.versatz.update(0, 0)
+_tm62.renderer.bilder  # noqa: B018  (Renderer gibt es)
+_fl62 = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+_tm62.renderer.laser_zeichnen(_fl62, _tm62.welt, 0, _tm62.kamera.ecke)
+_rot62 = sum(1 for x_ in range(K.GAME_W // 2, K.GAME_W) if _fl62.get_at((x_, K.GAME_H // 2)).r > 150)
+pruef("... und ihr Ziellaser ist fuer alle zu sehen", _rot62 >= 20, str(_rot62))
+
+# Doppelflinte: rechte Maustaste beide Laeufe.
+_leeren62()
+_k62 = _schuetze62("doppelflinte")
+_lauf62(_k62, K.FIXED_DT, zielt_=True)
+_kugeln62 = len([g_ for g_ in _geschosse62() if g_.von is _k62])
+pruef("Doppelflinte: rechte Maustaste feuert beide Laeufe auf einmal",
+      _k62.magazin["doppelflinte"] == 0 and _kugeln62 == 2 * K.WAFFEN["doppelflinte"]["geschosse"],
+      "%d Rest, %d Kugeln" % (_k62.magazin["doppelflinte"], _kugeln62))
+
+# Autoschrot: schiebt staerker.
+_leeren62()
+_k62 = _schuetze62("autoschrot")
+_s62 = []
+for _wf62 in ("schrot", "autoschrot"):
+    _z62 = _ziel62(60)
+    _g62 = EN.Geschoss(_k62.pos, 0.0, K.WAFFEN[_wf62], 0, _k62, _wf62)
+    _g62.welt = _tm62.welt
+    _g62.schub_anteil = 1.0
+    _g62.treffen(_z62)
+    _s62.append(_z62.tempo.length())
+pruef("Autoschrot: ein Treffer drueckt den Getroffenen deutlich weiter zurueck",
+      _s62[1] > _s62[0] * 2.0, str([round(x_) for x_ in _s62]))
+
+# Minigun: Anlauf, dann Dauerfeuer, der Traeger steht fast.
+_leeren62()
+_k62 = _schuetze62("minigun")
+_lauf62(_k62, 0.5, feuert_=True)
+_erst62 = 240 - _k62.magazin["minigun"]
+_lauf62(_k62, 1.6, feuert_=True)
+_dann62 = 240 - _k62.magazin["minigun"] - _erst62
+pruef("Minigun: erst langsam, nach dem Anlauf ein Vielfaches, und kaum zu bewegen",
+      _dann62 > 4 * _erst62 and _k62.gewicht_tempo < 0.4, "%d dann %d" % (_erst62, _dann62))
+
+# Granatwerfer: Bogen bis zum Zeiger, Koerper zuenden sofort.
+_leeren62()
+_k62 = _schuetze62("granatwerfer")
+_zz62 = _k62.pos + pygame.Vector2(260, 0)
+_hoch62 = [0.0]
+_lauf62(_k62, K.FIXED_DT, ziel_=_zz62, feuert_=True)
+_gr62 = [w_ for w_ in _alle62() if isinstance(w_, EN.Werfergranate)]
+
+
+def _hoehe62():
+    for g_ in _gr62:
+        _hoch62[0] = max(_hoch62[0], g_.flug)
+
+
+_flugzeit62 = (260.0 - 16.0) / K.WAFFEN["granatwerfer"]["tempo"]
+_lauf62(_k62, _flugzeit62 + 0.15, ziel_=_zz62, je_=_hoehe62)
+_gelandet62 = _gr62[0].pos.distance_to(_zz62) if _gr62 else 999.0
+pruef("Granatwerfer: die Granate steigt (nur als Groesse) und landet am Zeiger",
+      len(_gr62) == 1 and _hoch62[0] > 0.6 * K.WAFFEN["granatwerfer"]["bogen"]
+      and _gr62[0].liegt and _gelandet62 < 20.0 and _gr62[0].bild == "teil_granate40",
+      "%.0f hoch, %.0f daneben" % (_hoch62[0], _gelandet62))
+_lauf62(_k62, K.WAFFEN["granatwerfer"]["zuender"] + 0.2)
+pruef("... liegt kurz und zuendet dann", _gr62 and not _gr62[0].lebt)
+# Am Ende des Bogens ist sie wieder tief: wer dort steht, wird getroffen,
+# bevor sie aufsetzt. (Mitten im Bogen fliegt sie ueber Koepfe hinweg.)
+_z62 = _ziel62(290)
+_k62.magazin["granatwerfer"] = 1
+_k62.takt = 0.0
+_lauf62(_k62, K.FIXED_DT, ziel_=_k62.pos + pygame.Vector2(300, 0), feuert_=True)
+_gr62 = [w_ for w_ in _alle62() if isinstance(w_, EN.Werfergranate)]
+_lauf62(_k62, (300.0 - 16.0) / K.WAFFEN["granatwerfer"]["tempo"])
+pruef("... trifft sie tief einen Koerper, zuendet sie sofort - ohne aufzusetzen",
+      _gr62 and not _gr62[0].lebt and not _gr62[0].liegt and _z62.leben < _z62.max_leben,
+      "%.0f" % _z62.leben)
+
+# Einweg-Raketenwerfer: ein Schuss, das Rohr liegt am Boden, weiter mit
+# der naechsten Waffe.
+_leeren62()
+_k62 = _schuetze62("einwegwerfer")
+_lauf62(_k62, K.FIXED_DT, feuert_=True)
+_rohr62 = [f_ for f_ in _tm62.welt.flugleichen if f_.bild == "teil_rohr_leer"]
+_k62.nachladen()
+_lauf62(_k62, 0.5)
+pruef("Einweg-Raketenwerfer: ein Schuss, dann die naechste Waffe - nachladen geht nicht",
+      _k62.magazin["einwegwerfer"] == 0 and _k62.waffe_name != "einwegwerfer",
+      _k62.waffe_name)
+_lauf62(_k62, 2.0)
+pruef("... das Rohr liegt daneben, ohne Blut, qualmt und ist spaeter weg",
+      len(_rohr62) == 1 and not _rohr62[0].blut and _rohr62[0].lebt)
+_lauf62(_k62, K.ROHR["liegen"] + 0.5)
+pruef("... (weg nach K.ROHR liegen)", not _rohr62[0].lebt)
+
+# Raketenbuendel: sechs kleine Raketen auf einen Druck, die schlingern.
+_leeren62()
+_k62 = _schuetze62("raketenbuendel")
+_winkel62 = {}
+
+
+def _merk62():
+    for r_ in _tm62.welt.wesen:
+        if isinstance(r_, EN.Rakete) and r_.lebt:
+            _winkel62.setdefault(r_.kennung, []).append(r_.winkel)
+
+
+_lauf62(_k62, K.FIXED_DT, feuert_=True)
+_lauf62(_k62, 0.9, je_=_merk62)
+_bilder62 = {r_.bild for r_ in _tm62.welt.wesen if isinstance(r_, EN.Rakete)}
+pruef("Raketenbuendel: ein Druck, sechs kleine Raketen, jede schlingert",
+      _k62.magazin["raketenbuendel"] == 0 and len(_winkel62) == 6
+      # Wer eine halbe Sekunde flog (mehr als eine halbe Pendelbewegung),
+      # pendelte dabei um mehr als K.WAFFEN schlingern.
+      and any(len(v_) * K.FIXED_DT >= 0.5 for v_ in _winkel62.values())
+      and all(max(v_) - min(v_) > K.WAFFEN["raketenbuendel"]["schlingern"]
+              for v_ in _winkel62.values() if len(v_) * K.FIXED_DT >= 0.5),
+      "%d Raketen" % len(_winkel62))
+_k62.magazin["raketenbuendel"] = 6
+_k62.takt = 0.0
+_lauf62(_k62, K.FIXED_DT, feuert_=True)
+_k62.waffe_waehlen(_k62.waffen.index("sturm"))
+_lauf62(_k62, 0.8)
+pruef("... wer mitten in der Salve wechselt, beendet sie (nicht mit der neuen Waffe weiter)",
+      _k62.magazin["raketenbuendel"] == 5 and _k62.magazin["sturm"] == K.WAFFEN["sturm"]["magazin"],
+      "%d, %d" % (_k62.magazin["raketenbuendel"], _k62.magazin["sturm"]))
+_tm62.verlassen()
+
+# Im Gefecht: der Gast sieht die Figur, die 40-mm-Granate in der Luft, die
+# kleinen Raketen und das Rohr am Boden.
+w, ga = _paar59("pvp", karte="staubtal")
+_gk62 = w.kaempfer.get(ga.meine_nummer)
+_alt_ein62 = w._meine_eingabe
+_ein62 = {"feuert": False}
+w._meine_eingabe = lambda: {"will": [0, 0], "ziel": [w.ich.pos.x + 260, w.ich.pos.y],
+                            "knoepfe": [], "feuert": _ein62["feuert"], "zielt": False}
+_frei_ich62 = freier_punkt(w.welt, 0, random.Random(620))
+w.ich.pos.update(_frei_ich62)
+w.ich.vorher.update(_frei_ich62)
+w.ich.winkel = 0.0
+_namen62 = set()
+_hoehe_gast62 = [0.0]
+
+
+def _gast62(sek_, feuert_=False):
+    for _ in range(int(sek_ / K.NETZ["takt"])):
+        _ein62["feuert"] = feuert_
+        w.schritt(K.NETZ["takt"])
+        ga.schritt(K.NETZ["takt"])
+        for e_ in ga._fremde_schuesse:
+            _namen62.add(e_[4])
+            if e_[4] == "teil_granate40":
+                _hoehe_gast62[0] = max(_hoehe_gast62[0], e_[5])
+
+
+for _wf62 in ("granatwerfer", "raketenbuendel", "einwegwerfer"):
+    w.ich.waffen = [_wf62, "sturm", "granate"]
+    w.ich.waffe = 0
+    w.ich.magazin[_wf62] = K.WAFFEN[_wf62]["magazin"]
+    w.ich.takt = 0.0
+    _gast62(0.1)
+    _bild62 = ga.kaempfer[0].bild
+    _gast62(0.05, True)
+    _gast62(1.0)
+pruef("Der Gast sieht die neuen Waffen in der Hand", _bild62.endswith("_einwegwerfer"), _bild62)
+pruef("... die 40-mm-Granate im Bogen und die kleinen Raketen",
+      "teil_granate40" in _namen62 and _hoehe_gast62[0] > 20.0 and "teil_minirakete" in _namen62,
+      "%s %.0f" % (sorted(_namen62), _hoehe_gast62[0]))
+pruef("... und das abgelegte Rohr", any(f_.bild == "teil_rohr_leer" for f_ in ga.welt.flugleichen))
+w._meine_eingabe = _alt_ein62
+w.verlassen(); ga.verlassen()
+EN.RND.setstate(_rnd62)
+random.setstate(_zufall62)
+
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
 pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)
