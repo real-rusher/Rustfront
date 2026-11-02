@@ -2408,6 +2408,16 @@ class Renderer:
         klein = pygame.image.frombytes(bytes(roh), (breite, breite), "RGBA")
         flaeche = (klein if korn == 1 else
                    pygame.transform.scale(klein, (breite * korn, breite * korn)))
+        # Ins Format des Fensters (seit 0.34.74). Aus rohen Bytes hat die
+        # Flaeche die Byte-Folge RGBA, das Fenster meist eine andere; auf
+        # einem Intel-Mac kam die Wolke damit auf einem schwarzen Viereck an
+        # (gemeldet mit Bild). Dieselbe Art Fehler wie auf dem iPhone in
+        # 0.34.21. Ohne Fenster (Tests, Aufnahmen) bleibt sie, wie sie ist.
+        if pygame.display.get_surface() is not None:
+            try:
+                flaeche = flaeche.convert_alpha()
+            except pygame.error:
+                pass
         if len(self._rauch_puffer) > r["puffer"]:
             self._rauch_puffer.clear()
         self._rauch_puffer[schluessel] = (flaeche, (x0, y0))

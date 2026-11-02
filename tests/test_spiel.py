@@ -6628,6 +6628,23 @@ w.verlassen(); ga.verlassen()
 EN.RND.setstate(_rnd73)
 random.setstate(_zufall73)
 
+# 0.34.74: Rauch im Format des Fensters (schwarzes Viereck auf einem Intel-Mac).
+print("\n-- Rauch ohne schwarzes Viereck (0.34.74)")
+_alt74 = pygame.display.get_surface()
+if _alt74 is None:
+    pygame.display.set_mode((K.GAME_W, K.GAME_H))
+_tm74 = _TM59.Testmodus(app, karte="staubtal")
+_w74 = EN.Rauchwolke(pygame.Vector2(500, 500), 0, radius=58.0, dauer=9.0, alter=3.0)
+_f74, _ = _tm74.renderer._rauchbild(_w74, True)
+_grund74 = pygame.Surface((_f74.get_width(), _f74.get_height()))
+_grund74.fill((200, 0, 0))
+_grund74.blit(_f74, (0, 0))
+_probe74 = pygame.Surface((1, 1), pygame.SRCALPHA).convert_alpha()
+pruef("Die Rauchwolke hat das Pixelformat des Fensters, und ihr Rand bleibt durchsichtig",
+      _f74.get_masks() == _probe74.get_masks() and _grund74.get_at((1, 1))[:3] == (200, 0, 0),
+      "%s %s" % (_f74.get_masks(), _grund74.get_at((1, 1))))
+_tm74.verlassen()
+
 # Eine kaputte oder fehlende Karte darf nichts umwerfen.
 pruef("Eine fehlende Karte gibt None", W.karte_lesen("gibtsnicht")[0] is None)
 pruef("Und kaputter Text auch", W.karte_aus_text("bloedsinn")[0] is None)
