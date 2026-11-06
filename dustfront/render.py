@@ -339,8 +339,11 @@ class Ueberblendung:
     def merken(self, ziel: pygame.Surface) -> None:
         if self.rest > 0:
             return
-        if self.bild is None or self.bild.get_size() != ziel.get_size():
-            self.bild = pygame.Surface(ziel.get_size())
+        if (self.bild is None or self.bild.get_size() != ziel.get_size()
+                or self.bild.get_masks() != ziel.get_masks()):
+            # Im Format des Ziels (seit 0.34.75): dann ist das Merken ein
+            # reines Kopieren, ohne jedes Pixel umzurechnen.
+            self.bild = pygame.Surface(ziel.get_size(), 0, ziel)
         self.bild.blit(ziel, (0, 0))
 
     def starten(self) -> None:
@@ -1207,7 +1210,8 @@ class Renderer:
                 r = w.tempo.normalize()
                 pygame.draw.line(ziel, (128, 80, 30), p - r * 17, p - r * 5, 1)
                 pygame.draw.line(ziel, w.spur, p - r * 6, p, 1)
-            if w.bild is None:
+            bild = w.bild                 # eine Eigenschaft: einmal fragen (0.34.75)
+            if bild is None:
                 continue
             if (getattr(w, "dash_rest", 0.0) > 0.0
                     or getattr(w, "dash_bild_rest", 0.0) > 0.0):
@@ -1217,7 +1221,7 @@ class Renderer:
             # ansehen muss.
             if getattr(w, "f_vorlauf", 0.0) > 0.0:
                 self.ankuendigung(ziel, p, w)
-            roh = self.bilder.gedreht(w.bild, w.winkel)
+            roh = self.bilder.gedreht(bild, w.winkel)
             s = roh
             if dunkel is not None:
                 s = self.dunkel(s, dunkel)
@@ -1267,13 +1271,17 @@ class Renderer:
         if schritte >= 1:
             quelle = roh if roh is not None else s
             stufen = f3["seite_stufen"]
+            je_stufe = {}           # dieselbe Stufe, dieselbe Schicht (seit 0.34.75)
             for i in range(schritte):
                 t = i / schritte
                 # Unten dunkel, unter dem Deckel heller - wie die Mauern.
                 stufe = min(stufen - 1, int(t * stufen))
-                hell = f3["seite_unten"] + (f3["seite_oben"] - f3["seite_unten"]) \
-                    * stufe / max(1, stufen - 1)
-                seite, rand = self._seite(quelle, round(hell, 3), dunkel)
+                schicht = je_stufe.get(stufe)
+                if schicht is None:
+                    hell = f3["seite_unten"] + (f3["seite_oben"] - f3["seite_unten"]) \
+                        * stufe / max(1, stufen - 1)
+                    schicht = je_stufe[stufe] = self._seite(quelle, round(hell, 3), dunkel)
+                seite, rand = schicht
                 auftraege.append((seite, (p.x + weg.x * t - w2 + rand[0],
                                           p.y + weg.y * t - h2 + rand[1])))
         auftraege.append((s, (oben.x - w2, oben.y - h2)))
@@ -2266,6 +2274,15 @@ class Renderer:
                 self._ziel_frisch = None
             self._ebene_inhalt(flaeche, welt, idx, u_ecke, alpha, dunkel, False,
                                boden, figuren, luft, anzeige)
+            # Liegt im Ausschnitt dieser Ebene gar nichts (kein Boden, und
+            # die Flaeche ist ganz durchsichtig), aendert das Ausstanzen,
+            # Hochskalieren und Darueberlegen auf einem deckenden Bild kein
+            # Pixel - dann unterbleibt es (seit 0.34.75). Geprueft wird nur
+            # ohne Boden: mit Boden ist sie nie leer, und die Frage kostete
+            # umsonst.
+            leer = (not getattr(self, "_boden_da", True)
+                    and not ziel.get_flags() & pygame.SRCALPHA
+                    and _ganz_leer(flaeche))
             if dz < 0 and idx > 0:
                 # Ueber Spielflaeche blendet die Etage aus (oder ist mit
                 # oben_aus ganz weg), damit sie den Gang darunter nicht
@@ -2273,7 +2290,9 @@ class Renderer:
                 # sie ist der Deckel des Felsblocks, und durch einen
                 # Felsblock sieht man nicht. Blass gezeichnet stand dort
                 # ein Geist ueber dem Sockel statt eines Plateaus.
-                if turm:
+                if leer:
+                    pass                  # leer bleibt leer, auch ausgestanzt
+                elif turm:
                     # Nur der Block selbst; was ueber Spielflaeche einer
                     # tieferen Etage liegt, bleibt ganz weg.
                     self._ausstanzen(flaeche, welt, idx, u_ecke,
@@ -2285,14 +2304,6 @@ class Renderer:
                                      (255, 255, 255, int(255 * sicht)),
                                      pygame.BLEND_RGBA_MULT)
                 sicht = 1.0
-            # Liegt im Ausschnitt dieser Ebene gar nichts (kein Boden, und
-            # die Flaeche ist ganz durchsichtig), aendert das Hochskalieren
-            # und Darueberlegen auf einem deckenden Bild kein Pixel - dann
-            # unterbleibt es (seit 0.34.75). Geprueft wird nur ohne Boden:
-            # mit Boden ist sie nie leer, und die Frage kostete umsonst.
-            leer = (not getattr(self, "_boden_da", True)
-                    and not ziel.get_flags() & pygame.SRCALPHA
-                    and _ganz_leer(flaeche))
             if not leer:
                 # In eine gemerkte Flaeche (seit 0.34.75) statt jedes Bild in
                 # eine neue: transform.scale schreibt jedes Pixel neu.

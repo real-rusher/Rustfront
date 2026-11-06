@@ -15209,12 +15209,44 @@ pruef("Vignette in Randstreifen: dasselbe Bild wie ganz",
       _R175._rand_streifen(_v175) is not None
       and pygame.image.tobytes(_a175, "RGB") == pygame.image.tobytes(_b175, "RGB"))
 
+# Schrift mit Schatten in einem Blit: dasselbe Bild wie zwei.
+from dustfront.font import SCHRIFT as _SCH175, GH as _GH175
+_a175 = _ziel175()
+_b175 = _a175.copy()
+for _t175, _x175, _y175, _sk175 in (("HALLO 123", 5, 5, 1), ("ÄÖÜ (X) -5/7", 40, 80, 2), ("RAND", 290, 296, 1)):
+    _s175 = _SCH175.flaeche(_t175, (240, 200, 90), _sk175, 1)
+    _yy175 = _y175 - (_s175.get_height() - _GH175 * _sk175)
+    _a175.blit(_SCH175.flaeche(_t175, (8, 6, 4), _sk175, 1), (_x175 + _sk175, _yy175 + _sk175))
+    _a175.blit(_s175, (_x175, _yy175))
+    _SCH175.zeichnen(_b175, _t175, _x175, _y175, (240, 200, 90), _sk175, schatten=(8, 6, 4))
+pruef("Schrift mit Schatten in einem Blit: dasselbe Bild wie Schatten und Schrift einzeln",
+      pygame.image.tobytes(_a175, "RGB") == pygame.image.tobytes(_b175, "RGB"))
+
 # GOAP: ein Ausdruck gibt mit gemeinsamen Namen denselben Wert.
 _aus175 = _G175.Ausdruck("80 * magazin_leer * munition_da + max(mut, 2) - abs(x) / 3")
 _n175 = {"magazin_leer": 1, "munition_da": 1, "mut": 0.7, "x": -4.5, "min": 99}
 pruef("GOAP-Ausdruck: gleiche Zahl mit gemeinsamer Namenstafel",
       _aus175.wert(_n175) == _aus175.wert(_G175._bereit(_n175))
       and _aus175.wert(_G175._bereit({})) == _aus175.wert({}))
+
+# MVP-Punkte gemerkt: sie haengen nur an den Werten in MVP_NAMEN.
+from dustfront import bestenliste as _BL175
+class _Mitschrift175(dict):
+    gelesen = set()
+
+    def get(self, n, *rest):
+        self.gelesen.add(n)
+        return dict.get(self, n, *rest)
+
+    def __getitem__(self, n):
+        self.gelesen.add(n)
+        return dict.__getitem__(self, n)
+
+
+_w175 = _Mitschrift175({n: _rnd175.randrange(1, 9) for n in _BL175.MVP_NAMEN}, strecke=5.0)
+_BL175.mvp_punkte(_w175)
+pruef("MVP-Punkte lesen nur Werte aus MVP_NAMEN (die Anzeige merkt sie sich danach)",
+      _Mitschrift175.gelesen <= set(_BL175.MVP_NAMEN), str(sorted(_Mitschrift175.gelesen)))
 
 # Welt.nahe ueber die belegten Zellen: dieselben Wesen in derselben Folge.
 _tm = _TM175.Testmodus(app, karte="staubtal")

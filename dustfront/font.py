@@ -153,9 +153,30 @@ class Schrift:
             x -= s.get_width() // 2
         y -= s.get_height() - GH * skala        # Umlautpunkte ragen nach oben
         if schatten is not None:
+            if (len(farbe) == 3 and len(schatten) == 3
+                    and not ziel.get_flags() & pygame.SRCALPHA):
+                # Schrift und Schatten in einer Flaeche (seit 0.34.75): beide
+                # sind ganz deckend oder ganz durchsichtig, auf ein deckendes
+                # Ziel kommt also genau dasselbe wie mit zwei Blits.
+                ziel.blit(self._mit_schatten(text, farbe, schatten, skala, abstand, s), (x, y))
+                return s.get_width()
             ziel.blit(self.flaeche(text, schatten, skala, abstand), (x + skala, y + skala))
         ziel.blit(s, (x, y))
         return s.get_width()
+
+    def _mit_schatten(self, text, farbe, schatten, skala, abstand, s):
+        key = ("schatten", text, tuple(farbe), tuple(schatten), skala, abstand)
+        hit = self._cache.get(key)
+        if hit is not None:
+            return hit
+        sch = self.flaeche(text, schatten, skala, abstand)
+        hit = pygame.Surface((s.get_width() + skala, s.get_height() + skala), pygame.SRCALPHA)
+        hit.blit(sch, (skala, skala))
+        hit.blit(s, (0, 0))
+        if len(self._cache) > 700:
+            self._cache.clear()
+        self._cache[key] = hit
+        return hit
 
 
 SCHRIFT = Schrift()

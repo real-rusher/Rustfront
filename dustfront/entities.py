@@ -2608,9 +2608,12 @@ class Spieler(Wesen):
             if self.gelaehmt:
                 self.feuert = False
                 self.zielt = False
-        self.unverwundbar = max(0.0, self.unverwundbar - dt)
-        self.takt = max(0.0, self.takt - dt)
-        self.takt2 = max(0.0, self.takt2 - dt)
+        v = self.unverwundbar - dt
+        self.unverwundbar = v if v > 0.0 else 0.0     # = max(0.0, v), schneller (0.34.75)
+        v = self.takt - dt
+        self.takt = v if v > 0.0 else 0.0     # = max(0.0, v), schneller (0.34.75)
+        v = self.takt2 - dt
+        self.takt2 = v if v > 0.0 else 0.0     # = max(0.0, v), schneller (0.34.75)
         rest = getattr(self, "faehigkeit_rest", None)
         if rest:
             for art in list(rest):              # Faehigkeit der Klasse (0.34.73)
@@ -2662,12 +2665,15 @@ class Spieler(Wesen):
                     wolke(self.welt, self.pos, 10, 60, 0.6, K.C_TEAL,
                           self.ebene, 1)
 
-        self.dash_bild_rest = max(0.0, self.dash_bild_rest - dt)
+        v = self.dash_bild_rest - dt
+        self.dash_bild_rest = v if v > 0.0 else 0.0     # = max(0.0, v), schneller (0.34.75)
         # Wie lange der letzte Dash her ist (Schlagring, seit 0.34.66).
         self._seit_dash = 0.0 if self.dash_rest > 0 else getattr(self, "_seit_dash", 9.0) + dt
 
-        self.schlag_zeigen = max(0.0, self.schlag_zeigen - dt)
-        self.nahkampf_rest = max(0.0, self.nahkampf_rest - dt)
+        v = self.schlag_zeigen - dt
+        self.schlag_zeigen = v if v > 0.0 else 0.0     # = max(0.0, v), schneller (0.34.75)
+        v = self.nahkampf_rest - dt
+        self.nahkampf_rest = v if v > 0.0 else 0.0     # = max(0.0, v), schneller (0.34.75)
         if (getattr(self, "am_boden", False) and self.tempo.length_squared() < 0.01
                 and self.will.length_squared() < 0.01 and self.sturz_rest <= 0):
             # Wer still am Boden liegt, hat keine Waffe in der Hand, laeuft
@@ -2821,7 +2827,8 @@ class Spieler(Wesen):
     def _dash_laden(self, dt: float) -> None:
         """Die Ladungen fuellen sich nacheinander wieder auf."""
         d = K.DASH
-        self.dash_sperre = max(0.0, self.dash_sperre - dt)
+        v = self.dash_sperre - dt
+        self.dash_sperre = v if v > 0.0 else 0.0     # = max(0.0, v), schneller (0.34.75)
         if self.dash_ladungen >= d["ladungen"]:
             self.dash_laden = 0.0
             return

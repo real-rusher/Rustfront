@@ -366,11 +366,13 @@ class Anzeige:
     def _mvp(self, k) -> float:
         """bestenliste.mvp_punkte(k.werte_runde()), gemerkt, solange sich
         die Zahlen der Figur nicht aendern (seit 0.34.75) - die Rechnung
-        haengt nur an ihren Zaehlern, Abschuessen und Toden."""
+        haengt nur an den Zaehlern in bestenliste.MVP_NAMEN, Abschuessen und
+        Toden (nicht etwa an der Strecke, die jeden Schritt waechst)."""
         from . import bestenliste
         merk = self.__dict__.setdefault("_mvp_merk", {})
-        schluessel = (tuple(k.zaehler.items()), getattr(k, "abschuesse", None),
-                      getattr(k, "tode", None))
+        z = k.zaehler
+        schluessel = (tuple([z.get(n) for n in bestenliste.MVP_NAMEN]),
+                      getattr(k, "abschuesse", None), getattr(k, "tode", None))
         hit = merk.get(id(k))
         if hit is not None and hit[0] is k and hit[1] == schluessel:
             return hit[2]

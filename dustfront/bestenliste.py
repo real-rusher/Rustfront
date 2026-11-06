@@ -105,6 +105,14 @@ def sortiert(eintraege: list[dict]) -> list[dict]:
                                  e.get("name", "")))
 
 
+# Alle Schluessel, die mvp_punkte liest (seit 0.34.75: die Anzeige merkt
+# sich die Punkte, solange sich keiner davon aendert - wer mvp_punkte einen
+# neuen Wert lesen laesst, traegt ihn hier ein; ein Test prueft das).
+MVP_NAMEN = ("abschuesse", "gegner_abschuesse", "boss_abschuesse", "schaden",
+             "treffer_spieler", "schuesse", "treffer", "hilfen", "zonenzeit",
+             "medkits", "tode")
+
+
 def mvp_punkte(werte: dict, sieg_bonus: float = 0.0) -> float:
     """Rundenwertung: Kampf, Teamhilfe und Zielspiel zaehlen gemeinsam."""
     abschuesse = max(0, int(werte.get("abschuesse", 0) or 0))

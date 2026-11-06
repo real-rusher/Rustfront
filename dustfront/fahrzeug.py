@@ -412,11 +412,36 @@ class Buggy(Wesen):
             return antwort
         return self._passt_rechnen(w, pos, winkel)
 
+    def _frei_gemerkt(self, w, nr: int, c, r: float) -> bool:
+        """w.frei(c, r, ebene, True), je Kreis gemerkt (seit 0.34.75): ein
+        stehender Wagen fragt jeden Schritt dasselbe. Die Antwort haengt nur
+        an Ort und Radius und an den Kacheln unter dem Kreis - die werden
+        jedesmal verglichen."""
+        e = w.ebene(self.ebene)
+        T = K.TILE
+        x0, x1 = int((c.x - r) // T), int((c.x + r) // T)
+        y0, y1 = int((c.y - r) // T), int((c.y + r) // T)
+        b = e.breite
+        if not (0 <= x0 and x1 < b and 0 <= y0 and y1 < e.hoehe):
+            return w.frei(c, r, self.ebene, True)
+        kacheln = e.kacheln
+        reihen = [kacheln[ty * b + x0: ty * b + x1 + 1] for ty in range(y0, y1 + 1)]
+        schluessel = (c.x, c.y, r, x0, y0)
+        merk = self.__dict__.get("_frei_merk")
+        if merk is None:
+            merk = self._frei_merk = {}
+        hit = merk.get(nr)
+        if hit is not None and hit[0] == schluessel and hit[1] is e and hit[2] == reihen:
+            return hit[3]
+        antwort = w.frei(c, r, self.ebene, True)
+        merk[nr] = (schluessel, e, reihen, antwort)
+        return antwort
+
     def _passt_rechnen(self, w, pos, winkel) -> bool:
         r = self.radius
         kreise = self.kreise(pos, winkel)
-        for c in kreise:
-            if not w.frei(c, r, self.ebene, True):
+        for nr, c in enumerate(kreise):
+            if not self._frei_gemerkt(w, nr, c, r):
                 return False
         for a in w.nahe(pos, K.FAHRZEUG["achse"] + r + 40, self.ebene):
             if getattr(a, "rechteckig", False):
@@ -699,6 +724,7 @@ class Buggy(Wesen):
         bleibt eben stehen, und der Wagen mit ihm (siehe passt)."""
         w = self.welt
         r = self.radius
+        kreise = None
         for a in list(w.nahe(self.pos, K.FAHRZEUG["achse"] + r + 40, self.ebene)):
             if (a is self.fahrer or a is self or not a.lebt or a.flug > 0
                     or not getattr(a, "schiebt", True)
@@ -706,7 +732,11 @@ class Buggy(Wesen):
                     or getattr(a, "am_boden", False)
                     or getattr(a, "im_fahrzeug", False)):
                 continue
-            for c in self.kreise():
+            # Die Kreise einmal (seit 0.34.75): der Wagen bewegt sich in
+            # dieser Schleife nicht, nur die Geschobenen.
+            if kreise is None:
+                kreise = self.kreise()
+            for c in kreise:
                 d = a.pos - c
                 abstand = d.length()
                 mindest = r + a.radius
