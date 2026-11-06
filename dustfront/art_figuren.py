@@ -668,11 +668,18 @@ def bildname(skin: str, team_vorsatz: str = "", gehalten: str = "") -> str:
     return name
 
 
+_NACH_LAENGE: list = []
+
+
 def _skin_team(rest: str):
     """<id>[_<team>]<rest> -> (id, TEAM oder None, rest ohne Trenner) oder
     None. Die laengste Kennung zuerst: "schuetze" steckt in
     "scharfschuetze" nicht vorn, aber "mg_schuetze" beginnt mit "mg"."""
-    for skin in sorted(K.FIGUREN, key=len, reverse=True):
+    # Die Reihenfolge einmal (seit 0.34.75), nicht bei jedem Aufruf neu
+    # sortiert - K.FIGUREN aendert sich nach dem Laden nicht.
+    if len(_NACH_LAENGE) != len(K.FIGUREN):
+        _NACH_LAENGE[:] = sorted(K.FIGUREN, key=len, reverse=True)
+    for skin in _NACH_LAENGE:
         if rest == skin or rest.startswith(skin + "_"):
             teile = rest[len(skin) + 1:]
             team = None

@@ -262,6 +262,18 @@ class Partikel:
         return self.vorher.lerp(self.pos, alpha)
 
 
+_WERTE_ARTEN: list = [None, None]
+
+
+def _werte_arten() -> dict:
+    """{Schluessel: Art} aus K.WERTE, einmal gebaut (seit 0.34.75) - die
+    Anzeige fragt werte_runde jedes Bild fuer jeden Kaempfer."""
+    if _WERTE_ARTEN[0] is not K.WERTE:
+        _WERTE_ARTEN[0] = K.WERTE
+        _WERTE_ARTEN[1] = {s: a for s, _t, a in K.WERTE}
+    return _WERTE_ARTEN[1]
+
+
 def wolke(welt, pos, anzahl, tempo, dauer, farbe, ebene, groesse=1,
           art="staub", streuung=360.0, richtung=0.0, reibung=3.0):
     for _ in range(anzahl):
@@ -2178,7 +2190,7 @@ class Spieler(Wesen):
 
     def werte_runde(self) -> dict:
         """Die Zahlen dieser Runde, so wie sie ins Journal gehen."""
-        art = {s: a for s, _t, a in K.WERTE}
+        art = _werte_arten()
         werte = {}
         for s, wert in self.zaehler.items():
             if s not in art:
@@ -2233,6 +2245,19 @@ class Spieler(Wesen):
             # Betriebsart fuer den, der eine Stellung haelt.
             grund *= d["streuung_stand"]
         return grund
+
+    def _waffe_lesen(self) -> dict:
+        """Die Werte der gehaltenen Waffe nur zum Lesen (seit 0.34.75).
+
+        Ohne Betriebsart und ausser beim C4 ist `waffe_daten` eine Kopie
+        von K.WAFFEN[name] - die Kopie kostete jeden Schritt jeder Figur
+        mehrfach Zeit. Wer hier liest, schreibt nie hinein; sonst gilt
+        `waffe_daten`."""
+        name = self.waffen[self.waffe]
+        d = K.WAFFEN[name]
+        if name == "c4" or d.get("modus_daten"):
+            return self.waffe_daten
+        return d
 
     @property
     def waffe_daten(self) -> dict:
@@ -2398,7 +2423,7 @@ class Spieler(Wesen):
         der Abzug schon los ist und der Lauf noch dreht. Umgekehrt soll
         man nicht schon beim ersten Antippen festkleben.
         """
-        d = self.waffe_daten
+        d = self._waffe_lesen()
         if not d.get("gewicht_tempo") and not d.get("gewicht_drehen"):
             return 0.0
         if d.get("modus_daten") or d.get("anlauf"):
@@ -2409,7 +2434,7 @@ class Spieler(Wesen):
     @property
     def gewicht_tempo(self) -> float:
         """Faktor auf das Lauftempo. 1.0 heisst: keine Behinderung."""
-        d = self.waffe_daten
+        d = self._waffe_lesen()
         voll = d.get("gewicht_tempo")
         if voll is None:
             return 1.0
@@ -2418,7 +2443,7 @@ class Spieler(Wesen):
     @property
     def dreh_grenze(self) -> float:
         """Grad je Sekunde, mehr geht nicht. 0 heisst: keine Grenze."""
-        d = self.waffe_daten
+        d = self._waffe_lesen()
         voll = d.get("gewicht_drehen")
         if not voll:
             return 0.0

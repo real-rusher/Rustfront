@@ -52,14 +52,26 @@ def ecken(rect: pygame.Rect, schnitt: int = 4):
     ]
 
 
+# Die durchscheinenden Fuellungen von `kasten`, je Groesse, Farbe und
+# Schnitt einmal gezeichnet (seit 0.34.75): die Anzeige baute jedes Bild
+# ein Dutzend neue Flaechen, die immer gleich aussahen.
+_FUELLUNGEN: dict = {}
+
+
 def kasten(ziel, rect, rahmen=K.C_MUTED_DK, fuellung=(12, 9, 7), schnitt=4):
     rect = pygame.Rect(rect)
     punkte = ecken(rect, schnitt)
     if fuellung is not None:
         if len(fuellung) == 4:
-            flaeche = pygame.Surface(rect.size, pygame.SRCALPHA)
-            pygame.draw.polygon(flaeche, fuellung,
-                                [(px - rect.x, py - rect.y) for px, py in punkte])
+            schluessel = (rect.size, tuple(fuellung), schnitt)
+            flaeche = _FUELLUNGEN.get(schluessel)
+            if flaeche is None:
+                flaeche = pygame.Surface(rect.size, pygame.SRCALPHA)
+                pygame.draw.polygon(flaeche, fuellung,
+                                    [(px - rect.x, py - rect.y) for px, py in punkte])
+                if len(_FUELLUNGEN) > 200:
+                    _FUELLUNGEN.clear()
+                _FUELLUNGEN[schluessel] = flaeche
             ziel.blit(flaeche, rect.topleft)
         else:
             pygame.draw.polygon(ziel, fuellung, punkte)

@@ -692,7 +692,8 @@ class GoapHirn(BotHirn):
                     trupp_igel=False, trupp_engstelle=False, funk_sendet=False,
                     funk_fast_durch=False)
         rauch = self._rauch_platz() >= 0
-        if t is None or len(t.lebende()) < 2 or k not in t.lebende():
+        leute = t.lebende() if t is not None else None
+        if t is None or len(leute) < 2 or k not in leute:
             leer["rauch_da"] = rauch
             return leer
         fuehrer = t.fuehrt(k)
@@ -787,7 +788,7 @@ class GoapHirn(BotHirn):
         # Wird im Trupp einer geborgen und er ist nicht der Retter, bleibt er
         # in Deckung (seit 0.34.53, gemeldet: "alle Bots haben ihre Deckung
         # verlassen, um zu bergen") - auch wenn er selbst keinen Liegenden kennt.
-        halten = (t is not None and t.bergung is not None and len(t.lebende()) > 1
+        halten = (t is not None and t.bergung is not None and t.mehrere()
                   and k.nummer not in t.bergung["retter"])
         if x is None:
             return dict(bei_kamerad=False, kamerad_gedeckt=False, ich_berge=False,
@@ -816,15 +817,18 @@ class GoapHirn(BotHirn):
         fast_fertig = hilft_schon and x.revive_stand >= K.VERWUNDET["zu_ende"]
         if fast_fertig:
             sicher = True
+        # Die Kameraden einmal fuer alle drei Fragen (seit 0.34.75) - dazwischen
+        # aendert sich nichts.
+        kameraden = self.kameraden()
         laeuft = any(getattr(m, "zieht", None) == x.nummer or getattr(m, "hilft", None) == x.nummer
-                     for m in self.kameraden() + [k])
+                     for m in kameraden + [k])
         # Ziehen kann nur einer (seit 0.34.50): zogen beide, hing der zweite
         # bei kamerad_ziehen fest, statt ihnen Deckung zu geben.
-        anderer = any(getattr(m, "zieht", None) == x.nummer for m in self.kameraden())
+        anderer = any(getattr(m, "zieht", None) == x.nummer for m in kameraden)
         # Hilft ihm schon einer auf, zieht ihn keiner weg (seit 0.34.55) -
         # sonst zog der eine ihn dem anderen unter den Haenden fort, und
         # dessen Fortschritt verfiel. Mithelfen geht (doppelt so schnell).
-        anderer_hilft = any(getattr(m, "hilft", None) == x.nummer for m in self.kameraden())
+        anderer_hilft = any(getattr(m, "hilft", None) == x.nummer for m in kameraden)
         return dict(bei_kamerad=x.ebene == k.ebene
                     and k.pos.distance_to(x.pos) <= K.REVIVE["reichweite"]
                     + (K.REVIVE["halten"] - 1 if dran else -4),
@@ -900,7 +904,7 @@ class GoapHirn(BotHirn):
 
     def _stellung(self):
         t = self.trupp
-        if t is None or len(t.lebende()) < 2:
+        if t is None or not t.mehrere():
             return None
         return t.stellung(self.k)
 
@@ -1175,7 +1179,8 @@ class GoapHirn(BotHirn):
         und zu sagt einer, was er sieht - oder dass nichts ist."""
         t = self.trupp
         k = self.k
-        if t is None or len(t.lebende()) < 2 or k not in t.lebende():
+        leute = t.lebende() if t is not None else None
+        if t is None or len(leute) < 2 or k not in leute:
             return super()._unterwegs(dt, ein)
         self.stoss_rest = 0.0
         if k is t.fuehrer:
@@ -1354,7 +1359,7 @@ class GoapHirn(BotHirn):
         moeglichen Zielen das, wo sein Trupp am laengsten nicht war - nicht
         immer wieder dieselben Ecken."""
         t = self.trupp
-        if t is None or t.fuehrer is not self.k or len(t.lebende()) < 2:
+        if t is None or t.fuehrer is not self.k or not t.mehrere():
             return super()._streifziel()
         z = K.TRUPP["besuch_zelle"] * K.TILE
         jetzt = self.g.welt.zeit
@@ -1417,7 +1422,7 @@ class GoapHirn(BotHirn):
         a = self.gehirn.aktion
         will, punkt, feuern, zielt = self._handeln(dt, ein)
         will, punkt, feuern = self._umschauen(dt, will, punkt, feuern)
-        if (self.k.waffe_daten.get("rauch") and self.wurf_phase <= 0.0
+        if (self.k._waffe_lesen().get("rauch") and self.wurf_phase <= 0.0
                 and (a is None or a.tut != "rauch")):
             # Die Rauchgranate in der Hand, aber keine Rauchaktion: zurueck
             # zur Waffe, und nicht damit "schiessen" - sonst flog der Rauch

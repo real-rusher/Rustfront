@@ -363,10 +363,18 @@ class Wegenetz:
         schritte = int(laenge / (K.TILE * 0.5)) + 1
         b, h = self.breite[ebene], self.hoehe[ebene]
         frei = self.begehbar[ebene]
+        # Mit Zahlen statt Vektoren (seit 0.34.75): dieselben Rechenschritte
+        # (von + d * t, dann +/- quer), Komponente fuer Komponente - nur ohne
+        # je Punkt drei neue Vektoren. Die Zombies fragen das jeden Schritt.
+        T = K.TILE
+        vx, vy = von[0], von[1]
+        dx, dy = d.x, d.y
+        qx, qy = quer.x, quer.y
         for i in range(1, schritte + 1):
-            p = von + d * (i / schritte)
-            for q in (p, p + quer, p - quer):
-                tx, ty = int(q.x // K.TILE), int(q.y // K.TILE)
+            t = i / schritte
+            px, py = vx + dx * t, vy + dy * t
+            for x, y in ((px, py), (px + qx, py + qy), (px - qx, py - qy)):
+                tx, ty = int(x // T), int(y // T)
                 if not (0 <= tx < b and 0 <= ty < h) or not frei[ty * b + tx]:
                     return False
         return True

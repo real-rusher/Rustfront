@@ -55,6 +55,22 @@ class _Namen(dict):
         return 0
 
 
+class _BereiteNamen(_Namen):
+    """Namen samt min, max, abs, fertig fuer Ausdruck.wert (seit 0.34.75).
+    Ein Denkschritt wertet mit denselben Namen dutzende Ausdruecke aus;
+    vorher wurde fuer jeden die ganze Tabelle kopiert. Ein Ausdruck kann
+    nichts hineinschreiben (keine Zuweisung erlaubt), darum genuegt eine."""
+
+
+def _bereit(namen: dict) -> "_BereiteNamen":
+    n = _BereiteNamen(namen)
+    n.update(_FUNKTIONEN)
+    return n
+
+
+_GLOBAL = {"__builtins__": {}}
+
+
 class Ausdruck:
     """Eine kleine Rechnung aus den Daten, etwa
     `80 * magazin_leer * munition_da` oder `3 - mut`.
@@ -83,10 +99,12 @@ class Ausdruck:
         self._code = compile(baum, "<wesen>", "eval")
 
     def wert(self, namen: dict) -> float:
-        n = _Namen(namen)
-        n.update(_FUNKTIONEN)
+        if type(namen) is _BereiteNamen:
+            n = namen
+        else:
+            n = _bereit(namen)
         try:
-            return float(eval(self._code, {"__builtins__": {}}, n))
+            return float(eval(self._code, _GLOBAL, n))
         except ZeroDivisionError:
             return 0.0
 
@@ -307,7 +325,7 @@ class Gehirn:
         self._jetzt = jetzt
         self.fakten = dict(fakten)
         self.werte = dict(werte or {})
-        namen = self._namen()
+        namen = _bereit(self._namen())
         self.gewechselt = False
         self.dringlichkeiten = {z.name: z.dringlich.wert(namen) for z in self.ziele}
         self.raenge = {z.name: z.rang.wert(namen) for z in self.ziele}

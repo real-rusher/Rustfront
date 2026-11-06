@@ -52,6 +52,7 @@ einer Kante, er bleibt davor stehen.
 from __future__ import annotations
 
 import math
+import struct
 
 import pygame
 
@@ -105,6 +106,7 @@ class Buggy(Wesen):
     # entities.C4Ladung). Er selbst nimmt keinen Schaden davon, wer drin
     # sitzt, schon.
     c4_haftet = True
+    _passt_merk = None        # siehe passt: nur innerhalb von schritt
     # Seit 0.34.65: ein Fahrzeug fragt bei jedem Treffer nach der Art
     # (K.PANZERUNG, entities.schaden_an).
     ist_fahrzeug = True
@@ -397,6 +399,20 @@ class Buggy(Wesen):
         w = self.welt
         if w is None:
             return True
+        # Innerhalb des eigenen Schritts (seit 0.34.75): dieselbe Frage
+        # zweimal - Drehen um null und Fahren um null, wenn er steht - hat
+        # dieselbe Antwort, dazwischen bewegt sich in der Welt nichts.
+        merk = self._passt_merk
+        if merk is not None:
+            schluessel = (pos.x, pos.y, self.winkel if winkel is None else winkel)
+            if merk[0] == schluessel:
+                return merk[1]
+            antwort = self._passt_rechnen(w, pos, winkel)
+            self._passt_merk = (schluessel, antwort)
+            return antwort
+        return self._passt_rechnen(w, pos, winkel)
+
+    def _passt_rechnen(self, w, pos, winkel) -> bool:
         r = self.radius
         kreise = self.kreise(pos, winkel)
         for c in kreise:
@@ -451,8 +467,12 @@ class Buggy(Wesen):
             hoechst = self.werte["hoechst"] * K.NAEGEL["platt_tempo"]
             if self.geschw.length() > hoechst:
                 self.geschw.scale_to_length(hoechst)
-        self._drehen(dt)
-        self._fahren(dt)
+        self._passt_merk = ((), False)          # ab hier merken (passt)
+        try:
+            self._drehen(dt)
+            self._fahren(dt)
+        finally:
+            self._passt_merk = None
         self.tempo.update(self.geschw)
         self._beiseite_schieben()
         self._staub(dt)
@@ -493,7 +513,31 @@ class Buggy(Wesen):
         gas = staerke if abs(ab) < f["stick_wenden"] else staerke * 0.5
         return gas, lenk
 
+    # Merkzelle fuer _physik (seit 0.34.75): (Eingaben als Bytes, Werte,
+    # Ergebnis). Ein stehender Wagen rechnet jeden Schritt dasselbe.
+    _physik_merk = None
+    _PHYSIK_FORM = struct.Struct("<8d?")
+
     def _physik(self, dt: float, gas: float, lenk: float, handbremse: bool) -> None:
+        """_physik_rechnen, gemerkt. Die Rechnung haengt nur von Tempo,
+        Gier, Lenkwinkel, Winkel, den Werten und den Eingaben ab; sind die
+        bitgenau (auch das Vorzeichen einer Null) wie beim letzten Schritt,
+        kommt genau dasselbe heraus - ohne die ganze Rechnung."""
+        g = self.geschw
+        schluessel = self._PHYSIK_FORM.pack(g.x, g.y, self.gier, self.lenkwinkel, self.winkel,
+                                            dt, gas, lenk, bool(handbremse))
+        merk = self._physik_merk
+        f = self.werte
+        if merk is not None and merk[0] == schluessel and merk[1] is f:
+            gx, gy, self.gier, self.lenkwinkel, self.rutschen = merk[2]
+            g.update(gx, gy)
+            return
+        self._physik_rechnen(dt, gas, lenk, handbremse)
+        g = self.geschw
+        self._physik_merk = (schluessel, f, (g.x, g.y, self.gier, self.lenkwinkel,
+                                             self.rutschen))
+
+    def _physik_rechnen(self, dt: float, gas: float, lenk: float, handbremse: bool) -> None:
         """Ein Schritt Einspurmodell: Kraefte an Vorder- und Hinterachse,
         daraus Beschleunigung und Drehung. Je Masse gerechnet.
 
@@ -982,14 +1026,42 @@ class Schwer(Buggy):
                      for s in (-1, 0, 1))
 
     def _kacheln_frei(self, pos, winkel) -> bool:
-        """Mauern, Kisten, Faesser und Loecher (als Wand) gegen das Rechteck."""
+        """Mauern, Kisten, Faesser und Loecher (als Wand) gegen das Rechteck.
+
+        Gemerkt (seit 0.34.75): ein stehender Panzer fragt jeden Schritt
+        dasselbe. Die Antwort haengt nur an Ort und Winkel (bitgenau) und
+        an den Kachelnummern im Rechteck darum - die werden jedesmal
+        verglichen, eine zerstoerte oder gebaute Kachel faellt also auf."""
         w = self.welt
         e = w.ebene(self.ebene)
+        schluessel = struct.pack("<3d", pos.x, pos.y, winkel)
+        merk = self.__dict__.get("_kacheln_merk")
+        if merk is not None and merk[0] == schluessel and merk[1] is e:
+            x0, x1, y0, y1 = merk[2]
+            b = e.breite
+            kacheln = e.kacheln
+            if [kacheln[ty * b + x0: ty * b + x1 + 1] for ty in range(y0, y1 + 1)] == merk[3]:
+                return merk[4]
+        antwort = self._kacheln_frei_rechnen(e, pos, winkel)
+        bereich = self.__dict__.pop("_kacheln_bereich", None)
+        if bereich is not None:
+            x0, x1, y0, y1 = bereich
+            if 0 <= x0 and x1 < e.breite and 0 <= y0 and y1 < e.hoehe:
+                b = e.breite
+                kacheln = e.kacheln
+                self._kacheln_merk = (schluessel, e, bereich,
+                                      [kacheln[ty * b + x0: ty * b + x1 + 1]
+                                       for ty in range(y0, y1 + 1)], antwort)
+        return antwort
+
+    def _kacheln_frei_rechnen(self, e, pos, winkel) -> bool:
+        w = self.welt
         ecken = self.ecken(pos, winkel)
         x0 = int(min(c.x for c in ecken) // K.TILE)
         x1 = int(max(c.x for c in ecken) // K.TILE)
         y0 = int(min(c.y for c in ecken) // K.TILE)
         y1 = int(max(c.y for c in ecken) // K.TILE)
+        self._kacheln_bereich = (x0, x1, y0, y1)
         for ty in range(y0, y1 + 1):
             for tx in range(x0, x1 + 1):
                 kachel = e.kachel(tx, ty)
@@ -1011,13 +1083,11 @@ class Schwer(Buggy):
                     return False
         return True
 
-    def passt(self, pos, winkel=None) -> bool:
+    def _passt_rechnen(self, w, pos, winkel) -> bool:
         """Kann er hier stehen? Mauern, Loecher, andere Wagen und alles
         Unverschiebbare (Zielpuppe, Koloss) halten ihn auf. Menschen und
-        gewoehnliche Gegner nicht - die rammt er (`_beiseite_schieben`)."""
-        w = self.welt
-        if w is None:
-            return True
+        gewoehnliche Gegner nicht - die rammt er (`_beiseite_schieben`).
+        Gefragt wird ueber Buggy.passt (seit 0.34.75, mit Merkzelle)."""
         winkel = self.winkel if winkel is None else winkel
         if not self._kacheln_frei(pos, winkel):
             return False

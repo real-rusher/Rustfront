@@ -35,6 +35,149 @@ RND = random.Random(4711)
 # Bild ragt, kostet wenig. Gemerkt werden hoechstens BODEN_MERKEN Bloecke
 # (je 256 KB) - genug fuer alle Ebenen ganz herausgezoomt.
 BODEN_STUECK = 8
+
+
+def _erstes(eintrag):
+    return eintrag[0]
+
+
+def _viele_blits(ziel, auftraege) -> None:
+    """Viele Bilder nacheinander auf `ziel` - wie einzelne blit-Aufrufe, nur
+    mit einem einzigen Aufruf (pygame-ce fblits, seit 0.34.75). Ohne fblits
+    (aelteres pygame) einzeln."""
+    fb = getattr(ziel, "fblits", None)
+    if fb is not None:
+        fb(auftraege)
+    else:
+        for bild, ort in auftraege:
+            ziel.blit(bild, ort)
+
+
+def _deckend_wenn_moeglich(flaeche):
+    """Eine Flaeche, deren Pixel alle Alpha 255 haben, ohne Alphakanal
+    (seit 0.34.75). Beim Blit wird ein ganz deckendes Pixel genau kopiert -
+    das Bild bleibt dasselbe, nur ohne Mischen je Pixel. Sonst (oder ohne
+    Fenster) die Flaeche wie sie ist."""
+    try:
+        if not flaeche.get_flags() & pygame.SRCALPHA:
+            return flaeche
+        breite, hoehe = flaeche.get_size()
+        if pygame.mask.from_surface(flaeche, 254).count() == breite * hoehe:
+            return flaeche.convert()
+    except pygame.error:
+        pass
+    return flaeche
+
+
+_SCHLUESSEL = ((255, 0, 255), (1, 254, 3), (254, 1, 253), (3, 2, 251))
+
+
+def _mit_farbschluessel(flaeche):
+    """Eine Flaeche, deren Pixel nur ganz deckend oder ganz durchsichtig
+    sind, als deckende Flaeche mit Farbschluessel und RLE (seit 0.34.75).
+    Auf ein deckendes Ziel geblittet ergibt sie genau dasselbe Bild:
+    deckende Pixel werden kopiert, die Loecher bleiben, wie sie sind - nur
+    rund dreimal so schnell wie Mischen je Pixel. Gibt (Flaeche, True)
+    zurueck, oder (flaeche, False), wenn es nicht genau ginge."""
+    breite, hoehe = flaeche.get_size()
+    ganz = pygame.mask.from_surface(flaeche, 254).count()
+    if pygame.mask.from_surface(flaeche, 0).count() != ganz:
+        return flaeche, False                 # halb durchsichtige Pixel
+    loecher = breite * hoehe - ganz
+    for farbe in _SCHLUESSEL:
+        neu = pygame.Surface((breite, hoehe)).convert()
+        neu.fill(farbe)
+        neu.blit(flaeche, (0, 0))
+        # Nur die Loecher duerfen die Schluesselfarbe haben.
+        gleich = pygame.mask.from_threshold(neu, farbe, (1, 1, 1, 255)).count()
+        if gleich == loecher:
+            neu.set_colorkey(farbe, pygame.RLEACCEL)
+            return neu, True
+    return flaeche, False
+
+
+_STREIFEN: dict = {}
+
+
+def _rand_blit(ziel, bild) -> None:
+    """`bild` bei (0, 0) auf `ziel` - nur seine Randstreifen, wenn innen ein
+    Rechteck ganz durchsichtig ist (die Vignette, seit 0.34.75). Ein Pixel
+    mit Alpha 0 laesst ein deckendes Ziel genau, wie es war; auf ein Ziel
+    mit Alphakanal darum immer ganz."""
+    if ziel.get_flags() & pygame.SRCALPHA:
+        ziel.blit(bild, (0, 0))
+        return
+    hit = _STREIFEN.get(id(bild))
+    if hit is None or hit[0] is not bild:
+        hit = (bild, _rand_streifen(bild))
+        if len(_STREIFEN) > 16:
+            _STREIFEN.clear()
+        _STREIFEN[id(bild)] = hit
+    streifen = hit[1]
+    if streifen is None:
+        ziel.blit(bild, (0, 0))
+        return
+    for r in streifen:
+        ziel.blit(bild, r.topleft, r)
+
+
+def _rand_streifen(bild):
+    """Die vier Streifen um das groesste durchsichtige Rechteck in der
+    Mitte, oder None, wenn es keines gibt (oder es nicht sicher ist)."""
+    try:
+        w, h = bild.get_size()
+        m = pygame.mask.from_surface(bild, 0)        # gesetzt: Alpha > 0
+    except (pygame.error, ValueError):
+        return None
+    mx, my = w // 2, h // 2
+    if m.get_at((mx, my)):
+        return None
+    x0 = mx
+    while x0 > 0 and not m.get_at((x0 - 1, my)):
+        x0 -= 1
+    x1 = mx
+    while x1 < w - 1 and not m.get_at((x1 + 1, my)):
+        x1 += 1
+    y0 = my
+    while y0 > 0 and not m.get_at((mx, y0 - 1)):
+        y0 -= 1
+    y1 = my
+    while y1 < h - 1 and not m.get_at((mx, y1 + 1)):
+        y1 += 1
+    innen = pygame.Rect(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+    voll = pygame.mask.Mask(innen.size, fill=True)
+    if m.overlap_area(voll, innen.topleft) != 0:
+        return None
+    raus = [pygame.Rect(0, 0, w, innen.top), pygame.Rect(0, innen.bottom, w, h - innen.bottom),
+            pygame.Rect(0, innen.top, innen.left, innen.height),
+            pygame.Rect(innen.right, innen.top, w - innen.right, innen.height)]
+    return [r for r in raus if r.width > 0 and r.height > 0]
+
+
+_NULLEN: dict = {}
+
+
+def _ganz_leer(flaeche) -> bool:
+    """Sind alle Bytes der Flaeche null - nach fill((0, 0, 0, 0)) nichts
+    mehr darauf gezeichnet? Ein Vergleich der rohen Bytes, schneller als
+    eine Maske. Im Zweifel (Rand im Speicher, Fehler) False."""
+    try:
+        roh = flaeche.get_buffer().raw
+    except (pygame.error, ValueError, AttributeError):
+        return False
+    null = _NULLEN.get(len(roh))
+    if null is None:
+        if len(_NULLEN) > 8:
+            _NULLEN.clear()
+        null = _NULLEN[len(roh)] = bytes(len(roh))
+    return roh == null
+
+
+def _zeile_spalte(eintrag):
+    """Sortierschluessel fuer feste Kacheln: Zeile, dann Spalte."""
+    return eintrag[0], eintrag[1]
+
+
 BODEN_MERKEN = 320
 
 
@@ -388,7 +531,12 @@ class Renderer:
 
         `aufschieben`: Waende und Barrikaden noch nicht zeichnen, sondern
         merken - `stehende_nachholen` zeichnet sie nach den Figuren, damit
-        eine Mauer verdeckt, wer hinter ihr steht (seit 0.34.4)."""
+        eine Mauer verdeckt, wer hinter ihr steht (seit 0.34.4).
+
+        Ist `ziel` eben ganz durchsichtig geleert worden (die Tiefenflaeche,
+        `_ziel_frisch`, seit 0.34.75), kommen die Bodenstuecke zuerst und
+        nebeneinander, also jedes auf leeren Grund - dann duerfen sie als
+        Flaeche mit Farbschluessel kommen wie auf das Bild selbst."""
         e = welt.ebene(index)
         satz = self.SAETZE.get(getattr(welt, "satz", ""), {})
         boden_namen = satz.get("boden", self._boden_namen)
@@ -404,18 +552,29 @@ class Renderer:
         # Nachschlagungen, gemessen ein Viertel des ganzen Zeichnens.
         C = BODEN_STUECK
         fest = []
+        self._boden_da = False
+        # Auf ein deckendes Ziel (das Bild selbst, nicht eine Tiefenflaeche)
+        # darf ein Bodenstueck mit Loechern als Flaeche mit Farbschluessel
+        # kommen (_mit_farbschluessel).
+        deckend = (getattr(self, "_ziel_frisch", None) is ziel
+                   or not ziel.get_flags() & pygame.SRCALPHA)
         for cy in range(t0y // C, t1y // C + 1):
             for cx in range(t0x // C, t1x // C + 1):
                 stueck, stueck_fest = self._bodenstueck(welt, e, satz, boden_namen,
-                                                        cx, cy, dunkel)
+                                                        cx, cy, dunkel, deckend)
                 if stueck is not None:
+                    self._boden_da = True
                     ziel.blit(stueck, (cx * C * K.TILE - ecke.x, cy * C * K.TILE - ecke.y))
-                for (tx, ty, name_f) in stueck_fest:
+                for (tx, ty, name_f, info) in stueck_fest:
                     if t0x <= tx <= t1x and t0y <= ty <= t1y:
-                        fest.append((ty, tx, name_f))
+                        fest.append((ty, tx, name_f, info))
         # In der Reihenfolge wie vorher Kachel fuer Kachel: Zeile um Zeile.
-        fest.sort()
-        fest = [(tx, ty, name_f, ty * K.TILE - ecke.y) for (ty, tx, name_f) in fest]
+        # Sortiert nur nach Zeile und Spalte - die Angaben (Tupel mit dicts)
+        # lassen sich nicht vergleichen, und zwei Eintraege mit derselben
+        # Kachel gibt es nicht.
+        fest.sort(key=_zeile_spalte)
+        fest = [(tx, ty, name_f, ty * K.TILE - ecke.y, info)
+                for (ty, tx, name_f, info) in fest]
 
         # Fussspuren liegen auf der Schneeschicht und altern mit der Welt.
         # Ein fester Weltzeitstempel sorgt dafuer, dass Kamerawechsel und
@@ -438,16 +597,20 @@ class Renderer:
         sch = self._wandschatten
         if dunkel is not None:
             sch = self.dunkel(sch, dunkel)
-        for (tx, ty, name, sy) in fest:
-            st = self._stehend(name, K.KACHELN[e.kachel(tx, ty)])
-            if st is not None and st["rahmen"] != (0, 0, K.TILE, K.TILE):
+        # Alle Schatten in einem Aufruf (seit 0.34.75), in derselben Folge.
+        T, ex = K.TILE, ecke.x
+        schatten = []
+        for (tx, ty, name, sy, info) in fest:
+            st = info[0]
+            if st is not None and not info[1]:            # nicht voll (_stehend_fest)
                 # Ein Kaktus, ein Fass, eine Kiste: der Schatten hat ihre Form.
                 # Bis 0.34.18 warf jedes Hindernis den Schatten der ganzen
                 # Kachel - ein dunkles Quadrat um den Kaktus, das aussah, als
                 # stuende ein Block darunter (gemeldet).
-                ziel.blit(self._kleinschatten(st, dunkel), (tx * K.TILE - ecke.x, sy))
+                schatten.append((self._kleinschatten(st, dunkel), (tx * T - ex, sy)))
                 continue
-            ziel.blit(sch, (tx * K.TILE - ecke.x, sy))
+            schatten.append((sch, (tx * T - ex, sy)))
+        _viele_blits(ziel, schatten)
         auge_h = K.PERSPEKTIVE["brennweite"] if auge is None else auge
         self._augen[index] = (ecke.x + zw / 2.0, ecke.y + zh / 2.0, auge_h)
         auftrag = (ziel, e, satz, fest, ecke, dunkel, auge_h)
@@ -456,7 +619,8 @@ class Renderer:
         else:
             self._stehende_zeichnen(*auftrag)
 
-    def _bodenstueck(self, welt, e, satz, boden_namen, cx: int, cy: int, dunkel):
+    def _bodenstueck(self, welt, e, satz, boden_namen, cx: int, cy: int, dunkel,
+                     deckend: bool = False):
         """Ein Block Boden (BODEN_STUECK mal BODEN_STUECK Kacheln), fertig
         gezeichnet: (Flaeche oder None, [(tx, ty, Bildname) fester Kacheln]).
 
@@ -473,15 +637,20 @@ class Renderer:
         x1, y1 = min(b, x0 + C), min(h, y0 + C)
         kacheln = e.kacheln
         ax0, ax1 = max(0, x0 - 1), min(b, x1 + 1)
-        abdruck = b"".join(bytes(kacheln[ty * b + ax0: ty * b + ax1])
-                           for ty in range(max(0, y0 - 1), min(h, y1 + 1)))
+        # Der Abdruck als Liste der Zeilenstuecke (seit 0.34.75): dieselbe
+        # Gleichheit wie vorher mit bytes, aber ohne jede Kachelnummer erst
+        # umzuwandeln - das kostete je Bild mehr als der Vergleich.
+        abdruck = [kacheln[ty * b + ax0: ty * b + ax1]
+                   for ty in range(max(0, y0 - 1), min(h, y1 + 1))]
         schluessel = (id(e), cx, cy, dunkel, getattr(welt, "satz", ""))
         hit = self._boden_stuecke.get(schluessel)
-        if hit is not None and hit[3] is e and hit[0] == abdruck:
+        if (hit is not None and hit[3] is e and hit[0] == abdruck
+                and (deckend or not hit[4])):
             return hit[1], hit[2]
         T = K.TILE
         bild = self.bilder.bild
         flaeche = None
+        mit_schluessel = False
         fest = []
         for ty in range(y0, y1):
             zeile = ty * b
@@ -497,8 +666,9 @@ class Renderer:
                         name_f = bilder[e.variante[zeile + tx] % len(bilder)]
                     else:
                         name_f = satz.get(daten["bild"], daten["bild"])
-                    fest.append((tx, ty, name_f))
                     st = self._stehend(name_f, daten)
+                    fest.append((tx, ty, name_f,
+                                 self._stehend_fest(e, satz, tx, ty, name_f, st)))
                     if st is None or st["rahmen"] == (0, 0, T, T):
                         continue
                     # Ein Fass oder eine Kiste steht auf Boden: der ist
@@ -522,12 +692,55 @@ class Renderer:
                 flaeche.fill((dunkel, dunkel, dunkel), special_flags=pygame.BLEND_RGB_MULT)
             try:
                 flaeche = flaeche.convert_alpha()
+                # Ganz deckend (seit 0.34.75): dann ohne Alphakanal. Ein
+                # Pixel mit Alpha 255 wird beim Blit genau kopiert - dasselbe
+                # Bild, aber ohne Mischen je Pixel, rund dreimal so schnell.
+                flaeche = _deckend_wenn_moeglich(flaeche)
+                if deckend and flaeche.get_flags() & pygame.SRCALPHA:
+                    flaeche, mit_schluessel = _mit_farbschluessel(flaeche)
             except pygame.error:
                 pass                          # ohne Fenster (Tests): so lassen
         if len(self._boden_stuecke) > BODEN_MERKEN:
             self._boden_stuecke.clear()
-        self._boden_stuecke[schluessel] = (abdruck, flaeche, fest, e)
+        # Der letzte Eintrag: ob das Stueck einen Farbschluessel traegt - dann
+        # taugt es nur fuer ein deckendes Ziel und wird sonst neu gebaut.
+        self._boden_stuecke[schluessel] = (abdruck, flaeche, fest, e, mit_schluessel)
         return flaeche, fest
+
+    def _stehend_fest(self, e, satz, tx: int, ty: int, name: str, st):
+        """Was an einer stehenden Kachel nicht von der Kamera abhaengt (seit
+        0.34.75): ihre Masse, ob sie die Kachel ganz fuellt, welche Seiten
+        ein gleich hoher Nachbar verdeckt, und ihre Seitenfarbe. Gerechnet
+        einmal je Bodenstueck - das wird neu gebaut, sobald sich eine Kachel
+        darin oder am Rand aendert, und der Rand enthaelt alle Nachbarn.
+        Vorher je Bild und Kachel vier Nachbarfragen (rund 450 je Bild).
+
+        Dieselbe Rechnung wie `nachbar_deckt` in `_stehende_zeichnen`: ob der
+        Nachbar dort ueber das Kachelbild oder ueber den Satz nachgeschlagen
+        wird, ergibt fuer jede Kachel dieselben Masse (geprueft)."""
+        if st is None:
+            return (None, False, True, True, True, True, None)
+        T = K.TILE
+        voll = (0, 0, T, T)
+        voll_k = st["rahmen"] == voll
+        grund = self._seitenfarbe(name)
+        # Dahinter die Masse aus K.STEHEN, fertig ausgepackt: Rahmen, Hoehe,
+        # rund, und ob alle vier Seiten zu sind ("zu").
+        masse = tuple(st["rahmen"]) + (st["hoehe"], st["form"] == "rund")
+        if not voll_k:
+            return (st, False, True, True, True, True, grund) + masse + (False,)
+
+        def deckt(nx, ny):
+            daten = K.KACHELN[e.kachel(nx, ny)]
+            if not daten["fest"]:
+                return False
+            n = self._stehend(satz.get(daten["bild"], daten["bild"]), daten)
+            if n is None:
+                return True
+            return n["rahmen"] == voll and n["hoehe"] >= st["hoehe"]
+        offen = (not deckt(tx, ty - 1), not deckt(tx, ty + 1),
+                 not deckt(tx - 1, ty), not deckt(tx + 1, ty))
+        return (st, True) + offen + (grund,) + masse + (not any(offen),)
 
     def _kleinschatten(self, st: dict, dunkel):
         """Der Schlagschatten eines Hindernisses in seiner eigenen Form
@@ -650,10 +863,42 @@ class Renderer:
         # Kugel knapp hinter der Mauer durch die Luecke zwischen zwei Proben.
         schritte = int(weit * bis) + 1
         e = welt.ebene(index)
+        # Dieselbe Abtastung wie mit _stehend_an, nur ohne die Nachschlagungen
+        # je Probe (seit 0.34.75): Kacheln, Satz und die Masse je Kachelart
+        # einmal holen. Ein Geschoss fragt das in jedem Bild.
+        T = K.TILE
+        satz = self.SAETZE.get(getattr(welt, "satz", ""), {})
+        kacheln, breite, hoehe_k = e.kacheln, e.breite, e.hoehe
+        tabelle = K.KACHELN
+        leer = K.LEER
+        je_art = {}
+        px, py = pos[0], pos[1]
         for i in range(1, schritte + 1):
             t = bis * i / schritte
-            st = self._stehend_an(welt, e, pos[0] + dx * t, pos[1] + dy * t)
-            if st is not None and st["hoehe"] > hoehe + (ah - hoehe) * t:
+            x, y = px + dx * t, py + dy * t
+            tx, ty = int(x // T), int(y // T)
+            if 0 <= tx < breite and 0 <= ty < hoehe_k:
+                kachel = kacheln[ty * breite + tx]
+            else:
+                kachel = leer
+            if kachel in je_art:
+                st = je_art[kachel]
+            else:
+                daten = tabelle[kachel]
+                st = (self._stehend(satz.get(daten["bild"], daten["bild"]), daten)
+                      if daten["fest"] else None)
+                je_art[kachel] = st
+            if st is None:
+                continue
+            rx, ry, rb, rh = st["rahmen"]
+            lx, ly = x - tx * T - rx, y - ty * T - ry
+            if not (0 <= lx < rb and 0 <= ly < rh):
+                continue
+            if st["form"] == "rund":
+                mx, my = rb / 2.0, rh / 2.0
+                if (lx - mx) ** 2 + (ly - my) ** 2 > mx * mx:
+                    continue
+            if st["hoehe"] > hoehe + (ah - hoehe) * t:
                 return True
         return False
 
@@ -719,6 +964,7 @@ class Renderer:
             hit = pygame.transform.scale(quelle, (max(1, breite), max(1, hoehe)))
             if dunkel is not None:
                 hit = self.dunkel(hit, dunkel)
+            hit = _deckend_wenn_moeglich(hit)
             if len(self._oberseiten) > 300:
                 self._oberseiten.clear()
             self._oberseiten[schluessel] = hit
@@ -760,81 +1006,99 @@ class Renderer:
                 toene[schluessel] = farbe
             return farbe
 
-        stehend_bei = {}
-        for (tx, ty, name, sy) in fest:
-            stehend_bei[(tx, ty)] = self._stehend(name, K.KACHELN[e.kachel(tx, ty)])
-
-        def nachbar_deckt(tx, ty, st):
-            # Eine Seite gibt es nicht, wo eine gleich hohe volle Kachel
-            # anschliesst - eine lange Mauer ist eine Mauer, nicht zwanzig.
-            n = stehend_bei.get((tx, ty))
-            if n is None:
-                daten = K.KACHELN[e.kachel(tx, ty)]
-                if not daten["fest"]:
-                    return False
-                n = self._stehend(satz.get(daten["bild"], daten["bild"]), daten)
-                if n is None:
-                    return True                 # flache feste Kachel: ohne Seite
-            return n["rahmen"] == voll and n["hoehe"] >= st["hoehe"]
-
+        # Welche Seiten ein Nachbar verdeckt, steht seit 0.34.75 fertig in
+        # `info` (Renderer._stehend_fest, je Bodenstueck gerechnet): eine
+        # Seite gibt es nicht, wo eine gleich hohe volle Kachel anschliesst -
+        # eine lange Mauer ist eine Mauer, nicht zwanzig.
+        # Die Schleife ist auf Tempo geschrieben (seit 0.34.75): sie laeuft
+        # jedes Bild fuer jede sichtbare Mauer. Dieselbe Rechnung wie vorher,
+        # nur ohne Hilfsfunktionen, Woerterbuecher und doppelte Wege.
+        ex = ecke.x
         seiten, oben, flach, kanten = [], [], [], []
-        for (tx, ty, name, sy) in fest:
-            st = stehend_bei[(tx, ty)]
+        anhaengen_oben = oben.append
+        oberseiten = self._oberseiten
+
+        def oben_dazu(weg, name, x, y, x1, y1):
+            # Mit den schon gerundeten Ecken der Oberseite.
+            b, h = x1 - x, y1 - y
+            bild_o = oberseiten.get((name, b, h, dunkel))
+            if bild_o is None:
+                bild_o = self._oberseite(name, b, h, dunkel)
+            anhaengen_oben((weg, bild_o, (x, y)))
+        faktoren = {}
+        achse_x, achse_y = {}, {}
+        l_n, l_s, l_w, l_o = licht[(0, -1)], licht[(0, 1)], licht[(-1, 0)], licht[(1, 0)]
+        for (tx, ty, name, sy, info) in fest:
+            st = info[0]
             if st is None:
                 flach.append((tx, ty, name, sy))
                 continue
-            rx, ry, rb, rh = st["rahmen"]
-            x0, y0 = tx * T - ecke.x + rx, sy + ry
-            x1, y1 = x0 + rb, y0 + rh
-            k = auge / max(1.0, auge - st["hoehe"])
-            ox0, oy0 = cx + (x0 - cx) * k, cy + (y0 - cy) * k
-            ox1, oy1 = cx + (x1 - cx) * k, cy + (y1 - cy) * k
-            weg = ((x0 + x1) / 2 - cx) ** 2 + ((y0 + y1) / 2 - cy) ** 2
-            grund = self._seitenfarbe(name)
-            if st["form"] == "rund":
+            (st, voll_k, offen_n, offen_s, offen_w, offen_o, grund,
+             rx, ry, rb, rh, hoehe, rund, zu) = info
+            x0, y0 = tx * T - ex + rx, sy + ry
+            # Die Perspektive je Spalte und je Zeile nur einmal im Bild
+            # (seit 0.34.75): sie haengt an x0 (bzw. y0), der Breite und der
+            # Hoehe der Mauer - dieselben Formeln, nur nicht fuer jede Kachel
+            # einer Spalte noch einmal.
+            ax = achse_x.get((x0, rb, hoehe))
+            if ax is None:
+                k = faktoren.get(hoehe)
+                if k is None:
+                    k = faktoren[hoehe] = auge / max(1.0, auge - hoehe)
+                x1 = x0 + rb
+                ox0, ox1 = cx + (x0 - cx) * k, cx + (x1 - cx) * k
+                ax = achse_x[(x0, rb, hoehe)] = (x1, ox0, ox1, round(ox0), round(ox1),
+                                                 (x0 + x1) / 2 - cx)
+            ay = achse_y.get((y0, rh, hoehe))
+            if ay is None:
+                k = faktoren.get(hoehe)
+                if k is None:
+                    k = faktoren[hoehe] = auge / max(1.0, auge - hoehe)
+                y1 = y0 + rh
+                oy0, oy1 = cy + (y0 - cy) * k, cy + (y1 - cy) * k
+                ay = achse_y[(y0, rh, hoehe)] = (y1, oy0, oy1, round(oy0), round(oy1),
+                                                 (y0 + y1) / 2 - cy)
+            x1, ox0, ox1, rx_, rx1_, mx = ax
+            y1, oy0, oy1, ry_, ry1_, my = ay
+            weg = mx ** 2 + my ** 2
+            if rund:
                 seiten.append((weg, "rund", (x0, y0, x1, y1, ox0, oy0, ox1, oy1),
                                grund, st))
-            else:
-                voll_k = st["rahmen"] == voll
-                # Je Seite einmal fragen, ob ein Nachbar sie verdeckt - im
-                # Fels unter einem Plateau sind das hunderte Kacheln je Bild.
-                if voll_k:
-                    offen_n = not nachbar_deckt(tx, ty - 1, st)
-                    offen_s = not nachbar_deckt(tx, ty + 1, st)
-                    offen_w = not nachbar_deckt(tx - 1, ty, st)
-                    offen_o = not nachbar_deckt(tx + 1, ty, st)
-                    if not (offen_n or offen_s or offen_w or offen_o):
-                        oben.append((weg, name, ox0, oy0, ox1, oy1, st))
-                        continue
-                else:
-                    offen_n = offen_s = offen_w = offen_o = True
-                offen = {(0, -1): offen_n, (0, 1): offen_s,
-                         (-1, 0): offen_w, (1, 0): offen_o}
-                # Die Kante der Oberseite: rundherum, wo die Mauer endet -
-                # oben und links im Licht, unten und rechts im Schatten.
-                rx_, ry_ = round(ox0), round(oy0)
-                rb_, rh_ = round(ox1) - rx_ - 1, round(oy1) - ry_ - 1
-                for (nx, ny), a_, b_ in (
-                        ((0, -1), (rx_, ry_), (rx_ + rb_, ry_)),
-                        ((-1, 0), (rx_, ry_), (rx_, ry_ + rh_)),
-                        ((0, 1), (rx_, ry_ + rh_), (rx_ + rb_, ry_ + rh_)),
-                        ((1, 0), (rx_ + rb_, ry_), (rx_ + rb_, ry_ + rh_))):
-                    if offen[(nx, ny)]:
-                        kanten.append((a_, b_, nx + ny < 0, grund))
-                for (nx, ny), basis, kopf, sichtbar in (
-                        ((0, -1), ((x0, y0), (x1, y0)), ((ox1, oy0), (ox0, oy0)),
-                         oy0 > y0 + 0.5),
-                        ((0, 1), ((x0, y1), (x1, y1)), ((ox1, oy1), (ox0, oy1)),
-                         oy1 < y1 - 0.5),
-                        ((-1, 0), ((x0, y0), (x0, y1)), ((ox0, oy1), (ox0, oy0)),
-                         ox0 > x0 + 0.5),
-                        ((1, 0), ((x1, y0), (x1, y1)), ((ox1, oy1), (ox1, oy0)),
-                         ox1 < x1 - 0.5)):
-                    if not sichtbar or not offen[(nx, ny)]:
-                        continue
-                    seiten.append((weg, "block", (basis, kopf),
-                                   grund, st, licht[(nx, ny)]))
-            oben.append((weg, name, ox0, oy0, ox1, oy1, st))
+                oben_dazu(weg, name, rx_, ry_, rx1_, ry1_)
+                continue
+            if zu:
+                # Gleich fertig: Bild der Oberseite und Ort (seit 0.34.75 im
+                # selben Durchgang; sortiert wird danach wie vorher).
+                b, h = rx1_ - rx_, ry1_ - ry_
+                bild_o = oberseiten.get((name, b, h, dunkel))
+                if bild_o is None:
+                    bild_o = self._oberseite(name, b, h, dunkel)
+                anhaengen_oben((weg, bild_o, (rx_, ry_)))
+                continue
+            # Die Kante der Oberseite: rundherum, wo die Mauer endet -
+            # oben und links im Licht, unten und rechts im Schatten.
+            rb_, rh_ = rx1_ - rx_ - 1, ry1_ - ry_ - 1
+            if offen_n:
+                kanten.append(((rx_, ry_), (rx_ + rb_, ry_), True, grund))
+            if offen_w:
+                kanten.append(((rx_, ry_), (rx_, ry_ + rh_), True, grund))
+            if offen_s:
+                kanten.append(((rx_, ry_ + rh_), (rx_ + rb_, ry_ + rh_), False, grund))
+            if offen_o:
+                kanten.append(((rx_ + rb_, ry_), (rx_ + rb_, ry_ + rh_), False, grund))
+            if offen_n and oy0 > y0 + 0.5:
+                seiten.append((weg, "block", (((x0, y0), (x1, y0)), ((ox1, oy0), (ox0, oy0))),
+                               grund, st, l_n))
+            if offen_s and oy1 < y1 - 0.5:
+                seiten.append((weg, "block", (((x0, y1), (x1, y1)), ((ox1, oy1), (ox0, oy1))),
+                               grund, st, l_s))
+            if offen_w and ox0 > x0 + 0.5:
+                seiten.append((weg, "block", (((x0, y0), (x0, y1)), ((ox0, oy1), (ox0, oy0))),
+                               grund, st, l_w))
+            if offen_o and ox1 < x1 - 0.5:
+                seiten.append((weg, "block", (((x1, y0), (x1, y1)), ((ox1, oy1), (ox1, oy0))),
+                               grund, st, l_o))
+            oben_dazu(weg, name, rx_, ry_, rx1_, ry1_)
 
         for (tx, ty, name, sy) in flach:
             s = self.bilder.bild(name)
@@ -842,24 +1106,32 @@ class Renderer:
                 s = self.dunkel(s, dunkel)
             ziel.blit(s, (tx * K.TILE - ecke.x, sy))
 
-        seiten.sort(key=lambda s_: -s_[0])
+        # Absteigend nach `weg`; Gleiches bleibt in seiner Reihenfolge (die
+        # Sortierung ist stabil, auch mit reverse) - wie vorher mit -weg.
+        seiten.sort(key=_erstes, reverse=True)
+        linie = pygame.draw.line
+        # Die drei Toene einer Seite haengen nur an Farbe und Licht: je Bild
+        # einmal geholt (seit 0.34.75), dieselben Werte wie ton().
+        seiten_toene = {}
         for eintrag in seiten:
             if eintrag[1] == "block":
                 _w, _art, (basis, kopf), grund, st, l = eintrag
-                f = l * hell_f
-                viereck = [basis[0], basis[1], kopf[0], kopf[1]]
-                pygame.draw.polygon(ziel, ton(grund, f), viereck)
+                drei = seiten_toene.get((grund, l))
+                if drei is None:
+                    f = l * hell_f
+                    drei = seiten_toene[(grund, l)] = (ton(grund, f), ton(grund, f, 0.68),
+                                                       ton(grund, f, 0.42))
+                pygame.draw.polygon(ziel, drei[0], [basis[0], basis[1], kopf[0], kopf[1]])
                 # Querfugen: Steinlagen an der Mauer, Bretter an der Kiste.
-                fuge = ton(grund, f, 0.68)
+                fuge = drei[1]
                 n = st["fugen"]
+                (b0x, b0y), (b1x, b1y) = basis
+                (k0x, k0y), (k1x, k1y) = kopf
                 for i in range(1, n + 1):
                     t = i / (n + 1)
-                    a = (basis[0][0] + (kopf[1][0] - basis[0][0]) * t,
-                         basis[0][1] + (kopf[1][1] - basis[0][1]) * t)
-                    b = (basis[1][0] + (kopf[0][0] - basis[1][0]) * t,
-                         basis[1][1] + (kopf[0][1] - basis[1][1]) * t)
-                    pygame.draw.line(ziel, fuge, a, b, 1)
-                pygame.draw.line(ziel, ton(grund, f, 0.42), basis[0], basis[1], 1)
+                    linie(ziel, fuge, (b0x + (k1x - b0x) * t, b0y + (k1y - b0y) * t),
+                          (b1x + (k0x - b1x) * t, b1y + (k0y - b1y) * t), 1)
+                linie(ziel, drei[2], basis[0], basis[1], 1)
             else:
                 _w, _art, (x0, y0, x1, y1, ox0, oy0, ox1, oy1), grund, st = eintrag
                 # Ein Fass ist ein Zylinder: Kreise vom Fuss bis zum Deckel,
@@ -879,13 +1151,15 @@ class Renderer:
                                        (round(fx + (kx - fx) * t), round(fy + (ky - fy) * t)),
                                        max(1, round(fr + (kr - fr) * t)))
 
-        oben.sort(key=lambda o: -o[0])
-        for (_w, name, ox0, oy0, ox1, oy1, st) in oben:
-            x, y = round(ox0), round(oy0)
-            bild_o = self._oberseite(name, round(ox1) - x, round(oy1) - y, dunkel)
-            ziel.blit(bild_o, (x, y))
+        oben.sort(key=_erstes, reverse=True)
+        _viele_blits(ziel, [(bild_o, ort) for _w, bild_o, ort in oben])
+        kanten_toene = {}
         for a_, b_, im_licht, grund in kanten:
-            pygame.draw.line(ziel, ton(grund, (1.45 if im_licht else 0.38) * hell_f), a_, b_, 1)
+            farbe = kanten_toene.get((grund, im_licht))
+            if farbe is None:
+                farbe = kanten_toene[(grund, im_licht)] = ton(
+                    grund, (1.45 if im_licht else 0.38) * hell_f)
+            linie(ziel, farbe, a_, b_, 1)
 
     def wesen_zeichnen(self, ziel, welt, index, ecke, alpha, dunkel=None) -> None:
         """Was am Boden steht oder liegt: Figuren, Beute, Granaten.
@@ -987,6 +1261,9 @@ class Renderer:
         # Zeit. Die Luecken von da an liegen innerhalb des Umrisses, den
         # die Nachbarschichten ohnehin decken.
         schritte = min(int(max(abs(weg.x), abs(weg.y))), f3["schichten_max"])
+        # Alle Schichten und der Deckel in einem Aufruf (seit 0.34.75), in
+        # derselben Folge wie vorher einzeln.
+        auftraege = []
         if schritte >= 1:
             quelle = roh if roh is not None else s
             stufen = f3["seite_stufen"]
@@ -997,9 +1274,10 @@ class Renderer:
                 hell = f3["seite_unten"] + (f3["seite_oben"] - f3["seite_unten"]) \
                     * stufe / max(1, stufen - 1)
                 seite, rand = self._seite(quelle, round(hell, 3), dunkel)
-                ziel.blit(seite, (p.x + weg.x * t - w2 + rand[0],
-                                  p.y + weg.y * t - h2 + rand[1]))
-        ziel.blit(s, (oben.x - w2, oben.y - h2))
+                auftraege.append((seite, (p.x + weg.x * t - w2 + rand[0],
+                                          p.y + weg.y * t - h2 + rand[1])))
+        auftraege.append((s, (oben.x - w2, oben.y - h2)))
+        _viele_blits(ziel, auftraege)
 
     def _seite(self, s, hell: float, dunkel=None):
         """Eine Schicht der Seitenwand: der Umriss des Bildes, gefuellt mit
@@ -1795,7 +2073,8 @@ class Renderer:
         licht = {(0, 1): 0.82, (1, 0): 0.66, (-1, 0): 0.74, (0, -1): 0.56}
         schichten = K.KLIPPEN["schichten"]
         gezeichnet = 0
-        for (ax, ay, bx, by, nx, ny) in kanten:
+        je_richtung = {}
+        for (ax, ay, bx, by, nx, ny) in self._klippen_im_bild(kanten, unten, oben, gw, gh):
             pa = ((ax - oe.x) * osx, (ay - oe.y) * osy)
             pb = ((bx - oe.x) * osx, (by - oe.y) * osy)
             ua = ((ax - ue.x) * usx, (ay - ue.y) * usy)
@@ -1809,13 +2088,26 @@ class Renderer:
             ys = (pa[1], pb[1], ua[1], ub[1])
             if max(xs) < 0 or min(xs) > gw or max(ys) < 0 or min(ys) > gh:
                 continue
-            hell = licht.get((nx, ny), 0.7) * dunkel
+            # Die Farben haengen nur an der Blickrichtung der Wand: je
+            # Richtung einmal gerechnet (seit 0.34.75), dieselben Formeln.
+            farben = je_richtung.get((nx, ny))
+            if farben is None:
+                hell = licht.get((nx, ny), 0.7) * dunkel
+                baender = []
+                for nr in range(schichten):
+                    f = hell * (1.0 - K.KLIPPEN["abdunkeln"] * (nr / schichten))
+                    baender.append((tuple(max(0, min(255, int(c * f))) for c in grund),
+                                    tuple(int(c * f * K.KLIPPEN["fuge"]) for c in grund)))
+                farben = je_richtung[(nx, ny)] = (
+                    baender,
+                    tuple(min(255, int(c * hell * K.KLIPPEN["kante"])) for c in grund),
+                    tuple(int(c * hell * 0.45) for c in grund))
+            baender, kante, fuss = farben
             # Geschichteter Fels: Baender von oben nach unten, jedes etwas
             # dunkler - das liest sich als Hoehe und nicht als Flaeche.
             for nr in range(schichten):
                 t0, t1 = nr / schichten, (nr + 1) / schichten
-                f = hell * (1.0 - K.KLIPPEN["abdunkeln"] * t0)
-                farbe = tuple(max(0, min(255, int(c * f))) for c in grund)
+                farbe, fuge = baender[nr]
                 viereck = [
                     (pa[0] + (ua[0] - pa[0]) * t0, pa[1] + (ua[1] - pa[1]) * t0),
                     (pb[0] + (ub[0] - pb[0]) * t0, pb[1] + (ub[1] - pb[1]) * t0),
@@ -1825,15 +2117,55 @@ class Renderer:
                 pygame.draw.polygon(ziel, farbe, viereck)
                 if nr:
                     # Eine Fuge zwischen zwei Baendern, wie Schichten im Sandstein.
-                    fuge = tuple(int(c * f * K.KLIPPEN["fuge"]) for c in grund)
                     pygame.draw.line(ziel, fuge, viereck[0], viereck[1], 1)
             # Die Kante oben faengt Licht, der Fuss liegt im Schatten.
-            kante = tuple(min(255, int(c * hell * K.KLIPPEN["kante"])) for c in grund)
-            fuss = tuple(int(c * hell * 0.45) for c in grund)
             pygame.draw.line(ziel, kante, pa, pb, 1)
             pygame.draw.line(ziel, fuss, ua, ub, 1)
             gezeichnet += 1
         return gezeichnet
+
+    KLIPPEN_FELD = 256        # Rastergroesse der Vorauswahl in _klippen_im_bild
+
+    def _klippen_im_bild(self, kanten, unten, oben, gw, gh) -> list:
+        """Die Kanten, die ins Bild kommen koennen, in ihrer Reihenfolge
+        (seit 0.34.75). Vorher wurde jedes Bild jede Kante der Karte
+        umgerechnet - ueber 400, von denen eine Handvoll zu sehen war.
+
+        Grosszuegig ausgewaehlt: was hier durchgeht, prueft klippen_zeichnen
+        wie immer. Ausgelassen wird nur, was die Pruefung dort sicher
+        verwirft - eine Kante, die in keiner der beiden Abbildungen das
+        Bild beruehrt (Bildpunkt = (Weltpunkt - ecke) * s, s > 0)."""
+        ue, usx, usy = unten
+        oe, osx, osy = oben
+        if min(usx, usy, osx, osy) <= 0.0 or len(kanten) < 32:
+            return kanten
+        merk = self.__dict__.setdefault("_klippen_raster", {})
+        hit = merk.get(id(kanten))
+        if hit is None or hit[0] is not kanten:
+            F = self.KLIPPEN_FELD
+            raster = {}
+            for i, (ax, ay, bx, by, _nx, _ny) in enumerate(kanten):
+                for fy in range(int(min(ay, by) // F), int(max(ay, by) // F) + 1):
+                    for fx in range(int(min(ax, bx) // F), int(max(ax, bx) // F) + 1):
+                        raster.setdefault((fx, fy), []).append(i)
+            if len(merk) > 16:
+                merk.clear()
+            hit = merk[id(kanten)] = (kanten, raster)
+        raster = hit[1]
+        F = self.KLIPPEN_FELD
+        # Was im Bild liegt, liegt in einer der beiden Abbildungen zwischen
+        # ecke und ecke + Bildgroesse / s; zwei Pixel Luft gegen Rundung.
+        x0 = min(oe.x, ue.x) - 2.0
+        y0 = min(oe.y, ue.y) - 2.0
+        x1 = max(oe.x + gw / osx, ue.x + gw / usx) + 2.0
+        y1 = max(oe.y + gh / osy, ue.y + gh / usy) + 2.0
+        nummern = set()
+        for fy in range(int(y0 // F), int(y1 // F) + 1):
+            for fx in range(int(x0 // F), int(x1 // F) + 1):
+                drin = raster.get((fx, fy))
+                if drin:
+                    nummern.update(drin)
+        return [kanten[i] for i in sorted(nummern)]
 
     def welt_zeichnen(self, ziel, welt, kamera, alpha, blick_hoehe=None,
                       boden=None, blick=None, oben_aus=False,
@@ -1924,8 +2256,14 @@ class Renderer:
             # Das Auge steht ueber dieser Ebene um die Brennweite plus den
             # Hoehenunterschied - von oben gesehen wirken Waende unten
             # flacher, von unten die oben steiler.
-            self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel,
-                                max(60.0, p["brennweite"] + dz), aufschieben=True)
+            # Frisch geleert (seit 0.34.75, siehe ebene_zeichnen): ueber ein
+            # Merkmal statt eines neuen Arguments - Tests ersetzen die Methode.
+            self._ziel_frisch = flaeche
+            try:
+                self.ebene_zeichnen(flaeche, welt, idx, u_ecke, dunkel,
+                                    max(60.0, p["brennweite"] + dz), aufschieben=True)
+            finally:
+                self._ziel_frisch = None
             self._ebene_inhalt(flaeche, welt, idx, u_ecke, alpha, dunkel, False,
                                boden, figuren, luft, anzeige)
             if dz < 0 and idx > 0:
@@ -1947,10 +2285,32 @@ class Renderer:
                                      (255, 255, 255, int(255 * sicht)),
                                      pygame.BLEND_RGBA_MULT)
                 sicht = 1.0
-            skaliert = pygame.transform.scale(flaeche, self.groesse)
-            if sicht < 0.999:
-                skaliert = plattform.deckkraft(skaliert, 255 * sicht, kopie=False)
-            ziel.blit(skaliert, (0, 0))
+            # Liegt im Ausschnitt dieser Ebene gar nichts (kein Boden, und
+            # die Flaeche ist ganz durchsichtig), aendert das Hochskalieren
+            # und Darueberlegen auf einem deckenden Bild kein Pixel - dann
+            # unterbleibt es (seit 0.34.75). Geprueft wird nur ohne Boden:
+            # mit Boden ist sie nie leer, und die Frage kostete umsonst.
+            leer = (not getattr(self, "_boden_da", True)
+                    and not ziel.get_flags() & pygame.SRCALPHA
+                    and _ganz_leer(flaeche))
+            if not leer:
+                # In eine gemerkte Flaeche (seit 0.34.75) statt jedes Bild in
+                # eine neue: transform.scale schreibt jedes Pixel neu.
+                skaliert = self.__dict__.get("_skaliert_puffer")
+                if (skaliert is None or skaliert.get_size() != self.groesse
+                        or skaliert.get_flags() != flaeche.get_flags()
+                        or skaliert.get_bitsize() != flaeche.get_bitsize()):
+                    skaliert = pygame.transform.scale(flaeche, self.groesse)
+                    self._skaliert_puffer = skaliert
+                else:
+                    try:
+                        pygame.transform.scale(flaeche, self.groesse, skaliert)
+                    except (ValueError, pygame.error):
+                        skaliert = pygame.transform.scale(flaeche, self.groesse)
+                        self._skaliert_puffer = skaliert
+                if sicht < 0.999:
+                    skaliert = plattform.deckkraft(skaliert, 255 * sicht, kopie=False)
+                ziel.blit(skaliert, (0, 0))
             if dz > 0:
                 a = int(255 * p["dunst_staerke"] * (1.0 - k))
                 if a > 0:
@@ -1960,7 +2320,7 @@ class Renderer:
         if not self.nur_gelaende:
             self.fliegende_zeichnen(ziel, welt, kamera, alpha, blick_hoehe)
         if self.vignette_an:
-            ziel.blit(self._vignette, (0, 0))
+            _rand_blit(ziel, self._vignette)
 
     def _ebene_inhalt(self, ziel, welt, idx, ecke, alpha, dunkel, eigene,
                       boden, figuren, luft, anzeige) -> None:

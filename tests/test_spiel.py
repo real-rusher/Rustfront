@@ -15152,6 +15152,122 @@ pruef("Mehrere Trupps denken nicht im selben Bild (kurze Einbrueche auf 10 Bilde
       len(set(_takte115)) == 3, str(_takte115))
 _tm.verlassen()
 
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Schneller, aber dasselbe: Abkuerzungen beim Zeichnen und Rechnen (0.34.75)")
+# Jede Abkuerzung gegen den Weg, den sie ersetzt - Pixel fuer Pixel bzw.
+# Zahl fuer Zahl.
+from dustfront import render as _R175, goap as _G175, testmodus as _TM175
+from dustfront import fahrzeug as _FZ175
+from dustfront.world import freier_punkt as _fp175
+_rnd175 = random.Random(175)
+
+
+def _ziel175():
+    z = pygame.Surface((300, 300)).convert()
+    for _ in range(200):
+        z.fill((_rnd175.randrange(256), _rnd175.randrange(256), _rnd175.randrange(256)),
+               (_rnd175.randrange(300), _rnd175.randrange(300), 25, 25))
+    return z
+
+
+# Bodenstueck mit Loechern: Flaeche mit Farbschluessel = Mischen je Pixel,
+# auf ein deckendes Ziel und auf ein eben geleertes mit Alphakanal.
+_q175 = pygame.Surface((96, 96), pygame.SRCALPHA)
+for _ in range(60):
+    _q175.fill((_rnd175.randrange(256), _rnd175.randrange(256), _rnd175.randrange(256), 255),
+               (_rnd175.randrange(96), _rnd175.randrange(96), 12, 12))
+_q175.fill((0, 0, 0, 0), (0, 0, 32, 32))
+_q175.fill((255, 0, 255, 255), (60, 60, 4, 4))          # die erste Schluesselfarbe kommt vor
+_q175 = _q175.convert_alpha()
+_k175, _ok175 = _R175._mit_farbschluessel(_q175)
+_a175 = _ziel175()
+_b175 = _a175.copy()
+_a175.blit(_q175, (37, 11))
+_b175.blit(_k175, (37, 11))
+_l1_175 = pygame.Surface((200, 200), pygame.SRCALPHA)
+_l2_175 = pygame.Surface((200, 200), pygame.SRCALPHA)
+_l1_175.blit(_q175, (-20, 50))
+_l2_175.blit(_k175, (-20, 50))
+pruef("Bodenstueck mit Farbschluessel: dasselbe Bild wie mit Alpha (auch wenn die Schluesselfarbe vorkommt)",
+      _ok175 and pygame.image.tobytes(_a175, "RGB") == pygame.image.tobytes(_b175, "RGB")
+      and pygame.image.tobytes(_l1_175, "RGBA")[3::4] == pygame.image.tobytes(_l2_175, "RGBA")[3::4]
+      and pygame.mask.from_surface(_l1_175, 0).count() == pygame.mask.from_surface(_l2_175, 0).count())
+_halb175 = pygame.Surface((20, 20), pygame.SRCALPHA)
+_halb175.fill((10, 20, 30, 128))
+pruef("Halb durchsichtige Bilder bleiben, wie sie sind (kein Farbschluessel, kein Umwandeln)",
+      not _R175._mit_farbschluessel(_halb175.convert_alpha())[1]
+      and _R175._deckend_wenn_moeglich(_halb175).get_flags() & pygame.SRCALPHA)
+
+# Vignette nur als Randstreifen: dasselbe Bild.
+_v175 = app.bilder.bild("vignette")
+_a175 = pygame.Surface((K.GAME_W, K.GAME_H)).convert()
+_a175.fill((90, 140, 60))
+_b175 = _a175.copy()
+_a175.blit(_v175, (0, 0))
+_R175._rand_blit(_b175, _v175)
+pruef("Vignette in Randstreifen: dasselbe Bild wie ganz",
+      _R175._rand_streifen(_v175) is not None
+      and pygame.image.tobytes(_a175, "RGB") == pygame.image.tobytes(_b175, "RGB"))
+
+# GOAP: ein Ausdruck gibt mit gemeinsamen Namen denselben Wert.
+_aus175 = _G175.Ausdruck("80 * magazin_leer * munition_da + max(mut, 2) - abs(x) / 3")
+_n175 = {"magazin_leer": 1, "munition_da": 1, "mut": 0.7, "x": -4.5, "min": 99}
+pruef("GOAP-Ausdruck: gleiche Zahl mit gemeinsamer Namenstafel",
+      _aus175.wert(_n175) == _aus175.wert(_G175._bereit(_n175))
+      and _aus175.wert(_G175._bereit({})) == _aus175.wert({}))
+
+# Welt.nahe ueber die belegten Zellen: dieselben Wesen in derselben Folge.
+_tm = _TM175.Testmodus(app, karte="staubtal")
+for i_ in range(12):
+    _tm.bot_setzen(_fp175(_tm.welt, 0, _rnd175), 0, {"team": i_ % 2})
+_tm.welt._raster_bauen()
+_gleich175 = True
+for _ in range(40):
+    _p175 = _fp175(_tm.welt, 0, _rnd175)
+    _r175 = _rnd175.choice((20.0, 100.0, 300.0, 900.0))
+    _mit175 = _tm.welt.nahe(_p175, _r175, 0)
+    _beleg175 = _tm.welt._belegt
+    _tm.welt._belegt = None
+    _ohne175 = _tm.welt.nahe(_p175, _r175, 0)
+    _tm.welt._belegt = _beleg175
+    _gleich175 = _gleich175 and _mit175 == _ohne175
+pruef("Welt.nahe ueber belegte Zellen: dieselben Wesen in derselben Reihenfolge", _gleich175)
+
+# Buggy-Physik gemerkt: dasselbe wie frisch gerechnet - auch beim zweiten Mal.
+_bu175 = _FZ175.Buggy(_fp175(_tm.welt, 0, _rnd175), 0, 30.0)
+_bu175.welt = _tm.welt
+_bu175.geschw.update(37.5, -12.25)
+_bu175.gier = 0.3
+_bu175.lenkwinkel = 0.0
+_bu175._physik_merk = None
+_bu175._physik(K.FIXED_DT, 1.0, -0.5, False)
+_frisch175 = (tuple(_bu175.geschw), _bu175.gier, _bu175.lenkwinkel, _bu175.rutschen)
+_bu175.geschw.update(37.5, -12.25)
+_bu175.gier, _bu175.lenkwinkel = 0.3, 0.0
+_bu175._physik(K.FIXED_DT, 1.0, -0.5, False)       # jetzt aus der Merkzelle
+_gemerkt175 = (tuple(_bu175.geschw), _bu175.gier, _bu175.lenkwinkel, _bu175.rutschen)
+pruef("Buggy-Physik aus der Merkzelle: genau wie frisch gerechnet",
+      _frisch175 == _gemerkt175, "%s %s" % (_frisch175, _gemerkt175))
+
+# Panzer: die gemerkte Kachelfrage merkt, wenn eine Kachel sich aendert.
+_pz175 = _FZ175.Panzer(_fp175(_tm.welt, 0, _rnd175), 0, 0.0)
+_pz175.welt = _tm.welt
+_e175 = _tm.welt.ebene(0)
+for _ in range(80):
+    if _pz175._kacheln_frei(_pz175.pos, _pz175.winkel):
+        break
+    _pz175.pos.update(_fp175(_tm.welt, 0, _rnd175))
+_vorher175 = _pz175._kacheln_frei(_pz175.pos, _pz175.winkel)
+_tx175, _ty175 = int(_pz175.pos.x // K.TILE), int(_pz175.pos.y // K.TILE)
+_alt175 = _e175.kachel(_tx175, _ty175)
+_e175.setzen(_tx175, _ty175, K.WAND)
+_danach175 = _pz175._kacheln_frei(_pz175.pos, _pz175.winkel)
+_e175.setzen(_tx175, _ty175, _alt175)
+_wieder175 = _pz175._kacheln_frei(_pz175.pos, _pz175.winkel)
+pruef("Panzer: gemerkte Kachelfrage sieht eine neue Mauer unter sich und ihr Verschwinden",
+      _vorher175 and not _danach175 and _wieder175, "%s %s %s" % (_vorher175, _danach175, _wieder175))
+_tm.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

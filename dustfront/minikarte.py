@@ -109,8 +109,14 @@ class Minikarte:
         def punkt(pos):
             return (int(r.x + pos.x * sx), int(r.y + pos.y * sy))
 
-        grund = pygame.Surface(r.inflate(4, 4).size, pygame.SRCALPHA)
-        grund.fill(GRUND)
+        # Der durchscheinende Grund, je Groesse einmal gefuellt (seit
+        # 0.34.75) - vorher jedes Bild eine neue, immer gleiche Flaeche.
+        groesse = r.inflate(4, 4).size
+        grund = self.__dict__.get("_grund")
+        if grund is None or grund.get_size() != groesse:
+            grund = pygame.Surface(groesse, pygame.SRCALPHA)
+            grund.fill(GRUND)
+            self._grund = grund
         ziel.blit(grund, r.inflate(4, 4).topleft)
         ziel.blit(self._grundriss_fuer(g.welt, nr), r.topleft)
 

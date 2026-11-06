@@ -202,6 +202,10 @@ def platzhalter(name):
     return deko
 
 
+# Name -> (Zahl der Muster beim Rechnen, Sollmass), siehe Bilder.mass.
+_MASS_MERK: dict = {}
+
+
 def platzhalter_muster(anfang: str, zeichner, mass=None) -> None:
     """Registriert einen Zeichner fuer alle Namen, die mit `anfang`
     beginnen (siehe art_figuren.py). `mass(name)` sagt das Sollmass, damit
@@ -254,7 +258,15 @@ class Bilder:
 
     @staticmethod
     def mass(name: str) -> tuple[int, int] | None:
-        """Das Sollmass des Bildes, oder None, wenn keines festgelegt ist."""
+        """Das Sollmass des Bildes, oder None, wenn keines festgelegt ist.
+
+        Gemerkt je Name (seit 0.34.75): jede Figur fragt jedes Bild danach,
+        und fuer Skins hiess das, den Namen jedesmal neu zu zerlegen.
+        BILD_MASS aendert sich nach dem Laden nicht; kommt ein Muster spaeter
+        dazu (Import-Reihenfolge), gilt der Merkzettel nicht mehr."""
+        merk = _MASS_MERK.get(name)
+        if merk is not None and merk[0] == len(_MUSTER_MASS):
+            return merk[1]
         m = K.BILD_MASS.get(name)
         if not m:
             for anfang, mass in _MUSTER_MASS:
@@ -262,7 +274,11 @@ class Bilder:
                     m = mass(name)
                     if m:
                         break
-        return (int(m[0]), int(m[1])) if m else None
+        raus = (int(m[0]), int(m[1])) if m else None
+        if len(_MASS_MERK) > 20000:
+            _MASS_MERK.clear()
+        _MASS_MERK[name] = (len(_MUSTER_MASS), raus)
+        return raus
 
     def _laden(self, name: str) -> pygame.Surface | None:
         pfad = self.datei(name)

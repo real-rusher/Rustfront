@@ -340,8 +340,7 @@ class Anzeige:
         from . import bestenliste
         reihe = bestenliste.sortiert(
             [{"name": k.name, "abschuesse": k.abschuesse, "tode": k.tode,
-              "mvp_punkte": bestenliste.mvp_punkte(k.werte_runde()),
-              "k": k} for k in g.kaempfer.values()])
+              "mvp_punkte": self._mvp(k), "k": k} for k in g.kaempfer.values()])
         zeigen = reihe[:5]
         if g.ich is not None and not any(e["k"] is g.ich for e in zeigen):
             zeigen = reihe[:4] + [e for e in reihe if e["k"] is g.ich]
@@ -363,6 +362,23 @@ class Anzeige:
                   farbe, 1, "rechts")
             _text(ziel, "%d/%d" % (e["abschuesse"], e["tode"]), rechts, y,
                   farbe, 1, "rechts")
+
+    def _mvp(self, k) -> float:
+        """bestenliste.mvp_punkte(k.werte_runde()), gemerkt, solange sich
+        die Zahlen der Figur nicht aendern (seit 0.34.75) - die Rechnung
+        haengt nur an ihren Zaehlern, Abschuessen und Toden."""
+        from . import bestenliste
+        merk = self.__dict__.setdefault("_mvp_merk", {})
+        schluessel = (tuple(k.zaehler.items()), getattr(k, "abschuesse", None),
+                      getattr(k, "tode", None))
+        hit = merk.get(id(k))
+        if hit is not None and hit[0] is k and hit[1] == schluessel:
+            return hit[2]
+        wert = bestenliste.mvp_punkte(k.werte_runde())
+        if len(merk) > 200:
+            merk.clear()
+        merk[id(k)] = (k, schluessel, wert)
+        return wert
 
     # ---- Unten links: Panzerung, Dash, Medkits ------------------------
     def _vital(self, ziel, ich) -> None:

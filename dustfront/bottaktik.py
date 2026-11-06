@@ -143,9 +143,17 @@ class Taktik:
         self.gesagt = ""              # was er zuletzt gesagt hat (sagen)
 
     def taktik_zeiten(self, dt: float) -> None:
-        for name in ("funk_sperre", "flanke_pause", "druck_rest", "druck_pause",
-                     "unterdrueckt"):
-            setattr(self, name, max(0.0, getattr(self, name) - dt))
+        # Ausgeschrieben wie bots._zeiten (seit 0.34.75): genau max(0.0, v).
+        v = self.funk_sperre - dt
+        self.funk_sperre = v if v > 0.0 else 0.0
+        v = self.flanke_pause - dt
+        self.flanke_pause = v if v > 0.0 else 0.0
+        v = self.druck_rest - dt
+        self.druck_rest = v if v > 0.0 else 0.0
+        v = self.druck_pause - dt
+        self.druck_pause = v if v > 0.0 else 0.0
+        v = self.unterdrueckt - dt
+        self.unterdrueckt = v if v > 0.0 else 0.0
 
     def sagen(self, text: str, wichtig: bool = False) -> bool:
         """Etwas Eigenes sagen (seit 0.34.39, Trupps): wie `funken`, aber

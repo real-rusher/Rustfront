@@ -20,6 +20,7 @@ Struktur erzeugen, ohne dass der Spielcode es merkt.
 from __future__ import annotations
 
 import math
+from bisect import bisect_left
 from pathlib import Path
 
 import pygame
@@ -310,7 +311,9 @@ class Ebene:
     def loch(self, tx: int, ty: int) -> bool:
         if not (0 <= tx < self.breite and 0 <= ty < self.hoehe):
             return False
-        return K.KACHELN[self.kachel(tx, ty)].get("loch", False)
+        # Direkt in die Kacheln (seit 0.34.75): dieselbe Antwort ohne den
+        # Umweg ueber kachel() - die Frage kommt hunderttausendfach je Minute.
+        return K.KACHELN[self.kacheln[ty * self.breite + tx]].get("loch", False)
 
     def begehbar(self, tx: int, ty: int) -> bool:
         return not self.fest(tx, ty) and self.kachel(tx, ty) != K.LEER
@@ -348,6 +351,9 @@ class Ebene:
                 quelle = pygame.Rect(x0 - links, y0 - oben,
                                      x1 - x0, y1 - y0)
                 flaeche.blit(bild, (x0 - links_kachel, y0 - oben_kachel), quelle)
+
+
+_LOCH = ("loch",)          # Marke in Welt._frei_tafel: ein Loch
 
 
 class Welt:
@@ -870,7 +876,11 @@ class Welt:
         return w
 
     def ebene(self, index: int) -> Ebene:
-        return self.ebenen[max(0, min(len(self.ebenen) - 1, index))]
+        ebenen = self.ebenen
+        # Der haeufige Fall zuerst (seit 0.34.75), Ergebnis wie vorher.
+        if 0 <= index < len(ebenen):
+            return ebenen[index]
+        return ebenen[max(0, min(len(ebenen) - 1, index))]
 
     def hoehe(self, index: int) -> float:
         """Hoehe einer Ebene in Welt-Pixeln, aus der Tabelle in config."""
@@ -923,6 +933,7 @@ class Welt:
     # ---- Nachbarschaft ------------------------------------------------
     def _raster_bauen(self) -> None:
         self._raster.clear()
+        self._belegt = {}
         self._gross = []
         for w in self.wesen:
             if not w.lebt or w.radius <= 0 or not w.trefferbar:
@@ -936,16 +947,52 @@ class Welt:
     def nahe(self, pos: pygame.Vector2, radius: float, ebene: int):
         """Alle Wesen der Ebene, deren Zelle den Kreis beruehrt - und die
         grossen (Panzer, Panzerwagen), deren Huelle ihn beruehrt."""
-        r = int(radius // self.ZELLE) + 1
-        cx, cy = int(pos.x // self.ZELLE), int(pos.y // self.ZELLE)
-        for gy in range(cy - r, cy + r + 1):
-            for gx in range(cx - r, cx + r + 1):
-                for w in self._raster.get((gx, gy, ebene), ()):
-                    yield w
-        for w in self._gross:
-            if (w.ebene == ebene and w.pos.distance_squared_to(pos)
-                    <= (radius + w.huelle_radius + self.ZELLE) ** 2):
-                yield w
+        # Seit 0.34.75 eine Liste statt eines Generators: dieselben Wesen in
+        # derselben Reihenfolge, aber ohne die Kosten je geliefertem Wesen.
+        # Das Raster aendert sich waehrend eines Schritts nicht (gebaut wird
+        # es am Anfang von schritt), eine Liste sieht also dasselbe.
+        zelle = self.ZELLE
+        r = int(radius // zelle) + 1
+        cx, cy = int(pos.x // zelle), int(pos.y // zelle)
+        raster = self._raster
+        raus = []
+        seite = 2 * r + 1
+        belegt = self.__dict__.get("_belegt")
+        if belegt is not None and seite * seite > 9:
+            # Bei grossem Kreis (seit 0.34.75): statt jede Zelle zu fragen die
+            # belegten Zellen der Ebene durchgehen - nach Zeile und Spalte
+            # sortiert, also in derselben Reihenfolge wie die Schleife unten.
+            zellen = belegt.get(ebene)
+            if zellen is None:
+                zellen = belegt[ebene] = sorted(
+                    (k[1], k[0], v) for k, v in raster.items() if k[2] == ebene)
+            if len(zellen) < seite * seite:
+                y0, y1, x0, x1 = cy - r, cy + r, cx - r, cx + r
+                # Erst zur ersten Zeile springen: (y0,) liegt vor jedem
+                # Eintrag (y0, ...), es werden nie die Listen verglichen.
+                for i in range(bisect_left(zellen, (y0,)), len(zellen)):
+                    gy, gx, drin = zellen[i]
+                    if gy > y1:
+                        break
+                    if x0 <= gx <= x1:
+                        raus.extend(drin)
+                zellen = None
+            else:
+                zellen = ()
+        else:
+            zellen = ()
+        if zellen == ():
+            for gy in range(cy - r, cy + r + 1):
+                for gx in range(cx - r, cx + r + 1):
+                    drin = raster.get((gx, gy, ebene))
+                    if drin:
+                        raus.extend(drin)
+        if self._gross:
+            for w in self._gross:
+                if (w.ebene == ebene and w.pos.distance_squared_to(pos)
+                        <= (radius + w.huelle_radius + zelle) ** 2):
+                    raus.append(w)
+        return raus
 
     def treffer(self, pos: pygame.Vector2, radius: float, ebene: int, feind_von: str):
         """Naechstes lebendes Ziel einer anderen Fraktion im Kreis.
@@ -993,37 +1040,72 @@ class Welt:
             cache[kachel] = hit
         return hit
 
+    def _frei_tafel_bauen(self):
+        tafel = {}
+        for kachel, daten in K.KACHELN.items():
+            if daten["fest"]:
+                tafel[kachel] = self.huelle(kachel)
+            elif daten.get("loch", False):
+                tafel[kachel] = _LOCH
+            else:
+                tafel[kachel] = None
+        self._frei_tafel = (K.KACHELN, getattr(self, "satz", ""), tafel)
+        return self._frei_tafel
+
     def frei(self, pos: pygame.Vector2, radius: float, ebene: int,
              loch_fest: bool = False) -> bool:
         """loch_fest: Loecher zaehlen als Wand. Fuer alles, was nicht fallen soll.
 
         Feste Kacheln halten mit ihrer Grundflaeche auf (`huelle`), Loecher
         mit der ganzen Kachel."""
-        e = self.ebene(ebene)
-        t0x = int((pos.x - radius) // K.TILE)
-        t1x = int((pos.x + radius) // K.TILE)
-        t0y = int((pos.y - radius) // K.TILE)
-        t1y = int((pos.y + radius) // K.TILE)
+        ebenen = self.ebenen
+        e = ebenen[ebene] if 0 <= ebene < len(ebenen) else self.ebene(ebene)
+        T = K.TILE
+        px, py = pos.x, pos.y
+        t0x = int((px - radius) // T)
+        t1x = int((px + radius) // T)
+        t0y = int((py - radius) // T)
+        t1y = int((py + radius) // T)
         r2 = radius * radius
+        # Lokal und ohne den Umweg ueber kachel()/loch() (seit 0.34.75) -
+        # dieselben Fragen in derselben Reihenfolge, nur billiger.
+        kacheln, breite, hoehe = e.kacheln, e.breite, e.hoehe
+        # Je Kachelart fertig (seit 0.34.75): None (frei), _LOCH, oder die
+        # Huelle der festen Kachel - dieselbe Unterscheidung wie mit
+        # K.KACHELN[...]["fest"] / "loch" und huelle(), ohne sie jedesmal.
+        tafel = self.__dict__.get("_frei_tafel")
+        if tafel is None or tafel[0] is not K.KACHELN or tafel[1] != getattr(self, "satz", ""):
+            tafel = self._frei_tafel_bauen()
+        tafel = tafel[2]
+        leer = K.LEER
         for ty in range(t0y, t1y + 1):
+            innen_y = 0 <= ty < hoehe
             for tx in range(t0x, t1x + 1):
-                kachel = e.kachel(tx, ty)
-                if K.KACHELN[kachel]["fest"]:
-                    form, rx, ry, rb, rh = self.huelle(kachel)
-                elif loch_fest and e.loch(tx, ty):
-                    form, rx, ry, rb, rh = "block", 0, 0, K.TILE, K.TILE
+                if innen_y and 0 <= tx < breite:
+                    kachel = kacheln[ty * breite + tx]
+                    innen = True
                 else:
+                    kachel = leer
+                    innen = False
+                art = tafel[kachel]
+                if art is None:
                     continue
-                x0, y0 = tx * K.TILE + rx, ty * K.TILE + ry
+                if art is _LOCH:
+                    if not (loch_fest and innen):
+                        continue
+                    form, rx, ry, rb, rh = "block", 0, 0, T, T
+                else:
+                    form, rx, ry, rb, rh = art
+                x0, y0 = tx * T + rx, ty * T + ry
                 if form == "rund":
                     mx, my = x0 + rb / 2.0, y0 + rh / 2.0
                     grenze = radius + rb / 2.0
-                    if (pos.x - mx) ** 2 + (pos.y - my) ** 2 < grenze * grenze:
+                    if (px - mx) ** 2 + (py - my) ** 2 < grenze * grenze:
                         return False
                     continue
-                nx = max(x0, min(pos.x, x0 + rb))
-                ny = max(y0, min(pos.y, y0 + rh))
-                if (pos.x - nx) ** 2 + (pos.y - ny) ** 2 < r2:
+                nx = max(x0, min(px, x0 + rb))
+                ny = max(y0, min(py, y0 + rh))
+                if (px - nx) ** 2 + (py - ny) ** 2 < r2:
                     return False
         return True
 
@@ -1086,26 +1168,32 @@ class Welt:
         # neu an, waehrend der Fortschritt verfiel.
         fest_w = not getattr(wesen, "schiebbar", True) or getattr(wesen, "hilft", None) is not None
         for a in self.nahe(wesen.pos, wesen.radius * 2, wesen.ebene):
-            if a is wesen or not a.schiebt or getattr(a, "am_boden", False):
+            if a is wesen:
+                continue
+            # Erst der Abstand (seit 0.34.75): die meisten aus dem Raster
+            # sind zu weit weg, und die Fragen danach aendern nichts - sie
+            # entscheiden nur mit, ob geschoben wird.
+            d = wesen.pos - a.pos
+            abstand = d.length()
+            mindest = wesen.radius + a.radius
+            if not 0.0001 < abstand < mindest:
+                continue
+            if not a.schiebt or getattr(a, "am_boden", False):
                 continue
             fest_a = not getattr(a, "schiebbar", True) or getattr(a, "hilft", None) is not None
             if fest_w and fest_a:
                 continue
-            d = wesen.pos - a.pos
-            abstand = d.length()
-            mindest = wesen.radius + a.radius
-            if 0.0001 < abstand < mindest:
-                schub = d / abstand * (mindest - abstand)
-                if not fest_w:
-                    weg = schub * (1.0 if fest_a else 0.5)
-                    if self.frei(wesen.pos + weg, wesen.radius, wesen.ebene,
-                                 not getattr(wesen, "faellt", False)):
-                        wesen.pos += weg
-                if not fest_a:
-                    weg = schub * (1.0 if fest_w else 0.5)
-                    if self.frei(a.pos - weg, a.radius, a.ebene,
-                                 not getattr(a, "faellt", False)):
-                        a.pos -= weg
+            schub = d / abstand * (mindest - abstand)
+            if not fest_w:
+                weg = schub * (1.0 if fest_a else 0.5)
+                if self.frei(wesen.pos + weg, wesen.radius, wesen.ebene,
+                             not getattr(wesen, "faellt", False)):
+                    wesen.pos += weg
+            if not fest_a:
+                weg = schub * (1.0 if fest_w else 0.5)
+                if self.frei(a.pos - weg, a.radius, a.ebene,
+                             not getattr(a, "faellt", False)):
+                    a.pos -= weg
 
     def befreien(self, wesen) -> bool:
         """Holt ein Wesen aus der Wand, falls es doch einmal darin steckt.

@@ -148,14 +148,35 @@ class Trupp:
 
     # ── Wer ───────────────────────────────────────────────────────
     def lebende(self) -> list:
-        g = self.g
-        return [m for m in self.mitglieder
-                if m.lebt and not getattr(m, "am_boden", False)
-                and g.kaempfer.get(m.nummer) is m and getattr(m, "hirn", None) is not None]
+        # Als Schleife mit gemerktem `get` (seit 0.34.75): sehr oft gefragt,
+        # dasselbe Ergebnis wie die Liste mit Bedingung vorher.
+        hole = self.g.kaempfer.get
+        raus = []
+        for m in self.mitglieder:
+            if (m.lebt and not getattr(m, "am_boden", False)
+                    and hole(m.nummer) is m and getattr(m, "hirn", None) is not None):
+                raus.append(m)
+        return raus
+
+    def mehrere(self) -> bool:
+        """Leben mindestens zwei (wie len(lebende()) >= 2, seit 0.34.75)?
+        Hoert nach dem zweiten auf - die Frage kommt jeden Schritt."""
+        hole = self.g.kaempfer.get
+        zahl = 0
+        for m in self.mitglieder:
+            if (m.lebt and not getattr(m, "am_boden", False)
+                    and hole(m.nummer) is m and getattr(m, "hirn", None) is not None):
+                zahl += 1
+                if zahl >= 2:
+                    return True
+        return False
 
     def fuehrt(self, k) -> bool:
         """Fuehrt `k` gerade jemanden? Wer allein uebrig ist, fuehrt keinen."""
-        return k is self.fuehrer and len(self.lebende()) >= 2 and k in self.lebende()
+        if k is not self.fuehrer:
+            return False
+        leute = self.lebende()
+        return len(leute) >= 2 and k in leute
 
     def sprechweite(self) -> float:
         return K.TRUPP["sprech_weite"]

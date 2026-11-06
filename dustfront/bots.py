@@ -294,10 +294,10 @@ class BotHirn(Taktik):
         self._drall = self._drall * max(0.0, 1.0 - dt / K.BOTS["drall_zeit"]) + dreh
         weit = max(40.0, k.pos.distance_to(ziel_punkt))
         maus = k.pos + pygame.Vector2(1, 0).rotate(self.blick) * weit
-        if feuern and k.waffe_daten.get("art") == "schuss" and self.kamerad_im_weg(weit):
+        if feuern and k._waffe_lesen().get("art") == "schuss" and self.kamerad_im_weg(weit):
             feuern = False
         ein["ziel"] = [round(maus.x, 1), round(maus.y, 1)]
-        if (feuern and k.waffe_daten.get("art") == "schuss"
+        if (feuern and k._waffe_lesen().get("art") == "schuss"
                 and self.g.welt.deckung(k.pos, pygame.Vector2(ein["ziel"]), k.ebene) == "wand"):
             # Nie in eine Mauer (seit 0.34.54, gemeldet: "Bots versuchen oft
             # durch Mauern zu schiessen") - sie haelt jede Kugel auf, und
@@ -319,17 +319,18 @@ class BotHirn(Taktik):
         gemeldet: "teils drehen sich bots in verschiedensten Situationen um
         360 grad")."""
         k = self.k
-        geradeaus = k.pos + pygame.Vector2(1, 0).rotate(self.blick) * 120
+        # "Geradeaus" erst, wenn es gebraucht wird (seit 0.34.75) - dieselbe
+        # Rechnung, nur nicht in jedem Schritt umsonst.
         if will.length_squared() <= 0.01:
             self._lauf_richtung = None
-            return geradeaus
+            return k.pos + pygame.Vector2(1, 0).rotate(self.blick) * 120
         jetzt = self.g.welt.zeit
         alt = getattr(self, "_lauf_richtung", None)
         if alt is None or abs(_winkel_diff(alt.as_polar()[1], will.as_polar()[1])) > K.BOTS["lauf_blick_winkel"]:
             self._lauf_richtung = pygame.Vector2(will)
             self._lauf_seit = jetzt
         if jetzt - getattr(self, "_lauf_seit", jetzt) < K.BOTS["lauf_blick_ruhe"]:
-            return geradeaus
+            return k.pos + pygame.Vector2(1, 0).rotate(self.blick) * 120
         return k.pos + will * 120
 
     def _entscheiden(self, dt: float, ein: dict):
@@ -375,12 +376,37 @@ class BotHirn(Taktik):
         return will, ziel_punkt, feuern, zielt
 
     def _zeiten(self, dt: float) -> None:
-        for name in ("reaktion_rest", "stoss_rest", "pause_rest", "seite_rest",
-                     "wurf_rest", "waffen_rest", "weg_rest",
-                     "streif_rest", "ausweich_rest", "geblendet",
-                     "getroffen_rest", "deckung_rest", "deckung_pause",
-                     "deckung_suche"):
-            setattr(self, name, max(0.0, getattr(self, name) - dt))
+        # Ausgeschrieben statt setattr/getattr in einer Schleife (seit
+        # 0.34.75): jeder Bot jeden Schritt, gemessen ein Zehntel seiner
+        # Zeit. `v if v > 0.0 else 0.0` ist genau max(0.0, v).
+        v = self.reaktion_rest - dt
+        self.reaktion_rest = v if v > 0.0 else 0.0
+        v = self.stoss_rest - dt
+        self.stoss_rest = v if v > 0.0 else 0.0
+        v = self.pause_rest - dt
+        self.pause_rest = v if v > 0.0 else 0.0
+        v = self.seite_rest - dt
+        self.seite_rest = v if v > 0.0 else 0.0
+        v = self.wurf_rest - dt
+        self.wurf_rest = v if v > 0.0 else 0.0
+        v = self.waffen_rest - dt
+        self.waffen_rest = v if v > 0.0 else 0.0
+        v = self.weg_rest - dt
+        self.weg_rest = v if v > 0.0 else 0.0
+        v = self.streif_rest - dt
+        self.streif_rest = v if v > 0.0 else 0.0
+        v = self.ausweich_rest - dt
+        self.ausweich_rest = v if v > 0.0 else 0.0
+        v = self.geblendet - dt
+        self.geblendet = v if v > 0.0 else 0.0
+        v = self.getroffen_rest - dt
+        self.getroffen_rest = v if v > 0.0 else 0.0
+        v = self.deckung_rest - dt
+        self.deckung_rest = v if v > 0.0 else 0.0
+        v = self.deckung_pause - dt
+        self.deckung_pause = v if v > 0.0 else 0.0
+        v = self.deckung_suche - dt
+        self.deckung_suche = v if v > 0.0 else 0.0
         self.taktik_zeiten(dt)
         if self.ziel is None:
             self.ruhe += dt
@@ -1053,7 +1079,7 @@ class BotHirn(Taktik):
         g = self.g
         self.stoss_rest = 0.0
         # Nachladen, wenn es ruhig ist und das Magazin nicht voll.
-        d = k.waffe_daten
+        d = k._waffe_lesen()
         if (d.get("art") == "schuss" and k.nachlade_rest <= 0
                 and k.magazin.get(k.waffe_name, 0) < d.get("magazin", 0) * 0.6):
             ein["knoepfe"].append("nachladen")
@@ -1268,7 +1294,9 @@ class BotHirn(Taktik):
             if k.ebene > 0 and e.loch(tx, ty):
                 continue
             if welt.frei(p, k.radius, k.ebene, True):
-                if self._gefahr_bei(k.pos + r.normalize() * 26.0) and not self._gefahr_bei(k.pos):
+                # Ohne bekannte Gefahr gibt es nichts zu pruefen (seit 0.34.75).
+                if (self._gefahren and self._gefahr_bei(k.pos + r.normalize() * 26.0)
+                        and not self._gefahr_bei(k.pos)):
                     if notfall is None:
                         notfall = r
                     continue
@@ -1325,6 +1353,8 @@ class BotHirn(Taktik):
     def _gefahr_raus(self):
         """Steht er in einer Gefahr: die Richtung hinaus (weg von allen,
         in denen er steht). Sonst None."""
+        if not self._gefahren:
+            return None                   # wie unten: keine Gefahr, kein Weg hinaus
         k = self.k
         weg = pygame.Vector2(0, 0)
         for ort, r in self._gefahren:
@@ -1341,7 +1371,7 @@ class BotHirn(Taktik):
         Nahkampf erst, wenn er nah genug ist; die Spule wird gehalten und
         losgelassen, wenn sie voll ist; die Flamme nur in Reichweite."""
         k = self.k
-        d = k.waffe_daten
+        d = k._waffe_lesen()
         art = d.get("art", "schuss")
         z = self.ziel
         abstand = k.pos.distance_to(z.pos) if z is not None else 9999.0
