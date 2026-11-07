@@ -292,6 +292,12 @@ FELDER = (
          text=_loadout_name, gilt=lambda d: d.get("loadouts") == "gleich",
          rund=True, einzug=True,
          hilfe="EINES DEINER LOADOUTS - DAS TRAGEN ALLE."),
+    # Seit 0.34.79: die Faehigkeit der Klasse (Taste C) auch im Gefecht.
+    # Ohne Loadouts gibt es keine Klasse, also auch keine Faehigkeit.
+    Feld("faehigkeiten", "KLASSEN-FÄHIGKEITEN", "AUSRÜSTUNG",
+         K.GEFECHT["faehigkeiten"], None, schalter=True, einzug=True,
+         gilt=lambda d: d.get("loadouts") != "alles",
+         hilfe="TASTE C: KISTEN, FALLEN, GESCHÜTZE, DROHNEN DER KLASSE."),
     Feld("knapp", "MUNITION KNAPP", "AUSRÜSTUNG", False, None, schalter=True),
     Feld("medkits", "MEDKITS BEIM EINSTIEG", "AUSRÜSTUNG",
          K.GEFECHT["start_medkits"],
@@ -327,7 +333,8 @@ NACH_NAME = {f.schluessel: f for f in FELDER}
 # andere steht unter ERWEITERT und behaelt dort seinen Wert, auch wenn
 # es gerade nicht zu sehen ist.
 EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert", "bots",
-           "huegel_zeit", "schwierigkeit", "loadouts", "loadout_nr")
+           "huegel_zeit", "schwierigkeit", "loadouts", "loadout_nr",
+           "faehigkeiten")
 for _f in FELDER:
     _f.einfach = _f.schluessel in EINFACH
 GRUPPEN = ("RUNDE", "GEGNER", "AUSRÜSTUNG", "EINSTIEG")

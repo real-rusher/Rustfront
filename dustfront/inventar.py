@@ -4,7 +4,7 @@ DUSTFRONT - Inventar
 
 Drei Felder nebeneinander und ein Band darunter:
 
-    TRAEGER      was die Figur am Koerper hat (noch leer, kommt spaeter)
+    TRAEGER      die Figur und ihr Zustand (Leben, Medkits, Klasse)
     WAFFEN       die sechs Plaetze der Hotbar, umsortierbar
     ANGABEN      Werte der gewaehlten Waffe, im Vergleich zu allen anderen
     TASCHE       Medkits und was sonst noch mitgeht
@@ -267,7 +267,10 @@ class Inventar(Szene):
             return
         ui.schleier(ziel, 184)
         ui.tafel(ziel, TAFEL)
-        SCHRIFT.zeichnen(ziel, "AUSRÜSTUNG", TAFEL.centerx, TAFEL.y + 8,
+        # INVENTAR und nicht AUSRUESTUNG (seit 0.34.79): so heisst das
+        # Menue fuer Klasse und Waffen, und zwei Tafeln mit demselben
+        # Namen, die Verschiedenes tun, verwirren gerade Neue.
+        SCHRIFT.zeichnen(ziel, "INVENTAR", TAFEL.centerx, TAFEL.y + 8,
                          K.C_AMBER, 2, 2, "mitte")
         pygame.draw.line(ziel, K.C_MUTED_DK, (TAFEL.x + 18, TAFEL.y + 24),
                          (TAFEL.right - 19, TAFEL.y + 24))
@@ -305,19 +308,23 @@ class Inventar(Szene):
         ziel.blit(bild, (r.centerx - bild.get_width() // 2,
                          r.y + 60 - bild.get_height() // 2))
 
-        plaetze = [("KOPF", -1, 0), ("BRUST", -1, 1), ("ARME", 1, 0),
-                   ("BEINE", 1, 1)]
-        for text, seite, zeile in plaetze:
-            x = r.centerx + seite * 60 - (11 if seite > 0 else 11)
-            y = r.y + 26 + zeile * 34
-            f = pygame.Rect(x, y, 22, 22)
-            ui.feld(ziel, f)
-            pygame.draw.line(ziel, (34, 27, 20), (f.centerx - 5, f.centery),
-                             (f.centerx + 5, f.centery))
-            SCHRIFT.zeichnen(ziel, text, f.centerx, f.bottom + 2, K.C_MUTED_DK,
-                             1, 1, "mitte")
-        SCHRIFT.zeichnen(ziel, "PANZERUNG KOMMT SPÄTER", r.centerx,
-                         r.bottom - 12, K.C_MUTED_DK, 1, 1, "mitte")
+        # Statt vier leerer Panzerungsplaetze mit "kommt spaeter" (bis
+        # 0.34.78) steht hier, was die Figur gerade ausmacht.
+        held = self.spiel.held
+        zeilen = [
+            ("LEBEN", "%d / %d" % (max(0, round(held.leben)), round(held.max_leben))),
+            ("MEDKITS", str(getattr(held, "medkits", 0))),
+            ("EBENE", str(held.ebene)),
+        ]
+        klasse = getattr(held, "klasse", "")
+        if klasse:
+            from . import klassen as klassen_modul
+            zeilen.insert(0, ("KLASSE", klassen_modul.name(klasse)))
+        y = r.y + 92
+        for text, wert in zeilen:
+            SCHRIFT.zeichnen(ziel, text, r.x + 10, y, K.C_MUTED, 1)
+            SCHRIFT.zeichnen(ziel, wert, r.right - 10, y, K.C_CREAM, 1, 1, "rechts")
+            y += 11
 
     # ---- Waffen ------------------------------------------------------
     def _waffen(self, ziel) -> None:

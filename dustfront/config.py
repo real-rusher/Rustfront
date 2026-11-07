@@ -1972,6 +1972,10 @@ GEFECHT = dict(
     # die Ausruestung entscheidet, sondern wer besser damit umgeht.
     loadouts="alles",
     loadout_arten=("alles", "eigenes", "gleich"),
+    # Die Faehigkeiten der Klassen (Taste C) im Gefecht (seit 0.34.79, bis
+    # dahin nur im Testmodus). Was sie hinlegen, geht seitdem mit der
+    # Weltmeldung an die Gaeste ("geraete").
+    faehigkeiten=True,
     # Der Raketenwerfer. Aus, wenn der Gastgeber ihn nicht will - er
     # veraendert eine Runde, und das soll eine Entscheidung sein.
     rpg=False,
@@ -3421,8 +3425,8 @@ WAFFEN = {
 #   aufhelfen        x Zeit zum Aufhelfen       medkits   + Medkits
 #   schild           traegt das Schild (SCHILD)
 #   faehigkeit       was die Taste C hinlegt (ausruestung.py) und wie oft
-#                    (Sekunden Pause). Wie Bauen und Fallen erst im
-#                    Testmodus; im Gefecht wirken nur die Vorteile.
+#                    (Sekunden Pause). Seit 0.34.79 auch im Gefecht und in
+#                    der Lobby (Regel KLASSEN-FAEHIGKEITEN).
 KLASSEN = {
     "schuetze": dict(name="SCHÜTZE", text="Allrounder, laedt schneller",
                      waffen=("sturm", "repetierer", "mp", "unterhebel", "revolver"),

@@ -762,9 +762,22 @@ def _version_kleiner(a: str, b: str) -> bool:
 
 class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     # Die Faehigkeiten der Klassen (Taste C, seit 0.34.73) legen Dinge aus
-    # ausruestung.py hin, die noch nicht ueber das Netz gehen: erst der
-    # Testmodus schaltet sie ein.
-    faehigkeiten_an = False
+    # ausruestung.py hin. Bis 0.34.79 gingen die nicht ueber das Netz, und
+    # nur der Testmodus schaltete sie ein. Seitdem stehen sie in der
+    # Weltmeldung ("geraete"), und die Regel KLASSEN-FAEHIGKEITEN sagt, ob
+    # sie gelten - der Testmodus setzt sie fest (`faehigkeiten_an = True`).
+    faehigkeiten_regel = False
+    _faehigkeiten_fest = None
+
+    @property
+    def faehigkeiten_an(self) -> bool:
+        if self._faehigkeiten_fest is not None:
+            return self._faehigkeiten_fest
+        return bool(self.faehigkeiten_regel) and self.mit_loadouts
+
+    @faehigkeiten_an.setter
+    def faehigkeiten_an(self, an: bool) -> None:
+        self._faehigkeiten_fest = bool(an)
     """Die Spielszene fuer den LAN-Test, beim Gastgeber wie beim Gast.
 
     Die Lobby und der Rundenplan stehen in lobby.py (LobbyTeil).
@@ -979,6 +992,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._heilte = 0.0
         self._fremde_beute: list[tuple] = []
         self._fremde_gegner: list[tuple] = []
+        self._fremde_geraete: list[tuple] = []
         # Die Buggys der Karte (seit 0.34.9). Beim Gastgeber echte, beim
         # Gast Attrappen, die an die gemeldete Stelle gesetzt werden.
         self.fahrzeuge: list = []
@@ -1536,6 +1550,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         # das eine, das der Gastgeber gewaehlt hat (loadout_nr).
         self.loadout_regel = d["loadouts"]
         self.loadout_nr = int(d["loadout_nr"])
+        self.faehigkeiten_regel = bool(d.get("faehigkeiten", False))
         self.rpg_an = bool(d["rpg"])
         self.rpg_lenkung = bool(d["rpg_lenkung"])
         self.mg_schub = bool(d.get("mg_schub", False))
@@ -1778,6 +1793,24 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         k.waffe = 0
         k.magazin = {w: K.WAFFEN[w]["magazin"] for w in plaetze}
         k.vorrat = {w: K.MUNITION["vorrat"].get(w, 0) for w in plaetze}
+        klassen_modul.anwenden(k)
+
+    def _lobby_umruesten(self, k: Kaempfer) -> None:
+        """In der Lobby gilt eine neue Ausruestung sofort (seit 0.34.79).
+
+        Auch wenn nur die Klasse wechselt und die Waffen dieselben bleiben
+        - `_loadout_anlegen` haette dann nichts zu tun und die Klasse
+        bliebe die alte. Nur beim Gastgeber; im Gefecht wartet eine
+        Aenderung weiter bis zum naechsten Einstieg.
+        """
+        if not self.ist_gastgeber or not self.in_lobby or not self.mit_loadouts:
+            return
+        if k is None or k.ist_bot:
+            return
+        lo = self._loadout_fuer(k, getattr(k, "angemeldet", None))
+        if lo:
+            k.loadout = dict(lo)
+        self._loadout_anlegen(k)
         klassen_modul.anwenden(k)
 
     def _regeln_anlegen(self, k: Kaempfer) -> None:
@@ -2328,6 +2361,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         lo = self.mein_loadout()
         if lo == self._lo_zuletzt:
             return
+        if self.ist_gastgeber and self.in_lobby and self.ich is not None:
+            # In der Lobby gilt es sofort (seit 0.34.79): dort probiert
+            # man aus, und niemand gewinnt etwas dadurch.
+            self._lobby_umruesten(self.ich)
         if not self.ist_gastgeber:
             # Erst, wenn der Gastgeber einen angenommen hat. Vorher bleibt
             # der alte Stand stehen, damit es danach noch einmal versucht
@@ -2339,6 +2376,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._lo_zuletzt = copy.deepcopy(lo)
         if self.mit_loadouts and not self.in_lobby and not self.vorbei:
             self.melden("AUSRÜSTUNG GILT AB DEM NÄCHSTEN EINSTIEG")
+        elif self.in_lobby and self.mit_loadouts:
+            self.melden("AUSRÜSTUNG ANGELEGT")
 
     def _aussehen_beobachten(self) -> None:
         """Hat sich das eigene Aussehen geaendert (Menue AUSRUESTUNG)?
@@ -2801,6 +2840,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                     lo = konto_modul.loadout_saeubern(nachricht.get("lo"))
                     if lo is not None:
                         k.angemeldet = lo
+                        self._lobby_umruesten(k)
             elif art == "aussehen":
                 # Ein anderes Aussehen (seit 0.34.60). Gilt sofort: es
                 # aendert nichts am Gefecht, nur das Bild.
@@ -4095,6 +4135,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 "fr": round(k.funk_rest, 1),
                 # Sein Aussehen (seit 0.34.60), leer fuer die alte Figur.
                 "sk": k.skin,
+                # Seine Klasse und wie lange jede Faehigkeit noch braucht
+                # (seit 0.34.79): fuer das Schild im Bild und die Anzeige
+                # [C] beim Gast.
+                "kl": getattr(k, "klasse", ""),
+                "fh": {a: round(r, 1) for a, r in
+                       getattr(k, "faehigkeit_rest", {}).items() if r > 0.0},
             })
         flug = []
         gegner = []
@@ -4176,11 +4222,27 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         naegel = [[round(n.pos.x, 1), round(n.pos.y, 1), n.ebene,
                    round(n.alter, 1), n.kennung]
                   for n in self.welt.naegel if n.lebt]
+        # Was die Faehigkeiten hinlegen (seit 0.34.79, ausruestung.py):
+        # Ort, Richtung, Ebene, Bild, Leben, Kennung, Hoehe. Eine
+        # Sprengfalle hat kein Bild, solange sie niemand sieht - dann
+        # geht sie gar nicht erst hinaus.
+        geraete = []
+        for w in self.welt.wesen:
+            if not getattr(w, "ist_ausruestung", False) or not w.lebt:
+                continue
+            bild = w.bild
+            if not bild:
+                continue
+            geraete.append([round(w.pos.x, 1), round(w.pos.y, 1), round(w.winkel, 1),
+                            w.ebene, bild,
+                            round(max(0.0, w.leben) / max(0.01, w.max_leben), 2),
+                            w.kennung, round(getattr(w, "hoehe_3d", 0.0), 1)])
         # Gaswolken (seit 0.34.67): Ort, Ebene, Alter, Kennung.
         gas = [[round(g.pos.x, 1), round(g.pos.y, 1), g.ebene, round(g.alter, 1), g.kennung]
                for g in self.welt.gas if g.lebt]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
                 "feuer": brand, "fahrzeuge": wagen, "naegel": naegel, "gas": gas,
+                "geraete": geraete,
                 "wirkung": wirkung,
                 "spieler": spieler, "schuesse": flug, "beute": beute,
                 "gegner": gegner, "welle": self.welle,
@@ -4272,6 +4334,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                     self.welt.gas = []
                     self._fremde_beute = []
                     self._fremde_gegner = []
+                    self._fremde_geraete = []
                     self._fremde_schuesse = []
                     self.welt.partikel = []
                     self.welt.muendungen = []
@@ -4583,6 +4646,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             # Auch vom Gastgeber nur, was es gibt - ein unbekannter Name
             # waere sonst ein rotes Fehlbild.
             k.skin = figuren.saeubern(eintrag.get("sk", ""))
+            kl = eintrag.get("kl", "")
+            if isinstance(kl, str) and (kl in K.KLASSEN or kl == ""):
+                if kl != getattr(k, "klasse", ""):
+                    k.klasse = kl
+                    k.schild = bool(klassen_modul.daten(kl).get("schild", False))
+            fh = eintrag.get("fh")
+            k.faehigkeit_rest = ({str(a): float(r) for a, r in fh.items()
+                                  if isinstance(r, (int, float))}
+                                 if isinstance(fh, dict) else {})
             k.treffer_marken = int(eintrag.get("tz", 0))
             k.ist_bot = bool(eintrag.get("bo", False))
             k.funk = str(eintrag.get("fk", "") or "")[:K.BOTS["funk_laenge"]]
@@ -4624,6 +4696,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._feuer_uebernehmen(meldung.get("feuer", []))
         self._naegel_uebernehmen(meldung.get("naegel", []))
         self._gas_uebernehmen(meldung.get("gas", []))
+        self._geraete_uebernehmen(meldung.get("geraete", []))
         self._wirkung_nachspielen(meldung.get("wirkung", []))
         self._fremde_beute = [tuple(b) for b in meldung.get("beute", [])
                               if isinstance(b, (list, tuple)) and len(b) == 4]
@@ -4718,6 +4791,23 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             n.alter = alter
             neu.append(n)
         self.welt.naegel = neu
+
+    def _geraete_uebernehmen(self, eintraege) -> None:
+        """Was die Faehigkeiten hingelegt haben, beim Gast (seit 0.34.79).
+        Nur zum Zeichnen: Schaden, Kugeln und Fallen rechnet der Gastgeber."""
+        raus = []
+        for e in eintraege if isinstance(eintraege, list) else []:
+            try:
+                x, y, winkel = float(e[0]), float(e[1]), float(e[2])
+                ebene, bild = int(e[3]), str(e[4])
+                anteil, kennung = float(e[5]), int(e[6])
+                hoehe = float(e[7]) if len(e) > 7 else 0.0
+            except (TypeError, ValueError, IndexError):
+                continue
+            if bild not in K.BILD_MASS:
+                continue                # ein unbekanntes Bild waere rot
+            raus.append((x, y, winkel, ebene, bild, anteil, kennung, hoehe))
+        self._fremde_geraete = raus
 
     def _gas_uebernehmen(self, eintraege) -> None:
         """Gaswolken beim Gast (seit 0.34.67), wie die Nagelfelder."""
@@ -5602,7 +5692,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         def ausruesten(_szene=None):
             # Nur bei "eigenes": bei "eines fuer alle" waehlt der
             # Gastgeber, und die eigene Wahl aendert nichts.
-            if self.loadout_regel == "eigenes" and not konto.loadout_gewaehlt_je:
+            # In der Lobby nicht (seit 0.34.79 gilt dort auch "eigenes"):
+            # wer ankommt, soll erst einmal herumlaufen koennen, und ein
+            # Satz ist ohnehin da.
+            if (self.loadout_regel == "eigenes" and not self.in_lobby
+                    and not konto.loadout_gewaehlt_je):
                 self.app.schieben(Ausruestung(self.app))
 
         if not konto.angemeldet and not konto.werte.get("anmeldung_gefragt"):
@@ -5997,6 +6091,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self.renderer.figur_zeichnen(
                 ziel, s, pygame.Vector2(x - ecke.x, y - ecke.y),
                 K.FIGUREN_3D["beute"], ebene_i)
+        for (x, y, winkel, ebene, bild, _anteil, _kn,
+             hoehe) in getattr(self, "_fremde_geraete", ()):
+            if ebene != ebene_i:
+                continue
+            s = self.renderer.bilder.gedreht(bild, winkel)
+            self.renderer.figur_zeichnen(
+                ziel, s, pygame.Vector2(x - ecke.x, y - ecke.y), hoehe, ebene_i)
         for (x, y, winkel, ebene, art, anteil, _kn, vorlauf,
              vx, vy) in self._fremde_gegner:
             if ebene != ebene_i:
@@ -6487,7 +6588,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         "planen": "SPIELART, KARTE UND REGELN DER NÄCHSTEN RUNDE (TASTE P).",
         "neu": "BRICHT DIE RUNDE AB UND FÄNGT SIE NEU AN.",
         "teams": "MITSPIELER SOFORT IN DIE ANDERE MANNSCHAFT.",
-        "ausruestung": "DEINE LOADOUTS. GILT AB DEM NÄCHSTEN EINSTIEG.",
+        "ausruestung": "KLASSE, WAFFEN, AUSSEHEN. IN DER LOBBY SOFORT, IN EINER "
+                       "RUNDE AB DEM NÄCHSTEN EINSTIEG.",
         "konto": "ANMELDEN, ABMELDEN, DEINE ZAHLEN.",
         "einstellungen": "BILD, TON, STEUERUNG, BARRIEREFREIHEIT, NETZ.",
         "code": "KOPIERT DEN CODE. WER IHN UNTER MITSPIELEN EINGIBT, KOMMT REIN.",

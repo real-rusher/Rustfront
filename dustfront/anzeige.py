@@ -111,6 +111,7 @@ class Anzeige:
                 self._gefallen(ziel, ich)
             else:
                 self._vital(ziel, ich)
+                self._faehigkeit(ziel, ich)
                 self._waffe(ziel, ich)
                 self._hotbar(ziel, ich)
         if g.hinweis:
@@ -381,6 +382,34 @@ class Anzeige:
             merk.clear()
         merk[id(k)] = (k, schluessel, wert)
         return wert
+
+    # ---- Ueber dem Kasten unten links: die Faehigkeit ---------------
+    def _faehigkeit(self, ziel, ich) -> None:
+        """[C] und was die Klasse hinlegt - BEREIT oder die Sekunden bis
+        dahin (seit 0.34.79, seit die Faehigkeiten im Gefecht gelten).
+        Ohne Anzeige wuesste niemand, dass C etwas tut."""
+        g = self.g
+        if not getattr(g, "faehigkeiten_an", False):
+            return
+        from . import klassen as klassen_modul
+        d = klassen_modul.daten(getattr(ich, "klasse", ""))
+        arten = d.get("faehigkeit") or ()
+        if not arten:
+            return
+        rest = getattr(ich, "faehigkeit_rest", {}) or {}
+        teile = []
+        for art, _pause in arten:
+            name = klassen_modul.FAEHIGKEIT_NAMEN.get(art, art.upper())
+            r = rest.get(art, 0.0)
+            teile.append((name, r))
+        taste = "[%s]" % g._tastenname("faehigkeit")[:1] if hasattr(g, "_tastenname") else "[C]"
+        x, y = LINKS.x + 2, LINKS.y - 10
+        _text(ziel, taste, x, y, K.C_MUTED)
+        x += SCHRIFT.breite(taste, 1) + 4
+        for name, r in teile:
+            text = name if r <= 0.0 else "%s %d" % (name, math.ceil(r))
+            _text(ziel, text, x, y, K.C_TEAL if r <= 0.0 else K.C_MUTED_DK)
+            x += SCHRIFT.breite(text, 1) + 8
 
     # ---- Unten links: Panzerung, Dash, Medkits ------------------------
     def _vital(self, ziel, ich) -> None:

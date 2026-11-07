@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.34.78"
+VERSION = "0.34.79"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -327,6 +327,11 @@ GETEILT = {
                   lambda v: BILDRATEN.index(v) if v in BILDRATEN else 0),
     "vol_master": ("ton_gesamt", int, int),
     "vol_sfx": ("ton_effekte", int, int),
+    # Seit 0.34.79 stehen auch diese im Spiel (GRAFIK und AUDIO): das
+    # Hauptmenue hat keine eigene Einstellungsseite mehr.
+    "crt": ("menue_crt", bool, bool),
+    "splash": ("intro", bool, bool),
+    "vol_ambient": ("ton_menue", int, int),
 }
 
 
@@ -918,10 +923,16 @@ class Item:
 
 
 class Action(Item):
-    def __init__(self, label, callback, hint="", enabled=True, accent=None):
+    def __init__(self, label, callback, hint="", enabled=True, accent=None,
+                 info=(), titel=""):
         super().__init__(label, hint, enabled)
         self.callback = callback
         self.accent = accent
+        # Fuer die Erklaerkarte rechts (seit 0.34.79): Ueberschrift und
+        # Absaetze. Wer neu ist, soll lesen koennen, was hinter einem
+        # Punkt steckt, bevor er ihn anklickt.
+        self.titel = titel or label
+        self.info = tuple(info)
 
     def activate(self, app):
         return self.callback(app)
@@ -1164,12 +1175,12 @@ STEUERUNG = [
     ("MEDKIT", ("heilen",), ""),
     ("BRECHEISEN", ("nahkampf",), ""),
     ("FEUERART", ("feuermodus",), ""),
+    ("FÄHIGKEIT (KLASSE)", ("faehigkeit",), ""),
     ("INVENTAR", ("inventar",), ""),
     ("SCHIESSEN", (), "MAUS LINKS"),
     ("ZIELEN", (), "MAUS RECHTS"),
     ("WAFFE WÄHLEN", (), "1 - 9"),
     ("SICHTWEITE", (), "MAUSRAD"),
-    ("ZIELLINIE", ("tracer",), ""),
     ("OBERE EBENEN", ("ebenen",), ""),
     ("RUNDEN (MEHRSP.)", ("planen",), ""),
     ("PAUSE", ("pause",), ""),
@@ -1272,7 +1283,46 @@ class Page:
             if isinstance(it, Spacer):
                 continue
             self.draw_row(c, i, it)
-        self.draw_hint(c, r)
+        if self.karte:
+            self.draw_card(c, r)
+        else:
+            self.draw_hint(c, r)
+
+    # Seit 0.34.79: rechts neben der Liste eine Karte, die den gewaehlten
+    # Punkt erklaert. Vorher stand darunter eine Zeile in Kleinschrift, die
+    # bei grossen Fenstern mit der Fusszeile zusammenstiess und fuer
+    # jemanden, der das Spiel nicht kennt, zu wenig sagte.
+    karte = False
+
+    def card_rect(self, r) -> pygame.Rect:
+        x = r.right + 10
+        return pygame.Rect(x, r.y, VW - 26 - x, r.height)
+
+    def draw_card(self, c, r):
+        box = self.card_rect(r)
+        panel(c, box, C_LINE_DK, (6, 4, 3, 196), self.cut)
+        it = self.current
+        if it is None:
+            return
+        titel = getattr(it, "titel", "") or it.label
+        FONT.draw(c, fit(titel, box.width - 16, 2), box.x + 8, box.y + 9,
+                  C_AMBER, 2)
+        pygame.draw.line(c, C_LINE_DK, (box.x + 8, box.y + 25),
+                         (box.right - 8, box.y + 25))
+        absaetze = getattr(it, "info", ()) or ((it.hint,) if it.hint else ())
+        zeichen = max(10, (box.width - 16) // 6)
+        y = box.y + 32
+        for n, absatz in enumerate(absaetze):
+            # Ein Absatz, der mit "> " beginnt, ist ein Tipp: andere Farbe.
+            tipp = absatz.startswith("> ")
+            text = absatz[2:] if tipp else absatz
+            for zeile in wrap(text, zeichen):
+                if y + 7 > box.bottom - 6:
+                    return
+                FONT.draw(c, zeile, box.x + 8, y,
+                          C_TEAL if tipp else (C_CREAM if n == 0 else C_MUTED), 1)
+                y += 9
+            y += 5
 
     def draw_row(self, c, i, it: Item):
         row = self.row_rect(i)
@@ -1337,106 +1387,162 @@ class Page:
 
 
 class MainPage(Page):
+    """Das Hauptmenue (seit 0.34.79 neu geordnet).
+
+    Gemeldet: "raeum mal alle Menues auf ... damit neue Spieler das alles
+    verstehen". Darum: erst SPIELEN (drei Arten), dann VORBEREITEN
+    (Ausruestung, Konto, Einstellungen), dann Hilfe und Beenden - und zu
+    jedem Punkt rechts eine Karte, die sagt, was einen erwartet.
+    FORTSETZEN und die Seite mit Region und Schwierigkeit sind weg: beides
+    wertete das Spiel nie aus, und ein Knopf, der nichts tut, verwirrt
+    gerade die, fuer die er gedacht war.
+    """
     key, tab = "main", "HAUPTMENÜ"
-    py = 65
+    px, py, pw = 26, 72, 196
+    karte = True
 
     def build(self):
-        app = self.app
-        has_save = app.save_info is not None
-        info = app.save_info or {}
         self.items = [
-            Action("FORTSETZEN", lambda a: a.start_game("continue"),
-                   hint=(f"letzter stand: {info.get('label', '')}" if has_save
-                         else "kein spielstand gefunden. starte einen neuen auftrag."),
-                   enabled=has_save, accent=C_TEAL),
-            Action("EINZELSPIELER", lambda a: a.goto("newgame"),
-                   "einzelspieler: region, schwierigkeit und rufzeichen wählen."),
+            Action("EINZELSPIELER", lambda a: a.start_game("new_game"),
+                   info=("ALLEIN GEGEN WELLEN VON GEGNERN.",
+                         "JEDE WELLE WIRD HÄRTER. SAMMLE SCHROTT, HEILE DICH "
+                         "MIT MEDKITS UND HALTE SO LANGE DURCH, WIE DU KANNST.",
+                         "> GUT FÜR DEN ANFANG: HIER LERNST DU STEUERUNG UND "
+                         "WAFFEN IN RUHE."),
+                   accent=C_ORANGE),
             Action("MEHRSPIELER", lambda a: a.goto("multiplayer"),
-                   "lobby erstellen oder einer lobby im netz beitreten."),
-        ]
-        # Der Testmodus (seit 0.34.28), seit 0.34.63 auch auf iPhone und
-        # iPad: dort wird der Ziffernblock angetippt.
-        self.items.append(
+                   info=("MIT ANDEREN ÜBER DAS INTERNET ODER IM LAN.",
+                         "DU LANDEST ZUERST IN DER LOBBY: ARENA, SCHIESSSTAND "
+                         "UND ZOMBIE-GEHEGE. DORT TRÄGST DU DEINE KLASSE UND "
+                         "DEINE WAFFEN UND KANNST ALLES AUSPROBIEREN.",
+                         "> DER GASTGEBER STELLT DIE RUNDEN EIN UND STARTET SIE."),
+                   accent=C_ORANGE),
             Action("TESTMODUS", lambda a: a.start_game("testmodus"),
-                   "zum ausprobieren: beobachter, ziffernblock, spawner.",
-                   accent=C_TEAL))
-        self.items += [
-            Action("OPTIONEN", lambda a: a.goto("options"),
-                   "bild, ton und darstellung anpassen."),
-            Action("STEUERUNG", lambda a: a.goto("controls"),
-                   "belegung für charakter- und fahr-modus."),
-            Action("MITWIRKENDE", lambda a: a.goto("credits"),
-                   "mitwirkende und projektangaben."),
+                   info=("DIE SPIELWIESE.",
+                         "DU SCHWEBST ALS BEOBACHTER ÜBER DER KARTE UND "
+                         "SETZT GEGNER, BOTS, WAFFEN, FAHRZEUGE UND FALLEN, "
+                         "WO DU WILLST. ALLE KLASSEN-FÄHIGKEITEN WIRKEN.",
+                         "> DER ZIFFERNBLOCK (ODER ANTIPPEN) SIND DIE WERKZEUGE. "
+                         "F2: SIEHT AUS WIE EINE NORMALE RUNDE."),
+                   accent=C_TEAL),
+            Spacer(5),
+            Action("AUSRÜSTUNG", lambda a: a.start_game("ausruestung"),
+                   titel="KLASSE & WAFFEN",
+                   info=("WÄHLE DEINE KLASSE, ZWEI WAFFEN, EINE WURFWAFFE "
+                         "UND DEIN AUSSEHEN.",
+                         "DIE KLASSE GIBT VORTEILE (LEBEN, TEMPO, NACHLADEN ...) "
+                         "UND EINE FÄHIGKEIT AUF TASTE C, ETWA EINE "
+                         "MUNITIONSKISTE ODER EIN GESCHÜTZ.",
+                         "> IN DER LOBBY GILT EINE ÄNDERUNG SOFORT, IN EINER "
+                         "RUNDE AB DEM NÄCHSTEN EINSTIEG.")),
+            Action("KONTO", lambda a: a.start_game("konto"),
+                   info=("ANMELDEN ODER EIN KONTO ANLEGEN.",
+                         "DAS KONTO ZÄHLT ABSCHÜSSE, SIEGE UND DEINE "
+                         "BESTENLISTE UND NIMMT AUSRÜSTUNG UND EINSTELLUNGEN "
+                         "AN JEDEN RECHNER MIT.",
+                         "> OHNE KONTO KANNST DU GENAUSO SPIELEN.")),
+            Action("EINSTELLUNGEN", lambda a: a.start_game("einstellungen"),
+                   info=("BILD, TON, GRAFIK, TASTEN, BARRIEREFREIHEIT, NETZ.",
+                         "ALLES AN EINEM ORT - ES GILT IM MENÜ UND IM SPIEL "
+                         "GLEICHERMASSEN.",
+                         "> F11 SCHALTET JEDERZEIT ZWISCHEN FENSTER UND "
+                         "VOLLBILD.")),
+            Spacer(5),
+            Action("SO SPIELST DU", lambda a: a.goto("controls"),
+                   info=("DIE WICHTIGSTEN TASTEN UND DIE ERSTEN SCHRITTE.",
+                         "LIES DAS EINMAL, BEVOR DU DIE ERSTE RUNDE STARTEST. "
+                         "DORT STEHEN AUCH DIE MITWIRKENDEN.")),
             Action("BEENDEN", lambda a: a.goto("quit"),
-                   "wandler abschalten und zurück zum schreibtisch."),
+                   info=("DAS SPIEL SCHLIESSEN.",
+                         "EINSTELLUNGEN UND AUSRÜSTUNG SIND SCHON GESPEICHERT.")),
         ]
 
 
 class MultiplayerPage(Page):
     key, tab = "multiplayer", "MEHRSPIELER"
-    py = 91
+    px, py, pw = 26, 72, 196
+    karte = True
 
     def build(self):
         self.items = [
             Action("LOBBY ERSTELLEN", lambda a: a.start_game("mehrspieler"),
-                   "eigene lobby oeffnen und eine runde fuer alle starten."),
+                   info=("DU BIST GASTGEBER.",
+                         "DEINE LOBBY BEKOMMT EINEN CODE AUS VIER WÖRTERN. "
+                         "GIB IHN DEINEN FREUNDEN - DAMIT KOMMEN SIE ÜBER DAS "
+                         "INTERNET HEREIN, OHNE ROUTER-EINSTELLUNGEN.",
+                         "> IN DER LOBBY: P ODER ESC - RUNDE EINSTELLEN, "
+                         "DANN STARTEN."),
+                   accent=C_ORANGE),
             Action("LOBBY BEITRETEN", lambda a: a.start_game("mehrspieler_beitreten"),
-                   "lobbys im netz anzeigen und einer lobby beitreten."),
-            Action("ZURÜCK", lambda a: a.goto("main"), "zurueck ins hauptmenue."),
+                   info=("BEI JEMANDEM MITSPIELEN.",
+                         "ZEIGT DIE LOBBYS IN DEINEM NETZ. FÜR EINE LOBBY IM "
+                         "INTERNET GIBST DU DEN CODE EIN, DEN DIR DER "
+                         "GASTGEBER GESAGT HAT.",
+                         "> GASTGEBER UND GAST BRAUCHEN DIESELBE VERSION."),
+                   accent=C_ORANGE),
+            Spacer(5),
+            Action("ZURÜCK", lambda a: a.goto("main"),
+                   info=("ZURÜCK INS HAUPTMENÜ.",)),
         ]
 
 
-class NewGamePage(Page):
-    key, tab = "newgame", "NEUER AUFTRAG"
-    px, py, pw = 26, 48, 322
-    row_h = 17
-    body_h = 58
+# Was "SO SPIELST DU" neben den Tasten erklaert. Kurz, und in der
+# Reihenfolge, in der man es beim ersten Spielen braucht.
+ERSTE_SCHRITTE = [
+    "MIT DER MAUS ZIELEN, LINKS SCHIESSEN.",
+    "1-9 WECHSELN DIE WAFFE. DAS BRECHEISEN IST IMMER DA.",
+    "DER DASH WEICHT AUS UND LÄDT SICH VON SELBST AUF.",
+    "AM BODEN HILFT DIR EIN MITSPIELER WIEDER AUF.",
+    "DIE FÄHIGKEIT DEINER KLASSE: MENÜ AUSRÜSTUNG.",
+]
+
+
+class ControlsPage(Page):
+    """SO SPIELST DU (seit 0.34.79, vorher nur STEUERUNG): links die
+    Tasten, so wie sie gerade belegt sind, rechts die ersten Schritte."""
+    key, tab = "controls", "SO SPIELST DU"
+    px, py, pw = 26, 50, 428
+    body_h = 146
 
     def build(self):
-        self.items = [
-            Cycle("REGION", "region", [r[0] for r in REGIONEN],
-                  hints=[r[1] for r in REGIONEN]),
-            Cycle("SCHWIERIGKEIT", "difficulty", SCHWIERIGKEITEN,
-                  hints=["mehr schrott, weniger hitze, gegner zielen langsamer.",
-                         "die ausbalancierte fassung. so ist es gedacht.",
-                         "hitze steigt schneller, patrouillen jagen in gruppen.",
-                         "ein wandler, ein leben. kein laden nach dem verlust."]),
-            TextInput("RUFZEICHEN", "callsign",
-                      "enter zum tippen, enter zum \u00fcbernehmen. bis zu 10 zeichen."),
-            Spacer(4),
-            Action("KAMPAGNE STARTEN", lambda a: a.start_game("new_game"),
-                   "legt einen neuen spielstand an und startet im gewählten sektor.",
-                   accent=C_ORANGE),
-            Action("ZURÜCK", lambda a: a.goto("main"), ""),
-        ]
+        self.items = [Action("MITWIRKENDE", lambda a: a.goto("credits"), ""),
+                      Action("ZURÜCK", lambda a: a.goto("main"), "")]
 
     def draw_body(self, c, r):
-        idx = self.app.settings.region % len(REGIONEN)
-        name, _desc, disp = REGIONEN[idx]
-        FONT.draw(c, "PRÄSENZ IM SEKTOR", r.x, r.y, C_AMBER, 1)
-        FONT.draw(c, name, r.x, r.y + 12, C_CREAM, 2)
-        y = r.y + 28
-        for i, (fac, val) in enumerate(disp.items()):
-            FONT.draw(c, fac, r.x, y + i * 10, C_MUTED, 1)
-            seg_bar(c, r.x + 52, y + i * 10, 84, 5, val, FRAKTIONSFARBE[fac],
-                    C_LINE_DK, segments=12, gap=2)
-            FONT.draw(c, f"{int(val * 100)}", r.x + 156, y + i * 10,
-                      FRAKTIONSFARBE[fac], 1, align="right")
-        prev = sector_preview(idx)
-        box = pygame.Rect(r.right - prev.get_width() - 3, r.y - 2,
-                          prev.get_width() + 2, prev.get_height() + 2)
-        pygame.draw.rect(c, (8, 6, 5), box)
-        pygame.draw.rect(c, C_LINE_DK, box, 1)
-        c.blit(prev, (box.x + 1, box.y + 1))
+        links = 206
+        FONT.draw(c, "TASTEN", r.x, r.y, C_TEAL, 1)
+        FONT.draw(c, "ERSTE SCHRITTE", r.x + links + 12, r.y, C_ORANGE, 1)
+        pygame.draw.line(c, C_LINE_DK, (r.x, r.y + 9), (r.x + links, r.y + 9))
+        pygame.draw.line(c, C_LINE_DK, (r.x + links + 12, r.y + 9),
+                         (r.right - 2, r.y + 9))
+        for i, (label, keys) in enumerate(steuerung_zeilen()):
+            y = r.y + 14 + i * 8
+            if y + 7 > r.bottom:
+                break
+            FONT.draw(c, label, r.x, y, C_MUTED, 1)
+            FONT.draw(c, fit(keys, links - FONT.width(label) - 10, 1),
+                      r.x + links, y, C_CREAM, 1, align="right")
+        y = r.y + 14
+        x = r.x + links + 12
+        zeichen = (r.right - x) // 6
+        for satz in ERSTE_SCHRITTE:
+            for n, zeile in enumerate(wrap(satz, zeichen - 2)):
+                if n == 0:
+                    pygame.draw.rect(c, C_AMBER, (x, y + 2, 3, 3))
+                FONT.draw(c, zeile, x + 7, y, C_CREAM if n == 0 else C_MUTED, 1)
+                y += 9
+            y += 3
+        FONT.draw(c, "UMLEGEN: EINSTELLUNGEN, STEUERUNG",
+                  x, r.bottom - 8, C_AMBER, 1)
 
 
 class CreditsPage(Page):
     key, tab = "credits", "MITWIRKENDE"
-    px, py, pw = 26, 86, 300
+    px, py, pw = 26, 72, 300
     body_h = 76
 
     def build(self):
-        self.items = [Action("ZURÜCK", lambda a: a.goto("main"), "zurück ins hauptmenü.")]
+        self.items = [Action("ZURÜCK", lambda a: a.goto("controls"), "")]
 
     def draw_body(self, c, r):
         FONT.draw(c, "DUSTFRONT", r.x, r.y, C_AMBER, 2)
@@ -1444,61 +1550,6 @@ class CreditsPage(Page):
         FONT.draw(c, "NICOLAS, NIKOLAUS, MARLON", r.x, r.y + 34, C_CREAM, 1)
         FONT.draw(c, "UND ALFRED", r.x, r.y + 44, C_CREAM, 1)
         FONT.draw(c, "PYTHON + PYGAME-CE", r.x, r.y + 62, C_TEAL, 1)
-
-
-class OptionsPage(Page):
-    key, tab = "options", "OPTIONEN"
-    px, py, pw = 26, 46, 322
-    row_h = 16
-
-    def build(self):
-        self.items = [
-            Toggle("VOLLBILD", "fullscreen", "f11 tut dasselbe, jederzeit."),
-            Cycle("PIXELRASTER", "scale_mode", SKALIER_MODI,
-                  hints=["das bild füllt das fenster, seitenverhältnis bleibt.",
-                         "nur ganze pixelvielfache. saubere kanten, schmalerer rand."]),
-            Cycle("BILDRATE", "fps_index",
-                  ["FREI" if b == 0 else str(b) for b in BILDRATEN],
-                  hint="obergrenze für bilder pro sekunde. gilt auch im spiel."),
-            Toggle("CRT-FILTER", "crt", "scanlinien und leichtes flimmern."),
-            Toggle("INTRO ZEIGEN", "splash",
-                   "die splash-sequenz beim start. esc \u00fcberspringt sie immer."),
-            Slider("GESAMT", "vol_master", "hauptlautstärke. gilt auch im spiel."),
-            Slider("REAKTORBRUMM", "vol_ambient", "der hintergrundton des wandlers."),
-            Slider("EFFEKTE", "vol_sfx",
-                   "klicks und bestätigungen, im spiel schüsse und treffer."),
-            Spacer(6),
-            Action("ZURÜCK", lambda a: a.goto("main"), ""),
-        ]
-
-
-class ControlsPage(Page):
-    key, tab = "controls", "STEUERUNG"
-    px, py, pw = 26, 52, 322
-    body_h = 118
-
-    def build(self):
-        self.items = [Action("ZURÜCK", lambda a: a.goto("main"), "")]
-
-    def draw_body(self, c, r):
-        half = r.width // 2
-        FONT.draw(c, "IM SPIEL", r.x, r.y, C_TEAL, 1)
-        FONT.draw(c, "MAUS UND MEHR", r.x + half, r.y, C_ORANGE, 1)
-        pygame.draw.line(c, C_LINE_DK, (r.x, r.y + 9), (r.x + half - 12, r.y + 9))
-        pygame.draw.line(c, C_LINE_DK, (r.x + half, r.y + 9), (r.right - 4, r.y + 9))
-        zeilen = steuerung_zeilen()
-        je = (len(zeilen) + 1) // 2
-        for i, (label, keys) in enumerate(zeilen):
-            col, row = divmod(i, je)
-            x = r.x + col * half
-            y = r.y + 14 + row * 9
-            FONT.draw(c, label, x, y, C_MUTED, 1)
-            FONT.draw(c, fit(keys, half - 16 - FONT.width(label) - 8, 1),
-                      x + half - 16, y, C_CREAM, 1, align="right")
-        y2 = r.y + 14 + je * 9 + 6
-        pygame.draw.line(c, C_LINE_DK, (r.x, y2 - 5), (r.right - 4, y2 - 5))
-        FONT.draw(c, "UMLEGEN IM SPIEL: ESC - EINSTELLUNGEN - STEUERUNG.",
-                  r.x, y2, C_AMBER, 1)
 
 
 class QuitPage(Page):
@@ -1519,8 +1570,8 @@ class QuitPage(Page):
         super().draw(c)
 
 
-PAGES = {p.key: p for p in (MainPage, MultiplayerPage, NewGamePage, CreditsPage,
-                            OptionsPage, ControlsPage, QuitPage)}
+PAGES = {p.key: p for p in (MainPage, MultiplayerPage, CreditsPage,
+                            ControlsPage, QuitPage)}
 
 
 # --------------------------------------------------------------------------
@@ -1919,12 +1970,16 @@ class App:
 
     def draw_title(self, c):
         x = 26
-        if self.page.key == "main" or self.page.key == "quit":
-            y = 34
-            FONT.draw(c, SPIEL_TITEL, x, y, C_CREAM, 5, spacing=2, shadow=(62, 26, 12))
-            w = FONT.width(SPIEL_TITEL, 5, 2)
-            pygame.draw.rect(c, C_ORANGE, (x, y + 40, w, 2))
-            pygame.draw.rect(c, C_AMBER, (x, y + 40, 44, 2))
+        if self.page.key in ("main", "quit", "multiplayer"):
+            # Seit 0.34.79 eine Stufe kleiner: in 5 lief die Schrift in
+            # den Reiter der Tafel darunter.
+            y = 24
+            FONT.draw(c, SPIEL_TITEL, x, y, C_CREAM, 4, spacing=2, shadow=(62, 26, 12))
+            w = FONT.width(SPIEL_TITEL, 4, 2)
+            pygame.draw.rect(c, C_ORANGE, (x, y + 33, w, 2))
+            pygame.draw.rect(c, C_AMBER, (x, y + 33, 44, 2))
+            FONT.draw(c, "GEFECHTE IM STAUB", x + w + 10, y + 26,
+                      C_MUTED, 1)
         else:
             y = 24
             w = FONT.draw(c, SPIEL_TITEL, x, y, C_MUTED, 2, spacing=2)
@@ -1933,7 +1988,9 @@ class App:
     def draw_footer(self, c):
         y = VH - 16
         pygame.draw.line(c, C_LINE_DK, (26, y - 5), (VW - 26, y - 5))
-        hint = f"[{UP}{DOWN}] WÄHLEN   [{LEFT}{RIGHT}] ÄNDERN   [ENTER] OK   [ESC] ZURÜCK"
+        # Ohne [<>] AENDERN (seit 0.34.79): im Hauptmenue gibt es nichts
+        # mehr zu verstellen, und die Zeile lief in die Versionsnummer.
+        hint = f"[{UP}{DOWN}] WÄHLEN   [ENTER] OK   [ESC] ZURÜCK"
         FONT.draw(c, hint, 26, y, C_MUTED, 1)
         FONT.draw(c, "V%s  %s" % (VERSION, PHASE), VW - 26, y, C_MUTED_DK, 1,
                   align="right")
@@ -1971,6 +2028,11 @@ class App:
 # Platzhalter-Szene, damit das Menue vollstaendig testbar ist
 # --------------------------------------------------------------------------
 
+# Was das Hauptmenue im Spiel oeffnet, ohne zu spielen (seit 0.34.79):
+# die Menues des Spiels selbst, damit es jede Einstellung nur einmal gibt.
+NUR_MENUE = ("einstellungen", "ausruestung", "konto")
+
+
 def spiel_scene(window, app: App, result: dict) -> None:
     """Uebergibt an das eigentliche Spiel und nimmt danach wieder auf.
 
@@ -1988,7 +2050,7 @@ def spiel_scene(window, app: App, result: dict) -> None:
         placeholder_scene(window, app, result)
         return
 
-    if result.get("action") not in ("mehrspieler", "mehrspieler_beitreten", "testmodus"):
+    if result.get("action") in ("new_game", "continue"):
         # Der Mehrspieler hat keinen Spielstand; FORTSETZEN soll weiter
         # auf den letzten Auftrag zeigen.
         app.write_save()
@@ -2001,7 +2063,6 @@ def spiel_scene(window, app: App, result: dict) -> None:
         # auch hier: frisch lesen, bevor das Fenster neu aufgebaut wird.
         app.settings.load()
         app.audio.apply_volumes()
-        app.pages.pop("options", None)
         app.apply_display()
         pygame.event.clear()
         pygame.key.set_repeat()
@@ -2126,11 +2187,17 @@ def main() -> int:
         result = app.run()
         if result["action"] == "quit":
             break
+        # Wohin es zurueckgeht: aus EINSTELLUNGEN, KONTO und AUSRUESTUNG
+        # auf genau diese Zeile, aus einem Spiel an den Anfang.
+        seite, zeile = app.page.key, app.page.index
         spiel_scene(app.window, app, result)
         app.running = True
         app.fade, app.fade_dir, app.pending = 1.0, -1, None
         app.pages.pop("main", None)
         app.goto("main")
+        if result["action"] in NUR_MENUE and seite == "main":
+            app.page.index = zeile
+            app.fade = 0.35
         app.audio.play("back")
     app.audio.shutdown()
     try:

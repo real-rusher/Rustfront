@@ -42,13 +42,20 @@ from .menues import Menue
 def lobby_regeln() -> dict:
     """Die Regeln, die in der Lobby gelten.
 
-    Jeder hat alles - man soll hier jede Waffe ausprobieren koennen, auch
-    die, die man in der naechsten Runde nicht tragen wird. Kein
-    Einstiegsschutz, der wuerde im Schiessstand nur stoeren; keine knappe
-    Munition, keine herumliegenden Medkits, kein Raketenwerfer.
+    Seit 0.34.79 traegt jeder hier seinen eigenen Satz - Klasse, zwei
+    Waffen, Wurfwaffe - mit der Faehigkeit auf C. Gemeldet: Klassen und
+    die neuen Waffen sollen in den Mehrspieler-Testplatz. Bis dahin hatte
+    in der Lobby jeder dieselben zehn alten Waffen und keine Klasse; die
+    dreissig neuen kamen hier gar nicht vor. Eine Aenderung im Menue
+    AUSRUESTUNG gilt in der Lobby sofort (`_lobby_umruesten`), so probiert
+    man jede Waffe und jede Klasse aus, ohne eine Runde zu starten.
+
+    Kein Einstiegsschutz, der wuerde im Schiessstand nur stoeren; keine
+    knappe Munition, keine herumliegenden Medkits, kein Raketenwerfer.
     """
     return R.saeubern({"modus": "lobby", "karte": K.LOBBY["karte"],
-                       "loadouts": "alles", "knapp": False, "schutz": False,
+                       "loadouts": "eigenes", "faehigkeiten": True,
+                       "knapp": False, "schutz": False,
                        "medkits": 3, "medkit_spawn": False, "rpg": False})
 
 

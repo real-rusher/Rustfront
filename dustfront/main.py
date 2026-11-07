@@ -72,6 +72,19 @@ def starten(headless: bool = False, beenden: bool = True,
             print("Den Testmodus gibt es nur mit Tastatur (nicht auf iOS).")
             return 1
         app.schieben(testmodus.Testmodus(app, karte=app.auftrag.get("karte") or "staubtal"))
+    elif app.auftrag.get("action") in ("einstellungen", "ausruestung", "konto"):
+        # Seit 0.34.79 oeffnet das Hauptmenue die Menues des Spiels selbst,
+        # statt eigene, kleinere zu haben: so gibt es jede Einstellung
+        # genau einmal. Ist das Menue zu, ist der Stapel leer, und es geht
+        # zurueck ins Hauptmenue.
+        from . import menues
+        art = app.auftrag["action"]
+        if art == "einstellungen":
+            app.schieben(menues.Einstellungen(app))
+        elif art == "ausruestung":
+            app.schieben(menues.Ausruestung(app))
+        else:
+            app.schieben(menues.Anmeldung(app))
     else:
         app.schieben(Spiel(app, karte=app.auftrag.get("karte")))
     app.laufen(beenden=beenden)

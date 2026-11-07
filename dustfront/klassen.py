@@ -67,6 +67,48 @@ def anwenden(k) -> None:
     k.faehigkeit_rest = {}
 
 
+# Wie ein Vorteil im Menue heisst (seit 0.34.79). Faktor > 1 heisst bei
+# "leben", "tempo" und "fahrzeug" mehr; bei den anderen ist weniger
+# besser (Nachladezeit, Feuerschaden ...), darum steht dort "kleiner".
+_VORTEIL_TEXTE = (
+    ("leben", "LEBEN", "groesser"),
+    ("tempo", "TEMPO", "groesser"),
+    ("nachladen", "SCHNELLER NACHLADEN", "kleiner"),
+    ("kuehlen", "SCHNELLER ABKÜHLEN", "kleiner"),
+    ("feuer", "WENIGER FEUERSCHADEN", "kleiner"),
+    ("aufhelfen", "SCHNELLER AUFHELFEN", "kleiner"),
+    ("fahrzeug", "SCHADEN AN FAHRZEUGEN", "groesser"),
+    ("fahrzeug_schutz", "WENIGER SCHADEN AM EIGENEN FAHRZEUG", "kleiner"),
+)
+
+
+def vorteile(klasse: str) -> list:
+    """Was die Klasse an der Figur aendert, als kurze Zeilen fuers Menue
+    (AUSRUESTUNG zeigt sie, wenn die Zeile KLASSE gewaehlt ist). Ein
+    Nachteil steht mit Minus da - wer eine Klasse waehlt, soll auch
+    sehen, was sie kostet."""
+    d = daten(klasse)
+    raus = []
+    for schluessel, text, richtung in _VORTEIL_TEXTE:
+        f = float(d.get(schluessel, 1.0))
+        if abs(f - 1.0) < 1e-6:
+            continue
+        prozent = int(round(abs(f - 1.0) * 100))
+        gut = (f > 1.0) == (richtung == "groesser")
+        if richtung == "groesser":
+            raus.append("%s%d%% %s" % ("+" if f > 1.0 else "-", prozent, text))
+        else:
+            raus.append(("%d%% %s" % (prozent, text)) if gut
+                        else ("-%d%% %s" % (prozent, text)))
+    if d.get("medkits"):
+        raus.append("+%d MEDKIT" % int(d["medkits"]))
+    if d.get("granaten"):
+        raus.append("+%d SCHUSS JE WURFWAFFE" % int(d["granaten"]))
+    if d.get("schild"):
+        raus.append("TRÄGT EIN GROSSES SCHILD VORN")
+    return raus
+
+
 def faehigkeit_bereit(k):
     """Die erste Faehigkeit, deren Pause um ist - (Art, Pause) oder None."""
     d = daten(getattr(k, "klasse", ""))

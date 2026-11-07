@@ -132,8 +132,11 @@ pruef("Aenderung steht sofort in der Datei",
 
 opt.seite_wechseln(1)
 regler = [el for el in opt.elemente if isinstance(el, ui.Regler)]
-pruef("Tonseite hat zwei Regler (Musik gibt es noch nicht)", len(regler) == 2,
-      str(len(regler)))
+# Seit 0.34.79 steht hier auch das Brummen des Hauptmenues (das keine
+# eigene Einstellungsseite mehr hat). Musik gibt es weiter nicht.
+pruef("Tonseite: Gesamt, Effekte, Brummen im Hauptmenue - keine Musik",
+      [el.name for el in regler] == ["ton_gesamt", "ton_effekte", "ton_menue"],
+      str([el.name for el in regler]))
 opt.wahl = opt.elemente.index(regler[0])
 vorher = app.opt["ton_gesamt"]
 taste(opt, pygame.K_LEFT)
@@ -143,10 +146,21 @@ pruef("Der Mischer uebernimmt den Wert sofort",
       abs(app.klaenge.gesamt - app.opt["ton_gesamt"] / 100.0) < 1e-6)
 
 opt.seite_wechseln(2)
+# Seit 0.34.79 stehen keine grauen NICHT-VERFUEGBAR-Zeilen mehr in den
+# Einstellungen (Menues aufgeraeumt). Auf keiner Seite.
+_platzhalter = []
+for _nr in (0, 1, 2, 4, 5):
+    opt.seite_wechseln(_nr)
+    _platzhalter += [el.text for el in opt.elemente if isinstance(el, ui.Platzhalter)]
+pruef("Keine Seite der Einstellungen zeigt NICHT VERFUEGBAR", not _platzhalter,
+      ", ".join(_platzhalter))
+opt.seite_wechseln(2)
+pruef("GRAFIK hat Roehrenbild und Intro des Hauptmenues",
+      {"menue_crt", "intro"} <= {el.name for el in opt.elemente})
+# Wie sich eine gesperrte Zeile verhaelt, gilt trotzdem weiter - der
+# Platzhalter selbst ist nicht weg (ui.Platzhalter).
+opt.elemente.append(ui.Platzhalter((40, 300, 200, 16), "PROBE", "probe_gesperrt"))
 gesperrt = [el for el in opt.elemente if el.gesperrt]
-pruef("Was es noch nicht gibt, ist als NICHT VERFUEGBAR markiert",
-      len(gesperrt) == 4 and all(isinstance(el, ui.Platzhalter) for el in gesperrt),
-      str(len(gesperrt)))
 pruef("Ein Platzhalter laesst sich nicht waehlen",
       not any(el in opt.waehlbar for el in gesperrt))
 opt.wahl = opt.elemente.index(gesperrt[0])
@@ -428,7 +442,29 @@ _zeilen = dict(RM.steuerung_zeilen())
 pruef("Die Steuerung im Hauptmenue ist die des Spiels",
       _zeilen.get("NACHLADEN") == E.belegung_text(app.opt.tasten["nachladen"])
       and "BAUEN" not in _zeilen, str(_zeilen))
+# Das Hauptmenue (seit 0.34.79 aufgeraeumt): keine Knoepfe, die nichts
+# tun, eine Erklaerkarte je Punkt, und Einstellungen nur noch im Spiel.
+pruef("Hauptmenue: ohne FORTSETZEN, Region und eigene Optionsseite",
+      "newgame" not in RM.PAGES and "options" not in RM.PAGES)
+_hm = RM.MainPage.__new__(RM.MainPage)
+_hm.app = None
+_hm.build()
+_labels = [it.label for it in _hm.items if isinstance(it, RM.Action)]
+pruef("Hauptmenue: Spielen, Ausruestung, Konto, Einstellungen, Hilfe",
+      {"EINZELSPIELER", "MEHRSPIELER", "TESTMODUS", "AUSRÜSTUNG", "KONTO",
+       "EINSTELLUNGEN", "SO SPIELST DU", "BEENDEN"} <= set(_labels), str(_labels))
+pruef("Jeder Punkt hat eine Erklaerung",
+      all(it.info for it in _hm.items if isinstance(it, RM.Action)))
+pruef("Roehrenbild, Intro und Brummen kommen aus dem Spiel",
+      {"crt", "splash", "vol_ambient"} <= set(RM.GETEILT))
+app.opt["menue_crt"] = False
+app.opt["intro"] = False
+app.opt.speichern()
+_rm2 = RM.Settings()
+pruef("... und das Hauptmenue uebernimmt sie", _rm2.crt is False and _rm2.splash is False)
 app.opt.zuruecksetzen_werte()
+app.opt.speichern()
+pruef("Die Einstellungen des Spiels kennen sie", {"menue_crt", "intro", "ton_menue"} <= set(E.VORGABE))
 
 # Direkt in den Testmodus (seit 0.34.63): so startet ios/aufspielen.sh
 # --testmodus die App auf dem iPhone oder iPad.

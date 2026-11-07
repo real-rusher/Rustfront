@@ -92,6 +92,12 @@ VORGABE = {
     # eine Kennung aus K.FIGUREN, leer fuer die alte Figur. Alle anderen
     # sehen es auch - es geht mit der Weltmeldung mit.
     "aussehen": "",
+    # Was frueher nur das Hauptmenue einstellen konnte (seit 0.34.79 hier,
+    # damit es nur noch einen Ort fuer Einstellungen gibt): Scanlinien im
+    # Hauptmenue, die Startsequenz und das Brummen des Reaktors dort.
+    "menue_crt": True,
+    "intro": True,
+    "ton_menue": 45,
 }
 
 # Welche Einstellungen zum **Spieler** gehoeren und nicht zum Geraet.

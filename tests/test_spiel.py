@@ -6615,7 +6615,10 @@ _tm73.verlassen()
 w, ga = _paar59("team", karte="staubtal")
 w.ich.loadout = _KO73.loadout_saeubern({"name": "N", "klasse": "nahkaempfer"})
 _KL73.anwenden(w.ich)
-pruef("Im Gefecht legt C (noch) nichts hin", _KL73.faehigkeit_nutzen(w, w.ich) == "")
+# Seit 0.34.79 gilt die Faehigkeit auch im Gefecht - aber nur mit
+# Loadouts (ohne Satz keine Klasse); diese Runde ist JEDER HAT ALLES.
+pruef("Ohne Loadouts (JEDER HAT ALLES) legt C nichts hin",
+      _KL73.faehigkeit_nutzen(w, w.ich) == "")
 for _ in range(4):
     w.schritt(K.NETZ["takt"])
     ga.schritt(K.NETZ["takt"])
@@ -15481,6 +15484,68 @@ pruef("PIXELRASTER OHNE FLIMMERN: fuellt das Fenster und zeigt das Bild",
 app.opt["pixelraster"] = _alt178[1]
 app.fenster = pygame.display.set_mode(_alt178[0])
 app.viewport_rechnen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Klassen und neue Waffen in der Lobby, Faehigkeiten im Netz (0.34.79)")
+pruef("Neue Regel KLASSEN-FAEHIGKEITEN, an als Vorgabe",
+      RG.vorgabe()["faehigkeiten"] is True and "faehigkeiten" in RG.EINFACH)
+pruef("Sie gilt nur mit Loadouts (ohne Satz keine Klasse)",
+      not RG.NACH_NAME["faehigkeiten"].gilt({"loadouts": "alles"})
+      and RG.NACH_NAME["faehigkeiten"].gilt({"loadouts": "eigenes"}))
+_lr179 = LB.lobby_regeln()
+pruef("In der Lobby traegt jeder seinen eigenen Satz, mit Faehigkeit",
+      _lr179["loadouts"] == "eigenes" and _lr179["faehigkeiten"] is True, str(_lr179))
+wl179, gl179 = lobbypaar()
+pruef("Die Lobby hat Faehigkeiten an, beim Gast wie beim Gastgeber",
+      wl179.faehigkeiten_an and gl179.faehigkeiten_an)
+gk179 = wl179.kaempfer[gl179.meine_nummer]
+_satz179 = {"name": "SANI", "klasse": "sanitaeter", "waffen": ["zwillinge", "autoschrot"],
+            "wuerfe": ["rauch"]}
+gl179.gast.senden({"t": "loadout", "lo": _satz179})
+for _ in range(20):
+    wl179.schritt(K.NETZ["takt"])
+    gl179.schritt(K.NETZ["takt"])
+pruef("Eine neue Ausruestung gilt in der Lobby sofort - Klasse und neue Waffen",
+      gk179.klasse == "sanitaeter" and "zwillinge" in gk179.waffen
+      and "autoschrot" in gk179.waffen, "%s %s" % (gk179.klasse, gk179.waffen))
+_gich179 = gl179.kaempfer.get(gl179.meine_nummer)
+pruef("Der Gast weiss seine Klasse", _gich179 is not None and _gich179.klasse == "sanitaeter",
+      str(getattr(_gich179, "klasse", None)))
+# Auch wenn nur die Klasse wechselt und die Waffen bleiben.
+gl179.gast.senden({"t": "loadout", "lo": dict(_satz179, klasse="")})
+for _ in range(10):
+    wl179.schritt(K.NETZ["takt"])
+    gl179.schritt(K.NETZ["takt"])
+pruef("Nur die Klasse gewechselt: auch das gilt sofort", gk179.klasse == "", gk179.klasse)
+gl179.gast.senden({"t": "loadout", "lo": _satz179})
+for _ in range(10):
+    wl179.schritt(K.NETZ["takt"])
+    gl179.schritt(K.NETZ["takt"])
+_was179 = _KL73.faehigkeit_nutzen(wl179, gk179)
+for _ in range(10):
+    wl179.schritt(K.NETZ["takt"])
+    gl179.schritt(K.NETZ["takt"])
+pruef("Taste C in der Lobby: die Sanitasche liegt", _was179 == "SANITASCHE"
+      and any(isinstance(x, _AU73.Sanitasche) for x in wl179.welt.wesen))
+pruef("Der Gast sieht sie (geraete in der Weltmeldung)",
+      any(x[4] == "sanitasche" for x in gl179._fremde_geraete), str(gl179._fremde_geraete))
+pruef("Und weiss, wie lange die Faehigkeit noch braucht",
+      _gich179.faehigkeit_rest.get("sanitasche", 0.0) > 0.0, str(_gich179.faehigkeit_rest))
+_bild179 = pygame.Surface((K.GAME_W, K.GAME_H))
+gl179.zeichnen(_bild179, 0.5)
+pruef("Der Gast zeichnet Geraet und Anzeige [C] ohne Fehler", True)
+wl179.verlassen(); gl179.verlassen()
+w179, ga179 = _paar59("team", karte="staubtal")
+pruef("Eine Runde mit JEDER HAT ALLES hat keine Faehigkeiten", not w179.faehigkeiten_an)
+w179._regeln_setzen(dict(w179.regelwerk, loadouts="eigenes", faehigkeiten=False))
+pruef("... und mit Loadouts, aber abgeschaltet, auch nicht", not w179.faehigkeiten_an)
+w179._regeln_setzen(dict(w179.regelwerk, loadouts="eigenes", faehigkeiten=True))
+pruef("Mit Loadouts und an: ja", w179.faehigkeiten_an)
+w179.verlassen(); ga179.verlassen()
+pruef("Die Vorteile einer Klasse stehen als Text bereit (Menue AUSRUESTUNG)",
+      _KL73.vorteile("nahkaempfer") == ["+25% LEBEN", "+5% TEMPO"]
+      and _KL73.vorteile("schuetze") == ["15% SCHNELLER NACHLADEN"]
+      and _KL73.vorteile("") == [], str(_KL73.vorteile("nahkaempfer")))
 
 print()
 print("FEHLER:", fails or "keine")

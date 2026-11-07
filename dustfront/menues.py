@@ -293,6 +293,18 @@ class Menue(Szene):
 # Pause
 # ══════════════════════════════════════════════════════════════════
 
+# Was ein Eintrag der Pause tut (seit 0.34.79) - rechts unter dem Stand.
+PAUSE_HILFE = {
+    "weiter": "ZURÜCK INS SPIEL.",
+    "ausruestung": "KLASSE, ZWEI WAFFEN, WURFWAFFE UND AUSSEHEN.",
+    "konto": "ANMELDEN ODER ANLEGEN. DAS KONTO ZÄHLT DEINE ZAHLEN.",
+    "opt": "BILD, TON, GRAFIK, TASTEN, BARRIEREFREIHEIT, NETZ.",
+    "tasten": "ALLE TASTEN - UND JEDE LÄSST SICH UMLEGEN.",
+    "credits": "WER DAS SPIEL GEMACHT HAT.",
+    "raus": "BEENDET DIESEN VERSUCH. DER STAND GEHT VERLOREN.",
+}
+
+
 class Pause(Menue):
     """Was man sieht, wenn man mitten im Spiel Escape drueckt.
 
@@ -311,6 +323,11 @@ class Pause(Menue):
         super().__init__(app)
 
     def aufbauen(self) -> None:
+        # "AUFGEBEN" hiess bis 0.34.78, was das Spiel beendet - vom
+        # Hauptmenue aus fuehrt es aber dorthin zurueck. Jetzt sagt der
+        # Eintrag, wohin.
+        raus = ("ZUM HAUPTMENÜ" if getattr(self.app, "hauptmenue", False)
+                else "SPIEL BEENDEN")
         eintraege = [
             ("FORTSETZEN", "weiter"),
             ("AUSRÜSTUNG", "ausruestung"),
@@ -318,7 +335,7 @@ class Pause(Menue):
             ("EINSTELLUNGEN", "opt"),
             ("STEUERUNG", "tasten"),
             ("MITWIRKENDE", "credits"),
-            ("AUFGEBEN", "raus"),
+            (raus, "raus"),
         ]
         self.elemente = [
             ui.SpaltenKnopf((16, 76 + i * 22, self.SPALTE - 30, 19), text, name,
@@ -390,6 +407,16 @@ class Pause(Menue):
                          K.C_MUTED, 1)
         SCHRIFT.zeichnen(ziel, "%s %s" % (K.PHASE, K.VERSION), r.x + 10,
                          r.y + 54, K.C_MUTED_DK, 1)
+        # Was der gewaehlte Eintrag tut (seit 0.34.79), wie im Gefecht.
+        el = self.gewaehlt()
+        text = PAUSE_HILFE.get(getattr(el, "name", ""), "")
+        if text:
+            zeilen = _umbrechen(text, r.width - 20)
+            h = 16 + 10 * len(zeilen)
+            k = pygame.Rect(r.x, r.bottom + 8, r.width, h)
+            ui.kasten(ziel, k, K.C_MUTED_DK, (12, 9, 7), 5)
+            for i, z in enumerate(zeilen):
+                SCHRIFT.zeichnen(ziel, z, k.x + 10, k.y + 8 + i * 10, K.C_TEAL, 1)
 
     def fusstext(self) -> str:
         return "[ESC] WEITERSPIELEN"
@@ -468,11 +495,23 @@ HILFE = {
         "WIE WEIT DER PUNKT VOR DER WAFFE LIEGT, WENN BLICK VORAUS AN IST.",
         "WENIGER: DIE FIGUR BLEIBT NÄHER AN DER MITTE. GEHÖRT ZUM KONTO.",
     ],
+    "menue_crt": [
+        "SCANLINIEN UND LEICHTES FLIMMERN IM HAUPTMENÜ,",
+        "WIE AUF EINEM ALTEN RÖHRENBILDSCHIRM. IM SPIEL NICHT.",
+    ],
+    "intro": [
+        "DIE KURZE STARTSEQUENZ VOR DEM HAUPTMENÜ.",
+        "ESC ÜBERSPRINGT SIE IMMER, AUCH WENN SIE AN IST.",
+    ],
+    "ton_menue": [
+        "DAS LEISE BRUMMEN DES REAKTORS IM HAUPTMENÜ.",
+        "IM SPIEL SELBST GIBT ES ES NICHT.",
+    ],
     "reset": ["SETZT ALLE WERTE DIESER SEITEN AUF DIE VORGABE ZURÜCK."],
-    "zurueck": ["ZURÜCK ZUM PAUSENMENÜ. GESPEICHERT IST SCHON ALLES."],
+    "zurueck": ["ZURÜCK. GESPEICHERT IST SCHON ALLES."],
     "reiter_video": ["FENSTER, AUFLÖSUNG, BILDRATE, PIXELRASTER."],
     "reiter_audio": ["LAUTSTÄRKEN."],
-    "reiter_grafik": ["VIGNETTE, OBERE EBENEN UND WAS SPÄTER DAZUKOMMT."],
+    "reiter_grafik": ["VIGNETTE, OBERE EBENEN, HAUPTMENÜ UND INTRO."],
     "reiter_steuerung": ["DIE TASTENBELEGUNG."],
     "reiter_zugang": ["BLENDGRANATE, BILDWACKELN, KAMERA."],
     "reiter_netz": ["ONLINE-CODE UND LAN."],
@@ -487,6 +526,10 @@ HILFE = {
         "(FIREWALL). AUS: NUR ÜBER DEN CODE, DANN FRAGT NIEMAND.",
     ],
 }
+
+
+# So viele Zeilen zeigt der Erklaerkasten der Einstellungen.
+HILFE_ZEILEN = 5
 
 
 # Die Reiter der Einstellungen, in dieser Reihenfolge. STEUERUNG ist
@@ -519,12 +562,13 @@ def seite_oeffnen(app, nr: int) -> None:
 
 
 class Einstellungen(Menue):
-    """Video, Audio, Grafik, Steuerung, Barrierefreiheit (seit 0.32).
+    """Video, Audio, Grafik, Steuerung, Barrierefreiheit, Netz (seit 0.32).
 
-    Was es noch nicht gibt, steht als Platzhalter da: grau, mit NICHT
-    VERFUEGBAR, und nicht anklickbar (ui.Platzhalter). So sieht man,
-    wohin es geht, ohne dass etwas ins Leere klickt - und keine Zeile tut
-    so, als wirke sie, waehrend sie an nichts haengt.
+    Bis 0.34.78 stand, was es noch nicht gibt, als grauer Platzhalter da
+    (NICHT VERFUEGBAR). Fuer Neue war das eine Liste von Dingen, die nicht
+    gehen; seit dem Aufraeumen der Menues steht nur noch da, was wirkt.
+    Seitdem ist das hier auch der einzige Ort fuer Einstellungen - das
+    Hauptmenue oeffnet genau diese Szene.
     """
 
     titel = "EINSTELLUNGEN"
@@ -560,11 +604,6 @@ class Einstellungen(Menue):
     def _reihe(self, zx, zy, zw, i):
         return (zx, zy + i * (ZEILE_H + ZEILE_ABSTAND), zw, ZEILE_H)
 
-    def _platzhalter(self, zx, zy, zw, ab: int, texte) -> None:
-        for i, text in enumerate(texte):
-            self.elemente.append(ui.Platzhalter(self._reihe(zx, zy, zw, ab + i),
-                                                text, "spaeter_%s" % text))
-
     def _seite_video(self, zx, zy, zw) -> None:
         o = self.app.opt
         self.elemente += [
@@ -580,7 +619,6 @@ class Einstellungen(Menue):
                     E.RASTER, self._index(E.RASTER, o["pixelraster"]),
                     E.BESCHRIFTUNG["pixelraster"]),
         ]
-        self._platzhalter(zx, zy, zw, 4, ("VSYNC", "HELLIGKEIT"))
 
     def _seite_audio(self, zx, zy, zw) -> None:
         o = self.app.opt
@@ -591,9 +629,13 @@ class Einstellungen(Menue):
                       o["ton_effekte"]),
         ]
         # Musik gibt es noch nicht. Der Regler stand frueher trotzdem da
-        # und liess sich ziehen - ohne jede Wirkung.
-        self._platzhalter(zx, zy, zw, 2, ("MUSIK", "AUSGABEGERÄT"))
-        self.elemente.append(ui.Knopf(self._reihe(zx, zy, 128, 5), "PROBE HÖREN",
+        # und liess sich ziehen - ohne jede Wirkung. Seit 0.34.79 steht
+        # auch kein grauer Platzhalter mehr da: er sagte Neuen nur, was
+        # fehlt. Dafuer das Brummen im Hauptmenue, das vorher dort eine
+        # eigene Seite brauchte.
+        self.elemente.append(ui.Regler(self._reihe(zx, zy, zw, 2), "MENÜ: BRUMMEN",
+                                       "ton_menue", o["ton_menue"]))
+        self.elemente.append(ui.Knopf(self._reihe(zx, zy, 128, 4), "PROBE HÖREN",
                                       "probe"))
 
     def _seite_grafik(self, zx, zy, zw) -> None:
@@ -603,10 +645,11 @@ class Einstellungen(Menue):
                         o["vignette"]),
             ui.Schalter(self._reihe(zx, zy, zw, 1), "OBERE EBENEN",
                         "obere_ebenen", o["obere_ebenen"]),
+            ui.Schalter(self._reihe(zx, zy, zw, 2), "MENÜ: RÖHRENBILD",
+                        "menue_crt", o["menue_crt"]),
+            ui.Schalter(self._reihe(zx, zy, zw, 3), "INTRO BEIM START",
+                        "intro", o["intro"]),
         ]
-        # PARTIKEL stand als Wahl da und hing an nichts; jetzt ehrlich.
-        self._platzhalter(zx, zy, zw, 2, ("PARTIKEL", "LICHT UND SCHATTEN",
-                                          "WETTER UND STAUB", "TEXTURSATZ"))
 
     def _seite_zugang(self, zx, zy, zw) -> None:
         o = self.app.opt
@@ -626,9 +669,6 @@ class Einstellungen(Menue):
                     self._index(E.BLICK_WEITEN, o["kamera_blick_weite"]),
                     E.BESCHRIFTUNG["kamera_blick_weite"]),
         ]
-        self._platzhalter(zx, zy, zw, 5, ("FARBEN FÜR FARBENBLINDE",
-                                          "UNTERTITEL FÜR GERÄUSCHE",
-                                          "SCHRIFTGRÖSSE"))
 
     def _seite_netz(self, zx, zy, zw) -> None:
         o = self.app.opt
@@ -709,19 +749,24 @@ class Einstellungen(Menue):
     def inhalt_zeichnen(self, ziel) -> None:
         r = self.tafel
         # Erklaerkasten: sagt zur gerade gewaehlten Zeile, was sie bewirkt.
-        # So muss niemand raten, was "PIXELRASTER" bedeutet.
-        kasten_r = pygame.Rect(r.x + 26, r.bottom - 100, r.width - 52, 50)
+        # So muss niemand raten, was "PIXELRASTER" bedeutet. Seit 0.34.79
+        # mit Platz fuer fuenf Zeilen: bis dahin fielen bei PIXELRASTER und
+        # BILDWACKELN die letzten zwei einfach weg.
+        kasten_r = pygame.Rect(r.x + 26, r.bottom - 120, r.width - 52, 70)
         ui.kasten(ziel, kasten_r, (40, 31, 23), (10, 7, 6), 4)
         el = self.gewaehlt()
         zeilen = HILFE.get(getattr(el, "name", ""), HILFE["_"])
         SCHRIFT.zeichnen(ziel, getattr(el, "text", "") or "EINSTELLUNGEN",
                          kasten_r.x + 8, kasten_r.y + 7, K.C_AMBER, 1)
-        for i, z in enumerate(zeilen[:3]):
+        for i, z in enumerate(zeilen[:HILFE_ZEILEN]):
             SCHRIFT.zeichnen(ziel, z, kasten_r.x + 8, kasten_r.y + 20 + i * 10,
                              K.C_MUTED, 1)
-        SCHRIFT.zeichnen(ziel, ui.kuerzen("ABLAGE  " + pfade.beschreibung(),
-                                         r.width - 52), r.x + 26,
-                         r.bottom - 112, K.C_MUTED_DK, 1)
+        if self.seite == 5:
+            # Wo Einstellungen, Konto und Bestenliste liegen - gehoert zu
+            # NETZ und nicht ueber jede Seite (stand bis 0.34.78 ueberall).
+            SCHRIFT.zeichnen(ziel, ui.kuerzen("ABLAGE  " + pfade.beschreibung(),
+                                             r.width - 52), r.x + 26,
+                             r.bottom - 134, K.C_MUTED_DK, 1)
 
     def taste(self, ev) -> None:
         # Q und E blaettern die Reiter, wie in vielen Spielen.
@@ -1389,7 +1434,9 @@ class Ausruestung(Menue):
         # Was die Klasse kann (seit 0.34.73), unter dem Aussehen.
         from . import klassen as klassen_modul
         d = klassen_modul.daten(satz.get("klasse", ""))
-        text = d["text"].upper()
+        # Seit 0.34.79 nur Name und Faehigkeit: die ganze Beschreibung
+        # steht rechts, sobald die Zeile KLASSE gewaehlt ist.
+        text = d["name"] if satz.get("klasse") else d["text"].upper()
         if d.get("faehigkeit"):
             text += " - C: " + ", ".join(klassen_modul.FAEHIGKEIT_NAMEN.get(a, a.upper())
                                          for a, _ in d["faehigkeit"])
@@ -1399,7 +1446,18 @@ class Ausruestung(Menue):
         # Reihenfolge kennt, greift blind - und sieht hier, wo was liegt.
         from .konto import hotbar_aus_loadout
         plaetze = hotbar_aus_loadout(satz)
-        self._vorschau(ziel, plaetze[0] if plaetze else "")
+        # Rechts steht seit 0.34.79, was zur gewaehlten Zeile gehoert: bei
+        # KLASSE ihre Vorteile und ihre Faehigkeit, bei einer Waffe deren
+        # Werte, sonst das Aussehen. Vorher stand dort immer die Figur,
+        # und was eine Klasse kann, passte in eine gekuerzte Zeile.
+        el = self.gewaehlt()
+        name = getattr(el, "name", "")
+        if name == "klasse":
+            self._klasse_zeigen(ziel, satz.get("klasse", ""))
+        elif (name.startswith("waffe") or name.startswith("wurf")) and isinstance(el, ui.Wahl):
+            self._waffe_zeigen(ziel, el.wert)
+        else:
+            self._vorschau(ziel, plaetze[0] if plaetze else "")
         breite, luft = 82, 6
         gesamt = len(plaetze) * breite + (len(plaetze) - 1) * luft
         x = mitte - gesamt // 2
@@ -1414,13 +1472,88 @@ class Ausruestung(Menue):
                              kasten.centerx + 3, kasten.centery - 3,
                              K.C_CREAM, 1, 1, "mitte")
 
+    def _feld(self) -> pygame.Rect:
+        r = self.tafel
+        return pygame.Rect(r.x + 22 + self.LINKS + 18, r.y + 24,
+                           self.VORSCHAU, r.height - 38)
+
+    def _zeilen(self, ziel, feld, y, texte, farbe, abstand=10) -> int:
+        for text in texte:
+            for zeile in _umbrechen(text.upper(), feld.width - 14):
+                if y > feld.bottom - 12:
+                    return y
+                SCHRIFT.zeichnen(ziel, zeile, feld.x + 7, y, farbe, 1)
+                y += abstand
+        return y
+
+    def _klasse_zeigen(self, ziel, klasse: str) -> None:
+        """Rechts: was die Klasse kann - Vorteile, Faehigkeit, Auswahl."""
+        from . import klassen as klassen_modul
+        feld = self._feld()
+        ui.kasten(ziel, feld, K.C_MUTED_DK, (18, 13, 9), 3)
+        d = klassen_modul.daten(klasse)
+        SCHRIFT.zeichnen(ziel, d["name"], feld.centerx, feld.y + 6,
+                         K.C_AMBER, 1, 1, "mitte")
+        y = self._zeilen(ziel, feld, feld.y + 22, [d["text"]], K.C_CREAM)
+        vorteile = klassen_modul.vorteile(klasse)
+        if vorteile:
+            y = self._zeilen(ziel, feld, y + 6, ["VORTEILE"], K.C_MUTED_DK)
+            y = self._zeilen(ziel, feld, y, vorteile, K.C_TEAL)
+        if d.get("faehigkeit"):
+            y = self._zeilen(ziel, feld, y + 6, ["FÄHIGKEIT (TASTE C)"], K.C_MUTED_DK)
+            y = self._zeilen(ziel, feld, y, [
+                "%s (%d S)" % (klassen_modul.FAEHIGKEIT_NAMEN.get(a, a.upper()), p)
+                for a, p in d["faehigkeit"]], K.C_ORANGE)
+        if klasse:
+            y = self._zeilen(ziel, feld, y + 6, [
+                "%d WAFFEN UND %d WURFWAFFEN ZUR WAHL"
+                % (len(klassen_modul.waffen_von(klasse)),
+                   len(klassen_modul.wuerfe_von(klasse)))], K.C_MUTED)
+        else:
+            self._zeilen(ziel, feld, y + 6, ["JEDE WAFFE ZUR WAHL. WÄHLE EINE "
+                                             "KLASSE FÜR VORTEILE UND EINE "
+                                             "FÄHIGKEIT."], K.C_MUTED)
+
+    def _waffe_zeigen(self, ziel, waffe: str) -> None:
+        """Rechts: die Werte der gewaehlten Waffe und welche Klassen sie haben."""
+        feld = self._feld()
+        ui.kasten(ziel, feld, K.C_MUTED_DK, (18, 13, 9), 3)
+        w = K.WAFFEN.get(waffe, {})
+        SCHRIFT.zeichnen(ziel, w.get("name", waffe.upper()), feld.centerx,
+                         feld.y + 6, K.C_AMBER, 1, 1, "mitte")
+        bild = self.app.bilder.bild("waffe_" + waffe) if ("waffe_" + waffe) in K.BILD_MASS else None
+        y = feld.y + 20
+        if bild is not None:
+            gross = pygame.transform.scale(bild, (bild.get_width() * 2, bild.get_height() * 2))
+            ziel.blit(gross, gross.get_rect(midtop=(feld.centerx, y)))
+            y += gross.get_height() + 6
+        werte = []
+        if w.get("schaden"):
+            n = int(w.get("geschosse", 1) or 1)
+            werte.append("SCHADEN %d%s" % (round(w["schaden"]), (" X %d" % n) if n > 1 else ""))
+        if w.get("radius") and w.get("art") == "wurf":
+            werte.append("RADIUS %d" % round(w["radius"]))
+        if w.get("takt"):
+            werte.append("%.1f SCHUSS/S" % (1.0 / max(0.01, w["takt"])))
+        if w.get("magazin"):
+            werte.append("MAGAZIN %d" % w["magazin"])
+        if w.get("nachladen"):
+            werte.append("NACHLADEN %.1f S" % w["nachladen"])
+        if w.get("reichweite") and w.get("art") != "wurf":
+            werte.append("REICHWEITE %d" % round(w["reichweite"]))
+        y = self._zeilen(ziel, feld, y, werte, K.C_CREAM)
+        from . import klassen as klassen_modul
+        bei = [d["name"] for k, d in K.KLASSEN.items()
+               if waffe in klassen_modul.waffen_von(k) or waffe in klassen_modul.wuerfe_von(k)]
+        if bei:
+            y = self._zeilen(ziel, feld, y + 6, ["BEI DEN KLASSEN"], K.C_MUTED_DK)
+            self._zeilen(ziel, feld, y, [", ".join(bei)], K.C_MUTED)
+
     def _vorschau(self, ziel, waffe: str) -> None:
         """Rechts: wie man aussieht, mit der ersten Waffe in der Hand -
         gross, darunter in beiden Mannschaften (die Neon-Markierung), und
         was das Paket ueber die Figur sagt."""
-        r = self.tafel
-        feld = pygame.Rect(r.x + 22 + self.LINKS + 18, r.y + 24,
-                           self.VORSCHAU, r.height - 38)
+        feld = self._feld()
         ui.kasten(ziel, feld, K.C_MUTED_DK, (18, 13, 9), 3)
         skin = figuren.saeubern(self.app.opt["aussehen"])
         bilder = self.app.bilder
