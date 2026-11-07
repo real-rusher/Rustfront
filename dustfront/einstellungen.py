@@ -33,7 +33,7 @@ VORGABE = {
     "fenstermodus": "fenster",     # fenster | randlos | vollbild
     "aufloesung": "1280x720",
     "bildrate": 0,                 # 0 = unbegrenzt, sonst Obergrenze
-    "pixelraster": "gefuellt",     # gefuellt | ganzzahlig
+    "pixelraster": "gefuellt",     # gefuellt | ganzzahlig | ruhig
     # Ton
     "ton_gesamt": 75,
     "ton_effekte": 85,
@@ -112,7 +112,7 @@ PARTIKEL = ["wenig", "normal", "viel"]
 BLENDUNGEN = ["normal", "weiss", "schwarz"]
 BLEND_TOENE = ["werfer", "standard"]
 BLICK_WEITEN = [40, 55, 70, 85, 100, 120, 150]
-RASTER = ["gefuellt", "ganzzahlig"]
+RASTER = ["gefuellt", "ganzzahlig", "ruhig"]
 BILDRATEN = [0, 60, 75, 90, 120, 144, 165, 240]
 
 # Wie die Werte im Menue heissen sollen. Was hier fehlt, wird einfach
@@ -120,7 +120,8 @@ BILDRATEN = [0, 60, 75, 90, 120, 144, 165, 240]
 BESCHRIFTUNG = {
     "fenstermodus": {"fenster": "FENSTER", "randlos": "RANDLOS",
                      "vollbild": "VOLLBILD"},
-    "pixelraster": {"gefuellt": "FÜLLT DAS FENSTER", "ganzzahlig": "GANZE PIXEL"},
+    "pixelraster": {"gefuellt": "FÜLLT DAS FENSTER", "ganzzahlig": "GANZE PIXEL",
+                    "ruhig": "FÜLLT, OHNE FLIMMERN"},
     "partikel": {"wenig": "WENIG", "normal": "NORMAL", "viel": "VIEL"},
     "bildrate": {0: "UNBEGRENZT"},
     "blendung": {"normal": "WIE VOM WERFER", "weiss": "NUR WEISS",

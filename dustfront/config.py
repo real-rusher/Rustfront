@@ -190,6 +190,15 @@ KAMERA = dict(
 # normalen Bildes liegt im **Nebel**: man sieht das Gelaende gedaempft,
 # aber keine Wesen - keine Gegner, keine Mitspieler, keine Granaten. Ein
 # weiterer Blick ist damit Ueberblick, kein Vorteil.
+# Aufs Fenster bringen (seit 0.34.77, core.App.viewport_rechnen): liegt das
+# Fenster so nah an einem ganzen Vielfachen von 640 x 360, rastet die
+# Vergroesserung darauf ein - der Rest wird abgeschnitten oder bleibt als
+# schmaler Rand. Bei krummen Faktoren (1919 Pixel breit = 2,998) wurden
+# sonst manche Pixelreihen doppelt statt dreifach gezeigt, an festen
+# Stellen des Bildschirms, und alles, was darunter durchlief, veraenderte
+# beim Umschauen seine Textur (gemeldet mit zwei Bildern).
+FENSTER_EINRASTEN = 0.04
+
 # Abtastraster fuer alles, was skaliert aufs Bild kommt (seit 0.34.77,
 # render.Renderer._tiefen_plan und Gefecht._zoom_zeichnen): Breiten, die
 # von der genauen um so viele Pixel abweichen duerfen, damit ein kleines

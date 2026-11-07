@@ -15456,6 +15456,32 @@ for _ in range(int(120 * _n177["takt"] * 2)):
 pruef("... und aus heisst aus", len(_tm._bots()) <= _vorher177)
 _tm.verlassen()
 
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Fenster: ganze Vielfache einrasten, PIXELRASTER OHNE FLIMMERN (0.34.78)")
+_alt178 = (app.fenster.get_size(), app.opt["pixelraster"])
+_erg178 = {}
+for _w178, _h178 in ((1919, 1079), (1920, 1080), (1440, 900), (1300, 731)):
+    app.fenster = pygame.display.set_mode((_w178, _h178))
+    app.viewport_rechnen()
+    _erg178[(_w178, _h178)] = app.skala
+    app.ausgeben()
+pruef("Fast ein ganzes Vielfaches rastet ein (1919 x 1079 -> genau 3x), krumme Groessen nicht",
+      _erg178[(1919, 1079)] == 3.0 and _erg178[(1920, 1080)] == 3.0
+      and _erg178[(1440, 900)] == 2.25 and _erg178[(1300, 731)] == 2.0, str(_erg178))
+app.opt["pixelraster"] = "ruhig"
+app.fenster = pygame.display.set_mode((1440, 900))
+app.viewport_rechnen()
+app.flaeche.fill((10, 20, 30))
+app.flaeche.fill((200, 100, 50), (300, 170, 40, 20))
+app.ausgeben()
+_mitte178 = app.fenster.get_at((app.viewport.x + int(320 * 2.25), app.viewport.y + int(180 * 2.25)))
+pruef("PIXELRASTER OHNE FLIMMERN: fuellt das Fenster und zeigt das Bild",
+      app.skala == 2.25 and all(abs(a_ - b_) <= 8 for a_, b_ in zip(tuple(_mitte178)[:3], (200, 100, 50))),
+      str(_mitte178))
+app.opt["pixelraster"] = _alt178[1]
+app.fenster = pygame.display.set_mode(_alt178[0])
+app.viewport_rechnen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

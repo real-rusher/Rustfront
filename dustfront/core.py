@@ -512,8 +512,12 @@ class App:
     def viewport_rechnen(self) -> None:
         fw, fh = self.fenster.get_size()
         roh = min(fw / K.GAME_W, fh / K.GAME_H)
+        ganz = round(roh)
         if self.opt["pixelraster"] == "ganzzahlig":
             self.skala = max(1.0, float(int(roh)))
+        elif ganz >= 1 and abs(roh - ganz) <= K.FENSTER_EINRASTEN * ganz:
+            # Fast ein ganzes Vielfaches: genau das (K.FENSTER_EINRASTEN).
+            self.skala = float(ganz)
         else:
             self.skala = max(0.25, roh)
         w, h = int(K.GAME_W * self.skala), int(K.GAME_H * self.skala)
@@ -757,7 +761,10 @@ class App:
         f = self.fenster
         vp = self.viewport
         fb, fh = f.get_size()
-        if vp.left >= 0 and vp.top >= 0 and vp.right <= fb and vp.bottom <= fh:
+        if (self.opt["pixelraster"] == "ruhig" and abs(self.skala - round(self.skala)) > 1e-6
+                and self.skala > 1.0):
+            self._ruhig_ausgeben(f, vp, fb, fh)
+        elif vp.left >= 0 and vp.top >= 0 and vp.right <= fb and vp.bottom <= fh:
             for rand in ((0, 0, fb, vp.top), (0, vp.bottom, fb, fh - vp.bottom),
                          (0, vp.top, vp.left, vp.height),
                          (vp.right, vp.top, fb - vp.right, vp.height)):
@@ -765,9 +772,31 @@ class App:
                     f.fill(K.C_VOID, rand)
             pygame.transform.scale(self.flaeche, vp.size, f.subsurface(vp))
         else:
+            # Groesser als das Fenster (eingerastet, K.FENSTER_EINRASTEN):
+            # in eine gemerkte Flaeche, der Rand faellt beim Auflegen weg.
             f.fill(K.C_VOID)
-            f.blit(pygame.transform.scale(self.flaeche, vp.size), vp.topleft)
+            puffer = getattr(self, "_gross_puffer", None)
+            if puffer is None or puffer.get_size() != vp.size:
+                puffer = self._gross_puffer = pygame.Surface(vp.size, 0, self.flaeche)
+            pygame.transform.scale(self.flaeche, vp.size, puffer)
+            f.blit(puffer, vp.topleft)
         pygame.display.flip()
+
+    def _ruhig_ausgeben(self, f, vp, fb, fh) -> None:
+        """PIXELRASTER OHNE FLIMMERN (seit 0.34.77): erst um den naechsten
+        ganzen Faktor vergroessern - jedes Spielpixel gleich gross -, dann
+        weich auf die Fenstergroesse. Ein krummer Faktor zeigt so keine
+        Reihe doppelt und die naechste dreifach; die Kanten werden dafuer
+        etwas weicher, und es kostet einige Millisekunden je Bild."""
+        n = int(self.skala) + 1
+        gross = (K.GAME_W * n, K.GAME_H * n)
+        puffer = getattr(self, "_ruhig_puffer", None)
+        if puffer is None or puffer.get_size() != gross:
+            puffer = self._ruhig_puffer = pygame.Surface(gross, 0, self.flaeche)
+        pygame.transform.scale(self.flaeche, gross, puffer)
+        f.fill(K.C_VOID)
+        klein = pygame.transform.smoothscale(puffer, vp.size)
+        f.blit(klein, vp.topleft)
 
 
 # ══════════════════════════════════════════════════════════════════
