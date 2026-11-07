@@ -4300,14 +4300,14 @@ pruef("Gegen eine Mauer: nie darin", all(ok_ for _p, _w, ok_ in _wand69))
 pruef("... und irgendwann steht er davor (oder gleitet ab, aber nicht hindurch)",
       all(w.welt.frei(c_, b69.radius, 0, True) for c_ in b69.kreise()))
 
-# Schaden: 70 % kommen beim Fahrer an, kein Stoss.
+# Schaden: seit 0.34.77 kommt im Fahrzeug nichts an (K.FAHRZEUG
+# "fahrer_geschuetzt"), und gestossen wird man auch nicht.
 fahrer69.unverwundbar = 0.0
 fahrer69.leben = 100.0
 fahrer69.tempo.update(0, 0)
 fahrer69.schaden(10.0, pygame.Vector2(400, 0), andere69)
-pruef("Im Buggy kommen 70 % vom Schaden an",
-      abs((100.0 - fahrer69.leben) - 10.0 * K.FAHRZEUG["schaden_anteil"]) < 1e-6
-      and abs(K.FAHRZEUG["schaden_anteil"] - 0.7) < 1e-9,
+pruef("Im Buggy kommt kein Schaden an (seit 0.34.77)",
+      fahrer69.leben == 100.0 and K.FAHRZEUG["fahrer_geschuetzt"],
       "%.2f" % (100.0 - fahrer69.leben))
 pruef("... und er wird nicht weggestossen", fahrer69.tempo.length() < 1e-6)
 andere69.unverwundbar = 0.0
@@ -4315,14 +4315,13 @@ andere69.leben = 100.0
 andere69.schaden(10.0, None, fahrer69)
 pruef("Zu Fuss kommt der volle Schaden an", abs(andere69.leben - 90.0) < 1e-6)
 fahrer69.leben = fahrer69.max_leben
-# Seit 0.34.18 nimmt der Wagen den Treffer und reicht ihn an den Fahrer
-# weiter (der dann wie oben 70 % abbekommt). Bis dahin ging die Kugel am
-# unzerstoerbaren Wagen vorbei auf den Fahrer.
+# Seit 0.34.18 nimmt der Wagen den Treffer; seit 0.34.77 kommt beim
+# Fahrer nichts mehr davon an (K.FAHRZEUG "fahrer_geschuetzt").
 b69.schaden(30.0, None, andere69)
 w.welt._raster_bauen()
-pruef("Ein Treffer am Buggy: er nimmt Schaden, der Fahrer 70 Prozent davon",
+pruef("Ein Treffer am Buggy: er nimmt Schaden, der Fahrer nichts (seit 0.34.77)",
       b69.lebt and not b69.kaputt and b69.leben == b69.max_leben - 30.0
-      and abs((fahrer69.max_leben - fahrer69.leben) - 30.0 * 0.7) < 1e-6,
+      and fahrer69.leben == fahrer69.max_leben,
       "Wagen %.0f, Fahrer %.1f" % (b69.leben, fahrer69.leben))
 pruef("Eine Kugel trifft am Wagen den Wagen, nicht den Fahrer daneben",
       w.welt.treffer(b69.pos, 2.0, 0, andere69.fraktion) is b69)
@@ -4693,9 +4692,8 @@ pruef("Eine Kugel zerkratzt den Panzer nur (Panzerung, von hinten)",
       abs(_ab59 - K.WAFFEN["sturm"]["schaden"] * K.PANZERUNG["panzer"]["kugel"]
           * K.PANZER_SEITEN["hinten"]) < 0.01,
       "%.2f" % _ab59)
-pruef("... beim Kommandanten in der Luke kommt sein Teil der ganzen Kugel an",
-      abs((_vor59[1] - _k59.leben) - K.WAFFEN["sturm"]["schaden"] * K.PANZER["fahrer_anteil"])
-      < 0.01, "%.2f" % (_vor59[1] - _k59.leben))
+pruef("... beim Kommandanten in der Luke kommt nichts an (seit 0.34.77)",
+      _vor59[1] == _k59.leben, "%.2f" % (_vor59[1] - _k59.leben))
 
 # Der Gast sieht ihn: an derselben Stelle, mit Turmwinkel, Feuerball.
 for _ in range(6):
@@ -9958,11 +9956,8 @@ _gk71.leben = 1000.0
 _d71 = _gk71.pos.distance_to(_c71.pos)
 _c71.lade_rest = 0.0
 _c71.detonieren()
-_soll71 = (K.C4["schaden"] * (1.0 - 0.72 * min(1.0, _d71 / K.C4["radius"]))
-           * K.FAHRZEUG["schaden_anteil"])
-pruef("Der Fahrer bekommt 70 % der Ladung ab",
-      abs((1000.0 - _gk71.leben) - _soll71) < 0.01,
-      "%.1f statt %.1f" % (1000.0 - _gk71.leben, _soll71))
+pruef("Der Fahrer bekommt von der Ladung nichts ab (seit 0.34.77: im Fahrzeug geschuetzt)",
+      _gk71.leben == 1000.0, "%.1f" % (1000.0 - _gk71.leben))
 pruef("Der Buggy bleibt heil und fahrbereit",
       _gb71.lebt and _gb71 in w71.welt.wesen and _gb71.fahrer is _gk71)
 _gk71.leben = _gk71.max_leben
@@ -10595,9 +10590,8 @@ _vor80 = (_wg80.leben, _gk80.leben)
 w80.welt.dazu(_Gs80(_wg80.pos + pygame.Vector2(-30, 0), 0.0, K.WAFFEN["sturm"],
                     _wg80.ebene, _ich80, "sturm"))
 _beide80(0.1, w80, g80)
-pruef("Ein Schuss auf den Wagen: der Wagen nimmt Schaden, der Fahrer 70 Prozent",
-      _wg80.leben < _vor80[0]
-      and abs((_vor80[1] - _gk80.leben) - K.WAFFEN["sturm"]["schaden"] * 0.7) < 0.5,
+pruef("Ein Schuss auf den Wagen: der Wagen nimmt Schaden, der Fahrer nichts (seit 0.34.77)",
+      _wg80.leben < _vor80[0] and _gk80.leben == _vor80[1],
       "Wagen %.0f, Fahrer %.1f" % (_wg80.leben, _gk80.leben))
 pruef("... und zaehlt nicht als Treffer in der Statistik",
       _ich80.zaehler.get("treffer", 0) == 0)
@@ -15298,6 +15292,168 @@ _e175.setzen(_tx175, _ty175, _alt175)
 _wieder175 = _pz175._kacheln_frei(_pz175.pos, _pz175.winkel)
 pruef("Panzer: gemerkte Kachelfrage sieht eine neue Mauer unter sich und ihr Verschwinden",
       _vorher175 and not _danach175 and _wieder175, "%s %s %s" % (_vorher175, _danach175, _wieder175))
+_tm.verlassen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Kein Flimmern, Schild, Fahrzeug schuetzt, Testmodus: Runde, Karte, Nachschub (0.34.77)")
+from dustfront import testmodus as _TM177, render as _R177, fahrzeug as _FZ177
+from dustfront.world import freier_punkt as _fp177
+_rnd177 = random.Random(177)
+_tm = _TM177.Testmodus(app, karte="staubtal")
+
+# Abtastraster an der Welt: um q Weltpixel weiter heisst genau um ganze
+# Bildpixel weiter - das Muster aus der Textur bleibt dasselbe.
+_r177 = _tm.renderer
+_kam177 = _tm.kamera
+_gleich177 = True
+for _k177 in (0.73, 0.8, 1.37):
+    _kam177.pos.update(4000.25, 3000.0)
+    _kam177.versatz.update(0, 0)
+    _p1_177 = _r177._tiefen_plan(_kam177, _k177)
+    _gw177 = _r177.groesse[0]
+    _w177, _qx177 = _R177._raster_waehlen(_gw177, int(_gw177 / _k177) + 2)
+    _s177 = _p1_177[4][1]
+    _kam177.pos.x += _qx177
+    _p2_177 = _r177._tiefen_plan(_kam177, _k177)
+    _gleich177 = (_gleich177 and _qx177 is not None
+                  and _p2_177[0].x - _p1_177[0].x == _qx177
+                  and _p2_177[3] == _p1_177[3]
+                  and abs(_qx177 * _s177 - round(_qx177 * _s177)) < 1e-9)
+pruef("Andere Ebene: die Flaeche rastet auf die Welt ein (um q Weltpixel = ganze Bildpixel)",
+      _gleich177)
+_ab177 = _r177._abbildung(_kam177, 0.8, 30.0)
+_pl177 = _r177._tiefen_plan(_kam177, 0.8)
+pruef("... und die Abbildung (fuer die Klippen) passt genau zum Versatz beim Auflegen",
+      abs((_pl177[0].x - _ab177[0].x) * _ab177[1] + _pl177[3][0]) < 1e-6
+      and abs((_pl177[0].y - _ab177[0].y) * _ab177[2] + _pl177[3][1]) < 1e-6)
+
+# Mauerdeckel in fester Groesse: dieselbe Mauer an zwei Stellen bekommt
+# dasselbe Bild (nur anders zugeschnitten).
+_r177._oberseiten.clear()
+_bild177 = pygame.Surface((K.GAME_W, K.GAME_H)).convert()
+_e177 = _tm.welt.ebene(0)
+_fest177 = [(i_ % _e177.breite, i_ // _e177.breite) for i_, n_ in enumerate(_e177.kacheln)
+            if K.KACHELN[n_]["fest"] and 10 < i_ % _e177.breite < _e177.breite - 10
+            and 10 < i_ // _e177.breite < _e177.hoehe - 10][:1]
+_groessen177 = set()
+for _dx177 in range(0, 6):
+    _r177._oberseiten.clear()
+    _ecke177 = pygame.Vector2(_fest177[0][0] * K.TILE - 200 + _dx177, _fest177[0][1] * K.TILE - 150)
+    _r177.ebene_zeichnen(_bild177, _tm.welt, 0, _ecke177, None, K.PERSPEKTIVE["brennweite"])
+    _groessen177 |= {(n_, b_, h_) for (n_, b_, h_, _d) in _r177._oberseiten}
+_je177 = {}
+for n_, b_, h_ in _groessen177:
+    _je177.setdefault(n_, set()).add((b_, h_))
+pruef("Mauerdeckel: je Art eine feste Groesse, egal wo die Kamera steht (kein Flimmern)",
+      _je177 and all(len(v_) <= 2 for v_ in _je177.values()), str(_je177)[:200])
+
+# Zoom: die Ecke rastet ein, die Kamera bleibt, wo sie war.
+_tm.kamera.zoom = 1.25
+_vor177 = pygame.Vector2(_tm.kamera.pos)
+_tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)).convert(), 1.0)
+pruef("Zoom: nach dem Zeichnen steht die Kamera wieder genau, wo sie war",
+      _tm.kamera.pos == _vor177)
+_tm.kamera.zoom = 1.0
+
+# Schild: von vorn kommen nur noch 7 % an.
+_st177 = _tm.schildtraeger_setzen(_fp177(_tm.welt, 0, _rnd177), 0, {"team": 0})
+_gg177 = _tm.bot_setzen(_st177.pos + pygame.Vector2(80, 0), 0, {"team": 1})
+_st177.winkel = 0.0
+_st177.unverwundbar = 0.0
+_st177.leben = 100.0
+_st177.schaden(40.0, None, _gg177)
+pruef("Schildtraeger: von vorn kommen nur noch 7 % an (war 15 %)",
+      abs((100.0 - _st177.leben) - 40.0 * 0.07) < 1e-6 and K.SCHILD["anteil"] == 0.07,
+      "%.2f" % (100.0 - _st177.leben))
+
+# Im Fahrzeug kein Schaden - weder am Wagen noch an der Figur.
+_fa177 = _tm.fahrer_setzen(_fp177(_tm.welt, 0, _rnd177), 0, {"team": 0, "fahrzeug": "panzerwagen"})
+_wg177 = _fa177.fahrzeug
+_fa177.unverwundbar = 0.0
+_fa177.leben = 100.0
+_wg177.schaden(60.0, None, _gg177, art="kugel", herkunft=_gg177.pos)
+_fa177.schaden(30.0, None, _gg177)
+pruef("Im Fahrzeug kein Schaden: Treffer am Wagen und an der Figur kommen nicht an",
+      _fa177.im_fahrzeug and _fa177.leben == 100.0, "%.1f" % _fa177.leben)
+
+# Ein Panzer ohne Fahrer steht still, wie lange die Zeit auch laeuft.
+_pz177 = _tm.fahrzeug_setzen("panzer", _fp177(_tm.welt, 0, _rnd177), 0, {"winkel": 30.0})
+_lagen177 = set()
+for _ in range(240):
+    _tm.schritt(K.FIXED_DT)
+    _lagen177.add((_pz177.pos.x, _pz177.pos.y, _pz177.winkel, _pz177.aufbau))
+pruef("Panzer ohne Fahrer: steht bei laufender Zeit genau still", len(_lagen177) == 1,
+      str(len(_lagen177)))
+
+# Testmodus: Ansicht wie Runde (F2) - kein Ziffernblock, kein Status, kein Zeiger.
+_gerufen177 = []
+for _n177 in ("_numpad_zeichnen", "_status_zeichnen", "_zeiger_zeichnen", "_info_zeichnen"):
+    setattr(_tm, _n177, (lambda n_: (lambda *a_, **k_: _gerufen177.append(n_)))(_n177))
+_tm.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F2, mod=0, unicode="", scancode=0))
+_tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)).convert(), 1.0)
+_mit177 = list(_gerufen177)
+_tm.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F2, mod=0, unicode="", scancode=0))
+_tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)).convert(), 1.0)
+pruef("ANSICHT WIE RUNDE (F2): kein Ziffernblock, Status, Zeiger oder INFO; F2 wieder: alles da",
+      _mit177 == [] and "_numpad_zeichnen" in _gerufen177 and not _tm.wie_runde,
+      "%s / %s" % (_mit177, _gerufen177))
+for _n177 in ("_numpad_zeichnen", "_status_zeichnen", "_zeiger_zeichnen", "_info_zeichnen"):
+    delattr(_tm, _n177)
+pruef("... und alle drei stehen im Testmenue",
+      {"runde", "karte_alles", "nachschub"} <= {z_[0] for z_ in _tm._menue_zeilen()})
+
+# Allwissende Minikarte: auch als Beobachter, mit jedem Kaempfer.
+_gefragt177 = []
+_echt177 = _tm._farbe_fuer
+_tm._farbe_fuer = lambda k_, *a_: (_gefragt177.append(k_), _echt177(k_, *a_))[1]
+_tm.karte_allwissend = False
+_tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)).convert(), 1.0)
+_ohne177 = len(_gefragt177)
+_tm.karte_allwissend = True
+_tm._geist.pos.update(_gg177.pos)
+_tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)).convert(), 1.0)
+del _tm._farbe_fuer
+pruef("MINIKARTE ALLWISSEND: als Beobachter mit allen Kaempfern (vorher keine Karte)",
+      _tm.beobachter and _ohne177 == 0 and _gg177 in _gefragt177 and _st177 in _gefragt177,
+      "%d / %d" % (_ohne177, len(_gefragt177)))
+_tm.karte_allwissend = False
+
+# Standardfigur im Stil der Skins: dieselben Farben, dazu Teammarkierung.
+from dustfront import art_figuren as _AF177
+_rot177 = app.bilder.bild("spieler_rot_sturm")
+_neon177 = K.FIGUREN_NEON["ROT"][0]
+_hat177 = any(tuple(_rot177.get_at((x_, y_)))[:3] == tuple(_neon177)[:3]
+              for x_ in range(_rot177.get_width()) for y_ in range(_rot177.get_height()))
+_d177 = _AF177.standard(K.TEAMS["kombi"][0]["rumpf"], K.TEAMS["kombi"][0]["kante"],
+                        K.TEAMS["kombi"][0]["akzent"])
+pruef("Standardfigur im Stil der Skins: Teamfarben bleiben, Neon-Markierung und Weste kommen dazu",
+      _hat177 and _d177["rumpf"] == K.TEAMS["kombi"][0]["rumpf"] and _d177["weste"] == "platten")
+
+# Nachschub am Kartenrand: beide Seiten, am Rand, nie mehr als erlaubt.
+_tm.verlassen()
+_tm = _TM177.Testmodus(app, karte="staubtal")
+_tm.rnd.seed(177)
+_tm.nachschub_an = True
+_n177 = K.TESTMODUS["nachschub"]
+_neu177 = []
+_alt177 = set(id(k_) for k_ in _tm._bots())
+for _ in range(int(120 * _n177["takt"] * 6.5)):
+    _tm.schritt(K.FIXED_DT)
+    for k_ in _tm._bots():
+        if id(k_) not in _alt177:
+            _alt177.add(id(k_))
+            _neu177.append((k_.team, k_.pos.x / K.TILE))
+_e177 = _tm.welt.ebene(0)
+_rand177 = _n177["rand"] + 6
+pruef("NACHSCHUB AM KARTENRAND: neue Bots fuer beide Seiten, Seite 0 im Westen, 1 im Osten",
+      len(_neu177) >= 5 and {t_ for t_, _x in _neu177} == {0, 1}
+      and all((x_ <= _rand177 + 1) if t_ == 0 else (x_ >= _e177.breite - _rand177 - 1)
+              for t_, x_ in _neu177), str(_neu177)[:200])
+_tm.nachschub_an = False
+_vorher177 = len(_tm._bots())
+for _ in range(int(120 * _n177["takt"] * 2)):
+    _tm.schritt(K.FIXED_DT)
+pruef("... und aus heisst aus", len(_tm._bots()) <= _vorher177)
 _tm.verlassen()
 
 print()

@@ -190,6 +190,16 @@ KAMERA = dict(
 # normalen Bildes liegt im **Nebel**: man sieht das Gelaende gedaempft,
 # aber keine Wesen - keine Gegner, keine Mitspieler, keine Granaten. Ein
 # weiterer Blick ist damit Ueberblick, kein Vorteil.
+# Abtastraster fuer alles, was skaliert aufs Bild kommt (seit 0.34.77,
+# render.Renderer._tiefen_plan und Gefecht._zoom_zeichnen): Breiten, die
+# von der genauen um so viele Pixel abweichen duerfen, damit ein kleines
+# Raster passt, und das groesste Raster in Weltpixeln. Groesser heisst:
+# die Hilfsflaeche wird um so viel breiter.
+TIEFENRASTER = dict(
+    versuche=(0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6),
+    groesstes=48,
+)
+
 ZOOM = dict(
     stufen=(0.75, 1.0, 1.25, 1.5, 1.75, 2.0),
     start=1.0,
@@ -1037,6 +1047,12 @@ FAHRZEUG = dict(
     achse=14.0,               # Abstand der Kreise von seiner Mitte
     einsteigen=46.0,          # so nah muss man dran sein
     schaden_anteil=0.7,       # so viel von jedem Schaden kommt beim Fahrer an
+    # Seit 0.34.77 kommt im Fahrzeug gar nichts an (gemeldet: "Personen in
+    # Fahrzeugen sollen keinen Schaden nehmen") - weder Treffer am Wagen noch
+    # an der Figur selbst. Die Anteile (schaden_anteil, fahrer_anteil)
+    # gelten nur, wenn das hier False ist. Geht der Wagen hoch, ist man
+    # draussen: das zaehlt nicht (fahrer_schaden).
+    fahrer_geschuetzt=True,
     aufprall=0.25,            # so viel Tempo bleibt nach einem Aufprall (rueckwaerts)
     aufprall_hart=140.0,      # ab diesem Tempo rumst es (Ton, Ruckeln)
     staub_ab=80.0,            # ab diesem Tempo wirbelt er Staub auf
@@ -1659,6 +1675,10 @@ TESTMODUS = dict(
     flug=(500.0, 1100.0, 2400.0),   # Flugtempo des Beobachters (px/s), waehlbar
     turbo=3.0,                # x Flugtempo mit gehaltener Umschalttaste
     zeitfaktoren=(0.1, 0.25, 0.5, 1.0, 2.0, 4.0),
+    # Nachschub am Kartenrand (seit 0.34.77, Testmenue): alle `takt` Sekunden
+    # ein Bot fuer die kleinere Seite, bis `hoechstens` Bots leben; `rand`
+    # Kacheln vom Kartenrand entfernt.
+    nachschub=dict(takt=3.0, hoechstens=24, rand=3, hirn="goap"),
     einzelschritt=12,         # so viele Rechenschritte macht EIN SCHRITT (1/10 s)
     hoechstens_schritte=8,    # mehr Rechenschritte je Bild auch im Zeitraffer nicht
     # Testmenue BILDRATE (seit 0.34.58): das Spiel kuenstlich bremsen, um zu
@@ -3454,7 +3474,10 @@ KLASSE_FREI = dict(name="FREI", text="Ohne Klasse: jede Waffe, kein Vorteil")
 # Der Schildtraeger (seit 0.34.71, erst im Testmodus): ein grosses Schild
 # vorn. Was von vorn kommt (die Richtung zum Schuetzen), haelt es zum
 # groessten Teil ab; dafuer ist er langsamer und traegt nur eine Pistole.
-SCHILD = dict(winkel=60.0, anteil=0.15, tempo=0.82, waffe="repetierer")
+# anteil: was durchs Schild noch ankommt - seit 0.34.77 7 % statt 15 %
+# (gemeldet: "Schildtraeger sollen auf ihr Schild noch weniger Schaden
+# bekommen").
+SCHILD = dict(winkel=60.0, anteil=0.07, tempo=0.82, waffe="repetierer")
 
 # Trupp-Vorlagen fuer den Testmodus (seit 0.34.71). Gemeldet: "Trupp mit
 # Panzer oder Armored Truck, Schildtraeger ... Skins fuer jedes

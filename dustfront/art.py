@@ -1003,12 +1003,23 @@ def schwung_winkel(i: int) -> float:
     return -halb + 2 * halb * i / max(1, K.SCHWUNG_BILDER - 1)
 
 
+def _standard(rumpf, kante, akzent, waffe=None, team=None, groesse=None, schwung=None,
+              stummel=True):
+    """Die Spielerfigur im Stil der Skins (seit 0.34.77, art_figuren.standard).
+    Spaet importiert: art_figuren braucht selbst dieses Modul."""
+    from . import art_figuren
+    return art_figuren.standard_figur(rumpf, kante, akzent, waffe, team, groesse, schwung,
+                                      stummel)
+
+
 def _schwung_bild(i, kombi=None):
     def zeichner():
+        gross = K.BILD_MASS["spieler_schwung_%d" % i][0]
         if kombi is None:
-            return _figur_schwung(K.C_HULL, K.C_HULL_SH, K.C_TEAL, schwung_winkel(i))
-        return _figur_schwung(kombi["rumpf"], kombi["kante"], kombi["akzent"],
-                              schwung_winkel(i))
+            return _standard(K.C_HULL, K.C_HULL_SH, K.C_TEAL, groesse=gross,
+                             schwung=schwung_winkel(i))
+        return _standard(kombi["rumpf"], kombi["kante"], kombi["akzent"],
+                         team=kombi["name"], groesse=gross, schwung=schwung_winkel(i))
     return zeichner
 
 
@@ -1021,7 +1032,9 @@ for _i in range(K.SCHWUNG_BILDER):
 
 @platzhalter("spieler")
 def _spieler():
-    return _figur(28, K.C_HULL, K.C_HULL_SH, K.C_TEAL, bewaffnet=False)
+    # Ohne Waffe, wie die alte Grundfigur (bewaffnet=False).
+    return _standard(K.C_HULL, K.C_HULL_SH, K.C_TEAL, groesse=K.BILD_MASS["spieler"][0],
+                     stummel=False)
 
 
 # Eine Figur je Waffe. Damit sieht man der Gestalt an, was sie traegt,
@@ -1030,7 +1043,7 @@ def _spieler():
 def _spieler_mit(waffe):
     def zeichner():
         gross = K.BILD_MASS["spieler_" + waffe][0]
-        return _figur(gross, K.C_HULL, K.C_HULL_SH, K.C_TEAL, waffe=waffe)
+        return _standard(K.C_HULL, K.C_HULL_SH, K.C_TEAL, waffe=waffe, groesse=gross)
     return zeichner
 
 
@@ -1052,11 +1065,11 @@ for _waffe in K.WAFFEN_HAND:
 def _spieler_team(kombi, waffe=None):
     def zeichner():
         if waffe is None:
-            return _figur(K.BILD_MASS["spieler"][0], kombi["rumpf"],
-                          kombi["kante"], kombi["akzent"])
+            return _standard(kombi["rumpf"], kombi["kante"], kombi["akzent"],
+                             team=kombi["name"], groesse=K.BILD_MASS["spieler"][0])
         gross = K.BILD_MASS["spieler_" + waffe][0]
-        return _figur(gross, kombi["rumpf"], kombi["kante"], kombi["akzent"],
-                      waffe=waffe)
+        return _standard(kombi["rumpf"], kombi["kante"], kombi["akzent"], waffe=waffe,
+                         team=kombi["name"], groesse=gross)
     return zeichner
 
 

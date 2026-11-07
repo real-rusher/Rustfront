@@ -138,10 +138,31 @@ class Minikarte:
 
         # Zombies und Bosse - darunter, damit die eigenen Leute obenauf
         # zu sehen sind, wenn es eng wird.
-        for (x, y, ebene) in g.gegner_fuer_karte():
+        allwissend = bool(getattr(g, "karte_allwissend", False))
+        gegner = g.gegner_fuer_karte()
+        if allwissend and getattr(g, "ist_gastgeber", False):
+            # Allwissend (Testmodus, seit 0.34.77): jeder Zombie und Boss, auch
+            # ohne Wellen, und die Tiere.
+            from .mehrspieler import KampfGegner
+            gegner = [(w.pos.x, w.pos.y, int(w.ebene)) for w in g.welt.wesen
+                      if w.lebt and (isinstance(w, KampfGegner) or getattr(w, "tier", False))
+                      and getattr(w, "art", "") != "puppe"]
+        for (x, y, ebene) in gegner:
             if ebene == nr:
                 px, py = punkt(pygame.Vector2(x, y))
                 pygame.draw.rect(ziel, FARBE_GEGNER, (px - 1, py - 1, 2, 2))
+
+        if allwissend:
+            # Alle Kaempfer in den Farben ihrer Seite, mit dunklem Rand -
+            # die eigenen Leute zeichnet die Schleife unten noch einmal.
+            for k in g.kaempfer.values():
+                if k is ich or not (k.lebt or getattr(k, "am_boden", False)):
+                    continue
+                if int(k.ebene) != nr or getattr(k, "raus", False):
+                    continue
+                px, py = punkt(k.pos)
+                pygame.draw.rect(ziel, FARBE_DUNKEL, (px - 2, py - 2, 4, 4))
+                pygame.draw.rect(ziel, g._farbe_fuer(k), (px - 1, py - 1, 3, 3))
 
         # Feindliche Spieler und Bots, wenn der Gastgeber es so eingestellt
         # hat (Regel "gegner_karte", seit 0.34.18) - unter den eigenen.

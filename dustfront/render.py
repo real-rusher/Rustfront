@@ -173,6 +173,21 @@ def _ganz_leer(flaeche) -> bool:
     return roh == null
 
 
+def _raster_waehlen(bild: int, breite: int):
+    """Eine Flaechenbreite nahe `breite`, nach der `bild`/Breite ein kleines
+    Raster hat: (Breite, q) - q Weltpixel ergeben genau ganze Bildpixel.
+    Ohne passende Breite (breite, None): dann wie vor 0.34.77."""
+    g = K.TIEFENRASTER
+    for d in g["versuche"]:
+        b = breite + d
+        if b <= 0:
+            continue
+        q = b // math.gcd(b, bild)
+        if q <= g["groesstes"]:
+            return b, q
+    return breite, None
+
+
 def _zeile_spalte(eintrag):
     """Sortierschluessel fuer feste Kacheln: Zeile, dann Spalte."""
     return eintrag[0], eintrag[1]
@@ -1021,13 +1036,27 @@ class Renderer:
         anhaengen_oben = oben.append
         oberseiten = self._oberseiten
 
-        def oben_dazu(weg, name, x, y, x1, y1):
-            # Mit den schon gerundeten Ecken der Oberseite.
-            b, h = x1 - x, y1 - y
-            bild_o = oberseiten.get((name, b, h, dunkel))
+        # Die Oberseite in fester Groesse (seit 0.34.77): je Mauerart und Hoehe
+        # immer dieselbe, aufgerundete - gezeigt wird davon nur, was die
+        # gerundeten Ecken in diesem Bild verlangen. Vorher wurde sie jedes
+        # Bild auf die gerade gerundete Groesse skaliert, die beim Bewegen
+        # zwischen zwei Werten sprang, und das Muster darauf veraenderte
+        # sich sichtbar (gemeldet: "die Textur veraendert sich beim
+        # Umschauen"). Grosser als die Ecken verlangen ist sie nie: zwei
+        # gerundete Ecken liegen hoechstens aufgerundet weit auseinander.
+        feste_masse = {}
+
+        def oben_dazu(weg, name, x, y, x1, y1, rb, rh, hoehe):
+            masse = feste_masse.get((rb, rh, hoehe))
+            if masse is None:
+                k = faktoren[hoehe]
+                masse = feste_masse[(rb, rh, hoehe)] = (
+                    max(1, x1 - x, math.ceil(rb * k - 1e-6)),
+                    max(1, y1 - y, math.ceil(rh * k - 1e-6)))
+            bild_o = oberseiten.get((name, masse[0], masse[1], dunkel))
             if bild_o is None:
-                bild_o = self._oberseite(name, b, h, dunkel)
-            anhaengen_oben((weg, bild_o, (x, y)))
+                bild_o = self._oberseite(name, masse[0], masse[1], dunkel)
+            anhaengen_oben((weg, bild_o, (x, y), (0, 0, x1 - x, y1 - y)))
         faktoren = {}
         achse_x, achse_y = {}, {}
         l_n, l_s, l_w, l_o = licht[(0, -1)], licht[(0, 1)], licht[(-1, 0)], licht[(1, 0)]
@@ -1067,16 +1096,10 @@ class Renderer:
             if rund:
                 seiten.append((weg, "rund", (x0, y0, x1, y1, ox0, oy0, ox1, oy1),
                                grund, st))
-                oben_dazu(weg, name, rx_, ry_, rx1_, ry1_)
+                oben_dazu(weg, name, rx_, ry_, rx1_, ry1_, rb, rh, hoehe)
                 continue
             if zu:
-                # Gleich fertig: Bild der Oberseite und Ort (seit 0.34.75 im
-                # selben Durchgang; sortiert wird danach wie vorher).
-                b, h = rx1_ - rx_, ry1_ - ry_
-                bild_o = oberseiten.get((name, b, h, dunkel))
-                if bild_o is None:
-                    bild_o = self._oberseite(name, b, h, dunkel)
-                anhaengen_oben((weg, bild_o, (rx_, ry_)))
+                oben_dazu(weg, name, rx_, ry_, rx1_, ry1_, rb, rh, hoehe)
                 continue
             # Die Kante der Oberseite: rundherum, wo die Mauer endet -
             # oben und links im Licht, unten und rechts im Schatten.
@@ -1101,7 +1124,7 @@ class Renderer:
             if offen_o and ox1 < x1 - 0.5:
                 seiten.append((weg, "block", (((x1, y0), (x1, y1)), ((ox1, oy1), (ox1, oy0))),
                                grund, st, l_o))
-            oben_dazu(weg, name, rx_, ry_, rx1_, ry1_)
+            oben_dazu(weg, name, rx_, ry_, rx1_, ry1_, rb, rh, hoehe)
 
         for (tx, ty, name, sy) in flach:
             s = self.bilder.bild(name)
@@ -1155,7 +1178,7 @@ class Renderer:
                                        max(1, round(fr + (kr - fr) * t)))
 
         oben.sort(key=_erstes, reverse=True)
-        _viele_blits(ziel, [(bild_o, ort) for _w, bild_o, ort in oben])
+        ziel.blits([(bild_o, ort, teil) for _w, bild_o, ort, teil in oben], doreturn=False)
         kanten_toene = {}
         for a_, b_, im_licht, grund in kanten:
             farbe = kanten_toene.get((grund, im_licht))
@@ -1718,19 +1741,19 @@ class Renderer:
         cache[schluessel] = s
         return s
 
-    def _tiefenflaeche(self, k: float) -> pygame.Surface:
+    def _tiefenflaeche(self, k: float, groesse=None) -> pygame.Surface:
         """Hilfsflaeche fuer eine tiefer liegende Ebene.
 
         Sie zeigt einen groesseren Weltausschnitt und wird danach auf die
         Bildgroesse verkleinert. Genau das laesst die untere Ebene weiter weg
         wirken: gleiche Weltmitte, kleinerer Massstab.
         """
-        schluessel = (int(k * 100), self.groesse)
+        if groesse is None:
+            groesse = (int(self.groesse[0] / k) + 2, int(self.groesse[1] / k) + 2)
+        schluessel = groesse
         hit = self._tiefen.get(schluessel)
         if hit is None:
-            w = int(self.groesse[0] / k) + 2
-            h = int(self.groesse[1] / k) + 2
-            hit = pygame.Surface((w, h), pygame.SRCALPHA)
+            hit = pygame.Surface(groesse, pygame.SRCALPHA)
             if len(self._tiefen) > 64:
                 self._tiefen.clear()
             self._tiefen[schluessel] = hit
@@ -2044,11 +2067,37 @@ class Renderer:
         """
         if abs(dz) < 1.0:
             return kamera.ecke, 1.0, 1.0
-        w = int(self.groesse[0] / k) + 2
-        h = int(self.groesse[1] / k) + 2
+        return self._tiefen_plan(kamera, k)[4]
+
+    def _tiefen_plan(self, kamera, k: float):
+        """Wie eine andere Ebene gezeichnet und aufs Bild gebracht wird:
+        (Ecke der Flaeche, Groesse der Flaeche, Groesse nach dem Skalieren,
+        Versatz beim Auflegen, Abbildung).
+
+        Seit 0.34.77: das Abtastraster haengt an der Welt, nicht am Bild.
+        Vorher lag die Ecke der Flaeche jedes Bild woanders, und beim
+        Skalieren fiel jedes Mal ein anderes Pixelmuster aus der Textur -
+        beim langsamen Umschauen veraenderte sich Gestruepp, Sand und Fels
+        auf der Etage darueber oder darunter sichtbar (gemeldet). Jetzt
+        rastet die Ecke auf ein Vielfaches von `q` ein, nach dem Raster und
+        Bild wieder zusammenpassen; den Rest gleicht ein ganzer Pixel Versatz
+        beim Auflegen aus. Die Flaeche ist dafuer um `q` groesser, und ihre
+        Breite darf um ein paar Pixel von gw/k abweichen, damit `q` klein
+        bleibt (TIEFENRASTER)."""
+        gw, gh = self.groesse
+        w, qx = _raster_waehlen(gw, int(gw / k) + 2)
+        h, qy = _raster_waehlen(gh, int(gh / k) + 2)
         mitte = kamera.pos + kamera.versatz
-        ecke = pygame.Vector2(round(mitte.x - w / 2), round(mitte.y - h / 2))
-        return ecke, self.groesse[0] / w, self.groesse[1] / h
+        ex, ey = round(mitte.x - w / 2), round(mitte.y - h / 2)
+        sx, sy = gw / w, gh / h
+        if qx is None or qy is None:
+            ecke = pygame.Vector2(ex, ey)
+            return ecke, (w, h), (gw, gh), (0, 0), (ecke, sx, sy)
+        ex0, ey0 = (ex // qx) * qx, (ey // qy) * qy
+        ox, oy = round((ex - ex0) * sx), round((ey - ey0) * sy)
+        wirkt = pygame.Vector2(ex0 + ox / sx, ey0 + oy / sy)
+        return (pygame.Vector2(ex0, ey0), (w + qx, h + qy),
+                (gw + round(qx * sx), gh + round(qy * sy)), (ox, oy), (wirkt, sx, sy))
 
     def _klippenfarbe(self, welt):
         """Die Farbe des Felses: die Klippen- oder Wandkachel des
@@ -2238,7 +2287,8 @@ class Renderer:
                 if sicht <= 0.01:
                     continue
             k = p["brennweite"] / max(60.0, p["brennweite"] + dz)
-            ab = self._abbildung(kamera, k, dz)
+            plan = None if abs(dz) < 1.0 else self._tiefen_plan(kamera, k)
+            ab = (kamera.ecke, 1.0, 1.0) if plan is None else plan[4]
             if turm and not self._turm_im_bild(welt, idx, blick, ab[0], k):
                 continue
             abbildung[idx] = ab
@@ -2258,9 +2308,9 @@ class Renderer:
                 continue
 
             dunkel = max(48, int(p["dunkel"] * k)) if dz > 0 else None
-            flaeche = self._tiefenflaeche(k)
+            u_ecke, groesse_f, groesse_b, versatz_b = plan[0], plan[1], plan[2], plan[3]
+            flaeche = self._tiefenflaeche(k, groesse_f)
             flaeche.fill((0, 0, 0, 0))
-            u_ecke = abbildung[idx][0]
             # Das Auge steht ueber dieser Ebene um die Brennweite plus den
             # Hoehenunterschied - von oben gesehen wirken Waende unten
             # flacher, von unten die oben steiler.
@@ -2308,20 +2358,20 @@ class Renderer:
                 # In eine gemerkte Flaeche (seit 0.34.75) statt jedes Bild in
                 # eine neue: transform.scale schreibt jedes Pixel neu.
                 skaliert = self.__dict__.get("_skaliert_puffer")
-                if (skaliert is None or skaliert.get_size() != self.groesse
+                if (skaliert is None or skaliert.get_size() != groesse_b
                         or skaliert.get_flags() != flaeche.get_flags()
                         or skaliert.get_bitsize() != flaeche.get_bitsize()):
-                    skaliert = pygame.transform.scale(flaeche, self.groesse)
+                    skaliert = pygame.transform.scale(flaeche, groesse_b)
                     self._skaliert_puffer = skaliert
                 else:
                     try:
-                        pygame.transform.scale(flaeche, self.groesse, skaliert)
+                        pygame.transform.scale(flaeche, groesse_b, skaliert)
                     except (ValueError, pygame.error):
-                        skaliert = pygame.transform.scale(flaeche, self.groesse)
+                        skaliert = pygame.transform.scale(flaeche, groesse_b)
                         self._skaliert_puffer = skaliert
                 if sicht < 0.999:
                     skaliert = plattform.deckkraft(skaliert, 255 * sicht, kopie=False)
-                ziel.blit(skaliert, (0, 0))
+                ziel.blit(skaliert, (-versatz_b[0], -versatz_b[1]))
             if dz > 0:
                 a = int(255 * p["dunst_staerke"] * (1.0 - k))
                 if a > 0:

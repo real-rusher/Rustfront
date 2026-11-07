@@ -267,6 +267,10 @@ class Kaempfer(Spieler):
         self.toeter = von
 
     def schaden(self, menge, schub=None, von=None) -> None:
+        # Wer in einem Fahrzeug sitzt, nimmt keinen Schaden (seit 0.34.77,
+        # K.FAHRZEUG["fahrer_geschuetzt"]).
+        if self.im_fahrzeug and K.FAHRZEUG.get("fahrer_geschuetzt", False):
+            return
         # Am Boden gibt es keinen Rueckstoss. Wer liegt, liegt - sonst
         # schoebe jede Salve, jede Granate und jeder Stampfer einen
         # Gefallenen ein Stueck weiter, und am Ende laege er ganz woanders
@@ -5762,6 +5766,33 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         """
         z = self.kamera.zoom
         groesse = (max(1, int(round(K.GAME_W * z))), max(1, int(round(K.GAME_H * z))))
+        # Abtastraster an der Welt (seit 0.34.77, wie render._tiefen_plan): die
+        # Ecke rastet auf ein Vielfaches von q ein, nach dem Leinwand und
+        # Bild wieder zusammenpassen, der Rest wird ein ganzer Pixel Versatz
+        # beim Auflegen. Vorher fiel beim Skalieren jedes Bild ein anderes
+        # Muster aus der Textur, und beim Umschauen flimmerte alles.
+        sicht = self.sicht_welt()
+        qx = groesse[0] // math.gcd(groesse[0], K.GAME_W)
+        qy = groesse[1] // math.gcd(groesse[1], K.GAME_H)
+        kam = self.kamera
+        kamera_vorher = pygame.Vector2(kam.pos)
+        ziel_groesse, versatz = (K.GAME_W, K.GAME_H), (0, 0)
+        if max(qx, qy) <= K.TIEFENRASTER["groesstes"]:
+            e = kam.ecke
+            ex0, ey0 = (int(e.x) // qx) * qx, (int(e.y) // qy) * qy
+            for _ in range(3):                  # round() rundet halbe zur geraden Zahl
+                jetzt = kam.ecke
+                if (jetzt.x, jetzt.y) == (ex0, ey0):
+                    break
+                kam.pos.x += ex0 - jetzt.x
+                kam.pos.y += ey0 - jetzt.y
+            if (kam.ecke.x, kam.ecke.y) == (ex0, ey0):
+                bx, by = K.GAME_W / groesse[0], K.GAME_H / groesse[1]
+                versatz = (round((e.x - ex0) * bx), round((e.y - ey0) * by))
+                groesse = (groesse[0] + qx, groesse[1] + qy)
+                ziel_groesse = (K.GAME_W + round(qx * bx), K.GAME_H + round(qy * by))
+            else:
+                kam.pos.update(kamera_vorher)
         if self._leinwand is None or self._leinwand.get_size() != groesse:
             self._leinwand = pygame.Surface(groesse, 0, ziel)
         lw = self._leinwand
@@ -5769,7 +5800,6 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         r.groesse, r.vignette_an = groesse, False
         try:
             lw.fill(K.C_VOID)
-            sicht = self.sicht_welt()
             if sicht is None:
                 self._welt_bild(lw, misch)
             else:
@@ -5804,10 +5834,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 pygame.draw.rect(lw, K.ZOOM["nebel_rand"], bild_sicht.inflate(2, 2), 1)
         finally:
             r.groesse, r.vignette_an = (K.GAME_W, K.GAME_H), self._vignette_an()
+            kam.pos.update(kamera_vorher)
+        lage = (-versatz[0], -versatz[1])
         if z > 1.0:
-            ziel.blit(pygame.transform.smoothscale(lw, (K.GAME_W, K.GAME_H)), (0, 0))
+            ziel.blit(pygame.transform.smoothscale(lw, ziel_groesse), lage)
         else:
-            ziel.blit(pygame.transform.scale(lw, (K.GAME_W, K.GAME_H)), (0, 0))
+            ziel.blit(pygame.transform.scale(lw, ziel_groesse), lage)
         if self._vignette_an():
             ziel.blit(r._vignette, (0, 0))
 

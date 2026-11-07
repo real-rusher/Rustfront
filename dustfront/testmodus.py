@@ -527,6 +527,17 @@ class Testmodus(Gefecht):
         # 0.34.51): Front, Stellungen, Blickrichtungen - fuer die Szene, die
         # die geknickte Front zeigt.
         self.sauber_trupps = False
+        # Seit 0.34.77, gemeldet: "mit einem Knopf wie eine normale Runde
+        # aussehen" - kein Ziffernblock, keine Kreise, kein Status, keine
+        # INFO; nur das Spiel mit seiner Anzeige (Taste F2, Testmenue).
+        self.wie_runde = bool(z.get("wie_runde", False))
+        # Minikarte, die alles zeigt (seit 0.34.77): alle Kaempfer in ihren
+        # Farben, Zombies und Tiere - auch als Beobachter.
+        self.karte_allwissend = bool(z.get("karte_allwissend", False))
+        # Nachschub am Kartenrand (seit 0.34.77): solange an, kommen in einer
+        # Schlacht immer neue Bots vom Rand (K.TESTMODUS["nachschub"]).
+        self.nachschub_an = bool(z.get("nachschub_an", False))
+        self._nachschub_rest = 0.0
         # Was ENTF mit dem tut, was am Zeiger liegt (seit 0.34.33): loeschen
         # (verschwindet, keine Leiche) oder toeten (stirbt wie im Spiel).
         self.entf_toetet = bool(z.get("entf_toetet", False))
@@ -858,8 +869,49 @@ class Testmodus(Gefecht):
             return
         for _ in range(n):
             super()._schritt_gastgeber(dt)
+            self._nachschub(dt)
         if self._meldung_tm_rest > 0:
             self.hinweis = self._meldung_tm
+
+    # ── Nachschub am Kartenrand (seit 0.34.77) ──────────────────────────
+    def _nachschub(self, dt: float) -> None:
+        """Im Takt ein neuer Bot am Rand der Karte, fuer die Seite mit den
+        wenigsten - bis K.TESTMODUS["nachschub"]["hoechstens"] Bots. Seite 0
+        kommt von Westen, Seite 1 von Osten. Gemeldet: "einstellen, ob im
+        Testmodus durchgehend in Schlachten neue Bots am Rand spawnen"."""
+        if not self.nachschub_an:
+            return
+        n = K.TESTMODUS["nachschub"]
+        self._nachschub_rest -= dt
+        if self._nachschub_rest > 0.0:
+            return
+        self._nachschub_rest = n["takt"]
+        bots = [k for k in self._bots() if k.lebt]
+        if len(bots) >= n["hoechstens"]:
+            return
+        je_team = [sum(1 for k in bots if getattr(k, "team", 0) == t) for t in (0, 1)]
+        team = 0 if je_team[0] <= je_team[1] else 1
+        pos = self._randplatz(team)
+        if pos is None:
+            return
+        self.bot_setzen(pos, 0, {"team": team, "hirn": n["hirn"]})
+
+    def _randplatz(self, team: int):
+        """Ein freier Platz am West- (Seite 0) oder Ostrand der untersten
+        Ebene, oder None."""
+        e = self.welt.ebene(0)
+        T = K.TILE
+        rand = K.TESTMODUS["nachschub"]["rand"]
+        for _ in range(60):
+            tx = (self.rnd.randrange(rand, rand + 6) if team == 0
+                  else e.breite - 1 - self.rnd.randrange(rand, rand + 6))
+            ty = self.rnd.randrange(rand, max(rand + 1, e.hoehe - rand))
+            if not e.begehbar(tx, ty):
+                continue
+            p = pygame.Vector2((tx + 0.5) * T, (ty + 0.5) * T)
+            if self.welt.frei(p, K.SPIELER["radius"], 0, True):
+                return p
+        return None
 
     def melde(self, text: str, dauer: float = 2.5) -> None:
         self._meldung_tm = text
@@ -1623,6 +1675,10 @@ class Testmodus(Gefecht):
             if name is not None:
                 self.taste(name)
                 return
+            if ev.key == pygame.K_F2 and self.menue is None:
+                self.wie_runde = not self.wie_runde
+                self.melde("ANSICHT WIE RUNDE" if self.wie_runde else "ANSICHT TESTMODUS")
+                return
             if ev.key in self.app.opt.codes("pause") and self.menue is None:
                 if self.spawner_offen:
                     self.spawner_offen = False
@@ -1775,6 +1831,11 @@ class Testmodus(Gefecht):
             ("blend", "BEOBACHTER BLENDEN", "AN" if self.blend_beobachter else "AUS"),
             ("ruckeln", "BEOBACHTER RUCKELN", "AN" if self.ruckeln_beobachter else "AUS"),
             ("sauber", "SAUBERE ANSICHT (NUR AKTIONEN)", "AN" if self.sauber else "AUS"),
+            ("runde", "ANSICHT WIE RUNDE (F2)", "AN" if self.wie_runde else "AUS"),
+            ("karte_alles", "MINIKARTE ALLWISSEND", "AN" if self.karte_allwissend else "AUS"),
+            ("nachschub", "NACHSCHUB AM KARTENRAND",
+             "AN - BIS %d BOTS" % K.TESTMODUS["nachschub"]["hoechstens"]
+             if self.nachschub_an else "AUS"),
             ("entf", "ENTF-TASTE", "TÖTET" if self.entf_toetet else "LÖSCHT"),
             ("verwundete", "VERWUNDETE BOTS (LIEGEN, BERGEN)", "AN" if self.verwundete else "AUS"),
             ("sprint", "BOTS SPRINTEN", "AN" if self.bot_sprint else "AUS"),
@@ -1807,6 +1868,8 @@ class Testmodus(Gefecht):
                     wellen_an=self.wellen_an, beute_an=self.beute_an,
                     blend_beobachter=self.blend_beobachter,
                     ruckeln_beobachter=self.ruckeln_beobachter, sauber=self.sauber,
+                    wie_runde=self.wie_runde, karte_allwissend=self.karte_allwissend,
+                    nachschub_an=self.nachschub_an,
                     entf_toetet=self.entf_toetet, verwundete=self.verwundete,
                     bot_sprint=self.bot_sprint, fernglas=self.fernglas, nebel=self.nebel, bot_fliehen=self.bot_fliehen,
                     bot_uebermut=self.bot_uebermut, bildrate_nr=self.bildrate_nr,
@@ -1865,6 +1928,13 @@ class Testmodus(Gefecht):
             self.ruckeln_beobachter = not self.ruckeln_beobachter
         elif schluessel == "sauber":
             self.sauber = not self.sauber
+        elif schluessel == "runde":
+            self.wie_runde = not self.wie_runde
+        elif schluessel == "karte_alles":
+            self.karte_allwissend = not self.karte_allwissend
+        elif schluessel == "nachschub":
+            self.nachschub_an = not self.nachschub_an
+            self._nachschub_rest = 0.0
         elif schluessel == "entf":
             self.entf_toetet = not self.entf_toetet
         elif schluessel == "verwundete":
@@ -1981,6 +2051,18 @@ class Testmodus(Gefecht):
 
     def zeichnen(self, ziel, alpha: float) -> None:
         super().zeichnen(ziel, self.welt_anteil(alpha))
+        if self.wie_runde:
+            # Wie eine Runde: nur Welt und Anzeige des Spiels. Spawner und
+            # Menue erscheinen nur, wenn man sie oeffnet.
+            if self.beobachter and self.karte_allwissend:
+                self.hud.minikarte.zeichnen(ziel, self)
+            if self.spawner_offen:
+                self._spawner_zeichnen(ziel)
+            if self.menue_offen:
+                self._testmenue_zeichnen(ziel)
+            return
+        if self.beobachter and self.karte_allwissend:
+            self.hud.minikarte.zeichnen(ziel, self)
         if self.sauber:
             # Nur die Welt und die Aktionen. Spawner und Menue bleiben
             # bedienbar, wenn man sie oeffnet (Esc, Taste 4). Wer funkt,

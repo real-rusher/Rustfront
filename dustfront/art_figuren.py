@@ -623,6 +623,27 @@ def figur(d: dict, waffe=None, team=None, groesse=None, stummel: bool = True,
     return art._rand(s)
 
 
+def standard(rumpf, kante, akzent) -> dict:
+    """Die Standardfigur als Eintrag wie in K.FIGUREN (seit 0.34.77).
+
+    Gemeldet: "die Standard-Skins neu, damit sie mehr zu den neueren
+    passen - gleich aussehen, aber im Stil". Dieselben Farben wie die alte
+    Figur (art._figur): Grundton, dunkle Kante, Akzent als Schutzbrille -
+    dazu, was jeder neue Skin hat: Tarnflecken im eigenen Ton, eine
+    Plattenweste, ein Helm mit Bezugnaht."""
+    return {"name": "STANDARD %s" % (tuple(rumpf),), "rumpf": tuple(rumpf), "kante": tuple(kante),
+            "akzent": tuple(akzent), "kopf": "helm", "kopffarbe": _hell(rumpf, 20),
+            "tarn": (_misch(rumpf, kante, 0.25), _hell(rumpf, 16), _misch(rumpf, kante, 0.45)),
+            "weste": "platten", "westenfarbe": _misch(rumpf, kante, 0.4)}
+
+
+def standard_figur(rumpf, kante, akzent, waffe=None, team=None, groesse=None,
+                   schwung=None, stummel: bool = True) -> pygame.Surface:
+    """Die Standardfigur im Stil der Skins (siehe `standard`)."""
+    return figur(standard(rumpf, kante, akzent), waffe, team, groesse, stummel=stummel,
+                 schwung=schwung)
+
+
 def mit_fester_hand(skin: str) -> bool:
     """Haelt diese Figur etwas Festes (Schild, Pistole, Klemmbrett)? Dann
     kann sie keine gewaehlte Waffe zeigen - und ist kein Aussehen fuer
