@@ -1611,7 +1611,6 @@ BOTS = dict(
     fahren=dict(
         abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0),  # so weit bleibt er stehen
         suchen=700.0,         # so weit sucht ein Fahrer ohne Fahrzeug nach einem
-        kanone_winkel=5.0,    # so genau muss der Turm zeigen
         mg_winkel=10.0,
         steckt_nach=1.2,      # so lange ohne Fahrt, dann setzt er zurueck
         zurueck=1.0,          # so lange
@@ -1621,6 +1620,34 @@ BOTS = dict(
         # reicht 900, und ein Panzer, der seine Gegner nicht sieht, ist nur
         # ein Hindernis (gemessen: Gegner auf 730 px blieben ungesehen).
         sicht=dict(panzer=720.0, panzerwagen=560.0, buggy=380.0),
+        # Seit 0.34.84 (gemeldet nach einer grossen Fahrzeugschlacht):
+        # Liegt das Ziel hinter ihm und weiter weg als das, wendet er
+        # vorwaerts, statt die ganze Strecke rueckwaerts zu fahren.
+        wenden_ab=140.0,
+        panzer_drehen_ab=35.0,    # so schief: der Panzer dreht erst (fast) auf der Stelle
+        panzer_drehen_gas=0.3,    # ... und rollt dabei so langsam mit
+        # Die Kanone ist explosiv: feuern, wenn der Einschlag so nah am Ziel
+        # liegt (x Splash-Radius), statt auf 5 Grad genau zu warten - und
+        # auf einen, der eben hinter Deckung verschwand, solange die
+        # Granate bis dicht an ihn herankommt.
+        splash_anteil=0.6,
+        verdeckt_merken=3.0,      # so frisch muss die letzte Sicht sein (s)
+        # Zielwechsel im Fahrzeug: je Grad, den Turm/Wanne sich drehen
+        # muessten, zaehlt ein Gegner so viel Pixel weiter weg.
+        dreh_kosten=2.5,
+        # Bug-MG: steht der Panzer, dreht er die Wanne zum Gegner.
+        mg_ausrichten=True,
+        # Zum Einsteigen geht er an die Seite (beim Panzerwagen reicht die
+        # Front ueber den Einstiegsradius hinaus) - und das auch, wenn er
+        # einen Gegner sieht, solange der Wagen so nah ist.
+        einstieg_seite=10.0,      # so weit neben der Wanne
+        einstieg_trotz_feind=320.0,
+        einstieg_feind_nah=140.0, # ... ausser ein Gegner steht naeher als das
+        # Schutz fuer Liegende (nicht im Buggy): zwischen einen liegenden
+        # Kameraden und den Gegner fahren, wenn das nicht weit ist.
+        schutz_weite=380.0,       # so weit faehrt er dafuer hoechstens
+        schutz_vor=70.0,          # so weit vor dem Liegenden haelt er
+        schutz_leben=0.4,         # nur mit mehr als so viel Leben des Wagens
     ),
     # Woraus ein Bot sein Loadout zieht (seit 0.34.62). Nur die alten fuenf:
     # mit Zweithand, Doppellauf, Bogen oder Einwegrohr kann die KI noch

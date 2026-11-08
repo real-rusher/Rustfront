@@ -1080,10 +1080,98 @@ def feuer_umweg():
           "%s s, %s mal" % ([round(t, 2) for t in drin], rein))
 
 
+def fahrzeug_bots():
+    """Gemeldet (0.34.84) nach einer grossen Fahrzeugschlacht: Bots kommen
+    nicht in den Panzerwagen (stehen vorn oder hinten dran), fahren lange
+    Strecken rueckwaerts, die Panzerkanone feuert kaum, das Bug-MG wird
+    nicht ausgerichtet - und neu: ein Fahrzeug soll Liegende decken."""
+    print("\n-- Bots im Fahrzeug: einsteigen, wenden, Kanone, Bug-MG, Liegende decken")
+    drin, rueck, ausgerichtet, mg, schuss, gedeckt = [], [], [], [], [], []
+    for seed in (81, 82, 83):
+        # 1. Einsteigen: er steht vor dem Panzerwagen.
+        tm = neu(seed)
+        tx, ty, v = W.flaeche(tm, random.Random(seed), 24, 12)
+        pw = tm.fahrzeug_setzen("panzerwagen", v(12, 6), 0, {"winkel": 0})
+        k = tm.fahrer_setzen(v(12, 6) + pygame.Vector2(K.PANZERWAGEN["vorn"] + 14, 0), 0,
+                             {"team": 0}, mit_fahrzeug=False)
+        laufen(tm, 8.0)
+        drin.append(k.fahrzeug is pw)
+        tm.verlassen()
+        # 2. Wenden: ein Gegner weit hinter dem Panzerwagen.
+        tm = neu(seed)
+        # Platz zum Wenden: 14 Kacheln hoch (ein Panzerwagen wendet weit).
+        tx, ty, v = W.flaeche(tm, random.Random(seed), 28, 14)
+        f = tm.fahrer_setzen(v(23, 7), 0, {"team": 0, "fahrzeug": "panzerwagen", "winkel": 0})
+        pw = f.fahrzeug
+        g = tm.puppe_setzen(v(2, 7), 0, {"team": 1, "leben": 10.0})
+        g.unverwundbar = 1e9
+        W.kennen([f], [g], tm)
+        st = {"rueck": 0.0, "zeit": 0.0}
+
+        def zaehlen(pw=pw, st=st):
+            st["zeit"] += DT
+            if pw.fahrt < -5.0:
+                st["rueck"] += DT
+        laufen(tm, 10.0, zaehlen)
+        rueck.append(st["rueck"] / st["zeit"])
+        tm.verlassen()
+        # 3. Panzer haelt: Wanne zum Gegner, Bug-MG; Kanone auf Deckung.
+        tm = neu(seed)
+        tx, ty, v = W.flaeche(tm, random.Random(seed), 20, 14)
+        f = tm.fahrer_setzen(v(10, 10), 0, {"team": 0, "fahrzeug": "panzer", "winkel": 0})
+        pz = f.fahrzeug
+        g = tm.puppe_setzen(v(10, 3), 0, {"team": 1, "leben": 10.0})
+        g.leben = g.max_leben = 1e6          # haelt alles aus, zaehlt aber mit
+        W.kennen([f], [g], tm)
+        st = {"mg": False, "schuss": 0}
+
+        def mg_messen(tm=tm, pz=pz, st=st):
+            st["mg"] = st["mg"] or pz.zweit
+            st["schuss"] += sum(1 for x in tm.welt.neue if type(x).__name__ == "Panzergranate")
+        laufen(tm, 8.0, mg_messen)
+        hin = g.pos - pz.pos
+        soll = math.degrees(math.atan2(hin.y, hin.x))
+        ausgerichtet.append(abs((soll - pz.winkel + 180.0) % 360.0 - 180.0) <= 12.0)
+        mg.append(st["mg"])
+        schuss.append((st["schuss"], g.max_leben - g.leben))
+        tm.verlassen()
+        # 4. Ein Kamerad liegt zwischen Panzer und Gegner: der Panzer deckt ihn.
+        tm = neu(seed)
+        tx, ty, v = W.flaeche(tm, random.Random(seed), 24, 12)
+        # Freie Bahn (die Flaeche kann Mauern enthalten - dann faehrt er
+        # bewusst nicht hin, siehe bots._schutz_ort).
+        W.setzen(tm, tx, ty, [(x_, y_) for x_ in range(24) for y_ in range(12)], K.BODEN)
+        f = tm.fahrer_setzen(v(20, 6), 0, {"team": 0, "fahrzeug": "panzer", "winkel": 180})
+        pz = f.fahrzeug
+        x = tm.bot_setzen(v(12, 6), 0, {"team": 0, "hirn": "goap"})
+        g = tm.puppe_setzen(v(3, 6), 0, {"team": 1, "leben": 10.0})
+        g.unverwundbar = 1e9
+        laufen(tm, 0.5)
+        tm.toeten(x)
+        W.kennen([f], [g], tm)
+        laufen(tm, 12.0)
+        # Gedeckt: der Wagen steht zwischen ihm und dem Gegner, nah bei ihm.
+        hin = g.pos - x.pos
+        vor = (pz.pos - x.pos).dot(hin.normalize())
+        quer = abs((pz.pos - x.pos).cross(hin.normalize()))
+        gedeckt.append(x.am_boden and 20.0 < vor < 140.0 and quer < 45.0)
+        tm.verlassen()
+    pruef("Er steigt in den Panzerwagen, auch wenn er vorn davor steht (3 von 3)",
+          all(drin), str(drin))
+    pruef("... faehrt zu einem Gegner hinter sich kaum rueckwaerts, er wendet (unter 15 Prozent der Zeit)",
+          all(r_ < 0.15 for r_ in rueck), str([round(r_, 2) for r_ in rueck]))
+    pruef("Der Panzer, der haelt, dreht die Wanne zum Gegner (Bug-MG) und schiesst damit",
+          all(ausgerichtet) and all(mg), "%s %s" % (ausgerichtet, mg))
+    pruef("... und die Kanone feuert in 8 s wenigstens zweimal - und trifft",
+          all(n_ >= 2 and s_ > 0 for n_, s_ in schuss), str([(n_, round(s_)) for n_, s_ in schuss]))
+    pruef("Ein Kamerad liegt: der Panzer faehrt zwischen ihn und den Gegner (3 von 3)",
+          all(gedeckt), str(gedeckt))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
          planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
-         panzer_bot, spuren, feuer_umweg]
+         panzer_bot, spuren, feuer_umweg, fahrzeug_bots]
 NUR = sys.argv[1:]
 for teil in TEILE:
     if not NUR or teil.__name__ in NUR:

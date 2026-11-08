@@ -2512,7 +2512,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         Bug-MG des Panzers. Geschossen wird mit dem Fahrzeug, nicht mit
         der eigenen Waffe."""
         b = k.fahrzeug
-        if ein.get("rl"):
+        gl = ein.get("gl")
+        if k.ist_bot and isinstance(gl, (list, tuple)) and len(gl) == 2:
+            # Ein Bot lenkt selbst (seit 0.34.84, bots._lenken): wenden statt
+            # weite Strecken rueckwaerts, der Panzer dreht auf der Stelle.
+            try:
+                b.gas = max(-1.0, min(1.0, float(gl[0])))
+                b.lenk = max(-1.0, min(1.0, float(gl[1])))
+            except (TypeError, ValueError):
+                b.gas, b.lenk = 0.0, 0.0
+        elif ein.get("rl"):
             # Ein Stick (Touch, seit 0.34.22): der Wagen faehrt dorthin,
             # wohin er zeigt (fahrzeug.Buggy.stick_steuern).
             b.gas, b.lenk = b.stick_steuern(will)

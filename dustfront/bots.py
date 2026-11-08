@@ -93,7 +93,7 @@ import pygame
 
 from . import config as K
 from . import konto as konto_modul
-from .bottaktik import Taktik, braucht_schutz, stuerme_fuehren, unterdrueckung_pruefen
+from .bottaktik import Taktik, braucht_schutz, kampffaehig, stuerme_fuehren, unterdrueckung_pruefen
 
 
 def _winkel_zu(von, nach) -> float:
@@ -507,8 +507,12 @@ class BotHirn(Taktik):
             # halten. Mitten im Feuerstoss nicht: den bringt er zu Ende.
             von = getattr(k, "zuletzt_von", None)
             von = getattr(von, "von", von)
+            # Im Fahrzeug nicht (seit 0.34.84): jeder Wechsel heisst, den
+            # Turm neu zu drehen - im Gefecht wechselte er so dauernd das
+            # Ziel und kam kaum zum Schuss (gemeldet).
             if (von is not None and von is not self.ziel and von in sichtbar
-                    and self.getroffen_rest > 1.6 and self.stoss_rest <= 0.0):
+                    and self.getroffen_rest > 1.6 and self.stoss_rest <= 0.0
+                    and k.fahrzeug is None):
                 self.feuerschutz_fuer = None
                 self._neues_ziel(von, False)
                 self.linie = self.g.welt.deckung(k.pos, von.pos, k.ebene)
@@ -524,8 +528,14 @@ class BotHirn(Taktik):
             # Feuerschutz: wer einem Kameraden zu nahe kommt, der gerade
             # nachlaedt, liegt oder flankiert, ist zuerst dran.
             schuetzlinge = [x for x in self.kameraden() if braucht_schutz(x)]
+            fz = k.fahrzeug if getattr(k.fahrzeug, "rechteckig", False) else None
+
             def wert(w):
                 d = k.pos.distance_to(w.pos)
+                if fz is not None:
+                    # Lieber einen, auf den der Turm schon fast zeigt.
+                    d += abs(_winkel_diff(fz.aufbau, self._turm_soll(fz, w.pos))) \
+                        * K.BOTS["fahren"]["dreh_kosten"]
                 d -= self.schutz_bonus(w, schuetzlinge)[0]
                 d -= self._ziel_bonus(w)
                 # HUEGEL: wer im Kreis steht, nimmt ihn uns weg.
@@ -1370,10 +1380,14 @@ class BotHirn(Taktik):
     # ---- Fahren (seit 0.34.71) ------------------------------------------
     def _zum_fahrzeug(self, ein: dict):
         """Ein Fahrer ohne Fahrzeug: zum naechsten freien und einsteigen.
-        Sieht er gerade einen Gegner, kaempft er erst (None)."""
+
+        Seit 0.34.84 auch, wenn er einen Gegner sieht - solange der Wagen
+        nah ist und der Gegner nicht dicht vor ihm steht (gemeldet: "Bots
+        gehen oft nicht in Fahrzeuge"). Und er geht an die **Seite**: beim
+        Panzerwagen reicht die Front weiter, als man zum Einsteigen an die
+        Mitte heran muss - wer vorn oder hinten stand, kam nie hinein und
+        blieb dort stehen."""
         k = self.k
-        if self.ziel is not None and self.ziel_ok(self.ziel):
-            return None
         f = K.BOTS["fahren"]
         bester, weite = None, f["suchen"]
         for b in getattr(self.g, "fahrzeuge", ()):
@@ -1384,18 +1398,128 @@ class BotHirn(Taktik):
                 bester, weite = b, d
         if bester is None:
             return None
-        if weite <= bester.werte["einsteigen"] - 4.0:
+        if self.ziel is not None and self.ziel_ok(self.ziel):
+            if (weite > f["einstieg_trotz_feind"]
+                    or k.pos.distance_to(self.ziel.pos) < f["einstieg_feind_nah"]):
+                return None
+        if weite <= bester.werte["einsteigen"] - 3.0:
             ein["knoepfe"].append("nutzen")
             return ein
-        will = self._sicher(self._weg_richtung(bester.pos, bester.ebene, ein))
+        will = self._sicher(self._weg_richtung(self._einstiegspunkt(bester), bester.ebene, ein))
         ein["will"] = [round(will.x, 2), round(will.y, 2)]
         ein["ziel"] = [round(bester.pos.x, 1), round(bester.pos.y, 1)]
         return ein
 
+    def _einstiegspunkt(self, b):
+        """Wohin er zum Einsteigen geht: neben die Wanne, auf die Seite, die
+        ihm naeher ist - beim Buggy reicht die Mitte."""
+        if not getattr(b, "rechteckig", False):
+            return pygame.Vector2(b.pos)
+        k = self.k
+        quer = pygame.Vector2(-b.vorn.y, b.vorn.x)
+        seite = 1.0 if (k.pos - b.pos).dot(quer) >= 0 else -1.0
+        weit = min(b.werte["halb"] + k.radius + K.BOTS["fahren"]["einstieg_seite"],
+                   b.werte["einsteigen"] - 6.0)
+        return b.pos + quer * seite * weit
+
+    def _lenken(self, b, hin, halten: bool = False, weit=None):
+        """(Gas, Lenkung) zu einem Punkt (seit 0.34.84). Der Stick
+        (stick_steuern) faehrt rueckwaerts, sobald das Ziel hinter dem Wagen
+        liegt - fuer einen Menschen mit Daumen auf dem Stick richtig, fuer
+        einen Bot hiess es, lange Strecken rueckwaerts zu fahren (gemeldet).
+        Hier: weit weg und hinten - vorwaerts wenden; der Panzer dreht auf
+        der Stelle, wenn er sehr schief steht. `halten`: nicht fahren, nur
+        die Wanne dorthin drehen (Bug-MG)."""
+        f = K.BOTS["fahren"]
+        weg = pygame.Vector2(hin) - b.pos
+        dist = weg.length()
+        if dist < 4.0:
+            return 0.0, 0.0
+        # Wie weit es bis zum eigentlichen Ziel ist, nicht bis zum naechsten
+        # Wegpunkt - der liegt immer nah, und dann galt jede Strecke als kurz.
+        gesamt = dist if weit is None else max(dist, weit)
+        soll = math.degrees(math.atan2(weg.y, weg.x))
+        ab = _winkel_diff(b.winkel, soll)
+        voll = b.werte.get("stick_voll_lenken", 40.0)
+        lenk = max(-1.0, min(1.0, ab / voll))
+        if halten:
+            return 0.0, (lenk if abs(ab) > 3.0 else 0.0)
+        if b.art == "panzer":
+            if abs(ab) > f["panzer_drehen_ab"]:
+                # Drehen und dabei langsam rollen: in einer engen Ecke haengt
+                # eine Wanne, die nur auf der Stelle dreht, an der Wand.
+                return f["panzer_drehen_gas"], (1.0 if ab > 0 else -1.0)
+            return 1.0, lenk
+        if abs(ab) >= b.werte.get("stick_zurueck", 150.0) and gesamt <= f["wenden_ab"]:
+            return b.stick_steuern(weg.normalize())   # kurz: rueckwaerts ist richtig
+        if abs(ab) >= b.werte.get("stick_wenden", 110.0):
+            return 0.7, (1.0 if ab > 0 else -1.0)      # wenden, vorwaerts
+        return 1.0, lenk
+
+    def _schutz_ort(self, b):
+        """Ein Kamerad liegt, und ein Gegner ist bekannt: der Platz zwischen
+        beiden (seit 0.34.84, nicht im Buggy) - dort deckt der Wagen ihn,
+        bis ihm einer aufhilft. None, wenn es nichts zu decken gibt oder es
+        zu weit oder zu gefaehrlich ist."""
+        f = K.BOTS["fahren"]
+        k = self.k
+        if b.art == "buggy" or b.leben < b.max_leben * f["schutz_leben"]:
+            return None
+        feind = self.ziel if self.ziel is not None and self.ziel_ok(self.ziel) else None
+        if feind is None:
+            alt = self.letzter_feind()
+            feind_pos = alt[0] if alt is not None else None
+            if feind_pos is None:
+                # Aus dem Blick, aber nicht vergessen: seine Spur (0.34.80).
+                jetzt = self.g.welt.zeit
+                spuren = [s_ for s_ in self.spuren if s_[1] == b.ebene and s_[2] >= jetzt]
+                if spuren:
+                    feind_pos = pygame.Vector2(min(spuren, key=lambda s_: s_[0].distance_to(b.pos))[0])
+        else:
+            feind_pos = pygame.Vector2(feind.pos)
+        if feind_pos is None:
+            return None
+        welt = self.g.welt
+        bester = None
+        for x in self.kameraden():
+            if not getattr(x, "am_boden", False) or x.ebene != b.ebene:
+                continue
+            d = x.pos.distance_to(b.pos)
+            if d > f["schutz_weite"]:
+                continue
+            hin = feind_pos - x.pos
+            if hin.length_squared() < 1.0:
+                continue
+            hin = hin.normalize()
+            ort = None
+            # Erst genau davor, sonst etwas weiter oder leicht versetzt - steht
+            # dort eine Kiste, deckt ihn der Wagen daneben fast genauso.
+            for vor in (f["schutz_vor"], f["schutz_vor"] * 1.4, f["schutz_vor"] * 0.8):
+                for dreh in (0.0, 20.0, -20.0):
+                    p = x.pos + hin.rotate(dreh) * vor
+                    # "Wenn das ohne grosse Probleme geht" (gemeldet): nur
+                    # dorthin, wo der Wagen geradewegs hinkommt - um eine
+                    # Mauer herum ist er zu spaet und steht nur im Weg.
+                    if (welt.frei(p, b.werte["halb"], b.ebene, True)
+                            and welt.wege.gerade_frei(b.ebene, b.pos, p, b.werte["halb"] * 0.8)):
+                        ort = p
+                        break
+                if ort is not None:
+                    break
+            if ort is None:
+                continue
+            if bester is None or d < bester[0]:
+                bester = (d, ort, x)
+        return None if bester is None else bester[1:]
+
+    def _turm_soll(self, b, ort) -> float:
+        mitte = b.aufbau_mitte()
+        weg = pygame.Vector2(ort) - mitte
+        return math.degrees(math.atan2(weg.y, weg.x))
+
     def _am_steuer(self, dt: float, ein: dict) -> dict:
-        """Fahren mit dem Stick (wie am Touch: der Wagen faehrt dorthin, wohin
-        die Eingabe zeigt, fahrzeug.Buggy.stick_steuern), zielen mit dem
-        Zeiger (Turm bzw. Ring folgen ihm), schiessen, wenn der Turm steht."""
+        """Fahren und schiessen im Fahrzeug (seit 0.34.71, seit 0.34.84 neu
+        gelenkt, siehe _lenken). Turm bzw. Ring folgen dem Zeiger."""
         k = self.k
         b = k.fahrzeug
         f = K.BOTS["fahren"]
@@ -1404,46 +1528,147 @@ class BotHirn(Taktik):
             ein["knoepfe"].append("nutzen")          # raus, bevor er hochgeht
             return ein
         z = self.ziel if self.ziel is not None and self.ziel_ok(self.ziel) else None
+        # Ein Gegner, der eben noch zu sehen war: fuer die Kanone (explosiv)
+        # und um den Turm schon dorthin zu drehen.
+        verdeckt = None
+        if z is None and getattr(b, "rechteckig", False):
+            jetzt = self.g.welt.zeit
+            frisch = [(ort, w) for w, (ort, ebene, zeit) in self.gesehen.items()
+                      if ebene == b.ebene and jetzt - zeit <= f["verdeckt_merken"]
+                      and kampffaehig(w)]
+            if frisch:
+                verdeckt = min(frisch, key=lambda o: o[0].distance_to(b.pos))[0]
+        ziel_ort = (pygame.Vector2(z.pos) if z is not None
+                    else (pygame.Vector2(verdeckt) if verdeckt is not None else None))
+        gas, lenk = 0.0, 0.0
         will = pygame.Vector2(0, 0)
-        if z is not None:
-            abstand = k.pos.distance_to(z.pos)
+        schutz = self._schutz_ort(b)
+        if schutz is not None:
+            schutz, liegt = schutz
+            if b.pos.distance_to(schutz) > 18.0:
+                wp = self._wegpunkt_fuer(b, schutz)
+                # Nicht ueber ihn hinweg: liegt er auf dem Weg, aussen herum.
+                bahn = wp - b.pos
+                rel = liegt.pos - b.pos
+                t = rel.dot(bahn.normalize()) if bahn.length_squared() > 1.0 else -1.0
+                frei_halb = b.werte["halb"] + 26.0
+                if 0.0 < t < bahn.length() and abs(rel.x * bahn.normalize().y
+                                                  - rel.y * bahn.normalize().x) < frei_halb:
+                    quer = pygame.Vector2(-bahn.y, bahn.x).normalize()
+                    seite = -1.0 if rel.dot(quer) > 0 else 1.0
+                    wp = liegt.pos + quer * seite * (frei_halb + 12.0)
+                gas, lenk = self._lenken(b, wp)
+                will = wp - b.pos
+            ziel = ziel_ort if ziel_ort is not None else b.pos + b.vorn * 200.0
+        elif ziel_ort is not None:
+            abstand = b.pos.distance_to(ziel_ort)
             if abstand > f["abstand"].get(b.art, 200.0):
-                will = self._weg_richtung(z.pos, z.ebene)
-            ziel = pygame.Vector2(z.pos) + self.fehler * f["fehler"]
+                wp = self._wegpunkt_fuer(b, ziel_ort)
+                gas, lenk = self._lenken(b, wp, weit=abstand)
+                will = wp - b.pos
+            elif b.art == "panzer" and f["mg_ausrichten"] and z is not None:
+                # Er haelt: die Wanne zum Gegner, damit das Bug-MG mitschiesst.
+                gas, lenk = self._lenken(b, z.pos, halten=True)
+            # Die Kanone zielt ohne Handfehler (sie ist ein Geschuetz, kein
+            # Gewehr aus der Hand) - mit Fehler flog jede zweite Granate im
+            # Freien vorbei und zuendete erst 900 px weiter.
+            fehler = (self.fehler * f["fehler"] if z is not None and b.art != "panzer"
+                      else pygame.Vector2(0, 0))
+            ziel = ziel_ort + fehler
         else:
-            if self.streif_ort is None or k.pos.distance_to(self.streif_ort[0]) < 80.0:
+            if self.streif_ort is None or b.pos.distance_to(self.streif_ort[0]) < 80.0:
                 self.streif_ort = self._streifziel()
-            will = self._weg_richtung(self.streif_ort[0], self.streif_ort[1])
-            ziel = k.pos + b.vorn * 200.0
-        # Steckt er fest (Gas, aber keine Fahrt): ein Stueck zurueck.
+            wp = self._wegpunkt_fuer(b, self.streif_ort[0])
+            gas, lenk = self._lenken(b, wp, weit=b.pos.distance_to(self.streif_ort[0]))
+            will = wp - b.pos
+            ziel = b.pos + b.vorn * 200.0
+        # Steckt er fest: Gas, aber er kommt nicht vom Fleck - gemessen am
+        # Weg, nicht am Tempo (seit 0.34.84): ein Panzerwagen, der langsam
+        # anfaehrt und dabei wendet, war sonst schon "fest" und setzte immer
+        # wieder zurueck.
         self._fahr_steckt = getattr(self, "_fahr_steckt", 0.0)
         self._fahr_zurueck = max(0.0, getattr(self, "_fahr_zurueck", 0.0) - dt)
-        if will.length_squared() > 0.01 and abs(b.fahrt) < 15.0:
-            self._fahr_steckt += dt
+        # Auch wer nur dreht (Panzer auf der Stelle) und dabei mit der Wanne
+        # an einer Wand haengt, steckt fest.
+        anker = getattr(self, "_fahr_anker", None)
+        if abs(gas) > 0.1 or abs(lenk) > 0.3:
+            if (anker is None or b.pos.distance_to(anker[0]) > 12.0
+                    or abs(_winkel_diff(anker[1], b.winkel)) > 6.0):
+                self._fahr_anker = (pygame.Vector2(b.pos), b.winkel)
+                self._fahr_steckt = 0.0
+            else:
+                self._fahr_steckt += dt
         else:
+            self._fahr_anker = None
             self._fahr_steckt = 0.0
-        if self._fahr_steckt > f["steckt_nach"]:
+        if self._fahr_steckt > f["steckt_nach"] * 2.0:
             self._fahr_steckt = 0.0
+            self._fahr_anker = None
             self._fahr_zurueck = f["zurueck"]
         if self._fahr_zurueck > 0.0:
-            will = -b.vorn
+            gas, lenk = -0.8, -lenk if abs(lenk) > 0.05 else 0.0
+        ein["gl"] = [round(gas, 2), round(lenk, 2)]
+        if will.length_squared() > 1.0:
+            will = will.normalize()
         ein["will"] = [round(will.x, 2), round(will.y, 2)]
         ein["ziel"] = [round(ziel.x, 1), round(ziel.y, 1)]
-        if z is not None and getattr(b, "rechteckig", False) and self.reaktion_rest <= 0.0:
-            mitte = b.aufbau_mitte()
-            weg = z.pos - mitte
-            soll = math.degrees(math.atan2(weg.y, weg.x))
-            frei = self.g.welt.sicht_frei(mitte, z.pos, b.ebene)
-            reich = (K.FAHRZEUG_WAFFEN["kanone"]["reichweite"] if b.art == "panzer"
-                     else K.FAHRZEUG_WAFFEN["ring_mg"]["reichweite"])
-            if frei and weg.length() <= reich:
-                ein["feuert"] = abs(_winkel_diff(b.aufbau, soll)) <= (
-                    f["kanone_winkel"] if b.art == "panzer" else f["mg_winkel"])
-                if b.art == "panzer":
-                    vorn = math.degrees(math.atan2(b.vorn.y, b.vorn.x))
-                    ein["zielt"] = (abs(_winkel_diff(vorn, soll)) <= f["mg_winkel"]
-                                    and weg.length() <= K.FAHRZEUG_WAFFEN["bug_mg"]["reichweite"])
+        if ziel_ort is not None and getattr(b, "rechteckig", False) and self.reaktion_rest <= 0.0:
+            self._fahrzeug_feuern(b, z, ziel_ort, ein)
         return ein
+
+    def _wegpunkt_fuer(self, b, ort):
+        """Der naechste Wegpunkt zu `ort` - fuer den Wagen gerechnet wie zu
+        Fuss (Wegenetz), nur vom Wagen aus."""
+        richtung = self._weg_richtung(ort, b.ebene)
+        if richtung.length_squared() < 0.01:
+            return pygame.Vector2(ort)
+        p = self.wegpunkt if self.wegpunkt is not None else pygame.Vector2(ort)
+        return pygame.Vector2(p)
+
+    def _fahrzeug_feuern(self, b, z, ziel_ort, ein: dict) -> None:
+        """Kanone, Ring-MG und Bug-MG (seit 0.34.84). Die Kanone ist
+        explosiv: sie feuert, sobald der Einschlag nah genug am Ziel liegt
+        (statt auf 5 Grad genau), und auch auf einen, der gerade hinter
+        Deckung steht, wenn die Granate bis dicht an ihn herankommt."""
+        f = K.BOTS["fahren"]
+        welt = self.g.welt
+        mitte = b.aufbau_mitte()
+        weg = ziel_ort - mitte
+        dist = weg.length()
+        if dist < 1.0:
+            return
+        soll = math.degrees(math.atan2(weg.y, weg.x))
+        fehl = abs(_winkel_diff(b.aufbau, soll))
+        if b.art == "panzer":
+            w = K.FAHRZEUG_WAFFEN["kanone"]
+            if dist <= w["reichweite"]:
+                # Die Granate zuendet erst beim Aufschlag. Im Freien muss sie
+                # also treffen; steht aber Deckung direkt bei ihm (davor oder
+                # dahinter), schlaegt sie dort ein, und dann reicht "nah dran".
+                richtung = weg.normalize()
+                frei = welt.sicht_frei(mitte, ziel_ort, b.ebene)
+                dahinter = ziel_ort + richtung * (w["radius"] * 0.8)
+                deckung_nah = not welt.sicht_frei(ziel_ort, dahinter, b.ebene)
+                vorbei = dist * math.sin(math.radians(min(fehl, 89.0)))
+                if frei:
+                    treffer = (getattr(z, "radius", 9.0) if z is not None else 9.0) + 5.0
+                    ein["feuert"] = vorbei <= treffer or (
+                        deckung_nah and vorbei <= w["radius"] * f["splash_anteil"])
+                else:
+                    # Verdeckt: reicht die Bahn bis dicht vor ihn?
+                    vor = ziel_ort - richtung * (w["radius"] * 0.7)
+                    ein["feuert"] = (vorbei <= w["radius"] * f["splash_anteil"]
+                                     and welt.sicht_frei(mitte, vor, b.ebene))
+            if z is not None:
+                vorn = math.degrees(math.atan2(b.vorn.y, b.vorn.x))
+                mg = K.FAHRZEUG_WAFFEN["bug_mg"]
+                ein["zielt"] = (abs(_winkel_diff(vorn, soll)) <= f["mg_winkel"]
+                                and dist <= mg["reichweite"]
+                                and welt.sicht_frei(mitte, z.pos, b.ebene))
+        elif z is not None:
+            mg = K.FAHRZEUG_WAFFEN["ring_mg"]
+            ein["feuert"] = (fehl <= f["mg_winkel"] and dist <= mg["reichweite"]
+                             and welt.sicht_frei(mitte, z.pos, b.ebene))
 
     def _sicher(self, will):
         """Nicht in ein Loch und nicht gegen die Wand: die Richtung so weit

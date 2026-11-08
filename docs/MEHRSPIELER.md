@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.84 | Eingabe: neues Feld "gl" (Gas, Lenkung) - nur fuer Bots, die der Gastgeber selbst rechnet; von Gaesten wird es nicht angenommen (`Gefecht._fahren` prueft `k.ist_bot`). Sonst Bot-Verhalten im Fahrzeug. | Keine |
 | 0.34.80 | Nichts Neues im Netz. Die Bots (bots.py, bot_goap.py, rechnet nur der Gastgeber) merken sich Spuren, umgehen Feuer und geben dem Retter gezielter Feuerschutz. | Keine - ein Gast sieht nur, was der Gastgeber rechnet |
 | 0.34.79 | Weltmeldung: neue Liste "geraete" (was Klassen-Faehigkeiten hinlegen: Ort, Richtung, Ebene, Bild, Leben, Kennung, Hoehe), je Spieler "kl" (Klasse) und "fh" (Restzeit je Faehigkeit). Neue Regel "faehigkeiten" (KLASSEN-FAEHIGKEITEN). Die Lobby laeuft mit "eigenes" statt "alles"; eine "loadout"-Nachricht des Gasts ruestet ihn in der Lobby sofort um (`_lobby_umruesten`). | Ungleiche Versionen: ein alter Gast sieht hingelegte Kisten, Fallen und Geschuetze nicht; ein alter Gastgeber kennt die Regel nicht und hat in der Lobby noch "jeder hat alles" |
 | 0.34.77 | Nichts Neues im Netz. `mehrspieler.py`: wer im Fahrzeug sitzt, nimmt keinen Schaden (`Kaempfer.schaden`, K.FAHRZEUG "fahrer_geschuetzt"); das Schild laesst 7 % statt 15 % durch; das Zoombild rastet auf die Welt ein (nur Zeichnen). | Ungleiche Versionen: beim Gastgeber gilt seine Regel - der Gast sieht im Fahrzeug trotzdem keinen Schaden, wenn der Gastgeber 0.34.77 hat |

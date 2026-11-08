@@ -2278,7 +2278,12 @@ class Testmodus(Gefecht):
             # Seit 0.34.71: wer faehrt, wer ein Schild traegt.
             if k.fahrzeug is not None:
                 zustand = "FÄHRT %s" % k.fahrzeug.art.upper()
-                if h.ziel is not None:
+                # Seit 0.34.84: deckt er einen Liegenden, die Linie dorthin.
+                schutz = h._schutz_ort(k.fahrzeug) if hasattr(h, "_schutz_ort") else None
+                if schutz is not None:
+                    zustand += " > DECKT LIEGENDEN"
+                    pygame.draw.line(ziel, (120, 220, 160), p, kam.zu_bild(schutz[0]), 1)
+                elif h.ziel is not None:
                     zustand += " > ZIEL"
             elif getattr(k, "darf_fahren", False) and h.ziel is None:
                 zustand += " (SUCHT FAHRZEUG)"
