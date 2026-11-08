@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.82, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.83, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -852,6 +852,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.83 | Die drei fehlenden Menuebilder sind da (`assets/menue/stacheldraht.jpg`, `horchposten.jpg`, `raketenbuendel.jpg`) - alle 57 Waffen und Gegenstaende haben jetzt eines. Netz/LAN: unveraendert. |
 | 0.34.82 | **Menue AUSRUESTUNG mit grossen Waffenbildern.** Die 54 Bilder aus dem Bildgenerator (Prompts in `docs/BILDPROMPTS.md`, ueber Google Takeout geholt) liegen verkleinert als `assets/menue/<kennung>.jpg` (zusammen 1,5 MB); rechts im Menue erscheint das Bild der gewaehlten Waffe oder Wurfwaffe (`dustfront/menuebilder.py`, `K.MENUEBILDER`). Fehlt eine Datei (Stacheldraht, Horchposten, Raketenbuendel - dort hat der Generator nichts geliefert), bleibt es beim Pixelbild. Im Spiel selbst aendert sich nichts. Netz/LAN: unveraendert. |
 | 0.34.81 | `docs/BILDPROMPTS.md`: jeder Prompt komplett zum Kopieren (Stil, Motiv, was zu vermeiden ist und Format in einem Block) - nichts mehr zusammensetzen. Sonst nichts geaendert; Netz/LAN: unveraendert. |
 | 0.34.80 | **Bots vergessen Gegner nicht mehr so schnell, gehen um Feuer herum, Feuerschutz fuer den Retter.** Wer einen Gegner aus dem Blick verliert, behaelt seine letzte Stelle als **Spur** (45 s, `K.BOTS["spur_..."]`) und sieht dort nach, sobald nichts anderes los ist - langsam und mit dem Blick darauf, je nach Mut (Draufgaenger ab 0,8 in vollem Tempo); was einer geprueft hat, gilt fuer die Kameraden daneben, im Trupp fuehrt der Anfuehrer hin. Trupp-Gedaechtnis 6 -> 12 s. Liegt Feuer, Gas, Draht oder eine sichtbare Falle auf dem Weg, geht der Bot aussen herum (`_um_gefahr`, bleibt bei seiner Seite) statt hinein und rueckwaerts wieder heraus. Feuerschutz beim Bergen: zuerst der Gegner mit freier Linie auf den Retter. Testmodus INFO zeigt die Spuren (Kreuze, gestrichelt die naechste). Neu: `docs/BILDPROMPTS.md`, Prompts fuer einen Bildgenerator fuer alle Waffen und Gegenstaende. Netz: unveraendert; im Gefecht verhalten sich die Bots so (rechnet der Gastgeber). |

@@ -13,9 +13,9 @@ weglassen.
 Dateiname zum Speichern: die Kennung in Klammern, z. B. `sturm.png`.
 
 **Eingebaut seit 0.34.82:** Die Bilder liegen als `assets/menue/<kennung>.jpg`
-(640 breit) und erscheinen im Menue AUSRUESTUNG. Es fehlen noch
-**Stacheldraht, Horchposten und Raketenbuendel** - dort hat der Generator
-kein Bild geliefert. Neues Bild: als `assets/menue/<kennung>.jpg` (oder .png)
+(640 breit) und erscheinen im Menue AUSRUESTUNG. Seit 0.34.83 sind alle 57
+da (Stacheldraht, Horchposten und Raketenbuendel nachgereicht). Ein Bild
+ersetzen: als `assets/menue/<kennung>.jpg` (oder .png)
 ablegen, fertig.
 
 ## Schusswaffen

@@ -15587,9 +15587,12 @@ _bekannt182 = set(K.WAFFEN) | set(K.BILD_MASS) | {"munitionskiste", "geschuetz",
 pruef("Jedes Menuebild gehoert zu einer Waffe oder einem Gegenstand",
       _da182 and all(k_ in _bekannt182 for k_ in _da182),
       ", ".join(k_ for k_ in _da182 if k_ not in _bekannt182))
-pruef("Die Waffen der Ausruestung haben fast alle ein Bild (fehlt hoechstens das Raketenbuendel)",
-      [w_ for w_ in K.LOADOUT["auswahl_waffen"] if w_ not in _da182] in ([], ["raketenbuendel"]),
-      str([w_ for w_ in K.LOADOUT["auswahl_waffen"] if w_ not in _da182]))
+# Seit 0.34.83 vollstaendig: jede waehlbare Waffe und Wurfwaffe hat eines.
+pruef("Jede Waffe und Wurfwaffe der Ausruestung hat ein Menuebild",
+      [w_ for w_ in list(K.LOADOUT["auswahl_waffen"]) + list(K.LOADOUT["auswahl_wuerfe"])
+       if w_ not in _da182] == [],
+      str([w_ for w_ in list(K.LOADOUT["auswahl_waffen"]) + list(K.LOADOUT["auswahl_wuerfe"])
+           if w_ not in _da182]))
 _b182 = _MB182.bild("sturm", 140)
 pruef("Ein Menuebild kommt in der verlangten Breite, im Seitenverhaeltnis des Gemaeldes",
       _b182 is not None and _b182.get_width() == 140 and 70 <= _b182.get_height() <= 85,
