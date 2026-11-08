@@ -392,6 +392,14 @@ MEDKIT_BLICK = dict(
 # weiter unten; `python -m dustfront --vorlagen` schreibt von jedem Bild
 # eine masshaltige Vorlage zum Uebermalen heraus.
 
+# Grosse Bilder fuer das Menue AUSRUESTUNG (seit 0.34.82): je Waffe oder
+# Gegenstand eine Datei assets/menue/<kennung>.jpg, gemacht mit den Prompts
+# aus docs/BILDPROMPTS.md. Fehlt eine, zeigt das Menue das Pixelbild.
+MENUEBILDER = dict(
+    ordner="menue",               # Unterordner von ASSETS["ordner"]
+    endungen=(".jpg", ".png", ".webp"),
+)
+
 ASSETS = dict(
     ordner="assets",              # Name des Ordners neben dem Paket
     sfx="sfx",                    # Unterordner fuer die Klaenge

@@ -11,7 +11,12 @@ Generatoren diese letzten Zeichen einfach mitkopieren schadet nicht, oder
 weglassen.
 
 Dateiname zum Speichern: die Kennung in Klammern, z. B. `sturm.png`.
-Eingebaut sind die Bilder noch nicht (siehe README 0.34.80).
+
+**Eingebaut seit 0.34.82:** Die Bilder liegen als `assets/menue/<kennung>.jpg`
+(640 breit) und erscheinen im Menue AUSRUESTUNG. Es fehlen noch
+**Stacheldraht, Horchposten und Raketenbuendel** - dort hat der Generator
+kein Bild geliefert. Neues Bild: als `assets/menue/<kennung>.jpg` (oder .png)
+ablegen, fertig.
 
 ## Schusswaffen
 

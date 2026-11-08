@@ -15577,6 +15577,25 @@ pruef("Liegt Feuer vor ihm auf dem Weg, geht er seitlich daran vorbei",
       abs(_r180.y) > 0.3, str(_r180))
 _tm180.verlassen()
 
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Menuebilder aus dem Bildgenerator (0.34.82)")
+from dustfront import menuebilder as _MB182
+_da182 = _MB182.vorhanden()
+_bekannt182 = set(K.WAFFEN) | set(K.BILD_MASS) | {"munitionskiste", "geschuetz", "horchposten", "drohne",
+                                                  "sprengfalle", "sandsackwand", "stacheldraht",
+                                                  "kanister", "kraehenfuesse", "schild"}
+pruef("Jedes Menuebild gehoert zu einer Waffe oder einem Gegenstand",
+      _da182 and all(k_ in _bekannt182 for k_ in _da182),
+      ", ".join(k_ for k_ in _da182 if k_ not in _bekannt182))
+pruef("Die Waffen der Ausruestung haben fast alle ein Bild (fehlt hoechstens das Raketenbuendel)",
+      [w_ for w_ in K.LOADOUT["auswahl_waffen"] if w_ not in _da182] in ([], ["raketenbuendel"]),
+      str([w_ for w_ in K.LOADOUT["auswahl_waffen"] if w_ not in _da182]))
+_b182 = _MB182.bild("sturm", 140)
+pruef("Ein Menuebild kommt in der verlangten Breite, im Seitenverhaeltnis des Gemaeldes",
+      _b182 is not None and _b182.get_width() == 140 and 70 <= _b182.get_height() <= 85,
+      str(_b182.get_size() if _b182 else None))
+pruef("Ohne Datei: None (dann zeigt das Menue das Pixelbild)", _MB182.bild("gibtesnicht", 140) is None)
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

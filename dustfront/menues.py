@@ -1521,12 +1521,22 @@ class Ausruestung(Menue):
         w = K.WAFFEN.get(waffe, {})
         SCHRIFT.zeichnen(ziel, w.get("name", waffe.upper()), feld.centerx,
                          feld.y + 6, K.C_AMBER, 1, 1, "mitte")
-        bild = self.app.bilder.bild("waffe_" + waffe) if ("waffe_" + waffe) in K.BILD_MASS else None
         y = feld.y + 20
-        if bild is not None:
-            gross = pygame.transform.scale(bild, (bild.get_width() * 2, bild.get_height() * 2))
-            ziel.blit(gross, gross.get_rect(midtop=(feld.centerx, y)))
-            y += gross.get_height() + 6
+        # Das grosse Menuebild (seit 0.34.82, assets/menue), sonst das
+        # Pixelbild aus dem Spiel doppelt so gross.
+        from . import menuebilder
+        gemaelde = menuebilder.bild(waffe, feld.width - 8)
+        if gemaelde is not None:
+            ziel.blit(gemaelde, (feld.x + 4, y - 4))
+            pygame.draw.rect(ziel, K.C_MUTED_DK, (feld.x + 4, y - 4, gemaelde.get_width(),
+                                                  gemaelde.get_height()), 1)
+            y += gemaelde.get_height() + 2
+        else:
+            bild = self.app.bilder.bild("waffe_" + waffe) if ("waffe_" + waffe) in K.BILD_MASS else None
+            if bild is not None:
+                gross = pygame.transform.scale(bild, (bild.get_width() * 2, bild.get_height() * 2))
+                ziel.blit(gross, gross.get_rect(midtop=(feld.centerx, y)))
+                y += gross.get_height() + 6
         werte = []
         if w.get("schaden"):
             n = int(w.get("geschosse", 1) or 1)
