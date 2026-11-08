@@ -274,7 +274,7 @@ class Kaempfer(Spieler):
         super().sterben(von)
         self.toeter = von
 
-    def schaden(self, menge, schub=None, von=None) -> None:
+    def schaden(self, menge, schub=None, von=None, durch: float = 0.0) -> None:
         # Wer in einem Fahrzeug sitzt, nimmt keinen Schaden (seit 0.34.77,
         # K.FAHRZEUG["fahrer_geschuetzt"]).
         if self.im_fahrzeug and K.FAHRZEUG.get("fahrer_geschuetzt", False):
@@ -292,7 +292,13 @@ class Kaempfer(Spieler):
             weg = pygame.Vector2(getattr(von, "pos", self.pos)) - self.pos
             if weg.length_squared() > 1.0:
                 ab = abs((math.degrees(math.atan2(weg.y, weg.x)) - self.winkel + 180) % 360 - 180)
-                if ab <= K.SCHILD["winkel"]:
+                if ab <= K.SCHILD["winkel"] and durch > K.SCHILD["anteil"]:
+                    # Durchgeschlagen (seit 0.34.86): mehr kommt an, und es
+                    # klingt anders - wer dahinter steht, soll es hoeren.
+                    menge = float(menge) * durch
+                    schub = None
+                    self.welt.klang("schild_durch", 0.7, self.pos, self.ebene)
+                elif ab <= K.SCHILD["winkel"]:
                     menge = float(menge) * K.SCHILD["anteil"]
                     schub = None
                     self.welt.klang("schild", 0.5, self.pos, self.ebene)

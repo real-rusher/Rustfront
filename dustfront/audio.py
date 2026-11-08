@@ -997,6 +997,15 @@ def _schild(seed=0):
                     _rauschen(0.05, 0.3, 9000, 5000, 3.0, seed + 44, hp=True))
 
 
+@platzhalter_klang("schild_durch")
+def _schild_durch(seed=0):
+    """Eine Kugel schlaegt durch das Schild (seit 0.34.86): heller Schlag
+    wie beim Abprallen, dazu ein tiefes Reissen von Blech."""
+    return _mischen(_schlag(1700, 600, 0.14, 0.42, 2.2),
+                    _schlag(240, 120, 0.22, 0.38, 3.5),
+                    _rauschen(0.12, 0.34, 5000, 900, 2.6, seed + 71))
+
+
 @platzhalter_klang("lost_match")
 def _niederlage(seed=0):
     """Ein kurzer fallender Zweiklang fuer eine verlorene Runde."""

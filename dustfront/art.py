@@ -2421,24 +2421,15 @@ def _insasse(fahrer, groesse: int = 28, arme=8):
 
     Seit 0.34.60 auch {"skin": id, "team": ...}: dann sitzt er in seinem
     Aussehen drin (art_figuren.insasse)."""
+    from . import art_figuren
     if isinstance(fahrer, dict):
-        from . import art_figuren
         return art_figuren.insasse(fahrer, arme)
     rumpf, kante, akzent = fahrer
-    s = _flaeche(groesse, groesse)
-    c = groesse // 2
-    hell = tuple(min(255, k + 34) for k in rumpf)
-    schulter = pygame.Rect(c - 7, c - 8, 14, 16)
-    pygame.draw.ellipse(s, kante, schulter)
-    pygame.draw.ellipse(s, rumpf, schulter.inflate(-3, -3))
-    pygame.draw.ellipse(s, hell, schulter.inflate(-3, -3).move(0, -2), 1)
-    if arme:
-        pygame.draw.line(s, kante, (c + 1, c - 5), (c + arme, c - 3), 3)
-        pygame.draw.line(s, kante, (c + 1, c + 5), (c + arme, c + 3), 3)
-    pygame.draw.circle(s, kante, (c + 1, c), 5)
-    pygame.draw.circle(s, hell, (c + 1, c), 4)
-    pygame.draw.circle(s, akzent, (c + 3, c), 2)
-    return _rand(s)
+    # Seit 0.34.86 die Standardfigur im neuen Stil (art_figuren.standard,
+    # wie zu Fuss seit 0.34.77). Gemeldet: "beim Sitzen im Fahrzeug soll
+    # nicht nur der alte Standard-Skin angezeigt werden."
+    return art_figuren.figur(art_figuren.standard(rumpf, kante, akzent), None, None,
+                             groesse, stummel=False, arme_an=bool(arme))
 
 
 def _insasse_auf(gross, ss: int, mitte_px: int, fahrer, cx: float, cy: float,

@@ -343,7 +343,7 @@ def abschuss_buchen(von, ziel, waffe: str, lebte: bool) -> None:
 
 
 def schaden_an(ziel, menge, schub=None, von=None, art=None, herkunft=None,
-               fahrzeug_menge=None) -> None:
+               fahrzeug_menge=None, waffe=None) -> None:
     """Ein Treffer mit Schadensart (seit 0.34.65, K.PANZERUNG).
 
     Nur Fahrzeuge (`ist_fahrzeug`) fragen nach der Art und danach, woher
@@ -361,6 +361,14 @@ def schaden_an(ziel, menge, schub=None, von=None, art=None, herkunft=None,
     else:
         if art == "feuer":
             menge *= getattr(ziel, "feuer_schutz", 1.0)   # Flammentrupp (0.34.73)
+        if getattr(ziel, "schild", False):
+            # Was durchs Schild geht (seit 0.34.86, K.SCHILD "durchschlag").
+            s = K.SCHILD
+            durch = float(s["durchschlag"].get(waffe or "", 0.0))
+            if art == "panzerbrechend":
+                durch = max(durch, s["panzerbrechend"])
+            ziel.schaden(menge, schub, von, durch=durch)
+            return
         ziel.schaden(menge, schub, von)
 
 
@@ -550,7 +558,8 @@ class Geschoss(Wesen):
         herkunft = None
         if self.tempo.length_squared() > 0.001:
             herkunft = self.pos - pygame.Vector2(self.tempo).normalize() * 40.0
-        schaden_an(ziel, menge, schub, self.von, art, herkunft, self.fahrzeug_wert)
+        schaden_an(ziel, menge, schub, self.von, art, herkunft, self.fahrzeug_wert,
+                   waffe=self.waffe)
         abschuss_buchen(self.von, ziel, self.waffe, lebte)
         if self.nagelt and ziel.lebt and self.tempo.length_squared() > 0.001:
             z = K.ZUSTAENDE

@@ -4537,7 +4537,10 @@ pruef("Groesse 1,4 wie abgenommen: rund 90 Pixel lang, fast doppelt so lang wie 
 # (bis x = c + 4) Pixel fuer Pixel gleich.
 _kombi59 = K.TEAMS["kombi"][0]
 _ins59 = _ART59._insasse((_kombi59["rumpf"], _kombi59["kante"], _kombi59["akzent"]))
-_fig59 = _ART59._figur(28, _kombi59["rumpf"], _kombi59["kante"], _kombi59["akzent"])
+# Seit 0.34.86 die Spielerfigur im neuen Stil (art._standard, seit 0.34.77
+# die Figur zu Fuss) - vorher verglich der Test mit der alten art._figur.
+_fig59 = _ART59._standard(_kombi59["rumpf"], _kombi59["kante"], _kombi59["akzent"],
+                          groesse=28, stummel=False)
 pruef("Der Insasse ist die Spielerfigur (gleiche Schultern, gleicher Kopf)",
       _ins59.get_size() == _fig59.get_size()
       and all(_ins59.get_at((x_, y_)) == _fig59.get_at((x_, y_))
@@ -15650,6 +15653,49 @@ g185.zeichnen(_bild185, 0.5)
 pruef("Hotbar mit Gruppen und Werkzeuganzeige zeichnen sich", True)
 pruef("Antippen (Touch): neun Plaetze", len(w185.touch_hotbar()) == 9, str(len(w185.touch_hotbar())))
 w185.verlassen(); g185.verlassen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Schild: Durchschlag starker Waffen; Insassen im neuen Stil (0.34.86)")
+_tm186 = _TM59.Testmodus(app, karte="staubtal")
+_ort186 = freier_punkt(_tm186.welt, 0, random.Random(186))
+_st186 = _tm186.schildtraeger_setzen(_ort186, 0, {"team": 1})
+_st186.winkel = 0.0
+_sch186 = _tm186.puppe_setzen(_st186.pos + pygame.Vector2(100, 0), 0, {"anzahl": 1, "streuung": 0, "team": 0})
+_sch186 = _sch186[0] if isinstance(_sch186, list) else _sch186
+_kl186 = []
+_alt_klang186 = _tm186.welt.klang
+_tm186.welt.klang = lambda name, *a, **kw: (_kl186.append(name), _alt_klang186(name, *a, **kw))[1]
+
+
+def _treffer186(waffe, art="kugel"):
+    _st186.leben = _st186.max_leben = 10000.0
+    _kl186.clear()
+    EN.schaden_an(_st186, 100.0, None, _sch186, art, waffe=waffe)
+    return _st186.max_leben - _st186.leben, list(_kl186)
+
+
+_sturm186 = _treffer186("sturm")
+_scharf186 = _treffer186("scharf")
+_kanone186 = _treffer186(None, "panzerbrechend")
+pruef("Ein Sturmgewehr prallt ab wie bisher (7 Prozent, Klang schild)",
+      abs(_sturm186[0] - 100.0 * K.SCHILD["anteil"]) < 0.01 and "schild" in _sturm186[1], str(_sturm186))
+pruef("Das Scharfschuetzengewehr schlaegt durch: mehr Schaden, eigener Klang",
+      abs(_scharf186[0] - 100.0 * K.SCHILD["durchschlag"]["scharf"]) < 0.01
+      and "schild_durch" in _scharf186[1], str(_scharf186))
+pruef("Panzerbrechendes (Kanone) schlaegt immer durch",
+      abs(_kanone186[0] - 100.0 * K.SCHILD["panzerbrechend"]) < 0.01, str(_kanone186))
+_st186.winkel = 180.0
+_hinten186 = _treffer186("sturm")
+pruef("Von hinten hilft kein Schild", abs(_hinten186[0] - 100.0) < 0.01, str(_hinten186))
+_tm186.welt.klang = _alt_klang186
+_tm186.verlassen()
+pruef("Der Durchschlagsklang ist ein eigener Klang", "schild_durch" in K.KLANG_NAMEN)
+from dustfront import art as _ART186, art_figuren as _AF186
+_neu186 = _ART186._insasse((K.C_HULL, K.C_HULL_SH, K.C_TEAL))
+_soll186 = _AF186.figur(_AF186.standard(K.C_HULL, K.C_HULL_SH, K.C_TEAL), None, None, 28,
+                        stummel=False, arme_an=True)
+pruef("Wer ohne eigenes Aussehen im Fahrzeug sitzt, ist die Standardfigur im neuen Stil",
+      pygame.image.tobytes(_neu186, "RGBA") == pygame.image.tobytes(_soll186, "RGBA"))
 
 print()
 print("FEHLER:", fails or "keine")

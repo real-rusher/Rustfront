@@ -713,7 +713,7 @@ KLANG_NAMEN = (
     "schuss_kugelblitz", "plasma", "flammenwerfer", "kettensaege", "hammer_boden",
     "schock", "schlag_faust", "knaller", "emp", "piepen", "klebt", "gas",
     "schneeball", "wurf_leise", "nagel_wand", "falle_klick", "drohne", "horchposten",
-    "emp_aus", "reifen_platt", "schild",
+    "emp_aus", "reifen_platt", "schild", "schild_durch",
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -3550,7 +3550,15 @@ KLASSE_FREI = dict(name="FREI", text="Ohne Klasse: jede Waffe, kein Vorteil")
 # anteil: was durchs Schild noch ankommt - seit 0.34.77 7 % statt 15 %
 # (gemeldet: "Schildtraeger sollen auf ihr Schild noch weniger Schaden
 # bekommen").
-SCHILD = dict(winkel=60.0, anteil=0.07, tempo=0.82, waffe="repetierer")
+SCHILD = dict(winkel=60.0, anteil=0.07, tempo=0.82, waffe="repetierer",
+              # Was durchschlaegt (seit 0.34.86): so viel kommt trotz Schild
+              # an, mit eigenem Klang. Gemeldet: "das Schild soll bei high
+              # penetration Waffen einen Durchschlags-Sound machen und mehr
+              # Damage durchlassen". Panzerbrechend (Kanone, Spule) immer
+              # wenigstens `panzerbrechend`.
+              durchschlag=dict(scharf=0.45, praezision=0.3, panzerbuechse=0.7,
+                               spule=0.75, bolzer=0.5, revolver=0.15, unterhebel=0.15),
+              panzerbrechend=0.7)
 
 # Trupp-Vorlagen fuer den Testmodus (seit 0.34.71). Gemeldet: "Trupp mit
 # Panzer oder Armored Truck, Schildtraeger ... Skins fuer jedes
