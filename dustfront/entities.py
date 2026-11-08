@@ -643,6 +643,8 @@ class Granate(Wesen):
         # ist v0 * (1 - e^(-k*t)) / k, das loesen wir nach v0 auf.
         if weite is None:
             weite = daten["wurf_max"]
+        # Die Kuller rollt weiter, als gezielt wurde (seit 0.34.87).
+        weite *= float(daten.get("ueber_ziel", 1.0))
         k = daten["reibung"]
         anteil = 1.0 - math.exp(-k * self.rest)
         v0 = weite * k / max(0.05, anteil)
@@ -1197,10 +1199,13 @@ class Werfergranate(Granate):
                     self.flug = 0.0
                     self.zuenden()
                     return
-            # Eine Mauer haelt sie immer auf, niedrige Deckung nur dicht
-            # ueber dem Boden. Dort zuendet sie, wo sie anschlaegt.
-            if self.welt.schuss_halt(self.pos, self.ebene, self.radius,
-                                     self.flug > d["deckung_hoehe"]):
+            # Seit 0.34.87 haelt sie nur auf, was hoeher steht, als sie
+            # gerade fliegt (K.STEHEN, Mauer 24, Fels 30) - im Bogen geht sie
+            # ueber Mauern. Gemeldet: die Granaten "kollidieren oft mit
+            # Mauern, obwohl die gar nicht so hoch gerendert werden".
+            if (self.welt.schuss_halt(self.pos, self.ebene, self.radius)
+                    and self.flug < self.welt.kachel_hoehe(self.pos, self.ebene)
+                    + d["ueber_rand"]):
                 self.pos -= teil
                 self.flug = 0.0
                 self.zuenden()
@@ -3045,6 +3050,9 @@ class Spieler(Wesen):
         # Bild nach - fast gleichzeitig, aber einzeln und mit eigener
         # Streuung. Eine Schrotladung waere etwas anderes: die faechert.
         salve = d.get("salve")
+        if d.get("salve_trommel"):
+            # Faechern (Revolver, seit 0.34.87): die ganze restliche Trommel.
+            salve = max(1, self.magazin.get(self.waffe_name, 0))
         if salve and salve > 1:
             self.salve_rest = salve - 1
             self.salve_takt = d.get("salve_takt", 0.03)
@@ -3338,18 +3346,30 @@ class Spieler(Wesen):
         getroffen = []
         schritt = 6.0
         n = int(reich / schritt)
+        # Seit 0.34.87 verliert der Strahl an jeder Mauer und jedem Koerper
+        # Kraft (K.WAFFEN["spule"] wand_verlust, koerper_verlust).
+        kraft = 1.0
+        in_wand = False
         for i in range(1, n + 1):
             p = muendung + richtung * (i * schritt)
+            wand = w.schuss_halt(p, self.ebene, 0.0, True)
+            if wand and not in_wand:
+                kraft *= 1.0 - d.get("wand_verlust", 0.0)
+            in_wand = wand
             ziel = w.treffer(p, 4.0, self.ebene, self.fraktion)
-            if ziel is not None and ziel is not self and ziel not in getroffen:
-                getroffen.append(ziel)
-        for ziel in getroffen:
+            if ziel is not None and ziel is not self and ziel not in [z_ for z_, _k in getroffen]:
+                getroffen.append((ziel, kraft))
+                kraft *= 1.0 - d.get("koerper_verlust", 0.0)
+            if kraft < 0.05:
+                ende = p
+                break
+        for ziel, anteil in getroffen:
             lebte = ziel.lebt
             if hasattr(self, "zaehlen") and getattr(ziel, "zaehlt_treffer", True):
                 self.zaehlen("treffer", 1.0, self.waffe_name)
                 treffer_ziel_buchen(self, ziel)
-            schaden_an(ziel, d["schaden"] * ladung, richtung * 160.0 * ladung, self,
-                       d.get("schadensart"), muendung)
+            schaden_an(ziel, d["schaden"] * ladung * anteil, richtung * 160.0 * ladung * anteil,
+                       self, d.get("schadensart"), muendung, waffe=self.waffe_name)
             abschuss_buchen(self, ziel, self.waffe_name, lebte)
         w.entladung([muendung, ende], self.ebene, "spule")
 

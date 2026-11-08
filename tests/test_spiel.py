@@ -6032,19 +6032,31 @@ pruef("Drei Schneebaelle, und er friert ein", _z67.gefroren_rest > 0.0,
       "%.1f" % _z67.gefroren_rest)
 _z67.lebt = False
 # Kuller: rollt, zuendet, sobald jemand nahe kommt.
+# Zufallsneutral (seit 0.34.87): was die Kuller an Funken und Splittern
+# wuerfelt, haengt davon ab, wie weit sie rollt - und spaetere Pruefungen
+# (Speier, GOAP-Bots) haengen am gemeinsamen Zufall.
+_zufall_ku67 = (EN.RND.getstate(), random.getstate())
 _waffe67("kuller")
-_ich67.ziel = _ich67.pos + pygame.Vector2(260, 0)
+# 160 statt 260 (seit 0.34.87): sie rollt das 1,6-fache weit, und 416 px
+# reichten hier bis an eine Mauer.
+_ich67.ziel = _ich67.pos + pygame.Vector2(160, 0)
 _ich67.takt = 0.0
 _ich67.feuern()
 _ku67 = [g for g in _tm67.welt.neue + _tm67.welt.wesen if isinstance(g, EN.Granate)
          and g.daten.get("kuller")][0]
 _laufen67(2.5)
-pruef("Der Kuller liegt still und zuendet nicht von selbst", _ku67.lebt)
+# Seit 0.34.87 rollt sie ueber den Zeiger hinaus und ist nach 2,5 s noch
+# unterwegs - der Gegner steht darum vor ihr auf ihrer Bahn.
+pruef("Der Kuller rollt und zuendet nicht von selbst", _ku67.lebt)
 _z67 = _puppe67(0, 0)
-_z67.pos.update(_ku67.pos + pygame.Vector2(20, 0))
+_vor67 = (_ku67.tempo.normalize() * 20 if _ku67.tempo.length() > 1.0
+          else pygame.Vector2(20, 0))
+_z67.pos.update(_ku67.pos + _vor67)
 _laufen67(0.2)
 pruef("... aber sobald jemand nahe kommt", not _ku67.lebt and _z67.leben < _z67.max_leben)
 _z67.lebt = False
+EN.RND.setstate(_zufall_ku67[0])
+random.setstate(_zufall_ku67[1])
 # Knaller: knallt eine Weile, und Bots hoeren das.
 _bot67 = _tm67.bot_setzen(_ich67.pos + pygame.Vector2(0, -300), 0,
                           {"anzahl": 1, "streuung": 0, "team": 1})
@@ -10865,9 +10877,20 @@ pruef("DASH gedrueckt ist die gehaltene Dash-Taste (im Buggy die Handbremse)",
 _finger82(pygame.FINGERUP, 3, *_d82)
 pruef("... und losgelassen wieder los", not _tapp82.eingabe.gehalten("dash"))
 _tw82.ich.waffe = 0
+
+
+def _erste82(platz):
+    """Welche Waffe ein Druck auf diesen Platz waehlt: ohne Gruppen der
+    Platz, mit Gruppen (JEDER HAT ALLES, seit 0.34.85) die erste Waffe der
+    Gruppe."""
+    if not _tw82.gruppen_hotbar:
+        return platz
+    return next(i_ for i_, w_ in enumerate(_tw82.ich.waffen) if _tw82.gruppe_von(w_) == platz)
+
+
 _finger82(pygame.FINGERDOWN, 4, *_knopf82("waffe"))
-pruef("WFF waehlt die naechste Waffe der Hotbar", _tw82._waffe_wunsch == 1,
-      str(_tw82._waffe_wunsch))
+pruef("WFF waehlt die naechste Waffe der Hotbar (mit Gruppen: die naechste Gruppe)",
+      _tw82._waffe_wunsch == _erste82(1), str(_tw82._waffe_wunsch))
 _finger82(pygame.FINGERUP, 4, *_knopf82("waffe"))
 _tw82.ich.waffe = len(_tw82.ich.waffen) - 1
 _finger82(pygame.FINGERDOWN, 4, *_knopf82("waffe"))
@@ -10929,14 +10952,14 @@ pruef("Die Szene sagt, wo die Plaetze der Hotbar stehen",
       len(_plaetze82) == (len(K.ALLES_GRUPPEN) if _tw82.gruppen_hotbar else len(_tw82.ich.waffen))
       and len(_plaetze82) >= 3, str(len(_plaetze82)))
 _finger82(pygame.FINGERDOWN, 25, *_plaetze82[2].center)
-pruef("Den dritten Platz antippen waehlt die dritte Waffe", _tw82._waffe_wunsch == 2,
-      str(_tw82._waffe_wunsch))
+pruef("Den dritten Platz antippen waehlt die dritte Waffe (bzw. Gruppe)",
+      _tw82._waffe_wunsch == _erste82(2), str(_tw82._waffe_wunsch))
 _finger82(pygame.FINGERUP, 25, *_plaetze82[2].center)
 pruef("... und schiesst dabei nicht", not _tapp82.eingabe.gehalten("feuer"))
 _tw82._waffe_wunsch = -1
 _finger82(pygame.FINGERDOWN, 26, *_plaetze82[-1].midtop)
 pruef("... auch knapp darueber getroffen (die Felder sind nur 20 hoch)",
-      _tw82._waffe_wunsch == len(_plaetze82) - 1, str(_tw82._waffe_wunsch))
+      _tw82._waffe_wunsch == _erste82(len(_plaetze82) - 1), str(_tw82._waffe_wunsch))
 _finger82(pygame.FINGERUP, 26, *_plaetze82[-1].midtop)
 
 # Im Auto mit dem Stick: er faehrt dorthin, wohin der Stick zeigt.
@@ -15696,6 +15719,111 @@ _soll186 = _AF186.figur(_AF186.standard(K.C_HULL, K.C_HULL_SH, K.C_TEAL), None, 
                         stummel=False, arme_an=True)
 pruef("Wer ohne eigenes Aussehen im Fahrzeug sitzt, ist die Standardfigur im neuen Stil",
       pygame.image.tobytes(_neu186, "RGBA") == pygame.image.tobytes(_soll186, "RGBA"))
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Waffen: Spule, Revolver, Hotbar, Kuller, Granatwerfer, Drohne (0.34.87)")
+w187, g187 = _paar59("team", karte="staubtal")
+_k187 = w187.ich
+w187._loadout_anlegen(_k187)
+_gich187 = g187.kaempfer.get(g187.meine_nummer)
+for _ in range(6):
+    w187.schritt(K.NETZ["takt"]); g187.schritt(K.NETZ["takt"])
+_gich187 = g187.kaempfer.get(g187.meine_nummer)
+_gr187 = [i_ for i_, w_ in enumerate(_gich187.waffen) if g187.gruppe_von(w_) == 0]
+g187._platz_gedrueckt(0)
+_erst187 = g187._waffe_wunsch
+g187._platz_gedrueckt(0)
+_zweit187 = g187._waffe_wunsch
+pruef("Zweimal schnell 1 beim Gast (ohne Antwort dazwischen): zwei verschiedene Gewehre",
+      _erst187 in _gr187 and _zweit187 in _gr187 and _erst187 != _zweit187,
+      "%s %s %s" % (_erst187, _zweit187, _gr187))
+for _i187 in range(len(_gr187) - 2):
+    g187._platz_gedrueckt(0)
+_alle187 = set()
+g187._waffe_soll = None
+for _i187 in range(len(_gr187) + 1):
+    g187._platz_gedrueckt(0)
+    _alle187.add(g187._waffe_wunsch)
+pruef("... und jede Waffe der Gruppe ist erreichbar", set(_gr187) <= _alle187, "%s %s" % (_alle187, _gr187))
+# Revolver: der Gast sieht die Betriebsart, Faechern leert die Trommel.
+_k187.waffe_waehlen(_k187.waffen.index("revolver"))
+w187._anwenden(_k187, {"knoepfe": ["feuermodus"], "will": [0, 0], "ziel": [0, 0]})
+for _ in range(6):
+    w187.schritt(K.NETZ["takt"]); g187.schritt(K.NETZ["takt"])
+_gk187 = g187.kaempfer.get(_k187.nummer)
+pruef("Der Gast sieht die Betriebsart des Revolvers (FAECHERN)",
+      _gk187 is not None and _gk187.modus_von("revolver") == "faechern")
+_k187.magazin["revolver"] = 5
+_k187.takt = 0.0
+_n187 = [0]
+for _i187 in range(int(1.0 / K.FIXED_DT)):
+    _k187.feuert = _i187 < 2
+    _k187.schritt(K.FIXED_DT)
+    _n187[0] += sum(1 for x_ in w187.welt.neue if isinstance(x_, Geschoss))
+    w187.welt.neue = []
+pruef("Faechern: ein Klick leert die restliche Trommel", _n187[0] == 5 and _k187.magazin["revolver"] == 0,
+      "%d Schuss, %d uebrig" % (_n187[0], _k187.magazin["revolver"]))
+w187.verlassen(); g187.verlassen()
+# Spule: weniger, und Mauern wie Koerper kosten Kraft.
+_s187 = K.WAFFEN["spule"]
+pruef("Die Spule ist abgeschwaecht (hoechstens 100 Schaden, laenger laden, 3 Schuss)",
+      _s187["schaden"] <= 100.0 and _s187["ladezeit"] >= 2.0 and _s187["magazin"] <= 3
+      and _s187["wand_verlust"] > 0 and _s187["koerper_verlust"] > 0)
+# Kuller: rollt ueber den Zeiger hinaus, zuendet frueher.
+_ku187 = K.WAFFEN["kuller"]
+pruef("Die Kuller rollt weiter als gezielt und zuendet frueher als bisher (9 s)",
+      _ku187["ueber_ziel"] > 1.0 and _ku187["flugzeit"] < 9.0)
+_tmk187 = _TM59.Testmodus(app, karte="staubtal")
+_ok187 = freier_punkt(_tmk187.welt, 0, random.Random(187))
+_gr187k = EN.Granate(pygame.Vector2(_ok187), 0.0, _ku187, 0, None, 100.0)
+_tmk187.welt.dazu(_gr187k)
+_start187 = pygame.Vector2(_gr187k.pos)
+for _ in range(int(3.0 / K.FIXED_DT)):
+    _gr187k.schritt(K.FIXED_DT)
+pruef("... auf 100 px gezielt, ist sie nach 3 s schon weiter als 100 px gerollt",
+      _gr187k.pos.distance_to(_start187) > 100.0 or _gr187k.tempo.length() < 1.0,
+      "%.0f px" % _gr187k.pos.distance_to(_start187))
+# Granatwerfer: ueber eine Mauer, wenn er hoch genug fliegt.
+_gw187 = K.WAFFEN["granatwerfer"]
+pruef("Granatwerfer: langsamer, zuendet frueher am Boden",
+      _gw187["tempo"] < 400.0 and _gw187["zuender"] < 0.7)
+_wand187 = None
+_e187 = _tmk187.welt.ebene(0)
+for _ty in range(2, _e187.hoehe - 2):
+    for _tx in range(2, _e187.breite - 12):
+        _rei = [_e187.kachel(_tx + i_, _ty) for i_ in range(10)]
+        if all(not K.KACHELN[_r]["fest"] for _i, _r in enumerate(_rei) if _i != 5) \
+                and K.KACHELN[_rei[5]]["sicht"]:
+            _wand187 = (_tx, _ty)
+            break
+    if _wand187:
+        break
+if _wand187 is not None:
+    _von187 = pygame.Vector2((_wand187[0] + 0.5) * K.TILE, (_wand187[1] + 0.5) * K.TILE)
+    _wg187 = EN.Werfergranate(_von187, 0.0, _gw187, 0, None, weite=9 * K.TILE)
+    _tmk187.welt.dazu(_wg187)
+    for _ in range(int(2.0 / K.FIXED_DT)):
+        if not _wg187.lebt or _wg187.liegt:
+            break
+        _wg187.schritt(K.FIXED_DT)
+    pruef("Granatwerfer: eine Mauer in der Mitte der Bahn ueberfliegt er",
+          _wg187.pos.x > _von187.x + 7 * K.TILE, "%.0f px weit" % (_wg187.pos.x - _von187.x))
+else:
+    pruef("(eine Mauer fuer den Granatwerfer-Test gefunden)", False)
+_name187 = K.KACHELN[_e187.kachel(_wand187[0] + 5, _wand187[1])]["name"] if _wand187 else ""
+pruef("Was hoch steht, steht hoch (Mauer 24, Fels 30), flacher Boden 0",
+      _wand187 is not None
+      and _tmk187.welt.kachel_hoehe(_von187 + pygame.Vector2(5 * K.TILE, 0), 0) == K.STEHEN[_name187]["hoehe"]
+      and _tmk187.welt.kachel_hoehe(_von187, 0) == 0.0, _name187)
+_tmk187.verlassen()
+# Drohne: ein durchgehender Rotorklang, gleich laut, ohne Pumpen.
+from dustfront import audio as _AU187
+_dr187 = _AU187._drohne()
+_vier187 = [max(abs(x_) for x_ in _dr187[i_ * len(_dr187) // 4:(i_ + 1) * len(_dr187) // 4])
+            for i_ in range(1, 3)]
+pruef("Der Drohnenklang ist gleich laut statt abklingend (Rotor statt Surren)",
+      len(_dr187) > K.AUSRUESTUNG["drohne"].get("klang_takt", 0.5) * 44100
+      and min(_vier187) > 0.6 * max(_vier187), str([round(v_, 2) for v_ in _vier187]))
 
 print()
 print("FEHLER:", fails or "keine")

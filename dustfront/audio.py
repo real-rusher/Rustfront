@@ -967,8 +967,43 @@ def _falle_klick(seed=0):
 
 @platzhalter_klang("drohne")
 def _drohne(seed=0):
-    """Rotoren: ein hohes, schwankendes Surren."""
-    return _summen(320, 340, 0.5, 0.25, 0.1, 0.5, seed + 40)
+    """Vier Rotoren (seit 0.34.87, gemeldet: "der durchgehende Sound der
+    Drohne soll durch einen tatsaechlichen Rotor-Sound ersetzt werden").
+
+    Jeder Rotor ein Brummen mit Obertoenen, leicht gegeneinander verstimmt
+    (daraus das typische Schweben), dazu Luftrauschen, das im Takt der
+    Blaetter zerhackt wird. Gleich laut von Anfang bis Ende und mit weichen
+    Raendern: der Klang kommt alle 0,5 s neu (ausruestung.Drohne) und ist
+    etwas laenger, so gehen die Wiederholungen ohne Pumpen ineinander."""
+    dur = 0.56
+    n = int(RATE * dur)
+    zufall = random.Random(seed + 40).random
+    rotoren = (212.0, 219.0, 226.0, 234.0)
+    blatt = 74.0                     # Blattdurchgaenge je Sekunde: das "Wupp"
+    phasen = [zufall() * 6.283 for _ in rotoren]
+    rand = int(RATE * 0.03)
+    tp = 2 * math.pi
+    sin = math.sin
+    out = [0.0] * n
+    y = 0.0
+    for i in range(n):
+        t = i / RATE
+        ton = 0.0
+        for j, f in enumerate(rotoren):
+            ph = phasen[j] + tp * f * t
+            # Obertoene wie eine Saegezahnwelle, oben abgeschnitten.
+            ton += sin(ph) + 0.5 * sin(2 * ph) + 0.33 * sin(3 * ph) + 0.2 * sin(4 * ph)
+        ton /= len(rotoren) * 2.0
+        y += 0.18 * (-1.0 + 2.0 * zufall() - y)          # Rauschen, tiefpassgefiltert
+        hack = 0.55 + 0.45 * sin(tp * blatt * t)
+        s = ton * 0.55 + y * 1.4 * hack
+        huelle = 1.0
+        if i < rand:
+            huelle = i / rand
+        elif i > n - rand:
+            huelle = (n - i) / rand
+        out[i] = s * huelle * 0.42
+    return out
 
 
 @platzhalter_klang("horchposten")

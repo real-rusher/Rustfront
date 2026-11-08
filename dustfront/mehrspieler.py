@@ -1522,6 +1522,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         """(welche Waffe gerade, wie viele) - fuer den Knopf WFF."""
         if self.ich is None:
             return 0, 1
+        if self.gruppen_hotbar:
+            # WFF (Touch) geht seit 0.34.87 von Gruppe zu Gruppe; in der
+            # Gruppe schaltet erneutes Antippen ihres Feldes weiter.
+            return max(0, self.gruppe_von(self.ich.waffe_name)), len(K.ALLES_GRUPPEN)
         return int(self.ich.waffe), max(1, len(self.ich.waffen))
 
     @property
@@ -1966,7 +1970,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
             if ((nr == 10 and taste == pygame.K_0)
                     or taste in tabelle.get("waffe%d" % nr, ())):
-                self._waffe_wunsch = nr - 1
+                self._platz_gedrueckt(nr - 1)
 
     def knoepfe_sammeln(self) -> None:
         """Bleibt als Rueckfallebene fuer Tasten, die kein Ereignis erzeugen.
@@ -1983,7 +1987,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self._knoepfe.add("nutzen")
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
             if nr < 10 and e.gedrueckt("waffe%d" % nr):
-                self._waffe_wunsch = nr - 1
+                self._platz_gedrueckt(nr - 1)
 
     def _meine_eingabe(self) -> dict:
         e = self.app.eingabe
@@ -2014,7 +2018,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             "hb": False if offen else e.gehalten("dash"),
             # Kommt "will" von einem Stick? Dann lenkt der Wagen anders (_fahren).
             "rl": e.analog is not None,
-            "waffe": self._waffe_aus_taste(self._waffe_wunsch),
+            "waffe": self._waffe_wunsch,
             "knoepfe": sorted(self._knoepfe),
             "admin": self._admin_auftrag,
         }
@@ -2037,6 +2041,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 return i
         return -1
 
+    def _platz_gedrueckt(self, platz: int) -> None:
+        """Eine Zahl (oder ein Hotbarplatz) wurde gedrueckt. Seit 0.34.87
+        wird die Gruppe **sofort** in eine Waffe umgerechnet und gemerkt,
+        welche angefordert ist. Vorher geschah das erst beim Absenden und
+        von der Waffe aus, die die Figur gerade hielt - beim Gast eine
+        Netzrunde zu alt: zwei schnelle Druecke landeten auf derselben
+        Waffe, und manche liessen sich so nie erreichen (gemeldet)."""
+        ziel = self._waffe_aus_taste(platz)
+        if ziel < 0:
+            return
+        self._waffe_wunsch = ziel
+        if self.gruppen_hotbar:
+            self._waffe_soll = (ziel, self._zeit)
+
     def _waffe_aus_taste(self, platz: int) -> int:
         """Aus einem Druck auf 1 bis 9 die Waffe, die gemeint ist. Ohne
         Gruppen ist der Platz die Waffe. Mit Gruppen: steht man schon in
@@ -2052,8 +2070,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         if not drin:
             return -1
         merk = self.__dict__.setdefault("_gruppe_zuletzt", {})
-        if k.waffe in drin:
-            neu = drin[(drin.index(k.waffe) + 1) % len(drin)]
+        # Was zuletzt angefordert wurde, gilt als gehalten, bis der
+        # Gastgeber es bestaetigt hat (oder kurz danach).
+        jetzt = k.waffe
+        soll = getattr(self, "_waffe_soll", None)
+        if soll is not None and self._zeit - soll[1] < K.GEFECHT["waffe_soll_gilt"] \
+                and soll[0] != k.waffe:
+            jetzt = soll[0]
+        if jetzt in drin:
+            neu = drin[(drin.index(jetzt) + 1) % len(drin)]
         else:
             neu = merk.get(platz, drin[0])
             if neu not in drin:
@@ -2140,7 +2165,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 # Die Betriebsart gehoert zur Figur und damit zum
                 # Gastgeber - sonst schoesse der Gast im Dauerfeuer,
                 # waehrend der Gastgeber eine Salve rechnet.
-                k.modus_wechseln()
+                neu = k.modus_wechseln()
+                if neu and k is self.ich:
+                    # Seit 0.34.87 sagt es auch, was jetzt gilt.
+                    self.hinweis = "%s: %s" % (K.WAFFEN[k.waffe_name]["name"],
+                                               k.waffe_daten.get("kurz", neu.upper()))
             if "werkzeug" in knoepfe and getattr(k, "alle_werkzeuge", False):
                 # Das naechste Werkzeug fuer C (seit 0.34.85).
                 k.werkzeug = (getattr(k, "werkzeug", 0) + 1) % len(K.WERKZEUGE)
@@ -4215,6 +4244,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 # (seit 0.34.79): fuer das Schild im Bild und die Anzeige
                 # [C] beim Gast.
                 "kl": getattr(k, "klasse", ""),
+                # Die Betriebsart der gehaltenen Waffe (seit 0.34.87) - bis
+                # dahin zeigte der Gast immer die erste an (Revolver: GEZIELT).
+                "mo": k.modus_von(k.waffe_name),
                 # Werkzeuge fuer alle (seit 0.34.85): an? welches?
                 "aw": 1 if getattr(k, "alle_werkzeuge", False) else 0,
                 "wz": getattr(k, "werkzeug", 0),
@@ -4730,6 +4762,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 if kl != getattr(k, "klasse", ""):
                     k.klasse = kl
                     k.schild = bool(klassen_modul.daten(kl).get("schild", False))
+            mo = eintrag.get("mo", "")
+            if isinstance(mo, str) and mo and mo in (K.WAFFEN.get(k.waffe_name, {}).get("modi") or ()):
+                k.modi[k.waffe_name] = mo
             k.alle_werkzeuge = bool(eintrag.get("aw", 0))
             try:
                 k.werkzeug = int(eintrag.get("wz", 0)) % len(K.WERKZEUGE)

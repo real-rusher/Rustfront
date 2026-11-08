@@ -2036,6 +2036,9 @@ GEFECHT = dict(
     # dahin nur im Testmodus). Was sie hinlegen, geht seitdem mit der
     # Weltmeldung an die Gaeste ("geraete").
     faehigkeiten=True,
+    # So lange gilt eine angeforderte Waffe als gehalten, bis der Gastgeber
+    # sie bestaetigt (Gruppen-Hotbar, seit 0.34.87).
+    waffe_soll_gilt=0.6,
     # Der Raketenwerfer. Aus, wenn der Gastgeber ihn nicht will - er
     # veraendert eine Runde, und das soll eine Entscheidung sein.
     rpg=False,
@@ -2957,10 +2960,14 @@ WAFFEN = {
         huelsen=0,            # die Huelsen bleiben in der Trommel
         klang="schuss_revolver",
         modi=("gezielt", "faechern"),
+        # Seit 0.34.87 deutlicher getrennt (gemeldet: "die zwei Feuermodi
+        # beim Revolver funktionieren nicht"): GEZIELT ist praezise,
+        # FAECHERN leert die restliche Trommel in einem Zug.
         modus_daten={
-            "gezielt": dict(kurz="GEZIELT"),
-            "faechern": dict(kurz="FÄCHERN", takt=0.9, salve=6, salve_takt=0.07,
-                             streuung=8.0, streuung_lauf=9.0),
+            "gezielt": dict(kurz="GEZIELT", streuung=0.4, streuung_lauf=2.2),
+            "faechern": dict(kurz="FÄCHERN", takt=0.9, salve=6, salve_trommel=True,
+                             salve_takt=0.06, schaden=32.0,
+                             streuung=9.0, streuung_lauf=10.0),
         },
     ),
     "zwillinge": dict(
@@ -3160,11 +3167,13 @@ WAFFEN = {
         wurf_min=70.0,
         wurf_max=430.0,
         reichweite=430.0,
-        tempo=400.0,          # Pixel je Sekunde ueber den Boden
+        # 400 -> 340 (seit 0.34.87, gemeldet: "ein kleines bisschen
+        # langsamer fliegen" - und dafuer frueher zuenden).
+        tempo=340.0,          # Pixel je Sekunde ueber den Boden
         bogen=70.0,           # so hoch steigt sie in der Mitte
         koerper_hoehe=26.0,   # darunter trifft sie einen Koerper
-        deckung_hoehe=18.0,   # darunter haelt sie niedrige Deckung auf
-        zuender=0.7,          # so lange liegt sie, bevor sie zuendet
+        ueber_rand=2.0,       # so viel hoeher als die Kachel muss sie sein, um darueber zu gehen
+        zuender=0.4,          # so lange liegt sie, bevor sie zuendet (0.7 bis 0.34.86)
         ausrollen=0.12,       # so viel vom Tempo bleibt beim Aufsetzen
         reibung=5.0,          # und so schnell rollt sie aus
         streuung=1.5,
@@ -3619,8 +3628,10 @@ WUERFE_PAKET = {
         art="wurf", name="KULLER",
         # Klein und unscheinbar, gerade gerollt. Zuendet, sobald jemand
         # nahe kommt, sonst nach einer Weile.
+        # Seit 0.34.87: sie rollt ueber den Zeiger hinaus (`ueber_ziel`, sie
+        # rollt eben) und zuendet etwas frueher (flugzeit 9 -> 6,5 s).
         kuller=True, schaden=72.0, radius=70.0, takt=0.9, magazin=2, nachladen=3.6,
-        wurf_min=80.0, wurf_max=520.0, reibung=0.35, flugzeit=9.0,
+        wurf_min=80.0, wurf_max=520.0, reibung=0.35, flugzeit=6.5, ueber_ziel=1.6,
         kamera=6.0, rueckstoss=0.0, huelsen=0, bild_flug="teil_kuller_wurf",
         scharf_nach=0.5, naehe=34.0),
     "knaller": dict(
@@ -3651,10 +3662,15 @@ ENERGIE_PAKET = {
     "spule": dict(
         art="strahl", name="SPULENGEWEHR",
         # Halten laedt auf (die Linie ist fuer alle zu sehen), Loslassen
-        # feuert einen Strahl ohne Flugzeit, der durch Waende geht. Voll
-        # geladen die staerkste Waffe des Spiels.
-        schaden=150.0, ladezeit=1.6, mindest=0.25, reichweite=900.0,
-        takt=0.6, magazin=4, nachladen=5.0, kuehlt=True, abkuehlen=2.4,
+        # feuert einen Strahl ohne Flugzeit, der durch Waende geht.
+        # Seit 0.34.87 abgeschwaecht (gemeldet: "komplett op"): 150 -> 95
+        # Schaden, laenger laden, drei statt vier Schuss, und jede Mauer
+        # und jeder Koerper auf der Linie kostet Kraft (`wand_verlust`,
+        # `koerper_verlust`). Ein voll geladener Treffer ohne Hindernis
+        # erledigt noch jeden, aber kaum mehr zwei hintereinander.
+        schaden=95.0, ladezeit=2.1, mindest=0.25, reichweite=760.0,
+        wand_verlust=0.4, koerper_verlust=0.35,
+        takt=0.9, magazin=3, nachladen=5.5, kuehlt=True, abkuehlen=3.4,
         tempo_beim_laden=0.55, kamera=5.0, rueckstoss=60.0, huelsen=0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
         klang="schuss_spule", muendung=1.2, schadensart="panzerbrechend"),

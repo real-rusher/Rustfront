@@ -1231,6 +1231,21 @@ class Welt:
                 return von + richtung * (laenge * (i - 1) / schritte)
         return von + richtung * laenge
 
+    def kachel_hoehe(self, pos, ebene: int) -> float:
+        """Wie hoch steht, was an dieser Stelle steht (K.STEHEN), in
+        Spielpixeln - 0 fuer flachen Boden. Seit 0.34.87 fuer den
+        Granatwerfer: was hoeher fliegt, geht darueber."""
+        e = self.ebene(ebene)
+        kachel = e.kachel(int(pos.x // K.TILE), int(pos.y // K.TILE))
+        d = K.KACHELN[kachel]
+        if not d["fest"]:
+            return 0.0
+        st = K.STEHEN.get(d.get("name", ""))
+        if st is None:
+            # Ohne Eintrag (alte Kartenkacheln): eine Mauer im Zweifel.
+            return K.STEHEN["wand"]["hoehe"] if d["sicht"] else K.STEHEN["kiste"]["hoehe"]
+        return float(st["hoehe"])
+
     def schuss_halt(self, pos, ebene: int, radius: float = 0.0,
                     nur_hoch: bool = False) -> bool:
         """Haelt etwas an dieser Stelle eine Kugel auf?

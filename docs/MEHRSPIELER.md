@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.87 | Weltmeldung je Spieler: "mo" (Betriebsart der gehaltenen Waffe, z. B. Revolver FAECHERN). Die Gruppen-Hotbar schickt die gewaehlte Waffe gleich beim Tastendruck. | Ein alter Gast sieht beim Revolver weiter immer GEZIELT |
 | 0.34.85 | Weltmeldung je Spieler: "aw" (alle Werkzeuge an), "wz" (welches); "wl"/"ml"/"vl" haben in JEDER HAT ALLES 41 statt 10 Eintraege. Eingabe: neuer Knopf "werkzeug" (Taste X). Die Waffenwahl der Gruppen-Hotbar rechnet der Spieler selbst, ins Netz geht wie bisher der Platz ("waffe"). | Ungleiche Versionen: ein alter Gast hat in JEDER HAT ALLES 41 Plaetze ohne Gruppen und kann nur die ersten zehn waehlen |
 | 0.34.84 | Eingabe: neues Feld "gl" (Gas, Lenkung) - nur fuer Bots, die der Gastgeber selbst rechnet; von Gaesten wird es nicht angenommen (`Gefecht._fahren` prueft `k.ist_bot`). Sonst Bot-Verhalten im Fahrzeug. | Keine |
 | 0.34.80 | Nichts Neues im Netz. Die Bots (bots.py, bot_goap.py, rechnet nur der Gastgeber) merken sich Spuren, umgehen Feuer und geben dem Retter gezielter Feuerschutz. | Keine - ein Gast sieht nur, was der Gastgeber rechnet |

@@ -2415,11 +2415,14 @@ class Renderer:
         if figuren is not None:
             figuren(ziel, idx, ecke)
         self.zustaende_zeichnen(ziel, welt, idx, ecke)
-        self.entladungen_zeichnen(ziel, welt, idx, ecke)
         self.flugleichen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.aufbauten_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.laser_zeichnen(ziel, welt, idx, ecke)
         self.stehende_nachholen()
+        # Nach den Mauern (seit 0.34.87, gemeldet: "die Aufladung des
+        # Spulengewehrs wird unter Mauern gerendert"): der Strahl geht durch
+        # Waende, also liegen Ladelinie und Strahl ueber ihnen.
+        self.entladungen_zeichnen(ziel, welt, idx, ecke)
         self.luft_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.feuerbaelle_zeichnen(ziel, welt, idx, ecke, "glut")
         self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
