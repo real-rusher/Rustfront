@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.34.84"
+VERSION = "0.34.85"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -1175,13 +1175,13 @@ STEUERUNG = [
     ("MEDKIT", ("heilen",), ""),
     ("BRECHEISEN", ("nahkampf",), ""),
     ("FEUERART", ("feuermodus",), ""),
-    ("FÄHIGKEIT (KLASSE)", ("faehigkeit",), ""),
+    ("FÄHIGKEIT / WERKZEUG", ("faehigkeit",), ""),
+    ("WERKZEUG WECHSELN", ("werkzeug",), ""),
     ("INVENTAR", ("inventar",), ""),
     ("SCHIESSEN", (), "MAUS LINKS"),
     ("ZIELEN", (), "MAUS RECHTS"),
     ("WAFFE WÄHLEN", (), "1 - 9"),
     ("SICHTWEITE", (), "MAUSRAD"),
-    ("OBERE EBENEN", ("ebenen",), ""),
     ("RUNDEN (MEHRSP.)", ("planen",), ""),
     ("PAUSE", ("pause",), ""),
 ]

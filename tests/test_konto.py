@@ -919,8 +919,9 @@ w2.verlassen(); g2.verlassen()
 
 wirt3 = netz.Gastgeber(53903)
 w3 = Gefecht(app_w, "WIRT", gastgeber=wirt3, modus="pvp", seed=7)
+# Seit 0.34.85 wirklich alles (K.ALLES_GRUPPEN), nicht mehr die zehn aus HOTBAR.
 pruef("Ohne Loadout-Regel hat jeder alles",
-      w3.kaempfer[0].waffen == list(K.HOTBAR), str(w3.kaempfer[0].waffen))
+      w3.kaempfer[0].waffen == K.alles_waffen(), str(w3.kaempfer[0].waffen))
 w3.verlassen()
 
 # Und nochmal: eine zweite Endmeldung darf nichts verdoppeln.

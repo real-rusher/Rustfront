@@ -109,11 +109,22 @@ def vorteile(klasse: str) -> list:
     return raus
 
 
+def faehigkeiten_von(k) -> tuple:
+    """((Art, Pause), ...) - was diese Figur auf C hat: die Faehigkeit
+    ihrer Klasse, oder (JEDER HAT ALLES, seit 0.34.85) das gewaehlte
+    Werkzeug aus K.WERKZEUGE."""
+    d = daten(getattr(k, "klasse", ""))
+    if d.get("faehigkeit"):
+        return tuple(d["faehigkeit"])
+    if getattr(k, "alle_werkzeuge", False):
+        return (K.WERKZEUGE[getattr(k, "werkzeug", 0) % len(K.WERKZEUGE)],)
+    return ()
+
+
 def faehigkeit_bereit(k):
     """Die erste Faehigkeit, deren Pause um ist - (Art, Pause) oder None."""
-    d = daten(getattr(k, "klasse", ""))
     rest = getattr(k, "faehigkeit_rest", {})
-    for art, pause in d.get("faehigkeit", ()):
+    for art, pause in faehigkeiten_von(k):
         if rest.get(art, 0.0) <= 0.0:
             return art, pause
     return None

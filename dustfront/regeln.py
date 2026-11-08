@@ -294,10 +294,10 @@ FELDER = (
          hilfe="EINES DEINER LOADOUTS - DAS TRAGEN ALLE."),
     # Seit 0.34.79: die Faehigkeit der Klasse (Taste C) auch im Gefecht.
     # Ohne Loadouts gibt es keine Klasse, also auch keine Faehigkeit.
-    Feld("faehigkeiten", "KLASSEN-FÄHIGKEITEN", "AUSRÜSTUNG",
+    # Seit 0.34.85 auch in JEDER HAT ALLES: dort hat jeder jedes Werkzeug.
+    Feld("faehigkeiten", "FÄHIGKEITEN / WERKZEUGE", "AUSRÜSTUNG",
          K.GEFECHT["faehigkeiten"], None, schalter=True, einzug=True,
-         gilt=lambda d: d.get("loadouts") != "alles",
-         hilfe="TASTE C: KISTEN, FALLEN, GESCHÜTZE, DROHNEN DER KLASSE."),
+         hilfe="TASTE C: KISTEN, FALLEN, GESCHÜTZE, DROHNEN - JE KLASSE, BEI JEDER HAT ALLES ALLE (X WECHSELT)."),
     Feld("knapp", "MUNITION KNAPP", "AUSRÜSTUNG", False, None, schalter=True),
     Feld("medkits", "MEDKITS BEIM EINSTIEG", "AUSRÜSTUNG",
          K.GEFECHT["start_medkits"],

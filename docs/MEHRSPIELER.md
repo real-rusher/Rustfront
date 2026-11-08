@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.85 | Weltmeldung je Spieler: "aw" (alle Werkzeuge an), "wz" (welches); "wl"/"ml"/"vl" haben in JEDER HAT ALLES 41 statt 10 Eintraege. Eingabe: neuer Knopf "werkzeug" (Taste X). Die Waffenwahl der Gruppen-Hotbar rechnet der Spieler selbst, ins Netz geht wie bisher der Platz ("waffe"). | Ungleiche Versionen: ein alter Gast hat in JEDER HAT ALLES 41 Plaetze ohne Gruppen und kann nur die ersten zehn waehlen |
 | 0.34.84 | Eingabe: neues Feld "gl" (Gas, Lenkung) - nur fuer Bots, die der Gastgeber selbst rechnet; von Gaesten wird es nicht angenommen (`Gefecht._fahren` prueft `k.ist_bot`). Sonst Bot-Verhalten im Fahrzeug. | Keine |
 | 0.34.80 | Nichts Neues im Netz. Die Bots (bots.py, bot_goap.py, rechnet nur der Gastgeber) merken sich Spuren, umgehen Feuer und geben dem Retter gezielter Feuerschutz. | Keine - ein Gast sieht nur, was der Gastgeber rechnet |
 | 0.34.79 | Weltmeldung: neue Liste "geraete" (was Klassen-Faehigkeiten hinlegen: Ort, Richtung, Ebene, Bild, Leben, Kennung, Hoehe), je Spieler "kl" (Klasse) und "fh" (Restzeit je Faehigkeit). Neue Regel "faehigkeiten" (KLASSEN-FAEHIGKEITEN). Die Lobby laeuft mit "eigenes" statt "alles"; eine "loadout"-Nachricht des Gasts ruestet ihn in der Lobby sofort um (`_lobby_umruesten`). | Ungleiche Versionen: ein alter Gast sieht hingelegte Kisten, Fallen und Geschuetze nicht; ein alter Gastgeber kennt die Regel nicht und hat in der Lobby noch "jeder hat alles" |

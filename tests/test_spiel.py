@@ -3054,6 +3054,10 @@ if kl.ok and kl.klang("schuss_sturm"):
 # sieht anders aus, wenn das gewaehlte Magazin leer ist."
 w, ga = gefechtspaar("pvp", knapp=True)
 ich = w.kaempfer[0]
+# Die klassische Hotbar (renderer.hud rechnet mit ihren Plaetzen); seit
+# 0.34.85 traegt ein Kaempfer ohne Loadout alle 41 Waffen.
+ich.waffen = list(K.HOTBAR)
+ich.magazin.update({w_: K.WAFFEN[w_]["magazin"] for w_ in ich.waffen})
 ich.waffe_waehlen(ich.waffen.index("sturm"))
 bild = pygame.Surface((K.GAME_W, K.GAME_H))
 
@@ -6615,10 +6619,12 @@ _tm73.verlassen()
 w, ga = _paar59("team", karte="staubtal")
 w.ich.loadout = _KO73.loadout_saeubern({"name": "N", "klasse": "nahkaempfer"})
 _KL73.anwenden(w.ich)
-# Seit 0.34.79 gilt die Faehigkeit auch im Gefecht - aber nur mit
-# Loadouts (ohne Satz keine Klasse); diese Runde ist JEDER HAT ALLES.
-pruef("Ohne Loadouts (JEDER HAT ALLES) legt C nichts hin",
+# Seit 0.34.79 gilt die Faehigkeit auch im Gefecht; seit 0.34.85 auch in
+# JEDER HAT ALLES (dort jedes Werkzeug). Abgeschaltet legt C nichts hin.
+w._regeln_setzen(dict(w.regelwerk, faehigkeiten=False))
+pruef("Mit abgeschalteten Faehigkeiten legt C nichts hin",
       _KL73.faehigkeit_nutzen(w, w.ich) == "")
+w._regeln_setzen(dict(w.regelwerk, faehigkeiten=True))
 for _ in range(4):
     w.schritt(K.NETZ["takt"])
     ga.schritt(K.NETZ["takt"])
@@ -10915,8 +10921,10 @@ _finger82(pygame.FINGERUP, 23, 200, 200)
 
 # Die Hotbar antippen.
 _plaetze82 = _tw82.touch_hotbar()
+# Seit 0.34.85 in JEDER HAT ALLES: ein Platz je Gruppe (K.ALLES_GRUPPEN).
 pruef("Die Szene sagt, wo die Plaetze der Hotbar stehen",
-      len(_plaetze82) == len(_tw82.ich.waffen) and len(_plaetze82) >= 3, str(len(_plaetze82)))
+      len(_plaetze82) == (len(K.ALLES_GRUPPEN) if _tw82.gruppen_hotbar else len(_tw82.ich.waffen))
+      and len(_plaetze82) >= 3, str(len(_plaetze82)))
 _finger82(pygame.FINGERDOWN, 25, *_plaetze82[2].center)
 pruef("Den dritten Platz antippen waehlt die dritte Waffe", _tw82._waffe_wunsch == 2,
       str(_tw82._waffe_wunsch))
@@ -15489,8 +15497,8 @@ app.viewport_rechnen()
 print("\n-- Klassen und neue Waffen in der Lobby, Faehigkeiten im Netz (0.34.79)")
 pruef("Neue Regel KLASSEN-FAEHIGKEITEN, an als Vorgabe",
       RG.vorgabe()["faehigkeiten"] is True and "faehigkeiten" in RG.EINFACH)
-pruef("Sie gilt nur mit Loadouts (ohne Satz keine Klasse)",
-      not RG.NACH_NAME["faehigkeiten"].gilt({"loadouts": "alles"})
+pruef("Sie gilt immer: mit Loadouts die Klasse, ohne (seit 0.34.85) jedes Werkzeug",
+      RG.NACH_NAME["faehigkeiten"].gilt({"loadouts": "alles"})
       and RG.NACH_NAME["faehigkeiten"].gilt({"loadouts": "eigenes"}))
 _lr179 = LB.lobby_regeln()
 pruef("In der Lobby traegt jeder seinen eigenen Satz, mit Faehigkeit",
@@ -15536,7 +15544,8 @@ gl179.zeichnen(_bild179, 0.5)
 pruef("Der Gast zeichnet Geraet und Anzeige [C] ohne Fehler", True)
 wl179.verlassen(); gl179.verlassen()
 w179, ga179 = _paar59("team", karte="staubtal")
-pruef("Eine Runde mit JEDER HAT ALLES hat keine Faehigkeiten", not w179.faehigkeiten_an)
+# Seit 0.34.85 hat auch JEDER HAT ALLES Faehigkeiten: dort jedes Werkzeug.
+pruef("Eine Runde mit JEDER HAT ALLES hat Werkzeuge auf C", w179.faehigkeiten_an)
 w179._regeln_setzen(dict(w179.regelwerk, loadouts="eigenes", faehigkeiten=False))
 pruef("... und mit Loadouts, aber abgeschaltet, auch nicht", not w179.faehigkeiten_an)
 w179._regeln_setzen(dict(w179.regelwerk, loadouts="eigenes", faehigkeiten=True))
@@ -15598,6 +15607,49 @@ pruef("Ein Menuebild kommt in der verlangten Breite, im Seitenverhaeltnis des Ge
       _b182 is not None and _b182.get_width() == 140 and 70 <= _b182.get_height() <= 85,
       str(_b182.get_size() if _b182 else None))
 pruef("Ohne Datei: None (dann zeigt das Menue das Pixelbild)", _MB182.bild("gibtesnicht", 140) is None)
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Jeder hat alles: Kategorien-Hotbar und alle Werkzeuge auf C (0.34.85)")
+_alle185 = K.alles_waffen()
+pruef("JEDER HAT ALLES hat jede Waffe ausser Brecheisen (F) und Raketenwerfer (Karte)",
+      set(_alle185) == set(K.WAFFEN) - {"brecheisen", "rakete"} and len(_alle185) == len(set(_alle185)),
+      str(set(K.WAFFEN) - set(_alle185)))
+pruef("... in neun Gruppen, fuer die Tasten 1 bis 9", len(K.ALLES_GRUPPEN) == 9)
+w185, g185 = _paar59("team", karte="staubtal")
+_k185 = w185.ich
+w185._loadout_anlegen(_k185)
+pruef("Der Kaempfer traegt sie alle", _k185.waffen == _alle185 and w185.gruppen_hotbar,
+      "%d Waffen" % len(_k185.waffen))
+_gr185 = [i_ for i_, w_ in enumerate(_k185.waffen) if w185.gruppe_von(w_) == 2]
+_a185 = w185._waffe_aus_taste(2)
+_k185.waffe_waehlen(_a185)
+_b185 = w185._waffe_aus_taste(2)
+_k185.waffe_waehlen(_b185)
+pruef("Taste 3: die erste Schrotflinte, noch einmal: die naechste",
+      _a185 == _gr185[0] and _b185 == _gr185[1], "%s %s %s" % (_a185, _b185, _gr185))
+_k185.waffe_waehlen(w185._waffe_aus_taste(0))
+pruef("Zurueck in die Gruppe: die, die man dort zuletzt hatte",
+      w185._waffe_aus_taste(2) == _gr185[1])
+_k185.waffe_waehlen(0)
+pruef("Jedes Werkzeug auf C: zuerst das erste aus K.WERKZEUGE",
+      _k185.alle_werkzeuge and _KL73.faehigkeiten_von(_k185)[0][0] == K.WERKZEUGE[0][0])
+w185._anwenden(_k185, {"knoepfe": ["werkzeug"], "will": [0, 0], "ziel": [0, 0]})
+pruef("X schaltet zum naechsten Werkzeug", _KL73.faehigkeiten_von(_k185)[0][0] == K.WERKZEUGE[1][0],
+      str(_KL73.faehigkeiten_von(_k185)))
+_was185 = _KL73.faehigkeit_nutzen(w185, _k185)
+pruef("... und C legt es hin", _was185 == _KL73.FAEHIGKEIT_NAMEN[K.WERKZEUGE[1][0]], _was185)
+for _ in range(10):
+    w185.schritt(K.NETZ["takt"])
+    g185.schritt(K.NETZ["takt"])
+_gk185 = g185.kaempfer.get(_k185.nummer)
+pruef("Der Gast kennt Werkzeug und Waffenliste", _gk185 is not None and _gk185.alle_werkzeuge
+      and _gk185.werkzeug == 1 and _gk185.waffen == _alle185)
+_bild185 = pygame.Surface((K.GAME_W, K.GAME_H))
+w185.zeichnen(_bild185, 0.5)
+g185.zeichnen(_bild185, 0.5)
+pruef("Hotbar mit Gruppen und Werkzeuganzeige zeichnen sich", True)
+pruef("Antippen (Touch): neun Plaetze", len(w185.touch_hotbar()) == 9, str(len(w185.touch_hotbar())))
+w185.verlassen(); g185.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

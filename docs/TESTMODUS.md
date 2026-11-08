@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.85 | Nichts Neues zum Setzen. Die Werkzeuge aller Klassen gibt es im Testmodus schon im Spawner (BAUEN, FALLEN, AUFKLÄRUNG, HILFE); JEDER HAT ALLES mit Gruppen-Hotbar und Taste X gilt in Runden ohne Loadouts. Pruefungen im Abschnitt "Jeder hat alles: Kategorien-Hotbar" von `tests/test_spiel.py` |
 | 0.34.84 | INFO-Ansicht: ein Fahrer, der einen liegenden Kameraden deckt, zeigt "FÄHRT ... > DECKT LIEGENDEN" und eine gruene Linie zu dem Platz, an den er faehrt. Ausprobieren: FAHRER mit Panzer setzen, einen Bot seines Teams und einen Gegner, den Bot zu Boden bringen. Pruefungen in `tests/test_verhalten.py` (fahrzeug_bots) |
 | 0.34.80 | INFO-Ansicht (Taste 8): **Spuren** der Bots - wo ein verschwundener Gegner zuletzt war, als lila Kreuz; die Spur, die er gerade prueft, mit gestrichelter Linie. Ausprobieren: einen Bot einen Gegner sehen lassen, den Gegner wegsetzen. Pruefungen in `tests/test_verhalten.py` (spuren, feuer_umweg) und im Abschnitt "Bots: Spuren statt vergessen" von `tests/test_spiel.py` |
 | 0.34.79 | Nichts Neues zum Setzen: die Faehigkeiten der Klassen galten hier schon immer (`faehigkeiten_an` fest an). Neu sichtbar: die Anzeige **[C]** ueber dem Lebensbalken (bereit oder Sekunden). Im Gefecht und in der Lobby gelten sie jetzt auch (Regel KLASSEN-FAEHIGKEITEN). Pruefungen im Abschnitt "Klassen und neue Waffen in der Lobby" von `tests/test_spiel.py` |

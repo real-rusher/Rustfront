@@ -392,8 +392,7 @@ class Anzeige:
         if not getattr(g, "faehigkeiten_an", False):
             return
         from . import klassen as klassen_modul
-        d = klassen_modul.daten(getattr(ich, "klasse", ""))
-        arten = d.get("faehigkeit") or ()
+        arten = klassen_modul.faehigkeiten_von(ich)
         if not arten:
             return
         rest = getattr(ich, "faehigkeit_rest", {}) or {}
@@ -410,6 +409,11 @@ class Anzeige:
             text = name if r <= 0.0 else "%s %d" % (name, math.ceil(r))
             _text(ziel, text, x, y, K.C_TEAL if r <= 0.0 else K.C_MUTED_DK)
             x += SCHRIFT.breite(text, 1) + 8
+        if getattr(ich, "alle_werkzeuge", False) and not getattr(ich, "klasse", ""):
+            # Jeder hat alles: welches Werkzeug, und wie man wechselt.
+            wechsel = "[%s] WECHSELN" % (g._tastenname("werkzeug")[:1]
+                                         if hasattr(g, "_tastenname") else "X")
+            _text(ziel, wechsel, x, y, K.C_MUTED_DK)
 
     # ---- Unten links: Panzerung, Dash, Medkits ------------------------
     def _vital(self, ziel, ich) -> None:
@@ -513,6 +517,9 @@ class Anzeige:
         ueberdeckte er das Symbol.
         """
         g = self.g
+        if getattr(g, "gruppen_hotbar", False):
+            self._gruppen_hotbar(ziel, ich)
+            return
         n = len(ich.waffen)
         gross = self.hotbar_gross(n)
         bw, bh, luecke = self._hotbar_mass(n)
@@ -546,6 +553,50 @@ class Anzeige:
                 _text(ziel, "%d" % vorrat, r.centerx, r.bottom + 2,
                       K.C_RED if not vorrat else
                       (K.C_AMBER if aktiv else K.C_MUTED), 1, "mitte")
+
+    def _gruppen_hotbar(self, ziel, ich) -> None:
+        """JEDER HAT ALLES (seit 0.34.85): neun Felder, eines je Gruppe aus
+        K.ALLES_GRUPPEN. Im Feld die Waffe, die man dort zuletzt hatte (die
+        gehaltene, wenn sie in der Gruppe ist), darunter so viele Punkte,
+        wie die Gruppe Waffen hat - der helle ist die gezeigte."""
+        g = self.g
+        n = len(K.ALLES_GRUPPEN)
+        bw, bh, luecke = self._hotbar_mass(n)
+        rahmen_ganz = self.hotbar_rechteck(n)
+        hx, hy = rahmen_ganz.x, rahmen_ganz.y
+        jetzt = ich.waffe_name
+        merk = getattr(g, "_gruppe_zuletzt", {})
+        name_aktiv = ""
+        for i, (gname, _w) in enumerate(K.ALLES_GRUPPEN):
+            drin = [j for j, w in enumerate(ich.waffen) if g.gruppe_von(w) == i]
+            if not drin:
+                continue
+            aktiv = jetzt in [ich.waffen[j] for j in drin]
+            zeige = ich.waffe if aktiv else merk.get(i, drin[0])
+            if zeige not in drin:
+                zeige = drin[0]
+            name = ich.waffen[zeige]
+            if aktiv:
+                name_aktiv = gname
+            r = pygame.Rect(hx + i * (bw + luecke), hy - (2 if aktiv else 0), bw, bh)
+            wd = K.WAFFEN[name]
+            leer = bool(wd.get("magazin")) and not ich.magazin.get(name, 0) \
+                and (not g.knapp or not ich.vorrat.get(name, 0))
+            rahmen = (K.C_RED if leer and aktiv else K.C_AMBER if aktiv else K.C_MUTED_DK)
+            ui.kasten(ziel, r, rahmen, (34, 10, 8, 230) if leer else KASTEN, 3)
+            symbol = _c4_hotbar_symbol(ich) if name == "c4" else "waffe_" + name
+            sym = g.renderer.bilder.bild(symbol)
+            ziel.blit(sym, (r.centerx - sym.get_width() // 2, r.centery - sym.get_height() // 2))
+            SCHRIFT.zeichnen(ziel, "%d" % (i + 1), r.x + 3, r.y + 2,
+                             K.C_AMBER if aktiv else K.C_MUTED_DK, 1)
+            # Punkte: wie viele Waffen die Gruppe hat, welche gezeigt ist.
+            x0 = r.centerx - (len(drin) * 3 - 1) // 2
+            for p_, j in enumerate(drin):
+                pygame.draw.rect(ziel, K.C_AMBER if j == zeige and aktiv else
+                                 (K.C_MUTED if j == zeige else K.C_MUTED_DK),
+                                 (x0 + p_ * 3, r.bottom + 2, 2, 2))
+        titel = "%s - NOCHMAL DRÜCKEN: NÄCHSTE" % name_aktiv if name_aktiv else "JEDER HAT ALLES"
+        _text(ziel, titel, W // 2, hy - 10, K.C_MUTED_DK, 1, "mitte")
 
     @staticmethod
     def hotbar_gross(anzahl: int) -> bool:

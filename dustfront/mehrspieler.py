@@ -110,6 +110,14 @@ class Kaempfer(Spieler):
                 self.waffen = plaetze
                 self.waffe = 0
                 self.magazin = {w: K.WAFFEN[w]["magazin"] for w in self.waffen}
+        else:
+            # Ohne Loadout: jeder hat alles (seit 0.34.85 wirklich alles,
+            # K.ALLES_GRUPPEN) - gleich von Anfang an. Kam die volle Liste
+            # erst beim ersten Wiedereinstieg, war der Vorrat dabei jedes
+            # Mal neu voll (tests: "Und bezahlt es aus dem Vorrat").
+            self.waffen = K.alles_waffen()
+            self.waffe = 0
+            self.magazin = {w: K.WAFFEN[w]["magazin"] for w in self.waffen}
         self.loadout = dict(loadout) if loadout else None
         # Die Klasse (seit 0.34.73): Vorteile aus dem Satz.
         klassen_modul.anwenden(self)
@@ -773,7 +781,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     def faehigkeiten_an(self) -> bool:
         if self._faehigkeiten_fest is not None:
             return self._faehigkeiten_fest
-        return bool(self.faehigkeiten_regel) and self.mit_loadouts
+        # Mit Loadouts die Faehigkeit der Klasse, ohne (JEDER HAT ALLES)
+        # seit 0.34.85 jedes Werkzeug (K.WERKZEUGE, Taste X wechselt).
+        return bool(self.faehigkeiten_regel)
 
     @faehigkeiten_an.setter
     def faehigkeiten_an(self, an: bool) -> None:
@@ -1499,7 +1509,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         """Wo die Plaetze der Hotbar stehen - antippen waehlt die Waffe."""
         if self.ich is None or self.ich.im_fahrzeug:
             return []
-        return self.hud.hotbar_plaetze(len(self.ich.waffen))
+        return self.hud.hotbar_plaetze(len(K.ALLES_GRUPPEN) if self.gruppen_hotbar
+                                       else len(self.ich.waffen))
 
     def touch_waffen(self) -> tuple:
         """(welche Waffe gerade, wie viele) - fuer den Knopf WFF."""
@@ -1785,7 +1796,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             plaetze = konto_modul.hotbar_aus_loadout(lo) if lo else []
         else:
             lo = None
-            plaetze = list(K.HOTBAR)
+            # Jeder hat alles - seit 0.34.85 wirklich alles (K.ALLES_GRUPPEN),
+            # dazu jedes Werkzeug auf C.
+            plaetze = K.alles_waffen()
+        k.alle_werkzeuge = not self.mit_loadouts
         if not plaetze or plaetze == k.waffen:
             return
         k.loadout = dict(lo) if self.mit_loadouts and lo else None
@@ -1815,6 +1829,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
 
     def _regeln_anlegen(self, k: Kaempfer) -> None:
         """Was die Spielart am einzelnen Kaempfer aendert."""
+        # Werkzeuge fuer alle (seit 0.34.85): ohne Loadouts jedes, mit
+        # Loadouts nur die Faehigkeit der Klasse. Bots nutzen C nicht.
+        k.alle_werkzeuge = not self.mit_loadouts and not k.ist_bot
         k.revive_an = self.regeln["revive"]
         k.mg_schub = getattr(self, "mg_schub", False)
         if self.regeln["runden"]:
@@ -1926,7 +1943,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     # und eine Taste, die in der einen Liste steht und in der anderen
     # fehlt, geht genau dann nicht, wenn es darauf ankommt.
     DRUECKE = ("nachladen", "heilen", "tracer", "tracer_weit",
-               "nahkampf", "feuermodus", "dash", "faehigkeit")
+               "nahkampf", "feuermodus", "dash", "faehigkeit", "werkzeug")
 
     def _knopf_merken(self, taste) -> None:
         """Einen Tastendruck aufheben, bis das naechste Paket rausgeht."""
@@ -1991,7 +2008,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             "hb": False if offen else e.gehalten("dash"),
             # Kommt "will" von einem Stick? Dann lenkt der Wagen anders (_fahren).
             "rl": e.analog is not None,
-            "waffe": self._waffe_wunsch,
+            "waffe": self._waffe_aus_taste(self._waffe_wunsch),
             "knoepfe": sorted(self._knoepfe),
             "admin": self._admin_auftrag,
         }
@@ -1999,6 +2016,44 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._waffe_wunsch = -1
         self._admin_auftrag = ""
         return meldung
+
+    @property
+    def gruppen_hotbar(self) -> bool:
+        """Kategorien-Hotbar (seit 0.34.85): in JEDER HAT ALLES traegt man
+        alle Waffen, und 1 bis 9 waehlen eine Gruppe (K.ALLES_GRUPPEN)."""
+        k = self.ich
+        return (self.loadout_regel == "alles" and k is not None
+                and not getattr(k, "rpg", False) and len(k.waffen) > K.HOTBAR_PLAETZE)
+
+    def gruppe_von(self, waffe: str) -> int:
+        for i, (_name, waffen) in enumerate(K.ALLES_GRUPPEN):
+            if waffe in waffen:
+                return i
+        return -1
+
+    def _waffe_aus_taste(self, platz: int) -> int:
+        """Aus einem Druck auf 1 bis 9 die Waffe, die gemeint ist. Ohne
+        Gruppen ist der Platz die Waffe. Mit Gruppen: steht man schon in
+        der Gruppe, die naechste darin - sonst die, die man dort zuletzt
+        hatte. Gerechnet beim Spieler selbst, auch beim Gast; ins Netz geht
+        wie immer nur, welche Waffe er will."""
+        k = self.ich
+        if platz < 0 or k is None or not self.gruppen_hotbar:
+            return platz
+        if platz >= len(K.ALLES_GRUPPEN):
+            return -1
+        drin = [i for i, w in enumerate(k.waffen) if self.gruppe_von(w) == platz]
+        if not drin:
+            return -1
+        merk = self.__dict__.setdefault("_gruppe_zuletzt", {})
+        if k.waffe in drin:
+            neu = drin[(drin.index(k.waffe) + 1) % len(drin)]
+        else:
+            neu = merk.get(platz, drin[0])
+            if neu not in drin:
+                neu = drin[0]
+        merk[platz] = neu
+        return neu
 
     def _anwenden(self, k: Kaempfer, ein: dict) -> None:
         """Eine Eingabemeldung auf einen Kaempfer legen. Nur beim Gastgeber.
@@ -2080,6 +2135,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 # Gastgeber - sonst schoesse der Gast im Dauerfeuer,
                 # waehrend der Gastgeber eine Salve rechnet.
                 k.modus_wechseln()
+            if "werkzeug" in knoepfe and getattr(k, "alle_werkzeuge", False):
+                # Das naechste Werkzeug fuer C (seit 0.34.85).
+                k.werkzeug = (getattr(k, "werkzeug", 0) + 1) % len(K.WERKZEUGE)
+                if k is self.ich:
+                    self.hinweis = "C: " + klassen_modul.FAEHIGKEIT_NAMEN.get(
+                        K.WERKZEUGE[k.werkzeug][0], "")
             if "faehigkeit" in knoepfe:
                 # Die Faehigkeit der Klasse (seit 0.34.73, Taste C).
                 was = klassen_modul.faehigkeit_nutzen(self, k)
@@ -4148,6 +4209,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 # (seit 0.34.79): fuer das Schild im Bild und die Anzeige
                 # [C] beim Gast.
                 "kl": getattr(k, "klasse", ""),
+                # Werkzeuge fuer alle (seit 0.34.85): an? welches?
+                "aw": 1 if getattr(k, "alle_werkzeuge", False) else 0,
+                "wz": getattr(k, "werkzeug", 0),
                 "fh": {a: round(r, 1) for a, r in
                        getattr(k, "faehigkeit_rest", {}).items() if r > 0.0},
             })
@@ -4660,6 +4724,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 if kl != getattr(k, "klasse", ""):
                     k.klasse = kl
                     k.schild = bool(klassen_modul.daten(kl).get("schild", False))
+            k.alle_werkzeuge = bool(eintrag.get("aw", 0))
+            try:
+                k.werkzeug = int(eintrag.get("wz", 0)) % len(K.WERKZEUGE)
+            except (TypeError, ValueError):
+                k.werkzeug = 0
             fh = eintrag.get("fh")
             k.faehigkeit_rest = ({str(a): float(r) for a, r in fh.items()
                                   if isinstance(r, (int, float))}

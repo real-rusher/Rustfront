@@ -3881,6 +3881,39 @@ BILD_MASS["panzergranate"] = (12, 6)
 HOTBAR = ["repetierer", "sturm", "schrot", "scharf", "lmg", "granate",
           "rauch", "molotov", "blend", "c4"]
 
+# "Jeder hat alles" als Kategorien-Hotbar (seit 0.34.85). Gemeldet: in
+# JEDER HAT ALLES waren "bei weitem nicht alle Waffen oder Utilities
+# drinnen" - es waren die zehn alten aus HOTBAR. Jetzt traegt man alle; die
+# Tasten 1 bis 9 waehlen eine Gruppe, noch einmal gedrueckt die naechste
+# Waffe darin (wie in alten Shootern). Das Brecheisen bleibt auf F, der
+# Raketenwerfer kommt weiter nur von der Karte (Regel RAKETENWERFER).
+ALLES_GRUPPEN = (
+    ("GEWEHRE", ("sturm", "repetierer", "scharf", "praezision", "unterhebel", "panzerbuechse")),
+    ("PISTOLEN, MP", ("mp", "revolver", "zwillinge")),
+    ("SCHROT", ("schrot", "doppelflinte", "autoschrot")),
+    ("MG", ("lmg", "minigun")),
+    ("SCHWER", ("granatwerfer", "einwegwerfer", "raketenbuendel", "flammenwerfer")),
+    ("ENERGIE", ("spule", "kettenblitz", "spiegellaser", "kugelblitz", "nagler", "bolzer")),
+    ("NAHKAMPF", ("hammer", "schockstab", "schlagring", "kettensaege", "wurfmesser", "speer")),
+    ("GRANATEN", ("granate", "rauch", "blend", "molotov", "gas", "kuller", "knaller", "schneeball")),
+    ("SPRENGSTOFF", ("c4", "haftladung", "emp")),
+)
+
+
+def alles_waffen() -> list:
+    """Alle Waffen von "jeder hat alles", Gruppe fuer Gruppe."""
+    return [w for _name, waffen in ALLES_GRUPPEN for w in waffen if w in WAFFEN]
+
+
+# Werkzeuge auf C fuer alle (seit 0.34.85): in "jeder hat alles" legt jeder
+# jedes Werkzeug, das sonst nur eine Klasse hat - X schaltet weiter. Je
+# Werkzeug die Pause bis zum naechsten (s), wie bei den Klassen.
+WERKZEUGE = (
+    ("sandsackwand", 30.0), ("munitionskiste", 40.0), ("sanitasche", 25.0),
+    ("stacheldraht", 30.0), ("sprengfalle", 25.0), ("kraehenfuesse", 25.0),
+    ("kanister", 25.0), ("horchposten", 45.0), ("drohne", 45.0), ("geschuetz", 70.0),
+)
+
 # So viele Plaetze kann die Hotbar hoechstens haben. Es sind die Tasten 1
 # bis 9 - mehr Plaetze sind keine Auswahl mehr, sondern eine Suche. Wer
 # mehr Waffen will, als hier hineinpassen, spielt mit Loadouts: zwei
