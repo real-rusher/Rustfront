@@ -1286,6 +1286,8 @@ class Welt:
         und daran vorbei (K.DECKUNG). Abgetastet in Schritten von 4
         Pixeln; die beiden Enden zaehlen nicht - wer neben einer Kiste
         steht, steht nicht hinter ihr."""
+        if self._strecke_frei(von, nach, ebene):
+            return ""
         von = pygame.Vector2(von)
         nach = pygame.Vector2(nach)
         stuecke = []
@@ -1345,6 +1347,35 @@ class Welt:
             elif hx <= px < hx + rb and hy <= py < hy + rh:
                 return "hindernis"
         return ""
+
+    def _strecke_frei(self, von, nach, ebene: int) -> bool:
+        """Ist jede Kachel im Rechteck um die Strecke frei und in der Karte?
+        Dann findet die Verfolgung in `deckung` weder Wand noch Hindernis -
+        sie kommt nie aus diesem Rechteck heraus -, und die Antwort ist ""
+        (seit 0.34.89). Ein Hauch Rand je Seite deckt die Nachbarn, die sie
+        an einer Kachelecke mitprueft. Gefragt wird `deckung` vor allem mit
+        kurzen Strecken (trupp.gedeckt_hier), meist im Freien."""
+        T = float(K.TILE)
+        ax, ay, bx, by = von[0] / T, von[1] / T, nach[0] / T, nach[1] / T
+        if ax > bx:
+            ax, bx = bx, ax
+        if ay > by:
+            ay, by = by, ay
+        e = self.ebene(ebene)
+        tx0, tx1 = int(math.floor(ax - 1e-6)), int(math.floor(bx + 1e-6))
+        ty0, ty1 = int(math.floor(ay - 1e-6)), int(math.floor(by + 1e-6))
+        b = e.breite
+        if not (0 <= tx0 and tx1 < b and 0 <= ty0 and ty1 < e.hoehe
+                and (tx1 - tx0 + 1) * (ty1 - ty0 + 1) <= 16):
+            return False
+        art = _tafeln()
+        kacheln = e.kacheln
+        for ty in range(ty0, ty1 + 1):
+            zeile = ty * b
+            for tx in range(tx0, tx1 + 1):
+                if art[kacheln[zeile + tx]]:
+                    return False
+        return True
 
     def deckung_anteil(self, von, nach, ebene: int) -> float:
         """Wie viel einer Explosion bei `nach` ankommt (K.DECKUNG)."""

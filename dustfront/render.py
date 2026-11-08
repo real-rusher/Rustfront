@@ -330,7 +330,13 @@ class Kamera:
 
     def zu_bild(self, weltpunkt) -> pygame.Vector2:
         """Weltpunkt -> Bildpunkt im 640 x 360-Bild, mit Ruckeln und Zoom."""
-        return (pygame.Vector2(weltpunkt) - self.ecke) / self.zoom
+        # Dieselbe Rechnung wie (Vector2(weltpunkt) - self.ecke) / zoom, nur
+        # ohne die drei Zwischenvektoren (seit 0.34.89) - die Anzeige des
+        # Testmodus fragt das tausendfach je Bild.
+        pos, v, z = self.pos, self.versatz, self.zoom
+        ex = round(pos.x - self.breite / 2 + v.x)
+        ey = round(pos.y - self.hoehe / 2 + v.y)
+        return pygame.Vector2((weltpunkt[0] - ex) / z, (weltpunkt[1] - ey) / z)
 
 
 class Ueberblendung:
@@ -1205,8 +1211,16 @@ class Renderer:
         # Figuren (`aufbauten_zeichnen`).
         liste.sort(key=lambda w: (getattr(w, "schicht", 1), getattr(w, "obenauf", False),
                                   w.pos.y))
+        # Was weit ausserhalb des Bildes steht, kann nichts hineinzeichnen
+        # (seit 0.34.89): die 3D-Schichten ruecken nach aussen, weg von der
+        # Mitte, Schatten und Spur nur ein paar Pixel, ein Panzer samt Rohr
+        # keine 120. Mit diesem Rand bleibt das Bild Pixel fuer Pixel gleich.
+        rand = K.ZEICHNEN_RAND
+        x_max, y_max = ziel.get_width() + rand, ziel.get_height() + rand
         for w in liste:
             p = boden = w.zeichenpos(alpha) - ecke  # Stelle, auf der es steht
+            if not (-rand < p.x < x_max and -rand < p.y < y_max):
+                continue
             if getattr(w, "zeichnet_selbst", False):
                 w.zeichnen_unten(self, ziel, p, dunkel)
                 continue

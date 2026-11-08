@@ -2148,8 +2148,30 @@ class Testmodus(Gefecht):
             y += 10
 
     def _numpad_zeichnen(self, ziel) -> None:
-        for name, r in self.tasten_flaechen():
-            text, an = self._tastentext(name)
+        # Gemerkt als eine Flaeche (seit 0.34.89): die Tasten aendern sich
+        # selten, gezeichnet wurden sie jedes Bild neu - Dutzende Rechtecke
+        # und Schriften. Alles daran ist ganz deckend (Rechtecke, Schrift
+        # ohne Halbtoene), und Pixel mit Alpha 0 lassen ein deckendes Ziel,
+        # wie es war: auf ein deckendes Ziel kommt also genau dasselbe Bild.
+        tasten = [(name, r) + tuple(self._tastentext(name)) for name, r in self.tasten_flaechen()]
+        if not tasten:
+            return
+        if ziel.get_flags() & pygame.SRCALPHA:
+            self._numpad_malen(ziel, tasten, 0, 0)
+            return
+        schluessel = tuple((name, tuple(r), text, an) for name, r, text, an in tasten)
+        merk = self.__dict__.get("_numpad_merk")
+        if merk is None or merk[0] != schluessel:
+            rahmen = tasten[0][1].unionall([r for _n, r, _t, _a in tasten])
+            bild = pygame.Surface(rahmen.size, pygame.SRCALPHA)
+            self._numpad_malen(bild, tasten, rahmen.x, rahmen.y)
+            merk = self._numpad_merk = (schluessel, bild, rahmen.topleft)
+        ziel.blit(merk[1], merk[2])
+
+    def _numpad_malen(self, ziel, tasten, ox: int, oy: int) -> None:
+        """Die Tasten des Ziffernblocks, um (ox, oy) verschoben."""
+        for name, r, text, an in tasten:
+            r = r.move(-ox, -oy)
             if name == "num_auf":
                 pygame.draw.rect(ziel, (24, 30, 26) if an else (12, 10, 9), r)
                 pygame.draw.rect(ziel, K.C_TEAL if an else K.C_MUTED_DK, r, 1)

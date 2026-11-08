@@ -2036,10 +2036,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 and not getattr(k, "rpg", False) and len(k.waffen) > K.HOTBAR_PLAETZE)
 
     def gruppe_von(self, waffe: str) -> int:
-        for i, (_name, waffen) in enumerate(K.ALLES_GRUPPEN):
-            if waffe in waffen:
-                return i
-        return -1
+        return K.ALLES_GRUPPE_VON.get(waffe, -1)
 
     def _platz_gedrueckt(self, platz: int) -> None:
         """Eine Zahl (oder ein Hotbarplatz) wurde gedrueckt. Seit 0.34.87

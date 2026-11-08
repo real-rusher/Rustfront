@@ -567,8 +567,20 @@ class Anzeige:
         jetzt = ich.waffe_name
         merk = getattr(g, "_gruppe_zuletzt", {})
         name_aktiv = ""
+        # Welche Plaetze zu welcher Gruppe gehoeren, je Waffenliste einmal
+        # (seit 0.34.89) - dieselben Listen wie vorher je Bild und Gruppe.
+        schluessel = tuple(ich.waffen)
+        merk_gr = self.__dict__.get("_gruppen_plaetze")
+        if merk_gr is None or merk_gr[0] != schluessel:
+            gruppe_von = K.ALLES_GRUPPE_VON.get
+            je = [[] for _ in K.ALLES_GRUPPEN]
+            for j, w in enumerate(ich.waffen):
+                gi = gruppe_von(w, -1)
+                if gi >= 0:
+                    je[gi].append(j)
+            merk_gr = self._gruppen_plaetze = (schluessel, je)
         for i, (gname, _w) in enumerate(K.ALLES_GRUPPEN):
-            drin = [j for j, w in enumerate(ich.waffen) if g.gruppe_von(w) == i]
+            drin = merk_gr[1][i]
             if not drin:
                 continue
             aktiv = jetzt in [ich.waffen[j] for j in drin]

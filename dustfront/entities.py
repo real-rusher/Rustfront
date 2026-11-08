@@ -2104,6 +2104,17 @@ class Aufsammler(Wesen):
 
 class Spieler(Wesen):
     fraktion = "mensch"
+    # Vorgaben fuer Felder, die nur manche Figuren haben (seit 0.34.89):
+    # dieselben Werte, die vorher `getattr(self, ..., Vorgabe)` lieferte -
+    # so liest der Schritt sie direkt, ohne getattr je Feld und Schritt.
+    am_boden = False
+    zieht = None
+    hilft = None
+    schild = False
+    klassen_tempo = 1.0
+    draht_rest = 0.0
+    tempo_anteil = 1.0
+    sprintet = False
     # Kein fester Name: die Figur zeigt die Waffe, die sie gerade traegt.
     # Siehe die Eigenschaft bild() weiter unten.
     faellt = True
@@ -2641,9 +2652,9 @@ class Spieler(Wesen):
         # Wer einen Gefallenen zieht oder ihm aufhilft, schaut zu ihm
         # (Gefecht._ziehen, _revive), nicht zur Maus (seit 0.34.43).
         if (self.ziel - self.pos).length_squared() > 1 \
-                and not getattr(self, "am_boden", False) \
-                and getattr(self, "zieht", None) is None \
-                and getattr(self, "hilft", None) is None:
+                and not self.am_boden \
+                and self.zieht is None \
+                and self.hilft is None:
             soll = math.degrees(math.atan2(self.ziel.y - self.pos.y,
                                            self.ziel.x - self.pos.x))
             grenze = self.dreh_grenze
@@ -2673,7 +2684,7 @@ class Spieler(Wesen):
             self.heilt_rest -= dt
             if self.heilt_rest <= 0:
                 self.heilt_rest = 0.0
-                if self.lebt and not getattr(self, "am_boden", False):
+                if self.lebt and not self.am_boden:
                     self.leben = min(self.max_leben,
                                      self.leben + K.MEDKIT["heilt"])
                     wolke(self.welt, self.pos, 10, 60, 0.6, K.C_TEAL,
@@ -2688,7 +2699,7 @@ class Spieler(Wesen):
         self.schlag_zeigen = v if v > 0.0 else 0.0     # = max(0.0, v), schneller (0.34.75)
         v = self.nahkampf_rest - dt
         self.nahkampf_rest = v if v > 0.0 else 0.0     # = max(0.0, v), schneller (0.34.75)
-        if (getattr(self, "am_boden", False) and self.tempo.length_squared() < 0.01
+        if (self.am_boden and self.tempo.length_squared() < 0.01
                 and self.will.length_squared() < 0.01 and self.sturz_rest <= 0):
             # Wer still am Boden liegt, hat keine Waffe in der Hand, laeuft
             # nicht und dasht nicht: nichts davon rechnen (seit 0.34.55,
@@ -2709,22 +2720,22 @@ class Spieler(Wesen):
         luft *= wd.get("tempo_faktor", 1.0)
         if self.ladung > 0.0:
             luft *= wd.get("tempo_beim_laden", 1.0)    # Spule, Kettenblitz (0.34.68)
-        if getattr(self, "schild", False):
+        if self.schild:
             luft *= K.SCHILD["tempo"]           # Schildtraeger (seit 0.34.71)
-        luft *= getattr(self, "klassen_tempo", 1.0)   # die Klasse (seit 0.34.73)
-        if getattr(self, "draht_rest", 0.0) > 0.0:
+        luft *= self.klassen_tempo   # die Klasse (seit 0.34.73)
+        if self.draht_rest > 0.0:
             # Im Stacheldraht (seit 0.34.69, ausruestung).
             self.draht_rest -= dt
             luft *= K.AUSRUESTUNG["stacheldraht"]["tempo"]
         if self.heilt_rest > 0:
             # Wer ein Medkit anlegt, hat die Haende voll und geht langsamer.
             luft *= K.MEDKIT["tempo"]
-        if getattr(self, "zieht", None) is not None:
+        if self.zieht is not None:
             # Wer jemanden zieht, ebenso.
             luft *= K.ZIEHEN["tempo"]
         # Wer wiederbelebt wurde, geht langsamer (seit 0.34.40, Testmodus).
-        luft *= getattr(self, "tempo_anteil", 1.0)
-        if getattr(self, "sprintet", False):
+        luft *= self.tempo_anteil
+        if self.sprintet:
             luft *= K.SPRINT["faktor"]        # Bots sprinten (seit 0.34.50)
         self._dash_laden(dt)
         ziel_tempo = self.will * s["tempo"] * luft
@@ -2752,7 +2763,7 @@ class Spieler(Wesen):
         # einer grossen Schlacht lagen sonst Dutzende, und jeder kostete so
         # viel wie einer, der laeuft (seit 0.34.52, gemeldet: "die Framerate
         # geht oft runter").
-        if not (getattr(self, "am_boden", False) and self.tempo.length_squared() < 0.01
+        if not (self.am_boden and self.tempo.length_squared() < 0.01
                 and self.will.length_squared() < 0.01):
             self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
             self.welt.auseinander(self)

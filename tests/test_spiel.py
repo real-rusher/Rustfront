@@ -15851,6 +15851,69 @@ _tm188.wie_runde = False
 pruef("... sonst schon", _tm188.touch_tippen(_erste188.center) is True)
 _tm188.verlassen()
 
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Leistung ohne Spielaenderung: gemerkter Ziffernblock, Deckung vorweg, Gegnerliste (0.34.89)")
+_tm189 = _TM59.Testmodus(app, karte="staubtal")
+_tasten189 = [(n_, r_) + tuple(_tm189._tastentext(n_)) for n_, r_ in _tm189.tasten_flaechen()]
+_a189 = pygame.Surface((K.GAME_W, K.GAME_H))
+_b189 = pygame.Surface((K.GAME_W, K.GAME_H))
+for _f189 in (_a189, _b189):
+    for _y189 in range(0, K.GAME_H, 8):
+        pygame.draw.rect(_f189, (40 + _y189 % 200, 90, 160 - _y189 % 120), (0, _y189, K.GAME_W, 8))
+_tm189._numpad_malen(_a189, _tasten189, 0, 0)           # wie vorher, direkt
+_tm189.__dict__.pop("_numpad_merk", None)
+_tm189._numpad_zeichnen(_b189)                         # gemerkt
+_tm189._numpad_zeichnen(_b189)                         # und noch einmal aus dem Merker
+pruef("Der gemerkte Ziffernblock ergibt Pixel fuer Pixel dasselbe Bild",
+      pygame.image.tobytes(_a189, "RGB") == pygame.image.tobytes(_b189, "RGB"))
+_tm189.zeit_stopp = not _tm189.zeit_stopp              # eine Aufschrift aendert sich
+_tm189._numpad_zeichnen(_b189)
+pruef("... und zeichnet neu, wenn sich eine Taste aendert",
+      _tm189._numpad_merk[0] != tuple((n_, tuple(r_), t_, a_) for n_, r_, t_, a_ in _tasten189))
+_tm189.zeit_stopp = not _tm189.zeit_stopp
+
+# Deckung: die schnelle Antwort vorweg gilt nur, wo die Rechnung ohne sie
+# ebenfalls "" ergibt - verglichen an vielen kurzen und langen Strecken,
+# gern auf Kachelkanten.
+_w189 = _tm189.welt
+_e189 = _w189.ebene(0)
+_rnd189 = random.Random(189)
+_anders189 = _vorweg189 = 0
+for _ in range(4000):
+    _v189 = pygame.Vector2(_rnd189.uniform(0, _e189.breite * K.TILE), _rnd189.uniform(0, _e189.hoehe * K.TILE))
+    if _rnd189.random() < 0.3:
+        _v189.update(round(_v189.x / K.TILE) * K.TILE, round(_v189.y / K.TILE) * K.TILE)
+    _n189 = _v189 + pygame.Vector2(_rnd189.choice((8, 24, 36, 60)), 0).rotate(_rnd189.uniform(0, 360))
+    _mit189 = _w189.deckung(_v189, _n189, 0)
+    _w189._strecke_frei = lambda *_a: False             # der lange Weg
+    _ohne189 = _w189.deckung(_v189, _n189, 0)
+    del _w189._strecke_frei
+    _vorweg189 += 1 if _w189._strecke_frei(_v189, _n189, 0) else 0
+    _anders189 += 1 if _mit189 != _ohne189 else 0
+pruef("Deckung mit der schnellen Antwort vorweg wie ohne sie (4000 Strecken)",
+      _anders189 == 0 and _vorweg189 > 1000, "%d anders, %d vorweg" % (_anders189, _vorweg189))
+
+# Die Gegnerliste der Bots: im Durchgang gemerkt, ausserhalb frisch.
+_tm189.alles_weg()
+_tr189 = _tm189.trupp_setzen(pygame.Vector2(20 * K.TILE, 12 * K.TILE), 0, {"groesse": 3, "team": 0})
+_fd189 = _tm189.trupp_setzen(pygame.Vector2(26 * K.TILE, 12 * K.TILE), 0, {"groesse": 3, "team": 1})
+_h189 = _tr189.lebende()[0].hirn
+_frisch189 = [w_ for w_ in _tm189.kaempfer.values() if _h189.ist_feind(w_)]
+pruef("Ausserhalb des Bot-Durchgangs: die Gegnerliste wie ist_feind",
+      _h189._kandidaten() == _frisch189 and len(_frisch189) == 3, str(len(_frisch189)))
+_tm189._kandidaten_lauf = 1
+_erst189 = _h189._kandidaten()
+_opfer189 = _fd189.lebende()[0]
+_opfer189.lebt = False                                  # stirbt im selben Durchgang
+pruef("Im Durchgang: wer eben fiel, ist kein Kandidat mehr", _opfer189 not in _h189._kandidaten()
+      and len(_erst189) == 3)
+_opfer189.lebt = True
+_neu189 = _tm189.bot_setzen(pygame.Vector2(27 * K.TILE, 14 * K.TILE), 0, {"team": 1})
+pruef("... und wer im selben Durchgang dazukommt, ist sofort einer", _neu189 in _h189._kandidaten())
+_tm189._kandidaten_lauf = None
+_tm189.__dict__.pop("_kandidaten_merk", None)
+_tm189.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -440,13 +440,51 @@ class BotHirn(Taktik):
         return self.ist_feind(w) and w.ebene == self.k.ebene and not getattr(w, "am_boden", False)
 
     def _kandidaten(self) -> list:
+        """Wer fuer ihn ein Gegner sein kann (ist_feind), in derselben
+        Reihenfolge wie immer.
+
+        Seit 0.34.89 je Durchgang von _bots_steuern, Seite und Besetzung
+        nur einmal gesucht: alles, was ist_feind ausser "lebt" fragt
+        (Seite, raus, Puppe, unsichtbar, Nummer), aendert sich darin nicht.
+        "Lebt" kann sich aendern (ein Schlag eines Bots vor ihm im selben
+        Schritt) und wird darum bei jedem Aufruf neu gefragt."""
         g = self.g
-        raus = [w for w in g.kaempfer.values() if self.ist_feind(w)]
+        k = self.k
+        welt = g.welt
+        lauf = g.__dict__.get("_kandidaten_lauf")
+        if lauf is None:
+            # Ausserhalb von _bots_steuern wie immer, ohne Merken.
+            return [w for w in self._roh_kandidaten() if w is not k and getattr(w, "lebt", False)]
+        # Gemerkt nur innerhalb eines Durchgangs von _bots_steuern - und
+        # wer da ist, ueber die Identitaet jedes Einzelnen.
+        schluessel = (lauf, id(welt), tuple(map(id, g.kaempfer.values())),
+                      tuple(map(id, welt.wesen)) if g.mit_gegnern else (), g.mit_gegnern)
+        merk = g.__dict__.setdefault("_kandidaten_merk", {})
+        hit = merk.get(k.fraktion)
+        if hit is None or hit[0] != schluessel:
+            hit = merk[k.fraktion] = (schluessel, self._roh_kandidaten())
+        return [w for w in hit[1] if w is not k and getattr(w, "lebt", False)]
+
+    def _roh_kandidaten(self) -> list:
+        g = self.g
+        roh = [w for w in g.kaempfer.values() if self._feind_fest(w)]
         if g.mit_gegnern:
             from .mehrspieler import KampfGegner
-            raus += [w for w in g.welt.wesen
-                     if isinstance(w, KampfGegner) and self.ist_feind(w)]
-        return raus
+            roh += [w for w in g.welt.wesen
+                    if isinstance(w, KampfGegner) and self._feind_fest(w)]
+        return roh
+
+    def _feind_fest(self, w) -> bool:
+        """ist_feind ohne "lebt" und ohne "ist es er selbst" - was sich
+        innerhalb eines Schritts nicht aendert."""
+        k = self.k
+        if getattr(w, "fraktion", "") == k.fraktion:
+            return False
+        if getattr(w, "raus", False) or getattr(w, "ist_puppe", False):
+            return False
+        if getattr(w, "ki_unsichtbar", False):
+            return False
+        return hasattr(w, "nummer") or getattr(w, "fraktion", "") == "feind"
 
     def sieht(self, w) -> bool:
         """Sieht er `w`? Ebene, Weite, Wand, Rauch - wie ein Mensch."""
@@ -2011,16 +2049,25 @@ class BotTeil:
             if getattr(self, "_trupps", None):
                 from .trupp import trupps_fuehren
                 trupps_fuehren(self, dt)
-        for k in self._bots():
-            hirn = getattr(k, "hirn", None)
-            if hirn is None:
-                continue
-            self._anwenden(k, hirn.eingabe(dt))
+        # Ein Durchgang: so lange gilt das Merken in BotHirn._kandidaten.
+        self._kandidaten_lauf = self.__dict__.get("_kandidaten_zaehler", 0) + 1
+        self._kandidaten_zaehler = self._kandidaten_lauf
+        try:
+            for k in self._bots():
+                hirn = getattr(k, "hirn", None)
+                if hirn is None:
+                    continue
+                self._anwenden(k, hirn.eingabe(dt))
+        finally:
+            self._kandidaten_lauf = None
+            self.__dict__.pop("_kandidaten_merk", None)
 
     def _bot_hoert(self, pos, ebene: int, quelle, weite: float | None = None) -> None:
         """Ein Schuss oder Knall - fuer die Ohren der Bots. `weite`: so weit
         ist er zu hoeren (Vorgabe: ein Schuss)."""
-        if not self._bots():
+        # any statt der ganzen Liste (seit 0.34.89): dieselbe Frage, ob es
+        # ueberhaupt einen Bot gibt - bei jedem Schuss gestellt.
+        if not any(getattr(k, "ist_bot", False) for k in self.kaempfer.values()):
             return
         fraktion = getattr(getattr(quelle, "von", quelle), "fraktion", "")
         self._bot_geraeusche.append((pygame.Vector2(pos), int(ebene),

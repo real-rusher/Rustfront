@@ -3924,6 +3924,15 @@ ALLES_GRUPPEN = (
 )
 
 
+# Waffe -> Nummer ihrer Gruppe (seit 0.34.89; gefragt in jedem Bild).
+ALLES_GRUPPE_VON = {w: i for i, (_n, waffen) in enumerate(ALLES_GRUPPEN) for w in waffen}
+
+# So weit ausserhalb des Bildes wird ein Wesen noch gezeichnet (Pixel,
+# seit 0.34.89): mehr, als das groesste Bild (Panzer samt Rohr) und seine
+# Schichten hineinragen koennen - weiter draussen kostet es nur Zeit.
+ZEICHNEN_RAND = 200
+
+
 def alles_waffen() -> list:
     """Alle Waffen von "jeder hat alles", Gruppe fuer Gruppe."""
     return [w for _name, waffen in ALLES_GRUPPEN for w in waffen if w in WAFFEN]
