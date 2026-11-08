@@ -328,11 +328,26 @@ class GoapHirn(BotHirn):
                 # Was mitten zwischen den eigenen Leuten knallte, war eine
                 # Granate, kein Schuetze - dorthin nicht (gesehen 0.34.54).
                 kandidaten.append((pygame.Vector2(ort), ebene, None))
+        # Wer ist am gefaehrlichsten fuer den, der birgt? Seit 0.34.80 nicht
+        # mehr der naechste zum Schuetzen selbst (gemeldet: "Feuerschutz ist
+        # da, aber er schuetzt nicht unbedingt genau die bergende Person"),
+        # sondern zuerst wer freie Linie auf einen Retter hat.
+        b = K.BOTS
+        welt = self.g.welt
+        t = self.trupp
+        berg = t.bergung if t is not None else None
+        retter = ([m for m in t.lebende() if m.nummer in berg["retter"]]
+                  if berg is not None else [])
         bester = None
         for ort, ebene, w in kandidaten:
             if (w is not None and not kampffaehig(w)) or not self.bedroht_bergung(ort, ebene):
                 continue
+            # Vom Schuetzen aus gemessen: wer einen fernen Gegner waehlt,
+            # muss sich dafuer oft offen hinstellen (tests/test_verhalten.py).
             d = k.pos.distance_to(ort)
+            if any(x.ebene == ebene and welt.deckung(ort, x.pos, ebene) == ""
+                   for x in retter):
+                d -= b["schutz_retter_linie"]
             if bester is None or d < bester[0]:
                 bester = (d, (pygame.Vector2(ort), ebene, w))
         return None if bester is None else bester[1]
@@ -632,6 +647,9 @@ class GoapHirn(BotHirn):
             linie_frei=sichtbar and self.linie != "hindernis",
             feind_bekannt=gefahr is not None,
             feind_gehoert=self.unerklaert() is not None,
+            # Eine Stelle, an der ein verschwundener Gegner zuletzt war
+            # (seit 0.34.80, bots.Hirn.spur_offen).
+            spur_offen=gefahr is None and self.spur_offen() is not None,
             munition_da=bool(self._waffen_mit_munition()),
             magazin_leer=magazin_leer,
             granate_da=self._wurf_platz() >= 0
@@ -1110,6 +1128,19 @@ class GoapHirn(BotHirn):
             return True
         return not any(self.im_abschnitt(o) for o in self.feind_orte())
 
+    def _retter_linie(self, w) -> bool:
+        """Hat `w` freie Linie auf einen, der gerade birgt? (seit 0.34.80)"""
+        t = self.trupp
+        b = t.bergung if t is not None else None
+        if b is None:
+            return False
+        welt = self.g.welt
+        reicht = max(K.BOTS["reichweite"].values())
+        return any(m.nummer in b["retter"] and m.ebene == w.ebene
+                   and m.pos.distance_to(w.pos) <= reicht
+                   and welt.deckung(w.pos, m.pos, w.ebene) == ""
+                   for m in t.lebende())
+
     def _ziel_bonus(self, w) -> float:
         """Wer auf ihn schiesst, zuerst (seit 0.34.50). Im Trupp: wer dem
         Anfuehrer zu nahe kommt - und lieber der, auf den schon ein Kamerad
@@ -1126,6 +1157,8 @@ class GoapHirn(BotHirn):
             bonus += K.TRUPP["buendeln_bonus"]
         if self.bedroht_bergung(w.pos, w.ebene):
             bonus += K.TRUPP["bergung_bonus"]     # wer den Retter trifft, zuerst (0.34.54)
+            if self._retter_linie(w):
+                bonus += K.BOTS["schutz_retter_linie"]   # ... mit freier Linie noch eher (0.34.80)
         blick = t.blick_fuer(self.k)
         if blick is not None and t.abschnitte > 1:
             # Geknickte Front (0.34.50): jeder nimmt die Gegner in seinem

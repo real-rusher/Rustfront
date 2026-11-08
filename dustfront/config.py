@@ -1535,7 +1535,23 @@ BOTS = dict(
     wechsel_weg=(60.0, 300.0, 12.0),   # Panik: von - bis - in Schritten sucht er eine bessere Deckung
     wechsel_weiter=40.0,      # ... die so viel weiter vom Gegner weg ist
     granate_abstand=30.0,     # so weit ueber ihren Radius hinaus rennt er
+    # So lange gilt ein Gegner als im Kampf bekannt. Seit 0.34.80 ist er
+    # danach nicht mehr vergessen (gemeldet: "Bots vergessen Gegner sehr
+    # sehr schnell, was absolut unrealistisch ist"), sondern eine Spur,
+    # die er vorsichtig prueft (spur_...). Laenger als 4 s hielt er sich
+    # beim Bergen zu lange im Freien auf (tests/test_verhalten.py bergen).
     gedaechtnis=4.0,          # so lange sucht er dort, wo er einen zuletzt sah
+    # Die letzten Stellen verschwundener Gegner (seit 0.34.80): erst
+    # vorsichtig nachsehen, dann vergessen. Geprueft heisst: so nah dran,
+    # oder in dieser Weite mit freier Sicht darauf. Was ein Kamerad
+    # geprueft hat, gilt fuer alle in dieser Naehe.
+    spur_dauer=45.0,          # so lange bleibt eine Spur offen (s)
+    spur_nah=50.0,            # so nah heran, dann ist sie geprueft (px)
+    spur_blick=160.0,         # ... oder so nah mit freier Sicht darauf
+    spur_tempo=0.55,          # vorsichtig: so viel vom Lauftempo (bei Mut 0)
+    spur_draufgaenger=0.8,    # ab so viel Mut geht er im vollen Tempo
+    spur_zusammen=80.0,       # zwei Spuren so nah: eine
+    spur_hoechstens=4,        # so viele merkt er sich
     erinnerung=20.0,          # so lange weiss er noch, wo einer stand - fuers Bergen (0.34.50)
     wunschabstand=dict(repetierer=230.0, sturm=200.0, lmg=240.0,
                        schrot=105.0, scharf=320.0,
@@ -1571,6 +1587,15 @@ BOTS = dict(
                  "nahkampf"),
     # Seit 0.34.70: wovor er sich in Acht nimmt, und wie weit.
     gefahr_rand=12.0,         # so weit um Feuer, Gas und Fallen haelt er Abstand
+    # Seit 0.34.80: liegt Feuer (Gas, eine Falle ...) auf dem Weg, geht er
+    # aussen herum, statt hinein- und rueckwaerts wieder hinauszulaufen
+    # (gemeldet). So weit voraus schaut er, so lange bleibt er bei der
+    # gewaehlten Seite.
+    gefahr_umweg_vor=110.0,
+    # Feuerschutz beim Bergen (seit 0.34.80): so viel Pixel "naeher" zaehlt
+    # ein Gegner mit freier Linie auf den Retter.
+    schutz_retter_linie=250.0,
+    gefahr_umweg_seite=2.5,
     gefahr_takt=0.15,         # so oft schaut er nach (s)
     spule_loslassen=0.92,     # bei so viel Ladung laesst er los
     # Bots am Steuer (seit 0.34.71, nur wem der Testmodus es erlaubt -
@@ -1797,7 +1822,7 @@ MORAL = dict(
 TRUPP = dict(
     takt=0.25,                # so oft frischt ein Trupp auf, was er weiss (s)
     sprech_weite=260.0,       # so weit hoert man einen, der spricht (px)
-    gedaechtnis=6.0,          # so lange behaelt der Trupp einen gemeldeten Gegner (s)
+    gedaechtnis=12.0,         # so lange behaelt der Trupp einen gemeldeten Gegner (s; 6 bis 0.34.79)
     unterzahl=1.5,            # so viele Gegner je Mann: unterlegen
     zustand_halten=2.0,       # so lange bleibt ein Zustand mindestens (s)
     halten_weite=260.0,       # so nah an der Stellung: sie ist im Ruecken

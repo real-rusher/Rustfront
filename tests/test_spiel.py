@@ -15547,6 +15547,36 @@ pruef("Die Vorteile einer Klasse stehen als Text bereit (Menue AUSRUESTUNG)",
       and _KL73.vorteile("schuetze") == ["15% SCHNELLER NACHLADEN"]
       and _KL73.vorteile("") == [], str(_KL73.vorteile("nahkaempfer")))
 
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Bots: Spuren statt vergessen, Feuer umgehen, Feuerschutz fuer den Retter (0.34.80)")
+_tm180 = _TM59.Testmodus(app, karte="staubtal")
+_ort180 = freier_punkt(_tm180.welt, 0, random.Random(180))
+_b180 = _tm180.bot_setzen(_ort180, 0, {"team": 0, "hirn": "goap", "waffe": "sturm"})
+_p180 = _tm180.puppe_setzen(_ort180 + pygame.Vector2(40, 0), 0, {"team": 1, "leben": 10.0})
+_h180 = _b180.hirn
+_h180.gesehen[_p180] = (pygame.Vector2(_p180.pos), 0, _tm180.welt.zeit - K.BOTS["gedaechtnis"] - 1.0)
+_p180.pos.update(_p180.pos + pygame.Vector2(0, 4000))
+_h180._wahrnehmen()
+pruef("Wer zu lange nicht gesehen wurde, ist nicht vergessen: er wird eine Spur",
+      _p180 not in _h180.gesehen and len(_h180.spuren) == 1, str(_h180.spuren))
+_h180.spur_dazu(_h180.spuren[0][0] + pygame.Vector2(20, 0), 0)
+pruef("Zwei Spuren dicht beieinander sind eine", len(_h180.spuren) == 1)
+pruef("Offen ist sie, solange er keinen Gegner kennt", _h180.spur_offen() is not None)
+_h180._spur_weg(_h180.spuren[0][0], 0)
+pruef("Gesehen: weg", _h180.spur_offen() is None)
+_h180.merkmale["mut"] = 0.2
+_vor180 = _h180._vorsicht_tempo()
+_h180.merkmale["mut"] = 0.9
+pruef("Vorsichtig nachsehen: langsam mit wenig Mut, ein Draufgaenger im vollen Tempo",
+      _vor180 < 0.8 and _h180._vorsicht_tempo() == 1.0, "%.2f" % _vor180)
+# Feuer auf dem Weg: die Richtung fuehrt seitlich daran vorbei.
+_h180._flaechen = [(_b180.pos + pygame.Vector2(60, 0), 30.0)]
+_h180._gefahren = list(_h180._flaechen)
+_r180 = _h180._um_gefahr(pygame.Vector2(1, 0), _b180.pos + pygame.Vector2(300, 0))
+pruef("Liegt Feuer vor ihm auf dem Weg, geht er seitlich daran vorbei",
+      abs(_r180.y) > 0.3, str(_r180))
+_tm180.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -2246,6 +2246,23 @@ class Testmodus(Gefecht):
                 pygame.draw.line(ziel, K.C_AMBER, p, kam.zu_bild(h.taktik["ort"]), 1)
             if h.deckung_ort is not None:
                 pygame.draw.line(ziel, K.C_TEAL, p, kam.zu_bild(h.deckung_ort), 1)
+            # Spuren (seit 0.34.80): wo verschwundene Gegner zuletzt waren -
+            # ein kleines Kreuz, die naechste offene mit gestrichelter Linie.
+            for s_ in getattr(h, "spuren", ()):
+                if s_[1] != self.blick:
+                    continue
+                q = kam.zu_bild(s_[0])
+                pygame.draw.line(ziel, (200, 140, 220), (q.x - 4, q.y - 4), (q.x + 4, q.y + 4), 1)
+                pygame.draw.line(ziel, (200, 140, 220), (q.x - 4, q.y + 4), (q.x + 4, q.y - 4), 1)
+            if getattr(h, "spuren", None) and h.ziel is None:
+                naechste = min((s_ for s_ in h.spuren if s_[1] == k.ebene),
+                               key=lambda s_: k.pos.distance_squared_to(s_[0]), default=None)
+                if naechste is not None:
+                    q = kam.zu_bild(naechste[0])
+                    for i_ in range(0, 10, 2):
+                        a_ = p + (q - p) * (i_ / 10.0)
+                        b_ = p + (q - p) * ((i_ + 1) / 10.0)
+                        pygame.draw.line(ziel, (200, 140, 220), a_, b_, 1)
             if h.sturm is not None:
                 pygame.draw.line(ziel, (120, 170, 255), p, kam.zu_bild(h.sturm["sammel"]), 1)
             gehirn = getattr(h, "gehirn", None)

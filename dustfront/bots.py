@@ -149,6 +149,9 @@ class BotHirn(Taktik):
         self.ziel = None              # wen er bekaempft
         self.gesehen = {}             # Wesen -> (Ort, Ebene, Zeit)
         self.verdacht = None          # (Ort, Ebene, bis wann)
+        # Wo verschwundene Gegner zuletzt waren (seit 0.34.80): [Ort, Ebene,
+        # bis wann]. Er prueft sie vorsichtig, bevor er sie vergisst.
+        self.spuren = []
         self.reaktion_rest = 0.0
         self.fehler = pygame.Vector2(0, 0)
         self.fehler_zeit = 0.0        # so lange verfolgt er das Ziel schon
@@ -183,6 +186,7 @@ class BotHirn(Taktik):
         self.streif_ort = None        # wohin er faehrt, wenn er niemanden sieht (0.34.71)
         # Gefahren (seit 0.34.70): Feuer, Gas, Fallen, Wuerfe.
         self._gefahren = []
+        self._flaechen = []           # davon, was liegt: Feuer, Gas, Draht, Fallen (0.34.80)
         self.gefahr_rest = 0.0
         self.getroffen_rest = 0.0     # so lange ist der letzte Treffer her
         self.deckung_ort = None       # wo er sich gerade versteckt
@@ -477,11 +481,17 @@ class BotHirn(Taktik):
             if self.sieht(w):
                 sichtbar.append(w)
                 self.gesehen[w] = (pygame.Vector2(w.pos), w.ebene, jetzt)
-        # Vergessen, was zu lange her ist - und wer liegt.
+                if self.spuren:
+                    self._spur_weg(w.pos, w.ebene, alle=False)
+        # Vergessen, was zu lange her ist - und wer liegt. Wer nur aus dem
+        # Blick ist, hinterlaesst eine Spur (seit 0.34.80): dort sieht er
+        # vorsichtig nach, bevor er ihn ganz vergisst.
         for w in list(self.gesehen):
-            if (jetzt - self.gesehen[w][2] > K.BOTS["gedaechtnis"] or not w.lebt
-                    or getattr(w, "am_boden", False)):
+            if not w.lebt or getattr(w, "am_boden", False):
                 del self.gesehen[w]
+            elif jetzt - self.gesehen[w][2] > K.BOTS["gedaechtnis"]:
+                ort, ebene, _z = self.gesehen.pop(w)
+                self.spur_dazu(ort, ebene)
         # Wer am Boden liegt, ist kein Ziel mehr (seit 0.34.46, gemeldet:
         # "sie feuern immer sehr lange auf Gegner, die schon am Boden sind").
         # Seit 0.34.52 endet auch der Stoss, der lief: ein Dauerfeuer hielt
@@ -1100,12 +1110,24 @@ class BotHirn(Taktik):
                     self.streifzug = (p, ebene)
                     self.streif_rest = self.rnd.uniform(1.5, 3.0)
                 ziel = self.streifzug
+        # Der Verdacht ist die frische Verfolgung - im normalen Tempo. Erst
+        # was danach als Spur bleibt, prueft er vorsichtig (unten).
         if ziel is None and self.verdacht is not None and self.verdacht[2] >= jetzt:
             ort, ebene, _bis = self.verdacht
             if k.ebene == ebene and k.pos.distance_to(ort) < 30:
                 self.verdacht = None
+                self._spur_weg(ort, ebene)
             else:
                 ziel = (ort, ebene)
+        if ziel is None:
+            spur = self.spur_offen()
+            if spur is not None:
+                if self._spur_gesehen(spur):
+                    self._spur_weg(spur[0], spur[1])
+                    self.sagen_wenn_trupp("HIER IST KEINER MEHR.")
+                else:
+                    will = self._weg_richtung(spur[0], spur[1], ein) * self._vorsicht_tempo()
+                    return will, pygame.Vector2(spur[0])
         if ziel is None:
             if (self.streifzug is None or self.streif_rest <= 0.0
                     or (k.ebene == self.streifzug[1]
@@ -1118,6 +1140,91 @@ class BotHirn(Taktik):
         if self.verdacht is not None and self.verdacht[2] >= jetzt:
             blick = pygame.Vector2(self.verdacht[0])
         return will, blick
+
+    # ── Spuren (seit 0.34.80) ─────────────────────────────────────
+    # Gemeldet: "Bots vergessen Gegner sehr sehr schnell ... wenn die Bots
+    # entscheiden, dass der Gegner weg ist, sollten sie wenigstens erst
+    # vorsichtig seine letzten Spots pruefen." Eine Spur ist die letzte
+    # Stelle eines Gegners, den er aus dem Blick verloren hat. Er geht
+    # langsam hin, den Blick darauf, bis er sie sieht - dann ist sie fuer
+    # ihn und die Kameraden in der Naehe erledigt.
+    def _vorsicht_tempo(self) -> float:
+        """Wie schnell er nachsehen geht: K.BOTS["spur_tempo"] fuer den
+        ganz Vorsichtigen, schneller mit mehr Mut (Merkmal mut, GOAP), und
+        ein Draufgaenger (ab K.BOTS["spur_draufgaenger"]) bremst gar nicht -
+        er jagt dem Verschwundenen nach."""
+        mut = max(0.0, min(1.0, float(getattr(self, "merkmale", {}).get("mut", 0.5))))
+        if mut >= K.BOTS["spur_draufgaenger"]:
+            return 1.0
+        t = K.BOTS["spur_tempo"]
+        return t + (1.0 - t) * mut
+
+    def spur_dazu(self, ort, ebene) -> None:
+        b = K.BOTS
+        jetzt = self.g.welt.zeit
+        for s in self.spuren:
+            if s[1] == ebene and s[0].distance_to(ort) <= b["spur_zusammen"]:
+                s[0] = pygame.Vector2(ort)
+                s[2] = jetzt + b["spur_dauer"]
+                return
+        self.spuren.append([pygame.Vector2(ort), ebene, jetzt + b["spur_dauer"]])
+        del self.spuren[:-b["spur_hoechstens"]]
+        # Im Trupp entscheidet der Anfuehrer, wohin es geht: er bekommt die
+        # Spur auch, sonst zoege er weiter auf Streife.
+        t = getattr(self, "trupp", None)
+        f = getattr(t, "fuehrer", None) if t is not None else None
+        if f is not None and f is not self.k and f.lebt and getattr(f, "hirn", None) is not None:
+            f.hirn.spur_dazu(ort, ebene)
+
+    def spur_offen(self):
+        """Die naechste offene Spur auf seiner Ebene, oder None. Nur, wenn
+        gerade nichts anderes los ist: waehrend im Trupp einer geborgen
+        wird oder er einen Gegner kennt, geht keiner Spuren nachsehen -
+        sonst lief beim Bergen einer vom Feuerschutz weg."""
+        jetzt = self.g.welt.zeit
+        self.spuren = [s for s in self.spuren if s[2] >= jetzt]
+        if not self.spuren:
+            return None
+        t = getattr(self, "trupp", None)
+        if t is not None and getattr(t, "bergung", None) is not None:
+            return None
+        # Solange er einen Gegner noch kennt (gesehen, innerhalb des
+        # Gedaechtnisses), kaempft er - Spuren sind fuer danach.
+        if self.ziel is not None or self.gesehen:
+            return None
+        k = self.k
+        hier = [s for s in self.spuren if s[1] == k.ebene]
+        if not hier:
+            return None
+        return min(hier, key=lambda s: k.pos.distance_squared_to(s[0]))
+
+    def _spur_gesehen(self, spur) -> bool:
+        k = self.k
+        b = K.BOTS
+        d = k.pos.distance_to(spur[0])
+        if d <= b["spur_nah"]:
+            return True
+        return (d <= b["spur_blick"] and self.geblendet <= 0.0
+                and self.g.welt.sicht_frei(k.pos, spur[0], k.ebene))
+
+    def _spur_weg(self, ort, ebene, alle: bool = True) -> None:
+        """Die Spur bei `ort` ist erledigt - bei ihm und (alle) bei den
+        Kameraden, die dieselbe Stelle pruefen wollten."""
+        weit = K.BOTS["spur_zusammen"]
+        hirne = [self]
+        if alle:
+            hirne += [x.hirn for x in self.kameraden() if getattr(x, "hirn", None) is not None]
+        for h in hirne:
+            spuren = getattr(h, "spuren", None)
+            if spuren:
+                h.spuren = [s for s in spuren
+                            if s[1] != ebene or s[0].distance_to(ort) > weit]
+
+    def sagen_wenn_trupp(self, text: str) -> None:
+        """Ein Funkspruch, wenn er das kann (GOAP im Trupp); sonst nichts."""
+        sagen = getattr(self, "sagen", None)
+        if sagen is not None and getattr(self, "trupp", None) is not None:
+            sagen(text)
 
     def _streifziel(self):
         """Irgendwohin, wo Gegner sein koennten: die Kreise und Spawnstellen
@@ -1165,7 +1272,69 @@ class BotHirn(Taktik):
         d = self.wegpunkt - k.pos
         if d.length_squared() < 4.0:
             return pygame.Vector2(0, 0)
+        if getattr(self, "_flaechen", None) and k.ebene == ebene:
+            return self._um_gefahr(d.normalize(), ort)
         return d.normalize()
+
+    def _um_gefahr(self, richtung, ort):
+        """Liegt eine Gefahr (Brandflaeche, Gas ...) vor ihm auf dem Weg:
+        aussen herum (seit 0.34.80). Gemeldet: "Bots laufen noch oefters in
+        Molotovs rein, also kurz und dann wieder rueckwaerts raus." Bis
+        dahin merkte er das Feuer erst 26 Pixel vorher, drehte ab, und der
+        Weg zog ihn gleich wieder hinein. Jetzt schaut er weiter voraus und
+        bleibt eine Weile bei der Seite, die er gewaehlt hat. Ist auf
+        keiner Seite Platz, wartet er davor; liegt das Ziel selbst darin,
+        bleibt er am Rand stehen."""
+        k = self.k
+        b = K.BOTS
+        if self._gefahr_bei(k.pos):
+            return richtung              # schon drin: _gefahr_raus fuehrt hinaus
+        jetzt = self.g.welt.zeit
+        weite = min(b["gefahr_umweg_vor"], k.pos.distance_to(ort))
+        erste = None
+        for mitte, r in self._flaechen:
+            rel = mitte - k.pos
+            t = rel.dot(richtung)
+            if t < 0.0 or t > weite + r:
+                continue
+            quer = abs(rel.x * richtung.y - rel.y * richtung.x)
+            if quer >= r + k.radius:
+                continue
+            if erste is None or t < erste[2]:
+                erste = (mitte, r, t)
+        if erste is None:
+            return richtung
+        mitte, r, _t = erste
+        if mitte.distance_to(ort) <= r:
+            # Das Ziel liegt im Feuer: davor warten.
+            return pygame.Vector2(0, 0) if k.pos.distance_to(mitte) <= r + k.radius + 14.0 \
+                else richtung
+        n = richtung.rotate(90)
+        alt = getattr(self, "_umweg", None)
+        if alt is None or alt[0].distance_to(mitte) > 30.0 or alt[2] < jetzt:
+            welt = self.g.welt
+            zuerst = -1 if (mitte - k.pos).dot(n) > 0 else 1
+            seite, weit = 0, 0.0
+            # Erst eng am Rand vorbei, dann weiter aussen - in einem Gang ist
+            # oft nur dicht am Feuer Platz.
+            for s in (zuerst, -zuerst):
+                for extra in (2.0, 8.0, 14.0):
+                    p = mitte + n * s * (r + k.radius + extra)
+                    if welt.frei(p, k.radius, k.ebene, True) and not self._gefahr_bei(p):
+                        seite, weit = s, r + k.radius + extra
+                        break
+                if seite:
+                    break
+            self._umweg = (pygame.Vector2(mitte), seite, jetzt + b["gefahr_umweg_seite"], weit)
+        seite = self._umweg[1]
+        if seite == 0:
+            # Kein Platz daneben: wie bisher, Schritt fuer Schritt (_sicher).
+            return richtung
+        p = mitte + n * seite * self._umweg[3]
+        hin = p - k.pos
+        if hin.length_squared() < 16.0:
+            return richtung
+        return hin.normalize()
 
     def _wegpunkt(self, ort, ebene: int, ein):
         k = self.k
@@ -1319,8 +1488,10 @@ class BotHirn(Taktik):
             if g.lebt and g.ebene == k.ebene:
                 raus.append((pygame.Vector2(g.pos), g.radius + rand))
         if self.geblendet > 0.0:
+            self._flaechen = list(raus)
             return raus                  # was fliegt und liegt, sieht er nicht
         sicht = K.BOTS["granate_sieht"]
+        fliegt = set()
         for w in welt.wesen:
             if not w.lebt or w.ebene != k.ebene or w is k:
                 continue
@@ -1342,6 +1513,11 @@ class BotHirn(Taktik):
             if r <= 0.0 or k.pos.distance_to(w.pos) > sicht:
                 continue
             raus.append((pygame.Vector2(w.pos), r + rand))
+            fliegt.add(len(raus) - 1)
+        # Was liegt und brennt (Feuer, Gas, Draht, Fallen) - nur darum geht
+        # der Umweg (_um_gefahr). Einer geworfenen Granate weicht er auf
+        # seine eigene Art aus (granate_ausweichen).
+        self._flaechen = [g_ for i_, g_ in enumerate(raus) if i_ not in fliegt]
         return raus
 
     def _gefahr_bei(self, punkt) -> bool:

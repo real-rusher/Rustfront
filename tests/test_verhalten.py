@@ -986,10 +986,104 @@ def panzer_bot():
               "%d Schuss, %.0f px" % (zahl["schuss"], zahl["weg"]))
 
 
+def spuren():
+    """Gemeldet (0.34.80): "Bots vergessen Gegner sehr sehr schnell ... wenn
+    die Bots entscheiden, dass der Gegner weg ist, sollten sie wenigstens
+    erst vorsichtig seine letzten Spots pruefen." Ein Bot weiss, wo ein
+    Gegner stand, sieht ihn aber nicht mehr - er soll dort nachsehen,
+    langsam, statt ihn zu vergessen."""
+    print("\n-- Spuren: wo ein Gegner verschwand, sieht er vorsichtig nach")
+    geprueft, gesehen_dort, langsam = [], [], []
+
+    def szene(seed, mut):
+        tm = neu(seed)
+        tx, ty, v = W.flaeche(tm, random.Random(seed), 24, 11)
+        bot = tm.bot_setzen(v(3, 5), 0, {"team": 0, "hirn": "goap", "waffe": "sturm"})
+        bot.hirn.merkmale["mut"] = mut
+        feind = tm.puppe_setzen(v(14, 5), 0, {"team": 1, "leben": 10.0})
+        feind.unverwundbar = 1e9
+        stelle = pygame.Vector2(feind.pos)
+        W.kennen([bot], [feind], tm)
+        # Er ist weg: weit hinaus, wo ihn keiner mehr sieht.
+        feind.pos.update(stelle + pygame.Vector2(0, 3000))
+        feind.vorher.update(feind.pos)
+        st = {"spur": False, "nah": 9999.0, "weg": 0.0, "zeit": 0.0, "fertig": None,
+              "alt": pygame.Vector2(bot.pos)}
+
+        def messen(tm=tm, bot=bot, st=st, stelle=stelle):
+            h = bot.hirn
+            if h.spuren and h.ziel is None:
+                st["spur"] = True
+                st["weg"] += bot.pos.distance_to(st["alt"])
+                st["zeit"] += DT
+            st["alt"] = pygame.Vector2(bot.pos)
+            if (bot.pos.distance_to(stelle) <= K.BOTS["spur_blick"]
+                    and tm.welt.sicht_frei(bot.pos, stelle, 0)):
+                st["nah"] = min(st["nah"], bot.pos.distance_to(stelle))
+            if st["spur"] and not h.spuren and st["fertig"] is None:
+                st["fertig"] = tm.welt.zeit
+        laufen(tm, 25.0, messen)
+        tm.verlassen()
+        return st
+
+    for seed in (61, 62, 63):
+        st = szene(seed, 0.3)
+        mutig = szene(seed, 0.95)
+        geprueft.append(st["spur"] and st["fertig"] is not None)
+        gesehen_dort.append(st["nah"] <= K.BOTS["spur_blick"])
+        langsam.append((st["weg"] / max(1e-6, st["zeit"]), mutig["weg"] / max(1e-6, mutig["zeit"])))
+    pruef("Er vergisst ihn nicht einfach: es bleibt eine Spur, und er prueft sie (3 von 3)",
+          all(geprueft), str(geprueft))
+    pruef("... geprueft heisst: er hat die Stelle selbst gesehen", all(gesehen_dort), str(gesehen_dort))
+    pruef("... der Vorsichtige (Mut 0,3) geht dabei langsamer als ein Draufgaenger (Mut 0,95)",
+          all(0.0 < a_ < 0.85 * b_ for a_, b_ in langsam),
+          str([(round(a_), round(b_)) for a_, b_ in langsam]))
+
+
+def feuer_umweg():
+    """Gemeldet (0.34.80): "Bots laufen noch oefters in Molotovs rein, also
+    kurz und dann wieder rueckwaerts raus." Ein Bot will auf die andere
+    Seite einer Brandflaeche - er soll aussen herum gehen."""
+    print("\n-- Feuer auf dem Weg: aussen herum statt hinein und zurueck")
+    drin, an, rein = [], [], []
+    for seed in (71, 72, 73):
+        tm = neu(seed)
+        tx, ty, v = W.flaeche(tm, random.Random(seed), 24, 11)
+        # Ein Gang, 5 Kacheln hoch; das Feuer liegt nicht in der Mitte, nur
+        # oben bleibt ein Durchgang - wer erst davor merkt, dass es brennt,
+        # dreht zur falschen Seite und laeuft hinein.
+        W.setzen(tm, tx, ty, [(x, 2) for x in range(6, 17)] + [(x, 8) for x in range(6, 17)], K.WAND)
+        bot = tm.bot_setzen(v(3, 5), 0, {"team": 0, "hirn": "goap", "waffe": "sturm"})
+        ziel = pygame.Vector2(v(20, 5))
+        feuer = ENT.Brandflaeche(pygame.Vector2(v(11, 5)) + pygame.Vector2(0, 14), 0, dauer=1e9)
+        tm.welt.feuer.append(feuer)
+        st = {"drin": 0, "an": False, "rein": 0, "war": False}
+
+        def messen(tm=tm, bot=bot, st=st, ziel=ziel, feuer=feuer):
+            bot.hirn.verdacht = (ziel, 0, tm.welt.zeit + 30.0)
+            ist = feuer.brennt(bot.pos, 0) > 0.3
+            if ist:
+                st["drin"] += 1
+            if ist and not st["war"]:
+                st["rein"] += 1
+            st["war"] = ist
+            if bot.pos.distance_to(ziel) < 48.0:
+                st["an"] = True
+        laufen(tm, 20.0, messen)
+        drin.append(st["drin"] * DT)
+        an.append(st["an"])
+        rein.append(st["rein"])
+        tm.verlassen()
+    pruef("Er kommt auf der anderen Seite an (3 von 3)", all(an), str(an))
+    pruef("... ohne in das Feuer zu laufen (hoechstens 0,2 s darin, nie zweimal hinein)",
+          all(t <= 0.2 for t in drin) and all(r <= 1 for r in rein),
+          "%s s, %s mal" % ([round(t, 2) for t in drin], rein))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
          planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
-         panzer_bot]
+         panzer_bot, spuren, feuer_umweg]
 NUR = sys.argv[1:]
 for teil in TEILE:
     if not NUR or teil.__name__ in NUR:

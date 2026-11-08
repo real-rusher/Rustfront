@@ -10,6 +10,7 @@
 #   linie_frei           ... und zwischen ihnen haelt nichts die Kugel auf
 #   feind_bekannt        er sieht einen oder hat eben noch einen gesehen
 #   feind_gehoert        er hoert einen, den er nicht sieht (seit 0.34.38)
+#   spur_offen           wo ein verschwundener Gegner zuletzt war, hat er noch nicht nachgesehen (seit 0.34.80)
 #   munition_da          irgendeine Waffe hat noch Munition
 #   magazin_leer         das Magazin der Waffe in der Hand ist leer (oder er laedt)
 #   granate_da           er hat seine Sprenggranate noch
@@ -277,8 +278,11 @@ will: feind_sichtbar
 # Waehrend einer geborgen wird, gar nicht erst wollen (seit 0.34.55): die
 # Aktion suchen braucht dann !bergung_halten, und das Ziel lief jeden
 # Denkschritt vergeblich durch den Planer.
-dringlich: (10 + 15 * feind_gehoert) * (1 - bergung_halten)
-info: Nichts los: Gegner suchen - wo er einen hoerte, sonst auf der Karte.
+# Seit 0.34.80 mit Spuren: wer einen Gegner aus dem Blick verlor, sieht
+# erst vorsichtig an seinen letzten Stellen nach (gemeldet: "Bots vergessen
+# Gegner sehr sehr schnell").
+dringlich: (10 + 15 * feind_gehoert + 35 * spur_offen) * (1 - bergung_halten)
+info: Nichts los: Gegner suchen - erst die letzten Stellen verschwundener Gegner (langsam, Blick darauf), dann wo er einen hoerte, sonst auf der Karte.
 
 # ── Aktionen ──────────────────────────────────────────────────────────
 
