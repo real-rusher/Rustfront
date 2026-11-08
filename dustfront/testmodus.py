@@ -1642,7 +1642,12 @@ class Testmodus(Gefecht):
         einer Taste des Ziffernblocks gehoert er ihr, nicht dem Stick
         darunter. Die Maus, die iOS aus demselben Finger macht, laesst
         `ereignis` dort liegen - GRUND: sonst kaeme jeder Tipp zweimal an,
-        und je nach Reihenfolge ginge der Spawner auf und gleich wieder zu."""
+        und je nach Reihenfolge ginge der Spawner auf und gleich wieder zu.
+
+        In ANSICHT WIE RUNDE (seit 0.34.88) gibt es keinen Ziffernblock -
+        dann nimmt auch keine unsichtbare Taste den Finger weg."""
+        if self.wie_runde:
+            return False
         for name, r in self.tasten_flaechen():
             if r.collidepoint(punkt):
                 self.taste(name)
@@ -1696,7 +1701,8 @@ class Testmodus(Gefecht):
             # Aus einem Finger gemacht? Den Tipp auf den Ziffernblock hat der
             # Finger schon (touch_tippen).
             aus_finger = getattr(ev, "touch", False) and self.app.touch is not None
-            for name, r in self.tasten_flaechen():
+            # In ANSICHT WIE RUNDE ist der Ziffernblock weg - auch fuer die Maus.
+            for name, r in ([] if self.wie_runde else self.tasten_flaechen()):
                 if r.collidepoint(pos):
                     if ev.button == 1 and not aus_finger:
                         self.taste(name)
@@ -2054,14 +2060,16 @@ class Testmodus(Gefecht):
         if self.wie_runde:
             # Wie eine Runde: nur Welt und Anzeige des Spiels. Spawner und
             # Menue erscheinen nur, wenn man sie oeffnet.
-            if self.beobachter and self.karte_allwissend:
+            if self.beobachter:
+                # Seit 0.34.88 hat auch der Beobachter immer eine
+                # Minikarte; ALLWISSEND legt fest, was darauf ist.
                 self.hud.minikarte.zeichnen(ziel, self)
             if self.spawner_offen:
                 self._spawner_zeichnen(ziel)
             if self.menue_offen:
                 self._testmenue_zeichnen(ziel)
             return
-        if self.beobachter and self.karte_allwissend:
+        if self.beobachter:
             self.hud.minikarte.zeichnen(ziel, self)
         if self.sauber:
             # Nur die Welt und die Aktionen. Spawner und Menue bleiben

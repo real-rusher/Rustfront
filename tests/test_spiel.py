@@ -15446,12 +15446,16 @@ _tm._farbe_fuer = lambda k_, *a_: (_gefragt177.append(k_), _echt177(k_, *a_))[1]
 _tm.karte_allwissend = False
 _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)).convert(), 1.0)
 _ohne177 = len(_gefragt177)
+_gefragt177.clear()
 _tm.karte_allwissend = True
 _tm._geist.pos.update(_gg177.pos)
 _tm.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)).convert(), 1.0)
 del _tm._farbe_fuer
-pruef("MINIKARTE ALLWISSEND: als Beobachter mit allen Kaempfern (vorher keine Karte)",
-      _tm.beobachter and _ohne177 == 0 and _gg177 in _gefragt177 and _st177 in _gefragt177,
+# Seit 0.34.88 hat der Beobachter auch ohne ALLWISSEND eine Karte (darauf
+# weniger); mit ALLWISSEND steht jeder Kaempfer darauf.
+pruef("MINIKARTE ALLWISSEND: als Beobachter mit allen Kaempfern (ohne: weniger)",
+      _tm.beobachter and _ohne177 < len(_gefragt177) and _gg177 in _gefragt177
+      and _st177 in _gefragt177,
       "%d / %d" % (_ohne177, len(_gefragt177)))
 _tm.karte_allwissend = False
 
@@ -15824,6 +15828,28 @@ _vier187 = [max(abs(x_) for x_ in _dr187[i_ * len(_dr187) // 4:(i_ + 1) * len(_d
 pruef("Der Drohnenklang ist gleich laut statt abklingend (Rotor statt Surren)",
       len(_dr187) > K.AUSRUESTUNG["drohne"].get("klang_takt", 0.5) * 44100
       and min(_vier187) > 0.6 * max(_vier187), str([round(v_, 2) for v_ in _vier187]))
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Testmodus: Minikarte beim Beobachter, saubere Ansicht ohne Ziffernblock (0.34.88)")
+_tm188 = _TM59.Testmodus(app, karte="staubtal")
+_tm188.karte_allwissend = False
+_gerufen188 = []
+_alt188 = _tm188.hud.minikarte.zeichnen
+_tm188.hud.minikarte.zeichnen = lambda z_, g_: (_gerufen188.append(1), _alt188(z_, g_))[1]
+_b188 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm188.zeichnen(_b188, 0.5)
+pruef("Der Beobachter hat eine Minikarte, auch ohne ALLWISSEND", _tm188.beobachter and _gerufen188)
+_tm188.wie_runde = True
+_gerufen188.clear()
+_tm188.zeichnen(_b188, 0.5)
+pruef("... auch in ANSICHT WIE RUNDE", bool(_gerufen188))
+_r188 = dict(_tm188.tasten_flaechen())
+_erste188 = next(iter(_r188.values()))
+pruef("In ANSICHT WIE RUNDE nimmt der (unsichtbare) Ziffernblock keinen Finger",
+      _tm188.touch_tippen(_erste188.center) is False)
+_tm188.wie_runde = False
+pruef("... sonst schon", _tm188.touch_tippen(_erste188.center) is True)
+_tm188.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

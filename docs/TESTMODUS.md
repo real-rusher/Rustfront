@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.88 | Der Beobachter hat immer eine Minikarte (ALLWISSEND: jeder darauf); in ANSICHT WIE RUNDE ist der Ziffernblock auch fuer Finger und Maus weg. Pruefungen im Abschnitt "Testmodus: Minikarte beim Beobachter" von `tests/test_spiel.py` |
 | 0.34.87 | Nichts Neues zum Setzen; Spule, Revolver, Kuller, Granatwerfer und Drohne ausprobieren wie bisher (Spawner bzw. Ausruestung). Pruefungen im Abschnitt "Waffen: Spule, Revolver, Hotbar, Kuller, Granatwerfer, Drohne" von `tests/test_spiel.py` |
 | 0.34.85 | Nichts Neues zum Setzen. Die Werkzeuge aller Klassen gibt es im Testmodus schon im Spawner (BAUEN, FALLEN, AUFKLÄRUNG, HILFE); JEDER HAT ALLES mit Gruppen-Hotbar und Taste X gilt in Runden ohne Loadouts. Pruefungen im Abschnitt "Jeder hat alles: Kategorien-Hotbar" von `tests/test_spiel.py` |
 | 0.34.84 | INFO-Ansicht: ein Fahrer, der einen liegenden Kameraden deckt, zeigt "FÄHRT ... > DECKT LIEGENDEN" und eine gruene Linie zu dem Platz, an den er faehrt. Ausprobieren: FAHRER mit Panzer setzen, einen Bot seines Teams und einen Gegner, den Bot zu Boden bringen. Pruefungen in `tests/test_verhalten.py` (fahrzeug_bots) |
