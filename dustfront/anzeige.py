@@ -143,6 +143,8 @@ class Anzeige:
             return True
         if getattr(g, "spawner_offen", False) or g.in_lobby:
             return False
+        if getattr(g, "schlacht", False):
+            return False          # in SCHLACHT gehoert TAB dem Nachschub (seit 0.34.96)
         eingabe = getattr(getattr(g, "app", None), "eingabe", None)
         return bool(eingabe is not None and eingabe.gehalten("inventar"))
 
@@ -453,12 +455,15 @@ class Anzeige:
         flaeche.fill((11, 8, 6, 200))
         nr = max(0, min(len(g.welt.ebenen) - 1, int(ich.ebene)))
         e = g.welt.ebenen[nr]
-        alt = self.minikarte.rechteck(g.welt)
-        breite = max(8, int(alt.width * h["karte_zoom"]))
-        hoehe = max(8, int(alt.height * h["karte_zoom"]))
+        # Seit 0.34.96 wieder die ganze Karte (gewuenscht: "wie die alte,
+        # nur rund") - die laengere Seite fuellt den Kreis, die Ecken
+        # schneidet er ein wenig an. Um die Figur gelegt lag auf grossen
+        # Karten oft die Haelfte des Kreises im Leeren.
+        f = d * h["karte_ganz"] / float(max(e.pixel_breite, e.pixel_hoehe))
+        breite = max(8, int(e.pixel_breite * f))
+        hoehe = max(8, int(e.pixel_hoehe * f))
         rahmen = pygame.Rect(0, 0, breite, hoehe)
-        rahmen.topleft = (int(radius - ich.pos.x * breite / float(e.pixel_breite)),
-                          int(radius - ich.pos.y * hoehe / float(e.pixel_hoehe)))
+        rahmen.center = (radius, radius)
         self.minikarte.zeichnen(flaeche, g, rahmen=rahmen, rund=True)
         # Was ausserhalb des Kreises liegt, wird ganz durchsichtig.
         flaeche.blit(self._karte_maske, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
@@ -595,7 +600,9 @@ class Anzeige:
             if art == "nahkampf":
                 bereit = ich.nahkampf_rest <= 0.0
                 ui.kasten(ziel, r, K.C_MUTED_DK, KASTEN, 3)
-                sym = self._passend(g.renderer.bilder.bild("waffe_brecheisen"), r)
+                # Seit 0.34.96 die Waffe auf F, nicht immer das Brecheisen.
+                nk = getattr(ich, "nahkampf_name", K.NAHKAMPF["waffe"])
+                sym = self._passend(g.renderer.bilder.bild("waffe_" + nk), r)
                 ziel.blit(sym, (r.centerx - sym.get_width() // 2, r.centery - sym.get_height() // 2))
                 SCHRIFT.zeichnen(ziel, g._tastenname("nahkampf")[:1], r.x + 2, r.y + 2,
                                  K.C_AMBER if bereit else K.C_MUTED_DK, 1)

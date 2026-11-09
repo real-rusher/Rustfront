@@ -196,6 +196,22 @@ def _zeile_spalte(eintrag):
 BODEN_MERKEN = 320
 
 
+def _gezeigter_winkel(w) -> float:
+    """Der Winkel, mit dem ein Wesen gezeichnet wird - mit etwas Ruhe
+    (seit 0.34.96, K.FIGUR_DREH_RUHE). GRUND: beim langsamen Gehen wandert
+    der Mauspunkt in der Welt in ganzen Pixeln mit der Kamera, der Blick
+    schwankte um eine Drehstufe des Bildes, und die Figur sprang von Bild
+    zu Bild zwischen zwei gedrehten Fassungen - andere Pixel, die Mitte
+    einen Pixel versetzt (gemeldet: "Mikroschritte vor und zurueck").
+    Erst wer sich weiter dreht, bekommt das neue Bild."""
+    alt = w.__dict__.get("_winkel_gezeigt")
+    jetzt = w.winkel
+    if alt is not None and abs((jetzt - alt + 180.0) % 360.0 - 180.0) < K.FIGUR_DREH_RUHE:
+        return alt
+    w._winkel_gezeigt = jetzt
+    return jetzt
+
+
 class Kamera:
     """Der Bildausschnitt. Folgt dem Spieler, laeuft ein Stueck in seine
     Blickrichtung vor und bekommt gelegentlich einen Schlag ab.
@@ -267,7 +283,7 @@ class Kamera:
         self.ruckeln = min(r["max"], self.ruckeln + kraft)
 
     def schritt(self, dt: float, ziel: pygame.Vector2, blick: pygame.Vector2,
-                grenze: tuple[int, int], versatz=None) -> None:
+                grenze: tuple[int, int], versatz=None, scope: bool = False) -> None:
         """`versatz`: wo die Maus vom Bildmittelpunkt weg steht, in
         Weltpixeln (seit 0.32.6). Ist er da, folgt der kleine Vorlauf zur
         Maus ihm statt `blick`.
@@ -291,14 +307,16 @@ class Kamera:
                 wunsch += vor.normalize() * self.vorausschau
             nachlauf = k["blick_nachlauf"]
         else:
+            zug = K.SCOPE["zug"] if scope else k["maus_zug"]
+            grenze_vor = K.SCOPE["weite"] / zug if scope else k["maus_max"]
             if versatz is not None:
                 # Dieselbe Ruhelage wie frueher: dort galt
                 # vorlauf = zug * (versatz + vorlauf), also
                 # vorlauf = versatz * zug / (1 - zug).
-                vor = pygame.Vector2(versatz) / (1.0 - k["maus_zug"])
-            if vor.length() > k["maus_max"]:
-                vor.scale_to_length(k["maus_max"])
-            wunsch = ziel + vor * k["maus_zug"]
+                vor = pygame.Vector2(versatz) / (1.0 - zug)
+            if vor.length() > grenze_vor:
+                vor.scale_to_length(grenze_vor)
+            wunsch = ziel + vor * zug
             nachlauf = k["nachlauf"]
         self.pos += (wunsch - self.pos) * min(1.0, nachlauf * dt)
         if (wunsch - self.pos).length_squared() < 0.36:
@@ -363,8 +381,14 @@ class Kamera:
         return self._ecke_bei(0.0, 0.0)
 
     def zu_welt(self, bildpunkt) -> pygame.Vector2:
-        """Bildpunkt (im 640 x 360-Bild) -> Weltpunkt, auch mit Zoom."""
-        return pygame.Vector2(bildpunkt) * self.zoom + self.ecke_ruhig
+        """Bildpunkt (im 640 x 360-Bild) -> Weltpunkt, auch mit Zoom.
+        Seit 0.34.96 von der ungerundeten Kamera aus: von der gerundeten Ecke
+        sprang der Mauspunkt beim langsamen Gehen pixelweise, und mit ihm der
+        Blick der Figur."""
+        m = self.mitte
+        z = self.zoom
+        return pygame.Vector2(bildpunkt[0] * z + m.x - self.breite / 2,
+                              bildpunkt[1] * z + m.y - self.hoehe / 2)
 
     def zu_bild(self, weltpunkt) -> pygame.Vector2:
         """Weltpunkt -> Bildpunkt im 640 x 360-Bild, mit Ruckeln und Zoom."""
@@ -1265,7 +1289,7 @@ class Renderer:
                 # Ein eigener, mitgedrehter Schatten fuer alles, was nicht
                 # rund ist. Er faellt nach unten rechts wie der der Mauern,
                 # egal wohin das Wesen schaut.
-                sch = self.bilder.gedreht(schatten_bild, w.winkel)
+                sch = self.bilder.gedreht(schatten_bild, _gezeigter_winkel(w))
                 ziel.blit(sch, (boden.x - sch.get_width() / 2 + 2,
                                 boden.y - sch.get_height() / 2 + 4))
             if w.schatten:
@@ -1284,8 +1308,8 @@ class Renderer:
                 pygame.draw.line(ziel, (128, 80, 30), p - r * 17, p - r * 5, 1)
                 pygame.draw.line(ziel, w.spur, p - r * 6, p, 1)
             bild = w.bild                 # eine Eigenschaft: einmal fragen (0.34.75)
-            if bild is None:
-                continue
+            if bild is None or getattr(w, "hoch_oben", False):
+                continue                  # hoch oben: eigene Schicht (Drohne)
             if (getattr(w, "dash_rest", 0.0) > 0.0
                     or getattr(w, "dash_bild_rest", 0.0) > 0.0):
                 self.dash_zeichnen(ziel, p, w)
@@ -1294,7 +1318,7 @@ class Renderer:
             # ansehen muss.
             if getattr(w, "f_vorlauf", 0.0) > 0.0:
                 self.ankuendigung(ziel, p, w)
-            roh = self.bilder.gedreht(bild, w.winkel)
+            roh = self.bilder.gedreht(bild, _gezeigter_winkel(w))
             s = roh
             if dunkel is not None:
                 s = self.dunkel(s, dunkel)
@@ -1303,6 +1327,20 @@ class Renderer:
                 s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
             self.figur_zeichnen(ziel, s, p, getattr(w, "hoehe_3d", 0.0), index,
                                 roh, dunkel)
+
+    def hoch_oben_zeichnen(self, ziel, bild: str, p, winkel: float) -> None:
+        """Was hoch ueber allem fliegt (seit 0.34.96, die Drohne): ein
+        Schatten am Boden, das Bild etwas groesser und hoeher - so sieht man,
+        dass es ueber den Mauern ist."""
+        h = K.HOCH_OBEN
+        sch = self.schatten(7, 0.55)
+        ziel.blit(sch, (p.x - sch.get_width() / 2 + h["schatten"][0],
+                        p.y - sch.get_height() / 2 + h["schatten"][1]))
+        s = self.bilder.gedreht(bild, winkel)
+        if h["gross"] != 1.0:
+            s = pygame.transform.scale(s, (max(1, int(s.get_width() * h["gross"])),
+                                           max(1, int(s.get_height() * h["gross"]))))
+        ziel.blit(s, (p.x - s.get_width() / 2, p.y - s.get_height() / 2 - h["hoehe"]))
 
     def figur_zeichnen(self, ziel, s, p, hoehe: float, index: int,
                        roh=None, dunkel=None) -> None:
@@ -1826,12 +1864,17 @@ class Renderer:
                 continue
             mitte = fb.pos - ecke
             if teil == "glut":
+                self._druckwelle(ziel, fb, mitte)
                 for versatz, radius, start, dauer in fb.ballen:
                     t = fb.alter - start
                     if t < 0.0 or t > dauer:
                         continue
                     anteil = t / dauer
                     hell = (1.0 - anteil) ** 1.2
+                    # Der Pilz (seit 0.34.96): jeder Ballen steigt, die
+                    # inneren hoeher als die aeusseren.
+                    hoch = f["steigen"] * (anteil ** 0.7) * (1.0 - min(1.0, versatz.length()
+                                                                       / (f["ballen_streuung"] + 1.0)) * 0.5)
                     for k, farbe in f["glut"]:
                         rr = radius * k * (0.55 + 0.9 * min(1.0, anteil * 3.0)) \
                             * (1.0 - 0.5 * anteil)
@@ -1842,9 +1885,10 @@ class Renderer:
                         fl = pygame.Surface((n * 2 + 1, n * 2 + 1))
                         fl.fill((0, 0, 0))
                         pygame.draw.circle(fl, fb_farbe, (n, n), rr)
-                        p = mitte + versatz
+                        p = mitte + versatz - pygame.Vector2(0, hoch)
                         ziel.blit(fl, (round(p.x - n), round(p.y - n)),
                                   special_flags=pygame.BLEND_RGB_ADD)
+                self._brocken(ziel, fb, mitte)
                 continue
             for versatz, r0, r1, start, dauer, tempo, farbe in fb.wolken:
                 t = fb.alter - start
@@ -1858,8 +1902,41 @@ class Renderer:
                 n = int(rr) + 1
                 fl = pygame.Surface((n * 2 + 1, n * 2 + 1), pygame.SRCALPHA)
                 pygame.draw.circle(fl, tuple(farbe) + (deck,), (n, n), rr)
-                p = mitte + versatz + tempo * t
+                p = mitte + versatz + tempo * t - pygame.Vector2(0, f["rauch_steigen"] * t)
                 ziel.blit(fl, (round(p.x - n), round(p.y - n)))
+
+    def _druckwelle(self, ziel, fb, mitte) -> None:
+        """Eine flache Ellipse am Boden, die schnell auslaeuft (seit 0.34.96)."""
+        f = K.FEUERBALL
+        dauer, radius, flach = f["druckwelle"]
+        if fb.alter > dauer:
+            return
+        a = fb.alter / dauer
+        rr = radius * (a ** 0.6)
+        if rr < 2.0:
+            return
+        hell = (1.0 - a) ** 1.5
+        farbe = tuple(int(c * hell) for c in f["druck_farbe"])
+        rect = pygame.Rect(0, 0, int(rr * 2), max(2, int(rr * 2 * flach)))
+        rect.center = (round(mitte.x), round(mitte.y))
+        fl = pygame.Surface(rect.size)
+        fl.fill((0, 0, 0))
+        pygame.draw.ellipse(fl, farbe, fl.get_rect(), max(1, int(3 * (1.0 - a)) + 1))
+        ziel.blit(fl, rect.topleft, special_flags=pygame.BLEND_RGB_ADD)
+
+    def _brocken(self, ziel, fb, mitte) -> None:
+        """Brocken im Bogen: Hoehe aus Wurf und Schwere, der Schatten bleibt
+        am Boden und zeigt, wie hoch sie sind (seit 0.34.96)."""
+        g = K.FEUERBALL["schwere"]
+        t = fb.alter
+        for seite, hoch, gross, farbe in fb.brocken:
+            flug = 2.0 * hoch / g
+            if t > flug:
+                continue
+            z = hoch * t - 0.5 * g * t * t
+            boden = mitte + seite * t
+            pygame.draw.rect(ziel, (20, 15, 11), (round(boden.x), round(boden.y), gross, 1))
+            pygame.draw.rect(ziel, farbe, (round(boden.x), round(boden.y - z), gross, gross))
 
     def krater(self, radius: float, saat: int) -> pygame.Surface:
         """Ein Krater als Bodendekal: kein Kreis, sondern ein Haufen
@@ -3133,7 +3210,9 @@ class Renderer:
 
         if d.get("fokus_dauer"):
             halb = spieler.streuung_jetzt
-            weite = min(d["reichweite"], 340.0)
+            # So weit, wie man sieht (seit 0.34.96 mit dem Zoom - vorher
+            # fest eine halbe Bildbreite, also im weiten Blick zu kurz).
+            weite = min(d["reichweite"], max(340.0, kamera.breite * 0.6))
             muendung = spieler.pos + pygame.Vector2(14, 0).rotate(spieler.winkel)
             a = muendung - ecke
             linie = self._linie

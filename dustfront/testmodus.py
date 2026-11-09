@@ -1133,11 +1133,12 @@ class Testmodus(Gefecht):
         return trupp
 
     def panzerjaeger_setzen(self, pos, ebene: int, w: dict):
-        """Ein Panzerjaeger (seit 0.34.95, bots.panzerjaeger_waffen): die
-        Panzerbuechse und Einweg-Raketenwerfer oder Raketenbuendel."""
+        """Ein Panzerjaeger (seit 0.34.95, bots.panzerjaeger_waffen): eine
+        Panzerabwehrwaffe (meist Raketen) und eine gewoehnliche."""
         from .bots import panzerjaeger_waffen
         k = self.bot_setzen(pos, ebene, w)
-        lo = {"name": "BOT", "waffen": panzerjaeger_waffen(k.nummer), "wuerfe": ["granate"]}
+        lo = {"name": "BOT", "waffen": panzerjaeger_waffen(k.nummer, k.waffen[0] if k.waffen else "sturm"),
+              "wuerfe": ["granate"]}
         k.loadout = lo
         k.waffen = konto_modul.hotbar_aus_loadout(lo)
         k.waffe = 0

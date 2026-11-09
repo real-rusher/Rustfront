@@ -271,11 +271,17 @@ FELDER = (
     # der klassischen. Eine Regel und kein Umbau: so laesst sich beides in
     # derselben Runde vergleichen, und die klassische bleibt, bis die neue
     # in allem besser ist.
-    Feld("bot_ki", "BOT-KI", "RUNDE", "klassisch",
+    # Seit 0.34.96 GOAP als Vorgabe (gewuenscht).
+    Feld("bot_ki", "BOT-KI", "RUNDE", "goap",
          lambda d, u: K.GOAP["arten"],
          text=lambda v, d, u: v.upper(), rund=True,
          gilt=lambda d: _regeln(d)["beute"],
          hilfe="KLASSISCH: FESTE REIHENFOLGE. GOAP: ZIELE UND PLÄNE (WESEN/BOTS.TXT)."),
+    # Seit 0.34.96: ob die Funksprueche der Bots ueber ihnen stehen. Bisher
+    # fest aus (K.BOTS callouts); gesprochen wird so oder so.
+    Feld("funk", "FUNKSPRÜCHE DER BOTS", "RUNDE", False, None, schalter=True,
+         gilt=lambda d: _regeln(d)["beute"],
+         hilfe="WAS DIE BOTS FUNKEN, STEHT ALS UNTERTITEL ÜBER IHNEN - NUR FÜR DIE EIGENE MANNSCHAFT."),
     # ── Die Gegner
     Feld("schwierigkeit", "SCHWIERIGKEIT", "GEGNER", K.SCHWIERIGKEIT_VORGABE,
          lambda d, u: K.SCHWIERIGKEIT,

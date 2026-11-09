@@ -162,7 +162,10 @@ class Taktik:
         if not text or (self.funk_sperre > 0.0 and not wichtig):
             return False
         self.gesagt = text            # auch ohne Untertitel (K.BOTS["callouts"])
-        if b["callouts"]:
+        # Gefunkt hat er so oder so (seit 0.34.96): daran haengt das
+        # Funkgeraet eines Fahrzeugs, das ein Bot faehrt.
+        self.k.funkt_rest = b["funk_dauer"]
+        if b["callouts"] or getattr(self.g, "funk_an", False):
             self.k.funk = text[:b["funk_laenge"]]
             self.k.funk_rest = b["funk_dauer"]
         self.funk_sperre = b["funk_abstand"]
@@ -186,7 +189,8 @@ class Taktik:
                 return False
             if jetzt - self.funk_zuletzt.get(anlass, -1e9) < b["funk_wiederholen"]:
                 return False
-        if b["callouts"]:
+        self.k.funkt_rest = b["funk_dauer"]
+        if b["callouts"] or getattr(self.g, "funk_an", False):
             self.k.funk = self.rnd.choice(saetze)[:b["funk_laenge"]]
             self.k.funk_rest = b["funk_dauer"]
         self.funk_sperre = b["funk_abstand"]

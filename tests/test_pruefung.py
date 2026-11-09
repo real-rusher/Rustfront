@@ -356,6 +356,11 @@ _abweichend = [n for n, (a, b) in enumerate(zip(_soll.splitlines(), _ist.splitli
 pruef("karten/staubtal.txt ist genau die Ausgabe von werkzeug_staubtal.py",
       _soll == _ist, "%d Zeilen anders, erste: %s" % (len(_abweichend), _abweichend[:3]))
 
+import werkzeug_staubtal_offen  # noqa: E402
+pruef("karten/staubtal_offen.txt ist genau die Ausgabe von werkzeug_staubtal_offen.py",
+      werkzeug_staubtal_offen.als_text(werkzeug_staubtal_offen.bauen())
+      == (WURZEL / "karten" / "staubtal_offen.txt").read_text(encoding="utf-8"))
+
 # Und zwar immer dieselbe. In 0.34.6 entschied an zwei Stellen die
 # Reihenfolge einer Menge aus Zeichen, und die haengt an der Hash-Saat von
 # Python - je nach Lauf kam eine etwas andere Karte heraus (seit 0.34.7

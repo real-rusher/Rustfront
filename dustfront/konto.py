@@ -124,6 +124,11 @@ def loadout_saeubern(roh) -> dict | None:
         if wahl not in wuerfe:
             wuerfe.append(wahl)
     raus = {"name": name or "SATZ", "waffen": waffen, "wuerfe": wuerfe}
+    # Die Waffe fuer F (seit 0.34.96): sie ersetzt das Brecheisen und
+    # belegt keinen Waffenplatz. Nur, wenn es nicht das Brecheisen ist.
+    nk = roh.get("nahkampf")
+    if isinstance(nk, str) and nk in K.NAHKAMPF["waehlbar"] and nk != K.NAHKAMPF["waffe"]:
+        raus["nahkampf"] = nk
     if klasse:
         # Nur mit Klasse ein eigener Eintrag: ein Satz ohne sieht aus wie
         # vor 0.34.73, und aeltere Fassungen lesen ihn wie bisher.

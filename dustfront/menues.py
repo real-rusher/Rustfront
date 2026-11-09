@@ -1368,7 +1368,15 @@ class Ausruestung(Menue):
                 (bx, y + nr * 20, bw, 16), "WURFWAFFE",
                 "wurf%d" % nr, auswahl_g, auswahl_g.index(jetzt),
                 {w: K.WAFFEN[w]["name"] for w in auswahl_g}))
-        y += lo["wuerfe"] * 20 + 4
+        y += lo["wuerfe"] * 20
+        # Die Waffe auf F (seit 0.34.96): statt des Brecheisens, ohne Platz.
+        nk = list(K.NAHKAMPF["waehlbar"])
+        jetzt_nk = satz.get("nahkampf", K.NAHKAMPF["waffe"])
+        self.elemente.append(ui.Wahl(
+            (bx, y, bw, 16), "NAHKAMPF (F)", "nahkampf", nk,
+            nk.index(jetzt_nk) if jetzt_nk in nk else 0,
+            {w: K.WAFFEN[w]["name"] for w in nk}))
+        y += 24
         # Das Aussehen (seit 0.34.60). Haengt nicht am Satz: man ist
         # derselbe, egal was man traegt.
         aussehen = [""] + figuren.waehlbar()
@@ -1404,6 +1412,7 @@ class Ausruestung(Menue):
         from . import klassen as klassen_modul
         waffen, wuerfe = [], []
         klasse = ""
+        nahkampf = K.NAHKAMPF["waffe"]
         for e in self.elemente:
             if isinstance(e, ui.Textfeld):
                 continue
@@ -1413,12 +1422,15 @@ class Ausruestung(Menue):
                 wuerfe.append(e.wert)
             elif e.name == "klasse":
                 klasse = e.wert
+            elif e.name == "nahkampf":
+                nahkampf = e.wert
         if el.name == "klasse":
             # Eine andere Klasse: Waffen, die sie nicht hat, fallen heraus
             # (konto.loadout_saeubern fuellt aus ihrer Auswahl auf).
             alt = konto.loadout
             konto.loadout_setzen(konto.gewaehlt, {"name": alt["name"], "klasse": klasse,
-                                                  "waffen": waffen, "wuerfe": wuerfe})
+                                                  "waffen": waffen, "wuerfe": wuerfe,
+                                                  "nahkampf": nahkampf})
             self.aufbauen()
             return
         # Je Platz eine Waffe aus seiner eigenen Auswahl (seit 0.34.91):
@@ -1427,7 +1439,7 @@ class Ausruestung(Menue):
         alt = konto.loadout
         konto.loadout_setzen(konto.gewaehlt,
                              {"name": alt["name"], "klasse": klasse, "waffen": sauber,
-                              "wuerfe": wuerfe})
+                              "wuerfe": wuerfe, "nahkampf": nahkampf})
         if sauber != waffen:
             self.aufbauen()
 

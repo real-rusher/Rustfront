@@ -174,7 +174,8 @@ TASTEN_VORGABE = [
     ("waffe9",      "PLATZ 9",          ["9"]),
     ("waffe10",     "PLATZ 0",          ["0"]),
     ("feuermodus",  "FEUERART",         ["v"]),
-    ("nahkampf",    "BRECHEISEN",       ["f"]),
+    ("nahkampf",    "NAHKAMPF / MESSER", ["f"]),
+    ("granate",     "GRANATE SOFORT",   ["g"]),
     ("faehigkeit",  "FÄHIGKEIT / WERKZEUG", ["c"]),
     # Seit 0.34.85: in JEDER HAT ALLES das naechste Werkzeug fuer C.
     ("werkzeug",    "WERKZEUG WECHSELN", ["x"]),

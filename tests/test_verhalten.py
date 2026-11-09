@@ -1192,7 +1192,11 @@ def vorstoss():
         basis, _rechts, mitte = tm._schlacht_punkte()
         leute = [tm.bot_setzen(basis + pygame.Vector2(0, 30 * i), 0, {"team": 0, "hirn": "goap"})
                  for i in range(3)]
-        f = tm.fahrer_setzen(basis + pygame.Vector2(120, 0), 0,
+        # Wie im Spiel seit 0.34.96: das Fahrzeug steht dort an der Basis,
+        # von wo ein Fahrweg zur Mitte fuehrt (Gefecht._fahrzeug_platz_bei) -
+        # die linke Basis auf STAUBTAL liegt in einem Hof mit engen Toren.
+        platz = tm._fahrzeug_platz_bei("panzerwagen", basis, K.SCHLACHT["fahrzeug_umkreis"])
+        f = tm.fahrer_setzen(platz[0] if platz else basis + pygame.Vector2(120, 0), 0,
                              {"team": 0, "fahrzeug": "panzerwagen", "winkel": 0})
         pw = f.fahrzeug
         vorher = [k.pos.distance_to(mitte) for k in leute]

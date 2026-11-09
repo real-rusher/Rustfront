@@ -629,12 +629,21 @@ class Rundenplanung(Menue):
         g = self.gefecht
         d = g.plan[self.nr]
         umfeld = g._umfeld()
-        for i, f in enumerate(R.sichtbar(d, self.erweitert)):
+        felder = R.sichtbar(d, self.erweitert)
+        # Seit 0.34.96 blaettert die Liste, wenn sie nicht passt (gemeldet:
+        # in ERWEITERT liefen die Zeilen unter die Knoepfe am Fuss).
+        platz = max(4, (self.tafel.bottom - 64 - y) // self.ZEILE)
+        self._gesamt = len(felder)
+        self._platz = platz
+        self._oben = max(0, min(getattr(self, "_oben", 0), len(felder) - platz))
+        self._spalte_rect = pygame.Rect(x, y, breite, platz * self.ZEILE)
+        spalte = self.SPALTE if g.plan_offen else self.SPALTE + 40
+        for i, f in enumerate(felder[self._oben:self._oben + platz]):
             rect = (x, y + i * self.ZEILE, breite, 14)
             name = ("  " if f.einzug(d) else "") + f.name(d)
             if f.schalter:
                 el = ui.Schalter(rect, name, "r:" + f.schluessel,
-                                 bool(d[f.schluessel]), spalte=self.SPALTE)
+                                 bool(d[f.schluessel]), spalte=spalte)
             else:
                 werte = f.werte(d, umfeld)
                 jetzt = d[f.schluessel]
@@ -643,9 +652,41 @@ class Rundenplanung(Menue):
                 el = RegelWahl(rect, name, "r:" + f.schluessel, werte,
                                werte.index(jetzt),
                                {w: f.text(w, d, umfeld) for w in werte},
-                               spalte=self.SPALTE, rund=f.rund)
+                               spalte=spalte, rund=f.rund)
             el.gesperrt = not self.darf
             self.elemente.append(el)
+
+    def _blaettern(self, d: int) -> bool:
+        """Die Regelliste um eine Zeile weiter; True, wenn sie sich bewegt hat."""
+        neu = max(0, min(getattr(self, "_gesamt", 0) - getattr(self, "_platz", 0),
+                         getattr(self, "_oben", 0) + d))
+        if neu == getattr(self, "_oben", 0):
+            return False
+        self._oben = neu
+        self.aufbauen()
+        return True
+
+    def wahl_schieben(self, d: int) -> None:
+        el = self.gewaehlt()
+        zeilen = [e for e in self.elemente if e.name.startswith("r:") and not e.gesperrt]
+        if el in zeilen:
+            i = zeilen.index(el)
+            if (d > 0 and i == len(zeilen) - 1) or (d < 0 and i == 0):
+                if self._blaettern(d):
+                    super().wahl_schieben(d)
+                    return
+        super().wahl_schieben(d)
+
+    def ereignis(self, ev) -> None:
+        if ev.type == pygame.MOUSEWHEEL and getattr(self, "_spalte_rect", None) is not None:
+            maus = self.app.zu_spiel(pygame.mouse.get_pos())
+            r = self._spalte_rect
+            # Ueber den Namen blaettert das Rad die Liste, ueber den Werten
+            # verstellt es sie wie bisher.
+            if r.collidepoint(maus) and maus.x < r.x + self.SPALTE:
+                self._blaettern(-1 if ev.y > 0 else 1)
+                return
+        super().ereignis(ev)
 
     def _fuss(self, r) -> None:
         g = self.gefecht
@@ -660,7 +701,7 @@ class Rundenplanung(Menue):
         # Seit 0.34.26: der Team-Manager (Pausenmenue) auch von hier aus.
         if self.darf:
             self.elemente.append(ui.Knopf(
-                (r.right - 16 - 96 - 104 - 104, oben, 100, 14), "TEAMS UND BOTS",
+                (r.right - 16 - 96 - 104 - 124, oben, 120, 14), "TEAMS UND BOTS",
                 "teams"))
         y = r.bottom - 58
         self.elemente.append(ui.Knopf(
@@ -771,6 +812,14 @@ class Rundenplanung(Menue):
     def inhalt_zeichnen(self, ziel) -> None:
         g = self.gefecht
         r = self.tafel
+        sr = getattr(self, "_spalte_rect", None)
+        if sr is not None and getattr(self, "_gesamt", 0) > getattr(self, "_platz", 0):
+            if self._oben > 0:
+                SCHRIFT.zeichnen(ziel, "^ MEHR", sr.right, sr.y - 10, K.C_MUTED, 1,
+                                 ausrichtung="rechts")
+            if self._oben + self._platz < self._gesamt:
+                SCHRIFT.zeichnen(ziel, "v MEHR (RAD ÜBER DEN NAMEN)", sr.right, sr.bottom,
+                                 K.C_MUTED, 1, ausrichtung="rechts")
         # Welche Runde gerade eingestellt wird, als Ueberschrift der Regeln.
         if g.plan_offen:
             x = r.x + 196

@@ -724,7 +724,8 @@ class Buggy(Wesen):
         if stoss >= f["aufprall_hart"]:
             w = self.welt
             staerke = min(1.0, stoss / f["hoechst"])
-            w.klang("buggy_aufprall", 0.45 + 0.55 * staerke, self.pos, self.ebene)
+            # Kein Klang mehr beim Anprall (seit 0.34.96, gewuenscht) - nur
+            # Ruckeln und Staub.
             w.ruckeln(2.0 + 4.0 * staerke, "sturz", self.pos, self.ebene,
                       self.fahrer)
             wolke(w, self.pos + self.vorn * 20, 8, 90, 0.45, K.C_MUTED_DK,

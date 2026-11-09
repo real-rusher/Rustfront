@@ -187,9 +187,11 @@ pruef("Brecheisen trifft nicht durch den Raum", s == 0, "%.0f Schaden" % s)
 # ── Balance: Brecheisen, Schrot, Scharfschuetze ──────────────────────
 # Gemessen statt geglaubt.
 b = K.WAFFEN["brecheisen"]
-pruef("Zwei Brecheisenschlaege toeten einen Spieler",
-      2 * b["schaden"] >= K.SPIELER["leben"],
-      "%.0f x 2 gegen %.0f Leben" % (b["schaden"], K.SPIELER["leben"]))
+# Seit 0.34.96 bewusst schwach (gewuenscht): wer im Nahkampf etwas will,
+# legt eine Nahkampfwaffe auf F.
+pruef("Vier Brecheisenschlaege toeten einen Spieler, zwei nicht mehr",
+      4 * b["schaden"] >= K.SPIELER["leben"] > 2 * b["schaden"],
+      "%.0f x 4 gegen %.0f Leben" % (b["schaden"], K.SPIELER["leben"]))
 pruef("Ein einzelner Schlag toetet noch nicht",
       b["schaden"] < K.SPIELER["leben"], "%.0f" % b["schaden"])
 # Kein Unverwundbarkeitsfenster nach einem Treffer: es gab einmal eines
@@ -2463,18 +2465,25 @@ pruef("Nachladen nimmt aus dem Vorrat",
       wirt_k.vorrat[name] == voll_vorrat - K.WAFFEN[name]["magazin"],
       "%d von %d uebrig" % (wirt_k.vorrat[name], voll_vorrat))
 
-# **Der eigentliche Fehler:** ein Wiedereinstieg darf nicht umsonst
-# nachfuellen.
+# Seit 0.34.96 (gewuenscht, gemeldet: "Munition und Granaten werden nach
+# dem Tod nicht zuverlaessig aufgefuellt"): ein neues Leben beginnt mit
+# vollem Magazin und vollem Vorrat - auch wenn das Loadout dasselbe ist.
+# Knapp ist es innerhalb eines Lebens (oben: Nachladen nimmt aus dem Vorrat).
 wirt_k.magazin[name] = 0
-vorher_vorrat = wirt_k.vorrat[name]
+wirt_k.vorrat[name] = 0
+for w_ in wirt_k.waffen:
+    if K.WAFFEN[w_].get("art") == "wurf":
+        wirt_k.magazin[w_] = 0
+        wirt_k.vorrat[w_] = 0
 w._wieder_einsteigen(wirt_k)
 pruef("Ein Wiedereinstieg fuellt das Magazin",
       wirt_k.magazin[name] == K.WAFFEN[name]["magazin"],
       "%d" % wirt_k.magazin[name])
-pruef("Und bezahlt es aus dem Vorrat",
-      wirt_k.vorrat[name] == vorher_vorrat - K.WAFFEN[name]["magazin"],
-      "%d statt %d" % (wirt_k.vorrat[name],
-                       vorher_vorrat - K.WAFFEN[name]["magazin"]))
+pruef("... und den Vorrat, Granaten eingeschlossen - jedes Leben gleich",
+      wirt_k.vorrat[name] == voll_vorrat
+      and all(wirt_k.magazin[w_] == K.WAFFEN[w_]["magazin"] for w_ in wirt_k.waffen
+              if K.WAFFEN[w_].get("art") == "wurf"),
+      "%d statt %d" % (wirt_k.vorrat[name], voll_vorrat))
 
 # Ohne knappe Munition bleibt es wie immer: umsonst.
 w2, ga2 = gefechtspaar("team", knapp=False)
@@ -4730,8 +4739,9 @@ pruef("In den Panzerwagen steigt man genauso ein", _k59.im_fahrzeug and _lw59.fa
 _lw59.winkel = Gefecht._fahrzeug_richtung(_lw59)
 _lw59.aufbau = _lw59.winkel
 _fahr59(_lw59, (0.0, -1.0), 1.2)
-pruef("Der Panzerwagen zieht zaeh an: nach 1,2 s rund 26 px/s",
-      22.0 <= _lw59.fahrt <= 30.0, "%.1f px/s" % _lw59.fahrt)
+# Seit 0.34.96 deutlich wendiger (gewuenscht).
+pruef("Der Panzerwagen zieht an: nach 1,2 s rund 54 px/s (vorher 26)",
+      40.0 <= _lw59.fahrt <= 70.0, "%.1f px/s" % _lw59.fahrt)
 
 # Wenderadius und Hoechsttempo auf freiem Feld (eine eigene Welt ohne Mauern).
 from dustfront.world import Welt as _Welt59, Ebene as _Ebene59
@@ -4760,8 +4770,8 @@ for _ in range(int(2.5 / K.FIXED_DT)):
     _lwp59.gas = 1.0 if _lwp59.fahrt < 150 else 0.0
     _frei59.schritt(K.FIXED_DT)
 _radius59 = _lwp59.fahrt / max(1e-6, _lwp59.gier)
-pruef("... und lenkt sehr schlecht: Wenderadius rund 160 + v (bei 150 px/s ~310)",
-      260.0 < _radius59 < 360.0, "%.0f px" % _radius59)
+pruef("... und wendet enger: rund 70 + 0,45 v (bei 150 px/s ~140, vorher ~310)",
+      100.0 < _radius59 < 190.0, "%.0f px" % _radius59)
 
 # Rammen: ein Laeufer vorn bei voller Fahrt nimmt Schaden und fliegt; wer
 # seitlich steht, wird nur geschoben. Nach jedem Schritt steht niemand im
@@ -5833,9 +5843,10 @@ _tm66 = _TM59.Testmodus(app, karte="staubtal")
 _ort66 = freier_punkt(_tm66.welt, 0, random.Random(66))
 _ich66 = _tm66.ich_setzen(_ort66, 0, {"team": 0, "waffe_figur": "hammer"})
 _ich66 = _ich66[0] if isinstance(_ich66, list) else _ich66
-pruef("Die neuen Waffen sind in der Ausruestung waehlbar",
-      {"bolzer", "nagler", "hammer", "schockstab", "schlagring", "kettensaege"}
-      <= set(K.LOADOUT["auswahl_waffen"]))
+# Seit 0.34.96 liegen die Nahkampfwaffen auf F (NAHKAMPF waehlbar).
+pruef("Die neuen Waffen sind waehlbar (Nahkampf auf F)",
+      {"bolzer", "nagler"} <= set(K.LOADOUT["auswahl_waffen"])
+      and {"hammer", "schockstab", "schlagring", "kettensaege"} <= set(K.NAHKAMPF["waehlbar"]))
 def _puppe66(dx, dy=0.0, leben=400.0):
     p_ = _tm66.puppe_setzen(_ich66.pos + pygame.Vector2(dx, dy), 0,
                             {"anzahl": 1, "streuung": 0, "team": 1, "leben": leben})
@@ -5980,7 +5991,7 @@ _ich67 = _tm67.ich_setzen(_ort67, 0, {"team": 0, "waffe_figur": "wurfmesser"})
 _ich67 = _ich67[0] if isinstance(_ich67, list) else _ich67
 pruef("Die neuen Wuerfe sind waehlbar und im Spawner",
       {"gas", "kuller", "knaller", "schneeball"} <= set(K.LOADOUT["auswahl_wuerfe"])
-      and {"wurfmesser", "speer"} <= set(K.LOADOUT["auswahl_waffen"])
+      and {"wurfmesser", "speer"} <= set(K.NAHKAMPF["waehlbar"])
       and {"GASGRANATE", "KULLER", "KNALLER", "SCHNEEBALL"} <= {e.name for e in _TM59.eintraege()})
 def _puppe67(dx, dy=0.0, leben=400.0, team=1):
     p_ = _tm67.puppe_setzen(_ich67.pos + pygame.Vector2(dx, dy), 0,
@@ -9540,9 +9551,16 @@ _namen46 = [el.name for el in _t46.elemente]
 pruef("Die Tafel faengt einfach an", "r:knapp" not in _namen46
       and "r:modus" in _namen46 and "ansicht" in _namen46, str(_namen46))
 _t46.ausloesen([el for el in _t46.elemente if el.name == "ansicht"][0])
-pruef("ERWEITERT zeigt alle Regeln und merkt es sich",
+# Seit 0.34.96 blaettert die Liste, wenn sie nicht passt.
+for _ in range(40):
+    if "r:knapp" in [el.name for el in _t46.elemente]:
+        break
+    _t46._blaettern(1)
+pruef("ERWEITERT zeigt alle Regeln (blaetternd) und merkt es sich",
       "r:knapp" in [el.name for el in _t46.elemente]
-      and app.opt["runden_erweitert"] is True)
+      and app.opt["runden_erweitert"] is True
+      and all(el.rect.bottom <= _t46.tafel.bottom - 58 for el in _t46.elemente
+              if el.name.startswith("r:")))
 _l46.plan_verstellen(0, "modus", "pve")
 _l46.plan_verstellen(0, "knapp", True)
 pruef("Was unter ERWEITERT verstellt ist, weiss die einfache Ansicht",
@@ -10447,7 +10465,8 @@ w80.verlassen()
 # schwenkt nicht schneller als erlaubt und trifft einen, der quer laeuft,
 # deutlich seltener als einen, der stillsteht.
 _n80 = netz.Gastgeber(_neuer_port())
-w80 = Gefecht(app, "WIRT", gastgeber=_n80, modus="team", seed=3, regeln={"bots": 2})
+w80 = Gefecht(app, "WIRT", gastgeber=_n80, modus="team", seed=3,
+              regeln={"bots": 2, "bot_ki": "klassisch"})   # gemessen wird die klassische KI
 _bot80 = w80._bots()[0]
 _ich80 = w80.ich
 
@@ -12250,10 +12269,11 @@ pruef("Ein Fehler in den Daten kostet nur seinen Block - mit Datei und Zeile gem
       and _d88.spezies["s"].merkmale["mut"] == (0.1, 0.9), str(_f88))
 
 # Die Regel BOT-KI.
-pruef("Regel BOT-KI: klassisch ist die Vorgabe, GOAP waehlbar",
-      _RG88.vorgabe()["bot_ki"] == "klassisch"
-      and _RG88.saeubern({"bot_ki": "goap"})["bot_ki"] == "goap"
-      and _RG88.saeubern({"bot_ki": "unsinn"})["bot_ki"] == "klassisch", "")
+# Seit 0.34.96 ist GOAP die Vorgabe (gewuenscht).
+pruef("Regel BOT-KI: GOAP ist die Vorgabe, klassisch waehlbar",
+      _RG88.vorgabe()["bot_ki"] == "goap"
+      and _RG88.saeubern({"bot_ki": "klassisch"})["bot_ki"] == "klassisch"
+      and _RG88.saeubern({"bot_ki": "unsinn"})["bot_ki"] == "goap", "")
 _n88 = netz.Gastgeber(_neuer_port())
 _w88 = Gefecht(app, "WIRT", gastgeber=_n88, modus="team", seed=88,
                regeln={"bots": 4, "bot_ki": "goap"})
@@ -12263,8 +12283,8 @@ pruef("... mit GOAP denken alle Bots der Runde zielorientiert",
 _w88.verlassen()
 _n88 = netz.Gastgeber(_neuer_port())
 _w88 = Gefecht(app, "WIRT", gastgeber=_n88, modus="team", seed=88, regeln={"bots": 4})
-pruef("... ohne die Regel klassisch wie bisher",
-      _w88._bots() and not any(isinstance(b_.hirn, _BG88.GoapHirn) for b_ in _w88._bots()), "")
+pruef("... ohne die Regel GOAP (Vorgabe seit 0.34.96)",
+      _w88._bots() and all(isinstance(b_.hirn, _BG88.GoapHirn) for b_ in _w88._bots()), "")
 _w88.verlassen()
 
 # Im Testmodus: GOAP gegen klassisch, auf kurze Entfernung.
@@ -15670,10 +15690,11 @@ pruef("Ohne Datei: None (dann zeigt das Menue das Pixelbild)", _MB182.bild("gibt
 # ══════════════════════════════════════════════════════════════════
 print("\n-- Jeder hat alles: Kategorien-Hotbar und alle Werkzeuge auf C (0.34.85)")
 _alle185 = K.alles_waffen()
-pruef("JEDER HAT ALLES hat jede Waffe ausser Brecheisen (F) und Raketenwerfer (Karte)",
-      set(_alle185) == set(K.WAFFEN) - {"brecheisen", "rakete"} and len(_alle185) == len(set(_alle185)),
+pruef("JEDER HAT ALLES hat jede Waffe ausser denen auf F (Nahkampf) und dem Raketenwerfer (Karte)",
+      set(_alle185) == set(K.WAFFEN) - set(K.NAHKAMPF["waehlbar"]) - {"rakete"}
+      and len(_alle185) == len(set(_alle185)),
       str(set(K.WAFFEN) - set(_alle185)))
-pruef("... in neun Gruppen, fuer die Tasten 1 bis 9", len(K.ALLES_GRUPPEN) == 9)
+pruef("... in acht Gruppen (die NAHKAMPF-Gruppe liegt seit 0.34.96 auf F)", len(K.ALLES_GRUPPEN) == 8)
 w185, g185 = _paar59("team", karte="staubtal")
 _k185 = w185.ich
 w185._loadout_anlegen(_k185)
@@ -15707,7 +15728,7 @@ _bild185 = pygame.Surface((K.GAME_W, K.GAME_H))
 w185.zeichnen(_bild185, 0.5)
 g185.zeichnen(_bild185, 0.5)
 pruef("Hotbar mit Gruppen und Werkzeuganzeige zeichnen sich", True)
-pruef("Antippen (Touch): neun Plaetze", len(w185.touch_hotbar()) == 9, str(len(w185.touch_hotbar())))
+pruef("Antippen (Touch): acht Plaetze", len(w185.touch_hotbar()) == 8, str(len(w185.touch_hotbar())))
 w185.verlassen(); g185.verlassen()
 
 # ══════════════════════════════════════════════════════════════════
@@ -16236,7 +16257,8 @@ for _i196 in range(int(0.5 / K.FIXED_DT)):
         _wt196.schussknall(_p196, 0.0, 0, "flammenwerfer", None)
 _weit196 = max(_wt196.flamme_jetzt(b_, _wt196.flammen_zeit)[0] - _p196.x for b_ in _wt196.flammen)
 pruef("... sie fliegen fast so weit, wie er brennt (K.WAFFEN reichweite)",
-      0.6 * K.WAFFEN["flammenwerfer"]["reichweite"] < _weit196 <= 1.05 * K.WAFFEN["flammenwerfer"]["reichweite"],
+      0.6 * K.WAFFEN["flammenwerfer"]["reichweite"] < _weit196
+      <= (1.0 + K.FLAMME["tempo_streuung"]) * K.WAFFEN["flammenwerfer"]["reichweite"],
       "%.0f px" % _weit196)
 _bild196 = pygame.Surface((K.GAME_W, K.GAME_H))
 _bild196.fill((0, 0, 0))
@@ -16342,6 +16364,17 @@ w198._regeln_setzen(dict(_d198, schlacht_seite=12))
 w198._einstiegszonen_waehlen()
 w198._fahrzeuge_neu_aufstellen()
 w198._bots_fuehren(0.0, sofort=True)
+# Seit 0.34.96 kommen die Fahrzeuge an Fallschirmen in ihre Dropzonen.
+_ab198 = K.SCHLACHT["abwurf"]
+pruef("Jede Basis hat Dropzonen; zum Start faellt noch nichts, die Zonen zaehlen",
+      len(w198.dropzonen) == 2 * sum(n_ for _a, n_ in K.SCHLACHT["fahrzeuge"])
+      and not w198.fahrzeuge and all(z_.rest > 0 for z_ in w198.dropzonen))
+for _ in range(int((_ab198["start"] + 0.2) / K.FIXED_DT)):
+    w198.schlacht_schritt(K.FIXED_DT)
+pruef("... dann sinken sie am Fallschirm herunter", len(w198.abwuerfe) == len(w198.dropzonen)
+      and all(0 < a_.hoehe < _ab198["hoehe"] for a_ in w198.abwuerfe))
+for _ in range(int((_ab198["hoehe"] / _ab198["sinken"] + 0.5) / K.FIXED_DT)):
+    w198.schlacht_schritt(K.FIXED_DT)
 _je198 = [sum(1 for k_ in w198.kaempfer.values() if k_.team == i_) for i_ in range(2)]
 pruef("Beide Seiten stehen sofort voll - fehlende Spieler sind Bots", _je198 == [12, 12], str(_je198))
 _bl198, _br198, _mi198 = w198._schlacht_punkte()
@@ -16361,11 +16394,14 @@ pruef("Je Seite fahren so viele Bots, wie die Basis Fahrzeuge hat (K.SCHLACHT fa
 _pj_soll198 = [min(K.SCHLACHT["panzerjaeger_je_seite"],
                    sum(1 for k_ in _bots198 if k_.team == i_) // K.BOTS["panzerjaeger"]["je_bots"])
                for i_ in range(2)]
-pruef("Je Seite tragen Panzerjaeger Panzerbuechse und Raketen (einer je vier Bots, hoechstens K.SCHLACHT)",
+# Seit 0.34.96 seltener (einer je acht Bots, hoechstens zwei je Seite) und
+# mit einer Panzerabwehrwaffe neben einer gewoehnlichen.
+_pa198 = set(K.BOTS["panzerjaeger"]["waffen"])
+pruef("Je Seite wenige Panzerjaeger: eine Panzerabwehrwaffe und eine gewoehnliche",
       all(sum(1 for k_ in _bots198 if k_.team == i_ and getattr(k_, "panzerjaeger", False))
-          == _pj_soll198[i_] >= 2 for i_ in range(2))
-      and all("panzerbuechse" in k_.waffen and ("einwegwerfer" in k_.waffen or "raketenbuendel" in k_.waffen)
-              for k_ in _bots198 if getattr(k_, "panzerjaeger", False)))
+          == _pj_soll198[i_] >= 1 for i_ in range(2))
+      and all(len(set(k_.waffen[:2]) & _pa198) == 1
+              for k_ in _bots198 if getattr(k_, "panzerjaeger", False)), str(_pj_soll198))
 _ort198 = w198._einstiegsort(1)
 pruef("Eingestiegen wird in der eigenen Basis",
       _ort198.distance_to(_br198) <= K.SCHLACHT["spawn_umkreis"] * 1.5, "%.0f" % _ort198.distance_to(_br198))
@@ -16384,9 +16420,10 @@ _pz198 = next(b_ for b_ in _bt198[1] if b_.art == "panzer")
 _pz198.schaden(_pz198.leben + 5000.0, None, None, art="hohlladung")
 _pz198.wrack_rest = 0.0
 w198._fahrzeuge_erneuern(0.0)
-w198._fahrzeuge_erneuern(K.PANZER["neu_nach"] + 1.0)
+for _ in range(int((K.PANZER["neu_nach"] + _ab198["hoehe"] / _ab198["sinken"] + 1.0) / 0.05)):
+    w198.schlacht_schritt(0.05)
 _neu198 = [b_ for b_ in w198.fahrzeuge if b_.art == "panzer" and getattr(b_, "basis_team", -1) == 1]
-pruef("Ein zerstoerter Panzer kommt an der Basis seiner Seite wieder",
+pruef("Ein zerstoerter Panzer kommt in seiner Dropzone wieder (Fallschirm)",
       len(_neu198) == 1 and _neu198[0] is not _pz198
       and _neu198[0].pos.distance_to(_br198) <= K.SCHLACHT["fahrzeug_umkreis"] + 60)
 
@@ -16398,7 +16435,10 @@ for b_ in w198.fahrzeuge:
     if b_.fahrer is not None:
         w198._fahrzeug_loesen(b_.fahrer)
 w198._einsteigen(_fahrer198, _pw198)
-pruef("Ein Bot am Steuer: der Wagen funkt", w198._funkt(_pw198))
+pruef("Ein Bot am Steuer, der nichts meldet: der Wagen funkt nicht (seit 0.34.96)",
+      not w198._funkt(_pw198))
+_fahrer198.hirn.funken("fahrzeug_kontakt", wichtig=True)
+pruef("... meldet er etwas, funkt der Wagen", w198._funkt(_pw198))
 _ich198.lebt = True
 _ich198.am_boden = False
 _ich198.ebene = _pw198.ebene
@@ -16432,7 +16472,9 @@ _bot198.ebene = _pw198.ebene
 _bot198.pos.update(_ich198.pos)
 _bot198.treppe_rest = 0.0
 _e198(_bot198)
-pruef("Bots sitzen nicht auf (bis jetzt nur Spieler)", getattr(_bot198, "mitfahrt", None) is None)
+# Seit 0.34.96 sitzen in SCHLACHT auch Bots auf (der Fahrer setzt sie ab).
+pruef("In SCHLACHT sitzen auch Bots auf", getattr(_bot198, "mitfahrt", None) is _pw198)
+w198._absitzen(_bot198)
 _ich198.pos.update(_pw198.pos + pygame.Vector2(0, _pw198.werte["halb"] + 14).rotate(_pw198.winkel))
 _ich198.treppe_rest = 0.0
 _e198(_ich198)
@@ -16448,10 +16490,12 @@ pruef("Mit dem Fahrer draussen funkt der Wagen nicht mehr", not w198._funkt(_pw1
 _wagen198 = next(b_ for b_ in w198.fahrzeuge if not b_.kaputt and b_ is not _pw198)
 _f2_198 = next(k_ for k_ in _bots198 if k_.fahrzeug is None and k_ is not _bot198)
 w198._einsteigen(_f2_198, _wagen198)
-pruef("Ein Bot faehrt: Funk an ...", w198._funkt(_wagen198))
+_f2_198.hirn.funken("fahrzeug_vor", wichtig=True)
+pruef("Ein Bot faehrt und funkt: Funk an ...", w198._funkt(_wagen198))
 w198._aussteigen(_f2_198)
 pruef("... er steigt aus: Funk aus", not w198._funkt(_wagen198))
 w198._einsteigen(_f2_198, _wagen198)
+_f2_198.hirn.funken("fahrzeug_vor", wichtig=True)
 w198.blick = _wagen198.ebene
 w198.kamera.pos.update(_wagen198.pos)
 getattr(w198.kamera, "vorher", w198.kamera.pos).update(_wagen198.pos)
@@ -16482,8 +16526,9 @@ pruef("Testmodus: VIELE WAFFEN, PANZERJAEGER und VORSTOSS als Zeilen, aus als Vo
 _eintrag198 = next((e_ for e_ in _TM195.eintraege() if e_.name == "PANZERJÄGER"), None)
 _p198 = _fp195(_tm198.welt, 0, random.Random(198))
 _pj198 = _tm198.panzerjaeger_setzen(_p198, 0, {"team": 1})
-pruef("Spawner: PANZERJÄGER mit Panzerbuechse und Raketen",
-      _eintrag198 is not None and "panzerbuechse" in _pj198.waffen and _pj198.panzerjaeger)
+pruef("Spawner: PANZERJÄGER mit Panzerabwehr",
+      _eintrag198 is not None and set(_pj198.waffen) & set(K.BOTS["panzerjaeger"]["waffen"])
+      and _pj198.panzerjaeger)
 _pzz198 = _tm198.fahrer_setzen(_p198 + pygame.Vector2(200, 0), 0, {"team": 0, "fahrzeug": "panzer"})
 _pj198.hirn.ziel = _pzz198
 _wahl198 = _pj198.hirn._beste_waffe(200.0)
@@ -16500,6 +16545,72 @@ _ziel198 = _b198.hirn._streifziel()
 pruef("Testmodus mit VORSTOSS: ein Bot an der linken Basis zieht zur Mitte",
       _ziel198[0].distance_to(_tm198._schlacht_punkte()[2]) < 1.5 * K.SCHLACHT["streuung"])
 _tm198.verlassen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- 0.34.96: Nahkampf auf F, G-Granate, Panzerbuechse, Zielfernrohr, Drohne, Nachschub")
+from dustfront import regeln as _R199, konto as _KO199, klassen as _KL199
+pruef("GOAP ist die Vorgabe fuer die Bot-KI, Funksprueche sind eine Regel (aus)",
+      _R199.vorgabe()["bot_ki"] == "goap" and _R199.vorgabe()["funk"] is False)
+pruef("Nahkampfwaffen belegen keinen Waffenplatz mehr",
+      not set(K.NAHKAMPF["waehlbar"]) & set(K.LOADOUT["auswahl_waffen"])
+      and not any(set(K.NAHKAMPF["waehlbar"]) & set(w_) for _n, w_ in K.ALLES_GRUPPEN))
+_lo199 = _KO199.loadout_saeubern({"name": "X", "waffen": ["sturm", "revolver"], "wuerfe": ["granate"],
+                                  "nahkampf": "hammer"})
+pruef("... sondern stehen im Loadout als Waffe fuer F", _lo199.get("nahkampf") == "hammer")
+pruef("Brecheisen deutlich schwaecher, Hammer stoesst weiter, Speer reicht weiter",
+      K.WAFFEN["brecheisen"]["schaden"] <= 30 and K.WAFFEN["hammer"]["schub"] >= 900
+      and K.WAFFEN["speer"]["reichweite"] >= 90)
+w199, g199 = _paar59("team", karte="staubtal")
+_k199 = w199.ich
+_k199.unverwundbar = 0.0
+_k199.nahkampf_waffe = "wurfmesser"
+_k199.nahkampf_rest = 0.0
+_n199 = len([x_ for x_ in w199.welt.neue + w199.welt.wesen if type(x_).__name__ == "Wurfkoerper"])
+pruef("Messer auf F werden geworfen", _k199.nahkampf()
+      and len([x_ for x_ in w199.welt.neue + w199.welt.wesen if type(x_).__name__ == "Wurfkoerper"]) == _n199 + 1)
+_wurf199 = next((w_ for w_ in _k199.waffen if K.WAFFEN[w_].get("art") == "wurf"), None)
+if _wurf199 is not None:
+    _k199.magazin[_wurf199] = 1
+    _alt199 = _k199.waffe
+    _vor199 = len(w199.welt.neue)
+    pruef("G wirft die Granate sofort, ohne die Waffe zu wechseln",
+          _k199.schnellwurf() and _k199.waffe == _alt199 and len(w199.welt.neue) > _vor199)
+w199.verlassen(); g199.verlassen()
+from dustfront.entities import Geschoss as _Gs199
+_tm199 = _TM195.Testmodus(app, karte="staubtal")
+_wt199 = _tm199.welt
+_rnd199 = random.Random(199)
+for _ in range(500):
+    _q199 = _fp195(_wt199, 0, _rnd199)
+    # Eine echte Mauer (niedrige Deckung durchschlaegt sie ohnehin).
+    _d199 = next((float(i_) for i_ in range(4, 200, 2)
+                  if _wt199.schuss_halt(_q199 + pygame.Vector2(i_, 0), 0, 2.0, True)), 999.0)
+    if 40.0 < _d199 < 150.0:
+        break
+_kugel199 = _Gs199(pygame.Vector2(_q199), 0.0, K.WAFFEN["panzerbuechse"], 0, None, "panzerbuechse")
+_kugel199.welt = _wt199
+for _ in range(60):
+    if not _kugel199.lebt:
+        break
+    _kugel199.schritt(1.0 / 120)
+_weg199 = _kugel199.pos.distance_to(_q199)
+pruef("Panzerbuechse: durch die Mauer, aber nur ein Stueck dahinter",
+      _d199 < _weg199 <= _d199 + K.WAFFEN["panzerbuechse"]["durchdringen"] + 12,
+      "Mauer %.0f, Ende %.0f" % (_d199, _weg199))
+_tm199.verlassen()
+pruef("Das Scharfschuetzengewehr hat ein Zielfernrohr", K.WAFFEN["scharf"].get("scope"))
+from dustfront import ausruestung as _AU199
+_dr199 = _AU199.Drohne(pygame.Vector2(100, 100), 0, "team0")
+pruef("Die Drohne fliegt hoch oben (eigene Schicht)", _dr199.hoch_oben)
+from dustfront import schlacht as _SL199
+pruef("Nachschub: Munition, Medkits, Dropzonen fuer Fahrzeuge, Aufklaerung",
+      {n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]}
+      >= {"munition", "medkit", "buggy", "panzerwagen", "panzer", "aufklaerung"})
+from dustfront import world as _W199
+_w199, _kopf199 = _W199.karte_lesen("staubtal_offen")
+pruef("STAUBTAL - OFFEN: eine grosse offene Karte fuer Fahrzeuge, Vorschlag fuer SCHLACHT",
+      _w199 is not None and K.SCHLACHT["karte"] == "staubtal_offen"
+      and sum(_w199.fahrwege.begehbar[0]) > 0.7 * _w199.ebene(0).breite * _w199.ebene(0).hoehe)
 
 print()
 print("FEHLER:", fails or "keine")

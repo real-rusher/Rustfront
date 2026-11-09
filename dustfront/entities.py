@@ -444,6 +444,12 @@ class Geschoss(Wesen):
         self.abfall_rest = float(daten.get("abfall_rest", 1.0))
         self.durch = int(daten.get("durchschlag", 0))
         self.durch_deckung = bool(daten.get("durch_deckung", False))
+        # Seit 0.34.96 (Panzerbuechse): nach dem ersten Hindernis - Mauer
+        # oder Panzerung - noch so viele Pixel weiter, durch alles hindurch,
+        # danach ist Schluss. Getroffen wird also nur, was dicht hinter dem
+        # Hindernis steht.
+        self.durchdringen = float(daten.get("durchdringen", 0.0))
+        self._eindringen = None
         self.gegen_fahrzeug = bool(daten.get("gegen_fahrzeug", False))
         # Der Nagler (seit 0.34.66): ein Nagel statt einer Leuchtspur, und
         # wer vor einer Wand getroffen wird, haengt fest.
@@ -485,8 +491,26 @@ class Geschoss(Wesen):
             self.rest -= teil.length()
             ziel = self.welt.treffer(self.pos, self.radius, self.ebene,
                                      self.quelle_fraktion)
+            if self._eindringen is not None:
+                self._eindringen -= teil.length()
+                if self._eindringen <= 0.0:
+                    # Die Kraft ist verbraucht: steckt sie in der Mauer, ist
+                    # es ein Einschlag dort, sonst faellt sie einfach.
+                    if self.welt.schuss_halt(self.pos, self.ebene, self.radius, True):
+                        self.einschlag(None)
+                    else:
+                        self.lebt = False
+                    return
             if (ziel is not None and ziel is not self.von and ziel is not self.traeger
                     and ziel not in self._durch_wen):
+                if self.durchdringen > 0.0 and getattr(ziel, "ist_fahrzeug", False):
+                    # Durch die Panzerung (seit 0.34.96): der Wagen bekommt den
+                    # Treffer, und die Kugel fliegt noch ein Stueck weiter.
+                    self._durch_wen.append(ziel)
+                    self.treffen(ziel)
+                    if self._eindringen is None:
+                        self._eindringen = self.durchdringen
+                    continue
                 if self.durch > 0 and not getattr(ziel, "rechteckig", False):
                     # Durchschlag (seit 0.34.62): treffen und weiterfliegen.
                     # Jeden nur einmal - sonst traefe sie ihn in jedem
@@ -501,6 +525,12 @@ class Geschoss(Wesen):
             # Panzerbuechse nur eine Mauer (seit 0.34.62).
             if self.welt.schuss_halt(self.pos, self.ebene, self.radius,
                                      self.durch_deckung):
+                if self.durchdringen > 0.0:
+                    if self._eindringen is None:
+                        self._eindringen = self.durchdringen
+                        wolke(self.welt, self.pos, 6, 160, 0.2, (232, 196, 140), self.ebene,
+                              1, "funke", 120, self.winkel + 180, 6.0)
+                    continue
                 self.pos -= teil
                 if self.abprall > 0:
                     self._abprallen(teil)
@@ -989,7 +1019,9 @@ class Wurfkoerper(Granate):
     def _liegen(self) -> None:
         """Wer diese Waffe traegt und darueber laeuft, hebt es auf."""
         for a in self.welt.nahe(self.pos, 24.0, self.ebene):
-            if not getattr(a, "lebt", False) or self.waffe not in getattr(a, "waffen", ()):
+            if not getattr(a, "lebt", False) or (
+                    self.waffe not in getattr(a, "waffen", ())
+                    and getattr(a, "nahkampf_waffe", None) != self.waffe):
                 continue
             if getattr(a, "am_boden", False) or a.pos.distance_to(self.pos) > 16.0:
                 continue
@@ -1968,7 +2000,7 @@ class Feuerball:
     Zeiten in Sekunden; im Paket waren es Bilder bei 60 je Sekunde.
     """
 
-    __slots__ = ("pos", "ebene", "alter", "ballen", "wolken", "lebt")
+    __slots__ = ("pos", "ebene", "alter", "ballen", "wolken", "lebt", "brocken")
 
     def __init__(self, pos, ebene: int, saat: int, groesse: float = 1.0) -> None:
         self.pos = pygame.Vector2(pos)
@@ -1993,6 +2025,13 @@ class Feuerball:
                                 r.uniform(*f["wolke_gross"]) * groesse,
                                 r.uniform(*f["wolke_start"]), r.uniform(*f["wolke_dauer"]),
                                 versatz * 0.6 + wind, r.choice(f["rauch_farben"])))
+        # Brocken (seit 0.34.96): Richtung am Boden, Tempo nach oben, Groesse, Farbe.
+        self.brocken = []
+        for _ in range(f["brocken"]):
+            seite = pygame.Vector2(r.uniform(*f["brocken_tempo"]) * groesse, 0) \
+                .rotate(r.uniform(0, 360))
+            self.brocken.append((seite, r.uniform(*f["brocken_hoch"]),
+                                 r.choice((1, 2, 2, 3)), r.choice(f["brocken_farben"])))
 
     def schritt(self, dt: float) -> None:
         self.alter += dt
@@ -2572,15 +2611,60 @@ class Spieler(Wesen):
         selbst: waehrend er laeuft, ist die Waffe verstaut (siehe `bild`),
         und wer nichts in der Hand hat, schiesst auch nicht.
         """
-        d = K.WAFFEN.get(K.NAHKAMPF["waffe"])
+        name = self.nahkampf_name
+        d = K.WAFFEN.get(name)
         if d is None or self.nahkampf_rest > 0 or self.schlag_zeigen > 0 or self.gelaehmt:
             return False
         if self.nachlade_rest > 0 or self.heilt_rest > 0:
             return False
+        if d.get("f_werfen"):
+            # Messer werden auf F immer geworfen (seit 0.34.96).
+            if self.magazin.get(name, d.get("magazin", 0)) <= 0:
+                return False
+            self.magazin.setdefault(name, d.get("magazin", 0))
+            self.nahkampf_rest = d["wurf_takt"]
+            alt_takt = self.takt
+            self.takt = 0.0
+            self._werfen(d, name)
+            self.takt = alt_takt
+            return True
+        if d.get("saege"):
+            # Die Kettensaege auf F: ein kraeftiger Schnitt je Druck.
+            d = dict(d, saege=False, schaden=d["schaden"] * d.get("f_schnitt", 4.0),
+                     takt=d.get("f_takt", 0.55), schwung=0.18)
         self.nahkampf_rest = d["takt"]
         self.schlag_zeigen = d.get("schwung", 0.26) + K.NAHKAMPF["nachhalten"]
         self.schlagen(d)
         return True
+
+    @property
+    def nahkampf_name(self) -> str:
+        """Was auf F liegt (seit 0.34.96): das Brecheisen oder die
+        Nahkampfwaffe aus dem Loadout - sie belegt keinen Waffenplatz."""
+        name = self.__dict__.get("nahkampf_waffe") or K.NAHKAMPF["waffe"]
+        return name if name in K.WAFFEN else K.NAHKAMPF["waffe"]
+
+    def schnellwurf(self) -> bool:
+        """G (seit 0.34.96, nur Spieler): die erste Wurfwaffe mit Ladung sofort
+        werfen, ohne zu ihr zu wechseln."""
+        if self.gelaehmt or self.nachlade_rest > 0 or self.heilt_rest > 0 or self.schwingt:
+            return False
+        for i, name in enumerate(self.waffen):
+            d = K.WAFFEN.get(name, {})
+            if d.get("art") != "wurf":
+                continue
+            if self.magazin.get(name, 0) <= 0 and getattr(self, "vorrat", {}).get(name, 0) <= 0:
+                continue
+            alt, alt_takt = self.waffe, self.takt
+            self.waffe = i
+            self.takt = 0.0
+            try:
+                self.feuern()
+            finally:
+                self.waffe = alt
+                self.takt = alt_takt
+            return True
+        return False
 
     @property
     def schwingt(self) -> bool:
@@ -3219,7 +3303,7 @@ class Spieler(Wesen):
         d = daten or self.waffe_daten
         # Mit welcher Waffe: das Brecheisen auf F, sonst die gehaltene
         # (Hammer, Schockstab, Schlagring, Kettensaege - seit 0.34.66).
-        name = K.NAHKAMPF["waffe"] if daten is not None else self.waffe_name
+        name = self.nahkampf_name if daten is not None else self.waffe_name
         if daten is None:
             self.takt = d["takt"]
         if d.get("saege"):
@@ -3501,10 +3585,11 @@ class Spieler(Wesen):
         w.feuer.append(Brandflaeche(self.pos, self.ebene, radius=r * 0.7, von=self))
         w.explosion(self.pos, self.ebene, r, "feuer")
 
-    def _werfen(self, d: dict) -> None:
+    def _werfen(self, d: dict, name: str | None = None) -> None:
         """Wurfmesser und Speer werfen (seit 0.34.67): gerade, und danach
-        liegt das Ding am Boden, bis jemand es aufhebt."""
-        name = self.waffe_name
+        liegt das Ding am Boden, bis jemand es aufhebt. `name` (seit
+        0.34.96): das Messer auf F, nicht die Waffe in der Hand."""
+        name = name or self.waffe_name
         if self.takt > 0 or self.magazin.get(name, 0) <= 0:
             return
         self.magazin[name] -= 1

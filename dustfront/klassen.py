@@ -196,6 +196,7 @@ def faehigkeit_nutzen(gefecht, k) -> str:
         gefecht.welt.naegel.append(Nagelfeld(vorn, k.ebene, von=k))
     else:
         for ding in ausruestung.bauen(FAEHIGKEIT_ARTEN[art], vorn, k.ebene, k.fraktion, k.winkel):
+            ding.besitzer = k          # die Drohne kreist um ihn (seit 0.34.96)
             gefecht.welt.dazu(ding)
     k.faehigkeit_rest[art] = pause
     gefecht.welt.klang("aufheben", 0.6, k.pos, k.ebene)

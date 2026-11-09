@@ -76,6 +76,9 @@ TASTEN = {
     "ansicht_runter": [pygame.K_PAGEDOWN],
     "heilen":   [pygame.K_h],
     "nahkampf": [pygame.K_f],
+    # Granate sofort werfen (seit 0.34.96) - auf G wie das Ziehen: wer
+    # neben einem Gefallenen steht, zieht ihn, sonst fliegt die Granate.
+    "granate":  [pygame.K_g],
     "faehigkeit": [pygame.K_c],     # Faehigkeit der Klasse (seit 0.34.73)
     "inventar": [pygame.K_TAB],
     "pause":    [pygame.K_ESCAPE],

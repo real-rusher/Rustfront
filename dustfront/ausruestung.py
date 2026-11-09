@@ -339,9 +339,23 @@ class Drohne(Ausruestung):
         # Sie faellt herunter (Waffenpaket: "die Drohne sinkt zu Boden").
         self.schaden(self.leben + 1.0, None, None)
 
+    # Sie fliegt hoch ueber allem (seit 0.34.96, gemeldet: "die Drohne ist
+    # unter Waenden"): gezeichnet in einer eigenen Schicht ganz oben
+    # (Gefecht._drohnen_zeichnen), nicht mit ihrer Ebene.
+    hoch_oben = True
+
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
         d = A["drohne"]
+        # Seit 0.34.96 kreist sie um den, der sie gestartet hat, und geht
+        # mit ihm zu Boden: stirbt er, stuerzt sie ab.
+        besitzer = getattr(self, "besitzer", None)
+        if besitzer is not None:
+            if not besitzer.lebt or getattr(besitzer, "am_boden", False):
+                self.schaden(self.leben + 1.0, None, None)
+                return
+            self.mitte.update(besitzer.pos)
+            self.ebene = besitzer.ebene
         self.phase += d["tempo"] * dt
         self.kreis_jetzt = min(d["kreis"], self.kreis_jetzt + d["hinaus"] * dt)
         neu = self.mitte + pygame.Vector2(self.kreis_jetzt, 0).rotate(math.degrees(self.phase))

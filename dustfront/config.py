@@ -185,6 +185,22 @@ KAMERA = dict(
     blick_nachlauf=6.0,       # weicher als sonst: Drehen soll nicht reissen
 )
 
+# Beim Zeichnen dreht sich ein Wesen erst, wenn sein Blick sich um so viele
+# Grad geaendert hat (seit 0.34.96, render._gezeigter_winkel) - kleiner als
+# eine Drehstufe der Bilder (3 Grad), damit Zielen genau bleibt.
+FIGUR_DREH_RUHE = 2.6
+
+# Was hoch ueber allem fliegt (seit 0.34.96, die Spaehdrohne): so viele
+# Pixel ueber ihrem Schatten, so viel groesser, Schatten so versetzt.
+HOCH_OBEN = dict(hoehe=26, gross=1.25, schatten=(6, 10))
+
+# Das Zielfernrohr (seit 0.34.96, Waffen mit scope=True): mit der rechten
+# Maustaste laeuft das Bild weit zum Mauszeiger (zug, hoechstens weite),
+# und um den Zeiger ist ein Kreis von `linse` Weltpixeln klar - auch im
+# Nebel, aber nur bis zum Zeiger: die erste Mauer oder ein Fahrzeug auf
+# dem Weg dorthin haelt den Blick an.
+SCOPE = dict(zug=0.82, weite=1500.0, linse=72.0, ring=(36, 30, 24), fadenkreuz=(214, 64, 48))
+
 # Sichtweite im Gefecht (Mausrad, seit 0.30). 1 ist das normale Bild; mehr
 # heisst: mehr Welt im Bild, kleiner gezeichnet. Alles ausserhalb des
 # normalen Bildes liegt im **Nebel**: man sieht das Gelaende gedaempft,
@@ -948,7 +964,8 @@ FAHRZEUG_FUNK = dict(takt=1.1, wellen=3, radius=(4.0, 15.0), antenne=(-0.75, -0.
 SCHLACHT = dict(
     je_seite=24,
     groessen=(12, 16, 20, 24, 30),
-    karte="staubtal",
+    # Seit 0.34.96 die offene Karte (gewuenscht: Fahrzeuge sollen nutzbar sein).
+    karte="staubtal_offen",
     abschuesse=150,            # Vorgabe, wenn nach Abschuessen gespielt wird
     basis_x=0.08,              # Anteil der Kartenbreite vom Rand
     basis_proben=160,          # so viele freie Punkte werden je Basis geprueft
@@ -956,10 +973,53 @@ SCHLACHT = dict(
     fahrzeug_umkreis=420.0,    # so weit um die Basis stehen die Wagen
     spawn_umkreis=340.0,       # so weit um die Basis steigt man ein
     fahrer_je_seite=4,         # so viele Bots jeder Seite duerfen fahren
-    panzerjaeger_je_seite=4,   # so viele Bots jeder Seite tragen Panzerabwehr
+    panzerjaeger_je_seite=2,   # hoechstens so viele Bots jeder Seite tragen Panzerabwehr
     mitte_nah=260.0,           # so nah an der Mitte gilt sie als erreicht
     streuung=180.0,            # Ziele des Vorstosses so weit gestreut
     ziele_je=4,                # so viele feste Punkte je Ziel (Wegfelder teilen)
+    # Seit 0.34.96. Lage ohne Funk: wer einen Gegner sieht, meldet es seiner
+    # Seite (alle `melde_takt` s); Bots ohne Ziel ziehen zum naechsten
+    # frischen Kampf in `lage_weite`, der nicht aelter als `lage_alt` ist.
+    melde_takt=1.0,
+    lage_raster=256.0,         # Meldungen auf dieses Raster (Wegfelder teilen)
+    lage_alt=10.0,
+    lage_weite=1600.0,
+    # Front: mehr als `front_ab` Bots einer Seite teilen sich auf `spuren`
+    # Abschnitte quer zur Karte, `spur_abstand` px auseinander.
+    front_ab=20,
+    spuren=5,
+    spur_abstand=620.0,
+    # Aufsitzen: Bots gehen zu einem Panzerwagen in dieser Weite, der
+    # Fahrer setzt so weit vor Gegnern oder einem gemeldeten Kampf ab und
+    # faehrt danach mit hoechstens diesem Gas weiter.
+    # Dropzonen und Abwuerfe (seit 0.34.96, schlacht.py). hoehe: so hoch
+    # beginnt ein Abwurf, sinken: px/s, vorlauf: so lange vorher zaehlt die
+    # Zone sichtbar herunter, start: Vorlauf zum Rundenstart, vorlauf_kauf:
+    # nach einem Kauf. bild_hub: so viel der Hoehe sieht man als Versatz
+    # nach oben. sperre_basis: so weit um die feindliche Basis nichts kaufen.
+    abwurf=dict(hoehe=240.0, sinken=60.0, vorlauf=8.0, start=3.0, vorlauf_kauf=6.0,
+                bild_hub=0.55, schirm=(64, 26), schirm_kiste=(30, 14), schirm_ueber=30, kisten=3,
+                sperre_basis=1800.0),
+    dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
+                  zeichen=dict(buggy="B", panzer="P", panzerwagen="L", munition="M",
+                               medkit="+")),
+    punkte=dict(abschuss=1, fahrzeug=5, aufhelfen=5),
+    # Was man kaufen kann: (Kennung, Kosten, Name).
+    belohnungen=(
+        ("munition", 2, "MUNITIONSABWURF"),
+        ("medkit", 2, "SANITÄTSABWURF"),
+        ("buggy", 4, "DROPZONE: BUGGY"),
+        ("aufklaerung", 6, "AUFKLÄRUNGSDROHNE"),
+        ("panzerwagen", 8, "DROPZONE: PANZERWAGEN"),
+        ("panzer", 12, "DROPZONE: PANZER"),
+    ),
+    belohnung_hilfe=dict(munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
+                         buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
+                         panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE"),
+    aufklaerung=dict(radius=650.0, markiert=15.0, dauer=7.0, anflug=1400.0),
+    aufsitzen_weite=260.0,
+    absetzen_vor=650.0,
+    nach_absetzen_tempo=70.0,   # px/s
 )
 
 # Die Standardrunde (seit 0.32): womit eine frische Lobby plant, und was
@@ -1228,17 +1288,19 @@ PANZERWAGEN = dict(
     #   -> 26 px/s nach 1,2 s, rund 240 px/s nach 5 s, hoechstens 320
     #   Wenderadius wende_grund + wende_je_tempo * v (Buggy: rund 40)
     hoechst=320.0,
-    rueckwaerts=60.0,
-    motor=15.0,
-    motor_wachsen=0.6,
+    rueckwaerts=110.0,
+    # Seit 0.34.96 deutlich wendiger (gewuenscht): zieht frueher an,
+    # wendet auf engerem Kreis, lenkt schneller ein, faehrt flotter zurueck.
+    motor=28.0,
+    motor_wachsen=0.75,
     bremse=260.0,
     rollen=34.0,
     luft=0.0,
-    wende_grund=160.0,
-    wende_je_tempo=1.0,
-    lenk_max=14.0,            # nur fuer die Stick-Steuerung und als Grenze
+    wende_grund=70.0,
+    wende_je_tempo=0.45,
+    lenk_max=24.0,            # nur fuer die Stick-Steuerung und als Grenze
     lenk_abfall=0.0,
-    lenk_tempo=70.0,
+    lenk_tempo=150.0,
     achse_vorn=25.2,          # Vorderachse 18 Entwurfspixel vor der Mitte
     achse_hinten=19.0,        # zwischen den beiden Hinterachsen
     traegheit=1100.0,
@@ -1343,6 +1405,20 @@ FEUERBALL = dict(
     krater=15.0,                  # Radius des Kraters im Boden
     funken=60,
     kamera=6.0,
+    # Seit 0.34.96 mit Tiefe (gewuenscht: "etwas nach 3D"): die Glut steigt
+    # als Pilz auf, der Rauch als Saeule, am Boden laeuft eine flache
+    # Druckwelle (eine Ellipse wie von schraeg oben) aus, und Brocken
+    # fliegen in Boegen hoch - mit Schatten am Boden, damit man sieht, wie
+    # hoch sie sind.
+    steigen=30.0,                 # so hoch steigt die Glut (px)
+    rauch_steigen=26.0,           # so schnell steigt der Rauch (px/s)
+    druckwelle=(0.32, 96.0, 0.55),  # Dauer, Radius, Hoehe der Ellipse (x Breite)
+    druck_farbe=(255, 214, 160),
+    brocken=16,
+    brocken_tempo=(50.0, 150.0),  # zur Seite (px/s)
+    brocken_hoch=(120.0, 230.0),  # nach oben (px/s)
+    schwere=420.0,                # zieht sie wieder herunter (px/s^2)
+    brocken_farben=((62, 50, 40), (96, 78, 58), (40, 32, 26), (138, 104, 66)),
 )
 
 # Die Waffen der Fahrzeuge. Nicht in WAFFEN: niemand traegt sie in der
@@ -1663,6 +1739,10 @@ BOTS = dict(
         # zielt so viele Kacheln voraus, wie die Strecke gerade frei ist.
         weg_rand=1,
         weg_voraus=4,
+        # Der Panzer nimmt ein Fahrzeug so viel lieber als einen Fussgaenger
+        # (seit 0.34.96, in Pixeln Abstand).
+        panzer_blech_vorzug=900.0,
+        nah_rueckwaerts=70.0,     # naeher liegt ein Wegpunkt hinter ihm: rueckwaerts hin
         mg_winkel=10.0,
         steckt_nach=1.2,      # so lange ohne Fahrt, dann setzt er zurueck
         zurueck=1.0,          # so lange
@@ -1724,8 +1804,11 @@ BOTS = dict(
     # Panzerjaeger (seit 0.34.95): gibt es in der Runde Fahrzeuge, traegt
     # ein Teil der Bots Panzerbuechse und Raketen. Wer es wird, entscheidet
     # die Zahl, nicht der Zufall: je Mannschaft so viele, wie fehlen.
-    panzerjaeger=dict(waffen=("panzerbuechse",), dazu=("einwegwerfer", "raketenbuendel"),
-                      je_team=2, je_bots=4),
+    # Seit 0.34.96 viel seltener (gemeldet: "viel zu viele mit
+    # Panzerbuechse") und meist mit Raketen: eine Panzerabwehrwaffe (der
+    # Reihe nach aus `waffen`, nach Spielernummer) und eine gewoehnliche.
+    panzerjaeger=dict(waffen=("raketenbuendel", "einwegwerfer", "raketenbuendel", "panzerbuechse"),
+                      je_team=1, je_bots=8),
     # Waffenwahl gegen Fahrzeuge (seit 0.34.95, bots._beste_waffe): so viel
     # lieber nimmt er dann eine Panzerabwehrwaffe, und so viel weniger
     # gern die Einwegrakete gegen Figuren (in Pixeln Wunschabstand).
@@ -1772,6 +1855,11 @@ BOTS = dict(
         uebermut=("ICH HAB IHN!", "DER IST FÄLLIG!", "HINTERHER!"),
         gruppe=("DA SIND MEHRERE!", "GANZE GRUPPE!", "HALTET DRAUF!"),
         gehoert=("DA WAR WAS!", "HÖRT IHR DAS?"),
+        # Seit 0.34.96 aus dem Fahrzeug: daran haengt das Funkgeraet.
+        fahrzeug_kontakt=("ZIEL ERFASST!", "FEINDKONTAKT, FEUER FREI!"),
+        fahrzeug_getroffen=("WIR WERDEN BESCHOSSEN!", "TREFFER AM BLECH!"),
+        fahrzeug_vor=("RÜCKEN VOR!", "FAHREN ZUR FRONT!"),
+        absetzen=("ABSITZEN, ABSITZEN!", "ALLE RAUS!"),
     ),
     # Seit 0.34.43 aus (gemeldet: "die Callouts gerade einmal rausnehmen,
     # die brauchen wir gerade nicht"). Gesprochen wird trotzdem - wer im
@@ -2429,7 +2517,7 @@ MUNITION = dict(
 # Farbe und Deckkraft der Linie, der Punkt am Ende, wie weit vor der Figur
 # er anfaengt und wie weit er hoechstens reicht.
 LASER = dict(farbe=(232, 44, 32), staerke=120, punkt=(255, 96, 70), ab=30.0,
-             weite=900.0)
+             weite=1600.0)            # 900 bis 0.34.95 - endete vor dem Bildrand
 
 # Kurzer heller Blitz bei jeder Explosion (seit 0.34.64, gemeldet: die
 # kleinen Explosionen des Raketenbuendels waren kaum zu erkennen). dauer
@@ -2781,6 +2869,7 @@ WAFFEN = {
         rueckstoss=190.0,
         kamera=6.5,
         huelsen=1,
+        scope=True,           # Zielfernrohr mit der rechten Maustaste (seit 0.34.96)
     ),
     "granate": dict(
         art="wurf",
@@ -2993,7 +3082,10 @@ WAFFEN = {
         # lief jeder zweite Schlag in die Unverwundbarkeit des Getroffenen
         # und war umsonst - drei Schlaege fuer zwei Treffer. Jetzt sitzt
         # jeder Schlag, und ein Mann ist nach 0.62 s erledigt.
-        schaden=60.0,
+        # Seit 0.34.96 deutlich schwaecher (gewuenscht): das Brecheisen ist
+        # nur noch der Notbehelf; wer im Nahkampf etwas will, waehlt eine
+        # Nahkampfwaffe fuer F (Loadout, NAHKAMPF["waehlbar"]).
+        schaden=26.0,
         takt=0.62,
         reichweite=36.0,
         winkel=80.0,          # Oeffnung des Schlags in Grad
@@ -3169,6 +3261,10 @@ WAFFEN = {
         klang="schuss_panzerbuechse",
         durchschlag=3,
         durch_deckung=True,
+        # Seit 0.34.96: durch Mauern und Panzerung noch so viele Pixel
+        # weiter (gewuenscht: "penetriert ein paar Meter"); der Laser endet
+        # am ersten Hindernis.
+        durchdringen=80.0,
         fahrzeug_schaden=220.0,   # 160 -> 220 (seit 0.34.95): Panzerabwehr soll wirken
         gegen_fahrzeug=True,
         laser=True,
@@ -3399,12 +3495,13 @@ WAFFEN = {
         name="VORSCHLAGHAMMER",
         # Langsam und schwer. Links ein Schlag, rechts auf den Boden: alles
         # ringsum fliegt weg, wie beim Stampfer des Koloss.
+        # Seit 0.34.96 langsamer und stoesst weit weg (gewuenscht).
         schaden=72.0,
-        takt=1.05,
-        reichweite=42.0,
+        takt=1.35,
+        reichweite=44.0,
         winkel=80.0,
-        schwung=0.4,
-        schub=420.0,
+        schwung=0.48,
+        schub=1100.0,
         kamera=3.5,
         rueckstoss=0.0,
         magazin=0,
@@ -3474,6 +3571,8 @@ WAFFEN = {
         huelsen=0,
         laerm=620.0,          # so weit hoeren Bots sie
         tempo_faktor=0.92,
+        f_schnitt=4.0,        # auf F ein Schnitt mit so viel x Schaden
+        f_takt=0.55,
     ),
     "wurfmesser": dict(
         art="nahkampf",
@@ -3500,6 +3599,7 @@ WAFFEN = {
         wurf_takt=0.5,
         bild_flug="wurfmesser_flug",
         lautlos=True,
+        f_werfen=True,        # auf F immer geworfen (seit 0.34.96)
     ),
     "speer": dict(
         art="nahkampf",
@@ -3508,7 +3608,7 @@ WAFFEN = {
         # man ihn holt.
         schaden=50.0,
         takt=0.75,
-        reichweite=66.0,
+        reichweite=96.0,      # seit 0.34.96 grosse Reichweite (66 vorher)
         winkel=22.0,
         schwung=0.25,
         schub=200.0,
@@ -3645,8 +3745,9 @@ KLASSEN = {
                     wuerfe=("blend", "knaller", "emp"), tempo=1.1, leben=0.9,
                     faehigkeit=(("drohne", 45.0),)),
     "nahkaempfer": dict(name="NAHKÄMPFER", text="Mehr Leben, Nahkampfwaffen, Stacheldraht",
-                        waffen=("hammer", "schrot", "schlagring", "schockstab", "wurfmesser",
-                                "kettensaege", "speer"),
+                        # Die Nahkampfwaffen liegen seit 0.34.96 auf F.
+                        waffen=("schrot", "doppelflinte", "autoschrot", "mp", "revolver",
+                                "zwillinge", "flammenwerfer"),
                         plaetze=("haupt", "seite", "spezial"),
                         wuerfe=("rauch", "blend", "schneeball"), leben=1.25, tempo=1.05,
                         faehigkeit=(("stacheldraht", 30.0),)),
@@ -3673,13 +3774,11 @@ KLASSE_FREI = dict(name="FREI", text="Ohne Klasse: Haupt- und Seitenwaffe frei, 
 # Nahkampf) oder "spezial" (nur fuer Klassen mit dem Platz dafuer).
 WAFFEN_PLATZ = dict(
     {w: "haupt" for w in ("sturm", "schrot", "scharf", "lmg", "mp", "praezision",
-                          "unterhebel", "doppelflinte", "autoschrot", "hammer",
+                          "unterhebel", "doppelflinte", "autoschrot",
                           "kettenblitz", "spiegellaser")},
-    **{w: "seite" for w in ("repetierer", "revolver", "zwillinge", "bolzer", "nagler",
-                            "schockstab", "schlagring", "wurfmesser")},
+    **{w: "seite" for w in ("repetierer", "revolver", "zwillinge", "bolzer", "nagler")},
     **{w: "spezial" for w in ("minigun", "panzerbuechse", "granatwerfer", "einwegwerfer",
-                              "raketenbuendel", "kettensaege", "speer", "spule",
-                              "kugelblitz", "flammenwerfer")})
+                              "raketenbuendel", "spule", "kugelblitz", "flammenwerfer")})
 # Wie die Plaetze im Menue heissen und welche ein Satz ohne Klasse hat.
 PLATZ_NAMEN = dict(haupt="HAUPTWAFFE", seite="SEITENWAFFE", spezial="SPEZIALWAFFE")
 PLAETZE_VORGABE = ("haupt", "seite")
@@ -4082,7 +4181,6 @@ ALLES_GRUPPEN = (
     ("MG", ("lmg", "minigun")),
     ("SCHWER", ("granatwerfer", "einwegwerfer", "raketenbuendel", "flammenwerfer")),
     ("ENERGIE", ("spule", "kettenblitz", "spiegellaser", "kugelblitz", "nagler", "bolzer")),
-    ("NAHKAMPF", ("hammer", "schockstab", "schlagring", "kettensaege", "wurfmesser", "speer")),
     ("GRANATEN", ("granate", "rauch", "blend", "molotov", "gas", "kuller", "knaller", "schneeball")),
     ("SPRENGSTOFF", ("c4", "haftladung", "emp")),
 )
@@ -4157,10 +4255,9 @@ LOADOUT = dict(
                     "panzerbuechse", "doppelflinte", "autoschrot", "minigun",
                     "granatwerfer", "einwegwerfer", "raketenbuendel",
                     # Nahkampf und Werkzeug (seit 0.34.66)
-                    "bolzer", "nagler", "hammer", "schockstab", "schlagring",
-                    "kettensaege",
-                    # Stechen und werfen (seit 0.34.67)
-                    "wurfmesser", "speer",
+                    "bolzer", "nagler",
+                    # Hammer, Schockstab, Schlagring, Kettensaege, Wurfmesser
+                    # und Speer liegen seit 0.34.96 auf F (NAHKAMPF waehlbar).
                     # Energie und Feuer (seit 0.34.68)
                     "spule", "kettenblitz", "spiegellaser", "kugelblitz",
                     "flammenwerfer"),
@@ -4274,6 +4371,10 @@ KONTO = dict(
 # Brecheisen traegt, waere eine Luege - sie traegt ein Gewehr.
 NAHKAMPF = dict(
     waffe="brecheisen",       # welcher Eintrag aus WAFFEN den Schlag macht
+    # Seit 0.34.96: was man im Loadout fuer F waehlen kann. Nahkampfwaffen
+    # belegen keinen Waffenplatz mehr, sie ersetzen das Brecheisen.
+    waehlbar=("brecheisen", "hammer", "speer", "wurfmesser", "schockstab",
+              "schlagring", "kettensaege"),
     sperrt_feuer=True,        # waehrend des Schwungs wird nicht geschossen
     # So lange bleibt das Eisen nach dem Schwung noch in der Hand (seit
     # 0.32.8, gemeldet: "die Waffe soll frueher versteckt werden - gerade
@@ -4333,6 +4434,7 @@ HUD = dict(
     karte_x=10,               # ihr linker Rand
     unten=6,                  # Abstand der Kreise vom unteren Bildrand
     karte_zoom=1.5,           # so viel groesser als die alte Karte oben links
+    karte_ganz=1.0,           # die laengere Kartenseite = so viel vom Durchmesser (seit 0.34.96)
     bogen_abstand=0,          # der Ring liegt direkt am Kreis an (seit 0.34.93)
     bogen_dicke=5,
     bogen_von=200.0,          # Grad (0 = rechts, 90 = oben): von links unten ...

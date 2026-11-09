@@ -155,12 +155,15 @@ def bot_waffen_vielfalt(waffen: list, rnd) -> list:
     return raus
 
 
-def panzerjaeger_waffen(nummer: int) -> list:
-    """Was ein Panzerjaeger traegt (seit 0.34.95, K.BOTS panzerjaeger): die
-    Panzerbuechse und, je nach Nummer, Einweg-Raketenwerfer oder
-    Raketenbuendel."""
+def panzerjaeger_waffen(nummer: int, normal: str = "sturm") -> list:
+    """Was ein Panzerjaeger traegt (seit 0.34.96, K.BOTS panzerjaeger): eine
+    Panzerabwehrwaffe - nach Nummer meist Raketen, selten die
+    Panzerbuechse - und eine gewoehnliche Waffe."""
     p = K.BOTS["panzerjaeger"]
-    return list(p["waffen"]) + [p["dazu"][nummer % len(p["dazu"])]]
+    pa = p["waffen"][nummer % len(p["waffen"])]
+    if normal == pa or normal not in K.WAFFEN:
+        normal = "sturm"
+    return [pa, normal]
 
 
 def bot_loadout(rnd, fest=None, vielfalt: bool = False) -> dict:
@@ -272,6 +275,9 @@ class BotHirn(Taktik):
                "admin": ""}
         if not k.lebt:
             return ein
+        if getattr(k, "mitfahrt", None) is not None:
+            # Hinten auf dem Panzerwagen (seit 0.34.96): der Fahrer setzt ab.
+            return ein
         if k.am_boden:
             # Am Boden bleibt nur das Rufen - wie bei einem Menschen. Was er
             # vorhatte, ist vorbei (seit 0.34.46: in der Anzeige stand
@@ -293,6 +299,10 @@ class BotHirn(Taktik):
             return self._am_steuer(dt, ein)
         if getattr(k, "darf_fahren", False):
             hin = self._zum_fahrzeug(ein)
+            if hin is not None:
+                return hin
+        elif getattr(g, "schlacht", False):
+            hin = self._aufsitzen_wollen(ein)
             if hin is not None:
                 return hin
 
@@ -571,6 +581,7 @@ class BotHirn(Taktik):
         k = self.k
         jetzt = self.g.welt.zeit
         sichtbar = []
+        melden = getattr(self.g, "lage_melden", None)
         for w in self._kandidaten():
             # Wer liegt, ist keine Gefahr mehr (bottaktik.kampffaehig): nicht
             # hinsehen spart je Liegendem eine Sichtlinie (seit 0.34.52).
@@ -578,6 +589,8 @@ class BotHirn(Taktik):
                 continue
             if self.sieht(w):
                 sichtbar.append(w)
+                if melden is not None:
+                    melden(k, w)
                 self.gesehen[w] = (pygame.Vector2(w.pos), w.ebene, jetzt)
                 if self.spuren:
                     self._spur_weg(w.pos, w.ebene, alle=False)
@@ -597,8 +610,13 @@ class BotHirn(Taktik):
         liegt = self.ziel is not None and getattr(self.ziel, "am_boden", False)
         if liegt:
             self.stoss_rest = 0.0
+        # Der Panzer nimmt zuerst gepanzerte Ziele (seit 0.34.96): sieht er
+        # ein Fahrzeug, laesst er den Fussgaenger.
+        panzer = getattr(k.fahrzeug, "art", "") == "panzer"
+        blech_da = panzer and any(getattr(w, "im_fahrzeug", False) for w in sichtbar)
         if (self.ziel is not None and self.ziel in sichtbar and not liegt
-                and self._ziel_erlaubt(self.ziel)):
+                and self._ziel_erlaubt(self.ziel)
+                and not (blech_da and not getattr(self.ziel, "im_fahrzeug", False))):
             # Er bleibt dran - ausser ein anderer, den er sieht, hat ihn eben
             # getroffen (seit 0.34.38). Wer von der Seite beschossen wird,
             # dreht sich zu dem, der schiesst, statt stur auf den ersten zu
@@ -636,6 +654,8 @@ class BotHirn(Taktik):
                         * K.BOTS["fahren"]["dreh_kosten"]
                 d -= self.schutz_bonus(w, schuetzlinge)[0]
                 d -= self._ziel_bonus(w)
+                if panzer and getattr(w, "im_fahrzeug", False):
+                    d -= K.BOTS["fahren"]["panzer_blech_vorzug"]
                 # HUEGEL: wer im Kreis steht, nimmt ihn uns weg.
                 if zone is not None and w.ebene == zone[1] \
                         and w.pos.distance_to(zone[0]) <= K.ZONE["radius"]:
@@ -1532,6 +1552,62 @@ class BotHirn(Taktik):
         ein["ziel"] = [round(bester.pos.x, 1), round(bester.pos.y, 1)]
         return ein
 
+    def _aufsitzen_wollen(self, ein: dict):
+        """SCHLACHT (seit 0.34.96): wer nichts zu tun hat und neben einem
+        Panzerwagen der eigenen Seite steht, den ein Bot faehrt und der noch
+        weit fahren will, sitzt auf - der Fahrer setzt ihn vor dem Kampf ab."""
+        k = self.k
+        g = self.g
+        if self.ziel is not None and self.ziel_ok(self.ziel):
+            return None
+        s = K.SCHLACHT
+        for b in getattr(g, "fahrzeuge", ()):
+            if (b.art != "panzerwagen" or b.fahrer is None or b.kaputt or b.ebene != k.ebene
+                    or not getattr(b.fahrer, "ist_bot", False)
+                    or b.fahrer.team != k.team
+                    or len(b.mitfahrer) >= b.werte["plaetze"]
+                    or getattr(b, "abgesetzt", False)):
+                continue
+            weit = b.pos.distance_to(k.pos)
+            if weit > s["aufsitzen_weite"]:
+                continue
+            h = b.fahrer.hirn
+            if h is None or (h.ziel is not None and h.ziel_ok(h.ziel)):
+                continue
+            if weit <= b.werte["einsteigen"] - 4.0:
+                if k.treppe_rest <= 0.0:
+                    ein["knoepfe"].append("nutzen")
+                return ein
+            will = self._sicher(self._weg_richtung(self._einstiegspunkt(b), b.ebene, ein))
+            ein["will"] = [round(will.x, 2), round(will.y, 2)]
+            ein["ziel"] = [round(b.pos.x, 1), round(b.pos.y, 1)]
+            return ein
+        return None
+
+    def _absetzen_pruefen(self, b, z) -> None:
+        """Am Steuer mit Leuten hinten drauf: vor einem Kampf absetzen - wenn
+        er Gegner sieht oder ein gemeldeter Kampf nahe ist -, danach langsam
+        mit ihnen vorruecken (K.SCHLACHT)."""
+        liste = b.__dict__.get("_mitfahrer")
+        if not liste:
+            return
+        s = K.SCHLACHT
+        nah = z is not None and z.pos.distance_to(b.pos) < s["absetzen_vor"] * 1.6
+        lage = getattr(self.g, "lage_nahe", None)
+        if not nah and lage is not None:
+            nah = lage(self.k.team, b.pos, s["absetzen_vor"]) is not None
+        punkte = getattr(self.g, "_schlacht_punkte", None)
+        if not nah and punkte is not None:
+            # Vor der Mitte und vor der Basis der anderen: dort wird gekaempft.
+            basis_l, basis_r, mitte = punkte()
+            feind = basis_r if self.k.team == 0 else basis_l
+            nah = (b.pos.distance_to(mitte) < s["mitte_nah"] + s["absetzen_vor"]
+                   or b.pos.distance_to(feind) < s["absetzen_vor"] * 1.5)
+        if nah:
+            self.funken("absetzen", wichtig=True)
+            self.g.alle_absetzen(b)
+            b.abgesetzt = True
+
     def _einstiegspunkt(self, b):
         """Wohin er zum Einsteigen geht: neben die Wanne, auf die Seite, die
         ihm naeher ist - beim Buggy reicht die Mitte."""
@@ -1560,6 +1636,11 @@ class BotHirn(Taktik):
         # Wie weit es bis zum eigentlichen Ziel ist, nicht bis zum naechsten
         # Wegpunkt - der liegt immer nah, und dann galt jede Strecke als kurz.
         gesamt = dist if weit is None else max(dist, weit)
+        if dist < f["nah_rueckwaerts"] and getattr(self, "_fahr_versuch", None) is not None:
+            # Ein naher Wegpunkt hinter ihm, nachdem er schon feststeckte
+            # (seit 0.34.96): rueckwaerts hin statt vorwaerts zu wenden -
+            # beim Wenden drehte sich ein Panzerwagen in einer Sackgasse fest.
+            gesamt = dist
         soll = math.degrees(math.atan2(weg.y, weg.x))
         ab = _winkel_diff(b.winkel, soll)
         voll = b.werte.get("stick_voll_lenken", 40.0)
@@ -1650,6 +1731,15 @@ class BotHirn(Taktik):
             ein["knoepfe"].append("nutzen")          # raus, bevor er hochgeht
             return ein
         z = self.ziel if self.ziel is not None and self.ziel_ok(self.ziel) else None
+        # Funk aus dem Fahrzeug (seit 0.34.96): wenn etwas passiert - ein
+        # neuer Gegner, ein Treffer am Blech. Nur dann funkt das Geraet.
+        if z is not None and z is not getattr(self, "_fz_gemeldet", None):
+            self._fz_gemeldet = z
+            self.funken("fahrzeug_kontakt")
+        leben_alt = getattr(self, "_fz_leben", b.leben)
+        if b.leben < leben_alt - 1.0:
+            self.funken("fahrzeug_getroffen")
+        self._fz_leben = b.leben
         # Ein Gegner, der eben noch zu sehen war: fuer die Kanone (explosiv)
         # und um den Turm schon dorthin zu drehen.
         verdeckt = None
@@ -1660,6 +1750,8 @@ class BotHirn(Taktik):
                       and kampffaehig(w)]
             if frisch:
                 verdeckt = min(frisch, key=lambda o: o[0].distance_to(b.pos))[0]
+        if getattr(self.g, "schlacht", False):
+            self._absetzen_pruefen(b, z)
         ziel_ort = (pygame.Vector2(z.pos) if z is not None
                     else (pygame.Vector2(verdeckt) if verdeckt is not None else None))
         gas, lenk = 0.0, 0.0
@@ -1702,6 +1794,11 @@ class BotHirn(Taktik):
                 self.streif_ort = self._streifziel()
             wp = self._wegpunkt_fuer(b, self.streif_ort[0])
             gas, lenk = self._lenken(b, wp, weit=b.pos.distance_to(self.streif_ort[0]))
+            if getattr(b, "abgesetzt", False) and abs(b.fahrt) > K.SCHLACHT["nach_absetzen_tempo"]:
+                # Nach dem Absetzen langsam mit den Leuten vor (seit 0.34.96):
+                # das Tempo begrenzt, nicht das Gas - mit halbem Gas kam er
+                # aus keiner Kurve mehr heraus.
+                gas = 0.0
             will = wp - b.pos
             ziel = b.pos + b.vorn * 200.0
         # Steckt er fest: Gas, aber er kommt nicht vom Fleck - gemessen am
@@ -1723,12 +1820,31 @@ class BotHirn(Taktik):
         else:
             self._fahr_anker = None
             self._fahr_steckt = 0.0
+        # Seit 0.34.96 merkt er, wie oft er an derselben Stelle feststeckt:
+        # jedes Mal etwas laenger zurueck und abwechselnd zur anderen Seite
+        # eingeschlagen (gemessen in SCHLACHT: ein Panzerwagen setzte eine
+        # Minute lang gleich vor und zurueck). Steckt er immer wieder, setzt
+        # er seine Leute ab.
+        versuch = getattr(self, "_fahr_versuch", None)
+        if versuch is not None and b.pos.distance_to(versuch[0]) > 90.0:
+            self._fahr_versuch = versuch = None
         if self._fahr_steckt > f["steckt_nach"] * 2.0:
             self._fahr_steckt = 0.0
             self._fahr_anker = None
-            self._fahr_zurueck = f["zurueck"]
+            n = 0 if versuch is None else versuch[1] + 1
+            self._fahr_versuch = (pygame.Vector2(b.pos) if versuch is None else versuch[0], n)
+            # Die ersten beiden Male wie bisher eine Sekunde, erst dann laenger.
+            self._fahr_zurueck = min(2.6, f["zurueck"] * (1.0 + 0.4 * max(0, n - 1)))
+            self._fahr_seite = 1.0 if n % 2 == 0 else -1.0
+            if n >= 3 and getattr(self.g, "schlacht", False) and b.__dict__.get("_mitfahrer"):
+                self.g.alle_absetzen(b)
+                b.abgesetzt = True
         if self._fahr_zurueck > 0.0:
-            gas, lenk = -0.8, -lenk if abs(lenk) > 0.05 else 0.0
+            n = 0 if getattr(self, "_fahr_versuch", None) is None else self._fahr_versuch[1]
+            if n == 0:
+                gas, lenk = -0.8, -lenk if abs(lenk) > 0.05 else 0.0
+            else:
+                gas, lenk = -0.8, getattr(self, "_fahr_seite", 1.0)
         ein["gl"] = [round(gas, 2), round(lenk, 2)]
         if will.length_squared() > 1.0:
             will = will.normalize()
@@ -2124,7 +2240,9 @@ class BotTeil:
 
     def _panzerjaeger_an(self) -> bool:
         """Gibt es in dieser Runde Panzerjaeger? Nur, wenn Fahrzeuge da sind."""
-        return bool(getattr(self, "fahrzeuge", ()))
+        # In SCHLACHT immer: dort kommen die Fahrzeuge erst nach den Bots
+        # an Fallschirmen (seit 0.34.96).
+        return bool(getattr(self, "fahrzeuge", ())) or bool(getattr(self, "schlacht", False))
 
     def _panzerjaeger_noetig(self, k) -> bool:
         """Soll `k` in diesem Leben Panzerjaeger sein? So viele je
@@ -2147,7 +2265,7 @@ class BotTeil:
         lo = bot_loadout(self._bot_rnd, fest, vielfalt=fest is None and self._bot_vielfalt())
         k.panzerjaeger = fest is None and self._panzerjaeger_noetig(k)
         if k.panzerjaeger:
-            lo = dict(lo, waffen=panzerjaeger_waffen(k.nummer))
+            lo = dict(lo, waffen=panzerjaeger_waffen(k.nummer, lo["waffen"][0]))
         plaetze = konto_modul.hotbar_aus_loadout(lo)
         k.loadout = lo
         k.waffen = plaetze
