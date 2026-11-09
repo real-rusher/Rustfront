@@ -371,6 +371,12 @@ class Welt:
         self.wesen: list = []
         self.neue: list = []
         self.partikel: list = []
+        # Der Flammenstrom (seit 0.34.95, K.FLAMME, flammen_ausstossen): je
+        # Fleck eine Liste statt eines Objekts, es sind bei einem
+        # Flammenwerfer schnell zweihundert. Mit eigener Uhr, weil `zeit`
+        # beim Gast steht - die Flammen sieht er trotzdem.
+        self.flammen: list = []
+        self.flammen_zeit = 0.0
         self._raster: dict[tuple, list] = {}
         self.zeit = 0.0
         self.held = None                 # setzt die Spielszene
@@ -675,6 +681,58 @@ class Welt:
         r = max(lb["mindestens"], min(lb["hoechstens"], radius * lb["je_radius"]))
         self.lichtblitze.append([pygame.Vector2(pos), int(ebene), r, lb["dauer"], lb["dauer"]])
 
+    def flammen_ausstossen(self, pos, winkel: float, ebene: int, daten: dict) -> None:
+        """Ein Zug des Flammenwerfers: so viele Flecken, wie in einen Takt
+        passen (K.FLAMME). Jeder ist schon ein Stueck des Takts unterwegs,
+        sonst kaemen sie in Buendeln aus der Duese statt als Strom.
+
+        Ein Fleck ist [x, y, ux, uy, v0, weg_max, geburt, r_max, dauer,
+        ebene]. Wo er gerade ist, folgt aus seinem Alter (flamme_jetzt) -
+        so muss niemand ihn je Schritt bewegen, und gezeichnet wird er
+        genau zwischen zwei Schritten. Die Wand sucht er beim Ausstossen:
+        dort bleibt er stehen."""
+        from .entities import RND
+        f = K.FLAMME
+        takt = daten.get("takt", 0.06)
+        reib = f["reibung"]
+        mitte_dauer = (f["dauer"][0] + f["dauer"][1]) / 2.0
+        # So schnell, dass ein Fleck in seiner Zeit die Reichweite schafft:
+        # Weg = v / reibung * (1 - e^(-reibung * t)).
+        v0 = (daten.get("reichweite", 130.0) * f["weite"] * reib
+              / max(0.05, 1.0 - math.exp(-reib * mitte_dauer)))
+        # Gleich viele Flecken je Pixel wie im Paket (dort 180 je Sekunde
+        # bei 170 px/s): ein laengerer Strom braucht mehr davon, sonst
+        # wird er duenn und dunkel.
+        n = f["dichte"] * v0 * takt
+        anzahl = int(n) + (1 if RND.random() < n - int(n) else 0)
+        jetzt = self.flammen_zeit
+        start = pygame.Vector2(pos)
+        for _ in range(anzahl):
+            a = winkel + RND.uniform(-f["streuung"] / 2, f["streuung"] / 2)
+            u = pygame.Vector2(1, 0).rotate(a)
+            v = v0 * RND.uniform(1.0 - f["tempo_streuung"], 1.0 + f["tempo_streuung"])
+            weit = v / reib
+            halt = self.strahl(start, u, weit, ebene)
+            self.flammen.append([start.x, start.y, u.x, u.y, v, halt.distance_to(start),
+                                 jetzt - RND.uniform(0.0, takt), RND.uniform(*f["r_max"]),
+                                 RND.uniform(*f["dauer"]), ebene])
+        if len(self.flammen) > f["hoechstens"]:
+            del self.flammen[:len(self.flammen) - f["hoechstens"]]
+
+    def flamme_jetzt(self, b: list, zeit: float):
+        """(x, y, r, hitze) eines Flecks zur Zeit `zeit`, hitze <= 0: aus."""
+        f = K.FLAMME
+        alter = max(0.0, zeit - b[6])
+        reib = f["reibung"]
+        weg = min(b[5], b[4] / reib * (1.0 - math.exp(-reib * alter)))
+        return (b[0] + b[2] * weg, b[1] + b[3] * weg,
+                min(b[7], f["r_start"] + f["r_wachsen"] * alter), 1.0 - alter / b[8])
+
+    def _flammen_schritt(self, dt: float) -> None:
+        jetzt = self.flammen_zeit
+        if any(jetzt - b[6] >= b[8] for b in self.flammen):
+            self.flammen = [b for b in self.flammen if jetzt - b[6] < b[8]]
+
     def schussknall(self, pos, winkel: float, ebene: int, waffe: str,
                     quelle=None) -> None:
         """Muendungsblitz, Funken und Knall eines Schusses.
@@ -688,12 +746,10 @@ class Welt:
         pos = pygame.Vector2(pos)
         daten = K.WAFFEN.get(waffe) or K.FAHRZEUG_WAFFEN.get(waffe, {})
         if daten.get("flamme"):
-            # Der Flammenwerfer (seit 0.34.68): kein Blitz, ein Strom vieler
-            # ueberlappender Flammen - innen fast weiss, aussen rot, ohne Qualm.
-            for farbe, anz, gr in (((255, 250, 220), 3, 3), ((255, 200, 90), 4, 4),
-                                   ((240, 110, 40), 4, 4), ((190, 50, 30), 2, 3)):
-                wolke(self, pos, anz, daten["reichweite"] * 3.8, 0.26, farbe, ebene, gr,
-                      "funke", daten["winkel"], winkel, 0.8)
+            # Der Flammenwerfer: kein Blitz, ein Strom von Hitzeflecken, die
+            # zu einer Feuerzunge verschmelzen (seit 0.34.95 wie im Paket,
+            # K.FLAMME; vorher Funken).
+            self.flammen_ausstossen(pos, winkel, ebene, daten)
             if RND.random() < 0.12:
                 self.klang("flammenwerfer", 0.5, pos, ebene)
             return
@@ -818,6 +874,9 @@ class Welt:
             p.schritt(dt)
         if any(not p.lebt for p in self.partikel):
             self.partikel = [p for p in self.partikel if p.lebt]
+        self.flammen_zeit += dt
+        if self.flammen:
+            self._flammen_schritt(dt)
         if self.lichtblitze:
             for b in self.lichtblitze:
                 b[3] -= dt
@@ -1540,6 +1599,17 @@ class Welt:
             from .wege import Wegenetz
             netz = Wegenetz(self)
             self._wege = netz
+        return netz
+
+    @property
+    def fahrwege(self):
+        """Das Wegenetz fuer Fahrzeuge (seit 0.34.95, wege.Fahrwegenetz),
+        beim ersten Gebrauch gerechnet."""
+        netz = getattr(self, "_fahrwege", None)
+        if netz is None:
+            from .wege import Fahrwegenetz
+            netz = Fahrwegenetz(self, K.BOTS["fahren"]["weg_rand"])
+            self._fahrwege = netz
         return netz
 
     def ebene_wechseln(self, wesen, ziel: int, loch_fest: bool = False) -> bool:

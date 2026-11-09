@@ -113,6 +113,11 @@ class Eingabe:
         self._gehalten: set[str] = set()
         self._gedrueckt: set[str] = set()
         self._losgelassen: set[str] = set()
+        # Zaehlt die Bilder (seit 0.34.95). GRUND: ein Druck gilt ein ganzes
+        # Bild, in einem Bild laufen aber oft zwei oder drei Rechenschritte.
+        # Wer Druecke je Schritt liest, merkt so, ob er dieses Bild schon
+        # gelesen hat - sonst zaehlt ein Druck doppelt.
+        self.bild = 0
         self.maus = pygame.Vector2(0, 0)      # in Spielkoordinaten der Flaeche
         self.rad = 0
         # Ein Stick statt WASD (touch.py, seit 0.34.20): der Bewegungswunsch
@@ -126,6 +131,7 @@ class Eingabe:
         self.ziel_versatz: pygame.Vector2 | None = None
 
     def neues_bild(self) -> None:
+        self.bild += 1
         self._gedrueckt.clear()
         self._losgelassen.clear()
         self.rad = 0

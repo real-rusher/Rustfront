@@ -39,8 +39,12 @@ def ist_gegner(ding, fraktion: str) -> bool:
             and not getattr(ding, "ist_ausruestung", False))
 
 
-def markieren(ding) -> None:
+def markieren(ding, fuer: str = "") -> None:
+    """`fuer`: die Fraktion, die es jetzt weiss (seit 0.34.95). Im Gefecht
+    sieht sie den Markierten auch im Nebel und auf der Karte."""
     ding.markiert_rest = max(getattr(ding, "markiert_rest", 0.0), A["markiert"])
+    if fuer:
+        ding.markiert_fuer = fuer
 
 
 class Ausruestung(Wesen):
@@ -326,6 +330,10 @@ class Drohne(Ausruestung):
         self.phase = math.radians(winkel)
         self.bild = "teil_drohne_a"
         self._takt = 0.0
+        # Sie startet, wo sie hingestellt wird, und fliegt in einer Spirale
+        # hinaus auf ihren Kreis (seit 0.34.95: der Kreis ist weit, sie
+        # sprang sonst gleich 230 px weg).
+        self.kreis_jetzt = 0.0
 
     def emp_treffen(self, dauer: float) -> None:
         # Sie faellt herunter (Waffenpaket: "die Drohne sinkt zu Boden").
@@ -335,17 +343,24 @@ class Drohne(Ausruestung):
         super().schritt(dt)
         d = A["drohne"]
         self.phase += d["tempo"] * dt
-        neu = self.mitte + pygame.Vector2(d["kreis"], 0).rotate(math.degrees(self.phase))
+        self.kreis_jetzt = min(d["kreis"], self.kreis_jetzt + d["hinaus"] * dt)
+        neu = self.mitte + pygame.Vector2(self.kreis_jetzt, 0).rotate(math.degrees(self.phase))
         self.winkel = math.degrees(self.phase) + 90
         self.pos.update(neu)
         self._takt += dt
         self.bild = "teil_drohne_a" if int(self._takt * 20) % 2 else "teil_drohne_b"
         if int((self._takt - dt) / 0.5) != int(self._takt / 0.5):
             self.welt.klang("drohne", 0.25, self.pos, self.ebene)
+        # Nicht in jedem Schritt (seit 0.34.95): der Blick ist weit, die
+        # Markierung haelt laenger als der Takt.
+        self._such_rest = getattr(self, "_such_rest", 0.0) - dt
+        if self._such_rest > 0.0:
+            return
+        self._such_rest = d["such_takt"]
         for a in self.welt.nahe(self.pos, d["sicht"], self.ebene):
             if (a is not self and ist_gegner(a, self.fraktion)
                     and a.pos.distance_to(self.pos) <= d["sicht"]):
-                markieren(a)
+                markieren(a, self.fraktion)
 
     def sterben(self, von=None) -> None:
         wolke(self.welt, self.pos, 10, 120, 0.4, (255, 220, 150), self.ebene, 1, "funke")
@@ -381,7 +396,7 @@ class Horchposten(Ausruestung):
             if (a is not self and ist_gegner(a, self.fraktion)
                     and a.pos.distance_to(self.pos) <= h["weite"]
                     and a.tempo.length() > h["bewegt"]):
-                markieren(a)
+                markieren(a, self.fraktion)
 
 
 # ── Hilfe ──────────────────────────────────────────────────────────────

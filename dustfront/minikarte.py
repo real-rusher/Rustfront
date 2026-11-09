@@ -182,10 +182,14 @@ class Minikarte:
 
         # Feindliche Spieler und Bots, wenn der Gastgeber es so eingestellt
         # hat (Regel "gegner_karte", seit 0.34.18) - unter den eigenen.
-        if (getattr(g, "regelwerk", None) or {}).get("gegner_karte"):
-            for k in g.kaempfer.values():
-                if k is ich or not k.lebt or k.fraktion == ich.fraktion:
-                    continue
+        # Seit 0.34.95 immer die, die eine eigene Drohne oder ein eigener
+        # Horchposten gerade markiert hat.
+        alle_feinde = bool((getattr(g, "regelwerk", None) or {}).get("gegner_karte"))
+        markiert = getattr(g, "fuer_mich_markiert", None)
+        for k in g.kaempfer.values():
+            if k is ich or not k.lebt or k.fraktion == ich.fraktion:
+                continue
+            if alle_feinde or (markiert is not None and markiert(k)):
                 if int(k.ebene) != nr or getattr(k, "raus", False):
                     continue
                 px, py = punkt(k.pos)

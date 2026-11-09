@@ -392,6 +392,18 @@ class Buggy(Wesen):
         grenze = (self.radius + radius) ** 2
         return any(c.distance_squared_to(pos) <= grenze for c in self.kreise())
 
+    def rand_punkt(self, pos) -> pygame.Vector2:
+        """Der Punkt am Blech, der `pos` am naechsten ist (`pos` selbst,
+        wenn es am Wagen oder darin liegt). Seit 0.34.95 fuer Raketen: ein
+        Treffer am Bug ist ein Volltreffer, auch wenn die Mitte des Wagens
+        weit weg liegt."""
+        pos = pygame.Vector2(pos)
+        c = min(self.kreise(), key=lambda k: k.distance_squared_to(pos))
+        ab = pos - c
+        if ab.length_squared() <= self.radius * self.radius:
+            return pos
+        return c + ab.normalize() * self.radius
+
     def passt(self, pos, winkel=None) -> bool:
         """Kann er hier stehen? Mauern, Loecher und alles Unverschiebbare
         (Zielpuppe, Koloss) halten ihn auf; Menschen und gewoehnliche
@@ -1045,6 +1057,14 @@ class Schwer(Buggy):
         ny = max(-f["halb"], min(lok.y, f["halb"]))
         return (lok.x - nx) ** 2 + (lok.y - ny) ** 2 <= radius * radius
 
+    def rand_punkt(self, pos) -> pygame.Vector2:
+        """Der naechste Punkt des Rechtecks (siehe Buggy)."""
+        f = self.werte
+        lok = self.lokal(pos)
+        nx = max(f["hinten"], min(lok.x, f["vorn"]))
+        ny = max(-f["halb"], min(lok.y, f["halb"]))
+        return self.pos + pygame.Vector2(nx, ny).rotate(self.winkel)
+
     def kreise(self, pos=None, winkel=None) -> tuple:
         """Fuer alles, was nur Kreise kennt: drei Kreise entlang der Mitte."""
         pos = self.pos if pos is None else pos
@@ -1497,6 +1517,15 @@ class Panzerwagen(Schwer):
     art = "panzerwagen"
     werte = K.PANZERWAGEN
     aufbau_name = "panzerwagen_ring"
+
+    @property
+    def mitfahrer(self) -> list:
+        """Wer hinten aufgesessen ist (seit 0.34.95, Truppentransporter).
+        Beim Gast steht hier nichts; er kennt nur die Zahl (`besetzt_mit`)."""
+        liste = self.__dict__.get("_mitfahrer")
+        if liste is None:
+            liste = self._mitfahrer = []
+        return liste
 
     @property
     def aufbau_dreh(self) -> float:

@@ -139,7 +139,31 @@ def bot_waffen_gewichten(waffen: list, rnd) -> list:
     return raus
 
 
-def bot_loadout(rnd, fest=None) -> dict:
+def bot_waffen_vielfalt(waffen: list, rnd) -> list:
+    """Mehr Vielfalt (seit 0.34.95, K.BOTS vielfalt/varianten): eine
+    gezogene Waffe wird manchmal gegen eine verwandte getauscht - statt des
+    Sturmgewehrs eine MP, statt der Schrotflinte die Doppelflinte. Wie beim
+    Gewichten mit eigenem Zufall aus dem Stand von `rnd`, ohne ihn
+    weiterzudrehen."""
+    b = K.BOTS
+    zufall = random.Random(hash(rnd.getstate()[1][24:48]))
+    raus = list(waffen)
+    for i, w in enumerate(raus):
+        andere = [x for x in b["varianten"].get(w, ()) if x in K.WAFFEN and x not in raus]
+        if andere and zufall.random() < b["vielfalt"]:
+            raus[i] = andere[zufall.randrange(len(andere))]
+    return raus
+
+
+def panzerjaeger_waffen(nummer: int) -> list:
+    """Was ein Panzerjaeger traegt (seit 0.34.95, K.BOTS panzerjaeger): die
+    Panzerbuechse und, je nach Nummer, Einweg-Raketenwerfer oder
+    Raketenbuendel."""
+    p = K.BOTS["panzerjaeger"]
+    return list(p["waffen"]) + [p["dazu"][nummer % len(p["dazu"])]]
+
+
+def bot_loadout(rnd, fest=None, vielfalt: bool = False) -> dict:
     """Ein Loadout fuer einen Bot: zwei verschiedene Waffen und eine
     Granate (K.BOTS["wurf_arten"]) - oder das vorgegebene ("eines fuer
     alle"), dann aber auch nur mit einer Wurfwaffe. C4 nie. Die Waffen
@@ -157,6 +181,8 @@ def bot_loadout(rnd, fest=None) -> dict:
     # zweiter Waffe hielten sie im Feuerschutz messbar schlechter nieder -
     # ihre KI ist auf zwei Hauptwaffen abgestimmt (tests/test_verhalten.py).
     waffen = bot_waffen_gewichten(rnd.sample(list(K.BOTS["waffen"]), 2), rnd)
+    if vielfalt:
+        waffen = bot_waffen_vielfalt(waffen, rnd)
     return {"name": "BOT", "waffen": waffen, "wuerfe": [rnd.choice(wuerfe)]}
 
 
@@ -720,8 +746,21 @@ class BotHirn(Taktik):
             return None
         wunsch = K.BOTS["wunschabstand"]
         vorzug = K.BOTS["waffe_vorzug"]
+        # Gegen ein Fahrzeug die Panzerabwehr, sonst die Einwegrakete
+        # sparen (seit 0.34.95, Panzerjaeger).
+        z = getattr(self, "ziel", None)
+        gegen_blech = (z is not None and (getattr(z, "im_fahrzeug", False)
+                                          or getattr(z, "ist_fahrzeug", False)))
+        pa = K.BOTS["panzerabwehr"]
+
+        def blech(name):
+            d = K.WAFFEN[name]
+            stark = d.get("fahrzeug_schaden") is not None or d.get("gegen_fahrzeug")
+            if gegen_blech:
+                return -pa["vorzug"] if stark else 0.0
+            return pa["einweg_sparen"] if d.get("einweg") else 0.0
         return min(liste, key=lambda p: abs(wunsch.get(p[1], 220.0) - abstand)
-                   - vorzug.get(p[1], 0.0)
+                   - vorzug.get(p[1], 0.0) + blech(p[1])
                    + (0 if self.k.magazin.get(p[1], 0) > 0 else 60))
 
     def _stoss(self):
@@ -1319,6 +1358,12 @@ class BotHirn(Taktik):
         oder einfach eine freie Stelle."""
         g = self.g
         k = self.k
+        # SCHLACHT (seit 0.34.95): zur Mitte, dann zur Basis der anderen.
+        vorstoss = getattr(g, "vorstoss_ziel", None)
+        if vorstoss is not None:
+            ziel = vorstoss(k, self.rnd)
+            if ziel is not None:
+                return ziel
         wahl = []
         for ebene, punkt, _name in getattr(g, "kreise", ()):
             wahl.append((pygame.Vector2(punkt), ebene))
@@ -1694,13 +1739,33 @@ class BotHirn(Taktik):
         return ein
 
     def _wegpunkt_fuer(self, b, ort):
-        """Der naechste Wegpunkt zu `ort` - fuer den Wagen gerechnet wie zu
-        Fuss (Wegenetz), nur vom Wagen aus."""
-        richtung = self._weg_richtung(ort, b.ebene)
-        if richtung.length_squared() < 0.01:
-            return pygame.Vector2(ort)
-        p = self.wegpunkt if self.wegpunkt is not None else pygame.Vector2(ort)
-        return pygame.Vector2(p)
+        """Der naechste Wegpunkt zu `ort` fuer den Wagen. Seit 0.34.95 aus
+        dem Wegenetz der Fahrzeuge (wege.Fahrwegenetz): durch Luecken, durch
+        die nur ein Mensch passt, schickt es ihn nicht mehr. Er zielt so
+        weit voraus, wie die Strecke gerade frei ist."""
+        f = K.BOTS["fahren"]
+        netz = self.g.welt.fahrwege
+        ort = pygame.Vector2(ort)
+        if b.pos.distance_to(ort) < K.TILE * 1.5:
+            return ort
+        ziel = netz.naechste_frei(b.ebene, ort)
+        if ziel is None:
+            return ort
+        _schl, feld = netz.feld_zu(b.ebene, ziel)
+        punkt, _rest = netz.schritt_ueber(b.ebene, feld, b.pos)
+        if punkt is None:
+            # Er steht neben dem Netz (an einer Wand): erst zurueck darauf.
+            nah = netz.naechste_frei(b.ebene, b.pos)
+            if nah is not None and nah.distance_to(b.pos) > 4.0 and _rest != 0:
+                return nah
+            return ort
+        breit = b.werte.get("halb", 12.0)
+        for _ in range(f["weg_voraus"]):
+            weiter, _r = netz.schritt_ueber(b.ebene, feld, punkt)
+            if weiter is None or not netz.gerade_frei(b.ebene, b.pos, weiter, breit):
+                break
+            punkt = weiter
+        return punkt
 
     def _fahrzeug_feuern(self, b, z, ziel_ort, ein: dict) -> None:
         """Kanone, Ring-MG und Bug-MG (seit 0.34.84). Die Kanone ist
@@ -1923,15 +1988,18 @@ class BotTeil:
 
     @property
     def bots_soll(self) -> int:
-        """Wie viele Spieler es mit Bots insgesamt sein sollen, 0 = keine."""
+        """Wie viele Spieler es mit Bots insgesamt sein sollen, 0 = keine.
+        In SCHLACHT (seit 0.34.95) immer beide Seiten voll."""
         if not self.bots_aktiv:
             return 0
+        if getattr(self, "schlacht", False):
+            return self.schlacht_seite * len(K.TEAMS["namen"])
         return int(self.regelwerk.get("bots", 0) or 0)
 
     def bots_fest(self, team: int) -> int:
         """Wie viele Bots fest in dieser Mannschaft spielen (-1: ohne
         Mannschaften), unabhaengig von den Menschen (seit 0.34.26)."""
-        if not self.bots_aktiv:
+        if not self.bots_aktiv or getattr(self, "schlacht", False):
             return 0
         schluessel = "bots_dazu" if team < 0 else "bots_t%d" % team
         try:
@@ -1977,7 +2045,8 @@ class BotTeil:
             return
         self._bots_rest = K.BOTS["verwalten_takt"]
         for _ in range(4 * len(K.BOTS["auffuellen"])
-                       + K.BOTS["je_team_hoechstens"] * (len(K.TEAMS["namen"]) + 1) + 8):
+                       + K.BOTS["je_team_hoechstens"] * (len(K.TEAMS["namen"]) + 1) + 8
+                       + max(K.SCHLACHT["groessen"]) * len(K.TEAMS["namen"])):
             plan = self._bot_fehlen()
             fehlt = [t for t, n in plan if n > 0]
             zu_viel = [t for t, n in plan if n < 0]
@@ -2014,6 +2083,12 @@ class BotTeil:
         k.ist_bot = True
         k.angemeldet = None
         k.team_wunsch = team
+        # SCHLACHT (seit 0.34.95): so viele Bots je Seite duerfen fahren,
+        # wie die Basis Fahrzeuge hat - sonst fahren Bots nicht.
+        if getattr(self, "schlacht", False) and 0 <= team:
+            fahrer = sum(1 for x in self._bots() if x.team == team
+                         and getattr(x, "darf_fahren", False))
+            k.darf_fahren = fahrer < K.SCHLACHT["fahrer_je_seite"]
         k.konto = ""
         k.skin = bot_aussehen(name)
         self._regeln_anlegen(k)
@@ -2042,10 +2117,37 @@ class BotTeil:
         for k in self._bots():
             self._bot_weg(k)
 
+    def _bot_vielfalt(self) -> bool:
+        """Mehr verschiedene Waffen bei den Bots (seit 0.34.95). In echten
+        Runden immer; der Testmodus schaltet es selbst."""
+        return True
+
+    def _panzerjaeger_an(self) -> bool:
+        """Gibt es in dieser Runde Panzerjaeger? Nur, wenn Fahrzeuge da sind."""
+        return bool(getattr(self, "fahrzeuge", ()))
+
+    def _panzerjaeger_noetig(self, k) -> bool:
+        """Soll `k` in diesem Leben Panzerjaeger sein? So viele je
+        Mannschaft wie K.BOTS panzerjaeger je_team (in SCHLACHT
+        K.SCHLACHT panzerjaeger_je_seite) - gezaehlt, nicht gewuerfelt."""
+        if not self._panzerjaeger_an():
+            return False
+        hoechstens = (K.SCHLACHT["panzerjaeger_je_seite"] if getattr(self, "schlacht", False)
+                      else K.BOTS["panzerjaeger"]["je_team"])
+        # Einer je `je_bots` Bots der Mannschaft: in einer kleinen Runde
+        # waeren sonst gleich alle Bots Panzerjaeger.
+        team = [x for x in self._bots() if x.team == k.team]
+        soll = min(hoechstens, len(team) // K.BOTS["panzerjaeger"]["je_bots"])
+        da = sum(1 for x in team if x is not k and getattr(x, "panzerjaeger", False))
+        return da < soll
+
     def _bot_loadout_anlegen(self, k) -> None:
         """Zu jedem Leben ein neues, zufaelliges Loadout - ohne C4."""
         fest = self._fest_loadout() if self.loadout_regel == "gleich" else None
-        lo = bot_loadout(self._bot_rnd, fest)
+        lo = bot_loadout(self._bot_rnd, fest, vielfalt=fest is None and self._bot_vielfalt())
+        k.panzerjaeger = fest is None and self._panzerjaeger_noetig(k)
+        if k.panzerjaeger:
+            lo = dict(lo, waffen=panzerjaeger_waffen(k.nummer))
         plaetze = konto_modul.hotbar_aus_loadout(lo)
         k.loadout = lo
         k.waffen = plaetze

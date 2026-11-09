@@ -6435,7 +6435,16 @@ _rnd71 = EN.RND.getstate()
 _zufall71 = random.getstate()
 _tm71 = _TM59.Testmodus(app, karte="staubtal")
 _tm71._bot_rnd.seed(71)
-_ort71 = freier_punkt(_tm71.welt, 0, random.Random(71))
+# Eine Stelle mit freier Sicht zum Ziel (seit 0.34.95): die Pruefung sagt
+# "sieht er einen Gegner". Vorher stand er oft hinter einer Mauer und traf
+# nur, wenn ihn seine Streife zufaellig rechtzeitig um sie herumfuehrte -
+# mit dem Wegenetz fuer Fahrzeuge faehrt er dort anders.
+_r71 = random.Random(71)
+for _ in range(400):
+    _ort71 = freier_punkt(_tm71.welt, 0, _r71)
+    if (_tm71.welt.sicht_frei(_ort71, _ort71 + pygame.Vector2(0, -250), 0)
+            and _tm71.welt.frei(_ort71 + pygame.Vector2(0, -250), 12, 0)):
+        break
 _namen71 = {e.name for e in _TM59.eintraege()}
 pruef("Fahrer mit und ohne Fahrzeug, Schildtraeger und Trupp-Vorlagen im Spawner",
       {"FAHRER MIT FAHRZEUG", "FAHRER OHNE FAHRZEUG", "SCHILDTRÄGER", "TRUPP AUS VORLAGE"}
@@ -8716,9 +8725,12 @@ pruef("Und zu_bild ist die Umkehrung",
        - pygame.Vector2(123, 77)).length() < 0.6)
 
 sicht = wz.sicht_welt()
-pruef("Mit Zoom gibt es ein normales Bild, ausserhalb Nebel",
-      sicht is not None and sicht.size == (K.GAME_W, K.GAME_H)
-      and sicht.collidepoint(ich_z.pos.x, ich_z.pos.y))
+# Seit 0.34.95 ist der klare Bereich groesser als das normale Bild
+# (K.ZOOM klar, gewuenscht: "der Nebel soll etwas zurueckgehen").
+pruef("Mit Zoom gibt es einen klaren Bereich (K.ZOOM klar), ausserhalb Nebel",
+      sicht is not None and sicht.size == (int(round(K.GAME_W * K.ZOOM["klar"])),
+                                           int(round(K.GAME_H * K.ZOOM["klar"])))
+      and sicht.collidepoint(ich_z.pos.x, ich_z.pos.y), str(sicht))
 
 def bild_mit(gegner_pos):
     """Zeichnet einmal ohne und einmal mit einem Gegner an der Stelle und
@@ -12533,7 +12545,8 @@ pruef("Das Testmenue passt in seinen Kasten, jede Zeile",
                                                     _tm._menue_flaechen()[-1].bottom,
                                                     _tm.MENUE.bottom))
 _tm.nebel = True                   # seit 0.34.91 aus als Vorgabe - hier geht es um ihn
-_tm.zoom_ziel = _tm._zoom_weich = 1.5
+# Ganz heraus: seit 0.34.95 ist bis Zoom K.ZOOM klar (1,5) alles klar.
+_tm.zoom_ziel = _tm._zoom_weich = max(K.ZOOM["stufen"])
 _tm.schritt(_D87)
 pruef("Herausgezoomt zeichnet der Testmodus sonst nur im normalen Bild Figuren (Nebel)",
       _tm.sicht_welt() is not None, "")
@@ -16106,6 +16119,387 @@ pruef("Das Gewichten dreht den Zufall der Bots nicht weiter (feste Szenen bleibe
       _ra194.getstate() == _rb194.getstate())
 from dustfront.fahrzeug import Buggy as _Bg194, Panzer as _Pz194, Panzerwagen as _Pw194
 pruef("Fahrzeuge stehen flach (kein 3D)", _Bg194.hoehe_3d == _Pz194.hoehe_3d == _Pw194.hoehe_3d == 0.0)
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Ein Druck zaehlt einmal, auch bei mehreren Schritten im Bild (0.34.95)")
+w195, g195 = _paar59("team", karte="staubtal")
+_k195 = w195.ich
+w195._loadout_anlegen(_k195)
+for _ in range(4):
+    w195.schritt(K.NETZ["takt"]); g195.schritt(K.NETZ["takt"])
+_gr195 = [i_ for i_, w_ in enumerate(_k195.waffen) if w195.gruppe_von(w_) == 0]
+_k195.waffe_waehlen(_gr195[0])
+w195._waffe_soll = None
+
+def _bild195(szene, taste, schritte=3):
+    """Ein Bild wie im echten Ablauf: neues Bild, das Tastenereignis,
+    dann mehrere Rechenschritte (bei hoher Bildrate einer, bei niedriger
+    zwei oder drei)."""
+    e.neues_bild()
+    ev_ = pygame.event.Event(pygame.KEYDOWN, key=taste, mod=0, unicode="", scancode=0)
+    e.ereignis(ev_)
+    szene._knopf_merken(ev_.key)
+    for _ in range(schritte):
+        szene.schritt(K.FIXED_DT)
+    e.neues_bild()
+    e.ereignis(pygame.event.Event(pygame.KEYUP, key=taste, mod=0, unicode="", scancode=0))
+
+_t1_195 = e.tabelle["waffe1"][0]
+_gesehen195 = []
+for _ in range(len(_gr195)):
+    _bild195(w195, _t1_195)
+    _gesehen195.append(_k195.waffe)
+pruef("Mit Gruppen: jeder Druck auf 1 genau eine Waffe weiter, auch bei drei Schritten im Bild",
+      _gesehen195 == _gr195[1:] + _gr195[:1], "%s soll %s" % (_gesehen195, _gr195[1:] + _gr195[:1]))
+_k195.werkzeug = 0
+_tx195 = e.tabelle["werkzeug"][0]
+_wz195 = []
+for _ in range(len(K.WERKZEUGE)):
+    _bild195(w195, _tx195)
+    _wz195.append(_k195.werkzeug)
+pruef("X: jeder Druck genau ein Werkzeug weiter", _wz195 == [(i_ + 1) % len(K.WERKZEUGE)
+                                                   for i_ in range(len(K.WERKZEUGE))], str(_wz195))
+pruef("Die Bilder werden gezaehlt", e.bild > 0)
+w195.verlassen(); g195.verlassen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Panzerabwehr wirkt, Panzerwagen verwundbarer (0.34.95)")
+from dustfront import testmodus as _TM195, fahrzeug as _FZ195
+from dustfront.world import freier_punkt as _fp195
+_tm195 = _TM195.Testmodus(app, karte="staubtal")
+_wt195 = _tm195.welt
+_rnd195 = random.Random(195)
+
+def _rakete195(klasse, waffe, seite):
+    """Eine Rakete schlaegt 2 px vor dem Blech ein; was kommt beim Wagen an?"""
+    for _ in range(200):
+        v_ = klasse(_fp195(_wt195, 0, _rnd195), 0, 0.0)
+        v_.welt = _wt195
+        if v_._kacheln_frei(v_.pos, 0.0):
+            f_ = v_.werte
+            if seite == "vorn":
+                p_ = v_.pos + pygame.Vector2(f_["vorn"] + 2, 0)
+            elif seite == "hinten":
+                p_ = v_.pos + pygame.Vector2(f_["hinten"] - 2, 0)
+            else:
+                p_ = v_.pos + pygame.Vector2(0, f_["halb"] + 2)
+            if _wt195.deckung_anteil(p_, v_.rand_punkt(p_), 0) >= 1.0 \
+                    and _wt195.deckung_anteil(p_, v_.pos, 0) >= 1.0:
+                break
+    _wt195.wesen.append(v_)
+    _wt195._raster_bauen()
+    r_ = EN.Rakete(p_, (v_.pos - p_).as_polar()[1], K.WAFFEN[waffe], 0, None, waffe=waffe)
+    r_.welt = _wt195
+    vorher_ = v_.leben
+    r_.einschlag(v_)
+    _wt195.wesen.remove(v_)
+    return (vorher_ - v_.leben) / v_.max_leben
+
+_pw195 = {s_: _rakete195(_FZ195.Panzerwagen, "einwegwerfer", s_) for s_ in ("vorn", "seite", "hinten")}
+pruef("Einweg-Raketenwerfer: ein Panzerwagen haelt von vorn und der Seite einen Treffer aus, von hinten keinen",
+      0.5 <= _pw195["vorn"] < 1.0 and 0.65 <= _pw195["seite"] < 1.0 and _pw195["hinten"] >= 1.0, str(_pw195))
+_pz195 = _rakete195(_FZ195.Panzer, "einwegwerfer", "seite")
+pruef("... ein Panzer braucht zwei bis drei (er darf stark bleiben)", 1.0 / 3.0 <= _pz195 < 0.5, "%.2f" % _pz195)
+_bu195 = 6 * _rakete195(_FZ195.Panzerwagen, "raketenbuendel", "seite")
+pruef("Raketenbuendel: eine ganze Salve an der Seite nimmt einem Panzerwagen das meiste",
+      0.7 <= _bu195 < 1.0, "%.2f" % _bu195)
+_alt195 = K.WAFFEN["raketenbuendel"]
+pruef("... kleine Hohlladungen statt Sprengkoepfe", _alt195["schadensart"] == "hohlladung")
+_kugel195 = _FZ195.Panzerwagen(pygame.Vector2(0, 0), 0, 0.0).panzerung("kugel")
+pruef("Kugeln prallen am Panzerwagen weiter ab, das Leben bleibt",
+      _kugel195 <= 0.35 and K.PANZERWAGEN["leben"] == 620.0)
+_pb195 = K.WAFFEN["panzerbuechse"]["fahrzeug_schaden"] * K.PANZERUNG["panzerwagen"]["panzerbrechend"]
+pruef("Panzerbuechse: drei Treffer an der Seite fuer einen Panzerwagen",
+      2 * _pb195 < 620.0 <= 3 * _pb195, "%.0f je Treffer" % _pb195)
+_tm195.verlassen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Flammenwerfer wie im Waffenpaket: eine Feuerzunge statt Funken (0.34.95)")
+_tm196 = _TM195.Testmodus(app, karte="staubtal")
+_wt196 = _tm196.welt
+_rnd196 = random.Random(196)
+for _ in range(500):
+    _p196 = _fp195(_wt196, 0, _rnd196)
+    if all(_wt196.sicht_frei(_p196 + pygame.Vector2(0, dy_), _p196 + pygame.Vector2(170, dy_), 0)
+           for dy_ in (-30, 0, 30)):
+        break
+_wt196.partikel = []
+_wt196.schussknall(_p196, 0.0, 0, "flammenwerfer", None)
+pruef("Ein Zug des Flammenwerfers stoesst Hitzeflecken aus, keine Funken",
+      len(_wt196.flammen) >= 10 and not any(p_.art == "funke" for p_ in _wt196.partikel),
+      "%d Flecken, %d Partikel" % (len(_wt196.flammen), len(_wt196.partikel)))
+# Eine halbe Sekunde gehalten, Zug um Zug.
+_zug196 = K.WAFFEN["flammenwerfer"]["takt"]
+for _i196 in range(int(0.5 / K.FIXED_DT)):
+    _wt196.effekte_schritt(K.FIXED_DT)
+    if int((_i196 + 1) * K.FIXED_DT / _zug196) != int(_i196 * K.FIXED_DT / _zug196):
+        _wt196.schussknall(_p196, 0.0, 0, "flammenwerfer", None)
+_weit196 = max(_wt196.flamme_jetzt(b_, _wt196.flammen_zeit)[0] - _p196.x for b_ in _wt196.flammen)
+pruef("... sie fliegen fast so weit, wie er brennt (K.WAFFEN reichweite)",
+      0.6 * K.WAFFEN["flammenwerfer"]["reichweite"] < _weit196 <= 1.05 * K.WAFFEN["flammenwerfer"]["reichweite"],
+      "%.0f px" % _weit196)
+_bild196 = pygame.Surface((K.GAME_W, K.GAME_H))
+_bild196.fill((0, 0, 0))
+_ecke196 = _p196 - pygame.Vector2(40, K.GAME_H / 2)
+_tm196.renderer.flammen_zeichnen(_bild196, _wt196, 0, _ecke196, 1.0)
+_farben196 = set()
+for x_ in range(40, 40 + 150, 2):
+    for y_ in range(K.GAME_H // 2 - 20, K.GAME_H // 2 + 20, 2):
+        _farben196.add(tuple(_bild196.get_at((x_, y_)))[:3])
+_stufen196 = {tuple(f_) for _s, f_ in K.FLAMME["stufen"]}
+pruef("... und verschmelzen zu einer Zunge: innen fast weiss, aussen rot (die Stufen aus dem Paket)",
+      tuple(K.FLAMME["stufen"][0][1]) in _farben196 and tuple(K.FLAMME["stufen"][-2][1]) in _farben196
+      and _farben196 - {(0, 0, 0)} <= _stufen196, str(_farben196 - _stufen196))
+for _ in range(int(0.6 / K.FIXED_DT)):
+    _wt196.effekte_schritt(K.FIXED_DT)
+pruef("... und sind nach dem Loslassen nach gut einer halben Sekunde aus", not _wt196.flammen, str(len(_wt196.flammen)))
+# Vor einer Wand bleibt der Strom stehen.
+for _ in range(500):
+    _q196 = _fp195(_wt196, 0, _rnd196)
+    _wand196 = _wt196.strahl(_q196, pygame.Vector2(1, 0), 120.0, 0)
+    if 30.0 < _wand196.distance_to(_q196) < 80.0:
+        break
+_wt196.flammen = []
+_wt196.flammen_ausstossen(_q196, 0.0, 0, K.WAFFEN["flammenwerfer"])
+pruef("Vor einer Wand bleiben die Flammen an der Wand stehen",
+      all(b_[5] <= _wand196.distance_to(_q196) + 20.0 for b_ in _wt196.flammen),
+      "%.0f px bis zur Wand" % _wand196.distance_to(_q196))
+_tm196.verlassen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Spaehdrohne: weiter Kreis, Markierte im Nebel und auf der Karte; weniger Nebel (0.34.95)")
+from dustfront import ausruestung as _AU197
+_d197 = K.AUSRUESTUNG["drohne"]
+pruef("Die Drohne fliegt einen weiten Kreis und sieht weit (vorher 90 und 260)",
+      _d197["kreis"] >= 200.0 and _d197["sicht"] >= 320.0, "%s %s" % (_d197["kreis"], _d197["sicht"]))
+w197, g197 = _paar59("team", karte="staubtal")
+_ich197 = w197.ich
+_feind197 = w197.kaempfer[g197.meine_nummer]
+_feind197.team = 1 - _ich197.team if _ich197.team in (0, 1) else 1
+_feind197.fraktion = w197._fraktion_fuer(_feind197.nummer, _feind197.team)
+_feind197.lebt = True
+_dr197 = _AU197.Drohne(pygame.Vector2(_feind197.pos) + pygame.Vector2(200, 0), _feind197.ebene,
+                       _ich197.fraktion)
+w197.welt.dazu(_dr197)
+w197.schritt(K.FIXED_DT)
+pruef("Sie startet, wo sie steht, und fliegt hinaus auf ihren Kreis",
+      _dr197.pos.distance_to(_dr197.mitte) < 20.0, "%.0f" % _dr197.pos.distance_to(_dr197.mitte))
+for _i197 in range(int(3.0 / K.FIXED_DT)):
+    _feind197.pos.update(_dr197.mitte - pygame.Vector2(200, 0))
+    w197.schritt(K.FIXED_DT)
+    if _i197 % 4 == 0:
+        g197.schritt(4 * K.FIXED_DT)     # sonst gilt der Gast als gegangen
+pruef("... nach ein paar Sekunden fliegt sie auf dem weiten Kreis",
+      abs(_dr197.pos.distance_to(_dr197.mitte) - _d197["kreis"]) < 1.0)
+pruef("Sie markiert den Gegner fuer ihre Seite", getattr(_feind197, "markiert_rest", 0.0) > 0.0
+      and _feind197.markiert_fuer == _ich197.fraktion and w197.fuer_mich_markiert(_feind197))
+for _ in range(10):
+    w197.schritt(K.NETZ["takt"]); g197.schritt(K.NETZ["takt"])
+_gf197 = g197.kaempfer.get(_feind197.nummer)
+pruef("Der Gast erfaehrt, wer markiert ist und fuer wen (Netz: mf)",
+      _gf197 is not None and _gf197.markiert_fuer == _ich197.fraktion and _gf197.markiert_rest > 0.0)
+_bild197 = pygame.Surface((K.GAME_W, K.GAME_H))
+w197.zoom_ziel = w197._zoom_weich = w197.kamera.zoom = max(K.ZOOM["stufen"])
+_feind197.pos.update(_ich197.pos + pygame.Vector2(560, 0))
+pruef("Ganz herausgezoomt steht er im Nebel ...", not w197.im_licht(_feind197.pos))
+w197.zeichnen(_bild197, 1.0)
+_m197 = w197.kamera.zu_bild(_feind197.pos)
+_rot197 = any(tuple(_bild197.get_at((int(_m197.x) + dx_, int(_m197.y) - 20 + dy_)))[:3] == tuple(K.C_RED)[:3]
+              for dx_ in range(-2, 3) for dy_ in range(-2, 3)
+              if 0 <= int(_m197.x) + dx_ < K.GAME_W and 0 <= int(_m197.y) - 20 + dy_ < K.GAME_H)
+pruef("... aber markiert: die rote Raute zeigt, wo er steht", _rot197)
+_dr197.lebt = False
+_dr197.sterben(None) if hasattr(_dr197, "sterben") else None
+for _i197 in range(int((K.AUSRUESTUNG["markiert"] + 0.5) / K.FIXED_DT)):
+    w197.schritt(K.FIXED_DT)
+    if _i197 % 4 == 0:
+        g197.schritt(4 * K.FIXED_DT)
+pruef("Ohne Drohne laeuft die Markierung ab (bis 0.34.94 blieb sie im Gefecht fuer immer)",
+      _feind197.markiert_rest == 0.0 and not w197.fuer_mich_markiert(_feind197))
+w197.zoom_ziel = w197._zoom_weich = w197.kamera.zoom = 1.25
+pruef("Weniger Nebel: bis Zoom K.ZOOM klar ist alles klar", K.ZOOM["klar"] >= 1.5
+      and w197.sicht_welt() is None)
+w197.verlassen(); g197.verlassen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- SCHLACHT: links gegen rechts, volle Seiten, Fahrzeuge an der Basis, Vorstoss (0.34.95)")
+from dustfront import regeln as _R198, bots as _BO198
+_d198 = _R198.vorgabe()
+for _ in range(len(K.MODI) + 1):
+    if _d198["modus"] == "schlacht":
+        break
+    _R198.verstellen(_d198, "modus", 1)
+pruef("SCHLACHT ist waehlbar und schlaegt STAUBTAL und Abschuesse vor",
+      _d198["modus"] == "schlacht" and _d198["karte"] == K.SCHLACHT["karte"]
+      and _d198["ende_art"] == "abschuesse" and _d198["ende_wert"] == K.SCHLACHT["abschuesse"],
+      _R198.kurz(_d198))
+_sicht198 = [f_.schluessel for f_ in _R198.sichtbar(_d198, False)]
+pruef("... mit JE SEITE in der einfachen Ansicht, ohne die Regeln zum Bot-Auffuellen",
+      "schlacht_seite" in _sicht198 and "bots" not in _sicht198
+      and not any(f_.schluessel.startswith("bots_t") for f_ in _R198.sichtbar(_d198, True)), str(_sicht198))
+w198, g198 = _paar59("schlacht", karte="staubtal")
+w198._regeln_setzen(dict(_d198, schlacht_seite=12))
+w198._einstiegszonen_waehlen()
+w198._fahrzeuge_neu_aufstellen()
+w198._bots_fuehren(0.0, sofort=True)
+_je198 = [sum(1 for k_ in w198.kaempfer.values() if k_.team == i_) for i_ in range(2)]
+pruef("Beide Seiten stehen sofort voll - fehlende Spieler sind Bots", _je198 == [12, 12], str(_je198))
+_bl198, _br198, _mi198 = w198._schlacht_punkte()
+_breit198 = w198.welt.ebene(0).pixel_breite
+pruef("ROT hat seine Basis links, BLAU rechts", _bl198.x < 0.2 * _breit198 < 0.8 * _breit198 < _br198.x,
+      "%s %s" % (_bl198, _br198))
+_soll198 = sum(n_ for _a, n_ in K.SCHLACHT["fahrzeuge"])
+_bt198 = [[b_ for b_ in w198.fahrzeuge if getattr(b_, "basis_team", -1) == i_] for i_ in range(2)]
+pruef("Jede Basis hat ihre Fahrzeuge, die aus der Karte bleiben weg",
+      len(_bt198[0]) == len(_bt198[1]) == _soll198 and len(w198.fahrzeuge) == 2 * _soll198
+      and all(b_.pos.distance_to(w198.schlacht_basis(i_)) <= K.SCHLACHT["fahrzeug_umkreis"] + 60
+              for i_ in range(2) for b_ in _bt198[i_]), str([len(x_) for x_ in _bt198]))
+_bots198 = w198._bots()
+pruef("Je Seite fahren so viele Bots, wie die Basis Fahrzeuge hat (K.SCHLACHT fahrer_je_seite)",
+      all(sum(1 for k_ in _bots198 if k_.team == i_ and getattr(k_, "darf_fahren", False))
+          == K.SCHLACHT["fahrer_je_seite"] for i_ in range(2)))
+_pj_soll198 = [min(K.SCHLACHT["panzerjaeger_je_seite"],
+                   sum(1 for k_ in _bots198 if k_.team == i_) // K.BOTS["panzerjaeger"]["je_bots"])
+               for i_ in range(2)]
+pruef("Je Seite tragen Panzerjaeger Panzerbuechse und Raketen (einer je vier Bots, hoechstens K.SCHLACHT)",
+      all(sum(1 for k_ in _bots198 if k_.team == i_ and getattr(k_, "panzerjaeger", False))
+          == _pj_soll198[i_] >= 2 for i_ in range(2))
+      and all("panzerbuechse" in k_.waffen and ("einwegwerfer" in k_.waffen or "raketenbuendel" in k_.waffen)
+              for k_ in _bots198 if getattr(k_, "panzerjaeger", False)))
+_ort198 = w198._einstiegsort(1)
+pruef("Eingestiegen wird in der eigenen Basis",
+      _ort198.distance_to(_br198) <= K.SCHLACHT["spawn_umkreis"] * 1.5, "%.0f" % _ort198.distance_to(_br198))
+_rot198 = next(k_ for k_ in _bots198 if k_.team == 0)
+_rot198.pos.update(_bl198)
+_z1_198 = w198.vorstoss_ziel(_rot198, random.Random(1))
+_rot198.pos.update(_mi198)
+_z2_198 = w198.vorstoss_ziel(_rot198, random.Random(1))
+pruef("Vorstoss: aus der Basis erst zur Mitte, von der Mitte zur Basis der anderen",
+      _z1_198[0].distance_to(_mi198) < 1.5 * K.SCHLACHT["streuung"]
+      and _z2_198[0].distance_to(_br198) < 1.5 * K.SCHLACHT["streuung"], "%s %s" % (_z1_198, _z2_198))
+pruef("... und der Streifzug eines Bots folgt ihm (nicht die ganze Karte)",
+      _rot198.hirn._streifziel()[0].distance_to(_br198) < 1.5 * K.SCHLACHT["streuung"])
+# Ein Wrack kommt an seiner Basis wieder.
+_pz198 = next(b_ for b_ in _bt198[1] if b_.art == "panzer")
+_pz198.schaden(_pz198.leben + 5000.0, None, None, art="hohlladung")
+_pz198.wrack_rest = 0.0
+w198._fahrzeuge_erneuern(0.0)
+w198._fahrzeuge_erneuern(K.PANZER["neu_nach"] + 1.0)
+_neu198 = [b_ for b_ in w198.fahrzeuge if b_.art == "panzer" and getattr(b_, "basis_team", -1) == 1]
+pruef("Ein zerstoerter Panzer kommt an der Basis seiner Seite wieder",
+      len(_neu198) == 1 and _neu198[0] is not _pz198
+      and _neu198[0].pos.distance_to(_br198) <= K.SCHLACHT["fahrzeug_umkreis"] + 60)
+
+print("\n-- Panzerwagen als Truppentransporter, Funk der Fahrzeuge (0.34.95)")
+_ich198 = w198.ich
+_pw198 = next(b_ for b_ in _bt198[_ich198.team] if b_.art == "panzerwagen")
+_fahrer198 = next(k_ for k_ in _bots198 if k_.team == _ich198.team and k_.fahrzeug is None)
+for b_ in w198.fahrzeuge:
+    if b_.fahrer is not None:
+        w198._fahrzeug_loesen(b_.fahrer)
+w198._einsteigen(_fahrer198, _pw198)
+pruef("Ein Bot am Steuer: der Wagen funkt", w198._funkt(_pw198))
+_ich198.lebt = True
+_ich198.am_boden = False
+_ich198.ebene = _pw198.ebene
+_ich198.pos.update(_pw198.pos + pygame.Vector2(0, _pw198.werte["halb"] + 14).rotate(_pw198.winkel))
+_ich198.treppe_rest = 0.0
+
+def _e198(k_):
+    w198._anwenden(k_, {"will": [0, 0], "ziel": [k_.pos.x + 10, k_.pos.y], "knoepfe": ["nutzen"]})
+
+_e198(_ich198)
+pruef("E am Panzerwagen, den ein Kamerad faehrt: man sitzt hinten auf",
+      _ich198.mitfahrt is _pw198 and _ich198 in _pw198.mitfahrer and _ich198.im_fahrzeug
+      and not _ich198.trefferbar and _pw198.fahrer is _fahrer198)
+_pw198.pos += pygame.Vector2(40, 0)
+w198._mitfahrer_nachziehen()
+pruef("... und faehrt mit", _ich198.pos == _pw198.pos)
+for _ in range(8):
+    w198.schritt(K.NETZ["takt"]); g198.schritt(K.NETZ["takt"])
+_gpw198 = next((b_ for b_ in g198.fahrzeuge if b_.art == "panzerwagen"
+                and getattr(b_, "fahrer_nummer", -1) == _fahrer198.nummer), None)
+pruef("Der Gast weiss, wie viele aufsitzen und dass ein Bot faehrt (Netz: Fahrzeug Feld 15)",
+      _gpw198 is not None and _gpw198.besetzt_mit == 1 and g198._funkt(_gpw198))
+_ich198.treppe_rest = 0.0
+_e198(_ich198)
+pruef("E noch einmal: man steigt ab, neben den Wagen",
+      _ich198.mitfahrt is None and not _ich198.im_fahrzeug and _ich198.trefferbar
+      and _ich198 not in _pw198.mitfahrer and _ich198.pos != _pw198.pos)
+_bot198 = next(k_ for k_ in _bots198 if k_.team == _ich198.team and k_ is not _fahrer198
+               and k_.fahrzeug is None and not getattr(k_, "darf_fahren", False))
+_bot198.ebene = _pw198.ebene
+_bot198.pos.update(_ich198.pos)
+_bot198.treppe_rest = 0.0
+_e198(_bot198)
+pruef("Bots sitzen nicht auf (bis jetzt nur Spieler)", getattr(_bot198, "mitfahrt", None) is None)
+_ich198.pos.update(_pw198.pos + pygame.Vector2(0, _pw198.werte["halb"] + 14).rotate(_pw198.winkel))
+_ich198.treppe_rest = 0.0
+_e198(_ich198)
+_ich198.unverwundbar = 0.0            # der Einstiegsschutz haelt sonst alles ab
+_leben198 = _ich198.leben
+_pw198.schaden(_pw198.leben + 5000.0, None, None, art="hohlladung")
+w198._fahrzeuge_nachziehen()
+w198._mitfahrer_nachziehen()
+pruef("Geht der Wagen hoch, faellt man herunter und bekommt etwas ab",
+      _ich198.mitfahrt is None and not _ich198.im_fahrzeug and _ich198.leben < _leben198,
+      "%.0f -> %.0f" % (_leben198, _ich198.leben))
+pruef("Mit dem Fahrer draussen funkt der Wagen nicht mehr", not w198._funkt(_pw198))
+_wagen198 = next(b_ for b_ in w198.fahrzeuge if not b_.kaputt and b_ is not _pw198)
+_f2_198 = next(k_ for k_ in _bots198 if k_.fahrzeug is None and k_ is not _bot198)
+w198._einsteigen(_f2_198, _wagen198)
+pruef("Ein Bot faehrt: Funk an ...", w198._funkt(_wagen198))
+w198._aussteigen(_f2_198)
+pruef("... er steigt aus: Funk aus", not w198._funkt(_wagen198))
+w198._einsteigen(_f2_198, _wagen198)
+w198.blick = _wagen198.ebene
+w198.kamera.pos.update(_wagen198.pos)
+getattr(w198.kamera, "vorher", w198.kamera.pos).update(_wagen198.pos)
+_bild198 = pygame.Surface((K.GAME_W, K.GAME_H))
+_bild198.fill((0, 0, 0))
+w198._funk_wellen(_bild198)
+pruef("Die Wellen des Funkgeraets sind zu sehen",
+      any(tuple(_bild198.get_at((x_, y_)))[:3] == tuple(K.FAHRZEUG_FUNK["farbe"])
+          for x_ in range(K.GAME_W // 2 - 60, K.GAME_W // 2 + 60)
+          for y_ in range(K.GAME_H // 2 - 60, K.GAME_H // 2 + 40)))
+w198.verlassen(); g198.verlassen()
+
+print("\n-- Bots: mehr Waffen, Panzerjaeger waehlen Panzerabwehr (0.34.95)")
+_r1_198, _r2_198 = random.Random(5), random.Random(5)
+_viel198 = [_BO198.bot_loadout(_r1_198, vielfalt=True)["waffen"] for _ in range(300)]
+_alt198 = [_BO198.bot_loadout(_r2_198)["waffen"] for _ in range(300)]
+pruef("Mit Vielfalt tragen Bots deutlich mehr verschiedene Waffen",
+      len({w_ for x_ in _viel198 for w_ in x_}) >= len(K.BOTS["waffen"]) + 4
+      and len({w_ for x_ in _alt198 for w_ in x_}) <= len(K.BOTS["waffen"]),
+      "%d gegen %d" % (len({w_ for x_ in _viel198 for w_ in x_}), len({w_ for x_ in _alt198 for w_ in x_})))
+pruef("... ohne den Zufall der Bots weiterzudrehen (feste Szenen bleiben)",
+      _r1_198.getstate() == _r2_198.getstate() and all(len(set(x_)) == 2 for x_ in _viel198))
+_tm198 = _TM195.Testmodus(app, karte="staubtal")
+_zeilen198 = {z_[0] for z_ in _tm198._menue_zeilen()}
+pruef("Testmodus: VIELE WAFFEN, PANZERJAEGER und VORSTOSS als Zeilen, aus als Vorgabe",
+      {"vielfalt", "panzerjaeger", "vorstoss"} <= _zeilen198
+      and not (_tm198.bots_vielfalt or _tm198.panzerjaeger_an or _tm198.vorstoss_an))
+_eintrag198 = next((e_ for e_ in _TM195.eintraege() if e_.name == "PANZERJÄGER"), None)
+_p198 = _fp195(_tm198.welt, 0, random.Random(198))
+_pj198 = _tm198.panzerjaeger_setzen(_p198, 0, {"team": 1})
+pruef("Spawner: PANZERJÄGER mit Panzerbuechse und Raketen",
+      _eintrag198 is not None and "panzerbuechse" in _pj198.waffen and _pj198.panzerjaeger)
+_pzz198 = _tm198.fahrer_setzen(_p198 + pygame.Vector2(200, 0), 0, {"team": 0, "fahrzeug": "panzer"})
+_pj198.hirn.ziel = _pzz198
+_wahl198 = _pj198.hirn._beste_waffe(200.0)
+_pj198.hirn.ziel = None
+_wahl2_198 = _pj198.hirn._beste_waffe(200.0)
+pruef("Gegen einen Panzer nimmt er die Panzerabwehr, gegen Figuren spart er die Einwegrakete",
+      _wahl198 is not None and (K.WAFFEN[_wahl198[1]].get("fahrzeug_schaden") is not None
+                                or K.WAFFEN[_wahl198[1]].get("gegen_fahrzeug"))
+      and _wahl2_198 is not None and not K.WAFFEN[_wahl2_198[1]].get("einweg"),
+      "%s %s" % (_wahl198, _wahl2_198))
+_tm198.vorstoss_an = True
+_b198 = _tm198.bot_setzen(_tm198._schlacht_punkte()[0], 0, {"team": 0})
+_ziel198 = _b198.hirn._streifziel()
+pruef("Testmodus mit VORSTOSS: ein Bot an der linken Basis zieht zur Mitte",
+      _ziel198[0].distance_to(_tm198._schlacht_punkte()[2]) < 1.5 * K.SCHLACHT["streuung"])
+_tm198.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

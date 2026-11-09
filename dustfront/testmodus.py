@@ -239,6 +239,10 @@ def eintraege() -> list:
                 lambda t, p, e, w: t.fahrer_setzen(p, e, w, mit_fahrzeug=True)),
         Eintrag("FAHRER OHNE FAHRZEUG", "FIGUREN", ("team", "hirn"),
                 lambda t, p, e, w: t.fahrer_setzen(p, e, w, mit_fahrzeug=False)),
+        # Seit 0.34.95: ein Bot mit Panzerbuechse und Raketen, wie sie in
+        # Runden mit Fahrzeugen von selbst auftauchen.
+        Eintrag("PANZERJÄGER", "FIGUREN", ("anzahl", "streuung", "team", "hirn", "leben"),
+                lambda t, p, e, w: t.panzerjaeger_setzen(p, e, w)),
         Eintrag("SCHILDTRÄGER", "FIGUREN", ("anzahl", "streuung", "team", "hirn", "leben"),
                 lambda t, p, e, w: t.schildtraeger_setzen(p, e, w)),
         Eintrag("SPIELER, STEHT", "FIGUREN", ("anzahl", "streuung", "team", "leben",
@@ -560,6 +564,14 @@ class Testmodus(Gefecht):
         # Uebermut (seit 0.34.58): wie die Flucht in Runden aus, zum
         # Vergleichen einschaltbar.
         self.bot_uebermut = bool(z.get("bot_uebermut", False))
+        # Seit 0.34.95: wie in echten Runden mehr verschiedene Waffen und
+        # Panzerjaeger bei den Bots - hier aus als Vorgabe, die Szenen in
+        # tests/test_verhalten.py rechnen mit den alten fuenf Waffen.
+        self.bots_vielfalt = bool(z.get("bots_vielfalt", False))
+        self.panzerjaeger_an = bool(z.get("panzerjaeger_an", False))
+        # Vorstoss wie in SCHLACHT: Bots ohne Gegner ziehen zur Mitte und
+        # dann zur Basis der anderen Seite (links ROT, rechts BLAU).
+        self.vorstoss_an = bool(z.get("vorstoss_an", False))
         # Gebremste Bildrate (seit 0.34.58), zum Hoeren: kommen die Schuesse
         # eines Feuerstosses auch bei 8 Bildern je Sekunde einzeln?
         self.bildrate_nr = int(z.get("bildrate_nr", 0)) % len(K.TESTMODUS["bildraten"])
@@ -781,6 +793,17 @@ class Testmodus(Gefecht):
                                          K.TESTMODUS["einzelschritt"]))
         super().schritt(dt)
         self._gott_anwenden()
+
+    def _bot_vielfalt(self) -> bool:
+        # Hier nur, wenn eingeschaltet (BOTS: VIELE WAFFEN) - siehe oben.
+        return self.bots_vielfalt
+
+    def _panzerjaeger_an(self) -> bool:
+        return self.panzerjaeger_an and bool(self.fahrzeuge)
+
+    def _markierungen_ablaufen(self, dt: float) -> None:
+        # Das macht hier _aufklaeren, fuer alle Wesen und mit der Zeitlupe.
+        pass
 
     def _aufklaeren(self, dt: float) -> None:
         """Markierungen laufen ab; mit dem FERNGLAS (seit 0.34.69) markiert
@@ -1109,6 +1132,19 @@ class Testmodus(Gefecht):
         liste.append(trupp)
         return trupp
 
+    def panzerjaeger_setzen(self, pos, ebene: int, w: dict):
+        """Ein Panzerjaeger (seit 0.34.95, bots.panzerjaeger_waffen): die
+        Panzerbuechse und Einweg-Raketenwerfer oder Raketenbuendel."""
+        from .bots import panzerjaeger_waffen
+        k = self.bot_setzen(pos, ebene, w)
+        lo = {"name": "BOT", "waffen": panzerjaeger_waffen(k.nummer), "wuerfe": ["granate"]}
+        k.loadout = lo
+        k.waffen = konto_modul.hotbar_aus_loadout(lo)
+        k.waffe = 0
+        k.panzerjaeger = True
+        self._bot_munition(k)
+        return k
+
     def fahrer_setzen(self, pos, ebene: int, w: dict, mit_fahrzeug: bool = True):
         """Ein Bot, der fahren darf (seit 0.34.71) - im Aussehen des
         Panzerfahrers. Mit Fahrzeug sitzt er gleich drin; ohne geht er zum
@@ -1433,6 +1469,7 @@ class Testmodus(Gefecht):
         self.welt.gas.clear()
         self.welt.rauch.clear()
         self.welt.partikel.clear()
+        self.welt.flammen.clear()
         self.welt.muendungen.clear()
         self.gegner_offen = []
         self.welle_rest = []
@@ -1852,6 +1889,11 @@ class Testmodus(Gefecht):
             ("nebel", "NEBEL (SICHTWEITE)", "AN" if self.nebel else "AUS - ALLES SICHTBAR"),
             ("fliehen", "BOTS FLIEHEN IN PANIK", "AN - WIE KAMPAGNE" if self.bot_fliehen else "AUS - WIE IN RUNDEN"),
             ("uebermut", "BOTS ÜBERMÜTIG", "AN - WIE KAMPAGNE" if self.bot_uebermut else "AUS - WIE IN RUNDEN"),
+            ("vielfalt", "BOTS: VIELE WAFFEN", "AN - WIE IN RUNDEN" if self.bots_vielfalt else "AUS - DIE FÜNF"),
+            ("panzerjaeger", "BOTS: PANZERJÄGER (BEI FAHRZEUGEN)",
+             "AN - WIE IN RUNDEN" if self.panzerjaeger_an else "AUS"),
+            ("vorstoss", "BOTS: VORSTOSS WIE IN SCHLACHT",
+             "AN - MITTE, DANN FEINDBASIS" if self.vorstoss_an else "AUS"),
             ("bildrate", "BILDRATE (KLÄNGE PRÜFEN)", self._bildrate_text()),
             ("einstellungen", "EINSTELLUNGEN", ""),
             ("hauptmenue", "ZUM HAUPTMENÜ", ""),
@@ -1882,6 +1924,8 @@ class Testmodus(Gefecht):
                     entf_toetet=self.entf_toetet, verwundete=self.verwundete,
                     bot_sprint=self.bot_sprint, fernglas=self.fernglas, nebel=self.nebel, bot_fliehen=self.bot_fliehen,
                     bot_uebermut=self.bot_uebermut, bildrate_nr=self.bildrate_nr,
+                    bots_vielfalt=self.bots_vielfalt, panzerjaeger_an=self.panzerjaeger_an,
+                    vorstoss_an=self.vorstoss_an,
                     sp_werte=self._sp_werte, sp_nr=self._sp_nr)
 
     def _bildrate_text(self) -> str:
@@ -1958,6 +2002,12 @@ class Testmodus(Gefecht):
             self.bot_fliehen = not self.bot_fliehen
         elif schluessel == "uebermut":
             self.bot_uebermut = not self.bot_uebermut
+        elif schluessel == "vielfalt":
+            self.bots_vielfalt = not self.bots_vielfalt
+        elif schluessel == "panzerjaeger":
+            self.panzerjaeger_an = not self.panzerjaeger_an
+        elif schluessel == "vorstoss":
+            self.vorstoss_an = not self.vorstoss_an
         elif schluessel == "bildrate":
             self.bildrate_nr = (self.bildrate_nr + schritt) % len(K.TESTMODUS["bildraten"])
             self.bildrate_anwenden()
@@ -2261,6 +2311,14 @@ class Testmodus(Gefecht):
         """Was die KI gerade denkt: Linien zu Ziel, Flanke, Deckung und
         Sammelpunkt, darueber der Zustand."""
         kam = self.kamera
+        if self.vorstoss_an and self.blick == 0:
+            # Vorstoss wie in SCHLACHT (seit 0.34.95): die beiden Basen und
+            # die Mitte, auf die die Bots ohne Gegner zuziehen.
+            for (q, name) in zip(self._schlacht_punkte(), ("BASIS ROT", "BASIS BLAU", "MITTE")):
+                b_ = kam.zu_bild(q)
+                pygame.draw.circle(ziel, K.C_AMBER, (int(b_.x), int(b_.y)), 6, 1)
+                SCHRIFT.zeichnen(ziel, name, int(b_.x), int(b_.y) - 14, K.C_AMBER, 1,
+                                 ausrichtung="mitte")
         for k in self._bots():
             if k.ebene != self.blick or not k.lebt or k.hirn is None:
                 continue

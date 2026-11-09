@@ -131,6 +131,7 @@ class Wegenetz:
                     if e.begehbar(tx, ty) and not e.loch(tx, ty):
                         feld[ty * e.breite + tx] = 1
             self.begehbar.append(feld)
+        self._begehbar_anpassen()
         self.gebiet = [self._gebiete(i) for i in range(self.ebenen)]
         # Treppen: (ebene, tx, ty, ziel_ebene)
         self.treppen = []
@@ -167,6 +168,9 @@ class Wegenetz:
         # Wie viele Treppen es von jedem Gebiet bis zu einem Zielgebiet
         # noch sind, je Zielgebiet gemerkt (naechste_treppe).
         self._spruenge_merk: dict[tuple, dict] = {}
+
+    def _begehbar_anpassen(self) -> None:
+        """Fuer Unterklassen (Fahrwegenetz): hier bleibt alles, wie es ist."""
 
     # ---- Grundlagen -----------------------------------------------------
     def _frei(self, ebene: int, tx: int, ty: int) -> bool:
@@ -476,3 +480,59 @@ class Wegenetz:
                 max(0, hier)
         return (pygame.Vector2((bestes[0] + 0.5) * K.TILE,
                                (bestes[1] + 0.5) * K.TILE), beste)
+
+
+class Fahrwegenetz(Wegenetz):
+    """Das Wegenetz fuer Fahrzeuge (seit 0.34.95): nur Kacheln, um die
+    herum `rand` Kacheln frei sind. Zu Fuss passt man durch jede Luecke
+    einer Kachel; ein Panzerwagen blieb dort haengen (gemessen in SCHLACHT:
+    er setzte eine halbe Minute lang vor und zurueck)."""
+
+    def __init__(self, welt, rand: int = 1) -> None:
+        self.rand = int(rand)
+        super().__init__(welt)
+
+    def _begehbar_anpassen(self) -> None:
+        r = self.rand
+        if r <= 0:
+            return
+        for nr, feld in enumerate(self.begehbar):
+            b, h = self.breite[nr], self.hoehe[nr]
+            # Erst je Zeile, dann je Spalte: frei nur, wo das ganze Quadrat
+            # (2r+1)^2 frei ist - zweimal ein Streifen statt jedes Quadrat.
+            zeilen = bytearray(b * h)
+            for y in range(h):
+                lauf = 0
+                reihe = y * b
+                for x in range(b):
+                    lauf = lauf + 1 if feld[reihe + x] else 0
+                    if lauf >= 2 * r + 1:
+                        zeilen[reihe + x - r] = 1
+            neu = bytearray(b * h)
+            for x in range(b):
+                lauf = 0
+                for y in range(h):
+                    lauf = lauf + 1 if zeilen[y * b + x] else 0
+                    if lauf >= 2 * r + 1:
+                        neu[(y - r) * b + x] = 1
+            self.begehbar[nr] = neu
+
+    def naechste_frei(self, ebene: int, pos, weit: int = 4):
+        """Die Mitte der naechsten befahrbaren Kachel um `pos` (hoechstens
+        `weit` Kacheln entfernt), oder None."""
+        tx, ty = self.kachel(pos)
+        if self._frei(ebene, tx, ty):
+            return pygame.Vector2((tx + 0.5) * K.TILE, (ty + 0.5) * K.TILE)
+        for r in range(1, weit + 1):
+            beste, abstand = None, 1e18
+            for dx in range(-r, r + 1):
+                for dy in (-r, r) if abs(dx) < r else range(-r, r + 1):
+                    if self._frei(ebene, tx + dx, ty + dy):
+                        p = pygame.Vector2((tx + dx + 0.5) * K.TILE, (ty + dy + 0.5) * K.TILE)
+                        d = p.distance_squared_to(pos)
+                        if d < abstand:
+                            beste, abstand = p, d
+            if beste is not None:
+                return beste
+        return None
+

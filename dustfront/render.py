@@ -228,6 +228,25 @@ class Kamera:
         # Weltpixel vor der Figur, in Blickrichtung, liegt die Bildmitte.
         # 0 = aus, dann wie immer ein kleines Stueck zur Maus hin.
         self.vorausschau = 0.0
+        # Weich zwischen zwei Rechenschritten (seit 0.34.95): wo die Kamera
+        # beim vorigen Schritt stand, und wo das Bild gerade zwischen beiden
+        # liegt (alpha, wie bei den Figuren - zeichnen() setzt es). GRUND:
+        # die Figuren werden zwischen zwei Schritten gezeichnet, die Kamera
+        # stand auf dem letzten. Je nach Bildrate lag die Figur so jedes
+        # Bild ein, zwei Pixel woanders und zuckte (gemeldet: "der
+        # Charakter scheint beim Rumlaufen komisch umherzuhacken").
+        self.vorher = pygame.Vector2(self.pos)
+        self.alpha = 1.0
+        self._nach_schritt = pygame.Vector2(self.pos)
+
+    @property
+    def mitte(self) -> pygame.Vector2:
+        """Die Bildmitte, wie sie gezeichnet wird. Hat jemand die Kamera
+        seit dem Schritt von Hand versetzt (Sprung, Tests), gilt die neue
+        Stelle ohne Zwischenstand."""
+        if self.alpha >= 1.0 or self.pos != self._nach_schritt:
+            return pygame.Vector2(self.pos)
+        return self.vorher.lerp(self.pos, max(0.0, self.alpha))
 
     @property
     def breite(self) -> float:
@@ -261,6 +280,7 @@ class Kamera:
         (gemeldet). Der Abstand zur Bildmitte haengt an keinem von beiden.
         """
         k = K.KAMERA
+        self.vorher.update(self.pos)
         vor = (blick - ziel)
         if self.vorausschau > 0.0:
             # Der unsichtbare Punkt vor der Waffe. Nur die Richtung zaehlt,
@@ -303,12 +323,31 @@ class Kamera:
             self.pos.y = max(halb_h, min(bh - halb_h, self.pos.y))
         else:
             self.pos.y = bh / 2
+        self._nach_schritt.update(self.pos)
 
     @property
     def ecke(self) -> pygame.Vector2:
         """Die Ecke zum **Zeichnen**. Das Ruckeln steckt hier drin."""
-        return pygame.Vector2(round(self.pos.x - self.breite / 2 + self.versatz.x),
-                              round(self.pos.y - self.hoehe / 2 + self.versatz.y))
+        return self._ecke_bei(self.versatz.x, self.versatz.y)
+
+    def _ecke_bei(self, vx: float, vy: float) -> pygame.Vector2:
+        """Die Ecke mit dem Versatz (vx, vy), auf ganze Pixel gerundet."""
+        m = self.mitte
+        return pygame.Vector2(round(m.x - self.breite / 2 + vx),
+                              round(m.y - self.hoehe / 2 + vy))
+
+    def fest_im_bild(self, weltpunkt) -> pygame.Vector2:
+        """Wo die Figur, der die Kamera folgt, gezeichnet wird (seit 0.34.95):
+        auf ganzen Pixeln relativ zur ungerundeten Kamera, nicht zur
+        gerundeten Ecke. Ihr Abstand zur Kamera aendert sich beim Folgen nur
+        langsam, so steht sie still im Bild. GRUND: Figur und Ecke rundeten
+        jede fuer sich, und beim Laufen sprang die Figur staendig einen
+        Pixel vor und zurueck (gemeldet: "umherhacken")."""
+        e = self.ecke
+        m = self.mitte
+        fx = m.x - self.breite / 2 + self.versatz.x
+        fy = m.y - self.hoehe / 2 + self.versatz.y
+        return pygame.Vector2(e.x + round(weltpunkt[0] - fx), e.y + round(weltpunkt[1] - fy))
 
     @property
     def ecke_ruhig(self) -> pygame.Vector2:
@@ -321,8 +360,7 @@ class Kamera:
         Bildes: man haelt still, und der Wurf geht trotzdem woandershin.
         Das Ruckeln gehoert ins Bild, nicht in die Hand.
         """
-        return pygame.Vector2(round(self.pos.x - self.breite / 2),
-                              round(self.pos.y - self.hoehe / 2))
+        return self._ecke_bei(0.0, 0.0)
 
     def zu_welt(self, bildpunkt) -> pygame.Vector2:
         """Bildpunkt (im 640 x 360-Bild) -> Weltpunkt, auch mit Zoom."""
@@ -333,10 +371,8 @@ class Kamera:
         # Dieselbe Rechnung wie (Vector2(weltpunkt) - self.ecke) / zoom, nur
         # ohne die drei Zwischenvektoren (seit 0.34.89) - die Anzeige des
         # Testmodus fragt das tausendfach je Bild.
-        pos, v, z = self.pos, self.versatz, self.zoom
-        ex = round(pos.x - self.breite / 2 + v.x)
-        ey = round(pos.y - self.hoehe / 2 + v.y)
-        return pygame.Vector2((weltpunkt[0] - ex) / z, (weltpunkt[1] - ey) / z)
+        e, z = self.ecke, self.zoom
+        return pygame.Vector2((weltpunkt[0] - e.x) / z, (weltpunkt[1] - e.y) / z)
 
 
 class Ueberblendung:
@@ -1498,7 +1534,7 @@ class Renderer:
         Dieselbe Rechnung, die auch hinter der Tiefenflaeche steckt: gleiche
         Weltmitte, kleinerer Massstab.
         """
-        mitte = kamera.pos + kamera.versatz
+        mitte = kamera.ecke + pygame.Vector2(kamera.breite / 2, kamera.hoehe / 2)
         return pygame.Vector2(
             self.groesse[0] / 2 + (weltpos.x - mitte.x) * k,
             self.groesse[1] / 2 + (weltpos.y - mitte.y) * k)
@@ -1588,6 +1624,111 @@ class Renderer:
             if p.art == "funke":
                 farbe = (255, min(255, farbe[1] + 40), 160) if f > 0.55 else farbe
             pygame.draw.rect(ziel, farbe, (int(q.x), int(q.y), g, g))
+
+    # ---- Der Flammenstrom (seit 0.34.95, K.FLAMME) -----------------------
+    # Hitze je Zelle als Rotwert: so viel Rot ist eine Hitze von 1.
+    FLAMMEN_SKALA = 80.0
+
+    def flammen_zeichnen(self, ziel, welt, index, ecke, alpha=1.0) -> None:
+        """Wie im Waffenpaket: die Hitze aller Flecken wird je Zelle
+        (2 x 2 Pixel) zusammengezaehlt, ein wenig verrauscht und dann
+        nach Stufen gefaerbt. GRUND fuer den Umweg ueber Masken: Zelle fuer
+        Zelle in Python waeren das bei einem Flammenwerfer gut hunderttausend
+        Rechnungen je Bild; so addiert SDL vorbereitete Flecken (BLEND_ADD)
+        und die Masken schneiden die Stufen heraus."""
+        flammen = welt.flammen
+        if not flammen:
+            return
+        f = K.FLAMME
+        z = f["zelle"]
+        zeit = welt.flammen_zeit + (alpha - 1.0) * K.FIXED_DT
+        breite, hoehe = ziel.get_size()
+        ex, ey = ecke.x, ecke.y
+        punkte = []
+        x0 = y0 = 1e9
+        x1 = y1 = -1e9
+        jetzt = welt.flamme_jetzt
+        for b in flammen:
+            if b[9] != index:
+                continue
+            x, y, r, glut = jetzt(b, zeit)
+            if glut <= 0.0:
+                continue
+            x -= ex
+            y -= ey
+            if x + r < 0 or y + r < 0 or x - r > breite or y - r > hoehe:
+                continue
+            punkte.append((x, y, r, glut))
+            x0 = min(x0, x - r); y0 = min(y0, y - r)
+            x1 = max(x1, x + r); y1 = max(y1, y + r)
+        if not punkte:
+            return
+        gx0, gy0 = int(math.floor(x0 / z)) - 1, int(math.floor(y0 / z)) - 1
+        w = int(math.ceil(x1 / z)) + 2 - gx0
+        h = int(math.ceil(y1 / z)) + 2 - gy0
+        hitze = pygame.Surface((w, h))
+        hitze.fill((0, 0, 0))
+        add = pygame.BLEND_RGB_ADD
+        for x, y, r, glut in punkte:
+            fleck, mitte = self._flammen_fleck(r / z, glut)
+            hitze.blit(fleck, (int(round(x / z - gx0)) - mitte, int(round(y / z - gy0)) - mitte),
+                       special_flags=add)
+        # Zuengeln: in jeder Zelle etwas Rauschen, 24-mal je Sekunde neu.
+        rausch = self._flammen_rauschen()
+        rw, rh = rausch.get_size()
+        k = int(zeit * f["rausch_takt"])
+        ox, oy = (k * 37) % rw, (k * 53) % rh
+        for ty in range(-oy, h, rh):
+            for tx in range(-ox, w, rw):
+                hitze.blit(rausch, (tx, ty), special_flags=add)
+        bild = pygame.Surface((w, h), pygame.SRCALPHA)
+        bild.fill((0, 0, 0, 0))
+        versatz = f["rauschen"] / 2.0 * self.FLAMMEN_SKALA
+        for stufe, farbe in reversed(f["stufen"]):
+            ab = int(stufe * self.FLAMMEN_SKALA + versatz) + 1
+            if ab > 255:
+                continue
+            maske = pygame.mask.from_threshold(hitze, (255, 0, 0, 255), (256 - ab, 1, 1, 255))
+            maske.to_surface(bild, setcolor=farbe, unsetcolor=None)
+        ziel.blit(pygame.transform.scale(bild, (w * z, h * z)), (gx0 * z, gy0 * z))
+
+    def _flammen_fleck(self, r: float, glut: float):
+        """Ein Fleck als Rotwerte: (1 - d^2/r^2) * glut^2 * gewicht, in
+        Zellen. Gemerkt nach Groesse und Glut (gerundet)."""
+        cache = self.__dict__.setdefault("_flammen_flecken", {})
+        rq = max(1, int(round(r * 4)))
+        gq = max(0, min(20, int(round(glut * 20))))
+        hit = cache.get((rq, gq))
+        if hit is None:
+            rr = rq / 4.0
+            g = gq / 20.0
+            mitte = int(math.ceil(rr))
+            seite = 2 * mitte + 1
+            s = pygame.Surface((seite, seite))
+            s.fill((0, 0, 0))
+            wert = g * g * K.FLAMME["gewicht"] * self.FLAMMEN_SKALA
+            for j in range(seite):
+                for i in range(seite):
+                    q = 1.0 - ((i - mitte) ** 2 + (j - mitte) ** 2) / (rr * rr)
+                    if q > 0.0:
+                        v = int(round(q * wert))
+                        if v > 0:
+                            s.set_at((i, j), (min(255, v), 0, 0))
+            hit = (s, mitte)
+            cache[(rq, gq)] = hit
+        return hit
+
+    def _flammen_rauschen(self) -> pygame.Surface:
+        s = self.__dict__.get("_flammen_rausch")
+        if s is None:
+            zufall = random.Random(95)
+            hoch = int(K.FLAMME["rauschen"] * self.FLAMMEN_SKALA)
+            s = pygame.Surface((61, 47))
+            for y in range(s.get_height()):
+                for x in range(s.get_width()):
+                    s.set_at((x, y), (zufall.randint(0, hoch), 0, 0))
+            self._flammen_rausch = s
+        return s
 
     def muendungsfeuer(self, ziel, welt, ecke, index) -> None:
         for m in welt.muendungen:
@@ -2101,7 +2242,7 @@ class Renderer:
         gw, gh = self.groesse
         w, qx = _raster_waehlen(gw, int(gw / k) + 2)
         h, qy = _raster_waehlen(gh, int(gh / k) + 2)
-        mitte = kamera.pos + kamera.versatz
+        mitte = kamera.ecke + pygame.Vector2(kamera.breite / 2, kamera.hoehe / 2)
         ex, ey = round(mitte.x - w / 2), round(mitte.y - h / 2)
         sx, sy = gw / w, gh / h
         if qx is None or qy is None:
@@ -2440,6 +2581,7 @@ class Renderer:
         self.luft_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.feuerbaelle_zeichnen(ziel, welt, idx, ecke, "glut")
         self.partikel_zeichnen(ziel, welt, idx, ecke, alpha)
+        self.flammen_zeichnen(ziel, welt, idx, ecke, alpha)
         self.lichtblitze_zeichnen(ziel, welt, idx, ecke)
         self.muendungsfeuer(ziel, welt, ecke, idx)
         if luft is not None:

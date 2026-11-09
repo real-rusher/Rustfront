@@ -189,6 +189,11 @@ class Wesen:
         self.schaden(schaden, None, None)
 
     def zeichenpos(self, alpha: float) -> pygame.Vector2:
+        # Fest gesetzt fuer ein Bild (seit 0.34.95): wem die Kamera folgt,
+        # der steht ruhig im Bild (render.Kamera.fest_im_bild).
+        fest = self.__dict__.get("_zeichen_fest")
+        if fest is not None:
+            return pygame.Vector2(fest)
         return self.vorher.lerp(self.pos, alpha)
 
     # ---- Schaden -----------------------------------------------------
@@ -1465,9 +1470,22 @@ class Rakete(Wesen):
             if not ziel.lebt or ziel is self:
                 continue
             ab = ziel.pos - self.pos
-            entfernung = ab.length()
-            if entfernung > r + ziel.radius:
-                continue
+            rand = getattr(ziel, "rand_punkt", None)
+            if rand is not None:
+                # Ein Fahrzeug vom Blech aus gemessen (seit 0.34.95), auch
+                # die Deckung. Von der Mitte aus kam am Bug eines
+                # Panzerwagens nur ein Drittel an, und stand die Mitte
+                # hinter einer Wandkante, fast nichts - die Panzerabwehr
+                # verpuffte (gemeldet).
+                hin = rand(self.pos)
+                entfernung = hin.distance_to(self.pos)
+                if entfernung > r:
+                    continue
+            else:
+                hin = ziel.pos
+                entfernung = ab.length()
+                if entfernung > r + ziel.radius:
+                    continue
             if ziel is schuetze:
                 anteil = d["eigen_anteil"]
             elif (mein_team is not None and mein_team >= 0
@@ -1476,11 +1494,13 @@ class Rakete(Wesen):
             else:
                 anteil = 1.0
             anteil *= 1.0 - 0.7 * min(1.0, entfernung / r)
-            anteil *= w.deckung_anteil(self.pos, ziel.pos, self.ebene)
-            schub = (ab.normalize() * 420 * anteil) if entfernung > 0.01 else None
+            anteil *= w.deckung_anteil(self.pos, hin, self.ebene)
+            schub = (ab.normalize() * 420 * anteil) if ab.length_squared() > 1e-4 else None
             lebte = ziel.lebt
+            fz = d.get("fahrzeug_schaden")
             schaden_an(ziel, d["schaden"] * anteil, schub, schuetze,
-                       d.get("schadensart", "hohlladung"), self.pos - self.tempo * 0.1)
+                       d.get("schadensart", "hohlladung"), self.pos - self.tempo * 0.1,
+                       fahrzeug_menge=None if fz is None else fz * anteil)
             abschuss_buchen(schuetze, ziel, self.waffe, lebte)
         w.explosion(self.pos, self.ebene, r, d.get("explosion", "spreng"))
         w.kurz_langsam(0.06)

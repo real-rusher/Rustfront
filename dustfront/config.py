@@ -213,6 +213,9 @@ ZOOM = dict(
     stufen=(0.75, 1.0, 1.25, 1.5, 1.75, 2.0),
     start=1.0,
     weich=12.0,               # wie schnell der Zoom nachzieht
+    # Bis zu diesem Zoom ist alles klar, erst dahinter liegt der Nebel
+    # (seit 0.34.95; vorher 1, also schon direkt hinter dem normalen Bild).
+    klar=1.5,
     nebel=(14, 10, 8, 168),   # Farbe und Deckkraft des Nebels
     nebel_rand=(96, 78, 56),  # die Kante des normalen Bildes
 )
@@ -912,6 +915,13 @@ MODI = {
     "huegel": dict(name="HÜGEL", gegner=False, beute=True,  revive=False,
                    teams=True,  runden=False, zone=True,
                    hinweis="Haltet den Kreis in der Mitte."),
+    # Seit 0.34.95: zwei Armeen auf einer grossen Karte, links gegen
+    # rechts, mit Fahrzeugen in jeder Basis (K.SCHLACHT). Gewuenscht, ein
+    # wenig nach Battlefront: keine Phasen, nur Abschuesse fuer die Seite.
+    "schlacht": dict(name="SCHLACHT", gegner=False, beute=True, revive=False,
+                     teams=True, runden=False, zone=False, schlacht=True,
+                     hinweis="Zwei Armeen, links gegen rechts, mit Fahrzeugen. "
+                             "Abschüsse zählen für die Seite."),
     # Keine Spielart, die man waehlt, sondern der Ort dazwischen: hier
     # landet man beim Aufmachen und nach jeder Runde (siehe LOBBY).
     # "gegner" steht an, weil es im Gehege Zombies gibt - Wellen gibt es
@@ -921,6 +931,36 @@ MODI = {
                    hinweis="Rumlaufen, üben, auf die Runde warten."),
 }
 MODUS_VORGABE = "pvp"
+
+# Das Funkgeraet der Fahrzeuge (seit 0.34.95, gewuenscht): sitzt ein Bot
+# am Steuer, funkt der Wagen sichtbar - Wellen ueber der Antenne, bis er
+# aussteigt. `antenne` ist (vorn, quer) als Anteil von Laenge und Breite.
+FAHRZEUG_FUNK = dict(takt=1.1, wellen=3, radius=(4.0, 15.0), antenne=(-0.75, -0.7),
+                     farbe=(150, 232, 214))
+
+# SCHLACHT (seit 0.34.95). Jede Seite hat von Anfang an `je_seite`
+# Kaempfer; wo Menschen fehlen, stehen sofort Bots. Die Basis einer Seite
+# ist ihr Rand der Karte: links ROT, rechts BLAU (`basis_x` der Breite vom
+# Rand). Dort steigt man ein, und dort stehen die Fahrzeuge der Seite -
+# die Fahrzeuge aus der Karte bleiben weg, sie stuenden ungleich verteilt.
+# Bots ohne Gegner im Blick stossen erst zur Mitte vor, dann zur Basis
+# der anderen (`vorstoss_ziel`), statt die ganze Karte abzusuchen.
+SCHLACHT = dict(
+    je_seite=24,
+    groessen=(12, 16, 20, 24, 30),
+    karte="staubtal",
+    abschuesse=150,            # Vorgabe, wenn nach Abschuessen gespielt wird
+    basis_x=0.08,              # Anteil der Kartenbreite vom Rand
+    basis_proben=160,          # so viele freie Punkte werden je Basis geprueft
+    fahrzeuge=(("panzer", 1), ("panzerwagen", 1), ("buggy", 2)),
+    fahrzeug_umkreis=420.0,    # so weit um die Basis stehen die Wagen
+    spawn_umkreis=340.0,       # so weit um die Basis steigt man ein
+    fahrer_je_seite=4,         # so viele Bots jeder Seite duerfen fahren
+    panzerjaeger_je_seite=4,   # so viele Bots jeder Seite tragen Panzerabwehr
+    mitte_nah=260.0,           # so nah an der Mitte gilt sie als erreicht
+    streuung=180.0,            # Ziele des Vorstosses so weit gestreut
+    ziele_je=4,                # so viele feste Punkte je Ziel (Wegfelder teilen)
+)
 
 # Die Standardrunde (seit 0.32): womit eine frische Lobby plant, und was
 # der Knopf STANDARDRUNDE auf der Rundentafel einstellt. Gedacht fuer die,
@@ -1254,6 +1294,9 @@ PANZERWAGEN = dict(
     wrack_zeit=12.0,
     neu_nach=24.0,
     einsteigen=56.0,
+    # Truppentransporter (seit 0.34.95): faehrt jemand, steigen bis zu so
+    # viele Spieler hinten auf (E). Bots nicht.
+    plaetze=4,
     balken_breite=36,
     motor_takt=0.36,
     ramm_schwelle=40.0,
@@ -1325,7 +1368,9 @@ FEUERBALL = dict(
 PANZERUNG = {
     "buggy": dict(kugel=1.0, panzerbrechend=1.3, spreng=1.0, hohlladung=1.5,
                   feuer=0.6, nahkampf=0.5, ramm=1.0),
-    "panzerwagen": dict(kugel=0.35, panzerbrechend=1.0, spreng=0.7, hohlladung=1.4,
+    # Seit 0.34.95 gegen Panzerabwehr empfindlicher (gemeldet: "kein so
+    # unzerstoerbares Ding"); das Leben bleibt, Kugeln prallen weiter ab.
+    "panzerwagen": dict(kugel=0.35, panzerbrechend=1.3, spreng=0.85, hohlladung=1.7,
                         feuer=0.25, nahkampf=0.15, ramm=0.6),
     "panzer": dict(kugel=0.12, panzerbrechend=0.85, spreng=0.45, hohlladung=1.35,
                    feuer=0.1, nahkampf=0.05, ramm=0.4),
@@ -1613,6 +1658,11 @@ BOTS = dict(
     fahren=dict(
         abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0),  # so weit bleibt er stehen
         suchen=700.0,         # so weit sucht ein Fahrer ohne Fahrzeug nach einem
+        # Seit 0.34.95 faehrt er nach einem eigenen Wegenetz: nur Kacheln,
+        # um die so viele Kacheln frei sind (wege.Fahrwegenetz), und er
+        # zielt so viele Kacheln voraus, wie die Strecke gerade frei ist.
+        weg_rand=1,
+        weg_voraus=4,
         mg_winkel=10.0,
         steckt_nach=1.2,      # so lange ohne Fahrt, dann setzt er zurueck
         zurueck=1.0,          # so lange
@@ -1659,6 +1709,27 @@ BOTS = dict(
     # Wie oft eine davon gezogen wird (seit 0.34.94, Vorgabe 1): das MG nur
     # selten - gewuenscht, ein Trupp voller MGs sah nicht gut aus.
     waffen_gewicht=dict(lmg=0.1),
+    # Mehr Vielfalt im Gefecht (seit 0.34.95, gewuenscht): so oft wird eine
+    # gezogene Waffe gegen eine verwandte getauscht. Nur in echten Runden -
+    # im Testmodus nur, wenn es eingeschaltet ist (BOTS: VIELE WAFFEN):
+    # die Szenen in tests/test_verhalten.py rechnen mit den fuenf.
+    vielfalt=0.45,
+    varianten=dict(
+        sturm=("mp", "unterhebel", "zwillinge"),
+        repetierer=("unterhebel", "revolver", "praezision"),
+        schrot=("autoschrot", "doppelflinte"),
+        scharf=("praezision", "bolzer"),
+        lmg=("minigun",),
+    ),
+    # Panzerjaeger (seit 0.34.95): gibt es in der Runde Fahrzeuge, traegt
+    # ein Teil der Bots Panzerbuechse und Raketen. Wer es wird, entscheidet
+    # die Zahl, nicht der Zufall: je Mannschaft so viele, wie fehlen.
+    panzerjaeger=dict(waffen=("panzerbuechse",), dazu=("einwegwerfer", "raketenbuendel"),
+                      je_team=2, je_bots=4),
+    # Waffenwahl gegen Fahrzeuge (seit 0.34.95, bots._beste_waffe): so viel
+    # lieber nimmt er dann eine Panzerabwehrwaffe, und so viel weniger
+    # gern die Einwegrakete gegen Figuren (in Pixeln Wunschabstand).
+    panzerabwehr=dict(vorzug=400.0, einweg_sparen=500.0),
     nahkampf_ab=34.0,         # so nah, dann schlaegt er mit dem Brecheisen
     wurf_pause=(10.0, 18.0),  # zwischen zwei Wuerfen
     wurf_weite=(90.0, 230.0),
@@ -3098,7 +3169,7 @@ WAFFEN = {
         klang="schuss_panzerbuechse",
         durchschlag=3,
         durch_deckung=True,
-        fahrzeug_schaden=160.0,
+        fahrzeug_schaden=220.0,   # 160 -> 220 (seit 0.34.95): Panzerabwehr soll wirken
         gegen_fahrzeug=True,
         laser=True,
     ),
@@ -3206,6 +3277,11 @@ WAFFEN = {
         # Ungelenkt, ein einziger Schuss, danach liegt das Rohr am Boden.
         einweg=True,
         schaden=140.0,
+        # Am Blech (seit 0.34.95): Hohlladung, gegen Fahrzeuge viel
+        # staerker als gegen Figuren. Ein Panzerwagen haelt von vorn
+        # oder der Seite einen Treffer aus, von hinten keinen; ein
+        # Panzer zwei bis drei.
+        fahrzeug_schaden=300.0,
         radius=96.0,
         eigen_anteil=0.55,
         takt=1.0,
@@ -3245,8 +3321,10 @@ WAFFEN = {
         # gemeldet: "nicht wirklich als Raketen erkennbar" (0.34.64).
         bild="minirakete_flug",
         explosion="klein",
-        # Kleine Sprengkoepfe, keine Hohlladung: gegen Blech schwach.
-        schadensart="spreng",
+        # Seit 0.34.95 kleine Hohlladungen (vorher Spreng, gegen Blech
+        # schwach): eine ganze Salve nimmt einem Panzerwagen fast alles.
+        schadensart="hohlladung",
+        fahrzeug_schaden=55.0,
     ),
 
     # ── Gegen Fahrzeuge (seit 0.34.65) ─────────────────────────────────
@@ -3662,7 +3740,12 @@ AUSRUESTUNG = dict(
                    kegel=6.0, takt=0.16, streuung=3.0, schaden=10.0, tempo=640.0,
                    magazin=60, nachladen=4.0),
     kanister=dict(leben=18.0, radius=7.0, brand_radius=74.0, schaden=40.0),
-    drohne=dict(leben=60.0, radius=9.0, kreis=90.0, tempo=1.3, sicht=260.0, fallen=1.2),
+    # Seit 0.34.95 ein weiter Kreis und weiter Blick (vorher 90 und 260,
+    # gemeldet: "bringt keinen Vorteil"): sie fliegt ueber ein ganzes
+    # Viertel und markiert, wen sie unterwegs sieht. Das Tempo ist im
+    # Bogenmass je Sekunde, am Rand also etwa 150 px/s.
+    drohne=dict(leben=60.0, radius=9.0, kreis=230.0, tempo=0.65, sicht=340.0, fallen=1.2,
+                such_takt=0.15, hinaus=110.0),   # px/s hinaus auf den Kreis
     horchposten=dict(leben=80.0, radius=8.0, weite=300.0, takt=1.0, bewegt=20.0),
     fernglas=dict(weite=700.0, kegel=18.0, kamera=0.45),
     markiert=2.5,             # so lange bleibt ein entdeckter Gegner markiert
@@ -3774,6 +3857,31 @@ ENERGIE_PAKET = {
         tempo_faktor=0.9),
 }
 WAFFEN.update(ENERGIE_PAKET)
+
+# Wie der Flammenstrom aussieht (seit 0.34.95, wie im Waffenpaket,
+# code/effekte/anim.js): viele Hitzeflecken, die aus der Duese fliegen,
+# bremsen, wachsen und abkuehlen. Gezeichnet wird nicht jeder Fleck,
+# sondern die Summe ihrer Hitze in Zellen zu 2 x 2 Pixeln - wo sie sich
+# ueberlappen, verschmelzen sie zu einer Feuerzunge: innen fast weiss,
+# aussen rot. Vorher flogen Funken, und genau das hatte der Besitzer im
+# Paket schon einmal verworfen ("sieht eher aus wie Funken").
+FLAMME = dict(
+    dichte=180.0 / 170.0,     # Flecken je Sekunde je px/s Tempo (Paket: 180 bei 170)
+    streuung=14.0,            # Grad, ganz (im Paket +-7)
+    tempo_streuung=0.12,      # +- so viel vom Tempo (im Paket 150 bis 190)
+    reibung=2.4,              # je Sekunde, wie im Paket
+    weite=0.92,               # die Flecken kommen so weit wie die Reichweite mal das
+    r_start=2.0, r_wachsen=16.0, r_max=(7.0, 10.0),
+    dauer=(0.42, 0.54),       # so lange glueht ein Fleck
+    zelle=2,                  # Pixel je Zelle
+    gewicht=0.75,             # Hitze = (1 - d^2/r^2) * hitze^2 * gewicht
+    rauschen=0.18,            # so viel zuengelt es, gewuerfelt 24-mal je Sekunde
+    rausch_takt=24.0,
+    # Ab welcher Hitze welche Farbe (heiss zuerst), wie PAL.flamme im Paket.
+    stufen=((1.0, (255, 246, 204)), (0.74, (252, 214, 120)), (0.5, (240, 150, 44)),
+            (0.3, (200, 82, 24)), (0.15, (120, 36, 14))),
+    hoechstens=1500,          # mehr Flecken haelt die Welt nicht
+)
 
 # Wie Strahl, Blitz und Plasma aussehen (seit 0.34.68, render).
 ENTLADUNG = dict(dauer={"spule": 0.22, "blitz": 0.16, "plasma": 0.3},

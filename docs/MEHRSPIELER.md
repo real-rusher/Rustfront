@@ -69,7 +69,7 @@ Lobbysuche (`lan.py`), das Umsteigen zwischen Lobbys (`sitzung.py`, beide
 12g) und die Pruefungen im Abschnitt "LAN-Gefecht" von
 `tests/test_spiel.py`.
 
-**Sechs Spielarten:**
+**Sieben Spielarten:**
 
 | Schluessel | Name | Gegner | Spieler treffen sich | Aufhelfen | Mannschaften | Endet durch |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -79,6 +79,7 @@ Lobbysuche (`lan.py`), das Umsteigen zwischen Lobbys (`sitzung.py`, beide
 | `team` | TEAM | nein | ja | nein | ja | Zeit oder Teamabschuesse |
 | `versus` | VERSUS | nein | ja | ja | ja | Rundensiege (Zeit als Notbremse) |
 | `huegel` | HUEGEL | nein | ja | nein | ja | voller Kreis (Zeit als Notbremse) |
+| `schlacht` | SCHLACHT | nein | ja | nein | ja | Zeit oder Teamabschuesse (Vorgabe 150) |
 
 Dazu seit 0.27 die **Lobby** (`lobby`): keine waehlbare Spielart, sondern
 der Ort vor und zwischen den Runden (12b).
@@ -471,6 +472,40 @@ Vorgabe 15; allein und ohne Gegenwehr gerechnet) und ob der Fortschritt
 (`zone_faktor`), im selben Verhaeltnis - sonst waere bei drei Minuten ein
 kurzer Ausfall mehr wert als eine Minute im Kreis. Gemessen: 15,1 s bei
 15, 60,0 s bei 60.
+
+### 7.6b schlacht - links gegen rechts (seit 0.34.95)
+
+Gewuenscht, ein wenig nach Battlefront: eine grosse Karte, keine Phasen.
+
+**FEST.**
+
+* Jede Seite steht von Anfang an mit `JE SEITE` Kaempfern da (Regel
+  `schlacht_seite`, Vorgabe `SCHLACHT["je_seite"]` = 24, 12 bis 30). Fehlen
+  Menschen, stehen sofort Bots (`bots_soll`); die Regeln zum Auffuellen
+  gelten hier nicht.
+* Die **Basis** einer Seite ist ihr Rand der Karte: ROT links, BLAU rechts,
+  je `SCHLACHT["basis_x"]` der Breite vom Rand (`_schlacht_punkte`, mit
+  eigenem Zufall, also bei derselben Karte immer dieselbe). Dort steigt man
+  ein (`spawn_umkreis`).
+* Jede Basis bekommt ihre **Fahrzeuge** (`SCHLACHT["fahrzeuge"]`: Panzer,
+  Panzerwagen, zwei Buggys); ein Wrack kommt an der Basis seiner Seite
+  wieder. Die Fahrzeuge aus der Karte bleiben weg - sie stehen nicht gleich
+  verteilt.
+* `fahrer_je_seite` Bots jeder Seite duerfen fahren (sonst fahren Bots
+  nicht), `panzerjaeger_je_seite` tragen Panzerabwehr.
+* **Vorstoss:** wer keinen Gegner im Blick hat, zieht erst zur **Mitte**,
+  von dort - oder wenn er schon weiter ist - zur **Basis der anderen**
+  (`Gefecht.vorstoss_ziel`), zu Fuss wie im Fahrzeug. Die Ziele sind wenige
+  feste Punkte je Ort, damit sich die Bots die Wegfelder teilen.
+* Gespielt wird nach Abschuessen fuer die Seite (Vorgabe 150) oder nach Zeit.
+
+**Panzerwagen als Truppentransporter.** Faehrt ein Kamerad, sitzen bis zu
+`PANZERWAGEN["plaetze"]` (4) Spieler mit E hinten auf - in jeder Spielart,
+Bots nicht. Wer aufsitzt, ist nicht zu treffen und faehrt mit; E steigt ab.
+Geht der Wagen hoch, fallen alle herunter und bekommen `fahrer_schaden` ab.
+
+**Funkgeraet.** Faehrt ein Bot, funkt der Wagen sichtbar (Wellen ueber der
+Antenne, `FAHRZEUG_FUNK`), fuer alle - bis er aussteigt.
 
 ### 7.6c Bots, Gegner auf der Minikarte, kaputte Buggys (seit 0.34.18)
 
@@ -1987,6 +2022,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.95 | Neue Spielart "schlacht" (K.MODI, K.SCHLACHT) und Regel "schlacht_seite" (JE SEITE). Weltmeldung je Spieler: "mf" (fuer welche Fraktion er gerade markiert ist - Drohne, Horchposten). Fahrzeugeintrag: Feld 15 (wie viele hinten auf dem Panzerwagen aufsitzen). Mitfahrer gehen wie Fahrer als "fz" hinaus. Raketen messen an Fahrzeugen vom Blech aus, Einweg-Raketenwerfer und Raketenbuendel haben eigenen Fahrzeugschaden, der Panzerwagen eine schwaechere Panzerung gegen Panzerabwehr. Flammenwerfer: der Gast macht aus dem Schussknall jetzt Hitzeflecken (Welt.flammen) statt Funken. Ein Tastendruck zaehlt beim Gast und beim Gastgeber nur noch einmal je Bild. | Gastgeber und Gast muessen 0.34.95 haben - ein alter Gast kennt SCHLACHT nicht, sieht keine Markierungen und keine Mitfahrer und rechnet einen anderen Schaden an Fahrzeugen |
 | 0.34.91 | Regel "klasse_pflicht" (KLASSE PFLICHT, Vorgabe an) geht mit den Regeln an die Gaeste. Loadouts ("lo" im hallo/loadout) haben je Platz eine Waffe: Haupt-, Seiten-, je nach Klasse Spezialwaffe (konto.loadout_saeubern); mit KLASSE PFLICHT bekommt ein Satz ohne Klasse beim Gastgeber die Klasse SCHUETZE. Sturmgewehr streut mehr, Schrot macht weniger Schaden. | Gastgeber und Gast muessen 0.34.91 haben - sonst zeigt ein alter Gast andere Waffen im Menue als er im Gefecht traegt |
 | 0.34.87 | Weltmeldung je Spieler: "mo" (Betriebsart der gehaltenen Waffe, z. B. Revolver FAECHERN). Die Gruppen-Hotbar schickt die gewaehlte Waffe gleich beim Tastendruck. | Ein alter Gast sieht beim Revolver weiter immer GEZIELT |
 | 0.34.85 | Weltmeldung je Spieler: "aw" (alle Werkzeuge an), "wz" (welches); "wl"/"ml"/"vl" haben in JEDER HAT ALLES 41 statt 10 Eintraege. Eingabe: neuer Knopf "werkzeug" (Taste X). Die Waffenwahl der Gruppen-Hotbar rechnet der Spieler selbst, ins Netz geht wie bisher der Platz ("waffe"). | Ungleiche Versionen: ein alter Gast hat in JEDER HAT ALLES 41 Plaetze ohne Gruppen und kann nur die ersten zehn waehlen |

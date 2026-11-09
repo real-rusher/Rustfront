@@ -182,6 +182,8 @@ class Kaempfer(Spieler):
         # zeichnet die Figur dann nicht, sie ist Teil des Wagenbilds).
         self.fahrzeug = None
         self.im_fahrzeug = False
+        # Hinten auf einem Panzerwagen (seit 0.34.95, beim Gastgeber).
+        self.mitfahrt = None
         # Wie er aussieht (seit 0.34.60): eine Kennung aus K.FIGUREN, die
         # art_figuren.saeubern durchgelassen hat, oder leer fuer die alte
         # Figur. Geht mit der Weltmeldung an alle ("sk").
@@ -1477,6 +1479,94 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     def mit_teams(self) -> bool:
         return self.regeln["teams"]
 
+    # ---- SCHLACHT (seit 0.34.95, K.SCHLACHT) ----------------------------
+    @property
+    def schlacht(self) -> bool:
+        return bool(self.regeln.get("schlacht"))
+
+    @property
+    def schlacht_seite(self) -> int:
+        """So viele Kaempfer je Seite, Menschen und Bots zusammen."""
+        try:
+            return int(self.regelwerk.get("schlacht_seite", K.SCHLACHT["je_seite"]))
+        except (TypeError, ValueError):
+            return int(K.SCHLACHT["je_seite"])
+
+    def _schlacht_punkte(self) -> tuple:
+        """(Basis links, Basis rechts, Mitte) auf der untersten Ebene - je
+        der freie Punkt, der einer festen Stelle der Karte am naechsten
+        liegt. Gemerkt je Welt; gewuerfelt mit eigenem Zufall, damit die
+        Basen bei derselben Karte immer dieselben sind und der Zufall des
+        Gefechts nicht weiterlaeuft."""
+        w = self.welt
+        hit = getattr(w, "_schlacht_punkte", None)
+        if hit is not None:
+            return hit
+        s = K.SCHLACHT
+        e = w.ebene(0)
+        breite, hoehe = e.pixel_breite, e.pixel_hoehe
+        ziele = (pygame.Vector2(breite * s["basis_x"], hoehe / 2),
+                 pygame.Vector2(breite * (1.0 - s["basis_x"]), hoehe / 2),
+                 pygame.Vector2(breite / 2, hoehe / 2))
+        zufall = random.Random(9500)
+        proben = [freier_punkt(w, 0, zufall) for _ in range(s["basis_proben"] * 3)]
+        raus = tuple(pygame.Vector2(min(proben, key=lambda p: p.distance_squared_to(z)))
+                     for z in ziele)
+        w._schlacht_punkte = raus
+        return raus
+
+    def schlacht_basis(self, team: int):
+        """Die Basis einer Seite: ROT links, BLAU rechts. None ohne Schlacht."""
+        if not self.schlacht or not 0 <= team < 2:
+            return None
+        return self._schlacht_punkte()[team]
+
+    def vorstoss_ziel(self, k, rnd):
+        """Wohin ein Bot in SCHLACHT zieht, wenn er niemanden sieht: erst zur
+        Mitte, von dort - oder wenn er schon weiter ist - zur Basis der
+        anderen Seite (gewuenscht: "nicht die ganze Map absuchen"). (Ort,
+        Ebene) oder None ausserhalb der Schlacht."""
+        an = self.schlacht or bool(self.__dict__.get("vorstoss_an"))   # Testmodus
+        if not an or not 0 <= getattr(k, "team", -1) < 2:
+            return None
+        s = K.SCHLACHT
+        basis_l, basis_r, mitte = self._schlacht_punkte()
+        feind = 1 if k.team == 0 else 0
+        feind_ort = (basis_l, basis_r)[feind]
+        wahl = 2
+        if (k.ebene == 0 and k.pos.distance_to(mitte) < s["mitte_nah"]) \
+                or k.pos.distance_to(feind_ort) < mitte.distance_to(feind_ort):
+            wahl = feind
+        # Aus wenigen festen Punkten je Ziel: jedes neue Ziel kostet ein
+        # eigenes Wegfeld (wege.feld_zu), und auf STAUBTAL ist eines teuer -
+        # mit einem eigenen Punkt je Bot ging gemessen die Haelfte der Zeit
+        # eines Schritts in die Wegsuche.
+        ziele = self._schlacht_ziele()[wahl]
+        return pygame.Vector2(ziele[rnd.randrange(len(ziele))]), 0
+
+    def _schlacht_ziele(self) -> tuple:
+        """Je Basis und fuer die Mitte ein paar freie Punkte darum herum
+        (K.SCHLACHT ziele_je, streuung). Gemerkt je Welt."""
+        w = self.welt
+        hit = getattr(w, "_schlacht_ziele", None)
+        if hit is not None:
+            return hit
+        s = K.SCHLACHT
+        zufall = random.Random(9501)
+        raus = []
+        for anker in self._schlacht_punkte():
+            punkte = []
+            for _ in range(200):
+                if len(punkte) >= s["ziele_je"]:
+                    break
+                p = anker + pygame.Vector2(zufall.uniform(-1.0, 1.0),
+                                           zufall.uniform(-1.0, 1.0)) * s["streuung"]
+                if w.frei(p, 12.0, 0):
+                    punkte.append(pygame.Vector2(p))
+            raus.append(punkte or [pygame.Vector2(anker)])
+        w._schlacht_ziele = tuple(raus)
+        return w._schlacht_ziele
+
     @property
     def pausiert(self) -> bool:
         """Wird gerade nicht gespielt, obwohl die Welt weiterlaeuft?
@@ -1878,6 +1968,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self.einstiegszonen = []
         if not self.mit_teams:
             return
+        if self.schlacht:
+            # SCHLACHT: fest links und rechts, jede Runde gleich.
+            basen = self._schlacht_punkte()[:2]
+            for i in range(anzahl):
+                self.einstiegszonen.append(pygame.Vector2(basen[i % 2]))
+            return
         # Kandidaten sammeln und das Paar mit dem groessten Abstand nehmen.
         punkte = [freier_punkt(self.welt, 0, self.rnd)
                   for _ in range(K.GEFECHT["zonen_proben"])]
@@ -1918,6 +2014,18 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         anker = None
         if self.mit_teams and 0 <= team < len(self.einstiegszonen):
             anker = self.einstiegszonen[team]
+        if self.schlacht and anker is not None:
+            # SCHLACHT (seit 0.34.95): in der eigenen Basis, nicht irgendwo
+            # in ihrer Richtung - die Karte ist zu gross fuer Zufall.
+            umkreis = K.SCHLACHT["spawn_umkreis"]
+            for _ in range(80):
+                p = anker + pygame.Vector2(self.rnd.uniform(-1.0, 1.0),
+                                           self.rnd.uniform(-1.0, 1.0)) * umkreis
+                if not self.welt.frei(p, 12.0, 0):
+                    continue
+                if min((p.distance_to(q) for q in fremde), default=9999.0) < 160.0:
+                    continue
+                return p
 
         bester, bester_wert = None, -1e18
         for _ in range(K.NETZ["hoechstens"] * 6):
@@ -1970,9 +2078,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
     def _knopf_merken(self, taste) -> None:
         """Einen Tastendruck aufheben, bis das naechste Paket rausgeht."""
         tabelle = self.app.eingabe.tabelle
+        # Was hier als Ereignis ankam, laesst knoepfe_sammeln in diesem
+        # Bild aus - siehe dort.
+        bild = getattr(self.app.eingabe, "bild", 0)
+        if self.__dict__.get("_ereignis_bild") != bild:
+            self._ereignis_bild = bild
+            self._ereignis_namen = set()
         for name in self.DRUECKE:
             if taste in tabelle.get(name, ()):
                 self._knoepfe.add(name)
+                self._ereignis_namen.add(name)
         # Der Druck auf E geht zusaetzlich als Ereignis mit. Daran haengen
         # Treppe und Ruf (am Boden) - beides soll genau einmal je Druck
         # passieren, und ein Ereignis geht nie verloren (siehe
@@ -1982,6 +2097,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
             if ((nr == 10 and taste == pygame.K_0)
                     or taste in tabelle.get("waffe%d" % nr, ())):
+                self._ereignis_namen.add("waffe%d" % nr)
                 self._platz_gedrueckt(nr - 1)
 
     def knoepfe_sammeln(self) -> None:
@@ -1992,13 +2108,26 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         Belegung ohne Tastencode auskommt.
         """
         e = self.app.eingabe
+        # Seit 0.34.95 nur einmal je Bild, und ohne was schon als Ereignis
+        # kam. GRUND: das hier laeuft in jedem Rechenschritt, ein Druck
+        # bleibt aber das ganze Bild ueber "gedrueckt". Bei zwei Schritten
+        # im Bild ging X zwei Werkzeuge weiter und eine Zahl zwei Waffen
+        # in der Gruppe - manche liessen sich so nie waehlen (gemeldet).
+        bild = getattr(e, "bild", None)
+        if bild is not None:
+            if self.__dict__.get("_sammel_bild") == bild:
+                return
+            self._sammel_bild = bild
+        schon = (self.__dict__.get("_ereignis_namen", ())
+                 if self.__dict__.get("_ereignis_bild") == bild else ())
         for name in self.DRUECKE:
-            if e.gedrueckt(name):
+            if e.gedrueckt(name) and name not in schon:
                 self._knoepfe.add(name)
         if e.gedrueckt("nutzen"):
             self._knoepfe.add("nutzen")
         for nr in range(1, K.HOTBAR_PLAETZE + 1):
-            if nr < 10 and e.gedrueckt("waffe%d" % nr):
+            if nr < 10 and e.gedrueckt("waffe%d" % nr) \
+                    and "waffe%d" % nr not in schon:
                 self._platz_gedrueckt(nr - 1)
 
     def _meine_eingabe(self) -> dict:
@@ -2141,6 +2270,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         if k.fahrzeug is not None:
             self._fahren(k, will, ein)
             return
+        if getattr(k, "mitfahrt", None) is not None:
+            self._mitfahren(k, ein)
+            return
 
         k.will = will
         # Sprinten koennen nur Bots (seit 0.34.50) - der Gast schickt es
@@ -2259,6 +2391,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         wagen = self._freier_buggy(k) if darf else None
         if wagen is not None:
             self._einsteigen(k, wagen)
+            return
+        # Hinten auf einen Panzerwagen, den jemand faehrt (seit 0.34.95) -
+        # nur Spieler, Bots sitzen nicht auf.
+        transporter = None if k.ist_bot else self._transporter_bei(k)
+        if transporter is not None:
+            self._aufsitzen(k, transporter)
             return
         ziel_ebene = self.welt.treppe_unter(k)
         if ziel_ebene is not None and self.welt.ebene_wechseln(k, ziel_ebene):
@@ -2512,6 +2650,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self.fahrzeuge = []
         if not self.ist_gastgeber:
             return
+        if self.schlacht and not self.in_lobby:
+            self._basis_fahrzeuge_aufstellen()
+            return
         # Seit 0.34.59 drei Arten, jede mit ihrem Buchstaben: F Buggy,
         # P Panzer, L Panzerwagen (fahrzeug.marken).
         for marke, art in fahrzeug_modul.marken():
@@ -2524,6 +2665,53 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                         b.aufbau = b.winkel     # Turm und Ring schauen nach vorn
                     b.start = (pygame.Vector2(b.pos), b.ebene, b.winkel)
                     self.fahrzeuge.append(b)
+
+    def _basis_fahrzeuge_aufstellen(self) -> None:
+        """SCHLACHT: jede Seite bekommt ihre Fahrzeuge an die Basis
+        (K.SCHLACHT fahrzeuge). Die aus der Karte bleiben weg - sie stehen
+        nicht gleich verteilt."""
+        for team in range(2):
+            for art, anzahl in K.SCHLACHT["fahrzeuge"]:
+                for _ in range(anzahl):
+                    self._basis_fahrzeug(art, team)
+
+    def _basis_fahrzeug(self, art: str, team: int):
+        platz = self._fahrzeug_platz_bei(art, self.schlacht_basis(team),
+                                         K.SCHLACHT["fahrzeug_umkreis"])
+        if platz is None:
+            return None
+        pos, winkel = platz
+        b = fahrzeug_modul.neu(art, pos, 0, winkel)
+        self.welt.dazu(b)
+        if hasattr(b, "aufbau"):
+            b.aufbau = b.winkel
+        b.start = (pygame.Vector2(pos), 0, winkel)
+        b.basis_team = team
+        self.fahrzeuge.append(b)
+        return b
+
+    def _fahrzeug_platz_bei(self, art: str, anker, umkreis: float):
+        """(Ort, Richtung) fuer einen Wagen dieser Art nahe `anker`, oder
+        None. Gesucht wird mit eigenem Zufall, je Versuch etwas weiter
+        hinaus."""
+        if anker is None:
+            return None
+        probe = fahrzeug_modul.neu(art, (0, 0), 0)
+        probe.welt = self.welt
+        zufall = random.Random(int(anker.x) * 7919 + int(anker.y) + len(self.fahrzeuge) * 31)
+        for versuch in range(160):
+            weit = umkreis * (0.25 + 0.75 * versuch / 160.0)
+            p = anker + pygame.Vector2(zufall.uniform(-1, 1), zufall.uniform(-1, 1)) * weit
+            if not self.welt.frei(p, 12.0, 0):
+                continue
+            probe.pos.update(p)
+            winkel = self._fahrzeug_richtung(probe)
+            if not probe.passt(p, winkel):
+                continue
+            if any(b.lebt and b.pos.distance_to(p) < 90 for b in self.fahrzeuge):
+                continue
+            return pygame.Vector2(p), winkel
+        return None
 
     @staticmethod
     def _fahrzeug_richtung(b) -> float:
@@ -2578,7 +2766,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self.welt.klang("buggy_tuer", 0.8, b.pos, b.ebene)
 
     def _fahrzeug_loesen(self, k: Kaempfer) -> None:
-        """Fahrer und Wagen trennen, ohne die Figur zu versetzen."""
+        """Fahrer und Wagen trennen, ohne die Figur zu versetzen. Auch wer
+        nur aufsitzt (seit 0.34.95), ist danach unten."""
+        if getattr(k, "mitfahrt", None) is not None:
+            self._absitzen(k, versetzen=False)
         b = getattr(k, "fahrzeug", None)
         if b is not None and b.fahrer is k:
             b.fahrer = None
@@ -2605,6 +2796,105 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         k.tempo.update(0, 0)
         k.treppe_rest = K.GEFECHT["treppe_takt"]
         self.welt.klang("buggy_tuer", 0.7, b.pos, b.ebene)
+
+    # ---- Truppentransporter (seit 0.34.95) -------------------------------
+    def _transporter_bei(self, k: Kaempfer):
+        """Ein Panzerwagen in Reichweite, den jemand der eigenen Seite
+        faehrt und auf dem noch Platz ist - oder None."""
+        if (k.am_boden or k.flug > 0 or k.sturz_rest > 0 or k.fahrzeug is not None
+                or getattr(k, "mitfahrt", None) is not None):
+            return None
+        bester, abstand = None, 1e18
+        for b in self.fahrzeuge:
+            if (b.art != "panzerwagen" or b.fahrer is None or b.kaputt or b.nur_bild
+                    or not b.lebt or b.ebene != k.ebene):
+                continue
+            if b.fahrer.fraktion != k.fraktion:
+                continue
+            if len(b.mitfahrer) >= b.werte["plaetze"]:
+                continue
+            d = b.pos.distance_squared_to(k.pos)
+            if d <= b.werte["einsteigen"] ** 2 and d < abstand:
+                bester, abstand = b, d
+        return bester
+
+    def _aufsitzen(self, k: Kaempfer, b) -> None:
+        b.mitfahrer.append(k)
+        k.mitfahrt = b
+        k.im_fahrzeug = True
+        k.schiebbar = False
+        k.trefferbar = False
+        self._loslassen(k)
+        k.hilft = None
+        k.feuert = False
+        k.zielt = False
+        k.dash_rest = 0.0
+        k.will.update(0, 0)
+        k.tempo.update(0, 0)
+        k.pos.update(b.pos)
+        k.treppe_rest = K.GEFECHT["treppe_takt"]
+        self.welt.klang("buggy_tuer", 0.7, b.pos, b.ebene)
+
+    def _absitzen(self, k: Kaempfer, versetzen: bool = True) -> None:
+        """Herunter vom Panzerwagen, auf den ersten freien Platz daneben."""
+        b = getattr(k, "mitfahrt", None)
+        k.mitfahrt = None
+        k.im_fahrzeug = False
+        k.schiebbar = True
+        k.trefferbar = True
+        if b is None:
+            return
+        if k in b.mitfahrer:
+            b.mitfahrer.remove(k)
+        if not versetzen:
+            return
+        k.ebene = b.ebene
+        for p in b.ausstiegsorte(k.radius):
+            if self.welt.frei(p, k.radius, b.ebene, True):
+                k.pos.update(p)
+                break
+        k.tempo.update(0, 0)
+        k.treppe_rest = K.GEFECHT["treppe_takt"]
+        self.welt.klang("buggy_tuer", 0.6, b.pos, b.ebene)
+
+    def _mitfahren(self, k: Kaempfer, ein: dict) -> None:
+        """Hinten auf dem Panzerwagen: mitfahren, sonst nichts. E steigt ab."""
+        k.will.update(0, 0)
+        k.tempo.update(0, 0)
+        k.feuert = False
+        k.zielt = False
+        k.hilft = None
+        self._loslassen(k)
+        if self._e_gedrueckt(ein) and k.treppe_rest <= 0:
+            self._absitzen(k)
+
+    def _mitfahrer_nachziehen(self) -> None:
+        """Nach dem Weltschritt: wer aufsitzt, ist dort, wo der Wagen ist.
+        Geht der Wagen hoch, fallen alle herunter und bekommen etwas ab."""
+        for b in self.fahrzeuge:
+            liste = b.__dict__.get("_mitfahrer")
+            if not liste:
+                continue
+            for k in list(liste):
+                if (k.mitfahrt is not b or not k.lebt
+                        or self.kaempfer.get(k.nummer) is not k):
+                    if k in liste:
+                        liste.remove(k)
+                    if k.mitfahrt is b:
+                        self._absitzen(k, versetzen=False)
+                    continue
+                if b.kaputt or not b.lebt:
+                    self._absitzen(k)
+                    von = getattr(b, "kaputt_von", None)
+                    if von is None or getattr(von, "fraktion", None) != k.fraktion or von is k:
+                        k.schaden(b.werte["fahrer_schaden"], None, von)
+                    continue
+                if k.am_boden:
+                    self._absitzen(k)
+                    continue
+                k.pos.update(b.pos)
+                k.ebene = b.ebene
+                k.tempo.update(0, 0)
 
     def _fahren(self, k: Kaempfer, will, ein: dict) -> None:
         """Am Steuer: vor und zurueck sind Gas und Bremse, links und
@@ -2701,7 +2991,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             if b.kaputt and b.wrack_rest <= 0.0 and b.fahrer is None:
                 b.lebt = False
                 self.fahrzeuge.remove(b)
-                self._fahrzeug_warte.append([b.werte["neu_nach"], b.art])
+                # In SCHLACHT kommt er an seiner Basis wieder (seit 0.34.95).
+                self._fahrzeug_warte.append([b.werte["neu_nach"], b.art,
+                                             getattr(b, "basis_team", -1)])
         if not self._fahrzeug_warte:
             return
         for eintrag in self._fahrzeug_warte:
@@ -2709,6 +3001,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         if self._fahrzeug_warte[0][0] > 0.0:
             return
         art = self._fahrzeug_warte[0][1]
+        team = self._fahrzeug_warte[0][2] if len(self._fahrzeug_warte[0]) > 2 else -1
+        if team >= 0 and self.schlacht:
+            if self._basis_fahrzeug(art, team) is None:
+                self._fahrzeug_warte[0][0] = 1.0
+            else:
+                self._fahrzeug_warte.pop(0)
+            return
         platz = self._fahrzeug_platz(art)
         if platz is None:
             self._fahrzeug_warte[0][0] = 1.0    # in einer Sekunde noch einmal
@@ -2771,6 +3070,66 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             farbe = K.C_AMBER if anteil > 0.35 else K.C_RED
             pygame.draw.rect(ziel, farbe, (x, y, max(1, int(breite * anteil)), 3))
 
+    def _funkt(self, b) -> bool:
+        """Sitzt ein Bot am Steuer? Dann funkt der Wagen (seit 0.34.95)."""
+        if b.kaputt:
+            return False
+        if b.fahrer is not None:
+            return bool(getattr(b.fahrer, "ist_bot", False))
+        return bool(getattr(b, "funkt", False))
+
+    def _funk_wellen(self, ziel) -> None:
+        """Das Funkgeraet (K.FAHRZEUG_FUNK): ueber der Antenne gehen Wellen
+        auf, solange ein Bot faehrt - fuer alle zu sehen, wie ein Wagen,
+        der Meldung macht. Steigt er aus, ist Ruhe."""
+        f = K.FAHRZEUG_FUNK
+        zeit = self.welt.zeit if self.ist_gastgeber else self._zeit
+        for b in self.fahrzeuge:
+            if b.ebene != self.blick or not self._funkt(b):
+                continue
+            werte = b.werte
+            lang = (werte.get("vorn", 22.0) - werte.get("hinten", -22.0)) / 2.0
+            halb = werte.get("halb", 12.0)
+            punkt = b.pos + pygame.Vector2(f["antenne"][0] * lang, f["antenne"][1] * halb).rotate(b.winkel)
+            p = self.kamera.zu_bild(punkt)
+            if not (-30 < p.x < K.GAME_W + 30 and -30 < p.y < K.GAME_H + 30):
+                continue
+            x, y = int(p.x), int(p.y)
+            # Die Antenne: ein Strich nach oben mit einem Knopf.
+            pygame.draw.line(ziel, (40, 34, 28), (x, y), (x, y - 7))
+            pygame.draw.rect(ziel, f["farbe"], (x - 1, y - 8, 2, 2))
+            phase = (zeit + b.kennung * 0.37) / f["takt"]
+            for i in range(f["wellen"]):
+                t = (phase + i / float(f["wellen"])) % 1.0
+                r = f["radius"][0] + (f["radius"][1] - f["radius"][0]) * t
+                hell = 1.0 - t
+                farbe = tuple(int(c * hell + 20 * (1.0 - hell)) for c in f["farbe"])
+                rect = pygame.Rect(0, 0, int(r * 2), int(r * 2))
+                rect.center = (x, y - 7)
+                pygame.draw.arc(ziel, farbe, rect, math.radians(35), math.radians(145), 1)
+
+    def _ist_mitfahrer(self, k) -> bool:
+        """Sitzt `k` hinten auf einem Panzerwagen (und faehrt nicht)?"""
+        if not k.im_fahrzeug:
+            return False
+        if self.ist_gastgeber:
+            return getattr(k, "mitfahrt", None) is not None
+        return not any(getattr(b, "fahrer_nummer", -1) == k.nummer for b in self.fahrzeuge)
+
+    def _darf_aufsitzen(self, b) -> bool:
+        """Kann ich auf diesen Wagen aufsitzen (Hinweis [E] AUFSITZEN)?"""
+        ich = self.ich
+        if b.art != "panzerwagen" or b.kaputt or ich is None:
+            return False
+        if self.ist_gastgeber:
+            fahrer = b.fahrer
+            frei = b.werte["plaetze"] - len(b.mitfahrer)
+        else:
+            fahrer = self.kaempfer.get(getattr(b, "fahrer_nummer", -1))
+            frei = b.werte["plaetze"] - getattr(b, "besetzt_mit", 0)
+        return (fahrer is not None and fahrer is not ich and frei > 0
+                and fahrer.fraktion == ich.fraktion)
+
     def _fahrzeuge_uebernehmen(self, eintraege) -> None:
         """Beim Gast: die gemeldeten Buggys hinstellen, mit Zwischenlage
         wie bei den Gegnern (vorher -> jetzt)."""
@@ -2793,6 +3152,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 gier = float(e[12]) if len(e) > 12 else 0.0
                 laden = float(e[13]) if len(e) > 13 else 0.0
                 emp = float(e[14]) if len(e) > 14 else 0.0
+                auf = int(e[15]) if len(e) > 15 else 0
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
@@ -2811,6 +3171,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             b.besetzt = fahrer >= 0
             b.team = k.team if k is not None else -1
             b.skin = k.skin if k is not None else ""
+            # Seit 0.34.95: wer faehrt (fuer den Funk und das Aufsitzen) und
+            # wie viele hinten aufsitzen.
+            b.fahrer_nummer = fahrer
+            b.funkt = k is not None and bool(getattr(k, "ist_bot", False))
+            b.besetzt_mit = max(0, min(8, auf))
             b.geschw = b.vorn * fahrt
             b.rutschen = max(0.0, min(1.0, rutschen))
             # Leben (seit 0.34.18): fuer den Balken und das Wrack.
@@ -2841,6 +3206,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         if ich is None or not ich.lebt or ich.am_boden or self.vorbei:
             return
         taste_e = self._tastenname("nutzen")
+        if ich.im_fahrzeug and self._ist_mitfahrer(ich):
+            # Hinten aufgesessen (seit 0.34.95): nur wie man herunterkommt.
+            p = self.kamera.zu_bild(ich.pos)
+            SCHRIFT.zeichnen(ziel, "AUFGESESSEN  [%s] ABSTEIGEN" % taste_e, int(p.x),
+                             int(p.y) + 40, K.C_CREAM, 1, ausrichtung="mitte")
+            return
         if ich.im_fahrzeug:
             wagen = self._mein_wagen()
             schwer = wagen is not None and getattr(wagen, "rechteckig", False)
@@ -2875,13 +3246,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             return
         for b in self.fahrzeuge:
             besetzt = b.fahrer is not None or b.besetzt
-            if (besetzt or b.kaputt or b.ebene != ich.ebene
+            if (b.kaputt or b.ebene != ich.ebene
                     or b.pos.distance_squared_to(ich.pos) > b.werte["einsteigen"] ** 2):
+                continue
+            if besetzt and not self._darf_aufsitzen(b):
                 continue
             p = self.kamera.zu_bild(b.pos)
             unten = int(b.huelle_radius) + 8 if getattr(b, "rechteckig", False) else 30
-            SCHRIFT.zeichnen(ziel, "[%s] EINSTEIGEN" % taste_e, int(p.x),
-                             int(p.y) + unten, K.C_CREAM, 1, ausrichtung="mitte")
+            if besetzt:
+                drauf = len(b.mitfahrer) if self.ist_gastgeber else getattr(b, "besetzt_mit", 0)
+                text = "[%s] AUFSITZEN (%d/%d)" % (taste_e, drauf, b.werte["plaetze"])
+            else:
+                text = "[%s] EINSTEIGEN" % taste_e
+            SCHRIFT.zeichnen(ziel, text, int(p.x), int(p.y) + unten, K.C_CREAM, 1,
+                             ausrichtung="mitte")
             return
 
     def _mein_wagen(self):
@@ -2976,6 +3354,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         # Bots: nachzaehlen, dann jeder seine Eingabe wie ein Gast.
         self._bots_fuehren(dt)
         self._bots_steuern(dt)
+        self._markierungen_ablaufen(dt)
         self._kosmetik_schritt()
 
         if self.in_lobby:
@@ -2990,6 +3369,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self._rpg_regeln()
         self.welt.schritt(dt)
         self._fahrzeuge_nachziehen()
+        self._mitfahrer_nachziehen()
         self._fahrzeuge_erneuern(dt)
         if self.in_lobby:
             self._lobby_munition()        # nach dem Schuss, siehe dort
@@ -4246,6 +4626,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 "bo": k.ist_bot,
                 # Sein Funkspruch (seit 0.34.27), nur solange er steht.
                 "fk": k.funk if k.funk_rest > 0.0 else "",
+                # Wer ihn gerade markiert hat (seit 0.34.95, Drohne und
+                # Horchposten): die Fraktion, leer fuer niemand.
+                "mf": (getattr(k, "markiert_fuer", "")
+                       if getattr(k, "markiert_rest", 0.0) > 0.0 else ""),
                 "fr": round(k.funk_rest, 1),
                 # Sein Aussehen (seit 0.34.60), leer fuer die alte Figur.
                 "sk": k.skin,
@@ -4335,7 +4719,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                   round(getattr(b, "ruecklauf", 0.0), 1), round(b.gier, 2),
                   round(getattr(b, "takt", {}).get("kanone", 0.0), 1),
                   # Seit 0.34.65: wie lange ein EMP ihn noch stilllegt.
-                  round(b.emp_rest, 1)]
+                  round(b.emp_rest, 1),
+                  # Seit 0.34.95: wie viele hinten aufsitzen.
+                  len(b.__dict__.get("_mitfahrer") or ())]
                  for b in self.fahrzeuge]
         # Nagelfelder (seit 0.34.65): wo die Naegel liegen, folgt aus der
         # Kennung (entities.Nagelfeld.stellen).
@@ -4457,6 +4843,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                     self._fremde_geraete = []
                     self._fremde_schuesse = []
                     self.welt.partikel = []
+                    self.welt.flammen = []
                     self.welt.muendungen = []
                     self.hinweis = "NEUE RUNDE: %s" % K.MODI[self.modus]["name"]
                     self.obere_zeigen = bool(self.app.opt["obere_ebenen"])
@@ -4786,6 +5173,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             k.treffer_marken = int(eintrag.get("tz", 0))
             k.ist_bot = bool(eintrag.get("bo", False))
             k.funk = str(eintrag.get("fk", "") or "")[:K.BOTS["funk_laenge"]]
+            k.markiert_fuer = str(eintrag.get("mf", "") or "")[:24]
+            k.markiert_rest = 1.0 if k.markiert_fuer else 0.0
             k.funk_rest = float(eintrag.get("fr", 0.0)) if k.funk else 0.0
             k.toedlich_marken = int(eintrag.get("tk", 0))
             k.rpg = bool(eintrag.get("rp", False))
@@ -5126,6 +5515,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
                 sprung = self.ich.pos - self._ich_zuletzt
                 if sprung.length_squared() <= (2 * K.TILE) ** 2:
                     self.kamera.pos += sprung
+                    self.kamera.vorher += sprung
         self._ich_zuletzt.update(self.ich.pos)
         if self._rad:
             self.blick = max(0, min(len(self.welt.ebenen) - 1,
@@ -5180,6 +5570,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self.kamera.schritt(dt, self.ich.pos, self.ich.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe),
                             versatz=self._kamera_versatz)
+
+    def _kamera_folgt_mir(self) -> bool:
+        """Folgt die Kamera der eigenen Figur? (Der Testmodus hat einen
+        Beobachter, dem sie ebenso folgt - er sagt es selbst.)"""
+        return True
 
     def _befinden_fuehren(self, dt: float) -> None:
         """Den roten Rand und den Herzschlag nachfuehren.
@@ -5758,6 +6153,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         # Granate der alten.
         self._wirkung = []
         self.welt.partikel = []
+        self.welt.flammen = []
         self.welt.muendungen = []
         # Eine neue Partie faengt bei null an - auch beim Zaehlen.
         self.partie = ""
@@ -5848,16 +6244,32 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         # Bewegung nach der halben Zeit fertig und stuende dann still.
         # Genau das sah man als Ruckeln der Mitspieler.
         misch = alpha if self.ist_gastgeber else self.misch(alpha)
+        # Die Kamera laeuft hier wie dort mit den eigenen Rechenschritten -
+        # also mit dem Bildanteil, nicht mit dem Anteil der Meldungen.
+        self.kamera.alpha = alpha
+        # Wem die Kamera folgt, der steht ruhig im Bild (seit 0.34.95,
+        # render.Kamera.fest_im_bild) - die eigene Figur oder ihr Wagen.
+        fest = []
+        if self.ich is not None and self._kamera_folgt_mir():
+            for w in (self.ich, getattr(self.ich, "fahrzeug", None)):
+                if w is not None:
+                    w._zeichen_fest = self.kamera.fest_im_bild(w.zeichenpos(misch))
+                    fest.append(w)
         self.renderer.vignette_an = self._vignette_an()
-        if abs(self.kamera.zoom - 1.0) < 0.004:
-            self._welt_bild(ziel, misch)
-        else:
-            self._zoom_zeichnen(ziel, misch)
+        try:
+            if abs(self.kamera.zoom - 1.0) < 0.004:
+                self._welt_bild(ziel, misch)
+            else:
+                self._zoom_zeichnen(ziel, misch)
+        finally:
+            for w in fest:
+                w.__dict__.pop("_zeichen_fest", None)
         self._ueberblendung.zeichnen(ziel)
         self._ueberblendung.merken(ziel)
         self._haende_zeichnen(ziel)
         self._namen_zeichnen(ziel)
         self._fahrzeug_balken(ziel)
+        self._funk_wellen(ziel)
         self._fahrzeug_hinweis(ziel)
         self._kreispfeil(ziel)
         self._randpfeile(ziel)
@@ -5939,9 +6351,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         jetzt = min(range(len(stufen)), key=lambda i: abs(stufen[i] - self.zoom_ziel))
         self.zoom_ziel = stufen[max(0, min(len(stufen) - 1, jetzt + schritt))]
 
-    def _sicht_mitte(self) -> pygame.Vector2:
-        """Wo das normale Bild (Zoom 1) jetzt stuende - dieselbe Rechnung
-        wie Kamera.schritt, nur mit der normalen Groesse."""
+    def _sicht_mitte(self, klar: float = 1.0) -> pygame.Vector2:
+        """Wo das klare Bild (Zoom `klar`) jetzt stuende - dieselbe Rechnung
+        wie Kamera.schritt, nur mit dieser Groesse."""
         if self.ich is None:
             return pygame.Vector2(self.kamera.pos)
         k = K.KAMERA
@@ -5950,8 +6362,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             vor.scale_to_length(k["maus_max"])
         m = self.ich.pos + vor * k["maus_zug"]
         e = self.welt.ebene(self.ich.ebene)
-        for achse, bild, karte in ((0, K.GAME_W, e.pixel_breite),
-                                   (1, K.GAME_H, e.pixel_hoehe)):
+        for achse, bild, karte in ((0, K.GAME_W * klar, e.pixel_breite),
+                                   (1, K.GAME_H * klar, e.pixel_hoehe)):
             if karte > bild:
                 m[achse] = max(bild / 2, min(karte - bild / 2, m[achse]))
             else:
@@ -5959,12 +6371,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         return m
 
     def sicht_welt(self) -> pygame.Rect | None:
-        """Das normale Bild in Weltpixeln - ausserhalb liegt der Nebel.
-        None, wenn nichts im Nebel liegt (Zoom 1 oder naeher)."""
-        if self.kamera.zoom <= 1.0 + 0.004:
+        """Was klar zu sehen ist, in Weltpixeln - ausserhalb liegt der
+        Nebel. Seit 0.34.95 mehr als das normale Bild (K.ZOOM klar,
+        gemeldet: auf grossen Karten mit vielen Bots sah man nur, was
+        direkt neben einem stand). None, wenn nichts im Nebel liegt."""
+        klar = K.ZOOM["klar"]
+        if self.kamera.zoom <= klar + 0.004:
             return None
-        mitte = self._sicht_mitte()
-        r = pygame.Rect(0, 0, K.GAME_W, K.GAME_H)
+        mitte = self._sicht_mitte(klar)
+        r = pygame.Rect(0, 0, int(round(K.GAME_W * klar)), int(round(K.GAME_H * klar)))
         r.center = (round(mitte.x), round(mitte.y))
         return r
 
@@ -6347,6 +6762,24 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
             self.renderer.randglut(ziel, K.ERFASSUNG["warnung"],
                                    0.25 + 0.45 * erfasst_mich)
 
+    def _markierungen_ablaufen(self, dt: float) -> None:
+        """Was Drohne und Horchposten markiert haben, haelt nur eine Weile
+        (K.AUSRUESTUNG markiert). Bis 0.34.94 lief es im Gefecht nie ab -
+        und wurde nirgends gezeigt."""
+        for k in self.kaempfer.values():
+            rest = getattr(k, "markiert_rest", 0.0)
+            if rest > 0.0:
+                k.markiert_rest = max(0.0, rest - dt)
+
+    def fuer_mich_markiert(self, k) -> bool:
+        """Hat eine Drohne oder ein Horchposten meiner Seite `k` gerade
+        markiert? Dann zeigt ihn die Karte, und im Nebel steht eine Raute
+        (seit 0.34.95)."""
+        ich = self.ich
+        return (ich is not None and getattr(k, "markiert_rest", 0.0) > 0.0
+                and getattr(k, "markiert_fuer", "") == ich.fraktion
+                and k.fraktion != ich.fraktion)
+
     def gegner_fuer_karte(self) -> list[tuple]:
         """Zombies und Bosse fuer die Minikarte: (x, y, ebene).
 
@@ -6588,10 +7021,21 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         for k in self.kaempfer.values():
             if not k.lebt or k.ebene != self.blick:
                 continue
+            if self.fuer_mich_markiert(k):
+                # Markiert (seit 0.34.95): eine rote Raute, auch im Nebel und
+                # im Rauch - die Drohne hat ihn von oben gesehen.
+                m = self.kamera.zu_bild(k.pos)
+                if 0 <= m.x <= K.GAME_W and 0 <= m.y <= K.GAME_H:
+                    x, y = int(m.x), int(m.y) - 20
+                    raute = [(x, y - 4), (x + 4, y), (x, y + 4), (x - 4, y)]
+                    pygame.draw.polygon(ziel, (16, 11, 8), [(a, b + 1) for a, b in raute])
+                    pygame.draw.polygon(ziel, K.C_RED, raute)
             if k is not self.ich and self.welt.verdeckt(k.pos, k.ebene):
                 continue
             if not self.im_licht(k.pos):
                 continue                # im Nebel steht auch kein Name
+            if k is not self.ich and self._ist_mitfahrer(k):
+                continue                # hinten auf dem Wagen: der Fahrer steht dort
             p = self.kamera.zu_bild(k.pos)
             if not (0 <= p.x <= K.GAME_W and 0 <= p.y <= K.GAME_H):
                 continue

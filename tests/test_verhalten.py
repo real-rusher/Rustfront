@@ -1179,10 +1179,41 @@ def fahrzeug_bots():
           all(gedeckt), str(gedeckt))
 
 
+def vorstoss():
+    """SCHLACHT (seit 0.34.95, gewuenscht): Bots - zu Fuss und im Fahrzeug -,
+    die niemanden sehen, suchen nicht die ganze Karte ab, sondern ziehen
+    von ihrer Basis zur Mitte (und von dort zur Basis der anderen). Im
+    Testmodus mit BOTS: VORSTOSS WIE IN SCHLACHT."""
+    print("\n-- Vorstoss wie in SCHLACHT: von der Basis zur Mitte, zu Fuss und im Fahrzeug")
+    zu_fuss, gefahren_, richtung = [], [], []
+    for seed in (91, 92, 93):
+        tm = neu(seed)
+        tm.vorstoss_an = True
+        basis, _rechts, mitte = tm._schlacht_punkte()
+        leute = [tm.bot_setzen(basis + pygame.Vector2(0, 30 * i), 0, {"team": 0, "hirn": "goap"})
+                 for i in range(3)]
+        f = tm.fahrer_setzen(basis + pygame.Vector2(120, 0), 0,
+                             {"team": 0, "fahrzeug": "panzerwagen", "winkel": 0})
+        pw = f.fahrzeug
+        vorher = [k.pos.distance_to(mitte) for k in leute]
+        pw_vorher = pw.pos.distance_to(mitte)
+        laufen(tm, 40.0)
+        zu_fuss.append(sum(v_ - k.pos.distance_to(mitte) for v_, k in zip(vorher, leute)) / len(leute))
+        gefahren_.append(pw_vorher - pw.pos.distance_to(mitte))
+        # Niemand zieht in die Gegenrichtung oder streift woandershin.
+        richtung.append(all(k.pos.distance_to(mitte) < v_ for v_, k in zip(vorher, leute)))
+        tm.verlassen()
+    pruef("Zu Fuss: in 40 s im Mittel wenigstens 800 px naeher an der Mitte",
+          all(z_ >= 800.0 for z_ in zu_fuss), str([round(z_) for z_ in zu_fuss]))
+    pruef("... und jeder einzelne naeher als vorher (3 von 3)", all(richtung), str(richtung))
+    pruef("Im Panzerwagen: in 40 s wenigstens 1500 px naeher an der Mitte",
+          all(g_ >= 1500.0 for g_ in gefahren_), str([round(g_) for g_ in gefahren_]))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
          planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
-         panzer_bot, spuren, feuer_umweg, fahrzeug_bots]
+         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss]
 #
 # Ohne Angabe laufen die Szenen seit 0.34.94 gleichzeitig, je eine in einem
 # eigenen Prozess, so viele wie Kerne da sind (hoechstens TEILE). Jede

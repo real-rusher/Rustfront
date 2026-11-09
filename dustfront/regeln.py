@@ -183,6 +183,8 @@ def _ende_vorgabe(d):
         return 600
     if d.get("ende_art", "zeit") == "zeit":
         return int(K.GEFECHT["rundenzeit"])
+    if _regeln(d).get("schlacht"):
+        return int(K.SCHLACHT["abschuesse"])
     if _regeln(d)["teams"]:
         return int(K.GEFECHT["team_abschuesse"])
     return int(K.GEFECHT["abschuesse_ziel"])
@@ -233,10 +235,18 @@ FELDER = (
     # Seit 0.34.18: Bots fuellen auf (bots.py). Die Zahl ist, wie viele es
     # insgesamt sein sollen - mit Mannschaften gleichmaessig verteilt. Wer
     # dazukommt, verdraengt einen Bot.
+    # Seit 0.34.95: in SCHLACHT steht jede Seite von Anfang an mit so
+    # vielen da - wo Menschen fehlen, Bots. Die Regeln zu Bots gelten dort
+    # nicht.
+    Feld("schlacht_seite", "JE SEITE", "RUNDE", K.SCHLACHT["je_seite"],
+         lambda d, u: K.SCHLACHT["groessen"], zahl=True,
+         text=lambda v, d, u: "%d KÄMPFER" % v,
+         gilt=lambda d: bool(_regeln(d).get("schlacht")),
+         hilfe="SO VIELE STEHEN JE SEITE - FEHLENDE SPIELER WERDEN SOFORT MIT BOTS AUFGEFÜLLT."),
     Feld("bots", "BOTS AUFFÜLLEN BIS", "RUNDE", 0,
          lambda d, u: K.BOTS["auffuellen"],
          text=lambda v, d, u: "AUS" if not v else "%d SPIELER" % v,
-         gilt=lambda d: _regeln(d)["beute"],
+         gilt=lambda d: _regeln(d)["beute"] and not _regeln(d).get("schlacht"),
          hilfe="SCHWACHE BOTS FÜLLEN DIE RUNDE AUF - GLEICH VIELE JE MANNSCHAFT."),
 ) + tuple(
     # Seit 0.34.26: Bots fest in eine Mannschaft, egal wie viele Menschen
@@ -247,7 +257,8 @@ FELDER = (
     Feld("bots_t%d" % _i, "BOTS IN %s" % _n, "RUNDE", 0,
          lambda d, u: range(0, K.BOTS["je_team_hoechstens"] + 1), zahl=True,
          text=lambda v, d, u: "KEINE" if not v else str(v),
-         gilt=lambda d: _regeln(d)["beute"] and _regeln(d)["teams"],
+         gilt=lambda d: (_regeln(d)["beute"] and _regeln(d)["teams"]
+                         and not _regeln(d).get("schlacht")),
          hilfe="SO VIELE BOTS SPIELEN IMMER IN DIESER MANNSCHAFT MIT.")
     for _i, _n in enumerate(K.TEAMS["namen"])
 ) + (
@@ -338,7 +349,7 @@ NACH_NAME = {f.schluessel: f for f in FELDER}
 # Karte, Dauer und Ausruestung sehen und nicht sechzehn Zeilen. Alles
 # andere steht unter ERWEITERT und behaelt dort seinen Wert, auch wenn
 # es gerade nicht zu sehen ist.
-EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert", "bots",
+EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert", "bots", "schlacht_seite",
            "huegel_zeit", "schwierigkeit", "loadouts", "loadout_nr",
            "faehigkeiten")
 for _f in FELDER:
@@ -472,6 +483,13 @@ def verstellen(d: dict, schluessel: str, schritt: int = 1,
     else:
         i = max(0, min(len(werte) - 1, i))
     d[schluessel] = werte[i]
+    if schluessel == "modus" and K.MODI.get(d["modus"], {}).get("schlacht"):
+        # SCHLACHT ist fuer die grosse Karte gedacht und wird nach
+        # Abschuessen gespielt (seit 0.34.95) - beides als Vorschlag, der
+        # Gastgeber kann es danach verstellen.
+        if K.SCHLACHT["karte"] in _karten(d, umfeld):
+            d["karte"] = K.SCHLACHT["karte"]
+        d["ende_art"] = "abschuesse"
     if schluessel in ("ende_art", "modus"):
         d["ende_wert"] = _ende_vorgabe(d)
     neu = saeubern(d, umfeld)
