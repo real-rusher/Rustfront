@@ -95,13 +95,17 @@ class Minikarte:
         self._grundriss[nr] = fertig
         return fertig
 
-    def zeichnen(self, ziel, g) -> pygame.Rect | None:
-        """Malt die Karte. Gibt ihr Rechteck zurueck, oder None."""
+    def zeichnen(self, ziel, g, rahmen=None, rund: bool = False) -> pygame.Rect | None:
+        """Malt die Karte. Gibt ihr Rechteck zurueck, oder None.
+
+        `rahmen` (seit 0.34.92): wohin und wie gross statt oben links - die
+        runde Karte der Anzeige legt sie vergroessert um die eigene Figur.
+        `rund`: ohne eigenen Grund und Rahmen, die zeichnet die Anzeige."""
         ich = g.ich
         if ich is None or not g.welt.ebenen:
             return None
         nr = max(0, min(len(g.welt.ebenen) - 1, int(ich.ebene)))
-        r = self.rechteck(g.welt)
+        r = self.rechteck(g.welt) if rahmen is None else pygame.Rect(rahmen)
         e = g.welt.ebenen[nr]
         sx = r.width / float(e.pixel_breite)
         sy = r.height / float(e.pixel_hoehe)
@@ -111,14 +115,26 @@ class Minikarte:
 
         # Der durchscheinende Grund, je Groesse einmal gefuellt (seit
         # 0.34.75) - vorher jedes Bild eine neue, immer gleiche Flaeche.
-        groesse = r.inflate(4, 4).size
-        grund = self.__dict__.get("_grund")
-        if grund is None or grund.get_size() != groesse:
-            grund = pygame.Surface(groesse, pygame.SRCALPHA)
-            grund.fill(GRUND)
-            self._grund = grund
-        ziel.blit(grund, r.inflate(4, 4).topleft)
-        ziel.blit(self._grundriss_fuer(g.welt, nr), r.topleft)
+        if not rund:
+            groesse = r.inflate(4, 4).size
+            grund = self.__dict__.get("_grund")
+            if grund is None or grund.get_size() != groesse:
+                grund = pygame.Surface(groesse, pygame.SRCALPHA)
+                grund.fill(GRUND)
+                self._grund = grund
+            ziel.blit(grund, r.inflate(4, 4).topleft)
+        riss = self._grundriss_fuer(g.welt, nr)
+        if riss.get_size() != r.size:
+            # In anderer Groesse (runde Karte): je Groesse einmal skaliert.
+            merk = self.__dict__.setdefault("_gross", {})
+            schluessel = (id(riss), r.size)
+            gross = merk.get(schluessel)
+            if gross is None:
+                if len(merk) > 8:
+                    merk.clear()
+                gross = merk[schluessel] = pygame.transform.scale(riss, r.size)
+            riss = gross
+        ziel.blit(riss, r.topleft)
 
         # Der Kreis in HUEGEL, auf jeder Ebene. Liegt er auf einer anderen
         # als man selbst, ist er blasser und hat einen Pfeil nach oben oder
@@ -199,7 +215,8 @@ class Minikarte:
                 continue            # ein Wrack ist kein Wagen mehr (0.34.18)
             self._buggy(ziel, g, b, punkt(b.pos), int(b.ebene) != nr)
 
-        pygame.draw.rect(ziel, RAHMEN, r.inflate(4, 4), 1)
+        if not rund:
+            pygame.draw.rect(ziel, RAHMEN, r.inflate(4, 4), 1)
         return r
 
     @staticmethod

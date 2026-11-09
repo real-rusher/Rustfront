@@ -9,14 +9,19 @@ Hotbar mit neun Plaetzen ueberdeckte die Lebenszahl und die Medkits, der
 Vorrat stand quer ueber den Waffensymbolen, die Adresse des Gastgebers
 stand die ganze Runde oben links, und den Dash sah man gar nicht.
 
-Jetzt hat alles einen festen Ort:
+Jetzt hat alles einen festen Ort (seit 0.34.92 nach der Skizze des
+Besitzers):
 
-    oben links     die Minikarte, darunter Spielart und Karte
-    oben Mitte     worum es gerade geht: Uhr, Welle, Mannschaften, Boss
-    oben rechts    Ebenen, darunter der Punktestand (nur die ersten fuenf)
-    unten links    Panzerung, Dash, Medkits
+    oben links     die Uhr - oder das Abschussziel, in PVE die Welle
+    oben Mitte     der Stand der Mannschaften (TEAM: ein geteilter Balken,
+                   darunter die Zahlen), in PVE der Boss
+    oben rechts    die Ebenen
+    unten links    die runde Karte um die eigene Figur, die Panzerung als
+                   Bogen darum; daneben der Kreis der Faehigkeit (C), die
+                   Dashes als Bogen darum, rechts daneben die Medkits
     unten rechts   Waffe, Magazin, Vorrat
     unten Mitte    die Hotbar - und darueber ein Hinweis, wenn es einen gibt
+    TAB gehalten   die Tafel: Spielart, Karte und der ganze Punktestand
 
 Die Raender bleiben frei: dort zeigen die Pfeile auf gefallene Mitspieler.
 
@@ -64,7 +69,12 @@ def _c4_hotbar_symbol(ich) -> str:
 # Die festen Orte. Hier und nur hier - wer etwas verschiebt, sieht auf
 # einen Blick, was noch in der Naehe liegt.
 UNTEN = H - 40                  # Oberkante der unteren Kaesten
-LINKS = pygame.Rect(8, UNTEN, 156, 32)
+# Unten links stehen seit 0.34.92 die runde Karte und der Kreis der
+# Faehigkeit (K.HUD); LINKS ist der Platz, den sie zusammen brauchen -
+# bis dorthin reicht die Hotbar.
+_HUD = K.HUD
+LINKS = pygame.Rect(8, UNTEN, _HUD["karte_x"] + _HUD["karte_d"] + _HUD["faeh_luft"]
+                    + _HUD["faeh_d"] + 22 - 8, 32)
 RECHTS = pygame.Rect(W - 164, UNTEN, 156, 32)
 HOTBAR_Y = H - 36
 HINWEIS_Y = H - 66
@@ -96,37 +106,56 @@ class Anzeige:
 
     # ---- Ganz ----------------------------------------------------------
     def zeichnen(self, ziel) -> None:
+        """Seit 0.34.92 nach der Skizze: oben links die Uhr (oder die Welle),
+        oben in der Mitte der Stand der Mannschaften, oben rechts die
+        Ebenen; unten links die runde Karte mit der Panzerung als Bogen,
+        daneben die Faehigkeit mit den Dashes als Bogen, in der Mitte die
+        Hotbar, rechts die Waffe. Der Punktestand steht auf TAB."""
         g = self.g
-        r = self.minikarte.zeichnen(ziel, g) if K.MINIKARTE["an"] else None
-        self._karte_unten = r.bottom + 2 if r is not None else 0
+        self._karte_unten = 0          # die Karte steht nicht mehr oben links
         self._kopf_links(ziel)
         self._kopf_mitte(ziel)
         self._ebenen(ziel)
-        self._punkte(ziel)
         ich = g.ich
         if ich is not None:
+            mitte, radius = self._karte_rund(ziel, ich)
             if ich.am_boden:
                 self._am_boden(ziel, ich)
             elif not ich.lebt and not g.vorbei:
                 self._gefallen(ziel, ich)
             else:
-                self._vital(ziel, ich)
-                self._faehigkeit(ziel, ich)
+                self._panzerung(ziel, ich, mitte, radius)
+                self._faehigkeit_rund(ziel, ich)
                 self._waffe(ziel, ich)
                 self._hotbar(ziel, ich)
+        if self.tafel_zeigen():
+            self._tafel(ziel)
         if g.hinweis:
             self.hinweis(ziel, g.hinweis)
 
+    def tafel_zeigen(self) -> bool:
+        """Die Tafel mit dem Punktestand, solange TAB gehalten wird (die
+        Taste INVENTAR - im Gefecht gibt es kein Inventar). Nicht, waehrend
+        im Testmodus der Spawner offen ist: dort wechselt TAB die Spalte."""
+        g = self.g
+        if getattr(g, "tafel_fest", False):
+            return True
+        if getattr(g, "spawner_offen", False) or g.in_lobby:
+            return False
+        eingabe = getattr(getattr(g, "app", None), "eingabe", None)
+        return bool(eingabe is not None and eingabe.gehalten("inventar"))
+
     # ---- Oben links ------------------------------------------------
     def _kopf_links(self, ziel) -> None:
+        """Oben links: in der Lobby Spielart und Code, im Gefecht die Uhr
+        oder das Abschussziel und in PVE die Welle (seit 0.34.92 hier statt
+        in der Mitte). Spielart und Karte stehen auf der Tafel (TAB)."""
         g = self.g
-        # Unter der Minikarte, wenn es eine gibt.
-        y = self._karte_unten + 4 if self._karte_unten else 8
-        _text(ziel, K.MODI[g.modus]["name"], 10, y, K.C_AMBER)
+        y = 8
         if g.in_lobby:
+            _text(ziel, K.MODI[g.modus]["name"], 10, y, K.C_AMBER)
             # Die Adresse braucht man, um sie weiterzusagen - also in der
-            # Lobby, und nicht die ganze Runde lang. Die Karte heisst hier
-            # wie die Spielart; zweimal LOBBY sagt nichts.
+            # Lobby, und nicht die ganze Runde lang.
             if g.ist_gastgeber:
                 # Seit 0.34.13 der Online-Code - mit ihm kommt man von
                 # ueberall herein. Die Adresse im LAN nur, wenn die Lobby
@@ -141,38 +170,84 @@ class Anzeige:
                     _text(ziel, "LAN: " + g.gastgeber.adresse, 10, y + 18,
                           K.C_MUTED_DK)
             return
-        karte = (g.karte_kopf.get("name") or g.karte or "TESTKARTE").upper()
-        _text(ziel, karte, 10, y + 9, K.C_MUTED)
-
-    # ---- Oben Mitte ------------------------------------------------
-    def _kopf_mitte(self, ziel) -> None:
-        g = self.g
-        if g.in_lobby:
-            g._lobby_kopf(ziel)
-            return
-        mitte = W // 2
-        y = 6
-        if g.mit_gegnern:
-            y = self._welle(ziel, mitte, y)
         if self._mit_uhr:
             minuten, sekunden = divmod(int(max(0.0, g.rest)), 60)
-            gross = not g.mit_gegnern
             farbe = K.C_CREAM
             if g.rest <= 30 and not g.vorbei:
                 # Die letzten dreissig Sekunden: die Uhr wird rot. Wer
                 # vorn liegt, soll es merken, wer hinten liegt, erst recht.
                 farbe = K.C_RED if int(g.rest * 2) % 2 == 0 else K.C_CREAM
-            _text(ziel, "%d:%02d" % (minuten, sekunden), mitte, y, farbe,
-                  2 if gross else 1, "mitte")
-            y += 17 if gross else 10
+            _text(ziel, "%d:%02d" % (minuten, sekunden), 10, y, farbe, 2)
+            y += 18
         elif self._mit_abschussziel:
             text = ("BIS %d TEAMABSCHÜSSE" if g.mit_teams
                     else "BIS %d ABSCHÜSSE")
             _text(ziel, text % int(g.ende_wert or K.GEFECHT["team_abschuesse"]),
-                  mitte, y + 2, K.C_MUTED, 1, "mitte")
-            y += 12
+                  10, y, K.C_MUTED)
+            y += 11
+        if g.mit_gegnern:
+            _text(ziel, "WELLE %d" % max(1, g.welle), 10, y, K.C_CREAM, 2)
+            y += 17
+            rest = g.gegner_rest
+            if rest <= 0 and g.pause_rest > 0 and g.welle > 0:
+                _text(ziel, "NÄCHSTE IN %d" % max(1, int(g.pause_rest + 0.99)),
+                      10, y, K.C_AMBER)
+            elif rest > 0:
+                _text(ziel, "NOCH %d" % rest, 10, y, K.C_MUTED)
+
+    # ---- Oben Mitte ------------------------------------------------
+    def _kopf_mitte(self, ziel) -> None:
+        """Oben in der Mitte: der Stand der Mannschaften - in TEAM als ein
+        Balken, der sich nach dem Stand teilt, darunter die Zahlen (seit
+        0.34.92) -, und in PVE der Boss."""
+        g = self.g
+        if g.in_lobby:
+            g._lobby_kopf(ziel)
+            return
+        mitte = W // 2
+        y = 8
+        if g.mit_gegnern:
+            y = self._boss(ziel, mitte, y)
         if g.mit_teams:
-            self._mannschaften(ziel, mitte, y)
+            if g.regeln["runden"] or g.regeln["zone"]:
+                self._mannschaften(ziel, mitte, y)
+            else:
+                self._mannschaftsbalken(ziel, mitte, y)
+
+    def _mannschaftsbalken(self, ziel, mitte, y) -> int:
+        """Zwei Farben in einem Balken, geteilt nach dem Stand - bei 0:0
+        halb und halb. Darunter die Zahlen in ihren Farben."""
+        g = self.g
+        farben = [k["hud"] for k in K.TEAMS["kombi"]]
+        werte = list(g.teampunkte)[:2]
+        breite = 150
+        summe = werte[0] + werte[1]
+        links = int(round(breite * (werte[0] / summe if summe > 0 else 0.5)))
+        x0 = mitte - breite // 2
+        pygame.draw.rect(ziel, SCHATTEN, (x0 - 1, y - 1, breite + 2, 5))
+        if links > 0:
+            pygame.draw.rect(ziel, farben[0], (x0, y, links, 3))
+        if breite - links > 0:
+            pygame.draw.rect(ziel, farben[1], (x0 + links, y, breite - links, 3))
+        _text(ziel, "%d" % werte[0], mitte - breite // 4, y + 7, farben[0], 2, "mitte")
+        _text(ziel, "%d" % werte[1], mitte + breite // 4, y + 7, farben[1], 2, "mitte")
+        return y + 24
+
+    def _boss(self, ziel, mitte, y) -> int:
+        """Der Boss, wenn einer da ist: Name ueber dem Balken."""
+        boss = self.g.boss_stand()
+        if boss is None:
+            return y
+        name, anteil = boss
+        # Name ueber dem Balken, beides in Bernstein - dieselbe Farbe
+        # wie der Balken ueber dem Boss selbst.
+        _text(ziel, name, mitte, y, K.C_AMBER, 1, "mitte")
+        y += 9
+        breite = 160
+        pygame.draw.rect(ziel, SCHATTEN, (mitte - breite // 2 - 1, y - 1,
+                                          breite + 2, 6))
+        _balken(ziel, (mitte - breite // 2, y, breite, 4), anteil, K.C_AMBER)
+        return y + 9
 
     @property
     def _mit_uhr(self) -> bool:
@@ -188,35 +263,6 @@ class Anzeige:
         return (g.ende_art != "zeit" and not g.regeln["zone"]
                 and not g.regeln["runden"]
                 and (g.mit_teams or not g.regeln["revive"]))
-
-    def _welle(self, ziel, mitte, y) -> int:
-        """Welle, wie viele noch, und der Boss, wenn einer da ist."""
-        g = self.g
-        _text(ziel, "WELLE %d" % max(1, g.welle), mitte, y, K.C_CREAM, 2,
-              "mitte")
-        y += 17
-        rest = g.gegner_rest
-        if rest <= 0 and g.pause_rest > 0 and g.welle > 0:
-            _text(ziel, "NÄCHSTE IN %d" % max(1, int(g.pause_rest + 0.99)),
-                  mitte, y, K.C_AMBER, 1, "mitte")
-        elif rest > 0:
-            _text(ziel, "NOCH %d" % rest, mitte, y, K.C_MUTED, 1, "mitte")
-        y += 10
-        boss = g.boss_stand()
-        if boss is not None:
-            name, anteil = boss
-            # Name ueber dem Balken, beides in Bernstein - dieselbe Farbe
-            # wie der Balken ueber dem Boss selbst. Wer die Mitte des
-            # Bildes nicht sieht, sieht hier, wie weit er ist.
-            _text(ziel, name, mitte, y, K.C_AMBER, 1, "mitte")
-            y += 9
-            breite = 160
-            pygame.draw.rect(ziel, SCHATTEN, (mitte - breite // 2 - 1, y - 1,
-                                              breite + 2, 6))
-            _balken(ziel, (mitte - breite // 2, y, breite, 4), anteil,
-                    K.C_AMBER)
-            y += 9
-        return y
 
     def _mannschaften(self, ziel, mitte, y) -> int:
         """Der Stand der Mannschaften, je nach Spielart.
@@ -328,28 +374,31 @@ class Anzeige:
             if ich is not None and i == ich.ebene:
                 pygame.draw.rect(ziel, K.C_TEAL, (ex - 5, ey + 3, 3, 5))
 
-    def _punkte(self, ziel) -> None:
-        """Der Punktestand: die ersten fuenf, und man selbst immer.
-
-        Vorher standen alle untereinander. Bei acht Leuten war das ein
-        Block bis zur Bildmitte, den niemand liest - wer wissen will, wie
-        es steht, will die Spitze sehen und wo er selbst ist.
-        """
+    def _tafel(self, ziel) -> None:
+        """Die Tafel auf TAB (seit 0.34.92, vorher stand oben rechts eine
+        gekuerzte Liste): Spielart und Karte, darunter alle - Platz, Name,
+        Abschuesse und Tode -, man selbst hervorgehoben."""
         g = self.g
-        if g.in_lobby or not g.kaempfer:
+        if not g.kaempfer:
             return
         from . import bestenliste
         reihe = bestenliste.sortiert(
             [{"name": k.name, "abschuesse": k.abschuesse, "tode": k.tode,
               "mvp_punkte": self._mvp(k), "k": k} for k in g.kaempfer.values()])
-        zeigen = reihe[:5]
-        if g.ich is not None and not any(e["k"] is g.ich for e in zeigen):
-            zeigen = reihe[:4] + [e for e in reihe if e["k"] is g.ich]
-        oben = 8 + len(g.welt.ebenen) * 13 + 6
-        rechts = W - 10
-        for i, e in enumerate(zeigen):
+        breite = K.HUD["tafel_breite"]
+        hoehe = 34 + len(reihe) * 10 + 6
+        r = pygame.Rect((W - breite) // 2, max(34, (H - hoehe) // 2 - 20), breite, hoehe)
+        ui.kasten(ziel, r, K.C_MUTED_DK, (11, 8, 6, 232), 4)
+        karte = (g.karte_kopf.get("name") or g.karte or "TESTKARTE").upper()
+        _text(ziel, "%s - %s" % (K.MODI[g.modus]["name"], karte), r.centerx, r.y + 6,
+              K.C_AMBER, 1, "mitte")
+        _text(ziel, "NAME", r.x + 30, r.y + 20, K.C_MUTED_DK)
+        _text(ziel, "ABSCHÜSSE / TODE", r.right - 10, r.y + 20, K.C_MUTED_DK, 1, "rechts")
+        for i, e in enumerate(reihe):
             wer = e["k"]
-            platz = reihe.index(e) + 1
+            y = r.y + 32 + i * 10
+            if wer is g.ich:
+                pygame.draw.rect(ziel, (34, 26, 18), (r.x + 4, y - 2, r.width - 8, 10))
             if g.mit_teams:
                 farbe = g._farbe_fuer(wer, wer is g.ich)
             elif wer is g.ich:
@@ -358,10 +407,9 @@ class Anzeige:
                 farbe = K.C_RED
             else:
                 farbe = K.C_MUTED
-            y = oben + i * 9
-            _text(ziel, "%d %-9s" % (platz, wer.name[:9]), rechts - 42, y,
-                  farbe, 1, "rechts")
-            _text(ziel, "%d/%d" % (e["abschuesse"], e["tode"]), rechts, y,
+            _text(ziel, "%d" % (i + 1), r.x + 22, y, farbe, 1, "rechts")
+            _text(ziel, ui.kuerzen(wer.name, 160), r.x + 30, y, farbe)
+            _text(ziel, "%d / %d" % (e["abschuesse"], e["tode"]), r.right - 10, y,
                   farbe, 1, "rechts")
 
     def _mvp(self, k) -> float:
@@ -383,87 +431,134 @@ class Anzeige:
         merk[id(k)] = (k, schluessel, wert)
         return wert
 
-    # ---- Ueber dem Kasten unten links: die Faehigkeit ---------------
-    def _faehigkeit(self, ziel, ich) -> None:
-        """[C] und was die Klasse hinlegt - BEREIT oder die Sekunden bis
-        dahin (seit 0.34.79, seit die Faehigkeiten im Gefecht gelten).
-        Ohne Anzeige wuesste niemand, dass C etwas tut."""
+    # ---- Unten links: runde Karte, Panzerung, Faehigkeit, Dash -------
+    def _karte_rund(self, ziel, ich):
+        """Die Karte als Kreis um die eigene Figur (seit 0.34.92), etwas
+        groesser als die alte oben links. Gibt (Mitte, Radius) zurueck."""
         g = self.g
-        if not getattr(g, "faehigkeiten_an", False):
-            return
-        from . import klassen as klassen_modul
-        arten = klassen_modul.faehigkeiten_von(ich)
-        if not arten:
-            return
-        rest = getattr(ich, "faehigkeit_rest", {}) or {}
-        teile = []
-        for art, _pause in arten:
-            name = klassen_modul.FAEHIGKEIT_NAMEN.get(art, art.upper())
-            r = rest.get(art, 0.0)
-            teile.append((name, r))
-        taste = "[%s]" % g._tastenname("faehigkeit")[:1] if hasattr(g, "_tastenname") else "[C]"
-        x, y = LINKS.x + 2, LINKS.y - 10
-        _text(ziel, taste, x, y, K.C_MUTED)
-        x += SCHRIFT.breite(taste, 1) + 4
-        for name, r in teile:
-            text = name if r <= 0.0 else "%s %d" % (name, math.ceil(r))
-            _text(ziel, text, x, y, K.C_TEAL if r <= 0.0 else K.C_MUTED_DK)
-            x += SCHRIFT.breite(text, 1) + 8
-        if getattr(ich, "alle_werkzeuge", False) and not getattr(ich, "klasse", ""):
-            # Jeder hat alles: welches Werkzeug, und wie man wechselt.
-            wechsel = "[%s] WECHSELN" % (g._tastenname("werkzeug")[:1]
-                                         if hasattr(g, "_tastenname") else "X")
-            _text(ziel, wechsel, x, y, K.C_MUTED_DK)
+        h = K.HUD
+        d = h["karte_d"]
+        radius = d // 2
+        mitte = (h["karte_x"] + radius, H - h["unten"] - radius)
+        if not K.MINIKARTE["an"] or not g.welt.ebenen:
+            return mitte, radius
+        flaeche = self.__dict__.get("_karte_flaeche")
+        if flaeche is None or flaeche.get_size() != (d, d):
+            flaeche = self._karte_flaeche = pygame.Surface((d, d), pygame.SRCALPHA)
+            maske = pygame.Surface((d, d), pygame.SRCALPHA)
+            maske.fill((0, 0, 0, 0))
+            pygame.draw.circle(maske, (255, 255, 255, 255), (radius, radius), radius)
+            self._karte_maske = maske
+        flaeche.fill((11, 8, 6, 200))
+        nr = max(0, min(len(g.welt.ebenen) - 1, int(ich.ebene)))
+        e = g.welt.ebenen[nr]
+        alt = self.minikarte.rechteck(g.welt)
+        breite = max(8, int(alt.width * h["karte_zoom"]))
+        hoehe = max(8, int(alt.height * h["karte_zoom"]))
+        rahmen = pygame.Rect(0, 0, breite, hoehe)
+        rahmen.topleft = (int(radius - ich.pos.x * breite / float(e.pixel_breite)),
+                          int(radius - ich.pos.y * hoehe / float(e.pixel_hoehe)))
+        self.minikarte.zeichnen(flaeche, g, rahmen=rahmen, rund=True)
+        # Was ausserhalb des Kreises liegt, wird ganz durchsichtig.
+        flaeche.blit(self._karte_maske, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        ziel.blit(flaeche, (mitte[0] - radius, mitte[1] - radius))
+        pygame.draw.circle(ziel, (84, 66, 48), mitte, radius, 1)
+        return mitte, radius
 
-    # ---- Unten links: Panzerung, Dash, Medkits ------------------------
-    def _vital(self, ziel, ich) -> None:
-        g = self.g
-        r = LINKS
-        ui.kasten(ziel, r, K.C_MUTED_DK, KASTEN, 4)
+    @staticmethod
+    def _bogen(ziel, mitte, radius, teile, farbe_fuer, dicke) -> None:
+        """Ein Bogen aus `teile` Stuecken mit Luecken, von K.HUD bogen_von
+        ueber oben bis bogen_bis. farbe_fuer(i) -> (Farbe, Anteil 0..1):
+        so viel des Stuecks ist gefuellt, der Rest dunkel."""
+        h = K.HUD
+        von, bis = h["bogen_von"], h["bogen_bis"]
+        je = (von - bis) / float(teile)
+        # Die Luecke in Pixeln (Dicke plus gut einen), in Grad umgerechnet:
+        # bei jedem Radius gleich gut als Platten zu erkennen.
+        luecke = min(je * 0.5, math.degrees((dicke + 1.5) / max(1.0, float(radius))))
+        dunkel = (26, 19, 14)
+        for i in range(teile):
+            a0 = von - i * je - luecke / 2.0
+            a1 = von - (i + 1) * je + luecke / 2.0
+            farbe, anteil = farbe_fuer(i)
+            for f, b0, b1 in ((dunkel, a0, a1), (farbe, a0, a0 + (a1 - a0) * anteil)):
+                if f is None or abs(b1 - b0) < 0.5:
+                    continue
+                n = max(2, int(abs(b1 - b0) / 4.0) + 1)
+                punkte = [(mitte[0] + radius * math.cos(math.radians(b0 + (b1 - b0) * t / (n - 1))),
+                           mitte[1] - radius * math.sin(math.radians(b0 + (b1 - b0) * t / (n - 1))))
+                          for t in range(n)]
+                pygame.draw.lines(ziel, f, False, punkte, dicke)
+
+    def _panzerung(self, ziel, ich, mitte, radius) -> None:
+        """Die Panzerung als Bogen um die Karte - in Platten wie vorher
+        (K.HUD segmente), rot, wenn es eng wird."""
         anteil = max(0.0, ich.leben / ich.max_leben)
         farbe = K.C_TEAL if anteil > 0.35 else K.C_RED
-        _text(ziel, "PANZERUNG", r.x + 6, r.y + 4, K.C_MUTED)
-        _text(ziel, "%d" % max(0, round(ich.leben)), r.right - 6, r.y + 4,
-              farbe if anteil <= 0.35 else K.C_CREAM, 1, "rechts")
-        # Segmente wie bisher - die Panzerung ist ein Satz Platten, kein
-        # weicher Balken.
-        segmente = 18
-        sw = (r.width - 12) // segmente
-        for i in range(segmente):
-            an = i / segmente < anteil
-            pygame.draw.rect(ziel, farbe if an else (26, 19, 14),
-                             (r.x + 6 + i * sw, r.y + 13, sw - 2, 6))
-        y = r.y + 23
+        teile = K.HUD["segmente"]
+        self._bogen(ziel, mitte, radius + K.HUD["bogen_abstand"], teile,
+                    lambda i: (farbe, 1.0 if i / float(teile) < anteil else 0.0),
+                    K.HUD["bogen_dicke"])
+
+    def _faehigkeit_rund(self, ziel, ich) -> None:
+        """Der Kreis der Faehigkeit (Taste C) neben der Karte, die Dashes
+        als Bogen darum - die naechste Ladung fuellt sich sichtbar. Ueber
+        dem Bogen der Name, rechts daneben die Medkits."""
+        g = self.g
+        h = K.HUD
+        r = h["faeh_d"] // 2
+        mitte = (h["karte_x"] + h["karte_d"] + h["faeh_luft"] + r, H - h["unten"] - r)
+        pygame.draw.circle(ziel, (18, 13, 9), mitte, r)
+        pygame.draw.circle(ziel, K.C_MUTED_DK, mitte, r, 1)
+        from . import klassen as klassen_modul
+        arten = (klassen_modul.faehigkeiten_von(ich)
+                 if getattr(g, "faehigkeiten_an", False) else ())
         if ich.heilt_rest > 0:
-            # Waehrend das Medkit angelegt wird, zeigt die Zeile nur das:
-            # wie lange es noch dauert. Man kann gerade nichts anderes tun.
+            # Waehrend das Medkit angelegt wird: nur das, und wie lange noch.
             fertig = 1.0 - ich.heilt_rest / K.MEDKIT["dauer"]
-            _text(ziel, "MEDKIT", r.x + 6, y, K.C_TEAL)
-            _balken(ziel, (r.x + 46, y + 2, r.width - 52, 3), fertig, K.C_TEAL)
-            return
-        # Dash: die Ladungen, die naechste fuellt sich sichtbar. Die
-        # Breite teilt sich der Platz bis zu den Medkits (x + 74).
-        _text(ziel, "DASH", r.x + 6, y, K.C_MUTED)
+            _text(ziel, "MED", mitte[0], mitte[1] - 3, K.C_TEAL, 1, "mitte")
+            _balken(ziel, (mitte[0] - 9, mitte[1] + 6, 18, 2), fertig, K.C_TEAL)
+        elif arten:
+            rest = getattr(ich, "faehigkeit_rest", {}) or {}
+            r0 = min(rest.get(a, 0.0) for a, _p in arten)
+            taste = g._tastenname("faehigkeit")[:1] if hasattr(g, "_tastenname") else "C"
+            if r0 <= 0.0:
+                _text(ziel, taste, mitte[0], mitte[1] - 3, K.C_TEAL, 1, "mitte")
+            else:
+                _text(ziel, "%d" % math.ceil(r0), mitte[0], mitte[1] - 3, K.C_MUTED, 1, "mitte")
+            namen = ", ".join(klassen_modul.FAEHIGKEIT_NAMEN.get(a, a.upper()) for a, _p in arten)
+            if getattr(ich, "alle_werkzeuge", False) and not getattr(ich, "klasse", ""):
+                # Jeder hat alles: welches Werkzeug, und wie man wechselt.
+                namen += " [%s]" % (g._tastenname("werkzeug")[:1]
+                                    if hasattr(g, "_tastenname") else "X")
+            # Links buendig ueber dem Kreis: so liegt er nie auf der Karte.
+            _text(ziel, ui.kuerzen(namen, W // 2 - 60 - (mitte[0] - r)), mitte[0] - r,
+                  mitte[1] - r - h["bogen_abstand"] - 12,
+                  K.C_TEAL if r0 <= 0.0 else K.C_MUTED_DK)
+        else:
+            _text(ziel, "-", mitte[0], mitte[1] - 3, K.C_MUTED_DK, 1, "mitte")
+        # Dash: die Ladungen als Bogen, die naechste fuellt sich.
         voll = K.DASH["ladungen"]
-        schritt = max(6, min(14, 40 // max(1, voll)))
-        breit = schritt - 2
-        for i in range(voll):
-            x = r.x + 32 + i * schritt
-            pygame.draw.rect(ziel, (26, 19, 14), (x, y + 1, breit, 4))
+        laden = ich.dash_laden
+
+        def dash(i):
             if i < ich.dash_ladungen:
-                pygame.draw.rect(ziel, K.C_AMBER, (x, y + 1, breit, 4))
-            elif i == ich.dash_ladungen:
-                pygame.draw.rect(ziel, K.C_MUTED_DK,
-                                 (x, y + 1, int(breit * ich.dash_laden), 4))
+                return K.C_AMBER, 1.0
+            if i == ich.dash_ladungen:
+                return K.C_MUTED_DK, laden
+            return None, 0.0
+        self._bogen(ziel, mitte, r + h["bogen_abstand"], voll, dash, h["bogen_dicke"])
         # Medkits nur, wenn es in dieser Runde welche gibt.
         if g.start_medkits <= 0 and not g.medkits_spawnen and ich.medkits <= 0:
             return
-        x = r.x + 74
-        _text(ziel, "[%s]" % g._tastenname("heilen")[:1], x, y, K.C_MUTED)
+        x = mitte[0] + r + h["bogen_abstand"] + 6
+        y = H - h["unten"] - 8
         for i in range(K.MEDKIT["hoechstens"]):
-            mr = pygame.Rect(x + 20 + i * 9, y, 7, 6)
+            mr = pygame.Rect(x, y - i * 8, 6, 6)
             pygame.draw.rect(ziel, K.C_TEAL if i < ich.medkits else (24, 18, 13), mr)
             pygame.draw.rect(ziel, K.C_TEAL_DK, mr, 1)
+        _text(ziel, g._tastenname("heilen")[:1], x + 3,
+              y - K.MEDKIT["hoechstens"] * 8 - 2, K.C_MUTED, 1, "mitte")
 
     # ---- Unten rechts: die Waffe ----------------------------------
     def _waffe(self, ziel, ich) -> None:
@@ -623,7 +718,9 @@ class Anzeige:
         # mit C4 (0.32.27) sind es zehn, und die Hotbar ragte drei Pixel
         # in den Waffenkasten rechts. Die Waffenbilder sind 26 breit.
         luecke = 2
-        platz = RECHTS.left - LINKS.right - 8
+        # Die Hotbar steht in der Bildmitte; seit 0.34.92 ist links mehr
+        # belegt als rechts - zaehlt also die schmalere Seite, doppelt.
+        platz = 2 * min(W // 2 - LINKS.right, RECHTS.left - W // 2) - 8
         breite = min(30, (platz - (anzahl - 1) * luecke) // max(1, anzahl))
         return max(26, breite), 20, luecke
 

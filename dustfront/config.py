@@ -4205,6 +4205,24 @@ FEUER = dict(
 
 # Die Minikarte oben links (minikarte.py), ein Versuch. Groesse in
 # Spielpixeln: hoechstens so breit und hoch, die Seiten wie die Karte.
+# Die Anzeige im Gefecht (seit 0.34.92, nach der Skizze): unten links die
+# runde Karte mit der Panzerung als Bogen darum, daneben der Kreis der
+# Faehigkeit mit den Dashes als Bogen. Pixel im 640x360-Bild.
+HUD = dict(
+    karte_d=72,               # Durchmesser der runden Karte
+    karte_x=10,               # ihr linker Rand
+    unten=6,                  # Abstand der Kreise vom unteren Bildrand
+    karte_zoom=1.5,           # so viel groesser als die alte Karte oben links
+    bogen_abstand=5,          # Bogen so weit ausserhalb des Kreises
+    bogen_dicke=3,
+    bogen_von=200.0,          # Grad (0 = rechts, 90 = oben): von links unten ...
+    bogen_bis=-20.0,          # ... ueber oben bis rechts unten
+    segmente=18,              # die Platten der Panzerung, wie vorher
+    faeh_d=30,                # Durchmesser des Kreises der Faehigkeit
+    faeh_luft=14,             # Abstand zwischen Karte und Faehigkeit
+    tafel_breite=300,         # die Tafel auf TAB
+)
+
 MINIKARTE = dict(
     an=True,
     breite=84,

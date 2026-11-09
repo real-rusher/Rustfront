@@ -160,7 +160,9 @@ TASTEN_VORGABE = [
     ("planen",      "RUNDEN EINSTELLEN", ["p"]),
     ("nachladen",   "NACHLADEN",        ["r"]),
     ("heilen",      "MEDKIT",           ["h"]),
-    ("inventar",    "INVENTAR",         ["tab"]),
+    # Im Gefecht zeigt dieselbe Taste, solange sie gehalten wird, den
+    # Punktestand (seit 0.34.92, anzeige.Anzeige.tafel_zeigen).
+    ("inventar",    "INVENTAR / PUNKTE", ["tab"]),
     ("waffe1",      "PLATZ 1",          ["1"]),
     ("waffe2",      "PLATZ 2",          ["2"]),
     ("waffe3",      "PLATZ 3",          ["3"]),

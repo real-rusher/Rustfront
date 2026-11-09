@@ -8572,10 +8572,10 @@ pruef("Die Minikarte steht oben links",
       r9.left == K.MINIKARTE["links"] and r9.top == K.MINIKARTE["oben"]
       and r9.width <= K.MINIKARTE["breite"] and r9.height <= K.MINIKARTE["hoehe"], str(r9))
 ich9 = wm9.ich
-sx = r9.width / float(wm9.welt.ebenen[0].pixel_breite)
-sy = r9.height / float(wm9.welt.ebenen[0].pixel_hoehe)
-px = (int(r9.x + ich9.pos.x * sx), int(r9.y + ich9.pos.y * sy))
-pruef("Man selbst steht darauf, wo man ist",
+# Seit 0.34.92 zeigt die Anzeige die Karte als Kreis unten links, um die
+# eigene Figur: man selbst steht in seiner Mitte.
+px = (K.HUD["karte_x"] + K.HUD["karte_d"] // 2, K.GAME_H - K.HUD["unten"] - K.HUD["karte_d"] // 2)
+pruef("Man selbst steht darauf, wo man ist (in der Mitte der runden Karte)",
       tuple(app.flaeche.get_at(px))[:3] == (230, 255, 248), str(tuple(app.flaeche.get_at(px))))
 wm9.verlassen(); gm9.verlassen()
 
@@ -16003,6 +16003,58 @@ _w191.verlassen(); _g191.verlassen()
 pruef("Das Sturmgewehr streut mehr, die Schrotflinte macht weniger Schaden",
       K.WAFFEN["sturm"]["streuung"] > 2.2 and K.WAFFEN["sturm"]["streuung_lauf"] > 3.6
       and K.WAFFEN["schrot"]["schaden"] < 13.0)
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Anzeige nach der Skizze: runde Karte, Boegen, Punktestand auf TAB (0.34.92)")
+from dustfront import anzeige as _AZ192
+_w192, _g192 = gefechtspaar("team", regeln={"bots": 4})
+_hud192 = _w192.hud
+_ich192 = _w192.ich
+_b192 = pygame.Surface((K.GAME_W, K.GAME_H))
+_rufe192 = []
+_alt192 = _hud192.minikarte.zeichnen
+_hud192.minikarte.zeichnen = lambda z_, g_, **kw_: (_rufe192.append(kw_), _alt192(z_, g_, **kw_))[1]
+_w192.zeichnen(_b192, 0.5)
+pruef("Die Karte steht als Kreis unten links, um die eigene Figur",
+      _rufe192 and _rufe192[-1].get("rund") is True and _rufe192[-1].get("rahmen") is not None
+      and _hud192._karte_unten == 0, str(_rufe192[-1:]))
+_mitte192 = (K.HUD["karte_x"] + K.HUD["karte_d"] // 2, K.GAME_H - K.HUD["unten"] - K.HUD["karte_d"] // 2)
+# Mitten in einer Platte (genau oben liegt eine Luecke zwischen zweien).
+_je192 = (K.HUD["bogen_von"] - K.HUD["bogen_bis"]) / K.HUD["segmente"]
+_w_oben192 = math.radians(K.HUD["bogen_von"] - 8.5 * _je192)
+_rad192 = K.HUD["karte_d"] // 2 + K.HUD["bogen_abstand"]
+_oben192 = (int(round(_mitte192[0] + _rad192 * math.cos(_w_oben192))),
+            int(round(_mitte192[1] - _rad192 * math.sin(_w_oben192))))
+pruef("Die Panzerung ist ein Bogen ueber der Karte (oben im Bogen ihre Farbe)",
+      tuple(_b192.get_at(_oben192))[:3] == tuple(K.C_TEAL), str(tuple(_b192.get_at(_oben192))))
+_ich192.leben = _ich192.max_leben * 0.2
+_b192.fill((0, 0, 0))
+_w192.zeichnen(_b192, 0.5)
+_rechts192 = (int(_mitte192[0] + (K.HUD["karte_d"] // 2 + K.HUD["bogen_abstand"]) * math.cos(math.radians(-15))),
+              int(_mitte192[1] - (K.HUD["karte_d"] // 2 + K.HUD["bogen_abstand"]) * math.sin(math.radians(-15))))
+pruef("... mit wenig Panzerung rot und nur noch zum Teil voll (rechts dunkel)",
+      tuple(_b192.get_at(_rechts192))[:3] != tuple(K.C_RED), str(tuple(_b192.get_at(_rechts192))))
+_ich192.leben = _ich192.max_leben
+pruef("Ohne TAB keine Tafel, mit gehaltenem TAB (INVENTAR) schon",
+      not _hud192.tafel_zeigen(), "")
+app.eingabe._gehalten.add("inventar")
+pruef("... mit gehaltenem TAB die Tafel mit dem Punktestand", _hud192.tafel_zeigen())
+app.eingabe._gehalten.discard("inventar")
+_w192.teampunkte = [3, 1]
+_b192.fill((0, 0, 0))
+_w192.zeichnen(_b192, 0.5)
+_farben192 = [k_["hud"] for k_ in K.TEAMS["kombi"]]
+_x0192 = K.GAME_W // 2 - 75
+pruef("Oben in der Mitte ein Balken, geteilt nach dem Stand (3:1 - drei Viertel rot)",
+      tuple(_b192.get_at((_x0192 + 100, 9)))[:3] == tuple(_farben192[0])
+      and tuple(_b192.get_at((_x0192 + 120, 9)))[:3] == tuple(_farben192[1]),
+      "%s %s" % (tuple(_b192.get_at((_x0192 + 100, 9))), tuple(_b192.get_at((_x0192 + 120, 9)))))
+pruef("Die Hotbar laesst links Platz fuer Karte und Faehigkeit",
+      all(_hud192.hotbar_rechteck(n_).left > _AZ192.LINKS.right
+          and _hud192.hotbar_rechteck(n_).right < _AZ192.RECHTS.left
+          for n_ in (2, 3, 4, len(K.ALLES_GRUPPEN))),
+      str(_hud192.hotbar_rechteck(len(K.ALLES_GRUPPEN))))
+_w192.verlassen(); _g192.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")
