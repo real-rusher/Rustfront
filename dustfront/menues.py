@@ -625,7 +625,8 @@ class Einstellungen(Menue):
             ui.Wahl(self._reihe(zx, zy, zw, 3), "PIXELRASTER", "pixelraster",
                     E.RASTER, self._index(E.RASTER, o["pixelraster"]),
                     E.BESCHRIFTUNG["pixelraster"]),
-            ui.Schalter(self._reihe(zx, zy, zw, 4), "GRAFIKKARTE SKALIERT",
+            # Kurz genug fuer die Spalte (vorher "GRAFIKKARTE SKALI>").
+            ui.Schalter(self._reihe(zx, zy, zw, 4), "GPU SKALIERT",
                         "grafikkarte", o["grafikkarte"]),
         ]
 
@@ -1509,9 +1510,10 @@ class Ausruestung(Menue):
         mitte = r.x + 22 + self.LINKS // 2
         SCHRIFT.zeichnen(ziel, "HAUPT- UND SEITENWAFFE, EINE WURFWAFFE", mitte,
                          r.y + 28, K.C_MUTED, 1, 1, "mitte")
-        SCHRIFT.zeichnen(ziel, "DAS BRECHEISEN LIEGT AUF F UND IST IMMER DA",
-                         mitte, r.y + 38, K.C_MUTED_DK, 1, 1, "mitte")
-        # Was die Klasse kann (seit 0.34.73), unter dem Aussehen.
+        # Was die Klasse kann (seit 0.34.73). Seit 0.34.97 hier oben statt
+        # unter dem Aussehen: dort lag sie seit der Zeile NAHKAMPF (F) auf
+        # AUSSEHEN. Der alte Satz "das Brecheisen liegt auf F und ist immer
+        # da" stimmte auch nicht mehr - F ist jetzt waehlbar.
         from . import klassen as klassen_modul
         d = klassen_modul.daten(satz.get("klasse", ""))
         # Seit 0.34.79 nur Name und Faehigkeit: die ganze Beschreibung
@@ -1520,7 +1522,7 @@ class Ausruestung(Menue):
         if d.get("faehigkeit"):
             text += " - C: " + ", ".join(klassen_modul.FAEHIGKEIT_NAMEN.get(a, a.upper())
                                          for a, _ in d["faehigkeit"])
-        SCHRIFT.zeichnen(ziel, ui.kuerzen(text, self.LINKS), mitte, r.bottom - 84,
+        SCHRIFT.zeichnen(ziel, ui.kuerzen(text, self.LINKS), mitte, r.y + 38,
                          K.C_AMBER, 1, 1, "mitte")
         # Die drei Plaetze so zeigen, wie sie im Gefecht liegen. Wer die
         # Reihenfolge kennt, greift blind - und sieht hier, wo was liegt.

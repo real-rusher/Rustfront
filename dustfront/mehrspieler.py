@@ -2509,8 +2509,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
 
     def bergen_an(self) -> bool:
         """Darf man Gefallene aufheben und ziehen? Mit der Regel AUFHELFEN -
-        im Testmodus auch ohne (seit 0.34.40, VERWUNDETE BOTS)."""
-        return bool(self.regeln["revive"])
+        im Testmodus auch ohne (seit 0.34.40, VERWUNDETE BOTS). In der
+        SCHLACHT immer (seit 0.34.98): dort fallen alle erst zu Boden - ohne
+        das lief ihr Countdown nie ab, und sie lagen ewig."""
+        return bool(self.regeln["revive"]) or bool(getattr(self, "schlacht", False))
 
     def _gemeint(self, wen):
         """Wen eine Eingabe ausdruecklich meint ("wen", eine Nummer) - oder
@@ -6339,6 +6341,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
         for k in self.kaempfer.values():
             k.abschuesse = 0
             k.tode = 0
+            k.schlacht_punkte = 0          # Nachschubpunkte gelten je Runde (seit 0.34.98)
             # Bots haben immer begrenzte Munition (seit 0.34.26).
             k.knapp = self.knapp or k.ist_bot
             k.vorrat = {v: K.MUNITION["vorrat"].get(v, 0) for v in k.waffen}

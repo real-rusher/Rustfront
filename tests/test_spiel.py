@@ -16612,6 +16612,27 @@ pruef("STAUBTAL - OFFEN: eine grosse offene Karte fuer Fahrzeuge, Vorschlag fuer
       _w199 is not None and K.SCHLACHT["karte"] == "staubtal_offen"
       and sum(_w199.fahrwege.begehbar[0]) > 0.7 * _w199.ebene(0).breite * _w199.ebene(0).hoehe)
 
+print("\n-- 0.34.98: Fehlersuche (SCHLACHT am Boden, Nachschubpunkte je Runde)")
+w200, g200 = _paar59("schlacht", karte="staubtal")
+w200._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", revive=False))
+_b200 = next(k_ for k_ in w200.kaempfer.values() if k_ is not w200.ich)
+pruef("SCHLACHT: jeder faellt erst zu Boden, auch ohne die Regel AUFHELFEN",
+      _b200.revive_an and w200.bergen_an())
+_b200.unverwundbar = 0.0
+_b200.sterben(None)
+_b200.boden_rest = 0.05
+for _ in range(20):
+    w200._revive(1.0 / 120)
+# Gemeldet bei der Fehlersuche: ohne bergen_an lief der Countdown nie ab,
+# 20 von 23 Bots lagen ewig, und eine Runde endete nie.
+pruef("... und wer nicht geborgen wird, stirbt nach der Bodenzeit",
+      not _b200.lebt and not _b200.am_boden)
+w200.ich.schlacht_punkte = 7
+w200._runde_neu()
+pruef("Nachschubpunkte gelten je Runde: die neue Runde beginnt bei 0",
+      w200.ich.schlacht_punkte == 0, str(w200.ich.schlacht_punkte))
+w200.verlassen(); g200.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
