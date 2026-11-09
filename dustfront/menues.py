@@ -452,6 +452,13 @@ HILFE = {
         "OHNE FLIMMERN FÜLLT DAS FENSTER UND GLÄTTET KRUMME GRÖSSEN",
         "(Z.B. 1440X900): KEIN WISCHEN, ETWAS WEICHER, KOSTET LEISTUNG.",
     ],
+    "grafikkarte": [
+        "AN: DIE GRAFIKKARTE VERGRÖSSERT DAS BILD AUFS FENSTER - SPART",
+        "VOR ALLEM BEI GROSSEN FENSTERN UND IM VOLLBILD SPÜRBAR ZEIT.",
+        "AUS: DER PROZESSOR MACHT ES WIE BISHER. AUF SEHR SCHWACHEN",
+        "GRAFIKCHIPS KANN AUS SCHNELLER SEIN. OHNE SCHNELLE GRAFIKKARTE",
+        "BLEIBT ES VON SELBST BEIM PROZESSOR.",
+    ],
     "ton_gesamt": ["REGELT ALLES ZUSAMMEN, AUCH SPÄTERE MUSIK."],
     "ton_effekte": [
         "SCHÜSSE, SCHRITTE, EINSCHLÄGE.",
@@ -618,6 +625,8 @@ class Einstellungen(Menue):
             ui.Wahl(self._reihe(zx, zy, zw, 3), "PIXELRASTER", "pixelraster",
                     E.RASTER, self._index(E.RASTER, o["pixelraster"]),
                     E.BESCHRIFTUNG["pixelraster"]),
+            ui.Schalter(self._reihe(zx, zy, zw, 4), "GRAFIKKARTE SKALIERT",
+                        "grafikkarte", o["grafikkarte"]),
         ]
 
     def _seite_audio(self, zx, zy, zw) -> None:
@@ -736,7 +745,7 @@ class Einstellungen(Menue):
             for szene in getattr(self.app, "stapel", []):
                 if hasattr(szene, "netz_umstellen"):
                     szene.netz_umstellen()
-        if el.name in ("fenstermodus", "aufloesung", "bildrate", "pixelraster"):
+        if el.name in ("fenstermodus", "aufloesung", "bildrate", "pixelraster", "grafikkarte"):
             self.app.anzeige_uebernehmen()
             self.aufbauen()
         elif el.name in ("ton_gesamt", "ton_effekte"):

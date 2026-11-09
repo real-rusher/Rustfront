@@ -29,6 +29,8 @@ angefasst werden muessen:
 from __future__ import annotations
 
 import math
+import os
+import warnings
 from pathlib import Path
 
 import pygame
@@ -82,6 +84,26 @@ TASTEN = {
 }
 MAUSTASTEN = {"feuer": 1, "zweit": 3}
 
+
+
+
+def _gpu_hinweise_weg() -> None:
+    """Die Umgebungsvariablen fuer SCALED wieder weg (siehe App._gpu_setzen)."""
+    os.environ.pop("SDL_HINT_RENDER_SCALE_QUALITY", None)
+    os.environ.pop("SDL_RENDER_SCALE_QUALITY", None)
+
+
+def _fenster_objekt():
+    """Das Fenster als pygame.Window (pygame-ce ab 2.4), sonst None."""
+    fenster = getattr(pygame, "Window", None)
+    if fenster is None or not hasattr(fenster, "from_display_module"):
+        return None
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return fenster.from_display_module()
+    except (pygame.error, AttributeError):
+        return None
 
 class Eingabe:
     """Uebersetzt Tasten und Maus in benannte Aktionen."""
@@ -463,11 +485,16 @@ class App:
 
     # ---- Anzeige ----------------------------------------------------
     def anzeige_setzen(self) -> None:
+        self.gpu = False
         if self.headless:
             self.fenster = pygame.display.set_mode(K.START_FENSTER)
             self.viewport_rechnen()
             return
         modus = self.opt["fenstermodus"] if self.vollbild else "fenster"
+        if self._gpu_gewuenscht() and self._gpu_setzen(modus):
+            self.viewport_rechnen()
+            return
+        _gpu_hinweise_weg()
         if plattform.nur_vollbild():
             # iOS: der ganze Bildschirm, in der Groesse, die er hat.
             versuche = [((0, 0), pygame.FULLSCREEN)]
@@ -489,6 +516,71 @@ class App:
         self.vollbild = False
         self.fenster = pygame.display.set_mode(self.fenster_groesse, pygame.RESIZABLE)
         self.viewport_rechnen()
+
+    # ---- Hochskalieren auf der Grafikkarte (seit 0.34.90) -------------
+    def _gpu_gewuenscht(self) -> bool:
+        """Soll die Grafikkarte das Bild aufs Fenster vergroessern? Nur auf
+        Wunsch (GRAFIKKARTE SKALIERT) und nicht mit Touch-Steuerung: die
+        rechnet Finger selbst ins Fenster um (touch.py), und auf iOS bleibt
+        alles, wie es erprobt ist."""
+        return (bool(self.opt["grafikkarte"]) and not self.headless
+                and not plattform.touch_an() and not plattform.nur_vollbild()
+                and hasattr(pygame, "SCALED"))
+
+    def _gpu_setzen(self, modus: str) -> bool:
+        """Das Fenster mit pygame.SCALED: gezeichnet wird weiter in 640 x 360,
+        die Grafikkarte vergroessert es beim flip() aufs Fenster - samt
+        schwarzem Rand und Mauskoordinaten, die pygame zurueckrechnet. Das
+        spart das Vergroessern auf dem Prozessor (transform.scale), bei
+        1920 x 1080 rund 2 Millionen Pixel je Bild.
+
+        False, wenn es nicht geht oder nur ein langsamer Ersatz ohne
+        Grafikkarte da ist ("no fast renderer") - dann der alte Weg."""
+        raster = self.opt["pixelraster"]
+        # GRUND fuer die zwei Umgebungsvariablen: pygame fragt beim Anlegen
+        # "SDL_HINT_RENDER_SCALE_QUALITY" als Schalter fuer krumme Faktoren
+        # (sonst nur 2x, 3x ... im Fenster), SDL die Glaettung beim
+        # Vergroessern. GANZE PIXEL: nur ganze Faktoren; OHNE FLIMMERN:
+        # geglaettet; sonst scharf und fuellend.
+        os.environ["SDL_HINT_RENDER_SCALE_QUALITY"] = "0" if raster == "ganzzahlig" else "1"
+        os.environ["SDL_RENDER_SCALE_QUALITY"] = "linear" if raster == "ruhig" else "nearest"
+        if modus == "vollbild":
+            flags, groesse = pygame.SCALED | pygame.FULLSCREEN, None
+        elif modus == "randlos":
+            flags, groesse = pygame.SCALED | pygame.NOFRAME, self.desktop_groesse()
+        else:
+            flags, groesse = pygame.SCALED | pygame.RESIZABLE, self.fenster_groesse
+        try:
+            with warnings.catch_warnings(record=True) as meldungen:
+                warnings.simplefilter("always")
+                fenster = pygame.display.set_mode((K.GAME_W, K.GAME_H), flags)
+        except pygame.error:
+            return False
+        langsam = any("no fast renderer" in str(m.message) for m in meldungen)
+        if langsam and not K.ANZEIGE["gpu_ohne_grafikkarte"]:
+            return False
+        self.fenster = fenster
+        self.gpu = True
+        if groesse is not None:
+            fenster_obj = _fenster_objekt()
+            if fenster_obj is not None:
+                try:
+                    fenster_obj.size = tuple(groesse)
+                    if modus == "randlos":
+                        fenster_obj.position = (0, 0)
+                except (pygame.error, ValueError, TypeError):
+                    pass
+        return True
+
+    def _fenster_masse(self) -> tuple:
+        """Wie gross das Fenster wirklich ist - mit SCALED meldet die
+        Anzeigeflaeche nur 640 x 360."""
+        if getattr(self, "gpu", False):
+            fenster_obj = _fenster_objekt()
+            if fenster_obj is not None:
+                return tuple(fenster_obj.size)
+            return tuple(self.fenster_groesse)
+        return self.fenster.get_size()
 
     @staticmethod
     def desktop_groesse() -> tuple[int, int]:
@@ -600,7 +692,7 @@ class App:
                 if surf is not None:
                     self.fenster = surf
                     if not self.vollbild and not self.headless:
-                        self.fenster_groesse = surf.get_size()
+                        self.fenster_groesse = self._fenster_masse()
                 self.viewport_rechnen()
                 continue
             if ev.type == pygame.KEYDOWN:
@@ -759,6 +851,12 @@ class App:
         # nichts) und nicht gemerkt: legt set_mode das Fenster neu an, zeigte
         # ein gemerkter Ausschnitt auf Speicher, den es nicht mehr gibt.
         f = self.fenster
+        if getattr(self, "gpu", False):
+            # Die Grafikkarte vergroessert (GRAFIKKARTE SKALIERT): nur die
+            # 640 x 360 hineinkopieren, den Rest macht flip().
+            f.blit(self.flaeche, (0, 0))
+            pygame.display.flip()
+            return
         vp = self.viewport
         fb, fh = f.get_size()
         if (self.opt["pixelraster"] == "ruhig" and abs(self.skala - round(self.skala)) > 1e-6

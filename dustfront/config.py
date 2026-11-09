@@ -3924,6 +3924,15 @@ ALLES_GRUPPEN = (
 )
 
 
+# Die Anzeige (seit 0.34.90).
+ANZEIGE = dict(
+    # GRAFIKKARTE SKALIERT auch dann, wenn SDL nur einen Ersatz ohne
+    # Grafikkarte findet ("no fast renderer")? Nein: der waere langsamer
+    # als das Vergroessern im Spiel. Die Tests schalten es ein, weil es im
+    # Fenster ohne Bildschirm nur den Ersatz gibt.
+    gpu_ohne_grafikkarte=False,
+)
+
 # Waffe -> Nummer ihrer Gruppe (seit 0.34.89; gefragt in jedem Bild).
 ALLES_GRUPPE_VON = {w: i for i, (_n, waffen) in enumerate(ALLES_GRUPPEN) for w in waffen}
 

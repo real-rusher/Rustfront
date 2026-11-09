@@ -15914,6 +15914,43 @@ _tm189._kandidaten_lauf = None
 _tm189.__dict__.pop("_kandidaten_merk", None)
 _tm189.verlassen()
 
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Anzeige: GRAFIKKARTE SKALIERT als Schalter (0.34.90)")
+from dustfront import einstellungen as _E190
+pruef("GRAFIKKARTE SKALIERT ist aus, bis man es einschaltet", _E190.VORGABE["grafikkarte"] is False)
+_kopf190, _opt190 = app.headless, dict(app.opt.werte)
+app.headless = False                       # ein Fenster wie im Spiel (Treiber: dummy)
+app.opt.werte["grafikkarte"] = True
+app.opt.werte["fenstermodus"] = "fenster"
+app.vollbild = False
+K.ANZEIGE["gpu_ohne_grafikkarte"] = False
+app.anzeige_setzen()
+pruef("Ohne schnelle Grafikkarte bleibt es beim Vergroessern im Spiel",
+      app.gpu is False and app.fenster.get_size() != (K.GAME_W, K.GAME_H), str(app.fenster.get_size()))
+K.ANZEIGE["gpu_ohne_grafikkarte"] = True
+app.anzeige_setzen()
+pruef("Mit Grafikkarte: die Anzeigeflaeche ist das Spielbild selbst, ohne eigenes Vergroessern",
+      app.gpu and app.fenster.get_size() == (K.GAME_W, K.GAME_H) and app.skala == 1.0
+      and app.viewport == pygame.Rect(0, 0, K.GAME_W, K.GAME_H), str(app.viewport))
+pruef("... das Fenster behaelt die eingestellte Groesse", app._fenster_masse() == tuple(app.fenster_groesse),
+      str(app._fenster_masse()))
+pruef("... und die Maus braucht kein Umrechnen mehr (pygame liefert Spielkoordinaten)",
+      app.zu_spiel((123, 45)) == pygame.Vector2(123, 45))
+app.flaeche.fill((10, 200, 30))
+app.ausgeben()
+pruef("... ausgeben legt das Spielbild unveraendert hinein", app.fenster.get_at((5, 5))[:3] == (10, 200, 30))
+app.opt.werte["grafikkarte"] = False
+app.anzeige_setzen()
+pruef("Ausgeschaltet: wieder das Fenster in voller Groesse, vergroessert vom Spiel",
+      not app.gpu and app.fenster.get_size() == tuple(app.fenster_groesse)
+      and "SDL_HINT_RENDER_SCALE_QUALITY" not in os.environ, str(app.fenster.get_size()))
+app.ausgeben()
+K.ANZEIGE["gpu_ohne_grafikkarte"] = False
+app.opt.werte.clear()
+app.opt.werte.update(_opt190)
+app.headless = _kopf190
+app.anzeige_setzen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

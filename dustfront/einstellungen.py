@@ -34,6 +34,11 @@ VORGABE = {
     "aufloesung": "1280x720",
     "bildrate": 0,                 # 0 = unbegrenzt, sonst Obergrenze
     "pixelraster": "gefuellt",     # gefuellt | ganzzahlig | ruhig
+    # Das Bild von der Grafikkarte aufs Fenster vergroessern lassen statt
+    # vom Prozessor (seit 0.34.90). Aus als Vorgabe: auf sehr schwachen
+    # Grafikchips kann es langsamer sein, und ohne schnelle Grafikkarte
+    # faellt das Spiel ohnehin auf den alten Weg zurueck (core.App).
+    "grafikkarte": False,
     # Ton
     "ton_gesamt": 75,
     "ton_effekte": 85,

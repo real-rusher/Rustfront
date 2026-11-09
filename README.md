@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.89, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.90, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -852,6 +852,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.90 | **GRAFIKKARTE SKALIERT** (Einstellungen > Anzeige, aus als Vorgabe): die Grafikkarte vergroessert das 640x360-Bild aufs Fenster (pygame.SCALED) statt des Prozessors - spart bei grossen Fenstern und im Vollbild die meiste Zeit des Vergroesserns. Pixelraster gilt weiter (GANZE PIXEL: nur ganze Faktoren im Fenster, OHNE FLIMMERN: geglaettet). Ohne schnelle Grafikkarte, mit Touch-Steuerung und auf iOS bleibt es von selbst beim alten Weg; auf sehr schwachen Grafikchips einfach ausschalten. Netz/LAN: unveraendert. |
 | 0.34.89 | **Leistungsrunde ohne Spielaenderung** (Spielzustand und Bild bitgenau wie vorher, gemessen an drei Szenen): gemessen etwa 10 % schneller im Team-Gefecht und in PVE, gut 6 % in der grossen Testmodus-Schlacht. Figuren ausserhalb des Bildes werden nicht mehr gezeichnet, der Ziffernblock des Testmodus ist eine gemerkte Flaeche, `deckung` antwortet bei freien kurzen Strecken sofort, die Gegnerliste der Bots wird je Durchgang einmal gesucht, die JEDER-HAT-ALLES-Hotbar merkt ihre Gruppen, Kamera.zu_bild rechnet ohne Zwischenvektoren. Netz/LAN: unveraendert. |
 | 0.34.88 | Testmodus: der Beobachter hat immer eine Minikarte (MINIKARTE ALLWISSEND legt fest, ob jeder darauf ist); in ANSICHT WIE RUNDE nimmt der unsichtbare Ziffernblock weder Finger noch Mausklick weg. Netz/LAN: unveraendert. |
 | 0.34.87 | **Waffen-Feinschliff.** Spulengewehr abgeschwaecht: 95 statt 150 Schaden, 2,1 s Laden, 3 Schuss, 760 Reichweite, und jede Mauer (-40 %) und jeder Koerper (-35 %) auf der Linie kostet Kraft; Ladelinie und Strahl werden ueber den Mauern gezeichnet. Revolver: GEZIELT praeziser, FAECHERN leert die restliche Trommel mit einem Klick; der Gast sieht die Betriebsart ("mo"), und beim Umschalten steht ein Hinweis da. Gruppen-Hotbar: die Taste wird sofort in eine Waffe umgerechnet, und eine angeforderte Waffe zaehlt als gehalten, bis der Gastgeber sie bestaetigt - so ist jede Waffe einer Gruppe erreichbar, auch bei schnellem Druecken als Gast; WFF (Touch) geht von Gruppe zu Gruppe. Kuller rollt 1,6-mal so weit wie gezielt und zuendet nach 6,5 statt 9 s. Granatwerfer fliegt ueber alles, was niedriger steht als seine Flughoehe (Mauer 24, Fels 30; `Welt.kachel_hoehe`), fliegt etwas langsamer (340 statt 400) und zuendet am Boden nach 0,4 statt 0,7 s. Drohne: echter Rotorklang (vier verstimmte Rotoren, Luft im Blatttakt, gleich laut). **Netz:** neues Feld "mo" je Spieler; gleiche Version noetig. |
