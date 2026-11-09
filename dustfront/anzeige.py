@@ -469,7 +469,48 @@ class Anzeige:
         flaeche.blit(self._karte_maske, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
         ziel.blit(flaeche, (mitte[0] - radius, mitte[1] - radius))
         pygame.draw.circle(ziel, (84, 66, 48), mitte, radius, 1)
+        # Seit 0.34.100 noch einmal in Fensteraufloesung darueber (gewuenscht:
+        # "deutlich hoehere Resolution fuer die Minimap"). Nur, wenn nichts
+        # davor liegt - ein Menue oder eine andere Szene darueber deckte sie
+        # sonst nicht mehr zu.
+        if self._karte_frei(g):
+            kasten = pygame.Rect(mitte[0] - radius, mitte[1] - radius, d, d)
+            g.app.hoch_auflegen(kasten, lambda f, mass: self._karte_hoch(f, mass, rahmen, d))
         return mitte, radius
+
+    @staticmethod
+    def _karte_frei(g) -> bool:
+        app = getattr(g, "app", None)
+        if app is None or not hasattr(app, "hoch_auflegen"):
+            return False
+        if not app.stapel or app.stapel[-1] is not g:
+            return False
+        return not (getattr(g, "menue", None) is not None or getattr(g, "pausiert", False)
+                    or getattr(g, "belohnung_offen", False)
+                    or getattr(g, "_admin_zeile", None) is not None)
+
+    def _karte_hoch(self, f, mass: float, rahmen, d: int) -> None:
+        """Die runde Karte in Fenstergroesse (siehe App.hoch_auflegen)."""
+        groesse = f.get_size()
+        merk = self.__dict__.get("_karte_hoch_merk")
+        if merk is None or merk[0] != groesse:
+            flaeche = pygame.Surface(groesse, pygame.SRCALPHA)
+            maske = pygame.Surface(groesse, pygame.SRCALPHA)
+            maske.fill((0, 0, 0, 0))
+            rr = min(groesse) // 2
+            pygame.draw.circle(maske, (255, 255, 255, 255), (groesse[0] // 2, groesse[1] // 2), rr)
+            merk = self._karte_hoch_merk = (groesse, flaeche, maske)
+        _g, flaeche, maske = merk
+        flaeche.fill((11, 8, 6, 255))
+        fx, fy = groesse[0] / float(d), groesse[1] / float(d)
+        gross = pygame.Rect(int(rahmen.x * fx), int(rahmen.y * fy),
+                            max(8, int(rahmen.width * fx)), max(8, int(rahmen.height * fy)))
+        self.minikarte.zeichnen(flaeche, self.g, rahmen=gross, rund=True, mass=mass)
+        flaeche.blit(maske, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        f.blit(flaeche, (0, 0))
+        rr = min(groesse) // 2
+        pygame.draw.circle(f, (84, 66, 48), (groesse[0] // 2, groesse[1] // 2), rr,
+                           max(1, int(mass)))
 
     @staticmethod
     def _bogen(ziel, mitte, radius, teile, farbe_fuer, dicke) -> None:

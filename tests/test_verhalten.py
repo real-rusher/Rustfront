@@ -1214,10 +1214,50 @@ def vorstoss():
           all(g_ >= 1500.0 for g_ in gefahren_), str([round(g_) for g_ in gefahren_]))
 
 
+def fallschirmjaeger():
+    """Gewuenscht (0.34.100): Fallschirmjaeger tun vor dem Landen nichts, sehen
+    aber schon; die Gegner sehen sie kommen, schiessen aber nicht, bevor sie
+    gelandet sind, und gehen erst einmal in Stellung. Nach der Landung wird
+    gekaempft wie immer."""
+    print("\n-- Fallschirmjaeger: in der Luft kein Ziel, die Gegner gehen in Stellung")
+    for seed in (61, 62, 63):
+        tm = neu(seed)
+        tx, ty, v = W.flaeche(tm, random.Random(seed), 30, 16)
+        rote = [tm.bot_setzen(v(4 + 2 * i, 8), 0, {"team": 0, "hirn": "goap" if i % 2 else "klassisch"})
+                for i in range(4)]
+        tm.nachschub_setzen("fallschirmjaeger", v(17, 8), {"team": 1})
+        blaue = [k for k in tm.kaempfer.values() if getattr(k, "verstaerkung", False)]
+        zahl = {"ziel_luft": 0, "feuer_luft": 0, "schuss_springer": 0}
+        schuesse = Schuesse(tm, blaue)
+
+        def messen(tm=tm, zahl=zahl, schuesse=schuesse):
+            schuesse.schritt()
+            luft = [k for k in blaue if k.schirm_hoehe > 0]
+            if not luft:
+                return
+            for k in rote:
+                if k.lebt and k.hirn.ziel in luft:
+                    zahl["ziel_luft"] += 1
+            zahl["schuss_springer"] = len(schuesse.liste)
+        laufen(tm, 6.0, messen)
+        reagiert = sum(1 for k in rote if getattr(k.hirn, "springer_gesehen", None) is not None)
+        pruef("Seed %d: niemand nimmt einen Springer in der Luft ins Ziel, kein Springer schiesst" % seed,
+              zahl["ziel_luft"] == 0 and zahl["schuss_springer"] == 0,
+              "%d / %d" % (zahl["ziel_luft"], zahl["schuss_springer"]))
+        pruef("Seed %d: die Gegner haben sie kommen sehen" % seed, reagiert >= 2,
+              "%d von %d" % (reagiert, len(rote)))
+        laufen(tm, 8.0)
+        gelandet = all(k.schirm_hoehe == 0.0 for k in blaue)
+        im_kampf = any(k.lebt and k.hirn.ziel in blaue for k in rote) or any(
+            not k.lebt or k.am_boden for k in blaue + rote)
+        tm.verlassen()
+        pruef("Seed %d: gelandet, und dann wird gekaempft" % seed, gelandet and im_kampf)
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
          planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
-         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss]
+         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger]
 #
 # Ohne Angabe laufen die Szenen seit 0.34.94 gleichzeitig, je eine in einem
 # eigenen Prozess, so viele wie Kerne da sind (hoechstens TEILE). Jede

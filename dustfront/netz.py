@@ -169,6 +169,12 @@ class Leitung:
         if not self.offen:
             return []
         self.spuelen()
+        if not self.offen:
+            # spuelen kann die Leitung schliessen (Rueckstand zu gross, die
+            # Gegenstelle liest nicht mehr). Dann gibt es keinen Socket mehr,
+            # und select darauf warf ValueError - beim Gastgeber mitten im
+            # Gefecht, wenn ein Gast haengt (gefunden 0.34.100).
+            return []
         raus = []
         while True:
             bereit, _, _ = select.select([self.sock], [], [], 0)

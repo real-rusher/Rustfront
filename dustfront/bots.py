@@ -293,6 +293,12 @@ class BotHirn(Taktik):
         if self.denk_rest <= 0.0:
             self.denk_rest = K.BOTS["takt"]
             self._wahrnehmen()
+        if schwebt(k):
+            # Fallschirmjaeger in der Luft (seit 0.34.100): er sieht schon, wer
+            # unten steht (und merkt ihn sich), tut aber nichts, bis er landet.
+            if self.ziel is not None:
+                ein["ziel"] = [round(self.ziel.pos.x, 1), round(self.ziel.pos.y, 1)]
+            return ein
         # Am Steuer (seit 0.34.71) - und wer fahren darf, aber keinen Wagen
         # hat, geht zum naechsten freien.
         if k.fahrzeug is not None:
@@ -318,7 +324,11 @@ class BotHirn(Taktik):
             self.funken("nachladen")
         self.laden_vorher = laedt
 
-        will, ziel_punkt, feuern, zielt = self._entscheiden(dt, ein)
+        springer = self._springer_reaktion(dt)
+        if springer is not None:
+            will, ziel_punkt, feuern, zielt = springer
+        else:
+            will, ziel_punkt, feuern, zielt = self._entscheiden(dt, ein)
         feuern, zielt = self._abzug(feuern, zielt)
         # Seit 0.34.70: steht er in Feuer, Gas oder am Rand einer Falle,
         # geht er zuerst dort heraus - schiessen darf er dabei weiter.
@@ -507,7 +517,10 @@ class BotHirn(Taktik):
         # Wer liegt, ist kein Ziel (seit 0.34.52): sonst hielten Aktionen und
         # Gefahr (bot_goap._gefahr) ihn fest, und das Niederhalten schoss
         # Stoss um Stoss auf die Stelle, an der er lag.
-        return self.ist_feind(w) and w.ebene == self.k.ebene and not getattr(w, "am_boden", False)
+        # Wer noch am Schirm haengt, ist auch kein Ziel (seit 0.34.100) - erst
+        # wenn er gelandet ist.
+        return (self.ist_feind(w) and w.ebene == self.k.ebene and not getattr(w, "am_boden", False)
+                and not schwebt(w))
 
     def _kandidaten(self) -> list:
         """Wer fuer ihn ein Gegner sein kann (ist_feind), in derselben
@@ -588,6 +601,14 @@ class BotHirn(Taktik):
             if getattr(w, "am_boden", False):
                 continue
             if self.sieht(w):
+                if schwebt(w):
+                    # Ein Fallschirmjaeger im Anflug (seit 0.34.100): gesehen
+                    # und gemerkt, aber noch kein Ziel - in Stellung gehen.
+                    self.springer_gesehen = (pygame.Vector2(w.pos), jetzt)
+                    self.gesehen[w] = (pygame.Vector2(w.pos), w.ebene, jetzt)
+                    if melden is not None:
+                        melden(k, w)
+                    continue
                 sichtbar.append(w)
                 if melden is not None:
                     melden(k, w)
@@ -615,6 +636,7 @@ class BotHirn(Taktik):
         panzer = getattr(k.fahrzeug, "art", "") == "panzer"
         blech_da = panzer and any(getattr(w, "im_fahrzeug", False) for w in sichtbar)
         if (self.ziel is not None and self.ziel in sichtbar and not liegt
+                and not schwebt(self.ziel)
                 and self._ziel_erlaubt(self.ziel)
                 and not (blech_da and not getattr(self.ziel, "im_fahrzeug", False))):
             # Er bleibt dran - ausser ein anderer, den er sieht, hat ihn eben
@@ -673,6 +695,32 @@ class BotHirn(Taktik):
         geraeusch = self._hoeren()
         if geraeusch is not None and (self.verdacht is None or self.verdacht[2] < jetzt):
             self.verdacht = geraeusch
+
+    def _springer_reaktion(self, dt: float):
+        """Gegner kommen am Schirm herunter (seit 0.34.100, gewuenscht: "Bots
+        sollen die abspringenden Fallschirmjaeger wahrnehmen, aber nicht auf
+        sie schiessen, bis sie gelandet sind, und erstmal in Position oder in
+        Deckung gehen"). Ohne eigenes Ziel geht er in Deckung gegen die
+        Landestelle - findet er keine, bleibt er stehen - und schaut hin.
+        Gibt (will, Blickpunkt, feuern, zielt) zurueck oder None."""
+        k = self.k
+        z = self.ziel
+        if (z is not None and self.ziel_ok(z)) or k.fahrzeug is not None:
+            return None
+        gesehen = getattr(self, "springer_gesehen", None)
+        jetzt = self.g.welt.zeit
+        if gesehen is None or jetzt - gesehen[1] > K.BOTS["springer_merken"]:
+            self.springer_deckung = None
+            return None
+        ort = gesehen[0]
+        suche = getattr(self, "springer_suche", 0.0) - dt
+        self.springer_suche = suche
+        if getattr(self, "springer_deckung", None) is None and suche <= 0.0:
+            self.springer_suche = 1.0
+            self.springer_deckung = self._deckung_suchen(ort) or pygame.Vector2(k.pos)
+        hin = (getattr(self, "springer_deckung", None) or k.pos) - k.pos
+        will = hin.normalize() if hin.length() > 4.0 else pygame.Vector2(0, 0)
+        return will, pygame.Vector2(ort), False, False
 
     def liegt(self) -> None:
         """Er ist zu Boden gegangen: kein Ziel, keine Taktik, kein Sturm."""
@@ -2075,6 +2123,11 @@ class BotHirn(Taktik):
         return will
 
 
+def schwebt(w) -> bool:
+    """Haengt `w` noch am Fallschirm (seit 0.34.100)?"""
+    return getattr(w, "schirm_hoehe", 0.0) > 0.0
+
+
 class BotTeil:
     """Was das Gefecht fuer die Bots tut: aufstellen, wegnehmen, steuern.
     Wie LobbyTeil und KosmetikTeil ein Anteil des Gefechts."""
@@ -2135,7 +2188,9 @@ class BotTeil:
         (`bots_t0` ...) stellt so viele Bots fest in eine Mannschaft."""
         soll = self.bots_soll
         menschen = [k for k in self.kaempfer.values() if not getattr(k, "ist_bot", False)]
-        bots = self._bots()
+        # Fallschirmjaeger (seit 0.34.100) kommen dazu, sie zaehlen nicht mit:
+        # sonst nahm das Auffuellen gleich fuenf andere Bots weg.
+        bots = [k for k in self._bots() if not getattr(k, "verstaerkung", False)]
         if not self.mit_teams:
             braucht = max(max(0, soll - len(menschen)) if soll else 0,
                           self.bots_fest(-1))
@@ -2170,7 +2225,8 @@ class BotTeil:
                 self._bot_dazu(fehlt[0])
             elif zu_viel:
                 team = zu_viel[0]
-                kandidaten = [k for k in self._bots() if team < 0 or k.team == team]
+                kandidaten = [k for k in self._bots() if (team < 0 or k.team == team)
+                              and not getattr(k, "verstaerkung", False)]
                 if not kandidaten:
                     break
                 # Wer tot ist oder gerade nicht kaempft, geht zuerst.

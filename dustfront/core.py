@@ -637,6 +637,39 @@ class App:
         return pygame.Vector2((pos[0] - self.viewport.x) / self.skala,
                               (pos[1] - self.viewport.y) / self.skala)
 
+    def hoch_auflegen(self, rect, maler) -> bool:
+        """Etwas in Fensteraufloesung ueber das Bild legen (seit 0.34.100).
+
+        Die Spielflaeche ist 640 x 360 gross und wird aufs Fenster
+        vergroessert - eine Karte darin hat nie mehr Pixel als das. Gewuenscht
+        war "deutlich hoehere Resolution fuer die Minimap": wer hier
+        anmeldet, malt sein Rechteck (`rect`, Koordinaten der Spielflaeche)
+        nach dem Vergroessern noch einmal in voller Fenstergroesse.
+        `maler(flaeche, mass)` bekommt eine Flaeche in Fenstergroesse und den
+        Faktor Fenster/Spielflaeche. Was gleichzeitig auf der Spielflaeche
+        steht, bleibt der Ersatz, wenn es nichts zu vergroessern gibt (die
+        Grafikkarte skaliert, Touch-Steuerung, ohne Fenster)."""
+        if (getattr(self, "gpu", False) or getattr(self, "touch", None) is not None
+                or getattr(self, "skala", 1.0) <= 1.0 or getattr(self, "fenster", None) is None):
+            return False
+        self.__dict__.setdefault("hochaufgeloest", []).append((pygame.Rect(rect), maler))
+        return True
+
+    def _hoch_zeichnen(self, f) -> None:
+        liste = self.__dict__.get("hochaufgeloest") or []
+        if not liste:
+            return
+        rand = f.get_rect()
+        for rect, maler in liste:
+            ziel = self.zu_fenster(rect).clip(rand)
+            if ziel.width <= 0 or ziel.height <= 0:
+                continue
+            try:
+                maler(f.subsurface(ziel), self.skala)
+            except (pygame.error, ValueError):
+                continue
+        self.hochaufgeloest = []
+
     def zu_fenster(self, rect) -> pygame.Rect:
         """Ein Rechteck der Spielflaeche im Fenster (fuer die Tastatur)."""
         r = pygame.Rect(rect)
@@ -754,6 +787,7 @@ class App:
             self._rechnen(echt, bild_dauer)
 
             alpha = self._rest / K.FIXED_DT
+            self.hochaufgeloest = []
             self.flaeche.fill(K.C_VOID)
             for szene in self._sichtbar():
                 szene.zeichnen(self.flaeche, alpha)
@@ -887,6 +921,7 @@ class App:
                 puffer = self._gross_puffer = pygame.Surface(vp.size, 0, self.flaeche)
             pygame.transform.scale(self.flaeche, vp.size, puffer)
             f.blit(puffer, vp.topleft)
+        self._hoch_zeichnen(f)
         pygame.display.flip()
 
     def _ruhig_ausgeben(self, f, vp, fb, fh) -> None:

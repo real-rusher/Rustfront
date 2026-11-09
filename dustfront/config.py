@@ -997,9 +997,18 @@ SCHLACHT = dict(
     # Zone sichtbar herunter, start: Vorlauf zum Rundenstart, vorlauf_kauf:
     # nach einem Kauf. bild_hub: so viel der Hoehe sieht man als Versatz
     # nach oben. sperre_basis: so weit um die feindliche Basis nichts kaufen.
-    abwurf=dict(hoehe=240.0, sinken=60.0, vorlauf=8.0, start=3.0, vorlauf_kauf=6.0,
+    # Seit 0.34.100 beginnt ein Abwurf deutlich hoeher (gewuenscht: "die
+    # Fahrzeuge sollen was weiter oben spawnen und dann wie bisher
+    # absinken") - er kommt von oben ins Bild, statt darin aufzutauchen.
+    # Landung (seit 0.34.100): ausweichen_ab - unter dieser Hoehe treibt er zu
+    # einer freien Stelle, wenn unter ihm ein Fahrzeug, ein anderer Abwurf
+    # oder Fels liegt (mit treiben px/s, gesucht bis suche_weit px weit).
+    # Wer bei der Landung darunter steht, wird beiseite gestossen (stoss) und
+    # nimmt quetschen Schaden; warnen_ab: ab da blinkt der Schatten rot.
+    abwurf=dict(hoehe=460.0, sinken=60.0, vorlauf=8.0, start=3.0, vorlauf_kauf=6.0,
                 bild_hub=0.55, schirm=(64, 26), schirm_kiste=(30, 14), schirm_ueber=30, kisten=3,
-                sperre_basis=1800.0),
+                sperre_basis=1800.0, ausweichen_ab=300.0, treiben=70.0, suche_weit=420.0,
+                stoss=520.0, quetschen=15.0, warnen_ab=160.0),
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
                   zeichen=dict(buggy="B", panzer="P", panzerwagen="L", munition="M",
                                medkit="+")),
@@ -1010,13 +1019,32 @@ SCHLACHT = dict(
         ("medkit", 2, "SANITÄTSABWURF"),
         ("buggy", 4, "DROPZONE: BUGGY"),
         ("aufklaerung", 6, "AUFKLÄRUNGSDROHNE"),
+        ("fallschirmjaeger", 8, "FALLSCHIRMJÄGER"),
         ("panzerwagen", 8, "DROPZONE: PANZERWAGEN"),
         ("panzer", 12, "DROPZONE: PANZER"),
     ),
     belohnung_hilfe=dict(munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
                          buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
-                         panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE"),
-    aufklaerung=dict(radius=650.0, markiert=15.0, dauer=7.0, anflug=1400.0),
+                         panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE",
+                         fallschirmjaeger="FÜNF BOTS AM SCHIRM, IN FORMATION"),
+    # Die Aufklaerungsdrohne (seit 0.34.100 ein grosser Starrfluegler, hoch
+    # oben). markiert: so lange bleiben Pings ueber Gegnern und Fahrzeugen
+    # (vorher 15 s). flug_hub: so hoch fliegt sie im Bild ueber ihrem
+    # Schatten, parallaxe: so viel schneller als der Boden zieht sie vorbei.
+    aufklaerung=dict(radius=650.0, markiert=20.0, dauer=7.0, anflug=1400.0,
+                     flug_hub=96.0, parallaxe=0.45, spannweite=96),
+    # Die Nachschubkarte (seit 0.34.100): Nebel ueberall, ausser so weit um die
+    # eigenen Leute und im Kreis einer eigenen Drohne.
+    karte_sicht=650.0,
+    karte_nebel=(10, 8, 6, 170),
+    # Fallschirmjaeger (seit 0.34.100): anzahl Bots der eigenen Seite, in einer
+    # Keilformation (abstand px) innerhalb breite px um den Punkt, nie naeher
+    # als nicht_basis an der eigenen Basis. Sie beginnen hoehe hoch und sinken
+    # mit sinken px/s; in der Luft tun sie nichts, sehen aber schon.
+    fallschirmjaeger_schirm=(30, 13),
+    fallschirmjaeger=dict(anzahl=5, abstand=46.0, breite=140.0, nicht_basis=900.0,
+                          hoehe=420.0, sinken=70.0, versatz=0.8, waffen=("sturm", "mp", "unterhebel",
+                                                                          "sturm", "autoschrot")),
     aufsitzen_weite=260.0,
     absetzen_vor=650.0,
     nach_absetzen_tempo=70.0,   # px/s
@@ -1525,6 +1553,9 @@ FAHRZEUG_WAFFEN = {
 # Maus und zielt erst ungenau, dann besser - nie vorhaltend. Das Spiel
 # streut seine Schuesse wie die aller anderen.
 BOTS = dict(
+    # So lange (s) geht ein Bot gegen gesehene Fallschirmjaeger in Deckung,
+    # nachdem er sie zuletzt sah (seit 0.34.100).
+    springer_merken=4.0,
     nummer_ab=100,            # Spielernummern ab hier sind Bots
     auffuellen=(0, 2, 4, 6, 8, 10, 12),   # Regel "bots": 0 = keine
     je_team_hoechstens=8,     # Regeln "bots_t0" ... und "bots_dazu" (seit 0.34.26)
@@ -4437,7 +4468,7 @@ FEUER = dict(
 # runde Karte mit der Panzerung als Bogen darum, daneben der Kreis der
 # Faehigkeit mit den Dashes als Bogen. Pixel im 640x360-Bild.
 HUD = dict(
-    karte_d=72,               # Durchmesser der runden Karte
+    karte_d=84,               # Durchmesser der runden Karte (seit 0.34.100 groesser, vorher 72)
     karte_x=10,               # ihr linker Rand
     unten=6,                  # Abstand der Kreise vom unteren Bildrand
     karte_zoom=1.5,           # so viel groesser als die alte Karte oben links
@@ -4454,6 +4485,20 @@ HUD = dict(
     extra_rand=4,             # so viel Rand bleibt um ihr Symbol mindestens
     extra_abstand=10,         # Abstand der Felder BRECHEISEN und MEDKIT zur Hotbar (seit 0.34.93)
     waffe_zeigen=1.4,         # so lange steht nach dem Wechsel der Name am Zeiger (s)
+)
+
+# Das Kartenbild (kartenbild.py, seit 0.34.100): der Grundriss fuer die runde
+# Karte und die Nachschubkarte, gross gemalt und weich verkleinert.
+# ziel_pixel: so lang wird die laengere Seite ungefaehr (zwischen mindest
+# und hoechstens Pixel je Kachel). rauschen: so viel heller oder dunkler
+# ist eine Kachel als die naechste.
+KARTENBILD = dict(
+    ziel_pixel=1500, mindest=2, hoechstens=12, rauschen=5,
+    sand=(92, 74, 52), piste=(118, 96, 66), kies=(86, 80, 70), gestruepp=(80, 82, 50),
+    pflaster=(104, 98, 88), dielen=(108, 82, 56), gitter=(72, 72, 74),
+    schatten=(44, 34, 24), treppe=(72, 170, 158),
+    wand=(196, 170, 128), fels=(150, 128, 98), wand_licht=(214, 192, 150), wand_dunkel=(122, 100, 72),
+    deckung=(176, 148, 104), deckung_rand=(52, 38, 26),
 )
 
 MINIKARTE = dict(

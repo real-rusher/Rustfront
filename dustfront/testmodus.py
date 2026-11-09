@@ -297,6 +297,23 @@ def eintraege() -> list:
                 lambda t, p, e, w: t.zone_setzen(p, e), mehrfach=False),
         Eintrag("HOTZONE AUS", "OBJEKTE", (),
                 lambda t, p, e, w: t.zone_aus(), mehrfach=False),
+        # Seit 0.34.100: alles aus dem Nachschub der SCHLACHT, auch ohne sie -
+        # Abwuerfe am Fallschirm (sie weichen aus, wenn unten etwas steht),
+        # die Aufklaerungsdrohne und die Fallschirmjaeger.
+        Eintrag("ABWURF: MUNITION", "NACHSCHUB", ("team",),
+                lambda t, p, e, w: t.nachschub_setzen("munition", p, w), mehrfach=False),
+        Eintrag("ABWURF: MEDKITS", "NACHSCHUB", ("team",),
+                lambda t, p, e, w: t.nachschub_setzen("medkit", p, w), mehrfach=False),
+        Eintrag("ABWURF: BUGGY", "NACHSCHUB", ("team",),
+                lambda t, p, e, w: t.nachschub_setzen("buggy", p, w), mehrfach=False),
+        Eintrag("ABWURF: PANZERWAGEN", "NACHSCHUB", ("team",),
+                lambda t, p, e, w: t.nachschub_setzen("panzerwagen", p, w), mehrfach=False),
+        Eintrag("ABWURF: PANZER", "NACHSCHUB", ("team",),
+                lambda t, p, e, w: t.nachschub_setzen("panzer", p, w), mehrfach=False),
+        Eintrag("AUFKLÄRUNGSDROHNE", "NACHSCHUB", ("team",),
+                lambda t, p, e, w: t.nachschub_setzen("aufklaerung", p, w), mehrfach=False),
+        Eintrag("FALLSCHIRMJÄGER", "NACHSCHUB", ("team",),
+                lambda t, p, e, w: t.nachschub_setzen("fallschirmjaeger", p, w), mehrfach=False),
         Eintrag("MEDKIT", "BEUTE", ("anzahl", "streuung"), _beute_setzer("medkit")),
         Eintrag("MUNITIONSKISTE", "BEUTE", ("anzahl", "streuung"),
                 _beute_setzer("munition")),
@@ -1387,6 +1404,26 @@ class Testmodus(Gefecht):
             self._einsetzen(d)
         return dinge
 
+    def nachschub_setzen(self, was: str, pos, w: dict):
+        """Ein Nachschub wie aus dem Menue der SCHLACHT (seit 0.34.100): ohne
+        Punkte und ohne Pruefung, ob es dort erlaubt waere - nur der Abwurf
+        sucht sich wie immer eine freie Landestelle."""
+        from .schlacht import Dropzone, Ueberflug
+        self.nachschub_an = True
+        team = max(0, int(w.get("team", 0)))
+        pos = pygame.Vector2(pos)
+        if was == "aufklaerung":
+            fraktion = self._fraktion_fuer(K.BOTS["nummer_ab"], team)
+            u = Ueberflug(pos, team, fraktion, self.welt.ebene(0).pixel_breite)
+            self.ueberfluege.append(u)
+            return u
+        if was == "fallschirmjaeger":
+            return self.fallschirmjaeger_abwerfen(pos, team)
+        zone = Dropzone(pos, team, was, 0.0, einmalig=True)
+        zone.rest = 1.0
+        self.dropzonen.append(zone)
+        return zone
+
     def nagelfeld_setzen(self, pos, ebene: int):
         n = Nagelfeld(pygame.Vector2(pos), ebene)
         self.welt.naegel.append(n)
@@ -2381,6 +2418,16 @@ class Testmodus(Gefecht):
                 zustand += " (SUCHT FAHRZEUG)"
             if getattr(k, "schild", False):
                 zustand += " SCHILD"
+            # Seit 0.34.100: Fallschirmjaeger in der Luft, und wer gegen sie in
+            # Stellung geht (bots.BotHirn._springer_reaktion).
+            if getattr(k, "schirm_hoehe", 0.0) > 0.0:
+                zustand = "AM SCHIRM %d" % int(k.schirm_hoehe)
+            elif (getattr(h, "springer_gesehen", None) is not None and h.ziel is None
+                  and self.welt.zeit - h.springer_gesehen[1] <= K.BOTS["springer_merken"]):
+                zustand += " > SPRINGER: IN STELLUNG"
+                ort = h.springer_gesehen[0]
+                q = self.kamera.zu_bild(ort)
+                pygame.draw.line(ziel, K.C_TEAL, (int(p.x), int(p.y)), (int(q.x), int(q.y)), 1)
             # Seit 0.34.66: was ihn gerade festhaelt.
             if k.betaeubt_rest > 0.0:
                 zustand += " BETÄUBT"

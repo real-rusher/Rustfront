@@ -66,6 +66,7 @@ class Abwurf:
         self.hoehe = S["abwurf"]["hoehe"]
         self.alter = 0.0
         self.kennung = zone.kennung
+        self.ziel = None             # wohin er treibt, weil unten etwas im Weg ist
 
 
 class Ueberflug:
@@ -107,6 +108,7 @@ class SchlachtTeil:
         self.dropzonen = []
         self.abwuerfe = []
         self.ueberfluege = []
+        self.verstaerkung_weg()
         for team in range(2):
             for art, anzahl in S["fahrzeuge"]:
                 for _ in range(anzahl):
@@ -122,7 +124,7 @@ class SchlachtTeil:
 
     # ---- Ablauf (Gastgeber) ------------------------------------------------
     def schlacht_schritt(self, dt: float) -> None:
-        if not self.schlacht or not self.ist_gastgeber:
+        if not (self.schlacht or self.__dict__.get("nachschub_an")) or not self.ist_gastgeber:
             return
         a = S["abwurf"]
         for zone in list(self.dropzonen):
@@ -142,18 +144,156 @@ class SchlachtTeil:
         for ab in list(self.abwuerfe):
             ab.alter += dt
             ab.hoehe -= a["sinken"] * dt
+            if ab.hoehe <= a["ausweichen_ab"]:
+                self._abwurf_lenken(ab, dt)
             if ab.hoehe <= 0.0:
                 self.abwuerfe.remove(ab)
                 self._abwurf_landet(ab)
+        self._springer_schritt(dt)
         for ue in list(self.ueberfluege):
             ue.alter += dt
             self._ueberflug_markieren(ue)
             if ue.alter >= ue.dauer:
                 self.ueberfluege.remove(ue)
 
+    # ---- Landen, ohne auf etwas zu fallen (seit 0.34.100) --------------------
+    # Gewuenscht: "stell sicher, dass du dir eine Loesung ueberlegt hast, was
+    # passiert, wenn ein Fahrzeug mit dem Airdrop auf einem Spieler oder
+    # anderen Fahrzeug landet." Die Loesung in drei Stufen:
+    # 1. Unter ausweichen_ab prueft der Abwurf jeden Schritt, ob seine
+    #    Landestelle frei ist: kein Fels, kein Loch, kein Fahrzeug (auch kein
+    #    Wrack), kein anderer Abwurf. Ist sie es nicht, sucht er die naechste
+    #    freie Stelle und treibt am Schirm dorthin - sichtbar, wie bei Wind.
+    # 2. Beim Aufsetzen noch einmal: ist es dann immer noch belegt (ein Wagen
+    #    ist im letzten Moment hineingefahren), landet er gleich an der
+    #    naechsten freien Stelle. Nie auf oder in etwas.
+    # 3. Menschen und Tiere unter ihm werden nicht erschlagen, sondern aus dem
+    #    Fussabdruck gestossen (stoss) und nehmen etwas Schaden (quetschen).
+    #    Ab warnen_ab blinkt der Schatten rot, damit man rechtzeitig geht.
+    def _probe(self, art: str):
+        merk = self.__dict__.setdefault("_sl_probe", {})
+        probe = merk.get(art)
+        if probe is None:
+            probe = merk[art] = fahrzeug_modul.neu(art, (0, 0), 0)
+        probe.welt = self.welt
+        return probe
+
+    def abwurf_fuss(self, art: str) -> float:
+        """Wie gross die Landestelle ist (Radius in px)."""
+        if art in ("buggy", "panzer", "panzerwagen"):
+            probe = self._probe(art)
+            return max(20.0, float(getattr(probe, "huelle_radius", 0.0)), float(probe.radius))
+        if art == "mensch":
+            return 12.0
+        return 26.0
+
+    def landeplatz_frei(self, art: str, pos, winkel: float = 0.0, ohne=None) -> bool:
+        """Kann hier etwas dieser Art landen, ohne auf etwas zu fallen?"""
+        e = self.welt.ebene(0)
+        fuss = self.abwurf_fuss(art)
+        if not (fuss <= pos.x < e.pixel_breite - fuss and fuss <= pos.y < e.pixel_hoehe - fuss):
+            return False
+        if art in ("buggy", "panzer", "panzerwagen"):
+            probe = self._probe(art)
+            if not probe.passt(pygame.Vector2(pos), winkel):
+                return False
+            if self.welt.fahrwege.gebiet_bei(0, pos) < 0:
+                return False
+        elif not self.welt.frei(pygame.Vector2(pos), 12.0 if art == "mensch" else 16.0, 0):
+            return False
+        for b in getattr(self, "fahrzeuge", ()):
+            if int(getattr(b, "ebene", 0)) != 0:
+                continue
+            weite = fuss + max(float(getattr(b, "huelle_radius", 0.0)), float(b.radius))
+            if b.pos.distance_squared_to(pos) < weite * weite:
+                return False
+        for ab in self.abwuerfe:
+            if ab is ohne:
+                continue
+            ort = ab.ziel if ab.ziel is not None else ab.pos
+            weite = fuss + self.abwurf_fuss(ab.art)
+            if ort.distance_squared_to(pos) < weite * weite:
+                return False
+        return True
+
+    def freie_landestelle(self, art: str, nahe, winkel: float = 0.0, ohne=None):
+        """Die naechste Stelle um `nahe`, an der es landen kann - oder None."""
+        nahe = pygame.Vector2(nahe)
+        if self.landeplatz_frei(art, nahe, winkel, ohne):
+            return nahe
+        schritt = 20.0
+        weit = schritt
+        while weit <= S["abwurf"]["suche_weit"]:
+            teile = max(8, int(2 * math.pi * weit / schritt))
+            for i in range(teile):
+                p = nahe + pygame.Vector2(weit, 0).rotate(360.0 * i / teile)
+                if self.landeplatz_frei(art, p, winkel, ohne):
+                    return p
+            weit += schritt
+        return None
+
+    def _abwurf_lenken(self, ab: Abwurf, dt: float) -> None:
+        """Schritt 1: treiben, wenn unten belegt ist."""
+        ort = ab.ziel if ab.ziel is not None else ab.pos
+        if ab.ziel is None or not self.landeplatz_frei(ab.art, ort, ab.winkel, ab):
+            if self.landeplatz_frei(ab.art, ab.pos, ab.winkel, ab):
+                ab.ziel = None
+            else:
+                ab.ziel = self.freie_landestelle(ab.art, ab.pos, ab.winkel, ab)
+        if ab.ziel is not None:
+            weg = ab.ziel - ab.pos
+            schritt = S["abwurf"]["treiben"] * dt
+            if weg.length() <= schritt:
+                ab.pos.update(ab.ziel)
+            else:
+                ab.pos += weg.normalize() * schritt
+
+    def _abwurf_aufsetzen(self, ab: Abwurf) -> None:
+        """Schritt 2 und 3: nie auf etwas, und wer drunter steht, muss weg."""
+        if not self.landeplatz_frei(ab.art, ab.pos, ab.winkel, ab):
+            stelle = self.freie_landestelle(ab.art, ab.pos, ab.winkel, ab)
+            if stelle is not None:
+                ab.pos.update(stelle)
+        self.wegstossen(ab.pos, self.abwurf_fuss(ab.art))
+
+    def wegstossen(self, mitte, fuss: float, ausser=None) -> None:
+        """Alle Lebenden im Kreis `fuss` um `mitte` heraus an eine freie
+        Stelle, mit einem Stoss und etwas Schaden."""
+        a = S["abwurf"]
+        mitte = pygame.Vector2(mitte)
+        kandidaten = list(self.kaempfer.values()) + [
+            w for w in self.welt.wesen if getattr(w, "lebt", False)
+            and getattr(w, "schiebbar", True) and not getattr(w, "ist_ausruestung", False)
+            and w not in self.kaempfer.values()]
+        for k in kandidaten:
+            if k is ausser or not getattr(k, "lebt", False) or int(getattr(k, "ebene", 0)) != 0:
+                continue
+            if getattr(k, "im_fahrzeug", False) or getattr(k, "schirm_hoehe", 0.0) > 0.0:
+                continue
+            if getattr(k, "fraktion", "") == "geschoss":
+                continue
+            r = float(getattr(k, "radius", 8.0))
+            ab = k.pos - mitte
+            if ab.length() >= fuss + r:
+                continue
+            richtung = ab.normalize() if ab.length_squared() > 1.0 else pygame.Vector2(1, 0)
+            ziel = None
+            for dreh in (0, 30, -30, 60, -60, 90, -90, 120, -120, 150, -150, 180):
+                p = mitte + richtung.rotate(dreh) * (fuss + r + 6.0)
+                if self.welt.frei(p, r, 0):
+                    ziel = p
+                    break
+            if ziel is not None:
+                k.pos.update(ziel)
+                if hasattr(k, "vorher"):
+                    k.vorher.update(ziel)
+            if hasattr(k, "schaden"):
+                k.schaden(a["quetschen"], richtung * a["stoss"])
+
     def _abwurf_landet(self, ab: Abwurf) -> None:
         from .entities import wolke
         w = self.welt
+        self._abwurf_aufsetzen(ab)
         zone = ab.zone
         wolke(w, ab.pos, 26, 160, 0.9, K.C_SAND_KORN, 0, 2, "bodenstaub", 360, 0)
         w.ruckeln(2.5, "sturz", ab.pos, 0)
@@ -162,6 +302,8 @@ class SchlachtTeil:
             from .mehrspieler import KampfBeute
             for i in range(S["abwurf"]["kisten"]):
                 p = ab.pos + pygame.Vector2(14, 0).rotate(i * 360.0 / S["abwurf"]["kisten"])
+                if not w.frei(p, 8.0, 0):
+                    p = pygame.Vector2(ab.pos)     # nie in eine Mauer
                 w.dazu(KampfBeute(p, ab.art, 0, self.kaempfer))
             if zone in self.dropzonen:
                 self.dropzonen.remove(zone)
@@ -187,6 +329,129 @@ class SchlachtTeil:
             if k.lebt and k.fraktion != ue.fraktion and k.pos.distance_to(p) <= a["radius"]:
                 ausruestung.markieren(k, ue.fraktion)
                 k.markiert_rest = max(k.markiert_rest, a["markiert"])
+        # Seit 0.34.100 auch die Fahrzeuge der anderen Seite (und herrenlose
+        # an ihrer Basis): ihr Ping bewegt sich mit, auch im Nebel.
+        for b in getattr(self, "fahrzeuge", ()):
+            if getattr(b, "kaputt", False) or not getattr(b, "lebt", True):
+                continue
+            fahrer = getattr(b, "fahrer", None)
+            seite = getattr(fahrer, "team", None) if fahrer is not None else getattr(b, "basis_team", -1)
+            if seite == ue.team or b.pos.distance_to(p) > a["radius"]:
+                continue
+            b.markiert_rest = max(getattr(b, "markiert_rest", 0.0), a["markiert"])
+            b.markiert_fuer = ue.fraktion
+
+    # ---- Fallschirmjaeger (seit 0.34.100) --------------------------------------
+    # Gewuenscht: "einen Fallschirmjaeger-Abwurf, also sagen wir 5 Bots, quasi
+    # beliebig (wo Platz ist und nicht in Basen) gedroppt, in Formation, und
+    # zwar vor dem Landen nichts machen, aber schon Gegner erkennen koennen."
+    # Es sind zusaetzliche Bots der eigenen Seite (`verstaerkung`): sie
+    # zaehlen beim Auffuellen nicht mit und kommen nach dem Tod nicht wieder.
+    # In der Luft (`schirm_hoehe` > 0) sind sie kein Ziel und nicht zu
+    # treffen; die Gegner sehen sie trotzdem und gehen in Stellung
+    # (bots.BotHirn._springer_reaktion).
+    def _sprung_plaetze(self, punkt, team: int) -> list:
+        """Die Landestellen: ein Keil um `punkt`, die Spitze zur Gegenseite.
+        Wo eine Stelle belegt ist, die naechste freie in der Naehe."""
+        f = S["fallschirmjaeger"]
+        punkt = pygame.Vector2(punkt)
+        feind = self.schlacht_basis(1 - team) if team in (0, 1) else None
+        vorn = (feind - punkt) if feind is not None else pygame.Vector2(1, 0)
+        vorn = vorn.normalize() if vorn.length_squared() > 1.0 else pygame.Vector2(1, 0)
+        quer = pygame.Vector2(-vorn.y, vorn.x)
+        a = f["abstand"]
+        muster = [(0, 0), (-1, 1), (-1, -1), (-2, 2), (-2, -2), (-3, 0), (-3, 3), (-3, -3)]
+        plaetze = []
+        for zurueck, seite in muster[:f["anzahl"]]:
+            soll = punkt + vorn * (zurueck * a * 0.8) + quer * (seite * a * 0.6)
+            stelle = None
+            for weit in range(0, int(f["breite"]) + 1, 12):
+                for i in range(max(1, weit // 6)):
+                    q = soll + pygame.Vector2(weit, 0).rotate(360.0 * i / max(1, weit // 6))
+                    if q.distance_to(punkt) > f["breite"]:
+                        continue
+                    if not self.landeplatz_frei("mensch", q):
+                        continue
+                    if any(q.distance_to(x) < 24.0 for x in plaetze):
+                        continue
+                    stelle = q
+                    break
+                if stelle is not None:
+                    break
+            if stelle is not None:
+                plaetze.append(stelle)
+        return plaetze
+
+    def fallschirmjaeger_abwerfen(self, punkt, team: int) -> list:
+        """Fuenf Bots dieser Seite am Schirm ueber `punkt` (Gastgeber)."""
+        f = S["fallschirmjaeger"]
+        raus = []
+        for i, stelle in enumerate(self._sprung_plaetze(punkt, team)):
+            k = self._bot_dazu(team)
+            k.verstaerkung = True
+            k.darf_fahren = False
+            k.pos.update(stelle)
+            if hasattr(k, "vorher"):
+                k.vorher.update(stelle)
+            k.sprung_ort = pygame.Vector2(stelle)
+            # Leicht versetzt: sie springen nacheinander.
+            k.schirm_hoehe = f["hoehe"] + i * f["hoehe"] * 0.06 * f["versatz"]
+            k.trefferbar = False
+            k.schiebbar = False
+            k.unverwundbar = 0.0
+            ziel = self.schlacht_basis(1 - team) if team in (0, 1) else None
+            if ziel is not None:
+                hin = ziel - k.pos
+                k.winkel = math.degrees(math.atan2(hin.y, hin.x))
+            raus.append(k)
+        if raus:
+            self.welt.klang("drohne", 0.8, pygame.Vector2(punkt), 0)
+        return raus
+
+    def _springer_schritt(self, dt: float) -> None:
+        """Sinken, an der Stelle bleiben, sicher aufsetzen (Gastgeber)."""
+        f = S["fallschirmjaeger"]
+        for k in list(self.kaempfer.values()):
+            hoch = getattr(k, "schirm_hoehe", 0.0)
+            if hoch <= 0.0:
+                continue
+            if not k.lebt:
+                k.schirm_hoehe = 0.0
+                continue
+            ort = getattr(k, "sprung_ort", None)
+            if ort is not None:
+                k.pos.update(ort)
+            k.will.update(0, 0)
+            k.tempo.update(0, 0)
+            k.feuert = False
+            k.zielt = False
+            hoch -= f["sinken"] * dt
+            if hoch > 0.0:
+                k.schirm_hoehe = hoch
+                continue
+            # Gelandet. Belegt (ein Wagen ist hineingefahren)? Daneben.
+            k.schirm_hoehe = 0.0
+            if not self.landeplatz_frei("mensch", k.pos):
+                stelle = self.freie_landestelle("mensch", k.pos)
+                if stelle is not None:
+                    k.pos.update(stelle)
+                    if hasattr(k, "vorher"):
+                        k.vorher.update(stelle)
+            self.wegstossen(k.pos, 10.0, ausser=k)
+            k.trefferbar = True
+            k.schiebbar = True
+            k.sprung_ort = None
+            from .entities import wolke
+            wolke(self.welt, k.pos, 8, 60, 0.6, K.C_SAND_KORN, 0, 1, "bodenstaub", 360, 0)
+
+    def verstaerkung_weg(self) -> None:
+        """Zur neuen Runde: die Fallschirmjaeger der alten gehen."""
+        for k in list(self.kaempfer.values()):
+            if getattr(k, "verstaerkung", False):
+                self._bot_weg(k)
+
+    def _zeit_jetzt(self) -> float:
+        return self.welt.zeit if self.ist_gastgeber else self._zeit
 
     # ---- Punkte -------------------------------------------------------------
     def schlacht_punkte(self, k, wie_viel: int) -> None:
@@ -198,12 +463,14 @@ class SchlachtTeil:
     def belohnungen() -> list:
         return list(S["belohnungen"])
 
-    def belohnung_pruefen(self, k, was: str, punkt) -> str:
-        """Leer, wenn der Kauf geht - sonst warum nicht."""
+    def belohnung_pruefen(self, k, was: str, punkt, gratis: bool = False) -> str:
+        """Leer, wenn der Kauf geht - sonst warum nicht. `gratis`: der
+        ADMIN-Schalter (seit 0.34.100) - spart nur die Punkte, nicht die
+        anderen Pruefungen."""
         d = dict((n, (kosten, text)) for n, kosten, text in S["belohnungen"])
         if was not in d:
             return "UNBEKANNT"
-        if getattr(k, "schlacht_punkte", 0) < d[was][0]:
+        if not gratis and getattr(k, "schlacht_punkte", 0) < d[was][0]:
             return "ZU WENIG PUNKTE"
         e = self.welt.ebene(0)
         if not (0 <= punkt.x < e.pixel_breite and 0 <= punkt.y < e.pixel_hoehe):
@@ -213,6 +480,13 @@ class SchlachtTeil:
         feind = self.schlacht_basis(1 - k.team) if k.team in (0, 1) else None
         if feind is not None and punkt.distance_to(feind) < S["abwurf"]["sperre_basis"]:
             return "ZU NAH AN DER FEINDLICHEN BASIS"
+        if was == "fallschirmjaeger":
+            eigen = self.schlacht_basis(k.team) if k.team in (0, 1) else None
+            if eigen is not None and punkt.distance_to(eigen) < S["fallschirmjaeger"]["nicht_basis"]:
+                return "NICHT IN DER EIGENEN BASIS"
+            if len(self._sprung_plaetze(punkt, k.team)) < S["fallschirmjaeger"]["anzahl"]:
+                return "ZU WENIG PLATZ"
+            return ""
         if was in ("buggy", "panzer", "panzerwagen"):
             probe = fahrzeug_modul.neu(was, punkt, 0)
             probe.welt = self.welt
@@ -225,18 +499,24 @@ class SchlachtTeil:
             return "KEIN FREIER BODEN"
         return ""
 
-    def belohnung_kaufen(self, k, was: str, punkt) -> str:
-        """Beim Gastgeber: pruefen, Punkte abziehen, ausfuehren."""
+    def belohnung_kaufen(self, k, was: str, punkt, gratis: bool = False) -> str:
+        """Beim Gastgeber: pruefen, Punkte abziehen, ausfuehren. Gratis nur
+        fuer den ADMIN (darf_gratis) - was ein anderer schickt, zaehlt nicht."""
         punkt = pygame.Vector2(punkt)
-        grund = self.belohnung_pruefen(k, was, punkt)
+        gratis = bool(gratis) and self.darf_gratis(k)
+        grund = self.belohnung_pruefen(k, was, punkt, gratis=gratis)
         if grund:
             return grund
         kosten = next(c for n, c, _t in S["belohnungen"] if n == was)
-        k.schlacht_punkte -= kosten
+        if not gratis:
+            k.schlacht_punkte -= kosten
         if was == "aufklaerung":
             self.ueberfluege.append(Ueberflug(punkt, k.team, k.fraktion,
                                               self.welt.ebene(0).pixel_breite))
             self.welt.klang("drohne", 1.0, punkt, 0)
+            return ""
+        if was == "fallschirmjaeger":
+            self.fallschirmjaeger_abwerfen(punkt, k.team)
             return ""
         zone = Dropzone(punkt, k.team, was, 0.0, einmalig=True)
         zone.rest = S["abwurf"]["vorlauf_kauf"]
@@ -373,6 +653,12 @@ class SchlachtTeil:
             sch = pygame.Surface((sw * 2, sw), pygame.SRCALPHA)
             pygame.draw.ellipse(sch, (12, 9, 6, int(50 + 110 * anteil)), sch.get_rect())
             ziel.blit(sch, (boden.x - sw, boden.y - sw // 2))
+            # Kurz vor dem Aufsetzen: der Fussabdruck blinkt rot (seit 0.34.100)
+            # - wer drin steht, wird beiseite gestossen.
+            if hoch < a["warnen_ab"] and int(self._zeit_jetzt() * 6) % 2 == 0:
+                fuss = int(self.abwurf_fuss(ab.art))
+                pygame.draw.ellipse(ziel, K.C_RED, (int(boden.x) - fuss, int(boden.y) - int(fuss * 0.62),
+                                                    fuss * 2, int(fuss * 1.24)), 1)
             # Die Last: pendelt leicht.
             pendel = math.sin(ab.alter * 2.4) * 6.0 * (1.0 - anteil * 0.5)
             hub = hoch * a["bild_hub"]
@@ -383,6 +669,24 @@ class SchlachtTeil:
             schirm = last + pygame.Vector2(pendel * 0.4, -a["schirm_ueber"] * (1.6 if gross else 1.0))
             self._schirm_zeichnen(ziel, schirm, last, ab.team,
                                   a["schirm"] if gross else a["schirm_kiste"])
+
+        # Fallschirmjaeger: Schatten am Boden zeichnet der Renderer (wie fuer
+        # jede Figur), die Figur haengt darueber am eigenen Schirm.
+        for k in self.kaempfer.values():
+            hoch = getattr(k, "schirm_hoehe", 0.0)
+            if hoch <= 0.0 or not k.lebt or int(k.ebene) != int(getattr(self, "blick", 0)):
+                continue
+            boden = k.pos - ecke
+            if not (-200 < boden.x < K.GAME_W + 200 and -400 < boden.y < K.GAME_H + 400):
+                continue
+            pendel = math.sin(self._zeit_jetzt() * 2.0 + k.nummer) * 4.0
+            last = boden + pygame.Vector2(pendel, -hoch * a["bild_hub"])
+            bild = k.bild
+            if bild:
+                s = r.bilder.gedreht(bild, k.winkel)
+                ziel.blit(s, s.get_rect(center=(int(last.x), int(last.y))))
+            schirm = last + pygame.Vector2(pendel * 0.3, -a["schirm_ueber"] * 0.9)
+            self._schirm_zeichnen(ziel, schirm, last, k.team, S["fallschirmjaeger_schirm"])
 
     def _fracht_zeichnen(self, ziel, art: str, p, winkel: float) -> None:
         bilder = self.renderer.bilder
@@ -430,12 +734,19 @@ class SchlachtTeil:
             pygame.draw.line(ziel, (70, 62, 54), (x + dx, y), (int(last.x), int(last.y) - 4))
 
     def ueberfluege_zeichnen(self, ziel) -> None:
-        """Die grosse Drohne, hoch oben, mit ihrem Suchkreis am Boden."""
+        """Die grosse Aufklaerungsdrohne, hoch oben (seit 0.34.100 gewuenscht:
+        "mehr wie eine realistische grosse Aufklaerungsdrohne, modernes
+        Design, mehr wie eine A-10, keine Rotoren, deutlich hoeher").
+
+        Am Boden liegt ihr Suchkreis und ihr Schatten. Die Maschine selbst
+        steht weit darueber (flug_hub) und zieht schneller durchs Bild als
+        der Boden (parallaxe) - so wirkt sie hoch, ohne dass man den Boden
+        unter ihr aus den Augen verliert."""
         ecke = self.kamera.ecke
-        liste = ([(u.pos, u.team) for u in self.ueberfluege] if self.ist_gastgeber
-                 else getattr(self, "_ueberfluege_gast", []))
         a = S["aufklaerung"]
-        for pos, team in liste:
+        mitte_bild = pygame.Vector2(K.GAME_W / 2.0, K.GAME_H / 2.0)
+        zeit = self.welt.zeit if self.ist_gastgeber else self._zeit
+        for pos, team in self._drohnen_fuer_karte():
             p = pos - ecke
             kombi = K.TEAMS["kombi"][team] if 0 <= team < 2 else None
             farbe = kombi["hud"] if kombi else K.C_TEAL
@@ -447,22 +758,146 @@ class SchlachtTeil:
             ring = ringe.get(schluessel)
             if ring is None:
                 ring = pygame.Surface((rr * 2 + 2, rr * 2 + 2), pygame.SRCALPHA)
-                pygame.draw.circle(ring, tuple(farbe) + (28,), (rr + 1, rr + 1), rr)
+                pygame.draw.circle(ring, tuple(farbe) + (22,), (rr + 1, rr + 1), rr)
                 pygame.draw.circle(ring, tuple(farbe) + (120,), (rr + 1, rr + 1), rr, 1)
                 ringe[schluessel] = ring
             ziel.blit(ring, (p.x - rr - 1, p.y - rr - 1))
-            # Die Drohne: Rumpf und vier Rotoren, gross und hoch.
-            x, y = int(p.x), int(p.y) - 40
-            pygame.draw.ellipse(ziel, (12, 9, 6), (x - 18, y + 46, 36, 10))
-            pygame.draw.rect(ziel, (58, 62, 60), (x - 9, y - 4, 18, 8))
-            pygame.draw.rect(ziel, farbe, (x - 3, y - 2, 6, 4))
-            for dx, dy in ((-16, -10), (16, -10), (-16, 10), (16, 10)):
-                pygame.draw.line(ziel, (40, 42, 40), (x, y), (x + dx, y + dy), 2)
-                pygame.draw.circle(ziel, (150, 150, 140), (x + dx, y + dy), 6, 1)
+            winkel = 0.0 if team != 1 else 180.0
+            bild, schatten = self._drohne_bilder(team, winkel)
+            # Schatten: am Boden, etwas versetzt (die Sonne steht schraeg).
+            ziel.blit(schatten, schatten.get_rect(center=(int(p.x + 26), int(p.y + 14))))
+            flug = p + (p - mitte_bild) * a["parallaxe"] - pygame.Vector2(0, a["flug_hub"])
+            ziel.blit(bild, bild.get_rect(center=(int(flug.x), int(flug.y))))
+            # Positionslichter an den Fluegelspitzen, blinkend.
+            if int(zeit * 2.5) % 2 == 0:
+                halb = a["spannweite"] / 2.0 - 2
+                quer = pygame.Vector2(0, 1).rotate(winkel)
+                links, rechts = flug - quer * halb, flug + quer * halb
+                pygame.draw.circle(ziel, (255, 70, 60), (int(links.x), int(links.y)), 2)
+                pygame.draw.circle(ziel, (90, 255, 120), (int(rechts.x), int(rechts.y)), 2)
+
+    @staticmethod
+    def _drohne_form(u: float):
+        """Die Umrisse der Drohne, Nase nach rechts, in Pixeln (Faktor u):
+        [(Farbname, Punkte), ...] in der Reihenfolge des Zeichnens."""
+        def pt(liste):
+            return [(x * u, y * u) for x, y in liste]
+        return [
+            # Hoehenleitwerk hinten, mit den beiden Seitenleitwerken an den Enden.
+            ("dunkel", pt([(-44, -15), (-34, -15), (-31, 15), (-44, 15)])),
+            ("rumpf", pt([(-43, -14), (-35, -14), (-33, 14), (-43, 14)])),
+            ("dunkel", pt([(-46, -17), (-33, -17), (-33, -13), (-46, -13)])),
+            ("dunkel", pt([(-46, 13), (-33, 13), (-33, 17), (-46, 17)])),
+            # Die Tragflaeche: lang und gerade, leicht verjuengt.
+            ("dunkel", pt([(-2, -49), (10, -49), (14, -5), (14, 5), (10, 49), (-2, 49), (-6, 5),
+                           (-6, -5)])),
+            ("rumpf", pt([(-1, -48), (9, -48), (12, -5), (12, 5), (9, 48), (-1, 48), (-4, 5),
+                          (-4, -5)])),
+            # Rumpf: schlank, vorn der Sensorkopf.
+            ("dunkel", pt([(-40, -4), (30, -5), (42, -3), (46, 0), (42, 3), (30, 5), (-40, 4)])),
+            ("rumpf", pt([(-38, -3), (30, -4), (41, -2), (44, 0), (41, 2), (30, 4), (-38, 3)])),
+            ("licht", pt([(-30, -1), (34, -2), (34, 0), (-30, 0)])),
+            # Zwei Triebwerke hinten oben am Rumpf, wie bei der A-10.
+            ("dunkel", pt([(-26, -12), (-8, -12), (-6, -9), (-6, -5), (-8, -4), (-26, -4)])),
+            ("dunkel", pt([(-26, 4), (-8, 4), (-6, 5), (-6, 9), (-8, 12), (-26, 12)])),
+            ("rumpf", pt([(-24, -11), (-9, -11), (-8, -9), (-8, -6), (-9, -5), (-24, -5)])),
+            ("rumpf", pt([(-24, 5), (-9, 5), (-8, 6), (-8, 9), (-9, 11), (-24, 11)])),
+            ("duese", pt([(-27, -10), (-24, -10), (-24, -6), (-27, -6)])),
+            ("duese", pt([(-27, 6), (-24, 6), (-24, 10), (-27, 10)])),
+            # Kennstreifen der Seite auf beiden Fluegeln.
+            ("seite", pt([(0, -40), (8, -40), (8.4, -34), (0.4, -34)])),
+            ("seite", pt([(0.4, 34), (8.4, 34), (8, 40), (0, 40)])),
+            # Sensorkuppel unter der Nase.
+            ("glas", pt([(34, -2.5), (40, -2), (42, 0), (40, 2), (34, 2.5)])),
+        ]
+
+    def _drohne_bilder(self, team: int, winkel: float):
+        """(Bild, Schatten) der Drohne, je Seite und Richtung einmal gebaut."""
+        merk = self.__dict__.setdefault("_sl_drohne", {})
+        schluessel = (team, int(winkel))
+        fertig = merk.get(schluessel)
+        if fertig is not None:
+            return fertig
+        a = S["aufklaerung"]
+        u = a["spannweite"] / 98.0
+        kombi = K.TEAMS["kombi"][team] if 0 <= team < 2 else None
+        farben = dict(rumpf=(132, 138, 140), dunkel=(70, 74, 78), licht=(168, 174, 176),
+                      duese=(34, 30, 30), glas=(40, 52, 60),
+                      seite=kombi["hud"] if kombi else K.C_TEAL)
+        groesse = int(110 * u) * 2
+        mitte = groesse / 2.0
+        bild = pygame.Surface((groesse, groesse), pygame.SRCALPHA)
+        schatten = pygame.Surface((groesse, groesse), pygame.SRCALPHA)
+        for name, punkte in self._drohne_form(u):
+            verschoben = [(mitte + x, mitte + y) for x, y in punkte]
+            pygame.draw.polygon(bild, farben[name], verschoben)
+            pygame.draw.polygon(schatten, (10, 8, 6, 55), verschoben)
+        # Der Schatten hoch oben ist weich und kleiner als die Maschine.
+        klein = (int(groesse * 0.68), int(groesse * 0.68))
+        schatten = pygame.transform.smoothscale(schatten, klein)
+        if winkel:
+            bild = pygame.transform.rotate(bild, -winkel)
+            schatten = pygame.transform.rotate(schatten, -winkel)
+        merk[schluessel] = (bild, schatten)
+        return bild, schatten
+
+    def _drohne_zeichen(self, ziel, mitte, winkel: float, farbe, gross: float) -> None:
+        """Das kleine Zeichen der Drohne auf der Nachschubkarte."""
+        vorn = pygame.Vector2(1, 0).rotate(winkel)
+        quer = pygame.Vector2(-vorn.y, vorn.x)
+        m = pygame.Vector2(mitte)
+        g = gross
+        rumpf = [m + vorn * g * 1.6, m - vorn * g * 1.6]
+        fluegel = [m + vorn * g * 0.2 + quer * g * 1.8, m + vorn * g * 0.2 - quer * g * 1.8]
+        heck = [m - vorn * g * 1.4 + quer * g * 0.7, m - vorn * g * 1.4 - quer * g * 0.7]
+        dick = max(1, int(round(g * 0.45)))
+        for a_, b_ in (rumpf, fluegel, heck):
+            pygame.draw.line(ziel, (16, 11, 8), a_, b_, dick + 2)
+        for a_, b_ in (rumpf, fluegel, heck):
+            pygame.draw.line(ziel, farbe, a_, b_, dick)
 
     # ---- Belohnungsmenue -----------------------------------------------------
+    # Seit 0.34.100 in zwei Schritten (gewuenscht: "bei TAB erst die Ability und
+    # dann den Spot dafuer mit der Maus auf der Karte auswaehlen"): links
+    # waehlen, was kommen soll (belohnung_wahl, -1 = noch nichts), dann auf
+    # der Karte, wohin. Rechtsklick oder ESC gehen einen Schritt zurueck.
+    # Solange das Menue offen ist, kommt keine Eingabe ins Spiel
+    # (Gefecht._meine_eingabe, Gefecht.schritt).
     def belohnung_karte_rect(self) -> pygame.Rect:
         return pygame.Rect(232, 46, 392, 262)
+
+    def belohnung_oeffnen(self) -> None:
+        self.belohnung_offen = True
+        self.belohnung_wahl = -1
+
+    def belohnung_schliessen(self) -> None:
+        self.belohnung_offen = False
+        self.belohnung_wahl = -1
+        # Die Maustaste, mit der man angefordert hat, ist vielleicht noch
+        # unten: sie soll beim Schliessen keinen Schuss ausloesen.
+        self._feuer_sperre = True
+
+    def _ist_admin_lokal(self) -> bool:
+        """Ist man hier mit dem Konto ADMIN angemeldet (wie die Admin-Zeile
+        auf T)? Nur dann gibt es den Schalter ALLES GRATIS."""
+        konto = getattr(self.app, "_konto", None)
+        return bool(konto is not None and getattr(konto, "angemeldet", False)
+                    and str(getattr(konto, "name", "")).strip().lower() == "admin")
+
+    @staticmethod
+    def darf_gratis(k) -> bool:
+        """Beim Gastgeber: darf `k` gratis anfordern? Nur der angemeldete
+        ADMIN (dieselbe Pruefung wie fuer die Admin-Befehle) - ein Gast
+        kann "gratis" schicken, so viel er will."""
+        return bool(k is not None and getattr(k, "konto", None)
+                    and str(getattr(k, "name", "")).strip().lower() == "admin")
+
+    @staticmethod
+    def _belohnung_zeile(i: int) -> pygame.Rect:
+        return pygame.Rect(16, 62 + i * 28, 206, 25)
+
+    def _gratis_rect(self) -> pygame.Rect:
+        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 28 + 4, 206, 16)
 
     def belohnung_ereignis(self, ev) -> bool:
         """Tasten und Maus, solange das Menue offen ist. True: verbraucht."""
@@ -470,18 +905,27 @@ class SchlachtTeil:
             return False
         liste = S["belohnungen"]
         if ev.type == pygame.KEYDOWN:
-            if ev.key in self.app.opt.codes("inventar") or ev.key == pygame.K_ESCAPE:
-                self.belohnung_offen = False
+            if ev.key in self.app.opt.codes("inventar"):
+                self.belohnung_schliessen()
+                return True
+            if ev.key == pygame.K_ESCAPE:
+                if self.belohnung_wahl >= 0:
+                    self.belohnung_wahl = -1
+                else:
+                    self.belohnung_schliessen()
                 return True
             if pygame.K_1 <= ev.key <= pygame.K_9 and ev.key - pygame.K_1 < len(liste):
                 self.belohnung_wahl = ev.key - pygame.K_1
                 return True
             if ev.key in (pygame.K_UP, pygame.K_w):
-                self.belohnung_wahl = (self.belohnung_wahl - 1) % len(liste)
+                self.belohnung_wahl = (max(0, self.belohnung_wahl) - 1) % len(liste)
                 return True
             if ev.key in (pygame.K_DOWN, pygame.K_s):
                 self.belohnung_wahl = (self.belohnung_wahl + 1) % len(liste)
                 return True
+            return True
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 3:
+            self.belohnung_wahl = -1
             return True
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             maus = self.app.zu_spiel(ev.pos)
@@ -489,24 +933,33 @@ class SchlachtTeil:
                 if self._belohnung_zeile(i).collidepoint(maus):
                     self.belohnung_wahl = i
                     return True
+            if self._ist_admin_lokal() and self._gratis_rect().collidepoint(maus):
+                self.belohnung_gratis = not getattr(self, "belohnung_gratis", False)
+                return True
             karte = self.belohnung_karte_rect()
             if karte.collidepoint(maus):
-                self._belohnung_anfordern(self._karte_zu_welt(maus))
+                if self.belohnung_wahl < 0:
+                    self._sl_meldung = "ERST LINKS WÄHLEN, WAS KOMMEN SOLL"
+                    self._sl_meldung_rest = 2.0
+                elif self._belohnung_anfordern(self._karte_zu_welt(maus)):
+                    self.belohnung_schliessen()
             return True
         return ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL)
 
-    @staticmethod
-    def _belohnung_zeile(i: int) -> pygame.Rect:
-        return pygame.Rect(16, 70 + i * 30, 206, 26)
-
-    def _karte_masse(self):
+    def _karte_masse(self, r=None):
         e = self.welt.ebene(0)
-        r = self.belohnung_karte_rect()
+        r = self.belohnung_karte_rect() if r is None else r
         f = min(r.width / float(e.pixel_breite), r.height / float(e.pixel_hoehe))
         breit, hoch = e.pixel_breite * f, e.pixel_hoehe * f
         x0 = r.x + (r.width - breit) / 2
         y0 = r.y + (r.height - hoch) / 2
         return x0, y0, f
+
+    def _karte_feld(self) -> pygame.Rect:
+        """Wo die Karte in der Nachschubtafel genau liegt (ohne Rand)."""
+        x0, y0, f = self._karte_masse()
+        e = self.welt.ebene(0)
+        return pygame.Rect(int(x0), int(y0), int(e.pixel_breite * f), int(e.pixel_hoehe * f))
 
     def _karte_zu_welt(self, punkt) -> pygame.Vector2:
         x0, y0, f = self._karte_masse()
@@ -516,113 +969,278 @@ class SchlachtTeil:
         x0, y0, f = self._karte_masse()
         return int(x0 + pos.x * f), int(y0 + pos.y * f)
 
-    def _belohnung_anfordern(self, punkt) -> None:
+    def _belohnung_anfordern(self, punkt) -> bool:
+        """Anfordern, was gewaehlt ist, an `punkt`. True, wenn es ging."""
+        if not (0 <= self.belohnung_wahl < len(S["belohnungen"])):
+            return False
         was = S["belohnungen"][self.belohnung_wahl][0]
         ich = self.ich
         if ich is None:
-            return
+            return False
+        gratis = bool(getattr(self, "belohnung_gratis", False)) and self._ist_admin_lokal()
         if self.ist_gastgeber:
-            grund = self.belohnung_kaufen(ich, was, punkt)
+            grund = self.belohnung_kaufen(ich, was, punkt, gratis=gratis)
         else:
-            grund = self.belohnung_pruefen(ich, was, punkt)
+            grund = self.belohnung_pruefen(ich, was, punkt, gratis=gratis)
             if not grund:
-                self.gast.senden({"t": "belohnung", "was": was,
-                                  "x": round(punkt.x, 1), "y": round(punkt.y, 1)})
+                nachricht = {"t": "belohnung", "was": was,
+                             "x": round(punkt.x, 1), "y": round(punkt.y, 1)}
+                if gratis:
+                    nachricht["gratis"] = 1
+                self.gast.senden(nachricht)
         self._sl_meldung = grund or "ANGEFORDERT"
         self._sl_meldung_rest = 2.5
         if not grund:
             self.welt.klang("aufheben", 0.7)
+        return not grund
 
     def belohnung_zeichnen(self, ziel) -> None:
         if not self.belohnung_offen:
             return
         ich = self.ich
-        schleier = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
-        schleier.fill((8, 6, 4, 205))
+        schleier = self.__dict__.get("_sl_schleier")
+        if schleier is None:
+            schleier = self._sl_schleier = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+            schleier.fill((8, 6, 4, 215))
         ziel.blit(schleier, (0, 0))
         SCHRIFT.zeichnen(ziel, "NACHSCHUB", 16, 12, K.C_AMBER, 2)
+        gratis = bool(getattr(self, "belohnung_gratis", False)) and self._ist_admin_lokal()
         punkte = getattr(ich, "schlacht_punkte", 0) if ich is not None else 0
-        SCHRIFT.zeichnen(ziel, "PUNKTE: %d" % punkte, 16, 34, K.C_CREAM, 1)
+        SCHRIFT.zeichnen(ziel, "PUNKTE: %d" % punkte + ("  (GRATIS)" if gratis else ""),
+                         16, 34, K.C_TEAL if gratis else K.C_CREAM, 1)
         SCHRIFT.zeichnen(ziel, "KILL +%d  FAHRZEUG +%d  HELFEN +%d" % (
             S["punkte"]["abschuss"], S["punkte"]["fahrzeug"], S["punkte"]["aufhelfen"]),
             16, 46, K.C_MUTED, 1)
         for i, (name, kosten, text) in enumerate(S["belohnungen"]):
             r = self._belohnung_zeile(i)
             gewaehlt = i == self.belohnung_wahl
-            leistbar = punkte >= kosten
-            pygame.draw.rect(ziel, (34, 26, 18) if gewaehlt else (20, 15, 11), r)
+            leistbar = gratis or punkte >= kosten
+            pygame.draw.rect(ziel, (40, 30, 20) if gewaehlt else (20, 15, 11), r)
             pygame.draw.rect(ziel, K.C_AMBER if gewaehlt else (70, 56, 40), r, 1)
             farbe = K.C_CREAM if leistbar else K.C_MUTED_DK
-            SCHRIFT.zeichnen(ziel, "%d  %s" % (i + 1, text), r.x + 5, r.y + 4, farbe, 1)
-            SCHRIFT.zeichnen(ziel, "%d P" % kosten, r.right - 5, r.y + 4,
+            SCHRIFT.zeichnen(ziel, "%d  %s" % (i + 1, text), r.x + 5, r.y + 3, farbe, 1)
+            SCHRIFT.zeichnen(ziel, "GRATIS" if gratis else "%d P" % kosten, r.right - 5, r.y + 3,
                              K.C_AMBER if leistbar else K.C_MUTED_DK, 1, ausrichtung="rechts")
-            SCHRIFT.zeichnen(ziel, S["belohnung_hilfe"].get(name, ""), r.x + 5, r.y + 15,
+            SCHRIFT.zeichnen(ziel, S["belohnung_hilfe"].get(name, ""), r.x + 5, r.y + 14,
                              K.C_MUTED, 1)
+        if self._ist_admin_lokal():
+            r = self._gratis_rect()
+            pygame.draw.rect(ziel, (16, 30, 28), r)
+            pygame.draw.rect(ziel, K.C_TEAL if gratis else (50, 70, 66), r, 1)
+            SCHRIFT.zeichnen(ziel, "ADMIN: ALLES GRATIS  [%s]" % ("AN" if gratis else "AUS"),
+                             r.x + 5, r.y + 4, K.C_TEAL if gratis else K.C_MUTED, 1)
         self._belohnung_karte(ziel, ich)
         # Die Rangliste als Nebensache: der Stand der Seiten.
         if self.mit_teams and len(self.teampunkte) >= 2:
             SCHRIFT.zeichnen(ziel, "STAND  %s %d : %d %s" % (
                 K.TEAMS["namen"][0], self.teampunkte[0], self.teampunkte[1],
-                K.TEAMS["namen"][1]), 16, K.GAME_H - 40, K.C_MUTED, 1)
+                K.TEAMS["namen"][1]), 16, K.GAME_H - 34, K.C_MUTED, 1)
         meldung = getattr(self, "_sl_meldung", "")
         if meldung and getattr(self, "_sl_meldung_rest", 0.0) > 0.0:
             SCHRIFT.zeichnen(ziel, meldung, 428, K.GAME_H - 46, K.C_AMBER, 1, ausrichtung="mitte")
-        SCHRIFT.zeichnen(ziel, "[1-%d] WÄHLEN  [KLICK AUF DIE KARTE] ANFORDERN  [TAB] ZU" % len(
-            S["belohnungen"]), K.GAME_W // 2, K.GAME_H - 18, K.C_MUTED, 1, ausrichtung="mitte")
+        if self.belohnung_wahl < 0:
+            hilfe = "1. [1-%d] ODER KLICK LINKS: WAS ANFORDERN   [TAB] ZU" % len(S["belohnungen"])
+        else:
+            hilfe = "2. [KLICK AUF DIE KARTE] WOHIN   [RECHTSKLICK] ZURÜCK   [TAB] ZU"
+        SCHRIFT.zeichnen(ziel, hilfe, K.GAME_W // 2, K.GAME_H - 18, K.C_MUTED, 1,
+                         ausrichtung="mitte")
 
     def _belohnung_karte(self, ziel, ich) -> None:
+        """Die Karte der Tafel: einmal auf der Spielflaeche und - wenn das
+        Fenster groesser ist - noch einmal in Fensteraufloesung darueber
+        (App.hoch_auflegen, seit 0.34.100)."""
         r = self.belohnung_karte_rect()
-        e = self.welt.ebene(0)
-        x0, y0, f = self._karte_masse()
-        groesse = (max(1, int(e.pixel_breite * f)), max(1, int(e.pixel_hoehe * f)))
-        riss = self.__dict__.get("_sl_riss")
-        if riss is None or riss.get_size() != groesse or getattr(self, "_sl_riss_welt", None) is not self.welt:
-            klein = pygame.Surface((e.breite, e.hoehe))
-            klein.fill((58, 46, 34))
-            for ty in range(e.hoehe):
-                for tx in range(e.breite):
-                    if e.fest(tx, ty):
-                        klein.set_at((tx, ty), (126, 104, 78))
-            riss = pygame.transform.scale(klein, groesse)
-            self._sl_riss = riss
-            self._sl_riss_welt = self.welt
-        ziel.blit(riss, (int(x0), int(y0)))
         pygame.draw.rect(ziel, (84, 66, 48), r, 1)
-        was = S["belohnungen"][self.belohnung_wahl][0]
+        feld = self._karte_feld()
+        maus = self.app.zu_spiel(pygame.mouse.get_pos())
+        self._karte_malen(ziel, feld, 1.0, maus, ich)
+        if hasattr(self.app, "hoch_auflegen") and self.app.stapel and self.app.stapel[-1] is self:
+            self.app.hoch_auflegen(feld, lambda f, mass: self._karte_malen(
+                f, f.get_rect(), mass,
+                ((maus[0] - feld.x) * f.get_width() / float(max(1, feld.width)),
+                 (maus[1] - feld.y) * f.get_height() / float(max(1, feld.height))), ich))
+
+    def _karte_malen(self, ziel, r, m: float, maus, ich) -> None:
+        """Grundriss, Nebel, Zonen, Leute, Fahrzeuge, Drohnen und der
+        Zeiger - in das Rechteck `r` von `ziel`, `m` mal so fein wie die
+        Spielflaeche. `maus` in Koordinaten von `ziel`."""
+        from . import kartenbild
+        e = self.welt.ebene(0)
+        f = r.width / float(e.pixel_breite)
+        mm = max(1.0, float(m))
+
+        def punkt(pos):
+            return (int(r.x + pos.x * f), int(r.y + pos.y * f))
+
+        def n(wert):
+            return max(1, int(round(wert * mm)))
+
+        alt_clip = ziel.get_clip()
+        ziel.set_clip(r.clip(alt_clip) if alt_clip else r)
+        ziel.blit(kartenbild.in_groesse(e, r.size), r.topleft)
+        wahl = (S["belohnungen"][self.belohnung_wahl][0]
+                if 0 <= self.belohnung_wahl < len(S["belohnungen"]) else "")
+        fraktion = ich.fraktion if ich is not None else ""
+        team = ich.team if ich is not None else -1
+
+        # Der Nebel (seit 0.34.100): dunkel, ausser um die eigenen Leute und
+        # im Kreis einer eigenen Aufklaerungsdrohne, solange sie fliegt.
+        sicht = S["karte_sicht"] * f
+        auf = S["aufklaerung"]["radius"] * f
+        nebel = self.__dict__.get("_sl_nebel")
+        if nebel is None or nebel.get_size() != r.size:
+            nebel = self._sl_nebel = pygame.Surface(r.size, pygame.SRCALPHA)
+        nebel.fill(S["karte_nebel"])
+        loch = (0, 0, 0, 0)
+        for k in self.kaempfer.values():
+            if k.lebt and k.fraktion == fraktion and int(k.ebene) == 0:
+                p = punkt(k.pos)
+                pygame.draw.circle(nebel, loch, (p[0] - r.x, p[1] - r.y), int(sicht))
+        drohnen = self._drohnen_fuer_karte()
+        for pos, d_team in drohnen:
+            if d_team == team:
+                p = punkt(pos)
+                pygame.draw.circle(nebel, loch, (p[0] - r.x, p[1] - r.y), int(auf))
+        ziel.blit(nebel, r.topleft)
+
+        def sichtbar(pos) -> bool:
+            for k in self.kaempfer.values():
+                if (k.lebt and k.fraktion == fraktion
+                        and k.pos.distance_squared_to(pos) <= S["karte_sicht"] ** 2):
+                    return True
+            return any(d_team == team and q.distance_to(pos) <= S["aufklaerung"]["radius"]
+                       for q, d_team in drohnen)
+
         # Gesperrt: um die Basis der anderen (nicht fuer die Aufklaerung).
-        if ich is not None and ich.team in (0, 1) and was != "aufklaerung":
-            feind = self.schlacht_basis(1 - ich.team)
+        if wahl and wahl != "aufklaerung" and team in (0, 1):
+            feind = self.schlacht_basis(1 - team)
             if feind is not None:
                 rr = int(S["abwurf"]["sperre_basis"] * f)
                 sperre = pygame.Surface((rr * 2, rr * 2), pygame.SRCALPHA)
-                pygame.draw.circle(sperre, (200, 40, 30, 70), (rr, rr), rr)
-                # Nur innerhalb der Karte (seit 0.34.99): die Basis liegt
-                # am Rand, und der Kreis lief ueber den Rahmen bis an den
-                # Bildschirmrand.
-                alt_clip = ziel.get_clip()
-                ziel.set_clip(r.clip(alt_clip) if alt_clip else r)
-                ziel.blit(sperre, (self._welt_zu_karte(feind)[0] - rr,
-                                   self._welt_zu_karte(feind)[1] - rr))
-                ziel.set_clip(alt_clip)
+                pygame.draw.circle(sperre, (200, 40, 30, 60), (rr, rr), rr)
+                pygame.draw.circle(sperre, (220, 60, 40, 150), (rr, rr), rr, n(1))
+                q = punkt(feind)
+                ziel.blit(sperre, (q[0] - rr, q[1] - rr))
+        # Die Kreise der Drohnen am Himmel und ihr Flugzeug-Zeichen.
+        for pos, d_team in drohnen:
+            kombi = K.TEAMS["kombi"][d_team] if 0 <= d_team < 2 else None
+            farbe = kombi["hud"] if kombi else K.C_TEAL
+            q = punkt(pos)
+            pygame.draw.circle(ziel, farbe, q, int(auf), n(1))
+            self._drohne_zeichen(ziel, q, 0.0 if d_team == 0 else 180.0, farbe, 3.0 * mm)
+        # Dropzonen.
         for z in self.dropzonen:
+            if z.team != team and not sichtbar(z.pos):
+                continue
             kombi = K.TEAMS["kombi"][z.team] if 0 <= z.team < 2 else None
-            px, py = self._welt_zu_karte(z.pos)
-            pygame.draw.rect(ziel, kombi["hud"] if kombi else K.C_AMBER, (px - 2, py - 2, 5, 5), 1)
+            q = punkt(z.pos)
+            gr = n(3)
+            pygame.draw.rect(ziel, kombi["hud"] if kombi else K.C_AMBER,
+                             (q[0] - gr, q[1] - gr, gr * 2 + 1, gr * 2 + 1), n(1))
+        # Fallendes: wo gerade etwas am Schirm haengt.
+        for ab in self.abwuerfe:
+            if ab.team == team or sichtbar(ab.pos):
+                q = punkt(ab.pos)
+                pygame.draw.circle(ziel, (232, 226, 210), q, n(2), n(1))
+        # Fahrzeuge: eigene und unbesetzte in Sicht, feindliche in Sicht
+        # oder markiert (mit Raute, sie bewegt sich mit).
+        for b in getattr(self, "fahrzeuge", ()):
+            if getattr(b, "kaputt", False) or int(getattr(b, "ebene", 0)) != 0:
+                continue
+            seite = getattr(b, "team", -1)
+            if getattr(b, "fahrer", None) is not None:
+                seite = getattr(b.fahrer, "team", seite)
+            markiert = self.fahrzeug_fuer_mich_markiert(b)
+            if seite != team and not sichtbar(b.pos) and not markiert:
+                continue
+            q = punkt(b.pos)
+            vorn = pygame.Vector2(1, 0).rotate(getattr(b, "winkel", 0.0))
+            quer = pygame.Vector2(-vorn.y, vorn.x)
+            gross = 1.6 if getattr(b, "rechteckig", False) else 1.0
+            l, qq = 3.2 * gross * mm, 1.8 * gross * mm
+            mq = pygame.Vector2(q)
+            ecken = [mq + vorn * l + quer * qq, mq + vorn * l - quer * qq,
+                     mq - vorn * l - quer * qq, mq - vorn * l + quer * qq]
+            farbe = K.TEAMS["kombi"][seite]["hud"] if 0 <= seite < 2 else (214, 166, 70)
+            pygame.draw.polygon(ziel, farbe, ecken)
+            pygame.draw.polygon(ziel, (16, 11, 8), ecken, n(0.8))
+            if markiert and seite != team:
+                self._ping(ziel, (q[0], q[1] - int(6 * mm)), mm)
+        # Leute: eigene als Punkte, Gegner in Sicht oder markiert als Raute.
         for k in self.kaempfer.values():
-            if ich is not None and k.lebt and k.fraktion == ich.fraktion:
-                px, py = self._welt_zu_karte(k.pos)
-                pygame.draw.rect(ziel, self._farbe_fuer(k), (px - 1, py - 1, 2, 2))
+            if not (k.lebt or getattr(k, "am_boden", False)) or int(k.ebene) != 0:
+                continue
+            if getattr(k, "im_fahrzeug", False) or getattr(k, "raus", False):
+                continue
+            q = punkt(k.pos)
+            if k.fraktion == fraktion:
+                if k is ich:
+                    continue
+                pygame.draw.circle(ziel, (16, 11, 8), q, n(2.2))
+                pygame.draw.circle(ziel, self._farbe_fuer(k), q, n(1.5))
+            elif self.fuer_mich_markiert(k) or (k.lebt and sichtbar(k.pos)):
+                self._ping(ziel, q, mm)
+        # Fallschirmjaeger in der Luft (seit 0.34.100).
+        for k in self.kaempfer.values():
+            if k.lebt and getattr(k, "schirm_hoehe", 0.0) > 0.0 and (
+                    k.fraktion == fraktion or sichtbar(k.pos)):
+                q = punkt(k.pos)
+                pygame.draw.circle(ziel, (232, 226, 210), (q[0], q[1] - n(2)), n(2), n(1))
         if ich is not None:
-            px, py = self._welt_zu_karte(ich.pos)
-            pygame.draw.rect(ziel, (230, 255, 248), (px - 1, py - 1, 3, 3))
+            q = punkt(ich.pos)
+            vorn = pygame.Vector2(1, 0).rotate(getattr(ich, "winkel", 0.0))
+            quer = pygame.Vector2(-vorn.y, vorn.x)
+            g = 2.6 * mm
+            mq = pygame.Vector2(q)
+            ecken = [mq + vorn * g * 1.4, mq - vorn * g * 0.8 + quer * g * 0.9,
+                     mq - vorn * g * 0.35, mq - vorn * g * 0.8 - quer * g * 0.9]
+            pygame.draw.polygon(ziel, (16, 11, 8), ecken, max(2, int(g * 0.6)))
+            pygame.draw.polygon(ziel, (236, 255, 250), ecken)
         # Unter der Maus: wie gross das Ziel ist, und ob es geht.
-        maus = self.app.zu_spiel(pygame.mouse.get_pos())
-        if r.collidepoint(maus) and ich is not None:
-            punkt = self._karte_zu_welt(maus)
-            grund = self.belohnung_pruefen(ich, was, punkt)
-            weite = (S["aufklaerung"]["radius"] if was == "aufklaerung"
+        if wahl and ich is not None and r.collidepoint(maus):
+            welt = pygame.Vector2((maus[0] - r.x) / f, (maus[1] - r.y) / f)
+            gratis = bool(getattr(self, "belohnung_gratis", False)) and self._ist_admin_lokal()
+            grund = self.belohnung_pruefen(ich, wahl, welt, gratis=gratis)
+            weite = (S["aufklaerung"]["radius"] if wahl == "aufklaerung"
+                     else S["fallschirmjaeger"]["breite"] if wahl == "fallschirmjaeger"
                      else S["dropzone"]["radius"])
-            rr = max(3, int(weite * f))
-            pygame.draw.circle(ziel, K.C_TEAL if not grund else K.C_RED, maus, rr, 1)
-            SCHRIFT.zeichnen(ziel, grund or "HIER ANFORDERN", int(maus.x), int(maus.y) - rr - 10,
-                             K.C_TEAL if not grund else K.C_RED, 1, ausrichtung="mitte")
+            rr = max(n(3), int(weite * f))
+            farbe = K.C_TEAL if not grund else K.C_RED
+            mp = (int(maus[0]), int(maus[1]))
+            pygame.draw.circle(ziel, farbe, mp, rr, n(1))
+            pygame.draw.line(ziel, farbe, (mp[0] - n(4), mp[1]), (mp[0] + n(4), mp[1]), n(1))
+            pygame.draw.line(ziel, farbe, (mp[0], mp[1] - n(4)), (mp[0], mp[1] + n(4)), n(1))
+            groesse = max(1, int(round(mm)))
+            SCHRIFT.zeichnen(ziel, grund or "HIER ANFORDERN", mp[0], mp[1] - rr - n(10),
+                             farbe, groesse, ausrichtung="mitte")
+        elif not wahl:
+            # Noch nichts gewaehlt: die Karte gedaempft, mit Hinweis.
+            schatten = pygame.Surface(r.size, pygame.SRCALPHA)
+            schatten.fill((8, 6, 4, 110))
+            ziel.blit(schatten, r.topleft)
+            SCHRIFT.zeichnen(ziel, "ERST LINKS WÄHLEN, WAS KOMMEN SOLL", r.centerx,
+                             r.centery - n(4), K.C_CREAM, max(1, int(round(mm))),
+                             ausrichtung="mitte")
+        ziel.set_clip(alt_clip)
+
+    @staticmethod
+    def _ping(ziel, mitte, mm: float) -> None:
+        """Eine rote Raute ueber einem markierten Gegner."""
+        x, y = mitte
+        g = max(2, int(round(2.4 * mm)))
+        rand = max(1, int(round(mm)))
+        pygame.draw.polygon(ziel, (16, 11, 8), [(x, y - g - rand), (x + g + rand, y),
+                                                 (x, y + g + rand), (x - g - rand, y)])
+        pygame.draw.polygon(ziel, K.C_RED, [(x, y - g), (x + g, y), (x, y + g), (x - g, y)])
+
+    def _drohnen_fuer_karte(self) -> list:
+        """[(Ort, Team)] der Aufklaerungsdrohnen, die gerade fliegen."""
+        if self.ist_gastgeber:
+            return [(u.pos, u.team) for u in self.ueberfluege]
+        return [(e[0], e[1]) for e in getattr(self, "_ueberfluege_gast", [])]
+
+    def fahrzeug_fuer_mich_markiert(self, b) -> bool:
+        """Hat eine eigene Drohne dieses Fahrzeug markiert (seit 0.34.100)?"""
+        ich = self.ich
+        return (ich is not None and getattr(b, "markiert_rest", 0.0) > 0.0
+                and getattr(b, "markiert_fuer", "") == ich.fraktion)

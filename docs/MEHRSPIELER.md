@@ -2022,6 +2022,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.100 | Je Spieler "sh" (Hoehe am Fallschirm). Je Fahrzeug Feld 16: welche Fraktion es markiert hat (Drohne). Kauf "belohnung" mit "gratis" (zaehlt nur fuer ADMIN). Neue Belohnung "fallschirmjaeger". Netz: eine Leitung, die beim Spuelen zugeht, liefert nichts mehr statt den Gastgeber abstuerzen zu lassen. | Gastgeber und Gast muessen 0.34.100 haben - ein alter Gast sieht Fallschirmjaeger am Boden stehen und keine Pings an Fahrzeugen |
 | 0.34.99 | Klassen wirken auf den Schlag auf F (NAHKAEMPFER, SCHILDTRAEGER, SPAEHER). Keine neuen Felder. | Gastgeber und Gast sollten 0.34.99 haben - sonst sieht ein Gast andere Werte im Menue, als der Gastgeber rechnet |
 | 0.34.98 | SCHLACHT: Gefallene sterben nach der Bodenzeit (auch ohne Regel AUFHELFEN), Nachschubpunkte je Runde auf 0. Keine neuen Felder. | Gastgeber und Gast sollten 0.34.98 haben - sonst zeigt der Gast andere Punkte als der Gastgeber |
 | 0.34.96 | Weltmeldung "sl" (SCHLACHT: Dropzonen, Abwuerfe am Fallschirm, Ueberfluege der Aufklaerungsdrohne). Je Spieler "fu" (funkt gerade), "nk" (Waffe auf F), "pk" (Nachschubpunkte). Neue Nachricht des Gasts "belohnung" (was, x, y). Neue Regel "funk", "bot_ki" mit Vorgabe goap. Taste G ("granate") geht als Druck mit. Neue Karte staubtal_offen. | Gastgeber und Gast muessen 0.34.96 haben - ein alter Gast sieht keine Dropzonen und kann keinen Nachschub kaufen |

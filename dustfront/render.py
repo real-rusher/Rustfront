@@ -1310,6 +1310,8 @@ class Renderer:
             bild = w.bild                 # eine Eigenschaft: einmal fragen (0.34.75)
             if bild is None or getattr(w, "hoch_oben", False):
                 continue                  # hoch oben: eigene Schicht (Drohne)
+            if getattr(w, "schirm_hoehe", 0.0) > 0.0:
+                continue                  # am Fallschirm: schlacht.abwuerfe_zeichnen (0.34.100)
             if (getattr(w, "dash_rest", 0.0) > 0.0
                     or getattr(w, "dash_bild_rest", 0.0) > 0.0):
                 self.dash_zeichnen(ziel, p, w)

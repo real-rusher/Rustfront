@@ -16664,6 +16664,143 @@ pruef("... die Pause nach dem Schlag ist kuerzer als beim Brecheisen ohne Klasse
       "%.3f" % _k201.nahkampf_rest)
 w201.verlassen(); g201.verlassen()
 
+print("\n-- 0.34.100: Karte hochaufgeloest, Nachschub in zwei Schritten, Abwurf sicher, Drohne, Fallschirmjaeger")
+from dustfront import kartenbild as _KB300, schlacht as _SL300, testmodus as _TM300
+w300, g300 = _paar59("schlacht", karte="staubtal_offen")
+w300._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="staubtal_offen", schlacht_seite=6))
+w300._einstiegszonen_waehlen()
+w300._fahrzeuge_neu_aufstellen()
+w300._bots_fuehren(0.0, sofort=True)
+_e300 = w300.welt.ebene(0)
+_bild300 = _KB300.bild(_e300)
+pruef("Das Kartenbild hat mehrere Pixel je Kachel (nicht mehr einen)",
+      _bild300.get_width() >= 2 * _e300.breite and _bild300.get_height() >= 2 * _e300.hoehe,
+      str(_bild300.get_size()))
+_klein300 = _KB300.in_groesse(_e300, (200, 140))
+pruef("... und wird weich in jede Groesse gebracht (gemerkt)",
+      _klein300.get_size() == (200, 140) and _KB300.in_groesse(_e300, (200, 140)) is _klein300)
+# Fensteraufloesung: was angemeldet wird, malt nach dem Vergroessern.
+_app300 = type("A", (), {})()
+_gemalt300 = []
+_app300.gpu = False; _app300.touch = None; _app300.skala = 3.0
+_app300.fenster = pygame.Surface((1920, 1080)); _app300.viewport = pygame.Rect(0, 0, 1920, 1080)
+from dustfront.core import App as _App300
+_App300.hoch_auflegen(_app300, pygame.Rect(10, 10, 84, 84), lambda f_, m_: _gemalt300.append((f_.get_size(), m_)))
+_app300.zu_fenster = lambda r_: _App300.zu_fenster(_app300, r_)
+_App300._hoch_zeichnen(_app300, _app300.fenster)
+pruef("Die runde Karte kommt in Fensteraufloesung (drei mal so viele Pixel bei 1080p)",
+      _gemalt300 == [((252, 252), 3.0)], str(_gemalt300))
+_app300.gpu = True
+pruef("... nicht, wenn die Grafikkarte skaliert (dann bleibt die Spielflaeche)",
+      not _App300.hoch_auflegen(_app300, pygame.Rect(0, 0, 8, 8), lambda f_, m_: None))
+# Nachschub: erst was, dann wo.
+_ich300 = w300.ich
+_ich300.schlacht_punkte = 0
+w300.belohnung_oeffnen()
+pruef("TAB: zuerst ist nichts gewaehlt", w300.belohnung_offen and w300.belohnung_wahl == -1)
+_zonen300 = len(w300.dropzonen)
+pruef("... und ohne Wahl fordert ein Klick auf die Karte nichts an",
+      not w300._belohnung_anfordern(pygame.Vector2(_ich300.pos)) and len(w300.dropzonen) == _zonen300)
+w300._knoepfe.add("nahkampf"); w300._waffe_wunsch = 2
+w300.schritt(K.FIXED_DT); g300.schritt(K.FIXED_DT)
+pruef("Solange das Menue offen ist, kommt keine Taste ins Spiel",
+      not w300._knoepfe and w300._waffe_wunsch == -1)
+w300.belohnung_schliessen()
+pruef("Schliessen sperrt den Schuss der noch gedrueckten Maustaste",
+      not w300.belohnung_offen and w300._feuer_sperre)
+# Gratis nur fuer den ADMIN.
+_vorne300 = _ich300.pos + pygame.Vector2(1200, 0)
+pruef("Ohne Punkte geht nichts, auch wenn ein Gast 'gratis' schickt",
+      w300.belohnung_kaufen(_ich300, "munition", _vorne300, gratis=True) == "ZU WENIG PUNKTE")
+_name300, _konto300 = _ich300.name, getattr(_ich300, "konto", "")
+_ich300.name, _ich300.konto = "ADMIN", "konto-admin"
+pruef("Der angemeldete ADMIN darf mit dem Schalter gratis anfordern",
+      w300.belohnung_kaufen(_ich300, "munition", _vorne300, gratis=True) == ""
+      and _ich300.schlacht_punkte == 0)
+_ich300.name, _ich300.konto = _name300, _konto300
+# Abwurf: hoeher, und nie auf etwas drauf.
+pruef("Fahrzeuge kommen deutlich hoeher herein (mehr als frueher 240)",
+      K.SCHLACHT["abwurf"]["hoehe"] > 240)
+# Die Wagen der Basen kommen erst am Schirm herunter.
+for _ in range(int((K.SCHLACHT["abwurf"]["start"] + K.SCHLACHT["abwurf"]["hoehe"]
+                    / K.SCHLACHT["abwurf"]["sinken"] + 1) / K.FIXED_DT)):
+    _ich300.unverwundbar = 1.0
+    w300.schritt(K.FIXED_DT); g300.schritt(K.FIXED_DT)
+_b300 = next(b_ for b_ in w300.fahrzeuge if not b_.kaputt)
+_z300 = _SL300.Dropzone(pygame.Vector2(_b300.pos), 0, "panzer", 0.0, einmalig=True)
+_z300.rest = 0.01
+w300.dropzonen.append(_z300)
+_ich300.pos.update(_b300.pos + pygame.Vector2(0, 60)); _ich300.vorher.update(_ich300.pos)
+_z301 = _SL300.Dropzone(pygame.Vector2(_ich300.pos), 0, "buggy", 0.0, einmalig=True)
+_z301.rest = 0.01
+w300.dropzonen.append(_z301)
+for _ in range(int((K.SCHLACHT["abwurf"]["hoehe"] / K.SCHLACHT["abwurf"]["sinken"] + 2) / K.FIXED_DT)):
+    _ich300.unverwundbar = 1.0
+    w300.schritt(K.FIXED_DT); g300.schritt(K.FIXED_DT)
+_heil300 = [b_ for b_ in w300.fahrzeuge if not b_.kaputt]
+_ueber300 = [(a_.art, b_.art) for i_, a_ in enumerate(_heil300) for b_ in _heil300[i_ + 1:]
+             if a_.pos.distance_to(b_.pos) < 0.8 * (a_.radius + b_.radius)]
+pruef("Ein Abwurf auf einen stehenden Wagen landet daneben, nie darauf",
+      not w300.abwuerfe and not _ueber300, str(_ueber300))
+pruef("... und wer unter einem Abwurf steht, wird beiseite gestossen, nicht verschuettet",
+      all(_ich300.pos.distance_to(b_.pos) >= b_.radius for b_ in _heil300 if not _ich300.im_fahrzeug))
+# Die Drohne markiert auch Fahrzeuge, laenger als frueher.
+pruef("Pings bleiben etwas laenger (mehr als 15 s)", K.SCHLACHT["aufklaerung"]["markiert"] > 15.0)
+_feind300 = next((b_ for b_ in w300.fahrzeuge if getattr(b_, "basis_team", 0) == 1 and not b_.kaputt), None)
+if _feind300 is not None:
+    _ue300 = _SL300.Ueberflug(_feind300.pos, 0, _ich300.fraktion, 9999)
+    _ue300.alter = _ue300.dauer / 2.0
+    w300._ueberflug_markieren(_ue300)
+    pruef("Die Drohne markiert feindliche Fahrzeuge - fuer die eigene Seite",
+          w300.fahrzeug_fuer_mich_markiert(_feind300))
+    for _ in range(4):
+        w300.schritt(K.NETZ["takt"]); g300.schritt(K.NETZ["takt"])
+    _gb300 = [b_ for b_ in g300.fahrzeuge if b_.pos.distance_to(_feind300.pos) < 40]
+    pruef("... und der Gast sieht den Ping am Fahrzeug auch",
+          bool(_gb300) and getattr(_gb300[0], "markiert_fuer", "") == _ich300.fraktion)
+# Fallschirmjaeger.
+_alt300 = len(w300._bots())
+_sp300 = w300.fallschirmjaeger_abwerfen(w300._schlacht_punkte()[2], 1)
+pruef("Fallschirmjaeger: fuenf Bots der Seite, in der Luft und nicht zu treffen",
+      len(_sp300) == K.SCHLACHT["fallschirmjaeger"]["anzahl"]
+      and all(k_.schirm_hoehe > 0 and not k_.trefferbar and k_.team == 1 for k_ in _sp300))
+pruef("... in Formation: keiner steht auf einem anderen",
+      all(a_.pos.distance_to(b_.pos) >= 20 for i_, a_ in enumerate(_sp300) for b_ in _sp300[i_ + 1:]))
+_rot300 = next(k_ for k_ in w300._bots() if k_.team == 0)
+pruef("Ein Gegner darf sie in der Luft nicht zum Ziel nehmen", not _rot300.hirn.ziel_ok(_sp300[0]))
+w300._bots_fuehren(0.0, sofort=True)
+pruef("Sie kommen dazu: das Auffuellen nimmt dafuer keine anderen Bots weg",
+      len(w300._bots()) == _alt300 + len(_sp300))
+for _ in range(int((K.SCHLACHT["fallschirmjaeger"]["hoehe"] * 1.3 / K.SCHLACHT["fallschirmjaeger"]["sinken"] + 1)
+                   / K.FIXED_DT)):
+    w300.schritt(K.FIXED_DT); g300.schritt(K.FIXED_DT)
+pruef("Gelandet: am Boden, zu treffen, und ein Ziel wie jeder",
+      all(k_.schirm_hoehe == 0.0 and k_.trefferbar for k_ in _sp300 if k_.lebt)
+      and _rot300.hirn.ziel_ok(_sp300[0]) == (_sp300[0].lebt and not _sp300[0].am_boden
+                                              and _sp300[0].ebene == _rot300.ebene))
+_sp300[1].am_boden = False
+_sp300[1].lebt = False
+_sp300[1].abgerechnet = False
+for _ in range(int((K.GEFECHT["wieder_nach"] + 1) / K.FIXED_DT)):
+    w300.schritt(K.FIXED_DT); g300.schritt(K.FIXED_DT)
+pruef("Wer von ihnen faellt, kommt nicht wieder", _sp300[1].nummer not in w300.kaempfer)
+# Gefunden mit diesen Tests: schloss spuelen die Leitung (der Gast las nicht
+# mehr), warf das folgende select ValueError - beim Gastgeber.
+import socket as _so300
+_hoer300 = _so300.socket(); _hoer300.bind(("127.0.0.1", 0)); _hoer300.listen(1)
+_b300s = _so300.create_connection(_hoer300.getsockname())
+_a300, _x300 = _hoer300.accept()
+_hoer300.close()
+_l300 = netz.Leitung(_a300)
+_l300.spuelen = lambda: _l300.schliessen("Rueckstand")
+pruef("Netz: eine Leitung, die beim Spuelen zugeht, liefert nichts statt abzustuerzen",
+      _l300.holen() == [] and not _l300.offen)
+_b300s.close()
+pruef("Der Testmodus hat alles aus dem Nachschub im Spawner",
+      {"ABWURF: PANZER", "AUFKLÄRUNGSDROHNE", "FALLSCHIRMJÄGER"}
+      <= {e_.name for e_ in _TM300.eintraege()})
+w300.verlassen(); g300.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

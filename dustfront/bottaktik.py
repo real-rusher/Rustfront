@@ -90,7 +90,9 @@ def kampffaehig(w) -> bool:
     an keiner Stelle (seit 0.34.52, gemeldet: nach grossen Schlachten
     schossen sie "auf verwundete, am Boden liegende Gegner ... und
     manchmal auf gar nichts")."""
-    return getattr(w, "lebt", False) and not getattr(w, "am_boden", False)
+    # Wer noch am Fallschirm haengt (seit 0.34.100), ist auch noch keine.
+    return (getattr(w, "lebt", False) and not getattr(w, "am_boden", False)
+            and not getattr(w, "schirm_hoehe", 0.0) > 0.0)
 
 
 def braucht_schutz(x) -> bool:

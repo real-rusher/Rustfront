@@ -3261,6 +3261,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                 laden = float(e[13]) if len(e) > 13 else 0.0
                 emp = float(e[14]) if len(e) > 14 else 0.0
                 auf = int(e[15]) if len(e) > 15 else 0
+                markiert_fuer = str(e[16])[:20] if len(e) > 16 and e[16] else ""
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
@@ -3284,6 +3285,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
             b.fahrer_nummer = fahrer
             b.funkt = k is not None and bool(getattr(k, "ist_bot", False))
             b.besetzt_mit = max(0, min(8, auf))
+            b.markiert_fuer = markiert_fuer
+            b.markiert_rest = 1.0 if markiert_fuer else 0.0
             b.geschw = b.vorn * fahrt
             b.rutschen = max(0.0, min(1.0, rutschen))
             # Leben (seit 0.34.18): fuer den Balken und das Wrack.
@@ -3447,7 +3450,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                 if k is not None and self.schlacht:
                     try:
                         punkt = (float(nachricht.get("x", 0.0)), float(nachricht.get("y", 0.0)))
-                        self.belohnung_kaufen(k, str(nachricht.get("was", "")), punkt)
+                        self.belohnung_kaufen(k, str(nachricht.get("was", "")), punkt,
+                                              gratis=bool(nachricht.get("gratis")))
                     except (TypeError, ValueError):
                         pass
             elif art == "aussehen":
@@ -3488,6 +3492,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
         self._fahrzeuge_nachziehen()
         self._mitfahrer_nachziehen()
         self._fahrzeuge_erneuern(dt)
+        if not self.schlacht and self.__dict__.get("nachschub_an"):
+            # Testmodus (seit 0.34.100): Abwuerfe, Drohnen und Fallschirmjaeger
+            # aus dem Spawner, ohne SCHLACHT.
+            self.schlacht_schritt(dt)
         if self.schlacht:
             self.schlacht_schritt(dt)
             for b in self.fahrzeuge:
@@ -4336,7 +4344,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                 continue          # in pve steigt niemand von selbst wieder ein
             k.wieder_in -= dt
             if k.wieder_in <= 0 and not self.vorbei:
-                self._wieder_einsteigen(k)
+                if getattr(k, "verstaerkung", False):
+                    # Fallschirmjaeger (seit 0.34.100) kommen nicht wieder.
+                    self._bot_weg(k)
+                else:
+                    self._wieder_einsteigen(k)
 
     def _magazine_fuellen(self, k: Kaempfer) -> None:
         """Magazine beim Einstieg auffuellen.
@@ -4772,6 +4784,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                 "nk": getattr(k, "nahkampf_waffe", K.NAHKAMPF["waffe"]),
                 # Punkte fuer den Nachschub (seit 0.34.96, SCHLACHT).
                 "pk": getattr(k, "schlacht_punkte", 0),
+                # Noch am Fallschirm (seit 0.34.100): so hoch, 0 = am Boden.
+                "sh": round(getattr(k, "schirm_hoehe", 0.0), 1),
                 # Sein Aussehen (seit 0.34.60), leer fuer die alte Figur.
                 "sk": k.skin,
                 # Seine Klasse und wie lange jede Faehigkeit noch braucht
@@ -4862,7 +4876,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                   # Seit 0.34.65: wie lange ein EMP ihn noch stilllegt.
                   round(b.emp_rest, 1),
                   # Seit 0.34.95: wie viele hinten aufsitzen.
-                  len(b.__dict__.get("_mitfahrer") or ())]
+                  len(b.__dict__.get("_mitfahrer") or ()),
+                  # Seit 0.34.100: welche Seite ihn markiert hat (Drohne) - "".
+                  (getattr(b, "markiert_fuer", "")
+                   if getattr(b, "markiert_rest", 0.0) > 0.0 else "")]
                  for b in self.fahrzeuge]
         # Nagelfelder (seit 0.34.65): wo die Naegel liegen, folgt aus der
         # Kennung (entities.Nagelfeld.stellen).
@@ -5283,6 +5300,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
             k.ruf_zeigen = float(eintrag.get("rz", 0.0))
             k.im_fahrzeug = bool(eintrag.get("fz", False))
             try:
+                k.schirm_hoehe = max(0.0, min(2000.0, float(eintrag.get("sh", 0.0))))
+            except (TypeError, ValueError):
+                k.schirm_hoehe = 0.0
+            try:
                 k.ladung = max(0.0, min(1.0, float(eintrag.get("ld", 0.0))))
             except (TypeError, ValueError):
                 k.ladung = 0.0
@@ -5626,8 +5647,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
         if self.vorbei or self.in_lobby or not self.schlacht:
             self.belohnung_offen = False
         self._start_masken()
-        if not self.pausiert:
+        if not self.pausiert and not self.belohnung_offen:
             self.knoepfe_sammeln()
+        elif self.belohnung_offen:
+            # Im Nachschubmenue kommt nichts ins Spiel (seit 0.34.100): die
+            # Zahlen 1-7 waehlen dort aus und wechselten vorher nebenbei
+            # die Waffe, F schlug zu, G warf eine Granate.
+            self._knoepfe.clear()
+            self._waffe_wunsch = -1
+            self._rad = 0
         else:
             # Im Menue wird nicht gelaufen und nicht geschossen. Die Welt
             # laeuft trotzdem weiter - beim Gastgeber haengen alle Gaeste
@@ -5957,7 +5985,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
         if (self.schlacht and self.menue is None and not self.in_lobby and not self.vorbei
                 and ev.type == pygame.KEYDOWN and ev.key in self.app.opt.codes("inventar")):
             # TAB oeffnet in SCHLACHT den Nachschub (seit 0.34.96).
-            self.belohnung_offen = True
+            self.belohnung_oeffnen()
             return
         if self.menue is not None and self.versionsfehler is None and ev.type in (
                 pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEWHEEL):
@@ -6525,7 +6553,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
         if gast:
             self._fremde_fallende(ziel, misch)
         self._drohnen_zeichnen(ziel, misch)
-        if self.schlacht:
+        if self.schlacht or self.__dict__.get("nachschub_an"):
             self.ueberfluege_zeichnen(ziel)
             self.abwuerfe_zeichnen(ziel, misch)
         # Ziellinie und Streukegel nicht, solange man ein Medkit anlegt:
@@ -6757,7 +6785,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
             return True
 
     def _kreis_zeichnen(self, flaeche, ebene: int, ecke) -> None:
-        if self.schlacht:
+        if self.schlacht or self.__dict__.get("nachschub_an"):
             self.dropzonen_zeichnen(flaeche, ebene, ecke)
         self._zonenkreis_zeichnen(flaeche, ebene, ecke)
 
@@ -7036,7 +7064,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
         """Was Drohne und Horchposten markiert haben, haelt nur eine Weile
         (K.AUSRUESTUNG markiert). Bis 0.34.94 lief es im Gefecht nie ab -
         und wurde nirgends gezeigt."""
-        for k in self.kaempfer.values():
+        for k in list(self.kaempfer.values()) + list(getattr(self, "fahrzeuge", ())):
             rest = getattr(k, "markiert_rest", 0.0)
             if rest > 0.0:
                 k.markiert_rest = max(0.0, rest - dt)
@@ -7289,6 +7317,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
         Rauchwand nicht hinein.
         """
         belegt = []
+        # Markierte Fahrzeuge (seit 0.34.100): dieselbe Raute, hoeher, und sie
+        # faehrt mit - auch im Nebel.
+        for b in getattr(self, "fahrzeuge", ()):
+            if (int(getattr(b, "ebene", 0)) == self.blick and not getattr(b, "kaputt", False)
+                    and self.fahrzeug_fuer_mich_markiert(b)):
+                m = self.kamera.zu_bild(b.pos)
+                if 0 <= m.x <= K.GAME_W and 0 <= m.y <= K.GAME_H:
+                    x, y = int(m.x), int(m.y) - 36
+                    raute = [(x, y - 5), (x + 5, y), (x, y + 5), (x - 5, y)]
+                    pygame.draw.polygon(ziel, (16, 11, 8), [(a, c + 1) for a, c in raute])
+                    pygame.draw.polygon(ziel, K.C_RED, raute)
         for k in self.kaempfer.values():
             if not k.lebt or k.ebene != self.blick:
                 continue
@@ -7307,7 +7346,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                 continue                # im Nebel steht auch kein Name
             if k is not self.ich and self._ist_mitfahrer(k):
                 continue                # hinten auf dem Wagen: der Fahrer steht dort
-            p = self.kamera.zu_bild(k.pos)
+            # Am Fallschirm (seit 0.34.100) steht der Name bei der Figur oben,
+            # nicht bei ihrem Schatten.
+            p = self.kamera.zu_bild(k.pos - pygame.Vector2(
+                0, getattr(k, "schirm_hoehe", 0.0) * K.SCHLACHT["abwurf"]["bild_hub"]))
             if not (0 <= p.x <= K.GAME_W and 0 <= p.y <= K.GAME_H):
                 continue
             eigen = (k is self.ich)
