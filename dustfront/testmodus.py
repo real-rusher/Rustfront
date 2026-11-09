@@ -1046,8 +1046,10 @@ class Testmodus(Gefecht):
             # Die zweite aus den Waffen der Bots (seit 0.34.62): mit den
             # neuen in der Auswahl hielt ein Bot sonst oft eine, mit der er
             # nicht umgehen kann - und jede Szene mit festem Seed lief anders.
+            from .bots import bot_waffen_gewichten
             andere = [x for x in K.BOTS["waffen"] if x != w["waffe"]]
-            lo = {"name": "BOT", "waffen": [w["waffe"], self._bot_rnd.choice(andere)],
+            zweite = bot_waffen_gewichten([w["waffe"], self._bot_rnd.choice(andere)], self._bot_rnd)[1]
+            lo = {"name": "BOT", "waffen": [w["waffe"], zweite],
                   "wuerfe": ["granate"]}
             k.loadout = lo
             k.waffen = konto_modul.hotbar_aus_loadout(lo)

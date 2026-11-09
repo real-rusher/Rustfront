@@ -1183,10 +1183,51 @@ def fahrzeug_bots():
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
          planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
          panzer_bot, spuren, feuer_umweg, fahrzeug_bots]
-NUR = sys.argv[1:]
-for teil in TEILE:
-    if not NUR or teil.__name__ in NUR:
-        teil()
+#
+# Ohne Angabe laufen die Szenen seit 0.34.94 gleichzeitig, je eine in einem
+# eigenen Prozess, so viele wie Kerne da sind (hoechstens TEILE). Jede
+# Szene setzt ihren Zufall selbst (neu(seed)), haengt also nicht davon ab,
+# was vorher lief - das Ergebnis ist dasselbe wie nacheinander, nur in
+# einem Drittel der Zeit. --seriell laesst sie wie frueher nacheinander
+# laufen (zum Vergleichen, oder wo es nur einen Kern gibt).
+
+
+def _alle_gleichzeitig():
+    import ast
+    import subprocess
+    from concurrent.futures import ThreadPoolExecutor
+
+    def eine(teil):
+        lauf = subprocess.run([sys.executable, os.path.abspath(__file__), teil.__name__],
+                              capture_output=True, text=True)
+        text = lauf.stdout
+        fehler = []
+        for zeile in reversed(text.splitlines()):
+            if zeile.startswith("FEHLER:"):
+                rest = zeile[len("FEHLER:"):].strip()
+                fehler = [] if rest == "keine" else ast.literal_eval(rest)
+                break
+        else:
+            fehler = ["%s: abgebrochen (Rueckgabe %s)" % (teil.__name__, lauf.returncode)]
+            text += lauf.stderr[-2000:]
+        return text, fehler
+
+    with ThreadPoolExecutor(max_workers=max(1, min(len(TEILE), os.cpu_count() or 1))) as pool:
+        ergebnisse = list(pool.map(eine, TEILE))
+    for text, fehler in ergebnisse:
+        # Nur die Pruefungen der Szene, nicht ihr eigenes Schlusswort.
+        print("\n".join(z for z in text.splitlines()
+                        if not z.startswith("FEHLER:") and not z.startswith("pygame")).rstrip())
+        fails.extend(fehler)
+
+
+NUR = [a for a in sys.argv[1:] if not a.startswith("--")]
+if not NUR and "--seriell" not in sys.argv and (os.cpu_count() or 1) > 1:
+    _alle_gleichzeitig()
+else:
+    for teil in TEILE:
+        if not NUR or teil.__name__ in NUR:
+            teil()
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -11286,6 +11286,8 @@ if _alt_touch82 is not None:
 # Auto und so weiter einbaust, sodass es wirklich ueberall drin ist"
 # 0.34.34: "Entfern mal das 3D-Rendering bei Figuren, das ist doch nicht
 # so gut." Figuren sind wieder flach; Buggy und Beute behalten ihre Hoehe.
+# 0.34.94: "Deaktivier 3d rendering bei fahrzeugen" - nur noch die Beute
+# steht in 3D; die Rechnung selbst wird mit einer festen Hoehe geprueft.
 print("\n-- 3D nur fuer Gegenstaende, Figuren flach (0.34.25, 0.34.34)")
 from dustfront.render import Renderer as _R83
 from dustfront.entities import (Spieler as _Sp83, Gegner as _Gg83,
@@ -11293,8 +11295,8 @@ from dustfront.entities import (Spieler as _Sp83, Gegner as _Gg83,
 from dustfront.fahrzeug import Buggy as _Bg83
 from dustfront.mehrspieler import Kaempfer as _Kae83
 _f83 = K.FIGUREN_3D
-pruef("Buggy und Beute haben eine Hoehe; Spieler, Bots und Geschosse nicht",
-      _Bg83.hoehe_3d > 0 and _Auf83.hoehe_3d > 0
+pruef("Die Beute hat eine Hoehe; Fahrzeuge (seit 0.34.94), Spieler, Bots und Geschosse nicht",
+      _Bg83.hoehe_3d == 0.0 and _Auf83.hoehe_3d > 0
       and _Sp83.hoehe_3d == 0.0 and _Kae83.hoehe_3d == 0.0 and _Gg83.hoehe_3d == 0.0
       and EN.Geschoss.hoehe_3d == 0.0,
       "%s %s %s %s" % (_Sp83.hoehe_3d, _Bg83.hoehe_3d, _Auf83.hoehe_3d, _Kae83.hoehe_3d))
@@ -11321,7 +11323,8 @@ def _zeichne83(hoehe, p):
 _rot83, _seite83 = _zeichne83(0, (20, 20))
 pruef("Ohne Hoehe: das Bild genau an seiner Stelle, ohne Seitenwand",
       not _seite83 and abs(sum(x for x, _ in _rot83) / len(_rot83) - 20) < 1, "")
-_rot83, _seite83 = _zeichne83(_f83["buggy"], (20, 20))
+_h83 = 11.0                          # die Hoehe, die der Buggy bis 0.34.93 hatte
+_rot83, _seite83 = _zeichne83(_h83, (20, 20))
 _mx83 = sum(x for x, _ in _rot83) / len(_rot83)
 _my83 = sum(y for _, y in _rot83) / len(_rot83)
 pruef("Am Rand oben links: der Deckel rueckt von der Mitte weg, nach oben links",
@@ -11329,7 +11332,7 @@ pruef("Am Rand oben links: der Deckel rueckt von der Mitte weg, nach oben links"
 pruef("... und darunter steht eine dunklere Seitenwand in der Farbe der Figur",
       len(_seite83) > 10 and all(_z83.get_at(q)[1] < 60 for q in _seite83[:20]),
       "%d Pixel" % len(_seite83))
-_rot83, _seite83 = _zeichne83(_f83["buggy"], (100, 100))
+_rot83, _seite83 = _zeichne83(_h83, (100, 100))
 pruef("In der Bildmitte sieht man genau von oben: keine Seite, kein Versatz",
       not _seite83 and abs(sum(x for x, _ in _rot83) / len(_rot83) - 100) < 1,
       "%d Seitenpixel" % len(_seite83))
@@ -11346,7 +11349,7 @@ pruef("... und ist nur so gross wie ihr Umriss (Tempo)",
       _sw83.get_width() <= 14 and _sw83.get_height() <= 14, str(_sw83.get_size()))
 _sw83b, _ = _r83._seite(_gross83, 1.0)
 pruef("... und wird je Bild nur einmal gebaut", _sw83b is _sw83, "")
-_rot83, _ = _zeichne83(_f83["buggy"], (20, 20))
+_rot83, _ = _zeichne83(_h83, (20, 20))
 pruef("Die Quelle bleibt danach nicht gesperrt (sonst Absturz beim Blitten)",
       not _b83.get_locked(), "")
 
@@ -16085,6 +16088,24 @@ if _arten192:
     pruef("Nach dem Benutzen steht im Kreis der Faehigkeit ein grauer Countdown statt der Taste",
           (150, 146, 140) in _grau192 and tuple(K.C_TEAL) not in _grau192, str(set(_grau192)))
 _w192.verlassen(); _g192.verlassen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Bots selten mit MG, Fahrzeuge flach (0.34.94)")
+from dustfront import bots as _BO194
+_r194 = random.Random(194)
+_lo194 = [_BO194.bot_loadout(_r194)["waffen"] for _ in range(600)]
+_mg194 = sum(1 for w_ in _lo194 if "lmg" in w_) / float(len(_lo194))
+pruef("Bots ziehen das MG nur selten (unter 10 Prozent der Saetze, vorher 40)", _mg194 < 0.10,
+      "%.0f %%" % (_mg194 * 100))
+pruef("... und immer zwei verschiedene Waffen", all(len(set(w_)) == 2 for w_ in _lo194))
+_ra194, _rb194 = random.Random(7), random.Random(7)
+_BO194.bot_loadout(_ra194)
+_rb194.sample(list(K.BOTS["waffen"]), 2)                    # genau, was es vorher zog
+_rb194.choice([w_ for w_ in K.BOTS["wurf_arten"] if w_ != "c4"])
+pruef("Das Gewichten dreht den Zufall der Bots nicht weiter (feste Szenen bleiben, wie sie waren)",
+      _ra194.getstate() == _rb194.getstate())
+from dustfront.fahrzeug import Buggy as _Bg194, Panzer as _Pz194, Panzerwagen as _Pw194
+pruef("Fahrzeuge stehen flach (kein 3D)", _Bg194.hoehe_3d == _Pz194.hoehe_3d == _Pw194.hoehe_3d == 0.0)
 
 print()
 print("FEHLER:", fails or "keine")

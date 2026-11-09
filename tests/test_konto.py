@@ -132,9 +132,13 @@ sauber = konto_modul.loadout_saeubern(
 pruef("Doppelte, unbekannte und zu viele Waffen fliegen raus, je Platz eine",
       sauber["waffen"] == ["sturm", "repetierer"]
       and sauber["wuerfe"] == ["rauch"], str(sauber))
-pruef("Der Name wird gesaeubert und gekuerzt",
-      sauber["name"] == "MEIN SATZ" and len(sauber["name"]) <= lo["namenslaenge"],
+# Seit 0.34.94 sind die Zeichen frei, soweit die Schrift sie zeigen kann.
+pruef("Der Name wird gesaeubert (gross, ohne Rand) und gekuerzt",
+      sauber["name"] == "MEIN SATZ!!" and len(sauber["name"]) <= lo["namenslaenge"],
       sauber["name"])
+_lang = konto_modul.loadout_saeubern({"name": "x" * 40 + "\u2603", "waffen": [], "wuerfe": []})
+pruef("... ein zu langer Name wird gekuerzt, was die Schrift nicht kann, faellt heraus",
+      _lang["name"] == "X" * lo["namenslaenge"], _lang["name"])
 leer = konto_modul.loadout_saeubern({"name": "", "waffen": [], "wuerfe": []})
 pruef("Ein leeres wird aufgefuellt statt abgelehnt",
       len(leer["waffen"]) == lo["waffen"] and len(leer["wuerfe"]) == lo["wuerfe"],
@@ -202,6 +206,21 @@ kt = konto_modul.Konto(ablage_=abl, ordner=ordner_k, mit_faden=False)
 pruef("Ohne Anmeldung ist niemand angemeldet", not kt.angemeldet)
 pruef("Trotzdem stehen drei Loadouts bereit",
       len(kt.loadouts) == lo["plaetze"])
+# Seit 0.34.94 beliebig viele: dazu, wegnehmen, der letzte bleibt.
+_n94 = kt.loadout_neu()
+pruef("Ein neuer Satz kommt dazu und ist gleich gewaehlt",
+      len(kt.loadouts) == lo["plaetze"] + 1 and kt.gewaehlt == _n94 == lo["plaetze"], str(len(kt.loadouts)))
+for _ in range(10):
+    kt.loadout_neu()
+pruef("... und es gehen mehr als die drei vom Anfang (hier 14)", len(kt.loadouts) == 14, str(len(kt.loadouts)))
+pruef("Sie bleiben beim Saeubern alle erhalten (ein Profil mit 14 Saetzen)",
+      len(konto_modul.loadouts_saeubern(list(kt.loadouts))) == 14)
+while len(kt.loadouts) > 1:
+    kt.loadout_loeschen(len(kt.loadouts) - 1)
+pruef("Saetze lassen sich loeschen, der letzte bleibt",
+      not kt.loadout_loeschen(0) and len(kt.loadouts) == 1 and kt.gewaehlt == 0)
+kt.loadouts = konto_modul.loadouts_saeubern([])
+kt.gewaehlt = 0
 pruef("Und die Anmeldemaske sagt, wo das Konto gilt",
       "RECHNER" in kt.beschreibung(), kt.beschreibung())
 

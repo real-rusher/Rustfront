@@ -541,9 +541,11 @@ class Anzeige:
                 namen += " [%s]" % (g._tastenname("werkzeug")[:1]
                                     if hasattr(g, "_tastenname") else "X")
             # Links buendig ueber dem Kreis: so liegt er nie auf der Karte.
-            _text(ziel, ui.kuerzen(namen, W // 2 - 60 - (mitte[0] - r)), mitte[0] - r,
-                  mitte[1] - r - h["bogen_abstand"] - h["bogen_dicke"] - 10,
-                  K.C_TEAL if r0 <= 0.0 else K.C_MUTED_DK)
+            # Seit 0.34.94 in Bernstein (wie die Hotbar) und ein Stueck nach
+            # rechts oben - gewuenscht.
+            _text(ziel, ui.kuerzen(namen, W // 2 - 60 - (mitte[0] - r)), mitte[0] - r + 4,
+                  mitte[1] - r - h["bogen_abstand"] - h["bogen_dicke"] - 12,
+                  K.C_AMBER if r0 <= 0.0 else K.C_MUTED_DK)
         else:
             _text(ziel, "-", mitte[0], mitte[1] - 3, K.C_MUTED_DK, 1, "mitte")
         # Dash: die Ladungen als Bogen, die naechste fuellt sich.
@@ -569,12 +571,23 @@ class Anzeige:
         else:
             n = len(ich.waffen)
         r = self.hotbar_rechteck(n)
-        groesse = r.height + 2
+        groesse = K.HUD["extra_feld"]
         x = r.right + K.HUD["extra_abstand"]
-        raus = [("nahkampf", pygame.Rect(x, r.y - 1, groesse, groesse))]
+        y = r.bottom - groesse + 2
+        raus = [("nahkampf", pygame.Rect(x, y, groesse, groesse))]
         if g.start_medkits > 0 or g.medkits_spawnen or ich.medkits > 0:
-            raus.append(("medkit", pygame.Rect(x + groesse + 2, r.y - 1, groesse, groesse)))
+            raus.append(("medkit", pygame.Rect(x + groesse + 3, y, groesse, groesse)))
         return raus
+
+    def _passend(self, bild, r):
+        """Das Symbol so klein, dass es mit Rand ins Feld passt - nie groesser
+        als es ist (seit 0.34.94)."""
+        rand = K.HUD["extra_rand"]
+        platz_b, platz_h = r.width - 2 * rand, r.height - 2 * rand
+        if bild.get_width() <= platz_b and bild.get_height() <= platz_h:
+            return bild
+        return self._klein(bild, min(platz_b / float(bild.get_width()),
+                                     platz_h / float(bild.get_height())))
 
     def _extra_felder(self, ziel, ich) -> None:
         g = self.g
@@ -582,7 +595,7 @@ class Anzeige:
             if art == "nahkampf":
                 bereit = ich.nahkampf_rest <= 0.0
                 ui.kasten(ziel, r, K.C_MUTED_DK, KASTEN, 3)
-                sym = g.renderer.bilder.bild("waffe_brecheisen")
+                sym = self._passend(g.renderer.bilder.bild("waffe_brecheisen"), r)
                 ziel.blit(sym, (r.centerx - sym.get_width() // 2, r.centery - sym.get_height() // 2))
                 SCHRIFT.zeichnen(ziel, g._tastenname("nahkampf")[:1], r.x + 2, r.y + 2,
                                  K.C_AMBER if bereit else K.C_MUTED_DK, 1)
@@ -593,10 +606,7 @@ class Anzeige:
                 if ich.heilt_rest > 0:
                     fertig = 1.0 - ich.heilt_rest / K.MEDKIT["dauer"]
                     _balken(ziel, (r.x + 2, r.bottom - 4, r.width - 4, 2), fertig, K.C_TEAL)
-                sym = g.renderer.bilder.bild("medkit")
-                if sym.get_width() > r.width - 4 or sym.get_height() > r.height - 4:
-                    f = min((r.width - 4) / sym.get_width(), (r.height - 4) / sym.get_height())
-                    sym = self._klein(sym, f)
+                sym = self._passend(g.renderer.bilder.bild("medkit"), r)
                 if not da:
                     sym = self._blass(sym)
                 ziel.blit(sym, (r.centerx - sym.get_width() // 2, r.centery - sym.get_height() // 2))
@@ -697,7 +707,8 @@ class Anzeige:
         hx, hy = rahmen_ganz.x, rahmen_ganz.y
         titel = self._hotbar_titel(ich)
         if titel:
-            _text(ziel, titel, W // 2, hy - 10, K.C_MUTED_DK, 1, "mitte")
+            # 12 statt 10 ueber der Hotbar (seit 0.34.94, gewuenscht).
+            _text(ziel, titel, W // 2, hy - 12, K.C_MUTED_DK, 1, "mitte")
         for i, name in enumerate(ich.waffen):
             aktiv = (i == ich.waffe)
             r = pygame.Rect(hx + i * (bw + luecke), hy - (2 if aktiv else 0),

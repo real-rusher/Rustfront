@@ -88,8 +88,10 @@ def loadout_saeubern(roh) -> dict | None:
     if not isinstance(roh, dict):
         return None
     lo = K.LOADOUT
+    # Seit 0.34.94 frei: jedes Zeichen, das die Schrift zeigen kann.
+    from .font import darstellbar
     name = "".join(c for c in str(roh.get("name", "")).strip().upper()
-                   if c.isalnum() or c in " -_")[:lo["namenslaenge"]]
+                   if c.isprintable() and darstellbar(c))[:lo["namenslaenge"]].strip()
     # Die Klasse (seit 0.34.73): "" ist FREI wie bisher. Sie bestimmt,
     # woraus gewaehlt werden darf - was nicht zu ihr passt, faellt heraus.
     klasse = roh.get("klasse", "")
@@ -138,13 +140,14 @@ def loadouts_saeubern(roh) -> list[dict]:
     """Die Liste auf die richtige Laenge bringen, ohne etwas zu verlieren."""
     liste = []
     if isinstance(roh, list):
-        for eintrag in roh[:K.LOADOUT["plaetze"]]:
+        # Seit 0.34.94 so viele, wie es sind (hoechstens K.LOADOUT
+        # hoechstens). Aufgefuellt wird nur ein leeres Profil.
+        for eintrag in roh[:K.LOADOUT["hoechstens"]]:
             sauber = loadout_saeubern(eintrag)
             if sauber is not None:
                 liste.append(sauber)
-    vorlagen = loadout_vorlagen()
-    while len(liste) < K.LOADOUT["plaetze"]:
-        liste.append(vorlagen[len(liste) % len(vorlagen)])
+    if not liste:
+        liste = loadout_vorlagen()
     return liste
 
 
@@ -671,13 +674,36 @@ class Konto:
 
     def loadout_setzen(self, platz: int, lo: dict) -> dict:
         """Ein Loadout aendern und ablegen. Gibt das Ergebnis zurueck."""
-        platz = max(0, min(K.LOADOUT["plaetze"] - 1, int(platz)))
+        platz = max(0, min(len(self.loadouts), K.LOADOUT["hoechstens"] - 1, int(platz)))
         sauber = loadout_saeubern(lo) or loadout_vorlagen()[0]
         while len(self.loadouts) <= platz:
             self.loadouts.append(loadout_vorlagen()[0])
         self.loadouts[platz] = sauber
         self.profil_sichern()
         return sauber
+
+    def loadout_neu(self) -> int:
+        """Einen Satz dazu (seit 0.34.94): eine Kopie des gewaehlten, mit
+        neuem Namen, und gleich gewaehlt. Gibt seine Nummer zurueck."""
+        if len(self.loadouts) >= K.LOADOUT["hoechstens"]:
+            return self.gewaehlt
+        neu = dict(self.loadout)
+        neu["name"] = "SATZ %d" % (len(self.loadouts) + 1)
+        nr = len(self.loadouts)
+        self.loadout_setzen(nr, neu)
+        self.loadout_waehlen(nr)
+        return nr
+
+    def loadout_loeschen(self, platz: int) -> bool:
+        """Einen Satz weg (seit 0.34.94) - der letzte bleibt immer."""
+        if len(self.loadouts) <= 1 or not 0 <= int(platz) < len(self.loadouts):
+            return False
+        del self.loadouts[int(platz)]
+        if self.gewaehlt >= len(self.loadouts) or self.gewaehlt > int(platz):
+            self.gewaehlt = max(0, self.gewaehlt - 1)
+        self.profil_sichern()
+        self.sitzung_speichern()
+        return True
 
     def loadout_waehlen(self, platz: int) -> dict:
         self.gewaehlt = max(0, min(len(self.loadouts) - 1, int(platz)))

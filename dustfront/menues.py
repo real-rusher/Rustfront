@@ -1302,8 +1302,9 @@ class Ausruestung(Menue):
     def __init__(self, app, danach=None) -> None:
         # 236 -> 280 (seit 0.34.73): eine Zeile fuer die Klasse und eine
         # fuer das, was sie kann.
-        # 280 -> 300 (seit 0.34.91): Platz fuer die dritte Waffenzeile.
-        self.tafel = _mitte(22 + self.LINKS + 18 + self.VORSCHAU + 14, 300)
+        # 280 -> 300 (seit 0.34.91): Platz fuer die dritte Waffenzeile;
+        # 300 -> 324 (seit 0.34.94) fuer die Zeile NAME.
+        self.tafel = _mitte(22 + self.LINKS + 18 + self.VORSCHAU + 14, 324)
         self.danach = danach
         super().__init__(app)
 
@@ -1318,14 +1319,20 @@ class Ausruestung(Menue):
         satz = konto.loadout
         bx, bw = r.x + 22, self.LINKS
         y = r.y + 54
+        # Beliebig viele Saetze (seit 0.34.94): die Wahl geht ueber alle,
+        # darunter der Name zum Selbertippen.
+        from .font import darstellbar
         self.elemente = [
             ui.Wahl((bx, y, bw, 16), "SATZ", "satz",
-                    [str(i) for i in range(lo["plaetze"])],
-                    konto.gewaehlt,
+                    [str(i) for i in range(len(konto.loadouts))],
+                    max(0, min(len(konto.loadouts) - 1, konto.gewaehlt)),
                     {str(i): "%d - %s" % (i + 1, konto.loadouts[i]["name"])
                      for i in range(len(konto.loadouts))}),
+            ui.Textfeld((bx, y + 22, bw, 16), "NAME", "satzname", satz["name"],
+                        laenge=lo["namenslaenge"], label_breite=96,
+                        erlaubt=lambda c: c.isprintable() and darstellbar(c)),
         ]
-        y += 24
+        y += 46
         # Die Klasse (seit 0.34.73): sie bestimmt, woraus die Waffen und
         # die Wurfwaffe gewaehlt werden.
         from . import klassen as klassen_modul
@@ -1369,8 +1376,13 @@ class Ausruestung(Menue):
         self.elemente.append(ui.Wahl(
             (bx, y, bw, 16), "AUSSEHEN", "aussehen", aussehen,
             aussehen.index(jetzt), {k: figuren.name_zeigen(k) for k in aussehen}))
-        self.elemente.append(
-            ui.Knopf((bx, r.bottom - 40, bw, 20), "FERTIG", "fertig"))
+        drittel = (bw - 8) // 3
+        self.elemente += [
+            ui.Knopf((bx, r.bottom - 40, drittel, 20), "NEUER SATZ", "neu"),
+            ui.Knopf((bx + drittel + 4, r.bottom - 40, drittel, 20), "LÖSCHEN", "loeschen"),
+            ui.Knopf((bx + 2 * (drittel + 4), r.bottom - 40, drittel, 20), "FERTIG", "fertig"),
+        ]
+        self.elemente[-2].gesperrt = len(konto.loadouts) <= 1
 
     def geaendert(self, el) -> None:
         """Jede Aenderung wirkt sofort und wird sofort abgelegt.
@@ -1393,6 +1405,8 @@ class Ausruestung(Menue):
         waffen, wuerfe = [], []
         klasse = ""
         for e in self.elemente:
+            if isinstance(e, ui.Textfeld):
+                continue
             if e.name.startswith("waffe"):
                 waffen.append(e.wert)
             elif e.name.startswith("wurf"):
@@ -1417,7 +1431,53 @@ class Ausruestung(Menue):
         if sauber != waffen:
             self.aufbauen()
 
+    # ---- Der Name (seit 0.34.94) ----------------------------------------
+    def _namensfeld(self):
+        return next((e for e in self.elemente if isinstance(e, ui.Textfeld)), None)
+
+    def taste(self, ev) -> None:
+        """Steht die Wahl auf NAME, geht die Tastatur zuerst ans Feld - sonst
+        waehlte jedes w eine Zeile weiter oben (wie in der Anmeldung)."""
+        feld = self._namensfeld()
+        if feld is not None and self.gewaehlt() is feld:
+            if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.wahl_schieben(1)
+                return
+            if feld.tippen(ev):
+                self._name_sichern(feld.wert)
+                return
+        super().taste(ev)
+
+    def _name_sichern(self, name: str) -> None:
+        konto = self.konto
+        alt = dict(konto.loadout)
+        alt["name"] = name
+        konto.loadout_setzen(konto.gewaehlt, alt)
+        # Nur die Satzwahl neu beschriften - das Feld behaelt, was getippt
+        # wird (auch ein Leerzeichen am Ende).
+        for e in self.elemente:
+            if e.name == "satz" and isinstance(e, ui.Wahl):
+                e.anzeige = {str(i): "%d - %s" % (i + 1, konto.loadouts[i]["name"])
+                           for i in range(len(konto.loadouts))}
+
+    def schritt(self, dt: float) -> None:
+        super().schritt(dt)
+        feld = self._namensfeld()
+        if feld is not None:
+            feld.aktiv = self.gewaehlt() is feld
+            feld.schritt(dt)
+
     def ausloesen(self, el) -> None:
+        if el.name == "neu":
+            self.konto.loadout_neu()
+            self.aufbauen()
+            self.wahl = next(i for i, e in enumerate(self.elemente) if e.name == "satzname")
+            return
+        if el.name == "loeschen":
+            if self.konto.loadout_loeschen(self.konto.gewaehlt):
+                self.aufbauen()
+                self.wahl = 0
+            return
         if el.name == "fertig":
             self.konto.loadout_bestaetigen()
             naechste, self.danach = self.danach, None

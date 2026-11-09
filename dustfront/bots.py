@@ -117,6 +117,28 @@ def bot_aussehen(name: str) -> str:
     return random.Random(name).choice(soldaten) if soldaten else ""
 
 
+def bot_waffen_gewichten(waffen: list, rnd) -> list:
+    """Eine Waffe mit Gewicht unter 1 (K.BOTS waffen_gewicht: das MG) bleibt
+    nur mit dieser Wahrscheinlichkeit, sonst kommt eine andere aus
+    K.BOTS["waffen"], die er noch nicht hat.
+
+    Gewuerfelt wird mit einem eigenen Zufall, der aus dem Stand von `rnd`
+    abgeleitet ist, ohne ihn weiterzudrehen (seit 0.34.94): der Zufall der
+    Bots (Merkmale, Namen, Aufstellung) bleibt so genau, wie er war, und
+    dieselbe Szene ergibt dieselben Waffen - egal, was vorher lief."""
+    gewicht = K.BOTS["waffen_gewicht"]
+    zufall = random.Random(hash(rnd.getstate()[1][:24]))
+    raus = list(waffen)
+    for i, w in enumerate(raus):
+        if zufall.random() < float(gewicht.get(w, 1.0)):
+            continue
+        andere = [x for x in K.BOTS["waffen"] if x not in raus
+                  and float(gewicht.get(x, 1.0)) >= 1.0]
+        if andere:
+            raus[i] = andere[zufall.randrange(len(andere))]
+    return raus
+
+
 def bot_loadout(rnd, fest=None) -> dict:
     """Ein Loadout fuer einen Bot: zwei verschiedene Waffen und eine
     Granate (K.BOTS["wurf_arten"]) - oder das vorgegebene ("eines fuer
@@ -134,7 +156,7 @@ def bot_loadout(rnd, fest=None) -> dict:
     # Seitenwaffe gelten fuer die Saetze der Spieler): mit der Pistole als
     # zweiter Waffe hielten sie im Feuerschutz messbar schlechter nieder -
     # ihre KI ist auf zwei Hauptwaffen abgestimmt (tests/test_verhalten.py).
-    waffen = rnd.sample(list(K.BOTS["waffen"]), 2)
+    waffen = bot_waffen_gewichten(rnd.sample(list(K.BOTS["waffen"]), 2), rnd)
     return {"name": "BOT", "waffen": waffen, "wuerfe": [rnd.choice(wuerfe)]}
 
 

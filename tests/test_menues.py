@@ -541,8 +541,28 @@ pruef("AUSRUESTUNG oeffnet sich", isinstance(aus, M.Ausruestung))
 waehler = [el.name for el in aus.elemente]
 # Seit 0.34.73 steht die Klasse zwischen Satz und Waffen, seit 0.34.91
 # heissen die Waffenzeilen nach ihrem Platz.
-pruef("Ein Satz, eine Klasse, Haupt- und Seitenwaffe, eine Wurfwaffe",
-      waehler[:5] == ["satz", "klasse", "waffe0", "waffe1", "wurf0"], str(waehler))
+# Seit 0.34.94 mit dem Namen des Satzes zum Selbertippen.
+pruef("Ein Satz, sein Name, eine Klasse, Haupt- und Seitenwaffe, eine Wurfwaffe",
+      waehler[:6] == ["satz", "satzname", "klasse", "waffe0", "waffe1", "wurf0"], str(waehler))
+pruef("... und Knoepfe fuer einen neuen Satz und zum Loeschen",
+      "neu" in waehler and "loeschen" in waehler, str(waehler))
+_n_vor = len(app.konto.loadouts)
+_gew_vor = app.konto.gewaehlt
+aus.ausloesen(next(el for el in aus.elemente if el.name == "neu"))
+_feld = next(el for el in aus.elemente if el.name == "satzname")
+pruef("NEUER SATZ legt einen an, waehlt ihn und stellt die Wahl auf seinen Namen",
+      len(app.konto.loadouts) == _n_vor + 1 and app.konto.gewaehlt == _n_vor
+      and aus.gewaehlt() is _feld, "%d Saetze" % len(app.konto.loadouts))
+_feld.wert = ""
+for _z in "Wüste #2!":  # "#" kann die Schrift nicht - faellt heraus
+    aus.taste(pygame.event.Event(pygame.KEYDOWN, key=0, unicode=_z, mod=0))
+pruef("Der Name ist frei waehlbar - getippt, gross, sofort im Konto (auch w und s gehen ins Feld)",
+      app.konto.loadout["name"] == "WÜSTE 2!", app.konto.loadout["name"])
+aus.ausloesen(next(el for el in aus.elemente if el.name == "loeschen"))
+pruef("LÖSCHEN nimmt ihn wieder weg", len(app.konto.loadouts) == _n_vor, str(len(app.konto.loadouts)))
+app.konto.loadout_waehlen(_gew_vor)
+aus.aufbauen()
+waehler = [el.name for el in aus.elemente]
 w0 = next(el for el in aus.elemente if el.name == "waffe0")
 w1 = next(el for el in aus.elemente if el.name == "waffe1")
 pruef("... die erste Zeile ist die Hauptwaffe, die zweite die Seitenwaffe",

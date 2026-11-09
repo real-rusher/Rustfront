@@ -78,7 +78,7 @@ in `wesen/*.txt`, nicht in den Code.
 ```
 pip install pygame-ce
 python tests/test_spiel.py      # endet mit "FEHLER: keine"
-python tests/test_verhalten.py  # ganze Szenen: was die Bots tun (seit 0.34.52)
+python tests/test_verhalten.py  # ganze Szenen: was die Bots tun (seit 0.34.52; gleichzeitig auf allen Kernen, --seriell nacheinander)
 python tests/test_menues.py
 python -m dustfront --kontoseite && python tests/test_konto.py
 python tests/test_pruefung.py   # Syntax aller Dateien, Karten, Aufzuege

@@ -1209,18 +1209,19 @@ function seiteAusruestung(ziel){
   ziel.appendChild(t);
 }
 
-// Immer so viele Saetze, wie K.LOADOUT vorsieht - fehlende werden aus
-// den Vorlagen aufgefuellt. So steht die Maske nie halb leer da, und
-// was gespeichert wird, passt zu dem, was das Spiel erwartet.
+// Alle Saetze, die das Profil hat - wenigstens so viele, wie K.LOADOUT
+// vorsieht (fehlende aus den Vorlagen). Seit 0.34.94 kann man im Spiel
+// beliebig viele anlegen; die Seite darf beim Speichern keinen verlieren,
+// und auch nichts, was sie selbst nicht bearbeitet (Klasse, dritte Waffe).
 function holeLoadouts(){
   const L = DATEN.loadout;
   const da = Array.isArray(Stand.profil.loadouts) ? Stand.profil.loadouts : [];
   const aus = [];
-  for (let i = 0; i < L.plaetze; i++){
+  for (let i = 0; i < Math.max(L.plaetze, da.length); i++){
     const v = L.vorlagen[i % L.vorlagen.length];
     const s = da[i] || {};
     const waffen = [], wuerfe = [];
-    for (let j = 0; j < L.waffen; j++){
+    for (let j = 0; j < Math.max(L.waffen, (s.waffen || []).length); j++){
       const w = (s.waffen || [])[j];
       waffen.push(L.auswahl_waffen.includes(w) ? w : v.waffen[j % v.waffen.length]);
     }
@@ -1228,8 +1229,8 @@ function holeLoadouts(){
       const w = (s.wuerfe || [])[j];
       wuerfe.push(L.auswahl_wuerfe.includes(w) ? w : v.wuerfe[j % v.wuerfe.length]);
     }
-    aus.push({name: String(s.name || v.name).toUpperCase().slice(0, L.namenslaenge),
-              waffen, wuerfe});
+    aus.push(Object.assign({}, s, {name: String(s.name || v.name).toUpperCase().slice(0, L.namenslaenge),
+              waffen, wuerfe}));
   }
   return aus;
 }

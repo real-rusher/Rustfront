@@ -97,6 +97,16 @@ _PUNKTE = {"\u00c4": "A", "\u00d6": "O", "\u00dc": "U"}
 UEBER = 2        # so viele Pixel (mal Skala) ragen die Punkte nach oben
 
 
+def darstellbar(zeichen: str) -> bool:
+    """Kann die Pixelschrift dieses Zeichen zeigen (nach dem Grossschreiben)?
+    Seit 0.34.94 fuer frei gewaehlte Namen: alles, was hier nicht als "?"
+    erschiene."""
+    if zeichen == " ":
+        return True
+    t = Schrift.vorbereiten(zeichen)
+    return all(c == " " or c in _G or c in _PUNKTE for c in t)
+
+
 class Schrift:
     def __init__(self) -> None:
         self._rows = {k: v.split("/") for k, v in _G.items()}

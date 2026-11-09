@@ -1656,6 +1656,9 @@ BOTS = dict(
     # nicht umgehen - und ein Bot mit einem Granatwerfer, den er nie
     # benutzt, waere nur ein Bot mit einer Waffe weniger.
     waffen=("repetierer", "sturm", "schrot", "scharf", "lmg"),
+    # Wie oft eine davon gezogen wird (seit 0.34.94, Vorgabe 1): das MG nur
+    # selten - gewuenscht, ein Trupp voller MGs sah nicht gut aus.
+    waffen_gewicht=dict(lmg=0.1),
     nahkampf_ab=34.0,         # so nah, dann schlaegt er mit dem Brecheisen
     wurf_pause=(10.0, 18.0),  # zwischen zwei Wuerfen
     wurf_weite=(90.0, 230.0),
@@ -1957,6 +1960,10 @@ TRUPP = dict(
     fuehrer_loadout=dict(waffen=["repetierer"], wuerfe=["rauch"]),
     # GEMISCHT im Spawner: die ersten Leute bekommen diese Waffen, der Rest
     # das Sturmgewehr - damit jede Rolle (8.4) einmal da ist.
+    # Das MG bleibt hier (0.34.94 geprueft): der eine MG-Schuetze haelt
+    # nieder, ohne ihn standen grosse Trupps dichter (test_verhalten,
+    # grosse_trupps). Sonst ziehen Bots das MG nur noch selten (BOTS
+    # waffen_gewicht).
     mischung=("lmg", "schrot", "scharf"),
     # Seit 0.34.41: Rundumverteidigung (Igel) und Engstellen.
     igel_ab=3,                # so viele Gegner muessen es mindestens sein
@@ -2513,7 +2520,8 @@ HOEHEN = dict(
 # Bosse) sind wieder flach - gemeldet: "das ist doch nicht so gut".
 FIGUREN_3D = dict(
     an=True,
-    buggy=11.0,
+    # Fahrzeuge flach (seit 0.34.94, gewuenscht): kein Aufbau in die Hoehe.
+    buggy=0.0,
     beute=4.0,                # Medkit und was sonst am Boden liegt
     seite_unten=0.45,         # Helligkeit der Seitenwand am Boden (x mittlere Farbe)
     seite_oben=0.85,          # ... und unter dem Deckel
@@ -4025,7 +4033,11 @@ HOTBAR_PLAETZE = 10
 # Beides muss es geben. "Alles" ist die Runde, in der man einfach spielt;
 # "eigenes" ist die, in der die Wahl der Waffe eine Wahl ist.
 LOADOUT = dict(
-    plaetze=3,                # so viele Loadouts kann man sich anlegen
+    # Mit so vielen Saetzen faengt ein Konto an. Seit 0.34.94 kann man
+    # beliebig viele dazu anlegen (gewuenscht) - `hoechstens` ist nur eine
+    # Grenze gegen ein Profil, das ins Unendliche waechst.
+    plaetze=3,
+    hoechstens=999,
     waffen=2,                 # Waffen eines Satzes ohne Klasse (Haupt + Seite, seit 0.34.91 je Klasse: KLASSEN plaetze)
     wuerfe=1,                 # so viele Wurfwaffen je Loadout
     # Woraus gewaehlt werden darf. Bewusst als eigene Listen und nicht
@@ -4062,7 +4074,7 @@ LOADOUT = dict(
         dict(name="NAHKAMPF", klasse="pionier", waffen=("schrot", "nagler", "einwegwerfer"),
              wuerfe=("granate",)),
     ),
-    namenslaenge=12,
+    namenslaenge=16,          # seit 0.34.94 16 statt 12, Zeichen frei (was die Schrift kann)
 )
 
 # ══════════════════════════════════════════════════ ZAHLEN, DIE MITLAUFEN
@@ -4221,6 +4233,8 @@ HUD = dict(
     faeh_d=30,                # Durchmesser des Kreises der Faehigkeit
     faeh_luft=14,             # Abstand zwischen Karte und Faehigkeit
     tafel_breite=300,         # die Tafel auf TAB
+    extra_feld=28,            # Kantenlaenge der Felder BRECHEISEN und MEDKIT (seit 0.34.94)
+    extra_rand=4,             # so viel Rand bleibt um ihr Symbol mindestens
     extra_abstand=10,         # Abstand der Felder BRECHEISEN und MEDKIT zur Hotbar (seit 0.34.93)
     waffe_zeigen=1.4,         # so lange steht nach dem Wechsel der Name am Zeiger (s)
 )
