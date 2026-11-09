@@ -15631,7 +15631,9 @@ w179._regeln_setzen(dict(w179.regelwerk, loadouts="eigenes", faehigkeiten=True))
 pruef("Mit Loadouts und an: ja", w179.faehigkeiten_an)
 w179.verlassen(); ga179.verlassen()
 pruef("Die Vorteile einer Klasse stehen als Text bereit (Menue AUSRUESTUNG)",
-      _KL73.vorteile("nahkaempfer") == ["+25% LEBEN", "+5% TEMPO"]
+      # Seit 0.34.99 (gewuenscht) dazu der Schlag auf F.
+      _KL73.vorteile("nahkaempfer") == ["+25% LEBEN", "+5% TEMPO", "+40% NAHKAMPFSCHADEN (F)",
+                                        "25% SCHNELLER ZUSCHLAGEN (F)"]
       and _KL73.vorteile("schuetze") == ["15% SCHNELLER NACHLADEN"]
       and _KL73.vorteile("") == [], str(_KL73.vorteile("nahkaempfer")))
 
@@ -16632,6 +16634,35 @@ w200._runde_neu()
 pruef("Nachschubpunkte gelten je Runde: die neue Runde beginnt bei 0",
       w200.ich.schlacht_punkte == 0, str(w200.ich.schlacht_punkte))
 w200.verlassen(); g200.verlassen()
+
+print("\n-- 0.34.99: Nahkampf und Klassen, alte Saetze mit Nahkampfwaffe im Platz")
+from dustfront import konto as _KO201, klassen as _KL201
+_alt201 = _KO201.loadout_saeubern({"name": "ALT", "klasse": "nahkaempfer",
+                                   "waffen": ["hammer", "schrot"], "wuerfe": ["rauch"]})
+pruef("Ein alter Satz mit dem Hammer im Waffenplatz: der Hammer liegt jetzt auf F",
+      _alt201.get("nahkampf") == "hammer" and "hammer" not in _alt201["waffen"], str(_alt201))
+pruef("... und der Platz ist wieder mit einer Waffe der Klasse belegt",
+      len(_alt201["waffen"]) == len(_KL201.plaetze_von("nahkaempfer"))
+      and all(w_ in _KL201.waffen_von("nahkaempfer") for w_ in _alt201["waffen"]), str(_alt201))
+_neu201 = _KO201.loadout_saeubern({"name": "N", "waffen": ["speer", "sturm"], "nahkampf": "schlagring"})
+pruef("Wer schon eine Waffe fuer F gewaehlt hat, behaelt sie", _neu201.get("nahkampf") == "schlagring")
+pruef("In keiner Klasse steht noch eine Nahkampfwaffe unter den Waffen",
+      not any(set(d_["waffen"]) & set(K.NAHKAMPF["waehlbar"]) for d_ in K.KLASSEN.values()))
+pruef("Der NAHKAEMPFER schlaegt haerter und schneller zu, und das Menue sagt es",
+      K.KLASSEN["nahkaempfer"]["nahkampf"] > 1.0 and K.KLASSEN["nahkaempfer"]["nahkampf_takt"] < 1.0
+      and any("NAHKAMPF" in z_ for z_ in _KL201.vorteile("nahkaempfer")), str(_KL201.vorteile("nahkaempfer")))
+w201, g201 = _paar59("team", karte="staubtal")
+_k201 = w201.ich
+_k201.nahkampf_waffe = "brecheisen"
+_k201.loadout = {"klasse": "nahkaempfer"}
+_KL201.anwenden(_k201)
+_k201.nahkampf_rest = 0.0
+_k201.schlag_zeigen = 0.0
+_k201.nahkampf()
+pruef("... die Pause nach dem Schlag ist kuerzer als beim Brecheisen ohne Klasse",
+      abs(_k201.nahkampf_rest - K.WAFFEN["brecheisen"]["takt"] * K.KLASSEN["nahkaempfer"]["nahkampf_takt"]) < 1e-6,
+      "%.3f" % _k201.nahkampf_rest)
+w201.verlassen(); g201.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

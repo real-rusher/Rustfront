@@ -76,6 +76,8 @@ def anwenden(k) -> None:
     k.fahrzeug_bonus = float(d.get("fahrzeug", 1.0))
     k.fahrzeug_schutz = float(d.get("fahrzeug_schutz", 1.0))
     k.aufhelf_faktor = float(d.get("aufhelfen", 1.0))
+    k.nahkampf_faktor = float(d.get("nahkampf", 1.0))
+    k.nahkampf_takt_faktor = float(d.get("nahkampf_takt", 1.0))
     k.schild = bool(d.get("schild", False)) or bool(getattr(k, "schild_fest", False))
     if d.get("medkits") and hasattr(k, "medkits"):
         k.medkits = max(k.medkits, K.MEDKIT.get("start", 1) + int(d["medkits"]))
@@ -96,6 +98,8 @@ _VORTEIL_TEXTE = (
     ("kuehlen", "SCHNELLER ABKÜHLEN", "kleiner"),
     ("feuer", "WENIGER FEUERSCHADEN", "kleiner"),
     ("aufhelfen", "SCHNELLER AUFHELFEN", "kleiner"),
+    ("nahkampf", "NAHKAMPFSCHADEN (F)", "groesser"),
+    ("nahkampf_takt", "SCHNELLER ZUSCHLAGEN (F)", "kleiner"),
     ("fahrzeug", "SCHADEN AN FAHRZEUGEN", "groesser"),
     ("fahrzeug_schutz", "WENIGER SCHADEN AM EIGENEN FAHRZEUG", "kleiner"),
 )

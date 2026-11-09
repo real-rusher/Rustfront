@@ -2617,6 +2617,15 @@ class Spieler(Wesen):
             return False
         if self.nachlade_rest > 0 or self.heilt_rest > 0:
             return False
+        # Die Klasse (seit 0.34.99): der NAHKAEMPFER schlaegt haerter und
+        # schneller zu. Faktoren 1.0 lassen das Woerterbuch unberuehrt.
+        f_schaden = getattr(self, "nahkampf_faktor", 1.0)
+        f_takt = getattr(self, "nahkampf_takt_faktor", 1.0)
+        if f_schaden != 1.0 or f_takt != 1.0:
+            d = dict(d, schaden=d.get("schaden", 0) * f_schaden)
+            for schluessel in ("takt", "wurf_takt", "f_takt"):
+                if schluessel in d:
+                    d[schluessel] = d[schluessel] * f_takt
         if d.get("f_werfen"):
             # Messer werden auf F immer geworfen (seit 0.34.96).
             if self.magazin.get(name, d.get("magazin", 0)) <= 0:

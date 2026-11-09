@@ -3688,6 +3688,8 @@ WAFFEN = {
 #   feuer            x Schaden durch Feuer      fahrzeug  x Schaden an Fahrzeugen
 #   aufhelfen        x Zeit zum Aufhelfen       medkits   + Medkits
 #   schild           traegt das Schild (SCHILD)
+#   nahkampf         Faktor auf den Schaden der Waffe auf F (seit 0.34.99)
+#   nahkampf_takt    Faktor auf die Pause zwischen zwei Schlaegen auf F
 #   faehigkeit       was die Taste C hinlegt (ausruestung.py) und wie oft
 #                    (Sekunden Pause). Seit 0.34.79 auch im Gefecht und in
 #                    der Lobby (Regel KLASSEN-FAEHIGKEITEN).
@@ -3741,11 +3743,16 @@ KLASSEN = {
                          wuerfe=("molotov", "gas", "rauch"), feuer=0.4, leben=1.1,
                          faehigkeit=(("kanister", 25.0),)),
     "spaeher": dict(name="SPÄHER", text="Schnell, leise, mit Spaehdrohne",
-                    waffen=("mp", "praezision", "zwillinge", "revolver", "wurfmesser"),
+                    waffen=("mp", "praezision", "zwillinge", "revolver"),
                     wuerfe=("blend", "knaller", "emp"), tempo=1.1, leben=0.9,
+                    nahkampf_takt=0.85,
                     faehigkeit=(("drohne", 45.0),)),
-    "nahkaempfer": dict(name="NAHKÄMPFER", text="Mehr Leben, Nahkampfwaffen, Stacheldraht",
-                        # Die Nahkampfwaffen liegen seit 0.34.96 auf F.
+    "nahkaempfer": dict(name="NAHKÄMPFER", text="Mehr Leben, starker Nahkampf auf F, Stacheldraht",
+                        # Die Nahkampfwaffen liegen seit 0.34.96 auf F - jede
+                        # Klasse waehlt dort frei. Damit der NAHKAEMPFER
+                        # trotzdem der fuer den Nahkampf bleibt, schlaegt er
+                        # seit 0.34.99 haerter und schneller zu.
+                        nahkampf=1.4, nahkampf_takt=0.75,
                         waffen=("schrot", "doppelflinte", "autoschrot", "mp", "revolver",
                                 "zwillinge", "flammenwerfer"),
                         plaetze=("haupt", "seite", "spezial"),
@@ -3758,8 +3765,8 @@ KLASSEN = {
                       wuerfe=("emp", "blend", "haftladung"), kuehlen=0.75,
                       faehigkeit=(("horchposten", 35.0), ("geschuetz", 70.0))),
     "schildtraeger": dict(name="SCHILDTRÄGER", text="Grosses Schild vorn, nur Seitenwaffe",
-                          waffen=("repetierer", "revolver", "bolzer", "schockstab"),
-                          plaetze=("seite",),
+                          waffen=("repetierer", "revolver", "bolzer"),
+                          plaetze=("seite",), nahkampf=1.15,
                           wuerfe=("blend", "rauch", "granate"), schild=True, leben=1.1,
                           faehigkeit=(("sandsackwand", 30.0),)),
     "fahrer": dict(name="FAHRER", text="Fahrzeuge halten mehr aus, Kraehenfuesse",

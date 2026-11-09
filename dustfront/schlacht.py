@@ -440,9 +440,16 @@ class SchlachtTeil:
             kombi = K.TEAMS["kombi"][team] if 0 <= team < 2 else None
             farbe = kombi["hud"] if kombi else K.C_TEAL
             rr = int(a["radius"])
-            ring = pygame.Surface((rr * 2 + 2, rr * 2 + 2), pygame.SRCALPHA)
-            pygame.draw.circle(ring, farbe + (28,), (rr + 1, rr + 1), rr)
-            pygame.draw.circle(ring, farbe + (120,), (rr + 1, rr + 1), rr, 1)
+            # Der Kreis ist 1300 Pixel gross - einmal bauen, nicht in jedem
+            # Bild (seit 0.34.99).
+            schluessel = (rr, tuple(farbe))
+            ringe = self.__dict__.setdefault("_sl_ringe", {})
+            ring = ringe.get(schluessel)
+            if ring is None:
+                ring = pygame.Surface((rr * 2 + 2, rr * 2 + 2), pygame.SRCALPHA)
+                pygame.draw.circle(ring, tuple(farbe) + (28,), (rr + 1, rr + 1), rr)
+                pygame.draw.circle(ring, tuple(farbe) + (120,), (rr + 1, rr + 1), rr, 1)
+                ringe[schluessel] = ring
             ziel.blit(ring, (p.x - rr - 1, p.y - rr - 1))
             # Die Drohne: Rumpf und vier Rotoren, gross und hoch.
             x, y = int(p.x), int(p.y) - 40
@@ -589,8 +596,14 @@ class SchlachtTeil:
                 rr = int(S["abwurf"]["sperre_basis"] * f)
                 sperre = pygame.Surface((rr * 2, rr * 2), pygame.SRCALPHA)
                 pygame.draw.circle(sperre, (200, 40, 30, 70), (rr, rr), rr)
+                # Nur innerhalb der Karte (seit 0.34.99): die Basis liegt
+                # am Rand, und der Kreis lief ueber den Rahmen bis an den
+                # Bildschirmrand.
+                alt_clip = ziel.get_clip()
+                ziel.set_clip(r.clip(alt_clip) if alt_clip else r)
                 ziel.blit(sperre, (self._welt_zu_karte(feind)[0] - rr,
                                    self._welt_zu_karte(feind)[1] - rr))
+                ziel.set_clip(alt_clip)
         for z in self.dropzonen:
             kombi = K.TEAMS["kombi"][z.team] if 0 <= z.team < 2 else None
             px, py = self._welt_zu_karte(z.pos)

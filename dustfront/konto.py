@@ -127,6 +127,14 @@ def loadout_saeubern(roh) -> dict | None:
     # Die Waffe fuer F (seit 0.34.96): sie ersetzt das Brecheisen und
     # belegt keinen Waffenplatz. Nur, wenn es nicht das Brecheisen ist.
     nk = roh.get("nahkampf")
+    if not isinstance(nk, str) or nk not in K.NAHKAMPF["waehlbar"]:
+        # Ein Satz von vor 0.34.96 hatte die Nahkampfwaffe (Hammer, Speer,
+        # Messer ...) noch auf einem Waffenplatz. Dort fiel sie heraus, und
+        # sie war einfach weg - gemeldet: "was ist mit Leuten, die Melee-
+        # Waffen vor dem Update in ihren Slots hatten?" Seit 0.34.99 wandert
+        # die erste davon auf F; der Platz bekommt eine Waffe der Klasse.
+        nk = next((w for w in (roh.get("waffen") or [])
+                   if isinstance(w, str) and w in K.NAHKAMPF["waehlbar"]), None)
     if isinstance(nk, str) and nk in K.NAHKAMPF["waehlbar"] and nk != K.NAHKAMPF["waffe"]:
         raus["nahkampf"] = nk
     if klasse:
