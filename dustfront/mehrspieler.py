@@ -1572,6 +1572,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         self.loadout_regel = d["loadouts"]
         self.loadout_nr = int(d["loadout_nr"])
         self.faehigkeiten_regel = bool(d.get("faehigkeiten", False))
+        self.klasse_pflicht = bool(d.get("klasse_pflicht", False))
         self.rpg_an = bool(d["rpg"])
         self.rpg_lenkung = bool(d["rpg_lenkung"])
         self.mg_schub = bool(d.get("mg_schub", False))
@@ -1605,13 +1606,23 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         mitgeschickt hat; beim Gastgeber selbst gilt sein aktuelles.
         """
         if self.loadout_regel == "gleich":
-            return self._fest_loadout()
+            return self._mit_klasse(self._fest_loadout())
         if self.loadout_regel == "eigenes":
             if k is not None and k is self.ich:
-                return self.mein_loadout()
-            return angemeldet if angemeldet is not None else getattr(
-                k, "loadout", None)
+                return self._mit_klasse(self.mein_loadout())
+            return self._mit_klasse(angemeldet if angemeldet is not None else getattr(
+                k, "loadout", None))
         return None
+
+    def _mit_klasse(self, lo):
+        """KLASSE PFLICHT (seit 0.34.91): ein Satz ohne Klasse bekommt
+        K.KLASSE_PFLICHT_ERSATZ - mit seinen Waffen, soweit sie passen.
+        Bots ohne Klasse bleiben, wie sie sind: sie waehlen nicht."""
+        if (not lo or not getattr(self, "klasse_pflicht", False)
+                or lo.get("klasse") or lo.get("name") == "BOT"):
+            return lo
+        neu = konto_modul.loadout_saeubern(dict(lo, klasse=K.KLASSE_PFLICHT_ERSATZ))
+        return neu or lo
 
     def mein_loadout(self) -> dict | None:
         """Das eigene Loadout, oder None, wenn es keines gibt.
@@ -1753,6 +1764,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil):
         angemeldet = dict(loadout) if loadout else None
         if self.loadout_regel == "gleich":
             loadout = self._fest_loadout()
+        loadout = self._mit_klasse(loadout) if self.mit_loadouts else loadout
         k = Kaempfer(pos, 0, nummer, netz.name_saeubern(name),
                      self._fraktion_fuer(nummer, team), knapp=self.knapp,
                      team=team,

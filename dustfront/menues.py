@@ -1285,7 +1285,8 @@ class Anmeldung(Menue):
 # ══════════════════════════════════════════════════════════════════
 
 class Ausruestung(Menue):
-    """Drei Saetze aus zwei Waffen und einer Wurfwaffe.
+    """Drei Saetze aus Haupt- und Seitenwaffe (je nach Klasse dazu einer
+    Spezialwaffe, mit Schild nur der Seitenwaffe) und einer Wurfwaffe.
 
     Bewusst eine einzige Seite und keine Unterseiten: wer sich ausruestet,
     will alle drei Entscheidungen zugleich sehen. Der gewaehlte Satz ist
@@ -1301,7 +1302,8 @@ class Ausruestung(Menue):
     def __init__(self, app, danach=None) -> None:
         # 236 -> 280 (seit 0.34.73): eine Zeile fuer die Klasse und eine
         # fuer das, was sie kann.
-        self.tafel = _mitte(22 + self.LINKS + 18 + self.VORSCHAU + 14, 280)
+        # 280 -> 300 (seit 0.34.91): Platz fuer die dritte Waffenzeile.
+        self.tafel = _mitte(22 + self.LINKS + 18 + self.VORSCHAU + 14, 300)
         self.danach = danach
         super().__init__(app)
 
@@ -1334,18 +1336,22 @@ class Ausruestung(Menue):
             alle_klassen.index(klasse) if klasse in alle_klassen else 0,
             {kl: klassen_modul.name(kl) for kl in alle_klassen}))
         y += 24
-        auswahl_w = list(klassen_modul.waffen_von(klasse))
         auswahl_g = list(klassen_modul.wuerfe_von(klasse))
-        for nr in range(lo["waffen"]):
+        # Je Platz eine Zeile (seit 0.34.91): Haupt-, Seiten- und je nach
+        # Klasse Spezialwaffe - mit Schild nur die Seitenwaffe.
+        plaetze = klassen_modul.plaetze_von(klasse)
+        for nr, platz in enumerate(plaetze):
+            auswahl_w = list(klassen_modul.waffen_von(klasse, platz))
             jetzt = (satz["waffen"][nr] if nr < len(satz["waffen"])
                      else auswahl_w[0])
             if jetzt not in auswahl_w:
                 jetzt = auswahl_w[0]
             self.elemente.append(ui.Wahl(
-                (bx, y + nr * 20, bw, 16), "WAFFE %d" % (nr + 1),
+                (bx, y + nr * 20, bw, 16), K.PLATZ_NAMEN[platz],
                 "waffe%d" % nr, auswahl_w, auswahl_w.index(jetzt),
                 {w: K.WAFFEN[w]["name"] for w in auswahl_w}))
-        y += lo["waffen"] * 20
+        # Immer Platz fuer drei Zeilen, damit darunter nichts springt.
+        y += 3 * 20
         for nr in range(lo["wuerfe"]):
             jetzt = (satz["wuerfe"][nr] if nr < len(satz["wuerfe"])
                      else auswahl_g[0])
@@ -1401,16 +1407,9 @@ class Ausruestung(Menue):
                                                   "waffen": waffen, "wuerfe": wuerfe})
             self.aufbauen()
             return
-        # Zwei gleiche Waffen waeren ein Platz weniger, kein Vorteil. Die
-        # zweite rutscht darum auf die naechste freie.
-        sauber = []
-        for w in waffen:
-            if w in sauber:
-                for anderer in klassen_modul.waffen_von(klasse):
-                    if anderer not in sauber:
-                        w = anderer
-                        break
-            sauber.append(w)
+        # Je Platz eine Waffe aus seiner eigenen Auswahl (seit 0.34.91):
+        # zwei gleiche kann es nicht mehr geben.
+        sauber = list(waffen)
         alt = konto.loadout
         konto.loadout_setzen(konto.gewaehlt,
                              {"name": alt["name"], "klasse": klasse, "waffen": sauber,
@@ -1436,7 +1435,7 @@ class Ausruestung(Menue):
         r = self.tafel
         satz = self.konto.loadout
         mitte = r.x + 22 + self.LINKS // 2
-        SCHRIFT.zeichnen(ziel, "ZWEI WAFFEN UND EINE WURFWAFFE", mitte,
+        SCHRIFT.zeichnen(ziel, "HAUPT- UND SEITENWAFFE, EINE WURFWAFFE", mitte,
                          r.y + 28, K.C_MUTED, 1, 1, "mitte")
         SCHRIFT.zeichnen(ziel, "DAS BRECHEISEN LIEGT AUF F UND IST IMMER DA",
                          mitte, r.y + 38, K.C_MUTED_DK, 1, 1, "mitte")
@@ -1467,7 +1466,10 @@ class Ausruestung(Menue):
             self._waffe_zeigen(ziel, el.wert)
         else:
             self._vorschau(ziel, plaetze[0] if plaetze else "")
-        breite, luft = 82, 6
+        # Schmaler, wenn es mehr Plaetze sind (seit 0.34.91 bis zu vier):
+        # alles bleibt ueber den Waehlern.
+        luft = 6
+        breite = min(82, (self.LINKS - (len(plaetze) - 1) * luft) // max(1, len(plaetze)))
         gesamt = len(plaetze) * breite + (len(plaetze) - 1) * luft
         x = mitte - gesamt // 2
         y = r.bottom - 66

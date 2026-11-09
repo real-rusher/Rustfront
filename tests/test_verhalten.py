@@ -461,53 +461,64 @@ def feuerschutz():
     from dustfront.trupp import sieht_durch_rauch
     reicht = max(K.BOTS["reichweite"].values())
     je_s, nieder, offen_anteil = [], [], []
-    for seed in SEEDS:
-        tm = neu(seed)
-        tx, ty, v = W.flaeche(tm, random.Random(seed), 20, 11)
-        W.setzen(tm, tx, ty, [(13, y) for y in range(2, 9)], K.WAND)
-        W.setzen(tm, tx, ty, [(14, 1), (14, 9)], K.KISTE)
-        trupp = tm.trupp_setzen(v(15, 5), 0, {"groesse": 4, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
-        # Der Gegner steht fuer den Spieler: er schiesst, und er faellt nicht.
-        g = tm.bot_setzen(v(6, 2), 0, {"team": 1, "hirn": "goap", "waffe": "sturm"})
-        g.unverwundbar = 1e9
-        g.hirn.merkmale["mut"] = 0.9
-        opfer = next(m for m in trupp.mitglieder if m is not trupp.fuehrer)
-        opfer.pos.update(v(9, 5))
-        opfer.vorher.update(opfer.pos)
-        for m in trupp.mitglieder:
-            m.max_leben = m.leben = 2000.0      # sie spueren Treffer, fallen aber nicht
-        W.kennen(trupp.mitglieder, [g], tm)
-        W.kennen([g], trupp.mitglieder, tm)
-        laufen(tm, 1.0)
-        tm.toeten(opfer)
-        zaehler = Schuesse(tm, trupp.mitglieder)
-        gort, st = [], {"nieder": 0.0, "offen": 0.0, "da": 0.0}
-        for _ in range(int(20.0 / DT)):
-            n = len(zaehler.liste)
-            tm.schritt(DT)
-            zaehler.schritt()
-            gort += [pygame.Vector2(g.pos)] * (len(zaehler.liste) - n)
-            if getattr(g.hirn, "unterdrueckt", 0.0) > 0.0:
-                st["nieder"] += DT
-            b = trupp.bergung or {}
-            for m in trupp.lebende():
-                if m is opfer or m.nummer in b.get("retter", ()):
-                    continue
-                st["da"] += DT
-                lehnt = (m.hirn._lehnen is not None and m.hirn._lehnen["phase"] == "raus") or m.feuert
-                if (not lehnt and g.pos.distance_to(m.pos) <= reicht and tm.welt.deckung(g.pos, m.pos, 0) == ""
-                        and sieht_durch_rauch(tm.welt, g.pos, m.pos, 0)):
-                    st["offen"] += DT
-            if opfer.lebt and not opfer.am_boden:
-                break
-        dauer = max(1.0, tm.welt.zeit - 2.0)
-        retter = set((trupp.bergung or {}).get("retter", ()))
-        auf_ihn = [1 for (_z, w, p, r), go in zip(zaehler.liste, gort)
-                   if w.nummer not in retter and abs((r.angle_to(go - p) + 180.0) % 360.0 - 180.0) < 15.0]
-        je_s.append(len(auf_ihn) / dauer)
-        nieder.append(st["nieder"] / dauer)
-        offen_anteil.append(st["offen"] / max(1e-6, st["da"]))
-        tm.verlassen()
+    # Der Gegner steht fuer einen Spieler, der trifft. Seit 0.34.91 streut
+    # das Sturmgewehr mehr (gewuenscht); geprueft wird hier aber der
+    # Feuerschutz, nicht die Waffe - darum in dieser Szene die Streuung von
+    # vorher. Mit der neuen kam der Gegner in einem Lauf ungetroffen bis
+    # hinter die Mauer, und es gab dort nichts mehr zu decken.
+    alt_sturm = dict(K.WAFFEN["sturm"])
+    K.WAFFEN["sturm"].update(streuung=2.2, streuung_lauf=3.6)
+    try:
+        for seed in SEEDS:
+            tm = neu(seed)
+            tx, ty, v = W.flaeche(tm, random.Random(seed), 20, 11)
+            W.setzen(tm, tx, ty, [(13, y) for y in range(2, 9)], K.WAND)
+            W.setzen(tm, tx, ty, [(14, 1), (14, 9)], K.KISTE)
+            trupp = tm.trupp_setzen(v(15, 5), 0, {"groesse": 4, "team": 0, "fuehrer": "funk", "mischung": "gemischt"})
+            # Der Gegner steht fuer den Spieler: er schiesst, und er faellt nicht.
+            g = tm.bot_setzen(v(6, 2), 0, {"team": 1, "hirn": "goap", "waffe": "sturm"})
+            g.unverwundbar = 1e9
+            g.hirn.merkmale["mut"] = 0.9
+            opfer = next(m for m in trupp.mitglieder if m is not trupp.fuehrer)
+            opfer.pos.update(v(9, 5))
+            opfer.vorher.update(opfer.pos)
+            for m in trupp.mitglieder:
+                m.max_leben = m.leben = 2000.0      # sie spueren Treffer, fallen aber nicht
+            W.kennen(trupp.mitglieder, [g], tm)
+            W.kennen([g], trupp.mitglieder, tm)
+            laufen(tm, 1.0)
+            tm.toeten(opfer)
+            zaehler = Schuesse(tm, trupp.mitglieder)
+            gort, st = [], {"nieder": 0.0, "offen": 0.0, "da": 0.0}
+            for _ in range(int(20.0 / DT)):
+                n = len(zaehler.liste)
+                tm.schritt(DT)
+                zaehler.schritt()
+                gort += [pygame.Vector2(g.pos)] * (len(zaehler.liste) - n)
+                if getattr(g.hirn, "unterdrueckt", 0.0) > 0.0:
+                    st["nieder"] += DT
+                b = trupp.bergung or {}
+                for m in trupp.lebende():
+                    if m is opfer or m.nummer in b.get("retter", ()):
+                        continue
+                    st["da"] += DT
+                    lehnt = (m.hirn._lehnen is not None and m.hirn._lehnen["phase"] == "raus") or m.feuert
+                    if (not lehnt and g.pos.distance_to(m.pos) <= reicht and tm.welt.deckung(g.pos, m.pos, 0) == ""
+                            and sieht_durch_rauch(tm.welt, g.pos, m.pos, 0)):
+                        st["offen"] += DT
+                if opfer.lebt and not opfer.am_boden:
+                    break
+            dauer = max(1.0, tm.welt.zeit - 2.0)
+            retter = set((trupp.bergung or {}).get("retter", ()))
+            auf_ihn = [1 for (_z, w, p, r), go in zip(zaehler.liste, gort)
+                       if w.nummer not in retter and abs((r.angle_to(go - p) + 180.0) % 360.0 - 180.0) < 15.0]
+            je_s.append(len(auf_ihn) / dauer)
+            nieder.append(st["nieder"] / dauer)
+            offen_anteil.append(st["offen"] / max(1e-6, st["da"]))
+            tm.verlassen()
+    finally:
+        K.WAFFEN["sturm"].clear()
+        K.WAFFEN["sturm"].update(alt_sturm)
     pruef("Die anderen schiessen auf den, der den Retter bedroht (im Schnitt wenigstens 0,8 Schuss je Sekunde, keiner unter 0,3)",
           sum(je_s) / len(je_s) >= 0.8 and min(je_s) >= 0.3, str([round(x, 2) for x in je_s]))
     pruef("... er ist dabei meist niedergehalten (wenigstens 40 Prozent der Zeit)",

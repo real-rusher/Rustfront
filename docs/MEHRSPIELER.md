@@ -1987,6 +1987,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.91 | Regel "klasse_pflicht" (KLASSE PFLICHT, Vorgabe an) geht mit den Regeln an die Gaeste. Loadouts ("lo" im hallo/loadout) haben je Platz eine Waffe: Haupt-, Seiten-, je nach Klasse Spezialwaffe (konto.loadout_saeubern); mit KLASSE PFLICHT bekommt ein Satz ohne Klasse beim Gastgeber die Klasse SCHUETZE. Sturmgewehr streut mehr, Schrot macht weniger Schaden. | Gastgeber und Gast muessen 0.34.91 haben - sonst zeigt ein alter Gast andere Waffen im Menue als er im Gefecht traegt |
 | 0.34.87 | Weltmeldung je Spieler: "mo" (Betriebsart der gehaltenen Waffe, z. B. Revolver FAECHERN). Die Gruppen-Hotbar schickt die gewaehlte Waffe gleich beim Tastendruck. | Ein alter Gast sieht beim Revolver weiter immer GEZIELT |
 | 0.34.85 | Weltmeldung je Spieler: "aw" (alle Werkzeuge an), "wz" (welches); "wl"/"ml"/"vl" haben in JEDER HAT ALLES 41 statt 10 Eintraege. Eingabe: neuer Knopf "werkzeug" (Taste X). Die Waffenwahl der Gruppen-Hotbar rechnet der Spieler selbst, ins Netz geht wie bisher der Platz ("waffe"). | Ungleiche Versionen: ein alter Gast hat in JEDER HAT ALLES 41 Plaetze ohne Gruppen und kann nur die ersten zehn waehlen |
 | 0.34.84 | Eingabe: neues Feld "gl" (Gas, Lenkung) - nur fuer Bots, die der Gastgeber selbst rechnet; von Gaesten wird es nicht angenommen (`Gefecht._fahren` prueft `k.ist_bot`). Sonst Bot-Verhalten im Fahrzeug. | Keine |

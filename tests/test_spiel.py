@@ -5093,12 +5093,13 @@ _neu62 = ("revolver", "zwillinge", "mp", "praezision", "unterhebel", "panzerbuec
 pruef("Zwoelf neue Waffen stehen in der Auswahl der Loadouts, mit Namen und Vorrat",
       all(w_ in K.LOADOUT["auswahl_waffen"] and K.WAFFEN[w_]["name"]
           and w_ in K.MUNITION["vorrat"] for w_ in _neu62))
+# Seit 0.34.91 in der Folge der Plaetze: Haupt-, Seiten-, Spezialwaffe.
 pruef("Ein Loadout mit neuen Waffen behaelt sie in der Hotbar (vorher fielen sie heraus)",
-      _KO62.hotbar_aus_loadout({"waffen": ["raketenbuendel", "revolver"], "wuerfe": ["rauch"]})
-      == ["revolver", "raketenbuendel", "rauch"])
-pruef("... und die alten bleiben in ihrer Reihenfolge",
-      _KO62.hotbar_aus_loadout({"waffen": ["schrot", "sturm"], "wuerfe": ["blend"]})
-      == ["sturm", "schrot", "blend"])
+      _KO62.hotbar_aus_loadout({"waffen": ["mp", "revolver", "raketenbuendel"], "wuerfe": ["rauch"]})
+      == ["mp", "revolver", "raketenbuendel", "rauch"])
+pruef("... in der Folge der Plaetze: 1 Haupt-, 2 Seitenwaffe, dann die Wurfwaffe",
+      _KO62.hotbar_aus_loadout({"waffen": ["schrot", "repetierer"], "wuerfe": ["blend"]})
+      == ["schrot", "repetierer", "blend"])
 _r62 = random.Random(62)
 pruef("Bots ziehen weiter nur die alten fuenf (die KI kennt die neuen Griffe nicht)",
       all(set(_BOTS62.bot_loadout(_r62)["waffen"]) <= set(K.BOTS["waffen"]) for _ in range(40))
@@ -6589,8 +6590,10 @@ pruef("Viele Klassen, jede mit mehreren Waffen und Wurfwaffen zur Wahl",
 pruef("Keine Klasse darf alles waehlen",
       all(len(_KL73.waffen_von(k_)) < len(K.LOADOUT["auswahl_waffen"]) for k_ in K.KLASSEN))
 _alt73 = _KO73.loadout_saeubern({"name": "ALT", "waffen": ["lmg", "scharf"], "wuerfe": ["c4"]})
-pruef("Ein Satz ohne Klasse bleibt, wie er war (FREI)",
-      _alt73 == {"name": "ALT", "waffen": ["lmg", "scharf"], "wuerfe": ["c4"]}, str(_alt73))
+# Seit 0.34.91: auch FREI hat Haupt- und Seitenwaffe - aus zwei
+# Hauptwaffen wird die erste und die erste Seitenwaffe.
+pruef("Ein Satz ohne Klasse bleibt FREI, mit Haupt- und Seitenwaffe",
+      _alt73 == {"name": "ALT", "waffen": ["lmg", "repetierer"], "wuerfe": ["c4"]}, str(_alt73))
 _lo73 = _KO73.loadout_saeubern({"name": "SANI", "klasse": "sanitaeter",
                                 "waffen": ["lmg", "mp"], "wuerfe": ["c4"]})
 pruef("Mit Klasse fallen fremde Waffen heraus und werden aus ihrer Auswahl aufgefuellt",
@@ -7626,9 +7629,11 @@ pruef("Auch das weiss der Gast", ohne_boss["gast_bosse"] is False)
 # ── Eines fuer alle ──────────────────────────────────────────────────
 from dustfront import konto as KMOD
 fest_nr = 1
-fest_plaetze = KMOD.hotbar_aus_loadout(app.konto.loadouts[fest_nr])
 wl, gl = gefechtspaar("pvp", regeln={"loadouts": "gleich",
                                      "loadout_nr": fest_nr})
+# Mit KLASSE PFLICHT (seit 0.34.91, Vorgabe) bekommt ein Satz ohne Klasse
+# die Ersatzklasse - das ist das, was alle tragen.
+fest_plaetze = KMOD.hotbar_aus_loadout(wl._mit_klasse(app.konto.loadouts[fest_nr]))
 gast_fig = wl.kaempfer[gl.meine_nummer]
 pruef("Bei EINES FUER ALLE traegt der Gastgeber das gewaehlte",
       wl.kaempfer[0].waffen == fest_plaetze, str(wl.kaempfer[0].waffen))
@@ -10015,10 +10020,11 @@ pruef("... nicht schon nach 2,9 s, aber nach 3,1 s", not _noch72 and _c72.bereit
 # wird das gewaehlte Loadout, wie im Menue AUSRUESTUNG.
 _gew72 = app.konto.gewaehlt
 w72, g72 = gefechtspaar("pvp", regeln={"loadouts": "eigenes"})
-_alt72 = _KM72.hotbar_aus_loadout(app.konto.loadout)
+# Mit KLASSE PFLICHT (seit 0.34.91): was der Gastgeber daraus macht.
+_alt72 = _KM72.hotbar_aus_loadout(w72._mit_klasse(app.konto.loadout))
 _neu_nr72 = next(i_ for i_, lo_ in enumerate(app.konto.loadouts)
-                 if _KM72.hotbar_aus_loadout(lo_) != _alt72)
-_neu72 = _KM72.hotbar_aus_loadout(app.konto.loadouts[_neu_nr72])
+                 if _KM72.hotbar_aus_loadout(w72._mit_klasse(lo_)) != _alt72)
+_neu72 = _KM72.hotbar_aus_loadout(w72._mit_klasse(app.konto.loadouts[_neu_nr72]))
 _gk72 = w72.kaempfer[g72.meine_nummer]
 pruef("(Zu Beginn tragen beide das alte)",
       _gk72.waffen == _alt72 and w72.ich.waffen == _alt72, str(_gk72.waffen))
@@ -10026,7 +10032,7 @@ app.konto.gewaehlt = _neu_nr72
 netz_durchlassen(w72, g72, 6)
 pruef("Ein im Spiel geaendertes Loadout kommt beim Gastgeber an",
       _gk72.angemeldet is not None
-      and _KM72.hotbar_aus_loadout(_gk72.angemeldet) == _neu72,
+      and _KM72.hotbar_aus_loadout(w72._mit_klasse(_gk72.angemeldet)) == _neu72,
       str(_gk72.angemeldet and _gk72.angemeldet.get("waffen")))
 pruef("... gilt aber nicht sofort (kein Waffenwechsel mitten im Gefecht)",
       _gk72.waffen == _alt72 and w72.ich.waffen == _alt72)
@@ -12522,6 +12528,7 @@ pruef("Das Testmenue passt in seinen Kasten, jede Zeile",
       "%d Zeilen, unterste bei %d, Kasten bis %d" % (len(_tm._menue_flaechen()),
                                                     _tm._menue_flaechen()[-1].bottom,
                                                     _tm.MENUE.bottom))
+_tm.nebel = True                   # seit 0.34.91 aus als Vorgabe - hier geht es um ihn
 _tm.zoom_ziel = _tm._zoom_weich = 1.5
 _tm.schritt(_D87)
 pruef("Herausgezoomt zeichnet der Testmodus sonst nur im normalen Bild Figuren (Nebel)",
@@ -14356,9 +14363,12 @@ _kiste108 = _feuert108(_v108(4, 5))
 _frei108 = _feuert108(_v108(4, 7))
 pruef("Hinter einer Mauer: kein Schuss - hinter einer Kiste (niederhalten) und im Freien: ja",
       not _wand108 and _kiste108 and _frei108, "%s %s %s" % (_wand108, _kiste108, _frei108))
-pruef("Testmenue: NEBEL (SICHTWEITE) ist eine Zeile, an wie im Spiel",
-      any(z_[0] == "nebel" for z_ in _tm._menue_zeilen()) and _tm.nebel, "")
+# Seit 0.34.91 aus als Vorgabe (gewuenscht) - einschalten wie bisher.
+pruef("Testmenue: NEBEL (SICHTWEITE) ist eine Zeile, aus als Vorgabe",
+      any(z_[0] == "nebel" for z_ in _tm._menue_zeilen()) and not _tm.nebel, "")
 _tm.zoom_ziel = _tm.kamera.zoom = max(K.ZOOM["stufen"])
+_tm.menue_wirken("nebel")
+pruef("... eingeschaltet wie im Spiel", _tm.nebel, "")
 _mit108 = _tm.sicht_welt()
 _tm.menue_wirken("nebel")
 _ohne108 = _tm.sicht_welt()
@@ -15549,12 +15559,14 @@ pruef("Eine neue Ausruestung gilt in der Lobby sofort - Klasse und neue Waffen",
 _gich179 = gl179.kaempfer.get(gl179.meine_nummer)
 pruef("Der Gast weiss seine Klasse", _gich179 is not None and _gich179.klasse == "sanitaeter",
       str(getattr(_gich179, "klasse", None)))
-# Auch wenn nur die Klasse wechselt und die Waffen bleiben.
-gl179.gast.senden({"t": "loadout", "lo": dict(_satz179, klasse="")})
+# Auch wenn nur die Klasse wechselt und die Waffen bleiben. Seit 0.34.91
+# gilt KLASSE PFLICHT (Vorgabe): darum eine andere Klasse, die beide
+# Waffen auch hat, statt FREI.
+gl179.gast.senden({"t": "loadout", "lo": dict(_satz179, klasse="fahrer")})
 for _ in range(10):
     wl179.schritt(K.NETZ["takt"])
     gl179.schritt(K.NETZ["takt"])
-pruef("Nur die Klasse gewechselt: auch das gilt sofort", gk179.klasse == "", gk179.klasse)
+pruef("Nur die Klasse gewechselt: auch das gilt sofort", gk179.klasse == "fahrer", gk179.klasse)
 gl179.gast.senden({"t": "loadout", "lo": _satz179})
 for _ in range(10):
     wl179.schritt(K.NETZ["takt"])
@@ -15950,6 +15962,47 @@ app.opt.werte.clear()
 app.opt.werte.update(_opt190)
 app.headless = _kopf190
 app.anzeige_setzen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- Haupt- und Seitenwaffe, Spezialplatz, KLASSE PFLICHT (0.34.91)")
+from dustfront import klassen as _KL191, konto as _KO191, regeln as _R191, bots as _BO191
+pruef("Jede waehlbare Waffe hat ihren Platz (Haupt, Seite oder Spezial)",
+      all(K.WAFFEN_PLATZ.get(w_) in ("haupt", "seite", "spezial") for w_ in K.LOADOUT["auswahl_waffen"]))
+pruef("Jede Klasse hat Haupt- und Seitenwaffe zur Wahl - der Schildtraeger nur die Seitenwaffe",
+      all((_KL191.plaetze_von(k_) == ("seite",)) == bool(d_.get("schild"))
+          and all(_KL191.waffen_von(k_, p_) for p_ in _KL191.plaetze_von(k_))
+          and ("seite" in _KL191.plaetze_von(k_))
+          for k_, d_ in K.KLASSEN.items()))
+_spezial191 = [k_ for k_ in K.KLASSEN if "spezial" in _KL191.plaetze_von(k_)]
+pruef("Manche Klassen (nicht alle) haben einen Platz fuer eine Spezialwaffe, FREI keinen",
+      2 <= len(_spezial191) < len(K.KLASSEN) and "spezial" not in _KL191.plaetze_von(""),
+      str(_spezial191))
+_lo191 = _KO191.loadout_saeubern({"name": "X", "klasse": "panzerjaeger",
+                                  "waffen": ["panzerbuechse", "sturm", "mp", "repetierer"]})
+pruef("Ein Satz traegt je Platz eine Waffe, in der Folge Haupt, Seite, Spezial",
+      _lo191["waffen"] == ["mp", "repetierer", "panzerbuechse"], str(_lo191["waffen"]))
+_sch191 = _KO191.loadout_saeubern({"name": "S", "klasse": "schildtraeger", "waffen": ["sturm", "revolver"]})
+pruef("Mit Schild nur die Seitenwaffe", _sch191["waffen"] == ["revolver"], str(_sch191["waffen"]))
+_frei191 = _KO191.loadout_saeubern({"name": "F", "waffen": ["sturm", "schrot", "minigun"]})
+pruef("Zwei Hauptwaffen gibt es nicht mehr: aus der zweiten wird eine Seitenwaffe",
+      len(_frei191["waffen"]) == 2 and K.WAFFEN_PLATZ[_frei191["waffen"][1]] == "seite"
+      and "minigun" not in _frei191["waffen"], str(_frei191["waffen"]))
+_d191 = _R191.vorgabe()
+pruef("KLASSE PFLICHT ist eine Regel, als Vorgabe an, und gilt nur mit Loadouts",
+      _d191["klasse_pflicht"] is True and not _R191.NACH_NAME["klasse_pflicht"].gilt(dict(_d191, loadouts="alles"))
+      and _R191.NACH_NAME["klasse_pflicht"].gilt(dict(_d191, loadouts="eigenes")))
+_w191, _g191 = gefechtspaar("pvp", regeln={"loadouts": "eigenes"})
+_ohne191 = {"name": "OHNE", "waffen": ["scharf", "revolver"], "wuerfe": ["rauch"]}
+_mit191 = _w191._mit_klasse(_ohne191)
+pruef("Mit KLASSE PFLICHT spielt, wer ohne Klasse kommt, die Ersatzklasse - mit passenden Waffen",
+      _mit191["klasse"] == K.KLASSE_PFLICHT_ERSATZ
+      and all(w_ in _KL191.waffen_von(K.KLASSE_PFLICHT_ERSATZ) for w_ in _mit191["waffen"]), str(_mit191))
+_w191.klasse_pflicht = False
+pruef("... ohne die Regel bleibt er FREI", _w191._mit_klasse(_ohne191) is _ohne191)
+_w191.verlassen(); _g191.verlassen()
+pruef("Das Sturmgewehr streut mehr, die Schrotflinte macht weniger Schaden",
+      K.WAFFEN["sturm"]["streuung"] > 2.2 and K.WAFFEN["sturm"]["streuung_lauf"] > 3.6
+      and K.WAFFEN["schrot"]["schaden"] < 13.0)
 
 print()
 print("FEHLER:", fails or "keine")

@@ -127,8 +127,10 @@ sauber = konto_modul.loadout_saeubern(
     {"name": "  mein satz!! ", "waffen": ["sturm", "sturm", "gibtsnicht",
                                           "schrot", "scharf"],
      "wuerfe": ["rauch", "granate", "unsinn"]})
-pruef("Doppelte, unbekannte und zu viele Waffen fliegen raus",
-      sauber["waffen"] == ["sturm", "schrot"]
+# Seit 0.34.91 je Platz eine: Haupt- und Seitenwaffe. Die zweite
+# Hauptwaffe faellt heraus, die Seitenwaffe wird aufgefuellt.
+pruef("Doppelte, unbekannte und zu viele Waffen fliegen raus, je Platz eine",
+      sauber["waffen"] == ["sturm", "repetierer"]
       and sauber["wuerfe"] == ["rauch"], str(sauber))
 pruef("Der Name wird gesaeubert und gekuerzt",
       sauber["name"] == "MEIN SATZ" and len(sauber["name"]) <= lo["namenslaenge"],
@@ -138,13 +140,15 @@ pruef("Ein leeres wird aufgefuellt statt abgelehnt",
       len(leer["waffen"]) == lo["waffen"] and len(leer["wuerfe"]) == lo["wuerfe"],
       str(leer))
 pruef("Unsinn ergibt None", konto_modul.loadout_saeubern("kein dict") is None)
-pruef("Jede Vorlage ist gueltig",
-      all(len(v["waffen"]) == lo["waffen"] and len(v["wuerfe"]) == lo["wuerfe"]
+from dustfront import klassen as _kl_t
+pruef("Jede Vorlage ist gueltig (ein Platz je Waffe ihrer Klasse)",
+      all(len(v["waffen"]) == len(_kl_t.plaetze_von(v.get("klasse", "")))
+          and len(v["wuerfe"]) == lo["wuerfe"]
           for v in konto_modul.loadout_vorlagen()))
-hb = konto_modul.hotbar_aus_loadout({"waffen": ["scharf", "sturm"],
+hb = konto_modul.hotbar_aus_loadout({"waffen": ["scharf", "revolver"],
                                      "wuerfe": ["rauch"]})
-pruef("Die Hotbar folgt der gewohnten Reihenfolge",
-      hb == ["sturm", "scharf", "rauch"], str(hb))
+pruef("Die Hotbar folgt den Plaetzen: 1 Haupt-, 2 Seitenwaffe, dann Wurfwaffen",
+      hb == ["scharf", "revolver", "rauch"], str(hb))
 pruef("Und traegt genau die gewaehlten Plaetze",
       len(hb) == lo["waffen"] + lo["wuerfe"])
 
@@ -213,11 +217,11 @@ pruef("Die frueher gespielte Runde gehoert jetzt zum Konto",
       all(e.get("konto") == kt.kennung for e in kt.journal.eintraege))
 pruef("Und zaehlt nur einmal", kt.uebersicht()["abschuesse"] == 4)
 
-kt.loadout_setzen(0, {"name": "MEIN", "waffen": ["scharf", "schrot"],
+kt.loadout_setzen(0, {"name": "MEIN", "waffen": ["scharf", "revolver"],
                       "wuerfe": ["rauch"]})
 pruef("Ein Loadout laesst sich aendern",
       kt.loadouts[0]["name"] == "MEIN"
-      and kt.loadouts[0]["waffen"] == ["scharf", "schrot"])
+      and kt.loadouts[0]["waffen"] == ["scharf", "revolver"])
 pruef("Das Profil steht danach in Fassung 1 oder hoeher",
       kt.profil_fassung >= 1, str(kt.profil_fassung))
 kt.loadout_waehlen(2)
@@ -884,8 +888,8 @@ if wj and gj:
 
 # ── Loadouts im Gefecht ──────────────────────────────────────────────
 print("\n-- Loadouts im Gefecht --")
-app_w.konto.loadout_setzen(0, {"name": "SCHARF", "waffen": ["scharf", "schrot"],
-                               "wuerfe": ["rauch"]})
+app_w.konto.loadout_setzen(0, {"name": "SCHARF", "klasse": "scharfschuetze",
+                               "waffen": ["scharf", "revolver"], "wuerfe": ["rauch"]})
 app_w.konto.loadout_waehlen(0)
 app_g.konto.loadout_setzen(0, {"name": "STURM", "waffen": ["sturm", "repetierer"],
                                "wuerfe": ["granate"]})
@@ -901,12 +905,12 @@ for _ in range(60):
 pruef("Der Gastgeber spielt mit Loadouts", w2.mit_loadouts)
 pruef("Und der Gast erfaehrt es", g2.mit_loadouts)
 pruef("Der Gastgeber traegt sein eigenes",
-      w2.kaempfer[0].waffen == ["schrot", "scharf", "rauch"],
+      w2.kaempfer[0].waffen == ["scharf", "revolver", "rauch"],
       str(w2.kaempfer[0].waffen))
 gast_k2 = w2.kaempfer.get(g2.meine_nummer)
 pruef("Und der Gast das, das er angemeldet hat",
       gast_k2 is not None
-      and gast_k2.waffen == ["repetierer", "sturm", "granate"],
+      and gast_k2.waffen == ["sturm", "repetierer", "granate"],
       str(gast_k2.waffen if gast_k2 else None))
 pruef("Munition und Magazin gelten fuer genau diese Waffen",
       gast_k2 is not None

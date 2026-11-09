@@ -539,27 +539,33 @@ an.ausloesen(ui.Knopf((0, 0, 1, 1), "", "ausruestung"))
 aus = app.oben
 pruef("AUSRUESTUNG oeffnet sich", isinstance(aus, M.Ausruestung))
 waehler = [el.name for el in aus.elemente]
-# Seit 0.34.73 steht die Klasse zwischen Satz und Waffen.
-pruef("Ein Satz, eine Klasse, zwei Waffen, eine Wurfwaffe",
+# Seit 0.34.73 steht die Klasse zwischen Satz und Waffen, seit 0.34.91
+# heissen die Waffenzeilen nach ihrem Platz.
+pruef("Ein Satz, eine Klasse, Haupt- und Seitenwaffe, eine Wurfwaffe",
       waehler[:5] == ["satz", "klasse", "waffe0", "waffe1", "wurf0"], str(waehler))
-
 w0 = next(el for el in aus.elemente if el.name == "waffe0")
-w0.index = list(K.LOADOUT["auswahl_waffen"]).index("scharf")
+w1 = next(el for el in aus.elemente if el.name == "waffe1")
+pruef("... die erste Zeile ist die Hauptwaffe, die zweite die Seitenwaffe",
+      w0.text == K.PLATZ_NAMEN["haupt"] and w1.text == K.PLATZ_NAMEN["seite"]
+      and all(K.WAFFEN_PLATZ[w] == "haupt" for w in w0.optionen)
+      and all(K.WAFFEN_PLATZ[w] == "seite" for w in w1.optionen), "%s %s" % (w0.optionen, w1.optionen))
+
+_neu_w0 = next(w for w in w0.optionen if w != w0.wert)
+w0.index = w0.optionen.index(_neu_w0)
 aus.geaendert(w0)
 pruef("Eine geaenderte Waffe steht sofort im Loadout",
-      "scharf" in app.konto.loadout["waffen"],
+      _neu_w0 in app.konto.loadout["waffen"],
       str(app.konto.loadout["waffen"]))
 pruef("Und sofort auf der Platte",
-      "scharf" in KONTO_M.Konto(ablage_=ABLAGE.LokaleAblage(ordner=pfade.ordner()),
-                                ordner=pfade.ordner(),
-                                mit_faden=False).loadout["waffen"])
+      _neu_w0 in KONTO_M.Konto(ablage_=ABLAGE.LokaleAblage(ordner=pfade.ordner()),
+                               ordner=pfade.ordner(),
+                               mit_faden=False).loadout["waffen"])
 
-# Zweimal dieselbe Waffe waere ein Platz weniger, kein Vorteil.
-w1 = next(el for el in aus.elemente if el.name == "waffe1")
-w1.index = list(K.LOADOUT["auswahl_waffen"]).index("scharf")
-aus.geaendert(w1)
-pruef("Zweimal dieselbe Waffe gibt es nicht",
-      len(set(app.konto.loadout["waffen"])) == 2,
+# Zwei Hauptwaffen gibt es nicht mehr (seit 0.34.91): jede Zeile waehlt
+# aus ihrer eigenen Liste.
+pruef("Zweimal dieselbe Waffe oder zwei Hauptwaffen gibt es nicht",
+      not set(w0.optionen) & set(w1.optionen)
+      and len(set(app.konto.loadout["waffen"])) == 2,
       str(app.konto.loadout["waffen"]))
 
 satz = next(el for el in aus.elemente if el.name == "satz")

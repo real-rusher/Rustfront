@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.91 | Testmenue NEBEL (SICHTWEITE) steht als Vorgabe auf AUS - ALLES SICHTBAR (einschalten wie bisher). Bots mit Spulengewehr zielen beim Laden ruhiger, und ohne Gegner im Blick drehen sich Bots nicht mehr ganz um sich selbst (Drehbremse) - zu sehen in der INFO-Ansicht; Pruefungen in `tests/test_spiel.py` (Abschnitt 0.34.91) und `python tests/test_verhalten.py drehen` |
 | 0.34.88 | Der Beobachter hat immer eine Minikarte (ALLWISSEND: jeder darauf); in ANSICHT WIE RUNDE ist der Ziffernblock auch fuer Finger und Maus weg. Pruefungen im Abschnitt "Testmodus: Minikarte beim Beobachter" von `tests/test_spiel.py` |
 | 0.34.87 | Nichts Neues zum Setzen; Spule, Revolver, Kuller, Granatwerfer und Drohne ausprobieren wie bisher (Spawner bzw. Ausruestung). Pruefungen im Abschnitt "Waffen: Spule, Revolver, Hotbar, Kuller, Granatwerfer, Drohne" von `tests/test_spiel.py` |
 | 0.34.85 | Nichts Neues zum Setzen. Die Werkzeuge aller Klassen gibt es im Testmodus schon im Spawner (BAUEN, FALLEN, AUFKLÄRUNG, HILFE); JEDER HAT ALLES mit Gruppen-Hotbar und Taste X gilt in Runden ohne Loadouts. Pruefungen im Abschnitt "Jeder hat alles: Kategorien-Hotbar" von `tests/test_spiel.py` |

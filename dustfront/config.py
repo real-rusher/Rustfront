@@ -1514,6 +1514,7 @@ BOTS = dict(
     lauf_blick_winkel=35.0,   # ... und so viel darf sie dabei schwanken (Grad)
     kehrt_winkel=150.0,       # weiter herum dreht er sich zurueck, wie er gekommen ist (Grad, 0.34.58)
     drall_zeit=3.0,           # ... gemerkt wird, wohin er sich drehte, so lange (s)
+    drall_bremse=160.0,       # ohne Gegner nicht weiter herum als so viel (Drall, Grad; seit 0.34.91)
     blick_linie_weit=110.0,   # ohne Kontakt in Richtung der Linie schauen, solange er nicht weiter davon weg geht (Grad)
     rauch_laufen=3.0,         # so lange geht er hoechstens zu einer Stelle, von der er Rauch werfen kann (s, 0.34.55)
     rauch_pause=8.0,          # ... findet er keine, laesst er den Rauch so lange (s)
@@ -1606,6 +1607,7 @@ BOTS = dict(
     gefahr_umweg_seite=2.5,
     gefahr_takt=0.15,         # so oft schaut er nach (s)
     spule_loslassen=0.92,     # bei so viel Ladung laesst er los
+    spule_fehler=0.3,         # x Zielfehler, waehrend er die Spule laedt (seit 0.34.91)
     # Bots am Steuer (seit 0.34.71, nur wem der Testmodus es erlaubt -
     # im Gefecht fahren Bots weiter nicht, so gemeldet).
     fahren=dict(
@@ -2036,6 +2038,9 @@ GEFECHT = dict(
     # dahin nur im Testmodus). Was sie hinlegen, geht seitdem mit der
     # Weltmeldung an die Gaeste ("geraete").
     faehigkeiten=True,
+    # KLASSE PFLICHT (seit 0.34.91): mit Loadouts spielt jeder eine Klasse;
+    # wer ohne kommt, spielt KLASSE_PFLICHT_ERSATZ.
+    klasse_pflicht=True,
     # So lange gilt eine angeforderte Waffe als gehalten, bis der Gastgeber
     # sie bestaetigt (Gruppen-Hotbar, seit 0.34.87).
     waffe_soll_gilt=0.6,
@@ -2637,7 +2642,9 @@ WAFFEN = {
     "schrot": dict(
         art="schuss",
         name="SCHROT",
-        schaden=13.0,
+        # 13 -> 11,5 je Kugel (seit 0.34.91, gewuenscht): neben den neuen
+        # Waffen war sie zu stark - 80 statt 91 mit allen sieben.
+        schaden=11.5,
         takt=0.62,
         magazin=6,
         nachladen=2.1,
@@ -2660,8 +2667,10 @@ WAFFEN = {
         takt=0.085,           # rund 700 Schuss in der Minute
         magazin=30,
         nachladen=2.05,
-        streuung=2.2,
-        streuung_lauf=3.6,
+        # Mehr Streuung (seit 0.34.91, gewuenscht: 2,2 / 3,6 vorher) - der
+        # Allesgut-Griff sollte die neuen Waffen nicht ueberfluessig machen.
+        streuung=3.0,
+        streuung_lauf=4.6,
         streuung_dauerfeuer=4.5,   # Aufschlag, wenn man den Abzug haelt
         geschosse=1,
         tempo=760.0,
@@ -3496,17 +3505,26 @@ WAFFEN = {
 #   faehigkeit       was die Taste C hinlegt (ausruestung.py) und wie oft
 #                    (Sekunden Pause). Seit 0.34.79 auch im Gefecht und in
 #                    der Lobby (Regel KLASSEN-FAEHIGKEITEN).
+# Seit 0.34.91 traegt jeder Satz eine Hauptwaffe und eine Seitenwaffe -
+# gemeldet: "sidearms sind quasi irrelevant, weil man ja quasi auch zwei
+# primarys nehmen kann". Manche Klassen haben dazu einen Platz fuer eine
+# Spezialwaffe (`plaetze`); wer das Schild traegt, hat nur die
+# Seitenwaffe (die zweite Hand haelt das Schild). Woraus je Platz gewaehlt
+# wird, steht in `waffen` der Klasse; welcher Platz eine Waffe ist, in
+# WAFFEN_PLATZ.
 KLASSEN = {
     "schuetze": dict(name="SCHÜTZE", text="Allrounder, laedt schneller",
-                     waffen=("sturm", "repetierer", "mp", "unterhebel", "revolver"),
+                     waffen=("sturm", "unterhebel", "mp", "repetierer", "revolver"),
                      wuerfe=("granate", "rauch", "blend"), nachladen=0.85,
                      faehigkeit=(("munitionskiste", 40.0),)),
     "sanitaeter": dict(name="SANITÄTER", text="Wirft Sanitaschen, hilft schneller auf",
-                       waffen=("mp", "repetierer", "revolver", "zwillinge", "autoschrot"),
+                       waffen=("mp", "autoschrot", "repetierer", "revolver", "zwillinge"),
                        wuerfe=("rauch", "blend", "granate"), aufhelfen=0.6, medkits=1,
                        faehigkeit=(("sanitasche", 20.0),)),
     "unterstuetzer": dict(name="UNTERSTÜTZER", text="Schwere Waffen, Munitionskiste, Selbstschussanlage",
-                          waffen=("lmg", "minigun", "autoschrot", "sturm"),
+                          waffen=("lmg", "sturm", "autoschrot", "repetierer", "minigun",
+                                  "raketenbuendel"),
+                          plaetze=("haupt", "seite", "spezial"),
                           wuerfe=("granate", "rauch", "kuller"), tempo=0.94, leben=1.1,
                           faehigkeit=(("munitionskiste", 30.0), ("geschuetz", 60.0))),
     "scharfschuetze": dict(name="SCHARFSCHÜTZE", text="Weit und genau, markiert mit dem Fernglas",
@@ -3514,44 +3532,74 @@ KLASSEN = {
                            wuerfe=("rauch", "knaller", "blend"), leben=0.9,
                            faehigkeit=(("horchposten", 45.0),)),
     "pionier": dict(name="PIONIER", text="Sprengt und baut: Fallen, Sandsaecke, mehr gegen Blech",
-                    waffen=("schrot", "autoschrot", "nagler", "bolzer", "sturm"),
+                    waffen=("schrot", "autoschrot", "sturm", "nagler", "bolzer", "einwegwerfer"),
+                    plaetze=("haupt", "seite", "spezial"),
                     wuerfe=("c4", "haftladung", "granate"), fahrzeug=1.2,
                     faehigkeit=(("sprengfalle", 25.0), ("sandsackwand", 30.0))),
     "panzerjaeger": dict(name="PANZERJÄGER", text="Gegen Fahrzeuge gebaut",
-                         waffen=("panzerbuechse", "einwegwerfer", "raketenbuendel", "repetierer", "mp"),
+                         waffen=("mp", "unterhebel", "repetierer", "panzerbuechse",
+                                 "einwegwerfer", "raketenbuendel"),
+                         plaetze=("haupt", "seite", "spezial"),
                          wuerfe=("haftladung", "emp", "granate"), fahrzeug=1.3, tempo=0.95,
                          faehigkeit=(("kraehenfuesse", 25.0),)),
     "grenadier": dict(name="GRENADIER", text="Werfer und Granaten, eine Granate mehr",
-                      waffen=("granatwerfer", "sturm", "mp", "doppelflinte"),
+                      waffen=("sturm", "mp", "doppelflinte", "repetierer", "revolver",
+                              "granatwerfer"),
+                      plaetze=("haupt", "seite", "spezial"),
                       wuerfe=("granate", "kuller", "gas", "molotov"), granaten=1,
                       faehigkeit=(("sandsackwand", 35.0),)),
     "flammentrupp": dict(name="FLAMMENTRUPP", text="Feuer und Nahdistanz, haelt Feuer besser aus",
-                         waffen=("flammenwerfer", "doppelflinte", "schrot", "autoschrot"),
+                         waffen=("doppelflinte", "schrot", "autoschrot", "repetierer",
+                                 "flammenwerfer"),
+                         plaetze=("haupt", "seite", "spezial"),
                          wuerfe=("molotov", "gas", "rauch"), feuer=0.4, leben=1.1,
                          faehigkeit=(("kanister", 25.0),)),
     "spaeher": dict(name="SPÄHER", text="Schnell, leise, mit Spaehdrohne",
-                    waffen=("mp", "zwillinge", "revolver", "praezision", "wurfmesser"),
+                    waffen=("mp", "praezision", "zwillinge", "revolver", "wurfmesser"),
                     wuerfe=("blend", "knaller", "emp"), tempo=1.1, leben=0.9,
                     faehigkeit=(("drohne", 45.0),)),
     "nahkaempfer": dict(name="NAHKÄMPFER", text="Mehr Leben, Nahkampfwaffen, Stacheldraht",
-                        waffen=("hammer", "schlagring", "kettensaege", "speer", "wurfmesser",
-                                "schockstab", "schrot"),
+                        waffen=("hammer", "schrot", "schlagring", "schockstab", "wurfmesser",
+                                "kettensaege", "speer"),
+                        plaetze=("haupt", "seite", "spezial"),
                         wuerfe=("rauch", "blend", "schneeball"), leben=1.25, tempo=1.05,
                         faehigkeit=(("stacheldraht", 30.0),)),
     "techniker": dict(name="TECHNIKER", text="Chor-Waffen kuehlen schneller, Horchposten",
-                      waffen=("spule", "kettenblitz", "spiegellaser", "kugelblitz", "nagler"),
+                      waffen=("kettenblitz", "spiegellaser", "nagler", "repetierer", "spule",
+                              "kugelblitz"),
+                      plaetze=("haupt", "seite", "spezial"),
                       wuerfe=("emp", "blend", "haftladung"), kuehlen=0.75,
                       faehigkeit=(("horchposten", 35.0), ("geschuetz", 70.0))),
-    "schildtraeger": dict(name="SCHILDTRÄGER", text="Grosses Schild vorn, Pistole",
+    "schildtraeger": dict(name="SCHILDTRÄGER", text="Grosses Schild vorn, nur Seitenwaffe",
                           waffen=("repetierer", "revolver", "bolzer", "schockstab"),
+                          plaetze=("seite",),
                           wuerfe=("blend", "rauch", "granate"), schild=True, leben=1.1,
                           faehigkeit=(("sandsackwand", 30.0),)),
     "fahrer": dict(name="FAHRER", text="Fahrzeuge halten mehr aus, Kraehenfuesse",
-                   waffen=("mp", "repetierer", "zwillinge", "autoschrot"),
+                   waffen=("mp", "autoschrot", "repetierer", "zwillinge"),
                    wuerfe=("rauch", "emp", "granate"), fahrzeug_schutz=0.85,
                    faehigkeit=(("kraehenfuesse", 20.0),)),
 }
-KLASSE_FREI = dict(name="FREI", text="Ohne Klasse: jede Waffe, kein Vorteil")
+KLASSE_FREI = dict(name="FREI", text="Ohne Klasse: Haupt- und Seitenwaffe frei, kein Vorteil")
+
+# Welcher Platz im Satz eine Waffe ist (seit 0.34.91): "haupt" (die
+# Hauptwaffe), "seite" (Seitenwaffe - Pistolen, Werkzeug, leichter
+# Nahkampf) oder "spezial" (nur fuer Klassen mit dem Platz dafuer).
+WAFFEN_PLATZ = dict(
+    {w: "haupt" for w in ("sturm", "schrot", "scharf", "lmg", "mp", "praezision",
+                          "unterhebel", "doppelflinte", "autoschrot", "hammer",
+                          "kettenblitz", "spiegellaser")},
+    **{w: "seite" for w in ("repetierer", "revolver", "zwillinge", "bolzer", "nagler",
+                            "schockstab", "schlagring", "wurfmesser")},
+    **{w: "spezial" for w in ("minigun", "panzerbuechse", "granatwerfer", "einwegwerfer",
+                              "raketenbuendel", "kettensaege", "speer", "spule",
+                              "kugelblitz", "flammenwerfer")})
+# Wie die Plaetze im Menue heissen und welche ein Satz ohne Klasse hat.
+PLATZ_NAMEN = dict(haupt="HAUPTWAFFE", seite="SEITENWAFFE", spezial="SPEZIALWAFFE")
+PLAETZE_VORGABE = ("haupt", "seite")
+# KLASSE PFLICHT (Regel, seit 0.34.91): wer ohne Klasse kommt, spielt
+# diese - mit den Waffen seines Satzes, soweit sie zu ihr passen.
+KLASSE_PFLICHT_ERSATZ = "schuetze"
 
 # Der Schildtraeger (seit 0.34.71, erst im Testmodus): ein grosses Schild
 # vorn. Was von vorn kommt (die Richtung zum Schuetzen), haelt es zum
@@ -3978,7 +4026,7 @@ HOTBAR_PLAETZE = 10
 # "eigenes" ist die, in der die Wahl der Waffe eine Wahl ist.
 LOADOUT = dict(
     plaetze=3,                # so viele Loadouts kann man sich anlegen
-    waffen=2,                 # so viele Waffen je Loadout
+    waffen=2,                 # Waffen eines Satzes ohne Klasse (Haupt + Seite, seit 0.34.91 je Klasse: KLASSEN plaetze)
     wuerfe=1,                 # so viele Wurfwaffen je Loadout
     # Woraus gewaehlt werden darf. Bewusst als eigene Listen und nicht
     # aus WAFFEN abgeleitet: was waehlbar ist, ist eine Spielentscheidung
@@ -4004,10 +4052,15 @@ LOADOUT = dict(
     # Womit ein neues Loadout vorbelegt wird. Drei Stueck, damit man nach
     # dem ersten Anmelden gleich drei brauchbare Saetze hat und nicht vor
     # drei leeren Plaetzen sitzt.
+    # Seit 0.34.91 mit Klasse (KLASSE PFLICHT ist die Vorgabe) und mit
+    # Haupt- und Seitenwaffe.
     vorlagen=(
-        dict(name="STURM", waffen=("sturm", "schrot"), wuerfe=("granate",)),
-        dict(name="JÄGER", waffen=("scharf", "repetierer"), wuerfe=("rauch",)),
-        dict(name="NAHKAMPF", waffen=("schrot", "sturm"), wuerfe=("rauch",)),
+        dict(name="STURM", klasse="schuetze", waffen=("sturm", "repetierer"),
+             wuerfe=("granate",)),
+        dict(name="JÄGER", klasse="scharfschuetze", waffen=("scharf", "revolver"),
+             wuerfe=("rauch",)),
+        dict(name="NAHKAMPF", klasse="pionier", waffen=("schrot", "nagler", "einwegwerfer"),
+             wuerfe=("granate",)),
     ),
     namenslaenge=12,
 )

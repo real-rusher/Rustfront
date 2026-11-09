@@ -130,6 +130,10 @@ def bot_loadout(rnd, fest=None) -> dict:
         if not raus["wuerfe"]:
             raus["wuerfe"] = [rnd.choice(wuerfe)]
         return raus
+    # Bots tragen weiter zwei aus ihren fuenf (auch nach 0.34.91, Haupt- und
+    # Seitenwaffe gelten fuer die Saetze der Spieler): mit der Pistole als
+    # zweiter Waffe hielten sie im Feuerschutz messbar schlechter nieder -
+    # ihre KI ist auf zwei Hauptwaffen abgestimmt (tests/test_verhalten.py).
     waffen = rnd.sample(list(K.BOTS["waffen"]), 2)
     return {"name": "BOT", "waffen": waffen, "wuerfe": [rnd.choice(wuerfe)]}
 
@@ -294,6 +298,14 @@ class BotHirn(Taktik):
             self._kehrt = 0.0
         schritt = K.BOTS["dreh"] * dt
         dreh = max(-schritt, min(schritt, ab))
+        if (dreh * self._drall > 0.0 and abs(self._drall) >= K.BOTS["drall_bremse"]
+                and not (z is not None and self.ziel_ok(z))):
+            # Drehbremse (seit 0.34.91): ohne Gegner im Blick nicht noch
+            # weiter in dieselbe Richtung, wer sich eben schon fast ganz
+            # herum gedreht hat. Beim Suchen lagen die Blickpunkte sonst
+            # nacheinander je gut 120 Grad weiter - zusammen eine ganze
+            # Drehung ohne Sinn (gesehen, als die Gefechte laenger dauerten).
+            dreh = 0.0
         self.blick += dreh
         self._drall = self._drall * max(0.0, 1.0 - dt / K.BOTS["drall_zeit"]) + dreh
         weit = max(40.0, k.pos.distance_to(ziel_punkt))
@@ -739,6 +751,11 @@ class BotHirn(Taktik):
         if self.unterdrueckt > 0.0:
             fehler *= b["unterdrueckt_fehler"]   # Kugeln um die Ohren
         fehler *= self.fehler_faktor()
+        if k.ladung > 0.0 and k._waffe_lesen().get("art") == "strahl":
+            # Wer die Spule laedt, zielt in Ruhe (seit 0.34.91): ein einzelner
+            # Schuss, der alles entscheidet. Mit dem gewoehnlichen Wackeln
+            # ging er an einer Figur meist vorbei (gemessen: 7 von 12 Laeufen).
+            fehler *= b["spule_fehler"]
         self.fehler.rotate_ip(self.rnd.uniform(-40, 40) * dt * 3)
         ziel_punkt = z.pos + self.fehler * (fehler * massstab)
         # Mehrere dicht beieinander: ungefaehr in die Richtung, hin und her

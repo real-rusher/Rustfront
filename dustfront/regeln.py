@@ -292,6 +292,12 @@ FELDER = (
          text=_loadout_name, gilt=lambda d: d.get("loadouts") == "gleich",
          rund=True, einzug=True,
          hilfe="EINES DEINER LOADOUTS - DAS TRAGEN ALLE."),
+    # Seit 0.34.91: mit Loadouts spielt jeder eine Klasse (gewuenscht,
+    # Vorgabe an). Wer ohne Klasse kommt, spielt K.KLASSE_PFLICHT_ERSATZ.
+    Feld("klasse_pflicht", "KLASSE PFLICHT", "AUSRÜSTUNG",
+         K.GEFECHT["klasse_pflicht"], None, schalter=True, einzug=True,
+         gilt=lambda d: d.get("loadouts") in ("eigenes", "gleich"),
+         hilfe="JEDER SPIELT EINE KLASSE. WER OHNE KOMMT, SPIELT SCHÜTZE."),
     # Seit 0.34.79: die Faehigkeit der Klasse (Taste C) auch im Gefecht.
     # Ohne Loadouts gibt es keine Klasse, also auch keine Faehigkeit.
     # Seit 0.34.85 auch in JEDER HAT ALLES: dort hat jeder jedes Werkzeug.

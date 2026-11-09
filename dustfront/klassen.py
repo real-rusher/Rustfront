@@ -23,13 +23,32 @@ def name(klasse: str) -> str:
     return daten(klasse)["name"]
 
 
-def waffen_von(klasse: str) -> tuple:
-    """Woraus der Satz dieser Klasse Waffen waehlt."""
-    lo = K.LOADOUT
+def plaetze_von(klasse: str) -> tuple:
+    """Welche Plaetze ein Satz dieser Klasse hat (seit 0.34.91): Haupt-
+    und Seitenwaffe, manche Klassen dazu eine Spezialwaffe, mit Schild
+    nur die Seitenwaffe."""
     d = K.KLASSEN.get(klasse or "")
     if d is None:
-        return tuple(lo["auswahl_waffen"])
-    return tuple(w for w in d["waffen"] if w in lo["auswahl_waffen"])
+        return tuple(K.PLAETZE_VORGABE)
+    return tuple(d.get("plaetze", K.PLAETZE_VORGABE))
+
+
+def platz_von(waffe: str) -> str:
+    """Welcher Platz eine Waffe ist (K.WAFFEN_PLATZ), Vorgabe "haupt"."""
+    return K.WAFFEN_PLATZ.get(waffe, "haupt")
+
+
+def waffen_von(klasse: str, platz: str | None = None) -> tuple:
+    """Woraus der Satz dieser Klasse Waffen waehlt - mit `platz` nur die
+    fuer diesen Platz. Ohne Klasse jede Haupt- und Seitenwaffe; eine
+    Spezialwaffe gibt es nur mit einer Klasse, die den Platz hat."""
+    lo = K.LOADOUT
+    d = K.KLASSEN.get(klasse or "")
+    plaetze = plaetze_von(klasse)
+    quelle = lo["auswahl_waffen"] if d is None else d["waffen"]
+    return tuple(w for w in quelle if w in lo["auswahl_waffen"]
+                 and platz_von(w) in plaetze
+                 and (platz is None or platz_von(w) == platz))
 
 
 def wuerfe_von(klasse: str) -> tuple:

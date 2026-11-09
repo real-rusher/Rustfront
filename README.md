@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.90, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.91, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -852,6 +852,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.91 | **Hauptwaffe und Seitenwaffe.** Jeder Satz hat eine Haupt- und eine Seitenwaffe (Pistolen, Werkzeug, leichter Nahkampf); Unterstuetzer, Pionier, Panzerjaeger, Grenadier, Flammentrupp, Nahkaempfer und Techniker haben dazu einen Platz fuer eine Spezialwaffe (Minigun, Raketen, Werfer, Flammenwerfer, Kettensaege, Speer, Spule, Kugelblitz), der Schildtraeger nur die Seitenwaffe. Alte Saetze werden umgestellt (aus der zweiten Hauptwaffe wird eine Seitenwaffe). Neue Regel **KLASSE PFLICHT** (Vorgabe an): mit Loadouts spielt jeder eine Klasse, wer ohne kommt, spielt SCHUETZE. Sturmgewehr streut mehr (3,0/4,6 statt 2,2/3,6), Schrot 11,5 statt 13 je Kugel. Testmodus: NEBEL als Vorgabe aus. Bots: ruhiger zielen beim Laden der Spule, Drehbremse ohne Gegner. **Netz/Gefecht: Gastgeber und Gast brauchen 0.34.91** (Regel und Loadouts). |
 | 0.34.90 | **GRAFIKKARTE SKALIERT** (Einstellungen > Anzeige, aus als Vorgabe): die Grafikkarte vergroessert das 640x360-Bild aufs Fenster (pygame.SCALED) statt des Prozessors - spart bei grossen Fenstern und im Vollbild die meiste Zeit des Vergroesserns. Pixelraster gilt weiter (GANZE PIXEL: nur ganze Faktoren im Fenster, OHNE FLIMMERN: geglaettet). Ohne schnelle Grafikkarte, mit Touch-Steuerung und auf iOS bleibt es von selbst beim alten Weg; auf sehr schwachen Grafikchips einfach ausschalten. Netz/LAN: unveraendert. |
 | 0.34.89 | **Leistungsrunde ohne Spielaenderung** (Spielzustand und Bild bitgenau wie vorher, gemessen an drei Szenen): gemessen etwa 10 % schneller im Team-Gefecht und in PVE, gut 6 % in der grossen Testmodus-Schlacht. Figuren ausserhalb des Bildes werden nicht mehr gezeichnet, der Ziffernblock des Testmodus ist eine gemerkte Flaeche, `deckung` antwortet bei freien kurzen Strecken sofort, die Gegnerliste der Bots wird je Durchgang einmal gesucht, die JEDER-HAT-ALLES-Hotbar merkt ihre Gruppen, Kamera.zu_bild rechnet ohne Zwischenvektoren. Netz/LAN: unveraendert. |
 | 0.34.88 | Testmodus: der Beobachter hat immer eine Minikarte (MINIKARTE ALLWISSEND legt fest, ob jeder darauf ist); in ANSICHT WIE RUNDE nimmt der unsichtbare Ziffernblock weder Finger noch Mausklick weg. Netz/LAN: unveraendert. |

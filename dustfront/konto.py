@@ -98,20 +98,29 @@ def loadout_saeubern(roh) -> dict | None:
     from . import klassen as klassen_modul
     erlaubt_w = klassen_modul.waffen_von(klasse)
     erlaubt_g = klassen_modul.wuerfe_von(klasse)
-    waffen = [w for w in (roh.get("waffen") or [])
-              if isinstance(w, str) and w in erlaubt_w]
+    roh_w = [w for w in (roh.get("waffen") or [])
+             if isinstance(w, str) and w in erlaubt_w]
     wuerfe = [w for w in (roh.get("wuerfe") or [])
               if isinstance(w, str) and w in erlaubt_g]
+    # Je Platz eine Waffe (seit 0.34.91): Haupt-, Seiten- und je nach
+    # Klasse Spezialwaffe, in dieser Reihenfolge. Was der Satz fuer den
+    # Platz mitbringt, gilt; fehlt es (ein alter Satz mit zwei
+    # Hauptwaffen), die erste, die die Klasse dafuer hat.
+    waffen = []
+    for platz in klassen_modul.plaetze_von(klasse):
+        auswahl = klassen_modul.waffen_von(klasse, platz)
+        wahl = next((w for w in roh_w if w in auswahl and w not in waffen), None)
+        if wahl is None:
+            wahl = next((w for w in auswahl if w not in waffen), None)
+        if wahl is not None:
+            waffen.append(wahl)
     # Doppeltes entfernen, Reihenfolge behalten.
-    waffen = list(dict.fromkeys(waffen))[:lo["waffen"]]
     wuerfe = list(dict.fromkeys(wuerfe))[:lo["wuerfe"]]
-    for auswahl, liste, anzahl in ((erlaubt_w, waffen, lo["waffen"]),
-                                   (erlaubt_g, wuerfe, lo["wuerfe"])):
-        for wahl in auswahl:
-            if len(liste) >= anzahl:
-                break
-            if wahl not in liste:
-                liste.append(wahl)
+    for wahl in erlaubt_g:
+        if len(wuerfe) >= lo["wuerfe"]:
+            break
+        if wahl not in wuerfe:
+            wuerfe.append(wahl)
     raus = {"name": name or "SATZ", "waffen": waffen, "wuerfe": wuerfe}
     if klasse:
         # Nur mit Klasse ein eigener Eintrag: ein Satz ohne sieht aus wie
@@ -151,10 +160,13 @@ def hotbar_aus_loadout(lo: dict) -> list[str]:
     die Waffen aus dem Waffenpaket stehen nicht in HOTBAR (die hat nur zehn
     Plaetze) und fielen sonst einfach heraus.
     """
-    dabei = set(lo.get("waffen") or []) | set(lo.get("wuerfe") or [])
-    waffen = list(K.LOADOUT["auswahl_waffen"])
-    folge = waffen + [w for w in K.HOTBAR if w not in waffen]
-    return [w for w in folge if w in dabei]
+    # Seit 0.34.91 die Waffen in der Folge der Plaetze (1 Haupt-, 2 Seiten-,
+    # 3 Spezialwaffe), dann die Wurfwaffen wie in HOTBAR.
+    waffen = [w for w in (lo.get("waffen") or []) if w in K.WAFFEN]
+    waffen = list(dict.fromkeys(waffen))
+    wuerfe = set(lo.get("wuerfe") or []) - set(waffen)
+    return waffen + [w for w in K.HOTBAR if w in wuerfe] + sorted(
+        w for w in wuerfe if w not in K.HOTBAR and w in K.WAFFEN)
 
 
 # ══════════════════════════════════════════════════ Journal

@@ -551,8 +551,9 @@ class Testmodus(Gefecht):
         # Kegel zum Mauszeiger.
         self.fernglas = bool(z.get("fernglas", False))
         # Der Nebel jenseits des normalen Bildes (seit 0.34.54), abschaltbar:
-        # herausgezoomt sieht man dann jeden Gegner bis an den Rand.
-        self.nebel = bool(z.get("nebel", True))
+        # herausgezoomt sieht man dann jeden Gegner bis an den Rand. Seit
+        # 0.34.91 aus als Vorgabe (gewuenscht) - einschalten wie bisher.
+        self.nebel = bool(z.get("nebel", False))
         # Flucht in Panik (seit 0.34.56): in Runden aus, wie im Spiel; zum
         # Ansehen, wie es in der Kampagne waere, einschaltbar.
         self.bot_fliehen = bool(z.get("bot_fliehen", False))
