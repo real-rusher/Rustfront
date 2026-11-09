@@ -126,8 +126,9 @@ class Anzeige:
             else:
                 self._panzerung(ziel, ich, mitte, radius)
                 self._faehigkeit_rund(ziel, ich)
-                self._waffe(ziel, ich)
                 self._hotbar(ziel, ich)
+                self._extra_felder(ziel, ich)
+                self._munition(ziel, ich)
         if self.tafel_zeigen():
             self._tafel(ziel)
         if g.hinweis:
@@ -467,28 +468,39 @@ class Anzeige:
 
     @staticmethod
     def _bogen(ziel, mitte, radius, teile, farbe_fuer, dicke) -> None:
-        """Ein Bogen aus `teile` Stuecken mit Luecken, von K.HUD bogen_von
-        ueber oben bis bogen_bis. farbe_fuer(i) -> (Farbe, Anteil 0..1):
-        so viel des Stuecks ist gefuellt, der Rest dunkel."""
+        """Ein Ring aus `teile` Stuecken, der aussen am Kreis anliegt (seit
+        0.34.93: ohne Abstand, ohne Luecken - die Teile trennt nur ein
+        dunkler Strich, wie auf der Skizze), von K.HUD bogen_von ueber oben
+        bis bogen_bis. farbe_fuer(i) -> (Farbe, Anteil 0..1): so viel des
+        Stuecks ist gefuellt, der Rest dunkel."""
         h = K.HUD
         von, bis = h["bogen_von"], h["bogen_bis"]
         je = (von - bis) / float(teile)
-        # Die Luecke in Pixeln (Dicke plus gut einen), in Grad umgerechnet:
-        # bei jedem Radius gleich gut als Platten zu erkennen.
-        luecke = min(je * 0.5, math.degrees((dicke + 1.5) / max(1.0, float(radius))))
+        innen, aussen = radius + 0.5, radius + dicke + 0.5
         dunkel = (26, 19, 14)
+        cx, cy = mitte
+
+        def flaeche(a0, a1, farbe):
+            n = max(2, int(abs(a1 - a0) / 3.0) + 2)
+            winkel = [math.radians(a0 + (a1 - a0) * t / (n - 1)) for t in range(n)]
+            punkte = ([(cx + aussen * math.cos(w), cy - aussen * math.sin(w)) for w in winkel]
+                      + [(cx + innen * math.cos(w), cy - innen * math.sin(w))
+                         for w in reversed(winkel)])
+            pygame.draw.polygon(ziel, farbe, punkte)
+
         for i in range(teile):
-            a0 = von - i * je - luecke / 2.0
-            a1 = von - (i + 1) * je + luecke / 2.0
+            a0 = von - i * je
+            a1 = von - (i + 1) * je
             farbe, anteil = farbe_fuer(i)
-            for f, b0, b1 in ((dunkel, a0, a1), (farbe, a0, a0 + (a1 - a0) * anteil)):
-                if f is None or abs(b1 - b0) < 0.5:
-                    continue
-                n = max(2, int(abs(b1 - b0) / 4.0) + 1)
-                punkte = [(mitte[0] + radius * math.cos(math.radians(b0 + (b1 - b0) * t / (n - 1))),
-                           mitte[1] - radius * math.sin(math.radians(b0 + (b1 - b0) * t / (n - 1))))
-                          for t in range(n)]
-                pygame.draw.lines(ziel, f, False, punkte, dicke)
+            flaeche(a0, a1, dunkel)
+            if farbe is not None and anteil > 0.0:
+                flaeche(a0, a0 + (a1 - a0) * min(1.0, anteil), farbe)
+        # Die Striche zwischen den Teilen und an beiden Enden.
+        for i in range(teile + 1):
+            w = math.radians(von - i * je)
+            pygame.draw.line(ziel, (10, 7, 5),
+                             (cx + (innen - 0.5) * math.cos(w), cy - (innen - 0.5) * math.sin(w)),
+                             (cx + (aussen + 0.5) * math.cos(w), cy - (aussen + 0.5) * math.sin(w)), 1)
 
     def _panzerung(self, ziel, ich, mitte, radius) -> None:
         """Die Panzerung als Bogen um die Karte - in Platten wie vorher
@@ -502,8 +514,9 @@ class Anzeige:
 
     def _faehigkeit_rund(self, ziel, ich) -> None:
         """Der Kreis der Faehigkeit (Taste C) neben der Karte, die Dashes
-        als Bogen darum - die naechste Ladung fuellt sich sichtbar. Ueber
-        dem Bogen der Name, rechts daneben die Medkits."""
+        als Ring darum - die naechste Ladung fuellt sich sichtbar. Ueber
+        dem Ring der Name. Das Medkit hat seit 0.34.93 ein Feld neben der
+        Hotbar."""
         g = self.g
         h = K.HUD
         r = h["faeh_d"] // 2
@@ -513,19 +526,15 @@ class Anzeige:
         from . import klassen as klassen_modul
         arten = (klassen_modul.faehigkeiten_von(ich)
                  if getattr(g, "faehigkeiten_an", False) else ())
-        if ich.heilt_rest > 0:
-            # Waehrend das Medkit angelegt wird: nur das, und wie lange noch.
-            fertig = 1.0 - ich.heilt_rest / K.MEDKIT["dauer"]
-            _text(ziel, "MED", mitte[0], mitte[1] - 3, K.C_TEAL, 1, "mitte")
-            _balken(ziel, (mitte[0] - 9, mitte[1] + 6, 18, 2), fertig, K.C_TEAL)
-        elif arten:
+        if arten:
             rest = getattr(ich, "faehigkeit_rest", {}) or {}
             r0 = min(rest.get(a, 0.0) for a, _p in arten)
             taste = g._tastenname("faehigkeit")[:1] if hasattr(g, "_tastenname") else "C"
             if r0 <= 0.0:
                 _text(ziel, taste, mitte[0], mitte[1] - 3, K.C_TEAL, 1, "mitte")
             else:
-                _text(ziel, "%d" % math.ceil(r0), mitte[0], mitte[1] - 3, K.C_MUTED, 1, "mitte")
+                # Nach dem Benutzen der Countdown, in Grau (seit 0.34.93).
+                _text(ziel, "%d" % math.ceil(r0), mitte[0], mitte[1] - 3, (150, 146, 140), 1, "mitte")
             namen = ", ".join(klassen_modul.FAEHIGKEIT_NAMEN.get(a, a.upper()) for a, _p in arten)
             if getattr(ich, "alle_werkzeuge", False) and not getattr(ich, "klasse", ""):
                 # Jeder hat alles: welches Werkzeug, und wie man wechselt.
@@ -533,7 +542,7 @@ class Anzeige:
                                     if hasattr(g, "_tastenname") else "X")
             # Links buendig ueber dem Kreis: so liegt er nie auf der Karte.
             _text(ziel, ui.kuerzen(namen, W // 2 - 60 - (mitte[0] - r)), mitte[0] - r,
-                  mitte[1] - r - h["bogen_abstand"] - 12,
+                  mitte[1] - r - h["bogen_abstand"] - h["bogen_dicke"] - 10,
                   K.C_TEAL if r0 <= 0.0 else K.C_MUTED_DK)
         else:
             _text(ziel, "-", mitte[0], mitte[1] - 3, K.C_MUTED_DK, 1, "mitte")
@@ -548,58 +557,124 @@ class Anzeige:
                 return K.C_MUTED_DK, laden
             return None, 0.0
         self._bogen(ziel, mitte, r + h["bogen_abstand"], voll, dash, h["bogen_dicke"])
-        # Medkits nur, wenn es in dieser Runde welche gibt.
-        if g.start_medkits <= 0 and not g.medkits_spawnen and ich.medkits <= 0:
-            return
-        x = mitte[0] + r + h["bogen_abstand"] + 6
-        y = H - h["unten"] - 8
-        for i in range(K.MEDKIT["hoechstens"]):
-            mr = pygame.Rect(x, y - i * 8, 6, 6)
-            pygame.draw.rect(ziel, K.C_TEAL if i < ich.medkits else (24, 18, 13), mr)
-            pygame.draw.rect(ziel, K.C_TEAL_DK, mr, 1)
-        _text(ziel, g._tastenname("heilen")[:1], x + 3,
-              y - K.MEDKIT["hoechstens"] * 8 - 2, K.C_MUTED, 1, "mitte")
 
-    # ---- Unten rechts: die Waffe ----------------------------------
-    def _waffe(self, ziel, ich) -> None:
+    # ---- Neben der Hotbar: Brecheisen und Medkit (seit 0.34.93) ----------
+    def extra_rechtecke(self, ich) -> list:
+        """(Art, Rechteck) der beiden Felder rechts neben der Hotbar, mit
+        etwas Abstand: das Brecheisen (F) und das Medkit (H) - das nur,
+        wenn es in dieser Runde Medkits gibt."""
         g = self.g
-        r = RECHTS
-        ui.kasten(ziel, r, K.C_MUTED_DK, KASTEN, 4)
+        if getattr(g, "gruppen_hotbar", False):
+            n = len(K.ALLES_GRUPPEN)
+        else:
+            n = len(ich.waffen)
+        r = self.hotbar_rechteck(n)
+        groesse = r.height + 2
+        x = r.right + K.HUD["extra_abstand"]
+        raus = [("nahkampf", pygame.Rect(x, r.y - 1, groesse, groesse))]
+        if g.start_medkits > 0 or g.medkits_spawnen or ich.medkits > 0:
+            raus.append(("medkit", pygame.Rect(x + groesse + 2, r.y - 1, groesse, groesse)))
+        return raus
+
+    def _extra_felder(self, ziel, ich) -> None:
+        g = self.g
+        for art, r in self.extra_rechtecke(ich):
+            if art == "nahkampf":
+                bereit = ich.nahkampf_rest <= 0.0
+                ui.kasten(ziel, r, K.C_MUTED_DK, KASTEN, 3)
+                sym = g.renderer.bilder.bild("waffe_brecheisen")
+                ziel.blit(sym, (r.centerx - sym.get_width() // 2, r.centery - sym.get_height() // 2))
+                SCHRIFT.zeichnen(ziel, g._tastenname("nahkampf")[:1], r.x + 2, r.y + 2,
+                                 K.C_AMBER if bereit else K.C_MUTED_DK, 1)
+            else:
+                da = ich.medkits > 0
+                ui.kasten(ziel, r, K.C_TEAL_DK if da else K.C_MUTED_DK,
+                          KASTEN if da else (20, 14, 10, 200), 3)
+                if ich.heilt_rest > 0:
+                    fertig = 1.0 - ich.heilt_rest / K.MEDKIT["dauer"]
+                    _balken(ziel, (r.x + 2, r.bottom - 4, r.width - 4, 2), fertig, K.C_TEAL)
+                sym = g.renderer.bilder.bild("medkit")
+                if sym.get_width() > r.width - 4 or sym.get_height() > r.height - 4:
+                    f = min((r.width - 4) / sym.get_width(), (r.height - 4) / sym.get_height())
+                    sym = self._klein(sym, f)
+                if not da:
+                    sym = self._blass(sym)
+                ziel.blit(sym, (r.centerx - sym.get_width() // 2, r.centery - sym.get_height() // 2))
+                SCHRIFT.zeichnen(ziel, g._tastenname("heilen")[:1], r.x + 2, r.y + 2,
+                                 K.C_TEAL if da else K.C_MUTED_DK, 1)
+                _text(ziel, "%d" % ich.medkits, r.right - 2, r.bottom - 8,
+                      K.C_CREAM if da else K.C_MUTED_DK, 1, "rechts")
+
+    def _klein(self, bild, faktor):
+        merk = self.__dict__.setdefault("_klein_merk", {})
+        schluessel = (id(bild), round(faktor, 3))
+        hit = merk.get(schluessel)
+        if hit is None or hit[0] is not bild:
+            neu = pygame.transform.scale(bild, (max(1, int(bild.get_width() * faktor)),
+                                                max(1, int(bild.get_height() * faktor))))
+            hit = merk[schluessel] = (bild, neu)
+        return hit[1]
+
+    def _blass(self, bild):
+        merk = self.__dict__.setdefault("_blass_merk", {})
+        hit = merk.get(id(bild))
+        if hit is None or hit[0] is not bild:
+            neu = bild.copy()
+            neu.fill((110, 110, 110, 160), special_flags=pygame.BLEND_RGBA_MULT)
+            hit = merk[id(bild)] = (bild, neu)
+        return hit[1]
+
+    # ---- Am Zeiger: das Magazin (seit 0.34.93) ----------------------------
+    def _munition(self, ziel, ich) -> None:
+        """Die Patronen im Magazin dort, wo man hinschaut: gross rechts unter
+        dem Zeiger. Gelb, wenn es knapp wird, rot blinkend, wenn es leer ist;
+        beim Nachladen ein Balken. Nach einem Wechsel steht kurz der Name der
+        Waffe darueber. (Vorher ein grosser Kasten unten rechts.) Mit
+        Touch-Steuerung, wo es keinen Zeiger gibt, ueber der Hotbar."""
+        g = self.g
         d = ich.waffe_daten
         name = ich.waffe_name
-        _text(ziel, d["name"], r.x + 6, r.y + 4, K.C_AMBER)
+        jetzt = g.welt.zeit
+        if self.__dict__.get("_waffe_vorher") != name:
+            self._waffe_vorher = name
+            self._waffe_seit = jetzt
+        touch = getattr(getattr(g, "app", None), "touch", None) is not None
+        eingabe = getattr(getattr(g, "app", None), "eingabe", None)
+        if touch or eingabe is None:
+            x, y = W // 2 + 60, HOTBAR_Y - 30
+        else:
+            x, y = int(eingabe.maus.x) + 11, int(eingabe.maus.y) + 7
+            x = max(4, min(W - 60, x))
+            y = max(16, min(H - 30, y))
+        if jetzt - self._waffe_seit < K.HUD["waffe_zeigen"]:
+            _text(ziel, d["name"], x, y - 10, K.C_AMBER)
         kurz = d.get("kurz")
-        if kurz:
-            # Die Betriebsart (MG): was gleich passiert, wenn man drueckt.
-            _text(ziel, kurz, r.right - 6, r.y + 4, K.C_TEAL, 1, "rechts")
         if getattr(ich, "anlauf", 0.0) > 0.02:
-            _balken(ziel, (r.x + 6, r.y + 12, 50, 2), ich.anlauf, K.C_TEAL)
+            _balken(ziel, (x, y - 2, 24, 2), ich.anlauf, K.C_TEAL)
         if ich.nachlade_rest > 0 and d.get("nachladen"):
             fertig = 1.0 - ich.nachlade_rest / d["nachladen"]
-            _text(ziel, "NACHLADEN", r.x + 6, r.y + 20, K.C_MUTED)
-            _balken(ziel, (r.x + 66, r.y + 21, r.width - 72, 5), fertig,
-                    K.C_AMBER)
+            pygame.draw.rect(ziel, SCHATTEN, (x - 1, y + 3, 30, 5))
+            _balken(ziel, (x, y + 4, 28, 3), fertig, K.C_AMBER)
             return
         if not d.get("magazin"):
-            _text(ziel, "--", r.right - 6, r.y + 15, K.C_MUTED, 2, "rechts")
             return
         munition = ich.magazin.get(name, 0)
-        farbe = K.C_CREAM
+        voll = max(1, int(d["magazin"]))
         if not munition:
-            # Ein leeres Magazin blinkt. Rot allein reicht nicht: rot ist
-            # auch die Panzerung, wenn es eng wird.
-            farbe = K.C_RED if (g.welt.zeit * 4.0) % 1.0 < 0.6 else (90, 26, 20)
+            farbe = K.C_RED if (jetzt * 4.0) % 1.0 < 0.6 else (90, 26, 20)
+        elif munition <= max(1, voll // 4):
+            farbe = K.C_AMBER
+        else:
+            farbe = K.C_CREAM
+        _text(ziel, "%d" % munition, x, y, farbe, 2)
+        breite = SCHRIFT.breite("%d" % munition, 2)
         if g.knapp:
             vorrat = ich.vorrat.get(name, 0)
-            text = "/ %d" % vorrat
-            _text(ziel, text, r.right - 6, r.y + 22,
-                  K.C_RED if not vorrat else K.C_MUTED, 1, "rechts")
-            rechts = r.right - 10 - SCHRIFT.breite(text, 1)
-            if not vorrat and not munition:
-                _text(ziel, "KEIN VORRAT", r.x + 6, r.y + 22, K.C_RED)
-        else:
-            rechts = r.right - 6
-        _text(ziel, "%d" % munition, rechts, r.y + 15, farbe, 2, "rechts")
+            _text(ziel, "/%d" % vorrat, x + breite + 3, y + 7,
+                  K.C_RED if not vorrat else K.C_MUTED)
+        if kurz:
+            # Die Betriebsart (MG, Revolver): was gleich passiert.
+            _text(ziel, kurz, x + breite + 3, y, K.C_TEAL)
 
     # ---- Unten Mitte: die Hotbar --------------------------------------
     def _hotbar(self, ziel, ich) -> None:

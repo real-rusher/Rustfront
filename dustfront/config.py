@@ -4213,14 +4213,16 @@ HUD = dict(
     karte_x=10,               # ihr linker Rand
     unten=6,                  # Abstand der Kreise vom unteren Bildrand
     karte_zoom=1.5,           # so viel groesser als die alte Karte oben links
-    bogen_abstand=5,          # Bogen so weit ausserhalb des Kreises
-    bogen_dicke=3,
+    bogen_abstand=0,          # der Ring liegt direkt am Kreis an (seit 0.34.93)
+    bogen_dicke=5,
     bogen_von=200.0,          # Grad (0 = rechts, 90 = oben): von links unten ...
     bogen_bis=-20.0,          # ... ueber oben bis rechts unten
     segmente=18,              # die Platten der Panzerung, wie vorher
     faeh_d=30,                # Durchmesser des Kreises der Faehigkeit
     faeh_luft=14,             # Abstand zwischen Karte und Faehigkeit
     tafel_breite=300,         # die Tafel auf TAB
+    extra_abstand=10,         # Abstand der Felder BRECHEISEN und MEDKIT zur Hotbar (seit 0.34.93)
+    waffe_zeigen=1.4,         # so lange steht nach dem Wechsel der Name am Zeiger (s)
 )
 
 MINIKARTE = dict(

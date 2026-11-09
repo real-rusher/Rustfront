@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.92, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.93, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -852,6 +852,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.93 | Anzeige verfeinert: die Ringe um Karte und Faehigkeit liegen direkt an, ohne Luecken (Platten nur durch feine Striche getrennt), etwas dicker. Neben der Hotbar, mit Abstand, ein Feld fuer das Brecheisen (F) und eines fuer Medkits (H, mit Zahl), je mit Symbol. Der grosse Waffenkasten unten rechts ist weg: das Magazin steht gross rechts unter dem Zeiger (gelb, wenn knapp, rot blinkend, wenn leer, Balken beim Nachladen; nach dem Wechsel kurz der Name). Nach dem Benutzen der Faehigkeit steht im Kreis ein grauer Countdown statt C. Netz/LAN: unveraendert. |
 | 0.34.92 | **Neue Anzeige im Gefecht** (nach Skizze): oben links die Uhr (PVE: Welle), oben in der Mitte der Mannschaftsstand als geteilter Balken mit den Zahlen darunter, oben rechts die Ebenen wie bisher. Unten links die Minikarte als Kreis um die eigene Figur, die Panzerung als Bogen darum (in Platten wie vorher), daneben der Kreis der Faehigkeit (C) mit den Dashes als Bogen und den Medkits. Hotbar und Waffe wie bisher. Der Punktestand, Spielart und Karte stehen jetzt auf einer Tafel, solange TAB gehalten wird (Taste INVENTAR / PUNKTE). Werte unveraendert. Netz/LAN: unveraendert. |
 | 0.34.91 | **Hauptwaffe und Seitenwaffe.** Jeder Satz hat eine Haupt- und eine Seitenwaffe (Pistolen, Werkzeug, leichter Nahkampf); Unterstuetzer, Pionier, Panzerjaeger, Grenadier, Flammentrupp, Nahkaempfer und Techniker haben dazu einen Platz fuer eine Spezialwaffe (Minigun, Raketen, Werfer, Flammenwerfer, Kettensaege, Speer, Spule, Kugelblitz), der Schildtraeger nur die Seitenwaffe. Alte Saetze werden umgestellt (aus der zweiten Hauptwaffe wird eine Seitenwaffe). Neue Regel **KLASSE PFLICHT** (Vorgabe an): mit Loadouts spielt jeder eine Klasse, wer ohne kommt, spielt SCHUETZE. Sturmgewehr streut mehr (3,0/4,6 statt 2,2/3,6), Schrot 11,5 statt 13 je Kugel. Testmodus: NEBEL als Vorgabe aus. Bots: ruhiger zielen beim Laden der Spule, Drehbremse ohne Gegner. **Netz/Gefecht: Gastgeber und Gast brauchen 0.34.91** (Regel und Loadouts). |
 | 0.34.90 | **GRAFIKKARTE SKALIERT** (Einstellungen > Anzeige, aus als Vorgabe): die Grafikkarte vergroessert das 640x360-Bild aufs Fenster (pygame.SCALED) statt des Prozessors - spart bei grossen Fenstern und im Vollbild die meiste Zeit des Vergroesserns. Pixelraster gilt weiter (GANZE PIXEL: nur ganze Faktoren im Fenster, OHNE FLIMMERN: geglaettet). Ohne schnelle Grafikkarte, mit Touch-Steuerung und auf iOS bleibt es von selbst beim alten Weg; auf sehr schwachen Grafikchips einfach ausschalten. Netz/LAN: unveraendert. |

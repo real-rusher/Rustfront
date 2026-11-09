@@ -8034,8 +8034,9 @@ def hud_bild(sz):
     sz.hud.zeichnen(app.flaeche)
     return app.flaeche.copy()
 
-# Der Vorrat steht nur bei knapper Munition unter den Feldern.
-unter = pygame.Rect(0, AZ.H - 14, AZ.W, 12)
+# Der Vorrat steht nur bei knapper Munition - seit 0.34.93 am Zeiger neben
+# dem Magazin statt unten rechts, darum das ganze Bild verglichen.
+unter = pygame.Rect(0, 0, AZ.W, AZ.H)
 mit_vorrat = hud_bild(wa_).subsurface(unter).copy()
 wa_.knapp = False
 ohne_vorrat = hud_bild(wa_).subsurface(unter).copy()
@@ -16022,7 +16023,7 @@ _mitte192 = (K.HUD["karte_x"] + K.HUD["karte_d"] // 2, K.GAME_H - K.HUD["unten"]
 # Mitten in einer Platte (genau oben liegt eine Luecke zwischen zweien).
 _je192 = (K.HUD["bogen_von"] - K.HUD["bogen_bis"]) / K.HUD["segmente"]
 _w_oben192 = math.radians(K.HUD["bogen_von"] - 8.5 * _je192)
-_rad192 = K.HUD["karte_d"] // 2 + K.HUD["bogen_abstand"]
+_rad192 = K.HUD["karte_d"] // 2 + K.HUD["bogen_abstand"] + K.HUD["bogen_dicke"] / 2.0
 _oben192 = (int(round(_mitte192[0] + _rad192 * math.cos(_w_oben192))),
             int(round(_mitte192[1] - _rad192 * math.sin(_w_oben192))))
 pruef("Die Panzerung ist ein Bogen ueber der Karte (oben im Bogen ihre Farbe)",
@@ -16030,8 +16031,8 @@ pruef("Die Panzerung ist ein Bogen ueber der Karte (oben im Bogen ihre Farbe)",
 _ich192.leben = _ich192.max_leben * 0.2
 _b192.fill((0, 0, 0))
 _w192.zeichnen(_b192, 0.5)
-_rechts192 = (int(_mitte192[0] + (K.HUD["karte_d"] // 2 + K.HUD["bogen_abstand"]) * math.cos(math.radians(-15))),
-              int(_mitte192[1] - (K.HUD["karte_d"] // 2 + K.HUD["bogen_abstand"]) * math.sin(math.radians(-15))))
+_rechts192 = (int(_mitte192[0] + _rad192 * math.cos(math.radians(-15))),
+              int(_mitte192[1] - _rad192 * math.sin(math.radians(-15))))
 pruef("... mit wenig Panzerung rot und nur noch zum Teil voll (rechts dunkel)",
       tuple(_b192.get_at(_rechts192))[:3] != tuple(K.C_RED), str(tuple(_b192.get_at(_rechts192))))
 _ich192.leben = _ich192.max_leben
@@ -16054,6 +16055,35 @@ pruef("Die Hotbar laesst links Platz fuer Karte und Faehigkeit",
           and _hud192.hotbar_rechteck(n_).right < _AZ192.RECHTS.left
           for n_ in (2, 3, 4, len(K.ALLES_GRUPPEN))),
       str(_hud192.hotbar_rechteck(len(K.ALLES_GRUPPEN))))
+# 0.34.93: Felder fuer Brecheisen und Medkit, Magazin am Zeiger, Countdown.
+_ex192 = _hud192.extra_rechtecke(_ich192)
+_hb192 = _hud192.hotbar_rechteck(len(K.ALLES_GRUPPEN) if _w192.gruppen_hotbar else len(_ich192.waffen))
+pruef("Neben der Hotbar, mit Abstand, ein Feld fuer das Brecheisen (und eines fuer Medkits, wenn es welche gibt)",
+      _ex192 and _ex192[0][0] == "nahkampf"
+      and _ex192[0][1].left - _hb192.right >= K.HUD["extra_abstand"]
+      and all(a_ != "medkit" for a_, _r in _ex192) == (_w192.start_medkits <= 0 and not _w192.medkits_spawnen
+                                                       and _ich192.medkits <= 0), str(_ex192))
+_w192.start_medkits = 2
+pruef("... mit Medkits in der Runde auch das Medkit-Feld", any(a_ == "medkit" for a_, _r in _hud192.extra_rechtecke(_ich192)))
+app.eingabe.maus.update(300, 150)
+_ich192.magazin[_ich192.waffe_name] = 7
+_b192.fill((0, 0, 0))
+_w192.zeichnen(_b192, 0.5)
+_feld192 = pygame.Rect(311, 157, 24, 16)
+pruef("Das Magazin steht gross rechts unter dem Zeiger",
+      any(tuple(_b192.get_at((x_, y_)))[:3] in (tuple(K.C_CREAM), tuple(K.C_AMBER))
+          for x_ in range(_feld192.left, _feld192.right) for y_ in range(_feld192.top, _feld192.bottom)))
+_arten192 = __import__("dustfront.klassen", fromlist=["x"]).faehigkeiten_von(_ich192)
+if _arten192:
+    _ich192.faehigkeit_rest = {a_: 5.2 for a_, _p in _arten192}
+    _b192.fill((0, 0, 0))
+    _w192.zeichnen(_b192, 0.5)
+    _fr192 = K.HUD["faeh_d"] // 2
+    _fm192 = (K.HUD["karte_x"] + K.HUD["karte_d"] + K.HUD["faeh_luft"] + _fr192, K.GAME_H - K.HUD["unten"] - _fr192)
+    _grau192 = [tuple(_b192.get_at((x_, y_)))[:3] for x_ in range(_fm192[0] - 4, _fm192[0] + 4)
+                for y_ in range(_fm192[1] - 4, _fm192[1] + 4)]
+    pruef("Nach dem Benutzen steht im Kreis der Faehigkeit ein grauer Countdown statt der Taste",
+          (150, 146, 140) in _grau192 and tuple(K.C_TEAL) not in _grau192, str(set(_grau192)))
 _w192.verlassen(); _g192.verlassen()
 
 print()
