@@ -312,6 +312,10 @@ def eintraege() -> list:
                 lambda t, p, e, w: t.nachschub_setzen("panzer", p, w), mehrfach=False),
         Eintrag("AUFKLÄRUNGSDROHNE", "NACHSCHUB", ("team",),
                 lambda t, p, e, w: t.nachschub_setzen("aufklaerung", p, w), mehrfach=False),
+        # Seit 0.34.101: der Napalm-Angriff. Die Bahn beginnt am Zeiger und
+        # fuehrt in Richtung WINKEL (im Spiel: zweiter Klick auf der Karte).
+        Eintrag("NAPALM-ANGRIFF", "NACHSCHUB", ("team", "winkel"),
+                lambda t, p, e, w: t.nachschub_setzen("napalm", p, w), mehrfach=False),
         Eintrag("FALLSCHIRMJÄGER", "NACHSCHUB", ("team",),
                 lambda t, p, e, w: t.nachschub_setzen("fallschirmjaeger", p, w), mehrfach=False),
         Eintrag("MEDKIT", "BEUTE", ("anzahl", "streuung"), _beute_setzer("medkit")),
@@ -1419,6 +1423,14 @@ class Testmodus(Gefecht):
             return u
         if was == "fallschirmjaeger":
             return self.fallschirmjaeger_abwerfen(pos, team)
+        if was == "napalm":
+            from .schlacht import Luftangriff
+            richtung = pygame.Vector2(1, 0).rotate(float(w.get("winkel", 0.0) or 0.0))
+            ende = self.napalm_ende(pos, pos + richtung)
+            fraktion = self._fraktion_fuer(K.BOTS["nummer_ab"], team)
+            la = Luftangriff(pos, ende, team, fraktion)
+            self.luftangriffe.append(la)
+            return la
         zone = Dropzone(pos, team, was, 0.0, einmalig=True)
         zone.rest = 1.0
         self.dropzonen.append(zone)

@@ -1015,10 +1015,12 @@ SCHLACHT = dict(
     punkte=dict(abschuss=1, fahrzeug=5, aufhelfen=5),
     # Was man kaufen kann: (Kennung, Kosten, Name).
     belohnungen=(
-        ("munition", 2, "MUNITIONSABWURF"),
-        ("medkit", 2, "SANITÄTSABWURF"),
-        ("buggy", 4, "DROPZONE: BUGGY"),
+        # Seit 0.34.101 die ersten drei je einen Punkt teurer (gewuenscht).
+        ("munition", 3, "MUNITIONSABWURF"),
+        ("medkit", 3, "SANITÄTSABWURF"),
+        ("buggy", 5, "DROPZONE: BUGGY"),
         ("aufklaerung", 6, "AUFKLÄRUNGSDROHNE"),
+        ("napalm", 10, "NAPALM-ANGRIFF"),
         ("fallschirmjaeger", 8, "FALLSCHIRMJÄGER"),
         ("panzerwagen", 8, "DROPZONE: PANZERWAGEN"),
         ("panzer", 12, "DROPZONE: PANZER"),
@@ -1026,7 +1028,21 @@ SCHLACHT = dict(
     belohnung_hilfe=dict(munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
                          buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
                          panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE",
-                         fallschirmjaeger="FÜNF BOTS AM SCHIRM, IN FORMATION"),
+                         fallschirmjaeger="FÜNF BOTS AM SCHIRM, IN FORMATION",
+                         napalm="ZWEI KLICKS: START, DANN RICHTUNG"),
+    # Napalm-Angriff (seit 0.34.101): ein Flugzeug, das man nicht sieht, nur
+    # hoert, wirft entlang einer Bahn Napalm. Die Bahn ist immer gleich lang
+    # (laenge_anteil der Kartenhoehe) - der zweite Klick gibt nur die
+    # Richtung. Die Bomben fallen unregelmaessig: Abstand abstand (Faktor
+    # zufaellig in streu), mit luecke_chance eine Luecke von luecke px,
+    # seitlich bis seitlich px daneben. Jede hinterlaesst ein Feuer mit
+    # radius px, das dauer s brennt. So brennt nie die ganze Bahn, und man
+    # kommt mit etwas Geschick hindurch. vorlauf: so lange nach dem Kauf, bis
+    # das Flugzeug den Start erreicht; tempo: px/s; fall: so lange faellt
+    # eine Bombe.
+    napalm=dict(laenge_anteil=0.5, tempo=950.0, vorlauf=2.5, fall=0.7, abstand=105.0,
+                streu=(0.6, 1.7), luecke_chance=0.28, luecke=(110.0, 210.0), seitlich=46.0,
+                radius=(40.0, 72.0), dauer=(16.0, 24.0), wenigstens_luecken=3),
     # Die Aufklaerungsdrohne (seit 0.34.100 ein grosser Starrfluegler, hoch
     # oben). markiert: so lange bleiben Pings ueber Gegnern und Fahrzeugen
     # (vorher 15 s). flug_hub: so hoch fliegt sie im Bild ueber ihrem

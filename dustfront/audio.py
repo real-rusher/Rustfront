@@ -1006,6 +1006,47 @@ def _drohne(seed=0):
     return out
 
 
+@platzhalter_klang("jet")
+def _jet(seed=0):
+    """Das Flugzeug des Napalm-Angriffs (seit 0.34.101): man sieht es nicht,
+    man hoert es. Ein tiefes Triebwerksdroehnen, das anschwillt, im Vorbei-
+    flug am lautesten ist und abklingt; darueber ein Pfeifen, das beim
+    Vorbeiflug faellt (wie der Doppler-Effekt)."""
+    dur = 4.6
+    n = int(RATE * dur)
+    zufall = random.Random(seed + 60).random
+    tp = 2 * math.pi
+    sin = math.sin
+    out = [0.0] * n
+    y1 = y2 = 0.0
+    ph = 0.0
+    spitze = 0.42                   # so weit (Anteil) liegt der Vorbeiflug
+    for i in range(n):
+        p = i / n
+        # Huelle: langsam an, nach der Spitze schneller weg.
+        if p < spitze:
+            huelle = (p / spitze) ** 2.2
+        else:
+            huelle = (1.0 - (p - spitze) / (1.0 - spitze)) ** 1.6
+        r = -1.0 + 2.0 * zufall()
+        y1 += 0.035 * (r - y1)              # tiefes Droehnen
+        y2 += 0.22 * (r - y2)               # helleres Fauchen
+        pfeif = 2300.0 - 900.0 * max(0.0, min(1.0, (p - spitze + 0.08) / 0.16))
+        ph += tp * pfeif / RATE
+        s = y1 * 2.6 + y2 * 0.35 + sin(ph) * 0.05 * huelle
+        out[i] = s * huelle * 0.55
+    return out
+
+
+@platzhalter_klang("napalm")
+def _napalm(seed=0):
+    """Ein Napalmkanister schlaegt ein: ein dumpfer Wumms, dann das Fauchen
+    der Flammen, die sich ausbreiten."""
+    return _mischen(_schlag(90, 40, 0.5, 0.6, 2.0),
+                    _rauschen(0.9, 0.45, 1800, 500, 1.6, seed + 61),
+                    _still(0.08) + _knistern(0.7, 0.3, 0.03, seed + 62))
+
+
 @platzhalter_klang("horchposten")
 def _horchposten(seed=0):
     """Ein Sonar-Ping."""

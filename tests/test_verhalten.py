@@ -1254,10 +1254,52 @@ def fallschirmjaeger():
         pruef("Seed %d: gelandet, und dann wird gekaempft" % seed, gelandet and im_kampf)
 
 
+def napalm():
+    """Gewuenscht (0.34.101): ein Napalm-Angriff setzt eine Bahn unregelmaessig
+    in Brand. Bots meiden die Feuer und laufen hinaus; wer darin steht,
+    bleibt nicht stehen. Und die Bahn brennt nie ganz: es gibt Durchgaenge."""
+    print("\n-- Napalm-Angriff: Bots laufen aus dem Feuer, die Bahn hat Luecken")
+    from dustfront.schlacht import bomben_planen
+    for seed in (71, 72, 73):
+        tm = neu(seed)
+        tx, ty, v = W.flaeche(tm, random.Random(seed), 30, 16)
+        leute = [tm.bot_setzen(v(8 + 3 * i, 8), 0, {"team": i % 2, "hirn": "goap" if i % 2 else "klassisch"})
+                 for i in range(5)]
+        for k in leute:
+            k.unverwundbar = 999.0       # nur das Laufen zaehlt, nicht wer stirbt
+        la = tm.nachschub_setzen("napalm", v(2, 8), {"team": 0, "winkel": 0.0})
+        zeit = {"im_feuer": 0.0, "vorher": 0.0}
+
+        def messen(tm=tm, zeit=zeit, leute=leute):
+            for k in leute:
+                if k.lebt and any(f.brennt(k.pos, k.ebene) > 0.2 for f in tm.welt.feuer):
+                    zeit["im_feuer"] += DT
+        laufen(tm, la.dauer + 6.0, messen)
+        feuer = len([f for f in tm.welt.feuer if f.lebt])
+        tm.verlassen()
+        pruef("Seed %d: es brennt (%d Feuer), und kein Bot bleibt im Feuer stehen" % (seed, feuer),
+              feuer >= 5 and zeit["im_feuer"] / len(leute) < 2.5,
+              "%.1f s je Bot im Feuer" % (zeit["im_feuer"] / len(leute)))
+    # Die Bahn: nie ganz in Brand, an vielen Stellen ein Durchgang.
+    for n_ in range(20):
+        start = pygame.Vector2(1000 + 37 * n_, 900 + 53 * n_)
+        ende = start + pygame.Vector2(3200, 0).rotate(n_ * 17)
+        plan = bomben_planen(start, ende)
+        vorn = (ende - start).normalize()
+        quer = pygame.Vector2(-vorn.y, vorn.x)
+        frei = sum(1 for i in range(0, 3200, 20)
+                   if not any((start + vorn * i + quer * j).distance_to(p) < r
+                              for j in range(-110, 111, 10) for _t, p, r, _d in plan))
+        if frei < 20:
+            break
+    pruef("20 Bahnen: jede hat viele Durchgaenge (wenigstens 20 freie Querschnitte)",
+          frei >= 20, "zuletzt %d" % frei)
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
          planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
-         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger]
+         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger, napalm]
 #
 # Ohne Angabe laufen die Szenen seit 0.34.94 gleichzeitig, je eine in einem
 # eigenen Prozess, so viele wie Kerne da sind (hoechstens TEILE). Jede

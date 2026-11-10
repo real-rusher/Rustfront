@@ -1239,7 +1239,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                    # nur der Gastgeber ausloest, muss der Gast gemeldet bekommen.
                    "spule_laden", "kettensaege", "schock", "schlag_faust", "piepen",
                    "klebt", "gas", "schneeball", "wurf_leise", "emp_aus", "reifen_platt",
-                   "schild", "falle_klick", "drohne", "horchposten")
+                   "schild", "falle_klick", "drohne", "horchposten",
+                   # Napalm-Angriff (seit 0.34.101): das Flugzeug und die Einschlaege.
+                   "jet", "napalm")
 
     def _klang(self, name: str, lautstaerke: float = 1.0, pos=None,
                ebene: int | None = None) -> None:
@@ -3450,8 +3452,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                 if k is not None and self.schlacht:
                     try:
                         punkt = (float(nachricht.get("x", 0.0)), float(nachricht.get("y", 0.0)))
+                        punkt2 = None
+                        if "x2" in nachricht:
+                            punkt2 = (float(nachricht.get("x2", 0.0)), float(nachricht.get("y2", 0.0)))
                         self.belohnung_kaufen(k, str(nachricht.get("was", "")), punkt,
-                                              gratis=bool(nachricht.get("gratis")))
+                                              gratis=bool(nachricht.get("gratis")),
+                                              punkt2=punkt2)
                     except (TypeError, ValueError):
                         pass
             elif art == "aussehen":

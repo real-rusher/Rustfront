@@ -16801,6 +16801,86 @@ pruef("Der Testmodus hat alles aus dem Nachschub im Spawner",
       <= {e_.name for e_ in _TM300.eintraege()})
 w300.verlassen(); g300.verlassen()
 
+print("\n-- 0.34.101: Napalm-Angriff, Karte ohne Hinweis, Preise")
+from dustfront import schlacht as _SL301, audio as _AU301
+_preis301 = {n_: c_ for n_, c_, _t in K.SCHLACHT["belohnungen"]}
+pruef("Die ersten drei sind je einen Punkt teurer (3, 3, 5)",
+      [c_ for _n, c_, _t in K.SCHLACHT["belohnungen"][:3]] == [3, 3, 5])
+pruef("Den Napalm-Angriff gibt es im Nachschub", "napalm" in _preis301)
+w301, g301 = _paar59("schlacht", karte="staubtal_offen")
+w301._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="staubtal_offen", schlacht_seite=4))
+_ich301 = w301.ich
+_ich301.schlacht_punkte = 50
+_mitte301 = w301._schlacht_punkte()[2]
+w301.belohnung_oeffnen()
+w301._wahl(list(_preis301).index("napalm"))
+_start301 = _mitte301 + pygame.Vector2(-300, -1400)
+pruef("Napalm: der erste Klick setzt nur den Start, kostet nichts",
+      not w301._belohnung_anfordern(_start301) and w301._napalm_start == _start301
+      and _ich301.schlacht_punkte == 50 and not w301.luftangriffe)
+pruef("... der zweite gibt die Richtung - und dann geht es los",
+      w301._belohnung_anfordern(_start301 + pygame.Vector2(3, 40))
+      and _ich301.schlacht_punkte == 50 - _preis301["napalm"] and len(w301.luftangriffe) == 1)
+_la301 = w301.luftangriffe[0]
+_soll301 = w301.welt.ebene(0).pixel_hoehe * 0.5
+pruef("Die Bahn ist immer halb so lang wie die Karte hoch - egal wie nah der zweite Klick lag",
+      abs(_la301.start.distance_to(_la301.ende) - _soll301) < 1.0,
+      "%.0f / %.0f" % (_la301.start.distance_to(_la301.ende), _soll301))
+_ende301 = w301.napalm_ende(_start301, _start301 + pygame.Vector2(5000, 0))
+pruef("... auch wenn er weiter weg lag (sie reicht dann nur bis zur Laenge)",
+      abs(_ende301.distance_to(_start301) - _soll301) < 1.0)
+pruef("Rechtsklick nimmt den Startpunkt zurueck, die Wahl bleibt",
+      (w301._wahl(list(_preis301).index("napalm")), w301._belohnung_anfordern(_start301),
+       w301.belohnung_ereignis(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=3, pos=(0, 0))))
+      and w301._napalm_start is None and w301.belohnung_wahl == list(_preis301).index("napalm"))
+w301.belohnung_schliessen()
+_bomben301 = _la301.bomben
+pruef("Unregelmaessig: die Abstaende der Bomben sind verschieden",
+      len({round(a_[1].distance_to(b_[1])) for a_, b_ in zip(_bomben301, _bomben301[1:])}) > 5)
+_vorn301 = (_la301.ende - _la301.start).normalize()
+_quer301 = pygame.Vector2(-_vorn301.y, _vorn301.x)
+_frei301 = sum(1 for i_ in range(0, int(_soll301), 20)
+               if not any((_la301.start + _vorn301 * i_ + _quer301 * j_).distance_to(p_) < r_
+                          for j_ in range(-110, 111, 10) for _t, p_, r_, _d in _bomben301))
+pruef("... und nicht alles brennt: es gibt Durchgaenge quer durch die Bahn",
+      _frei301 >= K.SCHLACHT["napalm"]["wenigstens_luecken"], "%d freie Querschnitte" % _frei301)
+pruef("Das Flugzeug sieht man nicht, man hoert es (eigener Klang), dazu der Einschlag",
+      "jet" in _AU301._PLATZHALTER and "napalm" in _AU301._PLATZHALTER
+      and "jet" in w301.NETZKLAENGE and "napalm" in w301.NETZKLAENGE)
+_feuer_vorher301 = len(w301.welt.feuer)
+for _ in range(int((_la301.dauer + 0.5) / K.FIXED_DT)):
+    _ich301.unverwundbar = 1.0
+    w301.schritt(K.FIXED_DT); g301.schritt(K.FIXED_DT)
+_neu301 = [f_ for f_ in w301.welt.feuer][_feuer_vorher301:]
+pruef("Jede Bombe hinterlaesst ein laenger brennendes Feuer",
+      len(_neu301) >= len(_bomben301) - 2
+      and all(f_.dauer >= K.SCHLACHT["napalm"]["dauer"][0] > K.FEUER["dauer"] for f_ in _neu301),
+      "%d Feuer" % len(_neu301))
+pruef("Der Angriff ist danach vorbei", not w301.luftangriffe)
+pruef("Der Gast sieht die Feuer auch", len(g301.welt.feuer) >= len(_neu301) - 2)
+# Gast: ein Kauf mit zwei Punkten.
+_gk301 = w301.kaempfer[g301.meine_nummer]
+_gk301.schlacht_punkte = 20
+g301.ich.schlacht_punkte = 20
+g301.belohnung_oeffnen()
+g301._wahl(list(_preis301).index("napalm"))
+_gs301 = _mitte301 + pygame.Vector2(300, 1400) if _gk301.team == 0 else _mitte301 + pygame.Vector2(300, -1400)
+g301._belohnung_anfordern(_gs301)
+g301._belohnung_anfordern(_gs301 + pygame.Vector2(0, -30))
+for _ in range(8):
+    w301.schritt(K.NETZ["takt"]); g301.schritt(K.NETZ["takt"])
+pruef("Ein Gast fordert Napalm mit Start und Richtung an (Gastgeber prueft)",
+      len(w301.luftangriffe) == 1 and _gk301.schlacht_punkte == 20 - _preis301["napalm"],
+      "%d Angriffe, %d Punkte" % (len(w301.luftangriffe), _gk301.schlacht_punkte))
+pruef("... und sieht die Bahn auf seiner Karte", len(getattr(g301, "_luftangriffe_gast", ())) == 1)
+w301.verlassen(); g301.verlassen()
+import inspect as _in301
+pruef("Ohne Wahl ist die Nachschubkarte nur Karte: kein Hinweis darauf",
+      "ERST LINKS" not in _in301.getsource(_SL301))
+from dustfront import testmodus as _TM301
+pruef("Den Napalm-Angriff gibt es im Testmodus (Richtung: WINKEL)",
+      any(e_.name == "NAPALM-ANGRIFF" and "winkel" in e_.optionen for e_ in _TM301.eintraege()))
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

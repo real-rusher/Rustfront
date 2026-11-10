@@ -89,6 +89,77 @@ class Ueberflug:
         return self.start.lerp(self.ende, min(1.0, self.alter / self.dauer))
 
 
+class Luftangriff:
+    """Ein Napalm-Angriff (seit 0.34.101): ein Flugzeug, das niemand sieht,
+    fliegt von `start` nach `ende` und wirft unregelmaessig Napalm.
+
+    Wo die Bomben fallen, steht beim Kauf fest (`bomben_planen`, aus dem Ort
+    gewuerfelt): [(Zeit des Einschlags, Ort, Radius, Dauer), ...]. So ist
+    jeder Angriff anders, aber auf jedem Rechner derselbe."""
+
+    def __init__(self, start, ende, team: int, fraktion: str, von=None) -> None:
+        self.start = pygame.Vector2(start)
+        self.ende = pygame.Vector2(ende)
+        self.team = int(team)
+        self.fraktion = fraktion
+        self.von = von
+        self.alter = 0.0
+        self.bomben = bomben_planen(self.start, self.ende)
+        self.naechste = 0
+        self.gehoert = False
+
+    @property
+    def dauer(self) -> float:
+        return (self.bomben[-1][0] if self.bomben else 0.0) + 0.5
+
+    def flugzeug(self) -> pygame.Vector2:
+        """Wo das (unsichtbare) Flugzeug gerade ist."""
+        n = S["napalm"]
+        weg = (self.alter - n["vorlauf"]) * n["tempo"]
+        laenge = max(1.0, self.start.distance_to(self.ende))
+        return self.start.lerp(self.ende, max(-0.5, min(1.5, weg / laenge)))
+
+
+def bomben_planen(start, ende) -> list:
+    """Die Einschlaege eines Napalm-Angriffs: unregelmaessig, mit Luecken.
+
+    Gewuenscht: "es ist wichtig, dass es unregelmaessig ist und man mit
+    etwas Navigieren trotzdem durch die Bahn durchkommt, weil nicht alles
+    brennt". Darum: unregelmaessiger Abstand, seitlich versetzt, und echte
+    Luecken - wenigstens `wenigstens_luecken` Stellen, an denen zwischen
+    zwei Feuern ein Weg frei bleibt."""
+    import random
+    n = S["napalm"]
+    start, ende = pygame.Vector2(start), pygame.Vector2(ende)
+    laenge = start.distance_to(ende)
+    if laenge < 1.0:
+        return []
+    vorn = (ende - start) / laenge
+    quer = pygame.Vector2(-vorn.y, vorn.x)
+    r = random.Random(int(start.x) * 7919 + int(start.y) * 104729 + int(ende.x) * 31 + int(ende.y))
+    plan = []                   # (Weg auf der Bahn, seitlich, Radius, Dauer)
+    weg = r.uniform(0.0, n["abstand"])
+    luecken = 0
+    while weg <= laenge:
+        radius = r.uniform(*n["radius"])
+        plan.append((weg, r.uniform(-n["seitlich"], n["seitlich"]), radius, r.uniform(*n["dauer"])))
+        schritt = n["abstand"] * r.uniform(*n["streu"])
+        if r.random() < n["luecke_chance"]:
+            schritt += r.uniform(*n["luecke"])
+            luecken += 1
+        weg += schritt
+    # Zu wenige Luecken gewuerfelt? Dann fallen zufaellige Bomben weg, bis
+    # es genug freie Stellen gibt.
+    while luecken < n["wenigstens_luecken"] and len(plan) > 4:
+        plan.pop(r.randrange(1, len(plan) - 1))
+        luecken += 1
+    raus = []
+    for weg, seite, radius, dauer in plan:
+        zeit = n["vorlauf"] + weg / n["tempo"] + n["fall"]
+        raus.append((zeit, start + vorn * weg + quer * seite, radius, dauer))
+    return raus
+
+
 class SchlachtTeil:
     """Was das Gefecht in SCHLACHT zusaetzlich tut. Ein Anteil wie BotTeil."""
 
@@ -97,6 +168,8 @@ class SchlachtTeil:
         self.dropzonen: list = []
         self.abwuerfe: list = []
         self.ueberfluege: list = []
+        self.luftangriffe: list = []
+        self._napalm_start = None
         self.belohnung_offen = False
         self.belohnung_wahl = 0
         self._sl_meldung = ""
@@ -108,6 +181,7 @@ class SchlachtTeil:
         self.dropzonen = []
         self.abwuerfe = []
         self.ueberfluege = []
+        self.luftangriffe = []
         self.verstaerkung_weg()
         for team in range(2):
             for art, anzahl in S["fahrzeuge"]:
@@ -150,6 +224,10 @@ class SchlachtTeil:
                 self.abwuerfe.remove(ab)
                 self._abwurf_landet(ab)
         self._springer_schritt(dt)
+        for la in list(getattr(self, "luftangriffe", ())):
+            self._luftangriff_schritt(la, dt)
+            if la.alter >= la.dauer:
+                self.luftangriffe.remove(la)
         for ue in list(self.ueberfluege):
             ue.alter += dt
             self._ueberflug_markieren(ue)
@@ -444,6 +522,36 @@ class SchlachtTeil:
             from .entities import wolke
             wolke(self.welt, k.pos, 8, 60, 0.6, K.C_SAND_KORN, 0, 1, "bodenstaub", 360, 0)
 
+    def napalm_ende(self, start, richtung_punkt):
+        """Wo die Bahn endet: immer gleich lang (laenge_anteil der Karten-
+        hoehe), in Richtung des zweiten Punkts - auch ueber ihn hinaus."""
+        start = pygame.Vector2(start)
+        hin = pygame.Vector2(richtung_punkt) - start
+        if hin.length_squared() < 1.0:
+            return None
+        laenge = self.welt.ebene(0).pixel_hoehe * S["napalm"]["laenge_anteil"]
+        return start + hin.normalize() * laenge
+
+    def _luftangriff_schritt(self, la: Luftangriff, dt: float) -> None:
+        """Das Flugzeug kommt (man hoert es), dann schlagen die Bomben ein."""
+        from .entities import Brandflaeche
+        w = self.welt
+        if not la.gehoert and la.alter >= max(0.0, S["napalm"]["vorlauf"] - 1.6):
+            # Ohne Ort: jeder hoert das Flugzeug kommen, sieht es aber nicht.
+            la.gehoert = True
+            w.klang("jet", 0.75)
+        la.alter += dt
+        while la.naechste < len(la.bomben) and la.bomben[la.naechste][0] <= la.alter:
+            _t, ort, radius, dauer = la.bomben[la.naechste]
+            la.naechste += 1
+            e = w.ebene(0)
+            if not (0 <= ort.x < e.pixel_breite and 0 <= ort.y < e.pixel_hoehe):
+                continue
+            w.feuer.append(Brandflaeche(ort, 0, radius=radius, dauer=dauer, von=la.von))
+            w.explosion(ort, 0, 0.0, "feuer")
+            w.klang("napalm", 0.9, ort, 0)
+            w.laerm(ort, 0, la.von, 700.0)
+
     def verstaerkung_weg(self) -> None:
         """Zur neuen Runde: die Fallschirmjaeger der alten gehen."""
         for k in list(self.kaempfer.values()):
@@ -463,7 +571,8 @@ class SchlachtTeil:
     def belohnungen() -> list:
         return list(S["belohnungen"])
 
-    def belohnung_pruefen(self, k, was: str, punkt, gratis: bool = False) -> str:
+    def belohnung_pruefen(self, k, was: str, punkt, gratis: bool = False,
+                          punkt2=None) -> str:
         """Leer, wenn der Kauf geht - sonst warum nicht. `gratis`: der
         ADMIN-Schalter (seit 0.34.100) - spart nur die Punkte, nicht die
         anderen Pruefungen."""
@@ -480,6 +589,20 @@ class SchlachtTeil:
         feind = self.schlacht_basis(1 - k.team) if k.team in (0, 1) else None
         if feind is not None and punkt.distance_to(feind) < S["abwurf"]["sperre_basis"]:
             return "ZU NAH AN DER FEINDLICHEN BASIS"
+        if was == "napalm":
+            if punkt2 is None:
+                return ""                     # erst der Start - die Richtung folgt
+            ende = self.napalm_ende(punkt, punkt2)
+            if ende is None:
+                return "RICHTUNG WÄHLEN"
+            # Keine Bombe in die Sperre um die feindliche Basis (Spawn).
+            if feind is not None:
+                laenge = punkt.distance_to(ende)
+                for i in range(int(laenge // 80) + 1):
+                    q = punkt.lerp(ende, min(1.0, i * 80.0 / max(1.0, laenge)))
+                    if q.distance_to(feind) < S["abwurf"]["sperre_basis"]:
+                        return "BAHN ZU NAH AN DER FEINDLICHEN BASIS"
+            return ""
         if was == "fallschirmjaeger":
             eigen = self.schlacht_basis(k.team) if k.team in (0, 1) else None
             if eigen is not None and punkt.distance_to(eigen) < S["fallschirmjaeger"]["nicht_basis"]:
@@ -499,12 +622,15 @@ class SchlachtTeil:
             return "KEIN FREIER BODEN"
         return ""
 
-    def belohnung_kaufen(self, k, was: str, punkt, gratis: bool = False) -> str:
+    def belohnung_kaufen(self, k, was: str, punkt, gratis: bool = False,
+                         punkt2=None) -> str:
         """Beim Gastgeber: pruefen, Punkte abziehen, ausfuehren. Gratis nur
         fuer den ADMIN (darf_gratis) - was ein anderer schickt, zaehlt nicht."""
         punkt = pygame.Vector2(punkt)
         gratis = bool(gratis) and self.darf_gratis(k)
-        grund = self.belohnung_pruefen(k, was, punkt, gratis=gratis)
+        if was == "napalm" and punkt2 is None:
+            return "RICHTUNG WÄHLEN"
+        grund = self.belohnung_pruefen(k, was, punkt, gratis=gratis, punkt2=punkt2)
         if grund:
             return grund
         kosten = next(c for n, c, _t in S["belohnungen"] if n == was)
@@ -517,6 +643,10 @@ class SchlachtTeil:
             return ""
         if was == "fallschirmjaeger":
             self.fallschirmjaeger_abwerfen(punkt, k.team)
+            return ""
+        if was == "napalm":
+            self.luftangriffe.append(Luftangriff(punkt, self.napalm_ende(punkt, punkt2),
+                                                 k.team, k.fraktion, von=k))
             return ""
         zone = Dropzone(punkt, k.team, was, 0.0, einmalig=True)
         zone.rest = S["abwurf"]["vorlauf_kauf"]
@@ -532,6 +662,9 @@ class SchlachtTeil:
             "ab": [[round(a.pos.x), round(a.pos.y), round(a.hoehe, 1), a.art, a.team,
                     round(a.winkel), round(a.alter, 2)] for a in self.abwuerfe],
             "ue": [[round(u.pos.x), round(u.pos.y), u.team] for u in self.ueberfluege],
+            # Napalm-Angriffe (seit 0.34.101): Bahn und Seite, fuer die Karte.
+            "la": [[round(a.start.x), round(a.start.y), round(a.ende.x), round(a.ende.y), a.team]
+                   for a in getattr(self, "luftangriffe", ())],
         }
 
     def schlacht_uebernehmen(self, m) -> None:
@@ -568,6 +701,14 @@ class SchlachtTeil:
             except (TypeError, ValueError, IndexError):
                 continue
         self._ueberfluege_gast = ue
+        la = []
+        for e in m.get("la", []):
+            try:
+                la.append((pygame.Vector2(float(e[0]), float(e[1])),
+                           pygame.Vector2(float(e[2]), float(e[3])), int(e[4])))
+            except (TypeError, ValueError, IndexError):
+                continue
+        self._luftangriffe_gast = la
 
     # ---- Bild: am Boden -------------------------------------------------------
     def dropzonen_zeichnen(self, flaeche, ebene: int, ecke) -> None:
@@ -868,11 +1009,18 @@ class SchlachtTeil:
 
     def belohnung_oeffnen(self) -> None:
         self.belohnung_offen = True
-        self.belohnung_wahl = -1
+        self._wahl(-1)
+
+    def _wahl(self, i: int) -> None:
+        """Was links gewaehlt ist; ein Wechsel vergisst den Startpunkt des
+        Napalm-Angriffs."""
+        if i != getattr(self, "belohnung_wahl", -1):
+            self._napalm_start = None
+        self.belohnung_wahl = i
 
     def belohnung_schliessen(self) -> None:
         self.belohnung_offen = False
-        self.belohnung_wahl = -1
+        self._wahl(-1)
         # Die Maustaste, mit der man angefordert hat, ist vielleicht noch
         # unten: sie soll beim Schliessen keinen Schuss ausloesen.
         self._feuer_sperre = True
@@ -909,39 +1057,43 @@ class SchlachtTeil:
                 self.belohnung_schliessen()
                 return True
             if ev.key == pygame.K_ESCAPE:
-                if self.belohnung_wahl >= 0:
-                    self.belohnung_wahl = -1
+                if self._napalm_start is not None:
+                    self._napalm_start = None          # erst den Startpunkt zurueck
+                elif self.belohnung_wahl >= 0:
+                    self._wahl(-1)
                 else:
                     self.belohnung_schliessen()
                 return True
             if pygame.K_1 <= ev.key <= pygame.K_9 and ev.key - pygame.K_1 < len(liste):
-                self.belohnung_wahl = ev.key - pygame.K_1
+                self._wahl(ev.key - pygame.K_1)
                 return True
             if ev.key in (pygame.K_UP, pygame.K_w):
-                self.belohnung_wahl = (max(0, self.belohnung_wahl) - 1) % len(liste)
+                self._wahl((max(0, self.belohnung_wahl) - 1) % len(liste))
                 return True
             if ev.key in (pygame.K_DOWN, pygame.K_s):
-                self.belohnung_wahl = (self.belohnung_wahl + 1) % len(liste)
+                self._wahl((self.belohnung_wahl + 1) % len(liste))
                 return True
             return True
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 3:
-            self.belohnung_wahl = -1
+            if self._napalm_start is not None:
+                self._napalm_start = None
+            else:
+                self._wahl(-1)
             return True
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             maus = self.app.zu_spiel(ev.pos)
             for i in range(len(liste)):
                 if self._belohnung_zeile(i).collidepoint(maus):
-                    self.belohnung_wahl = i
+                    self._wahl(i)
                     return True
             if self._ist_admin_lokal() and self._gratis_rect().collidepoint(maus):
                 self.belohnung_gratis = not getattr(self, "belohnung_gratis", False)
                 return True
             karte = self.belohnung_karte_rect()
-            if karte.collidepoint(maus):
-                if self.belohnung_wahl < 0:
-                    self._sl_meldung = "ERST LINKS WÄHLEN, WAS KOMMEN SOLL"
-                    self._sl_meldung_rest = 2.0
-                elif self._belohnung_anfordern(self._karte_zu_welt(maus)):
+            # Ohne Wahl ist die Karte nur Karte (seit 0.34.101): ein Klick
+            # tut dann nichts.
+            if karte.collidepoint(maus) and self.belohnung_wahl >= 0:
+                if self._belohnung_anfordern(self._karte_zu_welt(maus)):
                     self.belohnung_schliessen()
             return True
         return ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL)
@@ -978,16 +1130,34 @@ class SchlachtTeil:
         if ich is None:
             return False
         gratis = bool(getattr(self, "belohnung_gratis", False)) and self._ist_admin_lokal()
+        punkt2 = None
+        if was == "napalm":
+            # Zwei Klicks (seit 0.34.101): erst der Start, dann die Richtung.
+            if self._napalm_start is None:
+                grund = self.belohnung_pruefen(ich, was, punkt, gratis=gratis)
+                if grund:
+                    self._sl_meldung = grund
+                    self._sl_meldung_rest = 2.5
+                    return False
+                self._napalm_start = pygame.Vector2(punkt)
+                self.welt.klang("aufheben", 0.4)
+                return False
+            punkt, punkt2 = self._napalm_start, pygame.Vector2(punkt)
         if self.ist_gastgeber:
-            grund = self.belohnung_kaufen(ich, was, punkt, gratis=gratis)
+            grund = self.belohnung_kaufen(ich, was, punkt, gratis=gratis, punkt2=punkt2)
         else:
-            grund = self.belohnung_pruefen(ich, was, punkt, gratis=gratis)
+            grund = self.belohnung_pruefen(ich, was, punkt, gratis=gratis, punkt2=punkt2)
             if not grund:
                 nachricht = {"t": "belohnung", "was": was,
                              "x": round(punkt.x, 1), "y": round(punkt.y, 1)}
+                if punkt2 is not None:
+                    nachricht["x2"] = round(punkt2.x, 1)
+                    nachricht["y2"] = round(punkt2.y, 1)
                 if gratis:
                     nachricht["gratis"] = 1
                 self.gast.senden(nachricht)
+        if not grund:
+            self._napalm_start = None
         self._sl_meldung = grund or "ANGEFORDERT"
         self._sl_meldung_rest = 2.5
         if not grund:
@@ -1121,6 +1291,22 @@ class SchlachtTeil:
                 pygame.draw.circle(sperre, (220, 60, 40, 150), (rr, rr), rr, n(1))
                 q = punkt(feind)
                 ziel.blit(sperre, (q[0] - rr, q[1] - rr))
+        # Feuer, die man sieht (seit 0.34.101): Napalm und Molotow.
+        for brand in getattr(self.welt, "feuer", ()):
+            if brand.lebt and brand.ebene == 0 and brand.staerke > 0.05 and sichtbar(brand.pos):
+                q = punkt(brand.pos)
+                rr = max(n(1.5), int(brand.radius * f))
+                pygame.draw.circle(ziel, (150, 52, 18), q, rr)
+                pygame.draw.circle(ziel, (236, 128, 40), q, max(1, rr // 2))
+        # Laufende Napalm-Angriffe der eigenen Seite: ihre Bahn (seit 0.34.101).
+        if self.ist_gastgeber:
+            bahnen = [(a_.start, a_.ende, a_.team) for a_ in getattr(self, "luftangriffe", ())]
+        else:
+            bahnen = list(getattr(self, "_luftangriffe_gast", ()))
+        for b_start, b_ende, b_team in bahnen:
+            if b_team == team:
+                self._bahn_malen(ziel, punkt(b_start), punkt(b_ende), (200, 90, 30),
+                                 S["napalm"]["seitlich"] * f, mm)
         # Die Kreise der Drohnen am Himmel und ihr Flugzeug-Zeichen.
         for pos, d_team in drohnen:
             kombi = K.TEAMS["kombi"][d_team] if 0 <= d_team < 2 else None
@@ -1196,13 +1382,30 @@ class SchlachtTeil:
                      mq - vorn * g * 0.35, mq - vorn * g * 0.8 - quer * g * 0.9]
             pygame.draw.polygon(ziel, (16, 11, 8), ecken, max(2, int(g * 0.6)))
             pygame.draw.polygon(ziel, (236, 255, 250), ecken)
+        # Napalm (seit 0.34.101): nach dem ersten Klick die ganze Bahn,
+        # immer gleich lang - sie reicht auch ueber den Zeiger hinaus.
+        if wahl == "napalm" and ich is not None and self._napalm_start is not None:
+            start = self._napalm_start
+            welt = pygame.Vector2((maus[0] - r.x) / f, (maus[1] - r.y) / f)
+            ende = self.napalm_ende(start, welt)
+            gratis = bool(getattr(self, "belohnung_gratis", False)) and self._ist_admin_lokal()
+            grund = (self.belohnung_pruefen(ich, wahl, start, gratis=gratis, punkt2=welt)
+                     if ende is not None else "RICHTUNG WÄHLEN")
+            self._bahn_malen(ziel, punkt(start), punkt(ende) if ende is not None else None,
+                             K.C_ORANGE if not grund else K.C_RED,
+                             S["napalm"]["seitlich"] * f + S["napalm"]["radius"][1] * f * 0.6, mm)
+            groesse = max(1, int(round(mm)))
+            q = punkt(start)
+            SCHRIFT.zeichnen(ziel, grund or "RICHTUNG: KLICKEN", q[0], q[1] - n(14),
+                             K.C_ORANGE if not grund else K.C_RED, groesse, ausrichtung="mitte")
         # Unter der Maus: wie gross das Ziel ist, und ob es geht.
-        if wahl and ich is not None and r.collidepoint(maus):
+        elif wahl and ich is not None and r.collidepoint(maus):
             welt = pygame.Vector2((maus[0] - r.x) / f, (maus[1] - r.y) / f)
             gratis = bool(getattr(self, "belohnung_gratis", False)) and self._ist_admin_lokal()
             grund = self.belohnung_pruefen(ich, wahl, welt, gratis=gratis)
             weite = (S["aufklaerung"]["radius"] if wahl == "aufklaerung"
                      else S["fallschirmjaeger"]["breite"] if wahl == "fallschirmjaeger"
+                     else S["napalm"]["radius"][1] if wahl == "napalm"
                      else S["dropzone"]["radius"])
             rr = max(n(3), int(weite * f))
             farbe = K.C_TEAL if not grund else K.C_RED
@@ -1211,17 +1414,42 @@ class SchlachtTeil:
             pygame.draw.line(ziel, farbe, (mp[0] - n(4), mp[1]), (mp[0] + n(4), mp[1]), n(1))
             pygame.draw.line(ziel, farbe, (mp[0], mp[1] - n(4)), (mp[0], mp[1] + n(4)), n(1))
             groesse = max(1, int(round(mm)))
-            SCHRIFT.zeichnen(ziel, grund or "HIER ANFORDERN", mp[0], mp[1] - rr - n(10),
+            text = grund or ("STARTPUNKT DER BAHN" if wahl == "napalm" else "HIER ANFORDERN")
+            SCHRIFT.zeichnen(ziel, text, mp[0], mp[1] - rr - n(10),
                              farbe, groesse, ausrichtung="mitte")
-        elif not wahl:
-            # Noch nichts gewaehlt: die Karte gedaempft, mit Hinweis.
-            schatten = pygame.Surface(r.size, pygame.SRCALPHA)
-            schatten.fill((8, 6, 4, 110))
-            ziel.blit(schatten, r.topleft)
-            SCHRIFT.zeichnen(ziel, "ERST LINKS WÄHLEN, WAS KOMMEN SOLL", r.centerx,
-                             r.centery - n(4), K.C_CREAM, max(1, int(round(mm))),
-                             ausrichtung="mitte")
+        # Ohne Wahl ist die Karte einfach die Karte (seit 0.34.101, gewuenscht:
+        # "das soll auch als normale Map dienen") - kein Schleier, kein Text.
         ziel.set_clip(alt_clip)
+
+    @staticmethod
+    def _bahn_malen(ziel, a, b, farbe, breite: float, mm: float) -> None:
+        """Die Bahn eines Napalm-Angriffs: Mittellinie gestrichelt, die
+        Raender duenn, Pfeile in Flugrichtung."""
+        n = max(1, int(round(mm)))
+        pygame.draw.circle(ziel, farbe, a, max(2, int(3 * mm)), n)
+        if b is None:
+            return
+        va, vb = pygame.Vector2(a), pygame.Vector2(b)
+        laenge = va.distance_to(vb)
+        if laenge < 2:
+            return
+        vorn = (vb - va) / laenge
+        quer = pygame.Vector2(-vorn.y, vorn.x) * max(2.0, breite)
+        for seite in (quer, -quer):
+            pygame.draw.line(ziel, tuple(int(c * 0.6) for c in farbe), va + seite, vb + seite, n)
+        strich = max(4.0, 6.0 * mm)
+        t = 0.0
+        while t < laenge:
+            p0 = va + vorn * t
+            p1 = va + vorn * min(laenge, t + strich)
+            pygame.draw.line(ziel, farbe, p0, p1, n + 1)
+            t += strich * 2
+        pfeil = max(4.0, 5.0 * mm)
+        for i in range(1, 5):
+            p = va + vorn * (laenge * i / 5.0)
+            pygame.draw.polygon(ziel, farbe, [p + vorn * pfeil, p - vorn * pfeil * 0.4 + quer.normalize() * pfeil * 0.8,
+                                              p - vorn * pfeil * 0.4 - quer.normalize() * pfeil * 0.8])
+        pygame.draw.circle(ziel, farbe, vb, max(2, int(2 * mm)))
 
     @staticmethod
     def _ping(ziel, mitte, mm: float) -> None:

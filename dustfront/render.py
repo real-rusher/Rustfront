@@ -2880,6 +2880,13 @@ class Renderer:
                 continue
             if brand.staerke <= 0.01:
                 continue
+            # Erst fragen, ob es ueberhaupt im Bild liegt (seit 0.34.101): das
+            # Bild eines Feuers wird gut zehnmal je Sekunde neu gebaut, und ein
+            # Napalm-Angriff legt zwanzig und mehr - die meisten weit weg.
+            r = brand.radius + 8
+            if (brand.pos.x - r - ecke.x > breite or brand.pos.y - r - ecke.y > hoehe
+                    or brand.pos.x + r - ecke.x < 0 or brand.pos.y + r - ecke.y < 0):
+                continue
             flaeche, versatz = self._feuerbild(brand, welt.zeit, eigene_ebene)
             if flaeche is None:
                 continue
@@ -2936,8 +2943,10 @@ class Renderer:
                 pygame.draw.rect(flaeche, (*ton, a),
                                  (gx * korn, gy * korn, korn, korn))
         self._feuer_puffer[brand.kennung] = (schluessel, flaeche, (x0, y0))
-        # Was nicht mehr brennt, muss auch nicht mehr gemerkt werden.
-        if len(self._feuer_puffer) > 24:
+        # Was nicht mehr brennt, muss auch nicht mehr gemerkt werden. Die
+        # Grenze lag bei 24 - mit einem Napalm-Angriff brennen mehr, und der
+        # Puffer wurde bei jedem neuen Bild geleert (seit 0.34.101: 96).
+        if len(self._feuer_puffer) > 96:
             self._feuer_puffer.clear()
         return flaeche, (x0, y0)
 
