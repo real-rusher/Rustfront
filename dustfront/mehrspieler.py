@@ -65,6 +65,7 @@ from . import ui
 from .bots import BotTeil
 from .lobby import LobbyTeil, lobby_regeln
 from .schlacht import SchlachtTeil
+from .gastseite import GastTeil
 from .spielerkosmetik import KosmetikTeil
 from . import klassen as klassen_modul
 from . import world as welt_modul
@@ -781,7 +782,7 @@ def _version_kleiner(a: str, b: str) -> bool:
     return teile(a) < teile(b)
 
 
-class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
+class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil):
     # Die Faehigkeiten der Klassen (Taste C, seit 0.34.73) legen Dinge aus
     # ausruestung.py hin. Bis 0.34.79 gingen die nicht ueber das Netz, und
     # nur der Testmodus schaltete sie ein. Seitdem stehen sie in der
@@ -1004,6 +1005,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
         # werden statt frueh anzuhalten.
         self._seit_paket = 0.0
         self._paket_takt = float(K.NETZ["takt"])
+        # Puffer und Vorhersage beim Gast (gastseite.py, seit 0.34.103).
+        self._gastseite_anlegen()
         # Roter Rand, Herzschlag, dumpfe Welt - und das Medkit dagegen.
         # Gelesen wird nur das eigene Leben; beim Gast steht es genauso in
         # der Weltmeldung wie beim Gastgeber in seiner eigenen Figur.
@@ -3435,6 +3438,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                 k = self.kaempfer.get(nummer)
                 if k is not None:
                     self._anwenden(k, nachricht)
+                    # Vorhersage beim Gast (seit 0.34.103): welche seiner
+                    # Eingaben gilt jetzt, und seit wann (ein_seit zaehlt
+                    # die Schritte, in denen sie bewegt hat).
+                    if "en" in nachricht:
+                        try:
+                            k.ein_nr = int(nachricht["en"])
+                            k.ein_seit = 0.0
+                        except (TypeError, ValueError):
+                            pass
             elif art == "loadout":
                 # Der Gast hat sein Loadout im Spiel geaendert (seit
                 # 0.34.12). Bis dahin kannte der Gastgeber nur das aus dem
@@ -3495,6 +3507,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
         self._gegnerlast_zaehlen()
         self._rpg_regeln()
         self.welt.schritt(dt)
+        for k in self.kaempfer.values():
+            if k.__dict__.get("ein_nr", -1) >= 0:
+                k.ein_seit += dt
         self._fahrzeuge_nachziehen()
         self._mitfahrer_nachziehen()
         self._fahrzeuge_erneuern(dt)
@@ -4807,6 +4822,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                 "fh": {a: round(r, 1) for a, r in
                        getattr(k, "faehigkeit_rest", {}).items() if r > 0.0},
             })
+            if k.__dict__.get("ein_nr", -1) >= 0:
+                # Fuer die Vorhersage des Gasts (seit 0.34.103): die zuletzt
+                # angewendete Eingabe, wie lange sie schon wirkt, das Tempo
+                # und der Faktor, mit dem die Figur gerade laeuft. Damit
+                # rechnet der Gast dieselbe Formel wie Spieler.schritt.
+                spieler[-1].update({
+                    "en": k.ein_nr, "ea": round(k.ein_seit, 4),
+                    "tv": [round(k.tempo.x, 2), round(k.tempo.y, 2)],
+                    "lf": round(k.__dict__.get("_luft", 1.0), 4)})
         flug = []
         gegner = []
         beute = []
@@ -4911,6 +4935,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
         gas = [[round(g.pos.x, 1), round(g.pos.y, 1), g.ebene, round(g.alter, 1), g.kennung]
                for g in self.welt.gas if g.lebt]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
+                # Die Uhr des Gastgebers (seit 0.34.103): danach spielt der
+                # Gast die Meldungen gleichmaessig ab (Gefecht._puffer_*).
+                "zt": round(self._zeit, 3),
                 "feuer": brand, "fahrzeuge": wagen, "naegel": naegel, "gas": gas,
                 "geraete": geraete,
                 # SCHLACHT (seit 0.34.96): Dropzonen, Abwuerfe, Ueberfluege.
@@ -4945,7 +4972,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
             if self.heimkehr:
                 self.heim("ABGEWIESEN: %s" % self.abgewiesen)
             return
-        if not self.gast.offen:
+        # Erst abspielen, was noch im Puffer liegt (seit 0.34.103): legt der
+        # Gastgeber gleich nach "abbruch" oder "ende" auf, stand genau das
+        # noch dort - und der Gast buchte die Runde unter eigener Kennung.
+        if not self.gast.offen and not self._eingang:
             self.hinweis = "VERBINDUNG VERLOREN  [ESC]"
             self._abbruch_buchen()          # mit dem letzten Zwischenstand
             zugang = getattr(self.gast, "zugang", None)
@@ -4965,7 +4995,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
         # bei null anfangen und nicht schon bei der Haelfte stehen.
         self._seit_paket += dt
 
-        post = list(self.gast.holen())
+        # Seit 0.34.103 durch den Puffer: was angekommen ist, wird nach der
+        # Uhr des Gastgebers abgespielt (gastseite.py).
+        post = self._puffer_eingang(list(self.gast.holen()))
         # Kommen mehrere Weltmeldungen auf einmal - der Gast rechnet gerade
         # langsam, oder der Gastgeber schickt im Schwall -, klingen ihre
         # Wirkungen ueber die Zeit verteilt, die seit der letzten Meldung
@@ -5018,6 +5050,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                 nr_welt += 1
                 try:
                     self._welt_uebernehmen(nachricht)
+                    self._puffer_abgespielt(nachricht)
                 finally:
                     klaenge.versatz = basis
             elif art == "stand":
@@ -5073,6 +5106,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
                     meine = alle.get(str(self.meine_nummer))
                 self._runde_buchen(meine if isinstance(meine, dict) else None)
 
+        # Die eigene Figur vorausrechnen (seit 0.34.103, gastseite.py) - nach
+        # dem Uebernehmen, das sie sonst auf den alten Stand zuruecksetzte.
+        self._puffer_schritt(dt)
+        self._vorhersage_schritt(dt)
+        self._vorhersage_zeigen()
+
         # Der Gast simuliert nichts, seine Rueckmeldungen muessen aber
         # trotzdem laufen: Staubringe und Aufschriften altern hier.
         self.welt.effekte_schritt(dt)
@@ -5084,13 +5123,23 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil):
 
         self._seit_senden += dt
         eilig = bool(self._knoepfe) or self._waffe_wunsch >= 0
+        # Eine neue Laufrichtung geht sofort hinaus (seit 0.34.103): die
+        # Vorhersage bewegt die Figur erst mit der gesendeten Eingabe - sonst
+        # laege bis zu ein Eingabetakt zwischen Taste und Bewegung.
+        if K.NETZ["vorhersage_an"] and not self.pausiert:
+            richtung = self.app.eingabe.richtung()
+            if (pygame.Vector2(richtung) - self._ein_will).length_squared() > 0.01 \
+                    and self._seit_senden >= K.NETZ["eingabe_mindest"]:
+                eilig = True
         if eilig or self._seit_senden >= K.NETZ["eingabe_takt"]:
             # Bei einer eiligen Meldung faengt der Takt neu an, sonst wird
             # nur der Takt abgezogen - siehe die Begruendung beim
             # Gastgeber.
             self._seit_senden = (0.0 if eilig
                                  else self._seit_senden - K.NETZ["eingabe_takt"])
-            self.gast.senden(self._meine_eingabe())
+            meldung = self._meine_eingabe()
+            self._vorhersage_gesendet(meldung)
+            self.gast.senden(meldung)
 
     def _willkommen_lesen(self, nachricht: dict) -> None:
         """Der Gastgeber bestimmt die Spielart, nicht der Gast.

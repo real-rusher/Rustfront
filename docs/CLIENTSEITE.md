@@ -125,7 +125,22 @@ Aufwand: gross. Lohnt erst, wenn der Gastgeber messbar an den Bots haengt
   das Ueberholte zaehlt nicht. Lohnt erst mit Stufe A-E und bringt eigene
   Probleme (Router, Tunnel ueber Cloudflare geht nur mit TCP).
 
-## 4. Empfohlene Reihenfolge
+## 4. Stand
+
+* **0.34.103: Stufe B und A eingebaut** (dustfront/gastseite.py, Tests in
+  tests/test_spiel.py Abschnitt 0.34.103 mit kuenstlichem Ping, Schwankung
+  und Aussetzer). Der Puffer verzoegert hoechstens 0,15 s - mehr hiesse
+  bis zu Stufe D, weiter hinter Gegnern herzuzielen.
+* **Gelernt dabei:** Wie lange der Gastgeber eine Eingabe anwendet, haengt
+  davon ab, wann die naechste ankommt - bei Schwankung also nicht davon, wie
+  lange der Gast sie gemeint hat. Der Abgleich rechnet fehlende Schritte
+  nach; beim Dash bleibt trotzdem ein Versatz bis etwa 15 px, der weich
+  ausgeglichen wird. Ganz weg waere er mit einem **Eingabepuffer beim
+  Gastgeber** (jede Eingabe genau so viele Schritte, wie der Gast sie
+  gerechnet hat) - kostet etwas Verzoegerung fuer alle anderen. Kandidat
+  fuer spaeter, wenn es im Spiel auffaellt.
+
+## 5. Empfohlene Reihenfolge
 
 1. **B** - klein, sofort ruhiger auf schlechtem Netz.
 2. **A** - das groesste Gefuehl: die eigene Figur reagiert sofort.
@@ -134,7 +149,7 @@ Aufwand: gross. Lohnt erst, wenn der Gastgeber messbar an den Bots haengt
 5. **E** - weniger Daten, fluessige Fluege.
 6. **F** - nur, wenn der Gastgeber an den Bots haengt.
 
-## 5. Wie wir pruefen
+## 6. Wie wir pruefen
 
 * Eine Testreihe `tests/test_netz.py` mit einer kuenstlich langsamen
   Leitung (Bandbreite, Ping, Schwankung, Aussetzer). Fuer 0.34.102 wurde so

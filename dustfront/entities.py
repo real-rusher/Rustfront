@@ -2851,6 +2851,8 @@ class Spieler(Wesen):
         if self.sprintet:
             luft *= K.SPRINT["faktor"]        # Bots sprinten (seit 0.34.50)
         self._dash_laden(dt)
+        # Fuer die Vorhersage beim Gast (seit 0.34.103, Gefecht).
+        self._luft = luft
         ziel_tempo = self.will * s["tempo"] * luft
         rate = (s["beschleunigung"] if self.will.length_squared() > 0
                 else s["bremsung"]) * luft

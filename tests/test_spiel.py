@@ -864,6 +864,11 @@ finally:
 print()
 from dustfront import netz
 from dustfront.mehrspieler import Gefecht
+# Seit 0.34.103 spielt der Gast Weltmeldungen gepuffert ab (gastseite.py) -
+# gewollt 30 bis 150 ms spaeter. Die Pruefungen hier fragen, ob etwas beim
+# Gast ankommt, und schauen dafuer nach wenigen Schritten nach; der Puffer
+# hat seinen eigenen Abschnitt (0.34.103), dort ist er an.
+K.NETZ["puffer_an"] = False
 
 PORT = 51011
 wirt = netz.Gastgeber(PORT)
@@ -16992,6 +16997,127 @@ pruef("Ein Schwall von 30 Meldungen zu je 20 KB wirft niemanden hinaus (600 KB a
       _l302b.offen and len(_da302) == _anzahl302, "%d, %s" % (len(_da302), _l302b.grund))
 _sender302.close(); _l302b.schliessen()
 pruef("Netztakt 30 je Sekunde (vorher 60)", abs(K.NETZ["takt"] - 1.0 / 30.0) < 1e-9)
+
+print("\n-- 0.34.103: Gast rechnet mit - Puffer und Vorhersage der eigenen Figur")
+import random as _rnd303
+K.NETZ["puffer_an"] = True
+_uhr303 = [0.0]
+def _verzoegert303(leitung_, ping_, schwank_, rnd_, ausfall_=None):
+    """Die Post dieser Leitung kommt ping_/2 (+- schwank_) spaeter, in
+    Reihenfolge wie bei TCP - nach der Uhr der Simulation."""
+    alt_ = leitung_.holen
+    warte_ = []
+    letzte_ = [0.0]
+    def holen_():
+        for m_ in alt_():
+            t_ = max(letzte_[0], _uhr303[0] + ping_ / 2 + rnd_.uniform(-schwank_, schwank_))
+            if ausfall_ and ausfall_[0] <= t_ <= ausfall_[1]:
+                t_ = ausfall_[1]
+            letzte_[0] = t_
+            warte_.append((t_, m_))
+        raus_ = [m_ for t_, m_ in warte_ if t_ <= _uhr303[0]]
+        warte_[:] = [(t_, m_) for t_, m_ in warte_ if t_ > _uhr303[0]]
+        return raus_
+    leitung_.holen = holen_
+def _paar303(ping_, schwank_, ausfall_=None, seed_=1):
+    w_, g_ = _paar59("team", karte="staubtal")
+    w_._regeln_setzen(dict(_R199.vorgabe(), modus="team", karte="staubtal", bots=0))
+    for _ in range(60):
+        _uhr303[0] += K.FIXED_DT
+        w_.schritt(K.FIXED_DT); g_.schritt(K.FIXED_DT)
+    rnd_ = _rnd303.Random(seed_)
+    _verzoegert303(g_.gast.leitung, ping_, schwank_, rnd_, ausfall_)
+    _verzoegert303(next(iter(w_.gastgeber.leitungen.values())), ping_, schwank_, rnd_, ausfall_)
+    w_.ich.unverwundbar = 999.0
+    w_.kaempfer[g_.meine_nummer].unverwundbar = 999.0
+    return w_, g_
+def _lauf303(w_, g_, sek_, halten_, druecke_=(), spur_=None):
+    for i_ in range(int(sek_ / K.FIXED_DT)):
+        _uhr303[0] += K.FIXED_DT
+        app.eingabe._gehalten = set(halten_)
+        if i_ == 0:
+            for d_ in druecke_:
+                g_._knoepfe.add(d_)
+        w_.schritt(K.FIXED_DT); g_.schritt(K.FIXED_DT)
+        if spur_ is not None:
+            spur_.append((_uhr303[0], pygame.Vector2(g_.ich.pos),
+                          pygame.Vector2(w_.kaempfer[g_.meine_nummer].pos)))
+# 400 ms Ping, +-80 ms Schwankung: die eigene Figur laeuft trotzdem sofort los.
+w303, g303 = _paar303(0.4, 0.08)
+_lauf303(w303, g303, 1.0, [])
+_start303 = pygame.Vector2(g303.ich.pos)
+_t0303 = _uhr303[0]
+_spur303 = []
+_lauf303(w303, g303, 1.5, ["rechts"], spur_=_spur303)
+_los303 = next((t_ - _t0303 for t_, a_, _b in _spur303 if a_.distance_to(_start303) > 1.0), 9.9)
+_lauf303(w303, g303, 2.0, [], spur_=_spur303)
+pruef("400 ms Ping: die eigene Figur laeuft sofort los (unter 0,1 s statt eines Hin- und Rueckwegs)",
+      _los303 < 0.1, "%.0f ms" % (_los303 * 1000))
+pruef("... und steht am Ende genau dort, wo der Gastgeber sie hat",
+      _spur303[-1][1].distance_to(_spur303[-1][2]) < 1.0,
+      "%.2f px" % _spur303[-1][1].distance_to(_spur303[-1][2]))
+_schritte303 = [a_.distance_to(b_) for (_t, a_, _x), (_u, b_, _y) in zip(_spur303, _spur303[1:])]
+pruef("... ohne Sprung: nie mehr als ein paar Pixel je Schritt", max(_schritte303) < 4.0 and g303.vh_spruenge == 0,
+      "%.1f px, %d Spruenge" % (max(_schritte303), g303.vh_spruenge))
+# Dash: sofort, und der Abgleich holt den Rest weich.
+_spur303b = []
+_vor303 = pygame.Vector2(g303.ich.pos)
+_lauf303(w303, g303, 0.15, ["rechts"], ["dash"], spur_=_spur303b)
+pruef("Der Dash beginnt beim Gast sofort", g303.ich.pos.distance_to(_vor303) > 30.0,
+      "%.0f px in 0,15 s" % g303.ich.pos.distance_to(_vor303))
+_lauf303(w303, g303, 2.0, [], spur_=_spur303b)
+_schritte303b = [a_.distance_to(b_) for (_t, a_, _x), (_u, b_, _y) in zip(_spur303b, _spur303b[1:])]
+pruef("... und endet ohne Ruck dort, wo der Gastgeber ihn hat",
+      max(_schritte303b) < 6.0 and _spur303b[-1][1].distance_to(_spur303b[-1][2]) < 1.0,
+      "%.1f px je Schritt, Ende %.2f px" % (max(_schritte303b), _spur303b[-1][1].distance_to(_spur303b[-1][2])))
+w303.verlassen(); g303.verlassen()
+# Ein Aussetzer von 1,5 s mitten im Laufen: die Vorhersage rennt nicht davon.
+w303, g303 = _paar303(0.2, 0.04, ausfall_=(_uhr303[0] + 60 * K.FIXED_DT + 1.5, _uhr303[0] + 60 * K.FIXED_DT + 3.0))
+_spur303c = []
+_lauf303(w303, g303, 1.0, [])
+_lauf303(w303, g303, 3.0, ["rechts"], spur_=_spur303c)
+_lauf303(w303, g303, 2.0, [], spur_=_spur303c)
+_schritte303c = [a_.distance_to(b_) for (_t, a_, _x), (_u, b_, _y) in zip(_spur303c, _spur303c[1:])]
+pruef("1,5 s Aussetzer: kein Zurueckspringen, und am Ende dort, wo der Gastgeber ist",
+      max(_schritte303c) < 6.0 and _spur303c[-1][1].distance_to(_spur303c[-1][2]) < 1.0
+      and g303.gast.offen,
+      "%.1f px je Schritt, Ende %.2f px" % (max(_schritte303c), _spur303c[-1][1].distance_to(_spur303c[-1][2])))
+pruef("Ohne Antwort bleibt die Vorhersage nach kurzer Zeit stehen",
+      K.NETZ["vorhersage_ohne_antwort"] <= 1.0)
+# Puffer: andere ruhiger bei Schwankung, Verzoegerung begrenzt.
+_v303 = g303._puffer_verzoegerung()
+pruef("Der Puffer verzoegert hoechstens 0,15 s (sonst zielte man weiter hinter Gegnern her)",
+      K.NETZ["puffer_mindest"] <= _v303 <= K.NETZ["puffer_hoechstens"] <= 0.15, "%.0f ms" % (_v303 * 1000))
+w303.verlassen(); g303.verlassen()
+# Reihenfolge und Leitung zu: was im Puffer liegt, wird noch abgespielt.
+w303, g303 = _paar303(0.05, 0.0)
+for _ in range(30):
+    _uhr303[0] += K.FIXED_DT
+    w303.schritt(K.FIXED_DT); g303.schritt(K.FIXED_DT)
+_zukunft303 = (g303._zt_zuletzt or 0.0) + 5.0
+g303._eingang.append({"t": "welt", "zt": _zukunft303, "spieler": [], "wirkung": []})
+g303._eingang.append({"t": "stand", "w": {"gepuffert": 1}})
+_uhr303[0] += K.FIXED_DT
+g303.schritt(K.FIXED_DT)
+pruef("Eine Nachricht hinter einer Weltmeldung wartet, bis diese dran ist (Reihenfolge bleibt)",
+      g303._zwischenstand != {"gepuffert": 1}
+      and any(m_.get("w") == {"gepuffert": 1} for m_ in g303._eingang))
+w303.verlassen()
+for _ in range(3):
+    _uhr303[0] += K.FIXED_DT
+    g303.schritt(K.FIXED_DT)
+pruef("Geht die Leitung zu, wird der Puffer zuerst abgespielt (Abbruch und Ende gehen nicht verloren)",
+      g303._zwischenstand == {"gepuffert": 1} and not g303._eingang)
+g303.verlassen()
+_gt303 = type("G", (), {})()
+for _n in ("_uhr_versatz", "_schwankung"):
+    setattr(_gt303, _n, None if _n == "_uhr_versatz" else 0.0)
+from dustfront.gastseite import GastTeil as _GT303
+_GT303._uhr_messen(_gt303, 100.0, 10.0)
+_GT303._uhr_messen(_gt303, 5.0, 11.0)
+pruef("Springt die Uhr des Gastgebers zurueck (neues Gefecht), stellt sich der Puffer neu ein",
+      abs(_gt303._uhr_versatz - (5.0 - 11.0)) < 1e-9)
+K.NETZ["puffer_an"] = False
 
 print()
 print("FEHLER:", fails or "keine")

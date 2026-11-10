@@ -804,6 +804,7 @@ NETZ = dict(
     # Abstand (Gefecht.misch), Tastendruecke gehen sofort hinaus.
     takt=1.0 / 30.0,          # so oft schickt der Gastgeber den Weltzustand
     eingabe_takt=1.0 / 30.0,  # so oft schickt ein Gast seine Eingaben
+    eingabe_mindest=1.0 / 120.0,  # eine neue Laufrichtung geht sofort, aber nicht oefter
     # Weltmeldungen als Aenderungen (netz.Leitung._welt_senden, seit
     # 0.34.102): voll_alle - so oft kommt trotzdem alles (Meldungen);
     # welt_stau_bytes - liegt mehr ungesendet, faellt die naechste Meldung
@@ -818,6 +819,30 @@ NETZ = dict(
     unterwegs_hoechstens=10,
     auslassen_hoechstens=30,
     wirkung_hoechstens=400,
+    # Was der Gast selbst rechnet (gastseite.py, seit 0.34.103).
+    # Puffer: Weltmeldungen nach der Uhr des Gastgebers abspielen, um
+    # takt + puffer_schwankung x gemessene Schwankung verzoegert (zwischen puffer_mindest
+    # und puffer_hoechstens s). Mehr als puffer_meldungen im Puffer: alles
+    # sofort. uhr_drift: so schnell (s je s) wird der Uhrvergleich vergessen.
+    puffer_an=True,
+    puffer_mindest=0.03,
+    # Nicht hoeher: Treffer rechnet der Gastgeber, wo die Gegner bei ihm
+    # stehen - jede Verzoegerung hier heisst, man zielt weiter hinter ihnen
+    # her (bis zur Treffer-Rueckrechnung, docs/CLIENTSEITE.md Stufe D).
+    puffer_hoechstens=0.15,
+    puffer_meldungen=20,
+    puffer_schwankung=1.0,
+    uhr_drift=0.01,
+    # Vorhersage der eigenen Figur: ab vorhersage_sprung px Unterschied
+    # springt sie, darunter gleitet sie mit vorhersage_glaetten (je s); ohne
+    # Antwort des Gastgebers laenger als vorhersage_ohne_antwort s bleibt
+    # sie stehen; vorhersage_spur: so viele Schritte merkt sie sich (120 = 1 s).
+    vorhersage_an=True,
+    vorhersage_sprung=72.0,
+    vorhersage_glaetten=10.0,
+    vorhersage_ohne_antwort=0.75,
+    vorhersage_spur=480,
+    vorhersage_nachrechnen=24,  # so viele Schritte rechnet der Abgleich hoechstens nach
     # Der Sendepuffer des Systems je Gast (Bytes). Klein, damit sich dort
     # nichts sekundenlang staut: was nicht hinausgeht, merkt der Gegendruck.
     sendepuffer=65536,

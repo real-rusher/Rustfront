@@ -2022,6 +2022,7 @@ schickt. **Neue Eintraege kommen unten dazu**, mit Version.
 
 Was seit 0.32 anders ist als bei den Playtests davor: Frueher oeffnete nur
 der Gastgeber einen Port, jetzt jeder (jeder sitzt in seiner eigenen
+| 0.34.103 | Jede Weltmeldung traegt die Uhr des Gastgebers "zt" (der Gast spielt danach ab). Jede Eingabe des Gasts traegt eine Nummer "en"; der Gastgeber schreibt in den Eintrag dieses Gasts "en" (zuletzt angewendet), "ea" (seit wie vielen Sekunden), "tv" (Tempo) und "lf" (Tempofaktor). Eine neue Laufrichtung geht sofort hinaus (hoechstens 120 je Sekunde). | Gastgeber und Gast muessen 0.34.103 haben - ein alter Gast sieht seine Figur wie bisher mit Verzoegerung, ein alter Gastgeber laesst die Vorhersage des neuen Gasts staendig neu beginnen |
 Lobby). Darum kann die Firewall- oder Virenschutzabfrage jetzt bei allen
 erscheinen. Wegklicken schadet dem Beitreten nicht. Und die Lobbysuche
 braucht Rundrufe (Broadcast) im Netz; manche Firewalls und WLANs lassen die
