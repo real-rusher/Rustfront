@@ -656,7 +656,9 @@ class SchlachtTeil:
     # ---- Netz -----------------------------------------------------------------
     def schlacht_meldung(self) -> dict:
         return {
-            "dz": [[round(z.pos.x), round(z.pos.y), z.team, round(z.rest, 1), z.art,
+            # Die Rueckzaehlung in halben Sekunden (seit 0.34.102): angezeigt
+            # werden ganze, und jede Aenderung kostet Bandbreite.
+            "dz": [[round(z.pos.x), round(z.pos.y), z.team, round(z.rest * 2.0) / 2.0, z.art,
                     1 if z.einmalig else 0, 1 if z.fahrzeug is not None else 0, z.kennung]
                    for z in self.dropzonen],
             "ab": [[round(a.pos.x), round(a.pos.y), round(a.hoehe, 1), a.art, a.team,

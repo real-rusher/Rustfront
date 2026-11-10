@@ -199,6 +199,16 @@ gemeldeten Punktlisten, ohne Wesen dafuer anzulegen (`_fremdes_zeichnen`).
 
 ## 4. Das Protokoll, vollstaendig
 
+**Seit 0.34.102 gehen Weltmeldungen als Aenderungen.** Die Felder unten
+beschreiben die volle Meldung, wie das Spiel sie baut und liest. Auf der
+Leitung (`netz.Leitung`) bekommt jeder Gast nur, was sich seit seiner
+letzten Meldung geaendert hat (`"dl": 1`, siehe `netz.welt_aenderung`),
+alle 300 Meldungen einmal alles, und jede Meldung traegt ihre Nummer `q`.
+Seine Leitung setzt daraus wieder die volle Meldung zusammen
+(`netz.welt_anwenden`). Sind mehr als `unterwegs_hoechstens` Meldungen
+unbestaetigt unterwegs, faellt die naechste fuer diesen Gast aus; ihre
+Ereignisse (`wirkung`) kommen mit der folgenden.
+
 ### 4.1 Gast -> Gastgeber
 
 **`hallo`** - einmal beim Verbinden.
@@ -207,7 +217,9 @@ gemeldeten Punktlisten, ohne Wesen dafuer anzulegen (`_fremdes_zeichnen`).
 {"t": "hallo", "name": "MEISTER"}
 ```
 
-**`ein`** - der Eingabezustand, rund 60 Mal je Sekunde.
+**`ein`** - der Eingabezustand, rund 30 Mal je Sekunde (bis 0.34.101: 60);
+Tastendruecke gehen sofort hinaus. Seit 0.34.102 haengt die Leitung des
+Gasts `wq` an: die Nummer `q` der letzten Weltmeldung, die er bekommen hat.
 
 | Feld | Typ | Bedeutung |
 | --- | --- | --- |
@@ -2022,6 +2034,7 @@ ihr Name kommt ueber das Netz.
 
 | Seit | Was | Wenn es nicht passt |
 | --- | --- | --- |
+| 0.34.102 | Weltmeldungen als Aenderungen: "dl": 1 und nur geaenderte Felder ("_weg" fuer weggefallene, Spieler einzeln nach "i" mit "_x", Reihenfolge in "_sp", Listen zeilenweise als {"~": [[Stelle, Zeile]]}, Woerterbuecher als {"~d": ..., "~x": ...}); alle 300 Meldungen eine volle. Jede Weltmeldung traegt eine Nummer "q", jede Eingabe des Gasts die zuletzt erhaltene als "wq". Takt 30 statt 60 je Sekunde (Welt und Eingaben). Sendepuffer je Gast 64 KB. | Gastgeber und Gast muessen 0.34.102 haben - ein alter Gast versteht die Aenderungen nicht und sieht eine stehende Welt |
 | 0.34.101 | Kauf "belohnung" mit zweitem Punkt "x2"/"y2" (Napalm: Richtung). Weltmeldung "sl" mit "la" (Bahnen laufender Napalm-Angriffe). Neue Netzklaenge "jet" und "napalm". | Gastgeber und Gast muessen 0.34.101 haben - ein alter Gast kann kein Napalm anfordern und sieht die Bahn nicht |
 | 0.34.100 | Je Spieler "sh" (Hoehe am Fallschirm). Je Fahrzeug Feld 16: welche Fraktion es markiert hat (Drohne). Kauf "belohnung" mit "gratis" (zaehlt nur fuer ADMIN). Neue Belohnung "fallschirmjaeger". Netz: eine Leitung, die beim Spuelen zugeht, liefert nichts mehr statt den Gastgeber abstuerzen zu lassen. | Gastgeber und Gast muessen 0.34.100 haben - ein alter Gast sieht Fallschirmjaeger am Boden stehen und keine Pings an Fahrzeugen |
 | 0.34.99 | Klassen wirken auf den Schlag auf F (NAHKAEMPFER, SCHILDTRAEGER, SPAEHER). Keine neuen Felder. | Gastgeber und Gast sollten 0.34.99 haben - sonst sieht ein Gast andere Werte im Menue, als der Gastgeber rechnet |

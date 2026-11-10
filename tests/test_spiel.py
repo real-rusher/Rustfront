@@ -4358,8 +4358,11 @@ for _ in range(6):
 _gb69 = [b_ for b_ in ga.fahrzeuge if b_.besetzt]
 pruef("Der Gast sieht alle fuenf Buggys",
       sum(1 for b_ in ga.fahrzeuge if b_.art == "buggy") == 5, str(len(ga.fahrzeuge)))
+# Der Gast sieht den Stand der letzten Meldung: so weit ist ein fahrender
+# Wagen seitdem gekommen (seit 0.34.102 kommen 30 statt 60 je Sekunde).
 pruef("... den besetzten an derselben Stelle",
-      len(_gb69) == 1 and _gb69[0].pos.distance_to(b69.pos) < 2.0,
+      len(_gb69) == 1
+      and _gb69[0].pos.distance_to(b69.pos) < 2.0 + b69.geschw.length() * K.NETZ["takt"],
       str([b_.pos for b_ in _gb69]))
 pruef("... mit Fahrer im Bild", _gb69 and "fahrer" in _gb69[0].bild)
 pruef("Der Gast weiss, dass er im Wagen sitzt", ga.ich.im_fahrzeug)
@@ -9050,6 +9053,11 @@ gx.verlassen()
 # Feuer verschont Gegner (verschont="feind", seit 0.26). Was ihn brennt,
 # ist der Molotow eines Spielers - das ist Absicht, der brennt alles.
 from dustfront.mehrspieler import KampfGegner as _KG40
+# Ein frueherer Abschnitt laesst die Feuertaste in der gemeinsamen Eingabe
+# gedrueckt - dann schoss WIRT schon im Vorlauf von gefechtspaar. Seit
+# 0.34.102 dauert der laenger (Netztakt 1/30), und eine Kugel traf den Boss.
+# Hier geht es nur um das Feuer.
+app.eingabe.alles_loslassen()
 _w40, _g40 = gefechtspaar("pve")
 _ich40 = _w40.kaempfer[0]
 _ich40.unverwundbar = 9999.0
@@ -16880,6 +16888,110 @@ pruef("Ohne Wahl ist die Nachschubkarte nur Karte: kein Hinweis darauf",
 from dustfront import testmodus as _TM301
 pruef("Den Napalm-Angriff gibt es im Testmodus (Richtung: WINKEL)",
       any(e_.name == "NAPALM-ANGRIFF" and "winkel" in e_.optionen for e_ in _TM301.eintraege()))
+
+print("\n-- 0.34.102: Netz - nur Aenderungen, Gegendruck, Quittungen, kein Rauswurf nach einem Schwall")
+import random as _rnd302, json as _js302, socket as _so302
+# Hin und zurueck: welt_aenderung + welt_anwenden ergeben genau die neue Meldung.
+_r302 = _rnd302.Random(302)
+def _zufall_welt302(alt_=None):
+    sp_ = []
+    for i_ in _r302.sample(range(12), _r302.randint(3, 10)):
+        e_ = {"i": i_, "p": [_r302.randint(0, 9), 1.5], "n": "N%d" % i_, "l": _r302.choice([100, 50])}
+        if _r302.random() < 0.3:
+            e_["x%d" % _r302.randint(0, 2)] = _r302.random()
+        sp_.append(e_)
+    w_ = {"t": "welt", "rest": _r302.choice([1.0, 2.0]), "spieler": sp_,
+          "fahrzeuge": [[i_, _r302.choice([0, 1])] for i_ in range(6)],
+          "sl": {"dz": [[1, _r302.choice([2.0, 2.5])], [3, 4]], "ab": []} if _r302.random() < 0.8 else None,
+          "wirkung": [["k", 1]] if _r302.random() < 0.3 else []}
+    if _r302.random() < 0.3:
+        w_["extra"] = _r302.random()
+    return _js302.loads(_js302.dumps(w_))
+_ok302 = True
+_a302 = _zufall_welt302()
+for _ in range(400):
+    _b302 = _zufall_welt302()
+    _d302 = _js302.loads(_js302.dumps(netz.welt_aenderung(_a302, _b302)))
+    if netz.welt_anwenden(_a302, _d302) != _b302:
+        _ok302 = False
+        break
+    _a302 = _b302
+pruef("Aenderungen ergeben beim Gast genau die volle Meldung (400 zufaellige Folgen)", _ok302)
+# Ein echtes Paar in SCHLACHT: der Gast setzt dieselbe Meldung zusammen, die
+# der Gastgeber gebaut hat - und es geht nur ein Bruchteil hinaus.
+w302, g302 = _paar59("schlacht", karte="staubtal_offen")
+w302._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="staubtal_offen", schlacht_seite=12))
+_l302 = next(iter(w302.gastgeber.leitungen.values()))
+_gemeint302, _bekommen302 = [], []
+_alt_ws302 = netz.Leitung._welt_senden
+_alt_wz302 = netz.Leitung._welt_zusammensetzen
+def _ws302(self_, n_):
+    r_ = _alt_ws302(self_, n_)
+    if r_ is not None:
+        _gemeint302.append(_js302.loads(_js302.dumps(self_._basis)))
+    return r_
+def _wz302(self_, n_):
+    r_ = _alt_wz302(self_, n_)
+    if r_ is not None:
+        _bekommen302.append(_js302.loads(_js302.dumps(r_)))
+    return r_
+netz.Leitung._welt_senden = _ws302
+netz.Leitung._welt_zusammensetzen = _wz302
+for _ in range(int(12 / K.FIXED_DT)):
+    w302.schritt(K.FIXED_DT); g302.schritt(K.FIXED_DT)
+_gemeint302.clear(); _bekommen302.clear()
+_bytes302 = _l302.gesendet_bytes
+for _ in range(int(8 / K.FIXED_DT)):
+    w302.schritt(K.FIXED_DT); g302.schritt(K.FIXED_DT)
+for _ in range(3):
+    g302.schritt(K.FIXED_DT)
+netz.Leitung._welt_senden = _alt_ws302
+netz.Leitung._welt_zusammensetzen = _alt_wz302
+_v302 = next((v_ for v_ in range(4) if _bekommen302[v_:v_ + 1] == _gemeint302[:1]), 0)
+_paare302 = list(zip(_gemeint302, _bekommen302[_v302:]))
+pruef("Im Gefecht: jede zusammengesetzte Meldung gleicht der gebauten",
+      len(_paare302) > 100 and all(a_ == b_ for a_, b_ in _paare302),
+      "%d Meldungen, %d abweichend" % (len(_paare302), sum(1 for a_, b_ in _paare302 if a_ != b_)))
+_rate302 = (_l302.gesendet_bytes - _bytes302) / 8.0 / 1024.0
+pruef("SCHLACHT mit 24 Kaempfern: unter 100 KB/s je Gast (vorher gut 1000)",
+      _rate302 < 100.0, "%.1f KB/s" % _rate302)
+pruef("Die Eingaben des Gasts quittieren die letzte Weltmeldung",
+      _l302._bestaetigt > 0 and _l302._welt_nr - _l302._bestaetigt <= K.NETZ["unterwegs_hoechstens"],
+      "%d / %d" % (_l302._bestaetigt, _l302._welt_nr))
+# Gegendruck: ohne Quittungen bleibt die Meldung aus - ihre Ereignisse nicht.
+_l302._bestaetigt = max(0, _l302._welt_nr - K.NETZ["unterwegs_hoechstens"] - 5)
+_vorher302 = _l302._welt_nr
+_raus302 = _l302._welt_senden({"t": "welt", "spieler": [], "wirkung": [["k", 7]]})
+pruef("Kommt der Gast nicht nach, faellt die naechste Meldung fuer ihn aus",
+      _raus302 is None and _l302._welt_nr == _vorher302)
+_l302._bestaetigt = _l302._welt_nr
+_raus302 = _l302._welt_senden({"t": "welt", "spieler": [], "wirkung": [["k", 8]]})
+pruef("... und ihre Ereignisse kommen mit der naechsten",
+      _raus302 is not None and _raus302.get("wirkung") == [["k", 7], ["k", 8]], str(_raus302)[:120])
+w302.verlassen(); g302.verlassen()
+# Ein Schwall: viele grosse Zeilen auf einmal (nach einem Haenger) - frueher
+# "Nachricht zu lang", und der Gast landete in der Lobby.
+_hoer302 = _so302.socket(); _hoer302.bind(("127.0.0.1", 0)); _hoer302.listen(1)
+_sender302 = _so302.create_connection(_hoer302.getsockname())
+_empf302, _x302 = _hoer302.accept()
+_hoer302.close()
+_l302b = netz.Leitung(_empf302)
+_zeile302 = (_js302.dumps({"t": "stand", "x": "A" * 20000}) + "\n").encode()
+_sender302.setblocking(True)
+_anzahl302 = 30
+import threading as _th302
+_th302.Thread(target=lambda: _sender302.sendall(_zeile302 * _anzahl302), daemon=True).start()
+import time as _ti302
+_da302 = []
+for _ in range(400):
+    _da302 += _l302b.holen()
+    if len(_da302) >= _anzahl302 or not _l302b.offen:
+        break
+    _ti302.sleep(0.01)
+pruef("Ein Schwall von 30 Meldungen zu je 20 KB wirft niemanden hinaus (600 KB auf einmal)",
+      _l302b.offen and len(_da302) == _anzahl302, "%d, %s" % (len(_da302), _l302b.grund))
+_sender302.close(); _l302b.schliessen()
+pruef("Netztakt 30 je Sekunde (vorher 60)", abs(K.NETZ["takt"] - 1.0 / 30.0) < 1e-9)
 
 print()
 print("FEHLER:", fails or "keine")

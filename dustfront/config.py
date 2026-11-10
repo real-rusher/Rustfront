@@ -799,8 +799,28 @@ NETZ = dict(
     puffer=65536,             # so viel wird je Versuch von der Leitung gelesen
     hoechstzeile=262144,      # laengere Nachricht = Leitung gilt als kaputt
     wartezeit=5.0,            # Sekunden, die ein Verbindungsversuch dauern darf
-    takt=1.0 / 60.0,          # so oft schickt der Gastgeber den Weltzustand
-    eingabe_takt=1.0 / 60.0,  # so oft schickt ein Gast seine Eingaben
+    # Seit 0.34.102 je 30 statt 60 je Sekunde (gemeldet: Lag bis zum Rauswurf
+    # auf langsamem Internet). Der Gast ueberblendet nach dem gemessenen
+    # Abstand (Gefecht.misch), Tastendruecke gehen sofort hinaus.
+    takt=1.0 / 30.0,          # so oft schickt der Gastgeber den Weltzustand
+    eingabe_takt=1.0 / 30.0,  # so oft schickt ein Gast seine Eingaben
+    # Weltmeldungen als Aenderungen (netz.Leitung._welt_senden, seit
+    # 0.34.102): voll_alle - so oft kommt trotzdem alles (Meldungen);
+    # welt_stau_bytes - liegt mehr ungesendet, faellt die naechste Meldung
+    # fuer diesen Gast aus; wirkung_hoechstens - so viele Ereignisse
+    # ausgelassener Meldungen werden nachgereicht.
+    welt_aenderungen=True,
+    voll_alle=300,
+    welt_stau_bytes=24000,
+    # Quittungen: so viele Weltmeldungen duerfen unbestaetigt unterwegs sein
+    # (bei 30 je Sekunde gut eine Drittelsekunde), und hoechstens so viele
+    # werden in Folge ausgelassen, falls keine Quittung mehr kommt.
+    unterwegs_hoechstens=10,
+    auslassen_hoechstens=30,
+    wirkung_hoechstens=400,
+    # Der Sendepuffer des Systems je Gast (Bytes). Klein, damit sich dort
+    # nichts sekundenlang staut: was nicht hinausgeht, merkt der Gegendruck.
+    sendepuffer=65536,
     probe_ziel="10.255.255.255",   # nur um die eigene Adresse zu erfahren
     namenslaenge=10,
     passwortlaenge=16,        # laenger wird abgeschnitten
