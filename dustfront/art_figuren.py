@@ -771,7 +771,11 @@ def insasse(fahrer: dict, arme=8) -> pygame.Surface:
 
 # Fahrzeuge mit einem Insassen im Skin: <grund>_skin_<id>[_<team>], wie
 # <grund>_<team>_fahrer. Der Grund ist das Bild mit dem neutralen Fahrer.
-_INSASSEN = ("buggy", "panzer_turm", "panzerwagen_ring")
+_INSASSEN = ("buggy", "panzer_turm", "panzerwagen_ring",
+             # Seit 0.34.109 auch die neuen Fahrzeuge (art_neue_fahrzeuge): das Krad
+             # leer mit Fahrer und mit Beifahrer (beide im Skin des Fahrers), die
+             # Kanone des Jagdpanzers samt Kommandant.
+             "krad", "krad_beiwagen", "jagdpanzer_rohr")
 
 
 def insassen_bildname(grund: str, skin: str, team_vorsatz: str = "") -> str:
@@ -799,7 +803,13 @@ def _insassen_zeichner(grund: str):
         fahrer = fahrer_aus_name(name)
         if fahrer is None:
             return None
-        from . import art_fahrzeuge
+        from . import art_fahrzeuge, art_neue_fahrzeuge
+        if grund == "krad":
+            return art_neue_fahrzeuge.krad_zeichnen(fahrer)
+        if grund == "krad_beiwagen":
+            return art_neue_fahrzeuge.krad_zeichnen(fahrer, fahrer)
+        if grund == "jagdpanzer_rohr":
+            return art_neue_fahrzeuge.jagdpanzer_aufbau(fahrer)
         if grund == "buggy":
             return art._buggy_zeichnen(fahrer)
         if grund == "panzer_turm":

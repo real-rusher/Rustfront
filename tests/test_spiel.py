@@ -17549,6 +17549,87 @@ _bot108.darf_fahren = True
 pruef("Trosswagen: ein Bot steigt nicht ein", _tm108._freier_buggy(_bot108) is None)
 _tm108.verlassen()
 
+# ─────────────────────────────────────────────────────────────────────
+# 0.34.109: Skins auch im Krad und im Jagdpanzer, und die Reichweite des
+# Jagdpanzers (Kanone und Zielfernrohr).
+from dustfront import art_figuren as _AF109
+_tm109 = _TM59.Testmodus(app, karte="staubtal_offen")
+_skin109 = _AF109.waehlbar()[3]
+_namen109 = ["krad_skin_%s_rot" % _skin109, "krad_beiwagen_skin_%s_blau" % _skin109,
+             "jagdpanzer_rohr_skin_%s_rot" % _skin109, "krad_skin_%s" % _skin109]
+_soll109 = [K.BILD_MASS["krad_fahrer"], K.BILD_MASS["krad_beiwagen_fahrer"],
+            K.BILD_MASS["jagdpanzer_rohr_fahrer"], K.BILD_MASS["krad_fahrer"]]
+pruef("Skins: Bilder von Krad (leer-Fahrer, Beiwagen) und Jagdpanzer-Kanone im Skin, im Sollmass",
+      all(app.bilder.bild(n_).get_size() == m_ for n_, m_ in zip(_namen109, _soll109)),
+      str([app.bilder.bild(n_).get_size() for n_ in _namen109]))
+pruef("... ein Skin, den es nicht gibt, bleibt ohne Muster (faellt auf die Mannschaft zurueck)",
+      not app.bilder.mass("krad_skin_gibtesnicht_rot"))
+_e109 = _tm109.welt.ebene(0)
+_rnd109 = random.Random(109)
+for _ in range(60000):
+    _ty109 = _rnd109.randrange(20, _e109.hoehe - 20)
+    _tx109 = _rnd109.randrange(40, _e109.breite - 60)
+    if all(not K.KACHELN[_e109.kachel(_tx109 + x_, _ty109 + dy_)]["fest"]
+           for x_ in range(48) for dy_ in (-2, -1, 0, 1, 2)):
+        break
+_z109 = lambda x_, y_: pygame.Vector2((_tx109 + x_ + 0.5) * K.TILE, (_ty109 + y_ + 0.5) * K.TILE)
+_kr109 = _tm109.fahrzeug_setzen("krad", _z109(2, 0), 0, {"winkel": 0})
+_f109 = _tm109.puppe_setzen(_kr109.ausstiegsorte(9.0)[0], 0, {"team": 0, "aussehen": _skin109}, name="FAHRER")
+_tm109._anwenden(_f109, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_b109 = _tm109.puppe_setzen(_kr109.pos + pygame.Vector2(20, 14), 0, {"team": 0}, name="BEI")
+_alt109 = _kr109.bild
+_tm109._anwenden(_b109, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Skins: das Krad zeigt den Fahrer in seinem Aussehen (leer, dann mit Beifahrer)",
+      _alt109 == "krad_skin_%s_rot" % _skin109
+      and _kr109.bild == "krad_beiwagen_skin_%s_rot" % _skin109,
+      "%s / %s" % (_alt109, _kr109.bild))
+_jp109 = _tm109.fahrzeug_setzen("jagdpanzer", _z109(6, 0), 0, {"winkel": 0})
+_jf109 = _tm109.puppe_setzen(_jp109.ausstiegsorte(9.0)[0], 0, {"team": 0, "aussehen": _skin109},
+                             name="KOMMANDANT")
+_tm109._anwenden(_jf109, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Skins: die Kanone des Jagdpanzers zeigt den Kommandanten im Aussehen",
+      _jp109.aufbau_bild_name() == "jagdpanzer_rohr_skin_%s_rot" % _skin109, _jp109.aufbau_bild_name())
+# Reichweite: ein Ziel 1 300 Pixel entfernt, mitten in der freien Bahn.
+_ziel109 = _tm109.puppe_setzen(_jp109.pos + pygame.Vector2(1300, 0), 0, {"team": 1, "leben": 20.0},
+                               name="WEIT")
+_l109 = _ziel109.leben
+_jp109.takt["kanone"] = 0.0
+for _ in range(int(3.5 / K.FIXED_DT)):
+    _tm109._anwenden(_jf109, {"will": [0, 0], "ziel": [_ziel109.pos.x, _ziel109.pos.y], "knoepfe": [],
+                              "feuert": True})
+    _tm109.schritt(K.FIXED_DT)
+pruef("Jagdpanzer: ein Ziel in 1 300 Pixeln wird von der Kanone getroffen (der Panzer reicht nur 900)",
+      _ziel109.leben < _l109 or not _ziel109.lebt, "Leben %.0f von %.0f" % (_ziel109.leben, _l109))
+_pz109 = _tm109.fahrzeug_setzen("panzer", _z109(6, 4), 0, {"winkel": 0})
+pruef("... der Panzer kaeme dort nicht mehr an (Reichweite)",
+      K.FAHRZEUG_WAFFEN["kanone"]["reichweite"] < 1300 < K.FAHRZEUG_WAFFEN["jagdkanone"]["reichweite"])
+# Zielfernrohr: rechte Maustaste im Jagdpanzer, nicht im Panzer oder Buggy.
+_gehalten109 = app.eingabe.gehalten
+app.eingabe.gehalten = lambda n_: n_ == "zweit"
+_tm109.uebernehmen(_jf109)          # ab hier ist er "ich" (mit eigener Eingabe, nicht mehr gesteuert)
+_scope_jp109 = _tm109.scope_an()
+_jf109.treppe_rest = 0.0
+_tm109._aussteigen(_jf109)
+_scope_draussen109 = _tm109.scope_an()
+app.eingabe.gehalten = lambda n_: False
+_scope_ohne109 = _tm109.scope_an()
+app.eingabe.gehalten = _gehalten109
+pruef("Zielfernrohr: im Jagdpanzer mit der rechten Maustaste an, ohne sie und zu Fuss (ohne Fernrohrwaffe) aus",
+      _scope_jp109 and not _scope_draussen109 and not _scope_ohne109,
+      "%s %s %s" % (_scope_jp109, _scope_draussen109, _scope_ohne109))
+from dustfront.render import Kamera as _Kam109
+_ka109 = _Kam109((1000, 1000))
+_kb109 = _Kam109((1000, 1000))
+for _ in range(240):
+    _ka109.schritt(K.FIXED_DT, pygame.Vector2(1000, 1000), pygame.Vector2(1000 + 900, 1000), (9999, 9999),
+                   versatz=pygame.Vector2(300, 0), scope=True)
+    _kb109.schritt(K.FIXED_DT, pygame.Vector2(1000, 1000), pygame.Vector2(1000 + 900, 1000), (9999, 9999),
+                   versatz=pygame.Vector2(300, 0), scope=False)
+pruef("Zielfernrohr: die Kamera laeuft weit voraus (mehr als ohne)",
+      _ka109.pos.x - 1000 > (_kb109.pos.x - 1000) * 1.5 and _ka109.pos.x - 1000 > 300,
+      "%.0f gegen %.0f" % (_ka109.pos.x - 1000, _kb109.pos.x - 1000))
+_tm109.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
