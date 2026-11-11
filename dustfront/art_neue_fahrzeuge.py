@@ -892,3 +892,147 @@ def _werfer_stellung(i: int):
 # Aufgebaut: das Gestell dreht sich in 30-Grad-Stufen zum Ziel (Werfer.bild).
 for _i in range(12):
     platzhalter("werfer_aufgebaut_%d" % _i)(_werfer_stellung(_i))
+
+
+# ──────────────────────────────── Tragschrauber (seit 0.34.113)
+
+TS_LACK = (176, 92, 52)           # ausgeblichenes Mennigerot
+TS_DK = (84, 40, 24)
+TS_HELL = (214, 136, 88)
+
+
+def tragschrauber_zeichnen(fahrer=None, bomben: int = 2) -> pygame.Surface:
+    """Ein Tragschrauber von oben, ohne Rotor (der dreht sich als eigenes
+    Bild, `rotor_zeichnen`): Rahmen mit Druckschraube hinten, offene
+    Bugkanzel, Leitwerk, Bomben an der Seite. 160 x 160. Mit `fahrer` sitzt er
+    in der Kanzel."""
+    b = _Blatt(160, G)
+    rnd = random.Random(7801)
+    for sy in (-1, 1):                                        # Fahrwerk
+        b.rohr((-1, sy * 2), (-3, sy * 11.6), 1.3, (150, 146, 138))
+        b.rohr((5, sy * 2), (-3, sy * 11.6), 1.0, (150, 146, 138))
+        b.rect((22, 19, 17), -6.4, sy * 12.2 - 1.6, 6.8, 3.2, 1.4)
+        b.rect((60, 54, 48), -5.9, sy * 12.2 - 1.1, 5.8, 2.2, 1.0)
+    b.rect((22, 19, 17), 17.6, -1.2, 4.4, 2.4, 1.0)
+    b.rohr((20, 0), (-27, 0), 2.0, (150, 146, 138), (40, 38, 34))
+    leit = [(-22, -11), (-27.4, -11), (-28.6, -9), (-28.6, 9), (-27.4, 11), (-22, 11)]
+    b.poly(TS_DK, leit)
+    b.poly(TS_LACK, [(-22.6, -10.2), (-27.2, -10.2), (-28, -8.6), (-28, 8.6), (-27.2, 10.2),
+                     (-22.6, 10.2)])
+    b.linie(TS_HELL, (-27.4, -9.6), (-23, -9.6), 0.6)
+    b.rect((226, 220, 204), -27.6, -1.6, 4.6, 3.2)
+    for sy in (-1, 1):
+        b.rect(TS_DK, -31, sy * 10.6 - 0.8, 9.6, 1.6, 0.5)
+        b.rect(TS_HELL, -30.6, sy * 10.6 - 0.4, 8.8, 0.8, 0.3)
+    for i in range(max(0, min(2, bomben))):                   # Bomben am Rahmen
+        sy = -1 if i % 2 == 0 else 1
+        b.rect((26, 24, 22), 2, sy * 5.6 - 1.4, 8, 2.8, 1.3)
+        b.rect((90, 96, 70), 2.4, sy * 5.6 - 1.0, 7.2, 2.0, 1.0)
+        b.rect((196, 172, 72), 7.2, sy * 5.6 - 1.0, 1.2, 2.0)
+        b.rect((26, 24, 22), 0.6, sy * 5.6 - 1.8, 2.0, 3.6, 0.3)
+    b.rect((40, 38, 36), -11.4, -4.4, 7.4, 8.8, 1.0)          # Motor
+    b.rect((92, 88, 82), -10.9, -3.9, 6.4, 7.8, 0.8)
+    for i in range(4):
+        b.linie((58, 56, 52), (-10.6, -3 + i * 2), (-5, -3 + i * 2), 0.6)
+    for sy in (-1, 1):
+        b.rohr((-9, sy * 4.4), (-13.4, sy * 6.4), 1.2, (178, 172, 160), (52, 48, 44))
+    _halb_durch(b, lambda: b.rect((60, 56, 52, 120), -13.6, -9.4, 1.8, 18.8, 0.8))
+    _halb_durch(b, lambda: b.rect((214, 208, 196, 110), -13.2, -8.6, 0.9, 17.2, 0.4))
+    b.kreis((30, 28, 26), (-12.7, 0), 1.3)
+    nase = [(22, 0), (20.4, -3.6), (15, -5.8), (6, -6.2), (2, -5), (2, 5), (6, 6.2), (15, 5.8),
+            (20.4, 3.6)]
+    b.poly(TS_DK, nase)
+    b.poly(TS_LACK, [(x * 0.96 + 0.3, y * 0.84) for x, y in nase])
+    b.linien(TS_HELL, [(19.4, -2.8), (14.6, -4.4), (6.4, -4.8)], 0.7)
+    b.rect((226, 220, 204), 12.6, -4.6, 1.6, 9.2)
+    b.rect((22, 18, 16), 2.6, -4.2, 9.4, 8.4, 2.0)
+    b.rect((46, 40, 36), 3.0, -3.8, 8.6, 7.6, 1.7)
+    b.segment(GLAS_DK, 4.2, 5.4, -70, 70, 9.6, 0)
+    b.segment((96, 146, 160), 4.5, 5.1, -62, 62, 9.6, 0)
+    if fahrer is None:
+        b.rect((92, 62, 44), 3.4, -2.6, 4.6, 5.2, 1.3)
+    else:
+        _insasse(b, fahrer, 4.6, 0, arme=6)
+    _staub(b, rnd, 20, 3, 20, -4.6, 4.6, [(196, 126, 84), (150, 84, 50), (214, 160, 120), (120, 66, 40)])
+    b.kreis((30, 28, 26), (-2.4, 0), 2.0)                     # Rotormast
+    b.kreis((150, 146, 138), (-2.4, 0), 1.3)
+    return b.fertig()
+
+
+def rotor_zeichnen(winkel: float = 25.0) -> pygame.Surface:
+    """Der Rotor: zwei Blaetter, verwischt zu einer blassen Scheibe. 192 x 192,
+    Drehpunkt in der Mitte."""
+    n = 192
+    radius = 31.0
+    b = _Blatt(n, G)
+    s = pygame.Surface(b.s.get_size(), pygame.SRCALPHA)
+    m = n / 2 * _SS
+    pygame.draw.circle(s, (210, 200, 180, 26), (m, m), b.d(radius))
+    pygame.draw.circle(s, (60, 54, 48, 34), (m, m), b.d(radius), max(1, round(b.d(0.7))))
+    b.s.blit(s, (0, 0))
+    for k, (dw, deck) in enumerate(((0, 215), (-9, 110), (-18, 60), (-27, 30))):
+        for basis in (0, 180):
+            a = math.radians(winkel + dw + basis)
+            ca, sa = math.cos(a), math.sin(a)
+            lage = pygame.Surface(b.s.get_size(), pygame.SRCALPHA)
+            p0 = (m + ca * b.d(2.0), m + sa * b.d(2.0))
+            p1 = (m + ca * b.d(radius - 0.6), m + sa * b.d(radius - 0.6))
+            nx, ny = -sa, ca
+            br0, br1 = b.d(1.5), b.d(1.0)
+            poly = [(p0[0] + nx * br0, p0[1] + ny * br0), (p1[0] + nx * br1, p1[1] + ny * br1),
+                    (p1[0] - nx * br1, p1[1] - ny * br1), (p0[0] - nx * br0, p0[1] - ny * br0)]
+            pygame.draw.polygon(lage, (44, 40, 36, deck), poly)
+            if k == 0:
+                pygame.draw.line(lage, (150, 146, 138, 235), p0, p1, max(1, round(b.d(0.5))))
+                tip0 = (m + ca * b.d(radius - 4), m + sa * b.d(radius - 4))
+                pygame.draw.line(lage, (214, 178, 72, 240), tip0, p1, max(1, round(b.d(1.6))))
+            b.s.blit(lage, (0, 0))
+    b.kreis((30, 28, 26), (0, 0), 2.2)
+    b.kreis((150, 146, 138), (0, 0), 1.4)
+    return pygame.transform.smoothscale(b.s, (n, n))
+
+
+@platzhalter("tragschrauber")
+def _tragschrauber():
+    return tragschrauber_zeichnen()
+
+
+@platzhalter("tragschrauber_fahrer")
+def _tragschrauber_fahrer():
+    return tragschrauber_zeichnen(_NEUTRAL)
+
+
+@platzhalter("tragschrauber_wrack")
+def _tragschrauber_wrack():
+    return _wrack(tragschrauber_zeichnen(None, 0), 7680)
+
+
+@platzhalter("tragschrauber_schatten")
+def _tragschrauber_schatten():
+    s = pygame.Surface((160, 160), pygame.SRCALPHA)
+    pygame.draw.ellipse(s, (0, 0, 0, 110), (160 // 2 - 30, 160 // 2 - 5, 60, 10))
+    pygame.draw.rect(s, (0, 0, 0, 110), (160 // 2 - 8, 160 // 2 - 18, 16, 36), border_radius=6)
+    for _ in range(2):
+        s = pygame.transform.smoothscale(pygame.transform.smoothscale(s, (40, 40)), (160, 160))
+    return s
+
+
+def _rotor_stufe(i: int):
+    def z():
+        return rotor_zeichnen(i * 30.0)
+    return z
+
+
+# Der Rotor dreht sich in sechs Stellungen (Tragschrauber-Schicht in luft.py).
+for _i in range(6):
+    platzhalter("rotor_%d" % _i)(_rotor_stufe(_i))
+
+
+def _ts_team(kombi):
+    def z():
+        return tragschrauber_zeichnen(_kombi_fahrer(kombi))
+    return z
+
+
+for _kombi in K.TEAMS["kombi"]:
+    platzhalter("tragschrauber_%s_fahrer" % _kombi["name"].lower())(_ts_team(_kombi))

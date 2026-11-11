@@ -176,7 +176,7 @@ OPTIONEN = {
     # Seit 0.34.73: die Klasse (K.KLASSEN) - Waffen, Vorteile, Faehigkeit (C).
     "klasse": ("KLASSE", lambda: [""] + list(K.KLASSEN),
                lambda v: K.KLASSEN[v]["name"] if v in K.KLASSEN else "KEINE"),
-    "fahrzeug": ("FAHRZEUG", lambda: ["panzer", "panzerwagen", "buggy", "krad", "jagdpanzer", "trosswagen", "spulenwagen", "funkwagen", "werfer"],
+    "fahrzeug": ("FAHRZEUG", lambda: ["panzer", "panzerwagen", "buggy", "krad", "jagdpanzer", "trosswagen", "spulenwagen", "funkwagen", "werfer", "tragschrauber"],
                  lambda v: v.upper()),
     "fuehrer": ("ANFÜHRER", lambda: ["funk", "ohne", "keiner"],
                 lambda v: {"funk": "MIT FUNK", "ohne": "OHNE FUNK", "keiner": "KEINER"}[v]),
@@ -312,6 +312,10 @@ def eintraege() -> list:
         # eine Salve - nur dorthin, wo ein gueltiges Ziel der eigenen Seite ist.
         Eintrag("WERFER", "OBJEKTE", ("anzahl", "streuung", "winkel"),
                 lambda t, p, e, w: t.fahrzeug_setzen("werfer", p, e, w)),
+        # Seit 0.34.113: fliegt. Mit Figur einsteigen (E), Gas bis er abhebt, E
+        # landet. Zum Draufschiessen: die Maus auf sein Bild legen.
+        Eintrag("TRAGSCHRAUBER", "OBJEKTE", ("anzahl", "streuung", "winkel"),
+                lambda t, p, e, w: t.fahrzeug_setzen("tragschrauber", p, e, w)),
         # Seit 0.34.65: was der Nagelstreuer eines Wagens hinterlaesst.
         Eintrag("NAGELFELD", "OBJEKTE", ("anzahl", "streuung"),
                 lambda t, p, e, w: t.nagelfeld_setzen(p, e)),
@@ -332,6 +336,8 @@ def eintraege() -> list:
                 lambda t, p, e, w: t.nachschub_setzen("krad", p, w), mehrfach=False),
         Eintrag("ABWURF: JAGDPANZER", "NACHSCHUB", ("team",),
                 lambda t, p, e, w: t.nachschub_setzen("jagdpanzer", p, w), mehrfach=False),
+        Eintrag("ABWURF: TRAGSCHRAUBER", "NACHSCHUB", ("team",),
+                lambda t, p, e, w: t.nachschub_setzen("tragschrauber", p, w), mehrfach=False),
         Eintrag("ABWURF: WERFER", "NACHSCHUB", ("team",),
                 lambda t, p, e, w: t.nachschub_setzen("werfer", p, w), mehrfach=False),
         Eintrag("ABWURF: FUNKWAGEN", "NACHSCHUB", ("team",),

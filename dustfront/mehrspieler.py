@@ -65,6 +65,7 @@ from . import ui
 from .bots import BotTeil
 from .lobby import LobbyTeil, lobby_regeln
 from .schlacht import SchlachtTeil
+from .luft import LuftTeil
 from .gastseite import GastTeil, WirtTeil
 from .spielerkosmetik import KosmetikTeil
 from . import klassen as klassen_modul
@@ -790,7 +791,7 @@ def _version_kleiner(a: str, b: str) -> bool:
     return teile(a) < teile(b)
 
 
-class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, WirtTeil):
+class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, GastTeil, WirtTeil):
     # Die Faehigkeiten der Klassen (Taste C, seit 0.34.73) legen Dinge aus
     # ausruestung.py hin. Bis 0.34.79 gingen die nicht ueber das Netz, und
     # nur der Testmodus schaltete sie ein. Seitdem stehen sie in der
@@ -1708,28 +1709,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             b.markiert_fuer = "team%d" % (1 - team)
 
     def _werfer_einschlag(self, b, p) -> None:
-        from .entities import abschuss_buchen, schaden_an
         s = K.WERFER["salve"]
-        w = self.welt
-        r = s["radius"]
-        w.explosion(p, b.ebene, r, "panzer", b.fahrer)
-        for a in list(w.nahe(p, r + 70.0, b.ebene)):
-            if not a.lebt or not getattr(a, "trefferbar", True) or getattr(a, "fraktion", "") == "geschoss":
-                continue
-            if getattr(a, "ist_fahrzeug", False):
-                if not a.beruehrt(p, r):
-                    continue
-                weit = a.pos.distance_to(p)
-            else:
-                weit = a.pos.distance_to(p)
-                if weit > r + a.radius:
-                    continue
-            anteil = (1.0 - 0.6 * min(1.0, weit / max(1.0, r))) * w.deckung_anteil(p, a.pos, b.ebene)
-            schub = (a.pos - p).normalize() * 260.0 * anteil if weit > 0.01 else None
-            lebte = a.lebt
-            schaden_an(a, s["schaden"] * anteil, schub, b.fahrer, "hohlladung", p,
-                       s["fahrzeug"] * anteil)
-            abschuss_buchen(b.fahrer, a, "werfer", lebte)
+        self.welt.explosion(p, b.ebene, s["radius"], "panzer", b.fahrer)
+        self.flaechenschaden(p, b.ebene, s["radius"], s["schaden"], s["fahrzeug"], b.fahrer, "werfer")
 
     def _werfer_zeichnen_boden(self, flaeche, ebene: int, ecke) -> None:
         """Am Boden (seit 0.34.112): wo Raketen einschlagen - rote Kreise, die
@@ -2582,6 +2564,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             k.ziel = pygame.Vector2(float(ein["ziel"][0]), float(ein["ziel"][1]))
         except (KeyError, TypeError, ValueError, IndexError):
             return
+        self.luft_zielen(k)         # liegt der Zeiger auf einem Luftziel? (seit 0.34.113, luft.py)
 
         if k.am_boden:
             # Am Boden liegt man. Kein Kriechen mehr: wer getroffen wurde,
@@ -3366,7 +3349,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         k.hilft = None
         self._loslassen(k)
         if self._e_gedrueckt(ein) and k.treppe_rest <= 0:
-            self._aussteigen(k)
+            if getattr(b, "luft", False):
+                b.landen_beginnen()             # Tragschrauber: zur Landung ansetzen
+            else:
+                self._aussteigen(k)
 
     def _fahrzeuge_nachziehen(self) -> None:
         """Nach dem Weltschritt: jeder Fahrer sitzt dort, wo sein Wagen
@@ -3672,6 +3658,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                                  K.C_AMBER if rest <= 0.0 else K.C_MUTED, 1,
                                  ausrichtung="mitte")
                 unten += 10
+            if wagen is not None and wagen.art == "tragschrauber" and not wagen.kaputt:
+                if not wagen.luft:
+                    txt = "FAHREN: AB %d PX/S HEBT ER AB" % int(wagen.werte["abheben"])
+                elif wagen.landen:
+                    txt = "LANDET - PLATZ NOETIG"
+                else:
+                    txt = "[E] LANDEN  [LMB] BOMBE (%d)" % wagen.bomben
+                SCHRIFT.zeichnen(ziel, txt, int(p.x), int(p.y) + unten, K.C_AMBER, 1,
+                                 ausrichtung="mitte")
+                unten += 10
             if wagen is not None and wagen.art == "werfer" and not wagen.kaputt:
                 if wagen.phase == 0:
                     txt = "WERFER [RMB]: AUFBAUEN"
@@ -3719,6 +3715,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                      else "[LMB] KANONE  [RMB] ZIELFERNROHR" if wagen.art == "jagdpanzer"
                      else "[LMB] MG"),
                     taste_e)
+            elif wagen is not None and wagen.art == "tragschrauber":
+                text = "[%s/%s] GAS  [%s/%s] KURVE  [LMB] BOMBE  [%s] LANDEN / AUSSTEIGEN" % (
+                    self._tastenname("vor"), self._tastenname("zurueck"),
+                    self._tastenname("links"), self._tastenname("rechts"), taste_e)
             elif wagen is not None and wagen.art == "werfer":
                 text = "[%s/%s] FAHREN  [%s/%s] LENKEN  [RMB] AUFBAUEN  [LMB] SALVE  [%s] AUSSTEIGEN" % (
                     self._tastenname("vor"), self._tastenname("zurueck"),
@@ -3904,6 +3904,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         self._fahrzeuge_erneuern(dt)
         self.funkwagen_schritt(dt)
         self.werfer_schritt(dt)
+        self.tragschrauber_schritt(dt)
         if not self.schlacht and self.__dict__.get("nachschub_an"):
             # Testmodus (seit 0.34.100): Abwuerfe, Drohnen und Fallschirmjaeger
             # aus dem Spawner, ohne SCHLACHT.
@@ -7021,7 +7022,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         r = self.renderer
         if self.ist_gastgeber:
             for w in self.welt.wesen:
-                if getattr(w, "hoch_oben", False) and w.lebt and w.bild:
+                if (getattr(w, "hoch_oben", False) and w.lebt and w.bild
+                        and not getattr(w, "ist_fahrzeug", False)):      # Fahrzeuge: luft.py
                     r.hoch_oben_zeichnen(ziel, w.bild, w.zeichenpos(misch) - ecke, w.winkel)
         else:
             for (x, y, winkel, _eb, bild, _a, _kn, _h) in getattr(self, "_fremde_geraete", ()):
@@ -7048,6 +7050,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         if gast:
             self._fremde_fallende(ziel, misch)
         self._drohnen_zeichnen(ziel, misch)
+        self._luftfahrzeuge_zeichnen(ziel, misch)
         self._raketen_zeichnen(ziel)
         if self.schlacht or self.__dict__.get("nachschub_an"):
             self.ueberfluege_zeichnen(ziel)

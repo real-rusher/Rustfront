@@ -1,4 +1,4 @@
-# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.112)
+# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.113)
 
 Zwoelf Entwuerfe fuer die SCHLACHT auf Karten, die groesser sind als
 STAUBTAL - OFFEN. Bilder und Szenen dazu stehen auf der Entscheidungsseite
@@ -17,7 +17,7 @@ davon eingebaut ist.
 | FUNKWAGEN | behalten; Bots, die mit ihm sprechen koennen, geben ihre Daten direkt ins Funknetz des Teams (nur mit aktivem Funk). Stoeren bleibt, aber er steht dabei auf der Karte | **0.34.111** |
 | WERFER | behalten; schiesst nur im Umkreis gueltiger Ziele (von jemandem im Team gesehene oder markierte Gegner und Fahrzeuge, Hotzones, spaeter weitere Objectives). Sehr leicht zu zerstoeren, dann grosse Explosion, die alle im Umkreis toetet. Jeder Schuss verraet ihn kurz auf Karte oder Minikarte, mit eigenem Symbol | **0.34.112** |
 | FLAKWAGEN | behalten; nur Bots fahren ihn (sie spawnen darin oder werden damit gedroppt), weil Spieler nicht zwischen Boden- und Luftzielen wechseln koennen | offen |
-| TRAGSCHRAUBER | behalten; das Zielproblem fuer Spieler loesen. Es soll spaeter mehr Hubschrauber geben, und man soll auf andere Etagen schiessen koennen | offen |
+| TRAGSCHRAUBER | behalten; das Zielproblem fuer Spieler loesen. Es soll spaeter mehr Hubschrauber geben, und man soll auf andere Etagen schiessen koennen | **0.34.113** |
 | GLEITER, RAEUMER, LADUNGSTRAEGER | verworfen | - |
 | LANDSCHIFF | **verworfen fuer diese Entwicklungsphase, aber gemerkt**: die fahrende Basis mit Plaetzen fuer Fahrer, Hauptturm und vier Seitentuerme, Einstieg der Gefallenen am Heck. Konzept und Zeichner liegen auf der Entscheidungsseite | zurueckgestellt |
 
@@ -29,7 +29,7 @@ davon eingebaut ist.
 4. Luftziele: Flakwagen und Tragschrauber, mit einer Regel, wie Spieler
    Luftziele und andere Etagen anvisieren
 
-Vorschlag fuer die Luftziel-Regel (noch nicht entschieden): die Maus zielt
+Die Luftziel-Regel (seit 0.34.113 gebaut, der Vorschlag war): die Maus zielt
 weiter in der Ebene; liegt der Zeiger auf dem *Bild* eines Luftziels (nicht
 auf seinem Schatten), geht der Schuss auf das Luftziel. Dieselbe Regel
 koennte fuer Helis und fuer Ziele auf anderen Etagen gelten.
@@ -96,3 +96,17 @@ koennte fuer Helis und fuer Ziele auf anderen Etagen gelten.
   `_werfer_zeichnen_boden` (rote Kreise, Zeiger), `_raketen_zeichnen`.
 * Zeichen auf Minikarte und Nachschubkarte: `Minikarte.werfer_zeichen`.
 * Ohne bekannte Seite (Testmodus ohne Team) gilt jeder Punkt als Ziel.
+
+## Was 0.34.113 gebaut hat
+
+* `dustfront/luft.py` (`LuftTeil`): `luft_ziele` (heute Tragschrauber,
+  Spaehdrohnen, Abwuerfe am Schirm, Fallschirmjaeger), `luft_zielen`
+  (Einrasten nach jeder Eingabe), `flaechenschaden` (Bomben, Raketen),
+  `tragschrauber_schritt`, `_luftfahrzeuge_zeichnen`. Kugeln tragen ihr
+  `luft_ziel` (`entities.Geschoss`) und treffen nur dieses.
+* `Tragschrauber(Buggy)` mit Bodenphase und Flugphase (`_fliegen`, Landung,
+  Absturz), Werte `K.TRAGSCHRAUBER`.
+* Abwuerfe und Fallschirmjaeger sind Luftziele, aber nur fuer Flak
+  (`nur_flak`): gewoehnliche Waffen rasten dort nicht ein - bis der Flakwagen
+  da ist, aendert sich fuer sie nichts. Mit der Regel koennte man den Flakwagen
+  auch Menschen geben; entschieden ist: nur Bots.

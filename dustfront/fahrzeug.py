@@ -2051,6 +2051,153 @@ class Werfer(Aufbauwagen):
         self.ziel_grund = 3
 
 
+class Tragschrauber(Buggy):
+    """Fliegt (seit 0.34.113, K.TRAGSCHRAUBER). Am Boden ein kleiner Wagen; ab
+    `abheben` px/s hebt er ab und fliegt ueber alles - Mauern, Felsen, Loecher
+    -, mit mindestens `flug_min` (stehen geht nicht). E setzt zur Landung an;
+    wo er aufsetzt, muss Platz sein, sonst stuerzt er ab. In der Luft ist er
+    fuer Schuesse vom Boden unerreichbar - nur wer auf sein Bild zielt (luft.py)
+    und Flak treffen ihn. Linke Maustaste wirft eine Bombe, er sieht die
+    Gegner unter sich (Gefecht.tragschrauber_schritt)."""
+
+    art = "tragschrauber"
+    werte = K.TRAGSCHRAUBER
+    schatten_bild = "tragschrauber_schatten"
+    schiesst = True
+
+    def __init__(self, pos, ebene: int = 0, winkel: float = 0.0,
+                 nur_bild: bool = False) -> None:
+        super().__init__(pos, ebene, winkel, nur_bild)
+        self.feuer = False
+        self.zweit = False
+        self.takt: dict = {}
+        self.luft = False              # fliegt er (oder setzt er gerade zur Landung an)?
+        self.hoehe = 0.0               # Pixel ueber seinem Schatten, im Bild
+        self.landen = False
+        self.flug_v = 0.0
+        self.bomben = int(self.werte["bomben"])
+        self.bomben_fall: list = []    # [Restzeit, x, y]
+        self._bomben_rest = 0.0
+        self._feuer_alt = False
+        self._aufkl_rest = 0.0
+
+    @property
+    def bild(self) -> str:
+        if self.kaputt:
+            return "tragschrauber_wrack"
+        return self._insassen_bild("tragschrauber")
+
+    @property
+    def hoch_oben(self) -> bool:
+        """Gezeichnet in der Schicht ueber allem (luft.py), solange er hoch ist."""
+        return self.hoehe > 2.0 and not self.kaputt
+
+    @property
+    def in_der_luft(self) -> bool:
+        return self.luft and self.hoehe > 10.0 and not self.kaputt
+
+    def passt(self, pos, winkel=None) -> bool:
+        if self.luft:
+            return True
+        return super().passt(pos, winkel)
+
+    def _beiseite_schieben(self) -> None:
+        if not self.luft:
+            super()._beiseite_schieben()
+
+    def schritt(self, dt: float) -> None:
+        if self.luft and not self.nur_bild and self.welt is not None and not self.kaputt:
+            Wesen.schritt(self, dt)
+            self._fliegen(dt)
+            self.trefferbar = not self.in_der_luft     # Bodenfeuer geht darunter durch
+            return
+        super().schritt(dt)
+        self.trefferbar = True
+        if self.nur_bild or self.welt is None or self.kaputt:
+            return
+        f = self.werte
+        if (self.fahrer is not None and self.emp_rest <= 0.0 and self.fahrt >= f["abheben"]
+                and not self.landen):
+            self.luft = True                            # abgehoben
+            self.flug_v = max(self.geschw.length(), f["abheben"])
+            self.welt.klang("drohne", 0.7, self.pos, self.ebene)
+        elif self.geschw.length() < 5.0 and self.bomben < f["bomben"]:
+            self._bomben_rest -= dt
+            if self._bomben_rest <= 0.0:
+                self.bomben += 1
+                self._bomben_rest = f["bomben_nachladen"]
+
+    def _fliegen(self, dt: float) -> None:
+        f = self.werte
+        gas = self.gas if self.fahrer is not None and self.emp_rest <= 0.0 else 0.0
+        if self.emp_rest > 0.0:
+            self.emp_rest = max(0.0, self.emp_rest - dt)
+            self.landen = True                          # kein Motor: runter
+        ziel_v = f["flug_hoechst"] if gas > 0.3 else (f["flug_min"] if gas < -0.3 else f["flug_reise"])
+        if self.landen:
+            ziel_v = f["landen_tempo"]
+        schritt = f["flug_beschl"] * dt
+        self.flug_v += max(-schritt, min(schritt, ziel_v - self.flug_v))
+        lenk = self.lenk if self.fahrer is not None else 0.0
+        dreh = lenk * f["drehen"] * (0.45 + 0.55 * min(1.0, self.flug_v / f["flug_hoechst"]))
+        self.winkel = (self.winkel + dreh * dt + 180.0) % 360.0 - 180.0
+        self.pos += self.vorn * self.flug_v * dt
+        e = self.welt.ebene(self.ebene)
+        self.pos.x = max(8.0, min(e.pixel_breite - 8.0, self.pos.x))
+        self.pos.y = max(8.0, min(e.pixel_hoehe - 8.0, self.pos.y))
+        self.geschw = self.vorn * self.flug_v
+        self.tempo.update(self.geschw)
+        if self.landen:
+            self.hoehe = max(0.0, self.hoehe - f["sinken"] * dt)
+            if self.hoehe <= 0.0:
+                self._aufsetzen()
+        else:
+            self.hoehe += (f["hoehe"] - self.hoehe) * min(1.0, f["steigen"] * dt)
+
+    def landen_beginnen(self) -> None:
+        if self.luft and not self.landen:
+            self.landen = True
+
+    def _aufsetzen(self) -> None:
+        """Unten angekommen: ist Platz, rollt er aus, sonst Absturz."""
+        self.hoehe = 0.0
+        self.landen = False
+        if Buggy.passt(self, self.pos):
+            self.luft = False
+            self.geschw = self.vorn * min(self.flug_v, self.werte["hoechst"] * 0.6)
+            self.flug_v = 0.0
+        else:
+            self.luft = False
+            self.schaden(self.leben + 1.0, None, None, art="ramm")
+
+    def _zerstoeren(self, von) -> None:
+        self.luft = self.landen = False
+        self.hoehe = self.flug_v = 0.0
+        super()._zerstoeren(von)
+
+    def netz_extra(self):
+        return [int(self.luft), int(self.hoehe), self.bomben,
+                [[round(b[0], 1), int(b[1]), int(b[2])] for b in self.bomben_fall[:4]]]
+
+    def netz_extra_setzen(self, wert) -> None:
+        try:
+            self.luft = bool(int(wert[0]))
+            self.hoehe = max(0.0, min(200.0, float(wert[1])))
+            self.bomben = max(0, min(9, int(wert[2])))
+            self.bomben_fall = [[float(b[0]), float(b[1]), float(b[2])] for b in wert[3][:4]]
+        except (TypeError, ValueError, IndexError):
+            self.bomben_fall = []
+
+    def zuruecksetzen(self) -> None:
+        super().zuruecksetzen()
+        self.luft = self.landen = False
+        self.hoehe = self.flug_v = 0.0
+        self.bomben = int(self.werte["bomben"])
+        self.bomben_fall = []
+        self.takt = {}
+        self.feuer = self.zweit = self._feuer_alt = False
+
+
 class Jagdpanzer(Panzer):
     """Ein Panzer ohne Turm (seit 0.34.107): die Kanone sitzt fest im Bug und
     schwenkt nur ein paar Grad (K.JAGDPANZER "schwenk"); wer mehr will, muss
@@ -2087,7 +2234,7 @@ class Jagdpanzer(Panzer):
 ARTEN = {"buggy": Buggy, "panzer": Panzer, "panzerwagen": Panzerwagen,
          "krad": Krad, "jagdpanzer": Jagdpanzer, "trosswagen": Trosswagen,
          "spulenwagen": Spulenwagen, "funkwagen": Funkwagen,
-         "werfer": Werfer}
+         "werfer": Werfer, "tragschrauber": Tragschrauber}
 
 
 def marken() -> list:

@@ -1081,7 +1081,7 @@ SCHLACHT = dict(
                 sperre_basis=1800.0, ausweichen_ab=300.0, treiben=70.0, suche_weit=420.0,
                 stoss=520.0, quetschen=15.0, warnen_ab=160.0),
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
-                  zeichen=dict(buggy="B", werfer="W", funkwagen="F", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
+                  zeichen=dict(buggy="B", tragschrauber="H", werfer="W", funkwagen="F", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
                                medkit="+")),
     punkte=dict(abschuss=1, fahrzeug=5, aufhelfen=5),
     # Was man kaufen kann: (Kennung, Kosten, Name).
@@ -1100,8 +1100,9 @@ SCHLACHT = dict(
         ("spulenwagen", 10, "DROPZONE: SPULENWAGEN"),
         ("funkwagen", 7, "DROPZONE: FUNKWAGEN"),
         ("werfer", 9, "DROPZONE: WERFER"),
+        ("tragschrauber", 9, "DROPZONE: TRAGSCHRAUBER"),
     ),
-    belohnung_hilfe=dict(werfer="SALVEN AUF GESEHENE ZIELE, SEHR ZERBRECHLICH", funkwagen="PEILEN ODER STÖREN, NUR AUFGEBAUT", spulenwagen="BLITZ UND EMP-FELD, NUR AUFGEBAUT", krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
+    belohnung_hilfe=dict(tragschrauber="FLIEGT, SIEHT ALLES, ZWEI BOMBEN", werfer="SALVEN AUF GESEHENE ZIELE, SEHR ZERBRECHLICH", funkwagen="PEILEN ODER STÖREN, NUR AUFGEBAUT", spulenwagen="BLITZ UND EMP-FELD, NUR AUFGEBAUT", krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
                          munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
                          buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
                          panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE",
@@ -1710,6 +1711,52 @@ WERFER = dict(
                sicht=420.0, verraten=6.0, hoch=150.0, pruefen=0.4),
 )
 
+# Der Tragschrauber (seit 0.34.113): fliegt ueber Mauern, Felsen und die Front.
+# Am Boden ein kleiner schwacher Wagen; ab `abheben` px/s hebt er ab, fliegt
+# mit `flug_min` bis `flug_hoechst` px/s (stehen bleiben geht nicht), E setzt
+# zur Landung an. In der Luft treffen ihn nur Schuesse, die auf ihn gezielt
+# sind (die Maus ueber seinem Bild, siehe luft.py), und Flak. Er sieht die
+# Gegner unter sich (`aufklaerung` px, markiert sie fuer die Seite) und wirft
+# `bomben` Bomben; nachgeladen wird nur am Boden. Nur fuer Menschen.
+TRAGSCHRAUBER = dict(
+    {k: v for k, v in dict(FAHRZEUG, **PANZERWAGEN).items()
+     if k not in ("plaetze", "ring", "ring_dreh", "ring_muendung", "ring_ruecklauf",
+                  "ring_ruecklauf_tempo", "vorn", "hinten", "halb", "reifen_abstand",
+                  "reifen_teilung", "unscharf_ab", "ramm_schwelle", "ramm_je_px",
+                  "ramm_stoss", "ramm_extra")},
+    marke="H",
+    name="TRAGSCHRAUBER",
+    hoechst=110.0,            # am Boden
+    kreis=14.0,
+    achse=16.0,
+    einsteigen=48.0,
+    leben=140.0,
+    nur_mensch=True,
+    schiesst=True,
+    explosion_radius=60.0,
+    explosion_schaden=60.0,
+    fahrer_schaden=70.0,
+    wrack_zeit=10.0,
+    neu_nach=45.0,
+    balken_breite=30,
+    abheben=100.0,
+    flug_hoechst=260.0,
+    flug_reise=190.0,
+    flug_min=140.0,
+    flug_beschl=120.0,
+    drehen=70.0,              # Grad je Sekunde (bei Hoechstfahrt)
+    hoehe=64.0,               # so hoch im Bild ueber seinem Schatten
+    steigen=2.0,
+    sinken=44.0,              # px/s beim Landen
+    landen_tempo=60.0,
+    aufklaerung=300.0,
+    aufklaerung_takt=1.0,
+    bomben=2,
+    bomben_nachladen=3.0,
+    bombe=dict(fall=0.8, radius=62.0, schaden=110.0, fahrzeug=140.0, pause=0.6),
+    luft_radius=24.0,         # so gross ist er als Ziel (Pixel um sein Bild)
+)
+
 # Rammen und was danach fliegt (seit 0.34.59). Gilt fuer beide.
 RAMMEN = dict(
     sperre=0.4,               # so lange kein zweiter Schaden vom selben Fahrzeug
@@ -1808,6 +1855,9 @@ PANZERUNG = {
     # Der Werfer: ein duenner Laster, jeder Treffer zaehlt.
     "werfer": dict(kugel=1.0, panzerbrechend=1.2, spreng=1.2, hohlladung=1.5,
                    feuer=1.0, nahkampf=0.6, ramm=1.0),
+    # Der Tragschrauber: dünnes Blech.
+    "tragschrauber": dict(kugel=1.0, panzerbrechend=1.2, spreng=1.5, hohlladung=1.5,
+                          feuer=1.2, nahkampf=0.8, ramm=1.0),
     "jagdpanzer": dict(kugel=0.1, panzerbrechend=0.8, spreng=0.4, hohlladung=1.25,
                        feuer=0.1, nahkampf=0.05, ramm=0.35),
 }
@@ -4543,6 +4593,12 @@ for _team in TEAMS["kombi"]:
     BILD_MASS["panzerwagen_ring_%s_fahrer" % _team["name"].lower()] = (_fz_r, _fz_r)
 # Die Granate der Kanone, mit dicker Leuchtspur gezeichnet.
 BILD_MASS["panzergranate"] = (12, 6)
+for _name in ("tragschrauber", "tragschrauber_fahrer", "tragschrauber_wrack", "tragschrauber_schatten"):
+    BILD_MASS[_name] = (160, 160)
+for _team in TEAMS["kombi"]:
+    BILD_MASS["tragschrauber_%s_fahrer" % _team["name"].lower()] = (160, 160)
+for _i in range(6):
+    BILD_MASS["rotor_%d" % _i] = (192, 192)
 for _name in ("werfer", "werfer_wrack", "werfer_schatten"):
     BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _i in range(12):

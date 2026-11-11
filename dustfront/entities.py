@@ -321,6 +321,11 @@ def tod_zeigen(w, von=None) -> None:
              math.degrees(math.atan2(weg.y, weg.x)))
 
 
+def daten_faktor(geschoss) -> float:
+    """Wie viel mehr Flakmunition gegen Luftziele wiegt (K.FLAK luft_faktor)."""
+    return float(getattr(K, "FLAK", {}).get("luft_faktor", 1.0))
+
+
 def abschuss_buchen(von, ziel, waffe: str, lebte: bool) -> None:
     """Hat dieser Treffer `ziel` getoetet? Dann beim Schuetzen buchen.
 
@@ -432,6 +437,10 @@ class Geschoss(Wesen):
         # das eigene Fahrzeug.
         if von is not None and self.traeger is None:
             self.traeger = getattr(von, "mitfahrt", None)
+        # Auf ein Luftziel gezielt (seit 0.34.113, luft.py): die Kugel geht am
+        # Boden entlang und trifft nur dieses Ziel (und Mauern).
+        self.luft_ziel = getattr(von, "luft_ziel", None) if von is not None else None
+        self.flak = bool(daten.get("flak"))
         # Der Stoss auf das Ziel gilt je Schuss, nicht je Kugel: vorher
         # schob jede der sieben Schrotkugeln einzeln, und aus naechster
         # Naehe flog ein Getroffener rund 240 Pixel weit (0.32).
@@ -496,8 +505,17 @@ class Geschoss(Wesen):
         for _ in range(schritte):
             self.pos += teil
             self.rest -= teil.length()
-            ziel = self.welt.treffer(self.pos, self.radius, self.ebene,
-                                     self.quelle_fraktion, self.rueck)
+            lz = self.luft_ziel
+            if lz is not None:
+                ziel = None            # am Boden trifft sie nichts, sie geht darueber
+                if lz.lebt and self.pos.distance_to(lz.pos) <= lz.radius:
+                    self.lebt = False
+                    lz.treffen(self.schaden_jetzt() * (daten_faktor(self) if self.flak else 1.0),
+                               self.von)
+                    return
+            else:
+                ziel = self.welt.treffer(self.pos, self.radius, self.ebene,
+                                         self.quelle_fraktion, self.rueck)
             if self._eindringen is not None:
                 self._eindringen -= teil.length()
                 if self._eindringen <= 0.0:

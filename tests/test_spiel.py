@@ -17937,6 +17937,123 @@ pruef("Werfer: wird er zerstoert, gibt es eine grosse Explosion - wer daneben st
       "%s / %s" % (_nah112.lebt, _ferne112.lebt))
 _tm112.verlassen()
 
+# ─────────────────────────────────────────────────────────────────────
+# Tragschrauber und die Luftziel-Regel (seit 0.34.113, luft.py): man schiesst
+# auf das, worauf der Mauszeiger liegt - auch in der Luft.
+_tm113 = _TM59.Testmodus(app, karte="staubtal_offen")
+_namen113 = [e_.name for e_ in _tm113.eintraege]
+pruef("Testmodus: TRAGSCHRAUBER im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB); im Nachschub fuer 9 Punkte",
+      "TRAGSCHRAUBER" in _namen113 and "ABWURF: TRAGSCHRAUBER" in _namen113
+      and ("tragschrauber", 9, "DROPZONE: TRAGSCHRAUBER") in K.SCHLACHT["belohnungen"])
+_e113 = _tm113.welt.ebene(0)
+_rnd113 = random.Random(113)
+for _ in range(40000):
+    _tx113 = _rnd113.randrange(60, _e113.breite - 90)
+    _ty113 = _rnd113.randrange(20, _e113.hoehe - 40)
+    if all(not K.KACHELN[_e113.kachel(_tx113 + x_, _ty113 + y_)]["fest"]
+           for x_ in range(50) for y_ in range(24)):
+        break
+_z113 = lambda x_, y_: pygame.Vector2((_tx113 + x_ + 0.5) * K.TILE, (_ty113 + y_ + 0.5) * K.TILE)
+_ts113 = _tm113.fahrzeug_setzen("tragschrauber", _z113(2, 12), 0, {"winkel": 0})
+_tp113 = _tm113.puppe_setzen(_ts113.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="PILOT")
+_tm113._anwenden(_tp113, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Tragschrauber: eigene Art, am Boden ein Wagen, nur fuer Menschen",
+      _tp113.fahrzeug is _ts113 and _ts113.art == "tragschrauber" and not _ts113.luft
+      and _ts113.werte["nur_mensch"] and "plaetze" not in _ts113.werte and _ts113.trefferbar)
+def _ts_ein113(will_=(0, 0), feuert_=False, knoepfe_=()):
+    _tm113._anwenden(_tp113, {"will": list(will_), "ziel": [0, 0], "knoepfe": list(knoepfe_),
+                              "feuert": feuert_})
+    _tm113.schritt(K.FIXED_DT)
+for _ in range(int(6.0 / K.FIXED_DT)):
+    _ts_ein113(will_=(0, -1))
+pruef("Tragschrauber: mit Gas hebt er ab, steigt auf seine Hoehe und ist dann in der Luft (hoch oben, nicht mehr vom Boden zu treffen)",
+      _ts113.luft and _ts113.hoehe > _ts113.werte["hoehe"] * 0.8 and _ts113.hoch_oben and _ts113.in_der_luft
+      and not _ts113.trefferbar, "luft %s hoehe %.0f" % (_ts113.luft, _ts113.hoehe))
+pruef("... er faehrt mindestens so schnell wie `flug_min` und nicht schneller als `flug_hoechst`",
+      K.TRAGSCHRAUBER["flug_min"] - 1.0 <= _ts113.flug_v <= K.TRAGSCHRAUBER["flug_hoechst"] + 1.0,
+      "%.0f" % _ts113.flug_v)
+# Ein Schuetze am Boden, ein Stueck unter ihm.
+_s113 = _tm113.puppe_setzen(_ts113.pos + pygame.Vector2(0, 140), 0, {"team": 1, "waffe_figur": "sturm"},
+                            name="SCHUETZE")
+_s113.magazin[_s113.waffe_name] = 400
+_s113.vorrat[_s113.waffe_name] = 400
+_tm113.welt._raster_bauen()
+_l113 = _ts113.leben
+for _ in range(int(0.8 / K.FIXED_DT)):
+    _tm113._anwenden(_s113, {"will": [0, 0], "ziel": [_ts113.pos.x, _ts113.pos.y], "knoepfe": [],
+                             "feuert": True})
+    _ts_ein113(will_=(0, 0))
+pruef("Luftziel: wer auf den Boden unter dem Tragschrauber zielt, trifft ihn nicht (er fliegt darueber)",
+      _ts113.leben == _l113 and _s113.luft_ziel is None, "%.0f" % _ts113.leben)
+_l113 = _ts113.leben
+for _ in range(int(1.5 / K.FIXED_DT)):
+    _bp113 = pygame.Vector2(_ts113.pos.x, _ts113.pos.y - _ts113.hoehe)       # sein Bild
+    _tm113._anwenden(_s113, {"will": [0, 0], "ziel": [_bp113.x, _bp113.y], "knoepfe": [], "feuert": True})
+    _ts_ein113(will_=(0, 0))
+    if _ts113.leben < _l113:
+        break
+_getroffen113 = _ts113.leben
+pruef("Luftziel: liegt der Zeiger auf seinem Bild, rastet das Ziel ein - und die Kugeln treffen ihn",
+      _s113.luft_ziel is not None and _s113.luft_ziel.objekt is _ts113 and _getroffen113 < _l113,
+      "%.0f -> %.0f" % (_l113, _getroffen113))
+_tm113._anwenden(_s113, {"will": [0, 0], "ziel": [0, 0], "knoepfe": [], "feuert": False})
+_freund113 = _tm113.puppe_setzen(_ts113.pos + pygame.Vector2(0, 140), 0, {"team": 0, "waffe_figur": "sturm"},
+                                 name="FREUND")
+_tm113._anwenden(_freund113, {"will": [0, 0], "ziel": [_bp113.x, _bp113.y], "knoepfe": []})
+pruef("... auf die eigene Seite rastet nichts ein", _freund113.luft_ziel is None)
+# Aufklaerung: ein Gegner unter ihm ist fuer die Seite markiert.
+_ts113.leben = _ts113.max_leben
+_unten113 = _tm113.puppe_setzen(_ts113.pos + _ts113.vorn * 60, 0, {"team": 1}, name="UNTEN")
+_weit113 = _tm113.puppe_setzen(_ts113.pos + pygame.Vector2(0, 700), 0, {"team": 1}, name="WEIT")
+_tm113.welt._raster_bauen()
+_ts113._aufkl_rest = 0.0
+_ts_ein113(will_=(0, 0))
+pruef("Tragschrauber: ein Gegner im Kreis unter ihm ist fuer seine Seite markiert (Aufklaerung), ein weit entfernter nicht",
+      getattr(_unten113, "markiert_rest", 0.0) > 0.0 and _unten113.markiert_fuer == _tp113.fraktion
+      and getattr(_weit113, "markiert_rest", 0.0) == 0.0,
+      "%s" % getattr(_unten113, "markiert_fuer", None))
+# Die Bombe.
+_bomben113 = _ts113.bomben
+_opfer113 = _tm113.puppe_setzen(_ts113.pos + _ts113.vorn * _ts113.flug_v * K.TRAGSCHRAUBER["bombe"]["fall"], 0,
+                                {"team": 1, "leben": 5.0}, name="OPFER")
+_opfer113.unverwundbar = 0.0
+_tm113.welt._raster_bauen()
+_ol113 = _opfer113.leben
+_ts_ein113(feuert_=True)
+_ts_ein113(feuert_=False)
+pruef("Tragschrauber: die linke Maustaste wirft eine Bombe (eine weniger), sie faellt eine Weile ...",
+      _ts113.bomben == _bomben113 - 1 and len(_ts113.bomben_fall) == 1,
+      "%d / %d" % (_ts113.bomben, len(_ts113.bomben_fall)))
+for _ in range(int(1.2 / K.FIXED_DT)):
+    _ts_ein113()
+pruef("... und schlaegt dort ein, wo er sie hingeworfen hat: der Gegner am Ziel ist getroffen",
+      not _ts113.bomben_fall and (_opfer113.leben < _ol113 or not _opfer113.lebt),
+      "%.0f -> %.0f" % (_ol113, _opfer113.leben))
+_n113 = _ts113.netz_extra()
+_g113 = _FZ59.Tragschrauber((0, 0), 0, 0.0, nur_bild=True)
+_g113.netz_extra_setzen(_n113)
+pruef("... der Gast sieht ihn in der Luft (Zusatzwert im Netz) - hoch oben, mit seinen Bomben",
+      _g113.luft and _g113.hoch_oben and _g113.bomben == _ts113.bomben, str(_n113))
+# Landen: E setzt an, unten ist Platz.
+_ts_ein113(will_=(0, 0), knoepfe_=["nutzen"])
+pruef("Tragschrauber: E setzt zur Landung an", _ts113.landen)
+for _ in range(int(5.0 / K.FIXED_DT)):
+    _ts_ein113()
+pruef("... er setzt auf und ist wieder ein Wagen am Boden (trefferbar), sonst stuerzte er ab",
+      not _ts113.luft and _ts113.hoehe == 0.0 and (_ts113.trefferbar or _ts113.kaputt) and not _ts113.kaputt,
+      "luft %s hoehe %.0f kaputt %s" % (_ts113.luft, _ts113.hoehe, _ts113.kaputt))
+# Nur Flak trifft Abwuerfe am Schirm: ein gewoehnlicher Schuetze rastet dort nicht ein.
+_tm113.nachschub_setzen("munition", _z113(30, 4), {"team": 1})
+for _ in range(int(1.6 / K.FIXED_DT)):
+    _tm113.schritt(K.FIXED_DT)
+_ab113 = _tm113.abwuerfe[0]
+_bild113 = _tm113.luft_ziele()
+_sch113 = _tm113.puppe_setzen(_z113(30, 14), 0, {"team": 0}, name="NORMAL")
+_tm113._anwenden(_sch113, {"will": [0, 0], "ziel": [_bild113[0].bild_pos.x, _bild113[0].bild_pos.y], "knoepfe": []})
+pruef("Abwuerfe am Schirm sind Luftziele, aber nur fuer Flak (ein gewoehnlicher Schuetze rastet nicht ein)",
+      _bild113 and _bild113[0].art == "abwurf" and _bild113[0].nur_flak and _sch113.luft_ziel is None)
+_tm113.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
