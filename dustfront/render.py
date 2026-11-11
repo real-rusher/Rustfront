@@ -1285,7 +1285,9 @@ class Renderer:
                 w.zeichnen_unten(self, ziel, p, dunkel)
                 continue
             schatten_bild = getattr(w, "schatten_bild", None)
-            if schatten_bild:
+            # Was hoch oben fliegt (Tragschrauber), wirft seinen Schatten in der
+            # Luftschicht (luft.py) - sonst waeren es zwei (seit 0.34.119).
+            if schatten_bild and not getattr(w, "hoch_oben", False):
                 # Ein eigener, mitgedrehter Schatten fuer alles, was nicht
                 # rund ist. Er faellt nach unten rechts wie der der Mauern,
                 # egal wohin das Wesen schaut.

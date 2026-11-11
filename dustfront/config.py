@@ -722,6 +722,8 @@ KLANG_NAMEN = (
     "flak_burst",           # eine Flakwolke platzt
     "fallschirm_riss",      # der Schirm eines Abwurfs reisst
     "absturz",              # ein Fahrzeug schlaegt nach dem Sturz auf
+    "bombe_ab",             # eine Bombe loest sich vom Rahmen (seit 0.34.119)
+    "bombe_fall",           # das Pfeifen der fallenden Bombe
     "panzer_einschlag",     # die Granate der Kanone schlaegt ein
     "panzer_motor",         # Ketten und Motor, in einem Takt, solange er faehrt
     "panzerwagen_motor",
@@ -1763,7 +1765,9 @@ TRAGSCHRAUBER = dict(
     aufklaerung_takt=1.0,
     bomben=2,
     bomben_nachladen=3.0,
-    bombe=dict(fall=0.8, radius=62.0, schaden=110.0, fahrzeug=140.0, pause=0.6),
+    # Seit 0.34.119 faellt die Bombe senkrecht unter ihm (ohne sein Tempo), eine
+    # nach der anderen, und sichtbar: `fall` Sekunden, gross.
+    bombe=dict(fall=1.1, radius=62.0, schaden=110.0, fahrzeug=140.0, pause=0.6),
     luft_radius=24.0,         # so gross ist er als Ziel (Pixel um sein Bild)
 )
 
@@ -4687,6 +4691,12 @@ for _name in ("flak_lafette", "flak_lafette_fahrer"):
     BILD_MASS[_name] = (128, 128)
 for _team in TEAMS["kombi"]:
     BILD_MASS["flak_lafette_%s_fahrer" % _team["name"].lower()] = (128, 128)
+for _name in ("bombe_rahmen",):
+    BILD_MASS[_name] = (48, 48)
+for _name in ("bombe_fall",):
+    BILD_MASS[_name] = (64, 64)
+for _i in range(6):
+    BILD_MASS["rotor_schatten_%d" % _i] = (192, 192)
 for _name in ("tragschrauber", "tragschrauber_fahrer", "tragschrauber_wrack", "tragschrauber_schatten"):
     BILD_MASS[_name] = (160, 160)
 for _team in TEAMS["kombi"]:

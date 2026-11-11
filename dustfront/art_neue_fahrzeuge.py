@@ -897,11 +897,13 @@ TS_DK = (84, 40, 24)
 TS_HELL = (214, 136, 88)
 
 
-def tragschrauber_zeichnen(fahrer=None, bomben: int = 2) -> pygame.Surface:
+def tragschrauber_zeichnen(fahrer=None, bomben: int = 0) -> pygame.Surface:
     """Ein Tragschrauber von oben, ohne Rotor (der dreht sich als eigenes
     Bild, `rotor_zeichnen`): Rahmen mit Druckschraube hinten, offene
-    Bugkanzel, Leitwerk, Bomben an der Seite. 160 x 160. Mit `fahrer` sitzt er
-    in der Kanzel."""
+    Bugkanzel, Leitwerk. 160 x 160. Mit `fahrer` sitzt er in der Kanzel.
+    Die Bomben am Rahmen sind seit 0.34.119 ein eigenes Bild (`bombe_rahmen`,
+    gezeichnet in luft.py): man soll sie fallen sehen. `bomben` > 0 malt sie
+    noch ins Bild."""
     b = _Blatt(160, G)
     rnd = random.Random(7801)
     for sy in (-1, 1):                                        # Fahrwerk
@@ -1003,14 +1005,60 @@ def _tragschrauber_wrack():
     return _wrack(tragschrauber_zeichnen(None, 0), 7680)
 
 
+def _umriss_schatten(bild: pygame.Surface, deckung: int) -> pygame.Surface:
+    """Der Schatten eines Bildes: seine Silhouette, einfarbig schwarz mit
+    `deckung` (0 bis 255). Genau der Umriss des Gezeigten - kein Oval."""
+    maske = pygame.mask.from_surface(bild, 40)
+    return maske.to_surface(setcolor=(0, 0, 0, deckung), unsetcolor=(0, 0, 0, 0))
+
+
 @platzhalter("tragschrauber_schatten")
 def _tragschrauber_schatten():
-    s = pygame.Surface((160, 160), pygame.SRCALPHA)
-    pygame.draw.ellipse(s, (0, 0, 0, 110), (160 // 2 - 30, 160 // 2 - 5, 60, 10))
-    pygame.draw.rect(s, (0, 0, 0, 110), (160 // 2 - 8, 160 // 2 - 18, 16, 36), border_radius=6)
-    for _ in range(2):
-        s = pygame.transform.smoothscale(pygame.transform.smoothscale(s, (40, 40)), (160, 160))
-    return s
+    """Der Schatten des Tragschraubers (seit 0.34.119): die Silhouette seines
+    eigenen Bildes - Rahmen, Kanzel, Leitwerk, Fahrwerk (ohne Rotor, der hat
+    eigene Schatten `rotor_schatten_N`)."""
+    return _umriss_schatten(tragschrauber_zeichnen(None, 0), 112)
+
+
+@platzhalter("bombe_rahmen")
+def _bombe_rahmen():
+    """Eine Bombe am Rahmen, von oben (Nase nach +x), 48 x 48: dunkle Huelle,
+    olivgruener Rumpf, gelbes Band, Leitwerk hinten."""
+    b = _Blatt(48, G * 1.25)
+    b.rect((22, 20, 18), -5.2, -2.1, 11.4, 4.2, 2.0)
+    b.rect((86, 94, 66), -4.6, -1.5, 10.2, 3.0, 1.5)
+    b.rect((120, 128, 96), -4.4, -1.3, 9.6, 0.9, 0.5)
+    b.rect((204, 176, 72), 0.4, -1.5, 1.6, 3.0)
+    b.rect((26, 24, 22), 5.6, -1.7, 1.4, 3.4, 0.8)            # Nase
+    b.rect((200, 66, 48), 6.1, -1.1, 0.9, 2.2, 0.4)
+    b.rect((26, 24, 22), -6.6, -2.8, 2.0, 5.6, 0.4)           # Leitwerk
+    return b.fertig()
+
+
+@platzhalter("bombe_fall")
+def _bombe_fall():
+    """Die fallende Bombe, gross und gut zu sehen (seit 0.34.119): von der Seite,
+    Nase nach unten (+y), Leitwerk oben. 64 x 64."""
+    b = _Blatt(64, G * 1.7)
+    b.rect((22, 20, 18), -2.9, -6.4, 5.8, 12.4, 2.4)
+    b.rect((86, 94, 66), -2.3, -5.6, 4.6, 10.8, 1.8)
+    b.rect((130, 138, 104), -1.9, -5.2, 1.2, 9.6, 0.5)        # Licht von links
+    b.rect((204, 176, 72), -2.3, -0.6, 4.6, 1.5)              # gelbes Band
+    b.rect((26, 24, 22), -2.3, 5.2, 4.6, 1.8, 1.0)            # Nase
+    b.rect((200, 66, 48), -1.4, 5.8, 2.8, 1.4, 0.6)
+    b.rect((26, 24, 22), -4.6, -7.4, 9.2, 1.8, 0.5)           # Leitwerk
+    b.rect((58, 54, 48), -4.0, -7.0, 8.0, 0.8, 0.3)
+    return b.fertig()
+
+
+def _rotor_schatten_stufe(i: int):
+    def z():
+        return _umriss_schatten(rotor_zeichnen(i * 30.0), 70)
+    return z
+
+
+for _i in range(6):
+    platzhalter("rotor_schatten_%d" % _i)(_rotor_schatten_stufe(_i))
 
 
 def _rotor_stufe(i: int):

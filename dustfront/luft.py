@@ -225,13 +225,18 @@ class LuftTeil:
                 continue
             druck = b.feuer and not b._feuer_alt
             b._feuer_alt = b.feuer
+            # Eine Bombe nach der anderen (seit 0.34.119) und senkrecht unter ihm:
+            # sie loest sich ohne sein Tempo vom Rahmen und faellt dort herunter,
+            # wo er sie abgeworfen hat.
             if (druck and b.in_der_luft and b.bomben > 0 and b.emp_rest <= 0.0
-                    and b.fahrer is not None and not b.landen):
+                    and b.fahrer is not None and not b.landen and not b.bomben_fall):
                 b.bomben -= 1
                 b._bomben_rest = f["bomben_nachladen"]
-                ort = b.pos + b.vorn * b.flug_v * bo["fall"]
+                sy = -1 if b.bomben % 2 == 0 else 1            # die Seite, an der sie hing
+                ort = b.pos + pygame.Vector2(8.4, sy * 7.8).rotate(b.winkel)
                 b.bomben_fall.append([bo["fall"], ort.x, ort.y])
-                self.welt.klang("granate", 0.5, b.pos, b.ebene)
+                self.welt.klang("bombe_ab", 0.8, b.pos, b.ebene)
+                self.welt.klang("bombe_fall", 0.6, b.pos, b.ebene)
             for e in list(b.bomben_fall):
                 e[0] -= dt
                 if e[0] <= 0.0:
@@ -276,19 +281,47 @@ class LuftTeil:
                 continue
             h = max(0.0, b.hoehe)
             besetzt = b.fahrer is not None or getattr(b, "besetzt", False)
+            st = int(t * 40.0) % 6
+            # Der Schatten (seit 0.34.119 genau der Umriss des Tragschraubers und
+            # seines Rotors - kein Oval): faellt schraeg nach rechts unten, je
+            # hoeher, desto weiter weg.
+            versatz = pygame.Vector2(h * 0.32, h * 0.12)
+            rotor_boden = p + pygame.Vector2(-3.4, 0).rotate(b.winkel)
             if b.hoch_oben:
                 sch = r.bilder.gedreht(b.schatten_bild, b.winkel)
-                ziel.blit(sch, sch.get_rect(center=(int(p.x + h * 0.32), int(p.y + h * 0.12 + 2))))
+                ziel.blit(sch, sch.get_rect(center=(int(p.x + versatz.x), int(p.y + versatz.y))))
+                if h > 2.0:
+                    rs = r.bilder.bild("rotor_schatten_%d" % st)
+                    ziel.blit(rs, rs.get_rect(center=(int(rotor_boden.x + versatz.x),
+                                                      int(rotor_boden.y + versatz.y))))
                 s = r.bilder.gedreht(b.bild, b.winkel)
                 ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y - h))))
+            # Die Bomben am Rahmen: eigene Bilder, damit man sie abfallen sieht
+            # (seit 0.34.119). Die erste faellt von der rechten Seite.
+            if b.bomben > 0:
+                rb = r.bilder.gedreht("bombe_rahmen", b.winkel)
+                for i in range(b.bomben):
+                    sy = -1 if i % 2 == 0 else 1
+                    q = p + pygame.Vector2(8.4, sy * 7.8).rotate(b.winkel) - pygame.Vector2(0, h)
+                    ziel.blit(rb, rb.get_rect(center=(int(q.x), int(q.y))))
             if h > 2.0 or besetzt:
-                rotor = r.bilder.bild("rotor_%d" % (int(t * 40.0) % 6))
+                rotor = r.bilder.bild("rotor_%d" % st)
                 m = p + pygame.Vector2(-3.4, 0).rotate(b.winkel) - pygame.Vector2(0, h + 6.0)
                 ziel.blit(rotor, rotor.get_rect(center=(int(m.x), int(m.y))))
+            # Fallende Bomben (seit 0.34.119 gross und gut zu sehen): senkrecht, dort
+            # wo sie abgeworfen wurden, schneller werdend; unten waechst ihr Schatten.
+            bo = K.TRAGSCHRAUBER["bombe"]
             for e in b.bomben_fall:
-                fall = K.TRAGSCHRAUBER["bombe"]["fall"]
+                u = 1.0 - max(0.0, min(1.0, e[0] / bo["fall"]))
+                hoch = K.TRAGSCHRAUBER["hoehe"] * (1.0 - u * u)       # startet am Rahmen
                 q = pygame.Vector2(e[1], e[2]) - ecke
-                oben = max(0.0, e[0] / fall) * h * 1.4
-                pygame.draw.ellipse(ziel, (12, 9, 6), (q.x - 3, q.y - 1, 6, 3))
-                pygame.draw.circle(ziel, (30, 28, 26), (int(q.x), int(q.y - oben)), 3)
-                pygame.draw.circle(ziel, (196, 172, 72), (int(q.x), int(q.y - oben)), 1)
+                sw = int(5 + 8 * u)
+                sch = pygame.Surface((sw * 2, sw), pygame.SRCALPHA)
+                pygame.draw.ellipse(sch, (12, 9, 6, int(60 + 120 * u)), sch.get_rect())
+                ziel.blit(sch, (int(q.x) - sw, int(q.y) - sw // 2))
+                spitze = pygame.Vector2(q.x, q.y - hoch)
+                for k, (dy, farbe) in enumerate(((16, (168, 160, 148)), (26, (132, 126, 116)), (36, (96, 92, 84)))):
+                    pygame.draw.line(ziel, farbe, (int(spitze.x), int(spitze.y) - dy + 4),
+                                     (int(spitze.x), int(spitze.y) - dy - 8), 2 - (k > 1))
+                bs = r.bilder.bild("bombe_fall")
+                ziel.blit(bs, bs.get_rect(center=(int(spitze.x), int(spitze.y))))

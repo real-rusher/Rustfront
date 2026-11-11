@@ -18024,8 +18024,13 @@ pruef("Tragschrauber: ein Gegner im Kreis unter ihm ist fuer seine Seite markier
       "%s" % getattr(_unten113, "markiert_fuer", None))
 # Die Bombe.
 _bomben113 = _ts113.bomben
-_opfer113 = _tm113.puppe_setzen(_ts113.pos + _ts113.vorn * _ts113.flug_v * K.TRAGSCHRAUBER["bombe"]["fall"], 0,
+# Seit 0.34.119 faellt die Bombe senkrecht unter ihm (ohne sein Tempo) - vom Rahmen, an dem sie hing.
+_opfer113 = _tm113.puppe_setzen(_ts113.pos + pygame.Vector2(8.4, 7.8).rotate(_ts113.winkel), 0,
                                 {"team": 1, "leben": 5.0}, name="OPFER")
+_vorn113 = _tm113.puppe_setzen(_ts113.pos + _ts113.vorn * _ts113.flug_v * K.TRAGSCHRAUBER["bombe"]["fall"], 0,
+                               {"team": 1, "leben": 5.0}, name="VORNE")
+_vorn113.unverwundbar = 0.0
+_vl113 = _vorn113.leben
 _opfer113.unverwundbar = 0.0
 _tm113.welt._raster_bauen()
 _ol113 = _opfer113.leben
@@ -18036,9 +18041,9 @@ pruef("Tragschrauber: die linke Maustaste wirft eine Bombe (eine weniger), sie f
       "%d / %d" % (_ts113.bomben, len(_ts113.bomben_fall)))
 for _ in range(int(1.2 / K.FIXED_DT)):
     _ts_ein113()
-pruef("... und schlaegt dort ein, wo er sie hingeworfen hat: der Gegner am Ziel ist getroffen",
-      not _ts113.bomben_fall and (_opfer113.leben < _ol113 or not _opfer113.lebt),
-      "%.0f -> %.0f" % (_ol113, _opfer113.leben))
+pruef("... und schlaegt dort ein, wo er sie abgeworfen hat (senkrecht, ohne sein Tempo): der Gegner darunter ist getroffen, einer weiter vorn nicht",
+      not _ts113.bomben_fall and (_opfer113.leben < _ol113 or not _opfer113.lebt) and _vorn113.leben == _vl113,
+      "%.0f -> %.0f, vorn %.0f -> %.0f" % (_ol113, _opfer113.leben, _vl113, _vorn113.leben))
 _n113 = _ts113.netz_extra()
 _g113 = _FZ59.Tragschrauber((0, 0), 0, 0.0, nur_bild=True)
 _g113.netz_extra_setzen(_n113)
@@ -18509,6 +18514,63 @@ _lzs118[0].treffen(9999.0, _sch118)
 pruef("Fallschirmjaeger: stirbt einer in der Luft, gibt es die Animation 'luft_mensch'",
       _lzs118 and any(a_ == "luft_mensch" for _p, a_ in _ex118) and not _lzs118[0].objekt.lebt)
 _tm118.verlassen()
+
+# 0.34.119: Tragschrauber - ein Schatten, der genau zu ihm passt; Bomben gross, eine nach der anderen.
+_tm119 = _TM59.Testmodus(app, karte="staubtal_offen")
+_e119 = _tm119.welt.ebene(0)
+_rnd119 = random.Random(119)
+for _ in range(40000):
+    _tx119 = _rnd119.randrange(60, _e119.breite - 90)
+    _ty119 = _rnd119.randrange(20, _e119.hoehe - 40)
+    if all(not K.KACHELN[_e119.kachel(_tx119 + x_, _ty119 + y_)]["fest"]
+           for x_ in range(50) for y_ in range(24)):
+        break
+_z119 = lambda x_, y_: pygame.Vector2((_tx119 + x_ + 0.5) * K.TILE, (_ty119 + y_ + 0.5) * K.TILE)
+# Der Schatten ist die Silhouette des Bildes (kein Oval) ...
+_sp119 = pygame.mask.from_surface(app.bilder.bild("tragschrauber"), 40)
+_sh119 = pygame.mask.from_surface(app.bilder.bild("tragschrauber_schatten"), 40)
+_u119 = _sp119.overlap_area(_sh119, (0, 0))
+pruef("Tragschrauber: der Schatten ist genau seine Silhouette (Rahmen, Kanzel, Leitwerk - deckungsgleich mit dem Bild)",
+      _sp119.count() > 300 and _u119 >= 0.97 * _sp119.count() and _sh119.count() <= 1.03 * _sp119.count(),
+      "%d / %d / %d" % (_u119, _sp119.count(), _sh119.count()))
+pruef("... der Rotor wirft seinen eigenen Schatten (sechs Stellungen, wie das Bild)",
+      all(app.bilder.bild("rotor_schatten_%d" % i_).get_size() == app.bilder.bild("rotor_%d" % i_).get_size()
+          and pygame.mask.from_surface(app.bilder.bild("rotor_schatten_%d" % i_), 20).count() > 50 for i_ in range(6)))
+_ts119 = _tm119.fahrzeug_setzen("tragschrauber", _z119(4, 12), 0, {"winkel": 0})
+_p119 = _tm119.puppe_setzen(_ts119.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="PILOT")
+_tm119._anwenden(_p119, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+def _ts_ein119(feuert_=False):
+    _tm119._anwenden(_p119, {"will": [0, -1], "ziel": [0, 0], "knoepfe": [], "feuert": feuert_})
+    _tm119.schritt(K.FIXED_DT)
+for _ in range(int(6.0 / K.FIXED_DT)):
+    _ts_ein119()
+_tm119.kamera.pos.update(_ts119.pos)
+_namen119 = []
+_alt_ged119 = _tm119.renderer.bilder.gedreht
+def _ged119(name_, winkel_, *a_, **k_):
+    _namen119.append(name_)
+    return _alt_ged119(name_, winkel_, *a_, **k_)
+_tm119.renderer.bilder.gedreht = _ged119
+_b119 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm119.zeichnen(_b119, 1.0)
+_tm119.renderer.bilder.gedreht = _alt_ged119
+pruef("Tragschrauber in der Luft: es gibt nur noch EINEN Schatten (die Luftschicht), nicht zwei", _namen119.count("tragschrauber_schatten") == 1,
+      str(_namen119.count("tragschrauber_schatten")))
+# Bomben: gross, eine nach der anderen.
+_bg119 = app.bilder.bild("bombe_fall")
+pruef("Bomben: die fallende Bombe ist ein grosses Bild (mind. 20 Pixel hoch), am Rahmen haengen zwei",
+      pygame.mask.from_surface(_bg119, 40).get_bounding_rects()[0].height >= 20 and _ts119.bomben == 2)
+_ts_ein119(True); _ts_ein119(False)
+pruef("... eine Bombe faellt, eine hing nur noch am Rahmen", _ts119.bomben == 1 and len(_ts119.bomben_fall) == 1)
+_ts_ein119(True); _ts_ein119(False)
+pruef("... eine zweite geht erst, wenn die erste unten ist (nur eine auf einmal)",
+      _ts119.bomben == 1 and len(_ts119.bomben_fall) == 1)
+_tm119.zeichnen(_b119, 1.0)                          # fallende Bombe zeichnen geht
+for _ in range(int(1.3 / K.FIXED_DT)):
+    _ts_ein119()
+_ts_ein119(True); _ts_ein119(False)
+pruef("... danach die zweite", _ts119.bomben == 0 and len(_ts119.bomben_fall) == 1)
+_tm119.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")
