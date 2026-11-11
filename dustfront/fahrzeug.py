@@ -1970,12 +1970,19 @@ class Funkwagen(Aufbauwagen):
                 self.welt.klang("aufheben", 0.5, self.pos, self.ebene)
 
     def netz_extra(self):
-        return self.modus
+        """[Betriebsart, Basis-Team]: der Gast braucht auch die Seite eines
+        Wagens ohne Fahrer (Abwurf), um seine Minikarte zu stoeren (0.34.115)."""
+        bt = getattr(self, "basis_team", None)
+        return [self.modus, bt if bt is not None and bt >= 0 else -1]
 
     def netz_extra_setzen(self, wert) -> None:
         try:
-            self.modus = 1 if int(wert) == 1 else 0
-        except (TypeError, ValueError):
+            if isinstance(wert, (list, tuple)):
+                self.modus = 1 if int(wert[0]) == 1 else 0
+                self.basis_team = int(wert[1]) if len(wert) > 1 else -1
+            else:
+                self.modus = 1 if int(wert) == 1 else 0
+        except (TypeError, ValueError, IndexError):
             self.modus = 0
 
     def zuruecksetzen(self) -> None:

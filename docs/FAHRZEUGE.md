@@ -1,4 +1,4 @@
-# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.114)
+# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.115)
 
 Zwoelf Entwuerfe fuer die SCHLACHT auf Karten, die groesser sind als
 STAUBTAL - OFFEN. Bilder und Szenen dazu stehen auf der Entscheidungsseite
@@ -84,8 +84,8 @@ koennte fuer Helis und fuer Ziele auf anderen Etagen gelten.
   `_funk_hoert` (Funknetz ueber `lage_melden`).
 * Zusatzwert je Art in der Fahrzeugmeldung (`netz_extra`, Feld 20) - der Werfer
   nutzt ihn fuer seine Einschlaege.
-* Nicht gebaut: Minikarte weg fuer Menschen im Stoerkreis (offen), Truppfunk
-  (`trupp.funk_senden`) wird nicht gestoert, nur die Funksprueche der Bots.
+* Nachgereicht in 0.34.115: die Minikarte im Stoerkreis rauscht (nur Pings der
+  Funkwagen), der Truppfunk wird gestoert (siehe unten).
 
 ## Was 0.34.112 gebaut hat
 
@@ -122,3 +122,13 @@ koennte fuer Helis und fuer Ziele auf anderen Etagen gelten.
 * Wer im Flakwagen sitzt, rastet auch auf `nur_flak`-Ziele ein (Abwuerfe,
   Fallschirmjaeger) - die Regel aus 0.34.113 ist damit komplett.
 
+## Was 0.34.115 gebaut hat
+
+* `Gefecht.funk_stoerer(punkt, team, ebene)`: alle gegnerischen Funkwagen auf
+  STOEREN, die diesen Punkt erfassen (Gastgeber und Gast); `funk_gestoert_bei`
+  fragt nur noch, ob die Liste leer ist.
+* `Minikarte`: im Stoerkreis `_rauschen` statt aller Punkte, dazu `_pings` -
+  je erfassendem Funkwagen einer. Werte `K.MINIKARTE["gestoert"]`.
+* Truppfunk: `bot_goap._funken_tun` bricht im Stoerkreis ab (Pause), und
+  `trupp.funk_senden` laesst gestoerte Anfuehrer nichts hoeren.
+* Funkwagen-Zusatzwert im Netz: `[Betriebsart, Basis-Team]`.

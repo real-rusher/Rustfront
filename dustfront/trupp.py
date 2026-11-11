@@ -1145,6 +1145,10 @@ class Trupp:
             fuehrer = anderer.fuehrer
             if fuehrer is None or not fuehrer.lebt or not getattr(fuehrer, "funkgeraet", False):
                 continue
+            # Im Stoerkreis eines gegnerischen Funkwagens hoert er nichts (0.34.115).
+            gestoert = getattr(g, "funk_gestoert", None)
+            if gestoert is not None and gestoert(fuehrer):
+                continue
             anderer.empfangen(spruch)
         return spruch
 

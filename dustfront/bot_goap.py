@@ -2488,6 +2488,9 @@ class GoapHirn(BotHirn):
             return _nichts("gescheitert")
         T = K.TRUPP
         jetzt = self.g.welt.zeit
+        # Eben gestoert: erst nach einer Pause wieder versuchen (0.34.115).
+        if jetzt < self.__dict__.get("funk_gestoert_bis", 0.0):
+            return _nichts("gescheitert")
         laeuft = self.funk_laeuft
         gefahr = self._gefahr()
         blick = gefahr[0] if gefahr else None
@@ -2502,6 +2505,14 @@ class GoapHirn(BotHirn):
             if ort is not None and k.pos.distance_to(ort) > 6.0 and jetzt < laeuft["weg_bis"]:
                 return self._weg_richtung(ort, k.ebene, ein=None), blick, False, False, "laeuft"
             laeuft.update(phase="senden", anfang=jetzt, bis=jetzt + laeuft["dauer"], leben=k.leben)
+        # Im Stoerkreis eines gegnerischen Funkwagens (seit 0.34.115) rauscht
+        # es nur: der Spruch kommt nicht durch. Man sieht es am Funker wie bei
+        # jedem anderen Abbruch (grauer, zerrissener Ring, rotes Kreuz).
+        gestoert = getattr(self.g, "funk_gestoert", None)
+        if gestoert is not None and gestoert(k):
+            self.funk_gestoert_bis = jetzt + T["funk_gestoert_pause"]
+            self._funk_abbrechen()
+            return _nichts("gescheitert")
         # Ueberrascht ist er, wenn einer dicht dran ist oder auf ihn schiesst
         # - nicht schon, weil einer in Sicht steht.
         nah = False

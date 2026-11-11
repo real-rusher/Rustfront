@@ -18152,6 +18152,113 @@ pruef("Abwurf FLAKWAGEN: er landet mit einem Bot seiner Seite am Steuer (Verstae
       and _ne114[0].fahrer.team == 0 and getattr(_ne114[0].fahrer, "verstaerkung", False))
 _tm114.verlassen()
 
+# Gestoerte Minikarte und gestoerter Trupp-Funk (seit 0.34.115): im Stoerkreis
+# eines gegnerischen Funkwagens zeigt die Karte nur Rauschen und je Funkwagen
+# einen Ping; der Funk der Anfuehrer geht nicht durch.
+from dustfront import minikarte as _MK115
+_tm115 = _TM59.Testmodus(app, karte="staubtal_offen")
+_e115 = _tm115.welt.ebene(0)
+_rnd115 = random.Random(115)
+for _ in range(40000):
+    _tx115 = _rnd115.randrange(60, _e115.breite - 90)
+    _ty115 = _rnd115.randrange(20, _e115.hoehe - 40)
+    if all(not K.KACHELN[_e115.kachel(_tx115 + x_, _ty115 + y_)]["fest"]
+           for x_ in range(50) for y_ in range(24)):
+        break
+_z115 = lambda x_, y_: pygame.Vector2((_tx115 + x_ + 0.5) * K.TILE, (_ty115 + y_ + 0.5) * K.TILE)
+def _stoerer115(x_, y_, team_=1):
+    b_ = _tm115.fahrzeug_setzen("funkwagen", _z115(x_, y_), 0, {"winkel": 0})
+    b_.phase, b_.phase_rest, b_.modus, b_.basis_team = 2, 0.0, 1, team_
+    return b_
+_f1115 = _stoerer115(10, 10)
+_opfer115 = _tm115.puppe_setzen(_f1115.mast_mitte() + pygame.Vector2(-300, 0), 0, {"team": 0}, name="OPFER")
+_frei115 = _tm115.puppe_setzen(_f1115.mast_mitte() + pygame.Vector2(-1500, 0), 0, {"team": 0}, name="FREI")
+pruef("Stoerkreis: ein Funkwagen auf STOEREN erfasst die Gegner im Kreis (Liste), die eigene Seite und Ferne nicht",
+      _tm115.funk_stoerer(_opfer115.pos, 0) == [_f1115] and not _tm115.funk_stoerer(_frei115.pos, 0)
+      and not _tm115.funk_stoerer(_opfer115.pos, 1))
+_f2115 = _stoerer115(10, 10)
+_f2115.pos.update(_opfer115.pos + pygame.Vector2(-300, 0) - (_f2115.mast_mitte() - _f2115.pos))
+_f2115.vorher.update(_f2115.pos)                                  # auf der anderen Seite des Opfers
+pruef("... zwei Funkwagen, deren Kreise sich decken, erfassen ihn beide",
+      len(_tm115.funk_stoerer(_opfer115.pos, 0)) == 2 and len(_tm115.funk_stoerer(_frei115.pos, 0)) == 0)
+# Der Gast kennt den Wagen nur aus der Meldung: nur_bild, Phase, Betriebsart und Basis-Team.
+_gw115 = _FZ59.neu("funkwagen", _z115(30, 6), 0, 0.0, True)
+_gw115.phase = 2
+_gw115.netz_extra_setzen(_f1115.netz_extra())
+pruef("Funkwagen im Netz: Betriebsart und Basis-Team gehen mit (Feld 20), ein alter Wert (nur die Zahl) geht auch",
+      _f1115.netz_extra() == [1, 1] and _gw115.modus == 1 and _gw115.basis_team == 1
+      and (_gw115.netz_extra_setzen(0) or _gw115.modus == 0))
+_gw115.netz_extra_setzen([1, 1])
+_tm115.fahrzeuge.append(_gw115)
+_gw115.ebene = 0
+_im115 = _tm115.puppe_setzen(_gw115.mast_mitte() + pygame.Vector2(-100, 0), 0, {"team": 0}, name="GASTOPFER")
+pruef("... beim Gast (nur_bild) stoert er genauso, aus der Fahrzeugliste",
+      _gw115 in _tm115.funk_stoerer(_im115.pos, 0))
+_tm115.fahrzeuge.remove(_gw115)
+
+def _karte115(k_):
+    _tm115.uebernehmen(k_)
+    f_ = pygame.Surface((K.GAME_W, K.GAME_H)); f_.fill((0, 0, 0))
+    _tm115.hud.minikarte.zeichnen(f_, _tm115)
+    return f_, _tm115.hud.minikarte.rechteck(_tm115.welt)
+def _anzahl115(f_, r_, farbe_):
+    return sum(1 for x_ in range(r_.left, r_.right) for y_ in range(r_.top, r_.bottom)
+               if f_.get_at((x_, y_))[:3] == tuple(farbe_))
+def _ping_da115(f_, r_, b_):
+    e_ = _tm115.welt.ebenen[0]
+    p_ = b_.mast_mitte()
+    px_ = int(r_.x + p_.x * r_.width / float(e_.pixel_breite))
+    py_ = int(r_.y + p_.y * r_.height / float(e_.pixel_hoehe))
+    return f_.get_at((px_, py_))[:3] == _MK115.PING_FARBE
+_f115, _r115 = _karte115(_frei115)
+pruef("Minikarte ausserhalb des Kreises: wie immer - man selbst steht darauf, kein Ping",
+      _anzahl115(_f115, _r115, _MK115.FARBE_ICH) > 0 and not _ping_da115(_f115, _r115, _f1115))
+_f115, _r115 = _karte115(_opfer115)
+pruef("Minikarte im Stoerkreis: man selbst und alles andere sind weg (nur Rauschen) ...",
+      _anzahl115(_f115, _r115, _MK115.FARBE_ICH) == 0)
+pruef("... aber jeder Funkwagen, der einen erfasst, steht als Ping darauf (hier zwei)",
+      _ping_da115(_f115, _r115, _f1115) and _ping_da115(_f115, _r115, _f2115))
+_f2115.schaden(99999.0, None, _opfer115)
+_f115, _r115 = _karte115(_opfer115)
+pruef("... faellt einer aus, bleibt nur sein Ping weg",
+      _ping_da115(_f115, _r115, _f1115) and not _ping_da115(_f115, _r115, _f2115))
+# Trupp-Funk: ein Anfuehrer im Stoerkreis kommt nicht durch und hoert nichts.
+_tm115.alles_weg()
+_f1115 = _stoerer115(10, 10)
+_ta115 = _tm115.trupp_setzen(_f1115.mast_mitte() + pygame.Vector2(-150, 0), 0, {"groesse": 2, "team": 0, "fuehrer": "funk"})
+_tb115 = _tm115.trupp_setzen(_z115(30, 20), 0, {"groesse": 2, "team": 0, "fuehrer": "funk"})
+_zq115 = _tm115.puppe_setzen(_z115(25, 20), 0, {"team": 1, "leben": 10.0})
+_ta115.lage = {_zq115: [pygame.Vector2(_zq115.pos), 0, _tm115.welt.zeit]}
+_tm115.ki_stopp = True
+_fh115 = _ta115.fuehrer.hirn
+_fh115.funk_laeuft = dict(art="lage", dauer=1.0, phase="senden", ort=None, weg_bis=0.0, text="",
+                          anfang=_tm115.welt.zeit, bis=_tm115.welt.zeit + 0.5, leben=_ta115.fuehrer.leben)
+_tm115.welt.zeit += 1.0
+_gesendet115 = len(_tm115.__dict__.get("_funknetz", []))
+_r115 = _fh115._funken_tun("lage")
+pruef("Trupp-Funk im Stoerkreis: der Spruch geht nicht raus (abgebrochen, nichts im Funknetz) ...",
+      _r115[-1] == "gescheitert" and _fh115.funk_laeuft is None
+      and len(_tm115.__dict__.get("_funknetz", [])) == _gesendet115
+      and _fh115.funk_ende is not None and _fh115.funk_ende[1] == "abgebrochen")
+_r115 = _fh115._funken_tun("lage")
+pruef("... und er versucht es nicht gleich wieder (Pause)",
+      _r115[-1] == "gescheitert" and _fh115.funk_laeuft is None
+      and _fh115.funk_gestoert_bis > _tm115.welt.zeit)
+# Ein Spruch von aussen erreicht den Anfuehrer im Stoerkreis nicht, ausserhalb schon.
+_tb115.fuehrer.pos.update(_f1115.mast_mitte() + pygame.Vector2(-100, 0))
+_tc115 = _tm115.trupp_setzen(_z115(40, 20), 0, {"groesse": 2, "team": 0, "fuehrer": "funk"})
+_tc115.lage = {_zq115: [pygame.Vector2(_zq115.pos), 0, _tm115.welt.zeit]}
+_tc115.funk_senden("lage")
+pruef("... wer im Stoerkreis steht, hoert einen Funkspruch nicht",
+      not _tb115.funk_lage and not _ta115.funk_lage, "%d %d" % (len(_tb115.funk_lage), len(_ta115.funk_lage)))
+_tb115.fuehrer.pos.update(_f1115.mast_mitte() + pygame.Vector2(900, 0))
+_td115 = _tm115.trupp_setzen(_z115(45, 20), 0, {"groesse": 2, "team": 0, "fuehrer": "funk"})
+_td115.lage = {_zq115: [pygame.Vector2(_zq115.pos), 0, _tm115.welt.zeit]}
+_td115.funk_senden("lage")
+pruef("... ein Anfuehrer ausserhalb schon", bool(_tb115.funk_lage), "%d" % len(_tb115.funk_lage))
+_tm115.ki_stopp = False
+_tm115.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -34,6 +34,7 @@ einen neuen Grundriss.
 from __future__ import annotations
 
 import math
+import random
 
 import pygame
 
@@ -50,6 +51,7 @@ FARBE_FEIND = (255, 64, 64)       # feindliche Spieler (Regel gegner_karte)
 FARBE_BUGGY = (214, 166, 70)
 FARBE_DUNKEL = (16, 11, 8)
 FARBE_ICH = (230, 255, 248)       # man selbst
+PING_FARBE = (255, 176, 40)       # der Funkwagen auf der gestoerten Karte
 RAHMEN = (84, 66, 48)
 GRUND = (11, 8, 6, 200)
 
@@ -109,6 +111,20 @@ class Minikarte:
         # Der Grundriss, gross gemalt und weich verkleinert (seit 0.34.100,
         # kartenbild.py) - vorher ein Pixel je Kachel, hart verkleinert.
         ziel.blit(kartenbild.in_groesse(e, r.size), r.topleft)
+
+        # Im Stoerkreis eines gegnerischen Funkwagens (seit 0.34.115): nur
+        # Rauschen - und je Funkwagen, der einen erfasst, ein Ping an seinem Ort.
+        # Sonst nichts: weder man selbst noch die eigenen Leute, nicht einmal
+        # der Ausschnitt.
+        stoerer = (g.funk_stoerer(ich.pos, getattr(ich, "team", -1), int(ich.ebene))
+                   if hasattr(g, "funk_stoerer") else [])
+        if stoerer:
+            self._rauschen(ziel, r, m)
+            self._pings(ziel, [punkt(b.mast_mitte()) for b in stoerer if int(b.ebene) == nr],
+                        float(getattr(g.welt, "zeit", 0.0)), m)
+            if not rund:
+                pygame.draw.rect(ziel, RAHMEN, r.inflate(4, 4), 1)
+            return r
 
         # Der Kreis in HUEGEL, auf jeder Ebene. Liegt er auf einer anderen
         # als man selbst, ist er blasser und hat einen Pfeil nach oben oder
@@ -197,6 +213,59 @@ class Minikarte:
         if not rund:
             pygame.draw.rect(ziel, RAHMEN, r.inflate(4, 4), 1)
         return r
+
+    def _rauschen(self, ziel, r, mass: float) -> None:
+        """Rauschen ueber der Karte (seit 0.34.115): ein paar fertige Bilder
+        je Groesse, reihum, dazu ein heller Streifen, der nach unten wandert."""
+        c = M["gestoert"]
+        schluessel = (r.width, r.height, round(mass, 2))
+        vorrat = self.__dict__.setdefault("_rausch", {})
+        bilder = vorrat.get(schluessel)
+        if bilder is None:
+            # Fester Zufall: das Rauschen soll flackern, aber nicht von Lauf zu
+            # Lauf anders aussehen (Tests, Bilder). Gemalt in Kartenpixeln und
+            # grob hochgezogen, damit es auf der grossen runden Karte genauso
+            # grobkoernig ist wie auf der kleinen.
+            zufall = random.Random(r.width * 1000 + r.height)
+            klein = (max(1, int(r.width / max(1.0, mass))), max(1, int(r.height / max(1.0, mass))))
+            bilder = []
+            for _ in range(int(c["bilder"])):
+                f = pygame.Surface(klein, pygame.SRCALPHA)
+                for y in range(klein[1]):
+                    for x in range(klein[0]):
+                        if zufall.random() < c["dichte"]:
+                            h = zufall.randrange(70, 190)
+                            f.set_at((x, y), (h, h - 6, h - 14, zufall.randrange(150, 235)))
+                bilder.append(pygame.transform.scale(f, (r.width, r.height)))
+            vorrat[schluessel] = bilder
+        zeit = pygame.time.get_ticks() / 1000.0
+        ziel.blit(bilder[int(zeit * c["takt"]) % len(bilder)], r.topleft)
+        hoehe = max(2, int(r.height * c["streifen_hoehe"]))
+        y = int((zeit * c["streifen_tempo"] % 1.0) * (r.height + hoehe)) - hoehe
+        streifen = pygame.Surface((r.width, hoehe), pygame.SRCALPHA)
+        streifen.fill((200, 190, 170, 46))
+        alt = ziel.get_clip()
+        ziel.set_clip(r.clip(alt))
+        ziel.blit(streifen, (r.x, r.y + y))
+        ziel.set_clip(alt)
+
+    @staticmethod
+    def _pings(ziel, orte: list, zeit: float, mass: float) -> None:
+        """Die Orte der Funkwagen auf der gestoerten Karte: je ein Punkt und
+        zwei Ringe, die nach aussen laufen und verblassen. Erst alle Ringe,
+        dann alle Punkte - sonst ueberdeckt der Ring des einen den Punkt des
+        anderen, wenn sich ihre Kreise decken."""
+        c = M["gestoert"]
+        for i, (x, y) in enumerate(orte):
+            for versatz in (0.0, 0.5):
+                t = ((zeit / c["ping_dauer"]) + versatz + i * 0.27) % 1.0
+                rr = max(2, int(round((3.0 + t * 9.0) * mass)))
+                helle = 1.0 - t
+                farbe = tuple(int(a * helle + d * (1.0 - helle)) for a, d in zip(PING_FARBE, FARBE_DUNKEL))
+                pygame.draw.circle(ziel, farbe, (int(x), int(y)), rr, max(1, int(round(mass))))
+        for x, y in orte:
+            pygame.draw.circle(ziel, FARBE_DUNKEL, (int(x), int(y)), max(2, int(round(2.4 * mass))))
+            pygame.draw.circle(ziel, PING_FARBE, (int(x), int(y)), max(1, int(round(1.6 * mass))))
 
     @staticmethod
     def werfer_zeichen(ziel, mitte, mass: float = 1.0) -> None:

@@ -2575,6 +2575,9 @@ TRUPP = dict(
     # sich eher wirklich zurueckziehen dafuer, so dass es moeglich ist, ein
     # Team zu ueberraschen, sodass es nicht funken kann."
     funk_dauer=6.0,           # so lange dauert ein Spruch (s) - er steht dabei
+    # Gestoert (Funkwagen der Gegner, seit 0.34.115): der Spruch geht nicht
+    # raus, und der Anfuehrer versucht es so lange nicht noch einmal (s).
+    funk_gestoert_pause=8.0,
     funk_abstand=300.0,       # so weit weg von jedem bekannten Gegner funkt er
     funk_weg_radien=(60.0, 110.0, 160.0, 220.0),   # so weit sucht er dafuer einen Platz
     funk_weg_zeit=8.0,        # laenger geht er nicht, dann funkt er, wo er ist
@@ -5003,6 +5006,13 @@ MINIKARTE = dict(
     buggy_laenge=5,
     buggy_breite=2.5,
     schwer_mass=1.6,          # Panzer und Panzerwagen so viel groesser (seit 0.34.59)
+    # Im Stoerkreis eines gegnerischen Funkwagens (seit 0.34.115): Rauschen
+    # statt Punkte - dicht, das Bild wechselt `takt` mal je Sekunde unter
+    # `bilder` Stellungen; ein heller Streifen wandert `streifen_tempo` mal
+    # je Sekunde ueber die Karte. Je Funkwagen im Kreis ein Ping (zwei Ringe,
+    # `ping_dauer` Sekunden je Welle).
+    gestoert=dict(dichte=0.42, bilder=6, takt=14.0, streifen_tempo=0.7, streifen_hoehe=0.12,
+                  ping_dauer=1.4),
 )
 
 # Spielerkosmetik: eigener Ton und eigenes Bild fuer die Blendgranate.

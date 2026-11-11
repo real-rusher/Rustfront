@@ -1556,15 +1556,34 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                     and self._team_von_seite(fahrzeug_modul.seite_von(b)) == team):
                 yield b
 
+    def _funkwagen_team(self, b):
+        """Zu welcher Seite ein Funkwagen gehoert (0, 1 oder None). Beim Gast
+        kennt der Wagen nur den Fahrer (`team`) und die Basis (`basis_team`,
+        ueber die Zusatzwerte der Meldung)."""
+        if b.nur_bild:
+            if getattr(b, "team", -1) in (0, 1):
+                return b.team                      # der Fahrer geht vor
+            bt = getattr(b, "basis_team", -1)
+            return bt if bt in (0, 1) else None
+        return self._team_von_seite(fahrzeug_modul.seite_von(b))
+
+    def funk_stoerer(self, punkt, team: int, ebene: int = 0) -> list:
+        """Alle gegnerischen Funkwagen auf STOEREN, in deren Kreis `punkt`
+        liegt (seit 0.34.115; beim Gast aus der Fahrzeugliste, darum zaehlt
+        `nur_bild` hier nicht)."""
+        if team not in (0, 1):
+            return []
+        liste = []
+        for b in self.fahrzeuge:
+            if (b.art == "funkwagen" and b.aufgebaut and b.modus == 1 and b.emp_rest <= 0.0
+                    and b.ebene == ebene and self._funkwagen_team(b) == 1 - team
+                    and b.mast_mitte().distance_to(punkt) <= b.werte["stoeren"]):
+                liste.append(b)
+        return liste
+
     def funk_gestoert_bei(self, punkt, team: int, ebene: int = 0) -> bool:
         """Liegt `punkt` im Stoerkreis eines gegnerischen Funkwagens?"""
-        if team not in (0, 1):
-            return False
-        for b in self._funkwagen_aktiv(1 - team):
-            if b.modus == 1 and b.ebene == ebene and \
-                    b.mast_mitte().distance_to(punkt) <= b.werte["stoeren"]:
-                return True
-        return False
+        return bool(self.funk_stoerer(punkt, team, ebene))
 
     def funk_gestoert(self, k) -> bool:
         """Kann dieser Kaempfer gerade nicht funken (gestoert)?"""
