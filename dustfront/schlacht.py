@@ -395,6 +395,8 @@ class SchlachtTeil:
         b.dropzone = zone
         self.fahrzeuge.append(b)
         zone.fahrzeug = b
+        if b.werte.get("nur_bot"):
+            self.bot_ans_steuer(b, zone.team)
         if zone.einmalig and zone in self.dropzonen:
             # Die gekaufte Zone gilt einmal; danach verschwindet sie.
             self.dropzonen.remove(zone)
@@ -459,6 +461,21 @@ class SchlachtTeil:
             if stelle is not None:
                 plaetze.append(stelle)
         return plaetze
+
+    def bot_ans_steuer(self, b, team: int):
+        """Ein Bot dieser Seite sitzt schon im Wagen (seit 0.34.114, Flakwagen:
+        Menschen duerfen ihn nicht fahren). Wie die Fallschirmjaeger ein
+        zusaetzlicher Bot (`verstaerkung`): er zaehlt beim Auffuellen nicht mit
+        und kommt nach dem Tod nicht wieder."""
+        k = self._bot_dazu(team)
+        k.verstaerkung = True
+        k.darf_fahren = True
+        k.pos.update(b.pos)
+        if hasattr(k, "vorher"):
+            k.vorher.update(b.pos)
+        k.unverwundbar = 0.0
+        self._einsteigen(k, b)
+        return k
 
     def fallschirmjaeger_abwerfen(self, punkt, team: int) -> list:
         """Fuenf Bots dieser Seite am Schirm ueber `punkt` (Gastgeber)."""
@@ -1047,16 +1064,17 @@ class SchlachtTeil:
 
     @staticmethod
     def _belohnung_zeile(i: int) -> pygame.Rect:
-        # Eine Zeile je Eintrag (seit 0.34.110, damit auch 14 passen); was der
-        # gewaehlte tut, steht darunter (`_belohnung_hilfe_rect`).
-        return pygame.Rect(16, 62 + i * 16, 206, 15)
+        # Eine Zeile je Eintrag (seit 0.34.110, damit auch 14 passen; seit
+        # 0.34.114 enger, damit 15 passen); was der gewaehlte tut, steht
+        # darunter (`_belohnung_hilfe_rect`).
+        return pygame.Rect(16, 62 + i * 15, 206, 14)
 
     @staticmethod
     def _belohnung_hilfe_rect() -> pygame.Rect:
-        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 16 + 2, 206, 12)
+        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 15 + 2, 206, 12)
 
     def _gratis_rect(self) -> pygame.Rect:
-        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 16 + 16, 206, 14)
+        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 15 + 16, 206, 14)
 
     def belohnung_ereignis(self, ev) -> bool:
         """Tasten und Maus, solange das Menue offen ist. True: verbraucht."""

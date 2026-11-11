@@ -2230,11 +2230,39 @@ class Jagdpanzer(Panzer):
             self._kanone()
 
 
+class Flakwagen(Panzerwagen):
+    """Ein Panzerwagen mit einem Flak-Vierling statt des MG-Rings (seit
+    0.34.114, K.FLAKWAGEN). Nur Bots fahren ihn (`nur_bot`). Wer darin sitzt,
+    rastet mit dem Zeiger auf Luftziele ein (`flak`, luft.py) - auch auf
+    solche, die sonst niemand trifft: Abwuerfe am Schirm und Fallschirmjaeger.
+    Die vier Rohre schiessen reihum; am Boden ist er ein schwaches MG."""
+
+    art = "flakwagen"
+    werte = K.FLAKWAGEN
+    aufbau_name = "flak_lafette"
+    schatten_bild = "flakwagen_schatten"
+    flak = True
+    # Wo die vier Rohre sitzen (quer zur Lafette, Pixel).
+    _ROHRE = (-12.2, 8.0, -8.0, 12.2)
+
+    def _schiessen(self) -> None:
+        if self.feuer and self.takt.get("flak_mg", 0.0) <= 0.0:
+            f = self.werte
+            mitte = self.aufbau_mitte()
+            rohr = self.__dict__.get("_rohr", 0)
+            self._rohr = (rohr + 1) % len(self._ROHRE)
+            quer = self._ROHRE[rohr]
+            m = mitte + pygame.Vector2(f["ring_muendung"] - self.ruecklauf, quer).rotate(self.aufbau)
+            self._mg("flak_mg", m, self.aufbau,
+                     mitte + pygame.Vector2(8, quer * 0.5).rotate(self.aufbau))
+            self.ruecklauf = f["ring_ruecklauf"]
+
+
 # Welche Art zu welcher Klasse und zu welchem Buchstaben in der Karte.
 ARTEN = {"buggy": Buggy, "panzer": Panzer, "panzerwagen": Panzerwagen,
          "krad": Krad, "jagdpanzer": Jagdpanzer, "trosswagen": Trosswagen,
          "spulenwagen": Spulenwagen, "funkwagen": Funkwagen,
-         "werfer": Werfer, "tragschrauber": Tragschrauber}
+         "werfer": Werfer, "tragschrauber": Tragschrauber, "flakwagen": Flakwagen}
 
 
 def marken() -> list:

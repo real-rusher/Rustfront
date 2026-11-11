@@ -1036,3 +1036,159 @@ def _ts_team(kombi):
 
 for _kombi in K.TEAMS["kombi"]:
     platzhalter("tragschrauber_%s_fahrer" % _kombi["name"].lower())(_ts_team(_kombi))
+
+
+# ──────────────────────────────── Flakwagen (seit 0.34.114)
+#
+# Ein dreiachsiger Laster mit abgeklappten Bordwaenden und einem Vierling auf
+# der Pritsche. Wie beim Panzerwagen sind Wanne (`flakwagen`) und drehender
+# Teil (`flak_lafette`, Drehpunkt in der Bildmitte) getrennte Bilder. Fahren
+# duerfen ihn nur Bots (K.FLAKWAGEN "nur_bot"), also gibt es kein Bild mit
+# einem Spielerskin - nur die Mannschaftsfarben (und Skins der Bots).
+
+FK_LACK = (110, 112, 96)
+FK_DK = (52, 54, 44)
+FK_HELL = (150, 152, 130)
+FK_SCHATTEN = (84, 86, 72)
+_STAUB_FK = [(140, 138, 112), (108, 106, 84), (166, 162, 132), (96, 92, 70)]
+
+
+def flakwagen_zeichnen() -> pygame.Surface:
+    """Die Wanne ohne Lafette. Vorn gelenkte Raeder, hinten zwei Achsen;
+    in der Mitte der Pritsche der Sockel, auf dem die Lafette sitzt."""
+    b = _Blatt()
+    rnd = random.Random(7501)
+    for ax in (21, -11, -23):
+        b.rohr((ax, -10), (ax, 10), 1.8, (96, 92, 86))
+    for ax, br in ((21, 5.8), (-11, 6.8), (-23, 6.8)):
+        _reifen(b, ax, -14.2, 10.5, br, 0.0)
+        _reifen(b, ax, 14.2, 10.5, br, 0.0)
+    # Stossstange, Haube, runde Kotfluegel
+    b.rect((30, 28, 24), 31.2, -11, 2.4, 22, 0.6)
+    b.rect((104, 98, 88), 31.6, -10.6, 1.6, 21.2, 0.4)
+    for sy in (-1, 1):
+        b.rect(FK_DK, 15, sy * 13.8 - 3.9, 12.4, 7.8, 2.6)
+        b.rect(FK_LACK if sy < 0 else FK_SCHATTEN, 15.5, sy * 13.8 - 3.4, 11.4, 6.8, 2.2)
+        _scheinwerfer(b, (29.4, sy * 7.8), 1.2)
+    haube = [(30.4, -5.2), (28.6, -8), (14, -9.2), (14, 9.2), (28.6, 8), (30.4, 5.2)]
+    b.poly(FK_DK, haube)
+    b.poly(FK_LACK, [(x * 0.97 + 0.3, y * 0.88) for x, y in haube])
+    b.linie(FK_HELL, (15.4, -7), (27.8, -6.2), 0.8)
+    for i in range(6):
+        b.linie(FK_DK, (29.2, -3.4 + i * 1.36), (30.2, -3.4 + i * 1.36), 0.5)
+    b.linie(FK_DK, (15, 0), (29, 0), 0.45)
+    # Fuehrerhaus mit Stoffdach und Windschutzscheibe (der Fahrer sitzt darunter)
+    b.rect(FK_DK, 3, -11.6, 11.6, 23.2, 1.6)
+    b.rect(PLANE_DK, 3.5, -11.1, 10.6, 22.2, 1.3)
+    b.rect(PLANE, 4.2, -10.4, 8.4, 20.8, 1.1)
+    b.linie(PLANE_HELL, (4.6, -9.8), (12, -9.8), 0.7)
+    for y in (-4.6, 4.6):
+        b.linie(PLANE_DK, (4.4, y), (12.4, y), 0.45)
+    b.rect(GLAS_DK, 12.9, -9.4, 1.5, 18.8, 0.3)
+    b.rect((70, 96, 112), 13.2, -8.6, 0.7, 7.4, 0.2)
+    b.rect((70, 96, 112), 13.2, 1.2, 0.7, 7.4, 0.2)
+    # Pritsche aus Stahl, Bordwaende heruntergeklappt (breiter Stand)
+    b.rect(FK_DK, -32, -13.6, 34, 27.2, 0.8)
+    b.rect(FK_SCHATTEN, -31.5, -13.1, 33, 26.2, 0.6)
+    b.rect((40, 40, 36), -31, -11.8, 32, 23.6, 0.5)
+    b.rect((92, 92, 82), -30.6, -11.4, 31.2, 22.8, 0.4)
+    for i in range(10):
+        for j in range(7):
+            b.kreis((70, 70, 62), (-29 + i * 3.1 + (j % 2) * 1.5, -10.0 + j * 3.3), 0.4)
+    b.linie(FK_HELL, (-31.2, -12.9), (1.2, -12.9), 0.7)
+    # Munitionskaesten vorn auf der Pritsche
+    _munkiste(b, -5.6, -10.8, 5.6, 6.2)
+    _munkiste(b, -5.6, 4.6, 5.6, 6.2)
+    b.rect((40, 36, 32), -5, -3.4, 4.4, 6.8, 0.5)
+    b.rect((150, 136, 84), -4.6, -3.0, 3.6, 6.0, 0.4)
+    for i in range(5):
+        b.linie((96, 84, 48), (-4.4, -2.4 + i * 1.2), (-1.4, -2.4 + i * 1.2), 0.4)
+    # Sockel der Lafette
+    c = (-18, 0)
+    b.kreis((30, 28, 26), c, 10.2)
+    b.kreis((100, 96, 88), c, 9.6)
+    b.kreis((62, 60, 54), c, 8.6)
+    for i in range(12):
+        a = i * math.pi / 6
+        b.kreis((38, 36, 32), (c[0] + math.cos(a) * 9.1, c[1] + math.sin(a) * 9.1), 0.38)
+    _staub(b, rnd, 60, -31, 30, -12.6, 12.6, _STAUB_FK)
+    _rost(b, rnd, 16, -31, 30, -13, 13)
+    return b.fertig()
+
+
+def flak_lafette(fahrer=None, rueckstoss: float = 0.0) -> pygame.Surface:
+    """Der Vierling: Sitz in der Mitte, je zwei Rohre links und rechts,
+    Schilde, Trommeln, Ringvisier. 128 x 128, Drehpunkt in der Bildmitte.
+    `rueckstoss`: so viele Pixel springen die Rohre zurueck (abwechselnd)."""
+    b = _Blatt(128, G)
+    r = -rueckstoss / G
+    b.kreis((30, 28, 26), (0, 0), 7.4)
+    b.kreis((84, 82, 74), (0, 0), 6.8)
+    b.rect((30, 22, 16), -6.4, -2.6, 4.4, 5.2, 1.2)
+    b.rect((98, 66, 44), -6.0, -2.2, 3.6, 4.4, 1.0)
+    if fahrer is not None:
+        _insasse(b, fahrer, -1.5, 0, arme=7)
+    for sy in (-1, 1):
+        b.rect((30, 28, 26), -2, sy * 7.2 - 3.2, 9, 6.4, 0.8)
+        b.rect((92, 90, 82), -1.6, sy * 7.2 - 2.8, 8.2, 5.6, 0.6)
+        for k, dy in enumerate((-1.5, 1.5)):
+            y = sy * 7.2 + dy
+            rr = r if (k + (0 if sy < 0 else 1)) % 2 == 0 else r * 0.3
+            b.rect((26, 24, 22), 6 + rr, y - 0.95, 19, 1.9, 0.6)
+            b.rect((96, 94, 86), 6.4 + rr, y - 0.5, 18.2, 1.0, 0.4)
+            b.rect((26, 24, 22), 23.6 + rr, y - 1.3, 3.4, 2.6, 0.5)      # Feuerdaempfer
+            b.rect((70, 68, 62), 24 + rr, y - 0.8, 2.6, 1.6, 0.4)
+            b.rect((40, 38, 34), 10 + rr, y - 1.25, 4, 2.5, 0.4)          # Kuehlmantel
+        b.kreis((30, 28, 26), (1.6, sy * 7.2), 2.9)                       # Trommel obenauf
+        b.kreis((86, 104, 62), (1.6, sy * 7.2), 2.4)
+        b.kreis((40, 50, 34), (1.6, sy * 7.2), 1.0)
+        b.poly((30, 28, 26), [(6.4, sy * 3.2), (8.2, sy * 3.2), (9.6, sy * 11.6), (7.4, sy * 11.6)])
+        b.poly(FK_HELL if sy < 0 else FK_SCHATTEN,
+               [(6.9, sy * 3.7), (7.8, sy * 3.7), (9.0, sy * 11.1), (7.8, sy * 11.1)])
+    b.linie((30, 28, 26), (3, 0), (9, 0), 0.6)                            # Ringvisier
+    b.kreis((30, 28, 26), (10.4, 0), 1.7)
+    b.kreis((84, 82, 74), (10.4, 0), 1.1)
+    b.kreis((30, 28, 26), (10.4, 0), 0.5)
+    return b.fertig()
+
+
+def _flakwagen_ganz(fahrer=None) -> pygame.Surface:
+    s = flakwagen_zeichnen().copy()
+    t = flak_lafette(fahrer)
+    s.blit(t, t.get_rect(center=(s.get_width() // 2 - int(18 * G), s.get_height() // 2)))
+    return s
+
+
+@platzhalter("flakwagen")
+def _flakwagen():
+    return flakwagen_zeichnen()
+
+
+@platzhalter("flak_lafette")
+def _flak_lafette():
+    return flak_lafette()
+
+
+@platzhalter("flak_lafette_fahrer")
+def _flak_lafette_fahrer():
+    return flak_lafette(_NEUTRAL)
+
+
+@platzhalter("flakwagen_wrack")
+def _flakwagen_wrack():
+    return _wrack(_flakwagen_ganz(), 7580)
+
+
+@platzhalter("flakwagen_schatten")
+def _flakwagen_schatten():
+    return _schatten(int(66 * G), int(36 * G), 11)
+
+
+def _lafette_team(kombi):
+    def z():
+        return flak_lafette(_kombi_fahrer(kombi))
+    return z
+
+
+for _kombi in K.TEAMS["kombi"]:
+    platzhalter("flak_lafette_%s_fahrer" % _kombi["name"].lower())(_lafette_team(_kombi))

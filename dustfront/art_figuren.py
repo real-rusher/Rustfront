@@ -775,7 +775,7 @@ _INSASSEN = ("buggy", "panzer_turm", "panzerwagen_ring",
              # Seit 0.34.109 auch die neuen Fahrzeuge (art_neue_fahrzeuge): das Krad
              # leer mit Fahrer und mit Beifahrer (beide im Skin des Fahrers), die
              # Kanone des Jagdpanzers samt Kommandant.
-             "krad", "krad_beiwagen", "jagdpanzer_rohr", "tragschrauber")
+             "krad", "krad_beiwagen", "jagdpanzer_rohr", "tragschrauber", "flak_lafette")
 
 
 def insassen_bildname(grund: str, skin: str, team_vorsatz: str = "") -> str:
@@ -812,6 +812,8 @@ def _insassen_zeichner(grund: str):
             return art_neue_fahrzeuge.jagdpanzer_aufbau(fahrer)
         if grund == "tragschrauber":
             return art_neue_fahrzeuge.tragschrauber_zeichnen(fahrer)
+        if grund == "flak_lafette":
+            return art_neue_fahrzeuge.flak_lafette(fahrer)
         if grund == "buggy":
             return art._buggy_zeichnen(fahrer)
         if grund == "panzer_turm":

@@ -1,4 +1,4 @@
-# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.113)
+# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.114)
 
 Zwoelf Entwuerfe fuer die SCHLACHT auf Karten, die groesser sind als
 STAUBTAL - OFFEN. Bilder und Szenen dazu stehen auf der Entscheidungsseite
@@ -16,7 +16,7 @@ davon eingebaut ist.
 | SPULENWAGEN | behalten; EMP-Feld einschaltbar, dafuer muss der Wagen aufgebaut sein, es pulsiert am Ort, nur begrenzte Zeit, danach aufladen; schwaecherer Kettenblitz | **0.34.110** |
 | FUNKWAGEN | behalten; Bots, die mit ihm sprechen koennen, geben ihre Daten direkt ins Funknetz des Teams (nur mit aktivem Funk). Stoeren bleibt, aber er steht dabei auf der Karte | **0.34.111** |
 | WERFER | behalten; schiesst nur im Umkreis gueltiger Ziele (von jemandem im Team gesehene oder markierte Gegner und Fahrzeuge, Hotzones, spaeter weitere Objectives). Sehr leicht zu zerstoeren, dann grosse Explosion, die alle im Umkreis toetet. Jeder Schuss verraet ihn kurz auf Karte oder Minikarte, mit eigenem Symbol | **0.34.112** |
-| FLAKWAGEN | behalten; nur Bots fahren ihn (sie spawnen darin oder werden damit gedroppt), weil Spieler nicht zwischen Boden- und Luftzielen wechseln koennen | offen |
+| FLAKWAGEN | behalten; nur Bots fahren ihn (sie spawnen darin oder werden damit gedroppt), weil Spieler nicht zwischen Boden- und Luftzielen wechseln koennen | **0.34.114** |
 | TRAGSCHRAUBER | behalten; das Zielproblem fuer Spieler loesen. Es soll spaeter mehr Hubschrauber geben, und man soll auf andere Etagen schiessen koennen | **0.34.113** |
 | GLEITER, RAEUMER, LADUNGSTRAEGER | verworfen | - |
 | LANDSCHIFF | **verworfen fuer diese Entwicklungsphase, aber gemerkt**: die fahrende Basis mit Plaetzen fuer Fahrer, Hauptturm und vier Seitentuerme, Einstieg der Gefallenen am Heck. Konzept und Zeichner liegen auf der Entscheidungsseite | zurueckgestellt |
@@ -110,3 +110,15 @@ koennte fuer Helis und fuer Ziele auf anderen Etagen gelten.
   (`nur_flak`): gewoehnliche Waffen rasten dort nicht ein - bis der Flakwagen
   da ist, aendert sich fuer sie nichts. Mit der Regel koennte man den Flakwagen
   auch Menschen geben; entschieden ist: nur Bots.
+
+## Was 0.34.114 gebaut hat
+
+* `Flakwagen(Panzerwagen)` (`fahrzeug.py`), Werte `K.FLAKWAGEN`, Waffe
+  `FAHRZEUG_WAFFEN["flak_mg"]`, Gewichtung gegen Luftziele `K.FLAK`.
+* Nur Bots am Steuer (`nur_bot`): `_freier_buggy` schliesst Menschen aus, ein
+  Abwurf setzt mit `SchlachtTeil.bot_ans_steuer` einen Bot der Seite hinein.
+* Bot-KI: `bots.BotHirn._flak_feuern` - naechstes Luftziel der Gegner, Zeiger
+  auf dessen Bild, `LuftTeil._vorhalten` rechnet den Vorhalt.
+* Wer im Flakwagen sitzt, rastet auch auf `nur_flak`-Ziele ein (Abwuerfe,
+  Fallschirmjaeger) - die Regel aus 0.34.113 ist damit komplett.
+

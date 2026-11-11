@@ -18054,6 +18054,104 @@ pruef("Abwuerfe am Schirm sind Luftziele, aber nur fuer Flak (ein gewoehnlicher 
       _bild113 and _bild113[0].art == "abwurf" and _bild113[0].nur_flak and _sch113.luft_ziel is None)
 _tm113.verlassen()
 
+# Flakwagen (seit 0.34.114): ein Laster mit Flak-Vierling, nur Bots fahren ihn.
+_tm114 = _TM59.Testmodus(app, karte="staubtal_offen")
+_namen114 = [e_.name for e_ in _tm114.eintraege]
+pruef("Testmodus: FLAKWAGEN im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB); im Nachschub fuer 9 Punkte",
+      "FLAKWAGEN" in _namen114 and "ABWURF: FLAKWAGEN" in _namen114
+      and ("flakwagen", 9, "DROPZONE: FLAKWAGEN") in K.SCHLACHT["belohnungen"])
+pruef("Flakwagen: Werte - nur Bots, Flak, kein Truppentransporter; die Flak-Zeile traegt `flak`",
+      K.FLAKWAGEN["nur_bot"] and K.FLAKWAGEN["flak"] and "plaetze" not in K.FLAKWAGEN
+      and K.FAHRZEUG_WAFFEN["flak_mg"]["flak"] and K.FLAK["luft_faktor"] > 1.0)
+_e114 = _tm114.welt.ebene(0)
+_rnd114 = random.Random(114)
+for _ in range(40000):
+    _tx114 = _rnd114.randrange(60, _e114.breite - 90)
+    _ty114 = _rnd114.randrange(20, _e114.hoehe - 40)
+    if all(not K.KACHELN[_e114.kachel(_tx114 + x_, _ty114 + y_)]["fest"]
+           for x_ in range(50) for y_ in range(24)):
+        break
+_z114 = lambda x_, y_: pygame.Vector2((_tx114 + x_ + 0.5) * K.TILE, (_ty114 + y_ + 0.5) * K.TILE)
+_fw114 = _tm114.fahrzeug_setzen("flakwagen", _z114(10, 12), 0, {"winkel": 0})
+pruef("Flakwagen: eigene Art, ein Panzerwagen mit Lafette, nur Bots",
+      _fw114.art == "flakwagen" and isinstance(_fw114, _FZ59.Panzerwagen) and _fw114.flak
+      and _fw114.aufbau_name == "flak_lafette" and _fw114.werte["nur_bot"])
+# Ein Mensch kommt nicht hinein, ein Bot schon.
+_mensch114 = _tm114.puppe_setzen(_fw114.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="MENSCH")
+_tm114._anwenden(_mensch114, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Flakwagen: ein Mensch kann nicht einsteigen (E bleibt ohne Wirkung)",
+      _mensch114.fahrzeug is None and _fw114.fahrer is None)
+_bot114 = _tm114.fahrer_setzen(_fw114.ausstiegsorte(9.0)[0], 0, {"team": 0}, mit_fahrzeug=False)
+_tm114._anwenden(_bot114, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Flakwagen: ein Bot, der fahren darf, findet ihn und kann einsteigen",
+      _bot114.fahrzeug is _fw114 and _fw114.fahrer is _bot114)
+# Zielregel: ein Schuetze im Flakwagen rastet auch auf Abwuerfe ein, ein gewoehnlicher nicht.
+_fl114 = _tm114.fahrzeug_setzen("flakwagen", _z114(10, 20), 0, {"winkel": 0})
+_pilot114 = _tm114.puppe_setzen(_fl114.pos + pygame.Vector2(0, 90), 0, {"team": 0}, name="FLAKSCHUETZE")
+_tm114._einsteigen(_pilot114, _fl114)
+_tm114.nachschub_setzen("munition", _z114(18, 22), {"team": 1})
+for _ in range(int(1.6 / K.FIXED_DT)):
+    _tm114.schritt(K.FIXED_DT)
+_lz114 = [x_ for x_ in _tm114.luft_ziele() if x_.art == "abwurf"]
+_tm114._anwenden(_pilot114, {"will": [0, 0], "ziel": [_lz114[0].bild_pos.x, _lz114[0].bild_pos.y],
+                             "knoepfe": []})
+pruef("Flakwagen: wer darin sitzt, rastet auf einen Abwurf am Schirm ein (das trifft sonst nur Flak)",
+      _lz114 and _pilot114.luft_ziel is not None and _pilot114.luft_ziel.art == "abwurf")
+_tm114._aussteigen(_pilot114)
+# Der Fahrer-Bot schiesst auf einen Tragschrauber, der vorbeifliegt.
+_tm114.verlassen()
+_tm114 = _TM59.Testmodus(app, karte="staubtal_offen")
+_e114 = _tm114.welt.ebene(0)
+_z114 = lambda x_, y_: pygame.Vector2((_tx114 + x_ + 0.5) * K.TILE, (_ty114 + y_ + 0.5) * K.TILE)
+_ts114 = _tm114.fahrzeug_setzen("tragschrauber", _z114(4, 12), 0, {"winkel": 0})
+_pil114 = _tm114.puppe_setzen(_ts114.ausstiegsorte(9.0)[0], 0, {"team": 1}, name="PILOT")
+_tm114._anwenden(_pil114, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+for _ in range(int(6.0 / K.FIXED_DT)):
+    _tm114._anwenden(_pil114, {"will": [0, -1], "ziel": [0, 0], "knoepfe": [], "feuert": False})
+    _tm114.schritt(K.FIXED_DT)
+# Erst jetzt, wo er fliegt, der Flakwagen: schraeg voraus, in Reichweite.
+_fw114 = _tm114.fahrzeug_setzen("flakwagen", _ts114.pos + _ts114.vorn * 260 + pygame.Vector2(0, 120), 0,
+                                {"winkel": 0})
+_fahrer114 = _tm114.fahrer_setzen(_fw114.pos, 0, {"team": 0, "fahrzeug": "flakwagen"}, mit_fahrzeug=False)
+_tm114._einsteigen(_fahrer114, _fw114)
+_tm114.welt._raster_bauen()
+_l114 = _ts114.leben
+_gesehen114 = False
+for _ in range(int(8.0 / K.FIXED_DT)):
+    _tm114._anwenden(_pil114, {"will": [0, -1], "ziel": [0, 0], "knoepfe": [], "feuert": False})
+    _tm114.schritt(K.FIXED_DT)
+    if getattr(_fahrer114.hirn, "flak_ziel", None) is not None:
+        _gesehen114 = True
+    if not _ts114.lebt or _ts114.kaputt or _ts114.leben < _l114 - 30:
+        break
+pruef("Flakwagen: der Bot am Steuer sucht sich den fliegenden Tragschrauber der Gegner als Ziel (flak_ziel)",
+      _gesehen114 and _ts114.luft, "luft %s" % _ts114.luft)
+pruef("... und trifft ihn mit dem Vierling in der Luft (Leben sinkt, Flak wiegt dort mehr)",
+      _ts114.leben < _l114, "%.0f -> %.0f, Abstand %.0f" % (
+          _l114, _ts114.leben, _ts114.pos.distance_to(_fw114.pos)))
+# Der Flak-Bot schiesst auch einen gegnerischen Abwurf am Schirm ab (nur Flak trifft ihn).
+_tm114.nachschub_setzen("medkit", _fw114.pos + pygame.Vector2(180, -40), {"team": 1})
+_ab114 = None
+for _ in range(int(10.0 / K.FIXED_DT)):
+    _tm114._anwenden(_pil114, {"will": [0, -1], "ziel": [0, 0], "knoepfe": [], "feuert": False})
+    _tm114.schritt(K.FIXED_DT)
+    if _ab114 is None and _tm114.abwuerfe:
+        _ab114 = _tm114.abwuerfe[0]
+    if _ab114 is not None and _ab114 not in _tm114.abwuerfe:
+        break
+pruef("Flakwagen: sein Bot holt einen gegnerischen Abwurf am Schirm herunter, ehe er landet",
+      _ab114 is not None and _ab114 not in _tm114.abwuerfe,
+      "Hoehe %s" % (getattr(_ab114, "hoehe", None),))
+# Ein Abwurf bringt seinen Bot mit.
+_tm114.nachschub_setzen("flakwagen", _z114(30, 4), {"team": 0})
+for _ in range(int(12.0 / K.FIXED_DT)):
+    _tm114.schritt(K.FIXED_DT)
+_ne114 = [b_ for b_ in _tm114.fahrzeuge if b_.art == "flakwagen" and b_ is not _fw114]
+pruef("Abwurf FLAKWAGEN: er landet mit einem Bot seiner Seite am Steuer (Verstaerkung, darf nicht nachkommen)",
+      _ne114 and _ne114[0].fahrer is not None and _ne114[0].fahrer.ist_bot
+      and _ne114[0].fahrer.team == 0 and getattr(_ne114[0].fahrer, "verstaerkung", False))
+_tm114.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

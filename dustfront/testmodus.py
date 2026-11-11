@@ -176,7 +176,7 @@ OPTIONEN = {
     # Seit 0.34.73: die Klasse (K.KLASSEN) - Waffen, Vorteile, Faehigkeit (C).
     "klasse": ("KLASSE", lambda: [""] + list(K.KLASSEN),
                lambda v: K.KLASSEN[v]["name"] if v in K.KLASSEN else "KEINE"),
-    "fahrzeug": ("FAHRZEUG", lambda: ["panzer", "panzerwagen", "buggy", "krad", "jagdpanzer", "trosswagen", "spulenwagen", "funkwagen", "werfer", "tragschrauber"],
+    "fahrzeug": ("FAHRZEUG", lambda: ["panzer", "panzerwagen", "buggy", "krad", "jagdpanzer", "trosswagen", "spulenwagen", "funkwagen", "werfer", "tragschrauber", "flakwagen"],
                  lambda v: v.upper()),
     "fuehrer": ("ANFÜHRER", lambda: ["funk", "ohne", "keiner"],
                 lambda v: {"funk": "MIT FUNK", "ohne": "OHNE FUNK", "keiner": "KEINER"}[v]),
@@ -316,6 +316,11 @@ def eintraege() -> list:
         # landet. Zum Draufschiessen: die Maus auf sein Bild legen.
         Eintrag("TRAGSCHRAUBER", "OBJEKTE", ("anzahl", "streuung", "winkel"),
                 lambda t, p, e, w: t.fahrzeug_setzen("tragschrauber", p, e, w)),
+        # Seit 0.34.114: nur Bots fahren ihn. Hier steht er leer (ein Bot der Seite
+        # steigt von selbst ein, wenn er fahren darf); mit einem Fahrer gleich
+        # drin: FIGUREN, FAHRER MIT FAHRZEUG, FAHRZEUG FLAKWAGEN.
+        Eintrag("FLAKWAGEN", "OBJEKTE", ("anzahl", "streuung", "winkel"),
+                lambda t, p, e, w: t.fahrzeug_setzen("flakwagen", p, e, w)),
         # Seit 0.34.65: was der Nagelstreuer eines Wagens hinterlaesst.
         Eintrag("NAGELFELD", "OBJEKTE", ("anzahl", "streuung"),
                 lambda t, p, e, w: t.nagelfeld_setzen(p, e)),
@@ -338,6 +343,8 @@ def eintraege() -> list:
                 lambda t, p, e, w: t.nachschub_setzen("jagdpanzer", p, w), mehrfach=False),
         Eintrag("ABWURF: TRAGSCHRAUBER", "NACHSCHUB", ("team",),
                 lambda t, p, e, w: t.nachschub_setzen("tragschrauber", p, w), mehrfach=False),
+        Eintrag("ABWURF: FLAKWAGEN", "NACHSCHUB", ("team",),
+                lambda t, p, e, w: t.nachschub_setzen("flakwagen", p, w), mehrfach=False),
         Eintrag("ABWURF: WERFER", "NACHSCHUB", ("team",),
                 lambda t, p, e, w: t.nachschub_setzen("werfer", p, w), mehrfach=False),
         Eintrag("ABWURF: FUNKWAGEN", "NACHSCHUB", ("team",),
@@ -2464,6 +2471,12 @@ class Testmodus(Gefecht):
                     pygame.draw.line(ziel, (120, 220, 160), p, kam.zu_bild(schutz[0]), 1)
                 elif h.ziel is not None:
                     zustand += " > ZIEL"
+                # Seit 0.34.114: der Flakwagen haelt auf einen Flieger - die
+                # Linie geht zu dessen Bild, nicht zum Schatten.
+                fz_ = getattr(h, "flak_ziel", None)
+                if getattr(k.fahrzeug, "flak", False) and fz_ is not None and fz_.lebt:
+                    zustand += " > FLAK"
+                    pygame.draw.line(ziel, K.C_AMBER, p, kam.zu_bild(fz_.bild_pos), 1)
             elif getattr(k, "darf_fahren", False) and h.ziel is None:
                 zustand += " (SUCHT FAHRZEUG)"
             if getattr(k, "schild", False):

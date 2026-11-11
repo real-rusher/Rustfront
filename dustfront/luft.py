@@ -122,8 +122,25 @@ class LuftTeil:
                 continue
             if lz.bild_pos.distance_to(ziel) <= lz.radius:
                 k.luft_ziel = lz
-                k.ziel = pygame.Vector2(lz.pos)
+                k.ziel = self._vorhalten(k, lz) if flak else pygame.Vector2(lz.pos)
                 return
+
+    def _vorhalten(self, k, lz) -> pygame.Vector2:
+        """Flak haelt vor (seit 0.34.114): die Lafette zielt dorthin, wo das
+        Luftziel ankommt, bis die Kugel da ist. Die Kugel prueft ihren Abstand
+        zum Ziel an dessen *jetzigem* Ort (entities.Geschoss.schritt) - ein
+        fliegender Tragschrauber waere sonst nicht zu treffen. Ohne Eigengeschwindigkeit
+        (Schirme, Abwuerfe) gilt der Ort selbst."""
+        v = getattr(lz.objekt, "geschw", None)
+        mitte = k.fahrzeug.aufbau_mitte() if hasattr(k.fahrzeug, "aufbau_mitte") else k.pos
+        tempo = K.FAHRZEUG_WAFFEN["flak_mg"]["tempo"]
+        if v is None or tempo <= 0.0:
+            return pygame.Vector2(lz.pos)
+        # Zweimal nachrechnen: die Flugzeit haengt vom Abstand zum Vorhalt-Ort ab.
+        ort = pygame.Vector2(lz.pos)
+        for _ in range(2):
+            ort = lz.pos + pygame.Vector2(v) * (ort.distance_to(mitte) / tempo)
+        return ort
 
     # ---- Treffer ------------------------------------------------------------
     def _abwurf_treffer(self, lz, menge: float, von) -> None:

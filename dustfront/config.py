@@ -1081,7 +1081,7 @@ SCHLACHT = dict(
                 sperre_basis=1800.0, ausweichen_ab=300.0, treiben=70.0, suche_weit=420.0,
                 stoss=520.0, quetschen=15.0, warnen_ab=160.0),
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
-                  zeichen=dict(buggy="B", tragschrauber="H", werfer="W", funkwagen="F", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
+                  zeichen=dict(buggy="B", flakwagen="A", tragschrauber="H", werfer="W", funkwagen="F", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
                                medkit="+")),
     punkte=dict(abschuss=1, fahrzeug=5, aufhelfen=5),
     # Was man kaufen kann: (Kennung, Kosten, Name).
@@ -1101,8 +1101,9 @@ SCHLACHT = dict(
         ("funkwagen", 7, "DROPZONE: FUNKWAGEN"),
         ("werfer", 9, "DROPZONE: WERFER"),
         ("tragschrauber", 9, "DROPZONE: TRAGSCHRAUBER"),
+        ("flakwagen", 9, "DROPZONE: FLAKWAGEN"),
     ),
-    belohnung_hilfe=dict(tragschrauber="FLIEGT, SIEHT ALLES, ZWEI BOMBEN", werfer="SALVEN AUF GESEHENE ZIELE, SEHR ZERBRECHLICH", funkwagen="PEILEN ODER STÖREN, NUR AUFGEBAUT", spulenwagen="BLITZ UND EMP-FELD, NUR AUFGEBAUT", krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
+    belohnung_hilfe=dict(flakwagen="BOT-FLAK GEGEN FLIEGER", tragschrauber="FLIEGT, SIEHT ALLES, ZWEI BOMBEN", werfer="SALVEN AUF GESEHENE ZIELE, SEHR ZERBRECHLICH", funkwagen="PEILEN ODER STÖREN, NUR AUFGEBAUT", spulenwagen="BLITZ UND EMP-FELD, NUR AUFGEBAUT", krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
                          munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
                          buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
                          panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE",
@@ -1757,6 +1758,37 @@ TRAGSCHRAUBER = dict(
     luft_radius=24.0,         # so gross ist er als Ziel (Pixel um sein Bild)
 )
 
+# Der Flakwagen (seit 0.34.114): ein Laster mit einem Vierling auf der
+# Pritsche - ein Panzerwagen, dessen Ring-MG gegen die Luft gebaut ist.
+# Fahren duerfen ihn nur Bots (`nur_bot`; gewuenscht: ein Mensch koennte
+# Boden- und Luftziel nicht auseinanderhalten - der Bot schon): ein Abwurf
+# bringt einen Bot der Seite gleich mit. Der Vierling schiesst ueber die
+# `flak_mg`-Zeile (FAHRZEUG_WAFFEN) und rastet auf Luftziele ein (luft.py).
+FLAKWAGEN = dict(
+    {k: v for k, v in PANZERWAGEN.items() if k not in ("plaetze", "marke", "name")},
+    marke="FL",
+    name="FLAKWAGEN",
+    nur_bot=True,
+    flak=True,
+    hoechst=240.0,
+    leben=520.0,
+    vorn=46.0, hinten=-44.0,
+    # Die Lafette sitzt weiter hinten auf der Pritsche und dreht schneller als
+    # der MG-Ring: sie muss einem Flieger folgen.
+    ring=(-25.2, 0.0),
+    ring_dreh=190.0,
+    ring_muendung=38.0,
+    explosion_radius=84.0,
+    explosion_schaden=85.0,
+    fahrer_schaden=50.0,
+    neu_nach=40.0,
+)
+
+# Flak gegen Luftziele: wie viel mehr eine Flak-Kugel dort wiegt, und wie weit
+# ein Bot einen Flieger sucht (ein Bot am Steuer; Tragschrauber, Drohnen,
+# Abwuerfe, Fallschirmjaeger). `streu` ist der Bot-Fehler beim Vorhalten.
+FLAK = dict(luft_faktor=1.8, bot_reichweite=680.0, bot_winkel=7.0)
+
 # Rammen und was danach fliegt (seit 0.34.59). Gilt fuer beide.
 RAMMEN = dict(
     sperre=0.4,               # so lange kein zweiter Schaden vom selben Fahrzeug
@@ -1858,6 +1890,9 @@ PANZERUNG = {
     # Der Tragschrauber: dünnes Blech.
     "tragschrauber": dict(kugel=1.0, panzerbrechend=1.2, spreng=1.5, hohlladung=1.5,
                           feuer=1.2, nahkampf=0.8, ramm=1.0),
+    # Der Flakwagen: Laster mit Schild, etwas weniger Blech als der Panzerwagen.
+    "flakwagen": dict(kugel=0.5, panzerbrechend=1.3, spreng=0.95, hohlladung=1.7,
+                      feuer=0.35, nahkampf=0.2, ramm=0.7),
     "jagdpanzer": dict(kugel=0.1, panzerbrechend=0.8, spreng=0.4, hohlladung=1.25,
                        feuer=0.1, nahkampf=0.05, ramm=0.35),
 }
@@ -1925,6 +1960,19 @@ FAHRZEUG_WAFFEN = {
         takt=1.0 / 11.0,      # rund 11 Schuss je Sekunde
         streuung=2.5,
         kamera=0.6,
+    ),
+    # Der Vierling des Flakwagens (seit 0.34.114): viele schwache Kugeln, gegen
+    # Luftziele (`flak`) mit K.FLAK luft_faktor gewichtet.
+    "flak_mg": dict(
+        name="FLAK-VIERLING",
+        schaden=9.0,
+        tempo=640.0,
+        reichweite=720.0,
+        geschosse=1,
+        takt=1.0 / 16.0,
+        streuung=2.6,
+        kamera=0.5,
+        flak=True,
     ),
     "ring_mg": dict(
         name="RING-MG",
@@ -2160,7 +2208,7 @@ BOTS = dict(
     # Bots am Steuer (seit 0.34.71, nur wem der Testmodus es erlaubt -
     # im Gefecht fahren Bots weiter nicht, so gemeldet).
     fahren=dict(
-        abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0, krad=0.0),  # so weit bleibt er stehen
+        abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0, krad=0.0, flakwagen=260.0),  # so weit bleibt er stehen
         suchen=700.0,         # so weit sucht ein Fahrer ohne Fahrzeug nach einem
         # Seit 0.34.95 faehrt er nach einem eigenen Wegenetz: nur Kacheln,
         # um die so viele Kacheln frei sind (wege.Fahrwegenetz), und er
@@ -2179,7 +2227,7 @@ BOTS = dict(
         # Aus Turm und Ring sieht man weiter als zu Fuss (330): die Kanone
         # reicht 900, und ein Panzer, der seine Gegner nicht sieht, ist nur
         # ein Hindernis (gemessen: Gegner auf 730 px blieben ungesehen).
-        sicht=dict(panzer=720.0, panzerwagen=560.0, buggy=380.0, krad=380.0),
+        sicht=dict(panzer=720.0, panzerwagen=560.0, buggy=380.0, krad=380.0, flakwagen=560.0),
         # Seit 0.34.84 (gemeldet nach einer grossen Fahrzeugschlacht):
         # Liegt das Ziel hinter ihm und weiter weg als das, wendet er
         # vorwaerts, statt die ganze Strecke rueckwaerts zu fahren.
@@ -4593,6 +4641,14 @@ for _team in TEAMS["kombi"]:
     BILD_MASS["panzerwagen_ring_%s_fahrer" % _team["name"].lower()] = (_fz_r, _fz_r)
 # Die Granate der Kanone, mit dicker Leuchtspur gezeichnet.
 BILD_MASS["panzergranate"] = (12, 6)
+# Der Flakwagen (seit 0.34.114, art_neue_fahrzeuge.py): Wanne wie der Panzerwagen,
+# die Lafette 128 gross (die Rohre ragen weit hinaus).
+for _name in ("flakwagen", "flakwagen_wrack", "flakwagen_schatten"):
+    BILD_MASS[_name] = (_fz_n, _fz_n)
+for _name in ("flak_lafette", "flak_lafette_fahrer"):
+    BILD_MASS[_name] = (128, 128)
+for _team in TEAMS["kombi"]:
+    BILD_MASS["flak_lafette_%s_fahrer" % _team["name"].lower()] = (128, 128)
 for _name in ("tragschrauber", "tragschrauber_fahrer", "tragschrauber_wrack", "tragschrauber_schatten"):
     BILD_MASS[_name] = (160, 160)
 for _team in TEAMS["kombi"]:

@@ -647,6 +647,8 @@ def wanne_bild(bilder, art_name: str, winkel: float, ph_links: float,
     bilder.bild(art_name)
     if art_name in bilder.aus_datei:
         return bilder.gedreht(art_name, winkel)
+    if art_name == "flakwagen":
+        return bilder.gedreht(art_name, winkel)      # Reifen ohne Phasen
     if art_name in ("panzer", "jagdpanzer"):
         schluessel = (art_name, _stufe(ph_links), _stufe(ph_rechts), False)
     else:
@@ -696,6 +698,8 @@ def aufbau_bild(bilder, name: str, winkel: float, rueckstoss: float) -> pygame.S
     def bauen():
         if name.startswith("jagdpanzer_rohr"):
             from .art_neue_fahrzeuge import jagdpanzer_aufbau as zeichner
+        elif name.startswith("flak_lafette"):
+            from .art_neue_fahrzeuge import flak_lafette as zeichner
         else:
             zeichner = panzer_turm if name.startswith("panzer_turm") else panzerwagen_ring
         roh = _WANNEN.get((name, rk))

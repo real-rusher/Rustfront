@@ -3088,6 +3088,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                 continue
             if k.ist_bot and b.werte.get("nur_mensch"):
                 continue                # Jagdpanzer: noch nichts fuer Bots (seit 0.34.107)
+            if not k.ist_bot and b.werte.get("nur_bot"):
+                continue                # Flakwagen: nur Bots am Steuer (seit 0.34.114)
             d = b.pos.distance_squared_to(k.pos)
             # Jede Art hat ihre Reichweite: an einen Panzer kommt man nicht
             # so nah heran wie an einen Buggy (seit 0.34.59).

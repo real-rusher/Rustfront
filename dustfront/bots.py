@@ -1902,7 +1902,34 @@ class BotHirn(Taktik):
         ein["ziel"] = [round(ziel.x, 1), round(ziel.y, 1)]
         if ziel_ort is not None and getattr(b, "rechteckig", False) and self.reaktion_rest <= 0.0:
             self._fahrzeug_feuern(b, z, ziel_ort, ein)
+        if getattr(b, "flak", False):
+            self._flak_feuern(b, ein)
         return ein
+
+    def _flak_feuern(self, b, ein: dict) -> None:
+        """Am Flak-Vierling (seit 0.34.114): ein Luftziel der Gegner in
+        Reichweite geht vor jedem Bodenziel. Der Bot legt den Zeiger auf das
+        *Bild* des Fliegers - die Zielregel (luft.py) rastet dann ein und
+        haelt vor - und feuert, sobald die Lafette nah genug dran ist. Mauern
+        zwischen Rohr und Boden unter ihm halten die Kugeln auf."""
+        f = K.FLAK
+        welt = self.g.welt
+        mitte = b.aufbau_mitte()
+        bester, weite = None, f["bot_reichweite"]
+        for lz in self.g.luft_ziele():
+            if (lz.fraktion and lz.fraktion == self.k.fraktion) or lz.objekt is b:
+                continue
+            d = lz.pos.distance_to(mitte)
+            if d < weite and welt.sicht_frei(mitte, lz.pos, b.ebene):
+                bester, weite = lz, d
+        self.flak_ziel = bester          # fuer die INFO-Ansicht des Testmodus
+        if bester is None:
+            return
+        ein["ziel"] = [round(bester.bild_pos.x, 1), round(bester.bild_pos.y, 1)]
+        ort = self.g._vorhalten(self.k, bester)
+        weg = ort - mitte
+        soll = math.degrees(math.atan2(weg.y, weg.x))
+        ein["feuert"] = abs(_winkel_diff(b.aufbau, soll)) <= f["bot_winkel"]
 
     def _wegpunkt_fuer(self, b, ort):
         """Der naechste Wegpunkt zu `ort` fuer den Wagen. Seit 0.34.95 aus
