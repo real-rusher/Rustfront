@@ -4,7 +4,7 @@ Wunsch des Besitzers (wortgetreu zusammengefasst): die letzten Aenderungen
 (0.34.117 bis 0.34.120) haben viele Designfehler. Zu tun, jeweils
 **komplett neu, ohne Bezug auf das Bisherige**, so wie urspruenglich gewuenscht:
 
-1. Bomben am Hubschrauber (Tragschrauber) komplett neu machen und designen. - **erledigt (ungeprueft im Bild)**
+1. Bomben am Hubschrauber (Tragschrauber) komplett neu machen und designen. - **erledigt**: zweiter Anlauf nach Einwand des Besitzers (keine moderne Fliegerbombe, nichts am Heli sichtbar, klein, Schrott): kleine rostige Blechdose mit Draht, Naegeln, Klebeband und Lunte; der Fahrer laesst sie neben der Kanzel fallen (`bombe.abwurf` in config), sie ueberschlaegt sich, Lunte glimmt, Funken, Rauchfaden. Klaenge `bombe_ab` (Zuenden) und `bombe_fall` (Zischen) neu.
 2. Alle Explosionen, Rauch, sonstige Effekte und Animationen neu. - **Effektsystem erledigt**, Auf-/Abbau-Animationen von Funkwagen/Werfer noch offen
 3. Raketen und 3D-Teil beim Werfer komplett neu. - **offen**
 4. Flak-Schuesse komplett neu. - **offen** (Wolke schon neu, Geschoss/Leuchtspur/Muendungsfeuer nicht)
@@ -33,8 +33,9 @@ Tragschrauber Feld 20 Bombe mit Richtung).
 * `dustfront/drei_d.py` - kleiner 3D-Zeichner (Kegelstumpf, Platte, Quader,
   drehen/kippen/rollen, Projektion Bild-y = y - z, Licht in Stufen). Gedacht
   auch fuer das neue Werfer-Gestell und die Raketen.
-* `dustfront/art_bombe.py` - Bombenmodell (3D); Tragschrauber-Bild mit Bomben
-  `tsb<N>_<Bild>`, Schatten `tss<N>`, fallende Bombe `bombe_fallend`.
+* `dustfront/art_bombe.py` - Schrottbombe `schrottbombe(winkel)` (12 Stufen),
+  `lunte_spitze(winkel)`; gezeichnet im Fall von `luft._bomben_fallend_zeichnen`.
+  Der Tragschrauber hat wieder sein normales Bild und `tragschrauber_schatten`.
 * Jagdpanzer: `_kommandantenluke` in `art_neue_fahrzeuge.jagdpanzer_wanne`.
 * Krad: `Krad.beifahrer_sitz/beifahrer_klemmen`, `K.KRAD beifahrer_bogen`,
   Zeichnen `LuftTeil._beifahrer_zeichnen`, Klemmen in `Spieler.schritt`.
