@@ -17119,6 +17119,58 @@ pruef("Springt die Uhr des Gastgebers zurueck (neues Gefecht), stellt sich der P
       abs(_gt303._uhr_versatz - (5.0 - 11.0)) < 1e-9)
 K.NETZ["puffer_an"] = False
 
+print("\n-- 0.34.104: Eingabepuffer beim Gastgeber - die Bewegung genau so lange, wie der Gast sie meinte")
+K.NETZ["puffer_an"] = True
+pruef("Der Eingabepuffer ist an", K.NETZ["eingabe_puffer"])
+# Dash und Zickzack bei 400 ms Ping und +-80 ms Schwankung: keine Korrektur.
+w304, g304 = _paar303(0.4, 0.08, seed_=4)
+# Die Figur des Gastgebers haengt an derselben Tastatur wie der Gast und
+# liefe neben ihm her - wer sich anrempelt, wird beim Gastgeber
+# auseinandergeschoben, und das rechnet die Vorhersage bewusst nicht. Also weg
+# mit ihr: hier geht es nur um Laufen und Dash.
+from dustfront.world import freier_punkt as _fp304
+w304.ich.pos.update(_fp304(w304.welt, 0, _rnd303.Random(7),
+                           weg_von=w304.kaempfer[g304.meine_nummer].pos, mindest=600.0))
+w304.ich.vorher.update(w304.ich.pos)
+_lauf303(w304, g304, 1.0, [])
+_spur304 = []
+for _i304 in range(8):
+    _lauf303(w304, g304, 0.17, [["rechts"], ["links"], ["hoch"], ["runter"]][_i304 % 4],
+             ["dash"] if _i304 in (2, 5) else (), spur_=_spur304)
+_lauf303(w304, g304, 2.0, [], spur_=_spur304)
+# Nicht "null Korrekturen": je nach Einstiegsort streift der Gast etwas, das
+# ihn beim Gastgeber schiebt (Figur, Fahrzeug) - das rechnet die Vorhersage
+# bewusst nicht. Ohne Eingabepuffer lagen hier bis zu 30 px daneben.
+pruef("Dash und Zickzack bei 400 ms Ping und Schwankung: die Vorhersage liegt unter 1 px daneben",
+      g304.vh_fehler_max < 1.0 and g304.vh_spruenge == 0
+      and _spur304[-1][1].distance_to(_spur304[-1][2]) < 0.5,
+      "%d Korrekturen (%.1f px), Ende %.2f px, Tempofaktor %.5f" % (
+          g304.vh_korrekturen, g304.vh_fehler_max,
+          _spur304[-1][1].distance_to(_spur304[-1][2]), g304._vh_luft))
+# Nur die Bewegung wartet: Schiessen wirkt sofort, wenn die Eingabe ankommt.
+_wk304 = w304.kaempfer[g304.meine_nummer]
+_l304 = next(iter(w304.gastgeber.leitungen.values()))
+_wk304.__dict__.setdefault("_bew_schlange", __import__("collections").deque()).clear()
+w304._eingabe_vom_gast(_wk304, {"t": "ein", "will": [1.0, 0.0], "ziel": [0.0, 0.0], "feuert": True,
+                                 "zielt": False, "knoepfe": [], "waffe": -1, "en": 99999, "es": 4})
+pruef("Schiessen und Zielen wirken sofort - nur die Laufrichtung wartet im Puffer",
+      _wk304.feuert and len(_wk304._bew_schlange) >= 1 and _wk304.ein_nr != 99999)
+w304._bewegung_fuehren()
+pruef("... und kommt dran, sobald die vorige Bewegung ihre Schritte hatte",
+      _wk304.ein_nr == 99999 or len(_wk304._bew_schlange) >= 1)
+# Zu viel Vorlauf wird abgebaut.
+_wk304._bew_schlange.clear()
+for _n304 in range(40):
+    w304._eingabe_vom_gast(_wk304, {"t": "ein", "will": [0.0, 1.0], "ziel": [0.0, 0.0], "feuert": False,
+                                     "zielt": False, "knoepfe": [], "waffe": -1, "en": 100000 + _n304, "es": 4})
+for _ in range(2):
+    w304._bewegung_fuehren(); w304._bewegung_gezaehlt()
+_vorlauf304 = sum(b_.dauer for b_ in _wk304._bew_schlange if b_.dauer is not None)
+pruef("Staut sich der Puffer (ein Schwall nach einem Haenger), wird er abgebaut statt die Figur hinterherhinken zu lassen",
+      _vorlauf304 <= K.NETZ["eingabe_vorlauf_hoechstens"] + 4, "%d Schritte" % _vorlauf304)
+w304.verlassen(); g304.verlassen()
+K.NETZ["puffer_an"] = False
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

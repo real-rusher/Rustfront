@@ -65,7 +65,7 @@ from . import ui
 from .bots import BotTeil
 from .lobby import LobbyTeil, lobby_regeln
 from .schlacht import SchlachtTeil
-from .gastseite import GastTeil
+from .gastseite import GastTeil, WirtTeil
 from .spielerkosmetik import KosmetikTeil
 from . import klassen as klassen_modul
 from . import world as welt_modul
@@ -782,7 +782,7 @@ def _version_kleiner(a: str, b: str) -> bool:
     return teile(a) < teile(b)
 
 
-class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil):
+class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, WirtTeil):
     # Die Faehigkeiten der Klassen (Taste C, seit 0.34.73) legen Dinge aus
     # ausruestung.py hin. Bis 0.34.79 gingen die nicht ueber das Netz, und
     # nur der Testmodus schaltete sie ein. Seitdem stehen sie in der
@@ -3437,16 +3437,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil):
             elif art == "ein":
                 k = self.kaempfer.get(nummer)
                 if k is not None:
-                    self._anwenden(k, nachricht)
-                    # Vorhersage beim Gast (seit 0.34.103): welche seiner
-                    # Eingaben gilt jetzt, und seit wann (ein_seit zaehlt
-                    # die Schritte, in denen sie bewegt hat).
-                    if "en" in nachricht:
-                        try:
-                            k.ein_nr = int(nachricht["en"])
-                            k.ein_seit = 0.0
-                        except (TypeError, ValueError):
-                            pass
+                    # Seit 0.34.104 ueber den Eingabepuffer (gastseite.WirtTeil):
+                    # die Bewegung genau so lange, wie der Gast sie meinte,
+                    # alles andere sofort.
+                    self._eingabe_vom_gast(k, nachricht)
             elif art == "loadout":
                 # Der Gast hat sein Loadout im Spiel geaendert (seit
                 # 0.34.12). Bis dahin kannte der Gastgeber nur das aus dem
@@ -3506,7 +3500,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil):
             self._runden(dt)
         self._gegnerlast_zaehlen()
         self._rpg_regeln()
+        self._bewegung_fuehren()
         self.welt.schritt(dt)
+        self._bewegung_gezaehlt()
         for k in self.kaempfer.values():
             if k.__dict__.get("ein_nr", -1) >= 0:
                 k.ein_seit += dt
@@ -4830,7 +4826,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil):
                 spieler[-1].update({
                     "en": k.ein_nr, "ea": round(k.ein_seit, 4),
                     "tv": [round(k.tempo.x, 2), round(k.tempo.y, 2)],
-                    "lf": round(k.__dict__.get("_luft", 1.0), 4)})
+                    # Genau: ein gerundeter Faktor laeuft ueber viele
+                    # Schritte zu Zehntelpixeln auf (seit 0.34.104).
+                    "lf": round(k.__dict__.get("_luft", 1.0), 7)})
         flug = []
         gegner = []
         beute = []

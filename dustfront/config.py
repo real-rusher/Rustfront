@@ -843,6 +843,15 @@ NETZ = dict(
     vorhersage_ohne_antwort=0.75,
     vorhersage_spur=480,
     vorhersage_nachrechnen=24,  # so viele Schritte rechnet der Abgleich hoechstens nach
+    # Eingabepuffer beim Gastgeber (gastseite.WirtTeil, seit 0.34.104): die
+    # Bewegung eines Gasts genau so viele Schritte, wie er sie gemeint hat.
+    # Mehr als eingabe_vorlauf_hoechstens Schritte Vorlauf (200 ms) werden
+    # sofort abgebaut; war eingabe_fenster Schritte (1 s) lang immer mehr als
+    # eingabe_vorlauf_ruhig da, ein Schritt.
+    eingabe_puffer=True,
+    eingabe_vorlauf_hoechstens=24,
+    eingabe_vorlauf_ruhig=2,
+    eingabe_fenster=120,
     # Der Sendepuffer des Systems je Gast (Bytes). Klein, damit sich dort
     # nichts sekundenlang staut: was nicht hinausgeht, merkt der Gegendruck.
     sendepuffer=65536,

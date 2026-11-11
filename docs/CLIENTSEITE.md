@@ -135,17 +135,25 @@ Aufwand: gross. Lohnt erst, wenn der Gastgeber messbar an den Bots haengt
   davon ab, wann die naechste ankommt - bei Schwankung also nicht davon, wie
   lange der Gast sie gemeint hat. Der Abgleich rechnet fehlende Schritte
   nach; beim Dash bleibt trotzdem ein Versatz bis etwa 15 px, der weich
-  ausgeglichen wird. Ganz weg waere er mit einem **Eingabepuffer beim
-  Gastgeber** (jede Eingabe genau so viele Schritte, wie der Gast sie
-  gerechnet hat) - kostet etwas Verzoegerung fuer alle anderen. Kandidat
-  fuer spaeter, wenn es im Spiel auffaellt.
+  ausgeglichen wird.
+* **0.34.104: Eingabepuffer beim Gastgeber** - jede Eingabe sagt, wie
+  viele Schritte die vorige beim Gast galt ("es"), und der Gastgeber wendet
+  die *Bewegung* genau so lange an. Seitdem stimmt die Vorhersage auch bei
+  Schwankung ohne Korrektur. Nur die Bewegung wartet (0-17 ms), Schiessen
+  und alle anderen Tasten wirken sofort. Es bleiben Korrekturen, wo
+  Figuren einander wegschieben (Welt.auseinander) - klein und weich.
 
 ## 5. Empfohlene Reihenfolge
 
-1. **B** - klein, sofort ruhiger auf schlechtem Netz.
-2. **A** - das groesste Gefuehl: die eigene Figur reagiert sofort.
-3. **C** - Bandbreite auf grossen Karten, Schutz gegen Wandhacks.
-4. **D** - Treffer, wie man sie sieht.
+1. **B** - erledigt (0.34.103).
+2. **A** - erledigt (0.34.103), mit Eingabepuffer (0.34.104).
+3. **D** - seit 0.34.104 vorgezogen: der Gast sieht Gegner einen halben
+   Ping plus Puffer zu spaet, getroffen wird aber, wo sie beim Gastgeber
+   stehen. Das ist jetzt der groesste spuerbare Nachteil auf schlechtem
+   Internet - und erst mit D darf der Puffer groesser werden (dann wird
+   das Bild bei starker Schwankung auch ruhiger).
+4. **C** - Bandbreite auf grossen Karten, Schutz gegen Wandhacks. Nach
+   0.34.102 (rund 40 KB/s in SCHLACHT) nicht mehr dringend.
 5. **E** - weniger Daten, fluessige Fluege.
 6. **F** - nur, wenn der Gastgeber an den Bots haengt.
 

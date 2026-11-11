@@ -76,6 +76,7 @@ class GastTeil:
         self._ein_nr = 0
         self._ein_will = pygame.Vector2(0, 0)
         self._ein_seit = 0.0               # so lange gilt die zuletzt gesendete Eingabe
+        self._ein_schritte = 0             # so viele Schritte galt sie (fuer den Eingabepuffer)
         self._vh_spur: deque = deque()     # (Nummer, seit, Ort, Tempo, Ebene)
         self._vh_ort = None                # vorhergesagter Ort, None = aus
         self._vh_tempo = pygame.Vector2(0, 0)
@@ -195,6 +196,11 @@ class GastTeil:
             return
         self._ein_nr += 1
         meldung["en"] = self._ein_nr
+        # Wie viele Schritte die vorige Eingabe hier gegolten hat (seit
+        # 0.34.104): genau so lange wendet der Gastgeber sie an
+        # (_bewegung_fuehren) - dann stimmt die Vorhersage auch bei Schwankung.
+        meldung["es"] = self._ein_schritte
+        self._ein_schritte = 0
         try:
             will = pygame.Vector2(float(meldung["will"][0]), float(meldung["will"][1]))
         except (KeyError, TypeError, ValueError, IndexError):
@@ -270,7 +276,9 @@ class GastTeil:
             self._vorhersage_setzen(ort, tempo, ebene)
             return
         tempo_fehler = tempo - passend[3]
-        if fehler.length_squared() > 0.01 or tempo_fehler.length_squared() > 0.01:
+        # Gezaehlt ab einem Viertelpixel: darunter ist es die Rundung der
+        # Meldung (Orte auf 0,1 px).
+        if fehler.length_squared() > 0.0625 or tempo_fehler.length_squared() > 1.0:
             self.vh_korrekturen += 1
             self.vh_fehler_max = max(self.vh_fehler_max, fehler.length())
         # Die Uhr des Dashs gleich mit (seit 0.34.103): wirkte eine Eingabe
@@ -281,7 +289,10 @@ class GastTeil:
         except (TypeError, ValueError):
             dash_gastgeber = passend[6]
         nach = sum(1 for x in self._vh_spur if (x[0], x[1]) > (passend[0], passend[1]))
-        if abs(dash_gastgeber - passend[6]) > K.FIXED_DT * 0.5:
+        # Erst ab anderthalb Schritten: "dr" kommt auf 0,01 s gerundet, und
+        # die Rundung allein (bis 5 ms) liess den Stoss sonst einen Schritt
+        # zu frueh enden.
+        if abs(dash_gastgeber - passend[6]) > K.FIXED_DT * 1.5:
             rest = max(0.0, dash_gastgeber - nach * K.FIXED_DT)
             if rest > 0.0 and self._vh_dash_rest <= 0.0:
                 try:
@@ -321,6 +332,7 @@ class GastTeil:
         die zuletzt hinausging (der Gastgeber wendet sie genauso an)."""
         k = self.ich
         self._ein_seit += dt
+        self._ein_schritte += 1
         self._vh_ohne_antwort += dt
         if not self._vorhersage_moeglich(k):
             self._vorhersage_aus()
@@ -387,3 +399,153 @@ class GastTeil:
         ort = self._vh_ort + self._vh_anzeige
         k.vorher.update(ort)
         k.pos.update(ort)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Beim Gastgeber: der Eingabepuffer fuer die Bewegung (seit 0.34.104)
+# ══════════════════════════════════════════════════════════════════
+#
+# Wie lange der Gastgeber eine Eingabe anwendet, hing davon ab, wann die
+# naechste ankam - bei schwankender Leitung also nicht davon, wie lange der
+# Gast sie gemeint hatte. Die Vorhersage lag dann daneben (beim Dash bis
+# 30 px). Jetzt sagt jede Eingabe, wie viele Schritte die vorige beim Gast
+# galt ("es"), und der Gastgeber wendet die **Bewegung** (Laufrichtung und
+# Dash) genau so viele Schritte an.
+#
+# Nur die Bewegung: Zielen, Schiessen, Nachladen, Waffe, Medkit, E und alle
+# anderen Tasten wirken weiter sofort, wenn die Eingabe ankommt - sonst
+# trafe man auf schlechtem Internet noch schlechter.
+#
+# Kommt die naechste Eingabe zu spaet, laeuft die alte weiter (wie bisher);
+# der Vorlauf, der so entsteht, faengt die naechste Schwankung ab. Ist eine
+# Sekunde lang mehr Vorlauf da als noetig, wird ein Schritt davon abgebaut;
+# ueber `eingabe_vorlauf_hoechstens` Schritte sofort. Im Fahrzeug, am Boden
+# und wo die Vorhersage ohnehin nicht rechnet, wirkt alles sofort wie
+# bisher.
+
+
+class _Bewegung:
+    __slots__ = ("nr", "will", "dash", "dauer")
+
+    def __init__(self, nr: int, will, dash: bool) -> None:
+        self.nr = nr
+        self.will = will
+        self.dash = dash
+        self.dauer = None          # Schritte - bekannt, sobald die naechste Eingabe da ist
+
+
+class WirtTeil:
+    """Der Eingabepuffer beim Gastgeber. Ein Anteil des Gefechts."""
+
+    @staticmethod
+    def _bewegung_puffern_moeglich(k) -> bool:
+        return (K.NETZ["eingabe_puffer"] and k.lebt and not k.am_boden
+                and k.fahrzeug is None and getattr(k, "mitfahrt", None) is None)
+
+    def _eingabe_vom_gast(self, k, nachricht: dict) -> None:
+        """Eine Eingabe eines Gasts ist angekommen."""
+        if "en" not in nachricht or "es" not in nachricht or not self._bewegung_puffern_moeglich(k):
+            # Wie bis 0.34.103: alles sofort - und was noch im Puffer lag, gilt
+            # nicht mehr (im Wagen lenkt die Richtung den Wagen).
+            k.__dict__.pop("_bew_schlange", None)
+            k._bew_aktuell = None
+            self._anwenden(k, nachricht)
+            if "en" in nachricht:
+                try:
+                    k.ein_nr = int(nachricht["en"])
+                    k.ein_seit = 0.0
+                except (TypeError, ValueError):
+                    pass
+            return
+        try:
+            nr = int(nachricht["en"])
+            es = max(1, int(nachricht["es"]))
+            will = pygame.Vector2(float(nachricht["will"][0]), float(nachricht["will"][1]))
+        except (KeyError, TypeError, ValueError, IndexError):
+            self._anwenden(k, nachricht)
+            return
+        if will.length_squared() > 1.0:
+            will.normalize_ip()
+        knoepfe = nachricht.get("knoepfe") or []
+        dash = isinstance(knoepfe, list) and "dash" in knoepfe
+        # Alles ausser der Bewegung: sofort.
+        sofort = dict(nachricht)
+        sofort["will"] = [k.will.x, k.will.y]
+        if dash:
+            sofort["knoepfe"] = [x for x in knoepfe if x != "dash"]
+        self._anwenden(k, sofort)
+        schlange = k.__dict__.setdefault("_bew_schlange", deque())
+        aktuell = k.__dict__.get("_bew_aktuell")
+        # "es" ist die Dauer der vorigen Eingabe.
+        if schlange:
+            if schlange[-1].dauer is None:
+                schlange[-1].dauer = es
+        elif aktuell is not None and aktuell.dauer is None:
+            aktuell.dauer = es
+        schlange.append(_Bewegung(nr, will, dash))
+
+    def _bewegung_fuehren(self) -> None:
+        """Vor jedem Schritt der Welt: welche Bewegung jetzt gilt."""
+        n = K.NETZ
+        for k in self.kaempfer.values():
+            schlange = k.__dict__.get("_bew_schlange")
+            if schlange is None:
+                continue
+            if not self._bewegung_puffern_moeglich(k):
+                # Inzwischen im Wagen, am Boden ...: die letzte Richtung gilt
+                # gleich, der Puffer ist vorbei.
+                if schlange:
+                    letzte = schlange[-1]
+                    k.ein_nr, k.ein_seit = letzte.nr, 0.0
+                del k.__dict__["_bew_schlange"]
+                k._bew_aktuell = None
+                continue
+            aktuell = k.__dict__.get("_bew_aktuell")
+            schritte = k.__dict__.get("_bew_schritte", 0)
+            vorlauf = sum(b.dauer for b in schlange if b.dauer is not None)
+            if aktuell is not None and aktuell.dauer is not None:
+                vorlauf += max(0, aktuell.dauer - schritte)
+            # Wie viel Vorlauf es mindestens gab - eine Sekunde lang gemerkt.
+            k._bew_min = min(k.__dict__.get("_bew_min", 999), vorlauf)
+            k._bew_fenster = k.__dict__.get("_bew_fenster", 0) + 1
+            abbauen = False
+            if k._bew_fenster >= n["eingabe_fenster"]:
+                abbauen = k._bew_min > n["eingabe_vorlauf_ruhig"]
+                k._bew_fenster = 0
+                k._bew_min = 999
+            wechseln = False
+            if aktuell is None:
+                wechseln = bool(schlange)
+            elif schlange:
+                fertig = aktuell.dauer is not None and schritte >= aktuell.dauer
+                zu_viel = vorlauf > n["eingabe_vorlauf_hoechstens"]
+                kuerzer = abbauen and aktuell.dauer is not None and schritte >= aktuell.dauer - 1
+                wechseln = fertig or zu_viel or kuerzer
+            if wechseln and vorlauf > n["eingabe_vorlauf_hoechstens"]:
+                # Ein Schwall nach einem Haenger: gleich auf das erlaubte Mass
+                # zurueck, statt Schritt fuer Schritt hinterherzulaufen. Was
+                # uebersprungen wird, verliert nur seine Richtung - ein Dash
+                # darin kommt mit der naechsten.
+                dash = False
+                while len(schlange) > 1 and vorlauf > n["eingabe_vorlauf_hoechstens"]:
+                    weg = schlange.popleft()
+                    dash = dash or weg.dash
+                    vorlauf -= weg.dauer or 0
+                if dash:
+                    schlange[0].dash = True
+            if wechseln:
+                b = schlange.popleft()
+                k._bew_aktuell = b
+                k._bew_schritte = 0
+                if not k.gehalten:
+                    k.will = pygame.Vector2(b.will)
+                if b.dash:
+                    k.dashen()
+                k.ein_nr = b.nr
+                k.ein_seit = 0.0
+
+    def _bewegung_gezaehlt(self) -> None:
+        """Nach jedem Schritt der Welt."""
+        for k in self.kaempfer.values():
+            if k.__dict__.get("_bew_aktuell") is not None:
+                k._bew_schritte = k.__dict__.get("_bew_schritte", 0) + 1
