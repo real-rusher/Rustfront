@@ -166,14 +166,30 @@ class GastTeil:
         """Nach _welt_uebernehmen: die Ueberblendung nach der Uhr des
         Gastgebers, statt nach dem Zeitpunkt der Ankunft."""
         zt = meldung.get("zt")
-        if not isinstance(zt, (int, float)) or not K.NETZ["puffer_an"] or self._uhr_versatz is None:
+        if not isinstance(zt, (int, float)):
             return
         zt = float(zt)
-        if self._zt_zuletzt is not None and zt > self._zt_zuletzt:
-            self._paket_takt = max(K.NETZ["takt"] * 0.5, min(0.5, zt - self._zt_zuletzt))
-        self._zt_davor, self._zt_zuletzt = self._zt_zuletzt, zt
+        # Immer gemerkt (auch ohne Puffer): daraus folgt, welchen Zeitpunkt
+        # der Gast gerade sieht (gesehene_zeit).
+        zuletzt = self._zt_zuletzt
+        self._zt_davor, self._zt_zuletzt = zuletzt, zt
+        if not K.NETZ["puffer_an"] or self._uhr_versatz is None:
+            return
+        if zuletzt is not None and zt > zuletzt:
+            self._paket_takt = max(K.NETZ["takt"] * 0.5, min(0.5, zt - zuletzt))
         abspielen = self._puffer_jetzt() + self._uhr_versatz - self._puffer_verzoegerung()
         self._seit_paket = max(0.0, min(self._paket_takt, abspielen - zt))
+
+    def gesehene_zeit(self):
+        """Welchen Zeitpunkt (Uhr des Gastgebers) zeigt das Bild gerade? Die
+        Figuren stehen zwischen der vorletzten und der letzten abgespielten
+        Meldung (Gefecht.misch) - also dort dazwischen."""
+        a, b = self._zt_davor, self._zt_zuletzt
+        if b is None:
+            return None
+        if a is None or b <= a:
+            return b
+        return a + (b - a) * self.misch(0.0)
 
     # ---- Vorhersage --------------------------------------------------------
     def _vorhersage_moeglich(self, k) -> bool:
@@ -201,6 +217,11 @@ class GastTeil:
         # (_bewegung_fuehren) - dann stimmt die Vorhersage auch bei Schwankung.
         meldung["es"] = self._ein_schritte
         self._ein_schritte = 0
+        # Welchen Zeitpunkt (Uhr des Gastgebers) der Gast gerade sieht - fuer
+        # die Treffer-Rueckrechnung (seit 0.34.105).
+        sz = self.gesehene_zeit()
+        if sz is not None:
+            meldung["sz"] = round(sz, 3)
         try:
             will = pygame.Vector2(float(meldung["will"][0]), float(meldung["will"][1]))
         except (KeyError, TypeError, ValueError, IndexError):
@@ -444,6 +465,17 @@ class WirtTeil:
 
     def _eingabe_vom_gast(self, k, nachricht: dict) -> None:
         """Eine Eingabe eines Gasts ist angekommen."""
+        # Treffer-Rueckrechnung (seit 0.34.105): welchen Zeitpunkt sieht der
+        # Gast gerade? So weit zurueck treffen seine Kugeln - hoechstens
+        # rueck_hoechstens. Ein Gast, der eine alte Zeit schickt, gewinnt
+        # damit nicht mehr als diese Grenze.
+        k.rueck = 0.0
+        if K.NETZ["rueck_an"] and "sz" in nachricht:
+            try:
+                k.rueck = max(0.0, min(K.NETZ["rueck_hoechstens"],
+                                       float(self._zeit) - float(nachricht["sz"])))
+            except (TypeError, ValueError):
+                k.rueck = 0.0
         if "en" not in nachricht or "es" not in nachricht or not self._bewegung_puffern_moeglich(k):
             # Wie bis 0.34.103: alles sofort - und was noch im Puffer lag, gilt
             # nicht mehr (im Wagen lenkt die Richtung den Wagen).

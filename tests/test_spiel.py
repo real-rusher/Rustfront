@@ -17171,6 +17171,94 @@ pruef("Staut sich der Puffer (ein Schwall nach einem Haenger), wird er abgebaut 
 w304.verlassen(); g304.verlassen()
 K.NETZ["puffer_an"] = False
 
+print("\n-- 0.34.105: Treffer-Rueckrechnung - die Kugel eines Gasts trifft, was er gesehen hat")
+w305, g305 = _paar59("pvp", karte="staubtal")
+_ziel305 = w305.ich
+_ziel305.unverwundbar = 0.0
+_a305 = pygame.Vector2(_ziel305.pos)
+w305.welt.lagen_merken(10.0)
+_ziel305.pos.update(_a305 + pygame.Vector2(60, 0))
+w305.welt.lagen_merken(10.2)
+_fr305 = "fremd"
+pruef("Ohne Rueckrechnung trifft eine Kugel, wo das Ziel jetzt steht",
+      w305.welt.treffer(_a305 + pygame.Vector2(60, 0), 2.0, _ziel305.ebene, _fr305) is _ziel305
+      and w305.welt.treffer(_a305, 2.0, _ziel305.ebene, _fr305) is not _ziel305)
+pruef("Mit 0,2 s Rueckrechnung trifft sie, wo es damals stand - und nicht, wo es jetzt steht",
+      w305.welt.treffer(_a305, 2.0, _ziel305.ebene, _fr305, 0.2) is _ziel305
+      and w305.welt.treffer(_a305 + pygame.Vector2(60, 0), 2.0, _ziel305.ebene, _fr305, 0.2) is not _ziel305)
+# Versetzt (Wiedereinstieg, Teleport): weiter, als es laufen kann - dann
+# zaehlt die jetzige Lage, nicht ein Ort, an dem es nie hinlief.
+_b305 = pygame.Vector2(_ziel305.pos)
+w305.welt.lagen_merken(10.3)
+_ziel305.pos.update(_b305 + pygame.Vector2(0, 900))
+w305.welt._raster_bauen()        # sonst stuende es im Raster noch an der alten Stelle
+w305.welt.lagen_merken(10.4)
+pruef("Wer versetzt wurde, wird nicht an seiner alten Stelle getroffen",
+      w305.welt.treffer(_b305, 2.0, _ziel305.ebene, _fr305, 0.1) is not _ziel305
+      and w305.welt.treffer(_b305 + pygame.Vector2(0, 900), 2.0, _ziel305.ebene, _fr305, 0.1) is _ziel305)
+_gk305 = w305.kaempfer[g305.meine_nummer]
+w305._eingabe_vom_gast(_gk305, {"t": "ein", "will": [0, 0], "ziel": [0, 0], "feuert": False,
+                                 "knoepfe": [], "waffe": -1, "sz": w305._zeit - 30.0})
+pruef("Wer eine uralte Zeit schickt, bekommt hoechstens die Grenze (0,5 s)",
+      abs(_gk305.rueck - K.NETZ["rueck_hoechstens"]) < 1e-9 and K.NETZ["rueck_hoechstens"] <= 0.5)
+w305._eingabe_vom_gast(_gk305, {"t": "ein", "will": [0, 0], "ziel": [0, 0], "feuert": False,
+                                 "knoepfe": [], "waffe": -1, "sz": w305._zeit + 5.0})
+pruef("... und eine Zeit aus der Zukunft gar keine", _gk305.rueck == 0.0)
+from dustfront.entities import Geschoss as _Gs305
+_gk305.rueck = 0.123
+pruef("Die Kugel eines Gasts bekommt seinen Rueckblick mit, die eines Bots keinen",
+      _Gs305(pygame.Vector2(0, 0), 0.0, K.WAFFEN["sturm"], 0, _gk305, "sturm").rueck == 0.123
+      and _Gs305(pygame.Vector2(0, 0), 0.0, K.WAFFEN["sturm"], 0, None, "sturm").rueck == 0.0)
+w305.verlassen(); g305.verlassen()
+# Im Gefecht bei 150 ms Ping: auf einen Laufenden zielen, wo man ihn sieht.
+def _schiessen305(rueck_an_):
+    K.NETZ["rueck_an"] = rueck_an_
+    K.NETZ["puffer_an"] = True
+    w_, g_ = _paar303(0.15, 0.03, seed_=5)
+    from dustfront.world import freier_punkt as _fp305
+    rnd_ = _rnd303.Random(11)
+    q_ = None
+    for _ in range(800):
+        q_ = _fp305(w_.welt, 0, rnd_)
+        if all(w_.welt.frei(q_ + pygame.Vector2(dx_, dy_), 10, 0)
+               for dx_ in range(-160, 161, 20) for dy_ in (0, 80, 160)):
+            break
+    ziel_, schuetze_ = w_.ich, w_.kaempfer[g_.meine_nummer]
+    ziel_.pos.update(q_); ziel_.vorher.update(q_)
+    schuetze_.pos.update(q_ + pygame.Vector2(0, 160)); schuetze_.vorher.update(schuetze_.pos)
+    if "sturm" in schuetze_.waffen:
+        schuetze_.waffe = schuetze_.waffen.index("sturm")
+    zahl_ = [0]
+    def schaden_(menge, schub=None, von=None, durch=0.0):
+        if von is schuetze_ or getattr(von, "von", None) is schuetze_:
+            zahl_[0] += 1
+    ziel_.schaden = schaden_
+    alt_ = g_._meine_eingabe
+    def ein_():
+        m_ = alt_()
+        gegner_ = g_.kaempfer.get(ziel_.nummer)
+        if gegner_ is not None:
+            z_ = gegner_.zeichenpos(g_.misch(0.0))
+            m_["ziel"] = [round(z_.x, 1), round(z_.y, 1)]
+        m_["will"] = [0.0, 0.0]
+        m_["feuert"] = True
+        return m_
+    g_._meine_eingabe = ein_
+    for i_ in range(int(6 / K.FIXED_DT)):
+        _uhr303[0] += K.FIXED_DT
+        app.eingabe._gehalten = {"rechts"} if (i_ // 90) % 2 == 0 else {"links"}
+        w_.schritt(K.FIXED_DT); g_.schritt(K.FIXED_DT)
+        schuetze_.magazin[schuetze_.waffe_name] = 30
+        schuetze_.nachlade_rest = 0.0
+        schuetze_.leben = schuetze_.max_leben
+    w_.verlassen(); g_.verlassen()
+    K.NETZ["rueck_an"] = True
+    K.NETZ["puffer_an"] = False
+    return zahl_[0]
+_ohne305, _mit305 = _schiessen305(False), _schiessen305(True)
+pruef("150 ms Ping, Ziel laeuft hin und her: mit Rueckrechnung deutlich mehr Treffer",
+      _mit305 >= _ohne305 * 1.25 and _mit305 > 0, "%d statt %d" % (_mit305, _ohne305))
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

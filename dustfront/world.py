@@ -1053,15 +1053,56 @@ class Welt:
                     raus.append(w)
         return raus
 
-    def treffer(self, pos: pygame.Vector2, radius: float, ebene: int, feind_von: str):
+    def treffer(self, pos: pygame.Vector2, radius: float, ebene: int, feind_von: str,
+                rueck: float = 0.0):
         """Naechstes lebendes Ziel einer anderen Fraktion im Kreis.
 
         Was rechteckig ist (Panzer, Panzerwagen, seit 0.34.59), wird an
-        seinem Rechteck getroffen und nicht an einem Kreis darum."""
+        seinem Rechteck getroffen und nicht an einem Kreis darum.
+
+        `rueck` (seit 0.34.105, Treffer-Rueckrechnung): so viele Sekunden
+        zurueck wird gefragt - jedes Ziel steht dann dort, wo es damals stand
+        (lagen_merken). Die Kugel eines Gasts fragt so nach dem, was der Gast
+        gesehen hat. Waende fragt der Aufrufer wie immer jetzt."""
         bestes, beste_d = None, 1e18
-        for w in self.nahe(pos, radius + 24, ebene):
+        damals = None
+        weite = radius + 24
+        if rueck > 0.0 and self.__dict__.get("_lagen"):
+            damals = self._lagen_um(self._lagen_zeit - rueck)
+            if damals is not None:
+                # So weit kann sich seitdem etwas bewegt haben (ein Dash ist
+                # mit gut 400 px/s das schnellste) - nicht mehr: jeder
+                # Teilschritt jeder Kugel fragt hier.
+                weite += min(K.NETZ["rueck_suchweite"], rueck * K.NETZ["rueck_tempo"])
+        for w in self.nahe(pos, weite, ebene):
             if not w.lebt or w.fraktion == feind_von or w.leben <= 0:
                 continue
+            if damals is not None:
+                eintrag = damals.get(id(w))
+                if eintrag is not None and eintrag[0] is w and (
+                        (w.pos.x - eintrag[1][0]) ** 2 + (w.pos.y - eintrag[1][1]) ** 2
+                        > (rueck * K.NETZ["rueck_tempo"] + 30.0) ** 2):
+                    # Weiter, als es in der Zeit laufen kann: versetzt
+                    # (Wiedereinstieg, Treppe, Teleport). Dann zaehlt, wo es
+                    # jetzt ist - sonst traefe die Kugel einen Ort, an dem es
+                    # nie hingelaufen ist.
+                    eintrag = None
+                if eintrag is not None and eintrag[0] is w:
+                    # Statt das Ziel zurueckzusetzen, den Punkt der Kugel um
+                    # den Weg verschieben, den es seitdem gemacht hat - dann
+                    # stimmt es auch fuer Rechtecke (beruehrt) ohne Umbau.
+                    p = pos + (w.pos - pygame.Vector2(eintrag[1]))
+                    if getattr(w, "rechteckig", False) or getattr(w, "c4_haftet", False):
+                        d = p.distance_squared_to(w.pos)
+                        if w.beruehrt(p, radius) and d < beste_d:
+                            bestes, beste_d = w, d
+                        continue
+                    d = p.distance_squared_to(w.pos)
+                    if d < (radius + w.radius) ** 2 and d < beste_d:
+                        bestes, beste_d = w, d
+                    continue
+                if pos.distance_squared_to(w.pos) > (radius + 24) ** 2:
+                    continue          # ohne alte Lage: nur, was jetzt nah ist
             d = pos.distance_squared_to(w.pos)
             if getattr(w, "rechteckig", False) or getattr(w, "c4_haftet", False):
                 # Auch der Buggy (seit 0.34.64) an seiner ganzen Laenge (zwei
@@ -1073,6 +1114,34 @@ class Welt:
             grenze = (radius + w.radius) ** 2
             if d < grenze and d < beste_d:
                 bestes, beste_d = w, d
+        return bestes
+
+    # ---- Treffer-Rueckrechnung (seit 0.34.105) -----------------------------
+    def lagen_merken(self, zeit: float) -> None:
+        """Wo jedes Wesen, das getroffen werden kann, gerade steht - eine
+        Drittelsekunde lang gemerkt (K.NETZ rueck_lagen). Nur beim Gastgeber
+        mit Gaesten (Gefecht)."""
+        from collections import deque
+        lagen = self.__dict__.get("_lagen")
+        if lagen is None:
+            lagen = self._lagen = deque()
+        lagen.append((zeit, {id(w): (w, (w.pos.x, w.pos.y)) for w in self.wesen
+                             if w.lebt and w.fraktion != "geschoss"}))
+        self._lagen_zeit = zeit
+        while len(lagen) > K.NETZ["rueck_lagen"]:
+            lagen.popleft()
+
+    def _lagen_um(self, zeit: float):
+        """Die gemerkte Lage, die dem Zeitpunkt am naechsten liegt - oder
+        None, wenn er vor der aeltesten liegt."""
+        lagen = self.__dict__.get("_lagen")
+        if not lagen or zeit < lagen[0][0] - 1e-6:
+            return None
+        bestes = None
+        for t, lage in reversed(lagen):
+            bestes = lage
+            if t <= zeit + 1e-6:
+                break
         return bestes
 
     # ---- Kollision ----------------------------------------------------

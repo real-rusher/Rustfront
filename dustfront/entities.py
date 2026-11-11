@@ -437,6 +437,9 @@ class Geschoss(Wesen):
         # und dann landete der Treffer bei der falschen.
         self.waffe = waffe
         self.quelle_fraktion = von.fraktion if von else "neutral"
+        # Treffer-Rueckrechnung (seit 0.34.105): die Kugel eines Gasts trifft,
+        # wo die Ziele standen, als er sie sah (Gefecht setzt `rueck`).
+        self.rueck = float(getattr(von, "rueck", 0.0) or 0.0) if von is not None else 0.0
         # Was die Waffe am Geschoss besonders macht (seit 0.34.62, siehe
         # K.WAFFEN): Schadensabfall, Durchschlag, Stoss, Blech.
         self.reichweite = float(daten["reichweite"])
@@ -490,7 +493,7 @@ class Geschoss(Wesen):
             self.pos += teil
             self.rest -= teil.length()
             ziel = self.welt.treffer(self.pos, self.radius, self.ebene,
-                                     self.quelle_fraktion)
+                                     self.quelle_fraktion, self.rueck)
             if self._eindringen is not None:
                 self._eindringen -= teil.length()
                 if self._eindringen <= 0.0:

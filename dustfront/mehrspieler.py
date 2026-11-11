@@ -3503,6 +3503,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         self._bewegung_fuehren()
         self.welt.schritt(dt)
         self._bewegung_gezaehlt()
+        if K.NETZ["rueck_an"] and self.gastgeber.leitungen:
+            # Fuer die Treffer-Rueckrechnung (seit 0.34.105): wo alle stehen,
+            # nach der Uhr, die auch in den Weltmeldungen steht ("zt").
+            self.welt.lagen_merken(self._zeit)
         for k in self.kaempfer.values():
             if k.__dict__.get("ein_nr", -1) >= 0:
                 k.ein_seit += dt

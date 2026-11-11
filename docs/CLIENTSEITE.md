@@ -147,13 +147,13 @@ Aufwand: gross. Lohnt erst, wenn der Gastgeber messbar an den Bots haengt
 
 1. **B** - erledigt (0.34.103).
 2. **A** - erledigt (0.34.103), mit Eingabepuffer (0.34.104).
-3. **D** - seit 0.34.104 vorgezogen: der Gast sieht Gegner einen halben
+3. **D** - erledigt (0.34.105), Grenze 0,5 s. Seit 0.34.104 vorgezogen: der Gast sieht Gegner einen halben
    Ping plus Puffer zu spaet, getroffen wird aber, wo sie beim Gastgeber
    stehen. Das ist jetzt der groesste spuerbare Nachteil auf schlechtem
    Internet - und erst mit D darf der Puffer groesser werden (dann wird
    das Bild bei starker Schwankung auch ruhiger).
-4. **C** - Bandbreite auf grossen Karten, Schutz gegen Wandhacks. Nach
-   0.34.102 (rund 40 KB/s in SCHLACHT) nicht mehr dringend.
+4. ~~**C**~~ - **kommt nicht** (Entscheidung des Besitzers, 0.34.105): alle
+   Wesen sollen beim Gast immer wie bisher gezeichnet werden.
 5. **E** - weniger Daten, fluessige Fluege.
 6. **F** - nur, wenn der Gastgeber an den Bots haengt.
 

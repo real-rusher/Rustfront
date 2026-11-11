@@ -852,6 +852,20 @@ NETZ = dict(
     eingabe_vorlauf_hoechstens=24,
     eingabe_vorlauf_ruhig=2,
     eingabe_fenster=120,
+    # Treffer-Rueckrechnung (seit 0.34.105, docs/CLIENTSEITE.md Stufe D): die
+    # Kugeln eines Gasts treffen, wo die Ziele standen, als er sie sah -
+    # hoechstens rueck_hoechstens s zurueck. Gemessen sieht ein Gast bei
+    # 300 ms Ping rund 0,4 s zurueck (Hin- und Rueckweg, Puffer,
+    # Ueberblendung). Hoeher hiesse: wer beschossen wird, wird oefter noch
+    # getroffen, obwohl er bei sich schon hinter der Deckung war.
+    # rueck_lagen: so viele Schritte merkt sich der Gastgeber (72 = 0,6 s);
+    # rueck_suchweite: so viel weiter sucht der Treffer nach Zielen, die
+    # seitdem weitergelaufen sind.
+    rueck_an=True,
+    rueck_hoechstens=0.5,
+    rueck_lagen=72,
+    rueck_suchweite=220.0,
+    rueck_tempo=450.0,        # px/s: so schnell bewegt sich hoechstens etwas
     # Der Sendepuffer des Systems je Gast (Bytes). Klein, damit sich dort
     # nichts sekundenlang staut: was nicht hinausgeht, merkt der Gegendruck.
     sendepuffer=65536,
