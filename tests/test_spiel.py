@@ -18259,6 +18259,33 @@ pruef("... ein Anfuehrer ausserhalb schon", bool(_tb115.funk_lage), "%d" % len(_
 _tm115.ki_stopp = False
 _tm115.verlassen()
 
+# Abwurf am Fallschirm zeichnen, fuer jede Fahrzeugart (seit 0.34.116). Gefunden
+# beim Filmen: `_fracht_zeichnen` nahm fuer jede Art ohne Eigenschaft
+# `rechteckig` die Wanne eines Schweren - Krad, Buggy, Trosswagen, Spulenwagen,
+# Funkwagen, Werfer und Tragschrauber stuerzten beim Zeichnen ab.
+_tm116 = _TM59.Testmodus(app, karte="staubtal_offen")
+_bild116 = pygame.Surface((K.GAME_W, K.GAME_H))
+_fehler116 = []
+for _art116 in _FZ59.ARTEN:
+    try:
+        _tm116._fracht_zeichnen(_bild116, _art116, pygame.Vector2(320, 180), 20.0)
+    except Exception as ex_:
+        _fehler116.append("%s: %s" % (_art116, ex_))
+pruef("Abwurf: die Last am Fallschirm laesst sich fuer jede Fahrzeugart zeichnen",
+      not _fehler116, "; ".join(_fehler116))
+_e116 = _tm116.welt.ebene(0)
+_tm116.nachschub_setzen("krad", pygame.Vector2(_e116.pixel_breite / 2, _e116.pixel_hoehe / 2), {"team": 0})
+_tm116.kamera.pos.update(_e116.pixel_breite / 2, _e116.pixel_hoehe / 2)
+_ok116 = True
+try:
+    for _ in range(int(2.0 / K.FIXED_DT)):
+        _tm116.schritt(K.FIXED_DT)
+    _tm116.zeichnen(_bild116, 1.0)
+except Exception as ex_:
+    _ok116 = False
+pruef("... und ein Krad im Abwurf kann im Gefecht gezeichnet werden (Testmodus)", _ok116 and bool(_tm116.abwuerfe))
+_tm116.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

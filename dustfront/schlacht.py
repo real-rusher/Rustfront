@@ -857,7 +857,7 @@ class SchlachtTeil:
             s = pygame.transform.scale(s, (s.get_width() * 2, s.get_height() * 2))
             ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y))))
             return
-        if not getattr(fahrzeug_modul.ARTEN.get(art), "rechteckig", True):
+        if not getattr(fahrzeug_modul.ARTEN.get(art), "rechteckig", False):
             # Alles, was kein Rechteck mit Aufbau ist: das Bild der Art selbst.
             s = bilder.gedreht(art, winkel)
             ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y))))
