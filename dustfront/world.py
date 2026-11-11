@@ -27,6 +27,7 @@ from pathlib import Path
 import pygame
 
 from . import config as K
+from . import effekte as effekte_modul
 
 # Zeichen -> Kachel. Alles, was hier nicht steht, wird zu Boden.
 ZEICHEN = {
@@ -408,6 +409,10 @@ class Welt:
         # entstehen sie aus derselben Meldung (explosion, leichenflug).
         self.feuerbaelle: list = []
         self.flugleichen: list = []
+        # Das Effektsystem (seit 0.34.122, effekte.py): Rauch, Feuer, Funken,
+        # Brocken, Fetzen, Ringe - jedes mit Hoehe. Beim Gast aus derselben
+        # Explosion.
+        self.effekte: list = []
         # Kurze helle Blitze bei Explosionen (seit 0.34.64): [Ort, Ebene,
         # Radius, Rest, Dauer]. Beim Gast aus derselben Explosion.
         self.lichtblitze: list = []
@@ -494,6 +499,10 @@ class Welt:
         """Lauter Laerm an dieser Stelle (seit 0.34.66: Kettensaege, spaeter
         der Knaller). Wer ihn hoert, entscheidet das Gefecht (Bots)."""
         pass
+
+    def brand_dekal(self, pos, ebene: int, stufe: int, winkel: float = 0.0) -> None:
+        """Ein Brandfleck in den Boden (seit 0.34.122, effekte.py), Stufe 0 bis 3."""
+        self.bild_dekal("fx_brand_%d" % max(0, min(3, int(stufe))), pos, ebene, winkel)
 
     def bild_dekal(self, name: str, pos, ebene: int, winkel: float = 0.0) -> None:
         """Ein kleines Bild bleibt am Boden (seit 0.34.66: Naegel in der
@@ -616,14 +625,9 @@ class Welt:
             self.ruckeln(5.0, "explosion", pos, ebene)
             self.klang("hammer_boden", 1.0, pos, ebene)
             return
-        if art in ("flak", "luft_kiste", "luft_mensch", "fallschirm_riss", "absturz"):
-            self._explosion_luft(pos, ebene, radius, art)
-            return
-        if art == "werfer_start":
-            self._werfer_start_effekt(pos, ebene, radius)
-            return
-        if art == "werfer_gross":
-            self._werfer_explosion(pos, ebene, radius)
+        if art in effekte_modul.ARTEN:
+            # Seit 0.34.122 im eigenen Effektsystem (effekte.py).
+            effekte_modul.ARTEN[art](self, pos, ebene, radius)
             return
         if art == "emp":
             # Die EMP-Granate (seit 0.34.65): kein Feuer, kein Krater - ein
@@ -683,122 +687,6 @@ class Welt:
         self.brandfleck(pos, ebene, radius)
         self.ruckeln(K.WAFFEN["granate"]["kamera"], "explosion", pos, ebene)
         self.klang("granate", 1.0, pos, ebene)
-
-    def _werfer_start_effekt(self, pos, ebene: int, winkel: float) -> None:
-        """Eine Rakete verlaesst ihr Rohr (seit 0.34.120). `pos` ist die Muendung,
-        `winkel` die Richtung des Gestells. Vorn ein Blitz, hinten - wie bei einer
-        Panzerfaust, nur viel mehr - der Rueckstrahl: ein Feuerstrahl, ein Druckstoss
-        aus Rauch und eine breite Staubwolke, die der Strahl vom Boden hochreisst."""
-        from .entities import wolke
-        vor = pygame.Vector2(1, 0).rotate(winkel)
-        hinten = (winkel + 180.0) % 360.0
-        ende = pos - vor * 40.0                       # das offene Ende des Rohrs
-        self.muendung(pos, winkel, ebene, 1.6)
-        wolke(self, pos, 8, 210, 0.22, (255, 232, 170), ebene, 1, "funke", 30, winkel, 6.0)
-        wolke(self, ende, 46, 520, 0.55, (250, 200, 120), ebene, 3, "funke", 34, hinten, 4.5)
-        wolke(self, ende, 28, 420, 0.9, (255, 150, 60), ebene, 4, "funke", 28, hinten, 2.5)
-        wolke(self, ende, 14, 360, 0.5, (255, 236, 190), ebene, 5, "funke", 20, hinten, 3.0)
-        # Der Druck: grosse graue Schwaden, die nach hinten gedrueckt werden und aufquellen,
-        # und eine breite Wand aus Staub, die der Strahl vom Boden reisst.
-        wolke(self, ende - vor * 14.0, 20, 420, 2.4, (116, 108, 98), ebene, 11, "flakrauch", 56, hinten, 2.0)
-        wolke(self, ende - vor * 30.0, 14, 300, 3.0, (92, 86, 78), ebene, 15, "flakrauch", 90, hinten, 1.6)
-        wolke(self, ende, 30, 300, 1.6, K.C_MUTED, ebene, 5, "staub", 80, hinten, 2.0)
-        wolke(self, ende - vor * 20.0, 70, 560, 2.0, K.C_SAND_KORN, ebene, 5, "bodenstaub", 120, hinten, 2.0)
-        wolke(self, ende - vor * 40.0, 44, 420, 2.6, (150, 112, 66), ebene, 6, "bodenstaub", 170, hinten, 1.6)
-        wolke(self, ende - vor * 60.0, 26, 300, 3.0, (176, 150, 108), ebene, 7, "bodenstaub", 220, hinten, 1.3)
-        self.aufschlagring(ende - vor * 30.0, ebene, 1.6)
-        self.aufschlagring(ende - vor * 70.0, ebene, 1.0)
-        self.lichtblitz(ende, ebene, 90.0)
-        self.ruckeln(5.0, "explosion", pos, ebene)
-
-    def _werfer_explosion(self, pos, ebene: int, radius: float) -> None:
-        """Der Werfer geht hoch (seit 0.34.120) - die groesste Explosion im Spiel:
-        mehrere Feuerbaelle nacheinander, ein weisser Blitz ueber den ganzen
-        Bildschirm, zwei Druckwellen, Funken in Hunderten, schwarzer Rauch, ein
-        grosser Krater - und keine Truemmer des Wagens, sondern Einzelteile, die
-        durch die Luft fliegen und am Boden liegen bleiben."""
-        from .entities import Feuerball, wolke
-        saat = int(abs(pos.x) * 7 + abs(pos.y) * 13)
-        r = random.Random(saat)
-        self.lichtblitz(pos, ebene, radius * 2.4)
-        for i, (dx, dy, g) in enumerate(((0, 0, 2.6), (34, -22, 1.9), (-40, 18, 2.1), (14, 44, 1.7),
-                                         (-18, -46, 1.8), (58, 20, 1.5))):
-            self.feuerbaelle.append(Feuerball(pos + pygame.Vector2(dx, dy), ebene, saat + i * 977, g))
-        wolke(self, pos, 110, 640, 1.0, (255, 224, 164), ebene, 3, "funke", reibung=1.8)
-        wolke(self, pos, 60, 340, 1.6, (255, 150, 60), ebene, 2, "funke", reibung=1.5)
-        wolke(self, pos, 40, 130, 4.2, (22, 20, 18), ebene, 14, "flakrauch", reibung=1.2)
-        wolke(self, pos, 30, 80, 5.0, (58, 54, 50), ebene, 20, "flakrauch", reibung=0.9)
-        wolke(self, pos, 60, 380, 2.2, K.C_MUTED_DK, ebene, 3, "staub", reibung=1.6)
-        wolke(self, pos, 70, 520, 1.8, K.C_SAND_KORN, ebene, 3, "bodenstaub", reibung=2.0)
-        wolke(self, pos, 40, 420, 2.4, (122, 86, 46), ebene, 3, "bodenstaub", reibung=1.8)
-        # Einzelteile, die fliegen: Metallbrocken in allen Groessen.
-        wolke(self, pos, 26, 520, 2.6, (96, 92, 86), ebene, 4, "splitter", reibung=1.0)
-        wolke(self, pos, 18, 380, 2.8, (176, 66, 44), ebene, 3, "splitter", reibung=1.0)
-        # ... und die, die liegen bleiben.
-        for i in range(8):
-            d = r.uniform(30.0, radius * 0.78)
-            p = pos + pygame.Vector2(d, 0).rotate(r.uniform(0.0, 360.0))
-            self.bild_dekal("werfer_teil_%d" % (i % 6), p, ebene, r.uniform(0.0, 360.0))
-        self.krater(pos, ebene, 58.0, saat)
-        self.brandfleck(pos, ebene, radius * 0.7)
-        self.aufschlagring(pos, ebene, 4.2)
-        self.aufschlagring(pos, ebene, 2.6)
-        self.ruckeln(26.0, "explosion", pos, ebene)
-        self.klang("werfer_explosion", 1.0, pos, ebene)
-
-    def _explosion_luft(self, pos, ebene: int, radius: float, art: str) -> None:
-        """Was in der Luft platzt oder reisst (seit 0.34.118). `pos` ist der
-        Ort im Bild, nicht am Boden. Bei "fallschirm_riss" ist `radius` die
-        Seite (0 oder 1), damit die Fetzen in den Farben des Schirms fliegen."""
-        from .entities import wolke
-        weiss = (232, 226, 210)
-        kombi = K.TEAMS["kombi"][int(radius)] if art == "fallschirm_riss" and 0 <= int(radius) < 2 else None
-        tuch = kombi["rumpf"] if kombi else (200, 70, 50)
-        if art == "flak":
-            # Eine Flakwolke wie im zweiten Weltkrieg: ein heller Kern, der
-            # gleich verglueht, eine dunkle, aufquellende Rauchwolke, die eine
-            # Weile stehen bleibt, und ein Kranz Splitterfunken.
-            self.lichtblitz(pos, ebene, 58.0)
-            wolke(self, pos, 5, 60, 0.18, (255, 238, 196), ebene, 5, "funke", reibung=3.0)
-            wolke(self, pos, 14, 90, 2.6, (24, 22, 20), ebene, 10, "flakrauch", reibung=2.2)
-            wolke(self, pos, 10, 46, 3.2, (62, 58, 54), ebene, 14, "flakrauch", reibung=1.7)
-            wolke(self, pos, 5, 20, 3.4, (96, 90, 84), ebene, 16, "flakrauch", reibung=1.5)
-            wolke(self, pos, 20, 440, 0.3, (255, 190, 110), ebene, 1, "funke", reibung=2.5)
-            wolke(self, pos, 6, 190, 0.8, (255, 140, 60), ebene, 1, "funke", reibung=2.0)
-            self.ruckeln(1.2, "explosion", pos, ebene)
-            self.klang("flak_burst", 0.9, pos, ebene)
-            return
-        if art in ("luft_kiste", "luft_mensch"):
-            # Was am Schirm hing, zerplatzt: Splitter bzw. Blut, Fetzen vom
-            # Schirm, eine kleine dunkle Wolke.
-            self.lichtblitz(pos, ebene, 40.0)
-            wolke(self, pos, 5, 60, 0.15, (255, 238, 196), ebene, 4, "funke", reibung=3.0)
-            if art == "luft_kiste":
-                wolke(self, pos, 16, 220, 1.1, (140, 104, 64), ebene, 2, "splitter", reibung=1.5)
-                wolke(self, pos, 8, 130, 1.5, (86, 104, 62), ebene, 2, "splitter", reibung=1.4)
-            else:
-                wolke(self, pos, 16, 200, 1.0, K.C_BLUT, ebene, 2, "blut", reibung=1.6)
-            wolke(self, pos, 12, 75, 2.4, weiss, ebene, 3, "fetzen", reibung=0.9)
-            wolke(self, pos, 8, 75, 2.4, tuch, ebene, 3, "fetzen", reibung=0.9)
-            wolke(self, pos, 8, 50, 2.2, (40, 36, 34), ebene, 8, "flakrauch", reibung=2.0)
-            self.ruckeln(1.0, "explosion", pos, ebene)
-            self.klang("flak_burst", 0.6, pos, ebene)
-            return
-        if art == "fallschirm_riss":
-            # Der Schirm reisst: Bahnen und Fetzen fliegen auseinander und
-            # taumeln hinunter.
-            wolke(self, pos, 14, 120, 2.6, weiss, ebene, 4, "fetzen", reibung=0.8)
-            wolke(self, pos, 14, 120, 2.6, tuch, ebene, 4, "fetzen", reibung=0.8)
-            wolke(self, pos, 8, 50, 1.6, (40, 36, 34), ebene, 4, "flakrauch", reibung=2.0)
-            self.klang("fallschirm_riss", 0.8, pos, ebene)
-            return
-        # "absturz": der Aufschlag eines Fahrzeugs ohne Schirm.
-        wolke(self, pos, 44, 300, 1.3, K.C_SAND_KORN, ebene, 2, "staub", reibung=2.2)
-        wolke(self, pos, 16, 340, 0.7, (122, 86, 46), ebene, 3, "staub", reibung=2.0)
-        wolke(self, pos, 18, 360, 0.5, (255, 214, 140), ebene, 1, "funke", reibung=2.5)
-        self.aufschlagring(pos, ebene, 1.8)
-        self.ruckeln(9.0, "explosion", pos, ebene)
-        self.klang("absturz", 1.0, pos, ebene)
 
     def lichtblitz(self, pos, ebene: int, radius: float) -> None:
         """Ein kurzer heller Blitz (K.LICHTBLITZ), gezeichnet additiv
@@ -1011,6 +899,10 @@ class Welt:
             for f in self.feuerbaelle:
                 f.schritt(dt)
             self.feuerbaelle = [f for f in self.feuerbaelle if f.lebt]
+        if self.effekte:
+            self.effekte = [f for f in self.effekte if f.schritt(dt)]
+            if len(self.effekte) > 2400:            # nie mehr als so viele auf einmal
+                del self.effekte[:len(self.effekte) - 2400]
         if self.flugleichen:
             for f in self.flugleichen:
                 f.schritt(dt, self)
@@ -1413,6 +1305,11 @@ class Welt:
         # ihn herum hatte, schob ihn quer durch den Raum.
         if getattr(wesen, "am_boden", False):
             return
+        # Wer im Fahrzeug sitzt, schiebt niemanden (seit 0.34.121): der Pilot
+        # eines Tragschraubers stand als Figur am Boden unter ihm und drueckte
+        # alles weg, ueber das er hinwegflog. Am Boden schiebt der Wagen selbst.
+        if getattr(wesen, "im_fahrzeug", False):
+            return
         # Wer unverschiebbar ist (Zielpuppe, Koloss), bleibt stehen, und der
         # andere weicht den ganzen Weg aus. Vorher gab jeder die Haelfte
         # nach - und eine Puppe liess sich durch Hineinlaufen quer durch
@@ -1432,7 +1329,7 @@ class Welt:
             mindest = wesen.radius + a.radius
             if not 0.0001 < abstand < mindest:
                 continue
-            if not a.schiebt or getattr(a, "am_boden", False):
+            if not a.schiebt or getattr(a, "am_boden", False) or getattr(a, "im_fahrzeug", False):
                 continue
             fest_a = not getattr(a, "schiebbar", True) or getattr(a, "hilft", None) is not None
             if fest_w and fest_a:

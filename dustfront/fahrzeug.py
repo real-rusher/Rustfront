@@ -1046,8 +1046,9 @@ class Flakgranate(Geschoss):
             if weit <= reich:
                 anteil = 1.0 - F["luft_abfall"] * min(1.0, weit / reich)
                 lz.treffen(F["luft_schaden"] * anteil, self.von)
-            w.explosion(pygame.Vector2(self.pos.x, self.pos.y - lz.versatz), self.ebene,
-                        F["luft_radius"], "flak", self.von)
+            # Am Boden unter dem Ziel, Radius = Hoehe: die Wolke steht dort, wo
+            # man den Flieger sieht (effekte.flak).
+            w.explosion(pygame.Vector2(self.pos), self.ebene, float(lz.versatz), "flak", self.von)
             return
         # Am Boden: ein kleiner Splitterkreis um den Zuendpunkt.
         r = F["boden_radius"]
@@ -1065,7 +1066,7 @@ class Flakgranate(Geschoss):
             schaden_an(a, d["schaden"] * anteil, schub, self.von, "spreng", self.pos,
                        F["boden_fahrzeug"] * anteil)
             abschuss_buchen(self.von, a, self.waffe, lebte)
-        w.explosion(self.pos, self.ebene, r, "flak", self.von)
+        w.explosion(self.pos, self.ebene, 0.0, "flak", self.von)
 
 
 class Schwer(Buggy):
@@ -1678,10 +1679,29 @@ class Krad(Buggy):
 
     @property
     def bild(self) -> str:
+        """Das Krad mit Fahrer, der Beiwagen leer: wer darin sitzt, zeichnet das
+        Gefecht seit 0.34.121 selbst - mit seiner Waffe, in seiner Richtung
+        (`beifahrer_sitz`, `beifahrer_klemmen`)."""
         if self.kaputt:
             return "krad_wrack"
-        zwei = bool(self.mitfahrer) if not self.nur_bild else self.besetzt_mit > 0
-        return self._insassen_bild("krad_beiwagen" if zwei else "krad")
+        return self._insassen_bild("krad")
+
+    def beifahrer_sitz(self, pos=None, winkel=None) -> pygame.Vector2:
+        """Die Mitte der Sitzmulde im Beiwagen (Welt)."""
+        pos = self.pos if pos is None else pos
+        winkel = self.winkel if winkel is None else winkel
+        return pos + pygame.Vector2(self.werte["beifahrer_sitz"]).rotate(winkel)
+
+    def beifahrer_klemmen(self, winkel: float) -> float:
+        """Die Richtung des Beifahrers, auf seinen Bogen begrenzt."""
+        lo, hi = self.werte["beifahrer_bogen"]
+        rel = (winkel - self.winkel + 180.0) % 360.0 - 180.0
+        if rel < lo or rel > hi:
+            # Ausserhalb: an die naehere Grenze (ueber den Ruecken gerechnet).
+            d_lo = abs((rel - lo + 180.0) % 360.0 - 180.0)
+            d_hi = abs((rel - hi + 180.0) % 360.0 - 180.0)
+            rel = lo if d_lo <= d_hi else hi
+        return (self.winkel + rel + 180.0) % 360.0 - 180.0
 
     def schaden(self, menge, schub=None, von=None, kugel: bool = False,
                 art=None, herkunft=None) -> None:
@@ -2260,7 +2280,6 @@ class Tragschrauber(Buggy):
 
     art = "tragschrauber"
     werte = K.TRAGSCHRAUBER
-    schatten_bild = "tragschrauber_schatten"
     schiesst = True
 
     def __init__(self, pos, ebene: int = 0, winkel: float = 0.0,
@@ -2274,16 +2293,23 @@ class Tragschrauber(Buggy):
         self.landen = False
         self.flug_v = 0.0
         self.bomben = int(self.werte["bomben"])
-        self.bomben_fall: list = []    # [Restzeit, x, y]
+        self.bomben_fall: list = []    # [Restzeit, x, y, Richtung beim Abwurf]
         self._bomben_rest = 0.0
         self._feuer_alt = False
         self._aufkl_rest = 0.0
 
     @property
     def bild(self) -> str:
+        """Seit 0.34.123 mit den Bomben im Bild (art_bombe.py, `tsb<N>_...`):
+        sie haengen fest an ihm und koennen nicht verrutschen."""
         if self.kaputt:
             return "tragschrauber_wrack"
-        return self._insassen_bild("tragschrauber")
+        return "tsb%d_%s" % (max(0, min(2, self.bomben)), self._insassen_bild("tragschrauber"))
+
+    @property
+    def schatten_bild(self) -> str:
+        """Der Umriss genau des Bildes, mit seinen Bomben (art_bombe.py)."""
+        return "tss%d" % max(0, min(2, self.bomben))
 
     @property
     def hoch_oben(self) -> bool:
@@ -2375,14 +2401,16 @@ class Tragschrauber(Buggy):
 
     def netz_extra(self):
         return [int(self.luft), int(self.hoehe), self.bomben,
-                [[round(b[0], 1), int(b[1]), int(b[2])] for b in self.bomben_fall[:4]]]
+                [[round(b[0], 1), int(b[1]), int(b[2]), int(b[3]) if len(b) > 3 else 0]
+                 for b in self.bomben_fall[:4]]]
 
     def netz_extra_setzen(self, wert) -> None:
         try:
             self.luft = bool(int(wert[0]))
             self.hoehe = max(0.0, min(200.0, float(wert[1])))
             self.bomben = max(0, min(9, int(wert[2])))
-            self.bomben_fall = [[float(b[0]), float(b[1]), float(b[2])] for b in wert[3][:4]]
+            self.bomben_fall = [[float(b[0]), float(b[1]), float(b[2]), float(b[3]) if len(b) > 3 else 0.0]
+                                for b in wert[3][:4]]
         except (TypeError, ValueError, IndexError):
             self.bomben_fall = []
 

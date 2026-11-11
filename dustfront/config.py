@@ -1528,6 +1528,11 @@ KRAD = dict(
     fahrer_anteil=1.0,
     plaetze=1,                # der Beifahrer im Beiwagen
     beifahrer_streuung=2.0,   # so viel mal mehr Streuung seiner Waffe, wenn das Krad rollt
+    # Der Beifahrer im Beiwagen (seit 0.34.121) dreht sich nur so weit: von
+    # leicht links vorn bis schraeg nach hinten rechts (Grad zur Fahrtrichtung,
+    # + = rechts). Ueber den Fahrer hinweg nach links schiesst er nicht.
+    beifahrer_bogen=(-35.0, 150.0),
+    beifahrer_sitz=(-3.9, 11.2),   # Mitte der Sitzmulde (Pixel, +x vorn, +y rechts)
     beifahrer_tempo=150.0,    # ... ab diesem Tempo (px/s) voll
     explosion_radius=48.0,
     explosion_schaden=40.0,
@@ -3191,11 +3196,6 @@ HOEHEN = dict(
     staub=3.0,            # Staub wirbelt knapp ueber dem Boden
     huelse=0.0,           # Huelsen liegen am Boden
     partikel=6.0,         # alles uebrige
-    # Was in der Luft schwebt (seit 0.34.118): Flakwolken, Schirmfetzen,
-    # Kistensplitter - hinter Mauern nicht verdeckt.
-    flakrauch=300.0,
-    fetzen=300.0,
-    splitter=300.0,
 )
 
 # Figuren mit Hoehe (seit 0.34.25, render.Renderer.figur_zeichnen): wie die
@@ -4704,10 +4704,11 @@ for _team in TEAMS["kombi"]:
     BILD_MASS["flak_lafette_%s_fahrer" % _team["name"].lower()] = (128, 128)
 for _i in range(6):
     BILD_MASS["werfer_teil_%d" % _i] = (32, 32)
-for _name in ("bombe_rahmen",):
-    BILD_MASS[_name] = (48, 48)
-for _name in ("bombe_fall",):
-    BILD_MASS[_name] = (64, 64)
+# Dekale des Effektsystems (seit 0.34.122, effekte.py).
+for _i, _n in enumerate((28, 44, 64, 96)):
+    BILD_MASS["fx_brand_%d" % _i] = (_n, _n)
+for _i in range(8):
+    BILD_MASS["fx_teil_%d" % _i] = (24, 24)
 for _i in range(6):
     BILD_MASS["rotor_schatten_%d" % _i] = (192, 192)
 for _name in ("tragschrauber", "tragschrauber_fahrer", "tragschrauber_wrack", "tragschrauber_schatten"):

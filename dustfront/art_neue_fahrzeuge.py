@@ -213,9 +213,34 @@ _KUPPEL = (-5, -3.6)              # Luke des Kommandanten, Entwurfspixel
 _STAUB_JP = [(166, 150, 104), (130, 116, 76), (190, 174, 130), (116, 100, 66)]
 
 
+def _kommandantenluke(b, c) -> None:
+    """Die Luke des Kommandanten, fest im Dach der Kasematte (seit 0.34.121):
+    ein flacher gepanzerter Kranz mit drei Winkelspiegeln nach vorn, darin
+    zwei geschlossene Halbdeckel mit Scharnier hinten und einem Griff - in
+    denselben Farben und mit denselben dunklen Kanten wie das Dach."""
+    x, y = c
+    b.kreis((40, 34, 20), (x + 0.5, y + 0.6), 4.5)              # Schlagschatten aufs Dach
+    b.kreis(JP_DK, (x, y), 4.4)                                   # Kranz
+    b.kreis(JP_SCHATTEN, (x, y), 3.8)
+    b.segment(JP_HELL, 3.1, 3.8, 160, 290, x, y)                  # Licht von oben links
+    for a in (-35, 0, 35):                                        # Winkelspiegel nach vorn
+        r = math.radians(a)
+        px, py = x + math.cos(r) * 3.6, y + math.sin(r) * 3.6
+        b.rect(JP_DK, px - 0.9, py - 0.75, 1.8, 1.5, 0.3)
+        b.rect((52, 76, 90), px - 0.4, py - 0.45, 1.0, 0.9, 0.2)
+    b.kreis(JP_DK, (x, y), 2.9)                                   # Deckel
+    b.kreis(JP_LACK, (x, y), 2.4)
+    b.segment(JP_HELL, 1.2, 2.4, 170, 280, x, y)
+    b.linie(JP_DK, (x, y - 2.5), (x, y + 2.5), 0.45)              # Fuge der Halbdeckel
+    b.rect(JP_DK, x - 3.6, y - 1.0, 1.2, 2.0, 0.3)                # Scharnier hinten
+    b.linie((44, 40, 30), (x + 0.9, y - 1.0), (x + 0.9, y + 1.0), 0.35)   # Griff
+    b.kreis(JP_HELL, (x - 1.0, y - 1.1), 0.45)
+
+
 def jagdpanzer_wanne(ph_links: float = 0.0, ph_rechts: float = 0.0) -> pygame.Surface:
-    """Wanne mit Ketten, Schuerzen, Bugplatte und der flachen Kasematte.
-    Das Rohr und die Luke gehoeren zum drehenden Teil."""
+    """Wanne mit Ketten, Schuerzen, Bugplatte und der flachen Kasematte, dazu
+    die Luke des Kommandanten (seit 0.34.121 hier, fest). Das Rohr ist der
+    drehende Teil."""
     b = _Blatt()
     rnd = random.Random(7201)
     _kette(b, -31, 30, -16.5, 8.2, ph_links)
@@ -259,6 +284,7 @@ def jagdpanzer_wanne(ph_links: float = 0.0, ph_rechts: float = 0.0) -> pygame.Su
     b.s = alt
     schicht.blit(maske, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
     b.s.blit(schicht, (0, 0))
+    _kommandantenluke(b, (-6.0, -4.4))
     b.rect(JP_DK, -11, 3.4, 7, 4.6, 0.8)        # Ladeluke
     b.rect(JP_SCHATTEN, -10.6, 3.8, 6.2, 3.8, 0.6)
     b.linie(JP_DK, (-7.5, 3.8), (-7.5, 7.6), 0.4)
@@ -289,11 +315,12 @@ def jagdpanzer_wanne(ph_links: float = 0.0, ph_rechts: float = 0.0) -> pygame.Su
 
 
 def jagdpanzer_aufbau(fahrer=None, rueckstoss: float = 0.0) -> pygame.Surface:
-    """Der drehende Teil, 160 x 160, Drehpunkt in der Mitte: die Blende mit
-    dem langen Rohr und der Muendungsbremse, dazu die Luke. Der Fahrer ist
-    nicht zu sehen (seit 0.34.117, gewuenscht): die Luke ist immer
-    geschlossen, `fahrer` wird nur noch aus Gruenden der Aufrufe angenommen.
-    `rueckstoss`: so viele Pixel faehrt das Rohr zurueck."""
+    """Der drehende Teil, 160 x 160, Drehpunkt in der Mitte: nur die Blende
+    mit dem langen Rohr und der Muendungsbremse. Die Luke des Kommandanten ist
+    seit 0.34.121 Teil der Wanne (`_kommandantenluke`) - so kann sie sich
+    technisch nicht gegen den Panzer bewegen. `fahrer` wird nur noch aus
+    Gruenden der Aufrufe angenommen. `rueckstoss`: so viele Pixel faehrt das
+    Rohr zurueck."""
     b = _Blatt(160, G)
     r = -rueckstoss / G
     gy = 0.0
@@ -308,17 +335,6 @@ def jagdpanzer_aufbau(fahrer=None, rueckstoss: float = 0.0) -> pygame.Surface:
     b.poly(JP_DK, blende)
     b.poly(JP_HELL, [(x * 0.97 + 0.5, gy + (y - gy) * 0.82) for x, y in blende])
     b.linie(JP_SCHATTEN, (15, gy + 4.2), (22, gy + 2.2), 0.8)
-    kl = _KUPPEL
-    rr = 5.2
-    b.kreis(JP_DK, kl, rr)
-    b.kreis(JP_SCHATTEN, kl, rr - 0.7)
-    for i in range(6):
-        a = i * math.pi / 3 + 0.3
-        b.rect((40, 58, 70), kl[0] + math.cos(a) * 4.2 - 0.5, kl[1] + math.sin(a) * 4.2 - 0.5,
-               1.0, 1.0, 0.3)
-    b.kreis(JP_DK, kl, 3.4)
-    b.kreis(JP_LACK, kl, 2.8)
-    b.kreis(JP_HELL, (kl[0] - 1.0, kl[1] - 1.0), 1.1)
     return b.fertig(rand=True)
 
 
@@ -1021,37 +1037,6 @@ def _tragschrauber_schatten():
     eigenen Bildes - Rahmen, Kanzel, Leitwerk, Fahrwerk (ohne Rotor, der hat
     eigene Schatten `rotor_schatten_N`)."""
     return _umriss_schatten(tragschrauber_zeichnen(None, 0), 112)
-
-
-@platzhalter("bombe_rahmen")
-def _bombe_rahmen():
-    """Eine Bombe am Rahmen, von oben (Nase nach +x), 48 x 48: dunkle Huelle,
-    olivgruener Rumpf, gelbes Band, Leitwerk hinten."""
-    b = _Blatt(48, G * 1.25)
-    b.rect((22, 20, 18), -5.2, -2.1, 11.4, 4.2, 2.0)
-    b.rect((86, 94, 66), -4.6, -1.5, 10.2, 3.0, 1.5)
-    b.rect((120, 128, 96), -4.4, -1.3, 9.6, 0.9, 0.5)
-    b.rect((204, 176, 72), 0.4, -1.5, 1.6, 3.0)
-    b.rect((26, 24, 22), 5.6, -1.7, 1.4, 3.4, 0.8)            # Nase
-    b.rect((200, 66, 48), 6.1, -1.1, 0.9, 2.2, 0.4)
-    b.rect((26, 24, 22), -6.6, -2.8, 2.0, 5.6, 0.4)           # Leitwerk
-    return b.fertig()
-
-
-@platzhalter("bombe_fall")
-def _bombe_fall():
-    """Die fallende Bombe, gross und gut zu sehen (seit 0.34.119): von der Seite,
-    Nase nach unten (+y), Leitwerk oben. 64 x 64."""
-    b = _Blatt(64, G * 1.7)
-    b.rect((22, 20, 18), -2.9, -6.4, 5.8, 12.4, 2.4)
-    b.rect((86, 94, 66), -2.3, -5.6, 4.6, 10.8, 1.8)
-    b.rect((130, 138, 104), -1.9, -5.2, 1.2, 9.6, 0.5)        # Licht von links
-    b.rect((204, 176, 72), -2.3, -0.6, 4.6, 1.5)              # gelbes Band
-    b.rect((26, 24, 22), -2.3, 5.2, 4.6, 1.8, 1.0)            # Nase
-    b.rect((200, 66, 48), -1.4, 5.8, 2.8, 1.4, 0.6)
-    b.rect((26, 24, 22), -4.6, -7.4, 9.2, 1.8, 0.5)           # Leitwerk
-    b.rect((58, 54, 48), -4.0, -7.0, 8.0, 0.8, 0.3)
-    return b.fertig()
 
 
 def _rotor_schatten_stufe(i: int):

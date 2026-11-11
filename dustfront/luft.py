@@ -164,7 +164,10 @@ class LuftTeil:
         if gross:
             ab.gerissen = 0.001
             self._lz_merk = None
-            self.welt.explosion(lz.bild_pos, 0, float(ab.team if ab.team in (0, 1) else 0),
+            # Radius = Hoehe * 10 + Seite (effekte.py): die Fetzen fallen aus der
+            # Hoehe des Schirms, in seinen Farben.
+            self.welt.explosion(pygame.Vector2(lz.pos), 0,
+                                float(int(lz.versatz) * 10 + (ab.team if ab.team in (0, 1) else 0)),
                                 "fallschirm_riss", von)
             return
         self.abwuerfe.remove(ab)
@@ -172,7 +175,7 @@ class LuftTeil:
         zone = getattr(ab, "zone", None)
         if zone is not None and zone.einmalig and zone in self.dropzonen:
             self.dropzonen.remove(zone)
-        self.welt.explosion(lz.bild_pos, 0, 40.0, "luft_kiste", von)
+        self.welt.explosion(pygame.Vector2(lz.pos), 0, float(lz.versatz), "luft_kiste", von)
 
     def _springer_treffer(self, lz, menge: float, von) -> None:
         k = lz.objekt
@@ -184,7 +187,7 @@ class LuftTeil:
                 k.am_boden = True
                 k.sterben(von)
             k.schirm_hoehe = 0.0
-            self.welt.explosion(lz.bild_pos, 0, 30.0, "luft_mensch", von)
+            self.welt.explosion(pygame.Vector2(lz.pos), 0, float(lz.versatz), "luft_mensch", von)
             self._lz_merk = None
 
     def _drohne_treffer(self, lz, menge: float, von) -> None:
@@ -225,16 +228,17 @@ class LuftTeil:
                 continue
             druck = b.feuer and not b._feuer_alt
             b._feuer_alt = b.feuer
-            # Eine Bombe nach der anderen (seit 0.34.119) und senkrecht unter ihm:
-            # sie loest sich ohne sein Tempo vom Rahmen und faellt dort herunter,
-            # wo er sie abgeworfen hat.
+            # Eine Bombe nach der anderen, senkrecht unter ihm (seit 0.34.123 neu):
+            # sie loest sich von ihrem Traeger - dort, wo sie im Bild hing -,
+            # behaelt nichts von seinem Tempo und faellt, waehrend er weiterfliegt.
             if (druck and b.in_der_luft and b.bomben > 0 and b.emp_rest <= 0.0
                     and b.fahrer is not None and not b.landen and not b.bomben_fall):
+                from .art_bombe import PLAETZE
                 b.bomben -= 1
                 b._bomben_rest = f["bomben_nachladen"]
-                sy = -1 if b.bomben % 2 == 0 else 1            # die Seite, an der sie hing
-                ort = b.pos + pygame.Vector2(8.4, sy * 7.8).rotate(b.winkel)
-                b.bomben_fall.append([bo["fall"], ort.x, ort.y])
+                ort = b.pos + pygame.Vector2(PLAETZE[b.bomben]).rotate(b.winkel)
+                b.bomben_fall.append([bo["fall"], ort.x, ort.y, b.winkel])
+                self.welt.explosion(ort, b.ebene, float(b.hoehe), "bombe_los", b.fahrer)
                 self.welt.klang("bombe_ab", 0.8, b.pos, b.ebene)
                 self.welt.klang("bombe_fall", 0.6, b.pos, b.ebene)
             for e in list(b.bomben_fall):
@@ -242,7 +246,7 @@ class LuftTeil:
                 if e[0] <= 0.0:
                     b.bomben_fall.remove(e)
                     p = pygame.Vector2(e[1], e[2])
-                    self.welt.explosion(p, b.ebene, bo["radius"], "panzer", b.fahrer)
+                    self.welt.explosion(p, b.ebene, bo["radius"], "bombe", b.fahrer)
                     self.flaechenschaden(p, b.ebene, bo["radius"], bo["schaden"], bo["fahrzeug"],
                                          b.fahrer, "bombe")
             if b.in_der_luft and b.fahrer is not None and b.emp_rest <= 0.0:
@@ -265,6 +269,45 @@ class LuftTeil:
                      else getattr(z, "fraktion", None))
             if seite == feind and getattr(z, "trefferbar", True):
                 ausruestung_modul.markieren(z, fuer=eigen)
+
+    # ---- Der Beifahrer im Krad (seit 0.34.121) ---------------------------------
+    def _beifahrer_im_krad(self, b):
+        """Wer im Beiwagen sitzt: beim Gastgeber aus der Liste, beim Gast der
+        Kaempfer im Fahrzeug, der an der Sitzmulde steht und nicht faehrt."""
+        if not b.nur_bild:
+            liste = b.__dict__.get("_mitfahrer") or []
+            return liste[0] if liste else None
+        if getattr(b, "besetzt_mit", 0) <= 0:
+            return None
+        sitz = b.beifahrer_sitz()
+        for k in self.kaempfer.values():
+            if (getattr(k, "im_fahrzeug", False) and k.lebt and k.nummer != getattr(b, "fahrer_nummer", -1)
+                    and k.ebene == b.ebene and (k.pos.distance_to(sitz) < 6.0 or k.pos.distance_to(b.pos) < 3.0)):
+                return k
+        return None
+
+    def _beifahrer_zeichnen(self, ziel, misch: float) -> None:
+        """Der Beifahrer sitzt im Beiwagen und zeigt seine Waffe in die Richtung,
+        in die er zielt - nur so weit, wie der Sitz es erlaubt (K.KRAD
+        `beifahrer_bogen`). Er wird mit dem Krad gezeichnet, aus dessen Lage,
+        damit er nicht neben dem Beiwagen schwebt."""
+        ecke = self.kamera.ecke
+        r = self.renderer
+        for b in self.fahrzeuge:
+            if b.art != "krad" or b.kaputt or b.ebene != self.blick:
+                continue
+            k = self._beifahrer_im_krad(b)
+            if k is None:
+                continue
+            boden = b.zeichenpos(misch)
+            sitz = b.beifahrer_sitz(boden) - ecke
+            if not (-60 < sitz.x < ziel.get_width() + 60 and -60 < sitz.y < ziel.get_height() + 60):
+                continue
+            name = k.bild
+            if not name:
+                continue
+            s = r.bilder.gedreht(name, b.beifahrer_klemmen(k.winkel))
+            ziel.blit(s, s.get_rect(center=(int(round(sitz.x)), int(round(sitz.y)))))
 
     # ---- Das Raketengestell des Werfers (seit 0.34.120) -------------------------
     def _werfer_gestelle_zeichnen(self, ziel, misch: float) -> None:
@@ -327,32 +370,36 @@ class LuftTeil:
                                                       int(rotor_boden.y + versatz.y))))
                 s = r.bilder.gedreht(b.bild, b.winkel)
                 ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y - h))))
-            # Die Bomben am Rahmen: eigene Bilder, damit man sie abfallen sieht
-            # (seit 0.34.119). Die erste faellt von der rechten Seite.
-            if b.bomben > 0:
-                rb = r.bilder.gedreht("bombe_rahmen", b.winkel)
-                for i in range(b.bomben):
-                    sy = -1 if i % 2 == 0 else 1
-                    q = p + pygame.Vector2(8.4, sy * 7.8).rotate(b.winkel) - pygame.Vector2(0, h)
-                    ziel.blit(rb, rb.get_rect(center=(int(q.x), int(q.y))))
             if h > 2.0 or besetzt:
                 rotor = r.bilder.bild("rotor_%d" % st)
                 m = p + pygame.Vector2(-3.4, 0).rotate(b.winkel) - pygame.Vector2(0, h + 6.0)
                 ziel.blit(rotor, rotor.get_rect(center=(int(m.x), int(m.y))))
-            # Fallende Bomben (seit 0.34.119 gross und gut zu sehen): senkrecht, dort
-            # wo sie abgeworfen wurden, schneller werdend; unten waechst ihr Schatten.
-            bo = K.TRAGSCHRAUBER["bombe"]
-            for e in b.bomben_fall:
-                u = 1.0 - max(0.0, min(1.0, e[0] / bo["fall"]))
-                hoch = K.TRAGSCHRAUBER["hoehe"] * (1.0 - u * u)       # startet am Rahmen
-                q = pygame.Vector2(e[1], e[2]) - ecke
-                sw = int(5 + 8 * u)
-                sch = pygame.Surface((sw * 2, sw), pygame.SRCALPHA)
-                pygame.draw.ellipse(sch, (12, 9, 6, int(60 + 120 * u)), sch.get_rect())
-                ziel.blit(sch, (int(q.x) - sw, int(q.y) - sw // 2))
-                spitze = pygame.Vector2(q.x, q.y - hoch)
-                for k, (dy, farbe) in enumerate(((16, (168, 160, 148)), (26, (132, 126, 116)), (36, (96, 92, 84)))):
-                    pygame.draw.line(ziel, farbe, (int(spitze.x), int(spitze.y) - dy + 4),
-                                     (int(spitze.x), int(spitze.y) - dy - 8), 2 - (k > 1))
-                bs = r.bilder.bild("bombe_fall")
-                ziel.blit(bs, bs.get_rect(center=(int(spitze.x), int(spitze.y))))
+            self._bomben_fallend_zeichnen(ziel, b, ecke)
+
+    def _bomben_fallend_zeichnen(self, ziel, b, ecke) -> None:
+        """Fallende Bomben (seit 0.34.123 neu): das 3D-Modell, in der Richtung,
+        in der der Tragschrauber flog; sie kippt mit der Nase nach unten,
+        dreht sich um sich selbst und faellt immer schneller dorthin, wo sie
+        abgeworfen wurde - darunter waechst ihr Schatten, hinter ihr ziehen
+        zwei helle Fallstreifen."""
+        from .art_bombe import bombe_fallend
+        bo = K.TRAGSCHRAUBER["bombe"]
+        z0 = max(4.0, K.TRAGSCHRAUBER["hoehe"] - 2.0)
+        for e in b.bomben_fall:
+            u = 1.0 - max(0.0, min(1.0, e[0] / bo["fall"]))
+            hoch = z0 * (1.0 - u * u)
+            boden = pygame.Vector2(e[1], e[2]) - ecke
+            sw = int(3 + 6 * u)
+            sch = pygame.Surface((sw * 2 + 2, sw + 2), pygame.SRCALPHA)
+            pygame.draw.ellipse(sch, (10, 8, 6, int(50 + 150 * u)), sch.get_rect())
+            ziel.blit(sch, (int(boden.x) - sw - 1, int(boden.y) - sw // 2 - 1))
+            kippen = 84.0 * min(1.0, u / 0.42) ** 0.8
+            bild = bombe_fallend(e[3] if len(e) > 3 else b.winkel, kippen, (1.0 - e[0]) * 520.0)
+            mitte = pygame.Vector2(boden.x, boden.y - hoch)
+            tempo = 2.0 * z0 * u / bo["fall"]
+            lang = int(tempo * 0.07)
+            if lang > 2:
+                for dx, farbe in ((-2, (226, 220, 206)), (2, (196, 190, 178))):
+                    pygame.draw.line(ziel, farbe, (int(mitte.x) + dx, int(mitte.y) - 6),
+                                     (int(mitte.x) + dx, int(mitte.y) - 6 - lang), 1)
+            ziel.blit(bild, bild.get_rect(center=(int(mitte.x), int(mitte.y))))

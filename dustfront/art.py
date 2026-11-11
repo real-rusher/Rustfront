@@ -2654,6 +2654,7 @@ def _panzergranate():
 # Buggys, die erst hier alle stehen.
 from . import art_fahrzeuge  # noqa: E402,F401
 from . import art_neue_fahrzeuge  # noqa: E402,F401  Krad, Jagdpanzer (seit 0.34.107)
+from . import art_bombe  # noqa: E402,F401  Bomben des Tragschraubers (seit 0.34.123)
 from . import art_werfer  # noqa: E402,F401  Raketengestell und Truemmer des Werfers (seit 0.34.120)
 from . import art_figuren  # noqa: E402,F401  Skins, NPCs, Tiere (seit 0.34.60)
 from . import art_waffen  # noqa: E402,F401  das Waffenpaket (seit 0.34.61)

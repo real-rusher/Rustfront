@@ -1749,7 +1749,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
 
     def _werfer_einschlag(self, b, p) -> None:
         s = K.WERFER["salve"]
-        self.welt.explosion(p, b.ebene, s["radius"], "panzer", b.fahrer)
+        self.welt.explosion(p, b.ebene, 1.0, "einschlag", b.fahrer)
         self.flaechenschaden(p, b.ebene, s["radius"], s["schaden"], s["fahrzeug"], b.fahrer, "werfer")
 
     def _werfer_zeichnen_boden(self, flaeche, ebene: int, ecke) -> None:
@@ -3337,7 +3337,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                 if k.am_boden or (b.art == "krad" and b.fahrer is None):
                     self._absitzen(k)
                     continue
-                k.pos.update(b.pos)
+                # Im Beiwagen sitzt er in der Mulde, nicht in der Mitte des Krads:
+                # dort ist auch seine Muendung (seit 0.34.121).
+                k.pos.update(b.beifahrer_sitz() if hasattr(b, "beifahrer_sitz") else b.pos)
                 k.ebene = b.ebene
                 k.tempo.update(0, 0)
 
@@ -7092,6 +7094,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         if gast:
             self._fremde_fallende(ziel, misch)
         self._drohnen_zeichnen(ziel, misch)
+        self._beifahrer_zeichnen(ziel, misch)
         self._werfer_gestelle_zeichnen(ziel, misch)
         self._luftfahrzeuge_zeichnen(ziel, misch)
         self._raketen_zeichnen(ziel)

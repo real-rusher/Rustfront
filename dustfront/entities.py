@@ -2807,6 +2807,10 @@ class Spieler(Wesen):
                 else:
                     self.winkel += hoechstens * (1.0 if ab > 0 else -1.0)
                     self.winkel = (self.winkel + 180) % 360 - 180
+            # Im Beiwagen eines Krads (seit 0.34.121): nur so weit, wie der Sitz es zulaesst.
+            sitz = getattr(self, "mitfahrt", None)
+            if sitz is not None and hasattr(sitz, "beifahrer_klemmen"):
+                self.winkel = sitz.beifahrer_klemmen(self.winkel)
 
         # Bewegung: beschleunigen in Wunschrichtung, sonst bremsen. Im Sturz
         # bleibt ein Teil der Steuerung, man kann also noch zur Seite ziehen.
