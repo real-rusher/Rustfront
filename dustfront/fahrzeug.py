@@ -996,10 +996,14 @@ class Flakgranate(Geschoss):
     Gegen Luftziele (Tragschrauber, Drohnen, Abwuerfe, Fallschirmjaeger) trifft
     die Wolke immer, mit `luft_schaden`; am Boden ist es nur ein kleiner
     Splitterkreis. Gezeichnet wird die Wolke dort, wo das Luftziel im Bild
-    steht (Welt.explosion "flak")."""
+    steht (Welt.explosion "flak").
 
-    bild = "panzergranate"
-    spur = (255, 206, 120)
+    Seit 0.34.123 sieht man sie als Leuchtspur aus dem Effektsystem
+    (effekte.flak_schuss, beim Gast ueber dieselbe Meldung): sie steigt im
+    Bild zur Hoehe ihres Ziels. Die Granate selbst ist unsichtbar."""
+
+    bild = "flak_leer"
+    spur = None
     spur_dick = 1
     radius = 2.0
 
@@ -2513,6 +2517,12 @@ class Flakwagen(Panzerwagen):
             g.rest = max(80.0, min(d["reichweite"], m.distance_to(pygame.Vector2(ziel))))
         self.welt.dazu(g)
         self.welt.schussknall(m, self.aufbau, self.ebene, "flak_kanone", self.fahrer)
+        # Die Leuchtspur (seit 0.34.123): Richtung, Strecke und Zielhoehe in
+        # einer Zahl (effekte.flak_schuss).
+        lz = getattr(self.fahrer, "luft_ziel", None)
+        hoch = int(max(0.0, min(127.0, lz.versatz))) if lz is not None else 0
+        code = int(round(a)) % 360 + 360 * (int(min(2047.0, g.rest)) + 2048 * hoch)
+        self.welt.explosion(m, self.ebene, float(code), "flak_schuss", self.fahrer)
         if hasattr(self.fahrer, "zaehlen"):
             self.fahrer.zaehlen("schuesse", 1.0, "flak_kanone")
         self.ruecklauf = f["ring_ruecklauf"] * 2.0

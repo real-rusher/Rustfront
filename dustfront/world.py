@@ -768,9 +768,12 @@ class Welt:
                 self.klang("flammenwerfer", 0.5, pos, ebene)
             return
         gross = daten.get("muendung", 1.0)
-        self.muendung(pos, winkel, ebene, gross)
-        wolke(self, pos, int(3 * gross), 120 * gross, 0.12 * gross, (255, 226, 160),
-              ebene, 1, "funke", 34, winkel, 8.0)
+        if not daten.get("flak"):
+            # Die Flak hat ihr eigenes Muendungsfeuer und ihre Leuchtspur
+            # (seit 0.34.123, effekte.flak_schuss).
+            self.muendung(pos, winkel, ebene, gross)
+            wolke(self, pos, int(3 * gross), 120 * gross, 0.12 * gross, (255, 226, 160),
+                  ebene, 1, "funke", 34, winkel, 8.0)
         if waffe == "kanone":
             # Die Druckwelle wirbelt Sand am Boden vor der Muendung auf - und
             # der liegt unter den Fahrzeugen, nicht in ihrer Mitte (gemeldet

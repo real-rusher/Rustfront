@@ -365,6 +365,19 @@ def _zeichne(ziel, f: Fx, ex: float, ey: float) -> None:
         pygame.draw.circle(flaeche, f.farbe + (deck,), (n // 2, n // 2), int(r), dick)
         pygame.draw.circle(flaeche, (255, 255, 255, deck // 3), (n // 2, n // 2), max(1, int(r) - dick), 1)
         ziel.blit(flaeche, (int(x - n / 2), int(y - n / 2)))
+    elif f.art == "leuchtspur":
+        # Die Flakgranate (seit 0.34.123): ein greller Kopf, dahinter ein
+        # roter Schweif - von schraeg oben gesehen steigt sie im Bild zu
+        # ihrem Ziel hoch (z waechst). Am Boden ein schwacher Schatten.
+        lang = 0.03
+        x2, y2 = x - f.vx * lang, y - (f.vy - f.vz) * lang
+        x3, y3 = x - f.vx * lang * 2.2, y - (f.vy - f.vz) * lang * 2.2
+        if f.z > 4.0:
+            pygame.draw.line(ziel, (22, 17, 12), (x, f.y - ey), (x2, f.y - ey - f.vy * lang), 1)
+        pygame.draw.line(ziel, (120, 30, 18), (x3, y3), (x2, y2), 1)
+        pygame.draw.line(ziel, (236, 84, 40), (x2, y2), (x, y), 3)
+        pygame.draw.line(ziel, (255, 214, 140), (x2 * 0.4 + x * 0.6, y2 * 0.4 + y * 0.6), (x, y), 1)
+        pygame.draw.circle(ziel, (255, 250, 228), (int(x), int(y)), 2)
     elif f.art == "blitz":
         r = int(f.r0 * (0.6 + 0.4 * (1.0 - a)))
         s = licht(r)
@@ -541,6 +554,33 @@ def flak(welt, pos, ebene: int, hoehe: float) -> None:
         rauch(welt, r, x, y, 0.0, ebene, "staub", 4, 12, 1.4, vz=10.0, boden=True)
     welt.ruckeln(1.0, "explosion", pygame.Vector2(x, y), ebene)
     welt.klang("flak_burst", 0.9, pygame.Vector2(x, y), ebene)
+
+
+def flak_schuss(welt, pos, ebene: int, code: float) -> None:
+    """Ein Rohr des Flak-Vierlings feuert (seit 0.34.123). `code` traegt
+    Richtung, Strecke und Zielhoehe: Richtung + 360 * (Strecke + 2048 * Hoehe).
+    Vorn ein kurzer, flacher Feuerstern, ein Woelkchen Pulverrauch, das
+    stehen bleibt, und die Leuchtspur: sie steigt geradewegs zur Hoehe des
+    Ziels und verlischt dort, wo die Granate platzt."""
+    code = int(code)
+    winkel = float(code % 360)
+    rest = code // 360
+    strecke, hoehe = float(rest % 2048), float(rest // 2048)
+    r = _rnd(pos, 11 + int(winkel))
+    x, y, z0 = pos[0], pos[1], 7.0
+    c, s_ = math.cos(math.radians(winkel)), math.sin(math.radians(winkel))
+    blitz(welt, x + c * 4, y + s_ * 4, z0, ebene, 22, 0.05)
+    for i in range(3):
+        feuer(welt, r, x + c * 3, y + s_ * 3, z0, ebene, 2, r.uniform(4, 6), 0.07,
+              vx=c * r.uniform(60, 140) + r.uniform(-30, 30), vy=s_ * r.uniform(60, 140) + r.uniform(-30, 30))
+    rauch(welt, r, x + c * 6, y + s_ * 6, z0, ebene, "grau", 2, r.uniform(6, 9), r.uniform(1.0, 1.5),
+          vx=c * 40, vy=s_ * 40, vz=8.0, zaeh=3.0, deckung=0.8)
+    tempo = float(K.FAHRZEUG_WAFFEN["flak_kanone"]["tempo"])
+    dauer = max(0.05, strecke / tempo)
+    f = Fx("leuchtspur", x, y, z0, ebene, dauer)
+    f.vx, f.vy = c * tempo, s_ * tempo
+    f.vz = (max(z0, hoehe) - z0) / dauer
+    _neu(welt, f)
 
 
 def kiste_platzt(welt, pos, ebene: int, hoehe: float) -> None:
@@ -795,6 +835,12 @@ def bombe(welt, pos, ebene: int) -> None:
 # Dekale am Boden
 # ══════════════════════════════════════════════════════════════════
 
+@platzhalter("flak_leer")
+def _flak_leer():
+    """Die Flakgranate selbst zeigt nichts - man sieht ihre Leuchtspur."""
+    return pygame.Surface((2, 2), pygame.SRCALPHA)
+
+
 def _brand(i: int):
     def z():
         groesse = (28, 44, 64, 96)[i]
@@ -853,6 +899,7 @@ ARTEN = {
     "luft_mensch": lambda w, p, e, r: mensch_luft(w, p, e, r),         # r = Hoehe
     "fallschirm_riss": lambda w, p, e, r: schirm_reisst(w, p, e, *_seite_hoehe(r)),
     "absturz": lambda w, p, e, r: absturz(w, p, e),
+    "flak_schuss": lambda w, p, e, r: flak_schuss(w, p, e, r),          # r = Richtung, Strecke, Hoehe
     "werfer_start": lambda w, p, e, r: raketenstart(w, p, e, r),       # r = Steilheit * 1000 + Richtung
     "werfer_gross": lambda w, p, e, r: werfer_explosion(w, p, e, r),   # r = Radius
     "einschlag": lambda w, p, e, r: einschlag(w, p, e, max(0.4, r)),   # r = Groesse

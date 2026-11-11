@@ -4702,6 +4702,7 @@ for _team in TEAMS["kombi"]:
     BILD_MASS["panzerwagen_ring_%s_fahrer" % _team["name"].lower()] = (_fz_r, _fz_r)
 # Die Granate der Kanone, mit dicker Leuchtspur gezeichnet.
 BILD_MASS["panzergranate"] = (12, 6)
+BILD_MASS["flak_leer"] = (2, 2)          # die Flakgranate ist unsichtbar (Leuchtspur: effekte.py)
 # Der Flakwagen (seit 0.34.114, art_neue_fahrzeuge.py): Wanne wie der Panzerwagen,
 # die Lafette 128 gross (die Rohre ragen weit hinaus).
 for _name in ("flakwagen", "flakwagen_wrack", "flakwagen_schatten"):
