@@ -750,3 +750,145 @@ def _funk_drehung(i: int):
 # nacheinander zeigt (Funkwagen.bild).
 for _i in range(4):
     platzhalter("funkwagen_aktiv_%d" % _i)(_funk_drehung(_i))
+
+
+# ──────────────────────────────── Werfer (seit 0.34.112)
+
+STAHL_DK = (34, 30, 26)
+STAHL = (112, 106, 96)
+
+
+def _halbkette_gepanzert(b, rnd) -> None:
+    """Halbkette mit gepanzertem Fuehrerhaus: vorn gelenkte Raeder, hinten
+    Ketten, Haube mit Scheinwerfern, Kabine mit Sehschlitzen."""
+    b.rohr((21, -10), (21, 10), 1.8, (96, 92, 86))
+    _reifen(b, 21, -13.2, 10.5, 5.6, 0.0)
+    _reifen(b, 21, 13.2, 10.5, 5.6, 0.0)
+    _kette(b, -29, 7, -14.2, 7.4, 0.0)
+    _kette(b, -29, 7, 14.2, 7.4, 0.0)
+    b.rect((30, 28, 24), 31.4, -10.5, 2.6, 21, 0.6)
+    b.rect((104, 98, 88), 31.8, -10.1, 1.8, 20.2, 0.4)
+    b.rect((40, 36, 30), 29.4, -2.6, 2.6, 5.2, 0.5)
+    for sy in (-1, 1):
+        _scheinwerfer(b, (29.6, sy * 7.6), 1.2)
+        b.rect(HK_DK, 15.4, sy * 13.4 - 3.8, 11.6, 7.6, 2.4)
+        b.rect(HK_LACK if sy < 0 else HK_SCHATTEN, 15.9, sy * 13.4 - 3.3, 10.6, 6.6, 2.0)
+    haube = [(30, -5.6), (28, -8.4), (13.5, -9.6), (13.5, 9.6), (28, 8.4), (30, 5.6)]
+    b.poly(HK_DK, haube)
+    b.poly(HK_LACK, [(x * 0.97 + 0.3, y * 0.88) for x, y in haube])
+    b.linie(HK_HELL, (15, -7.4), (27.4, -6.6), 0.8)
+    b.linie(HK_DK, (14.5, 0), (29, 0), 0.5)
+    for i in range(5):
+        y = -5.6 + i * 1.5
+        b.linie(HK_DK, (18, y), (24, y), 0.5)
+        b.linie(HK_DK, (18, -y), (24, -y), 0.5)
+    kab = [(13.5, -11), (10, -12.4), (1, -12.4), (1, 12.4), (10, 12.4), (13.5, 11)]
+    b.poly(HK_DK, kab)
+    b.poly(HK_SCHATTEN, [(x * 0.94 + 0.4, y * 0.92) for x, y in kab])
+    b.rect(HK_LACK, 2.4, -10.4, 8.4, 20.8, 1.0)
+    b.linie(HK_HELL, (2.8, -10), (10.4, -10), 0.7)
+    for sy in (-1, 1):
+        b.rect(GLAS_DK, 11.4, sy * 5.4 - 2.4, 1.5, 4.8, 0.3)
+        b.rect((70, 96, 112), 11.7, sy * 5.4 - 1.6, 0.6, 2.0, 0.2)
+    _luke(b, (6.4, -4.6), 2.6, HK_DK, HK_SCHATTEN, HK_HELL)
+    _nieten(b, [(x, sy * 9.4) for x in (3.4, 9.4) for sy in (-1, 1)], HK_DK)
+
+
+def werfer_gestell_zeichnen(geladen: int = 6) -> pygame.Surface:
+    """Das Rohrgestell: drei Rohre nebeneinander (darunter liegen drei
+    weitere), Wiege, Abgasblech. 128 x 128, Drehpunkt in der Mitte, schaut
+    nach +x."""
+    b = _Blatt(128, G)
+    L0, L1 = -9, 21
+    b.rect((30, 28, 26), -8, -8.4, 12, 16.8, 1.0)
+    b.rect((90, 86, 78), -7.5, -7.9, 11, 15.8, 0.8)
+    for sy in (-1, 1):
+        b.rect((40, 36, 32), -5, sy * 8.6 - 1.2, 6, 2.4, 0.5)
+    for i, y in enumerate((-5.3, 0.0, 5.3)):
+        b.rect((26, 24, 22), L0, y - 2.5, L1 - L0, 5.0, 1.0)
+        b.rect(HK_LACK, L0 + 0.5, y - 2.0, L1 - L0 - 1, 4.0, 0.8)
+        b.linie(HK_HELL, (L0 + 1, y - 1.3), (L1 - 1, y - 1.3), 0.55)
+        b.linie(HK_SCHATTEN, (L0 + 1, y + 1.3), (L1 - 1, y + 1.3), 0.55)
+        for x in (L0 + (L1 - L0) * 0.25, L0 + (L1 - L0) * 0.7):
+            b.rect((40, 36, 32), x, y - 2.5, 1.2, 5.0, 0.2)
+        b.kreis((20, 18, 16), (L1 - 0.2, y), 2.0)
+        if i * 2 < geladen:
+            b.kreis((176, 66, 44), (L1 + 0.5, y), 1.5)
+            b.kreis((226, 120, 92), (L1 + 0.2, y - 0.4), 0.6)
+        b.kreis((20, 18, 16), (L0 + 0.4, y), 1.7)
+    b.rect((30, 28, 26), L0 - 3.2, -9, 2.2, 18, 0.5)
+    b.rect((70, 66, 60), L0 - 2.9, -8.6, 1.5, 17.2, 0.4)
+    return b.fertig()
+
+
+def werfer_zeichnen(aufgebaut: bool = False, rel_winkel: float = 0.0,
+                    geladen: int = 6) -> pygame.Surface:
+    """Halbkette mit Raketengestell auf dem Drehkranz; aufgebaut stehen
+    Stuetzen schraeg nach aussen, und das Gestell zeigt `rel_winkel` Grad
+    von der Fahrtrichtung weg. 128 x 128."""
+    b = _Blatt()
+    rnd = random.Random(7401)
+    if aufgebaut:
+        for sy in (-1, 1):
+            for x0, x1 in ((-26, -34), (-2, 6)):
+                b.rohr((x0, sy * 12), (x1, sy * 24), 2.0, (150, 146, 138))
+                b.rect(STAHL_DK, x1 - 3, sy * 24 - 2.2, 6, 4.4, 0.6)
+                b.rect(STAHL, x1 - 2.5, sy * 24 - 1.7, 5, 3.4, 0.5)
+    _halbkette_gepanzert(b, rnd)
+    wanne = [(1, -13), (-28, -13), (-31, -10.4), (-31, 10.4), (-28, 13), (1, 13)]
+    b.poly(HK_DK, wanne)
+    b.poly(HK_LACK, [(x * 0.97 - 0.4, y * 0.93) for x, y in wanne])
+    b.rect((48, 46, 42), -29, -10.6, 28.4, 21.2, 0.8)
+    b.rect((82, 80, 72), -28.6, -10.2, 27.6, 20.4, 0.6)
+    for i in range(9):
+        for j in range(6):
+            b.kreis((64, 62, 56), (-27 + i * 3.1 + (j % 2) * 1.5, -8.6 + j * 3.4), 0.4)
+    b.linien(HK_HELL, [(0.4, -12.4), (-27.6, -12.4), (-30.2, -10)], 0.8)
+    b.linien(HK_SCHATTEN, [(0.4, 12.4), (-27.6, 12.4), (-30.2, 10)], 0.8)
+    c = (-15, 0)
+    b.kreis((30, 28, 26), c, 9.4)
+    b.kreis((96, 92, 84), c, 8.8)
+    b.kreis((58, 56, 50), c, 7.8)
+    for i in range(12):
+        a = i * math.pi / 6
+        b.kreis((36, 34, 30), (c[0] + math.cos(a) * 8.3, c[1] + math.sin(a) * 8.3), 0.38)
+    for i in range(4):                                        # Reserveraketen im Regal
+        y = -8.6 + i * 2.2
+        b.rect((30, 28, 26), -4.4, y, 4.6, 1.8, 0.6)
+        b.rect((140, 134, 118), -4.0, y + 0.3, 3.0, 1.2, 0.4)
+        b.rect((176, 66, 44), -1.2, y + 0.3, 1.2, 1.2, 0.5)
+    _kanister(b, -4.6, 5.6, 4.6, 3.4)
+    _staub(b, rnd, 50, -30, 30, -12, 12, _STAUB_TW)
+    _rost(b, rnd, 14, -30, 0, -12.6, 12.6)
+    unten = b.fertig()
+    g = werfer_gestell_zeichnen(geladen)
+    g = pygame.transform.rotate(g, -rel_winkel)
+    m = unten.get_width() / 2
+    unten.blit(g, g.get_rect(center=(m + c[0] * G, m + c[1] * G)))
+    return unten
+
+
+@platzhalter("werfer")
+def _werfer():
+    return werfer_zeichnen(False)
+
+
+@platzhalter("werfer_wrack")
+def _werfer_wrack():
+    return _wrack(werfer_zeichnen(False), 7480)
+
+
+@platzhalter("werfer_schatten")
+def _werfer_schatten():
+    return _schatten(int(64 * G), int(34 * G), 11)
+
+
+def _werfer_stellung(i: int):
+    def z():
+        return werfer_zeichnen(True, i * 30.0)
+    return z
+
+
+# Aufgebaut: das Gestell dreht sich in 30-Grad-Stufen zum Ziel (Werfer.bild).
+for _i in range(12):
+    platzhalter("werfer_aufgebaut_%d" % _i)(_werfer_stellung(_i))

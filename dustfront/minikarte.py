@@ -185,10 +185,32 @@ class Minikarte:
             if getattr(b, "kaputt", False):
                 continue            # ein Wrack ist kein Wagen mehr (0.34.18)
             self._buggy(ziel, g, b, punkt(b.pos), int(b.ebene) != nr, m)
+            if b.art == "werfer":
+                # Eigenes Zeichen (seit 0.34.112): immer fuer die eigene Seite, fuer
+                # die Gegner nur, solange er sich mit einer Salve verraten hat.
+                seite = getattr(b.fahrer, "team", getattr(b, "team", -1)) if getattr(b, "fahrer", None) \
+                    is not None else getattr(b, "team", getattr(b, "basis_team", -1))
+                ich = g.ich
+                if getattr(b, "markiert_rest", 0.0) > 0.0 or (ich is not None and seite == ich.team):
+                    self.werfer_zeichen(ziel, punkt(b.pos), m)
 
         if not rund:
             pygame.draw.rect(ziel, RAHMEN, r.inflate(4, 4), 1)
         return r
+
+    @staticmethod
+    def werfer_zeichen(ziel, mitte, mass: float = 1.0) -> None:
+        """Das Zeichen eines Werfers (seit 0.34.112): ein Dreieck mit drei
+        Punkten darueber - drei Raketen. Gebraucht auf der Minikarte und auf
+        der Nachschubkarte."""
+        x, y = int(mitte[0]), int(mitte[1])
+        g = max(2, int(round(3 * mass)))
+        dreieck = [(x, y - g), (x + g, y + g), (x - g, y + g)]
+        pygame.draw.polygon(ziel, FARBE_DUNKEL, dreieck, max(2, int(round(mass * 1.6))))
+        pygame.draw.polygon(ziel, (250, 208, 133), dreieck)
+        for dx in (-g, 0, g):
+            pygame.draw.circle(ziel, (236, 72, 52), (x + dx, y - g - max(2, int(mass * 2))),
+                               max(1, int(round(mass))))
 
     @staticmethod
     def _punkt(ziel, mitte, farbe, radius: float) -> None:

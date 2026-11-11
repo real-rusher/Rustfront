@@ -17829,6 +17829,114 @@ _fw2111.schaden(9999.0, None, _op111)
 pruef("... ein zerstoerter Funkwagen stoert nicht mehr", not _tm111.funk_gestoert(_op111))
 _tm111.verlassen()
 
+# ─────────────────────────────────────────────────────────────────────
+# Werfer (seit 0.34.112): aufgebaut, Salve nur auf gueltige Ziele der Seite,
+# rote Kreise, verraet sich, sehr zerbrechlich mit grosser Explosion.
+_tm112 = _TM59.Testmodus(app, karte="staubtal_offen")
+_namen112 = [e_.name for e_ in _tm112.eintraege]
+pruef("Testmodus: WERFER im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB); im Nachschub fuer 9 Punkte",
+      "WERFER" in _namen112 and "ABWURF: WERFER" in _namen112
+      and ("werfer", 9, "DROPZONE: WERFER") in K.SCHLACHT["belohnungen"])
+_e112 = _tm112.welt.ebene(0)
+_rnd112 = random.Random(112)
+for _ in range(40000):
+    _tx112 = _rnd112.randrange(60, _e112.breite - 90)
+    _ty112 = _rnd112.randrange(20, _e112.hoehe - 40)
+    if all(not K.KACHELN[_e112.kachel(_tx112 + x_, _ty112 + y_)]["fest"]
+           for x_ in range(44) for y_ in range(24)):
+        break
+_z112 = lambda x_, y_: pygame.Vector2((_tx112 + x_ + 0.5) * K.TILE, (_ty112 + y_ + 0.5) * K.TILE)
+_wf112 = _tm112.fahrzeug_setzen("werfer", _z112(4, 10), 0, {"winkel": 0})
+_wp112 = _tm112.puppe_setzen(_wf112.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="WERFERFUEHRER")
+_tm112._anwenden(_wp112, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Werfer: eigene Art, keine Plaetze, nur fuer Menschen, sehr leicht zu zerstoeren",
+      _wp112.fahrzeug is _wf112 and _wf112.art == "werfer" and "plaetze" not in _wf112.werte
+      and _wf112.werte["nur_mensch"] and _wf112.leben < K.FAHRZEUG["leben"] / 2.0, str(_wf112.leben))
+_ziel112 = [0.0, 0.0]
+def _wf_ein112(feuert_=False, zielt_=False):
+    _tm112._anwenden(_wp112, {"will": [0, 0], "ziel": list(_ziel112), "knoepfe": [], "feuert": feuert_,
+                              "zielt": zielt_})
+    _tm112.schritt(K.FIXED_DT)
+for _ in range(3):
+    _wf_ein112(zielt_=True)
+for _ in range(int(3.0 / K.FIXED_DT)):
+    _wf_ein112()
+pruef("Werfer: die rechte Maustaste baut ihn auf (Phase 2), er steht", _wf112.phase == 2 and _wf112.bild.startswith("werfer_aufgebaut_"),
+      "%d %s" % (_wf112.phase, _wf112.bild))
+# Ein Gegner 640 Pixel entfernt, ein Kamerad dicht dabei (sieht ihn).
+_feind112 = _tm112.puppe_setzen(_z112(24, 10), 0, {"team": 1, "leben": 5.0}, name="FEIND")
+_kam112 = _tm112.puppe_setzen(_z112(21, 10), 0, {"team": 0}, name="KAMERAD")
+_fern112 = _tm112.puppe_setzen(_z112(40, 20), 0, {"team": 1, "leben": 5.0}, name="UNGESEHEN")
+_ziel112 = [_feind112.pos.x, _feind112.pos.y]
+for _ in range(int(0.6 / K.FIXED_DT)):
+    _wf_ein112()
+pruef("Werfer: ein Ziel, das ein Kamerad sieht, gilt (ziel_grund 0), die Salve ist bereit",
+      _wf112.ziel_grund == 0 and _wf112.bereit, "%d %s" % (_wf112.ziel_grund, _wf112.bereit))
+_ziel112 = [_fern112.pos.x, _fern112.pos.y]
+for _ in range(int(0.6 / K.FIXED_DT)):
+    _wf_ein112(feuert_=True)
+pruef("... ein Gegner, den niemand sieht, nicht - die Salve geht nicht raus",
+      _wf112.ziel_grund == 3 and not _wf112.einschlaege and _wf112.bereit, str(_wf112.ziel_grund))
+_ziel112 = [_wf112.pos.x + 200, _wf112.pos.y]
+for _ in range(int(0.6 / K.FIXED_DT)):
+    _wf_ein112()
+pruef("... zu nah (unter 400 Pixeln) und zu weit (ueber 3 200) auch nicht",
+      _wf112.ziel_grund == 1 and (_ziel112.__setitem__(0, _wf112.pos.x + 4000) or True)
+      and (_wf_ein112() or True) and _wf112.ziel_grund == 2, str(_wf112.ziel_grund))
+# Markiert gilt auch ohne Sicht.
+_fern112.markiert_rest = 5.0; _fern112.markiert_fuer = _wp112.fraktion
+_ziel112 = [_fern112.pos.x, _fern112.pos.y]
+for _ in range(int(0.6 / K.FIXED_DT)):
+    _wf_ein112()
+pruef("... ein markierter Gegner (Drohne, Funkwagen) gilt, auch ohne Sicht", _wf112.ziel_grund == 0,
+      str(_wf112.ziel_grund))
+_fern112.markiert_rest = 0.0
+# Die Salve auf den gesehenen Gegner.
+_ziel112 = [_feind112.pos.x, _feind112.pos.y]
+for _ in range(int(0.6 / K.FIXED_DT)):
+    _wf_ein112()
+_leben112 = _feind112.leben
+_wf_ein112(feuert_=True)
+_n112 = len(_wf112.einschlaege)
+pruef("Werfer: die linke Maustaste schiesst eine Salve - sechs Raketen unterwegs, er laedt danach",
+      _n112 == K.WERFER["salve"]["raketen"] and not _wf112.bereit and _wf112.takt["salve"] > 10.0,
+      "%d Raketen, Pause %.1f" % (_n112, _wf112.takt.get("salve", -1)))
+pruef("... er hat sich verraten (fuer die Gegner markiert)",
+      _wf112.markiert_rest > 0.0 and _wf112.markiert_fuer == "team1", str(_wf112.markiert_fuer))
+_w2112 = _FZ59.Werfer((0, 0), 0, 0.0, nur_bild=True)
+_w2112.netz_extra_setzen(_wf112.netz_extra())
+pruef("... und der Gast sieht dieselben Raketen (Zusatzwert im Netz)",
+      len(_w2112.einschlaege) == _n112 and _w2112.rohr_stufe == _wf112.rohr_stufe)
+for _ in range(int(2.0 / K.FIXED_DT)):
+    _wf_ein112()
+pruef("... die Raketen starten nacheinander (die ersten fliegen, die letzten warten noch im Rohr)",
+      any(e_[3] for e_ in _wf112.einschlaege) and not all(e_[3] for e_ in _wf112.einschlaege)
+      if _wf112.einschlaege else False)
+for _ in range(int(5.0 / K.FIXED_DT)):
+    _wf_ein112()
+pruef("... sie schlagen ein: der Gegner am Ziel ist getroffen, und nichts ist mehr in der Luft",
+      not _wf112.einschlaege and (_feind112.leben < _leben112 or not _feind112.lebt),
+      "%.0f -> %.0f" % (_leben112, _feind112.leben))
+# Hotzone gilt.
+_tm112.zone_setzen(_z112(30, 5), 0)
+_tm112.schritt(K.FIXED_DT)
+_ziel112 = [_z112(30, 5).x + 60, _z112(30, 5).y]
+for _ in range(int(0.6 / K.FIXED_DT)):
+    _wf_ein112()
+pruef("Werfer: die Hotzone ist ein gueltiges Ziel", _wf112.ziel_grund == 0, str(_wf112.ziel_grund))
+# Zerbrechlich: ein Treffer, und alle in der Naehe sind tot.
+_nah112 = _tm112.puppe_setzen(_wf112.pos + pygame.Vector2(0, 60), 0, {"team": 1}, name="DANEBEN")
+_ferne112 = _tm112.puppe_setzen(_wf112.pos + pygame.Vector2(0, 400), 0, {"team": 1}, name="WEITWEG")
+_nah112.unverwundbar = 0.0
+_ferne112.unverwundbar = 0.0
+_tm112.welt._raster_bauen()          # die eben gesetzten stehen sonst noch nicht im Raster
+_wf112.schaden(_wf112.max_leben + 5.0, None, _nah112, art="kugel", herkunft=_nah112.pos)
+pruef("Werfer: wird er zerstoert, gibt es eine grosse Explosion - wer daneben steht, ist tot, wer weit weg steht, nicht",
+      _wf112.kaputt and (not _nah112.lebt or _nah112.am_boden) and _ferne112.lebt
+      and K.WERFER["explosion_radius"] > K.FAHRZEUG["explosion_radius"] * 2,
+      "%s / %s" % (_nah112.lebt, _ferne112.lebt))
+_tm112.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

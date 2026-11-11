@@ -1365,6 +1365,9 @@ class SchlachtTeil:
             pygame.draw.polygon(ziel, (16, 11, 8), ecken, n(0.8))
             if markiert and seite != team:
                 self._ping(ziel, (q[0], q[1] - int(6 * mm)), mm)
+            if b.art == "werfer":
+                from .minikarte import Minikarte
+                Minikarte.werfer_zeichen(ziel, (q[0], q[1] - int(1 * mm)), mm)
         # Leute: eigene als Punkte, Gegner in Sicht oder markiert als Raute.
         for k in self.kaempfer.values():
             if not (k.lebt or getattr(k, "am_boden", False)) or int(k.ebene) != 0:

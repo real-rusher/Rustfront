@@ -1984,6 +1984,73 @@ class Funkwagen(Aufbauwagen):
         self._wirk_rest = 0.0
 
 
+class Werfer(Aufbauwagen):
+    """Steilfeuer (seit 0.34.112, K.WERFER): aufgebaut schiesst die linke
+    Maustaste eine Salve Raketen auf einen Punkt, an dem die eigene Seite ein
+    gueltiges Ziel hat (Gefecht.werfer_pruefen). Hier steht der Zustand: die
+    Raketen in der Luft (`einschlaege`: [Restzeit, x, y, gestartet]), ob eine
+    Salve bereit ist, ob das Ziel unter dem Zeiger gilt (`ziel_grund`: 0 ja,
+    1 zu nah, 2 zu weit, 3 kein Ziel) und wohin das Gestell zeigt. Sehr
+    leicht zerstoert - dann eine grosse Explosion."""
+
+    art = "werfer"
+    werte = K.WERFER
+    schatten_bild = "werfer_schatten"
+    explosion_art = "c4"
+
+    def __init__(self, pos, ebene: int = 0, winkel: float = 0.0,
+                 nur_bild: bool = False) -> None:
+        super().__init__(pos, ebene, winkel, nur_bild)
+        self.einschlaege: list = []
+        self.bereit = False
+        self.ziel_grund = 3
+        self.rohr_stufe = 0          # Gestell in 30-Grad-Stufen von der Fahrtrichtung weg
+
+    @property
+    def bild(self) -> str:
+        if self.kaputt:
+            return "werfer_wrack"
+        return "werfer_aufgebaut_%d" % self.rohr_stufe if self.phase == 2 else "werfer"
+
+    def rohr_mitte(self, pos=None, winkel=None) -> pygame.Vector2:
+        pos = self.pos if pos is None else pos
+        winkel = self.winkel if winkel is None else winkel
+        return pos + pygame.Vector2(self.werte["rohr"]).rotate(winkel)
+
+    def schritt(self, dt: float) -> None:
+        super().schritt(dt)
+        if self.nur_bild or self.welt is None or self.kaputt:
+            return
+        k = self.fahrer
+        ziel = getattr(k, "ziel", None) if k is not None else None
+        if self.phase == 2 and ziel is not None:
+            d = pygame.Vector2(ziel) - self.rohr_mitte()
+            if d.length_squared() > 16.0:
+                rel = math.degrees(math.atan2(d.y, d.x)) - self.winkel
+                self.rohr_stufe = int(round(rel / 30.0)) % 12
+
+    def netz_extra(self):
+        return [int(self.bereit), self.ziel_grund, self.rohr_stufe,
+                [[round(e[0], 1), int(e[1]), int(e[2])] for e in self.einschlaege[:12]]]
+
+    def netz_extra_setzen(self, wert) -> None:
+        try:
+            self.bereit = bool(int(wert[0]))
+            self.ziel_grund = max(0, min(3, int(wert[1])))
+            self.rohr_stufe = int(wert[2]) % 12
+            self.einschlaege = [[max(0.0, min(30.0, float(e[0]))), float(e[1]), float(e[2]),
+                                 float(e[0]) <= K.WERFER["salve"]["flug"]]
+                                for e in wert[3][:12]]
+        except (TypeError, ValueError, IndexError):
+            self.einschlaege = []
+
+    def zuruecksetzen(self) -> None:
+        super().zuruecksetzen()
+        self.einschlaege = []
+        self.bereit = False
+        self.ziel_grund = 3
+
+
 class Jagdpanzer(Panzer):
     """Ein Panzer ohne Turm (seit 0.34.107): die Kanone sitzt fest im Bug und
     schwenkt nur ein paar Grad (K.JAGDPANZER "schwenk"); wer mehr will, muss
@@ -2019,7 +2086,8 @@ class Jagdpanzer(Panzer):
 # Welche Art zu welcher Klasse und zu welchem Buchstaben in der Karte.
 ARTEN = {"buggy": Buggy, "panzer": Panzer, "panzerwagen": Panzerwagen,
          "krad": Krad, "jagdpanzer": Jagdpanzer, "trosswagen": Trosswagen,
-         "spulenwagen": Spulenwagen, "funkwagen": Funkwagen}
+         "spulenwagen": Spulenwagen, "funkwagen": Funkwagen,
+         "werfer": Werfer}
 
 
 def marken() -> list:

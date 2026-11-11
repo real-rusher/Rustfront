@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.112 | Spawner OBJEKTE: WERFER, NACHSCHUB: ABWURF: WERFER. Ausprobieren: SPIELER, ICH (Team 0) mit E einsteigen, rechte Maustaste baut auf; einen Gegner (Team 1) setzen und einen Kameraden (Team 0) in seiner Naehe: der Zeiger wird gruen, die linke Maustaste schiesst die Salve. Ohne Kamerad in der Naehe bleibt er rot (KEIN GÜLTIGES ZIEL); mit FUNKWAGEN im Kreis oder dem Spawner HOTZONE HIER gilt es auch. ENTF auf den Werfer zeigt die grosse Explosion. Pruefungen im Abschnitt "Werfer" von `tests/test_spiel.py` |
 | 0.34.111 | Spawner OBJEKTE: FUNKWAGEN, NACHSCHUB: ABWURF: FUNKWAGEN. Ausprobieren: SPIELER, ICH (Team waehlen) mit E einsteigen, rechte Maustaste baut auf, R schaltet PEILEN/STOEREN; einen Gegner (Team 1) in den Kreis setzen und sehen, dass er markiert wird; einen BOT mit FUNKSPRUECHE-Regel im Kreis des Gegners setzen (er funkt nicht mehr). Pruefungen im Abschnitt "Funkwagen" von `tests/test_spiel.py` |
 | 0.34.110 | Spawner OBJEKTE: SPULENWAGEN, NACHSCHUB: ABWURF: SPULENWAGEN. Ausprobieren: SPIELER, ICH mit E einsteigen; linke Maustaste Blitz, rechte baut das Feld auf (im Stand), einen PANZER daneben setzen und mit INFO sehen, dass er stillsteht (EMP-Rest). Pruefungen im Abschnitt "Spulenwagen" von `tests/test_spiel.py` |
 | 0.34.109 | Nichts Neues zum Setzen: FAHRER MIT FAHRZEUG und SPIELER, ICH mit AUSSEHEN zeigen den Skin jetzt auch im Krad und im Jagdpanzer. Pruefungen im Abschnitt "0.34.109" von `tests/test_spiel.py` |

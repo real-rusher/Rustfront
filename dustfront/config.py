@@ -1081,7 +1081,7 @@ SCHLACHT = dict(
                 sperre_basis=1800.0, ausweichen_ab=300.0, treiben=70.0, suche_weit=420.0,
                 stoss=520.0, quetschen=15.0, warnen_ab=160.0),
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
-                  zeichen=dict(buggy="B", funkwagen="F", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
+                  zeichen=dict(buggy="B", werfer="W", funkwagen="F", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
                                medkit="+")),
     punkte=dict(abschuss=1, fahrzeug=5, aufhelfen=5),
     # Was man kaufen kann: (Kennung, Kosten, Name).
@@ -1099,8 +1099,9 @@ SCHLACHT = dict(
         ("jagdpanzer", 10, "DROPZONE: JAGDPANZER"),
         ("spulenwagen", 10, "DROPZONE: SPULENWAGEN"),
         ("funkwagen", 7, "DROPZONE: FUNKWAGEN"),
+        ("werfer", 9, "DROPZONE: WERFER"),
     ),
-    belohnung_hilfe=dict(funkwagen="PEILEN ODER STÖREN, NUR AUFGEBAUT", spulenwagen="BLITZ UND EMP-FELD, NUR AUFGEBAUT", krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
+    belohnung_hilfe=dict(werfer="SALVEN AUF GESEHENE ZIELE, SEHR ZERBRECHLICH", funkwagen="PEILEN ODER STÖREN, NUR AUFGEBAUT", spulenwagen="BLITZ UND EMP-FELD, NUR AUFGEBAUT", krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
                          munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
                          buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
                          panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE",
@@ -1672,6 +1673,43 @@ FUNKWAGEN = dict(
     drehen=1.1,               # Umdrehungen des Peilrahmens je Sekunde / 4 Stellungen
 )
 
+# Der Werfer (seit 0.34.112): Steilfeuer ueber die halbe Karte. Rechte
+# Maustaste baut ihn auf (im Stand, `aufbau` Sekunden), dann schiesst die
+# linke eine SALVE: `raketen` Raketen im Abstand `abstand`, Flugzeit `flug`,
+# Streukreis `streu`; jede wirkt im Kreis `radius`. Geschossen wird nur dorthin,
+# wo ein gueltiges Ziel der eigenen Seite ist (im Umkreis `umkreis`): ein
+# Gegner oder Fahrzeug, das jemand der Seite sieht (`sicht`) oder das markiert
+# ist (Drohne, Horchposten, Funkwagen), die Hotzone, spaeter weitere
+# Objectives (Gefecht.werfer_ziele). Am Ziel zaehlen rote Kreise herunter, und
+# jede Salve verraet ihn `verraten` Sekunden (markiert fuer die Gegner, eigenes
+# Zeichen auf Karte und Minikarte). Sehr leicht zu zerstoeren, dann eine
+# grosse Explosion, die alle im Umkreis toetet. Nur fuer Menschen am Steuer.
+WERFER = dict(
+    {k: v for k, v in TROSSWAGEN.items()
+     if k not in ("zone", "entnahmen", "pause", "reparatur", "nur_mensch", "name", "marke")},
+    marke="W",
+    name="WERFER",
+    hoechst=170.0,
+    kreis=22.0,
+    achse=24.0,
+    einsteigen=54.0,
+    leben=120.0,
+    nur_mensch=True,
+    schiesst=True,
+    explosion_radius=170.0,
+    explosion_schaden=400.0,
+    fahrer_schaden=60.0,
+    wrack_zeit=12.0,
+    neu_nach=60.0,
+    balken_breite=30,
+    aufbau=2.5,
+    stillstand=8.0,
+    rohr=(-15.0 * 1.4, 0.0),  # Mitte des Gestells (Pixel von der Mitte, +x = vorn)
+    salve=dict(raketen=6, abstand=0.5, flug=3.6, streu=110.0, radius=46.0, schaden=90.0,
+               fahrzeug=120.0, nachladen=14.0, nah=400.0, weit=3200.0, umkreis=130.0,
+               sicht=420.0, verraten=6.0, hoch=150.0, pruefen=0.4),
+)
+
 # Rammen und was danach fliegt (seit 0.34.59). Gilt fuer beide.
 RAMMEN = dict(
     sperre=0.4,               # so lange kein zweiter Schaden vom selben Fahrzeug
@@ -1767,6 +1805,9 @@ PANZERUNG = {
                         feuer=0.3, nahkampf=0.2, ramm=0.7),
     "funkwagen": dict(kugel=0.8, panzerbrechend=1.2, spreng=1.0, hohlladung=1.4,
                       feuer=0.5, nahkampf=0.4, ramm=0.9),
+    # Der Werfer: ein duenner Laster, jeder Treffer zaehlt.
+    "werfer": dict(kugel=1.0, panzerbrechend=1.2, spreng=1.2, hohlladung=1.5,
+                   feuer=1.0, nahkampf=0.6, ramm=1.0),
     "jagdpanzer": dict(kugel=0.1, panzerbrechend=0.8, spreng=0.4, hohlladung=1.25,
                        feuer=0.1, nahkampf=0.05, ramm=0.35),
 }
@@ -4502,6 +4543,10 @@ for _team in TEAMS["kombi"]:
     BILD_MASS["panzerwagen_ring_%s_fahrer" % _team["name"].lower()] = (_fz_r, _fz_r)
 # Die Granate der Kanone, mit dicker Leuchtspur gezeichnet.
 BILD_MASS["panzergranate"] = (12, 6)
+for _name in ("werfer", "werfer_wrack", "werfer_schatten"):
+    BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
+for _i in range(12):
+    BILD_MASS["werfer_aufgebaut_%d" % _i] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _name in ("funkwagen", "funkwagen_wrack"):
     BILD_MASS[_name] = (160, 160)
 BILD_MASS["funkwagen_schatten"] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])

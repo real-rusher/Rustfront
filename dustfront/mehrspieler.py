@@ -1617,6 +1617,182 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             if b.modus == 1:
                 ausruestung_modul.markieren(b, fuer=feind)    # er steht auf ihrer Karte
 
+    # ---- Werfer (seit 0.34.112, K.WERFER) ----------------------------------
+    def werfer_ziele(self, team: int) -> list:
+        """Wohin die Werfer dieser Seite schiessen duerfen: Orte mit einem
+        Radius. (1) Gegner und Fahrzeuge, die jemand der Seite sieht (Blick
+        nicht verdeckt, hoechstens `sicht` weit), (2) alles, was fuer die Seite
+        markiert ist (Drohne, Horchposten, Funkwagen), (3) die Hotzone.
+        Weitere Objectives haengen sich hier an. Gemerkt fuer `pruefen`
+        Sekunden."""
+        merk = self.__dict__.setdefault("_wz_merk", {})
+        jetzt = self.welt.zeit
+        alt = merk.get(team)
+        if alt is not None and jetzt - alt[0] < K.WERFER["salve"]["pruefen"]:
+            return alt[1]
+        eigen, feind = "team%d" % team, "team%d" % (1 - team)
+        sicht2 = K.WERFER["salve"]["sicht"] ** 2
+        freunde = [k for k in self.kaempfer.values()
+                   if k.lebt and not k.am_boden and k.ebene == 0 and getattr(k, "team", -1) == team]
+        gegner = [k for k in self.kaempfer.values()
+                  if k.lebt and not k.am_boden and k.ebene == 0 and getattr(k, "team", -1) == 1 - team]
+        gegner += [b for b in self.fahrzeuge
+                   if b.lebt and not b.kaputt and b.ebene == 0
+                   and fahrzeug_modul.seite_von(b) == feind]
+        orte = []
+        for g in gegner:
+            gesehen = getattr(g, "markiert_rest", 0.0) > 0.0 and getattr(g, "markiert_fuer", "") == eigen
+            if not gesehen:
+                for f in freunde:
+                    if (f.pos.distance_squared_to(g.pos) <= sicht2
+                            and self.welt.sicht_frei(f.pos, g.pos, 0)):
+                        gesehen = True
+                        break
+            if gesehen:
+                orte.append((pygame.Vector2(g.pos), 0.0))
+        if self.regeln.get("zone"):
+            orte.append((pygame.Vector2(self.zone_mitte), float(K.ZONE["radius"])))
+        merk[team] = (jetzt, orte)
+        return orte
+
+    def werfer_pruefen(self, b, team, punkt) -> int:
+        """0: dort darf er hinschiessen. 1 zu nah, 2 zu weit, 3 kein gueltiges
+        Ziel. Ohne bekannte Seite (Testmodus ohne Team) gilt jeder Punkt."""
+        s = K.WERFER["salve"]
+        weite = b.rohr_mitte().distance_to(punkt)
+        if weite < s["nah"]:
+            return 1
+        if weite > s["weit"]:
+            return 2
+        if team not in (0, 1):
+            return 0
+        for ort, r in self.werfer_ziele(team):
+            if ort.distance_to(punkt) <= s["umkreis"] + r:
+                return 0
+        return 3
+
+    def werfer_schritt(self, dt: float) -> None:
+        for b in self.fahrzeuge:
+            if b.art != "werfer" or b.nur_bild or b.kaputt:
+                continue
+            s = K.WERFER["salve"]
+            for e in list(b.einschlaege):
+                e[0] -= dt
+                if e[0] <= s["flug"] and not e[3]:
+                    e[3] = True
+                    self.welt.klang("rakete", 0.8, b.rohr_mitte(), b.ebene)
+                if e[0] <= 0.0:
+                    b.einschlaege.remove(e)
+                    self._werfer_einschlag(b, pygame.Vector2(e[1], e[2]))
+            b.bereit = b.aufgebaut and not b.einschlaege and b.takt.get("salve", 0.0) <= 0.0
+            k = b.fahrer
+            ziel = getattr(k, "ziel", None) if k is not None else None
+            team = self._team_von_seite(fahrzeug_modul.seite_von(b))
+            b.ziel_grund = 3 if ziel is None or not b.aufgebaut else self.werfer_pruefen(b, team, pygame.Vector2(ziel))
+            if b.feuer and b.bereit and b.emp_rest <= 0.0 and k is not None and b.ziel_grund == 0:
+                self._werfer_salve(b, pygame.Vector2(ziel), team)
+
+    def _werfer_salve(self, b, punkt, team) -> None:
+        s = K.WERFER["salve"]
+        b.takt["salve"] = s["nachladen"] + (s["raketen"] - 1) * s["abstand"]
+        b.bereit = False
+        for i in range(s["raketen"]):
+            r = s["streu"] * math.sqrt(random.random())
+            p = punkt + pygame.Vector2(r, 0).rotate(random.uniform(0.0, 360.0))
+            b.einschlaege.append([s["flug"] + i * s["abstand"], p.x, p.y, False])
+        if hasattr(b.fahrer, "zaehlen"):
+            b.fahrer.zaehlen("schuesse", float(s["raketen"]), "werfer")
+        # Der Werfer verraet sich (Zeichen auf der Karte der Gegner).
+        b.markiert_rest = max(getattr(b, "markiert_rest", 0.0), s["verraten"])
+        if team in (0, 1):
+            b.markiert_fuer = "team%d" % (1 - team)
+
+    def _werfer_einschlag(self, b, p) -> None:
+        from .entities import abschuss_buchen, schaden_an
+        s = K.WERFER["salve"]
+        w = self.welt
+        r = s["radius"]
+        w.explosion(p, b.ebene, r, "panzer", b.fahrer)
+        for a in list(w.nahe(p, r + 70.0, b.ebene)):
+            if not a.lebt or not getattr(a, "trefferbar", True) or getattr(a, "fraktion", "") == "geschoss":
+                continue
+            if getattr(a, "ist_fahrzeug", False):
+                if not a.beruehrt(p, r):
+                    continue
+                weit = a.pos.distance_to(p)
+            else:
+                weit = a.pos.distance_to(p)
+                if weit > r + a.radius:
+                    continue
+            anteil = (1.0 - 0.6 * min(1.0, weit / max(1.0, r))) * w.deckung_anteil(p, a.pos, b.ebene)
+            schub = (a.pos - p).normalize() * 260.0 * anteil if weit > 0.01 else None
+            lebte = a.lebt
+            schaden_an(a, s["schaden"] * anteil, schub, b.fahrer, "hohlladung", p,
+                       s["fahrzeug"] * anteil)
+            abschuss_buchen(b.fahrer, a, "werfer", lebte)
+
+    def _werfer_zeichnen_boden(self, flaeche, ebene: int, ecke) -> None:
+        """Am Boden (seit 0.34.112): wo Raketen einschlagen - rote Kreise, die
+        herunterzaehlen, fuer alle zu sehen - und, wer selbst am Werfer
+        steht, der Zeiger mit seinem Streukreis (gruen: gilt, rot: gilt nicht)."""
+        s = K.WERFER["salve"]
+        t = self.welt.zeit
+        mein = None
+        ich = self.ich
+        for b in self.fahrzeuge:
+            if b.art != "werfer" or b.kaputt or b.ebene != ebene:
+                continue
+            if ich is not None and ich.im_fahrzeug and ich.pos.distance_squared_to(b.pos) < 9.0:
+                mein = b
+            for e in b.einschlaege:
+                m = pygame.Vector2(e[1], e[2]) - ecke
+                if not (-80 < m.x < flaeche.get_width() + 80 and -80 < m.y < flaeche.get_height() + 80):
+                    continue
+                r = s["radius"]
+                rest = max(0.0, min(1.0, e[0] / s["flug"]))
+                a = 30 + int(50 * (1.0 - rest))
+                surf = pygame.Surface((int(r * 2 + 6), int(r * 2 + 6)), pygame.SRCALPHA)
+                c = (surf.get_width() // 2, surf.get_height() // 2)
+                pygame.draw.circle(surf, K.C_RED + (a,), c, int(r))
+                pygame.draw.circle(surf, K.C_RED + (200,), c, int(r), 1)
+                pygame.draw.circle(surf, (255, 236, 200, 220), c, max(2, int(r * rest)), 1)
+                flaeche.blit(surf, (m.x - c[0], m.y - c[1]))
+        if mein is not None and mein.aufgebaut:
+            p = self.app.eingabe.ziel_welt(self.kamera, ich.pos) - ecke
+            farbe = K.C_TEAL if mein.ziel_grund == 0 else K.C_RED
+            pygame.draw.circle(flaeche, farbe, (int(p.x), int(p.y)), int(s["streu"]), 1)
+            pygame.draw.line(flaeche, farbe, (p.x - 5, p.y), (p.x + 5, p.y))
+            pygame.draw.line(flaeche, farbe, (p.x, p.y - 5), (p.x, p.y + 5))
+
+    def _raketen_zeichnen(self, ziel) -> None:
+        """Raketen in der Luft (seit 0.34.112): ein Bogen vom Gestell zum
+        Einschlag, mit Rauchspur und Schatten am Boden."""
+        s = K.WERFER["salve"]
+        ecke = self.kamera.ecke
+        for b in self.fahrzeuge:
+            if b.art != "werfer" or b.kaputt or b.ebene != self.blick:
+                continue
+            start = b.rohr_mitte()
+            for e in b.einschlaege:
+                if e[0] > s["flug"]:
+                    continue
+                ende = pygame.Vector2(e[1], e[2])
+                p = 1.0 - e[0] / s["flug"]
+                for i in range(7, -1, -1):
+                    q = max(0.0, p - i * 0.022)
+                    pos = start.lerp(ende, q)
+                    hoch = 4.0 * q * (1.0 - q) * s["hoch"]
+                    bild = pos - ecke - pygame.Vector2(0, hoch)
+                    if i == 0:
+                        sch = pos - ecke
+                        pygame.draw.ellipse(ziel, (12, 9, 6), (sch.x - 3, sch.y - 1, 6, 3))
+                        pygame.draw.circle(ziel, (255, 170, 70), (int(bild.x), int(bild.y)), 2)
+                        pygame.draw.circle(ziel, (255, 244, 214), (int(bild.x), int(bild.y)), 1)
+                    else:
+                        grau = 210 - i * 14
+                        pygame.draw.circle(ziel, (grau, grau - 6, grau - 14), (int(bild.x), int(bild.y)),
+                                           1 + (1 if i > 3 else 0))
+
     def lage_melden(self, k, w) -> None:
         self._funk_hoert(k, w)
         self._lage_melden(k, w)
@@ -3496,6 +3672,21 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                                  K.C_AMBER if rest <= 0.0 else K.C_MUTED, 1,
                                  ausrichtung="mitte")
                 unten += 10
+            if wagen is not None and wagen.art == "werfer" and not wagen.kaputt:
+                if wagen.phase == 0:
+                    txt = "WERFER [RMB]: AUFBAUEN"
+                elif wagen.phase == 1:
+                    txt = "BAUT AUF %.1f" % wagen.phase_rest
+                elif not wagen.bereit:
+                    rest = wagen.takt.get("salve", 0.0)
+                    txt = "LÄDT %.0f" % rest if rest > 0.0 else "SALVE UNTERWEGS"
+                else:
+                    txt = ("SALVE [LMB]  [RMB] ABBAUEN", "ZU NAH", "ZU WEIT",
+                           "KEIN GÜLTIGES ZIEL")[wagen.ziel_grund]
+                SCHRIFT.zeichnen(ziel, txt, int(p.x), int(p.y) + unten,
+                                 K.C_AMBER if wagen.bereit and wagen.ziel_grund == 0 else K.C_MUTED, 1,
+                                 ausrichtung="mitte")
+                unten += 10
             if wagen is not None and wagen.art == "funkwagen" and not wagen.kaputt:
                 texte = ("MAST [RMB]: AUFBAUEN", "MAST BAUT AUF %.1f",
                          "PEILEN  [R] STÖREN  [RMB] ABBAUEN", "")
@@ -3528,6 +3719,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                      else "[LMB] KANONE  [RMB] ZIELFERNROHR" if wagen.art == "jagdpanzer"
                      else "[LMB] MG"),
                     taste_e)
+            elif wagen is not None and wagen.art == "werfer":
+                text = "[%s/%s] FAHREN  [%s/%s] LENKEN  [RMB] AUFBAUEN  [LMB] SALVE  [%s] AUSSTEIGEN" % (
+                    self._tastenname("vor"), self._tastenname("zurueck"),
+                    self._tastenname("links"), self._tastenname("rechts"), taste_e)
             elif wagen is not None and wagen.art == "funkwagen":
                 text = "[%s/%s] FAHREN  [%s/%s] LENKEN  [RMB] MAST  [R] BETRIEBSART  [%s] AUSSTEIGEN" % (
                     self._tastenname("vor"), self._tastenname("zurueck"),
@@ -3708,6 +3903,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         self._mitfahrer_nachziehen()
         self._fahrzeuge_erneuern(dt)
         self.funkwagen_schritt(dt)
+        self.werfer_schritt(dt)
         if not self.schlacht and self.__dict__.get("nachschub_an"):
             # Testmodus (seit 0.34.100): Abwuerfe, Drohnen und Fallschirmjaeger
             # aus dem Spawner, ohne SCHLACHT.
@@ -6852,6 +7048,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         if gast:
             self._fremde_fallende(ziel, misch)
         self._drohnen_zeichnen(ziel, misch)
+        self._raketen_zeichnen(ziel)
         if self.schlacht or self.__dict__.get("nachschub_an"):
             self.ueberfluege_zeichnen(ziel)
             self.abwuerfe_zeichnen(ziel, misch)
@@ -7144,6 +7341,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
 
     def _kreis_zeichnen(self, flaeche, ebene: int, ecke) -> None:
         self._spulen_zeichnen(flaeche, ebene, ecke)
+        self._werfer_zeichnen_boden(flaeche, ebene, ecke)
         if self.schlacht or self.__dict__.get("nachschub_an"):
             self.dropzonen_zeichnen(flaeche, ebene, ecke)
         self._zonenkreis_zeichnen(flaeche, ebene, ecke)
