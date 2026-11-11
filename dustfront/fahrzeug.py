@@ -2298,18 +2298,13 @@ class Tragschrauber(Buggy):
         self._feuer_alt = False
         self._aufkl_rest = 0.0
 
-    @property
-    def bild(self) -> str:
-        """Seit 0.34.123 mit den Bomben im Bild (art_bombe.py, `tsb<N>_...`):
-        sie haengen fest an ihm und koennen nicht verrutschen."""
-        if self.kaputt:
-            return "tragschrauber_wrack"
-        return "tsb%d_%s" % (max(0, min(2, self.bomben)), self._insassen_bild("tragschrauber"))
+    schatten_bild = "tragschrauber_schatten"
 
     @property
-    def schatten_bild(self) -> str:
-        """Der Umriss genau des Bildes, mit seinen Bomben (art_bombe.py)."""
-        return "tss%d" % max(0, min(2, self.bomben))
+    def bild(self) -> str:
+        if self.kaputt:
+            return "tragschrauber_wrack"
+        return self._insassen_bild("tragschrauber")
 
     @property
     def hoch_oben(self) -> bool:

@@ -116,6 +116,11 @@ def bewegen(flaechen, gieren=0.0, kippen=0.0, rollen=0.0, dx=0.0, dy=0.0, dz=0.0
     return raus
 
 
+def skalieren(flaechen, f: float) -> list:
+    return [Flaeche([(p[0] * f, p[1] * f, p[2] * f) for p in x.punkte], x.normale, x.farbe,
+                    x.beidseitig, x.glanz) for x in flaechen]
+
+
 # ---- Malen ----------------------------------------------------------------
 
 def _ton(farbe, normale, glanz=False):

@@ -1,122 +1,101 @@
 """
-DUSTFRONT - Die Bomben des Tragschraubers (seit 0.34.123)
-=========================================================
+DUSTFRONT - Die Schrottbombe des Tragschraubers (seit 0.34.123)
+===============================================================
 
-Neu gebaut (gewuenscht: "das mit den Bomben komplett neu machen und
-designen"). Die Bomben sind ein echtes 3D-Modell (drei_d.py): Rumpf, Nase,
-gelbes Band, Heck mit vier Leitflaechen, oben ein Traeger.
+Gewuenscht: passend zu einem Fluggeraet aus Schrott, ohne Panzerung - also
+keine Fliegerbombe, sondern was man selbst zusammenbaut: eine alte,
+verrostete Blechdose, mit Draht umwickelt, ein paar Naegel unter dem Draht,
+ein Streifen Klebeband, oben eine Lunte. Klein. Vor dem Abwurf sieht man
+sie nicht (der Fahrer hat sie bei sich im Sitz), er zuendet sie und laesst
+sie neben der Kanzel fallen.
 
-* **Am Tragschrauber** haengen sie fest im Bild: `tsb<N>_<Bildname>` ist das
-  Bild des Tragschraubers mit N Bomben an den Traegern links und rechts
-  unter dem Rahmen - ein einziges Bild, das sich mit ihm dreht und hebt. Sie
-  koennen nicht neben ihm schweben oder verrutschen. Der Schatten
-  (`tss<N>`) ist der Umriss genau dieses Bildes.
-* **Im Fall** wird die Bombe aus dem Modell gemalt, in der Richtung, in der
-  der Tragschrauber flog, und kippt dabei mit der Nase nach unten
-  (`bombe_fallend`).
+Im Fall ueberschlaegt sie sich langsam; die Lunte glimmt und sprueht
+Funken (das zeichnet luft.py). Die Bilder hier sind die Dose allein, in
+12 Drehstufen, je fuer sich gemalt (nicht gedreht), damit sie auch schraeg
+scharf bleibt.
 """
 
 from __future__ import annotations
 
+import math
+
 import pygame
 
-from . import core
-from . import drei_d as D
-from .core import platzhalter_muster
+GROSS = 4               # so viel feiner wird gemalt, dann verkleinert
+FELD = 16               # Bildgroesse in Spielpixeln
 
-RUMPF = (96, 104, 70)
-NASE = (58, 54, 48)
-BAND = (214, 182, 76)
-LEIT = (74, 80, 56)
-TRAEGER = (62, 60, 56)
+ROST = (122, 68, 38)
+ROST_HELL = (164, 98, 52)
+ROST_DK = (78, 44, 28)
+FLECK = (184, 112, 50)
+BLECH = (150, 138, 120)          # blanker Rand der Dose
+DRAHT = (176, 172, 160)
+BAND = (108, 112, 88)            # Klebeband, olivgrau
+NAGEL = (190, 186, 176)
+LUNTE = (104, 86, 62)
 
-# Wo die Bomben am Tragschrauber haengen (Spielpixel, +x vorn, +y rechts), die
-# erste rechts: sie faellt zuerst.
-PLAETZE = ((4.0, 12.0), (4.0, -12.0))
+# Lage der Lunte (Spitze) in der Dose, Spielpixel: die Achse der Dose ist y,
+# oben ist -y.
+LUNTE_SPITZE = (1.3, -5.6)
 
-
-def bombe_netz(traeger: int = 0) -> list:
-    """Die Bombe, Nase nach +x, 13 Pixel lang. `traeger`: +1 Traeger nach
-    links (die rechte Bombe haengt rechts am Rahmen), -1 nach rechts, 0 ohne."""
-    f = []
-    f += D.stumpf(-4.0, 3.6, 2.1, 2.1, RUMPF, 12, kappe0=False, kappe1=False, glanz=True)
-    f += D.stumpf(0.6, 1.6, 2.2, 2.2, BAND, 12, kappe0=False, kappe1=False)
-    f += D.stumpf(3.6, 6.4, 2.1, 0.5, NASE, 12, kappe0=False, kappe1=True)
-    f += D.stumpf(-6.6, -4.0, 1.0, 2.1, RUMPF, 12, kappe0=True, kappe1=False)
-    for y, z in ((3.4, 0.0), (-3.4, 0.0), (0.0, 3.4), (0.0, -3.4)):
-        ny, nz = (0.0, 1.0) if y == 0.0 else (1.0, 0.0)
-        f += D.platte([(-7.2, 0, 0), (-4.4, 0, 0), (-5.0, y * 0.8, z * 0.8), (-7.4, y, z)], (0, nz, ny), LEIT)
-    if traeger:
-        s = -traeger
-        f += D.quader(-2.0, 2.4, min(0, s * 5.0), max(0, s * 5.0), 1.6, 2.6, TRAEGER)
-    return f
+_BILDER: dict = {}
 
 
-_FALL: dict = {}
+def _punkt(x: float, y: float, w: float) -> tuple:
+    c, s = math.cos(w), math.sin(w)
+    return ((FELD / 2 + x * c - y * s) * GROSS, (FELD / 2 + x * s + y * c) * GROSS)
 
 
-def bombe_fallend(gieren: float, kippen: float, rollen: float = 0.0) -> pygame.Surface:
-    """Die fallende Bombe, 40 x 40, gerundet auf 10 Grad (gieren), 8 Grad
-    (kippen) und 30 Grad (rollen)."""
-    g = int(round(gieren / 10.0)) * 10 % 360
-    k = max(0, min(88, int(round(kippen / 8.0)) * 8))
-    r = int(round(rollen / 30.0)) * 30 % 360
-    s = _FALL.get((g, k, r))
+def lunte_spitze(winkel: float) -> tuple:
+    """Wo die Spitze der Lunte gerade ist, relativ zur Mitte der Dose."""
+    w = math.radians(winkel)
+    x, y = LUNTE_SPITZE
+    return (x * math.cos(w) - y * math.sin(w), x * math.sin(w) + y * math.cos(w))
+
+
+def _zeichnen(winkel: float) -> pygame.Surface:
+    w = math.radians(winkel)
+    s = pygame.Surface((FELD * GROSS, FELD * GROSS), pygame.SRCALPHA)
+
+    def viereck(farbe, x0, y0, x1, y1):
+        pygame.draw.polygon(s, farbe, [_punkt(x0, y0, w), _punkt(x1, y0, w), _punkt(x1, y1, w), _punkt(x0, y1, w)])
+
+    def strich(farbe, a, b, dick):
+        pygame.draw.line(s, farbe, _punkt(a[0], a[1], w), _punkt(b[0], b[1], w), max(1, int(dick * GROSS)))
+
+    def punkt(farbe, x, y, r):
+        pygame.draw.circle(s, farbe, [int(v) for v in _punkt(x, y, w)], max(1, int(r * GROSS)))
+
+    # Die Lunte zuerst - sie kommt oben aus dem Deckel und knickt ab.
+    strich(LUNTE, (0.2, -3.4), (0.5, -4.8), 0.9)
+    strich(LUNTE, (0.5, -4.8), LUNTE_SPITZE, 0.9)
+    # Die Dose: Rost, links vom Licht heller, rechts dunkler.
+    viereck(ROST, -2.4, -3.3, 2.4, 3.3)
+    viereck(ROST_HELL, -2.4, -3.3, -1.2, 3.3)
+    viereck(ROST_DK, 1.4, -3.3, 2.4, 3.3)
+    punkt(FLECK, 0.4, 0.4, 0.7)
+    punkt(FLECK, -0.9, 2.2, 0.45)
+    # Der gefalzte Rand oben und unten, verbeult (unten schief).
+    viereck(BLECH, -2.6, -3.6, 2.6, -2.9)
+    viereck(BLECH, -2.6, 2.9, 2.3, 3.6)
+    viereck(ROST_DK, 2.3, 2.9, 2.6, 3.4)
+    # Klebeband quer, Draht zweimal herum, Naegel stehen raus.
+    viereck(BAND, -2.5, -0.6, 2.5, 0.5)
+    strich(DRAHT, (-2.6, -1.8), (2.6, -1.6), 0.35)
+    strich(DRAHT, (-2.6, 1.7), (2.6, 1.9), 0.35)
+    for x, y, dx in ((-2.5, -1.2, -0.9), (2.5, 1.2, 0.9), (2.5, -2.3, 0.8), (-2.5, 2.5, -0.8)):
+        strich(NAGEL, (x, y), (x + dx, y), 0.35)
+        punkt(NAGEL, x + dx, y, 0.3)
+    klein = pygame.transform.smoothscale(s, (FELD, FELD))
+    from . import art
+    return art._rand(klein)
+
+
+def schrottbombe(winkel: float) -> pygame.Surface:
+    """Die Dose, um `winkel` Grad gedreht (gerundet auf 30 Grad)."""
+    stufe = int(round(winkel / 30.0)) % 12
+    s = _BILDER.get(stufe)
     if s is None:
-        s = D.malen(D.bewegen(bombe_netz(), gieren=g, kippen=k, rollen=r), 40)
-        _FALL[(g, k, r)] = s
+        s = _zeichnen(stufe * 30.0)
+        _BILDER[stufe] = s
     return s
-
-
-def _basis(name: str):
-    """Ein Bild aus den Zeichnern des Spiels (ohne Datei), fuer die Bilder mit Bomben."""
-    z = core._PLATZHALTER.get(name)
-    if z is not None:
-        return z()
-    for anfang, muster in core._MUSTER:
-        if anfang in ("tsb", "tss"):
-            continue
-        if name.startswith(anfang):
-            s = muster(name)
-            if s is not None:
-                return s
-    return None
-
-
-def _mit_bomben(basis: pygame.Surface, anzahl: int) -> pygame.Surface:
-    s = pygame.Surface(basis.get_size(), pygame.SRCALPHA)
-    m = (basis.get_width() / 2.0, basis.get_height() / 2.0)
-    for i in range(max(0, min(2, anzahl))):
-        x, y = PLAETZE[i]
-        b = D.malen(bombe_netz(1 if y > 0 else -1), 40)
-        s.blit(b, b.get_rect(center=(int(round(m[0] + x)), int(round(m[1] + y)))))
-    s.blit(basis, (0, 0))         # der Rahmen liegt ueber den Traegern
-    return s
-
-
-def _tsb(name: str):
-    """`tsb<N>_<Bildname>`: der Tragschrauber mit N Bomben."""
-    try:
-        kopf, basisname = name.split("_", 1)
-        anzahl = int(kopf[3:])
-    except (ValueError, IndexError):
-        return None
-    basis = _basis(basisname)
-    return None if basis is None else _mit_bomben(basis, anzahl)
-
-
-def _tss(name: str):
-    """`tss<N>`: der Schatten des leeren Tragschraubers mit N Bomben."""
-    try:
-        anzahl = int(name[3:])
-    except ValueError:
-        return None
-    basis = _basis("tragschrauber")
-    if basis is None:
-        return None
-    bild = _mit_bomben(basis, anzahl)
-    return pygame.mask.from_surface(bild, 40).to_surface(setcolor=(0, 0, 0, 112), unsetcolor=(0, 0, 0, 0))
-
-
-platzhalter_muster("tsb", _tsb, lambda name: (160, 160) if name.startswith("tsb") else None)
-platzhalter_muster("tss", _tss, lambda name: (160, 160) if name[3:].isdigit() else None)

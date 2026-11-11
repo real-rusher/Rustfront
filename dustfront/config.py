@@ -723,8 +723,8 @@ KLANG_NAMEN = (
     "fallschirm_riss",      # der Schirm eines Abwurfs reisst
     "absturz",              # ein Fahrzeug schlaegt nach dem Sturz auf
     "werfer_explosion",     # der Werfer geht hoch (seit 0.34.120)
-    "bombe_ab",             # eine Bombe loest sich vom Rahmen (seit 0.34.119)
-    "bombe_fall",           # das Pfeifen der fallenden Bombe
+    "bombe_ab",             # die Lunte der Schrottbombe wird gezuendet (seit 0.34.123)
+    "bombe_fall",           # die zischende Lunte der fallenden Bombe
     "panzer_einschlag",     # die Granate der Kanone schlaegt ein
     "panzer_motor",         # Ketten und Motor, in einem Takt, solange er faehrt
     "panzerwagen_motor",
@@ -1781,9 +1781,12 @@ TRAGSCHRAUBER = dict(
     aufklaerung_takt=1.0,
     bomben=2,
     bomben_nachladen=3.0,
-    # Seit 0.34.119 faellt die Bombe senkrecht unter ihm (ohne sein Tempo), eine
-    # nach der anderen, und sichtbar: `fall` Sekunden, gross.
-    bombe=dict(fall=1.1, radius=62.0, schaden=110.0, fahrzeug=140.0, pause=0.6),
+    # Seit 0.34.123 eine kleine Schrottbombe (Blechdose mit Lunte, art_bombe.py),
+    # von Hand neben der Kanzel fallen gelassen (`abwurf`: Spielpixel, +x vorn,
+    # +y rechts): senkrecht, ohne sein Tempo, eine nach der anderen; im Fall
+    # ueberschlaegt sie sich (`ueberschlag` Grad je Sekunde).
+    bombe=dict(fall=1.1, radius=62.0, schaden=110.0, fahrzeug=140.0, pause=0.6,
+               abwurf=(9.0, 8.0), ueberschlag=260.0),
     luft_radius=24.0,         # so gross ist er als Ziel (Pixel um sein Bild)
 )
 

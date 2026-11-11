@@ -750,12 +750,12 @@ def werfer_explosion(welt, pos, ebene: int, radius: float) -> None:
 
 
 def bombe_los(welt, pos, ebene: int, hoehe: float) -> None:
-    """Die Bombe loest sich vom Traeger: ein kurzer Ruck, ein Woelkchen und
-    ein paar Funken am Haken - man sieht, dass sie faellt."""
+    """Der Fahrer zuendet die Schrottbombe neben der Kanzel: die Lunte
+    flammt auf, ein paar Funken, ein Hauch Rauch, der zurueckbleibt."""
     r = _rnd(pos, 9)
-    x, y, z = pos[0], pos[1], max(0.0, hoehe - 2.0)
-    rauch(welt, r, x, y, z, ebene, "grau", 2, 6, 0.7, vz=-10.0, zaeh=3.0)
-    funken(welt, r, x, y, z, ebene, 5, 90.0, 0.25, farbe=(255, 214, 140), hoch=0.2)
+    x, y, z = pos[0], pos[1], max(0.0, hoehe - 4.0)
+    rauch(welt, r, x, y, z, ebene, "grau", 1, 5, 0.9, vz=6.0, zaeh=3.0)
+    funken(welt, r, x, y, z, ebene, 7, 70.0, 0.3, farbe=(255, 196, 96), hoch=0.3)
 
 
 def bombe(welt, pos, ebene: int) -> None:

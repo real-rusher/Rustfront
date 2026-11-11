@@ -916,13 +916,12 @@ TS_DK = (84, 40, 24)
 TS_HELL = (214, 136, 88)
 
 
-def tragschrauber_zeichnen(fahrer=None, bomben: int = 0) -> pygame.Surface:
+def tragschrauber_zeichnen(fahrer=None) -> pygame.Surface:
     """Ein Tragschrauber von oben, ohne Rotor (der dreht sich als eigenes
     Bild, `rotor_zeichnen`): Rahmen mit Druckschraube hinten, offene
     Bugkanzel, Leitwerk. 160 x 160. Mit `fahrer` sitzt er in der Kanzel.
-    Die Bomben am Rahmen sind seit 0.34.119 ein eigenes Bild (`bombe_rahmen`,
-    gezeichnet in luft.py): man soll sie fallen sehen. `bomben` > 0 malt sie
-    noch ins Bild."""
+    Seine Bomben sieht man nicht: der Fahrer hat sie bei sich im Sitz und
+    wirft sie von Hand (art_bombe.py)."""
     b = _Blatt(160, G)
     rnd = random.Random(7801)
     for sy in (-1, 1):                                        # Fahrwerk
@@ -941,12 +940,6 @@ def tragschrauber_zeichnen(fahrer=None, bomben: int = 0) -> pygame.Surface:
     for sy in (-1, 1):
         b.rect(TS_DK, -31, sy * 10.6 - 0.8, 9.6, 1.6, 0.5)
         b.rect(TS_HELL, -30.6, sy * 10.6 - 0.4, 8.8, 0.8, 0.3)
-    for i in range(max(0, min(2, bomben))):                   # Bomben am Rahmen
-        sy = -1 if i % 2 == 0 else 1
-        b.rect((26, 24, 22), 2, sy * 5.6 - 1.4, 8, 2.8, 1.3)
-        b.rect((90, 96, 70), 2.4, sy * 5.6 - 1.0, 7.2, 2.0, 1.0)
-        b.rect((196, 172, 72), 7.2, sy * 5.6 - 1.0, 1.2, 2.0)
-        b.rect((26, 24, 22), 0.6, sy * 5.6 - 1.8, 2.0, 3.6, 0.3)
     b.rect((40, 38, 36), -11.4, -4.4, 7.4, 8.8, 1.0)          # Motor
     b.rect((92, 88, 82), -10.9, -3.9, 6.4, 7.8, 0.8)
     for i in range(4):
@@ -1021,7 +1014,7 @@ def _tragschrauber_fahrer():
 
 @platzhalter("tragschrauber_wrack")
 def _tragschrauber_wrack():
-    return _wrack(tragschrauber_zeichnen(None, 0), 7680)
+    return _wrack(tragschrauber_zeichnen(None), 7680)
 
 
 def _umriss_schatten(bild: pygame.Surface, deckung: int) -> pygame.Surface:
@@ -1036,7 +1029,7 @@ def _tragschrauber_schatten():
     """Der Schatten des Tragschraubers (seit 0.34.119): die Silhouette seines
     eigenen Bildes - Rahmen, Kanzel, Leitwerk, Fahrwerk (ohne Rotor, der hat
     eigene Schatten `rotor_schatten_N`)."""
-    return _umriss_schatten(tragschrauber_zeichnen(None, 0), 112)
+    return _umriss_schatten(tragschrauber_zeichnen(None), 112)
 
 
 def _rotor_schatten_stufe(i: int):

@@ -228,19 +228,18 @@ class LuftTeil:
                 continue
             druck = b.feuer and not b._feuer_alt
             b._feuer_alt = b.feuer
-            # Eine Bombe nach der anderen, senkrecht unter ihm (seit 0.34.123 neu):
-            # sie loest sich von ihrem Traeger - dort, wo sie im Bild hing -,
-            # behaelt nichts von seinem Tempo und faellt, waehrend er weiterfliegt.
+            # Eine Bombe nach der anderen (seit 0.34.123 neu): der Fahrer zuendet
+            # eine Schrottbombe und laesst sie rechts neben der Kanzel fallen.
+            # Sie behaelt nichts von seinem Tempo und faellt senkrecht dorthin.
             if (druck and b.in_der_luft and b.bomben > 0 and b.emp_rest <= 0.0
                     and b.fahrer is not None and not b.landen and not b.bomben_fall):
-                from .art_bombe import PLAETZE
                 b.bomben -= 1
                 b._bomben_rest = f["bomben_nachladen"]
-                ort = b.pos + pygame.Vector2(PLAETZE[b.bomben]).rotate(b.winkel)
+                ort = b.pos + pygame.Vector2(bo["abwurf"]).rotate(b.winkel)
                 b.bomben_fall.append([bo["fall"], ort.x, ort.y, b.winkel])
                 self.welt.explosion(ort, b.ebene, float(b.hoehe), "bombe_los", b.fahrer)
-                self.welt.klang("bombe_ab", 0.8, b.pos, b.ebene)
-                self.welt.klang("bombe_fall", 0.6, b.pos, b.ebene)
+                self.welt.klang("bombe_ab", 0.7, b.pos, b.ebene)
+                self.welt.klang("bombe_fall", 0.5, b.pos, b.ebene)
             for e in list(b.bomben_fall):
                 e[0] -= dt
                 if e[0] <= 0.0:
@@ -377,29 +376,55 @@ class LuftTeil:
             self._bomben_fallend_zeichnen(ziel, b, ecke)
 
     def _bomben_fallend_zeichnen(self, ziel, b, ecke) -> None:
-        """Fallende Bomben (seit 0.34.123 neu): das 3D-Modell, in der Richtung,
-        in der der Tragschrauber flog; sie kippt mit der Nase nach unten,
-        dreht sich um sich selbst und faellt immer schneller dorthin, wo sie
-        abgeworfen wurde - darunter waechst ihr Schatten, hinter ihr ziehen
-        zwei helle Fallstreifen."""
-        from .art_bombe import bombe_fallend
+        """Fallende Schrottbomben (seit 0.34.123 neu, art_bombe.py): klein,
+        senkrecht und immer schneller nach unten, dabei ueberschlaegt sich
+        die Dose langsam. Die Lunte glimmt, sprueht Funken und zieht einen
+        duennen Rauchfaden hinter sich her. Darunter waechst ihr Schatten."""
+        from .art_bombe import lunte_spitze, schrottbombe
         bo = K.TRAGSCHRAUBER["bombe"]
-        z0 = max(4.0, K.TRAGSCHRAUBER["hoehe"] - 2.0)
+        z0 = max(4.0, K.TRAGSCHRAUBER["hoehe"] - 4.0)
+        jetzt = pygame.time.get_ticks() / 1000.0
         for e in b.bomben_fall:
-            u = 1.0 - max(0.0, min(1.0, e[0] / bo["fall"]))
-            hoch = z0 * (1.0 - u * u)
+            # Hoehe und Lage nur aus Zeit und Abwurfort: so sieht der Gast
+            # dasselbe wie der Gastgeber.
+            dreh = 1 if int(e[1] + e[2]) % 2 else -1
+            start = (e[1] * 7.0 + e[2] * 3.0) % 360.0
+
+            def lage(t, start=start, dreh=dreh):
+                t = max(0.0, min(bo["fall"], t))
+                u = t / bo["fall"]
+                return z0 * (1.0 - u * u), start + dreh * bo["ueberschlag"] * t
+
+            t = bo["fall"] - max(0.0, e[0])
+            hoch, winkel = lage(t)
+            u = t / bo["fall"]
             boden = pygame.Vector2(e[1], e[2]) - ecke
-            sw = int(3 + 6 * u)
+            sw = int(2 + 4 * u)
             sch = pygame.Surface((sw * 2 + 2, sw + 2), pygame.SRCALPHA)
-            pygame.draw.ellipse(sch, (10, 8, 6, int(50 + 150 * u)), sch.get_rect())
+            pygame.draw.ellipse(sch, (10, 8, 6, int(40 + 130 * u)), sch.get_rect())
             ziel.blit(sch, (int(boden.x) - sw - 1, int(boden.y) - sw // 2 - 1))
-            kippen = 84.0 * min(1.0, u / 0.42) ** 0.8
-            bild = bombe_fallend(e[3] if len(e) > 3 else b.winkel, kippen, (1.0 - e[0]) * 520.0)
-            mitte = pygame.Vector2(boden.x, boden.y - hoch)
-            tempo = 2.0 * z0 * u / bo["fall"]
-            lang = int(tempo * 0.07)
-            if lang > 2:
-                for dx, farbe in ((-2, (226, 220, 206)), (2, (196, 190, 178))):
-                    pygame.draw.line(ziel, farbe, (int(mitte.x) + dx, int(mitte.y) - 6),
-                                     (int(mitte.x) + dx, int(mitte.y) - 6 - lang), 1)
-            ziel.blit(bild, bild.get_rect(center=(int(mitte.x), int(mitte.y))))
+            # Rauchfaden: wo die Lunte eben noch war; er steigt etwas und
+            # wird nach hinten heller und dicker.
+            for k in range(9, 0, -1):
+                if k > 4 and k % 2:
+                    continue                    # hinten reisst der Faden auf
+                h, w = lage(t - k * 0.035)
+                lx, ly = lunte_spitze(w)
+                grau = 92 + k * 8
+                pygame.draw.circle(ziel, (grau, grau - 4, grau - 10),
+                                   (int(boden.x + lx + k * 0.3), int(boden.y - h + ly - k * 0.8)),
+                                   1 if k < 5 else 2)
+            bild = schrottbombe(winkel)
+            mitte = (int(boden.x), int(boden.y - hoch))
+            ziel.blit(bild, bild.get_rect(center=mitte))
+            # Die Glut an der Lunte und ein paar Funken drumherum.
+            lx, ly = lunte_spitze(winkel)
+            gx, gy = mitte[0] + lx, mitte[1] + ly
+            hell = math.sin(jetzt * 47.0 + e[1]) > -0.4
+            pygame.draw.circle(ziel, (255, 150, 40), (int(gx), int(gy)), 2)
+            pygame.draw.circle(ziel, (255, 236, 160) if hell else (255, 200, 90), (int(gx), int(gy)), 1)
+            for i in range(4):
+                w = jetzt * 9.0 + i * 1.7 + e[2]
+                d = 2.0 + ((jetzt * 23.0 + i * 0.37) % 1.0) * 4.0
+                ziel.set_at((int(gx + math.cos(w * 3.1) * d), int(gy + math.sin(w * 2.3) * d - d * 0.4)),
+                            (255, 210 - i * 20, 90))

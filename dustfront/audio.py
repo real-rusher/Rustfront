@@ -454,16 +454,23 @@ def _werfer_explosion_ton(seed=0):
 
 @platzhalter_klang("bombe_ab")
 def _bombe_ab(seed=0):
-    """Eine Bombe loest sich vom Rahmen: Klacken, kurzes Rauschen."""
-    return _mischen(_schlag(520, 210, 0.07, 0.6, 3.5),
-                    _rauschen(0.12, 0.35, 6000, 1200, 2.5, seed + 241, hp=True))
+    """Die Lunte der Schrottbombe faengt Feuer (seit 0.34.123): ein kurzes
+    Kratzen wie ein Streichholz, dann ein Aufzischen."""
+    return _mischen(_rauschen(0.05, 0.5, 5200, 2600, 4.0, seed + 241, hp=True),
+                    [0.0] * int(RATE * 0.05) + _rauschen(0.22, 0.4, 8500, 3500, 1.6, seed + 243, hp=True))
 
 
 @platzhalter_klang("bombe_fall")
 def _bombe_fall_ton(seed=0):
-    """Das Pfeifen der fallenden Bombe: ein hoher Ton, der nach unten gleitet."""
-    return _mischen(_schlag(2400, 700, 1.0, 0.32, 1.2),
-                    _rauschen(0.9, 0.12, 9000, 3000, 1.0, seed + 242, hp=True))
+    """Die fallende Schrottbombe pfeift nicht - ihre Lunte zischt und
+    knistert (seit 0.34.123)."""
+    knistern = _rauschen(1.0, 0.18, 9500, 4000, 0.4, seed + 242, hp=True)
+    r = random.Random(seed + 244)
+    for _ in range(14):
+        i = r.randrange(0, max(1, len(knistern) - 200))
+        for k in range(120):
+            knistern[i + k] += (r.random() - 0.5) * 0.5 * (1.0 - k / 120.0)
+    return knistern
 
 
 @platzhalter_klang("absturz")
