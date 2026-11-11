@@ -156,14 +156,37 @@ def _ins_bild(q) -> tuple:
     return (q[0] - MITTE[0] + halb, q[1] - q[2] - MITTE[1] + halb)
 
 
+MERKEN_HOECHSTENS = 400               # so viele Bilder (und Schatten) bleiben gemerkt
+
+
+def _voll(teil, versatz) -> pygame.Surface:
+    voll = pygame.Surface((GROESSE_BILD, GROESSE_BILD), pygame.SRCALPHA)
+    voll.blit(teil, (int(round(GROESSE_BILD / 2.0 + versatz[0])), int(round(GROESSE_BILD / 2.0 + versatz[1]))))
+    return voll
+
+
 def funkmast(gieren: float, fortschritt: float, drehung: float = 0.0) -> pygame.Surface:
-    """Der Mast im Bild, gerundet auf 5 Grad (gieren), 1/24 (fortschritt) und
-    15 Grad (drehung). Bildmitte ist der Mastfuss, verschoben um MITTE."""
+    """Der Mast in voller Bildgroesse (Bildmitte = Mastfuss, verschoben um
+    MITTE) - fuer Werkzeuge und Pruefungen; das Spiel nimmt
+    `funkmast_zugeschnitten`."""
+    return _voll(*funkmast_zugeschnitten(gieren, fortschritt, drehung))
+
+
+def schatten(gieren: float, fortschritt: float, drehung: float = 0.0) -> pygame.Surface:
+    """Der Schatten in voller Bildgroesse, wie `funkmast`."""
+    return _voll(*schatten_zugeschnitten(gieren, fortschritt, drehung))
+
+
+def funkmast_zugeschnitten(gieren: float, fortschritt: float, drehung: float = 0.0) -> tuple:
+    """(Bild, Versatz zur Bildmitte): nur der belegte Teil (seit 0.34.127,
+    spart den meisten Speicher). Gerundet auf 5 Grad (gieren), 1/24
+    (fortschritt) und 15 Grad (drehung)."""
+    from .art_werfer import zuschneiden
     k = _schluessel(gieren, fortschritt, drehung)
     s = _BILDER.get(k)
     if s is not None:
         return s
-    if len(_BILDER) > 600:
+    if len(_BILDER) > MERKEN_HOECHSTENS:
         _BILDER.clear()
     # Ohne den dunklen Rand von drei_d.malen: bei so duennen Teilen griff er
     # nur in manchen Lagen, dann bekam der Mast ploetzlich einen schwarzen
@@ -182,21 +205,22 @@ def funkmast(gieren: float, fortschritt: float, drehung: float = 0.0) -> pygame.
     s.blit(mast, (0, 0))
     for a, b in vorn:
         pygame.draw.aaline(s, SEIL, _ins_bild(a), _ins_bild(b))
-    _BILDER[k] = s
+    s = _BILDER[k] = zuschneiden(s)
     return s
 
 
-def schatten(gieren: float, fortschritt: float, drehung: float = 0.0) -> pygame.Surface:
+def schatten_zugeschnitten(gieren: float, fortschritt: float, drehung: float = 0.0) -> tuple:
     """Der Schatten des Mastes auf dem Boden, wie beim Werfer-Gestell schraeg
     nach rechts unten; dieselbe Bildmitte wie `funkmast`. Der Kopf dreht sich
     im Schatten mit, darum dieselben Stufen."""
+    from .art_werfer import zuschneiden
     k = _schluessel(gieren, fortschritt, drehung)
     s = _SCHATTEN.get(k)
     if s is not None:
         return s
-    if len(_SCHATTEN) > 600:
+    if len(_SCHATTEN) > MERKEN_HOECHSTENS:
         _SCHATTEN.clear()
     flach = D.malen(D.flach(_teile(*k, seile_als_stab=True), 0.42, 0.34), GROESSE_BILD, mitte=MITTE, rand=False)
-    s = _SCHATTEN[k] = pygame.mask.from_surface(flach, 30).to_surface(
-        setcolor=(0, 0, 0, 70), unsetcolor=(0, 0, 0, 0))
+    s = _SCHATTEN[k] = zuschneiden(pygame.mask.from_surface(flach, 30).to_surface(
+        setcolor=(0, 0, 0, 70), unsetcolor=(0, 0, 0, 0)))
     return s

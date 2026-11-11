@@ -314,7 +314,7 @@ class LuftTeil:
         jede Richtung und Steilheit neu gemalt, mit Schatten auf der Pritsche.
         Es dreht sich weich zum Zeiger und richtet die Rohre nach der
         Entfernung auf. Beim Gastgeber und beim Gast (Zustand aus der Meldung)."""
-        from .art_werfer import gestell
+        from .art_werfer import gestell_zugeschnitten
         ecke = self.kamera.ecke
         for b in self.fahrzeuge:
             if b.art != "werfer" or b.kaputt or b.ebene != self.blick:
@@ -323,9 +323,9 @@ class LuftTeil:
             if not (-120 < p.x < ziel.get_width() + 120 and -120 < p.y < ziel.get_height() + 120):
                 continue
             mitte = p + pygame.Vector2(b.werte["rohr"]).rotate(b.winkel)
-            bild, schatten = gestell(b.gestell_winkel(), b.erhebung(), b.rohre)
-            ziel.blit(schatten, schatten.get_rect(center=(int(mitte.x), int(mitte.y))))
-            ziel.blit(bild, bild.get_rect(center=(int(mitte.x), int(mitte.y))))
+            bild, bv, schatten, sv = gestell_zugeschnitten(b.gestell_winkel(), b.erhebung(), b.rohre)
+            ziel.blit(schatten, (int(round(mitte.x + sv[0])), int(round(mitte.y + sv[1]))))
+            ziel.blit(bild, (int(round(mitte.x + bv[0])), int(round(mitte.y + bv[1]))))
 
     # ---- Der Mast des Funkwagens (seit 0.34.124) ------------------------------
     def _funkmasten_zeichnen(self, ziel, misch: float) -> None:
@@ -333,7 +333,7 @@ class LuftTeil:
         (art_funkmast.py), mit Schatten: der Mast liegt eingepackt auf dem
         Dach, richtet sich beim Aufbau auf, faehrt aus, der Kopf klappt auf
         und dreht sich. Beim Gastgeber und beim Gast (aus `fortschritt`)."""
-        from .art_funkmast import MITTE, funkmast, schatten
+        from .art_funkmast import MITTE, funkmast_zugeschnitten, schatten_zugeschnitten
         ecke = self.kamera.ecke
         for b in self.fahrzeuge:
             if b.art != "funkwagen" or b.kaputt or b.ebene != self.blick:
@@ -342,12 +342,11 @@ class LuftTeil:
             if not (-140 < p.x < ziel.get_width() + 140 and -140 < p.y < ziel.get_height() + 140):
                 continue
             fuss = p + pygame.Vector2(b.werte["mast"]).rotate(b.winkel)
-            mitte = (int(round(fuss.x + MITTE[0])), int(round(fuss.y + MITTE[1])))
+            mx, my = fuss.x + MITTE[0], fuss.y + MITTE[1]
             kopf = getattr(b, "kopf", 0.0)
-            sch = schatten(b.winkel, b.fortschritt, kopf)
-            ziel.blit(sch, sch.get_rect(center=mitte))
-            bild = funkmast(b.winkel, b.fortschritt, kopf)
-            ziel.blit(bild, bild.get_rect(center=mitte))
+            for teil, (vx, vy) in (schatten_zugeschnitten(b.winkel, b.fortschritt, kopf),
+                                   funkmast_zugeschnitten(b.winkel, b.fortschritt, kopf)):
+                ziel.blit(teil, (int(round(mx + vx)), int(round(my + vy))))
 
     # ---- Zeichnen (Gastgeber und Gast) -----------------------------------------
     def _luftfahrzeuge_zeichnen(self, ziel, misch: float) -> None:
@@ -357,13 +356,15 @@ class LuftTeil:
         r = self.renderer
         t = self.welt.zeit
         for b in self.fahrzeuge:
-            if b.art != "tragschrauber" or b.kaputt or b.ebene != self.blick:
+            # Ein Wrack nur, solange es noch faellt (seit 0.34.127); am Boden
+            # zeichnet es der Renderer wie jedes Wrack.
+            if b.art != "tragschrauber" or (b.kaputt and b.hoehe <= 2.0) or b.ebene != self.blick:
                 continue
             p = b.zeichenpos(misch) - ecke
             if not (-120 < p.x < ziel.get_width() + 120 and -200 < p.y < ziel.get_height() + 200):
                 continue
             h = max(0.0, b.hoehe)
-            besetzt = b.fahrer is not None or getattr(b, "besetzt", False)
+            besetzt = (b.fahrer is not None or getattr(b, "besetzt", False)) and not b.kaputt
             st = int(t * 40.0) % 6
             # Der Schatten (seit 0.34.119 genau der Umriss des Tragschraubers und
             # seines Rotors - kein Oval): faellt schraeg nach rechts unten, je
@@ -373,13 +374,13 @@ class LuftTeil:
             if b.hoch_oben:
                 sch = r.bilder.gedreht(b.schatten_bild, b.winkel)
                 ziel.blit(sch, sch.get_rect(center=(int(p.x + versatz.x), int(p.y + versatz.y))))
-                if h > 2.0:
+                if h > 2.0 and not b.kaputt:
                     rs = r.bilder.bild("rotor_schatten_%d" % st)
                     ziel.blit(rs, rs.get_rect(center=(int(rotor_boden.x + versatz.x),
                                                       int(rotor_boden.y + versatz.y))))
                 s = r.bilder.gedreht(b.bild, b.winkel)
                 ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y - h))))
-            if h > 2.0 or besetzt:
+            if (h > 2.0 or besetzt) and not b.kaputt:     # das Wrack hat keinen Rotor mehr
                 rotor = r.bilder.bild("rotor_%d" % st)
                 m = p + pygame.Vector2(-3.4, 0).rotate(b.winkel) - pygame.Vector2(0, h + 6.0)
                 ziel.blit(rotor, rotor.get_rect(center=(int(m.x), int(m.y))))

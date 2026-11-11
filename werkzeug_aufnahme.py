@@ -711,8 +711,9 @@ def szene_werfer(tm, rnd):
 def szene_werfer_explosion(tm, rnd):
     """Der Werfer geht hoch: die groesste Explosion des Spiels, kein Wrack."""
     b, k, ziel, gruppe, kamerad = _werfer_mit_ziel(tm, rnd, 820.0)
-    nahe = [tm.puppe_setzen(b.pos + pygame.Vector2(math.cos(i * 1.3) * 150, math.sin(i * 1.3) * 110), 0,
-                            {"team": 1}, name="DANEBEN") for i in range(5)]
+    for i in range(5):
+        tm.puppe_setzen(b.pos + pygame.Vector2(math.cos(i * 1.3) * 150, math.sin(i * 1.3) * 110), 0,
+                        {"team": 1}, name="DANEBEN")
     uhr = {"t": 0.0}
 
     def jedes_bild():

@@ -235,20 +235,52 @@ def _felge_malen(b) -> None:
 
 
 _GESTELL: dict = {}
+GESTELL_HOECHSTENS = 600              # so viele Bilder bleiben gemerkt (je ~12 KB zugeschnitten)
 
 
-def gestell(gieren: float, erhebung: float, maske: int) -> tuple:
-    """(Bild, Schatten) des Gestells. Gerundet auf 5 Grad (gieren) und 2 Grad
-    (erhebung), jedes Bild wird einmal gerechnet und behalten."""
-    from .art_fahrzeuge import _Blatt
+def zuschneiden(s: pygame.Surface) -> tuple:
+    """Nur der belegte Teil eines Bildes und wo er liegt, von der Bildmitte
+    aus (seit 0.34.127): die gemerkten Bilder sind meist zu drei Vierteln
+    leer, zugeschnitten brauchen sie einen Bruchteil des Speichers."""
+    r = s.get_bounding_rect(1)
+    if r.width == 0 or r.height == 0:
+        r = pygame.Rect(0, 0, 1, 1)
+    return s.subsurface(r).copy(), (r.x - s.get_width() / 2.0, r.y - s.get_height() / 2.0)
+
+
+def gestell_zugeschnitten(gieren: float, erhebung: float, maske: int) -> tuple:
+    """(Bild, Versatz, Schatten, Versatz) - so zeichnet es das Spiel: den
+    Versatz zur Mitte des Drehtellers addieren. Gerundet auf 5 Grad (gieren)
+    und 2 Grad (erhebung), jedes Bild wird einmal gerechnet und behalten."""
     g = int(round(gieren / 5.0)) * 5 % 360
     e = max(0, min(80, int(round(erhebung / 2.0)) * 2))
     m = int(maske) & 63
     s = _GESTELL.get((g, e, m))
     if s is not None:
         return s
-    if len(_GESTELL) > 1500:
+    if len(_GESTELL) > GESTELL_HOECHSTENS:
         _GESTELL.clear()
+    bild, schatten = _gestell_malen(g, e, m)
+    s = _GESTELL[(g, e, m)] = zuschneiden(bild) + zuschneiden(schatten)
+    return s
+
+
+def gestell(gieren: float, erhebung: float, maske: int) -> tuple:
+    """(Bild, Schatten) des Gestells in voller Groesse (GROESSE_BILD), Mitte
+    = Drehteller - fuer Werkzeuge und Pruefungen; das Spiel nimmt die
+    zugeschnittenen (gestell_zugeschnitten)."""
+    b, bv, s, sv = gestell_zugeschnitten(gieren, erhebung, maske)
+    halb = GROESSE_BILD / 2.0
+    raus = []
+    for teil, (vx, vy) in ((b, bv), (s, sv)):
+        voll = pygame.Surface((GROESSE_BILD, GROESSE_BILD), pygame.SRCALPHA)
+        voll.blit(teil, (int(round(halb + vx)), int(round(halb + vy))))
+        raus.append(voll)
+    return tuple(raus)
+
+
+def _gestell_malen(g: int, e: int, m: int) -> tuple:
+    from .art_fahrzeuge import _Blatt
     teile = _teile(float(g), float(e), m)
     b = _Blatt(GROESSE_BILD, 1.0)
     _felge_malen(b)
@@ -266,8 +298,7 @@ def gestell(gieren: float, erhebung: float, maske: int) -> tuple:
     sb.kreis((0, 0, 0), (0, 0), 10.0)
     flach = sb.fertig(rand=False)
     schatten = pygame.mask.from_surface(flach, 30).to_surface(setcolor=(0, 0, 0, 86), unsetcolor=(0, 0, 0, 0))
-    s = _GESTELL[(g, e, m)] = (bild, schatten)
-    return s
+    return bild, schatten
 
 
 _RAKETE: dict = {}

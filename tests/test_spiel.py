@@ -19054,6 +19054,93 @@ pruef("... steiler: die Muendungen ragen im Bild hoeher (jede Aufrichtung ein ei
 pruef("... und jede Drehung (5-Grad-Schritte) ein eigenes Bild",
       len({pygame.image.tobytes(_AW126.gestell(g_, 40.0, 63)[0], "RGBA") for g_ in range(0, 360, 5)}) == 72)
 
+print("\n-- 0.34.127: Absturz des Tragschraubers, dichtere grosse Explosionen")
+_tm127 = _TM59.Testmodus(app, karte="staubtal_offen")
+_e127 = _tm127.welt.ebene(0)
+_rnd127 = random.Random(127)
+for _ in range(40000):
+    _tx127 = _rnd127.randrange(30, _e127.breite - 60)
+    _ty127 = _rnd127.randrange(20, _e127.hoehe - 30)
+    if all(not K.KACHELN[_e127.kachel(_tx127 + x_, _ty127 + y_)]["fest"] and not _e127.loch(_tx127 + x_, _ty127 + y_)
+           for x_ in range(40) for y_ in range(10)):
+        break
+_z127 = lambda x_, y_: pygame.Vector2((_tx127 + x_ + 0.5) * K.TILE, (_ty127 + y_ + 0.5) * K.TILE)
+def _heli127(mauer_, wand_weg_=150.0):
+    ts_ = _tm127.fahrzeug_setzen("tragschrauber", _z127(2, 5), 0, {"winkel": 0})
+    p_ = _tm127.puppe_setzen(ts_.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="PILOT")
+    _tm127._anwenden(p_, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+    for _ in range(int(4.5 / K.FIXED_DT)):
+        _tm127._anwenden(p_, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+        _tm127.schritt(K.FIXED_DT)
+    ts_.pos.update(_z127(3, 5)); ts_.vorher.update(ts_.pos)
+    for _ in range(int(0.3 / K.FIXED_DT)):
+        _tm127._anwenden(p_, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+        _tm127.schritt(K.FIXED_DT)
+    if mauer_:
+        for dy_ in range(-3, 4):
+            _e127.setzen(int((ts_.pos.x + wand_weg_) // K.TILE), int(ts_.pos.y // K.TILE) + dy_, K.WAND)
+        _tm127.welt._raster_bauen()
+    return ts_, p_
+_ts127, _p127 = _heli127(False)
+_h0_127, _x0_127 = _ts127.hoehe, _ts127.pos.x
+_ts127.schaden(_ts127.leben + 50.0, None, None, art="spreng")
+pruef("Tragschrauber: in der Luft abgeschossen ist der Pilot sofort tot, das Wrack faellt noch (nicht gleich am Boden)",
+      _ts127.luft is False and not _p127.lebt and _ts127.kaputt and _ts127.stuerzt and _ts127.hoehe > 40.0
+      and _ts127.hoch_oben, "Pilot %s, Hoehe %.0f" % (_p127.lebt, _ts127.hoehe))
+_hoehen127, _wege127 = [], []
+_tief127 = None
+for _ in range(int(3.0 / K.FIXED_DT)):
+    _tm127.schritt(K.FIXED_DT)
+    _hoehen127.append(_ts127.hoehe)
+    _wege127.append(_ts127.pos.x - _x0_127)
+    if _tief127 is None and _ts127.hoehe < 16.0:
+        _tief127 = _wege127[-1]                # ab hier ist es tiefer als eine Mauer (24)
+pruef("... es fliegt mit seinem Schwung weiter in seine Richtung, immer schneller nach unten, bis es aufschlaegt",
+      _wege127[-1] > 60.0 and all(b_ <= a_ for a_, b_ in zip(_hoehen127, _hoehen127[1:]))
+      and _hoehen127[-1] == 0.0 and not _ts127.stuerzt and _ts127.kaputt
+      and _ts127.wrack_rest <= _ts127.werte["wrack_zeit"], "Weg %.0f px" % _wege127[-1])
+_tm127.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+_frei127 = _wege127[-1]
+# Die Mauer dort, wo das Wrack schon tiefer ist als sie (sonst fliegt es darueber).
+_ts127b, _p127b = _heli127(True, _tief127 + K.TILE)
+_x0_127 = _ts127b.pos.x
+_ts127b.schaden(_ts127b.leben + 50.0, None, None, art="spreng")
+for _ in range(int(3.0 / K.FIXED_DT)):
+    _tm127.schritt(K.FIXED_DT)
+_wand127 = (int((_x0_127 + _tief127 + K.TILE) // K.TILE)) * K.TILE
+pruef("... faellt es gegen eine Mauer, die hoeher ist als es gerade, prallt es dort ab und liegt davor (nicht darin)",
+      _ts127b.pos.x - _x0_127 < _frei127 - 20.0 and _ts127b.pos.x < _wand127 and not _ts127b.stuerzt
+      and _FZ59.Buggy.passt(_ts127b, _ts127b.pos), "%.0f px (frei %.0f)" % (_ts127b.pos.x - _x0_127, _frei127))
+# Ueber eine Mauer, solange es noch hoeher ist: sinkt es darauf, rutscht es herunter.
+_ts127d, _p127d = _heli127(True, _tief127 - 24.0)
+_ts127d.schaden(_ts127d.leben + 50.0, None, None, art="spreng")
+for _ in range(int(3.0 / K.FIXED_DT)):
+    _tm127.schritt(K.FIXED_DT)
+pruef("... sinkt es beim Ueberfliegen auf eine Mauer, rutscht es von ihr herunter (liegt nie darin)",
+      not _ts127d.stuerzt and _ts127d.kaputt and _FZ59.Buggy.passt(_ts127d, _ts127d.pos)
+      and not _e127.fest(int(_ts127d.pos.x // K.TILE), int(_ts127d.pos.y // K.TILE)),
+      "%.0f %.0f" % (_ts127d.pos.x, _ts127d.pos.y))
+_ts127c = _tm127.fahrzeug_setzen("tragschrauber", _z127(30, 8), 0, {"winkel": 0})
+_p127c = _tm127.puppe_setzen(_ts127c.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="AM BODEN")
+_tm127._anwenden(_p127c, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_tm127.schritt(K.FIXED_DT)
+_ts127c.schaden(_ts127c.leben + 50.0, None, None, art="spreng")
+pruef("... auch am Boden zerstoert sind die Insassen sofort tot", _ts127c.kaputt and not _p127c.lebt
+      and not _ts127c.stuerzt)
+# Dichtere Teilchen bei massiven Explosionen.
+_tm127.welt.effekte = []
+_tm127.welt.explosion(_z127(20, 5), 0, 1.0, "einschlag", None)
+_klein127 = [f_.r0 for f_ in _tm127.welt.effekte if f_.art == "rauch"]
+_tm127.welt.effekte = []
+_tm127.welt.explosion(_z127(20, 5), 0, 330.0, "werfer_gross", None)
+_gross127 = [f_.r0 for f_ in _tm127.welt.effekte if f_.art == "rauch"]
+_alle127 = len(_tm127.welt.effekte)          # vor dem Kappen: sonst fiele der Feuerball weg
+pruef("Explosionen: die massive (Werfer) hat groessere, dichtere Teilchen als ein Einschlag, und alles passt unter die Grenze",
+      sum(_gross127) / len(_gross127) > sum(_klein127) / len(_klein127) + 0.8
+      and _alle127 <= K.EFFEKTE_HOECHSTENS,
+      "%.1f / %.1f, %d" % (sum(_gross127) / len(_gross127), sum(_klein127) / len(_klein127), _alle127))
+_tm127.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

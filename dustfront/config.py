@@ -1791,6 +1791,14 @@ TRAGSCHRAUBER = dict(
     bombe=dict(fall=1.1, radius=62.0, schaden=110.0, fahrzeug=140.0, pause=0.6,
                abwurf=(9.0, 8.0), ueberschlag=260.0),
     luft_radius=24.0,         # so gross ist er als Ziel (Pixel um sein Bild)
+    # Abschuss in der Luft (seit 0.34.127, gewuenscht): die Insassen sind
+    # sofort tot, das Wrack faellt mit seinem Schwung weiter (`bremse`: so
+    # viel Tempo verliert es je Sekunde in der Luft, `schwere` in px/s^2),
+    # dreht sich und brennt. Prallt es an etwas, das hoeher ist als es selbst
+    # gerade (Mauer, Fels), verliert es den Schwung (`abprall`: so viel kommt
+    # zurueck) und rutscht dort herunter. Am Boden schlaegt es auf.
+    absturz=dict(schwere=230.0, bremse=0.35, drehen=150.0, rauch_takt=0.05, abprall=0.18,
+                 zurueck=96.0),       # so weit (px) sucht es rueckwaerts einen Platz zum Liegen
 )
 
 # Der Flakwagen (seit 0.34.114): ein Laster mit einem Vierling auf der
@@ -3193,6 +3201,11 @@ KARTENSAETZE = {
 # aus dahinter liegt, ist nicht zu sehen; was darueber fliegt, schon.
 # Gezeichnet wird alles weiter an seinem Fusspunkt, wie die Figuren -
 # sonst saehe ein Treffer am Bildrand aus wie ein Fehlschuss.
+# So viele Effekt-Teilchen (effekte.py) gibt es hoechstens auf einmal; die
+# aeltesten fallen weg. Die Werfer-Explosion allein braucht gut 3700 - und
+# keiner davon darf fehlen, sonst fiele ihr Feuerball zuerst weg.
+EFFEKTE_HOECHSTENS = 4500
+
 HOEHEN = dict(
     lauf=12.0,            # Geschosse, Raketen, Muendungsfeuer: Laufhoehe
     funke=10.0,           # Funken fliegen um die Treffer- und Laufhoehe

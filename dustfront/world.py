@@ -904,8 +904,10 @@ class Welt:
             self.feuerbaelle = [f for f in self.feuerbaelle if f.lebt]
         if self.effekte:
             self.effekte = [f for f in self.effekte if f.schritt(dt)]
-            if len(self.effekte) > 2400:            # nie mehr als so viele auf einmal
-                del self.effekte[:len(self.effekte) - 2400]
+            # Nie mehr als so viele auf einmal (seit 0.34.127 mehr: die dichten
+            # Teilchenwolken der grossen Explosionen kosten kaum etwas).
+            if len(self.effekte) > K.EFFEKTE_HOECHSTENS:
+                del self.effekte[:len(self.effekte) - K.EFFEKTE_HOECHSTENS]
         if self.flugleichen:
             for f in self.flugleichen:
                 f.schritt(dt, self)

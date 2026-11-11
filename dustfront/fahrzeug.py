@@ -2321,8 +2321,15 @@ class Tragschrauber(Buggy):
         self._bomben_rest = 0.0
         self._feuer_alt = False
         self._aufkl_rest = 0.0
+        # Abgeschossen in der Luft (seit 0.34.127): das Wrack faellt noch.
+        self.stuerzt = False
+        self.fall_v = 0.0              # px/s nach unten (im Bild: Hoehe nimmt ab)
+        self._absturz_von = None
+        self._absturz_rauch = 0.0
+        self._flugrichtung = None
 
     schatten_bild = "tragschrauber_schatten"
+    explosion_art = "absturz"
 
     @property
     def bild(self) -> str:
@@ -2332,8 +2339,9 @@ class Tragschrauber(Buggy):
 
     @property
     def hoch_oben(self) -> bool:
-        """Gezeichnet in der Schicht ueber allem (luft.py), solange er hoch ist."""
-        return self.hoehe > 2.0 and not self.kaputt
+        """Gezeichnet in der Schicht ueber allem (luft.py), solange er hoch ist -
+        auch als Wrack, das noch faellt (seit 0.34.127)."""
+        return self.hoehe > 2.0
 
     @property
     def in_der_luft(self) -> bool:
@@ -2349,6 +2357,13 @@ class Tragschrauber(Buggy):
             super()._beiseite_schieben()
 
     def schritt(self, dt: float) -> None:
+        if self.kaputt and self.hoehe > 1.0 and self.welt is not None:
+            self._absturz_qualm(dt)                     # beim Gastgeber und beim Gast
+        if self.stuerzt and not self.nur_bild and self.welt is not None:
+            Wesen.schritt(self, dt)
+            self._stuerzen(dt)
+            self.trefferbar = False
+            return
         if self.luft and not self.nur_bild and self.welt is not None and not self.kaputt:
             Wesen.schritt(self, dt)
             self._fliegen(dt)
@@ -2413,10 +2428,113 @@ class Tragschrauber(Buggy):
             self.luft = False
             self.schaden(self.leben + 1.0, None, None, art="ramm")
 
+    def _insassen_toeten(self, von) -> None:
+        """Wer drin sitzt, ist sofort tot (gewuenscht, 0.34.127) - auch wenn
+        Insassen sonst geschuetzt sind (K.FAHRZEUG fahrer_geschuetzt) und man
+        am Boden sonst nur umfiele."""
+        leute = [self.fahrer] + list(self.__dict__.get("_mitfahrer") or [])
+        for k in leute:
+            if k is None or not getattr(k, "lebt", False):
+                continue
+            lebte = k.lebt
+            schaden_an(k, 99999.0, None, von, "spreng", self.pos)
+            if hasattr(k, "am_boden") and k.lebt:
+                k.am_boden = True
+                k.sterben(von)
+            abschuss_buchen(von, k, "tragschrauber", lebte)
+
     def _zerstoeren(self, von) -> None:
-        self.luft = self.landen = False
+        self._insassen_toeten(von)
+        if self.luft and self.hoehe > 4.0 and self.welt is not None and not self.kaputt:
+            # In der Luft getroffen: ein Feuerball dort oben, dann faellt das
+            # Wrack mit seinem Schwung. Schaden am Boden erst beim Aufschlag.
+            self.kaputt = True
+            self.kaputt_von = von
+            self.leben = 0.0
+            self.stuerzt = True
+            self._absturz_von = von
+            self.luft = self.landen = False
+            self.fall_v = 0.0
+            self.geschw = self.vorn * self.flug_v
+            self._flugrichtung = pygame.Vector2(self.vorn)
+            self.flug_v = 0.0
+            self.gas = self.lenk = 0.0
+            self.wrack_rest = self.werte["wrack_zeit"] + 60.0     # erst nach dem Aufschlag zaehlen
+            self.welt.explosion(pygame.Vector2(self.pos), self.ebene, float(self.hoehe), "heli_treffer", von)
+            self.welt.klang("c4_explosion", 0.7, self.pos, self.ebene)
+            return
+        self.luft = self.landen = self.stuerzt = False
         self.hoehe = self.flug_v = 0.0
         super()._zerstoeren(von)
+
+    def _stuerzen(self, dt: float) -> None:
+        """Das Wrack faellt: weiter in seine Richtung, gebremst von der Luft,
+        immer schneller nach unten, und es dreht sich. Was hoeher steht als
+        es gerade (Mauer, Fels), haelt es auf - dort rutscht es herunter."""
+        a = self.werte["absturz"]
+        w = self.welt
+        self.geschw *= math.exp(-a["bremse"] * dt)
+        self.fall_v += a["schwere"] * dt
+        self.hoehe = max(0.0, self.hoehe - self.fall_v * dt)
+        self.winkel = (self.winkel + a["drehen"] * dt + 180.0) % 360.0 - 180.0
+        neu = self.pos + self.geschw * dt
+        e = w.ebene(self.ebene)
+        neu.x = max(8.0, min(e.pixel_breite - 8.0, neu.x))
+        neu.y = max(8.0, min(e.pixel_hoehe - 8.0, neu.y))
+        if self.geschw.length_squared() > 1.0 and w.kachel_hoehe(neu, self.ebene) >= self.hoehe:
+            # Dagegen geprallt: Funken und Splitter an der Wand, der Schwung
+            # ist weg (ein wenig zurueck), es faellt an der Wand herunter.
+            if self.geschw.length() > 40.0:
+                w.explosion(pygame.Vector2(self.pos) + self.geschw.normalize() * 10.0, self.ebene, 0.6,
+                            "einschlag", self._absturz_von)
+            self.geschw *= -a["abprall"]
+        else:
+            self.pos.update(neu)
+        self.tempo.update(self.geschw)
+        if self.hoehe <= 0.0:
+            self._aufschlagen()
+
+    def _aufschlagen(self) -> None:
+        """Unten: liegt das Wrack in einer Mauer oder ueber einem Loch, rueckt
+        es auf seiner Bahn zurueck, bis es Platz hat. Dann der Aufschlag mit
+        Schaden ringsum (Buggy._zerstoeren, Art "absturz") und einem Feuerball."""
+        self.stuerzt = False
+        self.hoehe = self.fall_v = 0.0
+        if not Buggy.passt(self, self.pos):
+            # Auf einer Mauer gelandet (es war beim Ueberfliegen noch hoeher als
+            # sie) oder ueber einem Loch: es rutscht herunter, zur naeheren
+            # Seite entlang seiner Flugbahn - nicht entlang des Tempos, das nach
+            # einem Abprall schon umgedreht ist.
+            bahn = getattr(self, "_flugrichtung", None) or pygame.Vector2(self.vorn)
+            gefunden = False
+            for d in range(4, int(self.werte["absturz"]["zurueck"]) + 1, 4):
+                for p in (self.pos - bahn * d, self.pos + bahn * d):
+                    if Buggy.passt(self, p):
+                        self.pos.update(p)
+                        self.vorher.update(p)
+                        gefunden = True
+                        break
+                if gefunden:
+                    break
+        self.geschw.update(0, 0)
+        self.tempo.update(0, 0)
+        von = self._absturz_von
+        self.kaputt = False                      # Buggy._zerstoeren setzt es wieder
+        Buggy._zerstoeren(self, von)
+        self.welt.explosion(pygame.Vector2(self.pos), self.ebene, 1.2, "einschlag", von)
+
+    def _absturz_qualm(self, dt: float) -> None:
+        """Das fallende Wrack brennt und zieht schwarzen Rauch hinter sich her."""
+        from . import effekte
+        self._absturz_rauch -= dt
+        if self._absturz_rauch > 0.0:
+            return
+        self._absturz_rauch = self.werte["absturz"]["rauch_takt"]
+        r = RND
+        effekte.rauch(self.welt, r, self.pos.x, self.pos.y, self.hoehe + 4.0, self.ebene, "schwarz",
+                      2, r.uniform(6, 10), r.uniform(1.4, 2.2), vz=r.uniform(4, 14), zaeh=2.2)
+        effekte.feuer(self.welt, r, self.pos.x, self.pos.y, self.hoehe + 3.0, self.ebene, 2,
+                      r.uniform(4, 6), 0.25)
 
     def netz_extra(self):
         return [int(self.luft), int(self.hoehe), self.bomben,
@@ -2435,8 +2553,9 @@ class Tragschrauber(Buggy):
 
     def zuruecksetzen(self) -> None:
         super().zuruecksetzen()
-        self.luft = self.landen = False
-        self.hoehe = self.flug_v = 0.0
+        self.luft = self.landen = self.stuerzt = False
+        self.hoehe = self.flug_v = self.fall_v = 0.0
+        self._absturz_von = None
         self.bomben = int(self.werte["bomben"])
         self.bomben_fall = []
         self.takt = {}
