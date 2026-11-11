@@ -1,4 +1,4 @@
-# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.107)
+# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.108)
 
 Zwoelf Entwuerfe fuer die SCHLACHT auf Karten, die groesser sind als
 STAUBTAL - OFFEN. Bilder und Szenen dazu stehen auf der Entscheidungsseite
@@ -24,7 +24,7 @@ davon eingebaut ist.
 ## Reihenfolge
 
 1. Krad, Jagdpanzer (0.34.107)
-2. Trosswagen
+2. Trosswagen (0.34.108)
 3. Spulenwagen, Funkwagen, Werfer (Werfer und Funkwagen gehoeren zusammen)
 4. Luftziele: Flakwagen und Tragschrauber, mit einer Regel, wie Spieler
    Luftziele und andere Etagen anvisieren
@@ -51,3 +51,15 @@ koennte fuer Helis und fuer Ziele auf anderen Etagen gelten.
   Mannschaft zurueck (kein Skin-Muster fuer die neuen Arten).
 * SCHLACHT: eines mehr je Basis (Krad), Nachschub `krad` (3) und
   `jagdpanzer` (10); die Tafel hat zehn Zeilen.
+
+## Was 0.34.108 gebaut hat
+
+* `Trosswagen(Buggy)` in `dustfront/fahrzeug.py`, Werte `K.TROSSWAGEN`
+  (Physik vom Panzerwagen, kein Aufsitzen, `nur_mensch`). Zone hinter dem
+  Wagen (`zone_mitte`, `in_zone`), Reparatur eigener Fahrzeuge dort
+  (`_reparieren`, `seite_von`).
+* Nachschub holen: `Gefecht._nachschub_nehmen` (E hinten, vor dem
+  Einsteigen). Hinweis in `_fahrzeug_hinweis`, Vorrat im Netz als Feld 17.
+* Bild: `trosswagen_zeichnen` in `dustfront/art_neue_fahrzeuge.py` (der Fahrer
+  sitzt unter dem Verdeck und ist nicht zu sehen).
+* SCHLACHT: einer je Basis (`SCHLACHT["fahrzeuge"]`), nicht im Nachschub.
