@@ -1583,15 +1583,19 @@ class Brandflaeche:
 
     __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt",
                  "kennung", "von", "verschont", "_saat", "_feld",
-                 "_funkenrest")
+                 "_funkenrest", "napalm", "_rauchrest")
 
     _naechste_kennung = 0
 
     def __init__(self, pos, ebene: int, radius: float | None = None,
                  dauer: float | None = None, alter: float = 0.0,
                  kennung: int | None = None, von=None,
-                 verschont: str = "") -> None:
+                 verschont: str = "", napalm: bool = False) -> None:
         f = K.FEUER
+        # Napalm (seit 0.34.130): brennt laenger, sieht anders aus (K.FEUER
+        # napalm_*), mehr Funken und schwarzer Rauch.
+        self.napalm = bool(napalm)
+        self._rauchrest = 0.0
         self.pos = pygame.Vector2(pos)
         self.ebene = int(ebene)
         self.radius = float(f["radius"] if radius is None else radius)
@@ -1663,9 +1667,11 @@ class Brandflaeche:
             anteil = self.brennt(ziel.pos, ziel.ebene)
             if anteil > 0.0:
                 schaden_an(ziel, f["schaden"] * anteil * dt, None, self.von, "feuer")
+        if self.napalm:
+            self.qualmen(dt, welt)
         # Funken steigen auf. Sie sind das, was ein Feuer von einem
         # roten Fleck unterscheidet.
-        self._funkenrest += f["funken"] * self.staerke * dt
+        self._funkenrest += f["napalm_funken" if self.napalm else "funken"] * self.staerke * dt
         while self._funkenrest >= 1.0:
             self._funkenrest -= 1.0
             winkel = RND.uniform(0, 360)
@@ -1675,6 +1681,21 @@ class Brandflaeche:
                 stelle, (RND.uniform(-14, 14), RND.uniform(-46, -22)),
                 RND.uniform(0.5, 1.1), f["toene"][3], 1, "funke", 1.2,
                 self.ebene))
+
+    def qualmen(self, dt: float, welt) -> None:
+        """Napalm: schwarzer, oeliger Rauch steigt aus dem Feuer (seit
+        0.34.130). Beim Gastgeber im Schritt, beim Gast aus dem Nachfuehren -
+        es ist nur Bild."""
+        from . import effekte
+        self._rauchrest += K.FEUER["napalm_rauch"] * self.staerke * dt
+        while self._rauchrest >= 1.0:
+            self._rauchrest -= 1.0
+            winkel = RND.uniform(0, 360)
+            weg = RND.uniform(0, self.radius * 0.7)
+            stelle = self.pos + pygame.Vector2(weg, 0).rotate(winkel)
+            effekte.rauch(welt, RND, stelle.x, stelle.y, 4.0, self.ebene, "schwarz", 3,
+                          RND.uniform(10, 16), RND.uniform(2.2, 3.4), vx=RND.uniform(-6, 6),
+                          vz=RND.uniform(18, 34), zaeh=0.9, g=-6.0)
 
     def feld(self, korn: int):
         """Das Dichtefeld, einmal gerechnet und dann behalten.
@@ -2268,8 +2289,13 @@ class Spieler(Wesen):
         # Energiewaffen (seit 0.34.68): wie weit aufgeladen (0 bis 1), und
         # wann die naechste Ladung abgekuehlt ist.
         self.ladung = 0.0
-        self._kuehl_rest = 0.0
         self._flamme_rest = 0.0
+        # Hitze der Chor-Waffen (seit 0.34.130): je Waffe, wie lange sie noch
+        # ueberhitzt ist, und wann der naechste Teil abgekuehlt ist - auch fuer
+        # die, die gerade nicht in der Hand ist.
+        self.ueberhitzt: dict = {}
+        self._kuehl: dict = {}
+        self._kuehl_liste = ((), ())
         # Raketenwerfer. `rpg` heisst: er wird getragen, und dann traegt
         # man sonst nichts. `rpg_waffen` merkt sich, was vorher da war.
         self.rpg = False
@@ -2971,8 +2997,10 @@ class Spieler(Wesen):
             self._laden(dt, wd)
         elif self.feuert and self.takt <= 0 and self.heilt_rest <= 0:
             self.feuern()
-        if wd.get("kuehlt"):
-            self._abkuehlen(dt, wd)
+        if wd.get("kuehlt") and self.magazin.get(self.waffe_name, 0) <= 0 \
+                and self.waffe_name not in self.ueberhitzt:
+            self._ueberhitzen(self.waffe_name, wd)
+        self._abkuehlen(dt)
         # Die rechte Maustaste als zweiter Abzug (seit 0.34.62): die zweite
         # Pistole der Zwillinge, beide Laeufe der Doppelflinte.
         if ((wd.get("zweite_hand") or wd.get("beide_laeufe") or wd.get("zweit"))
@@ -3048,6 +3076,9 @@ class Spieler(Wesen):
         # Was man wirft und wieder aufhebt (Wurfmesser, Speer), laedt man
         # nicht nach (seit 0.34.67).
         if not d.get("magazin") or d.get("art") in ("wurf", "c4") or d.get("aufheben"):
+            return
+        if d.get("kuehlt"):
+            # Chor-Waffen laden nicht nach, sie kuehlen ab (seit 0.34.130).
             return
         if self.nachlade_rest <= 0 and self.magazin[self.waffe_name] < d["magazin"]:
             # Der Schuetze laedt schneller (seit 0.34.73, Klasse).
@@ -3443,19 +3474,49 @@ class Spieler(Wesen):
             w.klang("kettensaege", 0.8, self.pos, self.ebene)
             w.laerm(self.pos, self.ebene, self, d.get("laerm", 600.0))
 
-    def _abkuehlen(self, dt: float, d: dict) -> None:
-        """Chor-Waffen werden heiss statt leer (seit 0.34.68): in Ruhe kommt
-        alle `abkuehlen` Sekunden eine Ladung zurueck."""
-        name = self.waffe_name
-        if self.feuert or self.ladung > 0.0 or self.nachlade_rest > 0:
-            self._kuehl_rest = d["abkuehlen"]
-            return
-        if self.magazin.get(name, 0) >= d["magazin"]:
-            return
-        self._kuehl_rest -= dt
-        if self._kuehl_rest <= 0.0:
-            self._kuehl_rest = d["abkuehlen"] * getattr(self, "kuehl_faktor", 1.0)
-            self.magazin[name] = self.magazin.get(name, 0) + 1
+    def _ueberhitzen(self, name: str, d: dict) -> None:
+        """Die Hitze ist voll (wo frueher das Magazin leer war, seit 0.34.130):
+        die Waffe ist gesperrt, bis sie abgekuehlt ist - laenger als ein
+        Nachladen. Einmal der Kuehlton, damit man weiss: ab jetzt kuehlt sie."""
+        self.ueberhitzt[name] = d.get("ueberhitzt", d["nachladen"]) * getattr(self, "kuehl_faktor", 1.0)
+        self.ladung = 0.0
+        if self.welt is not None:
+            self.welt.klang("ueberhitzt", 0.7, self.pos, self.ebene)
+
+    def _abkuehlen(self, dt: float) -> None:
+        """Chor-Waffen werden heiss statt leer (seit 0.34.68, seit 0.34.130 so):
+        jede kuehlt fuer sich, auch weggesteckt. Ueberhitzt ist sie gesperrt,
+        bis die Zeit um ist - dann ist sie ganz kalt. Sonst kommt in Ruhe alle
+        `abkuehlen` Sekunden ein Teil zurueck; wer mit ihr schiesst oder laedt,
+        haelt das an."""
+        if self._kuehl_liste[0] != self.waffen:
+            # Je Waffenliste einmal ausrechnen: das laeuft fuer jeden Kaempfer
+            # in jedem Schritt (verglichen wird der Inhalt - die Liste kann
+            # sich an Ort und Stelle aendern).
+            self._kuehl_liste = (list(self.waffen), tuple(n for n in self.waffen if K.WAFFEN[n].get("kuehlt")))
+        faktor = getattr(self, "kuehl_faktor", 1.0)
+        for name in self._kuehl_liste[1]:
+            d = K.WAFFEN[name]
+            rest = self.ueberhitzt.get(name)
+            if rest is not None:
+                rest -= dt
+                if rest <= 0.0:
+                    del self.ueberhitzt[name]
+                    self.magazin[name] = d["magazin"]
+                    self._kuehl[name] = d["abkuehlen"] * faktor
+                else:
+                    self.ueberhitzt[name] = rest
+                continue
+            if name == self.waffe_name and (self.feuert or self.ladung > 0.0):
+                self._kuehl[name] = d["abkuehlen"] * faktor
+                continue
+            if self.magazin.get(name, 0) >= d["magazin"]:
+                continue
+            rest = self._kuehl.get(name, d["abkuehlen"] * faktor) - dt
+            if rest <= 0.0:
+                rest = d["abkuehlen"] * faktor
+                self.magazin[name] = self.magazin.get(name, 0) + 1
+            self._kuehl[name] = rest
 
     def _laden(self, dt: float, d: dict) -> None:
         """Spulengewehr und Kettenblitz (seit 0.34.68): halten laedt auf.

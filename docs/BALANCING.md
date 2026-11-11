@@ -14,7 +14,9 @@ Logik in `dustfront/schlacht.py` (Abschnitt "Freischalten und Balancing").
 * **Der Konter ist billiger als das, was er kontert** (Flak 5 < Tragschrauber 9).
 * **Schweres kommt nach und nach** - nicht nach festen Minuten, sondern nach
   dem Spielverlauf (FREISCHALTEN, siehe unten).
-* **Hoechstens so viele je Seite** fuer alles, was gehaeuft das Spiel kippt.
+* **Hoechstens so viele je Seite** fuer alles, was gehaeuft das Spiel kippt -
+  seit 0.34.130 nur mit der Regel HÖCHSTENS JE SEITE (erweiterte Ansicht,
+  Vorgabe aus: beliebig viele).
 * **Unterstuetzer nur in der eigenen Haelfte**: Funkwagen, Werfer und
   Tragschrauber wirken auf Entfernung und gehoeren nach hinten.
 * **Ein zerstoertes Fahrzeug bringt den halben Kaufpreis** (mindestens 2),

@@ -353,6 +353,61 @@ def _buggy_tuer(seed=0):
                     + _rauschen(0.30, 0.16, 300, 140, 1.8, seed + 92))
 
 
+@platzhalter_klang("ueberhitzt")
+def _ueberhitzt(seed=0):
+    """Eine Chor-Waffe ist zu heiss und kuehlt ab (seit 0.34.130, gewuenscht
+    ein wenig wie die Quasar-Kanone): ein Klacken, ein elektrisches Pfeifen,
+    das herunterfaehrt, und Dampf, der zischend entweicht. Einmal, kurz."""
+    n = int(RATE * 1.1)
+    ton = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        f = 1900.0 * (1.0 - p) ** 1.6 + 380.0 + 40.0 * math.sin(p * 70.0)
+        phase += 2 * math.pi * f / RATE
+        ton.append(math.sin(phase) * 0.13 * (1.0 - p) ** 1.2 * min(1.0, p * 40.0))
+    return _mischen(_schlag(900, 380, 0.05, 0.35, 3.0),
+                    ton,
+                    [0.0] * int(RATE * 0.04) + _rauschen(0.95, 0.32, 7600, 2400, 1.3, seed + 131, hp=True),
+                    [0.0] * int(RATE * 0.06) + _rauschen(0.7, 0.12, 1400, 600, 2.0, seed + 132))
+
+
+@platzhalter_klang("bomber")
+def _bomber(seed=0):
+    """Ein Stueck Triebwerk des Napalm-Bombers (seit 0.34.130): tiefes Grollen,
+    ein heulender Turbinenton darin, weich ein- und ausgeblendet - alle 0,45 s
+    eines an seinem Ort, die sich ueberlappen und zusammen den Ueberflug
+    ergeben."""
+    n = int(RATE * 1.2)
+    ton = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        f = 520.0 + 30.0 * math.sin(p * 9.0)
+        phase += 2 * math.pi * f / RATE
+        huelle = math.sin(math.pi * p) ** 2
+        ton.append(math.sin(phase) * 0.05 * huelle)
+    grollen = _rauschen(1.2, 0.55, 260, 220, 0.0, seed + 141)
+    rauschen = _rauschen(1.2, 0.18, 1600, 1400, 0.0, seed + 142)
+    huelle = [math.sin(math.pi * i / n) ** 2 for i in range(n)]
+    return _mischen(ton, [a * h for a, h in zip(grollen, huelle)],
+                    [a * h for a, h in zip(rauschen, huelle)])
+
+
+@platzhalter_klang("napalm_fall")
+def _napalm_fall(seed=0):
+    """Eine Napalmbombe faellt (seit 0.34.130): ein Pfeifen, das tiefer wird."""
+    n = int(RATE * 1.0)
+    ton = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        f = 1500.0 - 900.0 * p
+        phase += 2 * math.pi * f / RATE
+        ton.append(math.sin(phase) * 0.14 * min(1.0, p * 6.0) * (1.0 - p * 0.4))
+    return _mischen(ton, _rauschen(1.0, 0.05, 3000, 1500, 0.4, seed + 151, hp=True))
+
+
 @platzhalter_klang("buggy_aufprall")
 def _buggy_aufprall(seed=0):
     """Der Buggy faehrt gegen etwas: Blech und ein dumpfer Schlag."""

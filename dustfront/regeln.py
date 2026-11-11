@@ -252,6 +252,12 @@ FELDER = (
                                "normal": "NORMAL", "langsam": "LANGSAM"}[v],
          gilt=lambda d: bool(_regeln(d).get("schlacht")), rund=True,
          hilfe="SCHWERES KOMMT NACH UND NACH, JE NACH SPIELVERLAUF - AUCH AN DER BASIS. AUS: ALLES SOFORT."),
+    # Seit 0.34.130 (gewuenscht): Hoechstzahl gekaufter Fahrzeuge je Seite
+    # (K.SCHLACHT hoechstens_je_seite) nur, wenn eingeschaltet - nur in der
+    # erweiterten Ansicht, Vorgabe aus: jede Seite kann beliebig viele haben.
+    Feld("fahrzeug_grenze", "HÖCHSTENS JE SEITE", "RUNDE", False, None, schalter=True,
+         gilt=lambda d: bool(_regeln(d).get("schlacht")),
+         hilfe="AN: VON TRAGSCHRAUBER, WERFER, PANZER ... KANN JEDE SEITE NUR WENIGE ZUGLEICH KAUFEN."),
     Feld("bots", "BOTS AUFFÜLLEN BIS", "RUNDE", 0,
          lambda d, u: K.BOTS["auffuellen"],
          text=lambda v, d, u: "AUS" if not v else "%d SPIELER" % v,

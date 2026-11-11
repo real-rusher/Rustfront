@@ -19323,15 +19323,126 @@ for _ in range(200):
         _frei129 = _p129b
         break
 _k1_129 = _frei129 is not None and w129.belohnung_kaufen(_ich129, "tragschrauber", _frei129) == ""
-pruef("... hoechstens einer je Seite: der zweite Tragschrauber geht nicht, solange der erste unterwegs ist",
-      _k1_129 and w129.belohnung_pruefen(_ich129, "tragschrauber", _frei129).startswith("SCHON 1")
-      and _ich129.schlacht_punkte == 99 - _preis129["tragschrauber"], str(_frei129))
+pruef("... ohne die Regel HÖCHSTENS JE SEITE (Vorgabe, seit 0.34.130) beliebig viele",
+      _k1_129 and w129.belohnung_pruefen(_ich129, "tragschrauber", _frei129) == ""
+      and _d129.get("fahrzeug_grenze") is False
+      and "fahrzeug_grenze" not in [f_.schluessel for f_ in _R129.sichtbar(_d129, False)]
+      and "fahrzeug_grenze" in [f_.schluessel for f_ in _R129.sichtbar(_d129, True)], str(_frei129))
+w129.regelwerk["fahrzeug_grenze"] = True
+pruef("... mit ihr hoechstens einer je Seite: der zweite Tragschrauber geht nicht, solange der erste unterwegs ist",
+      w129.belohnung_pruefen(_ich129, "tragschrauber", _frei129).startswith("SCHON 1")
+      and _ich129.schlacht_punkte == 99 - _preis129["tragschrauber"])
 w129.runden_alter = 77.0
 for _ in range(8):
     w129.schritt(K.NETZ["takt"])
     g129.schritt(K.NETZ["takt"])
 pruef("Der Gast kennt die Laufzeit der Runde (Kaufliste zeigt dasselbe wie beim Gastgeber)",
       abs(g129.runden_alter - w129.runden_alter) < 1.0, "%.1f / %.1f" % (g129.runden_alter, w129.runden_alter))
+
+print("\n-- 0.34.130: Chor-Waffen werden heiss, Kugelblitz schwaecher, Napalm-Angriff")
+_tm130 = _TM59.Testmodus(app, karte="staubtal_offen")
+_p130 = pygame.Vector2(3000, 3000)
+_a130 = _tm130.puppe_setzen(_p130, 0, {"team": 0, "waffe_figur": "spiegellaser"}, name="A")
+_kl130 = []
+_alt_kl130 = _tm130.welt.klang
+def _klm130(name_, *a_, **k_):
+    _kl130.append(name_)
+    return _alt_kl130(name_, *a_, **k_)
+_tm130.welt.klang = _klm130
+def _ein130(**x_):
+    d_ = {"will": [0, 0], "ziel": [_p130.x + 300, _p130.y], "knoepfe": []}
+    d_.update(x_)
+    _tm130._anwenden(_a130, d_)
+    _tm130.schritt(K.FIXED_DT)
+_sl130 = K.WAFFEN["spiegellaser"]
+_schuss130 = 0
+_t130 = 0.0
+while "spiegellaser" not in _a130.ueberhitzt and _t130 < 10.0:
+    _vor130 = _a130.magazin["spiegellaser"]
+    _ein130(feuert=True)
+    _schuss130 += 1 if _a130.magazin["spiegellaser"] < _vor130 else 0
+    _t130 += K.FIXED_DT
+pruef("Chor-Waffe: nach so vielen Schuss, wie frueher ins Magazin passten, ueberhitzt sie - einmal der Kuehlton, kein Nachladeton",
+      _schuss130 == _sl130["magazin"] and _kl130.count("ueberhitzt") == 1 and "reload" not in _kl130,
+      "%d Schuss, %s" % (_schuss130, sorted(set(_kl130))))
+_ein130(knoepfe=["nachladen"])
+pruef("... R laedt sie nicht nach, und das Abkuehlen dauert laenger als ein Nachladen",
+      _a130.nachlade_rest == 0.0 and _sl130["ueberhitzt"] > _sl130["nachladen"]
+      and all(K.WAFFEN[n_]["ueberhitzt"] > K.WAFFEN[n_]["nachladen"] for n_ in K.WAFFEN if K.WAFFEN[n_].get("kuehlt")))
+_a130.waffe_waehlen(1)                     # weggesteckt: eine andere Waffe in der Hand
+for _ in range(int((_sl130["ueberhitzt"] - 0.3) / K.FIXED_DT)):
+    _ein130(feuert=True)
+_noch130 = "spiegellaser" in _a130.ueberhitzt
+for _ in range(int(0.6 / K.FIXED_DT)):
+    _ein130()
+pruef("... sie kuehlt auch weggesteckt ab - danach ist sie ganz kalt",
+      _noch130 and "spiegellaser" not in _a130.ueberhitzt and _a130.magazin["spiegellaser"] == _sl130["magazin"])
+_a130.waffe_waehlen(0)
+for _ in range(int(0.9 / K.FIXED_DT)):
+    _ein130(feuert=True)
+_heiss130 = _a130.magazin["spiegellaser"]
+_a130.waffe_waehlen(1)
+for _ in range(int(_sl130["abkuehlen"] * 3.2 / K.FIXED_DT)):
+    _ein130()
+pruef("... und in Ruhe kuehlt sie nach und nach ab, auch in der Tasche",
+      _heiss130 < _sl130["magazin"] and _a130.magazin["spiegellaser"] >= _heiss130 + 2,
+      "%d -> %d" % (_heiss130, _a130.magazin["spiegellaser"]))
+from dustfront import bots as _BO130
+_a130.ueberhitzt["spiegellaser"] = 3.0
+_mit130 = [n_ for _i, n_ in _BO130.BotHirn._waffen_mit_munition(type("H", (), {"k": _a130})())] \
+    if hasattr(_BO130, "BotHirn") and hasattr(_BO130.BotHirn, "_waffen_mit_munition") else None
+pruef("Bots nehmen eine ueberhitzte Waffe nicht (sie wechseln)",
+      _mit130 is None or "spiegellaser" not in _mit130, str(_mit130))
+_tm130.welt.klang = _alt_kl130
+pruef("Kugelblitz deutlich schwaecher (gemeldet: viel zu OP): weniger Schaden, kleinere Reichweite der Blitze",
+      K.WAFFEN["kugelblitz"]["schaden"] <= 10 and K.WAFFEN["kugelblitz"]["zap_radius"] <= 60
+      and K.WAFFEN["kugelblitz"]["platzen_schaden"] <= 40 and K.WAFFEN["kugelblitz"]["platzen_radius"] <= 62)
+# Napalm
+from dustfront import schlacht as _SL130
+_tm130.nachschub_setzen("napalm", _p130, {"winkel": 0})
+_la130 = _tm130.luftangriffe[-1]
+_kl130 = []
+_tm130.welt.klang = _klm130
+_orte130 = []
+_alt_kl2_130 = _klm130
+def _klm2_130(name_, laut_=1.0, pos_=None, ebene_=None):
+    if name_ == "bomber":
+        _orte130.append(None if pos_ is None else pygame.Vector2(pos_))
+    return _klm130(name_, laut_, pos_, ebene_)
+_tm130.welt.klang = _klm2_130
+_b130 = pygame.Surface((K.GAME_W, K.GAME_H))
+_gezeichnet130 = False
+_t0_130 = _la130.bomben[0][0]
+while _la130 in _tm130.luftangriffe:
+    _tm130.schritt(K.FIXED_DT)
+    if not _gezeichnet130 and _la130.alter > _t0_130 - 0.4:
+        _tm130.kamera.pos.update(_la130.bomben[0][1])
+        _tm130.zeichnen(_b130, 1.0)          # fallende Bomben zeichnen geht
+        _gezeichnet130 = True
+_bahn130 = _la130.ende - _la130.start
+_anteile130 = [(o_ - _la130.start).dot(_bahn130) / _bahn130.length_squared() for o_ in _orte130 if o_ is not None]
+pruef("Napalm: den Bomber hoert man nur an seinem Ort, und der wandert die Bahn entlang (auch davor und dahinter)",
+      len(_orte130) >= 8 and len(_anteile130) == len(_orte130)
+      and _anteile130[0] < 0.0 < 1.0 < _anteile130[-1]
+      and all(b_ > a_ for a_, b_ in zip(_anteile130, _anteile130[1:])) and "jet" not in _kl130,
+      "%d Stuecke, %.2f .. %.2f" % (len(_orte130), _anteile130[0] if _anteile130 else 0, _anteile130[-1] if _anteile130 else 0))
+pruef("... jede Bombe pfeift im Fall, und sie fallen sichtbar (gezeichnet)",
+      _kl130.count("napalm_fall") == len(_la130.bomben) and _gezeichnet130)
+_np130 = [f_ for f_ in _tm130.welt.feuer if getattr(f_, "napalm", False)]
+pruef("... das Napalm brennt als eigenes Feuer, deutlich laenger als vorher (16-24 s)",
+      _np130 and all(f_.dauer >= 30.0 for f_ in _np130) and K.FEUER["napalm_toene"] != K.FEUER["toene"],
+      str([round(f_.dauer) for f_ in _np130[:4]]))
+_eintrag130 = [[f_.pos.x, f_.pos.y, f_.ebene, f_.radius, f_.alter, f_.kennung + 9000, f_.dauer, 1] for f_ in _np130[:2]]
+_tm130.welt.feuer = []
+_tm130._feuer_uebernehmen(_eintrag130)
+pruef("... und beim Gast mit seiner Dauer und als Napalm (vorher ging es dort zu frueh aus)",
+      len(_tm130.welt.feuer) == 2 and all(f_.napalm and f_.dauer >= 30.0 for f_ in _tm130.welt.feuer))
+_la2_130 = _SL130.Luftangriff(_p130, _p130 + pygame.Vector2(1000, 0), 0, "")
+_la2_130.alter = 0.0
+pruef("... das Flugzeug hat auch vor dem Start einen Ort (vorher Absturz bei lerp ausserhalb 0..1)",
+      _la2_130.flugzeug().x < _p130.x)
+_tm130.welt.klang = _alt_kl130
+_tm130.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

@@ -110,6 +110,8 @@ class Luftangriff:
         self.bomben = bomben_planen(self.start, self.ende)
         self.naechste = 0
         self.gehoert = False
+        self.pfiff = 0                 # welche Bombe als naechste pfeift (seit 0.34.130)
+        self._brumm_rest = 0.0         # bis zum naechsten Stueck Triebwerk
 
     @property
     def dauer(self) -> float:
@@ -120,7 +122,9 @@ class Luftangriff:
         n = S["napalm"]
         weg = (self.alter - n["vorlauf"]) * n["tempo"]
         laenge = max(1.0, self.start.distance_to(self.ende))
-        return self.start.lerp(self.ende, max(-0.5, min(1.5, weg / laenge)))
+        # Nicht lerp: das nimmt nur 0 bis 1, das Flugzeug ist aber auch vor
+        # dem Start und hinter dem Ende (seit 0.34.130 hoert man es dort).
+        return self.start + (self.ende - self.start) * max(-0.7, min(1.7, weg / laenge))
 
 
 def bomben_planen(start, ende) -> list:
@@ -161,6 +165,31 @@ def bomben_planen(start, ende) -> list:
         zeit = n["vorlauf"] + weg / n["tempo"] + n["fall"]
         raus.append((zeit, start + vorn * weg + quer * seite, radius, dauer))
     return raus
+
+
+_NAPALM_BOMBE: dict = {}
+
+
+def _napalm_bombe(winkel: float) -> pygame.Surface:
+    """Eine Napalmbombe (seit 0.34.130): ein olivgruener Brandkanister mit
+    rotem Band und vier Blechflossen hinten, gemalt wie die Fahrzeuge; gedreht
+    in Flugrichtung, auf 10 Grad gerundet."""
+    from .art_fahrzeuge import _Blatt
+    w = int(round(winkel / 10.0)) * 10 % 360
+    s = _NAPALM_BOMBE.get(w)
+    if s is not None:
+        return s
+    b = _Blatt(24, 1.0)
+    c, s_ = math.cos(math.radians(w)), math.sin(math.radians(w))
+    an = lambda t, q=0.0: (c * t - s_ * q, s_ * t + c * q)       # noqa: E731
+    for q in (-1.0, 1.0):                                         # Flossen
+        b.poly((70, 74, 58), [an(-5.0, q * 1.2), an(-8.4, q * 3.4), an(-8.8, q * 3.0), an(-7.6, q * 1.0)])
+    b.rohr(an(-6.6), an(5.2), 3.6, (98, 106, 74), (40, 44, 30))
+    b.rohr(an(-1.0), an(0.2), 3.7, (168, 52, 36), (70, 22, 16))  # rotes Band
+    b.kreis((122, 130, 92), an(5.4), 1.4)                         # Nase
+    b.linie((140, 148, 112), an(-5.0, -0.8), an(4.0, -0.8), 0.6)  # Glanz
+    s = _NAPALM_BOMBE[w] = b.fertig()
+    return s
 
 
 class SchlachtTeil:
@@ -569,13 +598,24 @@ class SchlachtTeil:
         return start + hin.normalize() * laenge
 
     def _luftangriff_schritt(self, la: Luftangriff, dt: float) -> None:
-        """Das Flugzeug kommt (man hoert es), dann schlagen die Bomben ein."""
+        """Der Bomber kommt (man hoert ihn nur, und nur in seiner Naehe),
+        die Bomben fallen pfeifend, dann brennt Napalm."""
         from .entities import Brandflaeche
         w = self.welt
-        if not la.gehoert and la.alter >= max(0.0, S["napalm"]["vorlauf"] - 1.6):
-            # Ohne Ort: jeder hoert das Flugzeug kommen, sieht es aber nicht.
-            la.gehoert = True
-            w.klang("jet", 0.75)
+        n = S["napalm"]
+        # Seit 0.34.130 (gewuenscht): kein Ton fuer alle mehr, sondern ein
+        # Bomber, der ueber die Bahn zieht - Stueck fuer Stueck dort gespielt,
+        # wo er gerade ist. So hoert ihn, wer in der Naehe ist, unter ihm am
+        # lautesten, und das Geraeusch wandert mit.
+        la._brumm_rest -= dt
+        laenge = max(1.0, la.start.distance_to(la.ende))
+        weg = (la.alter - n["vorlauf"]) * n["tempo"] / laenge
+        if la._brumm_rest <= 0.0 and n["hoeren_ab"] <= weg <= n["hoeren_bis"]:
+            la._brumm_rest = n["brumm_takt"]
+            w.klang("bomber", n["brumm_laut"], la.flugzeug(), 0)
+        while la.pfiff < len(la.bomben) and la.bomben[la.pfiff][0] - n["fall"] <= la.alter:
+            w.klang("napalm_fall", 0.7, la.bomben[la.pfiff][1], 0)
+            la.pfiff += 1
         la.alter += dt
         while la.naechste < len(la.bomben) and la.bomben[la.naechste][0] <= la.alter:
             _t, ort, radius, dauer = la.bomben[la.naechste]
@@ -583,7 +623,7 @@ class SchlachtTeil:
             e = w.ebene(0)
             if not (0 <= ort.x < e.pixel_breite and 0 <= ort.y < e.pixel_hoehe):
                 continue
-            w.feuer.append(Brandflaeche(ort, 0, radius=radius, dauer=dauer, von=la.von))
+            w.feuer.append(Brandflaeche(ort, 0, radius=radius, dauer=dauer, von=la.von, napalm=True))
             w.explosion(ort, 0, 0.0, "feuer")
             w.klang("napalm", 0.9, ort, 0)
             w.laerm(ort, 0, la.von, 700.0)
@@ -722,7 +762,7 @@ class SchlachtTeil:
         bis = self.gesperrt_bis(was)
         if bis:
             return "NOCH NICHT FREI (%s)" % bis
-        grenze = S["hoechstens_je_seite"].get(was)
+        grenze = S["hoechstens_je_seite"].get(was) if getattr(self, "regelwerk", {}).get("fahrzeug_grenze") else None
         if grenze is not None and k.team in (0, 1) and self.gekauft_unterwegs(k.team, was) >= grenze:
             return "SCHON %d IM EINSATZ" % grenze
         if was in S["nur_eigene_haelfte"] and k.team in (0, 1) and not self.in_eigener_haelfte(punkt, k.team):
@@ -809,7 +849,9 @@ class SchlachtTeil:
                    for a in self.abwuerfe],
             "ue": [[round(u.pos.x), round(u.pos.y), u.team] for u in self.ueberfluege],
             # Napalm-Angriffe (seit 0.34.101): Bahn und Seite, fuer die Karte.
-            "la": [[round(a.start.x), round(a.start.y), round(a.ende.x), round(a.ende.y), a.team]
+            # Seit 0.34.130 mit dem Alter: daraus zeichnet der Gast die fallenden Bomben.
+            "la": [[round(a.start.x), round(a.start.y), round(a.ende.x), round(a.ende.y), a.team,
+                    round(a.alter, 2)]
                    for a in getattr(self, "luftangriffe", ())],
         }
 
@@ -849,13 +891,23 @@ class SchlachtTeil:
                 continue
         self._ueberfluege_gast = ue
         la = []
+        alt = self.__dict__.get("_napalm_gast", {})
+        neu = {}
         for e in m.get("la", []):
             try:
                 la.append((pygame.Vector2(float(e[0]), float(e[1])),
                            pygame.Vector2(float(e[2]), float(e[3])), int(e[4])))
+                if len(e) > 5:
+                    # Derselbe Bombenplan wie beim Gastgeber (aus dem Ort), je
+                    # Angriff einmal gebaut; nur das Alter kommt mit.
+                    schluessel = (int(e[0]), int(e[1]), int(e[2]), int(e[3]))
+                    angriff = alt.get(schluessel) or Luftangriff(la[-1][0], la[-1][1], int(e[4]), "")
+                    angriff.alter = float(e[5])
+                    neu[schluessel] = angriff
             except (TypeError, ValueError, IndexError):
                 continue
         self._luftangriffe_gast = la
+        self._napalm_gast = neu
 
     # ---- Bild: am Boden -------------------------------------------------------
     def dropzonen_zeichnen(self, flaeche, ebene: int, ecke) -> None:
@@ -926,6 +978,41 @@ class SchlachtTeil:
                              ausrichtung="mitte")
 
     # ---- Bild: in der Luft ---------------------------------------------------
+    def napalm_bomben_zeichnen(self, ziel) -> None:
+        """Die fallenden Napalmbomben (seit 0.34.130, gewuenscht): der Bomber
+        bleibt unsichtbar, aber seine Bomben sieht man - sie loesen sich in
+        der Hoehe, fliegen mit seinem Schwung ein Stueck mit, kippen mit der
+        Nase nach unten und schlagen genau dort ein, wo das Feuer entsteht.
+        Darunter waechst ihr Schatten. Beim Gastgeber und beim Gast."""
+        n = S["napalm"]
+        angriffe = (list(getattr(self, "luftangriffe", ())) if self.ist_gastgeber
+                    else list(self.__dict__.get("_napalm_gast", {}).values()))
+        if not angriffe:
+            return
+        ecke = self.kamera.ecke
+        breite, hoehe = ziel.get_size()
+        for la in angriffe:
+            vorn = la.ende - la.start
+            vorn = vorn.normalize() if vorn.length_squared() > 1.0 else pygame.Vector2(1, 0)
+            for t_ein, ort, _r, _d in la.bomben:
+                rest = t_ein - la.alter
+                if not (0.0 < rest <= n["fall"]):
+                    continue
+                q = 1.0 - rest / n["fall"]
+                hoch = n["bombe_hoehe"] * (1.0 - q * q)
+                boden = ort - vorn * (n["tempo"] * n["bombe_schwung"] * rest) - ecke
+                if not (-40 < boden.x < breite + 40 and -40 - hoch < boden.y < hoehe + 40):
+                    continue
+                sw = int(3 + 6 * q)
+                sch = pygame.Surface((sw * 2, max(2, sw)), pygame.SRCALPHA)
+                pygame.draw.ellipse(sch, (10, 8, 6, int(40 + 90 * q)), sch.get_rect())
+                ziel.blit(sch, (boden.x - sw, boden.y - sw // 2))
+                # Im Bild: vorwaerts mit dem Schwung, nach unten immer schneller.
+                vx = vorn.x * n["tempo"] * n["bombe_schwung"]
+                vy = vorn.y * n["tempo"] * n["bombe_schwung"] + 2.0 * n["bombe_hoehe"] * q / n["fall"]
+                bild = _napalm_bombe(math.degrees(math.atan2(vy, vx)))
+                ziel.blit(bild, bild.get_rect(center=(int(boden.x), int(boden.y - hoch))))
+
     def abwuerfe_zeichnen(self, ziel, misch: float) -> None:
         """Ueber allem: der Schatten am Boden (je tiefer, desto groesser und
         dunkler), die Last etwas hoeher und groesser, darueber der Schirm."""

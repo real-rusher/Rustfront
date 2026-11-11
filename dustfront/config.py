@@ -739,6 +739,9 @@ KLANG_NAMEN = (
     "schock", "schlag_faust", "knaller", "emp", "piepen", "klebt", "gas",
     "schneeball", "wurf_leise", "nagel_wand", "falle_klick", "drohne", "horchposten",
     "emp_aus", "reifen_platt", "schild", "schild_durch",
+    "ueberhitzt",           # eine Chor-Waffe ueberhitzt und kuehlt ab (seit 0.34.130)
+    "bomber",               # ein Stueck Triebwerk des Napalm-Bombers (seit 0.34.130)
+    "napalm_fall",          # eine Napalmbombe pfeift im Fall (seit 0.34.130)
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -1136,7 +1139,8 @@ SCHLACHT = dict(
         langsam=dict(stufen=(0.15, 0.32, 0.50), hoechstens=(180, 420, 660)),
         bezug=900.0,              # Runde nach Abschuessen: so lange gilt als ganze Runde (s)
     ),
-    # So viele gekaufte je Seite gleichzeitig (lebend oder noch im Anflug).
+    # So viele gekaufte je Seite gleichzeitig (lebend oder noch im Anflug) -
+    # seit 0.34.130 nur mit der Regel HÖCHSTENS JE SEITE (Vorgabe aus).
     hoechstens_je_seite=dict(panzerwagen=3, flakwagen=2, funkwagen=1, jagdpanzer=2,
                              spulenwagen=1, panzer=2, tragschrauber=1, werfer=1),
     # Nur in der eigenen Haelfte abzuwerfen: wirkt auf Entfernung, gehoert nach hinten.
@@ -1157,9 +1161,16 @@ SCHLACHT = dict(
     # kommt mit etwas Geschick hindurch. vorlauf: so lange nach dem Kauf, bis
     # das Flugzeug den Start erreicht; tempo: px/s; fall: so lange faellt
     # eine Bombe.
-    napalm=dict(laenge_anteil=0.5, tempo=950.0, vorlauf=2.5, fall=0.7, abstand=105.0,
+    # Seit 0.34.130: das Napalm brennt deutlich laenger (vorher 16-24 s) und
+    # anders als gewoehnliches Feuer (FEUER napalm_*); man hoert den Bomber
+    # nur in seiner Naehe - alle `brumm_takt` s ein Stueck Triebwerk dort, wo
+    # er ist (von `hoeren_ab` bis `hoeren_bis` der Bahn), und die Bomben fallen
+    # sichtbar (`fall` s aus `bombe_hoehe` px, mit `bombe_schwung` seines Tempos).
+    napalm=dict(laenge_anteil=0.5, tempo=950.0, vorlauf=2.5, fall=1.1, abstand=105.0,
                 streu=(0.6, 1.7), luecke_chance=0.28, luecke=(110.0, 210.0), seitlich=46.0,
-                radius=(40.0, 72.0), dauer=(16.0, 24.0), wenigstens_luecken=3),
+                radius=(40.0, 72.0), dauer=(30.0, 42.0), wenigstens_luecken=3,
+                hoeren_ab=-0.7, hoeren_bis=1.7, brumm_takt=0.45, brumm_laut=1.4,
+                bombe_hoehe=170.0, bombe_schwung=0.3),
     # Die Aufklaerungsdrohne (seit 0.34.100 ein grosser Starrfluegler, hoch
     # oben). markiert: so lange bleiben Pings ueber Gegnern und Fahrzeugen
     # (vorher 15 s). flug_hub: so hoch fliegt sie im Bild ueber ihrem
@@ -4497,8 +4508,12 @@ WAFFEN.update(WUERFE_PAKET)
 
 # Energiewaffen des Chors und der Flammenwerfer (seit 0.34.68). Statt
 # eines Magazins werden die Chor-Waffen heiss (`kuehlt`): jeder Schuss
-# verbraucht einen Teil, in Ruhe kommt alle `abkuehlen` Sekunden einer
-# zurueck; ist alles verbraucht, ueberhitzt sie und braucht `nachladen`.
+# macht Hitze (`magazin` Schuss passen hinein), in Ruhe kuehlt alle
+# `abkuehlen` Sekunden ein Teil ab - seit 0.34.130 auch weggesteckt. Ist die
+# Hitze voll, ueberhitzt sie: gesperrt fuer `ueberhitzt` Sekunden (laenger als
+# ein Nachladen, gewuenscht wie die Quasar-Kanone: man nimmt solange eine
+# andere Waffe), einmal der Kuehlton, danach ganz kalt. Nachladen gibt es
+# fuer sie nicht mehr; `nachladen` bleibt fuer die Bots als Mass.
 ENERGIE_PAKET = {
     "spule": dict(
         art="strahl", name="SPULENGEWEHR",
@@ -4511,7 +4526,7 @@ ENERGIE_PAKET = {
         # erledigt noch jeden, aber kaum mehr zwei hintereinander.
         schaden=95.0, ladezeit=2.1, mindest=0.25, reichweite=760.0,
         wand_verlust=0.4, koerper_verlust=0.35,
-        takt=0.9, magazin=3, nachladen=5.5, kuehlt=True, abkuehlen=3.4,
+        takt=0.9, magazin=3, nachladen=5.5, kuehlt=True, abkuehlen=3.4, ueberhitzt=7.5,
         tempo_beim_laden=0.55, kamera=5.0, rueckstoss=60.0, huelsen=0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
         klang="schuss_spule", muendung=1.2, schadensart="panzerbrechend"),
@@ -4521,7 +4536,7 @@ ENERGIE_PAKET = {
         # naechsten und wird dabei schwaecher. Die Waffe gegen Horden.
         schaden=46.0, ladezeit=0.45, reichweite=320.0, kegel=14.0,
         spruenge=5, sprung=120.0, abfall=0.72,
-        takt=0.25, magazin=8, nachladen=4.0, kuehlt=True, abkuehlen=1.2,
+        takt=0.25, magazin=8, nachladen=4.0, kuehlt=True, abkuehlen=1.2, ueberhitzt=5.5,
         tempo_beim_laden=0.8, kamera=2.0, rueckstoss=0.0, huelsen=0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
         klang="schuss_kettenblitz", muendung=0.8, schadensart="kugel", tempo_faktor=0.92),
@@ -4529,7 +4544,7 @@ ENERGIE_PAKET = {
         art="schuss", name="SPIEGELLASER",
         # Prallt an Waenden ab und wird mit jedem Abprall staerker - die
         # Waffe fuer Schuesse um die Ecke.
-        schaden=24.0, takt=0.3, magazin=10, nachladen=3.5, kuehlt=True, abkuehlen=0.7,
+        schaden=24.0, takt=0.3, magazin=10, nachladen=3.5, kuehlt=True, abkuehlen=0.7, ueberhitzt=5.0,
         streuung=0.6, streuung_lauf=2.0, geschosse=1, tempo=900.0, reichweite=1300.0,
         rueckstoss=0.0, kamera=0.8, huelsen=0, klang="schuss_spiegellaser", muendung=0.6,
         abprall=3, abprall_faktor=1.4, bild_flug="laser_flug"),
@@ -4538,9 +4553,12 @@ ENERGIE_PAKET = {
         # Eine langsame Kugel, die unterwegs staendig Blitze in mehrere
         # Richtungen schlaegt (auch ohne Ziel, bis an ihre Reichweite) und
         # am Ende gross platzt. Gut zu sehen, sperrt aber einen Gang.
-        schaden=18.0, zap_radius=86.0, zap_takt=0.22, zap_strahlen=4,
-        platzen_schaden=70.0, platzen_radius=96.0,
-        takt=1.6, magazin=2, nachladen=5.0, kuehlt=True, abkuehlen=4.0,
+        # Seit 0.34.130 stark abgeschwaecht (gemeldet: "viel zu OP"): Blitze
+        # 18 -> 10 Schaden und 86 -> 58 px weit, 4 -> 3 Strahlen, das Platzen
+        # 70 -> 40 Schaden in 96 -> 62 px.
+        schaden=10.0, zap_radius=58.0, zap_takt=0.22, zap_strahlen=3,
+        platzen_schaden=40.0, platzen_radius=62.0,
+        takt=1.6, magazin=2, nachladen=5.0, kuehlt=True, abkuehlen=4.0, ueberhitzt=7.0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=120.0, reichweite=760.0,
         rueckstoss=20.0, kamera=2.5, huelsen=0, klang="schuss_kugelblitz", muendung=1.0,
         bild_flug="kugelblitz_flug"),
@@ -5074,6 +5092,15 @@ FEUER = dict(
     toene=((84, 22, 10), (172, 54, 16), (230, 122, 26), (250, 192, 92)),
     funken=2.0,               # Funken je Sekunde und Flaeche
     brandfleck=True,          # hinterlaesst einen Fleck, wenn es aus ist
+    # Napalm (seit 0.34.130, gewuenscht "aggressiver"): klebriges Feuer -
+    # dunkler, roeter, mit schwarzem, oeligem Russ am Rand, einem gelbweissen
+    # Kern, zuengelt schneller, mehr Funken und schwarzer Rauch steigt auf.
+    napalm_toene=((52, 14, 8), (150, 26, 10), (220, 64, 14), (252, 150, 34), (255, 236, 150)),
+    napalm_russ=(22, 14, 10),
+    napalm_schwelle=0.27,     # brennt dichter als gewoehnliches Feuer
+    napalm_zunge=2.8,         # und zuengelt schneller
+    napalm_funken=6.0,
+    napalm_rauch=1.6,         # schwarze Rauchwolken je Sekunde
 )
 
 # Die Minikarte oben links (minikarte.py), ein Versuch. Groesse in

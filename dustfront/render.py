@@ -2920,7 +2920,8 @@ class Renderer:
         """
         f = K.FEUER
         korn = f["korn"]
-        schritt = 1.0 / max(1.0, f["zunge"] * 6.0)
+        napalm = getattr(brand, "napalm", False)
+        schritt = 1.0 / max(1.0, f["napalm_zunge" if napalm else "zunge"] * 6.0)
         takt = int(zeit / schritt)
         schluessel = (brand.kennung, takt, round(brand.staerke, 2), eigene_ebene)
         hit = self._feuer_puffer.get(brand.kennung)
@@ -2928,19 +2929,23 @@ class Renderer:
             return hit[1], hit[2]
         breite, x0, y0, werte = brand.feld(korn)
         flaeche = pygame.Surface((breite * korn, breite * korn), pygame.SRCALPHA)
-        toene = f["toene"]
+        toene = f["napalm_toene"] if napalm else f["toene"]
         # Die wandernde Schwelle: einmal je Zeitschritt ein neuer Wert,
         # aus der Kennung und dem Takt gewuerfelt. Damit zuengelt es auf
         # jedem Rechner gleich, ohne dass etwas uebertragen werden muss.
         zunge = ((brand.kennung * 2654435761 + takt * 40503) % 1000) / 1000.0
-        grund = f["schwelle"] * (0.80 + 0.40 * zunge)
+        grund = f["napalm_schwelle" if napalm else "schwelle"] * (0.80 + 0.40 * zunge)
         stufen = len(toene)
         deckung = brand.staerke if eigene_ebene else brand.staerke * 0.65
+        russ = grund - 0.12                    # Napalm: oeliger Russ am Rand
         for gy in range(breite):
             zeile = gy * breite
             for gx in range(breite):
                 w = werte[zeile + gx]
                 if w <= grund:
+                    if napalm and w > russ:
+                        pygame.draw.rect(flaeche, (*f["napalm_russ"], int(170 * deckung)),
+                                         (gx * korn, gy * korn, korn, korn))
                     continue
                 # Je dichter, desto heisser: aussen Glimmen, innen heller
                 # Kern. Der Kern ist klein, sonst sieht es aus wie eine

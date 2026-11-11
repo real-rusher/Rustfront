@@ -802,8 +802,13 @@ class BotHirn(Taktik):
             if d.get("art") == "nahkampf" and (not d.get("magazin") or d.get("aufheben")):
                 raus.append((i, name))           # ein Schlag braucht keine Munition
                 continue
-            if (k.magazin.get(name, 0) > 0 or not k.knapp or k.vorrat.get(name, 0) > 0
-                    or d.get("kuehlt")):
+            if d.get("kuehlt"):
+                # Chor-Waffen (seit 0.34.130): solange sie ueberhitzt ist, nimmt
+                # er eine andere - so wie ein Mensch.
+                if name not in getattr(k, "ueberhitzt", {}) and k.magazin.get(name, 0) > 0:
+                    raus.append((i, name))
+                continue
+            if k.magazin.get(name, 0) > 0 or not k.knapp or k.vorrat.get(name, 0) > 0:
                 raus.append((i, name))
         return raus
 

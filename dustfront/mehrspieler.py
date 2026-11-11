@@ -1252,6 +1252,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                    # Waffenpaket, Fahrzeuge, Ausruestung (seit 0.34.72): was
                    # nur der Gastgeber ausloest, muss der Gast gemeldet bekommen.
                    "spule_laden", "kettensaege", "schock", "schlag_faust", "piepen",
+                   "ueberhitzt",       # Chor-Waffe ueberhitzt (seit 0.34.130)
+                   "bomber", "napalm_fall",    # Napalm-Angriff (seit 0.34.130)
                    "klebt", "gas", "schneeball", "wurf_leise", "emp_aus", "reifen_platt",
                    "schild", "falle_klick", "drohne", "horchposten",
                    # Napalm-Angriff (seit 0.34.101): das Flugzeug und die Einschlaege.
@@ -5297,6 +5299,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                 "wl": list(k.waffen),
                 "ml": [k.magazin.get(n, 0) for n in k.waffen],
                 "vl": [k.vorrat.get(n, 0) for n in k.waffen],
+                # Seit 0.34.130: wie lange jede Waffe noch ueberhitzt ist (Chor).
+                "ul": [round(k.ueberhitzt.get(n, 0.0), 1) for n in k.waffen] if k.ueberhitzt else 0,
                 "nl": round(k.nachlade_rest, 2),
                 "cr": round(k.c4_rest, 2),
                 "fo": round(k.fokus, 2), "zi": k.zielt,
@@ -5440,8 +5444,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         # Brandflaechen wie der Rauch: mit Kennung, damit der Gast sie
         # wiedererkennt und nicht bei jedem Paket neu anlegt. Das war beim
         # Rauch der teure Fehler, und ein Feuerfeld kostet genauso viel.
+        # Seit 0.34.130 mit Dauer und Art: ein Napalmfeuer brannte beim Gast mit
+        # der gewoehnlichen Dauer und ging zu frueh aus.
         brand = [[round(b.pos.x, 1), round(b.pos.y, 1), b.ebene,
-                  round(b.radius, 1), round(b.alter, 2), b.kennung]
+                  round(b.radius, 1), round(b.alter, 2), b.kennung,
+                  round(b.dauer, 1), 1 if getattr(b, "napalm", False) else 0]
                  for b in self.welt.feuer if b.lebt]
         # Die Buggys (seit 0.34.9): Ort, Richtung, Ebene, Kennung, wer am
         # Steuer sitzt (-1 = niemand) und das Tempo in Fahrtrichtung - aus
@@ -5897,6 +5904,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                         k.vorrat[str(n)] = int(v)
                     except (TypeError, ValueError):
                         continue
+            heiss = eintrag.get("ul", 0)
+            k.ueberhitzt = {}
+            if isinstance(heiss, list) and isinstance(namen, list) and len(heiss) == len(namen):
+                for n, rest in zip(namen, heiss):
+                    try:
+                        if float(rest) > 0.0:
+                            k.ueberhitzt[str(n)] = float(rest)
+                    except (TypeError, ValueError):
+                        continue
             k.nachlade_rest = float(eintrag.get("nl", 0.0))
             k.c4_netz_rest = float(eintrag.get("cr", -1.0))
             k.dash_ladungen = int(eintrag.get("dl", K.DASH["ladungen"]))
@@ -6198,14 +6214,21 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                 kennung = int(eintrag[5])
             except (TypeError, ValueError):
                 continue
+            try:
+                dauer = float(eintrag[6]) if len(eintrag) > 6 else None
+                napalm = bool(int(eintrag[7])) if len(eintrag) > 7 else False
+            except (TypeError, ValueError):
+                dauer, napalm = None, False
             alt = vorhanden.get(kennung)
             if alt is not None:
+                if napalm:
+                    alt.qualmen(max(0.0, alter - alt.alter), self.welt)
                 alt.alter = alter
                 alt.lebt = True
                 behalten.append(alt)
                 continue
-            behalten.append(Brandflaeche(pygame.Vector2(x, y), ebene, radius,
-                                         alter=alter, kennung=kennung))
+            behalten.append(Brandflaeche(pygame.Vector2(x, y), ebene, radius, dauer=dauer,
+                                         alter=alter, kennung=kennung, napalm=napalm))
         self.welt.feuer = behalten
 
     def _rauch_uebernehmen(self, eintraege) -> None:
@@ -7229,6 +7252,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         if self.schlacht or self.__dict__.get("nachschub_an"):
             self.ueberfluege_zeichnen(ziel)
             self.abwuerfe_zeichnen(ziel, misch)
+            self.napalm_bomben_zeichnen(ziel)       # seit 0.34.130
         # Ziellinie und Streukegel nicht, solange man ein Medkit anlegt:
         # dann schiesst man nicht, und eine Linie saehe aus, als ob.
         if not self.__dict__.get("_zielhilfen_spaeter"):

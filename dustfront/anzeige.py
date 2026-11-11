@@ -709,6 +709,20 @@ class Anzeige:
         kurz = d.get("kurz")
         if getattr(ich, "anlauf", 0.0) > 0.02:
             _balken(ziel, (x, y - 2, 24, 2), ich.anlauf, K.C_TEAL)
+        if d.get("kuehlt"):
+            # Chor-Waffen (seit 0.34.130): Hitze statt Munition. Ueberhitzt
+            # fuellt sich der Balken rot, bis sie wieder geht.
+            voll = max(1, int(d["magazin"]))
+            rest = getattr(ich, "ueberhitzt", {}).get(name, 0.0)
+            pygame.draw.rect(ziel, SCHATTEN, (x - 1, y + 3, 30, 5))
+            if rest > 0.0:
+                gesamt = d.get("ueberhitzt", d["nachladen"]) * getattr(ich, "kuehl_faktor", 1.0)
+                _balken(ziel, (x, y + 4, 28, 3), 1.0 - rest / max(0.1, gesamt), K.C_RED)
+                _text(ziel, "KÜHLT", x + 32, y + 1, K.C_RED if (jetzt * 3.0) % 1.0 < 0.6 else (150, 50, 36))
+            else:
+                hitze = 1.0 - ich.magazin.get(name, 0) / float(voll)
+                _balken(ziel, (x, y + 4, 28, 3), hitze, K.C_AMBER if hitze < 0.75 else K.C_RED)
+            return
         if ich.nachlade_rest > 0 and d.get("nachladen"):
             fertig = 1.0 - ich.nachlade_rest / d["nachladen"]
             pygame.draw.rect(ziel, SCHATTEN, (x - 1, y + 3, 30, 5))
