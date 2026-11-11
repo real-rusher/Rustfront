@@ -18961,6 +18961,99 @@ _weiss124.blit(_FX124.brocken(3, "erde", 1, 0), (0, 0))
 pruef("Effekte: ein ausgeblendeter Brocken laesst sein Bild durchsichtig (kein schwarzes Quadrat)",
       tuple(_weiss124.get_at((0, 0)))[:3] == (255, 255, 255), str(tuple(_weiss124.get_at((0, 0)))))
 
+print("\n-- 0.34.126: kein Drift-Ton, Teilchenwolken, Funkmast einheitlich, Werfer klassisch")
+from dustfront import art_funkmast as _AFM126, art_werfer as _AW126, effekte as _FX126, drei_d as _D126
+from dustfront import art as _ART126
+_tm126 = _TM59.Testmodus(app, karte="staubtal_offen")
+_rnd126 = random.Random(126)
+_e126 = _tm126.welt.ebene(0)
+for _ in range(40000):
+    _tx126 = _rnd126.randrange(60, _e126.breite - 90)
+    _ty126 = _rnd126.randrange(20, _e126.hoehe - 40)
+    if all(not K.KACHELN[_e126.kachel(_tx126 + x_, _ty126 + y_)]["fest"]
+           for x_ in range(30) for y_ in range(20)):
+        break
+_z126 = lambda x_, y_: pygame.Vector2((_tx126 + x_ + 0.5) * K.TILE, (_ty126 + y_ + 0.5) * K.TILE)
+_kl126 = []
+_alt_kl126 = _tm126.welt.klang
+def _klm126(name, *a_, **k_):
+    _kl126.append(name)
+    return _alt_kl126(name, *a_, **k_)
+_tm126.welt.klang = _klm126
+_kr126 = _tm126.fahrzeug_setzen("krad", _z126(15, 10), 0, {"winkel": 0})
+_kf126 = _tm126.puppe_setzen(_kr126.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="KRADFAHRER")
+_tm126._anwenden(_kf126, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_rut126 = 0.0
+for i_ in range(int(1.5 / K.FIXED_DT)):
+    if i_ % 30 == 0:
+        _kr126.geschw.update(pygame.Vector2(0, 260).rotate(_kr126.winkel))    # quer: es rutscht
+    _tm126._anwenden(_kf126, {"will": [1, -1], "ziel": [0, 0], "knoepfe": []})
+    _tm126.schritt(K.FIXED_DT)
+    _rut126 = max(_rut126, _kr126.rutschen)
+pruef("Drift: das Krad rutscht, aber der Rutsch-Ton ist weg (auch aus Klangliste und Netz)",
+      _rut126 > 0.6 and "buggy_rutschen" not in _kl126 and "buggy_rutschen" not in K.KLANG_NAMEN
+      and not hasattr(_FZ59.Buggy, "_quietschen"), "%.2f %s" % (_rut126, sorted(set(_kl126))[:6]))
+_tm126.welt.klang = _alt_kl126
+# Explosionen: Rauch und Feuer sind Teilchenwolken.
+_tm126.welt.effekte = []
+_tm126.welt.explosion(_z126(15, 10), 0, 40030.0, "werfer_start", None)
+_ws126 = [f_ for f_ in _tm126.welt.effekte if f_.art in ("rauch", "feuer")]
+pruef("Explosionen: der Rueckstrahl ist eine grosse Wolke aus einzelnen Teilchen (keine gemalten Ballen)",
+      len(_ws126) > 150 and all(isinstance(f_, _FX126.Teilchen) for f_ in _ws126), str(len(_ws126)))
+_tm126.welt.effekte = []
+for _art126 in ("einschlag", "bombe", "flak", "absturz", "luft_kiste"):
+    _tm126.welt.explosion(_z126(15, 10), 0, 30.0, _art126, None)
+pruef("... ebenso bei allen anderen neuen Explosionen",
+      all(isinstance(f_, _FX126.Teilchen) for f_ in _tm126.welt.effekte if f_.art in ("rauch", "feuer")))
+# Aus der juengsten Explosion: mehr als 2400 Effekte auf einmal haelt die Welt
+# nicht, die aeltesten fallen weg (Welt.effekte_schritt).
+_t126 = [f_ for f_ in reversed(_tm126.welt.effekte) if isinstance(f_, _FX126.Teilchen)
+         and f_.vx * f_.vx + f_.vy * f_.vy > 400.0 and f_.dauer > 0.6 and f_.verzoegert < 0.05][0]
+_o0_126 = _t126.ort()
+for _ in range(int(0.3 / K.FIXED_DT)):
+    _tm126.welt.effekte_schritt(K.FIXED_DT)
+_tm126.kamera.pos.update(_z126(15, 10))
+_tm126.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+pruef("... die Teilchen fliegen auseinander und lassen sich zeichnen", _t126.ort() != _o0_126)
+_tm126.verlassen()
+# Funkmast: kein dunkler Rand, gleiche Farben beim Aufrichten, liegend unauffaellig.
+def _rand_pixel126(s_):
+    return sum(1 for x_ in range(s_.get_width()) for y_ in range(s_.get_height())
+               if tuple(s_.get_at((x_, y_))) == (16, 11, 8, 255))
+def _haeufigste126(s_):
+    z_ = {}
+    for x_ in range(s_.get_width()):
+        for y_ in range(s_.get_height()):
+            c_ = tuple(s_.get_at((x_, y_)))
+            if c_[3] == 255:
+                z_[c_[:3]] = z_.get(c_[:3], 0) + 1
+    return max(z_, key=z_.get)
+pruef("Funkmast: in keiner Stellung ein schwarzer Umriss",
+      all(_rand_pixel126(_AFM126.funkmast(g_, p_ / 24.0, 30.0)) == 0 for g_ in (0, 25, 200) for p_ in (0, 6, 10, 24)))
+_farben126 = [_haeufigste126(_AFM126.funkmast(25.0, p_, 0.0)) for p_ in (0.25, 0.3, 0.35, 0.42)]
+pruef("... beim Aufrichten bleibt seine Farbe gleich (kein Springen zwischen Lichtstufen)",
+      len(set(_farben126)) == 1, str(_farben126))
+_dach126 = _AFM126.DACH
+_ab126 = lambda c_: sum(abs(a_ - b_) for a_, b_ in zip(c_, _dach126))
+pruef("... liegend geht er in den Lack des Dachs ueber, aufgerichtet nicht",
+      _ab126(_haeufigste126(_AFM126.funkmast(25.0, 0.0, 0.0))) < _ab126(_farben126[-1]) - 20,
+      "%s / %s" % (_haeufigste126(_AFM126.funkmast(25.0, 0.0, 0.0)), _farben126[-1]))
+# Werfer: klassisch gemalt, Aufrichtung im Bild zu sehen.
+import inspect as _insp126
+def _oben126(s_):
+    return s_.get_bounding_rect(1).top
+pruef("Werfer: das Gestell ist gemalt wie die Fahrzeuge (kein 3D-Modell mehr)",
+      "import drei_d" not in _insp126.getsource(_AW126) and "drei_d as" not in _insp126.getsource(_AW126) and _AW126.gestell(0.0, 40.0, 63)[0].get_size()
+      == (_AW126.GROESSE_BILD, _AW126.GROESSE_BILD))
+pruef("... steiler: die Muendungen ragen im Bild hoeher (jede Aufrichtung ein eigenes Bild)",
+      _oben126(_AW126.gestell(0.0, 70.0, 63)[0]) < _oben126(_AW126.gestell(0.0, 30.0, 63)[0])
+      < _oben126(_AW126.gestell(0.0, 0.0, 63)[0])
+      and len({pygame.image.tobytes(_AW126.gestell(0.0, e_, 63)[0], "RGBA") for e_ in range(0, 81, 10)}) == 9,
+      "%d %d %d" % (_oben126(_AW126.gestell(0.0, 70.0, 63)[0]), _oben126(_AW126.gestell(0.0, 30.0, 63)[0]),
+                    _oben126(_AW126.gestell(0.0, 0.0, 63)[0])))
+pruef("... und jede Drehung (5-Grad-Schritte) ein eigenes Bild",
+      len({pygame.image.tobytes(_AW126.gestell(g_, 40.0, 63)[0], "RGBA") for g_ in range(0, 360, 5)}) == 72)
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

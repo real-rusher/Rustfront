@@ -310,7 +310,7 @@ class LuftTeil:
 
     # ---- Das Raketengestell des Werfers (seit 0.34.120) -------------------------
     def _werfer_gestelle_zeichnen(self, ziel, misch: float) -> None:
-        """Das Raketengestell (seit 0.34.123 ein 3D-Modell, art_werfer.py): fuer
+        """Das Raketengestell (art_werfer.py, seit 0.34.126 klassisch gemalt): fuer
         jede Richtung und Steilheit neu gemalt, mit Schatten auf der Pritsche.
         Es dreht sich weich zum Zeiger und richtet die Rohre nach der
         Entfernung auf. Beim Gastgeber und beim Gast (Zustand aus der Meldung)."""

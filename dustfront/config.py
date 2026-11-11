@@ -712,7 +712,6 @@ KLANG_NAMEN = (
     "trefferzeichen_toedlich",   # eigener Treffer, der erledigt
     "buggy_tuer",           # in den Buggy und wieder heraus (seit 0.34.9)
     "buggy_aufprall",       # der Buggy rumst gegen etwas
-    "buggy_rutschen",       # die Reifen quietschen, wenn er rutscht (seit 0.34.16)
     "funk_durch",           # ein Funkspruch ist durch (seit 0.34.58)
     # Panzer und Panzerwagen (seit 0.34.59) - Platzhalter, bis es Aufnahmen gibt.
     "schuss_kanone",        # die Panzerkanone
@@ -1291,8 +1290,6 @@ FAHRZEUG = dict(
     v_min=55.0,               # unter diesem Tempo rechnet der Schraeglauf ruhiger
     spur_ab=0.25,             # ab so viel Rutschen bleiben Reifenspuren (0 bis 1)
     spur_abstand=2.5,         # Pixel zwischen zwei Spurpunkten
-    quietschen_ab=0.5,        # ab so viel Rutschen quietschen die Reifen
-    quietschen_pause=0.6,
     kreis=13.0,               # Radius der beiden Kreise, mit denen er anstoesst
     achse=14.0,               # Abstand der Kreise von seiner Mitte
     einsteigen=46.0,          # so nah muss man dran sein
@@ -1455,8 +1452,6 @@ PANZERWAGEN = dict(
     v_min=55.0,
     spur_ab=0.3,
     spur_abstand=2.5,
-    quietschen_ab=0.55,
-    quietschen_pause=0.7,
     aufprall=0.2,
     aufprall_hart=120.0,
     staub_ab=70.0,
@@ -1734,7 +1729,7 @@ WERFER = dict(
     dreh=110.0,               # so schnell dreht sich das Gestell zum Zeiger (Grad/s)
     stillstand=8.0,
     rohr=(-15.0 * 1.4, 0.0),  # Mitte des Gestells (Pixel von der Mitte, +x = vorn)
-    # Das 3D-Gestell (seit 0.34.123, art_werfer.py): so steil stehen die Rohre
+    # Das Gestell (seit 0.34.123, art_werfer.py): so steil stehen die Rohre
     # bei einem Ziel ganz nah und ganz weit (Grad), so schnell richten sie sich
     # (Grad/s).
     hub=(56.0, 32.0),

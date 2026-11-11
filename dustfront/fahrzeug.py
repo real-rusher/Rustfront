@@ -24,8 +24,10 @@ Driftwinkel dreht ihn eine Stuetze zurueck, statt ihn sich drehen zu
 lassen. Eine Tastatur kennt nur voll oder nichts; ein Fahrer mit Lenkrad
 wuerde genau das mit den Haenden tun.
 
-Wo er rutscht, bleiben Reifenspuren im Sand, Staub fliegt, und die Reifen
-quietschen - beim Gast genauso, aus dem gemeldeten `rutschen`.
+Wo er rutscht, bleiben Reifenspuren im Sand und Staub fliegt - beim Gast
+genauso, aus dem gemeldeten `rutschen`. Ein Ton dazu ist seit 0.34.126 weg
+(der Besitzer: "den moechte ich nie wieder hoeren" - er kam beim Driften und
+beim Aufprall, weil ein Aufprall das Rutschen hochsetzt).
 
 **Zerstoerbar (seit 0.34.18).** Bis dahin war er unzerstoerbar und kein
 Ziel. Gemeldet: "autos sollen kaputt gehen koennen und dann respawnen random
@@ -132,7 +134,6 @@ class Buggy(Wesen):
         # Quietschen, und geht so an den Gast.
         self.rutschen = 0.0
         self._spur_letzte: dict = {}
-        self._quietsch_rest = 0.0
         # Wo er zu Beginn stand. Zu jeder neuen Runde kommt er dorthin
         # zurueck, sonst steht nach drei Runden jeder Buggy irgendwo.
         self.start = (pygame.Vector2(pos), int(ebene), float(winkel))
@@ -516,7 +517,6 @@ class Buggy(Wesen):
         self._beiseite_schieben()
         self._staub(dt)
         self._spuren()
-        self._quietschen(dt)
 
     def _drehen(self, dt: float) -> None:
         """Drehen nur, wenn er danach noch passt - sonst klemmte er sich an
@@ -790,7 +790,7 @@ class Buggy(Wesen):
 
     def staub_gast(self, dt: float) -> None:
         """Beim Gast: derselbe Staub, dieselben Spuren - aus dem gemeldeten
-        Tempo und Rutschen. Gequietscht wird beim Gastgeber (NETZKLAENGE)."""
+        Tempo und Rutschen."""
         self._staub(dt)
         self._spuren()
         self.wrack_qualm(dt)
@@ -832,14 +832,6 @@ class Buggy(Wesen):
                 q = letzte.lerp(p, s / schritte)
                 ebene.dekal(_spurpunkt(deck), q.x, q.y)
             self._spur_letzte[i] = pygame.Vector2(p)
-
-    def _quietschen(self, dt: float) -> None:
-        f = self.werte
-        self._quietsch_rest = max(0.0, self._quietsch_rest - dt)
-        if self.rutschen >= f["quietschen_ab"] and self._quietsch_rest <= 0.0:
-            self._quietsch_rest = f["quietschen_pause"]
-            self.welt.klang("buggy_rutschen", 0.35 + 0.5 * self.rutschen,
-                            self.pos, self.ebene)
 
     def zuruecksetzen(self) -> None:
         """Zurueck an den Platz vom Rundenbeginn, stehend und leer."""
@@ -1548,9 +1540,6 @@ class Panzer(Schwer):
 
     def _staub(self, dt: float) -> None:
         """Kein Fahrstaub wie beim Buggy - er ist zu langsam dafuer."""
-
-    def _quietschen(self, dt: float) -> None:
-        """Ketten quietschen nicht im Sand."""
 
     def _spuren(self) -> None:
         """Kettenspuren: zwei Baender im Sand, solange er sich bewegt - auch

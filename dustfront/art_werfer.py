@@ -1,27 +1,32 @@
 """
-DUSTFRONT - Das Raketengestell des Werfers und seine Raketen (seit 0.34.123)
+DUSTFRONT - Das Raketengestell des Werfers und seine Raketen (seit 0.34.126)
 ===========================================================================
 
-Komplett neu gebaut, als echtes 3D-Modell (drei_d.py), und aus Schrott wie
-alles in RUSTFRONT: sechs alte Rohre verschiedener Herkunft (verzinkt,
-rostig, olivgruen), nicht ganz gleich lang, mit zwei Bandeisen und einem
-Winkeleisen-Rahmen zusammengeschweisst. Das Buendel liegt auf einer Achse
-zwischen zwei Lagerboecken aus Blechresten, die auf einer alten Radfelge
-stehen (dem Drehteller). Eine Spindel vorn hebt es an.
+Gemalt wie die anderen Fahrzeuge (klassisch, von oben, mit dunklem Rand und
+wenigen flachen Toenen) - aber fuer jede Richtung und jede Steilheit ein
+eigenes Bild, damit man Drehung und Aufrichtung sieht. Bis 0.34.125 war es
+ein schattiertes 3D-Modell (drei_d.py); gemeldet: "nicht wirklich 3D, es soll
+nach 3D aussehen, aber das ist zu krass, der Artstyle zu unterschiedlich -
+klassischer".
 
-* **Drehen und Heben.** Das Bild wird fuer jede Richtung neu gerechnet
-  (`gestell(gieren, erhebung, maske)`), nicht als flaches Bild gedreht: beim
-  Schwenken sieht man je nach Richtung die Seite, die Oberseite oder die
-  Muendungen der Rohre, das Licht wandert ueber die Flaechen. Je steiler die
-  Rohre stehen, desto hoeher ragen die Muendungen im Bild, und die Spindel
-  faehrt aus.
-* **Raketen.** In jedem geladenen Rohr schaut vorn die rote Spitze heraus,
-  hinten das Leitwerk aus Blech. Leere Rohre sind schwarze Loecher.
-* **Im Flug** (`rakete(gieren, kippen)`) dasselbe Modell klein: Rumpf aus
-  Rohr, rote Spitze, vier Blechflossen - es zeigt immer in Flugrichtung.
+Wie es entsteht: die Lage jedes Teils wird raeumlich gerechnet (dieselbe
+Rechnung wie fuer Muendung und Rueckstrahl, `muendung3d`, `hinten3d`), die
+Bildpunkte sind dann (x, y - Hoehe) wie bei allem, was im Spiel in der Luft
+ist. Gemalt wird jedes Teil aber flach im Pixelstil der Fahrzeuge
+(art_fahrzeuge._Blatt): Rohre mit dunkler Kante, hellem Kern und einer
+Glanzlinie, Bandeisen, Lagerboecke mit hellem Deckel und dunkler Seite. Je
+steiler die Rohre, desto hoeher ragen die Muendungen im Bild und desto
+kuerzer werden die Rohre, wenn sie zum Betrachter oder von ihm weg zeigen.
 
-`muendung3d` und `hinten3d` sagen, wo ein Rohr vorn und hinten endet: von
-dort startet die Rakete, dort tritt der Rueckstrahl aus.
+Aus Schrott wie alles in RUSTFRONT: sechs alte Rohre verschiedener Herkunft
+(verzinkt, rostig, olivgruen), nicht ganz gleich lang, zwei Bandeisen, auf
+einer Achse zwischen zwei Lagerboecken auf einer alten Felge; eine Spindel
+vorn hebt das Buendel. Geladene Rohre zeigen vorn die rote Spitze und hinten
+das Leitwerk, leere Rohre sind dunkle Loecher.
+
+Bilder: `gestell(gieren, erhebung, maske)` (auf 5 und 2 Grad gerundet, jedes
+einmal gerechnet und behalten) und `rakete(gieren, kippen)` fuer die Rakete
+im Flug.
 """
 
 from __future__ import annotations
@@ -29,8 +34,6 @@ from __future__ import annotations
 import math
 
 import pygame
-
-from . import drei_d as D
 
 STUFEN = 8                          # Aufbau in so vielen Stufen (Fahrzeug.stufe)
 GROESSE_BILD = 112                  # Bildgroesse des Gestells (Spielpixel)
@@ -47,17 +50,21 @@ ROHRE = (
     (5.2, 3.0, -14.0, 19.5, (144, 138, 124)),
 )
 ROHR_R = 2.3
-SPITZE = (168, 60, 38)
+SPITZE = (176, 62, 40)
+SPITZE_DK = (92, 26, 18)
 SPITZE_BAND = (204, 176, 86)
 BLECH = (150, 146, 134)
-DUNKEL = (22, 18, 15)
-BAND = (70, 64, 56)
-WINKEL = (126, 84, 54)
+DUNKEL = (24, 20, 17)
+BAND = (64, 58, 50)
 BOCK_L = (112, 74, 46)              # die Lagerboecke: einer rostig ...
 BOCK_R = (98, 100, 74)              # ... einer aus olivem Blech
 FELGE = (104, 98, 88)
 NABE = (128, 122, 110)
 RAKETE_RUMPF = (150, 146, 130)
+
+
+def _mal(farbe, f: float) -> tuple:
+    return tuple(max(0, min(255, int(c * f))) for c in farbe)
 
 
 def _punkt_im_buendel(p, gieren: float, erhebung: float) -> tuple:
@@ -66,6 +73,13 @@ def _punkt_im_buendel(p, gieren: float, erhebung: float) -> tuple:
     e = math.radians(erhebung)
     x, z = x * math.cos(e) - z * math.sin(e), x * math.sin(e) + z * math.cos(e)
     z += ACHSE_Z
+    g = math.radians(gieren)
+    return (x * math.cos(g) - y * math.sin(g), x * math.sin(g) + y * math.cos(g), z)
+
+
+def _punkt_am_teller(p, gieren: float) -> tuple:
+    """Ein Punkt am Drehteller (dreht nur mit, hebt sich nicht)."""
+    x, y, z = p
     g = math.radians(gieren)
     return (x * math.cos(g) - y * math.sin(g), x * math.sin(g) + y * math.cos(g), z)
 
@@ -82,75 +96,142 @@ def hinten3d(index: int, gieren: float, erhebung: float) -> tuple:
     return _punkt_im_buendel((x0 - 1.0, q, h), gieren, erhebung)
 
 
-def _scheibe(x, y, z, r, normale_x, farbe, n=10) -> D.Flaeche:
-    return D.Flaeche([(x, y + math.cos(2 * math.pi * i / n) * r, z + math.sin(2 * math.pi * i / n) * r)
-                      for i in range(n)], (normale_x, 0, 0), farbe)
+# ══════════════════════════════════════════════════════════════════
+# Malen
+# ══════════════════════════════════════════════════════════════════
+
+def _bild(p) -> tuple:
+    """Raumpunkt -> Bildpunkt (wie alles in der Luft: um die Hoehe nach oben)."""
+    return (p[0], p[1] - p[2])
 
 
-def _flossen(x0, x1, y, z, r, farbe) -> list:
-    f = []
-    for dy, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-        nrm = (0, 0, 1) if dy else (0, 1, 0)
-        f += D.platte([(x1, y + dy * r * 0.7, z + dz * r * 0.7), (x0 + 0.6, y + dy * r * 0.7, z + dz * r * 0.7),
-                       (x0, y + dy * (r + 1.6), z + dz * (r + 1.6)), (x1 - 0.8, y + dy * (r + 1.4), z + dz * (r + 1.4))],
-                      nrm, farbe)
-    return f
+def _tiefe(*punkte) -> float:
+    """Was naeher am Betrachter ist (groesseres y + Hoehe), kommt spaeter."""
+    return sum(p[1] + p[2] for p in punkte) / len(punkte)
 
 
-def _buendel(maske: int) -> list:
-    """Das Rohrbuendel um seine Achse (0, 0, 0), Muendungen nach +x."""
-    f = []
-    # Winkeleisen-Rahmen links und rechts unter den Rohren (in Stuecken, damit
-    # die Reihenfolge beim Malen stimmt - siehe drei_d.malen).
-    for s in (-1, 1):
-        for a in range(-13, 16, 5):
-            f += D.quader(a, min(16.0, a + 5.0), min(s * 7.4, s * 8.4), max(s * 7.4, s * 8.4), -4.4, -0.6, WINKEL)
-    for i, (q, h, x0, x1, farbe) in enumerate(ROHRE):
-        a = x0
-        while a < x1 - 0.01:
-            e = min(x1, a + 4.5)
-            f += D.stumpf(a, e, ROHR_R, ROHR_R, farbe, 10, kappe0=False, kappe1=False, y=q, z=h, glanz=True)
-            a = e
-        for x in (-8.0, 9.0):                         # Bandeisen um jedes Rohr
-            f += D.stumpf(x - 0.7, x + 0.7, ROHR_R + 0.4, ROHR_R + 0.4, BAND, 10, kappe0=True, kappe1=True,
-                          y=q, z=h)
-        # Wulst an der Muendung, wie ein abgesaegtes Rohr mit Muffe.
-        f += D.stumpf(x1 - 1.4, x1, ROHR_R + 0.35, ROHR_R + 0.35, tuple(int(c * 0.8) for c in farbe), 10,
-                      kappe0=False, kappe1=True, y=q, z=h)
-        if maske & (1 << i):
-            f += D.stumpf(x1, x1 + 1.2, ROHR_R * 0.82, ROHR_R * 0.82, SPITZE_BAND, 8, kappe0=False, kappe1=False,
-                          y=q, z=h)
-            f += D.stumpf(x1 + 1.2, x1 + 4.6, ROHR_R * 0.82, 0.35, SPITZE, 8, kappe0=False, kappe1=False,
-                          y=q, z=h, glanz=True)
-            f += _flossen(x0 - 2.8, x0 + 0.2, q, h, 1.2, BLECH)
-        else:
-            f.append(_scheibe(x1 + 0.05, q, h, ROHR_R * 0.92, 1, DUNKEL))
-        f.append(_scheibe(x0 - 0.05, q, h, ROHR_R * 0.92, -1, DUNKEL))
-    # Ein Haltegriff aus Rundeisen hinten links, zum Nachrichten von Hand.
-    f += D.stab((-12.0, -8.4, 1.0), (-16.0, -10.8, 1.6), 0.55, NABE)
-    return f
+def _rohr_malen(b, a, e, dicke: float, farbe) -> None:
+    """Ein Rohr im Stil der Fahrzeuge: dunkle Kante, Kern, Glanzlinie oben
+    links (das Licht des Spiels)."""
+    pa, pe = _bild(a), _bild(e)
+    b.rohr(pa, pe, dicke, farbe, _mal(farbe, 0.42))
+    dx, dy = pe[0] - pa[0], pe[1] - pa[1]
+    lang = math.hypot(dx, dy)
+    if lang < 1.5:
+        return
+    nx, ny = -dy / lang, dx / lang
+    if nx + ny > 0.0:                       # zur Lichtseite (oben links)
+        nx, ny = -nx, -ny
+    v = dicke * 0.22
+    k = 0.18 * lang
+    hell = _mal(farbe, 1.32)
+    b.linie(hell, (pa[0] + nx * v + dx / lang * k * 0.3, pa[1] + ny * v + dy / lang * k * 0.3),
+            (pe[0] + nx * v - dx / lang * k * 0.3, pe[1] + ny * v - dy / lang * k * 0.3),
+            max(0.5, dicke * 0.18))
 
 
-def _sockel() -> list:
-    """Drehteller (alte Felge) mit den zwei Lagerboecken und der Achse."""
-    f = []
-    felge = D.stumpf(0.0, 1.8, 11.0, 11.0, FELGE, 16, kappe0=False, kappe1=True)
-    nabe = D.stumpf(1.8, 2.6, 4.6, 4.6, NABE, 12, kappe0=False, kappe1=True)
-    f += D.bewegen(felge + nabe, kippen=-90.0)
-    f += D.quader(-3.4, 3.4, 9.4, 11.4, 1.8, ACHSE_Z + 1.6, BOCK_L)
-    f += D.quader(-3.0, 3.0, -11.4, -9.4, 1.8, ACHSE_Z + 1.4, BOCK_R)
-    f += D.stab((0.0, -12.2, ACHSE_Z), (0.0, 12.2, ACHSE_Z), 1.1, NABE, 8)
-    return f
+def _ring_malen(b, a, e, breite: float, farbe, achse_a, achse_e) -> None:
+    """Ein Band um ein Rohr (Bandeisen, Muffe) als flacher Streifen quer
+    ueber das Rohr - mit runden Enden wuerde aus so einem kurzen Stueck eine
+    dunkle Scheibe. `achse_a`/`achse_e`: die Enden des Rohrs, fuer die
+    Richtung (auch wenn das Band selbst im Bild fast keine Laenge hat)."""
+    pa, pe = _bild(achse_a), _bild(achse_e)
+    dx, dy = pe[0] - pa[0], pe[1] - pa[1]
+    lang = math.hypot(dx, dy)
+    if lang < 0.5:
+        b.kreis(farbe, _bild(a), breite / 2.0)
+        return
+    nx, ny = -dy / lang * breite / 2.0, dx / lang * breite / 2.0
+    qa, qe = _bild(a), _bild(e)
+    if math.hypot(qe[0] - qa[0], qe[1] - qa[1]) < 0.6:          # mindestens ein Streifen
+        ux, uy = dx / lang * 0.3, dy / lang * 0.3
+        qa, qe = (qa[0] - ux, qa[1] - uy), (qe[0] + ux, qe[1] + uy)
+    b.poly(_mal(farbe, 0.55), [(qa[0] + nx * 1.12, qa[1] + ny * 1.12), (qe[0] + nx * 1.12, qe[1] + ny * 1.12),
+                               (qe[0] - nx * 1.12, qe[1] - ny * 1.12), (qa[0] - nx * 1.12, qa[1] - ny * 1.12)])
+    b.poly(farbe, [(qa[0] + nx, qa[1] + ny), (qe[0] + nx, qe[1] + ny),
+                   (qe[0] - nx, qe[1] - ny), (qa[0] - nx, qa[1] - ny)])
 
 
-def _spindel(erhebung: float) -> list:
-    """Die Hubspindel vorn: vom Drehteller schraeg zum Buendel."""
-    unten = (8.0, 0.0, 2.0)
-    e = math.radians(erhebung)
-    x, z = 9.0, -4.6
-    oben = (x * math.cos(e) - z * math.sin(e), 0.0, x * math.sin(e) + z * math.cos(e) + ACHSE_Z)
+def _quader_malen(b, ecken_von, x0, x1, y0, y1, z0, z1, farbe) -> None:
+    """Ein Block (Lagerbock): sichtbare Seiten dunkel, Deckel hell - drei
+    flache Toene, wie die Kaesten auf den Fahrzeugen."""
+    p = {(i, j, k): ecken_von((x, y, z)) for i, x in enumerate((x0, x1))
+         for j, y in enumerate((y0, y1)) for k, z in enumerate((z0, z1))}
+    seiten = []
+    for achse, wert in ((0, 0), (0, 1), (1, 0), (1, 1)):
+        ecken = [(i, j) for i in (0, 1) for j in (0, 1) if (i, j)[achse] == wert]
+        ecken = sorted(ecken, key=lambda q: q[1 - achse])
+        vier = [p[ecken[0] + (0,)], p[ecken[1] + (0,)], p[ecken[1] + (1,)], p[ecken[0] + (1,)]]
+        mitte = (sum(q[0] for q in vier) / 4, sum(q[1] for q in vier) / 4)
+        innen = (sum(q[0] for q in p.values()) / 8, sum(q[1] for q in p.values()) / 8)
+        if mitte[1] - innen[1] > 0.05:          # zeigt zum Betrachter
+            licht = (mitte[0] - innen[0]) < 0.0
+            seiten.append((mitte[1], vier, _mal(farbe, 0.78 if licht else 0.6)))
+    for _t, vier, f in sorted(seiten, key=lambda s: s[0]):
+        b.poly(f, [_bild(q) for q in vier])
+    deckel = [p[(0, 0, 1)], p[(1, 0, 1)], p[(1, 1, 1)], p[(0, 1, 1)]]
+    b.poly(_mal(farbe, 1.12), [_bild(q) for q in deckel])
+
+
+def _teile(gieren: float, erhebung: float, maske: int) -> list:
+    """Was zu malen ist, je (Tiefe, Zeichner(b))."""
+    teile = []
+    im = lambda p: _punkt_im_buendel(p, gieren, erhebung)      # noqa: E731
+    am = lambda p: _punkt_am_teller(p, gieren)                  # noqa: E731
+    # Die Lagerboecke links und rechts, dazwischen die Achse.
+    for y0, y1, farbe in ((9.4, 11.4, BOCK_L), (-11.4, -9.4, BOCK_R)):
+        m = am((0.0, (y0 + y1) / 2, 4.0))
+        teile.append((_tiefe(m), lambda b, y0=y0, y1=y1, farbe=farbe:
+                      _quader_malen(b, am, -3.2, 3.2, y0, y1, 1.6, ACHSE_Z + 1.4, farbe)))
+    a, e = am((0.0, -12.0, ACHSE_Z)), am((0.0, 12.0, ACHSE_Z))
+    teile.append((_tiefe(a, e) - 0.5, lambda b, a=a, e=e: _rohr_malen(b, a, e, 2.0, NABE)))
+    # Die Hubspindel vorn, vom Teller schraeg unter das Buendel.
+    unten = am((8.0, 0.0, 2.0))
+    oben = im((9.0, 0.0, -4.6))
     mitte = tuple(unten[k] + (oben[k] - unten[k]) * 0.45 for k in range(3))
-    return D.stab(unten, mitte, 1.5, (70, 66, 58), 6) + D.stab(mitte, oben, 0.9, (176, 170, 156), 6, glanz=True)
+    teile.append((_tiefe(unten, oben) - 1.0, lambda b: (_rohr_malen(b, unten, mitte, 2.8, (78, 74, 64)),
+                                                        _rohr_malen(b, mitte, oben, 1.8, (176, 170, 156)))))
+    # Die sechs Rohre, jedes mit Bandeisen, Muffe, Spitze oder Loch.
+    for i, (q, h, x0, x1, farbe) in enumerate(ROHRE):
+        hinten, vorn = im((x0, q, h)), im((x1, q, h))
+        geladen = bool(maske & (1 << i))
+
+        def rohr(b, i=i, q=q, h=h, x0=x0, x1=x1, farbe=farbe, hinten=hinten, vorn=vorn, geladen=geladen):
+            if geladen:                                           # Leitwerk aus Blech
+                for dq in (-1.0, 1.0):
+                    b.linie(_mal(BLECH, 0.8), _bild(im((x0 - 0.4, q + dq * 1.2, h))),
+                            _bild(im((x0 - 2.8, q + dq * 3.4, h))), 0.9)
+            _rohr_malen(b, hinten, vorn, ROHR_R * 2.0, farbe)
+            for x in (-8.0, 9.0):                                 # zwei Bandeisen
+                _ring_malen(b, im((x - 0.6, q, h)), im((x + 0.6, q, h)), ROHR_R * 2.0 + 0.6, BAND,
+                            hinten, vorn)
+            _ring_malen(b, im((x1 - 1.2, q, h)), vorn, ROHR_R * 2.0 + 0.6, _mal(farbe, 0.82),
+                        hinten, vorn)                             # Muffe vorn
+            b.kreis(DUNKEL, _bild(hinten), ROHR_R * 0.8)
+            if geladen:
+                band = im((x1 + 1.0, q, h))
+                nase = im((x1 + 4.4, q, h))
+                b.rohr(_bild(vorn), _bild(band), ROHR_R * 1.6, SPITZE_BAND, _mal(SPITZE_BAND, 0.45))
+                b.rohr(_bild(band), _bild(nase), ROHR_R * 1.3, SPITZE, SPITZE_DK)
+                b.kreis(_mal(SPITZE, 1.3), _bild(im((x1 + 2.6, q - 0.4, h + 0.5))), 0.5)
+            else:
+                b.kreis(DUNKEL, _bild(vorn), ROHR_R * 0.85)
+        teile.append((_tiefe(hinten, vorn) + 2.0, rohr))
+    # Ein Haltegriff aus Rundeisen hinten links, zum Nachrichten von Hand.
+    g0, g1 = im((-12.0, -8.4, 1.0)), im((-16.0, -10.8, 1.6))
+    teile.append((_tiefe(g0, g1), lambda b: _rohr_malen(b, g0, g1, 1.2, NABE)))
+    return sorted(teile, key=lambda t: t[0])
+
+
+def _felge_malen(b) -> None:
+    """Der Drehteller: eine alte Radfelge, rund - sie sieht in jeder
+    Richtung gleich aus."""
+    b.kreis(_mal(FELGE, 0.4), (0, -1.0), 10.6)
+    b.kreis(FELGE, (0, -1.0), 9.8)
+    b.kreis(_mal(FELGE, 0.7), (0, -1.0), 7.4)
+    b.kreis(_mal(NABE, 0.5), (0, -1.6), 4.2)
+    b.kreis(NABE, (0, -1.6), 3.5)
+    b.linie(_mal(FELGE, 1.3), (-7.4, -4.6), (-2.8, -8.6), 0.8)
 
 
 _GESTELL: dict = {}
@@ -159,43 +240,66 @@ _GESTELL: dict = {}
 def gestell(gieren: float, erhebung: float, maske: int) -> tuple:
     """(Bild, Schatten) des Gestells. Gerundet auf 5 Grad (gieren) und 2 Grad
     (erhebung), jedes Bild wird einmal gerechnet und behalten."""
+    from .art_fahrzeuge import _Blatt
     g = int(round(gieren / 5.0)) * 5 % 360
     e = max(0, min(80, int(round(erhebung / 2.0)) * 2))
     m = int(maske) & 63
     s = _GESTELL.get((g, e, m))
     if s is not None:
         return s
-    if len(_GESTELL) > 700:
+    if len(_GESTELL) > 1500:
         _GESTELL.clear()
-    teile = _sockel() + _spindel(e) + D.bewegen(_buendel(m), kippen=-e, dz=ACHSE_Z)
-    teile = D.bewegen(teile, gieren=g)
-    bild = D.malen(teile, GROESSE_BILD)
-    flach = D.malen(D.flach(teile, 0.42, 0.34), GROESSE_BILD, rand=False)
+    teile = _teile(float(g), float(e), m)
+    b = _Blatt(GROESSE_BILD, 1.0)
+    _felge_malen(b)
+    for _t, malen in teile:
+        malen(b)
+    bild = b.fertig()
+    # Der Schatten: dasselbe in Schwarz, auf den Boden gedrueckt und schraeg
+    # nach rechts unten verschoben (je hoeher, desto weiter).
+    sb = _Blatt(GROESSE_BILD, 1.0)
+    for i, (q, h, x0, x1, _f) in enumerate(ROHRE):
+        a = _punkt_im_buendel((x0, q, h), float(g), float(e))
+        z = _punkt_im_buendel((x1 + (4.4 if m & (1 << i) else 0.0), q, h), float(g), float(e))
+        sb.rohr((a[0] + a[2] * 0.42, a[1] + a[2] * 0.34), (z[0] + z[2] * 0.42, z[1] + z[2] * 0.34),
+                ROHR_R * 2.0, (0, 0, 0), (0, 0, 0))
+    sb.kreis((0, 0, 0), (0, 0), 10.0)
+    flach = sb.fertig(rand=False)
     schatten = pygame.mask.from_surface(flach, 30).to_surface(setcolor=(0, 0, 0, 86), unsetcolor=(0, 0, 0, 0))
     s = _GESTELL[(g, e, m)] = (bild, schatten)
     return s
 
 
-def _rakete_netz() -> list:
-    f = []
-    f += D.stumpf(-5.0, 2.6, 1.5, 1.5, RAKETE_RUMPF, 8, kappe0=True, kappe1=False, glanz=True)
-    f += D.stumpf(2.6, 3.6, 1.5, 1.5, SPITZE_BAND, 8, kappe0=False, kappe1=False)
-    f += D.stumpf(3.6, 7.0, 1.5, 0.3, SPITZE, 8, kappe0=False, kappe1=False, glanz=True)
-    f += _flossen(-6.2, -3.0, 0.0, 0.0, 1.0, BLECH)
-    return f
-
-
 _RAKETE: dict = {}
 
 
+def _rakete_richtung(gieren: float, kippen: float) -> tuple:
+    """Die Flugrichtung im Raum (`kippen` negativ: Nase nach oben)."""
+    g, k = math.radians(gieren), math.radians(kippen)
+    return (math.cos(k) * math.cos(g), math.cos(k) * math.sin(g), -math.sin(k))
+
+
 def rakete(gieren: float, kippen: float) -> pygame.Surface:
-    """Eine Rakete im Flug, 28 x 28, Nase in Flugrichtung (`kippen` negativ:
-    Nase nach oben). Gerundet auf 10 Grad."""
+    """Eine Rakete im Flug, 28 x 28, Nase in Flugrichtung - gemalt wie das
+    Gestell: Rumpf aus Rohr, rote Spitze, Leitwerk. Gerundet auf 10 Grad."""
+    from .art_fahrzeuge import _Blatt
     g = int(round(gieren / 10.0)) * 10 % 360
     k = max(-90, min(90, int(round(kippen / 10.0)) * 10))
     s = _RAKETE.get((g, k))
-    if s is None:
-        s = _RAKETE[(g, k)] = D.malen(D.bewegen(_rakete_netz(), gieren=g, kippen=k), 28)
+    if s is not None:
+        return s
+    d = _rakete_richtung(g, k)
+    an = lambda t: (d[0] * t, d[1] * t, d[2] * t)               # noqa: E731
+    b = _Blatt(28, 1.0)
+    quer = (-math.sin(math.radians(g)), math.cos(math.radians(g)), 0.0)
+    for s_ in (-1.0, 1.0):                                        # Leitwerk
+        a0 = an(-4.6)
+        a1 = tuple(an(-6.6)[i] + quer[i] * 2.6 * s_ for i in range(3))
+        b.linie(_mal(BLECH, 0.75), _bild(a0), _bild(a1), 0.9)
+    _rohr_malen(b, an(-6.0), an(2.6), 3.0, RAKETE_RUMPF)
+    b.rohr(_bild(an(2.6)), _bild(an(3.6)), 3.0, SPITZE_BAND, _mal(SPITZE_BAND, 0.45))
+    b.rohr(_bild(an(3.6)), _bild(an(6.4)), 2.4, SPITZE, SPITZE_DK)
+    s = _RAKETE[(g, k)] = b.fertig()
     return s
 
 

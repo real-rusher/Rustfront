@@ -1244,7 +1244,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
     NETZKLAENGE = ("speien", "boss_ansage", "dash", "wurf", "medkit", "ruf",
                    "reload", "downed_not_dead", "rundenstart", "c4_explosion",
                    "lmg_dauer", "lmg_salve", "schuss_schrot", "smoke_grenade",
-                   "buggy_tuer", "buggy_aufprall", "buggy_rutschen",
+                   "buggy_tuer", "buggy_aufprall",
                    # Panzer und Panzerwagen (seit 0.34.59)
                    "panzer_motor", "panzerwagen_motor", "rammen",
                    # Waffenpaket, Fahrzeuge, Ausruestung (seit 0.34.72): was
@@ -1789,7 +1789,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
             pygame.draw.line(flaeche, farbe, (p.x, p.y - 5), (p.x, p.y + 5))
 
     def _raketen_zeichnen(self, ziel) -> None:
-        """Raketen in der Luft (seit 0.34.123 neu): das kleine 3D-Modell
+        """Raketen in der Luft (seit 0.34.123 neu): das kleine Bild
         (art_werfer.rakete), immer in Flugrichtung. Sie verlaesst ihr Rohr in
         dessen Richtung, steigt steil, kippt im Scheitel und stuerzt aufs Ziel
         (eine Bezierkurve: Anfang entlang des Rohrs, Ende im Ziel). Hinten

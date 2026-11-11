@@ -4,9 +4,9 @@ DUSTFRONT - Ein kleiner 3D-Zeichner fuer Pixelbilder (seit 0.34.123)
 
 Fuer alles, was sich im Raum drehen und kippen soll und dabei nach echtem
 3D aussehen muss: die Bomben des Tragschraubers (sie kippen im Fall mit der
-Nase nach unten), das Raketengestell des Werfers (es dreht sich, hebt sich
-und zeigt dabei Ober- und Seitenflaechen) und die Raketen selbst (sie
-steigen im Bogen und kippen wieder).
+Nase nach unten) und der Mast des Funkwagens. Das Raketengestell des Werfers
+und seine Raketen waren bis 0.34.125 auch von hier; seit 0.34.126 sind sie
+klassisch gemalt (art_werfer.py) - "zu krass", der Stil zu anders.
 
 **Wie es zeichnet.** Koerper bestehen aus ebenen Flaechen (Zylinder,
 Kegelstuempfe, Platten, Quader), jede mit Normale und Grundfarbe. Gedreht
@@ -37,14 +37,18 @@ GROSS = 4                            # so viel groesser wird gemalt
 
 
 class Flaeche:
-    __slots__ = ("punkte", "normale", "farbe", "beidseitig", "glanz")
+    __slots__ = ("punkte", "normale", "farbe", "beidseitig", "glanz", "ton")
 
-    def __init__(self, punkte, normale, farbe, beidseitig=False, glanz=False) -> None:
+    def __init__(self, punkte, normale, farbe, beidseitig=False, glanz=False, ton=None) -> None:
         self.punkte = [tuple(p) for p in punkte]
         self.normale = tuple(normale)
         self.farbe = tuple(farbe)
         self.beidseitig = beidseitig
         self.glanz = glanz
+        # Fester Farbton (seit 0.34.126): gesetzt, malt `malen` ihn so, statt
+        # ihn aus dem Licht zu rechnen - fuer Teile, die beim Bewegen nicht die
+        # Farbe wechseln sollen (der Funkmast beim Aufrichten).
+        self.ton = ton
 
 
 # ---- Koerper (lokal: +x ist vorn, +y rechts, +z oben) -------------------
@@ -112,16 +116,33 @@ def bewegen(flaechen, gieren=0.0, kippen=0.0, rollen=0.0, dx=0.0, dy=0.0, dz=0.0
         for p in f.punkte:
             x, y, z = _drehe(p, cr, sr, cp, sp, cy, sy)
             pts.append((x + dx, y + dy, z + dz))
-        raus.append(Flaeche(pts, _drehe(f.normale, cr, sr, cp, sp, cy, sy), f.farbe, f.beidseitig, f.glanz))
+        raus.append(Flaeche(pts, _drehe(f.normale, cr, sr, cp, sp, cy, sy), f.farbe, f.beidseitig, f.glanz, f.ton))
     return raus
 
 
 def skalieren(flaechen, f: float) -> list:
     return [Flaeche([(p[0] * f, p[1] * f, p[2] * f) for p in x.punkte], x.normale, x.farbe,
-                    x.beidseitig, x.glanz) for x in flaechen]
+                    x.beidseitig, x.glanz, x.ton) for x in flaechen]
 
 
 # ---- Malen ----------------------------------------------------------------
+
+def ton_fest(flaechen, gieren=0.0, mischen=None, anteil=0.0) -> list:
+    """Jeder Flaeche ihren Farbton geben, wie er jetzt (um `gieren` gedreht)
+    im Licht steht - danach bleibt er beim Kippen gleich. `mischen`: eine
+    Farbe, in die der Ton zu `anteil` (0 bis 1) uebergeht."""
+    cy, sy = math.cos(math.radians(gieren)), math.sin(math.radians(gieren))
+    raus = []
+    for f in flaechen:
+        n = _drehe(f.normale, 1.0, 0.0, 1.0, 0.0, cy, sy)
+        if sum(a * b for a, b in zip(n, BLICK)) <= 0.0 and f.beidseitig:
+            n = (-n[0], -n[1], -n[2])
+        t = _ton(f.farbe, n, f.glanz)
+        if mischen is not None and anteil > 0.0:
+            t = tuple(int(a + (b - a) * anteil) for a, b in zip(t, mischen))
+        raus.append(Flaeche(f.punkte, f.normale, f.farbe, f.beidseitig, f.glanz, t))
+    return raus
+
 
 def _ton(farbe, normale, glanz=False):
     nl = sum(a * b for a, b in zip(normale, LICHT))
@@ -152,7 +173,7 @@ def malen(flaechen, groesse: int, mitte=(0.0, 0.0), rand: bool = True) -> pygame
     for _tiefe, f, nrm in sichtbar:
         pts = [((p[0] - mitte[0] + halb) * GROSS, (p[1] - p[2] - mitte[1] + halb) * GROSS) for p in f.punkte]
         if len(pts) >= 3:
-            pygame.draw.polygon(s, _ton(f.farbe, nrm, f.glanz), pts)
+            pygame.draw.polygon(s, f.ton if f.ton is not None else _ton(f.farbe, nrm, f.glanz), pts)
     klein = pygame.transform.smoothscale(s, (groesse, groesse))
     if not rand:
         return klein

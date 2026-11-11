@@ -18,6 +18,17 @@ Version erhoeht (README, `rustfront_menu.py`), docs/MEHRSPIELER.md (Netz
 geaendert), docs/FAHRZEUGE.md, docs/TESTMODUS.md. Die Versionen 0.34.121 bis
 0.34.123 in Kommentaren waren Zwischenstaende, veroeffentlicht ist 0.34.124.
 
+## Rueckmeldung zu 0.34.125 (umgesetzt in 0.34.126)
+
+* Drift-Ton `buggy_rutschen` ganz entfernt ("nie wieder hoeren") - nicht ersetzen.
+* Explosionen: keine gemalten Wolkenballen mehr, sondern eine grosse Wolke aus
+  Pixel-Teilchen wie bei den alten Explosionen (`effekte.Teilchen`; `rauch()` und
+  `feuer()` erzeugen sie). Besonders der Rueckstrahl des Werfers.
+* Funkmast: ohne schwarzen Umriss, feste Farben beim Aufrichten (`drei_d.ton_fest`),
+  liegend im Lack des Dachs (`art_funkmast.TARNUNG`).
+* Werfer-Gestell und Raketen: nicht 3D, sondern klassisch gemalt (`art_werfer.py`),
+  je Drehung und Aufrichtung ein eigenes Bild.
+
 ## Was neu gebaut ist (Dateien)
 
 * `dustfront/effekte.py` - neues Effektsystem: Teilchen mit Hoehe,

@@ -40,6 +40,8 @@ RING = (92, 88, 80)
 SEIL = (58, 54, 48)
 NAGEL = (150, 146, 136)
 LAMPE = (226, 70, 50)
+DACH = (98, 106, 84)                 # der Lack des Funkwagens, wie er im Bild steht
+TARNUNG = 0.6                        # so weit geht der liegende Mast in den Lack ueber
 
 
 def _glatt(t: float) -> float:
@@ -77,8 +79,13 @@ def _kopf(aufklappen: float, drehung: float) -> list:
     return D.bewegen(f, gieren=drehung)
 
 
-def _mast(aufrichten: float, ausfahren: float, aufklappen: float, drehung: float) -> tuple:
-    """Mast samt Kopf am Fuss (0, 0, 0); und wo seine Spitze ist."""
+def _mast(aufrichten: float, ausfahren: float, aufklappen: float, drehung: float,
+          gieren: float = 0.0) -> tuple:
+    """Mast samt Kopf am Fuss (0, 0, 0); und wo seine Spitze ist. Die Farben
+    werden am aufrechten Mast gerechnet (in Richtung `gieren`) und beim Kippen
+    behalten - sonst sprangen sie beim Aufrichten von Lichtstufe zu
+    Lichtstufe. Liegend geht er in den Lack des Dachs ueber: man soll ihn
+    erst sehen, wenn er sich hebt (Wunsch des Besitzers, 0.34.126)."""
     lang = UNTEN_L + OBEN_L * ausfahren
     f = []
     f += D.stab((0.0, 0.0, 0.0), (0.0, 0.0, UNTEN_L), 1.5, ROHR_U, 6)
@@ -86,6 +93,7 @@ def _mast(aufrichten: float, ausfahren: float, aufklappen: float, drehung: float
     for z in (5.0, 11.0, UNTEN_L - 0.6):                                       # Schellen
         f += D.stab((0.0, 0.0, z - 0.5), (0.0, 0.0, z + 0.5), 1.8, (70, 66, 58), 6)
     f += D.bewegen(_kopf(aufklappen, drehung), dz=lang)
+    f = D.ton_fest(f, gieren, DACH, TARNUNG * (1.0 - min(1.0, aufrichten / 40.0)))
     k = aufrichten - 90.0
     f = D.bewegen(f, kippen=k)
     w = math.radians(k)
@@ -131,8 +139,8 @@ def _seile(g: int, p: int, d: int) -> list:
 
 def _teile(g: int, p: int, d: int, seile_als_stab: bool = False) -> list:
     aufrichten, ausfahren, aufklappen, seile = stellung(p / 24.0)
-    teile, spitze = _mast(aufrichten, ausfahren, aufklappen, d)
-    teile += _fuss()
+    teile, spitze = _mast(aufrichten, ausfahren, aufklappen, d, g)
+    teile += D.ton_fest(_fuss(), g)
     if seile >= 0.98:
         for nx, ny in NAEGEL:
             teile += D.quader(nx - 1.0, nx + 1.0, ny - 1.0, ny + 1.0, 0.0, 1.4, NAGEL)
@@ -157,7 +165,10 @@ def funkmast(gieren: float, fortschritt: float, drehung: float = 0.0) -> pygame.
         return s
     if len(_BILDER) > 600:
         _BILDER.clear()
-    mast = D.malen(_teile(*k), GROESSE_BILD, mitte=MITTE)
+    # Ohne den dunklen Rand von drei_d.malen: bei so duennen Teilen griff er
+    # nur in manchen Lagen, dann bekam der Mast ploetzlich einen schwarzen
+    # Umriss (beim Liegen und an einem Punkt der Drehung).
+    mast = D.malen(_teile(*k), GROESSE_BILD, mitte=MITTE, rand=False)
     # Die Seile nicht als 3D-Koerper: so duenn greift der dunkle Rand von
     # drei_d.malen nur bei manchen Lagen, und dann waren die vorderen Seile
     # dick und schwarz, die hinteren kaum zu sehen. Als glatte Linie sind
