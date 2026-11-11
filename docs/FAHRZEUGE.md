@@ -12,7 +12,7 @@ davon eingebaut ist.
 | --- | --- | --- |
 | KRAD | behalten; der Fahrer hat keine Waffe | **0.34.107** |
 | JAGDPANZER | behalten; grosse, von vorn gepanzerte "Sniper" gegen Panzer | **0.34.107** |
-| TROSSWAGEN | behalten; kein Aufsitzen - hinten dranstellen, mit E einmal Munition und ein Medkit (begrenzter Gesamtvorrat). Gegnerische Trosswagen lassen sich pluendern. Nicht per Drop anforderbar, einige erscheinen regelmaessig an der Basis. Fahrzeuge heilen nur, solange sie hinten dranhaengen (auch im Stehen) | offen |
+| TROSSWAGEN | behalten; kein Aufsitzen - hinten dranstellen, mit E einmal Munition und ein Medkit (begrenzter Gesamtvorrat). Gegnerische Trosswagen lassen sich pluendern. Nicht per Drop anforderbar, einige erscheinen regelmaessig an der Basis. Fahrzeuge heilen nur, solange sie hinten dranhaengen (auch im Stehen) | **0.34.108** |
 | SPULENWAGEN | behalten; EMP-Feld einschaltbar, dafuer muss der Wagen aufgebaut sein, es pulsiert am Ort, nur begrenzte Zeit, danach aufladen; schwaecherer Kettenblitz | offen |
 | FUNKWAGEN | behalten; Bots, die mit ihm sprechen koennen, geben ihre Daten direkt ins Funknetz des Teams (nur mit aktivem Funk). Stoeren bleibt, aber er steht dabei auf der Karte | offen |
 | WERFER | behalten; schiesst nur im Umkreis gueltiger Ziele (von jemandem im Team gesehene oder markierte Gegner und Fahrzeuge, Hotzones, spaeter weitere Objectives). Sehr leicht zu zerstoeren, dann grosse Explosion, die alle im Umkreis toetet. Jeder Schuss verraet ihn kurz auf Karte oder Minikarte, mit eigenem Symbol | offen |

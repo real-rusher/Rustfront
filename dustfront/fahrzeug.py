@@ -1618,6 +1618,85 @@ class Krad(Buggy):
         self.__dict__.pop("_mitfahrer", None)
 
 
+def seite_von(b):
+    """Zu welcher Seite ein Fahrzeug gehoert: der Fahrer, sonst die Basis, aus
+    der es kam (Nachschub und Basisfahrzeuge setzen `basis_team`). None:
+    unbekannt - dann gilt es fuer jede Seite."""
+    if b.fahrer is not None:
+        return getattr(b.fahrer, "fraktion", None)
+    team = getattr(b, "basis_team", None)
+    return "team%d" % team if team is not None and team >= 0 else None
+
+
+class Trosswagen(Buggy):
+    """Munition, Medkits und Reparatur fuer die Front (seit 0.34.108,
+    K.TROSSWAGEN). Fahren wie der Panzerwagen, nur langsamer. Aufsitzen kann
+    niemand; wer HINTEN dransteht (die Zone `zone` hinter dem Wagen), holt
+    sich mit E Munition und ein Medkit (`nachschub` Mal je Wagen, siehe
+    Gefecht._nachschub_nehmen), und eigene Fahrzeuge in der Zone werden
+    repariert, solange der Vorrat reicht - auch im Stehen. Der Fahrer sitzt
+    unter dem Verdeck: das Bild zeigt ihn nicht."""
+
+    art = "trosswagen"
+    werte = K.TROSSWAGEN
+    schatten_bild = "trosswagen_schatten"
+
+    def __init__(self, pos, ebene: int = 0, winkel: float = 0.0,
+                 nur_bild: bool = False) -> None:
+        super().__init__(pos, ebene, winkel, nur_bild)
+        self.nachschub = int(self.werte["entnahmen"])      # beim Gast: gemeldet
+        self.reparatur = float(self.werte["reparatur"]["vorrat"])
+        self._entnommen: dict = {}                         # Kaempfer -> Zeit der letzten Entnahme
+
+    @property
+    def bild(self) -> str:
+        return "trosswagen_wrack" if self.kaputt else "trosswagen"
+
+    def zone_mitte(self, pos=None, winkel=None) -> pygame.Vector2:
+        """Die Mitte der Zone hinter dem Wagen, in der man Nachschub holt."""
+        pos = self.pos if pos is None else pos
+        winkel = self.winkel if winkel is None else winkel
+        return pos - pygame.Vector2(self.werte["zone"]["abstand"], 0).rotate(winkel)
+
+    def in_zone(self, punkt, radius: float = 0.0) -> bool:
+        return self.zone_mitte().distance_to(punkt) <= self.werte["zone"]["radius"] + radius
+
+    def schritt(self, dt: float) -> None:
+        super().schritt(dt)
+        if self.nur_bild or self.welt is None or self.kaputt:
+            return
+        if self.reparatur > 0.0 and self.emp_rest <= 0.0:
+            self._reparieren(dt)
+
+    def _reparieren(self, dt: float) -> None:
+        """Eigene Fahrzeuge in der Zone bekommen Leben, solange der Vorrat reicht."""
+        w = self.welt
+        r = self.werte["zone"]["radius"]
+        mitte = self.zone_mitte()
+        meine = seite_von(self)
+        je = float(self.werte["reparatur"]["je_sekunde"]) * dt
+        for a in w.nahe(mitte, r + 70.0, self.ebene):
+            if (a is self or not getattr(a, "ist_fahrzeug", False) or not a.lebt or a.kaputt
+                    or getattr(a, "nur_bild", False) or a.leben >= a.max_leben):
+                continue
+            if a.pos.distance_to(mitte) > r:
+                continue
+            seite = seite_von(a)
+            if meine is not None and seite is not None and meine != seite:
+                continue
+            gut = min(je, a.max_leben - a.leben, self.reparatur)
+            a.leben += gut
+            self.reparatur -= gut
+            if self.reparatur <= 0.0:
+                break
+
+    def zuruecksetzen(self) -> None:
+        super().zuruecksetzen()
+        self.nachschub = int(self.werte["entnahmen"])
+        self.reparatur = float(self.werte["reparatur"]["vorrat"])
+        self._entnommen = {}
+
+
 class Jagdpanzer(Panzer):
     """Ein Panzer ohne Turm (seit 0.34.107): die Kanone sitzt fest im Bug und
     schwenkt nur ein paar Grad (K.JAGDPANZER "schwenk"); wer mehr will, muss
@@ -1652,7 +1731,7 @@ class Jagdpanzer(Panzer):
 
 # Welche Art zu welcher Klasse und zu welchem Buchstaben in der Karte.
 ARTEN = {"buggy": Buggy, "panzer": Panzer, "panzerwagen": Panzerwagen,
-         "krad": Krad, "jagdpanzer": Jagdpanzer}
+         "krad": Krad, "jagdpanzer": Jagdpanzer, "trosswagen": Trosswagen}
 
 
 def marken() -> list:

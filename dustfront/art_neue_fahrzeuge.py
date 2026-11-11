@@ -369,3 +369,130 @@ def _rohr_team(kombi):
 
 for _kombi in K.TEAMS["kombi"]:
     platzhalter("jagdpanzer_rohr_%s_fahrer" % _kombi["name"].lower())(_rohr_team(_kombi))
+
+
+# ──────────────────────────────── Trosswagen (seit 0.34.108)
+
+HK_LACK = (126, 120, 92)
+HK_DK = (60, 56, 40)
+HK_HELL = (168, 160, 126)
+HK_SCHATTEN = (96, 90, 66)
+HOLZ = (128, 96, 62)
+HOLZ_DK = (74, 52, 34)
+PLANE = (164, 146, 108)
+PLANE_DK = (112, 96, 68)
+PLANE_HELL = (196, 180, 140)
+GLAS_DK = (24, 30, 36)
+_STAUB_TW = [(150, 142, 110), (118, 110, 84), (176, 166, 132), (104, 96, 70)]
+
+
+def _munkiste(b, x, y, w, h, streifen=(214, 178, 72)):
+    b.rect((40, 50, 34), x, y, w, h, 0.4)
+    b.rect((86, 104, 62), x + 0.4, y + 0.4, w - 0.8, h - 0.8, 0.3)
+    b.rect(streifen, x + 0.4, y + h * 0.42, w - 0.8, h * 0.16)
+    b.linie((40, 50, 34), (x + w * 0.3, y + 0.4), (x + w * 0.3, y + h - 0.4), 0.3)
+    b.linie((40, 50, 34), (x + w * 0.7, y + 0.4), (x + w * 0.7, y + h - 0.4), 0.3)
+
+
+def _fass(b, c, r, farbe, dk):
+    b.kreis(dk, c, r)
+    b.kreis(farbe, c, r - 0.5)
+    b.kreis(dk, c, r * 0.55)
+    b.kreis(farbe, c, r * 0.55 - 0.35)
+    b.kreis(tuple(min(255, v + 46) for v in farbe), (c[0] - r * 0.3, c[1] - r * 0.3), r * 0.22)
+
+
+def trosswagen_zeichnen() -> pygame.Surface:
+    """Halbkette mit Pritsche, Plane, Kisten, Faessern und Kranarm. Vorn
+    gelenkte Raeder, hinten Ketten; Platz fuer den Fahrer unter dem Verdeck
+    (er ist nicht zu sehen). Hinten steht, wer sich Nachschub holt."""
+    b = _Blatt()
+    rnd = random.Random(7301)
+    b.rohr((21, -10), (21, 10), 1.8, (96, 92, 86))
+    _reifen(b, 21, -13.2, 10.5, 5.6, 0.0)
+    _reifen(b, 21, 13.2, 10.5, 5.6, 0.0)
+    _kette(b, -29, 7, -14.2, 7.4, 0.0)
+    _kette(b, -29, 7, 14.2, 7.4, 0.0)
+    b.rect((30, 28, 24), 31.4, -10.5, 2.6, 21, 0.6)          # Stossstange mit Seilwinde
+    b.rect((104, 98, 88), 31.8, -10.1, 1.8, 20.2, 0.4)
+    b.rect((40, 36, 30), 29.4, -2.6, 2.6, 5.2, 0.5)
+    for i in range(4):
+        b.linie((120, 114, 100), (29.8, -2 + i * 1.3), (31.6, -2 + i * 1.3), 0.35)
+    for sy in (-1, 1):
+        _scheinwerfer(b, (29.6, sy * 7.6), 1.2)
+        b.rect(HK_DK, 15.4, sy * 13.4 - 3.8, 11.6, 7.6, 2.4)     # Kotfluegel
+        b.rect(HK_LACK if sy < 0 else HK_SCHATTEN, 15.9, sy * 13.4 - 3.3, 10.6, 6.6, 2.0)
+    haube = [(30, -5.6), (28, -8.4), (13.5, -9.6), (13.5, 9.6), (28, 8.4), (30, 5.6)]
+    b.poly(HK_DK, haube)
+    b.poly(HK_LACK, [(x * 0.97 + 0.3, y * 0.88) for x, y in haube])
+    b.linie(HK_HELL, (15, -7.4), (27.4, -6.6), 0.8)
+    b.linie(HK_DK, (14.5, 0), (29, 0), 0.5)
+    for i in range(5):
+        y = -5.6 + i * 1.5
+        b.linie(HK_DK, (18, y), (24, y), 0.5)
+        b.linie(HK_DK, (18, -y), (24, -y), 0.5)
+    b.rect(HK_DK, 1, -12, 12.5, 24, 1.4)                      # Fuehrerhaus mit Stoffdach
+    b.rect(PLANE_DK, 1.5, -11.5, 11.5, 23, 1.2)
+    b.rect(PLANE, 2.2, -10.8, 9.6, 21.6, 1.0)
+    for y in (-5.4, 0, 5.4):
+        b.linie(PLANE_DK, (2.4, y), (11.6, y), 0.5)
+    b.linie(PLANE_HELL, (2.6, -10.2), (11.2, -10.2), 0.7)
+    b.rect(GLAS_DK, 12.2, -9.6, 1.5, 19.2, 0.3)
+    b.rect((70, 96, 112), 12.5, -8.8, 0.7, 7.6, 0.2)
+    b.rect((70, 96, 112), 12.5, 1.2, 0.7, 7.6, 0.2)
+    for sy in (-1, 1):
+        b.rohr((11, sy * 12), (13.4, sy * 15.6), 0.8)
+        b.rect((30, 30, 32), 12.6, sy * 15.6 - 1.1, 1.6, 2.2, 0.4)
+    b.rect(HK_DK, -31, -13, 32, 26, 0.8)                      # Pritsche aus Holz
+    b.rect(HOLZ_DK, -30.3, -12.3, 30.6, 24.6, 0.5)
+    for i in range(8):
+        b.rect(HOLZ if i % 2 else (116, 86, 54), -30, -11.8 + i * 3.05, 30, 2.7, 0.2)
+    for x in (-22, -12, -3):
+        b.linie(HOLZ_DK, (x, -12), (x, 12), 0.35)
+    b.linien(HK_HELL, [(-30.4, -12.5), (0.4, -12.5)], 0.9)
+    b.linien(HK_SCHATTEN, [(-30.4, 12.5), (0.4, 12.5)], 0.9)
+    _munkiste(b, -8.5, -11, 7.5, 5)                           # Ladung
+    _munkiste(b, -8.5, -5.4, 7.5, 5)
+    _munkiste(b, -16.8, -11, 7.5, 5, (196, 72, 52))
+    b.rect((70, 66, 60), -8.6, 2.6, 7.6, 7.6, 0.5)            # Sanitaetskiste mit Kreuz
+    b.rect((226, 220, 204), -8.1, 3.1, 6.6, 6.6, 0.4)
+    b.rect((196, 52, 44), -5.6, 4.2, 1.6, 4.4)
+    b.rect((196, 52, 44), -7.0, 5.6, 4.4, 1.6)
+    _fass(b, (-13.4, 7.6), 3.0, (150, 62, 44), (62, 26, 20))
+    _fass(b, (-13.4, 1.4), 3.0, (70, 110, 112), (30, 48, 50))
+    _fass(b, (-19.8, 7.8), 3.0, (150, 62, 44), (62, 26, 20))
+    b.rect((44, 40, 36), -16.6, -4.6, 6.4, 4.2, 0.4)          # Werkzeugkiste
+    b.rect((150, 60, 44), -16.2, -4.2, 5.6, 3.4, 0.3)
+    b.linie((226, 220, 204), (-15.6, -2.5), (-11.2, -2.5), 0.45)
+    plane = [(-18, -12.4), (-30.6, -12.4), (-30.6, 2), (-24, 4), (-19, -3)]
+    b.poly(PLANE_DK, plane)                                   # Plane ueber dem Heck
+    b.poly(PLANE, [(x * 0.985 - 0.3, y * 0.95 - 0.2) for x, y in plane])
+    b.linien(PLANE_HELL, [(-30, -11.6), (-19, -11.6)], 0.7)
+    b.linien(PLANE_DK, [(-29, -8), (-24, -6.4), (-20.6, -8.4)], 0.5)
+    b.linien(PLANE_DK, [(-29.6, -2.4), (-25, -1.2), (-21.4, -4.4)], 0.5)
+    b.rohr((-24, 9.6), (-34.5, 3.4), 1.5, (150, 146, 138))    # Kranarm am Heck
+    b.rohr((-24, -1.2), (-34.5, 3.4), 1.5, (150, 146, 138))
+    b.kreis((30, 28, 26), (-34.8, 3.4), 1.7)
+    b.kreis((150, 146, 138), (-34.8, 3.4), 0.9)
+    b.linie((52, 50, 46), (-34.8, 3.4), (-38, 3.4), 0.6)
+    b.kreis((22, 19, 17), (-26.4, 8.6), 3.2)                  # Reserverad
+    b.kreis((46, 41, 37), (-26.4, 8.6), 2.5)
+    b.kreis((96, 92, 86), (-26.4, 8.6), 1.0)
+    _staub(b, rnd, 60, -30, 30, -12, 12, _STAUB_TW)
+    _rost(b, rnd, 14, 14, 30, -9, 9)
+    return b.fertig()
+
+
+@platzhalter("trosswagen")
+def _trosswagen():
+    return trosswagen_zeichnen()
+
+
+@platzhalter("trosswagen_wrack")
+def _trosswagen_wrack():
+    return _wrack(trosswagen_zeichnen(), 7380)
+
+
+@platzhalter("trosswagen_schatten")
+def _trosswagen_schatten():
+    return _schatten(int(64 * G), int(34 * G), 11)

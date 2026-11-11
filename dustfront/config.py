@@ -1040,7 +1040,7 @@ SCHLACHT = dict(
     abschuesse=150,            # Vorgabe, wenn nach Abschuessen gespielt wird
     basis_x=0.08,              # Anteil der Kartenbreite vom Rand
     basis_proben=160,          # so viele freie Punkte werden je Basis geprueft
-    fahrzeuge=(("panzer", 1), ("panzerwagen", 1), ("buggy", 2), ("krad", 1)),
+    fahrzeuge=(("panzer", 1), ("panzerwagen", 1), ("buggy", 2), ("krad", 1), ("trosswagen", 1)),
     fahrzeug_umkreis=420.0,    # so weit um die Basis stehen die Wagen
     spawn_umkreis=340.0,       # so weit um die Basis steigt man ein
     fahrer_je_seite=4,         # so viele Bots jeder Seite duerfen fahren
@@ -1556,6 +1556,47 @@ JAGDPANZER = dict(
     balken_breite=42,
 )
 
+# Der Trosswagen (seit 0.34.108): Munition, Medkits und Reparatur fahren mit
+# zur Front. Niemand sitzt auf; man stellt sich HINTEN dran und drueckt E
+# (einmal Munition und ein Medkit, bis der Vorrat des Wagens leer ist). Auch
+# Trosswagen der Gegner lassen sich so plündern. Eigene Fahrzeuge, die hinten
+# dranstehen, werden repariert - auch im Stehen, solange der Vorrat reicht.
+# Er faehrt wie der Panzerwagen (Einspurmodell), nur langsamer. Nicht per
+# Nachschub zu kaufen: an jeder Basis stehen welche (SCHLACHT "fahrzeuge")
+# und kommen wieder. Nur fuer Menschen am Steuer.
+TROSSWAGEN = dict(
+    {k: v for k, v in dict(FAHRZEUG, **PANZERWAGEN).items()
+     if k not in ("plaetze", "ring", "ring_dreh", "ring_muendung", "ring_ruecklauf",
+                  "ring_ruecklauf_tempo", "vorn", "hinten", "halb", "reifen_abstand",
+                  "reifen_teilung", "unscharf_ab", "ramm_schwelle", "ramm_je_px",
+                  "ramm_stoss", "ramm_extra")},
+    marke="T",
+    name="TROSSWAGEN",
+    hoechst=210.0,
+    rueckwaerts=70.0,
+    motor=22.0,
+    kreis=18.0,               # zwei Kreise von 18 Pixeln, 26 von der Mitte: 88 x 36
+    achse=26.0,
+    einsteigen=52.0,
+    leben=420.0,
+    nur_mensch=True,
+    explosion_radius=80.0,
+    explosion_schaden=80.0,
+    fahrer_schaden=50.0,
+    wrack_zeit=10.0,
+    neu_nach=45.0,
+    balken_breite=34,
+    motor_takt=0.4,
+    # Hinten dran: Mitte der Zone `abstand` hinter der Mitte des Wagens,
+    # Radius `radius`. Wer hier steht und E drueckt, bekommt Munition (wie
+    # eine Munitionskiste) und ein Medkit; `entnahmen` Mal je Wagen, ein
+    # Spieler hoechstens alle `pause` Sekunden.
+    zone=dict(abstand=62.0, radius=34.0),
+    entnahmen=10,
+    pause=4.0,
+    reparatur=dict(vorrat=600.0, je_sekunde=14.0),
+)
+
 # Rammen und was danach fliegt (seit 0.34.59). Gilt fuer beide.
 RAMMEN = dict(
     sperre=0.4,               # so lange kein zweiter Schaden vom selben Fahrzeug
@@ -1643,6 +1684,9 @@ PANZERUNG = {
     # gegen Panzerbrechendes); der Jagdpanzer ist ein Panzer, nur noch dicker.
     "krad": dict(kugel=1.0, panzerbrechend=1.2, spreng=1.0, hohlladung=1.3,
                  feuer=0.8, nahkampf=0.7, ramm=1.0),
+    # Der Trosswagen: Blech wie ein Laster, leicht gepanzert.
+    "trosswagen": dict(kugel=0.7, panzerbrechend=1.2, spreng=1.0, hohlladung=1.4,
+                       feuer=0.5, nahkampf=0.4, ramm=0.8),
     "jagdpanzer": dict(kugel=0.1, panzerbrechend=0.8, spreng=0.4, hohlladung=1.25,
                        feuer=0.1, nahkampf=0.05, ramm=0.35),
 }
@@ -4378,6 +4422,8 @@ for _team in TEAMS["kombi"]:
     BILD_MASS["panzerwagen_ring_%s_fahrer" % _team["name"].lower()] = (_fz_r, _fz_r)
 # Die Granate der Kanone, mit dicker Leuchtspur gezeichnet.
 BILD_MASS["panzergranate"] = (12, 6)
+for _name in ("trosswagen", "trosswagen_wrack", "trosswagen_schatten"):
+    BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 
 # Krad und Jagdpanzer (seit 0.34.107, art_neue_fahrzeuge.py). Das Krad in
 # vier Fassungen: leer, mit Fahrer, mit Fahrer und Beifahrer - je neutral

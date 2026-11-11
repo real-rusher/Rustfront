@@ -176,7 +176,7 @@ OPTIONEN = {
     # Seit 0.34.73: die Klasse (K.KLASSEN) - Waffen, Vorteile, Faehigkeit (C).
     "klasse": ("KLASSE", lambda: [""] + list(K.KLASSEN),
                lambda v: K.KLASSEN[v]["name"] if v in K.KLASSEN else "KEINE"),
-    "fahrzeug": ("FAHRZEUG", lambda: ["panzer", "panzerwagen", "buggy", "krad", "jagdpanzer"],
+    "fahrzeug": ("FAHRZEUG", lambda: ["panzer", "panzerwagen", "buggy", "krad", "jagdpanzer", "trosswagen"],
                  lambda v: v.upper()),
     "fuehrer": ("ANFÜHRER", lambda: ["funk", "ohne", "keiner"],
                 lambda v: {"funk": "MIT FUNK", "ohne": "OHNE FUNK", "keiner": "KEINER"}[v]),
@@ -296,6 +296,10 @@ def eintraege() -> list:
                 lambda t, p, e, w: t.fahrzeug_setzen("krad", p, e, w)),
         Eintrag("JAGDPANZER", "OBJEKTE", ("anzahl", "streuung", "winkel"),
                 lambda t, p, e, w: t.fahrzeug_setzen("jagdpanzer", p, e, w)),
+        # Seit 0.34.108: Nachschub fuer die Front. Mit einer Figur (SPIELER,
+        # ICH) hinten dranstellen und E druecken.
+        Eintrag("TROSSWAGEN", "OBJEKTE", ("anzahl", "streuung", "winkel"),
+                lambda t, p, e, w: t.fahrzeug_setzen("trosswagen", p, e, w)),
         # Seit 0.34.65: was der Nagelstreuer eines Wagens hinterlaesst.
         Eintrag("NAGELFELD", "OBJEKTE", ("anzahl", "streuung"),
                 lambda t, p, e, w: t.nagelfeld_setzen(p, e)),

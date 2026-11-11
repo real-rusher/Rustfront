@@ -17468,6 +17468,87 @@ pruef("Krad: zerstoert ist es ein Wrack",
       _krad107.kaputt and _krad107.bild == "krad_wrack")
 _tm107.verlassen()
 
+# ─────────────────────────────────────────────────────────────────────
+# Trosswagen (seit 0.34.108): hinten dran Nachschub holen (E), eigene
+# Fahrzeuge dort reparieren, nichts fuer Bots, nicht zu kaufen.
+_tm108 = _TM59.Testmodus(app, karte="staubtal_offen")
+pruef("Testmodus: TROSSWAGEN steht im Spawner (OBJEKTE)",
+      "TROSSWAGEN" in [e_.name for e_ in _tm108.eintraege if e_.gruppe == "OBJEKTE"])
+pruef("Der Trosswagen steht an jeder Basis, ist aber nicht zu kaufen",
+      ("trosswagen", 1) in K.SCHLACHT["fahrzeuge"]
+      and "trosswagen" not in [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]])
+_e108 = _tm108.welt.ebene(0)
+_rnd108 = random.Random(108)
+for _ in range(40000):
+    _tx108 = _rnd108.randrange(60, _e108.breite - 90)
+    _ty108 = _rnd108.randrange(20, _e108.hoehe - 40)
+    if all(not K.KACHELN[_e108.kachel(_tx108 + x_, _ty108 + y_)]["fest"]
+           for x_ in range(30) for y_ in range(14)):
+        break
+_z108 = lambda x_, y_: pygame.Vector2((_tx108 + x_ + 0.5) * K.TILE, (_ty108 + y_ + 0.5) * K.TILE)
+_tw108 = _tm108.fahrzeug_setzen("trosswagen", _z108(12, 7), 0, {"winkel": 0})
+_tw108.nachschub = 2
+pruef("Trosswagen: eigene Art, kein Platz zum Aufsitzen, nur fuer Menschen am Steuer",
+      _tw108.art == "trosswagen" and "plaetze" not in _tw108.werte
+      and _tw108.werte["nur_mensch"] and _tw108.bild == "trosswagen")
+_hinten108 = _tw108.zone_mitte()
+_a108 = _tm108.puppe_setzen(_hinten108 + pygame.Vector2(6, 4), 0, {"team": 0, "waffe_figur": "sturm"},
+                            name="HOLER")
+_a108.medkits = 0
+_a108.magazin[_a108.waffe_name] = 1
+_m108 = _a108.medkits
+_tm108._anwenden(_a108, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Trosswagen: hinten dran gibt E Munition und ein Medkit - ohne einzusteigen",
+      _a108.medkits == _m108 + 1
+      and _a108.magazin[_a108.waffe_name] == K.WAFFEN[_a108.waffe_name]["magazin"]
+      and _a108.fahrzeug is None and _tw108.nachschub == 1,
+      "Medkits %d, Magazin %d, Vorrat %d" % (_a108.medkits, _a108.magazin[_a108.waffe_name],
+                                              _tw108.nachschub))
+_a108.treppe_rest = 0.0
+_a108.magazin[_a108.waffe_name] = 1
+_tm108._anwenden(_a108, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("... derselbe Spieler muss warten (Pause), der Vorrat bleibt",
+      _tw108.nachschub == 1 and _a108.magazin[_a108.waffe_name] == 1 and _a108.fahrzeug is None)
+_b108 = _tm108.puppe_setzen(_hinten108 + pygame.Vector2(-8, -6), 0, {"team": 1, "waffe_figur": "sturm"},
+                            name="GEGNER")
+_b108.magazin[_b108.waffe_name] = 1
+_tm108._anwenden(_b108, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("... ein Gegner darf ihn auch plündern (zweite Entnahme, danach ist er leer)",
+      _b108.magazin[_b108.waffe_name] == K.WAFFEN[_b108.waffe_name]["magazin"]
+      and _tw108.nachschub == 0, str(_tw108.nachschub))
+_c108 = _tm108.puppe_setzen(_hinten108 + pygame.Vector2(0, 10), 0, {"team": 0}, name="DRITTER")
+_c108.magazin[_c108.waffe_name] = 1
+_tm108._anwenden(_c108, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("... ist der Vorrat leer, gibt es nichts mehr",
+      _c108.magazin[_c108.waffe_name] == 1)
+_ferne108 = _tm108.puppe_setzen(_tw108.pos + pygame.Vector2(0, 150), 0, {"team": 0}, name="FERN")
+_tw108.nachschub = 5
+_ferne108.magazin[_ferne108.waffe_name] = 1
+_tm108._anwenden(_ferne108, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Trosswagen: wer nicht hinten dransteht, bekommt nichts", _tw108.nachschub == 5
+      and _ferne108.magazin[_ferne108.waffe_name] == 1)
+# Reparatur: ein eigener Panzer hinten dran, ein anderer weiter weg.
+_pz108 = _tm108.fahrzeug_setzen("panzer", _tw108.zone_mitte(), 0, {"winkel": 0})
+_pf108 = _tm108.fahrzeug_setzen("panzer", _z108(26, 12), 0, {"winkel": 0})
+_pz108.leben = _pz108.max_leben * 0.5
+_pf108.leben = _pf108.max_leben * 0.5
+_l108 = (_pz108.leben, _pf108.leben, _tw108.reparatur)
+for _ in range(int(3.0 / K.FIXED_DT)):
+    _tm108.schritt(K.FIXED_DT)
+pruef("Trosswagen: ein Fahrzeug hinten dran wird repariert, auch im Stehen - ein fernes nicht",
+      _pz108.leben > _l108[0] + 30.0 and _pf108.leben == _l108[1] and _tw108.reparatur < _l108[2],
+      "%.0f -> %.0f, Vorrat %.0f" % (_l108[0], _pz108.leben, _tw108.reparatur))
+_tw108.reparatur = 0.0
+_v108 = _pz108.leben
+_pz108.leben = _v108 - 100.0
+for _ in range(int(1.0 / K.FIXED_DT)):
+    _tm108.schritt(K.FIXED_DT)
+pruef("... ist der Vorrat an Reparatur leer, hoert es auf", _pz108.leben == _v108 - 100.0)
+_bot108 = _tm108.bot_setzen(_tw108.pos + pygame.Vector2(0, 30), 0, {"team": 1})
+_bot108.darf_fahren = True
+pruef("Trosswagen: ein Bot steigt nicht ein", _tm108._freier_buggy(_bot108) is None)
+_tm108.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

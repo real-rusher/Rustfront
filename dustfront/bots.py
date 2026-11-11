@@ -1583,6 +1583,8 @@ class BotHirn(Taktik):
         for b in getattr(self.g, "fahrzeuge", ()):
             if b.fahrer is not None or b.kaputt or b.nur_bild or b.ebene != k.ebene:
                 continue
+            if b.werte.get("nur_mensch"):
+                continue                # Jagdpanzer, Trosswagen: nichts fuer Bots (seit 0.34.107)
             d = b.pos.distance_to(k.pos)
             if d < weite:
                 bester, weite = b, d

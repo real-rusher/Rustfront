@@ -2473,6 +2473,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         # duerfen es die, denen der Testmodus es erlaubt (`darf_fahren`,
         # gemeldet: "Mach mir mal das Bot Fahrzeuge steuern ... in den
         # Testmodus").
+        # Hinten an einem Trosswagen (seit 0.34.108): Nachschub holen - vor dem
+        # Einsteigen, denn die Zone liegt nah an der Mitte des Wagens.
+        if not k.ist_bot and self._nachschub_nehmen(k):
+            return
         darf = not k.ist_bot or getattr(k, "darf_fahren", False)
         wagen = self._freier_buggy(k) if darf else None
         if wagen is not None:
@@ -2849,6 +2853,43 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             if d <= b.werte["einsteigen"] ** 2 and d < abstand:
                 bester, abstand = b, d
         return bester
+
+    def _nachschub_nehmen(self, k: Kaempfer) -> bool:
+        """E hinten an einem Trosswagen (seit 0.34.108, K.TROSSWAGEN): einmal
+        Munition (die Magazine voll, dazu ein Teil des Vorrats) und ein
+        Medkit, solange der Vorrat des Wagens reicht - auch an dem eines
+        Gegners. Ein Spieler hoechstens alle `pause` Sekunden. True: E war
+        dafuer da (auch wenn er gerade warten muss)."""
+        if (k.fahrzeug is not None or getattr(k, "mitfahrt", None) is not None
+                or k.am_boden or k.flug > 0 or k.sturz_rest > 0):
+            return False
+        for b in self.fahrzeuge:
+            if (b.art != "trosswagen" or b.kaputt or b.nur_bild or not b.lebt
+                    or b.ebene != k.ebene or b.nachschub <= 0
+                    or not b.in_zone(k.pos, k.radius)):
+                continue
+            jetzt = self.welt.zeit
+            if jetzt - b._entnommen.get(k.nummer, -1e9) < b.werte["pause"]:
+                return True
+            genommen = False
+            if k.medkits < K.MEDKIT["hoechstens"]:
+                k.medkits += 1
+                genommen = True
+            for name in k.waffen:
+                d = K.WAFFEN.get(name, {})
+                if d.get("magazin") and k.magazin.get(name, 0) < d["magazin"]:
+                    k.magazin[name] = d["magazin"]
+                    genommen = True
+            if k.auffuellen(K.MUNITION["kiste_gibt"]):
+                genommen = True
+            if not genommen:
+                return False            # alles voll: E tut, was es sonst tut
+            b._entnommen[k.nummer] = jetzt
+            b.nachschub -= 1
+            self.welt.klang("aufheben", 0.7, b.zone_mitte(), b.ebene)
+            self.welt.aufschrift(k.pos, k.ebene, "NACHSCHUB")
+            return True
+        return False
 
     def _einsteigen(self, k: Kaempfer, b) -> None:
         b.fahrer = k
@@ -3285,6 +3326,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                 emp = float(e[14]) if len(e) > 14 else 0.0
                 auf = int(e[15]) if len(e) > 15 else 0
                 markiert_fuer = str(e[16])[:20] if len(e) > 16 and e[16] else ""
+                nachschub = max(0, min(99, int(e[17]))) if len(e) > 17 else 0
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
@@ -3310,6 +3352,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             b.besetzt_mit = max(0, min(8, auf))
             b.markiert_fuer = markiert_fuer
             b.markiert_rest = 1.0 if markiert_fuer else 0.0
+            if b.art == "trosswagen":
+                b.nachschub = nachschub
             b.geschw = b.vorn * fahrt
             b.rutschen = max(0.0, min(1.0, rutschen))
             # Leben (seit 0.34.18): fuer den Balken und das Wrack.
@@ -3380,6 +3424,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             return
         if ich.flug > 0 or ich.ebene != self.blick:
             return
+        for b in self.fahrzeuge:
+            # Hinten am Trosswagen (seit 0.34.108): Nachschub holen.
+            if (b.art == "trosswagen" and not b.kaputt and b.ebene == ich.ebene
+                    and b.nachschub > 0 and b.in_zone(ich.pos, ich.radius)):
+                p = self.kamera.zu_bild(b.zone_mitte())
+                SCHRIFT.zeichnen(ziel, "[%s] NACHSCHUB (%d)" % (taste_e, b.nachschub),
+                                 int(p.x), int(p.y) + 18, K.C_CREAM, 1, ausrichtung="mitte")
+                return
         for b in self.fahrzeuge:
             besetzt = b.fahrer is not None or b.besetzt
             if (b.kaputt or b.ebene != ich.ebene
@@ -4945,7 +4997,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                   len(b.__dict__.get("_mitfahrer") or ()),
                   # Seit 0.34.100: welche Seite ihn markiert hat (Drohne) - "".
                   (getattr(b, "markiert_fuer", "")
-                   if getattr(b, "markiert_rest", 0.0) > 0.0 else "")]
+                   if getattr(b, "markiert_rest", 0.0) > 0.0 else ""),
+                  # Seit 0.34.108: was der Trosswagen noch zu geben hat.
+                  b.nachschub if b.art == "trosswagen" else 0]
                  for b in self.fahrzeuge]
         # Nagelfelder (seit 0.34.65): wo die Naegel liegen, folgt aus der
         # Kennung (entities.Nagelfeld.stellen).
