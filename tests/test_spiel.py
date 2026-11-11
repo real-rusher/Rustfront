@@ -17386,8 +17386,12 @@ pruef("Krad: ein Kamerad sitzt mit E im Beiwagen auf (ein Platz)",
       and _tm107._transporter_bei(_tm107.puppe_setzen(_krad107.pos + pygame.Vector2(10, 14), 0,
                                                       {"team": 0}, name="ZWEITER")) is None,
       str(_krad107.mitfahrer))
-pruef("... das Bild zeigt zwei (Beiwagen mit Beifahrer, in den Farben der Mannschaft)",
-      "beiwagen" in _krad107.bild, _krad107.bild)
+_tm107.schritt(K.FIXED_DT)
+# Seit 0.34.123 sitzt der Beifahrer als eigene Figur im Beiwagen (mit seiner
+# Waffe und Blickrichtung, luft._beifahrer_zeichnen) - nicht mehr im Krad-Bild.
+pruef("... er sitzt sichtbar im Beiwagen: am Sitz des Krads (das Krad-Bild selbst bleibt ohne Beifahrer)",
+      "beiwagen" not in _krad107.bild and _bf107.pos.distance_to(_krad107.beifahrer_sitz()) < 1.0,
+      "%s %.1f" % (_krad107.bild, _bf107.pos.distance_to(_krad107.beifahrer_sitz())))
 _leben107 = (_krad107.leben, _f107.leben, _bf107.leben)
 _ziel107 = _krad107.pos + pygame.Vector2(200, 60)
 _vorher107 = _bf107.magazin[_bf107.waffe_name]
@@ -17586,9 +17590,9 @@ _tm109._anwenden(_f109, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
 _b109 = _tm109.puppe_setzen(_kr109.pos + pygame.Vector2(20, 14), 0, {"team": 0}, name="BEI")
 _alt109 = _kr109.bild
 _tm109._anwenden(_b109, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
-pruef("Skins: das Krad zeigt den Fahrer in seinem Aussehen (leer, dann mit Beifahrer)",
+pruef("Skins: das Krad zeigt den Fahrer in seinem Aussehen (leer und mit Beifahrer - der sitzt seit 0.34.123 als eigene Figur daneben)",
       _alt109 == "krad_skin_%s_rot" % _skin109
-      and _kr109.bild == "krad_beiwagen_skin_%s_rot" % _skin109,
+      and _kr109.bild == "krad_skin_%s_rot" % _skin109,
       "%s / %s" % (_alt109, _kr109.bild))
 _jp109 = _tm109.fahrzeug_setzen("jagdpanzer", _z109(6, 0), 0, {"winkel": 0})
 _jf109 = _tm109.puppe_setzen(_jp109.ausstiegsorte(9.0)[0], 0, {"team": 0, "aussehen": _skin109},
@@ -18025,8 +18029,9 @@ pruef("Tragschrauber: ein Gegner im Kreis unter ihm ist fuer seine Seite markier
       "%s" % getattr(_unten113, "markiert_fuer", None))
 # Die Bombe.
 _bomben113 = _ts113.bomben
-# Seit 0.34.119 faellt die Bombe senkrecht unter ihm (ohne sein Tempo) - vom Rahmen, an dem sie hing.
-_opfer113 = _tm113.puppe_setzen(_ts113.pos + pygame.Vector2(8.4, 7.8).rotate(_ts113.winkel), 0,
+# Seit 0.34.119 faellt die Bombe senkrecht unter ihm (ohne sein Tempo) - seit 0.34.123 dort, wo
+# der Fahrer sie neben der Kanzel fallen laesst (K.TRAGSCHRAUBER["bombe"]["abwurf"]).
+_opfer113 = _tm113.puppe_setzen(_ts113.pos + pygame.Vector2(K.TRAGSCHRAUBER["bombe"]["abwurf"]).rotate(_ts113.winkel), 0,
                                 {"team": 1, "leben": 5.0}, name="OPFER")
 _vorn113 = _tm113.puppe_setzen(_ts113.pos + _ts113.vorn * _ts113.flug_v * K.TRAGSCHRAUBER["bombe"]["fall"], 0,
                                {"team": 1, "leben": 5.0}, name="VORNE")
@@ -18557,12 +18562,14 @@ _tm119.zeichnen(_b119, 1.0)
 _tm119.renderer.bilder.gedreht = _alt_ged119
 pruef("Tragschrauber in der Luft: es gibt nur noch EINEN Schatten (die Luftschicht), nicht zwei", _namen119.count("tragschrauber_schatten") == 1,
       str(_namen119.count("tragschrauber_schatten")))
-# Bomben: gross, eine nach der anderen.
-_bg119 = app.bilder.bild("bombe_fall")
-pruef("Bomben: die fallende Bombe ist ein grosses Bild (mind. 20 Pixel hoch), am Rahmen haengen zwei",
-      pygame.mask.from_surface(_bg119, 40).get_bounding_rects()[0].height >= 20 and _ts119.bomben == 2)
+# Bomben: seit 0.34.123 kleine Schrottbomben (art_bombe.py), eine nach der anderen.
+from dustfront import art_bombe as _AB119
+_bg119 = pygame.mask.from_surface(_AB119.schrottbombe(0.0), 40).get_bounding_rects()[0]
+pruef("Bomben: die Schrottbombe ist klein (5 bis 12 Pixel hoch) und am Tragschrauber nicht zu sehen; er hat zwei dabei",
+      5 <= _bg119.height <= 12 and _ts119.bomben == 2 and _ts119.bild == _ts119._insassen_bild("tragschrauber"),
+      "%d %s" % (_bg119.height, _ts119.bild))
 _ts_ein119(True); _ts_ein119(False)
-pruef("... eine Bombe faellt, eine hing nur noch am Rahmen", _ts119.bomben == 1 and len(_ts119.bomben_fall) == 1)
+pruef("... eine Bombe faellt, eine hat er noch", _ts119.bomben == 1 and len(_ts119.bomben_fall) == 1)
 _ts_ein119(True); _ts_ein119(False)
 pruef("... eine zweite geht erst, wenn die erste unten ist (nur eine auf einmal)",
       _ts119.bomben == 1 and len(_ts119.bomben_fall) == 1)
@@ -18640,9 +18647,10 @@ _zz120 = [_we120.pos.x + 900, _we120.pos.y]
 def _w_ein120(feuert_=False, zielt_=False):
     _tm120._anwenden(_pw120, {"will": [0, 0], "ziel": list(_zz120), "knoepfe": [], "feuert": feuert_, "zielt": zielt_})
     _tm120.schritt(K.FIXED_DT)
-pruef("Werfer: das Gestell ist ein eigenes Bild mit sechs geladenen Rohren; eingepackt liegt es flach",
-      _we120.rohre == 63 and _we120.stufe == 0 and _we120.gestell_bild() == "werfer_rohre_0_63"
-      and app.bilder.bild("werfer_rohre_8_5").get_size() == (128, 128))
+from dustfront import art_werfer as _AW120
+pruef("Werfer: das Gestell ist ein 3D-Modell (seit 0.34.123) mit sechs geladenen Rohren; eingepackt liegt es flach",
+      _we120.rohre == 63 and _we120.stufe == 0 and _we120.erhebung() == 0.0
+      and _AW120.gestell(30.0, 40.0, 5)[0].get_size() == (_AW120.GROESSE_BILD, _AW120.GROESSE_BILD))
 for _ in range(3):
     _w_ein120(zielt_=True)
 _st120, _stufen120 = [], []
@@ -18689,10 +18697,11 @@ _leer120 = [bin(m_).count("1") for m_ in _maske120]
 pruef("... die Raketen verlassen ihre Rohre nacheinander (die Zahl geladener Rohre sinkt Stufe fuer Stufe 6, 5, ... 0)",
       _leer120 == [6, 5, 4, 3, 2, 1, 0], str(_leer120))
 _st120 = [a_ for a_ in _ex120 if a_[2] == "werfer_start"]
-pruef("... jede zuendet einen Rueckstrahl (Welt.explosion 'werfer_start' mit der Richtung des Gestells)",
-      len(_st120) == 6 and all(abs(r_ - _we120.gestell_winkel()) % 360 < 1.0 or abs(abs(r_ - _we120.gestell_winkel()) % 360 - 360) < 1.0 for _p, r_, _a in _st120),
-      str(len(_st120)))
-_bs120 = sum(1 for p_ in _tm120.welt.partikel if p_.art == "bodenstaub")
+pruef("... jede zuendet einen Rueckstrahl (Welt.explosion 'werfer_start', Radius = Steilheit * 1000 + Richtung des Gestells)",
+      len(_st120) == 6 and all(abs((int(r_) % 1000 - _we120.gestell_winkel() + 180.0) % 360.0 - 180.0) < 1.5
+                               and int(r_) // 1000 == int(round(_we120.erhebung())) for _p, r_, _a in _st120),
+      str([r_ for _p, r_, _a in _st120]))
+_bs120 = sum(1 for f_ in _tm120.welt.effekte if f_.art == "rauch" and f_.palette == "staub")
 pruef("... mit viel Staub am Boden, hinter dem Werfer", _bs120 >= 30, str(_bs120))
 _ladend120 = []
 for _ in range(int(16.0 / K.FIXED_DT)):
@@ -18717,8 +18726,8 @@ pruef("... der Fahrer stirbt sofort (nicht nur am Boden), und alle im Umkreis vo
       not _pw120.lebt and not _nah120.lebt, "%s %s" % (_pw120.lebt, _nah120.lebt))
 pruef("... wer weiter weg steht, bekommt nur noch einen Teil ab oder nichts", _weit120.lebt, str(_weit120.lebt))
 _leer120 = pygame.mask.from_surface(app.bilder.bild(_we120.bild), 10).count()
-pruef("... kein Wrack bleibt zurueck (sein Bild ist leer), nur Einzelteile am Boden (Dekale 'werfer_teil_N')",
-      _we120.bild == "werfer_wrack" and _leer120 == 0 and len([n_ for n_ in _dekal120 if n_.startswith("werfer_teil_")]) >= 6,
+pruef("... kein Wrack bleibt zurueck (sein Bild ist leer), nur Einzelteile am Boden (Dekale 'fx_teil_N', seit 0.34.123)",
+      _we120.bild == "werfer_wrack" and _leer120 == 0 and len([n_ for n_ in _dekal120 if n_.startswith("fx_teil_")]) >= 6,
       "%d Pixel, %d Teile" % (_leer120, len(_dekal120)))
 _b120 = pygame.Surface((K.GAME_W, K.GAME_H))
 _tm120.kamera.pos.update(_we120.pos)
@@ -18726,6 +18735,177 @@ for _ in range(int(0.6 / K.FIXED_DT)):
     _tm120.schritt(K.FIXED_DT)
 _tm120.zeichnen(_b120, 1.0)                           # die Explosion zeichnen geht
 _tm120.verlassen()
+
+
+# 0.34.123: Nacharbeit an den neuen Fahrzeugen, alles neu gemacht - Effektsystem
+# (effekte.py), Schrottbombe des Tragschraubers, 3D-Werfer, Flak-Leuchtspur,
+# Jagdpanzer-Luke fest in der Wanne, Beifahrer im Krad, kein Schieben von oben.
+from dustfront import effekte as _FX123, art_neue_fahrzeuge as _ANF123, art_werfer as _AW123
+from dustfront import art_bombe as _AB123
+_tm123 = _TM59.Testmodus(app, karte="staubtal_offen")
+_e123 = _tm123.welt.ebene(0)
+_rnd123 = random.Random(123)
+for _ in range(40000):
+    _tx123 = _rnd123.randrange(60, _e123.breite - 90)
+    _ty123 = _rnd123.randrange(20, _e123.hoehe - 40)
+    if all(not K.KACHELN[_e123.kachel(_tx123 + x_, _ty123 + y_)]["fest"]
+           for x_ in range(50) for y_ in range(24)):
+        break
+_z123 = lambda x_, y_: pygame.Vector2((_tx123 + x_ + 0.5) * K.TILE, (_ty123 + y_ + 0.5) * K.TILE)
+# -- Effektsystem: jede Art erzeugt Teilchen und laesst sich zeichnen.
+_b123 = pygame.Surface((K.GAME_W, K.GAME_H))
+_arten123 = []
+for _art123 in sorted(_FX123.ARTEN):
+    _tm123.welt.effekte = []
+    _r123 = {"flak_schuss": 1.0 * (90 + 360 * (300 + 2048 * 40)), "werfer_start": 40.0 * 1000 + 30.0,
+             "fallschirm_riss": 40.0 * 10 + 1}.get(_art123, 30.0)
+    _tm123.welt.explosion(_z123(25, 12), 0, _r123, _art123, None)
+    _n123 = len(_tm123.welt.effekte)
+    for _ in range(int(0.3 / K.FIXED_DT)):
+        _tm123.welt.effekte_schritt(K.FIXED_DT)
+    _tm123.kamera.pos.update(_z123(25, 12))
+    _tm123.zeichnen(_b123, 1.0)
+    if _n123 == 0:
+        _arten123.append(_art123)
+pruef("Effekte: jede Art des neuen Effektsystems erzeugt Teilchen und laesst sich zeichnen",
+      not _arten123 and len(_FX123.ARTEN) >= 11, str(_arten123))
+_tm123.welt.effekte = []
+_tm123.welt.explosion(_z123(25, 12), 0, 50.0, "flak", None)
+_hoch123 = [f_.z for f_ in _tm123.welt.effekte if f_.art == "rauch"]
+pruef("... die Flakwolke steht in der Hoehe des Ziels (Radius = Hoehe), nicht am Boden",
+      _hoch123 and min(_hoch123) > 40.0, str(_hoch123[:3]))
+# -- Jagdpanzer: die Luke ist fest in der Wanne, nicht im drehenden Aufbau.
+_alt_luke123 = _ANF123._kommandantenluke
+_mit123 = _ANF123.jagdpanzer_wanne()
+_ANF123._kommandantenluke = lambda b_, c_: None
+_ohne123 = _ANF123.jagdpanzer_wanne()
+def _luke_verboten123(b_, c_):
+    raise AssertionError("Luke im Aufbau")
+_ANF123._kommandantenluke = _luke_verboten123
+try:
+    _ANF123.jagdpanzer_aufbau()
+    _aufbau_ok123 = True
+except AssertionError:
+    _aufbau_ok123 = False
+_ANF123._kommandantenluke = _alt_luke123
+_diff123 = sum(1 for x_ in range(_mit123.get_width()) for y_ in range(_mit123.get_height())
+               if _mit123.get_at((x_, y_)) != _ohne123.get_at((x_, y_)))
+pruef("Jagdpanzer: die Kommandantenluke ist ins Bild der Wanne gemalt (kann sich nicht eigen bewegen), der Aufbau hat keine",
+      _diff123 > 40 and _aufbau_ok123, "%d Pixel" % _diff123)
+# -- Krad: der Beifahrer sitzt im Beiwagen und dreht sich nur in seinem Bogen.
+_kr123 = _tm123.fahrzeug_setzen("krad", _z123(4, 4), 0, {"winkel": 0})
+_bo123 = K.KRAD["beifahrer_bogen"]
+pruef("Krad: der Beifahrer dreht sich nur im Bogen (nach vorn rechts bis hinten), nicht in den Fahrer hinein",
+      abs(_kr123.beifahrer_klemmen(90.0) - 90.0) < 0.01 and abs(_kr123.beifahrer_klemmen(-100.0) - _bo123[0]) < 0.01
+      and abs(_kr123.beifahrer_klemmen(175.0) - _bo123[1]) < 0.01,
+      "%.1f %.1f %.1f" % (_kr123.beifahrer_klemmen(90.0), _kr123.beifahrer_klemmen(-100.0), _kr123.beifahrer_klemmen(175.0)))
+_kf123 = _tm123.puppe_setzen(_kr123.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="KRADFAHRER")
+_tm123._anwenden(_kf123, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_kb123 = _tm123.puppe_setzen(_kr123.pos + pygame.Vector2(20, 14), 0, {"team": 0, "waffe_figur": "sturm"}, name="BEI")
+_tm123._anwenden(_kb123, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_zk123 = _kr123.pos + pygame.Vector2(-300, -10)          # nach hinten links: ausserhalb des Bogens
+for _ in range(10):
+    _tm123._anwenden(_kb123, {"will": [0, 0], "ziel": [_zk123.x, _zk123.y], "knoepfe": []})
+    _tm123._anwenden(_kf123, {"will": [0, 0], "ziel": [0, 0], "knoepfe": []})
+    _tm123.schritt(K.FIXED_DT)
+_rel123 = (_kb123.winkel - _kr123.winkel + 180.0) % 360.0 - 180.0
+pruef("... zielt er dorthin, schaut er nur bis an den Rand des Bogens; er sitzt am Sitz im Beiwagen",
+      _bo123[0] - 0.5 <= _rel123 <= _bo123[1] + 0.5 and abs(abs(_rel123) - 180.0) > 20.0
+      and _kb123.pos.distance_to(_kr123.beifahrer_sitz()) < 1.0, "%.1f" % _rel123)
+_tm123.zeichnen(_b123, 1.0)                          # Beifahrer zeichnen geht
+# -- Tragschrauber: hoch oben schiebt er niemanden am Boden; die Schrottbombe.
+_ts123 = _tm123.fahrzeug_setzen("tragschrauber", _z123(10, 12), 0, {"winkel": 0})
+_tp123 = _tm123.puppe_setzen(_ts123.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="PILOT")
+_tm123._anwenden(_tp123, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+for _ in range(int(5.0 / K.FIXED_DT)):
+    _tm123._anwenden(_tp123, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+    _tm123.schritt(K.FIXED_DT)
+_boden123 = _tm123.puppe_setzen(pygame.Vector2(_ts123.pos), 0, {"team": 1}, name="BODEN")
+_bp123 = 0.0
+for _ in range(int(0.5 / K.FIXED_DT)):
+    _tm123._anwenden(_tp123, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+    _boden123.pos.update(_ts123.pos); _boden123.vorher.update(_ts123.pos)
+    _vor_b123 = pygame.Vector2(_boden123.pos)
+    _tm123.schritt(K.FIXED_DT)
+    _bp123 = max(_bp123, _boden123.pos.distance_to(_vor_b123))
+pruef("Tragschrauber: hoch oben schiebt er keinen am Boden (auch nicht, wenn der genau unter ihm steht)",
+      _ts123.hoch_oben and _bp123 < 1.0, "%.1f" % _bp123)
+_boden123.pos.update(_z123(40, 2))
+_ex123 = []
+_alt_ex123 = _tm123.welt.explosion
+def _ex_merk123(pos, ebene, radius, art="spreng", von=None):
+    _ex123.append((pygame.Vector2(pos), radius, art))
+    return _alt_ex123(pos, ebene, radius, art, von)
+_tm123.welt.explosion = _ex_merk123
+_vor123 = (pygame.Vector2(_ts123.pos), _ts123.winkel)
+_tm123._anwenden(_tp123, {"will": [0, -1], "ziel": [0, 0], "knoepfe": [], "feuert": True})
+_tm123.schritt(K.FIXED_DT)
+_los123 = [e_ for e_ in _ex123 if e_[2] == "bombe_los"]
+_soll123 = _vor123[0] + pygame.Vector2(K.TRAGSCHRAUBER["bombe"]["abwurf"]).rotate(_vor123[1])
+pruef("Schrottbombe: der Fahrer zuendet sie und laesst sie neben der Kanzel fallen ('bombe_los' in seiner Hoehe)",
+      len(_los123) == 1 and _los123[0][0].distance_to(_soll123) < 12.0 and _los123[0][1] > 30.0
+      and len(_ts123.bomben_fall) == 1 and len(_ts123.netz_extra()[3][0]) == 4,
+      str(_los123))
+_tm123.kamera.pos.update(_ts123.pos)
+for _ in range(int(0.4 / K.FIXED_DT)):
+    _tm123._anwenden(_tp123, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+    _tm123.schritt(K.FIXED_DT)
+_tm123.zeichnen(_b123, 1.0)                          # fallende Schrottbombe zeichnen geht
+pruef("... sie ueberschlaegt sich im Fall: zwoelf verschiedene Lagen, die Lunte wandert mit",
+      len({_AB123.schrottbombe(w_ * 30.0).get_size() for w_ in range(12)}) == 1
+      and _AB123.lunte_spitze(0.0) != _AB123.lunte_spitze(90.0))
+_tm123.welt.explosion = _alt_ex123
+# -- Werfer: das 3D-Gestell richtet sich nach der Entfernung auf; Raketen aus ihren Rohren.
+_we123 = _tm123.fahrzeug_setzen("werfer", _z123(10, 20), 0, {"winkel": 0})
+_wp123 = _tm123.puppe_setzen(_we123.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="WERFER")
+_tm123._anwenden(_wp123, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_wz123 = [_we123.pos.x + 450, _we123.pos.y]
+def _we_ein123(sek_, zielt_=False):
+    for _ in range(int(sek_ / K.FIXED_DT)):
+        _tm123._anwenden(_wp123, {"will": [0, 0], "ziel": list(_wz123), "knoepfe": [], "zielt": zielt_})
+        _tm123.schritt(K.FIXED_DT)
+_we_ein123(0.05, True)
+_we_ein123(4.0)
+_nah123 = _we123.erhebung()
+_wz123[:] = [_we123.pos.x + 3000, _we123.pos.y]
+_we_ein123(2.0)
+_weit123 = _we123.erhebung()
+pruef("Werfer: aufgebaut stehen die Rohre schraeg, bei nahem Ziel steiler als bei weitem",
+      _we123.phase == 2 and _nah123 > _weit123 + 10.0 and _weit123 > 20.0, "%.1f / %.1f" % (_nah123, _weit123))
+_m123 = [_we123.muendung(i_) for i_ in range(6)]
+_h123 = [_we123.muendung_hoehe(i_) for i_ in range(6)]
+pruef("... die sechs Muendungen liegen vorn am Gestell, hoch in der Luft (3D: obere Reihe hoeher)",
+      len({(round(m_.x), round(m_.y)) for m_ in _m123}) >= 3 and min(_h123) > 8.0 and _h123[3] > _h123[0],
+      str([round(h_) for h_ in _h123]))
+_e123r = [3.0, _we123.pos.x + 3000, _we123.pos.y, True, 2]
+_bahn123 = _tm123._raketen_bahn(_we123, _e123r)
+_a123, _z123b = _bahn123(0.0), _bahn123(1.0)
+_mitte123 = _bahn123(0.5)
+pruef("... eine Rakete fliegt aus ihrem Rohr (Start an der Muendung, Nase nach oben) im Bogen ins Ziel",
+      pygame.Vector2(_a123[0], _a123[1]).distance_to(_we123.muendung(2)) < 1.0 and _a123[4] < -10.0
+      and abs(_z123b[0] - _e123r[1]) < 1.0 and _z123b[2] < 1.0 and _mitte123[2] > 100.0 and _z123b[4] > 10.0,
+      "%.0f %.0f %.0f" % (_a123[4], _mitte123[2], _z123b[4]))
+_gb123, _gs123 = _AW123.gestell(30.0, 40.0, 63)
+_gl123 = _AW123.gestell(30.0, 40.0, 0)[0]
+pruef("... das Gestell sieht man je nach Richtung anders (3D), leere Rohre anders als geladene",
+      pygame.image.tostring(_AW123.gestell(30.0, 40.0, 63)[0], "RGBA") != pygame.image.tostring(_AW123.gestell(210.0, 40.0, 63)[0], "RGBA")
+      and pygame.image.tostring(_gb123, "RGBA") != pygame.image.tostring(_gl123, "RGBA"))
+_gast123 = _FZ59.Werfer((0, 0), 0, 0.0, nur_bild=True)
+_gast123.netz_extra_setzen(_we123.netz_extra())
+pruef("... der Gast bekommt die Steilheit mit (Feld 6 der Meldung)",
+      abs(_gast123._hub_soll - _we123._hub_soll) < 1.0, "%.1f %.1f" % (_gast123._hub_soll, _we123._hub_soll))
+_tm123.zeichnen(_b123, 1.0)
+# -- Flak: Leuchtspur aus dem Effektsystem, sie steigt zur Hoehe des Ziels.
+_tm123.welt.effekte = []
+_tm123.welt.explosion(_z123(25, 12), 0, float(0 + 360 * (400 + 2048 * 60)), "flak_schuss", None)
+_ls123 = [f_ for f_ in _tm123.welt.effekte if f_.art == "leuchtspur"]
+pruef("Flak: jeder Schuss zeichnet eine Leuchtspur, die zur Hoehe des Ziels steigt (dort, wo die Wolke platzt)",
+      len(_ls123) == 1 and _ls123[0].vz > 0.0
+      and abs(_ls123[0].z + _ls123[0].vz * _ls123[0].dauer - 60.0) < 1.0
+      and abs(_ls123[0].vx * _ls123[0].dauer - 400.0) < 2.0, str([(f_.vz, f_.dauer) for f_ in _ls123]))
+pruef("... die Granate selbst sieht man nicht (nur die Spur)", _FZ59.Flakgranate.bild == "flak_leer"
+      and _FZ59.Flakgranate.spur is None)
+_tm123.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")
