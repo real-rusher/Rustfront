@@ -16866,6 +16866,9 @@ w301, g301 = _paar59("schlacht", karte="staubtal_offen")
 # FREISCHALTEN aus (seit 0.34.129): hier geht es um den Angriff, nicht darum, wann er kommt.
 w301._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="staubtal_offen", schlacht_seite=4,
                          freischalten="aus"))
+# Der Gast prueft einen Kauf vorher selbst - mit denselben Regeln (im Spiel
+# kommen sie mit der Willkommensnachricht, hier nachtraeglich gesetzt).
+g301._regeln_setzen(dict(w301.regelwerk))
 _ich301 = w301.ich
 _ich301.schlacht_punkte = 50
 _mitte301 = w301._schlacht_punkte()[2]
