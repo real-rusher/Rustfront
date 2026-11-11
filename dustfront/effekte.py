@@ -464,7 +464,7 @@ def _neu(welt, f: Fx) -> Fx:
 
 
 def _teilchen_wolke(welt, r, art, x, y, z, ebene, r0, r1, dauer, vx, vy, vz, zaeh, g, verzoegert,
-                    boden, anzahl, groesse, farbe_von) -> None:
+                    boden, anzahl, groesse, farbe_von, palette="grau") -> None:
     """Viele Teilchen, die aus einer Kugel vom Radius `r0` auseinanderfliegen,
     bis die Wolke etwa `r1` gross ist; dazu treibt sie mit (vx, vy, vz)."""
     k = max(0.4, zaeh)
@@ -487,6 +487,7 @@ def _teilchen_wolke(welt, r, art, x, y, z, ebene, r0, r1, dauer, vx, vy, vz, zae
         f.variante = r.randrange(100)
         f.r0 = r.choice(groesse)
         f.farbe, f.r1 = farbe_von(ux, uy, uz)
+        f.palette = palette                  # woraus sie ist (Staub, Rauch ...), fuer Abfragen
         _neu(welt, f)
 
 
@@ -503,7 +504,7 @@ def rauch(welt, r, x, y, z, ebene, palette, r0, r1, dauer, vx=0.0, vy=0.0, vz=0.
         hell = -(ux * 0.6 + uy * 0.7) + uz * 0.5 + r.uniform(-0.45, 0.45)
         return toene[0 if hell > 0.55 else 1 if hell > 0.0 else 2 if hell > -0.5 else 3], 0
     _teilchen_wolke(welt, r, "rauch", x, y, z, ebene, r0, r1, dauer * r.uniform(0.85, 1.15), vx, vy, vz,
-                    zaeh, g, verzoegert, boden, n, groesse, farbe)
+                    zaeh, g, verzoegert, boden, n, groesse, farbe, palette)
 
 
 def feuer(welt, r, x, y, z, ebene, r0, r1, dauer, vx=0.0, vy=0.0, vz=0.0, verzoegert=0.0) -> None:

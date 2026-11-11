@@ -683,7 +683,7 @@ def _werfer_mit_ziel(tm, rnd, abstand: float):
 
 
 def szene_werfer(tm, rnd):
-    """Der Werfer: Stuetzen raus, das 3D-Gestell hebt sich und dreht zum
+    """Der Werfer: Stuetzen raus, das Gestell hebt sich und dreht zum
     Ziel, die Rohre stellen sich nach der Entfernung (erst nah und steil,
     dann weit und flacher). Die Salve: Rakete fuer Rakete aus ihrem Rohr,
     Rueckstrahl hinten, im Bogen ins Ziel; die Rohre laden einzeln nach."""
@@ -704,7 +704,7 @@ def szene_werfer(tm, rnd):
         else:
             blick.pos.update(b.pos + pygame.Vector2(40, -20))
 
-    return ("Werfer: 3D-Gestell hebt sich nach der Entfernung, Raketen im Bogen aus ihren Rohren",
+    return ("Werfer: Gestell hebt sich nach der Entfernung, Raketen im Bogen aus ihren Rohren",
             [blick], lambda: uhr["t"] > 19.0, 21, 1.0, jedes_bild)
 
 
