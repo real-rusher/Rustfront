@@ -18948,6 +18948,19 @@ pruef("... beim Abbau dreht der Kopf zurueck in Fahrtrichtung (auch beim Gast, o
 pruef("... die alten flachen Mastbilder gibt es nicht mehr",
       not any(n_.startswith(("funkwagen_aktiv_", "funkwagen_aufbau_")) for n_ in K.BILD_MASS))
 
+# Ein Brocken, der ausgeblendet wird, darf sein Bild im Zwischenspeicher nicht
+# undurchsichtig machen (bis 0.34.124: schwarze Quadrate bei jedem Einschlag).
+from dustfront import effekte as _FX124
+_br124 = _FX124.brocken(3, "erde", 1, 0)
+_fx124 = _FX124.Fx("brocken", 20.0, 20.0, 0.0, 0, 1.0)
+_fx124.r0, _fx124.palette, _fx124.variante, _fx124.alter = 3.0, "erde", 1, 0.9
+_FX124._zeichne(pygame.Surface((40, 40)), _fx124, 0.0, 0.0)
+_weiss124 = pygame.Surface(_br124.get_size())
+_weiss124.fill((255, 255, 255))
+_weiss124.blit(_FX124.brocken(3, "erde", 1, 0), (0, 0))
+pruef("Effekte: ein ausgeblendeter Brocken laesst sein Bild durchsichtig (kein schwarzes Quadrat)",
+      tuple(_weiss124.get_at((0, 0)))[:3] == (255, 255, 255), str(tuple(_weiss124.get_at((0, 0)))))
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

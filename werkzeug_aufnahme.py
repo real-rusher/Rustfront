@@ -636,6 +636,171 @@ def szene_panzerwagen(tm, rnd):
             [b], lambda: uhr["t"] > 13.0, 15, 1.5, jedes_bild)
 
 
+# ── Die Nacharbeit an den Fahrzeugen (seit 0.34.124, docs/UEBERGABE.md) ──
+# Der Besitzer wollte am Ende alles "praesentiert": Videos und Bilder. Die
+# Kamera folgt hier oft einem Blickpunkt statt Figuren - eine Rakete fliegt
+# weiter, als das Bild breit ist.
+
+class _Blick:
+    """Ein Punkt, dem die Kamera folgt (wie eine Figur: pos, lebt, ebene)."""
+
+    lebt = True
+    ebene = 0
+
+    def __init__(self, pos) -> None:
+        self.pos = pygame.Vector2(pos)
+
+
+def szene_funkwagen(tm, rnd):
+    """Der Mast des Funkwagens als 3D-Modell: er liegt auf dem Dach, richtet
+    sich auf, faehrt aus, der Kopf klappt auf, die Seile laufen aus; dann
+    dreht sich der Kopf, und der Abbau laeuft rueckwaerts."""
+    tx, ty, zelle = _feld_ganz_frei(tm, rnd, 12, 10)
+    b, k = _fahrer_in(tm, "funkwagen", zelle(6, 5), 25.0)
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        t = uhr["t"]
+        # Rechte Maustaste kurz: bei 1 s aufbauen, bei 9 s wieder abbauen.
+        _steuern(tm, k, (0, 0), b.pos + b.vorn * 100, zielt=(1.0 <= t < 1.05 or 9.0 <= t < 9.05))
+
+    return ("Funkwagen: der Mast richtet sich auf, faehrt aus, Kopf klappt auf und dreht sich",
+            [_Blick(b.mast_mitte() + pygame.Vector2(0, -14))], lambda: uhr["t"] > 13.0, 15, 0.45, jedes_bild)
+
+
+def _werfer_mit_ziel(tm, rnd, abstand: float):
+    """Ein Werfer mit Fahrer, vor ihm in `abstand` eine Gruppe Gegner und ein
+    Kamerad, der sie sieht (sonst gilt das Ziel nicht, Gefecht.werfer_pruefen)."""
+    tx, ty, zelle = _feld_ganz_frei(tm, rnd, 8, 8)
+    b, k = _fahrer_in(tm, "werfer", zelle(4, 4), 0.0)
+    ziel = b.pos + pygame.Vector2(abstand, 60)
+    gruppe = [tm.puppe_setzen(ziel + pygame.Vector2((i % 3) * 22 - 22, (i // 3) * 22 - 11), 0,
+                              {"team": 1, "leben": 5.0}, name="ZIEL") for i in range(6)]
+    kamerad = tm.puppe_setzen(ziel + pygame.Vector2(-120, 30), 0, {"team": 0}, name="KAMERAD")
+    tm.welt._raster_bauen()
+    return b, k, ziel, gruppe, kamerad
+
+
+def szene_werfer(tm, rnd):
+    """Der Werfer: Stuetzen raus, das 3D-Gestell hebt sich und dreht zum
+    Ziel, die Rohre stellen sich nach der Entfernung (erst nah und steil,
+    dann weit und flacher). Die Salve: Rakete fuer Rakete aus ihrem Rohr,
+    Rueckstrahl hinten, im Bogen ins Ziel; die Rohre laden einzeln nach."""
+    b, k, ziel, gruppe, kamerad = _werfer_mit_ziel(tm, rnd, 820.0)
+    nah = b.pos + pygame.Vector2(260, -330)
+    blick = _Blick(b.pos)
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        t = uhr["t"]
+        zeiger = nah if t < 5.0 else ziel
+        _steuern(tm, k, (0, 0), zeiger, zielt=(0.5 <= t < 0.55), feuert=(8.0 <= t < 8.3))
+        # Die Kamera bleibt beim Werfer, bis die letzte Rakete draussen ist,
+        # dann faehrt sie zum Ziel und sieht die Einschlaege.
+        if t > 11.5:
+            blick.pos.update(ziel)
+        else:
+            blick.pos.update(b.pos + pygame.Vector2(40, -20))
+
+    return ("Werfer: 3D-Gestell hebt sich nach der Entfernung, Raketen im Bogen aus ihren Rohren",
+            [blick], lambda: uhr["t"] > 19.0, 21, 0.8, jedes_bild)
+
+
+def szene_werfer_explosion(tm, rnd):
+    """Der Werfer geht hoch: die groesste Explosion des Spiels, kein Wrack."""
+    b, k, ziel, gruppe, kamerad = _werfer_mit_ziel(tm, rnd, 820.0)
+    nahe = [tm.puppe_setzen(b.pos + pygame.Vector2(math.cos(i * 1.3) * 150, math.sin(i * 1.3) * 110), 0,
+                            {"team": 1}, name="DANEBEN") for i in range(5)]
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        t = uhr["t"]
+        _steuern(tm, k, (0, 0), ziel, zielt=(0.3 <= t < 0.35))
+        if 5.0 <= t < 5.05 and not b.kaputt:
+            b._zerstoeren(None)
+
+    return ("Werfer: getroffen - die groesste Explosion, nur Einzelteile bleiben",
+            [_Blick(b.pos)], lambda: uhr["t"] > 11.0, 13, 1.2, jedes_bild)
+
+
+def szene_schrottbombe(tm, rnd):
+    """Der Tragschrauber wirft seine zwei Schrottbomben (Dose mit Lunte) auf
+    eine Gruppe: am Heli sieht man nichts, sie faellt neben der Kanzel,
+    ueberschlaegt sich, die Lunte glimmt."""
+    tx, ty, zelle = _feld_ganz_frei(tm, rnd, 30, 8)
+    b, k = _fahrer_in(tm, "tragschrauber", zelle(3, 4), 0.0)
+    gruppen = []
+    for gx in (33, 44):
+        gruppen.append([tm.gegner_setzen("laeufer", zelle(gx + (i % 2) * 1.2, 3.4 + (i // 2) * 1.2), 0,
+                                         {"ki": False}) for i in range(4)])
+    blick = _Blick(b.pos)
+    uhr = {"t": 0.0}
+    abgeworfen = []
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        feuer = False
+        for i, g in enumerate(gruppen):
+            mitte = sum((x.pos for x in g), pygame.Vector2()) / len(g)
+            if i not in abgeworfen and b.hoch_oben and b.pos.x >= mitte.x - 16:
+                feuer = True
+                abgeworfen.append(i)
+        _steuern(tm, k, (0, -1), b.pos + b.vorn * 200, feuert=feuer)
+        blick.pos.update(b.pos + pygame.Vector2(0, -max(0.0, b.hoehe) * 0.5))
+
+    return ("Tragschrauber: zwei Schrottbomben auf zwei Gruppen",
+            [blick], lambda: uhr["t"] > 16.0 or len(abgeworfen) == 2 and not b.bomben_fall and uhr["t"] > 6,
+            18, 1.0, jedes_bild)
+
+
+def szene_flak(tm, rnd):
+    """Der Flakwagen mit Bot gegen einen Tragschrauber: sichtbar ist die
+    Leuchtspur, die zur Hoehe des Fliegers steigt, dazu das Muendungsfeuer;
+    die Wolken platzen in seiner Hoehe."""
+    tx, ty, zelle = _feld_ganz_frei(tm, rnd, 24, 10)
+    ts = tm.fahrzeug_setzen("tragschrauber", zelle(2, 3), 0, {"winkel": 0})
+    pilot = tm.puppe_setzen(ts.ausstiegsorte(9.0)[0], 0, {"team": 1}, name="PILOT")
+    tm._einsteigen(pilot, ts)
+    fl = tm.fahrzeug_setzen("flakwagen", zelle(16, 8), 0, {"winkel": -90})
+    fahrer = tm.fahrer_setzen(fl.pos, 0, {"team": 0, "fahrzeug": "flakwagen"}, mit_fahrzeug=False)
+    tm._einsteigen(fahrer, fl)
+    tm.welt._raster_bauen()
+    blick = _Blick(fl.pos)
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        _steuern(tm, pilot, (0, -1), ts.pos + ts.vorn * 200)
+        if ts.lebt and not ts.kaputt:
+            blick.pos.update((fl.pos + ts.pos) / 2)
+
+    return ("Flak: Leuchtspur zur Hoehe des Ziels, Wolken in seiner Hoehe",
+            [blick], lambda: uhr["t"] > 16.0 or ts.kaputt and uhr["t"] > 8.0, 18, 1.1, jedes_bild)
+
+
+def szene_krad(tm, rnd):
+    """Das Krad faehrt einen Bogen, der Beifahrer im Beiwagen haelt seine
+    Waffe auf einen Punkt - nur so weit, wie sein Sitz es erlaubt."""
+    tx, ty, zelle = _feld_ganz_frei(tm, rnd, 24, 16)
+    b, k = _fahrer_in(tm, "krad", zelle(4, 12), -20.0)
+    bei = tm.puppe_setzen(b.pos + pygame.Vector2(20, 14), 0, {"team": 0, "waffe_figur": "sturm"}, name="BEI")
+    tm._anwenden(bei, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+    punkt = zelle(14, 4)
+    uhr = {"t": 0.0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        t = uhr["t"]
+        _steuern(tm, k, (0.55 if t > 1.0 else 0.0, -0.55), b.pos + b.vorn * 100)
+        tm._anwenden(bei, {"will": [0, 0], "ziel": [punkt.x, punkt.y], "knoepfe": []})
+
+    return ("Krad: der Beifahrer zielt im Beiwagen, nur in seinem Bogen",
+            [b], lambda: uhr["t"] > 11.0, 13, 0.7, jedes_bild)
+
+
 SZENEN = {
     "duell": ("1_goap_gegen_klassisch", szene_duell),
     "flanke": ("2_flanke_und_niederhalten", szene_flanke),
@@ -659,6 +824,12 @@ SZENEN = {
     "abschnitte": ("20_geknickte_front", szene_abschnitte),
     "panzer": ("21_panzer", szene_panzer),
     "panzerwagen": ("22_panzerwagen", szene_panzerwagen),
+    "funkwagen": ("23_funkwagen_mast", szene_funkwagen),
+    "werfer": ("24_werfer_salve", szene_werfer),
+    "werfer_explosion": ("25_werfer_explosion", szene_werfer_explosion),
+    "schrottbombe": ("26_schrottbombe", szene_schrottbombe),
+    "flak": ("27_flak_leuchtspur", szene_flak),
+    "krad": ("28_krad_beifahrer", szene_krad),
 }
 
 

@@ -108,19 +108,44 @@ def _schluessel(gieren: float, fortschritt: float, drehung: float) -> tuple:
             int(round(drehung / 15.0)) * 15 % 360)
 
 
-def _teile(g: int, p: int, d: int) -> list:
+def _seile(g: int, p: int, d: int) -> list:
+    """Die Abspannseile, schon gegiert: [(oben, ende), ...] in Spielpixeln
+    vom Mastfuss."""
+    aufrichten, ausfahren, aufklappen, seile = stellung(p / 24.0)
+    if seile <= 0.0:
+        return []
+    _f, spitze = _mast(aufrichten, ausfahren, 0.0, 0.0)
+    oben = tuple(c * 0.82 for c in spitze)
+    w = math.radians(g)
+    cw, sw = math.cos(w), math.sin(w)
+
+    def gier(q):
+        return (q[0] * cw - q[1] * sw, q[0] * sw + q[1] * cw, q[2])
+    raus = []
+    for nx, ny in NAEGEL:
+        ende = (oben[0] + (nx - oben[0]) * seile, oben[1] + (ny - oben[1]) * seile,
+                oben[2] + (0.0 - oben[2]) * seile)
+        raus.append((gier(oben), gier(ende)))
+    return raus
+
+
+def _teile(g: int, p: int, d: int, seile_als_stab: bool = False) -> list:
     aufrichten, ausfahren, aufklappen, seile = stellung(p / 24.0)
     teile, spitze = _mast(aufrichten, ausfahren, aufklappen, d)
     teile += _fuss()
-    if seile > 0.0:
-        oben = tuple(c * 0.82 for c in spitze)
+    if seile >= 0.98:
         for nx, ny in NAEGEL:
-            ende = (oben[0] + (nx - oben[0]) * seile, oben[1] + (ny - oben[1]) * seile,
-                    oben[2] + (0.0 - oben[2]) * seile)
-            teile += D.stab(oben, ende, 0.3, SEIL, 4)
-            if seile >= 0.98:
-                teile += D.quader(nx - 1.0, nx + 1.0, ny - 1.0, ny + 1.0, 0.0, 1.4, NAGEL)
-    return D.bewegen(teile, gieren=g)
+            teile += D.quader(nx - 1.0, nx + 1.0, ny - 1.0, ny + 1.0, 0.0, 1.4, NAGEL)
+    teile = D.bewegen(teile, gieren=g)
+    if seile_als_stab:
+        for a, b in _seile(g, p, d):
+            teile += D.stab(a, b, 0.3, SEIL, 4)
+    return teile
+
+
+def _ins_bild(q) -> tuple:
+    halb = GROESSE_BILD / 2.0
+    return (q[0] - MITTE[0] + halb, q[1] - q[2] - MITTE[1] + halb)
 
 
 def funkmast(gieren: float, fortschritt: float, drehung: float = 0.0) -> pygame.Surface:
@@ -132,7 +157,21 @@ def funkmast(gieren: float, fortschritt: float, drehung: float = 0.0) -> pygame.
         return s
     if len(_BILDER) > 600:
         _BILDER.clear()
-    s = _BILDER[k] = D.malen(_teile(*k), GROESSE_BILD, mitte=MITTE)
+    mast = D.malen(_teile(*k), GROESSE_BILD, mitte=MITTE)
+    # Die Seile nicht als 3D-Koerper: so duenn greift der dunkle Rand von
+    # drei_d.malen nur bei manchen Lagen, und dann waren die vorderen Seile
+    # dick und schwarz, die hinteren kaum zu sehen. Als glatte Linie sind
+    # alle gleich - die hinteren unter dem Mast, die vorderen darueber.
+    s = pygame.Surface(mast.get_size(), pygame.SRCALPHA)
+    seile = _seile(*k)
+    hinten = [z for z in seile if z[1][1] < 0.0]
+    vorn = [z for z in seile if z[1][1] >= 0.0]
+    for a, b in hinten:
+        pygame.draw.aaline(s, SEIL, _ins_bild(a), _ins_bild(b))
+    s.blit(mast, (0, 0))
+    for a, b in vorn:
+        pygame.draw.aaline(s, SEIL, _ins_bild(a), _ins_bild(b))
+    _BILDER[k] = s
     return s
 
 
@@ -146,7 +185,7 @@ def schatten(gieren: float, fortschritt: float, drehung: float = 0.0) -> pygame.
         return s
     if len(_SCHATTEN) > 600:
         _SCHATTEN.clear()
-    flach = D.malen(D.flach(_teile(*k), 0.42, 0.34), GROESSE_BILD, mitte=MITTE, rand=False)
+    flach = D.malen(D.flach(_teile(*k, seile_als_stab=True), 0.42, 0.34), GROESSE_BILD, mitte=MITTE, rand=False)
     s = _SCHATTEN[k] = pygame.mask.from_surface(flach, 30).to_surface(
         setcolor=(0, 0, 0, 70), unsetcolor=(0, 0, 0, 0))
     return s

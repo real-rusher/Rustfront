@@ -335,9 +335,12 @@ def _zeichne(ziel, f: Fx, ex: float, ey: float) -> None:
             pygame.draw.ellipse(ziel, (16, 12, 9), (int(x - sch), int(f.y - ey - sch * 0.4), sch * 2, max(2, int(sch * 0.8))))
         s = brocken(int(f.r0), f.palette, f.variante % 5, int(f.winkel / 30.0) * 30 % 360)
         if a > 0.8:
+            # Auf einer Kopie ausblenden: das Bild ist im Zwischenspeicher, und
+            # set_alpha(None) danach schaltete bei ihm die Durchsichtigkeit ganz
+            # ab - dann war jeder Brocken (und jedes fx_teil) ein schwarzes Quadrat.
+            s = s.copy()
             s.set_alpha(int(255 * (1.0 - a) / 0.2))
         ziel.blit(s, (int(x - s.get_width() / 2), int(y - s.get_height() / 2)))
-        s.set_alpha(None)
     elif f.art == "fetzen":
         # Ein Stueck Stoff, das sich dreht: mal breit, mal schmal (flattern).
         breit = max(1.0, f.r0 * abs(math.cos(math.radians(f.winkel * 2.3))))
