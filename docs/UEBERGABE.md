@@ -6,7 +6,7 @@ Wunsch des Besitzers (wortgetreu zusammengefasst): die letzten Aenderungen
 
 1. Bomben am Hubschrauber (Tragschrauber) komplett neu machen und designen. - **erledigt**: zweiter Anlauf nach Einwand des Besitzers (keine moderne Fliegerbombe, nichts am Heli sichtbar, klein, Schrott): kleine rostige Blechdose mit Draht, Naegeln, Klebeband und Lunte; der Fahrer laesst sie neben der Kanzel fallen (`bombe.abwurf` in config), sie ueberschlaegt sich, Lunte glimmt, Funken, Rauchfaden. Klaenge `bombe_ab` (Zuenden) und `bombe_fall` (Zischen) neu.
 2. Alle Explosionen, Rauch, sonstige Effekte und Animationen neu. - **Effektsystem erledigt**, Auf-/Abbau-Animationen von Funkwagen/Werfer noch offen
-3. Raketen und 3D-Teil beim Werfer komplett neu. - **offen**
+3. Raketen und 3D-Teil beim Werfer komplett neu. - **erledigt**: `art_werfer.py` neu (3D-Gestell aus sechs ungleichen Schrottrohren auf alter Felge, dreht und hebt sich, `gestell(gieren, erhebung, maske)`; Raketen `rakete(gieren, kippen)`), Steilheit nach Zielentfernung (`WERFER.hub`, `hub_dreh`, Netzfeld 6 der Werfer-Meldung), Flugbahn als Bezierkurve aus dem Rohr (`Gefecht._raketen_bahn`), Rauchspur, Rueckstrahl am hinteren Rohrende (`werfer_start`-Radius = Steilheit*1000 + Richtung). Die alten Dekale `werfer_teil_N` und `werfer_rohre_*` sind weg (Tests anpassen!).
 4. Flak-Schuesse komplett neu. - **offen** (Wolke schon neu, Geschoss/Leuchtspur/Muendungsfeuer nicht)
 5. Luke auf dem Jagdpanzer entfernen, stilgerechte Luke fest in den Wannen-Sprite. - **erledigt**
 6. Krad: Beifahrer mit Waffe und Ausrichtung zeigen, nur begrenzt drehbar. - **erledigt**
