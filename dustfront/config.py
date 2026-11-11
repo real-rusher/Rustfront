@@ -1047,9 +1047,12 @@ SCHLACHT = dict(
     basis_x=0.08,              # Anteil der Kartenbreite vom Rand
     basis_proben=160,          # so viele freie Punkte werden je Basis geprueft
     # Seit 0.34.117: zwei Trosswagen und ein Flakwagen (der kommt mit einem Bot am
-    # Steuer, siehe K.FLAK konvoi_*).
-    fahrzeuge=(("panzer", 1), ("panzerwagen", 1), ("buggy", 2), ("krad", 1), ("trosswagen", 2),
-               ("flakwagen", 1)),
+    # Steuer, siehe K.FLAK konvoi_*). Seit 0.34.129 je Eintrag die Stufe, ab der
+    # er an der Basis steht (FREISCHALTEN, siehe `freischalten`): erst die
+    # leichten, dann Flak und der zweite Trosswagen, zuletzt der Panzer. Ist
+    # FREISCHALTEN aus, steht alles von Anfang an da (wie vorher).
+    fahrzeuge=(("buggy", 2, 0), ("krad", 1, 0), ("panzerwagen", 1, 0), ("trosswagen", 1, 0),
+               ("trosswagen", 1, 1), ("flakwagen", 1, 1), ("panzer", 1, 2)),
     fahrzeug_umkreis=420.0,    # so weit um die Basis stehen die Wagen
     spawn_umkreis=340.0,       # so weit um die Basis steigt man ein
     fahrer_je_seite=4,         # so viele Bots jeder Seite duerfen fahren
@@ -1092,26 +1095,52 @@ SCHLACHT = dict(
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
                   zeichen=dict(buggy="B", flakwagen="A", tragschrauber="H", werfer="W", funkwagen="F", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
                                medkit="+")),
-    punkte=dict(abschuss=1, fahrzeug=5, aufhelfen=5),
-    # Was man kaufen kann: (Kennung, Kosten, Name).
+    # Punkte (nur Menschen). Ein zerstoertes Fahrzeug bringt seit 0.34.129 die
+    # Haelfte seines Kaufpreises (`fahrzeug_anteil`, mindestens `fahrzeug_min`),
+    # was man nicht kaufen kann (Trosswagen) `fahrzeug` - vorher pauschal 5:
+    # ein Krad brachte mehr, als es kostete.
+    punkte=dict(abschuss=1, fahrzeug=3, fahrzeug_anteil=0.5, fahrzeug_min=2, aufhelfen=5),
+    # Was man kaufen kann: (Kennung, Kosten, Name). Seit 0.34.129 billiger
+    # (gewuenscht: "es kaufen ja nur Spieler, und es gibt nicht so viele").
     belohnungen=(
-        # Seit 0.34.101 die ersten drei je einen Punkt teurer (gewuenscht).
-        ("munition", 3, "MUNITIONSABWURF"),
-        ("medkit", 3, "SANITÄTSABWURF"),
-        ("buggy", 5, "DROPZONE: BUGGY"),
-        ("krad", 3, "DROPZONE: KRAD"),
-        ("aufklaerung", 6, "AUFKLÄRUNGSDROHNE"),
-        ("napalm", 10, "NAPALM-ANGRIFF"),
-        ("fallschirmjaeger", 8, "FALLSCHIRMJÄGER"),
-        ("panzerwagen", 8, "DROPZONE: PANZERWAGEN"),
-        ("panzer", 12, "DROPZONE: PANZER"),
-        ("jagdpanzer", 10, "DROPZONE: JAGDPANZER"),
-        ("spulenwagen", 10, "DROPZONE: SPULENWAGEN"),
-        ("funkwagen", 7, "DROPZONE: FUNKWAGEN"),
-        ("werfer", 9, "DROPZONE: WERFER"),
+        ("munition", 2, "MUNITIONSABWURF"),
+        ("medkit", 2, "SANITÄTSABWURF"),
+        ("buggy", 3, "DROPZONE: BUGGY"),
+        ("krad", 2, "DROPZONE: KRAD"),
+        ("aufklaerung", 4, "AUFKLÄRUNGSDROHNE"),
+        ("napalm", 7, "NAPALM-ANGRIFF"),
+        ("fallschirmjaeger", 6, "FALLSCHIRMJÄGER"),
+        ("panzerwagen", 6, "DROPZONE: PANZERWAGEN"),
+        ("panzer", 9, "DROPZONE: PANZER"),
+        ("jagdpanzer", 8, "DROPZONE: JAGDPANZER"),
+        ("spulenwagen", 8, "DROPZONE: SPULENWAGEN"),
+        ("funkwagen", 6, "DROPZONE: FUNKWAGEN"),
+        ("werfer", 10, "DROPZONE: WERFER"),
         ("tragschrauber", 9, "DROPZONE: TRAGSCHRAUBER"),
-        ("flakwagen", 9, "DROPZONE: FLAKWAGEN"),
+        ("flakwagen", 5, "DROPZONE: FLAKWAGEN"),
     ),
+    # FREISCHALTEN (seit 0.34.129, Regel der Runde): was man kaufen kann, kommt
+    # in Stufen - nicht nach festen Minuten, sondern nach dem Spielverlauf,
+    # damit es bei 5 wie bei 30 Minuten passt. Der Verlauf ist der Anteil der
+    # abgelaufenen Rundenzeit (bei einer Runde nach Abschuessen der groessere
+    # von: Abschuesse der fuehrenden Seite am Ziel, Laufzeit an `bezug`).
+    # `stufen`: Anteil, ab dem Stufe 1, 2, 3 gilt; `hoechstens`: spaetestens
+    # nach so vielen Sekunden (lange Runden warten sonst zu lange). AUS: alles sofort.
+    stufe=dict(munition=0, medkit=0, krad=0, buggy=0, aufklaerung=0,
+               panzerwagen=1, flakwagen=1, funkwagen=1, fallschirmjaeger=1, napalm=1,
+               panzer=2, jagdpanzer=2, spulenwagen=2, tragschrauber=2,
+               werfer=3),
+    freischalten=dict(
+        schnell=dict(stufen=(0.05, 0.12, 0.22), hoechstens=(60, 150, 270)),
+        normal=dict(stufen=(0.10, 0.22, 0.35), hoechstens=(120, 270, 450)),
+        langsam=dict(stufen=(0.15, 0.32, 0.50), hoechstens=(180, 420, 660)),
+        bezug=900.0,              # Runde nach Abschuessen: so lange gilt als ganze Runde (s)
+    ),
+    # So viele gekaufte je Seite gleichzeitig (lebend oder noch im Anflug).
+    hoechstens_je_seite=dict(panzerwagen=3, flakwagen=2, funkwagen=1, jagdpanzer=2,
+                             spulenwagen=1, panzer=2, tragschrauber=1, werfer=1),
+    # Nur in der eigenen Haelfte abzuwerfen: wirkt auf Entfernung, gehoert nach hinten.
+    nur_eigene_haelfte=("funkwagen", "werfer", "tragschrauber"),
     belohnung_hilfe=dict(flakwagen="BOT-FLAK GEGEN FLIEGER", tragschrauber="FLIEGT, SIEHT ALLES, ZWEI BOMBEN", werfer="SALVEN AUF GESEHENE ZIELE, SEHR ZERBRECHLICH", funkwagen="PEILEN ODER STÖREN, NUR AUFGEBAUT", spulenwagen="BLITZ UND EMP-FELD, NUR AUFGEBAUT", krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
                          munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
                          buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
@@ -1153,6 +1182,18 @@ SCHLACHT = dict(
     absetzen_vor=650.0,
     nach_absetzen_tempo=70.0,   # px/s
 )
+
+def basis_wagen(bis_stufe: int = 99) -> list:
+    """Die Basis-Fahrzeuge der SCHLACHT bis zu dieser Stufe als (Art, Anzahl),
+    je Art zusammengezaehlt (seit 0.34.129 haben die Eintraege eine Stufe)."""
+    zusammen: dict = {}
+    for eintrag in SCHLACHT["fahrzeuge"]:
+        art, anzahl = eintrag[0], eintrag[1]
+        stufe = eintrag[2] if len(eintrag) > 2 else 0
+        if stufe <= bis_stufe:
+            zusammen[art] = zusammen.get(art, 0) + anzahl
+    return list(zusammen.items())
+
 
 # Die Standardrunde (seit 0.32): womit eine frische Lobby plant, und was
 # der Knopf STANDARDRUNDE auf der Rundentafel einstellt. Gedacht fuer die,
@@ -2844,6 +2885,13 @@ REVIVE = dict(
     danach_leben=40.0,        # mit so viel Leben steht man wieder auf
     schutz=2.0,               # Sekunden unverwundbar nach dem Aufstehen
     kriechen=0.35,            # so viel Tempo hat man am Boden noch
+    # Aufgeben (seit 0.34.129, gewuenscht): wer am Boden liegt, haelt R so
+    # lange gedrueckt, dann ist er tot und kommt neu (wie nach dem Verbluten).
+    # RESPAWN im Escape-Menue tut dasselbe sofort, auch im Stehen. Wer kurz
+    # davor (`wertung` s) von einem Gegner getroffen wurde, zaehlt fuer den
+    # als Abschuss - sonst entzoege man sich so jedem Abschuss.
+    aufgeben=2.5,
+    wertung=8.0,
 )
 
 # Verwundete Bots im Testmodus (seit 0.34.40, Testmenue VERWUNDETE BOTS).

@@ -243,6 +243,15 @@ FELDER = (
          text=lambda v, d, u: "%d KÄMPFER" % v,
          gilt=lambda d: bool(_regeln(d).get("schlacht")),
          hilfe="SO VIELE STEHEN JE SEITE - FEHLENDE SPIELER WERDEN SOFORT MIT BOTS AUFGEFÜLLT."),
+    # Seit 0.34.129 (gewuenscht): Fahrzeuge und Angriffe kommen in SCHLACHT in
+    # Stufen, nach dem Spielverlauf statt nach festen Minuten (K.SCHLACHT
+    # freischalten). AUS: alles sofort, wie vorher.
+    Feld("freischalten", "FREISCHALTEN", "RUNDE", "normal",
+         lambda d, u: ("aus", "schnell", "normal", "langsam"),
+         text=lambda v, d, u: {"aus": "AUS - ALLES SOFORT", "schnell": "SCHNELL",
+                               "normal": "NORMAL", "langsam": "LANGSAM"}[v],
+         gilt=lambda d: bool(_regeln(d).get("schlacht")), rund=True,
+         hilfe="SCHWERES KOMMT NACH UND NACH, JE NACH SPIELVERLAUF - AUCH AN DER BASIS. AUS: ALLES SOFORT."),
     Feld("bots", "BOTS AUFFÜLLEN BIS", "RUNDE", 0,
          lambda d, u: K.BOTS["auffuellen"],
          text=lambda v, d, u: "AUS" if not v else "%d SPIELER" % v,
@@ -355,7 +364,7 @@ NACH_NAME = {f.schluessel: f for f in FELDER}
 # Karte, Dauer und Ausruestung sehen und nicht sechzehn Zeilen. Alles
 # andere steht unter ERWEITERT und behaelt dort seinen Wert, auch wenn
 # es gerade nicht zu sehen ist.
-EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert", "bots", "schlacht_seite",
+EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert", "bots", "schlacht_seite", "freischalten",
            "huegel_zeit", "schwierigkeit", "loadouts", "loadout_nr",
            "faehigkeiten")
 for _f in FELDER:

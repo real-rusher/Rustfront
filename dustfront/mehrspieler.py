@@ -340,6 +340,7 @@ class Kaempfer(Spieler):
         # wie ein Mensch, der sieht, woher die Kugeln kommen.
         if von is not None and von is not self:
             self.zuletzt_von = von
+            self.zuletzt_zeit = getattr(self.welt, "zeit", 0.0)
         super().schaden(menge, schub, von)
 
     def zeichenpos(self, alpha: float) -> pygame.Vector2:
@@ -959,6 +960,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         self.runden_pause = 0.0
         self.sieger_team = -1
         self.rest = self.ende_wert if self.ende_art == "zeit" else 0.0
+        self.runden_alter = 0.0       # seit wann die Runde laeuft (s, seit 0.34.129: FREISCHALTEN)
         self.welle = 0
         self.pause_rest = K.WELLEN_MP["pause"]
         self.gegner_offen: list = []
@@ -2581,7 +2583,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
             "waffe": self._waffe_wunsch,
             "knoepfe": sorted(self._knoepfe),
             "admin": self._admin_auftrag,
+            # Am Boden R gehalten: aufgeben (seit 0.34.129). Gehalten statt
+            # gedrueckt, damit es keiner aus Versehen tut.
+            "ag": bool(not offen and self.ich is not None and self.ich.am_boden
+                       and e.gehalten("nachladen")),
         }
+        # Fuer die Anzeige: seit wann gehalten (der Gastgeber zaehlt selbst).
+        if meldung["ag"]:
+            if self.__dict__.get("_aufgeben_ab") is None:
+                self._aufgeben_ab = self._zeit
+        else:
+            self._aufgeben_ab = None
         self._knoepfe.clear()
         self._waffe_wunsch = -1
         self._admin_auftrag = ""
@@ -2651,6 +2663,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         """
         if not k.lebt:
             return
+        knoepfe = ein.get("knoepfe") or []
+        if isinstance(knoepfe, list) and "aufgeben" in knoepfe:
+            self.aufgeben(k)                # RESPAWN im Escape-Menue (seit 0.34.129)
+            return
+        k.aufgeben_halten = bool(ein.get("ag")) and k.am_boden
         befehl = ein.get("admin")
         if (isinstance(befehl, str) and befehl
                 and k.name.strip().lower() == "admin" and k.konto):
@@ -3104,7 +3121,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         (K.SCHLACHT fahrzeuge). Die aus der Karte bleiben weg - sie stehen
         nicht gleich verteilt."""
         for team in range(2):
-            for art, anzahl in K.SCHLACHT["fahrzeuge"]:
+            for art, anzahl in K.basis_wagen(min(3, self.freischalt_stufe())):
                 for _ in range(anzahl):
                     self._basis_fahrzeug(art, team)
 
@@ -4018,7 +4035,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                     b._punkte_gebucht = True
                     von = getattr(b.kaputt_von, "von", b.kaputt_von)
                     if von is not None and getattr(von, "team", -1) != getattr(b, "basis_team", -2):
-                        self.schlacht_punkte(von, K.SCHLACHT["punkte"]["fahrzeug"])
+                        self.schlacht_punkte(von, self.fahrzeug_punkte(b.art))
         if self.in_lobby:
             self._lobby_munition()        # nach dem Schuss, siehe dort
         self._ziehen(dt)
@@ -4776,9 +4793,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         for k in self.kaempfer.values():
             if k.lebt and not k.am_boden and k.hilft is not None:
                 hilfe[k.hilft] = hilfe.get(k.hilft, 0) + 1
-        for k in self.kaempfer.values():
+        for k in list(self.kaempfer.values()):
             if not (k.lebt and k.am_boden):
                 continue
+            if getattr(k, "aufgeben_halten", False):
+                # R gehalten (seit 0.34.129): nach K.REVIVE["aufgeben"] gibt er auf.
+                k.aufgeben_stand = getattr(k, "aufgeben_stand", 0.0) + dt
+                if k.aufgeben_stand >= K.REVIVE["aufgeben"]:
+                    self.aufgeben(k)
+                    continue
+            else:
+                k.aufgeben_stand = 0.0
             helfer = hilfe.get(k.nummer, 0)
             if helfer:
                 for helfer_k in self.kaempfer.values():
@@ -4810,6 +4835,29 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                 if k.boden_rest <= 0:
                     k.am_boden = False
                     Spieler.sterben(k, k.toeter)
+
+    def aufgeben(self, k) -> None:
+        """Aufgeben bzw. RESPAWN (seit 0.34.129, gewuenscht): tot, und dann
+        wie nach jedem Tod - neu eingesetzt, wo die Spielart das tut. Am
+        Boden zaehlt es wie Verbluten (fuer den, der ihn umgeworfen hat).
+        Im Stehen fuer den Gegner, der ihn zuletzt getroffen hat, wenn das
+        keine `K.REVIVE["wertung"]` Sekunden her ist - sonst fuer niemanden."""
+        if not k.lebt or getattr(k, "ist_bot", False):
+            return
+        k.aufgeben_halten = False
+        k.aufgeben_stand = 0.0
+        if k.am_boden:
+            k.am_boden = False
+            Spieler.sterben(k, k.toeter)
+            return
+        von = getattr(k, "zuletzt_von", None)
+        frisch = (self.welt.zeit - getattr(k, "zuletzt_zeit", -1e9)) <= K.REVIVE["wertung"]
+        if not (von is not None and frisch and getattr(von, "fraktion", None) != k.fraktion):
+            von = None
+        if von is not k.toeter:
+            k.toeter_waffe = ""
+        Spieler.sterben(k, von)
+        k.toeter = von
 
     def _tote_abrechnen(self, dt: float) -> None:
         for k in list(self.kaempfer.values()):
@@ -4938,6 +4986,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
     def _ende_pruefen(self, dt: float) -> None:
         if self.vorbei or not self.kaempfer or self.in_lobby:
             return
+        self.runden_alter = getattr(self, "runden_alter", 0.0) + dt
         # Zone und Runden beenden sich selbst, sobald ein Team am Ziel ist.
         if self.regeln["zone"] or self.regeln["runden"]:
             if self.ende_art == "zeit" and self.ende_wert > 0:
@@ -5452,6 +5501,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         gas = [[round(g.pos.x, 1), round(g.pos.y, 1), g.ebene, round(g.alter, 1), g.kennung]
                for g in self.welt.gas if g.lebt]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
+                # Seit 0.34.129: wie lange die Runde laeuft (FREISCHALTEN beim Gast).
+                "rlz": round(getattr(self, "runden_alter", 0.0), 1),
                 # Die Uhr des Gastgebers (seit 0.34.103): danach spielt der
                 # Gast die Meldungen gleichmaessig ab (Gefecht._puffer_*).
                 "zt": round(self._zeit, 3),
@@ -5760,6 +5811,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                                    min(0.5, self._paket_takt))
         self._seit_paket = 0.0
         self.rest = float(meldung.get("rest", self.rest))
+        try:
+            self.runden_alter = float(meldung.get("rlz", getattr(self, "runden_alter", 0.0)))
+        except (TypeError, ValueError):
+            pass
         self.vorbei = bool(meldung.get("aus", False))
         self.welle = int(meldung.get("welle", 0))
         self.pause_rest = float(meldung.get("pause", 0.0))
@@ -6466,6 +6521,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                 eintraege.append(("teams", "TEAMS UND BOTS", ""))
         else:
             eintraege.append(("planen", "NÄCHSTE RUNDE ANSEHEN", ""))
+        if self.ich is not None and self.ich.lebt and not self.in_lobby:
+            # Seit 0.34.129 (gewuenscht): festgefahren, verirrt, am Boden ohne
+            # Hilfe - einfach neu anfangen.
+            eintraege.append(("respawn", "RESPAWN", "AM BODEN: [%s] HALTEN" % self._tastenname("nachladen")
+                              if self.ich.am_boden else ""))
         eintraege.append(("ausruestung", "AUSRÜSTUNG",
                           konto.loadout["name"] if konto else ""))
         eintraege.append(("konto", "KONTO",
@@ -6676,7 +6736,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
     # gefaehrlich: ein Druck daneben haette das Gefecht beendet.
     TATEN = ("weiter", "raus", "teams", "neu", "ausruestung", "konto",
              "planen", "starten", "starten_kos", "lobby", "suchen",
-             "beenden", "einstellungen", "code")
+             "beenden", "einstellungen", "code", "respawn")
 
     def _menue_wirken(self, schluessel: str, vor: bool, waehlen: bool) -> None:
         if schluessel in self.TATEN and not waehlen:
@@ -6684,6 +6744,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         self.app.klaenge.spielen("menue_ok" if waehlen else "menue", 0.5)
         if schluessel == "weiter":
             self._menue_zu()
+            return
+        if schluessel == "respawn":
+            # Geht als Tastendruck zum Gastgeber wie jede andere Eingabe:
+            # dort wird entschieden, was ein Tod ist.
+            self._menue_zu()
+            self._knoepfe.add("aufgeben")
             return
         if schluessel == "raus":
             self._menue_zu()
@@ -6918,6 +6984,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         self._ende_ton_gespielt = False
         self.liste = []
         self.rest = self.ende_wert if self.ende_art == "zeit" else 0.0
+        self.runden_alter = 0.0       # seit wann die Runde laeuft (s, seit 0.34.129: FREISCHALTEN)
         self.obere_zeigen = bool(self.app.opt["obere_ebenen"])
 
         # Alles, was herumliegt oder herumlaeuft, kommt weg: eine neue
@@ -8155,6 +8222,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         "code": "KOPIERT DEN CODE. WER IHN UNTER MITSPIELEN EINGIBT, KOMMT REIN.",
         "suchen": "LOBBYS IM SELBEN NETZ - ANKLICKEN UND UMSTEIGEN.",
         "raus": "ZURÜCK IN DEINE EIGENE LOBBY.",
+        "respawn": "DU STIRBST UND KOMMST NEU. HAT DICH GERADE EIN GEGNER GETROFFEN, ZÄHLT ES FÜR IHN.",
         "lobby": "BEENDET DIE RUNDE. ALLE GEHEN ZURÜCK IN DIE LOBBY.",
         "beenden": "SCHLIESST DAS SPIEL.",
     }

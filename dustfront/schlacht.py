@@ -186,8 +186,11 @@ class SchlachtTeil:
         self.ueberfluege = []
         self.luftangriffe = []
         self.verstaerkung_weg()
+        # Was zu Rundenbeginn schon steht (seit 0.34.129 nach FREISCHALTEN;
+        # spaetere Stufen kommen mit basis_nachschub).
+        self._basis_stufe = min(3, self.freischalt_stufe())
         for team in range(2):
-            for art, anzahl in S["fahrzeuge"]:
+            for art, anzahl in K.basis_wagen(self._basis_stufe):
                 for _ in range(anzahl):
                     platz = self._fahrzeug_platz_bei(art, self.schlacht_basis(team),
                                                      S["fahrzeug_umkreis"],
@@ -203,6 +206,8 @@ class SchlachtTeil:
     def schlacht_schritt(self, dt: float) -> None:
         if not (self.schlacht or self.__dict__.get("nachschub_an")) or not self.ist_gastgeber:
             return
+        if self.schlacht:
+            self.basis_nachschub()
         a = S["abwurf"]
         for zone in list(self.dropzonen):
             if zone.fahrzeug is not None:
@@ -400,6 +405,7 @@ class SchlachtTeil:
             b.aufbau = b.winkel
         b.start = (pygame.Vector2(ab.pos), 0, ab.winkel)
         b.basis_team = zone.team
+        b.gekauft = zone.einmalig            # zaehlt fuer K.SCHLACHT hoechstens_je_seite
         b.dropzone = zone
         if ab.gerissen > 0.0:
             # Gestuerzt (seit 0.34.118): der Schirm war ab, der Wagen schlaegt hart auf
@@ -596,6 +602,102 @@ class SchlachtTeil:
         if self.schlacht and k is not None and not getattr(k, "ist_bot", False):
             k.schlacht_punkte = getattr(k, "schlacht_punkte", 0) + int(wie_viel)
 
+    # ---- Freischalten und Balancing (seit 0.34.129) -----------------------
+    def freischalt_modus(self) -> str:
+        return str(getattr(self, "regelwerk", {}).get("freischalten", "normal"))
+
+    def spielverlauf(self) -> float:
+        """Wie weit die Runde ist (0 bis 1): Anteil der Rundenzeit; bei einer
+        Runde nach Abschuessen der groessere von Abschuessen der fuehrenden
+        Seite am Ziel und Laufzeit an K.SCHLACHT freischalten bezug."""
+        alter = float(getattr(self, "runden_alter", 0.0))
+        if self.ende_art == "zeit" and self.ende_wert > 0:
+            return alter / float(self.ende_wert)
+        anteil = alter / float(S["freischalten"]["bezug"])
+        if self.ende_wert > 0 and getattr(self, "teampunkte", None):
+            anteil = max(anteil, max(self.teampunkte) / float(self.ende_wert))
+        return anteil
+
+    def freischalt_stufe(self) -> int:
+        """Welche Stufe gilt: 0 am Anfang, 3 = alles. Mit FREISCHALTEN AUS
+        (oder ausserhalb der SCHLACHT) gleich alles."""
+        modus = self.freischalt_modus()
+        if modus not in S["freischalten"] or not self.schlacht:
+            return 99
+        f = S["freischalten"][modus]
+        anteil = self.spielverlauf()
+        alter = float(getattr(self, "runden_alter", 0.0))
+        return sum(1 for g, spaet in zip(f["stufen"], f["hoechstens"]) if anteil >= g or alter >= spaet)
+
+    def freischalt_rest(self, stufe: int) -> float:
+        """Sekunden, bis die Stufe kommt - None, wenn das nicht an der Zeit
+        haengt (Runde nach Abschuessen: es kann auch frueher kommen)."""
+        modus = self.freischalt_modus()
+        if modus not in S["freischalten"] or stufe <= 0:
+            return 0.0
+        f = S["freischalten"][modus]
+        alter = float(getattr(self, "runden_alter", 0.0))
+        spaet = f["hoechstens"][stufe - 1]
+        if self.ende_art == "zeit" and self.ende_wert > 0:
+            spaet = min(spaet, f["stufen"][stufe - 1] * float(self.ende_wert))
+        return max(0.0, spaet - alter)
+
+    def gesperrt_bis(self, was: str) -> str:
+        """Leer, wenn `was` schon freigeschaltet ist - sonst ab wann."""
+        stufe = int(S["stufe"].get(was, 0))
+        if stufe <= self.freischalt_stufe():
+            return ""
+        rest = self.freischalt_rest(stufe)
+        return "IN %d:%02d" % (int(rest) // 60, int(rest) % 60) if rest > 0 else "STUFE %d" % stufe
+
+    def gekauft_unterwegs(self, team: int, art: str) -> int:
+        """Wie viele gekaufte `art` die Seite gerade hat: gelandet und heil,
+        am Schirm oder noch als Zone angemeldet."""
+        n = sum(1 for b in self.fahrzeuge if b.art == art and getattr(b, "gekauft", False)
+                and getattr(b, "basis_team", -1) == team and not b.kaputt)
+        n += sum(1 for z in self.dropzonen if z.einmalig and z.team == team and z.art == art)
+        n += sum(1 for a in self.abwuerfe if a.zone.einmalig and a.team == team and a.art == art
+                 and a.zone not in self.dropzonen)
+        return n
+
+    def in_eigener_haelfte(self, punkt, team: int) -> bool:
+        """Liegt der Punkt auf der Seite der eigenen Basis (von der Mitte aus)?"""
+        basis = self.schlacht_basis(team)
+        mitte = self._schlacht_punkte()[2]
+        return (punkt - mitte).dot(basis - mitte) >= 0.0
+
+    @staticmethod
+    def fahrzeug_punkte(art: str) -> int:
+        """Was ein zerstoertes Fahrzeug bringt: die Haelfte seines Preises,
+        mindestens `fahrzeug_min`; nicht kaufbares `fahrzeug`."""
+        p = S["punkte"]
+        for name, kosten, _t in S["belohnungen"]:
+            if name == art:
+                return max(int(p["fahrzeug_min"]), int(kosten * p["fahrzeug_anteil"] + 0.5))
+        return int(p["fahrzeug"])
+
+    def basis_nachschub(self) -> None:
+        """Die Basis-Fahrzeuge einer neuen Stufe anmelden (Gastgeber): sie
+        fallen mit Rueckzaehlung an der eigenen Basis wie zu Rundenbeginn."""
+        stufe = min(3, self.freischalt_stufe())
+        bisher = self.__dict__.get("_basis_stufe", 0)
+        if stufe <= bisher:
+            return
+        self._basis_stufe = stufe
+        for team in range(2):
+            for eintrag in S["fahrzeuge"]:
+                art, anzahl, st = eintrag[0], eintrag[1], (eintrag[2] if len(eintrag) > 2 else 0)
+                if not (bisher < st <= stufe):
+                    continue
+                for _ in range(anzahl):
+                    platz = self._fahrzeug_platz_bei(art, self.schlacht_basis(team),
+                                                     S["fahrzeug_umkreis"], abstand_zonen=True)
+                    if platz is None:
+                        continue
+                    zone = Dropzone(platz[0], team, art, platz[1])
+                    zone.rest = S["abwurf"]["vorlauf_kauf"]
+                    self.dropzonen.append(zone)
+
     # ---- Kaufen ------------------------------------------------------------
     @staticmethod
     def belohnungen() -> list:
@@ -616,6 +718,15 @@ class SchlachtTeil:
             return "AUSSERHALB DER KARTE"
         if not gratis and self.funk_gestoert_bei(punkt, k.team):
             return "GESTÖRT: FUNKWAGEN DER GEGNER"       # seit 0.34.111
+        # Seit 0.34.129: Stufe, Hoechstzahl je Seite, eigene Haelfte.
+        bis = self.gesperrt_bis(was)
+        if bis:
+            return "NOCH NICHT FREI (%s)" % bis
+        grenze = S["hoechstens_je_seite"].get(was)
+        if grenze is not None and k.team in (0, 1) and self.gekauft_unterwegs(k.team, was) >= grenze:
+            return "SCHON %d IM EINSATZ" % grenze
+        if was in S["nur_eigene_haelfte"] and k.team in (0, 1) and not self.in_eigener_haelfte(punkt, k.team):
+            return "NUR IN DER EIGENEN HÄLFTE"
         if was == "aufklaerung":
             return ""
         feind = self.schlacht_basis(1 - k.team) if k.team in (0, 1) else None
@@ -1250,18 +1361,19 @@ class SchlachtTeil:
         punkte = getattr(ich, "schlacht_punkte", 0) if ich is not None else 0
         SCHRIFT.zeichnen(ziel, "PUNKTE: %d" % punkte + ("  (GRATIS)" if gratis else ""),
                          16, 34, K.C_TEAL if gratis else K.C_CREAM, 1)
-        SCHRIFT.zeichnen(ziel, "KILL +%d  FAHRZEUG +%d  HELFEN +%d" % (
-            S["punkte"]["abschuss"], S["punkte"]["fahrzeug"], S["punkte"]["aufhelfen"]),
+        SCHRIFT.zeichnen(ziel, "KILL +%d  FAHRZEUG +HALBER PREIS  HELFEN +%d" % (
+            S["punkte"]["abschuss"], S["punkte"]["aufhelfen"]),
             16, 46, K.C_MUTED, 1)
         for i, (name, kosten, text) in enumerate(S["belohnungen"]):
             r = self._belohnung_zeile(i)
             gewaehlt = i == self.belohnung_wahl
-            leistbar = gratis or punkte >= kosten
+            bis = self.gesperrt_bis(name)            # seit 0.34.129: noch nicht frei
+            leistbar = (gratis or punkte >= kosten) and not bis
             pygame.draw.rect(ziel, (40, 30, 20) if gewaehlt else (20, 15, 11), r)
             pygame.draw.rect(ziel, K.C_AMBER if gewaehlt else (70, 56, 40), r, 1)
             farbe = K.C_CREAM if leistbar else K.C_MUTED_DK
             SCHRIFT.zeichnen(ziel, "%d  %s" % (i + 1, text), r.x + 5, r.y + 4, farbe, 1)
-            SCHRIFT.zeichnen(ziel, "GRATIS" if gratis else "%d P" % kosten, r.right - 5, r.y + 4,
+            SCHRIFT.zeichnen(ziel, bis or ("GRATIS" if gratis else "%d P" % kosten), r.right - 5, r.y + 4,
                              K.C_AMBER if leistbar else K.C_MUTED_DK, 1, ausrichtung="rechts")
         wahl_ = self.belohnung_wahl
         if 0 <= wahl_ < len(S["belohnungen"]):

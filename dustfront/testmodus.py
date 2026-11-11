@@ -1952,6 +1952,9 @@ class Testmodus(Gefecht):
         raus = [
             ("karte", "KARTE (ENTER LÄDT)", (karte or "testkarte").upper()),
             ("neu", "NEU LADEN", ""),
+            # Seit 0.34.129: wie RESPAWN im Escape-Menue einer Runde, fuer die
+            # gesteuerte Figur (am Boden: R halten gibt auf).
+            ("respawn", "RESPAWN (GESTEUERTE FIGUR)", "" if not self.beobachter else "ERST FIGUR STEUERN"),
             ("zeit", "ZEIT", "STEHT" if self.zeit_stopp else "LÄUFT"),
             ("faktor", "ZEITFAKTOR", "x%g" % self.zeitfaktor),
             ("ki", "KI", "STOP" if self.ki_stopp else "AN"),
@@ -2042,6 +2045,12 @@ class Testmodus(Gefecht):
             self._karte_wahl = karten[(self._karte_nr() + schritt) % len(karten)]
         elif schluessel == "neu" and ausloesen:
             self.karte_laden(self.karte)
+        elif schluessel == "respawn" and ausloesen:
+            if self.beobachter or self.ich is None or self.ich is self._geist:
+                self.melde("ERST EINE FIGUR STEUERN (3)")
+            else:
+                self.aufgeben(self.ich)
+                self.melde("RESPAWN")
         elif schluessel == "zeit":
             self.taste("0")
         elif schluessel == "faktor":

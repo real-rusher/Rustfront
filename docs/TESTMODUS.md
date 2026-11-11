@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.129 | Zeile RESPAWN im Testmenue (wie im Escape-Menue einer Runde, fuer die gesteuerte Figur; 3 zum Steuern). Am Boden R halten gibt auf (mit VERWUNDETE BOTS oder einem Treffer am Boden ausprobieren). FREISCHALTEN gilt nur in SCHLACHT - ausprobieren in einer SCHLACHT-Runde mit kurzer Zeit (5 MIN) oder AUS. Pruefungen im Abschnitt 0.34.129 von `tests/test_spiel.py` |
 | 0.34.127 | Keine neuen Spawner-Eintraege. Ausprobieren: TRAGSCHRAUBER fliegen und mit FLAKWAGEN (Bot, anderes Team) abschiessen lassen oder ENTF auf ihn: der Pilot ist sofort tot, das Wrack faellt brennend weiter und schlaegt auf; gegen eine Mauer geflogen prallt es ab. WERFER mit ENTF: die dichtere Explosion. |
 | 0.34.126 | Keine neuen Spawner-Eintraege. Ausprobieren: KRAD oder BUGGY driften und gegen eine Wand fahren - kein Rutsch-Ton. WERFER aufbauen und schiessen: Rueckstrahl und Einschlaege als Teilchenwolken, das Gestell gemalt wie die anderen Fahrzeuge; ENTF auf den Werfer: die grosse Explosion. FUNKWAGEN aufbauen: der Mast ohne schwarzen Umriss, liegend kaum zu sehen. |
 | 0.34.125 | Keine neuen Spawner-Eintraege. Ausprobieren: eine Salve des WERFERS oder eine Granate: nach dem Einschlag liegen keine schwarzen Quadrate mehr. FUNKWAGEN aufbauen: alle vier Seile gleich duenn. Als Video: `python werkzeug_aufnahme.py funkwagen werfer werfer_explosion schrottbombe flak krad` |

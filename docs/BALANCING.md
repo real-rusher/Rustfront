@@ -1,83 +1,102 @@
-# Balancing der Fahrzeuge (VORSCHLAG, noch nicht eingebaut)
+# Balancing der Fahrzeuge in SCHLACHT (seit 0.34.129)
 
-Stand 0.34.128. Gilt fuer die SCHLACHT, dort werden Fahrzeuge mit Punkten
-gekauft und am Fallschirm abgeworfen (`K.SCHLACHT["belohnungen"]`). In den
-anderen Spielarten stehen nur Buggy, Panzer und Panzerwagen fest auf der
-Karte; daran aendert der Vorschlag nichts.
-
-## Wie es heute ist
-
-* Punkte bekommen nur Menschen: **1 je Abschuss, 5 je zerstoertem Fahrzeug,
-  5 fuers Aufhelfen**.
-* Alles ist **ab der ersten Sekunde** kaufbar, **ohne Obergrenze**, ueberall
-  ausser nahe der feindlichen Basis.
-* In jeder Basis stehen von Anfang an: Panzer, Panzerwagen, 2 Buggys, Krad,
-  2 Trosswagen, Flakwagen (mit Bot).
-
-Was dabei schief laeuft:
-
-1. **Ein Krad kostet 3, sein Abschuss bringt 5** - wer gegnerische Kraeder
-   jagt, verdient mehr, als sie kosten. Dasselbe beim Buggy (5 / 5).
-2. **Der Tragschrauber kostet 9**, ist vom Boden praktisch nicht zu treffen,
-   sieht alles und wirft Bomben; sein Konter, der **Flakwagen, kostet auch 9**.
-3. **Der Werfer kostet 9** und schiesst ueber die halbe Karte - zwei davon
-   mit einem Funkwagen dazu machen die Mitte unbetretbar.
-4. Gleich zu Beginn stehen Panzer in beiden Basen und alles Schwere ist
-   kaufbar - die ersten Minuten sind keine Infanterieschlacht.
+Gilt fuer die SCHLACHT: dort kaufen Spieler mit Punkten Nachschub, der am
+Fallschirm landet (`K.SCHLACHT["belohnungen"]`). In den anderen Spielarten
+stehen nur Buggy, Panzer und Panzerwagen fest auf der Karte - daran aendert
+sich nichts. Alle Zahlen stehen in `dustfront/config.py` (`SCHLACHT`), die
+Logik in `dustfront/schlacht.py` (Abschnitt "Freischalten und Balancing").
 
 ## Grundsaetze
 
-* **Preis folgt Wirkung**: wie viel es zerstoert, wie weit es wirkt, wie
-  schwer es zu kontern ist.
-* **Der Konter ist billiger als das, was er kontert** (Flak < Tragschrauber,
-  Jagdpanzer < Panzer).
-* **Freischalten nach Rundenzeit**: erst leicht, dann mittel, dann schwer.
-* **Hoechstens so viele je Seite gleichzeitig** fuer alles, was gehaeuft das
-  Spiel kippt.
-* **Unterstuetzer nur in der eigenen Haelfte** abwerfen (Funkwagen, Werfer,
-  Tragschrauber) - sie wirken auf Entfernung und gehoeren nach hinten.
-* **Ein Fahrzeug abzuschiessen bringt die Haelfte seines Preises** (mindestens 2)
-  statt pauschal 5.
+* **Preis folgt Wirkung** - wie viel es zerstoert, wie weit es wirkt, wie
+  schwer es zu kontern ist. Insgesamt eher guenstig: kaufen koennen nur
+  Menschen, und davon gibt es in einer Runde nicht viele.
+* **Der Konter ist billiger als das, was er kontert** (Flak 5 < Tragschrauber 9).
+* **Schweres kommt nach und nach** - nicht nach festen Minuten, sondern nach
+  dem Spielverlauf (FREISCHALTEN, siehe unten).
+* **Hoechstens so viele je Seite** fuer alles, was gehaeuft das Spiel kippt.
+* **Unterstuetzer nur in der eigenen Haelfte**: Funkwagen, Werfer und
+  Tragschrauber wirken auf Entfernung und gehoeren nach hinten.
+* **Ein zerstoertes Fahrzeug bringt den halben Kaufpreis** (mindestens 2),
+  nicht kaufbare (Trosswagen) 3 - vorher pauschal 5, ein Krad brachte damit
+  mehr, als es kostete.
 
-## Vorschlag
+## Preise, Stufen, Grenzen
 
-| Was | Kosten heute | neu | frei ab Minute | hoechstens je Seite | Abwurf |
-| --- | --- | --- | --- | --- | --- |
-| Munition | 3 | 3 | 0 | - | ueberall (wie heute) |
-| Sanitaetsabwurf | 3 | 3 | 0 | - | ueberall |
-| Krad | 3 | 3 | 0 | - | ueberall |
-| Buggy | 5 | **4** | 0 | - | ueberall |
-| Aufklaerungsdrohne | 6 | **5** | 0 | - | ueberall |
-| Panzerwagen | 8 | 8 | **2** | **3** | ueberall |
-| Flakwagen | 9 | **6** | **2** | **2** | ueberall |
-| Funkwagen | 7 | **8** | **2** | **1** | **eigene Haelfte** |
-| Fallschirmjaeger | 8 | 8 | **3** | - | nicht in der eigenen Basis (wie heute) |
-| Jagdpanzer | 10 | 10 | **4** | **2** | ueberall |
-| Spulenwagen | 10 | 10 | **4** | **1** | ueberall |
-| Panzer | 12 | **14** | **5** | **2** | ueberall |
-| Tragschrauber | 9 | **12** | **5** | **1** | **eigene Haelfte** |
-| Werfer | 9 | **13** | **5** | **1** | **eigene Haelfte** |
-| Napalm-Angriff | 10 | **12** | **6** | - | ueberall (Bahn nicht in die Basis, wie heute) |
+| Was | Preis (vorher) | Stufe | hoechstens je Seite | Abwurf |
+| --- | --- | --- | --- | --- |
+| Munition | 2 (3) | 0 | - | ueberall ausser nahe der feindlichen Basis |
+| Sanitaetsabwurf | 2 (3) | 0 | - | ueberall |
+| Krad | 2 (3) | 0 | - | ueberall |
+| Buggy | 3 (5) | 0 | - | ueberall |
+| Aufklaerungsdrohne | 4 (6) | 0 | - | ueberall |
+| Panzerwagen | 6 (8) | 1 | 3 | ueberall |
+| Flakwagen | 5 (9) | 1 | 2 | ueberall |
+| Funkwagen | 6 (7) | 1 | 1 | **eigene Haelfte** |
+| Fallschirmjaeger | 6 (8) | 1 | - | nicht in der eigenen Basis |
+| Napalm-Angriff | 7 (10) | 1 | - | Bahn nicht in die feindliche Basis |
+| Jagdpanzer | 8 (10) | 2 | 2 | ueberall |
+| Spulenwagen | 8 (10) | 2 | 1 | ueberall |
+| Panzer | 9 (12) | 2 | 2 | ueberall |
+| Tragschrauber | 9 (9) | 2 | 1 | **eigene Haelfte** |
+| Werfer | 10 (9) | 3 | 1 | **eigene Haelfte** |
 
-**Basis**: der Panzer der Basis kommt erst ab **Minute 4** (heute ab Start);
-alles andere bleibt. Wartezeiten bis zum Ersatz (`neu_nach`) bleiben.
+"Hoechstens je Seite" zaehlt, was die Seite gekauft hat und was noch lebt
+oder unterwegs ist (angemeldete Zone, am Schirm, gelandet und heil). Die
+Fahrzeuge der Basis zaehlen nicht mit.
 
-**Punkte**: Abschuss eines Fahrzeugs = halber Kaufpreis, mindestens 2 (Krad 2,
-Buggy 2, Panzerwagen 4, Flakwagen 3, Tragschrauber 6, Werfer 7, Panzer 7). Fuer
-Wagen, die man nicht kaufen kann (Trosswagen), 3. Abschuss 1 und Aufhelfen 5
-bleiben.
+## FREISCHALTEN (Regel der Runde)
 
-**Spiel nach Abschuessen** statt nach Zeit: dieselben Minuten seit Rundenbeginn.
+Einstellbar in RUNDE EINSTELLEN (auch in der einfachen Ansicht):
+**AUS - ALLES SOFORT**, **SCHNELL**, **NORMAL** (Vorgabe), **LANGSAM**.
 
-## Was beim Einbauen dazukommt
+**Der Spielverlauf** ist der Anteil der Rundenzeit, der schon um ist. Bei
+einer Runde nach Abschuessen der groessere von: Abschuesse der fuehrenden
+Seite am Ziel, Laufzeit an 15 Minuten. Eine Stufe gilt, sobald der Verlauf
+ihren Anteil erreicht - **oder spaetestens** nach ihrer Hoechstzeit, damit
+lange Runden nicht ewig warten.
 
-* `K.SCHLACHT`: Kosten, `freischalten` (Sekunden je Art), `hoechstens_je_seite`,
-  `nur_eigene_haelfte`; `punkte["fahrzeug"]` als Anteil des Preises.
-* `schlacht.belohnung_pruefen`: neue Gruende "AB MINUTE 5", "SCHON 1 IM EINSATZ",
-  "NUR IN DER EIGENEN HAELFTE"; gezaehlt wird, was eine Seite gekauft hat und
-  noch lebt oder unterwegs ist (Dropzone, Abwurf, Fahrzeug).
-* Die Kaufliste zeigt Gesperrtes grau mit Grund und Restzeit.
-* Pruefungen in `tests/test_spiel.py`, Zeile im Testmodus (ADMIN gratis
-  umgeht weiterhin nur die Punkte).
-* Version, README; das Netz aendert sich nur, wenn der Gast die Sperren in der
-  Liste anzeigen soll (dann: Rundenzeit und Zaehler in der Schlachtmeldung).
+| Einstellung | Stufe 1 | Stufe 2 | Stufe 3 |
+| --- | --- | --- | --- |
+| SCHNELL | 5 % / spaetestens 1:00 | 12 % / 2:30 | 22 % / 4:30 |
+| NORMAL | 10 % / 2:00 | 22 % / 4:30 | 35 % / 7:30 |
+| LANGSAM | 15 % / 3:00 | 32 % / 7:00 | 50 % / 11:00 |
+
+Beispiele mit NORMAL: eine **5-Minuten-Runde** hat Stufe 1 nach 0:30, Stufe 2
+nach 1:06, Stufe 3 nach 1:45 - es bleibt reichlich Zeit fuer alles. Eine
+**30-Minuten-Runde** hat Stufe 1 nach 2:00, Stufe 2 nach 4:30, Stufe 3 nach
+7:30 (die Hoechstzeiten greifen). In der Kaufliste steht bei Gesperrtem,
+wann es kommt ("IN 0:20").
+
+## Die Basis im Lauf der Runde
+
+Auch was an der Basis steht, kommt mit den Stufen (mit FREISCHALTEN AUS
+steht alles von Anfang an da, wie vorher):
+
+| Stufe | an jeder Basis |
+| --- | --- |
+| 0 (Start) | 2 Buggys, 1 Krad, 1 Panzerwagen, 1 Trosswagen |
+| 1 | + 1 Flakwagen (mit Bot), + 1 Trosswagen |
+| 2 | + 1 Panzer |
+
+Neue Fahrzeuge der Basis fallen mit Rueckzaehlung an ihren Zonen, wie zu
+Rundenbeginn. Was zerstoert wird, kommt nach seiner Wartezeit (`neu_nach`)
+wieder.
+
+## Ideen fuer weitere Karten (noch nicht gebaut)
+
+Die Basis-Ausstattung haengt bisher nur an `K.SCHLACHT["fahrzeuge"]`. Fuer
+neue Karten waere der naechste Schritt, dass eine Karte das ueberschreiben
+kann - im Kopf der Kartendatei, wie die Kartenzeichen:
+
+* **Ausstattung je Karte**: `# basis: buggy 2 0, krad 1 0, panzer 1 2` (Art,
+  Anzahl, Stufe). Eine enge Stadtkarte bekaeme keine Panzer an die Basis und
+  mehr Kraeder, eine offene Wueste mehr schwere Wagen.
+* **Sperren je Karte**: `# ohne: tragschrauber, werfer` - eine Karte mit
+  vielen Plateaus und Mauern ist fuer Werfer und Flieger zu unuebersichtlich.
+* **Feste Stellplaetze**: Zeichen auf der Karte fuer die Basis-Zonen, statt
+  sie im Umkreis der Basis zu suchen.
+* **Eroberbare Punkte**: ein Punkt in der Mitte, dessen Besitzer eine Stufe
+  frueher bekommt oder einen Rabatt - dann lohnt es, um ihn zu kaempfen.
+* **Ungleiche Karten**: wenn eine Seite es schwerer hat (bergauf), bekommt sie
+  eine Stufe Vorsprung bei der Basis.

@@ -16408,14 +16408,15 @@ pruef("... mit JE SEITE in der einfachen Ansicht, ohne die Regeln zum Bot-Auffue
       "schlacht_seite" in _sicht198 and "bots" not in _sicht198
       and not any(f_.schluessel.startswith("bots_t") for f_ in _R198.sichtbar(_d198, True)), str(_sicht198))
 w198, g198 = _paar59("schlacht", karte="staubtal")
-w198._regeln_setzen(dict(_d198, schlacht_seite=12))
+# FREISCHALTEN aus (seit 0.34.129): so steht alles von Anfang an da, wie bisher.
+w198._regeln_setzen(dict(_d198, schlacht_seite=12, freischalten="aus"))
 w198._einstiegszonen_waehlen()
 w198._fahrzeuge_neu_aufstellen()
 w198._bots_fuehren(0.0, sofort=True)
 # Seit 0.34.96 kommen die Fahrzeuge an Fallschirmen in ihre Dropzonen.
 _ab198 = K.SCHLACHT["abwurf"]
 pruef("Jede Basis hat Dropzonen; zum Start faellt noch nichts, die Zonen zaehlen",
-      len(w198.dropzonen) == 2 * sum(n_ for _a, n_ in K.SCHLACHT["fahrzeuge"])
+      len(w198.dropzonen) == 2 * sum(n_ for _a, n_ in K.basis_wagen())
       and not w198.fahrzeuge and all(z_.rest > 0 for z_ in w198.dropzonen))
 for _ in range(int((_ab198["start"] + 0.2) / K.FIXED_DT)):
     w198.schlacht_schritt(K.FIXED_DT)
@@ -16436,7 +16437,7 @@ _bl198, _br198, _mi198 = w198._schlacht_punkte()
 _breit198 = w198.welt.ebene(0).pixel_breite
 pruef("ROT hat seine Basis links, BLAU rechts", _bl198.x < 0.2 * _breit198 < 0.8 * _breit198 < _br198.x,
       "%s %s" % (_bl198, _br198))
-_soll198 = sum(n_ for _a, n_ in K.SCHLACHT["fahrzeuge"])
+_soll198 = sum(n_ for _a, n_ in K.basis_wagen())
 _bt198 = [[b_ for b_ in w198.fahrzeuge if getattr(b_, "basis_team", -1) == i_] for i_ in range(2)]
 pruef("Jede Basis hat ihre Fahrzeuge, die aus der Karte bleiben weg",
       len(_bt198[0]) == len(_bt198[1]) == _soll198 and len(w198.fahrzeuge) == 2 * _soll198
@@ -16857,8 +16858,9 @@ w300.verlassen(); g300.verlassen()
 print("\n-- 0.34.101: Napalm-Angriff, Karte ohne Hinweis, Preise")
 from dustfront import schlacht as _SL301, audio as _AU301
 _preis301 = {n_: c_ for n_, c_, _t in K.SCHLACHT["belohnungen"]}
-pruef("Die ersten drei sind je einen Punkt teurer (3, 3, 5)",
-      [c_ for _n, c_, _t in K.SCHLACHT["belohnungen"][:3]] == [3, 3, 5])
+# Seit 0.34.129 billiger (Balancing); die Preise prueft der Abschnitt 0.34.129.
+pruef("Munition, Sanitaet und Buggy stehen vorn in der Liste",
+      [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"][:3]] == ["munition", "medkit", "buggy"])
 pruef("Den Napalm-Angriff gibt es im Nachschub", "napalm" in _preis301)
 w301, g301 = _paar59("schlacht", karte="staubtal_offen")
 w301._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="staubtal_offen", schlacht_seite=4))
@@ -17376,7 +17378,7 @@ _unten107 = _SL107.SchlachtTeil._belohnung_hilfe_rect().bottom + 2 + 14
 pruef("Die Nachschubtafel passt mit allen Zeilen aufs Bild (Hinweiszeile bleibt frei)",
       _unten107 < K.GAME_H - 36, "unten bei %d" % _unten107)
 pruef("Die Basis jeder Seite bekommt ein Krad dazu",
-      ("krad", 1) in K.SCHLACHT["fahrzeuge"])
+      ("krad", 1) in K.basis_wagen())
 
 # Ein freies Feld, gross genug zum Fahren.
 _e107 = _tm107.welt.ebene(0)
@@ -17519,7 +17521,7 @@ _tm108 = _TM59.Testmodus(app, karte="staubtal_offen")
 pruef("Testmodus: TROSSWAGEN steht im Spawner (OBJEKTE)",
       "TROSSWAGEN" in [e_.name for e_ in _tm108.eintraege if e_.gruppe == "OBJEKTE"])
 pruef("Der Trosswagen steht an jeder Basis, ist aber nicht zu kaufen",
-      dict(K.SCHLACHT["fahrzeuge"]).get("trosswagen") == 2
+      dict(K.basis_wagen()).get("trosswagen") == 2
       and "trosswagen" not in [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]])
 _e108 = _tm108.welt.ebene(0)
 _rnd108 = random.Random(108)
@@ -17683,8 +17685,8 @@ _tm110 = _TM59.Testmodus(app, karte="staubtal_offen")
 _namen110 = [e_.name for e_ in _tm110.eintraege]
 pruef("Testmodus: SPULENWAGEN im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB)",
       "SPULENWAGEN" in _namen110 and "ABWURF: SPULENWAGEN" in _namen110)
-pruef("Der Spulenwagen ist im Nachschub (10 Punkte), die Tafel passt trotzdem",
-      ("spulenwagen", 10, "DROPZONE: SPULENWAGEN") in K.SCHLACHT["belohnungen"]
+pruef("Der Spulenwagen ist im Nachschub, die Tafel passt trotzdem",
+      "spulenwagen" in [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]]
       and _SL107.SchlachtTeil._gratis_rect.__name__ and
       _SL107.SchlachtTeil._belohnung_hilfe_rect().bottom + 2 + 14 < K.GAME_H - 36)
 _e110 = _tm110.welt.ebene(0)
@@ -17783,7 +17785,7 @@ _tm111 = _TM59.Testmodus(app, karte="staubtal_offen")
 _namen111 = [e_.name for e_ in _tm111.eintraege]
 pruef("Testmodus: FUNKWAGEN im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB); im Nachschub fuer 7 Punkte",
       "FUNKWAGEN" in _namen111 and "ABWURF: FUNKWAGEN" in _namen111
-      and ("funkwagen", 7, "DROPZONE: FUNKWAGEN") in K.SCHLACHT["belohnungen"])
+      and "funkwagen" in [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]])
 _e111 = _tm111.welt.ebene(0)
 _rnd111 = random.Random(111)
 for _ in range(40000):
@@ -17883,7 +17885,7 @@ random.seed(1120)          # die Streuung der Raketen waere sonst Glueckssache
 _namen112 = [e_.name for e_ in _tm112.eintraege]
 pruef("Testmodus: WERFER im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB); im Nachschub fuer 9 Punkte",
       "WERFER" in _namen112 and "ABWURF: WERFER" in _namen112
-      and ("werfer", 9, "DROPZONE: WERFER") in K.SCHLACHT["belohnungen"])
+      and "werfer" in [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]])
 _e112 = _tm112.welt.ebene(0)
 _rnd112 = random.Random(112)
 for _ in range(40000):
@@ -17992,7 +17994,7 @@ _tm113 = _TM59.Testmodus(app, karte="staubtal_offen")
 _namen113 = [e_.name for e_ in _tm113.eintraege]
 pruef("Testmodus: TRAGSCHRAUBER im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB); im Nachschub fuer 9 Punkte",
       "TRAGSCHRAUBER" in _namen113 and "ABWURF: TRAGSCHRAUBER" in _namen113
-      and ("tragschrauber", 9, "DROPZONE: TRAGSCHRAUBER") in K.SCHLACHT["belohnungen"])
+      and "tragschrauber" in [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]])
 _e113 = _tm113.welt.ebene(0)
 _rnd113 = random.Random(113)
 for _ in range(40000):
@@ -18113,7 +18115,7 @@ _tm114 = _TM59.Testmodus(app, karte="staubtal_offen")
 _namen114 = [e_.name for e_ in _tm114.eintraege]
 pruef("Testmodus: FLAKWAGEN im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB); im Nachschub fuer 9 Punkte",
       "FLAKWAGEN" in _namen114 and "ABWURF: FLAKWAGEN" in _namen114
-      and ("flakwagen", 9, "DROPZONE: FLAKWAGEN") in K.SCHLACHT["belohnungen"])
+      and "flakwagen" in [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]])
 pruef("Flakwagen: Werte - nur Bots, Flak, kein Truppentransporter; die Flak-Zeile traegt `flak`",
       K.FLAKWAGEN["nur_bot"] and K.FLAKWAGEN["flak"] and "plaetze" not in K.FLAKWAGEN
       and K.FAHRZEUG_WAFFEN["flak_kanone"]["flak"] and K.FLAK["luft_schaden"] > 50.0)
@@ -18374,7 +18376,7 @@ pruef("Jagdpanzer: der Fahrer ist nicht zu sehen - die Luke ist zu, mit und ohne
 pruef("Trosswagen: ein Fuenftel groesser (Kreise, Achsen, Zone hinten)",
       abs(K.TROSSWAGEN["kreis"] - 18.0 * 1.2) < 0.1 and abs(K.TROSSWAGEN["achse"] - 26.0 * 1.2) < 0.7
       and K.TROSSWAGEN["zone"]["radius"] > 34.0)
-_f117 = dict(K.SCHLACHT["fahrzeuge"])
+_f117 = dict(K.basis_wagen())
 pruef("Basis: zwei Trosswagen und ein Flakwagen je Seite", _f117.get("trosswagen") == 2 and _f117.get("flakwagen") == 1,
       str(_f117))
 # Der Flakwagen wartet auf andere Fahrzeuge und faehrt dann hinter ihnen her.
@@ -19173,6 +19175,158 @@ pruef("Explosionen: die massive (Werfer) hat groessere, dichtere Teilchen als ei
       and _alle127 <= K.EFFEKTE_HOECHSTENS,
       "%.1f / %.1f, %d" % (sum(_gross127) / len(_gross127), sum(_klein127) / len(_klein127), _alle127))
 _tm127.verlassen()
+
+print("\n-- 0.34.129: Respawn im Escape-Menue, Aufgeben am Boden")
+_tm129 = _TM59.Testmodus(app, karte="staubtal_offen")
+_p129 = pygame.Vector2(3000, 3000)
+_a129 = _tm129.puppe_setzen(_p129, 0, {"team": 0}, name="A")
+_b129 = _tm129.puppe_setzen(_p129 + pygame.Vector2(200, 0), 0, {"team": 1}, name="B")
+def _ein129(k_, **x_):
+    d_ = {"will": [0, 0], "ziel": [0, 0], "knoepfe": []}
+    d_.update(x_)
+    _tm129._anwenden(k_, d_)
+_ein129(_a129, knoepfe=["aufgeben"])
+_tot129 = not _a129.lebt and _a129.toeter is None
+for _ in range(int(5.0 / K.FIXED_DT)):
+    _tm129.schritt(K.FIXED_DT)
+pruef("RESPAWN: man ist sofort tot (ohne Toeter, wenn keiner getroffen hat) und kommt wieder",
+      _tot129 and _a129.lebt)
+_ab129 = _b129.abschuesse
+_a129.schaden(5, None, _b129)
+_ein129(_a129, knoepfe=["aufgeben"])
+_tm129.schritt(K.FIXED_DT)
+pruef("... wer gerade von einem Gegner getroffen wurde, zaehlt fuer ihn als Abschuss (kein Entkommen per Respawn)",
+      not _a129.lebt and _b129.abschuesse > _ab129, "%s -> %s" % (_ab129, _b129.abschuesse))
+for _ in range(int(5.0 / K.FIXED_DT)):
+    _tm129.schritt(K.FIXED_DT)
+_a129.revive_an = True
+_a129.sterben(_b129)
+_unten129 = _a129.am_boden and _a129.lebt
+for _ in range(int(2.0 / K.FIXED_DT)):
+    _ein129(_a129, ag=True)
+    _tm129.schritt(K.FIXED_DT)
+_noch129 = _a129.lebt and _a129.am_boden
+for _ in range(int(0.7 / K.FIXED_DT)):
+    _ein129(_a129, ag=True)
+    _tm129.schritt(K.FIXED_DT)
+pruef("Am Boden: R %.1f s gehalten gibt auf (2 s noch nicht) - danach tot wie nach dem Verbluten" % K.REVIVE["aufgeben"],
+      _unten129 and _noch129 and not _a129.lebt and 2.0 < K.REVIVE["aufgeben"] <= 3.0)
+for _ in range(int(5.0 / K.FIXED_DT)):
+    _tm129.schritt(K.FIXED_DT)
+_a129.revive_an = True                       # nach dem Neuanfang wieder aus
+_a129.sterben(_b129)
+_unten129b = _a129.am_boden
+for i_ in range(int(3.0 / K.FIXED_DT)):
+    _ein129(_a129, ag=(i_ % 60) < 40)          # zwischendurch losgelassen
+    _tm129.schritt(K.FIXED_DT)
+pruef("... loslassen faengt von vorn an", _unten129b and _a129.lebt and _a129.am_boden,
+      "%.2f" % getattr(_a129, "aufgeben_stand", -1.0))
+_c129 = _tm129.puppe_setzen(_p129 + pygame.Vector2(-200, 0), 0, {"team": 0}, name="C")
+_tm129.uebernehmen(_c129)
+_tm129.menue_wirken("respawn", ausloesen=True)
+pruef("Testmodus: Zeile RESPAWN wirkt auf die gesteuerte Figur", not _c129.lebt
+      and "respawn" in [z_[0] for z_ in _tm129._menue_zeilen()])
+_tm129.beobachten()
+_bot129 = _tm129.bot_setzen(_p129 + pygame.Vector2(0, 200), 0, {"team": 1})
+_tm129.aufgeben(_bot129)
+pruef("... Bots geben nie auf", _bot129.lebt and getattr(_bot129, "ist_bot", False))
+_tm129.verlassen()
+from dustfront import mehrspieler as _MS129
+pruef("Escape-Menue: RESPAWN ist eine Tat (nur auf Enter, ein Pfeil daneben toetet nicht)",
+      "respawn" in _MS129.Gefecht.TATEN)
+
+print("\n-- 0.34.129: Balancing und FREISCHALTEN in SCHLACHT")
+from dustfront import regeln as _R129
+# Der Vorschlag (docs/BALANCING.md, 0.34.128) - gewuenscht war: "alles ein bisschen billiger".
+_vorschlag129 = dict(munition=3, medkit=3, buggy=4, krad=3, aufklaerung=5, napalm=12, fallschirmjaeger=8,
+                     panzerwagen=8, panzer=14, jagdpanzer=10, spulenwagen=10, funkwagen=8, werfer=13,
+                     tragschrauber=12, flakwagen=6)
+_preis129 = {n_: c_ for n_, c_, _t in K.SCHLACHT["belohnungen"]}
+pruef("Preise: alles billiger als im Vorschlag, der Konter Flak billiger als der Tragschrauber",
+      set(_preis129) == set(_vorschlag129) and all(_preis129[n_] < _vorschlag129[n_] for n_ in _preis129)
+      and _preis129["flakwagen"] < _preis129["tragschrauber"], str(_preis129))
+pruef("... Panzer, Napalm und Tragschrauber frueher als im Vorschlag (dort erst ganz am Ende)",
+      K.SCHLACHT["stufe"]["panzer"] <= 2 and K.SCHLACHT["stufe"]["napalm"] <= 1
+      and K.SCHLACHT["stufe"]["tragschrauber"] < K.SCHLACHT["stufe"]["werfer"])
+pruef("Ein zerstoertes Fahrzeug bringt den halben Preis (mindestens 2), ein Trosswagen 3",
+      _MS129.Gefecht.fahrzeug_punkte("krad") == 2 and _MS129.Gefecht.fahrzeug_punkte("panzer")
+      == int(_preis129["panzer"] / 2.0 + 0.5) and _MS129.Gefecht.fahrzeug_punkte("trosswagen") == 3
+      and _MS129.Gefecht.fahrzeug_punkte("krad") <= _preis129["krad"])
+_d129 = _R129.vorgabe()
+for _ in range(len(K.MODI) + 1):
+    if _d129["modus"] == "schlacht":
+        break
+    _R129.verstellen(_d129, "modus", 1)
+pruef("FREISCHALTEN ist eine Regel der SCHLACHT (Vorgabe NORMAL), in der einfachen Ansicht",
+      _d129.get("freischalten") == "normal"
+      and "freischalten" in [f_.schluessel for f_ in _R129.sichtbar(_d129, False)])
+w129, g129 = _paar59("schlacht", karte="staubtal")
+def _stufe129(regeln_, alter_):
+    w129._regeln_setzen(dict(_d129, **regeln_))
+    w129.runden_alter = float(alter_)
+    return w129.freischalt_stufe()
+pruef("5-Minuten-Runde (NORMAL): Stufe 1 nach 30 s, 2 nach gut 1 min, 3 nach 105 s",
+      [_stufe129({"ende_art": "zeit", "ende_wert": 300, "freischalten": "normal"}, t_)
+       for t_ in (0, 29, 31, 67, 106)] == [0, 0, 1, 2, 3])
+pruef("... 30-Minuten-Runde: nicht nach 10 % = 3 min, sondern spaetestens nach 2 / 4,5 / 7,5 min",
+      [_stufe129({"ende_art": "zeit", "ende_wert": 1800, "freischalten": "normal"}, t_)
+       for t_ in (119, 121, 271, 451)] == [0, 1, 2, 3])
+w129._regeln_setzen(dict(_d129, ende_art="abschuesse", ende_wert=100, freischalten="normal"))
+w129.runden_alter = 0.0
+w129.teampunkte[0], w129.teampunkte[1] = 23, 4
+pruef("... nach Abschuessen: die fuehrende Seite am Ziel (23 von 100 = Stufe 2)", w129.freischalt_stufe() == 2,
+      str(w129.freischalt_stufe()))
+w129.teampunkte[0] = w129.teampunkte[1] = 0
+pruef("... AUS: alles sofort", _stufe129({"freischalten": "aus"}, 0) >= 3)
+w129._regeln_setzen(dict(_d129, ende_art="zeit", ende_wert=300, freischalten="normal"))
+w129.runden_alter = 10.0
+pruef("Gesperrtes zeigt, wann es kommt", w129.gesperrt_bis("napalm") == "IN 0:20"
+      and w129.gesperrt_bis("buggy") == "" and w129.gesperrt_bis("werfer").startswith("IN "),
+      "%s / %s" % (w129.gesperrt_bis("napalm"), w129.gesperrt_bis("werfer")))
+w129._einstiegszonen_waehlen()
+w129.runden_alter = 0.0
+w129._fahrzeuge_neu_aufstellen()
+_arten129 = sorted({z_.art for z_ in w129.dropzonen})
+pruef("Basis zum Start (NORMAL): nur die leichten - kein Panzer, keine Flak",
+      "panzer" not in _arten129 and "flakwagen" not in _arten129 and "buggy" in _arten129, str(_arten129))
+w129.runden_alter = 300 * 0.36
+w129.schlacht_schritt(K.FIXED_DT)
+_arten129b = [z_.art for z_ in w129.dropzonen]
+pruef("... mit der Stufe kommen sie nach (Flak, zweiter Trosswagen, Panzer) - je Seite",
+      _arten129b.count("panzer") == 2 and _arten129b.count("flakwagen") == 2
+      and _arten129b.count("trosswagen") == 4, str(sorted(_arten129b)))
+_ich129 = w129.ich
+_ich129.schlacht_punkte = 99
+_bas129 = w129.schlacht_basis(_ich129.team)
+_mitte129 = w129._schlacht_punkte()[2]
+_eigen129 = _bas129.lerp(_mitte129, 0.5)
+_fremd129 = _mitte129 + (_mitte129 - _bas129) * 0.4
+w129.runden_alter = 0.0
+pruef("Kaufen: Gesperrtes geht nicht (Napalm am Anfang)",
+      w129.belohnung_pruefen(_ich129, "napalm", _eigen129, punkt2=_eigen129 + pygame.Vector2(50, 0))
+      .startswith("NOCH NICHT FREI"))
+w129.runden_alter = 300.0
+_gf129 = w129.belohnung_pruefen(_ich129, "tragschrauber", _fremd129)
+pruef("... Tragschrauber, Werfer, Funkwagen nur in der eigenen Haelfte",
+      _gf129 == "NUR IN DER EIGENEN HÄLFTE"
+      and w129.belohnung_pruefen(_ich129, "werfer", _fremd129) == "NUR IN DER EIGENEN HÄLFTE"
+      and w129.belohnung_pruefen(_ich129, "panzer", _fremd129) != "NUR IN DER EIGENEN HÄLFTE", _gf129)
+_frei129 = None
+for _ in range(200):
+    _p129b = _bas129.lerp(_mitte129, random.uniform(0.3, 0.9)) + pygame.Vector2(0, random.uniform(-400, 400))
+    if w129.belohnung_pruefen(_ich129, "tragschrauber", _p129b) == "":
+        _frei129 = _p129b
+        break
+_k1_129 = _frei129 is not None and w129.belohnung_kaufen(_ich129, "tragschrauber", _frei129) == ""
+pruef("... hoechstens einer je Seite: der zweite Tragschrauber geht nicht, solange der erste unterwegs ist",
+      _k1_129 and w129.belohnung_pruefen(_ich129, "tragschrauber", _frei129).startswith("SCHON 1")
+      and _ich129.schlacht_punkte == 99 - _preis129["tragschrauber"], str(_frei129))
+w129.runden_alter = 77.0
+for _ in range(8):
+    w129.schritt(K.NETZ["takt"])
+    g129.schritt(K.NETZ["takt"])
+pruef("Der Gast kennt die Laufzeit der Runde (Kaufliste zeigt dasselbe wie beim Gastgeber)",
+      abs(g129.runden_alter - w129.runden_alter) < 1.0, "%.1f / %.1f" % (g129.runden_alter, w129.runden_alter))
 
 print()
 print("FEHLER:", fails or "keine")

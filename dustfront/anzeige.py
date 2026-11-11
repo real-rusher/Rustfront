@@ -891,7 +891,7 @@ class Anzeige:
         # Unten, wo sonst Waffe und Hotbar stehen - die braucht man jetzt
         # nicht, und die Mitte des Bildes bleibt frei: man will sehen, wer
         # kommt, zum Helfen oder zum Erledigen.
-        r = pygame.Rect(W // 2 - 90, H - 48, 180, 36)
+        r = pygame.Rect(W // 2 - 90, H - 58, 180, 46)
         ui.kasten(ziel, r, K.C_RED, KASTEN, 4)
         _text(ziel, "AM BODEN  %d" % max(0, int(ich.boden_rest + 0.99)),
               r.centerx, r.y + 5, K.C_RED, 1, "mitte")
@@ -907,6 +907,15 @@ class Anzeige:
         else:
             _text(ziel, "[%s] RUFEN" % g._tastenname("nutzen"), r.centerx,
                   r.y + 23, K.C_AMBER, 1, "mitte")
+        # Aufgeben (seit 0.34.129): R halten, der Balken fuellt sich.
+        ab = g.__dict__.get("_aufgeben_ab")
+        if ab is not None:
+            anteil = min(1.0, (g._zeit - ab) / K.REVIVE["aufgeben"])
+            _balken(ziel, (r.x + 10, r.y + 33, r.width - 20, 3), anteil, K.C_MUTED)
+            _text(ziel, "AUFGEBEN ...", r.centerx, r.y + 38, K.C_MUTED, 1, "mitte")
+        else:
+            _text(ziel, "[%s] HALTEN: AUFGEBEN" % g._tastenname("nachladen"), r.centerx,
+                  r.y + 34, K.C_MUTED, 1, "mitte")
 
     def _gefallen(self, ziel, ich) -> None:
         g = self.g
