@@ -310,12 +310,12 @@ class LuftTeil:
 
     # ---- Das Raketengestell des Werfers (seit 0.34.120) -------------------------
     def _werfer_gestelle_zeichnen(self, ziel, misch: float) -> None:
-        """Das Gestell liegt als eigenes Bild ueber dem Wagen: es dreht sich
-        weich zum Zeiger, steigt mit dem Aufbau (leichter Hub nach oben, mit
-        eigenem Schatten auf der Pritsche) und zeigt, welche Rohre eine Rakete
-        tragen. Beim Gastgeber und beim Gast (Zustand aus der Meldung)."""
+        """Das Raketengestell (seit 0.34.123 ein 3D-Modell, art_werfer.py): fuer
+        jede Richtung und Steilheit neu gemalt, mit Schatten auf der Pritsche.
+        Es dreht sich weich zum Zeiger und richtet die Rohre nach der
+        Entfernung auf. Beim Gastgeber und beim Gast (Zustand aus der Meldung)."""
+        from .art_werfer import gestell
         ecke = self.kamera.ecke
-        r = self.renderer
         for b in self.fahrzeuge:
             if b.art != "werfer" or b.kaputt or b.ebene != self.blick:
                 continue
@@ -323,21 +323,9 @@ class LuftTeil:
             if not (-120 < p.x < ziel.get_width() + 120 and -120 < p.y < ziel.get_height() + 120):
                 continue
             mitte = p + pygame.Vector2(b.werte["rohr"]).rotate(b.winkel)
-            stufe = b.stufe
-            heben = stufe * 1.15
-            bild = r.bilder.gedreht(b.gestell_bild(), b.gestell_winkel())
-            if stufe > 0:
-                vorrat = self.__dict__.setdefault("_gestell_schatten", {})
-                eintrag = vorrat.get(id(bild))
-                if eintrag is None or eintrag[0] is not bild:
-                    if len(vorrat) > 400:
-                        vorrat.clear()
-                    maske = pygame.mask.from_surface(bild, 40)
-                    eintrag = vorrat[id(bild)] = (bild, maske.to_surface(setcolor=(0, 0, 0, 84),
-                                                                          unsetcolor=(0, 0, 0, 0)))
-                sch = eintrag[1]
-                ziel.blit(sch, sch.get_rect(center=(int(mitte.x + heben * 0.7), int(mitte.y + heben * 0.45 + 1))))
-            ziel.blit(bild, bild.get_rect(center=(int(mitte.x), int(mitte.y - heben))))
+            bild, schatten = gestell(b.gestell_winkel(), b.erhebung(), b.rohre)
+            ziel.blit(schatten, schatten.get_rect(center=(int(mitte.x), int(mitte.y))))
+            ziel.blit(bild, bild.get_rect(center=(int(mitte.x), int(mitte.y))))
 
     # ---- Zeichnen (Gastgeber und Gast) -----------------------------------------
     def _luftfahrzeuge_zeichnen(self, ziel, misch: float) -> None:

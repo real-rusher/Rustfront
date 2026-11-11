@@ -1731,6 +1731,11 @@ WERFER = dict(
     dreh=110.0,               # so schnell dreht sich das Gestell zum Zeiger (Grad/s)
     stillstand=8.0,
     rohr=(-15.0 * 1.4, 0.0),  # Mitte des Gestells (Pixel von der Mitte, +x = vorn)
+    # Das 3D-Gestell (seit 0.34.123, art_werfer.py): so steil stehen die Rohre
+    # bei einem Ziel ganz nah und ganz weit (Grad), so schnell richten sie sich
+    # (Grad/s).
+    hub=(56.0, 32.0),
+    hub_dreh=28.0,
     salve=dict(raketen=6, abstand=0.5, flug=3.6, streu=110.0, radius=46.0, schaden=90.0,
                fahrzeug=120.0, nachladen=14.0, nah=400.0, weit=3200.0, umkreis=130.0,
                sicht=420.0, verraten=6.0, hoch=150.0, pruefen=0.4,
@@ -4705,8 +4710,6 @@ for _name in ("flak_lafette", "flak_lafette_fahrer"):
     BILD_MASS[_name] = (128, 128)
 for _team in TEAMS["kombi"]:
     BILD_MASS["flak_lafette_%s_fahrer" % _team["name"].lower()] = (128, 128)
-for _i in range(6):
-    BILD_MASS["werfer_teil_%d" % _i] = (32, 32)
 # Dekale des Effektsystems (seit 0.34.122, effekte.py).
 for _i, _n in enumerate((28, 44, 64, 96)):
     BILD_MASS["fx_brand_%d" % _i] = (_n, _n)

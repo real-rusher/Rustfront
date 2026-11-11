@@ -1745,7 +1745,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         b.rohre &= ~(1 << rohr)
         pos = b.muendung(rohr)
         self.welt.klang("rakete", 0.9, pos, b.ebene)
-        self.welt.explosion(pos, b.ebene, b.gestell_winkel(), "werfer_start", b.fahrer)
+        # Seit 0.34.123 traegt der Radius Richtung und Steilheit:
+        # Steilheit * 1000 + Richtung (effekte.raketenstart).
+        code = int(round(b.erhebung())) * 1000 + int(round(b.gestell_winkel())) % 360
+        self.welt.explosion(pos, b.ebene, float(code), "werfer_start", b.fahrer)
 
     def _werfer_einschlag(self, b, p) -> None:
         s = K.WERFER["salve"]
@@ -1786,34 +1789,89 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
             pygame.draw.line(flaeche, farbe, (p.x, p.y - 5), (p.x, p.y + 5))
 
     def _raketen_zeichnen(self, ziel) -> None:
-        """Raketen in der Luft (seit 0.34.112): ein Bogen vom Gestell zum
-        Einschlag, mit Rauchspur und Schatten am Boden."""
+        """Raketen in der Luft (seit 0.34.123 neu): das kleine 3D-Modell
+        (art_werfer.rakete), immer in Flugrichtung. Sie verlaesst ihr Rohr in
+        dessen Richtung, steigt steil, kippt im Scheitel und stuerzt aufs Ziel
+        (eine Bezierkurve: Anfang entlang des Rohrs, Ende im Ziel). Hinten
+        brennt der Treibsatz, dahinter bleibt eine Rauchspur stehen
+        (effekte.rauchspur); am Boden ein kleiner Schatten."""
+        from . import effekte
+        from .art_werfer import rakete, rakete_heck
         s = K.WERFER["salve"]
         ecke = self.kamera.ecke
+        spur = self.__dict__.setdefault("_raketen_spur", {})
+        jetzt = pygame.time.get_ticks() / 1000.0
+        noch = set()
+        w_, h_ = ziel.get_width(), ziel.get_height()
         for b in self.fahrzeuge:
             if b.art != "werfer" or b.kaputt or b.ebene != self.blick:
                 continue
             for e in b.einschlaege:
                 if e[0] > s["flug"]:
                     continue
-                start = b.muendung(e[4])              # sie fliegen aus ihrem Rohr (seit 0.34.120)
-                ende = pygame.Vector2(e[1], e[2])
-                p = 1.0 - e[0] / s["flug"]
-                anfang_hoch = 6.0 + b.stufe * 1.1
-                for i in range(7, -1, -1):
-                    q = max(0.0, p - i * 0.022)
-                    pos = start.lerp(ende, q)
-                    hoch = 4.0 * q * (1.0 - q) * s["hoch"] + (1.0 - q) * anfang_hoch
-                    bild = pos - ecke - pygame.Vector2(0, hoch)
-                    if i == 0:
-                        sch = pos - ecke
-                        pygame.draw.ellipse(ziel, (12, 9, 6), (sch.x - 3, sch.y - 1, 6, 3))
-                        pygame.draw.circle(ziel, (255, 170, 70), (int(bild.x), int(bild.y)), 2)
-                        pygame.draw.circle(ziel, (255, 244, 214), (int(bild.x), int(bild.y)), 1)
-                    else:
-                        grau = 210 - i * 14
-                        pygame.draw.circle(ziel, (grau, grau - 6, grau - 14), (int(bild.x), int(bild.y)),
-                                           1 + (1 if i > 3 else 0))
+                bahn = self._raketen_bahn(b, e)
+                q = max(0.0, min(1.0, 1.0 - e[0] / s["flug"]))
+                x, y, z, gieren, kippen = bahn(q)
+                schluessel = (id(b), int(e[1]), int(e[2]), e[4])
+                noch.add(schluessel)
+                # Rauchspur: seit dem letzten Bild alle 0.02 s ein Ballen.
+                alt = spur.get(schluessel, q)
+                n = int((q - alt) * s["flug"] / 0.02)
+                if n > 0 or schluessel not in spur:
+                    for i in range(1, min(n, 12) + 1):
+                        qx = alt + (q - alt) * i / float(max(1, n))
+                        px, py, pz, _g, _k = bahn(qx)
+                        if -200 < px - ecke.x < w_ + 200 and -200 < py - pz - ecke.y < h_ + 200:
+                            effekte.rauchspur(self.welt, px, py, pz, b.ebene,
+                                              int(qx * 1000) + int(e[1]) * 7 + e[4])
+                    spur[schluessel] = q
+                sx, sy = x - ecke.x, y - ecke.y - z
+                if not (-40 < sx < w_ + 40 and -40 < sy < h_ + 40):
+                    continue
+                gx, gy = x - ecke.x, y - ecke.y
+                groesse = 2 + int(min(3, z / 60.0))
+                schatten = pygame.Surface((groesse * 2 + 2, groesse + 2), pygame.SRCALPHA)
+                pygame.draw.ellipse(schatten, (10, 8, 6, max(30, 110 - int(z * 0.2))), schatten.get_rect())
+                ziel.blit(schatten, (int(gx) - groesse - 1, int(gy) - groesse // 2 - 1))
+                hx, hy = rakete_heck(gieren, kippen)
+                fx, fy = sx + hx, sy + hy
+                flacker = 1 + int((jetzt * 37.0 + e[4]) % 2)
+                pygame.draw.circle(ziel, (255, 120, 40), (int(fx), int(fy)), 2 + flacker)
+                pygame.draw.circle(ziel, (255, 214, 120), (int(fx), int(fy)), 1 + flacker // 2)
+                bild = rakete(gieren, kippen)
+                ziel.blit(bild, bild.get_rect(center=(int(sx), int(sy))))
+                pygame.draw.circle(ziel, (255, 246, 214), (int(fx), int(fy)), 1)
+        for k in list(spur):
+            if k not in noch:
+                del spur[k]
+
+    def _raketen_bahn(self, b, e):
+        """Die Flugbahn einer Rakete als Funktion von 0 (Muendung) bis 1 (Ziel):
+        (x, y, hoch, Richtung, Kippen). Start ist ihr Rohr beim Abschuss (beim
+        Gastgeber gemerkt, beim Gast das Rohr, wie es jetzt steht)."""
+        if len(e) > 9:
+            p0, g, er = (e[5], e[6], e[7]), e[8], e[9]
+        else:
+            m = b.muendung(e[4])
+            p0 = (m.x, m.y, b.muendung_hoehe(e[4]))
+            g = math.radians(b.gestell_winkel())
+            er = math.radians(max(10.0, b.erhebung()))
+            if len(e) == 5 and e[3] and not b.nur_bild:
+                e.extend((p0[0], p0[1], p0[2], g, er))
+        ziel = (e[1], e[2], 0.0)
+        weit = math.hypot(ziel[0] - p0[0], ziel[1] - p0[1])
+        lang = (weit * 0.5) / max(0.2, math.cos(er))
+        hoch = min(lang * math.sin(er), 700.0)
+        p1 = (p0[0] + math.cos(g) * math.cos(er) * lang, p0[1] + math.sin(g) * math.cos(er) * lang, p0[2] + hoch)
+
+        def punkt(q):
+            a, c, d = (1 - q) * (1 - q), 2 * (1 - q) * q, q * q
+            pos = [a * p0[i] + c * p1[i] + d * ziel[i] for i in range(3)]
+            t = [2 * (1 - q) * (p1[i] - p0[i]) + 2 * q * (ziel[i] - p1[i]) for i in range(3)]
+            gieren = math.degrees(math.atan2(t[1], t[0]))
+            kippen = -math.degrees(math.atan2(t[2], math.hypot(t[0], t[1])))
+            return pos[0], pos[1], pos[2], gieren, kippen
+        return punkt
 
     def lage_melden(self, k, w) -> None:
         self._funk_hoert(k, w)

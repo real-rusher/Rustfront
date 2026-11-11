@@ -188,6 +188,15 @@ def brocken(groesse: int, art: str, variante: int, winkel: int) -> pygame.Surfac
         r = random.Random(variante * 31 + groesse)
         n = groesse * 2 + 4
         flach = pygame.Surface((n, n), pygame.SRCALPHA)
+        if groesse <= 1:
+            # So klein wird ein Vieleck mit Rand nur ein schwarzes Quadrat:
+            # zwei mal zwei Pixel in der Farbe, eines hell.
+            flach.fill(farben[1], pygame.Rect(n // 2 - 1, n // 2 - 1, 2, 2))
+            flach.set_at((n // 2 - 1, n // 2 - 1), farben[0])
+            _BROCKEN[(groesse, art, variante, None)] = flach
+            s = pygame.transform.rotate(flach, winkel) if winkel else flach
+            _BROCKEN[schluessel] = s
+            return s
         ecken = []
         k = r.randint(4, 6)
         for i in range(k):
@@ -610,28 +619,36 @@ def absturz(welt, pos, ebene: int) -> None:
     welt.klang("absturz", 1.0, pygame.Vector2(x, y), ebene)
 
 
-def raketenstart(welt, pos, ebene: int, winkel: float) -> None:
+def raketenstart(welt, pos, ebene: int, code: float) -> None:
     """Eine Rakete verlaesst das Rohr. Vorn ein kurzer Feuerstoss; hinten der
     Rueckstrahl - wie bei einer Panzerfaust, nur viel mehr: ein Kegel aus
     weissem Druckrauch schiesst nach hinten, quillt auf und bleibt lange
     stehen, am Boden reisst er eine breite Staubwand hoch, ein flacher
-    Druckring laeuft ueber den Boden."""
+    Druckring laeuft ueber den Boden. `code` = Steilheit * 1000 + Richtung
+    (seit 0.34.123): das hintere Ende des Rohrs liegt tiefer und naeher,
+    je steiler es steht."""
+    code = int(code)
+    winkel, steil = float(code % 1000), math.radians(min(85, code // 1000))
     r = _rnd(pos, 6 + int(winkel))
     x, y = pos[0], pos[1]
     vor = (math.cos(math.radians(winkel)), math.sin(math.radians(winkel)))
     hinten = winkel + 180.0
-    hx, hy = x - vor[0] * 44.0, y - vor[1] * 44.0
-    blitz(welt, x, y, 10, ebene, 40, 0.08)
-    feuer(welt, r, x, y, 10, ebene, 3, 8, 0.12, vx=vor[0] * 120, vy=vor[1] * 120)
-    blitz(welt, hx, hy, 6, ebene, 60, 0.12)
+    zurueck = 36.0 * math.cos(steil)
+    hx, hy = x - vor[0] * zurueck, y - vor[1] * zurueck
+    zm = 8.0 + 20.0 * math.sin(steil)               # Muendung und hinteres Ende, hoch
+    zh = max(2.0, 8.0 - 15.0 * math.sin(steil))
+    blitz(welt, x, y, zm, ebene, 40, 0.08)
+    feuer(welt, r, x, y, zm, ebene, 3, 8, 0.12, vx=vor[0] * 120 * math.cos(steil),
+          vy=vor[1] * 120 * math.cos(steil), vz=120 * math.sin(steil))
+    blitz(welt, hx, hy, zh, ebene, 60, 0.12)
     for i in range(5):
-        feuer(welt, r, hx, hy, 8, ebene, 4, 10, 0.22,
+        feuer(welt, r, hx, hy, zh, ebene, 4, 10, 0.22,
               vx=math.cos(math.radians(hinten + r.uniform(-12, 12))) * r.uniform(200, 380),
               vy=math.sin(math.radians(hinten + r.uniform(-12, 12))) * r.uniform(200, 380), vz=0.0)
     for i in range(16):
         w = math.radians(hinten + r.uniform(-22, 22))
         v = r.uniform(250, 620)
-        rauch(welt, r, hx, hy, 8, ebene, "weiss", 4, r.uniform(11, 20), r.uniform(2.6, 3.8),
+        rauch(welt, r, hx, hy, zh, ebene, "weiss", 4, r.uniform(11, 20), r.uniform(2.6, 3.8),
               vx=math.cos(w) * v, vy=math.sin(w) * v, vz=r.uniform(4, 22), zaeh=3.2)
     for i in range(22):
         w = math.radians(hinten + r.uniform(-55, 55))
@@ -640,7 +657,6 @@ def raketenstart(welt, pos, ebene: int, winkel: float) -> None:
               r.uniform(10, 18), r.uniform(1.8, 2.8), vx=math.cos(w) * v, vy=math.sin(w) * v,
               vz=r.uniform(2, 12), zaeh=2.8)
     ring(welt, hx - vor[0] * 20, hy - vor[1] * 20, ebene, 6, 70, 0.45, (236, 222, 188))
-    brockenwurf(welt, r, hx, hy, 1, ebene, 6, 160.0, "erde", (1, 2), hoch=(0.2, 0.6), liegen=2.0)
     welt.ruckeln(4.5, "explosion", pygame.Vector2(x, y), ebene)
 
 
@@ -837,7 +853,7 @@ ARTEN = {
     "luft_mensch": lambda w, p, e, r: mensch_luft(w, p, e, r),         # r = Hoehe
     "fallschirm_riss": lambda w, p, e, r: schirm_reisst(w, p, e, *_seite_hoehe(r)),
     "absturz": lambda w, p, e, r: absturz(w, p, e),
-    "werfer_start": lambda w, p, e, r: raketenstart(w, p, e, r),       # r = Richtung
+    "werfer_start": lambda w, p, e, r: raketenstart(w, p, e, r),       # r = Steilheit * 1000 + Richtung
     "werfer_gross": lambda w, p, e, r: werfer_explosion(w, p, e, r),   # r = Radius
     "einschlag": lambda w, p, e, r: einschlag(w, p, e, max(0.4, r)),   # r = Groesse
     "bombe": lambda w, p, e, r: bombe(w, p, e),

@@ -2146,6 +2146,10 @@ class Werfer(Aufbauwagen):
         self._rohr_soll = 0.0        # beim Gast: der gemeldete Wert, dem es folgt
         self.rohre = 63              # welche der sechs Rohre eine Rakete tragen (Bits)
         self.nachladen: list = []    # [Restzeit, Rohr]: wann ein leeres Rohr wieder laedt
+        # Wie steil die Rohre stehen sollen (Grad), nach der Entfernung zum
+        # Ziel (seit 0.34.123); gezeigt wird das mal dem Aufbau (`erhebung`).
+        self.hub = float(self.werte["hub"][0])
+        self._hub_soll = self.hub
 
     @property
     def stufe(self) -> int:
@@ -2162,8 +2166,11 @@ class Werfer(Aufbauwagen):
             return "werfer"
         return "werfer_stuetze_%d" % max(1, min(8, int(math.ceil(self.fortschritt * 8.0))))
 
-    def gestell_bild(self) -> str:
-        return "werfer_rohre_%d_%d" % (self.stufe, self.rohre)
+    def erhebung(self) -> float:
+        """Wie steil das Gestell gerade steht (Grad): liegt flach, solange es
+        nicht aufgebaut ist, und hebt sich mit dem Aufbau auf `hub`."""
+        from .art_werfer import STUFEN
+        return self.hub * self.stufe / float(STUFEN)
 
     def gestell_winkel(self) -> float:
         return self.winkel + self.rohr_rel
@@ -2175,10 +2182,16 @@ class Werfer(Aufbauwagen):
         return pos + pygame.Vector2(self.werte["rohr"]).rotate(winkel)
 
     def muendung(self, index: int) -> pygame.Vector2:
-        """Wo Rohr `index` endet (Welt, Spielpixel)."""
-        from .art_werfer import muendung_versatz
-        vor, quer = muendung_versatz(index, self.stufe)
-        return self.rohr_mitte() + pygame.Vector2(vor * 1.1, quer * 1.1).rotate(self.gestell_winkel())
+        """Wo Rohr `index` vorn endet, am Boden gesehen (Welt, Spielpixel)."""
+        from .art_werfer import muendung3d
+        x, y, _z = muendung3d(index, self.gestell_winkel(), self.erhebung())
+        return self.rohr_mitte() + pygame.Vector2(x, y)
+
+    def muendung_hoehe(self, index: int) -> float:
+        """Wie hoch die Muendung von Rohr `index` steht (ueber der Pritsche,
+        die im Bild am Boden liegt - so passt es zum gemalten Gestell)."""
+        from .art_werfer import muendung3d
+        return muendung3d(index, self.gestell_winkel(), self.erhebung())[2]
 
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
@@ -2194,13 +2207,20 @@ class Werfer(Aufbauwagen):
                 d = pygame.Vector2(ziel) - self.rohr_mitte()
                 if d.length_squared() > 16.0:
                     soll = (math.degrees(math.atan2(d.y, d.x)) - self.winkel + 180.0) % 360.0 - 180.0
+                # Nah steil, weit flacher (wie ein Werfer eben zielt).
+                sa = self.werte["salve"]
+                t = max(0.0, min(1.0, (d.length() - sa["nah"]) / max(1.0, sa["weit"] - sa["nah"])))
+                self._hub_soll = self.werte["hub"][0] + (self.werte["hub"][1] - self.werte["hub"][0]) * t
+        h = float(self.werte["hub_dreh"]) * dt
+        self.hub += max(-h, min(h, self._hub_soll - self.hub))
         diff = (soll - self.rohr_rel + 180.0) % 360.0 - 180.0
         schritt = float(self.werte["dreh"]) * dt
         self.rohr_rel = (self.rohr_rel + max(-schritt, min(schritt, diff)) + 180.0) % 360.0 - 180.0
 
     def netz_extra(self):
         return [int(self.bereit), self.ziel_grund, int(round(self.rohr_rel)), int(self.rohre),
-                [[round(e[0], 1), int(e[1]), int(e[2]), int(e[4])] for e in self.einschlaege[:12]]]
+                [[round(e[0], 1), int(e[1]), int(e[2]), int(e[4])] for e in self.einschlaege[:12]],
+                int(round(self._hub_soll))]
 
     def netz_extra_setzen(self, wert) -> None:
         try:
@@ -2212,6 +2232,8 @@ class Werfer(Aufbauwagen):
                                  float(e[0]) <= K.WERFER["salve"]["flug"],
                                  max(0, min(5, int(e[3])))]
                                 for e in wert[4][:12]]
+            if len(wert) > 5:
+                self._hub_soll = max(0.0, min(80.0, float(wert[5])))
         except (TypeError, ValueError, IndexError):
             self.einschlaege = []
 
@@ -2221,6 +2243,7 @@ class Werfer(Aufbauwagen):
         self.nachladen = []
         self.rohre = 63
         self.rohr_rel = self._rohr_soll = 0.0
+        self.hub = self._hub_soll = float(self.werte["hub"][0])
         self.bereit = False
         self.ziel_grund = 3
 

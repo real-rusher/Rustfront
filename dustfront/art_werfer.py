@@ -1,199 +1,206 @@
 """
-DUSTFRONT - Das Raketengestell des Werfers und seine Truemmer (seit 0.34.120)
-=============================================================================
+DUSTFRONT - Das Raketengestell des Werfers und seine Raketen (seit 0.34.123)
+===========================================================================
 
-Das Gestell ist ein eigenes Bild, das ueber dem Wagen liegt und sich zum
-Ziel dreht (luft.py `_werfer_gestelle_zeichnen`). Es steht auf dem Drehkranz,
-zwei Reihen zu drei Rohren, und sieht nach 3D aus:
+Komplett neu gebaut, als echtes 3D-Modell (drei_d.py), und aus Schrott wie
+alles in RUSTFRONT: sechs alte Rohre verschiedener Herkunft (verzinkt,
+rostig, olivgruen), nicht ganz gleich lang, mit zwei Bandeisen und einem
+Winkeleisen-Rahmen zusammengeschweisst. Das Buendel liegt auf einer Achse
+zwischen zwei Lagerboecken aus Blechresten, die auf einer alten Radfelge
+stehen (dem Drehteller). Eine Spindel vorn hebt es an.
 
-* **Hub.** Je hoeher es steht (Stufe 0 bis 8), desto kuerzer erscheinen die
-  Rohre (von oben gesehen) und desto groesser ihre Muendungen und desto
-  heller ihre Vorderseite - sie kommen dem Betrachter entgegen. Zwei
-  Zylinder an der Wiege strecken sich. Das ganze Bild wird beim Zeichnen
-  zusaetzlich nach oben gehoben, mit eigenem Schatten am Wagen.
-* **Beladung.** Die Maske (6 Bits) sagt, welches Rohr eine Rakete traegt:
-  rote Spitze in der Muendung - sonst ein dunkles, leeres Rohr.
+* **Drehen und Heben.** Das Bild wird fuer jede Richtung neu gerechnet
+  (`gestell(gieren, erhebung, maske)`), nicht als flaches Bild gedreht: beim
+  Schwenken sieht man je nach Richtung die Seite, die Oberseite oder die
+  Muendungen der Rohre, das Licht wandert ueber die Flaechen. Je steiler die
+  Rohre stehen, desto hoeher ragen die Muendungen im Bild, und die Spindel
+  faehrt aus.
+* **Raketen.** In jedem geladenen Rohr schaut vorn die rote Spitze heraus,
+  hinten das Leitwerk aus Blech. Leere Rohre sind schwarze Loecher.
+* **Im Flug** (`rakete(gieren, kippen)`) dasselbe Modell klein: Rumpf aus
+  Rohr, rote Spitze, vier Blechflossen - es zeigt immer in Flugrichtung.
 
-Gezeichnet wird es nach +x, wie alle Bilder; das Spiel dreht es. Bilder
-heissen `werfer_rohre_<Stufe>_<Maske>` und entstehen beim ersten Gebrauch
-(`platzhalter_muster`).
-
-Dazu `werfer_teil_0..5`: Truemmerteile, die nach der Explosion am Boden
-bleiben (Rohrstueck, Rad, Blech, Rakete, Tuer, Zahnrad).
+`muendung3d` und `hinten3d` sagen, wo ein Rohr vorn und hinten endet: von
+dort startet die Rakete, dort tritt der Rueckstrahl aus.
 """
 
 from __future__ import annotations
 
 import math
-import random
 
 import pygame
 
-from . import config as K
-from .art_fahrzeuge import GROESSE, _Blatt
-from .art_neue_fahrzeuge import HK_DK, HK_HELL, HK_LACK, HK_SCHATTEN
-from .core import platzhalter, platzhalter_muster
+from . import drei_d as D
 
-G = GROESSE
-STUFEN = 8                          # Hub in so vielen Stufen
-ROHR_X0 = -9.0                      # Rohre beginnen hier (Entwurfspixel vom Drehkranz)
-ROHR_L = 30.0                       # ... und sind so lang (ausgefahren: Stufe 0)
+STUFEN = 8                          # Aufbau in so vielen Stufen (Fahrzeug.stufe)
+GROESSE_BILD = 112                  # Bildgroesse des Gestells (Spielpixel)
+ACHSE_Z = 8.0                       # so hoch liegt die Achse des Buendels ueber dem Drehteller
 
-
-def rohr_lage(index: int) -> tuple:
-    """Seite (-1 links, 0 Mitte, 1 rechts) und Reihe (0 unten, 1 oben) eines Rohrs."""
-    return (index % 3) - 1, index // 3
-
-
-def muendung_versatz(index: int, stufe: int = 0) -> tuple:
-    """Wo die Muendung von Rohr `index` liegt: (vor, quer) in Spielpixeln vom
-    Drehkranz aus, nach +x gerichtet (das Spiel dreht es mit dem Gestell)."""
-    spalte, _reihe = rohr_lage(index)
-    laenge = ROHR_L * math.cos(math.radians(50.0 * stufe / STUFEN)) + 2.0
-    return ((ROHR_X0 + laenge) * G, spalte * 5.3 * G)
-
-
-def hinten_versatz(index: int) -> tuple:
-    """Das offene Ende des Rohrs - dort tritt der Rueckstrahl aus."""
-    spalte, _reihe = rohr_lage(index)
-    return (ROHR_X0 * G, spalte * 5.3 * G)
-
-
-def _rohr(b, index: int, e: float, geladen: bool) -> None:
-    spalte, reihe = rohr_lage(index)
-    laenge = ROHR_L * math.cos(math.radians(50.0 * e)) + 2.0
-    x0, x1 = ROHR_X0, ROHR_X0 + laenge
-    y = spalte * 5.3 - (2.6 + 2.8 * e if reihe else 0.0)
-    r_hinten = 2.1
-    r_vorn = 2.1 * (1.0 + 0.55 * e)                  # naeher am Betrachter: groesser
-    kopf = [(x0, y - r_hinten), (x1, y - r_vorn), (x1, y + r_vorn), (x0, y + r_hinten)]
-    if reihe:                                         # Schlagschatten auf die untere Reihe
-        b.poly((20, 18, 16), [(x, py + 2.4 + 1.2 * e) for x, py in kopf])
-    b.poly((24, 22, 20), kopf)
-    # Wie ein Zylinder beleuchtet: Licht von oben links, also oben ein heller
-    # Streifen, unten ein dunkler - Streifen entlang des Rohrs, vorn breiter.
-    steigerung = 0.92 + 0.3 * e
-    for f0, f1, helligkeit in ((-0.86, -0.55, 0.78), (-0.55, -0.22, 1.12), (-0.22, 0.05, 1.32),
-                                (0.05, 0.42, 1.0), (0.42, 0.7, 0.78), (0.7, 0.86, 0.56)):
-        farbe = tuple(min(255, int(c * helligkeit * steigerung)) for c in HK_LACK)
-        b.poly(farbe, [(x0 + 0.5, y + r_hinten * f0), (x1 - 0.2, y + r_vorn * f0),
-                       (x1 - 0.2, y + r_vorn * f1), (x0 + 0.5, y + r_hinten * f1)])
-    b.linie((236, 232, 214), (x0 + 1.4, y - r_hinten * 0.38), (x1 - 1.2, y - r_vorn * 0.38), 0.35)
-    for t in (0.28, 0.66):                            # Spannringe
-        px = x0 + (x1 - x0) * t
-        r = r_hinten + (r_vorn - r_hinten) * t
-        b.rect((40, 36, 32), px, y - r, 1.1, 2 * r, 0.2)
-    b.kreis((20, 18, 16), (x0 + 0.3, y), r_hinten * 0.82)         # offenes Ende hinten
-    b.kreis((70, 66, 60), (x0 + 0.1, y), r_hinten * 0.4)
-    b.kreis((30, 28, 24), (x1, y), r_vorn * 1.02)                  # Muendungsrand
-    b.kreis((14, 12, 10), (x1 + 0.1, y), r_vorn * 0.78)
-    if geladen:
-        b.kreis((176, 66, 44), (x1 + 0.7 + 0.4 * e, y), r_vorn * 0.66)
-        b.kreis((226, 120, 92), (x1 + 0.3 + 0.4 * e, y - r_vorn * 0.26), r_vorn * 0.24)
-        b.linie((236, 224, 196), (x1 - 0.4, y - r_vorn * 0.7), (x1 - 0.4, y + r_vorn * 0.7), 0.3)
+# Die sechs Rohre: (quer, hoch, hinten, vorn, Farbe). Unten drei, oben drei.
+# Absichtlich ungleich: Schrott aus verschiedenen Quellen.
+ROHRE = (
+    (-5.2, -1.6, -15.0, 18.0, (150, 144, 128)),   # verzinkt, stumpf
+    (0.0, -1.6, -14.0, 19.5, (156, 92, 52)),      # rostig
+    (5.2, -1.6, -15.5, 18.5, (116, 124, 86)),      # olivgruen
+    (-5.2, 3.0, -14.5, 19.0, (162, 100, 56)),
+    (0.0, 3.0, -15.0, 18.0, (110, 118, 84)),
+    (5.2, 3.0, -14.0, 19.5, (144, 138, 124)),
+)
+ROHR_R = 2.3
+SPITZE = (168, 60, 38)
+SPITZE_BAND = (204, 176, 86)
+BLECH = (150, 146, 134)
+DUNKEL = (22, 18, 15)
+BAND = (70, 64, 56)
+WINKEL = (126, 84, 54)
+BOCK_L = (112, 74, 46)              # die Lagerboecke: einer rostig ...
+BOCK_R = (98, 100, 74)              # ... einer aus olivem Blech
+FELGE = (104, 98, 88)
+NABE = (128, 122, 110)
+RAKETE_RUMPF = (150, 146, 130)
 
 
-def werfer_gestell3d(stufe: int = 0, maske: int = 63) -> pygame.Surface:
-    """Das Gestell auf dem Drehkranz: Platte, Wiege, Hubzylinder, sechs Rohre."""
-    e = max(0.0, min(1.0, stufe / float(STUFEN)))
-    b = _Blatt(128, G * 1.1)
-    b.rect((28, 26, 24), -11.5, -10.6, 18, 21.2, 1.2)             # Wiege auf dem Drehkranz
-    b.rect((96, 92, 84), -11.0, -10.1, 17, 20.2, 1.0)
-    b.rect((58, 56, 50), -10.2, -9.2, 15.4, 18.4, 0.8)
-    for sy in (-1, 1):                                            # Hubzylinder
-        ausgefahren = 2.0 + 7.0 * e
-        b.rohr((-9.5, sy * 9.2), (-9.5 + ausgefahren, sy * 9.2), 1.7, (170, 166, 156), (40, 38, 34))
-        b.rohr((-9.5, sy * 9.2), (-9.5 + 2.0 + 3.0 * e, sy * 9.2), 2.3, (84, 80, 72), (30, 28, 24))
-        b.kreis((30, 28, 26), (-9.5, sy * 9.2), 1.3)
-    for i in (0, 1, 2):                                           # untere Reihe, dann die obere
-        _rohr(b, i, e, bool(maske & (1 << i)))
-    for i in (3, 4, 5):
-        _rohr(b, i, e, bool(maske & (1 << i)))
-    b.rect((30, 28, 26), ROHR_X0 - 3.0, -9.4, 2.4, 18.8, 0.5)     # Abgasblech hinten
-    b.rect((74, 70, 62), ROHR_X0 - 2.7, -9.0, 1.7, 18.0, 0.4)
-    for sy in (-1, 1):
-        b.kreis((200, 170, 70), (ROHR_X0 - 1.8, sy * 7.8), 0.7)   # Warnmarken
-    return b.fertig()
+def _punkt_im_buendel(p, gieren: float, erhebung: float) -> tuple:
+    """Ein Punkt im Buendel (zur Achse) in Spielpixeln vom Drehteller."""
+    x, y, z = p
+    e = math.radians(erhebung)
+    x, z = x * math.cos(e) - z * math.sin(e), x * math.sin(e) + z * math.cos(e)
+    z += ACHSE_Z
+    g = math.radians(gieren)
+    return (x * math.cos(g) - y * math.sin(g), x * math.sin(g) + y * math.cos(g), z)
 
 
-def _gestell_zeichner(name: str):
-    """`werfer_rohre_<Stufe>_<Maske>` -> Bild; sonst None."""
-    teile = name[len("werfer_rohre_"):].split("_")
-    try:
-        stufe, maske = int(teile[0]), int(teile[1])
-    except (ValueError, IndexError):
-        return None
-    if not (0 <= stufe <= STUFEN and 0 <= maske <= 63):
-        return None
-    return werfer_gestell3d(stufe, maske)
+def muendung3d(index: int, gieren: float, erhebung: float) -> tuple:
+    """Die Muendung von Rohr `index`: (x, y, hoch) vom Drehteller aus."""
+    q, h, _x0, x1, _f = ROHRE[index]
+    return _punkt_im_buendel((x1 + 1.0, q, h), gieren, erhebung)
 
 
-platzhalter_muster("werfer_rohre_", _gestell_zeichner,
-                   lambda name: (128, 128) if _gestell_zeichner_ok(name) else None)
+def hinten3d(index: int, gieren: float, erhebung: float) -> tuple:
+    """Das hintere offene Ende von Rohr `index` - dort tritt der Rueckstrahl aus."""
+    q, h, x0, _x1, _f = ROHRE[index]
+    return _punkt_im_buendel((x0 - 1.0, q, h), gieren, erhebung)
 
 
-def _gestell_zeichner_ok(name: str) -> bool:
-    teile = name[len("werfer_rohre_"):].split("_")
-    try:
-        return 0 <= int(teile[0]) <= STUFEN and 0 <= int(teile[1]) <= 63
-    except (ValueError, IndexError):
-        return False
+def _scheibe(x, y, z, r, normale_x, farbe, n=10) -> D.Flaeche:
+    return D.Flaeche([(x, y + math.cos(2 * math.pi * i / n) * r, z + math.sin(2 * math.pi * i / n) * r)
+                      for i in range(n)], (normale_x, 0, 0), farbe)
 
 
-# ──────────────────────────────── Truemmerteile
+def _flossen(x0, x1, y, z, r, farbe) -> list:
+    f = []
+    for dy, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        nrm = (0, 0, 1) if dy else (0, 1, 0)
+        f += D.platte([(x1, y + dy * r * 0.7, z + dz * r * 0.7), (x0 + 0.6, y + dy * r * 0.7, z + dz * r * 0.7),
+                       (x0, y + dy * (r + 1.6), z + dz * (r + 1.6)), (x1 - 0.8, y + dy * (r + 1.4), z + dz * (r + 1.4))],
+                      nrm, farbe)
+    return f
 
-def _angekohlt(s: pygame.Surface, seed: int) -> pygame.Surface:
-    s = s.copy()
-    s.fill((92, 82, 76, 255), special_flags=pygame.BLEND_RGBA_MULT)
-    rnd = random.Random(seed)
-    n = s.get_width()
-    for _ in range(14):
-        x, y = rnd.randrange(2, n - 2), rnd.randrange(2, n - 2)
-        if s.get_at((x, y))[3] > 40:
-            pygame.draw.circle(s, (24, 20, 18, 255), (x, y), rnd.randint(1, 2))
+
+def _buendel(maske: int) -> list:
+    """Das Rohrbuendel um seine Achse (0, 0, 0), Muendungen nach +x."""
+    f = []
+    # Winkeleisen-Rahmen links und rechts unter den Rohren (in Stuecken, damit
+    # die Reihenfolge beim Malen stimmt - siehe drei_d.malen).
+    for s in (-1, 1):
+        for a in range(-13, 16, 5):
+            f += D.quader(a, min(16.0, a + 5.0), min(s * 7.4, s * 8.4), max(s * 7.4, s * 8.4), -4.4, -0.6, WINKEL)
+    for i, (q, h, x0, x1, farbe) in enumerate(ROHRE):
+        a = x0
+        while a < x1 - 0.01:
+            e = min(x1, a + 4.5)
+            f += D.stumpf(a, e, ROHR_R, ROHR_R, farbe, 10, kappe0=False, kappe1=False, y=q, z=h, glanz=True)
+            a = e
+        for x in (-8.0, 9.0):                         # Bandeisen um jedes Rohr
+            f += D.stumpf(x - 0.7, x + 0.7, ROHR_R + 0.4, ROHR_R + 0.4, BAND, 10, kappe0=True, kappe1=True,
+                          y=q, z=h)
+        # Wulst an der Muendung, wie ein abgesaegtes Rohr mit Muffe.
+        f += D.stumpf(x1 - 1.4, x1, ROHR_R + 0.35, ROHR_R + 0.35, tuple(int(c * 0.8) for c in farbe), 10,
+                      kappe0=False, kappe1=True, y=q, z=h)
+        if maske & (1 << i):
+            f += D.stumpf(x1, x1 + 1.2, ROHR_R * 0.82, ROHR_R * 0.82, SPITZE_BAND, 8, kappe0=False, kappe1=False,
+                          y=q, z=h)
+            f += D.stumpf(x1 + 1.2, x1 + 4.6, ROHR_R * 0.82, 0.35, SPITZE, 8, kappe0=False, kappe1=False,
+                          y=q, z=h, glanz=True)
+            f += _flossen(x0 - 2.8, x0 + 0.2, q, h, 1.2, BLECH)
+        else:
+            f.append(_scheibe(x1 + 0.05, q, h, ROHR_R * 0.92, 1, DUNKEL))
+        f.append(_scheibe(x0 - 0.05, q, h, ROHR_R * 0.92, -1, DUNKEL))
+    # Ein Haltegriff aus Rundeisen hinten links, zum Nachrichten von Hand.
+    f += D.stab((-12.0, -8.4, 1.0), (-16.0, -10.8, 1.6), 0.55, NABE)
+    return f
+
+
+def _sockel() -> list:
+    """Drehteller (alte Felge) mit den zwei Lagerboecken und der Achse."""
+    f = []
+    felge = D.stumpf(0.0, 1.8, 11.0, 11.0, FELGE, 16, kappe0=False, kappe1=True)
+    nabe = D.stumpf(1.8, 2.6, 4.6, 4.6, NABE, 12, kappe0=False, kappe1=True)
+    f += D.bewegen(felge + nabe, kippen=-90.0)
+    f += D.quader(-3.4, 3.4, 9.4, 11.4, 1.8, ACHSE_Z + 1.6, BOCK_L)
+    f += D.quader(-3.0, 3.0, -11.4, -9.4, 1.8, ACHSE_Z + 1.4, BOCK_R)
+    f += D.stab((0.0, -12.2, ACHSE_Z), (0.0, 12.2, ACHSE_Z), 1.1, NABE, 8)
+    return f
+
+
+def _spindel(erhebung: float) -> list:
+    """Die Hubspindel vorn: vom Drehteller schraeg zum Buendel."""
+    unten = (8.0, 0.0, 2.0)
+    e = math.radians(erhebung)
+    x, z = 9.0, -4.6
+    oben = (x * math.cos(e) - z * math.sin(e), 0.0, x * math.sin(e) + z * math.cos(e) + ACHSE_Z)
+    mitte = tuple(unten[k] + (oben[k] - unten[k]) * 0.45 for k in range(3))
+    return D.stab(unten, mitte, 1.5, (70, 66, 58), 6) + D.stab(mitte, oben, 0.9, (176, 170, 156), 6, glanz=True)
+
+
+_GESTELL: dict = {}
+
+
+def gestell(gieren: float, erhebung: float, maske: int) -> tuple:
+    """(Bild, Schatten) des Gestells. Gerundet auf 5 Grad (gieren) und 2 Grad
+    (erhebung), jedes Bild wird einmal gerechnet und behalten."""
+    g = int(round(gieren / 5.0)) * 5 % 360
+    e = max(0, min(80, int(round(erhebung / 2.0)) * 2))
+    m = int(maske) & 63
+    s = _GESTELL.get((g, e, m))
+    if s is not None:
+        return s
+    if len(_GESTELL) > 700:
+        _GESTELL.clear()
+    teile = _sockel() + _spindel(e) + D.bewegen(_buendel(m), kippen=-e, dz=ACHSE_Z)
+    teile = D.bewegen(teile, gieren=g)
+    bild = D.malen(teile, GROESSE_BILD)
+    flach = D.malen(D.flach(teile, 0.42, 0.34), GROESSE_BILD, rand=False)
+    schatten = pygame.mask.from_surface(flach, 30).to_surface(setcolor=(0, 0, 0, 86), unsetcolor=(0, 0, 0, 0))
+    s = _GESTELL[(g, e, m)] = (bild, schatten)
     return s
 
 
-def _teil(index: int) -> pygame.Surface:
-    b = _Blatt(32, G)
-    if index == 0:                                    # ein Stueck Rohr
-        b.rect((24, 22, 20), -7, -2.4, 14, 4.8, 1.2)
-        b.rect(HK_LACK, -6.5, -1.9, 13, 3.8, 1.0)
-        b.kreis((14, 12, 10), (6.4, 0), 1.7)
-        b.rect((40, 36, 32), -2, -2.4, 1.1, 4.8, 0.2)
-    elif index == 1:                                  # ein Rad
-        b.kreis((22, 19, 17), (0, 0), 6.4)
-        b.kreis((46, 41, 37), (0, 0), 5.0)
-        b.kreis((96, 92, 86), (0, 0), 2.2)
-    elif index == 2:                                  # Blech mit Nieten
-        b.poly((30, 28, 24), [(-6, -4), (5, -5.4), (6.6, 3), (-2, 5.6), (-6.4, 2)])
-        b.poly(HK_LACK, [(-5, -3), (4.2, -4.2), (5.6, 2.4), (-1.8, 4.6), (-5.4, 1.6)])
-        for p in ((-3, -1.6), (2.4, -2.6), (3.4, 1.6), (-1.6, 2.4)):
-            b.kreis((44, 42, 38), p, 0.5)
-    elif index == 3:                                  # eine Rakete, verbogen
-        b.rect((30, 28, 24), -7, -1.6, 12, 3.2, 1.0)
-        b.rect((120, 114, 98), -6.6, -1.2, 10.8, 2.4, 0.8)
-        b.kreis((176, 66, 44), (5.4, 0), 1.5)
-        b.rect((30, 28, 24), -8, -2.6, 1.6, 5.2, 0.3)
-    elif index == 4:                                  # eine Tuer
-        b.rect((30, 28, 24), -5.5, -6.5, 11, 13, 1.0)
-        b.rect(HK_LACK, -5, -6, 10, 12, 0.8)
-        b.rect((24, 30, 36), -3.4, -4.4, 6.8, 3.4, 0.4)
-    else:                                             # ein Zahnrad vom Drehkranz
-        b.kreis((30, 28, 26), (0, 0), 6.0)
-        b.kreis((96, 92, 84), (0, 0), 5.0)
-        b.kreis((58, 56, 50), (0, 0), 3.4)
-        for i in range(10):
-            a = i * math.pi / 5
-            b.kreis((30, 28, 26), (math.cos(a) * 5.8, math.sin(a) * 5.8), 0.9)
-    return _angekohlt(b.fertig(), 8800 + index)
+def _rakete_netz() -> list:
+    f = []
+    f += D.stumpf(-5.0, 2.6, 1.5, 1.5, RAKETE_RUMPF, 8, kappe0=True, kappe1=False, glanz=True)
+    f += D.stumpf(2.6, 3.6, 1.5, 1.5, SPITZE_BAND, 8, kappe0=False, kappe1=False)
+    f += D.stumpf(3.6, 7.0, 1.5, 0.3, SPITZE, 8, kappe0=False, kappe1=False, glanz=True)
+    f += _flossen(-6.2, -3.0, 0.0, 0.0, 1.0, BLECH)
+    return f
 
 
-def _teil_stufe(i: int):
-    def z():
-        return _teil(i)
-    return z
+_RAKETE: dict = {}
 
 
-for _i in range(6):
-    platzhalter("werfer_teil_%d" % _i)(_teil_stufe(_i))
+def rakete(gieren: float, kippen: float) -> pygame.Surface:
+    """Eine Rakete im Flug, 28 x 28, Nase in Flugrichtung (`kippen` negativ:
+    Nase nach oben). Gerundet auf 10 Grad."""
+    g = int(round(gieren / 10.0)) * 10 % 360
+    k = max(-90, min(90, int(round(kippen / 10.0)) * 10))
+    s = _RAKETE.get((g, k))
+    if s is None:
+        s = _RAKETE[(g, k)] = D.malen(D.bewegen(_rakete_netz(), gieren=g, kippen=k), 28)
+    return s
+
+
+def rakete_heck(gieren: float, kippen: float) -> tuple:
+    """Wo das Heck (die Flamme) liegt, relativ zur Mitte: (x, y - z) im Bild."""
+    g, k = math.radians(gieren), math.radians(kippen)
+    x, z = -6.4 * math.cos(k), 6.4 * math.sin(k)
+    return (x * math.cos(g), x * math.sin(g) - z)

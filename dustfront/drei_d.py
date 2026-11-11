@@ -158,3 +158,37 @@ def malen(flaechen, groesse: int, mitte=(0.0, 0.0), rand: bool = True) -> pygame
         return klein
     from . import art
     return art._rand(klein)
+
+
+def stab(a, b, r, farbe, n=6, glanz=False) -> list:
+    """Ein Rohr (Prisma mit `n` Seiten) von Punkt `a` nach Punkt `b`, ohne
+    Deckel - fuer Streben, Hubspindeln und Gestaenge."""
+    ax = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    lang = math.sqrt(sum(c * c for c in ax)) or 1e-6
+    ax = tuple(c / lang for c in ax)
+    hilf = (0.0, 0.0, 1.0) if abs(ax[2]) < 0.9 else (0.0, 1.0, 0.0)
+    u = (ax[1] * hilf[2] - ax[2] * hilf[1], ax[2] * hilf[0] - ax[0] * hilf[2], ax[0] * hilf[1] - ax[1] * hilf[0])
+    lu = math.sqrt(sum(c * c for c in u))
+    u = tuple(c / lu for c in u)
+    v = (ax[1] * u[2] - ax[2] * u[1], ax[2] * u[0] - ax[0] * u[2], ax[0] * u[1] - ax[1] * u[0])
+    raus = []
+    for i in range(n):
+        w0, w1 = 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n
+        wm = (w0 + w1) / 2
+
+        def rand(p, w):
+            c, s = math.cos(w) * r, math.sin(w) * r
+            return (p[0] + u[0] * c + v[0] * s, p[1] + u[1] * c + v[1] * s, p[2] + u[2] * c + v[2] * s)
+        nrm = tuple(u[k] * math.cos(wm) + v[k] * math.sin(wm) for k in range(3))
+        raus.append(Flaeche([rand(a, w0), rand(b, w0), rand(b, w1), rand(a, w1)], nrm, farbe, glanz=glanz))
+    return raus
+
+
+def flach(flaechen, dx_je_z=0.5, dy_je_z=0.3) -> list:
+    """Die Flaechen auf den Boden gedrueckt (z = 0), um ihre Hoehe in
+    Lichtrichtung verschoben - daraus wird ein Schatten."""
+    raus = []
+    for f in flaechen:
+        pts = [(p[0] + p[2] * dx_je_z, p[1] + p[2] * dy_je_z, 0.0) for p in f.punkte]
+        raus.append(Flaeche(pts, (0, 0, 1), (0, 0, 0), beidseitig=True))
+    return raus
