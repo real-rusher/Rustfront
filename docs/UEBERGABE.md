@@ -1,4 +1,4 @@
-# Uebergabe: Nacharbeit an den Fahrzeugen (Stand: als 0.34.124 veroeffentlicht, nur noch Punkt 8 offen)
+# Uebergabe: Nacharbeit an den Fahrzeugen (Stand: fertig, 0.34.125)
 
 Wunsch des Besitzers (wortgetreu zusammengefasst): die letzten Aenderungen
 (0.34.117 bis 0.34.120) haben viele Designfehler. Zu tun, jeweils
@@ -11,7 +11,7 @@ Wunsch des Besitzers (wortgetreu zusammengefasst): die letzten Aenderungen
 5. Luke auf dem Jagdpanzer entfernen, stilgerechte Luke fest in den Wannen-Sprite. - **erledigt**
 6. Krad: Beifahrer mit Waffe und Ausrichtung zeigen, nur begrenzt drehbar. - **erledigt**
 7. Hubschrauber ganz oben darf keine Bodenwesen schieben. - **erledigt** (Ursache: der Pilot als Figur am Boden; `Welt.auseinander` ignoriert jetzt Insassen)
-8. Am Ende alles praesentieren: Videos und Bilder. - **offen**
+8. Am Ende alles praesentieren: Videos und Bilder. - **erledigt** (0.34.125): `python werkzeug_aufnahme.py funkwagen werfer werfer_explosion schrottbombe flak krad` schreibt sechs Videos nach `aufnahmen/` (23 bis 28). Beim Ansehen fielen zwei Fehler auf und sind behoben: schwarze Quadrate bei jedem Einschlag (`effekte._zeichne`, Brocken) und ungleich dicke Seile am Funkmast.
 
 Erledigt in 0.34.124: Tests in `tests/test_spiel.py` angepasst und ergaenzt,
 Version erhoeht (README, `rustfront_menu.py`), docs/MEHRSPIELER.md (Netz
@@ -42,5 +42,10 @@ geaendert), docs/FAHRZEUGE.md, docs/TESTMODUS.md. Die Versionen 0.34.121 bis
 
 ## Noch zu tun
 
-1. Videos und Bilder fuer den Besitzer (Punkt 8): Testmodus, `tm.zeichnen`,
-   ffmpeg (Skripte im Scratchpad gingen verloren, neu schreiben).
+Nichts aus diesem Auftrag. Zur Beobachtung: der Test "Panik in der Deckung"
+in `tests/test_spiel.py` haengt vom Hash-Zufall von Python ab: mit
+`PYTHONHASHSEED=1` gruen (alter und neuer Stand), ohne festen Wert in beiden
+Laeufen von 0.34.124 rot (einmal plante der Bot vorher
+`deckung_wechseln`, einmal wich er einer Granate aus). Ob der alte Stand
+bei anderen Werten auch rot wird, ist nicht geprueft. Die Lobby-Tests mit
+echten Sockets scheitern gelegentlich, wenn der Rechner nebenher ausgelastet ist.

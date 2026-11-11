@@ -666,7 +666,7 @@ def szene_funkwagen(tm, rnd):
         _steuern(tm, k, (0, 0), b.pos + b.vorn * 100, zielt=(1.0 <= t < 1.05 or 9.0 <= t < 9.05))
 
     return ("Funkwagen: der Mast richtet sich auf, faehrt aus, Kopf klappt auf und dreht sich",
-            [_Blick(b.mast_mitte() + pygame.Vector2(0, -14))], lambda: uhr["t"] > 13.0, 15, 0.45, jedes_bild)
+            [_Blick(b.mast_mitte() + pygame.Vector2(0, -14))], lambda: uhr["t"] > 13.0, 15, 1.0, jedes_bild)
 
 
 def _werfer_mit_ziel(tm, rnd, abstand: float):
@@ -705,7 +705,7 @@ def szene_werfer(tm, rnd):
             blick.pos.update(b.pos + pygame.Vector2(40, -20))
 
     return ("Werfer: 3D-Gestell hebt sich nach der Entfernung, Raketen im Bogen aus ihren Rohren",
-            [blick], lambda: uhr["t"] > 19.0, 21, 0.8, jedes_bild)
+            [blick], lambda: uhr["t"] > 19.0, 21, 1.0, jedes_bild)
 
 
 def szene_werfer_explosion(tm, rnd):
@@ -798,7 +798,7 @@ def szene_krad(tm, rnd):
         tm._anwenden(bei, {"will": [0, 0], "ziel": [punkt.x, punkt.y], "knoepfe": []})
 
     return ("Krad: der Beifahrer zielt im Beiwagen, nur in seinem Bogen",
-            [b], lambda: uhr["t"] > 11.0, 13, 0.7, jedes_bild)
+            [b], lambda: uhr["t"] > 11.0, 13, 1.0, jedes_bild)
 
 
 SZENEN = {
