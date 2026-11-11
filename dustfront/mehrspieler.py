@@ -68,6 +68,7 @@ from .schlacht import SchlachtTeil
 from .gastseite import GastTeil, WirtTeil
 from .spielerkosmetik import KosmetikTeil
 from . import klassen as klassen_modul
+from . import ausruestung as ausruestung_modul
 from . import world as welt_modul
 from . import art_figuren as figuren
 from .core import Bilder, Szene
@@ -1539,7 +1540,88 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             return None
         return self._schlacht_punkte()[team]
 
+    # ---- Funkwagen (seit 0.34.111, K.FUNKWAGEN) ---------------------------
+    @staticmethod
+    def _team_von_seite(seite):
+        """"team0" -> 0, "team1" -> 1, sonst None."""
+        if isinstance(seite, str) and seite in ("team0", "team1"):
+            return int(seite[-1])
+        return None
+
+    def _funkwagen_aktiv(self, team: int):
+        """Die aufgebauten Funkwagen dieser Seite."""
+        for b in self.fahrzeuge:
+            if (b.art == "funkwagen" and b.aufgebaut and not b.nur_bild and b.emp_rest <= 0.0
+                    and self._team_von_seite(fahrzeug_modul.seite_von(b)) == team):
+                yield b
+
+    def funk_gestoert_bei(self, punkt, team: int, ebene: int = 0) -> bool:
+        """Liegt `punkt` im Stoerkreis eines gegnerischen Funkwagens?"""
+        if team not in (0, 1):
+            return False
+        for b in self._funkwagen_aktiv(1 - team):
+            if b.modus == 1 and b.ebene == ebene and \
+                    b.mast_mitte().distance_to(punkt) <= b.werte["stoeren"]:
+                return True
+        return False
+
+    def funk_gestoert(self, k) -> bool:
+        """Kann dieser Kaempfer gerade nicht funken (gestoert)?"""
+        return self.funk_gestoert_bei(k.pos, getattr(k, "team", -1), k.ebene)
+
+    def _funk_hoert(self, k, w) -> None:
+        """Ein Bot sieht einen Gegner: steht ein Funkwagen seiner Seite in
+        Reichweite, geht es ins Funknetz der Seite - der Gegner ist fuer alle
+        markiert (nur mit der Regel FUNKSPRUECHE DER BOTS)."""
+        team = getattr(k, "team", -1)
+        if not self.funk_an or team not in (0, 1) or self.funk_gestoert(k):
+            return
+        for b in self._funkwagen_aktiv(team):
+            if b.ebene == k.ebene and b.mast_mitte().distance_to(k.pos) <= b.werte["funk"]:
+                ausruestung_modul.markieren(w, fuer=k.fraktion)
+                return
+
+    def funkwagen_schritt(self, dt: float) -> None:
+        """Was aufgebaute Funkwagen bewirken: PEILEN markiert, STOEREN stoert."""
+        for b in self.fahrzeuge:
+            if b.art != "funkwagen" or not b.aufgebaut or b.nur_bild or b.emp_rest > 0.0:
+                continue
+            b._wirk_rest -= dt
+            if b._wirk_rest > 0.0:
+                continue
+            b._wirk_rest = b.werte["takt"]
+            team = self._team_von_seite(fahrzeug_modul.seite_von(b))
+            if team is None:
+                continue
+            eigen, feind = "team%d" % team, "team%d" % (1 - team)
+            mitte = b.mast_mitte()
+            r = b.radius_wirkung
+            for z in list(self.welt.nahe(mitte, r + 60.0, b.ebene)):
+                if z is b or not z.lebt:
+                    continue
+                if b.modus == 0:
+                    seite = (fahrzeug_modul.seite_von(z) if getattr(z, "ist_fahrzeug", False)
+                             else getattr(z, "fraktion", None))
+                    if (seite == feind and getattr(z, "trefferbar", True)
+                            and z.pos.distance_to(mitte) <= r):
+                        ausruestung_modul.markieren(z, fuer=eigen)
+                else:
+                    if z.pos.distance_to(mitte) > r:
+                        continue
+                    seite = (fahrzeug_modul.seite_von(z) if getattr(z, "ist_fahrzeug", False)
+                             else getattr(z, "fraktion", None))
+                    if getattr(z, "markiert_fuer", "") == feind and seite == eigen:
+                        z.markiert_rest = 0.0        # was der Gegner von uns weiss, verfaellt
+                    if isinstance(z, ausruestung_modul.Drohne) and z.fraktion == feind:
+                        z.emp_treffen(K.EMP["dauer"])
+            if b.modus == 1:
+                ausruestung_modul.markieren(b, fuer=feind)    # er steht auf ihrer Karte
+
     def lage_melden(self, k, w) -> None:
+        self._funk_hoert(k, w)
+        self._lage_melden(k, w)
+
+    def _lage_melden(self, k, w) -> None:
         """Ein Bot sieht einen Gegner (seit 0.34.96): in SCHLACHT erfaehrt es
         seine Seite, ohne Funk. Auf ein Raster, damit sich die Wegfelder
         teilen, und je Bot hoechstens alle `melde_takt` Sekunden."""
@@ -3095,7 +3177,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         knoepfe = ein.get("knoepfe") or []
         if isinstance(knoepfe, list):
             if "nachladen" in knoepfe:
-                b.hilfe_nutzen("hecknebel")
+                if b.art == "funkwagen":
+                    b.modus_wechseln()          # PEILEN <-> STOEREN (seit 0.34.111)
+                else:
+                    b.hilfe_nutzen("hecknebel")
             if "nahkampf" in knoepfe:
                 b.hilfe_nutzen("nagelstreuer")
         k.will.update(0, 0)
@@ -3329,6 +3414,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                 nachschub = max(0, min(99, int(e[17]))) if len(e) > 17 else 0
                 phase = max(0, min(3, int(e[18]))) if len(e) > 18 else 0
                 phase_rest = max(0.0, min(60.0, float(e[19]))) if len(e) > 19 else 0.0
+                extra = e[20] if len(e) > 20 else 0
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
@@ -3356,8 +3442,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             b.markiert_rest = 1.0 if markiert_fuer else 0.0
             if b.art == "trosswagen":
                 b.nachschub = nachschub
-            if b.art == "spulenwagen":
+            if hasattr(b, "phase"):
                 b.phase, b.phase_rest = phase, phase_rest
+            if hasattr(b, "netz_extra_setzen"):
+                b.netz_extra_setzen(extra)
             b.geschw = b.vorn * fahrt
             b.rutschen = max(0.0, min(1.0, rutschen))
             # Leben (seit 0.34.18): fuer den Balken und das Wrack.
@@ -3408,6 +3496,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                                  K.C_AMBER if rest <= 0.0 else K.C_MUTED, 1,
                                  ausrichtung="mitte")
                 unten += 10
+            if wagen is not None and wagen.art == "funkwagen" and not wagen.kaputt:
+                texte = ("MAST [RMB]: AUFBAUEN", "MAST BAUT AUF %.1f",
+                         "PEILEN  [R] STÖREN  [RMB] ABBAUEN", "")
+                txt = ("STÖREN  [R] PEILEN  [RMB] ABBAUEN" if wagen.phase == 2 and wagen.modus == 1
+                       else texte[wagen.phase])
+                if "%" in txt:
+                    txt = txt % wagen.phase_rest
+                SCHRIFT.zeichnen(ziel, txt, int(p.x), int(p.y) + unten,
+                                 K.C_AMBER if wagen.phase != 1 else K.C_MUTED, 1,
+                                 ausrichtung="mitte")
+                unten += 10
             if wagen is not None and wagen.art == "spulenwagen" and not wagen.kaputt:
                 # Was das Feld gerade tut (seit 0.34.110).
                 texte = ("FELD [RMB]: BEREIT", "FELD BAUT AUF %.1f", "FELD AKTIV %.1f  [RMB] AUS",
@@ -3429,6 +3528,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                      else "[LMB] KANONE  [RMB] ZIELFERNROHR" if wagen.art == "jagdpanzer"
                      else "[LMB] MG"),
                     taste_e)
+            elif wagen is not None and wagen.art == "funkwagen":
+                text = "[%s/%s] FAHREN  [%s/%s] LENKEN  [RMB] MAST  [R] BETRIEBSART  [%s] AUSSTEIGEN" % (
+                    self._tastenname("vor"), self._tastenname("zurueck"),
+                    self._tastenname("links"), self._tastenname("rechts"), taste_e)
             elif wagen is not None and wagen.art == "spulenwagen":
                 text = "[%s/%s] FAHREN  [%s/%s] LENKEN  [LMB] BLITZ  [RMB] FELD  [%s] AUSSTEIGEN" % (
                     self._tastenname("vor"), self._tastenname("zurueck"),
@@ -3604,6 +3707,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         self._fahrzeuge_nachziehen()
         self._mitfahrer_nachziehen()
         self._fahrzeuge_erneuern(dt)
+        self.funkwagen_schritt(dt)
         if not self.schlacht and self.__dict__.get("nachschub_an"):
             # Testmodus (seit 0.34.100): Abwuerfe, Drohnen und Fallschirmjaeger
             # aus dem Spawner, ohne SCHLACHT.
@@ -5021,7 +5125,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                   b.nachschub if b.art == "trosswagen" else 0,
                   # Seit 0.34.110: Phase des Spulenwagens (0 bereit, 1 baut auf,
                   # 2 Feld aktiv, 3 laedt) und wie lange sie noch dauert.
-                  getattr(b, "phase", 0), round(getattr(b, "phase_rest", 0.0), 1)]
+                  getattr(b, "phase", 0), round(getattr(b, "phase_rest", 0.0), 1),
+                  # Seit 0.34.111: ein Zusatzwert je Art (Betriebsart des Funkwagens).
+                  b.netz_extra() if hasattr(b, "netz_extra") else 0]
                  for b in self.fahrzeuge]
         # Nagelfelder (seit 0.34.65): wo die Naegel liegen, folgt aus der
         # Kennung (entities.Nagelfeld.stellen).
@@ -6987,6 +7093,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         Kranz am Boden, beim Aufbauen duenn, aktiv pulsierend, mit dem Rest
         als Bogen."""
         for b in self.fahrzeuge:
+            if b.art == "funkwagen" and not b.kaputt and b.ebene == ebene and b.phase in (1, 2):
+                self._funk_kranz(flaeche, b, ecke)
+                continue
             if b.art != "spulenwagen" or b.kaputt or b.ebene != ebene or b.phase not in (1, 2):
                 continue
             f = K.SPULENWAGEN["feld"]
@@ -7012,6 +7121,26 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                 pygame.draw.arc(s, (250, 208, 133, 200), rect, math.pi / 2,
                                 math.pi / 2 + 2 * math.pi * rest, 2)
             flaeche.blit(s, (m.x - c[0], m.y - c[1]))
+
+    def _funk_kranz(self, flaeche, b, ecke) -> None:
+        """Der Kreis eines Funkwagens (seit 0.34.111): beim Aufbauen waechst
+        er, aufgebaut steht er - PEILEN tuerkis, STOEREN bernstein, mit einer
+        Welle, die vom Mast nach aussen laeuft."""
+        f = b.werte
+        r0 = b.radius_wirkung
+        m = b.mast_mitte() - ecke
+        if not (-r0 < m.x < flaeche.get_width() + r0 and -r0 < m.y < flaeche.get_height() + r0):
+            return
+        r = r0 if b.phase == 2 else r0 * (1.0 - b.phase_rest / f["aufbau"])
+        farbe = K.C_AMBER if b.modus == 1 else K.C_TEAL
+        s = pygame.Surface((int(r * 2 + 8), int(r * 2 + 8)), pygame.SRCALPHA)
+        c = (s.get_width() // 2, s.get_height() // 2)
+        pygame.draw.circle(s, farbe + (16 if b.phase == 2 else 8,), c, int(r))
+        pygame.draw.circle(s, farbe + (150 if b.phase == 2 else 70,), c, int(r), 1)
+        if b.phase == 2:
+            t = (self.welt.zeit / 2.4) % 1.0
+            pygame.draw.circle(s, farbe + (int(120 * (1.0 - t)),), c, max(2, int(r * t)), 1)
+        flaeche.blit(s, (m.x - c[0], m.y - c[1]))
 
     def _kreis_zeichnen(self, flaeche, ebene: int, ecke) -> None:
         self._spulen_zeichnen(flaeche, ebene, ecke)

@@ -17729,6 +17729,106 @@ pruef("... und viel schwaecher als der Kettenblitz zu Fuss",
       K.SPULENWAGEN["blitz"]["schaden"] < K.WAFFEN["kettenblitz"]["schaden"])
 _tm110.verlassen()
 
+# ─────────────────────────────────────────────────────────────────────
+# Funkwagen (seit 0.34.111): Mast aufbauen, PEILEN (Gegner markieren) oder
+# STOEREN (kein Funk, keine Markierungen, keine Drohnen, kein Nachschub),
+# und die Bots der Seite sprechen mit ihm (Funknetz).
+_tm111 = _TM59.Testmodus(app, karte="staubtal_offen")
+_namen111 = [e_.name for e_ in _tm111.eintraege]
+pruef("Testmodus: FUNKWAGEN im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB); im Nachschub fuer 7 Punkte",
+      "FUNKWAGEN" in _namen111 and "ABWURF: FUNKWAGEN" in _namen111
+      and ("funkwagen", 7, "DROPZONE: FUNKWAGEN") in K.SCHLACHT["belohnungen"])
+_e111 = _tm111.welt.ebene(0)
+_rnd111 = random.Random(111)
+for _ in range(40000):
+    _tx111 = _rnd111.randrange(60, _e111.breite - 90)
+    _ty111 = _rnd111.randrange(20, _e111.hoehe - 40)
+    if all(not K.KACHELN[_e111.kachel(_tx111 + x_, _ty111 + y_)]["fest"]
+           for x_ in range(40) for y_ in range(24)):
+        break
+_z111 = lambda x_, y_: pygame.Vector2((_tx111 + x_ + 0.5) * K.TILE, (_ty111 + y_ + 0.5) * K.TILE)
+_fw111 = _tm111.fahrzeug_setzen("funkwagen", _z111(6, 8), 0, {"winkel": 0})
+_ff111 = _tm111.puppe_setzen(_fw111.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="FUNKER")
+_tm111._anwenden(_ff111, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Funkwagen: eigene Art, keine Plaetze, nur fuer Menschen, Betriebsart PEILEN zu Beginn",
+      _ff111.fahrzeug is _fw111 and _fw111.art == "funkwagen" and "plaetze" not in _fw111.werte
+      and _fw111.werte["nur_mensch"] and _fw111.modus == 0 and _fw111.bild == "funkwagen")
+def _fw_ein111(zielt_, knoepfe_=(), will_=(0, 0)):
+    _tm111._anwenden(_ff111, {"will": list(will_), "ziel": [0, 0], "knoepfe": list(knoepfe_), "zielt": zielt_})
+    _tm111.schritt(K.FIXED_DT)
+_fw_ein111(True); _fw_ein111(True); _fw_ein111(False)
+pruef("Funkwagen: die rechte Maustaste baut den Mast auf (er steht dabei) ...",
+      _fw111.phase == 1 and _fw111.phase_rest > 2.0)
+for _ in range(int(3.3 / K.FIXED_DT)):
+    _fw_ein111(False, will_=(0, -1))
+pruef("... nach drei Sekunden steht er (Phase 2, Bild mit Peilrahmen)",
+      _fw111.phase == 2 and _fw111.bild.startswith("funkwagen_aktiv_") and _fw111.geschw.length() < 1.0,
+      "%s %.1f" % (_fw111.bild, _fw111.geschw.length()))
+_nah111 = _tm111.puppe_setzen(_fw111.mast_mitte() + pygame.Vector2(300, 0), 0, {"team": 1}, name="NAH")
+_fern111 = _tm111.puppe_setzen(_fw111.mast_mitte() + pygame.Vector2(0, 600), 0, {"team": 1}, name="FERN")
+_freund111 = _tm111.puppe_setzen(_fw111.mast_mitte() + pygame.Vector2(0, -200), 0, {"team": 0}, name="FREUND")
+_pz111 = _tm111.fahrzeug_setzen("panzer", _z111(14, 16), 0, {"winkel": 0})
+_pf111 = _tm111.puppe_setzen(_pz111.ausstiegsorte(9.0)[0], 0, {"team": 1}, name="FAHRER")
+_tm111._anwenden(_pf111, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+for _ in range(int(1.3 / K.FIXED_DT)):
+    _fw_ein111(False)
+pruef("Funkwagen PEILEN: Gegner im Kreis sind fuer die eigene Seite markiert - auch ein Fahrzeug",
+      _nah111.markiert_rest > 0.0 and _nah111.markiert_fuer == _ff111.fraktion
+      and _pz111.markiert_rest > 0.0 and _pz111.markiert_fuer == _ff111.fraktion,
+      "%s %s" % (_nah111.markiert_fuer, _ff111.fraktion))
+pruef("... Gegner ausserhalb und die eigenen nicht",
+      getattr(_fern111, "markiert_rest", 0.0) == 0.0 and getattr(_freund111, "markiert_rest", 0.0) == 0.0)
+_fw_ein111(False, knoepfe_=["nachladen"])
+pruef("Funkwagen: R schaltet auf STOEREN (und wieder zurueck)", _fw111.modus == 1)
+# Funknetz: ein Bot der Seite im Kreis meldet, was er sieht.
+_bot111 = _tm111.bot_setzen(_fw111.pos + pygame.Vector2(0, 150), 0, {"team": 0})
+_feind111 = _tm111.puppe_setzen(_fw111.pos + pygame.Vector2(800, 400), 0, {"team": 1}, name="WEIT")
+_fw111.modus = 0
+_alt_funk111 = _tm111.regelwerk if hasattr(_tm111, "regelwerk") else None
+_tm111.regelwerk = dict(_alt_funk111 or {}, funk=False)
+_tm111.lage_melden(_bot111, _feind111)
+_aus111 = getattr(_feind111, "markiert_rest", 0.0)
+_tm111.regelwerk = dict(_alt_funk111 or {}, funk=True)
+_tm111.lage_melden(_bot111, _feind111)
+pruef("Funknetz: nur mit aktiver Funk-Regel gibt ein Bot im Kreis dem Team weiter, was er sieht",
+      _aus111 == 0.0 and _feind111.markiert_rest > 0.0 and _feind111.markiert_fuer == _bot111.fraktion,
+      "%.1f / %.1f" % (_aus111, _feind111.markiert_rest))
+# Stoeren: ein zweiter Funkwagen der anderen Seite.
+_fw2111 = _tm111.fahrzeug_setzen("funkwagen", _z111(26, 6), 0, {"winkel": 0})
+_f2111 = _tm111.puppe_setzen(_fw2111.ausstiegsorte(9.0)[0], 0, {"team": 1}, name="STOERER")
+_tm111._anwenden(_f2111, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+def _fw2_ein111(zielt_, knoepfe_=()):
+    _tm111._anwenden(_f2111, {"will": [0, 0], "ziel": [0, 0], "knoepfe": list(knoepfe_), "zielt": zielt_})
+    _tm111.schritt(K.FIXED_DT)
+_fw2_ein111(True); _fw2_ein111(True); _fw2_ein111(False)
+for _ in range(int(3.3 / K.FIXED_DT)):
+    _fw2_ein111(False)
+_fw2_ein111(False, ["nachladen"])
+_op111 = _tm111.puppe_setzen(_fw2111.mast_mitte() + pygame.Vector2(-200, 0), 0, {"team": 0}, name="OPFER")
+_ausser111 = _tm111.puppe_setzen(_fw2111.mast_mitte() + pygame.Vector2(-700, 0), 0, {"team": 0}, name="AUSSEN")
+_eig111 = _tm111.puppe_setzen(_fw2111.mast_mitte() + pygame.Vector2(150, 0), 0, {"team": 1}, name="EIGENER")
+_eig111.markiert_rest = 5.0; _eig111.markiert_fuer = "team0"      # der Gegner hat ihn markiert
+_dr111 = _tm111.ausruestung_setzen("SPÄHDROHNE", _fw2111.mast_mitte() + pygame.Vector2(100, 100), 0,
+                                   {"team": 0})
+for _ in range(int(1.5 / K.FIXED_DT)):
+    _fw2_ein111(False)
+pruef("Funkwagen STOEREN: wer im Kreis steht, kann nicht funken - wer draussen steht, schon",
+      _tm111.funk_gestoert(_op111) and not _tm111.funk_gestoert(_ausser111)
+      and not _tm111.funk_gestoert(_f2111), "%s %s" % (_tm111.funk_gestoert(_op111), _tm111.funk_gestoert(_ausser111)))
+pruef("... was der Gegner im Kreis markiert hat, verfaellt, und seine Spaehdrohne faellt aus",
+      getattr(_eig111, "markiert_rest", 0.0) == 0.0 and all(not d_.lebt or d_.emp_rest > 0.0 for d_ in _dr111) and _dr111, "%.1f" % getattr(_eig111, "markiert_rest", 0.0))
+pruef("... und der Stoerer steht dabei auf der Karte der Gegner (markiert)",
+      _fw2111.markiert_rest > 0.0 and _fw2111.markiert_fuer == "team0", _fw2111.markiert_fuer)
+_k111 = _tm111.puppe_setzen(_z111(30, 20), 0, {"team": 0}, name="KAEUFER")
+_k111.schlacht_punkte = 99
+_in111 = _fw2111.mast_mitte() + pygame.Vector2(-100, 0)
+pruef("... und kein Nachschub kommt in den Kreis (gestoert), ausserhalb schon",
+      "GESTÖRT" in _tm111.belohnung_pruefen(_k111, "munition", _in111)
+      and "GESTÖRT" not in _tm111.belohnung_pruefen(_k111, "munition", _fw2111.mast_mitte() + pygame.Vector2(-900, 0)))
+_fw2111.schaden(9999.0, None, _op111)
+pruef("... ein zerstoerter Funkwagen stoert nicht mehr", not _tm111.funk_gestoert(_op111))
+_tm111.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

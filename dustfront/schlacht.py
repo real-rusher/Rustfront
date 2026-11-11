@@ -584,6 +584,8 @@ class SchlachtTeil:
         e = self.welt.ebene(0)
         if not (0 <= punkt.x < e.pixel_breite and 0 <= punkt.y < e.pixel_hoehe):
             return "AUSSERHALB DER KARTE"
+        if not gratis and self.funk_gestoert_bei(punkt, k.team):
+            return "GESTÖRT: FUNKWAGEN DER GEGNER"       # seit 0.34.111
         if was == "aufklaerung":
             return ""
         feind = self.schlacht_basis(1 - k.team) if k.team in (0, 1) else None

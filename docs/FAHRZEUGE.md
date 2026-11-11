@@ -1,4 +1,4 @@
-# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.110)
+# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.111)
 
 Zwoelf Entwuerfe fuer die SCHLACHT auf Karten, die groesser sind als
 STAUBTAL - OFFEN. Bilder und Szenen dazu stehen auf der Entscheidungsseite
@@ -14,7 +14,7 @@ davon eingebaut ist.
 | JAGDPANZER | behalten; grosse, von vorn gepanzerte "Sniper" gegen Panzer | **0.34.107** |
 | TROSSWAGEN | behalten; kein Aufsitzen - hinten dranstellen, mit E einmal Munition und ein Medkit (begrenzter Gesamtvorrat). Gegnerische Trosswagen lassen sich pluendern. Nicht per Drop anforderbar, einige erscheinen regelmaessig an der Basis. Fahrzeuge heilen nur, solange sie hinten dranhaengen (auch im Stehen) | **0.34.108** |
 | SPULENWAGEN | behalten; EMP-Feld einschaltbar, dafuer muss der Wagen aufgebaut sein, es pulsiert am Ort, nur begrenzte Zeit, danach aufladen; schwaecherer Kettenblitz | **0.34.110** |
-| FUNKWAGEN | behalten; Bots, die mit ihm sprechen koennen, geben ihre Daten direkt ins Funknetz des Teams (nur mit aktivem Funk). Stoeren bleibt, aber er steht dabei auf der Karte | offen |
+| FUNKWAGEN | behalten; Bots, die mit ihm sprechen koennen, geben ihre Daten direkt ins Funknetz des Teams (nur mit aktivem Funk). Stoeren bleibt, aber er steht dabei auf der Karte | **0.34.111** |
 | WERFER | behalten; schiesst nur im Umkreis gueltiger Ziele (von jemandem im Team gesehene oder markierte Gegner und Fahrzeuge, Hotzones, spaeter weitere Objectives). Sehr leicht zu zerstoeren, dann grosse Explosion, die alle im Umkreis toetet. Jeder Schuss verraet ihn kurz auf Karte oder Minikarte, mit eigenem Symbol | offen |
 | FLAKWAGEN | behalten; nur Bots fahren ihn (sie spawnen darin oder werden damit gedroppt), weil Spieler nicht zwischen Boden- und Luftzielen wechseln koennen | offen |
 | TRAGSCHRAUBER | behalten; das Zielproblem fuer Spieler loesen. Es soll spaeter mehr Hubschrauber geben, und man soll auf andere Etagen schiessen koennen | offen |
@@ -25,7 +25,7 @@ davon eingebaut ist.
 
 1. Krad, Jagdpanzer (0.34.107)
 2. Trosswagen (0.34.108)
-3. Spulenwagen (0.34.110), Funkwagen, Werfer (Werfer und Funkwagen gehoeren zusammen)
+3. Spulenwagen (0.34.110), Funkwagen (0.34.111), Werfer (Werfer und Funkwagen gehoeren zusammen)
 4. Luftziele: Flakwagen und Tragschrauber, mit einer Regel, wie Spieler
    Luftziele und andere Etagen anvisieren
 
@@ -74,3 +74,15 @@ koennte fuer Helis und fuer Ziele auf anderen Etagen gelten.
 * Die Maustasten des Fahrers gelten fuer Fahrzeuge mit `schiesst = True`
   (`Gefecht._fahren`). Bodenkranz: `Gefecht._spulen_zeichnen`.
 * Die Nachschubtafel hat eine Zeile je Eintrag (Platz fuer bis zu 14).
+
+## Was 0.34.111 gebaut hat
+
+* `Aufbauwagen(Buggy)` (Phasen fahren / baut auf / aufgebaut, rechte
+  Maustaste) und `Funkwagen(Aufbauwagen)` in `dustfront/fahrzeug.py`,
+  Werte `K.FUNKWAGEN`. Die Wirkung steht im Gefecht:
+  `funkwagen_schritt` (markieren, stoeren), `funk_gestoert` (Bots, Nachschub),
+  `_funk_hoert` (Funknetz ueber `lage_melden`).
+* Zusatzwert je Art in der Fahrzeugmeldung (`netz_extra`, Feld 20) - der Werfer
+  nutzt ihn fuer seine Einschlaege.
+* Nicht gebaut: Minikarte weg fuer Menschen im Stoerkreis (offen), Truppfunk
+  (`trupp.funk_senden`) wird nicht gestoert, nur die Funksprueche der Bots.

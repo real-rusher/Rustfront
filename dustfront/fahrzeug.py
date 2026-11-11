@@ -1865,6 +1865,125 @@ class Spulenwagen(Buggy):
         self.feuer = self.zweit = self._zweit_alt = False
 
 
+class Aufbauwagen(Buggy):
+    """Ein Wagen, den man aufbauen muss, bevor er wirkt (seit 0.34.111:
+    Funkwagen, Werfer): die rechte Maustaste baut auf - nur im Stand, dauert
+    `aufbau` Sekunden, und er steht dabei und danach. Noch einmal gedrueckt
+    baut er wieder ab. Phasen: 0 faehrt, 1 baut auf, 2 aufgebaut."""
+
+    schiesst = True            # die Maustasten des Fahrers gelten (mehrspieler._fahren)
+
+    def __init__(self, pos, ebene: int = 0, winkel: float = 0.0,
+                 nur_bild: bool = False) -> None:
+        super().__init__(pos, ebene, winkel, nur_bild)
+        self.feuer = False
+        self.zweit = False
+        self.takt: dict = {}
+        self.phase = 0
+        self.phase_rest = 0.0      # beim Gast gemeldet
+        self._zweit_alt = False
+
+    @property
+    def aufgebaut(self) -> bool:
+        return self.phase == 2 and not self.kaputt
+
+    def schritt(self, dt: float) -> None:
+        if not (self.nur_bild or self.welt is None) and self.phase in (1, 2):
+            self.gas = self.lenk = 0.0
+            self.handbremse = True
+        super().schritt(dt)
+        if self.nur_bild or self.welt is None or self.kaputt:
+            return
+        for k in list(self.takt):
+            self.takt[k] = max(0.0, self.takt[k] - dt)
+        if self.emp_rest > 0.0:
+            return
+        self._aufbauen(dt)
+
+    def _aufbauen(self, dt: float) -> None:
+        druck = self.zweit and not self._zweit_alt
+        self._zweit_alt = self.zweit
+        if self.phase == 0 and druck and self.fahrer is not None \
+                and self.geschw.length() <= self.werte["stillstand"]:
+            self.phase, self.phase_rest = 1, self.werte["aufbau"]
+            self.welt.klang("aufheben", 0.8, self.pos, self.ebene)
+        elif self.phase in (1, 2) and druck:
+            self.phase, self.phase_rest = 0, 0.0
+            self.welt.klang("aufheben", 0.6, self.pos, self.ebene)
+        elif self.phase == 1:
+            self.phase_rest -= dt
+            if self.phase_rest <= 0.0:
+                self.phase, self.phase_rest = 2, 0.0
+
+    def netz_extra(self):
+        """Ein Zusatzwert fuer die Fahrzeugmeldung (Feld 20): Betriebsart,
+        Einschlaege ... - was die Art braucht."""
+        return 0
+
+    def netz_extra_setzen(self, wert) -> None:
+        pass
+
+    def zuruecksetzen(self) -> None:
+        super().zuruecksetzen()
+        self.phase, self.phase_rest = 0, 0.0
+        self.takt = {}
+        self.feuer = self.zweit = self._zweit_alt = False
+
+
+class Funkwagen(Aufbauwagen):
+    """Mast und Peilrahmen (seit 0.34.111, K.FUNKWAGEN). Betriebsart 0 PEILEN
+    oder 1 STOEREN (R); was sie bewirken, rechnet das Gefecht
+    (mehrspieler.Gefecht.funkwagen_schritt) - hier steht nur der Zustand."""
+
+    art = "funkwagen"
+    werte = K.FUNKWAGEN
+    schatten_bild = "funkwagen_schatten"
+
+    def __init__(self, pos, ebene: int = 0, winkel: float = 0.0,
+                 nur_bild: bool = False) -> None:
+        super().__init__(pos, ebene, winkel, nur_bild)
+        self.modus = 0
+        self._wirk_rest = 0.0
+
+    @property
+    def bild(self) -> str:
+        if self.kaputt:
+            return "funkwagen_wrack"
+        if self.phase != 2:
+            return "funkwagen"
+        zeit = self.welt.zeit if self.welt is not None else 0.0
+        return "funkwagen_aktiv_%d" % (int(zeit * self.werte["drehen"] * 4) % 4)
+
+    def mast_mitte(self, pos=None, winkel=None) -> pygame.Vector2:
+        pos = self.pos if pos is None else pos
+        winkel = self.winkel if winkel is None else winkel
+        return pos + pygame.Vector2(self.werte["mast"]).rotate(winkel)
+
+    @property
+    def radius_wirkung(self) -> float:
+        return self.werte["stoeren"] if self.modus == 1 else self.werte["peilen"]
+
+    def modus_wechseln(self) -> None:
+        if not self.kaputt and self.emp_rest <= 0.0:
+            self.modus = 1 - self.modus
+            if self.welt is not None:
+                self.welt.klang("aufheben", 0.5, self.pos, self.ebene)
+
+    def netz_extra(self):
+        return self.modus
+
+    def netz_extra_setzen(self, wert) -> None:
+        try:
+            self.modus = 1 if int(wert) == 1 else 0
+        except (TypeError, ValueError):
+            self.modus = 0
+
+    def zuruecksetzen(self) -> None:
+        super().zuruecksetzen()
+        self.modus = 0
+        self._wirk_rest = 0.0
+
+
 class Jagdpanzer(Panzer):
     """Ein Panzer ohne Turm (seit 0.34.107): die Kanone sitzt fest im Bug und
     schwenkt nur ein paar Grad (K.JAGDPANZER "schwenk"); wer mehr will, muss
@@ -1900,7 +2019,7 @@ class Jagdpanzer(Panzer):
 # Welche Art zu welcher Klasse und zu welchem Buchstaben in der Karte.
 ARTEN = {"buggy": Buggy, "panzer": Panzer, "panzerwagen": Panzerwagen,
          "krad": Krad, "jagdpanzer": Jagdpanzer, "trosswagen": Trosswagen,
-         "spulenwagen": Spulenwagen}
+         "spulenwagen": Spulenwagen, "funkwagen": Funkwagen}
 
 
 def marken() -> list:

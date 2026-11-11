@@ -616,3 +616,137 @@ def _spulenwagen_wrack():
 @platzhalter("spulenwagen_schatten")
 def _spulenwagen_schatten():
     return _schatten(int(66 * G), int(36 * G), 12)
+
+
+# ──────────────────────────────── Funkwagen (seit 0.34.111)
+
+FW_LACK = (106, 114, 92)
+FW_DK = (48, 54, 40)
+FW_HELL = (148, 156, 128)
+FW_SCHATTEN = (80, 88, 68)
+_STAUB_FW = [(140, 142, 112), (108, 110, 84), (166, 166, 132), (96, 96, 70)]
+
+
+def _luke(b, c, r, dk, mitte, hell):
+    b.kreis(dk, c, r)
+    b.kreis(mitte, c, r - 0.6)
+    b.kreis(hell, (c[0] - r * 0.25, c[1] - r * 0.25), r * 0.3)
+    b.linie(dk, (c[0] - r * 0.6, c[1] + r * 0.2), (c[0] + r * 0.6, c[1] + r * 0.2), 0.45)
+
+
+def peilrahmen_zeichnen(aufgebaut: bool = True) -> pygame.Surface:
+    """Was auf dem Mast sitzt: ein Richtstrahler mit Querstaeben und eine
+    kleine Schuessel, dazu die Warnlampe. 128 x 128, Drehpunkt in der Mitte;
+    eingefahren kleiner."""
+    b = _Blatt(128, G)
+    k = 1.0 if aufgebaut else 0.62
+    b.rohr((-13 * k, 0), (17 * k, 0), 1.5, (150, 146, 138), (40, 38, 34))
+    for i, x in enumerate((-11, -5, 1, 7, 13)):
+        halb = (9.4 - i * 1.3) * k
+        b.rohr((x * k, -halb), (x * k, halb), 0.9, (170, 166, 156), (40, 38, 34))
+    b.ellipse((30, 28, 26), -17 * k - 2.2, -4.2 * k, 4.4, 8.4 * k)
+    b.ellipse((176, 172, 160), -17 * k - 1.7, -3.7 * k, 3.4, 7.4 * k)
+    b.ellipse((112, 108, 100), -17 * k - 0.6, -2.6 * k, 1.6, 5.2 * k)
+    b.kreis((30, 28, 26), (0, 0), 2.6)
+    b.kreis((96, 92, 84), (0, 0), 2.0)
+    b.kreis((60, 16, 12), (0, 0), 1.1)
+    b.kreis((255, 84, 60) if aufgebaut else (150, 60, 44), (0, 0), 0.75)
+    return b.fertig()
+
+
+def funkwagen_zeichnen(aufgebaut: bool = False, drehung: float = 0.0) -> pygame.Surface:
+    """Kofferwagen mit Stabantennen, Aggregat, Kabeltrommel und dem Mast.
+    Aufgebaut: vier Abspannseile zu Erdnaegeln und der Peilrahmen, der um den
+    Mast `drehung` Grad gedreht steht. 160 x 160."""
+    b = _Blatt(160, G)
+    rnd = random.Random(8101)
+    if aufgebaut:
+        for dx, dy in ((22, -30), (22, 30), (-40, -28), (-40, 28)):
+            b.linie((52, 48, 42), (-8, 0), (dx, dy), 0.4)
+            b.kreis((30, 28, 26), (dx, dy), 1.2)
+            b.kreis((150, 146, 138), (dx, dy), 0.6)
+    for ax in (18, -18):
+        b.rohr((ax, -10), (ax, 10), 1.8, (96, 92, 86))
+        _reifen(b, ax, -13.4, 11, 6, 0.0)
+        _reifen(b, ax, 13.4, 11, 6, 0.0)
+    b.rect((30, 28, 24), 29.4, -10.4, 2.4, 20.8, 0.6)
+    b.rect((104, 98, 88), 29.8, -10, 1.6, 20, 0.4)
+    for sy in (-1, 1):
+        _scheinwerfer(b, (27.8, sy * 7.4), 1.2)
+    haube = [(28.6, -6), (26.6, -9), (15, -10), (15, 10), (26.6, 9), (28.6, 6)]
+    b.poly(FW_DK, haube)
+    b.poly(FW_LACK, [(x * 0.97 + 0.3, y * 0.88) for x, y in haube])
+    b.linie(FW_HELL, (16.4, -7.8), (26, -7), 0.8)
+    for i in range(4):
+        b.linie(FW_DK, (19, -4.5 + i * 3), (24.6, -4.5 + i * 3), 0.5)
+    b.rect(FW_DK, 6, -11.6, 9.6, 23.2, 1.4)                   # Fuehrerhaus
+    b.rect(FW_SCHATTEN, 6.5, -11.1, 8.6, 22.2, 1.1)
+    b.rect(FW_LACK, 7.2, -10.2, 6.4, 20.4, 0.9)
+    b.linie(FW_HELL, (7.6, -9.6), (13, -9.6), 0.7)
+    b.rect(GLAS_DK, 14, -9.2, 1.5, 18.4, 0.3)
+    b.rect((70, 96, 112), 14.3, -8.4, 0.7, 7.2, 0.2)
+    b.rect((70, 96, 112), 14.3, 1.2, 0.7, 7.2, 0.2)
+    koffer = [(6, -12.6), (-28, -12.6), (-30, -10.6), (-30, 10.6), (-28, 12.6), (6, 12.6)]
+    b.poly(FW_DK, koffer)
+    b.poly(FW_LACK, [(x * 0.97 - 0.3, y * 0.93) for x, y in koffer])
+    b.linien(FW_HELL, [(5, -11.4), (-27.6, -11.4), (-29, -10)], 0.9)
+    b.linien(FW_SCHATTEN, [(5, 11.4), (-27.6, 11.4), (-29, 10)], 0.9)
+    for x in (-3, -15):
+        b.linie(FW_DK, (x, -11.4), (x, 11.4), 0.4)
+    _nieten(b, [(x, sy * 10.4) for x in range(-26, 6, 5) for sy in (-1, 1)], FW_DK)
+    _luke(b, (1.4, 5.6), 2.8, FW_DK, FW_SCHATTEN, FW_HELL)
+    b.rect((30, 28, 26), -27.6, 2.6, 8.4, 7.4, 0.8)           # Aggregat mit Auspuff
+    b.rect((96, 92, 84), -27.2, 3.0, 7.6, 6.6, 0.6)
+    for i in range(4):
+        b.linie((52, 50, 46), (-26.6, 4 + i * 1.6), (-20.4, 4 + i * 1.6), 0.5)
+    b.rohr((-27, 6.4), (-31.6, 7.6), 1.3, (178, 172, 160), (52, 48, 44))
+    b.kreis((30, 28, 26), (-23.4, -6.2), 3.4)                 # Kabeltrommel
+    b.kreis((70, 66, 60), (-23.4, -6.2), 2.8)
+    for rr in (2.3, 1.7, 1.1):
+        b.segment((30, 28, 26), rr - 0.16, rr + 0.16, -180, 180, -23.4, -6.2)
+    b.kreis((150, 146, 138), (-23.4, -6.2), 0.6)
+    b.linien((30, 28, 26), [(-21, -4.6), (-15, -2.4), (-10.4, -1.4)], 0.45)
+    for (x, y, dx, dy) in ((3.4, -10.4, 9, -6), (-27, -10.6, -7, -6), (3.4, 10.4, 8, 5)):
+        b.linie((30, 28, 26), (x, y), (x + dx, y + dy), 0.4)  # Stabantennen
+        b.kreis((150, 232, 214), (x + dx, y + dy), 0.55)
+        b.kreis((30, 28, 26), (x, y), 0.8)
+    c = (-8, 0)                                               # Mastfuss
+    b.rect((30, 28, 26), c[0] - 4.2, c[1] - 4.2, 8.4, 8.4, 0.5)
+    b.rect((84, 82, 74), c[0] - 3.7, c[1] - 3.7, 7.4, 7.4, 0.4)
+    b.linie((30, 28, 26), (c[0] - 3.6, c[1] - 3.6), (c[0] + 3.6, c[1] + 3.6), 0.5)
+    b.linie((30, 28, 26), (c[0] - 3.6, c[1] + 3.6), (c[0] + 3.6, c[1] - 3.6), 0.5)
+    _staub(b, rnd, 60, -29, 27, -11.6, 11.6, _STAUB_FW)
+    _rost(b, rnd, 18, -29, 27, -12, 12)
+    unten = b.fertig()
+    peil = peilrahmen_zeichnen(aufgebaut)
+    peil = pygame.transform.rotate(peil, -drehung)
+    m = unten.get_width() / 2
+    unten.blit(peil, peil.get_rect(center=(m + c[0] * G, m + c[1] * G)))
+    return unten
+
+
+@platzhalter("funkwagen")
+def _funkwagen():
+    return funkwagen_zeichnen(False)
+
+
+@platzhalter("funkwagen_wrack")
+def _funkwagen_wrack():
+    return _wrack(funkwagen_zeichnen(False), 7580)
+
+
+@platzhalter("funkwagen_schatten")
+def _funkwagen_schatten():
+    return _schatten(int(64 * G), int(34 * G), 11)
+
+
+def _funk_drehung(i: int):
+    def z():
+        return funkwagen_zeichnen(True, i * 45.0)
+    return z
+
+
+# Aufgebaut: der Peilrahmen dreht sich - vier Stellungen, die das Fahrzeug
+# nacheinander zeigt (Funkwagen.bild).
+for _i in range(4):
+    platzhalter("funkwagen_aktiv_%d" % _i)(_funk_drehung(_i))

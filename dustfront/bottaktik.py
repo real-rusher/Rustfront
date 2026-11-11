@@ -185,6 +185,11 @@ class Taktik:
         saetze = b["funk"].get(anlass)
         if not saetze:
             return False
+        # Im Stoerkreis eines gegnerischen Funkwagens (seit 0.34.111) kommt
+        # nichts durch.
+        gestoert = getattr(self.g, "funk_gestoert", None)
+        if gestoert is not None and gestoert(self.k):
+            return False
         jetzt = self.g.welt.zeit
         if not wichtig:
             if self.funk_sperre > 0.0:

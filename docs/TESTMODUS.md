@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.111 | Spawner OBJEKTE: FUNKWAGEN, NACHSCHUB: ABWURF: FUNKWAGEN. Ausprobieren: SPIELER, ICH (Team waehlen) mit E einsteigen, rechte Maustaste baut auf, R schaltet PEILEN/STOEREN; einen Gegner (Team 1) in den Kreis setzen und sehen, dass er markiert wird; einen BOT mit FUNKSPRUECHE-Regel im Kreis des Gegners setzen (er funkt nicht mehr). Pruefungen im Abschnitt "Funkwagen" von `tests/test_spiel.py` |
 | 0.34.110 | Spawner OBJEKTE: SPULENWAGEN, NACHSCHUB: ABWURF: SPULENWAGEN. Ausprobieren: SPIELER, ICH mit E einsteigen; linke Maustaste Blitz, rechte baut das Feld auf (im Stand), einen PANZER daneben setzen und mit INFO sehen, dass er stillsteht (EMP-Rest). Pruefungen im Abschnitt "Spulenwagen" von `tests/test_spiel.py` |
 | 0.34.109 | Nichts Neues zum Setzen: FAHRER MIT FAHRZEUG und SPIELER, ICH mit AUSSEHEN zeigen den Skin jetzt auch im Krad und im Jagdpanzer. Pruefungen im Abschnitt "0.34.109" von `tests/test_spiel.py` |
 | 0.34.108 | Spawner OBJEKTE: TROSSWAGEN (Anzahl, Streuung, Richtung); FAHRER MIT FAHRZEUG kennt ihn nicht (nur Menschen am Steuer). Ausprobieren: SPIELER, ICH hinter den Wagen stellen und E druecken (Munition und Medkit, `[E] NACHSCHUB (n)` steht dort), einen beschaedigten PANZER hinten dranstellen (repariert sich). Pruefungen im Abschnitt "Trosswagen" von `tests/test_spiel.py` |

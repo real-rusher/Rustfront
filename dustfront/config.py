@@ -1081,7 +1081,7 @@ SCHLACHT = dict(
                 sperre_basis=1800.0, ausweichen_ab=300.0, treiben=70.0, suche_weit=420.0,
                 stoss=520.0, quetschen=15.0, warnen_ab=160.0),
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
-                  zeichen=dict(buggy="B", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
+                  zeichen=dict(buggy="B", funkwagen="F", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
                                medkit="+")),
     punkte=dict(abschuss=1, fahrzeug=5, aufhelfen=5),
     # Was man kaufen kann: (Kennung, Kosten, Name).
@@ -1098,8 +1098,9 @@ SCHLACHT = dict(
         ("panzer", 12, "DROPZONE: PANZER"),
         ("jagdpanzer", 10, "DROPZONE: JAGDPANZER"),
         ("spulenwagen", 10, "DROPZONE: SPULENWAGEN"),
+        ("funkwagen", 7, "DROPZONE: FUNKWAGEN"),
     ),
-    belohnung_hilfe=dict(spulenwagen="BLITZ UND EMP-FELD, NUR AUFGEBAUT", krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
+    belohnung_hilfe=dict(funkwagen="PEILEN ODER STÖREN, NUR AUFGEBAUT", spulenwagen="BLITZ UND EMP-FELD, NUR AUFGEBAUT", krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
                          munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
                          buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
                          panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE",
@@ -1631,6 +1632,46 @@ SPULENWAGEN = dict(
               stillstand=8.0),   # nur im Stand: so langsam (px/s) muss er sein
 )
 
+# Der Funkwagen (seit 0.34.111): Mast und Peilrahmen. Rechte Maustaste baut
+# ihn auf (er steht dabei, `aufbau` Sekunden), R schaltet die Betriebsart:
+#   PEILEN  gegnerische Kaempfer, Gegner und Fahrzeuge im Kreis `peilen`
+#           werden fuer die eigene Seite markiert (Raute, Karte, auch im
+#           Nebel) - und damit zum Ziel fuer den Werfer.
+#   STOEREN im Kreis `stoeren` funken gegnerische Bots nicht, ihre
+#           Markierungen verfallen, Spaehdrohnen fallen aus, und kein
+#           gegnerischer Nachschub kommt an. Dafuer steht der Funkwagen
+#           waehrenddessen auf der Karte der Gegner.
+# Aufgebaut hoert er ausserdem die Bots der eigenen Seite im Kreis `funk`
+# (nur mit der Regel FUNKSPRUECHE DER BOTS): was sie sehen, steht dann als
+# Markierung im Funknetz der Seite. Nur fuer Menschen am Steuer.
+FUNKWAGEN = dict(
+    {k: v for k, v in TROSSWAGEN.items()
+     if k not in ("zone", "entnahmen", "pause", "reparatur", "nur_mensch", "name", "marke")},
+    marke="F2",
+    name="FUNKWAGEN",
+    hoechst=200.0,
+    kreis=22.0,
+    achse=24.0,
+    einsteigen=54.0,
+    leben=300.0,
+    nur_mensch=True,
+    explosion_radius=70.0,
+    explosion_schaden=60.0,
+    fahrer_schaden=45.0,
+    wrack_zeit=10.0,
+    neu_nach=40.0,
+    balken_breite=34,
+    schiesst=True,
+    mast=(-8.0 * 1.4, 0.0),   # Pixel von der Mitte, +x = vorn
+    aufbau=3.0,
+    stillstand=8.0,           # nur im Stand: so langsam (px/s) muss er sein
+    takt=1.0,                 # so oft wirkt er (s)
+    peilen=470.0,
+    stoeren=420.0,
+    funk=900.0,
+    drehen=1.1,               # Umdrehungen des Peilrahmens je Sekunde / 4 Stellungen
+)
+
 # Rammen und was danach fliegt (seit 0.34.59). Gilt fuer beide.
 RAMMEN = dict(
     sperre=0.4,               # so lange kein zweiter Schaden vom selben Fahrzeug
@@ -1724,6 +1765,8 @@ PANZERUNG = {
     # Der Spulenwagen: Keramik und Blech, wie ein Panzerwagen.
     "spulenwagen": dict(kugel=0.4, panzerbrechend=1.2, spreng=0.9, hohlladung=1.5,
                         feuer=0.3, nahkampf=0.2, ramm=0.7),
+    "funkwagen": dict(kugel=0.8, panzerbrechend=1.2, spreng=1.0, hohlladung=1.4,
+                      feuer=0.5, nahkampf=0.4, ramm=0.9),
     "jagdpanzer": dict(kugel=0.1, panzerbrechend=0.8, spreng=0.4, hohlladung=1.25,
                        feuer=0.1, nahkampf=0.05, ramm=0.35),
 }
@@ -4459,6 +4502,11 @@ for _team in TEAMS["kombi"]:
     BILD_MASS["panzerwagen_ring_%s_fahrer" % _team["name"].lower()] = (_fz_r, _fz_r)
 # Die Granate der Kanone, mit dicker Leuchtspur gezeichnet.
 BILD_MASS["panzergranate"] = (12, 6)
+for _name in ("funkwagen", "funkwagen_wrack"):
+    BILD_MASS[_name] = (160, 160)
+BILD_MASS["funkwagen_schatten"] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
+for _i in range(4):
+    BILD_MASS["funkwagen_aktiv_%d" % _i] = (160, 160)
 for _name in ("spulenwagen", "spulenwagen_aktiv", "spulenwagen_wrack", "spulenwagen_schatten"):
     BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _name in ("trosswagen", "trosswagen_wrack", "trosswagen_schatten"):
