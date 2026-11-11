@@ -5502,7 +5502,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                for g in self.welt.gas if g.lebt]
         return {"t": "welt", "rest": round(self.rest, 1), "rauch": qualm,
                 # Seit 0.34.129: wie lange die Runde laeuft (FREISCHALTEN beim Gast).
-                "rlz": round(getattr(self, "runden_alter", 0.0), 1),
+                # Ganze Sekunden: aendert sich nur einmal je Sekunde, so geht es
+                # in den Aenderungsmeldungen fast nie mit.
+                "rlz": int(getattr(self, "runden_alter", 0.0)),
                 # Die Uhr des Gastgebers (seit 0.34.103): danach spielt der
                 # Gast die Meldungen gleichmaessig ab (Gefecht._puffer_*).
                 "zt": round(self._zeit, 3),

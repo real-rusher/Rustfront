@@ -16863,7 +16863,9 @@ pruef("Munition, Sanitaet und Buggy stehen vorn in der Liste",
       [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"][:3]] == ["munition", "medkit", "buggy"])
 pruef("Den Napalm-Angriff gibt es im Nachschub", "napalm" in _preis301)
 w301, g301 = _paar59("schlacht", karte="staubtal_offen")
-w301._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="staubtal_offen", schlacht_seite=4))
+# FREISCHALTEN aus (seit 0.34.129): hier geht es um den Angriff, nicht darum, wann er kommt.
+w301._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="staubtal_offen", schlacht_seite=4,
+                         freischalten="aus"))
 _ich301 = w301.ich
 _ich301.schlacht_punkte = 50
 _mitte301 = w301._schlacht_punkte()[2]

@@ -1373,7 +1373,9 @@ class SchlachtTeil:
             pygame.draw.rect(ziel, K.C_AMBER if gewaehlt else (70, 56, 40), r, 1)
             farbe = K.C_CREAM if leistbar else K.C_MUTED_DK
             SCHRIFT.zeichnen(ziel, "%d  %s" % (i + 1, text), r.x + 5, r.y + 4, farbe, 1)
-            SCHRIFT.zeichnen(ziel, bis or ("GRATIS" if gratis else "%d P" % kosten), r.right - 5, r.y + 4,
+            # Gesperrt: nur die Zeit ("0:46"), damit lange Namen Platz haben.
+            SCHRIFT.zeichnen(ziel, bis.replace("IN ", "") or ("GRATIS" if gratis else "%d P" % kosten),
+                             r.right - 5, r.y + 4,
                              K.C_AMBER if leistbar else K.C_MUTED_DK, 1, ausrichtung="rechts")
         wahl_ = self.belohnung_wahl
         if 0 <= wahl_ < len(S["belohnungen"]):
