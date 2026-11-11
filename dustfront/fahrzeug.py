@@ -1964,13 +1964,29 @@ class Aufbauwagen(Buggy):
         self.phase = 0
         self.phase_rest = 0.0      # beim Gast gemeldet
         self._zweit_alt = False
+        # Wie weit aufgebaut, weich (seit 0.34.120): 0 eingepackt, 1 steht. Er
+        # waechst waehrend des Aufbaus und faellt beim Abbau - dasselbe Mass,
+        # damit das Bild nicht von einer Stellung in die andere springt. Beim
+        # Gast folgt er der gemeldeten Phase von selbst.
+        self.fortschritt = 0.0
 
     @property
     def aufgebaut(self) -> bool:
         return self.phase == 2 and not self.kaputt
 
+    def _fortschritt_nachziehen(self, dt: float) -> None:
+        ziel = 1.0 if self.phase in (1, 2) and not self.kaputt else 0.0
+        schritt = dt / max(0.2, float(self.werte["aufbau"]))
+        if self.fortschritt < ziel:
+            self.fortschritt = min(ziel, self.fortschritt + schritt)
+        elif self.fortschritt > ziel:
+            self.fortschritt = max(ziel, self.fortschritt - schritt)
+
     def schritt(self, dt: float) -> None:
-        if not (self.nur_bild or self.welt is None) and self.phase in (1, 2):
+        self._fortschritt_nachziehen(dt)
+        # Aufgebaut oder noch beim Abbauen: er steht (seit 0.34.120 auch waehrend
+        # des Einpackens - sonst fuhr er mit halb ausgefahrenem Mast los).
+        if not (self.nur_bild or self.welt is None) and (self.phase in (1, 2) or self.fortschritt > 0.0):
             self.gas = self.lenk = 0.0
             self.handbremse = True
         super().schritt(dt)
@@ -1985,7 +2001,7 @@ class Aufbauwagen(Buggy):
     def _aufbauen(self, dt: float) -> None:
         druck = self.zweit and not self._zweit_alt
         self._zweit_alt = self.zweit
-        if self.phase == 0 and druck and self.fahrer is not None \
+        if self.phase == 0 and druck and self.fahrer is not None and self.fortschritt <= 0.02 \
                 and self.geschw.length() <= self.werte["stillstand"]:
             self.phase, self.phase_rest = 1, self.werte["aufbau"]
             self.welt.klang("aufheben", 0.8, self.pos, self.ebene)
@@ -2008,6 +2024,7 @@ class Aufbauwagen(Buggy):
     def zuruecksetzen(self) -> None:
         super().zuruecksetzen()
         self.phase, self.phase_rest = 0, 0.0
+        self.fortschritt = 0.0
         self.takt = {}
         self.feuer = self.zweit = self._zweit_alt = False
 
@@ -2031,8 +2048,13 @@ class Funkwagen(Aufbauwagen):
     def bild(self) -> str:
         if self.kaputt:
             return "funkwagen_wrack"
-        if self.phase != 2:
+        p = self.fortschritt
+        if p <= 0.0:
             return "funkwagen"
+        if p < 1.0 or self.phase != 2:
+            # Auf- und Abbau (seit 0.34.120): Abspannseile laufen aus, der Peilrahmen
+            # steigt, klappt auf und dreht sich schneller - in 15 Stufen.
+            return "funkwagen_aufbau_%d" % max(1, min(15, int(math.ceil(p * 16.0)) - 1))
         zeit = self.welt.zeit if self.welt is not None else 0.0
         return "funkwagen_aktiv_%d" % (int(zeit * self.werte["drehen"] * 4) % 4)
 
@@ -2077,15 +2099,22 @@ class Werfer(Aufbauwagen):
     """Steilfeuer (seit 0.34.112, K.WERFER): aufgebaut schiesst die linke
     Maustaste eine Salve Raketen auf einen Punkt, an dem die eigene Seite ein
     gueltiges Ziel hat (Gefecht.werfer_pruefen). Hier steht der Zustand: die
-    Raketen in der Luft (`einschlaege`: [Restzeit, x, y, gestartet]), ob eine
-    Salve bereit ist, ob das Ziel unter dem Zeiger gilt (`ziel_grund`: 0 ja,
-    1 zu nah, 2 zu weit, 3 kein Ziel) und wohin das Gestell zeigt. Sehr
-    leicht zerstoert - dann eine grosse Explosion."""
+    Raketen in der Luft (`einschlaege`: [Restzeit, x, y, gestartet, Rohr]),
+    ob eine Salve bereit ist, ob das Ziel unter dem Zeiger gilt (`ziel_grund`:
+    0 ja, 1 zu nah, 2 zu weit, 3 kein Ziel).
+
+    Seit 0.34.120 hat das Gestell einen eigenen Zustand (art_werfer.py,
+    luft.py): es dreht sich weich zum Zeiger (`rohr_rel`, Grad zur
+    Fahrtrichtung), hebt sich mit dem Aufbau (`stufe`), und jedes der sechs
+    Rohre ist geladen oder leer (`rohre`, Maske): die Raketen starten
+    nacheinander, die Rohre laden hinterher einzeln wieder (`nachladen`:
+    [Restzeit, Rohr]). Sehr leicht zerstoert - dann die groesste Explosion des
+    Spiels, ohne Wrack: nur Einzelteile."""
 
     art = "werfer"
     werte = K.WERFER
     schatten_bild = "werfer_schatten"
-    explosion_art = "c4"
+    explosion_art = "werfer_gross"
 
     def __init__(self, pos, ebene: int = 0, winkel: float = 0.0,
                  nur_bild: bool = False) -> None:
@@ -2093,51 +2122,131 @@ class Werfer(Aufbauwagen):
         self.einschlaege: list = []
         self.bereit = False
         self.ziel_grund = 3
-        self.rohr_stufe = 0          # Gestell in 30-Grad-Stufen von der Fahrtrichtung weg
+        self.rohr_rel = 0.0          # wohin das Gestell zeigt, Grad von der Fahrtrichtung
+        self._rohr_soll = 0.0        # beim Gast: der gemeldete Wert, dem es folgt
+        self.rohre = 63              # welche der sechs Rohre eine Rakete tragen (Bits)
+        self.nachladen: list = []    # [Restzeit, Rohr]: wann ein leeres Rohr wieder laedt
+
+    @property
+    def stufe(self) -> int:
+        """Wie hoch das Gestell steht, 0 (liegt auf der Pritsche) bis 8."""
+        from .art_werfer import STUFEN
+        h = max(0.0, min(1.0, (self.fortschritt - 0.3) / 0.7))
+        return int(round(h * STUFEN))
 
     @property
     def bild(self) -> str:
         if self.kaputt:
             return "werfer_wrack"
-        return "werfer_aufgebaut_%d" % self.rohr_stufe if self.phase == 2 else "werfer"
+        if self.fortschritt <= 0.0:
+            return "werfer"
+        return "werfer_stuetze_%d" % max(1, min(8, int(math.ceil(self.fortschritt * 8.0))))
+
+    def gestell_bild(self) -> str:
+        return "werfer_rohre_%d_%d" % (self.stufe, self.rohre)
+
+    def gestell_winkel(self) -> float:
+        return self.winkel + self.rohr_rel
 
     def rohr_mitte(self, pos=None, winkel=None) -> pygame.Vector2:
+        """Der Drehkranz, auf dem das Gestell sitzt."""
         pos = self.pos if pos is None else pos
         winkel = self.winkel if winkel is None else winkel
         return pos + pygame.Vector2(self.werte["rohr"]).rotate(winkel)
 
+    def muendung(self, index: int) -> pygame.Vector2:
+        """Wo Rohr `index` endet (Welt, Spielpixel)."""
+        from .art_werfer import muendung_versatz
+        vor, quer = muendung_versatz(index, self.stufe)
+        return self.rohr_mitte() + pygame.Vector2(vor * 1.1, quer * 1.1).rotate(self.gestell_winkel())
+
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
-        if self.nur_bild or self.welt is None or self.kaputt:
+        if self.kaputt:
             return
-        k = self.fahrer
-        ziel = getattr(k, "ziel", None) if k is not None else None
-        if self.phase == 2 and ziel is not None:
-            d = pygame.Vector2(ziel) - self.rohr_mitte()
-            if d.length_squared() > 16.0:
-                rel = math.degrees(math.atan2(d.y, d.x)) - self.winkel
-                self.rohr_stufe = int(round(rel / 30.0)) % 12
+        if self.nur_bild or self.welt is None:
+            soll = self._rohr_soll                 # Gast: dem gemeldeten Wert folgen
+        else:
+            soll = 0.0
+            k = self.fahrer
+            ziel = getattr(k, "ziel", None) if k is not None else None
+            if self.phase == 2 and ziel is not None:
+                d = pygame.Vector2(ziel) - self.rohr_mitte()
+                if d.length_squared() > 16.0:
+                    soll = (math.degrees(math.atan2(d.y, d.x)) - self.winkel + 180.0) % 360.0 - 180.0
+        diff = (soll - self.rohr_rel + 180.0) % 360.0 - 180.0
+        schritt = float(self.werte["dreh"]) * dt
+        self.rohr_rel = (self.rohr_rel + max(-schritt, min(schritt, diff)) + 180.0) % 360.0 - 180.0
 
     def netz_extra(self):
-        return [int(self.bereit), self.ziel_grund, self.rohr_stufe,
-                [[round(e[0], 1), int(e[1]), int(e[2])] for e in self.einschlaege[:12]]]
+        return [int(self.bereit), self.ziel_grund, int(round(self.rohr_rel)), int(self.rohre),
+                [[round(e[0], 1), int(e[1]), int(e[2]), int(e[4])] for e in self.einschlaege[:12]]]
 
     def netz_extra_setzen(self, wert) -> None:
         try:
             self.bereit = bool(int(wert[0]))
             self.ziel_grund = max(0, min(3, int(wert[1])))
-            self.rohr_stufe = int(wert[2]) % 12
+            self._rohr_soll = float(wert[2])
+            self.rohre = int(wert[3]) & 63
             self.einschlaege = [[max(0.0, min(30.0, float(e[0]))), float(e[1]), float(e[2]),
-                                 float(e[0]) <= K.WERFER["salve"]["flug"]]
-                                for e in wert[3][:12]]
+                                 float(e[0]) <= K.WERFER["salve"]["flug"],
+                                 max(0, min(5, int(e[3])))]
+                                for e in wert[4][:12]]
         except (TypeError, ValueError, IndexError):
             self.einschlaege = []
 
     def zuruecksetzen(self) -> None:
         super().zuruecksetzen()
         self.einschlaege = []
+        self.nachladen = []
+        self.rohre = 63
+        self.rohr_rel = self._rohr_soll = 0.0
         self.bereit = False
         self.ziel_grund = 3
+
+    def _zerstoeren(self, von) -> None:
+        """Die groesste Explosion des Spiels (seit 0.34.120): der Fahrer stirbt
+        sofort und alle im Umkreis `explosion_tot` mit ihm, bis `explosion_radius`
+        reisst es noch viel mit (abfallend). Kein Wrack - der Wagen ist weg, am
+        Boden bleiben Einzelteile (Welt.explosion "werfer_gross")."""
+        f = self.werte
+        self.kaputt = True
+        self.kaputt_von = von
+        self.leben = 0.0
+        self.wrack_rest = f["wrack_zeit"]
+        self.gas = self.lenk = 0.0
+        self.handbremse = False
+        self.einschlaege = []
+        w = self.welt
+        if w is None:
+            return
+        r = f["explosion_radius"]
+        tot = f["explosion_tot"]
+        w.explosion(self.pos, self.ebene, r, "werfer_gross", von)
+        fahrer = self.fahrer
+        for ding in list(w.nahe(self.pos, r + 40, self.ebene)) + ([fahrer] if fahrer is not None else []):
+            if ding is self or not ding.lebt or not (getattr(ding, "trefferbar", False) or ding is fahrer):
+                continue
+            weit = self.pos.distance_to(ding.pos)
+            if weit >= r and ding is not fahrer:
+                continue
+            ab = ding.pos - self.pos
+            schub = ab.normalize() * 520.0 if ab.length_squared() > 0.01 else None
+            if getattr(ding, "ist_fahrzeug", False):
+                schaden_an(ding, f["explosion_fahrzeug"] * (1.0 - 0.6 * min(1.0, weit / r)), schub, von,
+                           "spreng", self.pos)
+                continue
+            if ding is fahrer or weit <= tot:
+                # Tot, sofort: bei einer Figur ohne Aufhelfen (am Boden gaebe es ein Aufstehen).
+                lebte = ding.lebt
+                schaden_an(ding, 99999.0, schub, von, "spreng", self.pos)
+                if hasattr(ding, "am_boden") and ding.lebt:
+                    ding.am_boden = True
+                    ding.sterben(von)
+                abschuss_buchen(von, ding, "werfer", lebte)
+            else:
+                anteil = (1.0 - (weit - tot) / max(1.0, r - tot))
+                schaden_an(ding, 220.0 * anteil, schub, von, "spreng", self.pos)
 
 
 class Tragschrauber(Buggy):

@@ -722,6 +722,7 @@ KLANG_NAMEN = (
     "flak_burst",           # eine Flakwolke platzt
     "fallschirm_riss",      # der Schirm eines Abwurfs reisst
     "absturz",              # ein Fahrzeug schlaegt nach dem Sturz auf
+    "werfer_explosion",     # der Werfer geht hoch (seit 0.34.120)
     "bombe_ab",             # eine Bombe loest sich vom Rahmen (seit 0.34.119)
     "bombe_fall",           # das Pfeifen der fallenden Bombe
     "panzer_einschlag",     # die Granate der Kanone schlaegt ein
@@ -1709,18 +1710,28 @@ WERFER = dict(
     leben=120.0,
     nur_mensch=True,
     schiesst=True,
-    explosion_radius=170.0,
+    # Die groesste Explosion des Spiels (seit 0.34.120): wer bis `explosion_tot`
+    # Pixel danebensteht - der Fahrer immer -, stirbt sofort; bis
+    # `explosion_radius` reisst es noch Leben (Fahrzeuge `explosion_fahrzeug`).
+    # Kein Wrack: `wrack_zeit` ist nur die Zeit, bis der Wagen aus der Welt ist.
+    explosion_radius=330.0,
+    explosion_tot=210.0,
     explosion_schaden=400.0,
-    fahrer_schaden=60.0,
-    wrack_zeit=12.0,
+    explosion_fahrzeug=700.0,
+    fahrer_schaden=9999.0,
+    wrack_zeit=0.6,
     neu_nach=60.0,
     balken_breite=30,
     aufbau=2.5,
+    dreh=110.0,               # so schnell dreht sich das Gestell zum Zeiger (Grad/s)
     stillstand=8.0,
     rohr=(-15.0 * 1.4, 0.0),  # Mitte des Gestells (Pixel von der Mitte, +x = vorn)
     salve=dict(raketen=6, abstand=0.5, flug=3.6, streu=110.0, radius=46.0, schaden=90.0,
                fahrzeug=120.0, nachladen=14.0, nah=400.0, weit=3200.0, umkreis=130.0,
-               sicht=420.0, verraten=6.0, hoch=150.0, pruefen=0.4),
+               sicht=420.0, verraten=6.0, hoch=150.0, pruefen=0.4,
+               # Die Rohre laden einzeln wieder (seit 0.34.120): das erste `nachladen_ab`
+               # Sekunden nach dem letzten Start, dann je `nachladen_je` Sekunden eines.
+               nachladen_ab=3.0, nachladen_je=1.75, reihenfolge=(0, 3, 1, 4, 2, 5)),
 )
 
 # Der Tragschrauber (seit 0.34.113): fliegt ueber Mauern, Felsen und die Front.
@@ -4691,6 +4702,8 @@ for _name in ("flak_lafette", "flak_lafette_fahrer"):
     BILD_MASS[_name] = (128, 128)
 for _team in TEAMS["kombi"]:
     BILD_MASS["flak_lafette_%s_fahrer" % _team["name"].lower()] = (128, 128)
+for _i in range(6):
+    BILD_MASS["werfer_teil_%d" % _i] = (32, 32)
 for _name in ("bombe_rahmen",):
     BILD_MASS[_name] = (48, 48)
 for _name in ("bombe_fall",):
@@ -4705,13 +4718,15 @@ for _i in range(6):
     BILD_MASS["rotor_%d" % _i] = (192, 192)
 for _name in ("werfer", "werfer_wrack", "werfer_schatten"):
     BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
-for _i in range(12):
-    BILD_MASS["werfer_aufgebaut_%d" % _i] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
+for _i in range(1, 9):
+    BILD_MASS["werfer_stuetze_%d" % _i] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _name in ("funkwagen", "funkwagen_wrack"):
     BILD_MASS[_name] = (160, 160)
 BILD_MASS["funkwagen_schatten"] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _i in range(4):
     BILD_MASS["funkwagen_aktiv_%d" % _i] = (160, 160)
+for _i in range(1, 16):
+    BILD_MASS["funkwagen_aufbau_%d" % _i] = (160, 160)
 for _name in ("spulenwagen", "spulenwagen_aktiv", "spulenwagen_wrack", "spulenwagen_schatten"):
     BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _name in ("trosswagen", "trosswagen_wrack", "trosswagen_schatten"):

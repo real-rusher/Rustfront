@@ -1700,11 +1700,18 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                 e[0] -= dt
                 if e[0] <= s["flug"] and not e[3]:
                     e[3] = True
-                    self.welt.klang("rakete", 0.8, b.rohr_mitte(), b.ebene)
+                    self._werfer_start(b, e[4])
                 if e[0] <= 0.0:
                     b.einschlaege.remove(e)
                     self._werfer_einschlag(b, pygame.Vector2(e[1], e[2]))
-            b.bereit = b.aufgebaut and not b.einschlaege and b.takt.get("salve", 0.0) <= 0.0
+            # Die leeren Rohre laden nacheinander wieder (seit 0.34.120).
+            for r in list(b.nachladen):
+                r[0] -= dt
+                if r[0] <= 0.0:
+                    b.nachladen.remove(r)
+                    b.rohre |= 1 << r[1]
+                    self.welt.klang("aufheben", 0.5, b.muendung(r[1]), b.ebene)
+            b.bereit = (b.aufgebaut and not b.einschlaege and not b.nachladen and b.rohre == 63)
             k = b.fahrer
             ziel = getattr(k, "ziel", None) if k is not None else None
             team = self._team_von_seite(fahrzeug_modul.seite_von(b))
@@ -1714,18 +1721,31 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
 
     def _werfer_salve(self, b, punkt, team) -> None:
         s = K.WERFER["salve"]
-        b.takt["salve"] = s["nachladen"] + (s["raketen"] - 1) * s["abstand"]
         b.bereit = False
         for i in range(s["raketen"]):
             r = s["streu"] * math.sqrt(random.random())
             p = punkt + pygame.Vector2(r, 0).rotate(random.uniform(0.0, 360.0))
-            b.einschlaege.append([s["flug"] + i * s["abstand"], p.x, p.y, False])
+            rohr = s["reihenfolge"][i % len(s["reihenfolge"])]
+            b.einschlaege.append([s["flug"] + i * s["abstand"], p.x, p.y, False, rohr])
+            # Das Rohr laedt wieder, wenn alle gestartet sind und die Pause um ist -
+            # eines nach dem anderen, in der Reihenfolge, in der sie leer wurden.
+            b.nachladen.append([(s["raketen"] - 1) * s["abstand"] + s["nachladen_ab"] + i * s["nachladen_je"],
+                                rohr])
         if hasattr(b.fahrer, "zaehlen"):
             b.fahrer.zaehlen("schuesse", float(s["raketen"]), "werfer")
         # Der Werfer verraet sich (Zeichen auf der Karte der Gegner).
         b.markiert_rest = max(getattr(b, "markiert_rest", 0.0), s["verraten"])
         if team in (0, 1):
             b.markiert_fuer = "team%d" % (1 - team)
+
+    def _werfer_start(self, b, rohr: int) -> None:
+        """Eine Rakete verlaesst ihr Rohr (seit 0.34.120): das Rohr ist leer, vorn
+        blitzt es, hinten tritt der Rueckstrahl aus (Welt.explosion "werfer_start",
+        der Radius ist hier die Richtung des Gestells - so geht es zum Gast)."""
+        b.rohre &= ~(1 << rohr)
+        pos = b.muendung(rohr)
+        self.welt.klang("rakete", 0.9, pos, b.ebene)
+        self.welt.explosion(pos, b.ebene, b.gestell_winkel(), "werfer_start", b.fahrer)
 
     def _werfer_einschlag(self, b, p) -> None:
         s = K.WERFER["salve"]
@@ -1773,16 +1793,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         for b in self.fahrzeuge:
             if b.art != "werfer" or b.kaputt or b.ebene != self.blick:
                 continue
-            start = b.rohr_mitte()
             for e in b.einschlaege:
                 if e[0] > s["flug"]:
                     continue
+                start = b.muendung(e[4])              # sie fliegen aus ihrem Rohr (seit 0.34.120)
                 ende = pygame.Vector2(e[1], e[2])
                 p = 1.0 - e[0] / s["flug"]
+                anfang_hoch = 6.0 + b.stufe * 1.1
                 for i in range(7, -1, -1):
                     q = max(0.0, p - i * 0.022)
                     pos = start.lerp(ende, q)
-                    hoch = 4.0 * q * (1.0 - q) * s["hoch"]
+                    hoch = 4.0 * q * (1.0 - q) * s["hoch"] + (1.0 - q) * anfang_hoch
                     bild = pos - ecke - pygame.Vector2(0, hoch)
                     if i == 0:
                         sch = pos - ecke
@@ -3695,8 +3716,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                 elif wagen.phase == 1:
                     txt = "BAUT AUF %.1f" % wagen.phase_rest
                 elif not wagen.bereit:
-                    rest = wagen.takt.get("salve", 0.0)
-                    txt = "LÄDT %.0f" % rest if rest > 0.0 else "SALVE UNTERWEGS"
+                    txt = ("SALVE UNTERWEGS" if wagen.einschlaege
+                           else "LÄDT %d/6" % bin(wagen.rohre).count("1"))
                 else:
                     txt = ("SALVE [LMB]  [RMB] ABBAUEN", "ZU NAH", "ZU WEIT",
                            "KEIN GÜLTIGES ZIEL")[wagen.ziel_grund]
@@ -7071,6 +7092,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         if gast:
             self._fremde_fallende(ziel, misch)
         self._drohnen_zeichnen(ziel, misch)
+        self._werfer_gestelle_zeichnen(ziel, misch)
         self._luftfahrzeuge_zeichnen(ziel, misch)
         self._raketen_zeichnen(ziel)
         if self.schlacht or self.__dict__.get("nachschub_an"):

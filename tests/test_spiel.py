@@ -17871,7 +17871,7 @@ for _ in range(3):
     _wf_ein112(zielt_=True)
 for _ in range(int(3.0 / K.FIXED_DT)):
     _wf_ein112()
-pruef("Werfer: die rechte Maustaste baut ihn auf (Phase 2), er steht", _wf112.phase == 2 and _wf112.bild.startswith("werfer_aufgebaut_"),
+pruef("Werfer: die rechte Maustaste baut ihn auf (Phase 2), er steht", _wf112.phase == 2 and _wf112.bild.startswith("werfer_stuetze_"),
       "%d %s" % (_wf112.phase, _wf112.bild))
 # Ein Gegner 640 Pixel entfernt, ein Kamerad dicht dabei (sieht ihn).
 _feind112 = _tm112.puppe_setzen(_z112(24, 10), 0, {"team": 1, "leben": 5.0}, name="FEIND")
@@ -17909,14 +17909,15 @@ _leben112 = _feind112.leben
 _wf_ein112(feuert_=True)
 _n112 = len(_wf112.einschlaege)
 pruef("Werfer: die linke Maustaste schiesst eine Salve - sechs Raketen unterwegs, er laedt danach",
-      _n112 == K.WERFER["salve"]["raketen"] and not _wf112.bereit and _wf112.takt["salve"] > 10.0,
-      "%d Raketen, Pause %.1f" % (_n112, _wf112.takt.get("salve", -1)))
+      _n112 == K.WERFER["salve"]["raketen"] and not _wf112.bereit and len(_wf112.nachladen) == 6,
+      "%d Raketen, %d Rohre laden nach" % (_n112, len(_wf112.nachladen)))
 pruef("... er hat sich verraten (fuer die Gegner markiert)",
       _wf112.markiert_rest > 0.0 and _wf112.markiert_fuer == "team1", str(_wf112.markiert_fuer))
 _w2112 = _FZ59.Werfer((0, 0), 0, 0.0, nur_bild=True)
 _w2112.netz_extra_setzen(_wf112.netz_extra())
 pruef("... und der Gast sieht dieselben Raketen (Zusatzwert im Netz)",
-      len(_w2112.einschlaege) == _n112 and _w2112.rohr_stufe == _wf112.rohr_stufe)
+      len(_w2112.einschlaege) == _n112 and _w2112.rohre == _wf112.rohre
+      and _w2112._rohr_soll == round(_wf112.rohr_rel))
 for _ in range(int(2.0 / K.FIXED_DT)):
     _wf_ein112()
 pruef("... die Raketen starten nacheinander (die ersten fliegen, die letzten warten noch im Rohr)",
@@ -18571,6 +18572,160 @@ for _ in range(int(1.3 / K.FIXED_DT)):
 _ts_ein119(True); _ts_ein119(False)
 pruef("... danach die zweite", _ts119.bomben == 0 and len(_ts119.bomben_fall) == 1)
 _tm119.verlassen()
+
+# 0.34.120: Funkwagen und Werfer bauen mit Animation auf; neues Raketengestell (3D, dreht
+# sich zum Zeiger, Raketen nacheinander, Rohre laden einzeln nach, Rueckstrahl); der Werfer
+# geht mit der groessten Explosion hoch, ohne Wrack.
+_tm120 = _TM59.Testmodus(app, karte="staubtal_offen")
+_e120 = _tm120.welt.ebene(0)
+_rnd120 = random.Random(120)
+for _ in range(40000):
+    _tx120 = _rnd120.randrange(60, _e120.breite - 90)
+    _ty120 = _rnd120.randrange(20, _e120.hoehe - 40)
+    if all(not K.KACHELN[_e120.kachel(_tx120 + x_, _ty120 + y_)]["fest"]
+           for x_ in range(50) for y_ in range(24)):
+        break
+_z120 = lambda x_, y_: pygame.Vector2((_tx120 + x_ + 0.5) * K.TILE, (_ty120 + y_ + 0.5) * K.TILE)
+_ex120 = []
+_dekal120 = []
+_alt_ex120 = _tm120.welt.explosion
+def _exm120(pos, ebene, radius, art="spreng", von=None):
+    _ex120.append((pygame.Vector2(pos), round(radius, 1), art))
+    return _alt_ex120(pos, ebene, radius, art, von)
+_tm120.welt.explosion = _exm120
+_alt_dk120 = _tm120.welt.bild_dekal
+def _dkm120(name, pos, ebene, winkel=0.0):
+    _dekal120.append(name)
+    return _alt_dk120(name, pos, ebene, winkel)
+_tm120.welt.bild_dekal = _dkm120
+# -- Funkwagen: Aufbau und Abbau als Folge von Bildern
+_fw120 = _tm120.fahrzeug_setzen("funkwagen", _z120(6, 6), 0, {"winkel": 0})
+_pf120 = _tm120.puppe_setzen(_fw120.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="FUNKER")
+_tm120._anwenden(_pf120, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+def _f_ein120(zielt_=False, gas_=0.0):
+    _tm120._anwenden(_pf120, {"will": [0, -gas_], "ziel": [0, 0], "knoepfe": [], "zielt": zielt_})
+    _tm120.schritt(K.FIXED_DT)
+for _ in range(3):
+    _f_ein120(True)
+_bilder120, _prog120 = [], []
+for _ in range(int(3.0 / K.FIXED_DT)):
+    _f_ein120()
+    _prog120.append(_fw120.fortschritt)
+    if not _bilder120 or _bilder120[-1] != _fw120.bild:
+        _bilder120.append(_fw120.bild)
+pruef("Funkwagen: der Aufbau ist eine Animation - der Fortschritt steigt gleichmaessig, das Bild durchlaeuft viele Stellungen (kein Sprung)",
+      all(b_ >= a_ for a_, b_ in zip(_prog120, _prog120[1:])) and _prog120[-1] >= 0.999
+      and len(set(_bilder120)) >= 10 and (_bilder120[0].startswith("funkwagen_aufbau_") or _bilder120[0] == "funkwagen"),
+      "%d Stellungen: %s ... %s" % (len(set(_bilder120)), _bilder120[:2], _bilder120[-2:]))
+pruef("... am Ende steht der Peilrahmen und dreht (funkwagen_aktiv_N)", _fw120.phase == 2 and _fw120.bild.startswith("funkwagen_aktiv_"),
+      _fw120.bild)
+for _ in range(3):
+    _f_ein120(True)
+_bilder120, _prog120 = [], []
+for _ in range(int(1.0 / K.FIXED_DT)):
+    _f_ein120(gas_=1.0)
+    _prog120.append(_fw120.fortschritt)
+    _bilder120.append(_fw120.bild)
+pruef("... der Abbau laeuft rueckwaerts (Fortschritt faellt) und der Wagen steht dabei, bis er eingepackt ist",
+      _prog120[-1] < _prog120[0] and 0.0 < _prog120[-1] < 1.0 and _fw120.geschw.length() < 5.0
+      and len(set(_bilder120)) >= 4, "%.2f -> %.2f, v %.0f" % (_prog120[0], _prog120[-1], _fw120.geschw.length()))
+for _ in range(int(2.5 / K.FIXED_DT)):
+    _f_ein120(gas_=1.0)
+pruef("... danach faehrt er wieder", _fw120.fortschritt == 0.0 and _fw120.bild == "funkwagen")
+# -- Werfer
+_we120 = _tm120.fahrzeug_setzen("werfer", _z120(6, 18), 0, {"winkel": 0})
+_pw120 = _tm120.puppe_setzen(_we120.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="WERFERFUEHRER")
+_tm120._anwenden(_pw120, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_zz120 = [_we120.pos.x + 900, _we120.pos.y]
+def _w_ein120(feuert_=False, zielt_=False):
+    _tm120._anwenden(_pw120, {"will": [0, 0], "ziel": list(_zz120), "knoepfe": [], "feuert": feuert_, "zielt": zielt_})
+    _tm120.schritt(K.FIXED_DT)
+pruef("Werfer: das Gestell ist ein eigenes Bild mit sechs geladenen Rohren; eingepackt liegt es flach",
+      _we120.rohre == 63 and _we120.stufe == 0 and _we120.gestell_bild() == "werfer_rohre_0_63"
+      and app.bilder.bild("werfer_rohre_8_5").get_size() == (128, 128))
+for _ in range(3):
+    _w_ein120(zielt_=True)
+_st120, _stufen120 = [], []
+for _ in range(int(3.0 / K.FIXED_DT)):
+    _w_ein120()
+    _st120.append(_we120.fortschritt)
+    if not _stufen120 or _stufen120[-1] != _we120.stufe:
+        _stufen120.append(_we120.stufe)
+pruef("Werfer: beim Aufbau schwenken die Stuetzen aus und das Gestell hebt sich stufenweise (0 bis 8), alles weich",
+      _we120.phase == 2 and _stufen120[0] == 0 and _stufen120[-1] == 8 and len(_stufen120) >= 7
+      and all(b_ >= a_ for a_, b_ in zip(_st120, _st120[1:])), str(_stufen120))
+# Das Gestell dreht sich weich zum Zeiger (nicht ruckartig).
+_zz120[:] = [_we120.pos.x, _we120.pos.y - 800]
+_r0120 = _we120.rohr_rel
+for _ in range(int(0.15 / K.FIXED_DT)):
+    _w_ein120()
+_r1120 = _we120.rohr_rel
+pruef("Werfer: das Gestell dreht sich weich zum Zeiger - in 0,15 s hoechstens 110 Grad/s weit",
+      0.0 < abs(_r1120 - _r0120) <= K.WERFER["dreh"] * 0.15 + 1.0, "%.1f -> %.1f" % (_r0120, _r1120))
+for _ in range(int(2.5 / K.FIXED_DT)):
+    _w_ein120()
+pruef("... und zeigt am Ende genau dorthin (links der Fahrtrichtung, -90 Grad)", abs(_we120.rohr_rel + 90.0) < 3.0,
+      "%.1f" % _we120.rohr_rel)
+# Salve: die Raketen starten nacheinander aus ihren Rohren, die Rohre laden einzeln wieder.
+_feind120 = [_tm120.puppe_setzen(pygame.Vector2(_we120.pos.x, _we120.pos.y - 900 + 30 * i_), 0, {"team": 1, "leben": 5.0},
+                                 name="FEIND%d" % i_) for i_ in range(3)]
+for _f120 in _feind120:
+    _f120.markiert_rest = 60.0; _f120.markiert_fuer = _pw120.fraktion
+_zz120[:] = [_feind120[1].pos.x, _feind120[1].pos.y]
+for _ in range(int(0.7 / K.FIXED_DT)):
+    _w_ein120()
+pruef("Werfer: das Ziel gilt, er ist bereit", _we120.bereit and _we120.ziel_grund == 0, "%s %d" % (_we120.bereit, _we120.ziel_grund))
+_ex120.clear()
+_maske120 = [_we120.rohre]
+_w_ein120(True)
+_w_ein120(False)
+if _maske120[-1] != _we120.rohre:
+    _maske120.append(_we120.rohre)
+for _ in range(int(3.2 / K.FIXED_DT)):
+    _w_ein120()
+    if _maske120[-1] != _we120.rohre:
+        _maske120.append(_we120.rohre)
+_leer120 = [bin(m_).count("1") for m_ in _maske120]
+pruef("... die Raketen verlassen ihre Rohre nacheinander (die Zahl geladener Rohre sinkt Stufe fuer Stufe 6, 5, ... 0)",
+      _leer120 == [6, 5, 4, 3, 2, 1, 0], str(_leer120))
+_st120 = [a_ for a_ in _ex120 if a_[2] == "werfer_start"]
+pruef("... jede zuendet einen Rueckstrahl (Welt.explosion 'werfer_start' mit der Richtung des Gestells)",
+      len(_st120) == 6 and all(abs(r_ - _we120.gestell_winkel()) % 360 < 1.0 or abs(abs(r_ - _we120.gestell_winkel()) % 360 - 360) < 1.0 for _p, r_, _a in _st120),
+      str(len(_st120)))
+_bs120 = sum(1 for p_ in _tm120.welt.partikel if p_.art == "bodenstaub")
+pruef("... mit viel Staub am Boden, hinter dem Werfer", _bs120 >= 30, str(_bs120))
+_ladend120 = []
+for _ in range(int(16.0 / K.FIXED_DT)):
+    _w_ein120()
+    _ladend120.append(bin(_we120.rohre).count("1"))
+pruef("... danach tauchen die Raketen in den Rohren nacheinander wieder auf (sechs Stufen), bis er wieder bereit ist",
+      sorted(set(_ladend120)) == [0, 1, 2, 3, 4, 5, 6][:len(sorted(set(_ladend120)))] and len(set(_ladend120)) >= 6
+      and _ladend120[-1] == 6 and _we120.bereit, str(sorted(set(_ladend120))))
+# Zerstoerung: die groesste Explosion, kein Wrack.
+_nah120 = _tm120.puppe_setzen(_we120.pos + pygame.Vector2(0, 150), 0, {"team": 0}, name="NAH")
+_mitte120 = _tm120.puppe_setzen(_we120.pos + pygame.Vector2(0, 280), 0, {"team": 1}, name="MITTE")
+_weit120 = _tm120.puppe_setzen(_we120.pos + pygame.Vector2(0, 600), 0, {"team": 1}, name="WEIT")
+for _p120 in (_nah120, _mitte120, _weit120):
+    _p120.unverwundbar = 0.0
+_tm120.welt._raster_bauen()
+_ex120.clear(); _dekal120.clear()
+_we120.schaden(_we120.max_leben + 5.0, None, _mitte120, art="kugel", herkunft=_mitte120.pos)
+_tm120.schritt(K.FIXED_DT)
+pruef("Werfer: er geht mit der groessten Explosion hoch (Art 'werfer_gross', Radius deutlich ueber 300)",
+      any(a_[2] == "werfer_gross" and a_[1] >= 300.0 for a_ in _ex120) and _we120.kaputt, str(_ex120[:2]))
+pruef("... der Fahrer stirbt sofort (nicht nur am Boden), und alle im Umkreis von gut 200 Pixeln mit ihm",
+      not _pw120.lebt and not _nah120.lebt, "%s %s" % (_pw120.lebt, _nah120.lebt))
+pruef("... wer weiter weg steht, bekommt nur noch einen Teil ab oder nichts", _weit120.lebt, str(_weit120.lebt))
+_leer120 = pygame.mask.from_surface(app.bilder.bild(_we120.bild), 10).count()
+pruef("... kein Wrack bleibt zurueck (sein Bild ist leer), nur Einzelteile am Boden (Dekale 'werfer_teil_N')",
+      _we120.bild == "werfer_wrack" and _leer120 == 0 and len([n_ for n_ in _dekal120 if n_.startswith("werfer_teil_")]) >= 6,
+      "%d Pixel, %d Teile" % (_leer120, len(_dekal120)))
+_b120 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm120.kamera.pos.update(_we120.pos)
+for _ in range(int(0.6 / K.FIXED_DT)):
+    _tm120.schritt(K.FIXED_DT)
+_tm120.zeichnen(_b120, 1.0)                           # die Explosion zeichnen geht
+_tm120.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

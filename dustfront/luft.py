@@ -266,6 +266,37 @@ class LuftTeil:
             if seite == feind and getattr(z, "trefferbar", True):
                 ausruestung_modul.markieren(z, fuer=eigen)
 
+    # ---- Das Raketengestell des Werfers (seit 0.34.120) -------------------------
+    def _werfer_gestelle_zeichnen(self, ziel, misch: float) -> None:
+        """Das Gestell liegt als eigenes Bild ueber dem Wagen: es dreht sich
+        weich zum Zeiger, steigt mit dem Aufbau (leichter Hub nach oben, mit
+        eigenem Schatten auf der Pritsche) und zeigt, welche Rohre eine Rakete
+        tragen. Beim Gastgeber und beim Gast (Zustand aus der Meldung)."""
+        ecke = self.kamera.ecke
+        r = self.renderer
+        for b in self.fahrzeuge:
+            if b.art != "werfer" or b.kaputt or b.ebene != self.blick:
+                continue
+            p = b.zeichenpos(misch) - ecke
+            if not (-120 < p.x < ziel.get_width() + 120 and -120 < p.y < ziel.get_height() + 120):
+                continue
+            mitte = p + pygame.Vector2(b.werte["rohr"]).rotate(b.winkel)
+            stufe = b.stufe
+            heben = stufe * 1.15
+            bild = r.bilder.gedreht(b.gestell_bild(), b.gestell_winkel())
+            if stufe > 0:
+                vorrat = self.__dict__.setdefault("_gestell_schatten", {})
+                eintrag = vorrat.get(id(bild))
+                if eintrag is None or eintrag[0] is not bild:
+                    if len(vorrat) > 400:
+                        vorrat.clear()
+                    maske = pygame.mask.from_surface(bild, 40)
+                    eintrag = vorrat[id(bild)] = (bild, maske.to_surface(setcolor=(0, 0, 0, 84),
+                                                                          unsetcolor=(0, 0, 0, 0)))
+                sch = eintrag[1]
+                ziel.blit(sch, sch.get_rect(center=(int(mitte.x + heben * 0.7), int(mitte.y + heben * 0.45 + 1))))
+            ziel.blit(bild, bild.get_rect(center=(int(mitte.x), int(mitte.y - heben))))
+
     # ---- Zeichnen (Gastgeber und Gast) -----------------------------------------
     def _luftfahrzeuge_zeichnen(self, ziel, misch: float) -> None:
         """Tragschrauber: der Rotor immer (auch am Boden, solange er besetzt

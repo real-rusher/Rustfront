@@ -436,6 +436,22 @@ def _fallschirm_riss(seed=0):
     )
 
 
+@platzhalter_klang("werfer_explosion")
+def _werfer_explosion_ton(seed=0):
+    """Der Werfer geht hoch (seit 0.34.120): der lauteste Ton des Spiels. Ein
+    Schlag, den man im Bauch spuert, ein langes Grollen darunter, ein
+    Rauschen aus Druck und Splittern, ein Knistern und herabfallende Teile."""
+    return _mischen(
+        _schlag(46, 14, 1.6, 1.0, 1.4),
+        _schlag(120, 34, 0.9, 1.0, 1.8),
+        _rauschen(1.8, 1.0, 5600, 100, 1.3, seed + 251),
+        _rauschen(0.08, 0.7, 12000, 5000, 2.0, seed + 252, hp=True),
+        [0.0] * int(RATE * 0.22) + _rauschen(1.5, 0.45, 1600, 140, 1.2, seed + 253),
+        [0.0] * int(RATE * 0.5) + _rauschen(1.3, 0.28, 9000, 1800, 2.2, seed + 254, hp=True),
+        [0.0] * int(RATE * 0.9) + _schlag(190, 70, 0.3, 0.4, 3.0),
+    )
+
+
 @platzhalter_klang("bombe_ab")
 def _bombe_ab(seed=0):
     """Eine Bombe loest sich vom Rahmen: Klacken, kurzes Rauschen."""

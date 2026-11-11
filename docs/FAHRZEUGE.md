@@ -1,4 +1,4 @@
-# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.115)
+# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.120)
 
 Zwoelf Entwuerfe fuer die SCHLACHT auf Karten, die groesser sind als
 STAUBTAL - OFFEN. Bilder und Szenen dazu stehen auf der Entscheidungsseite
@@ -132,3 +132,28 @@ koennte fuer Helis und fuer Ziele auf anderen Etagen gelten.
 * Truppfunk: `bot_goap._funken_tun` bricht im Stoerkreis ab (Pause), und
   `trupp.funk_senden` laesst gestoerte Anfuehrer nichts hoeren.
 * Funkwagen-Zusatzwert im Netz: `[Betriebsart, Basis-Team]`.
+
+## Was 0.34.117 bis 0.34.120 gebaut haben (Wuensche nach den Videos)
+
+* **0.34.117** Abwurf: Wanne und Aufbau als ein Bild gedreht
+  (`SchlachtTeil._fracht_ganz`); Jagdpanzer ohne sichtbaren Fahrer (Luke
+  immer zu); Trosswagen 20 % groesser; Basis: zwei Trosswagen und ein
+  Flakwagen mit Bot, der im Konvoi faehrt (`bots._konvoi_fahren`,
+  `K.FLAK["konvoi_*"]`).
+* **0.34.118** Flak: `Flakgranate` (Zeitzuender, Wolke), gut 2 Schuss/s;
+  Abwuerfe am Schirm: Kisten und Fallschirmjaeger platzen mit eigener
+  Animation, Fahrzeuge verlieren den Schirm (`Abwurf.gerissen`) und kommen mit
+  4 % Leben an.
+* **0.34.119** Tragschrauber: ein Schatten aus der Silhouette (samt Rotor);
+  Bomben als eigene Bilder, senkrecht, eine auf einmal.
+* **0.34.120** Funkwagen und Werfer: Auf- und Abbau mit Animation
+  (`Aufbauwagen.fortschritt`); neues 3D-Raketengestell (`art_werfer.py`,
+  `luft._werfer_gestelle_zeichnen`), das sich zum Zeiger dreht, Raketen
+  nacheinander aus den Rohren, Rohre laden einzeln nach, Rueckstrahl; der
+  Werfer geht mit der groessten Explosion hoch (`Welt._werfer_explosion`),
+  Fahrer und alle im Umkreis sterben, kein Wrack, nur Einzelteile.
+* **Trosswagen, was es gibt und was nicht:** das Aufnehmen von Medkit und
+  Munition hat eine Einblendung ("[E] NACHSCHUB (n)", wer hinten steht); ein
+  **Anhaengen** von Fahrzeugen gibt es nicht - Fahrzeuge werden nur in der
+  Zone hinter dem Wagen repariert.
+

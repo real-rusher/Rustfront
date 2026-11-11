@@ -630,12 +630,16 @@ def _luke(b, c, r, dk, mitte, hell):
     b.linie(dk, (c[0] - r * 0.6, c[1] + r * 0.2), (c[0] + r * 0.6, c[1] + r * 0.2), 0.45)
 
 
-def peilrahmen_zeichnen(aufgebaut: bool = True) -> pygame.Surface:
+def peilrahmen_zeichnen(aufgebaut=True) -> pygame.Surface:
     """Was auf dem Mast sitzt: ein Richtstrahler mit Querstaeben und eine
     kleine Schuessel, dazu die Warnlampe. 128 x 128, Drehpunkt in der Mitte;
-    eingefahren kleiner."""
+    eingefahren kleiner. `aufgebaut` darf auch ein Fortschritt von 0 bis 1
+    sein (seit 0.34.120): der Rahmen steigt auf dem Mast (wird groesser, kommt
+    dem Betrachter entgegen) und klappt auf."""
     b = _Blatt(128, G)
-    k = 1.0 if aufgebaut else 0.62
+    p = (1.0 if aufgebaut else 0.0) if isinstance(aufgebaut, bool) else max(0.0, min(1.0, float(aufgebaut)))
+    aufgebaut = p >= 1.0
+    k = 0.62 + 0.38 * (p * p * (3.0 - 2.0 * p))
     b.rohr((-13 * k, 0), (17 * k, 0), 1.5, (150, 146, 138), (40, 38, 34))
     for i, x in enumerate((-11, -5, 1, 7, 13)):
         halb = (9.4 - i * 1.3) * k
@@ -650,17 +654,27 @@ def peilrahmen_zeichnen(aufgebaut: bool = True) -> pygame.Surface:
     return b.fertig()
 
 
-def funkwagen_zeichnen(aufgebaut: bool = False, drehung: float = 0.0) -> pygame.Surface:
+def funkwagen_zeichnen(aufgebaut: bool = False, drehung: float = 0.0,
+                       fortschritt: float | None = None) -> pygame.Surface:
     """Kofferwagen mit Stabantennen, Aggregat, Kabeltrommel und dem Mast.
     Aufgebaut: vier Abspannseile zu Erdnaegeln und der Peilrahmen, der um den
-    Mast `drehung` Grad gedreht steht. 160 x 160."""
+    Mast `drehung` Grad gedreht steht. 160 x 160. `fortschritt` (0 bis 1, seit
+    0.34.120) malt eine Stellung mitten im Aufbau: die Seile laufen zu den
+    Naegeln aus (erst die Haelfte der Zeit), die Naegel stehen, der Rahmen
+    steigt und klappt auf."""
     b = _Blatt(160, G)
     rnd = random.Random(8101)
-    if aufgebaut:
+    p = (1.0 if aufgebaut else 0.0) if fortschritt is None else max(0.0, min(1.0, fortschritt))
+    seil = min(1.0, p / 0.5)
+    if p > 0.0:
         for dx, dy in ((22, -30), (22, 30), (-40, -28), (-40, 28)):
-            b.linie((52, 48, 42), (-8, 0), (dx, dy), 0.4)
-            b.kreis((30, 28, 26), (dx, dy), 1.2)
-            b.kreis((150, 146, 138), (dx, dy), 0.6)
+            ex, ey = -8 + (dx + 8) * seil, dy * seil
+            b.linie((52, 48, 42), (-8, 0), (ex, ey), 0.4)
+            if seil >= 0.98:
+                b.kreis((30, 28, 26), (dx, dy), 1.2)
+                b.kreis((150, 146, 138), (dx, dy), 0.6)
+            else:
+                b.kreis((150, 146, 138), (ex, ey), 0.5)           # der Nagel fliegt noch
     for ax in (18, -18):
         b.rohr((ax, -10), (ax, 10), 1.8, (96, 92, 86))
         _reifen(b, ax, -13.4, 11, 6, 0.0)
@@ -714,7 +728,9 @@ def funkwagen_zeichnen(aufgebaut: bool = False, drehung: float = 0.0) -> pygame.
     _staub(b, rnd, 60, -29, 27, -11.6, 11.6, _STAUB_FW)
     _rost(b, rnd, 18, -29, 27, -12, 12)
     unten = b.fertig()
-    peil = peilrahmen_zeichnen(aufgebaut)
+    peil = peilrahmen_zeichnen(p if fortschritt is not None else aufgebaut)
+    if fortschritt is not None and p < 1.0:
+        drehung = 300.0 * p * p                                   # dreht beim Hochfahren an
     peil = pygame.transform.rotate(peil, -drehung)
     m = unten.get_width() / 2
     unten.blit(peil, peil.get_rect(center=(m + c[0] * G, m + c[1] * G)))
@@ -746,6 +762,17 @@ def _funk_drehung(i: int):
 # nacheinander zeigt (Funkwagen.bild).
 for _i in range(4):
     platzhalter("funkwagen_aktiv_%d" % _i)(_funk_drehung(_i))
+
+
+def _funk_aufbau(i: int):
+    def z():
+        return funkwagen_zeichnen(False, 0.0, i / 16.0)
+    return z
+
+
+# Mitten im Aufbau und Abbau (seit 0.34.120): 15 Stellungen (Funkwagen.bild).
+for _i in range(1, 16):
+    platzhalter("funkwagen_aufbau_%d" % _i)(_funk_aufbau(_i))
 
 
 # ──────────────────────────────── Werfer (seit 0.34.112)
@@ -790,46 +817,25 @@ def _halbkette_gepanzert(b, rnd) -> None:
     _nieten(b, [(x, sy * 9.4) for x in (3.4, 9.4) for sy in (-1, 1)], HK_DK)
 
 
-def werfer_gestell_zeichnen(geladen: int = 6) -> pygame.Surface:
-    """Das Rohrgestell: drei Rohre nebeneinander (darunter liegen drei
-    weitere), Wiege, Abgasblech. 128 x 128, Drehpunkt in der Mitte, schaut
-    nach +x."""
-    b = _Blatt(128, G)
-    L0, L1 = -9, 21
-    b.rect((30, 28, 26), -8, -8.4, 12, 16.8, 1.0)
-    b.rect((90, 86, 78), -7.5, -7.9, 11, 15.8, 0.8)
-    for sy in (-1, 1):
-        b.rect((40, 36, 32), -5, sy * 8.6 - 1.2, 6, 2.4, 0.5)
-    for i, y in enumerate((-5.3, 0.0, 5.3)):
-        b.rect((26, 24, 22), L0, y - 2.5, L1 - L0, 5.0, 1.0)
-        b.rect(HK_LACK, L0 + 0.5, y - 2.0, L1 - L0 - 1, 4.0, 0.8)
-        b.linie(HK_HELL, (L0 + 1, y - 1.3), (L1 - 1, y - 1.3), 0.55)
-        b.linie(HK_SCHATTEN, (L0 + 1, y + 1.3), (L1 - 1, y + 1.3), 0.55)
-        for x in (L0 + (L1 - L0) * 0.25, L0 + (L1 - L0) * 0.7):
-            b.rect((40, 36, 32), x, y - 2.5, 1.2, 5.0, 0.2)
-        b.kreis((20, 18, 16), (L1 - 0.2, y), 2.0)
-        if i * 2 < geladen:
-            b.kreis((176, 66, 44), (L1 + 0.5, y), 1.5)
-            b.kreis((226, 120, 92), (L1 + 0.2, y - 0.4), 0.6)
-        b.kreis((20, 18, 16), (L0 + 0.4, y), 1.7)
-    b.rect((30, 28, 26), L0 - 3.2, -9, 2.2, 18, 0.5)
-    b.rect((70, 66, 60), L0 - 2.9, -8.6, 1.5, 17.2, 0.4)
-    return b.fertig()
-
-
-def werfer_zeichnen(aufgebaut: bool = False, rel_winkel: float = 0.0,
-                    geladen: int = 6) -> pygame.Surface:
-    """Halbkette mit Raketengestell auf dem Drehkranz; aufgebaut stehen
-    Stuetzen schraeg nach aussen, und das Gestell zeigt `rel_winkel` Grad
-    von der Fahrtrichtung weg. 128 x 128."""
+def werfer_zeichnen(fortschritt: float = 0.0) -> pygame.Surface:
+    """Halbkette mit Drehkranz auf der Pritsche und Reserveraketen im Regal -
+    ohne das Raketengestell (das ist ein eigenes Bild, art_werfer.py, und
+    dreht sich zum Ziel). `fortschritt` (0 bis 1): die vier Stuetzen
+    schwenken schraeg nach aussen (in den ersten zwei Dritteln der Zeit) und
+    setzen mit ihren Fuessen auf. 128 x 128 (seit 0.34.120)."""
     b = _Blatt()
     rnd = random.Random(7401)
-    if aufgebaut:
+    ext = max(0.0, min(1.0, fortschritt / 0.62))
+    if ext > 0.0:
         for sy in (-1, 1):
             for x0, x1 in ((-26, -34), (-2, 6)):
-                b.rohr((x0, sy * 12), (x1, sy * 24), 2.0, (150, 146, 138))
-                b.rect(STAHL_DK, x1 - 3, sy * 24 - 2.2, 6, 4.4, 0.6)
-                b.rect(STAHL, x1 - 2.5, sy * 24 - 1.7, 5, 3.4, 0.5)
+                ex, ey = x0 + (x1 - x0) * ext, sy * (12 + 12 * ext)
+                b.rohr((x0, sy * 12), (ex, ey), 2.0, (150, 146, 138))
+                if ext >= 0.9:
+                    b.rect(STAHL_DK, ex - 3, ey - 2.2, 6, 4.4, 0.6)
+                    b.rect(STAHL, ex - 2.5, ey - 1.7, 5, 3.4, 0.5)
+                else:
+                    b.kreis((150, 146, 138), (ex, ey), 1.3)
     _halbkette_gepanzert(b, rnd)
     wanne = [(1, -13), (-28, -13), (-31, -10.4), (-31, 10.4), (-28, 13), (1, 13)]
     b.poly(HK_DK, wanne)
@@ -856,22 +862,19 @@ def werfer_zeichnen(aufgebaut: bool = False, rel_winkel: float = 0.0,
     _kanister(b, -4.6, 5.6, 4.6, 3.4)
     _staub(b, rnd, 50, -30, 30, -12, 12, _STAUB_TW)
     _rost(b, rnd, 14, -30, 0, -12.6, 12.6)
-    unten = b.fertig()
-    g = werfer_gestell_zeichnen(geladen)
-    g = pygame.transform.rotate(g, -rel_winkel)
-    m = unten.get_width() / 2
-    unten.blit(g, g.get_rect(center=(m + c[0] * G, m + c[1] * G)))
-    return unten
+    return b.fertig()
 
 
 @platzhalter("werfer")
 def _werfer():
-    return werfer_zeichnen(False)
+    return werfer_zeichnen(0.0)
 
 
 @platzhalter("werfer_wrack")
 def _werfer_wrack():
-    return _wrack(werfer_zeichnen(False), 7480)
+    """Kein Wrack (seit 0.34.120, gewuenscht): nach der Explosion bleiben nur
+    Einzelteile (`werfer_teil_N`, art_werfer.py) am Boden - der Wagen selbst ist weg."""
+    return pygame.Surface((K.FAHRZEUG_BILD["flaeche"], K.FAHRZEUG_BILD["flaeche"]), pygame.SRCALPHA)
 
 
 @platzhalter("werfer_schatten")
@@ -879,15 +882,15 @@ def _werfer_schatten():
     return _schatten(int(64 * G), int(34 * G), 11)
 
 
-def _werfer_stellung(i: int):
+def _werfer_stufe(i: int):
     def z():
-        return werfer_zeichnen(True, i * 30.0)
+        return werfer_zeichnen(i / 8.0)
     return z
 
 
-# Aufgebaut: das Gestell dreht sich in 30-Grad-Stufen zum Ziel (Werfer.bild).
-for _i in range(12):
-    platzhalter("werfer_aufgebaut_%d" % _i)(_werfer_stellung(_i))
+# Aufbau und Abbau: die Stuetzen schwenken aus (Werfer.bild), in acht Stellungen.
+for _i in range(1, 9):
+    platzhalter("werfer_stuetze_%d" % _i)(_werfer_stufe(_i))
 
 
 # ──────────────────────────────── Tragschrauber (seit 0.34.113)
