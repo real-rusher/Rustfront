@@ -18640,7 +18640,7 @@ _bilder120, _prog120 = [], []
 for _ in range(int(1.0 / K.FIXED_DT)):
     _f_ein120(gas_=1.0)
     _prog120.append(_fw120.fortschritt)
-    _bilder120.append(_fw120.bild)
+    _bilder120.append(_AFM120._schluessel(_fw120.winkel, _fw120.fortschritt, _fw120.kopf))
 pruef("... der Abbau laeuft rueckwaerts (Fortschritt faellt) und der Wagen steht dabei, bis er eingepackt ist",
       _prog120[-1] < _prog120[0] and 0.0 < _prog120[-1] < 1.0 and _fw120.geschw.length() < 5.0
       and len(set(_bilder120)) >= 4, "%.2f -> %.2f, v %.0f" % (_prog120[0], _prog120[-1], _fw120.geschw.length()))
