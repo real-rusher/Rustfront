@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.110 | Spawner OBJEKTE: SPULENWAGEN, NACHSCHUB: ABWURF: SPULENWAGEN. Ausprobieren: SPIELER, ICH mit E einsteigen; linke Maustaste Blitz, rechte baut das Feld auf (im Stand), einen PANZER daneben setzen und mit INFO sehen, dass er stillsteht (EMP-Rest). Pruefungen im Abschnitt "Spulenwagen" von `tests/test_spiel.py` |
 | 0.34.109 | Nichts Neues zum Setzen: FAHRER MIT FAHRZEUG und SPIELER, ICH mit AUSSEHEN zeigen den Skin jetzt auch im Krad und im Jagdpanzer. Pruefungen im Abschnitt "0.34.109" von `tests/test_spiel.py` |
 | 0.34.108 | Spawner OBJEKTE: TROSSWAGEN (Anzahl, Streuung, Richtung); FAHRER MIT FAHRZEUG kennt ihn nicht (nur Menschen am Steuer). Ausprobieren: SPIELER, ICH hinter den Wagen stellen und E druecken (Munition und Medkit, `[E] NACHSCHUB (n)` steht dort), einen beschaedigten PANZER hinten dranstellen (repariert sich). Pruefungen im Abschnitt "Trosswagen" von `tests/test_spiel.py` |
 | 0.34.107 | Spawner OBJEKTE: KRAD und JAGDPANZER (Anzahl, Streuung, Richtung); Spawner NACHSCHUB: ABWURF: KRAD und ABWURF: JAGDPANZER; FAHRER MIT FAHRZEUG kennt beide (der Bot faehrt das Krad, nicht den Jagdpanzer). Zum Ausprobieren: SPIELER, ICH oder Taste 3, mit E einsteigen. Krad: ein zweiter Spieler setzt sich mit E in den Beiwagen und schiesst; der Jagdpanzer schwenkt nur 12 Grad, rechte Maustaste ist das Zielfernrohr. Pruefungen im Abschnitt "Krad und Jagdpanzer" von `tests/test_spiel.py` |

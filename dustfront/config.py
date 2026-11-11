@@ -1081,7 +1081,7 @@ SCHLACHT = dict(
                 sperre_basis=1800.0, ausweichen_ab=300.0, treiben=70.0, suche_weit=420.0,
                 stoss=520.0, quetschen=15.0, warnen_ab=160.0),
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
-                  zeichen=dict(buggy="B", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
+                  zeichen=dict(buggy="B", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
                                medkit="+")),
     punkte=dict(abschuss=1, fahrzeug=5, aufhelfen=5),
     # Was man kaufen kann: (Kennung, Kosten, Name).
@@ -1097,8 +1097,9 @@ SCHLACHT = dict(
         ("panzerwagen", 8, "DROPZONE: PANZERWAGEN"),
         ("panzer", 12, "DROPZONE: PANZER"),
         ("jagdpanzer", 10, "DROPZONE: JAGDPANZER"),
+        ("spulenwagen", 10, "DROPZONE: SPULENWAGEN"),
     ),
-    belohnung_hilfe=dict(krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
+    belohnung_hilfe=dict(spulenwagen="BLITZ UND EMP-FELD, NUR AUFGEBAUT", krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
                          munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
                          buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
                          panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE",
@@ -1597,6 +1598,39 @@ TROSSWAGEN = dict(
     reparatur=dict(vorrat=600.0, je_sekunde=14.0),
 )
 
+# Der Spulenwagen (seit 0.34.110): erbeutete Chor-Technik. Linke Maustaste:
+# ein schwacher Kettenblitz (der erste im Kegel zum Zeiger, dann von Koerper
+# zu Koerper). Rechte Maustaste: das EMP-Feld. Dafuer muss er aufgebaut
+# werden (`aufbau` Sekunden, er steht dabei), dann pulsiert es am Ort: alle
+# `takt` Sekunden legt ein Puls jedes fremde Fahrzeug im Kreis `radius` fuer
+# `emp` Sekunden still. Nur `dauer` Sekunden lang, danach muss er `laden`
+# Sekunden laden (fahren geht wieder, ein neues Feld nicht). Eigene Fahrzeuge
+# bleiben verschont. Nur fuer Menschen am Steuer.
+SPULENWAGEN = dict(
+    {k: v for k, v in TROSSWAGEN.items()
+     if k not in ("zone", "entnahmen", "pause", "reparatur", "nur_mensch", "name", "marke")},
+    marke="S",
+    name="SPULENWAGEN",
+    hoechst=180.0,
+    kreis=22.0,               # zwei Kreise von 22 Pixeln, 26 von der Mitte: 96 x 44
+    achse=26.0,
+    einsteigen=56.0,
+    leben=480.0,
+    nur_mensch=True,
+    explosion_radius=84.0,
+    explosion_schaden=85.0,
+    fahrer_schaden=50.0,
+    wrack_zeit=12.0,
+    neu_nach=40.0,
+    balken_breite=36,
+    schiesst=True,
+    spule=(-9.0 * 1.4, 0.0),  # Mitte der Spule (Pixel von der Mitte, +x = vorn)
+    blitz=dict(schaden=26.0, reichweite=360.0, kegel=14.0, spruenge=4, sprung=110.0,
+               abfall=0.7, takt=1.0, schadensart="kugel"),
+    feld=dict(aufbau=2.5, dauer=10.0, laden=28.0, takt=1.2, radius=250.0, emp=2.2,
+              stillstand=8.0),   # nur im Stand: so langsam (px/s) muss er sein
+)
+
 # Rammen und was danach fliegt (seit 0.34.59). Gilt fuer beide.
 RAMMEN = dict(
     sperre=0.4,               # so lange kein zweiter Schaden vom selben Fahrzeug
@@ -1687,6 +1721,9 @@ PANZERUNG = {
     # Der Trosswagen: Blech wie ein Laster, leicht gepanzert.
     "trosswagen": dict(kugel=0.7, panzerbrechend=1.2, spreng=1.0, hohlladung=1.4,
                        feuer=0.5, nahkampf=0.4, ramm=0.8),
+    # Der Spulenwagen: Keramik und Blech, wie ein Panzerwagen.
+    "spulenwagen": dict(kugel=0.4, panzerbrechend=1.2, spreng=0.9, hohlladung=1.5,
+                        feuer=0.3, nahkampf=0.2, ramm=0.7),
     "jagdpanzer": dict(kugel=0.1, panzerbrechend=0.8, spreng=0.4, hohlladung=1.25,
                        feuer=0.1, nahkampf=0.05, ramm=0.35),
 }
@@ -4422,6 +4459,8 @@ for _team in TEAMS["kombi"]:
     BILD_MASS["panzerwagen_ring_%s_fahrer" % _team["name"].lower()] = (_fz_r, _fz_r)
 # Die Granate der Kanone, mit dicker Leuchtspur gezeichnet.
 BILD_MASS["panzergranate"] = (12, 6)
+for _name in ("spulenwagen", "spulenwagen_aktiv", "spulenwagen_wrack", "spulenwagen_schatten"):
+    BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _name in ("trosswagen", "trosswagen_wrack", "trosswagen_schatten"):
     BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 

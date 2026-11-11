@@ -1,4 +1,4 @@
-# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.108)
+# Fahrzeuge fuer grosse Karten (Plan, Stand 0.34.110)
 
 Zwoelf Entwuerfe fuer die SCHLACHT auf Karten, die groesser sind als
 STAUBTAL - OFFEN. Bilder und Szenen dazu stehen auf der Entscheidungsseite
@@ -13,7 +13,7 @@ davon eingebaut ist.
 | KRAD | behalten; der Fahrer hat keine Waffe | **0.34.107** |
 | JAGDPANZER | behalten; grosse, von vorn gepanzerte "Sniper" gegen Panzer | **0.34.107** |
 | TROSSWAGEN | behalten; kein Aufsitzen - hinten dranstellen, mit E einmal Munition und ein Medkit (begrenzter Gesamtvorrat). Gegnerische Trosswagen lassen sich pluendern. Nicht per Drop anforderbar, einige erscheinen regelmaessig an der Basis. Fahrzeuge heilen nur, solange sie hinten dranhaengen (auch im Stehen) | **0.34.108** |
-| SPULENWAGEN | behalten; EMP-Feld einschaltbar, dafuer muss der Wagen aufgebaut sein, es pulsiert am Ort, nur begrenzte Zeit, danach aufladen; schwaecherer Kettenblitz | offen |
+| SPULENWAGEN | behalten; EMP-Feld einschaltbar, dafuer muss der Wagen aufgebaut sein, es pulsiert am Ort, nur begrenzte Zeit, danach aufladen; schwaecherer Kettenblitz | **0.34.110** |
 | FUNKWAGEN | behalten; Bots, die mit ihm sprechen koennen, geben ihre Daten direkt ins Funknetz des Teams (nur mit aktivem Funk). Stoeren bleibt, aber er steht dabei auf der Karte | offen |
 | WERFER | behalten; schiesst nur im Umkreis gueltiger Ziele (von jemandem im Team gesehene oder markierte Gegner und Fahrzeuge, Hotzones, spaeter weitere Objectives). Sehr leicht zu zerstoeren, dann grosse Explosion, die alle im Umkreis toetet. Jeder Schuss verraet ihn kurz auf Karte oder Minikarte, mit eigenem Symbol | offen |
 | FLAKWAGEN | behalten; nur Bots fahren ihn (sie spawnen darin oder werden damit gedroppt), weil Spieler nicht zwischen Boden- und Luftzielen wechseln koennen | offen |
@@ -25,7 +25,7 @@ davon eingebaut ist.
 
 1. Krad, Jagdpanzer (0.34.107)
 2. Trosswagen (0.34.108)
-3. Spulenwagen, Funkwagen, Werfer (Werfer und Funkwagen gehoeren zusammen)
+3. Spulenwagen (0.34.110), Funkwagen, Werfer (Werfer und Funkwagen gehoeren zusammen)
 4. Luftziele: Flakwagen und Tragschrauber, mit einer Regel, wie Spieler
    Luftziele und andere Etagen anvisieren
 
@@ -63,3 +63,14 @@ koennte fuer Helis und fuer Ziele auf anderen Etagen gelten.
 * Bild: `trosswagen_zeichnen` in `dustfront/art_neue_fahrzeuge.py` (der Fahrer
   sitzt unter dem Verdeck und ist nicht zu sehen).
 * SCHLACHT: einer je Basis (`SCHLACHT["fahrzeuge"]`), nicht im Nachschub.
+
+## Was 0.34.110 gebaut hat
+
+* `Spulenwagen(Buggy)`, Werte `K.SPULENWAGEN` (Physik wie der Trosswagen,
+  `blitz`, `feld`). Phasen 0 bereit / 1 baut auf / 2 Feld aktiv / 3 laedt;
+  in 1 und 2 steht er. Der Puls (`_puls`) legt fremde Fahrzeuge und Technik
+  im Kreis still, eigene nicht (`seite_von`). Der Blitz (`_blitz`) wie der
+  Kettenblitz zu Fuss, nur schwaecher.
+* Die Maustasten des Fahrers gelten fuer Fahrzeuge mit `schiesst = True`
+  (`Gefecht._fahren`). Bodenkranz: `Gefecht._spulen_zeichnen`.
+* Die Nachschubtafel hat eine Zeile je Eintrag (Platz fuer bis zu 14).

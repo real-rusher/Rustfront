@@ -3087,7 +3087,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             b.gas = 1.0 if will.y < -0.3 else (-1.0 if will.y > 0.3 else 0.0)
             b.lenk = 1.0 if will.x > 0.3 else (-1.0 if will.x < -0.3 else 0.0)
         b.handbremse = bool(ein.get("hb"))
-        if getattr(b, "rechteckig", False):
+        if getattr(b, "rechteckig", False) or getattr(b, "schiesst", False):
             b.feuer = bool(ein.get("feuert"))
             b.zweit = bool(ein.get("zielt"))
         # Seit 0.34.65: was hinten heraus geht, auf den Tasten, die am
@@ -3327,6 +3327,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                 auf = int(e[15]) if len(e) > 15 else 0
                 markiert_fuer = str(e[16])[:20] if len(e) > 16 and e[16] else ""
                 nachschub = max(0, min(99, int(e[17]))) if len(e) > 17 else 0
+                phase = max(0, min(3, int(e[18]))) if len(e) > 18 else 0
+                phase_rest = max(0.0, min(60.0, float(e[19]))) if len(e) > 19 else 0.0
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
@@ -3354,6 +3356,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             b.markiert_rest = 1.0 if markiert_fuer else 0.0
             if b.art == "trosswagen":
                 b.nachschub = nachschub
+            if b.art == "spulenwagen":
+                b.phase, b.phase_rest = phase, phase_rest
             b.geschw = b.vorn * fahrt
             b.rutschen = max(0.0, min(1.0, rutschen))
             # Leben (seit 0.34.18): fuer den Balken und das Wrack.
@@ -3404,6 +3408,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                                  K.C_AMBER if rest <= 0.0 else K.C_MUTED, 1,
                                  ausrichtung="mitte")
                 unten += 10
+            if wagen is not None and wagen.art == "spulenwagen" and not wagen.kaputt:
+                # Was das Feld gerade tut (seit 0.34.110).
+                texte = ("FELD [RMB]: BEREIT", "FELD BAUT AUF %.1f", "FELD AKTIV %.1f  [RMB] AUS",
+                         "SPULE LÄDT %.0f")
+                txt = texte[wagen.phase]
+                if "%" in txt:
+                    txt = txt % wagen.phase_rest
+                SCHRIFT.zeichnen(ziel, txt, int(p.x), int(p.y) + unten,
+                                 K.C_AMBER if wagen.phase in (0, 2) else K.C_MUTED, 1,
+                                 ausrichtung="mitte")
+                unten += 10
             if self._fahrhinweis_rest <= 0.0:
                 return
             if schwer:
@@ -3414,6 +3429,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                      else "[LMB] KANONE  [RMB] ZIELFERNROHR" if wagen.art == "jagdpanzer"
                      else "[LMB] MG"),
                     taste_e)
+            elif wagen is not None and wagen.art == "spulenwagen":
+                text = "[%s/%s] FAHREN  [%s/%s] LENKEN  [LMB] BLITZ  [RMB] FELD  [%s] AUSSTEIGEN" % (
+                    self._tastenname("vor"), self._tastenname("zurueck"),
+                    self._tastenname("links"), self._tastenname("rechts"), taste_e)
             else:
                 text = "[%s/%s] GAS  [%s/%s] LENKEN  [%s] HANDBREMSE  [%s] AUSSTEIGEN" % (
                     self._tastenname("vor"), self._tastenname("zurueck"),
@@ -4999,7 +5018,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                   (getattr(b, "markiert_fuer", "")
                    if getattr(b, "markiert_rest", 0.0) > 0.0 else ""),
                   # Seit 0.34.108: was der Trosswagen noch zu geben hat.
-                  b.nachschub if b.art == "trosswagen" else 0]
+                  b.nachschub if b.art == "trosswagen" else 0,
+                  # Seit 0.34.110: Phase des Spulenwagens (0 bereit, 1 baut auf,
+                  # 2 Feld aktiv, 3 laedt) und wie lange sie noch dauert.
+                  getattr(b, "phase", 0), round(getattr(b, "phase_rest", 0.0), 1)]
                  for b in self.fahrzeuge]
         # Nagelfelder (seit 0.34.65): wo die Naegel liegen, folgt aus der
         # Kennung (entities.Nagelfeld.stellen).
@@ -6960,7 +6982,39 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         except (KeyError, TypeError, AttributeError):
             return True
 
+    def _spulen_zeichnen(self, flaeche, ebene: int, ecke) -> None:
+        """Das Feld eines aufgebauten Spulenwagens (seit 0.34.110): ein
+        Kranz am Boden, beim Aufbauen duenn, aktiv pulsierend, mit dem Rest
+        als Bogen."""
+        for b in self.fahrzeuge:
+            if b.art != "spulenwagen" or b.kaputt or b.ebene != ebene or b.phase not in (1, 2):
+                continue
+            f = K.SPULENWAGEN["feld"]
+            m = b.spule_mitte() - ecke
+            if not (-f["radius"] < m.x < flaeche.get_width() + f["radius"]
+                    and -f["radius"] < m.y < flaeche.get_height() + f["radius"]):
+                continue
+            t = self.welt.zeit
+            aktiv = b.phase == 2
+            r = f["radius"] if aktiv else f["radius"] * (1.0 - b.phase_rest / f["aufbau"])
+            s = pygame.Surface((int(r * 2 + 8), int(r * 2 + 8)), pygame.SRCALPHA)
+            c = (s.get_width() // 2, s.get_height() // 2)
+            pygame.draw.circle(s, K.C_TEAL + (22 if aktiv else 12,), c, int(r))
+            pygame.draw.circle(s, K.C_TEAL + (150 if aktiv else 80,), c, int(r), 1)
+            if aktiv:
+                takt = f["takt"]
+                puls = (t % takt) / takt
+                pygame.draw.circle(s, (214, 255, 246, int(180 * (1.0 - puls))), c,
+                                   max(2, int(r * (0.25 + 0.75 * puls))), 1)
+                rest = max(0.0, min(1.0, b.phase_rest / f["dauer"]))
+                rect = pygame.Rect(0, 0, int(r * 2 - 10), int(r * 2 - 10))
+                rect.center = c
+                pygame.draw.arc(s, (250, 208, 133, 200), rect, math.pi / 2,
+                                math.pi / 2 + 2 * math.pi * rest, 2)
+            flaeche.blit(s, (m.x - c[0], m.y - c[1]))
+
     def _kreis_zeichnen(self, flaeche, ebene: int, ecke) -> None:
+        self._spulen_zeichnen(flaeche, ebene, ecke)
         if self.schlacht or self.__dict__.get("nachschub_an"):
             self.dropzonen_zeichnen(flaeche, ebene, ecke)
         self._zonenkreis_zeichnen(flaeche, ebene, ecke)

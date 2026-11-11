@@ -496,3 +496,123 @@ def _trosswagen_wrack():
 @platzhalter("trosswagen_schatten")
 def _trosswagen_schatten():
     return _schatten(int(64 * G), int(34 * G), 11)
+
+
+# ──────────────────────────────── Spulenwagen (seit 0.34.110)
+
+KUPFER = (184, 112, 62)
+KUPFER_HELL = (232, 164, 96)
+TEAL = (110, 226, 208)
+TEAL_HELL = (214, 255, 246)
+CHOR = (226, 222, 208)
+CHOR_DK = (120, 118, 110)
+CHOR_SCHATTEN = (176, 172, 160)
+CHOR_HELL = (250, 248, 238)
+_STAUB_SP = [(176, 160, 124), (150, 134, 100), (196, 182, 150)]
+
+
+def _halb_durch(b, zeichnen):
+    """Etwas halb durchsichtig auflegen: auf eigener Flaeche, dann blitten."""
+    s = pygame.Surface(b.s.get_size(), pygame.SRCALPHA)
+    alt, b.s = b.s, s
+    try:
+        zeichnen()
+    finally:
+        b.s = alt
+    b.s.blit(s, (0, 0))
+
+
+def spulenwagen_zeichnen(glut: float = 0.3) -> pygame.Surface:
+    """Das erbeutete Sechsrad des Chors: helle Keramikplatten, nachgeruestet
+    mit Rost, Platte und Kanistern; hinten die Spule mit Kupferwicklung und
+    einem Kern, der mit `glut` (0 bis 1) leuchtet. Der Fahrer sitzt hinter
+    dem Glasband."""
+    b = _Blatt()
+    rnd = random.Random(8001)
+    for ax in (20, -2, -22):
+        for sy in (-1, 1):
+            _reifen(b, ax, sy * 15.2, 10.5, 5.4, 0.0)
+            b.rect(CHOR_DK, ax - 6.6, sy * 12.6 - 3.4, 13.2, 6.8, 2.8)
+            b.rect(CHOR if sy < 0 else CHOR_SCHATTEN, ax - 6.1, sy * 12.6 - 2.9, 12.2, 5.8, 2.4)
+    rumpf = [(33, 0), (27, -9.4), (-27, -11.6), (-32, -7), (-32, 7), (-27, 11.6), (27, 9.4)]
+    b.poly(CHOR_DK, rumpf)
+    b.poly(CHOR, [(x * 0.965, y * 0.92) for x, y in rumpf])
+    b.linien(CHOR_HELL, [(26, -8.2), (-26.4, -10.2), (-30.4, -6.4)], 1.0)
+    b.linien(CHOR_SCHATTEN, [(26, 8.2), (-26.4, 10.2), (-30.4, 6.4)], 1.2)
+    for x in (16, 6, -6, -18):
+        b.linie((168, 164, 152), (x, -10), (x, 10), 0.4)
+    b.linie((168, 164, 152), (-26, 0), (16, 0), 0.35)
+    kanzel = [(31, 0), (26.6, -6.8), (18, -7.6), (18, 7.6), (26.6, 6.8)]
+    b.poly(CHOR_DK, kanzel)
+    b.poly((28, 44, 50), [(30, 0), (26, -6), (19, -6.8), (19, 6.8), (26, 6)])
+    b.poly((70, 124, 130), [(29.2, -0.8), (25.6, -5.4), (20, -6.0), (20, -1.4)])
+    b.linie((150, 214, 210), (21, -5.2), (25.2, -4.8), 0.5)
+    for sy in (-1, 1):
+        b.kreis((28, 44, 50), (29.6, sy * 4.8), 0.9)
+        b.kreis(TEAL, (29.6, sy * 4.8), 0.55)
+    b.rect((60, 40, 26), 6.6, 2.4, 9.4, 6.6, 0.4)             # nachgeruestete Platte
+    b.rect((132, 80, 46), 7.0, 2.8, 8.6, 5.8, 0.3)
+    _nieten(b, [(7.8, 3.6), (14.8, 3.6), (7.8, 7.8), (14.8, 7.8)], (60, 40, 26), 0.4)
+    b.rohr((7, -8.4), (16, -8.0), 0.8, (120, 110, 96))
+    b.rohr((7, -4.2), (16, -4.0), 0.8, (120, 110, 96))
+    _kanister(b, 8.6, -8.0, 4.6, 3.4)
+    b.rect(PLANE_DK, 12.6, -7.6, 3.4, 3.2, 0.8)
+    b.rect(PLANE, 13.0, -7.2, 2.6, 2.4, 0.6)
+    for sy in (-1, 1):                                        # Kondensatoren am Heck
+        for i in range(3):
+            c = (-29.2 + i * 4.4, sy * 7.2)
+            b.kreis((40, 44, 46), c, 2.1)
+            b.kreis((104, 124, 126), c, 1.6)
+            b.kreis((196, 226, 222), (c[0] - 0.5, c[1] - 0.5), 0.55)
+            b.linie((30, 28, 26), c, (-13.5 + i * 1.5, sy * 4.2), 0.45)
+    b.rect((40, 44, 46), -32.6, -4.4, 3.0, 8.8, 0.4)          # Kuehlrippen
+    for i in range(6):
+        b.linie((150, 160, 158), (-32.3, -3.6 + i * 1.44), (-29.9, -3.6 + i * 1.44), 0.4)
+    c = (-9, 0)
+    if glut > 0:
+        _halb_durch(b, lambda: b.kreis(TEAL + (int(40 + 60 * glut),), c, 12.6))
+    b.kreis((36, 34, 32), c, 10.4)                            # die Spule
+    for i in range(10):
+        a = i * math.pi / 5 + 0.2
+        p = (c[0] + math.cos(a) * 9.0, c[1] + math.sin(a) * 9.0)
+        b.kreis((70, 66, 60), p, 1.5)
+        b.kreis((232, 226, 210), p, 1.1)
+        b.kreis((176, 170, 156), p, 0.5)
+    b.kreis((70, 40, 22), c, 7.6)
+    for i, rr in enumerate((7.2, 6.4, 5.6)):
+        b.kreis(KUPFER if i % 2 == 0 else KUPFER_HELL, c, rr)
+        b.kreis((110, 62, 34), c, rr - 0.42)
+    b.kreis(KUPFER, c, 5.0)
+    b.segment(KUPFER_HELL, 5.0, 7.3, -160, -100, c[0], c[1])
+    b.kreis((52, 54, 56), c, 4.7)
+    b.kreis((188, 192, 190), c, 4.2)
+    b.segment((236, 240, 238), 2.6, 4.0, -170, -80, c[0], c[1])
+    b.segment((120, 124, 124), 2.6, 4.0, 10, 100, c[0], c[1])
+    b.kreis((30, 44, 46), c, 2.5)
+    b.kreis(tuple(int(v * (0.45 + 0.55 * glut)) for v in TEAL), c, 2.0)
+    if glut > 0.3:
+        b.kreis(TEAL_HELL, c, 1.0)
+    _staub(b, rnd, 50, -30, 30, 6, 10.6, _STAUB_SP)
+    _staub(b, rnd, 24, -30, 30, -10.6, -7, _STAUB_SP[:2])
+    _rost(b, rnd, 8, -28, 26, 8, 10.4)
+    return b.fertig()
+
+
+@platzhalter("spulenwagen")
+def _spulenwagen():
+    return spulenwagen_zeichnen(0.3)
+
+
+@platzhalter("spulenwagen_aktiv")
+def _spulenwagen_aktiv():
+    return spulenwagen_zeichnen(1.0)
+
+
+@platzhalter("spulenwagen_wrack")
+def _spulenwagen_wrack():
+    return _wrack(spulenwagen_zeichnen(0.0), 7480)
+
+
+@platzhalter("spulenwagen_schatten")
+def _spulenwagen_schatten():
+    return _schatten(int(66 * G), int(36 * G), 12)

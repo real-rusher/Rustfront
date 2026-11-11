@@ -17332,7 +17332,7 @@ pruef("Beide sind im Nachschub der SCHLACHT zu kaufen, mit Buchstaben fuer die D
       "krad" in _namen107 and "jagdpanzer" in _namen107
       and K.SCHLACHT["dropzone"]["zeichen"]["krad"] == "K"
       and K.SCHLACHT["dropzone"]["zeichen"]["jagdpanzer"] == "J")
-_unten107 = _SL107.SchlachtTeil._belohnung_zeile(len(_namen107) - 1).bottom + 4 + 16
+_unten107 = _SL107.SchlachtTeil._belohnung_hilfe_rect().bottom + 2 + 14
 pruef("Die Nachschubtafel passt mit allen Zeilen aufs Bild (Hinweiszeile bleibt frei)",
       _unten107 < K.GAME_H - 36, "unten bei %d" % _unten107)
 pruef("Die Basis jeder Seite bekommt ein Krad dazu",
@@ -17629,6 +17629,105 @@ pruef("Zielfernrohr: die Kamera laeuft weit voraus (mehr als ohne)",
       _ka109.pos.x - 1000 > (_kb109.pos.x - 1000) * 1.5 and _ka109.pos.x - 1000 > 300,
       "%.0f gegen %.0f" % (_ka109.pos.x - 1000, _kb109.pos.x - 1000))
 _tm109.verlassen()
+
+# ─────────────────────────────────────────────────────────────────────
+# Spulenwagen (seit 0.34.110): schwacher Kettenblitz, EMP-Feld nur aufgebaut,
+# zeitlich begrenzt, danach laden; eigene Fahrzeuge bleiben verschont.
+_tm110 = _TM59.Testmodus(app, karte="staubtal_offen")
+_namen110 = [e_.name for e_ in _tm110.eintraege]
+pruef("Testmodus: SPULENWAGEN im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB)",
+      "SPULENWAGEN" in _namen110 and "ABWURF: SPULENWAGEN" in _namen110)
+pruef("Der Spulenwagen ist im Nachschub (10 Punkte), die Tafel passt trotzdem",
+      ("spulenwagen", 10, "DROPZONE: SPULENWAGEN") in K.SCHLACHT["belohnungen"]
+      and _SL107.SchlachtTeil._gratis_rect.__name__ and
+      _SL107.SchlachtTeil._belohnung_hilfe_rect().bottom + 2 + 14 < K.GAME_H - 36)
+_e110 = _tm110.welt.ebene(0)
+_rnd110 = random.Random(110)
+for _ in range(40000):
+    _tx110 = _rnd110.randrange(60, _e110.breite - 90)
+    _ty110 = _rnd110.randrange(20, _e110.hoehe - 40)
+    if all(not K.KACHELN[_e110.kachel(_tx110 + x_, _ty110 + y_)]["fest"]
+           for x_ in range(34) for y_ in range(16)):
+        break
+_z110 = lambda x_, y_: pygame.Vector2((_tx110 + x_ + 0.5) * K.TILE, (_ty110 + y_ + 0.5) * K.TILE)
+_sp110 = _tm110.fahrzeug_setzen("spulenwagen", _z110(6, 8), 0, {"winkel": 0})
+_sf110 = _tm110.puppe_setzen(_sp110.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="TECHNIKER")
+_tm110._anwenden(_sf110, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Spulenwagen: eigene Art, keine Plaetze, nur fuer Menschen, eigenes Bild",
+      _sf110.fahrzeug is _sp110 and _sp110.art == "spulenwagen" and "plaetze" not in _sp110.werte
+      and _sp110.werte["nur_mensch"] and _sp110.bild == "spulenwagen")
+# Die Gegner: ein Panzer im Kreis, einer ausserhalb, ein eigener im Kreis.
+_feind110 = _tm110.fahrzeug_setzen("panzer", _z110(11, 8), 0, {"winkel": 180})
+_fern110 = _tm110.fahrzeug_setzen("panzer", _z110(30, 13), 0, {"winkel": 180})
+_eigen110 = _tm110.fahrzeug_setzen("buggy", _z110(6, 4), 0, {"winkel": 0})
+_ef110 = _tm110.puppe_setzen(_feind110.ausstiegsorte(9.0)[0], 0, {"team": 1}, name="FEIND")
+_tm110._anwenden(_ef110, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_if110 = _tm110.puppe_setzen(_eigen110.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="FREUND")
+_tm110._anwenden(_if110, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_ziel110 = [_z110(20, 8).x, _z110(20, 8).y]
+def _sp_ein110(zielt_, will_=(0, 0), feuert_=False):
+    _tm110._anwenden(_sf110, {"will": list(will_), "ziel": _ziel110, "knoepfe": [], "zielt": zielt_,
+                              "feuert": feuert_})
+    _tm110.schritt(K.FIXED_DT)
+for _ in range(3):
+    _sp_ein110(True)
+_sp_ein110(False)
+pruef("Spulenwagen: die rechte Maustaste baut das Feld auf (Phase 1), er steht dabei",
+      _sp110.phase == 1 and _sp110.phase_rest > 2.0)
+for _ in range(int(1.0 / K.FIXED_DT)):
+    _sp_ein110(False, will_=(0, -1))
+pruef("... beim Aufbauen faehrt er nicht (Gas gilt nicht)", _sp110.geschw.length() < 1.0,
+      "%.1f" % _sp110.geschw.length())
+for _ in range(int(2.0 / K.FIXED_DT)):
+    _sp_ein110(False)
+pruef("... danach ist das Feld aktiv (Phase 2) und pulsiert: Bild mit Glut",
+      _sp110.phase == 2 and _sp110.bild == "spulenwagen_aktiv", str(_sp110.phase))
+for _ in range(int(1.5 / K.FIXED_DT)):
+    _sp_ein110(False)
+pruef("Ein Puls legt fremde Fahrzeuge im Kreis still ...", _feind110.emp_rest > 0.0,
+      "%.1f" % _feind110.emp_rest)
+pruef("... aber nicht eigene und nicht die ausserhalb", _eigen110.emp_rest == 0.0 and _fern110.emp_rest == 0.0,
+      "%.1f / %.1f" % (_eigen110.emp_rest, _fern110.emp_rest))
+_ph110 = K.SPULENWAGEN["feld"]
+for _ in range(int((_ph110["dauer"] + 0.5) / K.FIXED_DT)):
+    _sp_ein110(False)
+pruef("Das Feld haelt nur seine Zeit: danach laedt er (Phase 3) und steht wieder frei",
+      _sp110.phase == 3 and _sp110.phase_rest > _ph110["laden"] - 3.0, "%d %.1f" % (_sp110.phase, _sp110.phase_rest))
+for _ in range(3):
+    _sp_ein110(True)
+_sp_ein110(False)
+pruef("... solange er laedt, geht kein neues Feld", _sp110.phase == 3)
+for _ in range(int((_ph110["laden"] + 1.0) / K.FIXED_DT)):
+    _sp_ein110(False)
+_sp110.pos.update(_z110(2, 2)); _sp110.vorher.update(_sp110.pos); _sp110.geschw.update(0, 0)
+_sp110.winkel = 90.0
+for _ in range(int(2.0 / K.FIXED_DT)):
+    _sp_ein110(False, will_=(0, -1))
+pruef("... nach dem Laden ist er bereit und faehrt", _sp110.phase == 0 and _sp110.geschw.length() > 5.0,
+      "%d %.1f" % (_sp110.phase, _sp110.geschw.length()))
+# Nur im Stand aufbauen.
+_tm110._anwenden(_sf110, {"will": [0, -1], "ziel": _ziel110, "knoepfe": [], "zielt": True})
+_tm110.schritt(K.FIXED_DT)
+pruef("Aufbauen geht nur im Stand, nicht in voller Fahrt", _sp110.phase == 0 and _sp110.geschw.length() > 20.0)
+# Der Blitz.
+_sp110.pos.update(_z110(4, 3)); _sp110.vorher.update(_sp110.pos); _sp110.geschw.update(0, 0)
+_sp110.winkel = 0.0; _sp110.phase = 0
+_tm110.fahrzeuge  # (nur zur Lesbarkeit)
+_a110 = _tm110.puppe_setzen(_sp110.spule_mitte() + pygame.Vector2(180, 0), 0, {"team": 1, "leben": 20.0}, name="A")
+_b110 = _tm110.puppe_setzen(_a110.pos + pygame.Vector2(60, 40), 0, {"team": 1, "leben": 20.0}, name="B")
+_c110 = _tm110.puppe_setzen(_sp110.spule_mitte() + pygame.Vector2(0, 220), 0, {"team": 1, "leben": 20.0}, name="C")
+_ziel110 = [_a110.pos.x, _a110.pos.y]
+_la110, _lb110, _lc110 = _a110.leben, _b110.leben, _c110.leben
+_sf110.treppe_rest = 0.0
+for _ in range(int(0.3 / K.FIXED_DT)):
+    _sp_ein110(False, feuert_=True)
+_da110, _db110 = _la110 - _a110.leben, _lb110 - _b110.leben
+pruef("Spulenwagen: der Blitz trifft den ersten im Kegel und springt weiter, schwaecher",
+      0.0 < _db110 < _da110 and _lc110 == _c110.leben and _da110 <= K.SPULENWAGEN["blitz"]["schaden"] + 0.01,
+      "%.1f / %.1f" % (_da110, _db110))
+pruef("... und viel schwaecher als der Kettenblitz zu Fuss",
+      K.SPULENWAGEN["blitz"]["schaden"] < K.WAFFEN["kettenblitz"]["schaden"])
+_tm110.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

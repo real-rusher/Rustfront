@@ -838,7 +838,8 @@ class SchlachtTeil:
             s = pygame.transform.scale(s, (s.get_width() * 2, s.get_height() * 2))
             ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y))))
             return
-        if art in ("buggy", "krad"):
+        if not getattr(fahrzeug_modul.ARTEN.get(art), "rechteckig", True):
+            # Alles, was kein Rechteck mit Aufbau ist: das Bild der Art selbst.
             s = bilder.gedreht(art, winkel)
             ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y))))
             return
@@ -1044,10 +1045,16 @@ class SchlachtTeil:
 
     @staticmethod
     def _belohnung_zeile(i: int) -> pygame.Rect:
-        return pygame.Rect(16, 62 + i * 24, 206, 22)
+        # Eine Zeile je Eintrag (seit 0.34.110, damit auch 14 passen); was der
+        # gewaehlte tut, steht darunter (`_belohnung_hilfe_rect`).
+        return pygame.Rect(16, 62 + i * 16, 206, 15)
+
+    @staticmethod
+    def _belohnung_hilfe_rect() -> pygame.Rect:
+        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 16 + 2, 206, 12)
 
     def _gratis_rect(self) -> pygame.Rect:
-        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 24 + 4, 206, 16)
+        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 16 + 16, 206, 14)
 
     def belohnung_ereignis(self, ev) -> bool:
         """Tasten und Maus, solange das Menue offen ist. True: verbraucht."""
@@ -1190,11 +1197,13 @@ class SchlachtTeil:
             pygame.draw.rect(ziel, (40, 30, 20) if gewaehlt else (20, 15, 11), r)
             pygame.draw.rect(ziel, K.C_AMBER if gewaehlt else (70, 56, 40), r, 1)
             farbe = K.C_CREAM if leistbar else K.C_MUTED_DK
-            SCHRIFT.zeichnen(ziel, "%d  %s" % (i + 1, text), r.x + 5, r.y + 3, farbe, 1)
-            SCHRIFT.zeichnen(ziel, "GRATIS" if gratis else "%d P" % kosten, r.right - 5, r.y + 3,
+            SCHRIFT.zeichnen(ziel, "%d  %s" % (i + 1, text), r.x + 5, r.y + 4, farbe, 1)
+            SCHRIFT.zeichnen(ziel, "GRATIS" if gratis else "%d P" % kosten, r.right - 5, r.y + 4,
                              K.C_AMBER if leistbar else K.C_MUTED_DK, 1, ausrichtung="rechts")
-            SCHRIFT.zeichnen(ziel, S["belohnung_hilfe"].get(name, ""), r.x + 5, r.y + 14,
-                             K.C_MUTED, 1)
+        wahl_ = self.belohnung_wahl
+        if 0 <= wahl_ < len(S["belohnungen"]):
+            SCHRIFT.zeichnen(ziel, S["belohnung_hilfe"].get(S["belohnungen"][wahl_][0], ""),
+                             16, self._belohnung_hilfe_rect().y + 2, K.C_MUTED, 1)
         if self._ist_admin_lokal():
             r = self._gratis_rect()
             pygame.draw.rect(ziel, (16, 30, 28), r)

@@ -176,7 +176,7 @@ OPTIONEN = {
     # Seit 0.34.73: die Klasse (K.KLASSEN) - Waffen, Vorteile, Faehigkeit (C).
     "klasse": ("KLASSE", lambda: [""] + list(K.KLASSEN),
                lambda v: K.KLASSEN[v]["name"] if v in K.KLASSEN else "KEINE"),
-    "fahrzeug": ("FAHRZEUG", lambda: ["panzer", "panzerwagen", "buggy", "krad", "jagdpanzer", "trosswagen"],
+    "fahrzeug": ("FAHRZEUG", lambda: ["panzer", "panzerwagen", "buggy", "krad", "jagdpanzer", "trosswagen", "spulenwagen"],
                  lambda v: v.upper()),
     "fuehrer": ("ANFÜHRER", lambda: ["funk", "ohne", "keiner"],
                 lambda v: {"funk": "MIT FUNK", "ohne": "OHNE FUNK", "keiner": "KEINER"}[v]),
@@ -300,6 +300,10 @@ def eintraege() -> list:
         # ICH) hinten dranstellen und E druecken.
         Eintrag("TROSSWAGEN", "OBJEKTE", ("anzahl", "streuung", "winkel"),
                 lambda t, p, e, w: t.fahrzeug_setzen("trosswagen", p, e, w)),
+        # Seit 0.34.110: Linke Taste Blitz, rechte Taste das EMP-Feld (steht
+        # still, baut auf, pulsiert, laedt).
+        Eintrag("SPULENWAGEN", "OBJEKTE", ("anzahl", "streuung", "winkel"),
+                lambda t, p, e, w: t.fahrzeug_setzen("spulenwagen", p, e, w)),
         # Seit 0.34.65: was der Nagelstreuer eines Wagens hinterlaesst.
         Eintrag("NAGELFELD", "OBJEKTE", ("anzahl", "streuung"),
                 lambda t, p, e, w: t.nagelfeld_setzen(p, e)),
@@ -320,6 +324,8 @@ def eintraege() -> list:
                 lambda t, p, e, w: t.nachschub_setzen("krad", p, w), mehrfach=False),
         Eintrag("ABWURF: JAGDPANZER", "NACHSCHUB", ("team",),
                 lambda t, p, e, w: t.nachschub_setzen("jagdpanzer", p, w), mehrfach=False),
+        Eintrag("ABWURF: SPULENWAGEN", "NACHSCHUB", ("team",),
+                lambda t, p, e, w: t.nachschub_setzen("spulenwagen", p, w), mehrfach=False),
         Eintrag("ABWURF: PANZERWAGEN", "NACHSCHUB", ("team",),
                 lambda t, p, e, w: t.nachschub_setzen("panzerwagen", p, w), mehrfach=False),
         Eintrag("ABWURF: PANZER", "NACHSCHUB", ("team",),

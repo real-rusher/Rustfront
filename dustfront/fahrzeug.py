@@ -1697,6 +1697,174 @@ class Trosswagen(Buggy):
         self._entnommen = {}
 
 
+class Spulenwagen(Buggy):
+    """Erbeutete Chor-Technik (seit 0.34.110, K.SPULENWAGEN). Linke
+    Maustaste: ein schwacher Kettenblitz vom Wagen zum Zeiger. Rechte: das
+    EMP-Feld - der Wagen muss dafuer stehen und aufgebaut werden, dann
+    pulsiert es am Ort (alle `takt` Sekunden legt ein Puls jedes fremde
+    Fahrzeug im Kreis still), aber nur `dauer` Sekunden lang; danach laedt
+    er. Eigene Fahrzeuge bleiben verschont.
+
+    Phasen: 0 bereit, 1 baut auf, 2 Feld aktiv, 3 laedt. In 1 und 2 steht er."""
+
+    art = "spulenwagen"
+    werte = K.SPULENWAGEN
+    schatten_bild = "spulenwagen_schatten"
+    schiesst = True            # die Maustasten des Fahrers gelten (mehrspieler._fahren)
+
+    def __init__(self, pos, ebene: int = 0, winkel: float = 0.0,
+                 nur_bild: bool = False) -> None:
+        super().__init__(pos, ebene, winkel, nur_bild)
+        self.feuer = False
+        self.zweit = False
+        self.takt: dict = {}
+        self.phase = 0
+        self.phase_rest = 0.0      # Sekunden bis zur naechsten Phase (beim Gast gemeldet)
+        self._zweit_alt = False
+        self._puls_rest = 0.0
+
+    @property
+    def bild(self) -> str:
+        if self.kaputt:
+            return "spulenwagen_wrack"
+        return "spulenwagen_aktiv" if self.phase == 2 else "spulenwagen"
+
+    def spule_mitte(self, pos=None, winkel=None) -> pygame.Vector2:
+        """Wo die Spule sitzt: von hier gehen Blitz und Puls aus."""
+        pos = self.pos if pos is None else pos
+        winkel = self.winkel if winkel is None else winkel
+        return pos + pygame.Vector2(self.werte["spule"]).rotate(winkel)
+
+    def schritt(self, dt: float) -> None:
+        if not (self.nur_bild or self.welt is None) and self.phase in (1, 2):
+            self.gas = self.lenk = 0.0          # aufgebaut steht er
+            self.handbremse = True
+        super().schritt(dt)
+        if self.nur_bild or self.welt is None or self.kaputt:
+            return
+        for k in list(self.takt):
+            self.takt[k] = max(0.0, self.takt[k] - dt)
+        if self.emp_rest > 0.0:
+            return
+        self._phasen(dt)
+        if self.feuer and self.fahrer is not None and self.takt.get("blitz", 0.0) <= 0.0:
+            self._blitz()
+
+    # ---- Das Feld ----------------------------------------------------
+    def _phasen(self, dt: float) -> None:
+        f = self.werte["feld"]
+        druck = self.zweit and not self._zweit_alt
+        self._zweit_alt = self.zweit
+        if self.phase == 0 and druck and self.fahrer is not None \
+                and self.geschw.length() <= f["stillstand"]:
+            self.phase, self.phase_rest = 1, f["aufbau"]
+            self.welt.klang("aufheben", 0.8, self.pos, self.ebene)
+        elif self.phase == 1 and druck:
+            self.phase, self.phase_rest = 0, 0.0              # abgebrochen, kostet nichts
+        elif self.phase == 2 and druck:
+            benutzt = 1.0 - self.phase_rest / f["dauer"]       # frueh aus: kuerzer laden
+            self.phase, self.phase_rest = 3, max(4.0, f["laden"] * benutzt)
+        elif self.phase == 1:
+            self.phase_rest -= dt
+            if self.phase_rest <= 0.0:
+                self.phase, self.phase_rest, self._puls_rest = 2, f["dauer"], 0.0
+        elif self.phase == 2:
+            self.phase_rest -= dt
+            self._puls_rest -= dt
+            if self._puls_rest <= 0.0:
+                self._puls_rest = f["takt"]
+                self._puls()
+            if self.phase_rest <= 0.0:
+                self.phase, self.phase_rest = 3, f["laden"]
+        elif self.phase == 3:
+            self.phase_rest -= dt
+            if self.phase_rest <= 0.0:
+                self.phase, self.phase_rest = 0, 0.0
+
+    def _puls(self) -> None:
+        """Ein Puls: jedes fremde Fahrzeug (und jede Technik) im Kreis steht still."""
+        f = self.werte["feld"]
+        w = self.welt
+        mitte = self.spule_mitte()
+        meine = seite_von(self)
+        for b in list(w.nahe(mitte, f["radius"] + 80.0, self.ebene)):
+            if b is self or not b.lebt:
+                continue
+            if getattr(b, "ist_fahrzeug", False):
+                s = seite_von(b)
+                if b.kaputt or (meine is not None and s == meine):
+                    continue
+                if b.beruehrt(mitte, f["radius"]):
+                    b.emp_treffen(f["emp"])
+            elif (getattr(b, "technik", False) and getattr(b, "fraktion", None) != getattr(self.fahrer, "fraktion", "-")
+                  and b.pos.distance_to(mitte) <= f["radius"] + b.radius):
+                b.emp_treffen(f["emp"])
+        w.explosion(mitte, self.ebene, f["radius"], "emp")
+
+    # ---- Der Blitz ---------------------------------------------------
+    def _blitz(self) -> None:
+        """Der erste im Kegel zum Zeiger, dann von Koerper zu Koerper, jedes
+        Mal schwaecher (wie der Kettenblitz zu Fuss, nur schwaecher)."""
+        d = self.werte["blitz"]
+        k = self.fahrer
+        ziel = getattr(k, "ziel", None)
+        if ziel is None:
+            return
+        mitte = self.spule_mitte()
+        zu = pygame.Vector2(ziel) - mitte
+        if zu.length_squared() < 4.0:
+            return
+        winkel = math.degrees(math.atan2(zu.y, zu.x))
+        self.takt["blitz"] = d["takt"]
+        w = self.welt
+        meine = seite_von(self)
+        punkte = [pygame.Vector2(mitte)]
+        getroffen = []
+        jetzt = pygame.Vector2(mitte)
+        menge = d["schaden"]
+        for sprung in range(d["spruenge"] + 1):
+            bestes, beste_weite = None, 1e9
+            weite_max = d["reichweite"] if sprung == 0 else d["sprung"]
+            for z in w.nahe(jetzt, weite_max + 40.0, self.ebene):
+                if (z is self or not z.lebt or z in getroffen
+                        or getattr(z, "fraktion", "") in ("geschoss", k.fraktion)
+                        or not getattr(z, "trefferbar", True)
+                        or getattr(z, "im_fahrzeug", False)):
+                    continue
+                if getattr(z, "ist_fahrzeug", False) and meine is not None and seite_von(z) == meine:
+                    continue
+                ab = z.pos - jetzt
+                weit = ab.length()
+                if weit > weite_max + z.radius or weit >= beste_weite:
+                    continue
+                if sprung == 0:
+                    delta = (math.degrees(math.atan2(ab.y, ab.x)) - winkel + 180) % 360 - 180
+                    if abs(delta) > d["kegel"]:
+                        continue
+                if not w.sicht_frei(jetzt, z.pos, self.ebene):
+                    continue
+                bestes, beste_weite = z, weit
+            if bestes is None:
+                break
+            lebte = bestes.lebt
+            schaden_an(bestes, menge, None, k, d["schadensart"], jetzt)
+            abschuss_buchen(k, bestes, "kettenblitz", lebte)
+            getroffen.append(bestes)
+            jetzt = pygame.Vector2(bestes.pos)
+            punkte.append(jetzt)
+            menge *= d["abfall"]
+        if len(punkte) == 1:
+            punkte.append(w.strahl(mitte, pygame.Vector2(1, 0).rotate(winkel),
+                                   d["reichweite"] * 0.6, self.ebene))
+        w.entladung(punkte, self.ebene, "blitz")
+
+    def zuruecksetzen(self) -> None:
+        super().zuruecksetzen()
+        self.phase, self.phase_rest, self._puls_rest = 0, 0.0, 0.0
+        self.takt = {}
+        self.feuer = self.zweit = self._zweit_alt = False
+
+
 class Jagdpanzer(Panzer):
     """Ein Panzer ohne Turm (seit 0.34.107): die Kanone sitzt fest im Bug und
     schwenkt nur ein paar Grad (K.JAGDPANZER "schwenk"); wer mehr will, muss
@@ -1731,7 +1899,8 @@ class Jagdpanzer(Panzer):
 
 # Welche Art zu welcher Klasse und zu welchem Buchstaben in der Karte.
 ARTEN = {"buggy": Buggy, "panzer": Panzer, "panzerwagen": Panzerwagen,
-         "krad": Krad, "jagdpanzer": Jagdpanzer, "trosswagen": Trosswagen}
+         "krad": Krad, "jagdpanzer": Jagdpanzer, "trosswagen": Trosswagen,
+         "spulenwagen": Spulenwagen}
 
 
 def marken() -> list:
