@@ -7154,6 +7154,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         self._drohnen_zeichnen(ziel, misch)
         self._beifahrer_zeichnen(ziel, misch)
         self._werfer_gestelle_zeichnen(ziel, misch)
+        self._funkmasten_zeichnen(ziel, misch)
         self._luftfahrzeuge_zeichnen(ziel, misch)
         self._raketen_zeichnen(ziel)
         if self.schlacht or self.__dict__.get("nachschub_an"):

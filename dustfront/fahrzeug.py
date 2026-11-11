@@ -2070,17 +2070,16 @@ class Funkwagen(Aufbauwagen):
 
     @property
     def bild(self) -> str:
-        if self.kaputt:
-            return "funkwagen_wrack"
-        p = self.fortschritt
-        if p <= 0.0:
-            return "funkwagen"
-        if p < 1.0 or self.phase != 2:
-            # Auf- und Abbau (seit 0.34.120): Abspannseile laufen aus, der Peilrahmen
-            # steigt, klappt auf und dreht sich schneller - in 15 Stufen.
-            return "funkwagen_aufbau_%d" % max(1, min(15, int(math.ceil(p * 16.0)) - 1))
+        # Der Mast ist seit 0.34.124 ein eigenes 3D-Bild ueber dem Wagen
+        # (art_funkmast.py, luft._funkmasten_zeichnen).
+        return "funkwagen_wrack" if self.kaputt else "funkwagen"
+
+    def mast_drehung(self) -> float:
+        """Wie weit der Peilkopf gerade gedreht ist (Grad): er dreht sich, sobald
+        er aufgeklappt ist, und laeuft dabei weich an."""
         zeit = self.welt.zeit if self.welt is not None else 0.0
-        return "funkwagen_aktiv_%d" % (int(zeit * self.werte["drehen"] * 4) % 4)
+        an = max(0.0, min(1.0, (self.fortschritt - 0.8) / 0.2))
+        return (zeit * self.werte["drehen"] * 90.0 * an) % 360.0
 
     def mast_mitte(self, pos=None, winkel=None) -> pygame.Vector2:
         pos = self.pos if pos is None else pos

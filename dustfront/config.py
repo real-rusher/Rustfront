@@ -4731,10 +4731,6 @@ for _i in range(1, 9):
 for _name in ("funkwagen", "funkwagen_wrack"):
     BILD_MASS[_name] = (160, 160)
 BILD_MASS["funkwagen_schatten"] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
-for _i in range(4):
-    BILD_MASS["funkwagen_aktiv_%d" % _i] = (160, 160)
-for _i in range(1, 16):
-    BILD_MASS["funkwagen_aufbau_%d" % _i] = (160, 160)
 for _name in ("spulenwagen", "spulenwagen_aktiv", "spulenwagen_wrack", "spulenwagen_schatten"):
     BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _name in ("trosswagen", "trosswagen_wrack", "trosswagen_schatten"):

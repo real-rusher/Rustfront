@@ -327,6 +327,22 @@ class LuftTeil:
             ziel.blit(schatten, schatten.get_rect(center=(int(mitte.x), int(mitte.y))))
             ziel.blit(bild, bild.get_rect(center=(int(mitte.x), int(mitte.y))))
 
+    def _funkmasten_zeichnen(self, ziel, misch: float) -> None:
+        """Der Mast des Funkwagens (seit 0.34.124, art_funkmast.py): ein
+        3D-Modell auf dem Mastfuss, das sich beim Aufbau aufrichtet, ausfaehrt,
+        den Peilkopf aufklappt und sich abspannt; aufgebaut dreht sich der Kopf."""
+        from .art_funkmast import MITTE, funkmast
+        ecke = self.kamera.ecke
+        for b in self.fahrzeuge:
+            if b.art != "funkwagen" or b.kaputt or b.ebene != self.blick:
+                continue
+            p = b.zeichenpos(misch) - ecke
+            if not (-160 < p.x < ziel.get_width() + 160 and -160 < p.y < ziel.get_height() + 160):
+                continue
+            fuss = p + pygame.Vector2(b.werte["mast"]).rotate(b.winkel)
+            bild = funkmast(b.winkel, b.fortschritt, b.mast_drehung())
+            ziel.blit(bild, bild.get_rect(center=(int(fuss.x + MITTE[0]), int(fuss.y + MITTE[1]))))
+
     # ---- Zeichnen (Gastgeber und Gast) -----------------------------------------
     def _luftfahrzeuge_zeichnen(self, ziel, misch: float) -> None:
         """Tragschrauber: der Rotor immer (auch am Boden, solange er besetzt
