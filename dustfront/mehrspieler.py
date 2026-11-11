@@ -4836,6 +4836,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         flug = []
         gegner = []
         beute = []
+        # Gerade Fluege (seit 0.34.106, docs/CLIENTSEITE.md Stufe E): jede
+        # Kugel nur einmal - Start, Tempo, Uhrzeit -, den Rest rechnet der
+        # Gast (Gefecht._fliegendes_uebernehmen). Neu gemeldet wird sie nur,
+        # wenn sich ihr Tempo aendert (Abprallen).
+        gerade = {} if K.NETZ["flug_beim_gast"] else None
         for w in self.welt.wesen:
             if not w.lebt:
                 continue
@@ -4859,6 +4864,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             # Blendgranate und Rakete eigene Bilder haben (Skins), kamen
             # sie beim Gast nie an: er sah nur die Explosion (gemeldet in
             # 0.30). Der Name geht als Bild mit, wie er ist.
+            if gerade is not None and isinstance(w, Geschoss) and getattr(w, "flug", 0.0) <= 0.0:
+                start = w.__dict__.get("_netz_start")
+                if start is None or (start[2], start[3]) != (round(w.tempo.x, 1), round(w.tempo.y, 1)):
+                    start = w._netz_start = [round(w.pos.x, 1), round(w.pos.y, 1),
+                                             round(w.tempo.x, 1), round(w.tempo.y, 1), w.ebene,
+                                             getattr(w, "bild", None) or "geschoss",
+                                             round(self._zeit, 3)]
+                gerade[str(w.kennung)] = start
+                continue
             if isinstance(w, (Geschoss, Granate, Rakete, C4Ladung)):
                 name = getattr(w, "bild", None) or "geschoss"
                 # Die Flughoehe muss mit: eine Granate, die eine Ebene
@@ -4946,6 +4960,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                 "sl": self.schlacht_meldung() if self.schlacht else None,
                 "wirkung": wirkung,
                 "spieler": spieler, "schuesse": flug, "beute": beute,
+                "gs": gerade,
                 "gegner": gegner, "welle": self.welle,
                 "pause": round(self.pause_rest, 1),
                 "offen": len(self.gegner_offen), "aus": self.vorbei,
@@ -5440,6 +5455,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             self.welt.held = self.ich
         vorige_beute = self._fremde_beute
         self._fliegendes_uebernehmen(meldung.get("schuesse", []))
+        self._gerade_uebernehmen(meldung.get("gs"), meldung.get("zt"))
         self._rauch_uebernehmen(meldung.get("rauch", []))
         self._feuer_uebernehmen(meldung.get("feuer", []))
         self._naegel_uebernehmen(meldung.get("naegel", []))
@@ -5523,6 +5539,30 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             vx, vy = (alt[0], alt[1]) if alt is not None else (x, y)
             raus.append((x, y, winkel, ebene, name, hoehe, kennung, vx, vy))
         self._fremde_schuesse = raus
+
+    def _gerade_uebernehmen(self, gerade, zt) -> None:
+        """Gerade Fluege beim Gast (seit 0.34.106): aus Start, Tempo und
+        Uhrzeit die Lage zur Zeit der vorletzten und der letzten Meldung.
+        Dazwischen zeichnet die Ueberblendung wie bei allem anderen - und
+        weiter als bis zur letzten bekannten Zeit wird nie gerechnet: eine
+        Kugel fliegt also nicht durch eine Mauer, in der sie beim Gastgeber
+        schon steckt. Was nicht mehr gemeldet wird, ist weg."""
+        if not isinstance(gerade, dict) or not isinstance(zt, (int, float)):
+            return
+        t_neu = float(zt)
+        t_alt = self._zt_zuletzt if isinstance(self._zt_zuletzt, (int, float)) else t_neu
+        t_alt = min(t_alt, t_neu)
+        for kennung, e in gerade.items():
+            try:
+                x0, y0, vx, vy = float(e[0]), float(e[1]), float(e[2]), float(e[3])
+                ebene, name, t0 = int(e[4]), str(e[5]), float(e[6])
+            except (TypeError, ValueError, IndexError):
+                continue
+            a = max(0.0, t_alt - t0)
+            b = max(0.0, t_neu - t0)
+            winkel = math.degrees(math.atan2(vy, vx)) if (vx or vy) else 0.0
+            self._fremde_schuesse.append((x0 + vx * b, y0 + vy * b, winkel, ebene, name, 0.0,
+                                          -1, x0 + vx * a, y0 + vy * a))
 
     def _naegel_uebernehmen(self, eintraege) -> None:
         """Nagelfelder beim Gast (seit 0.34.65): nur Ort und Alter, die

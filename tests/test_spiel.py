@@ -17259,6 +17259,61 @@ _ohne305, _mit305 = _schiessen305(False), _schiessen305(True)
 pruef("150 ms Ping, Ziel laeuft hin und her: mit Rueckrechnung deutlich mehr Treffer",
       _mit305 >= _ohne305 * 1.25 and _mit305 > 0, "%d statt %d" % (_mit305, _ohne305))
 
+print("\n-- 0.34.106: Gerade Fluege rechnet der Gast - jede Kugel geht nur einmal hinaus")
+from dustfront.entities import Geschoss as _Gs306
+w306, g306 = _paar59("pvp", karte="staubtal")
+_d306 = dict(K.WAFFEN["sturm"], reichweite=5000.0)
+# In eine Richtung, in der 800 px lang keine Mauer steht; vom Gastgeber
+# selbst geschossen, damit sie ihn nicht beim Start trifft.
+_w306 = next((a_ for a_ in range(0, 360, 15)
+              if not any(w306.welt.schuss_halt(w306.ich.pos + pygame.Vector2(d_, 0).rotate(a_),
+                                               w306.ich.ebene, 2.0)
+                         for d_ in range(10, 800, 8))), 0)
+_k306 = _Gs306(pygame.Vector2(w306.ich.pos), float(_w306), _d306, w306.ich.ebene, w306.ich, "sturm")
+w306.welt.dazu(_k306)
+_lagen306 = {}
+_alt_wm306 = w306._weltmeldung
+def _wm306():
+    m_ = _alt_wm306()
+    if _k306.lebt:
+        _lagen306[m_["zt"]] = pygame.Vector2(_k306.pos)
+    return m_
+w306._weltmeldung = _wm306
+_meldungen306 = []
+_alt_ws306 = netz.Leitung._welt_senden
+def _ws306(self_, n_):
+    r_ = _alt_ws306(self_, n_)
+    if r_ is not None:
+        _meldungen306.append(r_)
+    return r_
+netz.Leitung._welt_senden = _ws306
+for _ in range(12):
+    w306.schritt(K.FIXED_DT); g306.schritt(K.FIXED_DT)
+netz.Leitung._welt_senden = _alt_ws306
+_meins306 = [e_ for e_ in g306._fremde_schuesse if e_[6] == -1]
+_wirt306 = _lagen306.get(g306._zt_zuletzt)
+pruef("Der Gast rechnet die Kugel selbst - und sie steht genau dort, wo der Gastgeber sie hatte",
+      len(_meins306) == 1 and _wirt306 is not None
+      and pygame.Vector2(_meins306[0][0], _meins306[0][1]).distance_to(_wirt306) < 0.5,
+      "%s / %s" % (_meins306[:1], _wirt306))
+_mit306 = [m_ for m_ in _meldungen306 if str(_k306.kennung) in (m_.get("gs") or {}).get("~d", m_.get("gs") or {})]
+pruef("... und sie ging nur einmal hinaus, nicht in jeder Meldung",
+      len(_meldungen306) >= 3 and len(_mit306) == 1, "%d von %d Meldungen" % (len(_mit306), len(_meldungen306)))
+_k306.tempo = _k306.tempo * 0.5               # wie nach einem Abprallen: anderes Tempo
+for _ in range(8):
+    w306.schritt(K.FIXED_DT); g306.schritt(K.FIXED_DT)
+_meins306 = [e_ for e_ in g306._fremde_schuesse if e_[6] == -1]
+_wirt306 = _lagen306.get(g306._zt_zuletzt)
+pruef("Aendert sie die Richtung (Abprallen), kommt sie neu - und der Gast folgt",
+      len(_meins306) == 1 and _wirt306 is not None
+      and pygame.Vector2(_meins306[0][0], _meins306[0][1]).distance_to(_wirt306) < 0.5)
+_k306.lebt = False
+for _ in range(8):
+    w306.schritt(K.FIXED_DT); g306.schritt(K.FIXED_DT)
+pruef("Ist sie beim Gastgeber weg, ist sie es auch beim Gast",
+      not [e_ for e_ in g306._fremde_schuesse if e_[6] == -1])
+w306.verlassen(); g306.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

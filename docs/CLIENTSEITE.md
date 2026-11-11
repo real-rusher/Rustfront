@@ -154,7 +154,8 @@ Aufwand: gross. Lohnt erst, wenn der Gastgeber messbar an den Bots haengt
    das Bild bei starker Schwankung auch ruhiger).
 4. ~~**C**~~ - **kommt nicht** (Entscheidung des Besitzers, 0.34.105): alle
    Wesen sollen beim Gast immer wie bisher gezeichnet werden.
-5. **E** - weniger Daten, fluessige Fluege.
+5. **E** - erledigt (0.34.106) fuer gerade Fluege (Geschoss, Panzergranate);
+   Granaten, Raketen und C4 bleiben, wie sie sind (Bogen, Abprallen, Lenkung).
 6. **F** - nur, wenn der Gastgeber an den Bots haengt.
 
 ## 6. Wie wir pruefen

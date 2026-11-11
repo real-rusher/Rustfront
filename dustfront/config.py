@@ -866,6 +866,9 @@ NETZ = dict(
     rueck_lagen=72,
     rueck_suchweite=220.0,
     rueck_tempo=450.0,        # px/s: so schnell bewegt sich hoechstens etwas
+    # Gerade Fluege rechnet der Gast (seit 0.34.106): jede Kugel geht nur
+    # einmal hinaus (Start, Tempo, Uhrzeit), nicht in jeder Meldung.
+    flug_beim_gast=True,
     # Der Sendepuffer des Systems je Gast (Bytes). Klein, damit sich dort
     # nichts sekundenlang staut: was nicht hinausgeht, merkt der Gegendruck.
     sendepuffer=65536,
