@@ -1807,7 +1807,10 @@ class BotHirn(Taktik):
         gas, lenk = 0.0, 0.0
         will = pygame.Vector2(0, 0)
         schutz = self._schutz_ort(b)
-        if schutz is not None:
+        if getattr(b, "flak", False):
+            # Flakwagen (seit 0.34.117): fahren nur im Gefolge anderer Fahrzeuge.
+            gas, lenk, will, ziel = self._konvoi_fahren(b, ziel_ort)
+        elif schutz is not None:
             schutz, liegt = schutz
             if b.pos.distance_to(schutz) > 18.0:
                 wp = self._wegpunkt_fuer(b, schutz)
@@ -1905,6 +1908,43 @@ class BotHirn(Taktik):
         if getattr(b, "flak", False):
             self._flak_feuern(b, ein)
         return ein
+
+    def _konvoi_fuehrer(self, b):
+        """Das Fahrzeug der eigenen Seite, hinter dem der Flakwagen herfaehrt
+        (seit 0.34.117) - oder None: dann wartet er. Erst wenn eines mit
+        Fahrer mehr als K.FLAK["konvoi_los"] von seinem Startort weg ist, geht
+        es los; danach gilt jedes eigene Fahrzeug mit Fahrer."""
+        f = K.FLAK
+        team = self.k.team
+        los = self.__dict__.get("_konvoi_los", False)
+        bester = None
+        for x in getattr(self.g, "fahrzeuge", ()):
+            if (x is b or x.art == "flakwagen" or x.nur_bild or x.kaputt or x.fahrer is None
+                    or x.ebene != b.ebene or getattr(x.fahrer, "team", -1) != team):
+                continue
+            start = getattr(x, "start", None)
+            if not los and start is not None and x.pos.distance_to(start[0]) < f["konvoi_los"]:
+                continue
+            d = x.pos.distance_to(b.pos)
+            if bester is None or d < bester[0]:
+                bester = (d, x)
+        self._konvoi_los = bester is not None
+        return None if bester is None else bester[1]
+
+    def _konvoi_fahren(self, b, ziel_ort):
+        """Gas, Lenken, Richtung und Zielpunkt des Flakwagens: hinter dem
+        Fuehrer her oder stehen. Geschossen wird wie immer."""
+        f = K.FLAK
+        ziel = pygame.Vector2(ziel_ort) if ziel_ort is not None else b.pos + b.vorn * 200.0
+        fuehrer = self._konvoi_fuehrer(b)
+        if fuehrer is None:
+            return 0.0, 0.0, pygame.Vector2(0, 0), ziel
+        abstand = b.pos.distance_to(fuehrer.pos)
+        if abstand <= f["konvoi_abstand"]:
+            return 0.0, 0.0, pygame.Vector2(0, 0), ziel
+        wp = self._wegpunkt_fuer(b, fuehrer.pos)
+        gas, lenk = self._lenken(b, wp, weit=abstand)
+        return gas, lenk, wp - b.pos, ziel
 
     def _flak_feuern(self, b, ein: dict) -> None:
         """Am Flak-Vierling (seit 0.34.114): ein Luftziel der Gegner in

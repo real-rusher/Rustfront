@@ -16391,7 +16391,14 @@ pruef("... dann sinken sie am Fallschirm herunter", len(w198.abwuerfe) == len(w1
 for _ in range(int((_ab198["hoehe"] / _ab198["sinken"] + 0.5) / K.FIXED_DT)):
     w198.schlacht_schritt(K.FIXED_DT)
 _je198 = [sum(1 for k_ in w198.kaempfer.values() if k_.team == i_) for i_ in range(2)]
-pruef("Beide Seiten stehen sofort voll - fehlende Spieler sind Bots", _je198 == [12, 12], str(_je198))
+# Der Flakwagen der Basis (seit 0.34.117) bringt einen zusaetzlichen Bot mit (Verstaerkung):
+# die Seiten sind mit 12 gefuellt, dazu je ein Flak-Fahrer.
+_je198 = [sum(1 for k_ in w198.kaempfer.values() if k_.team == i_ and not getattr(k_, "verstaerkung", False))
+          for i_ in range(2)]
+_flak198 = [sum(1 for k_ in w198.kaempfer.values() if k_.team == i_ and getattr(k_, "verstaerkung", False)
+                and getattr(getattr(k_, "fahrzeug", None), "art", "") == "flakwagen") for i_ in range(2)]
+pruef("Beide Seiten stehen sofort voll - fehlende Spieler sind Bots; dazu je ein Bot im Flakwagen",
+      _je198 == [12, 12] and _flak198 == [1, 1], str(_je198) + str(_flak198))
 _bl198, _br198, _mi198 = w198._schlacht_punkte()
 _breit198 = w198.welt.ebene(0).pixel_breite
 pruef("ROT hat seine Basis links, BLAU rechts", _bl198.x < 0.2 * _breit198 < 0.8 * _breit198 < _br198.x,
@@ -17475,7 +17482,7 @@ _tm108 = _TM59.Testmodus(app, karte="staubtal_offen")
 pruef("Testmodus: TROSSWAGEN steht im Spawner (OBJEKTE)",
       "TROSSWAGEN" in [e_.name for e_ in _tm108.eintraege if e_.gruppe == "OBJEKTE"])
 pruef("Der Trosswagen steht an jeder Basis, ist aber nicht zu kaufen",
-      ("trosswagen", 1) in K.SCHLACHT["fahrzeuge"]
+      dict(K.SCHLACHT["fahrzeuge"]).get("trosswagen") == 2
       and "trosswagen" not in [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]])
 _e108 = _tm108.welt.ebene(0)
 _rnd108 = random.Random(108)
@@ -17587,8 +17594,10 @@ _jp109 = _tm109.fahrzeug_setzen("jagdpanzer", _z109(6, 0), 0, {"winkel": 0})
 _jf109 = _tm109.puppe_setzen(_jp109.ausstiegsorte(9.0)[0], 0, {"team": 0, "aussehen": _skin109},
                              name="KOMMANDANT")
 _tm109._anwenden(_jf109, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
-pruef("Skins: die Kanone des Jagdpanzers zeigt den Kommandanten im Aussehen",
-      _jp109.aufbau_bild_name() == "jagdpanzer_rohr_skin_%s_rot" % _skin109, _jp109.aufbau_bild_name())
+# Seit 0.34.117 (gewuenscht): beim Jagdpanzer ist der Fahrer nicht zu sehen, die Luke ist
+# geschlossen - es gibt dafuer nur noch ein Bild, ohne Skin und ohne Mannschaftsfarbe.
+pruef("Jagdpanzer: der Fahrer ist nicht sichtbar - die Kanone hat immer dasselbe Bild mit geschlossener Luke",
+      _jp109.aufbau_bild_name() == "jagdpanzer_rohr", _jp109.aufbau_bild_name())
 # Reichweite: ein Ziel 1 300 Pixel entfernt, mitten in der freien Bahn.
 _ziel109 = _tm109.puppe_setzen(_jp109.pos + pygame.Vector2(1300, 0), 0, {"team": 1, "leben": 20.0},
                                name="WEIT")
@@ -17833,6 +17842,7 @@ _tm111.verlassen()
 # Werfer (seit 0.34.112): aufgebaut, Salve nur auf gueltige Ziele der Seite,
 # rote Kreise, verraet sich, sehr zerbrechlich mit grosser Explosion.
 _tm112 = _TM59.Testmodus(app, karte="staubtal_offen")
+random.seed(1120)          # die Streuung der Raketen waere sonst Glueckssache
 _namen112 = [e_.name for e_ in _tm112.eintraege]
 pruef("Testmodus: WERFER im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB); im Nachschub fuer 9 Punkte",
       "WERFER" in _namen112 and "ABWURF: WERFER" in _namen112
@@ -18285,6 +18295,79 @@ except Exception as ex_:
     _ok116 = False
 pruef("... und ein Krad im Abwurf kann im Gefecht gezeichnet werden (Testmodus)", _ok116 and bool(_tm116.abwuerfe))
 _tm116.verlassen()
+
+# 0.34.117: Abwurf einheitlich bewegen, Jagdpanzer ohne sichtbaren Fahrer, groesserer
+# Trosswagen, mehr Fahrzeuge an der Basis (zwei Trosswagen, ein Flakwagen mit Bot).
+_tm117 = _TM59.Testmodus(app, karte="staubtal_offen")
+_bild117 = pygame.Surface((K.GAME_W, K.GAME_H), pygame.SRCALPHA)
+_arten117 = ["panzer", "panzerwagen", "jagdpanzer", "flakwagen"]
+# Wanne und Aufbau sind EIN Bild: die Mitte des Gezeichneten (Schwerpunkt der Deckkraft) dreht
+# sich gleichmaessig mit - kein Teil wandert gegen den Rest.
+def _schwerpunkt117(art_, winkel_):
+    f_ = pygame.Surface((200, 200), pygame.SRCALPHA)
+    _tm117._fracht_zeichnen(f_, art_, pygame.Vector2(100, 100), winkel_)
+    m_ = pygame.mask.from_surface(f_)
+    return pygame.Vector2(m_.centroid()) if m_.count() else None
+_ok117 = True
+_zusatz117 = []
+for _a117 in _arten117:
+    _g117 = _tm117._fracht_ganz(_a117)
+    _m117 = pygame.mask.from_surface(_g117)
+    _c0 = pygame.Vector2(_m117.centroid())
+    _rel117 = _c0 - pygame.Vector2(_g117.get_width() / 2, _g117.get_height() / 2)
+    for _w117 in (-8, 5, 17):
+        _c117 = _schwerpunkt117(_a117, _w117)
+        _soll117 = pygame.Vector2(100, 100) + _rel117.rotate(_w117)
+        if _c117 is None or _c117.distance_to(_soll117) > 1.6:
+            _ok117 = False
+            _zusatz117.append("%s %d: %s statt %s" % (_a117, _w117, _c117, _soll117))
+pruef("Abwurf: Wanne und Aufbau (Luke, Geschuetz) drehen am Schirm als ein Bild mit - der Schwerpunkt liegt immer dort, wo das gedrehte Ganze ihn hat",
+      _ok117, "; ".join(_zusatz117))
+from dustfront import art_neue_fahrzeuge as _ANF117
+pruef("Jagdpanzer: der Fahrer ist nicht zu sehen - die Luke ist zu, mit und ohne Fahrer dasselbe Bild",
+      pygame.image.tobytes(_ANF117.jagdpanzer_aufbau(None), "RGBA")
+      == pygame.image.tobytes(_ANF117.jagdpanzer_aufbau((K.C_HULL, K.C_HULL_SH, K.C_TEAL)), "RGBA"))
+pruef("Trosswagen: ein Fuenftel groesser (Kreise, Achsen, Zone hinten)",
+      abs(K.TROSSWAGEN["kreis"] - 18.0 * 1.2) < 0.1 and abs(K.TROSSWAGEN["achse"] - 26.0 * 1.2) < 0.7
+      and K.TROSSWAGEN["zone"]["radius"] > 34.0)
+_f117 = dict(K.SCHLACHT["fahrzeuge"])
+pruef("Basis: zwei Trosswagen und ein Flakwagen je Seite", _f117.get("trosswagen") == 2 and _f117.get("flakwagen") == 1,
+      str(_f117))
+# Der Flakwagen wartet auf andere Fahrzeuge und faehrt dann hinter ihnen her.
+_e117 = _tm117.welt.ebene(0)
+_rnd117 = random.Random(117)
+for _ in range(40000):
+    _tx117 = _rnd117.randrange(60, _e117.breite - 90)
+    _ty117 = _rnd117.randrange(20, _e117.hoehe - 40)
+    if all(not K.KACHELN[_e117.kachel(_tx117 + x_, _ty117 + y_)]["fest"]
+           for x_ in range(50) for y_ in range(24)):
+        break
+_z117 = lambda x_, y_: pygame.Vector2((_tx117 + x_ + 0.5) * K.TILE, (_ty117 + y_ + 0.5) * K.TILE)
+_fl117 = _tm117.fahrzeug_setzen("flakwagen", _z117(4, 12), 0, {"winkel": 0})
+_fb117 = _tm117.fahrer_setzen(_fl117.pos, 0, {"team": 0}, mit_fahrzeug=False)
+_tm117._einsteigen(_fb117, _fl117)
+_bg117 = _tm117.fahrzeug_setzen("buggy", _z117(8, 12), 0, {"winkel": 0})
+_pg117 = _tm117.puppe_setzen(_bg117.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="VORDERMANN")
+_tm117._anwenden(_pg117, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_start117 = pygame.Vector2(_fl117.pos)
+for _ in range(int(4.0 / K.FIXED_DT)):
+    _tm117._anwenden(_pg117, {"will": [0, 0], "ziel": [0, 0], "knoepfe": []})
+    _tm117.schritt(K.FIXED_DT)
+pruef("Flakwagen an der Basis: steht, solange kein anderes Fahrzeug seiner Seite losgefahren ist",
+      _fl117.pos.distance_to(_start117) < 6.0, "%.0f" % _fl117.pos.distance_to(_start117))
+for _ in range(int(5.0 / K.FIXED_DT)):
+    _tm117._anwenden(_pg117, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+    _tm117.schritt(K.FIXED_DT)
+_weit117 = _bg117.pos.distance_to(_bg117.start[0])
+for _ in range(int(8.0 / K.FIXED_DT)):
+    _tm117._anwenden(_pg117, {"will": [0, 0], "ziel": [0, 0], "knoepfe": [], "hb": True})
+    _tm117.schritt(K.FIXED_DT)
+pruef("... ist eines mehr als 350 px von seinem Start weg, faehrt er hinter ihm her",
+      _weit117 > K.FLAK["konvoi_los"] and _fl117.pos.distance_to(_start117) > 150.0
+      and _fl117.pos.distance_to(_bg117.pos) < _start117.distance_to(_bg117.pos) - 100.0,
+      "Vordermann %.0f weg, Flak %.0f bewegt, Abstand %.0f" % (
+          _weit117, _fl117.pos.distance_to(_start117), _fl117.pos.distance_to(_bg117.pos)))
+_tm117.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

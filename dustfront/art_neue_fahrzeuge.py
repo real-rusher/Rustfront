@@ -290,9 +290,10 @@ def jagdpanzer_wanne(ph_links: float = 0.0, ph_rechts: float = 0.0) -> pygame.Su
 
 def jagdpanzer_aufbau(fahrer=None, rueckstoss: float = 0.0) -> pygame.Surface:
     """Der drehende Teil, 160 x 160, Drehpunkt in der Mitte: die Blende mit
-    dem langen Rohr und der Muendungsbremse, dazu die Luke. Mit `fahrer`
-    steht der Kommandant darin. `rueckstoss`: so viele Pixel faehrt das
-    Rohr zurueck."""
+    dem langen Rohr und der Muendungsbremse, dazu die Luke. Der Fahrer ist
+    nicht zu sehen (seit 0.34.117, gewuenscht): die Luke ist immer
+    geschlossen, `fahrer` wird nur noch aus Gruenden der Aufrufe angenommen.
+    `rueckstoss`: so viele Pixel faehrt das Rohr zurueck."""
     b = _Blatt(160, G)
     r = -rueckstoss / G
     gy = 0.0
@@ -315,15 +316,9 @@ def jagdpanzer_aufbau(fahrer=None, rueckstoss: float = 0.0) -> pygame.Surface:
         a = i * math.pi / 3 + 0.3
         b.rect((40, 58, 70), kl[0] + math.cos(a) * 4.2 - 0.5, kl[1] + math.sin(a) * 4.2 - 0.5,
                1.0, 1.0, 0.3)
-    if fahrer is None:
-        b.kreis(JP_DK, kl, 3.4)
-        b.kreis(JP_LACK, kl, 2.8)
-        b.kreis(JP_HELL, (kl[0] - 1.0, kl[1] - 1.0), 1.1)
-    else:
-        b.kreis((18, 16, 14), kl, 3.6)
-        art._insasse_auf(b.s, _SS, b.n // 2, fahrer, kl[0] * G, kl[1] * G, arme=None)
-        b.segment(JP_DK, 6.4 / G, rr, -180, 180, kl[0], kl[1])
-        b.segment(JP_SCHATTEN, 6.9 / G, rr - 0.5, -180, 180, kl[0], kl[1])
+    b.kreis(JP_DK, kl, 3.4)
+    b.kreis(JP_LACK, kl, 2.8)
+    b.kreis(JP_HELL, (kl[0] - 1.0, kl[1] - 1.0), 1.1)
     return b.fertig(rand=True)
 
 
@@ -373,6 +368,7 @@ for _kombi in K.TEAMS["kombi"]:
 
 # ──────────────────────────────── Trosswagen (seit 0.34.108)
 
+TW_MASS = 1.2                     # der Trosswagen ist ein Fuenftel groesser (0.34.117)
 HK_LACK = (126, 120, 92)
 HK_DK = (60, 56, 40)
 HK_HELL = (168, 160, 126)
@@ -406,7 +402,7 @@ def trosswagen_zeichnen() -> pygame.Surface:
     """Halbkette mit Pritsche, Plane, Kisten, Faessern und Kranarm. Vorn
     gelenkte Raeder, hinten Ketten; Platz fuer den Fahrer unter dem Verdeck
     (er ist nicht zu sehen). Hinten steht, wer sich Nachschub holt."""
-    b = _Blatt()
+    b = _Blatt(g=G * TW_MASS)
     rnd = random.Random(7301)
     b.rohr((21, -10), (21, 10), 1.8, (96, 92, 86))
     _reifen(b, 21, -13.2, 10.5, 5.6, 0.0)
@@ -495,7 +491,7 @@ def _trosswagen_wrack():
 
 @platzhalter("trosswagen_schatten")
 def _trosswagen_schatten():
-    return _schatten(int(64 * G), int(34 * G), 11)
+    return _schatten(int(64 * G * TW_MASS), int(34 * G * TW_MASS), 12)
 
 
 # ──────────────────────────────── Spulenwagen (seit 0.34.110)

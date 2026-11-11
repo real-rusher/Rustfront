@@ -1040,7 +1040,10 @@ SCHLACHT = dict(
     abschuesse=150,            # Vorgabe, wenn nach Abschuessen gespielt wird
     basis_x=0.08,              # Anteil der Kartenbreite vom Rand
     basis_proben=160,          # so viele freie Punkte werden je Basis geprueft
-    fahrzeuge=(("panzer", 1), ("panzerwagen", 1), ("buggy", 2), ("krad", 1), ("trosswagen", 1)),
+    # Seit 0.34.117: zwei Trosswagen und ein Flakwagen (der kommt mit einem Bot am
+    # Steuer, siehe K.FLAK konvoi_*).
+    fahrzeuge=(("panzer", 1), ("panzerwagen", 1), ("buggy", 2), ("krad", 1), ("trosswagen", 2),
+               ("flakwagen", 1)),
     fahrzeug_umkreis=420.0,    # so weit um die Basis stehen die Wagen
     spawn_umkreis=340.0,       # so weit um die Basis steigt man ein
     fahrer_je_seite=4,         # so viele Bots jeder Seite duerfen fahren
@@ -1580,9 +1583,11 @@ TROSSWAGEN = dict(
     hoechst=210.0,
     rueckwaerts=70.0,
     motor=22.0,
-    kreis=18.0,               # zwei Kreise von 18 Pixeln, 26 von der Mitte: 88 x 36
-    achse=26.0,
-    einsteigen=52.0,
+    # Seit 0.34.117 ein Fuenftel groesser (gewuenscht): Bild, Kreise, Achsen
+    # und die Zone hinten wuchsen mit.
+    kreis=21.6,               # zwei Kreise von 21,6 Pixeln, 31 von der Mitte: 106 x 43
+    achse=31.0,
+    einsteigen=60.0,
     leben=420.0,
     nur_mensch=True,
     explosion_radius=80.0,
@@ -1596,7 +1601,7 @@ TROSSWAGEN = dict(
     # Radius `radius`. Wer hier steht und E drueckt, bekommt Munition (wie
     # eine Munitionskiste) und ein Medkit; `entnahmen` Mal je Wagen, ein
     # Spieler hoechstens alle `pause` Sekunden.
-    zone=dict(abstand=62.0, radius=34.0),
+    zone=dict(abstand=74.0, radius=40.0),
     entnahmen=10,
     pause=4.0,
     reparatur=dict(vorrat=600.0, je_sekunde=14.0),
@@ -1787,7 +1792,12 @@ FLAKWAGEN = dict(
 # Flak gegen Luftziele: wie viel mehr eine Flak-Kugel dort wiegt, und wie weit
 # ein Bot einen Flieger sucht (ein Bot am Steuer; Tragschrauber, Drohnen,
 # Abwuerfe, Fallschirmjaeger). `streu` ist der Bot-Fehler beim Vorhalten.
-FLAK = dict(luft_faktor=1.8, bot_reichweite=680.0, bot_winkel=7.0)
+FLAK = dict(luft_faktor=1.8, bot_reichweite=680.0, bot_winkel=7.0,
+            # Der Flakwagen einer Basis (seit 0.34.117) wartet, bis ein anderes
+            # Fahrzeug seiner Seite mit Fahrer mehr als `konvoi_los` px von
+            # seinem Startort weg ist, und faehrt dann hinter ihm her,
+            # `konvoi_abstand` px dahinter. Ohne Vordermann steht er.
+            konvoi_los=350.0, konvoi_abstand=240.0)
 
 # Rammen und was danach fliegt (seit 0.34.59). Gilt fuer beide.
 RAMMEN = dict(

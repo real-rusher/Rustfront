@@ -469,7 +469,7 @@ class SchlachtTeil:
         und kommt nach dem Tod nicht wieder."""
         k = self._bot_dazu(team)
         k.verstaerkung = True
-        k.darf_fahren = True
+        k.darf_fahren = False        # sitzt schon; sucht nach dem Aussteigen keinen neuen Wagen
         k.pos.update(b.pos)
         if hasattr(k, "vorher"):
             k.vorher.update(b.pos)
@@ -862,15 +862,36 @@ class SchlachtTeil:
             s = bilder.gedreht(art, winkel)
             ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y))))
             return
-        merk = self.__dict__.setdefault("_fracht_probe", {})
-        v = merk.get(art)
-        if v is None:
-            v = merk[art] = fahrzeug_modul.neu(art, (0, 0), 0, 0.0, nur_bild=True)
-        v.winkel = winkel
-        v.aufbau = winkel
-        s = v._wanne_flaeche(bilder)
+        # Wanne und Turm bzw. Ring als EIN Bild (seit 0.34.117): am Schirm
+        # pendelt der Wagen, und vorher drehten Wanne und Aufbau getrennt
+        # (jedes mit seiner eigenen Rasterung) - die Luke und das Geschuetz
+        # wanderten gegen den Rest. Jetzt wird einmal im Ruhezustand
+        # zusammengesetzt und das ganze Bild gedreht.
+        ganz = self._fracht_ganz(art)
+        k = int(round(winkel))
+        gedreht = self.__dict__.setdefault("_fracht_gedreht", {})
+        s = gedreht.get((art, k))
+        if s is None:
+            s = gedreht[(art, k)] = pygame.transform.rotate(ganz, -k)
         ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y))))
-        v.zeichnen_oben(self.renderer, ziel, p)
+
+    def _fracht_ganz(self, art: str) -> pygame.Surface:
+        """Der Wagen mit seinem Aufbau, nach rechts gerichtet, leer und
+        ruhend - auf einer Flaeche, die fuer jede Drehung gross genug ist."""
+        vorrat = self.__dict__.setdefault("_fracht_ganz_bilder", {})
+        s = vorrat.get(art)
+        if s is None:
+            v = fahrzeug_modul.neu(art, (0, 0), 0, 0.0, nur_bild=True)
+            v.winkel = 0.0
+            v.aufbau = 0.0
+            v.ruecklauf = v.ruck = 0.0
+            w = v._wanne_flaeche(self.renderer.bilder)
+            n = int(max(w.get_width(), w.get_height()) * 1.5)
+            s = pygame.Surface((n, n), pygame.SRCALPHA)
+            s.blit(w, w.get_rect(center=(n // 2, n // 2)))
+            v.zeichnen_oben(self.renderer, s, pygame.Vector2(n // 2, n // 2))
+            vorrat[art] = s
+        return s
 
     @staticmethod
     def _schirm_zeichnen(ziel, schirm, last, team: int, groesse) -> None:

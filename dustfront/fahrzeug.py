@@ -2217,6 +2217,10 @@ class Jagdpanzer(Panzer):
     werte = K.JAGDPANZER
     aufbau_name = "jagdpanzer_rohr"
 
+    def aufbau_bild_name(self) -> str:
+        """Immer dasselbe Bild: die Luke ist zu, kein Fahrer und kein Skin."""
+        return self.aufbau_name
+
     def _aufbau_fuehren(self, dt: float) -> None:
         """Das Rohr folgt dem Zeiger, aber nur im Schwenkbereich vor der Wanne."""
         k = self.fahrer
