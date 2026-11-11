@@ -1040,7 +1040,7 @@ SCHLACHT = dict(
     abschuesse=150,            # Vorgabe, wenn nach Abschuessen gespielt wird
     basis_x=0.08,              # Anteil der Kartenbreite vom Rand
     basis_proben=160,          # so viele freie Punkte werden je Basis geprueft
-    fahrzeuge=(("panzer", 1), ("panzerwagen", 1), ("buggy", 2)),
+    fahrzeuge=(("panzer", 1), ("panzerwagen", 1), ("buggy", 2), ("krad", 1)),
     fahrzeug_umkreis=420.0,    # so weit um die Basis stehen die Wagen
     spawn_umkreis=340.0,       # so weit um die Basis steigt man ein
     fahrer_je_seite=4,         # so viele Bots jeder Seite duerfen fahren
@@ -1081,7 +1081,7 @@ SCHLACHT = dict(
                 sperre_basis=1800.0, ausweichen_ab=300.0, treiben=70.0, suche_weit=420.0,
                 stoss=520.0, quetschen=15.0, warnen_ab=160.0),
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
-                  zeichen=dict(buggy="B", panzer="P", panzerwagen="L", munition="M",
+                  zeichen=dict(buggy="B", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
                                medkit="+")),
     punkte=dict(abschuss=1, fahrzeug=5, aufhelfen=5),
     # Was man kaufen kann: (Kennung, Kosten, Name).
@@ -1090,13 +1090,16 @@ SCHLACHT = dict(
         ("munition", 3, "MUNITIONSABWURF"),
         ("medkit", 3, "SANITÄTSABWURF"),
         ("buggy", 5, "DROPZONE: BUGGY"),
+        ("krad", 3, "DROPZONE: KRAD"),
         ("aufklaerung", 6, "AUFKLÄRUNGSDROHNE"),
         ("napalm", 10, "NAPALM-ANGRIFF"),
         ("fallschirmjaeger", 8, "FALLSCHIRMJÄGER"),
         ("panzerwagen", 8, "DROPZONE: PANZERWAGEN"),
         ("panzer", 12, "DROPZONE: PANZER"),
+        ("jagdpanzer", 10, "DROPZONE: JAGDPANZER"),
     ),
-    belohnung_hilfe=dict(munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
+    belohnung_hilfe=dict(krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
+                         munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
                          buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
                          panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE",
                          fallschirmjaeger="FÜNF BOTS AM SCHIRM, IN FORMATION",
@@ -1482,6 +1485,77 @@ PANZERWAGEN = dict(
     ramm_extra=30.0,
 )
 
+# ── Krad und Jagdpanzer (seit 0.34.107) ────────────────────────────
+#
+# Zwei der Fahrzeuge aus dem Konzept "Fahrzeuge fuer grosse Karten" (die
+# Seite mit den Entscheidungen des Besitzers). Beide fuer die SCHLACHT.
+
+# Das Krad: ein Motorrad mit Beiwagen, eine Abwandlung des Buggys (gleiches
+# Einspurmodell, eigene Werte). Das schnellste Fahrzeug, aber ohne
+# Panzerung: wer drinsitzt, bekommt jeden Treffer ganz ab. Der Fahrer hat
+# keine Waffe (gewuenscht); der Beifahrer schiesst mit seiner eigenen.
+KRAD = dict(
+    FAHRZEUG,
+    marke="K",
+    name="KRAD",
+    hoechst=290.0,
+    rueckwaerts=80.0,
+    motor=520.0,
+    bremse=560.0,
+    traegheit=150.0,          # leichter: dreht sich schneller um sich selbst
+    kreis=9.0,                # kleiner als der Buggy (13)
+    achse=10.0,
+    einsteigen=40.0,
+    leben=180.0,
+    # Im Gegensatz zu allen anderen Fahrzeugen kein Schutz der Insassen.
+    fahrer_geschuetzt=False,
+    schaden_anteil=1.0,
+    fahrer_anteil=1.0,
+    plaetze=1,                # der Beifahrer im Beiwagen
+    beifahrer_streuung=2.0,   # so viel mal mehr Streuung seiner Waffe, wenn das Krad rollt
+    beifahrer_tempo=150.0,    # ... ab diesem Tempo (px/s) voll
+    explosion_radius=48.0,
+    explosion_schaden=40.0,
+    fahrer_schaden=40.0,
+    wrack_zeit=7.0,
+    neu_nach=10.0,
+    balken_breite=20,
+)
+
+# Der Jagdpanzer: kein Turm, eine starre Kanone im Bug (Schwenk nur wenige
+# Grad), dafuer die dickste Front im Spiel und eine Kanone, die weiter reicht
+# als die des Panzers. Eine grosse, von vorn gepanzerte Scharfschuetzenwaffe
+# gegen Fahrzeuge; gegen Infanterie fast wirkungslos (kein Bug-MG, kleine
+# Druckwelle). Rechte Maustaste: Zielfernrohr (wie beim Scharfschuetzen).
+JAGDPANZER = dict(
+    PANZER,
+    marke="J",
+    name="JAGDPANZER",
+    hoechst=62.0,
+    rueckwaerts=30.0,
+    beschleunigung=60.0,
+    leben=800.0,
+    vorn=46.0, hinten=-44.0, halb=29.0,
+    ketten_abstand=23.1,
+    turm_vor=0.0,             # die Kanone schwenkt um die Mitte der Wanne
+    muendung=72.8,            # Muendung der Kanone vor der Mitte (Pixel)
+    kanone="jagdkanone",      # welche Zeile von FAHRZEUG_WAFFEN
+    schwenk=12.0,             # Grad, die die Kanone von der Wanne abweichen darf
+    turm_dreh=40.0,           # Grad je Sekunde, mit denen sie schwenkt
+    zielfernrohr=True,
+    nur_mensch=True,          # Bots fahren ihn (noch) nicht: er braucht eine Wanne, die zielt
+    # Dicker vorn, duenner hinten als der Panzer (PANZER_SEITEN).
+    seiten=dict(vorn=0.5, seite=1.1, hinten=1.6),
+    fahrer_anteil=0.15,
+    explosion_radius=100.0,
+    explosion_schaden=100.0,
+    fahrer_schaden=40.0,
+    wrack_zeit=14.0,
+    neu_nach=40.0,
+    einsteigen=60.0,
+    balken_breite=42,
+)
+
 # Rammen und was danach fliegt (seit 0.34.59). Gilt fuer beide.
 RAMMEN = dict(
     sperre=0.4,               # so lange kein zweiter Schaden vom selben Fahrzeug
@@ -1565,6 +1639,12 @@ PANZERUNG = {
                         feuer=0.25, nahkampf=0.15, ramm=0.6),
     "panzer": dict(kugel=0.12, panzerbrechend=0.85, spreng=0.45, hohlladung=1.35,
                    feuer=0.1, nahkampf=0.05, ramm=0.4),
+    # Seit 0.34.107. Das Krad hat kein Blech (wie der Buggy, nur ohne Bonus
+    # gegen Panzerbrechendes); der Jagdpanzer ist ein Panzer, nur noch dicker.
+    "krad": dict(kugel=1.0, panzerbrechend=1.2, spreng=1.0, hohlladung=1.3,
+                 feuer=0.8, nahkampf=0.7, ramm=1.0),
+    "jagdpanzer": dict(kugel=0.1, panzerbrechend=0.8, spreng=0.4, hohlladung=1.25,
+                       feuer=0.1, nahkampf=0.05, ramm=0.35),
 }
 # Woher ein Treffer kommt: vorn ist das Blech am dicksten, hinten am
 # duennsten. Gilt fuer Treffer, die eine Richtung haben (alles ausser
@@ -1605,6 +1685,21 @@ FAHRZEUG_WAFFEN = {
         kamera=4.0,
         muendung=2.4,         # Muendungsblitz so viel groesser
         schub=300.0,
+    ),
+    # Die Kanone des Jagdpanzers (seit 0.34.107): weiter, haerter, langsamer
+    # geladen; die Druckwelle klein - sie soll Blech knacken, keine Gruppen.
+    "jagdkanone": dict(
+        name="JAGDKANONE",
+        schaden=190.0,
+        flaeche=45.0,
+        radius=26.0,
+        tempo=900.0,
+        reichweite=1400.0,
+        geschosse=1,
+        takt=3.4,
+        kamera=4.5,
+        muendung=2.6,
+        schub=240.0,
     ),
     "bug_mg": dict(
         name="BUG-MG",
@@ -1850,7 +1945,7 @@ BOTS = dict(
     # Bots am Steuer (seit 0.34.71, nur wem der Testmodus es erlaubt -
     # im Gefecht fahren Bots weiter nicht, so gemeldet).
     fahren=dict(
-        abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0),  # so weit bleibt er stehen
+        abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0, krad=0.0),  # so weit bleibt er stehen
         suchen=700.0,         # so weit sucht ein Fahrer ohne Fahrzeug nach einem
         # Seit 0.34.95 faehrt er nach einem eigenen Wegenetz: nur Kacheln,
         # um die so viele Kacheln frei sind (wege.Fahrwegenetz), und er
@@ -1869,7 +1964,7 @@ BOTS = dict(
         # Aus Turm und Ring sieht man weiter als zu Fuss (330): die Kanone
         # reicht 900, und ein Panzer, der seine Gegner nicht sieht, ist nur
         # ein Hindernis (gemessen: Gegner auf 730 px blieben ungesehen).
-        sicht=dict(panzer=720.0, panzerwagen=560.0, buggy=380.0),
+        sicht=dict(panzer=720.0, panzerwagen=560.0, buggy=380.0, krad=380.0),
         # Seit 0.34.84 (gemeldet nach einer grossen Fahrzeugschlacht):
         # Liegt das Ziel hinter ihm und weiter weg als das, wendet er
         # vorwaerts, statt die ganze Strecke rueckwaerts zu fahren.
@@ -4283,6 +4378,22 @@ for _team in TEAMS["kombi"]:
     BILD_MASS["panzerwagen_ring_%s_fahrer" % _team["name"].lower()] = (_fz_r, _fz_r)
 # Die Granate der Kanone, mit dicker Leuchtspur gezeichnet.
 BILD_MASS["panzergranate"] = (12, 6)
+
+# Krad und Jagdpanzer (seit 0.34.107, art_neue_fahrzeuge.py). Das Krad in
+# vier Fassungen: leer, mit Fahrer, mit Fahrer und Beifahrer - je neutral
+# und je Mannschaft. Beim Jagdpanzer ist die Kanone samt Kommandant der
+# drehende Teil (`jagdpanzer_rohr`, groesser: das Rohr ragt weit hinaus).
+for _name in ("krad", "krad_fahrer", "krad_beiwagen", "krad_beiwagen_fahrer", "krad_wrack",
+              "krad_schatten"):
+    BILD_MASS[_name] = (96, 96)
+for _team in TEAMS["kombi"]:
+    for _grund in ("krad", "krad_beiwagen"):
+        BILD_MASS["%s_%s_fahrer" % (_grund, _team["name"].lower())] = (96, 96)
+    BILD_MASS["jagdpanzer_rohr_%s_fahrer" % _team["name"].lower()] = (160, 160)
+for _name in ("jagdpanzer", "jagdpanzer_wrack", "jagdpanzer_schatten"):
+    BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
+for _name in ("jagdpanzer_rohr", "jagdpanzer_rohr_fahrer"):
+    BILD_MASS[_name] = (160, 160)
 
 # Was der Spieler zu Beginn auf den Plaetzen 1 bis 6 traegt.
 #

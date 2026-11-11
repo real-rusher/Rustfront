@@ -258,7 +258,7 @@ class SchlachtTeil:
 
     def abwurf_fuss(self, art: str) -> float:
         """Wie gross die Landestelle ist (Radius in px)."""
-        if art in ("buggy", "panzer", "panzerwagen"):
+        if art in fahrzeug_modul.ARTEN:
             probe = self._probe(art)
             return max(20.0, float(getattr(probe, "huelle_radius", 0.0)), float(probe.radius))
         if art == "mensch":
@@ -271,7 +271,7 @@ class SchlachtTeil:
         fuss = self.abwurf_fuss(art)
         if not (fuss <= pos.x < e.pixel_breite - fuss and fuss <= pos.y < e.pixel_hoehe - fuss):
             return False
-        if art in ("buggy", "panzer", "panzerwagen"):
+        if art in fahrzeug_modul.ARTEN:
             probe = self._probe(art)
             if not probe.passt(pygame.Vector2(pos), winkel):
                 return False
@@ -610,7 +610,7 @@ class SchlachtTeil:
             if len(self._sprung_plaetze(punkt, k.team)) < S["fallschirmjaeger"]["anzahl"]:
                 return "ZU WENIG PLATZ"
             return ""
-        if was in ("buggy", "panzer", "panzerwagen"):
+        if was in fahrzeug_modul.ARTEN:
             probe = fahrzeug_modul.neu(was, punkt, 0)
             probe.welt = self.welt
             if not probe.passt(punkt, 0.0):
@@ -732,7 +732,7 @@ class SchlachtTeil:
         kombi = K.TEAMS["kombi"][z.team] if 0 <= z.team < 2 else None
         farbe = kombi["hud"] if kombi else K.C_AMBER
         dunkel = kombi["hud_dunkel"] if kombi else K.C_MUTED_DK
-        r = d["radius"] if z.art in ("buggy", "panzer", "panzerwagen") else d["radius_kiste"]
+        r = d["radius"] if z.art in fahrzeug_modul.ARTEN else d["radius_kiste"]
         bald = 0.0 <= z.rest <= S["abwurf"]["vorlauf"] and not besetzt
         puls = 0.5 + 0.5 * math.sin(zeit * (9.0 if bald else 2.2))
         cx, cy = int(p.x), int(p.y)
@@ -808,7 +808,7 @@ class SchlachtTeil:
             last = boden + pygame.Vector2(pendel, -hub)
             self._fracht_zeichnen(ziel, ab.art, last, ab.winkel + pendel * 0.8)
             # Der Schirm.
-            gross = ab.art in ("buggy", "panzer", "panzerwagen")
+            gross = ab.art in fahrzeug_modul.ARTEN
             schirm = last + pygame.Vector2(pendel * 0.4, -a["schirm_ueber"] * (1.6 if gross else 1.0))
             self._schirm_zeichnen(ziel, schirm, last, ab.team,
                                   a["schirm"] if gross else a["schirm_kiste"])
@@ -838,8 +838,8 @@ class SchlachtTeil:
             s = pygame.transform.scale(s, (s.get_width() * 2, s.get_height() * 2))
             ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y))))
             return
-        if art == "buggy":
-            s = bilder.gedreht("buggy", winkel)
+        if art in ("buggy", "krad"):
+            s = bilder.gedreht(art, winkel)
             ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y))))
             return
         merk = self.__dict__.setdefault("_fracht_probe", {})
@@ -1044,10 +1044,10 @@ class SchlachtTeil:
 
     @staticmethod
     def _belohnung_zeile(i: int) -> pygame.Rect:
-        return pygame.Rect(16, 62 + i * 28, 206, 25)
+        return pygame.Rect(16, 62 + i * 24, 206, 22)
 
     def _gratis_rect(self) -> pygame.Rect:
-        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 28 + 4, 206, 16)
+        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 24 + 4, 206, 16)
 
     def belohnung_ereignis(self, ev) -> bool:
         """Tasten und Maus, solange das Menue offen ist. True: verbraucht."""

@@ -281,10 +281,16 @@ class Kaempfer(Spieler):
         super().sterben(von)
         self.toeter = von
 
+    def _fahrzeug_werte(self) -> dict:
+        """Die Werte des Fahrzeugs, in dem er sitzt oder mitfaehrt (seit
+        0.34.107: das Krad schuetzt seine Insassen nicht)."""
+        b = self.fahrzeug or self.mitfahrt
+        return dict(K.FAHRZEUG, **(getattr(b, "werte", None) or {}))
+
     def schaden(self, menge, schub=None, von=None, durch: float = 0.0) -> None:
         # Wer in einem Fahrzeug sitzt, nimmt keinen Schaden (seit 0.34.77,
         # K.FAHRZEUG["fahrer_geschuetzt"]).
-        if self.im_fahrzeug and K.FAHRZEUG.get("fahrer_geschuetzt", False):
+        if self.im_fahrzeug and self._fahrzeug_werte().get("fahrer_geschuetzt", False):
             return
         # Am Boden gibt es keinen Rueckstoss. Wer liegt, liegt - sonst
         # schoebe jede Salve, jede Granate und jeder Stampfer einen
@@ -319,7 +325,8 @@ class Kaempfer(Spieler):
             # Wie viel ankommt, sagt das Fahrzeug (seit 0.34.59): im Panzer
             # steht der Kommandant in der Luke, im Panzerwagen der Schuetze
             # im offenen Ring.
-            anteil = getattr(self.fahrzeug, "fahrer_anteil", K.FAHRZEUG["schaden_anteil"])
+            anteil = getattr(self.fahrzeug or self.mitfahrt, "fahrer_anteil",
+                             K.FAHRZEUG["schaden_anteil"])
             menge = float(menge) * anteil
             schub = None
         # In der Lobby entscheidet das Gefecht, wo es wehtut (lobby.py).
@@ -2834,6 +2841,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             if (b.fahrer is not None or b.ebene != k.ebene or b.nur_bild
                     or not b.lebt or b.kaputt):
                 continue
+            if k.ist_bot and b.werte.get("nur_mensch"):
+                continue                # Jagdpanzer: noch nichts fuer Bots (seit 0.34.107)
             d = b.pos.distance_squared_to(k.pos)
             # Jede Art hat ihre Reichweite: an einen Panzer kommt man nicht
             # so nah heran wie an einen Buggy (seit 0.34.59).
@@ -2904,7 +2913,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             return None
         bester, abstand = None, 1e18
         for b in self.fahrzeuge:
-            if (b.art != "panzerwagen" or b.fahrer is None or b.kaputt or b.nur_bild
+            if ("plaetze" not in b.werte or b.fahrer is None or b.kaputt or b.nur_bild
                     or not b.lebt or b.ebene != k.ebene):
                 continue
             if b.fahrer.fraktion != k.fraktion:
@@ -2968,6 +2977,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         k.zielt = False
         k.hilft = None
         self._loslassen(k)
+        if getattr(k.mitfahrt, "art", "") == "krad":
+            # Im Beiwagen schiesst man mit der eigenen Waffe (seit 0.34.107):
+            # feuern, nachladen und die Waffe wechseln gehen wie zu Fuss; Dash,
+            # Heilen, Werfen und Nahkampf nicht - man sitzt.
+            k.feuert = bool(ein.get("feuert"))
+            k.zielt = bool(ein.get("zielt"))
+            knoepfe = ein.get("knoepfe") or []
+            if isinstance(knoepfe, list) and "nachladen" in knoepfe:
+                k.nachladen()
         if self._e_gedrueckt(ein) and k.treppe_rest <= 0:
             self._absitzen(k)
 
@@ -2992,7 +3010,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                     if von is None or getattr(von, "fraktion", None) != k.fraktion or von is k:
                         k.schaden(b.werte["fahrer_schaden"], None, von)
                     continue
-                if k.am_boden:
+                if k.am_boden or (b.art == "krad" and b.fahrer is None):
                     self._absitzen(k)
                     continue
                 k.pos.update(b.pos)
@@ -3232,7 +3250,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
     def _darf_aufsitzen(self, b) -> bool:
         """Kann ich auf diesen Wagen aufsitzen (Hinweis [E] AUFSITZEN)?"""
         ich = self.ich
-        if b.art != "panzerwagen" or b.kaputt or ich is None:
+        if "plaetze" not in b.werte or b.kaputt or ich is None:
             return False
         if self.ist_gastgeber:
             fahrer = b.fahrer
@@ -3333,7 +3351,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
             schwer = wagen is not None and getattr(wagen, "rechteckig", False)
             p = self.kamera.zu_bild(ich.pos)
             unten = int(wagen.huelle_radius) + 8 if schwer else 30
-            if schwer and wagen.art == "panzer" and not wagen.kaputt:
+            if schwer and wagen.art in ("panzer", "jagdpanzer") and not wagen.kaputt:
                 # Ob die Kanone geladen ist - die einzige Zahl, die man im
                 # Panzer wirklich braucht (seit 0.34.59).
                 rest = wagen.takt.get("kanone", 0.0)
@@ -3348,7 +3366,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
                 text = "[%s/%s] FAHREN  [%s/%s] DREHEN  [MAUS] ZIELEN  %s  [%s] AUSSTEIGEN" % (
                     self._tastenname("vor"), self._tastenname("zurueck"),
                     self._tastenname("links"), self._tastenname("rechts"),
-                    "[LMB] KANONE  [RMB] MG" if wagen.art == "panzer" else "[LMB] MG",
+                    ("[LMB] KANONE  [RMB] MG" if wagen.art == "panzer"
+                     else "[LMB] KANONE  [RMB] ZIELFERNROHR" if wagen.art == "jagdpanzer"
+                     else "[LMB] MG"),
                     taste_e)
             else:
                 text = "[%s/%s] GAS  [%s/%s] LENKEN  [%s] HANDBREMSE  [%s] AUSSTEIGEN" % (
@@ -6709,9 +6729,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, GastTeil, W
         Zoom 1 alles ausser dem klaren Bereich um die Figur im Nebel -
         sonst saehe man mit dem weit vorgelaufenen Bild durch Waende."""
         ich = self.ich
-        if ich is None or not ich.lebt or ich.am_boden or ich.im_fahrzeug or self.pausiert:
+        if ich is None or not ich.lebt or ich.am_boden or self.pausiert:
             return False
-        if not K.WAFFEN.get(ich.waffe_name, {}).get("scope"):
+        if ich.im_fahrzeug:
+            # Der Jagdpanzer hat eines (seit 0.34.107, K.JAGDPANZER).
+            wagen = self._mein_wagen()
+            if wagen is None or not wagen.werte.get("zielfernrohr") or wagen.kaputt:
+                return False
+        elif not K.WAFFEN.get(ich.waffe_name, {}).get("scope"):
             return False
         return bool(self.app.eingabe.gehalten("zweit"))
 

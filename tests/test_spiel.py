@@ -17314,6 +17314,160 @@ pruef("Ist sie beim Gastgeber weg, ist sie es auch beim Gast",
       not [e_ for e_ in g306._fremde_schuesse if e_[6] == -1])
 w306.verlassen(); g306.verlassen()
 
+# ─────────────────────────────────────────────────────────────────────
+# Krad und Jagdpanzer (seit 0.34.107): zwei Fahrzeuge fuer grosse Karten.
+# Krad: schnell, ohne Schutz, Beifahrer schiesst. Jagdpanzer: starre Kanone,
+# weite Reichweite, dicke Front, nichts fuer Bots.
+from dustfront import schlacht as _SL107
+_tm107 = _TM59.Testmodus(app, karte="staubtal_offen")
+_tm107.zeit_stopp = False
+_objekte107 = [e_.name for e_ in _tm107.eintraege if e_.gruppe == "OBJEKTE"]
+_nachschub107 = [e_.name for e_ in _tm107.eintraege if e_.gruppe == "NACHSCHUB"]
+pruef("Testmodus: KRAD und JAGDPANZER stehen im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB)",
+      "KRAD" in _objekte107 and "JAGDPANZER" in _objekte107
+      and "ABWURF: KRAD" in _nachschub107 and "ABWURF: JAGDPANZER" in _nachschub107,
+      str(_objekte107 + _nachschub107))
+_namen107 = [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]]
+pruef("Beide sind im Nachschub der SCHLACHT zu kaufen, mit Buchstaben fuer die Dropzone",
+      "krad" in _namen107 and "jagdpanzer" in _namen107
+      and K.SCHLACHT["dropzone"]["zeichen"]["krad"] == "K"
+      and K.SCHLACHT["dropzone"]["zeichen"]["jagdpanzer"] == "J")
+_unten107 = _SL107.SchlachtTeil._belohnung_zeile(len(_namen107) - 1).bottom + 4 + 16
+pruef("Die Nachschubtafel passt mit allen Zeilen aufs Bild (Hinweiszeile bleibt frei)",
+      _unten107 < K.GAME_H - 36, "unten bei %d" % _unten107)
+pruef("Die Basis jeder Seite bekommt ein Krad dazu",
+      ("krad", 1) in K.SCHLACHT["fahrzeuge"])
+
+# Ein freies Feld, gross genug zum Fahren.
+_e107 = _tm107.welt.ebene(0)
+_rnd107 = random.Random(107)
+for _ in range(40000):
+    _tx107 = _rnd107.randrange(60, _e107.breite - 90)
+    _ty107 = _rnd107.randrange(20, _e107.hoehe - 40)
+    if all(not K.KACHELN[_e107.kachel(_tx107 + x_, _ty107 + y_)]["fest"]
+           for x_ in range(30) for y_ in range(14)):
+        break
+_z107 = lambda x_, y_: pygame.Vector2((_tx107 + x_ + 0.5) * K.TILE, (_ty107 + y_ + 0.5) * K.TILE)
+
+_krad107 = _tm107.fahrzeug_setzen("krad", _z107(4, 4), 0, {"winkel": 0})
+_bug107 = _tm107.fahrzeug_setzen("buggy", _z107(4, 9), 0, {"winkel": 0})
+_f107 = _tm107.puppe_setzen(_krad107.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="FAHRER")
+_tm107._anwenden(_f107, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Krad: man steigt mit E ein, und es ist ein Krad (eigenes Bild, Art)",
+      _f107.fahrzeug is _krad107 and _krad107.art == "krad" and _krad107.bild.startswith("krad_"),
+      _krad107.bild)
+_fb107 = _tm107.puppe_setzen(_bug107.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="BUGGY")
+_tm107._anwenden(_fb107, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+for _ in range(int(3.5 / K.FIXED_DT)):
+    _tm107._anwenden(_f107, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+    _tm107._anwenden(_fb107, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+    _tm107.schritt(K.FIXED_DT)
+pruef("Krad: schneller als der Buggy und von den Werten her das schnellste Fahrzeug",
+      _krad107.geschw.length() > _bug107.geschw.length() + 10.0
+      and K.KRAD["hoechst"] > max(K.FAHRZEUG["hoechst"], K.PANZERWAGEN["hoechst"] * 0.9),
+      "%.0f gegen %.0f" % (_krad107.geschw.length(), _bug107.geschw.length()))
+
+# Der Beifahrer.
+_krad107.pos.update(_z107(10, 4)); _krad107.vorher.update(_krad107.pos)
+_krad107.geschw.update(0, 0); _krad107.gas = 0.0
+_krad107.winkel = 0.0
+_bf107 = _tm107.puppe_setzen(_krad107.pos + pygame.Vector2(20, 14), 0, {"team": 0, "waffe_figur": "sturm"},
+                             name="BEIFAHRER")
+_tm107._anwenden(_bf107, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Krad: ein Kamerad sitzt mit E im Beiwagen auf (ein Platz)",
+      _bf107.mitfahrt is _krad107 and len(_krad107.mitfahrer) == 1
+      and _tm107._transporter_bei(_tm107.puppe_setzen(_krad107.pos + pygame.Vector2(10, 14), 0,
+                                                      {"team": 0}, name="ZWEITER")) is None,
+      str(_krad107.mitfahrer))
+pruef("... das Bild zeigt zwei (Beiwagen mit Beifahrer, in den Farben der Mannschaft)",
+      "beiwagen" in _krad107.bild, _krad107.bild)
+_leben107 = (_krad107.leben, _f107.leben, _bf107.leben)
+_ziel107 = _krad107.pos + pygame.Vector2(200, 60)
+_vorher107 = _bf107.magazin[_bf107.waffe_name]
+for _ in range(int(0.8 / K.FIXED_DT)):
+    _tm107._anwenden(_bf107, {"will": [0, 0], "ziel": [_ziel107.x, _ziel107.y], "knoepfe": [],
+                              "feuert": True})
+    _tm107.schritt(K.FIXED_DT)
+pruef("Krad: der Beifahrer schiesst mit seiner Waffe (Munition geht weg) ...",
+      _bf107.magazin[_bf107.waffe_name] < _vorher107, str(_bf107.magazin[_bf107.waffe_name]))
+pruef("... und trifft sein eigenes Krad nicht",
+      _krad107.leben == _leben107[0] and _f107.leben == _leben107[1],
+      "%s / %s" % (_krad107.leben, _f107.leben))
+_feind107 = _tm107.puppe_setzen(_z107(24, 4), 0, {"team": 1}, name="FEIND")
+_tm107._anwenden(_bf107, {"will": [0, 0], "ziel": [_ziel107.x, _ziel107.y], "knoepfe": [],
+                          "feuert": False})
+_krad107.schaden(40.0, None, _feind107, art="kugel", herkunft=_feind107.pos)
+pruef("Krad: ein Treffer kommt ungeschuetzt bei beiden an (im Gegensatz zu allen anderen Fahrzeugen)",
+      _f107.leben < _leben107[1] and _bf107.leben < _leben107[2]
+      and abs((_leben107[1] - _f107.leben) - (_leben107[2] - _bf107.leben)) < 1e-6,
+      "Fahrer %.0f, Beifahrer %.0f" % (_f107.leben, _bf107.leben))
+_f107.treppe_rest = 0.0
+_tm107._anwenden(_f107, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+for _ in range(3):
+    _tm107.schritt(K.FIXED_DT)
+pruef("Krad: steigt der Fahrer aus, steigt der Beifahrer ab",
+      _f107.fahrzeug is None and _bf107.mitfahrt is None and not _krad107.mitfahrer)
+
+# Der Jagdpanzer.
+_jp107 = _tm107.fahrzeug_setzen("jagdpanzer", _z107(16, 9), 0, {"winkel": 0})
+_pz107 = _tm107.fahrzeug_setzen("panzer", _z107(16, 3), 0, {"winkel": 0})
+_jf107 = _tm107.puppe_setzen(_jp107.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="JAEGER")
+_tm107._anwenden(_jf107, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("Jagdpanzer: eigene Art, einsteigen geht, er ist rechteckig wie der Panzer",
+      _jf107.fahrzeug is _jp107 and _jp107.art == "jagdpanzer" and _jp107.rechteckig
+      and _jp107.bild == "jagdpanzer")
+# Zeiger weit hinter ihn: das Rohr bleibt im Schwenkbereich.
+_hinten107 = _jp107.pos + pygame.Vector2(-300, 40)
+for _ in range(int(3.0 / K.FIXED_DT)):
+    _tm107._anwenden(_jf107, {"will": [0, 0], "ziel": [_hinten107.x, _hinten107.y], "knoepfe": []})
+    _tm107.schritt(K.FIXED_DT)
+_ab107 = abs((_jp107.aufbau - _jp107.winkel + 180.0) % 360.0 - 180.0)
+pruef("Jagdpanzer: die Kanone schwenkt nur wenige Grad aus der Wanne (kein Turm)",
+      _ab107 <= K.JAGDPANZER["schwenk"] + 0.5, "%.1f Grad" % _ab107)
+_vorn107 = _jp107.pos + pygame.Vector2(300, 0)
+for _ in range(int(2.5 / K.FIXED_DT)):
+    _tm107._anwenden(_jf107, {"will": [0, 0], "ziel": [_vorn107.x, _vorn107.y], "knoepfe": []})
+    _tm107.schritt(K.FIXED_DT)
+_gr107 = len([w_ for w_ in _tm107.welt.wesen if isinstance(w_, _FZ59.Panzergranate)])
+_tm107._anwenden(_jf107, {"will": [0, 0], "ziel": [_vorn107.x, _vorn107.y], "knoepfe": [],
+                          "feuert": True})
+_tm107.schritt(K.FIXED_DT)
+_tm107.schritt(K.FIXED_DT)
+_gr2107 = [w_ for w_ in _tm107.welt.wesen if isinstance(w_, _FZ59.Panzergranate)]
+pruef("Jagdpanzer: die Linke schiesst die Kanone - weiter als der Panzer, mit eigener Pause",
+      len(_gr2107) == _gr107 + 1 and _gr2107[-1].rest > K.FAHRZEUG_WAFFEN["kanone"]["reichweite"]
+      and abs(_jp107.takt["kanone"] - K.FAHRZEUG_WAFFEN["jagdkanone"]["takt"]) < 0.1,
+      "Rest %.0f, Pause %.2f" % (_gr2107[-1].rest if _gr2107 else -1, _jp107.takt.get("kanone", -1)))
+_vor107 = _jp107.pos + _jp107.vorn * 100
+_hin107 = _jp107.pos - _jp107.vorn * 100
+pruef("Jagdpanzer: von vorn dicker als der Panzer, von hinten duenner als von vorn",
+      _jp107.panzerung("kugel", _vor107) < _pz107.panzerung("kugel", _pz107.pos + _pz107.vorn * 100)
+      and _jp107.panzerung("hohlladung", _hin107) > _jp107.panzerung("hohlladung", _vor107) * 2.0,
+      "%.3f gegen %.3f" % (_jp107.panzerung("kugel", _vor107),
+                           _pz107.panzerung("kugel", _pz107.pos + _pz107.vorn * 100)))
+_tm107._anwenden(_jf107, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_jf107.treppe_rest = 0.0
+_tm107._anwenden(_jf107, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_bot107 = _tm107.bot_setzen(_jp107.pos + pygame.Vector2(0, 50), 0, {"team": 1})
+_bot107.darf_fahren = True
+_krad2107 = _tm107.fahrzeug_setzen("krad", _z107(24, 10), 0, {"winkel": 0})
+_bot2107 = _tm107.bot_setzen(_krad2107.pos + pygame.Vector2(0, 24), 0, {"team": 1})
+_bot2107.darf_fahren = True
+pruef("Jagdpanzer: ein Bot steigt nicht ein (noch nichts fuer Bots), ins Krad schon",
+      _tm107._freier_buggy(_bot107) is None and _tm107._freier_buggy(_bot2107) is _krad2107,
+      "%s / %s" % (_tm107._freier_buggy(_bot107), _tm107._freier_buggy(_bot2107)))
+_bi107 = app.bilder
+_masse107 = [(n_, _bi107.bild(n_).get_size()) for n_ in
+             ("krad", "krad_fahrer", "krad_beiwagen_fahrer", "krad_beiwagen_rot_fahrer",
+              "krad_blau_fahrer", "krad_wrack", "krad_schatten", "jagdpanzer", "jagdpanzer_rohr",
+              "jagdpanzer_rohr_fahrer", "jagdpanzer_rohr_rot_fahrer", "jagdpanzer_wrack")]
+pruef("Alle Bilder von Krad und Jagdpanzer gibt es, in ihrem Sollmass",
+      all(g_ == K.BILD_MASS[n_] for n_, g_ in _masse107), str(_masse107[:3]))
+_krad107.schaden(9999.0, None, _feind107)
+pruef("Krad: zerstoert ist es ein Wrack",
+      _krad107.kaputt and _krad107.bild == "krad_wrack")
+_tm107.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

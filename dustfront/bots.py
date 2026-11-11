@@ -1714,7 +1714,7 @@ class BotHirn(Taktik):
         zu weit oder zu gefaehrlich ist."""
         f = K.BOTS["fahren"]
         k = self.k
-        if b.art == "buggy" or b.leben < b.max_leben * f["schutz_leben"]:
+        if b.art in ("buggy", "krad") or b.leben < b.max_leben * f["schutz_leben"]:
             return None
         feind = self.ziel if self.ziel is not None and self.ziel_ok(self.ziel) else None
         if feind is None:

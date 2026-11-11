@@ -2653,5 +2653,6 @@ def _panzergranate():
 # unten: art_fahrzeuge braucht `_rand`, `_insasse_auf` und die Farben des
 # Buggys, die erst hier alle stehen.
 from . import art_fahrzeuge  # noqa: E402,F401
+from . import art_neue_fahrzeuge  # noqa: E402,F401  Krad, Jagdpanzer (seit 0.34.107)
 from . import art_figuren  # noqa: E402,F401  Skins, NPCs, Tiere (seit 0.34.60)
 from . import art_waffen  # noqa: E402,F401  das Waffenpaket (seit 0.34.61)

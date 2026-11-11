@@ -236,7 +236,9 @@ class Buggy(Wesen):
         anteil = float(K.PANZERUNG.get(self.art, {}).get(art, 1.0))
         s = K.PANZER_SEITEN
         if art not in s["ohne"]:
-            anteil *= s[self.seite(herkunft)]
+            # Je Art eigene Faktoren (seit 0.34.107, Jagdpanzer: dicker vorn).
+            eigene = self.werte.get("seiten")
+            anteil *= (eigene or s)[self.seite(herkunft)]
         return anteil
 
     @property
@@ -384,7 +386,7 @@ class Buggy(Wesen):
         """Die beiden Kreise, mit denen er anstoesst: vorn und hinten."""
         pos = self.pos if pos is None else pos
         winkel = self.winkel if winkel is None else winkel
-        achse = pygame.Vector2(K.FAHRZEUG["achse"], 0).rotate(winkel)
+        achse = pygame.Vector2(self.werte["achse"], 0).rotate(winkel)
         return (pos + achse, pos - achse)
 
     def beruehrt(self, pos, radius: float) -> bool:
@@ -455,7 +457,7 @@ class Buggy(Wesen):
         for nr, c in enumerate(kreise):
             if not self._frei_gemerkt(w, nr, c, r):
                 return False
-        for a in w.nahe(pos, K.FAHRZEUG["achse"] + r + 40, self.ebene):
+        for a in w.nahe(pos, self.werte["achse"] + r + 40, self.ebene):
             if getattr(a, "rechteckig", False):
                 # Ein Panzer oder Panzerwagen (seit 0.34.59): Kreis an Rechteck.
                 if a.lebt and any(a.beruehrt(c, r) for c in kreise):
@@ -738,7 +740,7 @@ class Buggy(Wesen):
         w = self.welt
         r = self.radius
         kreise = None
-        for a in list(w.nahe(self.pos, K.FAHRZEUG["achse"] + r + 40, self.ebene)):
+        for a in list(w.nahe(self.pos, self.werte["achse"] + r + 40, self.ebene)):
             if (a is self.fahrer or a is self or not a.lebt or a.flug > 0
                     or not getattr(a, "schiebt", True)
                     or not getattr(a, "schiebbar", True)
@@ -865,7 +867,7 @@ class Buggy(Wesen):
         vorn = self.vorn
         quer = pygame.Vector2(vorn.y, -vorn.x)       # links in Fahrtrichtung
         seite = self.radius + radius + 3.0
-        laenge = K.FAHRZEUG["achse"] + self.radius + radius + 3.0
+        laenge = self.werte["achse"] + self.radius + radius + 3.0
         return [self.pos + quer * seite, self.pos - quer * seite,
                 self.pos - vorn * laenge, self.pos + vorn * laenge,
                 self.pos + quer * seite - vorn * 14, self.pos - quer * seite - vorn * 14,
@@ -1497,7 +1499,7 @@ class Panzer(Schwer):
         ruckt zurueck, die Kamera wackelt. Der Staub am Boden vor der
         Muendung kommt mit dem Knall (Welt.schussknall) - auch beim Gast."""
         f = self.werte
-        d = K.FAHRZEUG_WAFFEN["kanone"]
+        d = K.FAHRZEUG_WAFFEN[f.get("kanone", "kanone")]
         self.takt["kanone"] = d["takt"]
         mitte = self.aufbau_mitte()
         m = mitte + pygame.Vector2(f["muendung"] - self.ruecklauf, 0).rotate(self.aufbau)
@@ -1567,8 +1569,90 @@ class Panzerwagen(Schwer):
             self.ruecklauf = f["ring_ruecklauf"]
 
 
+class Krad(Buggy):
+    """Motorrad mit Beiwagen (seit 0.34.107): faehrt wie der Buggy, nur
+    leichter und schneller, und ohne jeden Schutz - was trifft, trifft auch
+    die beiden, die darauf sitzen. Der Fahrer hat keine Waffe; im Beiwagen
+    sitzt einer mit E auf (wie hinten auf dem Panzerwagen) und schiesst mit
+    seiner eigenen Waffe. Beide verlieren das Leben, das der Wagen verliert."""
+
+    art = "krad"
+    werte = K.KRAD
+    schatten_bild = "krad_schatten"
+    besetzt_mit = 0                # beim Gast: wie viele im Beiwagen sitzen
+
+    @property
+    def mitfahrer(self) -> list:
+        """Wer im Beiwagen sitzt. Beim Gast steht hier nichts; er kennt nur
+        die Zahl (`besetzt_mit`)."""
+        liste = self.__dict__.get("_mitfahrer")
+        if liste is None:
+            liste = self._mitfahrer = []
+        return liste
+
+    @property
+    def fahrer_anteil(self) -> float:
+        return float(self.werte["fahrer_anteil"])
+
+    @property
+    def bild(self) -> str:
+        if self.kaputt:
+            return "krad_wrack"
+        zwei = bool(self.mitfahrer) if not self.nur_bild else self.besetzt_mit > 0
+        return self._insassen_bild("krad_beiwagen" if zwei else "krad")
+
+    def schaden(self, menge, schub=None, von=None, kugel: bool = False,
+                art=None, herkunft=None) -> None:
+        """Wie beim Buggy, und der Beifahrer bekommt es auch (der Fahrer
+        wird in Buggy.schaden bedient). Die eigenen Leute verletzen einander
+        nicht."""
+        if not (self.kaputt or self.nur_bild or not self.lebt) and float(menge) > 0.0:
+            for k in list(self.__dict__.get("_mitfahrer") or ()):
+                if (k.lebt and von is not k
+                        and (von is None or getattr(von, "fraktion", None) != k.fraktion)):
+                    k.schaden(float(menge), None, von)
+        super().schaden(menge, schub, von, kugel, art, herkunft)
+
+    def zuruecksetzen(self) -> None:
+        super().zuruecksetzen()
+        self.__dict__.pop("_mitfahrer", None)
+
+
+class Jagdpanzer(Panzer):
+    """Ein Panzer ohne Turm (seit 0.34.107): die Kanone sitzt fest im Bug und
+    schwenkt nur ein paar Grad (K.JAGDPANZER "schwenk"); wer mehr will, muss
+    die Wanne drehen. Dafuer reicht sie weit (1 400 statt 900 Pixel), und die
+    Front ist die dickste im Spiel (K.JAGDPANZER "seiten"). Kein Bug-MG: die
+    rechte Maustaste ist das Zielfernrohr. Der drehende Teil (Rohr samt
+    Kommandant) schwenkt um die Mitte der Wanne."""
+
+    art = "jagdpanzer"
+    werte = K.JAGDPANZER
+    aufbau_name = "jagdpanzer_rohr"
+
+    def _aufbau_fuehren(self, dt: float) -> None:
+        """Das Rohr folgt dem Zeiger, aber nur im Schwenkbereich vor der Wanne."""
+        k = self.fahrer
+        ziel = getattr(k, "ziel", None) if k is not None else None
+        soll = self.winkel
+        if ziel is not None:
+            d = pygame.Vector2(ziel) - self.aufbau_mitte()
+            if d.length_squared() >= 16.0:
+                bis = self.werte["schwenk"]
+                rel = (math.degrees(math.atan2(d.y, d.x)) - self.winkel + 180.0) % 360.0 - 180.0
+                soll = self.winkel + max(-bis, min(bis, rel))
+        diff = (soll - self.aufbau + 180.0) % 360.0 - 180.0
+        schritt = self.aufbau_dreh * dt
+        self.aufbau = (self.aufbau + max(-schritt, min(schritt, diff)) + 180.0) % 360.0 - 180.0
+
+    def _schiessen(self) -> None:
+        if self.feuer and self.takt.get("kanone", 0.0) <= 0.0:
+            self._kanone()
+
+
 # Welche Art zu welcher Klasse und zu welchem Buchstaben in der Karte.
-ARTEN = {"buggy": Buggy, "panzer": Panzer, "panzerwagen": Panzerwagen}
+ARTEN = {"buggy": Buggy, "panzer": Panzer, "panzerwagen": Panzerwagen,
+         "krad": Krad, "jagdpanzer": Jagdpanzer}
 
 
 def marken() -> list:

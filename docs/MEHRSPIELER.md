@@ -519,6 +519,12 @@ Geht der Wagen hoch, fallen alle herunter und bekommen `fahrer_schaden` ab.
 **Funkgeraet.** Faehrt ein Bot, funkt der Wagen sichtbar (Wellen ueber der
 Antenne, `FAHRZEUG_FUNK`), fuer alle - bis er aussteigt.
 
+**Krad und Jagdpanzer (seit 0.34.107).** Jede Basis bekommt ein Krad dazu
+(`SCHLACHT["fahrzeuge"]`); im Nachschub gibt es `krad` (3 Punkte) und
+`jagdpanzer` (10). Das Krad hat einen Beifahrer (E, ein Platz), der mit seiner
+eigenen Waffe schiesst; Fahrer und Beifahrer sind nicht geschuetzt. Der
+Jagdpanzer ist nur fuer Menschen. Plan und Entscheidungen: `docs/FAHRZEUGE.md`.
+
 ### 7.6c Bots, Gegner auf der Minikarte, kaputte Buggys (seit 0.34.18)
 
 **Bots** (`dustfront/bots.py`, `K.BOTS`). Gemeldet: "optionale schwache
@@ -2022,6 +2028,7 @@ schickt. **Neue Eintraege kommen unten dazu**, mit Version.
 
 Was seit 0.32 anders ist als bei den Playtests davor: Frueher oeffnete nur
 der Gastgeber einen Port, jetzt jeder (jeder sitzt in seiner eigenen
+| 0.34.107 | Zwei neue Fahrzeugarten in der Fahrzeugmeldung (`art` = `krad` oder `jagdpanzer`, sonst dieselben Felder; der Jagdpanzer meldet Rohrwinkel und Ladezeit wie der Panzer). Ein Krad meldet im Feld `besetzt_mit` (Platz 15) den Beifahrer, dessen Bild "krad_beiwagen_..." folgt daraus. Die Nachschubtafel kennt `krad` und `jagdpanzer`. | Gastgeber und Gast muessen 0.34.107 haben - ein alter Gast zeichnete beide als Buggy |
 | 0.34.106 | Weltmeldung "gs": gerade Fluege als {Kennung: [x0, y0, vx, vy, Ebene, Bild, t0]} - einmal je Kugel, neu bei geaendertem Tempo; der Gast rechnet die Lage selbst. Sie fehlen dafuer in "schuesse". | Gastgeber und Gast muessen 0.34.106 haben - ein alter Gast saehe keine Kugeln mehr |
 | 0.34.105 | Jede Eingabe des Gasts traegt "sz": welchen Zeitpunkt (Uhr des Gastgebers, wie "zt") er gerade sieht. Der Gastgeber prueft die Kugeln dieses Gasts gegen die Lagen von damals (hoechstens 0,5 s zurueck). | Gastgeber und Gast muessen 0.34.105 haben - ohne "sz" treffen die Kugeln wie bis 0.34.104 |
 | 0.34.104 | Jede Eingabe des Gasts traegt "es": so viele Schritte galt die vorige bei ihm. Der Gastgeber wendet Laufrichtung und Dash genau so lange an (Eingabepuffer); alles andere aus der Eingabe sofort. | Gastgeber und Gast muessen 0.34.104 haben - ohne "es" wirkt eine Eingabe wie bis 0.34.103 sofort |

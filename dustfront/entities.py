@@ -428,6 +428,10 @@ class Geschoss(Wesen):
         self.fahrzeug_wert = daten.get("fahrzeug_schaden")
         self.rest = daten["reichweite"]
         self.von = von
+        # Wer im Beiwagen eines Krads schiesst (seit 0.34.107), trifft nicht
+        # das eigene Fahrzeug.
+        if von is not None and self.traeger is None:
+            self.traeger = getattr(von, "mitfahrt", None)
         # Der Stoss auf das Ziel gilt je Schuss, nicht je Kugel: vorher
         # schob jede der sieben Schrotkugeln einzeln, und aus naechster
         # Naehe flog ein Getroffener rund 240 Pixel weit (0.32).
