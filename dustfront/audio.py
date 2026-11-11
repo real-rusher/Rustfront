@@ -405,6 +405,48 @@ def _schuss_bug_mg(seed=0):
 platzhalter_klang("schuss_ring_mg")(_schuss_bug_mg)
 
 
+@platzhalter_klang("schuss_flak_kanone")
+def _schuss_flak(seed=0):
+    """Der Flak-Vierling (seit 0.34.118): ein harter Schlag mit hellem Knall
+    obenauf, kuerzer als die Panzerkanone, lauter als ein MG."""
+    return _mischen(
+        _schlag(120, 42, 0.3, 0.95, 2.0),
+        _rauschen(0.2, 0.9, 6500, 500, 2.2, seed + 201),
+        _rauschen(0.04, 0.55, 12000, 4000, 2.0, seed + 202, hp=True),
+    )
+
+
+@platzhalter_klang("flak_burst")
+def _flak_burst(seed=0):
+    """Eine Flakwolke platzt: ein dumpfes Wummern, darueber ein Knistern von Splittern."""
+    return _mischen(
+        _schlag(74, 30, 0.38, 0.9, 1.8),
+        _rauschen(0.45, 0.6, 3000, 300, 1.6, seed + 211),
+        [0.0] * int(RATE * 0.03) + _rauschen(0.3, 0.4, 9000, 2500, 3.0, seed + 212, hp=True),
+    )
+
+
+@platzhalter_klang("fallschirm_riss")
+def _fallschirm_riss(seed=0):
+    """Der Schirm reisst: ein langes, hohes Reissen von Stoff, ein Knall am Anfang."""
+    return _mischen(
+        _schlag(300, 120, 0.08, 0.5, 3.0),
+        _rauschen(0.55, 0.55, 9500, 1800, 1.1, seed + 221, hp=True),
+        _rauschen(0.3, 0.3, 4000, 900, 2.0, seed + 222),
+    )
+
+
+@platzhalter_klang("absturz")
+def _absturz(seed=0):
+    """Ein Fahrzeug schlaegt nach dem Sturz auf: Wucht, Blech, Staub."""
+    return _mischen(
+        _schlag(62, 24, 0.55, 1.0, 2.0),
+        _rauschen(0.6, 0.75, 2400, 150, 1.8, seed + 231),
+        _schlag(430, 170, 0.32, 0.3, 3.0),
+        [0.0] * int(RATE * 0.06) + _rauschen(0.4, 0.35, 7500, 1200, 2.2, seed + 232, hp=True),
+    )
+
+
 @platzhalter_klang("panzer_einschlag")
 def _panzer_einschlag(seed=0):
     """Der Einschlag der Kanone: groesser als Granate und C4."""

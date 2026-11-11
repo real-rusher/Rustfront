@@ -986,6 +986,88 @@ class Panzergranate(Geschoss):
         w.explosion(self.pos, self.ebene, r, "panzer", self.von)
 
 
+class Flakgranate(Geschoss):
+    """Die Granate des Flak-Vierlings (seit 0.34.118): fliegt wie jede Flak des
+    zweiten Weltkriegs mit Zeitzuender - sie trifft keinen Koerper auf dem Weg
+    (sie fliegt darueber) und platzt nach der Strecke bis zum Zielpunkt
+    (`rest`, vom Geschuetz gesetzt) oder, ist ein Luftziel anvisiert, sobald
+    sie ihm auf K.FLAK naeher kommt. Nur eine Mauer haelt sie vorher auf.
+
+    Gegen Luftziele (Tragschrauber, Drohnen, Abwuerfe, Fallschirmjaeger) trifft
+    die Wolke immer, mit `luft_schaden`; am Boden ist es nur ein kleiner
+    Splitterkreis. Gezeichnet wird die Wolke dort, wo das Luftziel im Bild
+    steht (Welt.explosion "flak")."""
+
+    bild = "panzergranate"
+    spur = (255, 206, 120)
+    spur_dick = 1
+    radius = 2.0
+
+    def __init__(self, pos, richtung: float, daten: dict, ebene: int,
+                 von=None, waffe: str = "flak_kanone", traeger=None) -> None:
+        super().__init__(pos, richtung, daten, ebene, von, waffe)
+        self.daten = daten
+        self.traeger = traeger
+        self._gezuendet = False
+
+    def schritt(self, dt: float) -> None:
+        self.vorher.update(self.pos)
+        weg = self.tempo * dt
+        schritte = max(1, int(weg.length() / 6.0))
+        teil = weg / schritte
+        for _ in range(schritte):
+            self.pos += teil
+            self.rest -= teil.length()
+            if self.welt.schuss_halt(self.pos, self.ebene, self.radius, True):
+                self.pos -= teil
+                self._zuenden()
+                return
+            lz = self.luft_ziel
+            if lz is not None and lz.lebt and self.pos.distance_to(lz.pos) <= K.FLAK["naeher"]:
+                self._zuenden()
+                return
+            if self.rest <= 0.0:
+                self._zuenden()
+                return
+
+    def _zuenden(self) -> None:
+        if self._gezuendet:
+            return
+        self._gezuendet = True
+        self.lebt = False
+        w = self.welt
+        if w is None:
+            return
+        F = K.FLAK
+        lz = self.luft_ziel
+        if lz is not None and lz.lebt:
+            weit = self.pos.distance_to(lz.pos)
+            reich = F["luft_radius"] + lz.radius
+            if weit <= reich:
+                anteil = 1.0 - F["luft_abfall"] * min(1.0, weit / reich)
+                lz.treffen(F["luft_schaden"] * anteil, self.von)
+            w.explosion(pygame.Vector2(self.pos.x, self.pos.y - lz.versatz), self.ebene,
+                        F["luft_radius"], "flak", self.von)
+            return
+        # Am Boden: ein kleiner Splitterkreis um den Zuendpunkt.
+        r = F["boden_radius"]
+        d = self.daten
+        for a in list(w.nahe(self.pos, r + 60, self.ebene)):
+            if not a.lebt or a is self or not getattr(a, "trefferbar", True):
+                continue
+            ab = a.pos - self.pos
+            weit = ab.length()
+            if weit > r + a.radius:
+                continue
+            anteil = (1.0 - 0.6 * min(1.0, weit / max(1.0, r))) * w.deckung_anteil(self.pos, a.pos, self.ebene)
+            schub = ab.normalize() * 160.0 * anteil if weit > 0.01 else None
+            lebte = a.lebt
+            schaden_an(a, d["schaden"] * anteil, schub, self.von, "spreng", self.pos,
+                       F["boden_fahrzeug"] * anteil)
+            abschuss_buchen(self.von, a, self.waffe, lebte)
+        w.explosion(self.pos, self.ebene, r, "flak", self.von)
+
+
 class Schwer(Buggy):
     """Was Panzer und Panzerwagen gemeinsam haben (siehe oben)."""
 
@@ -2257,16 +2339,28 @@ class Flakwagen(Panzerwagen):
     _ROHRE = (-12.2, 8.0, -8.0, 12.2)
 
     def _schiessen(self) -> None:
-        if self.feuer and self.takt.get("flak_mg", 0.0) <= 0.0:
-            f = self.werte
-            mitte = self.aufbau_mitte()
-            rohr = self.__dict__.get("_rohr", 0)
-            self._rohr = (rohr + 1) % len(self._ROHRE)
-            quer = self._ROHRE[rohr]
-            m = mitte + pygame.Vector2(f["ring_muendung"] - self.ruecklauf, quer).rotate(self.aufbau)
-            self._mg("flak_mg", m, self.aufbau,
-                     mitte + pygame.Vector2(8, quer * 0.5).rotate(self.aufbau))
-            self.ruecklauf = f["ring_ruecklauf"]
+        """Ein Schuss: eine Granate aus dem naechsten der vier Rohre. Ihr
+        Zeitzuender steht auf der Strecke bis zum Zeiger (K.FLAK)."""
+        if not self.feuer or self.takt.get("flak_kanone", 0.0) > 0.0:
+            return
+        f = self.werte
+        d = K.FAHRZEUG_WAFFEN["flak_kanone"]
+        self.takt["flak_kanone"] = d["takt"]
+        mitte = self.aufbau_mitte()
+        rohr = self.__dict__.get("_rohr", 0)
+        self._rohr = (rohr + 1) % len(self._ROHRE)
+        quer = self._ROHRE[rohr]
+        m = mitte + pygame.Vector2(f["ring_muendung"] - self.ruecklauf, quer).rotate(self.aufbau)
+        a = self.aufbau + RND.uniform(-d["streuung"], d["streuung"])
+        g = Flakgranate(m, a, d, self.ebene, self.fahrer, "flak_kanone", traeger=self)
+        ziel = getattr(self.fahrer, "ziel", None)
+        if ziel is not None:
+            g.rest = max(80.0, min(d["reichweite"], m.distance_to(pygame.Vector2(ziel))))
+        self.welt.dazu(g)
+        self.welt.schussknall(m, self.aufbau, self.ebene, "flak_kanone", self.fahrer)
+        if hasattr(self.fahrer, "zaehlen"):
+            self.fahrer.zaehlen("schuesse", 1.0, "flak_kanone")
+        self.ruecklauf = f["ring_ruecklauf"] * 2.0
 
 
 # Welche Art zu welcher Klasse und zu welchem Buchstaben in der Karte.

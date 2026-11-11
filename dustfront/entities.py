@@ -322,7 +322,8 @@ def tod_zeigen(w, von=None) -> None:
 
 
 def daten_faktor(geschoss) -> float:
-    """Wie viel mehr Flakmunition gegen Luftziele wiegt (K.FLAK luft_faktor)."""
+    """Wie viel mehr eine Waffe mit `flak` gegen Luftziele wiegt (K.FLAK luft_faktor,
+    seit 0.34.118 nicht mehr gesetzt: die Flakgranate platzt, siehe fahrzeug.Flakgranate)."""
     return float(getattr(K, "FLAK", {}).get("luft_faktor", 1.0))
 
 

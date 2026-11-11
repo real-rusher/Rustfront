@@ -67,6 +67,9 @@ class Abwurf:
         self.alter = 0.0
         self.kennung = zone.kennung
         self.ziel = None             # wohin er treibt, weil unten etwas im Weg ist
+        # Der Schirm ist gerissen (seit 0.34.118, Flak): Sekunden seitdem, 0 =
+        # nein. Der Wagen faellt dann beschleunigt und kommt fast kaputt an.
+        self.gerissen = 0.0
 
 
 class Ueberflug:
@@ -217,7 +220,12 @@ class SchlachtTeil:
                     self.welt.klang("drohne", 0.6, zone.pos, 0)
         for ab in list(self.abwuerfe):
             ab.alter += dt
-            ab.hoehe -= a["sinken"] * dt
+            if ab.gerissen > 0.0:
+                ab.gerissen += dt
+                F = K.FLAK
+                ab.hoehe -= min(F["riss_tempo"], a["sinken"] + F["riss_beschl"] * ab.gerissen) * dt
+            else:
+                ab.hoehe -= a["sinken"] * dt
             if ab.hoehe <= a["ausweichen_ab"]:
                 self._abwurf_lenken(ab, dt)
             if ab.hoehe <= 0.0:
@@ -393,6 +401,11 @@ class SchlachtTeil:
         b.start = (pygame.Vector2(ab.pos), 0, ab.winkel)
         b.basis_team = zone.team
         b.dropzone = zone
+        if ab.gerissen > 0.0:
+            # Gestuerzt (seit 0.34.118): der Schirm war ab, der Wagen schlaegt hart auf
+            # und hat fast nichts mehr.
+            b.leben = max(1.0, b.max_leben * K.FLAK["absturz_leben"])
+            w.explosion(pygame.Vector2(ab.pos), 0, 40.0, "absturz")
         self.fahrzeuge.append(b)
         zone.fahrzeug = b
         if b.werte.get("nur_bot"):
@@ -681,7 +694,8 @@ class SchlachtTeil:
                     1 if z.einmalig else 0, 1 if z.fahrzeug is not None else 0, z.kennung]
                    for z in self.dropzonen],
             "ab": [[round(a.pos.x), round(a.pos.y), round(a.hoehe, 1), a.art, a.team,
-                    round(a.winkel), round(a.alter, 2)] for a in self.abwuerfe],
+                    round(a.winkel), round(a.alter, 2), round(a.gerissen, 2)]
+                   for a in self.abwuerfe],
             "ue": [[round(u.pos.x), round(u.pos.y), u.team] for u in self.ueberfluege],
             # Napalm-Angriffe (seit 0.34.101): Bahn und Seite, fuer die Karte.
             "la": [[round(a.start.x), round(a.start.y), round(a.ende.x), round(a.ende.y), a.team]
@@ -711,6 +725,7 @@ class SchlachtTeil:
                 a = Abwurf(z)
                 a.hoehe = float(e[2])
                 a.alter = float(e[6])
+                a.gerissen = float(e[7]) if len(e) > 7 else 0.0
                 abw.append(a)
             except (TypeError, ValueError, IndexError):
                 continue
@@ -821,16 +836,23 @@ class SchlachtTeil:
                 fuss = int(self.abwurf_fuss(ab.art))
                 pygame.draw.ellipse(ziel, K.C_RED, (int(boden.x) - fuss, int(boden.y) - int(fuss * 0.62),
                                                     fuss * 2, int(fuss * 1.24)), 1)
-            # Die Last: pendelt leicht.
-            pendel = math.sin(ab.alter * 2.4) * 6.0 * (1.0 - anteil * 0.5)
+            # Die Last: pendelt leicht - mit gerissenem Schirm (seit 0.34.118)
+            # nicht mehr, sondern dreht sich im Sturz.
+            if ab.gerissen > 0.0:
+                pendel = 0.0
+                sturz = ab.winkel + 70.0 * ab.gerissen * (1 if ab.kennung % 2 == 0 else -1)
+            else:
+                pendel = math.sin(ab.alter * 2.4) * 6.0 * (1.0 - anteil * 0.5)
+                sturz = ab.winkel + pendel * 0.8
             hub = hoch * a["bild_hub"]
             last = boden + pygame.Vector2(pendel, -hub)
-            self._fracht_zeichnen(ziel, ab.art, last, ab.winkel + pendel * 0.8)
-            # Der Schirm.
+            self._fracht_zeichnen(ziel, ab.art, last, sturz)
+            # Der Schirm - ab ist er nach dem Riss.
             gross = ab.art in fahrzeug_modul.ARTEN
-            schirm = last + pygame.Vector2(pendel * 0.4, -a["schirm_ueber"] * (1.6 if gross else 1.0))
-            self._schirm_zeichnen(ziel, schirm, last, ab.team,
-                                  a["schirm"] if gross else a["schirm_kiste"])
+            if ab.gerissen <= 0.0:
+                schirm = last + pygame.Vector2(pendel * 0.4, -a["schirm_ueber"] * (1.6 if gross else 1.0))
+                self._schirm_zeichnen(ziel, schirm, last, ab.team,
+                                      a["schirm"] if gross else a["schirm_kiste"])
 
         # Fallschirmjaeger: Schatten am Boden zeichnet der Renderer (wie fuer
         # jede Figur), die Figur haengt darueber am eigenen Schirm.

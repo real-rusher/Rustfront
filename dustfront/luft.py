@@ -82,6 +82,8 @@ class LuftTeil:
         liste = []
         hub = S["abwurf"]["bild_hub"]
         for ab in getattr(self, "abwuerfe", ()):
+            if getattr(ab, "gerissen", 0.0) > 0.0:
+                continue                 # der Schirm ist ab: er faellt, daran ist nichts mehr zu schiessen
             liste.append(LuftZiel(ab, "abwurf", "team%d" % ab.team if ab.team >= 0 else "", ab.pos,
                                   max(0.0, ab.hoehe) * hub, 26.0, True, self._abwurf_treffer))
         for k in self.kaempfer.values():
@@ -133,7 +135,7 @@ class LuftTeil:
         (Schirme, Abwuerfe) gilt der Ort selbst."""
         v = getattr(lz.objekt, "geschw", None)
         mitte = k.fahrzeug.aufbau_mitte() if hasattr(k.fahrzeug, "aufbau_mitte") else k.pos
-        tempo = K.FAHRZEUG_WAFFEN["flak_mg"]["tempo"]
+        tempo = K.FAHRZEUG_WAFFEN["flak_kanone"]["tempo"]
         if v is None or tempo <= 0.0:
             return pygame.Vector2(lz.pos)
         # Zweimal nachrechnen: die Flugzeit haengt vom Abstand zum Vorhalt-Ort ab.
@@ -144,26 +146,46 @@ class LuftTeil:
 
     # ---- Treffer ------------------------------------------------------------
     def _abwurf_treffer(self, lz, menge: float, von) -> None:
+        """Ein Treffer an einem Abwurf am Schirm (seit 0.34.118). Kisten und
+        Medkits platzen, ein Fahrzeug haelt `fahrzeug_leben` aus: dann reisst
+        der Schirm, und es faellt schnell hinunter (Abwurf.gerissen)."""
         ab = lz.objekt
-        if ab not in self.abwuerfe:
+        if ab not in self.abwuerfe or getattr(ab, "gerissen", 0.0) > 0.0:
             return
+        F = K.FLAK
+        gross = ab.art in fahrzeug_modul.ARTEN
         leben = getattr(ab, "luft_leben", None)
         if leben is None:
-            leben = 80.0 if ab.art in ("munition", "medkit") else 260.0
+            leben = F["fahrzeug_leben"] if gross else F["kiste_leben"]
         leben -= menge
         ab.luft_leben = leben
-        if leben <= 0.0:
-            self.abwuerfe.remove(ab)
-            zone = getattr(ab, "zone", None)
-            if zone is not None and zone.einmalig and zone in self.dropzonen:
-                self.dropzonen.remove(zone)
-            self.welt.explosion(ab.pos, 0, 40.0, "spreng", von)
+        if leben > 0.0:
+            return
+        if gross:
+            ab.gerissen = 0.001
+            self._lz_merk = None
+            self.welt.explosion(lz.bild_pos, 0, float(ab.team if ab.team in (0, 1) else 0),
+                                "fallschirm_riss", von)
+            return
+        self.abwuerfe.remove(ab)
+        self._lz_merk = None
+        zone = getattr(ab, "zone", None)
+        if zone is not None and zone.einmalig and zone in self.dropzonen:
+            self.dropzonen.remove(zone)
+        self.welt.explosion(lz.bild_pos, 0, 40.0, "luft_kiste", von)
 
     def _springer_treffer(self, lz, menge: float, von) -> None:
         k = lz.objekt
         k.schaden(menge, None, von)
-        if not k.lebt:
+        if k.am_boden or not k.lebt:
+            # In der Luft gibt es kein Aufhelfen: er stirbt gleich, mit eigener
+            # Animation (seit 0.34.118).
+            if k.lebt:
+                k.am_boden = True
+                k.sterben(von)
             k.schirm_hoehe = 0.0
+            self.welt.explosion(lz.bild_pos, 0, 30.0, "luft_mensch", von)
+            self._lz_merk = None
 
     def _drohne_treffer(self, lz, menge: float, von) -> None:
         lz.objekt.schaden(menge, None, von)

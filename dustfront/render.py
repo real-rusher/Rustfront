@@ -1659,6 +1659,29 @@ class Renderer:
                 s = self.bilder.gedreht("huelse", p.winkel)
                 ziel.blit(s, (q.x - s.get_width() / 2, q.y - s.get_height() / 2))
                 continue
+            if p.art == "flakrauch":
+                # Eine Flakwolke (seit 0.34.118): quillt auf, wird heller und
+                # verblasst am Ende - als Kreis, nicht als Quadrat.
+                rr = max(2, int(p.groesse * (1.7 - 0.7 * f)))
+                alt = 1.0 - f
+                farbe = tuple(min(255, int(c + (92 - c) * alt * 0.6)) for c in p.farbe[:3])
+                pygame.draw.circle(ziel, farbe, (int(q.x), int(q.y)), rr)
+                continue
+            if p.art == "fetzen":
+                # Ein Fetzen vom Schirm: ein kleines Stueck Stoff, das sich dreht.
+                g = max(2, int(p.groesse))
+                a = math.radians(p.winkel)
+                dx, dy = math.cos(a) * g, math.sin(a) * g
+                ex, ey = -dy * 0.5, dx * 0.5
+                punkte = [(q.x - dx + ex, q.y - dy + ey), (q.x + dx + ex, q.y + dy + ey),
+                          (q.x + dx - ex, q.y + dy - ey), (q.x - dx - ex, q.y - dy - ey)]
+                pygame.draw.polygon(ziel, p.farbe, punkte)
+                continue
+            if p.art == "splitter":
+                g = max(1, int(p.groesse))
+                a = math.radians(p.winkel)
+                pygame.draw.line(ziel, p.farbe, (q.x, q.y), (q.x + math.cos(a) * g * 2, q.y + math.sin(a) * g * 2), g)
+                continue
             g = max(1, int(p.groesse * (0.4 + 0.6 * f)))
             farbe = p.farbe
             if p.art == "funke":

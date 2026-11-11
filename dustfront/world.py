@@ -615,6 +615,9 @@ class Welt:
             self.ruckeln(5.0, "explosion", pos, ebene)
             self.klang("hammer_boden", 1.0, pos, ebene)
             return
+        if art in ("flak", "luft_kiste", "luft_mensch", "fallschirm_riss", "absturz"):
+            self._explosion_luft(pos, ebene, radius, art)
+            return
         if art == "emp":
             # Die EMP-Granate (seit 0.34.65): kein Feuer, kein Krater - ein
             # blauer Kranz, der den Kreis zeigt, in dem Fahrzeuge ausfallen.
@@ -673,6 +676,60 @@ class Welt:
         self.brandfleck(pos, ebene, radius)
         self.ruckeln(K.WAFFEN["granate"]["kamera"], "explosion", pos, ebene)
         self.klang("granate", 1.0, pos, ebene)
+
+    def _explosion_luft(self, pos, ebene: int, radius: float, art: str) -> None:
+        """Was in der Luft platzt oder reisst (seit 0.34.118). `pos` ist der
+        Ort im Bild, nicht am Boden. Bei "fallschirm_riss" ist `radius` die
+        Seite (0 oder 1), damit die Fetzen in den Farben des Schirms fliegen."""
+        from .entities import wolke
+        weiss = (232, 226, 210)
+        kombi = K.TEAMS["kombi"][int(radius)] if art == "fallschirm_riss" and 0 <= int(radius) < 2 else None
+        tuch = kombi["rumpf"] if kombi else (200, 70, 50)
+        if art == "flak":
+            # Eine Flakwolke wie im zweiten Weltkrieg: ein heller Kern, der
+            # gleich verglueht, eine dunkle, aufquellende Rauchwolke, die eine
+            # Weile stehen bleibt, und ein Kranz Splitterfunken.
+            self.lichtblitz(pos, ebene, 58.0)
+            wolke(self, pos, 5, 60, 0.18, (255, 238, 196), ebene, 5, "funke", reibung=3.0)
+            wolke(self, pos, 14, 90, 2.6, (24, 22, 20), ebene, 10, "flakrauch", reibung=2.2)
+            wolke(self, pos, 10, 46, 3.2, (62, 58, 54), ebene, 14, "flakrauch", reibung=1.7)
+            wolke(self, pos, 5, 20, 3.4, (96, 90, 84), ebene, 16, "flakrauch", reibung=1.5)
+            wolke(self, pos, 20, 440, 0.3, (255, 190, 110), ebene, 1, "funke", reibung=2.5)
+            wolke(self, pos, 6, 190, 0.8, (255, 140, 60), ebene, 1, "funke", reibung=2.0)
+            self.ruckeln(1.2, "explosion", pos, ebene)
+            self.klang("flak_burst", 0.9, pos, ebene)
+            return
+        if art in ("luft_kiste", "luft_mensch"):
+            # Was am Schirm hing, zerplatzt: Splitter bzw. Blut, Fetzen vom
+            # Schirm, eine kleine dunkle Wolke.
+            self.lichtblitz(pos, ebene, 40.0)
+            wolke(self, pos, 5, 60, 0.15, (255, 238, 196), ebene, 4, "funke", reibung=3.0)
+            if art == "luft_kiste":
+                wolke(self, pos, 16, 220, 1.1, (140, 104, 64), ebene, 2, "splitter", reibung=1.5)
+                wolke(self, pos, 8, 130, 1.5, (86, 104, 62), ebene, 2, "splitter", reibung=1.4)
+            else:
+                wolke(self, pos, 16, 200, 1.0, K.C_BLUT, ebene, 2, "blut", reibung=1.6)
+            wolke(self, pos, 12, 75, 2.4, weiss, ebene, 3, "fetzen", reibung=0.9)
+            wolke(self, pos, 8, 75, 2.4, tuch, ebene, 3, "fetzen", reibung=0.9)
+            wolke(self, pos, 8, 50, 2.2, (40, 36, 34), ebene, 8, "flakrauch", reibung=2.0)
+            self.ruckeln(1.0, "explosion", pos, ebene)
+            self.klang("flak_burst", 0.6, pos, ebene)
+            return
+        if art == "fallschirm_riss":
+            # Der Schirm reisst: Bahnen und Fetzen fliegen auseinander und
+            # taumeln hinunter.
+            wolke(self, pos, 14, 120, 2.6, weiss, ebene, 4, "fetzen", reibung=0.8)
+            wolke(self, pos, 14, 120, 2.6, tuch, ebene, 4, "fetzen", reibung=0.8)
+            wolke(self, pos, 8, 50, 1.6, (40, 36, 34), ebene, 4, "flakrauch", reibung=2.0)
+            self.klang("fallschirm_riss", 0.8, pos, ebene)
+            return
+        # "absturz": der Aufschlag eines Fahrzeugs ohne Schirm.
+        wolke(self, pos, 44, 300, 1.3, K.C_SAND_KORN, ebene, 2, "staub", reibung=2.2)
+        wolke(self, pos, 16, 340, 0.7, (122, 86, 46), ebene, 3, "staub", reibung=2.0)
+        wolke(self, pos, 18, 360, 0.5, (255, 214, 140), ebene, 1, "funke", reibung=2.5)
+        self.aufschlagring(pos, ebene, 1.8)
+        self.ruckeln(9.0, "explosion", pos, ebene)
+        self.klang("absturz", 1.0, pos, ebene)
 
     def lichtblitz(self, pos, ebene: int, radius: float) -> None:
         """Ein kurzer heller Blitz (K.LICHTBLITZ), gezeichnet additiv

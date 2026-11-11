@@ -718,6 +718,10 @@ KLANG_NAMEN = (
     "schuss_kanone",        # die Panzerkanone
     "schuss_bug_mg",        # das Bug-MG des Panzers
     "schuss_ring_mg",       # das MG im Ring des Panzerwagens
+    "schuss_flak_kanone",   # der Flak-Vierling (seit 0.34.118)
+    "flak_burst",           # eine Flakwolke platzt
+    "fallschirm_riss",      # der Schirm eines Abwurfs reisst
+    "absturz",              # ein Fahrzeug schlaegt nach dem Sturz auf
     "panzer_einschlag",     # die Granate der Kanone schlaegt ein
     "panzer_motor",         # Ketten und Motor, in einem Takt, solange er faehrt
     "panzerwagen_motor",
@@ -1768,7 +1772,7 @@ TRAGSCHRAUBER = dict(
 # Fahren duerfen ihn nur Bots (`nur_bot`; gewuenscht: ein Mensch koennte
 # Boden- und Luftziel nicht auseinanderhalten - der Bot schon): ein Abwurf
 # bringt einen Bot der Seite gleich mit. Der Vierling schiesst ueber die
-# `flak_mg`-Zeile (FAHRZEUG_WAFFEN) und rastet auf Luftziele ein (luft.py).
+# `flak_kanone`-Zeile (FAHRZEUG_WAFFEN) und rastet auf Luftziele ein (luft.py).
 FLAKWAGEN = dict(
     {k: v for k, v in PANZERWAGEN.items() if k not in ("plaetze", "marke", "name")},
     marke="FL",
@@ -1792,7 +1796,20 @@ FLAKWAGEN = dict(
 # Flak gegen Luftziele: wie viel mehr eine Flak-Kugel dort wiegt, und wie weit
 # ein Bot einen Flieger sucht (ein Bot am Steuer; Tragschrauber, Drohnen,
 # Abwuerfe, Fallschirmjaeger). `streu` ist der Bot-Fehler beim Vorhalten.
-FLAK = dict(luft_faktor=1.8, bot_reichweite=680.0, bot_winkel=7.0,
+FLAK = dict(bot_reichweite=680.0, bot_winkel=7.0,
+            # Die Wolke (seit 0.34.118): platzt eine Flakgranate nahe an einem
+            # Luftziel - Zeitzuender am Zielpunkt oder Annaeherung auf `naeher`
+            # Pixel -, trifft sie es immer, mit `luft_schaden` in der Mitte und
+            # `luft_abfall` weniger am Rand von `luft_radius`. Am Boden ein
+            # kleiner Splitterkreis.
+            luft_schaden=75.0, luft_radius=64.0, luft_abfall=0.35, naeher=44.0,
+            boden_radius=40.0, boden_fahrzeug=14.0,
+            # Was an Fallschirmen haengt: Kisten und Medkits platzen mit einem
+            # Treffer, Fahrzeuge halten `fahrzeug_leben` aus - dann reisst der
+            # Schirm, sie stuerzen mit bis zu `riss_tempo` px/s (Beschleunigung
+            # `riss_beschl`) und kommen mit `absturz_leben` ihrer Leben an.
+            kiste_leben=60.0, fahrzeug_leben=200.0, riss_beschl=420.0, riss_tempo=620.0,
+            absturz_leben=0.04,
             # Der Flakwagen einer Basis (seit 0.34.117) wartet, bis ein anderes
             # Fahrzeug seiner Seite mit Fahrer mehr als `konvoi_los` px von
             # seinem Startort weg ist, und faehrt dann hinter ihm her,
@@ -1971,17 +1988,20 @@ FAHRZEUG_WAFFEN = {
         streuung=2.5,
         kamera=0.6,
     ),
-    # Der Vierling des Flakwagens (seit 0.34.114): viele schwache Kugeln, gegen
-    # Luftziele (`flak`) mit K.FLAK luft_faktor gewichtet.
-    "flak_mg": dict(
+    # Der Vierling des Flakwagens: seit 0.34.118 keine MG-Kugeln mehr, sondern
+    # langsam (gut zwei Schuss je Sekunde) abgefeuerte Granaten mit Zeitzuender,
+    # die nach der Strecke bis zum Zielpunkt platzen (fahrzeug.Flakgranate,
+    # K.FLAK). `schaden` gilt nur fuer die Splitter am Boden.
+    "flak_kanone": dict(
         name="FLAK-VIERLING",
-        schaden=9.0,
-        tempo=640.0,
-        reichweite=720.0,
+        schaden=26.0,
+        tempo=780.0,
+        reichweite=900.0,
         geschosse=1,
-        takt=1.0 / 16.0,
-        streuung=2.6,
-        kamera=0.5,
+        takt=0.42,
+        streuung=0.8,
+        kamera=1.6,
+        muendung=1.8,
         flak=True,
     ),
     "ring_mg": dict(
@@ -3156,6 +3176,11 @@ HOEHEN = dict(
     staub=3.0,            # Staub wirbelt knapp ueber dem Boden
     huelse=0.0,           # Huelsen liegen am Boden
     partikel=6.0,         # alles uebrige
+    # Was in der Luft schwebt (seit 0.34.118): Flakwolken, Schirmfetzen,
+    # Kistensplitter - hinter Mauern nicht verdeckt.
+    flakrauch=300.0,
+    fetzen=300.0,
+    splitter=300.0,
 )
 
 # Figuren mit Hoehe (seit 0.34.25, render.Renderer.figur_zeichnen): wie die

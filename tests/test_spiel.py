@@ -18072,7 +18072,7 @@ pruef("Testmodus: FLAKWAGEN im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB); im 
       and ("flakwagen", 9, "DROPZONE: FLAKWAGEN") in K.SCHLACHT["belohnungen"])
 pruef("Flakwagen: Werte - nur Bots, Flak, kein Truppentransporter; die Flak-Zeile traegt `flak`",
       K.FLAKWAGEN["nur_bot"] and K.FLAKWAGEN["flak"] and "plaetze" not in K.FLAKWAGEN
-      and K.FAHRZEUG_WAFFEN["flak_mg"]["flak"] and K.FLAK["luft_faktor"] > 1.0)
+      and K.FAHRZEUG_WAFFEN["flak_kanone"]["flak"] and K.FLAK["luft_schaden"] > 50.0)
 _e114 = _tm114.welt.ebene(0)
 _rnd114 = random.Random(114)
 for _ in range(40000):
@@ -18368,6 +18368,147 @@ pruef("... ist eines mehr als 350 px von seinem Start weg, faehrt er hinter ihm 
       "Vordermann %.0f weg, Flak %.0f bewegt, Abstand %.0f" % (
           _weit117, _fl117.pos.distance_to(_start117), _fl117.pos.distance_to(_bg117.pos)))
 _tm117.verlassen()
+
+# 0.34.118: Flak - langsamer, Granaten platzen am Zielpunkt (Wolke), stark gegen Luftziele;
+# Abwuerfe: kleine Last platzt, Fahrzeuge verlieren den Schirm und stuerzen.
+_tm118 = _TM59.Testmodus(app, karte="staubtal_offen")
+_e118 = _tm118.welt.ebene(0)
+_rnd118 = random.Random(118)
+for _ in range(40000):
+    _tx118 = _rnd118.randrange(60, _e118.breite - 90)
+    _ty118 = _rnd118.randrange(20, _e118.hoehe - 40)
+    if all(not K.KACHELN[_e118.kachel(_tx118 + x_, _ty118 + y_)]["fest"]
+           for x_ in range(50) for y_ in range(24)):
+        break
+_z118 = lambda x_, y_: pygame.Vector2((_tx118 + x_ + 0.5) * K.TILE, (_ty118 + y_ + 0.5) * K.TILE)
+_ex118 = []
+_alt_ex118 = _tm118.welt.explosion
+def _ex_merk118(pos, ebene, radius, art="spreng", von=None):
+    _ex118.append((pygame.Vector2(pos), art))
+    return _alt_ex118(pos, ebene, radius, art, von)
+_tm118.welt.explosion = _ex_merk118
+_w118 = K.FAHRZEUG_WAFFEN["flak_kanone"]
+pruef("Flak: deutlich langsamer (hoechstens 3 Schuss/s, vorher 16) und ohne MG-Zeile",
+      _w118["takt"] >= 0.33 and "flak_mg" not in K.FAHRZEUG_WAFFEN, "%.2f s" % _w118["takt"])
+_fl118 = _tm118.fahrzeug_setzen("flakwagen", _z118(10, 12), 0, {"winkel": 0})
+_sch118 = _tm118.puppe_setzen(_fl118.pos, 0, {"team": 0}, name="FLAKSCHUETZE")
+_tm118._einsteigen(_sch118, _fl118)
+def _flak_ein118(ziel_, feuer_=True):
+    _tm118._anwenden(_sch118, {"will": [0, 0], "ziel": [ziel_.x, ziel_.y], "knoepfe": [], "feuert": feuer_})
+    _tm118.schritt(K.FIXED_DT)
+# Am Boden: zwei Gegner - einer auf dem Weg, einer am Zielpunkt. Die Granate fliegt ueber den ersten und platzt am Ziel.
+_weg118 = _tm118.puppe_setzen(_fl118.pos + pygame.Vector2(200, 0), 0, {"team": 1, "leben": 5.0}, name="WEG")
+_zp118 = _fl118.pos + pygame.Vector2(420, 0)
+_ziel118 = _tm118.puppe_setzen(_zp118, 0, {"team": 1, "leben": 5.0}, name="ZIEL")
+_weg118.unverwundbar = 0.0; _ziel118.unverwundbar = 0.0
+_wl118, _zl118 = _weg118.leben, _ziel118.leben
+_tm118.welt._raster_bauen()
+_ex118.clear()
+for _ in range(int(0.15 / K.FIXED_DT)):
+    _flak_ein118(_zp118)
+_flak_ein118(_zp118, False)
+for _ in range(int(1.2 / K.FIXED_DT)):
+    _flak_ein118(_zp118, False)
+_fl_ex118 = [p_ for p_, a_ in _ex118 if a_ == "flak"]
+pruef("Flak am Boden: die Granate platzt nach der Strecke bis zum Zeiger - nicht an dem, der dazwischen steht",
+      bool(_fl_ex118) and min(abs(p_.x - _zp118.x) for p_ in _fl_ex118) < 40.0
+      and _weg118.leben == _wl118 and _ziel118.leben < _zl118,
+      "Wolken %s, Weg %.1f->%.1f, Ziel %.1f->%.1f" % ([(round(p_.x), round(p_.y)) for p_ in _fl_ex118],
+                                                     _wl118, _weg118.leben, _zl118, _ziel118.leben))
+# Schussfolge: in 3 Sekunden Dauerfeuer nicht mehr als 3 je Sekunde.
+_n118 = [0]
+_alt_dazu118 = _tm118.welt.dazu
+def _dazu118(w_):
+    if w_.__class__.__name__ == "Flakgranate":
+        _n118[0] += 1
+    return _alt_dazu118(w_)
+_tm118.welt.dazu = _dazu118
+for _ in range(int(3.0 / K.FIXED_DT)):
+    _flak_ein118(_zp118)
+pruef("... Dauerfeuer: in 3 s hoechstens neun Granaten", 5 <= _n118[0] <= 9, str(_n118[0]))
+_tm118.welt.dazu = _alt_dazu118
+# In der Luft: ein fliegender Tragschrauber der Gegner, auf sein Bild gezielt.
+_ts118 = _tm118.fahrzeug_setzen("tragschrauber", _z118(30, 4), 0, {"winkel": 0})
+_pil118 = _tm118.puppe_setzen(_ts118.ausstiegsorte(9.0)[0], 0, {"team": 1}, name="PILOT")
+_tm118._anwenden(_pil118, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+for _ in range(int(6.0 / K.FIXED_DT)):
+    _tm118._anwenden(_pil118, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+    _tm118.schritt(K.FIXED_DT)
+# Der Flakwagen steht jetzt schraeg voraus in Reichweite (der Tragschrauber ist weit geflogen).
+_fl118.pos.update(_ts118.pos + pygame.Vector2(260, 200)); _fl118.vorher.update(_fl118.pos)
+_sch118.pos.update(_fl118.pos)
+_l118 = _ts118.leben
+_ex118.clear()
+_n118[0] = 0
+for _ in range(int(2.0 / K.FIXED_DT)):
+    _tm118._anwenden(_pil118, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+    _bp118 = pygame.Vector2(_ts118.pos.x, _ts118.pos.y - _ts118.hoehe)
+    _tm118._anwenden(_sch118, {"will": [0, 0], "ziel": [_bp118.x, _bp118.y], "knoepfe": [], "feuert": True})
+    _tm118.schritt(K.FIXED_DT)
+    if not _ts118.lebt or _ts118.kaputt:
+        break
+pruef("Flak in der Luft: die Wolke platzt am Ziel und trifft den Tragschrauber hart (zwei, drei Granaten)",
+      (_ts118.leben < _l118 - 40.0 or _ts118.kaputt) and any(a_ == "flak" for _p, a_ in _ex118),
+      "%.0f -> %.0f" % (_l118, _ts118.leben))
+# Abwuerfe: Kiste platzt mit einem Treffer, mit einer neuen Animation.
+_tm118.welt.explosion = _ex_merk118
+_ex118.clear()
+_tm118.nachschub_setzen("medkit", _z118(20, 20), {"team": 1})
+for _ in range(int(1.6 / K.FIXED_DT)):
+    _tm118.schritt(K.FIXED_DT)
+_lz118 = [x_ for x_ in _tm118.luft_ziele() if x_.art == "abwurf"][0]
+_lz118.treffen(K.FLAK["luft_schaden"], _sch118)
+pruef("Abwurf am Schirm: Medkit/Kiste platzt mit einem Flaktreffer (neue Animation 'luft_kiste'), nichts landet",
+      not _tm118.abwuerfe and any(a_ == "luft_kiste" for _p, a_ in _ex118)
+      and not any(getattr(b_, "art", "") == "medkit" for b_ in _tm118.welt.wesen))
+# Fahrzeug am Schirm: nach etwas Beschuss reisst der Schirm, er faellt schnell und kommt fast kaputt an.
+_ex118.clear()
+_tm118.nachschub_setzen("krad", _z118(25, 18), {"team": 1})
+for _ in range(int(2.4 / K.FIXED_DT)):
+    _tm118.schritt(K.FIXED_DT)
+_ab118 = _tm118.abwuerfe[0]
+_lz118 = [x_ for x_ in _tm118.luft_ziele() if x_.art == "abwurf"][0]
+_lz118.treffen(K.FLAK["luft_schaden"], _sch118)
+pruef("Fahrzeug am Schirm: ein Treffer reisst den Schirm noch nicht",
+      _ab118 in _tm118.abwuerfe and _ab118.gerissen == 0.0)
+_lz118 = [x_ for x_ in _tm118.luft_ziele() if x_.art == "abwurf"][0]
+_lz118.treffen(K.FLAK["luft_schaden"], _sch118)
+_lz118 = [x_ for x_ in _tm118.luft_ziele() if x_.art == "abwurf"][0]
+_lz118.treffen(K.FLAK["luft_schaden"], _sch118)
+pruef("... nach genug Treffern reisst er (neue Animation 'fallschirm_riss'), der Wagen ist kein Luftziel mehr",
+      _ab118.gerissen > 0.0 and any(a_ == "fallschirm_riss" for _p, a_ in _ex118)
+      and not [x_ for x_ in _tm118.luft_ziele() if x_.art == "abwurf"])
+_h0118 = _ab118.hoehe
+for _ in range(int(0.5 / K.FIXED_DT)):
+    _tm118.schritt(K.FIXED_DT)
+_normal118 = K.SCHLACHT["abwurf"]["sinken"] * 0.5
+pruef("... und faellt viel schneller als am Schirm (beschleunigt)",
+      _h0118 - _ab118.hoehe > _normal118 * 2.5, "%.0f px in 0,5 s, am Schirm %.0f" % (_h0118 - _ab118.hoehe, _normal118))
+_bild118 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm118.zeichnen(_bild118, 1.0)                      # gerissen zeichnen geht
+_m118 = _tm118.schlacht_meldung()
+_m118["ab"][0] = list(_m118["ab"][0])
+_g118 = _TM59.Testmodus(app, karte="staubtal_offen")
+_g118.schlacht_uebernehmen(_m118)
+pruef("... der Gast bekommt den Riss mit (Abwurf Feld 7)",
+      _g118.abwuerfe and _g118.abwuerfe[0].gerissen > 0.0)
+for _ in range(int(3.0 / K.FIXED_DT)):
+    _tm118.schritt(K.FIXED_DT)
+_krad118 = [b_ for b_ in _tm118.fahrzeuge if b_.art == "krad" and getattr(b_, "basis_team", -1) == 1]
+pruef("... er kommt mit extrem wenig Leben am Boden an (hartes Aufsetzen: 'absturz')",
+      _krad118 and _krad118[-1].leben <= _krad118[-1].max_leben * 0.06 and _krad118[-1].lebt
+      and any(a_ == "absturz" for _p, a_ in _ex118),
+      "%s" % ([(b_.leben, b_.max_leben) for b_ in _krad118]))
+# Fallschirmjaeger: tot in der Luft - eigene Animation.
+_ex118.clear()
+_sp118 = _tm118.fallschirmjaeger_abwerfen(_z118(5, 5), 1)
+for _ in range(int(0.5 / K.FIXED_DT)):
+    _tm118.schritt(K.FIXED_DT)
+_lzs118 = [x_ for x_ in _tm118.luft_ziele() if x_.art == "springer"]
+_lzs118[0].treffen(9999.0, _sch118)
+pruef("Fallschirmjaeger: stirbt einer in der Luft, gibt es die Animation 'luft_mensch'",
+      _lzs118 and any(a_ == "luft_mensch" for _p, a_ in _ex118) and not _lzs118[0].objekt.lebt)
+_tm118.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")
