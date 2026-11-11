@@ -782,6 +782,57 @@ def szene_flak(tm, rnd):
             [blick], lambda: uhr["t"] > 16.0 or ts.kaputt and uhr["t"] > 8.0, 18, 1.1, jedes_bild)
 
 
+def _feld_offen(tm, rnd, breite: int, hoehe: int):
+    """Wie `_feld_ganz_frei`, und darueber liegt auch keine hoehere Ebene -
+    sonst verdeckt ein Plateau, was am Boden liegt (seit 0.34.127)."""
+    T = K.TILE
+    e = tm.welt.ebene(0)
+    oben = tm.welt.ebenen[1:]
+    for _ in range(60000):
+        tx = rnd.randrange(2, e.breite - breite - 2)
+        ty = rnd.randrange(2, e.hoehe - hoehe - 2)
+        if all(not K.KACHELN[e.kachel(tx + x, ty + y)]["fest"] and not e.loch(tx + x, ty + y)
+               and all(o.kachel(tx + x, ty + y) == K.LEER for o in oben)
+               for x in range(breite) for y in range(hoehe)):
+            return tx, ty, (lambda x, y: pygame.Vector2((tx + x + 0.5) * T, (ty + y + 0.5) * T))
+    return _feld_ganz_frei(tm, rnd, breite, hoehe)
+
+
+def szene_heli_absturz(tm, rnd):
+    """Seit 0.34.127: zwei Tragschrauber werden in der Luft getroffen - der
+    Pilot ist sofort tot, das brennende Wrack fliegt mit seinem Schwung
+    weiter. Das erste prallt an eine Mauer und rutscht an ihr herunter, das
+    zweite schlaegt im Freien auf. Die Kamera folgt erst dem einen, dann dem
+    anderen."""
+    tx, ty, zelle = _feld_offen(tm, rnd, 46, 12)
+    e = tm.welt.ebene(0)
+    hubschrauber = [_fahrer_in(tm, "tragschrauber", zelle(2, zy), 0.0) for zy in (3, 9)]
+    blick = _Blick(hubschrauber[0][0].pos)
+    uhr = {"t": 0.0, "mauer": False}
+    treffer = (4.6, 8.4)                      # wann welcher getroffen wird (s)
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        t = uhr["t"]
+        for i, (b, k) in enumerate(hubschrauber):
+            if b.fahrer is not None:
+                _steuern(tm, k, (0, -1), b.pos + b.vorn * 200)
+            if not b.kaputt and b.in_der_luft and t > treffer[i]:
+                if i == 0 and not uhr["mauer"]:
+                    # Die Mauer dort, wo das Wrack schon tiefer ist als sie.
+                    wx = int((b.pos.x + 150) // K.TILE)
+                    for dy in range(-3, 4):
+                        e.setzen(wx, int(b.pos.y // K.TILE) + dy, K.WAND)
+                    tm.welt._raster_bauen()
+                    uhr["mauer"] = True
+                b.schaden(b.leben + 50.0, None, None, art="spreng")
+        ziel = hubschrauber[0 if t < treffer[1] - 1.2 else 1][0]
+        blick.pos.update(ziel.pos + pygame.Vector2(70, -20))
+
+    return ("Tragschrauber: abgeschossen, das Wrack faellt mit Schwung - gegen eine Mauer und ins Freie",
+            [blick], lambda: uhr["t"] > 12.0, 14, 1.0, jedes_bild)
+
+
 def szene_krad(tm, rnd):
     """Das Krad faehrt einen Bogen, der Beifahrer im Beiwagen haelt seine
     Waffe auf einen Punkt - nur so weit, wie sein Sitz es erlaubt."""
@@ -831,6 +882,7 @@ SZENEN = {
     "schrottbombe": ("26_schrottbombe", szene_schrottbombe),
     "flak": ("27_flak_leuchtspur", szene_flak),
     "krad": ("28_krad_beifahrer", szene_krad),
+    "heli_absturz": ("29_tragschrauber_absturz", szene_heli_absturz),
 }
 
 
@@ -978,10 +1030,10 @@ def aufnehmen(app, name: str, ordner: str, seed: int | None = None,
             if jedes_bild is not None:
                 jedes_bild()
             for teil in (0, 1):
-                if teil == 0 and ff_lupe is None:
-                    schritte = SCHRITTE_JE_BILD
-                else:
-                    schritte = haelfte if teil == 0 else SCHRITTE_JE_BILD - haelfte
+                # Beide Haelften zusammen sind immer genau ein Bild. Bis 0.34.127
+                # rechnete die erste Haelfte ohne Zeitlupe schon ein ganzes Bild,
+                # die zweite dann noch eine halbe - jedes Video lief 1,5-mal zu schnell.
+                schritte = haelfte if teil == 0 else SCHRITTE_JE_BILD - haelfte
                 # Die Kamera schaut ein Stueck zur Maus voraus. Ohne Fenster
                 # stuende die bei (0, 0), und das Bild rutschte nach links oben.
                 app.eingabe.maus = pygame.Vector2(K.GAME_W / 2, K.GAME_H / 2)

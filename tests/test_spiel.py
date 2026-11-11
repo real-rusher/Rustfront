@@ -12634,6 +12634,39 @@ pruef("werkzeug_aufnahme.py: jede Szene baut sich auf, laeuft und zeichnet (ohne
       not _fehler91 and len(_WA91.SZENEN) >= 5, str(_fehler91))
 pruef("... 30 Bilder je Sekunde aus 120 Rechenschritten",
       _WA91.SCHRITTE_JE_BILD == 4, str(_WA91.SCHRITTE_JE_BILD))
+# Und so wird auch wirklich aufgenommen (bis 0.34.127 rechnete jedes Bild
+# 6 statt 4 Schritte - alle Videos liefen 1,5-mal zu schnell). Ohne ffmpeg:
+# ein Schreiber, der die Bilder nur zaehlt.
+import tempfile as _tf91
+class _Schreiber91:
+    def __init__(self, pfad_):
+        self.stdin = self
+        self.bilder = 0
+        self._f = open(pfad_, "wb")
+    def write(self, roh_):
+        self.bilder += 1
+    def close(self):
+        self._f.close()
+    def wait(self):
+        return 0
+_schreiber91 = []
+_alt_vs91 = _WA91._video_schreiber
+_WA91._video_schreiber = lambda pfad_: _schreiber91.append(_Schreiber91(pfad_)) or _schreiber91[-1]
+_schritte91 = [0]
+_alt_ts91 = _TM59.Testmodus.schritt
+def _ts_zaehl91(self_, dt_):
+    _schritte91[0] += 1
+    return _alt_ts91(self_, dt_)
+_TM59.Testmodus.schritt = _ts_zaehl91
+try:
+    _WA91.aufnehmen(app, "duell", _tf91.mkdtemp(prefix="aufnahme_test_"), ton=False)
+finally:
+    _TM59.Testmodus.schritt = _alt_ts91
+    _WA91._video_schreiber = _alt_vs91
+pruef("... und jedes geschriebene Bild ist genau so viele Rechenschritte (Videos in echtem Tempo)",
+      _schreiber91 and _schreiber91[0].bilder > 0
+      and _schritte91[0] == _schreiber91[0].bilder * _WA91.SCHRITTE_JE_BILD,
+      "%d Schritte, %d Bilder" % (_schritte91[0], _schreiber91[0].bilder if _schreiber91 else 0))
 
 # 0.34.35: "Und mit Sound. Und wie waere es, wenn du mir die auch
 # verlangsamst? ... jeweils noch eine 0,5-Speed-Version dazu."
