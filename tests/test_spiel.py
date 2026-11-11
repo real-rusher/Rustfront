@@ -17774,9 +17774,9 @@ pruef("Funkwagen: die rechte Maustaste baut den Mast auf (er steht dabei) ...",
       _fw111.phase == 1 and _fw111.phase_rest > 2.0)
 for _ in range(int(3.3 / K.FIXED_DT)):
     _fw_ein111(False, will_=(0, -1))
-pruef("... nach drei Sekunden steht er (Phase 2, Bild mit Peilrahmen)",
-      _fw111.phase == 2 and _fw111.bild.startswith("funkwagen_aktiv_") and _fw111.geschw.length() < 1.0,
-      "%s %.1f" % (_fw111.bild, _fw111.geschw.length()))
+pruef("... nach drei Sekunden steht er (Phase 2, Mast ganz aufgebaut - seit 0.34.124 ein 3D-Modell ueber dem Wagen)",
+      _fw111.phase == 2 and _fw111.fortschritt >= 1.0 and _fw111.bild == "funkwagen" and _fw111.geschw.length() < 1.0,
+      "%s %.2f %.1f" % (_fw111.bild, _fw111.fortschritt, _fw111.geschw.length()))
 _nah111 = _tm111.puppe_setzen(_fw111.mast_mitte() + pygame.Vector2(300, 0), 0, {"team": 1}, name="NAH")
 _fern111 = _tm111.puppe_setzen(_fw111.mast_mitte() + pygame.Vector2(0, 600), 0, {"team": 1}, name="FERN")
 _freund111 = _tm111.puppe_setzen(_fw111.mast_mitte() + pygame.Vector2(0, -200), 0, {"team": 0}, name="FREUND")
@@ -18614,18 +18614,26 @@ def _f_ein120(zielt_=False, gas_=0.0):
     _tm120.schritt(K.FIXED_DT)
 for _ in range(3):
     _f_ein120(True)
+# Seit 0.34.124 ist der Mast ein 3D-Modell (art_funkmast.py): die Stellungen
+# zaehlen hier als Bilder des Mastes, nicht mehr als Namen des Wagenbildes.
+from dustfront import art_funkmast as _AFM120
 _bilder120, _prog120 = [], []
 for _ in range(int(3.0 / K.FIXED_DT)):
     _f_ein120()
     _prog120.append(_fw120.fortschritt)
-    if not _bilder120 or _bilder120[-1] != _fw120.bild:
-        _bilder120.append(_fw120.bild)
-pruef("Funkwagen: der Aufbau ist eine Animation - der Fortschritt steigt gleichmaessig, das Bild durchlaeuft viele Stellungen (kein Sprung)",
+    _sl120 = _AFM120._schluessel(_fw120.winkel, _fw120.fortschritt, _fw120.kopf)
+    if not _bilder120 or _bilder120[-1] != _sl120:
+        _bilder120.append(_sl120)
+pruef("Funkwagen: der Aufbau ist eine Animation - der Fortschritt steigt gleichmaessig, der Mast durchlaeuft viele Stellungen (kein Sprung)",
       all(b_ >= a_ for a_, b_ in zip(_prog120, _prog120[1:])) and _prog120[-1] >= 0.999
-      and len(set(_bilder120)) >= 10 and (_bilder120[0].startswith("funkwagen_aufbau_") or _bilder120[0] == "funkwagen"),
+      and len(set(_bilder120)) >= 10 and _fw120.bild == "funkwagen"
+      and all(b_[1] - a_[1] <= 1 for a_, b_ in zip(_bilder120, _bilder120[1:])),
       "%d Stellungen: %s ... %s" % (len(set(_bilder120)), _bilder120[:2], _bilder120[-2:]))
-pruef("... am Ende steht der Peilrahmen und dreht (funkwagen_aktiv_N)", _fw120.phase == 2 and _fw120.bild.startswith("funkwagen_aktiv_"),
-      _fw120.bild)
+_k0_120 = _fw120.kopf
+for _ in range(int(0.5 / K.FIXED_DT)):
+    _f_ein120()
+pruef("... am Ende steht der Mast und der Peilkopf dreht sich", _fw120.phase == 2 and _fw120.fortschritt >= 1.0
+      and abs((_fw120.kopf - _k0_120 + 180.0) % 360.0 - 180.0) > 10.0, "%.0f -> %.0f" % (_k0_120, _fw120.kopf))
 for _ in range(3):
     _f_ein120(True)
 _bilder120, _prog120 = [], []
@@ -18906,6 +18914,39 @@ pruef("Flak: jeder Schuss zeichnet eine Leuchtspur, die zur Hoehe des Ziels stei
 pruef("... die Granate selbst sieht man nicht (nur die Spur)", _FZ59.Flakgranate.bild == "flak_leer"
       and _FZ59.Flakgranate.spur is None)
 _tm123.verlassen()
+
+print("\n-- Funkwagen: der Mast als 3D-Modell (0.34.124)")
+from dustfront import art_funkmast as _AFM124
+_st0_124, _st1_124 = _AFM124.stellung(0.0), _AFM124.stellung(1.0)
+pruef("Funkmast: eingepackt liegt er (0 Grad, eingefahren, zu, keine Seile), aufgebaut steht er ganz",
+      _st0_124 == (0.0, 0.0, 0.0, 0.0) and _st1_124 == (90.0, 1.0, 1.0, 1.0), "%s %s" % (_st0_124, _st1_124))
+_folge124 = [_AFM124.stellung(i_ / 50.0) for i_ in range(51)]
+pruef("... erst richtet er sich auf, dann faehrt er aus, dann klappt der Kopf auf, zuletzt die Seile",
+      all(all(b_[j_] >= a_[j_] for j_ in range(4)) for a_, b_ in zip(_folge124, _folge124[1:]))
+      and _AFM124.stellung(0.42)[1] == 0.0 and _AFM124.stellung(0.6)[2] == 0.0 and _AFM124.stellung(0.72)[3] == 0.0
+      and _AFM124.stellung(0.42)[0] == 90.0)
+_m0_124 = _AFM124.funkmast(0.0, 0.0)
+_m1_124 = _AFM124.funkmast(0.0, 1.0)
+def _hoch124(s_):
+    r_ = s_.get_bounding_rect(1)
+    return (s_.get_height() // 2 - _AFM124.MITTE[1]) - r_.top
+pruef("... aufgerichtet ragt er im Bild weit nach oben, liegend kaum",
+      _m0_124.get_size() == (_AFM124.GROESSE_BILD, _AFM124.GROESSE_BILD)
+      and _hoch124(_m1_124) > _hoch124(_m0_124) + 25, "%d %d" % (_hoch124(_m0_124), _hoch124(_m1_124)))
+pruef("... der Kopf dreht sich im Bild, und die Richtung des Wagens dreht den liegenden Mast mit (3D)",
+      pygame.image.tostring(_AFM124.funkmast(0.0, 1.0, 0.0), "RGBA") != pygame.image.tostring(_AFM124.funkmast(0.0, 1.0, 45.0), "RGBA")
+      and pygame.image.tostring(_AFM124.funkmast(0.0, 0.0), "RGBA") != pygame.image.tostring(_AFM124.funkmast(90.0, 0.0), "RGBA"))
+pruef("... mit Schatten (gleich gross, nicht leer)",
+      _AFM124.schatten(0.0, 1.0).get_size() == _m1_124.get_size()
+      and _AFM124.schatten(0.0, 1.0).get_bounding_rect(1).width > 10)
+_fwg124 = _FZ59.Funkwagen((0, 0), 0, 0.0, nur_bild=True)
+_fwg124.phase, _fwg124.kopf = 0, 120.0
+for _ in range(int(1.5 / K.FIXED_DT)):
+    _fwg124.schritt(K.FIXED_DT)
+pruef("... beim Abbau dreht der Kopf zurueck in Fahrtrichtung (auch beim Gast, ohne Meldung)",
+      abs((_fwg124.kopf + 180.0) % 360.0 - 180.0) < 1.0 and _fwg124.bild == "funkwagen", "%.1f" % _fwg124.kopf)
+pruef("... die alten flachen Mastbilder gibt es nicht mehr",
+      not any(n_.startswith(("funkwagen_aktiv_", "funkwagen_aufbau_")) for n_ in K.BILD_MASS))
 
 print()
 print("FEHLER:", fails or "keine")

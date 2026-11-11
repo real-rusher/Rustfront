@@ -1689,7 +1689,10 @@ FUNKWAGEN = dict(
     peilen=470.0,
     stoeren=420.0,
     funk=900.0,
-    drehen=1.1,               # Umdrehungen des Peilrahmens je Sekunde / 4 Stellungen
+    # Der Peilkopf auf dem Mast (seit 0.34.124 ein 3D-Modell, art_funkmast.py):
+    # aufgebaut dreht er sich so schnell (Grad/s); beim Abbau dreht er erst
+    # zurueck in Fahrtrichtung, damit er eingeklappt laengs auf dem Dach liegt.
+    kopf_dreh=75.0,
 )
 
 # Der Werfer (seit 0.34.112): Steilfeuer ueber die halbe Karte. Rechte
@@ -4731,10 +4734,6 @@ for _i in range(1, 9):
 for _name in ("funkwagen", "funkwagen_wrack"):
     BILD_MASS[_name] = (160, 160)
 BILD_MASS["funkwagen_schatten"] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
-for _i in range(4):
-    BILD_MASS["funkwagen_aktiv_%d" % _i] = (160, 160)
-for _i in range(1, 16):
-    BILD_MASS["funkwagen_aufbau_%d" % _i] = (160, 160)
 for _name in ("spulenwagen", "spulenwagen_aktiv", "spulenwagen_wrack", "spulenwagen_schatten"):
     BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _name in ("trosswagen", "trosswagen_wrack", "trosswagen_schatten"):

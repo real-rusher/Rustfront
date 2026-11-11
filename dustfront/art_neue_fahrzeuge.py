@@ -646,51 +646,14 @@ def _luke(b, c, r, dk, mitte, hell):
     b.linie(dk, (c[0] - r * 0.6, c[1] + r * 0.2), (c[0] + r * 0.6, c[1] + r * 0.2), 0.45)
 
 
-def peilrahmen_zeichnen(aufgebaut=True) -> pygame.Surface:
-    """Was auf dem Mast sitzt: ein Richtstrahler mit Querstaeben und eine
-    kleine Schuessel, dazu die Warnlampe. 128 x 128, Drehpunkt in der Mitte;
-    eingefahren kleiner. `aufgebaut` darf auch ein Fortschritt von 0 bis 1
-    sein (seit 0.34.120): der Rahmen steigt auf dem Mast (wird groesser, kommt
-    dem Betrachter entgegen) und klappt auf."""
-    b = _Blatt(128, G)
-    p = (1.0 if aufgebaut else 0.0) if isinstance(aufgebaut, bool) else max(0.0, min(1.0, float(aufgebaut)))
-    aufgebaut = p >= 1.0
-    k = 0.62 + 0.38 * (p * p * (3.0 - 2.0 * p))
-    b.rohr((-13 * k, 0), (17 * k, 0), 1.5, (150, 146, 138), (40, 38, 34))
-    for i, x in enumerate((-11, -5, 1, 7, 13)):
-        halb = (9.4 - i * 1.3) * k
-        b.rohr((x * k, -halb), (x * k, halb), 0.9, (170, 166, 156), (40, 38, 34))
-    b.ellipse((30, 28, 26), -17 * k - 2.2, -4.2 * k, 4.4, 8.4 * k)
-    b.ellipse((176, 172, 160), -17 * k - 1.7, -3.7 * k, 3.4, 7.4 * k)
-    b.ellipse((112, 108, 100), -17 * k - 0.6, -2.6 * k, 1.6, 5.2 * k)
-    b.kreis((30, 28, 26), (0, 0), 2.6)
-    b.kreis((96, 92, 84), (0, 0), 2.0)
-    b.kreis((60, 16, 12), (0, 0), 1.1)
-    b.kreis((255, 84, 60) if aufgebaut else (150, 60, 44), (0, 0), 0.75)
-    return b.fertig()
-
-
-def funkwagen_zeichnen(aufgebaut: bool = False, drehung: float = 0.0,
-                       fortschritt: float | None = None) -> pygame.Surface:
-    """Kofferwagen mit Stabantennen, Aggregat, Kabeltrommel und dem Mast.
-    Aufgebaut: vier Abspannseile zu Erdnaegeln und der Peilrahmen, der um den
-    Mast `drehung` Grad gedreht steht. 160 x 160. `fortschritt` (0 bis 1, seit
-    0.34.120) malt eine Stellung mitten im Aufbau: die Seile laufen zu den
-    Naegeln aus (erst die Haelfte der Zeit), die Naegel stehen, der Rahmen
-    steigt und klappt auf."""
+def funkwagen_zeichnen() -> pygame.Surface:
+    """Kofferwagen mit Stabantennen, Aggregat, Kabeltrommel und dem Mastfuss
+    auf dem Dach. 160 x 160. Mast, Peilkopf und Abspannseile sind seit 0.34.124
+    ein eigenes 3D-Modell (art_funkmast.py), das ueber dem Wagen gezeichnet
+    wird - sie richten sich beim Aufbau im Raum auf, das kann ein flaches Bild
+    nicht."""
     b = _Blatt(160, G)
     rnd = random.Random(8101)
-    p = (1.0 if aufgebaut else 0.0) if fortschritt is None else max(0.0, min(1.0, fortschritt))
-    seil = min(1.0, p / 0.5)
-    if p > 0.0:
-        for dx, dy in ((22, -30), (22, 30), (-40, -28), (-40, 28)):
-            ex, ey = -8 + (dx + 8) * seil, dy * seil
-            b.linie((52, 48, 42), (-8, 0), (ex, ey), 0.4)
-            if seil >= 0.98:
-                b.kreis((30, 28, 26), (dx, dy), 1.2)
-                b.kreis((150, 146, 138), (dx, dy), 0.6)
-            else:
-                b.kreis((150, 146, 138), (ex, ey), 0.5)           # der Nagel fliegt noch
     for ax in (18, -18):
         b.rohr((ax, -10), (ax, 10), 1.8, (96, 92, 86))
         _reifen(b, ax, -13.4, 11, 6, 0.0)
@@ -743,52 +706,22 @@ def funkwagen_zeichnen(aufgebaut: bool = False, drehung: float = 0.0,
     b.linie((30, 28, 26), (c[0] - 3.6, c[1] + 3.6), (c[0] + 3.6, c[1] - 3.6), 0.5)
     _staub(b, rnd, 60, -29, 27, -11.6, 11.6, _STAUB_FW)
     _rost(b, rnd, 18, -29, 27, -12, 12)
-    unten = b.fertig()
-    peil = peilrahmen_zeichnen(p if fortschritt is not None else aufgebaut)
-    if fortschritt is not None and p < 1.0:
-        drehung = 300.0 * p * p                                   # dreht beim Hochfahren an
-    peil = pygame.transform.rotate(peil, -drehung)
-    m = unten.get_width() / 2
-    unten.blit(peil, peil.get_rect(center=(m + c[0] * G, m + c[1] * G)))
-    return unten
+    return b.fertig()
 
 
 @platzhalter("funkwagen")
 def _funkwagen():
-    return funkwagen_zeichnen(False)
+    return funkwagen_zeichnen()
 
 
 @platzhalter("funkwagen_wrack")
 def _funkwagen_wrack():
-    return _wrack(funkwagen_zeichnen(False), 7580)
+    return _wrack(funkwagen_zeichnen(), 7580)
 
 
 @platzhalter("funkwagen_schatten")
 def _funkwagen_schatten():
     return _schatten(int(64 * G), int(34 * G), 11)
-
-
-def _funk_drehung(i: int):
-    def z():
-        return funkwagen_zeichnen(True, i * 45.0)
-    return z
-
-
-# Aufgebaut: der Peilrahmen dreht sich - vier Stellungen, die das Fahrzeug
-# nacheinander zeigt (Funkwagen.bild).
-for _i in range(4):
-    platzhalter("funkwagen_aktiv_%d" % _i)(_funk_drehung(_i))
-
-
-def _funk_aufbau(i: int):
-    def z():
-        return funkwagen_zeichnen(False, 0.0, i / 16.0)
-    return z
-
-
-# Mitten im Aufbau und Abbau (seit 0.34.120): 15 Stellungen (Funkwagen.bild).
-for _i in range(1, 16):
-    platzhalter("funkwagen_aufbau_%d" % _i)(_funk_aufbau(_i))
 
 
 # ──────────────────────────────── Werfer (seit 0.34.112)

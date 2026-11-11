@@ -2067,20 +2067,27 @@ class Funkwagen(Aufbauwagen):
         super().__init__(pos, ebene, winkel, nur_bild)
         self.modus = 0
         self._wirk_rest = 0.0
+        # Wie der Peilkopf auf dem Mast steht, Grad zur Fahrtrichtung (seit
+        # 0.34.124). Nur fuers Bild, nicht im Netz: beim Gast folgt er der
+        # gemeldeten Phase von selbst, wie `fortschritt`.
+        self.kopf = 0.0
 
     @property
     def bild(self) -> str:
-        if self.kaputt:
-            return "funkwagen_wrack"
-        p = self.fortschritt
-        if p <= 0.0:
-            return "funkwagen"
-        if p < 1.0 or self.phase != 2:
-            # Auf- und Abbau (seit 0.34.120): Abspannseile laufen aus, der Peilrahmen
-            # steigt, klappt auf und dreht sich schneller - in 15 Stufen.
-            return "funkwagen_aufbau_%d" % max(1, min(15, int(math.ceil(p * 16.0)) - 1))
-        zeit = self.welt.zeit if self.welt is not None else 0.0
-        return "funkwagen_aktiv_%d" % (int(zeit * self.werte["drehen"] * 4) % 4)
+        # Seit 0.34.124 nur der Wagen: Mast, Kopf und Seile zeichnet luft.py
+        # als 3D-Modell darueber (art_funkmast.py), aus `fortschritt` und `kopf`.
+        return "funkwagen_wrack" if self.kaputt else "funkwagen"
+
+    def schritt(self, dt: float) -> None:
+        super().schritt(dt)
+        dreh = float(self.werte["kopf_dreh"]) * dt
+        if self.aufgebaut and self.fortschritt >= 1.0:
+            self.kopf = (self.kopf + dreh) % 360.0
+        else:
+            # Erst zurueck in Fahrtrichtung, dann klappt er ein (schneller als er
+            # sich dreht, damit er vor dem Einklappen dort ist).
+            diff = (0.0 - self.kopf + 180.0) % 360.0 - 180.0
+            self.kopf = (self.kopf + max(-3.0 * dreh, min(3.0 * dreh, diff))) % 360.0
 
     def mast_mitte(self, pos=None, winkel=None) -> pygame.Vector2:
         pos = self.pos if pos is None else pos
@@ -2117,6 +2124,7 @@ class Funkwagen(Aufbauwagen):
         super().zuruecksetzen()
         self.modus = 0
         self._wirk_rest = 0.0
+        self.kopf = 0.0
 
 
 class Werfer(Aufbauwagen):
