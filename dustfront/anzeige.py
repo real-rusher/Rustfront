@@ -933,6 +933,8 @@ class Anzeige:
 
     def _gefallen(self, ziel, ich) -> None:
         g = self.g
+        if getattr(g, "einstieg_offen", False):
+            return            # die Einstiegskarte sagt es (seit 0.34.131)
         _text(ziel, "GEFALLEN", W // 2, H // 2 - 10, K.C_RED, 2, "mitte")
         if g.regeln["runden"]:
             _text(ziel, "RAUS BIS ZUR NÄCHSTEN RUNDE", W // 2, H // 2 + 8,

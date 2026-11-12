@@ -135,6 +135,10 @@ class Minikarte:
                         max(n(M["kreis_mindest"]), int(K.ZONE["radius"] * sx)),
                         zone_ebene - nr, m)
 
+        # Die Eroberungspunkte und Basen der Front (seit 0.34.131).
+        if getattr(g, "front_an", False) and nr == 0:
+            g.front_auf_karte(ziel, punkt, sx, m)
+
         # Der Ausschnitt im Bild.
         mitte = g.kamera.pos
         sicht = pygame.Rect(0, 0, max(2, int(g.kamera.breite * sx)),

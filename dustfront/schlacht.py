@@ -219,10 +219,9 @@ class SchlachtTeil:
         # spaetere Stufen kommen mit basis_nachschub).
         self._basis_stufe = min(3, self.freischalt_stufe())
         for team in range(2):
-            for art, anzahl in K.basis_wagen(self._basis_stufe):
+            for art, anzahl, basis in self.basis_ausstattung(team, -1, self._basis_stufe):
                 for _ in range(anzahl):
-                    platz = self._fahrzeug_platz_bei(art, self.schlacht_basis(team),
-                                                     S["fahrzeug_umkreis"],
+                    platz = self._fahrzeug_platz_bei(art, basis, S["fahrzeug_umkreis"],
                                                      abstand_zonen=True)
                     if platz is None:
                         continue
@@ -230,6 +229,26 @@ class SchlachtTeil:
                     zone = Dropzone(pos, team, art, winkel)
                     zone.rest = S["abwurf"]["start"]
                     self.dropzonen.append(zone)
+
+    def basis_ausstattung(self, team: int, ab_stufe: int, bis_stufe: int) -> list:
+        """Was an den Basen einer Seite steht, von (ausschliesslich) ab_stufe
+        bis bis_stufe: [(Art, Anzahl, Ort der Basis)]. Auf einer Karte mit
+        Front (seit 0.34.131) hat jede Basis ihre eigene Ausstattung aus dem
+        Kartenkopf; sonst K.SCHLACHT fahrzeuge an der einen Basis."""
+        raus = []
+        basen = self.front_basen(team) if self.schlachtplan is not None else []
+        if basen:
+            for b in basen:
+                for art, anzahl, stufe in b.fahrzeuge:
+                    if ab_stufe < stufe <= bis_stufe:
+                        raus.append((art, anzahl, b.pos))
+            return raus
+        for eintrag in S["fahrzeuge"]:
+            art, anzahl = eintrag[0], eintrag[1]
+            stufe = eintrag[2] if len(eintrag) > 2 else 0
+            if ab_stufe < stufe <= bis_stufe:
+                raus.append((art, anzahl, self.schlacht_basis(team)))
+        return raus
 
     # ---- Ablauf (Gastgeber) ------------------------------------------------
     def schlacht_schritt(self, dt: float) -> None:
@@ -725,13 +744,10 @@ class SchlachtTeil:
             return
         self._basis_stufe = stufe
         for team in range(2):
-            for eintrag in S["fahrzeuge"]:
-                art, anzahl, st = eintrag[0], eintrag[1], (eintrag[2] if len(eintrag) > 2 else 0)
-                if not (bisher < st <= stufe):
-                    continue
+            for art, anzahl, basis in self.basis_ausstattung(team, bisher, stufe):
                 for _ in range(anzahl):
-                    platz = self._fahrzeug_platz_bei(art, self.schlacht_basis(team),
-                                                     S["fahrzeug_umkreis"], abstand_zonen=True)
+                    platz = self._fahrzeug_platz_bei(art, basis, S["fahrzeug_umkreis"],
+                                                     abstand_zonen=True)
                     if platz is None:
                         continue
                     zone = Dropzone(platz[0], team, art, platz[1])
@@ -853,6 +869,8 @@ class SchlachtTeil:
             "la": [[round(a.start.x), round(a.start.y), round(a.ende.x), round(a.ende.y), a.team,
                     round(a.alter, 2)]
                    for a in getattr(self, "luftangriffe", ())],
+            # Die Eroberungspunkte der Front (seit 0.34.131).
+            "fp": self.front_meldung() if self.front_an else [],
         }
 
     def schlacht_uebernehmen(self, m) -> None:
@@ -908,6 +926,8 @@ class SchlachtTeil:
                 continue
         self._luftangriffe_gast = la
         self._napalm_gast = neu
+        if m.get("fp"):
+            self.front_uebernehmen(m["fp"])
 
     # ---- Bild: am Boden -------------------------------------------------------
     def dropzonen_zeichnen(self, flaeche, ebene: int, ecke) -> None:
@@ -1598,6 +1618,8 @@ class SchlachtTeil:
             gr = n(3)
             pygame.draw.rect(ziel, kombi["hud"] if kombi else K.C_AMBER,
                              (q[0] - gr, q[1] - gr, gr * 2 + 1, gr * 2 + 1), n(1))
+        # Die Front (seit 0.34.131): Punkte mit Buchstaben, Basen mit Fahne.
+        self.front_auf_karte(ziel, punkt, f, mm, namen=True)
         # Fallendes: wo gerade etwas am Schirm haengt.
         for ab in self.abwuerfe:
             if ab.team == team or sichtbar(ab.pos):

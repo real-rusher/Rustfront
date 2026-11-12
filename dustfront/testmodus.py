@@ -197,6 +197,8 @@ OPTIONEN = {
     # wie sonst, jede andere Wahl ein Loadout mit dieser Waffe vorn.
     "waffe_figur": ("WAFFE", lambda: ["alle"] + list(K.LOADOUT["auswahl_waffen"]),
                     lambda v: "ALLE (HOTBAR)" if v == "alle" else K.WAFFEN[v]["name"]),
+    # Seit 0.34.131: wie gross ein Wasserfleck wird (Kacheln Radius).
+    "radius": ("RADIUS", lambda: [2, 4, 7], lambda v: "%d KACHELN" % v),
     "stirnband": ("STIRNBAND", lambda: [""] + [K.bild_kennung(n) for n, _f in K.STIRNBAND_FARBEN],
                   lambda v: "VORGABE" if not v else
                   next(n for n, _f in K.STIRNBAND_FARBEN if K.bild_kennung(n) == v)),
@@ -328,6 +330,16 @@ def eintraege() -> list:
                 lambda t, p, e, w: t.zone_setzen(p, e), mehrfach=False),
         Eintrag("HOTZONE AUS", "OBJEKTE", (),
                 lambda t, p, e, w: t.zone_aus(), mehrfach=False),
+        # Seit 0.34.131: die Front (front.py) - Eroberungspunkte, Startbasen,
+        # Wasser. Ein Punkt oder eine Basis schaltet die Front ein.
+        Eintrag("EROBERUNGSPUNKT", "OBJEKTE", ("team",),
+                lambda t, p, e, w: t.eroberungspunkt_setzen(p, w), mehrfach=False),
+        Eintrag("STARTBASIS", "OBJEKTE", ("team",),
+                lambda t, p, e, w: t.startbasis_setzen(p, w), mehrfach=False),
+        Eintrag("WASSER: SEICHT", "OBJEKTE", ("radius",),
+                lambda t, p, e, w: t.wasser_setzen(p, e, w, K.WASSER_SEICHT), mehrfach=False),
+        Eintrag("WASSER: TIEF", "OBJEKTE", ("radius",),
+                lambda t, p, e, w: t.wasser_setzen(p, e, w, K.WASSER_TIEF), mehrfach=False),
         # Seit 0.34.100: alles aus dem Nachschub der SCHLACHT, auch ohne sie -
         # Abwuerfe am Fallschirm (sie weichen aus, wenn unten etwas steht),
         # die Aufklaerungsdrohne und die Fallschirmjaeger.
@@ -638,6 +650,9 @@ class Testmodus(Gefecht):
         # Vorstoss wie in SCHLACHT: Bots ohne Gegner ziehen zur Mitte und
         # dann zur Basis der anderen Seite (links ROT, rechts BLAU).
         self.vorstoss_an = bool(z.get("vorstoss_an", False))
+        # Die Front (seit 0.34.131): auf einer Karte mit Punkten (FLUSSTAL,
+        # KANALSTADT) wie in SCHLACHT - Punkte einnehmen, Gruppen, Formationen.
+        self.front_test = bool(z.get("front_test", False))
         # Gebremste Bildrate (seit 0.34.58), zum Hoeren: kommen die Schuesse
         # eines Feuerstosses auch bei 8 Bildern je Sekunde einzeln?
         self.bildrate_nr = int(z.get("bildrate_nr", 0)) % len(K.TESTMODUS["bildraten"])
@@ -1547,7 +1562,13 @@ class Testmodus(Gefecht):
 
     # ── Wegnehmen ──────────────────────────────────────────────────
     def alles_weg(self) -> None:
-        """Alles aus der Welt ausser der Figur, die man steuert."""
+        """Alles aus der Welt ausser der Figur, die man steuert - auch das
+        Wasser, das der Spawner gemalt hat (seit 0.34.131)."""
+        alt = self.__dict__.pop("_wasser_alt", None)
+        if alt:
+            for ebene, tx, ty, kachel in reversed(alt):
+                self.welt.ebene(ebene).setzen(tx, ty, kachel)
+            self._wege_neu(alt[0][0])
         bleibt = None if self.beobachter else self.ich
         for w in self.welt.wesen + self.welt.neue:
             if w is not bleibt:
@@ -1946,6 +1967,122 @@ class Testmodus(Gefecht):
     # BILDRATE stand die letzte Zeile sonst auf dem Rahmen.
     MENUE = pygame.Rect(150, 4, 340, 354)
 
+    # ---- Die Front (seit 0.34.131, front.py) ----------------------------------
+    def _front_plan_holen(self):
+        """Der Plan der Karte - oder ein leerer, in den der Spawner Punkte
+        und Basen setzt (Karten ohne Front)."""
+        plan = self.schlachtplan
+        if plan is None:
+            from .front import Schlachtplan
+            plan = Schlachtplan()
+            self.welt._schlachtplan = plan
+        return plan
+
+    def _an_netz(self, plan, pos) -> int:
+        """Ein neuer Knoten des Wegenetzes an `pos`, verbunden mit den zwei naechsten."""
+        i = len(plan.knoten)
+        plan.knoten.append(pygame.Vector2(pos))
+        plan.kanten[i] = []
+        for j in sorted(range(i), key=lambda j: plan.knoten[j].distance_squared_to(pos))[:2]:
+            plan._verbinden(i, j)
+        return i
+
+    def eroberungspunkt_setzen(self, pos, werte) -> None:
+        from .front import Punkt
+        plan = self._front_plan_holen()
+        team = int(werte.get("team", -1))
+        p = Punkt(len(plan.punkte), pygame.Vector2(pos), "PUNKT %d" % (len(plan.punkte) + 1))
+        p.buchstabe = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[p.nr % 26]
+        p.besitzer = team if team in (0, 1) else -1
+        p.stand = {0: -1.0, 1: 1.0}.get(team, 0.0)
+        p.knoten = self._an_netz(plan, p.pos)
+        plan.punkte.append(p)
+        self.front_test = True
+        self.front_zustand()
+        self.melde("PUNKT %s (%s)" % (p.buchstabe, _team_text(team)))
+
+    def startbasis_setzen(self, pos, werte) -> None:
+        from .front import Basis
+        plan = self._front_plan_holen()
+        team = int(werte.get("team", 0))
+        team = team if team in (0, 1) else 0
+        b = Basis(len(plan.basen), team, pygame.Vector2(pos), "BASIS %d" % (len(plan.basen) + 1), [])
+        b.knoten = self._an_netz(plan, b.pos)
+        plan.basen.append(b)
+        self.welt.__dict__.pop("_schlacht_punkte", None)
+        self.front_test = True
+        self.front_zustand()
+        self.melde("STARTBASIS %s" % _team_text(team))
+
+    def wasser_setzen(self, pos, ebene: int, werte, kachel: int) -> None:
+        """Ein runder Wasserfleck; Wege und Fahrwege werden neu gerechnet."""
+        e = self.welt.ebene(ebene)
+        rad = int(werte.get("radius", 4))
+        cx, cy = int(pos.x // K.TILE), int(pos.y // K.TILE)
+        for ty in range(cy - rad, cy + rad + 1):
+            for tx in range(cx - rad, cx + rad + 1):
+                if (tx - cx) ** 2 + (ty - cy) ** 2 <= rad * rad and 0 < tx < e.breite - 1 \
+                        and 0 < ty < e.hoehe - 1 and not K.KACHELN[e.kachel(tx, ty)]["fest"] \
+                        and e.kachel(tx, ty) != K.LEER:
+                    self.__dict__.setdefault("_wasser_alt", []).append((ebene, tx, ty, e.kachel(tx, ty)))
+                    e.setzen(tx, ty, kachel)
+        self._wege_neu(ebene)
+        self.melde("WASSER %s" % ("TIEF" if kachel == K.WASSER_TIEF else "SEICHT"))
+
+    def _wege_neu(self, ebene: int) -> None:
+        """Nach geaenderten Kacheln: Wegenetze und Kartenbild neu."""
+        self.welt.__dict__.pop("_wege", None)
+        self.welt.__dict__.pop("_fahrwege", None)
+        from . import kartenbild
+        kartenbild._gross.pop(id(self.welt.ebene(ebene)), None)
+        kartenbild._klein.clear()
+
+    def front_punkte_verteilen(self) -> None:
+        """Alle Punkte reihum: alle ROT, alle BLAU, alle frei, geteilt (West ROT)."""
+        punkte = self.front_punkte()
+        if not punkte:
+            self.melde("KEINE PUNKTE")
+            return
+        self._verteilt = (self.__dict__.get("_verteilt", -1) + 1) % 4
+        mitte = self.welt.ebene(0).pixel_breite / 2.0
+        for p in punkte:
+            team = (0, 1, -1, 0 if p.pos.x < mitte else 1)[self._verteilt]
+            p.besitzer = team
+            p.stand = {0: -1.0, 1: 1.0}.get(team, 0.0)
+        self.melde(("ALLE ROT", "ALLE BLAU", "ALLE FREI", "GETEILT: WESTEN ROT")[self._verteilt])
+
+    def _front_info(self, ziel) -> None:
+        """INFO der Front: je Gruppe der Weg (gestrichelt), Linien vom
+        Anfuehrer zu den Plaetzen, darueber Formation und Ziel."""
+        kam = self.kamera
+        for g in self.__dict__.get("_gruppen", ()):
+            leute = g.lebende()
+            if not leute:
+                continue
+            f = leute[0]
+            farbe = K.TEAMS["kombi"][g.team]["hud"] if g.team in (0, 1) else K.C_CREAM
+            vorher = kam.zu_bild(f.pos)
+            for q in g.weg[g.schritt:]:
+                b_ = kam.zu_bild(q)
+                pygame.draw.line(ziel, farbe, (int(vorher.x), int(vorher.y)), (int(b_.x), int(b_.y)), 1)
+                pygame.draw.circle(ziel, farbe, (int(b_.x), int(b_.y)), 2)
+                vorher = b_
+            for m in leute[1:]:
+                platz = self.form_platz(g, leute, m, f)
+                a_, b_ = kam.zu_bild(m.pos), kam.zu_bild(platz)
+                pygame.draw.line(ziel, K.C_MUTED, (int(a_.x), int(a_.y)), (int(b_.x), int(b_.y)), 1)
+            ort, _kn = self._ziel_ort(g.ziel)
+            name = ""
+            if g.ziel[0] == "punkt" and 0 <= g.ziel[1] < len(self.front_punkte()):
+                pk = self.front_punkte()[g.ziel[1]]
+                name = "%s %s" % (pk.buchstabe, pk.name)
+            elif g.ziel[0] == "basis":
+                name = "BASIS"
+            zustand = "HÄLT" if g.am_ziel else ("SAMMELT" if self.welt.zeit < g.sammeln_bis else "GEHT")
+            p_ = kam.zu_bild(f.pos)
+            SCHRIFT.zeichnen(ziel, "G%d %s %s > %s" % (g.nr, g.form.upper(), zustand, name),
+                             int(p_.x), int(p_.y) - 28, farbe, 1, ausrichtung="mitte")
+
     def _menue_zeilen(self) -> list:
         """(Schluessel, Beschriftung, Wert) - was im Testmenue steht."""
         karte = self._karten()[self._karte_nr()]
@@ -1992,6 +2129,10 @@ class Testmodus(Gefecht):
              "AN - WIE IN RUNDEN" if self.panzerjaeger_an else "AUS"),
             ("vorstoss", "BOTS: VORSTOSS WIE IN SCHLACHT",
              "AN - MITTE, DANN FEINDBASIS" if self.vorstoss_an else "AUS"),
+            ("front", "FRONT: PUNKTE, GRUPPEN, FORMATIONEN",
+             ("AN - %d PUNKTE" % len(self.front_punkte())) if self.front_test
+             else ("AUS" if self.schlachtplan is not None else "AUS - KARTE OHNE PUNKTE")),
+            ("front_punkte", "FRONT: PUNKTE VERTEILEN (ENTER)", ""),
             ("bildrate", "BILDRATE (KLÄNGE PRÜFEN)", self._bildrate_text()),
             ("einstellungen", "EINSTELLUNGEN", ""),
             ("hauptmenue", "ZUM HAUPTMENÜ", ""),
@@ -2023,7 +2164,7 @@ class Testmodus(Gefecht):
                     bot_sprint=self.bot_sprint, fernglas=self.fernglas, nebel=self.nebel, bot_fliehen=self.bot_fliehen,
                     bot_uebermut=self.bot_uebermut, bildrate_nr=self.bildrate_nr,
                     bots_vielfalt=self.bots_vielfalt, panzerjaeger_an=self.panzerjaeger_an,
-                    vorstoss_an=self.vorstoss_an,
+                    vorstoss_an=self.vorstoss_an, front_test=self.front_test,
                     sp_werte=self._sp_werte, sp_nr=self._sp_nr)
 
     def _bildrate_text(self) -> str:
@@ -2112,6 +2253,14 @@ class Testmodus(Gefecht):
             self.panzerjaeger_an = not self.panzerjaeger_an
         elif schluessel == "vorstoss":
             self.vorstoss_an = not self.vorstoss_an
+        elif schluessel == "front":
+            self.front_test = not self.front_test
+            if self.front_test:
+                self._front_plan_holen()
+                self.front_zustand()
+            self.melde("FRONT AN" if self.front_test else "FRONT AUS")
+        elif schluessel == "front_punkte" and ausloesen:
+            self.front_punkte_verteilen()
         elif schluessel == "bildrate":
             self.bildrate_nr = (self.bildrate_nr + schritt) % len(K.TESTMODUS["bildraten"])
             self.bildrate_anwenden()
@@ -2423,6 +2572,8 @@ class Testmodus(Gefecht):
                 pygame.draw.circle(ziel, K.C_AMBER, (int(b_.x), int(b_.y)), 6, 1)
                 SCHRIFT.zeichnen(ziel, name, int(b_.x), int(b_.y) - 14, K.C_AMBER, 1,
                                  ausrichtung="mitte")
+        if self.front_an and self.blick == 0:
+            self._front_info(ziel)
         for k in self._bots():
             if k.ebene != self.blick or not k.lebt or k.hirn is None:
                 continue

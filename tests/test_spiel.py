@@ -16664,8 +16664,8 @@ pruef("Nachschub: Munition, Medkits, Dropzonen fuer Fahrzeuge, Aufklaerung",
       >= {"munition", "medkit", "buggy", "panzerwagen", "panzer", "aufklaerung"})
 from dustfront import world as _W199
 _w199, _kopf199 = _W199.karte_lesen("staubtal_offen")
-pruef("STAUBTAL - OFFEN: eine grosse offene Karte fuer Fahrzeuge, Vorschlag fuer SCHLACHT",
-      _w199 is not None and K.SCHLACHT["karte"] == "staubtal_offen"
+pruef("STAUBTAL - OFFEN: eine grosse offene Karte fuer Fahrzeuge (Vorschlag fuer SCHLACHT seit 0.34.131 FLUSSTAL)",
+      _w199 is not None and K.SCHLACHT["karte"] == "flusstal"
       and sum(_w199.fahrwege.begehbar[0]) > 0.7 * _w199.ebene(0).breite * _w199.ebene(0).hoehe)
 
 print("\n-- 0.34.98: Fehlersuche (SCHLACHT am Boden, Nachschubpunkte je Runde)")
@@ -17539,9 +17539,9 @@ for _ in range(40000):
 _z108 = lambda x_, y_: pygame.Vector2((_tx108 + x_ + 0.5) * K.TILE, (_ty108 + y_ + 0.5) * K.TILE)
 _tw108 = _tm108.fahrzeug_setzen("trosswagen", _z108(12, 7), 0, {"winkel": 0})
 _tw108.nachschub = 2
-pruef("Trosswagen: eigene Art, kein Platz zum Aufsitzen, nur fuer Menschen am Steuer",
+pruef("Trosswagen: eigene Art, kein Platz zum Aufsitzen, seit 0.34.131 auch mit Bot am Steuer",
       _tw108.art == "trosswagen" and "plaetze" not in _tw108.werte
-      and _tw108.werte["nur_mensch"] and _tw108.bild == "trosswagen")
+      and not _tw108.werte.get("nur_mensch") and _tw108.bild == "trosswagen")
 _hinten108 = _tw108.zone_mitte()
 _a108 = _tm108.puppe_setzen(_hinten108 + pygame.Vector2(6, 4), 0, {"team": 0, "waffe_figur": "sturm"},
                             name="HOLER")
@@ -17597,7 +17597,9 @@ for _ in range(int(1.0 / K.FIXED_DT)):
 pruef("... ist der Vorrat an Reparatur leer, hoert es auf", _pz108.leben == _v108 - 100.0)
 _bot108 = _tm108.bot_setzen(_tw108.pos + pygame.Vector2(0, 30), 0, {"team": 1})
 _bot108.darf_fahren = True
-pruef("Trosswagen: ein Bot steigt nicht ein", _tm108._freier_buggy(_bot108) is None)
+# Seit 0.34.131 faehrt ein Bot ihn (gewuenscht: "die Bots sollen alle
+# Fahrzeuge richtig nutzen") - an die Front, dort stellt er ihn ab.
+pruef("Trosswagen: ein Bot steigt ein (seit 0.34.131)", _tm108._freier_buggy(_bot108) is _tw108)
 _tm108.verlassen()
 
 # ─────────────────────────────────────────────────────────────────────
@@ -17706,9 +17708,9 @@ _z110 = lambda x_, y_: pygame.Vector2((_tx110 + x_ + 0.5) * K.TILE, (_ty110 + y_
 _sp110 = _tm110.fahrzeug_setzen("spulenwagen", _z110(6, 8), 0, {"winkel": 0})
 _sf110 = _tm110.puppe_setzen(_sp110.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="TECHNIKER")
 _tm110._anwenden(_sf110, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
-pruef("Spulenwagen: eigene Art, keine Plaetze, nur fuer Menschen, eigenes Bild",
+pruef("Spulenwagen: eigene Art, keine Plaetze, seit 0.34.131 auch fuer Bots, eigenes Bild",
       _sf110.fahrzeug is _sp110 and _sp110.art == "spulenwagen" and "plaetze" not in _sp110.werte
-      and _sp110.werte["nur_mensch"] and _sp110.bild == "spulenwagen")
+      and not _sp110.werte.get("nur_mensch") and _sp110.bild == "spulenwagen")
 # Die Gegner: ein Panzer im Kreis, einer ausserhalb, ein eigener im Kreis.
 _feind110 = _tm110.fahrzeug_setzen("panzer", _z110(11, 8), 0, {"winkel": 180})
 _fern110 = _tm110.fahrzeug_setzen("panzer", _z110(30, 13), 0, {"winkel": 180})
@@ -17803,9 +17805,9 @@ _z111 = lambda x_, y_: pygame.Vector2((_tx111 + x_ + 0.5) * K.TILE, (_ty111 + y_
 _fw111 = _tm111.fahrzeug_setzen("funkwagen", _z111(6, 8), 0, {"winkel": 0})
 _ff111 = _tm111.puppe_setzen(_fw111.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="FUNKER")
 _tm111._anwenden(_ff111, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
-pruef("Funkwagen: eigene Art, keine Plaetze, nur fuer Menschen, Betriebsart PEILEN zu Beginn",
+pruef("Funkwagen: eigene Art, keine Plaetze, seit 0.34.131 auch fuer Bots, Betriebsart PEILEN zu Beginn",
       _ff111.fahrzeug is _fw111 and _fw111.art == "funkwagen" and "plaetze" not in _fw111.werte
-      and _fw111.werte["nur_mensch"] and _fw111.modus == 0 and _fw111.bild == "funkwagen")
+      and not _fw111.werte.get("nur_mensch") and _fw111.modus == 0 and _fw111.bild == "funkwagen")
 def _fw_ein111(zielt_, knoepfe_=(), will_=(0, 0)):
     _tm111._anwenden(_ff111, {"will": list(will_), "ziel": [0, 0], "knoepfe": list(knoepfe_), "zielt": zielt_})
     _tm111.schritt(K.FIXED_DT)
@@ -17903,9 +17905,9 @@ _z112 = lambda x_, y_: pygame.Vector2((_tx112 + x_ + 0.5) * K.TILE, (_ty112 + y_
 _wf112 = _tm112.fahrzeug_setzen("werfer", _z112(4, 10), 0, {"winkel": 0})
 _wp112 = _tm112.puppe_setzen(_wf112.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="WERFERFUEHRER")
 _tm112._anwenden(_wp112, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
-pruef("Werfer: eigene Art, keine Plaetze, nur fuer Menschen, sehr leicht zu zerstoeren",
+pruef("Werfer: eigene Art, keine Plaetze, seit 0.34.131 auch fuer Bots, sehr leicht zu zerstoeren",
       _wp112.fahrzeug is _wf112 and _wf112.art == "werfer" and "plaetze" not in _wf112.werte
-      and _wf112.werte["nur_mensch"] and _wf112.leben < K.FAHRZEUG["leben"] / 2.0, str(_wf112.leben))
+      and not _wf112.werte.get("nur_mensch") and _wf112.leben < K.FAHRZEUG["leben"] / 2.0, str(_wf112.leben))
 _ziel112 = [0.0, 0.0]
 def _wf_ein112(feuert_=False, zielt_=False):
     _tm112._anwenden(_wp112, {"will": [0, 0], "ziel": list(_ziel112), "knoepfe": [], "feuert": feuert_,
@@ -18012,9 +18014,9 @@ _z113 = lambda x_, y_: pygame.Vector2((_tx113 + x_ + 0.5) * K.TILE, (_ty113 + y_
 _ts113 = _tm113.fahrzeug_setzen("tragschrauber", _z113(2, 12), 0, {"winkel": 0})
 _tp113 = _tm113.puppe_setzen(_ts113.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="PILOT")
 _tm113._anwenden(_tp113, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
-pruef("Tragschrauber: eigene Art, am Boden ein Wagen, nur fuer Menschen",
+pruef("Tragschrauber: eigene Art, am Boden ein Wagen, seit 0.34.131 auch fuer Bots",
       _tp113.fahrzeug is _ts113 and _ts113.art == "tragschrauber" and not _ts113.luft
-      and _ts113.werte["nur_mensch"] and "plaetze" not in _ts113.werte and _ts113.trefferbar)
+      and not _ts113.werte.get("nur_mensch") and "plaetze" not in _ts113.werte and _ts113.trefferbar)
 def _ts_ein113(will_=(0, 0), feuert_=False, knoepfe_=()):
     _tm113._anwenden(_tp113, {"will": list(will_), "ziel": [0, 0], "knoepfe": list(knoepfe_),
                               "feuert": feuert_})
@@ -19443,6 +19445,214 @@ pruef("... das Flugzeug hat auch vor dem Start einen Ort (vorher Absturz bei ler
       _la2_130.flugzeug().x < _p130.x)
 _tm130.welt.klang = _alt_kl130
 _tm130.verlassen()
+
+print("\n-- 0.34.131: Wasser, FLUSSTAL und KANALSTADT, Front mit Punkten, Einstiegskarte, Bots in Gruppen und an allen Fahrzeugen")
+from dustfront import world as _W131, front as _FR131, kartenbild as _KB131, bots as _BO131
+from dustfront.mehrspieler import Gefecht as _G131
+# Wasser: seicht bremst, tief sperrt - aber nicht fuer Kugeln, Sicht und Wuerfe.
+_w131 = _W131.Welt([_W131.Ebene.aus_text(["........", "..++%%..", "..++%%..", "........"], 0)])
+_ps131 = pygame.Vector2(2.5 * K.TILE, 1.5 * K.TILE)
+_pt131 = pygame.Vector2(4.5 * K.TILE, 1.5 * K.TILE)
+pruef("Wasser: Zeichen + ist seicht, % tief; tief ist kein Weg, seicht schon",
+      _w131.ebene(0).kachel(2, 1) == K.WASSER_SEICHT and _w131.ebene(0).kachel(4, 1) == K.WASSER_TIEF
+      and _w131.ebene(0).begehbar(2, 1) and not _w131.ebene(0).begehbar(4, 1))
+pruef("... tiefes Wasser haelt jeden auf, der geht oder faehrt - nicht, was darueber fliegt",
+      not _w131.frei(_pt131, 10.0, 0) and _w131.frei(_pt131, 10.0, 0, ueber_wasser=True)
+      and _w131.frei(_ps131, 10.0, 0))
+pruef("... Kugeln und Sicht gehen darueber",
+      not _w131.schuss_halt(_pt131, 0) and _w131.sicht_frei(pygame.Vector2(8, 40), pygame.Vector2(250, 40), 0))
+pruef("... seichtes Wasser bremst zu Fuss mehr als im Wagen",
+      _w131.boden_tempo(_ps131, 0) == K.WASSER["seicht_tempo"] < K.WASSER["seicht_fahrzeug"]
+      == _w131.boden_tempo(_ps131, 0, fahrzeug=True) and _w131.boden_tempo(pygame.Vector2(16, 16), 0) == 1.0)
+pruef("... Granaten fliegen ueber tiefes Wasser", getattr(_EN_G131 := __import__("dustfront.entities", fromlist=["Granate"]).Granate, "ueber_wasser", False))
+pruef("Kachelsaetze gruen und stadt: Abwechslung aus dem Satz, Baum statt Kaktus",
+      K.satz_bild(K.KARTENSAETZE["gruen"], K.KACHELN[K.FELS], 1) == "moosfels_2"
+      and K.satz_bild(K.KARTENSAETZE["gruen"], K.KACHELN[K.KAKTUS]) == "baum"
+      and K.satz_bild(K.KARTENSAETZE["stadt"], K.KACHELN[K.WASSER_TIEF], 2) == "kanal_3"
+      and K.satz_bild(K.KARTENSAETZE["wueste"], K.KACHELN[K.FELS], 2) == "fels_3")
+# Die Karten und ihr Plan.
+for _name131 in ("flusstal", "kanalstadt"):
+    _wk131, _kopf131 = _W131.karte_lesen(_name131)
+    _plan131 = _FR131.Schlachtplan.lesen(_kopf131)
+    _ok_netz131 = _plan131 is not None
+    if _ok_netz131:
+        for _b131 in _plan131.basen:
+            _ent131 = _plan131.entfernungen(_b131.knoten)
+            _ok_netz131 = _ok_netz131 and all(p_.knoten in _ent131 for p_ in _plan131.punkte)
+    pruef("%s: neun Punkte A-I, je Seite drei Basen mit eigener Ausstattung, von jeder Basis jeder Punkt erreichbar" % _name131.upper(),
+          _plan131 is not None and len(_plan131.punkte) == 9
+          and sorted(p_.buchstabe for p_ in _plan131.punkte) == list("ABCDEFGHI")
+          and sorted(b_.team for b_ in _plan131.basen) == [0, 0, 0, 1, 1, 1]
+          and all(b_.fahrzeuge for b_ in _plan131.basen) and _ok_netz131)
+    _e131 = _wk131.ebene(0)
+    _farbe131 = _KB131.bild(_e131).get_at((5 * _KB131.pixel_je_kachel(_e131), _e131.hoehe // 2 * _KB131.pixel_je_kachel(_e131)))
+    pruef("... das Kartenbild hat die Farben des Satzes (nicht sandbraun)",
+          _wk131.satz in ("gruen", "stadt") and tuple(_farbe131)[:3] != K.KARTENBILD["sand"], str(_farbe131))
+_wf131, _kf131 = _W131.karte_lesen("flusstal")
+_alle131 = sum(1 for z_ in "".join("".join("+" if k_ == K.WASSER_SEICHT else "" for k_ in _wf131.ebene(0).kacheln)) if z_)
+pruef("FLUSSTAL hat seichtes und tiefes Wasser und Bruecken",
+      _alle131 > 200 and K.WASSER_TIEF in _wf131.ebene(0).kacheln and K.BRUECKE in _wf131.ebene(0).kacheln)
+
+# Die Front in einer SCHLACHT auf FLUSSTAL, mit Gast.
+w131, g131 = _paar59("schlacht", karte="flusstal")
+w131._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="flusstal", schlacht_seite=8, freischalten="aus"))
+w131._einstiegszonen_waehlen()
+w131._fahrzeuge_neu_aufstellen()
+w131._bots_fuehren(0.0, sofort=True)
+w131.front_anlegen()
+pruef("FLUSSTAL ist die Vorgabe fuer SCHLACHT, und die Front gilt dort",
+      K.SCHLACHT["karte"] == "flusstal" and w131.front_an and len(w131.front_punkte()) == 9)
+pruef("... die Basis jeder Seite ist ihr Hauptlager aus dem Kartenkopf",
+      w131.schlacht_basis(0) == w131.hauptbasis(0).pos and w131.hauptbasis(0).name == "HAUPTLAGER"
+      and w131.schlacht_basis(1).x > w131.schlacht_basis(0).x)
+_zonen131 = {z_.art for z_ in w131.dropzonen}
+pruef("... an den Basen fallen ihre eigenen Fahrzeuge, auch Werfer, Tragschrauber, Jagdpanzer",
+      {"werfer", "tragschrauber", "jagdpanzer", "spulenwagen", "funkwagen"} <= _zonen131, str(sorted(_zonen131)))
+# Einnehmen: einer allein zieht den Stand zu sich, Gleichstand haelt, ganz = Besitzer.
+_pk131 = w131.front_punkte()[0]
+_pk131.stand, _pk131.besitzer = 0.0, -1
+_rot131 = next(k_ for k_ in w131.kaempfer.values() if k_.team == 0 and k_.ist_bot)
+_blau131 = next(k_ for k_ in w131.kaempfer.values() if k_.team == 1 and k_.ist_bot)
+for k_ in w131.kaempfer.values():
+    if k_.pos.distance_to(_pk131.pos) < K.FRONT["radius"] + 50:
+        k_.pos.update(_pk131.pos + pygame.Vector2(0, 2000))
+_rot131.pos.update(_pk131.pos)
+for _ in range(int(K.FRONT["zeit"] * 0.5 / 0.1)):
+    w131._punkte_einnehmen(0.1)
+_halb131 = _pk131.stand
+pruef("Punkt: einer allein zieht ihn zu seiner Seite, halb nach der halben Zeit",
+      -0.6 < _halb131 < -0.4 and _pk131.besitzer == -1, "%.2f" % _halb131)
+_blau131.pos.update(_pk131.pos + pygame.Vector2(30, 0))
+for _ in range(20):
+    w131._punkte_einnehmen(0.1)
+pruef("... stehen beide gleich viele drin, bewegt sich nichts (umkaempft)", abs(_pk131.stand - _halb131) < 1e-6)
+_blau131.pos.update(_pk131.pos + pygame.Vector2(0, 3000))
+for _ in range(int(K.FRONT["zeit"] / 0.1) + 5):
+    w131._punkte_einnehmen(0.1)
+pruef("... und ganz eingenommen gehoert er ROT", _pk131.besitzer == 0 and _pk131.gehoert(0))
+_ein131 = {e_[0]: e_ for e_ in w131.einstiege(0)}
+pruef("Einstiege: die drei Basen immer, ein eigener Punkt, wenn kein Gegner nah ist",
+      sum(1 for k_ in _ein131 if k_.startswith("b")) == 3 and _ein131["p%d" % _pk131.nr][3])
+_blau131.pos.update(_pk131.pos + pygame.Vector2(K.FRONT["umkaempft"] * 0.5, 0))
+pruef("... mit einem Gegner in der Naehe ist der Punkt UMKÄMPFT und kein Einstieg",
+      not {e_[0]: e_ for e_ in w131.einstiege(0)}["p%d" % _pk131.nr][3]
+      and "UMK" in {e_[0]: e_ for e_ in w131.einstiege(0)}["p%d" % _pk131.nr][4])
+_blau131.pos.update(_pk131.pos + pygame.Vector2(0, 3000))
+# Mensch: gewaehlter Einstieg - am Punkt; ohne Wahl an der Hauptbasis.
+_ich131 = w131.ich
+_ich131.team = 0
+_ich131.einstieg_wahl = "p%d" % _pk131.nr
+pruef("Ein Mensch steigt am gewaehlten Punkt ein",
+      w131.front_einstiegsort(_ich131).distance_to(_pk131.pos) <= K.FRONT["einstieg_umkreis"] * 1.2)
+_ich131.einstieg_wahl = "p99"
+pruef("... ist die Wahl nicht (mehr) frei, an der Hauptbasis",
+      w131.front_einstiegsort(_ich131).distance_to(w131.hauptbasis(0).pos) <= K.FRONT["basis_umkreis"] * 1.2)
+# Netz: Stand der Punkte zum Gast, die Wahl des Gastes zum Gastgeber.
+_pk131.da = [1, 0]
+g131.front_uebernehmen(w131.front_meldung())
+pruef("Netz: der Gast kennt Besitzer und Stand jedes Punktes (fp)",
+      g131.front_punkte()[0].besitzer == 0 and abs(g131.front_punkte()[0].stand - _pk131.stand) < 1e-3
+      and "fp" in w131.schlacht_meldung())
+g131.ich.lebt = False
+g131.einstieg_waehlen("b%d" % w131.front_basen(g131.ich.team)[0].nr)
+for _ in range(6):
+    g131.schritt(K.NETZ["takt"]); w131.schritt(K.NETZ["takt"])
+_gk131 = w131.kaempfer.get(g131.ich.nummer)
+pruef("... und der Gastgeber kennt den Einstieg, den der Gast gewaehlt hat (einstieg)",
+      _gk131 is not None and _gk131.einstieg_wahl == "b%d" % w131.front_basen(g131.ich.team)[0].nr)
+g131.ich.lebt = False          # der Gast bekaeme es sonst mit der naechsten Meldung zurueck
+g131.ich.am_boden = False
+pruef("Einstiegskarte: offen, solange man tot ist; 1 waehlt den ersten Einstieg",
+      g131.einstieg_offen and g131.einstieg_ereignis(
+          pygame.event.Event(pygame.KEYDOWN, key=pygame.K_1, mod=0, unicode="1", scancode=0))
+      and g131.ich.einstieg_wahl == g131._einstieg_liste()[0][0])
+_bild131 = pygame.Surface((K.GAME_W, K.GAME_H))
+g131.zeichnen(_bild131, 1.0)
+pruef("... und sie zeichnet sich (mit Leiste und Punkten)", True)
+g131.ich.lebt = True
+# Bots: Gruppen von 1 bis 4 mit Formation und Weg; verschiedene Ziele.
+w131._front_rest = [0.0, 0.0]
+w131._front_planen(0); w131._front_planen(1)
+_gr131 = w131._gruppen
+_bots131 = [k_ for k_ in w131.kaempfer.values() if k_.ist_bot and k_.lebt and k_.fahrzeug is None]
+pruef("Bots gehen in Gruppen von 1 bis 4, jede mit Formation und Weg",
+      _gr131 and all(1 <= len(g_.mitglieder) <= 4 and g_.form in _FR131.FORMATIONEN and g_.weg for g_ in _gr131)
+      and all(w131.front_gruppe(k_) is not None for k_ in _bots131),
+      str([(len(g_.mitglieder), g_.form) for g_ in _gr131]))
+pruef("... und nicht alle zum selben Ziel", len({g_.ziel for g_ in _gr131 if g_.team == 0}) >= 2,
+      str({g_.ziel for g_ in _gr131}))
+# Flankieren: zwei Gruppen zum selben Ziel nehmen verschiedene Wege.
+_ga131 = _FR131.Gruppe(0, ("punkt", 1), random.Random(1)); w131._gruppen.append(_ga131)
+w131._weg_planen(_ga131, w131.hauptbasis(0).pos)
+_gb131 = _FR131.Gruppe(0, ("punkt", 1), random.Random(2)); w131._gruppen.append(_gb131)
+w131._weg_planen(_gb131, w131.hauptbasis(0).pos)
+pruef("Zwei Gruppen zum selben Ziel nehmen nicht denselben Weg (sie flankieren)",
+      _ga131.kanten != _gb131.kanten, "%s / %s" % (_ga131.kanten[:4], _gb131.kanten[:4]))
+w131._gruppen.remove(_ga131); w131._gruppen.remove(_gb131)
+_g131 = next(g_ for g_ in _gr131 if len(g_.lebende()) >= 2)
+_f131, _m131 = _g131.lebende()[0], _g131.lebende()[1]
+_auf131 = w131.front_auftrag(_m131)
+pruef("... wer folgt, bekommt einen Platz in der Formation oder auf der Spur",
+      _auf131 is not None and _auf131[0].distance_to(_f131.pos) < 400.0)
+# Einstieg der Bots: verteilt auf die Einstiege, nicht alle an einem.
+w131._einstieg_zahl = {}
+_k131 = [k_ for k_ in w131.kaempfer.values() if k_.ist_bot and k_.team == 0]
+_fahrer131 = [k_.darf_fahren for k_ in _k131]
+for k_ in _k131:
+    k_.darf_fahren = False             # Fahrer steigen an der Basis mit ihrem Wagen ein
+_wahl131 = [w131._bot_einstieg(k_, {kn_: (o_, kn_[0]) for kn_, o_, _n, ok_, _g in w131.einstiege(0) if ok_})
+            for k_ in _k131 * 2]
+for k_, d_ in zip(_k131, _fahrer131):
+    k_.darf_fahren = d_
+pruef("Bots steigen an mehreren Einstiegen ein (von mehreren Seiten zum Ziel)",
+      len(set(_wahl131)) >= 2, str(_wahl131))
+# Fahrzeuge: keins mehr nur fuer Menschen; das wertvollere zuerst.
+pruef("Keine Fahrzeugart ist mehr nur fuer Menschen",
+      not any(getattr(K, n_).get("nur_mensch") for n_ in ("JAGDPANZER", "TROSSWAGEN", "SPULENWAGEN",
+                                                             "FUNKWAGEN", "WERFER", "TRAGSCHRAUBER")))
+pruef("... und ein Bot nimmt lieber den Tragschrauber als den Buggy daneben",
+      _BO131.FAHRZEUG_VORZUG["tragschrauber"] > _BO131.FAHRZEUG_VORZUG["buggy"] + 300)
+w131.verlassen(); g131.verlassen()
+
+# Fahrzeuge mit Bot im Testmodus: Werfer baut in seiner Stellung auf und
+# schiesst nicht auf eigene Leute; Tragschrauber hebt ab und bombt.
+_tm131 = _TM59.Testmodus(app, karte="staubtal_offen")
+_p131 = pygame.Vector2(4000, 3200)
+_fw131 = _tm131.fahrer_setzen(_p131, 0, {"fahrzeug": "werfer", "team": 0, "hirn": "klassisch", "winkel": 0},
+                              mit_fahrzeug=True)
+_wb131 = _fw131.fahrzeug if _fw131 is not None else None
+if _wb131 is not None:
+    _fw131.hirn._fz_stellung = (pygame.Vector2(_wb131.pos), 1e9, _wb131)
+    for _ in range(int(5.0 / K.FIXED_DT)):
+        _tm131.schritt(K.FIXED_DT)
+pruef("Werfer mit Bot: in der Stellung baut er auf",
+      _wb131 is not None and _wb131.phase in (1, 2), str(getattr(_wb131, "phase", None)))
+_ts131 = _tm131.fahrer_setzen(_p131 + pygame.Vector2(0, 600), 0,
+                              {"fahrzeug": "tragschrauber", "team": 0, "hirn": "klassisch", "winkel": 0},
+                              mit_fahrzeug=True)
+_hs131 = _ts131.fahrzeug if _ts131 is not None else None
+for _ in range(int(4.0 / K.FIXED_DT)):
+    _tm131.schritt(K.FIXED_DT)
+pruef("Tragschrauber mit Bot: er nimmt Anlauf und hebt ab",
+      _hs131 is not None and _hs131.luft, str(getattr(_hs131, "luft", None)))
+# Testmodus: Punkt, Basis, Wasser aus dem Spawner.
+_tm131.eroberungspunkt_setzen(_p131 + pygame.Vector2(400, 0), {"team": 1})
+_tm131.startbasis_setzen(_p131 - pygame.Vector2(900, 0), {"team": 0})
+pruef("Testmodus: ein EROBERUNGSPUNKT schaltet die Front ein (mit Besitzer)",
+      _tm131.front_an and _tm131.front_punkte()[-1].besitzer == 1 and _tm131.front_basen(0))
+_tm131.wasser_setzen(_p131 + pygame.Vector2(0, -900), 0, {"radius": 2}, K.WASSER_TIEF)
+_wt131 = _p131 + pygame.Vector2(0, -900)
+pruef("... WASSER: TIEF malt Wasser, und das Wegenetz kennt es",
+      _tm131.welt.ebene(0).kachel(int(_wt131.x // K.TILE), int(_wt131.y // K.TILE)) == K.WASSER_TIEF
+      and not _tm131.welt.wege._frei(0, int(_wt131.x // K.TILE), int(_wt131.y // K.TILE)))
+_tm131.alles_weg()
+pruef("... LEEREN nimmt das gemalte Wasser wieder weg",
+      _tm131.welt.ebene(0).kachel(int(_wt131.x // K.TILE), int(_wt131.y // K.TILE)) != K.WASSER_TIEF)
+_bild131b = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm131.info = 1
+_tm131.zeichnen(_bild131b, 1.0)
+pruef("... und INFO zeichnet die Gruppen der Front", True)
+_tm131.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

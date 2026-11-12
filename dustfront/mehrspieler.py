@@ -65,6 +65,8 @@ from . import ui
 from .bots import BotTeil
 from .lobby import LobbyTeil, lobby_regeln
 from .schlacht import SchlachtTeil
+from .front import FrontTeil
+from .front_karte import FrontKarteTeil
 from .luft import LuftTeil
 from .gastseite import GastTeil, WirtTeil
 from .spielerkosmetik import KosmetikTeil
@@ -142,6 +144,9 @@ class Kaempfer(Spieler):
         # seinen Namen aendert. Leer ohne Konto.
         self.konto = ""
         self.wieder_in = 0.0
+        # Wo er nach dem Tod einsteigen will (seit 0.34.131, Front): "b0" eine
+        # Basis, "p3" ein Punkt; leer = die Hauptbasis.
+        self.einstieg_wahl = ""
         self.toeter = None           # wertet das Gefecht aus und raeumt weg
         # Womit der Toeter ihn erwischt hat (seit 0.31). Ein Spieler stirbt
         # erst am Ende der Bodenzeit, lange nach dem Treffer - dann weiss
@@ -792,7 +797,8 @@ def _version_kleiner(a: str, b: str) -> bool:
     return teile(a) < teile(b)
 
 
-class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, GastTeil, WirtTeil):
+class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, FrontKarteTeil,
+              LuftTeil, GastTeil, WirtTeil):
     # Die Faehigkeiten der Klassen (Taste C, seit 0.34.73) legen Dinge aus
     # ausruestung.py hin. Bis 0.34.79 gingen die nicht ueber das Netz, und
     # nur der Testmodus schaltete sie ein. Seitdem stehen sie in der
@@ -1529,6 +1535,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         s = K.SCHLACHT
         e = w.ebene(0)
         breite, hoehe = e.pixel_breite, e.pixel_hoehe
+        if self.schlachtplan is not None and self.hauptbasis(0) and self.hauptbasis(1):
+            # Karte mit Front (seit 0.34.131): die Hauptlager aus dem Kopf.
+            raus = (pygame.Vector2(self.hauptbasis(0).pos), pygame.Vector2(self.hauptbasis(1).pos),
+                    pygame.Vector2(breite / 2, hoehe / 2))
+            w._schlacht_punkte = raus
+            return raus
         ziele = (pygame.Vector2(breite * s["basis_x"], hoehe / 2),
                  pygame.Vector2(breite * (1.0 - s["basis_x"]), hoehe / 2),
                  pygame.Vector2(breite / 2, hoehe / 2))
@@ -1920,6 +1932,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         an = self.schlacht or bool(self.__dict__.get("vorstoss_an"))   # Testmodus
         if not an or not 0 <= getattr(k, "team", -1) < 2:
             return None
+        if self.front_an:
+            # Front (seit 0.34.131): am Steuer zum Ziel, das die Seite braucht;
+            # zu Fuss ohne Gruppe zum naechsten Ziel der Front.
+            if k.fahrzeug is not None:
+                ort = self.front_fahrziel(k)
+                if ort is not None:
+                    return pygame.Vector2(ort), 0
+            else:
+                plan = self.__dict__.get("_front_plan", {}).get(k.team)
+                if plan:
+                    orte = [self._ziel_ort(z)[0] for z in plan]
+                    orte = [o for o in orte if o is not None]
+                    if orte:
+                        return pygame.Vector2(min(orte, key=lambda o: o.distance_squared_to(k.pos))), 0
         s = K.SCHLACHT
         basis_l, basis_r, mitte = self._schlacht_punkte()
         feind = 1 if k.team == 0 else 0
@@ -2429,6 +2455,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
             platz = self._lobby_einstieg(ausser)
             if platz is not None:
                 return platz
+        if ausser is not None and 0 <= team < 2 and self.front_an:
+            # Front (seit 0.34.131): am gewaehlten Einstieg, Bots nach Plan.
+            return self.front_einstiegsort(ausser)
         eigene = [k.pos for k in self.kaempfer.values()
                   if k.lebt and k is not ausser and team >= 0 and k.team == team]
         fremde = [k.pos for k in self.kaempfer.values()
@@ -3962,6 +3991,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                     if lo is not None:
                         k.angemeldet = lo
                         self._lobby_umruesten(k)
+            elif art == "einstieg":
+                # Wo er nach dem Tod einsteigen will (seit 0.34.131, Front).
+                k = self.kaempfer.get(nummer)
+                if k is not None:
+                    k.einstieg_wahl = str(nachricht.get("wahl", ""))[:6]
             elif art == "belohnung":
                 # Ein Kauf im Nachschubmenue (seit 0.34.96, SCHLACHT).
                 k = self.kaempfer.get(nummer)
@@ -4030,6 +4064,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
             # Testmodus (seit 0.34.100): Abwuerfe, Drohnen und Fallschirmjaeger
             # aus dem Spawner, ohne SCHLACHT.
             self.schlacht_schritt(dt)
+        self.front_schritt(dt)          # prueft selbst, ob die Front gilt (auch Testmodus)
         if self.schlacht:
             self.schlacht_schritt(dt)
             for b in self.fahrzeuge:
@@ -4735,6 +4770,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         self.welt.klang("rundenstart", 0.7)
         # Neue Runde, neue Seiten - aber innerhalb der Runde bleiben sie.
         self._einstiegszonen_waehlen()
+        if self.schlachtplan is not None:
+            self.front_anlegen()
         # Die Buggys zurueck an ihre Plaetze, leer und heil. Sonst stuende
         # nach ein paar Runden jeder irgendwo, und wer weiss, wo sie
         # stehen, waere im Vorteil.
@@ -4901,6 +4938,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
                 k.tode += 1
                 k.serie = 0          # der eigene Tod beendet die Folge
                 k.wieder_in = (K.LOBBY["wieder_nach"] if self.in_lobby
+                               else K.FRONT["wieder_nach"] if self.front_an
                                else K.GEFECHT["wieder_nach"])
             if self.regeln["runden"]:
                 k.raus = True     # in versus bleibt man bis zur naechsten Runde
@@ -4969,6 +5007,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         k.boden_rest = 0.0
         k.revive_stand = 0.0
         k.unverwundbar = self.schutz_zeit
+        self.front_eingestiegen(k)
         k.medkits = 0 if k.ist_bot else max(k.medkits, self.start_medkits)
         if not k.ist_bot:
             # Jedes Leben mit vollem Vorrat und vollen Magazinen, Granaten
@@ -6665,6 +6704,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
             return
         if self.schlacht and self.menue is None and self.belohnung_ereignis(ev):
             return
+        if self.menue is None and self.einstieg_ereignis(ev):
+            return
         if (self.schlacht and self.menue is None and not self.in_lobby and not self.vorbei
                 and ev.type == pygame.KEYDOWN and ev.key in self.app.opt.codes("inventar")):
             # TAB oeffnet in SCHLACHT den Nachschub (seit 0.34.96).
@@ -7177,10 +7218,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         # Siegtafel.
         if not self.vorbei:
             self._anzeige(ziel)
+            self.front_leiste(ziel)
+            self.einstieg_zeichnen(ziel)
             if self.schlacht:
                 if self.belohnung_offen:
                     self.belohnung_zeichnen(ziel)
-                elif self.ich is not None:
+                elif self.ich is not None and not self.einstieg_offen:
                     SCHRIFT.zeichnen(ziel, "NACHSCHUB %d P  [%s]" % (
                         getattr(self.ich, "schlacht_punkte", 0), self._tastenname("inventar")),
                         10, 30, K.C_AMBER, 1)
@@ -7545,6 +7588,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, LuftTeil, G
         self._werfer_zeichnen_boden(flaeche, ebene, ecke)
         if self.schlacht or self.__dict__.get("nachschub_an"):
             self.dropzonen_zeichnen(flaeche, ebene, ecke)
+        self.front_boden_zeichnen(flaeche, ebene, ecke)
         self._zonenkreis_zeichnen(flaeche, ebene, ecke)
 
     def _zonenkreis_zeichnen(self, flaeche, ebene: int, ecke) -> None:

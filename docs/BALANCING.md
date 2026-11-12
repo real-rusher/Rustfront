@@ -85,20 +85,37 @@ Neue Fahrzeuge der Basis fallen mit Rueckzaehlung an ihren Zonen, wie zu
 Rundenbeginn. Was zerstoert wird, kommt nach seiner Wartezeit (`neu_nach`)
 wieder.
 
+## Karten mit Front (seit 0.34.131)
+
+FLUSSTAL und KANALSTADT nennen im Kopf ihre Basen - drei je Seite - und
+**jede Basis hat ihre eigene Ausstattung** (`basisN: Seite x y NAME | Art
+Anzahl Stufe, ...`). Sie ersetzt dort `K.SCHLACHT["fahrzeuge"]`; die Stufen
+gelten wie oben (FREISCHALTEN). Die Kaufpreise bleiben dieselben.
+
+| FLUSSTAL | Stufe 0 | Stufe 1 | Stufe 2 | Stufe 3 |
+| --- | --- | --- | --- | --- |
+| Nordlager (ROT) / Suedlager (BLAU) | Buggy, Krad | Funkwagen | Tragschrauber | - |
+| Hauptlager | Buggy, Panzerwagen, Trosswagen | Flakwagen | Panzer | Werfer |
+| Suedlager (ROT) / Nordlager (BLAU) | Buggy, Krad | Trosswagen | Jagdpanzer, Spulenwagen | - |
+
+| KANALSTADT | Stufe 0 | Stufe 1 | Stufe 2 | Stufe 3 |
+| --- | --- | --- | --- | --- |
+| Nordkaserne (ROT) / Suedkaserne (BLAU) | 2 Kraeder, Buggy | Funkwagen | Tragschrauber | - |
+| Hauptdepot | Buggy, Panzerwagen, Trosswagen | Flakwagen | Jagdpanzer | Werfer |
+| Suedkaserne (ROT) / Nordkaserne (BLAU) | Krad, Buggy | Trosswagen | Panzer, Spulenwagen | - |
+
+In der Stadt mehr Kraeder und der Jagdpanzer im Hauptdepot (lange Strassen,
+weite Schuesse die Allee entlang), der Panzer an der Seite, wo die
+Strassen breiter sind. So viele Bots je Seite fahren, wie der Kopf sagt
+(`fahrer:` 7 in FLUSSTAL, 6 in KANALSTADT; sonst `K.FRONT["fahrer"]`).
+
+**Eroberungspunkte** bringen keine Zaehler und keinen Rabatt: ganz
+eingenommen und ohne Gegner in der Naehe sind sie ein Einstieg. Das ist ihr
+ganzer Wert - wer die Front nach vorn schiebt, steigt naeher am Kampf ein.
+
 ## Ideen fuer weitere Karten (noch nicht gebaut)
 
-Die Basis-Ausstattung haengt bisher nur an `K.SCHLACHT["fahrzeuge"]`. Fuer
-neue Karten waere der naechste Schritt, dass eine Karte das ueberschreiben
-kann - im Kopf der Kartendatei, wie die Kartenzeichen:
-
-* **Ausstattung je Karte**: `# basis: buggy 2 0, krad 1 0, panzer 1 2` (Art,
-  Anzahl, Stufe). Eine enge Stadtkarte bekaeme keine Panzer an die Basis und
-  mehr Kraeder, eine offene Wueste mehr schwere Wagen.
 * **Sperren je Karte**: `# ohne: tragschrauber, werfer` - eine Karte mit
   vielen Plateaus und Mauern ist fuer Werfer und Flieger zu unuebersichtlich.
-* **Feste Stellplaetze**: Zeichen auf der Karte fuer die Basis-Zonen, statt
-  sie im Umkreis der Basis zu suchen.
-* **Eroberbare Punkte**: ein Punkt in der Mitte, dessen Besitzer eine Stufe
-  frueher bekommt oder einen Rabatt - dann lohnt es, um ihn zu kaempfen.
 * **Ungleiche Karten**: wenn eine Seite es schwerer hat (bergauf), bekommt sie
   eine Stufe Vorsprung bei der Basis.

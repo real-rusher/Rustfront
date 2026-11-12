@@ -649,6 +649,7 @@ class Granate(Wesen):
     """Fliegt, prallt von Waenden ab und zuendet nach ihrer Flugzeit."""
 
     fraktion = "geschoss"
+    ueber_wasser = True     # fliegt ueber tiefes Wasser (seit 0.34.131)
     schiebt = False
     trefferbar = False
     schatten = True
@@ -2906,6 +2907,9 @@ class Spieler(Wesen):
         luft *= self.tempo_anteil
         if self.sprintet:
             luft *= K.SPRINT["faktor"]        # Bots sprinten (seit 0.34.50)
+        if self.sturz_rest <= 0 and self.welt is not None:
+            # Seichtes Wasser bremst (seit 0.34.131, K.WASSER).
+            luft *= self.welt.boden_tempo(self.pos, self.ebene)
         self._dash_laden(dt)
         # Fuer die Vorhersage beim Gast (seit 0.34.103, Gefecht).
         self._luft = luft
@@ -2962,7 +2966,16 @@ class Spieler(Wesen):
                         self.welt.schneespuren.append([p.x, p.y, self.ebene, self.welt.zeit])
                     if len(self.welt.schneespuren) > 900:
                         del self.welt.schneespuren[:100]
-                else:
+                elif self.welt.seicht(self.pos, self.ebene):
+                    # Im Wasser (seit 0.34.131): Wellenringe statt Staub.
+                    from . import effekte
+                    effekte.ring(self.welt, self.pos.x, self.pos.y + 3, self.ebene,
+                                 3.0, 15.0, 0.7, (178, 214, 222))
+                elif not (getattr(self.welt, "satz", "") == "gruen"
+                          and self.welt.ebene(self.ebene).kachel(
+                              int(self.pos.x // K.TILE), int(self.pos.y // K.TILE))
+                          in (K.BODEN, K.GESTRUEPP)):
+                    # Auf einer Wiese staubt es nicht.
                     wolke(self.welt, self.pos + pygame.Vector2(0, 4), 2, 26, 0.34,
                           K.C_MUTED_DK, self.ebene, 1, "staub", 360, 0, 6.0)
 

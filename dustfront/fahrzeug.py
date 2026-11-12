@@ -499,6 +499,18 @@ class Buggy(Wesen):
             self.emp_rest = max(0.0, self.emp_rest - dt)
             self._emp_funkeln(dt)
         fahrer = self.fahrer is not None and not self.kaputt and not stromlos
+        if (self.fahrer is None and not self.kaputt and self.geschw.length_squared() < 0.01
+                and abs(getattr(self, "gier", 0.0)) < 1e-4):
+            # Er steht leer und still (seit 0.34.131): keine Physik, kein
+            # Drehen, kein Staub. Die Karten mit Front haben bis zu 15 Wagen
+            # je Seite an ihren Basen - gemessen ein Sechstel jedes Schritts.
+            # Was ihn anstoesst (Explosion, Rammen), gibt ihm Tempo und weckt ihn.
+            self.tempo.update(0, 0)
+            self._ruhe_takt = getattr(self, "_ruhe_takt", 0.0) - dt
+            if self._ruhe_takt <= 0.0:
+                self._ruhe_takt = 0.1
+                self._beiseite_schieben()
+            return
         self._physik(dt, self.gas if fahrer else 0.0,
                      self.lenk if fahrer else 0.0,
                      bool(self.handbremse) and fahrer)
@@ -507,6 +519,20 @@ class Buggy(Wesen):
             hoechst = self.werte["hoechst"] * K.NAEGEL["platt_tempo"]
             if self.geschw.length() > hoechst:
                 self.geschw.scale_to_length(hoechst)
+        if self.welt is not None and not getattr(self, "luft", False) \
+                and self.welt.seicht(self.pos, self.ebene):
+            # Durch die Furt (seit 0.34.131): langsamer, und es spritzt.
+            hoechst = self.werte["hoechst"] * K.WASSER["seicht_fahrzeug"]
+            v = self.geschw.length()
+            if v > hoechst:
+                self.geschw.scale_to_length(hoechst)
+            self._spritz_rest = getattr(self, "_spritz_rest", 0.0) - dt
+            if v > 20.0 and self._spritz_rest <= 0.0:
+                self._spritz_rest = K.WASSER["spritzer_takt"]
+                from . import effekte
+                effekte.ring(self.welt, self.pos.x, self.pos.y, self.ebene,
+                             self.werte.get("halb", 16.0) * 0.6, self.werte.get("halb", 16.0) * 1.6, 0.8,
+                             (178, 214, 222))
         self._passt_merk = ((), False)          # ab hier merken (passt)
         try:
             self._drehen(dt)

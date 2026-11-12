@@ -361,12 +361,29 @@ pruef("karten/staubtal_offen.txt ist genau die Ausgabe von werkzeug_staubtal_off
       werkzeug_staubtal_offen.als_text(werkzeug_staubtal_offen.bauen())
       == (WURZEL / "karten" / "staubtal_offen.txt").read_text(encoding="utf-8"))
 
+import subprocess  # noqa: E402
+
+# FLUSSTAL und KANALSTADT (seit 0.34.131): dasselbe, und ihre Werkzeuge
+# pruefen selbst, dass Punkte, Basen und Wegpunkte begehbar sind.
+import werkzeug_flusstal  # noqa: E402
+import werkzeug_kanalstadt  # noqa: E402
+for _wz, _datei in ((werkzeug_flusstal, "flusstal.txt"), (werkzeug_kanalstadt, "kanalstadt.txt")):
+    pruef("karten/%s ist genau die Ausgabe von %s.py" % (_datei, _wz.__name__),
+          _wz.als_text(_wz.fertig()) == (WURZEL / "karten" / _datei).read_text(encoding="utf-8"))
+    _ziel2 = Path(tempfile.mkdtemp()) / _datei
+    _r = subprocess.run([sys.executable, "-c",
+                         "import %s as w; import pathlib; pathlib.Path(%r).write_text("
+                         "w.als_text(w.fertig()), encoding='utf-8')" % (_wz.__name__, str(_ziel2))],
+                        cwd=str(WURZEL), env=dict(os.environ, PYTHONHASHSEED="4711"),
+                        stdout=subprocess.DEVNULL)
+    pruef("%s erzeugt mit jeder Hash-Saat dieselbe Karte" % _wz.__name__,
+          _r.returncode == 0 and _ziel2.read_text(encoding="utf-8")
+          == (WURZEL / "karten" / _datei).read_text(encoding="utf-8"))
+
 # Und zwar immer dieselbe. In 0.34.6 entschied an zwei Stellen die
 # Reihenfolge einer Menge aus Zeichen, und die haengt an der Hash-Saat von
 # Python - je nach Lauf kam eine etwas andere Karte heraus (seit 0.34.7
 # fest). Darum einmal mit einer anderen Saat in einem eigenen Prozess.
-import subprocess  # noqa: E402
-
 _ziel = Path(tempfile.mkdtemp()) / "staubtal.txt"
 subprocess.run([sys.executable, str(WURZEL / "werkzeug_staubtal.py"), str(_ziel)],
                cwd=str(WURZEL), env=dict(os.environ, PYTHONHASHSEED="4711"),

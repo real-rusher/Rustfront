@@ -1532,3 +1532,16 @@ mit zehn 37 bis 40 -> 1 bis 5 Prozent (`test_verhalten.py marsch`).
   Markierungen in `karten/*.txt` genauer (Days Gone: Verteidigungszone,
   Heimatbereich, Befestigung).
 * Die Fraktionsfuehrer-Ebene (Killzone: wie viele Trupps wohin) fehlt noch.
+
+
+## Nachtrag 0.34.131: die Front in SCHLACHT (front.py)
+
+Ueber den einzelnen Hirnen steht in SCHLACHT auf Karten mit Punkten eine
+**Front je Seite** - kein Hirn, sondern wie ein Zugfuehrer, der Auftraege
+verteilt: welche Punkte angegriffen, verteidigt oder gehalten werden, wie
+viele Bots jeder braucht, in Gruppen von 1 bis 4 mit Anfuehrer, Weg durch
+das Wegenetz der Karte (Kopfzeilen `wegN`) und Formation. Was ein Bot tut,
+sobald er einen Gegner sieht, entscheidet weiter sein eigenes Hirn
+(klassisch oder GOAP); die Front sagt ihm nur, wohin er ohne Gegner geht
+(`FrontTeil.front_auftrag`, gefragt in `BotHirn._unterwegs`). Darum stehen
+dafuer keine Ziele in `wesen/bots.txt`: es ist ein Auftrag, kein Wunsch.

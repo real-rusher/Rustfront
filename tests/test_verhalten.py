@@ -1296,10 +1296,59 @@ def napalm():
           frei >= 20, "zuletzt %d" % frei)
 
 
+def front():
+    """Gewuenscht (0.34.131): in SCHLACHT laufen die Bots nicht alle in die
+    Mitte, sondern in kleinen Gruppen (auch mal einer oder zwei) auf
+    verschiedenen Wegen zu verschiedenen Punkten, in Formation - eine Front,
+    kein grosser Ball. FLUSSTAL mit Front, je Seite zehn Bots am Hauptlager."""
+    print("\n-- Front auf FLUSSTAL: Gruppen, verschiedene Ziele, Formation, kein Knaeuel")
+    ziele_n, spreizung, formation, gruppen_ok = [], [], [], []
+    for seed in (41, 42, 43):
+        random.seed(seed)
+        tm = TM.Testmodus(app, karte="flusstal")
+        tm._bot_rnd.seed(seed)
+        ENT.RND.seed(seed)
+        tm.rnd.seed(seed)
+        tm.wiedereinstieg = False
+        tm.front_test = True
+        tm.front_anlegen()
+        tm._front_rnd.seed(seed)
+        for team in (0, 1):
+            basis = tm.hauptbasis(team).pos
+            for i in range(10):
+                tm.bot_setzen(basis + pygame.Vector2(30 * (i % 5) - 60, 30 * (i // 5) - 15), 0,
+                              {"team": team, "hirn": "goap" if i % 2 else "klassisch"})
+        abstand = []
+
+        def messen(tm=tm, abstand=abstand):
+            if int(tm.welt.zeit / DT) % 120:
+                return
+            for g in tm._gruppen:
+                leute = g.lebende()
+                if len(leute) >= 2 and not g.am_ziel and tm.welt.zeit >= g.sammeln_bis:
+                    abstand.extend(m.pos.distance_to(leute[0].pos) for m in leute[1:])
+        laufen(tm, 50.0, messen)
+        rot = [g for g in tm._gruppen if g.team == 0 and g.lebende()]
+        ziele_n.append(len({g.ziel for g in rot}))
+        gruppen_ok.append(bool(rot) and all(1 <= len(g.mitglieder) <= 4 for g in tm._gruppen))
+        orte = [k.pos for k in tm.kaempfer.values() if k.team == 0 and k.lebt]
+        mitte = sum(orte, pygame.Vector2(0, 0)) / max(1, len(orte))
+        spreizung.append(max(q.distance_to(mitte) for q in orte) if orte else 0.0)
+        formation.append(sum(abstand) / max(1, len(abstand)))
+        tm.verlassen()
+    pruef("Gruppen von 1 bis 4 Bots (je Seite mehrere)", all(gruppen_ok), str(gruppen_ok))
+    pruef("ROT zieht zu wenigstens zwei verschiedenen Punkten (3 von 3 Seeds)",
+          all(n_ >= 2 for n_ in ziele_n), str(ziele_n))
+    pruef("... und steht nicht als ein Knaeuel: die Bots sind ueber 900 px verteilt",
+          all(s_ > 900.0 for s_ in spreizung), str([round(s_) for s_ in spreizung]))
+    pruef("Unterwegs bleibt eine Gruppe beisammen (im Mittel unter 220 px zum Anfuehrer)",
+          all(0.0 < f_ < 220.0 for f_ in formation), str([round(f_) for f_ in formation]))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
          planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
-         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger, napalm]
+         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger, napalm, front]
 #
 # Ohne Angabe laufen die Szenen seit 0.34.94 gleichzeitig, je eine in einem
 # eigenen Prozess, so viele wie Kerne da sind (hoechstens TEILE). Jede

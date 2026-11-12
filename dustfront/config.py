@@ -548,6 +548,76 @@ BILD_MASS = {
     "gestruepp_4":      (TILE, TILE),
     "dielen":           (TILE, TILE),
     "dielen_2":         (TILE, TILE),
+    # Wasser und die Saetze gruen und stadt (seit 0.34.131, art_gelaende).
+    "seicht":           (TILE, TILE),
+    "seicht_2":         (TILE, TILE),
+    "seicht_3":         (TILE, TILE),
+    "wasser":           (TILE, TILE),
+    "wasser_2":         (TILE, TILE),
+    "wasser_3":         (TILE, TILE),
+    "kanal":            (TILE, TILE),
+    "kanal_2":          (TILE, TILE),
+    "kanal_3":          (TILE, TILE),
+    "gras":             (TILE, TILE),
+    "gras_2":           (TILE, TILE),
+    "gras_3":           (TILE, TILE),
+    "gras_4":           (TILE, TILE),
+    "feldstein":        (TILE, TILE),
+    "moosfels":         (TILE, TILE),
+    "moosfels_2":       (TILE, TILE),
+    "moosfels_3":       (TILE, TILE),
+    "baum":             (TILE, TILE),
+    "feldweg":          (TILE, TILE),
+    "feldweg_2":        (TILE, TILE),
+    "feldweg_3":        (TILE, TILE),
+    "feldweg_4":        (TILE, TILE),
+    "ufer":             (TILE, TILE),
+    "ufer_2":           (TILE, TILE),
+    "ufer_3":           (TILE, TILE),
+    "ufer_4":           (TILE, TILE),
+    "wiese":            (TILE, TILE),
+    "wiese_2":          (TILE, TILE),
+    "wiese_3":          (TILE, TILE),
+    "wiese_4":          (TILE, TILE),
+    "steg":             (TILE, TILE),
+    "steg_2":           (TILE, TILE),
+    "asphalt":          (TILE, TILE),
+    "asphalt_2":        (TILE, TILE),
+    "asphalt_3":        (TILE, TILE),
+    "asphalt_4":        (TILE, TILE),
+    "ziegel":           (TILE, TILE),
+    "beton":            (TILE, TILE),
+    "beton_2":          (TILE, TILE),
+    "beton_3":          (TILE, TILE),
+    "truemmer":         (TILE, TILE),
+    "truemmer_2":       (TILE, TILE),
+    "truemmer_3":       (TILE, TILE),
+    "wrack":            (TILE, TILE),
+    "wrack_2":          (TILE, TILE),
+    "wrack_3":          (TILE, TILE),
+    "strasse":          (TILE, TILE),
+    "strasse_2":        (TILE, TILE),
+    "strasse_3":        (TILE, TILE),
+    "strasse_4":        (TILE, TILE),
+    "schutt":           (TILE, TILE),
+    "schutt_2":         (TILE, TILE),
+    "schutt_3":         (TILE, TILE),
+    "schutt_4":         (TILE, TILE),
+    "gehweg":           (TILE, TILE),
+    "gehweg_2":         (TILE, TILE),
+    "gehweg_3":         (TILE, TILE),
+    "rasen":            (TILE, TILE),
+    "rasen_2":          (TILE, TILE),
+    "rasen_3":          (TILE, TILE),
+    "rasen_4":          (TILE, TILE),
+    "fliesen":          (TILE, TILE),
+    "fliesen_2":        (TILE, TILE),
+    "kasernenplatz":    (TILE, TILE),
+    "kasernenplatz_2":  (TILE, TILE),
+    "kasernenplatz_3":  (TILE, TILE),
+    "kanal_seicht":     (TILE, TILE),
+    "kanal_seicht_2":   (TILE, TILE),
+    "kanal_seicht_3":   (TILE, TILE),
     # Verschneiter Kachelsatz fuer die lokale Hoehenkarten-Demo.
     "schnee":           (TILE, TILE),
     "schnee_2":         (TILE, TILE),
@@ -666,6 +736,21 @@ BILD_MASS = {
     "schrott_oben":     (TILE, TILE),
     "schrott_2_oben":   (TILE, TILE),
     "schrott_3_oben":   (TILE, TILE),
+    "feldstein_oben":   (TILE, TILE),
+    "moosfels_oben":    (TILE, TILE),
+    "moosfels_2_oben":  (TILE, TILE),
+    "moosfels_3_oben":  (TILE, TILE),
+    "baum_oben":        (22, 22),
+    "ziegel_oben":      (TILE, TILE),
+    "beton_oben":       (TILE, TILE),
+    "beton_2_oben":     (TILE, TILE),
+    "beton_3_oben":     (TILE, TILE),
+    "truemmer_oben":    (26, 26),
+    "truemmer_2_oben":  (26, 26),
+    "truemmer_3_oben":  (26, 26),
+    "wrack_oben":       (24, 30),
+    "wrack_2_oben":     (24, 30),
+    "wrack_3_oben":     (24, 30),
     "vignette":         (GAME_W, GAME_H),
 }
 
@@ -1045,7 +1130,8 @@ SCHLACHT = dict(
     je_seite=24,
     groessen=(12, 16, 20, 24, 30),
     # Seit 0.34.96 die offene Karte (gewuenscht: Fahrzeuge sollen nutzbar sein).
-    karte="staubtal_offen",
+    # Seit 0.34.131 FLUSSTAL: die erste Karte mit Front (Eroberungspunkte).
+    karte="flusstal",
     abschuesse=150,            # Vorgabe, wenn nach Abschuessen gespielt wird
     basis_x=0.08,              # Anteil der Kartenbreite vom Rand
     basis_proben=160,          # so viele freie Punkte werden je Basis geprueft
@@ -1193,6 +1279,51 @@ SCHLACHT = dict(
     absetzen_vor=650.0,
     nach_absetzen_tempo=70.0,   # px/s
 )
+
+# Die Front in SCHLACHT (seit 0.34.131, dustfront/front.py). Gilt auf Karten,
+# die ihre Basen, Eroberungspunkte und Wege im Kopf nennen (FLUSSTAL,
+# KANALSTADT). Gewuenscht: Hotzonen, die "wenn eingenommen, keine Punkte
+# bringen", sondern Einstiegspunkte werden; nach dem Tod eine Karte mit
+# allen Einstiegen zur Wahl; Bots in kleinen Gruppen auf verschiedenen
+# Wegen, in Formationen, verteilt auf die Einstiege - eine Front.
+FRONT = dict(
+    radius=210.0,              # Eroberungskreis eines Punktes (px)
+    zeit=14.0,                 # so lange braucht einer allein von neutral bis ganz (s)
+    mehr=0.4,                  # jeder weitere der Mehrheit macht es so viel schneller ...
+    hoechstens=2.6,            # ... bis hoechstens so viel mal
+    zurueck=0.06,              # niemand da: zurueck zum Stand des Besitzers (Anteil je s)
+    einstieg_umkreis=150.0,    # so weit um einen Punkt steigt man ein (px)
+    basis_umkreis=210.0,       # ... um eine Basis
+    umkaempft=520.0,           # ein Gegner so nah am Punkt: dort steigt keiner ein (px)
+    wieder_nach=7.0,           # Wiedereinstieg in SCHLACHT mit Front (s): Zeit zum Waehlen
+    takt=1.5,                  # so oft plant die Front einer Seite neu (s)
+    knoten_zusammen=96.0,      # Wegpunkte so nah beieinander sind ein Knoten (px)
+    punkt_anschluss=420.0,     # so weit sucht ein Punkt den naechsten Wegknoten (px)
+    # Gruppengroessen und wie oft: auch einmal einer allein oder zu zweit.
+    gruppen=((1, 0.15), (2, 0.32), (3, 0.3), (4, 0.23)),
+    sammeln=3.0,               # so lange wartet eine neue Gruppe am Einstieg auf ihre Leute (s)
+    wegpunkt_nah=70.0,         # so nah am Wegpunkt: weiter zum naechsten (px)
+    warten_ab=150.0,           # faellt einer weiter zurueck, geht der Anfuehrer langsamer (px)
+    warten_tempo=0.55,
+    form_abstand=46.0,         # Abstand in der Formation (px)
+    spur_abstand=40.0,         # in der Reihe auf der Spur des Anfuehrers (px)
+    halten_ring=(0.3, 0.85),   # am Punkt: so weit vom Mittelpunkt (Anteil des Radius)
+    halten_neu=(14.0, 26.0),   # so lange haelt eine Gruppe einen sicheren Punkt, dann weiter (s)
+    kampf_weite=520.0,         # ein gemeldeter Kampf so nah am Anfuehrer zieht die Gruppe an
+    kampf_pause=14.0,          # ... danach so lange kein neuer Umweg (s)
+    gewicht_angriff=1.0,       # Gewichte der Ziele: Punkt an der Front angreifen,
+    gewicht_bedroht=1.7,       # eigenen Punkt verteidigen, der bedroht ist,
+    gewicht_halten=0.3,        # eigenen Punkt an der Front halten,
+    gewicht_basis=0.9,         # Basis der anderen (wenn alle Punkte uns gehoeren)
+    bedroht=640.0,             # Gegner so nah: ein eigener Punkt gilt als bedroht (px)
+    front_faktor=1.6,          # bis so viel weiter als der naechste gilt ein Punkt als Front
+    weg_teilen=0.9,            # Aufschlag je Gruppe, die eine Kante zum selben Ziel nimmt
+    einstieg_last=0.6,         # Aufschlag je Bot, der von dort schon zu diesem Ziel ging
+    einstieg_weit=2.6,         # weiter als so viel mal der naechste: dorthin kein Bot
+    anflug=(70.0, 150.0),      # der letzte Wegpunkt liegt so weit vor dem Punkt (px)
+    fahrer=4,                  # so viele Bots je Seite fahren, wenn die Karte nichts sagt
+)
+
 
 def basis_wagen(bis_stufe: int = 99) -> list:
     """Die Basis-Fahrzeuge der SCHLACHT bis zu dieser Stufe als (Art, Anzahl),
@@ -1610,7 +1741,6 @@ JAGDPANZER = dict(
     schwenk=12.0,             # Grad, die die Kanone von der Wanne abweichen darf
     turm_dreh=40.0,           # Grad je Sekunde, mit denen sie schwenkt
     zielfernrohr=True,
-    nur_mensch=True,          # Bots fahren ihn (noch) nicht: er braucht eine Wanne, die zielt
     # Dicker vorn, duenner hinten als der Panzer (PANZER_SEITEN).
     seiten=dict(vorn=0.5, seite=1.1, hinten=1.6),
     fahrer_anteil=0.15,
@@ -1648,7 +1778,6 @@ TROSSWAGEN = dict(
     achse=31.0,
     einsteigen=60.0,
     leben=420.0,
-    nur_mensch=True,
     explosion_radius=80.0,
     explosion_schaden=80.0,
     fahrer_schaden=50.0,
@@ -1684,7 +1813,6 @@ SPULENWAGEN = dict(
     achse=26.0,
     einsteigen=56.0,
     leben=480.0,
-    nur_mensch=True,
     explosion_radius=84.0,
     explosion_schaden=85.0,
     fahrer_schaden=50.0,
@@ -1721,7 +1849,6 @@ FUNKWAGEN = dict(
     achse=24.0,
     einsteigen=54.0,
     leben=300.0,
-    nur_mensch=True,
     explosion_radius=70.0,
     explosion_schaden=60.0,
     fahrer_schaden=45.0,
@@ -1763,7 +1890,6 @@ WERFER = dict(
     achse=24.0,
     einsteigen=54.0,
     leben=120.0,
-    nur_mensch=True,
     schiesst=True,
     # Die groesste Explosion des Spiels (seit 0.34.120): wer bis `explosion_tot`
     # Pixel danebensteht - der Fahrer immer -, stirbt sofort; bis
@@ -1814,7 +1940,6 @@ TRAGSCHRAUBER = dict(
     achse=16.0,
     einsteigen=48.0,
     leben=140.0,
-    nur_mensch=True,
     schiesst=True,
     explosion_radius=60.0,
     explosion_schaden=60.0,
@@ -2324,7 +2449,8 @@ BOTS = dict(
     # Bots am Steuer (seit 0.34.71, nur wem der Testmodus es erlaubt -
     # im Gefecht fahren Bots weiter nicht, so gemeldet).
     fahren=dict(
-        abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0, krad=0.0, flakwagen=260.0),  # so weit bleibt er stehen
+        abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0, krad=0.0, flakwagen=260.0,
+                     jagdpanzer=520.0, spulenwagen=230.0),  # so weit bleibt er stehen
         suchen=700.0,         # so weit sucht ein Fahrer ohne Fahrzeug nach einem
         # Seit 0.34.95 faehrt er nach einem eigenen Wegenetz: nur Kacheln,
         # um die so viele Kacheln frei sind (wege.Fahrwegenetz), und er
@@ -2343,7 +2469,9 @@ BOTS = dict(
         # Aus Turm und Ring sieht man weiter als zu Fuss (330): die Kanone
         # reicht 900, und ein Panzer, der seine Gegner nicht sieht, ist nur
         # ein Hindernis (gemessen: Gegner auf 730 px blieben ungesehen).
-        sicht=dict(panzer=720.0, panzerwagen=560.0, buggy=380.0, krad=380.0, flakwagen=560.0),
+        sicht=dict(panzer=720.0, panzerwagen=560.0, buggy=380.0, krad=380.0, flakwagen=560.0,
+                   jagdpanzer=900.0, spulenwagen=440.0, trosswagen=380.0, funkwagen=380.0,
+                   werfer=380.0, tragschrauber=520.0),   # seit 0.34.131 fahren Bots alle
         # Seit 0.34.84 (gemeldet nach einer grossen Fahrzeugschlacht):
         # Liegt das Ziel hinter ihm und weiter weg als das, wendet er
         # vorwaerts, statt die ganze Strecke rueckwaerts zu fahren.
@@ -3222,6 +3350,15 @@ STEHEN = {
     "holzkiste":  dict(hoehe=16.0, rahmen=(3, 3, 26, 26), form="block", fugen=2),
     "kaktus":     dict(hoehe=20.0, rahmen=(7, 7, 18, 18), form="rund", fugen=0),
     "schrott":    dict(hoehe=14.0, rahmen=(0, 0, 32, 32), form="block", fugen=1),
+    # Seit 0.34.131 (Saetze gruen und stadt): der Baum ist hoeher als jede
+    # Mauer, haelt aber nur mit dem Stamm und dem dichten Teil der Krone.
+    "feldstein":  dict(hoehe=22.0, rahmen=(0, 0, 32, 32), form="block", fugen=2),
+    "moosfels":   dict(hoehe=30.0, rahmen=(0, 0, 32, 32), form="block", fugen=3),
+    "baum":       dict(hoehe=28.0, rahmen=(5, 5, 22, 22), form="rund", fugen=0),
+    "ziegel":     dict(hoehe=28.0, rahmen=(0, 0, 32, 32), form="block", fugen=2),
+    "beton":      dict(hoehe=26.0, rahmen=(0, 0, 32, 32), form="block", fugen=2),
+    "truemmer":   dict(hoehe=12.0, rahmen=(3, 3, 26, 26), form="block", fugen=0),
+    "wrack":      dict(hoehe=15.0, rahmen=(4, 1, 24, 30), form="block", fugen=1),
 }
 
 # Deckung (seit 0.34.26, world.Welt.schuss_halt / deckung). Jede feste
@@ -3252,7 +3389,42 @@ KARTENSAETZE = {
                "wand": "sand_wand", "kiste": "sand_kiste", "klippe": "fels"},
     "schnee": {"boden": ("schnee", "schnee_2", "schnee_3", "schnee_4"),
                "wand": "schnee_fels"},
+    # Seit 0.34.131: FLUSSTAL - Wiesen, Feldwege, bemooster Granit, Baeume,
+    # Feldsteinmauern, Stege ueber das Wasser.
+    "gruen": {"boden": ("gras", "gras_2", "gras_3", "gras_4"),
+              "wand": "feldstein", "kaktus": "baum", "klippe": "moosfels",
+              "bilder": {"fels": ("moosfels", "moosfels_2", "moosfels_3"),
+                         "piste": ("feldweg", "feldweg_2", "feldweg_3", "feldweg_4"),
+                         "kies": ("ufer", "ufer_2", "ufer_3", "ufer_4"),
+                         "gestruepp": ("wiese", "wiese_2", "wiese_3", "wiese_4"),
+                         "pflaster": ("gehweg", "gehweg_2", "gehweg_3")}},
+    # Seit 0.34.131: KANALSTADT - Asphalt, Ziegelhaeuser, Betontruemmer,
+    # Autowracks, Kanaele mit Bruecken, Parks mit Rasen und Baeumen.
+    "stadt": {"boden": ("asphalt", "asphalt_2", "asphalt_3", "asphalt_4"),
+              "wand": "ziegel", "kaktus": "baum", "klippe": "beton",
+              "bilder": {"fels": ("beton", "beton_2", "beton_3"),
+                         "brocken": ("truemmer", "truemmer_2", "truemmer_3"),
+                         "schrott": ("wrack", "wrack_2", "wrack_3"),
+                         "piste": ("strasse", "strasse_2", "strasse_3", "strasse_4"),
+                         "kies": ("schutt", "schutt_2", "schutt_3", "schutt_4"),
+                         "pflaster": ("gehweg", "gehweg_2", "gehweg_3"),
+                         "gestruepp": ("rasen", "rasen_2", "rasen_3", "rasen_4"),
+                         "dielen": ("fliesen", "fliesen_2"),
+                         "wasser": ("kanal", "kanal_2", "kanal_3"),
+                         "seicht": ("kanal_seicht", "kanal_seicht_2", "kanal_seicht_3"),
+                         "gitter": ("kasernenplatz", "kasernenplatz_2", "kasernenplatz_3")}},
 }
+
+# Kachelsaetze mit Varianten (seit 0.34.131): "bilder" ersetzt die
+# Abwechslungsbilder einer Kachelart (KACHELN bilder) - in FLUSSTAL ist der
+# Fels bemoost und die Piste ein Feldweg, ohne neue Kachelarten. Was ein
+# Satz nicht nennt, bleibt, wie es ist.
+def satz_bild(satz: dict, daten: dict, variante: int = 0) -> str:
+    """Das Bild einer Kachelart in diesem Satz, mit Abwechslung."""
+    bilder = satz.get("bilder", {}).get(daten["name"]) or daten.get("bilder")
+    if bilder:
+        return bilder[variante % len(bilder)]
+    return satz.get(daten["bild"], daten["bild"])
 
 # Wie hoch ueber dem Boden etwas in der Welt ist, in Welt-Pixeln (seit
 # 0.34.5). Gebraucht nur fuer die Frage, ob eine Mauer es verdeckt
@@ -3337,9 +3509,15 @@ TRACER = dict(
 # weich     Bodenart ohne feste Kante (Piste, Kies): wo Sand angrenzt,
 #           franst der Sand in sie hinein, statt dass eine Kachelkante
 #           eine Linie zieht (render.Renderer._weicher_rand)
+# seicht    (seit 0.34.131) Wasser bis zum Knie: begehbar und befahrbar,
+#           aber so viel langsamer (Faktor auf das Tempo, K.WASSER)
+# sperrt    (seit 0.34.131) tiefes Wasser: niemand geht oder faehrt hinein,
+#           aber es ist kein Hindernis fuer Kugeln, Sicht und Wuerfe - man
+#           schiesst ueber den Fluss, man geht nicht hindurch
 LEER, BODEN, GITTER, WAND, KISTE, TREPPE_HOCH, TREPPE_RUNTER, LUKE, \
     AUFZUG_HOCH, AUFZUG_RUNTER, FELS, BROCKEN, SANDSACK, HOLZKISTE, \
-    KAKTUS, SCHROTT, PISTE, KIES, PFLASTER, GESTRUEPP, DIELEN = range(21)
+    KAKTUS, SCHROTT, PISTE, KIES, PFLASTER, GESTRUEPP, DIELEN, \
+    WASSER_SEICHT, WASSER_TIEF, BRUECKE = range(24)
 
 KACHELN = {
     # Ein Loch: man kann darueber hinwegschiessen und hineinfallen, aber es
@@ -3387,7 +3565,27 @@ KACHELN = {
                         bilder=("gestruepp", "gestruepp_2", "gestruepp_3", "gestruepp_4")),
     DIELEN:        dict(name="dielen",   fest=False, sicht=False, bild="dielen",
                         bilder=("dielen", "dielen_2")),
+    # Seit 0.34.131 fuer FLUSSTAL und KANALSTADT (gewuenscht: "gerne auch
+    # seichtes Wasser"). Zeichen + und %.
+    WASSER_SEICHT: dict(name="seicht",   fest=False, sicht=False, bild="seicht",
+                        bilder=("seicht", "seicht_2", "seicht_3"), weich=True,
+                        seicht=True),
+    WASSER_TIEF:   dict(name="wasser",   fest=False, sicht=False, bild="wasser",
+                        bilder=("wasser", "wasser_2", "wasser_3"), weich=True,
+                        sperrt=True),
+    # Bohlen einer Bruecke ueber das Wasser (Zeichen |): Boden, aber man
+    # sieht durch die Fugen den Fluss darunter.
+    BRUECKE:       dict(name="bruecke",  fest=False, sicht=False, bild="steg",
+                        bilder=("steg", "steg_2")),
 }
+
+# Wasser (seit 0.34.131): wie sehr seichtes Wasser bremst. Tiefes sperrt
+# ganz (KACHELN sperrt) - darum gibt es dort Furten und Bruecken.
+WASSER = dict(
+    seicht_tempo=0.62,        # zu Fuss
+    seicht_fahrzeug=0.72,     # Fahrzeuge (Ketten und Raeder kommen besser durch)
+    spritzer_takt=0.22,       # so oft spritzt es um einen, der im Wasser laeuft (s)
+)
 
 # ══════════════════════════════════════════════════ INHALTE: Waffen
 
@@ -5140,6 +5338,22 @@ KARTENBILD = dict(
     schatten=(44, 34, 24), treppe=(72, 170, 158),
     wand=(196, 170, 128), fels=(150, 128, 98), wand_licht=(214, 192, 150), wand_dunkel=(122, 100, 72),
     deckung=(176, 148, 104), deckung_rand=(52, 38, 26),
+    seicht=(84, 116, 118), wasser=(40, 72, 96),
+    # Seit 0.34.131: je Kachelsatz andere Farben (kartenbild._farben).
+    saetze={
+        "gruen": dict(sand=(66, 92, 48), piste=(108, 90, 62), kies=(100, 98, 84),
+                      gestruepp=(80, 106, 54), pflaster=(108, 106, 100), dielen=(112, 84, 54),
+                      seicht=(76, 118, 126), wasser=(38, 74, 104), schatten=(34, 50, 28),
+                      wand=(178, 172, 156), fels=(122, 132, 110), wand_licht=(206, 202, 186),
+                      wand_dunkel=(96, 100, 86), deckung=(150, 136, 104),
+                      deckung_rand=(36, 44, 28), baum=(38, 70, 34)),
+        "stadt": dict(sand=(72, 72, 76), piste=(54, 54, 58), kies=(100, 94, 88),
+                      gestruepp=(74, 102, 56), pflaster=(122, 120, 116), dielen=(140, 136, 128),
+                      seicht=(70, 100, 110), wasser=(34, 60, 76), schatten=(30, 30, 34),
+                      wand=(176, 104, 80), fels=(156, 156, 150), wand_licht=(206, 140, 110),
+                      wand_dunkel=(112, 64, 50), deckung=(150, 146, 140),
+                      deckung_rand=(30, 30, 34), baum=(46, 82, 40)),
+    },
 )
 
 MINIKARTE = dict(

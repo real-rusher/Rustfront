@@ -55,6 +55,10 @@ ZEICHEN = {
     "_": K.PFLASTER,
     '"': K.GESTRUEPP,
     "=": K.DIELEN,
+    # Seit 0.34.131: Wasser - seicht (begehbar, bremst) und tief (sperrt).
+    "+": K.WASSER_SEICHT,
+    "%": K.WASSER_TIEF,
+    "|": K.BRUECKE,
 }
 
 # Dekale werden in kleinen Flaechen abgelegt. Auf einer grossen Karte waere
@@ -318,7 +322,11 @@ class Ebene:
         return K.KACHELN[self.kacheln[ty * self.breite + tx]].get("loch", False)
 
     def begehbar(self, tx: int, ty: int) -> bool:
-        return not self.fest(tx, ty) and self.kachel(tx, ty) != K.LEER
+        k = self.kachel(tx, ty)
+        d = K.KACHELN[k]
+        # Tiefes Wasser (seit 0.34.131) ist kein Weg - fuer Wegenetz,
+        # freie Punkte und Einstiege genau wie eine Wand.
+        return not d["fest"] and k != K.LEER and not d.get("sperrt", False)
 
     @property
     def pixel_breite(self) -> int:
@@ -369,6 +377,8 @@ class Welt:
         # Boden, Wand und Kiste gegen Sand, Fels und Fass. Steht als
         # `satz:` im Kopf der Kartendatei.
         self.satz = satz
+        for e in ebenen:
+            e.satz = satz       # fuer das Kartenbild (kartenbild.py, seit 0.34.131)
         self.schneespuren: list[list[float]] = []
         self.wesen: list = []
         self.neue: list = []
@@ -1193,19 +1203,40 @@ class Welt:
 
     def _frei_tafel_bauen(self):
         tafel = {}
+        ueber = {}
         for kachel, daten in K.KACHELN.items():
             if daten["fest"]:
                 tafel[kachel] = self.huelle(kachel)
             elif daten.get("loch", False):
                 tafel[kachel] = _LOCH
+            elif daten.get("sperrt", False):
+                # Tiefes Wasser (seit 0.34.131): die ganze Kachel sperrt -
+                # ausser fuer das, was darueber fliegt (`ueber`).
+                tafel[kachel] = ("block", 0, 0, K.TILE, K.TILE)
+                ueber[kachel] = None
+                continue
             else:
                 tafel[kachel] = None
-        self._frei_tafel = (K.KACHELN, getattr(self, "satz", ""), tafel)
+            ueber[kachel] = tafel[kachel]
+        self._frei_tafel = (K.KACHELN, getattr(self, "satz", ""), tafel, ueber)
         return self._frei_tafel
 
+    def seicht(self, pos, ebene: int) -> bool:
+        """Steht man hier in seichtem Wasser (seit 0.34.131)?"""
+        e = self.ebene(ebene)
+        return K.KACHELN[e.kachel(int(pos.x // K.TILE), int(pos.y // K.TILE))].get("seicht", False)
+
+    def boden_tempo(self, pos, ebene: int, fahrzeug: bool = False) -> float:
+        """Faktor auf das Tempo durch den Boden: 1, im seichten Wasser
+        weniger (K.WASSER)."""
+        if self.seicht(pos, ebene):
+            return K.WASSER["seicht_fahrzeug" if fahrzeug else "seicht_tempo"]
+        return 1.0
+
     def frei(self, pos: pygame.Vector2, radius: float, ebene: int,
-             loch_fest: bool = False) -> bool:
+             loch_fest: bool = False, ueber_wasser: bool = False) -> bool:
         """loch_fest: Loecher zaehlen als Wand. Fuer alles, was nicht fallen soll.
+        ueber_wasser: tiefes Wasser haelt nicht auf (Granaten, Flieger).
 
         Feste Kacheln halten mit ihrer Grundflaeche auf (`huelle`), Loecher
         mit der ganzen Kachel."""
@@ -1227,7 +1258,7 @@ class Welt:
         tafel = self.__dict__.get("_frei_tafel")
         if tafel is None or tafel[0] is not K.KACHELN or tafel[1] != getattr(self, "satz", ""):
             tafel = self._frei_tafel_bauen()
-        tafel = tafel[2]
+        tafel = tafel[3] if ueber_wasser else tafel[2]
         leer = K.LEER
         for ty in range(t0y, t1y + 1):
             innen_y = 0 <= ty < hoehe
@@ -1278,19 +1309,20 @@ class Welt:
         # steht die Figur beim Aufsetzen schon auf freiem Grund und muss nicht
         # im letzten Bild noch zur Seite gesetzt werden.
         lf = (not getattr(wesen, "faellt", False)) if loch_fest is None else loch_fest
+        uw = getattr(wesen, "ueber_wasser", False)
         stoss_x = stoss_y = False
         schritte = max(1, int(max(abs(dx), abs(dy)) / (r * 0.75)) + 1)
         sx, sy = dx / schritte, dy / schritte
         for _ in range(schritte):
             if sx:
                 pos.x += sx
-                if not self.frei(pos, r, eb, lf):
+                if not self.frei(pos, r, eb, lf, uw):
                     pos.x -= sx
                     stoss_x = True
                     sx = 0.0
             if sy:
                 pos.y += sy
-                if not self.frei(pos, r, eb, lf):
+                if not self.frei(pos, r, eb, lf, uw):
                     pos.y -= sy
                     stoss_y = True
                     sy = 0.0

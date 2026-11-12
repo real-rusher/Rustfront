@@ -743,13 +743,10 @@ class Renderer:
                 if kachel == K.LEER:
                     continue
                 daten = K.KACHELN[kachel]
-                bilder = daten.get("bilder")
                 s = None
                 if daten["fest"]:
-                    if bilder:
-                        name_f = bilder[e.variante[zeile + tx] % len(bilder)]
-                    else:
-                        name_f = satz.get(daten["bild"], daten["bild"])
+                    # Mit Abwechslung, auch aus dem Satz (seit 0.34.131).
+                    name_f = K.satz_bild(satz, daten, e.variante[zeile + tx])
                     st = self._stehend(name_f, daten)
                     fest.append((tx, ty, name_f,
                                  self._stehend_fest(e, satz, tx, ty, name_f, st)))
@@ -759,11 +756,10 @@ class Renderer:
                     # rundherum zu sehen, also zuerst der Boden.
                     s = bild(boden_namen[e.variante[zeile + tx]])
                 else:
-                    name = satz.get(daten["bild"], daten["bild"])
                     if kachel == K.BODEN:
                         name = boden_namen[e.variante[zeile + tx]]
-                    elif bilder:
-                        name = bilder[e.variante[zeile + tx] % len(bilder)]
+                    else:
+                        name = K.satz_bild(satz, daten, e.variante[zeile + tx])
                     if daten.get("weich"):
                         s = self._weicher_rand(name, e, tx, ty, boden_namen[0])
                     else:
