@@ -5589,6 +5589,11 @@ for _w in ("repetierer", "sturm", "schrot", "scharf", "lmg", "granate",
     SKIN_ROLLEN["%s_knall" % _w] = ("schuss_%s" % _w
                                     if "schuss_%s" % _w in KLANG_NAMEN
                                     else "schuss")
+# Das Zeichen jeder anderen Waffe (seit 0.34.135, gemeldet: auf der
+# Kontoseite und in der Kosmetik standen neue Waffen lila): dasselbe Bild
+# wie in der Hotbar (inventar.symbol).
+for _w in WAFFEN:
+    SKIN_ROLLEN.setdefault("%s_symbol" % _w, "waffe_%s" % _w)
 
 # ══════════════════════════════════════════════════ FIGUREN (seit 0.34.60)
 #
