@@ -229,6 +229,15 @@ class SchlachtTeil:
                     zone = Dropzone(pos, team, art, winkel)
                     zone.rest = S["abwurf"]["start"]
                     self.dropzonen.append(zone)
+        # Seit 0.34.138 stehen die Wagen der Basen zum Rundenstart gleich da
+        # (gemeldet: "alle laufen los, dann droppen die Fahrzeuge, und ein paar
+        # Bots rennen zurueck"). Was spaeter nachkommt, faellt weiter am Schirm.
+        if S["basis_sofort"]:
+            for zone in list(self.dropzonen):
+                if zone.fahrzeug is None and zone.art in fahrzeug_modul.ARTEN:
+                    zone.rest = 0.0
+                    self._abwurf_landet(Abwurf(zone))
+        self._basis_fahrer_offen = True
 
     def basis_ausstattung(self, team: int, ab_stufe: int, bis_stufe: int) -> list:
         """Was an den Basen einer Seite steht, von (ausschliesslich) ab_stufe
@@ -251,11 +260,42 @@ class SchlachtTeil:
         return raus
 
     # ---- Ablauf (Gastgeber) ------------------------------------------------
+    def basis_fahrer_setzen(self) -> int:
+        """Zum Rundenstart (seit 0.34.138): in jeden Wagen der Basen setzt sich
+        gleich ein freier Bot-Fahrer seiner Seite (`darf_fahren`), der naechste
+        zuerst - so faehrt die Seite gemeinsam los, statt dass Bots spaeter
+        zurueckrennen. Gibt die Zahl der Besetzten zurueck."""
+        from .bots import FAHRZEUG_VORZUG
+        n = 0
+        # Die wertvollen zuerst (Werfer, Panzer, Funkwagen ...), dann Buggys.
+        for b in sorted(self.fahrzeuge, key=lambda v: -FAHRZEUG_VORZUG.get(v.art, 0.0)):
+            if (b.fahrer is not None or b.kaputt or b.nur_bild or not b.lebt
+                    or getattr(b, "basis_team", -1) not in (0, 1) or b.werte.get("nur_mensch")):
+                continue
+            frei = [k for k in self.kaempfer.values()
+                    if getattr(k, "ist_bot", False) and k.lebt and not k.am_boden
+                    and k.team == b.basis_team and getattr(k, "darf_fahren", False)
+                    and k.fahrzeug is None and getattr(k, "mitfahrt", None) is None
+                    and k.pos.distance_to(b.pos) <= S["basis_fahrer_weite"]]
+            if not frei:
+                continue
+            k = min(frei, key=lambda x: x.pos.distance_squared_to(b.pos))
+            k.pos.update(b.pos)
+            if hasattr(k, "vorher"):
+                k.vorher.update(b.pos)
+            self._einsteigen(k, b)
+            n += 1
+        return n
+
     def schlacht_schritt(self, dt: float) -> None:
         if not (self.schlacht or self.__dict__.get("nachschub_an")) or not self.ist_gastgeber:
             return
         if self.schlacht:
             self.basis_nachschub()
+            if self.__dict__.get("_basis_fahrer_offen") and any(
+                    getattr(k, "ist_bot", False) for k in self.kaempfer.values()):
+                self._basis_fahrer_offen = False
+                self.basis_fahrer_setzen()
         a = S["abwurf"]
         for zone in list(self.dropzonen):
             if zone.fahrzeug is not None:

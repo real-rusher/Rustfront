@@ -8633,7 +8633,10 @@ def nur_verbuendete(modus):
     e = w.welt.ebenen[0]
     q = (int(r.x + andere.pos.x * r.width / float(e.pixel_breite)),
          int(r.y + andere.pos.y * r.height / float(e.pixel_hoehe)))
-    sichtbar = tuple(app.flaeche.get_at(q))[:3] == (1, 2, 250)
+    # Seit 0.34.138 stehen Freunde immer in FARBE_FREUND (cyan), nicht in der
+    # Mannschaftsfarbe - gesucht wird beides.
+    from dustfront import minikarte as _MK9
+    sichtbar = tuple(app.flaeche.get_at(q))[:3] in ((1, 2, 250), tuple(_MK9.FARBE_FREUND))
     w.verlassen(); g.verlassen()
     return sichtbar
 pruef("In PVE stehen die Mitspieler auf der Karte", nur_verbuendete("pve"))
@@ -16486,14 +16489,14 @@ pruef("... dann sinken sie am Fallschirm herunter", len(w198.abwuerfe) == len(w1
 for _ in range(int((_ab198["hoehe"] / _ab198["sinken"] + 0.5) / K.FIXED_DT)):
     w198.schlacht_schritt(K.FIXED_DT)
 _je198 = [sum(1 for k_ in w198.kaempfer.values() if k_.team == i_) for i_ in range(2)]
-# Der Flakwagen der Basis (seit 0.34.117) bringt einen zusaetzlichen Bot mit (Verstaerkung):
-# die Seiten sind mit 12 gefuellt, dazu je ein Flak-Fahrer.
+# Der Flakwagen der Basis brachte von 0.34.117 bis 0.34.137 einen zusaetzlichen Bot mit;
+# seit 0.34.138 duerfen ihn Menschen fahren, und es kommt keiner mehr dazu.
 _je198 = [sum(1 for k_ in w198.kaempfer.values() if k_.team == i_ and not getattr(k_, "verstaerkung", False))
           for i_ in range(2)]
 _flak198 = [sum(1 for k_ in w198.kaempfer.values() if k_.team == i_ and getattr(k_, "verstaerkung", False)
                 and getattr(getattr(k_, "fahrzeug", None), "art", "") == "flakwagen") for i_ in range(2)]
-pruef("Beide Seiten stehen sofort voll - fehlende Spieler sind Bots; dazu je ein Bot im Flakwagen",
-      _je198 == [12, 12] and _flak198 == [1, 1], str(_je198) + str(_flak198))
+pruef("Beide Seiten stehen sofort voll - fehlende Spieler sind Bots; kein zusaetzlicher Flak-Bot mehr",
+      _je198 == [12, 12] and _flak198 == [0, 0], str(_je198) + str(_flak198))
 _bl198, _br198, _mi198 = w198._schlacht_punkte()
 _breit198 = w198.welt.ebene(0).pixel_breite
 pruef("ROT hat seine Basis links, BLAU rechts", _bl198.x < 0.2 * _breit198 < 0.8 * _breit198 < _br198.x,
@@ -18210,8 +18213,8 @@ _namen114 = [e_.name for e_ in _tm114.eintraege]
 pruef("Testmodus: FLAKWAGEN im Spawner (OBJEKTE) und als Abwurf (NACHSCHUB); im Nachschub fuer 9 Punkte",
       "FLAKWAGEN" in _namen114 and "ABWURF: FLAKWAGEN" in _namen114
       and "flakwagen" in [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]])
-pruef("Flakwagen: Werte - nur Bots, Flak, kein Truppentransporter; die Flak-Zeile traegt `flak`",
-      K.FLAKWAGEN["nur_bot"] and K.FLAKWAGEN["flak"] and "plaetze" not in K.FLAKWAGEN
+pruef("Flakwagen: Werte - seit 0.34.138 auch fuer Menschen, Flak, kein Truppentransporter; die Flak-Zeile traegt `flak`",
+      not K.FLAKWAGEN.get("nur_bot") and K.FLAKWAGEN["flak"] and "plaetze" not in K.FLAKWAGEN
       and K.FAHRZEUG_WAFFEN["flak_kanone"]["flak"] and K.FLAK["luft_schaden"] > 50.0)
 _e114 = _tm114.welt.ebene(0)
 _rnd114 = random.Random(114)
@@ -18223,14 +18226,16 @@ for _ in range(40000):
         break
 _z114 = lambda x_, y_: pygame.Vector2((_tx114 + x_ + 0.5) * K.TILE, (_ty114 + y_ + 0.5) * K.TILE)
 _fw114 = _tm114.fahrzeug_setzen("flakwagen", _z114(10, 12), 0, {"winkel": 0})
-pruef("Flakwagen: eigene Art, ein Panzerwagen mit Lafette, nur Bots",
+pruef("Flakwagen: eigene Art, ein Panzerwagen mit Lafette (seit 0.34.138 auch fuer Menschen)",
       _fw114.art == "flakwagen" and isinstance(_fw114, _FZ59.Panzerwagen) and _fw114.flak
-      and _fw114.aufbau_name == "flak_lafette" and _fw114.werte["nur_bot"])
-# Ein Mensch kommt nicht hinein, ein Bot schon.
+      and _fw114.aufbau_name == "flak_lafette" and not _fw114.werte.get("nur_bot"))
+# Seit 0.34.138 kommt auch ein Mensch hinein (gewuenscht) - er steigt gleich wieder aus.
 _mensch114 = _tm114.puppe_setzen(_fw114.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="MENSCH")
 _tm114._anwenden(_mensch114, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
-pruef("Flakwagen: ein Mensch kann nicht einsteigen (E bleibt ohne Wirkung)",
-      _mensch114.fahrzeug is None and _fw114.fahrer is None)
+pruef("Flakwagen: ein Mensch kann einsteigen (seit 0.34.138)",
+      _mensch114.fahrzeug is _fw114 and _fw114.fahrer is _mensch114)
+_tm114._aussteigen(_mensch114)
+_mensch114.pos.update(_fw114.pos + pygame.Vector2(0, 300))
 _bot114 = _tm114.fahrer_setzen(_fw114.ausstiegsorte(9.0)[0], 0, {"team": 0}, mit_fahrzeug=False)
 _tm114._anwenden(_bot114, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
 pruef("Flakwagen: ein Bot, der fahren darf, findet ihn und kann einsteigen",
@@ -20070,6 +20075,7 @@ pruef("... STANDARDRUNDE setzt sie wieder ein, und jede neue Lobby plant sie zue
       and _R138.meine_standardrunde(app.opt["eigene_standardrunde"])["modus"] == "pvp"
       and _R138.meine_standardrunde({})["modus"] == K.STANDARDRUNDE["modus"])
 app.opt["eigene_standardrunde"] = _alt_std138
+app.opt.speichern()
 # Flakwagen fuer Menschen, Volltreffer, Bots gegen Luftziele.
 pruef("Flakwagen: auch Menschen duerfen ihn fahren (kein nur_bot mehr)", not K.FLAKWAGEN.get("nur_bot"))
 from dustfront import fahrzeug as _FZ138
@@ -20265,6 +20271,38 @@ if _bot139 is not None:
     pruef("Aufsitzen: direkt am Heck (%.0f px von der Mitte) eines Panzerwagens, den ein Eigener faehrt" %
           _ich139.pos.distance_to(_pw139.pos), w139._transporter_bei(_ich139) is _pw139)
 w139.verlassen(); g139.verlassen()
+
+# Rundenstart in SCHLACHT: Wagen sofort da, zur Front gedreht, die wertvollen besetzt und unterwegs.
+w140, g140 = _paar59("schlacht", karte="flusstal")
+w140._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="flusstal", schlacht_seite=24, freischalten="aus"))
+w140._einstiegszonen_waehlen(); w140._fahrzeuge_neu_aufstellen(); w140._bots_fuehren(0.0, sofort=True)
+w140.schritt(K.FIXED_DT)
+_mitte140 = w140._schlacht_punkte()[2]
+_basis140 = [b_ for b_ in w140.fahrzeuge if getattr(b_, "basis_team", -1) in (0, 1)]
+pruef("Rundenstart: die Basiswagen stehen sofort da (kein Warten auf den Abwurf)", len(_basis140) >= 20, str(len(_basis140)))
+pruef("... alle schauen zur Front (keiner um 180 Grad verdreht)",
+      all(b_.vorn.dot((_mitte140 - b_.pos).normalize()) > 0.3 for b_ in _basis140),
+      str(sorted(round(b_.vorn.dot((_mitte140 - b_.pos).normalize()), 2) for b_ in _basis140)[:4]))
+_besetzt140 = {b_.art for b_ in _basis140 if b_.fahrer is not None}
+pruef("... und Bot-Fahrer sitzen gleich darin, die wertvollen zuerst (Werfer, Funkwagen, Flakwagen ...)",
+      {"werfer", "funkwagen", "flakwagen", "panzer"} <= _besetzt140, str(sorted(_besetzt140)))
+_start140 = {id(b_): pygame.Vector2(b_.pos) for b_ in _basis140 if b_.fahrer is not None}
+for _ in range(int(15 / K.FIXED_DT)):
+    w140.schritt(K.FIXED_DT)
+_still140 = [b_.art for b_ in _basis140 if id(b_) in _start140 and b_.fahrer is not None
+             and b_.pos.distance_to(_start140[id(b_)]) < 60]
+pruef("... und sie fahren los (auch der Flakwagen ohne Konvoi)", len(_still140) <= 2, str(_still140))
+_bb140 = next((b_ for b_ in w140.fahrzeuge if b_.art == "buggy" and b_.fahrer is not None
+               and getattr(b_.fahrer, "ist_bot", False)), None)
+if _bb140 is not None:
+    _fb140 = _bb140.fahrer
+    _gg140 = next(k_ for k_ in w140.kaempfer.values() if k_.lebt and k_.team != _fb140.team)
+    _gg140.pos.update(_bb140.pos + _bb140.vorn * 150)
+    _fb140.hirn.ziel = _gg140
+    _ein140 = _fb140.hirn._am_steuer(K.FIXED_DT, {"knoepfe": [], "will": [0, 0], "ziel": [0, 0]})
+    pruef("Buggy ohne Waffe: ist ein Gegner nah, steigt der Bot aus (kein Anfahren und Umkreisen)",
+          "nutzen" in _ein140["knoepfe"] and _fb140.hirn._zum_fahrzeug({"knoepfe": []}) is None)
+w140.verlassen(); g140.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

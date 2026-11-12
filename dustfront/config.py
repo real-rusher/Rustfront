@@ -1223,6 +1223,11 @@ SCHLACHT = dict(
     # gross wie das Fahrzeug plus `rand` px (Kisten: `kiste` px), an den Ecken
     # blaue Fackeln; je Fackel `rauch` Wolken, die `steigen` px aufsteigen,
     # bis `rauch_gross` px wachsen und mit `wind` verwehen.
+    # Seit 0.34.138: die Basiswagen stehen zum Rundenstart sofort da, und freie
+    # Bot-Fahrer (darf_fahren) bis `basis_fahrer_weite` px sitzen gleich darin.
+    basis_sofort=True, basis_fahrer_weite=900.0,
+    fahrer_anteil=0.45,        # seit 0.34.138: so viel der Seite darf fahren (hoechstens so viele, wie die Basen Wagen haben)
+    drop_frei_vorn=6,          # seit 0.34.138: so viele 8-px-Schritte muss ein Basiswagen zur Front frei losfahren koennen
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
                   rand=10, kiste=40, rauch=10, rauch_tempo=0.4, steigen=44.0, rauch_gross=13,
                   wind=0.8,
@@ -2606,6 +2611,10 @@ BOTS = dict(
     # Bots am Steuer (seit 0.34.71, nur wem der Testmodus es erlaubt -
     # im Gefecht fahren Bots weiter nicht, so gemeldet).
     fahren=dict(
+        # Seit 0.34.138: wer in einem Wagen ohne Waffe sitzt (Buggy, Krad), jagt
+        # keinen Gegner; kommt einer naeher als `unbewaffnet_aussteigen` px,
+        # steigt er aus und sucht `unbewaffnet_pause` s lang keinen Wagen.
+        unbewaffnet_aussteigen=300.0, unbewaffnet_pause=25.0,
         abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0, krad=0.0, flakwagen=260.0,
                      jagdpanzer=520.0, spulenwagen=230.0),  # so weit bleibt er stehen
         suchen=700.0,         # so weit sucht ein Fahrer ohne Fahrzeug nach einem

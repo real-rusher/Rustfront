@@ -1655,6 +1655,8 @@ class BotHirn(Taktik):
         blieb dort stehen."""
         k = self.k
         f = K.BOTS["fahren"]
+        if self.g.welt.zeit < getattr(self, "_fz_pause_bis", -1.0):
+            return None                 # eben aus einem Buggy gestiegen, um zu kaempfen
         bester, weite, wert = None, f["suchen"], 1e18
         for b in getattr(self.g, "fahrzeuge", ()):
             if b.fahrer is not None or b.kaputt or b.nur_bild or b.ebene != k.ebene:
@@ -1913,6 +1915,19 @@ class BotHirn(Taktik):
         ziel_ort = (pygame.Vector2(z.pos) if z is not None
                     else (pygame.Vector2(verdeckt) if verdeckt is not None else None))
         if stellung:
+            ziel_ort = None
+        unbewaffnet = not (getattr(b, "rechteckig", False) or getattr(b, "schiesst", False)
+                           or getattr(b, "flak", False) or b.art == "tragschrauber")
+        if unbewaffnet and not stellung:
+            # Seit 0.34.138 (gemeldet: "Bots in Buggies versuchen die ganze Zeit
+            # einen anzufahren und umkreisen einen, obwohl sie keinen Schaden
+            # machen"): wer nicht schiessen kann, jagt keinen. Ist ein Gegner
+            # nah, steigt er aus und kaempft zu Fuss - und sucht eine Weile
+            # keinen Wagen (bots._zum_fahrzeug).
+            if z is not None and b.pos.distance_to(z.pos) <= f["unbewaffnet_aussteigen"]:
+                self._fz_pause_bis = self.g.welt.zeit + f["unbewaffnet_pause"]
+                ein["knoepfe"].append("nutzen")
+                return ein
             ziel_ort = None
         gas, lenk = 0.0, 0.0
         will = pygame.Vector2(0, 0)
@@ -2298,7 +2313,14 @@ class BotHirn(Taktik):
         ziel = pygame.Vector2(ziel_ort) if ziel_ort is not None else b.pos + b.vorn * 200.0
         fuehrer = self._konvoi_fuehrer(b)
         if fuehrer is None:
-            return 0.0, 0.0, pygame.Vector2(0, 0), ziel
+            # Ohne Konvoi nicht stehen bleiben (seit 0.34.138, gemeldet: "die
+            # Fahrer im Flakwagen fahren oft einfach nicht los"): wie die
+            # anderen Fahrzeuge zu den Zielen der Seite.
+            if self.streif_ort is None or b.pos.distance_to(self.streif_ort[0]) < 80.0:
+                self.streif_ort = self._streifziel()
+            wp = self._wegpunkt_fuer(b, self.streif_ort[0])
+            gas, lenk = self._lenken(b, wp, weit=b.pos.distance_to(self.streif_ort[0]))
+            return gas, lenk, wp - b.pos, ziel
         abstand = b.pos.distance_to(fuehrer.pos)
         if abstand <= f["konvoi_abstand"]:
             return 0.0, 0.0, pygame.Vector2(0, 0), ziel
@@ -2707,6 +2729,18 @@ class BotTeil:
             # Auf einer Karte mit Front sagt der Kopf, wie viele (seit 0.34.131).
             plan = getattr(self, "schlachtplan", None)
             hoechstens = plan.fahrer if plan is not None else K.SCHLACHT["fahrer_je_seite"]
+            # Seit 0.34.138 mit der Seitenstaerke mehr (gemeldet: "die Bots sollen
+            # alle Fahrzeuge bewusster einsetzen, den Funkwagen sehe ich nie") -
+            # hoechstens so viele, wie die Basen Wagen haben.
+            seite = int(getattr(self, "regelwerk", {}).get("schlacht_seite", 0) or 0)
+            hoechstens = max(hoechstens, int(seite * K.SCHLACHT["fahrer_anteil"]))
+            if hasattr(self, "basis_ausstattung"):
+                try:
+                    wagen = sum(n for _a, n, _b in self.basis_ausstattung(team, -1, 3))
+                except Exception:          # noqa: BLE001  ohne Plan: wie bisher
+                    wagen = hoechstens
+                if wagen > 0:
+                    hoechstens = min(hoechstens, wagen)
             k.darf_fahren = fahrer < hoechstens
         k.konto = ""
         k.skin = bot_aussehen(name)

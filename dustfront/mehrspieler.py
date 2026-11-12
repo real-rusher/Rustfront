@@ -3378,7 +3378,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             if haupt >= 0 and netz.gebiet_bei(0, p) != haupt:
                 continue
             probe.pos.update(p)
-            winkel = self._fahrzeug_richtung(probe)
+            hin = (mitte - p) if mitte is not anker else None
+            winkel = self._fahrzeug_richtung(probe, hin)
+            if (hin is not None and versuch < 200 and hin.length_squared() > 1.0
+                    and pygame.Vector2(1, 0).rotate(winkel).dot(hin.normalize()) < 0.3):
+                continue        # hier kaeme er nur verkehrt herum heraus: eine andere Stelle
             if not probe.passt(p, winkel):
                 continue
             if any(b.lebt and b.pos.distance_to(p) < 90 for b in self.fahrzeuge):
@@ -3389,7 +3393,24 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         return None
 
     @staticmethod
-    def _fahrzeug_richtung(b) -> float:
+    def _fahrzeug_richtung(b, hin=None) -> float:
+        """Wohin ein abgestellter Wagen schaut. Mit `hin` (seit 0.34.138,
+        gemeldet: "manche droppen falsch rum, um 180 Grad gedreht - die Bots
+        kriegen sie nie auf die Bahn"): moeglichst dorthin, in Achtelschritten,
+        sofern er von dort ein Stueck weit frei losfahren kann; sonst die
+        Richtung mit dem meisten Platz."""
+        if hin is not None and pygame.Vector2(hin).length_squared() > 1.0:
+            soll = pygame.Vector2(hin).as_polar()[1]
+            for winkel in sorted((float(w) for w in range(-180, 180, 45)),
+                                 key=lambda w: abs((w - soll + 180.0) % 360.0 - 180.0)):
+                if abs((winkel - soll + 180.0) % 360.0 - 180.0) > 100.0:
+                    break
+                if not b.passt(b.pos, winkel):
+                    continue
+                vorn = pygame.Vector2(1, 0).rotate(winkel)
+                if all(b.passt(b.pos + vorn * (8 * (i + 1)), winkel)
+                       for i in range(K.SCHLACHT["drop_frei_vorn"])):
+                    return winkel
         bester, weiteste = 0.0, -1
         for winkel in (0.0, 90.0, 180.0, -90.0):
             if not b.passt(b.pos, winkel):
