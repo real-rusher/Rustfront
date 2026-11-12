@@ -19654,6 +19654,34 @@ _tm131.zeichnen(_bild131b, 1.0)
 pruef("... und INFO zeichnet die Gruppen der Front", True)
 _tm131.verlassen()
 
+print("\n-- 0.34.132: JE SEITE in SCHLACHT je Karte, von sehr wenig bis sehr viel")
+from dustfront import regeln as _R132, netz as _NZ132
+_f132 = _R132.vorgabe(modus="schlacht", karte="flusstal")
+_w132 = _R132.NACH_NAME["schlacht_seite"].werte(_f132)
+pruef("FLUSSTAL: JE SEITE von 1 bis 150, Vorgabe 24 (aus dem Kartenkopf)",
+      _w132[0] == 1 and _w132[-1] == 150 and _f132["schlacht_seite"] == 24 and len(_w132) >= 15, str(_w132))
+_s132 = _R132.vorgabe(modus="schlacht", karte="schneefeld")
+pruef("... eine kleine Karte ohne Angabe traegt nach ihrer Flaeche weniger (SCHNEEFELD)",
+      max(_R132.NACH_NAME["schlacht_seite"].werte(_s132)) < 12 and _s132["schlacht_seite"] <= 12)
+_g132 = _R132.vorgabe(modus="schlacht", karte="flusstal", schlacht_seite=150)
+_g132["karte"] = "schneefeld"
+_g132 = _R132.saeubern(_g132)
+pruef("... wer die Karte wechselt, bekommt hoechstens, was die neue traegt",
+      _g132["schlacht_seite"] == max(_R132.NACH_NAME["schlacht_seite"].werte(_g132)), str(_g132["schlacht_seite"]))
+pruef("... und das Menue sagt bei sehr vielen, dass es viel ist",
+      "VIEL" in _R132.anzeige(_R132.vorgabe(modus="schlacht", karte="flusstal", schlacht_seite=100), "schlacht_seite"))
+_l132 = _NZ132.Leitung.__new__(_NZ132.Leitung)
+_l132._raus = [b"x" * 40000]
+_l132._welt_bytes = 30000
+_l132._welt_nr = _l132._bestaetigt = 0
+_l132._ausgelassen_folge = 0
+_l132.ausgelassen = 0
+_l132._wirkung_rest = []
+_l132._basis = None
+_l132._seit_voll = 0
+pruef("Netz: mit sehr vielen Kaempfern faellt nicht jede zweite Weltmeldung aus (die Stau-Grenze waechst mit)",
+      _l132._welt_senden({"t": "welt", "wirkung": []}) is not None)
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

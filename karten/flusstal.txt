@@ -10,6 +10,8 @@
 name: FLUSSTAL
 satz: gruen
 kreise: E
+je_seite: 24
+je_seite_bis: 150
 fahrer: 7
 basis1: 0 20 38 NORDLAGER | buggy 1 0, krad 1 0, funkwagen 1 1, tragschrauber 1 2
 basis2: 1 319 171 SÜDLAGER | buggy 1 0, krad 1 0, funkwagen 1 1, tragschrauber 1 2

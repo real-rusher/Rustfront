@@ -1128,7 +1128,13 @@ FAHRZEUG_FUNK = dict(takt=1.1, wellen=3, radius=(4.0, 15.0), antenne=(-0.75, -0.
 # der anderen (`vorstoss_ziel`), statt die ganze Karte abzusuchen.
 SCHLACHT = dict(
     je_seite=24,
-    groessen=(12, 16, 20, 24, 30),
+    # Seit 0.34.132 (gewuenscht: "von sehr wenig zu unglaublich viel", je
+    # Karte): alle Stufen; welche eine Karte anbietet, sagt ihr Kopf
+    # (`je_seite_bis:`, `je_seite:`) oder ihre Groesse (seite_je_kacheln).
+    groessen=(1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 30, 36, 42, 50, 60, 75, 100, 125, 150),
+    seite_je_kacheln=380,      # ohne Angabe: je so viele begehbare Kacheln ein Kaempfer je Seite
+    seite_viel=42,             # ab so vielen je Seite steht VIEL! im Menue (gemessen: bis ~40 je Seite haelt ein
+                               # gewoehnlicher Rechner die 120 Schritte je Sekunde, 100 je Seite braucht ~2,5 mal so lang)
     # Seit 0.34.96 die offene Karte (gewuenscht: Fahrzeuge sollen nutzbar sein).
     # Seit 0.34.131 FLUSSTAL: die erste Karte mit Front (Eroberungspunkte).
     karte="flusstal",

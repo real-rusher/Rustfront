@@ -46,6 +46,8 @@ KOPF = [
     "name: KANALSTADT",
     "satz: stadt",
     "kreise: E",
+    "je_seite: 24",
+    "je_seite_bis: 150",
     "fahrer: 6",
 ]
 

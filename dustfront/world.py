@@ -1882,6 +1882,40 @@ def karten_liste() -> list[str]:
     return sorted(p.stem for p in ordner.glob("*.txt"))
 
 
+_KOPF_MERK: dict = {}
+
+
+def karte_kopf(name: str) -> dict:
+    """Der Kopf einer Kartendatei ohne die Karte zu bauen (fuer die Regeln,
+    seit 0.34.132), dazu "_kacheln": wie viele Kacheln begehbar sind.
+    Gemerkt je Datei und Aenderungszeit; eine fehlende Karte gibt {}."""
+    pfad = kartenordner() / ("%s.txt" % name)
+    try:
+        stand = pfad.stat().st_mtime
+    except OSError:
+        return {}
+    hit = _KOPF_MERK.get(name)
+    if hit is not None and hit[0] == stand:
+        return hit[1]
+    try:
+        roh = pfad.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    kopf = {}
+    teil, _, karte = roh.partition("--- ebene")
+    for zeile in teil.splitlines():
+        blank = zeile.strip()
+        if blank and not blank.startswith("#") and ":" in blank:
+            k, _, v = blank.partition(":")
+            kopf[k.strip()] = v.strip()
+    begehbar = set(z for z, k in ZEICHEN.items()
+                   if not K.KACHELN[k]["fest"] and not K.KACHELN[k].get("loch")
+                   and not K.KACHELN[k].get("sperrt"))
+    kopf["_kacheln"] = sum(1 for z in karte if z in begehbar or (z.isalpha() and z.isupper() and z not in ZEICHEN))
+    _KOPF_MERK[name] = (stand, kopf)
+    return kopf
+
+
 def karte_lesen(name: str):
     """Eine Karte laden. Gibt (Welt, Kopf) zurueck, oder (None, {}).
 

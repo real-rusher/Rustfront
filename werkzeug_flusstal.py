@@ -56,6 +56,8 @@ KOPF = [
     "name: FLUSSTAL",
     "satz: gruen",
     "kreise: E",
+    "je_seite: 24",
+    "je_seite_bis: 150",
     "fahrer: 7",
 ]
 

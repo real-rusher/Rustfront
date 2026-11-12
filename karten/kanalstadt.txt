@@ -10,6 +10,8 @@
 name: KANALSTADT
 satz: stadt
 kreise: E
+je_seite: 24
+je_seite_bis: 150
 fahrer: 6
 basis1: 0 21 40 NORDKASERNE | krad 2 0, buggy 1 0, funkwagen 1 1, tragschrauber 1 2
 basis2: 1 298 183 SÜDKASERNE | krad 2 0, buggy 1 0, funkwagen 1 1, tragschrauber 1 2
