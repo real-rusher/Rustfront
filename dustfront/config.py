@@ -924,7 +924,7 @@ NETZ = dict(
     # Nicht hoeher: Treffer rechnet der Gastgeber, wo die Gegner bei ihm
     # stehen - jede Verzoegerung hier heisst, man zielt weiter hinter ihnen
     # her (bis zur Treffer-Rueckrechnung, docs/CLIENTSEITE.md Stufe D).
-    puffer_hoechstens=0.15,
+    puffer_hoechstens=0.08,     # seit 0.34.135 (0.15): weniger Verzoegerung im Bild
     puffer_meldungen=20,
     puffer_schwankung=1.0,
     uhr_drift=0.01,
@@ -943,7 +943,11 @@ NETZ = dict(
     # Mehr als eingabe_vorlauf_hoechstens Schritte Vorlauf (200 ms) werden
     # sofort abgebaut; war eingabe_fenster Schritte (1 s) lang immer mehr als
     # eingabe_vorlauf_ruhig da, ein Schritt.
-    eingabe_puffer=True,
+    # Seit 0.34.135 aus (gemeldet: "der Dash ist bei Gaesten extrem verzoegert",
+    # "Laufen fuehlt sich schwammig an"): bis zu 200 ms Vorlauf hiess, jede
+    # Bewegung und jeder Dash wirkten beim Gastgeber so viel spaeter, und die
+    # Vorhersage des Gasts musste staendig nachziehen. Jetzt wirkt alles sofort.
+    eingabe_puffer=False,
     eingabe_vorlauf_hoechstens=24,
     eingabe_vorlauf_ruhig=2,
     eingabe_fenster=120,

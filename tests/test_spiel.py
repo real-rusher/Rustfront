@@ -19808,6 +19808,19 @@ pruef("... ein Ziel weit hinter der alten Grenze (3200 px) ist nicht mehr zu wei
 _bild134 = pygame.Surface((K.GAME_W, K.GAME_H))
 w134.zeichnen(_bild134, 1.0)
 pruef("... und die Karte des Werfers steht im Bild (aufgebaut)", w134._werfer_eigen() is _wf134)
+_gk134 = w134.kaempfer[g134.ich.nummer]
+_wf134b = _FZ134.neu("werfer", _gk134.pos + pygame.Vector2(0, 90), 0)
+w134.welt.dazu(_wf134b); w134.fahrzeuge.append(_wf134b)
+if _gk134.fahrzeug is not None:
+    w134._aussteigen(_gk134)
+_gk134.lebt = True; _gk134.am_boden = False
+w134._einsteigen(_gk134, _wf134b)
+_wf134b.phase, _wf134b.fortschritt = 2, 1.0
+for _ in range(20):
+    w134.schritt(K.NETZ["takt"]); g134.schritt(K.NETZ["takt"])
+    _wf134b.phase = 2
+pruef("... auch beim Gast steht die Karte (seit 0.34.135: dort kennt nur das Fahrzeug seinen Fahrer)",
+      g134._werfer_eigen() is not None and g134._werfer_eigen().art == "werfer")
 w134.verlassen(); g134.verlassen()
 
 print()

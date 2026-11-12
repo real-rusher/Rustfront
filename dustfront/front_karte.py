@@ -349,8 +349,12 @@ class WerferKarteTeil:
     def _werfer_eigen(self):
         ich = self.ich
         b = getattr(ich, "fahrzeug", None) if ich is not None else None
-        if (b is None or b.art != "werfer" or not ich.lebt or b.kaputt
-                or getattr(b, "fortschritt", 0.0) < 1.0 or b.phase != 2):
+        if b is None and ich is not None and not self.ist_gastgeber:
+            # Beim Gast kennt nur das Fahrzeug seinen Fahrer (fahrer_nummer) -
+            # bis 0.34.135 kam die Karte darum nur beim Gastgeber.
+            b = next((x for x in getattr(self, "fahrzeuge", ())
+                      if getattr(x, "fahrer_nummer", -1) == ich.nummer), None)
+        if (b is None or b.art != "werfer" or not ich.lebt or b.kaputt or b.phase != 2):
             return None
         if getattr(self, "belohnung_offen", False) or self.menue is not None or self.vorbei:
             return None
