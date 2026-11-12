@@ -1131,7 +1131,7 @@ class Welt:
                             bestes, beste_d = w, d
                         continue
                     d = p.distance_squared_to(w.pos)
-                    if d < (radius + w.radius) ** 2 and d < beste_d:
+                    if d < (radius + (getattr(w, "treffer_radius", 0.0) or w.radius)) ** 2 and d < beste_d:
                         bestes, beste_d = w, d
                     continue
                 if pos.distance_squared_to(w.pos) > (radius + 24) ** 2:
@@ -1144,7 +1144,8 @@ class Welt:
                 if w.beruehrt(pos, radius) and d < beste_d:
                     bestes, beste_d = w, d
                 continue
-            grenze = (radius + w.radius) ** 2
+            # Wer schwimmt, wird nur am Kopf getroffen (seit 0.34.140, treffer_radius).
+            grenze = (radius + (getattr(w, "treffer_radius", 0.0) or w.radius)) ** 2
             if d < grenze and d < beste_d:
                 bestes, beste_d = w, d
         return bestes
@@ -1226,11 +1227,18 @@ class Welt:
         e = self.ebene(ebene)
         return K.KACHELN[e.kachel(int(pos.x // K.TILE), int(pos.y // K.TILE))].get("seicht", False)
 
+    def tief(self, pos, ebene: int) -> bool:
+        """Ist hier tiefes Wasser (seit 0.34.140: man schwimmt darin)?"""
+        e = self.ebene(ebene)
+        return K.KACHELN[e.kachel(int(pos.x // K.TILE), int(pos.y // K.TILE))].get("sperrt", False)
+
     def boden_tempo(self, pos, ebene: int, fahrzeug: bool = False) -> float:
         """Faktor auf das Tempo durch den Boden: 1, im seichten Wasser
-        weniger (K.WASSER)."""
+        weniger (K.WASSER), schwimmend noch weniger."""
         if self.seicht(pos, ebene):
             return K.WASSER["seicht_fahrzeug" if fahrzeug else "seicht_tempo"]
+        if not fahrzeug and self.tief(pos, ebene):
+            return K.WASSER["schwimm_tempo"]
         return 1.0
 
     def frei(self, pos: pygame.Vector2, radius: float, ebene: int,
@@ -1396,13 +1404,15 @@ class Welt:
         # haengen - sonst zoege ihn das hier in jedem Schritt zurueck, und
         # er fiele nie (Gegner._geschoben).
         lf = not getattr(wesen, "faellt", False) and not getattr(wesen, "geschoben", False)
-        if self.frei(wesen.pos, wesen.radius, wesen.ebene, lf):
+        # Wer schwimmen kann, steckt im tiefen Wasser nicht fest (seit 0.34.140).
+        uw = getattr(wesen, "ueber_wasser", False)
+        if self.frei(wesen.pos, wesen.radius, wesen.ebene, lf, uw):
             return False
         for r in (3.0, 6.0, 10.0, 15.0, 21.0, 29.0, 40.0, 54.0):
             for i in range(12):
                 a = math.tau * i / 12 + r * 0.7
                 p = wesen.pos + pygame.Vector2(math.cos(a), math.sin(a)) * r
-                if self.frei(p, wesen.radius, wesen.ebene, lf):
+                if self.frei(p, wesen.radius, wesen.ebene, lf, uw):
                     wesen.pos.update(p)
                     wesen.vorher.update(p)
                     wesen.tempo *= 0.4

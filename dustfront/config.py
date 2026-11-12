@@ -837,7 +837,7 @@ KLANG_NAMEN = (
     "schuss_spule", "spule_laden", "schuss_kettenblitz", "schuss_spiegellaser",
     "schuss_kugelblitz", "plasma", "flammenwerfer", "kettensaege", "hammer_boden",
     "schock", "schlag_faust", "knaller", "emp", "piepen", "klebt", "gas",
-    "schneeball", "wurf_leise", "nagel_wand", "falle_klick", "drohne", "horchposten", "anflug",
+    "schneeball", "wurf_leise", "nagel_wand", "falle_klick", "drohne", "horchposten", "anflug", "platsch",
     "emp_aus", "reifen_platt", "schild", "schild_durch",
     "ueberhitzt",           # eine Chor-Waffe ueberhitzt und kuehlt ab (seit 0.34.130)
     "bomber",               # ein Stueck Triebwerk des Napalm-Bombers (seit 0.34.130)
@@ -3781,6 +3781,16 @@ WASSER = dict(
     seicht_tempo=0.62,        # zu Fuss
     seicht_fahrzeug=0.72,     # Fahrzeuge (Ketten und Raeder kommen besser durch)
     spritzer_takt=0.22,       # so oft spritzt es um einen, der im Wasser laeuft (s)
+    # Schwimmen im tiefen Wasser (seit 0.34.140, gewuenscht): wer zu Fuss ist,
+    # kommt hinein (Fahrzeuge weiter nicht), schwimmt langsam, kann dashen,
+    # aber nicht schiessen, werfen oder schlagen. Ueber Wasser ist nur der
+    # Kopf - nur der wird getroffen (`kopf_radius` statt des Koerpers).
+    schwimmen=True,
+    schwimm_tempo=0.45,       # Faktor auf das Lauftempo
+    kopf_radius=5.0,          # so gross ist, was ueber Wasser getroffen werden kann (px)
+    koerper_deck=165,         # wie deutlich der Koerper unter Wasser zu sehen ist (0 bis 255)
+    koerper_farbe=(120, 170, 196), # so faerbt das Wasser ihn ein
+    platsch_ring=(4.0, 26.0, 0.7), # der Ring beim Hineingehen: von, bis (px), Dauer (s)
 )
 
 # ══════════════════════════════════════════════════ INHALTE: Waffen

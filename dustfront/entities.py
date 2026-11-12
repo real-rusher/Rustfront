@@ -2687,7 +2687,8 @@ class Spieler(Wesen):
         """
         name = self.nahkampf_name
         d = K.WAFFEN.get(name)
-        if d is None or self.nahkampf_rest > 0 or self.schlag_zeigen > 0 or self.gelaehmt:
+        if (d is None or self.nahkampf_rest > 0 or self.schlag_zeigen > 0 or self.gelaehmt
+                or self.schwimmt):
             return False
         if self.nachlade_rest > 0 or self.heilt_rest > 0:
             return False
@@ -2730,7 +2731,8 @@ class Spieler(Wesen):
     def schnellwurf(self) -> bool:
         """G (seit 0.34.96, nur Spieler): die erste Wurfwaffe mit Ladung sofort
         werfen, ohne zu ihr zu wechseln."""
-        if self.gelaehmt or self.nachlade_rest > 0 or self.heilt_rest > 0 or self.schwingt:
+        if (self.gelaehmt or self.nachlade_rest > 0 or self.heilt_rest > 0 or self.schwingt
+                or self.schwimmt):
             return False
         for i, name in enumerate(self.waffen):
             d = K.WAFFEN.get(name, {})
@@ -2970,6 +2972,7 @@ class Spieler(Wesen):
             self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
             self.welt.auseinander(self)
             self.welt.befreien(self)
+        self._wasser_pruefen()
 
         if self.sturz_rest > 0:
             pass                         # in der Luft kein Staub, kein Loch
@@ -2993,7 +2996,7 @@ class Spieler(Wesen):
                         self.welt.schneespuren.append([p.x, p.y, self.ebene, self.welt.zeit])
                     if len(self.welt.schneespuren) > 900:
                         del self.welt.schneespuren[:100]
-                elif self.welt.seicht(self.pos, self.ebene):
+                elif self.schwimmt or self.welt.seicht(self.pos, self.ebene):
                     # Im Wasser (seit 0.34.131): Wellenringe statt Staub.
                     from . import effekte
                     effekte.ring(self.welt, self.pos.x, self.pos.y + 3, self.ebene,
@@ -3174,7 +3177,35 @@ class Spieler(Wesen):
             return True
         return False
 
+    # Schwimmen (seit 0.34.140, K.WASSER): wird in jedem Schritt gesetzt.
+    schwimmt = False
+    treffer_radius = 0.0          # 0: der ganze Koerper (world.treffer)
+
+    @property
+    def ueber_wasser(self) -> bool:
+        """Zu Fuss kommt man ins tiefe Wasser (world.frei ueber_wasser)."""
+        return K.WASSER["schwimmen"] and not getattr(self, "im_fahrzeug", False)
+
+    def _wasser_pruefen(self) -> None:
+        """Schwimmt die Figur gerade? Beim Hineingehen platscht es."""
+        alt = self.schwimmt
+        jetzt = (K.WASSER["schwimmen"] and self.lebt and self.welt is not None
+                 and self.sturz_rest <= 0 and self.flug <= 0
+                 and not getattr(self, "im_fahrzeug", False)
+                 and self.welt.tief(self.pos, self.ebene))
+        self.schwimmt = jetzt
+        self.treffer_radius = K.WASSER["kopf_radius"] if jetzt else 0.0
+        if jetzt and not alt:
+            from . import effekte
+            r0, r1, dauer = K.WASSER["platsch_ring"]
+            effekte.ring(self.welt, self.pos.x, self.pos.y, self.ebene, r0, r1, dauer, (196, 226, 236))
+            effekte.ring(self.welt, self.pos.x, self.pos.y, self.ebene, r0 * 0.5, r1 * 0.6, dauer * 0.7,
+                         (232, 246, 250))
+            self.welt.klang("platsch", 0.7, self.pos, self.ebene)
+
     def feuern(self) -> None:
+        if self.schwimmt:
+            return          # im tiefen Wasser keine Waffe (seit 0.34.140)
         d = self.waffe_daten
         art = d.get("art", "schuss")
         if art == "nahkampf":

@@ -1265,6 +1265,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                    "bomber", "napalm_fall",    # Napalm-Angriff (seit 0.34.130)
                    "klebt", "gas", "schneeball", "wurf_leise", "emp_aus", "reifen_platt",
                    "schild", "falle_klick", "drohne", "horchposten", "anflug",
+                   "platsch",          # ins tiefe Wasser (seit 0.34.140)
                    # Napalm-Angriff (seit 0.34.101): das Flugzeug und die Einschlaege.
                    "jet", "napalm")
 
@@ -3535,6 +3536,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         k.schiebbar = True
         k.trefferbar = True
 
+    def _ausstieg_platz(self, b, k):
+        """Wo `k` aus dem Wagen `b` steigt: der erste freie Platz am Ufer;
+        gibt es keinen (mitten im Fluss), der erste im tiefen Wasser - dort
+        schwimmt er (seit 0.34.140, gemeldet: "steigt man mitten im Fluss
+        aus, ist man stuck"). None: nirgends Platz."""
+        orte = b.ausstiegsorte(k.radius)
+        for wasser in (False, True):
+            if wasser and not k.ueber_wasser:
+                break
+            for p in orte:
+                if self.welt.frei(p, k.radius, b.ebene, True, wasser):
+                    return p
+        return None
+
     def _aussteigen(self, k: Kaempfer) -> None:
         """Raus aus dem Wagen, auf den ersten freien Platz daneben."""
         b = k.fahrzeug
@@ -3542,10 +3557,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if b is None:
             return
         k.ebene = b.ebene
-        for p in b.ausstiegsorte(k.radius):
-            if self.welt.frei(p, k.radius, b.ebene, True):
-                k.pos.update(p)
-                break
+        p = self._ausstieg_platz(b, k)
+        if p is not None:
+            k.pos.update(p)
         # Kein Platz frei: dann bleibt er, wo der Wagen ist, und der
         # schiebt ihn im naechsten Schritt selbst hinaus.
         k.tempo.update(0, 0)
@@ -3617,10 +3631,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if not versetzen:
             return
         k.ebene = b.ebene
-        for p in b.ausstiegsorte(k.radius):
-            if self.welt.frei(p, k.radius, b.ebene, True):
-                k.pos.update(p)
-                break
+        p = self._ausstieg_platz(b, k)
+        if p is not None:
+            k.pos.update(p)
         k.tempo.update(0, 0)
         k.treppe_rest = K.GEFECHT["treppe_takt"]
         self.welt.klang("buggy_tuer", 0.6, b.pos, b.ebene)

@@ -305,6 +305,17 @@ def _sturz(seed=0):
     )
 
 
+@platzhalter_klang("platsch")
+def _platsch(seed=0):
+    """Ins tiefe Wasser (seit 0.34.140): ein dumpfer Schlag aufs Wasser,
+    dann Gluckern und Spritzer."""
+    return _mischen(
+        _schlag(110, 60, 0.22, 0.7, 2.6),
+        _rauschen(0.35, 0.6, 3200, 600, 2.2, seed + 141),
+        [0.0] * int(RATE * 0.05) + _rauschen(0.45, 0.3, 1400, 300, 1.6, seed + 142),
+    )
+
+
 @platzhalter_klang("wurf")
 def _wurf(seed=0):
     return _rauschen(0.22, 0.4, 1800, 5200, 1.6, seed + 61, hp=True)

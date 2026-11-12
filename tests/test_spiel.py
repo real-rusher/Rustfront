@@ -20489,6 +20489,74 @@ _rauch140 = sum(1 for x_ in range(0, 300, 3) for y_ in range(0, int(_unten140) -
 pruef("... ueber ihr steht eine grosse Rauchwolke (der Rauch ist, was man sieht)", _rauch140 > 400, str(_rauch140))
 w140c.verlassen(); g140c.verlassen()
 
+# Gewuenscht: durch tiefes Wasser schwimmen - langsam, dashen geht, schiessen nicht,
+# nur der Kopf wird getroffen, es platscht; mitten im Fluss aussteigen heisst ins Wasser.
+_tm140s = _TM59.Testmodus(app, karte="flusstal")
+_e140s = _tm140s.welt.ebene(0)
+_ort140s = None
+for _ty in range(10, _e140s.hoehe - 10):
+    for _tx in range(10, _e140s.breite - 10):
+        if (all(K.KACHELN[_e140s.kachel(_tx + d_, _ty + dy_)].get("sperrt") for d_ in range(0, 4) for dy_ in (-1, 0, 1))
+                and all(not K.KACHELN[_e140s.kachel(_tx - d_, _ty)]["fest"]
+                        and not K.KACHELN[_e140s.kachel(_tx - d_, _ty)].get("sperrt") for d_ in range(2, 5))):
+            _ort140s = (_tx, _ty)
+            break
+    if _ort140s:
+        break
+pruef("FLUSSTAL hat tiefes Wasser mit Ufer daneben", _ort140s is not None)
+_tx140, _ty140 = _ort140s
+_land140 = pygame.Vector2((_tx140 - 3.5) * K.TILE, (_ty140 + 0.5) * K.TILE)
+_sw140 = _tm140s.puppe_setzen(_land140, 0, {"team": 0}, name="SCHWIMMER")
+_sw140.tempo_anteil = 1.0
+_klang140 = []
+_alt_klang140 = _tm140s.welt.klang
+_tm140s.welt.klang = lambda n_, *a_, **k_: (_klang140.append(n_), _alt_klang140(n_, *a_, **k_))
+for _ in range(int(2.5 / K.FIXED_DT)):
+    _tm140s._anwenden(_sw140, {"will": [1, 0], "ziel": [_sw140.pos.x + 100, _sw140.pos.y], "knoepfe": []})
+    _tm140s.schritt(K.FIXED_DT)
+    if _sw140.schwimmt:
+        break
+pruef("Zu Fuss geht man ins tiefe Wasser und schwimmt", _sw140.schwimmt and _tm140s.welt.tief(_sw140.pos, 0),
+      str(_sw140.pos))
+pruef("... beim Hineingehen platscht es", "platsch" in _klang140, str(_klang140[-5:]))
+_tm140s.welt.klang = _alt_klang140
+for _ in range(int(0.6 / K.FIXED_DT)):
+    _tm140s._anwenden(_sw140, {"will": [1, 0], "ziel": [_sw140.pos.x + 100, _sw140.pos.y], "knoepfe": []})
+    _tm140s.schritt(K.FIXED_DT)
+pruef("... langsam (Lauftempo mal schwimm_tempo)",
+      _sw140.schwimmt and _sw140.tempo.length() < K.SPIELER["tempo"] * K.WASSER["schwimm_tempo"] * 1.05,
+      "%.0f px/s" % _sw140.tempo.length())
+_n140 = len(_tm140s.welt.wesen) + len(_tm140s.welt.neue)
+_sw140.takt = 0.0
+_sw140.feuern()
+pruef("... und schiesst nicht", len(_tm140s.welt.wesen) + len(_tm140s.welt.neue) == _n140)
+pruef("... schlagen und werfen auch nicht", not _sw140.nahkampf() and not _sw140.schnellwurf())
+_feind140 = _tm140s.puppe_setzen(_land140 + pygame.Vector2(0, -60), 0, {"team": 1}, name="SCHUETZE")
+_neben140 = _sw140.pos + pygame.Vector2(0, _sw140.radius + 1.0)
+pruef("Getroffen wird nur der Kopf: neben ihm (ausserhalb des Kopfes, im Koerper) geht die Kugel vorbei",
+      _tm140s.welt.treffer(_neben140, 1.5, 0, _feind140.fraktion) is not _sw140)
+pruef("... auf den Kopf trifft sie", _tm140s.welt.treffer(pygame.Vector2(_sw140.pos), 1.5, 0, _feind140.fraktion) is _sw140)
+_sw140.dash_ladungen = K.DASH["ladungen"]
+_sw140.will.update(1, 0)
+pruef("... dashen geht im Wasser", _sw140.dashen() and _sw140.dash_rest > 0)
+# Aus dem Buggy mitten im Fluss: ins Wasser, nicht festgeklemmt.
+_fahrer140 = _tm140s.puppe_setzen(_land140, 0, {"team": 0}, name="FAHRER")
+_bg140 = _tm140s.fahrzeug_setzen("buggy", _land140 + pygame.Vector2(0, 80), 0, {"winkel": 0})
+_tm140s._einsteigen(_fahrer140, _bg140)
+_bg140.pos.update((_tx140 + 2.0) * K.TILE, (_ty140 + 0.5) * K.TILE)
+_tm140s._aussteigen(_fahrer140)
+pruef("Mitten im Fluss ausgestiegen: man faellt ins Wasser und schwimmt (nicht im Wagen eingeklemmt)",
+      _fahrer140.fahrzeug is None and _tm140s.welt.tief(_fahrer140.pos, 0)
+      and _fahrer140.pos.distance_to(_bg140.pos) > _bg140.radius, str(_fahrer140.pos))
+# Das Bild: Koerper unter Wasser, nur der Kopf oben.
+_bild140 = pygame.Surface((120, 120)); _bild140.fill((40, 72, 96))
+_tm140s.renderer.schwimmer_zeichnen(_bild140, _sw140, pygame.Vector2(60, 60), 1.0)
+_roh140 = pygame.Surface((120, 120)); _roh140.fill((40, 72, 96))
+_r140 = _tm140s.renderer.bilder.gedreht(_sw140.bild, 0)
+pruef("... und gezeichnet wird er anders als an Land (der Koerper liegt unter Wasser)",
+      pygame.image.tobytes(_bild140, "RGB") != pygame.image.tobytes(_roh140, "RGB"))
+_tm140s.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -1280,6 +1280,10 @@ class Renderer:
             if getattr(w, "zeichnet_selbst", False):
                 w.zeichnen_unten(self, ziel, p, dunkel)
                 continue
+            if (hasattr(w, "waffen") and getattr(w, "ueber_wasser", False) and w.flug <= 0
+                    and welt.tief(w.pos, index)):
+                self.schwimmer_zeichnen(ziel, w, p, welt.zeit, dunkel)   # seit 0.34.140
+                continue
             schatten_bild = getattr(w, "schatten_bild", None)
             # Was hoch oben fliegt (Tragschrauber), wirft seinen Schatten in der
             # Luftschicht (luft.py) - sonst waeren es zwei (seit 0.34.119).
@@ -1337,6 +1341,58 @@ class Renderer:
                 if dunkel is not None:
                     sch = self.dunkel(sch, dunkel)
                 ziel.blit(sch, (p.x - sch.get_width() / 2, p.y - sch.get_height() / 2))
+
+    def schwimmer_zeichnen(self, ziel, w, p, zeit: float, dunkel=None) -> None:
+        """Wer im tiefen Wasser schwimmt (seit 0.34.140, gewuenscht): der
+        Koerper samt Waffe liegt unter der Oberflaeche - eingefaerbt, blass,
+        er schwankt leicht -, darueber nur der Kopf, und um ihn kraeuselt sich
+        das Wasser. Ein Treffer laesst nur den Kopf aufblitzen."""
+        wa = K.WASSER
+        bild = w.bild
+        if bild is None:
+            return
+        roh = self.bilder.gedreht(bild, _gezeigter_winkel(w))
+        bw, bh = roh.get_size()
+        # Der Koerper unter Wasser, gemerkt je Bild (gedreht kommt es aus dem Speicher).
+        merk = self.__dict__.setdefault("_unter_wasser", {})
+        unten = merk.get(id(roh))
+        if unten is None or unten[0] is not roh:
+            u = roh.copy()
+            u.fill(wa["koerper_farbe"] + (255,), special_flags=pygame.BLEND_RGBA_MULT)
+            u.fill((26, 48, 62, 0), special_flags=pygame.BLEND_RGB_ADD)
+            u.set_alpha(wa["koerper_deck"])
+            if len(merk) > 600:
+                merk.clear()
+            unten = merk[id(roh)] = (roh, u)
+        u = unten[1]
+        if dunkel is not None:
+            u = self.dunkel(u, dunkel)
+        schwank = math.sin(zeit * 2.3 + w.pos.x * 0.05) * 1.0
+        ziel.blit(u, (p.x - bw / 2 + schwank, p.y - bh / 2 + 1))
+        # Die Kraeusel um den Kopf.
+        r = int(wa["kopf_radius"]) + 3
+        welle = 0.5 + 0.5 * math.sin(zeit * 3.1 + w.pos.y * 0.07)
+        ring = pygame.Rect(0, 0, 2 * r + 4 + int(2 * welle), 2 * r + 1 + int(welle))
+        ring.center = (int(p.x), int(p.y) + 1)
+        pygame.draw.ellipse(ziel, (170, 208, 222), ring, 1)
+        # Der Kopf: die Mitte des Bildes (dort sitzt er bei jeder Figur).
+        kr = int(wa["kopf_radius"]) + 1
+        kopf = self.__dict__.get("_kopf_flaeche")
+        if kopf is None or kopf.get_width() != 2 * kr:
+            kopf = self._kopf_flaeche = pygame.Surface((2 * kr, 2 * kr), pygame.SRCALPHA)
+            maske = self._kopf_maske = pygame.Surface((2 * kr, 2 * kr), pygame.SRCALPHA)
+            maske.fill((0, 0, 0, 0))
+            pygame.draw.circle(maske, (255, 255, 255, 255), (kr, kr), kr)
+        kopf.fill((0, 0, 0, 0))
+        kopf.blit(roh, (0, 0), pygame.Rect(bw // 2 - kr, bh // 2 - kr, 2 * kr, 2 * kr))
+        kopf.blit(self._kopf_maske, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        k = kopf
+        if dunkel is not None:
+            k = self.dunkel(kopf, dunkel)
+        elif w.blitz > 0:
+            k = kopf.copy()
+            k.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
+        ziel.blit(k, (int(p.x) - kr, int(p.y) - kr))
 
     def hoch_oben_zeichnen(self, ziel, bild: str, p, winkel: float) -> None:
         """Was hoch ueber allem fliegt (seit 0.34.96, die Drohne): ein
