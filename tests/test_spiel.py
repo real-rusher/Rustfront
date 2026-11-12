@@ -10506,7 +10506,11 @@ def _stelle80(abstand, frei=True):
             continue
         # Frei heisst seit 0.34.26 auch: keine Kiste dazwischen - an der
         # bleibt jede Kugel haengen, und der Bot schiesst nicht hinein.
-        if frei and w80.welt.deckung(_bot80.pos, p_, 0) == "":
+        # Seit 0.34.135 eine freie Gasse, nicht nur die Mittellinie: lag
+        # 8 px daneben eine Mauer, traf die gewoellte Streuung des Bots ihre
+        # Kante, und er schoss nach der Regel "nie in eine Mauer" gar nicht.
+        if frei and all(w80.welt.deckung(_bot80.pos, p_ + pygame.Vector2(0, d_).rotate(a_), 0) == ""
+                        for d_ in (-16, -8, 0, 8, 16)):
             return p_
         if not frei and not w80.welt.sicht_frei(_bot80.pos, p_, 0):
             return p_
@@ -13571,7 +13575,8 @@ print("\n-- Tempo, Deckung zuerst, Verkriechen, Funkwellen (0.34.43)")
 # mit demselben Faktor, die Geschosse fliegen langsamer, so weit wie vorher.
 pruef("Alle laufen langsamer: Spieler, Bots und Gegner mit demselben Faktor",
       0.0 < K.BEWEGUNG["lauf"] < 1.0
-      and abs(K.SPIELER["tempo"] - 108.0 * K.BEWEGUNG["lauf"]) < 1e-6
+      # seit 0.34.135 alle 1,3 mal so schnell (gewuenscht: "Spieler sind extrem langsam")
+      and abs(K.SPIELER["tempo"] - 108.0 * K.BEWEGUNG["lauf"] * 1.3) < 1e-6
       and K.BOTS["schritte_tempo"][0] < K.SPIELER["tempo"],
       "Spieler %.0f px/s" % K.SPIELER["tempo"])
 pruef("Geschosse fliegen langsamer, die Reichweite bleibt",
@@ -17219,7 +17224,10 @@ K.NETZ["puffer_an"] = False
 
 print("\n-- 0.34.104: Eingabepuffer beim Gastgeber - die Bewegung genau so lange, wie der Gast sie meinte")
 K.NETZ["puffer_an"] = True
-pruef("Der Eingabepuffer ist an", K.NETZ["eingabe_puffer"])
+# Seit 0.34.135 aus als Vorgabe (gemeldet: Dash und Laufen beim Gast verzoegert,
+# der Puffer kostete bis zu 200 ms). Es gibt ihn weiter - hier eingeschaltet geprueft.
+pruef("Der Eingabepuffer ist als Vorgabe aus (seit 0.34.135)", not K.NETZ["eingabe_puffer"])
+K.NETZ["eingabe_puffer"] = True
 # Dash und Zickzack bei 400 ms Ping und +-80 ms Schwankung: keine Korrektur.
 w304, g304 = _paar303(0.4, 0.08, seed_=4)
 # Die Figur des Gastgebers haengt an derselben Tastatur wie der Gast und
@@ -17268,6 +17276,7 @@ pruef("Staut sich der Puffer (ein Schwall nach einem Haenger), wird er abgebaut 
       _vorlauf304 <= K.NETZ["eingabe_vorlauf_hoechstens"] + 4, "%d Schritte" % _vorlauf304)
 w304.verlassen(); g304.verlassen()
 K.NETZ["puffer_an"] = False
+K.NETZ["eingabe_puffer"] = False
 
 print("\n-- 0.34.105: Treffer-Rueckrechnung - die Kugel eines Gasts trifft, was er gesehen hat")
 w305, g305 = _paar59("pvp", karte="staubtal")
