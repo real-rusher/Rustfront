@@ -396,7 +396,7 @@ class WerferKarteTeil:
         for m, r in kreise:
             pygame.draw.circle(flaeche, (30, 120, 112), m, r)
         flaeche.set_colorkey((0, 0, 0))
-        flaeche.set_alpha(80)
+        flaeche.set_alpha(110)
         rand = pygame.Surface(feld.size)
         rand.fill((0, 0, 0))
         for m, r in kreise:
@@ -462,5 +462,11 @@ class WerferKarteTeil:
             SCHRIFT.zeichnen(ziel, text, maus[0], maus[1] - 16, farbe, 1, ausrichtung="mitte")
         ziel.set_clip(alt_clip)
         SCHRIFT.zeichnen(ziel, "WERFER - AUFGEBAUT", feld.x, feld.y - 12, K.C_AMBER, 1)
-        SCHRIFT.zeichnen(ziel, "TÜRKIS: ZIELZONEN   ORANGE: REICHWEITE   ROT: ENTDECKTE GEGNER   RECHTS: ABBAUEN",
-                         feld.right, feld.bottom + 6, K.C_MUTED, 1, ausrichtung="rechts")
+        leiste = pygame.Rect(feld.x, feld.bottom - 12, feld.width, 12)
+        dunkel = pygame.Surface(leiste.size, pygame.SRCALPHA)
+        dunkel.fill((8, 6, 4, 200))
+        ziel.blit(dunkel, leiste.topleft)
+        SCHRIFT.zeichnen(ziel, "TÜRKIS: ZIELZONEN", leiste.x + 4, leiste.y + 3, (120, 240, 220), 1)
+        SCHRIFT.zeichnen(ziel, "ORANGE: REICHWEITE", leiste.x + 120, leiste.y + 3, (236, 128, 40), 1)
+        SCHRIFT.zeichnen(ziel, "ROT: ENTDECKTE GEGNER   RECHTS: ABBAUEN", leiste.right - 4, leiste.y + 3,
+                         K.C_MUTED, 1, ausrichtung="rechts")
