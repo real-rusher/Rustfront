@@ -10,6 +10,9 @@ from dustfront.core import App
 from dustfront.play import Spiel
 
 app = App("test", None, headless=True)
+# Was ein Spieler sich gemerkt hat (eigene Standardrunde, seit 0.34.138), gilt
+# hier nicht: die Pruefungen erwarten K.STANDARDRUNDE.
+app.opt["eigene_standardrunde"] = {}
 # Fester Seed: sonst wuerfelt jede Runde eine andere Karte aus, und
 # Pruefungen wie "Rueckweg vorhanden" faellt mal so und mal so aus.
 szene = Spiel(app, seed=20250920)
@@ -16479,13 +16482,16 @@ w198._fahrzeuge_neu_aufstellen()
 w198._bots_fuehren(0.0, sofort=True)
 # Seit 0.34.96 kommen die Fahrzeuge an Fallschirmen in ihre Dropzonen.
 _ab198 = K.SCHLACHT["abwurf"]
-pruef("Jede Basis hat Dropzonen; zum Start faellt noch nichts, die Zonen zaehlen",
+# Seit 0.34.138 stehen die Wagen der Basen zum Rundenstart gleich da (gewuenscht:
+# die Bots sollen nicht erst loslaufen und dann zurueckrennen); was spaeter
+# nachkommt, faellt weiter am Schirm (siehe unten: ein zerstoerter Panzer).
+pruef("Jede Basis hat Dropzonen; zum Start steht in jeder schon ihr Wagen",
       len(w198.dropzonen) == 2 * sum(n_ for _a, n_ in K.basis_wagen())
-      and not w198.fahrzeuge and all(z_.rest > 0 for z_ in w198.dropzonen))
+      and len(w198.fahrzeuge) == len(w198.dropzonen)
+      and all(z_.fahrzeug is not None for z_ in w198.dropzonen))
 for _ in range(int((_ab198["start"] + 0.2) / K.FIXED_DT)):
     w198.schlacht_schritt(K.FIXED_DT)
-pruef("... dann sinken sie am Fallschirm herunter", len(w198.abwuerfe) == len(w198.dropzonen)
-      and all(0 < a_.hoehe < _ab198["hoehe"] for a_ in w198.abwuerfe))
+pruef("... und es faellt dann nichts mehr am Schirm herunter", not w198.abwuerfe)
 for _ in range(int((_ab198["hoehe"] / _ab198["sinken"] + 0.5) / K.FIXED_DT)):
     w198.schlacht_schritt(K.FIXED_DT)
 _je198 = [sum(1 for k_ in w198.kaempfer.values() if k_.team == i_) for i_ in range(2)]
@@ -16508,9 +16514,14 @@ pruef("Jede Basis hat ihre Fahrzeuge, die aus der Karte bleiben weg",
       and all(b_.pos.distance_to(w198.schlacht_basis(i_)) <= K.SCHLACHT["fahrzeug_umkreis"] + 60
               for i_ in range(2) for b_ in _bt198[i_]), str([len(x_) for x_ in _bt198]))
 _bots198 = w198._bots()
-pruef("Je Seite fahren so viele Bots, wie die Basis Fahrzeuge hat (K.SCHLACHT fahrer_je_seite)",
-      all(sum(1 for k_ in _bots198 if k_.team == i_ and getattr(k_, "darf_fahren", False))
-          == K.SCHLACHT["fahrer_je_seite"] for i_ in range(2)))
+# Seit 0.34.138 ein Anteil der Seite (K.SCHLACHT fahrer_anteil), hoechstens so viele, wie die Basis Wagen hat.
+# Die Bots entstehen teils schon mit der Vorgabe-Seitenstaerke (vor _regeln_setzen):
+# beide Werte gelten.
+_fsoll198 = {min(sum(n_ for _a, n_ in K.basis_wagen()), max(1, int(round(n_ * K.SCHLACHT["fahrer_anteil"]))))
+             for n_ in (12, K.SCHLACHT["je_seite"])}
+_fist198 = [sum(1 for k_ in _bots198 if k_.team == i_ and getattr(k_, "darf_fahren", False)) for i_ in range(2)]
+pruef("Je Seite faehrt ein Anteil der Bots (K.SCHLACHT fahrer_anteil, hoechstens so viele, wie die Basis Wagen hat)",
+      all(n_ in _fsoll198 for n_ in _fist198), "%s soll %s" % (_fist198, sorted(_fsoll198)))
 _pj_soll198 = [min(K.SCHLACHT["panzerjaeger_je_seite"],
                    sum(1 for k_ in _bots198 if k_.team == i_) // K.BOTS["panzerjaeger"]["je_bots"])
                for i_ in range(2)]
@@ -16549,6 +16560,10 @@ if _sto198 is not None:
                   w198._schlacht_ziele(_sto198.nummer % K.SCHLACHT["spuren"])[1]))
 # Ein Wrack kommt an seiner Basis wieder.
 _pz198 = next(b_ for b_ in _bt198[1] if b_.art == "panzer")
+if _pz198.fahrer is not None:
+    # Seit 0.34.138 sitzt zum Start ein Bot darin; hier laeuft nur der
+    # Schlacht-Schritt, der Fahrer muss also von Hand hinaus.
+    w198._aussteigen(_pz198.fahrer)
 _pz198.schaden(_pz198.leben + 5000.0, None, None, art="hohlladung")
 _pz198.wrack_rest = 0.0
 w198._fahrzeuge_erneuern(0.0)
@@ -18297,14 +18312,13 @@ for _ in range(int(10.0 / K.FIXED_DT)):
 pruef("Flakwagen: sein Bot holt einen gegnerischen Abwurf am Schirm herunter, ehe er landet",
       _ab114 is not None and _ab114 not in _tm114.abwuerfe,
       "Hoehe %s" % (getattr(_ab114, "hoehe", None),))
-# Ein Abwurf bringt seinen Bot mit.
+# Ein Abwurf brachte bis 0.34.137 seinen Bot mit.
 _tm114.nachschub_setzen("flakwagen", _z114(30, 4), {"team": 0})
 for _ in range(int(12.0 / K.FIXED_DT)):
     _tm114.schritt(K.FIXED_DT)
 _ne114 = [b_ for b_ in _tm114.fahrzeuge if b_.art == "flakwagen" and b_ is not _fw114]
-pruef("Abwurf FLAKWAGEN: er landet mit einem Bot seiner Seite am Steuer (Verstaerkung, darf nicht nachkommen)",
-      _ne114 and _ne114[0].fahrer is not None and _ne114[0].fahrer.ist_bot
-      and _ne114[0].fahrer.team == 0 and getattr(_ne114[0].fahrer, "verstaerkung", False))
+pruef("Abwurf FLAKWAGEN: seit 0.34.138 landet er leer - Menschen und Bots duerfen ihn fahren",
+      _ne114 and _ne114[0].fahrer is None)
 _tm114.verlassen()
 
 # Gestoerte Minikarte und gestoerter Trupp-Funk (seit 0.34.115): im Stoerkreis
@@ -18472,8 +18486,9 @@ from dustfront import art_neue_fahrzeuge as _ANF117
 pruef("Jagdpanzer: der Fahrer ist nicht zu sehen - die Luke ist zu, mit und ohne Fahrer dasselbe Bild",
       pygame.image.tobytes(_ANF117.jagdpanzer_aufbau(None), "RGBA")
       == pygame.image.tobytes(_ANF117.jagdpanzer_aufbau((K.C_HULL, K.C_HULL_SH, K.C_TEAL)), "RGBA"))
-pruef("Trosswagen: ein Fuenftel groesser (Kreise, Achsen, Zone hinten)",
-      abs(K.TROSSWAGEN["kreis"] - 18.0 * 1.2) < 0.1 and abs(K.TROSSWAGEN["achse"] - 26.0 * 1.2) < 0.7
+# Seit 0.34.138 ist die Huelle genau an seinem Bild gemessen (122 x 62), nicht mehr ein Fuenftel ueber dem Panzerwagen.
+pruef("Trosswagen: gross wie sein Bild (Kreise, Achse), Zone hinten",
+      abs(2 * (K.TROSSWAGEN["kreis"] + K.TROSSWAGEN["achse"]) - 122) <= 2 and abs(2 * K.TROSSWAGEN["kreis"] - 62) <= 2
       and K.TROSSWAGEN["zone"]["radius"] > 34.0)
 _f117 = dict(K.basis_wagen())
 pruef("Basis: zwei Trosswagen und ein Flakwagen je Seite", _f117.get("trosswagen") == 2 and _f117.get("flakwagen") == 1,
@@ -18498,8 +18513,10 @@ _start117 = pygame.Vector2(_fl117.pos)
 for _ in range(int(4.0 / K.FIXED_DT)):
     _tm117._anwenden(_pg117, {"will": [0, 0], "ziel": [0, 0], "knoepfe": []})
     _tm117.schritt(K.FIXED_DT)
-pruef("Flakwagen an der Basis: steht, solange kein anderes Fahrzeug seiner Seite losgefahren ist",
-      _fl117.pos.distance_to(_start117) < 6.0, "%.0f" % _fl117.pos.distance_to(_start117))
+# Seit 0.34.138 bleibt er ohne Konvoi nicht stehen (gemeldet: "die Fahrer im Flakwagen fahren
+# oft einfach nicht los"), sondern faehrt wie die anderen zu den Zielen der Seite.
+pruef("Flakwagen an der Basis: ohne losgefahrenen Vordermann faehrt er selbst los (seit 0.34.138)",
+      _fl117.pos.distance_to(_start117) > 20.0, "%.0f" % _fl117.pos.distance_to(_start117))
 for _ in range(int(5.0 / K.FIXED_DT)):
     _tm117._anwenden(_pg117, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
     _tm117.schritt(K.FIXED_DT)
@@ -19592,6 +19609,9 @@ w131._einstiegszonen_waehlen()
 w131._fahrzeuge_neu_aufstellen()
 w131._bots_fuehren(0.0, sofort=True)
 w131.front_anlegen()
+# Geprueft werden hier Gruppen zu Fuss; dass zum Start Bots in die Wagen der
+# Basen steigen (seit 0.34.138), hat eigene Pruefungen (0.34.138).
+w131._basis_fahrer_offen = False
 pruef("FLUSSTAL ist die Vorgabe fuer SCHLACHT, und die Front gilt dort",
       K.SCHLACHT["karte"] == "flusstal" and w131.front_an and len(w131.front_punkte()) == 9)
 pruef("... die Basis jeder Seite ist ihr Hauptlager aus dem Kartenkopf",

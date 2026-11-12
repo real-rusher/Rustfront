@@ -2732,8 +2732,10 @@ class BotTeil:
             # Seit 0.34.138 mit der Seitenstaerke mehr (gemeldet: "die Bots sollen
             # alle Fahrzeuge bewusster einsetzen, den Funkwagen sehe ich nie") -
             # hoechstens so viele, wie die Basen Wagen haben.
-            seite = int(getattr(self, "regelwerk", {}).get("schlacht_seite", 0) or 0)
-            hoechstens = max(hoechstens, int(seite * K.SCHLACHT["fahrer_anteil"]))
+            seite = int(getattr(self, "schlacht_seite", 0) or 0)
+            if seite > 0:
+                # Ein Anteil der Seite - bei 8 je Seite 3, bei 24 je Seite 10.
+                hoechstens = max(1, int(round(seite * K.SCHLACHT["fahrer_anteil"])))
             if hasattr(self, "basis_ausstattung"):
                 try:
                     wagen = sum(n for _a, n, _b in self.basis_ausstattung(team, -1, 3))
