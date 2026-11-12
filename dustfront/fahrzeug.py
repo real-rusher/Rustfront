@@ -266,6 +266,8 @@ class Buggy(Wesen):
             return
         if art is None and kugel:
             art = "kugel"
+        if self.freund_drin(von):
+            return
         k = self.fahrer
         if (k is not None and k.lebt and von is not k
                 and (von is None or getattr(von, "fraktion", None) != k.fraktion)):
@@ -276,6 +278,20 @@ class Buggy(Wesen):
         self.blitz = K.TREFFER["blitz"]
         if self.leben <= 0.0:
             self._zerstoeren(von)
+
+    def freund_drin(self, von) -> bool:
+        """Sitzt ein Kamerad von `von` darin (nicht er selbst)? Dann macht
+        sein Treffer dem Wagen nichts (seit 0.34.140, gewuenscht: "man soll
+        Fahrzeugen, in denen Teammates sitzen, keinen Schaden mehr machen").
+        Vorher ging der Wagen kaputt und nahm die Leute darin mit."""
+        fraktion = getattr(von, "fraktion", None) if von is not None else None
+        if not fraktion:
+            return False
+        for k in [self.fahrer] + list(self.__dict__.get("_mitfahrer") or ()):
+            if k is not None and k is not von and getattr(k, "lebt", False) \
+                    and getattr(k, "fraktion", None) == fraktion:
+                return True
+        return False
 
     # ---- EMP, Reifen, Heckhilfen (seit 0.34.65) ----------------------
     def emp_treffen(self, dauer: float) -> None:
@@ -1742,7 +1758,8 @@ class Krad(Buggy):
         """Wie beim Buggy, und der Beifahrer bekommt es auch (der Fahrer
         wird in Buggy.schaden bedient). Die eigenen Leute verletzen einander
         nicht."""
-        if not (self.kaputt or self.nur_bild or not self.lebt) and float(menge) > 0.0:
+        if (not (self.kaputt or self.nur_bild or not self.lebt) and float(menge) > 0.0
+                and not self.freund_drin(von)):
             for k in list(self.__dict__.get("_mitfahrer") or ()):
                 if (k.lebt and von is not k
                         and (von is None or getattr(von, "fraktion", None) != k.fraktion)):

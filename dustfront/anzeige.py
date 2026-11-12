@@ -695,6 +695,9 @@ class Anzeige:
         Waffe darueber. (Vorher ein grosser Kasten unten rechts.) Mit
         Touch-Steuerung, wo es keinen Zeiger gibt, ueber der Hotbar."""
         g = self.g
+        frei = getattr(g, "_eigene_waffe_im_wagen", None)
+        if frei is not None and not frei():
+            return          # am Steuer keine Patronen der eigenen Waffe (seit 0.34.140)
         d = ich.waffe_daten
         name = ich.waffe_name
         jetzt = g.welt.zeit

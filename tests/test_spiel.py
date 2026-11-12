@@ -20441,6 +20441,36 @@ _bs140 = pygame.image.tobytes(app.bilder.bild(_nb140), "RGBA")
 pruef("... und Saege und Eisen sehen verschieden aus",
       _bs140 != pygame.image.tobytes(app.bilder.bild(_nb140[:-len("_kettensaege")]), "RGBA"))
 
+# Gewuenscht: Fahrzeuge, in denen Teammates sitzen, nehmen von den eigenen Leuten keinen Schaden.
+_tm140 = _TM59.Testmodus(app, karte="staubtal_offen")
+_ff140 = _tm140.fahrer_setzen(pygame.Vector2(_tm140.ich.pos) + pygame.Vector2(200, 0), 0,
+                              {"team": 0, "fahrzeug": "panzerwagen"}, mit_fahrzeug=True)
+_fb140 = _ff140.fahrzeug
+_freund140 = _tm140.puppe_setzen(_fb140.pos + pygame.Vector2(0, 120), 0, {"team": 0}, name="FREUND")
+_feind140 = _tm140.puppe_setzen(_fb140.pos + pygame.Vector2(0, -120), 0, {"team": 1}, name="FEIND")
+_vor140 = _fb140.leben
+_fb140.schaden(300.0, None, _freund140, art="explosion")
+pruef("Ein Kamerad trifft den Panzerwagen, in dem sein Mitspieler sitzt: kein Schaden",
+      _fb140.leben == _vor140 and _ff140.leben == _ff140.max_leben, "%.0f -> %.0f" % (_vor140, _fb140.leben))
+_fb140.schaden(300.0, None, _feind140, art="explosion")
+pruef("... ein Gegner schon", _fb140.leben < _vor140, "%.0f -> %.0f" % (_vor140, _fb140.leben))
+_tm140.verlassen()
+
+# Gemeldet: Medkits und dergleichen werden nach dem Tod nicht richtig zurueckgesetzt.
+w140b, g140b = _paar59("pve", karte="staubtal")
+_ich140 = w140b.ich
+_ich140.medkits = K.MEDKIT["hoechstens"]
+_ich140.heilt_rest = 0.8
+_ich140.nachlade_rest = 1.2
+_ich140.dash_ladungen = 0
+_ich140.lebt = False
+w140b._wieder_einsteigen(_ich140)
+pruef("Wiedereinstieg: genau die Medkits fuer den Anfang (nicht die aufgesammelten des alten Lebens)",
+      _ich140.medkits == w140b.start_medkits, "%d statt %d" % (_ich140.medkits, w140b.start_medkits))
+pruef("... und nichts aus dem alten Leben laeuft weiter (Medkit anlegen, Nachladen, Dash)",
+      _ich140.heilt_rest == 0 and _ich140.nachlade_rest == 0 and _ich140.dash_ladungen == K.DASH["ladungen"])
+w140b.verlassen(); g140b.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -5446,7 +5446,18 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         k.revive_stand = 0.0
         k.unverwundbar = self.schutz_zeit
         self.front_eingestiegen(k)
-        k.medkits = 0 if k.ist_bot else max(k.medkits, self.start_medkits)
+        # Genau die Medkits fuer den Anfang (seit 0.34.140, gemeldet: "Medkits
+        # werden nach dem Tod nicht richtig zurueckgesetzt"): vorher blieben
+        # die aufgesammelten aus dem alten Leben (max), bis zum Hoechstwert.
+        k.medkits = 0 if k.ist_bot else self.start_medkits
+        # Was im alten Leben gerade lief, endet mit ihm: Anlegen eines Medkits,
+        # Nachladen, Schlag, Salve, Dash, Hitze, Zielerfassung.
+        k.heilt_rest = k.nachlade_rest = k.nahkampf_rest = k.schlag_zeigen = 0.0
+        k.salve_rest = 0
+        k.dash_ladungen, k.dash_laden, k.dash_rest, k.dash_sperre = K.DASH["ladungen"], 0.0, 0.0, 0.0
+        k.anlauf = k.ladung = 0.0
+        k.ueberhitzt, k._kuehl = {}, {}
+        k.erfasst, k.erfassung, k.erfassung_rest = None, 0.0, 0.0
         if not k.ist_bot:
             # Jedes Leben mit vollem Vorrat und vollen Magazinen, Granaten
             # eingeschlossen (seit 0.34.96, gemeldet: "nicht immer
@@ -7759,9 +7770,19 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if not self.__dict__.get("_zielhilfen_spaeter"):
             self._zielhilfen_zeichnen(ziel)
 
+    def _eigene_waffe_im_wagen(self) -> bool:
+        """Zeigt die Anzeige die eigene Waffe (Streukegel, Ziellinie, Munition)?
+        Zu Fuss ja; im Fahrzeug nur, wer hinten aufsitzt oder im Beiwagen
+        sitzt und mit ihr schiesst (seit 0.34.140, gemeldet: "das Scope und
+        die Munition sollen im Fahrzeug nicht mehr angezeigt werden") - am
+        Steuer schiesst man mit dem Wagen oder gar nicht."""
+        ich = self.ich
+        return ich is None or not getattr(ich, "im_fahrzeug", False) or self._ist_mitfahrer(ich)
+
     def _zielhilfen_zeichnen(self, ziel) -> None:
         if (self.ich is not None and self.ich.lebt and not self.ich.am_boden
-                and self.blick == self.ich.ebene and self.ich.heilt_rest <= 0):
+                and self.blick == self.ich.ebene and self.ich.heilt_rest <= 0
+                and self._eigene_waffe_im_wagen()):
             self.renderer.zielhilfen(ziel, self.welt, self.kamera, self.ich)
             self.renderer.tracer(ziel, self.welt, self.kamera, self.ich)
 
