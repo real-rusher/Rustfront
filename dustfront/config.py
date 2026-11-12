@@ -5456,7 +5456,7 @@ HUD = dict(
 # und hoechstens Pixel je Kachel). rauschen: so viel heller oder dunkler
 # ist eine Kachel als die naechste.
 KARTENBILD = dict(
-    ziel_pixel=1500, mindest=2, hoechstens=12, rauschen=5,
+    ziel_pixel=2400, mindest=2, hoechstens=16, rauschen=5,   # seit 0.34.138 feiner (vorher 1500)
     sand=(92, 74, 52), piste=(118, 96, 66), kies=(86, 80, 70), gestruepp=(80, 82, 50),
     pflaster=(104, 98, 88), dielen=(108, 82, 56), gitter=(72, 72, 74),
     schatten=(44, 34, 24), treppe=(72, 170, 158),
@@ -5494,6 +5494,11 @@ MINIKARTE = dict(
     buggy_laenge=5,
     buggy_breite=2.5,
     schwer_mass=1.6,          # Panzer und Panzerwagen so viel groesser (seit 0.34.59)
+    # Fahrzeugzeichen (seit 0.34.138): das eigene Bild, so viel mal so lang wie
+    # der Wagen auf der Karte waere, aber mindestens/hoechstens so viele Pixel
+    # (mal dem Massstab der Karte). Gegner im Wagen nur, wenn ein Eigener
+    # naeher als `sicht` px steht (oder er markiert ist).
+    symbol_mass=2.2, symbol_mindest=5, symbol_hoechstens=16, sicht=650.0,
     # Im Stoerkreis eines gegnerischen Funkwagens (seit 0.34.115): Rauschen
     # statt Punkte - dicht, das Bild wechselt `takt` mal je Sekunde unter
     # `bilder` Stellungen; ein heller Streifen wandert `streifen_tempo` mal

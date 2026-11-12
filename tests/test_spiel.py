@@ -4430,6 +4430,11 @@ def _punkte70(f_, r_, farbe_):
             if f_.get_at((x_, y_))[:3] == tuple(farbe_)]
 
 def _buggy_da70(f_, r_, g_, b_, farbe_):
+    # Seit 0.34.138 traegt jeder Wagen sein eigenes Zeichen mit dem Rand in der
+    # Farbe seiner Seite (cyan, rot, bernstein) - gesucht wird diese Farbe;
+    # `farbe_` sagt nur noch, ob blass (andere Ebene) oder nicht.
+    soll_ = g_.hud.minikarte._fahrzeug_farbe(g_, b_, False) or MK.FARBE_FEIND
+    farbe_ = MK.Minikarte._blass(soll_) if farbe_ != MK.FARBE_BUGGY else soll_
     e_ = g_.welt.ebenen[0]
     px_ = int(r_.x + b_.pos.x * r_.width / float(e_.pixel_breite))
     py_ = int(r_.y + b_.pos.y * r_.height / float(e_.pixel_hoehe))
@@ -4471,8 +4476,11 @@ for _ in range(150):
 pruef("(Er ist wirklich gefahren)", _b70.pos.distance_to(_alt70) > 150 and _k70.im_fahrzeug,
       "%.0f px" % _b70.pos.distance_to(_alt70))
 _f70, _r70 = _karte70(w)
-pruef("Ein gefahrener Buggy steht beim Gastgeber auf der Karte, wo er ist",
-      _buggy_da70(_f70, _r70, w, _b70, MK.FARBE_BUGGY))
+_sicht70 = w.hud.minikarte._fahrzeug_farbe(w, _b70, False)
+pruef("Ein gefahrener Buggy steht beim Gastgeber auf der Karte, wo er ist - seit 0.34.138 nur, "
+      "wenn er ihn sieht oder ein Freund faehrt (gemeldet: Gegnerfahrzeuge standen immer darauf)",
+      _buggy_da70(_f70, _r70, w, _b70, MK.FARBE_BUGGY) if _sicht70 is not None
+      else not _buggy_da70(_f70, _r70, w, _b70, MK.FARBE_BUGGY), str(_sicht70))
 for _ in range(6):
     w.schritt(K.FIXED_DT)
     ga.schritt(K.FIXED_DT)
@@ -20131,6 +20139,35 @@ w138._sold_rest = 0.0
 w138.sold_schritt(K.FIXED_DT)
 pruef("... und Sold fuer jeden Menschen, ganz ohne Abschuss", _ich138.schlacht_punkte >= K.SCHLACHT["punkte"]["sold"]
       or getattr(_ich138, "team", -1) not in (0, 1), str(_ich138.schlacht_punkte))
+# Minimap: Gegnerfahrzeuge nur, wenn gesehen; Freund/Feind; eigene Zeichen.
+from dustfront import minikarte as _MK138
+_mk138 = _MK138.Minikarte()
+_fd138 = next(k_ for k_ in w138.kaempfer.values() if k_.lebt and getattr(k_, "team", -1) == 1 - _ich138.team)
+_bw138 = _FZ138.neu("buggy", pygame.Vector2(5, 5), 0)
+_bw138.fahrer = _fd138
+_alt_pos138 = {k_.nummer: pygame.Vector2(k_.pos) for k_ in w138.kaempfer.values()}
+for k_ in w138.kaempfer.values():
+    if k_.fraktion == _ich138.fraktion:
+        k_.pos.update(50000, 50000)
+_bw138.pos.update(100, 100)
+pruef("Minimap: ein Gegnerfahrzeug mit Gegner darin, das niemand sieht, steht nicht darauf",
+      _mk138._fahrzeug_farbe(w138, _bw138, False) is None)
+_ich138.pos.update(_bw138.pos + pygame.Vector2(200, 0))
+pruef("... steht ein Eigener nah dabei, schon - rot, egal welche Mannschaftsfarbe",
+      _mk138._fahrzeug_farbe(w138, _bw138, False) == _MK138.FARBE_FEIND)
+_bw138.fahrer = _ich138
+pruef("... das eigene ist cyan, ein leeres bernstein",
+      _mk138._fahrzeug_farbe(w138, _bw138, False) == _MK138.FARBE_FREUND
+      and (setattr(_bw138, "fahrer", None) or _mk138._fahrzeug_farbe(w138, _bw138, False)) in (_MK138.FARBE_LEER, _MK138.FARBE_FREUND))
+for k_ in w138.kaempfer.values():
+    if k_.nummer in _alt_pos138:
+        k_.pos.update(_alt_pos138[k_.nummer])
+_s1 = _mk138._symbol_bild(w138, "panzer", 30, _MK138.FARBE_FEIND, 0)
+_s2 = _mk138._symbol_bild(w138, "buggy", 30, _MK138.FARBE_FEIND, 0)
+pruef("... jedes Fahrzeug hat sein eigenes Zeichen (sein Bild von oben)",
+      _s1 is not None and _s2 is not None
+      and pygame.image.tobytes(_s1, "RGBA") != pygame.image.tobytes(pygame.transform.scale(_s2, _s1.get_size()), "RGBA"))
+_ich138.pos.update(_alt_pos138.get(_ich138.nummer, _ich138.pos))
 w138.verlassen(); g138.verlassen()
 
 print()

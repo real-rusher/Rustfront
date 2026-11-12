@@ -51,6 +51,10 @@ FARBE_FEIND = (255, 64, 64)       # feindliche Spieler (Regel gegner_karte)
 FARBE_BUGGY = (214, 166, 70)
 FARBE_DUNKEL = (16, 11, 8)
 FARBE_ICH = (230, 255, 248)       # man selbst
+# Freund und Feind immer gleich, egal welche Mannschaftsfarbe (seit 0.34.138,
+# gewuenscht: "klarer zwischen Freund und Feind unterscheiden, immer").
+FARBE_FREUND = (90, 214, 255)
+FARBE_LEER = (226, 186, 92)       # ein Fahrzeug ohne Fahrer
 PING_FARBE = (255, 176, 40)       # der Funkwagen auf der gestoerten Karte
 RAHMEN = (84, 66, 48)
 GRUND = (11, 8, 6, 200)
@@ -180,6 +184,8 @@ class Minikarte:
         for k in g.kaempfer.values():
             if k is ich or not k.lebt or k.fraktion == ich.fraktion:
                 continue
+            if getattr(k, "am_boden", False) or getattr(k, "fahrzeug", None) is not None:
+                continue            # Liegende nicht (seit 0.34.138); Fahrer zeigt ihr Wagen
             if alle_feinde or (markiert is not None and markiert(k)):
                 if int(k.ebene) != nr or getattr(k, "raus", False):
                     continue
@@ -191,7 +197,10 @@ class Minikarte:
                 continue
             if int(k.ebene) != nr or k.fraktion != ich.fraktion:
                 continue
-            self._punkt(ziel, punkt(k.pos), g._farbe_fuer(k), 1.5 * m)
+            if getattr(k, "fahrzeug", None) is not None:
+                continue            # wer faehrt, steht als sein Wagen auf der Karte
+            farbe = self._blass(FARBE_FREUND) if getattr(k, "am_boden", False) else FARBE_FREUND
+            self._punkt(ziel, punkt(k.pos), farbe, 1.5 * m)
 
         # Man selbst: ein Pfeil in Blickrichtung (seit 0.34.100, vorher ein
         # Punkt mit Strich - auf der kleinen Karte kaum zu finden).
@@ -204,7 +213,10 @@ class Minikarte:
         for b in getattr(g, "fahrzeuge", ()):
             if getattr(b, "kaputt", False):
                 continue            # ein Wrack ist kein Wagen mehr (0.34.18)
-            self._buggy(ziel, g, b, punkt(b.pos), int(b.ebene) != nr, m)
+            farbe = self._fahrzeug_farbe(g, b, allwissend or alle_feinde)
+            if farbe is None:
+                continue            # ein Gegner darin, und niemand sieht ihn (seit 0.34.138)
+            self._fahrzeug_symbol(ziel, g, b, punkt(b.pos), farbe, int(b.ebene) != nr, m, sx)
             if b.art == "werfer":
                 # Eigenes Zeichen (seit 0.34.112): immer fuer die eigene Seite, fuer
                 # die Gegner nur, solange er sich mit einer Salve verraten hat.
@@ -214,6 +226,12 @@ class Minikarte:
                 if getattr(b, "markiert_rest", 0.0) > 0.0 or (ich is not None and seite == ich.team):
                     self.werfer_zeichen(ziel, punkt(b.pos), m)
 
+        # Der Kreis noch einmal obenauf (seit 0.34.138): die Fahrzeugzeichen
+        # sind groesser geworden und lagen sonst ueber dem Ziel der Runde.
+        if g.regeln.get("zone") and zone_ebene >= 0:
+            self._kreis(ziel, g, punkt(g.zone_mitte),
+                        max(n(M["kreis_mindest"]), int(K.ZONE["radius"] * sx)),
+                        zone_ebene - nr, m)
         if not rund:
             pygame.draw.rect(ziel, RAHMEN, r.inflate(4, 4), 1)
         return r
@@ -344,6 +362,115 @@ class Minikarte:
         pygame.draw.polygon(ziel, FARBE_DUNKEL, ecken, 2)
         pygame.draw.polygon(ziel, g._zonenfarbe()[0] if hasattr(g, "_zonenfarbe")
                             else K.C_AMBER, ecken)
+
+    @staticmethod
+    def _fahrer_von(g, b):
+        f = getattr(b, "fahrer", None)
+        if f is None:
+            f = getattr(g, "kaempfer", {}).get(getattr(b, "fahrer_nummer", -1))
+        return f
+
+    def _fahrzeug_farbe(self, g, b, alles: bool):
+        """Freund (cyan), Feind (rot), leer (bernstein) - oder None, wenn ein
+        Gegner darin sitzt, den die eigene Seite nicht sieht (seit 0.34.138,
+        gemeldet: "auf der Minimap sieht man alle Gegnerfahrzeuge mit Gegnern
+        drin immer"). Leere Wagen stehen immer da: wo einer steht, ist eine
+        Frage des Weges, nicht der Deckung."""
+        ich = g.ich
+        fahrer = self._fahrer_von(g, b)
+        if fahrer is None:
+            seite = getattr(b, "basis_team", -1)
+            if ich is not None and seite in (0, 1) and seite == getattr(ich, "team", -2):
+                return FARBE_FREUND
+            return FARBE_LEER
+        if ich is not None and (fahrer is ich or getattr(fahrer, "fraktion", None) == ich.fraktion):
+            return FARBE_FREUND
+        markiert = getattr(g, "fahrzeug_fuer_mich_markiert", None)
+        if alles or (markiert is not None and markiert(b)) or self._sieht_eigene_seite(g, b.pos):
+            return FARBE_FEIND
+        return None
+
+    @staticmethod
+    def _sieht_eigene_seite(g, pos) -> bool:
+        """Steht es so nah an einem der eigenen Leute, dass die Seite es sieht
+        (wie der Nebel der grossen Karte, K.MINIKARTE sicht)?"""
+        ich = g.ich
+        if ich is None:
+            return False
+        weit2 = M["sicht"] ** 2
+        for k in g.kaempfer.values():
+            if (k.lebt and not getattr(k, "am_boden", False) and k.fraktion == ich.fraktion
+                    and k.pos.distance_squared_to(pos) <= weit2):
+                return True
+        return False
+
+    def _symbol_bild(self, g, art: str, laenge: int, farbe, winkel: int):
+        """Das Zeichen eines Fahrzeugs: sein eigenes Bild von oben,
+        verkleinert, mit einem Rand in der Farbe seiner Seite (seit 0.34.138,
+        gewuenscht: "jedes Fahrzeug durch ein eigenes, sehr detailliertes
+        Symbol direkt erkennen"). Gemerkt je Art, Groesse, Farbe und Winkel."""
+        merk = self.__dict__.setdefault("_symbole", {})
+        schluessel = (art, laenge, farbe, winkel)
+        s = merk.get(schluessel)
+        if s is not None:
+            return s
+        quelle = None
+        try:
+            if hasattr(g, "_fracht_ganz"):
+                from . import fahrzeug as fahrzeug_modul
+                if getattr(fahrzeug_modul.ARTEN.get(art), "rechteckig", False):
+                    quelle = g._fracht_ganz(art)
+            if quelle is None:
+                quelle = g.renderer.bilder.bild(art)
+        except Exception:                      # noqa: BLE001  kein Bild: kein Zeichen
+            return None
+        bb = quelle.get_bounding_rect()
+        if bb.width < 2 or bb.height < 2:
+            return None
+        quelle = quelle.subsurface(bb)
+        f = laenge / float(bb.width)
+        klein = pygame.transform.smoothscale(quelle.convert_alpha() if pygame.display.get_surface() else quelle,
+                                             (max(2, int(bb.width * f)), max(2, int(bb.height * f))))
+        rand = 1
+        roh = pygame.Surface((klein.get_width() + 2 * rand + 2, klein.get_height() + 2 * rand + 2),
+                             pygame.SRCALPHA)
+        umriss = pygame.mask.from_surface(klein, 60).to_surface(setcolor=farbe + (255,),
+                                                                 unsetcolor=(0, 0, 0, 0))
+        dunkel = pygame.mask.from_surface(klein, 60).to_surface(setcolor=(10, 8, 6, 255),
+                                                                 unsetcolor=(0, 0, 0, 0))
+        for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2), (-1, -1), (1, 1), (-1, 1), (1, -1)):
+            roh.blit(dunkel, (rand + 1 + dx, rand + 1 + dy))
+        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            roh.blit(umriss, (rand + 1 + dx, rand + 1 + dy))
+        roh.blit(klein, (rand + 1, rand + 1))
+        # Ein Hauch der Seitenfarbe ueber dem Bild, damit es auch klein klar ist.
+        hauch = umriss.copy()
+        hauch.set_alpha(70)
+        roh.blit(hauch, (rand + 1, rand + 1))
+        s = pygame.transform.rotate(roh, -winkel)
+        if len(merk) > 600:
+            merk.clear()
+        merk[schluessel] = s
+        return s
+
+    def _fahrzeug_symbol(self, ziel, g, b, mitte, farbe, andere_ebene: bool, mass: float,
+                         sx: float) -> None:
+        if andere_ebene:
+            farbe = self._blass(farbe)
+        laenge = max(int(M["symbol_mindest"] * mass),
+                     int(round(b.werte.get("vorn", 20.0) - b.werte.get("hinten", -20.0)) * sx
+                         * M["symbol_mass"]))
+        laenge = min(laenge, int(M["symbol_hoechstens"] * mass))
+        winkel = int(round(getattr(b, "winkel", 0.0) / 15.0)) * 15 % 360
+        s = self._symbol_bild(g, b.art, laenge, tuple(farbe[:3]), winkel)
+        if s is None:
+            self._buggy(ziel, g, b, mitte, andere_ebene, mass)
+            return
+        ziel.blit(s, s.get_rect(center=mitte))
+        ich = g.ich
+        if (getattr(ich, "im_fahrzeug", False) and ich.ebene == b.ebene
+                and ich.pos.distance_squared_to(b.pos) < 4.0):
+            pygame.draw.circle(ziel, FARBE_ICH, mitte, max(1, int(round(mass))))
 
     def _buggy(self, ziel, g, b, mitte, andere_ebene: bool, mass: float = 1.0) -> None:
         """Ein Buggy: laenglich in Fahrtrichtung, besetzt mit einem Punkt
