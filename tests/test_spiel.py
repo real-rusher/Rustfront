@@ -8781,7 +8781,22 @@ drinnen = next((pygame.Vector2(sicht.centerx + dx, sicht.centery + dy)
                                                sicht.centery + dy),
                                 10, ich_z.ebene)),
                pygame.Vector2(sicht.centerx + 120, sicht.centery))
-draussen = pygame.Vector2(sicht.right + 120, sicht.centery)
+# Mitten im Nebelstreifen zwischen klarem Bereich und Bildrand (seit
+# 0.34.135: klar bis 1,75 - 120 px dahinter lag schon ausserhalb des Bildes).
+# Die Kamera schaut der Maus voraus, der klare Bereich nicht: genommen wird
+# die Seite mit dem breitesten Streifen.
+_lo_bild = wz.kamera.zu_welt(pygame.Vector2(0, 0))
+_ru_bild = wz.kamera.zu_welt(pygame.Vector2(K.GAME_W - 1, K.GAME_H - 1))
+_streifen = max(((_ru_bild.x - sicht.right, pygame.Vector2((sicht.right + _ru_bild.x) / 2.0, sicht.centery)),
+                 (sicht.left - _lo_bild.x, pygame.Vector2((sicht.left + _lo_bild.x) / 2.0, sicht.centery)),
+                 (_ru_bild.y - sicht.bottom, pygame.Vector2(sicht.centerx, (sicht.bottom + _ru_bild.y) / 2.0)),
+                 (sicht.top - _lo_bild.y, pygame.Vector2(sicht.centerx, (sicht.top + _lo_bild.y) / 2.0))),
+                key=lambda t_: t_[0])
+# Eine freie Stelle in diesem Streifen (wie drinnen: dort kann ein Fass stehen).
+_quer = (pygame.Vector2(0, 1) if abs(_streifen[1].y - sicht.centery) < 1.0 else pygame.Vector2(1, 0))
+draussen = next((_streifen[1] + _quer * d_ for d_ in (0, 40, -40, 80, -80, 120, -120, 160, -160, 200, -200)
+                 if wz.welt.frei(_streifen[1] + _quer * d_, 10, ich_z.ebene)), _streifen[1])
+pruef("... der Nebelstreifen ist breit genug fuer die Probe", _streifen[0] >= 40, "%.0f" % _streifen[0])
 pruef("Im normalen Bild sieht man einen Gegner auch mit Zoom",
       wz.welt.frei(drinnen, 10, ich_z.ebene) and bild_mit(drinnen))
 pruef("Im Nebel nicht - er wird gar nicht gezeichnet",
@@ -19906,6 +19921,31 @@ _luecke135 = max((_wk135[(i_ + 1) % 5] - _wk135[i_]) % 360 for i_ in range(5))
 pruef("... gleichmaessig rundum verteilt (keine Luecke ueber 100 Grad)", _luecke135 < 100, str([round(x_) for x_ in _wk135]))
 pruef("... jede Rakete staerker und mit groesserem Radius als vor 0.34.135",
       K.WERFER["salve"]["schaden"] > 90 and K.WERFER["salve"]["radius"] > 46)
+
+from dustfront import bots as _BO135
+_bots135 = w134._bots()
+# Hier sind es nur ein paar Bots - die Schwelle fuer die Probe tiefer.
+_staffel_alt135 = K.BOTS["staffel"]
+K.BOTS["staffel"] = ((min(len(_bots135), 5), 2),)
+_jede135 = 2
+_ruf135 = {}
+_alt135 = _BO135.BotHirn.eingabe
+def _zaehl135(self, dt):
+    z_ = _ruf135.setdefault(self.k.nummer, [0, 0.0]); z_[0] += 1; z_[1] += dt
+    return _alt135(self, dt)
+_BO135.BotHirn.eingabe = _zaehl135
+try:
+    for _ in range(6 * _jede135):
+        w134._bots_steuern(K.FIXED_DT)
+finally:
+    _BO135.BotHirn.eingabe = _alt135
+    K.BOTS["staffel"] = _staffel_alt135
+_mit135 = [v_ for n_, v_ in _ruf135.items()]
+pruef("Gestaffelt: ab K.BOTS staffel denkt jeder Bot nur jeden 2. Schritt (%d Bots)" % len(_bots135),
+      _jede135 > 1 and _mit135 and all(v_[0] == 6 for v_ in _mit135),
+      str(sorted(set(v_[0] for v_ in _mit135))))
+pruef("... und bekommt dabei die ganze vergangene Zeit (keine Uhr laeuft langsamer)",
+      all(abs(v_[1] - 6 * _jede135 * K.FIXED_DT) <= _jede135 * K.FIXED_DT + 1e-9 for v_ in _mit135))
 w134.verlassen(); g134.verlassen()
 
 print()

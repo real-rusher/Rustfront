@@ -2303,6 +2303,13 @@ FAHRZEUG_WAFFEN = {
 # Maus und zielt erst ungenau, dann besser - nie vorhaltend. Das Spiel
 # streut seine Schuesse wie die aller anderen.
 BOTS = dict(
+    # Gestaffeltes Denken (seit 0.34.135, gewuenscht: "die Rechenleistung der
+    # Bots aufteilen, muss aber fluessig laufen"): ab `staffel` [i][0] Bots
+    # denkt jeder nur jeden [i][1]. Schritt (versetzt, mit der ganzen
+    # vergangenen Zeit). Dazwischen gilt seine letzte Eingabe weiter -
+    # Laufen, Zielen, Gas und Lenkung bleiben am Kaempfer stehen. Bei 120
+    # Schritten je s sind das 60 oder 40 Entscheidungen je s und Bot.
+    staffel=((40, 2), (120, 3)),
     # So lange (s) geht ein Bot gegen gesehene Fallschirmjaeger in Deckung,
     # nachdem er sie zuletzt sah (seit 0.34.100).
     springer_merken=4.0,
@@ -2377,7 +2384,10 @@ BOTS = dict(
            "MONGOOSE", "SKULL", "BONES"),
     takt=0.1,                 # so oft sieht und entscheidet er neu (s)
     sicht=330.0,              # so weit sieht er (halbe Bildbreite ist 320)
-    reaktion=(0.45, 0.85),    # bis zum ersten Schuss auf ein neues Ziel (s)
+    # Seit 0.34.135 um das neue Lauftempo kuerzer (vorher 0.45-0.85): alle
+    # laufen 1,3 mal so schnell, ein Gegner steht also kuerzer offen - mit der
+    # alten Zeit kam der Feuerschutz kaum noch zum Schuss (test_verhalten).
+    reaktion=(0.35, 0.65),    # bis zum ersten Schuss auf ein neues Ziel (s)
     reaktion_hinten=0.35,     # dazu, wenn es von hinten kommt
     dreh=230.0,               # so schnell schwenkt er das Fadenkreuz (Grad/s)
     fehler_start=48.0,        # Zielfehler beim ersten Sehen, auf 250 px (px)
@@ -5936,7 +5946,7 @@ GEGNER = {
         name="RENNER",
         leben=26.0,              # ein Schrotschuss, ein Treffer mit dem Gewehr
         radius=8.0,
-        tempo=118.0,             # schneller als ein laufender Spieler (108)
+        tempo=118.0 * 1.3,       # schneller als ein laufender Spieler (seit 0.34.135 mit ihm 1,3 mal so schnell)
         beschleunigung=900.0,
         schaden=7.0,
         schlagtakt=0.55,

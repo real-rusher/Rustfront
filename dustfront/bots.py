@@ -2781,11 +2781,27 @@ class BotTeil:
         # Ein Durchgang: so lange gilt das Merken in BotHirn._kandidaten.
         self._kandidaten_lauf = self.__dict__.get("_kandidaten_zaehler", 0) + 1
         self._kandidaten_zaehler = self._kandidaten_lauf
+        bots = self._bots()
+        jede = 1
+        for ab, n in K.BOTS["staffel"]:
+            if len(bots) >= ab:
+                jede = n
+        lauf = self.__dict__.get("_staffel_lauf", 0) + 1
+        self._staffel_lauf = lauf
         try:
-            for k in self._bots():
+            for k in bots:
                 hirn = getattr(k, "hirn", None)
                 if hirn is None:
                     continue
+                if jede > 1:
+                    # Versetzt: in jedem Schritt denkt ein Teil der Bots.
+                    hirn._staffel_dt = getattr(hirn, "_staffel_dt", 0.0) + dt
+                    if (lauf + k.nummer) % jede:
+                        continue
+                    schritt, hirn._staffel_dt = hirn._staffel_dt, 0.0
+                    self._anwenden(k, hirn.eingabe(schritt))
+                    continue
+                hirn._staffel_dt = 0.0
                 self._anwenden(k, hirn.eingabe(dt))
         finally:
             self._kandidaten_lauf = None
