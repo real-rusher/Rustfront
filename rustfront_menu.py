@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.34.136"
+VERSION = "0.34.137"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -2018,6 +2018,9 @@ def spiel_scene(window, app: App, result: dict) -> None:
     rendert auf 640x360 und setzt sich sein eigenes Fenster, das Menue
     rechnet mit 480x270.
     """
+    # Nicht schwarz, solange geladen wird (seit 0.34.137).
+    uebersetzer_abwarten(app)
+    ladebild(app)
     try:
         from dustfront.main import aus_menue
     except ImportError:
@@ -2120,6 +2123,90 @@ def run_splash(app) -> str:
     return rustfront_splash.play(app)
 
 
+# ── Vorab uebersetzen (seit 0.34.137) ───────────────────────────────────
+# Gemeldet: auf sehr schwachen Rechnern beim ersten Start jeder neuen Version
+# ein langer schwarzer Schirm beim ersten Gang in die Runde (und ein kuerzerer
+# bis zum Hauptmenue). Grund: Python uebersetzt jede geaenderte .py-Datei beim
+# ersten Import in Bytecode (__pycache__) - 75 000 Zeilen, gemessen 0,64 s auf
+# einem schnellen Rechner, auf einem langsamen ein Vielfaches. Das Menue
+# braucht nur wenige Dateien; den grossen Rest (mehrspieler.py allein 9000
+# Zeilen) holte erst der Klick auf SPIELEN.
+# Darum uebersetzt jetzt ein eigener Prozess das ganze Paket, waehrend man im
+# Menue steht. Ein Prozess und kein Faden: ein Faden hielte die GIL und
+# braechte den Ton zum Haengen (siehe 0.34.136).
+_UEBERSETZER = None
+
+
+def _veraltet(ordner: Path) -> list:
+    """Die .py-Dateien im Ordner, deren Bytecode fehlt oder aelter ist."""
+    import importlib.util
+    raus = []
+    for py in sorted(ordner.glob("*.py")):
+        try:
+            pyc = Path(importlib.util.cache_from_source(str(py)))
+            if not pyc.is_file() or pyc.stat().st_mtime < py.stat().st_mtime:
+                raus.append(py)
+        except (OSError, NotImplementedError, ValueError):
+            continue
+    return raus
+
+
+def vorab_uebersetzen(ordner: Path | None = None):
+    """Startet den Uebersetzer-Prozess, wenn etwas veraltet ist. Gibt ihn
+    zurueck, oder None (nichts zu tun, oder es geht hier nicht)."""
+    global _UEBERSETZER
+    if getattr(sys, "frozen", False) or not sys.executable or sys.dont_write_bytecode:
+        return None
+    # Wie plattform.prozesse_erlaubt, aber ohne das Paket zu laden: dessen
+    # __init__ zoege das ganze Spiel nach (und uebersetzte es hier vorn).
+    if sys.platform == "ios":
+        return None
+    ordner = ordner or (Path(__file__).resolve().parent / "dustfront")
+    if not ordner.is_dir() or not _veraltet(ordner):
+        return None
+    import subprocess
+    extra = {}
+    if os.name == "nt":
+        # Unter normaler Prioritaet und ohne Konsolenfenster.
+        extra["creationflags"] = 0x00004000 | 0x08000000   # BELOW_NORMAL | CREATE_NO_WINDOW
+    try:
+        _UEBERSETZER = subprocess.Popen(
+            [sys.executable, "-m", "compileall", "-q", "-l", str(ordner)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, **extra)
+    except (OSError, ValueError):
+        _UEBERSETZER = None
+    return _UEBERSETZER
+
+
+def uebersetzer_abwarten(app=None, hoechstens: float = 120.0) -> None:
+    """Vor dem Spiel: laeuft der Uebersetzer noch, auf ihn warten - mit
+    LAEDT im Bild statt schwarz. Doppelt uebersetzen kostete nur mehr."""
+    proc = _UEBERSETZER
+    if proc is None or proc.poll() is not None:
+        return
+    ende = time.time() + hoechstens
+    while proc.poll() is None and time.time() < ende:
+        for _ in pygame.event.get(pygame.QUIT):
+            pass
+        if app is not None:
+            ladebild(app, "LÄDT DIE NEUE VERSION ...")
+        time.sleep(0.05)
+
+
+def ladebild(app, text: str = "LÄDT ...") -> None:
+    """Ein Bild mit LAEDT, damit der Schirm beim Uebergang nicht schwarz ist."""
+    try:
+        c = app.canvas
+        c.fill(C_VOID)
+        punkte = "." * (1 + int(time.time() * 2.5) % 3)
+        FONT.draw(c, text.rstrip(". ") + " " + punkte, VW // 2, VH // 2 - 4, C_AMBER, 1,
+                  align="center")
+        app.present()
+    except Exception:               # noqa: BLE001  nur ein Hinweis, nie ein Absturz
+        pass
+
+
 def _klaenge_vorbauen() -> None:
     """Die Klaenge des Spiels schon im Menue bauen lassen (seit 0.34.58).
 
@@ -2146,6 +2233,7 @@ def _startauftrag() -> dict | None:
 
 
 def main() -> int:
+    vorab_uebersetzen()
     app = build_app()
     run_splash(app)
     pygame.event.clear()

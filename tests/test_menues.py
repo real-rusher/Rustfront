@@ -429,6 +429,26 @@ pruef("Das Hauptmenue spielt keinen Dauerton mehr (seit 0.34.136: das Brummen is
       and all(k_.get_length() < 0.5 for k_ in _au.sounds.values()),
       str({n_: round(k_.get_length(), 2) for n_, k_ in _au.sounds.items()}))
 pruef("... und oeffnet den Mischer mit demselben Puffer wie das Spiel", RM.MIX_PUFFER == K.AUDIO["puffer"])
+
+# Vorab uebersetzen (seit 0.34.137, gemeldet: auf schwachen Rechnern beim
+# ersten Start jeder Version ein langer schwarzer Schirm vor der ersten Runde).
+import shutil as _sh137
+_pk137 = Path(_WEG) / "paket137"
+_sh137.copytree(Path(__file__).resolve().parent.parent / "dustfront", _pk137,
+                ignore=_sh137.ignore_patterns("__pycache__"))
+_vor137 = len(RM._veraltet(_pk137))
+_proc137 = RM.vorab_uebersetzen(_pk137)
+pruef("Neue Version: ein eigener Prozess uebersetzt das ganze Paket, waehrend man im Menue steht",
+      _vor137 > 20 and _proc137 is not None and _proc137.wait(120) == 0 and not RM._veraltet(_pk137),
+      "%d veraltet, danach %d" % (_vor137, len(RM._veraltet(_pk137))))
+pruef("... beim naechsten Start ist nichts zu tun (kein Prozess)", RM.vorab_uebersetzen(_pk137) is None)
+_bild137 = pygame.Surface((RM.VW, RM.VH))
+_gezeigt137 = []
+_fake137 = type("A", (), {"canvas": _bild137, "present": lambda self_: _gezeigt137.append(1)})()
+RM.ladebild(_fake137)
+pruef("... und beim Uebergang ins Spiel steht LAEDT im Bild statt schwarz",
+      _gezeigt137 and any(_bild137.get_at((x_, RM.VH // 2))[:3] != RM.C_VOID for x_ in range(RM.VW)))
+RM.uebersetzer_abwarten(_fake137, 5.0)
 app.opt["bildrate"] = 144
 app.opt["ton_gesamt"] = 40
 app.opt["fenstermodus"] = "randlos"
