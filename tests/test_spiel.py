@@ -19975,6 +19975,32 @@ pruef("... und bekommt dabei die ganze vergangene Zeit (keine Uhr laeuft langsam
       all(abs(v_[1] - 6 * _jede135 * K.FIXED_DT) <= _jede135 * K.FIXED_DT + 1e-9 for v_ in _mit135))
 w134.verlassen(); g134.verlassen()
 
+# ══════════════════════════════════════════════════════════════════
+print("\n-- 0.34.138: Beste Qualitaet beim Zoom, Fehler aus der Meldung")
+from dustfront import einstellungen as E_138
+w138, g138 = _paar59("pve", karte="staubtal")
+for _ in range(30):
+    w138.schritt(K.NETZ["takt"])
+w138.zoom_ziel = w138._zoom_weich = w138.kamera.zoom = 1.75
+app.opt["zoom_hochaufloesend"] = False
+w138.zeichnen(app.flaeche, 1.0)
+pruef("Zoom ohne BESTE QUALITAET: wie bisher, nichts fuers Fenster",
+      app.__dict__.get("welt_hoch") is None and not E_138.VORGABE["zoom_hochaufloesend"])
+app.opt["zoom_hochaufloesend"] = True
+w138.zeichnen(app.flaeche, 1.0)
+_wh138 = app.__dict__.get("welt_hoch")
+pruef("... mit: die Leinwand in Zoomgroesse geht ans Fenster, mit ungerundeter Ecke",
+      _wh138 is not None and _wh138["leinwand"].get_width() >= int(K.GAME_W * 1.75)
+      and abs(_wh138["ecke"][0]) < 8 and abs(_wh138["ecke"][1]) < 8, str(_wh138 and _wh138["ecke"]))
+_f138 = pygame.Surface((K.GAME_W * 2, K.GAME_H * 2))
+app.flaeche.fill((10, 200, 30), (5, 5, 20, 20))     # "Anzeige" ueber der Welt
+app._welt_hoch_auflegen(_f138, pygame.Rect(0, 0, K.GAME_W * 2, K.GAME_H * 2))
+pruef("... das Fenster bekommt die Welt in voller Aufloesung, und die Anzeige bleibt obenauf",
+      tuple(_f138.get_at((20, 20)))[:3] == (10, 200, 30) and "welt_hoch" not in app.__dict__
+      and tuple(_f138.get_at((K.GAME_W, K.GAME_H)))[:3] != (0, 0, 0))
+app.opt["zoom_hochaufloesend"] = False
+w138.verlassen(); g138.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

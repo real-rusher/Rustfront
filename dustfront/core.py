@@ -921,8 +921,56 @@ class App:
                 puffer = self._gross_puffer = pygame.Surface(vp.size, 0, self.flaeche)
             pygame.transform.scale(self.flaeche, vp.size, puffer)
             f.blit(puffer, vp.topleft)
+        self._welt_hoch_auflegen(f, vp)
         self._hoch_zeichnen(f)
         pygame.display.flip()
+
+    # Die Farbe, die in der Anzeige-Schicht "hier nichts" heisst.
+    _LEER = (255, 0, 254)
+
+    def _welt_hoch_auflegen(self, f, vp) -> None:
+        """BESTE QUALITAET BEIM ZOOM (seit 0.34.138, gewuenscht: "dass das
+        Spiel immer am bestmoeglichsten aussieht, egal wie weit man
+        rausgezoomt hat"): die gezoomte Welt kommt in Fensteraufloesung ins
+        Fenster, an ihre ungerundete Stelle - nicht erst auf 640 x 360
+        verkleinert. Damit faellt auch das Zittern der eigenen Figur weg: auf
+        dem groben Raster lagen Kamera und Figur je Bild bis zu 0,4 Pixel
+        gegeneinander verschoben. Darueber kommt, was die Anzeige gemalt hat:
+        jedes Bildpixel, das sich vom reinen Weltbild unterscheidet."""
+        hoch = self.__dict__.pop("welt_hoch", None)
+        if not hoch or vp.width <= 0 or vp.height <= 0:
+            return
+        try:
+            lw, z = hoch["leinwand"], hoch["zoom"]
+            sk = vp.width / float(K.GAME_W)
+            ox, oy = hoch["ecke"]
+            b = max(1, int(round(lw.get_width() * sk / z)))
+            h = max(1, int(round(lw.get_height() * sk / z)))
+            # Groesser: hart, solange es mindestens doppelt ist (scharfe
+            # Pixel); sonst weich (kein Flimmern bei krummen Faktoren).
+            if b >= 2 * lw.get_width():
+                gross = pygame.transform.scale(lw, (b, h))
+            else:
+                gross = pygame.transform.smoothscale(lw, (b, h))
+            alt = f.get_clip()
+            f.set_clip(vp)
+            f.blit(gross, (vp.x + int(round(ox * sk)), vp.y + int(round(oy * sk))))
+            # Die Anzeige: was sich vom reinen Weltbild unterscheidet.
+            flach, jetzt = hoch["flach"], self.flaeche
+            d1 = jetzt.copy()
+            d1.blit(flach, (0, 0), special_flags=pygame.BLEND_RGB_SUB)
+            d2 = flach.copy()
+            d2.blit(jetzt, (0, 0), special_flags=pygame.BLEND_RGB_SUB)
+            d1.blit(d2, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+            gleich = pygame.mask.from_threshold(d1, (0, 0, 0), (3, 3, 3, 255))
+            schicht = jetzt.copy()
+            gleich.to_surface(schicht, setcolor=self._LEER, unsetcolor=None)
+            schicht = pygame.transform.scale(schicht, vp.size)
+            schicht.set_colorkey(self._LEER)
+            f.blit(schicht, vp.topleft)
+            f.set_clip(alt)
+        except (pygame.error, ValueError, KeyError, TypeError):
+            pass
 
     def _ruhig_ausgeben(self, f, vp, fb, fh) -> None:
         """PIXELRASTER OHNE FLIMMERN (seit 0.34.77): erst um den naechsten

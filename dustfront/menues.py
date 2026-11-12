@@ -475,6 +475,10 @@ HILFE = {
     ],
     "probe": ["SPIELT EINEN SCHUSS, DAMIT MAN DIE LAUTSTÄRKE HÖRT."],
     "vignette": ["DUNKLE ECKEN. ZIEHT DEN BLICK ZUR MITTE."],
+    "zoom_hochaufloesend": [
+        "HERAUS- UND HEREINGEZOOMT SO SCHARF WIE OHNE ZOOM, OHNE PIXELZITTERN.",
+        "BRAUCHT MEHR RECHENZEIT. AUF SCHWACHEN RECHNERN AUS LASSEN.",
+    ],
     "bildschirm_ruckeln": [
         "WIE STARK DAS BILD BEI EXPLOSIONEN UND TREFFERN WACKELT.",
         "ES RUCKELT NUR NOCH, WAS NAH GENUG UND AUF DERSELBEN EBENE",
@@ -658,6 +662,8 @@ class Einstellungen(Menue):
                         "menue_crt", o["menue_crt"]),
             ui.Schalter(self._reihe(zx, zy, zw, 3), "INTRO BEIM START",
                         "intro", o["intro"]),
+            ui.Schalter(self._reihe(zx, zy, zw, 4), "BESTE QUALITÄT BEIM ZOOM",
+                        "zoom_hochaufloesend", o["zoom_hochaufloesend"]),
         ]
 
     def _seite_zugang(self, zx, zy, zw) -> None:

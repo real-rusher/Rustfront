@@ -7680,6 +7680,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         qy = groesse[1] // math.gcd(groesse[1], K.GAME_H)
         kam = self.kamera
         kamera_vorher = pygame.Vector2(kam.pos)
+        # Die ungerundete Ecke (seit 0.34.138): fuer BESTE QUALITAET BEIM ZOOM
+        # wird die Leinwand genau dort ins Fenster gelegt, ohne Raster.
+        _m = kam.mitte
+        ecke_genau = (_m.x - kam.breite / 2 + kam.versatz.x, _m.y - kam.hoehe / 2 + kam.versatz.y)
         ziel_groesse, versatz = (K.GAME_W, K.GAME_H), (0, 0)
         if max(qx, qy) <= K.TIEFENRASTER["groesstes"]:
             e = kam.ecke
@@ -7702,6 +7706,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         lw = self._leinwand
         r = self.renderer
         r.groesse, r.vignette_an = groesse, False
+        ecke_lw = pygame.Vector2(kam.ecke)
         try:
             lw.fill(K.C_VOID)
             if sicht is None:
@@ -7753,6 +7758,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             ziel.blit(pygame.transform.scale(lw, ziel_groesse), lage)
         if self._vignette_an():
             ziel.blit(r._vignette, (0, 0))
+        if self._hochaufloesend_an() and ziel is getattr(self.app, "flaeche", None):
+            # Das Fenster legt die Leinwand selbst auf (core.App.ausgeben),
+            # in voller Aufloesung; `flach` ist das Weltbild auf 640 x 360,
+            # um nachher zu erkennen, was die Anzeige darueber gemalt hat.
+            self.app.welt_hoch = {"leinwand": lw, "zoom": z, "flach": ziel.copy(),
+                                  "ecke": ((ecke_lw.x - ecke_genau[0]) / z,
+                                           (ecke_lw.y - ecke_genau[1]) / z)}
+
+    def _hochaufloesend_an(self) -> bool:
+        """BESTE QUALITAET BEIM ZOOM (GRAFIK, seit 0.34.138)."""
+        try:
+            return bool(self.app.opt["zoom_hochaufloesend"]) and not getattr(self.app, "gpu", False)
+        except (KeyError, TypeError, AttributeError):
+            return False
 
     def _vignette_an(self) -> bool:
         """Die dunklen Ecken - seit 0.32 haengen sie am Schalter in GRAFIK.

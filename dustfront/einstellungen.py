@@ -45,6 +45,10 @@ VORGABE = {
     "ton_musik": 60,
     # Grafik
     "vignette": True,             # noch ohne Wirkung, der Schalter steht bereit
+    # Beim Zoom die Welt in Fensteraufloesung statt ueber 640 x 360 (seit
+    # 0.34.138, gewuenscht): kein Qualitaetsverlust, kein Pixelzittern -
+    # kostet Rechenzeit, darum aus als Vorgabe.
+    "zoom_hochaufloesend": False,
     # Prozent der Staerke, 0 = das Bild steht vollkommen still. Die
     # Vorgabe ist absichtlich 100 und nicht weniger: schwach und selten
     # ist das Ruckeln schon in RUCKELN eingestellt, und zweimal
