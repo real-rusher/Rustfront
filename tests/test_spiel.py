@@ -19756,15 +19756,15 @@ _ich134.schlacht_punkte = 0
 _feind134.revive_an = True
 _feind134.sterben(_ich134)
 w134._tote_abrechnen(0.0)
-pruef("SCHLACHT: wer einen umwirft, bekommt sofort 2 Punkte (am Boden, noch nicht tot)",
-      _feind134.am_boden and _ich134.schlacht_punkte == 2 == K.SCHLACHT["punkte"]["abschuss"],
+pruef("SCHLACHT: wer einen umwirft, bekommt sofort seinen Punkt (am Boden, noch nicht tot; seit 0.34.135 einer)",
+      _feind134.am_boden and _ich134.schlacht_punkte == 1 == K.SCHLACHT["punkte"]["abschuss"],
       str(_ich134.schlacht_punkte))
 _feind134.boden_rest = 0.0
 for _ in range(10):
     w134._revive(0.1)
     w134._tote_abrechnen(0.1)
 pruef("... stirbt er danach, gibt es nicht noch einmal Punkte",
-      not _feind134.lebt and _ich134.schlacht_punkte == 2, str(_ich134.schlacht_punkte))
+      not _feind134.lebt and _ich134.schlacht_punkte == 1, str(_ich134.schlacht_punkte))
 # Fahrzeug: Bot der eigenen Seite hinauswerfen, er steigt wieder ein.
 from dustfront import fahrzeug as _FZ134
 _bw134 = _FZ134.neu("buggy", _ich134.pos + pygame.Vector2(40, 0), 0)

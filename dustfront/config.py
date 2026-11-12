@@ -126,7 +126,8 @@ SPIELER = dict(
     radius=9.0,
     # Pixel pro Sekunde bei vollem Lauf (war 132, dann 108; seit 0.34.43 mal
     # BEWEGUNG["lauf"])
-    tempo=108.0 * BEWEGUNG["lauf"],
+    # Seit 0.34.135 1,3 mal so schnell (gewuenscht: "Spieler sind extrem langsam").
+    tempo=108.0 * BEWEGUNG["lauf"] * 1.3,
     beschleunigung=1150.0,    # wie schnell das Tempo erreicht wird (war 1250)
     bremsung=1400.0,          # wie schnell er steht, wenn man loslaesst (war 1500)
     leben=100.0,
@@ -1198,9 +1199,9 @@ SCHLACHT = dict(
     # Haelfte seines Kaufpreises (`fahrzeug_anteil`, mindestens `fahrzeug_min`),
     # was man nicht kaufen kann (Trosswagen) `fahrzeug` - vorher pauschal 5:
     # ein Krad brachte mehr, als es kostete.
-    # Seit 0.34.134: 2 Punkte je Abschuss, gebucht schon beim Umwerfen (am Boden),
-    # egal ob er danach wiederbelebt wird.
-    punkte=dict(abschuss=2, fahrzeug=3, fahrzeug_anteil=0.5, fahrzeug_min=2, aufhelfen=5),
+    # Seit 0.34.134 gebucht schon beim Umwerfen (am Boden), egal ob er danach
+    # wiederbelebt wird; seit 0.34.135 wieder 1 Punkt (gewuenscht).
+    punkte=dict(abschuss=1, fahrzeug=3, fahrzeug_anteil=0.5, fahrzeug_min=2, aufhelfen=5),
     # Was man kaufen kann: (Kennung, Kosten, Name). Seit 0.34.129 billiger
     # (gewuenscht: "es kaufen ja nur Spieler, und es gibt nicht so viele").
     belohnungen=(
@@ -1467,7 +1468,7 @@ ZONE = dict(
 FAHRZEUG = dict(
     marke="F",                # Buchstabe in der Karte, wo einer steht
     hoechst=250.0,            # bis hierher zieht der Motor (wirklich: ~220, Luft)
-    rueckwaerts=95.0,
+    rueckwaerts=145.0,         # seit 0.34.135 schneller (95)
     motor=420.0,              # Antrieb hinten, im Stand; nimmt mit dem Tempo ab
     bremse=520.0,             # wenn man gegen die Fahrtrichtung drueckt
     rollen=55.0,              # so schnell wird er ohne Gas langsamer
@@ -1564,7 +1565,7 @@ PANZER = dict(
     # Fahren: ein Kettenfahrzeug, kein Einspurmodell. Dreht auf der
     # Stelle, driftet nicht. Zielwerte aus dem abgenommenen Video.
     hoechst=45.0,             # px/s vorwaerts
-    rueckwaerts=26.0,
+    rueckwaerts=44.0,          # seit 0.34.135 schneller (26)
     beschleunigung=55.0,
     bremse=120.0,             # gegen die Fahrtrichtung gedrueckt
     rollen=90.0,              # ohne Gas
@@ -1717,7 +1718,7 @@ KRAD = dict(
     marke="K",
     name="KRAD",
     hoechst=290.0,
-    rueckwaerts=80.0,
+    rueckwaerts=125.0,         # seit 0.34.135 schneller (80)
     motor=520.0,
     bremse=560.0,
     traegheit=150.0,          # leichter: dreht sich schneller um sich selbst
@@ -1755,7 +1756,7 @@ JAGDPANZER = dict(
     marke="J",
     name="JAGDPANZER",
     hoechst=62.0,
-    rueckwaerts=30.0,
+    rueckwaerts=48.0,          # seit 0.34.135 schneller (30)
     beschleunigung=60.0,
     leben=800.0,
     vorn=46.0, hinten=-44.0, halb=29.0,
@@ -1795,7 +1796,7 @@ TROSSWAGEN = dict(
     marke="T",
     name="TROSSWAGEN",
     hoechst=210.0,
-    rueckwaerts=70.0,
+    rueckwaerts=110.0,         # seit 0.34.135 schneller (70)
     motor=22.0,
     # Seit 0.34.117 ein Fuenftel groesser (gewuenscht): Bild, Kreise, Achsen
     # und die Zone hinten wuchsen mit.
@@ -4748,8 +4749,11 @@ ENERGIE_PAKET = {
         # und jeder Koerper auf der Linie kostet Kraft (`wand_verlust`,
         # `koerper_verlust`). Ein voll geladener Treffer ohne Hindernis
         # erledigt noch jeden, aber kaum mehr zwei hintereinander.
-        schaden=95.0, ladezeit=2.1, mindest=0.25, reichweite=760.0,
-        wand_verlust=0.4, koerper_verlust=0.35,
+        # Seit 0.34.135 noch einmal schwaecher (gemeldet: "die Chor-Waffe, die
+        # durch Waende schiesst, ist zu stark"): 95 -> 75 Schaden, jede Mauer
+        # kostet 60 statt 40 Prozent, laenger laden.
+        schaden=75.0, ladezeit=2.4, mindest=0.25, reichweite=760.0,
+        wand_verlust=0.6, koerper_verlust=0.35,
         takt=0.9, magazin=3, nachladen=5.5, kuehlt=True, abkuehlen=3.4, ueberhitzt=7.5,
         tempo_beim_laden=0.55, kamera=5.0, rueckstoss=60.0, huelsen=0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
