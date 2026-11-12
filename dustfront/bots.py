@@ -1817,6 +1817,65 @@ class BotHirn(Taktik):
             return 0.7, (1.0 if ab > 0 else -1.0)      # wenden, vorwaerts
         return 1.0, lenk
 
+    def _kolonne(self, b, soll: float, weite: float, laenge: float):
+        """Faehrt ein besetzter Wagen vor ihm auf seiner Spur? ("folgen",
+        Gasanteil): in gleicher Richtung - dahinter bleiben, mit Abstand; steht
+        der Vordermann, warten, aber hoechstens `kolonne_warten` s, dann wird
+        er umfahren. ("rechts", Grad): er kommt entgegen - beide halten sich
+        rechts. None: niemand."""
+        f = K.BOTS["fahren"]
+        richtung = pygame.Vector2(1, 0).rotate(soll)
+        quer = pygame.Vector2(-richtung.y, richtung.x)
+        halb = float(b.werte.get("halb", b.werte.get("kreis", 16.0)))
+        bester = None
+        for o in getattr(self.g, "fahrzeuge", ()):
+            if (o is b or o.fahrer is None or o.kaputt or o.ebene != b.ebene
+                    or getattr(o, "in_der_luft", False) or getattr(o, "nur_bild", False)):
+                continue
+            rel = o.pos - b.pos
+            vor = rel.dot(richtung)
+            o_halb = float(o.werte.get("halb", o.werte.get("kreis", 16.0)))
+            o_laenge = float(o.werte.get("vorn", o.werte.get("achse", 0.0) + o.werte.get("kreis", 16.0)))
+            if not (0.0 < vor < weite + o_laenge + f["kolonne_abstand"]):
+                continue
+            if abs(rel.dot(quer)) > halb + o_halb + f["kolonne_seite"]:
+                continue
+            if bester is None or vor < bester[0]:
+                bester = (vor, o, o_laenge)
+        if bester is None:
+            b.__dict__.pop("_kolonne_seit", None)
+            return None
+        vor, o, o_laenge = bester
+        b._kolonne_info = ("folgen", o, self.g.welt.zeit)     # fuer die INFO-Ansicht (Testmodus)
+        # Nach der Nase des anderen, nicht nach seinem Tempo: zwei, die Nase an
+        # Nase stehen, hielten sonst einander fuer den Vordermann und warteten.
+        gleich = o.vorn.dot(richtung)
+        if gleich < -f["kolonne_gleich"] or o.geschw.dot(richtung) < -f["kolonne_gegen"]:
+            b._kolonne_info = ("rechts", o, self.g.welt.zeit)
+            return ("rechts", f["kolonne_rechts"])
+        if gleich < f["kolonne_gleich"]:
+            b.__dict__.pop("_kolonne_info", None)
+            return None                     # er faehrt quer: ausweichen wie sonst
+        jetzt = self.g.welt.zeit
+        if o.geschw.length() < f["kolonne_steht"]:
+            seit = b.__dict__.setdefault("_kolonne_seit", jetzt)
+            if jetzt - seit > f["kolonne_warten"]:
+                b.__dict__.pop("_kolonne_info", None)
+                return None                 # er kommt nicht weiter: vorbei
+        else:
+            b.__dict__.pop("_kolonne_seit", None)
+        # `laenge` und `o_laenge` reichen schon von der Mitte bis zur Nase.
+        o_hinten = abs(float(o.werte.get("hinten", -o_laenge)))
+        luecke = vor - laenge - o_hinten
+        # Wer schneller ist als der Vordermann, braucht mehr Abstand - und
+        # bremst (Gas los hiess nur rollen, und der Buggy fuhr auf).
+        eigen = b.geschw.dot(richtung)
+        schliesst = max(0.0, eigen - o.geschw.dot(richtung))
+        noetig = f["kolonne_abstand"] + schliesst * f["kolonne_bremsweg"]
+        if luecke < noetig:
+            return ("folgen", -1.0 if eigen > f["kolonne_steht"] else 0.0)
+        return ("folgen", max(0.0, min(1.0, (luecke - noetig) / f["kolonne_auflauf"])))
+
     def _spur_frei(self, b, winkel: float, weite: float) -> bool:
         """Kann der Wagen in Richtung `winkel` die naechsten `weite` px fahren,
         ohne an etwas zu stossen (Mauer, Wagen, Wrack, eigene Leute)?"""
@@ -1850,7 +1909,17 @@ class BotHirn(Taktik):
         laenge = float(b.werte.get("vorn", b.werte.get("achse", 0.0) + b.werte.get("kreis", 16.0)))
         weite += laenge * 0.5
         versatz, gas = 0.0, 1.0
-        if not self._spur_frei(b, soll, weite):
+        kolonne = self._kolonne(b, soll, weite, laenge)
+        if kolonne is not None and kolonne[0] == "folgen":
+            # Hinter einem eigenen Wagen anstellen statt vorbeidraengeln (seit
+            # 0.34.140, gemeldet mit Bild: fuenf Wagen verkeilt an einer
+            # Engstelle). Der Vordermann faehrt den Weg, den man selbst will.
+            b._ausweich = (jetzt, soll, 0.0, kolonne[1])
+            return soll % 360.0, kolonne[1]
+        if kolonne is not None:
+            versatz = kolonne[1]           # Gegenverkehr: rechts halten
+        if not self._spur_frei(b, (soll + versatz) % 360.0, weite):
+            versatz = 0.0
             # Die Seite von eben behalten - sonst pendelt er zwischen links und rechts.
             alt = b.__dict__.get("_ausweich_seite")
             if alt is not None and jetzt - alt[1] < f["ausweichen_seite_halten"]:
@@ -2149,6 +2218,12 @@ class BotHirn(Taktik):
             n = 0 if getattr(self, "_fahr_versuch", None) is None else self._fahr_versuch[1]
             if n == 0:
                 gas, lenk = -0.8, -lenk if abs(lenk) > 0.05 else 0.0
+            elif abs(lenk) > 0.3:
+                # Wie beim Wenden in drei Zuegen (seit 0.34.140): rueckwaerts
+                # gegen die Seite lenken, zu der er will - die Nase schwenkt so
+                # zum Ziel. Abwechselnd (wie bisher) machte jeder zweite Versuch
+                # den vorigen zunichte; gemessen hing ein Panzerwagen 88 s.
+                gas, lenk = -0.8, (-1.0 if lenk > 0 else 1.0)
             else:
                 gas, lenk = -0.8, getattr(self, "_fahr_seite", 1.0)
         ein["gl"] = [round(gas, 2), round(lenk, 2)]

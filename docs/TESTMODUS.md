@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.140 | Keine neuen Spawner-Eintraege. Schwimmen: auf FLUSSTAL mit ICH oder einer PUPPE ins tiefe Wasser gehen (langsam, kein Schuss, nur der Kopf oben). Kolonne: zwei FAHRER MIT FAHRZEUG hintereinander setzen; die INFO-Ansicht (Taste 8) zeigt beim Hinteren "> KOLONNE" und eine tuerkise Linie zum Vordermann, bei Gegenverkehr "> RECHTS HALTEN". Szene in `tests/test_verhalten.py`: `kolonne`. |
 | 0.34.139 | Keine neuen Spawner-Eintraege: FAHRER MIT FAHRZEUG (Buggy, Panzerwagen ...) setzen, ein leeres FAHRZEUG oder einen eigenen Mann (ZIELPUPPE, eigene Seite) auf seinen Weg stellen und zusehen, wie er vorausschauend um sie herumfaehrt, statt dagegen zu schieben. Szene in `tests/test_verhalten.py`: `ausweichen`. |
 | 0.34.138 | Keine neuen Spawner-Eintraege; alles mit vorhandenen ausprobieren: FAHRZEUG TROSSWAGEN und dahinter ein leeres FAHRZEUG setzen, einsteigen, rechte Maustaste haengt an (Seil), noch einmal koppelt ab. Zwei Fahrzeuge gegeneinander fahren: leichte werden geschoben, schwere nur von schweren. FAHRZEUG FLAKWAGEN laesst sich jetzt selbst fahren. Nachschub-Abwuerfe zeigen die neue Abwurfzone (Fackeln, Rauch, Groesse je Fahrzeug). In GRAFIK: BESTE QUALITAET BEIM ZOOM. |
 | 0.34.135 | Keine neuen Spawner-Eintraege. Werfer-Zielzonen ausprobieren: FRONT an, FAHRZEUG WERFER mit Team setzen, einsteigen, aufbauen - die Karte zeigt die Zonen tuerkis; AUFKLAERUNGSDROHNE (Nachschub) laesst 25 s eine Spur zurueck. |

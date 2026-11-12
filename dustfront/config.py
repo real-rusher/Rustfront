@@ -2637,6 +2637,15 @@ BOTS = dict(
         # der Nase, die an einer Wand steht, `wand_zeit` s lang langsamer als `wand_tempo` px/s und
         # um weniger als `wand_drehung` Grad gedreht: zurueck, bis vor der Nase Platz ist
         # (hoechstens `wand_rueck_max` s).
+        # Kolonne (seit 0.34.140): faehrt ein besetzter Wagen vor ihm auf seiner Spur (seitlich
+        # weniger als beide halben Breiten plus `kolonne_seite`), bleibt er `kolonne_abstand` px
+        # dahinter und gibt erst auf `kolonne_auflauf` px mehr wieder Vollgas; steht der
+        # Vordermann (unter `kolonne_steht` px/s), wartet er hoechstens `kolonne_warten` s.
+        # Kommt er entgegen (mehr als `kolonne_gegen` px/s), halten sich beide `kolonne_rechts` Grad rechts.
+        kolonne_abstand=34.0, kolonne_seite=10.0, kolonne_auflauf=70.0, kolonne_steht=12.0,
+        kolonne_warten=4.0, kolonne_gegen=25.0, kolonne_rechts=28.0,
+        kolonne_bremsweg=0.45,    # so viele Sekunden Annaeherung gehen zusaetzlich auf den Abstand
+        kolonne_gleich=0.5,       # cos des Winkels zwischen beiden Nasen: darueber gleiche Richtung, unter minus entgegen
         wand_rueck_winkel=45.0, wand_tempo=20.0, wand_zeit=0.6, wand_drehung=4.0, wand_rueck_max=1.0,
         abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0, krad=0.0, flakwagen=260.0,
                      jagdpanzer=520.0, spulenwagen=230.0),  # so weit bleibt er stehen

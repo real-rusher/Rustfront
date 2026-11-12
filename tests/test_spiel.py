@@ -20557,6 +20557,26 @@ pruef("... und gezeichnet wird er anders als an Land (der Koerper liegt unter Wa
       pygame.image.tobytes(_bild140, "RGB") != pygame.image.tobytes(_roh140, "RGB"))
 _tm140s.verlassen()
 
+# Gemeldet (mit Bild): Bot-Wagen verkeilen sich an einer Engstelle. Kolonne und Gegenverkehr.
+_tm140k = _TM59.Testmodus(app, karte="staubtal_offen")
+_p140k = pygame.Vector2(_tm140k.ich.pos)
+_a140k = _tm140k.fahrer_setzen(_p140k, 0, {"team": 0, "fahrzeug": "buggy"}, mit_fahrzeug=True)
+_v140k = _tm140k.fahrer_setzen(_p140k + pygame.Vector2(110, 0), 0, {"team": 0, "fahrzeug": "panzerwagen"},
+                               mit_fahrzeug=True)
+_a140k.fahrzeug.winkel = _v140k.fahrzeug.winkel = 0.0
+_v140k.fahrzeug.pos.update(_a140k.fahrzeug.pos + pygame.Vector2(95, 0))
+_k140k = _a140k.hirn._kolonne(_a140k.fahrzeug, 0.0, 200.0, 26.0)
+pruef("Ein eigener Wagen faehrt vorn in dieselbe Richtung: anstellen (KOLONNE), nicht vorbei",
+      _k140k is not None and _k140k[0] == "folgen" and _k140k[1] < 1.0, str(_k140k))
+_v140k.fahrzeug.winkel = 180.0
+_k140k = _a140k.hirn._kolonne(_a140k.fahrzeug, 0.0, 200.0, 26.0)
+pruef("... er kommt entgegen: rechts halten", _k140k is not None and _k140k[0] == "rechts"
+      and _k140k[1] > 0, str(_k140k))
+_tm140k.info = True if hasattr(_tm140k, "info") else None
+_tm140k.zeichnen(app.flaeche, 1.0)
+pruef("... die INFO-Ansicht kennt den Zustand", "_kolonne_info" in _a140k.fahrzeug.__dict__)
+_tm140k.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

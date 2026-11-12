@@ -1438,10 +1438,59 @@ def ausweichen():
           str([t for _, _s, t in werte]))
 
 
+def kolonne():
+    """Gemeldet (0.34.140, mit Bild): fuenf Bot-Wagen verkeilt an einer
+    Engstelle. Gewuenscht: hinter einem eigenen Wagen anstellen statt
+    vorbeidraengeln, bei Gegenverkehr rechts halten. Je Seed: (a) ein Buggy
+    faehrt hinter einem Panzerwagen zum selben Ziel, (b) zwei Buggys fahren
+    einander auf derselben Linie entgegen. Gezaehlt: Bilder mit Beruehrung,
+    und ob alle ankommen."""
+    print("\n-- Bots am Steuer: Kolonne und Gegenverkehr")
+    werte = []
+    for seed in SEEDS:
+        tm = neu(seed)
+        rnd = random.Random(seed)
+        tx, ty, v = W.flaeche(tm, rnd, 60, 16)
+        y = 8 + rnd.choice((-1, 0, 1))
+        vorn = tm.fahrer_setzen(v(12, y), 0, {"team": 0, "fahrzeug": "panzerwagen"}, mit_fahrzeug=True)
+        hinten = tm.fahrer_setzen(v(3, y), 0, {"team": 0, "fahrzeug": "buggy"}, mit_fahrzeug=True)
+        links = tm.fahrer_setzen(v(30, 3), 0, {"team": 0, "fahrzeug": "buggy"}, mit_fahrzeug=True)
+        rechts = tm.fahrer_setzen(v(56, 3), 0, {"team": 0, "fahrzeug": "buggy"}, mit_fahrzeug=True)
+        vorn.fahrzeug.winkel = hinten.fahrzeug.winkel = links.fahrzeug.winkel = 0.0
+        rechts.fahrzeug.winkel = 180.0
+        # Der Hintere will kurz vor den Vorderen (nicht auf denselben Punkt -
+        # dort kreisten sie umeinander, das ist kein Stau).
+        auftrag = [(vorn, v(56, y)), (hinten, v(47, y)), (links, v(56, 3)), (rechts, v(30, 3))]
+        st = {"stoss_k": 0, "stoss_g": 0, "an": set()}
+
+        def messen(tm=tm, auftrag=auftrag, st=st):
+            for k, ziel in auftrag:
+                k.hirn.streif_ort = (ziel, 0)
+                k.hirn.ziel = None
+                if k.fahrzeug is not None and k.fahrzeug.pos.distance_to(ziel) < 90:
+                    st["an"].add(id(k))
+            a, b = auftrag[0][0].fahrzeug, auftrag[1][0].fahrzeug
+            if a is not None and b is not None and any(a.beruehrt(c, b.radius + 1.0) for c in b.kreise()):
+                st["stoss_k"] += 1
+            a, b = auftrag[2][0].fahrzeug, auftrag[3][0].fahrzeug
+            if a is not None and b is not None and a.pos.distance_to(b.pos) < 2 * (a.radius + b.radius) \
+                    and any(c.distance_to(d) < a.radius + b.radius for c in a.kreise() for d in b.kreise()):
+                st["stoss_g"] += 1
+        laufen(tm, 25.0, messen)
+        werte.append((st["stoss_k"], st["stoss_g"], len(st["an"])))
+        tm.verlassen()
+    print("   ", werte)
+    pruef("Kolonne: der Buggy faehrt dem Panzerwagen nicht auf (%d Seeds)" % len(SEEDS),
+          all(k_ == 0 for k_, _g, _a in werte), str([k_ for k_, _g, _a in werte]))
+    pruef("... Gegenverkehr: die zwei Buggys stossen nicht zusammen",
+          all(g_ == 0 for _k, g_, _a in werte), str([g_ for _k, g_, _a in werte]))
+    pruef("... und alle vier kommen an", all(a_ == 4 for _k, _g, a_ in werte), str([a_ for _k, _g, a_ in werte]))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
          planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
-         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger, napalm, front, verteilung, ausweichen]
+         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger, napalm, front, verteilung, ausweichen, kolonne]
 #
 # Ohne Angabe laufen die Szenen seit 0.34.94 gleichzeitig, je eine in einem
 # eigenen Prozess, so viele wie Kerne da sind (hoechstens TEILE). Jede

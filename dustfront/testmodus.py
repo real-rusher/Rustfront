@@ -2637,6 +2637,14 @@ class Testmodus(Gefecht):
                 if getattr(k.fahrzeug, "flak", False) and fz_ is not None and fz_.lebt:
                     zustand += " > FLAK"
                     pygame.draw.line(ziel, K.C_AMBER, p, kam.zu_bild(fz_.bild_pos), 1)
+                # Kolonne und Gegenverkehr (seit 0.34.140, bots._kolonne).
+                kol_ = k.fahrzeug.__dict__.get("_kolonne_info")
+                if kol_ is not None and self.welt.zeit - kol_[2] < 0.3:
+                    if kol_[0] == "folgen":
+                        zustand += " > KOLONNE"
+                        pygame.draw.line(ziel, K.C_TEAL, p, kam.zu_bild(kol_[1].pos), 1)
+                    else:
+                        zustand += " > RECHTS HALTEN"
             elif getattr(k, "darf_fahren", False) and h.ziel is None:
                 zustand += " (SUCHT FAHRZEUG)"
             if getattr(k, "schild", False):
