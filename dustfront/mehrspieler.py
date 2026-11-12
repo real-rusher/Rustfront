@@ -1973,6 +1973,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         basis_l, basis_r, mitte = self._schlacht_punkte()
         feind = 1 if k.team == 0 else 0
         feind_ort = (basis_l, basis_r)[feind]
+        # Viele Bots: jeder in seinem Abschnitt der Front (seit 0.34.96).
+        spur = None
+        if sum(1 for x in self.kaempfer.values() if x.team == k.team and x.ist_bot) > s["front_ab"]:
+            spur = k.nummer % s["spuren"]
+        # "An der Mitte" heisst: an der Mitte seines Abschnitts (seit 0.34.133).
+        # Vorher galt die Kartenmitte - wer in einem aeusseren Abschnitt seine
+        # Mitte erreichte, bekam dasselbe Ziel immer wieder und blieb dort.
+        if spur is not None:
+            mitte = self._schlacht_ziele(spur)[2][0]
+            feind_ort = self._schlacht_ziele(spur)[feind][0]
         wahl = 2
         if (k.ebene == 0 and k.pos.distance_to(mitte) < s["mitte_nah"]) \
                 or k.pos.distance_to(feind_ort) < mitte.distance_to(feind_ort):
@@ -1992,10 +2002,6 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             kampf = self.kampf_zuteilen(k.team, k.nummer, k.pos, s["lage_weite"], s["kampf_zulauf"])
             if kampf is not None:
                 return pygame.Vector2(kampf), 0
-        # Viele Bots: jeder in seinem Abschnitt der Front (seit 0.34.96).
-        spur = None
-        if sum(1 for x in self.kaempfer.values() if x.team == k.team and x.ist_bot) > s["front_ab"]:
-            spur = k.nummer % s["spuren"]
         ziele = self._schlacht_ziele(spur)[wahl]
         return pygame.Vector2(ziele[rnd.randrange(len(ziele))]), 0
 

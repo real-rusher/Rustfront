@@ -16461,16 +16461,28 @@ pruef("Je Seite wenige Panzerjaeger: eine Panzerabwehrwaffe und eine gewoehnlich
 _ort198 = w198._einstiegsort(1)
 pruef("Eingestiegen wird in der eigenen Basis",
       _ort198.distance_to(_br198) <= K.SCHLACHT["spawn_umkreis"] * 1.5, "%.0f" % _ort198.distance_to(_br198))
-_rot198 = next(k_ for k_ in _bots198 if k_.team == 0)
+# Seit 0.34.133 hat jeder Bot seinen Abschnitt (spur), und ein Viertel
+# (Stosstrupp) zieht gleich zur Basis der anderen.
+def _stoss198(k_):
+    return ((k_.nummer * 2654435761) % 1000) / 1000.0 < K.SCHLACHT["stosstrupp"]
+_rot198 = next(k_ for k_ in _bots198 if k_.team == 0 and not _stoss198(k_))
+_ziele198 = w198._schlacht_ziele(_rot198.nummer % K.SCHLACHT["spuren"])
+def _bei198(z_, liste_):
+    return min(z_[0].distance_to(q_) for q_ in liste_) < 1.0
 _rot198.pos.update(_bl198)
 _z1_198 = w198.vorstoss_ziel(_rot198, random.Random(1))
-_rot198.pos.update(_mi198)
+_rot198.pos.update(_ziele198[2][0])
 _z2_198 = w198.vorstoss_ziel(_rot198, random.Random(1))
-pruef("Vorstoss: aus der Basis erst zur Mitte, von der Mitte zur Basis der anderen",
-      _z1_198[0].distance_to(_mi198) < 1.5 * K.SCHLACHT["streuung"]
-      and _z2_198[0].distance_to(_br198) < 1.5 * K.SCHLACHT["streuung"], "%s %s" % (_z1_198, _z2_198))
+pruef("Vorstoss: aus der Basis erst zur Mitte seines Abschnitts, von dort zur Basis der anderen",
+      _bei198(_z1_198, _ziele198[2]) and _bei198(_z2_198, _ziele198[1]), "%s %s" % (_z1_198, _z2_198))
 pruef("... und der Streifzug eines Bots folgt ihm (nicht die ganze Karte)",
-      _rot198.hirn._streifziel()[0].distance_to(_br198) < 1.5 * K.SCHLACHT["streuung"])
+      _bei198(_rot198.hirn._streifziel(), _ziele198[1]))
+_sto198 = next((k_ for k_ in _bots198 if k_.team == 0 and _stoss198(k_)), None)
+if _sto198 is not None:
+    _sto198.pos.update(_bl198)
+    pruef("... ein Stosstrupp zieht aus der Basis gleich zur Basis der anderen (seit 0.34.133)",
+          _bei198(w198.vorstoss_ziel(_sto198, random.Random(1)),
+                  w198._schlacht_ziele(_sto198.nummer % K.SCHLACHT["spuren"])[1]))
 # Ein Wrack kommt an seiner Basis wieder.
 _pz198 = next(b_ for b_ in _bt198[1] if b_.art == "panzer")
 _pz198.schaden(_pz198.leben + 5000.0, None, None, art="hohlladung")
