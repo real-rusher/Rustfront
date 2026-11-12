@@ -18521,7 +18521,10 @@ for _ in range(int(5.0 / K.FIXED_DT)):
     _tm117._anwenden(_pg117, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
     _tm117.schritt(K.FIXED_DT)
 _weit117 = _bg117.pos.distance_to(_bg117.start[0])
-for _ in range(int(8.0 / K.FIXED_DT)):
+# 14 statt 8 s (seit 0.34.139): seit 0.34.138 wartet er nicht mehr am Start, sondern ist
+# schon zu den Zielen der Seite unterwegs, wenn der Vordermann losfaehrt - er muss erst wenden
+# und zurueck (gemessen bis 13 s, wenn er dabei an einer Mauer zuruecksetzen muss).
+for _ in range(int(14.0 / K.FIXED_DT)):
     _tm117._anwenden(_pg117, {"will": [0, 0], "ziel": [0, 0], "knoepfe": [], "hb": True})
     _tm117.schritt(K.FIXED_DT)
 pruef("... ist eines mehr als 350 px von seinem Start weg, faehrt er hinter ihm her",

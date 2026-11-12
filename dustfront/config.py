@@ -2627,6 +2627,11 @@ BOTS = dict(
         ausweichen_winkel=(20.0, 40.0, 65.0, 90.0), ausweichen_gas=0.35, ausweichen_takt=0.12,
         ausweichen_nah=26.0, ausweichen_rueck_tempo=60.0, ausweichen_rueck_zeit=0.7,
         ausweichen_rueck_gas=0.7, ausweichen_seite_halten=2.0,
+        # Wegpunkt dicht daneben (unter `ausweichen_ab`), mehr als `wand_rueck_winkel` Grad neben
+        # der Nase, die an einer Wand steht, `wand_zeit` s lang langsamer als `wand_tempo` px/s und
+        # um weniger als `wand_drehung` Grad gedreht: zurueck, bis vor der Nase Platz ist
+        # (hoechstens `wand_rueck_max` s).
+        wand_rueck_winkel=45.0, wand_tempo=20.0, wand_zeit=0.6, wand_drehung=4.0, wand_rueck_max=1.0,
         abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0, krad=0.0, flakwagen=260.0,
                      jagdpanzer=520.0, spulenwagen=230.0),  # so weit bleibt er stehen
         suchen=700.0,         # so weit sucht ein Fahrer ohne Fahrzeug nach einem

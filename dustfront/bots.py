@@ -1779,16 +1779,27 @@ class BotHirn(Taktik):
         soll = math.degrees(math.atan2(weg.y, weg.x))
         gas_mal = 1.0
         if not halten and dist > f["ausweichen_ab"]:
-            # Vorausschauend ausweichen (seit 0.34.138, gewuenscht: "Bots sollen
+            # Vorausschauend ausweichen (seit 0.34.139, gewuenscht: "Bots sollen
             # nirgendwo gegenfahren") - um Mauern, leere Wagen, Wracks und die
             # eigenen Leute, nicht erst, wenn er feststeckt.
             soll, gas_mal = self._frei_richtung(b, soll)
+        elif not halten:
+            self._an_der_wand(b, soll)
         ab = _winkel_diff(b.winkel, soll)
         voll = b.werte.get("stick_voll_lenken", 40.0)
         lenk = max(-1.0, min(1.0, ab / voll))
         if halten:
             return 0.0, (lenk if abs(ab) > 3.0 else 0.0)
-        if self.g.welt.zeit < b.__dict__.get("_rueck_bis", -1.0):
+        jetzt = self.g.welt.zeit
+        rueck_bis = b.__dict__.get("_rueck_bis", -1.0)
+        rueck_ab = b.__dict__.get("_rueck_ab")
+        if (rueck_ab is not None and rueck_bis <= jetzt < rueck_bis + 0.05
+                and jetzt - rueck_ab < f["wand_rueck_max"]
+                and not self._spur_frei(b, b.winkel, f["ausweichen_nah"] * 1.5)):
+            # An der Wand noch kein Platz vor der Nase (schwere Wagen kommen im
+            # Rueckwaertsgang langsam in Fahrt): laenger zurueck.
+            b._rueck_bis = rueck_bis = jetzt + 0.04
+        if jetzt < rueck_bis:
             # Direkt vor der Nase steht etwas: kurz zurueck und die Nase dabei
             # zur freien Richtung drehen (rueckwaerts lenkt es andersherum).
             return -f["ausweichen_rueck_gas"], (-1.0 if ab > 0 else 1.0) if abs(ab) > 5.0 else 0.0
@@ -1863,8 +1874,31 @@ class BotHirn(Taktik):
                     and not self._spur_frei(b, b.winkel, f["ausweichen_nah"])
                     and not self._spur_frei(b, soll + versatz, f["ausweichen_nah"])):
                 b._rueck_bis = jetzt + f["ausweichen_rueck_zeit"]
+                b._rueck_ab = None
         b._ausweich = (jetzt, soll, versatz, gas)
         return (soll + versatz) % 360.0, gas
+
+    def _an_der_wand(self, b, soll: float) -> None:
+        """Der naechste Wegpunkt liegt dicht neben ihm, quer zur Nase, und die
+        Nase steht an einer Wand: vorwaerts mit vollem Einschlag kommt ein
+        Wagen mit Raedern nicht hin (gesehen beim Flakwagen: 10 s auf der
+        Stelle). Steht er so eine Weile, ohne sich zu drehen, setzt er zurueck,
+        bis vor der Nase Platz ist."""
+        f = K.BOTS["fahren"]
+        jetzt = self.g.welt.zeit
+        tempo = abs(getattr(b, "fahrt", 0.0)) if hasattr(b, "fahrt") else b.geschw.length()
+        if (jetzt < b.__dict__.get("_rueck_bis", -1.0) or tempo >= f["wand_tempo"]
+                or abs(_winkel_diff(b.winkel, soll)) <= f["wand_rueck_winkel"]
+                or self._spur_frei(b, b.winkel, f["ausweichen_nah"])):
+            b._wand_seit = None
+            return
+        seit = b.__dict__.get("_wand_seit")
+        if seit is None or abs(_winkel_diff(seit[1], b.winkel)) > f["wand_drehung"]:
+            b._wand_seit = (jetzt, b.winkel)
+        elif jetzt - seit[0] >= f["wand_zeit"]:
+            b._rueck_bis = jetzt + f["ausweichen_rueck_zeit"]
+            b._rueck_ab = jetzt
+            b._wand_seit = None
 
     def _schutz_ort(self, b):
         """Ein Kamerad liegt, und ein Gegner ist bekannt: der Platz zwischen
