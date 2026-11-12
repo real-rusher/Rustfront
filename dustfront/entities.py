@@ -2771,8 +2771,14 @@ class Spieler(Wesen):
         """Der Name des Schwungbilds (schwung_nummer), in den Farben der
         Mannschaft, wenn es die gibt."""
         i = self.schwung_nummer()
-        name = "spieler_%sschwung_%d" % (vorsatz, i)
-        return name if name in K.BILD_MASS else "spieler_schwung_%d" % i
+        # Mit der Nahkampfwaffe, die auf F liegt (seit 0.34.140), nicht immer dem Brecheisen.
+        nk = self.__dict__.get("nahkampf_waffe")
+        zusatz = "_" + nk if nk and nk != K.NAHKAMPF["waffe"] else ""
+        for name in ("spieler_%sschwung_%d%s" % (vorsatz, i, zusatz), "spieler_schwung_%d%s" % (i, zusatz),
+                     "spieler_%sschwung_%d" % (vorsatz, i)):
+            if name in K.BILD_MASS:
+                return name
+        return "spieler_schwung_%d" % i
 
     @property
     def bild(self) -> str:

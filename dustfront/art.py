@@ -980,16 +980,36 @@ def _figur_schwung(rumpf, rumpf_dk, akzent, rel: float):
     return _rand(s)
 
 
-def schwung_arme(s, c: int, kante, rel: float) -> None:
-    """Brecheisen und beide Arme zur Hand vorn, um `rel` Grad gedreht. Fuer
-    _figur_schwung und die Skins (art_figuren), seit 0.34.60 eine eigene
-    Funktion - damit jeder Skin denselben Schwung zeigt."""
+def _nahkampf_bild(waffe):
+    """(Bild, Griff im Bild) der Nahkampfwaffe fuer den Schwung (seit
+    0.34.140). Das Brecheisen wie bisher; die anderen aus ihren Bildern der
+    Hotbar (art_waffen) - sie liegen alle mit dem Griff links, also wird
+    an der linken Kante gegriffen, in der Hoehe, in der dort etwas ist."""
+    if waffe and waffe != K.NAHKAMPF["waffe"]:
+        from . import art_waffen
+        zeichner = art_waffen._SY_KLEIN.get(waffe)
+        if zeichner is not None:
+            bild = zeichner()
+            w, h = bild.get_size()
+            for x in range(w):
+                ys = [y for y in range(h) if bild.get_at((x, y)).a > 0]
+                if ys:
+                    return bild, (x + 2, (min(ys) + max(ys)) / 2.0)
+            return bild, (3, h / 2.0)
+    return _waffe_brecheisen(), (5, 7.5)
+
+
+def schwung_arme(s, c: int, kante, rel: float, waffe=None) -> None:
+    """Die Nahkampfwaffe und beide Arme zur Hand vorn, um `rel` Grad gedreht.
+    Fuer _figur_schwung und die Skins (art_figuren), seit 0.34.60 eine eigene
+    Funktion - damit jeder Skin denselben Schwung zeigt. `waffe` (seit
+    0.34.140): welche Nahkampfwaffe, sonst das Brecheisen."""
     hand = pygame.Vector2(c + 1, c) + pygame.Vector2(12, 0).rotate(rel)
     # Erst das Eisen, dann die Arme darueber: die Haende umfassen den Griff.
-    eisen = _waffe_brecheisen()
+    eisen, (gx, gy) = _nahkampf_bild(waffe)
     gedreht = pygame.transform.rotate(eisen, -rel)
-    # Gedreht wird um den Griff (5, 7.5 im Bild), nicht um die Bildmitte.
-    griff = pygame.Vector2(5 - eisen.get_width() / 2, 7.5 - eisen.get_height() / 2)
+    # Gedreht wird um den Griff (beim Brecheisen 5, 7.5 im Bild), nicht um die Bildmitte.
+    griff = pygame.Vector2(gx - eisen.get_width() / 2, gy - eisen.get_height() / 2)
     mitte = hand - griff.rotate(rel)
     s.blit(gedreht, gedreht.get_rect(center=(round(mitte.x), round(mitte.y))))
     for seite in (-5, 5):
@@ -1004,22 +1024,23 @@ def schwung_winkel(i: int) -> float:
 
 
 def _standard(rumpf, kante, akzent, waffe=None, team=None, groesse=None, schwung=None,
-              stummel=True):
+              stummel=True, nahkampf=None):
     """Die Spielerfigur im Stil der Skins (seit 0.34.77, art_figuren.standard).
     Spaet importiert: art_figuren braucht selbst dieses Modul."""
     from . import art_figuren
     return art_figuren.standard_figur(rumpf, kante, akzent, waffe, team, groesse, schwung,
-                                      stummel)
+                                      stummel, nahkampf=nahkampf)
 
 
-def _schwung_bild(i, kombi=None):
+def _schwung_bild(i, kombi=None, nahkampf=None):
     def zeichner():
         gross = K.BILD_MASS["spieler_schwung_%d" % i][0]
         if kombi is None:
             return _standard(K.C_HULL, K.C_HULL_SH, K.C_TEAL, groesse=gross,
-                             schwung=schwung_winkel(i))
+                             schwung=schwung_winkel(i), nahkampf=nahkampf)
         return _standard(kombi["rumpf"], kombi["kante"], kombi["akzent"],
-                         team=kombi["name"], groesse=gross, schwung=schwung_winkel(i))
+                         team=kombi["name"], groesse=gross, schwung=schwung_winkel(i),
+                         nahkampf=nahkampf)
     return zeichner
 
 
@@ -1028,6 +1049,14 @@ for _i in range(K.SCHWUNG_BILDER):
     for _kombi in K.TEAMS["kombi"]:
         platzhalter("spieler_%s_schwung_%d" % (_kombi["name"].lower(), _i))(
             _schwung_bild(_i, _kombi))
+    # Mit der gewaehlten Nahkampfwaffe (seit 0.34.140).
+    for _nk in K.NAHKAMPF["waehlbar"]:
+        if _nk == K.NAHKAMPF["waffe"]:
+            continue
+        platzhalter("spieler_schwung_%d_%s" % (_i, _nk))(_schwung_bild(_i, None, _nk))
+        for _kombi in K.TEAMS["kombi"]:
+            platzhalter("spieler_%s_schwung_%d_%s" % (_kombi["name"].lower(), _i, _nk))(
+                _schwung_bild(_i, _kombi, _nk))
 
 
 @platzhalter("spieler")

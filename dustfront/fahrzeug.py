@@ -702,7 +702,14 @@ class Buggy(Wesen):
         # Die Driftstuetze (siehe oben): dreht ihn zurueck, bevor er sich dreht.
         # Auch ueber 90 Grad hinaus - gerade dann, sonst dreht er sich ganz.
         # Rueckwaerts gefahren wird nicht gestuetzt (gas < 0, vx < 0).
-        if tempo > 40.0 and not (gas < 0.0 and vx < 0.0):
+        # Auch nicht beim Zurueckrollen (seit 0.34.140, gemeldet: "nach dem
+        # Rueckwaertsfahren dreht sich das Fahrzeug auf einmal um 360 Grad"):
+        # wer vom Rueckwaertsgas geht oder schon Vorwaertsgas gibt, rollt noch
+        # zurueck - fuer die Stuetze war das ein Drift von 180 Grad, und sie
+        # drehte den Wagen mit voller Kraft herum. Rollt er fast gerade nach
+        # hinten (innerhalb `rueck_roll_grenze`), schleudert er nicht.
+        rueck_rollt = vx < 0.0 and abs(vy) < -vx * math.tan(math.radians(f.get("rueck_roll_grenze", 60.0)))
+        if tempo > 40.0 and not (gas < 0.0 and vx < 0.0) and not rueck_rollt:
             beta = math.atan2(vy, vx)
             ueber = abs(beta) - math.radians(f["drift_grenze_hb" if handbremse
                                                else "drift_grenze"])

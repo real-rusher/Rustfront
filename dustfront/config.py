@@ -1556,6 +1556,7 @@ FAHRZEUG = dict(
     drift_grenze=29.0,        # ab diesem Driftwinkel (Grad) faengt ihn die Stuetze
     drift_grenze_hb=69.0,     # mit Handbremse erst hier
     drift_stuetze=30000.0,    # wie kraeftig sie zurueckdreht
+    rueck_roll_grenze=60.0,   # rollt er so nah an gerade nach hinten (Grad), stuetzt sie nicht (0.34.140)
     v_min=55.0,               # unter diesem Tempo rechnet der Schraeglauf ruhiger
     spur_ab=0.25,             # ab so viel Rutschen bleiben Reifenspuren (0 bis 1)
     spur_abstand=2.5,         # Pixel zwischen zwei Spurpunkten
@@ -5448,6 +5449,17 @@ NAHKAMPF = dict(
     # gerade hinschaut.
     nachhalten=0.14,
 )
+
+# Der Schwung mit der gewaehlten Nahkampfwaffe in der Hand (seit 0.34.140,
+# gemeldet: "bei F wird immer das Brecheisen angezeigt"): je Waffe eigene
+# Bilder spieler[_<team>]_schwung_<i>_<waffe>; das Brecheisen bleibt ohne Zusatz.
+for _nk in NAHKAMPF["waehlbar"]:
+    if _nk == NAHKAMPF["waffe"]:
+        continue
+    for _i in range(SCHWUNG_BILDER):
+        BILD_MASS["spieler_schwung_%d_%s" % (_i, _nk)] = (64, 64)
+        for _team in TEAMS["kombi"]:
+            BILD_MASS["spieler_%s_schwung_%d_%s" % (_team["name"].lower(), _i, _nk)] = (64, 64)
 
 # Rauchgranate: eine Wand, durch die niemand durchsieht - auch nicht von
 # der Ebene darueber. Sie macht keinen Schaden, sie nimmt nur die Sicht.

@@ -20371,6 +20371,76 @@ pruef("... und um einen eigenen Mann, der im Weg steht", _b139 == 0 and _a139,
       "%d Bilder Beruehrung, angekommen: %s" % (_b139, _a139))
 _tm139.verlassen()
 
+# ══════════════════════════════════════════════════════════════════
+print("\n-- 0.34.140: Beste Qualitaet beim Zoom - die eigene Figur zittert nicht")
+w140, g140 = _paar59("pve", karte="staubtal")
+app.opt["zoom_hochaufloesend"] = True
+_lage140 = []
+for _n140 in range(200):
+    w140.ich.vorher = pygame.Vector2(w140.ich.pos)
+    w140.ich.pos += pygame.Vector2(1, 0.83) * 95 * K.FIXED_DT     # diagonal, krumme Schritte
+    w140.schritt(K.FIXED_DT)
+    if _n140 % 2 == 0:
+        w140.zoom_ziel = w140._zoom_weich = w140.kamera.zoom = 2.0
+        w140.zeichnen(app.flaeche, 0.5)
+        _wh140 = app.__dict__.pop("welt_hoch", None)
+        if _wh140 and _wh140.get("figur") and _n140 > 80:
+            _lage140.append((_wh140["figur"][0] + _wh140["ecke"][0], _wh140["figur"][1] + _wh140["ecke"][1]))
+app.opt["zoom_hochaufloesend"] = False
+_d140 = [abs(_lage140[i_ + 1][0] - 2 * _lage140[i_][0] + _lage140[i_ - 1][0])
+         + abs(_lage140[i_ + 1][1] - 2 * _lage140[i_][1] + _lage140[i_ - 1][1]) for i_ in range(1, len(_lage140) - 1)]
+# Vorher (0.34.138/139) gemessen: im Mittel 0,73, in der Spitze 1,0 Bildpunkte Sprung je Bild.
+pruef("Zoom 2 mit BESTE QUALITAET, diagonal gehen: die Figur liegt im Fenster ohne Sprung (unter 0,05)",
+      len(_d140) > 30 and max(_d140) < 0.05, "%d Bilder, groesster Sprung %.3f" % (len(_d140), max(_d140 or [9])))
+w140.verlassen(); g140.verlassen()
+
+# Gemeldet: nach dem Rueckwaertsfahren drehte sich der Wagen beim Richtungswechsel um 360 Grad.
+from dustfront import fahrzeug as _FZ140
+def _roll140(cls_, gas_, lenk_, sek_, stick_=None, start_=None):
+    b_ = start_ or cls_(pygame.Vector2(0, 0), 0, winkel=0.0)
+    weg_, dreh_ = 0.0, 0.0
+    for _ in range(int(sek_ / K.FIXED_DT)):
+        if stick_ is not None:
+            gas_, lenk_ = b_.stick_steuern(pygame.Vector2(stick_))
+        b_._physik(K.FIXED_DT, gas_, lenk_, False)
+        alt_ = b_.winkel
+        b_.winkel = (b_.winkel + math.degrees(b_.gier * K.FIXED_DT) + 180) % 360 - 180
+        dreh_ += (b_.winkel - alt_ + 180) % 360 - 180
+        weg_ += (b_.geschw * K.FIXED_DT).length()
+        b_.pos += b_.geschw * K.FIXED_DT
+    return b_, weg_, dreh_
+for _cls140 in (_FZ140.Buggy, _FZ140.Krad, _FZ140.Panzerwagen):
+    _b140, _, _ = _roll140(_cls140, -1.0, 0.0, 1.5)
+    _b140, _weg140, _dreh140 = _roll140(_cls140, 0.0, 1.0, 3.0, start_=_b140)
+    _r140 = _weg140 / max(1e-6, math.radians(abs(_dreh140)))
+    pruef("%s: rueckwaerts, dann Gas los und eingeschlagen - er rollt im Bogen aus (Radius %.0f px), statt sich zu drehen"
+          % (_cls140.__name__, _r140), abs(_dreh140) < 180.0 and _r140 > 30.0,
+          "%.0f Grad auf %.0f px" % (_dreh140, _weg140))
+    _b140, _, _ = _roll140(_cls140, 0, 0, 1.5, stick_=(-1, 0))
+    _b140, _, _dreh140 = _roll140(_cls140, 0, 0, 3.0, stick_=(0, 1), start_=_b140)
+    pruef("... mit dem Stick: erst zurueck, dann zur Seite - er dreht auf die Seite und nicht weiter (90 Grad)",
+          abs(_dreh140 - 90.0) < 25.0, "%.0f Grad" % _dreh140)
+
+# Gemeldet: bei F wird immer das Brecheisen gezeigt, egal welche Nahkampfwaffe.
+from dustfront.mehrspieler import Kaempfer as _Kae140
+from dustfront.core import Bilder as _Bilder140
+_k140 = _Kae140(pygame.Vector2(100, 100), 0, 9001, "NAHKAMPF", "")
+_k140.nahkampf_waffe = "hammer"
+_k140.schlag_zeigen = 0.2
+_k140.nahkampf_rest = 0.3
+_nb140 = _k140.bild
+pruef("Schwung mit dem Hammer auf F: das Bild zeigt den Hammer, nicht das Brecheisen",
+      _nb140.endswith("_hammer") and _Bilder140.mass(_nb140) is not None, _nb140)
+_k140.nahkampf_waffe = "brecheisen"
+pruef("... mit dem Brecheisen das alte Bild", not _k140.bild.endswith("_brecheisen"), _k140.bild)
+_k140.skin = list(K.FIGUREN)[3]
+_k140.nahkampf_waffe = "kettensaege"
+_nb140 = _k140.bild
+pruef("... auch im eigenen Aussehen (Skin)", _nb140.startswith("skin_") and _nb140.endswith("_kettensaege"), _nb140)
+_bs140 = pygame.image.tobytes(app.bilder.bild(_nb140), "RGBA")
+pruef("... und Saege und Eisen sehen verschieden aus",
+      _bs140 != pygame.image.tobytes(app.bilder.bild(_nb140[:-len("_kettensaege")]), "RGBA"))
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

@@ -246,6 +246,9 @@ class Kaempfer(Spieler):
             if skin:
                 name = "%s_schwung_%d" % (figuren.bildname(skin, vorsatz),
                                           self.schwung_nummer())
+                nk = self.__dict__.get("nahkampf_waffe")
+                if nk and nk != K.NAHKAMPF["waffe"] and Bilder.mass(name + "_" + nk):
+                    return name + "_" + nk      # mit der gewaehlten Nahkampfwaffe (0.34.140)
                 if Bilder.mass(name):
                     return name
             return self.schwung_bild(vorsatz)
@@ -7622,11 +7625,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         # Wem die Kamera folgt, der steht ruhig im Bild (seit 0.34.95,
         # render.Kamera.fest_im_bild) - die eigene Figur oder ihr Wagen.
         fest = []
+        self._hoch_korrektur = (0.0, 0.0)
         if self.ich is not None and self._kamera_folgt_mir():
             for w in (self.ich, getattr(self.ich, "fahrzeug", None)):
                 if w is not None:
-                    w._zeichen_fest = self.kamera.fest_im_bild(w.zeichenpos(misch))
+                    genau = w.zeichenpos(misch)
+                    w._zeichen_fest = self.kamera.fest_im_bild(genau)
                     fest.append(w)
+                    # Fuer BESTE QUALITAET BEIM ZOOM (seit 0.34.140): um so viel
+                    # liegt die Figur auf ganzen Weltpixeln neben ihrer genauen
+                    # Stelle - der Wagen, wenn man darin sitzt.
+                    self._hoch_korrektur = (genau.x - w._zeichen_fest.x, genau.y - w._zeichen_fest.y)
         self.renderer.vignette_an = self._vignette_an()
         try:
             if abs(self.kamera.zoom - 1.0) < 0.004 and self.sicht_welt() is None:
@@ -8006,9 +8015,21 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             # Das Fenster legt die Leinwand selbst auf (core.App.ausgeben),
             # in voller Aufloesung; `flach` ist das Weltbild auf 640 x 360,
             # um nachher zu erkennen, was die Anzeige darueber gemalt hat.
+            # Die Leinwand wird um den Rest der eigenen Figur verschoben (seit
+            # 0.34.140, gemeldet: "die Figuren bewegen sich weiter komisch,
+            # wenn ich weiter rauszoome"). Die Figur kann auf der Leinwand nur
+            # auf ganzen Weltpixeln stehen, ein Weltpixel sind hier mehrere
+            # Fensterpixel - lag die Leinwand genau, sprang sie darum je Bild
+            # bis zu einem halben Weltpixel. So steht sie genau, und die Welt
+            # rastet um sie herum ein wie ohne Zoom.
+            kx, ky = getattr(self, "_hoch_korrektur", (0.0, 0.0))
+            fest = getattr(self.ich, "_zeichen_fest", None) if self.ich is not None else None
             self.app.welt_hoch = {"leinwand": lw, "zoom": z, "flach": ziel.copy(),
-                                  "ecke": ((ecke_lw.x - ecke_genau[0]) / z,
-                                           (ecke_lw.y - ecke_genau[1]) / z)}
+                                  "ecke": ((ecke_lw.x - ecke_genau[0] + kx) / z,
+                                           (ecke_lw.y - ecke_genau[1] + ky) / z),
+                                  # Wo die eigene Figur auf der Leinwand steht (fuer die Probe).
+                                  "figur": None if fest is None else ((fest.x - ecke_lw.x) / z,
+                                                                      (fest.y - ecke_lw.y) / z)}
 
     def _hochaufloesend_an(self) -> bool:
         """BESTE QUALITAET BEIM ZOOM (GRAFIK, seit 0.34.138)."""
