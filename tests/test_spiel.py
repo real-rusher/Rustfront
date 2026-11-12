@@ -20213,7 +20213,7 @@ w138._zone_bild(_fl138, pygame.Vector2(100, 110), _z138, 1.0, False)
 _ecken138 = w138._zone_ecken(_z138, 100.0, 110.0)
 _blau138 = [max(_fl138.get_at((int(e_.x) + dx_, int(e_.y) + dy_))[2] - _fl138.get_at((int(e_.x) + dx_, int(e_.y) + dy_))[0]
                 for dx_ in range(-2, 3) for dy_ in range(-8, 1)) for e_ in _ecken138]
-pruef("... an jeder der vier Ecken brennt eine blaue Fackel", all(b_ > 60 for b_ in _blau138), str(_blau138))
+pruef("... an jeder der vier Ecken liegt eine blau leuchtende Fackel", all(b_ > 60 for b_ in _blau138), str(_blau138))
 _f2_138 = pygame.Surface((200, 200)); _f2_138.fill((40, 60, 30))
 w138._zone_bild(_f2_138, pygame.Vector2(100, 110), _z138, 1.4, False)
 pruef("... und sie lebt (Rauch, Flammen und Rand bewegen sich)",
@@ -20470,6 +20470,24 @@ pruef("Wiedereinstieg: genau die Medkits fuer den Anfang (nicht die aufgesammelt
 pruef("... und nichts aus dem alten Leben laeuft weiter (Medkit anlegen, Nachladen, Dash)",
       _ich140.heilt_rest == 0 and _ich140.nachlade_rest == 0 and _ich140.dash_ladungen == K.DASH["ladungen"])
 w140b.verlassen(); g140b.verlassen()
+
+# Abwurfzonen neu (gewuenscht): kein Hologramm, kein Raster, kein Rand - Leuchtfackeln am Boden, deren Rauch man sieht.
+w140c, g140c = _paar59("schlacht", karte="staubtal_offen")
+from dustfront.schlacht import Dropzone as _DZ140
+_z140 = _DZ140(pygame.Vector2(0, 0), w140c.ich.team, "panzer", 0.0)
+_z140.rest = 9.0
+_fl140 = pygame.Surface((300, 300)); _fl140.fill((40, 60, 30))
+w140c._zone_bild(_fl140, pygame.Vector2(150, 170), _z140, 2.0, False)
+_ecken140 = w140c._zone_ecken(_z140, 150.0, 170.0)
+_unten140 = max(e_.y for e_ in _ecken140)
+# Knapp innerhalb ihrer Unterkante (der Rauch steigt nach oben): nur Boden - vorher lag dort der Grund der Zone.
+_boden140 = all(tuple(_fl140.get_at((x_, int(_unten140) - 3)))[:3] == (40, 60, 30)
+                for x_ in range(130, 171, 4))
+pruef("Abwurfzone: auf ihrem Rand liegt nichts mehr (kein Rahmen, kein Raster, kein Hologramm)", _boden140)
+_rauch140 = sum(1 for x_ in range(0, 300, 3) for y_ in range(0, int(_unten140) - 50, 3)
+                if tuple(_fl140.get_at((x_, y_)))[:3] != (40, 60, 30))
+pruef("... ueber ihr steht eine grosse Rauchwolke (der Rauch ist, was man sieht)", _rauch140 > 400, str(_rauch140))
+w140c.verlassen(); g140c.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

@@ -1229,8 +1229,13 @@ SCHLACHT = dict(
     fahrer_anteil=0.45,        # seit 0.34.138: so viel der Seite darf fahren (hoechstens so viele, wie die Basen Wagen haben)
     drop_frei_vorn=6,          # seit 0.34.138: so viele 8-px-Schritte muss ein Basiswagen zur Front frei losfahren koennen
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
-                  rand=10, kiste=40, rauch=10, rauch_tempo=0.4, steigen=44.0, rauch_gross=13,
-                  wind=0.8,
+                  rand=10, kiste=40,
+                  # Seit 0.34.140 Leuchtfackeln am Boden mit dichtem Rauch (schlacht._leuchtfackel):
+                  # Wolken je Fackel, wie schnell sie nachkommen, wie hoch sie steigen und wie
+                  # gross sie werden, wie sehr der Wind sie wegtraegt, wie dicht sie am Anfang sind.
+                  rauch=22, rauch_tempo=0.26, steigen=64.0, rauch_gross=30, wind=0.65, rauch_deck=245.0,
+                  rauch_freund=(120, 170, 255), rauch_feind=(240, 88, 72), rauch_alt=(150, 150, 160),
+                  licht_freund=(110, 180, 255), licht_feind=(255, 96, 70),
                   zeichen=dict(buggy="B", flakwagen="A", tragschrauber="H", werfer="W", funkwagen="F", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
                                medkit="+")),
     # Punkte (nur Menschen). Ein zerstoertes Fahrzeug bringt seit 0.34.129 die
