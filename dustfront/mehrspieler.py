@@ -6647,6 +6647,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         self.kamera.vorausschau = self.app.opt.blick_weite()
         # Der Zoom zieht weich nach - ein Sprung auf die doppelte Weite
         # in einem Bild verliert einen voellig.
+        self._zoom_begrenzen()
         z = self._zoom_weich
         z += (self.zoom_ziel - z) * min(1.0, K.ZOOM["weich"] * dt)
         self._zoom_weich = self.zoom_ziel if abs(self.zoom_ziel - z) < 0.004 else z
@@ -7499,9 +7500,40 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             self.renderer.tracer(ziel, self.welt, self.kamera, self.ich)
 
     # ---- Sichtweite und Nebel -------------------------------------------
+    def zoom_grenzen(self) -> tuple:
+        """(hoechster Zoom, klar bis) gerade jetzt (seit 0.34.135): mehr
+        im aufgebauten Funkwagen und im fliegenden Tragschrauber (K.ZOOM
+        fahrzeug), sonst K.ZOOM hoechst und klar."""
+        z = K.ZOOM
+        hoechst, klar = z["hoechst"], z["klar"]
+        ich = self.ich
+        if ich is not None and ich.lebt and getattr(ich, "im_fahrzeug", False):
+            b = self._mein_wagen()
+            regel = z["fahrzeug"].get(b.art) if b is not None and not b.kaputt else None
+            if regel is not None and (
+                    (regel[2] == "aufgebaut" and getattr(b, "phase", 0) == 2)
+                    or (regel[2] == "luft" and getattr(b, "in_der_luft", False))):
+                hoechst, klar = max(hoechst, regel[0]), max(klar, regel[1])
+        return hoechst, klar
+
+    def _zoom_begrenzen(self) -> None:
+        """Faellt die Erlaubnis weg (Funkwagen faehrt los, Tragschrauber
+        landet), springt der Zoom auf die hoechste erlaubte Stufe zurueck;
+        kommt sie dazu, zoomt das Bild einmal so weit hinaus."""
+        hoechst, _klar = self.zoom_grenzen()
+        vorher = self.__dict__.get("_zoom_hoechst_vorher", K.ZOOM["hoechst"])
+        self._zoom_hoechst_vorher = hoechst
+        erlaubt = [x for x in K.ZOOM["stufen"] if x <= hoechst + 1e-6]
+        if hoechst > vorher + 1e-6 and hoechst > K.ZOOM["hoechst"] + 1e-6:
+            self.zoom_ziel = erlaubt[-1]
+        elif self.zoom_ziel > hoechst + 1e-6:
+            self.zoom_ziel = erlaubt[-1]
+
     def zoom_stufe(self, schritt: int) -> None:
-        """Eine Stufe weiter oder naeher (Mausrad)."""
-        stufen = K.ZOOM["stufen"]
+        """Eine Stufe weiter oder naeher (Mausrad), seit 0.34.135 nur bis
+        zur Grenze des Augenblicks (zoom_grenzen)."""
+        hoechst, _klar = self.zoom_grenzen()
+        stufen = [x for x in K.ZOOM["stufen"] if x <= hoechst + 1e-6]
         jetzt = min(range(len(stufen)), key=lambda i: abs(stufen[i] - self.zoom_ziel))
         self.zoom_ziel = stufen[max(0, min(len(stufen) - 1, jetzt + schritt))]
 
@@ -7529,7 +7561,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         Nebel. Seit 0.34.95 mehr als das normale Bild (K.ZOOM klar,
         gemeldet: auf grossen Karten mit vielen Bots sah man nur, was
         direkt neben einem stand). None, wenn nichts im Nebel liegt."""
-        klar = K.ZOOM["klar"]
+        klar = self.zoom_grenzen()[1]
         if self.kamera.zoom <= klar + 0.004 and not self.scope_an():
             return None
         mitte = self._sicht_mitte(klar)

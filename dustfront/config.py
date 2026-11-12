@@ -227,12 +227,21 @@ TIEFENRASTER = dict(
 )
 
 ZOOM = dict(
-    stufen=(0.75, 1.0, 1.25, 1.5, 1.75, 2.0),
+    stufen=(0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75),
     start=1.0,
     weich=12.0,               # wie schnell der Zoom nachzieht
+    hoechst=2.0,              # so weit hinaus ohne besonderes Fahrzeug
     # Bis zu diesem Zoom ist alles klar, erst dahinter liegt der Nebel
-    # (seit 0.34.95; vorher 1, also schon direkt hinter dem normalen Bild).
-    klar=1.5,
+    # (seit 0.34.95; vorher 1, also schon direkt hinter dem normalen Bild;
+    # seit 0.34.135 1,75 statt 1,5 - gewuenscht: "der Nebel soll noch etwas
+    # zurueckgehen").
+    klar=1.75,
+    # Fahrzeuge, die weiter sehen (seit 0.34.135): Art -> (hoechster Zoom,
+    # klar bis, wann). Der Funkwagen sieht aufgebaut seinen ganzen Peilkreis
+    # (470 px Radius, also 940 px hoch: 2,75 * 360 = 990), der Tragschrauber
+    # in der Luft weiter. Faellt der Zustand weg, springt der Zoom auf die
+    # hoechste erlaubte Stufe zurueck; kommt er, zoomt das Bild einmal hinaus.
+    fahrzeug={"funkwagen": (2.75, 2.75, "aufgebaut"), "tragschrauber": (2.5, 2.25, "luft")},
     nebel=(14, 10, 8, 168),   # Farbe und Deckkraft des Nebels
     nebel_rand=(96, 78, 56),  # die Kante des normalen Bildes
 )

@@ -8722,8 +8722,8 @@ wz.ereignis(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=-1))
 pruef("Mausrad zurueck: weiter weg", wz.zoom_ziel > 1.0, "%.2f" % wz.zoom_ziel)
 for _ in range(8):
     wz.ereignis(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=-1))
-pruef("Bis zur weitesten Stufe, nicht darueber",
-      wz.zoom_ziel == max(K.ZOOM["stufen"]), "%.2f" % wz.zoom_ziel)
+pruef("Bis zur weitesten Stufe, nicht darueber (seit 0.34.135: zu Fuss K.ZOOM hoechst)",
+      wz.zoom_ziel == K.ZOOM["hoechst"], "%.2f" % wz.zoom_ziel)
 blick_vorher, rad_vorher = wz.blick, wz._rad
 wz.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_PAGEUP, mod=0, unicode=""))
 pruef("Bild hoch schaut eine Ebene hoeher (statt des Mausrads)",
@@ -16370,7 +16370,7 @@ pruef("Der Gast erfaehrt, wer markiert ist und fuer wen (Netz: mf)",
       _gf197 is not None and _gf197.markiert_fuer == _ich197.fraktion and _gf197.markiert_rest > 0.0)
 _bild197 = pygame.Surface((K.GAME_W, K.GAME_H))
 w197.zoom_ziel = w197._zoom_weich = w197.kamera.zoom = max(K.ZOOM["stufen"])
-_feind197.pos.update(_ich197.pos + pygame.Vector2(560, 0))
+_feind197.pos.update(_ich197.pos + pygame.Vector2(760, 0))   # seit 0.34.135 klar bis 1,75: 560 lag noch im Klaren
 pruef("Ganz herausgezoomt steht er im Nebel ...", not w197.im_licht(_feind197.pos))
 w197.zeichnen(_bild197, 1.0)
 _m197 = w197.kamera.zu_bild(_feind197.pos)
@@ -16389,6 +16389,30 @@ pruef("Ohne Drohne laeuft die Markierung ab (bis 0.34.94 blieb sie im Gefecht fu
 w197.zoom_ziel = w197._zoom_weich = w197.kamera.zoom = 1.25
 pruef("Weniger Nebel: bis Zoom K.ZOOM klar ist alles klar", K.ZOOM["klar"] >= 1.5
       and w197.sicht_welt() is None)
+
+print("\n-- 0.34.135: Zoom je Fahrzeug --")
+from dustfront import fahrzeug as _FZ135
+_fw135 = _FZ135.neu("funkwagen", _ich197.pos + pygame.Vector2(0, 70), 0)
+w197.welt.dazu(_fw135); w197.fahrzeuge.append(_fw135)
+if _ich197.fahrzeug is not None:
+    w197._aussteigen(_ich197)
+w197.zoom_ziel = w197._zoom_weich = w197.kamera.zoom = 1.0
+w197._einsteigen(_ich197, _fw135)
+pruef("Zoom: im fahrenden Funkwagen nur bis K.ZOOM hoechst",
+      w197.zoom_grenzen()[0] == K.ZOOM["hoechst"])
+_fw135.phase, _fw135.fortschritt = 2, 1.0
+w197._zoom_begrenzen()
+pruef("... aufgebaut weiter (ganzer Peilkreis) und das Bild zoomt einmal hinaus",
+      w197.zoom_grenzen()[0] > K.ZOOM["hoechst"] and w197.zoom_ziel == w197.zoom_grenzen()[0]
+      and K.GAME_H * w197.zoom_grenzen()[1] >= 2 * K.FUNKWAGEN["peilen"], "%.2f" % w197.zoom_ziel)
+for _ in range(12):
+    w197.zoom_stufe(1)
+pruef("... mit dem Mausrad nicht ueber diese Grenze", w197.zoom_ziel == K.ZOOM["fahrzeug"]["funkwagen"][0])
+_fw135.phase = 0
+w197._zoom_begrenzen()
+pruef("... faehrt er los, springt der Zoom auf die hoechste erlaubte Stufe zurueck",
+      w197.zoom_ziel == K.ZOOM["hoechst"], "%.2f" % w197.zoom_ziel)
+w197._aussteigen(_ich197)
 w197.verlassen(); g197.verlassen()
 
 # ══════════════════════════════════════════════════════════════════
