@@ -595,6 +595,10 @@ BILD_MASS = {
     "asphalt_2":        (TILE, TILE),
     "asphalt_3":        (TILE, TILE),
     "asphalt_4":        (TILE, TILE),
+    "hof":              (TILE, TILE),
+    "hof_2":            (TILE, TILE),
+    "hof_3":            (TILE, TILE),
+    "hof_4":            (TILE, TILE),
     "ziegel":           (TILE, TILE),
     "beton":            (TILE, TILE),
     "beton_2":          (TILE, TILE),
@@ -3464,7 +3468,10 @@ KARTENSAETZE = {
                          "pflaster": ("gehweg", "gehweg_2", "gehweg_3")}},
     # Seit 0.34.131: KANALSTADT - Asphalt, Ziegelhaeuser, Betontruemmer,
     # Autowracks, Kanaele mit Bruecken, Parks mit Rasen und Baeumen.
-    "stadt": {"boden": ("asphalt", "asphalt_2", "asphalt_3", "asphalt_4"),
+    # Seit 0.34.135 ist der Boden der Bloecke heller Kopfstein ("hof") und
+    # nicht Asphalt (gemeldet: "nicht erkennbar, was Teil des Gebaeudes und
+    # was Teil der Strasse ist") - die dunkle Fahrbahn hebt sich ab.
+    "stadt": {"boden": ("hof", "hof_2", "hof_3", "hof_4"),
               "wand": "ziegel", "kaktus": "baum", "klippe": "beton",
               "bilder": {"fels": ("beton", "beton_2", "beton_3"),
                          "brocken": ("truemmer", "truemmer_2", "truemmer_3"),
@@ -5414,7 +5421,7 @@ KARTENBILD = dict(
                       wand=(178, 172, 156), fels=(122, 132, 110), wand_licht=(206, 202, 186),
                       wand_dunkel=(96, 100, 86), deckung=(150, 136, 104),
                       deckung_rand=(36, 44, 28), baum=(38, 70, 34)),
-        "stadt": dict(sand=(72, 72, 76), piste=(54, 54, 58), kies=(100, 94, 88),
+        "stadt": dict(sand=(118, 108, 94), piste=(44, 44, 48), kies=(100, 94, 88),
                       gestruepp=(74, 102, 56), pflaster=(122, 120, 116), dielen=(140, 136, 128),
                       seicht=(70, 100, 110), wasser=(34, 60, 76), schatten=(30, 30, 34),
                       wand=(176, 104, 80), fels=(156, 156, 150), wand_licht=(206, 140, 110),

@@ -370,10 +370,12 @@ def _strasse_basis(seed) -> pygame.Surface:
     Gullydeckel. Keine Mittellinie - dieselbe Kachel liegt in jeder
     Richtung."""
     r = random.Random(seed)
-    s = _asphalt_basis(seed, (54, 54, 58))
+    # Seit 0.34.135 dunkler (54 -> 44): die Fahrbahn soll sich klar von
+    # Hoefen und Haeusern abheben.
+    s = _asphalt_basis(seed, (44, 44, 48))
     if r.random() < 0.4:
         x, y = r.randrange(3, T - 14), r.randrange(3, T - 12)
-        pygame.draw.rect(s, (62, 62, 66), (x, y, r.randrange(8, 12), r.randrange(6, 10)))
+        pygame.draw.rect(s, (52, 52, 56), (x, y, r.randrange(8, 12), r.randrange(6, 10)))
     if r.random() < 0.18:
         x, y = r.randrange(6, T - 12), r.randrange(6, T - 12)
         pygame.draw.circle(s, (40, 40, 42), (x + 4, y + 4), 4)
@@ -587,6 +589,33 @@ for _i, _saat in enumerate((1811, 1812, 1813)):
     platzhalter("wrack_oben" if _i == 0 else "wrack_%d_oben" % (_i + 1))(
         lambda saat=_saat: _wrack_oben_basis(saat))
 
+def _hof_basis(seed) -> pygame.Surface:
+    """Hof und Blockflaeche (seit 0.34.135, der Boden des Satzes stadt):
+    heller, warmer Kopfstein in Reihen - klar anders als die dunkle
+    Fahrbahn."""
+    r = random.Random(seed)
+    s = _flaeche(T, T)
+    fuge = (84, 76, 66)
+    s.fill(fuge)
+    steine = ((122, 112, 98), (116, 106, 92), (128, 118, 104), (110, 102, 90))
+    reihe_h = T // 4
+    for j in range(4):
+        versatz = (j % 2) * (T // 8)
+        x = -versatz
+        while x < T:
+            b = T // 4 + r.randrange(-1, 2)
+            ton = r.choice(steine)
+            pygame.draw.rect(s, ton, (x + 1, j * reihe_h + 1, b - 1, reihe_h - 1))
+            pygame.draw.line(s, _ton(ton, 12), (x + 1, j * reihe_h + 1), (x + b - 2, j * reihe_h + 1))
+            x += b
+    _koerner(s, (98, 90, 78), 16, seed + 1)
+    if r.random() < 0.2:
+        x, y = r.randrange(4, T - 12), r.randrange(4, T - 10)
+        pygame.draw.ellipse(s, (96, 88, 76), (x, y, r.randrange(6, 10), r.randrange(4, 7)))
+    return s
+
+
+_reihe("hof", _hof_basis, (1823, 1829, 1837, 1843))
 _reihe("asphalt", _asphalt_basis, (1821, 1823, 1831, 1847))
 _reihe("strasse", _strasse_basis, (1851, 1861, 1867, 1871))
 _reihe("gehweg", _gehweg_basis, (1873, 1877, 1879))

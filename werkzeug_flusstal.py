@@ -101,7 +101,7 @@ def bauen() -> Leinwand:
     # Ufergehoelz: einzelne Baeume den Fluss entlang
     for y in range(0, HOEHE):
         for seite in (-1, 1):
-            if r.random() < 0.12:
+            if r.random() < 0.07:
                 x = int(fluss_x(y) + seite * r.uniform(9, 15))
                 lw.setze(x, y, "k", nur=set('.";'))
 
@@ -133,21 +133,23 @@ def bauen() -> Leinwand:
     # ── Deckung auf den Wiesen ──────────────────────────────────────────
     # Einzelne Baeume und Buschgruppen: offen genug fuer Panzer, aber zu
     # Fuss kommt man von Deckung zu Deckung.
-    for _ in range(170):
+    # Seit 0.34.135 weniger Kram (gewuenscht: "freier", "uebersichtlicher"):
+    # Baeume 170 -> 90, Heuballen 26 -> 14, Feldmauern 22 -> 11, Trichter 18 -> 10.
+    for _ in range(90):
         x, y = r.randrange(8, BREITE - 8), r.randrange(8, HOEHE - 8)
         if lw.get(x, y) in '."':
             lw.setze(x, y, "k")
             if r.random() < 0.5:
                 lw.kreis(x + r.choice((-1, 1)), y + r.choice((-1, 1)), 1.4, '"', nur=set("."))
     # Heuballen in Reihen auf den Feldern.
-    for _ in range(26):
+    for _ in range(14):
         x, y = r.randrange(50, 150), r.randrange(10, HOEHE - 10)
         quer = r.random() < 0.5
         for i in range(r.randint(2, 4)):
             xx, yy = (x + i * 2, y) if quer else (x, y + i * 2)
             lw.setze(xx, yy, "h", nur=set('.";'))
     # Feldmauern: kurze Zuege aus Feldsteinen mit Luecken.
-    for _ in range(22):
+    for _ in range(11):
         x, y = r.randrange(48, 150), r.randrange(10, HOEHE - 10)
         quer = r.random() < 0.5
         for i in range(r.randint(5, 11)):
@@ -155,7 +157,7 @@ def bauen() -> Leinwand:
                 xx, yy = (x + i, y) if quer else (x, y + i)
                 lw.setze(xx, yy, "#", nur=set('.";'))
     # Granattrichter: Kies im Kreis, ein paar Brocken am Rand.
-    for _ in range(18):
+    for _ in range(10):
         x, y = r.randrange(110, 160), r.randrange(10, HOEHE - 10)
         rad = r.uniform(1.6, 2.8)
         lw.kreis(x, y, rad, ";", nur=set('."k'))

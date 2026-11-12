@@ -37,7 +37,7 @@ KOPF = [
     "# KANALSTADT - zerschossene Stadt mit Kanal (seit 0.34.131).",
     "# Erzeugt mit werkzeug_kanalstadt.py (nicht von Hand aendern - neu erzeugen).",
     "# 320 x 224 Kacheln, eine Ebene, punktgespiegelt. Satz stadt:",
-    "#   . Asphalt  : Fahrbahn  _ Gehweg  ; Schutt  \" Rasen  = Fliesen  , Gitter",
+    "#   . Hof (Kopfstein)  : Fahrbahn  _ Gehweg  ; Schutt  \" Rasen  = Fliesen  , Gitter",
     "#   # Ziegel  r Beton  b Truemmer  w Autowrack  s Sandsack  h Kiste  X Fass",
     "#   k Baum  + seichtes Wasser  % Kanal",
     "#   Z Spawnstelle  F Buggy  P Panzer  L Panzerwagen  E Eroberungspunkt",
@@ -67,9 +67,10 @@ def bauen() -> Leinwand:
     lw = Leinwand(BREITE, HOEHE, ".")
 
     # ── Boden: Schutt und Risse ─────────────────────────────────────────
-    for _ in range(160):
+    # Seit 0.34.135 weniger (160 -> 60, gewuenscht: "uebersichtlicher").
+    for _ in range(60):
         cx, cy = r.randrange(BREITE), r.randrange(HOEHE)
-        lw.kreis(cx, cy, r.uniform(1.2, 3.5), ";", rnd=r, dichte=0.55)
+        lw.kreis(cx, cy, r.uniform(1.2, 3.0), ";", rnd=r, dichte=0.45)
 
     # ── Haeuserbloecke ───────────────────────────────────────────────────
     def haus_oder_dach(x0, y0, b, h, kaputt=0.1):
@@ -121,26 +122,26 @@ def bauen() -> Leinwand:
         if hx1 > hx0 + 2 and hy1 > hy0 + 2:
             if r.random() < 0.4:
                 lw.rechteck(hx0, hy0, hx1, hy1, '"')
-            for _ in range(r.randint(2, 5)):
+            for _ in range(r.randint(0, 2)):
                 lw.setze(r.randint(hx0, hx1), r.randint(hy0, hy1), r.choice("khwbX"))
 
     def block_ruine(x0, y0, x1, y1):
         block_wohnen(x0, y0, x1, y1, kaputt=0.45)
-        for _ in range(r.randint(4, 8)):
+        for _ in range(r.randint(2, 4)):
             lw.kreis(r.randint(x0, x1), r.randint(y0, y1), r.uniform(1.5, 3.2), ";", nur=set("#=."))
-        for _ in range(r.randint(6, 12)):
+        for _ in range(r.randint(2, 5)):
             lw.setze(r.randint(x0, x1), r.randint(y0, y1), "b", nur=set(";."))
 
     def block_truemmerfeld(x0, y0, x1, y1):
         """Ein eingeebneter Block: Schutt, Mauerreste, Bombentrichter - offen
         und weit einsehbar, Deckung nur hinter Brocken und Stummeln."""
         lw.rechteck(x0, y0, x1, y1, ";")
-        for _ in range(9):
+        for _ in range(5):
             x, y = r.randint(x0 + 1, x1 - 4), r.randint(y0 + 1, y1 - 2)
             quer = r.random() < 0.5
             for i in range(r.randint(2, 5)):
                 lw.setze(x + (i if quer else 0), y + (0 if quer else i), "#")
-        for _ in range(int((x1 - x0) * (y1 - y0) * 0.05)):
+        for _ in range(int((x1 - x0) * (y1 - y0) * 0.02)):
             lw.setze(r.randint(x0, x1), r.randint(y0, y1), r.choice("bbbrw"))
         for _ in range(3):
             lw.kreis(r.randint(x0 + 3, x1 - 3), r.randint(y0 + 3, y1 - 3), r.uniform(2.0, 3.0), ".")
@@ -327,7 +328,7 @@ def bauen() -> Leinwand:
     lw.punkt((x0 + x1) // 2 + 2, (y0 + y1) // 2 + 1, "GASWERK", "KRAFTWERK")
 
     # ── Strassenkampf: Wracks, Barrikaden, Trichter ──────────────────────
-    for _ in range(70):
+    for _ in range(30):
         if r.random() < 0.5:
             y = r.choice(STRASSEN_Y)
             x = r.randint(48, int(MITTE_X) - 10)
@@ -338,11 +339,11 @@ def bauen() -> Leinwand:
         lw.setze(x, y, "w", nur=set(":"))
     for x in STRASSEN_X[1:]:                                 # Barrikaden an Kreuzungen
         for y in STRASSEN_Y:
-            if r.random() < 0.45:
+            if r.random() < 0.25:
                 seite = r.choice((-1, 1))
                 for i in range(3):
                     lw.setze(x + seite * 4, y - 1 + i, "s", nur=set(":_."))
-    for _ in range(24):                                      # Trichter
+    for _ in range(12):                                      # Trichter
         x, y = r.randint(50, int(MITTE_X) - 12), r.randint(8, HOEHE - 8)
         lw.kreis(x, y, r.uniform(1.4, 2.6), ";", nur=set(':_."'))
 
