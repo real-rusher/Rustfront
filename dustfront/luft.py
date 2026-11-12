@@ -249,17 +249,18 @@ class LuftTeil:
             b._feuer_alt = b.feuer
             # Eine Bombe nach der anderen (seit 0.34.123 neu): der Fahrer zuendet
             # eine Schrottbombe und laesst sie rechts neben der Kanzel fallen.
-            # Sie behaelt nichts von seinem Tempo und faellt senkrecht dorthin.
+            # Seit 0.34.135 behaelt sie einen Teil seines Schwungs (bombe schwung).
             if (druck and b.in_der_luft and b.bomben > 0 and b.emp_rest <= 0.0
                     and b.fahrer is not None and not b.landen and not b.bomben_fall):
                 b.bomben -= 1
                 b._bomben_rest = f["bomben_nachladen_luft"]
                 # Mit einem Teil seines Schwungs (seit 0.34.135, gewuenscht): sie
                 # schlaegt vor ihm auf, nicht senkrecht unter ihm.
-                ort = b.pos + pygame.Vector2(bo["abwurf"]).rotate(b.winkel) \
-                    + b.vorn * (b.flug_v * bo["fall"] * bo["schwung"])
+                los = b.pos + pygame.Vector2(bo["abwurf"]).rotate(b.winkel)
+                ort = los + b.vorn * (b.flug_v * bo["fall"] * bo["schwung"])
                 b.bomben_fall.append([bo["fall"], ort.x, ort.y, b.winkel])
-                self.welt.explosion(ort, b.ebene, float(b.hoehe), "bombe_los", b.fahrer)
+                # Gezuendet wird an der Kanzel; einschlagen tut sie vorn (ort).
+                self.welt.explosion(los, b.ebene, float(b.hoehe), "bombe_los", b.fahrer)
                 self.welt.klang("bombe_ab", 0.7, b.pos, b.ebene)
                 self.welt.klang("bombe_fall", 0.5, b.pos, b.ebene)
             for e in list(b.bomben_fall):

@@ -3324,6 +3324,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                  else anker)
         mitte_frei = netz.naechste_frei(0, mitte, 12) or mitte
         haupt = netz.gebiet_bei(0, mitte_frei)
+        # Liegt die Mitte in einer kleinen abgeschlossenen Ecke (seit 0.34.135
+        # gesehen: auf dem neu erzeugten FLUSSTAL ein Fleck am Ufer bei der
+        # Muehle), zaehlt das grosse Fahrgebiet - sonst fand kein Wagen einen Platz.
+        if haupt >= 0 and netz.gebiet_groesse(0, haupt) * 20 < netz.gebiet_groesse(0, netz.groesstes_gebiet(0)):
+            haupt = netz.groesstes_gebiet(0)
         for versuch in range(240):
             weit = umkreis * (0.25 + 1.75 * versuch / 240.0)
             p = anker + pygame.Vector2(zufall.uniform(-1, 1), zufall.uniform(-1, 1)) * weit

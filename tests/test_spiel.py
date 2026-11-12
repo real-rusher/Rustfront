@@ -17983,6 +17983,10 @@ pruef("Werfer: die rechte Maustaste baut ihn auf (Phase 2), er steht", _wf112.ph
 _feind112 = _tm112.puppe_setzen(_z112(24, 10), 0, {"team": 1, "leben": 5.0}, name="FEIND")
 _kam112 = _tm112.puppe_setzen(_z112(21, 10), 0, {"team": 0}, name="KAMERAD")
 _fern112 = _tm112.puppe_setzen(_z112(40, 20), 0, {"team": 1, "leben": 5.0}, name="UNGESEHEN")
+# Seit 0.34.135 darf er in die ganze Sicht des Teams und etwas darueber hinaus
+# (K.WERFER zonen) - der Ungesehene steht darum weit hinter dem Kameraden.
+_fern112.pos.update(_kam112.pos + pygame.Vector2(K.SCHLACHT["karte_sicht"] + K.WERFER["zonen"]["sicht_rand"] + 200, 0))
+_fern112.vorher.update(_fern112.pos)
 _ziel112 = [_feind112.pos.x, _feind112.pos.y]
 for _ in range(int(0.6 / K.FIXED_DT)):
     _wf_ein112()
@@ -17991,7 +17995,7 @@ pruef("Werfer: ein Ziel, das ein Kamerad sieht, gilt (ziel_grund 0), die Salve i
 _ziel112 = [_fern112.pos.x, _fern112.pos.y]
 for _ in range(int(0.6 / K.FIXED_DT)):
     _wf_ein112(feuert_=True)
-pruef("... ein Gegner, den niemand sieht, nicht - die Salve geht nicht raus",
+pruef("... ein Gegner ausserhalb aller Zielzonen (niemand sieht ihn, auch nicht der Rand) nicht - die Salve geht nicht raus",
       _wf112.ziel_grund == 3 and not _wf112.einschlaege and _wf112.bereit, str(_wf112.ziel_grund))
 _ziel112 = [_wf112.pos.x + 200, _wf112.pos.y]
 for _ in range(int(0.6 / K.FIXED_DT)):
@@ -18134,10 +18138,14 @@ pruef("Tragschrauber: ein Gegner im Kreis unter ihm ist fuer seine Seite markier
 _bomben113 = _ts113.bomben
 # Seit 0.34.119 faellt die Bombe senkrecht unter ihm (ohne sein Tempo) - seit 0.34.123 dort, wo
 # der Fahrer sie neben der Kanzel fallen laesst (K.TRAGSCHRAUBER["bombe"]["abwurf"]).
-_opfer113 = _tm113.puppe_setzen(_ts113.pos + pygame.Vector2(K.TRAGSCHRAUBER["bombe"]["abwurf"]).rotate(_ts113.winkel), 0,
+# Seit 0.34.135 mit einem Teil seines Schwungs (gewuenscht): sie schlaegt vor
+# dem Abwurfort auf. Wer senkrecht unter dem Abwurf steht, bleibt heil.
+_bo113 = K.TRAGSCHRAUBER["bombe"]
+_los113 = _ts113.pos + pygame.Vector2(_bo113["abwurf"]).rotate(_ts113.winkel)
+_weg113 = _ts113.flug_v * _bo113["fall"] * _bo113["schwung"]
+_opfer113 = _tm113.puppe_setzen(_los113 + _ts113.vorn * _weg113, 0,
                                 {"team": 1, "leben": 5.0}, name="OPFER")
-_vorn113 = _tm113.puppe_setzen(_ts113.pos + _ts113.vorn * _ts113.flug_v * K.TRAGSCHRAUBER["bombe"]["fall"], 0,
-                               {"team": 1, "leben": 5.0}, name="VORNE")
+_vorn113 = _tm113.puppe_setzen(_los113, 0, {"team": 1, "leben": 5.0}, name="SENKRECHT")
 _vorn113.unverwundbar = 0.0
 _vl113 = _vorn113.leben
 _opfer113.unverwundbar = 0.0
@@ -18150,8 +18158,9 @@ pruef("Tragschrauber: die linke Maustaste wirft eine Bombe (eine weniger), sie f
       "%d / %d" % (_ts113.bomben, len(_ts113.bomben_fall)))
 for _ in range(int(1.2 / K.FIXED_DT)):
     _ts_ein113()
-pruef("... und schlaegt dort ein, wo er sie abgeworfen hat (senkrecht, ohne sein Tempo): der Gegner darunter ist getroffen, einer weiter vorn nicht",
-      not _ts113.bomben_fall and (_opfer113.leben < _ol113 or not _opfer113.lebt) and _vorn113.leben == _vl113,
+pruef("... und schlaegt mit seinem Schwung vor dem Abwurfort ein: der Gegner dort ist getroffen, einer senkrecht unter dem Abwurf nicht",
+      _weg113 > _bo113["radius"] + 12 and not _ts113.bomben_fall
+      and (_opfer113.leben < _ol113 or not _opfer113.lebt) and _vorn113.leben == _vl113,
       "%.0f -> %.0f, vorn %.0f -> %.0f" % (_ol113, _opfer113.leben, _vl113, _vorn113.leben))
 _n113 = _ts113.netz_extra()
 _g113 = _FZ59.Tragschrauber((0, 0), 0, 0.0, nur_bild=True)

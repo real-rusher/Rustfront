@@ -205,6 +205,23 @@ class Wegenetz:
             naechste += 1
         return nummer
 
+    def gebiet_groesse(self, ebene: int, nr: int) -> int:
+        """Wie viele Kacheln das Gebiet `nr` hat (seit 0.34.135, gezaehlt
+        beim ersten Fragen)."""
+        zahl = self.__dict__.setdefault("_gebiet_zahl", {})
+        if ebene not in zahl:
+            z = {}
+            for g in self.gebiet[ebene]:
+                if g >= 0:
+                    z[g] = z.get(g, 0) + 1
+            zahl[ebene] = z
+        return zahl[ebene].get(nr, 0)
+
+    def groesstes_gebiet(self, ebene: int) -> int:
+        self.gebiet_groesse(ebene, -1)
+        z = self._gebiet_zahl[ebene]
+        return max(z, key=z.get) if z else -1
+
     def gebiet_bei(self, ebene: int, pos) -> int:
         tx, ty = self.kachel(pos)
         if not (0 <= tx < self.breite[ebene] and 0 <= ty < self.hoehe[ebene]):
