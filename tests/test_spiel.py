@@ -17948,8 +17948,9 @@ pruef("... ein Gegner, den niemand sieht, nicht - die Salve geht nicht raus",
 _ziel112 = [_wf112.pos.x + 200, _wf112.pos.y]
 for _ in range(int(0.6 / K.FIXED_DT)):
     _wf_ein112()
-pruef("... zu nah (unter 400 Pixeln) und zu weit (ueber 3 200) auch nicht",
-      _wf112.ziel_grund == 1 and (_ziel112.__setitem__(0, _wf112.pos.x + 4000) or True)
+# Seit 0.34.134 reicht er ueber die halbe Kartenbreite (werfer_weite).
+pruef("... zu nah (unter 400 Pixeln) und zu weit (ueber werfer_weite) auch nicht",
+      _wf112.ziel_grund == 1 and (_ziel112.__setitem__(0, _wf112.pos.x + _tm112.werfer_weite() + 400) or True)
       and (_wf_ein112() or True) and _wf112.ziel_grund == 2, str(_wf112.ziel_grund))
 # Markiert gilt auch ohne Sicht.
 _fern112.markiert_rest = 5.0; _fern112.markiert_fuer = _wp112.fraktion

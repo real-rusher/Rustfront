@@ -3309,6 +3309,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         Bot ist von seiner Seite, nicht beim Flakwagen (nur Bots, seit
         0.34.114) - seit 0.34.134."""
         f = b.fahrer
+        if "plaetze" in b.werte and (k.pos - b.pos).dot(b.vorn) < b.werte.get("vorn", 40.0) * 0.25:
+            # Ein Panzerwagen nimmt Leute mit: an der Mitte und hinten sitzt
+            # man auf wie bisher - das Steuer uebernimmt, wer vorn an der
+            # Seite steht (an der Fahrertuer).
+            return False
         return (not k.ist_bot and getattr(f, "ist_bot", False) and 0 <= k.team == f.team
                 and not b.werte.get("nur_bot") and not getattr(b, "luft", False))
 
