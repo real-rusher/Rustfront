@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.34.135"
+VERSION = "0.34.136"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -427,6 +427,9 @@ class Settings:
 # --------------------------------------------------------------------------
 
 MIX_RATE = 44100
+# Wie dustfront.config AUDIO puffer (seit 0.34.136): wer zuerst den Mischer
+# oeffnet, legt den Puffer fest - Menue und Spiel muessen gleich sein.
+MIX_PUFFER = 1024
 
 
 class Audio:
@@ -434,9 +437,8 @@ class Audio:
         self.settings = settings
         self.ok = False
         self.sounds: dict[str, pygame.mixer.Sound] = {}
-        self.drone_channel = None
         try:
-            pygame.mixer.init(frequency=MIX_RATE, size=-16, channels=2, buffer=512)
+            pygame.mixer.init(frequency=MIX_RATE, size=-16, channels=2, buffer=MIX_PUFFER)
             self.ok = pygame.mixer.get_init() is not None
         except pygame.error:
             self.ok = False
@@ -449,12 +451,12 @@ class Audio:
             self.sounds["deny"] = self._tone(110, 130, 0.26, "saw", sweep=-0.15)
             self.sounds["tick"] = self._tone(880, 25, 0.14, "square")
             self.sounds["boot"] = self._tone(140, 220, 0.20, "saw", sweep=1.6)
-            self.drone = self._drone(4.0)
         except Exception:
             self.ok = False
             return
+        # Kein Dauerbrummen mehr (seit 0.34.136, gewuenscht: "mach diesen Sound
+        # komplett raus") - es lag als lauter, pulsierender Ton ueber allem.
         self.apply_volumes()
-        self.start_drone()
 
     # -- Synthese ---------------------------------------------------------
     @staticmethod
@@ -498,23 +500,6 @@ class Audio:
             buf.append(s)
         return pygame.mixer.Sound(buffer=buf.tobytes())
 
-    def _drone(self, seconds):
-        """Nahtlos schleifbarer Reaktorbrumm (nur ganzzahlige Perioden)."""
-        n = int(MIX_RATE * seconds)
-        buf = array.array("h")
-        f1, f2, f3 = 55.0, 55.25, 82.5
-        tp = 2.0 * math.pi
-        for i in range(n):
-            t = i / MIX_RATE
-            swell = 0.62 + 0.38 * math.sin(tp * (0.25 * t))
-            s = (math.sin(tp * f1 * t) * 0.55
-                 + math.sin(tp * f2 * t) * 0.35
-                 + math.sin(tp * f3 * t) * 0.18 * swell)
-            v = int(max(-1.0, min(1.0, s * 0.30 * swell)) * 32000)
-            buf.append(v)
-            buf.append(v)
-        return pygame.mixer.Sound(buffer=buf.tobytes())
-
     # -- Steuerung --------------------------------------------------------
     def apply_volumes(self):
         if not self.ok:
@@ -522,17 +507,6 @@ class Audio:
         m = self.settings.vol_master / 100.0
         for s in self.sounds.values():
             s.set_volume(m * self.settings.vol_sfx / 100.0 * 0.9)
-        if self.drone_channel is not None:
-            self.drone_channel.set_volume(m * self.settings.vol_ambient / 100.0 * 0.8)
-
-    def start_drone(self):
-        if not self.ok:
-            return
-        try:
-            self.drone_channel = self.drone.play(loops=-1, fade_ms=1200)
-            self.apply_volumes()
-        except pygame.error:
-            self.drone_channel = None
 
     def play(self, name):
         if not self.ok:

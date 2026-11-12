@@ -15026,11 +15026,20 @@ if _kl114.ok:
 
     _kw114._bauen = _zaehlt114
     _namen114 = ["schuss_sturm", "tod", "menue"]
+    # Seit 0.34.136: solange die Werkstatt baut, gibt sie die GIL oefter ab
+    # (gemeldet: beim ersten Start nur ein lauter Pulston, keine Klaenge).
+    _wechsel_vor114 = sys.getswitchinterval()
+    _wechsel_beim114 = []
+    _alle_alt114 = _kw114._alle_bauen
+    _kw114._alle_bauen = lambda n_: (_wechsel_beim114.append(sys.getswitchinterval()), _alle_alt114(n_))
     _kw114.vorbauen(_namen114)
     _zugleich114 = [len(_kw114.klang(n_)) for n_ in _namen114]     # das Spiel fragt mitten hinein
     _fertig114 = _kw114.werkstatt_warten(120)
     pruef("Die Werkstatt baut im Hintergrund jeden Klang genau einmal - auch wenn das Spiel ihn zugleich braucht",
           _fertig114 and sorted(_gebaut114) == sorted(_namen114) and all(_zugleich114), str(_gebaut114))
+    pruef("Die Werkstatt gibt beim Bauen die GIL oft ab (der Ton haengt nicht) und stellt es danach zurueck",
+          _wechsel_beim114 and _wechsel_beim114[0] <= K.AUDIO["werkstatt_wechsel"] + 1e-12
+          and sys.getswitchinterval() == _wechsel_vor114, str(_wechsel_beim114))
     pruef("... danach die dumpfen Fassungen, nur nicht fuer das Menue",
           set(_kw114._dumpf_cache) == {"schuss_sturm", "tod"}, str(sorted(_kw114._dumpf_cache)))
     _g1_114 = _AU114.Klaenge.geteilt(None)

@@ -866,6 +866,14 @@ NIE_DUMPF = ("herzschlag", "menue", "menue_ok")
 
 AUDIO = dict(
     gesamt=0.75,              # Gesamtlautstaerke
+    # Mischerpuffer in Proben (seit 0.34.136, vorher 512 = 12 ms): mit 1024
+    # (23 ms) laeuft er nicht leer, wenn der Klangfaden kurz die GIL haelt -
+    # sonst wiederholte die Karte den letzten Puffer, ein lauter Pulston.
+    # Gleich in rustfront_menu.MIX_PUFFER (wer zuerst oeffnet, gilt).
+    puffer=1024,
+    # So oft gibt der Klangfaden die GIL ab, solange er baut (s; Python
+    # sonst 0.005). pygame braucht sie im Tonfaden, wenn ein Klang endet.
+    werkstatt_wechsel=0.0005,
     schuss=0.85,              # Lautstaerke der Schuesse
     # Wie ein Ton mit der Entfernung leiser wird. Bis `nah` ist er voll
     # zu hoeren, ab `weit` nicht mehr; dazwischen faellt er gleichmaessig

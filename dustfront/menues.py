@@ -515,10 +515,6 @@ HILFE = {
         "DIE KURZE STARTSEQUENZ VOR DEM HAUPTMENÜ.",
         "ESC ÜBERSPRINGT SIE IMMER, AUCH WENN SIE AN IST.",
     ],
-    "ton_menue": [
-        "DAS LEISE BRUMMEN DES REAKTORS IM HAUPTMENÜ.",
-        "IM SPIEL SELBST GIBT ES ES NICHT.",
-    ],
     "reset": ["SETZT ALLE WERTE DIESER SEITEN AUF DIE VORGABE ZURÜCK."],
     "zurueck": ["ZURÜCK. GESPEICHERT IST SCHON ALLES."],
     "reiter_video": ["FENSTER, AUFLÖSUNG, BILDRATE, PIXELRASTER."],
@@ -646,10 +642,8 @@ class Einstellungen(Menue):
         # Musik gibt es noch nicht. Der Regler stand frueher trotzdem da
         # und liess sich ziehen - ohne jede Wirkung. Seit 0.34.79 steht
         # auch kein grauer Platzhalter mehr da: er sagte Neuen nur, was
-        # fehlt. Dafuer das Brummen im Hauptmenue, das vorher dort eine
-        # eigene Seite brauchte.
-        self.elemente.append(ui.Regler(self._reihe(zx, zy, zw, 2), "MENÜ: BRUMMEN",
-                                       "ton_menue", o["ton_menue"]))
+        # fehlt. Das Brummen im Hauptmenue und sein Regler sind seit
+        # 0.34.136 weg (gewuenscht); der Wert ton_menue bleibt in der Datei.
         self.elemente.append(ui.Knopf(self._reihe(zx, zy, 128, 4), "PROBE HÖREN",
                                       "probe"))
 

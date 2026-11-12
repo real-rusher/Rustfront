@@ -134,8 +134,8 @@ opt.seite_wechseln(1)
 regler = [el for el in opt.elemente if isinstance(el, ui.Regler)]
 # Seit 0.34.79 steht hier auch das Brummen des Hauptmenues (das keine
 # eigene Einstellungsseite mehr hat). Musik gibt es weiter nicht.
-pruef("Tonseite: Gesamt, Effekte, Brummen im Hauptmenue - keine Musik",
-      [el.name for el in regler] == ["ton_gesamt", "ton_effekte", "ton_menue"],
+pruef("Tonseite: Gesamt und Effekte - kein Brummen (seit 0.34.136), keine Musik",
+      [el.name for el in regler] == ["ton_gesamt", "ton_effekte"],   # seit 0.34.136 kein Brummen mehr
       str([el.name for el in regler]))
 opt.wahl = opt.elemente.index(regler[0])
 vorher = app.opt["ton_gesamt"]
@@ -423,6 +423,12 @@ import importlib
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 RM = importlib.import_module("rustfront_menu")
 RM.SETTINGS_PATH = Path(_WEG) / "rustfront_settings.json"
+_au = RM.Audio(RM.Settings())
+pruef("Das Hauptmenue spielt keinen Dauerton mehr (seit 0.34.136: das Brummen ist weg)",
+      not hasattr(_au, "drone") and not hasattr(RM.Audio, "start_drone")
+      and all(k_.get_length() < 0.5 for k_ in _au.sounds.values()),
+      str({n_: round(k_.get_length(), 2) for n_, k_ in _au.sounds.items()}))
+pruef("... und oeffnet den Mischer mit demselben Puffer wie das Spiel", RM.MIX_PUFFER == K.AUDIO["puffer"])
 app.opt["bildrate"] = 144
 app.opt["ton_gesamt"] = 40
 app.opt["fenstermodus"] = "randlos"

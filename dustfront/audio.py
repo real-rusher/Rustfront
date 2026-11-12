@@ -19,6 +19,7 @@ from __future__ import annotations
 import array
 import math
 import random
+import sys
 import threading
 import time
 from pathlib import Path
@@ -1312,7 +1313,7 @@ class Klaenge:
         self._faden: threading.Thread | None = None
         self._halt = False
         try:
-            pygame.mixer.init(frequency=RATE, size=-16, channels=2, buffer=512)
+            pygame.mixer.init(frequency=RATE, size=-16, channels=2, buffer=K.AUDIO["puffer"])
             self.ok = pygame.mixer.get_init() is not None
         except pygame.error:
             self.ok = False
@@ -1472,30 +1473,45 @@ class Klaenge:
         namen = list(namen)
 
         def arbeiten() -> None:
+            # Die Klaenge werden Probe fuer Probe in Python gerechnet und
+            # halten dabei die GIL. pygame braucht sie im Tonfaden, sobald ein
+            # Klang zu Ende ist; wartete der zu lange, lief der Puffer leer und
+            # beim ersten Start klang alles wie ein lauter Pulston, bis die
+            # Werkstatt fertig war (gemeldet 0.34.135). Darum, solange sie baut,
+            # oefter abgeben.
+            alt = sys.getswitchinterval()
+            sys.setswitchinterval(min(alt, K.AUDIO["werkstatt_wechsel"]))
             try:
-                for name in namen:
-                    if self._halt:
-                        return
-                    self.klang(name)
-                    time.sleep(0.001)        # dem Spiel Luft lassen
-                for name in namen:
-                    if self._halt:
-                        return
-                    if name in K.NIE_DUMPF or name in self._dumpf_cache:
-                        continue
-                    fassungen = self.klang(name)
-                    self._dumpf_cache[name] = ([dumpf_machen(fassungen[0])]
-                                               if fassungen else [])
-                    time.sleep(0.001)
-            except Exception:                 # noqa: BLE001
-                # Der Mischer ist schon zu, oder eine Datei ist kaputt: dann
-                # hoert die Werkstatt auf, und das Spiel baut selbst, wenn es
-                # den Klang braucht - mit demselben Fehler wie bisher.
-                return
+                self._alle_bauen(namen)
+            finally:
+                sys.setswitchinterval(alt)
 
         self._faden = threading.Thread(target=arbeiten, name="klangwerkstatt",
                                        daemon=True)
         self._faden.start()
+
+    def _alle_bauen(self, namen) -> None:
+        """Der Lauf der Werkstatt: erst alle Klaenge, dann die dumpfen."""
+        try:
+            for name in namen:
+                if self._halt:
+                    return
+                self.klang(name)
+                time.sleep(0.001)        # dem Spiel Luft lassen
+            for name in namen:
+                if self._halt:
+                    return
+                if name in K.NIE_DUMPF or name in self._dumpf_cache:
+                    continue
+                fassungen = self.klang(name)
+                self._dumpf_cache[name] = ([dumpf_machen(fassungen[0])]
+                                           if fassungen else [])
+                time.sleep(0.001)
+        except Exception:                 # noqa: BLE001
+            # Der Mischer ist schon zu, oder eine Datei ist kaputt: dann
+            # hoert die Werkstatt auf, und das Spiel baut selbst, wenn es
+            # den Klang braucht - mit demselben Fehler wie bisher.
+            return
 
     def werkstatt_warten(self, hoechstens: float | None = None) -> bool:
         """Bis die Werkstatt fertig ist (Tests). True, wenn sie fertig ist."""
