@@ -1345,10 +1345,59 @@ def front():
           all(0.0 < f_ < 220.0 for f_ in formation), str([round(f_) for f_ in formation]))
 
 
+def verteilung():
+    """Gewuenscht (0.34.133): in SCHLACHT rennen nicht alle Bots zum selben
+    Kampf, sondern haben eigene Ziele und stossen an verschiedenen Stellen
+    vor. STAUBTAL - OFFEN ohne Front, 14 je Seite, 2 Minuten: wie viele einer
+    Seite (ausser an der Basis) stehen im groessten Knaeuel (500 px)? Vor
+    0.34.133 gemessen im Mittel 0,68-0,75, in der Spitze 0,95."""
+    print("\n-- SCHLACHT ohne Front: kein grosses Knaeuel, Kaempfe an mehreren Stellen")
+    from dustfront.mehrspieler import Gefecht
+    from dustfront import netz, regeln
+    mittel, orte = [], []
+    for seed in (1, 2):
+        random.seed(seed)
+        ENT.RND.seed(seed)
+        w = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(47450 + seed), modus="schlacht", seed=seed,
+                    karte="staubtal_offen")
+        w._regeln_setzen(dict(regeln.vorgabe(), modus="schlacht", karte="staubtal_offen", schlacht_seite=14))
+        w._einstiegszonen_waehlen()
+        w._fahrzeuge_neu_aufstellen()
+        w._bots_fuehren(0.0, sofort=True)
+        w.ich.lebt = False
+        w.ich.wieder_in = 1e9
+        anteile, n_orte = [], []
+
+        def messen(w=w, anteile=anteile, n_orte=n_orte):
+            if w.welt.zeit < 50.0 or int(w.welt.zeit / DT) % int(5.0 / DT):
+                return
+            for team in (0, 1):
+                basis = w.schlacht_basis(team)
+                leute = [k.pos for k in w.kaempfer.values() if k.team == team and k.lebt and k.ist_bot
+                         and k.pos.distance_to(basis) > 1000]
+                if len(leute) < 4:
+                    continue
+                anteile.append(max(sum(1 for q in leute if q.distance_to(p) < 500) for p in leute) / len(leute))
+                rest, n = list(leute), 0
+                while rest:
+                    p = rest[0]
+                    rest = [q for q in rest if q.distance_to(p) >= 500]
+                    n += 1
+                n_orte.append(n)
+        laufen(w, 120.0, messen)
+        mittel.append(sum(anteile) / max(1, len(anteile)))
+        orte.append(sum(n_orte) / max(1, len(n_orte)))
+        w.verlassen()
+    pruef("Im groessten Knaeuel steht im Mittel hoechstens gut die Haelfte einer Seite (2 Seeds)",
+          all(m_ <= 0.58 for m_ in mittel), str([round(m_, 2) for m_ in mittel]))
+    pruef("... und gekaempft wird an mehreren Stellen (im Mittel wenigstens 4 Orte)",
+          all(o_ >= 4.0 for o_ in orte), str([round(o_, 1) for o_ in orte]))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
          planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
-         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger, napalm, front]
+         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger, napalm, front, verteilung]
 #
 # Ohne Angabe laufen die Szenen seit 0.34.94 gleichzeitig, je eine in einem
 # eigenen Prozess, so viele wie Kerne da sind (hoechstens TEILE). Jede

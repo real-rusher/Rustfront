@@ -1161,10 +1161,14 @@ SCHLACHT = dict(
     melde_takt=1.0,
     lage_raster=256.0,         # Meldungen auf dieses Raster (Wegfelder teilen)
     lage_alt=10.0,
-    lage_weite=1600.0,
+    lage_weite=1100.0,         # seit 0.34.133 kleiner (vorher 1600: fast jeder kam zu jedem Kampf)
+    kampf_zulauf=3,            # so viele Bots gehen hoechstens zugleich zu einem gemeldeten Kampf
+    zulauf_halten=25.0,        # so lange gilt die Zusage eines Bots fuer einen Kampf (s)
+    stosstrupp=0.25,           # dieser Anteil zieht ohne Umweg ueber die Mitte zur Basis der anderen
     # Front: mehr als `front_ab` Bots einer Seite teilen sich auf `spuren`
     # Abschnitte quer zur Karte, `spur_abstand` px auseinander.
-    front_ab=20,
+    front_ab=4,                # seit 0.34.133 immer in Abschnitten (vorher erst ab 20)
+    spur_tiefe=520.0,          # so weit liegt die Mitte eines Abschnitts vor oder hinter der Kartenmitte
     spuren=5,
     spur_abstand=620.0,
     # Aufsitzen: Bots gehen zu einem Panzerwagen in dieser Weite, der
@@ -1328,6 +1332,14 @@ FRONT = dict(
     einstieg_weit=2.6,         # weiter als so viel mal der naechste: dorthin kein Bot
     anflug=(70.0, 150.0),      # der letzte Wegpunkt liegt so weit vor dem Punkt (px)
     fahrer=4,                  # so viele Bots je Seite fahren, wenn die Karte nichts sagt
+    # Seit 0.34.133 (gewuenscht: "nicht alle Bots zum selben Fight, sondern
+    # unabhaengige Ziele und Vorstoesse an verschiedenen Stellen"):
+    kampf_gruppen=1,           # so viele Gruppen biegen hoechstens zugleich zu einem gemeldeten Kampf ab
+    kampf_weg=520.0,           # ... und nur, wenn er so nah an ihrem eigenen Weg liegt (px)
+    verdacht_weite=330.0,      # weiter weg gehoerte Schuesse lassen eine Gruppe nur hinschauen, nicht hingehen
+    ziel_anteil=0.36,          # mehr als dieser Anteil der Bots einer Seite geht nie zum selben Ziel
+    gewicht_vorstoss=0.32,     # Punkte hinter der Front: kleine Stosstrupps (1-2) gehen dorthin
+    vorstoss_ab=8,             # ... wenn die Seite wenigstens so viele Bots hat
 )
 
 

@@ -1924,6 +1924,29 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                     beste, abstand = p, d
         return beste
 
+    def kampf_zuteilen(self, team: int, wer, pos, weite: float, hoechstens: int):
+        """Ein gemeldeter Kampf fuer `wer` (Bot oder Gruppe): der naechste in
+        `weite`, zu dem noch nicht `hoechstens` andere unterwegs sind - oder
+        None (seit 0.34.133, gewuenscht: "nicht alle Bots zum selben Fight").
+        Eine Zusage gilt `zulauf_halten` Sekunden; wer dort kaempft, fragt
+        nicht mehr, und dann darf der Naechste nachruecken."""
+        s = K.SCHLACHT
+        jetzt = self.welt.zeit
+        zulauf = self.__dict__.setdefault("_zulauf", {}).setdefault(team, {})
+        for schl in list(zulauf):
+            zulauf[schl] = {w: t for w, t in zulauf[schl].items() if jetzt - t < s["zulauf_halten"]}
+            if not zulauf[schl]:
+                del zulauf[schl]
+        kandidaten = sorted((p.distance_to(pos), (int(p.x), int(p.y)), p)
+                            for p, t in self.__dict__.get("_lage", {}).get(team, ())
+                            if jetzt - t < s["lage_alt"] and p.distance_to(pos) <= weite)
+        for _d, schl, p in kandidaten:
+            dort = zulauf.get(schl, {})
+            if wer in dort or len(dort) < hoechstens:
+                zulauf.setdefault(schl, {})[wer] = jetzt
+                return pygame.Vector2(p)
+        return None
+
     def vorstoss_ziel(self, k, rnd):
         """Wohin ein Bot in SCHLACHT zieht, wenn er niemanden sieht: erst zur
         Mitte, von dort - oder wenn er schon weiter ist - zur Basis der
@@ -1954,13 +1977,19 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if (k.ebene == 0 and k.pos.distance_to(mitte) < s["mitte_nah"]) \
                 or k.pos.distance_to(feind_ort) < mitte.distance_to(feind_ort):
             wahl = feind
+        # Stosstrupps (seit 0.34.133): ein Teil zieht in seinem Abschnitt
+        # gleich zur Basis der anderen, statt erst zur Mitte - so wird an
+        # verschiedenen Stellen und in verschiedener Tiefe gekaempft.
+        if ((k.nummer * 2654435761) % 1000) / 1000.0 < s["stosstrupp"]:
+            wahl = feind
         # Aus wenigen festen Punkten je Ziel: jedes neue Ziel kostet ein
         # eigenes Wegfeld (wege.feld_zu), und auf STAUBTAL ist eines teuer -
         # mit einem eigenen Punkt je Bot ging gemessen die Haelfte der Zeit
         # eines Schritts in die Wegsuche.
         # Ein gemeldeter Kampf in der Naehe geht vor (seit 0.34.96, ohne Funk).
         if self.schlacht:
-            kampf = self.lage_nahe(k.team, k.pos, s["lage_weite"])
+            # Nur, solange noch nicht genug dorthin unterwegs sind (seit 0.34.133).
+            kampf = self.kampf_zuteilen(k.team, k.nummer, k.pos, s["lage_weite"], s["kampf_zulauf"])
             if kampf is not None:
                 return pygame.Vector2(kampf), 0
         # Viele Bots: jeder in seinem Abschnitt der Front (seit 0.34.96).
@@ -1983,10 +2012,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         zufall = random.Random(9501 + (0 if spur is None else spur + 1))
         hoehe = w.ebene(0).pixel_hoehe
         raus = []
-        for anker in self._schlacht_punkte():
+        # Seit 0.34.133 ueber drei Viertel der Kartenhoehe verteilt (vorher
+        # fest 620 px je Abschnitt: auf STAUBTAL - OFFEN lagen alle Abschnitte
+        # in gut einem Drittel der Hoehe, und gemessen standen drei Viertel
+        # einer Seite in einem Knaeuel) - und die Mitte jedes Abschnitts in
+        # anderer Tiefe: man trifft sich nicht auf einer Linie.
+        abstand = max(s["spur_abstand"], hoehe * 0.75 / max(1, s["spuren"] - 1))
+        for nr, anker in enumerate(self._schlacht_punkte()):
             if spur is not None:
-                quer = (spur - (s["spuren"] - 1) / 2.0) * s["spur_abstand"]
-                anker = pygame.Vector2(anker.x, max(200.0, min(hoehe - 200.0, anker.y + quer)))
+                quer = (spur - (s["spuren"] - 1) / 2.0) * abstand
+                tiefe = (((spur * 7) % 3) - 1) * s["spur_tiefe"] if nr == 2 else 0.0
+                anker = pygame.Vector2(anker.x + tiefe, max(200.0, min(hoehe - 200.0, anker.y + quer)))
             punkte = []
             for _ in range(200):
                 if len(punkte) >= s["ziele_je"]:

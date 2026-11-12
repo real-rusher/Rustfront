@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.133 | Keine neuen Spawner-Eintraege. Ausprobieren: FLUSSTAL laden, FRONT an, je Seite zehn Bots setzen, INFO (8): wenige Gruppen biegen zu einem Kampf ab, die anderen gehen weiter ihr Ziel; Stosstrupps (1-2) gehen hinter die Front. |
 | 0.34.132 | Keine neuen Spawner-Eintraege (JE SEITE gilt nur in SCHLACHT-Runden). |
 | 0.34.131 | Spawner OBJEKTE: EROBERUNGSPUNKT (TEAM = Besitzer), STARTBASIS (TEAM), WASSER: SEICHT und WASSER: TIEF (RADIUS; LEEREN nimmt es wieder weg) - ein Punkt oder eine Basis schaltet die Front ein. Testmenue FRONT: PUNKTE, GRUPPEN, FORMATIONEN (auf FLUSSTAL und KANALSTADT gleich mit den Punkten der Karte) und FRONT: PUNKTE VERTEILEN (ENTER: alle ROT, alle BLAU, frei, geteilt). INFO (8) zeigt je Gruppe den Weg, Linien zu den Formationsplaetzen und ueber dem Anfuehrer `G3 KEIL GEHT > B NORDBRÜCKE`. Bots fahren jetzt jedes Fahrzeug: FIGUREN, FAHRER MIT FAHRZEUG, FAHRZEUG WERFER/TRAGSCHRAUBER/... |
 | 0.34.130 | Keine neuen Spawner-Eintraege. Ausprobieren: eine Figur mit SPIEGELLASER (oder einer anderen Chor-Waffe) steuern und durchfeuern - sie ueberhitzt, Kuehlton, KÜHLT am Zeiger; wegstecken und weiterschiessen. NACHSCHUB: NAPALM - dem Bomber nachhoeren, die Bomben fallen sehen, das neue Feuer. KUGELBLITZ: kleinere Blitze. |

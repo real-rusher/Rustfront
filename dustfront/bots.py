@@ -1319,7 +1319,11 @@ class BotHirn(Taktik):
                 ziel = self.streifzug
         # Der Verdacht ist die frische Verfolgung - im normalen Tempo. Erst
         # was danach als Spur bleibt, prueft er vorsichtig (unten).
-        if ziel is None and self.verdacht is not None and self.verdacht[2] >= jetzt:
+        gruppe = getattr(g, "front_an", False) and g.front_gruppe(k) is not None
+        if ziel is None and self.verdacht is not None and self.verdacht[2] >= jetzt \
+                and not (gruppe and k.pos.distance_to(self.verdacht[0]) > K.FRONT["verdacht_weite"]):
+            # In einer Gruppe der Front (seit 0.34.133) geht er nur nahen
+            # Geraeuschen nach - fernen Schuessen schaut er nur entgegen.
             ort, ebene, _bis = self.verdacht
             if k.ebene == ebene and k.pos.distance_to(ort) < 30:
                 self.verdacht = None
@@ -1330,8 +1334,7 @@ class BotHirn(Taktik):
             spur = self.spur_offen()
             # In einer Gruppe der Front (seit 0.34.131) prueft er nur Spuren
             # in der Naehe - sonst zoege jede Spur einen aus der Formation.
-            if spur is not None and getattr(g, "front_an", False) and g.front_gruppe(k) is not None \
-                    and k.pos.distance_to(spur[0]) > K.FRONT["kampf_weite"] * 0.6:
+            if spur is not None and gruppe and k.pos.distance_to(spur[0]) > K.FRONT["kampf_weite"] * 0.6:
                 spur = None
             if spur is not None:
                 if self._spur_gesehen(spur):
@@ -1345,6 +1348,8 @@ class BotHirn(Taktik):
             auftrag = g.front_auftrag(k)
             if auftrag is not None:
                 ort, tempo, blick = auftrag
+                if self.verdacht is not None and self.verdacht[2] >= jetzt:
+                    blick = pygame.Vector2(self.verdacht[0])     # dorthin schauen, nicht gehen
                 if tempo <= 0.0 or k.pos.distance_to(ort) < 8.0:
                     return pygame.Vector2(0, 0), blick
                 return self._weg_richtung(ort, 0, ein) * tempo, blick

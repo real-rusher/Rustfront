@@ -1545,3 +1545,9 @@ sobald er einen Gegner sieht, entscheidet weiter sein eigenes Hirn
 (klassisch oder GOAP); die Front sagt ihm nur, wohin er ohne Gegner geht
 (`FrontTeil.front_auftrag`, gefragt in `BotHirn._unterwegs`). Darum stehen
 dafuer keine Ziele in `wesen/bots.txt`: es ist ein Auftrag, kein Wunsch.
+
+Seit 0.34.133 zieht ein gemeldeter Kampf nicht mehr jeden an: wer hin will,
+holt sich beim Gefecht eine Zusage (`kampf_zuteilen`); pro Kampf gibt es nur
+wenige (3 Bots ohne Front, 1 Gruppe mit Front). Die Front verteilt ihre Bots
+zudem so, dass kein Ziel mehr als gut ein Drittel bekommt, und schickt
+kleine Stosstrupps hinter die Front.

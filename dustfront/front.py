@@ -550,16 +550,24 @@ class FrontTeil:
                     nah[i] = d
         ziele = []
         offen = [p for p in punkte if p.besitzer != team]
+        vorstoss = set()
         if offen:
             naechster = min(nah.get(p.knoten, 1e9) for p in offen)
+            bots = sum(1 for k in self.kaempfer.values() if k.team == team and getattr(k, "ist_bot", False))
             for p in offen:
                 d = nah.get(p.knoten, 1e9)
                 if d <= naechster * F["front_faktor"] + 300.0:
                     w = F["gewicht_angriff"] * (1.25 if p.besitzer < 0 else 1.0)
                     ziele.append((("punkt", p.nr), w))
+                elif bots >= F["vorstoss_ab"]:
+                    # Hinter der Front: ein Vorstoss fuer einen kleinen Trupp
+                    # (seit 0.34.133) - Unruhe im Ruecken des Gegners.
+                    ziele.append((("punkt", p.nr), F["gewicht_vorstoss"]))
+                    vorstoss.add(("punkt", p.nr))
         else:
             for b in self.front_basen(1 - team):
                 ziele.append((("basis", b.nr), F["gewicht_basis"]))
+        self.__dict__.setdefault("_vorstoss_ziele", {})[team] = vorstoss
         bedroht2 = F["bedroht"] ** 2
         feinde = [k.pos for k in self.kaempfer.values()
                   if k.lebt and 0 <= k.team < 2 and k.team != team and int(k.ebene) == 0]
@@ -654,10 +662,13 @@ class FrontTeil:
                    if k.team == team and getattr(k, "ist_bot", False))
         summe = sum(w for _z, w in ziele) or 1.0
         bestes, fehlt = None, -1e9
+        # Kein Ziel bekommt mehr als ziel_anteil der Bots (seit 0.34.133),
+        # solange es andere gibt - sonst laufen alle zum wichtigsten.
+        deckel = max(2.0, bots * F["ziel_anteil"]) if len(ziele) >= 3 else bots
         for z, w in ziele:
             if z == ausser and len(ziele) > 1:
                 continue
-            soll = bots * w / summe
+            soll = min(deckel, bots * w / summe)
             f = soll - zahl.get(z, 0) + self._front_rnd.uniform(0.0, 0.6)
             if f > fehlt:
                 bestes, fehlt = z, f
@@ -670,6 +681,8 @@ class FrontTeil:
             ziel = ("basis", feind[0].nr) if feind else ("punkt", 0)
         g = Gruppe(team, ziel, rnd)
         g.soll = self._groesse(rnd)
+        if ziel in self.__dict__.get("_vorstoss_ziele", {}).get(team, ()):
+            g.soll = min(g.soll, 2)               # ein Stosstrupp: einer oder zwei
         g.form = rnd.choice(FORM_WAHL.get(g.soll, ("keil",)))
         g.einstieg = einstieg
         self._weg_planen(g, wo)
@@ -864,10 +877,14 @@ class FrontTeil:
         if jetzt < g.sammeln_bis and len(leute) < g.soll:
             return pygame.Vector2(k.pos), 0.0, k.pos + g.richtung * 120.0
         # Ein gemeldeter Kampf in der Naehe: erst dorthin (ohne Funk, wie bisher).
-        if g.umweg is None and jetzt >= g.kampf_pause:
-            kampf = self.lage_nahe(g.team, k.pos, F["kampf_weite"]) if hasattr(self, "lage_nahe") else None
+        # Seit 0.34.133 nur eine Gruppe je Kampf (kampf_gruppen) und nur, wenn er
+        # an ihrem eigenen Weg liegt - die anderen verfolgen ihr Ziel weiter.
+        if g.umweg is None and jetzt >= g.kampf_pause and hasattr(self, "kampf_zuteilen"):
             ziel = g.weg[-1] if g.weg else None
-            if kampf is not None and (ziel is None or ziel.distance_to(k.pos) > kampf.distance_to(k.pos) + 150.0):
+            kampf = self.kampf_zuteilen(g.team, ("g", g.nr), k.pos, F["kampf_weite"], F["kampf_gruppen"])
+            if kampf is not None and (ziel is None or ziel.distance_to(k.pos) > kampf.distance_to(k.pos) + 150.0) \
+                    and min([q.distance_to(kampf) for q in g.weg[g.schritt:]] + [k.pos.distance_to(kampf)]) \
+                    <= F["kampf_weg"]:
                 g.umweg = pygame.Vector2(kampf)
                 g.kampf_pause = jetzt + F["kampf_pause"]
         if g.umweg is not None:

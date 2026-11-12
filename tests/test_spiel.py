@@ -19682,6 +19682,56 @@ _l132._seit_voll = 0
 pruef("Netz: mit sehr vielen Kaempfern faellt nicht jede zweite Weltmeldung aus (die Stau-Grenze waechst mit)",
       _l132._welt_senden({"t": "welt", "wirkung": []}) is not None)
 
+print("\n-- 0.34.133: nicht alle zum selben Kampf - Zulauf begrenzt, eigene Vorstoesse")
+w133, g133 = _paar59("schlacht", karte="staubtal_offen")
+w133._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="staubtal_offen", schlacht_seite=8))
+_p133 = pygame.Vector2(4800, 3200)
+w133._lage = {0: [(pygame.Vector2(_p133), w133.welt.zeit)]}
+_zu133 = [w133.kampf_zuteilen(0, n_, _p133 + pygame.Vector2(300, 0), 1000.0, K.SCHLACHT["kampf_zulauf"]) for n_ in range(6)]
+pruef("Zu einem gemeldeten Kampf gehen hoechstens kampf_zulauf zugleich, die anderen nicht",
+      sum(1 for z_ in _zu133 if z_ is not None) == K.SCHLACHT["kampf_zulauf"], str(_zu133))
+pruef("... wer schon zugesagt hat, bekommt ihn wieder",
+      w133.kampf_zuteilen(0, 0, _p133, 1000.0, K.SCHLACHT["kampf_zulauf"]) is not None)
+w133.welt.zeit += K.SCHLACHT["zulauf_halten"] + 1.0
+w133._lage = {0: [(pygame.Vector2(_p133), w133.welt.zeit)]}
+pruef("... nach zulauf_halten duerfen andere nachruecken",
+      w133.kampf_zuteilen(0, 99, _p133, 1000.0, K.SCHLACHT["kampf_zulauf"]) is not None)
+_ab133 = {round(p_.y) for p_ in (w133._schlacht_ziele(sp_)[2][0] for sp_ in range(K.SCHLACHT["spuren"]))}
+pruef("Ohne Front: die Abschnitte liegen ueber die Kartenhoehe verteilt (mehr als die Haelfte)",
+      max(_ab133) - min(_ab133) > w133.welt.ebene(0).pixel_hoehe * 0.5, str(sorted(_ab133)))
+_st133 = sum(1 for n_ in range(K.BOTS["nummer_ab"], K.BOTS["nummer_ab"] + 200)
+             if ((n_ * 2654435761) % 1000) / 1000.0 < K.SCHLACHT["stosstrupp"])
+pruef("... und ein Teil zieht als Stosstrupp gleich zur Basis der anderen (etwa ein Viertel)",
+      30 <= _st133 <= 70, str(_st133))
+w133.verlassen(); g133.verlassen()
+w133b, g133b = _paar59("schlacht", karte="flusstal")
+w133b._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="flusstal", schlacht_seite=20))
+w133b._einstiegszonen_waehlen(); w133b._fahrzeuge_neu_aufstellen(); w133b._bots_fuehren(0.0, sofort=True)
+w133b.front_anlegen()
+for p_ in w133b.front_punkte():                     # ROT haelt seine Seite: Punkte im Osten liegen hinter der Front
+    if p_.pos.x < w133b.welt.ebene(0).pixel_breite * 0.4:
+        p_.besitzer, p_.stand = 0, -1.0
+_z133 = dict(w133b._front_ziele(0))
+pruef("Front: Punkte hinter der Front sind Ziele fuer Vorstoesse (klein gewichtet)",
+      any(abs(v_ - K.FRONT["gewicht_vorstoss"]) < 1e-9 for v_ in _z133.values()), str(_z133))
+_gr133 = [w133b._gruppe_bilden(0, [(z_, 1.0)], w133b.hauptbasis(0).pos, random.Random(i_))
+          for i_, z_ in enumerate(list(w133b._vorstoss_ziele[0])[:1] * 6)]
+pruef("... ein Stosstrupp ist einer oder zwei", all(g_.soll <= 2 for g_ in _gr133), str([g_.soll for g_ in _gr133]))
+for g_ in _gr133:
+    w133b._gruppen.remove(g_)
+w133b._gruppen[:] = []
+_n133 = sum(1 for k_ in w133b.kaempfer.values() if k_.team == 0 and k_.ist_bot)
+_ziel133 = []
+for _ in range(_n133):                             # je Bot eine Gruppe von 1
+    z_ = w133b._bedarf(0, list(_z133.items()))
+    _ziel133.append(z_)
+    w133b._gruppen.append(type("G", (), {"team": 0, "ziel": z_, "mitglieder": [None]})())
+_haeufig133 = max(_ziel133.count(z_) for z_ in set(_ziel133))
+pruef("... kein Ziel bekommt mehr als ziel_anteil der Bots, solange es andere gibt",
+      _haeufig133 <= int(_n133 * K.FRONT["ziel_anteil"]) + 1 and len(set(_ziel133)) >= 4,
+      "%d von %d Bots, %d Ziele" % (_haeufig133, _n133, len(set(_ziel133))))
+w133b.verlassen(); g133b.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
