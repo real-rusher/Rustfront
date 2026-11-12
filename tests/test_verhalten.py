@@ -1394,10 +1394,54 @@ def verteilung():
           all(o_ >= 4.0 for o_ in orte), str([round(o_, 1) for o_ in orte]))
 
 
+def ausweichen():
+    """Gewuenscht (0.34.139): Bots fahren nirgendwo gegen - nicht gegen leere
+    Wagen, Wracks oder die eigenen Leute. Je Seed ein Bot im Buggy oder
+    Panzerwagen, der quer ueber eine freie Flaeche faehrt; auf seinem Weg
+    stehen ein leerer Panzer, ein leerer Panzerwagen (leicht versetzt, damit
+    die Gasse nicht immer gleich ist) und ein eigener Mann. Vor 0.34.139
+    gemessen: der Buggy schob 2 Sekunden am Panzer entlang, der Panzerwagen
+    kam nie an."""
+    print("\n-- Bots am Steuer weichen leeren Wagen und eigenen Leuten aus")
+    werte = []
+    for seed in SEEDS:
+        tm = neu(seed)
+        rnd = random.Random(seed)
+        tx, ty, v = W.flaeche(tm, rnd, 60, 16)
+        art = ("buggy", "panzerwagen")[seed % 2]
+        f = tm.fahrer_setzen(v(3, 8), 0, {"team": 0, "fahrzeug": art}, mit_fahrzeug=True)
+        b = f.fahrzeug
+        b.winkel = 0.0
+        hin = [tm.fahrzeug_setzen("panzer", v(18, 8 + rnd.choice((-1, 0, 1))), 0,
+                                  {"winkel": rnd.choice((0, 45, 90))}),
+               tm.fahrzeug_setzen("panzerwagen", v(34, 8 + rnd.choice((-1, 0, 1))), 0,
+                                  {"winkel": rnd.choice((0, 90, 135))})]
+        mann = tm.puppe_setzen(v(47, 8 + rnd.choice((-1, 0, 1))), 0, {"team": 0}, name="KAMERAD")
+        ziel = v(56, 8)
+        st = {"stoss": 0, "an": None}
+
+        def messen(tm=tm, b=b, f=f, hin=hin, mann=mann, ziel=ziel, st=st):
+            f.hirn.streif_ort = (ziel, 0)
+            f.hirn.ziel = None
+            if any(h.beruehrt(c, b.radius + 1.0) for h in hin for c in b.kreise()) \
+                    or any(c.distance_to(mann.pos) < b.radius + mann.radius for c in b.kreise()):
+                st["stoss"] += 1
+            if st["an"] is None and b.pos.distance_to(ziel) < 90:
+                st["an"] = tm.welt.zeit
+        laufen(tm, 30.0, messen)
+        werte.append((art, st["stoss"], st["an"]))
+        tm.verlassen()
+    print("   ", [(a, s, None if t is None else round(t, 1)) for a, s, t in werte])
+    pruef("Kein Bot beruehrt einen leeren Wagen oder den eigenen Mann (%d Seeds)" % len(SEEDS),
+          all(s == 0 for _, s, _t in werte), str([s for _, s, _t in werte]))
+    pruef("... und alle kommen an ihrem Ziel an", all(t is not None for _, _s, t in werte),
+          str([t for _, _s, t in werte]))
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
          planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
-         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger, napalm, front, verteilung]
+         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger, napalm, front, verteilung, ausweichen]
 #
 # Ohne Angabe laufen die Szenen seit 0.34.94 gleichzeitig, je eine in einem
 # eigenen Prozess, so viele wie Kerne da sind (hoechstens TEILE). Jede

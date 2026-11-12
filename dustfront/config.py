@@ -2615,6 +2615,18 @@ BOTS = dict(
         # keinen Gegner; kommt einer naeher als `unbewaffnet_aussteigen` px,
         # steigt er aus und sucht `unbewaffnet_pause` s lang keinen Wagen.
         unbewaffnet_aussteigen=300.0, unbewaffnet_pause=25.0,
+        # Vorausschauend ausweichen (seit 0.34.138): ab `ausweichen_ab` px bis
+        # zum Wegpunkt prueft er die Spur vor sich - so weit, wie er in
+        # `ausweichen_zeit` s faehrt (zwischen min und max px) - und weicht in
+        # diesen Winkeln aus; ist alles zu, faehrt er mit `ausweichen_gas`
+        # weiter. Je Wagen hoechstens alle `ausweichen_takt` s neu gerechnet.
+        # Steht in `ausweichen_nah` px vor der Nase etwas und ist er langsamer als
+        # `ausweichen_rueck_tempo`, setzt er `ausweichen_rueck_zeit` s zurueck;
+        # eine gewaehlte Seite haelt er `ausweichen_seite_halten` s.
+        ausweichen_ab=20.0, ausweichen_zeit=0.9, ausweichen_min=40.0, ausweichen_max=220.0,
+        ausweichen_winkel=(20.0, 40.0, 65.0, 90.0), ausweichen_gas=0.35, ausweichen_takt=0.12,
+        ausweichen_nah=26.0, ausweichen_rueck_tempo=60.0, ausweichen_rueck_zeit=0.7,
+        ausweichen_rueck_gas=0.7, ausweichen_seite_halten=2.0,
         abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0, krad=0.0, flakwagen=260.0,
                      jagdpanzer=520.0, spulenwagen=230.0),  # so weit bleibt er stehen
         suchen=700.0,         # so weit sucht ein Fahrer ohne Fahrzeug nach einem

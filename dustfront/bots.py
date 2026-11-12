@@ -1777,11 +1777,23 @@ class BotHirn(Taktik):
             # beim Wenden drehte sich ein Panzerwagen in einer Sackgasse fest.
             gesamt = dist
         soll = math.degrees(math.atan2(weg.y, weg.x))
+        gas_mal = 1.0
+        if not halten and dist > f["ausweichen_ab"]:
+            # Vorausschauend ausweichen (seit 0.34.138, gewuenscht: "Bots sollen
+            # nirgendwo gegenfahren") - um Mauern, leere Wagen, Wracks und die
+            # eigenen Leute, nicht erst, wenn er feststeckt.
+            soll, gas_mal = self._frei_richtung(b, soll)
         ab = _winkel_diff(b.winkel, soll)
         voll = b.werte.get("stick_voll_lenken", 40.0)
         lenk = max(-1.0, min(1.0, ab / voll))
         if halten:
             return 0.0, (lenk if abs(ab) > 3.0 else 0.0)
+        if self.g.welt.zeit < b.__dict__.get("_rueck_bis", -1.0):
+            # Direkt vor der Nase steht etwas: kurz zurueck und die Nase dabei
+            # zur freien Richtung drehen (rueckwaerts lenkt es andersherum).
+            return -f["ausweichen_rueck_gas"], (-1.0 if ab > 0 else 1.0) if abs(ab) > 5.0 else 0.0
+        if gas_mal < 1.0 and abs(ab) < b.werte.get("stick_wenden", 110.0):
+            return gas_mal, lenk
         if b.art == "panzer":
             if abs(ab) > f["panzer_drehen_ab"]:
                 # Drehen und dabei langsam rollen: in einer engen Ecke haengt
@@ -1793,6 +1805,66 @@ class BotHirn(Taktik):
         if abs(ab) >= b.werte.get("stick_wenden", 110.0):
             return 0.7, (1.0 if ab > 0 else -1.0)      # wenden, vorwaerts
         return 1.0, lenk
+
+    def _spur_frei(self, b, winkel: float, weite: float) -> bool:
+        """Kann der Wagen in Richtung `winkel` die naechsten `weite` px fahren,
+        ohne an etwas zu stossen (Mauer, Wagen, Wrack, eigene Leute)?"""
+        vorn = pygame.Vector2(1, 0).rotate(winkel)
+        kreis = float(b.werte.get("halb", b.werte.get("kreis", 16.0)))
+        eigen = [k for k in self.g.kaempfer.values()
+                 if k is not self.k and k.lebt and k.team == self.k.team and k.fahrzeug is None
+                 and getattr(k, "mitfahrt", None) is None and k.ebene == b.ebene
+                 and k.pos.distance_squared_to(b.pos) < (weite + 80.0) ** 2]
+        for anteil in (0.35, 0.7, 1.0):
+            q = b.pos + vorn * (weite * anteil)
+            if not b.passt(q, winkel):
+                return False
+            for k in eigen:
+                if k.pos.distance_squared_to(q) < (kreis + k.radius + 6.0) ** 2:
+                    return False
+        return True
+
+    def _frei_richtung(self, b, soll: float):
+        """(Richtung, Gasanteil): `soll`, wenn die Spur frei ist; sonst die
+        naechste freie Richtung daneben (zuerst zur Seite, zu der er ohnehin
+        dreht); ist keine frei, langsam weiter - das Feststecken (_am_steuer)
+        setzt dann wie bisher zurueck. Gemerkt je Wagen fuer `ausweichen_takt` s."""
+        f = K.BOTS["fahren"]
+        jetzt = self.g.welt.zeit
+        merk = b.__dict__.get("_ausweich")
+        if merk is not None and jetzt - merk[0] < f["ausweichen_takt"] and abs(_winkel_diff(merk[1], soll)) < 25.0:
+            return (soll + merk[2]) % 360.0, merk[3]
+        tempo = abs(getattr(b, "fahrt", 0.0)) if hasattr(b, "fahrt") else b.geschw.length()
+        weite = max(f["ausweichen_min"], min(f["ausweichen_max"], tempo * f["ausweichen_zeit"]))
+        laenge = float(b.werte.get("vorn", b.werte.get("achse", 0.0) + b.werte.get("kreis", 16.0)))
+        weite += laenge * 0.5
+        versatz, gas = 0.0, 1.0
+        if not self._spur_frei(b, soll, weite):
+            # Die Seite von eben behalten - sonst pendelt er zwischen links und rechts.
+            alt = b.__dict__.get("_ausweich_seite")
+            if alt is not None and jetzt - alt[1] < f["ausweichen_seite_halten"]:
+                zuerst = alt[0]
+            else:
+                zuerst = 1.0 if _winkel_diff(b.winkel, soll) >= 0 else -1.0
+            gefunden = False
+            for w in f["ausweichen_winkel"]:
+                for seite in (zuerst, -zuerst):
+                    if self._spur_frei(b, soll + seite * w, weite * 0.8):
+                        versatz, gefunden = seite * w, True
+                        b._ausweich_seite = (seite, jetzt)
+                        break
+                if gefunden:
+                    break
+            if not gefunden:
+                gas = f["ausweichen_gas"]
+            # Steht direkt vor der Nase etwas und geht es auch in die neue
+            # Richtung nicht gleich weiter, hilft kein Lenken mehr: kurz zurueck.
+            if (jetzt >= b.__dict__.get("_rueck_bis", -1.0) and tempo < f["ausweichen_rueck_tempo"]
+                    and not self._spur_frei(b, b.winkel, f["ausweichen_nah"])
+                    and not self._spur_frei(b, soll + versatz, f["ausweichen_nah"])):
+                b._rueck_bis = jetzt + f["ausweichen_rueck_zeit"]
+        b._ausweich = (jetzt, soll, versatz, gas)
+        return (soll + versatz) % 360.0, gas
 
     def _schutz_ort(self, b):
         """Ein Kamerad liegt, und ein Gegner ist bekannt: der Platz zwischen

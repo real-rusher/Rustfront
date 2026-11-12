@@ -20324,6 +20324,50 @@ if _bb140 is not None:
           "nutzen" in _ein140["knoepfe"] and _fb140.hirn._zum_fahrzeug({"knoepfe": []}) is None)
 w140.verlassen(); g140.verlassen()
 
+# ══════════════════════════════════════════════════════════════════
+print("\n-- 0.34.139: Bots weichen am Steuer vorausschauend aus")
+_tm139 = _TM59.Testmodus(app, karte="staubtal_offen")
+_e139 = _tm139.welt.ebene(0)
+_rnd139 = random.Random(5)
+for _ in range(40000):
+    _tx139, _ty139 = _rnd139.randrange(30, _e139.breite - 60), _rnd139.randrange(20, _e139.hoehe - 30)
+    if all(not K.KACHELN[_e139.kachel(_tx139 + x_, _ty139 + y_)]["fest"] for x_ in range(44) for y_ in range(14)):
+        break
+_z139 = lambda x_, y_: pygame.Vector2((_tx139 + x_ + 0.5) * K.TILE, (_ty139 + y_ + 0.5) * K.TILE)
+def _fahrt139(art_, hindernis_):
+    bot_ = _tm139.fahrer_setzen(_z139(3, 7), 0, {"team": 0, "fahrzeug": art_}, mit_fahrzeug=True)
+    b_ = bot_.fahrzeug
+    b_.winkel = 0.0
+    if hindernis_ == "panzer":
+        h_ = _tm139.fahrzeug_setzen("panzer", _z139(20, 7), 0, {"winkel": 90})
+        stoss_ = lambda: any(h_.beruehrt(c_, b_.radius + 1.0) for c_ in b_.kreise())
+    else:
+        h_ = _tm139.puppe_setzen(_z139(20, 7), 0, {"team": 0}, name="KAMERAD")
+        stoss_ = lambda: any(c_.distance_to(h_.pos) < b_.radius + h_.radius for c_ in b_.kreise())
+    ziel_ = _z139(40, 7)
+    beruehrt_, an_ = 0, False
+    for _ in range(int(14 / K.FIXED_DT)):
+        bot_.hirn.streif_ort = (ziel_, 0); bot_.hirn.ziel = None
+        _tm139.schritt(K.FIXED_DT)
+        beruehrt_ += 1 if stoss_() else 0
+        if b_.pos.distance_to(ziel_) < 90:
+            an_ = True
+            break
+    for v_ in (b_, h_):
+        v_.lebt = False
+        if v_ in _tm139.fahrzeuge:
+            _tm139.fahrzeuge.remove(v_)
+    bot_.lebt = False
+    return beruehrt_, an_
+for _art139 in ("buggy", "panzerwagen"):
+    _b139, _a139 = _fahrt139(_art139, "panzer")
+    pruef("Ein Bot im %s faehrt um einen leeren Panzer mitten auf seinem Weg herum, ohne ihn zu beruehren" % _art139.upper(),
+          _b139 == 0 and _a139, "%d Bilder Beruehrung, angekommen: %s" % (_b139, _a139))
+_b139, _a139 = _fahrt139("buggy", "kamerad")
+pruef("... und um einen eigenen Mann, der im Weg steht", _b139 == 0 and _a139,
+      "%d Bilder Beruehrung, angekommen: %s" % (_b139, _a139))
+_tm139.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
