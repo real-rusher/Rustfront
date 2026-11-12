@@ -412,6 +412,12 @@ class FrontTeil:
         """Ein Punkt hat den Besitzer gewechselt: Klang und Meldung."""
         if p.besitzer >= 0:
             self.welt.klang("aufheben", 0.9, p.pos, 0)
+            # Punkte fuer die, die ihn genommen haben (seit 0.34.138).
+            if hasattr(self, "schlacht_punkte"):
+                r2 = F["radius"] ** 2
+                for k in self._zaehlbar():
+                    if k.team == p.besitzer and k.pos.distance_squared_to(p.pos) <= r2:
+                        self.schlacht_punkte(k, K.SCHLACHT["punkte"]["erobern"], "EROBERT " + p.name)
             name = K.TEAMS["namen"][p.besitzer]
             self.__dict__.setdefault("_front_meldungen", []).append(
                 (self.welt.zeit, "%s NIMMT %s" % (name, p.name), p.besitzer))

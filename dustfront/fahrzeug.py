@@ -2568,9 +2568,13 @@ class Tragschrauber(Buggy):
                       r.uniform(4, 6), 0.25)
 
     def netz_extra(self):
+        # Seit 0.34.138 auch, wie lange die naechste Bombe noch laedt (die
+        # Anzeige beim Fahrer, auch beim Gast).
+        laedt = (round(max(0.0, self._bomben_rest), 1)
+                 if self.bomben < int(self.werte["bomben"]) else 0.0)
         return [int(self.luft), int(self.hoehe), self.bomben,
                 [[round(b[0], 1), int(b[1]), int(b[2]), int(b[3]) if len(b) > 3 else 0]
-                 for b in self.bomben_fall[:4]]]
+                 for b in self.bomben_fall[:4]], laedt]
 
     def netz_extra_setzen(self, wert) -> None:
         try:
@@ -2579,6 +2583,7 @@ class Tragschrauber(Buggy):
             self.bomben = max(0, min(9, int(wert[2])))
             self.bomben_fall = [[float(b[0]), float(b[1]), float(b[2]), float(b[3]) if len(b) > 3 else 0.0]
                                 for b in wert[3][:4]]
+            self._bomben_rest = max(0.0, min(60.0, float(wert[4]))) if len(wert) > 4 else 0.0
         except (TypeError, ValueError, IndexError):
             self.bomben_fall = []
 

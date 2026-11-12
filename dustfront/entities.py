@@ -423,6 +423,17 @@ class Geschoss(Wesen):
     # nicht im eigenen Blech stecken bleiben.
     traeger = None
 
+    @property
+    def luft_hub(self) -> float:
+        """So weit (px) ueber dem Boden zeichnen: auf dem Weg zum Luftziel
+        steigt die Kugel bis zu dessen Bildhoehe (seit 0.34.138)."""
+        lz = getattr(self, "luft_ziel", None)
+        weg = getattr(self, "_luft_weg", 0.0)
+        if lz is None or weg <= 0.0:
+            return 0.0
+        rest = self.pos.distance_to(lz.jetzt)
+        return float(getattr(lz, "versatz", 0.0)) * max(0.0, min(1.0, 1.0 - rest / weg))
+
     def __init__(self, pos, richtung: float, daten: dict, ebene: int,
                  von=None, waffe: str = "") -> None:
         super().__init__(pos, ebene)
@@ -441,6 +452,11 @@ class Geschoss(Wesen):
         # Auf ein Luftziel gezielt (seit 0.34.113, luft.py): die Kugel geht am
         # Boden entlang und trifft nur dieses Ziel (und Mauern).
         self.luft_ziel = getattr(von, "luft_ziel", None) if von is not None else None
+        # Fuer das Bild (seit 0.34.138): wie weit es bis unter das Ziel war - die
+        # Kugel steigt im Bild zu ihm hoch (luft_hub), man sieht, dass sie in
+        # die Luft geht.
+        self._luft_weg = (max(1.0, pygame.Vector2(pos).distance_to(self.luft_ziel.pos))
+                          if self.luft_ziel is not None else 0.0)
         self.flak = bool(daten.get("flak"))
         # Der Stoss auf das Ziel gilt je Schuss, nicht je Kugel: vorher
         # schob jede der sieben Schrotkugeln einzeln, und aus naechster

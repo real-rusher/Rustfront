@@ -28,12 +28,14 @@ und sein Zeichnen ueber allem.
 from __future__ import annotations
 
 import math
+import random
 
 import pygame
 
 from . import ausruestung as ausruestung_modul
 from . import config as K
 from . import fahrzeug as fahrzeug_modul
+from .font import SCHRIFT
 
 S = K.SCHLACHT
 
@@ -111,6 +113,46 @@ class LuftTeil:
         self._lz_merk = (jetzt, liste)
         return liste
 
+    def luft_zeiger_zeichnen(self, ziel) -> None:
+        """Zeigt der eigene Zeiger auf ein Luftziel, legt sich eine
+        Zielklammer darum, mit LUFT (seit 0.34.138, gemeldet: "es soll
+        visuell klarer sein, wann man in die Luft schiesst und wann nicht").
+        Beim Gastgeber und beim Gast aus dem, was beide kennen."""
+        ich = self.ich
+        if ich is None or not ich.lebt or getattr(ich, "ebene", 0) != 0 or self.pausiert:
+            return
+        maus = self.app.zu_spiel(pygame.mouse.get_pos())
+        welt_maus = self.kamera.zu_welt(maus)
+        flak = bool(getattr(getattr(ich, "fahrzeug", None), "flak", False))
+        kandidaten = []
+        for b in getattr(self, "fahrzeuge", ()):
+            if b.art == "tragschrauber" and getattr(b, "luft", False) and not b.kaputt:
+                if b is getattr(ich, "fahrzeug", None) or fahrzeug_modul.seite_von(b) == ich.fraktion:
+                    continue
+                kandidaten.append((pygame.Vector2(b.pos.x, b.pos.y - b.hoehe), b.werte["luft_radius"]))
+        for w in self.welt.wesen:
+            if (getattr(w, "hoch_oben", False) and w.lebt and isinstance(w, ausruestung_modul.Drohne)
+                    and getattr(w, "fraktion", "") != ich.fraktion):
+                kandidaten.append((pygame.Vector2(w.pos.x, w.pos.y - K.HOCH_OBEN["hoehe"]), 14.0))
+        if flak:
+            for ab in getattr(self, "abwuerfe", ()):
+                hoch = max(0.0, getattr(ab, "hoehe", 0.0)) * S["abwurf"]["bild_hub"]
+                kandidaten.append((pygame.Vector2(ab.pos.x, ab.pos.y - hoch), 26.0))
+        fang = K.LUFT_ZIELEN["fang_extra"]
+        for ort, r in kandidaten:
+            if ort.distance_to(welt_maus) <= r + fang:
+                z = self.kamera.zoom
+                m = self.kamera.zu_bild(ort)
+                g = int((r + 6) / z) + 3
+                farbe = K.C_TEAL
+                for sx in (-1, 1):
+                    for sy in (-1, 1):
+                        ex, ey = int(m.x + sx * g), int(m.y + sy * g)
+                        pygame.draw.line(ziel, farbe, (ex, ey), (ex - sx * 5, ey), 1)
+                        pygame.draw.line(ziel, farbe, (ex, ey), (ex, ey - sy * 5), 1)
+                SCHRIFT.zeichnen(ziel, "LUFT", int(m.x), int(m.y - g - 9), farbe, 1, ausrichtung="mitte")
+                return
+
     # ---- Einrasten ----------------------------------------------------------
     def luft_zielen(self, k) -> None:
         """Nach jeder Eingabe (Gastgeber): liegt der Zeiger auf dem Bild eines
@@ -137,6 +179,13 @@ class LuftTeil:
                 # Bots im Flakwagen") - die Kugel flog dorthin, wo er beim Schuss
                 # war, und kam an, wenn er laengst weiter war.
                 k.ziel = self._vorhalten(k, lz)
+                if getattr(k, "ist_bot", False) and not getattr(getattr(k, "fahrzeug", None), "flak", False):
+                    # Ein Bot zu Fuss trifft nicht wie ein Mensch, der ruhig
+                    # zielt (seit 0.34.138): ein Fehler im Kreis um den
+                    # Vorhalt, je Schritt neu - etwa jede zweite Kugel geht vorbei.
+                    fehl = lz.radius * K.BOTS["luft_fehler"]
+                    k.ziel = k.ziel + pygame.Vector2(fehl * math.sqrt(random.random()), 0).rotate(
+                        random.uniform(0.0, 360.0))
                 return
 
     def _vorhalten(self, k, lz) -> pygame.Vector2:
@@ -218,24 +267,32 @@ class LuftTeil:
 
     # ---- Flaechenschaden (Bomben, Raketen) -----------------------------------
     def flaechenschaden(self, p, ebene: int, radius: float, schaden: float, fahrzeug: float,
-                        von, waffe: str) -> None:
+                        von, waffe: str, direkt: float = 1.0) -> None:
         """Ein Einschlag wirkt im Kreis: nach aussen weniger, durch Deckung
-        weniger (wie die Kanone des Panzers)."""
+        weniger (wie die Kanone des Panzers). Seit 0.34.138: landet er auf
+        einem Fahrzeug (Volltreffer), wirkt er dort voll und `direkt`-fach -
+        er schlaegt durch die Panzerung, statt daneben aufzuschlagen."""
         from .entities import abschuss_buchen, schaden_an
         w = self.welt
         for a in list(w.nahe(p, radius + 70.0, ebene)):
             if not a.lebt or not getattr(a, "trefferbar", True) or getattr(a, "fraktion", "") == "geschoss":
                 continue
+            voll = False
             if getattr(a, "ist_fahrzeug", False):
                 if not a.beruehrt(p, radius):
                     continue
+                voll = direkt != 1.0 and a.beruehrt(p, K.LUFT_ZIELEN["volltreffer"])
             elif a.pos.distance_to(p) > radius + a.radius:
                 continue
             weit = a.pos.distance_to(p)
-            anteil = (1.0 - 0.6 * min(1.0, weit / max(1.0, radius))) * w.deckung_anteil(p, a.pos, ebene)
+            if voll:
+                anteil, mal = 1.0, direkt
+            else:
+                anteil = (1.0 - 0.6 * min(1.0, weit / max(1.0, radius))) * w.deckung_anteil(p, a.pos, ebene)
+                mal = 1.0
             schub = (a.pos - p).normalize() * 260.0 * anteil if weit > 0.01 else None
             lebte = a.lebt
-            schaden_an(a, schaden * anteil, schub, von, "hohlladung", p, fahrzeug * anteil)
+            schaden_an(a, schaden * anteil, schub, von, "hohlladung", p, fahrzeug * anteil * mal)
             abschuss_buchen(von, a, waffe, lebte)
 
     # ---- Der Tragschrauber im Gefecht -----------------------------------------
@@ -270,7 +327,7 @@ class LuftTeil:
                     p = pygame.Vector2(e[1], e[2])
                     self.welt.explosion(p, b.ebene, bo["radius"], "bombe", b.fahrer)
                     self.flaechenschaden(p, b.ebene, bo["radius"], bo["schaden"], bo["fahrzeug"],
-                                         b.fahrer, "bombe")
+                                         b.fahrer, "bombe", bo["volltreffer"])
             if b.in_der_luft and b.bomben < f["bomben"] and not b.bomben_fall:
                 # Auch in der Luft laden die Bomben nach (seit 0.34.135, gemeldet:
                 # "laden sich nicht nach") - langsamer als am Boden.

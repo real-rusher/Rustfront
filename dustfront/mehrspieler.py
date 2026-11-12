@@ -1850,7 +1850,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
     def _werfer_einschlag(self, b, p) -> None:
         s = K.WERFER["salve"]
         self.welt.explosion(p, b.ebene, 1.0, "einschlag", b.fahrer)
-        self.flaechenschaden(p, b.ebene, s["radius"], s["schaden"], s["fahrzeug"], b.fahrer, "werfer")
+        self.flaechenschaden(p, b.ebene, s["radius"], s["schaden"], s["fahrzeug"], b.fahrer, "werfer",
+                             s["volltreffer"])
 
     def _werfer_zeichnen_boden(self, flaeche, ebene: int, ecke) -> None:
         """Am Boden (seit 0.34.112): wo Raketen einschlagen - rote Kreise, die
@@ -3982,10 +3983,34 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 elif wagen.landen:
                     txt = "LANDET - PLATZ NOETIG"
                 else:
-                    txt = "[E] LANDEN  [LMB] BOMBE (%d)" % wagen.bomben
+                    txt = "[E] LANDEN  [LMB] BOMBE"
                 SCHRIFT.zeichnen(ziel, txt, int(p.x), int(p.y) + unten, K.C_AMBER, 1,
                                  ausrichtung="mitte")
                 unten += 10
+                # Die Bomben und wann die naechste fertig ist (seit 0.34.138,
+                # gemeldet: "zeigt nicht wirklich an, wann seine Bomben
+                # nachgeladen sind"): ein Kaestchen je Bombe, das ladende fuellt sich.
+                voll = int(wagen.werte["bomben"])
+                rest = max(0.0, getattr(wagen, "_bomben_rest", 0.0))
+                dauer = float(wagen.werte["bomben_nachladen_luft"] if wagen.luft
+                              else wagen.werte["bomben_nachladen"])
+                breite = voll * 9 - 2
+                x0 = int(p.x) - breite // 2
+                for i in range(voll):
+                    kasten = pygame.Rect(x0 + i * 9, int(p.y) + unten, 7, 5)
+                    pygame.draw.rect(ziel, (20, 14, 10), kasten.inflate(2, 2))
+                    if i < wagen.bomben:
+                        pygame.draw.rect(ziel, K.C_AMBER, kasten)
+                    elif i == wagen.bomben and rest > 0.0:
+                        teil = max(0.0, min(1.0, 1.0 - rest / max(0.1, dauer)))
+                        pygame.draw.rect(ziel, K.C_MUTED_DK, kasten)
+                        pygame.draw.rect(ziel, K.C_TEAL, (kasten.x, kasten.y, int(7 * teil), 5))
+                    else:
+                        pygame.draw.rect(ziel, K.C_MUTED_DK, kasten)
+                if wagen.bomben < voll and rest > 0.0:
+                    SCHRIFT.zeichnen(ziel, "NÄCHSTE %.0f S" % math.ceil(rest), x0 + breite + 5,
+                                     int(p.y) + unten, K.C_TEAL, 1)
+                unten += 9
             if wagen is not None and wagen.art == "werfer" and not wagen.kaputt:
                 if wagen.phase == 0:
                     txt = "WERFER [RMB]: AUFBAUEN"
@@ -4227,6 +4252,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         self._fahrzeuge_erneuern(dt)
         self.funkwagen_schritt(dt)
         self.werfer_schritt(dt)
+        self.sold_schritt(dt)                 # Punkte fuer alle (seit 0.34.138)
         self.tragschrauber_schritt(dt)
         if not self.schlacht and self.__dict__.get("nachschub_an"):
             # Testmodus (seit 0.34.100): Abwuerfe, Drohnen und Fallschirmjaeger
@@ -4250,7 +4276,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                              and self.welt.zeit - zuletzt[1] <= K.SCHLACHT["fahrzeug_zuletzt"]
                              else getattr(b, "basis_team", -2))
                     if von is not None and getattr(von, "team", -1) != seite:
-                        self.schlacht_punkte(von, self.fahrzeug_punkte(b.art))
+                        self.schlacht_punkte(von, self.fahrzeug_punkte(b.art),
+                                             "%s ZERSTÖRT" % b.werte.get("name", b.art.upper()))
+                        self.serie_punkte(von, "fahrzeug")
         if self.in_lobby:
             self._lobby_munition()        # nach dem Schuss, siehe dort
         self._ziehen(dt)
@@ -5045,7 +5073,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                     for helfer_k in self.kaempfer.values():
                         if helfer_k.hilft == k.nummer:
                             helfer_k.zaehlen("hilfen")
-                            self.schlacht_punkte(helfer_k, K.SCHLACHT["punkte"]["aufhelfen"])
+                            self.schlacht_punkte(helfer_k, K.SCHLACHT["punkte"]["aufhelfen"], "AUFGEHOLFEN")
             else:
                 k.revive_stand = max(0.0, k.revive_stand - dt / k.revive_dauer)
                 k.boden_rest -= dt
@@ -5097,7 +5125,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                     toeter.abschuesse += K.GEFECHT["punkt_abschuss"]
                     if not k.__dict__.pop("_down_gebucht", False):
                         # Nicht schon beim Umwerfen gebucht (seit 0.34.134).
-                        self.schlacht_punkte(toeter, K.SCHLACHT["punkte"]["abschuss"])
+                        self.schlacht_punkte(toeter, K.SCHLACHT["punkte"]["abschuss"], "ABSCHUSS")
+                        self.serie_punkte(toeter, "abschuss")
                     toeter.opfer[k.nummer] = toeter.opfer.get(k.nummer, 0) + 1
                     if k.toeter_waffe:
                         # Je Waffe. Die Summe "abschuesse" kommt weiter aus
@@ -5149,7 +5178,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             k._down_gebucht = True
             toeter = getattr(k.toeter, "von", k.toeter)
             if isinstance(toeter, Kaempfer) and toeter is not k and toeter.team != k.team:
-                self.schlacht_punkte(toeter, K.SCHLACHT["punkte"]["abschuss"])
+                self.schlacht_punkte(toeter, K.SCHLACHT["punkte"]["abschuss"], "ABSCHUSS")
+                self.serie_punkte(toeter, "abschuss")
             else:
                 k._down_gebucht = False                  # ohne Gegner: beim Tod wie bisher
 
@@ -7405,6 +7435,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         self._ueberblendung.merken(ziel)
         self._haende_zeichnen(ziel)
         self._namen_zeichnen(ziel)
+        self.luft_zeiger_zeichnen(ziel)     # seit 0.34.138
         self._fahrzeug_balken(ziel)
         self._funk_wellen(ziel)
         self._fahrzeug_hinweis(ziel)

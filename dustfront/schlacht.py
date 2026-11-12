@@ -657,9 +657,58 @@ class SchlachtTeil:
         return self.welt.zeit if self.ist_gastgeber else self._zeit
 
     # ---- Punkte -------------------------------------------------------------
-    def schlacht_punkte(self, k, wie_viel: int) -> None:
+    def schlacht_punkte(self, k, wie_viel: int, grund: str = "") -> None:
         if self.schlacht and k is not None and not getattr(k, "ist_bot", False):
             k.schlacht_punkte = getattr(k, "schlacht_punkte", 0) + int(wie_viel)
+            if grund and int(wie_viel) > 0:
+                self._punkte_melden(k, int(wie_viel), grund)
+
+    def _punkte_melden(self, k, n: int, grund: str) -> None:
+        """Fuer den Spieler selbst: wofuer es gerade Punkte gab (seit 0.34.138).
+        Beim Gast kommt es als Klang-freie Meldung ueber den Stand."""
+        if k is self.ich and hasattr(self, "melden"):
+            self.melden("+%d %s" % (n, grund), 2.0)
+
+    def serie_punkte(self, k, art: str) -> None:
+        """Bonus fuer eine Folge (seit 0.34.138): Abschuesse oder Fahrzeuge kurz
+        nacheinander bringen mehr - wer sich darauf wirft, kommt schneller voran."""
+        if not self.schlacht or k is None or getattr(k, "ist_bot", False):
+            return
+        p = S["punkte"]
+        jetzt = self.welt.zeit
+        if art == "fahrzeug":
+            vorher = getattr(k, "_jagd_zuletzt", -1e9)
+            k._jagd_zuletzt = jetzt
+            if jetzt - vorher <= p["jagd_zeit"]:
+                self.schlacht_punkte(k, p["jagd"], "JAGD")
+            return
+        vorher = getattr(k, "_serie_zuletzt", -1e9)
+        k._serie_zuletzt = jetzt
+        k._serie = getattr(k, "_serie", 0) + 1 if jetzt - vorher <= p["serie_zeit"] else 1
+        if k._serie > p["serie_ab"]:
+            bonus = min(p["serie_hoechstens"], p["serie"] * (k._serie - p["serie_ab"]))
+            self.schlacht_punkte(k, bonus, "SERIE x%d" % k._serie)
+
+    def sold_schritt(self, dt: float) -> None:
+        """Alle sold_takt Sekunden etwas fuer jeden (seit 0.34.138): wer faehrt,
+        heilt oder den Werfer bedient, muss nichts aufgeben, um zu Punkten zu
+        kommen. Wer mehr Eroberungspunkte haelt, bekommt mehr."""
+        if not self.schlacht or self.vorbei or self.in_lobby or not self.ist_gastgeber:
+            return
+        p = S["punkte"]
+        self._sold_rest = getattr(self, "_sold_rest", p["sold_takt"]) - dt
+        if self._sold_rest > 0.0:
+            return
+        self._sold_rest = p["sold_takt"]
+        gehalten = [0, 0]
+        for q in (self.front_punkte() if hasattr(self, "front_punkte") else ()):
+            if q.besitzer in (0, 1):
+                gehalten[q.besitzer] += 1
+        for k in self.kaempfer.values():
+            if getattr(k, "ist_bot", False) or getattr(k, "team", -1) not in (0, 1):
+                continue
+            n = p["sold"] + (p["sold_halten"] if gehalten[k.team] > gehalten[1 - k.team] else 0)
+            self.schlacht_punkte(k, n, "SOLD")
 
     # ---- Freischalten und Balancing (seit 0.34.129) -----------------------
     def freischalt_modus(self) -> str:

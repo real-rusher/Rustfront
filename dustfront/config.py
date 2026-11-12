@@ -1228,7 +1228,19 @@ SCHLACHT = dict(
     # ein Krad brachte mehr, als es kostete.
     # Seit 0.34.134 gebucht schon beim Umwerfen (am Boden), egal ob er danach
     # wiederbelebt wird; seit 0.34.135 wieder 1 Punkt (gewuenscht).
-    punkte=dict(abschuss=1, fahrzeug=3, fahrzeug_anteil=0.5, fahrzeug_min=2, aufhelfen=5),
+    # Seit 0.34.138 (gewuenscht: "neue Arten, Punkte zu gewinnen ... man soll
+    # nie Sachen aufgeben muessen, weil sie keine Punkte bringen, aber sich
+    # eine Zeit lang bewusst auf etwas fokussieren koennen"):
+    #   aufhelfen 3 statt 5,
+    #   erobern     jeder Mensch im Kreis, wenn ein Punkt an seine Seite faellt,
+    #   serie       ein Abschuss innerhalb `serie_zeit` s nach dem vorigen: so viel
+    #               mehr (der dritte, vierte ... in Folge; bis `serie_hoechstens`),
+    #   jagd        ein Fahrzeug innerhalb `jagd_zeit` s nach dem vorigen: so viel mehr,
+    #   sold        alle `sold_takt` s jeder Mensch, `sold_halten` mehr, wenn die
+    #               eigene Seite mehr Eroberungspunkte haelt als die andere.
+    punkte=dict(abschuss=1, fahrzeug=3, fahrzeug_anteil=0.5, fahrzeug_min=2, aufhelfen=3,
+                erobern=3, serie=1, serie_zeit=20.0, serie_ab=2, serie_hoechstens=3,
+                jagd=2, jagd_zeit=90.0, sold=1, sold_halten=1, sold_takt=60.0),
     # Was man kaufen kann: (Kennung, Kosten, Name). Seit 0.34.129 billiger
     # (gewuenscht: "es kaufen ja nur Spieler, und es gibt nicht so viele").
     belohnungen=(
@@ -1322,8 +1334,10 @@ SCHLACHT = dict(
 
 # Auf Luftziele zielen (seit 0.34.135): liegt der Zeiger so viel ausserhalb
 # ihres Radius noch auf dem Bild, rastet er trotzdem ein.
-LUFT_ZIELEN = dict(fang_extra=12.0,
-                   treffer_extra=14.0)   # ... und eine Kugel trifft es so viel ausserhalb noch (Streuung)
+LUFT_ZIELEN = dict(
+    volltreffer=6.0,          # so nah am Wagen (px) zaehlt ein Einschlag als Volltreffer (seit 0.34.138)
+    fang_extra=12.0,
+    treffer_extra=14.0)       # ... und eine Kugel trifft es so viel ausserhalb noch (Streuung)
 
 # Ein Fahrzeug von einem Bot der eigenen Seite uebernehmen (seit 0.34.134):
 # E am Wagen wirft ihn hinaus (nicht beim Flakwagen); steigt man aus, steigt er
@@ -1973,8 +1987,11 @@ WERFER = dict(
     # Seit 0.34.135 (gewuenscht: "jede soll was staerker sein und einen groesseren
     # Radius haben", "mehr spread out"): 6 Raketen in einem Ring um die Mitte
     # (`formation` mal streu weit, eine in die Mitte), je `wackeln` px versetzt.
+    # Seit 0.34.138 deutlich staerker gegen Fahrzeuge (gewuenscht: "besonders
+    # gegen gepanzerte, es ist schwer genug, sie ueberhaupt zu treffen"):
+    # 240 statt 165, und ein Volltreffer auf dem Wagen `volltreffer`-fach.
     salve=dict(raketen=6, abstand=0.5, flug=3.6, streu=150.0, radius=66.0, schaden=120.0,
-               fahrzeug=165.0, nachladen=14.0, nah=400.0, weit=3200.0, umkreis=130.0,
+               fahrzeug=240.0, volltreffer=1.7, nachladen=14.0, nah=400.0, weit=3200.0, umkreis=130.0,
                formation=0.72, wackeln=22.0,
         weit_karte=0.5,      # seit 0.34.134: aufgebaut reicht er ueber die halbe Kartenbreite (mindestens weit)
                sicht=420.0, verraten=6.0, hoch=150.0, pruefen=0.4,
@@ -2037,7 +2054,9 @@ TRAGSCHRAUBER = dict(
     # von Hand neben der Kanzel fallen gelassen (`abwurf`: Spielpixel, +x vorn,
     # +y rechts): senkrecht, ohne sein Tempo, eine nach der anderen; im Fall
     # ueberschlaegt sie sich (`ueberschlag` Grad je Sekunde).
-    bombe=dict(fall=1.1, radius=62.0, schaden=110.0, fahrzeug=140.0, pause=0.6,
+    # volltreffer (seit 0.34.138): landet die Bombe auf einem Fahrzeug, schlaegt
+    # sie durch die Panzerung - so viel mal den Fahrzeugschaden; daneben wie bisher.
+    bombe=dict(fall=1.1, radius=62.0, schaden=110.0, fahrzeug=140.0, volltreffer=2.2, pause=0.6,
         schwung=0.5,             # seit 0.34.135: so viel vom Tempo des Tragschraubers behaelt die Bombe
                abwurf=(9.0, 8.0), ueberschlag=260.0),
     luft_radius=24.0,         # so gross ist er als Ziel (Pixel um sein Bild)
@@ -2061,7 +2080,8 @@ FLAKWAGEN = dict(
     {k: v for k, v in PANZERWAGEN.items() if k not in ("plaetze", "marke", "name")},
     marke="FL",
     name="FLAKWAGEN",
-    nur_bot=True,
+    # Seit 0.34.138 auch fuer Menschen (gewuenscht) - vorher nur_bot, und
+    # er fiel mit einem Bot darin.
     flak=True,
     hoechst=240.0,
     leben=520.0,
@@ -2319,6 +2339,13 @@ BOTS = dict(
     # Laufen, Zielen, Gas und Lenkung bleiben am Kaempfer stehen. Bei 120
     # Schritten je s sind das 60 oder 40 Entscheidungen je s und Bot.
     staffel=((40, 2), (120, 3)),
+    # Luftziele (seit 0.34.138): ohne Gegner am Boden schiessen Bots auf
+    # Tragschrauber und Drohnen bis `luft_weite` px (und Waffenreichweite),
+    # suchen alle `luft_takt` s, reagieren `luft_reaktion` s langsamer als
+    # auf Bodenziele, feuern in Stoessen (an, aus in s) und verfehlen im
+    # Kreis von `luft_fehler` mal dem Zielradius (nicht zu stark).
+    luft_weite=560.0, luft_takt=0.3, luft_reaktion=0.4, luft_stoss=(0.6, 0.9),
+    luft_fehler=2.2,
     # So lange (s) geht ein Bot gegen gesehene Fallschirmjaeger in Deckung,
     # nachdem er sie zuletzt sah (seit 0.34.100).
     springer_merken=4.0,

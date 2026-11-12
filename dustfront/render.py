@@ -1301,6 +1301,9 @@ class Renderer:
                 # nicht: es haengt zwischen den Ebenen und wird nach allen
                 # Ebenen gezeichnet, mit dem Massstab seiner eigenen Hoehe.
                 continue
+            hub = getattr(w, "luft_hub", 0.0)
+            if hub:
+                p = p - pygame.Vector2(0, hub)     # in die Luft (seit 0.34.138)
             if w.spur is not None and w.tempo.length_squared() > 1:
                 r = w.tempo.normalize()
                 pygame.draw.line(ziel, (128, 80, 30), p - r * 17, p - r * 5, 1)

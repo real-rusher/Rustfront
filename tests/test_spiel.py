@@ -20058,6 +20058,79 @@ pruef("... STANDARDRUNDE setzt sie wieder ein, und jede neue Lobby plant sie zue
       and _R138.meine_standardrunde(app.opt["eigene_standardrunde"])["modus"] == "pvp"
       and _R138.meine_standardrunde({})["modus"] == K.STANDARDRUNDE["modus"])
 app.opt["eigene_standardrunde"] = _alt_std138
+# Flakwagen fuer Menschen, Volltreffer, Bots gegen Luftziele.
+pruef("Flakwagen: auch Menschen duerfen ihn fahren (kein nur_bot mehr)", not K.FLAKWAGEN.get("nur_bot"))
+from dustfront import fahrzeug as _FZ138
+_pz138 = _FZ138.neu("panzer", _ich138.pos + pygame.Vector2(300, 0), 0)
+w138.welt.dazu(_pz138); w138.fahrzeuge.append(_pz138)
+w138.schritt(K.FIXED_DT)
+w138.welt._raster_bauen()
+_l0 = _pz138.leben
+w138.flaechenschaden(pygame.Vector2(_pz138.pos), 0, 66.0, 120.0, 240.0, None, "werfer", 1.7)
+_voll138 = _l0 - _pz138.leben
+_pz138.leben = _l0
+_neben138 = pygame.Vector2(_pz138.pos) + pygame.Vector2(0, 40)
+while _pz138.beruehrt(_neben138, 6.0):
+    _neben138.y += 4
+w138.flaechenschaden(_neben138, 0, 66.0, 120.0, 240.0, None, "werfer", 1.7)
+_dane138 = _l0 - _pz138.leben
+_pz138.leben = _l0
+pruef("Volltreffer: landet ein Einschlag auf dem Panzer, schlaegt er durch (deutlich mehr als daneben)",
+      _voll138 > 1.6 * _dane138 > 0 and _voll138 >= 240 * K.PANZERUNG["panzer"]["hohlladung"] * 1.6,
+      "%.0f gegen %.0f" % (_voll138, _dane138))
+pruef("... Artillerie und Bombe sind darauf eingestellt",
+      K.WERFER["salve"]["fahrzeug"] >= 240 and K.WERFER["salve"]["volltreffer"] > 1.0
+      and K.TRAGSCHRAUBER["bombe"]["volltreffer"] > 1.0)
+from dustfront.luft import LuftZiel as _LZ138
+w138.verlassen(); g138.verlassen()
+w138, g138 = _paar59("schlacht", karte="flusstal")
+w138._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="flusstal", schlacht_seite=4, freischalten="aus"))
+w138._einstiegszonen_waehlen(); w138._bots_fuehren(0.0, sofort=True)
+_ich138 = w138.ich
+_bot138 = next((k_ for k_ in w138.kaempfer.values() if k_.ist_bot), None)
+pruef("(fuer die Probe gibt es einen Bot)", _bot138 is not None)
+if _bot138 is not None:
+    _obj138 = type("O", (), {"pos": _bot138.pos + pygame.Vector2(200, 0), "lebt": True, "geschw": pygame.Vector2(0, 0)})()
+    _lz138 = _LZ138(_obj138, "fahrzeug", "feindlich", _obj138.pos, 90.0, 24.0, False, lambda *a_: None)
+    _alt_lz138 = w138.luft_ziele
+    w138.luft_ziele = lambda: [_lz138]
+    _bot138.hirn.ziel = None
+    _bot138.waffen[_bot138.waffe] = "sturm"; _bot138.magazin["sturm"] = 30
+    _feuer138 = []
+    for _ in range(int(3.0 / K.FIXED_DT)):
+        _zp, _f = _bot138.hirn._luft_abwehr(K.FIXED_DT, None, False)
+        _feuer138.append(_f)
+    pruef("Bots schiessen auf Tragschrauber in der Luft: erst nach der Reaktion, dann in Stoessen, zielend auf sein Bild",
+          not any(_feuer138[:int(0.5 / K.FIXED_DT)]) and any(_feuer138) and not all(_feuer138[int(2 / K.FIXED_DT):])
+          and _zp is not None and _zp.distance_to(_lz138.bild_pos) < 1.0)
+    _bot138.ziel = pygame.Vector2(_lz138.bild_pos)
+    _orte138 = []
+    for _ in range(40):
+        _bot138.ziel = pygame.Vector2(_lz138.bild_pos)
+        w138.luft_zielen(_bot138)
+        _orte138.append(pygame.Vector2(_bot138.ziel))
+    _weit138 = [o_.distance_to(_lz138.pos) for o_ in _orte138]
+    pruef("... aber nicht wie ein Mensch, der ruhig zielt: sie streuen um das Ziel (K.BOTS luft_fehler)",
+          _bot138.luft_ziel is _lz138 and max(_weit138) > 10.0
+          and max(_weit138) <= 24.0 * K.BOTS["luft_fehler"] + 0.5, "%.0f" % max(_weit138))
+    w138.luft_ziele = _alt_lz138
+# Punkte: Aufhelfen 3, Serie, Jagd, Erobern, Sold.
+pruef("Punkte: Aufhelfen bringt 3", K.SCHLACHT["punkte"]["aufhelfen"] == 3)
+_ich138.schlacht_punkte = 0
+for _ in range(4):
+    w138.serie_punkte(_ich138, "abschuss")
+pruef("... Abschuesse kurz nacheinander: ab dem dritten ein Bonus (Serie)",
+      _ich138.schlacht_punkte == sum(min(K.SCHLACHT["punkte"]["serie_hoechstens"],
+                                         K.SCHLACHT["punkte"]["serie"] * (n_ - K.SCHLACHT["punkte"]["serie_ab"]))
+                                     for n_ in (3, 4)), str(_ich138.schlacht_punkte))
+_ich138.schlacht_punkte = 0
+w138.serie_punkte(_ich138, "fahrzeug"); w138.serie_punkte(_ich138, "fahrzeug")
+pruef("... zwei Fahrzeuge kurz nacheinander: Jagdbonus", _ich138.schlacht_punkte == K.SCHLACHT["punkte"]["jagd"])
+_ich138.schlacht_punkte = 0
+w138._sold_rest = 0.0
+w138.sold_schritt(K.FIXED_DT)
+pruef("... und Sold fuer jeden Menschen, ganz ohne Abschuss", _ich138.schlacht_punkte >= K.SCHLACHT["punkte"]["sold"]
+      or getattr(_ich138, "team", -1) not in (0, 1), str(_ich138.schlacht_punkte))
 w138.verlassen(); g138.verlassen()
 
 print()

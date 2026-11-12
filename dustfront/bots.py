@@ -337,6 +337,7 @@ class BotHirn(Taktik):
             will, ziel_punkt, feuern, zielt = springer
         else:
             will, ziel_punkt, feuern, zielt = self._entscheiden(dt, ein)
+            ziel_punkt, feuern = self._luft_abwehr(dt, ziel_punkt, feuern)
         feuern, zielt = self._abzug(feuern, zielt)
         # Seit 0.34.70: steht er in Feuer, Gas oder am Rand einer Falle,
         # geht er zuerst dort heraus - schiessen darf er dabei weiter.
@@ -401,6 +402,45 @@ class BotHirn(Taktik):
         ein["feuert"] = bool(feuern)
         ein["zielt"] = bool(zielt)
         return ein
+
+    def _luft_abwehr(self, dt: float, ziel_punkt, feuern):
+        """Auf einen Tragschrauber oder eine Drohne schiessen (seit 0.34.138,
+        gemeldet: "die Bots kriegen es nicht hin, Ziele in der Luft zu
+        treffen"). Nur ohne Gegner am Boden im Blick, mit einer Schusswaffe,
+        in Reichweite; erst nach der Reaktionszeit und in Stoessen. Getroffen
+        wird ueber das Einrasten wie beim Menschen (luft.luft_zielen) - dort
+        bekommt ein Bot seinen Zielfehler (K.BOTS luft_fehler)."""
+        k, g = self.k, self.g
+        if (feuern or (self.ziel is not None and self.ziel_ok(self.ziel))
+                or k.ebene != 0 or not hasattr(g, "luft_ziele")
+                or k._waffe_lesen().get("art") != "schuss"):
+            self._luft_lz = None
+            return ziel_punkt, feuern
+        b = K.BOTS
+        self._luft_such = getattr(self, "_luft_such", 0.0) - dt
+        if self._luft_such <= 0.0:
+            self._luft_such = b["luft_takt"]
+            reich = min(b["reichweite"].get(k.waffe_name, 300.0), b["luft_weite"])
+            beste, best_d = None, reich
+            for lz in g.luft_ziele():
+                if lz.nur_flak or not lz.lebt or not lz.fraktion or lz.fraktion == k.fraktion:
+                    continue
+                d = k.pos.distance_to(lz.bild_pos)
+                if d < best_d:
+                    beste, best_d = lz, d
+            if beste is not getattr(self, "_luft_lz", None):
+                self._luft_lz = beste
+                self._luft_seit = 0.0
+                self._luft_reaktion = self.rnd.uniform(*b["reaktion"]) + b["luft_reaktion"]
+        lz = getattr(self, "_luft_lz", None)
+        if lz is None or not lz.lebt:
+            return ziel_punkt, feuern
+        self._luft_seit = getattr(self, "_luft_seit", 0.0) + dt
+        if self._luft_seit < getattr(self, "_luft_reaktion", 1.0):
+            return pygame.Vector2(lz.bild_pos), False
+        stoss, pause = b["luft_stoss"]
+        im_stoss = ((self._luft_seit - self._luft_reaktion) % (stoss + pause)) < stoss
+        return pygame.Vector2(lz.bild_pos), bool(im_stoss and k.magazin.get(k.waffe_name, 0) > 0)
 
     def _blick_ohne_ziel(self, will):
         """Wohin er schaut, wenn er nichts anvisiert: wohin er geht - aber
