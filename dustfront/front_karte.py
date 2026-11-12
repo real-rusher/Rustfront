@@ -382,6 +382,35 @@ class WerferKarteTeil:
             return None
         return pygame.Vector2((maus[0] - feld.x) / f, (maus[1] - feld.y) / f)
 
+    def _werfer_zonen_bild(self, zonen: list, feld, f: float):
+        """Die Zielzonen als eine Flaeche (seit 0.34.135): tuerkis gefuellt,
+        mit hellem Rand nur aussen - Kreise, die sich ueberlappen, verschmelzen
+        zu einem Gebiet. Tuerkis, damit sie neben dem orangen Reichweitenkreis
+        nicht verwechselt wird. Neu gemalt nur, wenn die Zonen neu sind."""
+        alt = self.__dict__.get("_wzn_bild")
+        if alt is not None and alt[0] is zonen and alt[1] == feld.size:
+            return alt[2]
+        kreise = [((int(o.x * f), int(o.y * f)), max(3, int(r * f))) for o, r, _a in zonen]
+        flaeche = pygame.Surface(feld.size)
+        flaeche.fill((0, 0, 0))
+        for m, r in kreise:
+            pygame.draw.circle(flaeche, (30, 120, 112), m, r)
+        flaeche.set_colorkey((0, 0, 0))
+        flaeche.set_alpha(80)
+        rand = pygame.Surface(feld.size)
+        rand.fill((0, 0, 0))
+        for m, r in kreise:
+            pygame.draw.circle(rand, (120, 240, 220), m, r)
+        for m, r in kreise:
+            pygame.draw.circle(rand, (0, 0, 0), m, max(1, r - 2))
+        rand.set_colorkey((0, 0, 0))
+        rand.set_alpha(220)
+        fertig = pygame.Surface(feld.size, pygame.SRCALPHA)
+        fertig.blit(flaeche, (0, 0))
+        fertig.blit(rand, (0, 0))
+        self._wzn_bild = (zonen, feld.size, fertig)
+        return fertig
+
     def werfer_karte_zeichnen(self, ziel) -> None:
         b = self._werfer_eigen()
         if b is None:
@@ -409,22 +438,29 @@ class WerferKarteTeil:
         pygame.draw.circle(kreis, (236, 128, 40, 200), m_, weit, 2)
         pygame.draw.circle(kreis, (200, 60, 40, 160), m_, max(2, nah), 1)
         ziel.blit(kreis, feld.topleft)
-        if self.ist_gastgeber and self.ich is not None:
-            for ort, _r in self.werfer_ziele(self.ich.team):
+        team = getattr(self.ich, "team", -1)
+        zonen = self.werfer_zonen(team) if team in (0, 1) else []
+        ziel.blit(self._werfer_zonen_bild(zonen, feld, f), feld.topleft)
+        for ort, _r, art in zonen:
+            if art == "feind":
                 q = punkt(ort)
                 pygame.draw.circle(ziel, K.C_RED, q, 3)
                 pygame.draw.circle(ziel, (16, 11, 8), q, 3, 1)
         maus = self.app.zu_spiel(pygame.mouse.get_pos())
         if feld.collidepoint(maus):
-            gut = b.ziel_grund == 0
+            # Beim Gast selbst geprueft (seit 0.34.135): sein Zeiger kommt beim
+            # Gastgeber spaeter an, die Anzeige soll trotzdem sofort stimmen.
+            wpunkt = pygame.Vector2((maus[0] - feld.x) / f, (maus[1] - feld.y) / f)
+            grund = self.werfer_pruefen(b, team, wpunkt) if team in (0, 1) else b.ziel_grund
+            gut = grund == 0
             farbe = K.C_TEAL if gut else K.C_RED
             pygame.draw.circle(ziel, farbe, maus, max(3, int(s["streu"] * f)), 1)
             pygame.draw.line(ziel, farbe, (maus[0] - 5, maus[1]), (maus[0] + 5, maus[1]))
             pygame.draw.line(ziel, farbe, (maus[0], maus[1] - 5), (maus[0], maus[1] + 5))
             text = ("FEUER: KLICK" if b.bereit else "LÄDT ...") if gut else \
-                {1: "ZU NAH", 2: "ZU WEIT", 3: "KEIN ZIEL DORT"}.get(b.ziel_grund, "")
+                {1: "ZU NAH", 2: "ZU WEIT", 3: "AUSSERHALB DER ZONEN"}.get(grund, "")
             SCHRIFT.zeichnen(ziel, text, maus[0], maus[1] - 16, farbe, 1, ausrichtung="mitte")
         ziel.set_clip(alt_clip)
         SCHRIFT.zeichnen(ziel, "WERFER - AUFGEBAUT", feld.x, feld.y - 12, K.C_AMBER, 1)
-        SCHRIFT.zeichnen(ziel, "ROT: GESEHENE ZIELE   KREIS: REICHWEITE   RECHTE MAUSTASTE: ABBAUEN",
-                         feld.right, feld.y - 12, K.C_MUTED, 1, ausrichtung="rechts")
+        SCHRIFT.zeichnen(ziel, "TÜRKIS: ZIELZONEN   ORANGE: REICHWEITE   ROT: ENTDECKTE GEGNER   RECHTS: ABBAUEN",
+                         feld.right, feld.bottom + 6, K.C_MUTED, 1, ausrichtung="rechts")

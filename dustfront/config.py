@@ -1948,13 +1948,25 @@ WERFER = dict(
     # (Grad/s).
     hub=(56.0, 32.0),
     hub_dreh=28.0,
-    salve=dict(raketen=6, abstand=0.5, flug=3.6, streu=110.0, radius=46.0, schaden=90.0,
-               fahrzeug=120.0, nachladen=14.0, nah=400.0, weit=3200.0, umkreis=130.0,
+    # Seit 0.34.135 (gewuenscht: "jede soll was staerker sein und einen groesseren
+    # Radius haben", "mehr spread out"): 6 Raketen in einem Ring um die Mitte
+    # (`formation` mal streu weit, eine in die Mitte), je `wackeln` px versetzt.
+    salve=dict(raketen=6, abstand=0.5, flug=3.6, streu=150.0, radius=66.0, schaden=120.0,
+               fahrzeug=165.0, nachladen=14.0, nah=400.0, weit=3200.0, umkreis=130.0,
+               formation=0.72, wackeln=22.0,
         weit_karte=0.5,      # seit 0.34.134: aufgebaut reicht er ueber die halbe Kartenbreite (mindestens weit)
                sicht=420.0, verraten=6.0, hoch=150.0, pruefen=0.4,
                # Die Rohre laden einzeln wieder (seit 0.34.120): das erste `nachladen_ab`
                # Sekunden nach dem letzten Start, dann je `nachladen_je` Sekunden eines.
                nachladen_ab=3.0, nachladen_je=1.75, reihenfolge=(0, 3, 1, 4, 2, 5)),
+    # Wohin er schiessen darf (seit 0.34.135, gewuenscht: "ueberall in die
+    # aufgedeckten Bereiche des ganzen Teams", etwas ueber die Sicht hinaus):
+    # um jeden eigenen Kaempfer SCHLACHT karte_sicht + sicht_rand, um jeden
+    # Eroberungspunkt und die Hotzone ihr Kreis + punkt_rand, um jeden
+    # markierten Gegner `feind`, und wo Aufklaerung (Drohne, Tragschrauber)
+    # vorbeikam, bleibt `spur_dauer` s lang ihr Kreis (alle `spur_takt` s ein
+    # Fleck). Auf der Karte des Werfers tuerkis.
+    zonen=dict(sicht_rand=220.0, punkt_rand=320.0, feind=420.0, spur_dauer=25.0, spur_takt=0.5),
 )
 
 # Der Tragschrauber (seit 0.34.113): fliegt ueber Mauern, Felsen und die Front.

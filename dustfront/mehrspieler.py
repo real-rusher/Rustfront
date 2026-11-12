@@ -1691,6 +1691,70 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         merk[team] = (jetzt, orte)
         return orte
 
+    def _werfer_spuren_merken(self) -> None:
+        """Wo Aufklaerung fliegt, bleibt eine Weile ein Fleck (seit 0.34.135,
+        gewuenscht: "soll das eine gewisse Zeit lang so eine Area
+        hinterlassen"). Laeuft beim Gastgeber und beim Gast gleich, aus dem,
+        was beide kennen: die grossen Drohnen und Tragschrauber in der Luft."""
+        z = K.WERFER["zonen"]
+        jetzt = self._zeit
+        if jetzt - self.__dict__.get("_wsp_zuletzt", -99.0) < z["spur_takt"]:
+            return
+        self._wsp_zuletzt = jetzt
+        spuren = self.__dict__.setdefault("_werfer_spuren", [])
+        spuren[:] = [x for x in spuren if jetzt - x[0] <= z["spur_dauer"]]
+        drohnen = getattr(self, "_drohnen_fuer_karte", None)
+        if drohnen is not None:
+            r = float(K.SCHLACHT["aufklaerung"]["radius"])
+            for pos, team in drohnen():
+                spuren.append((jetzt, pygame.Vector2(pos), r, team))
+        for b in getattr(self, "fahrzeuge", ()):
+            if b.art != "tragschrauber" or b.kaputt or not getattr(b, "in_der_luft", False):
+                continue
+            team = self._team_von_seite(fahrzeug_modul.seite_von(b))
+            if team in (0, 1):
+                spuren.append((jetzt, pygame.Vector2(b.pos), float(K.TRAGSCHRAUBER["aufklaerung"]), team))
+
+    def werfer_zonen(self, team: int) -> list:
+        """[(Ort, Radius, Art)]: wohin die Werfer dieser Seite schiessen
+        duerfen (seit 0.34.135). Art "sicht" (um die eigenen Leute, etwas
+        weiter als sie sehen), "spur" (wo Aufklaerung war), "punkt"
+        (Eroberungspunkte und Hotzone), "feind" (markierte Gegner). Beim
+        Gast aus seinen eigenen Daten - so zeigt seine Karte dasselbe."""
+        merk = self.__dict__.setdefault("_wzn_merk", {})
+        jetzt = self._zeit
+        alt = merk.get(team)
+        if alt is not None and jetzt - alt[0] < K.WERFER["salve"]["pruefen"]:
+            return alt[1]
+        self._werfer_spuren_merken()
+        z = K.WERFER["zonen"]
+        eigen = "team%d" % team
+        sicht = float(K.SCHLACHT["karte_sicht"]) + z["sicht_rand"]
+        zonen = []
+        for k in self.kaempfer.values():
+            if not k.lebt or int(k.ebene) != 0:
+                continue
+            if getattr(k, "team", -1) == team:
+                zonen.append((pygame.Vector2(k.pos), sicht, "sicht"))
+            elif (getattr(k, "team", -1) == 1 - team and getattr(k, "markiert_rest", 0.0) > 0.0
+                  and getattr(k, "markiert_fuer", "") == eigen):
+                zonen.append((pygame.Vector2(k.pos), z["feind"], "feind"))
+        for b in getattr(self, "fahrzeuge", ()):
+            if (not b.kaputt and b.ebene == 0 and getattr(b, "markiert_rest", 0.0) > 0.0
+                    and getattr(b, "markiert_fuer", "") == eigen):
+                zonen.append((pygame.Vector2(b.pos), z["feind"], "feind"))
+        for _t, pos, r, t_team in self.__dict__.get("_werfer_spuren", ()):
+            if t_team == team:
+                zonen.append((pos, r, "spur"))
+        punkte = getattr(self, "front_punkte", None)
+        if punkte is not None and getattr(self, "schlachtplan", None) is not None:
+            for p_ in punkte():
+                zonen.append((pygame.Vector2(p_.pos), K.FRONT["radius"] + z["punkt_rand"], "punkt"))
+        if self.regeln.get("zone"):
+            zonen.append((pygame.Vector2(self.zone_mitte), float(K.ZONE["radius"]) + z["punkt_rand"], "punkt"))
+        merk[team] = (jetzt, zonen)
+        return zonen
+
     def werfer_weite(self) -> float:
         """Wie weit der Werfer reicht: seit 0.34.134 ueber die halbe Karte
         (gewuenscht), mindestens K.WERFER salve weit."""
@@ -1708,8 +1772,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             return 2
         if team not in (0, 1):
             return 0
-        for ort, r in self.werfer_ziele(team):
-            if ort.distance_to(punkt) <= s["umkreis"] + r:
+        for ort, r, _art in self.werfer_zonen(team):
+            if ort.distance_squared_to(punkt) <= r * r:
                 return 0
         return 3
 
@@ -1745,9 +1809,19 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
     def _werfer_salve(self, b, punkt, team) -> None:
         s = K.WERFER["salve"]
         b.bereit = False
+        # Eine in die Mitte, die anderen im Ring darum (seit 0.34.135, vorher
+        # gewuerfelt - das sah oft aus wie eine Linie); abwechselnd ueber den
+        # Ring, damit die Einschlaege springen.
+        dreh = random.uniform(0.0, 360.0)
+        ring = max(1, s["raketen"] - 1)
+        folge = [(j * 2) % ring if j * 2 < ring else (j * 2 - ring) | 1 for j in range(ring)]
         for i in range(s["raketen"]):
-            r = s["streu"] * math.sqrt(random.random())
-            p = punkt + pygame.Vector2(r, 0).rotate(random.uniform(0.0, 360.0))
+            if i == 0:
+                p = pygame.Vector2(punkt)
+            else:
+                w = dreh + 360.0 * folge[(i - 1) % ring] / ring
+                p = punkt + pygame.Vector2(s["streu"] * s["formation"], 0).rotate(w)
+            p += pygame.Vector2(s["wackeln"] * math.sqrt(random.random()), 0).rotate(random.uniform(0.0, 360.0))
             rohr = s["reihenfolge"][i % len(s["reihenfolge"])]
             b.einschlaege.append([s["flug"] + i * s["abstand"], p.x, p.y, False, rohr])
             # Das Rohr laedt wieder, wenn alle gestartet sind und die Pause um ist -
@@ -6478,6 +6552,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if self.vorbei or self.in_lobby or not self.schlacht:
             self.belohnung_offen = False
         self._start_masken()
+        if self.schlacht or self.__dict__.get("front_test"):
+            self._werfer_spuren_merken()
         if not self.pausiert and not self.belohnung_offen:
             self.knoepfe_sammeln()
         elif self.belohnung_offen:

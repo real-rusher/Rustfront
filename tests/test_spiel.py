@@ -19821,6 +19821,67 @@ for _ in range(20):
     _wf134b.phase = 2
 pruef("... auch beim Gast steht die Karte (seit 0.34.135: dort kennt nur das Fahrzeug seinen Fahrer)",
       g134._werfer_eigen() is not None and g134._werfer_eigen().art == "werfer")
+
+print("\n-- 0.34.135: Zielzonen des Werfers, Formation, Staerke --")
+_t135 = _ich134.team
+_zn135 = w134.werfer_zonen(_t135)
+pruef("Werfer-Zonen: um jeden eigenen Kaempfer eine Sichtzone, weiter als er sieht",
+      any(a_ == "sicht" and r_ > K.SCHLACHT["karte_sicht"] and o_.distance_to(_ich134.pos) < 1.0
+          for o_, r_, a_ in _zn135))
+pruef("... um jeden Eroberungspunkt eine Zone",
+      sum(1 for _o, _r, a_ in _zn135 if a_ == "punkt") >= len(w134.front_punkte()) > 0)
+_ue135 = __import__("dustfront.schlacht", fromlist=["Ueberflug"]).Ueberflug(
+    pygame.Vector2(_ich134.pos) + pygame.Vector2(2500, 0), _t135, _ich134.fraktion, 0)
+w134.ueberfluege.append(_ue135)
+w134._wsp_zuletzt = -99.0; w134._wzn_merk = {}
+w134._werfer_spuren_merken()
+w134.ueberfluege.remove(_ue135)
+w134._wzn_merk = {}
+_sp135 = pygame.Vector2(_ue135.pos)
+pruef("... wo die Aufklaerungsdrohne war, bleibt eine Spur, auch wenn sie weg ist",
+      any(a_ == "spur" and o_.distance_to(_sp135) < 1.0 for o_, _r, a_ in w134.werfer_zonen(_t135)))
+w134._werfer_spuren = [(w134._zeit - K.WERFER["zonen"]["spur_dauer"] - 1.0, _sp135, 650.0, _t135)]
+w134._wsp_zuletzt = -99.0; w134._werfer_spuren_merken(); w134._wzn_merk = {}
+pruef("... und vergeht nach spur_dauer Sekunden",
+      not any(a_ == "spur" and o_.distance_to(_sp135) < 1.0 for o_, _r, a_ in w134.werfer_zonen(_t135)))
+_fe135 = next(k_ for k_ in w134.kaempfer.values() if k_.lebt and getattr(k_, "team", -1) == 1 - _t135)
+_fe135.markiert_fuer, _fe135.markiert_rest = "team%d" % _t135, 10.0
+w134._wzn_merk = {}
+pruef("... um einen markierten Gegner eine Zone",
+      any(a_ == "feind" and o_.distance_to(_fe135.pos) < 1.0 for o_, _r, a_ in w134.werfer_zonen(_t135)))
+_weit135 = max(w134.werfer_weite() - 50.0, K.WERFER["salve"]["nah"] + 50.0)
+_frei135 = None
+for _w in range(0, 360, 10):
+    _q = _wf134.rohr_mitte() + pygame.Vector2(_weit135, 0).rotate(_w)
+    if not any(o_.distance_to(_q) <= r_ for o_, r_, _a in w134.werfer_zonen(_t135)):
+        _frei135 = _q
+        break
+pruef("... ausserhalb aller Zonen gilt kein Ziel (Grund 3)",
+      _frei135 is None or w134.werfer_pruefen(_wf134, _t135, _frei135) == 3)
+_in135 = _fe135.pos
+pruef("... im Umkreis eines markierten Gegners schon (wenn in Reichweite)",
+      w134.werfer_pruefen(_wf134, _t135, _in135 + pygame.Vector2(K.WERFER["zonen"]["feind"] - 30, 0)) in (0, 1, 2))
+_gz135 = g134.werfer_zonen(g134.ich.team)
+pruef("... der Gast rechnet die Zonen selbst (seine Karte zeigt sie)",
+      any(a_ == "sicht" for _o, _r, a_ in _gz135) and any(a_ == "punkt" for _o, _r, a_ in _gz135))
+_bild135 = pygame.Surface((K.GAME_W, K.GAME_H))
+g134.zeichnen(_bild135, 1.0)
+pruef("... und zeichnet die Karte mit Zonen ohne Fehler", g134.__dict__.get("_wzn_bild") is not None)
+_wf134.einschlaege = []
+w134._werfer_salve(_wf134, pygame.Vector2(_ich134.pos) + pygame.Vector2(1500, 0), _t135)
+_ort135 = [pygame.Vector2(e_[1], e_[2]) for e_ in _wf134.einschlaege]
+_mi135 = pygame.Vector2(_ich134.pos) + pygame.Vector2(1500, 0)
+_ab135 = sorted(o_.distance_to(_mi135) for o_ in _ort135)
+pruef("Salve: eine Rakete in die Mitte, die anderen im Ring darum (keine Linie)",
+      len(_ort135) == 6 and _ab135[0] <= K.WERFER["salve"]["wackeln"] + 0.5
+      and all(o_ > K.WERFER["salve"]["streu"] * K.WERFER["salve"]["formation"] - K.WERFER["salve"]["wackeln"] - 0.5
+              for o_ in _ab135[1:]), str([round(x_) for x_ in _ab135]))
+_wk135 = [math.degrees(math.atan2(o_.y - _mi135.y, o_.x - _mi135.x)) % 360 for o_ in _ort135[1:]]
+_wk135.sort()
+_luecke135 = max((_wk135[(i_ + 1) % 5] - _wk135[i_]) % 360 for i_ in range(5))
+pruef("... gleichmaessig rundum verteilt (keine Luecke ueber 100 Grad)", _luecke135 < 100, str([round(x_) for x_ in _wk135]))
+pruef("... jede Rakete staerker und mit groesserem Radius als vor 0.34.135",
+      K.WERFER["salve"]["schaden"] > 90 and K.WERFER["salve"]["radius"] > 46)
 w134.verlassen(); g134.verlassen()
 
 print()
