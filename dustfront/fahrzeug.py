@@ -1045,7 +1045,7 @@ class Flakgranate(Geschoss):
                 self._zuenden()
                 return
             lz = self.luft_ziel
-            if lz is not None and lz.lebt and self.pos.distance_to(lz.pos) <= K.FLAK["naeher"]:
+            if lz is not None and lz.lebt and self.pos.distance_to(lz.jetzt) <= K.FLAK["naeher"]:
                 self._zuenden()
                 return
             if self.rest <= 0.0:
@@ -1063,7 +1063,7 @@ class Flakgranate(Geschoss):
         F = K.FLAK
         lz = self.luft_ziel
         if lz is not None and lz.lebt:
-            weit = self.pos.distance_to(lz.pos)
+            weit = self.pos.distance_to(lz.jetzt)
             reich = F["luft_radius"] + lz.radius
             if weit <= reich:
                 anteil = 1.0 - F["luft_abfall"] * min(1.0, weit / reich)

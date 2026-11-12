@@ -62,6 +62,14 @@ class LuftZiel:
         return pygame.Vector2(self.pos.x, self.pos.y - self.versatz)
 
     @property
+    def jetzt(self) -> pygame.Vector2:
+        """Wo es *jetzt* ist (seit 0.34.135): eine Kugel prueft ihren Treffer
+        hier. Vorher gegen `pos` - den Ort beim Schuss -, und ein fliegender
+        Tragschrauber war dort nie mehr, wenn sie ankam."""
+        p = getattr(self.objekt, "pos", None)
+        return p if p is not None else self.pos
+
+    @property
     def lebt(self) -> bool:
         return bool(getattr(self.objekt, "lebt", True))
 
@@ -122,9 +130,13 @@ class LuftTeil:
                 continue
             if lz.objekt is getattr(k, "fahrzeug", None):
                 continue
-            if lz.bild_pos.distance_to(ziel) <= lz.radius:
+            if lz.bild_pos.distance_to(ziel) <= lz.radius + K.LUFT_ZIELEN["fang_extra"]:
                 k.luft_ziel = lz
-                k.ziel = self._vorhalten(k, lz) if flak else pygame.Vector2(lz.pos)
+                # Seit 0.34.135 haelt jeder vor, nicht nur die Flak (gemeldet:
+                # "das Schiessen auf den Heli geht noch gar nicht ausser von
+                # Bots im Flakwagen") - die Kugel flog dorthin, wo er beim Schuss
+                # war, und kam an, wenn er laengst weiter war.
+                k.ziel = self._vorhalten(k, lz)
                 return
 
     def _vorhalten(self, k, lz) -> pygame.Vector2:
@@ -134,8 +146,15 @@ class LuftTeil:
         fliegender Tragschrauber waere sonst nicht zu treffen. Ohne Eigengeschwindigkeit
         (Schirme, Abwuerfe) gilt der Ort selbst."""
         v = getattr(lz.objekt, "geschw", None)
-        mitte = k.fahrzeug.aufbau_mitte() if hasattr(k.fahrzeug, "aufbau_mitte") else k.pos
-        tempo = K.FAHRZEUG_WAFFEN["flak_kanone"]["tempo"]
+        fz = getattr(k, "fahrzeug", None)
+        mitte = fz.aufbau_mitte() if hasattr(fz, "aufbau_mitte") else k.pos
+        if getattr(fz, "flak", False):
+            tempo = K.FAHRZEUG_WAFFEN["flak_kanone"]["tempo"]
+        elif fz is not None:
+            tempo = K.FAHRZEUG_WAFFEN.get("ring_mg", {}).get("tempo", 900.0)
+        else:
+            lesen = getattr(k, "_waffe_lesen", None)
+            tempo = float((lesen() if lesen is not None else {}).get("tempo", 700.0) or 700.0)
         if v is None or tempo <= 0.0:
             return pygame.Vector2(lz.pos)
         # Zweimal nachrechnen: die Flugzeit haengt vom Abstand zum Vorhalt-Ort ab.
@@ -234,8 +253,11 @@ class LuftTeil:
             if (druck and b.in_der_luft and b.bomben > 0 and b.emp_rest <= 0.0
                     and b.fahrer is not None and not b.landen and not b.bomben_fall):
                 b.bomben -= 1
-                b._bomben_rest = f["bomben_nachladen"]
-                ort = b.pos + pygame.Vector2(bo["abwurf"]).rotate(b.winkel)
+                b._bomben_rest = f["bomben_nachladen_luft"]
+                # Mit einem Teil seines Schwungs (seit 0.34.135, gewuenscht): sie
+                # schlaegt vor ihm auf, nicht senkrecht unter ihm.
+                ort = b.pos + pygame.Vector2(bo["abwurf"]).rotate(b.winkel) \
+                    + b.vorn * (b.flug_v * bo["fall"] * bo["schwung"])
                 b.bomben_fall.append([bo["fall"], ort.x, ort.y, b.winkel])
                 self.welt.explosion(ort, b.ebene, float(b.hoehe), "bombe_los", b.fahrer)
                 self.welt.klang("bombe_ab", 0.7, b.pos, b.ebene)
@@ -248,6 +270,13 @@ class LuftTeil:
                     self.welt.explosion(p, b.ebene, bo["radius"], "bombe", b.fahrer)
                     self.flaechenschaden(p, b.ebene, bo["radius"], bo["schaden"], bo["fahrzeug"],
                                          b.fahrer, "bombe")
+            if b.in_der_luft and b.bomben < f["bomben"] and not b.bomben_fall:
+                # Auch in der Luft laden die Bomben nach (seit 0.34.135, gemeldet:
+                # "laden sich nicht nach") - langsamer als am Boden.
+                b._bomben_rest -= dt
+                if b._bomben_rest <= 0.0:
+                    b.bomben += 1
+                    b._bomben_rest = f["bomben_nachladen_luft"]
             if b.in_der_luft and b.fahrer is not None and b.emp_rest <= 0.0:
                 b._aufkl_rest -= dt
                 if b._aufkl_rest <= 0.0:
@@ -409,7 +438,10 @@ class LuftTeil:
             t = bo["fall"] - max(0.0, e[0])
             hoch, winkel = lage(t)
             u = t / bo["fall"]
-            boden = pygame.Vector2(e[1], e[2]) - ecke
+            # Sie fliegt mit dem Schwung des Tragschraubers nach vorn (seit
+            # 0.34.135): bis zum Aufschlag noch so viel davor.
+            drift = pygame.Vector2(1, 0).rotate(e[3]) * (K.TRAGSCHRAUBER["flug_reise"] * bo["fall"] * bo["schwung"])
+            boden = pygame.Vector2(e[1], e[2]) - drift * (1.0 - u) - ecke
             sw = int(2 + 4 * u)
             sch = pygame.Surface((sw * 2 + 2, sw + 2), pygame.SRCALPHA)
             pygame.draw.ellipse(sch, (10, 8, 6, int(40 + 130 * u)), sch.get_rect())

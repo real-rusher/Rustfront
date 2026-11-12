@@ -509,7 +509,7 @@ class Geschoss(Wesen):
             lz = self.luft_ziel
             if lz is not None:
                 ziel = None            # am Boden trifft sie nichts, sie geht darueber
-                if lz.lebt and self.pos.distance_to(lz.pos) <= lz.radius:
+                if lz.lebt and self.pos.distance_to(lz.jetzt) <= lz.radius + K.LUFT_ZIELEN["treffer_extra"]:
                     self.lebt = False
                     lz.treffen(self.schaden_jetzt() * (daten_faktor(self) if self.flak else 1.0),
                                self.von)

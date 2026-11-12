@@ -1293,6 +1293,11 @@ SCHLACHT = dict(
     nach_absetzen_tempo=70.0,   # px/s
 )
 
+# Auf Luftziele zielen (seit 0.34.135): liegt der Zeiger so viel ausserhalb
+# ihres Radius noch auf dem Bild, rastet er trotzdem ein.
+LUFT_ZIELEN = dict(fang_extra=12.0,
+                   treffer_extra=14.0)   # ... und eine Kugel trifft es so viel ausserhalb noch (Streuung)
+
 # Ein Fahrzeug von einem Bot der eigenen Seite uebernehmen (seit 0.34.134):
 # E am Wagen wirft ihn hinaus (nicht beim Flakwagen); steigt man aus, steigt er
 # wieder ein, wenn er so nah ist.
@@ -1988,11 +1993,13 @@ TRAGSCHRAUBER = dict(
     aufklaerung_takt=1.0,
     bomben=2,
     bomben_nachladen=3.0,
+    bomben_nachladen_luft=9.0,   # seit 0.34.135: in der Luft laedt er auch nach, langsamer
     # Seit 0.34.123 eine kleine Schrottbombe (Blechdose mit Lunte, art_bombe.py),
     # von Hand neben der Kanzel fallen gelassen (`abwurf`: Spielpixel, +x vorn,
     # +y rechts): senkrecht, ohne sein Tempo, eine nach der anderen; im Fall
     # ueberschlaegt sie sich (`ueberschlag` Grad je Sekunde).
     bombe=dict(fall=1.1, radius=62.0, schaden=110.0, fahrzeug=140.0, pause=0.6,
+        schwung=0.5,             # seit 0.34.135: so viel vom Tempo des Tragschraubers behaelt die Bombe
                abwurf=(9.0, 8.0), ueberschlag=260.0),
     luft_radius=24.0,         # so gross ist er als Ziel (Pixel um sein Bild)
     # Abschuss in der Luft (seit 0.34.127, gewuenscht): die Insassen sind

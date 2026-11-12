@@ -2188,7 +2188,7 @@ class BotHirn(Taktik):
         ein["will"] = [round(b.vorn.x, 2), round(b.vorn.y, 2)]
         # Bomben: ein Gegner (oder fremdes Fahrzeug) dort, wo sie aufschlaegt.
         bo = f["bombe"]
-        abwurf = b.pos + pygame.Vector2(bo["abwurf"]).rotate(b.winkel) + b.vorn * (b.flug_v * bo["fall"] * 0.0)
+        abwurf = b.pos + pygame.Vector2(bo["abwurf"]).rotate(b.winkel) + b.vorn * (b.flug_v * bo["fall"] * bo["schwung"])
         treffer = [x.pos for x in g.kaempfer.values()
                    if x.lebt and 0 <= x.team < 2 and x.team != k.team and int(x.ebene) == 0
                    and x.pos.distance_to(abwurf) <= bo["radius"] * 0.8]
