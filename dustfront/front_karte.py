@@ -338,3 +338,89 @@ class FrontKarteTeil:
                 SCHRIFT.zeichnen(ziel, name, q[0], q[1] + gross + 2 * groesse,
                                  K.C_AMBER if kenn == gewaehlt else K.C_TEAL, groesse, ausrichtung="mitte")
         ziel.set_clip(alt_clip)
+
+
+class WerferKarteTeil:
+    """Der aufgebaute Werfer (seit 0.34.134, gewuenscht): man sieht eine
+    Karte wie im Nachschub (TAB) und schiesst ueber die halbe Karte - der
+    Kreis zeigt, wie weit er reicht, der Zeiger, wo die Salve fallen soll und
+    ob es dort ein Ziel gibt. Ein Klick feuert."""
+
+    def _werfer_eigen(self):
+        ich = self.ich
+        b = getattr(ich, "fahrzeug", None) if ich is not None else None
+        if (b is None or b.art != "werfer" or not ich.lebt or b.kaputt
+                or getattr(b, "fortschritt", 0.0) < 1.0 or b.phase != 2):
+            return None
+        if getattr(self, "belohnung_offen", False) or self.menue is not None or self.vorbei:
+            return None
+        return b
+
+    @staticmethod
+    def werfer_karte_rect() -> pygame.Rect:
+        return pygame.Rect(150, 40, 474, 292)
+
+    def _werfer_masse(self):
+        e = self.welt.ebene(0)
+        r = self.werfer_karte_rect()
+        f = min(r.width / float(e.pixel_breite), r.height / float(e.pixel_hoehe))
+        breit, hoch = e.pixel_breite * f, e.pixel_hoehe * f
+        return pygame.Rect(int(r.x + (r.width - breit) / 2), int(r.y + (r.height - hoch) / 2),
+                           int(breit), int(hoch)), f
+
+    def werfer_karte_ziel(self):
+        """Wohin der Zeiger auf der Karte zeigt (Welt), oder None."""
+        if self._werfer_eigen() is None:
+            return None
+        feld, f = self._werfer_masse()
+        maus = self.app.zu_spiel(pygame.mouse.get_pos())
+        if not feld.collidepoint(maus):
+            return None
+        return pygame.Vector2((maus[0] - feld.x) / f, (maus[1] - feld.y) / f)
+
+    def werfer_karte_zeichnen(self, ziel) -> None:
+        b = self._werfer_eigen()
+        if b is None:
+            return
+        feld, f = self._werfer_masse()
+        pygame.draw.rect(ziel, (8, 6, 4), feld.inflate(6, 6))
+        pygame.draw.rect(ziel, (84, 66, 48), feld.inflate(6, 6), 1)
+        wahl, self.belohnung_wahl = getattr(self, "belohnung_wahl", -1), -1
+        try:
+            self._karte_malen(ziel, feld, 1.0, (-999, -999), self.ich)
+        finally:
+            self.belohnung_wahl = wahl
+        alt_clip = ziel.get_clip()
+        ziel.set_clip(feld)
+
+        def punkt(pos):
+            return (int(feld.x + pos.x * f), int(feld.y + pos.y * f))
+        s = K.WERFER["salve"]
+        mitte = punkt(b.rohr_mitte())
+        weit = int(self.werfer_weite() * f)
+        nah = int(s["nah"] * f)
+        kreis = pygame.Surface(feld.size, pygame.SRCALPHA)
+        m_ = (mitte[0] - feld.x, mitte[1] - feld.y)
+        pygame.draw.circle(kreis, (236, 128, 40, 26), m_, weit)
+        pygame.draw.circle(kreis, (236, 128, 40, 200), m_, weit, 2)
+        pygame.draw.circle(kreis, (200, 60, 40, 160), m_, max(2, nah), 1)
+        ziel.blit(kreis, feld.topleft)
+        if self.ist_gastgeber and self.ich is not None:
+            for ort, _r in self.werfer_ziele(self.ich.team):
+                q = punkt(ort)
+                pygame.draw.circle(ziel, K.C_RED, q, 3)
+                pygame.draw.circle(ziel, (16, 11, 8), q, 3, 1)
+        maus = self.app.zu_spiel(pygame.mouse.get_pos())
+        if feld.collidepoint(maus):
+            gut = b.ziel_grund == 0
+            farbe = K.C_TEAL if gut else K.C_RED
+            pygame.draw.circle(ziel, farbe, maus, max(3, int(s["streu"] * f)), 1)
+            pygame.draw.line(ziel, farbe, (maus[0] - 5, maus[1]), (maus[0] + 5, maus[1]))
+            pygame.draw.line(ziel, farbe, (maus[0], maus[1] - 5), (maus[0], maus[1] + 5))
+            text = ("FEUER: KLICK" if b.bereit else "LÄDT ...") if gut else \
+                {1: "ZU NAH", 2: "ZU WEIT", 3: "KEIN ZIEL DORT"}.get(b.ziel_grund, "")
+            SCHRIFT.zeichnen(ziel, text, maus[0], maus[1] - 16, farbe, 1, ausrichtung="mitte")
+        ziel.set_clip(alt_clip)
+        SCHRIFT.zeichnen(ziel, "WERFER - AUFGEBAUT", feld.x, feld.y - 12, K.C_AMBER, 1)
+        SCHRIFT.zeichnen(ziel, "ROT: GESEHENE ZIELE   KREIS: REICHWEITE   RECHTE MAUSTASTE: ABBAUEN",
+                         feld.right, feld.y - 12, K.C_MUTED, 1, ausrichtung="rechts")

@@ -66,7 +66,7 @@ from .bots import BotTeil
 from .lobby import LobbyTeil, lobby_regeln
 from .schlacht import SchlachtTeil
 from .front import FrontTeil
-from .front_karte import FrontKarteTeil
+from .front_karte import FrontKarteTeil, WerferKarteTeil
 from .luft import LuftTeil
 from .gastseite import GastTeil, WirtTeil
 from .spielerkosmetik import KosmetikTeil
@@ -798,7 +798,7 @@ def _version_kleiner(a: str, b: str) -> bool:
 
 
 class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, FrontKarteTeil,
-              LuftTeil, GastTeil, WirtTeil):
+              WerferKarteTeil, LuftTeil, GastTeil, WirtTeil):
     # Die Faehigkeiten der Klassen (Taste C, seit 0.34.73) legen Dinge aus
     # ausruestung.py hin. Bis 0.34.79 gingen die nicht ueber das Netz, und
     # nur der Testmodus schaltete sie ein. Seitdem stehen sie in der
@@ -1691,6 +1691,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         merk[team] = (jetzt, orte)
         return orte
 
+    def werfer_weite(self) -> float:
+        """Wie weit der Werfer reicht: seit 0.34.134 ueber die halbe Karte
+        (gewuenscht), mindestens K.WERFER salve weit."""
+        e = self.welt.ebene(0)
+        return max(float(K.WERFER["salve"]["weit"]), e.pixel_breite * K.WERFER["salve"]["weit_karte"])
+
     def werfer_pruefen(self, b, team, punkt) -> int:
         """0: dort darf er hinschiessen. 1 zu nah, 2 zu weit, 3 kein gueltiges
         Ziel. Ohne bekannte Seite (Testmodus ohne Team) gilt jeder Punkt."""
@@ -1698,7 +1704,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         weite = b.rohr_mitte().distance_to(punkt)
         if weite < s["nah"]:
             return 1
-        if weite > s["weit"]:
+        if weite > self.werfer_weite():
             return 2
         if team not in (0, 1):
             return 0
@@ -1711,6 +1717,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         for b in self.fahrzeuge:
             if b.art != "werfer" or b.nur_bild or b.kaputt:
                 continue
+            b._weite = self.werfer_weite()
             s = K.WERFER["salve"]
             for e in list(b.einschlaege):
                 e[0] -= dt
@@ -2635,6 +2642,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             ziel = self._ziel_zuletzt
         else:
             ziel = e.ziel_welt(self.kamera, self.ich.pos if self.ich else (0, 0))
+            # Aufgebauter Werfer (seit 0.34.134): gezielt wird auf der Karte.
+            karte = self.werfer_karte_ziel()
+            if karte is not None:
+                ziel = karte
             self._ziel_zuletzt = pygame.Vector2(ziel)
         if self._feuer_sperre and not (e.gehalten("feuer") or e.gehalten("zweit")):
             self._feuer_sperre = False
@@ -2909,6 +2920,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         darf = not k.ist_bot or getattr(k, "darf_fahren", False)
         wagen = self._freier_buggy(k) if darf else None
         if wagen is not None:
+            bot = wagen.fahrer
+            if bot is not None:
+                # Ein Bot der eigenen Seite am Steuer (seit 0.34.134): er
+                # steigt aus, man selbst ein - geht man wieder raus, steigt er
+                # sofort wieder ein (_aussteigen).
+                self._aussteigen(bot)
+                wagen._bot_wartet = bot
             self._einsteigen(k, wagen)
             return
         # Hinten auf einen Panzerwagen, den jemand faehrt (seit 0.34.95) -
@@ -3271,8 +3289,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             return None
         bester, abstand = None, 1e18
         for b in self.fahrzeuge:
-            if (b.fahrer is not None or b.ebene != k.ebene or b.nur_bild
-                    or not b.lebt or b.kaputt):
+            if b.ebene != k.ebene or b.nur_bild or not b.lebt or b.kaputt:
+                continue
+            if b.fahrer is not None and not self._bot_raus_erlaubt(k, b):
                 continue
             if k.ist_bot and b.werte.get("nur_mensch"):
                 continue                # Jagdpanzer: noch nichts fuer Bots (seit 0.34.107)
@@ -3284,6 +3303,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             if d <= b.werte["einsteigen"] ** 2 and d < abstand:
                 bester, abstand = b, d
         return bester
+
+    def _bot_raus_erlaubt(self, k: Kaempfer, b) -> bool:
+        """Darf `k` den Bot am Steuer von `b` hinauswerfen? Ein Mensch, der
+        Bot ist von seiner Seite, nicht beim Flakwagen (nur Bots, seit
+        0.34.114) - seit 0.34.134."""
+        f = b.fahrer
+        return (not k.ist_bot and getattr(f, "ist_bot", False) and 0 <= k.team == f.team
+                and not b.werte.get("nur_bot") and not getattr(b, "luft", False))
 
     def _nachschub_nehmen(self, k: Kaempfer) -> bool:
         """E hinten an einem Trosswagen (seit 0.34.108, K.TROSSWAGEN): einmal
@@ -3375,6 +3402,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         k.tempo.update(0, 0)
         k.treppe_rest = K.GEFECHT["treppe_takt"]
         self.welt.klang("buggy_tuer", 0.7, b.pos, b.ebene)
+        # Hatte man einen Bot hinausgeworfen (seit 0.34.134): er steigt sofort
+        # wieder ein, wenn er noch lebt und in der Naehe ist.
+        bot = b.__dict__.pop("_bot_wartet", None)
+        if (bot is not None and not k.ist_bot and bot.lebt and not bot.am_boden
+                and bot.fahrzeug is None and getattr(bot, "mitfahrt", None) is None
+                and self.kaempfer.get(bot.nummer) is bot and not b.kaputt
+                and bot.pos.distance_to(b.pos) <= K.FAHRZEUG_UEBERNEHMEN["zurueck_weite"]):
+            self._einsteigen(bot, b)
 
     # ---- Truppentransporter (seit 0.34.95) -------------------------------
     def _transporter_bei(self, k: Kaempfer):
@@ -4941,6 +4976,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         k.toeter = von
 
     def _tote_abrechnen(self, dt: float) -> None:
+        if self.schlacht:
+            self._umgeworfen_buchen()
         for k in list(self.kaempfer.values()):
             if k.lebt:
                 continue
@@ -4957,7 +4994,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 toeter = getattr(k.toeter, "von", k.toeter)
                 if isinstance(toeter, Kaempfer) and toeter is not k:
                     toeter.abschuesse += K.GEFECHT["punkt_abschuss"]
-                    self.schlacht_punkte(toeter, K.SCHLACHT["punkte"]["abschuss"])
+                    if not k.__dict__.pop("_down_gebucht", False):
+                        # Nicht schon beim Umwerfen gebucht (seit 0.34.134).
+                        self.schlacht_punkte(toeter, K.SCHLACHT["punkte"]["abschuss"])
                     toeter.opfer[k.nummer] = toeter.opfer.get(k.nummer, 0) + 1
                     if k.toeter_waffe:
                         # Je Waffe. Die Summe "abschuesse" kommt weiter aus
@@ -4994,6 +5033,24 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                     self._bot_weg(k)
                 else:
                     self._wieder_einsteigen(k)
+
+    def _umgeworfen_buchen(self) -> None:
+        """SCHLACHT (seit 0.34.134, gewuenscht): der Abschuss bringt seine
+        Punkte sofort beim Umwerfen - egal, ob er danach aufgeholfen wird.
+        Beim Tod wird dann nicht noch einmal gebucht."""
+        for k in self.kaempfer.values():
+            if not k.am_boden:
+                if k.lebt and "_down_gebucht" in k.__dict__:
+                    del k.__dict__["_down_gebucht"]      # aufgeholfen: das naechste Umwerfen zaehlt neu
+                continue
+            if k.__dict__.get("_down_gebucht"):
+                continue
+            k._down_gebucht = True
+            toeter = getattr(k.toeter, "von", k.toeter)
+            if isinstance(toeter, Kaempfer) and toeter is not k and toeter.team != k.team:
+                self.schlacht_punkte(toeter, K.SCHLACHT["punkte"]["abschuss"])
+            else:
+                k._down_gebucht = False                  # ohne Gegner: beim Tod wie bisher
 
     def _magazine_fuellen(self, k: Kaempfer) -> None:
         """Magazine beim Einstieg auffuellen.
@@ -7261,6 +7318,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if not self.vorbei:
             self._anzeige(ziel)
             self.front_leiste(ziel)
+            self.werfer_karte_zeichnen(ziel)
             self.einstieg_zeichnen(ziel)
             if self.schlacht:
                 if self.belohnung_offen:

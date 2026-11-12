@@ -2236,7 +2236,8 @@ class Werfer(Aufbauwagen):
                     soll = (math.degrees(math.atan2(d.y, d.x)) - self.winkel + 180.0) % 360.0 - 180.0
                 # Nah steil, weit flacher (wie ein Werfer eben zielt).
                 sa = self.werte["salve"]
-                t = max(0.0, min(1.0, (d.length() - sa["nah"]) / max(1.0, sa["weit"] - sa["nah"])))
+                weit = getattr(self, "_weite", sa["weit"])
+                t = max(0.0, min(1.0, (d.length() - sa["nah"]) / max(1.0, weit - sa["nah"])))
                 self._hub_soll = self.werte["hub"][0] + (self.werte["hub"][1] - self.werte["hub"][0]) * t
         h = float(self.werte["hub_dreh"]) * dt
         self.hub += max(-h, min(h, self._hub_soll - self.hub))

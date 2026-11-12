@@ -19744,6 +19744,71 @@ pruef("... kein Ziel bekommt mehr als ziel_anteil der Bots, solange es andere gi
       "%d von %d Bots, %d Ziele" % (_haeufig133, _n133, len(set(_ziel133))))
 w133b.verlassen(); g133b.verlassen()
 
+print("\n-- 0.34.134: 2 Punkte beim Umwerfen, Bot aus dem Fahrzeug werfen, Werfer mit Karte")
+w134, g134 = _paar59("schlacht", karte="flusstal")
+w134._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="flusstal", schlacht_seite=6, freischalten="aus"))
+w134._einstiegszonen_waehlen(); w134._fahrzeuge_neu_aufstellen(); w134._bots_fuehren(0.0, sofort=True)
+_ich134 = w134.ich
+_feind134 = next(k_ for k_ in w134.kaempfer.values() if k_.ist_bot and k_.team != _ich134.team)
+_feind134.unverwundbar = 0.0
+_ich134.schlacht_punkte = 0
+_feind134.revive_an = True
+_feind134.sterben(_ich134)
+w134._tote_abrechnen(0.0)
+pruef("SCHLACHT: wer einen umwirft, bekommt sofort 2 Punkte (am Boden, noch nicht tot)",
+      _feind134.am_boden and _ich134.schlacht_punkte == 2 == K.SCHLACHT["punkte"]["abschuss"],
+      str(_ich134.schlacht_punkte))
+_feind134.boden_rest = 0.0
+for _ in range(10):
+    w134._revive(0.1)
+    w134._tote_abrechnen(0.1)
+pruef("... stirbt er danach, gibt es nicht noch einmal Punkte",
+      not _feind134.lebt and _ich134.schlacht_punkte == 2, str(_ich134.schlacht_punkte))
+# Fahrzeug: Bot der eigenen Seite hinauswerfen, er steigt wieder ein.
+from dustfront import fahrzeug as _FZ134
+_bw134 = _FZ134.neu("buggy", _ich134.pos + pygame.Vector2(40, 0), 0)
+w134.welt.dazu(_bw134); w134.fahrzeuge.append(_bw134)
+_bot134 = next(k_ for k_ in w134.kaempfer.values() if k_.ist_bot and k_.team == _ich134.team and k_.lebt)
+_bot134.pos.update(_bw134.pos)
+w134._einsteigen(_bot134, _bw134)
+_ich134.am_boden = False; _ich134.lebt = True; _ich134.fahrzeug = None
+pruef("Ein Mensch nimmt einem Bot der eigenen Seite den Wagen ab",
+      w134._freier_buggy(_ich134) is _bw134)
+w134._anwenden(_ich134, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+pruef("... der Bot steigt aus, man selbst ein", _bw134.fahrer is _ich134 and _bot134.fahrzeug is None)
+w134._aussteigen(_ich134)
+pruef("... und steigt man aus, sitzt der Bot sofort wieder drin", _bw134.fahrer is _bot134)
+_fl134 = _FZ134.neu("flakwagen", _ich134.pos + pygame.Vector2(0, 60), 0)
+w134.welt.dazu(_fl134); w134.fahrzeuge.append(_fl134)
+_bot134b = next(k_ for k_ in w134.kaempfer.values() if k_.ist_bot and k_.team == _ich134.team
+                and k_.lebt and k_ is not _bot134)
+w134._einsteigen(_bot134b, _fl134)
+pruef("... nicht beim Flakwagen", not w134._bot_raus_erlaubt(_ich134, _fl134))
+_fe134 = next(k_ for k_ in w134.kaempfer.values() if k_.ist_bot and k_.team != _ich134.team and k_.lebt)
+_bw134b = _FZ134.neu("buggy", _ich134.pos + pygame.Vector2(-60, 0), 0)
+w134.welt.dazu(_bw134b); w134.fahrzeuge.append(_bw134b)
+w134._einsteigen(_fe134, _bw134b)
+pruef("... und nie einem Bot der anderen Seite", not w134._bot_raus_erlaubt(_ich134, _bw134b))
+# Werfer: halbe Karte Reichweite, Karte im Bild, Ziel ueber die Karte.
+pruef("Werfer: aufgebaut reicht er ueber die halbe Kartenbreite",
+      w134.werfer_weite() >= w134.welt.ebene(0).pixel_breite * 0.5 - 1)
+for b_ in list(w134.fahrzeuge):
+    if b_.fahrer is _ich134:
+        w134._aussteigen(_ich134)
+_wf134 = _FZ134.neu("werfer", _ich134.pos + pygame.Vector2(0, -80), 0)
+w134.welt.dazu(_wf134); w134.fahrzeuge.append(_wf134)
+w134._einsteigen(_ich134, _wf134)
+_wf134.phase, _wf134.fortschritt = 2, 1.0
+_ziel134 = w134._schlacht_punkte()[2]
+w134.werfer_schritt(0.0)
+pruef("... ein Ziel weit hinter der alten Grenze (3200 px) ist nicht mehr zu weit",
+      w134.werfer_pruefen(_wf134, _ich134.team, _wf134.rohr_mitte() + pygame.Vector2(4000, 0)) != 2
+      or w134.welt.ebene(0).pixel_breite * 0.5 < 4000)
+_bild134 = pygame.Surface((K.GAME_W, K.GAME_H))
+w134.zeichnen(_bild134, 1.0)
+pruef("... und die Karte des Werfers steht im Bild (aufgebaut)", w134._werfer_eigen() is _wf134)
+w134.verlassen(); g134.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

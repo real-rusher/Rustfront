@@ -2075,7 +2075,7 @@ class BotHirn(Taktik):
         team = self.k.team
         mitte = b.rohr_mitte()
         orte = [o for o, _r in self.g.werfer_ziele(team)
-                if w["nah"] + 20.0 <= o.distance_to(mitte) <= w["weit"] - 20.0] \
+                if w["nah"] + 20.0 <= o.distance_to(mitte) <= self.g.werfer_weite() - 20.0] \
             if hasattr(self.g, "werfer_ziele") and 0 <= team < 2 else []
         if not orte:
             return ziel

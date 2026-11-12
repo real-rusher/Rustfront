@@ -1198,7 +1198,9 @@ SCHLACHT = dict(
     # Haelfte seines Kaufpreises (`fahrzeug_anteil`, mindestens `fahrzeug_min`),
     # was man nicht kaufen kann (Trosswagen) `fahrzeug` - vorher pauschal 5:
     # ein Krad brachte mehr, als es kostete.
-    punkte=dict(abschuss=1, fahrzeug=3, fahrzeug_anteil=0.5, fahrzeug_min=2, aufhelfen=5),
+    # Seit 0.34.134: 2 Punkte je Abschuss, gebucht schon beim Umwerfen (am Boden),
+    # egal ob er danach wiederbelebt wird.
+    punkte=dict(abschuss=2, fahrzeug=3, fahrzeug_anteil=0.5, fahrzeug_min=2, aufhelfen=5),
     # Was man kaufen kann: (Kennung, Kosten, Name). Seit 0.34.129 billiger
     # (gewuenscht: "es kaufen ja nur Spieler, und es gibt nicht so viele").
     belohnungen=(
@@ -1289,6 +1291,11 @@ SCHLACHT = dict(
     absetzen_vor=650.0,
     nach_absetzen_tempo=70.0,   # px/s
 )
+
+# Ein Fahrzeug von einem Bot der eigenen Seite uebernehmen (seit 0.34.134):
+# E am Wagen wirft ihn hinaus (nicht beim Flakwagen); steigt man aus, steigt er
+# wieder ein, wenn er so nah ist.
+FAHRZEUG_UEBERNEHMEN = dict(zurueck_weite=900.0)
 
 # Die Front in SCHLACHT (seit 0.34.131, dustfront/front.py). Gilt auf Karten,
 # die ihre Basen, Eroberungspunkte und Wege im Kopf nennen (FLUSSTAL,
@@ -1932,6 +1939,7 @@ WERFER = dict(
     hub_dreh=28.0,
     salve=dict(raketen=6, abstand=0.5, flug=3.6, streu=110.0, radius=46.0, schaden=90.0,
                fahrzeug=120.0, nachladen=14.0, nah=400.0, weit=3200.0, umkreis=130.0,
+        weit_karte=0.5,      # seit 0.34.134: aufgebaut reicht er ueber die halbe Kartenbreite (mindestens weit)
                sicht=420.0, verraten=6.0, hoch=150.0, pruefen=0.4,
                # Die Rohre laden einzeln wieder (seit 0.34.120): das erste `nachladen_ab`
                # Sekunden nach dem letzten Start, dann je `nachladen_je` Sekunden eines.
