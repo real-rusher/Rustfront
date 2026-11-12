@@ -872,6 +872,10 @@ class Buggy(Wesen):
         self.gier = self.lenkwinkel = self.rutschen = 0.0
         self.handbremse = False
         self._spur_letzte.clear()
+        # Was vom vorigen Leben haengen blieb (seit 0.34.135): aufgegeben,
+        # zuletzt gefahren von, Punkte schon gebucht.
+        for merk in ("_aufgegeben", "_zuletzt_team", "_punkte_gebucht"):
+            self.__dict__.pop(merk, None)
         self.leben = self.max_leben
         self.kaputt = False
         self.kaputt_von = None

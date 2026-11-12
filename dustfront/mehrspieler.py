@@ -4150,10 +4150,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if self.schlacht:
             self.schlacht_schritt(dt)
             for b in self.fahrzeuge:
+                if b.fahrer is not None and not b.kaputt:
+                    b._zuletzt_team = (getattr(b.fahrer, "team", -1), self.welt.zeit)
                 if b.kaputt and not getattr(b, "_punkte_gebucht", False):
                     b._punkte_gebucht = True
                     von = getattr(b.kaputt_von, "von", b.kaputt_von)
-                    if von is not None and getattr(von, "team", -1) != getattr(b, "basis_team", -2):
+                    # Wem es gehoerte: wer es in den letzten Sekunden gefahren
+                    # hat (seit 0.34.135, gemeldet: stieg ein Gegner-Bot aus
+                    # einem Wagen der eigenen Basis und man zerstoerte ihn, gab
+                    # es nichts), sonst die Seite seiner Basis.
+                    zuletzt = b.__dict__.get("_zuletzt_team")
+                    seite = (zuletzt[0] if zuletzt is not None
+                             and self.welt.zeit - zuletzt[1] <= K.SCHLACHT["fahrzeug_zuletzt"]
+                             else getattr(b, "basis_team", -2))
+                    if von is not None and getattr(von, "team", -1) != seite:
                         self.schlacht_punkte(von, self.fahrzeug_punkte(b.art))
         if self.in_lobby:
             self._lobby_munition()        # nach dem Schuss, siehe dort

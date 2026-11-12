@@ -1343,6 +1343,11 @@ class BotHirn(Taktik):
                 else:
                     will = self._weg_richtung(spur[0], spur[1], ein) * self._vorsicht_tempo()
                     return will, pygame.Vector2(spur[0])
+        if ziel is None and self.__dict__.get("_flucht_bis", 0.0) > jetzt:
+            # Aus einem Wrack geflohen (seit 0.34.135): weg von ihm, zur eigenen Seite.
+            basis = g.schlacht_basis(k.team) if hasattr(g, "schlacht_basis") else None
+            if basis is not None and k.pos.distance_to(basis) > 200.0:
+                return self._weg_richtung(basis, 0, ein), None
         if ziel is None and getattr(g, "front_an", False):
             # Die Front: mit seiner Gruppe auf ihrem Weg, in Formation.
             auftrag = g.front_auftrag(k)
@@ -1618,6 +1623,8 @@ class BotHirn(Taktik):
                 continue                # (seit 0.34.131 keiner mehr)
             if self.g.welt.zeit - getattr(b, "_abgestellt", -999.0) < 60.0:
                 continue                # ein abgestellter Trosswagen ist Nachschub, kein Taxi
+            if b.leben < b.max_leben * f["wrack_meiden"] or "_aufgegeben" in b.__dict__:
+                continue                # kurz vor dem Hochgehen oder schon aufgegeben (seit 0.34.135)
             d = b.pos.distance_to(k.pos)
             # Das wertvollere Fahrzeug zuerst (seit 0.34.131): sonst stieg jeder
             # in den naechsten Buggy, und Werfer und Tragschrauber blieben stehen.
@@ -1815,9 +1822,26 @@ class BotHirn(Taktik):
         b = k.fahrzeug
         f = K.BOTS["fahren"]
         ein["rl"] = True
-        if b.kaputt or b.leben < b.max_leben * f["raus_unter"]:
-            ein["knoepfe"].append("nutzen")          # raus, bevor er hochgeht
+        if b.kaputt:
+            ein["knoepfe"].append("nutzen")
             return ein
+        if b.leben < b.max_leben * f["raus_unter"]:
+            # Kurz vor dem Hochgehen (seit 0.34.135, gemeldet: Bots stiegen aus
+            # und sofort wieder ein, immer weiter): er entscheidet sich einmal -
+            # drinbleiben bis zum Schluss, raus und weglaufen, oder raus und in
+            # Stellung. Den Wagen nimmt danach kein Bot mehr (_zum_fahrzeug).
+            wahl = self.__dict__.get("_wrack_wahl")
+            if wahl is None or wahl[0] is not b:
+                t = self.rnd.random()
+                art = "bleiben" if t < f["wrack_bleiben"] else (
+                    "fliehen" if t < f["wrack_bleiben"] + f["wrack_fliehen"] else "stellung")
+                self._wrack_wahl = wahl = (b, art)
+            if wahl[1] != "bleiben":
+                b._aufgegeben = self.g.welt.zeit
+                ein["knoepfe"].append("nutzen")          # raus, bevor er hochgeht
+                if wahl[1] == "fliehen":
+                    self._flucht_bis = self.g.welt.zeit + f["wrack_flucht_zeit"]
+                return ein
         z = self.ziel if self.ziel is not None and self.ziel_ok(self.ziel) else None
         # Funk aus dem Fahrzeug (seit 0.34.96): wenn etwas passiert - ein
         # neuer Gegner, ein Treffer am Blech. Nur dann funkt das Geraet.
@@ -1947,7 +1971,8 @@ class BotHirn(Taktik):
             if n >= 3 and getattr(self.g, "schlacht", False) and b.__dict__.get("_mitfahrer"):
                 self.g.alle_absetzen(b)
                 b.abgesetzt = True
-            if n >= 4:
+            if n >= 2:
+                # Seit 0.34.135 schon beim zweiten Mal (vorher vierten).
                 # Immer wieder an derselben Stelle (seit 0.34.131, gemessen auf
                 # FLUSSTAL: ein Werfer hing 40 s zwischen Findlingen): ein
                 # Umweg zu einer freien Stelle des Fahrwegenetzes daneben.

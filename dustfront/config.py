@@ -1164,6 +1164,7 @@ SCHLACHT = dict(
     lage_alt=10.0,
     lage_weite=1100.0,         # seit 0.34.133 kleiner (vorher 1600: fast jeder kam zu jedem Kampf)
     kampf_zulauf=3,            # so viele Bots gehen hoechstens zugleich zu einem gemeldeten Kampf
+    fahrzeug_zuletzt=20.0,     # so lange nach dem Aussteigen gehoert ein Wagen noch der Seite seines Fahrers (Punkte)
     zulauf_halten=25.0,        # so lange gilt die Zusage eines Bots fuer einen Kampf (s)
     stosstrupp=0.25,           # dieser Anteil zieht ohne Umweg ueber die Mitte zur Basis der anderen
     # Front: mehr als `front_ab` Bots einer Seite teilen sich auf `spuren`
@@ -2498,7 +2499,11 @@ BOTS = dict(
         mg_winkel=10.0,
         steckt_nach=1.2,      # so lange ohne Fahrt, dann setzt er zurueck
         zurueck=1.0,          # so lange
-        raus_unter=0.15,      # unter so viel Leben steigt er aus
+        raus_unter=0.15,      # unter so viel Leben ueberlegt er, auszusteigen (seit 0.34.135 nicht immer):
+        wrack_bleiben=0.35,   # ... so oft bleibt er drin bis zum Schluss
+        wrack_fliehen=0.35,   # ... so oft steigt er aus und laeuft weg (sonst: aus und in Stellung)
+        wrack_flucht_zeit=7.0,
+        wrack_meiden=0.25,    # einen Wagen mit weniger Leben nimmt kein Bot
         fehler=14.0,          # Zielfehler am Ziel (px)
         # Aus Turm und Ring sieht man weiter als zu Fuss (330): die Kanone
         # reicht 900, und ein Panzer, der seine Gegner nicht sieht, ist nur
