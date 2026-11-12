@@ -1219,7 +1219,13 @@ SCHLACHT = dict(
                 bild_hub=0.55, schirm=(64, 26), schirm_kiste=(30, 14), schirm_ueber=30, kisten=3,
                 sperre_basis=1800.0, ausweichen_ab=300.0, treiben=70.0, suche_weit=420.0,
                 stoss=520.0, quetschen=15.0, warnen_ab=160.0),
+    # Seit 0.34.138 wie eine Evakuierungszone (XCOM 2, gewuenscht): ein Feld so
+    # gross wie das Fahrzeug plus `rand` px (Kisten: `kiste` px), an den Ecken
+    # blaue Fackeln; je Fackel `rauch` Wolken, die `steigen` px aufsteigen,
+    # bis `rauch_gross` px wachsen und mit `wind` verwehen.
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
+                  rand=10, kiste=40, rauch=10, rauch_tempo=0.4, steigen=44.0, rauch_gross=13,
+                  wind=0.8,
                   zeichen=dict(buggy="B", flakwagen="A", tragschrauber="H", werfer="W", funkwagen="F", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
                                medkit="+")),
     # Punkte (nur Menschen). Ein zerstoertes Fahrzeug bringt seit 0.34.129 die

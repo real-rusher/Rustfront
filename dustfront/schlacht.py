@@ -993,58 +993,208 @@ class SchlachtTeil:
             besetzt = z.fahrzeug is not None or getattr(z, "besetzt", False)
             self._zone_bild(flaeche, p, z, zeit, besetzt)
 
-    def _zone_bild(self, flaeche, p, z, zeit: float, besetzt: bool) -> None:
+    # ---- Die Zone im Stil einer Evakuierungszone (seit 0.34.138) -----------
+    # Gewuenscht: "wie die Extraction Zone bei XCOM 2 ... wichtig, dass diese
+    # blau brennenden Fackeln, das blaue Feuer, was diesen blauen Smoke macht,
+    # an den Ecken da ist", animiert, und so gross wie das Fahrzeug. Alles
+    # haengt nur an der Zeit - beim Gast sieht es genauso aus.
+    _FACKEL = (90, 170, 255)
+    _FACKEL_KERN = (215, 240, 255)
+    _RAUCH = (96, 138, 214)
+
+    def _zone_mass(self, art: str) -> tuple:
+        """(Laenge, Breite) der Zone: das Bild des Fahrzeugs plus Rand."""
+        merk = self.__dict__.setdefault("_zonen_mass", {})
+        if art in merk:
+            return merk[art]
         d = S["dropzone"]
-        kombi = K.TEAMS["kombi"][z.team] if 0 <= z.team < 2 else None
-        farbe = kombi["hud"] if kombi else K.C_AMBER
-        dunkel = kombi["hud_dunkel"] if kombi else K.C_MUTED_DK
-        r = d["radius"] if z.art in fahrzeug_modul.ARTEN else d["radius_kiste"]
+        if art not in fahrzeug_modul.ARTEN:
+            mass = (d["kiste"], d["kiste"])
+        else:
+            try:
+                if getattr(fahrzeug_modul.ARTEN.get(art), "rechteckig", False):
+                    bild = self._fracht_ganz(art)
+                else:
+                    bild = self.renderer.bilder.bild(art)
+                bb = bild.get_bounding_rect()
+                mass = (bb.width + 2 * d["rand"], bb.height + 2 * d["rand"])
+            except Exception:                  # noqa: BLE001  ohne Bild: Vorgabe
+                mass = (2 * d["radius"], d["radius"])
+        merk[art] = mass
+        return mass
+
+    def _zone_fest(self, z, besetzt: bool, freund: bool):
+        """Was sich nicht bewegt: Grund, Raster und Hologramm, gedreht.
+        Gemerkt je Art, Winkel und Zustand."""
+        merk = self.__dict__.setdefault("_zonen_fest", {})
+        winkel = int(round(z.winkel)) % 360
+        schluessel = (z.art, winkel, besetzt, freund)
+        fest = merk.get(schluessel)
+        if fest is not None:
+            return fest
+        laenge, breite = self._zone_mass(z.art)
+        rand = S["dropzone"]["rand"]
+        f = pygame.Surface((laenge, breite), pygame.SRCALPHA)
+        grund = (40, 90, 150) if freund else (130, 50, 46)
+        f.fill(grund + (34 if besetzt else 58,))
+        linie = (120, 190, 255, 46) if freund else (240, 120, 100, 46)
+        for x in range(0, laenge, 8):
+            pygame.draw.line(f, linie, (x, 0), (x, breite - 1))
+        for y in range(0, breite, 8):
+            pygame.draw.line(f, linie, (0, y), (laenge - 1, y))
+        if z.art in fahrzeug_modul.ARTEN and not besetzt:
+            # Das Hologramm des Fahrzeugs: wie gross es ist und wohin es schaut.
+            try:
+                if getattr(fahrzeug_modul.ARTEN.get(z.art), "rechteckig", False):
+                    bild = self._fracht_ganz(z.art)
+                else:
+                    bild = self.renderer.bilder.bild(z.art)
+                bild = bild.subsurface(bild.get_bounding_rect())
+                holo = pygame.mask.from_surface(bild, 40).to_surface(
+                    setcolor=(140, 200, 255, 70) if freund else (255, 150, 130, 70),
+                    unsetcolor=(0, 0, 0, 0))
+                f.blit(holo, holo.get_rect(center=(laenge // 2, breite // 2)))
+            except Exception:                  # noqa: BLE001
+                pass
+        elif z.art not in fahrzeug_modul.ARTEN:
+            zeichen = S["dropzone"]["zeichen"].get(z.art, "?")
+            SCHRIFT.zeichnen(f, zeichen, laenge // 2, breite // 2 - 3,
+                             (190, 225, 255) if freund else (255, 190, 170), 1, ausrichtung="mitte")
+        del rand
+        fest = pygame.transform.rotate(f, -winkel)
+        if len(merk) > 120:
+            merk.clear()
+        merk[schluessel] = fest
+        return fest
+
+    def _zone_ecken(self, z, cx: float, cy: float) -> list:
+        laenge, breite = self._zone_mass(z.art)
+        vorn = pygame.Vector2(1, 0).rotate(z.winkel)
+        quer = pygame.Vector2(-vorn.y, vorn.x)
+        m = pygame.Vector2(cx, cy)
+        return [m + vorn * (sx * laenge / 2) + quer * (sy * breite / 2)
+                for sx, sy in ((1, 1), (1, -1), (-1, -1), (-1, 1))]
+
+    def _hauch(self, radius: int, farbe) -> pygame.Surface:
+        """Ein weicher runder Fleck (Rauch, Leuchthof), gemerkt je Groesse."""
+        merk = self.__dict__.setdefault("_zonen_hauch", {})
+        schluessel = (radius, farbe)
+        s = merk.get(schluessel)
+        if s is None:
+            s = pygame.Surface((radius * 2 + 2, radius * 2 + 2), pygame.SRCALPHA)
+            for r in range(radius, 0, -1):
+                a = int(255 * (1.0 - r / float(radius + 1)) ** 1.6)
+                pygame.draw.circle(s, farbe + (a,), (radius + 1, radius + 1), r)
+            merk[schluessel] = s
+        return s
+
+    def _leuchten(self, radius: int, farbe, staerke: float) -> pygame.Surface:
+        """Ein Leuchtfleck zum Addieren (BLEND_RGB_ADD): die Farbe ist schon mit
+        der Staerke verrechnet - beim Addieren wirkt set_alpha nicht."""
+        merk = self.__dict__.setdefault("_zonen_licht", {})
+        stufe = max(0, min(10, int(round(staerke * 10))))
+        schluessel = (radius, farbe, stufe)
+        s = merk.get(schluessel)
+        if s is None:
+            s = pygame.Surface((radius * 2 + 2, radius * 2 + 2))
+            s.fill((0, 0, 0))
+            for r in range(radius, 0, -1):
+                k = (1.0 - r / float(radius + 1)) ** 2 * stufe / 10.0
+                pygame.draw.circle(s, tuple(int(c * k) for c in farbe), (radius + 1, radius + 1), r)
+            merk[schluessel] = s
+        return s
+
+    def _fackel(self, flaeche, ort, zeit: float, nr: int, stark: float) -> None:
+        """Eine blau brennende Fackel mit Rauch (XCOM 2, gewuenscht)."""
+        x, y = int(ort.x), int(ort.y)
+        d = S["dropzone"]
+        # Rauch: Wolken steigen auf, wachsen, verwehen und vergehen.
+        n = d["rauch"]
+        for i in range(n):
+            alter = (zeit * d["rauch_tempo"] + i / float(n) + nr * 0.37) % 1.0
+            wind = math.sin(zeit * 0.7 + nr * 1.9 + i) * 3.0
+            px = x + wind * alter + d["wind"] * alter * 10.0
+            py = y - 4 - d["steigen"] * alter
+            r = int(2 + d["rauch_gross"] * alter)
+            puff = self._hauch(r, self._RAUCH)
+            puff.set_alpha(int(min(255, 230 * (1.0 - alter) * min(1.0, stark) * min(1.0, alter * 6.0))))
+            flaeche.blit(puff, (px - r - 1, py - r - 1))
+        # Der Stab und der Leuchthof.
+        pygame.draw.line(flaeche, (60, 40, 34), (x, y + 2), (x, y - 2), 2)
+        flacker = 0.75 + 0.25 * math.sin(zeit * 23.0 + nr * 2.1) * math.sin(zeit * 13.0 + nr)
+        hof = self._leuchten(int(8 + 5 * min(1.0, stark)), self._FACKEL, 0.6 * flacker * min(1.2, stark))
+        flaeche.blit(hof, (x - hof.get_width() // 2, y - 3 - hof.get_height() // 2),
+                     special_flags=pygame.BLEND_RGB_ADD)
+        # Die Flamme: zwei, drei zuckende Zungen.
+        for k in range(3):
+            h = (4 + 5 * stark) * (0.7 + 0.3 * math.sin(zeit * (17 + k * 5) + nr + k))
+            dx = (k - 1) * 1.2
+            pygame.draw.line(flaeche, self._FACKEL, (x + dx, y - 2), (x + dx * 0.5, y - 2 - h), 2)
+        pygame.draw.circle(flaeche, self._FACKEL_KERN, (x, y - 3), 1)
+
+    def _zone_bild(self, flaeche, p, z, zeit: float, besetzt: bool) -> None:
+        ich = getattr(self, "ich", None)
+        freund = ich is None or z.team not in (0, 1) or z.team == getattr(ich, "team", -1)
         bald = 0.0 <= z.rest <= S["abwurf"]["vorlauf"] and not besetzt
-        puls = 0.5 + 0.5 * math.sin(zeit * (9.0 if bald else 2.2))
-        cx, cy = int(p.x), int(p.y)
-        # Grund: ein durchscheinendes Achteck, darauf die Kante.
-        punkte = [(cx + r * math.cos(math.radians(22.5 + 45 * i)),
-                   cy + r * 0.62 * math.sin(math.radians(22.5 + 45 * i))) for i in range(8)]
-        grund = pygame.Surface((r * 2 + 4, int(r * 1.3) + 4), pygame.SRCALPHA)
-        verschoben = [(x - cx + r + 2, y - cy + int(r * 0.65) + 2) for x, y in punkte]
-        deck = int(d["grund"] + (d["grund_puls"] * puls if bald else 0))
-        pygame.draw.polygon(grund, dunkel + (deck,), verschoben)
-        flaeche.blit(grund, (cx - r - 2, cy - int(r * 0.65) - 2))
-        kante = farbe if (bald and puls > 0.5) or besetzt else dunkel
-        pygame.draw.polygon(flaeche, kante, punkte, 1)
-        # Eckwinkel aussen, wie Klammern.
-        for i in range(0, 8, 2):
-            a = math.radians(45 * i + 45)
-            ex, ey = cx + (r + 5) * math.cos(a), cy + (r + 5) * 0.62 * math.sin(a)
-            sx = 1 if math.cos(a) > 0 else -1
-            sy = 1 if math.sin(a) > 0 else -1
-            pygame.draw.line(flaeche, farbe, (ex, ey), (ex - sx * 6, ey))
-            pygame.draw.line(flaeche, farbe, (ex, ey), (ex, ey - sy * 4))
-        # Pfeile, die nach innen wandern.
+        cx, cy = float(p.x), float(p.y)
+        fest = self._zone_fest(z, besetzt, freund)
+        flaeche.blit(fest, fest.get_rect(center=(int(cx), int(cy))))
+        ecken = self._zone_ecken(z, cx, cy)
+        farbe = (120, 200, 255) if freund else (255, 110, 90)
+        puls = 0.5 + 0.5 * math.sin(zeit * (9.0 if bald else 2.4))
+        if besetzt:
+            farbe = tuple(int(c * 0.45) for c in farbe)
+        # Der Rand: laufende Striche, dazu Eckklammern.
+        lauf = (zeit * (40.0 if bald else 14.0)) % 10.0
+        for a, b in zip(ecken, ecken[1:] + ecken[:1]):
+            weg = b - a
+            lang = weg.length()
+            if lang < 1.0:
+                continue
+            richtung = weg / lang
+            t = -lauf
+            while t < lang:
+                s0, s1 = max(0.0, t), min(lang, t + 6.0)
+                if s1 > s0:
+                    pygame.draw.line(flaeche, farbe, a + richtung * s0, a + richtung * s1, 1)
+                t += 10.0
+        for i, e in enumerate(ecken):
+            nach = ecken[(i + 1) % 4] - e
+            vor = ecken[i - 1] - e
+            for w in (nach, vor):
+                if w.length_squared() > 1.0:
+                    pygame.draw.line(flaeche, farbe, e, e + w.normalize() * 7, 2)
+        # Ein Scanstreifen wandert ueber die Zone.
         if not besetzt:
-            lauf = (zeit * (1.6 if bald else 0.6)) % 1.0
-            for i in range(4):
-                a = math.radians(90 * i)
+            t = (zeit * (0.9 if bald else 0.35)) % 1.0
+            a = ecken[3].lerp(ecken[0], t)
+            b = ecken[2].lerp(ecken[1], t)
+            hell = tuple(min(255, int(c + 60 * puls)) for c in farbe)
+            pygame.draw.line(flaeche, hell, a, b, 1)
+        # Die Fackeln an den Ecken.
+        stark = 0.35 if besetzt else (1.0 + 0.35 * puls if bald else 0.85)
+        for i, e in enumerate(ecken):
+            self._fackel(flaeche, e, zeit, i + (z.kennung if isinstance(getattr(z, "kennung", 0), int) else 0),
+                         stark)
+        if bald:
+            # Pfeile laufen nach innen, und eine Lichtsaeule steht ueber der Mitte.
+            for e in ecken:
+                hin = pygame.Vector2(cx, cy) - e
+                if hin.length_squared() < 1.0:
+                    continue
                 for j in range(2):
-                    t = (lauf + j * 0.5) % 1.0
-                    rr = r * (0.95 - 0.55 * t)
-                    hx = cx + rr * math.cos(a)
-                    hy = cy + rr * 0.62 * math.sin(a)
-                    spitze = pygame.Vector2(-math.cos(a), -math.sin(a) * 0.62) * 4
-                    quer = pygame.Vector2(-spitze.y, spitze.x) * 0.8
-                    f = tuple(int(c * (1.0 - t * 0.7)) for c in farbe)
-                    pygame.draw.lines(flaeche, f, False,
-                                      [(hx - spitze.x + quer.x, hy - spitze.y + quer.y),
-                                       (hx, hy),
-                                       (hx - spitze.x - quer.x, hy - spitze.y - quer.y)])
-        # In der Mitte: was hier landet.
-        zeichen = S["dropzone"]["zeichen"].get(z.art, "?")
-        SCHRIFT.zeichnen(flaeche, zeichen, cx, cy - 3, farbe if not besetzt else dunkel, 1,
-                         ausrichtung="mitte")
-        if bald and z.rest > 0.0:
-            text = "ABWURF %d" % int(math.ceil(z.rest))
-            SCHRIFT.zeichnen(flaeche, text, cx, cy - int(r * 0.62) - 12, farbe, 1,
-                             ausrichtung="mitte")
+                    t = ((zeit * 1.6) + j * 0.5) % 1.0
+                    q = e + hin * (0.15 + 0.5 * t)
+                    sp = hin.normalize() * 4
+                    qu = pygame.Vector2(-sp.y, sp.x) * 0.8
+                    pygame.draw.lines(flaeche, farbe, False, [q - sp + qu, q, q - sp - qu])
+            saeule = self._leuchten(12, self._FACKEL, 0.12 + 0.12 * puls)
+            for h in range(0, 60, 8):
+                flaeche.blit(saeule, (int(cx) - 13, int(cy) - 13 - h), special_flags=pygame.BLEND_RGB_ADD)
+            if z.rest > 0.0:
+                laenge, breite = self._zone_mass(z.art)
+                SCHRIFT.zeichnen(flaeche, "ABWURF %d" % int(math.ceil(z.rest)), int(cx),
+                                 int(cy) - max(laenge, breite) // 2 - 14, farbe, 1, ausrichtung="mitte")
 
     # ---- Bild: in der Luft ---------------------------------------------------
     def napalm_bomben_zeichnen(self, ziel) -> None:

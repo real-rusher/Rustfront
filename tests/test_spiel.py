@@ -20168,6 +20168,23 @@ pruef("... jedes Fahrzeug hat sein eigenes Zeichen (sein Bild von oben)",
       _s1 is not None and _s2 is not None
       and pygame.image.tobytes(_s1, "RGBA") != pygame.image.tobytes(pygame.transform.scale(_s2, _s1.get_size()), "RGBA"))
 _ich138.pos.update(_alt_pos138.get(_ich138.nummer, _ich138.pos))
+# Abwurfzonen wie eine Evakuierungszone: so gross wie das Fahrzeug, blaue Fackeln an den Ecken.
+from dustfront.schlacht import Dropzone as _DZ138
+_lb138 = w138._zone_mass("buggy"); _lp138 = w138._zone_mass("panzer"); _lk138 = w138._zone_mass("medkit")
+pruef("Abwurfzone: ihre Groesse richtet sich nach dem Fahrzeug (Panzer groesser als Buggy, Kisten klein)",
+      _lp138[0] * _lp138[1] > _lb138[0] * _lb138[1] > 0 and _lk138[0] <= K.SCHLACHT["dropzone"]["kiste"],
+      "%s %s %s" % (_lb138, _lp138, _lk138))
+_fl138 = pygame.Surface((200, 200)); _fl138.fill((40, 60, 30))
+_z138 = _DZ138(pygame.Vector2(0, 0), _ich138.team, "panzer", 30.0); _z138.rest = 9.0
+w138._zone_bild(_fl138, pygame.Vector2(100, 110), _z138, 1.0, False)
+_ecken138 = w138._zone_ecken(_z138, 100.0, 110.0)
+_blau138 = [max(_fl138.get_at((int(e_.x) + dx_, int(e_.y) + dy_))[2] - _fl138.get_at((int(e_.x) + dx_, int(e_.y) + dy_))[0]
+                for dx_ in range(-2, 3) for dy_ in range(-8, 1)) for e_ in _ecken138]
+pruef("... an jeder der vier Ecken brennt eine blaue Fackel", all(b_ > 60 for b_ in _blau138), str(_blau138))
+_f2_138 = pygame.Surface((200, 200)); _f2_138.fill((40, 60, 30))
+w138._zone_bild(_f2_138, pygame.Vector2(100, 110), _z138, 1.4, False)
+pruef("... und sie lebt (Rauch, Flammen und Rand bewegen sich)",
+      pygame.image.tobytes(_fl138, "RGB") != pygame.image.tobytes(_f2_138, "RGB"))
 w138.verlassen(); g138.verlassen()
 
 print()
