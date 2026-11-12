@@ -570,8 +570,11 @@ class Anzeige:
         pygame.draw.circle(ziel, (18, 13, 9), mitte, r)
         pygame.draw.circle(ziel, K.C_MUTED_DK, mitte, r, 1)
         from . import klassen as klassen_modul
-        arten = (klassen_modul.faehigkeiten_von(ich)
-                 if getattr(g, "faehigkeiten_an", False) else ())
+        alle = (klassen_modul.faehigkeiten_von(ich)
+                if getattr(g, "faehigkeiten_an", False) else ())
+        # Seit 0.34.138 die gewaehlte (X wechselt), nicht alle zugleich.
+        wahl = klassen_modul.faehigkeit_gewaehlt(ich) if alle else None
+        arten = (wahl,) if wahl else ()
         if arten:
             rest = getattr(ich, "faehigkeit_rest", {}) or {}
             r0 = min(rest.get(a, 0.0) for a, _p in arten)
@@ -582,8 +585,10 @@ class Anzeige:
                 # Nach dem Benutzen der Countdown, in Grau (seit 0.34.93).
                 _text(ziel, "%d" % math.ceil(r0), mitte[0], mitte[1] - 3, (150, 146, 140), 1, "mitte")
             namen = ", ".join(klassen_modul.FAEHIGKEIT_NAMEN.get(a, a.upper()) for a, _p in arten)
-            if getattr(ich, "alle_werkzeuge", False) and not getattr(ich, "klasse", ""):
-                # Jeder hat alles: welches Werkzeug, und wie man wechselt.
+            if len(alle) > 1 or (getattr(ich, "alle_werkzeuge", False) and not getattr(ich, "klasse", "")):
+                # Es gibt mehr als eines: welches gilt, und wie man wechselt.
+                if len(alle) > 1:
+                    namen += " (%d/%d)" % (alle.index(wahl) + 1, len(alle))
                 namen += " [%s]" % (g._tastenname("werkzeug")[:1]
                                     if hasattr(g, "_tastenname") else "X")
             # Links buendig ueber dem Kreis: so liegt er nie auf der Karte.

@@ -1327,6 +1327,13 @@ class Renderer:
                 s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
             self.figur_zeichnen(ziel, s, p, getattr(w, "hoehe_3d", 0.0), index,
                                 roh, dunkel)
+            if getattr(w, "schild", False) and w.lebt and not getattr(w, "am_boden", False):
+                # Das Schild des SCHILDTRAEGERS (seit 0.34.138): vor der Figur,
+                # mit ihr gedreht.
+                sch = self.bilder.gedreht("schild_klasse", _gezeigter_winkel(w))
+                if dunkel is not None:
+                    sch = self.dunkel(sch, dunkel)
+                ziel.blit(sch, (p.x - sch.get_width() / 2, p.y - sch.get_height() / 2))
 
     def hoch_oben_zeichnen(self, ziel, bild: str, p, winkel: float) -> None:
         """Was hoch ueber allem fliegt (seit 0.34.96, die Drohne): ein

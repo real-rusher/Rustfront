@@ -368,8 +368,27 @@ class LobbyTeil:
         """Eine geplante Runde auf die Standardrunde setzen (0.32)."""
         if not self.ist_gastgeber or not 0 <= nr < len(self.plan):
             return
-        self.plan[nr] = R.standardrunde(self._umfeld())
+        eigene = {}
+        try:
+            eigene = dict(self.app.opt["eigene_standardrunde"] or {})
+        except (KeyError, TypeError, AttributeError):
+            pass
+        self.plan[nr] = R.meine_standardrunde(eigene, self._umfeld())
         self._plan_geaendert()
+
+    def plan_als_standard(self, nr: int) -> bool:
+        """Diese geplante Runde als eigene Standardrunde merken (seit
+        0.34.138): jede neue Lobby plant sie zuerst. Gehoert zum Spieler und
+        wandert mit dem Konto."""
+        if not 0 <= nr < len(self.plan):
+            return False
+        opt = self.app.opt
+        opt["eigene_standardrunde"] = dict(self.plan[nr])
+        opt.speichern()
+        sichern = getattr(self.app, "konto_sichern", None)
+        if sichern is not None:
+            sichern()
+        return True
 
     def plan_dazu(self, nach: int) -> int:
         """Eine Runde hinter `nach` einfuegen, als Kopie davon."""
@@ -698,10 +717,14 @@ class Rundenplanung(Menue):
         self.elemente.append(ui.Knopf(
             (r.right - 16 - 96 - 104, oben, 100, 14), "STANDARDRUNDE",
             "standard", gesperrt=not self.darf))
+        # Seit 0.34.138: die eingestellte Runde als eigene Standardrunde.
+        self.elemente.append(ui.Knopf(
+            (r.right - 16 - 96 - 104 - 84, oben, 80, 14), "ALS STANDARD",
+            "merken"))
         # Seit 0.34.26: der Team-Manager (Pausenmenue) auch von hier aus.
         if self.darf:
             self.elemente.append(ui.Knopf(
-                (r.right - 16 - 96 - 104 - 124, oben, 120, 14), "TEAMS UND BOTS",
+                (r.right - 16 - 96 - 104 - 84 - 124, oben, 120, 14), "TEAMS UND BOTS",
                 "teams"))
         y = r.bottom - 58
         self.elemente.append(ui.Knopf(
@@ -748,6 +771,10 @@ class Rundenplanung(Menue):
         elif name == "standard":
             g.plan_standard(self.nr)
             self.sagen("RUNDE %d IST JETZT DIE STANDARDRUNDE" % (self.nr + 1))
+        elif name == "merken":
+            if g.plan_als_standard(self.nr):
+                self.sagen("RUNDE %d IST JETZT DEINE STANDARDRUNDE - JEDE NEUE LOBBY PLANT SIE"
+                           % (self.nr + 1))
         elif name.startswith("runde:"):
             self.nr = int(name.split(":")[1])
         elif name == "dazu":
@@ -851,8 +878,11 @@ class Rundenplanung(Menue):
         elif el is not None and el.name == "teams":
             hilfe = "BOTS JE MANNSCHAFT, AUFFÜLLEN, SPIELER EINTEILEN"
         elif el is not None and el.name == "standard":
-            hilfe = "%s - FÜR DEN ANFANG DAS RICHTIGE" % R.kurz(
-                R.standardrunde(g._umfeld()), g._umfeld())
+            eigene = dict(self.app.opt["eigene_standardrunde"] or {})
+            hilfe = "%s - %s" % (R.kurz(R.meine_standardrunde(eigene, g._umfeld()), g._umfeld()),
+                                 "DEINE GEMERKTE" if eigene else "FÜR DEN ANFANG DAS RICHTIGE")
+        elif el is not None and el.name == "merken":
+            hilfe = "DIESE RUNDE ALS DEINE STANDARDRUNDE MERKEN - JEDE NEUE LOBBY PLANT SIE ZUERST"
         elif el is not None and el.name == "start_mit":
             hilfe = "BLENDGRANATEN KLINGEN UND AUSSEHEN WIE VOM WERFER GEMACHT"
         elif el is not None and el.name == "start_ohne":

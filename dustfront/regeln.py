@@ -499,6 +499,18 @@ def standardrunde(umfeld=None) -> dict:
     return saeubern(d, umfeld)
 
 
+def meine_standardrunde(eigene=None, umfeld=None) -> dict:
+    """Die eigene Standardrunde des Spielers (seit 0.34.138), sonst
+    K.STANDARDRUNDE. Was nicht (mehr) gilt - eine Karte, die fehlt, ein
+    Wert aus einer alten Fassung -, raeumt saeubern weg."""
+    if isinstance(eigene, dict) and eigene.get("modus"):
+        d = dict(eigene)
+        if d.get("karte") and d["karte"] not in _karten(d, umfeld):
+            d["karte"] = ""
+        return saeubern(d, umfeld)
+    return standardrunde(umfeld)
+
+
 def verstellen(d: dict, schluessel: str, schritt: int = 1,
                umfeld=None) -> None:
     """Eine Regel einen Schritt weiter oder zurueck, an Ort und Stelle.

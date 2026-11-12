@@ -319,6 +319,17 @@ def _schild(s, c, d) -> None:
     draw.rect(s, (150, 190, 200), (c + 10, c - 1, 1, 2))
 
 
+@platzhalter("schild_klasse")
+def _schild_klasse():
+    """Das Schild der Klasse SCHILDTRAEGER (seit 0.34.138, gemeldet: "das
+    Schild wird einfach nicht gerendert" - es hing bisher nur an Aussehen, die
+    selbst eines tragen). Dieselbe Form, ueber die Figur gelegt; die Mitte des
+    Bildes ist die Mitte der Figur."""
+    f = pygame.Surface((32, 32), pygame.SRCALPHA)
+    _schild(f, 16, {"schildfarbe": (78, 90, 70)})
+    return f
+
+
 def _arme(s, c, d, waffe, stummel: bool = True, arme_an: bool = True) -> None:
     """Arme und was in der Hand ist. `waffe`: die Waffe aus
     art._hand_waffe. Ohne Waffe und mit `stummel` der alte Gewehrstummel

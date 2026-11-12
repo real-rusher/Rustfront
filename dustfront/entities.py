@@ -2623,6 +2623,8 @@ class Spieler(Wesen):
             self._rakete_abgeben(d)
         else:
             self._schuss_abgeben(d)
+        if self.salve_rest <= 0:
+            self._zweit_modus = ""
 
     # ---- Betriebsarten -------------------------------------------------
     def modus_von(self, waffe: str) -> str:
@@ -2630,6 +2632,9 @@ class Spieler(Wesen):
         modi = K.WAFFEN.get(waffe, {}).get("modi")
         if not modi:
             return ""
+        zweit = self.__dict__.get("_zweit_modus")
+        if zweit and zweit in modi and waffe == self.waffen[self.waffe]:
+            return zweit
         gewaehlt = self.modi.get(waffe)
         return gewaehlt if gewaehlt in modi else modi[0]
 
@@ -3321,6 +3326,20 @@ class Spieler(Wesen):
             return
         if d.get("zweit") == "werfen":
             self._werfen(d)
+            return
+        if d.get("zweit") in d.get("modi", ()):
+            # Eine Betriebsart auf der rechten Maustaste (Revolver: FAECHERN,
+            # seit 0.34.138). Sie gilt fuer diesen Abzug und seine Salve.
+            if self.takt > 0 or self.salve_rest > 0:
+                return
+            if self.magazin.get(self.waffe_name, 0) <= 0:
+                self.nachladen()
+                return
+            self._zweit_modus = d["zweit"]
+            self.feuern()
+            self.takt2 = max(self.takt, 0.2)
+            if self.salve_rest <= 0:
+                self._zweit_modus = ""
             return
         name = self.waffe_name
         hat = self.magazin.get(name, 0)

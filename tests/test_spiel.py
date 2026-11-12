@@ -19999,6 +19999,65 @@ pruef("... das Fenster bekommt die Welt in voller Aufloesung, und die Anzeige bl
       tuple(_f138.get_at((20, 20)))[:3] == (10, 200, 30) and "welt_hoch" not in app.__dict__
       and tuple(_f138.get_at((K.GAME_W, K.GAME_H)))[:3] != (0, 0, 0))
 app.opt["zoom_hochaufloesend"] = False
+# Revolver: die rechte Maustaste faechert die ganze Trommel.
+_ich138 = w138.ich
+_ich138.waffen[_ich138.waffe] = "revolver"
+_ich138.magazin["revolver"] = 6
+_ich138.takt = _ich138.takt2 = 0.0; _ich138.nachlade_rest = 0.0
+_ich138.feuert, _ich138.zielt = False, True
+_schuss138 = _ich138.zaehler.get("schuesse", 0)
+for _ in range(int(0.6 / K.FIXED_DT)):
+    _ich138.zielt = True
+    _ich138.schritt(K.FIXED_DT)
+_ich138.zielt = False
+pruef("Revolver: die rechte Maustaste feuert die ganze Trommel (FAECHERN), auch im Modus GEZIELT",
+      _ich138.magazin["revolver"] == 0 and _ich138.zaehler.get("schuesse", 0) - _schuss138 == 6
+      and _ich138.modus == "gezielt", "%d Schuss, %d uebrig" % (
+          _ich138.zaehler.get("schuesse", 0) - _schuss138, _ich138.magazin["revolver"]))
+# Faehigkeit wechseln: der Unterstuetzer hat zwei.
+from dustfront import klassen as _KL138
+_ich138.klasse = "unterstuetzer"
+_ich138.faehigkeit_wahl = 0
+_ich138.faehigkeit_rest = {}
+_a138 = _KL138.faehigkeit_gewaehlt(_ich138)[0]
+_n138 = _KL138.faehigkeit_wechseln(_ich138)
+_b138 = _KL138.faehigkeit_gewaehlt(_ich138)[0]
+pruef("Faehigkeit wechseln (X): bei zwei Faehigkeiten der Klasse waehlt X die andere, C nimmt die gewaehlte",
+      _a138 != _b138 and _n138 and _KL138.faehigkeit_bereit(_ich138)[0] == _b138, "%s -> %s" % (_a138, _b138))
+_ich138.faehigkeit_rest[_b138] = 10.0
+pruef("... ist die gewaehlte noch in der Pause, nimmt C nicht heimlich die andere",
+      _KL138.faehigkeit_bereit(_ich138) is None)
+_ich138.klasse = ""
+# Schildtraeger: das Schild wird gezeichnet.
+_ich138.schild = True
+_bild138 = pygame.Surface((K.GAME_W, K.GAME_H))
+w138.zeichnen(_bild138, 1.0)
+_sk138 = w138.renderer.bilder.bild("schild_klasse")
+pruef("Schildtraeger: das Schild hat ein eigenes Bild und wird mit der Figur gezeichnet",
+      _sk138.get_bounding_rect().width > 2 and "schild_klasse: weder Datei" not in " ".join(w138.renderer.bilder.fehler))
+_ich138.schild = False
+# Medkit-Abwurf: so viele Kisten am Schirm, wie unten liegen.
+_fl138 = pygame.Surface((200, 200), pygame.SRCALPHA)
+w138._fracht_zeichnen(_fl138, "medkit", pygame.Vector2(100, 100), 0.0)
+_mk138 = w138.renderer.bilder.bild("medkit")
+_teile138 = pygame.mask.from_surface(_fl138).connected_components()
+pruef("Medkit-Abwurf: am Schirm haengen %d Kisten in normaler Groesse, nicht ein grosses Paket" % K.SCHLACHT["abwurf"]["kisten"],
+      len(_teile138) >= K.SCHLACHT["abwurf"]["kisten"]
+      and max(t_.get_bounding_rects()[0].width for t_ in _teile138) <= _mk138.get_width() + 1, str(len(_teile138)))
+# Eigene Standardrunde.
+from dustfront import regeln as _R138
+_alt_std138 = app.opt["eigene_standardrunde"]
+w138.plan[0] = _R138.saeubern(dict(w138.plan[0], modus="pvp"), w138._umfeld())
+w138.plan_als_standard(0)
+pruef("Eigene Standardrunde: ALS STANDARD merkt die Runde (beim Spieler, mit dem Konto)",
+      app.opt["eigene_standardrunde"].get("modus") == "pvp" and "eigene_standardrunde" in E_138.KONTO_WERTE)
+w138.plan[0] = _R138.saeubern(dict(w138.plan[0], modus="pve"), w138._umfeld())
+w138.plan_standard(0)
+pruef("... STANDARDRUNDE setzt sie wieder ein, und jede neue Lobby plant sie zuerst",
+      w138.plan[0]["modus"] == "pvp"
+      and _R138.meine_standardrunde(app.opt["eigene_standardrunde"])["modus"] == "pvp"
+      and _R138.meine_standardrunde({})["modus"] == K.STANDARDRUNDE["modus"])
+app.opt["eigene_standardrunde"] = _alt_std138
 w138.verlassen(); g138.verlassen()
 
 print()

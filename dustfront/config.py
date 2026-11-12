@@ -595,6 +595,7 @@ BILD_MASS = {
     "asphalt_2":        (TILE, TILE),
     "asphalt_3":        (TILE, TILE),
     "asphalt_4":        (TILE, TILE),
+    "schild_klasse":    (32, 32),       # das Schild des SCHILDTRAEGERS (seit 0.34.138)
     "hof":              (TILE, TILE),
     "hof_2":            (TILE, TILE),
     "hof_3":            (TILE, TILE),
@@ -836,7 +837,7 @@ KLANG_NAMEN = (
     "schuss_spule", "spule_laden", "schuss_kettenblitz", "schuss_spiegellaser",
     "schuss_kugelblitz", "plasma", "flammenwerfer", "kettensaege", "hammer_boden",
     "schock", "schlag_faust", "knaller", "emp", "piepen", "klebt", "gas",
-    "schneeball", "wurf_leise", "nagel_wand", "falle_klick", "drohne", "horchposten",
+    "schneeball", "wurf_leise", "nagel_wand", "falle_klick", "drohne", "horchposten", "anflug",
     "emp_aus", "reifen_platt", "schild", "schild_durch",
     "ueberhitzt",           # eine Chor-Waffe ueberhitzt und kuehlt ab (seit 0.34.130)
     "bomber",               # ein Stueck Triebwerk des Napalm-Bombers (seit 0.34.130)
@@ -4034,6 +4035,10 @@ WAFFEN = {
         huelsen=0,            # die Huelsen bleiben in der Trommel
         klang="schuss_revolver",
         modi=("gezielt", "faechern"),
+        # Seit 0.34.138 faechert die rechte Maustaste immer (gemeldet: "mit der
+        # Rechtstaste kann man immer noch nicht das komplette Magazin
+        # abfeuern") - ohne erst den Feuermodus umzuschalten.
+        zweit="faechern",
         # Seit 0.34.87 deutlicher getrennt (gemeldet: "die zwei Feuermodi
         # beim Revolver funktionieren nicht"): GEZIELT ist praezise,
         # FAECHERN leert die restliche Trommel in einem Zug.

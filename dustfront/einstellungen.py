@@ -49,6 +49,10 @@ VORGABE = {
     # 0.34.138, gewuenscht): kein Qualitaetsverlust, kein Pixelzittern -
     # kostet Rechenzeit, darum aus als Vorgabe.
     "zoom_hochaufloesend": False,
+    # Die eigene Standardrunde (seit 0.34.138, gewuenscht: "pro User soll es
+    # seine Standardrunde speichern und sie immer automatisch ausgewaehlt
+    # haben"). Leer: K.STANDARDRUNDE. Wandert mit dem Konto.
+    "eigene_standardrunde": {},
     # Prozent der Staerke, 0 = das Bild steht vollkommen still. Die
     # Vorgabe ist absichtlich 100 und nicht weniger: schwach und selten
     # ist das Ruckeln schon in RUCKELN eingestellt, und zweimal
@@ -119,7 +123,8 @@ VORGABE = {
 KONTO_WERTE = ("bildschirm_ruckeln", "vignette", "partikel",
                "tracer", "tracer_weit", "ton_gesamt", "ton_effekte",
                "ton_musik", "obere_ebenen", "blendung", "kamera_blick",
-               "kamera_blick_weite", "blendung_ton", "aussehen")
+               "kamera_blick_weite", "blendung_ton", "aussehen",
+               "eigene_standardrunde")
 
 AUFLOESUNGEN = ["960x540", "1280x720", "1600x900", "1920x1080", "2560x1440"]
 FENSTERMODI = ["fenster", "randlos", "vollbild"]

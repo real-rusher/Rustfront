@@ -270,7 +270,7 @@ class SchlachtTeil:
                 if zone.rest <= 0.0:
                     zone.rest = 0.0
                     self.abwuerfe.append(Abwurf(zone))
-                    self.welt.klang("drohne", 0.6, zone.pos, 0)
+                    self.welt.klang("anflug", 0.6, zone.pos, 0)
         for ab in list(self.abwuerfe):
             ab.alter += dt
             if ab.gerissen > 0.0:
@@ -567,7 +567,7 @@ class SchlachtTeil:
                 k.winkel = math.degrees(math.atan2(hin.y, hin.x))
             raus.append(k)
         if raus:
-            self.welt.klang("drohne", 0.8, pygame.Vector2(punkt), 0)
+            self.welt.klang("anflug", 0.8, pygame.Vector2(punkt), 0)
         return raus
 
     def _springer_schritt(self, dt: float) -> None:
@@ -838,7 +838,7 @@ class SchlachtTeil:
         if was == "aufklaerung":
             self.ueberfluege.append(Ueberflug(punkt, k.team, k.fraktion,
                                               self.welt.ebene(0).pixel_breite))
-            self.welt.klang("drohne", 1.0, punkt, 0)
+            self.welt.klang("anflug", 1.0, punkt, 0)
             return ""
         if was == "fallschirmjaeger":
             self.fallschirmjaeger_abwerfen(punkt, k.team)
@@ -1093,9 +1093,14 @@ class SchlachtTeil:
     def _fracht_zeichnen(self, ziel, art: str, p, winkel: float) -> None:
         bilder = self.renderer.bilder
         if art in ("munition", "medkit"):
+            # Seit 0.34.138 so viele Kisten, wie unten liegen, und genau dort,
+            # wo sie landen (_abwurf_landet) - vorher ein grosses Paket, das
+            # am Boden zu drei kleinen wurde (gemeldet).
             s = bilder.bild("munikiste" if art == "munition" else "medkit")
-            s = pygame.transform.scale(s, (s.get_width() * 2, s.get_height() * 2))
-            ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y))))
+            n = S["abwurf"]["kisten"]
+            for i in range(n):
+                q = pygame.Vector2(p) + pygame.Vector2(14, 0).rotate(i * 360.0 / n)
+                ziel.blit(s, s.get_rect(center=(int(q.x), int(q.y))))
             return
         if not getattr(fahrzeug_modul.ARTEN.get(art), "rechteckig", False):
             # Alles, was kein Rechteck mit Aufbau ist: das Bild der Art selbst.

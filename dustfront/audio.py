@@ -395,6 +395,28 @@ def _bomber(seed=0):
                     [a * h for a, h in zip(rauschen, huelle)])
 
 
+@platzhalter_klang("anflug")
+def _anflug(seed=0):
+    """Ein Transportflugzeug zieht vorbei (seit 0.34.138): tiefes
+    Propellerbrummen, an- und abschwellend. Fuer Abwurf, Fallschirmjaeger und
+    die grosse Aufklaerungsdrohne - vorher klang dort der Quadrokopter der
+    Spaehdrohne (gemeldet: "an zufaelligen Stellen den Sound der Drohne")."""
+    dauer = 1.6
+    n = int(RATE * dauer)
+    ton = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        f = 92.0 - 10.0 * p                       # leicht fallend: es zieht vorbei
+        phase += 2 * math.pi * f / RATE
+        blatt = 0.6 + 0.4 * math.sin(2 * math.pi * 23.0 * i / RATE)   # Propellerschlag
+        huelle = math.sin(math.pi * p) ** 1.5
+        ton.append((math.sin(phase) + 0.35 * math.sin(2 * phase)) * 0.16 * blatt * huelle)
+    grollen = _rauschen(dauer, 0.35, 180, 160, 0.0, seed + 151)
+    huelle = [math.sin(math.pi * i / n) ** 1.5 for i in range(n)]
+    return _mischen(ton, [a * h for a, h in zip(grollen, huelle)])
+
+
 @platzhalter_klang("napalm_fall")
 def _napalm_fall(seed=0):
     """Eine Napalmbombe faellt (seit 0.34.130): ein Pfeifen, das tiefer wird."""

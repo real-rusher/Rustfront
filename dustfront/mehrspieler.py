@@ -1261,7 +1261,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                    "ueberhitzt",       # Chor-Waffe ueberhitzt (seit 0.34.130)
                    "bomber", "napalm_fall",    # Napalm-Angriff (seit 0.34.130)
                    "klebt", "gas", "schneeball", "wurf_leise", "emp_aus", "reifen_platt",
-                   "schild", "falle_klick", "drohne", "horchposten",
+                   "schild", "falle_klick", "drohne", "horchposten", "anflug",
                    # Napalm-Angriff (seit 0.34.101): das Flugzeug und die Einschlaege.
                    "jet", "napalm")
 
@@ -2906,17 +2906,24 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                     # Seit 0.34.87 sagt es auch, was jetzt gilt.
                     self.hinweis = "%s: %s" % (K.WAFFEN[k.waffe_name]["name"],
                                                k.waffe_daten.get("kurz", neu.upper()))
-            if "werkzeug" in knoepfe and getattr(k, "alle_werkzeuge", False):
-                # Das naechste Werkzeug fuer C (seit 0.34.85).
-                k.werkzeug = (getattr(k, "werkzeug", 0) + 1) % len(K.WERKZEUGE)
-                if k is self.ich:
-                    self.hinweis = "C: " + klassen_modul.FAEHIGKEIT_NAMEN.get(
-                        K.WERKZEUGE[k.werkzeug][0], "")
+            if "werkzeug" in knoepfe:
+                # Die naechste Faehigkeit fuer C (Werkzeug seit 0.34.85, die
+                # Faehigkeiten einer Klasse seit 0.34.138).
+                name = klassen_modul.faehigkeit_wechseln(k)
+                if name and k is self.ich:
+                    self.hinweis = "%s: %s" % (self._tastenname("faehigkeit")[:1], name)
             if "faehigkeit" in knoepfe:
                 # Die Faehigkeit der Klasse (seit 0.34.73, Taste C).
                 was = klassen_modul.faehigkeit_nutzen(self, k)
-                if was and k is self.ich:
-                    self.hinweis = was
+                if k is self.ich:
+                    if was:
+                        self.hinweis = was
+                    else:
+                        wahl = klassen_modul.faehigkeit_gewaehlt(k)
+                        rest = (getattr(k, "faehigkeit_rest", {}) or {}).get(wahl[0], 0.0) if wahl else 0.0
+                        if wahl and rest > 0.0:
+                            self.hinweis = "%s: NOCH %d S" % (klassen_modul.FAEHIGKEIT_NAMEN.get(
+                                wahl[0], wahl[0].upper()), math.ceil(rest))
             if "nahkampf" in knoepfe:
                 # Das Brecheisen liegt auf einer eigenen Taste und braucht
                 # keinen Waffenwechsel. Es schlaegt mit seinen eigenen
