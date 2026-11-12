@@ -625,6 +625,62 @@ taste(an, pygame.K_ESCAPE)
 schirm(M.Anmeldung(app), "menue_8_konto.png")
 schirm(M.Ausruestung(app), "menue_9_ausruestung.png")
 
+# ══════════════════════════════════════════════════════════════════
+# Kosmetik im Spiel bearbeiten (seit 0.34.135, gewuenscht)
+print("\n-- Kosmetik im Spiel --")
+import array as _arr, math as _m, wave as _wave
+from dustfront import kosmetik_bearbeiten as KB
+from dustfront import ablage as _ablage
+pruef("PAUSE hat einen Eintrag KOSMETIK",
+      any(el.name == "kosmetik" for el in M.Pause(app, szene).elemente))
+_ko = KB.ordner()
+with _wave.open(str(_ko / "knall.wav"), "wb") as _w:
+    _w.setnchannels(2); _w.setsampwidth(2); _w.setframerate(44100)
+    _a = _arr.array("h")
+    for _i in range(44100 * 5):
+        _v = int(9000 * _m.sin(_i * 2 * _m.pi * 110 / 44100)); _a.extend((_v, _v))
+    _w.writeframes(_a.tobytes())
+_bf = pygame.Surface((800, 450)); _bf.fill((30, 90, 200))
+pygame.draw.circle(_bf, (250, 220, 60), (400, 225), 180)
+pygame.image.save(_bf, str(_ko / "bild.jpg"))
+kb = KB.KosmetikBearbeiten(app)
+app.schieben(kb)
+kb.ausloesen(next(e for e in kb.elemente if e.name == "ton_laden"))
+pruef("TON LADEN nimmt die WAV aus dem Ordner (Stereo, 44100 Hz)",
+      kb.ton_quelle is not None and kb.ton_quelle[2] == "knall.wav", kb.meldung)
+kb.ausloesen(next(e for e in kb.elemente if e.name == "bild_laden"))
+pruef("BILD LADEN nimmt das JPG und macht es klein genug",
+      kb.bild_quelle is not None and max(kb.bild_quelle.get_size()) <= K.SPIELERKOSMETIK["bild_max"])
+_fw = next(e for e in kb.elemente if e.name == "filter")
+_fw.blaettern(2); kb.geaendert(_fw)
+_rx = next(e for e in kb.elemente if e.name == "x"); _rx.wert = 30; kb.geaendert(_rx)
+_rl = next(e for e in kb.elemente if e.name == "laenge"); _rl.wert = 50; kb.geaendert(_rl)
+_ton, _bild = kb.paket()
+_pk = __import__("dustfront.spielerkosmetik", fromlist=["aus_konto"]).aus_konto(_ton, _bild)
+pruef("Das Paket besteht dieselbe Pruefung wie jedes fremde (Laenge, Lage, Filter)",
+      abs(_pk.dauer - 2.5) < 0.05 and abs(_pk.lage["x"] - 0.3) < 0.01 and kb.filter == "sepia",
+      "%.2f %s" % (_pk.dauer, _pk.lage))
+schirm(kb, "menue_10_kosmetik.png")
+kb = KB.KosmetikBearbeiten(app)
+app.schieben(kb)
+_png = _ko / "zweit.png"
+pygame.image.save(_bf, str(_png))
+kb.ereignis(pygame.event.Event(pygame.DROPFILE, file=str(_png)))
+pruef("Eine Datei ins Fenster ziehen laedt sie", kb.bild_name == "zweit.png", kb.meldung)
+if isinstance(app.konto.ablage, _ablage.LokaleAblage) and app.konto.angemeldet:
+    kb.ausloesen(next(e for e in kb.elemente if e.name == "ton_laden"))
+    kb.ausloesen(next(e for e in kb.elemente if e.name == "speichern"))
+    pruef("SPEICHERN legt Ton und Bild ins Konto",
+          app.konto.kosmetik is not None and app.konto.kosmetik.bild is not None
+          and app.konto.kosmetik_meldung == "GESPEICHERT", app.konto.kosmetik_meldung)
+    app.werfen()
+    kb2 = KB.KosmetikBearbeiten(app)
+    pruef("... und beim naechsten Oeffnen steht es wieder da",
+          kb2.ton_quelle is not None and kb2.bild_name == "IM KONTO")
+else:
+    pruef("(Speichern nur mit lokaler Ablage geprueft)", True)
+    app.werfen()
+
 print()
 print("FEHLER:", ", ".join(fehler) if fehler else "keine")
 pygame.quit()

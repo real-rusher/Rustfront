@@ -6786,6 +6786,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         eintraege.append(("konto", "KONTO",
                           konto.name.upper() if konto and konto.angemeldet
                           else "NICHT ANGEMELDET"))
+        eintraege.append(("kosmetik", "KOSMETIK", "BLENDGRANATE: TON UND BILD"))
         eintraege.append(("einstellungen", "EINSTELLUNGEN", ""))
         if self.in_lobby:
             # Von Lobby zu Lobby (seit 0.32): beitreten geht aus jeder
@@ -6991,7 +6992,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
     # Eintraege, die etwas *tun*, statt einen Wert zu verstellen. Sie
     # reagieren nur auf Enter. Auf einen Pfeil zu hoeren waere hier
     # gefaehrlich: ein Druck daneben haette das Gefecht beendet.
-    TATEN = ("weiter", "raus", "teams", "neu", "ausruestung", "konto",
+    TATEN = ("weiter", "raus", "teams", "neu", "ausruestung", "konto", "kosmetik",
              "planen", "starten", "starten_kos", "lobby", "suchen",
              "beenden", "einstellungen", "code", "respawn")
 
@@ -7037,6 +7038,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if schluessel == "planen":
             self._menue_zu()
             self.planung_oeffnen()
+            return
+        if schluessel == "kosmetik":
+            # Seit 0.34.135 im Spiel (gewuenscht); das Gefecht laeuft darunter
+            # weiter, und ein neuer Ton geht von selbst an alle (KosmetikTeil).
+            from .kosmetik_bearbeiten import KosmetikBearbeiten
+            self._menue_zu()
+            self.app.schieben(KosmetikBearbeiten(self.app))
             return
         if schluessel in ("ausruestung", "konto"):
             # Als eigene Szene und nicht als Unterseite: die beiden
@@ -8511,6 +8519,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         "ausruestung": "KLASSE, WAFFEN, AUSSEHEN. IN DER LOBBY SOFORT, IN EINER "
                        "RUNDE AB DEM NÄCHSTEN EINSTIEG.",
         "konto": "ANMELDEN, ABMELDEN, DEINE ZAHLEN.",
+        "kosmetik": "TON UND BILD DEINER BLENDGRANATE BEARBEITEN (SEIT 0.34.135 IM SPIEL).",
         "einstellungen": "BILD, TON, STEUERUNG, BARRIEREFREIHEIT, NETZ.",
         "code": "KOPIERT DEN CODE. WER IHN UNTER MITSPIELEN EINGIBT, KOMMT REIN.",
         "suchen": "LOBBYS IM SELBEN NETZ - ANKLICKEN UND UMSTEIGEN.",

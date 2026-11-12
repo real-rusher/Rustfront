@@ -452,6 +452,7 @@ class Konto:
         # None. Kommt vom Server und liegt danach auch auf der Platte.
         self.kosmetik = None
         self.kosmetik_fehler = ""
+        self.kosmetik_meldung = ""      # was beim Speichern aus dem Spiel geschah (0.34.135)
         self.sitzung_laden()
         self._kosmetik_merken_laden()
 
@@ -602,6 +603,55 @@ class Konto:
             self._ergebnis("kosmetik_lesen", arbeit())
             return
         self._werk.auftrag("kosmetik_lesen", arbeit)
+
+    def kosmetik_speichern(self, ton: str, bild: str) -> None:
+        """Ton und Bild aus dem Spiel ins Konto (seit 0.34.135, Base64).
+        Das Musikpaket bleibt, wie es ist. Laeuft nebenher; das Ergebnis
+        steht in `kosmetik_meldung`."""
+        if not self.angemeldet:
+            self.kosmetik_meldung = "NUR MIT KONTO"
+            return
+        alt = self._kosmetik_roh()
+        music_kit = alt.get("music_kit", "")
+        sitzung, kennung = self.sitzung, self.kennung
+        self._kosmetik_neu = (ton, bild, music_kit)
+        self.kosmetik_meldung = "SPEICHERT ..."
+        arbeit = lambda: self.ablage.kosmetik_schreiben(sitzung, kennung, ton, bild, music_kit)
+        if self._werk is None:
+            self._ergebnis("kosmetik_schreiben", arbeit())
+            return
+        self._werk.auftrag("kosmetik_schreiben", arbeit)
+
+    def _kosmetik_geschrieben(self, antwort) -> None:
+        from . import spielerkosmetik
+        if not antwort:
+            self.kosmetik_meldung = "NICHT GESPEICHERT: " + str(antwort.fehler or "")[:60]
+            return
+        ton, bild, music_kit = getattr(self, "_kosmetik_neu", ("", "", ""))
+        if not ton and not bild and not music_kit:
+            self.kosmetik = None
+            self._kosmetik_merken(None, "", "")
+        else:
+            try:
+                self.kosmetik = spielerkosmetik.aus_konto(ton, bild, music_kit)
+                self._kosmetik_merken(self.kosmetik, ton, bild, music_kit)
+            except ValueError as fehler:
+                self.kosmetik_meldung = str(fehler)
+                return
+        self.kosmetik_fehler = ""
+        self.kosmetik_meldung = "GESPEICHERT"
+
+    def _kosmetik_roh(self) -> dict:
+        """Was zuletzt gespeichert ist, als Base64 (aus der Datei)."""
+        pfad = self._kosmetik_pfad()
+        try:
+            if pfad is not None and pfad.is_file():
+                d = json.loads(pfad.read_text(encoding="utf-8"))
+                if d.get("konto") == self.kennung:
+                    return {k: str(d.get(k) or "") for k in ("ton", "bild", "music_kit")}
+        except (OSError, ValueError):
+            pass
+        return {"ton": "", "bild": "", "music_kit": ""}
 
     def _kosmetik_gelesen(self, antwort) -> None:
         """Pruefen wie jedes fremde Paket - auch das eigene vom Server."""
@@ -806,6 +856,8 @@ class Konto:
             self._gefechte_geschickt(antwort)
         elif marke == "kosmetik_lesen":
             self._kosmetik_gelesen(antwort)
+        elif marke == "kosmetik_schreiben":
+            self._kosmetik_geschrieben(antwort)
 
     def _angemeldet(self, marke: str, antwort) -> None:
         if not antwort:

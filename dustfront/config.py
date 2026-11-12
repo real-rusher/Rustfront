@@ -5482,6 +5482,25 @@ SPIELERKOSMETIK = dict(
     teile_max=100,          # mehr Teile hat kein gueltiges Paket (groesstes: 92)
 )
 
+# Kosmetik im Spiel bearbeiten (seit 0.34.135, kosmetik_bearbeiten.py).
+# Dateien liegen im Ordner `ordner` neben den Einstellungen oder werden ins
+# Fenster gezogen; groesser als `datei_max` Bytes wird nichts gelesen, von
+# einem Ton hoechstens `ton_quelle_max` s. Heraus kommt eine WAV mit `rate`.
+# LAUTER geht von lauter[0] bis lauter[1] (mal), BASS mischt bis `bass` mal
+# den Tiefpass unter `bass_grenze` Hz dazu, GROESSE ist die Hoehe des Bildes
+# als Anteil am Schirm.
+KOSMETIK_EDITOR = dict(
+    ordner="kosmetik",
+    datei_max=40_000_000,
+    ton_quelle_max=600,
+    rate=22050,
+    lauter=(0.5, 3.0),
+    bass=2.0,
+    bass_grenze=160.0,
+    groesse=(0.1, 2.0),
+    vorschau_laut=0.8,
+)
+
 # Die Blendgranate.
 #
 # **Sie unterscheidet keine Mannschaften.** Wer hinsieht, ist geblendet -

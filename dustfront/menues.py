@@ -298,6 +298,7 @@ PAUSE_HILFE = {
     "weiter": "ZURÜCK INS SPIEL.",
     "ausruestung": "KLASSE, ZWEI WAFFEN, WURFWAFFE UND AUSSEHEN.",
     "konto": "ANMELDEN ODER ANLEGEN. DAS KONTO ZÄHLT DEINE ZAHLEN.",
+    "kosmetik": "TON UND BILD DEINER BLENDGRANATE BEARBEITEN.",
     "opt": "BILD, TON, GRAFIK, TASTEN, BARRIEREFREIHEIT, NETZ.",
     "tasten": "ALLE TASTEN - UND JEDE LÄSST SICH UMLEGEN.",
     "credits": "WER DAS SPIEL GEMACHT HAT.",
@@ -332,6 +333,7 @@ class Pause(Menue):
             ("FORTSETZEN", "weiter"),
             ("AUSRÜSTUNG", "ausruestung"),
             ("KONTO", "konto"),
+            ("KOSMETIK", "kosmetik"),
             ("EINSTELLUNGEN", "opt"),
             ("STEUERUNG", "tasten"),
             ("MITWIRKENDE", "credits"),
@@ -350,6 +352,9 @@ class Pause(Menue):
             self.app.schieben(Anmeldung(self.app))
         elif el.name == "ausruestung":
             self.app.schieben(Ausruestung(self.app))
+        elif el.name == "kosmetik":
+            from .kosmetik_bearbeiten import KosmetikBearbeiten
+            self.app.schieben(KosmetikBearbeiten(self.app))
         elif el.name == "opt":
             self.app.schieben(Einstellungen(self.app))
         elif el.name == "tasten":
