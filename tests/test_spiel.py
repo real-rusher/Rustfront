@@ -19849,8 +19849,12 @@ w134._einsteigen(_bot134, _bw134)
 _ich134.am_boden = False; _ich134.lebt = True; _ich134.fahrzeug = None
 pruef("Ein Mensch nimmt einem Bot der eigenen Seite den Wagen ab",
       w134._freier_buggy(_ich134) is _bw134)
-w134._anwenden(_ich134, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
-pruef("... der Bot steigt aus, man selbst ein", _bw134.fahrer is _ich134 and _bot134.fahrzeug is None)
+w134._anwenden(_ich134, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"], "nutzen": True})
+pruef("... seit 0.34.138 nicht auf einen kurzen Druck (E halten, gewuenscht)",
+      _bw134.fahrer is _bot134 and w134.uebernehmen_anteil(_ich134) == 0.0)
+w134.welt.zeit += K.FAHRZEUG_UEBERNEHMEN["halten"] + 0.05
+w134._anwenden(_ich134, {"will": [0, 0], "ziel": [0, 0], "knoepfe": [], "nutzen": True})
+pruef("... nach dem Halten steigt der Bot aus, man selbst ein", _bw134.fahrer is _ich134 and _bot134.fahrzeug is None)
 w134._aussteigen(_ich134)
 pruef("... und steigt man aus, sitzt der Bot sofort wieder drin", _bw134.fahrer is _bot134)
 _fl134 = _FZ134.neu("flakwagen", _ich134.pos + pygame.Vector2(0, 60), 0)
@@ -19858,7 +19862,7 @@ w134.welt.dazu(_fl134); w134.fahrzeuge.append(_fl134)
 _bot134b = next(k_ for k_ in w134.kaempfer.values() if k_.ist_bot and k_.team == _ich134.team
                 and k_.lebt and k_ is not _bot134)
 w134._einsteigen(_bot134b, _fl134)
-pruef("... nicht beim Flakwagen", not w134._bot_raus_erlaubt(_ich134, _fl134))
+pruef("... seit 0.34.138 auch beim Flakwagen (er ist jetzt fuer Menschen)", w134._bot_raus_erlaubt(_ich134, _fl134))
 _fe134 = next(k_ for k_ in w134.kaempfer.values() if k_.ist_bot and k_.team != _ich134.team and k_.lebt)
 _bw134b = _FZ134.neu("buggy", _ich134.pos + pygame.Vector2(-60, 0), 0)
 w134.welt.dazu(_bw134b); w134.fahrzeuge.append(_bw134b)
@@ -20186,6 +20190,81 @@ w138._zone_bild(_f2_138, pygame.Vector2(100, 110), _z138, 1.4, False)
 pruef("... und sie lebt (Rauch, Flammen und Rand bewegen sich)",
       pygame.image.tobytes(_fl138, "RGB") != pygame.image.tobytes(_f2_138, "RGB"))
 w138.verlassen(); g138.verlassen()
+
+# Fahrzeuge: Huellen, Schieben, Abschleppen, Uebernehmen per Halten, Aufsitzen am Heck.
+from dustfront.world import freier_punkt as _fp139
+w139, g139 = _paar59("team", karte="flusstal")
+_ich139 = w139.ich
+_platz139 = None
+for _s139 in range(400):
+    _q = _fp139(w139.welt, 0, random.Random(_s139))
+    if all(w139.welt.frei(_q + pygame.Vector2(dx_, dy_), 30, 0) for dx_ in range(-260, 261, 40) for dy_ in (-80, 0, 80)):
+        _platz139 = _q
+        break
+pruef("(eine freie Flaeche fuer die Fahrzeugproben)", _platz139 is not None)
+def _neu139(art_, pos_, winkel_=0.0):
+    v_ = _FZ138.neu(art_, pos_, 0, winkel_)
+    w139.welt.dazu(v_); w139.fahrzeuge.append(v_)
+    return v_
+pruef("Huellen wie die Bilder: der Trosswagen ist 122 lang (vorher 105), der Buggy 36 breit (vorher 26)",
+      abs(2 * (K.TROSSWAGEN["achse"] + K.TROSSWAGEN["kreis"]) - 122) <= 2 and abs(2 * K.FAHRZEUG["kreis"] - 36) <= 2)
+_a139 = _neu139("buggy", _platz139)
+_b139 = _neu139("buggy", _platz139 + pygame.Vector2(2 * (K.FAHRZEUG["achse"] + K.FAHRZEUG["kreis"]) + 2, 0))
+for k_ in list(w139.kaempfer.values()):
+    if k_ is not _ich139:
+        k_.pos.update(_platz139 + pygame.Vector2(0, 2000))
+_ich139.pos.update(_a139.pos + pygame.Vector2(0, 40)); _ich139.ebene = 0
+w139._einsteigen(_ich139, _a139)
+_b0 = pygame.Vector2(_b139.pos)
+_gas139 = {"will": [0.0, -1.0], "ziel": [0, 0], "knoepfe": []}
+_alt_ein139 = w139._meine_eingabe
+w139._meine_eingabe = lambda: dict(_gas139)        # W gehalten
+for _ in range(int(1.5 / K.FIXED_DT)):
+    w139.schritt(K.FIXED_DT)
+pruef("Schieben: ein Buggy, der gegen einen leeren Buggy faehrt, schiebt ihn vor sich her",
+      _b139.pos.x - _b0.x > 20, "%.0f px" % (_b139.pos.x - _b0.x))
+_p139 = _neu139("panzer", _b139.pos + pygame.Vector2(2 * (K.FAHRZEUG["achse"] + K.FAHRZEUG["kreis"]) + 60, 0))
+_pz0 = pygame.Vector2(_p139.pos)
+for _ in range(int(1.5 / K.FIXED_DT)):
+    w139.schritt(K.FIXED_DT)
+pruef("... einen Panzer aber nicht (zu schwer fuer einen Buggy)", _p139.pos.distance_to(_pz0) < 1.0,
+      "%.1f" % _p139.pos.distance_to(_pz0))
+w139._meine_eingabe = _alt_ein139
+w139._aussteigen(_ich139)
+# Abschleppen
+_t139 = _neu139("trosswagen", _platz139 + pygame.Vector2(-150, 160))
+_l139 = _neu139("krad", _t139.zone_mitte())
+w139.schritt(K.FIXED_DT)
+_ich139.pos.update(_t139.pos + pygame.Vector2(0, 60))
+w139._einsteigen(_ich139, _t139)
+_ein139 = {"will": [0, 0], "ziel": [0, 0], "knoepfe": [], "zielt": True}
+w139._anwenden(_ich139, _ein139)
+_ein139["zielt"] = False
+w139._anwenden(_ich139, _ein139)
+pruef("Abschleppen: am Steuer des Trosswagens haengt die rechte Maustaste den leeren Wagen hinten an",
+      _t139.anhang is _l139)
+_lp0 = pygame.Vector2(_l139.pos)
+w139._meine_eingabe = lambda: dict(_gas139)
+for _ in range(int(2.0 / K.FIXED_DT)):
+    w139.schritt(K.FIXED_DT)
+w139._meine_eingabe = _alt_ein139
+pruef("... und er folgt am Haken", _l139.pos.distance_to(_lp0) > 30 and _l139.pos.distance_to(_t139.haken()) < 60,
+      "%.0f px" % _l139.pos.distance_to(_lp0))
+w139._anwenden(_ich139, dict(_ein139, zielt=True))
+pruef("... die rechte Maustaste koppelt wieder ab", _t139.anhang is None)
+w139._aussteigen(_ich139)
+# Aufsitzen hinten am Panzerwagen, den ein Bot faehrt.
+_pw139 = _neu139("panzerwagen", _platz139 + pygame.Vector2(150, -120), 0.0)
+_bot139 = w139.kaempfer.get(g139.meine_nummer)
+_bot139.team, _bot139.fraktion = _ich139.team, _ich139.fraktion
+if _bot139 is not None:
+    _bot139.lebt = True; _bot139.am_boden = False
+    w139._einsteigen(_bot139, _pw139)
+    _ich139.pos.update(_pw139.pos + _pw139.vorn * (K.PANZERWAGEN["hinten"] - _ich139.radius - 10))
+    _ich139.treppe_rest = 0.0
+    pruef("Aufsitzen: direkt am Heck (%.0f px von der Mitte) eines Panzerwagens, den ein Eigener faehrt" %
+          _ich139.pos.distance_to(_pw139.pos), w139._transporter_bei(_ich139) is _pw139)
+w139.verlassen(); g139.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

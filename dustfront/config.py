@@ -1348,7 +1348,10 @@ LUFT_ZIELEN = dict(
 # Ein Fahrzeug von einem Bot der eigenen Seite uebernehmen (seit 0.34.134):
 # E am Wagen wirft ihn hinaus (nicht beim Flakwagen); steigt man aus, steigt er
 # wieder ein, wenn er so nah ist.
-FAHRZEUG_UEBERNEHMEN = dict(zurueck_weite=900.0)
+# Seit 0.34.138: E so lange `halten` (s), um einen Bot vom Steuer zu holen;
+# auf einen Panzerwagen sitzt auf, wer bis `aufsitzen_rand` px am Blech steht
+# (vorher zaehlte der Abstand zur Mitte, am Heck war man zu weit weg).
+FAHRZEUG_UEBERNEHMEN = dict(zurueck_weite=900.0, halten=0.6, aufsitzen_rand=18.0)
 
 # Die Front in SCHLACHT (seit 0.34.131, dustfront/front.py). Gilt auf Karten,
 # die ihre Basen, Eroberungspunkte und Wege im Kopf nennen (FLUSSTAL,
@@ -2102,6 +2105,44 @@ FLAKWAGEN = dict(
     fahrer_schaden=50.0,
     neu_nach=40.0,
 )
+
+# Huellen genau wie die Bilder (seit 0.34.138, gemeldet: "mit unsichtbaren
+# Teilen an Waenden stecken bleiben, durch Fahrzeuge durchlaufen, zum Teil in
+# Waenden drin"). Gemessen an den Bildern (deckende Pixel): die Kastenwagen
+# bekommen vorn/hinten/halb, die mit zwei Kreisen einen Radius = halbe Breite
+# und eine Achse, mit der die Laenge stimmt; `mitte` schiebt beide Kreise
+# entlang der Achse, wo das Bild nicht mittig sitzt. Vorher waren die meisten
+# kleiner als ihr Bild (Trosswagen 105 x 43 gegen 122 x 62, Krad mit
+# Beiwagen 38 x 18 gegen 52 x 45).
+for _d, _h in ((PANZER, dict(vorn=48.0, hinten=-46.0, halb=31.0)),
+               (PANZERWAGEN, dict(vorn=48.0, hinten=-48.0, halb=25.0)),
+               (JAGDPANZER, dict(vorn=46.0, hinten=-48.0, halb=31.0)),
+               (FLAKWAGEN, dict(vorn=47.0, hinten=-46.0, halb=26.0)),
+               (FAHRZEUG, dict(kreis=18.0, achse=8.0, mitte=1.0)),
+               (KRAD, dict(kreis=22.0, achse=4.0, mitte=0.0)),
+               (TROSSWAGEN, dict(kreis=31.0, achse=30.0, mitte=-3.0)),
+               (SPULENWAGEN, dict(kreis=26.0, achse=21.0, mitte=0.0)),
+               (FUNKWAGEN, dict(kreis=25.0, achse=22.0, mitte=-2.0)),
+               (WERFER, dict(kreis=26.0, achse=20.5, mitte=2.5)),
+               (TRAGSCHRAUBER, dict(kreis=20.0, achse=18.0, mitte=-6.0))):
+    _d.update(_h)
+
+# Schieben (seit 0.34.138, gewuenscht: "leichte Fahrzeuge koennen gepusht
+# werden, indem man dagegen faehrt, schwere von anderen schweren"): wer Gas
+# gibt (mehr als `gas`) und an einen Wagen stoesst, schiebt ihn mit `tempo`
+# px/s (mal Gas) - wenn sein `gewicht` mindestens so gross ist und der andere
+# leicht (1) ist oder er selbst nicht leicht. Wracks auch.
+# Abschleppen mit dem Trosswagen (seit 0.34.138): ein leerer Wagen bis `fang`
+# px um die Zone hinten wird mit der rechten Maustaste angehaengt; er haengt
+# `abstand` px hinter der Kupplung und reisst ab, wenn er weiter als `reissen`
+# px zurueckbleibt (an einer Mauer festgehakt). Ziehen kann er Leichtes und
+# Mittleres (K.SCHIEBEN gewicht), keinen Panzer.
+ABSCHLEPPEN = dict(fang=30.0, abstand=6.0, reissen=70.0)
+
+SCHIEBEN = dict(gas=0.3, tempo=70.0,
+                gewicht=dict(buggy=1, krad=1, tragschrauber=1, trosswagen=2, funkwagen=2,
+                             spulenwagen=2, werfer=2, flakwagen=2, panzerwagen=2,
+                             panzer=3, jagdpanzer=3))
 
 # Flak gegen Luftziele: wie viel mehr eine Flak-Kugel dort wiegt, und wie weit
 # ein Bot einen Flieger sucht (ein Bot am Steuer; Tragschrauber, Drohnen,

@@ -2960,6 +2960,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
 
         # Nutzen: erst jemandem aufhelfen, sonst die Treppe nehmen.
         gedrueckt = self._e_gedrueckt(ein)
+        if self._uebernehmen_halten(k, ein):
+            return
         if not ein.get("nutzen") and not gedrueckt:
             return
         opfer = self._wem_helfen(k, ein.get("wen"), hilft_vorher) if ein.get("nutzen") else None
@@ -3002,13 +3004,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         darf = not k.ist_bot or getattr(k, "darf_fahren", False)
         wagen = self._freier_buggy(k) if darf else None
         if wagen is not None:
-            bot = wagen.fahrer
-            if bot is not None:
-                # Ein Bot der eigenen Seite am Steuer (seit 0.34.134): er
-                # steigt aus, man selbst ein - geht man wieder raus, steigt er
-                # sofort wieder ein (_aussteigen).
-                self._aussteigen(bot)
-                wagen._bot_wartet = bot
+            if wagen.fahrer is not None:
+                # Ein Bot der eigenen Seite am Steuer (seit 0.34.134): seit
+                # 0.34.138 E **halten** (K.FAHRZEUG_UEBERNEHMEN halten) - ein
+                # kurzer Druck soll nicht aus Versehen den Fahrer hinauswerfen
+                # (gewuenscht). Das Halten fuehrt _uebernehmen_halten.
+                k._uebernehmen = (wagen, self.welt.zeit)
+                return
             self._einsteigen(k, wagen)
             return
         # Hinten auf einen Panzerwagen, den jemand faehrt (seit 0.34.95) -
@@ -3024,6 +3026,37 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             wolke(self.welt, k.pos, 10, 90, 0.4, K.C_MUTED_DK, k.ebene, 1,
                   "staub")
             self.welt.klang("aufheben", 0.4)
+
+    def _uebernehmen_halten(self, k, ein: dict) -> bool:
+        """E gehalten an einem Wagen mit einem Bot der eigenen Seite (seit
+        0.34.138): nach K.FAHRZEUG_UEBERNEHMEN halten Sekunden steigt der Bot
+        aus und man selbst ein. Laesst man los oder geht weg, nichts. True,
+        solange das Halten laeuft (E tut dann nichts anderes)."""
+        lauf = k.__dict__.get("_uebernehmen")
+        if lauf is None:
+            return False
+        wagen, seit = lauf
+        if (not ein.get("nutzen") or wagen.kaputt or wagen.fahrer is None
+                or not self._bot_raus_erlaubt(k, wagen) or k.fahrzeug is not None
+                or wagen.pos.distance_to(k.pos) > wagen.werte["einsteigen"] + 30.0):
+            k._uebernehmen = None
+            return False
+        if self.welt.zeit - seit < K.FAHRZEUG_UEBERNEHMEN["halten"]:
+            k.feuert = False
+            return True
+        k._uebernehmen = None
+        bot = wagen.fahrer
+        self._aussteigen(bot)
+        wagen._bot_wartet = bot      # geht man wieder raus, steigt er ein (_aussteigen)
+        self._einsteigen(k, wagen)
+        return True
+
+    def uebernehmen_anteil(self, k) -> float:
+        """Wie weit das Halten zum Uebernehmen ist (0 bis 1), fuer die Anzeige."""
+        lauf = k.__dict__.get("_uebernehmen") if k is not None else None
+        if lauf is None:
+            return 0.0
+        return max(0.0, min(1.0, (self.welt.zeit - lauf[1]) / K.FAHRZEUG_UEBERNEHMEN["halten"]))
 
     @staticmethod
     def _e_gedrueckt(ein: dict) -> bool:
@@ -3395,7 +3428,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         """Darf `k` den Bot am Steuer von `b` hinauswerfen? Ein Mensch, der
         Bot ist von seiner Seite, nicht beim Flakwagen (nur Bots, seit
         0.34.114) - seit 0.34.134."""
-        f = b.fahrer
+        f = b.fahrer or self.kaempfer.get(getattr(b, "fahrer_nummer", -1))
         if "plaetze" in b.werte and (k.pos - b.pos).dot(b.vorn) < b.werte.get("vorn", 40.0) * 0.25:
             # Ein Panzerwagen nimmt Leute mit: an der Mitte und hinten sitzt
             # man auf wie bisher - das Steuer uebernimmt, wer vorn an der
@@ -3520,7 +3553,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             if len(b.mitfahrer) >= b.werte["plaetze"]:
                 continue
             d = b.pos.distance_squared_to(k.pos)
-            if d <= b.werte["einsteigen"] ** 2 and d < abstand:
+            # Seit 0.34.138 zaehlt der Abstand zum Blech, nicht zur Mitte
+            # (gemeldet: "hinten in den Panzerwagen einsteigen geht nicht so
+            # ganz" - am Heck war man schon zu weit von der Mitte weg).
+            nah = (b.beruehrt(k.pos, k.radius + K.FAHRZEUG_UEBERNEHMEN["aufsitzen_rand"])
+                   if getattr(b, "rechteckig", False) else d <= b.werte["einsteigen"] ** 2)
+            if nah and d < abstand:
                 bester, abstand = b, d
         return bester
 
@@ -3650,6 +3688,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if getattr(b, "rechteckig", False) or getattr(b, "schiesst", False):
             b.feuer = bool(ein.get("feuert"))
             b.zweit = bool(ein.get("zielt"))
+        if b.art == "trosswagen":
+            # Rechte Maustaste: anhaengen oder abkoppeln (seit 0.34.138).
+            zweit = bool(ein.get("zielt"))
+            if zweit and not b.__dict__.get("_haken_alt", False):
+                self._trosswagen_haken(b, k)
+            b._haken_alt = zweit
         # Seit 0.34.65: was hinten heraus geht, auf den Tasten, die am
         # Steuer sonst nichts tun - R wirft Nebel, F streut Naegel.
         knoepfe = ein.get("knoepfe") or []
@@ -3672,6 +3716,113 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 b.landen_beginnen()             # Tragschrauber: zur Landung ansetzen
             else:
                 self._aussteigen(k)
+
+    def _trosswagen_haken(self, b, k) -> None:
+        """Anhaengen oder abkoppeln (Trosswagen, rechte Maustaste)."""
+        if b.anhang is not None:
+            b.anhang._gezogen_von = None
+            b.anhang = None
+            self.welt.klang("buggy_tuer", 0.6, b.haken(), b.ebene)
+            if k is self.ich:
+                self.melden("ABGEKOPPELT", 1.5)
+            return
+        a = b.anhang_kandidat(self.fahrzeuge)
+        if a is None:
+            if k is self.ich:
+                self.melden("NICHTS ZUM ANHÄNGEN - EIN LEERER WAGEN MUSS HINTEN STEHEN", 2.5)
+            return
+        b.anhang = a
+        a._gezogen_von = b
+        self.welt.klang("buggy_tuer", 0.8, b.haken(), b.ebene)
+        if k is self.ich:
+            self.melden("%s ANGEHÄNGT" % a.werte.get("name", a.art.upper()), 1.5)
+
+    def _anhaenger_ziehen(self, dt: float) -> None:
+        """Was am Haken haengt, folgt der Kupplung: es dreht sich zu ihr hin und
+        steht mit seiner Nase knapp dahinter (K.ABSCHLEPPEN)."""
+        for b in self.fahrzeuge:
+            a = getattr(b, "anhang", None)
+            if a is None:
+                continue
+            if (b.kaputt or a not in self.fahrzeuge or a.fahrer is not None
+                    or getattr(a, "luft", False) or a.ebene != b.ebene):
+                b.anhang = None
+                a._gezogen_von = None
+                continue
+            haken = b.haken()
+            hin = haken - a.pos
+            if hin.length_squared() < 1.0:
+                continue
+            winkel = math.degrees(math.atan2(hin.y, hin.x))
+            nase = self._fahrzeug_vorn(a) + K.ABSCHLEPPEN["abstand"]
+            neu = haken - pygame.Vector2(nase, 0).rotate(winkel)
+            if a.passt(neu, winkel):
+                a.pos.update(neu)
+                a.winkel = winkel
+                if hasattr(a, "aufbau") and not getattr(a, "fahrer", None):
+                    a.aufbau = winkel
+            elif a.pos.distance_to(haken) > nase + K.ABSCHLEPPEN["reissen"]:
+                b.anhang = None
+                a._gezogen_von = None
+                self.welt.aufschrift(haken, b.ebene, "ABGERISSEN")
+
+    def _abschleppseile_zeichnen(self, ziel) -> None:
+        """Ein Seil von der Kupplung zur Nase des Anhaengers."""
+        for b in self.fahrzeuge:
+            a = getattr(b, "anhang", None)
+            if a is None or b.ebene != self.blick:
+                continue
+            nase = a.pos + pygame.Vector2(self._fahrzeug_vorn(a), 0).rotate(a.winkel)
+            p, q = self.kamera.zu_bild(b.haken()), self.kamera.zu_bild(nase)
+            pygame.draw.line(ziel, (24, 18, 12), p, q, 3)
+            pygame.draw.line(ziel, (150, 130, 96), p, q, 1)
+
+    @staticmethod
+    def _fahrzeug_vorn(v) -> float:
+        """Wie weit die Nase eines Wagens vor seiner Mitte liegt."""
+        w = v.werte
+        if getattr(v, "rechteckig", False):
+            return float(w["vorn"])
+        return float(w.get("achse", 0.0)) + float(v.radius) + float(w.get("mitte", 0.0))
+
+    def _fahrzeuge_schieben(self, dt: float) -> None:
+        """Wer Gas gibt und an einen anderen Wagen stoesst, schiebt ihn, wenn
+        er schwer genug ist (K.SCHIEBEN, seit 0.34.138). Bots blieben vorher
+        oft an leer stehenden Wagen haengen."""
+        f = K.SCHIEBEN
+        gew = f["gewicht"]
+        for a in self.fahrzeuge:
+            if (a.fahrer is None or a.kaputt or a.nur_bild or getattr(a, "luft", False)
+                    or abs(getattr(a, "gas", 0.0)) < f["gas"]):
+                continue
+            ga = gew.get(a.art, 2)
+            richtung = a.vorn * (1.0 if a.gas > 0 else -1.0)
+            probe = a.pos + richtung * 4.0
+            kreise = a.kreise(probe)
+            for b in self.fahrzeuge:
+                if b is a or b.nur_bild or b.ebene != a.ebene or getattr(b, "luft", False):
+                    continue
+                weit = self._fahrzeug_reichweite(a) + self._fahrzeug_reichweite(b) + 12.0
+                if b.pos.distance_squared_to(a.pos) > weit * weit:
+                    continue
+                gb = gew.get(b.art, 2)
+                if ga < gb or (gb > 1 and ga == 1):
+                    continue
+                if not any(b.beruehrt(c, a.radius) for c in kreise):
+                    continue
+                schub = richtung * (f["tempo"] * abs(a.gas) * dt)
+                neu = b.pos + schub
+                if b.passt(neu):
+                    b.pos.update(neu)
+
+    @staticmethod
+    def _fahrzeug_reichweite(v) -> float:
+        """So weit reicht ein Wagen hoechstens von seiner Mitte aus."""
+        r = getattr(v, "huelle_radius", None)
+        if r:
+            return float(r)
+        w = v.werte
+        return float(w.get("achse", 0.0)) + float(v.radius) + abs(float(w.get("mitte", 0.0)))
 
     def _fahrzeuge_nachziehen(self) -> None:
         """Nach dem Weltschritt: jeder Fahrer sitzt dort, wo sein Wagen
@@ -4011,6 +4162,18 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                     SCHRIFT.zeichnen(ziel, "NÄCHSTE %.0f S" % math.ceil(rest), x0 + breite + 5,
                                      int(p.y) + unten, K.C_TEAL, 1)
                 unten += 9
+            if wagen is not None and wagen.art == "trosswagen" and not wagen.kaputt:
+                # Abschleppen (seit 0.34.138): immer sagen, was die rechte
+                # Maustaste gerade tut - "so etwas sollte klar sein".
+                if getattr(wagen, "anhang", None) is not None:
+                    txt = "[RMB] ABKOPPELN: %s" % wagen.anhang.werte.get("name", "").upper()
+                else:
+                    kand = wagen.anhang_kandidat(self.fahrzeuge)
+                    txt = ("[RMB] ANHÄNGEN: %s" % kand.werte.get("name", kand.art.upper())
+                           if kand is not None else "ZIEHEN: LEEREN WAGEN HINTEN HINSTELLEN, DANN [RMB]")
+                SCHRIFT.zeichnen(ziel, txt, int(p.x), int(p.y) + unten,
+                                 K.C_AMBER if "[RMB]" in txt else K.C_MUTED, 1, ausrichtung="mitte")
+                unten += 10
             if wagen is not None and wagen.art == "werfer" and not wagen.kaputt:
                 if wagen.phase == 0:
                     txt = "WERFER [RMB]: AUFBAUEN"
@@ -4094,9 +4257,28 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 return
         for b in self.fahrzeuge:
             besetzt = b.fahrer is not None or b.besetzt
-            if (b.kaputt or b.ebene != ich.ebene
-                    or b.pos.distance_squared_to(ich.pos) > b.werte["einsteigen"] ** 2):
+            if b.kaputt or b.ebene != ich.ebene:
                 continue
+            nah = b.pos.distance_squared_to(ich.pos) <= b.werte["einsteigen"] ** 2
+            if besetzt and "plaetze" in b.werte and getattr(b, "rechteckig", False):
+                # Aufsitzen nach dem Abstand zum Blech (seit 0.34.138).
+                nah = nah or b.beruehrt(ich.pos, ich.radius + K.FAHRZEUG_UEBERNEHMEN["aufsitzen_rand"])
+            if not nah:
+                continue
+            fahrer = b.fahrer if self.ist_gastgeber else self.kaempfer.get(getattr(b, "fahrer_nummer", -1))
+            if (besetzt and fahrer is not None and getattr(fahrer, "ist_bot", False)
+                    and fahrer.fraktion == ich.fraktion and self._bot_raus_erlaubt(ich, b)):
+                # Ein Bot der eigenen Seite am Steuer (seit 0.34.138: halten).
+                p = self.kamera.zu_bild(b.pos)
+                unten = int(getattr(b, "huelle_radius", 22)) + 8
+                anteil = self.uebernehmen_anteil(ich)
+                SCHRIFT.zeichnen(ziel, "[%s] HALTEN: STEUER ÜBERNEHMEN" % taste_e, int(p.x),
+                                 int(p.y) + unten, K.C_CREAM, 1, ausrichtung="mitte")
+                if anteil > 0.0:
+                    balken = pygame.Rect(int(p.x) - 30, int(p.y) + unten + 10, 60, 3)
+                    pygame.draw.rect(ziel, (20, 14, 10), balken.inflate(2, 2))
+                    pygame.draw.rect(ziel, K.C_TEAL, (balken.x, balken.y, int(60 * anteil), 3))
+                return
             if besetzt and not self._darf_aufsitzen(b):
                 continue
             p = self.kamera.zu_bild(b.pos)
@@ -4250,6 +4432,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         self._fahrzeuge_nachziehen()
         self._mitfahrer_nachziehen()
         self._fahrzeuge_erneuern(dt)
+        self._fahrzeuge_schieben(dt)       # seit 0.34.138
+        self._anhaenger_ziehen(dt)          # seit 0.34.138
         self.funkwagen_schritt(dt)
         self.werfer_schritt(dt)
         self.sold_schritt(dt)                 # Punkte fuer alle (seit 0.34.138)
@@ -7436,6 +7620,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         self._haende_zeichnen(ziel)
         self._namen_zeichnen(ziel)
         self.luft_zeiger_zeichnen(ziel)     # seit 0.34.138
+        self._abschleppseile_zeichnen(ziel)  # seit 0.34.138
         self._fahrzeug_balken(ziel)
         self._funk_wellen(ziel)
         self._fahrzeug_hinweis(ziel)

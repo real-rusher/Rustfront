@@ -388,6 +388,10 @@ class Buggy(Wesen):
         pos = self.pos if pos is None else pos
         winkel = self.winkel if winkel is None else winkel
         achse = pygame.Vector2(self.werte["achse"], 0).rotate(winkel)
+        m = self.werte.get("mitte", 0.0)
+        if m:
+            # Wo das Bild nicht mittig sitzt (seit 0.34.138, K.* mitte).
+            pos = pos + pygame.Vector2(m, 0).rotate(winkel)
         return (pos + achse, pos - achse)
 
     def beruehrt(self, pos, radius: float) -> bool:
@@ -468,7 +472,7 @@ class Buggy(Wesen):
                 # Andere Wagen: Kreis an Kreis (seit 0.34.18 stehen sie im
                 # Raster, weil man sie treffen kann - vorher hielt nur der
                 # Fahrer des anderen Wagens einen auf, ein leerer gar nicht).
-                if any(c.distance_squared_to(d) < (2 * r) ** 2
+                if any(c.distance_squared_to(d) < (r + a.radius) ** 2
                        for c in kreise for d in a.kreise()):
                     return False
                 continue
@@ -1785,6 +1789,37 @@ class Trosswagen(Buggy):
 
     def in_zone(self, punkt, radius: float = 0.0) -> bool:
         return self.zone_mitte().distance_to(punkt) <= self.werte["zone"]["radius"] + radius
+
+    # ---- Abschleppen (seit 0.34.138) -------------------------------------
+    # Gefragt: "ob es moeglich ist, mit dem Trosswagen was hinten dran zu
+    # ziehen ... ich wuesste die Taste nicht. So etwas sollte immer klar und
+    # intuitiv sein." Jetzt: rechte Maustaste am Steuer haengt einen leeren
+    # Wagen in der Zone hinten an (oder ab); er folgt am Haken.
+    anhang = None
+
+    def haken(self, pos=None, winkel=None) -> pygame.Vector2:
+        """Die Anhaengerkupplung: hinten am Wagen."""
+        pos = self.pos if pos is None else pos
+        winkel = self.winkel if winkel is None else winkel
+        w = self.werte
+        hinten = w["achse"] + w["kreis"] - w.get("mitte", 0.0)
+        return pos - pygame.Vector2(hinten, 0).rotate(winkel)
+
+    def anhang_kandidat(self, fahrzeuge):
+        """Ein leerer Wagen in der Zone hinten, den er ziehen kann, oder None."""
+        gew = K.SCHIEBEN["gewicht"]
+        mein = gew.get(self.art, 2)
+        beste, best_d = None, 1e9
+        for a in fahrzeuge:
+            if (a is self or a.ebene != self.ebene or getattr(a, "luft", False)
+                    or a.fahrer is not None or getattr(a, "besetzt", False)):
+                continue
+            if gew.get(a.art, 2) > mein:
+                continue
+            d = a.pos.distance_to(self.zone_mitte())
+            if d <= self.werte["zone"]["radius"] + K.ABSCHLEPPEN["fang"] and d < best_d:
+                beste, best_d = a, d
+        return beste
 
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
