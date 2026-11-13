@@ -2411,7 +2411,15 @@ BOTS = dict(
     # vergangenen Zeit). Dazwischen gilt seine letzte Eingabe weiter -
     # Laufen, Zielen, Gas und Lenkung bleiben am Kaempfer stehen. Bei 120
     # Schritten je s sind das 60 oder 40 Entscheidungen je s und Bot.
-    staffel=((40, 2), (120, 3)),
+    # Seit 0.34.142 (gewuenscht: "die Performance bei Schlacht deutlich
+    # verbessern"): ab 30 Bots jeden 4. Schritt (30 Entscheidungen je s - gut
+    # unter der Reaktionszeit eines Menschen), ab 100 jeden 6. Gemessen auf
+    # FLUSSTAL mit 24 je Seite dachten die Bots 42 Prozent jedes Schritts.
+    staffel=((30, 4), (100, 6)),
+    # Und wer weiter als `fern_ab` px von jedem Menschen weg ist (gut
+    # anderthalb Bildbreiten), denkt nur jeden `fern_jede`. Schritt - ab
+    # `fern_ab_bots` Bots, und nur, wenn Menschen mitspielen (seit 0.34.142).
+    fern_ab=1000.0, fern_jede=12, fern_ab_bots=16,
     # Luftziele (seit 0.34.138): ohne Gegner am Boden schiessen Bots auf
     # Tragschrauber und Drohnen bis `luft_weite` px (und Waffenreichweite),
     # suchen alle `luft_takt` s, reagieren `luft_reaktion` s langsamer als

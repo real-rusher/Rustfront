@@ -363,6 +363,9 @@ class Ebene:
                 flaeche.blit(bild, (x0 - links_kachel, y0 - oben_kachel), quelle)
 
 
+# Kachelart -> 0/1/2 (Welt.wasser), neu gebaut, wenn K.KACHELN ein anderes ist.
+_WASSER_TAFEL = [None, {}]
+
 _LOCH = ("loch",)          # Marke in Welt._frei_tafel: ein Loch
 
 
@@ -1222,22 +1225,38 @@ class Welt:
         self._frei_tafel = (K.KACHELN, getattr(self, "satz", ""), tafel, ueber)
         return self._frei_tafel
 
+    def wasser(self, pos, ebene: int) -> int:
+        """0 trocken, 1 seichtes, 2 tiefes Wasser - eine Abfrage statt zweier
+        (seit 0.34.142: jeder Kaempfer fragt das jeden Schritt, bis zu dreimal)."""
+        ebenen = self.ebenen
+        e = ebenen[ebene] if 0 <= ebene < len(ebenen) else self.ebene(ebene)
+        tx, ty = int(pos.x // K.TILE), int(pos.y // K.TILE)
+        if 0 <= tx < e.breite and 0 <= ty < e.hoehe:
+            k = e.kacheln[ty * e.breite + tx]
+        else:
+            k = K.LEER
+        tafel = _WASSER_TAFEL
+        if tafel[0] is not K.KACHELN:
+            tafel[0] = K.KACHELN
+            tafel[1] = {n: (1 if d.get("seicht") else 2 if d.get("sperrt") else 0)
+                        for n, d in K.KACHELN.items()}
+        return tafel[1].get(k, 0)
+
     def seicht(self, pos, ebene: int) -> bool:
         """Steht man hier in seichtem Wasser (seit 0.34.131)?"""
-        e = self.ebene(ebene)
-        return K.KACHELN[e.kachel(int(pos.x // K.TILE), int(pos.y // K.TILE))].get("seicht", False)
+        return self.wasser(pos, ebene) == 1
 
     def tief(self, pos, ebene: int) -> bool:
         """Ist hier tiefes Wasser (seit 0.34.140: man schwimmt darin)?"""
-        e = self.ebene(ebene)
-        return K.KACHELN[e.kachel(int(pos.x // K.TILE), int(pos.y // K.TILE))].get("sperrt", False)
+        return self.wasser(pos, ebene) == 2
 
     def boden_tempo(self, pos, ebene: int, fahrzeug: bool = False) -> float:
         """Faktor auf das Tempo durch den Boden: 1, im seichten Wasser
         weniger (K.WASSER), schwimmend noch weniger."""
-        if self.seicht(pos, ebene):
+        art = self.wasser(pos, ebene)
+        if art == 1:
             return K.WASSER["seicht_fahrzeug" if fahrzeug else "seicht_tempo"]
-        if not fahrzeug and self.tief(pos, ebene):
+        if art == 2 and not fahrzeug:
             return K.WASSER["schwimm_tempo"]
         return 1.0
 

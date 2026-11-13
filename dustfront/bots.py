@@ -3052,15 +3052,28 @@ class BotTeil:
                 jede = n
         lauf = self.__dict__.get("_staffel_lauf", 0) + 1
         self._staffel_lauf = lauf
+        # Fern vom Geschehen (seit 0.34.142): wer weiter als `fern_ab` px von
+        # jedem Menschen weg ist, denkt nur jeden `fern_jede`. Schritt - ihn
+        # sieht keiner, und gekaempft wird trotzdem (gemessen in SCHLACHT:
+        # die meisten Bots stehen weit weg vom Spieler). Ohne Menschen (der
+        # Testmodus, die Verhaltens-Szenen) gilt das nicht.
+        fern_ab, fern_jede = K.BOTS["fern_ab"], K.BOTS["fern_jede"]
+        menschen = [(m.pos, m.ebene) for m in self.kaempfer.values() if not m.ist_bot] \
+            if len(bots) >= K.BOTS["fern_ab_bots"] else []
+        fern_q = fern_ab * fern_ab
         try:
             for k in bots:
                 hirn = getattr(k, "hirn", None)
                 if hirn is None:
                     continue
-                if jede > 1:
+                jetzt_jede = jede
+                if menschen and fern_jede > jede and all(
+                        k.pos.distance_squared_to(p_) > fern_q for p_, _e in menschen):
+                    jetzt_jede = fern_jede
+                if jetzt_jede > 1:
                     # Versetzt: in jedem Schritt denkt ein Teil der Bots.
                     hirn._staffel_dt = getattr(hirn, "_staffel_dt", 0.0) + dt
-                    if (lauf + k.nummer) % jede:
+                    if (lauf + k.nummer) % jetzt_jede:
                         continue
                     schritt, hirn._staffel_dt = hirn._staffel_dt, 0.0
                     self._anwenden(k, hirn.eingabe(schritt))

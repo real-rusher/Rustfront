@@ -459,14 +459,21 @@ class Buggy(Wesen):
         b = e.breite
         if not (0 <= x0 and x1 < b and 0 <= y0 and y1 < e.hoehe):
             return w.frei(c, r, self.ebene, True)
-        kacheln = e.kacheln
-        reihen = [kacheln[ty * b + x0: ty * b + x1 + 1] for ty in range(y0, y1 + 1)]
         schluessel = (c.x, c.y, r, x0, y0)
         merk = self.__dict__.get("_frei_merk")
         if merk is None:
             merk = self._frei_merk = {}
         hit = merk.get(nr)
-        if hit is not None and hit[0] == schluessel and hit[1] is e and hit[2] == reihen:
+        if hit is None or hit[0] != schluessel or hit[1] is not e:
+            # Er faehrt (seit 0.34.142): die Kacheln erst merken, wenn er
+            # wieder auf derselben Stelle steht - beim Fahren half der Zettel
+            # nie und kostete jede Pruefung die Ausschnitte.
+            antwort = w.frei(c, r, self.ebene, True)
+            merk[nr] = (schluessel, e, None, antwort)
+            return antwort
+        kacheln = e.kacheln
+        reihen = [kacheln[ty * b + x0: ty * b + x1 + 1] for ty in range(y0, y1 + 1)]
+        if hit[2] is not None and hit[2] == reihen:
             return hit[3]
         antwort = w.frei(c, r, self.ebene, True)
         merk[nr] = (schluessel, e, reihen, antwort)
