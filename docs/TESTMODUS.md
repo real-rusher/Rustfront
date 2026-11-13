@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.144 | Keine neuen Spawner-Eintraege. Eigenbeschuss: einen Wagen mit PUPPE als Fahrer setzen und mit einer zweiten PUPPE derselben Seite darauf schiessen - er nimmt Schaden, der Fahrer nicht; als Beifahrer im KRAD nicht. Werfer: WERFER setzen und zerstoeren (kleinere Explosion). |
 | 0.34.143 | Keine neuen Spawner-Eintraege. Krad zu zweit: ein Bot-Fahrer auf einem KRAD (FAHRER mit Fahrzeug) und ein BOT daneben - er sitzt im Beiwagen auf; die INFO-Ansicht (Taste 8) zeigt WARTET AUF BEIFAHRER, ZU ZWEIT, > KREIST und beim Beifahrer IM BEIWAGEN. Panzerbuechse: ein BOT mit PANZERBUECHSE vor einem PANZER mit PUPPE als Fahrer. Flammenwerfer: PUPPE mit FLAMMENWERFER als Waffe. Motoren: jeden Wagen setzen und fahren. |
 | 0.34.142 | Keine neuen Spawner-Eintraege. Die INFO-Ansicht (Taste 8) zeigt FERN bei Bots, die weiter als 1200 px von jedem Menschen weg sind: sie denken seltener und rechnen im halben Takt. Im Testmodus nur, wenn man eine Figur selbst steuert (sonst gibt es keinen Menschen). |
 | 0.34.140 | Keine neuen Spawner-Eintraege. Schwimmen: auf FLUSSTAL mit ICH oder einer PUPPE ins tiefe Wasser gehen (langsam, kein Schuss, nur der Kopf oben). Kolonne: zwei FAHRER MIT FAHRZEUG hintereinander setzen; die INFO-Ansicht (Taste 8) zeigt beim Hinteren "> KOLONNE" und eine tuerkise Linie zum Vordermann, bei Gegenverkehr "> RECHTS HALTEN". Szene in `tests/test_verhalten.py`: `kolonne`. |

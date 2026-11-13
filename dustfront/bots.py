@@ -1278,6 +1278,22 @@ class BotHirn(Taktik):
                 continue
             if abs(d.cross(hin)) < luecke + getattr(x, "radius", 9.0) * 0.5:
                 return True
+        # Ein besetzter Wagen der eigenen Seite (seit 0.34.143): die eigenen
+        # Kugeln beschaedigen ihn wieder, also nicht hindurch schiessen.
+        eigener = getattr(k, "fahrzeug", None) or wagen
+        for b in getattr(self.g, "fahrzeuge", ()):
+            if (b is eigener or b.kaputt or b.ebene != k.ebene
+                    or not (b.fahrer is not None or b.__dict__.get("_mitfahrer"))):
+                continue
+            insassen = [b.fahrer] + list(b.__dict__.get("_mitfahrer") or ())
+            if not any(x is not None and getattr(x, "fraktion", None) == k.fraktion for x in insassen):
+                continue
+            d = b.pos - k.pos
+            vor = d.dot(hin)
+            if vor <= 0.0 or vor > weite + b.radius:
+                continue
+            if abs(d.cross(hin)) < b.radius * 0.8:
+                return True
         return False
 
     def _deckung_wert(self, p, gefahr, zone):

@@ -2016,14 +2016,15 @@ WERFER = dict(
     kreis=22.0,
     achse=24.0,
     einsteigen=54.0,
-    leben=120.0,
+    leben=160.0,              # seit 0.34.143 (gewuenscht: "etwas mehr HP"), vorher 120
     schiesst=True,
     # Die groesste Explosion des Spiels (seit 0.34.120): wer bis `explosion_tot`
     # Pixel danebensteht - der Fahrer immer -, stirbt sofort; bis
     # `explosion_radius` reisst es noch Leben (Fahrzeuge `explosion_fahrzeug`).
     # Kein Wrack: `wrack_zeit` ist nur die Zeit, bis der Wagen aus der Welt ist.
-    explosion_radius=330.0,
-    explosion_tot=210.0,
+    # Seit 0.34.143 ein wenig kleiner (gewuenscht): vorher 330 und 210.
+    explosion_radius=300.0,
+    explosion_tot=190.0,
     explosion_schaden=400.0,
     explosion_fahrzeug=700.0,
     fahrer_schaden=9999.0,
