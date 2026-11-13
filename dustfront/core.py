@@ -246,6 +246,70 @@ def platzhalter_muster(anfang: str, zeichner, mass=None) -> None:
         _MUSTER_MASS.append((anfang, mass))
 
 
+def drehen_mittig(bild: pygame.Surface, grad: float) -> pygame.Surface:
+    """Wie pygame.transform.rotate(bild, grad), aber die Mitte des Bildes
+    liegt bei jedem Winkel genau auf dem mittleren Pixel, und Breite und Hoehe
+    sind immer ungerade (seit 0.34.141, K.DREHEN). Sonst sprang ein Bild, das
+    sich dreht, um einen halben Pixel hin und her - je nachdem, ob rotate eine
+    gerade oder ungerade Breite lieferte.
+
+    Wie: das Bild `fein`-fach vergroessern (harte Pixel), drehen und dann je
+    Pixel genau einmal abtasten, im Raster um die Mitte herum. Das ist eine
+    Drehung mit naechstem Nachbarn, nur mit fester Mitte - es bleibt Pixel-Art."""
+    d = K.DREHEN
+    if not d["an"]:
+        return pygame.transform.rotate(bild, grad)
+    # Auch ungedreht (0 Grad) auf ungerade Masse: dieselbe Mitte wie gedreht.
+    k = grad % 360
+    f = max(1, int(d["fein"]))
+    w, h = bild.get_size()
+    gross = pygame.transform.scale(bild, (w * f, h * f))
+    gedreht = pygame.transform.rotate(gross, k) if k else gross
+    gw, gh = gedreht.get_size()
+    # Bei gerader Breite liegt die Mitte zwischen zwei Pixeln. Abgetastet wird
+    # dann einen halben Pixel links (oben) davon: so liegt das Bild ungedreht
+    # genau wie vorher, wenn es an seiner Mitte aufgelegt wird (p - Breite/2),
+    # und gedreht ebenso fest.
+    cx = gw / 2.0 - (f / 2.0 if w % 2 == 0 else 0.0)
+    cy = gh / 2.0 - (f / 2.0 if h % 2 == 0 else 0.0)
+    rahmen = gedreht.get_bounding_rect()
+    if rahmen.width == 0 or rahmen.height == 0:
+        return pygame.transform.rotate(bild, grad)
+    hx = int(math.ceil(max(cx - rahmen.left, rahmen.right - cx) / f))
+    hy = int(math.ceil(max(cy - rahmen.top, rahmen.bottom - cy) / f))
+    bw, bh = 2 * hx + 1, 2 * hy + 1
+    # Abgetastet wird je Pixel die Stelle seiner Mitte: der mittlere Pixel
+    # (hx, hy) bei (cx, cy), die anderen im Abstand von `f`.
+    # transform.scale nimmt beim Verkleinern um `f` je Block den Pixel bei
+    # f // 2 (gemessen) - darum so viel frueher anfangen.
+    x0 = int(math.floor(cx - hx * f)) - f // 2
+    y0 = int(math.floor(cy - hy * f)) - f // 2
+    flaeche = pygame.Surface((bw * f, bh * f), pygame.SRCALPHA, gedreht)
+    flaeche.fill((0, 0, 0, 0))
+    flaeche.blit(gedreht, (-x0, -y0))
+    return pygame.transform.scale(flaeche, (bw, bh))
+
+
+def _zusammenfassen(stuecke: list, abstand: int = 6) -> list:
+    """Nahe beieinander liegende Rechtecke zu einem (Buchstaben eines Worts,
+    Felder einer Leiste): weniger, groessere Stuecke sind schneller
+    hochzuziehen als viele kleine."""
+    rest = sorted(stuecke, key=lambda r: (r.y, r.x))
+    fertig = []
+    while rest:
+        r = rest.pop(0)
+        wachsen = True
+        while wachsen:
+            wachsen = False
+            gross = r.inflate(abstand * 2, abstand * 2)
+            for i in range(len(rest) - 1, -1, -1):
+                if gross.colliderect(rest[i]):
+                    r = r.union(rest.pop(i))
+                    wachsen = True
+        fertig.append(r)
+    return fertig
+
+
 class Bilder:
     """Registratur fuer Sprites.
 
@@ -363,7 +427,7 @@ class Bilder:
         key = (name, k)
         hit = self._dreh.get(key)
         if hit is None:
-            hit = pygame.transform.rotate(self.bild(name), -k)
+            hit = drehen_mittig(self.bild(name), -k)
             self._dreh[key] = hit
         return hit
 
@@ -532,7 +596,11 @@ class App:
         Wunsch (GRAFIKKARTE SKALIERT) und nicht mit Touch-Steuerung: die
         rechnet Finger selbst ins Fenster um (touch.py), und auf iOS bleibt
         alles, wie es erprobt ist."""
+        # BESTE QUALITAET BEIM ZOOM geht vor (seit 0.34.141): sie legt die Welt
+        # selbst in Fensteraufloesung auf - mit SCALED ging das nicht, und der
+        # Schalter wirkte stillschweigend gar nicht.
         return (bool(self.opt["grafikkarte"]) and not self.headless
+                and not self.opt["zoom_hochaufloesend"]
                 and not plattform.touch_an() and not plattform.nur_vollbild()
                 and hasattr(pygame, "SCALED"))
 
@@ -902,15 +970,21 @@ class App:
             return
         vp = self.viewport
         fb, fh = f.get_size()
+        innen = vp.left >= 0 and vp.top >= 0 and vp.right <= fb and vp.bottom <= fh
+        if innen and self.__dict__.get("welt_hoch"):
+            # BESTE QUALITAET (seit 0.34.141): die Welt deckt den ganzen
+            # Ausschnitt - das 640 x 360-Bild vorher aufs Fenster zu ziehen war
+            # umsonst (gemessen der groesste Posten je Bild).
+            self._rand_fuellen(f, vp, fb, fh)
+            if self._welt_hoch_auflegen(f, vp):
+                self._hoch_zeichnen(f)
+                pygame.display.flip()
+                return
         if (self.opt["pixelraster"] == "ruhig" and abs(self.skala - round(self.skala)) > 1e-6
                 and self.skala > 1.0):
             self._ruhig_ausgeben(f, vp, fb, fh)
-        elif vp.left >= 0 and vp.top >= 0 and vp.right <= fb and vp.bottom <= fh:
-            for rand in ((0, 0, fb, vp.top), (0, vp.bottom, fb, fh - vp.bottom),
-                         (0, vp.top, vp.left, vp.height),
-                         (vp.right, vp.top, fb - vp.right, vp.height)):
-                if rand[2] > 0 and rand[3] > 0:
-                    f.fill(K.C_VOID, rand)
+        elif innen:
+            self._rand_fuellen(f, vp, fb, fh)
             pygame.transform.scale(self.flaeche, vp.size, f.subsurface(vp))
         else:
             # Groesser als das Fenster (eingerastet, K.FENSTER_EINRASTEN):
@@ -925,10 +999,18 @@ class App:
         self._hoch_zeichnen(f)
         pygame.display.flip()
 
+    @staticmethod
+    def _rand_fuellen(f, vp, fb, fh) -> None:
+        for rand in ((0, 0, fb, vp.top), (0, vp.bottom, fb, fh - vp.bottom),
+                     (0, vp.top, vp.left, vp.height),
+                     (vp.right, vp.top, fb - vp.right, vp.height)):
+            if rand[2] > 0 and rand[3] > 0:
+                f.fill(K.C_VOID, rand)
+
     # Die Farbe, die in der Anzeige-Schicht "hier nichts" heisst.
     _LEER = (255, 0, 254)
 
-    def _welt_hoch_auflegen(self, f, vp) -> None:
+    def _welt_hoch_auflegen(self, f, vp) -> bool:
         """BESTE QUALITAET BEIM ZOOM (seit 0.34.138, gewuenscht: "dass das
         Spiel immer am bestmoeglichsten aussieht, egal wie weit man
         rausgezoomt hat"): die gezoomte Welt kommt in Fensteraufloesung ins
@@ -939,7 +1021,7 @@ class App:
         jedes Bildpixel, das sich vom reinen Weltbild unterscheidet."""
         hoch = self.__dict__.pop("welt_hoch", None)
         if not hoch or vp.width <= 0 or vp.height <= 0:
-            return
+            return False
         try:
             lw, z = hoch["leinwand"], hoch["zoom"]
             sk = vp.width / float(K.GAME_W)
@@ -957,20 +1039,30 @@ class App:
             f.blit(gross, (vp.x + int(round(ox * sk)), vp.y + int(round(oy * sk))))
             # Die Anzeige: was sich vom reinen Weltbild unterscheidet.
             flach, jetzt = hoch["flach"], self.flaeche
-            d1 = jetzt.copy()
-            d1.blit(flach, (0, 0), special_flags=pygame.BLEND_RGB_SUB)
-            d2 = flach.copy()
-            d2.blit(jetzt, (0, 0), special_flags=pygame.BLEND_RGB_SUB)
-            d1.blit(d2, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
-            gleich = pygame.mask.from_threshold(d1, (0, 0, 0), (3, 3, 3, 255))
+            # Pixel fuer Pixel gegen das Weltbild (seit 0.34.141 in einem Schritt).
+            gleich = pygame.mask.from_threshold(jetzt, (0, 0, 0, 0), (3, 3, 3, 255), flach)
             schicht = jetzt.copy()
             gleich.to_surface(schicht, setcolor=self._LEER, unsetcolor=None)
-            schicht = pygame.transform.scale(schicht, vp.size)
             schicht.set_colorkey(self._LEER)
-            f.blit(schicht, vp.topleft)
+            # Nur wo Anzeige liegt (seit 0.34.141): je Stueck vergroessern statt
+            # das ganze Bild - die Anzeige deckt meist wenig.
+            gleich.invert()
+            stuecke = _zusammenfassen(gleich.get_bounding_rects() if gleich.count() else [])
+            if len(stuecke) > K.ANZEIGE_STUECKE:
+                stuecke = [schicht.get_rect()]
+            sy = vp.height / float(K.GAME_H)
+            for r in stuecke:
+                x0, x1 = int(round(r.left * sk)), int(round(r.right * sk))
+                y0, y1 = int(round(r.top * sy)), int(round(r.bottom * sy))
+                if x1 <= x0 or y1 <= y0:
+                    continue
+                teil = pygame.transform.scale(schicht.subsurface(r), (x1 - x0, y1 - y0))
+                teil.set_colorkey(self._LEER)
+                f.blit(teil, (vp.x + x0, vp.y + y0))
             f.set_clip(alt)
+            return True
         except (pygame.error, ValueError, KeyError, TypeError):
-            pass
+            return False
 
     def _ruhig_ausgeben(self, f, vp, fb, fh) -> None:
         """PIXELRASTER OHNE FLIMMERN (seit 0.34.77): erst um den naechsten

@@ -476,8 +476,9 @@ HILFE = {
     "probe": ["SPIELT EINEN SCHUSS, DAMIT MAN DIE LAUTSTÄRKE HÖRT."],
     "vignette": ["DUNKLE ECKEN. ZIEHT DEN BLICK ZUR MITTE."],
     "zoom_hochaufloesend": [
-        "HERAUS- UND HEREINGEZOOMT SO SCHARF WIE OHNE ZOOM, OHNE PIXELZITTERN.",
-        "BRAUCHT MEHR RECHENZEIT. AUF SCHWACHEN RECHNERN AUS LASSEN.",
+        "DIE WELT IN FENSTERAUFLÖSUNG, AUCH OHNE ZOOM: SO SCHARF WIE MÖGLICH,",
+        "EIGENE FIGUR UND FAHRZEUG OHNE PIXELZITTERN. GILT SOFORT.",
+        "BRAUCHT MEHR RECHENZEIT; DIE GRAFIKKARTE SKALIERT DANN NICHT.",
     ],
     "bildschirm_ruckeln": [
         "WIE STARK DAS BILD BEI EXPLOSIONEN UND TREFFERN WACKELT.",
@@ -751,7 +752,8 @@ class Einstellungen(Menue):
             for szene in getattr(self.app, "stapel", []):
                 if hasattr(szene, "netz_umstellen"):
                     szene.netz_umstellen()
-        if el.name in ("fenstermodus", "aufloesung", "bildrate", "pixelraster", "grafikkarte"):
+        if el.name in ("fenstermodus", "aufloesung", "bildrate", "pixelraster", "grafikkarte",
+                       "zoom_hochaufloesend"):
             self.app.anzeige_uebernehmen()
             self.aufbauen()
         elif el.name in ("ton_gesamt", "ton_effekte"):

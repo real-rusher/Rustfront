@@ -7650,9 +7650,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         fest = []
         self._hoch_korrektur = (0.0, 0.0)
         if self.ich is not None and self._kamera_folgt_mir():
+            # Die eigene Figur rechnet der Gast selbst voraus, Schritt fuer
+            # Schritt wie die Kamera: also mit dem Bildanteil, nicht mit dem
+            # Anteil der Meldungen (seit 0.34.141).
+            eigen = alpha if self.__dict__.get("_vh_gezeigt") is not None else misch
             for w in (self.ich, getattr(self.ich, "fahrzeug", None)):
                 if w is not None:
-                    genau = w.zeichenpos(misch)
+                    genau = w.zeichenpos(eigen if w is self.ich else misch)
                     w._zeichen_fest = self.kamera.fest_im_bild(genau)
                     fest.append(w)
                     # Fuer BESTE QUALITAET BEIM ZOOM (seit 0.34.140): um so viel
@@ -7661,7 +7665,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                     self._hoch_korrektur = (genau.x - w._zeichen_fest.x, genau.y - w._zeichen_fest.y)
         self.renderer.vignette_an = self._vignette_an()
         try:
-            if abs(self.kamera.zoom - 1.0) < 0.004 and self.sicht_welt() is None:
+            # Mit BESTE QUALITAET BEIM ZOOM auch ohne Zoom (seit 0.34.141): sonst
+            # stand das Bild bei Zoom 1 auf dem groben Raster, ein Spielpixel
+            # drei Fensterpixel, und Figur und Wagen sprangen darauf.
+            if (abs(self.kamera.zoom - 1.0) < 0.004 and self.sicht_welt() is None
+                    and not (self._hochaufloesend_an() and ziel is getattr(self.app, "flaeche", None))):
                 self._welt_bild(ziel, misch)
             else:
                 self._zoom_zeichnen(ziel, misch)
@@ -7971,7 +7979,29 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         _m = kam.mitte
         ecke_genau = (_m.x - kam.breite / 2 + kam.versatz.x, _m.y - kam.hoehe / 2 + kam.versatz.y)
         ziel_groesse, versatz = (K.GAME_W, K.GAME_H), (0, 0)
-        if max(qx, qy) <= K.TIEFENRASTER["groesstes"]:
+        hoch = self._hochaufloesend_an() and ziel is getattr(self.app, "flaeche", None)
+        if hoch:
+            # Fuer BESTE QUALITAET kein Einrasten (seit 0.34.141): die Leinwand
+            # sprang dabei um bis zu 11 Weltpixel, mit ihr die Perspektive der
+            # Figuren - gemessen zitterte die eigene Figur bei Zoom 1,75 um
+            # 1,6 Fensterpixel je Bild. Dafuer rundum `rand` Pixel mehr, damit
+            # die genau gelegte Leinwand den Ausschnitt immer ganz deckt.
+            m = K.TIEFENRASTER["hoch_rand"]
+            e = kam.ecke
+            for _ in range(3):
+                jetzt = kam.ecke
+                if (jetzt.x, jetzt.y) == (e.x - m, e.y - m):
+                    break
+                kam.pos.x += e.x - m - jetzt.x
+                kam.pos.y += e.y - m - jetzt.y
+            if (kam.ecke.x, kam.ecke.y) == (e.x - m, e.y - m):
+                bx, by = K.GAME_W / groesse[0], K.GAME_H / groesse[1]
+                versatz = (round(m * bx), round(m * by))
+                groesse = (groesse[0] + 2 * m, groesse[1] + 2 * m)
+                ziel_groesse = (K.GAME_W + round(2 * m * bx), K.GAME_H + round(2 * m * by))
+            else:
+                kam.pos.update(kamera_vorher)
+        elif max(qx, qy) <= K.TIEFENRASTER["groesstes"]:
             e = kam.ecke
             ex0, ey0 = (int(e.x) // qx) * qx, (int(e.y) // qy) * qy
             for _ in range(3):                  # round() rundet halbe zur geraden Zahl

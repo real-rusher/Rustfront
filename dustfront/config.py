@@ -189,6 +189,20 @@ KAMERA = dict(
 # Beim Zeichnen dreht sich ein Wesen erst, wenn sein Blick sich um so viele
 # Grad geaendert hat (seit 0.34.96, render._gezeigter_winkel) - kleiner als
 # eine Drehstufe der Bilder (3 Grad), damit Zielen genau bleibt.
+# Gedrehte Bilder (seit 0.34.141, core.drehen_mittig): pygame.transform.rotate
+# liefert je nach Winkel gerade oder ungerade Breiten, und die Mitte des Bildes
+# lag dann mal auf, mal zwischen zwei Pixeln - beim Drehen sprang alles um einen
+# halben Spielpixel hin und her (gemeldet: "Fahrzeuge zittern stark"). Jetzt
+# wird ein `fein`-fach vergroessertes Bild gedreht und genau um die Mitte herum
+# wieder abgetastet: ungerade Breite und Hoehe, die Mitte immer auf demselben
+# Pixel. `an`: aus = wie vor 0.34.141.
+DREHEN = dict(an=True, fein=4)
+
+# BESTE QUALITAET (core._welt_hoch_auflegen): die Anzeige wird in so vielen
+# Stuecken hochgezogen, wie sie zusammenhaengende Flecken hat; sind es mehr,
+# auf einmal das ganze Bild (seit 0.34.141).
+ANZEIGE_STUECKE = 400
+
 FIGUR_DREH_RUHE = 2.6
 
 # Was hoch ueber allem fliegt (seit 0.34.96, die Spaehdrohne): so viele
@@ -224,6 +238,7 @@ FENSTER_EINRASTEN = 0.04
 TIEFENRASTER = dict(
     versuche=(0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6),
     groesstes=48,
+    hoch_rand=2,              # BESTE QUALITAET: so viele Pixel Rand rund um die Leinwand (0.34.141)
 )
 
 ZOOM = dict(

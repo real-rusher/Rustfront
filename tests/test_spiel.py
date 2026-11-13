@@ -726,8 +726,13 @@ try:
           not ohne.aus_datei and ohne.bild("wand").get_at((5, 5)) != GRUEN)
 
     # Drehen und Zwischenspeichern muessen mit der Datei genauso gehen.
+    # Seit 0.34.141 haben gedrehte Bilder ungerade Masse (core.drehen_mittig):
+    # die Mitte liegt bei jedem Winkel auf demselben Pixel - 33 statt 32.
+    _wd = b.gedreht("wand", 90)
     pruef("Gedrehte Fassung einer Datei klappt",
-          b.gedreht("wand", 90).get_size() == (K.TILE, K.TILE))
+          _wd.get_width() % 2 == 1 and _wd.get_height() % 2 == 1
+          and _wd.get_bounding_rect().size == (K.TILE, K.TILE)
+          and _wd.get_at(_wd.get_bounding_rect().center) == GRUEN)
     b.vergessen()
     pruef("Nach vergessen() wird neu geladen",
           not b.aus_datei and b.bild("wand").get_at((5, 5)) == GRUEN)
@@ -20579,6 +20584,53 @@ _tm140k.info = True if hasattr(_tm140k, "info") else None
 _tm140k.zeichnen(app.flaeche, 1.0)
 pruef("... die INFO-Ansicht kennt den Zustand", "_kolonne_info" in _a140k.fahrzeug.__dict__)
 _tm140k.verlassen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- 0.34.141: Zittern beim Zoomen, im Fahrzeug und als Gast")
+from dustfront.core import drehen_mittig as _dm141
+_q141 = pygame.Surface((52, 26), pygame.SRCALPHA)
+_q141.fill((90, 90, 90, 255))
+_q141.fill((255, 0, 0, 255), (25, 12, 2, 2))      # die Mitte (52/2, 26/2) markiert
+_fehl141, _gerade141 = 0.0, 0
+for _g141 in range(0, 360, 3):
+    _r141 = _dm141(_q141, _g141)
+    _b141, _h141 = _r141.get_size()
+    _gerade141 += (_b141 % 2 == 0) + (_h141 % 2 == 0)
+    _m141 = pygame.mask.from_threshold(_r141, (255, 0, 0, 255), (40, 40, 40, 255))
+    _c141 = _m141.centroid()
+    _fehl141 = max(_fehl141, abs(_c141[0] + 0.5 - _b141 / 2.0), abs(_c141[1] + 0.5 - _h141 / 2.0))
+pruef("Gedrehte Bilder: Breite und Hoehe immer ungerade, die Mitte bei jedem Winkel am selben Ort",
+      _gerade141 == 0 and _fehl141 <= 1.0, "%d gerade Masse, Mitte bis %.2f Pixel daneben" % (_gerade141, _fehl141))
+pruef("... vorher (pygame.transform.rotate) war das nicht so",
+      any(pygame.transform.rotate(_q141, g_).get_width() % 2 == 0 for g_ in range(0, 360, 3)))
+w141, g141 = _paar59("pve", karte="staubtal")
+app.opt["zoom_hochaufloesend"] = True
+w141.zoom_ziel = w141._zoom_weich = w141.kamera.zoom = 1.0
+w141.zeichnen(app.flaeche, 1.0)
+pruef("BESTE QUALITAET gilt auch ohne Zoom (Zoom 1): die Welt geht in Fensteraufloesung ans Fenster",
+      app.__dict__.pop("welt_hoch", None) is not None)
+pruef("... und die Grafikkarte skaliert dann nicht (sonst wirkte der Schalter nicht)",
+      not app._gpu_gewuenscht())
+app.opt["zoom_hochaufloesend"] = False
+# Als Gast: die vorausgerechnete eigene Figur hat einen vorigen Ort, zwischen dem eingeblendet wird.
+_gi141 = g141.ich
+_n141 = 0
+_bew141 = []
+_ein_alt141 = g141._meine_eingabe
+def _ein141():
+    m_ = _ein_alt141()
+    m_["will"] = [1.0, 0.0]
+    return m_
+g141._meine_eingabe = _ein141
+for _ in range(int(1.0 / K.FIXED_DT)):
+    w141.schritt(K.FIXED_DT)
+    g141.schritt(K.FIXED_DT)
+    if g141.__dict__.get("_vh_gezeigt") is not None:
+        _bew141.append(_gi141.pos.distance_to(_gi141.vorher))
+pruef("Gast: die eigene Figur wird zwischen zwei Schritten eingeblendet (vorher != jetzt beim Laufen)",
+      len(_bew141) > 20 and sum(1 for d_ in _bew141 if d_ > 0.1) > len(_bew141) // 2,
+      "%d Schritte, %d mit Weg" % (len(_bew141), sum(1 for d_ in _bew141 if d_ > 0.1)))
+w141.verlassen(); g141.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

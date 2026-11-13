@@ -416,10 +416,17 @@ class GastTeil:
         Uebernehmen einer Meldung, die sie sonst zurueckgesetzt haette)."""
         k = self.ich
         if self._vh_ort is None or k is None:
+            self.__dict__.pop("_vh_gezeigt", None)
             return
         ort = self._vh_ort + self._vh_anzeige
-        k.vorher.update(ort)
+        # Der Ort des vorigen Schritts bleibt `vorher` (seit 0.34.141): so wird
+        # die Figur zwischen zwei Schritten eingeblendet wie die Kamera. Vorher
+        # stand sie je Schritt hart auf dem neuen Ort, und bei mehr Bildern als
+        # Schritten (144 Hz) zitterte sie gegen das Bild (gemessen 1,1 Pixel je Bild).
+        alt = self.__dict__.get("_vh_gezeigt")
+        k.vorher.update(alt if alt is not None and alt.distance_squared_to(ort) < 40.0 ** 2 else ort)
         k.pos.update(ort)
+        self._vh_gezeigt = pygame.Vector2(ort)
 
 
 # ══════════════════════════════════════════════════════════════════

@@ -39,6 +39,8 @@ from collections import OrderedDict
 
 import pygame
 
+from .core import drehen_mittig
+
 from . import art
 from . import config as K
 from .core import platzhalter
@@ -670,7 +672,7 @@ def wanne_bild(bilder, art_name: str, winkel: float, ph_links: float,
             roh = panzerwagen_wanne(schluessel[1] / q, schluessel[2] / q, unscharf)
         _WANNEN[schluessel] = roh
     k = _raster(winkel)
-    return _merken(schluessel + (k,), lambda: pygame.transform.rotate(roh, -k))
+    return _merken(schluessel + (k,), lambda: drehen_mittig(roh, -k))
 
 
 # Wer im Aufbau sitzt: Name des Bildes -> Farben.
@@ -706,5 +708,5 @@ def aufbau_bild(bilder, name: str, winkel: float, rueckstoss: float) -> pygame.S
         if roh is None:
             roh = zeichner(_fahrer_zu(name), rk)
             _WANNEN[(name, rk)] = roh
-        return pygame.transform.rotate(roh, -k)
+        return drehen_mittig(roh, -k)
     return _merken((name, rk, k), bauen)
