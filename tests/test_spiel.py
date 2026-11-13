@@ -20460,15 +20460,14 @@ _tm140.verlassen()
 w140b, g140b = _paar59("pve", karte="staubtal")
 _ich140 = w140b.ich
 _ich140.medkits = K.MEDKIT["hoechstens"]
-_ich140.heilt_rest = 0.8
-_ich140.nachlade_rest = 1.2
 _ich140.dash_ladungen = 0
+_ich140.ueberhitzt = {"x": 3.0}
 _ich140.lebt = False
 w140b._wieder_einsteigen(_ich140)
 pruef("Wiedereinstieg: genau die Medkits fuer den Anfang (nicht die aufgesammelten des alten Lebens)",
       _ich140.medkits == w140b.start_medkits, "%d statt %d" % (_ich140.medkits, w140b.start_medkits))
-pruef("... und nichts aus dem alten Leben laeuft weiter (Medkit anlegen, Nachladen, Dash)",
-      _ich140.heilt_rest == 0 and _ich140.nachlade_rest == 0 and _ich140.dash_ladungen == K.DASH["ladungen"])
+pruef("... und Dash und Hitze des alten Lebens sind zurueckgesetzt",
+      _ich140.dash_ladungen == K.DASH["ladungen"] and not _ich140.ueberhitzt)
 w140b.verlassen(); g140b.verlassen()
 
 # Abwurfzonen neu (gewuenscht): kein Hologramm, kein Raster, kein Rand - Leuchtfackeln am Boden, deren Rauch man sieht.

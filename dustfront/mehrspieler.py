@@ -5464,12 +5464,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         # die aufgesammelten aus dem alten Leben (max), bis zum Hoechstwert.
         k.medkits = 0 if k.ist_bot else self.start_medkits
         if not k.ist_bot:
-            # Was im alten Leben gerade lief, endet mit ihm: Anlegen eines
-            # Medkits, Nachladen, Schlag, Salve, Dash, Hitze, Zielerfassung.
-            # Nur fuer Menschen (gemeldet war es fuer sie); Bots bleiben wie
-            # bisher - ihr Ablauf und die daran gemessenen Szenen aendern sich nicht.
-            k.heilt_rest = k.nachlade_rest = k.nahkampf_rest = k.schlag_zeigen = 0.0
-            k.salve_rest = 0
+            # Was im alten Leben gerade lief, endet mit ihm: Dash, Hitze,
+            # Zielerfassung. Nur fuer Menschen (gemeldet war es fuer sie).
             k.dash_ladungen, k.dash_laden, k.dash_rest, k.dash_sperre = K.DASH["ladungen"], 0.0, 0.0, 0.0
             k.anlauf = k.ladung = 0.0
             k.ueberhitzt, k._kuehl = {}, {}
