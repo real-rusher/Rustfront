@@ -266,7 +266,11 @@ class Buggy(Wesen):
             return
         if art is None and kugel:
             art = "kugel"
-        if self.sitzt_drin(von):
+        if self.freund_drin(von):
+            return
+        if self.sitzt_drin(von) and art not in K.EIGENES_FAHRZEUG_TRIFFT:
+            # Das eigene Fahrzeug (seit 0.34.145): nur eine Explosion schadet
+            # ihm - der Panzer, der in die Wand direkt vor sich schiesst.
             return
         k = self.fahrer
         if (k is not None and k.lebt and von is not k
@@ -279,17 +283,25 @@ class Buggy(Wesen):
         if self.leben <= 0.0:
             self._zerstoeren(von)
 
-    def sitzt_drin(self, von) -> bool:
-        """Sitzt `von` selbst darin (am Steuer oder mitfahrend)? Dann macht
-        sein Treffer dem Wagen nichts - der Beifahrer im Krad schiesst sonst
-        sein eigenes Krad an.
+    def freund_drin(self, von) -> bool:
+        """Sitzt ein Kamerad von `von` darin (nicht er selbst)? Dann macht
+        sein Treffer dem Wagen nichts (seit 0.34.140, gewuenscht: "man soll
+        Fahrzeugen, in denen Teammates sitzen, keinen Schaden mehr machen").
+        Vorher ging der Wagen kaputt und nahm die Leute darin mit."""
+        fraktion = getattr(von, "fraktion", None) if von is not None else None
+        if not fraktion:
+            return False
+        for k in [self.fahrer] + list(self.__dict__.get("_mitfahrer") or ()):
+            if k is not None and k is not von and getattr(k, "lebt", False) \
+                    and getattr(k, "fraktion", None) == fraktion:
+                return True
+        return False
 
-        Seit 0.34.143 nur noch das. Von 0.34.140 an nahm ein Wagen, in dem
-        ein Kamerad sass, von der eigenen Seite gar keinen Schaden; wieder
-        entfernt (gewuenscht: "Entfern, dass man seinem eigenen Fahrzeug
-        durch direkten Beschuss keinen Damage mehr machen kann ... aber der
-        Beifahrer beim Krad sollte das Krad nicht beschaedigen koennen").
-        Die Leute darin treffen die eigenen Kugeln weiter nicht."""
+    def sitzt_drin(self, von) -> bool:
+        """Sitzt `von` selbst darin (am Steuer oder mitfahrend)? Seit
+        0.34.145 (gewuenscht: "dass man seinem eigenen Fahrzeug keinen
+        Schaden macht, ausser mit einer Explosion"): dann schadet ihm nur,
+        was in K.EIGENES_FAHRZEUG_TRIFFT steht."""
         if von is None:
             return False
         return von is self.fahrer or von in (self.__dict__.get("_mitfahrer") or ())
@@ -1776,7 +1788,8 @@ class Krad(Buggy):
         wird in Buggy.schaden bedient). Die eigenen Leute verletzen einander
         nicht."""
         if (not (self.kaputt or self.nur_bild or not self.lebt) and float(menge) > 0.0
-                and not self.sitzt_drin(von)):
+                and not self.freund_drin(von)
+                and not (self.sitzt_drin(von) and art not in K.EIGENES_FAHRZEUG_TRIFFT)):
             for k in list(self.__dict__.get("_mitfahrer") or ()):
                 if (k.lebt and von is not k
                         and (von is None or getattr(von, "fraktion", None) != k.fraktion)):

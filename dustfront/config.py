@@ -2290,6 +2290,13 @@ FEUERBALL = dict(
 #   ramm            Rammen
 #
 # Ohne Art (alte Aufrufe, Testmodus, Befehle) kommt alles an.
+# Was das eigene Fahrzeug trifft, wenn man selbst darin sitzt (seit 0.34.145,
+# gewuenscht: "dass man seinem eigenen Fahrzeug keinen Schaden macht, ausser
+# halt mit einer Explosion - zum Beispiel ein Panzer, der direkt in eine Wand
+# vor sich schiesst"). Kugeln, Panzerbuechse, Feuer, Rammen nicht; der
+# Beifahrer im Krad schiesst sein Krad also nicht an.
+EIGENES_FAHRZEUG_TRIFFT = ("spreng", "hohlladung")
+
 PANZERUNG = {
     "buggy": dict(kugel=1.0, panzerbrechend=1.3, spreng=1.0, hohlladung=1.5,
                   feuer=0.6, nahkampf=0.5, ramm=1.0),

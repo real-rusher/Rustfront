@@ -20446,9 +20446,7 @@ _bs140 = pygame.image.tobytes(app.bilder.bild(_nb140), "RGBA")
 pruef("... und Saege und Eisen sehen verschieden aus",
       _bs140 != pygame.image.tobytes(app.bilder.bild(_nb140[:-len("_kettensaege")]), "RGBA"))
 
-# 0.34.140 gewuenscht: Fahrzeuge, in denen Teammates sitzen, nehmen von den eigenen Leuten
-# keinen Schaden. Seit 0.34.144 wieder entfernt (gewuenscht) - nur wer selbst darin sitzt,
-# beschaedigt den Wagen nicht (Abschnitt 0.34.144).
+# Gewuenscht: Fahrzeuge, in denen Teammates sitzen, nehmen von den eigenen Leuten keinen Schaden.
 _tm140 = _TM59.Testmodus(app, karte="staubtal_offen")
 _ff140 = _tm140.fahrer_setzen(pygame.Vector2(_tm140.ich.pos) + pygame.Vector2(200, 0), 0,
                               {"team": 0, "fahrzeug": "panzerwagen"}, mit_fahrzeug=True)
@@ -20456,15 +20454,11 @@ _fb140 = _ff140.fahrzeug
 _freund140 = _tm140.puppe_setzen(_fb140.pos + pygame.Vector2(0, 120), 0, {"team": 0}, name="FREUND")
 _feind140 = _tm140.puppe_setzen(_fb140.pos + pygame.Vector2(0, -120), 0, {"team": 1}, name="FEIND")
 _vor140 = _fb140.leben
-_fb140.schaden(300.0, None, _ff140, art="explosion")
-pruef("Wer im Panzerwagen sitzt, beschaedigt ihn nicht (seit 0.34.144 die einzige Ausnahme)",
-      _fb140.leben == _vor140 and _ff140.leben == _ff140.max_leben, "%.0f -> %.0f" % (_vor140, _fb140.leben))
 _fb140.schaden(300.0, None, _freund140, art="explosion")
-pruef("... ein Kamerad draussen schon wieder (seit 0.34.144), aber nicht den Mann darin",
-      _fb140.leben < _vor140 and _ff140.leben == _ff140.max_leben, "%.0f -> %.0f" % (_vor140, _fb140.leben))
-_vor140 = _fb140.leben
+pruef("Ein Kamerad trifft den Panzerwagen, in dem sein Mitspieler sitzt: kein Schaden",
+      _fb140.leben == _vor140 and _ff140.leben == _ff140.max_leben, "%.0f -> %.0f" % (_vor140, _fb140.leben))
 _fb140.schaden(300.0, None, _feind140, art="explosion")
-pruef("... ein Gegner sowieso", _fb140.leben < _vor140, "%.0f -> %.0f" % (_vor140, _fb140.leben))
+pruef("... ein Gegner schon", _fb140.leben < _vor140, "%.0f -> %.0f" % (_vor140, _fb140.leben))
 _tm140.verlassen()
 
 # Gemeldet: Medkits und dergleichen werden nach dem Tod nicht richtig zurueckgesetzt.
@@ -20818,47 +20812,50 @@ pruef("... die Minikarte ist schon gebaut (vorher im ersten Bild: eine Sekunde a
 pruef("... und die Zeit des Aufbaus wird nicht nachgerechnet", app._rest == 0.0, str(app._rest))
 wl143.verlassen(); gl143.verlassen()
 
-# ── 0.34.144: eigene Leute treffen Fahrzeuge wieder, Insassen nicht;
-#    Werfer haelt mehr aus und geht etwas kleiner hoch ─────────────────────
-print("\n-- 0.34.144")
-_tm144 = _TM59.Testmodus(app, karte="staubtal_offen")
-_e144 = _tm144.welt.ebene(0)
-_rnd144 = random.Random(144)
+# ── 0.34.145: das eigene Fahrzeug nimmt nur von Explosionen Schaden, wenn man
+#    selbst darin sitzt (Kameradenschutz von 0.34.140 bleibt); Werfer zaeher ──
+print("\n-- 0.34.145")
+_tm145 = _TM59.Testmodus(app, karte="staubtal_offen")
+_e145 = _tm145.welt.ebene(0)
+_rnd145 = random.Random(145)
 for _ in range(60000):
-    _ty144 = _rnd144.randrange(20, _e144.hoehe - 20)
-    _tx144 = _rnd144.randrange(40, _e144.breite - 60)
-    if all(not K.KACHELN[_e144.kachel(_tx144 + x_, _ty144 + dy_)]["fest"]
+    _ty145 = _rnd145.randrange(20, _e145.hoehe - 20)
+    _tx145 = _rnd145.randrange(40, _e145.breite - 60)
+    if all(not K.KACHELN[_e145.kachel(_tx145 + x_, _ty145 + dy_)]["fest"]
            for x_ in range(-4, 30) for dy_ in range(-6, 7)):
         break
-_z144 = lambda x_, y_: pygame.Vector2((_tx144 + x_ + 0.5) * K.TILE, (_ty144 + y_ + 0.5) * K.TILE)
-_kr144 = _tm144.fahrzeug_setzen("krad", _z144(10, 0), 0, {"winkel": 90})
-_kf144 = _tm144.puppe_setzen(_kr144.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="FAHRER")
-_tm144._anwenden(_kf144, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
-_kb144 = _tm144.puppe_setzen(_kr144.pos + pygame.Vector2(20, 14), 0, {"team": 0}, name="BEI")
-_tm144._anwenden(_kb144, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
-_l144 = _kr144.leben
-_kr144.schaden(40.0, None, _kb144, art="kugel")
-_kr144.schaden(40.0, None, _kb144, art="spreng")
-pruef("Der Beifahrer im Krad beschaedigt sein Krad nicht - weder mit Kugeln noch mit Explosionen",
-      _kb144.mitfahrt is _kr144 and _kr144.leben == _l144, "%.0f -> %.0f" % (_l144, _kr144.leben))
-_sch144 = _tm144.puppe_setzen(_z144(3, 0), 0, {"team": 0, "waffe_figur": "sturm"}, name="KAMERAD")
-for _ in range(int(1.0 / K.FIXED_DT)):
-    _tm144._anwenden(_sch144, {"will": [0, 0], "ziel": [_kr144.pos.x, _kr144.pos.y], "knoepfe": [],
-                               "feuert": True})
-    _tm144.schritt(K.FIXED_DT)
-pruef("Ein Kamerad draussen trifft das besetzte Krad mit Kugeln wieder (vorher seit 0.34.140 nicht)",
-      _kr144.leben < _l144, "%.0f -> %.0f" % (_l144, _kr144.leben))
-pruef("... die Leute darin bekommen von ihm nichts ab",
-      _kf144.leben == _kf144.max_leben and _kb144.leben == _kb144.max_leben)
-# Bots schiessen nicht durch einen besetzten Wagen der eigenen Seite.
-_bot144 = _tm144.bot_setzen(_z144(3, 0), 0, {"team": 0, "waffe": "sturm"})
-_bot144.hirn.blick = _bot144.hirn.blick * 0.0 + math.degrees(math.atan2(_kr144.pos.y - _bot144.pos.y,
-                                                                         _kr144.pos.x - _bot144.pos.x))
-pruef("Bots: ein besetzter eigener Wagen in der Schusslinie gilt wie ein Kamerad (nicht hindurch)",
-      _bot144.hirn.kamerad_im_weg(_bot144.pos.distance_to(_kr144.pos) + 100.0))
-_bot144.hirn.blick += 90.0
-pruef("... daneben vorbei schon", not _bot144.hirn.kamerad_im_weg(400.0))
-_tm144.verlassen()
+_z145 = lambda x_, y_: pygame.Vector2((_tx145 + x_ + 0.5) * K.TILE, (_ty145 + y_ + 0.5) * K.TILE)
+_pz145 = _tm145.fahrzeug_setzen("panzer", _z145(10, 0), 0, {"winkel": 0})
+_pf145 = _tm145.puppe_setzen(_pz145.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="FAHRER")
+_tm145._anwenden(_pf145, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_l145 = _pz145.leben
+for a_ in ("kugel", "panzerbrechend", "feuer", "nahkampf", "ramm", None):
+    _pz145.schaden(30.0, None, _pf145, art=a_)
+pruef("Eigenes Fahrzeug: wer darin sitzt, beschaedigt es nicht mit Kugel, Panzerbuechse, Feuer, Nahkampf, Rammen",
+      _pf145.fahrzeug is _pz145 and _pz145.leben == _l145, "%.0f -> %.0f" % (_l145, _pz145.leben))
+_pz145.schaden(60.0, None, _pf145, art="spreng", herkunft=_pz145.pos + pygame.Vector2(40, 0))
+pruef("... mit einer Explosion schon (die eigene Granate in die Wand direkt davor)",
+      _pz145.leben < _l145, "%.0f -> %.0f" % (_l145, _pz145.leben))
+pruef("... und das gilt fuer Spreng- und Hohlladung", set(K.EIGENES_FAHRZEUG_TRIFFT) == {"spreng", "hohlladung"})
+# Krad: der Beifahrer schiesst sein Krad nicht an.
+_kr145 = _tm145.fahrzeug_setzen("krad", _z145(20, 4), 0, {"winkel": 0})
+_kb145 = _tm145.puppe_setzen(_kr145.pos + pygame.Vector2(20, 14), 0, {"team": 1}, name="BEI")
+_kf145 = _tm145.puppe_setzen(_kr145.ausstiegsorte(9.0)[0], 0, {"team": 1}, name="KF")
+_tm145._anwenden(_kf145, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_tm145._anwenden(_kb145, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_lk145 = _kr145.leben
+_kr145.schaden(40.0, None, _kb145, art="kugel")
+pruef("Der Beifahrer im Krad trifft sein Krad nicht mit seinen Kugeln",
+      _kb145.mitfahrt is _kr145 and _kr145.leben == _lk145 and _kf145.leben == _kf145.max_leben,
+      "%.0f -> %.0f" % (_lk145, _kr145.leben))
+# Der Kameradenschutz von 0.34.140 bleibt: ein Kamerad draussen macht dem besetzten Wagen nichts.
+_kam145 = _tm145.puppe_setzen(_z145(2, 0), 0, {"team": 0}, name="KAMERAD")
+_l145 = _pz145.leben
+_pz145.schaden(60.0, None, _kam145, art="spreng")
+_pz145.schaden(60.0, None, _kam145, art="kugel")
+pruef("... und ein Kamerad draussen macht dem besetzten Wagen weiter nichts (wie seit 0.34.140)",
+      _pz145.leben == _l145, "%.0f -> %.0f" % (_l145, _pz145.leben))
+_tm145.verlassen()
 pruef("Werfer: 160 Leben (vorher 120)", K.WERFER["leben"] == 160.0)
 pruef("... und eine etwas kleinere Explosion (300 statt 330, sofort tot bis 190 statt 210)",
       K.WERFER["explosion_radius"] == 300.0 and K.WERFER["explosion_tot"] == 190.0)
