@@ -3514,8 +3514,11 @@ class Spieler(Wesen):
         w.schlagknall(spitze, self.winkel, self.ebene, bool(getroffen), self,
                       treffer_art)
 
-    def _ziele_vorn(self, reich: float, winkel: float) -> list:
-        """Wer im Kegel vor ihm steht (nicht er selbst, nicht die eigenen)."""
+    def _ziele_vorn(self, reich: float, winkel: float, koerper: bool = False) -> list:
+        """Wer im Kegel vor ihm steht (nicht er selbst, nicht die eigenen).
+        `koerper` (seit 0.34.143, Flammenwerfer): es genuegt, dass ein Teil
+        von ihm im Kegel steht - vorher zaehlte nur seine Mitte, und wer am
+        Rand der Flamme stand, brannte sichtbar und bekam doch nichts ab."""
         raus = []
         halb = winkel * 0.5
         for ziel in list(self.welt.nahe(self.pos, reich + 20, self.ebene)):
@@ -3523,10 +3526,12 @@ class Spieler(Wesen):
                     or ziel.fraktion == "geschoss" or not getattr(ziel, "trefferbar", True)):
                 continue
             ab = ziel.pos - self.pos
-            if ab.length() > reich + ziel.radius:
+            weit = ab.length()
+            if weit > reich + ziel.radius:
                 continue
             delta = (math.degrees(math.atan2(ab.y, ab.x)) - self.winkel + 180) % 360 - 180
-            if abs(delta) <= halb:
+            rand = (math.degrees(math.atan2(ziel.radius, max(1.0, weit))) if koerper else 0.0)
+            if abs(delta) <= halb + rand:
                 raus.append(ziel)
         return raus
 
@@ -3733,7 +3738,7 @@ class Spieler(Wesen):
         muendung = self.pos + pygame.Vector2(14, 0).rotate(self.winkel)
         reich = d["reichweite"]
         ende = w.strahl(muendung, pygame.Vector2(1, 0).rotate(self.winkel), reich, self.ebene)
-        for ziel in self._ziele_vorn(reich, d["winkel"]):
+        for ziel in self._ziele_vorn(reich, d["winkel"], koerper=True):
             if not w.sicht_frei(muendung, ziel.pos, self.ebene):
                 continue
             lebte = ziel.lebt
@@ -3743,7 +3748,9 @@ class Spieler(Wesen):
         if self._flamme_rest <= 0.0:
             self._flamme_rest = d["streifen_takt"]
             self.zaehlen("schuesse", 1.0, name)
-            w.feuer.append(Brandflaeche(ende, self.ebene, radius=d["streifen_radius"],
+            # Entlang der Flamme, nicht nur an ihrem Ende (seit 0.34.143).
+            ort = muendung.lerp(ende, RND.uniform(d.get("streifen_ab", 1.0), 1.0))
+            w.feuer.append(Brandflaeche(ort, self.ebene, radius=d["streifen_radius"],
                                         dauer=d["streifen_dauer"], von=self))
         for r in w.rauch:
             if r.ebene == self.ebene and r.pos.distance_to(ende) < r.radius:

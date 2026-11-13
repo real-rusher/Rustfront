@@ -1410,6 +1410,11 @@ class Ausruestung(Menue):
         if el.name == "aussehen":
             self.app.opt["aussehen"] = el.wert
             self.app.opt.speichern()
+            # Auch ins Konto (seit 0.34.143): das Aussehen wandert mit dem
+            # Konto (einstellungen.KONTO_WERTE). Stand es nur hier, setzte das
+            # angemeldete Konto beim naechsten Start seinen alten Wert wieder
+            # ein (gemeldet: "ich spawne oft mit dem Standard-Skin").
+            self.app.konto_sichern()
             return
         if el.name == "satz":
             konto.loadout_waehlen(int(el.wert))

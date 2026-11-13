@@ -538,7 +538,9 @@ def _panzerwagen_ganz(fahrer=None) -> pygame.Surface:
 # bekommt ihre Bilder von selbst.
 
 def _kombi_fahrer(kombi) -> tuple:
-    return (kombi["rumpf"], kombi["kante"], kombi["akzent"])
+    # Mit dem Namen der Mannschaft (seit 0.34.143): der Insasse traegt ihre
+    # Streifen wie zu Fuss (art._insasse).
+    return (kombi["rumpf"], kombi["kante"], kombi["akzent"], kombi["name"])
 
 
 _NEUTRAL = (K.C_HULL, K.C_HULL_SH, K.C_TEAL)

@@ -790,6 +790,9 @@ def raketenstart(welt, pos, ebene: int, code: float) -> None:
               vz=r.uniform(2, 12), zaeh=2.8)
     ring(welt, hx - vor[0] * 20, hy - vor[1] * 20, ebene, 6, 70, 0.45, (236, 222, 188))
     welt.ruckeln(4.5, "explosion", pygame.Vector2(x, y), ebene)
+    # Der Ton steckt seit 0.34.143 hier statt im Gefecht: so hoert ihn
+    # auch der Gast, der die Explosion gemeldet bekommt.
+    welt.klang("werfer_start", 0.9, pygame.Vector2(x, y), ebene)
 
 
 def rauchspur(welt, x, y, z, ebene, seed: int) -> None:
@@ -825,6 +828,9 @@ def einschlag(welt, pos, ebene: int, groesse: float = 1.0) -> None:
     funken(welt, r, x, y, 4, ebene, int(18 * g), 380.0 * g, 0.5)
     welt.brand_dekal(pygame.Vector2(x, y), ebene, int(min(3, g * 1.6)), r.uniform(0, 360))
     welt.ruckeln(5.0 * g, "explosion", pygame.Vector2(x, y), ebene)
+    # Seit 0.34.143 hoerbar (gemeldet: "deren Einschlaege haben auch noch
+    # keine Sounds"); die Bombe (1.4) ist lauter als eine Rakete (1.0).
+    welt.klang("einschlag", min(1.0, 0.6 + 0.3 * g), pygame.Vector2(x, y), ebene)
 
 
 def werfer_explosion(welt, pos, ebene: int, radius: float) -> None:

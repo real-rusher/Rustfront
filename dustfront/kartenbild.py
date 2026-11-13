@@ -90,28 +90,41 @@ def bild(ebene) -> pygame.Surface:
     boden_farbe = {k: F[n] for k, n in _BODEN_SCHLUESSEL.items()}
     leer = K.LEER
 
+    # Die Kacheln einmal als Zeilen holen, und was je Kachelart gilt, einmal
+    # nachschlagen (seit 0.34.143): auf den grossen Schlachtkarten kostete
+    # das Bild gemessen eine Sekunde, fast alles in Aufrufen je Kachel.
+    zeilen = [[kachel(tx, ty) for tx in range(br)] for ty in range(ho)]
+    hoch_arten = {a for a, d in daten.items() if d["fest"] and d["sicht"]}
+    hochfeld = [[a in hoch_arten for a in z] for z in zeilen]
+
     def art(tx, ty):
-        return kachel(tx, ty)
+        return zeilen[ty][tx]
 
     def hoch(tx, ty):
-        a = art(tx, ty)
-        return daten[a]["fest"] and daten[a]["sicht"]
+        return hochfeld[ty][tx]
+
+    hell_merk = {}
+    rausch_mass = B["rauschen"]
 
     # 1. Boden ueberall, wo kein Loch ist.
     for ty in range(ho):
+        zeile = zeilen[ty]
         for tx in range(br):
-            a = art(tx, ty)
+            a = zeile[tx]
             if a == leer:
                 continue
-            grund = boden_farbe.get(a, F["sand"])
-            if daten[a]["fest"]:
-                grund = F["sand"]
-            s.fill(_hell(grund, _rauschen(tx, ty) * B["rauschen"]), (tx * p, ty * p, p, p))
+            grund = F["sand"] if daten[a]["fest"] else boden_farbe.get(a, F["sand"])
+            um = _rauschen(tx, ty) * rausch_mass
+            farbe = hell_merk.get((grund, um))
+            if farbe is None:
+                farbe = hell_merk[(grund, um)] = _hell(grund, um)
+            s.fill(farbe, (tx * p, ty * p, p, p))
     # 2. Schatten der hohen Waende nach unten rechts auf den Boden.
     schatten = max(1, p // 3)
     for ty in range(ho):
+        hz = hochfeld[ty]
         for tx in range(br):
-            if not hoch(tx, ty):
+            if not hz[tx]:
                 continue
             if tx + 1 < br and not hoch(tx + 1, ty) and art(tx + 1, ty) != leer:
                 s.fill(F["schatten"], ((tx + 1) * p, ty * p + schatten, schatten, p))
@@ -120,8 +133,11 @@ def bild(ebene) -> pygame.Surface:
     # 3. Hohe Waende, niedrige Deckung, Treppen.
     kante = max(1, p // 4)
     for ty in range(ho):
+        zeile = zeilen[ty]
         for tx in range(br):
-            a = art(tx, ty)
+            a = zeile[tx]
+            if a not in hoch_arten and a not in _TREPPEN and not daten[a]["fest"]:
+                continue
             x, y = tx * p, ty * p
             if a in _TREPPEN:
                 s.fill(B["treppe"], (x, y, p, p))
@@ -132,7 +148,11 @@ def bild(ebene) -> pygame.Surface:
                 # Gewachsener Fels etwas dunkler als gebaute Mauern: so liest
                 # man auf STAUBTAL Haeuser vor dem Gebirge.
                 farbe = F["fels"] if a == K.FELS else F["wand"]
-                s.fill(_hell(farbe, _rauschen(ty, tx) * B["rauschen"]), (x, y, p, p))
+                um = _rauschen(ty, tx) * rausch_mass
+                hell = hell_merk.get((farbe, um))
+                if hell is None:
+                    hell = hell_merk[(farbe, um)] = _hell(farbe, um)
+                s.fill(hell, (x, y, p, p))
                 # Lichtkante oben und links, wo die Nachbarkachel nicht hoch ist.
                 if ty == 0 or not hoch(tx, ty - 1):
                     s.fill(F["wand_licht"], (x, y, p, kante))

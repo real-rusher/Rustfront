@@ -551,9 +551,17 @@ class App:
         bleibt es bei der Datei auf diesem Rechner - das ist kein
         Sonderfall, sondern der Normalfall vor der ersten Anmeldung.
         """
+        jetzt = self.opt.konto_werte()
         if self._konto is None:
-            return
-        self._konto.werte.update(self.opt.konto_werte())
+            # Noch nicht geladen (seit 0.34.143): erst laden - das Laden
+            # uebernimmt den alten Stand des Kontos in die Einstellungen -,
+            # dann gilt wieder, was gerade gewaehlt wurde. Vorher ging die
+            # Aenderung hier verloren, und beim ersten Zugriff aufs Konto
+            # (Rundenstart) setzte der alte Stand das Aussehen zurueck
+            # (gemeldet: "ich spawne oft mit dem Standard-Skin").
+            self.konto
+            self.opt.konto_uebernehmen(jetzt)
+        self._konto.werte.update(jetzt)
         self._konto.profil_sichern()
 
     # ---- Anzeige ----------------------------------------------------
@@ -869,6 +877,16 @@ class App:
         if beenden:
             self.klaenge.werkstatt_anhalten()
             pygame.quit()
+
+    def takt_neu(self) -> None:
+        """Die Uhr neu stellen, nach einem langen Aufbau (seit 0.34.143):
+        die Zeit, die er gedauert hat, wird nicht nachgerechnet - sonst
+        liefen danach Bild fuer Bild die meisten Schritte, die erlaubt sind,
+        und die ersten Sekunden ruckelten."""
+        self._rest = 0.0
+        uhr = getattr(self, "uhr", None)
+        if uhr is not None:
+            uhr.tick()
 
     def _rechnen(self, echt: float, bild_dauer: float) -> int:
         """Die Rechenschritte eines Bildes: so viele feste Schritte, wie in

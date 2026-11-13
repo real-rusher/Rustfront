@@ -457,6 +457,60 @@ class LobbyTeil:
         self._plan_geaendert()
         return True
 
+    def plan_starten_bald(self, nr: int = 0, kosmetik: bool | None = None) -> bool:
+        """Wie plan_starten, aber erst nach einem Ladebild (seit 0.34.143).
+
+        Gemeldet: "Waehrend die Simulation schon startet, haengt man noch
+        in der Lobby in diesem Menue kurz fest, und die ersten paar
+        Sekunden sind unglaublich laggy." Der Aufbau einer grossen Karte
+        kostet gemessen ueber zwei Sekunden, und ein Teil davon fiel erst
+        ins erste Bild der Runde (Wegenetz der Bots, Minikarte). Jetzt
+        steht erst ein Bild "WIRD AUFGEBAUT" da, dann wird alles auf
+        einmal gebaut (_start_ausfuehren) und die Uhr danach neu
+        gestellt, damit nichts im Zeitraffer nachgeholt wird."""
+        if not self.ist_gastgeber or not self.plan:
+            return False
+        if kosmetik and not self.kosmetik_bereit:
+            return self.plan_starten(nr, kosmetik)      # meldet, was noch laedt
+        self._start_bald = [nr, kosmetik, False]
+        return True
+
+    def _start_ausfuehren(self) -> bool:
+        """Der Start nach dem Ladebild. Gibt zurueck, ob er jetzt lief."""
+        bald = getattr(self, "_start_bald", None)
+        if bald is None or not bald[2]:
+            return False
+        self._start_bald = None
+        self.plan_starten(bald[0], kosmetik=bald[1])
+        self._schwer_vorbauen()
+        klaenge = getattr(self.app, "klaenge", None)
+        if klaenge is not None:
+            klaenge.werkstatt_warten(K.LOBBY["start_klang_warten"])
+        takt_neu = getattr(self.app, "takt_neu", None)
+        if takt_neu is not None:
+            takt_neu()
+        return True
+
+    def _schwer_vorbauen(self) -> None:
+        """Was sonst erst im ersten Bild der Runde gebaut wurde: das
+        Wegenetz, auf dem die Bots laufen, und der Grundriss der Minikarte."""
+        from . import kartenbild
+        if self.ist_gastgeber and self.kaempfer and any(
+                getattr(k, "ist_bot", False) for k in self.kaempfer.values()):
+            self.welt.wege
+        for e in self.welt.ebenen:
+            kartenbild.bild(e)
+
+    def _ladebild(self, ziel) -> None:
+        """Das Bild, das waehrend des Aufbaus steht."""
+        ziel.fill(K.C_VOID)
+        mitte = K.GAME_W // 2
+        name = K.MODI.get(self.plan[self._start_bald[0]].get("modus"), {}).get("name", "") \
+            if self.plan else ""
+        SCHRIFT.zeichnen(ziel, "%s WIRD AUFGEBAUT ..." % name if name else "RUNDE WIRD AUFGEBAUT ...",
+                         mitte, K.GAME_H // 2 - 8, K.C_CREAM, 2, ausrichtung="mitte")
+        self._start_bald[2] = True
+
     def lobby_betreten(self) -> None:
         """Zurueck in die Lobby, von wo auch immer."""
         if not self.ist_gastgeber:
@@ -788,7 +842,7 @@ class Rundenplanung(Menue):
             g.plan_einfuegen(self.nr)
             self.sagen("IN RUNDE %d EINGEFÜGT" % (self.nr + 1))
         elif name in ("start", "start_ohne", "start_mit"):
-            if g.plan_starten(0, kosmetik=(name == "start_mit")):
+            if g.plan_starten_bald(0, kosmetik=(name == "start_mit")):
                 self.app.werfen()
             else:
                 self.sagen("KOSMETIK LÄDT NOCH")

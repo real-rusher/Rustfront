@@ -20693,6 +20693,125 @@ pruef("... 10 Schritte der Welt: 5-mal bewegt, je mit doppelter Zeit",
 K.BOTS["staffel"], K.BOTS["fern_ab_bots"] = _alt_k142
 w142.verlassen(); g142.verlassen()
 
+# ── 0.34.143: Klaenge, Start ohne Haenger, Krad zu zweit, Flammenwerfer,
+#    Panzerbuechse, seltene Waffen und Granaten der Bots ─────────────────
+print("\n-- 0.34.143")
+from dustfront import audio as _AU143
+from dustfront import bots as _BO143
+from dustfront import art_fahrzeuge as _AF143
+from dustfront import kartenbild as _KB143
+from dustfront.mehrspieler import Gefecht as _G143
+_neu143 = ("werfer_start", "werfer_anflug", "einschlag", "buggy_motor", "krad_motor", "lkw_motor", "rotor")
+pruef("Klaenge: Werferstart, Anflug, Einschlag und vier Motoren sind angemeldet und klingen",
+      all(n_ in K.KLANG_NAMEN and len(_AU143._PLATZHALTER[n_]()) > 1000 for n_ in _neu143))
+pruef("... was nur der Gastgeber spielt, hoeren auch die Gaeste (NETZKLAENGE)",
+      all(n_ in _G143.NETZKLAENGE for n_ in ("werfer_anflug", "bombe_ab", "bombe_fall", "buggy_motor",
+                                              "krad_motor", "lkw_motor", "rotor")))
+_arten143 = ("FAHRZEUG", "KRAD", "PANZER", "JAGDPANZER", "PANZERWAGEN", "FLAKWAGEN", "TROSSWAGEN",
+             "SPULENWAGEN", "FUNKWAGEN", "WERFER", "TRAGSCHRAUBER")
+pruef("... jeder Wagen hat einen Motorton, den es gibt (Jagdpanzer und Flakwagen suchten vorher einen, den es nicht gab)",
+      all(getattr(K, a_)["motor_klang"] in _AU143._PLATZHALTER and getattr(K, a_)["motor_takt"] > 0.1
+          for a_ in _arten143), str([getattr(K, a_).get("motor_klang") for a_ in _arten143]))
+_tm143 = _TM59.Testmodus(app, karte="staubtal_offen")
+_e143 = _tm143.welt.ebene(0)
+_rnd143 = random.Random(143)
+for _ in range(60000):
+    _ty143 = _rnd143.randrange(20, _e143.hoehe - 20)
+    _tx143 = _rnd143.randrange(40, _e143.breite - 60)
+    if all(not K.KACHELN[_e143.kachel(_tx143 + x_, _ty143 + dy_)]["fest"]
+           for x_ in range(-4, 30) for dy_ in range(-6, 7)):
+        break
+_z143 = lambda x_, y_: pygame.Vector2((_tx143 + x_ + 0.5) * K.TILE, (_ty143 + y_ + 0.5) * K.TILE)
+_gehoert143 = []
+_klang_alt143 = _tm143.welt.klang
+_tm143.welt.klang = lambda n_, *a_, **k_: _gehoert143.append(n_)
+_tm143.welt.explosion(_z143(20, 0), 0, 1.0, "einschlag")
+_tm143.welt.explosion(_z143(20, 0), 0, 30000.0 + 90.0, "werfer_start")
+pruef("Einschlag einer Rakete und Start am Werfer klingen (in effekte, also auch beim Gast)",
+      "einschlag" in _gehoert143 and "werfer_start" in _gehoert143, str(_gehoert143))
+_bg143 = _tm143.fahrzeug_setzen("buggy", _z143(2, 0), 0, {"winkel": 0})
+_bf143 = _tm143.puppe_setzen(_bg143.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="FAHRER")
+_tm143._anwenden(_bf143, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+del _gehoert143[:]
+for _ in range(int(1.0 / K.FIXED_DT)):
+    _tm143._anwenden(_bf143, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})     # W: Gas
+    _tm143.schritt(K.FIXED_DT)
+pruef("Der Buggy brummt, waehrend er faehrt (vorher stumm)",
+      _bf143.fahrzeug is _bg143 and _gehoert143.count("buggy_motor") >= 2,
+      "%d x, Tempo %.0f" % (_gehoert143.count("buggy_motor"), _bg143.geschw.length()))
+_wf143 = _tm143.fahrzeug_setzen("werfer", _z143(10, 4), 0, {"winkel": 0})
+del _gehoert143[:]
+_wf143.einschlaege.append([K.WERFER["salve"]["anflug_ton"] - 0.05, _z143(25, 0).x, _z143(25, 0).y, True, 0])
+_tm143.werfer_schritt(0.02)
+pruef("Kurz vor dem Einschlag heult die Rakete herunter (einmal)",
+      _gehoert143.count("werfer_anflug") == 1, str(_gehoert143))
+_tm143.werfer_schritt(0.02)
+pruef("... und nur einmal", _gehoert143.count("werfer_anflug") == 1, str(_gehoert143))
+_tm143.welt.klang = _klang_alt143
+# Flammenwerfer: mehr Reichweite, wer mit dem Koerper im Strahl steht, brennt.
+pruef("Flammenwerfer reicht 150 statt 130", K.WAFFEN["flammenwerfer"]["reichweite"] == 150.0)
+_fl143 = _tm143.puppe_setzen(_z143(4, -4), 0, {"team": 0, "waffe_figur": "flammenwerfer"}, name="FLAMME")
+_rand143 = _tm143.puppe_setzen(_fl143.pos + pygame.Vector2(110, 0).rotate(15.0), 0, {"team": 1}, name="RAND")
+_weg143 = _tm143.puppe_setzen(_fl143.pos + pygame.Vector2(110, 0).rotate(-40.0), 0, {"team": 1}, name="DANEBEN")
+for p_ in (_rand143, _weg143):
+    p_.leben = p_.max_leben = 9999.0
+_feuer_vor143 = len(_tm143.welt.feuer)
+for _ in range(int(1.0 / K.FIXED_DT)):
+    _tm143._anwenden(_fl143, {"will": [0, 0], "ziel": [_fl143.pos.x + 200, _fl143.pos.y], "knoepfe": [],
+                              "feuert": True})
+    _tm143.schritt(K.FIXED_DT)
+pruef("Flammenwerfer: wer mit dem Koerper im Strahl steht (Mitte 15 Grad daneben), bekommt Direktschaden",
+      _fl143.waffe_name == "flammenwerfer" and _rand143.leben < 9999.0 - 20.0, "%.0f" % (9999.0 - _rand143.leben))
+pruef("... wer 40 Grad daneben steht, nicht", _weg143.leben >= 9999.0, "%.0f" % (9999.0 - _weg143.leben))
+_neu_feuer143 = _tm143.welt.feuer[_feuer_vor143:]
+pruef("... brennende Flecken etwa alle 0,15 s, auch mitten im Strahl (nicht nur an seinem Ende)",
+      len(_neu_feuer143) >= 5 and min(f_.pos.distance_to(_fl143.pos) for f_ in _neu_feuer143) < 130.0,
+      "%d Flecken, nah %.0f" % (len(_neu_feuer143),
+                                 min([f_.pos.distance_to(_fl143.pos) for f_ in _neu_feuer143] or [0])))
+_tm143.verlassen()
+# Panzerbuechse: der Wunschabstand liegt in der Schussweite, ruhiger zielen.
+pruef("Panzerbuechse: Bots wollen nicht weiter weg stehen, als sie schiessen (vorher 380 zu 330)",
+      K.BOTS["wunschabstand"]["panzerbuechse"] <= K.BOTS["reichweite"]["panzerbuechse"])
+pruef("... und zielen ruhiger", 0.0 < K.BOTS["ruhig_zielen"]["panzerbuechse"] < 1.0)
+# Seltene Waffen und andere Granaten - nur in echten Runden (vielfalt).
+_r143 = random.Random(1430)
+_lo143 = [_BO143.bot_loadout(_r143, None, vielfalt=True) for _ in range(600)]
+_selten143 = sum(1 for lo_ in _lo143 if lo_["waffen"][1] in K.BOTS["selten_waffen"])
+_wuerfe143 = set(lo_["wuerfe"][0] for lo_ in _lo143)
+_basis143 = set(K.BOTS["waffen"]) | set(x_ for v_ in K.BOTS["varianten"].values() for x_ in v_)
+pruef("Bots: ab und zu eine seltene Waffe (Raketen, Flammenwerfer ...): 4 bis 18 Prozent",
+      0.04 * 600 <= _selten143 <= 0.18 * 600, "%d von 600" % _selten143)
+pruef("... die erste Waffe bleibt eine gewoehnliche",
+      all(lo_["waffen"][0] in _basis143 for lo_ in _lo143))
+pruef("... und neben der Granate mindestens drei andere Wurfwaffen",
+      "granate" in _wuerfe143 and len(_wuerfe143 - {"granate"}) >= 3, str(sorted(_wuerfe143)))
+_r143 = random.Random(1431)
+pruef("... ohne Vielfalt (Testmodus, Szenen) wie bisher nur die Granate",
+      all(_BO143.bot_loadout(_r143, None, vielfalt=False)["wuerfe"] == ["granate"] for _ in range(50)))
+# Kleinkram
+pruef("Krad: Fahrer und Beifahrer bekommen 85 Prozent", K.KRAD["schaden_anteil"] == 0.85
+      and K.KRAD["fahrer_anteil"] == 0.85)
+pruef("Tragschrauber: 160 Leben (vorher 140)", K.TRAGSCHRAUBER["leben"] == 160.0)
+pruef("Flakwagen faellt ohne Bot", not K.FLAKWAGEN.get("nur_bot"))
+pruef("Insassen: das Bild traegt die Mannschaft mit (Teamstreifen auch im Standardskin)",
+      len(_AF143._kombi_fahrer(K.TEAMS["kombi"][0])) == 4
+      and _AF143._kombi_fahrer(K.TEAMS["kombi"][0])[3] == K.TEAMS["kombi"][0]["name"])
+# Start ohne Haenger: erst das Ladebild, dann der Aufbau, dann die Uhr neu.
+wl143, gl143 = lobbypaar(modus="pvp")
+wl143.plan = [dict(wl143.plan[0], modus="pvp", karte="staubtal_offen")]
+pruef("Start: plan_starten_bald startet noch nicht", wl143.plan_starten_bald(0) and wl143.in_lobby)
+wl143.schritt(K.FIXED_DT)
+pruef("... auch im naechsten Schritt nicht, solange das Ladebild nicht stand", wl143.in_lobby)
+_fl_bild143 = pygame.Surface((K.GAME_W, K.GAME_H))
+wl143.zeichnen(_fl_bild143, 0.0)
+app._rest = 0.5
+wl143.schritt(K.FIXED_DT)
+pruef("... nach dem Ladebild laeuft die Runde", not wl143.in_lobby and wl143.modus == "pvp", wl143.modus)
+pruef("... die Minikarte ist schon gebaut (vorher im ersten Bild: eine Sekunde auf grossen Karten)",
+      _KB143._gross.get(id(wl143.welt.ebenen[0])) is not None)
+pruef("... und die Zeit des Aufbaus wird nicht nachgerechnet", app._rest == 0.0, str(app._rest))
+wl143.verlassen(); gl143.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

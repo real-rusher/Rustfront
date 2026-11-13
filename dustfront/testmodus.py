@@ -2655,6 +2655,18 @@ class Testmodus(Gefecht):
                         zustand += " > RECHTS HALTEN"
             elif getattr(k, "darf_fahren", False) and h.ziel is None:
                 zustand += " (SUCHT FAHRZEUG)"
+            # Krad zu zweit (seit 0.34.143, bots._beiwagen_kampf, _krad_wartet):
+            # wer im Beiwagen sitzt, und ob der Fahrer kreist oder wartet.
+            wagen_ = getattr(k, "mitfahrt", None)
+            if getattr(wagen_, "art", "") == "krad":
+                zustand += " IM BEIWAGEN"
+            fz_k = getattr(k, "fahrzeug", None)
+            if getattr(fz_k, "art", "") == "krad":
+                if fz_k.__dict__.get("_mitfahrer"):
+                    zustand += " > KREIST" if (h.ziel is not None and h.ziel_ok(h.ziel)) else " ZU ZWEIT"
+                elif (fz_k.__dict__.get("_krad_seit") is not None
+                      and self.welt.zeit - fz_k._krad_seit[1] <= K.BOTS["fahren"]["krad_warten"]):
+                    zustand += " > WARTET AUF BEIFAHRER"
             if getattr(k, "schild", False):
                 zustand += " SCHILD"
             if getattr(k, "_fern", False):

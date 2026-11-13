@@ -837,6 +837,13 @@ KLANG_NAMEN = (
     "fallschirm_riss",      # der Schirm eines Abwurfs reisst
     "absturz",              # ein Fahrzeug schlaegt nach dem Sturz auf
     "werfer_explosion",     # der Werfer geht hoch (seit 0.34.120)
+    "werfer_start",         # eine Rakete des Werfers startet (seit 0.34.143)
+    "werfer_anflug",        # sie heult herunter, kurz vor dem Einschlag
+    "einschlag",            # Rakete oder Bombe schlaegt ein
+    "buggy_motor",          # Motoren (seit 0.34.143): Buggy,
+    "krad_motor",           # Krad,
+    "lkw_motor",            # Laster (Tross-, Spulen-, Funkwagen, Werfer)
+    "rotor",                # und der Tragschrauber
     "bombe_ab",             # die Lunte der Schrottbombe wird gezuendet (seit 0.34.123)
     "bombe_fall",           # die zischende Lunte der fallenden Bombe
     "panzer_einschlag",     # die Granate der Kanone schlaegt ein
@@ -1359,6 +1366,7 @@ SCHLACHT = dict(
                           hoehe=420.0, sinken=70.0, versatz=0.8, waffen=("sturm", "mp", "unterhebel",
                                                                           "sturm", "autoschrot")),
     aufsitzen_weite=260.0,
+    krad_aufsitzen_weite=360.0,   # in den Beiwagen eines Krads (seit 0.34.143)
     absetzen_vor=650.0,
     nach_absetzen_tempo=70.0,   # px/s
 )
@@ -1547,6 +1555,11 @@ ZONE = dict(
 # stehen bleibt, und in mittelschnellen Kurven haelt er.
 FAHRZEUG = dict(
     marke="F",                # Buchstabe in der Karte, wo einer steht
+    # Seit 0.34.143 brummt jeder Wagen, solange einer faehrt (vorher nur
+    # Panzer und Panzerwagen; gemeldet: "ganz viele Sachen haben noch keine
+    # Sounds"). Welcher Ton, und wie oft er wiederholt wird (s).
+    motor_klang="buggy_motor",
+    motor_takt=0.3,
     hoechst=250.0,            # bis hierher zieht der Motor (wirklich: ~220, Luft)
     rueckwaerts=145.0,         # seit 0.34.135 schneller (95)
     motor=420.0,              # Antrieb hinten, im Stand; nimmt mit dem Tempo ab
@@ -1682,6 +1695,7 @@ PANZER = dict(
     einsteigen=60.0,          # so nah muss man an der Mitte sein
     balken_breite=40,
     motor_takt=0.42,          # so oft brummt der Motor, waehrend er faehrt (s)
+    motor_klang="panzer_motor",   # auch fuer den Jagdpanzer (seit 0.34.143; vorher stumm)
     # Mit einem Stick (Touch): wie beim Buggy (fahrzeug.Buggy.stick_steuern).
     stick_tot=0.2,
     stick_voll_lenken=40.0,
@@ -1779,6 +1793,7 @@ PANZERWAGEN = dict(
     plaetze=4,
     balken_breite=36,
     motor_takt=0.36,
+    motor_klang="panzerwagen_motor",   # auch fuer den Flakwagen (seit 0.34.143)
     ramm_schwelle=40.0,
     ramm_je_px=0.37,          # 1/30 Treffer eines Laeufers
     ramm_stoss=1.35,
@@ -1798,6 +1813,8 @@ KRAD = dict(
     FAHRZEUG,
     marke="K",
     name="KRAD",
+    motor_klang="krad_motor",
+    motor_takt=0.24,
     hoechst=290.0,
     rueckwaerts=125.0,         # seit 0.34.135 schneller (80)
     motor=520.0,
@@ -1807,10 +1824,12 @@ KRAD = dict(
     achse=10.0,
     einsteigen=40.0,
     leben=180.0,
-    # Im Gegensatz zu allen anderen Fahrzeugen kein Schutz der Insassen.
+    # Im Gegensatz zu allen anderen Fahrzeugen kein Schutz der Insassen -
+    # seit 0.34.143 ein kleines bisschen (gewuenscht: "etwas weniger Schaden
+    # als normal"): 85 Prozent statt des vollen Treffers.
     fahrer_geschuetzt=False,
-    schaden_anteil=1.0,
-    fahrer_anteil=1.0,
+    schaden_anteil=0.85,
+    fahrer_anteil=0.85,
     plaetze=1,                # der Beifahrer im Beiwagen
     beifahrer_streuung=2.0,   # so viel mal mehr Streuung seiner Waffe, wenn das Krad rollt
     # Der Beifahrer im Beiwagen (seit 0.34.121) dreht sich nur so weit: von
@@ -1876,6 +1895,7 @@ TROSSWAGEN = dict(
                   "ramm_stoss", "ramm_extra")},
     marke="T",
     name="TROSSWAGEN",
+    motor_klang="lkw_motor",   # auch Spulen-, Funkwagen und Werfer
     hoechst=210.0,
     rueckwaerts=110.0,         # seit 0.34.135 schneller (70)
     motor=22.0,
@@ -2028,6 +2048,7 @@ WERFER = dict(
     salve=dict(raketen=6, abstand=0.5, flug=3.6, streu=150.0, radius=66.0, schaden=120.0,
                fahrzeug=240.0, volltreffer=1.7, nachladen=14.0, nah=400.0, weit=3200.0, umkreis=130.0,
                formation=0.72, wackeln=22.0,
+        anflug_ton=1.1,      # seit 0.34.143: so viele Sekunden vor dem Einschlag heult sie herunter
         weit_karte=0.5,      # seit 0.34.134: aufgebaut reicht er ueber die halbe Kartenbreite (mindestens weit)
                sicht=420.0, verraten=6.0, hoch=150.0, pruefen=0.4,
                # Die Rohre laden einzeln wieder (seit 0.34.120): das erste `nachladen_ab`
@@ -2058,11 +2079,13 @@ TRAGSCHRAUBER = dict(
                   "ramm_stoss", "ramm_extra")},
     marke="H",
     name="TRAGSCHRAUBER",
+    motor_klang="rotor",      # am Boden und in der Luft
+    motor_takt=0.36,
     hoechst=110.0,            # am Boden
     kreis=14.0,
     achse=16.0,
     einsteigen=48.0,
-    leben=140.0,
+    leben=160.0,              # seit 0.34.143 (gewuenscht: "etwas mehr Leben"), vorher 140
     schiesst=True,
     explosion_radius=60.0,
     explosion_schaden=60.0,
@@ -2107,9 +2130,8 @@ TRAGSCHRAUBER = dict(
 
 # Der Flakwagen (seit 0.34.114): ein Laster mit einem Vierling auf der
 # Pritsche - ein Panzerwagen, dessen Ring-MG gegen die Luft gebaut ist.
-# Fahren duerfen ihn nur Bots (`nur_bot`; gewuenscht: ein Mensch koennte
-# Boden- und Luftziel nicht auseinanderhalten - der Bot schon): ein Abwurf
-# bringt einen Bot der Seite gleich mit. Der Vierling schiesst ueber die
+# Seit 0.34.138 duerfen ihn auch Menschen fahren, seit 0.34.143 faellt er
+# leer (gewuenscht: "ohne Bot droppen"). Der Vierling schiesst ueber die
 # `flak_kanone`-Zeile (FAHRZEUG_WAFFEN) und rastet auf Luftziele ein (luft.py).
 FLAKWAGEN = dict(
     {k: v for k, v in PANZERWAGEN.items() if k not in ("plaetze", "marke", "name")},
@@ -2599,7 +2621,10 @@ BOTS = dict(
                        # Aus dem Waffenpaket (seit 0.34.62) - fuer Bots, denen
                        # der Testmodus eine davon gibt (siehe `waffen`).
                        revolver=230.0, zwillinge=170.0, mp=150.0,
-                       praezision=330.0, unterhebel=230.0, panzerbuechse=380.0,
+                       praezision=330.0, unterhebel=230.0,
+                       # 0.34.143: 300 statt 380 - er hielt sich ausserhalb seiner eigenen
+                       # Schussweite (reichweite, 330) und schoss darum kaum.
+                       panzerbuechse=300.0,
                        doppelflinte=110.0, autoschrot=130.0, minigun=220.0,
                        # Seit 0.34.70: alle uebrigen Waffen, die ein Bot im
                        # Testmodus (spaeter: in seiner Klasse) bekommen kann.
@@ -2607,7 +2632,7 @@ BOTS = dict(
                        bolzer=26.0, nagler=200.0, hammer=24.0, schockstab=22.0,
                        schlagring=16.0, kettensaege=20.0, wurfmesser=18.0, speer=44.0,
                        spule=330.0, kettenblitz=200.0, spiegellaser=260.0,
-                       kugelblitz=240.0, flammenwerfer=90.0),
+                       kugelblitz=240.0, flammenwerfer=105.0),   # 0.34.143: Flamme 150 statt 130
     # Wer ein MG hat, schiesst damit (seit 0.34.38): so viele Pixel
     # Abstand nimmt er hin, bevor er lieber die andere Waffe nimmt. Vorher
     # nahm der MG-Schuetze auf mittlere Weite das Sturmgewehr.
@@ -2621,7 +2646,7 @@ BOTS = dict(
                     bolzer=44.0, nagler=300.0, hammer=40.0, schockstab=36.0,
                     schlagring=26.0, kettensaege=32.0, wurfmesser=26.0, speer=62.0,
                     spule=330.0, kettenblitz=300.0, spiegellaser=330.0,
-                    kugelblitz=330.0, flammenwerfer=125.0),
+                    kugelblitz=330.0, flammenwerfer=145.0),
     # Womit ein Bot kaempfen kann (seit 0.34.70): alles ausser Wurf und C4,
     # die gehen ueber den Wurf (_werfen).
     kampf_arten=("schuss", "werfer", "rakete", "strahl", "kette", "kugel", "flamme",
@@ -2640,6 +2665,12 @@ BOTS = dict(
     gefahr_takt=0.15,         # so oft schaut er nach (s)
     spule_loslassen=0.92,     # bei so viel Ladung laesst er los
     spule_fehler=0.3,         # x Zielfehler, waehrend er die Spule laedt (seit 0.34.91)
+    # Ruhig zielen (seit 0.34.143, gemeldet: "Bots mit der Panzerbuechse
+    # brauchen extrem lang zum Schiessen, wechseln sehr oft den Punkt, auf
+    # den sie bei diesem Fahrzeug zielen"): x Zielfehler fuer langsame
+    # Einzelschuesse mit Laser - der wanderte sichtbar ums Ziel. Sitzt der
+    # Gegner in einem Fahrzeug, zielt er auf dessen Mitte.
+    ruhig_zielen=dict(panzerbuechse=0.35),
     # Bots am Steuer (seit 0.34.71, nur wem der Testmodus es erlaubt -
     # im Gefecht fahren Bots weiter nicht, so gemeldet).
     fahren=dict(
@@ -2647,6 +2678,14 @@ BOTS = dict(
         # keinen Gegner; kommt einer naeher als `unbewaffnet_aussteigen` px,
         # steigt er aus und sucht `unbewaffnet_pause` s lang keinen Wagen.
         unbewaffnet_aussteigen=300.0, unbewaffnet_pause=25.0,
+        # Krad zu zweit (seit 0.34.143, gewuenscht: "Bots mit dem Krad sollen
+        # oefter zu zweit umherfahren, wobei das um den Gegner Herumfahren
+        # wieder Sinn macht, weil der Beifahrer dann schiesst"). Sitzt einer im
+        # Beiwagen, kreist der Fahrer in `krad_kreis` px um den Gegner, den
+        # Beiwagen zu ihm hin, und zielt dabei `krad_kreis_schritt` Grad voraus.
+        # Allein wartet er nach dem Aufsitzen bis `krad_warten` s auf einen
+        # Kameraden ohne Aufgabe, der hoechstens `krad_warten_weite` px weg ist.
+        krad_kreis=170.0, krad_kreis_schritt=45.0, krad_warten=4.0, krad_warten_weite=320.0,
         # Vorausschauend ausweichen (seit 0.34.138): ab `ausweichen_ab` px bis
         # zum Wegpunkt prueft er die Spur vor sich - so weit, wie er in
         # `ausweichen_zeit` s faehrt (zwischen min und max px) - und weicht in
@@ -2749,6 +2788,17 @@ BOTS = dict(
         scharf=("praezision", "bolzer"),
         lmg=("minigun",),
     ),
+    # Seltene Waffen (seit 0.34.143, gewuenscht: "hin und wieder selten mal
+    # einen Bot mit einem Raketenwerfer oder Flammenwerfer"): so oft wird -
+    # wie `vielfalt` nur in echten Runden - die zweite Waffe gegen eine davon
+    # getauscht. Das Grundsaetzliche bleibt: die erste ist immer eine der fuenf.
+    selten=0.1,
+    selten_waffen=("raketenbuendel", "flammenwerfer", "granatwerfer", "einwegwerfer"),
+    # Andere Wurfwaffen (seit 0.34.143, gewuenscht: "mehr verschiedene
+    # Granaten, nicht immer nur die Standardgranate"): so oft statt der
+    # Granate eine aus `wurf_andere` - ebenso nur in echten Runden.
+    wurf_vielfalt=0.45,
+    wurf_andere=("molotov", "blend", "gas", "kuller", "haftladung"),
     # Panzerjaeger (seit 0.34.95): gibt es in der Runde Fahrzeuge, traegt
     # ein Teil der Bots Panzerbuechse und Raketen. Wer es wird, entscheidet
     # die Zahl, nicht der Zufall: je Mannschaft so viele, wie fehlen.
@@ -3117,6 +3167,10 @@ LOBBY = dict(
                   "blaeher"),
     weiter_nach=12.0,         # so lange steht die Siegtafel vor der naechsten
     plan_hoechstens=12,       # mehr Runden plant niemand
+    # Start mit Ladebild (seit 0.34.143): so lange wartet er hoechstens auf
+    # Klaenge, die die Werkstatt noch baut - sonst baute sie sie mitten in
+    # den ersten Sekunden der Runde (s).
+    start_klang_warten=12.0,
 )
 
 
@@ -5014,11 +5068,15 @@ ENERGIE_PAKET = {
         # Boden, frisst Rauch, und wer den Traeger erwischt, bringt
         # vielleicht seinen Tank zur Explosion.
         # 4,5 je Zug, gut 75 je Sekunde, dazu der brennende Boden.
-        flamme=True, schaden=4.5, reichweite=130.0, winkel=24.0,
+        # Seit 0.34.143 (gewuenscht: "Range ein kleines bisschen erhoeht,
+        # ein bisschen mehr vom Boden anzuenden"): 150 statt 130 weit,
+        # brennende Flecken doppelt so oft und nicht nur am Ende, sondern
+        # entlang der Flamme (ab `streifen_ab` ihrer Laenge), etwas groesser.
+        flamme=True, schaden=4.5, reichweite=150.0, winkel=24.0,
         takt=0.06, magazin=120, nachladen=4.2,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
         rueckstoss=0.0, kamera=0.4, huelsen=0, muendung=0.0,
-        streifen_takt=0.3, streifen_radius=20.0, streifen_dauer=4.0,
+        streifen_takt=0.15, streifen_radius=23.0, streifen_dauer=4.5, streifen_ab=0.45,
         rauch_fressen=1.0, tank_ab=0.2, tank_radius=64.0, tank_schaden=45.0,
         tempo_faktor=0.9),
 }

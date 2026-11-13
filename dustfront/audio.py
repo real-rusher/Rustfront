@@ -523,6 +523,59 @@ def _werfer_explosion_ton(seed=0):
     )
 
 
+@platzhalter_klang("werfer_start")
+def _werfer_start_ton(seed=0):
+    """Eine Rakete des Werfers verlaesst ihr Rohr (seit 0.34.143, gemeldet:
+    "die Artillerieraketen ... haben noch keine Sounds"). Schwerer als die
+    Panzerfaust: ein Stoss beim Zuenden, ein brausender Schub, der anschwillt
+    und lang nachzischt, darunter das Grollen des Rueckstrahls."""
+    zischen = _rauschen(0.9, 0.9, 700, 3600, 0.4, seed + 261)
+    n = len(zischen)
+    for i in range(n):
+        p = i / n
+        zischen[i] *= min(1.0, p * 10.0) * (1.0 - p) ** 1.1
+    return _mischen(
+        _schlag(96, 38, 0.35, 0.85, 2.0),
+        zischen,
+        _rauschen(0.7, 0.5, 320, 90, 1.4, seed + 262),
+        _rauschen(0.05, 0.4, 11000, 4000, 2.0, seed + 263, hp=True),
+    )
+
+
+@platzhalter_klang("werfer_anflug")
+def _werfer_anflug_ton(seed=0):
+    """Eine Rakete des Werfers kommt herunter (seit 0.34.143): ein Heulen,
+    das fallend lauter wird und mit dem Einschlag abreisst - wer es hoert,
+    hat noch einen Herzschlag Zeit."""
+    dauer = 1.1
+    n = int(RATE * dauer)
+    heulen = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        f = 1500.0 - 900.0 * p
+        phase += 2 * math.pi * f / RATE
+        heulen.append(math.sin(phase) * 0.22 * p ** 1.6)
+    rauschen = _rauschen(dauer, 0.5, 2500, 5000, 0.0, seed + 264)
+    for i in range(n):
+        rauschen[i] *= (i / n) ** 2.2
+    return _mischen(heulen, rauschen)
+
+
+@platzhalter_klang("einschlag")
+def _einschlag_ton(seed=0):
+    """Eine Rakete oder Bombe schlaegt ein (seit 0.34.143): ein harter
+    Schlag, der Druck, dann Erde, die herunterprasselt - kleiner als der
+    Werfer, der hochgeht, groesser als die Panzergranate."""
+    return _mischen(
+        _schlag(70, 18, 1.2, 1.0, 1.5),
+        _schlag(150, 45, 0.5, 0.7, 2.2),
+        _rauschen(1.2, 1.0, 5200, 120, 1.4, seed + 271),
+        _rauschen(0.06, 0.6, 12000, 5000, 2.0, seed + 272, hp=True),
+        [0.0] * int(RATE * 0.3) + _rauschen(0.9, 0.3, 7000, 1500, 1.8, seed + 273, hp=True),
+    )
+
+
 @platzhalter_klang("bombe_ab")
 def _bombe_ab(seed=0):
     """Die Lunte der Schrottbombe faengt Feuer (seit 0.34.123): ein kurzes
@@ -593,6 +646,62 @@ def _panzerwagen_motor(seed=0):
         phase += 2 * math.pi * (68.0 + 10.0 * math.sin(p * 24.0)) / RATE
         brumm.append(math.sin(phase) * 0.45 * min(1.0, p * 8) * (1 - p) ** 0.7)
     return _mischen(brumm, _rauschen(0.38, 0.2, 800, 300, 0.9, seed + 141))
+
+
+def _motor_stueck(dauer, grund, wobble, takt_hz, puls, laut, seed, rausch_lp=900, rausch_laut=0.18):
+    """Ein Stueck Motor fuer die Wagen, die bis 0.34.143 stumm fuhren: ein
+    Grundton mit leichtem Schwanken, gepulst wie die Zuendungen, sanft ein-
+    und ausgeblendet, damit die Wiederholung im Takt nicht knackt."""
+    n = int(RATE * dauer)
+    ton = []
+    phase = 0.0
+    tp = 2 * math.pi
+    sin = math.sin
+    for i in range(n):
+        p = i / n
+        phase += tp * (grund + wobble * sin(p * 20.0)) / RATE
+        schlag = 1.0 - puls + puls * (0.5 + 0.5 * sin(tp * takt_hz * i / RATE)) ** 2
+        huelle = min(1.0, p * 8.0) * min(1.0, (1.0 - p) * 6.0)
+        ton.append((sin(phase) + 0.4 * sin(2.0 * phase)) * laut * schlag * huelle)
+    rauschen = _rauschen(dauer, rausch_laut, rausch_lp, rausch_lp * 0.4, 0.0, seed)
+    for i in range(n):
+        p = i / n
+        rauschen[i] *= min(1.0, p * 8.0) * min(1.0, (1.0 - p) * 6.0)
+    return _mischen(ton, rauschen)
+
+
+@platzhalter_klang("buggy_motor")
+def _buggy_motor(seed=0):
+    """Der Buggy: ein kleiner, drehfreudiger Benziner, heller als die Laster."""
+    return _motor_stueck(0.34, 105.0, 12.0, 38.0, 0.45, 0.3, seed + 281, 1400, 0.16)
+
+
+@platzhalter_klang("krad_motor")
+def _krad_motor(seed=0):
+    """Das Krad: ein Einzylinder, der knattert - deutlich gepulst."""
+    return _motor_stueck(0.28, 82.0, 8.0, 24.0, 0.85, 0.32, seed + 282, 1800, 0.14)
+
+
+@platzhalter_klang("lkw_motor")
+def _lkw_motor(seed=0):
+    """Die Laster (Tross-, Spulen-, Funkwagen, Werfer): ein brummiger
+    Diesel, tiefer als der Buggy, nicht so schwer wie der Panzerwagen."""
+    return _motor_stueck(0.44, 58.0, 7.0, 16.0, 0.4, 0.38, seed + 283, 700, 0.2)
+
+
+@platzhalter_klang("rotor")
+def _rotor(seed=0):
+    """Der Tragschrauber: das Wummern der Blaetter ueber einem kleinen
+    Motor - "wopp wopp", gut von den Wagen am Boden zu unterscheiden."""
+    dauer = 0.4
+    n = int(RATE * dauer)
+    wumm = _rauschen(dauer, 0.6, 600, 600, 0.0, seed + 284)
+    for i in range(n):
+        p = i / n
+        # Zwei Blaetter, etwa 7 Schlaege je Sekunde je Blatt: 14 Hz.
+        blatt = (0.5 + 0.5 * math.cos(2 * math.pi * 14.0 * i / RATE)) ** 6
+        wumm[i] *= (0.15 + 0.85 * blatt) * min(1.0, p * 8.0) * min(1.0, (1.0 - p) * 6.0)
+    return _mischen(wumm, _motor_stueck(dauer, 120.0, 6.0, 40.0, 0.2, 0.12, seed + 285, 2000, 0.06))
 
 
 @platzhalter_klang("rammen")

@@ -1266,6 +1266,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                    "klebt", "gas", "schneeball", "wurf_leise", "emp_aus", "reifen_platt",
                    "schild", "falle_klick", "drohne", "horchposten", "anflug",
                    "platsch",          # ins tiefe Wasser (seit 0.34.140)
+                   # Werfer und Schrottbombe (seit 0.34.143): beides spielt nur
+                   # der Gastgeber, der Gast hoerte es nie.
+                   "werfer_anflug", "bombe_ab", "bombe_fall",
+                   # Motoren aller Wagen (seit 0.34.143)
+                   "buggy_motor", "krad_motor", "lkw_motor", "rotor",
                    # Napalm-Angriff (seit 0.34.101): das Flugzeug und die Einschlaege.
                    "jet", "napalm")
 
@@ -1792,6 +1797,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 if e[0] <= s["flug"] and not e[3]:
                     e[3] = True
                     self._werfer_start(b, e[4])
+                if e[0] <= s["anflug_ton"] and len(e) < 6:
+                    # Das Heulen kurz vor dem Einschlag (seit 0.34.143), am
+                    # Einschlagort - Warnung fuer alle, die dort stehen.
+                    e.append(True)
+                    self.welt.klang("werfer_anflug", 0.8, pygame.Vector2(e[1], e[2]), b.ebene)
                 if e[0] <= 0.0:
                     b.einschlaege.remove(e)
                     self._werfer_einschlag(b, pygame.Vector2(e[1], e[2]))
@@ -1845,7 +1855,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         der Radius ist hier die Richtung des Gestells - so geht es zum Gast)."""
         b.rohre &= ~(1 << rohr)
         pos = b.muendung(rohr)
-        self.welt.klang("rakete", 0.9, pos, b.ebene)
+        # Den Ton spielt seit 0.34.143 effekte.raketenstart ("werfer_start").
         # Seit 0.34.123 traegt der Radius Richtung und Steilheit:
         # Steilheit * 1000 + Richtung (effekte.raketenstart).
         code = int(round(b.erhebung())) * 1000 + int(round(b.gestell_winkel())) % 360
@@ -3018,9 +3028,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             self._einsteigen(k, wagen)
             return
         # Hinten auf einen Panzerwagen, den jemand faehrt (seit 0.34.95) -
-        # Bots seit 0.34.96 in SCHLACHT (bots._aufsitzen_wollen).
-        transporter = (None if k.ist_bot and not self.schlacht
-                       else self._transporter_bei(k))
+        # Bots seit 0.34.96 in SCHLACHT (bots._aufsitzen_wollen), in den
+        # Beiwagen eines Krads seit 0.34.143 ueberall, wo Bots fahren.
+        transporter = self._transporter_bei(k)
+        if (transporter is not None and k.ist_bot and not self.schlacht
+                and transporter.art != "krad"):
+            transporter = None
         if transporter is not None:
             self._aufsitzen(k, transporter)
             return
@@ -6123,6 +6136,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                     self.welt.muendungen = []
                     self.hinweis = "NEUE RUNDE: %s" % K.MODI[self.modus]["name"]
                     self.obere_zeigen = bool(self.app.opt["obere_ebenen"])
+                    # Wie beim Gastgeber (seit 0.34.143): die Minikarte jetzt
+                    # bauen statt im ersten Bild, und die Zeit des Aufbaus
+                    # nicht nachrechnen.
+                    self._schwer_vorbauen()
+                    takt_neu = getattr(self.app, "takt_neu", None)
+                    if takt_neu is not None:
+                        takt_neu()
             elif art == "welt":
                 klaenge.versatz = basis + nr_welt * abstand
                 nr_welt += 1
@@ -6817,6 +6837,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
 
     # ---- Szene ---------------------------------------------------------
     def schritt(self, dt: float) -> None:
+        if getattr(self, "_start_bald", None) is not None:
+            # Erst das Ladebild, dann der Aufbau (LobbyTeil.plan_starten_bald).
+            self._start_ausfuehren()
+            return
         self._zeit += dt
         if not self.vorbei:
             self._rundenzeit += dt
@@ -7340,7 +7364,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             self._runde_neu()
             self._menue_zu()
         elif schluessel in ("starten", "starten_kos"):
-            if self.plan_starten(0, kosmetik=(schluessel == "starten_kos")):
+            if self.plan_starten_bald(0, kosmetik=(schluessel == "starten_kos")):
                 self._menue_zu()
         elif schluessel == "lobby":
             self._menue_zu()
@@ -7635,6 +7659,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
 
     # ---- Bild ----------------------------------------------------------
     def zeichnen(self, ziel, alpha: float) -> None:
+        if getattr(self, "_start_bald", None) is not None:
+            self._ladebild(ziel)
+            return
         # Beim Gast wird nicht zwischen zwei Rechenschritten ueberblendet,
         # sondern zwischen zwei Meldungen. `vorher` und `pos` eines
         # Mitspielers stehen bei ihm eine Sechzigstelsekunde auseinander,

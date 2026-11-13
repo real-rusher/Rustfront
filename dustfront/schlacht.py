@@ -1234,12 +1234,9 @@ class SchlachtTeil:
             sch = pygame.Surface((sw * 2, sw), pygame.SRCALPHA)
             pygame.draw.ellipse(sch, (12, 9, 6, int(50 + 110 * anteil)), sch.get_rect())
             ziel.blit(sch, (boden.x - sw, boden.y - sw // 2))
-            # Kurz vor dem Aufsetzen: der Fussabdruck blinkt rot (seit 0.34.100)
-            # - wer drin steht, wird beiseite gestossen.
-            if hoch < a["warnen_ab"] and int(self._zeit_jetzt() * 6) % 2 == 0:
-                fuss = int(self.abwurf_fuss(ab.art))
-                pygame.draw.ellipse(ziel, K.C_RED, (int(boden.x) - fuss, int(boden.y) - int(fuss * 0.62),
-                                                    fuss * 2, int(fuss * 1.24)), 1)
+            # Der rot blinkende Fussabdruck kurz vor dem Aufsetzen (0.34.100)
+            # ist seit 0.34.143 weg (gewuenscht) - die Abwurfzone mit ihren
+            # Fackeln zeigt die Stelle schon, und der Schatten waechst.
             # Die Last: pendelt leicht - mit gerissenem Schirm (seit 0.34.118)
             # nicht mehr, sondern dreht sich im Sturz.
             if ab.gerissen > 0.0:

@@ -2453,11 +2453,13 @@ def _insasse(fahrer, groesse: int = 28, arme=8):
     from . import art_figuren
     if isinstance(fahrer, dict):
         return art_figuren.insasse(fahrer, arme)
-    rumpf, kante, akzent = fahrer
+    rumpf, kante, akzent = fahrer[:3]
     # Seit 0.34.86 die Standardfigur im neuen Stil (art_figuren.standard,
     # wie zu Fuss seit 0.34.77). Gemeldet: "beim Sitzen im Fahrzeug soll
-    # nicht nur der alte Standard-Skin angezeigt werden."
-    return art_figuren.figur(art_figuren.standard(rumpf, kante, akzent), None, None,
+    # nicht nur der alte Standard-Skin angezeigt werden." Seit 0.34.143 mit
+    # den Streifen der Mannschaft, wie zu Fuss (4. Wert: ROT/BLAU).
+    team = fahrer[3] if len(fahrer) > 3 else None
+    return art_figuren.figur(art_figuren.standard(rumpf, kante, akzent), None, team,
                              groesse, stummel=False, arme_an=bool(arme))
 
 
@@ -2617,7 +2619,7 @@ def _buggy_fahrer():
 
 def _buggy_team(kombi):
     def zeichner():
-        return _buggy_zeichnen((kombi["rumpf"], kombi["kante"], kombi["akzent"]))
+        return _buggy_zeichnen((kombi["rumpf"], kombi["kante"], kombi["akzent"], kombi["name"]))
     return zeichner
 
 

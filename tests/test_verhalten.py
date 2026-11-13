@@ -1494,10 +1494,96 @@ def kolonne():
     pruef("... und alle vier kommen an", all(a_ == 4 for _k, _g, a_ in werte), str([a_ for _k, _g, a_ in werte]))
 
 
+def krad_zu_zweit():
+    """Seit 0.34.143 (gewuenscht: "Bots mit dem Krad sollen oefter zu zweit
+    umherfahren, wobei das Herumfahren um den Gegner wieder Sinn macht, weil
+    der Beifahrer dann schiesst"). Je Seed: ein Bot auf dem
+    Krad, ein Kamerad ohne Aufgabe daneben - er sitzt im Beiwagen auf. Dann
+    ein Gegner: der Fahrer kreist um ihn, der Beifahrer schiesst."""
+    print("\n-- Krad zu zweit: aufsitzen, kreisen, aus dem Beiwagen schiessen")
+    werte = []
+    for seed in SEEDS[:3]:
+        tm = neu(seed)
+        rnd = random.Random(seed)
+        tx, ty, v = W.flaeche(tm, rnd, 30, 16)
+        fahrer = tm.fahrer_setzen(v(10, 8), 0, {"team": 0, "fahrzeug": "krad", "waffe": "sturm"},
+                                  mit_fahrzeug=True)
+        kr = fahrer.fahrzeug
+        bei = tm.bot_setzen(v(6, 8), 0, {"team": 0, "waffe": "sturm"})
+        laufen(tm, 4.0)
+        drin = bei.mitfahrt is kr
+        feind = tm.puppe_setzen(kr.pos + pygame.Vector2(260, 0), 0, {"team": 1}, name="ZIEL")
+        feind.leben = feind.max_leben = 9999.0
+        st = {"abst": [], "n": 0}
+
+        def messen(st=st, kr=kr, feind=feind):
+            st["n"] += 1
+            if st["n"] % 60 == 0:
+                st["abst"].append(kr.pos.distance_to(feind.pos))
+        laufen(tm, 8.0, messen)
+        nah = [a_ for a_ in st["abst"][2:]]
+        werte.append((drin, round(9999.0 - feind.leben),
+                      round(sum(nah) / max(1, len(nah))), bei.mitfahrt is kr))
+        tm.verlassen()
+    print("   ", werte)
+    pruef("Krad: der Kamerad sitzt im Beiwagen auf (%d Seeds)" % len(werte),
+          all(w_[0] for w_ in werte), str([w_[0] for w_ in werte]))
+    pruef("... der Beifahrer trifft den Gegner aus dem Beiwagen",
+          all(w_[1] >= 100 for w_ in werte), str([w_[1] for w_ in werte]))
+    pruef("... der Fahrer kreist um ihn (im Mittel 60 bis 240 px), statt ihn anzufahren",
+          all(60 <= w_[2] <= 240 for w_ in werte), str([w_[2] for w_ in werte]))
+    pruef("... und der Beifahrer bleibt sitzen (kein Absetzen beim Krad)",
+          all(w_[3] for w_ in werte), str([w_[3] for w_ in werte]))
+
+
+def panzerbuechse_schuetze():
+    """Gemeldet (0.34.142): "Bots mit der Panzerbuechse brauchen extrem lang
+    zum Schiessen, wechseln sehr oft den Punkt, auf den sie zielen." Je Seed:
+    ein Bot mit Panzerbuechse, vor ihm ein Panzer mit Fahrer. Gezaehlt: die
+    Schuesse in 20 s (hoechstens 5: Takt und Nachladen) und wie weit sein
+    Zeiger je Viertelsekunde springt."""
+    print("\n-- Panzerbuechse: schiesst zuegig, Zeiger bleibt auf dem Blech")
+    werte = []
+    for seed in SEEDS[:3]:
+        tm = neu(seed)
+        rnd = random.Random(seed)
+        tx, ty, v = W.flaeche(tm, rnd, 30, 8)
+        pz = tm.fahrzeug_setzen("panzer", v(18, 4), 0, {"winkel": 180})
+        f = tm.puppe_setzen(pz.ausstiegsorte(9.0)[0], 0, {"team": 1}, name="FAHRER")
+        tm._anwenden(f, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+        pz.leben = pz.max_leben = 99999.0
+        bot = tm.bot_setzen(v(9, 4), 0, {"team": 0, "waffe": "panzerbuechse"})
+        bot.hirn.blick = 0.0
+        bot.winkel = 0.0
+        st = {"schuss": 0, "alt": bot.magazin.get("panzerbuechse", 0), "zeiger": [], "n": 0}
+
+        def messen(st=st, bot=bot):
+            m = bot.magazin.get("panzerbuechse", 0)
+            if m < st["alt"]:
+                st["schuss"] += 1
+            st["alt"] = m
+            st["n"] += 1
+            if st["n"] % 30 == 0 and bot.hirn.ziel is not None and bot.waffe_name == "panzerbuechse":
+                st["zeiger"].append(pygame.Vector2(bot.ziel))
+        laufen(tm, 20.0, messen)
+        z_ = st["zeiger"]
+        sprung = sum(z_[j].distance_to(z_[j + 1]) for j in range(len(z_) - 1)) / max(1, len(z_) - 1)
+        werte.append((st["schuss"], round(sprung)))
+        tm.verlassen()
+    print("   ", werte)
+    pruef("Panzerbuechse: mindestens 4 Schuesse in 20 s auf den Panzer (%d Seeds; vorher meist 0 bis 2)"
+          % len(werte), all(s_ >= 4 for s_, _z in werte), str([s_ for s_, _z in werte]))
+    pruef("... der Zeiger springt im Mittel unter 25 px je Viertelsekunde (vorher 40 bis 100)",
+          all(z_ < 25 for _s, z_ in werte), str([z_ for _s, z_ in werte]))
+    pruef("... der Wunschabstand liegt in der eigenen Schussweite",
+          K.BOTS["wunschabstand"]["panzerbuechse"] <= K.BOTS["reichweite"]["panzerbuechse"])
+
+
 # Einzeln: python tests/test_verhalten.py bergen abschnitte
 TEILE = [nach_der_schlacht, kein_fehlfeuer, deckung_dicht, abschnitte, bergen, feuerschutz, mauern,
          planer, bergen_fluessig, drehen, keine_flucht, marsch, grosse_trupps, gefahren,
-         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger, napalm, front, verteilung, ausweichen, kolonne]
+         panzer_bot, spuren, feuer_umweg, fahrzeug_bots, vorstoss, fallschirmjaeger, napalm, front, verteilung, ausweichen, kolonne,
+         krad_zu_zweit, panzerbuechse_schuetze]
 #
 # Ohne Angabe laufen die Szenen seit 0.34.94 gleichzeitig, je eine in einem
 # eigenen Prozess, so viele wie Kerne da sind (hoechstens TEILE). Jede

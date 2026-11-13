@@ -570,6 +570,29 @@ class Buggy(Wesen):
         self._beiseite_schieben()
         self._staub(dt)
         self._spuren()
+        if fahrer:
+            self._motor(dt)
+
+    def _motor(self, dt: float) -> None:
+        """Kein Motor als Schleife - ein kurzes Brummen in einem Takt, solange
+        er faehrt. Seit 0.34.143 fuer jeden Wagen (vorher nur Panzer und
+        Panzerwagen, und Jagdpanzer und Flakwagen suchten einen Ton, den es
+        nicht gab); welcher, steht in den Werten (`motor_klang`). In der
+        Luft dreht der Rotor immer, auch ohne Gas."""
+        name = self.werte.get("motor_klang")
+        if not name or self.welt is None:
+            return
+        self._motor_rest = getattr(self, "_motor_rest", 0.0) - dt
+        if self._motor_rest > 0.0:
+            return
+        self._motor_rest = self.werte.get("motor_takt", 0.4)
+        tempo = self.geschw.length()
+        luft = bool(getattr(self, "luft", False))
+        if (not luft and tempo < 3.0 and abs(getattr(self, "gier", 0.0)) < 0.05
+                and abs(self.gas) < 0.1):
+            return
+        anteil = 1.0 if luft else min(1.0, tempo / max(1.0, self.werte["hoechst"]))
+        self.welt.klang(name, 0.3 + 0.35 * anteil, self.pos, self.ebene)
 
     def _drehen(self, dt: float) -> None:
         """Drehen nur, wenn er danach noch passt - sonst klemmte er sich an
@@ -1344,7 +1367,6 @@ class Schwer(Buggy):
         self._aufbau_fuehren(dt)
         if self.fahrer is not None:
             self._schiessen()
-            self._motor(dt)
 
     def _abklingen(self, dt: float) -> None:
         f = self.werte
@@ -1387,19 +1409,6 @@ class Schwer(Buggy):
         self.welt.partikel.append(Partikel(
             huelse_von, pygame.Vector2(RND.uniform(60, 95), 0).rotate(aus) + self.geschw,
             0.9, (176, 140, 62), 1, "huelse", 3.0, self.ebene))
-
-    def _motor(self, dt: float) -> None:
-        """Kein Motor als Schleife - ein kurzes Brummen in einem Takt, solange
-        er faehrt. Wie das Quietschen des Buggys."""
-        self._motor_rest -= dt
-        if self._motor_rest > 0.0:
-            return
-        self._motor_rest = self.werte["motor_takt"]
-        tempo = abs(self.fahrt)
-        if tempo < 3.0 and abs(self.gier) < 0.05 and abs(self.gas) < 0.1:
-            return
-        anteil = min(1.0, tempo / self.werte["hoechst"])
-        self.welt.klang("%s_motor" % self.art, 0.3 + 0.35 * anteil, self.pos, self.ebene)
 
     # ---- Rammen -------------------------------------------------------
     def _beiseite_schieben(self) -> None:
@@ -2464,6 +2473,8 @@ class Tragschrauber(Buggy):
         if self.luft and not self.nur_bild and self.welt is not None and not self.kaputt:
             Wesen.schritt(self, dt)
             self._fliegen(dt)
+            if self.fahrer is not None and self.emp_rest <= 0.0:
+                self._motor(dt)
             self.trefferbar = not self.in_der_luft     # Bodenfeuer geht darunter durch
             return
         super().schritt(dt)
