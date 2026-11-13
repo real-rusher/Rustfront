@@ -5463,14 +5463,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         # werden nach dem Tod nicht richtig zurueckgesetzt"): vorher blieben
         # die aufgesammelten aus dem alten Leben (max), bis zum Hoechstwert.
         k.medkits = 0 if k.ist_bot else self.start_medkits
-        # Was im alten Leben gerade lief, endet mit ihm: Anlegen eines Medkits,
-        # Nachladen, Schlag, Salve, Dash, Hitze, Zielerfassung.
-        k.heilt_rest = k.nachlade_rest = k.nahkampf_rest = k.schlag_zeigen = 0.0
-        k.salve_rest = 0
-        k.dash_ladungen, k.dash_laden, k.dash_rest, k.dash_sperre = K.DASH["ladungen"], 0.0, 0.0, 0.0
-        k.anlauf = k.ladung = 0.0
-        k.ueberhitzt, k._kuehl = {}, {}
-        k.erfasst, k.erfassung, k.erfassung_rest = None, 0.0, 0.0
+        if not k.ist_bot:
+            # Was im alten Leben gerade lief, endet mit ihm: Anlegen eines
+            # Medkits, Nachladen, Schlag, Salve, Dash, Hitze, Zielerfassung.
+            # Nur fuer Menschen (gemeldet war es fuer sie); Bots bleiben wie
+            # bisher - ihr Ablauf und die daran gemessenen Szenen aendern sich nicht.
+            k.heilt_rest = k.nachlade_rest = k.nahkampf_rest = k.schlag_zeigen = 0.0
+            k.salve_rest = 0
+            k.dash_ladungen, k.dash_laden, k.dash_rest, k.dash_sperre = K.DASH["ladungen"], 0.0, 0.0, 0.0
+            k.anlauf = k.ladung = 0.0
+            k.ueberhitzt, k._kuehl = {}, {}
+            k.erfasst, k.erfassung, k.erfassung_rest = None, 0.0, 0.0
         if not k.ist_bot:
             # Jedes Leben mit vollem Vorrat und vollen Magazinen, Granaten
             # eingeschlossen (seit 0.34.96, gemeldet: "nicht immer

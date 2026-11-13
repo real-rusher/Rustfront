@@ -20566,6 +20566,10 @@ _v140k = _tm140k.fahrer_setzen(_p140k + pygame.Vector2(110, 0), 0, {"team": 0, "
 _a140k.fahrzeug.winkel = _v140k.fahrzeug.winkel = 0.0
 _v140k.fahrzeug.pos.update(_a140k.fahrzeug.pos + pygame.Vector2(95, 0))
 _k140k = _a140k.hirn._kolonne(_a140k.fahrzeug, 0.0, 200.0, 26.0)
+pruef("Ein eigener Wagen steht vorn geparkt (kein Gas): kein Vordermann, sondern ein Hindernis",
+      _k140k is None, str(_k140k))
+_v140k.fahrzeug.gas = 1.0
+_k140k = _a140k.hirn._kolonne(_a140k.fahrzeug, 0.0, 200.0, 26.0)
 pruef("Ein eigener Wagen faehrt vorn in dieselbe Richtung: anstellen (KOLONNE), nicht vorbei",
       _k140k is not None and _k140k[0] == "folgen" and _k140k[1] < 1.0, str(_k140k))
 _v140k.fahrzeug.winkel = 180.0

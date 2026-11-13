@@ -1201,16 +1201,23 @@ def vorstoss():
         pw = f.fahrzeug
         vorher = [k.pos.distance_to(mitte) for k in leute]
         pw_vorher = pw.pos.distance_to(mitte)
-        laufen(tm, 40.0)
+        # Am naechsten an der Mitte (seit 0.34.140): wer sie erreicht, zieht
+        # weiter zur Basis der anderen - gemessen am Ende war ein Panzerwagen,
+        # der schneller durchkam, wieder "weiter weg" (814 statt 4170 px).
+        naechst = {"pw": pw_vorher}
+
+        def messen(pw=pw, mitte=mitte, naechst=naechst):
+            naechst["pw"] = min(naechst["pw"], pw.pos.distance_to(mitte))
+        laufen(tm, 40.0, messen)
         zu_fuss.append(sum(v_ - k.pos.distance_to(mitte) for v_, k in zip(vorher, leute)) / len(leute))
-        gefahren_.append(pw_vorher - pw.pos.distance_to(mitte))
+        gefahren_.append(pw_vorher - naechst["pw"])
         # Niemand zieht in die Gegenrichtung oder streift woandershin.
         richtung.append(all(k.pos.distance_to(mitte) < v_ for v_, k in zip(vorher, leute)))
         tm.verlassen()
     pruef("Zu Fuss: in 40 s im Mittel wenigstens 800 px naeher an der Mitte",
           all(z_ >= 800.0 for z_ in zu_fuss), str([round(z_) for z_ in zu_fuss]))
     pruef("... und jeder einzelne naeher als vorher (3 von 3)", all(richtung), str(richtung))
-    pruef("Im Panzerwagen: in 40 s wenigstens 1500 px naeher an der Mitte",
+    pruef("Im Panzerwagen: in 40 s wenigstens 1500 px naeher an der Mitte (am naechsten)",
           all(g_ >= 1500.0 for g_ in gefahren_), str([round(g_) for g_ in gefahren_]))
 
 

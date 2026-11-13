@@ -1858,6 +1858,13 @@ class BotHirn(Taktik):
             return None                     # er faehrt quer: ausweichen wie sonst
         jetzt = self.g.welt.zeit
         if o.geschw.length() < f["kolonne_steht"]:
+            # Ein geparkter Wagen (kein Gas, wartet selbst in keiner Kolonne):
+            # kein Vordermann, sondern ein Hindernis - gleich vorbei.
+            seine = o.__dict__.get("_kolonne_info")
+            wartet = seine is not None and seine[0] == "folgen" and jetzt - seine[2] < 0.5
+            if abs(getattr(o, "gas", 0.0)) < 0.05 and not wartet:
+                b.__dict__.pop("_kolonne_info", None)
+                return None
             seit = b.__dict__.setdefault("_kolonne_seit", jetzt)
             if jetzt - seit > f["kolonne_warten"]:
                 b.__dict__.pop("_kolonne_info", None)
