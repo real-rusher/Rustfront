@@ -875,6 +875,14 @@ class Testmodus(Gefecht):
         super().schritt(dt)
         self._gott_anwenden()
 
+    def _fern_menschen(self) -> list:
+        # Zielpuppen sind keine Menschen (seit 0.34.142): nur die Figur, die
+        # man selbst steuert, zaehlt fuer die Fernregel der Bots.
+        k = self.ich
+        if self.beobachter or k is None or k not in self.kaempfer.values():
+            return []
+        return [(k.pos, k.ebene)]
+
     def _bot_vielfalt(self) -> bool:
         # Hier nur, wenn eingeschaltet (BOTS: VIELE WAFFEN) - siehe oben.
         return self.bots_vielfalt
@@ -2649,6 +2657,9 @@ class Testmodus(Gefecht):
                 zustand += " (SUCHT FAHRZEUG)"
             if getattr(k, "schild", False):
                 zustand += " SCHILD"
+            if getattr(k, "_fern", False):
+                # Weit weg von jedem Menschen: denkt seltener, rechnet im halben Takt (0.34.142).
+                zustand += " FERN"
             # Seit 0.34.100: Fallschirmjaeger in der Luft, und wer gegen sie in
             # Stellung geht (bots.BotHirn._springer_reaktion).
             if getattr(k, "schirm_hoehe", 0.0) > 0.0:

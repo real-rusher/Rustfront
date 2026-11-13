@@ -20632,6 +20632,67 @@ pruef("Gast: die eigene Figur wird zwischen zwei Schritten eingeblendet (vorher 
       "%d Schritte, %d mit Weg" % (len(_bew141), sum(1 for d_ in _bew141 if d_ > 0.1)))
 w141.verlassen(); g141.verlassen()
 
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- 0.34.142: Leistung in SCHLACHT (Bots seltener denken, ferne im halben Takt)")
+from dustfront import bots as _BO142
+_jede142 = 1
+for ab_, n_ in K.BOTS["staffel"]:
+    if 48 >= ab_:
+        _jede142 = n_
+pruef("Mit 24 je Seite (48 Bots) denkt jeder Bot jeden 4. Schritt - 30-mal je Sekunde",
+      _jede142 == 4, str(K.BOTS["staffel"]))
+w142, g142 = gefechtspaar("team", regeln={"bots": 6})
+_bots142 = w142._bots()
+_ich142 = w142.ich
+# Ein Bot nah am Menschen, die anderen weit weg (Schwelle fuer die Probe tiefer).
+_alt_k142 = (K.BOTS["staffel"], K.BOTS["fern_ab_bots"])
+K.BOTS["staffel"] = ((1, 4),)
+K.BOTS["fern_ab_bots"] = 1
+_nah142 = _bots142[0]
+_nah142.pos.update(_ich142.pos + pygame.Vector2(60, 0))
+for b_ in _bots142[1:]:
+    b_.pos.update(_ich142.pos + pygame.Vector2(K.BOTS["fern_ab"] + 400, 0))
+_ruf142 = {}
+_alt142 = _BO142.BotHirn.eingabe
+def _zaehl142(self, dt):
+    z_ = _ruf142.setdefault(self.k.nummer, [0, 0.0]); z_[0] += 1; z_[1] += dt
+    return _alt142(self, dt)
+_BO142.BotHirn.eingabe = _zaehl142
+try:
+    for _ in range(48):
+        for b_ in _bots142[1:]:
+            b_.pos.update(_ich142.pos + pygame.Vector2(K.BOTS["fern_ab"] + 400, 0))
+        w142._bots_steuern(K.FIXED_DT)
+finally:
+    _BO142.BotHirn.eingabe = _alt142
+pruef("Ein Bot nah am Menschen denkt jeden 4. Schritt (48 Schritte: 12-mal)",
+      _ruf142.get(_nah142.nummer, [0])[0] == 12, str(_ruf142.get(_nah142.nummer)))
+pruef("... einer weit weg von jedem Menschen jeden %d. (48 Schritte: %d-mal), mit der ganzen Zeit"
+      % (K.BOTS["fern_jede"], 48 // K.BOTS["fern_jede"]),
+      all(_ruf142.get(b_.nummer, [0])[0] == 48 // K.BOTS["fern_jede"]
+          and abs(_ruf142[b_.nummer][1] - 48 * K.FIXED_DT) <= K.BOTS["fern_jede"] * K.FIXED_DT + 1e-9
+          for b_ in _bots142[1:]), str([_ruf142.get(b_.nummer) for b_ in _bots142[1:]]))
+pruef("... und die Welt rechnet seine Bewegung im halben Takt (der nahe nicht)",
+      all(getattr(b_, "_fern", False) for b_ in _bots142[1:]) and not getattr(_nah142, "_fern", False))
+_fern142 = _bots142[1]
+_schr142 = []
+_alt_s142 = type(_fern142).schritt
+def _s142(self, dt, _alt=_alt_s142):
+    if self is _fern142:
+        _schr142.append(dt)
+    return _alt(self, dt)
+type(_fern142).schritt = _s142
+try:
+    for _ in range(10):
+        w142.welt.schritt(K.FIXED_DT)
+finally:
+    type(_fern142).schritt = _alt_s142
+pruef("... 10 Schritte der Welt: 5-mal bewegt, je mit doppelter Zeit",
+      len(_schr142) == 5 and all(abs(d_ - 2 * K.FIXED_DT) < 1e-9 for d_ in _schr142), str(_schr142))
+K.BOTS["staffel"], K.BOTS["fern_ab_bots"] = _alt_k142
+w142.verlassen(); g142.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

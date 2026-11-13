@@ -3058,8 +3058,7 @@ class BotTeil:
         # die meisten Bots stehen weit weg vom Spieler). Ohne Menschen (der
         # Testmodus, die Verhaltens-Szenen) gilt das nicht.
         fern_ab, fern_jede = K.BOTS["fern_ab"], K.BOTS["fern_jede"]
-        menschen = [(m.pos, m.ebene) for m in self.kaempfer.values() if not m.ist_bot] \
-            if len(bots) >= K.BOTS["fern_ab_bots"] else []
+        menschen = self._fern_menschen() if len(bots) >= K.BOTS["fern_ab_bots"] else []
         fern_q = fern_ab * fern_ab
         try:
             for k in bots:
@@ -3067,9 +3066,15 @@ class BotTeil:
                 if hirn is None:
                     continue
                 jetzt_jede = jede
-                if menschen and fern_jede > jede and all(
-                        k.pos.distance_squared_to(p_) > fern_q for p_, _e in menschen):
+                fern = bool(menschen) and all(
+                    k.pos.distance_squared_to(p_) > fern_q for p_, _e in menschen)
+                if fern and fern_jede > jede and k.fahrzeug is None:
+                    # Am Steuer nicht: wer nur 10-mal je Sekunde lenkt, faehrt
+                    # an Mauern entlang und bleibt haengen.
                     jetzt_jede = fern_jede
+                # Fern rechnet auch die Welt seine Bewegung im halben Takt
+                # (World.schritt, seit 0.34.142) - ihn sieht keiner.
+                k._fern = fern and K.BOTS["fern_halbtakt"]
                 if jetzt_jede > 1:
                     # Versetzt: in jedem Schritt denkt ein Teil der Bots.
                     hirn._staffel_dt = getattr(hirn, "_staffel_dt", 0.0) + dt
@@ -3083,6 +3088,10 @@ class BotTeil:
         finally:
             self._kandidaten_lauf = None
             self.__dict__.pop("_kandidaten_merk", None)
+
+    def _fern_menschen(self) -> list:
+        """(Ort, Ebene) jedes Menschen - fuer die Fernregel (seit 0.34.142)."""
+        return [(m.pos, m.ebene) for m in self.kaempfer.values() if not m.ist_bot]
 
     def _bot_hoert(self, pos, ebene: int, quelle, weite: float | None = None) -> None:
         """Ein Schuss oder Knall - fuer die Ohren der Bots. `weite`: so weit

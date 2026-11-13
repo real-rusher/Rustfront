@@ -1000,8 +1000,20 @@ class Welt:
             self.wesen.extend(self.neue)
             self.neue.clear()
         self._raster_bauen()
+        nr = self.bildnummer
         for w in self.wesen:
             if w.lebt:
+                d = w.__dict__
+                if d.get("_fern") or d.get("_fern_dt"):
+                    # Fern von jedem Menschen (Gefecht, seit 0.34.142): nur
+                    # jeden zweiten Schritt, versetzt, mit der ganzen Zeit.
+                    rest = d.get("_fern_dt", 0.0) + dt
+                    if d.get("_fern") and (nr + d.get("nummer", 0)) & 1:
+                        w._fern_dt = rest
+                        continue
+                    w._fern_dt = 0.0
+                    w.schritt(rest)
+                    continue
                 w.schritt(dt)
         self.effekte_schritt(dt)
         for r in self.rauch:

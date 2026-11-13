@@ -2416,10 +2416,13 @@ BOTS = dict(
     # unter der Reaktionszeit eines Menschen), ab 100 jeden 6. Gemessen auf
     # FLUSSTAL mit 24 je Seite dachten die Bots 42 Prozent jedes Schritts.
     staffel=((30, 4), (100, 6)),
-    # Und wer weiter als `fern_ab` px von jedem Menschen weg ist (gut
-    # anderthalb Bildbreiten), denkt nur jeden `fern_jede`. Schritt - ab
+    # Und wer weiter als `fern_ab` px von jedem Menschen weg ist (weiter als
+    # die Bildecke ganz herausgezoomt), denkt nur jeden `fern_jede`. Schritt - ab
     # `fern_ab_bots` Bots, und nur, wenn Menschen mitspielen (seit 0.34.142).
-    fern_ab=1000.0, fern_jede=12, fern_ab_bots=16,
+    fern_ab=1200.0, fern_jede=12, fern_ab_bots=16,
+    # ... und die Welt rechnet seine Bewegung nur jeden zweiten Schritt, mit
+    # der doppelten Zeit (World.schritt).
+    fern_halbtakt=True,
     # Luftziele (seit 0.34.138): ohne Gegner am Boden schiessen Bots auf
     # Tragschrauber und Drohnen bis `luft_weite` px (und Waffenreichweite),
     # suchen alle `luft_takt` s, reagieren `luft_reaktion` s langsamer als
