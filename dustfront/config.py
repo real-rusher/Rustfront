@@ -4726,7 +4726,7 @@ for _i in range(6):
     BILD_MASS["rotor_%d" % _i] = (192, 192)
 for _name in ("werfer", "werfer_wrack", "werfer_schatten"):
     BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
-for _i in range(1, 9):
+for _i in range(1, 17):
     BILD_MASS["werfer_stuetze_%d" % _i] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _name in ("funkwagen", "funkwagen_wrack"):
     BILD_MASS[_name] = (160, 160)

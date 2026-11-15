@@ -583,6 +583,22 @@ def flak_schuss(welt, pos, ebene: int, code: float) -> None:
     _neu(welt, f)
 
 
+def stuetze_auf(welt, pos, ebene: int, winkel: float) -> None:
+    """Die vier Teller des Werfers setzen auf (seit 0.34.124): an jedem ein
+    flacher Staubkranz, der zur Seite weggedrueckt wird, und ein dumpfer Ruck."""
+    from .art_neue_fahrzeuge import STUETZEN
+    r = _rnd(pos, 12)
+    g = float(K.FAHRZEUG_BILD["groesse"])
+    for x, y in STUETZEN:
+        p = pygame.Vector2(x * g, y * g).rotate(winkel) + pygame.Vector2(pos)
+        aussen = pygame.Vector2(0, 1 if y > 0 else -1).rotate(winkel)
+        for i in range(6):
+            w = aussen.rotate(r.uniform(-70, 70)) * r.uniform(30, 70)
+            rauch(welt, r, p.x, p.y, 1, ebene, "staub", 3, r.uniform(7, 11), r.uniform(0.9, 1.4),
+                  vx=w.x, vy=w.y, vz=r.uniform(4, 12), zaeh=3.0)
+    welt.ruckeln(1.5, "explosion", pygame.Vector2(pos), ebene)
+
+
 def kiste_platzt(welt, pos, ebene: int, hoehe: float) -> None:
     """Eine Kiste am Schirm platzt: Bretter fliegen auseinander und fallen,
     der Inhalt (rot/gruen) streut, der Schirm reisst in Fetzen."""
@@ -900,6 +916,7 @@ ARTEN = {
     "fallschirm_riss": lambda w, p, e, r: schirm_reisst(w, p, e, *_seite_hoehe(r)),
     "absturz": lambda w, p, e, r: absturz(w, p, e),
     "flak_schuss": lambda w, p, e, r: flak_schuss(w, p, e, r),          # r = Richtung, Strecke, Hoehe
+    "stuetze_auf": lambda w, p, e, r: stuetze_auf(w, p, e, r),          # r = Richtung des Werfers
     "werfer_start": lambda w, p, e, r: raketenstart(w, p, e, r),       # r = Steilheit * 1000 + Richtung
     "werfer_gross": lambda w, p, e, r: werfer_explosion(w, p, e, r),   # r = Radius
     "einschlag": lambda w, p, e, r: einschlag(w, p, e, max(0.4, r)),   # r = Groesse

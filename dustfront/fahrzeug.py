@@ -2167,7 +2167,9 @@ class Werfer(Aufbauwagen):
             return "werfer_wrack"
         if self.fortschritt <= 0.0:
             return "werfer"
-        return "werfer_stuetze_%d" % max(1, min(8, int(math.ceil(self.fortschritt * 8.0))))
+        # Die Stuetzen fahren in der ersten Haelfte des Aufbaus aus und senken
+        # sich (seit 0.34.124: 16 Stellungen, art_neue_fahrzeuge._werfer_stuetzen).
+        return "werfer_stuetze_%d" % max(1, min(16, int(math.ceil(min(1.0, self.fortschritt / 0.5) * 16.0))))
 
     def erhebung(self) -> float:
         """Wie steil das Gestell gerade steht (Grad): liegt flach, solange es
@@ -2197,9 +2199,14 @@ class Werfer(Aufbauwagen):
         return muendung3d(index, self.gestell_winkel(), self.erhebung())[2]
 
     def schritt(self, dt: float) -> None:
+        vorher = self.fortschritt
         super().schritt(dt)
         if self.kaputt:
             return
+        if not (self.nur_bild or self.welt is None) and vorher < 0.5 <= self.fortschritt:
+            # Die Teller setzen auf (seit 0.34.124): Staub an allen vier Stuetzen.
+            self.welt.explosion(pygame.Vector2(self.pos), self.ebene, float(self.winkel % 360.0),
+                                "stuetze_auf", self.fahrer)
         if self.nur_bild or self.welt is None:
             soll = self._rohr_soll                 # Gast: dem gemeldeten Wert folgen
         else:
