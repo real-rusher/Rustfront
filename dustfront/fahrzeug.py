@@ -2573,6 +2573,11 @@ class Tragschrauber(Buggy):
         self.landen = False
         self.flug_v = 0.0
         self.bomben = int(self.werte["bomben"])
+        # In welcher Ebene er fliegt (seit 0.34.147): darunter kommt er nicht
+        # ueber eine Tafel, die hoeher ist - er muss steigen.
+        self.flugstufe = int(ebene)
+        self.zu_tief = 0.0           # Sekunden, die der Hinweis STEIGEN noch steht
+        self._zweit_alt = False
         self.bomben_fall: list = []    # [Restzeit, x, y, Richtung beim Abwurf]
         self._bomben_rest = 0.0
         self._feuer_alt = False
@@ -2636,6 +2641,11 @@ class Tragschrauber(Buggy):
                 and not self.landen):
             self.luft = True                            # abgehoben
             self.flug_v = max(self.geschw.length(), f["abheben"])
+            # Er steigt in die Ebene, von der er abhebt; ein Bot gleich ganz
+            # hinauf - so bleibt er an keiner Tafel haengen (seit 0.34.147).
+            self.flugstufe = self.ebene
+            if getattr(self.fahrer, "ist_bot", False):
+                self.flugstufe = len(self.welt.ebenen) - 1
             self.welt.klang("drohne", 0.7, self.pos, self.ebene)
         elif self.geschw.length() < 5.0 and self.bomben < f["bomben"]:
             self._bomben_rest -= dt
@@ -2657,22 +2667,43 @@ class Tragschrauber(Buggy):
         lenk = self.lenk if self.fahrer is not None else 0.0
         dreh = lenk * f["drehen"] * (0.45 + 0.55 * min(1.0, self.flug_v / f["flug_hoechst"]))
         self.winkel = (self.winkel + dreh * dt + 180.0) % 360.0 - 180.0
-        self.pos += self.vorn * self.flug_v * dt
+        neu = self.pos + self.vorn * self.flug_v * dt
         e = self.welt.ebene(self.ebene)
-        self.pos.x = max(8.0, min(e.pixel_breite - 8.0, self.pos.x))
-        self.pos.y = max(8.0, min(e.pixel_hoehe - 8.0, self.pos.y))
+        neu.x = max(8.0, min(e.pixel_breite - 8.0, neu.x))
+        neu.y = max(8.0, min(e.pixel_hoehe - 8.0, neu.y))
         # Er folgt dem Gelaende (seit 0.34.146): in der Luft gehoert er zur
         # obersten Ebene unter sich - ueber einer Tafel zur Tafel. So landet er
         # dort, wo man ihn sieht, und Insassen schauen auf diese Ebene.
-        self.ebene = self.welt.oberste_ebene(self.pos)
+        # Seit 0.34.147 fliegt er in einer Hoehe (`flugstufe`): eine Tafel, die
+        # hoeher ist, ist fuer ihn eine Wand - er prallt ab und muss steigen.
+        unten = self.welt.oberste_ebene(neu)
+        if unten > self.flugstufe and not self.landen:
+            self.flug_v *= f["tafel_abprall"]
+            self.zu_tief = 1.6
+        else:
+            self.pos.update(neu)
+            self.ebene = unten
+        self.zu_tief = max(0.0, self.zu_tief - dt)
+        self.flugstufe = max(self.flugstufe, self.ebene)
         self.geschw = self.vorn * self.flug_v
         self.tempo.update(self.geschw)
         if self.landen:
+            self.flugstufe = self.ebene
             self.hoehe = max(0.0, self.hoehe - f["sinken"] * dt)
             if self.hoehe <= 0.0:
                 self._aufsetzen()
         else:
-            self.hoehe += (f["hoehe"] - self.hoehe) * min(1.0, f["steigen"] * dt)
+            soll = f["hoehe"] + f["stufe_px"] * (self.flugstufe - self.ebene)
+            self.hoehe += (soll - self.hoehe) * min(1.0, f["steigen"] * dt)
+
+    def hoehe_wechseln(self, um: int) -> None:
+        """Eine Ebene hoeher oder tiefer fliegen (RMB steigt, R sinkt; seit
+        0.34.147) - nie unter den Boden, ueber dem er gerade ist, und nicht
+        hoeher als die oberste Ebene der Karte."""
+        if not self.luft or self.landen or self.kaputt or self.welt is None:
+            return
+        oben = len(self.welt.ebenen) - 1
+        self.flugstufe = max(self.ebene, min(oben, self.flugstufe + int(um)))
 
     def landen_beginnen(self) -> None:
         if self.luft and not self.landen:
@@ -2814,7 +2845,10 @@ class Tragschrauber(Buggy):
                  if self.bomben < int(self.werte["bomben"]) else 0.0)
         return [int(self.luft), int(self.hoehe), self.bomben,
                 [[round(b[0], 1), int(b[1]), int(b[2]), int(b[3]) if len(b) > 3 else 0]
-                 for b in self.bomben_fall[:4]], laedt]
+                 for b in self.bomben_fall[:4]], laedt,
+                # Seit 0.34.147: in welcher Ebene er fliegt, und ob er gerade zu
+                # tief an eine Tafel stiess (fuer die Anzeige beim Fahrer).
+                self.flugstufe, int(self.zu_tief > 0.0)]
 
     def netz_extra_setzen(self, wert) -> None:
         try:
@@ -2824,6 +2858,9 @@ class Tragschrauber(Buggy):
             self.bomben_fall = [[float(b[0]), float(b[1]), float(b[2]), float(b[3]) if len(b) > 3 else 0.0]
                                 for b in wert[3][:4]]
             self._bomben_rest = max(0.0, min(60.0, float(wert[4]))) if len(wert) > 4 else 0.0
+            if len(wert) > 6:
+                self.flugstufe = max(0, min(9, int(wert[5])))
+                self.zu_tief = 1.0 if int(wert[6]) else 0.0
         except (TypeError, ValueError, IndexError):
             self.bomben_fall = []
 

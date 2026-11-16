@@ -3772,6 +3772,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         # Seit 0.34.65: was hinten heraus geht, auf den Tasten, die am
         # Steuer sonst nichts tun - R wirft Nebel, F streut Naegel.
         knoepfe = ein.get("knoepfe") or []
+        if b.art == "tragschrauber" and getattr(b, "luft", False):
+            # In der Luft (seit 0.34.147): RMB steigt eine Ebene, R sinkt eine.
+            zweit = bool(ein.get("zielt"))
+            if zweit and not b._zweit_alt:
+                b.hoehe_wechseln(+1)
+            b._zweit_alt = zweit
+            if isinstance(knoepfe, list) and "nachladen" in knoepfe:
+                b.hoehe_wechseln(-1)
+                knoepfe = [x for x in knoepfe if x != "nachladen"]
         if isinstance(knoepfe, list):
             if "nachladen" in knoepfe:
                 if b.art == "funkwagen":
@@ -4208,15 +4217,28 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                                  ausrichtung="mitte")
                 unten += 10
             if wagen is not None and wagen.art == "tragschrauber" and not wagen.kaputt:
+                farbe = K.C_AMBER
                 if not wagen.luft:
                     txt = "FAHREN: AB %d PX/S HEBT ER AB" % int(wagen.werte["abheben"])
                 elif wagen.landen:
                     txt = "LANDET - PLATZ NOETIG"
+                elif getattr(wagen, "zu_tief", 0.0) > 0.0:
+                    # Gegen eine hoehere Tafel (seit 0.34.147).
+                    txt = "ZU TIEF - [RMB] STEIGEN"
+                    farbe = K.C_RED
                 else:
                     txt = "[E] LANDEN  [LMB] BOMBE"
-                SCHRIFT.zeichnen(ziel, txt, int(p.x), int(p.y) + unten, K.C_AMBER, 1,
+                SCHRIFT.zeichnen(ziel, txt, int(p.x), int(p.y) + unten, farbe, 1,
                                  ausrichtung="mitte")
                 unten += 10
+                if wagen.luft and len(self.welt.ebenen) > 1:
+                    # Die Flughoehe in Ebenen (seit 0.34.147).
+                    stufe = int(getattr(wagen, "flugstufe", wagen.ebene))
+                    txt = "HÖHE: EBENE %d / %d  [RMB] STEIGEN  [%s] SINKEN" % (
+                        stufe, len(self.welt.ebenen) - 1, self._tastenname("nachladen"))
+                    SCHRIFT.zeichnen(ziel, txt, int(p.x), int(p.y) + unten, K.C_CREAM, 1,
+                                     ausrichtung="mitte")
+                    unten += 10
                 # Die Bomben und wann die naechste fertig ist (seit 0.34.138,
                 # gemeldet: "zeigt nicht wirklich an, wann seine Bomben
                 # nachgeladen sind"): ein Kaestchen je Bombe, das ladende fuellt sich.
@@ -4301,9 +4323,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                      else "[LMB] MG"),
                     taste_e)
             elif wagen is not None and wagen.art == "tragschrauber":
-                text = "[%s/%s] GAS  [%s/%s] KURVE  [LMB] BOMBE  [%s] LANDEN / AUSSTEIGEN" % (
+                text = "[%s/%s] GAS  [%s/%s] KURVE  [LMB] BOMBE  [RMB/%s] HÖHE  [%s] LANDEN / AUSSTEIGEN" % (
                     self._tastenname("vor"), self._tastenname("zurueck"),
-                    self._tastenname("links"), self._tastenname("rechts"), taste_e)
+                    self._tastenname("links"), self._tastenname("rechts"),
+                    self._tastenname("nachladen"), taste_e)
             elif wagen is not None and wagen.art == "werfer":
                 text = "[%s/%s] FAHREN  [%s/%s] LENKEN  [RMB] AUFBAUEN  [LMB] SALVE  [%s] AUSSTEIGEN" % (
                     self._tastenname("vor"), self._tastenname("zurueck"),

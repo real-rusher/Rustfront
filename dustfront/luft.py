@@ -534,7 +534,7 @@ class LuftTeil:
         duennen Rauchfaden hinter sich her. Darunter waechst ihr Schatten."""
         from .art_bombe import lunte_spitze, schrottbombe
         bo = K.TRAGSCHRAUBER["bombe"]
-        z0 = max(4.0, K.TRAGSCHRAUBER["hoehe"] - 4.0)
+        z0 = max(4.0, float(getattr(b, "hoehe", K.TRAGSCHRAUBER["hoehe"])) - 4.0)   # seine Hoehe (0.34.147)
         jetzt = pygame.time.get_ticks() / 1000.0
         for e in b.bomben_fall:
             # Hoehe und Lage nur aus Zeit und Abwurfort: so sieht der Gast

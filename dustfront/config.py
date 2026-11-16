@@ -2101,6 +2101,11 @@ TRAGSCHRAUBER = dict(
     flug_beschl=120.0,
     drehen=70.0,              # Grad je Sekunde (bei Hoechstfahrt)
     hoehe=64.0,               # so hoch im Bild ueber seinem Schatten
+    # Flughoehe in Ebenen (seit 0.34.147): RMB steigt eine Ebene, R sinkt eine.
+    # Je Ebene ueber dem Boden darunter so viel hoeher im Bild; zu tief
+    # prallt er an einer hoeheren Tafel ab (und verliert so viel Tempo).
+    stufe_px=44.0,
+    tafel_abprall=0.25,
     steigen=2.0,
     sinken=44.0,              # px/s beim Landen
     landen_tempo=60.0,
