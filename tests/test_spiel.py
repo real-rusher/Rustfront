@@ -4428,8 +4428,19 @@ from dustfront import minikarte as MK
 w, ga = gefechtspaar("huegel", karte="staubtal")
 _mk70 = w.hud.minikarte
 
+# Seit 0.34.147 traegt jeder Wagen ein Abzeichen (kartensymbole.zeichnen): welche
+# Wagen gezeichnet wurden und ob blass (andere Ebene), merkt sich _gezeichnet70.
+from dustfront import kartensymbole as _KS70
+_gezeichnet70 = {}
+_alt_ks70 = _KS70.zeichnen
+def _ks_merk70(ziel_, b_, mitte_, px_, farbe_, mindest=12.0, blass=False):
+    _gezeichnet70[id(b_)] = (bool(blass), tuple(farbe_[:3]), mitte_)
+    return _alt_ks70(ziel_, b_, mitte_, px_, farbe_, mindest, blass)
+_KS70.zeichnen = _ks_merk70
+
 def _karte70(g_):
     f_ = pygame.Surface((K.GAME_W, K.GAME_H)); f_.fill((0, 0, 0))
+    _gezeichnet70.clear()
     g_.hud.minikarte.zeichnen(f_, g_)
     return f_, g_.hud.minikarte.rechteck(g_.welt)
 
@@ -4438,16 +4449,18 @@ def _punkte70(f_, r_, farbe_):
             if f_.get_at((x_, y_))[:3] == tuple(farbe_)]
 
 def _buggy_da70(f_, r_, g_, b_, farbe_):
-    # Seit 0.34.138 traegt jeder Wagen sein eigenes Zeichen mit dem Rand in der
-    # Farbe seiner Seite (cyan, rot, bernstein) - gesucht wird diese Farbe;
-    # `farbe_` sagt nur noch, ob blass (andere Ebene) oder nicht.
-    soll_ = g_.hud.minikarte._fahrzeug_farbe(g_, b_, False) or MK.FARBE_FEIND
-    farbe_ = MK.Minikarte._blass(soll_) if farbe_ != MK.FARBE_BUGGY else soll_
+    # Seit 0.34.147 ein Abzeichen je Wagen (kartensymbole.py), in der Farbe seiner
+    # Seite. Es zaehlt: wurde er gezeichnet, an seinem Ort, und blass genau dann,
+    # wenn `farbe_` die blasse Farbe ist (andere Ebene).
+    eintrag_ = _gezeichnet70.get(id(b_))
+    if eintrag_ is None:
+        return False
     e_ = g_.welt.ebenen[0]
     px_ = int(r_.x + b_.pos.x * r_.width / float(e_.pixel_breite))
     py_ = int(r_.y + b_.pos.y * r_.height / float(e_.pixel_hoehe))
-    return any(f_.get_at((px_ + dx_, py_ + dy_))[:3] == tuple(farbe_)
-               for dx_ in range(-3, 4) for dy_ in range(-3, 4))
+    blass_ = farbe_ != MK.FARBE_BUGGY
+    return (eintrag_[0] == blass_ and abs(eintrag_[2][0] - px_) <= 1 and abs(eintrag_[2][1] - py_) <= 1
+            and f_.get_at((px_, py_))[:3] != (0, 0, 0))
 
 w._kreis_setzen(next(i_ for i_, (e_, _p, _n) in enumerate(w.kreise) if e_ == 0))
 w.zone_halter = 0
@@ -8620,8 +8633,11 @@ ich9 = wm9.ich
 # Seit 0.34.92 zeigt die Anzeige die Karte als Kreis unten links, um die
 # eigene Figur: man selbst steht in seiner Mitte.
 px = (K.HUD["karte_x"] + K.HUD["karte_d"] // 2, K.GAME_H - K.HUD["unten"] - K.HUD["karte_d"] // 2)
+# Seit 0.34.147 ist der eigene Pfeil kleiner (gewuenscht): er liegt an der Mitte,
+# nicht unbedingt auf ihrem genauen Pixel.
 pruef("Man selbst steht darauf, wo man ist (in der Mitte der runden Karte)",
-      tuple(app.flaeche.get_at(px))[:3] == (230, 255, 248), str(tuple(app.flaeche.get_at(px))))
+      any(tuple(app.flaeche.get_at((px[0] + dx_, px[1] + dy_)))[:3] == (230, 255, 248)
+          for dx_ in range(-2, 3) for dy_ in range(-2, 3)), str(tuple(app.flaeche.get_at(px))))
 wm9.verlassen(); gm9.verlassen()
 
 def nur_verbuendete(modus):
@@ -20191,18 +20207,20 @@ _bw138.pos.update(100, 100)
 pruef("Minimap: ein Gegnerfahrzeug mit Gegner darin, das niemand sieht, steht nicht darauf",
       _mk138._fahrzeug_farbe(w138, _bw138, False) is None)
 _ich138.pos.update(_bw138.pos + pygame.Vector2(200, 0))
-pruef("... steht ein Eigener nah dabei, schon - rot, egal welche Mannschaftsfarbe",
-      _mk138._fahrzeug_farbe(w138, _bw138, False) == _MK138.FARBE_FEIND)
+# Seit 0.34.147 in der Farbe der Seite: ROT immer Orange, BLAU immer Blau.
+pruef("... steht ein Eigener nah dabei, schon - in der Farbe seiner Seite (Orange/Blau, fest)",
+      _mk138._fahrzeug_farbe(w138, _bw138, False) == K.TEAMS["farben"][_fd138.team])
 _bw138.fahrer = _ich138
-pruef("... das eigene ist cyan, ein leeres bernstein",
-      _mk138._fahrzeug_farbe(w138, _bw138, False) == _MK138.FARBE_FREUND
-      and (setattr(_bw138, "fahrer", None) or _mk138._fahrzeug_farbe(w138, _bw138, False)) in (_MK138.FARBE_LEER, _MK138.FARBE_FREUND))
+pruef("... das eigene in der Farbe der eigenen Seite, ein leeres ohne Basis Sand",
+      _mk138._fahrzeug_farbe(w138, _bw138, False) == K.TEAMS["farben"][_ich138.team]
+      and (setattr(_bw138, "fahrer", None) or _mk138._fahrzeug_farbe(w138, _bw138, False)) == _MK138.FARBE_LEER)
 for k_ in w138.kaempfer.values():
     if k_.nummer in _alt_pos138:
         k_.pos.update(_alt_pos138[k_.nummer])
-_s1 = _mk138._symbol_bild(w138, "panzer", 30, _MK138.FARBE_FEIND, 0)
-_s2 = _mk138._symbol_bild(w138, "buggy", 30, _MK138.FARBE_FEIND, 0)
-pruef("... jedes Fahrzeug hat sein eigenes Zeichen (sein Bild von oben)",
+from dustfront import kartensymbole as _KS138
+_s1 = _KS138.symbol("panzer", 30, K.TEAMS["farben"][0])
+_s2 = _KS138.symbol("buggy", 30, K.TEAMS["farben"][0])
+pruef("... jedes Fahrzeug hat sein eigenes Zeichen (seit 0.34.147 ein Abzeichen mit Piktogramm)",
       _s1 is not None and _s2 is not None
       and pygame.image.tobytes(_s1, "RGBA") != pygame.image.tobytes(pygame.transform.scale(_s2, _s1.get_size()), "RGBA"))
 _ich138.pos.update(_alt_pos138.get(_ich138.nummer, _ich138.pos))
@@ -20889,7 +20907,8 @@ _tp146 = _tm146.puppe_setzen(_ts146.ausstiegsorte(9.0)[0], 0, {"team": 0}, name=
 _tm146._anwenden(_tp146, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
 _feind146 = _tm146.puppe_setzen(_T146(47, 183), 1, {"team": 1}, name="AUFDERTAFEL")
 for _ in range(int(6 / K.FIXED_DT)):
-    _tm146._anwenden(_tp146, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+    # Seit 0.34.147 muss er fuer die Tafel eine Ebene steigen (RMB, gehalten zaehlt einmal).
+    _tm146._anwenden(_tp146, {"will": [0, -1], "ziel": [0, 0], "knoepfe": [], "zielt": bool(_ts146.luft)})
     _tm146.schritt(K.FIXED_DT)
     if _ts146.luft and _ts146.pos.x < _T146(56, 0).x:
         break
@@ -20957,16 +20976,27 @@ _n146 = len(_tm146.fahrzeuge)
 _tm146.nachschub_setzen("buggy", _T146(49, 189), {"team": 0})
 _tm146.nachschub_setzen("medkit", _T146(45, 182), {"team": 0})
 _spr146 = _tm146.fallschirmjaeger_abwerfen(_T146(48, 186), 0)
+_gelandet146 = {}
+_vorher_ids146 = {id(b_) for b_ in _tm146.fahrzeuge}
+_neu146 = []
 for _ in range(int(25 / K.FIXED_DT)):
     _tm146.schritt(K.FIXED_DT)
-_neu146 = [b_ for b_ in _tm146.fahrzeuge[_n146:] if b_.art == "buggy"]
+    for b_ in _tm146.fahrzeuge:
+        # Der gelandete Wagen, wie er aufsetzt (danach nehmen ihn vielleicht Bots).
+        if id(b_) not in _vorher_ids146 and b_.art == "buggy" and not _neu146:
+            _neu146.append(b_)
+            _neu_ebene146 = b_.ebene
+    for k_ in _spr146:
+        # Wo er aufsetzt - danach laufen die Bots weiter (auch per Aufzug ins Tal).
+        if k_.nummer not in _gelandet146 and getattr(k_, "schirm_hoehe", 0.0) <= 0.0:
+            _gelandet146[k_.nummer] = k_.ebene
 _kisten146 = [x_ for x_ in _w146.wesen if type(x_).__name__ == "KampfBeute" and x_.pos.distance_to(_T146(45, 182)) < 60]
 pruef("Abwurf: ein Wagen ueber der Tafel landet auf der Tafel, die Kisten ebenso (vorher trieben sie ins Tal)",
-      _neu146 and _neu146[0].ebene == 1 and _kisten146 and all(x_.ebene == 1 for x_ in _kisten146),
-      "%s %s" % ([b_.ebene for b_ in _neu146], [x_.ebene for x_ in _kisten146]))
+      _neu146 and _neu_ebene146 == 1 and _kisten146 and all(x_.ebene == 1 for x_ in _kisten146),
+      "%s %s" % ([_neu_ebene146] if _neu146 else [], [x_.ebene for x_ in _kisten146]))
 pruef("... Fallschirmjaeger ueber der Tafel landen auf der Tafel",
-      _spr146 and all(k_.ebene == 1 and getattr(k_, "schirm_hoehe", 0.0) <= 0.0 for k_ in _spr146),
-      str([(k_.ebene, round(getattr(k_, "schirm_hoehe", 0.0))) for k_ in _spr146]))
+      _spr146 and len(_gelandet146) == len(_spr146) and all(e_ == 1 for e_ in _gelandet146.values()),
+      str(_gelandet146))
 from dustfront import schlacht as _SL146
 _la146 = _SL146.Luftangriff(_T146(20, 185), _T146(100, 185), 0, "team0")
 _la146.bomben = [(0.0, _tafel146, 40.0, 5.0)]
@@ -21085,6 +21115,85 @@ pruef("Testmodus: Zeile FAHRZEUG ÜBER DIE KANTE stellt einen Wagen an eine Kant
       and _kb146.flug == 0.0 and _kb146.leben < _kb146.max_leben)
 _w146.explosion = _alt_ex146
 _tm146.verlassen()
+
+
+# 0.34.147: Tragschrauber fliegt in Ebenen; neue Fahrzeugzeichen auf den Karten;
+# feste Teamfarben (ROT Orange, BLAU Blau), Zombies gruen, kleinere Spielermarker.
+_tm147 = _TM59.Testmodus(app, karte="staubtal")
+_T147 = lambda tx_, ty_: pygame.Vector2((tx_ + 0.5) * K.TILE, (ty_ + 0.5) * K.TILE)
+_ts147 = _tm147.fahrzeug_setzen("tragschrauber", _T147(68, 185), 0, {"winkel": 180})
+_p147 = _tm147.puppe_setzen(_ts147.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="PILOT")
+_tm147._anwenden(_p147, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+def _flieg147(sek_, **kw_):
+    for _ in range(int(sek_ / K.FIXED_DT)):
+        _tm147._anwenden(_p147, dict({"will": [0, -1], "ziel": [0, 0], "knoepfe": []}, **kw_))
+        _tm147.schritt(K.FIXED_DT)
+_flieg147(4.0)
+pruef("Tragschrauber-Hoehe: in Ebene 0 kommt er nicht ueber die Tafel - er prallt ab, die Anzeige sagt ZU TIEF",
+      _ts147.luft and _ts147.flugstufe == 0 and _ts147.ebene == 0 and _ts147.zu_tief > 0.0
+      and _ts147.pos.x // K.TILE >= 53, "stufe %d x %d" % (_ts147.flugstufe, _ts147.pos.x // K.TILE))
+_tm147._anwenden(_p147, {"will": [0, -1], "ziel": [0, 0], "knoepfe": [], "zielt": True})
+_tm147.schritt(K.FIXED_DT)
+_flieg147(3.0)
+pruef("... RMB steigt eine Ebene - jetzt fliegt er ueber die Tafel (ihr Boden ist unter ihm, Ebene 1)",
+      _ts147.flugstufe == 1 and _ts147.ebene == 1 and _ts147.pos.x // K.TILE < 53,
+      "stufe %d ebene %d x %d" % (_ts147.flugstufe, _ts147.ebene, _ts147.pos.x // K.TILE))
+_h0147 = _ts147.hoehe
+_tm147._anwenden(_p147, {"will": [0, -1], "ziel": [0, 0], "knoepfe": [], "zielt": True})
+_tm147.schritt(K.FIXED_DT)
+_flieg147(1.0)
+pruef("... noch eine Ebene hoeher: er wird hoeher ueber seinem Schatten gezeichnet",
+      _ts147.flugstufe == 2 and _ts147.hoehe > _h0147 + 20.0, "%d %.0f -> %.0f" % (_ts147.flugstufe, _h0147, _ts147.hoehe))
+for _ in range(2):
+    _tm147._anwenden(_p147, {"will": [0, -1], "ziel": [0, 0], "knoepfe": ["nachladen"]})
+    _tm147.schritt(K.FIXED_DT)
+pruef("... R sinkt, aber nie unter den Boden, ueber dem er ist (zweimal R: Ebene 1, nicht 0)",
+      _ts147.flugstufe == 1 and _ts147.ebene == 1, "%d" % _ts147.flugstufe)
+_n147 = _ts147.netz_extra()
+_g147 = _FZ59.Tragschrauber((0, 0), 0, 0.0, nur_bild=True)
+_g147.netz_extra_setzen(_n147)
+pruef("... der Gast bekommt die Flughoehe mit (Zusatzwert Feld 6)", _g147.flugstufe == 1)
+_bot147 = _tm147.fahrer_setzen(_T147(70, 182), 0, {"team": 1}, mit_fahrzeug=False)
+_ts2147 = _tm147.fahrzeug_setzen("tragschrauber", _T147(70, 188), 0, {"winkel": 0})
+_tm147._einsteigen(_bot147, _ts2147)
+_ts2147.geschw = _ts2147.vorn * 200.0
+for _ in range(int(0.5 / K.FIXED_DT)):
+    _tm147._anwenden(_bot147, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+    _tm147.schritt(K.FIXED_DT)
+pruef("... ein Bot steigt gleich ganz hinauf (er bleibt an keiner Tafel haengen)",
+      (not _ts2147.luft) or _ts2147.flugstufe == len(_tm147.welt.ebenen) - 1,
+      "luft %s stufe %d" % (_ts2147.luft, _ts2147.flugstufe))
+_tm147.verlassen()
+# Zeichen der Fahrzeuge.
+from dustfront import kartensymbole as _KS147, fahrzeug as _FZ147, minikarte as _MK147
+_bilder147 = {a_: pygame.image.tobytes(_KS147.symbol(a_, 32, K.TEAMS["farben"][0]), "RGBA")
+              for a_ in _FZ147.ARTEN}
+pruef("Kartenzeichen: jede Fahrzeugart hat ihr eigenes, verschiedenes Zeichen",
+      len(_bilder147) == len(_FZ147.ARTEN) and len(set(_bilder147.values())) == len(_FZ147.ARTEN))
+_kl147 = pygame.Surface((80, 80), pygame.SRCALPHA)
+_bb147 = _FZ147.neu("buggy", pygame.Vector2(0, 0), 0)
+_KS147.zeichnen(_kl147, _bb147, (40, 40), 0.001, K.TEAMS["farben"][1], K.MINIKARTE["zeichen_mindest"])
+_gr147 = _kl147.get_bounding_rect()
+pruef("... auch winzig auf der Karte nie kleiner als die Mindestgroesse - deutlich groesser als ein Spielermarker",
+      _gr147.width >= K.MINIKARTE["zeichen_mindest"] - 1
+      and K.MINIKARTE["zeichen_mindest"] >= 2.5 * (K.MINIKARTE["leute_punkt"] * 2 + 1), str(_gr147))
+_links147 = _KS147.symbol("panzer", 32, K.TEAMS["farben"][0], True)
+_rechts147 = _KS147.symbol("panzer", 32, K.TEAMS["farben"][0], False)
+pruef("... die Nase zeigt dorthin, wohin er faehrt (gespiegelt)",
+      pygame.image.tobytes(pygame.transform.flip(_rechts147, True, False), "RGBA") != pygame.image.tobytes(_rechts147, "RGBA")
+      and pygame.image.tobytes(_links147, "RGBA") != pygame.image.tobytes(_rechts147, "RGBA"))
+_o147, _b147 = K.TEAMS["farben"]
+pruef("Teamfarben: ROT ist klar Orange, BLAU klar Blau, Zombies auf der Karte gruen",
+      _o147[0] > 200 and _o147[2] < 80 and _b147[2] > 200 and _b147[0] < 100
+      and K.TEAMS["kombi"][0]["hud"] == _o147 and K.TEAMS["kombi"][1]["hud"] == _b147
+      and _MK147.FARBE_GEGNER == K.C_ZOMBIE and K.C_ZOMBIE[1] > K.C_ZOMBIE[0] and K.C_ZOMBIE[1] > K.C_ZOMBIE[2])
+class _Leut147:
+    def __init__(self, team_):
+        self.team = team_
+pruef("... auf der Karte immer nach Seite, nicht nach Freund/Feind (Orange bleibt Orange)",
+      _MK147.Minikarte._seitenfarbe(_Leut147(0), (1, 2, 3)) == _o147
+      and _MK147.Minikarte._seitenfarbe(_Leut147(1), (1, 2, 3)) == _b147
+      and _MK147.Minikarte._seitenfarbe(_Leut147(-1), (1, 2, 3)) == (1, 2, 3))
 
 print()
 print("FEHLER:", fails or "keine")
