@@ -47,8 +47,9 @@ nur gezeichnet, Staub macht er aus dem gemeldeten Tempo selbst.
 
 **Anstossen.** Ein laenglicher Wagen passt nicht in einen Kreis. Er stoesst
 deshalb mit zwei Kreisen an, einer vorn und einer hinten (K.FAHRZEUG
-"kreis" und "achse"). Loecher zaehlen als Wand: ein Buggy faellt nicht von
-einer Kante, er bleibt davor stehen.
+"kreis" und "achse"). Loecher zaehlen fuer Bots als Wand: ihr Wagen bleibt
+vor einer Kante stehen. Seit 0.34.146 faehrt ein Mensch darueber hinaus, und
+der Wagen faellt eine Ebene tiefer (`fahrzeug_sturz_beginnen`).
 """
 
 from __future__ import annotations

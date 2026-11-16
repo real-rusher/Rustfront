@@ -20860,6 +20860,232 @@ pruef("Werfer: 160 Leben (vorher 120)", K.WERFER["leben"] == 160.0)
 pruef("... und eine etwas kleinere Explosion (300 statt 330, sofort tot bis 190 statt 210)",
       K.WERFER["explosion_radius"] == 300.0 and K.WERFER["explosion_tot"] == 190.0)
 
+
+# 0.34.146: Alles Neuere auf Karten mit mehreren Ebenen (STAUBTAL). Was aus der
+# Luft kommt, trifft die oberste Ebene am Ort; Luftziele von jeder Ebene;
+# Aufbauten mit ihrer Ebene gezeichnet; Fahrzeuge fallen ueber Kanten.
+_tm146 = _TM59.Testmodus(app, karte="staubtal")
+_w146 = _tm146.welt
+_T146 = lambda tx_, ty_: pygame.Vector2((tx_ + 0.5) * K.TILE, (ty_ + 0.5) * K.TILE)
+# Die Tafel (Ebene 1) bei Kachel 44-53 / 181-190, das Tal (Ebene 0) daneben ab 58.
+_tafel146, _tal146 = _T146(48, 185), _T146(66, 185)
+pruef("Ebenen: oberste_ebene - auf der Tafel 1, im Tal 0 (dort ist die Tafel ein Loch)",
+      _w146.oberste_ebene(_tafel146) == 1 and _w146.oberste_ebene(_tal146) == 0
+      and _w146.ebene(0).kachel(48, 185) != K.LEER and K.KACHELN[_w146.ebene(0).kachel(48, 185)]["fest"],
+      "%d %d" % (_w146.oberste_ebene(_tafel146), _w146.oberste_ebene(_tal146)))
+_ex146 = []
+_alt_ex146 = _w146.explosion
+def _exm146(pos, ebene, radius, art="spreng", von=None):
+    _ex146.append((art, int(ebene)))
+    return _alt_ex146(pos, ebene, radius, art, von)
+_w146.explosion = _exm146
+_w146.effekte = []
+_w146.explosion(_tafel146, 0, 60.0, "flak", None)
+pruef("... eine Flakwolke ueber der Tafel liegt mit der Tafel im Bild (Ebene 1), nicht im Fels darunter",
+      _w146.effekte and all(f_.ebene == 1 for f_ in _w146.effekte), str({f_.ebene for f_ in _w146.effekte}))
+# -- Tragschrauber: vom Tal ueber die Tafel, Bombe, Aufklaerung, Landung.
+_ts146 = _tm146.fahrzeug_setzen("tragschrauber", _T146(66, 185), 0, {"winkel": 180})
+_tp146 = _tm146.puppe_setzen(_ts146.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="PILOT")
+_tm146._anwenden(_tp146, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_feind146 = _tm146.puppe_setzen(_T146(47, 183), 1, {"team": 1}, name="AUFDERTAFEL")
+for _ in range(int(6 / K.FIXED_DT)):
+    _tm146._anwenden(_tp146, {"will": [0, -1], "ziel": [0, 0], "knoepfe": []})
+    _tm146.schritt(K.FIXED_DT)
+    if _ts146.luft and _ts146.pos.x < _T146(56, 0).x:
+        break
+for _ in range(int(1.2 / K.FIXED_DT)):
+    _tm146._anwenden(_tp146, {"will": [0, 0], "ziel": [0, 0], "knoepfe": []})
+    _tm146.schritt(K.FIXED_DT)
+pruef("Tragschrauber: ueber der Tafel gehoert er zur Tafel (Ebene 1) und sieht die Gegner dort (markiert)",
+      _ts146.luft and _ts146.ebene == _w146.oberste_ebene(_ts146.pos) == 1
+      and getattr(_feind146, "markiert_rest", 0.0) > 0.0, "%d %.1f" % (_ts146.ebene, getattr(_feind146, "markiert_rest", 0.0)))
+_bo146 = K.TRAGSCHRAUBER["bombe"]
+_los146 = _ts146.pos + pygame.Vector2(_bo146["abwurf"]).rotate(_ts146.winkel)
+_ort146 = _los146 + _ts146.vorn * (_ts146.flug_v * _bo146["fall"] * _bo146["schwung"])
+_opfer146 = _tm146.puppe_setzen(_ort146, _w146.oberste_ebene(_ort146), {"team": 1, "leben": 5.0}, name="OPFER")
+_opfer146.unverwundbar = 0.0
+_ol146 = _opfer146.leben
+_ex146.clear()
+_tm146._anwenden(_tp146, {"will": [0, 0], "ziel": [0, 0], "knoepfe": [], "feuert": True})
+_tm146.schritt(K.FIXED_DT)
+for _ in range(int(1.6 / K.FIXED_DT)):
+    _tm146._anwenden(_tp146, {"will": [0, 0], "ziel": [0, 0], "knoepfe": []})
+    _tm146.schritt(K.FIXED_DT)
+pruef("... eine Bombe ueber der Tafel schlaegt auf der Tafel ein und trifft den Gegner dort",
+      ("bombe", 1) in _ex146 and (_opfer146.leben < _ol146 or not _opfer146.lebt),
+      "%s %.0f -> %.0f" % ([e_ for e_ in _ex146 if e_[0] == "bombe"], _ol146, _opfer146.leben))
+_sch146 = _tm146.puppe_setzen(_T146(46, 188), 1, {"team": 1}, name="SCHUETZE")
+_bild146 = pygame.Vector2(_ts146.pos.x, _ts146.pos.y - _ts146.hoehe)
+_tm146._anwenden(_sch146, {"will": [0, 0], "ziel": [_bild146.x, _bild146.y], "knoepfe": []})
+_tm146.schritt(K.FIXED_DT)
+pruef("... wer auf der Tafel steht, rastet auf ihn ein und kann in die Luft schiessen (vorher nur von Ebene 0)",
+      _sch146.ebene == 1 and getattr(_sch146, "luft_ziel", None) is not None)
+for _i in range(int(4 / K.FIXED_DT)):
+    _tm146._anwenden(_tp146, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"] if _i == 0 else []})
+    _tm146.schritt(K.FIXED_DT)
+pruef("... landet er ueber der Tafel, setzt er auf der Tafel auf (vorher zerschellte er am Fels darunter)",
+      not _ts146.luft and not _ts146.kaputt and _ts146.ebene == 1 and _tp146.lebt,
+      "luft %s kaputt %s ebene %d" % (_ts146.luft, _ts146.kaputt, _ts146.ebene))
+# -- Werfer im Tal schiesst auf die Tafel.
+_we146 = _tm146.fahrzeug_setzen("werfer", _T146(66, 186), 0, {"winkel": 0})
+_wp146 = _tm146.puppe_setzen(_we146.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="WERFER")
+_tm146._anwenden(_wp146, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_ziele146 = [_tm146.puppe_setzen(_T146(47 + i_, 184 + i_), 1, {"team": 1, "leben": 5.0}, name="Z%d" % i_)
+             for i_ in range(3)]
+for _z146 in _ziele146:
+    _z146.unverwundbar = 0.0
+    _z146.markiert_rest = 60.0
+    _z146.markiert_fuer = _wp146.fraktion
+def _we_ein146(n_, **kw_):
+    for _ in range(n_):
+        _tm146._anwenden(_wp146, dict({"will": [0, 0], "ziel": [_ziele146[1].pos.x, _ziele146[1].pos.y],
+                                       "knoepfe": []}, **kw_))
+        _tm146.schritt(K.FIXED_DT)
+_we_ein146(1, zielt=True)
+_we_ein146(int(4 / K.FIXED_DT))
+_l146 = [z_.leben for z_ in _ziele146]
+_ex146.clear()
+_we_ein146(1, feuert=True)
+_we_ein146(int(9 / K.FIXED_DT))
+_ein146 = [e_ for e_ in _ex146 if e_[0] == "einschlag"]
+pruef("Werfer: Steilfeuer auf die Tafel schlaegt auf der Tafel ein und trifft dort (vorher im Fels darunter)",
+      _we146.ziel_grund == 0 and _ein146 and all(e_[1] == 1 for e_ in _ein146)
+      and sum(z_.leben for z_ in _ziele146) < sum(_l146), "%s %s" % (_ein146[:3], [round(z_.leben) for z_ in _ziele146]))
+# -- Abwurf, Fallschirmjaeger, Napalm ueber der Tafel.
+_tm146.nachschub_an = True
+_n146 = len(_tm146.fahrzeuge)
+_tm146.nachschub_setzen("buggy", _T146(49, 189), {"team": 0})
+_tm146.nachschub_setzen("medkit", _T146(45, 182), {"team": 0})
+_spr146 = _tm146.fallschirmjaeger_abwerfen(_T146(48, 186), 0)
+for _ in range(int(25 / K.FIXED_DT)):
+    _tm146.schritt(K.FIXED_DT)
+_neu146 = [b_ for b_ in _tm146.fahrzeuge[_n146:] if b_.art == "buggy"]
+_kisten146 = [x_ for x_ in _w146.wesen if type(x_).__name__ == "KampfBeute" and x_.pos.distance_to(_T146(45, 182)) < 60]
+pruef("Abwurf: ein Wagen ueber der Tafel landet auf der Tafel, die Kisten ebenso (vorher trieben sie ins Tal)",
+      _neu146 and _neu146[0].ebene == 1 and _kisten146 and all(x_.ebene == 1 for x_ in _kisten146),
+      "%s %s" % ([b_.ebene for b_ in _neu146], [x_.ebene for x_ in _kisten146]))
+pruef("... Fallschirmjaeger ueber der Tafel landen auf der Tafel",
+      _spr146 and all(k_.ebene == 1 and getattr(k_, "schirm_hoehe", 0.0) <= 0.0 for k_ in _spr146),
+      str([(k_.ebene, round(getattr(k_, "schirm_hoehe", 0.0))) for k_ in _spr146]))
+from dustfront import schlacht as _SL146
+_la146 = _SL146.Luftangriff(_T146(20, 185), _T146(100, 185), 0, "team0")
+_la146.bomben = [(0.0, _tafel146, 40.0, 5.0)]
+_la146.naechste = 0
+_f0146 = len(_w146.feuer)
+_tm146._luftangriff_schritt(_la146, 0.05)
+_br146 = _w146.feuer[_f0146:]
+pruef("Napalm: eine Bombe ueber der Tafel brennt auf der Tafel",
+      _br146 and _br146[0].ebene == 1, str([b_.ebene for b_ in _br146]))
+# -- Aufbauten (Gestell, Mast) werden mit ihrer Ebene gezeichnet.
+_we146.phase = 2
+_we146.fortschritt = 1.0
+_gez146 = []
+_alt_ge146 = _tm146._werfer_gestelle_zeichnen
+def _ge146(ziel_, misch_, ebene_=None, ecke_=None, dunkel_=None, nur=None):
+    _gez146.append((ebene_, dunkel_))
+    return _alt_ge146(ziel_, misch_, ebene_, ecke_, dunkel_, nur=nur)
+_tm146._werfer_gestelle_zeichnen = _ge146
+_tm146.ich.ebene = 1
+_tm146.ich.pos.update(_tafel146)
+for _ in range(30):
+    _tm146.schritt(K.FIXED_DT)
+_b146 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm146.zeichnen(_b146, 1.0)
+_tm146._werfer_gestelle_zeichnen = _alt_ge146
+pruef("Aufbauten: von der Tafel aus wird das Gestell des Werfers im Tal mit dessen Ebene gezeichnet (abgedunkelt)",
+      any(e_ == 0 and d_ is not None for e_, d_ in _gez146), str(_gez146[:4]))
+_w146.explosion = _alt_ex146
+_tm146.verlassen()
+
+# -- Fahrzeuge fallen ueber eine Kante (seit 0.34.146, neu).
+_tm146 = _TM59.Testmodus(app, karte="staubtal")
+_w146 = _tm146.welt
+_ex146 = []
+_alt_ex146 = _w146.explosion
+_w146.explosion = _exm146
+_bu146 = _tm146.fahrzeug_setzen("buggy", _T146(46, 185), 1, {"winkel": 0})
+_bf146 = _tm146.puppe_setzen(_bu146.ausstiegsorte(9.0)[0], 1, {"team": 0}, name="FAHRER")
+_tm146._anwenden(_bf146, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_unten146 = _tm146.puppe_setzen(_T146(58, 185), 0, {"team": 1}, name="UNTEN")
+_unten146.unverwundbar = 0.0
+_bl146, _fl146, _ul146 = _bu146.leben, _bf146.leben, _unten146.leben
+_flug146, _kipp146 = [], []
+for _ in range(int(5 / K.FIXED_DT)):
+    _tm146._anwenden(_bf146, {"will": [0, -1], "ziel": [_bu146.pos.x + 300, _bu146.pos.y], "knoepfe": []})
+    _tm146.schritt(K.FIXED_DT)
+    if _bu146.flug > 0:
+        _flug146.append(_bu146.flug)
+        _kipp146.append(abs(_bu146.sturz_kippen))
+        if len(_flug146) == 10:
+            _tm146.zeichnen(_b146, 1.0)          # den fallenden Wagen zeichnen geht
+    elif _flug146:
+        break
+pruef("Fahrzeugsturz: ein Mensch faehrt ueber die Kante - der Wagen faellt (Hoehe sinkt stetig) und senkt die Nase",
+      len(_flug146) > 10 and all(b_ <= a_ for a_, b_ in zip(_flug146, _flug146[1:]))
+      and max(_kipp146) > 20.0, "%d Schritte, %.0f Grad" % (len(_flug146), max(_kipp146) if _kipp146 else 0))
+pruef("... er landet eine Ebene tiefer, der Fahrer mit ihm; Wagen und Fahrer nehmen Schaden (auch im geschuetzten Wagen)",
+      _bu146.ebene == 0 and _bf146.ebene == 0 and _bu146.flug == 0.0 and _bu146.leben < _bl146
+      and _bf146.leben < _fl146 and ("fahrzeug_aufprall", 0) in _ex146,
+      "ebene %d/%d leben %.0f->%.0f fahrer %.0f->%.0f" % (_bu146.ebene, _bf146.ebene, _bl146, _bu146.leben,
+                                                          _fl146, _bf146.leben))
+_eintrag146 = [1.0, 2.0, 0.0, 0, 77, -1, 0, 0.0, 1.0, "buggy", 0.0, 0.0, 0.0, 0.0, 0.0, 0, "", 0, 0, 0.0, 0,
+               59.0, 118.0, 25.0]
+_gast146 = _TM59.Testmodus(app, karte="staubtal")
+_gast146.fahrzeuge = []
+_gast146._fahrzeuge_uebernehmen([_eintrag146])
+_gb146 = _gast146.fahrzeuge[0] if _gast146.fahrzeuge else None
+pruef("... der Gast bekommt Hoehe, Sturzhoehe und Kippen mit (Fahrzeugmeldung Feld 21-23)",
+      _gb146 is not None and _gb146.flug == 59.0 and _gb146.sturz_hoehe == 118.0 and _gb146.sturz_kippen == 25.0)
+_gast146.verlassen()
+# Ein Bot am Steuer faehrt nie ueber die Kante.
+_bb146 = _tm146.fahrzeug_setzen("buggy", _T146(46, 188), 1, {"winkel": 0})
+_bot146 = _tm146.fahrer_setzen(_bb146.pos, 1, {"team": 0}, mit_fahrzeug=False)
+_tm146._einsteigen(_bot146, _bb146)
+for _ in range(int(4 / K.FIXED_DT)):
+    _tm146._anwenden(_bot146, {"will": [0, -1], "ziel": [_bb146.pos.x + 300, _bb146.pos.y], "knoepfe": []})
+    _tm146.schritt(K.FIXED_DT)
+pruef("... ein Bot am Steuer bleibt an der Kante stehen (fuer ihn ist das Loch eine Wand)",
+      getattr(_bot146, "ist_bot", False) and _bb146.ebene == 1 and _bb146.flug == 0.0,
+      "bot %s ebene %d" % (getattr(_bot146, "ist_bot", None), _bb146.ebene))
+# Ein leerer Wagen, den jemand ueber die Kante schiebt, faellt auch.
+_leer146 = _tm146.fahrzeug_setzen("krad", _T146(51, 182), 1, {"winkel": 0})
+_pz146 = _tm146.fahrzeug_setzen("panzer", _T146(45, 182), 1, {"winkel": 0})
+_pf146 = _tm146.puppe_setzen(_pz146.ausstiegsorte(9.0)[0], 1, {"team": 0}, name="SCHIEBER")
+_tm146._anwenden(_pf146, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_fiel146 = False
+for _ in range(int(8 / K.FIXED_DT)):
+    _tm146._anwenden(_pf146, {"will": [0, -1], "ziel": [_pz146.pos.x + 300, _pz146.pos.y], "knoepfe": []})
+    _tm146.schritt(K.FIXED_DT)
+    _fiel146 = _fiel146 or _leer146.flug > 0
+pruef("... ein leerer Wagen, den ein Panzer ueber die Kante schiebt, faellt hinunter",
+      _fiel146 and _leer146.ebene == 0, "%s %d" % (_fiel146, _leer146.ebene))
+# Ein Wrack, das tief auf eine Tafel zufliegt, prallt an der Felswand ab und liegt im Tal.
+_wr146 = _tm146.fahrzeug_setzen("tragschrauber", _T146(60, 191), 0, {"winkel": 180})
+_wr146.luft = True
+_wr146.hoehe = 20.0
+_wr146.flug_v = 160.0
+_wr146.schaden(99999.0, None, None)
+_wre146 = set()
+for _ in range(int(4 / K.FIXED_DT)):
+    _tm146.schritt(K.FIXED_DT)
+    _wre146.add(_wr146.ebene)
+    if not _wr146.stuerzt:
+        break
+pruef("Tragschrauber-Wrack: tief gegen eine Tafel prallt es am Fels ab und liegt im Tal, nicht im Fels und nicht oben",
+      not _wr146.stuerzt and _wr146.ebene == 0 and _wre146 == {0} and _wr146.pos.x // K.TILE > 53
+      and _w146.oberste_ebene(_wr146.pos) == 0, "ebene %d Kachel %d" % (_wr146.ebene, _wr146.pos.x // K.TILE))
+# Testmodus: FAHRZEUG UEBER DIE KANTE.
+_tm146.kamera.pos.update(_T146(48, 185))
+_zeilen146 = [z_[0] for z_ in _tm146._menue_zeilen()]
+_kb146 = _tm146.kante_sturz("werfer")
+for _ in range(int(1.5 / K.FIXED_DT)):
+    _tm146.schritt(K.FIXED_DT)
+pruef("Testmodus: Zeile FAHRZEUG ÜBER DIE KANTE stellt einen Wagen an eine Kante und laesst ihn fallen",
+      "kante" in _zeilen146 and _kb146 is not None and _kb146.art == "werfer" and _kb146.ebene == 0
+      and _kb146.flug == 0.0 and _kb146.leben < _kb146.max_leben)
+_w146.explosion = _alt_ex146
+_tm146.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
