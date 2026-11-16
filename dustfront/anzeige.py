@@ -570,8 +570,11 @@ class Anzeige:
         pygame.draw.circle(ziel, (18, 13, 9), mitte, r)
         pygame.draw.circle(ziel, K.C_MUTED_DK, mitte, r, 1)
         from . import klassen as klassen_modul
-        arten = (klassen_modul.faehigkeiten_von(ich)
-                 if getattr(g, "faehigkeiten_an", False) else ())
+        alle = (klassen_modul.faehigkeiten_von(ich)
+                if getattr(g, "faehigkeiten_an", False) else ())
+        # Seit 0.34.138 die gewaehlte (X wechselt), nicht alle zugleich.
+        wahl = klassen_modul.faehigkeit_gewaehlt(ich) if alle else None
+        arten = (wahl,) if wahl else ()
         if arten:
             rest = getattr(ich, "faehigkeit_rest", {}) or {}
             r0 = min(rest.get(a, 0.0) for a, _p in arten)
@@ -582,8 +585,10 @@ class Anzeige:
                 # Nach dem Benutzen der Countdown, in Grau (seit 0.34.93).
                 _text(ziel, "%d" % math.ceil(r0), mitte[0], mitte[1] - 3, (150, 146, 140), 1, "mitte")
             namen = ", ".join(klassen_modul.FAEHIGKEIT_NAMEN.get(a, a.upper()) for a, _p in arten)
-            if getattr(ich, "alle_werkzeuge", False) and not getattr(ich, "klasse", ""):
-                # Jeder hat alles: welches Werkzeug, und wie man wechselt.
+            if len(alle) > 1 or (getattr(ich, "alle_werkzeuge", False) and not getattr(ich, "klasse", "")):
+                # Es gibt mehr als eines: welches gilt, und wie man wechselt.
+                if len(alle) > 1:
+                    namen += " (%d/%d)" % (alle.index(wahl) + 1, len(alle))
                 namen += " [%s]" % (g._tastenname("werkzeug")[:1]
                                     if hasattr(g, "_tastenname") else "X")
             # Links buendig ueber dem Kreis: so liegt er nie auf der Karte.
@@ -690,6 +695,9 @@ class Anzeige:
         Waffe darueber. (Vorher ein grosser Kasten unten rechts.) Mit
         Touch-Steuerung, wo es keinen Zeiger gibt, ueber der Hotbar."""
         g = self.g
+        frei = getattr(g, "_eigene_waffe_im_wagen", None)
+        if frei is not None and not frei():
+            return          # am Steuer keine Patronen der eigenen Waffe (seit 0.34.140)
         d = ich.waffe_daten
         name = ich.waffe_name
         jetzt = g.welt.zeit
@@ -709,6 +717,20 @@ class Anzeige:
         kurz = d.get("kurz")
         if getattr(ich, "anlauf", 0.0) > 0.02:
             _balken(ziel, (x, y - 2, 24, 2), ich.anlauf, K.C_TEAL)
+        if d.get("kuehlt"):
+            # Chor-Waffen (seit 0.34.130): Hitze statt Munition. Ueberhitzt
+            # fuellt sich der Balken rot, bis sie wieder geht.
+            voll = max(1, int(d["magazin"]))
+            rest = getattr(ich, "ueberhitzt", {}).get(name, 0.0)
+            pygame.draw.rect(ziel, SCHATTEN, (x - 1, y + 3, 30, 5))
+            if rest > 0.0:
+                gesamt = d.get("ueberhitzt", d["nachladen"]) * getattr(ich, "kuehl_faktor", 1.0)
+                _balken(ziel, (x, y + 4, 28, 3), 1.0 - rest / max(0.1, gesamt), K.C_RED)
+                _text(ziel, "KÜHLT", x + 32, y + 1, K.C_RED if (jetzt * 3.0) % 1.0 < 0.6 else (150, 50, 36))
+            else:
+                hitze = 1.0 - ich.magazin.get(name, 0) / float(voll)
+                _balken(ziel, (x, y + 4, 28, 3), hitze, K.C_AMBER if hitze < 0.75 else K.C_RED)
+            return
         if ich.nachlade_rest > 0 and d.get("nachladen"):
             fertig = 1.0 - ich.nachlade_rest / d["nachladen"]
             pygame.draw.rect(ziel, SCHATTEN, (x - 1, y + 3, 30, 5))
@@ -891,7 +913,7 @@ class Anzeige:
         # Unten, wo sonst Waffe und Hotbar stehen - die braucht man jetzt
         # nicht, und die Mitte des Bildes bleibt frei: man will sehen, wer
         # kommt, zum Helfen oder zum Erledigen.
-        r = pygame.Rect(W // 2 - 90, H - 48, 180, 36)
+        r = pygame.Rect(W // 2 - 90, H - 64, 180, 52)
         ui.kasten(ziel, r, K.C_RED, KASTEN, 4)
         _text(ziel, "AM BODEN  %d" % max(0, int(ich.boden_rest + 0.99)),
               r.centerx, r.y + 5, K.C_RED, 1, "mitte")
@@ -907,9 +929,20 @@ class Anzeige:
         else:
             _text(ziel, "[%s] RUFEN" % g._tastenname("nutzen"), r.centerx,
                   r.y + 23, K.C_AMBER, 1, "mitte")
+        # Aufgeben (seit 0.34.129): R halten, der Balken fuellt sich.
+        ab = g.__dict__.get("_aufgeben_ab")
+        if ab is not None:
+            anteil = min(1.0, (g._zeit - ab) / K.REVIVE["aufgeben"])
+            _balken(ziel, (r.x + 10, r.y + 34, r.width - 20, 3), anteil, K.C_AMBER)
+            _text(ziel, "AUFGEBEN ...", r.centerx, r.y + 40, K.C_AMBER, 1, "mitte")
+        else:
+            _text(ziel, "[%s] HALTEN: AUFGEBEN" % g._tastenname("nachladen"), r.centerx,
+                  r.y + 37, K.C_MUTED, 1, "mitte")
 
     def _gefallen(self, ziel, ich) -> None:
         g = self.g
+        if getattr(g, "einstieg_offen", False):
+            return            # die Einstiegskarte sagt es (seit 0.34.131)
         _text(ziel, "GEFALLEN", W // 2, H // 2 - 10, K.C_RED, 2, "mitte")
         if g.regeln["runden"]:
             _text(ziel, "RAUS BIS ZUR NÄCHSTEN RUNDE", W // 2, H // 2 + 8,

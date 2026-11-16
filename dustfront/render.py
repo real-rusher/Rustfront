@@ -743,13 +743,10 @@ class Renderer:
                 if kachel == K.LEER:
                     continue
                 daten = K.KACHELN[kachel]
-                bilder = daten.get("bilder")
                 s = None
                 if daten["fest"]:
-                    if bilder:
-                        name_f = bilder[e.variante[zeile + tx] % len(bilder)]
-                    else:
-                        name_f = satz.get(daten["bild"], daten["bild"])
+                    # Mit Abwechslung, auch aus dem Satz (seit 0.34.131).
+                    name_f = K.satz_bild(satz, daten, e.variante[zeile + tx])
                     st = self._stehend(name_f, daten)
                     fest.append((tx, ty, name_f,
                                  self._stehend_fest(e, satz, tx, ty, name_f, st)))
@@ -759,11 +756,10 @@ class Renderer:
                     # rundherum zu sehen, also zuerst der Boden.
                     s = bild(boden_namen[e.variante[zeile + tx]])
                 else:
-                    name = satz.get(daten["bild"], daten["bild"])
                     if kachel == K.BODEN:
                         name = boden_namen[e.variante[zeile + tx]]
-                    elif bilder:
-                        name = bilder[e.variante[zeile + tx] % len(bilder)]
+                    else:
+                        name = K.satz_bild(satz, daten, e.variante[zeile + tx])
                     if daten.get("weich"):
                         s = self._weicher_rand(name, e, tx, ty, boden_namen[0])
                     else:
@@ -1284,6 +1280,10 @@ class Renderer:
             if getattr(w, "zeichnet_selbst", False):
                 w.zeichnen_unten(self, ziel, p, dunkel)
                 continue
+            if (hasattr(w, "waffen") and getattr(w, "ueber_wasser", False) and w.flug <= 0
+                    and welt.tief(w.pos, index)):
+                self.schwimmer_zeichnen(ziel, w, p, welt.zeit, dunkel)   # seit 0.34.140
+                continue
             schatten_bild = getattr(w, "schatten_bild", None)
             # Was hoch oben fliegt (Tragschrauber), wirft seinen Schatten in der
             # Luftschicht (luft.py) - sonst waeren es zwei (seit 0.34.119).
@@ -1305,6 +1305,9 @@ class Renderer:
                 # nicht: es haengt zwischen den Ebenen und wird nach allen
                 # Ebenen gezeichnet, mit dem Massstab seiner eigenen Hoehe.
                 continue
+            hub = getattr(w, "luft_hub", 0.0)
+            if hub:
+                p = p - pygame.Vector2(0, hub)     # in die Luft (seit 0.34.138)
             if w.spur is not None and w.tempo.length_squared() > 1:
                 r = w.tempo.normalize()
                 pygame.draw.line(ziel, (128, 80, 30), p - r * 17, p - r * 5, 1)
@@ -1331,6 +1334,65 @@ class Renderer:
                 s.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
             self.figur_zeichnen(ziel, s, p, getattr(w, "hoehe_3d", 0.0), index,
                                 roh, dunkel)
+            if getattr(w, "schild", False) and w.lebt and not getattr(w, "am_boden", False):
+                # Das Schild des SCHILDTRAEGERS (seit 0.34.138): vor der Figur,
+                # mit ihr gedreht.
+                sch = self.bilder.gedreht("schild_klasse", _gezeigter_winkel(w))
+                if dunkel is not None:
+                    sch = self.dunkel(sch, dunkel)
+                ziel.blit(sch, (p.x - sch.get_width() / 2, p.y - sch.get_height() / 2))
+
+    def schwimmer_zeichnen(self, ziel, w, p, zeit: float, dunkel=None) -> None:
+        """Wer im tiefen Wasser schwimmt (seit 0.34.140, gewuenscht): der
+        Koerper samt Waffe liegt unter der Oberflaeche - eingefaerbt, blass,
+        er schwankt leicht -, darueber nur der Kopf, und um ihn kraeuselt sich
+        das Wasser. Ein Treffer laesst nur den Kopf aufblitzen."""
+        wa = K.WASSER
+        bild = w.bild
+        if bild is None:
+            return
+        roh = self.bilder.gedreht(bild, _gezeigter_winkel(w))
+        bw, bh = roh.get_size()
+        # Der Koerper unter Wasser, gemerkt je Bild (gedreht kommt es aus dem Speicher).
+        merk = self.__dict__.setdefault("_unter_wasser", {})
+        unten = merk.get(id(roh))
+        if unten is None or unten[0] is not roh:
+            u = roh.copy()
+            u.fill(wa["koerper_farbe"] + (255,), special_flags=pygame.BLEND_RGBA_MULT)
+            u.fill((26, 48, 62, 0), special_flags=pygame.BLEND_RGB_ADD)
+            u.set_alpha(wa["koerper_deck"])
+            if len(merk) > 600:
+                merk.clear()
+            unten = merk[id(roh)] = (roh, u)
+        u = unten[1]
+        if dunkel is not None:
+            u = self.dunkel(u, dunkel)
+        schwank = math.sin(zeit * 2.3 + w.pos.x * 0.05) * 1.0
+        ziel.blit(u, (p.x - bw / 2 + schwank, p.y - bh / 2 + 1))
+        # Die Kraeusel um den Kopf.
+        r = int(wa["kopf_radius"]) + 3
+        welle = 0.5 + 0.5 * math.sin(zeit * 3.1 + w.pos.y * 0.07)
+        ring = pygame.Rect(0, 0, 2 * r + 4 + int(2 * welle), 2 * r + 1 + int(welle))
+        ring.center = (int(p.x), int(p.y) + 1)
+        pygame.draw.ellipse(ziel, (170, 208, 222), ring, 1)
+        # Der Kopf: die Mitte des Bildes (dort sitzt er bei jeder Figur).
+        kr = int(wa["kopf_radius"]) + 1
+        kopf = self.__dict__.get("_kopf_flaeche")
+        if kopf is None or kopf.get_width() != 2 * kr:
+            kopf = self._kopf_flaeche = pygame.Surface((2 * kr, 2 * kr), pygame.SRCALPHA)
+            maske = self._kopf_maske = pygame.Surface((2 * kr, 2 * kr), pygame.SRCALPHA)
+            maske.fill((0, 0, 0, 0))
+            pygame.draw.circle(maske, (255, 255, 255, 255), (kr, kr), kr)
+        kopf.fill((0, 0, 0, 0))
+        kopf.blit(roh, (0, 0), pygame.Rect(bw // 2 - kr, bh // 2 - kr, 2 * kr, 2 * kr))
+        kopf.blit(self._kopf_maske, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        k = kopf
+        if dunkel is not None:
+            k = self.dunkel(kopf, dunkel)
+        elif w.blitz > 0:
+            k = kopf.copy()
+            k.fill((210, 210, 210), special_flags=pygame.BLEND_RGB_ADD)
+        ziel.blit(k, (int(p.x) - kr, int(p.y) - kr))
 
     def hoch_oben_zeichnen(self, ziel, bild: str, p, winkel: float) -> None:
         """Was hoch ueber allem fliegt (seit 0.34.96, die Drohne): ein
@@ -2920,7 +2982,8 @@ class Renderer:
         """
         f = K.FEUER
         korn = f["korn"]
-        schritt = 1.0 / max(1.0, f["zunge"] * 6.0)
+        napalm = getattr(brand, "napalm", False)
+        schritt = 1.0 / max(1.0, f["napalm_zunge" if napalm else "zunge"] * 6.0)
         takt = int(zeit / schritt)
         schluessel = (brand.kennung, takt, round(brand.staerke, 2), eigene_ebene)
         hit = self._feuer_puffer.get(brand.kennung)
@@ -2928,19 +2991,23 @@ class Renderer:
             return hit[1], hit[2]
         breite, x0, y0, werte = brand.feld(korn)
         flaeche = pygame.Surface((breite * korn, breite * korn), pygame.SRCALPHA)
-        toene = f["toene"]
+        toene = f["napalm_toene"] if napalm else f["toene"]
         # Die wandernde Schwelle: einmal je Zeitschritt ein neuer Wert,
         # aus der Kennung und dem Takt gewuerfelt. Damit zuengelt es auf
         # jedem Rechner gleich, ohne dass etwas uebertragen werden muss.
         zunge = ((brand.kennung * 2654435761 + takt * 40503) % 1000) / 1000.0
-        grund = f["schwelle"] * (0.80 + 0.40 * zunge)
+        grund = f["napalm_schwelle" if napalm else "schwelle"] * (0.80 + 0.40 * zunge)
         stufen = len(toene)
         deckung = brand.staerke if eigene_ebene else brand.staerke * 0.65
+        russ = grund - 0.12                    # Napalm: oeliger Russ am Rand
         for gy in range(breite):
             zeile = gy * breite
             for gx in range(breite):
                 w = werte[zeile + gx]
                 if w <= grund:
+                    if napalm and w > russ:
+                        pygame.draw.rect(flaeche, (*f["napalm_russ"], int(170 * deckung)),
+                                         (gx * korn, gy * korn, korn, korn))
                     continue
                 # Je dichter, desto heisser: aussen Glimmen, innen heller
                 # Kern. Der Kern ist klein, sonst sieht es aus wie eine

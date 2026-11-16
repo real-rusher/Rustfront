@@ -53,6 +53,31 @@ def _karten(d, u):
     return [""] + [k for k in liste if k != K.LOBBY["karte"]]
 
 
+def _seiten(d) -> tuple:
+    """(erlaubte Stufen von JE SEITE, Vorgabe) fuer die Karte der Sammlung
+    (seit 0.34.132, gewuenscht: "pro Karte ... von sehr wenig zu unglaublich
+    viel"). Der Kopf der Karte darf es sagen (`je_seite_bis:`, `je_seite:`),
+    sonst richtet es sich nach ihrer begehbaren Flaeche."""
+    from . import world
+    s = K.SCHLACHT
+    alle = list(s["groessen"])
+    karte = str(d.get("karte") or "")
+    kopf = world.karte_kopf(karte) if karte else {}
+    try:
+        bis = int(kopf["je_seite_bis"])
+    except (KeyError, TypeError, ValueError):
+        flaeche = int(kopf.get("_kacheln", 0) or 0)
+        # Ohne Datei (die eingebaute Testkarte) ist es eine kleine Karte.
+        bis = max(4, flaeche // s["seite_je_kacheln"]) if flaeche else 16
+    werte = [g for g in alle if g <= bis] or alle[:1]
+    try:
+        vorgabe = int(kopf["je_seite"])
+    except (KeyError, TypeError, ValueError):
+        vorgabe = s["je_seite"]
+    vorgabe = max(g for g in werte if g <= max(vorgabe, werte[0]))
+    return werte, vorgabe
+
+
 def _abschuesse_werte():
     return [1, 2, 3, 5, 8, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100, 150, 200]
 
@@ -238,11 +263,28 @@ FELDER = (
     # Seit 0.34.95: in SCHLACHT steht jede Seite von Anfang an mit so
     # vielen da - wo Menschen fehlen, Bots. Die Regeln zu Bots gelten dort
     # nicht.
-    Feld("schlacht_seite", "JE SEITE", "RUNDE", K.SCHLACHT["je_seite"],
-         lambda d, u: K.SCHLACHT["groessen"], zahl=True,
-         text=lambda v, d, u: "%d KÄMPFER" % v,
+    # Seit 0.34.132 je Karte von 1 bis zu dem, was sie traegt (_seiten).
+    Feld("schlacht_seite", "JE SEITE", "RUNDE", lambda d: _seiten(d)[1],
+         lambda d, u: _seiten(d)[0], zahl=True,
+         text=lambda v, d, u: ("%d KÄMPFER" % v) + (" (VIEL!)" if v >= K.SCHLACHT["seite_viel"] else ""),
          gilt=lambda d: bool(_regeln(d).get("schlacht")),
-         hilfe="SO VIELE STEHEN JE SEITE - FEHLENDE SPIELER WERDEN SOFORT MIT BOTS AUFGEFÜLLT."),
+         hilfe="SO VIELE STEHEN JE SEITE - FEHLENDE SPIELER WERDEN SOFORT MIT BOTS AUFGEFÜLLT. "
+               "WIE VIELE GEHEN, HÄNGT AN DER KARTE. AB 42 KANN DAS SPIEL LANGSAMER LAUFEN."),
+    # Seit 0.34.129 (gewuenscht): Fahrzeuge und Angriffe kommen in SCHLACHT in
+    # Stufen, nach dem Spielverlauf statt nach festen Minuten (K.SCHLACHT
+    # freischalten). AUS: alles sofort, wie vorher.
+    Feld("freischalten", "FREISCHALTEN", "RUNDE", "normal",
+         lambda d, u: ("aus", "schnell", "normal", "langsam"),
+         text=lambda v, d, u: {"aus": "AUS - ALLES SOFORT", "schnell": "SCHNELL",
+                               "normal": "NORMAL", "langsam": "LANGSAM"}[v],
+         gilt=lambda d: bool(_regeln(d).get("schlacht")), rund=True,
+         hilfe="SCHWERES KOMMT NACH UND NACH, JE NACH SPIELVERLAUF - AUCH AN DER BASIS. AUS: ALLES SOFORT."),
+    # Seit 0.34.130 (gewuenscht): Hoechstzahl gekaufter Fahrzeuge je Seite
+    # (K.SCHLACHT hoechstens_je_seite) nur, wenn eingeschaltet - nur in der
+    # erweiterten Ansicht, Vorgabe aus: jede Seite kann beliebig viele haben.
+    Feld("fahrzeug_grenze", "HÖCHSTENS JE SEITE", "RUNDE", False, None, schalter=True,
+         gilt=lambda d: bool(_regeln(d).get("schlacht")),
+         hilfe="AN: VON TRAGSCHRAUBER, WERFER, PANZER ... KANN JEDE SEITE NUR WENIGE ZUGLEICH KAUFEN."),
     Feld("bots", "BOTS AUFFÜLLEN BIS", "RUNDE", 0,
          lambda d, u: K.BOTS["auffuellen"],
          text=lambda v, d, u: "AUS" if not v else "%d SPIELER" % v,
@@ -355,7 +397,7 @@ NACH_NAME = {f.schluessel: f for f in FELDER}
 # Karte, Dauer und Ausruestung sehen und nicht sechzehn Zeilen. Alles
 # andere steht unter ERWEITERT und behaelt dort seinen Wert, auch wenn
 # es gerade nicht zu sehen ist.
-EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert", "bots", "schlacht_seite",
+EINFACH = ("modus", "karte", "runden", "ende_art", "ende_wert", "bots", "schlacht_seite", "freischalten",
            "huegel_zeit", "schwierigkeit", "loadouts", "loadout_nr",
            "faehigkeiten")
 for _f in FELDER:
@@ -455,6 +497,18 @@ def standardrunde(umfeld=None) -> dict:
     if d.get("karte") and d["karte"] not in _karten(d, umfeld):
         d["karte"] = ""
     return saeubern(d, umfeld)
+
+
+def meine_standardrunde(eigene=None, umfeld=None) -> dict:
+    """Die eigene Standardrunde des Spielers (seit 0.34.138), sonst
+    K.STANDARDRUNDE. Was nicht (mehr) gilt - eine Karte, die fehlt, ein
+    Wert aus einer alten Fassung -, raeumt saeubern weg."""
+    if isinstance(eigene, dict) and eigene.get("modus"):
+        d = dict(eigene)
+        if d.get("karte") and d["karte"] not in _karten(d, umfeld):
+            d["karte"] = ""
+        return saeubern(d, umfeld)
+    return standardrunde(umfeld)
 
 
 def verstellen(d: dict, schluessel: str, schritt: int = 1,

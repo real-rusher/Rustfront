@@ -736,6 +736,22 @@ pruef("Jede Waffe ist darin, mit Namen und Bild",
       set(_d["waffen"]) == set(K.WAFFEN)
       and all(v["name"] and v["bild"].startswith("data:image/png;base64,")
               for v in _d["waffen"].values()))
+# Seit 0.34.135 (gemeldet: neue Waffen lila, andere mit altem Bild): jedes
+# Bild ist genau das der Hotbar, keines der lila Ersatz fuer "fehlt".
+import base64 as _b64, io as _io
+import pygame
+from dustfront import art as _art  # noqa: F401
+from dustfront.core import Bilder as _Bilder
+from dustfront.main import asset_ordner as _asset
+_bl = _Bilder(_asset())
+def _gleich(uri, name):
+    roh = pygame.image.load(_io.BytesIO(_b64.b64decode(uri.split(",", 1)[1])), "x.png")
+    soll = _bl.bild(name).convert_alpha()
+    return (roh.get_size() == soll.get_size()
+            and pygame.image.tobytes(roh.convert_alpha(), "RGBA") == pygame.image.tobytes(soll, "RGBA"))
+_anders = [w for w, v in _d["waffen"].items() if not _gleich(v["bild"], "waffe_" + w)]
+pruef("Jedes Waffenbild ist das aus der Hotbar (keine lila Platzhalter, keine alten Bilder)",
+      not _anders and not _bl.fehler, ", ".join(_anders[:8]))
 # Genau der Fehler, der im Browser als "[object Object]" auffiel.
 pruef("Die Spielarten sind Namen und keine ganzen Regelwerke",
       all(isinstance(v, str) and v for v in _d["modi"].values()),

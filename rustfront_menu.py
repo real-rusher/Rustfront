@@ -57,7 +57,7 @@ SPIEL_TITEL = "DUSTFRONT"         # <- hier den Spielnamen ändern
 # Versionsnummer nach dem Schema in der README: MAJOR.MINOR.PATCH
 #   MINOR +1  etwas Neues kam dazu      PATCH +1  nur repariert oder justiert
 #   1.0.0     erstmals von vorn bis hinten spielbar
-VERSION = "0.34.123"
+VERSION = "0.34.145"
 PHASE = "PRE-ALPHA"        # PRE-ALPHA | ALPHA | BETA | RELEASE
 
 VW, VH = 480, 270                  # virtuelle Aufloesung (alles wird hochskaliert)
@@ -427,6 +427,9 @@ class Settings:
 # --------------------------------------------------------------------------
 
 MIX_RATE = 44100
+# Wie dustfront.config AUDIO puffer (seit 0.34.136): wer zuerst den Mischer
+# oeffnet, legt den Puffer fest - Menue und Spiel muessen gleich sein.
+MIX_PUFFER = 1024
 
 
 class Audio:
@@ -434,9 +437,8 @@ class Audio:
         self.settings = settings
         self.ok = False
         self.sounds: dict[str, pygame.mixer.Sound] = {}
-        self.drone_channel = None
         try:
-            pygame.mixer.init(frequency=MIX_RATE, size=-16, channels=2, buffer=512)
+            pygame.mixer.init(frequency=MIX_RATE, size=-16, channels=2, buffer=MIX_PUFFER)
             self.ok = pygame.mixer.get_init() is not None
         except pygame.error:
             self.ok = False
@@ -449,12 +451,12 @@ class Audio:
             self.sounds["deny"] = self._tone(110, 130, 0.26, "saw", sweep=-0.15)
             self.sounds["tick"] = self._tone(880, 25, 0.14, "square")
             self.sounds["boot"] = self._tone(140, 220, 0.20, "saw", sweep=1.6)
-            self.drone = self._drone(4.0)
         except Exception:
             self.ok = False
             return
+        # Kein Dauerbrummen mehr (seit 0.34.136, gewuenscht: "mach diesen Sound
+        # komplett raus") - es lag als lauter, pulsierender Ton ueber allem.
         self.apply_volumes()
-        self.start_drone()
 
     # -- Synthese ---------------------------------------------------------
     @staticmethod
@@ -498,23 +500,6 @@ class Audio:
             buf.append(s)
         return pygame.mixer.Sound(buffer=buf.tobytes())
 
-    def _drone(self, seconds):
-        """Nahtlos schleifbarer Reaktorbrumm (nur ganzzahlige Perioden)."""
-        n = int(MIX_RATE * seconds)
-        buf = array.array("h")
-        f1, f2, f3 = 55.0, 55.25, 82.5
-        tp = 2.0 * math.pi
-        for i in range(n):
-            t = i / MIX_RATE
-            swell = 0.62 + 0.38 * math.sin(tp * (0.25 * t))
-            s = (math.sin(tp * f1 * t) * 0.55
-                 + math.sin(tp * f2 * t) * 0.35
-                 + math.sin(tp * f3 * t) * 0.18 * swell)
-            v = int(max(-1.0, min(1.0, s * 0.30 * swell)) * 32000)
-            buf.append(v)
-            buf.append(v)
-        return pygame.mixer.Sound(buffer=buf.tobytes())
-
     # -- Steuerung --------------------------------------------------------
     def apply_volumes(self):
         if not self.ok:
@@ -522,17 +507,6 @@ class Audio:
         m = self.settings.vol_master / 100.0
         for s in self.sounds.values():
             s.set_volume(m * self.settings.vol_sfx / 100.0 * 0.9)
-        if self.drone_channel is not None:
-            self.drone_channel.set_volume(m * self.settings.vol_ambient / 100.0 * 0.8)
-
-    def start_drone(self):
-        if not self.ok:
-            return
-        try:
-            self.drone_channel = self.drone.play(loops=-1, fade_ms=1200)
-            self.apply_volumes()
-        except pygame.error:
-            self.drone_channel = None
 
     def play(self, name):
         if not self.ok:
@@ -2044,6 +2018,9 @@ def spiel_scene(window, app: App, result: dict) -> None:
     rendert auf 640x360 und setzt sich sein eigenes Fenster, das Menue
     rechnet mit 480x270.
     """
+    # Nicht schwarz, solange geladen wird (seit 0.34.137).
+    uebersetzer_abwarten(app)
+    ladebild(app)
     try:
         from dustfront.main import aus_menue
     except ImportError:
@@ -2146,6 +2123,90 @@ def run_splash(app) -> str:
     return rustfront_splash.play(app)
 
 
+# ── Vorab uebersetzen (seit 0.34.137) ───────────────────────────────────
+# Gemeldet: auf sehr schwachen Rechnern beim ersten Start jeder neuen Version
+# ein langer schwarzer Schirm beim ersten Gang in die Runde (und ein kuerzerer
+# bis zum Hauptmenue). Grund: Python uebersetzt jede geaenderte .py-Datei beim
+# ersten Import in Bytecode (__pycache__) - 75 000 Zeilen, gemessen 0,64 s auf
+# einem schnellen Rechner, auf einem langsamen ein Vielfaches. Das Menue
+# braucht nur wenige Dateien; den grossen Rest (mehrspieler.py allein 9000
+# Zeilen) holte erst der Klick auf SPIELEN.
+# Darum uebersetzt jetzt ein eigener Prozess das ganze Paket, waehrend man im
+# Menue steht. Ein Prozess und kein Faden: ein Faden hielte die GIL und
+# braechte den Ton zum Haengen (siehe 0.34.136).
+_UEBERSETZER = None
+
+
+def _veraltet(ordner: Path) -> list:
+    """Die .py-Dateien im Ordner, deren Bytecode fehlt oder aelter ist."""
+    import importlib.util
+    raus = []
+    for py in sorted(ordner.glob("*.py")):
+        try:
+            pyc = Path(importlib.util.cache_from_source(str(py)))
+            if not pyc.is_file() or pyc.stat().st_mtime < py.stat().st_mtime:
+                raus.append(py)
+        except (OSError, NotImplementedError, ValueError):
+            continue
+    return raus
+
+
+def vorab_uebersetzen(ordner: Path | None = None):
+    """Startet den Uebersetzer-Prozess, wenn etwas veraltet ist. Gibt ihn
+    zurueck, oder None (nichts zu tun, oder es geht hier nicht)."""
+    global _UEBERSETZER
+    if getattr(sys, "frozen", False) or not sys.executable or sys.dont_write_bytecode:
+        return None
+    # Wie plattform.prozesse_erlaubt, aber ohne das Paket zu laden: dessen
+    # __init__ zoege das ganze Spiel nach (und uebersetzte es hier vorn).
+    if sys.platform == "ios":
+        return None
+    ordner = ordner or (Path(__file__).resolve().parent / "dustfront")
+    if not ordner.is_dir() or not _veraltet(ordner):
+        return None
+    import subprocess
+    extra = {}
+    if os.name == "nt":
+        # Unter normaler Prioritaet und ohne Konsolenfenster.
+        extra["creationflags"] = 0x00004000 | 0x08000000   # BELOW_NORMAL | CREATE_NO_WINDOW
+    try:
+        _UEBERSETZER = subprocess.Popen(
+            [sys.executable, "-m", "compileall", "-q", "-l", str(ordner)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, **extra)
+    except (OSError, ValueError):
+        _UEBERSETZER = None
+    return _UEBERSETZER
+
+
+def uebersetzer_abwarten(app=None, hoechstens: float = 120.0) -> None:
+    """Vor dem Spiel: laeuft der Uebersetzer noch, auf ihn warten - mit
+    LAEDT im Bild statt schwarz. Doppelt uebersetzen kostete nur mehr."""
+    proc = _UEBERSETZER
+    if proc is None or proc.poll() is not None:
+        return
+    ende = time.time() + hoechstens
+    while proc.poll() is None and time.time() < ende:
+        for _ in pygame.event.get(pygame.QUIT):
+            pass
+        if app is not None:
+            ladebild(app, "LÄDT DIE NEUE VERSION ...")
+        time.sleep(0.05)
+
+
+def ladebild(app, text: str = "LÄDT ...") -> None:
+    """Ein Bild mit LAEDT, damit der Schirm beim Uebergang nicht schwarz ist."""
+    try:
+        c = app.canvas
+        c.fill(C_VOID)
+        punkte = "." * (1 + int(time.time() * 2.5) % 3)
+        FONT.draw(c, text.rstrip(". ") + " " + punkte, VW // 2, VH // 2 - 4, C_AMBER, 1,
+                  align="center")
+        app.present()
+    except Exception:               # noqa: BLE001  nur ein Hinweis, nie ein Absturz
+        pass
+
+
 def _klaenge_vorbauen() -> None:
     """Die Klaenge des Spiels schon im Menue bauen lassen (seit 0.34.58).
 
@@ -2172,6 +2233,7 @@ def _startauftrag() -> dict | None:
 
 
 def main() -> int:
+    vorab_uebersetzen()
     app = build_app()
     run_splash(app)
     pygame.event.clear()

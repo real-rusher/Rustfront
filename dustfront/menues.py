@@ -298,6 +298,7 @@ PAUSE_HILFE = {
     "weiter": "ZURÜCK INS SPIEL.",
     "ausruestung": "KLASSE, ZWEI WAFFEN, WURFWAFFE UND AUSSEHEN.",
     "konto": "ANMELDEN ODER ANLEGEN. DAS KONTO ZÄHLT DEINE ZAHLEN.",
+    "kosmetik": "TON UND BILD DEINER BLENDGRANATE BEARBEITEN.",
     "opt": "BILD, TON, GRAFIK, TASTEN, BARRIEREFREIHEIT, NETZ.",
     "tasten": "ALLE TASTEN - UND JEDE LÄSST SICH UMLEGEN.",
     "credits": "WER DAS SPIEL GEMACHT HAT.",
@@ -332,6 +333,7 @@ class Pause(Menue):
             ("FORTSETZEN", "weiter"),
             ("AUSRÜSTUNG", "ausruestung"),
             ("KONTO", "konto"),
+            ("KOSMETIK", "kosmetik"),
             ("EINSTELLUNGEN", "opt"),
             ("STEUERUNG", "tasten"),
             ("MITWIRKENDE", "credits"),
@@ -350,6 +352,9 @@ class Pause(Menue):
             self.app.schieben(Anmeldung(self.app))
         elif el.name == "ausruestung":
             self.app.schieben(Ausruestung(self.app))
+        elif el.name == "kosmetik":
+            from .kosmetik_bearbeiten import KosmetikBearbeiten
+            self.app.schieben(KosmetikBearbeiten(self.app))
         elif el.name == "opt":
             self.app.schieben(Einstellungen(self.app))
         elif el.name == "tasten":
@@ -470,6 +475,11 @@ HILFE = {
     ],
     "probe": ["SPIELT EINEN SCHUSS, DAMIT MAN DIE LAUTSTÄRKE HÖRT."],
     "vignette": ["DUNKLE ECKEN. ZIEHT DEN BLICK ZUR MITTE."],
+    "zoom_hochaufloesend": [
+        "DIE WELT IN FENSTERAUFLÖSUNG, AUCH OHNE ZOOM: SO SCHARF WIE MÖGLICH,",
+        "EIGENE FIGUR UND FAHRZEUG OHNE PIXELZITTERN. GILT SOFORT.",
+        "BRAUCHT MEHR RECHENZEIT; DIE GRAFIKKARTE SKALIERT DANN NICHT.",
+    ],
     "bildschirm_ruckeln": [
         "WIE STARK DAS BILD BEI EXPLOSIONEN UND TREFFERN WACKELT.",
         "ES RUCKELT NUR NOCH, WAS NAH GENUG UND AUF DERSELBEN EBENE",
@@ -509,10 +519,6 @@ HILFE = {
     "intro": [
         "DIE KURZE STARTSEQUENZ VOR DEM HAUPTMENÜ.",
         "ESC ÜBERSPRINGT SIE IMMER, AUCH WENN SIE AN IST.",
-    ],
-    "ton_menue": [
-        "DAS LEISE BRUMMEN DES REAKTORS IM HAUPTMENÜ.",
-        "IM SPIEL SELBST GIBT ES ES NICHT.",
     ],
     "reset": ["SETZT ALLE WERTE DIESER SEITEN AUF DIE VORGABE ZURÜCK."],
     "zurueck": ["ZURÜCK. GESPEICHERT IST SCHON ALLES."],
@@ -641,10 +647,8 @@ class Einstellungen(Menue):
         # Musik gibt es noch nicht. Der Regler stand frueher trotzdem da
         # und liess sich ziehen - ohne jede Wirkung. Seit 0.34.79 steht
         # auch kein grauer Platzhalter mehr da: er sagte Neuen nur, was
-        # fehlt. Dafuer das Brummen im Hauptmenue, das vorher dort eine
-        # eigene Seite brauchte.
-        self.elemente.append(ui.Regler(self._reihe(zx, zy, zw, 2), "MENÜ: BRUMMEN",
-                                       "ton_menue", o["ton_menue"]))
+        # fehlt. Das Brummen im Hauptmenue und sein Regler sind seit
+        # 0.34.136 weg (gewuenscht); der Wert ton_menue bleibt in der Datei.
         self.elemente.append(ui.Knopf(self._reihe(zx, zy, 128, 4), "PROBE HÖREN",
                                       "probe"))
 
@@ -659,6 +663,8 @@ class Einstellungen(Menue):
                         "menue_crt", o["menue_crt"]),
             ui.Schalter(self._reihe(zx, zy, zw, 3), "INTRO BEIM START",
                         "intro", o["intro"]),
+            ui.Schalter(self._reihe(zx, zy, zw, 4), "BESTE QUALITÄT BEIM ZOOM",
+                        "zoom_hochaufloesend", o["zoom_hochaufloesend"]),
         ]
 
     def _seite_zugang(self, zx, zy, zw) -> None:
@@ -746,7 +752,8 @@ class Einstellungen(Menue):
             for szene in getattr(self.app, "stapel", []):
                 if hasattr(szene, "netz_umstellen"):
                     szene.netz_umstellen()
-        if el.name in ("fenstermodus", "aufloesung", "bildrate", "pixelraster", "grafikkarte"):
+        if el.name in ("fenstermodus", "aufloesung", "bildrate", "pixelraster", "grafikkarte",
+                       "zoom_hochaufloesend"):
             self.app.anzeige_uebernehmen()
             self.aufbauen()
         elif el.name in ("ton_gesamt", "ton_effekte"):
@@ -1403,6 +1410,11 @@ class Ausruestung(Menue):
         if el.name == "aussehen":
             self.app.opt["aussehen"] = el.wert
             self.app.opt.speichern()
+            # Auch ins Konto (seit 0.34.143): das Aussehen wandert mit dem
+            # Konto (einstellungen.KONTO_WERTE). Stand es nur hier, setzte das
+            # angemeldete Konto beim naechsten Start seinen alten Wert wieder
+            # ein (gemeldet: "ich spawne oft mit dem Standard-Skin").
+            self.app.konto_sichern()
             return
         if el.name == "satz":
             konto.loadout_waehlen(int(el.wert))

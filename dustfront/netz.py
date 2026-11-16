@@ -123,6 +123,8 @@ class Leitung:
         except (TypeError, ValueError):
             return False
         self.gesendet_bytes += len(roh)
+        if nachricht.get("t") == "welt":
+            self._welt_bytes = len(roh)
         self._raus.append(roh)
         self._schlange_kuerzen()
         return self.spuelen()
@@ -156,7 +158,11 @@ class Leitung:
         n = K.NETZ
         wirkung = nachricht.get("wirkung") or []
         unterwegs = self._welt_nr - self._bestaetigt if self._bestaetigt >= 0 else 0
-        stau = ((self._raus and self._ungesendet() > n["welt_stau_bytes"])
+        # Die Grenze waechst mit der Meldung (seit 0.34.132): mit 100 Kaempfern
+        # je Seite ist schon eine einzige groesser als welt_stau_bytes, und
+        # jede zweite fiele aus, auch im LAN.
+        grenze = max(n["welt_stau_bytes"], 3 * self.__dict__.get("_welt_bytes", 0))
+        stau = ((self._raus and self._ungesendet() > grenze)
                 or unterwegs > n["unterwegs_hoechstens"])
         # Hoechstens so viele in Folge auslassen: kommen keine Quittungen
         # mehr (der Gast haengt), geht trotzdem ab und zu eine hinaus.

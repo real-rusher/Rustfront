@@ -15,10 +15,10 @@ auf das Bestehende" zu bauen.
   prallen am Boden ab und bleiben liegen. Was in der Luft platzt (Flak,
   Abwurf), beginnt in der Hoehe des Ziels - Splitter und Fetzen fallen von
   dort wirklich herunter.
-* **Rauch und Feuer sind gemalte Sprites**, keine Quadrate oder flachen
-  Kreise: ein Ballen mit buckligem Rand, beleuchtet von oben links (vier
-  Toene wie die Fahrzeuge), Feuer mit weissem Kern und rotem Rand. Sie
-  wachsen, steigen, treiben und verblassen weich.
+* **Rauch und Feuer sind Wolken aus Pixel-Teilchen** (seit 0.34.126, wie
+  die aelteren Explosionen; vorher gemalte Ballen mit buckligem Rand):
+  oben links heller, Feuer mit weissem Kern und rotem Rand. Sie wachsen
+  (die Teilchen ruecken auseinander), steigen, treiben und verblassen weich.
 * **Funken** ziehen einen Streifen in Flugrichtung, **Stofffetzen** flattern
   (sie werden schmal und breit, waehrend sie sich drehen) und sinken langsam,
   **Druckwellen** laufen als Ring ueber den Boden, ein **Blitz** erhellt
@@ -72,87 +72,93 @@ _LICHT: dict = {}
 _LICHT_DIR = (-0.52, -0.62, 0.58)
 
 
-def _buckel(seed: int) -> list:
-    """Drei Wellen, die den Rand eines Ballens bucklig machen."""
-    r = random.Random(seed)
-    return [(r.uniform(0.06, 0.14), r.randint(3, 7), r.uniform(0, 6.28)) for _ in range(3)]
+# Seit 0.34.126 sind Rauch und Feuer Wolken aus kleinen Pixel-Teilchen, wie
+# die aelteren Explosionen (entities.Partikel) - vorher waren es gemalte
+# Ballen mit buckligem Rand. Gemeldet: "nicht viele kleine, komisch geformte
+# Wolken, sondern mehr eine grosse Partikelwolke". Jedes Teilchen hat in
+# einer Wolke einen festen Platz (aus `variante`), nur der Abstand zur Mitte
+# waechst mit dem Radius - so fliegen die Teilchen sichtbar auseinander, und
+# was sich ueberlappt, wird eine einzige Wolke. Ohne Rand.
+_TEILCHEN: dict = {}
+TEILCHEN_HOECHSTENS = 320
+
+
+def _teilchen(variante: int, feuer: bool) -> list:
+    """Die festen Plaetze der Teilchen einer Wolke: (Abstand 0..1, Winkel,
+    Groesse, Licht) - dichter zur Mitte."""
+    schluessel = (variante, feuer)
+    t = _TEILCHEN.get(schluessel)
+    if t is not None:
+        return t
+    r = random.Random(variante * 7919 + (17 if not feuer else 29))
+    t = []
+    for _ in range(TEILCHEN_HOECHSTENS):
+        d = r.random() ** (0.85 if not feuer else 1.1)
+        w = r.uniform(0.0, 2.0 * math.pi)
+        groesse = r.choice((1, 2, 2, 2, 3)) if not feuer else r.choice((1, 2, 2, 3))
+        t.append((d, w, groesse, r.uniform(-0.35, 0.35)))
+    _TEILCHEN[schluessel] = t
+    return t
+
+
+def _anzahl(radius: int) -> int:
+    # Mit dem Radius mehr Teilchen, aber langsamer als die Flaeche: eine
+    # wachsende Wolke wird dabei lockerer, wie Teilchen, die auseinanderfliegen.
+    return min(TEILCHEN_HOECHSTENS, int(6 + 1.7 * radius ** 1.5))
 
 
 def ballen(radius: int, palette: str, variante: int) -> pygame.Surface:
-    """Ein Rauchballen: bucklige Kugel, beleuchtet, vier Toene, dunkler Rand."""
+    """Eine Rauchwolke aus Pixel-Teilchen, oben links heller (das Licht des
+    Spiels), unten rechts dunkler; ohne Rand."""
     radius = max(2, int(radius))
     schluessel = (radius, palette, variante)
     s = _BALLEN.get(schluessel)
     if s is not None:
         return s
     toene = PALETTEN[palette]
-    n = radius * 2 + 3
+    n = radius * 2 + 4
     s = pygame.Surface((n, n), pygame.SRCALPHA)
-    wellen = _buckel(variante * 7919 + 17)
-    # Kleine Buckel innen: Ballen auf dem Ballen, jeder mit eigenem Licht.
-    r = random.Random(variante * 104729 + radius)
-    innen = [(r.uniform(-0.45, 0.45), r.uniform(-0.45, 0.45), r.uniform(0.35, 0.55)) for _ in range(4)]
     m = n / 2.0
-    lx, ly, lz = _LICHT_DIR
-    for py in range(n):
-        for px in range(n):
-            dx = (px + 0.5 - m) / radius
-            dy = (py + 0.5 - m) / radius
-            d = math.hypot(dx, dy)
-            if d > 1.25:
-                continue
-            w = math.atan2(dy, dx)
-            rand = 1.0 + sum(a * math.sin(k * w + p) for a, k, p in wellen)
-            if d > rand:
-                continue
-            q = d / rand
-            nz = math.sqrt(max(0.0, 1.0 - q * q))
-            licht = (lx * dx / rand + ly * dy / rand + lz * nz)
-            for bx, by, br in innen:
-                ex, ey = dx - bx, dy - by
-                e = math.hypot(ex, ey) / br
-                if e < 1.0:
-                    bz = math.sqrt(1.0 - e * e)
-                    licht = max(licht, 0.15 + 0.85 * (lx * ex / br + ly * ey / br + lz * bz))
-            if q > 0.9:
-                ton = 4 if q > 0.97 else 3
-            elif licht > 0.78:
-                ton = 0
-            elif licht > 0.5:
-                ton = 1
-            elif licht > 0.18:
-                ton = 2
-            else:
-                ton = 3
-            s.set_at((px, py), toene[ton] + (255,))
+    for d, w, g, rausch in _teilchen(variante, False)[:_anzahl(radius)]:
+        dx, dy = math.cos(w) * d, math.sin(w) * d
+        hell = -(dx * 0.62 + dy * 0.78) + rausch
+        ton = 0 if hell > 0.5 else 1 if hell > 0.05 else 2 if hell > -0.45 else 3
+        g = min(g, max(1, radius // 3))
+        s.fill(toene[ton] + (255,), (int(m + dx * radius - g / 2.0), int(m + dy * radius - g / 2.0), g, g))
     _BALLEN[schluessel] = s
     return s
 
 
 def flamme(radius: int, variante: int) -> pygame.Surface:
-    """Ein Feuerballen: weisser Kern, gelb, orange, roter Rand, zuengelnd."""
+    """Feuer aus Pixel-Teilchen: weiss und gelb in der Mitte, nach aussen
+    orange und rot."""
     radius = max(2, int(radius))
     schluessel = (radius, variante)
     s = _FLAMMEN.get(schluessel)
     if s is not None:
         return s
-    n = radius * 2 + 3
+    n = radius * 2 + 4
     s = pygame.Surface((n, n), pygame.SRCALPHA)
-    wellen = _buckel(variante * 3571 + 5)
     m = n / 2.0
-    for py in range(n):
-        for px in range(n):
-            dx = (px + 0.5 - m) / radius
-            dy = (py + 0.5 - m) / radius
-            d = math.hypot(dx, dy)
-            w = math.atan2(dy, dx)
-            rand = 1.0 + sum(a * 1.6 * math.sin(k * w + p) for a, k, p in wellen)
-            if d > rand:
-                continue
-            q = d / rand
-            ton = 0 if q < 0.3 else 1 if q < 0.55 else 2 if q < 0.78 else 3 if q < 0.93 else 4
-            s.set_at((px, py), FEUER[ton] + (255,))
+    for d, w, g, rausch in _teilchen(variante, True)[:_anzahl(radius) + 8]:
+        q = d + rausch * 0.3
+        ton = 0 if q < 0.25 else 1 if q < 0.5 else 2 if q < 0.75 else 3 if q < 0.92 else 4
+        g = min(g, max(1, radius // 3))
+        s.fill(FEUER[ton] + (255,), (int(m + math.cos(w) * d * radius - g / 2.0),
+                                     int(m + math.sin(w) * d * radius - g / 2.0), g, g))
     _FLAMMEN[schluessel] = s
+    return s
+
+
+_SCHATTEN: dict = {}
+
+
+def _schatten(groesse: int) -> pygame.Surface:
+    s = _SCHATTEN.get(groesse)
+    if s is None:
+        s = pygame.Surface((groesse * 2, max(2, groesse)), pygame.SRCALPHA)
+        pygame.draw.ellipse(s, (16, 12, 9, 70), s.get_rect())
+        _SCHATTEN[groesse] = s
     return s
 
 
@@ -288,6 +294,32 @@ class Fx:
         return True
 
 
+class Teilchen(Fx):
+    """Ein einzelnes Pixel-Teilchen Rauch oder Feuer (seit 0.34.126) - wie
+    die alten `entities.Partikel`: fliegt los, bremst ab, wird kleiner und
+    duennt aus. Eine Wolke sind viele davon (`rauch`, `feuer`).
+
+    Bewegt wird es nicht Schritt fuer Schritt: wo es ist, folgt geschlossen
+    aus seinem Alter (Reibung `zaeh`, Auftrieb/Schwere `g`). So kosten
+    hunderte davon fast nichts - `schritt` zaehlt nur die Zeit."""
+
+    __slots__ = ("x0", "y0", "z0", "toene")
+
+    def schritt(self, dt: float) -> bool:
+        if self.verzoegert > 0.0:
+            self.verzoegert -= dt
+            return True
+        self.alter += dt
+        return self.alter < self.dauer
+
+    def ort(self) -> tuple:
+        t = self.alter
+        k = self.zaeh
+        d = (1.0 - math.exp(-k * t)) / k if k > 0.0 else t
+        z = self.z0 + self.vz * d - 0.5 * self.g * t * t
+        return self.x0 + self.vx * d, self.y0 + self.vy * d, max(0.0, z)
+
+
 # ══════════════════════════════════════════════════════════════════
 # Zeichnen
 # ══════════════════════════════════════════════════════════════════
@@ -296,6 +328,19 @@ def _zeichne(ziel, f: Fx, ex: float, ey: float) -> None:
     if f.verzoegert > 0.0:
         return
     a = f.anteil
+    if isinstance(f, Teilchen):
+        # Gegen Ende duennt die Wolke aus: jedes Teilchen verschwindet zu
+        # seiner Zeit (variante), statt dass alle zugleich blasser werden.
+        if a > 0.5 and f.variante < (a - 0.5) * 200.0:
+            return
+        px, py, pz = f.ort()
+        g = max(1, int(f.r0 * (0.45 + 0.55 * (1.0 - a)) + 0.5))
+        if f.art == "feuer":
+            farbe = FEUER[min(4, int(a * 4.2 + f.r1))]
+        else:
+            farbe = f.farbe
+        ziel.fill(farbe, (int(px - ex - g / 2.0), int(py - ey - pz - g / 2.0), g, g))
+        return
     x = f.x - ex
     y = f.y - ey - f.z
     if f.art == "rauch":
@@ -330,14 +375,20 @@ def _zeichne(ziel, f: Fx, ex: float, ey: float) -> None:
         pygame.draw.line(ziel, schweif, (x2, y2), (x, y), 1)
         pygame.draw.rect(ziel, kopf, (int(x), int(y), 2 if a < 0.3 else 1, 2 if a < 0.3 else 1))
     elif f.art == "brocken":
-        if f.z > 1.0:
-            sch = max(2, int(f.r0))
-            pygame.draw.ellipse(ziel, (16, 12, 9), (int(x - sch), int(f.y - ey - sch * 0.4), sch * 2, max(2, int(sch * 0.8))))
+        if f.z > 1.0 and f.r0 >= 3:
+            # Ein weicher, halb durchsichtiger Schatten - die harten schwarzen
+            # Striche darunter sahen aus wie Fremdkoerper (0.34.126); kleine
+            # Splitter werfen keinen.
+            sch = _schatten(int(f.r0))
+            ziel.blit(sch, (int(x - sch.get_width() / 2), int(f.y - ey - sch.get_height() / 2)))
         s = brocken(int(f.r0), f.palette, f.variante % 5, int(f.winkel / 30.0) * 30 % 360)
         if a > 0.8:
+            # Auf einer Kopie ausblenden: das Bild ist im Zwischenspeicher, und
+            # set_alpha(None) danach schaltete bei ihm die Durchsichtigkeit ganz
+            # ab - dann war jeder Brocken (und jedes fx_teil) ein schwarzes Quadrat.
+            s = s.copy()
             s.set_alpha(int(255 * (1.0 - a) / 0.2))
         ziel.blit(s, (int(x - s.get_width() / 2), int(y - s.get_height() / 2)))
-        s.set_alpha(None)
     elif f.art == "fetzen":
         # Ein Stueck Stoff, das sich dreht: mal breit, mal schmal (flattern).
         breit = max(1.0, f.r0 * abs(math.cos(math.radians(f.winkel * 2.3))))
@@ -412,28 +463,69 @@ def _neu(welt, f: Fx) -> Fx:
     return f
 
 
+def _teilchen_wolke(welt, r, art, x, y, z, ebene, r0, r1, dauer, vx, vy, vz, zaeh, g, verzoegert,
+                    boden, anzahl, groesse, farbe_von, palette="grau") -> None:
+    """Viele Teilchen, die aus einer Kugel vom Radius `r0` auseinanderfliegen,
+    bis die Wolke etwa `r1` gross ist; dazu treibt sie mit (vx, vy, vz)."""
+    k = max(0.4, zaeh)
+    weite = (1.0 - math.exp(-k * dauer)) / k        # so weit traegt 1 px/s in der Zeit
+    for _ in range(anzahl):
+        # Richtung in der Kugel; im Bild etwas flacher (wie alles am Boden).
+        w = r.uniform(0.0, 2.0 * math.pi)
+        h = r.uniform(-0.8, 1.0)
+        q = math.sqrt(max(0.0, 1.0 - h * h))
+        ux, uy, uz = math.cos(w) * q, math.sin(w) * q * 0.8, h * 0.7
+        start = r.uniform(0.0, r0)
+        ziel = r.uniform(0.25, 1.0) ** 0.6 * r1
+        v = max(0.0, ziel - start) / max(0.05, weite)
+        f = Teilchen(art, x, y, z, ebene, dauer * r.uniform(0.55, 1.1))
+        f.x0, f.y0, f.z0 = x + ux * start, y + uy * start, max(0.0, z + uz * start)
+        f.vx, f.vy, f.vz = vx + ux * v, vy + uy * v, vz + uz * v
+        f.zaeh, f.g = k, g
+        f.verzoegert = verzoegert + r.uniform(0.0, 0.04)
+        f.boden = boden
+        f.variante = r.randrange(100)
+        f.r0 = r.choice(groesse)
+        f.farbe, f.r1 = farbe_von(ux, uy, uz)
+        f.palette = palette                  # woraus sie ist (Staub, Rauch ...), fuer Abfragen
+        _neu(welt, f)
+
+
 def rauch(welt, r, x, y, z, ebene, palette, r0, r1, dauer, vx=0.0, vy=0.0, vz=0.0,
-          zaeh=1.6, g=0.0, verzoegert=0.0, boden=False, deckung=1.0) -> Fx:
-    f = Fx("rauch", x, y, z, ebene, dauer * r.uniform(0.85, 1.15))
-    f.palette = palette
-    f.variante = r.randrange(4)
-    f.r0, f.r1 = r0, r1
-    f.vx, f.vy, f.vz = vx, vy, vz
-    f.zaeh, f.g = zaeh, g
-    f.verzoegert = verzoegert
-    f.boden = boden
-    f.deckung = deckung
-    return _neu(welt, f)
+          zaeh=1.6, g=0.0, verzoegert=0.0, boden=False, deckung=1.0, dicht=1.0) -> None:
+    """Eine Rauch- oder Staubwolke aus Pixel-Teilchen (seit 0.34.126, vorher
+    ein gemalter Ballen): oben links heller, unten rechts dunkler. Wie viele
+    Teilchen, folgt aus der Groesse; `deckung` macht sie lockerer. `dicht`
+    (seit 0.34.127, fuer massive Explosionen wie die des Werfers): mehr und
+    groessere Teilchen, damit zwischen ihnen kaum Boden durchscheint - mehr
+    ueber die Groesse als ueber die Zahl, die kostet Rechenzeit."""
+    toene = PALETTEN[palette]
+    n = max(3, min(int(20 * dicht ** 0.25), int(r1 * 1.1 * deckung * dicht ** 0.25)))
+    groesse = (1, 2, 2) if r1 < 8 else (2, 2, 3) if r1 < 18 else (2, 3, 3, 4)
+    if dicht > 1.0:
+        mehr = 1 if dicht < 1.8 else 2
+        groesse = tuple(g_ + mehr for g_ in groesse)
+
+    def farbe(ux, uy, uz):
+        hell = -(ux * 0.6 + uy * 0.7) + uz * 0.5 + r.uniform(-0.45, 0.45)
+        return toene[0 if hell > 0.55 else 1 if hell > 0.0 else 2 if hell > -0.5 else 3], 0
+    _teilchen_wolke(welt, r, "rauch", x, y, z, ebene, r0, r1, dauer * r.uniform(0.85, 1.15), vx, vy, vz,
+                    zaeh, g, verzoegert, boden, n, groesse, farbe, palette)
 
 
-def feuer(welt, r, x, y, z, ebene, r0, r1, dauer, vx=0.0, vy=0.0, vz=0.0, verzoegert=0.0) -> Fx:
-    f = Fx("feuer", x, y, z, ebene, dauer * r.uniform(0.85, 1.15))
-    f.variante = r.randrange(6)
-    f.r0, f.r1 = r0, r1
-    f.vx, f.vy, f.vz = vx, vy, vz
-    f.zaeh = 3.0
-    f.verzoegert = verzoegert
-    return _neu(welt, f)
+def feuer(welt, r, x, y, z, ebene, r0, r1, dauer, vx=0.0, vy=0.0, vz=0.0, verzoegert=0.0) -> None:
+    """Feuer aus Pixel-Teilchen (seit 0.34.126): weiss und gelb, im Fliegen
+    orange, rot und dunkel - die aeusseren kuehlen schneller ab. Dazu ein
+    weiches Gluehen, wie beim Feuerball der Panzerkanone."""
+    n = max(4, min(22, int(r1 * 1.3)))
+    groesse = (1, 2, 2) if r1 < 8 else (2, 2, 3)
+
+    def farbe(ux, uy, uz):
+        return FEUER[0], r.uniform(0.0, 1.2)       # r1: wie viel heisser/kuehler es beginnt
+    _teilchen_wolke(welt, r, "feuer", x, y, z, ebene, r0, r1, dauer * r.uniform(0.85, 1.15), vx, vy, vz,
+                    3.0, -20.0, verzoegert, False, n, groesse, farbe)
+    b = blitz(welt, x, y, z, ebene, max(8, int(r1 * 1.6)), dauer * 0.7)
+    b.verzoegert = verzoegert
 
 
 def funken(welt, r, x, y, z, ebene, anzahl, tempo, dauer, farbe=(255, 196, 96), richtung=None,
@@ -513,14 +605,14 @@ def blitz(welt, x, y, z, ebene, radius, dauer=0.12) -> Fx:
 
 
 def staubwand(welt, r, x, y, ebene, radius, anzahl, palette="staub", tempo=260.0, groesse=(6, 12),
-              dauer=1.6) -> None:
+              dauer=1.6, dicht=1.0) -> None:
     """Staub, der von der Mitte aus ueber den Boden rollt."""
     for i in range(anzahl):
         w = i * 2 * math.pi / anzahl + r.uniform(-0.2, 0.2)
         v = tempo * r.uniform(0.6, 1.0)
         rauch(welt, r, x + math.cos(w) * radius * 0.25, y + math.sin(w) * radius * 0.25, 1.0, ebene,
-              palette, groesse[0], groesse[1] * r.uniform(1.0, 1.6), dauer,
-              vx=math.cos(w) * v, vy=math.sin(w) * v, vz=r.uniform(4, 18), zaeh=2.4, boden=False)
+              palette, groesse[0], groesse[1] * r.uniform(1.4, 2.2), dauer,
+              vx=math.cos(w) * v, vy=math.sin(w) * v, vz=r.uniform(4, 18), zaeh=2.4, boden=False, dicht=dicht)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -581,22 +673,6 @@ def flak_schuss(welt, pos, ebene: int, code: float) -> None:
     f.vx, f.vy = c * tempo, s_ * tempo
     f.vz = (max(z0, hoehe) - z0) / dauer
     _neu(welt, f)
-
-
-def stuetze_auf(welt, pos, ebene: int, winkel: float) -> None:
-    """Die vier Teller des Werfers setzen auf (seit 0.34.124): an jedem ein
-    flacher Staubkranz, der zur Seite weggedrueckt wird, und ein dumpfer Ruck."""
-    from .art_neue_fahrzeuge import STUETZEN
-    r = _rnd(pos, 12)
-    g = float(K.FAHRZEUG_BILD["groesse"])
-    for x, y in STUETZEN:
-        p = pygame.Vector2(x * g, y * g).rotate(winkel) + pygame.Vector2(pos)
-        aussen = pygame.Vector2(0, 1 if y > 0 else -1).rotate(winkel)
-        for i in range(6):
-            w = aussen.rotate(r.uniform(-70, 70)) * r.uniform(30, 70)
-            rauch(welt, r, p.x, p.y, 1, ebene, "staub", 3, r.uniform(7, 11), r.uniform(0.9, 1.4),
-                  vx=w.x, vy=w.y, vz=r.uniform(4, 12), zaeh=3.0)
-    welt.ruckeln(1.5, "explosion", pygame.Vector2(pos), ebene)
 
 
 def kiste_platzt(welt, pos, ebene: int, hoehe: float) -> None:
@@ -664,10 +740,10 @@ def absturz(welt, pos, ebene: int) -> None:
     r = _rnd(pos, 5)
     x, y = pos[0], pos[1]
     ring(welt, x, y, ebene, 10, 110, 0.6, (226, 206, 160))
-    staubwand(welt, r, x, y, ebene, 40, 22, "staub", 300.0, (6, 11), 1.8)
+    staubwand(welt, r, x, y, ebene, 40, 22, "staub", 300.0, (6, 11), 1.8, dicht=1.6)
     for _ in range(6):
         rauch(welt, r, x + r.uniform(-14, 14), y + r.uniform(-10, 10), 2, ebene, "staub", 8, 18, 2.4,
-              vz=r.uniform(20, 50), zaeh=1.2)
+              vz=r.uniform(20, 50), zaeh=1.2, dicht=1.6)
     brockenwurf(welt, r, x, y, 2, ebene, 14, 220.0, "erde", (2, 4), liegen=4.0)
     brockenwurf(welt, r, x, y, 4, ebene, 5, 180.0, "metall", (2, 3), liegen=6.0)
     funken(welt, r, x, y, 4, ebene, 18, 320.0, 0.45)
@@ -714,6 +790,9 @@ def raketenstart(welt, pos, ebene: int, code: float) -> None:
               vz=r.uniform(2, 12), zaeh=2.8)
     ring(welt, hx - vor[0] * 20, hy - vor[1] * 20, ebene, 6, 70, 0.45, (236, 222, 188))
     welt.ruckeln(4.5, "explosion", pygame.Vector2(x, y), ebene)
+    # Der Ton steckt seit 0.34.143 hier statt im Gefecht: so hoert ihn
+    # auch der Gast, der die Explosion gemeldet bekommt.
+    welt.klang("werfer_start", 0.9, pygame.Vector2(x, y), ebene)
 
 
 def rauchspur(welt, x, y, z, ebene, seed: int) -> None:
@@ -749,6 +828,9 @@ def einschlag(welt, pos, ebene: int, groesse: float = 1.0) -> None:
     funken(welt, r, x, y, 4, ebene, int(18 * g), 380.0 * g, 0.5)
     welt.brand_dekal(pygame.Vector2(x, y), ebene, int(min(3, g * 1.6)), r.uniform(0, 360))
     welt.ruckeln(5.0 * g, "explosion", pygame.Vector2(x, y), ebene)
+    # Seit 0.34.143 hoerbar (gemeldet: "deren Einschlaege haben auch noch
+    # keine Sounds"); die Bombe (1.4) ist lauter als eine Rakete (1.0).
+    welt.klang("einschlag", min(1.0, 0.6 + 0.3 * g), pygame.Vector2(x, y), ebene)
 
 
 def werfer_explosion(welt, pos, ebene: int, radius: float) -> None:
@@ -783,7 +865,7 @@ def werfer_explosion(welt, pos, ebene: int, radius: float) -> None:
                   verzoegert=t)
         for _ in range(3):
             rauch(welt, r, px, py, 10, ebene, "schwarz", 5, r.uniform(12, 18), 3.0, vz=24, zaeh=1.4,
-                  verzoegert=t + 0.1)
+                  verzoegert=t + 0.1, dicht=1.8)
     # Zwei Raketen fliegen davon, mit einer Spur aus Rauchballen.
     for i in range(2):
         w = r.uniform(0, 2 * math.pi)
@@ -795,18 +877,18 @@ def werfer_explosion(welt, pos, ebene: int, radius: float) -> None:
         f.vx, f.vy, f.vz = math.cos(w) * 520, math.sin(w) * 520, 90
         f.farbe = (255, 220, 140)
         _neu(welt, f)
-    staubwand(welt, r, x, y, ebene, radius * 0.4, 34, "staub", 520.0, (10, 18), 2.6)
-    staubwand(welt, r, x, y, ebene, radius * 0.25, 22, "erde", 340.0, (8, 14), 2.2)
+    staubwand(welt, r, x, y, ebene, radius * 0.4, 34, "staub", 520.0, (10, 18), 2.6, dicht=2.0)
+    staubwand(welt, r, x, y, ebene, radius * 0.25, 22, "erde", 340.0, (8, 14), 2.2, dicht=2.0)
     # Der Pilz: schwarzer Rauch, der hoch steigt und oben breit wird.
     for i in range(30):
         h = r.uniform(0.0, 1.0)
         rauch(welt, r, x + r.uniform(-24, 24) * (0.5 + h), y + r.uniform(-16, 16), 10 + h * 30, ebene,
               "schwarz", 8, r.uniform(22, 36) * (0.7 + h * 0.6), r.uniform(5.5, 8.5),
               vx=r.uniform(-14, 14) + 8, vy=r.uniform(-8, 8), vz=30 + h * 70, zaeh=0.9,
-              verzoegert=0.25 + h * 0.6)
+              verzoegert=0.25 + h * 0.6, dicht=2.2)
     for i in range(10):
         rauch(welt, r, x + r.uniform(-40, 40), y + r.uniform(-30, 30), 6, ebene, "grau", 10,
-              r.uniform(22, 32), r.uniform(6, 9), vx=8, vz=12, zaeh=1.0, verzoegert=0.9)
+              r.uniform(22, 32), r.uniform(6, 9), vx=8, vz=12, zaeh=1.0, verzoegert=0.9, dicht=2.2)
     brockenwurf(welt, r, x, y, 10, ebene, 26, 420.0, "metall", (2, 5), hoch=(0.6, 1.6), liegen=9.0, glut=40)
     brockenwurf(welt, r, x, y, 4, ebene, 20, 300.0, "erde", (1, 3), liegen=4.0)
     funken(welt, r, x, y, 10, ebene, 80, 700.0, 0.9, hoch=0.8)
@@ -819,6 +901,25 @@ def werfer_explosion(welt, pos, ebene: int, radius: float) -> None:
                         ebene, r.uniform(0, 360))
     welt.ruckeln(26.0, "explosion", pygame.Vector2(x, y), ebene)
     welt.klang("werfer_explosion", 1.0, pygame.Vector2(x, y), ebene)
+
+
+def heli_treffer(welt, pos, ebene: int, hoehe: float) -> None:
+    """Der Tragschrauber wird in der Luft zerstoert (seit 0.34.127): ein
+    Feuerball in seiner Hoehe, schwarzer Rauch, Funken, und Blechteile, die
+    herunterfallen. Das Wrack selbst faellt weiter (fahrzeug.Tragschrauber)."""
+    r = _rnd(pos, 12)
+    x, y, z = pos[0], pos[1], hoehe
+    blitz(welt, x, y, z, ebene, 90, 0.16)
+    for _ in range(6):
+        feuer(welt, r, x + r.uniform(-8, 8), y + r.uniform(-6, 6), z + r.uniform(-4, 6), ebene, 4,
+              r.uniform(10, 16), r.uniform(0.4, 0.7), vz=r.uniform(-10, 30))
+    for _ in range(8):
+        rauch(welt, r, x + r.uniform(-10, 10), y + r.uniform(-8, 8), z + r.uniform(0, 8), ebene, "schwarz",
+              4, r.uniform(12, 20), r.uniform(2.6, 3.8), vx=r.uniform(-20, 20), vz=r.uniform(4, 20),
+              zaeh=1.6, verzoegert=r.uniform(0.05, 0.2), dicht=1.6)
+    funken(welt, r, x, y, z, ebene, 30, 420.0, 0.6, hoch=0.5)
+    brockenwurf(welt, r, x, y, z, ebene, 10, 160.0, "metall", (2, 4), hoch=(-0.2, 0.6), liegen=6.0, glut=10)
+    welt.ruckeln(6.0, "explosion", pygame.Vector2(x, y), ebene)
 
 
 def bombe_los(welt, pos, ebene: int, hoehe: float) -> None:
@@ -842,7 +943,7 @@ def bombe(welt, pos, ebene: int) -> None:
         v = r.uniform(20, 70)
         rauch(welt, r, x + math.cos(w) * 6, y + math.sin(w) * 4, 4, ebene, "erde", 4, r.uniform(7, 12),
               r.uniform(1.4, 2.0), vx=math.cos(w) * v, vy=math.sin(w) * v * 0.6, vz=r.uniform(160, 300),
-              g=330.0, zaeh=0.8)
+              g=330.0, zaeh=0.8, dicht=1.5)
     brockenwurf(welt, r, x, y, 4, ebene, 18, 160.0, "erde", (1, 3), hoch=(1.2, 2.4), liegen=4.0)
     welt.brand_dekal(pygame.Vector2(x, y), ebene, 2, r.uniform(0, 360))
 
@@ -916,10 +1017,10 @@ ARTEN = {
     "fallschirm_riss": lambda w, p, e, r: schirm_reisst(w, p, e, *_seite_hoehe(r)),
     "absturz": lambda w, p, e, r: absturz(w, p, e),
     "flak_schuss": lambda w, p, e, r: flak_schuss(w, p, e, r),          # r = Richtung, Strecke, Hoehe
-    "stuetze_auf": lambda w, p, e, r: stuetze_auf(w, p, e, r),          # r = Richtung des Werfers
     "werfer_start": lambda w, p, e, r: raketenstart(w, p, e, r),       # r = Steilheit * 1000 + Richtung
     "werfer_gross": lambda w, p, e, r: werfer_explosion(w, p, e, r),   # r = Radius
     "einschlag": lambda w, p, e, r: einschlag(w, p, e, max(0.4, r)),   # r = Groesse
     "bombe": lambda w, p, e, r: bombe(w, p, e),
     "bombe_los": lambda w, p, e, r: bombe_los(w, p, e, r),            # r = Hoehe
+    "heli_treffer": lambda w, p, e, r: heli_treffer(w, p, e, r),      # r = Hoehe (seit 0.34.127)
 }

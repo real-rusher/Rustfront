@@ -101,6 +101,14 @@ def _winkel_zu(von, nach) -> float:
     return math.degrees(math.atan2(d.y, d.x))
 
 
+# Welches Fahrzeug ein Bot lieber nimmt (seit 0.34.131), in Pixeln Umweg:
+# was selten ist und viel bewirkt, zuerst - und damit eine Seite ihre Basis
+# nutzt, steigen Fahrer dort ein, wo so etwas frei steht (front._fahrer_basis).
+FAHRZEUG_VORZUG = {"tragschrauber": 520.0, "werfer": 480.0, "panzer": 420.0, "jagdpanzer": 400.0,
+                   "spulenwagen": 340.0, "funkwagen": 320.0, "panzerwagen": 280.0, "flakwagen": 260.0,
+                   "trosswagen": 220.0, "buggy": 60.0, "krad": 40.0}
+
+
 def _winkel_diff(a: float, b: float) -> float:
     """b - a, auf -180 bis 180."""
     return (b - a + 180.0) % 360.0 - 180.0
@@ -139,6 +147,15 @@ def bot_waffen_gewichten(waffen: list, rnd) -> list:
     return raus
 
 
+def _eigener_zufall(rnd, ab: int):
+    """Ein Zufall aus dem Stand von `rnd`, ohne ihn weiterzudrehen. Mit der
+    Stelle im Zustand (seit 0.34.143): die Zahlen darin aendern sich nur
+    alle 624 Zuege, und bis dahin bekamen alle Bots denselben Zufall - in
+    einer Runde hatten dann ganze Wellen dieselbe Variante."""
+    stand = rnd.getstate()[1]
+    return random.Random(hash((stand[-1],) + tuple(stand[ab:ab + 24])))
+
+
 def bot_waffen_vielfalt(waffen: list, rnd) -> list:
     """Mehr Vielfalt (seit 0.34.95, K.BOTS vielfalt/varianten): eine
     gezogene Waffe wird manchmal gegen eine verwandte getauscht - statt des
@@ -146,7 +163,7 @@ def bot_waffen_vielfalt(waffen: list, rnd) -> list:
     Gewichten mit eigenem Zufall aus dem Stand von `rnd`, ohne ihn
     weiterzudrehen."""
     b = K.BOTS
-    zufall = random.Random(hash(rnd.getstate()[1][24:48]))
+    zufall = _eigener_zufall(rnd, 24)
     raus = list(waffen)
     for i, w in enumerate(raus):
         andere = [x for x in b["varianten"].get(w, ()) if x in K.WAFFEN and x not in raus]
@@ -184,9 +201,28 @@ def bot_loadout(rnd, fest=None, vielfalt: bool = False) -> dict:
     # zweiter Waffe hielten sie im Feuerschutz messbar schlechter nieder -
     # ihre KI ist auf zwei Hauptwaffen abgestimmt (tests/test_verhalten.py).
     waffen = bot_waffen_gewichten(rnd.sample(list(K.BOTS["waffen"]), 2), rnd)
+    wurf = rnd.choice(wuerfe)
     if vielfalt:
         waffen = bot_waffen_vielfalt(waffen, rnd)
-    return {"name": "BOT", "waffen": waffen, "wuerfe": [rnd.choice(wuerfe)]}
+        waffen, wurf = bot_seltenes(waffen, wurf, rnd)
+    return {"name": "BOT", "waffen": waffen, "wuerfe": [wurf]}
+
+
+def bot_seltenes(waffen: list, wurf: str, rnd):
+    """Ab und zu eine seltene Waffe statt der zweiten und eine andere
+    Wurfwaffe statt der Granate (seit 0.34.143, K.BOTS selten, wurf_vielfalt).
+    Wie bot_waffen_vielfalt mit eigenem Zufall aus dem Stand von `rnd`, ohne
+    ihn weiterzudrehen."""
+    b = K.BOTS
+    zufall = _eigener_zufall(rnd, 48)
+    raus = list(waffen)
+    seltene = [x for x in b["selten_waffen"] if x in K.WAFFEN and x not in raus]
+    if len(raus) >= 2 and seltene and zufall.random() < b["selten"]:
+        raus[1] = seltene[zufall.randrange(len(seltene))]
+    andere = [x for x in b["wurf_andere"] if x in K.WAFFEN]
+    if wurf == "granate" and andere and zufall.random() < b["wurf_vielfalt"]:
+        wurf = andere[zufall.randrange(len(andere))]
+    return raus, wurf
 
 
 class BotHirn(Taktik):
@@ -275,9 +311,16 @@ class BotHirn(Taktik):
                "admin": ""}
         if not k.lebt:
             return ein
+        beiwagen = False
         if getattr(k, "mitfahrt", None) is not None:
-            # Hinten auf dem Panzerwagen (seit 0.34.96): der Fahrer setzt ab.
-            return ein
+            if getattr(k.mitfahrt, "art", "") != "krad":
+                # Hinten auf dem Panzerwagen (seit 0.34.96): der Fahrer setzt ab.
+                return ein
+            # Im Beiwagen (seit 0.34.143): er sieht, zielt und schiesst wie zu
+            # Fuss - laufen, werfen und aussteigen nicht (Gefecht._mitfahren
+            # nimmt nur Abzug, Zeiger und Nachladen). Absitzen tut er, wenn
+            # der Fahrer aussteigt.
+            beiwagen = True
         if k.am_boden:
             # Am Boden bleibt nur das Rufen - wie bei einem Menschen. Was er
             # vorhatte, ist vorbei (seit 0.34.46: in der Anzeige stand
@@ -303,12 +346,21 @@ class BotHirn(Taktik):
         # hat, geht zum naechsten freien.
         if k.fahrzeug is not None:
             return self._am_steuer(dt, ein)
-        if getattr(k, "darf_fahren", False):
+        if beiwagen:
+            pass
+        elif getattr(k, "darf_fahren", False):
             hin = self._zum_fahrzeug(ein)
             if hin is not None:
                 return hin
-        elif getattr(g, "schlacht", False):
-            hin = self._aufsitzen_wollen(ein)
+            # Wer fahren darf, aber keinen Wagen findet, steigt in den
+            # Beiwagen eines Krads (seit 0.34.143) - wie alle anderen auch:
+            # das gilt ueberall, wo Bots fahren (SCHLACHT, Testmodus).
+            hin = self._aufsitzen_wollen(ein, nur_krad=True)
+            if hin is not None:
+                return hin
+        else:
+            # Auf den Panzerwagen nur in SCHLACHT (dort setzt er ab).
+            hin = self._aufsitzen_wollen(ein, nur_krad=not getattr(g, "schlacht", False))
             if hin is not None:
                 return hin
 
@@ -327,8 +379,11 @@ class BotHirn(Taktik):
         springer = self._springer_reaktion(dt)
         if springer is not None:
             will, ziel_punkt, feuern, zielt = springer
+        elif beiwagen:
+            will, ziel_punkt, feuern, zielt = self._beiwagen_kampf(dt, ein)
         else:
             will, ziel_punkt, feuern, zielt = self._entscheiden(dt, ein)
+            ziel_punkt, feuern = self._luft_abwehr(dt, ziel_punkt, feuern)
         feuern, zielt = self._abzug(feuern, zielt)
         # Seit 0.34.70: steht er in Feuer, Gas oder am Rand einer Falle,
         # geht er zuerst dort heraus - schiessen darf er dabei weiter.
@@ -392,7 +447,49 @@ class BotHirn(Taktik):
         ein["will"] = [round(will.x, 2), round(will.y, 2)]
         ein["feuert"] = bool(feuern)
         ein["zielt"] = bool(zielt)
+        if beiwagen:
+            # E hiesse dort: absitzen. Nur der Fahrer entscheidet, wann.
+            ein["knoepfe"] = [x for x in ein["knoepfe"] if x != "nutzen"]
         return ein
+
+    def _luft_abwehr(self, dt: float, ziel_punkt, feuern):
+        """Auf einen Tragschrauber oder eine Drohne schiessen (seit 0.34.138,
+        gemeldet: "die Bots kriegen es nicht hin, Ziele in der Luft zu
+        treffen"). Nur ohne Gegner am Boden im Blick, mit einer Schusswaffe,
+        in Reichweite; erst nach der Reaktionszeit und in Stoessen. Getroffen
+        wird ueber das Einrasten wie beim Menschen (luft.luft_zielen) - dort
+        bekommt ein Bot seinen Zielfehler (K.BOTS luft_fehler)."""
+        k, g = self.k, self.g
+        if (feuern or (self.ziel is not None and self.ziel_ok(self.ziel))
+                or k.ebene != 0 or not hasattr(g, "luft_ziele")
+                or k._waffe_lesen().get("art") != "schuss"):
+            self._luft_lz = None
+            return ziel_punkt, feuern
+        b = K.BOTS
+        self._luft_such = getattr(self, "_luft_such", 0.0) - dt
+        if self._luft_such <= 0.0:
+            self._luft_such = b["luft_takt"]
+            reich = min(b["reichweite"].get(k.waffe_name, 300.0), b["luft_weite"])
+            beste, best_d = None, reich
+            for lz in g.luft_ziele():
+                if lz.nur_flak or not lz.lebt or not lz.fraktion or lz.fraktion == k.fraktion:
+                    continue
+                d = k.pos.distance_to(lz.bild_pos)
+                if d < best_d:
+                    beste, best_d = lz, d
+            if beste is not getattr(self, "_luft_lz", None):
+                self._luft_lz = beste
+                self._luft_seit = 0.0
+                self._luft_reaktion = self.rnd.uniform(*b["reaktion"]) + b["luft_reaktion"]
+        lz = getattr(self, "_luft_lz", None)
+        if lz is None or not lz.lebt:
+            return ziel_punkt, feuern
+        self._luft_seit = getattr(self, "_luft_seit", 0.0) + dt
+        if self._luft_seit < getattr(self, "_luft_reaktion", 1.0):
+            return pygame.Vector2(lz.bild_pos), False
+        stoss, pause = b["luft_stoss"]
+        im_stoss = ((self._luft_seit - self._luft_reaktion) % (stoss + pause)) < stoss
+        return pygame.Vector2(lz.bild_pos), bool(im_stoss and k.magazin.get(k.waffe_name, 0) > 0)
 
     def _blick_ohne_ziel(self, will):
         """Wohin er schaut, wenn er nichts anvisiert: wohin er geht - aber
@@ -802,8 +899,13 @@ class BotHirn(Taktik):
             if d.get("art") == "nahkampf" and (not d.get("magazin") or d.get("aufheben")):
                 raus.append((i, name))           # ein Schlag braucht keine Munition
                 continue
-            if (k.magazin.get(name, 0) > 0 or not k.knapp or k.vorrat.get(name, 0) > 0
-                    or d.get("kuehlt")):
+            if d.get("kuehlt"):
+                # Chor-Waffen (seit 0.34.130): solange sie ueberhitzt ist, nimmt
+                # er eine andere - so wie ein Mensch.
+                if name not in getattr(k, "ueberhitzt", {}) and k.magazin.get(name, 0) > 0:
+                    raus.append((i, name))
+                continue
+            if k.magazin.get(name, 0) > 0 or not k.knapp or k.vorrat.get(name, 0) > 0:
                 raus.append((i, name))
         return raus
 
@@ -885,8 +987,19 @@ class BotHirn(Taktik):
             # Schuss, der alles entscheidet. Mit dem gewoehnlichen Wackeln
             # ging er an einer Figur meist vorbei (gemessen: 7 von 12 Laeufen).
             fehler *= b["spule_fehler"]
+        ruhig = b["ruhig_zielen"].get(k.waffe_name)
+        mitte_ziel = pygame.Vector2(z.pos)
+        ziel_radius = getattr(z, "radius", 9.0)
+        if ruhig is not None:
+            # Ruhig zielen (seit 0.34.143): weniger Wackeln, und im Fahrzeug
+            # auf dessen Mitte - das ganze Blech ist das Ziel.
+            fehler *= ruhig
+            fz = getattr(z, "fahrzeug", None) if getattr(z, "im_fahrzeug", False) else None
+            if fz is not None and not getattr(fz, "kaputt", False):
+                mitte_ziel = pygame.Vector2(fz.pos)
+                ziel_radius = max(ziel_radius, fz.werte.get("halb", fz.werte.get("kreis", 16.0)))
         self.fehler.rotate_ip(self.rnd.uniform(-40, 40) * dt * 3)
-        ziel_punkt = z.pos + self.fehler * (fehler * massstab)
+        ziel_punkt = mitte_ziel + self.fehler * (fehler * massstab)
         # Mehrere dicht beieinander: ungefaehr in die Richtung, hin und her
         # ueber die Gruppe statt genau auf einen (seit 0.34.38).
         gruppe = self.gruppe_um(z) if k.waffe_name in b["feuer"] else [z]
@@ -957,7 +1070,7 @@ class BotHirn(Taktik):
         name = k.waffe_name
         reich = b["reichweite"].get(name, 300.0)
         winkel_fehler = abs(_winkel_diff(self.blick, _winkel_zu(k.pos, ziel_punkt)))
-        erlaubt = math.degrees(math.atan2(getattr(z, "radius", 9.0) + 8.0,
+        erlaubt = math.degrees(math.atan2(ziel_radius + 8.0,
                                           max(1.0, abstand))) + 3.0
         bereit = (sichtbar and self.reaktion_rest <= 0.0 and abstand <= reich
                   and k.nachlade_rest <= 0)
@@ -1133,15 +1246,31 @@ class BotHirn(Taktik):
         nah = k.pos + d * (min(laenge, K.BOTS["vorn_frei"]) / laenge)
         return self.g.welt.deckung(k.pos, nah, k.ebene) != ""
 
+    def _beiwagen_kampf(self, dt: float, ein: dict):
+        """Im Beiwagen (seit 0.34.143): kaempfen ohne Deckung, ohne Wurf und
+        ohne Plan - laufen kann er ja nicht. Das GOAP-Hirn suchte dort
+        Deckung oder zog sich zurueck und schoss darum nie (gemessen)."""
+        self.wurf_rest = max(self.wurf_rest, 1.0)
+        self.wurf_phase = 0.0
+        z = self.ziel
+        if z is None or not self.ziel_ok(z):
+            return pygame.Vector2(0, 0), None, False, False
+        return self._kaempfen(dt, ein, mit_deckung=False)
+
     def kamerad_im_weg(self, weite: float) -> bool:
         """Steht ein Kamerad dort, wohin der Lauf gerade zeigt, naeher als
         `weite`? Dann schiesst er nicht (seit 0.34.52, gemeldet: sie
-        schossen "manchmal auf Teammates"). Wer liegt, ist unter der Bahn."""
+        schossen "manchmal auf Teammates"). Wer liegt, ist unter der Bahn.
+        Der eigene Fahrer zaehlt im Beiwagen nicht (seit 0.34.143): die
+        Kugeln der eigenen Seite gehen durch ihn hindurch, und er sass fast
+        immer in der Bahn."""
         k = self.k
         hin = pygame.Vector2(1, 0).rotate(self.blick)
         luecke = K.BOTS["kamerad_linie"]
+        wagen = getattr(k, "mitfahrt", None)
+        fahrer = getattr(wagen, "fahrer", None) if wagen is not None else None
         for x in self.kameraden():
-            if x.ebene != k.ebene or getattr(x, "am_boden", False):
+            if x.ebene != k.ebene or getattr(x, "am_boden", False) or x is fahrer:
                 continue
             d = x.pos - k.pos
             vor = d.dot(hin)
@@ -1306,7 +1435,11 @@ class BotHirn(Taktik):
                 ziel = self.streifzug
         # Der Verdacht ist die frische Verfolgung - im normalen Tempo. Erst
         # was danach als Spur bleibt, prueft er vorsichtig (unten).
-        if ziel is None and self.verdacht is not None and self.verdacht[2] >= jetzt:
+        gruppe = getattr(g, "front_an", False) and g.front_gruppe(k) is not None
+        if ziel is None and self.verdacht is not None and self.verdacht[2] >= jetzt \
+                and not (gruppe and k.pos.distance_to(self.verdacht[0]) > K.FRONT["verdacht_weite"]):
+            # In einer Gruppe der Front (seit 0.34.133) geht er nur nahen
+            # Geraeuschen nach - fernen Schuessen schaut er nur entgegen.
             ort, ebene, _bis = self.verdacht
             if k.ebene == ebene and k.pos.distance_to(ort) < 30:
                 self.verdacht = None
@@ -1315,6 +1448,10 @@ class BotHirn(Taktik):
                 ziel = (ort, ebene)
         if ziel is None:
             spur = self.spur_offen()
+            # In einer Gruppe der Front (seit 0.34.131) prueft er nur Spuren
+            # in der Naehe - sonst zoege jede Spur einen aus der Formation.
+            if spur is not None and gruppe and k.pos.distance_to(spur[0]) > K.FRONT["kampf_weite"] * 0.6:
+                spur = None
             if spur is not None:
                 if self._spur_gesehen(spur):
                     self._spur_weg(spur[0], spur[1])
@@ -1322,6 +1459,21 @@ class BotHirn(Taktik):
                 else:
                     will = self._weg_richtung(spur[0], spur[1], ein) * self._vorsicht_tempo()
                     return will, pygame.Vector2(spur[0])
+        if ziel is None and self.__dict__.get("_flucht_bis", 0.0) > jetzt:
+            # Aus einem Wrack geflohen (seit 0.34.135): weg von ihm, zur eigenen Seite.
+            basis = g.schlacht_basis(k.team) if hasattr(g, "schlacht_basis") else None
+            if basis is not None and k.pos.distance_to(basis) > 200.0:
+                return self._weg_richtung(basis, 0, ein), None
+        if ziel is None and getattr(g, "front_an", False):
+            # Die Front: mit seiner Gruppe auf ihrem Weg, in Formation.
+            auftrag = g.front_auftrag(k)
+            if auftrag is not None:
+                ort, tempo, blick = auftrag
+                if self.verdacht is not None and self.verdacht[2] >= jetzt:
+                    blick = pygame.Vector2(self.verdacht[0])     # dorthin schauen, nicht gehen
+                if tempo <= 0.0 or k.pos.distance_to(ort) < 8.0:
+                    return pygame.Vector2(0, 0), blick
+                return self._weg_richtung(ort, 0, ein) * tempo, blick
         if ziel is None:
             if (self.streifzug is None or self.streif_rest <= 0.0
                     or (k.ebene == self.streifzug[1]
@@ -1579,15 +1731,24 @@ class BotHirn(Taktik):
         blieb dort stehen."""
         k = self.k
         f = K.BOTS["fahren"]
-        bester, weite = None, f["suchen"]
+        if self.g.welt.zeit < getattr(self, "_fz_pause_bis", -1.0):
+            return None                 # eben aus einem Buggy gestiegen, um zu kaempfen
+        bester, weite, wert = None, f["suchen"], 1e18
         for b in getattr(self.g, "fahrzeuge", ()):
             if b.fahrer is not None or b.kaputt or b.nur_bild or b.ebene != k.ebene:
                 continue
             if b.werte.get("nur_mensch"):
-                continue                # Jagdpanzer, Trosswagen: nichts fuer Bots (seit 0.34.107)
+                continue                # (seit 0.34.131 keiner mehr)
+            if self.g.welt.zeit - getattr(b, "_abgestellt", -999.0) < 60.0:
+                continue                # ein abgestellter Trosswagen ist Nachschub, kein Taxi
+            if b.leben < b.max_leben * f["wrack_meiden"] or "_aufgegeben" in b.__dict__:
+                continue                # kurz vor dem Hochgehen oder schon aufgegeben (seit 0.34.135)
             d = b.pos.distance_to(k.pos)
-            if d < weite:
-                bester, weite = b, d
+            # Das wertvollere Fahrzeug zuerst (seit 0.34.131): sonst stieg jeder
+            # in den naechsten Buggy, und Werfer und Tragschrauber blieben stehen.
+            w = d - FAHRZEUG_VORZUG.get(b.art, 0.0)
+            if d < f["suchen"] and w < wert:
+                bester, weite, wert = b, d, w
         if bester is None:
             return None
         if self.ziel is not None and self.ziel_ok(self.ziel):
@@ -1602,24 +1763,27 @@ class BotHirn(Taktik):
         ein["ziel"] = [round(bester.pos.x, 1), round(bester.pos.y, 1)]
         return ein
 
-    def _aufsitzen_wollen(self, ein: dict):
+    def _aufsitzen_wollen(self, ein: dict, nur_krad: bool = False):
         """SCHLACHT (seit 0.34.96): wer nichts zu tun hat und neben einem
         Panzerwagen der eigenen Seite steht, den ein Bot faehrt und der noch
-        weit fahren will, sitzt auf - der Fahrer setzt ihn vor dem Kampf ab."""
+        weit fahren will, sitzt auf - der Fahrer setzt ihn vor dem Kampf ab.
+        Seit 0.34.143 auch in den Beiwagen eines Krads: dort bleibt er sitzen
+        und schiesst, solange der Fahrer faehrt."""
         k = self.k
         g = self.g
         if self.ziel is not None and self.ziel_ok(self.ziel):
             return None
         s = K.SCHLACHT
         for b in getattr(g, "fahrzeuge", ()):
-            if (b.art != "panzerwagen" or b.fahrer is None or b.kaputt or b.ebene != k.ebene
+            if (b.art not in ("panzerwagen", "krad") or (nur_krad and b.art != "krad")
+                    or b.fahrer is None or b.kaputt or b.ebene != k.ebene
                     or not getattr(b.fahrer, "ist_bot", False)
                     or b.fahrer.team != k.team
                     or len(b.mitfahrer) >= b.werte["plaetze"]
                     or getattr(b, "abgesetzt", False)):
                 continue
             weit = b.pos.distance_to(k.pos)
-            if weit > s["aufsitzen_weite"]:
+            if weit > s["krad_aufsitzen_weite" if b.art == "krad" else "aufsitzen_weite"]:
                 continue
             h = b.fahrer.hirn
             if h is None or (h.ziel is not None and h.ziel_ok(h.ziel)):
@@ -1633,6 +1797,27 @@ class BotHirn(Taktik):
             ein["ziel"] = [round(b.pos.x, 1), round(b.pos.y, 1)]
             return ein
         return None
+
+    def _krad_wartet(self, b) -> bool:
+        """Allein auf dem Krad, eben aufgestiegen (seit 0.34.143): steht ein
+        Kamerad ohne Aufgabe in der Naehe, wartet er kurz, bis der im
+        Beiwagen sitzt (_aufsitzen_wollen) - zu zweit kreist es um Gegner."""
+        f = K.BOTS["fahren"]
+        jetzt = self.g.welt.zeit
+        seit = b.__dict__.get("_krad_seit")
+        if seit is None or seit[0] is not self.k:
+            b._krad_seit = seit = (self.k, jetzt)
+        if jetzt - seit[1] > f["krad_warten"]:
+            return False
+        for x in self.kameraden():
+            h = getattr(x, "hirn", None)
+            if (getattr(x, "ist_bot", False) and x.fahrzeug is None
+                    and getattr(x, "mitfahrt", None) is None and not x.am_boden
+                    and x.ebene == b.ebene and h is not None
+                    and not (h.ziel is not None and h.ziel_ok(h.ziel))
+                    and x.pos.distance_to(b.pos) <= f["krad_warten_weite"]):
+                return True
+        return False
 
     def _absetzen_pruefen(self, b, z) -> None:
         """Am Steuer mit Leuten hinten drauf: vor einem Kampf absetzen - wenn
@@ -1666,7 +1851,7 @@ class BotHirn(Taktik):
         k = self.k
         quer = pygame.Vector2(-b.vorn.y, b.vorn.x)
         seite = 1.0 if (k.pos - b.pos).dot(quer) >= 0 else -1.0
-        weit = min(b.werte["halb"] + k.radius + K.BOTS["fahren"]["einstieg_seite"],
+        weit = min(b.werte.get("halb", 16.0) + k.radius + K.BOTS["fahren"]["einstieg_seite"],
                    b.werte["einsteigen"] - 6.0)
         return b.pos + quer * seite * weit
 
@@ -1692,11 +1877,34 @@ class BotHirn(Taktik):
             # beim Wenden drehte sich ein Panzerwagen in einer Sackgasse fest.
             gesamt = dist
         soll = math.degrees(math.atan2(weg.y, weg.x))
+        gas_mal = 1.0
+        if not halten and dist > f["ausweichen_ab"]:
+            # Vorausschauend ausweichen (seit 0.34.139, gewuenscht: "Bots sollen
+            # nirgendwo gegenfahren") - um Mauern, leere Wagen, Wracks und die
+            # eigenen Leute, nicht erst, wenn er feststeckt.
+            soll, gas_mal = self._frei_richtung(b, soll)
+        elif not halten:
+            self._an_der_wand(b, soll)
         ab = _winkel_diff(b.winkel, soll)
         voll = b.werte.get("stick_voll_lenken", 40.0)
         lenk = max(-1.0, min(1.0, ab / voll))
         if halten:
             return 0.0, (lenk if abs(ab) > 3.0 else 0.0)
+        jetzt = self.g.welt.zeit
+        rueck_bis = b.__dict__.get("_rueck_bis", -1.0)
+        rueck_ab = b.__dict__.get("_rueck_ab")
+        if (rueck_ab is not None and rueck_bis <= jetzt < rueck_bis + 0.05
+                and jetzt - rueck_ab < f["wand_rueck_max"]
+                and not self._spur_frei(b, b.winkel, f["ausweichen_nah"] * 1.5)):
+            # An der Wand noch kein Platz vor der Nase (schwere Wagen kommen im
+            # Rueckwaertsgang langsam in Fahrt): laenger zurueck.
+            b._rueck_bis = rueck_bis = jetzt + 0.04
+        if jetzt < rueck_bis:
+            # Direkt vor der Nase steht etwas: kurz zurueck und die Nase dabei
+            # zur freien Richtung drehen (rueckwaerts lenkt es andersherum).
+            return -f["ausweichen_rueck_gas"], (-1.0 if ab > 0 else 1.0) if abs(ab) > 5.0 else 0.0
+        if gas_mal < 1.0 and abs(ab) < b.werte.get("stick_wenden", 110.0):
+            return gas_mal, lenk
         if b.art == "panzer":
             if abs(ab) > f["panzer_drehen_ab"]:
                 # Drehen und dabei langsam rollen: in einer engen Ecke haengt
@@ -1708,6 +1916,165 @@ class BotHirn(Taktik):
         if abs(ab) >= b.werte.get("stick_wenden", 110.0):
             return 0.7, (1.0 if ab > 0 else -1.0)      # wenden, vorwaerts
         return 1.0, lenk
+
+    def _kolonne(self, b, soll: float, weite: float, laenge: float):
+        """Faehrt ein besetzter Wagen vor ihm auf seiner Spur? ("folgen",
+        Gasanteil): in gleicher Richtung - dahinter bleiben, mit Abstand; steht
+        der Vordermann, warten, aber hoechstens `kolonne_warten` s, dann wird
+        er umfahren. ("rechts", Grad): er kommt entgegen - beide halten sich
+        rechts. None: niemand."""
+        f = K.BOTS["fahren"]
+        richtung = pygame.Vector2(1, 0).rotate(soll)
+        quer = pygame.Vector2(-richtung.y, richtung.x)
+        halb = float(b.werte.get("halb", b.werte.get("kreis", 16.0)))
+        bester = None
+        for o in getattr(self.g, "fahrzeuge", ()):
+            if (o is b or o.fahrer is None or o.kaputt or o.ebene != b.ebene
+                    or getattr(o, "in_der_luft", False) or getattr(o, "nur_bild", False)):
+                continue
+            rel = o.pos - b.pos
+            vor = rel.dot(richtung)
+            o_halb = float(o.werte.get("halb", o.werte.get("kreis", 16.0)))
+            o_laenge = float(o.werte.get("vorn", o.werte.get("achse", 0.0) + o.werte.get("kreis", 16.0)))
+            if not (0.0 < vor < weite + o_laenge + f["kolonne_abstand"]):
+                continue
+            if abs(rel.dot(quer)) > halb + o_halb + f["kolonne_seite"]:
+                continue
+            if bester is None or vor < bester[0]:
+                bester = (vor, o, o_laenge)
+        if bester is None:
+            b.__dict__.pop("_kolonne_seit", None)
+            return None
+        vor, o, o_laenge = bester
+        b._kolonne_info = ("folgen", o, self.g.welt.zeit)     # fuer die INFO-Ansicht (Testmodus)
+        # Nach der Nase des anderen, nicht nach seinem Tempo: zwei, die Nase an
+        # Nase stehen, hielten sonst einander fuer den Vordermann und warteten.
+        gleich = o.vorn.dot(richtung)
+        if gleich < -f["kolonne_gleich"] or o.geschw.dot(richtung) < -f["kolonne_gegen"]:
+            b._kolonne_info = ("rechts", o, self.g.welt.zeit)
+            return ("rechts", f["kolonne_rechts"])
+        if gleich < f["kolonne_gleich"]:
+            b.__dict__.pop("_kolonne_info", None)
+            return None                     # er faehrt quer: ausweichen wie sonst
+        jetzt = self.g.welt.zeit
+        if o.geschw.length() < f["kolonne_steht"]:
+            # Ein geparkter Wagen (kein Gas, wartet selbst in keiner Kolonne):
+            # kein Vordermann, sondern ein Hindernis - gleich vorbei.
+            seine = o.__dict__.get("_kolonne_info")
+            wartet = seine is not None and seine[0] == "folgen" and jetzt - seine[2] < 0.5
+            if abs(getattr(o, "gas", 0.0)) < 0.05 and not wartet:
+                b.__dict__.pop("_kolonne_info", None)
+                return None
+            seit = b.__dict__.setdefault("_kolonne_seit", jetzt)
+            if jetzt - seit > f["kolonne_warten"]:
+                b.__dict__.pop("_kolonne_info", None)
+                return None                 # er kommt nicht weiter: vorbei
+        else:
+            b.__dict__.pop("_kolonne_seit", None)
+        # `laenge` und `o_laenge` reichen schon von der Mitte bis zur Nase.
+        o_hinten = abs(float(o.werte.get("hinten", -o_laenge)))
+        luecke = vor - laenge - o_hinten
+        # Wer schneller ist als der Vordermann, braucht mehr Abstand - und
+        # bremst (Gas los hiess nur rollen, und der Buggy fuhr auf).
+        eigen = b.geschw.dot(richtung)
+        schliesst = max(0.0, eigen - o.geschw.dot(richtung))
+        noetig = f["kolonne_abstand"] + schliesst * f["kolonne_bremsweg"]
+        if luecke < noetig:
+            return ("folgen", -1.0 if eigen > f["kolonne_steht"] else 0.0)
+        return ("folgen", max(0.0, min(1.0, (luecke - noetig) / f["kolonne_auflauf"])))
+
+    def _spur_frei(self, b, winkel: float, weite: float) -> bool:
+        """Kann der Wagen in Richtung `winkel` die naechsten `weite` px fahren,
+        ohne an etwas zu stossen (Mauer, Wagen, Wrack, eigene Leute)?"""
+        vorn = pygame.Vector2(1, 0).rotate(winkel)
+        kreis = float(b.werte.get("halb", b.werte.get("kreis", 16.0)))
+        eigen = [k for k in self.g.kaempfer.values()
+                 if k is not self.k and k.lebt and k.team == self.k.team and k.fahrzeug is None
+                 and getattr(k, "mitfahrt", None) is None and k.ebene == b.ebene
+                 and k.pos.distance_squared_to(b.pos) < (weite + 80.0) ** 2]
+        for anteil in (0.35, 0.7, 1.0):
+            q = b.pos + vorn * (weite * anteil)
+            if not b.passt(q, winkel):
+                return False
+            for k in eigen:
+                if k.pos.distance_squared_to(q) < (kreis + k.radius + 6.0) ** 2:
+                    return False
+        return True
+
+    def _frei_richtung(self, b, soll: float):
+        """(Richtung, Gasanteil): `soll`, wenn die Spur frei ist; sonst die
+        naechste freie Richtung daneben (zuerst zur Seite, zu der er ohnehin
+        dreht); ist keine frei, langsam weiter - das Feststecken (_am_steuer)
+        setzt dann wie bisher zurueck. Gemerkt je Wagen fuer `ausweichen_takt` s."""
+        f = K.BOTS["fahren"]
+        jetzt = self.g.welt.zeit
+        merk = b.__dict__.get("_ausweich")
+        if merk is not None and jetzt - merk[0] < f["ausweichen_takt"] and abs(_winkel_diff(merk[1], soll)) < 25.0:
+            return (soll + merk[2]) % 360.0, merk[3]
+        tempo = abs(getattr(b, "fahrt", 0.0)) if hasattr(b, "fahrt") else b.geschw.length()
+        weite = max(f["ausweichen_min"], min(f["ausweichen_max"], tempo * f["ausweichen_zeit"]))
+        laenge = float(b.werte.get("vorn", b.werte.get("achse", 0.0) + b.werte.get("kreis", 16.0)))
+        weite += laenge * 0.5
+        versatz, gas = 0.0, 1.0
+        kolonne = self._kolonne(b, soll, weite, laenge)
+        if kolonne is not None and kolonne[0] == "folgen":
+            # Hinter einem eigenen Wagen anstellen statt vorbeidraengeln (seit
+            # 0.34.140, gemeldet mit Bild: fuenf Wagen verkeilt an einer
+            # Engstelle). Der Vordermann faehrt den Weg, den man selbst will.
+            b._ausweich = (jetzt, soll, 0.0, kolonne[1])
+            return soll % 360.0, kolonne[1]
+        if kolonne is not None:
+            versatz = kolonne[1]           # Gegenverkehr: rechts halten
+        if not self._spur_frei(b, (soll + versatz) % 360.0, weite):
+            versatz = 0.0
+            # Die Seite von eben behalten - sonst pendelt er zwischen links und rechts.
+            alt = b.__dict__.get("_ausweich_seite")
+            if alt is not None and jetzt - alt[1] < f["ausweichen_seite_halten"]:
+                zuerst = alt[0]
+            else:
+                zuerst = 1.0 if _winkel_diff(b.winkel, soll) >= 0 else -1.0
+            gefunden = False
+            for w in f["ausweichen_winkel"]:
+                for seite in (zuerst, -zuerst):
+                    if self._spur_frei(b, soll + seite * w, weite * 0.8):
+                        versatz, gefunden = seite * w, True
+                        b._ausweich_seite = (seite, jetzt)
+                        break
+                if gefunden:
+                    break
+            if not gefunden:
+                gas = f["ausweichen_gas"]
+            # Steht direkt vor der Nase etwas und geht es auch in die neue
+            # Richtung nicht gleich weiter, hilft kein Lenken mehr: kurz zurueck.
+            if (jetzt >= b.__dict__.get("_rueck_bis", -1.0) and tempo < f["ausweichen_rueck_tempo"]
+                    and not self._spur_frei(b, b.winkel, f["ausweichen_nah"])
+                    and not self._spur_frei(b, soll + versatz, f["ausweichen_nah"])):
+                b._rueck_bis = jetzt + f["ausweichen_rueck_zeit"]
+                b._rueck_ab = None
+        b._ausweich = (jetzt, soll, versatz, gas)
+        return (soll + versatz) % 360.0, gas
+
+    def _an_der_wand(self, b, soll: float) -> None:
+        """Der naechste Wegpunkt liegt dicht neben ihm, quer zur Nase, und die
+        Nase steht an einer Wand: vorwaerts mit vollem Einschlag kommt ein
+        Wagen mit Raedern nicht hin (gesehen beim Flakwagen: 10 s auf der
+        Stelle). Steht er so eine Weile, ohne sich zu drehen, setzt er zurueck,
+        bis vor der Nase Platz ist."""
+        f = K.BOTS["fahren"]
+        jetzt = self.g.welt.zeit
+        tempo = abs(getattr(b, "fahrt", 0.0)) if hasattr(b, "fahrt") else b.geschw.length()
+        if (jetzt < b.__dict__.get("_rueck_bis", -1.0) or tempo >= f["wand_tempo"]
+                or abs(_winkel_diff(b.winkel, soll)) <= f["wand_rueck_winkel"]
+                or self._spur_frei(b, b.winkel, f["ausweichen_nah"])):
+            b._wand_seit = None
+            return
+        seit = b.__dict__.get("_wand_seit")
+        if seit is None or abs(_winkel_diff(seit[1], b.winkel)) > f["wand_drehung"]:
+            b._wand_seit = (jetzt, b.winkel)
+        elif jetzt - seit[0] >= f["wand_zeit"]:
+            b._rueck_bis = jetzt + f["ausweichen_rueck_zeit"]
+            b._rueck_ab = jetzt
+            b._wand_seit = None
 
     def _schutz_ort(self, b):
         """Ein Kamerad liegt, und ein Gegner ist bekannt: der Platz zwischen
@@ -1753,8 +2120,10 @@ class BotHirn(Taktik):
                     # "Wenn das ohne grosse Probleme geht" (gemeldet): nur
                     # dorthin, wo der Wagen geradewegs hinkommt - um eine
                     # Mauer herum ist er zu spaet und steht nur im Weg.
-                    if (welt.frei(p, b.werte["halb"], b.ebene, True)
-                            and welt.wege.gerade_frei(b.ebene, b.pos, p, b.werte["halb"] * 0.8)):
+                    # Nicht jeder Wagen hat "halb" (Spulenwagen, seit 0.34.131 mit Bot).
+                    halb = b.werte.get("halb", b.werte.get("kreis", 16.0))
+                    if (welt.frei(p, halb, b.ebene, True)
+                            and welt.wege.gerade_frei(b.ebene, b.pos, p, halb * 0.8)):
                         ort = p
                         break
                 if ort is not None:
@@ -1777,9 +2146,26 @@ class BotHirn(Taktik):
         b = k.fahrzeug
         f = K.BOTS["fahren"]
         ein["rl"] = True
-        if b.kaputt or b.leben < b.max_leben * f["raus_unter"]:
-            ein["knoepfe"].append("nutzen")          # raus, bevor er hochgeht
+        if b.kaputt:
+            ein["knoepfe"].append("nutzen")
             return ein
+        if b.leben < b.max_leben * f["raus_unter"]:
+            # Kurz vor dem Hochgehen (seit 0.34.135, gemeldet: Bots stiegen aus
+            # und sofort wieder ein, immer weiter): er entscheidet sich einmal -
+            # drinbleiben bis zum Schluss, raus und weglaufen, oder raus und in
+            # Stellung. Den Wagen nimmt danach kein Bot mehr (_zum_fahrzeug).
+            wahl = self.__dict__.get("_wrack_wahl")
+            if wahl is None or wahl[0] is not b:
+                t = self.rnd.random()
+                art = "bleiben" if t < f["wrack_bleiben"] else (
+                    "fliehen" if t < f["wrack_bleiben"] + f["wrack_fliehen"] else "stellung")
+                self._wrack_wahl = wahl = (b, art)
+            if wahl[1] != "bleiben":
+                b._aufgegeben = self.g.welt.zeit
+                ein["knoepfe"].append("nutzen")          # raus, bevor er hochgeht
+                if wahl[1] == "fliehen":
+                    self._flucht_bis = self.g.welt.zeit + f["wrack_flucht_zeit"]
+                return ein
         z = self.ziel if self.ziel is not None and self.ziel_ok(self.ziel) else None
         # Funk aus dem Fahrzeug (seit 0.34.96): wenn etwas passiert - ein
         # neuer Gegner, ein Treffer am Blech. Nur dann funkt das Geraet.
@@ -1800,13 +2186,36 @@ class BotHirn(Taktik):
                       and kampffaehig(w)]
             if frisch:
                 verdeckt = min(frisch, key=lambda o: o[0].distance_to(b.pos))[0]
-        if getattr(self.g, "schlacht", False):
+        if getattr(self.g, "schlacht", False) and b.art != "krad":
             self._absetzen_pruefen(b, z)
+        if b.art == "tragschrauber":
+            # Fliegen (seit 0.34.131): eigene Steuerung, siehe _schrauber_steuern.
+            return self._schrauber_steuern(b, ein, dt)
+        # Nachschub, Funk und Werfer jagen keinen (seit 0.34.131): sie fahren
+        # in ihre Stellung hinter der Front und tun dort ihre Arbeit.
+        stellung = b.art in ("trosswagen", "funkwagen", "werfer")
         ziel_ort = (pygame.Vector2(z.pos) if z is not None
                     else (pygame.Vector2(verdeckt) if verdeckt is not None else None))
+        if stellung:
+            ziel_ort = None
+        # Ein Krad mit Beifahrer ist bewaffnet - der schiesst (seit 0.34.143).
+        schuetze = b.art == "krad" and any(x.lebt for x in b.__dict__.get("_mitfahrer") or ())
+        unbewaffnet = not (getattr(b, "rechteckig", False) or getattr(b, "schiesst", False)
+                           or getattr(b, "flak", False) or b.art == "tragschrauber" or schuetze)
+        if unbewaffnet and not stellung:
+            # Seit 0.34.138 (gemeldet: "Bots in Buggies versuchen die ganze Zeit
+            # einen anzufahren und umkreisen einen, obwohl sie keinen Schaden
+            # machen"): wer nicht schiessen kann, jagt keinen. Ist ein Gegner
+            # nah, steigt er aus und kaempft zu Fuss - und sucht eine Weile
+            # keinen Wagen (bots._zum_fahrzeug).
+            if z is not None and b.pos.distance_to(z.pos) <= f["unbewaffnet_aussteigen"]:
+                self._fz_pause_bis = self.g.welt.zeit + f["unbewaffnet_pause"]
+                ein["knoepfe"].append("nutzen")
+                return ein
+            ziel_ort = None
         gas, lenk = 0.0, 0.0
         will = pygame.Vector2(0, 0)
-        schutz = self._schutz_ort(b)
+        schutz = None if stellung else self._schutz_ort(b)
         if getattr(b, "flak", False):
             # Flakwagen (seit 0.34.117): fahren nur im Gefolge anderer Fahrzeuge.
             gas, lenk, will, ziel = self._konvoi_fahren(b, ziel_ort)
@@ -1818,7 +2227,7 @@ class BotHirn(Taktik):
                 bahn = wp - b.pos
                 rel = liegt.pos - b.pos
                 t = rel.dot(bahn.normalize()) if bahn.length_squared() > 1.0 else -1.0
-                frei_halb = b.werte["halb"] + 26.0
+                frei_halb = b.werte.get("halb", b.werte.get("kreis", 16.0)) + 26.0
                 if 0.0 < t < bahn.length() and abs(rel.x * bahn.normalize().y
                                                   - rel.y * bahn.normalize().x) < frei_halb:
                     quer = pygame.Vector2(-bahn.y, bahn.x).normalize()
@@ -1827,6 +2236,19 @@ class BotHirn(Taktik):
                 gas, lenk = self._lenken(b, wp)
                 will = wp - b.pos
             ziel = ziel_ort if ziel_ort is not None else b.pos + b.vorn * 200.0
+        elif schuetze and ziel_ort is not None:
+            # Um den Gegner kreisen, der Beiwagen innen (er sitzt rechts: im
+            # Bild im Uhrzeigersinn) - so hat der Beifahrer ihn im Bogen.
+            weg = b.pos - ziel_ort
+            if weg.length_squared() < 1.0:
+                weg = pygame.Vector2(b.vorn)
+            seite = 1.0 if b.werte["beifahrer_sitz"][1] >= 0 else -1.0
+            hin = ziel_ort + weg.normalize().rotate(f["krad_kreis_schritt"] * seite) * f["krad_kreis"]
+            if not self.g.welt.frei(hin, b.werte.get("kreis", 9.0) * 1.5, b.ebene, True):
+                hin = self._wegpunkt_fuer(b, ziel_ort)
+            gas, lenk = self._lenken(b, hin)
+            will = hin - b.pos
+            ziel = ziel_ort
         elif ziel_ort is not None:
             abstand = b.pos.distance_to(ziel_ort)
             if abstand > f["abstand"].get(b.art, 200.0):
@@ -1836,12 +2258,21 @@ class BotHirn(Taktik):
             elif b.art == "panzer" and f["mg_ausrichten"] and z is not None:
                 # Er haelt: die Wanne zum Gegner, damit das Bug-MG mitschiesst.
                 gas, lenk = self._lenken(b, z.pos, halten=True)
+            elif b.art == "jagdpanzer":
+                # Die Kanone schwenkt nur ein paar Grad (seit 0.34.131 faehrt
+                # ihn ein Bot): er dreht die ganze Wanne zum Gegner.
+                gas, lenk = self._lenken(b, ziel_ort, halten=True)
             # Die Kanone zielt ohne Handfehler (sie ist ein Geschuetz, kein
             # Gewehr aus der Hand) - mit Fehler flog jede zweite Granate im
             # Freien vorbei und zuendete erst 900 px weiter.
             fehler = (self.fehler * f["fehler"] if z is not None and b.art != "panzer"
                       else pygame.Vector2(0, 0))
             ziel = ziel_ort + fehler
+        elif stellung:
+            gas, lenk, will = self._stellung_steuern(b, ein, dt)
+            ziel = b.pos + b.vorn * 200.0
+            if b.art == "werfer":
+                ziel = self._werfer_zielen(b, ein, ziel)
         else:
             if self.streif_ort is None or b.pos.distance_to(self.streif_ort[0]) < 80.0:
                 self.streif_ort = self._streifziel()
@@ -1892,12 +2323,34 @@ class BotHirn(Taktik):
             if n >= 3 and getattr(self.g, "schlacht", False) and b.__dict__.get("_mitfahrer"):
                 self.g.alle_absetzen(b)
                 b.abgesetzt = True
+            if n >= 2:
+                # Seit 0.34.135 schon beim zweiten Mal (vorher vierten).
+                # Immer wieder an derselben Stelle (seit 0.34.131, gemessen auf
+                # FLUSSTAL: ein Werfer hing 40 s zwischen Findlingen): ein
+                # Umweg zu einer freien Stelle des Fahrwegenetzes daneben.
+                netz = self.g.welt.fahrwege
+                rnd = self.rnd
+                for _ in range(20):
+                    q = b.pos + pygame.Vector2(rnd.uniform(160.0, 320.0), 0).rotate(rnd.uniform(0, 360))
+                    nah = netz.naechste_frei(b.ebene, q)
+                    if nah is not None and self.g.welt.frei(nah, 30.0, b.ebene, True):
+                        self._fahr_umweg = (pygame.Vector2(nah), self.g.welt.zeit + 5.0)
+                        break
         if self._fahr_zurueck > 0.0:
             n = 0 if getattr(self, "_fahr_versuch", None) is None else self._fahr_versuch[1]
             if n == 0:
                 gas, lenk = -0.8, -lenk if abs(lenk) > 0.05 else 0.0
+            elif abs(lenk) > 0.3:
+                # Wie beim Wenden in drei Zuegen (seit 0.34.140): rueckwaerts
+                # gegen die Seite lenken, zu der er will - die Nase schwenkt so
+                # zum Ziel. Abwechselnd (wie bisher) machte jeder zweite Versuch
+                # den vorigen zunichte; gemessen hing ein Panzerwagen 88 s.
+                gas, lenk = -0.8, (-1.0 if lenk > 0 else 1.0)
             else:
                 gas, lenk = -0.8, getattr(self, "_fahr_seite", 1.0)
+        if b.art == "krad" and not schuetze and z is None and self._krad_wartet(b):
+            gas, lenk = 0.0, 0.0
+            ein["hb"] = True
         ein["gl"] = [round(gas, 2), round(lenk, 2)]
         if will.length_squared() > 1.0:
             will = will.normalize()
@@ -1907,6 +2360,234 @@ class BotHirn(Taktik):
             self._fahrzeug_feuern(b, z, ziel_ort, ein)
         if getattr(b, "flak", False):
             self._flak_feuern(b, ein)
+        if b.art == "spulenwagen":
+            self._spule_feuern(b, z, ein, dt)
+        return ein
+
+    # ---- Fahrzeuge mit eigener Aufgabe (seit 0.34.131) --------------------------
+    # Gewuenscht: "Stell sicher, dass die Bots alle Fahrzeuge richtig nutzen."
+    # Bis 0.34.130 liessen Bots den Jagdpanzer, den Trosswagen, den
+    # Spulenwagen, den Funkwagen, den Werfer und den Tragschrauber stehen
+    # (K.<ART> nur_mensch). Jetzt hat jeder seine Aufgabe.
+    def _druecken(self, ein: dict, dt: float) -> None:
+        """Rechte Maustaste einmal druecken (der Wagen reagiert auf die
+        Flanke): hoechstens alle 0,6 Sekunden."""
+        if self.__dict__.get("_druck_rest", 0.0) <= 0.0:
+            ein["zielt"] = True
+            self._druck_rest = 0.25
+
+    def _stellung_ort(self, b):
+        """Wo ein Nachschub-, Funk- oder Werferwagen stehen soll: mit Front
+        hinter dem eigenen Punkt, der den Zielen am naechsten ist; sonst auf
+        dem Weg von der eigenen Basis zur Mitte (der Werfer weiter hinten)."""
+        g = self.g
+        ort = g.front_fahrziel(self.k) if getattr(g, "front_an", False) else None
+        if ort is None:
+            punkte = getattr(g, "_schlacht_punkte", None)
+            basis = g.schlacht_basis(self.k.team) if hasattr(g, "schlacht_basis") else None
+            if basis is None or punkte is None:
+                return None
+            mitte = punkte()[2]
+            anteil = {"trosswagen": 0.55, "funkwagen": 0.45, "werfer": 0.22}.get(b.art, 0.4)
+            ort = basis + (mitte - basis) * anteil
+        return pygame.Vector2(ort)
+
+    def _stellung_steuern(self, b, ein: dict, dt: float):
+        """(Gas, Lenkung, Richtung) fuer die Stellung: hinfahren, anhalten,
+        aufbauen (Funk, Werfer) oder - der Trosswagen - abstellen und
+        aussteigen: dort holen sich die Leute Munition."""
+        k = self.k
+        jetzt = self.g.welt.zeit
+        self._druck_rest = self.__dict__.get("_druck_rest", 0.0) - dt
+        st = self.__dict__.get("_fz_stellung")
+        if st is None or st[2] is not b or jetzt >= st[1]:
+            ort = self._stellung_ort(b)
+            if ort is None:
+                return 0.0, 0.0, pygame.Vector2(0, 0)
+            # Nur umziehen, wenn sich die Front wirklich verschoben hat - ein
+            # Aufbau kostet Sekunden, und jeder Umzug macht ihn wehrlos.
+            if st is not None and st[2] is b and st[0].distance_to(ort) < 900.0:
+                self._fz_stellung = st = (st[0], jetzt + 30.0, b)
+            else:
+                platz = None
+                if hasattr(self.g, "_fahrzeug_platz_bei"):
+                    platz = self.g._fahrzeug_platz_bei(b.art, ort, 320.0)
+                ort = pygame.Vector2(platz[0]) if platz is not None else ort
+                self._fz_stellung = st = (ort, jetzt + 30.0, b)
+        ort = st[0]
+        d = b.pos.distance_to(ort)
+        aufbauen = b.art in ("funkwagen", "werfer")
+        # Angekommen ist er auf gut drei Kacheln: kurz vor dem Ziel nimmt
+        # _lenken das Gas weg, er rollt nicht genau auf den Punkt.
+        if d > 130.0:
+            if aufbauen and getattr(b, "phase", 0) in (1, 2):
+                # Die Stellung ist weitergezogen: erst einpacken.
+                if getattr(b, "aufgebaut", False) or b.phase == 1:
+                    self._druecken(ein, dt)
+                return 0.0, 0.0, pygame.Vector2(0, 0)
+            if aufbauen and getattr(b, "fortschritt", 0.0) > 0.0:
+                return 0.0, 0.0, pygame.Vector2(0, 0)          # packt noch ein
+            wp = self._wegpunkt_fuer(b, ort)
+            gas, lenk = self._lenken(b, wp, weit=d)
+            return gas, lenk, wp - b.pos
+        ein["hb"] = True
+        if aufbauen:
+            # Der Wagen nimmt den Druck nur im Stand an (stillstand): mit Abstand
+            # darunter druecken, die Handbremse zittert noch ein wenig.
+            if b.phase == 0 and b.geschw.length() <= b.werte["stillstand"] * 0.6:
+                self._druecken(ein, dt)
+            if b.art == "funkwagen" and getattr(b, "aufgebaut", False):
+                # Stoeren, sobald Gegner nahe sind, sonst peilen (R wechselt).
+                nah = any(x.lebt and x.team != k.team and 0 <= x.team < 2
+                          and x.pos.distance_to(b.pos) <= b.werte["stoeren"]
+                          for x in self.g.kaempfer.values())
+                if b.modus != (1 if nah else 0) and self._druck_rest <= 0.0:
+                    ein["knoepfe"].append("nachladen")
+                    self._druck_rest = 1.0
+        elif b.art == "trosswagen":
+            # Abgestellt: aussteigen und mitkaempfen - der Wagen bleibt als
+            # Nachschub stehen (keiner faehrt ihn gleich wieder weg).
+            if b.geschw.length() < 8.0:
+                b._abgestellt = jetzt
+                ein["knoepfe"].append("nutzen")
+        return 0.0, 0.0, pygame.Vector2(0, 0)
+
+    def _werfer_zielen(self, b, ein: dict, ziel):
+        """Aufgebaut: das Ziel der Seite mit den meisten Gegnern darum, in
+        Reichweite - dorthin der Zeiger, und feuern, wenn er bereit ist."""
+        if not getattr(b, "aufgebaut", False):
+            return ziel
+        w = K.WERFER["salve"]
+        team = self.k.team
+        mitte = b.rohr_mitte()
+        orte = [o for o, _r in self.g.werfer_ziele(team)
+                if w["nah"] + 20.0 <= o.distance_to(mitte) <= self.g.werfer_weite() - 20.0] \
+            if hasattr(self.g, "werfer_ziele") and 0 <= team < 2 else []
+        if not orte:
+            return ziel
+        # Nie dorthin, wo eigene Leute stehen.
+        eigen = [x.pos for x in self.g.kaempfer.values()
+                 if x.lebt and x.team == team and x is not self.k]
+        orte = [o for o in orte if all(o.distance_to(q) > w["streu"] + w["radius"] + 30.0 for q in eigen)]
+        if not orte:
+            return ziel
+        bestes = max(orte, key=lambda o: sum(1 for q in orte if q.distance_to(o) < w["streu"] * 1.5))
+        ein["feuert"] = bool(getattr(b, "bereit", False))
+        return pygame.Vector2(bestes)
+
+    def _landeplatz_suchen(self, b, basis) -> pygame.Vector2:
+        """Eine freie, offene Stelle bei der Basis, gross genug, dass ein
+        Tragschrauber dort ohne Absturz aufsetzt (Buggy.passt und Abstand)."""
+        welt = self.g.welt
+        rnd = self.rnd
+        beste = pygame.Vector2(basis)
+        for versuch in range(80):
+            weit = 120.0 + versuch * 8.0
+            p = pygame.Vector2(basis) + pygame.Vector2(weit, 0).rotate(rnd.uniform(0, 360))
+            if welt.frei(p, 70.0, b.ebene, True):
+                return p
+        return beste
+
+    def _spule_feuern(self, b, z, ein: dict, dt: float) -> None:
+        """Spulenwagen: der Kettenblitz auf einen Gegner in Reichweite, das
+        EMP-Feld, wenn fremde Fahrzeuge nah sind (er haelt dafuer an)."""
+        self._druck_rest = self.__dict__.get("_druck_rest", 0.0) - dt
+        welt = self.g.welt
+        blitz = b.werte["blitz"]
+        if z is not None and z.pos.distance_to(b.pos) <= blitz["reichweite"] \
+                and welt.sicht_frei(b.pos, z.pos, b.ebene):
+            ein["feuert"] = True
+            ein["ziel"] = [round(z.pos.x, 1), round(z.pos.y, 1)]
+        feld = b.werte["feld"]
+        from .fahrzeug import seite_von
+        eigen = seite_von(b)
+        fremde = [x for x in getattr(self.g, "fahrzeuge", ())
+                  if x is not b and not x.kaputt and not x.nur_bild and x.fahrer is not None
+                  and seite_von(x) != eigen and x.pos.distance_to(b.pos) <= feld["radius"] * 0.85]
+        if fremde and b.phase == 0:
+            ein["gl"] = [0.0, 0.0]
+            ein["hb"] = True
+            if b.geschw.length() <= feld["stillstand"]:
+                self._druecken(ein, dt)
+
+    def _schrauber_steuern(self, b, ein: dict, dt: float) -> dict:
+        """Der Tragschrauber (seit 0.34.131 auch mit Bot): am Boden Gas, bis
+        er abhebt; in der Luft zum Ziel der Front und dort im Kreis, Bomben
+        auf Gegner unter ihm. Ohne Bomben zurueck zur eigenen Basis, landen,
+        nachladen, wieder los."""
+        k = self.k
+        g = self.g
+        f = b.werte
+        jetzt = g.welt.zeit
+        basis = g.schlacht_basis(k.team) if hasattr(g, "schlacht_basis") else None
+        heim = b.bomben <= 0 or b.leben < b.max_leben * 0.35
+        if not b.luft:
+            self.__dict__.pop("_landeplatz", None)
+            if b.bomben < f["bomben"] and basis is not None and b.pos.distance_to(basis) < 900.0:
+                ein["gl"] = [0.0, 0.0]          # nachladen: stehen
+                ein["hb"] = True
+                ein["will"] = [0.0, 0.0]
+                return ein
+            # Anlauf: geradeaus, wo frei ist, bis er abhebt.
+            frei = g.welt.frei(b.pos + b.vorn * 90.0, 18.0, b.ebene, True)
+            ein["gl"] = [1.0, 0.0 if frei else 1.0]
+            ein["will"] = [round(b.vorn.x, 2), round(b.vorn.y, 2)]
+            ein["ziel"] = [round(b.pos.x + b.vorn.x * 200, 1), round(b.pos.y + b.vorn.y * 200, 1)]
+            return ein
+        if heim and basis is not None:
+            # Heim zum Nachladen: ein freier Landeplatz bei der Basis, gemerkt.
+            # Er setzt zur Landung an, wenn er gerade darauf zufliegt und noch
+            # so weit weg ist, wie er beim Sinken gleitet - dann setzt er dort auf.
+            platz = self.__dict__.get("_landeplatz")
+            if platz is None or platz[1] != id(b):
+                ort = self._landeplatz_suchen(b, basis)
+                platz = self._landeplatz = (ort, id(b))
+            ziel = pygame.Vector2(platz[0])
+            weg = ziel - b.pos
+            gleiten = f["landen_tempo"] * f["hoehe"] / max(1.0, f["sinken"]) + 30.0
+            if not b.landen and weg.length() < gleiten + 50.0:
+                diff_l = abs(_winkel_diff(b.winkel, math.degrees(math.atan2(weg.y, weg.x))))
+                if diff_l < 25.0 and weg.length() > gleiten - 40.0:
+                    ein["knoepfe"].append("nutzen")       # E: zur Landung ansetzen
+                elif weg.length() < gleiten - 40.0:
+                    # Zu nah fuer den Anflug: eine Schleife und noch einmal.
+                    ziel = ziel + (b.pos - ziel).normalize() * 500.0 if weg.length() > 1.0 else ziel
+        else:
+            ziel = self.__dict__.get("_flug_ziel")
+            if ziel is None or jetzt >= self.__dict__.get("_flug_neu", 0.0):
+                ort = g.front_fahrziel(k) if getattr(g, "front_an", False) else None
+                if ort is None:
+                    punkte = getattr(g, "_schlacht_punkte", None)
+                    ort = punkte()[2] if punkte is not None else b.pos
+                self._flug_ziel = ziel = pygame.Vector2(ort)
+                self._flug_neu = jetzt + 20.0
+            # Ueber dem Ziel kreisen: der Punkt wandert auf einem Kreis darum.
+            kreis = pygame.Vector2(260.0, 0).rotate(jetzt * 30.0 + k.nummer * 47.0)
+            if b.pos.distance_to(ziel) < 420.0:
+                ziel = ziel + kreis
+        weg = ziel - b.pos
+        soll = math.degrees(math.atan2(weg.y, weg.x))
+        diff = _winkel_diff(b.winkel, soll)
+        lenk = max(-1.0, min(1.0, diff / 25.0))
+        gas = 1.0 if weg.length() > 600.0 else 0.0
+        ein["gl"] = [round(gas, 2), round(lenk, 2)]
+        ein["will"] = [round(b.vorn.x, 2), round(b.vorn.y, 2)]
+        # Bomben: ein Gegner (oder fremdes Fahrzeug) dort, wo sie aufschlaegt.
+        bo = f["bombe"]
+        abwurf = b.pos + pygame.Vector2(bo["abwurf"]).rotate(b.winkel) + b.vorn * (b.flug_v * bo["fall"] * bo["schwung"])
+        treffer = [x.pos for x in g.kaempfer.values()
+                   if x.lebt and 0 <= x.team < 2 and x.team != k.team and int(x.ebene) == 0
+                   and x.pos.distance_to(abwurf) <= bo["radius"] * 0.8]
+        from .fahrzeug import seite_von
+        eigen = seite_von(b)
+        treffer += [x.pos for x in getattr(g, "fahrzeuge", ())
+                    if x is not b and not x.kaputt and not x.nur_bild and x.fahrer is not None
+                    and seite_von(x) != eigen and x.pos.distance_to(abwurf) <= bo["radius"]]
+        freunde = any(x.lebt and x.team == k.team and x is not k
+                      and x.pos.distance_to(abwurf) <= bo["radius"] * 1.2 for x in g.kaempfer.values())
+        ein["feuert"] = bool(treffer) and not freunde and b.bomben > 0 and not heim
+        ziel_bild = treffer[0] if treffer else b.pos + b.vorn * 200.0
+        ein["ziel"] = [round(ziel_bild.x, 1), round(ziel_bild.y, 1)]
         return ein
 
     def _konvoi_fuehrer(self, b):
@@ -1938,7 +2619,14 @@ class BotHirn(Taktik):
         ziel = pygame.Vector2(ziel_ort) if ziel_ort is not None else b.pos + b.vorn * 200.0
         fuehrer = self._konvoi_fuehrer(b)
         if fuehrer is None:
-            return 0.0, 0.0, pygame.Vector2(0, 0), ziel
+            # Ohne Konvoi nicht stehen bleiben (seit 0.34.138, gemeldet: "die
+            # Fahrer im Flakwagen fahren oft einfach nicht los"): wie die
+            # anderen Fahrzeuge zu den Zielen der Seite.
+            if self.streif_ort is None or b.pos.distance_to(self.streif_ort[0]) < 80.0:
+                self.streif_ort = self._streifziel()
+            wp = self._wegpunkt_fuer(b, self.streif_ort[0])
+            gas, lenk = self._lenken(b, wp, weit=b.pos.distance_to(self.streif_ort[0]))
+            return gas, lenk, wp - b.pos, ziel
         abstand = b.pos.distance_to(fuehrer.pos)
         if abstand <= f["konvoi_abstand"]:
             return 0.0, 0.0, pygame.Vector2(0, 0), ziel
@@ -1979,6 +2667,12 @@ class BotHirn(Taktik):
         f = K.BOTS["fahren"]
         netz = self.g.welt.fahrwege
         ort = pygame.Vector2(ort)
+        umweg = self.__dict__.get("_fahr_umweg")
+        if umweg is not None:
+            if self.g.welt.zeit < umweg[1] and b.pos.distance_to(umweg[0]) > K.TILE * 1.5:
+                ort = umweg[0]
+            else:
+                self._fahr_umweg = None
         if b.pos.distance_to(ort) < K.TILE * 1.5:
             return ort
         ziel = netz.naechste_frei(b.ebene, ort)
@@ -2014,6 +2708,15 @@ class BotHirn(Taktik):
             return
         soll = math.degrees(math.atan2(weg.y, weg.x))
         fehl = abs(_winkel_diff(b.aufbau, soll))
+        if b.art == "jagdpanzer":
+            # Die Jagdkanone (seit 0.34.131 mit Bot): weit und genau - sie
+            # feuert, wenn das Rohr auf ihn zeigt und nichts dazwischen ist.
+            w = K.FAHRZEUG_WAFFEN.get(b.werte.get("kanone", "kanone"), K.FAHRZEUG_WAFFEN["kanone"])
+            treffer = (getattr(z, "radius", 9.0) if z is not None else 9.0) + 6.0
+            vorbei = dist * math.sin(math.radians(min(fehl, 89.0)))
+            ein["feuert"] = (dist <= w["reichweite"] and vorbei <= treffer
+                             and welt.sicht_frei(mitte, ziel_ort, b.ebene))
+            return
         if b.art == "panzer":
             w = K.FAHRZEUG_WAFFEN["kanone"]
             if dist <= w["reichweite"]:
@@ -2329,7 +3032,24 @@ class BotTeil:
         if getattr(self, "schlacht", False) and 0 <= team:
             fahrer = sum(1 for x in self._bots() if x.team == team
                          and getattr(x, "darf_fahren", False))
-            k.darf_fahren = fahrer < K.SCHLACHT["fahrer_je_seite"]
+            # Auf einer Karte mit Front sagt der Kopf, wie viele (seit 0.34.131).
+            plan = getattr(self, "schlachtplan", None)
+            hoechstens = plan.fahrer if plan is not None else K.SCHLACHT["fahrer_je_seite"]
+            # Seit 0.34.138 mit der Seitenstaerke mehr (gemeldet: "die Bots sollen
+            # alle Fahrzeuge bewusster einsetzen, den Funkwagen sehe ich nie") -
+            # hoechstens so viele, wie die Basen Wagen haben.
+            seite = int(getattr(self, "schlacht_seite", 0) or 0)
+            if seite > 0:
+                # Ein Anteil der Seite - bei 8 je Seite 3, bei 24 je Seite 10.
+                hoechstens = max(1, int(round(seite * K.SCHLACHT["fahrer_anteil"])))
+            if hasattr(self, "basis_ausstattung"):
+                try:
+                    wagen = sum(n for _a, n, _b in self.basis_ausstattung(team, -1, 3))
+                except Exception:          # noqa: BLE001  ohne Plan: wie bisher
+                    wagen = hoechstens
+                if wagen > 0:
+                    hoechstens = min(hoechstens, wagen)
+            k.darf_fahren = fahrer < hoechstens
         k.konto = ""
         k.skin = bot_aussehen(name)
         self._regeln_anlegen(k)
@@ -2347,6 +3067,13 @@ class BotTeil:
             k.hirn = BotHirn(self, k, self._bot_rnd)
         self._loadout_anlegen(k)
         self._magazine_fuellen(k)
+        if getattr(self, "schlacht", False) and getattr(self, "front_an", False) and 0 <= team < 2:
+            # Front (seit 0.34.131): gleich dort einsteigen, wo ihn sein Ziel
+            # hinschickt. Nur in SCHLACHT - im Testmodus steht ein Bot dort,
+            # wo man ihn hinsetzt.
+            k.pos.update(self.front_einstiegsort(k))
+            k.vorher.update(k.pos)
+            self.front_eingestiegen(k)
         return k
 
     def _bot_weg(self, k) -> None:
@@ -2436,15 +3163,53 @@ class BotTeil:
         # Ein Durchgang: so lange gilt das Merken in BotHirn._kandidaten.
         self._kandidaten_lauf = self.__dict__.get("_kandidaten_zaehler", 0) + 1
         self._kandidaten_zaehler = self._kandidaten_lauf
+        bots = self._bots()
+        jede = 1
+        for ab, n in K.BOTS["staffel"]:
+            if len(bots) >= ab:
+                jede = n
+        lauf = self.__dict__.get("_staffel_lauf", 0) + 1
+        self._staffel_lauf = lauf
+        # Fern vom Geschehen (seit 0.34.142): wer weiter als `fern_ab` px von
+        # jedem Menschen weg ist, denkt nur jeden `fern_jede`. Schritt - ihn
+        # sieht keiner, und gekaempft wird trotzdem (gemessen in SCHLACHT:
+        # die meisten Bots stehen weit weg vom Spieler). Ohne Menschen (der
+        # Testmodus, die Verhaltens-Szenen) gilt das nicht.
+        fern_ab, fern_jede = K.BOTS["fern_ab"], K.BOTS["fern_jede"]
+        menschen = self._fern_menschen() if len(bots) >= K.BOTS["fern_ab_bots"] else []
+        fern_q = fern_ab * fern_ab
         try:
-            for k in self._bots():
+            for k in bots:
                 hirn = getattr(k, "hirn", None)
                 if hirn is None:
                     continue
+                jetzt_jede = jede
+                fern = bool(menschen) and all(
+                    k.pos.distance_squared_to(p_) > fern_q for p_, _e in menschen)
+                if fern and fern_jede > jede and k.fahrzeug is None:
+                    # Am Steuer nicht: wer nur 10-mal je Sekunde lenkt, faehrt
+                    # an Mauern entlang und bleibt haengen.
+                    jetzt_jede = fern_jede
+                # Fern rechnet auch die Welt seine Bewegung im halben Takt
+                # (World.schritt, seit 0.34.142) - ihn sieht keiner.
+                k._fern = fern and K.BOTS["fern_halbtakt"]
+                if jetzt_jede > 1:
+                    # Versetzt: in jedem Schritt denkt ein Teil der Bots.
+                    hirn._staffel_dt = getattr(hirn, "_staffel_dt", 0.0) + dt
+                    if (lauf + k.nummer) % jetzt_jede:
+                        continue
+                    schritt, hirn._staffel_dt = hirn._staffel_dt, 0.0
+                    self._anwenden(k, hirn.eingabe(schritt))
+                    continue
+                hirn._staffel_dt = 0.0
                 self._anwenden(k, hirn.eingabe(dt))
         finally:
             self._kandidaten_lauf = None
             self.__dict__.pop("_kandidaten_merk", None)
+
+    def _fern_menschen(self) -> list:
+        """(Ort, Ebene) jedes Menschen - fuer die Fernregel (seit 0.34.142)."""
+        return [(m.pos, m.ebene) for m in self.kaempfer.values() if not m.ist_bot]
 
     def _bot_hoert(self, pos, ebene: int, quelle, weite: float | None = None) -> None:
         """Ein Schuss oder Knall - fuer die Ohren der Bots. `weite`: so weit

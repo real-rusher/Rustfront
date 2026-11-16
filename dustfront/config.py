@@ -126,7 +126,8 @@ SPIELER = dict(
     radius=9.0,
     # Pixel pro Sekunde bei vollem Lauf (war 132, dann 108; seit 0.34.43 mal
     # BEWEGUNG["lauf"])
-    tempo=108.0 * BEWEGUNG["lauf"],
+    # Seit 0.34.135 1,3 mal so schnell (gewuenscht: "Spieler sind extrem langsam").
+    tempo=108.0 * BEWEGUNG["lauf"] * 1.3,
     beschleunigung=1150.0,    # wie schnell das Tempo erreicht wird (war 1250)
     bremsung=1400.0,          # wie schnell er steht, wenn man loslaesst (war 1500)
     leben=100.0,
@@ -188,6 +189,20 @@ KAMERA = dict(
 # Beim Zeichnen dreht sich ein Wesen erst, wenn sein Blick sich um so viele
 # Grad geaendert hat (seit 0.34.96, render._gezeigter_winkel) - kleiner als
 # eine Drehstufe der Bilder (3 Grad), damit Zielen genau bleibt.
+# Gedrehte Bilder (seit 0.34.141, core.drehen_mittig): pygame.transform.rotate
+# liefert je nach Winkel gerade oder ungerade Breiten, und die Mitte des Bildes
+# lag dann mal auf, mal zwischen zwei Pixeln - beim Drehen sprang alles um einen
+# halben Spielpixel hin und her (gemeldet: "Fahrzeuge zittern stark"). Jetzt
+# wird ein `fein`-fach vergroessertes Bild gedreht und genau um die Mitte herum
+# wieder abgetastet: ungerade Breite und Hoehe, die Mitte immer auf demselben
+# Pixel. `an`: aus = wie vor 0.34.141.
+DREHEN = dict(an=True, fein=4)
+
+# BESTE QUALITAET (core._welt_hoch_auflegen): die Anzeige wird in so vielen
+# Stuecken hochgezogen, wie sie zusammenhaengende Flecken hat; sind es mehr,
+# auf einmal das ganze Bild (seit 0.34.141).
+ANZEIGE_STUECKE = 400
+
 FIGUR_DREH_RUHE = 2.6
 
 # Was hoch ueber allem fliegt (seit 0.34.96, die Spaehdrohne): so viele
@@ -223,15 +238,25 @@ FENSTER_EINRASTEN = 0.04
 TIEFENRASTER = dict(
     versuche=(0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6),
     groesstes=48,
+    hoch_rand=2,              # BESTE QUALITAET: so viele Pixel Rand rund um die Leinwand (0.34.141)
 )
 
 ZOOM = dict(
-    stufen=(0.75, 1.0, 1.25, 1.5, 1.75, 2.0),
+    stufen=(0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75),
     start=1.0,
     weich=12.0,               # wie schnell der Zoom nachzieht
+    hoechst=2.0,              # so weit hinaus ohne besonderes Fahrzeug
     # Bis zu diesem Zoom ist alles klar, erst dahinter liegt der Nebel
-    # (seit 0.34.95; vorher 1, also schon direkt hinter dem normalen Bild).
-    klar=1.5,
+    # (seit 0.34.95; vorher 1, also schon direkt hinter dem normalen Bild;
+    # seit 0.34.135 1,75 statt 1,5 - gewuenscht: "der Nebel soll noch etwas
+    # zurueckgehen").
+    klar=1.75,
+    # Fahrzeuge, die weiter sehen (seit 0.34.135): Art -> (hoechster Zoom,
+    # klar bis, wann). Der Funkwagen sieht aufgebaut seinen ganzen Peilkreis
+    # (470 px Radius, also 940 px hoch: 2,75 * 360 = 990), der Tragschrauber
+    # in der Luft weiter. Faellt der Zustand weg, springt der Zoom auf die
+    # hoechste erlaubte Stufe zurueck; kommt er, zoomt das Bild einmal hinaus.
+    fahrzeug={"funkwagen": (2.75, 2.75, "aufgebaut"), "tragschrauber": (2.5, 2.25, "luft")},
     nebel=(14, 10, 8, 168),   # Farbe und Deckkraft des Nebels
     nebel_rand=(96, 78, 56),  # die Kante des normalen Bildes
 )
@@ -548,6 +573,81 @@ BILD_MASS = {
     "gestruepp_4":      (TILE, TILE),
     "dielen":           (TILE, TILE),
     "dielen_2":         (TILE, TILE),
+    # Wasser und die Saetze gruen und stadt (seit 0.34.131, art_gelaende).
+    "seicht":           (TILE, TILE),
+    "seicht_2":         (TILE, TILE),
+    "seicht_3":         (TILE, TILE),
+    "wasser":           (TILE, TILE),
+    "wasser_2":         (TILE, TILE),
+    "wasser_3":         (TILE, TILE),
+    "kanal":            (TILE, TILE),
+    "kanal_2":          (TILE, TILE),
+    "kanal_3":          (TILE, TILE),
+    "gras":             (TILE, TILE),
+    "gras_2":           (TILE, TILE),
+    "gras_3":           (TILE, TILE),
+    "gras_4":           (TILE, TILE),
+    "feldstein":        (TILE, TILE),
+    "moosfels":         (TILE, TILE),
+    "moosfels_2":       (TILE, TILE),
+    "moosfels_3":       (TILE, TILE),
+    "baum":             (TILE, TILE),
+    "feldweg":          (TILE, TILE),
+    "feldweg_2":        (TILE, TILE),
+    "feldweg_3":        (TILE, TILE),
+    "feldweg_4":        (TILE, TILE),
+    "ufer":             (TILE, TILE),
+    "ufer_2":           (TILE, TILE),
+    "ufer_3":           (TILE, TILE),
+    "ufer_4":           (TILE, TILE),
+    "wiese":            (TILE, TILE),
+    "wiese_2":          (TILE, TILE),
+    "wiese_3":          (TILE, TILE),
+    "wiese_4":          (TILE, TILE),
+    "steg":             (TILE, TILE),
+    "steg_2":           (TILE, TILE),
+    "asphalt":          (TILE, TILE),
+    "asphalt_2":        (TILE, TILE),
+    "asphalt_3":        (TILE, TILE),
+    "asphalt_4":        (TILE, TILE),
+    "schild_klasse":    (32, 32),       # das Schild des SCHILDTRAEGERS (seit 0.34.138)
+    "hof":              (TILE, TILE),
+    "hof_2":            (TILE, TILE),
+    "hof_3":            (TILE, TILE),
+    "hof_4":            (TILE, TILE),
+    "ziegel":           (TILE, TILE),
+    "beton":            (TILE, TILE),
+    "beton_2":          (TILE, TILE),
+    "beton_3":          (TILE, TILE),
+    "truemmer":         (TILE, TILE),
+    "truemmer_2":       (TILE, TILE),
+    "truemmer_3":       (TILE, TILE),
+    "wrack":            (TILE, TILE),
+    "wrack_2":          (TILE, TILE),
+    "wrack_3":          (TILE, TILE),
+    "strasse":          (TILE, TILE),
+    "strasse_2":        (TILE, TILE),
+    "strasse_3":        (TILE, TILE),
+    "strasse_4":        (TILE, TILE),
+    "schutt":           (TILE, TILE),
+    "schutt_2":         (TILE, TILE),
+    "schutt_3":         (TILE, TILE),
+    "schutt_4":         (TILE, TILE),
+    "gehweg":           (TILE, TILE),
+    "gehweg_2":         (TILE, TILE),
+    "gehweg_3":         (TILE, TILE),
+    "rasen":            (TILE, TILE),
+    "rasen_2":          (TILE, TILE),
+    "rasen_3":          (TILE, TILE),
+    "rasen_4":          (TILE, TILE),
+    "fliesen":          (TILE, TILE),
+    "fliesen_2":        (TILE, TILE),
+    "kasernenplatz":    (TILE, TILE),
+    "kasernenplatz_2":  (TILE, TILE),
+    "kasernenplatz_3":  (TILE, TILE),
+    "kanal_seicht":     (TILE, TILE),
+    "kanal_seicht_2":   (TILE, TILE),
+    "kanal_seicht_3":   (TILE, TILE),
     # Verschneiter Kachelsatz fuer die lokale Hoehenkarten-Demo.
     "schnee":           (TILE, TILE),
     "schnee_2":         (TILE, TILE),
@@ -666,6 +766,21 @@ BILD_MASS = {
     "schrott_oben":     (TILE, TILE),
     "schrott_2_oben":   (TILE, TILE),
     "schrott_3_oben":   (TILE, TILE),
+    "feldstein_oben":   (TILE, TILE),
+    "moosfels_oben":    (TILE, TILE),
+    "moosfels_2_oben":  (TILE, TILE),
+    "moosfels_3_oben":  (TILE, TILE),
+    "baum_oben":        (22, 22),
+    "ziegel_oben":      (TILE, TILE),
+    "beton_oben":       (TILE, TILE),
+    "beton_2_oben":     (TILE, TILE),
+    "beton_3_oben":     (TILE, TILE),
+    "truemmer_oben":    (26, 26),
+    "truemmer_2_oben":  (26, 26),
+    "truemmer_3_oben":  (26, 26),
+    "wrack_oben":       (24, 30),
+    "wrack_2_oben":     (24, 30),
+    "wrack_3_oben":     (24, 30),
     "vignette":         (GAME_W, GAME_H),
 }
 
@@ -712,7 +827,6 @@ KLANG_NAMEN = (
     "trefferzeichen_toedlich",   # eigener Treffer, der erledigt
     "buggy_tuer",           # in den Buggy und wieder heraus (seit 0.34.9)
     "buggy_aufprall",       # der Buggy rumst gegen etwas
-    "buggy_rutschen",       # die Reifen quietschen, wenn er rutscht (seit 0.34.16)
     "funk_durch",           # ein Funkspruch ist durch (seit 0.34.58)
     # Panzer und Panzerwagen (seit 0.34.59) - Platzhalter, bis es Aufnahmen gibt.
     "schuss_kanone",        # die Panzerkanone
@@ -723,6 +837,13 @@ KLANG_NAMEN = (
     "fallschirm_riss",      # der Schirm eines Abwurfs reisst
     "absturz",              # ein Fahrzeug schlaegt nach dem Sturz auf
     "werfer_explosion",     # der Werfer geht hoch (seit 0.34.120)
+    "werfer_start",         # eine Rakete des Werfers startet (seit 0.34.143)
+    "werfer_anflug",        # sie heult herunter, kurz vor dem Einschlag
+    "einschlag",            # Rakete oder Bombe schlaegt ein
+    "buggy_motor",          # Motoren (seit 0.34.143): Buggy,
+    "krad_motor",           # Krad,
+    "lkw_motor",            # Laster (Tross-, Spulen-, Funkwagen, Werfer)
+    "rotor",                # und der Tragschrauber
     "bombe_ab",             # die Lunte der Schrottbombe wird gezuendet (seit 0.34.123)
     "bombe_fall",           # die zischende Lunte der fallenden Bombe
     "panzer_einschlag",     # die Granate der Kanone schlaegt ein
@@ -738,8 +859,11 @@ KLANG_NAMEN = (
     "schuss_spule", "spule_laden", "schuss_kettenblitz", "schuss_spiegellaser",
     "schuss_kugelblitz", "plasma", "flammenwerfer", "kettensaege", "hammer_boden",
     "schock", "schlag_faust", "knaller", "emp", "piepen", "klebt", "gas",
-    "schneeball", "wurf_leise", "nagel_wand", "falle_klick", "drohne", "horchposten",
+    "schneeball", "wurf_leise", "nagel_wand", "falle_klick", "drohne", "horchposten", "anflug", "platsch",
     "emp_aus", "reifen_platt", "schild", "schild_durch",
+    "ueberhitzt",           # eine Chor-Waffe ueberhitzt und kuehlt ab (seit 0.34.130)
+    "bomber",               # ein Stueck Triebwerk des Napalm-Bombers (seit 0.34.130)
+    "napalm_fall",          # eine Napalmbombe pfeift im Fall (seit 0.34.130)
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -765,6 +889,14 @@ NIE_DUMPF = ("herzschlag", "menue", "menue_ok")
 
 AUDIO = dict(
     gesamt=0.75,              # Gesamtlautstaerke
+    # Mischerpuffer in Proben (seit 0.34.136, vorher 512 = 12 ms): mit 1024
+    # (23 ms) laeuft er nicht leer, wenn der Klangfaden kurz die GIL haelt -
+    # sonst wiederholte die Karte den letzten Puffer, ein lauter Pulston.
+    # Gleich in rustfront_menu.MIX_PUFFER (wer zuerst oeffnet, gilt).
+    puffer=1024,
+    # So oft gibt der Klangfaden die GIL ab, solange er baut (s; Python
+    # sonst 0.005). pygame braucht sie im Tonfaden, wenn ein Klang endet.
+    werkstatt_wechsel=0.0005,
     schuss=0.85,              # Lautstaerke der Schuesse
     # Wie ein Ton mit der Entfernung leiser wird. Bis `nah` ist er voll
     # zu hoeren, ab `weit` nicht mehr; dazwischen faellt er gleichmaessig
@@ -836,7 +968,7 @@ NETZ = dict(
     # Nicht hoeher: Treffer rechnet der Gastgeber, wo die Gegner bei ihm
     # stehen - jede Verzoegerung hier heisst, man zielt weiter hinter ihnen
     # her (bis zur Treffer-Rueckrechnung, docs/CLIENTSEITE.md Stufe D).
-    puffer_hoechstens=0.15,
+    puffer_hoechstens=0.08,     # seit 0.34.135 (0.15): weniger Verzoegerung im Bild
     puffer_meldungen=20,
     puffer_schwankung=1.0,
     uhr_drift=0.01,
@@ -855,7 +987,11 @@ NETZ = dict(
     # Mehr als eingabe_vorlauf_hoechstens Schritte Vorlauf (200 ms) werden
     # sofort abgebaut; war eingabe_fenster Schritte (1 s) lang immer mehr als
     # eingabe_vorlauf_ruhig da, ein Schritt.
-    eingabe_puffer=True,
+    # Seit 0.34.135 aus (gemeldet: "der Dash ist bei Gaesten extrem verzoegert",
+    # "Laufen fuehlt sich schwammig an"): bis zu 200 ms Vorlauf hiess, jede
+    # Bewegung und jeder Dash wirkten beim Gastgeber so viel spaeter, und die
+    # Vorhersage des Gasts musste staendig nachziehen. Jetzt wirkt alles sofort.
+    eingabe_puffer=False,
     eingabe_vorlauf_hoechstens=24,
     eingabe_vorlauf_ruhig=2,
     eingabe_fenster=120,
@@ -1041,16 +1177,26 @@ FAHRZEUG_FUNK = dict(takt=1.1, wellen=3, radius=(4.0, 15.0), antenne=(-0.75, -0.
 # der anderen (`vorstoss_ziel`), statt die ganze Karte abzusuchen.
 SCHLACHT = dict(
     je_seite=24,
-    groessen=(12, 16, 20, 24, 30),
+    # Seit 0.34.132 (gewuenscht: "von sehr wenig zu unglaublich viel", je
+    # Karte): alle Stufen; welche eine Karte anbietet, sagt ihr Kopf
+    # (`je_seite_bis:`, `je_seite:`) oder ihre Groesse (seite_je_kacheln).
+    groessen=(1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 30, 36, 42, 50, 60, 75, 100, 125, 150),
+    seite_je_kacheln=380,      # ohne Angabe: je so viele begehbare Kacheln ein Kaempfer je Seite
+    seite_viel=42,             # ab so vielen je Seite steht VIEL! im Menue (gemessen: bis ~40 je Seite haelt ein
+                               # gewoehnlicher Rechner die 120 Schritte je Sekunde, 100 je Seite braucht ~2,5 mal so lang)
     # Seit 0.34.96 die offene Karte (gewuenscht: Fahrzeuge sollen nutzbar sein).
-    karte="staubtal_offen",
+    # Seit 0.34.131 FLUSSTAL: die erste Karte mit Front (Eroberungspunkte).
+    karte="flusstal",
     abschuesse=150,            # Vorgabe, wenn nach Abschuessen gespielt wird
     basis_x=0.08,              # Anteil der Kartenbreite vom Rand
     basis_proben=160,          # so viele freie Punkte werden je Basis geprueft
     # Seit 0.34.117: zwei Trosswagen und ein Flakwagen (der kommt mit einem Bot am
-    # Steuer, siehe K.FLAK konvoi_*).
-    fahrzeuge=(("panzer", 1), ("panzerwagen", 1), ("buggy", 2), ("krad", 1), ("trosswagen", 2),
-               ("flakwagen", 1)),
+    # Steuer, siehe K.FLAK konvoi_*). Seit 0.34.129 je Eintrag die Stufe, ab der
+    # er an der Basis steht (FREISCHALTEN, siehe `freischalten`): erst die
+    # leichten, dann Flak und der zweite Trosswagen, zuletzt der Panzer. Ist
+    # FREISCHALTEN aus, steht alles von Anfang an da (wie vorher).
+    fahrzeuge=(("buggy", 2, 0), ("krad", 1, 0), ("panzerwagen", 1, 0), ("trosswagen", 1, 0),
+               ("trosswagen", 1, 1), ("flakwagen", 1, 1), ("panzer", 1, 2)),
     fahrzeug_umkreis=420.0,    # so weit um die Basis stehen die Wagen
     spawn_umkreis=340.0,       # so weit um die Basis steigt man ein
     fahrer_je_seite=4,         # so viele Bots jeder Seite duerfen fahren
@@ -1064,10 +1210,15 @@ SCHLACHT = dict(
     melde_takt=1.0,
     lage_raster=256.0,         # Meldungen auf dieses Raster (Wegfelder teilen)
     lage_alt=10.0,
-    lage_weite=1600.0,
+    lage_weite=1100.0,         # seit 0.34.133 kleiner (vorher 1600: fast jeder kam zu jedem Kampf)
+    kampf_zulauf=3,            # so viele Bots gehen hoechstens zugleich zu einem gemeldeten Kampf
+    fahrzeug_zuletzt=20.0,     # so lange nach dem Aussteigen gehoert ein Wagen noch der Seite seines Fahrers (Punkte)
+    zulauf_halten=25.0,        # so lange gilt die Zusage eines Bots fuer einen Kampf (s)
+    stosstrupp=0.25,           # dieser Anteil zieht ohne Umweg ueber die Mitte zur Basis der anderen
     # Front: mehr als `front_ab` Bots einer Seite teilen sich auf `spuren`
     # Abschnitte quer zur Karte, `spur_abstand` px auseinander.
-    front_ab=20,
+    front_ab=4,                # seit 0.34.133 immer in Abschnitten (vorher erst ab 20)
+    spur_tiefe=520.0,          # so weit liegt die Mitte eines Abschnitts vor oder hinter der Kartenmitte
     spuren=5,
     spur_abstand=620.0,
     # Aufsitzen: Bots gehen zu einem Panzerwagen in dieser Weite, der
@@ -1090,29 +1241,86 @@ SCHLACHT = dict(
                 bild_hub=0.55, schirm=(64, 26), schirm_kiste=(30, 14), schirm_ueber=30, kisten=3,
                 sperre_basis=1800.0, ausweichen_ab=300.0, treiben=70.0, suche_weit=420.0,
                 stoss=520.0, quetschen=15.0, warnen_ab=160.0),
+    # Seit 0.34.138 wie eine Evakuierungszone (XCOM 2, gewuenscht): ein Feld so
+    # gross wie das Fahrzeug plus `rand` px (Kisten: `kiste` px), an den Ecken
+    # blaue Fackeln; je Fackel `rauch` Wolken, die `steigen` px aufsteigen,
+    # bis `rauch_gross` px wachsen und mit `wind` verwehen.
+    # Seit 0.34.138: die Basiswagen stehen zum Rundenstart sofort da, und freie
+    # Bot-Fahrer (darf_fahren) bis `basis_fahrer_weite` px sitzen gleich darin.
+    basis_sofort=True, basis_fahrer_weite=900.0,
+    fahrer_anteil=0.45,        # seit 0.34.138: so viel der Seite darf fahren (hoechstens so viele, wie die Basen Wagen haben)
+    drop_frei_vorn=6,          # seit 0.34.138: so viele 8-px-Schritte muss ein Basiswagen zur Front frei losfahren koennen
     dropzone=dict(radius=40, radius_kiste=22, grund=46, grund_puls=60,
+                  rand=10, kiste=40,
+                  # Seit 0.34.140 Leuchtfackeln am Boden mit dichtem Rauch (schlacht._leuchtfackel):
+                  # Wolken je Fackel, wie schnell sie nachkommen, wie hoch sie steigen und wie
+                  # gross sie werden, wie sehr der Wind sie wegtraegt, wie dicht sie am Anfang sind.
+                  rauch=22, rauch_tempo=0.26, steigen=64.0, rauch_gross=30, wind=0.65, rauch_deck=245.0,
+                  rauch_freund=(120, 170, 255), rauch_feind=(240, 88, 72), rauch_alt=(150, 150, 160),
+                  licht_freund=(110, 180, 255), licht_feind=(255, 96, 70),
                   zeichen=dict(buggy="B", flakwagen="A", tragschrauber="H", werfer="W", funkwagen="F", spulenwagen="S", krad="K", jagdpanzer="J", panzer="P", panzerwagen="L", munition="M",
                                medkit="+")),
-    punkte=dict(abschuss=1, fahrzeug=5, aufhelfen=5),
-    # Was man kaufen kann: (Kennung, Kosten, Name).
+    # Punkte (nur Menschen). Ein zerstoertes Fahrzeug bringt seit 0.34.129 die
+    # Haelfte seines Kaufpreises (`fahrzeug_anteil`, mindestens `fahrzeug_min`),
+    # was man nicht kaufen kann (Trosswagen) `fahrzeug` - vorher pauschal 5:
+    # ein Krad brachte mehr, als es kostete.
+    # Seit 0.34.134 gebucht schon beim Umwerfen (am Boden), egal ob er danach
+    # wiederbelebt wird; seit 0.34.135 wieder 1 Punkt (gewuenscht).
+    # Seit 0.34.138 (gewuenscht: "neue Arten, Punkte zu gewinnen ... man soll
+    # nie Sachen aufgeben muessen, weil sie keine Punkte bringen, aber sich
+    # eine Zeit lang bewusst auf etwas fokussieren koennen"):
+    #   aufhelfen 3 statt 5,
+    #   erobern     jeder Mensch im Kreis, wenn ein Punkt an seine Seite faellt,
+    #   serie       ein Abschuss innerhalb `serie_zeit` s nach dem vorigen: so viel
+    #               mehr (der dritte, vierte ... in Folge; bis `serie_hoechstens`),
+    #   jagd        ein Fahrzeug innerhalb `jagd_zeit` s nach dem vorigen: so viel mehr,
+    #   sold        alle `sold_takt` s jeder Mensch, `sold_halten` mehr, wenn die
+    #               eigene Seite mehr Eroberungspunkte haelt als die andere.
+    punkte=dict(abschuss=1, fahrzeug=3, fahrzeug_anteil=0.5, fahrzeug_min=2, aufhelfen=3,
+                erobern=3, serie=1, serie_zeit=20.0, serie_ab=2, serie_hoechstens=3,
+                jagd=2, jagd_zeit=90.0, sold=1, sold_halten=1, sold_takt=60.0),
+    # Was man kaufen kann: (Kennung, Kosten, Name). Seit 0.34.129 billiger
+    # (gewuenscht: "es kaufen ja nur Spieler, und es gibt nicht so viele").
     belohnungen=(
-        # Seit 0.34.101 die ersten drei je einen Punkt teurer (gewuenscht).
-        ("munition", 3, "MUNITIONSABWURF"),
-        ("medkit", 3, "SANITÄTSABWURF"),
-        ("buggy", 5, "DROPZONE: BUGGY"),
-        ("krad", 3, "DROPZONE: KRAD"),
-        ("aufklaerung", 6, "AUFKLÄRUNGSDROHNE"),
-        ("napalm", 10, "NAPALM-ANGRIFF"),
-        ("fallschirmjaeger", 8, "FALLSCHIRMJÄGER"),
-        ("panzerwagen", 8, "DROPZONE: PANZERWAGEN"),
-        ("panzer", 12, "DROPZONE: PANZER"),
-        ("jagdpanzer", 10, "DROPZONE: JAGDPANZER"),
-        ("spulenwagen", 10, "DROPZONE: SPULENWAGEN"),
-        ("funkwagen", 7, "DROPZONE: FUNKWAGEN"),
-        ("werfer", 9, "DROPZONE: WERFER"),
+        ("munition", 2, "MUNITIONSABWURF"),
+        ("medkit", 2, "SANITÄTSABWURF"),
+        ("buggy", 3, "DROPZONE: BUGGY"),
+        ("krad", 2, "DROPZONE: KRAD"),
+        ("aufklaerung", 4, "AUFKLÄRUNGSDROHNE"),
+        ("napalm", 7, "NAPALM-ANGRIFF"),
+        ("fallschirmjaeger", 6, "FALLSCHIRMJÄGER"),
+        ("panzerwagen", 6, "DROPZONE: PANZERWAGEN"),
+        ("panzer", 9, "DROPZONE: PANZER"),
+        ("jagdpanzer", 8, "DROPZONE: JAGDPANZER"),
+        ("spulenwagen", 8, "DROPZONE: SPULENWAGEN"),
+        ("funkwagen", 6, "DROPZONE: FUNKWAGEN"),
+        ("werfer", 10, "DROPZONE: WERFER"),
         ("tragschrauber", 9, "DROPZONE: TRAGSCHRAUBER"),
-        ("flakwagen", 9, "DROPZONE: FLAKWAGEN"),
+        ("flakwagen", 5, "DROPZONE: FLAKWAGEN"),
     ),
+    # FREISCHALTEN (seit 0.34.129, Regel der Runde): was man kaufen kann, kommt
+    # in Stufen - nicht nach festen Minuten, sondern nach dem Spielverlauf,
+    # damit es bei 5 wie bei 30 Minuten passt. Der Verlauf ist der Anteil der
+    # abgelaufenen Rundenzeit (bei einer Runde nach Abschuessen der groessere
+    # von: Abschuesse der fuehrenden Seite am Ziel, Laufzeit an `bezug`).
+    # `stufen`: Anteil, ab dem Stufe 1, 2, 3 gilt; `hoechstens`: spaetestens
+    # nach so vielen Sekunden (lange Runden warten sonst zu lange). AUS: alles sofort.
+    stufe=dict(munition=0, medkit=0, krad=0, buggy=0, aufklaerung=0,
+               panzerwagen=1, flakwagen=1, funkwagen=1, fallschirmjaeger=1, napalm=1,
+               panzer=2, jagdpanzer=2, spulenwagen=2, tragschrauber=2,
+               werfer=3),
+    freischalten=dict(
+        schnell=dict(stufen=(0.05, 0.12, 0.22), hoechstens=(60, 150, 270)),
+        normal=dict(stufen=(0.10, 0.22, 0.35), hoechstens=(120, 270, 450)),
+        langsam=dict(stufen=(0.15, 0.32, 0.50), hoechstens=(180, 420, 660)),
+        bezug=900.0,              # Runde nach Abschuessen: so lange gilt als ganze Runde (s)
+    ),
+    # So viele gekaufte je Seite gleichzeitig (lebend oder noch im Anflug) -
+    # seit 0.34.130 nur mit der Regel HÖCHSTENS JE SEITE (Vorgabe aus).
+    hoechstens_je_seite=dict(panzerwagen=3, flakwagen=2, funkwagen=1, jagdpanzer=2,
+                             spulenwagen=1, panzer=2, tragschrauber=1, werfer=1),
+    # Nur in der eigenen Haelfte abzuwerfen: wirkt auf Entfernung, gehoert nach hinten.
+    nur_eigene_haelfte=("funkwagen", "werfer", "tragschrauber"),
     belohnung_hilfe=dict(flakwagen="BOT-FLAK GEGEN FLIEGER", tragschrauber="FLIEGT, SIEHT ALLES, ZWEI BOMBEN", werfer="SALVEN AUF GESEHENE ZIELE, SEHR ZERBRECHLICH", funkwagen="PEILEN ODER STÖREN, NUR AUFGEBAUT", spulenwagen="BLITZ UND EMP-FELD, NUR AUFGEBAUT", krad="EINMAL, SCHNELL, KEIN SCHUTZ", jagdpanzer="EINMAL, WEIT, NUR VON VORN DICK",
                          munition="DREI KISTEN AM FALLSCHIRM", medkit="DREI MEDKITS AM FALLSCHIRM",
                          buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
@@ -1129,9 +1337,16 @@ SCHLACHT = dict(
     # kommt mit etwas Geschick hindurch. vorlauf: so lange nach dem Kauf, bis
     # das Flugzeug den Start erreicht; tempo: px/s; fall: so lange faellt
     # eine Bombe.
-    napalm=dict(laenge_anteil=0.5, tempo=950.0, vorlauf=2.5, fall=0.7, abstand=105.0,
+    # Seit 0.34.130: das Napalm brennt deutlich laenger (vorher 16-24 s) und
+    # anders als gewoehnliches Feuer (FEUER napalm_*); man hoert den Bomber
+    # nur in seiner Naehe - alle `brumm_takt` s ein Stueck Triebwerk dort, wo
+    # er ist (von `hoeren_ab` bis `hoeren_bis` der Bahn), und die Bomben fallen
+    # sichtbar (`fall` s aus `bombe_hoehe` px, mit `bombe_schwung` seines Tempos).
+    napalm=dict(laenge_anteil=0.5, tempo=950.0, vorlauf=2.5, fall=1.1, abstand=105.0,
                 streu=(0.6, 1.7), luecke_chance=0.28, luecke=(110.0, 210.0), seitlich=46.0,
-                radius=(40.0, 72.0), dauer=(16.0, 24.0), wenigstens_luecken=3),
+                radius=(40.0, 72.0), dauer=(30.0, 42.0), wenigstens_luecken=3,
+                hoeren_ab=-0.7, hoeren_bis=1.7, brumm_takt=0.45, brumm_laut=1.4,
+                bombe_hoehe=170.0, bombe_schwung=0.3),
     # Die Aufklaerungsdrohne (seit 0.34.100 ein grosser Starrfluegler, hoch
     # oben). markiert: so lange bleiben Pings ueber Gegnern und Fahrzeugen
     # (vorher 15 s). flug_hub: so hoch fliegt sie im Bild ueber ihrem
@@ -1151,9 +1366,90 @@ SCHLACHT = dict(
                           hoehe=420.0, sinken=70.0, versatz=0.8, waffen=("sturm", "mp", "unterhebel",
                                                                           "sturm", "autoschrot")),
     aufsitzen_weite=260.0,
+    krad_aufsitzen_weite=360.0,   # in den Beiwagen eines Krads (seit 0.34.143)
     absetzen_vor=650.0,
     nach_absetzen_tempo=70.0,   # px/s
 )
+
+# Auf Luftziele zielen (seit 0.34.135): liegt der Zeiger so viel ausserhalb
+# ihres Radius noch auf dem Bild, rastet er trotzdem ein.
+LUFT_ZIELEN = dict(
+    volltreffer=6.0,          # so nah am Wagen (px) zaehlt ein Einschlag als Volltreffer (seit 0.34.138)
+    fang_extra=12.0,
+    treffer_extra=14.0)       # ... und eine Kugel trifft es so viel ausserhalb noch (Streuung)
+
+# Ein Fahrzeug von einem Bot der eigenen Seite uebernehmen (seit 0.34.134):
+# E am Wagen wirft ihn hinaus (nicht beim Flakwagen); steigt man aus, steigt er
+# wieder ein, wenn er so nah ist.
+# Seit 0.34.138: E so lange `halten` (s), um einen Bot vom Steuer zu holen;
+# auf einen Panzerwagen sitzt auf, wer bis `aufsitzen_rand` px am Blech steht
+# (vorher zaehlte der Abstand zur Mitte, am Heck war man zu weit weg).
+FAHRZEUG_UEBERNEHMEN = dict(zurueck_weite=900.0, halten=0.6, aufsitzen_rand=18.0)
+
+# Die Front in SCHLACHT (seit 0.34.131, dustfront/front.py). Gilt auf Karten,
+# die ihre Basen, Eroberungspunkte und Wege im Kopf nennen (FLUSSTAL,
+# KANALSTADT). Gewuenscht: Hotzonen, die "wenn eingenommen, keine Punkte
+# bringen", sondern Einstiegspunkte werden; nach dem Tod eine Karte mit
+# allen Einstiegen zur Wahl; Bots in kleinen Gruppen auf verschiedenen
+# Wegen, in Formationen, verteilt auf die Einstiege - eine Front.
+FRONT = dict(
+    radius=210.0,              # Eroberungskreis eines Punktes (px)
+    zeit=14.0,                 # so lange braucht einer allein von neutral bis ganz (s)
+    mehr=0.4,                  # jeder weitere der Mehrheit macht es so viel schneller ...
+    hoechstens=2.6,            # ... bis hoechstens so viel mal
+    zurueck=0.06,              # niemand da: zurueck zum Stand des Besitzers (Anteil je s)
+    einstieg_umkreis=150.0,    # so weit um einen Punkt steigt man ein (px)
+    basis_umkreis=210.0,       # ... um eine Basis
+    umkaempft=520.0,           # ein Gegner so nah am Punkt: dort steigt keiner ein (px)
+    wieder_nach=7.0,           # Wiedereinstieg in SCHLACHT mit Front (s): Zeit zum Waehlen
+    takt=1.5,                  # so oft plant die Front einer Seite neu (s)
+    knoten_zusammen=96.0,      # Wegpunkte so nah beieinander sind ein Knoten (px)
+    punkt_anschluss=420.0,     # so weit sucht ein Punkt den naechsten Wegknoten (px)
+    # Gruppengroessen und wie oft: auch einmal einer allein oder zu zweit.
+    gruppen=((1, 0.15), (2, 0.32), (3, 0.3), (4, 0.23)),
+    sammeln=3.0,               # so lange wartet eine neue Gruppe am Einstieg auf ihre Leute (s)
+    wegpunkt_nah=70.0,         # so nah am Wegpunkt: weiter zum naechsten (px)
+    warten_ab=150.0,           # faellt einer weiter zurueck, geht der Anfuehrer langsamer (px)
+    warten_tempo=0.55,
+    form_abstand=46.0,         # Abstand in der Formation (px)
+    spur_abstand=40.0,         # in der Reihe auf der Spur des Anfuehrers (px)
+    halten_ring=(0.3, 0.85),   # am Punkt: so weit vom Mittelpunkt (Anteil des Radius)
+    halten_neu=(14.0, 26.0),   # so lange haelt eine Gruppe einen sicheren Punkt, dann weiter (s)
+    kampf_weite=520.0,         # ein gemeldeter Kampf so nah am Anfuehrer zieht die Gruppe an
+    kampf_pause=14.0,          # ... danach so lange kein neuer Umweg (s)
+    gewicht_angriff=1.0,       # Gewichte der Ziele: Punkt an der Front angreifen,
+    gewicht_bedroht=1.7,       # eigenen Punkt verteidigen, der bedroht ist,
+    gewicht_halten=0.3,        # eigenen Punkt an der Front halten,
+    gewicht_basis=0.9,         # Basis der anderen (wenn alle Punkte uns gehoeren)
+    bedroht=640.0,             # Gegner so nah: ein eigener Punkt gilt als bedroht (px)
+    front_faktor=1.6,          # bis so viel weiter als der naechste gilt ein Punkt als Front
+    weg_teilen=0.9,            # Aufschlag je Gruppe, die eine Kante zum selben Ziel nimmt
+    einstieg_last=0.6,         # Aufschlag je Bot, der von dort schon zu diesem Ziel ging
+    einstieg_weit=2.6,         # weiter als so viel mal der naechste: dorthin kein Bot
+    anflug=(70.0, 150.0),      # der letzte Wegpunkt liegt so weit vor dem Punkt (px)
+    fahrer=4,                  # so viele Bots je Seite fahren, wenn die Karte nichts sagt
+    # Seit 0.34.133 (gewuenscht: "nicht alle Bots zum selben Fight, sondern
+    # unabhaengige Ziele und Vorstoesse an verschiedenen Stellen"):
+    kampf_gruppen=1,           # so viele Gruppen biegen hoechstens zugleich zu einem gemeldeten Kampf ab
+    kampf_weg=520.0,           # ... und nur, wenn er so nah an ihrem eigenen Weg liegt (px)
+    verdacht_weite=330.0,      # weiter weg gehoerte Schuesse lassen eine Gruppe nur hinschauen, nicht hingehen
+    ziel_anteil=0.36,          # mehr als dieser Anteil der Bots einer Seite geht nie zum selben Ziel
+    gewicht_vorstoss=0.32,     # Punkte hinter der Front: kleine Stosstrupps (1-2) gehen dorthin
+    vorstoss_ab=8,             # ... wenn die Seite wenigstens so viele Bots hat
+)
+
+
+def basis_wagen(bis_stufe: int = 99) -> list:
+    """Die Basis-Fahrzeuge der SCHLACHT bis zu dieser Stufe als (Art, Anzahl),
+    je Art zusammengezaehlt (seit 0.34.129 haben die Eintraege eine Stufe)."""
+    zusammen: dict = {}
+    for eintrag in SCHLACHT["fahrzeuge"]:
+        art, anzahl = eintrag[0], eintrag[1]
+        stufe = eintrag[2] if len(eintrag) > 2 else 0
+        if stufe <= bis_stufe:
+            zusammen[art] = zusammen.get(art, 0) + anzahl
+    return list(zusammen.items())
+
 
 # Die Standardrunde (seit 0.32): womit eine frische Lobby plant, und was
 # der Knopf STANDARDRUNDE auf der Rundentafel einstellt. Gedacht fuer die,
@@ -1259,8 +1555,13 @@ ZONE = dict(
 # stehen bleibt, und in mittelschnellen Kurven haelt er.
 FAHRZEUG = dict(
     marke="F",                # Buchstabe in der Karte, wo einer steht
+    # Seit 0.34.143 brummt jeder Wagen, solange einer faehrt (vorher nur
+    # Panzer und Panzerwagen; gemeldet: "ganz viele Sachen haben noch keine
+    # Sounds"). Welcher Ton, und wie oft er wiederholt wird (s).
+    motor_klang="buggy_motor",
+    motor_takt=0.3,
     hoechst=250.0,            # bis hierher zieht der Motor (wirklich: ~220, Luft)
-    rueckwaerts=95.0,
+    rueckwaerts=145.0,         # seit 0.34.135 schneller (95)
     motor=420.0,              # Antrieb hinten, im Stand; nimmt mit dem Tempo ab
     bremse=520.0,             # wenn man gegen die Fahrtrichtung drueckt
     rollen=55.0,              # so schnell wird er ohne Gas langsamer
@@ -1288,11 +1589,10 @@ FAHRZEUG = dict(
     drift_grenze=29.0,        # ab diesem Driftwinkel (Grad) faengt ihn die Stuetze
     drift_grenze_hb=69.0,     # mit Handbremse erst hier
     drift_stuetze=30000.0,    # wie kraeftig sie zurueckdreht
+    rueck_roll_grenze=60.0,   # rollt er so nah an gerade nach hinten (Grad), stuetzt sie nicht (0.34.140)
     v_min=55.0,               # unter diesem Tempo rechnet der Schraeglauf ruhiger
     spur_ab=0.25,             # ab so viel Rutschen bleiben Reifenspuren (0 bis 1)
     spur_abstand=2.5,         # Pixel zwischen zwei Spurpunkten
-    quietschen_ab=0.5,        # ab so viel Rutschen quietschen die Reifen
-    quietschen_pause=0.6,
     kreis=13.0,               # Radius der beiden Kreise, mit denen er anstoesst
     achse=14.0,               # Abstand der Kreise von seiner Mitte
     einsteigen=46.0,          # so nah muss man dran sein
@@ -1359,7 +1659,7 @@ PANZER = dict(
     # Fahren: ein Kettenfahrzeug, kein Einspurmodell. Dreht auf der
     # Stelle, driftet nicht. Zielwerte aus dem abgenommenen Video.
     hoechst=45.0,             # px/s vorwaerts
-    rueckwaerts=26.0,
+    rueckwaerts=44.0,          # seit 0.34.135 schneller (26)
     beschleunigung=55.0,
     bremse=120.0,             # gegen die Fahrtrichtung gedrueckt
     rollen=90.0,              # ohne Gas
@@ -1395,6 +1695,7 @@ PANZER = dict(
     einsteigen=60.0,          # so nah muss man an der Mitte sein
     balken_breite=40,
     motor_takt=0.42,          # so oft brummt der Motor, waehrend er faehrt (s)
+    motor_klang="panzer_motor",   # auch fuer den Jagdpanzer (seit 0.34.143; vorher stumm)
     # Mit einem Stick (Touch): wie beim Buggy (fahrzeug.Buggy.stick_steuern).
     stick_tot=0.2,
     stick_voll_lenken=40.0,
@@ -1455,8 +1756,6 @@ PANZERWAGEN = dict(
     v_min=55.0,
     spur_ab=0.3,
     spur_abstand=2.5,
-    quietschen_ab=0.55,
-    quietschen_pause=0.7,
     aufprall=0.2,
     aufprall_hart=120.0,
     staub_ab=70.0,
@@ -1494,6 +1793,7 @@ PANZERWAGEN = dict(
     plaetze=4,
     balken_breite=36,
     motor_takt=0.36,
+    motor_klang="panzerwagen_motor",   # auch fuer den Flakwagen (seit 0.34.143)
     ramm_schwelle=40.0,
     ramm_je_px=0.37,          # 1/30 Treffer eines Laeufers
     ramm_stoss=1.35,
@@ -1513,8 +1813,10 @@ KRAD = dict(
     FAHRZEUG,
     marke="K",
     name="KRAD",
+    motor_klang="krad_motor",
+    motor_takt=0.24,
     hoechst=290.0,
-    rueckwaerts=80.0,
+    rueckwaerts=125.0,         # seit 0.34.135 schneller (80)
     motor=520.0,
     bremse=560.0,
     traegheit=150.0,          # leichter: dreht sich schneller um sich selbst
@@ -1522,10 +1824,12 @@ KRAD = dict(
     achse=10.0,
     einsteigen=40.0,
     leben=180.0,
-    # Im Gegensatz zu allen anderen Fahrzeugen kein Schutz der Insassen.
+    # Im Gegensatz zu allen anderen Fahrzeugen kein Schutz der Insassen -
+    # seit 0.34.143 ein kleines bisschen (gewuenscht: "etwas weniger Schaden
+    # als normal"): 85 Prozent statt des vollen Treffers.
     fahrer_geschuetzt=False,
-    schaden_anteil=1.0,
-    fahrer_anteil=1.0,
+    schaden_anteil=0.85,
+    fahrer_anteil=0.85,
     plaetze=1,                # der Beifahrer im Beiwagen
     beifahrer_streuung=2.0,   # so viel mal mehr Streuung seiner Waffe, wenn das Krad rollt
     # Der Beifahrer im Beiwagen (seit 0.34.121) dreht sich nur so weit: von
@@ -1552,7 +1856,7 @@ JAGDPANZER = dict(
     marke="J",
     name="JAGDPANZER",
     hoechst=62.0,
-    rueckwaerts=30.0,
+    rueckwaerts=48.0,          # seit 0.34.135 schneller (30)
     beschleunigung=60.0,
     leben=800.0,
     vorn=46.0, hinten=-44.0, halb=29.0,
@@ -1563,7 +1867,6 @@ JAGDPANZER = dict(
     schwenk=12.0,             # Grad, die die Kanone von der Wanne abweichen darf
     turm_dreh=40.0,           # Grad je Sekunde, mit denen sie schwenkt
     zielfernrohr=True,
-    nur_mensch=True,          # Bots fahren ihn (noch) nicht: er braucht eine Wanne, die zielt
     # Dicker vorn, duenner hinten als der Panzer (PANZER_SEITEN).
     seiten=dict(vorn=0.5, seite=1.1, hinten=1.6),
     fahrer_anteil=0.15,
@@ -1592,8 +1895,9 @@ TROSSWAGEN = dict(
                   "ramm_stoss", "ramm_extra")},
     marke="T",
     name="TROSSWAGEN",
+    motor_klang="lkw_motor",   # auch Spulen-, Funkwagen und Werfer
     hoechst=210.0,
-    rueckwaerts=70.0,
+    rueckwaerts=110.0,         # seit 0.34.135 schneller (70)
     motor=22.0,
     # Seit 0.34.117 ein Fuenftel groesser (gewuenscht): Bild, Kreise, Achsen
     # und die Zone hinten wuchsen mit.
@@ -1601,7 +1905,6 @@ TROSSWAGEN = dict(
     achse=31.0,
     einsteigen=60.0,
     leben=420.0,
-    nur_mensch=True,
     explosion_radius=80.0,
     explosion_schaden=80.0,
     fahrer_schaden=50.0,
@@ -1637,7 +1940,6 @@ SPULENWAGEN = dict(
     achse=26.0,
     einsteigen=56.0,
     leben=480.0,
-    nur_mensch=True,
     explosion_radius=84.0,
     explosion_schaden=85.0,
     fahrer_schaden=50.0,
@@ -1674,7 +1976,6 @@ FUNKWAGEN = dict(
     achse=24.0,
     einsteigen=54.0,
     leben=300.0,
-    nur_mensch=True,
     explosion_radius=70.0,
     explosion_schaden=60.0,
     fahrer_schaden=45.0,
@@ -1689,7 +1990,10 @@ FUNKWAGEN = dict(
     peilen=470.0,
     stoeren=420.0,
     funk=900.0,
-    drehen=1.1,               # Umdrehungen des Peilrahmens je Sekunde / 4 Stellungen
+    # Der Peilkopf auf dem Mast (seit 0.34.124 ein 3D-Modell, art_funkmast.py):
+    # aufgebaut dreht er sich so schnell (Grad/s); beim Abbau dreht er erst
+    # zurueck in Fahrtrichtung, damit er eingeklappt laengs auf dem Dach liegt.
+    kopf_dreh=75.0,
 )
 
 # Der Werfer (seit 0.34.112): Steilfeuer ueber die halbe Karte. Rechte
@@ -1712,15 +2016,15 @@ WERFER = dict(
     kreis=22.0,
     achse=24.0,
     einsteigen=54.0,
-    leben=120.0,
-    nur_mensch=True,
+    leben=160.0,              # seit 0.34.143 (gewuenscht: "etwas mehr HP"), vorher 120
     schiesst=True,
     # Die groesste Explosion des Spiels (seit 0.34.120): wer bis `explosion_tot`
     # Pixel danebensteht - der Fahrer immer -, stirbt sofort; bis
     # `explosion_radius` reisst es noch Leben (Fahrzeuge `explosion_fahrzeug`).
     # Kein Wrack: `wrack_zeit` ist nur die Zeit, bis der Wagen aus der Welt ist.
-    explosion_radius=330.0,
-    explosion_tot=210.0,
+    # Seit 0.34.143 ein wenig kleiner (gewuenscht): vorher 330 und 210.
+    explosion_radius=300.0,
+    explosion_tot=190.0,
     explosion_schaden=400.0,
     explosion_fahrzeug=700.0,
     fahrer_schaden=9999.0,
@@ -1731,17 +2035,34 @@ WERFER = dict(
     dreh=110.0,               # so schnell dreht sich das Gestell zum Zeiger (Grad/s)
     stillstand=8.0,
     rohr=(-15.0 * 1.4, 0.0),  # Mitte des Gestells (Pixel von der Mitte, +x = vorn)
-    # Das 3D-Gestell (seit 0.34.123, art_werfer.py): so steil stehen die Rohre
+    # Das Gestell (seit 0.34.123, art_werfer.py): so steil stehen die Rohre
     # bei einem Ziel ganz nah und ganz weit (Grad), so schnell richten sie sich
     # (Grad/s).
     hub=(56.0, 32.0),
     hub_dreh=28.0,
-    salve=dict(raketen=6, abstand=0.5, flug=3.6, streu=110.0, radius=46.0, schaden=90.0,
-               fahrzeug=120.0, nachladen=14.0, nah=400.0, weit=3200.0, umkreis=130.0,
+    # Seit 0.34.135 (gewuenscht: "jede soll was staerker sein und einen groesseren
+    # Radius haben", "mehr spread out"): 6 Raketen in einem Ring um die Mitte
+    # (`formation` mal streu weit, eine in die Mitte), je `wackeln` px versetzt.
+    # Seit 0.34.138 deutlich staerker gegen Fahrzeuge (gewuenscht: "besonders
+    # gegen gepanzerte, es ist schwer genug, sie ueberhaupt zu treffen"):
+    # 240 statt 165, und ein Volltreffer auf dem Wagen `volltreffer`-fach.
+    salve=dict(raketen=6, abstand=0.5, flug=3.6, streu=150.0, radius=66.0, schaden=120.0,
+               fahrzeug=240.0, volltreffer=1.7, nachladen=14.0, nah=400.0, weit=3200.0, umkreis=130.0,
+               formation=0.72, wackeln=22.0,
+        anflug_ton=1.1,      # seit 0.34.143: so viele Sekunden vor dem Einschlag heult sie herunter
+        weit_karte=0.5,      # seit 0.34.134: aufgebaut reicht er ueber die halbe Kartenbreite (mindestens weit)
                sicht=420.0, verraten=6.0, hoch=150.0, pruefen=0.4,
                # Die Rohre laden einzeln wieder (seit 0.34.120): das erste `nachladen_ab`
                # Sekunden nach dem letzten Start, dann je `nachladen_je` Sekunden eines.
                nachladen_ab=3.0, nachladen_je=1.75, reihenfolge=(0, 3, 1, 4, 2, 5)),
+    # Wohin er schiessen darf (seit 0.34.135, gewuenscht: "ueberall in die
+    # aufgedeckten Bereiche des ganzen Teams", etwas ueber die Sicht hinaus):
+    # um jeden eigenen Kaempfer SCHLACHT karte_sicht + sicht_rand, um jeden
+    # Eroberungspunkt und die Hotzone ihr Kreis + punkt_rand, um jeden
+    # markierten Gegner `feind`, und wo Aufklaerung (Drohne, Tragschrauber)
+    # vorbeikam, bleibt `spur_dauer` s lang ihr Kreis (alle `spur_takt` s ein
+    # Fleck). Auf der Karte des Werfers tuerkis.
+    zonen=dict(sicht_rand=220.0, punkt_rand=320.0, feind=420.0, spur_dauer=25.0, spur_takt=0.5),
 )
 
 # Der Tragschrauber (seit 0.34.113): fliegt ueber Mauern, Felsen und die Front.
@@ -1759,12 +2080,13 @@ TRAGSCHRAUBER = dict(
                   "ramm_stoss", "ramm_extra")},
     marke="H",
     name="TRAGSCHRAUBER",
+    motor_klang="rotor",      # am Boden und in der Luft
+    motor_takt=0.36,
     hoechst=110.0,            # am Boden
     kreis=14.0,
     achse=16.0,
     einsteigen=48.0,
-    leben=140.0,
-    nur_mensch=True,
+    leben=160.0,              # seit 0.34.143 (gewuenscht: "etwas mehr Leben"), vorher 140
     schiesst=True,
     explosion_radius=60.0,
     explosion_schaden=60.0,
@@ -1786,26 +2108,38 @@ TRAGSCHRAUBER = dict(
     aufklaerung_takt=1.0,
     bomben=2,
     bomben_nachladen=3.0,
+    bomben_nachladen_luft=9.0,   # seit 0.34.135: in der Luft laedt er auch nach, langsamer
     # Seit 0.34.123 eine kleine Schrottbombe (Blechdose mit Lunte, art_bombe.py),
     # von Hand neben der Kanzel fallen gelassen (`abwurf`: Spielpixel, +x vorn,
     # +y rechts): senkrecht, ohne sein Tempo, eine nach der anderen; im Fall
     # ueberschlaegt sie sich (`ueberschlag` Grad je Sekunde).
-    bombe=dict(fall=1.1, radius=62.0, schaden=110.0, fahrzeug=140.0, pause=0.6,
+    # volltreffer (seit 0.34.138): landet die Bombe auf einem Fahrzeug, schlaegt
+    # sie durch die Panzerung - so viel mal den Fahrzeugschaden; daneben wie bisher.
+    bombe=dict(fall=1.1, radius=62.0, schaden=110.0, fahrzeug=140.0, volltreffer=2.2, pause=0.6,
+        schwung=0.5,             # seit 0.34.135: so viel vom Tempo des Tragschraubers behaelt die Bombe
                abwurf=(9.0, 8.0), ueberschlag=260.0),
     luft_radius=24.0,         # so gross ist er als Ziel (Pixel um sein Bild)
+    # Abschuss in der Luft (seit 0.34.127, gewuenscht): die Insassen sind
+    # sofort tot, das Wrack faellt mit seinem Schwung weiter (`bremse`: so
+    # viel Tempo verliert es je Sekunde in der Luft, `schwere` in px/s^2),
+    # dreht sich und brennt. Prallt es an etwas, das hoeher ist als es selbst
+    # gerade (Mauer, Fels), verliert es den Schwung (`abprall`: so viel kommt
+    # zurueck) und rutscht dort herunter. Am Boden schlaegt es auf.
+    absturz=dict(schwere=230.0, bremse=0.35, drehen=150.0, rauch_takt=0.05, abprall=0.18,
+                 zurueck=96.0),       # so weit (px) sucht es rueckwaerts einen Platz zum Liegen
 )
 
 # Der Flakwagen (seit 0.34.114): ein Laster mit einem Vierling auf der
 # Pritsche - ein Panzerwagen, dessen Ring-MG gegen die Luft gebaut ist.
-# Fahren duerfen ihn nur Bots (`nur_bot`; gewuenscht: ein Mensch koennte
-# Boden- und Luftziel nicht auseinanderhalten - der Bot schon): ein Abwurf
-# bringt einen Bot der Seite gleich mit. Der Vierling schiesst ueber die
+# Seit 0.34.138 duerfen ihn auch Menschen fahren, seit 0.34.143 faellt er
+# leer (gewuenscht: "ohne Bot droppen"). Der Vierling schiesst ueber die
 # `flak_kanone`-Zeile (FAHRZEUG_WAFFEN) und rastet auf Luftziele ein (luft.py).
 FLAKWAGEN = dict(
     {k: v for k, v in PANZERWAGEN.items() if k not in ("plaetze", "marke", "name")},
     marke="FL",
     name="FLAKWAGEN",
-    nur_bot=True,
+    # Seit 0.34.138 auch fuer Menschen (gewuenscht) - vorher nur_bot, und
+    # er fiel mit einem Bot darin.
     flak=True,
     hoechst=240.0,
     leben=520.0,
@@ -1820,6 +2154,44 @@ FLAKWAGEN = dict(
     fahrer_schaden=50.0,
     neu_nach=40.0,
 )
+
+# Huellen genau wie die Bilder (seit 0.34.138, gemeldet: "mit unsichtbaren
+# Teilen an Waenden stecken bleiben, durch Fahrzeuge durchlaufen, zum Teil in
+# Waenden drin"). Gemessen an den Bildern (deckende Pixel): die Kastenwagen
+# bekommen vorn/hinten/halb, die mit zwei Kreisen einen Radius = halbe Breite
+# und eine Achse, mit der die Laenge stimmt; `mitte` schiebt beide Kreise
+# entlang der Achse, wo das Bild nicht mittig sitzt. Vorher waren die meisten
+# kleiner als ihr Bild (Trosswagen 105 x 43 gegen 122 x 62, Krad mit
+# Beiwagen 38 x 18 gegen 52 x 45).
+for _d, _h in ((PANZER, dict(vorn=48.0, hinten=-46.0, halb=31.0)),
+               (PANZERWAGEN, dict(vorn=48.0, hinten=-48.0, halb=25.0)),
+               (JAGDPANZER, dict(vorn=46.0, hinten=-48.0, halb=31.0)),
+               (FLAKWAGEN, dict(vorn=47.0, hinten=-46.0, halb=26.0)),
+               (FAHRZEUG, dict(kreis=18.0, achse=8.0, mitte=1.0)),
+               (KRAD, dict(kreis=22.0, achse=4.0, mitte=0.0)),
+               (TROSSWAGEN, dict(kreis=31.0, achse=30.0, mitte=-3.0)),
+               (SPULENWAGEN, dict(kreis=26.0, achse=21.0, mitte=0.0)),
+               (FUNKWAGEN, dict(kreis=25.0, achse=22.0, mitte=-2.0)),
+               (WERFER, dict(kreis=26.0, achse=20.5, mitte=2.5)),
+               (TRAGSCHRAUBER, dict(kreis=20.0, achse=18.0, mitte=-6.0))):
+    _d.update(_h)
+
+# Schieben (seit 0.34.138, gewuenscht: "leichte Fahrzeuge koennen gepusht
+# werden, indem man dagegen faehrt, schwere von anderen schweren"): wer Gas
+# gibt (mehr als `gas`) und an einen Wagen stoesst, schiebt ihn mit `tempo`
+# px/s (mal Gas) - wenn sein `gewicht` mindestens so gross ist und der andere
+# leicht (1) ist oder er selbst nicht leicht. Wracks auch.
+# Abschleppen mit dem Trosswagen (seit 0.34.138): ein leerer Wagen bis `fang`
+# px um die Zone hinten wird mit der rechten Maustaste angehaengt; er haengt
+# `abstand` px hinter der Kupplung und reisst ab, wenn er weiter als `reissen`
+# px zurueckbleibt (an einer Mauer festgehakt). Ziehen kann er Leichtes und
+# Mittleres (K.SCHIEBEN gewicht), keinen Panzer.
+ABSCHLEPPEN = dict(fang=30.0, abstand=6.0, reissen=70.0)
+
+SCHIEBEN = dict(gas=0.3, tempo=70.0,
+                gewicht=dict(buggy=1, krad=1, tragschrauber=1, trosswagen=2, funkwagen=2,
+                             spulenwagen=2, werfer=2, flakwagen=2, panzerwagen=2,
+                             panzer=3, jagdpanzer=3))
 
 # Flak gegen Luftziele: wie viel mehr eine Flak-Kugel dort wiegt, und wie weit
 # ein Bot einen Flieger sucht (ein Bot am Steuer; Tragschrauber, Drohnen,
@@ -1918,6 +2290,13 @@ FEUERBALL = dict(
 #   ramm            Rammen
 #
 # Ohne Art (alte Aufrufe, Testmodus, Befehle) kommt alles an.
+# Was das eigene Fahrzeug trifft, wenn man selbst darin sitzt (seit 0.34.145,
+# gewuenscht: "dass man seinem eigenen Fahrzeug keinen Schaden macht, ausser
+# halt mit einer Explosion - zum Beispiel ein Panzer, der direkt in eine Wand
+# vor sich schiesst"). Kugeln, Panzerbuechse, Feuer, Rammen nicht; der
+# Beifahrer im Krad schiesst sein Krad also nicht an.
+EIGENES_FAHRZEUG_TRIFFT = ("spreng", "hohlladung")
+
 PANZERUNG = {
     "buggy": dict(kugel=1.0, panzerbrechend=1.3, spreng=1.0, hohlladung=1.5,
                   feuer=0.6, nahkampf=0.5, ramm=1.0),
@@ -2056,6 +2435,31 @@ FAHRZEUG_WAFFEN = {
 # Maus und zielt erst ungenau, dann besser - nie vorhaltend. Das Spiel
 # streut seine Schuesse wie die aller anderen.
 BOTS = dict(
+    # Gestaffeltes Denken (seit 0.34.135, gewuenscht: "die Rechenleistung der
+    # Bots aufteilen, muss aber fluessig laufen"): ab `staffel` [i][0] Bots
+    # denkt jeder nur jeden [i][1]. Schritt (versetzt, mit der ganzen
+    # vergangenen Zeit). Dazwischen gilt seine letzte Eingabe weiter -
+    # Laufen, Zielen, Gas und Lenkung bleiben am Kaempfer stehen. Bei 120
+    # Schritten je s sind das 60 oder 40 Entscheidungen je s und Bot.
+    # Seit 0.34.142 (gewuenscht: "die Performance bei Schlacht deutlich
+    # verbessern"): ab 30 Bots jeden 4. Schritt (30 Entscheidungen je s - gut
+    # unter der Reaktionszeit eines Menschen), ab 100 jeden 6. Gemessen auf
+    # FLUSSTAL mit 24 je Seite dachten die Bots 42 Prozent jedes Schritts.
+    staffel=((30, 4), (100, 6)),
+    # Und wer weiter als `fern_ab` px von jedem Menschen weg ist (weiter als
+    # die Bildecke ganz herausgezoomt), denkt nur jeden `fern_jede`. Schritt - ab
+    # `fern_ab_bots` Bots, und nur, wenn Menschen mitspielen (seit 0.34.142).
+    fern_ab=1200.0, fern_jede=12, fern_ab_bots=16,
+    # ... und die Welt rechnet seine Bewegung nur jeden zweiten Schritt, mit
+    # der doppelten Zeit (World.schritt).
+    fern_halbtakt=True,
+    # Luftziele (seit 0.34.138): ohne Gegner am Boden schiessen Bots auf
+    # Tragschrauber und Drohnen bis `luft_weite` px (und Waffenreichweite),
+    # suchen alle `luft_takt` s, reagieren `luft_reaktion` s langsamer als
+    # auf Bodenziele, feuern in Stoessen (an, aus in s) und verfehlen im
+    # Kreis von `luft_fehler` mal dem Zielradius (nicht zu stark).
+    luft_weite=560.0, luft_takt=0.3, luft_reaktion=0.4, luft_stoss=(0.6, 0.9),
+    luft_fehler=2.2,
     # So lange (s) geht ein Bot gegen gesehene Fallschirmjaeger in Deckung,
     # nachdem er sie zuletzt sah (seit 0.34.100).
     springer_merken=4.0,
@@ -2130,7 +2534,10 @@ BOTS = dict(
            "MONGOOSE", "SKULL", "BONES"),
     takt=0.1,                 # so oft sieht und entscheidet er neu (s)
     sicht=330.0,              # so weit sieht er (halbe Bildbreite ist 320)
-    reaktion=(0.45, 0.85),    # bis zum ersten Schuss auf ein neues Ziel (s)
+    # Seit 0.34.135 um das neue Lauftempo kuerzer (vorher 0.45-0.85): alle
+    # laufen 1,3 mal so schnell, ein Gegner steht also kuerzer offen - mit der
+    # alten Zeit kam der Feuerschutz kaum noch zum Schuss (test_verhalten).
+    reaktion=(0.35, 0.65),    # bis zum ersten Schuss auf ein neues Ziel (s)
     reaktion_hinten=0.35,     # dazu, wenn es von hinten kommt
     dreh=230.0,               # so schnell schwenkt er das Fadenkreuz (Grad/s)
     fehler_start=48.0,        # Zielfehler beim ersten Sehen, auf 250 px (px)
@@ -2222,7 +2629,10 @@ BOTS = dict(
                        # Aus dem Waffenpaket (seit 0.34.62) - fuer Bots, denen
                        # der Testmodus eine davon gibt (siehe `waffen`).
                        revolver=230.0, zwillinge=170.0, mp=150.0,
-                       praezision=330.0, unterhebel=230.0, panzerbuechse=380.0,
+                       praezision=330.0, unterhebel=230.0,
+                       # 0.34.143: 300 statt 380 - er hielt sich ausserhalb seiner eigenen
+                       # Schussweite (reichweite, 330) und schoss darum kaum.
+                       panzerbuechse=300.0,
                        doppelflinte=110.0, autoschrot=130.0, minigun=220.0,
                        # Seit 0.34.70: alle uebrigen Waffen, die ein Bot im
                        # Testmodus (spaeter: in seiner Klasse) bekommen kann.
@@ -2230,7 +2640,7 @@ BOTS = dict(
                        bolzer=26.0, nagler=200.0, hammer=24.0, schockstab=22.0,
                        schlagring=16.0, kettensaege=20.0, wurfmesser=18.0, speer=44.0,
                        spule=330.0, kettenblitz=200.0, spiegellaser=260.0,
-                       kugelblitz=240.0, flammenwerfer=90.0),
+                       kugelblitz=240.0, flammenwerfer=105.0),   # 0.34.143: Flamme 150 statt 130
     # Wer ein MG hat, schiesst damit (seit 0.34.38): so viele Pixel
     # Abstand nimmt er hin, bevor er lieber die andere Waffe nimmt. Vorher
     # nahm der MG-Schuetze auf mittlere Weite das Sturmgewehr.
@@ -2244,7 +2654,7 @@ BOTS = dict(
                     bolzer=44.0, nagler=300.0, hammer=40.0, schockstab=36.0,
                     schlagring=26.0, kettensaege=32.0, wurfmesser=26.0, speer=62.0,
                     spule=330.0, kettenblitz=300.0, spiegellaser=330.0,
-                    kugelblitz=330.0, flammenwerfer=125.0),
+                    kugelblitz=330.0, flammenwerfer=145.0),
     # Womit ein Bot kaempfen kann (seit 0.34.70): alles ausser Wurf und C4,
     # die gehen ueber den Wurf (_werfen).
     kampf_arten=("schuss", "werfer", "rakete", "strahl", "kette", "kugel", "flamme",
@@ -2263,10 +2673,55 @@ BOTS = dict(
     gefahr_takt=0.15,         # so oft schaut er nach (s)
     spule_loslassen=0.92,     # bei so viel Ladung laesst er los
     spule_fehler=0.3,         # x Zielfehler, waehrend er die Spule laedt (seit 0.34.91)
+    # Ruhig zielen (seit 0.34.143, gemeldet: "Bots mit der Panzerbuechse
+    # brauchen extrem lang zum Schiessen, wechseln sehr oft den Punkt, auf
+    # den sie bei diesem Fahrzeug zielen"): x Zielfehler fuer langsame
+    # Einzelschuesse mit Laser - der wanderte sichtbar ums Ziel. Sitzt der
+    # Gegner in einem Fahrzeug, zielt er auf dessen Mitte.
+    ruhig_zielen=dict(panzerbuechse=0.35),
     # Bots am Steuer (seit 0.34.71, nur wem der Testmodus es erlaubt -
     # im Gefecht fahren Bots weiter nicht, so gemeldet).
     fahren=dict(
-        abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0, krad=0.0, flakwagen=260.0),  # so weit bleibt er stehen
+        # Seit 0.34.138: wer in einem Wagen ohne Waffe sitzt (Buggy, Krad), jagt
+        # keinen Gegner; kommt einer naeher als `unbewaffnet_aussteigen` px,
+        # steigt er aus und sucht `unbewaffnet_pause` s lang keinen Wagen.
+        unbewaffnet_aussteigen=300.0, unbewaffnet_pause=25.0,
+        # Krad zu zweit (seit 0.34.143, gewuenscht: "Bots mit dem Krad sollen
+        # oefter zu zweit umherfahren, wobei das um den Gegner Herumfahren
+        # wieder Sinn macht, weil der Beifahrer dann schiesst"). Sitzt einer im
+        # Beiwagen, kreist der Fahrer in `krad_kreis` px um den Gegner, den
+        # Beiwagen zu ihm hin, und zielt dabei `krad_kreis_schritt` Grad voraus.
+        # Allein wartet er nach dem Aufsitzen bis `krad_warten` s auf einen
+        # Kameraden ohne Aufgabe, der hoechstens `krad_warten_weite` px weg ist.
+        krad_kreis=170.0, krad_kreis_schritt=45.0, krad_warten=4.0, krad_warten_weite=320.0,
+        # Vorausschauend ausweichen (seit 0.34.138): ab `ausweichen_ab` px bis
+        # zum Wegpunkt prueft er die Spur vor sich - so weit, wie er in
+        # `ausweichen_zeit` s faehrt (zwischen min und max px) - und weicht in
+        # diesen Winkeln aus; ist alles zu, faehrt er mit `ausweichen_gas`
+        # weiter. Je Wagen hoechstens alle `ausweichen_takt` s neu gerechnet.
+        # Steht in `ausweichen_nah` px vor der Nase etwas und ist er langsamer als
+        # `ausweichen_rueck_tempo`, setzt er `ausweichen_rueck_zeit` s zurueck;
+        # eine gewaehlte Seite haelt er `ausweichen_seite_halten` s.
+        ausweichen_ab=20.0, ausweichen_zeit=0.9, ausweichen_min=40.0, ausweichen_max=220.0,
+        ausweichen_winkel=(20.0, 40.0, 65.0, 90.0), ausweichen_gas=0.35, ausweichen_takt=0.12,
+        ausweichen_nah=26.0, ausweichen_rueck_tempo=60.0, ausweichen_rueck_zeit=0.7,
+        ausweichen_rueck_gas=0.7, ausweichen_seite_halten=2.0,
+        # Wegpunkt dicht daneben (unter `ausweichen_ab`), mehr als `wand_rueck_winkel` Grad neben
+        # der Nase, die an einer Wand steht, `wand_zeit` s lang langsamer als `wand_tempo` px/s und
+        # um weniger als `wand_drehung` Grad gedreht: zurueck, bis vor der Nase Platz ist
+        # (hoechstens `wand_rueck_max` s).
+        # Kolonne (seit 0.34.140): faehrt ein besetzter Wagen vor ihm auf seiner Spur (seitlich
+        # weniger als beide halben Breiten plus `kolonne_seite`), bleibt er `kolonne_abstand` px
+        # dahinter und gibt erst auf `kolonne_auflauf` px mehr wieder Vollgas; steht der
+        # Vordermann (unter `kolonne_steht` px/s), wartet er hoechstens `kolonne_warten` s.
+        # Kommt er entgegen (mehr als `kolonne_gegen` px/s), halten sich beide `kolonne_rechts` Grad rechts.
+        kolonne_abstand=34.0, kolonne_seite=10.0, kolonne_auflauf=70.0, kolonne_steht=12.0,
+        kolonne_warten=4.0, kolonne_gegen=25.0, kolonne_rechts=28.0,
+        kolonne_bremsweg=0.45,    # so viele Sekunden Annaeherung gehen zusaetzlich auf den Abstand
+        kolonne_gleich=0.5,       # cos des Winkels zwischen beiden Nasen: darueber gleiche Richtung, unter minus entgegen
+        wand_rueck_winkel=45.0, wand_tempo=20.0, wand_zeit=0.6, wand_drehung=4.0, wand_rueck_max=1.0,
+        abstand=dict(panzer=300.0, panzerwagen=200.0, buggy=0.0, krad=0.0, flakwagen=260.0,
+                     jagdpanzer=520.0, spulenwagen=230.0),  # so weit bleibt er stehen
         suchen=700.0,         # so weit sucht ein Fahrer ohne Fahrzeug nach einem
         # Seit 0.34.95 faehrt er nach einem eigenen Wegenetz: nur Kacheln,
         # um die so viele Kacheln frei sind (wege.Fahrwegenetz), und er
@@ -2280,12 +2735,18 @@ BOTS = dict(
         mg_winkel=10.0,
         steckt_nach=1.2,      # so lange ohne Fahrt, dann setzt er zurueck
         zurueck=1.0,          # so lange
-        raus_unter=0.15,      # unter so viel Leben steigt er aus
+        raus_unter=0.15,      # unter so viel Leben ueberlegt er, auszusteigen (seit 0.34.135 nicht immer):
+        wrack_bleiben=0.35,   # ... so oft bleibt er drin bis zum Schluss
+        wrack_fliehen=0.35,   # ... so oft steigt er aus und laeuft weg (sonst: aus und in Stellung)
+        wrack_flucht_zeit=7.0,
+        wrack_meiden=0.25,    # einen Wagen mit weniger Leben nimmt kein Bot
         fehler=14.0,          # Zielfehler am Ziel (px)
         # Aus Turm und Ring sieht man weiter als zu Fuss (330): die Kanone
         # reicht 900, und ein Panzer, der seine Gegner nicht sieht, ist nur
         # ein Hindernis (gemessen: Gegner auf 730 px blieben ungesehen).
-        sicht=dict(panzer=720.0, panzerwagen=560.0, buggy=380.0, krad=380.0, flakwagen=560.0),
+        sicht=dict(panzer=720.0, panzerwagen=560.0, buggy=380.0, krad=380.0, flakwagen=560.0,
+                   jagdpanzer=900.0, spulenwagen=440.0, trosswagen=380.0, funkwagen=380.0,
+                   werfer=380.0, tragschrauber=520.0),   # seit 0.34.131 fahren Bots alle
         # Seit 0.34.84 (gemeldet nach einer grossen Fahrzeugschlacht):
         # Liegt das Ziel hinter ihm und weiter weg als das, wendet er
         # vorwaerts, statt die ganze Strecke rueckwaerts zu fahren.
@@ -2335,6 +2796,17 @@ BOTS = dict(
         scharf=("praezision", "bolzer"),
         lmg=("minigun",),
     ),
+    # Seltene Waffen (seit 0.34.143, gewuenscht: "hin und wieder selten mal
+    # einen Bot mit einem Raketenwerfer oder Flammenwerfer"): so oft wird -
+    # wie `vielfalt` nur in echten Runden - die zweite Waffe gegen eine davon
+    # getauscht. Das Grundsaetzliche bleibt: die erste ist immer eine der fuenf.
+    selten=0.1,
+    selten_waffen=("raketenbuendel", "flammenwerfer", "granatwerfer", "einwegwerfer"),
+    # Andere Wurfwaffen (seit 0.34.143, gewuenscht: "mehr verschiedene
+    # Granaten, nicht immer nur die Standardgranate"): so oft statt der
+    # Granate eine aus `wurf_andere` - ebenso nur in echten Runden.
+    wurf_vielfalt=0.45,
+    wurf_andere=("molotov", "blend", "gas", "kuller", "haftladung"),
     # Panzerjaeger (seit 0.34.95): gibt es in der Runde Fahrzeuge, traegt
     # ein Teil der Bots Panzerbuechse und Raketen. Wer es wird, entscheidet
     # die Zahl, nicht der Zufall: je Mannschaft so viele, wie fehlen.
@@ -2703,6 +3175,10 @@ LOBBY = dict(
                   "blaeher"),
     weiter_nach=12.0,         # so lange steht die Siegtafel vor der naechsten
     plan_hoechstens=12,       # mehr Runden plant niemand
+    # Start mit Ladebild (seit 0.34.143): so lange wartet er hoechstens auf
+    # Klaenge, die die Werkstatt noch baut - sonst baute sie sie mitten in
+    # den ersten Sekunden der Runde (s).
+    start_klang_warten=12.0,
 )
 
 
@@ -2838,6 +3314,13 @@ REVIVE = dict(
     danach_leben=40.0,        # mit so viel Leben steht man wieder auf
     schutz=2.0,               # Sekunden unverwundbar nach dem Aufstehen
     kriechen=0.35,            # so viel Tempo hat man am Boden noch
+    # Aufgeben (seit 0.34.129, gewuenscht): wer am Boden liegt, haelt R so
+    # lange gedrueckt, dann ist er tot und kommt neu (wie nach dem Verbluten).
+    # RESPAWN im Escape-Menue tut dasselbe sofort, auch im Stehen. Wer kurz
+    # davor (`wertung` s) von einem Gegner getroffen wurde, zaehlt fuer den
+    # als Abschuss - sonst entzoege man sich so jedem Abschuss.
+    aufgeben=2.5,
+    wertung=8.0,
 )
 
 # Verwundete Bots im Testmodus (seit 0.34.40, Testmenue VERWUNDETE BOTS).
@@ -3157,6 +3640,15 @@ STEHEN = {
     "holzkiste":  dict(hoehe=16.0, rahmen=(3, 3, 26, 26), form="block", fugen=2),
     "kaktus":     dict(hoehe=20.0, rahmen=(7, 7, 18, 18), form="rund", fugen=0),
     "schrott":    dict(hoehe=14.0, rahmen=(0, 0, 32, 32), form="block", fugen=1),
+    # Seit 0.34.131 (Saetze gruen und stadt): der Baum ist hoeher als jede
+    # Mauer, haelt aber nur mit dem Stamm und dem dichten Teil der Krone.
+    "feldstein":  dict(hoehe=22.0, rahmen=(0, 0, 32, 32), form="block", fugen=2),
+    "moosfels":   dict(hoehe=30.0, rahmen=(0, 0, 32, 32), form="block", fugen=3),
+    "baum":       dict(hoehe=28.0, rahmen=(5, 5, 22, 22), form="rund", fugen=0),
+    "ziegel":     dict(hoehe=28.0, rahmen=(0, 0, 32, 32), form="block", fugen=2),
+    "beton":      dict(hoehe=26.0, rahmen=(0, 0, 32, 32), form="block", fugen=2),
+    "truemmer":   dict(hoehe=12.0, rahmen=(3, 3, 26, 26), form="block", fugen=0),
+    "wrack":      dict(hoehe=15.0, rahmen=(4, 1, 24, 30), form="block", fugen=1),
 }
 
 # Deckung (seit 0.34.26, world.Welt.schuss_halt / deckung). Jede feste
@@ -3187,7 +3679,45 @@ KARTENSAETZE = {
                "wand": "sand_wand", "kiste": "sand_kiste", "klippe": "fels"},
     "schnee": {"boden": ("schnee", "schnee_2", "schnee_3", "schnee_4"),
                "wand": "schnee_fels"},
+    # Seit 0.34.131: FLUSSTAL - Wiesen, Feldwege, bemooster Granit, Baeume,
+    # Feldsteinmauern, Stege ueber das Wasser.
+    "gruen": {"boden": ("gras", "gras_2", "gras_3", "gras_4"),
+              "wand": "feldstein", "kaktus": "baum", "klippe": "moosfels",
+              "bilder": {"fels": ("moosfels", "moosfels_2", "moosfels_3"),
+                         "piste": ("feldweg", "feldweg_2", "feldweg_3", "feldweg_4"),
+                         "kies": ("ufer", "ufer_2", "ufer_3", "ufer_4"),
+                         "gestruepp": ("wiese", "wiese_2", "wiese_3", "wiese_4"),
+                         "pflaster": ("gehweg", "gehweg_2", "gehweg_3")}},
+    # Seit 0.34.131: KANALSTADT - Asphalt, Ziegelhaeuser, Betontruemmer,
+    # Autowracks, Kanaele mit Bruecken, Parks mit Rasen und Baeumen.
+    # Seit 0.34.135 ist der Boden der Bloecke heller Kopfstein ("hof") und
+    # nicht Asphalt (gemeldet: "nicht erkennbar, was Teil des Gebaeudes und
+    # was Teil der Strasse ist") - die dunkle Fahrbahn hebt sich ab.
+    "stadt": {"boden": ("hof", "hof_2", "hof_3", "hof_4"),
+              "wand": "ziegel", "kaktus": "baum", "klippe": "beton",
+              "bilder": {"fels": ("beton", "beton_2", "beton_3"),
+                         "brocken": ("truemmer", "truemmer_2", "truemmer_3"),
+                         "schrott": ("wrack", "wrack_2", "wrack_3"),
+                         "piste": ("strasse", "strasse_2", "strasse_3", "strasse_4"),
+                         "kies": ("schutt", "schutt_2", "schutt_3", "schutt_4"),
+                         "pflaster": ("gehweg", "gehweg_2", "gehweg_3"),
+                         "gestruepp": ("rasen", "rasen_2", "rasen_3", "rasen_4"),
+                         "dielen": ("fliesen", "fliesen_2"),
+                         "wasser": ("kanal", "kanal_2", "kanal_3"),
+                         "seicht": ("kanal_seicht", "kanal_seicht_2", "kanal_seicht_3"),
+                         "gitter": ("kasernenplatz", "kasernenplatz_2", "kasernenplatz_3")}},
 }
+
+# Kachelsaetze mit Varianten (seit 0.34.131): "bilder" ersetzt die
+# Abwechslungsbilder einer Kachelart (KACHELN bilder) - in FLUSSTAL ist der
+# Fels bemoost und die Piste ein Feldweg, ohne neue Kachelarten. Was ein
+# Satz nicht nennt, bleibt, wie es ist.
+def satz_bild(satz: dict, daten: dict, variante: int = 0) -> str:
+    """Das Bild einer Kachelart in diesem Satz, mit Abwechslung."""
+    bilder = satz.get("bilder", {}).get(daten["name"]) or daten.get("bilder")
+    if bilder:
+        return bilder[variante % len(bilder)]
+    return satz.get(daten["bild"], daten["bild"])
 
 # Wie hoch ueber dem Boden etwas in der Welt ist, in Welt-Pixeln (seit
 # 0.34.5). Gebraucht nur fuer die Frage, ob eine Mauer es verdeckt
@@ -3195,6 +3725,11 @@ KARTENSAETZE = {
 # aus dahinter liegt, ist nicht zu sehen; was darueber fliegt, schon.
 # Gezeichnet wird alles weiter an seinem Fusspunkt, wie die Figuren -
 # sonst saehe ein Treffer am Bildrand aus wie ein Fehlschuss.
+# So viele Effekt-Teilchen (effekte.py) gibt es hoechstens auf einmal; die
+# aeltesten fallen weg. Die Werfer-Explosion allein braucht gut 3700 - und
+# keiner davon darf fehlen, sonst fiele ihr Feuerball zuerst weg.
+EFFEKTE_HOECHSTENS = 4500
+
 HOEHEN = dict(
     lauf=12.0,            # Geschosse, Raketen, Muendungsfeuer: Laufhoehe
     funke=10.0,           # Funken fliegen um die Treffer- und Laufhoehe
@@ -3267,9 +3802,15 @@ TRACER = dict(
 # weich     Bodenart ohne feste Kante (Piste, Kies): wo Sand angrenzt,
 #           franst der Sand in sie hinein, statt dass eine Kachelkante
 #           eine Linie zieht (render.Renderer._weicher_rand)
+# seicht    (seit 0.34.131) Wasser bis zum Knie: begehbar und befahrbar,
+#           aber so viel langsamer (Faktor auf das Tempo, K.WASSER)
+# sperrt    (seit 0.34.131) tiefes Wasser: niemand geht oder faehrt hinein,
+#           aber es ist kein Hindernis fuer Kugeln, Sicht und Wuerfe - man
+#           schiesst ueber den Fluss, man geht nicht hindurch
 LEER, BODEN, GITTER, WAND, KISTE, TREPPE_HOCH, TREPPE_RUNTER, LUKE, \
     AUFZUG_HOCH, AUFZUG_RUNTER, FELS, BROCKEN, SANDSACK, HOLZKISTE, \
-    KAKTUS, SCHROTT, PISTE, KIES, PFLASTER, GESTRUEPP, DIELEN = range(21)
+    KAKTUS, SCHROTT, PISTE, KIES, PFLASTER, GESTRUEPP, DIELEN, \
+    WASSER_SEICHT, WASSER_TIEF, BRUECKE = range(24)
 
 KACHELN = {
     # Ein Loch: man kann darueber hinwegschiessen und hineinfallen, aber es
@@ -3317,7 +3858,37 @@ KACHELN = {
                         bilder=("gestruepp", "gestruepp_2", "gestruepp_3", "gestruepp_4")),
     DIELEN:        dict(name="dielen",   fest=False, sicht=False, bild="dielen",
                         bilder=("dielen", "dielen_2")),
+    # Seit 0.34.131 fuer FLUSSTAL und KANALSTADT (gewuenscht: "gerne auch
+    # seichtes Wasser"). Zeichen + und %.
+    WASSER_SEICHT: dict(name="seicht",   fest=False, sicht=False, bild="seicht",
+                        bilder=("seicht", "seicht_2", "seicht_3"), weich=True,
+                        seicht=True),
+    WASSER_TIEF:   dict(name="wasser",   fest=False, sicht=False, bild="wasser",
+                        bilder=("wasser", "wasser_2", "wasser_3"), weich=True,
+                        sperrt=True),
+    # Bohlen einer Bruecke ueber das Wasser (Zeichen |): Boden, aber man
+    # sieht durch die Fugen den Fluss darunter.
+    BRUECKE:       dict(name="bruecke",  fest=False, sicht=False, bild="steg",
+                        bilder=("steg", "steg_2")),
 }
+
+# Wasser (seit 0.34.131): wie sehr seichtes Wasser bremst. Tiefes sperrt
+# ganz (KACHELN sperrt) - darum gibt es dort Furten und Bruecken.
+WASSER = dict(
+    seicht_tempo=0.62,        # zu Fuss
+    seicht_fahrzeug=0.72,     # Fahrzeuge (Ketten und Raeder kommen besser durch)
+    spritzer_takt=0.22,       # so oft spritzt es um einen, der im Wasser laeuft (s)
+    # Schwimmen im tiefen Wasser (seit 0.34.140, gewuenscht): wer zu Fuss ist,
+    # kommt hinein (Fahrzeuge weiter nicht), schwimmt langsam, kann dashen,
+    # aber nicht schiessen, werfen oder schlagen. Ueber Wasser ist nur der
+    # Kopf - nur der wird getroffen (`kopf_radius` statt des Koerpers).
+    schwimmen=True,
+    schwimm_tempo=0.45,       # Faktor auf das Lauftempo
+    kopf_radius=5.0,          # so gross ist, was ueber Wasser getroffen werden kann (px)
+    koerper_deck=165,         # wie deutlich der Koerper unter Wasser zu sehen ist (0 bis 255)
+    koerper_farbe=(120, 170, 196), # so faerbt das Wasser ihn ein
+    platsch_ring=(4.0, 26.0, 0.7), # der Ring beim Hineingehen: von, bis (px), Dauer (s)
+)
 
 # ══════════════════════════════════════════════════ INHALTE: Waffen
 
@@ -3677,6 +4248,10 @@ WAFFEN = {
         huelsen=0,            # die Huelsen bleiben in der Trommel
         klang="schuss_revolver",
         modi=("gezielt", "faechern"),
+        # Seit 0.34.138 faechert die rechte Maustaste immer (gemeldet: "mit der
+        # Rechtstaste kann man immer noch nicht das komplette Magazin
+        # abfeuern") - ohne erst den Feuermodus umzuschalten.
+        zweit="faechern",
         # Seit 0.34.87 deutlicher getrennt (gemeldet: "die zwei Feuermodi
         # beim Revolver funktionieren nicht"): GEZIELT ist praezise,
         # FAECHERN leert die restliche Trommel in einem Zug.
@@ -4438,8 +5013,12 @@ WAFFEN.update(WUERFE_PAKET)
 
 # Energiewaffen des Chors und der Flammenwerfer (seit 0.34.68). Statt
 # eines Magazins werden die Chor-Waffen heiss (`kuehlt`): jeder Schuss
-# verbraucht einen Teil, in Ruhe kommt alle `abkuehlen` Sekunden einer
-# zurueck; ist alles verbraucht, ueberhitzt sie und braucht `nachladen`.
+# macht Hitze (`magazin` Schuss passen hinein), in Ruhe kuehlt alle
+# `abkuehlen` Sekunden ein Teil ab - seit 0.34.130 auch weggesteckt. Ist die
+# Hitze voll, ueberhitzt sie: gesperrt fuer `ueberhitzt` Sekunden (laenger als
+# ein Nachladen, gewuenscht wie die Quasar-Kanone: man nimmt solange eine
+# andere Waffe), einmal der Kuehlton, danach ganz kalt. Nachladen gibt es
+# fuer sie nicht mehr; `nachladen` bleibt fuer die Bots als Mass.
 ENERGIE_PAKET = {
     "spule": dict(
         art="strahl", name="SPULENGEWEHR",
@@ -4450,9 +5029,12 @@ ENERGIE_PAKET = {
         # und jeder Koerper auf der Linie kostet Kraft (`wand_verlust`,
         # `koerper_verlust`). Ein voll geladener Treffer ohne Hindernis
         # erledigt noch jeden, aber kaum mehr zwei hintereinander.
-        schaden=95.0, ladezeit=2.1, mindest=0.25, reichweite=760.0,
-        wand_verlust=0.4, koerper_verlust=0.35,
-        takt=0.9, magazin=3, nachladen=5.5, kuehlt=True, abkuehlen=3.4,
+        # Seit 0.34.135 noch einmal schwaecher (gemeldet: "die Chor-Waffe, die
+        # durch Waende schiesst, ist zu stark"): 95 -> 75 Schaden, jede Mauer
+        # kostet 60 statt 40 Prozent, laenger laden.
+        schaden=75.0, ladezeit=2.4, mindest=0.25, reichweite=760.0,
+        wand_verlust=0.6, koerper_verlust=0.35,
+        takt=0.9, magazin=3, nachladen=5.5, kuehlt=True, abkuehlen=3.4, ueberhitzt=7.5,
         tempo_beim_laden=0.55, kamera=5.0, rueckstoss=60.0, huelsen=0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
         klang="schuss_spule", muendung=1.2, schadensart="panzerbrechend"),
@@ -4462,7 +5044,7 @@ ENERGIE_PAKET = {
         # naechsten und wird dabei schwaecher. Die Waffe gegen Horden.
         schaden=46.0, ladezeit=0.45, reichweite=320.0, kegel=14.0,
         spruenge=5, sprung=120.0, abfall=0.72,
-        takt=0.25, magazin=8, nachladen=4.0, kuehlt=True, abkuehlen=1.2,
+        takt=0.25, magazin=8, nachladen=4.0, kuehlt=True, abkuehlen=1.2, ueberhitzt=5.5,
         tempo_beim_laden=0.8, kamera=2.0, rueckstoss=0.0, huelsen=0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
         klang="schuss_kettenblitz", muendung=0.8, schadensart="kugel", tempo_faktor=0.92),
@@ -4470,7 +5052,7 @@ ENERGIE_PAKET = {
         art="schuss", name="SPIEGELLASER",
         # Prallt an Waenden ab und wird mit jedem Abprall staerker - die
         # Waffe fuer Schuesse um die Ecke.
-        schaden=24.0, takt=0.3, magazin=10, nachladen=3.5, kuehlt=True, abkuehlen=0.7,
+        schaden=24.0, takt=0.3, magazin=10, nachladen=3.5, kuehlt=True, abkuehlen=0.7, ueberhitzt=5.0,
         streuung=0.6, streuung_lauf=2.0, geschosse=1, tempo=900.0, reichweite=1300.0,
         rueckstoss=0.0, kamera=0.8, huelsen=0, klang="schuss_spiegellaser", muendung=0.6,
         abprall=3, abprall_faktor=1.4, bild_flug="laser_flug"),
@@ -4479,9 +5061,12 @@ ENERGIE_PAKET = {
         # Eine langsame Kugel, die unterwegs staendig Blitze in mehrere
         # Richtungen schlaegt (auch ohne Ziel, bis an ihre Reichweite) und
         # am Ende gross platzt. Gut zu sehen, sperrt aber einen Gang.
-        schaden=18.0, zap_radius=86.0, zap_takt=0.22, zap_strahlen=4,
-        platzen_schaden=70.0, platzen_radius=96.0,
-        takt=1.6, magazin=2, nachladen=5.0, kuehlt=True, abkuehlen=4.0,
+        # Seit 0.34.130 stark abgeschwaecht (gemeldet: "viel zu OP"): Blitze
+        # 18 -> 10 Schaden und 86 -> 58 px weit, 4 -> 3 Strahlen, das Platzen
+        # 70 -> 40 Schaden in 96 -> 62 px.
+        schaden=10.0, zap_radius=58.0, zap_takt=0.22, zap_strahlen=3,
+        platzen_schaden=40.0, platzen_radius=62.0,
+        takt=1.6, magazin=2, nachladen=5.0, kuehlt=True, abkuehlen=4.0, ueberhitzt=7.0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=120.0, reichweite=760.0,
         rueckstoss=20.0, kamera=2.5, huelsen=0, klang="schuss_kugelblitz", muendung=1.0,
         bild_flug="kugelblitz_flug"),
@@ -4491,11 +5076,15 @@ ENERGIE_PAKET = {
         # Boden, frisst Rauch, und wer den Traeger erwischt, bringt
         # vielleicht seinen Tank zur Explosion.
         # 4,5 je Zug, gut 75 je Sekunde, dazu der brennende Boden.
-        flamme=True, schaden=4.5, reichweite=130.0, winkel=24.0,
+        # Seit 0.34.143 (gewuenscht: "Range ein kleines bisschen erhoeht,
+        # ein bisschen mehr vom Boden anzuenden"): 150 statt 130 weit,
+        # brennende Flecken doppelt so oft und nicht nur am Ende, sondern
+        # entlang der Flamme (ab `streifen_ab` ihrer Laenge), etwas groesser.
+        flamme=True, schaden=4.5, reichweite=150.0, winkel=24.0,
         takt=0.06, magazin=120, nachladen=4.2,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
         rueckstoss=0.0, kamera=0.4, huelsen=0, muendung=0.0,
-        streifen_takt=0.3, streifen_radius=20.0, streifen_dauer=4.0,
+        streifen_takt=0.15, streifen_radius=23.0, streifen_dauer=4.5, streifen_ab=0.45,
         rauch_fressen=1.0, tank_ab=0.2, tank_radius=64.0, tank_schaden=45.0,
         tempo_faktor=0.9),
 }
@@ -4726,7 +5315,7 @@ for _i in range(6):
     BILD_MASS["rotor_%d" % _i] = (192, 192)
 for _name in ("werfer", "werfer_wrack", "werfer_schatten"):
     BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
-for _i in range(1, 17):
+for _i in range(1, 9):
     BILD_MASS["werfer_stuetze_%d" % _i] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _name in ("funkwagen", "funkwagen_wrack"):
     BILD_MASS[_name] = (160, 160)
@@ -4977,6 +5566,17 @@ NAHKAMPF = dict(
     nachhalten=0.14,
 )
 
+# Der Schwung mit der gewaehlten Nahkampfwaffe in der Hand (seit 0.34.140,
+# gemeldet: "bei F wird immer das Brecheisen angezeigt"): je Waffe eigene
+# Bilder spieler[_<team>]_schwung_<i>_<waffe>; das Brecheisen bleibt ohne Zusatz.
+for _nk in NAHKAMPF["waehlbar"]:
+    if _nk == NAHKAMPF["waffe"]:
+        continue
+    for _i in range(SCHWUNG_BILDER):
+        BILD_MASS["spieler_schwung_%d_%s" % (_i, _nk)] = (64, 64)
+        for _team in TEAMS["kombi"]:
+            BILD_MASS["spieler_%s_schwung_%d_%s" % (_team["name"].lower(), _i, _nk)] = (64, 64)
+
 # Rauchgranate: eine Wand, durch die niemand durchsieht - auch nicht von
 # der Ebene darueber. Sie macht keinen Schaden, sie nimmt nur die Sicht.
 #
@@ -5015,6 +5615,15 @@ FEUER = dict(
     toene=((84, 22, 10), (172, 54, 16), (230, 122, 26), (250, 192, 92)),
     funken=2.0,               # Funken je Sekunde und Flaeche
     brandfleck=True,          # hinterlaesst einen Fleck, wenn es aus ist
+    # Napalm (seit 0.34.130, gewuenscht "aggressiver"): klebriges Feuer -
+    # dunkler, roeter, mit schwarzem, oeligem Russ am Rand, einem gelbweissen
+    # Kern, zuengelt schneller, mehr Funken und schwarzer Rauch steigt auf.
+    napalm_toene=((52, 14, 8), (150, 26, 10), (220, 64, 14), (252, 150, 34), (255, 236, 150)),
+    napalm_russ=(22, 14, 10),
+    napalm_schwelle=0.27,     # brennt dichter als gewoehnliches Feuer
+    napalm_zunge=2.8,         # und zuengelt schneller
+    napalm_funken=6.0,
+    napalm_rauch=1.6,         # schwarze Rauchwolken je Sekunde
 )
 
 # Die Minikarte oben links (minikarte.py), ein Versuch. Groesse in
@@ -5048,12 +5657,28 @@ HUD = dict(
 # und hoechstens Pixel je Kachel). rauschen: so viel heller oder dunkler
 # ist eine Kachel als die naechste.
 KARTENBILD = dict(
-    ziel_pixel=1500, mindest=2, hoechstens=12, rauschen=5,
+    ziel_pixel=2400, mindest=2, hoechstens=16, rauschen=5,   # seit 0.34.138 feiner (vorher 1500)
     sand=(92, 74, 52), piste=(118, 96, 66), kies=(86, 80, 70), gestruepp=(80, 82, 50),
     pflaster=(104, 98, 88), dielen=(108, 82, 56), gitter=(72, 72, 74),
     schatten=(44, 34, 24), treppe=(72, 170, 158),
     wand=(196, 170, 128), fels=(150, 128, 98), wand_licht=(214, 192, 150), wand_dunkel=(122, 100, 72),
     deckung=(176, 148, 104), deckung_rand=(52, 38, 26),
+    seicht=(84, 116, 118), wasser=(40, 72, 96),
+    # Seit 0.34.131: je Kachelsatz andere Farben (kartenbild._farben).
+    saetze={
+        "gruen": dict(sand=(66, 92, 48), piste=(108, 90, 62), kies=(100, 98, 84),
+                      gestruepp=(80, 106, 54), pflaster=(108, 106, 100), dielen=(112, 84, 54),
+                      seicht=(76, 118, 126), wasser=(38, 74, 104), schatten=(34, 50, 28),
+                      wand=(178, 172, 156), fels=(122, 132, 110), wand_licht=(206, 202, 186),
+                      wand_dunkel=(96, 100, 86), deckung=(150, 136, 104),
+                      deckung_rand=(36, 44, 28), baum=(38, 70, 34)),
+        "stadt": dict(sand=(118, 108, 94), piste=(44, 44, 48), kies=(100, 94, 88),
+                      gestruepp=(74, 102, 56), pflaster=(122, 120, 116), dielen=(140, 136, 128),
+                      seicht=(70, 100, 110), wasser=(34, 60, 76), schatten=(30, 30, 34),
+                      wand=(176, 104, 80), fels=(156, 156, 150), wand_licht=(206, 140, 110),
+                      wand_dunkel=(112, 64, 50), deckung=(150, 146, 140),
+                      deckung_rand=(30, 30, 34), baum=(46, 82, 40)),
+    },
 )
 
 MINIKARTE = dict(
@@ -5070,6 +5695,11 @@ MINIKARTE = dict(
     buggy_laenge=5,
     buggy_breite=2.5,
     schwer_mass=1.6,          # Panzer und Panzerwagen so viel groesser (seit 0.34.59)
+    # Fahrzeugzeichen (seit 0.34.138): das eigene Bild, so viel mal so lang wie
+    # der Wagen auf der Karte waere, aber mindestens/hoechstens so viele Pixel
+    # (mal dem Massstab der Karte). Gegner im Wagen nur, wenn ein Eigener
+    # naeher als `sicht` px steht (oder er markiert ist).
+    symbol_mass=2.2, symbol_mindest=5, symbol_hoechstens=16, sicht=650.0,
     # Im Stoerkreis eines gegnerischen Funkwagens (seit 0.34.115): Rauschen
     # statt Punkte - dicht, das Bild wechselt `takt` mal je Sekunde unter
     # `bilder` Stellungen; ein heller Streifen wandert `streifen_tempo` mal
@@ -5113,6 +5743,25 @@ SPIELERKOSMETIK = dict(
     teil=8000,              # Zeichen je Netzmeldung
     teile_je_schritt=2,     # so viele Teile gehen je Schritt hinaus
     teile_max=100,          # mehr Teile hat kein gueltiges Paket (groesstes: 92)
+)
+
+# Kosmetik im Spiel bearbeiten (seit 0.34.135, kosmetik_bearbeiten.py).
+# Dateien liegen im Ordner `ordner` neben den Einstellungen oder werden ins
+# Fenster gezogen; groesser als `datei_max` Bytes wird nichts gelesen, von
+# einem Ton hoechstens `ton_quelle_max` s. Heraus kommt eine WAV mit `rate`.
+# LAUTER geht von lauter[0] bis lauter[1] (mal), BASS mischt bis `bass` mal
+# den Tiefpass unter `bass_grenze` Hz dazu, GROESSE ist die Hoehe des Bildes
+# als Anteil am Schirm.
+KOSMETIK_EDITOR = dict(
+    ordner="kosmetik",
+    datei_max=40_000_000,
+    ton_quelle_max=600,
+    rate=22050,
+    lauter=(0.5, 3.0),
+    bass=2.0,
+    bass_grenze=160.0,
+    groesse=(0.1, 2.0),
+    vorschau_laut=0.8,
 )
 
 # Die Blendgranate.
@@ -5222,6 +5871,11 @@ for _w in ("repetierer", "sturm", "schrot", "scharf", "lmg", "granate",
     SKIN_ROLLEN["%s_knall" % _w] = ("schuss_%s" % _w
                                     if "schuss_%s" % _w in KLANG_NAMEN
                                     else "schuss")
+# Das Zeichen jeder anderen Waffe (seit 0.34.135, gemeldet: auf der
+# Kontoseite und in der Kosmetik standen neue Waffen lila): dasselbe Bild
+# wie in der Hotbar (inventar.symbol).
+for _w in WAFFEN:
+    SKIN_ROLLEN.setdefault("%s_symbol" % _w, "waffe_%s" % _w)
 
 # ══════════════════════════════════════════════════ FIGUREN (seit 0.34.60)
 #
@@ -5538,7 +6192,7 @@ GEGNER = {
         name="RENNER",
         leben=26.0,              # ein Schrotschuss, ein Treffer mit dem Gewehr
         radius=8.0,
-        tempo=118.0,             # schneller als ein laufender Spieler (108)
+        tempo=118.0 * 1.3,       # schneller als ein laufender Spieler (seit 0.34.135 mit ihm 1,3 mal so schnell)
         beschleunigung=900.0,
         schaden=7.0,
         schlagtakt=0.55,

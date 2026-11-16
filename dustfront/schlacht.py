@@ -110,6 +110,8 @@ class Luftangriff:
         self.bomben = bomben_planen(self.start, self.ende)
         self.naechste = 0
         self.gehoert = False
+        self.pfiff = 0                 # welche Bombe als naechste pfeift (seit 0.34.130)
+        self._brumm_rest = 0.0         # bis zum naechsten Stueck Triebwerk
 
     @property
     def dauer(self) -> float:
@@ -120,7 +122,9 @@ class Luftangriff:
         n = S["napalm"]
         weg = (self.alter - n["vorlauf"]) * n["tempo"]
         laenge = max(1.0, self.start.distance_to(self.ende))
-        return self.start.lerp(self.ende, max(-0.5, min(1.5, weg / laenge)))
+        # Nicht lerp: das nimmt nur 0 bis 1, das Flugzeug ist aber auch vor
+        # dem Start und hinter dem Ende (seit 0.34.130 hoert man es dort).
+        return self.start + (self.ende - self.start) * max(-0.7, min(1.7, weg / laenge))
 
 
 def bomben_planen(start, ende) -> list:
@@ -163,6 +167,31 @@ def bomben_planen(start, ende) -> list:
     return raus
 
 
+_NAPALM_BOMBE: dict = {}
+
+
+def _napalm_bombe(winkel: float) -> pygame.Surface:
+    """Eine Napalmbombe (seit 0.34.130): ein olivgruener Brandkanister mit
+    rotem Band und vier Blechflossen hinten, gemalt wie die Fahrzeuge; gedreht
+    in Flugrichtung, auf 10 Grad gerundet."""
+    from .art_fahrzeuge import _Blatt
+    w = int(round(winkel / 10.0)) * 10 % 360
+    s = _NAPALM_BOMBE.get(w)
+    if s is not None:
+        return s
+    b = _Blatt(24, 1.0)
+    c, s_ = math.cos(math.radians(w)), math.sin(math.radians(w))
+    an = lambda t, q=0.0: (c * t - s_ * q, s_ * t + c * q)       # noqa: E731
+    for q in (-1.0, 1.0):                                         # Flossen
+        b.poly((70, 74, 58), [an(-5.0, q * 1.2), an(-8.4, q * 3.4), an(-8.8, q * 3.0), an(-7.6, q * 1.0)])
+    b.rohr(an(-6.6), an(5.2), 3.6, (98, 106, 74), (40, 44, 30))
+    b.rohr(an(-1.0), an(0.2), 3.7, (168, 52, 36), (70, 22, 16))  # rotes Band
+    b.kreis((122, 130, 92), an(5.4), 1.4)                         # Nase
+    b.linie((140, 148, 112), an(-5.0, -0.8), an(4.0, -0.8), 0.6)  # Glanz
+    s = _NAPALM_BOMBE[w] = b.fertig()
+    return s
+
+
 class SchlachtTeil:
     """Was das Gefecht in SCHLACHT zusaetzlich tut. Ein Anteil wie BotTeil."""
 
@@ -186,11 +215,13 @@ class SchlachtTeil:
         self.ueberfluege = []
         self.luftangriffe = []
         self.verstaerkung_weg()
+        # Was zu Rundenbeginn schon steht (seit 0.34.129 nach FREISCHALTEN;
+        # spaetere Stufen kommen mit basis_nachschub).
+        self._basis_stufe = min(3, self.freischalt_stufe())
         for team in range(2):
-            for art, anzahl in S["fahrzeuge"]:
+            for art, anzahl, basis in self.basis_ausstattung(team, -1, self._basis_stufe):
                 for _ in range(anzahl):
-                    platz = self._fahrzeug_platz_bei(art, self.schlacht_basis(team),
-                                                     S["fahrzeug_umkreis"],
+                    platz = self._fahrzeug_platz_bei(art, basis, S["fahrzeug_umkreis"],
                                                      abstand_zonen=True)
                     if platz is None:
                         continue
@@ -198,11 +229,73 @@ class SchlachtTeil:
                     zone = Dropzone(pos, team, art, winkel)
                     zone.rest = S["abwurf"]["start"]
                     self.dropzonen.append(zone)
+        # Seit 0.34.138 stehen die Wagen der Basen zum Rundenstart gleich da
+        # (gemeldet: "alle laufen los, dann droppen die Fahrzeuge, und ein paar
+        # Bots rennen zurueck"). Was spaeter nachkommt, faellt weiter am Schirm.
+        if S["basis_sofort"]:
+            for zone in list(self.dropzonen):
+                if zone.fahrzeug is None and zone.art in fahrzeug_modul.ARTEN:
+                    zone.rest = 0.0
+                    self._abwurf_landet(Abwurf(zone))
+        self._basis_fahrer_offen = True
+
+    def basis_ausstattung(self, team: int, ab_stufe: int, bis_stufe: int) -> list:
+        """Was an den Basen einer Seite steht, von (ausschliesslich) ab_stufe
+        bis bis_stufe: [(Art, Anzahl, Ort der Basis)]. Auf einer Karte mit
+        Front (seit 0.34.131) hat jede Basis ihre eigene Ausstattung aus dem
+        Kartenkopf; sonst K.SCHLACHT fahrzeuge an der einen Basis."""
+        raus = []
+        basen = self.front_basen(team) if self.schlachtplan is not None else []
+        if basen:
+            for b in basen:
+                for art, anzahl, stufe in b.fahrzeuge:
+                    if ab_stufe < stufe <= bis_stufe:
+                        raus.append((art, anzahl, b.pos))
+            return raus
+        for eintrag in S["fahrzeuge"]:
+            art, anzahl = eintrag[0], eintrag[1]
+            stufe = eintrag[2] if len(eintrag) > 2 else 0
+            if ab_stufe < stufe <= bis_stufe:
+                raus.append((art, anzahl, self.schlacht_basis(team)))
+        return raus
 
     # ---- Ablauf (Gastgeber) ------------------------------------------------
+    def basis_fahrer_setzen(self) -> int:
+        """Zum Rundenstart (seit 0.34.138): in jeden Wagen der Basen setzt sich
+        gleich ein freier Bot-Fahrer seiner Seite (`darf_fahren`), der naechste
+        zuerst - so faehrt die Seite gemeinsam los, statt dass Bots spaeter
+        zurueckrennen. Gibt die Zahl der Besetzten zurueck."""
+        from .bots import FAHRZEUG_VORZUG
+        n = 0
+        # Die wertvollen zuerst (Werfer, Panzer, Funkwagen ...), dann Buggys.
+        for b in sorted(self.fahrzeuge, key=lambda v: -FAHRZEUG_VORZUG.get(v.art, 0.0)):
+            if (b.fahrer is not None or b.kaputt or b.nur_bild or not b.lebt
+                    or getattr(b, "basis_team", -1) not in (0, 1) or b.werte.get("nur_mensch")):
+                continue
+            frei = [k for k in self.kaempfer.values()
+                    if getattr(k, "ist_bot", False) and k.lebt and not k.am_boden
+                    and k.team == b.basis_team and getattr(k, "darf_fahren", False)
+                    and k.fahrzeug is None and getattr(k, "mitfahrt", None) is None
+                    and k.pos.distance_to(b.pos) <= S["basis_fahrer_weite"]]
+            if not frei:
+                continue
+            k = min(frei, key=lambda x: x.pos.distance_squared_to(b.pos))
+            k.pos.update(b.pos)
+            if hasattr(k, "vorher"):
+                k.vorher.update(b.pos)
+            self._einsteigen(k, b)
+            n += 1
+        return n
+
     def schlacht_schritt(self, dt: float) -> None:
         if not (self.schlacht or self.__dict__.get("nachschub_an")) or not self.ist_gastgeber:
             return
+        if self.schlacht:
+            self.basis_nachschub()
+            if self.__dict__.get("_basis_fahrer_offen") and any(
+                    getattr(k, "ist_bot", False) for k in self.kaempfer.values()):
+                self._basis_fahrer_offen = False
+                self.basis_fahrer_setzen()
         a = S["abwurf"]
         for zone in list(self.dropzonen):
             if zone.fahrzeug is not None:
@@ -217,7 +310,7 @@ class SchlachtTeil:
                 if zone.rest <= 0.0:
                     zone.rest = 0.0
                     self.abwuerfe.append(Abwurf(zone))
-                    self.welt.klang("drohne", 0.6, zone.pos, 0)
+                    self.welt.klang("anflug", 0.6, zone.pos, 0)
         for ab in list(self.abwuerfe):
             ab.alter += dt
             if ab.gerissen > 0.0:
@@ -400,6 +493,7 @@ class SchlachtTeil:
             b.aufbau = b.winkel
         b.start = (pygame.Vector2(ab.pos), 0, ab.winkel)
         b.basis_team = zone.team
+        b.gekauft = zone.einmalig            # zaehlt fuer K.SCHLACHT hoechstens_je_seite
         b.dropzone = zone
         if ab.gerissen > 0.0:
             # Gestuerzt (seit 0.34.118): der Schirm war ab, der Wagen schlaegt hart auf
@@ -513,7 +607,7 @@ class SchlachtTeil:
                 k.winkel = math.degrees(math.atan2(hin.y, hin.x))
             raus.append(k)
         if raus:
-            self.welt.klang("drohne", 0.8, pygame.Vector2(punkt), 0)
+            self.welt.klang("anflug", 0.8, pygame.Vector2(punkt), 0)
         return raus
 
     def _springer_schritt(self, dt: float) -> None:
@@ -563,13 +657,24 @@ class SchlachtTeil:
         return start + hin.normalize() * laenge
 
     def _luftangriff_schritt(self, la: Luftangriff, dt: float) -> None:
-        """Das Flugzeug kommt (man hoert es), dann schlagen die Bomben ein."""
+        """Der Bomber kommt (man hoert ihn nur, und nur in seiner Naehe),
+        die Bomben fallen pfeifend, dann brennt Napalm."""
         from .entities import Brandflaeche
         w = self.welt
-        if not la.gehoert and la.alter >= max(0.0, S["napalm"]["vorlauf"] - 1.6):
-            # Ohne Ort: jeder hoert das Flugzeug kommen, sieht es aber nicht.
-            la.gehoert = True
-            w.klang("jet", 0.75)
+        n = S["napalm"]
+        # Seit 0.34.130 (gewuenscht): kein Ton fuer alle mehr, sondern ein
+        # Bomber, der ueber die Bahn zieht - Stueck fuer Stueck dort gespielt,
+        # wo er gerade ist. So hoert ihn, wer in der Naehe ist, unter ihm am
+        # lautesten, und das Geraeusch wandert mit.
+        la._brumm_rest -= dt
+        laenge = max(1.0, la.start.distance_to(la.ende))
+        weg = (la.alter - n["vorlauf"]) * n["tempo"] / laenge
+        if la._brumm_rest <= 0.0 and n["hoeren_ab"] <= weg <= n["hoeren_bis"]:
+            la._brumm_rest = n["brumm_takt"]
+            w.klang("bomber", n["brumm_laut"], la.flugzeug(), 0)
+        while la.pfiff < len(la.bomben) and la.bomben[la.pfiff][0] - n["fall"] <= la.alter:
+            w.klang("napalm_fall", 0.7, la.bomben[la.pfiff][1], 0)
+            la.pfiff += 1
         la.alter += dt
         while la.naechste < len(la.bomben) and la.bomben[la.naechste][0] <= la.alter:
             _t, ort, radius, dauer = la.bomben[la.naechste]
@@ -577,7 +682,7 @@ class SchlachtTeil:
             e = w.ebene(0)
             if not (0 <= ort.x < e.pixel_breite and 0 <= ort.y < e.pixel_hoehe):
                 continue
-            w.feuer.append(Brandflaeche(ort, 0, radius=radius, dauer=dauer, von=la.von))
+            w.feuer.append(Brandflaeche(ort, 0, radius=radius, dauer=dauer, von=la.von, napalm=True))
             w.explosion(ort, 0, 0.0, "feuer")
             w.klang("napalm", 0.9, ort, 0)
             w.laerm(ort, 0, la.von, 700.0)
@@ -592,9 +697,151 @@ class SchlachtTeil:
         return self.welt.zeit if self.ist_gastgeber else self._zeit
 
     # ---- Punkte -------------------------------------------------------------
-    def schlacht_punkte(self, k, wie_viel: int) -> None:
+    def schlacht_punkte(self, k, wie_viel: int, grund: str = "") -> None:
         if self.schlacht and k is not None and not getattr(k, "ist_bot", False):
             k.schlacht_punkte = getattr(k, "schlacht_punkte", 0) + int(wie_viel)
+            if grund and int(wie_viel) > 0:
+                self._punkte_melden(k, int(wie_viel), grund)
+
+    def _punkte_melden(self, k, n: int, grund: str) -> None:
+        """Fuer den Spieler selbst: wofuer es gerade Punkte gab (seit 0.34.138).
+        Beim Gast kommt es als Klang-freie Meldung ueber den Stand."""
+        if k is self.ich and hasattr(self, "melden"):
+            self.melden("+%d %s" % (n, grund), 2.0)
+
+    def serie_punkte(self, k, art: str) -> None:
+        """Bonus fuer eine Folge (seit 0.34.138): Abschuesse oder Fahrzeuge kurz
+        nacheinander bringen mehr - wer sich darauf wirft, kommt schneller voran."""
+        if not self.schlacht or k is None or getattr(k, "ist_bot", False):
+            return
+        p = S["punkte"]
+        jetzt = self.welt.zeit
+        if art == "fahrzeug":
+            vorher = getattr(k, "_jagd_zuletzt", -1e9)
+            k._jagd_zuletzt = jetzt
+            if jetzt - vorher <= p["jagd_zeit"]:
+                self.schlacht_punkte(k, p["jagd"], "JAGD")
+            return
+        vorher = getattr(k, "_serie_zuletzt", -1e9)
+        k._serie_zuletzt = jetzt
+        k._serie = getattr(k, "_serie", 0) + 1 if jetzt - vorher <= p["serie_zeit"] else 1
+        if k._serie > p["serie_ab"]:
+            bonus = min(p["serie_hoechstens"], p["serie"] * (k._serie - p["serie_ab"]))
+            self.schlacht_punkte(k, bonus, "SERIE x%d" % k._serie)
+
+    def sold_schritt(self, dt: float) -> None:
+        """Alle sold_takt Sekunden etwas fuer jeden (seit 0.34.138): wer faehrt,
+        heilt oder den Werfer bedient, muss nichts aufgeben, um zu Punkten zu
+        kommen. Wer mehr Eroberungspunkte haelt, bekommt mehr."""
+        if not self.schlacht or self.vorbei or self.in_lobby or not self.ist_gastgeber:
+            return
+        p = S["punkte"]
+        self._sold_rest = getattr(self, "_sold_rest", p["sold_takt"]) - dt
+        if self._sold_rest > 0.0:
+            return
+        self._sold_rest = p["sold_takt"]
+        gehalten = [0, 0]
+        for q in (self.front_punkte() if hasattr(self, "front_punkte") else ()):
+            if q.besitzer in (0, 1):
+                gehalten[q.besitzer] += 1
+        for k in self.kaempfer.values():
+            if getattr(k, "ist_bot", False) or getattr(k, "team", -1) not in (0, 1):
+                continue
+            n = p["sold"] + (p["sold_halten"] if gehalten[k.team] > gehalten[1 - k.team] else 0)
+            self.schlacht_punkte(k, n, "SOLD")
+
+    # ---- Freischalten und Balancing (seit 0.34.129) -----------------------
+    def freischalt_modus(self) -> str:
+        return str(getattr(self, "regelwerk", {}).get("freischalten", "normal"))
+
+    def spielverlauf(self) -> float:
+        """Wie weit die Runde ist (0 bis 1): Anteil der Rundenzeit; bei einer
+        Runde nach Abschuessen der groessere von Abschuessen der fuehrenden
+        Seite am Ziel und Laufzeit an K.SCHLACHT freischalten bezug."""
+        alter = float(getattr(self, "runden_alter", 0.0))
+        if self.ende_art == "zeit" and self.ende_wert > 0:
+            return alter / float(self.ende_wert)
+        anteil = alter / float(S["freischalten"]["bezug"])
+        if self.ende_wert > 0 and getattr(self, "teampunkte", None):
+            anteil = max(anteil, max(self.teampunkte) / float(self.ende_wert))
+        return anteil
+
+    def freischalt_stufe(self) -> int:
+        """Welche Stufe gilt: 0 am Anfang, 3 = alles. Mit FREISCHALTEN AUS
+        (oder ausserhalb der SCHLACHT) gleich alles."""
+        modus = self.freischalt_modus()
+        if modus not in S["freischalten"] or not self.schlacht:
+            return 99
+        f = S["freischalten"][modus]
+        anteil = self.spielverlauf()
+        alter = float(getattr(self, "runden_alter", 0.0))
+        return sum(1 for g, spaet in zip(f["stufen"], f["hoechstens"]) if anteil >= g or alter >= spaet)
+
+    def freischalt_rest(self, stufe: int) -> float:
+        """Sekunden, bis die Stufe kommt - None, wenn das nicht an der Zeit
+        haengt (Runde nach Abschuessen: es kann auch frueher kommen)."""
+        modus = self.freischalt_modus()
+        if modus not in S["freischalten"] or stufe <= 0:
+            return 0.0
+        f = S["freischalten"][modus]
+        alter = float(getattr(self, "runden_alter", 0.0))
+        spaet = f["hoechstens"][stufe - 1]
+        if self.ende_art == "zeit" and self.ende_wert > 0:
+            spaet = min(spaet, f["stufen"][stufe - 1] * float(self.ende_wert))
+        return max(0.0, spaet - alter)
+
+    def gesperrt_bis(self, was: str) -> str:
+        """Leer, wenn `was` schon freigeschaltet ist - sonst ab wann."""
+        stufe = int(S["stufe"].get(was, 0))
+        if stufe <= self.freischalt_stufe():
+            return ""
+        rest = self.freischalt_rest(stufe)
+        return "IN %d:%02d" % (int(rest) // 60, int(rest) % 60) if rest > 0 else "STUFE %d" % stufe
+
+    def gekauft_unterwegs(self, team: int, art: str) -> int:
+        """Wie viele gekaufte `art` die Seite gerade hat: gelandet und heil,
+        am Schirm oder noch als Zone angemeldet."""
+        n = sum(1 for b in self.fahrzeuge if b.art == art and getattr(b, "gekauft", False)
+                and getattr(b, "basis_team", -1) == team and not b.kaputt)
+        n += sum(1 for z in self.dropzonen if z.einmalig and z.team == team and z.art == art)
+        n += sum(1 for a in self.abwuerfe if a.zone.einmalig and a.team == team and a.art == art
+                 and a.zone not in self.dropzonen)
+        return n
+
+    def in_eigener_haelfte(self, punkt, team: int) -> bool:
+        """Liegt der Punkt auf der Seite der eigenen Basis (von der Mitte aus)?"""
+        basis = self.schlacht_basis(team)
+        mitte = self._schlacht_punkte()[2]
+        return (punkt - mitte).dot(basis - mitte) >= 0.0
+
+    @staticmethod
+    def fahrzeug_punkte(art: str) -> int:
+        """Was ein zerstoertes Fahrzeug bringt: die Haelfte seines Preises,
+        mindestens `fahrzeug_min`; nicht kaufbares `fahrzeug`."""
+        p = S["punkte"]
+        for name, kosten, _t in S["belohnungen"]:
+            if name == art:
+                return max(int(p["fahrzeug_min"]), int(kosten * p["fahrzeug_anteil"] + 0.5))
+        return int(p["fahrzeug"])
+
+    def basis_nachschub(self) -> None:
+        """Die Basis-Fahrzeuge einer neuen Stufe anmelden (Gastgeber): sie
+        fallen mit Rueckzaehlung an der eigenen Basis wie zu Rundenbeginn."""
+        stufe = min(3, self.freischalt_stufe())
+        bisher = self.__dict__.get("_basis_stufe", 0)
+        if stufe <= bisher:
+            return
+        self._basis_stufe = stufe
+        for team in range(2):
+            for art, anzahl, basis in self.basis_ausstattung(team, bisher, stufe):
+                for _ in range(anzahl):
+                    platz = self._fahrzeug_platz_bei(art, basis, S["fahrzeug_umkreis"],
+                                                     abstand_zonen=True)
+                    if platz is None:
+                        continue
+                    zone = Dropzone(platz[0], team, art, platz[1])
+                    zone.rest = S["abwurf"]["vorlauf_kauf"]
+                    self.dropzonen.append(zone)
 
     # ---- Kaufen ------------------------------------------------------------
     @staticmethod
@@ -616,6 +863,15 @@ class SchlachtTeil:
             return "AUSSERHALB DER KARTE"
         if not gratis and self.funk_gestoert_bei(punkt, k.team):
             return "GESTÖRT: FUNKWAGEN DER GEGNER"       # seit 0.34.111
+        # Seit 0.34.129: Stufe, Hoechstzahl je Seite, eigene Haelfte.
+        bis = self.gesperrt_bis(was)
+        if bis:
+            return "NOCH NICHT FREI (%s)" % bis
+        grenze = S["hoechstens_je_seite"].get(was) if getattr(self, "regelwerk", {}).get("fahrzeug_grenze") else None
+        if grenze is not None and k.team in (0, 1) and self.gekauft_unterwegs(k.team, was) >= grenze:
+            return "SCHON %d IM EINSATZ" % grenze
+        if was in S["nur_eigene_haelfte"] and k.team in (0, 1) and not self.in_eigener_haelfte(punkt, k.team):
+            return "NUR IN DER EIGENEN HÄLFTE"
         if was == "aufklaerung":
             return ""
         feind = self.schlacht_basis(1 - k.team) if k.team in (0, 1) else None
@@ -671,7 +927,7 @@ class SchlachtTeil:
         if was == "aufklaerung":
             self.ueberfluege.append(Ueberflug(punkt, k.team, k.fraktion,
                                               self.welt.ebene(0).pixel_breite))
-            self.welt.klang("drohne", 1.0, punkt, 0)
+            self.welt.klang("anflug", 1.0, punkt, 0)
             return ""
         if was == "fallschirmjaeger":
             self.fallschirmjaeger_abwerfen(punkt, k.team)
@@ -698,8 +954,12 @@ class SchlachtTeil:
                    for a in self.abwuerfe],
             "ue": [[round(u.pos.x), round(u.pos.y), u.team] for u in self.ueberfluege],
             # Napalm-Angriffe (seit 0.34.101): Bahn und Seite, fuer die Karte.
-            "la": [[round(a.start.x), round(a.start.y), round(a.ende.x), round(a.ende.y), a.team]
+            # Seit 0.34.130 mit dem Alter: daraus zeichnet der Gast die fallenden Bomben.
+            "la": [[round(a.start.x), round(a.start.y), round(a.ende.x), round(a.ende.y), a.team,
+                    round(a.alter, 2)]
                    for a in getattr(self, "luftangriffe", ())],
+            # Die Eroberungspunkte der Front (seit 0.34.131).
+            "fp": self.front_meldung() if self.front_an else [],
         }
 
     def schlacht_uebernehmen(self, m) -> None:
@@ -738,13 +998,25 @@ class SchlachtTeil:
                 continue
         self._ueberfluege_gast = ue
         la = []
+        alt = self.__dict__.get("_napalm_gast", {})
+        neu = {}
         for e in m.get("la", []):
             try:
                 la.append((pygame.Vector2(float(e[0]), float(e[1])),
                            pygame.Vector2(float(e[2]), float(e[3])), int(e[4])))
+                if len(e) > 5:
+                    # Derselbe Bombenplan wie beim Gastgeber (aus dem Ort), je
+                    # Angriff einmal gebaut; nur das Alter kommt mit.
+                    schluessel = (int(e[0]), int(e[1]), int(e[2]), int(e[3]))
+                    angriff = alt.get(schluessel) or Luftangriff(la[-1][0], la[-1][1], int(e[4]), "")
+                    angriff.alter = float(e[5])
+                    neu[schluessel] = angriff
             except (TypeError, ValueError, IndexError):
                 continue
         self._luftangriffe_gast = la
+        self._napalm_gast = neu
+        if m.get("fp"):
+            self.front_uebernehmen(m["fp"])
 
     # ---- Bild: am Boden -------------------------------------------------------
     def dropzonen_zeichnen(self, flaeche, ebene: int, ecke) -> None:
@@ -761,60 +1033,192 @@ class SchlachtTeil:
             besetzt = z.fahrzeug is not None or getattr(z, "besetzt", False)
             self._zone_bild(flaeche, p, z, zeit, besetzt)
 
-    def _zone_bild(self, flaeche, p, z, zeit: float, besetzt: bool) -> None:
+    # ---- Die Zone im Stil einer Evakuierungszone (seit 0.34.138) -----------
+    # Gewuenscht: "wie die Extraction Zone bei XCOM 2 ... wichtig, dass diese
+    # blau brennenden Fackeln, das blaue Feuer, was diesen blauen Smoke macht,
+    # an den Ecken da ist", animiert, und so gross wie das Fahrzeug. Alles
+    # haengt nur an der Zeit - beim Gast sieht es genauso aus.
+
+    def _zone_mass(self, art: str) -> tuple:
+        """(Laenge, Breite) der Zone: das Bild des Fahrzeugs plus Rand."""
+        merk = self.__dict__.setdefault("_zonen_mass", {})
+        if art in merk:
+            return merk[art]
         d = S["dropzone"]
-        kombi = K.TEAMS["kombi"][z.team] if 0 <= z.team < 2 else None
-        farbe = kombi["hud"] if kombi else K.C_AMBER
-        dunkel = kombi["hud_dunkel"] if kombi else K.C_MUTED_DK
-        r = d["radius"] if z.art in fahrzeug_modul.ARTEN else d["radius_kiste"]
+        if art not in fahrzeug_modul.ARTEN:
+            mass = (d["kiste"], d["kiste"])
+        else:
+            try:
+                if getattr(fahrzeug_modul.ARTEN.get(art), "rechteckig", False):
+                    bild = self._fracht_ganz(art)
+                else:
+                    bild = self.renderer.bilder.bild(art)
+                bb = bild.get_bounding_rect()
+                mass = (bb.width + 2 * d["rand"], bb.height + 2 * d["rand"])
+            except Exception:                  # noqa: BLE001  ohne Bild: Vorgabe
+                mass = (2 * d["radius"], d["radius"])
+        merk[art] = mass
+        return mass
+
+    def _zone_ecken(self, z, cx: float, cy: float) -> list:
+        laenge, breite = self._zone_mass(z.art)
+        vorn = pygame.Vector2(1, 0).rotate(z.winkel)
+        quer = pygame.Vector2(-vorn.y, vorn.x)
+        m = pygame.Vector2(cx, cy)
+        return [m + vorn * (sx * laenge / 2) + quer * (sy * breite / 2)
+                for sx, sy in ((1, 1), (1, -1), (-1, -1), (-1, 1))]
+
+    def _hauch(self, radius: int, farbe) -> pygame.Surface:
+        """Ein weicher runder Fleck (Rauch, Leuchthof), gemerkt je Groesse."""
+        merk = self.__dict__.setdefault("_zonen_hauch", {})
+        schluessel = (radius, farbe)
+        s = merk.get(schluessel)
+        if s is None:
+            s = pygame.Surface((radius * 2 + 2, radius * 2 + 2), pygame.SRCALPHA)
+            for r in range(radius, 0, -1):
+                a = int(255 * (1.0 - r / float(radius + 1)) ** 1.6)
+                pygame.draw.circle(s, farbe + (a,), (radius + 1, radius + 1), r)
+            merk[schluessel] = s
+        return s
+
+    def _leuchten(self, radius: int, farbe, staerke: float) -> pygame.Surface:
+        """Ein Leuchtfleck zum Addieren (BLEND_RGB_ADD): die Farbe ist schon mit
+        der Staerke verrechnet - beim Addieren wirkt set_alpha nicht."""
+        merk = self.__dict__.setdefault("_zonen_licht", {})
+        stufe = max(0, min(10, int(round(staerke * 10))))
+        schluessel = (radius, farbe, stufe)
+        s = merk.get(schluessel)
+        if s is None:
+            s = pygame.Surface((radius * 2 + 2, radius * 2 + 2))
+            s.fill((0, 0, 0))
+            for r in range(radius, 0, -1):
+                k = (1.0 - r / float(radius + 1)) ** 2 * stufe / 10.0
+                pygame.draw.circle(s, tuple(int(c * k) for c in farbe), (radius + 1, radius + 1), r)
+            merk[schluessel] = s
+        return s
+
+    # ---- Seit 0.34.140: Leuchtfackeln am Boden, der Rauch ist die Zone -------
+    # Gewuenscht: "das Hologramm soll gar nicht da sein, und die Fackeln
+    # weniger Fackeln und mehr diese brennenden Leuchtmarkierungen wie aus
+    # einer Leuchtpistole, die auf dem Boden liegen ... da steigt Smoke auf,
+    # und der Smoke ist eigentlich das, was man sieht, nicht die Flamme."
+    # Also: an jeder Ecke liegt eine Signalfackel quer am Boden, ein greller
+    # Punkt mit Funken, und aus ihr quillt dichter farbiger Rauch, der breit
+    # wird und mit dem Wind abzieht. Kein Grund, kein Raster, kein Rand.
+
+    def _rauch_farbe(self, freund: bool, alter: float, hell: float) -> tuple:
+        """Frisch leuchtet der Rauch in der Farbe der Fackel, alt wird er grau."""
+        d = S["dropzone"]
+        kern = d["rauch_freund"] if freund else d["rauch_feind"]
+        grau = d["rauch_alt"]
+        # In sechs Stufen: die Wolken werden je Groesse und Farbe gemerkt (_hauch).
+        t = round(min(1.0, alter * 1.4) * 6) / 6.0
+        return tuple(max(0, min(255, int((kern[k] * (1.0 - t) + grau[k] * t) * hell))) for k in range(3))
+
+    def _leuchtfackel(self, flaeche, ort, zeit: float, nr: int, stark: float, freund: bool) -> None:
+        """Eine Signalfackel, die am Boden liegt und raucht."""
+        d = S["dropzone"]
+        x, y = float(ort.x), float(ort.y)
+        # Der Rauch zuerst: die alten (grossen, grauen) Wolken hinten, die
+        # frischen vorn. Er quillt hoch, wird breit und zieht mit dem Wind ab.
+        n = max(1, int(round(d["rauch"] * (0.45 + 0.55 * min(1.0, stark)))))
+        wind = pygame.Vector2(d["wind"], 0).rotate(-30 + 18 * math.sin(zeit * 0.13 + nr))
+        wolken = []
+        for i in range(n):
+            alter = (zeit * d["rauch_tempo"] + i / float(n) + nr * 0.37) % 1.0
+            # Jede Wolke quillt zu ihrer eigenen Seite (fest je Wolke), so wird
+            # die Saeule breit und bauschig statt ein duenner Strich.
+            seite = math.sin(nr * 3.7 + i * 2.9 + math.floor(zeit * d["rauch_tempo"] + i / float(n)) * 1.3)
+            wackel = (seite * 14.0 + math.sin(zeit * 0.9 + nr * 1.9 + i * 2.3) * 4.0) * alter ** 0.6
+            px = x + wind.x * alter * 55.0 + wackel
+            py = y - 2 - d["steigen"] * (alter ** 0.75) + wind.y * alter * 18.0
+            r = int(4 + d["rauch_gross"] * (alter ** 0.55))
+            deck = d["rauch_deck"] * (1.0 - alter) ** 1.1 * min(1.0, alter * 10.0) * min(1.0, stark)
+            wolken.append((alter, px, py, r, deck))
+        for alter, px, py, r, deck in sorted(wolken, reverse=True):
+            if deck <= 2:
+                continue
+            puff = self._hauch(r, self._rauch_farbe(freund, alter, 1.0))
+            puff.set_alpha(int(min(255, deck)))
+            flaeche.blit(puff, (px - r - 1, py - r - 1))
+        # Der Lichtschein auf dem Boden, flackernd.
+        farbe = d["licht_freund"] if freund else d["licht_feind"]
+        flacker = 0.7 + 0.3 * math.sin(zeit * 29.0 + nr * 2.1) * math.sin(zeit * 11.0 + nr)
+        hof = self._leuchten(int(7 + 6 * min(1.0, stark)), farbe, 0.75 * flacker * min(1.2, stark))
+        flaeche.blit(hof, (int(x) - hof.get_width() // 2, int(y) - hof.get_height() // 2),
+                     special_flags=pygame.BLEND_RGB_ADD)
+        # Die Fackel selbst: ein kurzer Stab, quer hingeworfen, am Ende die Glut.
+        lage = pygame.Vector2(1, 0).rotate(nr * 77.0 + 20.0)
+        hinten, vorn = pygame.Vector2(x, y) - lage * 3.5, pygame.Vector2(x, y) + lage * 3.5
+        huelle = (150, 34, 30) if not freund else (40, 70, 140)
+        pygame.draw.line(flaeche, (24, 20, 20), hinten + (1, 1), vorn + (1, 1), 2)
+        pygame.draw.line(flaeche, huelle, hinten, vorn, 2)
+        kern = (235, 248, 255) if freund else (255, 236, 214)
+        pygame.draw.circle(flaeche, farbe, (int(vorn.x), int(vorn.y)), 2)
+        flaeche.set_at((int(vorn.x), int(vorn.y)), kern)
+        # Funken spritzen aus der Glut.
+        for k in range(3):
+            t = (zeit * 3.1 + k / 3.0 + nr * 0.21) % 1.0
+            w = (nr * 53 + k * 131 + int(zeit * 3.1 + k / 3.0) * 97) % 360
+            q = vorn + pygame.Vector2(2 + 7 * t, 0).rotate(w) - pygame.Vector2(0, 4 * t)
+            if 0 <= q.x < flaeche.get_width() and 0 <= q.y < flaeche.get_height() and t < 0.8:
+                flaeche.set_at((int(q.x), int(q.y)), kern if t < 0.4 else farbe)
+
+    def _zone_bild(self, flaeche, p, z, zeit: float, besetzt: bool) -> None:
+        ich = getattr(self, "ich", None)
+        freund = ich is None or z.team not in (0, 1) or z.team == getattr(ich, "team", -1)
         bald = 0.0 <= z.rest <= S["abwurf"]["vorlauf"] and not besetzt
-        puls = 0.5 + 0.5 * math.sin(zeit * (9.0 if bald else 2.2))
-        cx, cy = int(p.x), int(p.y)
-        # Grund: ein durchscheinendes Achteck, darauf die Kante.
-        punkte = [(cx + r * math.cos(math.radians(22.5 + 45 * i)),
-                   cy + r * 0.62 * math.sin(math.radians(22.5 + 45 * i))) for i in range(8)]
-        grund = pygame.Surface((r * 2 + 4, int(r * 1.3) + 4), pygame.SRCALPHA)
-        verschoben = [(x - cx + r + 2, y - cy + int(r * 0.65) + 2) for x, y in punkte]
-        deck = int(d["grund"] + (d["grund_puls"] * puls if bald else 0))
-        pygame.draw.polygon(grund, dunkel + (deck,), verschoben)
-        flaeche.blit(grund, (cx - r - 2, cy - int(r * 0.65) - 2))
-        kante = farbe if (bald and puls > 0.5) or besetzt else dunkel
-        pygame.draw.polygon(flaeche, kante, punkte, 1)
-        # Eckwinkel aussen, wie Klammern.
-        for i in range(0, 8, 2):
-            a = math.radians(45 * i + 45)
-            ex, ey = cx + (r + 5) * math.cos(a), cy + (r + 5) * 0.62 * math.sin(a)
-            sx = 1 if math.cos(a) > 0 else -1
-            sy = 1 if math.sin(a) > 0 else -1
-            pygame.draw.line(flaeche, farbe, (ex, ey), (ex - sx * 6, ey))
-            pygame.draw.line(flaeche, farbe, (ex, ey), (ex, ey - sy * 4))
-        # Pfeile, die nach innen wandern.
-        if not besetzt:
-            lauf = (zeit * (1.6 if bald else 0.6)) % 1.0
-            for i in range(4):
-                a = math.radians(90 * i)
-                for j in range(2):
-                    t = (lauf + j * 0.5) % 1.0
-                    rr = r * (0.95 - 0.55 * t)
-                    hx = cx + rr * math.cos(a)
-                    hy = cy + rr * 0.62 * math.sin(a)
-                    spitze = pygame.Vector2(-math.cos(a), -math.sin(a) * 0.62) * 4
-                    quer = pygame.Vector2(-spitze.y, spitze.x) * 0.8
-                    f = tuple(int(c * (1.0 - t * 0.7)) for c in farbe)
-                    pygame.draw.lines(flaeche, f, False,
-                                      [(hx - spitze.x + quer.x, hy - spitze.y + quer.y),
-                                       (hx, hy),
-                                       (hx - spitze.x - quer.x, hy - spitze.y - quer.y)])
-        # In der Mitte: was hier landet.
-        zeichen = S["dropzone"]["zeichen"].get(z.art, "?")
-        SCHRIFT.zeichnen(flaeche, zeichen, cx, cy - 3, farbe if not besetzt else dunkel, 1,
-                         ausrichtung="mitte")
+        cx, cy = float(p.x), float(p.y)
+        ecken = self._zone_ecken(z, cx, cy)
+        puls = 0.5 + 0.5 * math.sin(zeit * (9.0 if bald else 2.4))
+        # Steht schon etwas darauf, glimmen die Fackeln nur noch; kurz vor dem
+        # Abwurf qualmen sie am staerksten.
+        stark = 0.3 if besetzt else (1.15 + 0.25 * puls if bald else 0.9)
+        nr0 = z.kennung if isinstance(getattr(z, "kennung", 0), int) else 0
+        for i, e in enumerate(ecken):
+            self._leuchtfackel(flaeche, e, zeit, i + nr0 * 4, stark, freund)
         if bald and z.rest > 0.0:
-            text = "ABWURF %d" % int(math.ceil(z.rest))
-            SCHRIFT.zeichnen(flaeche, text, cx, cy - int(r * 0.62) - 12, farbe, 1,
-                             ausrichtung="mitte")
+            farbe = (150, 210, 255) if freund else (255, 130, 110)
+            laenge, breite = self._zone_mass(z.art)
+            SCHRIFT.zeichnen(flaeche, "ABWURF %d" % int(math.ceil(z.rest)), int(cx),
+                             int(cy) - max(laenge, breite) // 2 - 14, farbe, 1, ausrichtung="mitte")
 
     # ---- Bild: in der Luft ---------------------------------------------------
+    def napalm_bomben_zeichnen(self, ziel) -> None:
+        """Die fallenden Napalmbomben (seit 0.34.130, gewuenscht): der Bomber
+        bleibt unsichtbar, aber seine Bomben sieht man - sie loesen sich in
+        der Hoehe, fliegen mit seinem Schwung ein Stueck mit, kippen mit der
+        Nase nach unten und schlagen genau dort ein, wo das Feuer entsteht.
+        Darunter waechst ihr Schatten. Beim Gastgeber und beim Gast."""
+        n = S["napalm"]
+        angriffe = (list(getattr(self, "luftangriffe", ())) if self.ist_gastgeber
+                    else list(self.__dict__.get("_napalm_gast", {}).values()))
+        if not angriffe:
+            return
+        ecke = self.kamera.ecke
+        breite, hoehe = ziel.get_size()
+        for la in angriffe:
+            vorn = la.ende - la.start
+            vorn = vorn.normalize() if vorn.length_squared() > 1.0 else pygame.Vector2(1, 0)
+            for t_ein, ort, _r, _d in la.bomben:
+                rest = t_ein - la.alter
+                if not (0.0 < rest <= n["fall"]):
+                    continue
+                q = 1.0 - rest / n["fall"]
+                hoch = n["bombe_hoehe"] * (1.0 - q * q)
+                boden = ort - vorn * (n["tempo"] * n["bombe_schwung"] * rest) - ecke
+                if not (-40 < boden.x < breite + 40 and -40 - hoch < boden.y < hoehe + 40):
+                    continue
+                sw = int(3 + 6 * q)
+                sch = pygame.Surface((sw * 2, max(2, sw)), pygame.SRCALPHA)
+                pygame.draw.ellipse(sch, (10, 8, 6, int(40 + 90 * q)), sch.get_rect())
+                ziel.blit(sch, (boden.x - sw, boden.y - sw // 2))
+                # Im Bild: vorwaerts mit dem Schwung, nach unten immer schneller.
+                vx = vorn.x * n["tempo"] * n["bombe_schwung"]
+                vy = vorn.y * n["tempo"] * n["bombe_schwung"] + 2.0 * n["bombe_hoehe"] * q / n["fall"]
+                bild = _napalm_bombe(math.degrees(math.atan2(vy, vx)))
+                ziel.blit(bild, bild.get_rect(center=(int(boden.x), int(boden.y - hoch))))
+
     def abwuerfe_zeichnen(self, ziel, misch: float) -> None:
         """Ueber allem: der Schatten am Boden (je tiefer, desto groesser und
         dunkler), die Last etwas hoeher und groesser, darueber der Schirm."""
@@ -830,12 +1234,9 @@ class SchlachtTeil:
             sch = pygame.Surface((sw * 2, sw), pygame.SRCALPHA)
             pygame.draw.ellipse(sch, (12, 9, 6, int(50 + 110 * anteil)), sch.get_rect())
             ziel.blit(sch, (boden.x - sw, boden.y - sw // 2))
-            # Kurz vor dem Aufsetzen: der Fussabdruck blinkt rot (seit 0.34.100)
-            # - wer drin steht, wird beiseite gestossen.
-            if hoch < a["warnen_ab"] and int(self._zeit_jetzt() * 6) % 2 == 0:
-                fuss = int(self.abwurf_fuss(ab.art))
-                pygame.draw.ellipse(ziel, K.C_RED, (int(boden.x) - fuss, int(boden.y) - int(fuss * 0.62),
-                                                    fuss * 2, int(fuss * 1.24)), 1)
+            # Der rot blinkende Fussabdruck kurz vor dem Aufsetzen (0.34.100)
+            # ist seit 0.34.143 weg (gewuenscht) - die Abwurfzone mit ihren
+            # Fackeln zeigt die Stelle schon, und der Schatten waechst.
             # Die Last: pendelt leicht - mit gerissenem Schirm (seit 0.34.118)
             # nicht mehr, sondern dreht sich im Sturz.
             if ab.gerissen > 0.0:
@@ -875,9 +1276,14 @@ class SchlachtTeil:
     def _fracht_zeichnen(self, ziel, art: str, p, winkel: float) -> None:
         bilder = self.renderer.bilder
         if art in ("munition", "medkit"):
+            # Seit 0.34.138 so viele Kisten, wie unten liegen, und genau dort,
+            # wo sie landen (_abwurf_landet) - vorher ein grosses Paket, das
+            # am Boden zu drei kleinen wurde (gemeldet).
             s = bilder.bild("munikiste" if art == "munition" else "medkit")
-            s = pygame.transform.scale(s, (s.get_width() * 2, s.get_height() * 2))
-            ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y))))
+            n = S["abwurf"]["kisten"]
+            for i in range(n):
+                q = pygame.Vector2(p) + pygame.Vector2(14, 0).rotate(i * 360.0 / n)
+                ziel.blit(s, s.get_rect(center=(int(q.x), int(q.y))))
             return
         if not getattr(fahrzeug_modul.ARTEN.get(art), "rechteckig", False):
             # Alles, was kein Rechteck mit Aufbau ist: das Bild der Art selbst.
@@ -1250,18 +1656,21 @@ class SchlachtTeil:
         punkte = getattr(ich, "schlacht_punkte", 0) if ich is not None else 0
         SCHRIFT.zeichnen(ziel, "PUNKTE: %d" % punkte + ("  (GRATIS)" if gratis else ""),
                          16, 34, K.C_TEAL if gratis else K.C_CREAM, 1)
-        SCHRIFT.zeichnen(ziel, "KILL +%d  FAHRZEUG +%d  HELFEN +%d" % (
-            S["punkte"]["abschuss"], S["punkte"]["fahrzeug"], S["punkte"]["aufhelfen"]),
+        SCHRIFT.zeichnen(ziel, "KILL +%d  FAHRZEUG +HALBER PREIS  HELFEN +%d" % (
+            S["punkte"]["abschuss"], S["punkte"]["aufhelfen"]),
             16, 46, K.C_MUTED, 1)
         for i, (name, kosten, text) in enumerate(S["belohnungen"]):
             r = self._belohnung_zeile(i)
             gewaehlt = i == self.belohnung_wahl
-            leistbar = gratis or punkte >= kosten
+            bis = self.gesperrt_bis(name)            # seit 0.34.129: noch nicht frei
+            leistbar = (gratis or punkte >= kosten) and not bis
             pygame.draw.rect(ziel, (40, 30, 20) if gewaehlt else (20, 15, 11), r)
             pygame.draw.rect(ziel, K.C_AMBER if gewaehlt else (70, 56, 40), r, 1)
             farbe = K.C_CREAM if leistbar else K.C_MUTED_DK
             SCHRIFT.zeichnen(ziel, "%d  %s" % (i + 1, text), r.x + 5, r.y + 4, farbe, 1)
-            SCHRIFT.zeichnen(ziel, "GRATIS" if gratis else "%d P" % kosten, r.right - 5, r.y + 4,
+            # Gesperrt: nur die Zeit ("0:46"), damit lange Namen Platz haben.
+            SCHRIFT.zeichnen(ziel, bis.replace("IN ", "") or ("GRATIS" if gratis else "%d P" % kosten),
+                             r.right - 5, r.y + 4,
                              K.C_AMBER if leistbar else K.C_MUTED_DK, 1, ausrichtung="rechts")
         wahl_ = self.belohnung_wahl
         if 0 <= wahl_ < len(S["belohnungen"]):
@@ -1397,6 +1806,8 @@ class SchlachtTeil:
             gr = n(3)
             pygame.draw.rect(ziel, kombi["hud"] if kombi else K.C_AMBER,
                              (q[0] - gr, q[1] - gr, gr * 2 + 1, gr * 2 + 1), n(1))
+        # Die Front (seit 0.34.131): Punkte mit Buchstaben, Basen mit Fahne.
+        self.front_auf_karte(ziel, punkt, f, mm, namen=True)
         # Fallendes: wo gerade etwas am Schirm haengt.
         for ab in self.abwuerfe:
             if ab.team == team or sichtbar(ab.pos):

@@ -368,8 +368,27 @@ class LobbyTeil:
         """Eine geplante Runde auf die Standardrunde setzen (0.32)."""
         if not self.ist_gastgeber or not 0 <= nr < len(self.plan):
             return
-        self.plan[nr] = R.standardrunde(self._umfeld())
+        eigene = {}
+        try:
+            eigene = dict(self.app.opt["eigene_standardrunde"] or {})
+        except (KeyError, TypeError, AttributeError):
+            pass
+        self.plan[nr] = R.meine_standardrunde(eigene, self._umfeld())
         self._plan_geaendert()
+
+    def plan_als_standard(self, nr: int) -> bool:
+        """Diese geplante Runde als eigene Standardrunde merken (seit
+        0.34.138): jede neue Lobby plant sie zuerst. Gehoert zum Spieler und
+        wandert mit dem Konto."""
+        if not 0 <= nr < len(self.plan):
+            return False
+        opt = self.app.opt
+        opt["eigene_standardrunde"] = dict(self.plan[nr])
+        opt.speichern()
+        sichern = getattr(self.app, "konto_sichern", None)
+        if sichern is not None:
+            sichern()
+        return True
 
     def plan_dazu(self, nach: int) -> int:
         """Eine Runde hinter `nach` einfuegen, als Kopie davon."""
@@ -437,6 +456,60 @@ class LobbyTeil:
                 nr + 1, len(self.plan), K.MODI[self.modus]["name"])
         self._plan_geaendert()
         return True
+
+    def plan_starten_bald(self, nr: int = 0, kosmetik: bool | None = None) -> bool:
+        """Wie plan_starten, aber erst nach einem Ladebild (seit 0.34.143).
+
+        Gemeldet: "Waehrend die Simulation schon startet, haengt man noch
+        in der Lobby in diesem Menue kurz fest, und die ersten paar
+        Sekunden sind unglaublich laggy." Der Aufbau einer grossen Karte
+        kostet gemessen ueber zwei Sekunden, und ein Teil davon fiel erst
+        ins erste Bild der Runde (Wegenetz der Bots, Minikarte). Jetzt
+        steht erst ein Bild "WIRD AUFGEBAUT" da, dann wird alles auf
+        einmal gebaut (_start_ausfuehren) und die Uhr danach neu
+        gestellt, damit nichts im Zeitraffer nachgeholt wird."""
+        if not self.ist_gastgeber or not self.plan:
+            return False
+        if kosmetik and not self.kosmetik_bereit:
+            return self.plan_starten(nr, kosmetik)      # meldet, was noch laedt
+        self._start_bald = [nr, kosmetik, False]
+        return True
+
+    def _start_ausfuehren(self) -> bool:
+        """Der Start nach dem Ladebild. Gibt zurueck, ob er jetzt lief."""
+        bald = getattr(self, "_start_bald", None)
+        if bald is None or not bald[2]:
+            return False
+        self._start_bald = None
+        self.plan_starten(bald[0], kosmetik=bald[1])
+        self._schwer_vorbauen()
+        klaenge = getattr(self.app, "klaenge", None)
+        if klaenge is not None:
+            klaenge.werkstatt_warten(K.LOBBY["start_klang_warten"])
+        takt_neu = getattr(self.app, "takt_neu", None)
+        if takt_neu is not None:
+            takt_neu()
+        return True
+
+    def _schwer_vorbauen(self) -> None:
+        """Was sonst erst im ersten Bild der Runde gebaut wurde: das
+        Wegenetz, auf dem die Bots laufen, und der Grundriss der Minikarte."""
+        from . import kartenbild
+        if self.ist_gastgeber and self.kaempfer and any(
+                getattr(k, "ist_bot", False) for k in self.kaempfer.values()):
+            self.welt.wege
+        for e in self.welt.ebenen:
+            kartenbild.bild(e)
+
+    def _ladebild(self, ziel) -> None:
+        """Das Bild, das waehrend des Aufbaus steht."""
+        ziel.fill(K.C_VOID)
+        mitte = K.GAME_W // 2
+        name = K.MODI.get(self.plan[self._start_bald[0]].get("modus"), {}).get("name", "") \
+            if self.plan else ""
+        SCHRIFT.zeichnen(ziel, "%s WIRD AUFGEBAUT ..." % name if name else "RUNDE WIRD AUFGEBAUT ...",
+                         mitte, K.GAME_H // 2 - 8, K.C_CREAM, 2, ausrichtung="mitte")
+        self._start_bald[2] = True
 
     def lobby_betreten(self) -> None:
         """Zurueck in die Lobby, von wo auch immer."""
@@ -698,10 +771,14 @@ class Rundenplanung(Menue):
         self.elemente.append(ui.Knopf(
             (r.right - 16 - 96 - 104, oben, 100, 14), "STANDARDRUNDE",
             "standard", gesperrt=not self.darf))
+        # Seit 0.34.138: die eingestellte Runde als eigene Standardrunde.
+        self.elemente.append(ui.Knopf(
+            (r.right - 16 - 96 - 104 - 84, oben, 80, 14), "ALS STANDARD",
+            "merken"))
         # Seit 0.34.26: der Team-Manager (Pausenmenue) auch von hier aus.
         if self.darf:
             self.elemente.append(ui.Knopf(
-                (r.right - 16 - 96 - 104 - 124, oben, 120, 14), "TEAMS UND BOTS",
+                (r.right - 16 - 96 - 104 - 84 - 124, oben, 120, 14), "TEAMS UND BOTS",
                 "teams"))
         y = r.bottom - 58
         self.elemente.append(ui.Knopf(
@@ -748,6 +825,10 @@ class Rundenplanung(Menue):
         elif name == "standard":
             g.plan_standard(self.nr)
             self.sagen("RUNDE %d IST JETZT DIE STANDARDRUNDE" % (self.nr + 1))
+        elif name == "merken":
+            if g.plan_als_standard(self.nr):
+                self.sagen("RUNDE %d IST JETZT DEINE STANDARDRUNDE - JEDE NEUE LOBBY PLANT SIE"
+                           % (self.nr + 1))
         elif name.startswith("runde:"):
             self.nr = int(name.split(":")[1])
         elif name == "dazu":
@@ -761,7 +842,7 @@ class Rundenplanung(Menue):
             g.plan_einfuegen(self.nr)
             self.sagen("IN RUNDE %d EINGEFÜGT" % (self.nr + 1))
         elif name in ("start", "start_ohne", "start_mit"):
-            if g.plan_starten(0, kosmetik=(name == "start_mit")):
+            if g.plan_starten_bald(0, kosmetik=(name == "start_mit")):
                 self.app.werfen()
             else:
                 self.sagen("KOSMETIK LÄDT NOCH")
@@ -851,8 +932,11 @@ class Rundenplanung(Menue):
         elif el is not None and el.name == "teams":
             hilfe = "BOTS JE MANNSCHAFT, AUFFÜLLEN, SPIELER EINTEILEN"
         elif el is not None and el.name == "standard":
-            hilfe = "%s - FÜR DEN ANFANG DAS RICHTIGE" % R.kurz(
-                R.standardrunde(g._umfeld()), g._umfeld())
+            eigene = dict(self.app.opt["eigene_standardrunde"] or {})
+            hilfe = "%s - %s" % (R.kurz(R.meine_standardrunde(eigene, g._umfeld()), g._umfeld()),
+                                 "DEINE GEMERKTE" if eigene else "FÜR DEN ANFANG DAS RICHTIGE")
+        elif el is not None and el.name == "merken":
+            hilfe = "DIESE RUNDE ALS DEINE STANDARDRUNDE MERKEN - JEDE NEUE LOBBY PLANT SIE ZUERST"
         elif el is not None and el.name == "start_mit":
             hilfe = "BLENDGRANATEN KLINGEN UND AUSSEHEN WIE VOM WERFER GEMACHT"
         elif el is not None and el.name == "start_ohne":

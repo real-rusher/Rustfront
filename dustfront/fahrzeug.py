@@ -24,8 +24,10 @@ Driftwinkel dreht ihn eine Stuetze zurueck, statt ihn sich drehen zu
 lassen. Eine Tastatur kennt nur voll oder nichts; ein Fahrer mit Lenkrad
 wuerde genau das mit den Haenden tun.
 
-Wo er rutscht, bleiben Reifenspuren im Sand, Staub fliegt, und die Reifen
-quietschen - beim Gast genauso, aus dem gemeldeten `rutschen`.
+Wo er rutscht, bleiben Reifenspuren im Sand und Staub fliegt - beim Gast
+genauso, aus dem gemeldeten `rutschen`. Ein Ton dazu ist seit 0.34.126 weg
+(der Besitzer: "den moechte ich nie wieder hoeren" - er kam beim Driften und
+beim Aufprall, weil ein Aufprall das Rutschen hochsetzt).
 
 **Zerstoerbar (seit 0.34.18).** Bis dahin war er unzerstoerbar und kein
 Ziel. Gemeldet: "autos sollen kaputt gehen koennen und dann respawnen random
@@ -132,7 +134,6 @@ class Buggy(Wesen):
         # Quietschen, und geht so an den Gast.
         self.rutschen = 0.0
         self._spur_letzte: dict = {}
-        self._quietsch_rest = 0.0
         # Wo er zu Beginn stand. Zu jeder neuen Runde kommt er dorthin
         # zurueck, sonst steht nach drei Runden jeder Buggy irgendwo.
         self.start = (pygame.Vector2(pos), int(ebene), float(winkel))
@@ -265,6 +266,12 @@ class Buggy(Wesen):
             return
         if art is None and kugel:
             art = "kugel"
+        if self.freund_drin(von):
+            return
+        if self.sitzt_drin(von) and art not in K.EIGENES_FAHRZEUG_TRIFFT:
+            # Das eigene Fahrzeug (seit 0.34.145): nur eine Explosion schadet
+            # ihm - der Panzer, der in die Wand direkt vor sich schiesst.
+            return
         k = self.fahrer
         if (k is not None and k.lebt and von is not k
                 and (von is None or getattr(von, "fraktion", None) != k.fraktion)):
@@ -275,6 +282,29 @@ class Buggy(Wesen):
         self.blitz = K.TREFFER["blitz"]
         if self.leben <= 0.0:
             self._zerstoeren(von)
+
+    def freund_drin(self, von) -> bool:
+        """Sitzt ein Kamerad von `von` darin (nicht er selbst)? Dann macht
+        sein Treffer dem Wagen nichts (seit 0.34.140, gewuenscht: "man soll
+        Fahrzeugen, in denen Teammates sitzen, keinen Schaden mehr machen").
+        Vorher ging der Wagen kaputt und nahm die Leute darin mit."""
+        fraktion = getattr(von, "fraktion", None) if von is not None else None
+        if not fraktion:
+            return False
+        for k in [self.fahrer] + list(self.__dict__.get("_mitfahrer") or ()):
+            if k is not None and k is not von and getattr(k, "lebt", False) \
+                    and getattr(k, "fraktion", None) == fraktion:
+                return True
+        return False
+
+    def sitzt_drin(self, von) -> bool:
+        """Sitzt `von` selbst darin (am Steuer oder mitfahrend)? Seit
+        0.34.145 (gewuenscht: "dass man seinem eigenen Fahrzeug keinen
+        Schaden macht, ausser mit einer Explosion"): dann schadet ihm nur,
+        was in K.EIGENES_FAHRZEUG_TRIFFT steht."""
+        if von is None:
+            return False
+        return von is self.fahrer or von in (self.__dict__.get("_mitfahrer") or ())
 
     # ---- EMP, Reifen, Heckhilfen (seit 0.34.65) ----------------------
     def emp_treffen(self, dauer: float) -> None:
@@ -387,6 +417,10 @@ class Buggy(Wesen):
         pos = self.pos if pos is None else pos
         winkel = self.winkel if winkel is None else winkel
         achse = pygame.Vector2(self.werte["achse"], 0).rotate(winkel)
+        m = self.werte.get("mitte", 0.0)
+        if m:
+            # Wo das Bild nicht mittig sitzt (seit 0.34.138, K.* mitte).
+            pos = pos + pygame.Vector2(m, 0).rotate(winkel)
         return (pos + achse, pos - achse)
 
     def beruehrt(self, pos, radius: float) -> bool:
@@ -438,14 +472,21 @@ class Buggy(Wesen):
         b = e.breite
         if not (0 <= x0 and x1 < b and 0 <= y0 and y1 < e.hoehe):
             return w.frei(c, r, self.ebene, True)
-        kacheln = e.kacheln
-        reihen = [kacheln[ty * b + x0: ty * b + x1 + 1] for ty in range(y0, y1 + 1)]
         schluessel = (c.x, c.y, r, x0, y0)
         merk = self.__dict__.get("_frei_merk")
         if merk is None:
             merk = self._frei_merk = {}
         hit = merk.get(nr)
-        if hit is not None and hit[0] == schluessel and hit[1] is e and hit[2] == reihen:
+        if hit is None or hit[0] != schluessel or hit[1] is not e:
+            # Er faehrt (seit 0.34.142): die Kacheln erst merken, wenn er
+            # wieder auf derselben Stelle steht - beim Fahren half der Zettel
+            # nie und kostete jede Pruefung die Ausschnitte.
+            antwort = w.frei(c, r, self.ebene, True)
+            merk[nr] = (schluessel, e, None, antwort)
+            return antwort
+        kacheln = e.kacheln
+        reihen = [kacheln[ty * b + x0: ty * b + x1 + 1] for ty in range(y0, y1 + 1)]
+        if hit[2] is not None and hit[2] == reihen:
             return hit[3]
         antwort = w.frei(c, r, self.ebene, True)
         merk[nr] = (schluessel, e, reihen, antwort)
@@ -467,7 +508,7 @@ class Buggy(Wesen):
                 # Andere Wagen: Kreis an Kreis (seit 0.34.18 stehen sie im
                 # Raster, weil man sie treffen kann - vorher hielt nur der
                 # Fahrer des anderen Wagens einen auf, ein leerer gar nicht).
-                if any(c.distance_squared_to(d) < (2 * r) ** 2
+                if any(c.distance_squared_to(d) < (r + a.radius) ** 2
                        for c in kreise for d in a.kreise()):
                     return False
                 continue
@@ -498,6 +539,18 @@ class Buggy(Wesen):
             self.emp_rest = max(0.0, self.emp_rest - dt)
             self._emp_funkeln(dt)
         fahrer = self.fahrer is not None and not self.kaputt and not stromlos
+        if (self.fahrer is None and not self.kaputt and self.geschw.length_squared() < 0.01
+                and abs(getattr(self, "gier", 0.0)) < 1e-4):
+            # Er steht leer und still (seit 0.34.131): keine Physik, kein
+            # Drehen, kein Staub. Die Karten mit Front haben bis zu 15 Wagen
+            # je Seite an ihren Basen - gemessen ein Sechstel jedes Schritts.
+            # Was ihn anstoesst (Explosion, Rammen), gibt ihm Tempo und weckt ihn.
+            self.tempo.update(0, 0)
+            self._ruhe_takt = getattr(self, "_ruhe_takt", 0.0) - dt
+            if self._ruhe_takt <= 0.0:
+                self._ruhe_takt = 0.1
+                self._beiseite_schieben()
+            return
         self._physik(dt, self.gas if fahrer else 0.0,
                      self.lenk if fahrer else 0.0,
                      bool(self.handbremse) and fahrer)
@@ -506,6 +559,20 @@ class Buggy(Wesen):
             hoechst = self.werte["hoechst"] * K.NAEGEL["platt_tempo"]
             if self.geschw.length() > hoechst:
                 self.geschw.scale_to_length(hoechst)
+        if self.welt is not None and not getattr(self, "luft", False) \
+                and self.welt.seicht(self.pos, self.ebene):
+            # Durch die Furt (seit 0.34.131): langsamer, und es spritzt.
+            hoechst = self.werte["hoechst"] * K.WASSER["seicht_fahrzeug"]
+            v = self.geschw.length()
+            if v > hoechst:
+                self.geschw.scale_to_length(hoechst)
+            self._spritz_rest = getattr(self, "_spritz_rest", 0.0) - dt
+            if v > 20.0 and self._spritz_rest <= 0.0:
+                self._spritz_rest = K.WASSER["spritzer_takt"]
+                from . import effekte
+                effekte.ring(self.welt, self.pos.x, self.pos.y, self.ebene,
+                             self.werte.get("halb", 16.0) * 0.6, self.werte.get("halb", 16.0) * 1.6, 0.8,
+                             (178, 214, 222))
         self._passt_merk = ((), False)          # ab hier merken (passt)
         try:
             self._drehen(dt)
@@ -516,7 +583,29 @@ class Buggy(Wesen):
         self._beiseite_schieben()
         self._staub(dt)
         self._spuren()
-        self._quietschen(dt)
+        if fahrer:
+            self._motor(dt)
+
+    def _motor(self, dt: float) -> None:
+        """Kein Motor als Schleife - ein kurzes Brummen in einem Takt, solange
+        er faehrt. Seit 0.34.143 fuer jeden Wagen (vorher nur Panzer und
+        Panzerwagen, und Jagdpanzer und Flakwagen suchten einen Ton, den es
+        nicht gab); welcher, steht in den Werten (`motor_klang`). In der
+        Luft dreht der Rotor immer, auch ohne Gas."""
+        name = self.werte.get("motor_klang")
+        if not name or self.welt is None:
+            return
+        self._motor_rest = getattr(self, "_motor_rest", 0.0) - dt
+        if self._motor_rest > 0.0:
+            return
+        self._motor_rest = self.werte.get("motor_takt", 0.4)
+        tempo = self.geschw.length()
+        luft = bool(getattr(self, "luft", False))
+        if (not luft and tempo < 3.0 and abs(getattr(self, "gier", 0.0)) < 0.05
+                and abs(self.gas) < 0.1):
+            return
+        anteil = 1.0 if luft else min(1.0, tempo / max(1.0, self.werte["hoechst"]))
+        self.welt.klang(name, 0.3 + 0.35 * anteil, self.pos, self.ebene)
 
     def _drehen(self, dt: float) -> None:
         """Drehen nur, wenn er danach noch passt - sonst klemmte er sich an
@@ -672,7 +761,14 @@ class Buggy(Wesen):
         # Die Driftstuetze (siehe oben): dreht ihn zurueck, bevor er sich dreht.
         # Auch ueber 90 Grad hinaus - gerade dann, sonst dreht er sich ganz.
         # Rueckwaerts gefahren wird nicht gestuetzt (gas < 0, vx < 0).
-        if tempo > 40.0 and not (gas < 0.0 and vx < 0.0):
+        # Auch nicht beim Zurueckrollen (seit 0.34.140, gemeldet: "nach dem
+        # Rueckwaertsfahren dreht sich das Fahrzeug auf einmal um 360 Grad"):
+        # wer vom Rueckwaertsgas geht oder schon Vorwaertsgas gibt, rollt noch
+        # zurueck - fuer die Stuetze war das ein Drift von 180 Grad, und sie
+        # drehte den Wagen mit voller Kraft herum. Rollt er fast gerade nach
+        # hinten (innerhalb `rueck_roll_grenze`), schleudert er nicht.
+        rueck_rollt = vx < 0.0 and abs(vy) < -vx * math.tan(math.radians(f.get("rueck_roll_grenze", 60.0)))
+        if tempo > 40.0 and not (gas < 0.0 and vx < 0.0) and not rueck_rollt:
             beta = math.atan2(vy, vx)
             ueber = abs(beta) - math.radians(f["drift_grenze_hb" if handbremse
                                                else "drift_grenze"])
@@ -790,7 +886,7 @@ class Buggy(Wesen):
 
     def staub_gast(self, dt: float) -> None:
         """Beim Gast: derselbe Staub, dieselben Spuren - aus dem gemeldeten
-        Tempo und Rutschen. Gequietscht wird beim Gastgeber (NETZKLAENGE)."""
+        Tempo und Rutschen."""
         self._staub(dt)
         self._spuren()
         self.wrack_qualm(dt)
@@ -833,14 +929,6 @@ class Buggy(Wesen):
                 ebene.dekal(_spurpunkt(deck), q.x, q.y)
             self._spur_letzte[i] = pygame.Vector2(p)
 
-    def _quietschen(self, dt: float) -> None:
-        f = self.werte
-        self._quietsch_rest = max(0.0, self._quietsch_rest - dt)
-        if self.rutschen >= f["quietschen_ab"] and self._quietsch_rest <= 0.0:
-            self._quietsch_rest = f["quietschen_pause"]
-            self.welt.klang("buggy_rutschen", 0.35 + 0.5 * self.rutschen,
-                            self.pos, self.ebene)
-
     def zuruecksetzen(self) -> None:
         """Zurueck an den Platz vom Rundenbeginn, stehend und leer."""
         pos, ebene, winkel = self.start
@@ -854,6 +942,10 @@ class Buggy(Wesen):
         self.gier = self.lenkwinkel = self.rutschen = 0.0
         self.handbremse = False
         self._spur_letzte.clear()
+        # Was vom vorigen Leben haengen blieb (seit 0.34.135): aufgegeben,
+        # zuletzt gefahren von, Punkte schon gebucht.
+        for merk in ("_aufgegeben", "_zuletzt_team", "_punkte_gebucht"):
+            self.__dict__.pop(merk, None)
         self.leben = self.max_leben
         self.kaputt = False
         self.kaputt_von = None
@@ -1027,7 +1119,7 @@ class Flakgranate(Geschoss):
                 self._zuenden()
                 return
             lz = self.luft_ziel
-            if lz is not None and lz.lebt and self.pos.distance_to(lz.pos) <= K.FLAK["naeher"]:
+            if lz is not None and lz.lebt and self.pos.distance_to(lz.jetzt) <= K.FLAK["naeher"]:
                 self._zuenden()
                 return
             if self.rest <= 0.0:
@@ -1045,7 +1137,7 @@ class Flakgranate(Geschoss):
         F = K.FLAK
         lz = self.luft_ziel
         if lz is not None and lz.lebt:
-            weit = self.pos.distance_to(lz.pos)
+            weit = self.pos.distance_to(lz.jetzt)
             reich = F["luft_radius"] + lz.radius
             if weit <= reich:
                 anteil = 1.0 - F["luft_abfall"] * min(1.0, weit / reich)
@@ -1288,7 +1380,6 @@ class Schwer(Buggy):
         self._aufbau_fuehren(dt)
         if self.fahrer is not None:
             self._schiessen()
-            self._motor(dt)
 
     def _abklingen(self, dt: float) -> None:
         f = self.werte
@@ -1331,19 +1422,6 @@ class Schwer(Buggy):
         self.welt.partikel.append(Partikel(
             huelse_von, pygame.Vector2(RND.uniform(60, 95), 0).rotate(aus) + self.geschw,
             0.9, (176, 140, 62), 1, "huelse", 3.0, self.ebene))
-
-    def _motor(self, dt: float) -> None:
-        """Kein Motor als Schleife - ein kurzes Brummen in einem Takt, solange
-        er faehrt. Wie das Quietschen des Buggys."""
-        self._motor_rest -= dt
-        if self._motor_rest > 0.0:
-            return
-        self._motor_rest = self.werte["motor_takt"]
-        tempo = abs(self.fahrt)
-        if tempo < 3.0 and abs(self.gier) < 0.05 and abs(self.gas) < 0.1:
-            return
-        anteil = min(1.0, tempo / self.werte["hoechst"])
-        self.welt.klang("%s_motor" % self.art, 0.3 + 0.35 * anteil, self.pos, self.ebene)
 
     # ---- Rammen -------------------------------------------------------
     def _beiseite_schieben(self) -> None:
@@ -1549,9 +1627,6 @@ class Panzer(Schwer):
     def _staub(self, dt: float) -> None:
         """Kein Fahrstaub wie beim Buggy - er ist zu langsam dafuer."""
 
-    def _quietschen(self, dt: float) -> None:
-        """Ketten quietschen nicht im Sand."""
-
     def _spuren(self) -> None:
         """Kettenspuren: zwei Baender im Sand, solange er sich bewegt - auch
         beim Drehen auf der Stelle."""
@@ -1712,7 +1787,9 @@ class Krad(Buggy):
         """Wie beim Buggy, und der Beifahrer bekommt es auch (der Fahrer
         wird in Buggy.schaden bedient). Die eigenen Leute verletzen einander
         nicht."""
-        if not (self.kaputt or self.nur_bild or not self.lebt) and float(menge) > 0.0:
+        if (not (self.kaputt or self.nur_bild or not self.lebt) and float(menge) > 0.0
+                and not self.freund_drin(von)
+                and not (self.sitzt_drin(von) and art not in K.EIGENES_FAHRZEUG_TRIFFT)):
             for k in list(self.__dict__.get("_mitfahrer") or ()):
                 if (k.lebt and von is not k
                         and (von is None or getattr(von, "fraktion", None) != k.fraktion)):
@@ -1766,6 +1843,37 @@ class Trosswagen(Buggy):
 
     def in_zone(self, punkt, radius: float = 0.0) -> bool:
         return self.zone_mitte().distance_to(punkt) <= self.werte["zone"]["radius"] + radius
+
+    # ---- Abschleppen (seit 0.34.138) -------------------------------------
+    # Gefragt: "ob es moeglich ist, mit dem Trosswagen was hinten dran zu
+    # ziehen ... ich wuesste die Taste nicht. So etwas sollte immer klar und
+    # intuitiv sein." Jetzt: rechte Maustaste am Steuer haengt einen leeren
+    # Wagen in der Zone hinten an (oder ab); er folgt am Haken.
+    anhang = None
+
+    def haken(self, pos=None, winkel=None) -> pygame.Vector2:
+        """Die Anhaengerkupplung: hinten am Wagen."""
+        pos = self.pos if pos is None else pos
+        winkel = self.winkel if winkel is None else winkel
+        w = self.werte
+        hinten = w["achse"] + w["kreis"] - w.get("mitte", 0.0)
+        return pos - pygame.Vector2(hinten, 0).rotate(winkel)
+
+    def anhang_kandidat(self, fahrzeuge):
+        """Ein leerer Wagen in der Zone hinten, den er ziehen kann, oder None."""
+        gew = K.SCHIEBEN["gewicht"]
+        mein = gew.get(self.art, 2)
+        beste, best_d = None, 1e9
+        for a in fahrzeuge:
+            if (a is self or a.ebene != self.ebene or getattr(a, "luft", False)
+                    or a.fahrer is not None or getattr(a, "besetzt", False)):
+                continue
+            if gew.get(a.art, 2) > mein:
+                continue
+            d = a.pos.distance_to(self.zone_mitte())
+            if d <= self.werte["zone"]["radius"] + K.ABSCHLEPPEN["fang"] and d < best_d:
+                beste, best_d = a, d
+        return beste
 
     def schritt(self, dt: float) -> None:
         super().schritt(dt)
@@ -2067,19 +2175,27 @@ class Funkwagen(Aufbauwagen):
         super().__init__(pos, ebene, winkel, nur_bild)
         self.modus = 0
         self._wirk_rest = 0.0
+        # Wie der Peilkopf auf dem Mast steht, Grad zur Fahrtrichtung (seit
+        # 0.34.124). Nur fuers Bild, nicht im Netz: beim Gast folgt er der
+        # gemeldeten Phase von selbst, wie `fortschritt`.
+        self.kopf = 0.0
 
     @property
     def bild(self) -> str:
-        # Der Mast ist seit 0.34.124 ein eigenes 3D-Bild ueber dem Wagen
-        # (art_funkmast.py, luft._funkmasten_zeichnen).
+        # Seit 0.34.124 nur der Wagen: Mast, Kopf und Seile zeichnet luft.py
+        # als 3D-Modell darueber (art_funkmast.py), aus `fortschritt` und `kopf`.
         return "funkwagen_wrack" if self.kaputt else "funkwagen"
 
-    def mast_drehung(self) -> float:
-        """Wie weit der Peilkopf gerade gedreht ist (Grad): er dreht sich, sobald
-        er aufgeklappt ist, und laeuft dabei weich an."""
-        zeit = self.welt.zeit if self.welt is not None else 0.0
-        an = max(0.0, min(1.0, (self.fortschritt - 0.8) / 0.2))
-        return (zeit * self.werte["drehen"] * 90.0 * an) % 360.0
+    def schritt(self, dt: float) -> None:
+        super().schritt(dt)
+        dreh = float(self.werte["kopf_dreh"]) * dt
+        if self.aufgebaut and self.fortschritt >= 1.0:
+            self.kopf = (self.kopf + dreh) % 360.0
+        else:
+            # Erst zurueck in Fahrtrichtung, dann klappt er ein (schneller als er
+            # sich dreht, damit er vor dem Einklappen dort ist).
+            diff = (0.0 - self.kopf + 180.0) % 360.0 - 180.0
+            self.kopf = (self.kopf + max(-3.0 * dreh, min(3.0 * dreh, diff))) % 360.0
 
     def mast_mitte(self, pos=None, winkel=None) -> pygame.Vector2:
         pos = self.pos if pos is None else pos
@@ -2116,6 +2232,7 @@ class Funkwagen(Aufbauwagen):
         super().zuruecksetzen()
         self.modus = 0
         self._wirk_rest = 0.0
+        self.kopf = 0.0
 
 
 class Werfer(Aufbauwagen):
@@ -2167,9 +2284,7 @@ class Werfer(Aufbauwagen):
             return "werfer_wrack"
         if self.fortschritt <= 0.0:
             return "werfer"
-        # Die Stuetzen fahren in der ersten Haelfte des Aufbaus aus und senken
-        # sich (seit 0.34.124: 16 Stellungen, art_neue_fahrzeuge._werfer_stuetzen).
-        return "werfer_stuetze_%d" % max(1, min(16, int(math.ceil(min(1.0, self.fortschritt / 0.5) * 16.0))))
+        return "werfer_stuetze_%d" % max(1, min(8, int(math.ceil(self.fortschritt * 8.0))))
 
     def erhebung(self) -> float:
         """Wie steil das Gestell gerade steht (Grad): liegt flach, solange es
@@ -2199,14 +2314,9 @@ class Werfer(Aufbauwagen):
         return muendung3d(index, self.gestell_winkel(), self.erhebung())[2]
 
     def schritt(self, dt: float) -> None:
-        vorher = self.fortschritt
         super().schritt(dt)
         if self.kaputt:
             return
-        if not (self.nur_bild or self.welt is None) and vorher < 0.5 <= self.fortschritt:
-            # Die Teller setzen auf (seit 0.34.124): Staub an allen vier Stuetzen.
-            self.welt.explosion(pygame.Vector2(self.pos), self.ebene, float(self.winkel % 360.0),
-                                "stuetze_auf", self.fahrer)
         if self.nur_bild or self.welt is None:
             soll = self._rohr_soll                 # Gast: dem gemeldeten Wert folgen
         else:
@@ -2219,7 +2329,8 @@ class Werfer(Aufbauwagen):
                     soll = (math.degrees(math.atan2(d.y, d.x)) - self.winkel + 180.0) % 360.0 - 180.0
                 # Nah steil, weit flacher (wie ein Werfer eben zielt).
                 sa = self.werte["salve"]
-                t = max(0.0, min(1.0, (d.length() - sa["nah"]) / max(1.0, sa["weit"] - sa["nah"])))
+                weit = getattr(self, "_weite", sa["weit"])
+                t = max(0.0, min(1.0, (d.length() - sa["nah"]) / max(1.0, weit - sa["nah"])))
                 self._hub_soll = self.werte["hub"][0] + (self.werte["hub"][1] - self.werte["hub"][0]) * t
         h = float(self.werte["hub_dreh"]) * dt
         self.hub += max(-h, min(h, self._hub_soll - self.hub))
@@ -2330,8 +2441,15 @@ class Tragschrauber(Buggy):
         self._bomben_rest = 0.0
         self._feuer_alt = False
         self._aufkl_rest = 0.0
+        # Abgeschossen in der Luft (seit 0.34.127): das Wrack faellt noch.
+        self.stuerzt = False
+        self.fall_v = 0.0              # px/s nach unten (im Bild: Hoehe nimmt ab)
+        self._absturz_von = None
+        self._absturz_rauch = 0.0
+        self._flugrichtung = None
 
     schatten_bild = "tragschrauber_schatten"
+    explosion_art = "absturz"
 
     @property
     def bild(self) -> str:
@@ -2341,8 +2459,9 @@ class Tragschrauber(Buggy):
 
     @property
     def hoch_oben(self) -> bool:
-        """Gezeichnet in der Schicht ueber allem (luft.py), solange er hoch ist."""
-        return self.hoehe > 2.0 and not self.kaputt
+        """Gezeichnet in der Schicht ueber allem (luft.py), solange er hoch ist -
+        auch als Wrack, das noch faellt (seit 0.34.127)."""
+        return self.hoehe > 2.0
 
     @property
     def in_der_luft(self) -> bool:
@@ -2358,9 +2477,18 @@ class Tragschrauber(Buggy):
             super()._beiseite_schieben()
 
     def schritt(self, dt: float) -> None:
+        if self.kaputt and self.hoehe > 1.0 and self.welt is not None:
+            self._absturz_qualm(dt)                     # beim Gastgeber und beim Gast
+        if self.stuerzt and not self.nur_bild and self.welt is not None:
+            Wesen.schritt(self, dt)
+            self._stuerzen(dt)
+            self.trefferbar = False
+            return
         if self.luft and not self.nur_bild and self.welt is not None and not self.kaputt:
             Wesen.schritt(self, dt)
             self._fliegen(dt)
+            if self.fahrer is not None and self.emp_rest <= 0.0:
+                self._motor(dt)
             self.trefferbar = not self.in_der_luft     # Bodenfeuer geht darunter durch
             return
         super().schritt(dt)
@@ -2422,15 +2550,122 @@ class Tragschrauber(Buggy):
             self.luft = False
             self.schaden(self.leben + 1.0, None, None, art="ramm")
 
+    def _insassen_toeten(self, von) -> None:
+        """Wer drin sitzt, ist sofort tot (gewuenscht, 0.34.127) - auch wenn
+        Insassen sonst geschuetzt sind (K.FAHRZEUG fahrer_geschuetzt) und man
+        am Boden sonst nur umfiele."""
+        leute = [self.fahrer] + list(self.__dict__.get("_mitfahrer") or [])
+        for k in leute:
+            if k is None or not getattr(k, "lebt", False):
+                continue
+            lebte = k.lebt
+            schaden_an(k, 99999.0, None, von, "spreng", self.pos)
+            if hasattr(k, "am_boden") and k.lebt:
+                k.am_boden = True
+                k.sterben(von)
+            abschuss_buchen(von, k, "tragschrauber", lebte)
+
     def _zerstoeren(self, von) -> None:
-        self.luft = self.landen = False
+        self._insassen_toeten(von)
+        if self.luft and self.hoehe > 4.0 and self.welt is not None and not self.kaputt:
+            # In der Luft getroffen: ein Feuerball dort oben, dann faellt das
+            # Wrack mit seinem Schwung. Schaden am Boden erst beim Aufschlag.
+            self.kaputt = True
+            self.kaputt_von = von
+            self.leben = 0.0
+            self.stuerzt = True
+            self._absturz_von = von
+            self.luft = self.landen = False
+            self.fall_v = 0.0
+            self.geschw = self.vorn * self.flug_v
+            self._flugrichtung = pygame.Vector2(self.vorn)
+            self.flug_v = 0.0
+            self.gas = self.lenk = 0.0
+            self.wrack_rest = self.werte["wrack_zeit"] + 60.0     # erst nach dem Aufschlag zaehlen
+            self.welt.explosion(pygame.Vector2(self.pos), self.ebene, float(self.hoehe), "heli_treffer", von)
+            self.welt.klang("c4_explosion", 0.7, self.pos, self.ebene)
+            return
+        self.luft = self.landen = self.stuerzt = False
         self.hoehe = self.flug_v = 0.0
         super()._zerstoeren(von)
 
+    def _stuerzen(self, dt: float) -> None:
+        """Das Wrack faellt: weiter in seine Richtung, gebremst von der Luft,
+        immer schneller nach unten, und es dreht sich. Was hoeher steht als
+        es gerade (Mauer, Fels), haelt es auf - dort rutscht es herunter."""
+        a = self.werte["absturz"]
+        w = self.welt
+        self.geschw *= math.exp(-a["bremse"] * dt)
+        self.fall_v += a["schwere"] * dt
+        self.hoehe = max(0.0, self.hoehe - self.fall_v * dt)
+        self.winkel = (self.winkel + a["drehen"] * dt + 180.0) % 360.0 - 180.0
+        neu = self.pos + self.geschw * dt
+        e = w.ebene(self.ebene)
+        neu.x = max(8.0, min(e.pixel_breite - 8.0, neu.x))
+        neu.y = max(8.0, min(e.pixel_hoehe - 8.0, neu.y))
+        if self.geschw.length_squared() > 1.0 and w.kachel_hoehe(neu, self.ebene) >= self.hoehe:
+            # Dagegen geprallt: Funken und Splitter an der Wand, der Schwung
+            # ist weg (ein wenig zurueck), es faellt an der Wand herunter.
+            if self.geschw.length() > 40.0:
+                w.explosion(pygame.Vector2(self.pos) + self.geschw.normalize() * 10.0, self.ebene, 0.6,
+                            "einschlag", self._absturz_von)
+            self.geschw *= -a["abprall"]
+        else:
+            self.pos.update(neu)
+        self.tempo.update(self.geschw)
+        if self.hoehe <= 0.0:
+            self._aufschlagen()
+
+    def _aufschlagen(self) -> None:
+        """Unten: liegt das Wrack in einer Mauer oder ueber einem Loch, rueckt
+        es auf seiner Bahn zurueck, bis es Platz hat. Dann der Aufschlag mit
+        Schaden ringsum (Buggy._zerstoeren, Art "absturz") und einem Feuerball."""
+        self.stuerzt = False
+        self.hoehe = self.fall_v = 0.0
+        if not Buggy.passt(self, self.pos):
+            # Auf einer Mauer gelandet (es war beim Ueberfliegen noch hoeher als
+            # sie) oder ueber einem Loch: es rutscht herunter, zur naeheren
+            # Seite entlang seiner Flugbahn - nicht entlang des Tempos, das nach
+            # einem Abprall schon umgedreht ist.
+            bahn = getattr(self, "_flugrichtung", None) or pygame.Vector2(self.vorn)
+            gefunden = False
+            for d in range(4, int(self.werte["absturz"]["zurueck"]) + 1, 4):
+                for p in (self.pos - bahn * d, self.pos + bahn * d):
+                    if Buggy.passt(self, p):
+                        self.pos.update(p)
+                        self.vorher.update(p)
+                        gefunden = True
+                        break
+                if gefunden:
+                    break
+        self.geschw.update(0, 0)
+        self.tempo.update(0, 0)
+        von = self._absturz_von
+        self.kaputt = False                      # Buggy._zerstoeren setzt es wieder
+        Buggy._zerstoeren(self, von)
+        self.welt.explosion(pygame.Vector2(self.pos), self.ebene, 1.2, "einschlag", von)
+
+    def _absturz_qualm(self, dt: float) -> None:
+        """Das fallende Wrack brennt und zieht schwarzen Rauch hinter sich her."""
+        from . import effekte
+        self._absturz_rauch -= dt
+        if self._absturz_rauch > 0.0:
+            return
+        self._absturz_rauch = self.werte["absturz"]["rauch_takt"]
+        r = RND
+        effekte.rauch(self.welt, r, self.pos.x, self.pos.y, self.hoehe + 4.0, self.ebene, "schwarz",
+                      2, r.uniform(6, 10), r.uniform(1.4, 2.2), vz=r.uniform(4, 14), zaeh=2.2)
+        effekte.feuer(self.welt, r, self.pos.x, self.pos.y, self.hoehe + 3.0, self.ebene, 2,
+                      r.uniform(4, 6), 0.25)
+
     def netz_extra(self):
+        # Seit 0.34.138 auch, wie lange die naechste Bombe noch laedt (die
+        # Anzeige beim Fahrer, auch beim Gast).
+        laedt = (round(max(0.0, self._bomben_rest), 1)
+                 if self.bomben < int(self.werte["bomben"]) else 0.0)
         return [int(self.luft), int(self.hoehe), self.bomben,
                 [[round(b[0], 1), int(b[1]), int(b[2]), int(b[3]) if len(b) > 3 else 0]
-                 for b in self.bomben_fall[:4]]]
+                 for b in self.bomben_fall[:4]], laedt]
 
     def netz_extra_setzen(self, wert) -> None:
         try:
@@ -2439,13 +2674,15 @@ class Tragschrauber(Buggy):
             self.bomben = max(0, min(9, int(wert[2])))
             self.bomben_fall = [[float(b[0]), float(b[1]), float(b[2]), float(b[3]) if len(b) > 3 else 0.0]
                                 for b in wert[3][:4]]
+            self._bomben_rest = max(0.0, min(60.0, float(wert[4]))) if len(wert) > 4 else 0.0
         except (TypeError, ValueError, IndexError):
             self.bomben_fall = []
 
     def zuruecksetzen(self) -> None:
         super().zuruecksetzen()
-        self.luft = self.landen = False
-        self.hoehe = self.flug_v = 0.0
+        self.luft = self.landen = self.stuerzt = False
+        self.hoehe = self.flug_v = self.fall_v = 0.0
+        self._absturz_von = None
         self.bomben = int(self.werte["bomben"])
         self.bomben_fall = []
         self.takt = {}

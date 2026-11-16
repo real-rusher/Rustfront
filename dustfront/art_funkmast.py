@@ -40,6 +40,8 @@ RING = (92, 88, 80)
 SEIL = (58, 54, 48)
 NAGEL = (150, 146, 136)
 LAMPE = (226, 70, 50)
+DACH = (98, 106, 84)                 # der Lack des Funkwagens, wie er im Bild steht
+TARNUNG = 0.6                        # so weit geht der liegende Mast in den Lack ueber
 
 
 def _glatt(t: float) -> float:
@@ -77,8 +79,13 @@ def _kopf(aufklappen: float, drehung: float) -> list:
     return D.bewegen(f, gieren=drehung)
 
 
-def _mast(aufrichten: float, ausfahren: float, aufklappen: float, drehung: float) -> tuple:
-    """Mast samt Kopf am Fuss (0, 0, 0); und wo seine Spitze ist."""
+def _mast(aufrichten: float, ausfahren: float, aufklappen: float, drehung: float,
+          gieren: float = 0.0) -> tuple:
+    """Mast samt Kopf am Fuss (0, 0, 0); und wo seine Spitze ist. Die Farben
+    werden am aufrechten Mast gerechnet (in Richtung `gieren`) und beim Kippen
+    behalten - sonst sprangen sie beim Aufrichten von Lichtstufe zu
+    Lichtstufe. Liegend geht er in den Lack des Dachs ueber: man soll ihn
+    erst sehen, wenn er sich hebt (Wunsch des Besitzers, 0.34.126)."""
     lang = UNTEN_L + OBEN_L * ausfahren
     f = []
     f += D.stab((0.0, 0.0, 0.0), (0.0, 0.0, UNTEN_L), 1.5, ROHR_U, 6)
@@ -86,6 +93,7 @@ def _mast(aufrichten: float, ausfahren: float, aufklappen: float, drehung: float
     for z in (5.0, 11.0, UNTEN_L - 0.6):                                       # Schellen
         f += D.stab((0.0, 0.0, z - 0.5), (0.0, 0.0, z + 0.5), 1.8, (70, 66, 58), 6)
     f += D.bewegen(_kopf(aufklappen, drehung), dz=lang)
+    f = D.ton_fest(f, gieren, DACH, TARNUNG * (1.0 - min(1.0, aufrichten / 40.0)))
     k = aufrichten - 90.0
     f = D.bewegen(f, kippen=k)
     w = math.radians(k)
@@ -100,30 +108,119 @@ def _fuss() -> list:
 
 
 _BILDER: dict = {}
+_SCHATTEN: dict = {}
+
+
+def _schluessel(gieren: float, fortschritt: float, drehung: float) -> tuple:
+    return (int(round(gieren / 5.0)) * 5 % 360, int(round(max(0.0, min(1.0, fortschritt)) * 24)),
+            int(round(drehung / 15.0)) * 15 % 360)
+
+
+def _seile(g: int, p: int, d: int) -> list:
+    """Die Abspannseile, schon gegiert: [(oben, ende), ...] in Spielpixeln
+    vom Mastfuss."""
+    aufrichten, ausfahren, aufklappen, seile = stellung(p / 24.0)
+    if seile <= 0.0:
+        return []
+    _f, spitze = _mast(aufrichten, ausfahren, 0.0, 0.0)
+    oben = tuple(c * 0.82 for c in spitze)
+    w = math.radians(g)
+    cw, sw = math.cos(w), math.sin(w)
+
+    def gier(q):
+        return (q[0] * cw - q[1] * sw, q[0] * sw + q[1] * cw, q[2])
+    raus = []
+    for nx, ny in NAEGEL:
+        ende = (oben[0] + (nx - oben[0]) * seile, oben[1] + (ny - oben[1]) * seile,
+                oben[2] + (0.0 - oben[2]) * seile)
+        raus.append((gier(oben), gier(ende)))
+    return raus
+
+
+def _teile(g: int, p: int, d: int, seile_als_stab: bool = False) -> list:
+    aufrichten, ausfahren, aufklappen, seile = stellung(p / 24.0)
+    teile, spitze = _mast(aufrichten, ausfahren, aufklappen, d, g)
+    teile += D.ton_fest(_fuss(), g)
+    if seile >= 0.98:
+        for nx, ny in NAEGEL:
+            teile += D.quader(nx - 1.0, nx + 1.0, ny - 1.0, ny + 1.0, 0.0, 1.4, NAGEL)
+    teile = D.bewegen(teile, gieren=g)
+    if seile_als_stab:
+        for a, b in _seile(g, p, d):
+            teile += D.stab(a, b, 0.3, SEIL, 4)
+    return teile
+
+
+def _ins_bild(q) -> tuple:
+    halb = GROESSE_BILD / 2.0
+    return (q[0] - MITTE[0] + halb, q[1] - q[2] - MITTE[1] + halb)
+
+
+MERKEN_HOECHSTENS = 400               # so viele Bilder (und Schatten) bleiben gemerkt
+
+
+def _voll(teil, versatz) -> pygame.Surface:
+    voll = pygame.Surface((GROESSE_BILD, GROESSE_BILD), pygame.SRCALPHA)
+    voll.blit(teil, (int(round(GROESSE_BILD / 2.0 + versatz[0])), int(round(GROESSE_BILD / 2.0 + versatz[1]))))
+    return voll
 
 
 def funkmast(gieren: float, fortschritt: float, drehung: float = 0.0) -> pygame.Surface:
-    """Der Mast im Bild, gerundet auf 5 Grad (gieren), 1/24 (fortschritt) und
-    15 Grad (drehung). Bildmitte ist der Mastfuss, verschoben um MITTE."""
-    g = int(round(gieren / 5.0)) * 5 % 360
-    p = int(round(max(0.0, min(1.0, fortschritt)) * 24))
-    d = int(round(drehung / 15.0)) * 15 % 360
-    s = _BILDER.get((g, p, d))
+    """Der Mast in voller Bildgroesse (Bildmitte = Mastfuss, verschoben um
+    MITTE) - fuer Werkzeuge und Pruefungen; das Spiel nimmt
+    `funkmast_zugeschnitten`."""
+    return _voll(*funkmast_zugeschnitten(gieren, fortschritt, drehung))
+
+
+def schatten(gieren: float, fortschritt: float, drehung: float = 0.0) -> pygame.Surface:
+    """Der Schatten in voller Bildgroesse, wie `funkmast`."""
+    return _voll(*schatten_zugeschnitten(gieren, fortschritt, drehung))
+
+
+def funkmast_zugeschnitten(gieren: float, fortschritt: float, drehung: float = 0.0) -> tuple:
+    """(Bild, Versatz zur Bildmitte): nur der belegte Teil (seit 0.34.127,
+    spart den meisten Speicher). Gerundet auf 5 Grad (gieren), 1/24
+    (fortschritt) und 15 Grad (drehung)."""
+    from .art_werfer import zuschneiden
+    k = _schluessel(gieren, fortschritt, drehung)
+    s = _BILDER.get(k)
     if s is not None:
         return s
-    if len(_BILDER) > 600:
+    if len(_BILDER) > MERKEN_HOECHSTENS:
         _BILDER.clear()
-    aufrichten, ausfahren, aufklappen, seile = stellung(p / 24.0)
-    teile, spitze = _mast(aufrichten, ausfahren, aufklappen, d)
-    teile += _fuss()
-    if seile > 0.0:
-        oben = tuple(c * 0.82 for c in spitze)
-        for nx, ny in NAEGEL:
-            ende = (oben[0] + (nx - oben[0]) * seile, oben[1] + (ny - oben[1]) * seile,
-                    oben[2] + (0.0 - oben[2]) * seile)
-            teile += D.stab(oben, ende, 0.22, SEIL, 4)
-            if seile >= 0.98:
-                teile += D.quader(nx - 1.0, nx + 1.0, ny - 1.0, ny + 1.0, 0.0, 1.4, NAGEL)
-    s = D.malen(D.bewegen(teile, gieren=g), GROESSE_BILD, mitte=MITTE)
-    _BILDER[(g, p, d)] = s
+    # Ohne den dunklen Rand von drei_d.malen: bei so duennen Teilen griff er
+    # nur in manchen Lagen, dann bekam der Mast ploetzlich einen schwarzen
+    # Umriss (beim Liegen und an einem Punkt der Drehung).
+    mast = D.malen(_teile(*k), GROESSE_BILD, mitte=MITTE, rand=False)
+    # Die Seile nicht als 3D-Koerper: so duenn greift der dunkle Rand von
+    # drei_d.malen nur bei manchen Lagen, und dann waren die vorderen Seile
+    # dick und schwarz, die hinteren kaum zu sehen. Als glatte Linie sind
+    # alle gleich - die hinteren unter dem Mast, die vorderen darueber.
+    s = pygame.Surface(mast.get_size(), pygame.SRCALPHA)
+    seile = _seile(*k)
+    hinten = [z for z in seile if z[1][1] < 0.0]
+    vorn = [z for z in seile if z[1][1] >= 0.0]
+    for a, b in hinten:
+        pygame.draw.aaline(s, SEIL, _ins_bild(a), _ins_bild(b))
+    s.blit(mast, (0, 0))
+    for a, b in vorn:
+        pygame.draw.aaline(s, SEIL, _ins_bild(a), _ins_bild(b))
+    s = _BILDER[k] = zuschneiden(s)
+    return s
+
+
+def schatten_zugeschnitten(gieren: float, fortschritt: float, drehung: float = 0.0) -> tuple:
+    """Der Schatten des Mastes auf dem Boden, wie beim Werfer-Gestell schraeg
+    nach rechts unten; dieselbe Bildmitte wie `funkmast`. Der Kopf dreht sich
+    im Schatten mit, darum dieselben Stufen."""
+    from .art_werfer import zuschneiden
+    k = _schluessel(gieren, fortschritt, drehung)
+    s = _SCHATTEN.get(k)
+    if s is not None:
+        return s
+    if len(_SCHATTEN) > MERKEN_HOECHSTENS:
+        _SCHATTEN.clear()
+    flach = D.malen(D.flach(_teile(*k, seile_als_stab=True), 0.42, 0.34), GROESSE_BILD, mitte=MITTE, rand=False)
+    s = _SCHATTEN[k] = zuschneiden(pygame.mask.from_surface(flach, 30).to_surface(
+        setcolor=(0, 0, 0, 70), unsetcolor=(0, 0, 0, 0)))
     return s

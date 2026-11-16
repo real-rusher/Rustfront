@@ -134,8 +134,8 @@ opt.seite_wechseln(1)
 regler = [el for el in opt.elemente if isinstance(el, ui.Regler)]
 # Seit 0.34.79 steht hier auch das Brummen des Hauptmenues (das keine
 # eigene Einstellungsseite mehr hat). Musik gibt es weiter nicht.
-pruef("Tonseite: Gesamt, Effekte, Brummen im Hauptmenue - keine Musik",
-      [el.name for el in regler] == ["ton_gesamt", "ton_effekte", "ton_menue"],
+pruef("Tonseite: Gesamt und Effekte - kein Brummen (seit 0.34.136), keine Musik",
+      [el.name for el in regler] == ["ton_gesamt", "ton_effekte"],   # seit 0.34.136 kein Brummen mehr
       str([el.name for el in regler]))
 opt.wahl = opt.elemente.index(regler[0])
 vorher = app.opt["ton_gesamt"]
@@ -423,6 +423,32 @@ import importlib
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 RM = importlib.import_module("rustfront_menu")
 RM.SETTINGS_PATH = Path(_WEG) / "rustfront_settings.json"
+_au = RM.Audio(RM.Settings())
+pruef("Das Hauptmenue spielt keinen Dauerton mehr (seit 0.34.136: das Brummen ist weg)",
+      not hasattr(_au, "drone") and not hasattr(RM.Audio, "start_drone")
+      and all(k_.get_length() < 0.5 for k_ in _au.sounds.values()),
+      str({n_: round(k_.get_length(), 2) for n_, k_ in _au.sounds.items()}))
+pruef("... und oeffnet den Mischer mit demselben Puffer wie das Spiel", RM.MIX_PUFFER == K.AUDIO["puffer"])
+
+# Vorab uebersetzen (seit 0.34.137, gemeldet: auf schwachen Rechnern beim
+# ersten Start jeder Version ein langer schwarzer Schirm vor der ersten Runde).
+import shutil as _sh137
+_pk137 = Path(_WEG) / "paket137"
+_sh137.copytree(Path(__file__).resolve().parent.parent / "dustfront", _pk137,
+                ignore=_sh137.ignore_patterns("__pycache__"))
+_vor137 = len(RM._veraltet(_pk137))
+_proc137 = RM.vorab_uebersetzen(_pk137)
+pruef("Neue Version: ein eigener Prozess uebersetzt das ganze Paket, waehrend man im Menue steht",
+      _vor137 > 20 and _proc137 is not None and _proc137.wait(120) == 0 and not RM._veraltet(_pk137),
+      "%d veraltet, danach %d" % (_vor137, len(RM._veraltet(_pk137))))
+pruef("... beim naechsten Start ist nichts zu tun (kein Prozess)", RM.vorab_uebersetzen(_pk137) is None)
+_bild137 = pygame.Surface((RM.VW, RM.VH))
+_gezeigt137 = []
+_fake137 = type("A", (), {"canvas": _bild137, "present": lambda self_: _gezeigt137.append(1)})()
+RM.ladebild(_fake137)
+pruef("... und beim Uebergang ins Spiel steht LAEDT im Bild statt schwarz",
+      _gezeigt137 and any(_bild137.get_at((x_, RM.VH // 2))[:3] != RM.C_VOID for x_ in range(RM.VW)))
+RM.uebersetzer_abwarten(_fake137, 5.0)
 app.opt["bildrate"] = 144
 app.opt["ton_gesamt"] = 40
 app.opt["fenstermodus"] = "randlos"
@@ -624,6 +650,62 @@ taste(an, pygame.K_ESCAPE)
 # Bilder der beiden neuen Masken, wie bei den anderen auch.
 schirm(M.Anmeldung(app), "menue_8_konto.png")
 schirm(M.Ausruestung(app), "menue_9_ausruestung.png")
+
+# ══════════════════════════════════════════════════════════════════
+# Kosmetik im Spiel bearbeiten (seit 0.34.135, gewuenscht)
+print("\n-- Kosmetik im Spiel --")
+import array as _arr, math as _m, wave as _wave
+from dustfront import kosmetik_bearbeiten as KB
+from dustfront import ablage as _ablage
+pruef("PAUSE hat einen Eintrag KOSMETIK",
+      any(el.name == "kosmetik" for el in M.Pause(app, szene).elemente))
+_ko = KB.ordner()
+with _wave.open(str(_ko / "knall.wav"), "wb") as _w:
+    _w.setnchannels(2); _w.setsampwidth(2); _w.setframerate(44100)
+    _a = _arr.array("h")
+    for _i in range(44100 * 5):
+        _v = int(9000 * _m.sin(_i * 2 * _m.pi * 110 / 44100)); _a.extend((_v, _v))
+    _w.writeframes(_a.tobytes())
+_bf = pygame.Surface((800, 450)); _bf.fill((30, 90, 200))
+pygame.draw.circle(_bf, (250, 220, 60), (400, 225), 180)
+pygame.image.save(_bf, str(_ko / "bild.jpg"))
+kb = KB.KosmetikBearbeiten(app)
+app.schieben(kb)
+kb.ausloesen(next(e for e in kb.elemente if e.name == "ton_laden"))
+pruef("TON LADEN nimmt die WAV aus dem Ordner (Stereo, 44100 Hz)",
+      kb.ton_quelle is not None and kb.ton_quelle[2] == "knall.wav", kb.meldung)
+kb.ausloesen(next(e for e in kb.elemente if e.name == "bild_laden"))
+pruef("BILD LADEN nimmt das JPG und macht es klein genug",
+      kb.bild_quelle is not None and max(kb.bild_quelle.get_size()) <= K.SPIELERKOSMETIK["bild_max"])
+_fw = next(e for e in kb.elemente if e.name == "filter")
+_fw.blaettern(2); kb.geaendert(_fw)
+_rx = next(e for e in kb.elemente if e.name == "x"); _rx.wert = 30; kb.geaendert(_rx)
+_rl = next(e for e in kb.elemente if e.name == "laenge"); _rl.wert = 50; kb.geaendert(_rl)
+_ton, _bild = kb.paket()
+_pk = __import__("dustfront.spielerkosmetik", fromlist=["aus_konto"]).aus_konto(_ton, _bild)
+pruef("Das Paket besteht dieselbe Pruefung wie jedes fremde (Laenge, Lage, Filter)",
+      abs(_pk.dauer - 2.5) < 0.05 and abs(_pk.lage["x"] - 0.3) < 0.01 and kb.filter == "sepia",
+      "%.2f %s" % (_pk.dauer, _pk.lage))
+schirm(kb, "menue_10_kosmetik.png")
+kb = KB.KosmetikBearbeiten(app)
+app.schieben(kb)
+_png = _ko / "zweit.png"
+pygame.image.save(_bf, str(_png))
+kb.ereignis(pygame.event.Event(pygame.DROPFILE, file=str(_png)))
+pruef("Eine Datei ins Fenster ziehen laedt sie", kb.bild_name == "zweit.png", kb.meldung)
+if isinstance(app.konto.ablage, _ablage.LokaleAblage) and app.konto.angemeldet:
+    kb.ausloesen(next(e for e in kb.elemente if e.name == "ton_laden"))
+    kb.ausloesen(next(e for e in kb.elemente if e.name == "speichern"))
+    pruef("SPEICHERN legt Ton und Bild ins Konto",
+          app.konto.kosmetik is not None and app.konto.kosmetik.bild is not None
+          and app.konto.kosmetik_meldung == "GESPEICHERT", app.konto.kosmetik_meldung)
+    app.werfen()
+    kb2 = KB.KosmetikBearbeiten(app)
+    pruef("... und beim naechsten Oeffnen steht es wieder da",
+          kb2.ton_quelle is not None and kb2.bild_name == "IM KONTO")
+else:
+    pruef("(Speichern nur mit lokaler Ablage geprueft)", True)
+    app.werfen()
 
 print()
 print("FEHLER:", ", ".join(fehler) if fehler else "keine")

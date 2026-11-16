@@ -423,6 +423,17 @@ class Geschoss(Wesen):
     # nicht im eigenen Blech stecken bleiben.
     traeger = None
 
+    @property
+    def luft_hub(self) -> float:
+        """So weit (px) ueber dem Boden zeichnen: auf dem Weg zum Luftziel
+        steigt die Kugel bis zu dessen Bildhoehe (seit 0.34.138)."""
+        lz = getattr(self, "luft_ziel", None)
+        weg = getattr(self, "_luft_weg", 0.0)
+        if lz is None or weg <= 0.0:
+            return 0.0
+        rest = self.pos.distance_to(lz.jetzt)
+        return float(getattr(lz, "versatz", 0.0)) * max(0.0, min(1.0, 1.0 - rest / weg))
+
     def __init__(self, pos, richtung: float, daten: dict, ebene: int,
                  von=None, waffe: str = "") -> None:
         super().__init__(pos, ebene)
@@ -441,6 +452,11 @@ class Geschoss(Wesen):
         # Auf ein Luftziel gezielt (seit 0.34.113, luft.py): die Kugel geht am
         # Boden entlang und trifft nur dieses Ziel (und Mauern).
         self.luft_ziel = getattr(von, "luft_ziel", None) if von is not None else None
+        # Fuer das Bild (seit 0.34.138): wie weit es bis unter das Ziel war - die
+        # Kugel steigt im Bild zu ihm hoch (luft_hub), man sieht, dass sie in
+        # die Luft geht.
+        self._luft_weg = (max(1.0, pygame.Vector2(pos).distance_to(self.luft_ziel.pos))
+                          if self.luft_ziel is not None else 0.0)
         self.flak = bool(daten.get("flak"))
         # Der Stoss auf das Ziel gilt je Schuss, nicht je Kugel: vorher
         # schob jede der sieben Schrotkugeln einzeln, und aus naechster
@@ -509,7 +525,7 @@ class Geschoss(Wesen):
             lz = self.luft_ziel
             if lz is not None:
                 ziel = None            # am Boden trifft sie nichts, sie geht darueber
-                if lz.lebt and self.pos.distance_to(lz.pos) <= lz.radius:
+                if lz.lebt and self.pos.distance_to(lz.jetzt) <= lz.radius + K.LUFT_ZIELEN["treffer_extra"]:
                     self.lebt = False
                     lz.treffen(self.schaden_jetzt() * (daten_faktor(self) if self.flak else 1.0),
                                self.von)
@@ -649,6 +665,7 @@ class Granate(Wesen):
     """Fliegt, prallt von Waenden ab und zuendet nach ihrer Flugzeit."""
 
     fraktion = "geschoss"
+    ueber_wasser = True     # fliegt ueber tiefes Wasser (seit 0.34.131)
     schiebt = False
     trefferbar = False
     schatten = True
@@ -1583,15 +1600,19 @@ class Brandflaeche:
 
     __slots__ = ("pos", "ebene", "radius", "dauer", "alter", "lebt",
                  "kennung", "von", "verschont", "_saat", "_feld",
-                 "_funkenrest")
+                 "_funkenrest", "napalm", "_rauchrest")
 
     _naechste_kennung = 0
 
     def __init__(self, pos, ebene: int, radius: float | None = None,
                  dauer: float | None = None, alter: float = 0.0,
                  kennung: int | None = None, von=None,
-                 verschont: str = "") -> None:
+                 verschont: str = "", napalm: bool = False) -> None:
         f = K.FEUER
+        # Napalm (seit 0.34.130): brennt laenger, sieht anders aus (K.FEUER
+        # napalm_*), mehr Funken und schwarzer Rauch.
+        self.napalm = bool(napalm)
+        self._rauchrest = 0.0
         self.pos = pygame.Vector2(pos)
         self.ebene = int(ebene)
         self.radius = float(f["radius"] if radius is None else radius)
@@ -1663,9 +1684,11 @@ class Brandflaeche:
             anteil = self.brennt(ziel.pos, ziel.ebene)
             if anteil > 0.0:
                 schaden_an(ziel, f["schaden"] * anteil * dt, None, self.von, "feuer")
+        if self.napalm:
+            self.qualmen(dt, welt)
         # Funken steigen auf. Sie sind das, was ein Feuer von einem
         # roten Fleck unterscheidet.
-        self._funkenrest += f["funken"] * self.staerke * dt
+        self._funkenrest += f["napalm_funken" if self.napalm else "funken"] * self.staerke * dt
         while self._funkenrest >= 1.0:
             self._funkenrest -= 1.0
             winkel = RND.uniform(0, 360)
@@ -1675,6 +1698,21 @@ class Brandflaeche:
                 stelle, (RND.uniform(-14, 14), RND.uniform(-46, -22)),
                 RND.uniform(0.5, 1.1), f["toene"][3], 1, "funke", 1.2,
                 self.ebene))
+
+    def qualmen(self, dt: float, welt) -> None:
+        """Napalm: schwarzer, oeliger Rauch steigt aus dem Feuer (seit
+        0.34.130). Beim Gastgeber im Schritt, beim Gast aus dem Nachfuehren -
+        es ist nur Bild."""
+        from . import effekte
+        self._rauchrest += K.FEUER["napalm_rauch"] * self.staerke * dt
+        while self._rauchrest >= 1.0:
+            self._rauchrest -= 1.0
+            winkel = RND.uniform(0, 360)
+            weg = RND.uniform(0, self.radius * 0.7)
+            stelle = self.pos + pygame.Vector2(weg, 0).rotate(winkel)
+            effekte.rauch(welt, RND, stelle.x, stelle.y, 4.0, self.ebene, "schwarz", 3,
+                          RND.uniform(10, 16), RND.uniform(2.2, 3.4), vx=RND.uniform(-6, 6),
+                          vz=RND.uniform(18, 34), zaeh=0.9, g=-6.0)
 
     def feld(self, korn: int):
         """Das Dichtefeld, einmal gerechnet und dann behalten.
@@ -2268,8 +2306,13 @@ class Spieler(Wesen):
         # Energiewaffen (seit 0.34.68): wie weit aufgeladen (0 bis 1), und
         # wann die naechste Ladung abgekuehlt ist.
         self.ladung = 0.0
-        self._kuehl_rest = 0.0
         self._flamme_rest = 0.0
+        # Hitze der Chor-Waffen (seit 0.34.130): je Waffe, wie lange sie noch
+        # ueberhitzt ist, und wann der naechste Teil abgekuehlt ist - auch fuer
+        # die, die gerade nicht in der Hand ist.
+        self.ueberhitzt: dict = {}
+        self._kuehl: dict = {}
+        self._kuehl_liste = ((), ())
         # Raketenwerfer. `rpg` heisst: er wird getragen, und dann traegt
         # man sonst nichts. `rpg_waffen` merkt sich, was vorher da war.
         self.rpg = False
@@ -2596,6 +2639,8 @@ class Spieler(Wesen):
             self._rakete_abgeben(d)
         else:
             self._schuss_abgeben(d)
+        if self.salve_rest <= 0:
+            self._zweit_modus = ""
 
     # ---- Betriebsarten -------------------------------------------------
     def modus_von(self, waffe: str) -> str:
@@ -2603,6 +2648,9 @@ class Spieler(Wesen):
         modi = K.WAFFEN.get(waffe, {}).get("modi")
         if not modi:
             return ""
+        zweit = self.__dict__.get("_zweit_modus")
+        if zweit and zweit in modi and waffe == self.waffen[self.waffe]:
+            return zweit
         gewaehlt = self.modi.get(waffe)
         return gewaehlt if gewaehlt in modi else modi[0]
 
@@ -2639,7 +2687,8 @@ class Spieler(Wesen):
         """
         name = self.nahkampf_name
         d = K.WAFFEN.get(name)
-        if d is None or self.nahkampf_rest > 0 or self.schlag_zeigen > 0 or self.gelaehmt:
+        if (d is None or self.nahkampf_rest > 0 or self.schlag_zeigen > 0 or self.gelaehmt
+                or self.schwimmt):
             return False
         if self.nachlade_rest > 0 or self.heilt_rest > 0:
             return False
@@ -2682,7 +2731,8 @@ class Spieler(Wesen):
     def schnellwurf(self) -> bool:
         """G (seit 0.34.96, nur Spieler): die erste Wurfwaffe mit Ladung sofort
         werfen, ohne zu ihr zu wechseln."""
-        if self.gelaehmt or self.nachlade_rest > 0 or self.heilt_rest > 0 or self.schwingt:
+        if (self.gelaehmt or self.nachlade_rest > 0 or self.heilt_rest > 0 or self.schwingt
+                or self.schwimmt):
             return False
         for i, name in enumerate(self.waffen):
             d = K.WAFFEN.get(name, {})
@@ -2723,8 +2773,14 @@ class Spieler(Wesen):
         """Der Name des Schwungbilds (schwung_nummer), in den Farben der
         Mannschaft, wenn es die gibt."""
         i = self.schwung_nummer()
-        name = "spieler_%sschwung_%d" % (vorsatz, i)
-        return name if name in K.BILD_MASS else "spieler_schwung_%d" % i
+        # Mit der Nahkampfwaffe, die auf F liegt (seit 0.34.140), nicht immer dem Brecheisen.
+        nk = self.__dict__.get("nahkampf_waffe")
+        zusatz = "_" + nk if nk and nk != K.NAHKAMPF["waffe"] else ""
+        for name in ("spieler_%sschwung_%d%s" % (vorsatz, i, zusatz), "spieler_schwung_%d%s" % (i, zusatz),
+                     "spieler_%sschwung_%d" % (vorsatz, i)):
+            if name in K.BILD_MASS:
+                return name
+        return "spieler_schwung_%d" % i
 
     @property
     def bild(self) -> str:
@@ -2880,6 +2936,9 @@ class Spieler(Wesen):
         luft *= self.tempo_anteil
         if self.sprintet:
             luft *= K.SPRINT["faktor"]        # Bots sprinten (seit 0.34.50)
+        if self.sturz_rest <= 0 and self.welt is not None:
+            # Seichtes Wasser bremst (seit 0.34.131, K.WASSER).
+            luft *= self.welt.boden_tempo(self.pos, self.ebene)
         self._dash_laden(dt)
         # Fuer die Vorhersage beim Gast (seit 0.34.103, Gefecht).
         self._luft = luft
@@ -2913,6 +2972,7 @@ class Spieler(Wesen):
             self.welt.bewegen(self, self.tempo.x * dt, self.tempo.y * dt)
             self.welt.auseinander(self)
             self.welt.befreien(self)
+        self._wasser_pruefen()
 
         if self.sturz_rest > 0:
             pass                         # in der Luft kein Staub, kein Loch
@@ -2936,7 +2996,16 @@ class Spieler(Wesen):
                         self.welt.schneespuren.append([p.x, p.y, self.ebene, self.welt.zeit])
                     if len(self.welt.schneespuren) > 900:
                         del self.welt.schneespuren[:100]
-                else:
+                elif self.schwimmt or self.welt.seicht(self.pos, self.ebene):
+                    # Im Wasser (seit 0.34.131): Wellenringe statt Staub.
+                    from . import effekte
+                    effekte.ring(self.welt, self.pos.x, self.pos.y + 3, self.ebene,
+                                 3.0, 15.0, 0.7, (178, 214, 222))
+                elif not (getattr(self.welt, "satz", "") == "gruen"
+                          and self.welt.ebene(self.ebene).kachel(
+                              int(self.pos.x // K.TILE), int(self.pos.y // K.TILE))
+                          in (K.BODEN, K.GESTRUEPP)):
+                    # Auf einer Wiese staubt es nicht.
                     wolke(self.welt, self.pos + pygame.Vector2(0, 4), 2, 26, 0.34,
                           K.C_MUTED_DK, self.ebene, 1, "staub", 360, 0, 6.0)
 
@@ -2971,8 +3040,10 @@ class Spieler(Wesen):
             self._laden(dt, wd)
         elif self.feuert and self.takt <= 0 and self.heilt_rest <= 0:
             self.feuern()
-        if wd.get("kuehlt"):
-            self._abkuehlen(dt, wd)
+        if wd.get("kuehlt") and self.magazin.get(self.waffe_name, 0) <= 0 \
+                and self.waffe_name not in self.ueberhitzt:
+            self._ueberhitzen(self.waffe_name, wd)
+        self._abkuehlen(dt)
         # Die rechte Maustaste als zweiter Abzug (seit 0.34.62): die zweite
         # Pistole der Zwillinge, beide Laeufe der Doppelflinte.
         if ((wd.get("zweite_hand") or wd.get("beide_laeufe") or wd.get("zweit"))
@@ -3049,6 +3120,9 @@ class Spieler(Wesen):
         # nicht nach (seit 0.34.67).
         if not d.get("magazin") or d.get("art") in ("wurf", "c4") or d.get("aufheben"):
             return
+        if d.get("kuehlt"):
+            # Chor-Waffen laden nicht nach, sie kuehlen ab (seit 0.34.130).
+            return
         if self.nachlade_rest <= 0 and self.magazin[self.waffe_name] < d["magazin"]:
             # Der Schuetze laedt schneller (seit 0.34.73, Klasse).
             self.nachlade_rest = d["nachladen"] * getattr(self, "nachlade_faktor", 1.0)
@@ -3103,7 +3177,35 @@ class Spieler(Wesen):
             return True
         return False
 
+    # Schwimmen (seit 0.34.140, K.WASSER): wird in jedem Schritt gesetzt.
+    schwimmt = False
+    treffer_radius = 0.0          # 0: der ganze Koerper (world.treffer)
+
+    @property
+    def ueber_wasser(self) -> bool:
+        """Zu Fuss kommt man ins tiefe Wasser (world.frei ueber_wasser)."""
+        return K.WASSER["schwimmen"] and not getattr(self, "im_fahrzeug", False)
+
+    def _wasser_pruefen(self) -> None:
+        """Schwimmt die Figur gerade? Beim Hineingehen platscht es."""
+        alt = self.schwimmt
+        jetzt = (K.WASSER["schwimmen"] and self.lebt and self.welt is not None
+                 and self.sturz_rest <= 0 and self.flug <= 0
+                 and not getattr(self, "im_fahrzeug", False)
+                 and self.welt.tief(self.pos, self.ebene))
+        self.schwimmt = jetzt
+        self.treffer_radius = K.WASSER["kopf_radius"] if jetzt else 0.0
+        if jetzt and not alt:
+            from . import effekte
+            r0, r1, dauer = K.WASSER["platsch_ring"]
+            effekte.ring(self.welt, self.pos.x, self.pos.y, self.ebene, r0, r1, dauer, (196, 226, 236))
+            effekte.ring(self.welt, self.pos.x, self.pos.y, self.ebene, r0 * 0.5, r1 * 0.6, dauer * 0.7,
+                         (232, 246, 250))
+            self.welt.klang("platsch", 0.7, self.pos, self.ebene)
+
     def feuern(self) -> None:
+        if self.schwimmt:
+            return          # im tiefen Wasser keine Waffe (seit 0.34.140)
         d = self.waffe_daten
         art = d.get("art", "schuss")
         if art == "nahkampf":
@@ -3278,6 +3380,20 @@ class Spieler(Wesen):
         if d.get("zweit") == "werfen":
             self._werfen(d)
             return
+        if d.get("zweit") in d.get("modi", ()):
+            # Eine Betriebsart auf der rechten Maustaste (Revolver: FAECHERN,
+            # seit 0.34.138). Sie gilt fuer diesen Abzug und seine Salve.
+            if self.takt > 0 or self.salve_rest > 0:
+                return
+            if self.magazin.get(self.waffe_name, 0) <= 0:
+                self.nachladen()
+                return
+            self._zweit_modus = d["zweit"]
+            self.feuern()
+            self.takt2 = max(self.takt, 0.2)
+            if self.salve_rest <= 0:
+                self._zweit_modus = ""
+            return
         name = self.waffe_name
         hat = self.magazin.get(name, 0)
         if hat <= 0:
@@ -3398,8 +3514,11 @@ class Spieler(Wesen):
         w.schlagknall(spitze, self.winkel, self.ebene, bool(getroffen), self,
                       treffer_art)
 
-    def _ziele_vorn(self, reich: float, winkel: float) -> list:
-        """Wer im Kegel vor ihm steht (nicht er selbst, nicht die eigenen)."""
+    def _ziele_vorn(self, reich: float, winkel: float, koerper: bool = False) -> list:
+        """Wer im Kegel vor ihm steht (nicht er selbst, nicht die eigenen).
+        `koerper` (seit 0.34.143, Flammenwerfer): es genuegt, dass ein Teil
+        von ihm im Kegel steht - vorher zaehlte nur seine Mitte, und wer am
+        Rand der Flamme stand, brannte sichtbar und bekam doch nichts ab."""
         raus = []
         halb = winkel * 0.5
         for ziel in list(self.welt.nahe(self.pos, reich + 20, self.ebene)):
@@ -3407,10 +3526,12 @@ class Spieler(Wesen):
                     or ziel.fraktion == "geschoss" or not getattr(ziel, "trefferbar", True)):
                 continue
             ab = ziel.pos - self.pos
-            if ab.length() > reich + ziel.radius:
+            weit = ab.length()
+            if weit > reich + ziel.radius:
                 continue
             delta = (math.degrees(math.atan2(ab.y, ab.x)) - self.winkel + 180) % 360 - 180
-            if abs(delta) <= halb:
+            rand = (math.degrees(math.atan2(ziel.radius, max(1.0, weit))) if koerper else 0.0)
+            if abs(delta) <= halb + rand:
                 raus.append(ziel)
         return raus
 
@@ -3443,19 +3564,49 @@ class Spieler(Wesen):
             w.klang("kettensaege", 0.8, self.pos, self.ebene)
             w.laerm(self.pos, self.ebene, self, d.get("laerm", 600.0))
 
-    def _abkuehlen(self, dt: float, d: dict) -> None:
-        """Chor-Waffen werden heiss statt leer (seit 0.34.68): in Ruhe kommt
-        alle `abkuehlen` Sekunden eine Ladung zurueck."""
-        name = self.waffe_name
-        if self.feuert or self.ladung > 0.0 or self.nachlade_rest > 0:
-            self._kuehl_rest = d["abkuehlen"]
-            return
-        if self.magazin.get(name, 0) >= d["magazin"]:
-            return
-        self._kuehl_rest -= dt
-        if self._kuehl_rest <= 0.0:
-            self._kuehl_rest = d["abkuehlen"] * getattr(self, "kuehl_faktor", 1.0)
-            self.magazin[name] = self.magazin.get(name, 0) + 1
+    def _ueberhitzen(self, name: str, d: dict) -> None:
+        """Die Hitze ist voll (wo frueher das Magazin leer war, seit 0.34.130):
+        die Waffe ist gesperrt, bis sie abgekuehlt ist - laenger als ein
+        Nachladen. Einmal der Kuehlton, damit man weiss: ab jetzt kuehlt sie."""
+        self.ueberhitzt[name] = d.get("ueberhitzt", d["nachladen"]) * getattr(self, "kuehl_faktor", 1.0)
+        self.ladung = 0.0
+        if self.welt is not None:
+            self.welt.klang("ueberhitzt", 0.7, self.pos, self.ebene)
+
+    def _abkuehlen(self, dt: float) -> None:
+        """Chor-Waffen werden heiss statt leer (seit 0.34.68, seit 0.34.130 so):
+        jede kuehlt fuer sich, auch weggesteckt. Ueberhitzt ist sie gesperrt,
+        bis die Zeit um ist - dann ist sie ganz kalt. Sonst kommt in Ruhe alle
+        `abkuehlen` Sekunden ein Teil zurueck; wer mit ihr schiesst oder laedt,
+        haelt das an."""
+        if self._kuehl_liste[0] != self.waffen:
+            # Je Waffenliste einmal ausrechnen: das laeuft fuer jeden Kaempfer
+            # in jedem Schritt (verglichen wird der Inhalt - die Liste kann
+            # sich an Ort und Stelle aendern).
+            self._kuehl_liste = (list(self.waffen), tuple(n for n in self.waffen if K.WAFFEN[n].get("kuehlt")))
+        faktor = getattr(self, "kuehl_faktor", 1.0)
+        for name in self._kuehl_liste[1]:
+            d = K.WAFFEN[name]
+            rest = self.ueberhitzt.get(name)
+            if rest is not None:
+                rest -= dt
+                if rest <= 0.0:
+                    del self.ueberhitzt[name]
+                    self.magazin[name] = d["magazin"]
+                    self._kuehl[name] = d["abkuehlen"] * faktor
+                else:
+                    self.ueberhitzt[name] = rest
+                continue
+            if name == self.waffe_name and (self.feuert or self.ladung > 0.0):
+                self._kuehl[name] = d["abkuehlen"] * faktor
+                continue
+            if self.magazin.get(name, 0) >= d["magazin"]:
+                continue
+            rest = self._kuehl.get(name, d["abkuehlen"] * faktor) - dt
+            if rest <= 0.0:
+                rest = d["abkuehlen"] * faktor
+                self.magazin[name] = self.magazin.get(name, 0) + 1
+            self._kuehl[name] = rest
 
     def _laden(self, dt: float, d: dict) -> None:
         """Spulengewehr und Kettenblitz (seit 0.34.68): halten laedt auf.
@@ -3587,7 +3738,7 @@ class Spieler(Wesen):
         muendung = self.pos + pygame.Vector2(14, 0).rotate(self.winkel)
         reich = d["reichweite"]
         ende = w.strahl(muendung, pygame.Vector2(1, 0).rotate(self.winkel), reich, self.ebene)
-        for ziel in self._ziele_vorn(reich, d["winkel"]):
+        for ziel in self._ziele_vorn(reich, d["winkel"], koerper=True):
             if not w.sicht_frei(muendung, ziel.pos, self.ebene):
                 continue
             lebte = ziel.lebt
@@ -3597,7 +3748,9 @@ class Spieler(Wesen):
         if self._flamme_rest <= 0.0:
             self._flamme_rest = d["streifen_takt"]
             self.zaehlen("schuesse", 1.0, name)
-            w.feuer.append(Brandflaeche(ende, self.ebene, radius=d["streifen_radius"],
+            # Entlang der Flamme, nicht nur an ihrem Ende (seit 0.34.143).
+            ort = muendung.lerp(ende, RND.uniform(d.get("streifen_ab", 1.0), 1.0))
+            w.feuer.append(Brandflaeche(ort, self.ebene, radius=d["streifen_radius"],
                                         dauer=d["streifen_dauer"], von=self))
         for r in w.rauch:
             if r.ebene == self.ebene and r.pos.distance_to(ende) < r.radius:

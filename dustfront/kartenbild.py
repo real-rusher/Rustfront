@@ -32,16 +32,27 @@ B = K.KARTENBILD
 
 _TREPPEN = (K.TREPPE_HOCH, K.TREPPE_RUNTER, K.LUKE, K.AUFZUG_HOCH, K.AUFZUG_RUNTER)
 
-# Je Kachelart die Grundfarbe des Bodens.
-_BODEN_FARBE = {
-    K.BODEN: B["sand"],
-    K.PISTE: B["piste"],
-    K.KIES: B["kies"],
-    K.GESTRUEPP: B["gestruepp"],
-    K.PFLASTER: B["pflaster"],
-    K.DIELEN: B["dielen"],
-    K.GITTER: B["gitter"],
+# Je Kachelart, welche Farbe aus K.KARTENBILD der Boden hat.
+_BODEN_SCHLUESSEL = {
+    K.BODEN: "sand",
+    K.PISTE: "piste",
+    K.KIES: "kies",
+    K.GESTRUEPP: "gestruepp",
+    K.PFLASTER: "pflaster",
+    K.DIELEN: "dielen",
+    K.GITTER: "gitter",
+    K.WASSER_SEICHT: "seicht",
+    K.WASSER_TIEF: "wasser",
+    K.BRUECKE: "dielen",
 }
+
+
+def _farben(ebene) -> dict:
+    """Die Farben fuer den Kachelsatz der Ebene (seit 0.34.131): eine Wiese
+    ist gruen, Asphalt grau - nicht alles sandbraun wie in der Wueste."""
+    f = dict(B)
+    f.update(B["saetze"].get(getattr(ebene, "satz", ""), {}))
+    return f
 
 # Gemerkt: je Ebene (Objekt) das grosse Bild, je (Ebene, Groesse) das kleine.
 _gross: dict = {}
@@ -75,40 +86,58 @@ def bild(ebene) -> pygame.Surface:
     s.fill((0, 0, 0, 0))
     kachel = ebene.kachel
     daten = K.KACHELN
+    F = _farben(ebene)
+    boden_farbe = {k: F[n] for k, n in _BODEN_SCHLUESSEL.items()}
     leer = K.LEER
 
+    # Die Kacheln einmal als Zeilen holen, und was je Kachelart gilt, einmal
+    # nachschlagen (seit 0.34.143): auf den grossen Schlachtkarten kostete
+    # das Bild gemessen eine Sekunde, fast alles in Aufrufen je Kachel.
+    zeilen = [[kachel(tx, ty) for tx in range(br)] for ty in range(ho)]
+    hoch_arten = {a for a, d in daten.items() if d["fest"] and d["sicht"]}
+    hochfeld = [[a in hoch_arten for a in z] for z in zeilen]
+
     def art(tx, ty):
-        return kachel(tx, ty)
+        return zeilen[ty][tx]
 
     def hoch(tx, ty):
-        a = art(tx, ty)
-        return daten[a]["fest"] and daten[a]["sicht"]
+        return hochfeld[ty][tx]
+
+    hell_merk = {}
+    rausch_mass = B["rauschen"]
 
     # 1. Boden ueberall, wo kein Loch ist.
     for ty in range(ho):
+        zeile = zeilen[ty]
         for tx in range(br):
-            a = art(tx, ty)
+            a = zeile[tx]
             if a == leer:
                 continue
-            grund = _BODEN_FARBE.get(a, B["sand"])
-            if daten[a]["fest"]:
-                grund = B["sand"]
-            s.fill(_hell(grund, _rauschen(tx, ty) * B["rauschen"]), (tx * p, ty * p, p, p))
+            grund = F["sand"] if daten[a]["fest"] else boden_farbe.get(a, F["sand"])
+            um = _rauschen(tx, ty) * rausch_mass
+            farbe = hell_merk.get((grund, um))
+            if farbe is None:
+                farbe = hell_merk[(grund, um)] = _hell(grund, um)
+            s.fill(farbe, (tx * p, ty * p, p, p))
     # 2. Schatten der hohen Waende nach unten rechts auf den Boden.
     schatten = max(1, p // 3)
     for ty in range(ho):
+        hz = hochfeld[ty]
         for tx in range(br):
-            if not hoch(tx, ty):
+            if not hz[tx]:
                 continue
             if tx + 1 < br and not hoch(tx + 1, ty) and art(tx + 1, ty) != leer:
-                s.fill(B["schatten"], ((tx + 1) * p, ty * p + schatten, schatten, p))
+                s.fill(F["schatten"], ((tx + 1) * p, ty * p + schatten, schatten, p))
             if ty + 1 < ho and not hoch(tx, ty + 1) and art(tx, ty + 1) != leer:
-                s.fill(B["schatten"], (tx * p + schatten, (ty + 1) * p, p, schatten))
+                s.fill(F["schatten"], (tx * p + schatten, (ty + 1) * p, p, schatten))
     # 3. Hohe Waende, niedrige Deckung, Treppen.
     kante = max(1, p // 4)
     for ty in range(ho):
+        zeile = zeilen[ty]
         for tx in range(br):
-            a = art(tx, ty)
+            a = zeile[tx]
+            if a not in hoch_arten and a not in _TREPPEN and not daten[a]["fest"]:
+                continue
             x, y = tx * p, ty * p
             if a in _TREPPEN:
                 s.fill(B["treppe"], (x, y, p, p))
@@ -118,23 +147,30 @@ def bild(ebene) -> pygame.Surface:
             if daten[a]["sicht"]:
                 # Gewachsener Fels etwas dunkler als gebaute Mauern: so liest
                 # man auf STAUBTAL Haeuser vor dem Gebirge.
-                farbe = B["fels"] if a == K.FELS else B["wand"]
-                s.fill(_hell(farbe, _rauschen(ty, tx) * B["rauschen"]), (x, y, p, p))
+                farbe = F["fels"] if a == K.FELS else F["wand"]
+                um = _rauschen(ty, tx) * rausch_mass
+                hell = hell_merk.get((farbe, um))
+                if hell is None:
+                    hell = hell_merk[(farbe, um)] = _hell(farbe, um)
+                s.fill(hell, (x, y, p, p))
                 # Lichtkante oben und links, wo die Nachbarkachel nicht hoch ist.
                 if ty == 0 or not hoch(tx, ty - 1):
-                    s.fill(B["wand_licht"], (x, y, p, kante))
+                    s.fill(F["wand_licht"], (x, y, p, kante))
                 if tx == 0 or not hoch(tx - 1, ty):
-                    s.fill(B["wand_licht"], (x, y, kante, p))
+                    s.fill(F["wand_licht"], (x, y, kante, p))
                 if ty + 1 >= ho or not hoch(tx, ty + 1):
-                    s.fill(B["wand_dunkel"], (x, y + p - kante, p, kante))
+                    s.fill(F["wand_dunkel"], (x, y + p - kante, p, kante))
                 if tx + 1 >= br or not hoch(tx + 1, ty):
-                    s.fill(B["wand_dunkel"], (x + p - kante, y, kante, p))
+                    s.fill(F["wand_dunkel"], (x + p - kante, y, kante, p))
+            elif a == K.KAKTUS and "baum" in F:
+                # Ein Baum: eine runde, dunkelgruene Krone.
+                pygame.draw.circle(s, F["baum"], (x + p // 2, y + p // 2), max(1, p // 2))
             else:
                 rand = max(1, p // 5) if p >= 4 else 0
-                s.fill(B["deckung_rand"], (x + rand, y + rand, p - 2 * rand, p - 2 * rand))
+                s.fill(F["deckung_rand"], (x + rand, y + rand, p - 2 * rand, p - 2 * rand))
                 innen = rand + max(1, p // 6) if p >= 4 else 0
                 if p - 2 * innen > 0:
-                    s.fill(B["deckung"], (x + innen, y + innen, p - 2 * innen, p - 2 * innen))
+                    s.fill(F["deckung"], (x + innen, y + innen, p - 2 * innen, p - 2 * innen))
     if len(_gross) > 8:
         _gross.clear()
         _klein.clear()

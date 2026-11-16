@@ -34,6 +34,14 @@ from .font import SCHRIFT
 from .menues import Menue, _mitte
 
 
+def _eigene_standardrunde(app) -> dict:
+    """Die gespeicherte eigene Standardrunde (seit 0.34.138), oder {}."""
+    try:
+        return dict(app.opt["eigene_standardrunde"] or {})
+    except (KeyError, TypeError, AttributeError):
+        return {}
+
+
 def spielername(app) -> str:
     """Wie man in Lobbys heisst.
 
@@ -93,7 +101,8 @@ def eigene_lobby(app, hinweis: str = "", headless_port: int | None = None):
     # Geplant ist zuerst die Standardrunde (K.STANDARDRUNDE): wer neu ist,
     # drueckt START und spielt etwas Vernuenftiges.
     g = Gefecht(app, spielername(app), gastgeber=wirt, lobby=True,
-                ansagen=True, heimkehr=True, regeln=R.standardrunde())
+                ansagen=True, heimkehr=True,
+                regeln=R.meine_standardrunde(_eigene_standardrunde(app)))
     app.ersetzen(g)
     if hinweis:
         g.melden(hinweis, 6.0)

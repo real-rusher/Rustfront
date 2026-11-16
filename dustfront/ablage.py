@@ -583,12 +583,26 @@ class LokaleAblage:
         return gut({"gefechte": list((eintrag.get("gefechte") or {}).values())})
 
     def kosmetik_lesen(self, sitzung: str) -> Antwort:
-        """Lokal gibt es keine: gemacht wird Kosmetik in der Kontoseite,
-        und die redet nur mit dem Server."""
+        """Was im Spiel bearbeitet wurde (seit 0.34.135); vorher gab es
+        lokal keine, weil nur die Kontoseite Kosmetik machte."""
         prfg = self.sitzung_pruefen(sitzung)
         if not prfg:
             return prfg
-        return gut({"ton": "", "bild": "", "music_kit": ""})
+        k = self._lesen()["konten"][str(sitzung)[6:]].get("kosmetik") or {}
+        return gut({"ton": str(k.get("ton") or ""), "bild": str(k.get("bild") or ""),
+                    "music_kit": str(k.get("music_kit") or "")})
+
+    def kosmetik_schreiben(self, sitzung: str, kennung: str, ton: str, bild: str,
+                           music_kit: str = "") -> Antwort:
+        prfg = self.sitzung_pruefen(sitzung)
+        if not prfg:
+            return prfg
+        daten = self._lesen()
+        daten["konten"][str(sitzung)[6:]]["kosmetik"] = {
+            "ton": ton, "bild": bild, "music_kit": music_kit}
+        if not self._schreiben(daten):
+            return schlecht("KOSMETIK LÄSST SICH HIER NICHT SPEICHERN")
+        return gut({})
 
 
 # ══════════════════════════════════════════════════ Netzablage
@@ -885,6 +899,19 @@ class NetzAblage:
         return gut({"ton": str(zeile.get("blend_ton") or ""),
                     "bild": str(zeile.get("blend_bild") or ""),
                     "music_kit": str(zeile.get("music_kit") or "")})
+
+    def kosmetik_schreiben(self, sitzung: str, kennung: str, ton: str, bild: str,
+                           music_kit: str = "") -> Antwort:
+        """Anlegen oder ersetzen in einem (seit 0.34.135, fuer das
+        Bearbeiten im Spiel) - derselbe Aufruf wie kosmetikSchreiben der
+        Kontoseite."""
+        import datetime
+        return self._rufen(
+            "/rest/v1/kosmetik?on_conflict=konto",
+            {"konto": kennung, "blend_ton": ton, "blend_bild": bild, "music_kit": music_kit,
+             "geaendert": datetime.datetime.now(datetime.timezone.utc).isoformat()},
+            token=sitzung, methode="POST",
+            kopf={"Prefer": "resolution=merge-duplicates,return=minimal"})
 
 
 def waehlen(lokal_erzwingen: bool = False):

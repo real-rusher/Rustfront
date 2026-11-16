@@ -152,6 +152,14 @@ koennte fuer Helis und fuer Ziele auf anderen Etagen gelten.
   nacheinander aus den Rohren, Rohre laden einzeln nach, Rueckstrahl; der
   Werfer geht mit der groessten Explosion hoch (`Welt._werfer_explosion`),
   Fahrer und alle im Umkreis sterben, kein Wrack, nur Einzelteile.
+* **0.34.124** Nacharbeit (Uebergabe in `docs/UEBERGABE.md`): Effektsystem
+  `effekte.py`, 3D-Zeichner `drei_d.py`; Schrottbombe (`art_bombe.py`); das
+  Werfer-Gestell als echtes 3D-Modell aus Schrottrohren, das die Rohre nach
+  der Zielentfernung hebt, Raketen als 3D-Modell im Bogen; Flak mit
+  Leuchtspur; der Funkwagen-Mast als 3D-Modell (`art_funkmast.py`,
+  `luft._funkmasten_zeichnen`): liegt eingepackt auf dem Dach, richtet sich
+  auf, faehrt aus, Kopf klappt auf, Seile laufen aus, der Kopf dreht sich
+  (`Funkwagen.kopf`, `K.FUNKWAGEN["kopf_dreh"]`).
 * **Trosswagen, was es gibt und was nicht:** das Aufnehmen von Medkit und
   Munition hat eine Einblendung ("[E] NACHSCHUB (n)", wer hinten steht); ein
   **Anhaengen** von Fahrzeugen gibt es nicht - Fahrzeuge werden nur in der

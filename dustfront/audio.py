@@ -19,6 +19,7 @@ from __future__ import annotations
 import array
 import math
 import random
+import sys
 import threading
 import time
 from pathlib import Path
@@ -304,6 +305,17 @@ def _sturz(seed=0):
     )
 
 
+@platzhalter_klang("platsch")
+def _platsch(seed=0):
+    """Ins tiefe Wasser (seit 0.34.140): ein dumpfer Schlag aufs Wasser,
+    dann Gluckern und Spritzer."""
+    return _mischen(
+        _schlag(110, 60, 0.22, 0.7, 2.6),
+        _rauschen(0.35, 0.6, 3200, 600, 2.2, seed + 141),
+        [0.0] * int(RATE * 0.05) + _rauschen(0.45, 0.3, 1400, 300, 1.6, seed + 142),
+    )
+
+
 @platzhalter_klang("wurf")
 def _wurf(seed=0):
     return _rauschen(0.22, 0.4, 1800, 5200, 1.6, seed + 61, hp=True)
@@ -353,22 +365,81 @@ def _buggy_tuer(seed=0):
                     + _rauschen(0.30, 0.16, 300, 140, 1.8, seed + 92))
 
 
-@platzhalter_klang("buggy_rutschen")
-def _buggy_rutschen(seed=0):
-    """Reifen, die ueber Sand und Kies rutschen: ein raues, schmales
-    Rauschen mit einem hohen Ton darin, das abschwillt. Kein Asphalt-
-    Quietschen - im Sand klingt es eher nach Schaben."""
-    r = random.Random(seed + 97)
-    n = int(RATE * 0.42)
+@platzhalter_klang("ueberhitzt")
+def _ueberhitzt(seed=0):
+    """Eine Chor-Waffe ist zu heiss und kuehlt ab (seit 0.34.130, gewuenscht
+    ein wenig wie die Quasar-Kanone): ein Klacken, ein elektrisches Pfeifen,
+    das herunterfaehrt, und Dampf, der zischend entweicht. Einmal, kurz."""
+    n = int(RATE * 1.1)
     ton = []
     phase = 0.0
     for i in range(n):
         p = i / n
-        f = 1350.0 + 220.0 * math.sin(p * 31.0) + r.uniform(-60, 60)
+        f = 1900.0 * (1.0 - p) ** 1.6 + 380.0 + 40.0 * math.sin(p * 70.0)
         phase += 2 * math.pi * f / RATE
-        ton.append(math.sin(phase) * 0.16 * (1 - p) ** 1.5 * min(1.0, p * 12))
-    return _mischen(ton, _rauschen(0.42, 0.42, 5200, 2600, 1.6, seed + 98, hp=True),
-                    _rauschen(0.30, 0.20, 900, 400, 2.2, seed + 99))
+        ton.append(math.sin(phase) * 0.13 * (1.0 - p) ** 1.2 * min(1.0, p * 40.0))
+    return _mischen(_schlag(900, 380, 0.05, 0.35, 3.0),
+                    ton,
+                    [0.0] * int(RATE * 0.04) + _rauschen(0.95, 0.32, 7600, 2400, 1.3, seed + 131, hp=True),
+                    [0.0] * int(RATE * 0.06) + _rauschen(0.7, 0.12, 1400, 600, 2.0, seed + 132))
+
+
+@platzhalter_klang("bomber")
+def _bomber(seed=0):
+    """Ein Stueck Triebwerk des Napalm-Bombers (seit 0.34.130): tiefes Grollen,
+    ein heulender Turbinenton darin, weich ein- und ausgeblendet - alle 0,45 s
+    eines an seinem Ort, die sich ueberlappen und zusammen den Ueberflug
+    ergeben."""
+    n = int(RATE * 1.2)
+    ton = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        f = 520.0 + 30.0 * math.sin(p * 9.0)
+        phase += 2 * math.pi * f / RATE
+        huelle = math.sin(math.pi * p) ** 2
+        ton.append(math.sin(phase) * 0.05 * huelle)
+    grollen = _rauschen(1.2, 0.55, 260, 220, 0.0, seed + 141)
+    rauschen = _rauschen(1.2, 0.18, 1600, 1400, 0.0, seed + 142)
+    huelle = [math.sin(math.pi * i / n) ** 2 for i in range(n)]
+    return _mischen(ton, [a * h for a, h in zip(grollen, huelle)],
+                    [a * h for a, h in zip(rauschen, huelle)])
+
+
+@platzhalter_klang("anflug")
+def _anflug(seed=0):
+    """Ein Transportflugzeug zieht vorbei (seit 0.34.138): tiefes
+    Propellerbrummen, an- und abschwellend. Fuer Abwurf, Fallschirmjaeger und
+    die grosse Aufklaerungsdrohne - vorher klang dort der Quadrokopter der
+    Spaehdrohne (gemeldet: "an zufaelligen Stellen den Sound der Drohne")."""
+    dauer = 1.6
+    n = int(RATE * dauer)
+    ton = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        f = 92.0 - 10.0 * p                       # leicht fallend: es zieht vorbei
+        phase += 2 * math.pi * f / RATE
+        blatt = 0.6 + 0.4 * math.sin(2 * math.pi * 23.0 * i / RATE)   # Propellerschlag
+        huelle = math.sin(math.pi * p) ** 1.5
+        ton.append((math.sin(phase) + 0.35 * math.sin(2 * phase)) * 0.16 * blatt * huelle)
+    grollen = _rauschen(dauer, 0.35, 180, 160, 0.0, seed + 151)
+    huelle = [math.sin(math.pi * i / n) ** 1.5 for i in range(n)]
+    return _mischen(ton, [a * h for a, h in zip(grollen, huelle)])
+
+
+@platzhalter_klang("napalm_fall")
+def _napalm_fall(seed=0):
+    """Eine Napalmbombe faellt (seit 0.34.130): ein Pfeifen, das tiefer wird."""
+    n = int(RATE * 1.0)
+    ton = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        f = 1500.0 - 900.0 * p
+        phase += 2 * math.pi * f / RATE
+        ton.append(math.sin(phase) * 0.14 * min(1.0, p * 6.0) * (1.0 - p * 0.4))
+    return _mischen(ton, _rauschen(1.0, 0.05, 3000, 1500, 0.4, seed + 151, hp=True))
 
 
 @platzhalter_klang("buggy_aufprall")
@@ -452,6 +523,59 @@ def _werfer_explosion_ton(seed=0):
     )
 
 
+@platzhalter_klang("werfer_start")
+def _werfer_start_ton(seed=0):
+    """Eine Rakete des Werfers verlaesst ihr Rohr (seit 0.34.143, gemeldet:
+    "die Artillerieraketen ... haben noch keine Sounds"). Schwerer als die
+    Panzerfaust: ein Stoss beim Zuenden, ein brausender Schub, der anschwillt
+    und lang nachzischt, darunter das Grollen des Rueckstrahls."""
+    zischen = _rauschen(0.9, 0.9, 700, 3600, 0.4, seed + 261)
+    n = len(zischen)
+    for i in range(n):
+        p = i / n
+        zischen[i] *= min(1.0, p * 10.0) * (1.0 - p) ** 1.1
+    return _mischen(
+        _schlag(96, 38, 0.35, 0.85, 2.0),
+        zischen,
+        _rauschen(0.7, 0.5, 320, 90, 1.4, seed + 262),
+        _rauschen(0.05, 0.4, 11000, 4000, 2.0, seed + 263, hp=True),
+    )
+
+
+@platzhalter_klang("werfer_anflug")
+def _werfer_anflug_ton(seed=0):
+    """Eine Rakete des Werfers kommt herunter (seit 0.34.143): ein Heulen,
+    das fallend lauter wird und mit dem Einschlag abreisst - wer es hoert,
+    hat noch einen Herzschlag Zeit."""
+    dauer = 1.1
+    n = int(RATE * dauer)
+    heulen = []
+    phase = 0.0
+    for i in range(n):
+        p = i / n
+        f = 1500.0 - 900.0 * p
+        phase += 2 * math.pi * f / RATE
+        heulen.append(math.sin(phase) * 0.22 * p ** 1.6)
+    rauschen = _rauschen(dauer, 0.5, 2500, 5000, 0.0, seed + 264)
+    for i in range(n):
+        rauschen[i] *= (i / n) ** 2.2
+    return _mischen(heulen, rauschen)
+
+
+@platzhalter_klang("einschlag")
+def _einschlag_ton(seed=0):
+    """Eine Rakete oder Bombe schlaegt ein (seit 0.34.143): ein harter
+    Schlag, der Druck, dann Erde, die herunterprasselt - kleiner als der
+    Werfer, der hochgeht, groesser als die Panzergranate."""
+    return _mischen(
+        _schlag(70, 18, 1.2, 1.0, 1.5),
+        _schlag(150, 45, 0.5, 0.7, 2.2),
+        _rauschen(1.2, 1.0, 5200, 120, 1.4, seed + 271),
+        _rauschen(0.06, 0.6, 12000, 5000, 2.0, seed + 272, hp=True),
+        [0.0] * int(RATE * 0.3) + _rauschen(0.9, 0.3, 7000, 1500, 1.8, seed + 273, hp=True),
+    )
+
+
 @platzhalter_klang("bombe_ab")
 def _bombe_ab(seed=0):
     """Die Lunte der Schrottbombe faengt Feuer (seit 0.34.123): ein kurzes
@@ -522,6 +646,62 @@ def _panzerwagen_motor(seed=0):
         phase += 2 * math.pi * (68.0 + 10.0 * math.sin(p * 24.0)) / RATE
         brumm.append(math.sin(phase) * 0.45 * min(1.0, p * 8) * (1 - p) ** 0.7)
     return _mischen(brumm, _rauschen(0.38, 0.2, 800, 300, 0.9, seed + 141))
+
+
+def _motor_stueck(dauer, grund, wobble, takt_hz, puls, laut, seed, rausch_lp=900, rausch_laut=0.18):
+    """Ein Stueck Motor fuer die Wagen, die bis 0.34.143 stumm fuhren: ein
+    Grundton mit leichtem Schwanken, gepulst wie die Zuendungen, sanft ein-
+    und ausgeblendet, damit die Wiederholung im Takt nicht knackt."""
+    n = int(RATE * dauer)
+    ton = []
+    phase = 0.0
+    tp = 2 * math.pi
+    sin = math.sin
+    for i in range(n):
+        p = i / n
+        phase += tp * (grund + wobble * sin(p * 20.0)) / RATE
+        schlag = 1.0 - puls + puls * (0.5 + 0.5 * sin(tp * takt_hz * i / RATE)) ** 2
+        huelle = min(1.0, p * 8.0) * min(1.0, (1.0 - p) * 6.0)
+        ton.append((sin(phase) + 0.4 * sin(2.0 * phase)) * laut * schlag * huelle)
+    rauschen = _rauschen(dauer, rausch_laut, rausch_lp, rausch_lp * 0.4, 0.0, seed)
+    for i in range(n):
+        p = i / n
+        rauschen[i] *= min(1.0, p * 8.0) * min(1.0, (1.0 - p) * 6.0)
+    return _mischen(ton, rauschen)
+
+
+@platzhalter_klang("buggy_motor")
+def _buggy_motor(seed=0):
+    """Der Buggy: ein kleiner, drehfreudiger Benziner, heller als die Laster."""
+    return _motor_stueck(0.34, 105.0, 12.0, 38.0, 0.45, 0.3, seed + 281, 1400, 0.16)
+
+
+@platzhalter_klang("krad_motor")
+def _krad_motor(seed=0):
+    """Das Krad: ein Einzylinder, der knattert - deutlich gepulst."""
+    return _motor_stueck(0.28, 82.0, 8.0, 24.0, 0.85, 0.32, seed + 282, 1800, 0.14)
+
+
+@platzhalter_klang("lkw_motor")
+def _lkw_motor(seed=0):
+    """Die Laster (Tross-, Spulen-, Funkwagen, Werfer): ein brummiger
+    Diesel, tiefer als der Buggy, nicht so schwer wie der Panzerwagen."""
+    return _motor_stueck(0.44, 58.0, 7.0, 16.0, 0.4, 0.38, seed + 283, 700, 0.2)
+
+
+@platzhalter_klang("rotor")
+def _rotor(seed=0):
+    """Der Tragschrauber: das Wummern der Blaetter ueber einem kleinen
+    Motor - "wopp wopp", gut von den Wagen am Boden zu unterscheiden."""
+    dauer = 0.4
+    n = int(RATE * dauer)
+    wumm = _rauschen(dauer, 0.6, 600, 600, 0.0, seed + 284)
+    for i in range(n):
+        p = i / n
+        # Zwei Blaetter, etwa 7 Schlaege je Sekunde je Blatt: 14 Hz.
+        blatt = (0.5 + 0.5 * math.cos(2 * math.pi * 14.0 * i / RATE)) ** 6
+        wumm[i] *= (0.15 + 0.85 * blatt) * min(1.0, p * 8.0) * min(1.0, (1.0 - p) * 6.0)
+    return _mischen(wumm, _motor_stueck(dauer, 120.0, 6.0, 40.0, 0.2, 0.12, seed + 285, 2000, 0.06))
 
 
 @platzhalter_klang("rammen")
@@ -1275,7 +1455,7 @@ class Klaenge:
         self._faden: threading.Thread | None = None
         self._halt = False
         try:
-            pygame.mixer.init(frequency=RATE, size=-16, channels=2, buffer=512)
+            pygame.mixer.init(frequency=RATE, size=-16, channels=2, buffer=K.AUDIO["puffer"])
             self.ok = pygame.mixer.get_init() is not None
         except pygame.error:
             self.ok = False
@@ -1435,30 +1615,45 @@ class Klaenge:
         namen = list(namen)
 
         def arbeiten() -> None:
+            # Die Klaenge werden Probe fuer Probe in Python gerechnet und
+            # halten dabei die GIL. pygame braucht sie im Tonfaden, sobald ein
+            # Klang zu Ende ist; wartete der zu lange, lief der Puffer leer und
+            # beim ersten Start klang alles wie ein lauter Pulston, bis die
+            # Werkstatt fertig war (gemeldet 0.34.135). Darum, solange sie baut,
+            # oefter abgeben.
+            alt = sys.getswitchinterval()
+            sys.setswitchinterval(min(alt, K.AUDIO["werkstatt_wechsel"]))
             try:
-                for name in namen:
-                    if self._halt:
-                        return
-                    self.klang(name)
-                    time.sleep(0.001)        # dem Spiel Luft lassen
-                for name in namen:
-                    if self._halt:
-                        return
-                    if name in K.NIE_DUMPF or name in self._dumpf_cache:
-                        continue
-                    fassungen = self.klang(name)
-                    self._dumpf_cache[name] = ([dumpf_machen(fassungen[0])]
-                                               if fassungen else [])
-                    time.sleep(0.001)
-            except Exception:                 # noqa: BLE001
-                # Der Mischer ist schon zu, oder eine Datei ist kaputt: dann
-                # hoert die Werkstatt auf, und das Spiel baut selbst, wenn es
-                # den Klang braucht - mit demselben Fehler wie bisher.
-                return
+                self._alle_bauen(namen)
+            finally:
+                sys.setswitchinterval(alt)
 
         self._faden = threading.Thread(target=arbeiten, name="klangwerkstatt",
                                        daemon=True)
         self._faden.start()
+
+    def _alle_bauen(self, namen) -> None:
+        """Der Lauf der Werkstatt: erst alle Klaenge, dann die dumpfen."""
+        try:
+            for name in namen:
+                if self._halt:
+                    return
+                self.klang(name)
+                time.sleep(0.001)        # dem Spiel Luft lassen
+            for name in namen:
+                if self._halt:
+                    return
+                if name in K.NIE_DUMPF or name in self._dumpf_cache:
+                    continue
+                fassungen = self.klang(name)
+                self._dumpf_cache[name] = ([dumpf_machen(fassungen[0])]
+                                           if fassungen else [])
+                time.sleep(0.001)
+        except Exception:                 # noqa: BLE001
+            # Der Mischer ist schon zu, oder eine Datei ist kaputt: dann
+            # hoert die Werkstatt auf, und das Spiel baut selbst, wenn es
+            # den Klang braucht - mit demselben Fehler wie bisher.
+            return
 
     def werkstatt_warten(self, hoechstens: float | None = None) -> bool:
         """Bis die Werkstatt fertig ist (Tests). True, wenn sie fertig ist."""

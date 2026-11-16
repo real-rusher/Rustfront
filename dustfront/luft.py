@@ -28,12 +28,14 @@ und sein Zeichnen ueber allem.
 from __future__ import annotations
 
 import math
+import random
 
 import pygame
 
 from . import ausruestung as ausruestung_modul
 from . import config as K
 from . import fahrzeug as fahrzeug_modul
+from .font import SCHRIFT
 
 S = K.SCHLACHT
 
@@ -60,6 +62,14 @@ class LuftZiel:
     def bild_pos(self) -> pygame.Vector2:
         """Wo man es im Bild sieht (und wohin der Mauszeiger zeigt)."""
         return pygame.Vector2(self.pos.x, self.pos.y - self.versatz)
+
+    @property
+    def jetzt(self) -> pygame.Vector2:
+        """Wo es *jetzt* ist (seit 0.34.135): eine Kugel prueft ihren Treffer
+        hier. Vorher gegen `pos` - den Ort beim Schuss -, und ein fliegender
+        Tragschrauber war dort nie mehr, wenn sie ankam."""
+        p = getattr(self.objekt, "pos", None)
+        return p if p is not None else self.pos
 
     @property
     def lebt(self) -> bool:
@@ -103,6 +113,46 @@ class LuftTeil:
         self._lz_merk = (jetzt, liste)
         return liste
 
+    def luft_zeiger_zeichnen(self, ziel) -> None:
+        """Zeigt der eigene Zeiger auf ein Luftziel, legt sich eine
+        Zielklammer darum, mit LUFT (seit 0.34.138, gemeldet: "es soll
+        visuell klarer sein, wann man in die Luft schiesst und wann nicht").
+        Beim Gastgeber und beim Gast aus dem, was beide kennen."""
+        ich = self.ich
+        if ich is None or not ich.lebt or getattr(ich, "ebene", 0) != 0 or self.pausiert:
+            return
+        maus = self.app.zu_spiel(pygame.mouse.get_pos())
+        welt_maus = self.kamera.zu_welt(maus)
+        flak = bool(getattr(getattr(ich, "fahrzeug", None), "flak", False))
+        kandidaten = []
+        for b in getattr(self, "fahrzeuge", ()):
+            if b.art == "tragschrauber" and getattr(b, "luft", False) and not b.kaputt:
+                if b is getattr(ich, "fahrzeug", None) or fahrzeug_modul.seite_von(b) == ich.fraktion:
+                    continue
+                kandidaten.append((pygame.Vector2(b.pos.x, b.pos.y - b.hoehe), b.werte["luft_radius"]))
+        for w in self.welt.wesen:
+            if (getattr(w, "hoch_oben", False) and w.lebt and isinstance(w, ausruestung_modul.Drohne)
+                    and getattr(w, "fraktion", "") != ich.fraktion):
+                kandidaten.append((pygame.Vector2(w.pos.x, w.pos.y - K.HOCH_OBEN["hoehe"]), 14.0))
+        if flak:
+            for ab in getattr(self, "abwuerfe", ()):
+                hoch = max(0.0, getattr(ab, "hoehe", 0.0)) * S["abwurf"]["bild_hub"]
+                kandidaten.append((pygame.Vector2(ab.pos.x, ab.pos.y - hoch), 26.0))
+        fang = K.LUFT_ZIELEN["fang_extra"]
+        for ort, r in kandidaten:
+            if ort.distance_to(welt_maus) <= r + fang:
+                z = self.kamera.zoom
+                m = self.kamera.zu_bild(ort)
+                g = int((r + 6) / z) + 3
+                farbe = K.C_TEAL
+                for sx in (-1, 1):
+                    for sy in (-1, 1):
+                        ex, ey = int(m.x + sx * g), int(m.y + sy * g)
+                        pygame.draw.line(ziel, farbe, (ex, ey), (ex - sx * 5, ey), 1)
+                        pygame.draw.line(ziel, farbe, (ex, ey), (ex, ey - sy * 5), 1)
+                SCHRIFT.zeichnen(ziel, "LUFT", int(m.x), int(m.y - g - 9), farbe, 1, ausrichtung="mitte")
+                return
+
     # ---- Einrasten ----------------------------------------------------------
     def luft_zielen(self, k) -> None:
         """Nach jeder Eingabe (Gastgeber): liegt der Zeiger auf dem Bild eines
@@ -122,9 +172,20 @@ class LuftTeil:
                 continue
             if lz.objekt is getattr(k, "fahrzeug", None):
                 continue
-            if lz.bild_pos.distance_to(ziel) <= lz.radius:
+            if lz.bild_pos.distance_to(ziel) <= lz.radius + K.LUFT_ZIELEN["fang_extra"]:
                 k.luft_ziel = lz
-                k.ziel = self._vorhalten(k, lz) if flak else pygame.Vector2(lz.pos)
+                # Seit 0.34.135 haelt jeder vor, nicht nur die Flak (gemeldet:
+                # "das Schiessen auf den Heli geht noch gar nicht ausser von
+                # Bots im Flakwagen") - die Kugel flog dorthin, wo er beim Schuss
+                # war, und kam an, wenn er laengst weiter war.
+                k.ziel = self._vorhalten(k, lz)
+                if getattr(k, "ist_bot", False) and not getattr(getattr(k, "fahrzeug", None), "flak", False):
+                    # Ein Bot zu Fuss trifft nicht wie ein Mensch, der ruhig
+                    # zielt (seit 0.34.138): ein Fehler im Kreis um den
+                    # Vorhalt, je Schritt neu - etwa jede zweite Kugel geht vorbei.
+                    fehl = lz.radius * K.BOTS["luft_fehler"]
+                    k.ziel = k.ziel + pygame.Vector2(fehl * math.sqrt(random.random()), 0).rotate(
+                        random.uniform(0.0, 360.0))
                 return
 
     def _vorhalten(self, k, lz) -> pygame.Vector2:
@@ -134,8 +195,15 @@ class LuftTeil:
         fliegender Tragschrauber waere sonst nicht zu treffen. Ohne Eigengeschwindigkeit
         (Schirme, Abwuerfe) gilt der Ort selbst."""
         v = getattr(lz.objekt, "geschw", None)
-        mitte = k.fahrzeug.aufbau_mitte() if hasattr(k.fahrzeug, "aufbau_mitte") else k.pos
-        tempo = K.FAHRZEUG_WAFFEN["flak_kanone"]["tempo"]
+        fz = getattr(k, "fahrzeug", None)
+        mitte = fz.aufbau_mitte() if hasattr(fz, "aufbau_mitte") else k.pos
+        if getattr(fz, "flak", False):
+            tempo = K.FAHRZEUG_WAFFEN["flak_kanone"]["tempo"]
+        elif fz is not None:
+            tempo = K.FAHRZEUG_WAFFEN.get("ring_mg", {}).get("tempo", 900.0)
+        else:
+            lesen = getattr(k, "_waffe_lesen", None)
+            tempo = float((lesen() if lesen is not None else {}).get("tempo", 700.0) or 700.0)
         if v is None or tempo <= 0.0:
             return pygame.Vector2(lz.pos)
         # Zweimal nachrechnen: die Flugzeit haengt vom Abstand zum Vorhalt-Ort ab.
@@ -199,24 +267,32 @@ class LuftTeil:
 
     # ---- Flaechenschaden (Bomben, Raketen) -----------------------------------
     def flaechenschaden(self, p, ebene: int, radius: float, schaden: float, fahrzeug: float,
-                        von, waffe: str) -> None:
+                        von, waffe: str, direkt: float = 1.0) -> None:
         """Ein Einschlag wirkt im Kreis: nach aussen weniger, durch Deckung
-        weniger (wie die Kanone des Panzers)."""
+        weniger (wie die Kanone des Panzers). Seit 0.34.138: landet er auf
+        einem Fahrzeug (Volltreffer), wirkt er dort voll und `direkt`-fach -
+        er schlaegt durch die Panzerung, statt daneben aufzuschlagen."""
         from .entities import abschuss_buchen, schaden_an
         w = self.welt
         for a in list(w.nahe(p, radius + 70.0, ebene)):
             if not a.lebt or not getattr(a, "trefferbar", True) or getattr(a, "fraktion", "") == "geschoss":
                 continue
+            voll = False
             if getattr(a, "ist_fahrzeug", False):
                 if not a.beruehrt(p, radius):
                     continue
+                voll = direkt != 1.0 and a.beruehrt(p, K.LUFT_ZIELEN["volltreffer"])
             elif a.pos.distance_to(p) > radius + a.radius:
                 continue
             weit = a.pos.distance_to(p)
-            anteil = (1.0 - 0.6 * min(1.0, weit / max(1.0, radius))) * w.deckung_anteil(p, a.pos, ebene)
+            if voll:
+                anteil, mal = 1.0, direkt
+            else:
+                anteil = (1.0 - 0.6 * min(1.0, weit / max(1.0, radius))) * w.deckung_anteil(p, a.pos, ebene)
+                mal = 1.0
             schub = (a.pos - p).normalize() * 260.0 * anteil if weit > 0.01 else None
             lebte = a.lebt
-            schaden_an(a, schaden * anteil, schub, von, "hohlladung", p, fahrzeug * anteil)
+            schaden_an(a, schaden * anteil, schub, von, "hohlladung", p, fahrzeug * anteil * mal)
             abschuss_buchen(von, a, waffe, lebte)
 
     # ---- Der Tragschrauber im Gefecht -----------------------------------------
@@ -230,14 +306,18 @@ class LuftTeil:
             b._feuer_alt = b.feuer
             # Eine Bombe nach der anderen (seit 0.34.123 neu): der Fahrer zuendet
             # eine Schrottbombe und laesst sie rechts neben der Kanzel fallen.
-            # Sie behaelt nichts von seinem Tempo und faellt senkrecht dorthin.
+            # Seit 0.34.135 behaelt sie einen Teil seines Schwungs (bombe schwung).
             if (druck and b.in_der_luft and b.bomben > 0 and b.emp_rest <= 0.0
                     and b.fahrer is not None and not b.landen and not b.bomben_fall):
                 b.bomben -= 1
-                b._bomben_rest = f["bomben_nachladen"]
-                ort = b.pos + pygame.Vector2(bo["abwurf"]).rotate(b.winkel)
+                b._bomben_rest = f["bomben_nachladen_luft"]
+                # Mit einem Teil seines Schwungs (seit 0.34.135, gewuenscht): sie
+                # schlaegt vor ihm auf, nicht senkrecht unter ihm.
+                los = b.pos + pygame.Vector2(bo["abwurf"]).rotate(b.winkel)
+                ort = los + b.vorn * (b.flug_v * bo["fall"] * bo["schwung"])
                 b.bomben_fall.append([bo["fall"], ort.x, ort.y, b.winkel])
-                self.welt.explosion(ort, b.ebene, float(b.hoehe), "bombe_los", b.fahrer)
+                # Gezuendet wird an der Kanzel; einschlagen tut sie vorn (ort).
+                self.welt.explosion(los, b.ebene, float(b.hoehe), "bombe_los", b.fahrer)
                 self.welt.klang("bombe_ab", 0.7, b.pos, b.ebene)
                 self.welt.klang("bombe_fall", 0.5, b.pos, b.ebene)
             for e in list(b.bomben_fall):
@@ -247,7 +327,14 @@ class LuftTeil:
                     p = pygame.Vector2(e[1], e[2])
                     self.welt.explosion(p, b.ebene, bo["radius"], "bombe", b.fahrer)
                     self.flaechenschaden(p, b.ebene, bo["radius"], bo["schaden"], bo["fahrzeug"],
-                                         b.fahrer, "bombe")
+                                         b.fahrer, "bombe", bo["volltreffer"])
+            if b.in_der_luft and b.bomben < f["bomben"] and not b.bomben_fall:
+                # Auch in der Luft laden die Bomben nach (seit 0.34.135, gemeldet:
+                # "laden sich nicht nach") - langsamer als am Boden.
+                b._bomben_rest -= dt
+                if b._bomben_rest <= 0.0:
+                    b.bomben += 1
+                    b._bomben_rest = f["bomben_nachladen_luft"]
             if b.in_der_luft and b.fahrer is not None and b.emp_rest <= 0.0:
                 b._aufkl_rest -= dt
                 if b._aufkl_rest <= 0.0:
@@ -310,11 +397,11 @@ class LuftTeil:
 
     # ---- Das Raketengestell des Werfers (seit 0.34.120) -------------------------
     def _werfer_gestelle_zeichnen(self, ziel, misch: float) -> None:
-        """Das Raketengestell (seit 0.34.123 ein 3D-Modell, art_werfer.py): fuer
+        """Das Raketengestell (art_werfer.py, seit 0.34.126 klassisch gemalt): fuer
         jede Richtung und Steilheit neu gemalt, mit Schatten auf der Pritsche.
         Es dreht sich weich zum Zeiger und richtet die Rohre nach der
         Entfernung auf. Beim Gastgeber und beim Gast (Zustand aus der Meldung)."""
-        from .art_werfer import gestell
+        from .art_werfer import gestell_zugeschnitten
         ecke = self.kamera.ecke
         for b in self.fahrzeuge:
             if b.art != "werfer" or b.kaputt or b.ebene != self.blick:
@@ -323,25 +410,30 @@ class LuftTeil:
             if not (-120 < p.x < ziel.get_width() + 120 and -120 < p.y < ziel.get_height() + 120):
                 continue
             mitte = p + pygame.Vector2(b.werte["rohr"]).rotate(b.winkel)
-            bild, schatten = gestell(b.gestell_winkel(), b.erhebung(), b.rohre)
-            ziel.blit(schatten, schatten.get_rect(center=(int(mitte.x), int(mitte.y))))
-            ziel.blit(bild, bild.get_rect(center=(int(mitte.x), int(mitte.y))))
+            bild, bv, schatten, sv = gestell_zugeschnitten(b.gestell_winkel(), b.erhebung(), b.rohre)
+            ziel.blit(schatten, (int(round(mitte.x + sv[0])), int(round(mitte.y + sv[1]))))
+            ziel.blit(bild, (int(round(mitte.x + bv[0])), int(round(mitte.y + bv[1]))))
 
+    # ---- Der Mast des Funkwagens (seit 0.34.124) ------------------------------
     def _funkmasten_zeichnen(self, ziel, misch: float) -> None:
-        """Der Mast des Funkwagens (seit 0.34.124, art_funkmast.py): ein
-        3D-Modell auf dem Mastfuss, das sich beim Aufbau aufrichtet, ausfaehrt,
-        den Peilkopf aufklappt und sich abspannt; aufgebaut dreht sich der Kopf."""
-        from .art_funkmast import MITTE, funkmast
+        """Mast, Peilkopf und Abspannseile des Funkwagens als 3D-Modell
+        (art_funkmast.py), mit Schatten: der Mast liegt eingepackt auf dem
+        Dach, richtet sich beim Aufbau auf, faehrt aus, der Kopf klappt auf
+        und dreht sich. Beim Gastgeber und beim Gast (aus `fortschritt`)."""
+        from .art_funkmast import MITTE, funkmast_zugeschnitten, schatten_zugeschnitten
         ecke = self.kamera.ecke
         for b in self.fahrzeuge:
             if b.art != "funkwagen" or b.kaputt or b.ebene != self.blick:
                 continue
             p = b.zeichenpos(misch) - ecke
-            if not (-160 < p.x < ziel.get_width() + 160 and -160 < p.y < ziel.get_height() + 160):
+            if not (-140 < p.x < ziel.get_width() + 140 and -140 < p.y < ziel.get_height() + 140):
                 continue
             fuss = p + pygame.Vector2(b.werte["mast"]).rotate(b.winkel)
-            bild = funkmast(b.winkel, b.fortschritt, b.mast_drehung())
-            ziel.blit(bild, bild.get_rect(center=(int(fuss.x + MITTE[0]), int(fuss.y + MITTE[1]))))
+            mx, my = fuss.x + MITTE[0], fuss.y + MITTE[1]
+            kopf = getattr(b, "kopf", 0.0)
+            for teil, (vx, vy) in (schatten_zugeschnitten(b.winkel, b.fortschritt, kopf),
+                                   funkmast_zugeschnitten(b.winkel, b.fortschritt, kopf)):
+                ziel.blit(teil, (int(round(mx + vx)), int(round(my + vy))))
 
     # ---- Zeichnen (Gastgeber und Gast) -----------------------------------------
     def _luftfahrzeuge_zeichnen(self, ziel, misch: float) -> None:
@@ -351,13 +443,15 @@ class LuftTeil:
         r = self.renderer
         t = self.welt.zeit
         for b in self.fahrzeuge:
-            if b.art != "tragschrauber" or b.kaputt or b.ebene != self.blick:
+            # Ein Wrack nur, solange es noch faellt (seit 0.34.127); am Boden
+            # zeichnet es der Renderer wie jedes Wrack.
+            if b.art != "tragschrauber" or (b.kaputt and b.hoehe <= 2.0) or b.ebene != self.blick:
                 continue
             p = b.zeichenpos(misch) - ecke
             if not (-120 < p.x < ziel.get_width() + 120 and -200 < p.y < ziel.get_height() + 200):
                 continue
             h = max(0.0, b.hoehe)
-            besetzt = b.fahrer is not None or getattr(b, "besetzt", False)
+            besetzt = (b.fahrer is not None or getattr(b, "besetzt", False)) and not b.kaputt
             st = int(t * 40.0) % 6
             # Der Schatten (seit 0.34.119 genau der Umriss des Tragschraubers und
             # seines Rotors - kein Oval): faellt schraeg nach rechts unten, je
@@ -367,13 +461,13 @@ class LuftTeil:
             if b.hoch_oben:
                 sch = r.bilder.gedreht(b.schatten_bild, b.winkel)
                 ziel.blit(sch, sch.get_rect(center=(int(p.x + versatz.x), int(p.y + versatz.y))))
-                if h > 2.0:
+                if h > 2.0 and not b.kaputt:
                     rs = r.bilder.bild("rotor_schatten_%d" % st)
                     ziel.blit(rs, rs.get_rect(center=(int(rotor_boden.x + versatz.x),
                                                       int(rotor_boden.y + versatz.y))))
                 s = r.bilder.gedreht(b.bild, b.winkel)
                 ziel.blit(s, s.get_rect(center=(int(p.x), int(p.y - h))))
-            if h > 2.0 or besetzt:
+            if (h > 2.0 or besetzt) and not b.kaputt:     # das Wrack hat keinen Rotor mehr
                 rotor = r.bilder.bild("rotor_%d" % st)
                 m = p + pygame.Vector2(-3.4, 0).rotate(b.winkel) - pygame.Vector2(0, h + 6.0)
                 ziel.blit(rotor, rotor.get_rect(center=(int(m.x), int(m.y))))
@@ -402,7 +496,10 @@ class LuftTeil:
             t = bo["fall"] - max(0.0, e[0])
             hoch, winkel = lage(t)
             u = t / bo["fall"]
-            boden = pygame.Vector2(e[1], e[2]) - ecke
+            # Sie fliegt mit dem Schwung des Tragschraubers nach vorn (seit
+            # 0.34.135): bis zum Aufschlag noch so viel davor.
+            drift = pygame.Vector2(1, 0).rotate(e[3]) * (K.TRAGSCHRAUBER["flug_reise"] * bo["fall"] * bo["schwung"])
+            boden = pygame.Vector2(e[1], e[2]) - drift * (1.0 - u) - ecke
             sw = int(2 + 4 * u)
             sch = pygame.Surface((sw * 2 + 2, sw + 2), pygame.SRCALPHA)
             pygame.draw.ellipse(sch, (10, 8, 6, int(40 + 130 * u)), sch.get_rect())

@@ -144,13 +144,50 @@ def faehigkeiten_von(k) -> tuple:
     return ()
 
 
+def faehigkeit_gewaehlt(k):
+    """Die gewaehlte Faehigkeit (Art, Pause) oder None. Seit 0.34.138
+    waehlt X (WERKZEUG WECHSELN) auch zwischen den Faehigkeiten einer
+    Klasse (gemeldet: "Faehigkeit wechseln funktioniert gar nicht" - C nahm
+    immer die erste, die bereit war, und X wirkte nur ohne Klasse)."""
+    liste = faehigkeiten_von(k)
+    if not liste:
+        return None
+    if len(liste) == 1:
+        return liste[0]
+    return liste[getattr(k, "faehigkeit_wahl", 0) % len(liste)]
+
+
+def faehigkeit_wechseln(k) -> str:
+    """X: die naechste Faehigkeit der Klasse, oder - ohne Klasse, JEDER HAT
+    ALLES - das naechste Werkzeug. Gibt den Namen zurueck oder ""."""
+    d = daten(getattr(k, "klasse", ""))
+    if d.get("faehigkeit"):
+        liste = tuple(d["faehigkeit"])
+        if len(liste) < 2:
+            return ""
+        k.faehigkeit_wahl = (getattr(k, "faehigkeit_wahl", 0) + 1) % len(liste)
+    elif getattr(k, "alle_werkzeuge", False):
+        k.werkzeug = (getattr(k, "werkzeug", 0) + 1) % len(K.WERKZEUGE)
+    else:
+        return ""
+    wahl = faehigkeit_gewaehlt(k)
+    return FAEHIGKEIT_NAMEN.get(wahl[0], wahl[0].upper()) if wahl else ""
+
+
 def faehigkeit_bereit(k):
-    """Die erste Faehigkeit, deren Pause um ist - (Art, Pause) oder None."""
+    """Die gewaehlte Faehigkeit, wenn ihre Pause um ist - (Art, Pause) oder None.
+    Bots waehlen nicht: sie nehmen die erste, die bereit ist (wie bisher)."""
     rest = getattr(k, "faehigkeit_rest", {})
-    for art, pause in faehigkeiten_von(k):
-        if rest.get(art, 0.0) <= 0.0:
-            return art, pause
-    return None
+    if getattr(k, "ist_bot", False):
+        for art, pause in faehigkeiten_von(k):
+            if rest.get(art, 0.0) <= 0.0:
+                return art, pause
+        return None
+    wahl = faehigkeit_gewaehlt(k)
+    if wahl is None:
+        return None
+    rest = getattr(k, "faehigkeit_rest", {})
+    return wahl if rest.get(wahl[0], 0.0) <= 0.0 else None
 
 
 def faehigkeiten_schritt(k, dt: float) -> None:

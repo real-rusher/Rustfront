@@ -130,6 +130,9 @@ def daten() -> dict:
     from dustfront.font import _G, _TRANS, GH, GW
     from dustfront.core import Bilder
     from dustfront.main import asset_ordner
+    # Die im Code gezeichneten Bilder (seit 0.34.135): ohne diesen Import
+    # kannte die Seite nur Dateien - neue Waffen kamen lila, andere alt.
+    from dustfront import art  # noqa: F401
 
     bilder = Bilder(asset_ordner())
 

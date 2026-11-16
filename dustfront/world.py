@@ -55,6 +55,10 @@ ZEICHEN = {
     "_": K.PFLASTER,
     '"': K.GESTRUEPP,
     "=": K.DIELEN,
+    # Seit 0.34.131: Wasser - seicht (begehbar, bremst) und tief (sperrt).
+    "+": K.WASSER_SEICHT,
+    "%": K.WASSER_TIEF,
+    "|": K.BRUECKE,
 }
 
 # Dekale werden in kleinen Flaechen abgelegt. Auf einer grossen Karte waere
@@ -318,7 +322,11 @@ class Ebene:
         return K.KACHELN[self.kacheln[ty * self.breite + tx]].get("loch", False)
 
     def begehbar(self, tx: int, ty: int) -> bool:
-        return not self.fest(tx, ty) and self.kachel(tx, ty) != K.LEER
+        k = self.kachel(tx, ty)
+        d = K.KACHELN[k]
+        # Tiefes Wasser (seit 0.34.131) ist kein Weg - fuer Wegenetz,
+        # freie Punkte und Einstiege genau wie eine Wand.
+        return not d["fest"] and k != K.LEER and not d.get("sperrt", False)
 
     @property
     def pixel_breite(self) -> int:
@@ -355,6 +363,9 @@ class Ebene:
                 flaeche.blit(bild, (x0 - links_kachel, y0 - oben_kachel), quelle)
 
 
+# Kachelart -> 0/1/2 (Welt.wasser), neu gebaut, wenn K.KACHELN ein anderes ist.
+_WASSER_TAFEL = [None, {}]
+
 _LOCH = ("loch",)          # Marke in Welt._frei_tafel: ein Loch
 
 
@@ -369,6 +380,8 @@ class Welt:
         # Boden, Wand und Kiste gegen Sand, Fels und Fass. Steht als
         # `satz:` im Kopf der Kartendatei.
         self.satz = satz
+        for e in ebenen:
+            e.satz = satz       # fuer das Kartenbild (kartenbild.py, seit 0.34.131)
         self.schneespuren: list[list[float]] = []
         self.wesen: list = []
         self.neue: list = []
@@ -904,8 +917,10 @@ class Welt:
             self.feuerbaelle = [f for f in self.feuerbaelle if f.lebt]
         if self.effekte:
             self.effekte = [f for f in self.effekte if f.schritt(dt)]
-            if len(self.effekte) > 2400:            # nie mehr als so viele auf einmal
-                del self.effekte[:len(self.effekte) - 2400]
+            # Nie mehr als so viele auf einmal (seit 0.34.127 mehr: die dichten
+            # Teilchenwolken der grossen Explosionen kosten kaum etwas).
+            if len(self.effekte) > K.EFFEKTE_HOECHSTENS:
+                del self.effekte[:len(self.effekte) - K.EFFEKTE_HOECHSTENS]
         if self.flugleichen:
             for f in self.flugleichen:
                 f.schritt(dt, self)
@@ -985,8 +1000,20 @@ class Welt:
             self.wesen.extend(self.neue)
             self.neue.clear()
         self._raster_bauen()
+        nr = self.bildnummer
         for w in self.wesen:
             if w.lebt:
+                d = w.__dict__
+                if d.get("_fern") or d.get("_fern_dt"):
+                    # Fern von jedem Menschen (Gefecht, seit 0.34.142): nur
+                    # jeden zweiten Schritt, versetzt, mit der ganzen Zeit.
+                    rest = d.get("_fern_dt", 0.0) + dt
+                    if d.get("_fern") and (nr + d.get("nummer", 0)) & 1:
+                        w._fern_dt = rest
+                        continue
+                    w._fern_dt = 0.0
+                    w.schritt(rest)
+                    continue
                 w.schritt(dt)
         self.effekte_schritt(dt)
         for r in self.rauch:
@@ -1119,7 +1146,7 @@ class Welt:
                             bestes, beste_d = w, d
                         continue
                     d = p.distance_squared_to(w.pos)
-                    if d < (radius + w.radius) ** 2 and d < beste_d:
+                    if d < (radius + (getattr(w, "treffer_radius", 0.0) or w.radius)) ** 2 and d < beste_d:
                         bestes, beste_d = w, d
                     continue
                 if pos.distance_squared_to(w.pos) > (radius + 24) ** 2:
@@ -1132,7 +1159,8 @@ class Welt:
                 if w.beruehrt(pos, radius) and d < beste_d:
                     bestes, beste_d = w, d
                 continue
-            grenze = (radius + w.radius) ** 2
+            # Wer schwimmt, wird nur am Kopf getroffen (seit 0.34.140, treffer_radius).
+            grenze = (radius + (getattr(w, "treffer_radius", 0.0) or w.radius)) ** 2
             if d < grenze and d < beste_d:
                 bestes, beste_d = w, d
         return bestes
@@ -1191,19 +1219,63 @@ class Welt:
 
     def _frei_tafel_bauen(self):
         tafel = {}
+        ueber = {}
         for kachel, daten in K.KACHELN.items():
             if daten["fest"]:
                 tafel[kachel] = self.huelle(kachel)
             elif daten.get("loch", False):
                 tafel[kachel] = _LOCH
+            elif daten.get("sperrt", False):
+                # Tiefes Wasser (seit 0.34.131): die ganze Kachel sperrt -
+                # ausser fuer das, was darueber fliegt (`ueber`).
+                tafel[kachel] = ("block", 0, 0, K.TILE, K.TILE)
+                ueber[kachel] = None
+                continue
             else:
                 tafel[kachel] = None
-        self._frei_tafel = (K.KACHELN, getattr(self, "satz", ""), tafel)
+            ueber[kachel] = tafel[kachel]
+        self._frei_tafel = (K.KACHELN, getattr(self, "satz", ""), tafel, ueber)
         return self._frei_tafel
 
+    def wasser(self, pos, ebene: int) -> int:
+        """0 trocken, 1 seichtes, 2 tiefes Wasser - eine Abfrage statt zweier
+        (seit 0.34.142: jeder Kaempfer fragt das jeden Schritt, bis zu dreimal)."""
+        ebenen = self.ebenen
+        e = ebenen[ebene] if 0 <= ebene < len(ebenen) else self.ebene(ebene)
+        tx, ty = int(pos.x // K.TILE), int(pos.y // K.TILE)
+        if 0 <= tx < e.breite and 0 <= ty < e.hoehe:
+            k = e.kacheln[ty * e.breite + tx]
+        else:
+            k = K.LEER
+        tafel = _WASSER_TAFEL
+        if tafel[0] is not K.KACHELN:
+            tafel[0] = K.KACHELN
+            tafel[1] = {n: (1 if d.get("seicht") else 2 if d.get("sperrt") else 0)
+                        for n, d in K.KACHELN.items()}
+        return tafel[1].get(k, 0)
+
+    def seicht(self, pos, ebene: int) -> bool:
+        """Steht man hier in seichtem Wasser (seit 0.34.131)?"""
+        return self.wasser(pos, ebene) == 1
+
+    def tief(self, pos, ebene: int) -> bool:
+        """Ist hier tiefes Wasser (seit 0.34.140: man schwimmt darin)?"""
+        return self.wasser(pos, ebene) == 2
+
+    def boden_tempo(self, pos, ebene: int, fahrzeug: bool = False) -> float:
+        """Faktor auf das Tempo durch den Boden: 1, im seichten Wasser
+        weniger (K.WASSER), schwimmend noch weniger."""
+        art = self.wasser(pos, ebene)
+        if art == 1:
+            return K.WASSER["seicht_fahrzeug" if fahrzeug else "seicht_tempo"]
+        if art == 2 and not fahrzeug:
+            return K.WASSER["schwimm_tempo"]
+        return 1.0
+
     def frei(self, pos: pygame.Vector2, radius: float, ebene: int,
-             loch_fest: bool = False) -> bool:
+             loch_fest: bool = False, ueber_wasser: bool = False) -> bool:
         """loch_fest: Loecher zaehlen als Wand. Fuer alles, was nicht fallen soll.
+        ueber_wasser: tiefes Wasser haelt nicht auf (Granaten, Flieger).
 
         Feste Kacheln halten mit ihrer Grundflaeche auf (`huelle`), Loecher
         mit der ganzen Kachel."""
@@ -1225,7 +1297,7 @@ class Welt:
         tafel = self.__dict__.get("_frei_tafel")
         if tafel is None or tafel[0] is not K.KACHELN or tafel[1] != getattr(self, "satz", ""):
             tafel = self._frei_tafel_bauen()
-        tafel = tafel[2]
+        tafel = tafel[3] if ueber_wasser else tafel[2]
         leer = K.LEER
         for ty in range(t0y, t1y + 1):
             innen_y = 0 <= ty < hoehe
@@ -1276,19 +1348,20 @@ class Welt:
         # steht die Figur beim Aufsetzen schon auf freiem Grund und muss nicht
         # im letzten Bild noch zur Seite gesetzt werden.
         lf = (not getattr(wesen, "faellt", False)) if loch_fest is None else loch_fest
+        uw = getattr(wesen, "ueber_wasser", False)
         stoss_x = stoss_y = False
         schritte = max(1, int(max(abs(dx), abs(dy)) / (r * 0.75)) + 1)
         sx, sy = dx / schritte, dy / schritte
         for _ in range(schritte):
             if sx:
                 pos.x += sx
-                if not self.frei(pos, r, eb, lf):
+                if not self.frei(pos, r, eb, lf, uw):
                     pos.x -= sx
                     stoss_x = True
                     sx = 0.0
             if sy:
                 pos.y += sy
-                if not self.frei(pos, r, eb, lf):
+                if not self.frei(pos, r, eb, lf, uw):
                     pos.y -= sy
                     stoss_y = True
                     sy = 0.0
@@ -1362,13 +1435,15 @@ class Welt:
         # haengen - sonst zoege ihn das hier in jedem Schritt zurueck, und
         # er fiele nie (Gegner._geschoben).
         lf = not getattr(wesen, "faellt", False) and not getattr(wesen, "geschoben", False)
-        if self.frei(wesen.pos, wesen.radius, wesen.ebene, lf):
+        # Wer schwimmen kann, steckt im tiefen Wasser nicht fest (seit 0.34.140).
+        uw = getattr(wesen, "ueber_wasser", False)
+        if self.frei(wesen.pos, wesen.radius, wesen.ebene, lf, uw):
             return False
         for r in (3.0, 6.0, 10.0, 15.0, 21.0, 29.0, 40.0, 54.0):
             for i in range(12):
                 a = math.tau * i / 12 + r * 0.7
                 p = wesen.pos + pygame.Vector2(math.cos(a), math.sin(a)) * r
-                if self.frei(p, wesen.radius, wesen.ebene, lf):
+                if self.frei(p, wesen.radius, wesen.ebene, lf, uw):
                     wesen.pos.update(p)
                     wesen.vorher.update(p)
                     wesen.tempo *= 0.4
@@ -1846,6 +1921,40 @@ def karten_liste() -> list[str]:
     if not ordner.is_dir():
         return []
     return sorted(p.stem for p in ordner.glob("*.txt"))
+
+
+_KOPF_MERK: dict = {}
+
+
+def karte_kopf(name: str) -> dict:
+    """Der Kopf einer Kartendatei ohne die Karte zu bauen (fuer die Regeln,
+    seit 0.34.132), dazu "_kacheln": wie viele Kacheln begehbar sind.
+    Gemerkt je Datei und Aenderungszeit; eine fehlende Karte gibt {}."""
+    pfad = kartenordner() / ("%s.txt" % name)
+    try:
+        stand = pfad.stat().st_mtime
+    except OSError:
+        return {}
+    hit = _KOPF_MERK.get(name)
+    if hit is not None and hit[0] == stand:
+        return hit[1]
+    try:
+        roh = pfad.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    kopf = {}
+    teil, _, karte = roh.partition("--- ebene")
+    for zeile in teil.splitlines():
+        blank = zeile.strip()
+        if blank and not blank.startswith("#") and ":" in blank:
+            k, _, v = blank.partition(":")
+            kopf[k.strip()] = v.strip()
+    begehbar = set(z for z, k in ZEICHEN.items()
+                   if not K.KACHELN[k]["fest"] and not K.KACHELN[k].get("loch")
+                   and not K.KACHELN[k].get("sperrt"))
+    kopf["_kacheln"] = sum(1 for z in karte if z in begehbar or (z.isalpha() and z.isupper() and z not in ZEICHEN))
+    _KOPF_MERK[name] = (stand, kopf)
+    return kopf
 
 
 def karte_lesen(name: str):

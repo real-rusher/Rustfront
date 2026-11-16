@@ -319,6 +319,17 @@ def _schild(s, c, d) -> None:
     draw.rect(s, (150, 190, 200), (c + 10, c - 1, 1, 2))
 
 
+@platzhalter("schild_klasse")
+def _schild_klasse():
+    """Das Schild der Klasse SCHILDTRAEGER (seit 0.34.138, gemeldet: "das
+    Schild wird einfach nicht gerendert" - es hing bisher nur an Aussehen, die
+    selbst eines tragen). Dieselbe Form, ueber die Figur gelegt; die Mitte des
+    Bildes ist die Mitte der Figur."""
+    f = pygame.Surface((32, 32), pygame.SRCALPHA)
+    _schild(f, 16, {"schildfarbe": (78, 90, 70)})
+    return f
+
+
 def _arme(s, c, d, waffe, stummel: bool = True, arme_an: bool = True) -> None:
     """Arme und was in der Hand ist. `waffe`: die Waffe aus
     art._hand_waffe. Ohne Waffe und mit `stummel` der alte Gewehrstummel
@@ -594,7 +605,7 @@ def _kopf_grund(s, c, d, t, f, haut, grund) -> None:
 # ──────────────────────────────── Die Figur
 
 def figur(d: dict, waffe=None, team=None, groesse=None, stummel: bool = True,
-          arme_an: bool = True, schwung=None) -> pygame.Surface:
+          arme_an: bool = True, schwung=None, nahkampf=None) -> pygame.Surface:
     """Eine Figur aus K.FIGUREN (`d` ist ihr Eintrag). `team` "ROT" oder
     "BLAU" legt die Neon-Markierung darauf, sonst keine. `groesse` wie bei
     art._figur: 28, mit Waffe 56. `schwung`: der Winkel des Brecheisens
@@ -612,7 +623,7 @@ def figur(d: dict, waffe=None, team=None, groesse=None, stummel: bool = True,
     if neon:
         _markierung(s, c, d, *neon)
     if schwung is not None:
-        art.schwung_arme(s, c, d["kante"], schwung)
+        art.schwung_arme(s, c, d["kante"], schwung, nahkampf)
     else:
         _arme(s, c, d, waffe, stummel, arme_an)
     _kopf(s, c, d)
@@ -638,10 +649,10 @@ def standard(rumpf, kante, akzent) -> dict:
 
 
 def standard_figur(rumpf, kante, akzent, waffe=None, team=None, groesse=None,
-                   schwung=None, stummel: bool = True) -> pygame.Surface:
+                   schwung=None, stummel: bool = True, nahkampf=None) -> pygame.Surface:
     """Die Standardfigur im Stil der Skins (siehe `standard`)."""
     return figur(standard(rumpf, kante, akzent), waffe, team, groesse, stummel=stummel,
-                 schwung=schwung)
+                 schwung=schwung, nahkampf=nahkampf)
 
 
 def mit_fester_hand(skin: str) -> bool:
@@ -721,9 +732,16 @@ def _zerlegen(name: str):
         return None
     skin, team, rest = teile
     schwung = None
+    nahkampf = None
     if rest.startswith("schwung_"):
+        zahl = rest[len("schwung_"):]
+        if "_" in zahl:
+            # Mit der gewaehlten Nahkampfwaffe (seit 0.34.140): schwung_<i>_<waffe>.
+            zahl, nahkampf = zahl.split("_", 1)
+            if nahkampf not in K.NAHKAMPF["waehlbar"] or nahkampf == K.NAHKAMPF["waffe"]:
+                return None
         try:
-            schwung = int(rest[len("schwung_"):])
+            schwung = int(zahl)
         except ValueError:
             return None
         if not 0 <= schwung < K.SCHWUNG_BILDER:
@@ -732,7 +750,7 @@ def _zerlegen(name: str):
     waffe = rest or None
     if waffe is not None and (waffe not in K.WAFFEN_HAND or mit_fester_hand(skin)):
         return None
-    return skin, team, waffe, schwung
+    return skin, team, waffe, (schwung, nahkampf) if nahkampf else schwung
 
 
 def skin_mass(name: str):
@@ -742,6 +760,8 @@ def skin_mass(name: str):
     if teile is None:
         return None
     _skin, _team, waffe, schwung = teile
+    if isinstance(schwung, tuple):
+        schwung = schwung[0]
     if schwung is not None:
         return K.BILD_MASS["spieler_schwung_%d" % schwung]
     return K.BILD_MASS["spieler_" + waffe] if waffe else K.BILD_MASS["spieler"]
@@ -752,8 +772,12 @@ def _skin_zeichnen(name: str):
     if teile is None:
         return None
     skin, team, waffe, schwung = teile
+    nahkampf = None
+    if isinstance(schwung, tuple):
+        schwung, nahkampf = schwung
     winkel = None if schwung is None else art.schwung_winkel(schwung)
-    return figur(K.FIGUREN[skin], waffe, team, skin_mass(name)[0], schwung=winkel)
+    return figur(K.FIGUREN[skin], waffe, team, skin_mass(name)[0], schwung=winkel,
+                 nahkampf=nahkampf)
 
 
 platzhalter_muster("skin_", _skin_zeichnen, skin_mass)
