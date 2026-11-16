@@ -297,10 +297,21 @@ class Kaempfer(Spieler):
         b = self.fahrzeug or self.mitfahrt
         return dict(K.FAHRZEUG, **(getattr(b, "werte", None) or {}))
 
+    def sturz_schaden(self, menge) -> None:
+        """Ein Schlag, der durch den Wagen geht (seit 0.34.146: er stuerzt ueber
+        eine Kante). Davor schuetzt das Blech nicht - weder ganz noch zum Teil."""
+        self.__dict__["_ungeschuetzt"] = True
+        try:
+            self.schaden(menge, None, None)
+        finally:
+            self.__dict__.pop("_ungeschuetzt", None)
+
     def schaden(self, menge, schub=None, von=None, durch: float = 0.0) -> None:
         # Wer in einem Fahrzeug sitzt, nimmt keinen Schaden (seit 0.34.77,
-        # K.FAHRZEUG["fahrer_geschuetzt"]).
-        if self.im_fahrzeug and self._fahrzeug_werte().get("fahrer_geschuetzt", False):
+        # K.FAHRZEUG["fahrer_geschuetzt"]) - ausser beim Sturz (sturz_schaden).
+        ungeschuetzt = self.__dict__.get("_ungeschuetzt", False)
+        if (self.im_fahrzeug and not ungeschuetzt
+                and self._fahrzeug_werte().get("fahrer_geschuetzt", False)):
             return
         # Am Boden gibt es keinen Rueckstoss. Wer liegt, liegt - sonst
         # schoebe jede Salve, jede Granate und jeder Stampfer einen
@@ -331,7 +342,7 @@ class Kaempfer(Spieler):
         # der Wagen haelt einen fest (seit 0.34.9, K.FAHRZEUG). Hier und
         # nicht beim Wagen, damit Statistik und Schadenszahl genau das
         # zaehlen, was wirklich angekommen ist.
-        if self.im_fahrzeug:
+        if self.im_fahrzeug and not ungeschuetzt:
             # Wie viel ankommt, sagt das Fahrzeug (seit 0.34.59): im Panzer
             # steht der Kommandant in der Luke, im Panzerwagen der Schuetze
             # im offenen Ring.
@@ -4111,6 +4122,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 phase = max(0, min(3, int(e[18]))) if len(e) > 18 else 0
                 phase_rest = max(0.0, min(60.0, float(e[19]))) if len(e) > 19 else 0.0
                 extra = e[20] if len(e) > 20 else 0
+                flug = max(0.0, min(2000.0, float(e[21]))) if len(e) > 21 else 0.0
+                sturz_hoehe = max(0.0, min(2000.0, float(e[22]))) if len(e) > 22 else 0.0
+                kippen = max(-90.0, min(90.0, float(e[23]))) if len(e) > 23 else 0.0
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
@@ -4125,6 +4139,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 b.pos.update(x, y)
             b.winkel = winkel
             b.ebene = ebene
+            b.flug, b.sturz_hoehe, b.sturz_kippen = flug, sturz_hoehe, kippen
             k = self.kaempfer.get(fahrer) if fahrer >= 0 else None
             b.besetzt = fahrer >= 0
             b.team = k.team if k is not None else -1
@@ -6009,7 +6024,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                   # 2 Feld aktiv, 3 laedt) und wie lange sie noch dauert.
                   getattr(b, "phase", 0), round(getattr(b, "phase_rest", 0.0), 1),
                   # Seit 0.34.111: ein Zusatzwert je Art (Betriebsart des Funkwagens).
-                  b.netz_extra() if hasattr(b, "netz_extra") else 0]
+                  b.netz_extra() if hasattr(b, "netz_extra") else 0,
+                  # Seit 0.34.146: im Sturz ueber eine Kante - Hoehe ueber dem Boden,
+                  # wie hoch der Sturz war, und wie weit die Nase gesenkt ist.
+                  round(b.flug, 1), round(getattr(b, "sturz_hoehe", 0.0), 1),
+                  round(getattr(b, "sturz_kippen", 0.0), 1)]
                  for b in self.fahrzeuge]
         # Nagelfelder (seit 0.34.65): wo die Naegel liegen, folgt aus der
         # Kennung (entities.Nagelfeld.stellen).
@@ -6909,7 +6928,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             self._letzte_ebene = self.ich.ebene
             self.blick = self.ich.ebene
             self.blick_rest = 0.0
-            wagen = getattr(self.ich, "fahrzeug", None) or getattr(self.ich, "mitfahrt", None)
+            wagen = self._mein_wagen()
             gleitet = getattr(wagen, "hoch_oben", False) or getattr(wagen, "flug", 0.0) > 0.0
             if self.ich.flug <= 0 and not gleitet:
                 # Treppe, Luke, Aufzug: sofort dort, das alte Bild blendet
@@ -6945,8 +6964,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             if self.blick_rest <= 0:
                 self.blick = self.ich.ebene
         ziel_h = float(self.welt.hoehe(self.blick))
-        if self.ich.flug > 0 and self.blick == self.ich.ebene:
-            self.blick_hoehe = self.welt.hoehe(self.ich.ebene) + self.ich.flug
+        # Im Wagen, der ueber eine Kante faellt, sinkt die Ansicht mit ihm
+        # (seit 0.34.146) - wie bei der eigenen Figur im Sturz.
+        wagen = self._mein_wagen()
+        flug = max(self.ich.flug, float(getattr(wagen, "flug", 0.0) or 0.0))
+        if flug > 0 and self.blick == self.ich.ebene:
+            self.blick_hoehe = self.welt.hoehe(self.ich.ebene) + flug
         else:
             self.blick_hoehe += (ziel_h - self.blick_hoehe) * min(1.0, 9.0 * dt)
         if self.blick != self.ich.ebene:
@@ -7801,6 +7824,18 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 if bild.startswith("teil_drohne"):
                     r.hoch_oben_zeichnen(ziel, bild, pygame.Vector2(x - ecke.x, y - ecke.y), winkel)
 
+    def _mein_wagen(self):
+        """Der Wagen, in dem man sitzt - beim Gast aus der Meldung (wer faehrt)."""
+        ich = self.ich
+        if ich is None or not getattr(ich, "im_fahrzeug", False):
+            return None
+        wagen = getattr(ich, "fahrzeug", None) or getattr(ich, "mitfahrt", None)
+        if wagen is None:
+            for b in self.fahrzeuge:
+                if getattr(b, "fahrer_nummer", -2) == ich.nummer:
+                    return b
+        return wagen
+
     def _welt_bild(self, ziel, misch: float) -> None:
         """Alles, was in Weltkoordinaten liegt: die Welt, beim Gast die
         gemeldeten Wesen, Ziellinie und Streukegel."""
@@ -7813,6 +7848,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         # Gestell, Mast und Beifahrer je Ebene (seit 0.34.146, luft.py).
         self.renderer.fahrzeug_aufbauten = (
             lambda f, i, e, d: self.fahrzeug_aufbauten_zeichnen(f, i, e, d, misch))
+        self.renderer.fahrzeug_aufbau_einzeln = (
+            lambda f, b, m: self.fahrzeug_aufbau_einzeln(f, b, m, misch))
         try:
             self.renderer.welt_zeichnen(
                 ziel, self.welt, self.kamera, misch,
@@ -7824,6 +7861,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 anzeige=(lambda f, i, e: self._fremde_anzeige(f, i, e, misch)) if gast else None)
         finally:
             self.renderer.fahrzeug_aufbauten = None
+            self.renderer.fahrzeug_aufbau_einzeln = None
         if gast:
             self._fremde_fallende(ziel, misch)
         self._drohnen_zeichnen(ziel, misch)

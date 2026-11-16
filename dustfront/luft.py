@@ -394,10 +394,29 @@ class LuftTeil:
         self._werfer_gestelle_zeichnen(ziel, misch, ebene, ecke, dunkel)
         self._funkmasten_zeichnen(ziel, misch, ebene, ecke, dunkel)
 
+    def fahrzeug_aufbau_einzeln(self, ziel, b, mitte, misch: float) -> None:
+        """Dasselbe fuer einen einzelnen Wagen, um `mitte` in `ziel` - fuer
+        das Bild eines Wagens, der gerade ueber eine Kante faellt
+        (render.fahrzeug_ganz, seit 0.34.146)."""
+        ecke = b.zeichenpos(misch) - pygame.Vector2(mitte)
+        self._beifahrer_zeichnen(ziel, misch, b.ebene, ecke, None, nur=b)
+        self._werfer_gestelle_zeichnen(ziel, misch, b.ebene, ecke, None, nur=b)
+        self._funkmasten_zeichnen(ziel, misch, b.ebene, ecke, None, nur=b)
+
+    @staticmethod
+    def _aufbau_zeigen(b, art: str, ebene: int, nur) -> bool:
+        """Gehoert dieser Wagen in diese Zeichnung? Mit `nur`: genau er, auch im
+        Sturz; sonst jeder dieser Art auf der Ebene, der nicht gerade faellt."""
+        if b.art != art or b.kaputt:
+            return False
+        if nur is not None:
+            return b is nur
+        return b.ebene == ebene and getattr(b, "flug", 0.0) <= 0.0
+
     def _dunkel_oder(self, bild, dunkel):
         return bild if dunkel is None else self.renderer.dunkel(bild, dunkel)
 
-    def _beifahrer_zeichnen(self, ziel, misch: float, ebene=None, ecke=None, dunkel=None) -> None:
+    def _beifahrer_zeichnen(self, ziel, misch: float, ebene=None, ecke=None, dunkel=None, nur=None) -> None:
         """Der Beifahrer sitzt im Beiwagen und zeigt seine Waffe in die Richtung,
         in die er zielt - nur so weit, wie der Sitz es erlaubt (K.KRAD
         `beifahrer_bogen`). Er wird mit dem Krad gezeichnet, aus dessen Lage,
@@ -406,7 +425,7 @@ class LuftTeil:
         ebene = self.blick if ebene is None else ebene
         r = self.renderer
         for b in self.fahrzeuge:
-            if b.art != "krad" or b.kaputt or b.ebene != ebene or getattr(b, "flug", 0.0) > 0.0:
+            if not self._aufbau_zeigen(b, "krad", ebene, nur):
                 continue
             k = self._beifahrer_im_krad(b)
             if k is None:
@@ -422,7 +441,8 @@ class LuftTeil:
             ziel.blit(s, s.get_rect(center=(int(round(sitz.x)), int(round(sitz.y)))))
 
     # ---- Das Raketengestell des Werfers (seit 0.34.120) -------------------------
-    def _werfer_gestelle_zeichnen(self, ziel, misch: float, ebene=None, ecke=None, dunkel=None) -> None:
+    def _werfer_gestelle_zeichnen(self, ziel, misch: float, ebene=None, ecke=None, dunkel=None,
+                                  nur=None) -> None:
         """Das Raketengestell (art_werfer.py, seit 0.34.126 klassisch gemalt): fuer
         jede Richtung und Steilheit neu gemalt, mit Schatten auf der Pritsche.
         Es dreht sich weich zum Zeiger und richtet die Rohre nach der
@@ -431,7 +451,7 @@ class LuftTeil:
         ecke = self.kamera.ecke if ecke is None else ecke
         ebene = self.blick if ebene is None else ebene
         for b in self.fahrzeuge:
-            if b.art != "werfer" or b.kaputt or b.ebene != ebene or getattr(b, "flug", 0.0) > 0.0:
+            if not self._aufbau_zeigen(b, "werfer", ebene, nur):
                 continue
             p = b.zeichenpos(misch) - ecke
             if not (-120 < p.x < ziel.get_width() + 120 and -120 < p.y < ziel.get_height() + 120):
@@ -443,7 +463,8 @@ class LuftTeil:
             ziel.blit(bild, (int(round(mitte.x + bv[0])), int(round(mitte.y + bv[1]))))
 
     # ---- Der Mast des Funkwagens (seit 0.34.124) ------------------------------
-    def _funkmasten_zeichnen(self, ziel, misch: float, ebene=None, ecke=None, dunkel=None) -> None:
+    def _funkmasten_zeichnen(self, ziel, misch: float, ebene=None, ecke=None, dunkel=None,
+                             nur=None) -> None:
         """Mast, Peilkopf und Abspannseile des Funkwagens als 3D-Modell
         (art_funkmast.py), mit Schatten: der Mast liegt eingepackt auf dem
         Dach, richtet sich beim Aufbau auf, faehrt aus, der Kopf klappt auf
@@ -452,7 +473,7 @@ class LuftTeil:
         ecke = self.kamera.ecke if ecke is None else ecke
         ebene = self.blick if ebene is None else ebene
         for b in self.fahrzeuge:
-            if b.art != "funkwagen" or b.kaputt or b.ebene != ebene or getattr(b, "flug", 0.0) > 0.0:
+            if not self._aufbau_zeigen(b, "funkwagen", ebene, nur):
                 continue
             p = b.zeichenpos(misch) - ecke
             if not (-140 < p.x < ziel.get_width() + 140 and -140 < p.y < ziel.get_height() + 140):

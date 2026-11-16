@@ -3771,6 +3771,23 @@ KLIPPEN = dict(
     kante=1.45,           # die Oberkante faengt Licht, so viel heller
 )
 
+# Ein Fahrzeug faellt ueber eine Kante eine Ebene tiefer (seit 0.34.146,
+# fahrzeug.Buggy.fahrzeug_sturz_beginnen). Bots fahren nie ueber eine Kante
+# (ihre Wege meiden Loecher); Menschen schon, und leere Wagen, die geschoben
+# werden. Er fliegt mit seinem Schwung weiter, kippt mit der Nase nach unten
+# und schlaegt auf: Schaden am Wagen (Anteil seines vollen Lebens je 100 px
+# Fallhoehe), an den Insassen und an jedem, auf den er faellt.
+FAHRZEUG_STURZ = dict(
+    schwung=0.85,         # so viel seines Tempos nimmt er in den Flug mit
+    kippen=50.0,          # so weit (Grad) senkt sich die Nase bis zum Aufschlag
+    wagen_je_100=0.16,    # Schaden am Wagen: Anteil des vollen Lebens je 100 px
+    insassen_je_100=14.0, # Schaden an Fahrer und Mitfahrern je 100 px
+    quetschen=90.0,       # wer darunter steht, bekommt so viel
+    nachfedern=0.32,      # Sekunden, in denen er nach dem Aufschlag nachwippt
+    ausrollen=0.35,       # so viel Tempo behaelt er nach dem Aufschlag
+    suche_weit=140.0,     # so weit (px) sucht er unten einen Platz zum Landen
+)
+
 STURZ = dict(
     schwerkraft=980.0,    # Pixel je Sekunde im Quadrat, bestimmt die Falldauer
     luftsteuerung=0.55,   # so viel Bewegung hat man waehrend des Sturzes

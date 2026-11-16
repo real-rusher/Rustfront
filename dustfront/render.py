@@ -1277,6 +1277,11 @@ class Renderer:
             p = boden = w.zeichenpos(alpha) - ecke  # Stelle, auf der es steht
             if not (-rand < p.x < x_max and -rand < p.y < y_max):
                 continue
+            if w.flug > 0 and getattr(w, "ist_fahrzeug", False):
+                # Ein Wagen im Sturz (seit 0.34.146): hier liegt nur sein
+                # Schatten, er selbst wird nach allen Ebenen gezeichnet.
+                self._sturzschatten(ziel, w, boden)
+                continue
             if getattr(w, "zeichnet_selbst", False):
                 w.zeichnen_unten(self, ziel, p, dunkel)
                 continue
@@ -1665,9 +1670,67 @@ class Renderer:
         # Das hoechste zuletzt, damit es ueber den tieferen liegt.
         fliegende.sort(key=lambda w: welt.hoehe(w.ebene) + w.flug)
         for w in fliegende:
+            if getattr(w, "ist_fahrzeug", False):
+                self.fahrzeug_fliegend(ziel, welt, kamera, blick_hoehe, w, alpha)
+                continue
             self.fliegendes(ziel, welt, kamera, blick_hoehe,
                             w.zeichenpos(alpha), w.winkel, w.ebene, w.flug,
                             w.bild, w.blitz > 0)
+
+    # ---- Ein Wagen faellt ueber eine Kante (seit 0.34.146) -------------------
+    def _sturzschatten(self, ziel, w, boden) -> None:
+        """Wo der fallende Wagen aufschlagen wird: ein Schatten, der dunkler
+        und schaerfer wird, je naeher er kommt."""
+        hoch = max(1.0, float(getattr(w, "sturz_hoehe", 0.0) or w.flug))
+        nah = max(0.0, min(1.0, 1.0 - w.flug / hoch))
+        r = float(getattr(w, "huelle_radius", 0.0) or w.radius * 1.6)
+        b, h = int(r * 2.2), int(r * 1.5)
+        fl = pygame.Surface((b, h), pygame.SRCALPHA)
+        pygame.draw.ellipse(fl, (12, 9, 7, int(40 + 120 * nah)), fl.get_rect())
+        ziel.blit(fl, (boden.x - b / 2 + 2, boden.y - h / 2 + 3))
+
+    def fahrzeug_ganz(self, w) -> pygame.Surface:
+        """Der ganze Wagen in einem Bild, gedreht wie er steht: Wanne, Turm
+        bzw. Ring und, was das Gefecht obendrauf setzt (Gestell, Mast,
+        Beifahrer: `fahrzeug_aufbau_einzeln`). Fuer den Sturz."""
+        roh = self.bilder.gedreht(w.bild, _gezeigter_winkel(w)) if w.bild else None
+        n = 220
+        fl = pygame.Surface((n, n), pygame.SRCALPHA)
+        mitte = pygame.Vector2(n / 2, n / 2)
+        if getattr(w, "zeichnet_selbst", False):
+            w.zeichnen_unten(self, fl, mitte, None)
+            w.zeichnen_oben(self, fl, mitte, None)
+        elif roh is not None:
+            fl.blit(roh, roh.get_rect(center=(int(mitte.x), int(mitte.y))))
+        extra = self.__dict__.get("fahrzeug_aufbau_einzeln")
+        if extra is not None:
+            extra(fl, w, mitte)
+        return fl
+
+    def fahrzeug_fliegend(self, ziel, welt, kamera, blick_hoehe, w, alpha) -> None:
+        """Der fallende Wagen mit dem Massstab seiner Hoehe (wie jedes fallende
+        Wesen) und mit gesenkter Nase: von oben gesehen wird er in Fahrt-
+        richtung kuerzer, je weiter er kippt."""
+        p = K.PERSPEKTIVE
+        dz = blick_hoehe - (welt.hoehe(w.ebene) + w.flug)
+        if dz < -p["ausblenden"]:
+            return
+        k = p["brennweite"] / max(60.0, p["brennweite"] + dz)
+        s = self.fahrzeug_ganz(w)
+        kippen = abs(float(getattr(w, "sturz_kippen", 0.0)))
+        if kippen > 1.0:
+            # In Fahrtrichtung stauchen: auf die Achse drehen, stauchen, zurueck.
+            winkel = _gezeigter_winkel(w)
+            gerade = pygame.transform.rotate(s, winkel)
+            gerade = pygame.transform.smoothscale(
+                gerade, (max(1, int(gerade.get_width() * math.cos(math.radians(kippen)))),
+                         gerade.get_height()))
+            s = pygame.transform.rotate(gerade, -winkel)
+        if abs(k - 1.0) > p["massstab_schwelle"]:
+            s = pygame.transform.smoothscale(
+                s, (max(1, int(round(s.get_width() * k))), max(1, int(round(s.get_height() * k)))))
+        b = self._bildpunkt(w.zeichenpos(alpha), kamera, k)
+        ziel.blit(s, (b.x - s.get_width() / 2, b.y - s.get_height() / 2))
 
     def fliegendes(self, ziel, welt, kamera, blick_hoehe, pos, winkel,
                    ebene: int, flug: float, bild: str,
@@ -1895,7 +1958,8 @@ class Renderer:
         """Tuerme und MG-Ringe - nach allen Figuren: Rohr und MG liegen
         ueber dem, der davor steht (die dritte Ebene aus dem Paket)."""
         for w in welt.wesen:
-            if (w.ebene == index and w.lebt and getattr(w, "zeichnet_selbst", False)):
+            if (w.ebene == index and w.lebt and getattr(w, "zeichnet_selbst", False)
+                    and w.flug <= 0):
                 w.zeichnen_oben(self, ziel, w.zeichenpos(alpha) - ecke, dunkel)
 
     def flugleichen_zeichnen(self, ziel, welt, index, ecke, alpha, dunkel=None) -> None:

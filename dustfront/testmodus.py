@@ -2141,6 +2141,8 @@ class Testmodus(Gefecht):
              ("AN - %d PUNKTE" % len(self.front_punkte())) if self.front_test
              else ("AUS" if self.schlachtplan is not None else "AUS - KARTE OHNE PUNKTE")),
             ("front_punkte", "FRONT: PUNKTE VERTEILEN (ENTER)", ""),
+            # Seit 0.34.146: ein Wagen faellt ueber eine Kante eine Ebene tiefer.
+            ("kante", "FAHRZEUG ÜBER DIE KANTE (ENTER)", self._kante_art().upper()),
             ("bildrate", "BILDRATE (KLÄNGE PRÜFEN)", self._bildrate_text()),
             ("einstellungen", "EINSTELLUNGEN", ""),
             ("hauptmenue", "ZUM HAUPTMENÜ", ""),
@@ -2185,7 +2187,59 @@ class Testmodus(Gefecht):
         wert = K.TESTMODUS["bildraten"][self.bildrate_nr]
         self.app.fps_grenze = wert or int(self.app.opt["bildrate"] or 0)
 
+    def _kante_art(self) -> str:
+        from . import fahrzeug as fahrzeug_modul
+        arten = [a for a in sorted(fahrzeug_modul.ARTEN) if a != "tragschrauber"]
+        return arten[self.__dict__.get("_kante_nr", 0) % len(arten)]
+
+    def kante_sturz(self, art=None):
+        """Testmenue FAHRZEUG ÜBER DIE KANTE (seit 0.34.146): an der naechsten
+        Kante einer oberen Ebene im Bild steht ein Wagen der gewaehlten Art und
+        faehrt hinunter - er faellt eine Ebene tiefer (Buggy.fahrzeug_sturz_beginnen).
+        Gibt den Wagen zurueck oder None, wenn keine Kante in der Naehe ist."""
+        w = self.welt
+        art = art or self._kante_art()
+        T = K.TILE
+        mitte = pygame.Vector2(self.kamera.pos)
+        cx, cy = int(mitte.x // T), int(mitte.y // T)
+        beste = None
+        for nr in range(len(w.ebenen) - 1, 0, -1):
+            e = w.ebene(nr)
+            for ty in range(max(1, cy - 40), min(e.hoehe - 1, cy + 40)):
+                for tx in range(max(1, cx - 50), min(e.breite - 1, cx + 50)):
+                    if not e.loch(tx, ty):
+                        continue
+                    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        # Drei Kacheln Anlauf auf Boden, dann das Loch.
+                        if all(e.begehbar(tx - dx * i, ty - dy * i) for i in range(1, 4)):
+                            d = (tx - cx) ** 2 + (ty - cy) ** 2
+                            if beste is None or d < beste[0]:
+                                beste = (d, nr, tx, ty, dx, dy)
+            if beste is not None:
+                break
+        if beste is None:
+            self.melde("KEINE KANTE EINER OBEREN EBENE IN DER NÄHE")
+            return None
+        _d, nr, tx, ty, dx, dy = beste
+        richtung = pygame.Vector2(dx, dy)
+        loch = pygame.Vector2((tx + 0.5) * T, (ty + 0.5) * T)
+        b = self.fahrzeug_setzen(art, loch, nr, {"winkel": math.degrees(math.atan2(dy, dx))})
+        if b is None:
+            return None
+        b.pos.update(loch)                   # genau an der Kante, nicht daneben gesucht
+        b.vorher.update(loch)
+        b.geschw = richtung * b.werte["hoechst"] * 0.6
+        b.fahrzeug_sturz_beginnen()
+        self.melde("%s FÄLLT ÜBER DIE KANTE" % art.upper())
+        return b
+
     def menue_wirken(self, schluessel: str, schritt: int = 1, ausloesen: bool = False) -> None:
+        if schluessel == "kante":
+            if ausloesen:
+                self.kante_sturz()
+            else:
+                self._kante_nr = self.__dict__.get("_kante_nr", 0) + schritt
+            return
         if schluessel == "karte":
             karten = self._karten()
             if ausloesen:

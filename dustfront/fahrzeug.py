@@ -467,12 +467,13 @@ class Buggy(Wesen):
         jedesmal verglichen."""
         e = w.ebene(self.ebene)
         T = K.TILE
+        lf = self.loch_ist_wand
         x0, x1 = int((c.x - r) // T), int((c.x + r) // T)
         y0, y1 = int((c.y - r) // T), int((c.y + r) // T)
         b = e.breite
         if not (0 <= x0 and x1 < b and 0 <= y0 and y1 < e.hoehe):
-            return w.frei(c, r, self.ebene, True)
-        schluessel = (c.x, c.y, r, x0, y0)
+            return w.frei(c, r, self.ebene, lf)
+        schluessel = (c.x, c.y, r, x0, y0, lf)
         merk = self.__dict__.get("_frei_merk")
         if merk is None:
             merk = self._frei_merk = {}
@@ -481,14 +482,14 @@ class Buggy(Wesen):
             # Er faehrt (seit 0.34.142): die Kacheln erst merken, wenn er
             # wieder auf derselben Stelle steht - beim Fahren half der Zettel
             # nie und kostete jede Pruefung die Ausschnitte.
-            antwort = w.frei(c, r, self.ebene, True)
+            antwort = w.frei(c, r, self.ebene, lf)
             merk[nr] = (schluessel, e, None, antwort)
             return antwort
         kacheln = e.kacheln
         reihen = [kacheln[ty * b + x0: ty * b + x1 + 1] for ty in range(y0, y1 + 1)]
         if hit[2] is not None and hit[2] == reihen:
             return hit[3]
-        antwort = w.frei(c, r, self.ebene, True)
+        antwort = w.frei(c, r, self.ebene, lf)
         merk[nr] = (schluessel, e, reihen, antwort)
         return antwort
 
@@ -526,6 +527,12 @@ class Buggy(Wesen):
         super().schritt(dt)
         if self.nur_bild or self.welt is None:
             return
+        if self.sturz_rest > 0.0 or self.flug > 0.0:
+            # Er faellt ueber eine Kante (seit 0.34.146, sturz_schritt): kein
+            # Gas, keine Lenkung, keine Reibung - nur der Flug.
+            self.tempo.update(self.geschw)
+            return
+        self._nachfedern(dt)
         if self.kaputt:
             self.wrack_rest = max(0.0, self.wrack_rest - dt)
             self.wrack_qualm(dt)
@@ -550,6 +557,8 @@ class Buggy(Wesen):
             if self._ruhe_takt <= 0.0:
                 self._ruhe_takt = 0.1
                 self._beiseite_schieben()
+            # Auch still: ueber die Kante gezogen oder geschoben, faellt er.
+            self._kante_pruefen()
             return
         self._physik(dt, self.gas if fahrer else 0.0,
                      self.lenk if fahrer else 0.0,
@@ -585,6 +594,132 @@ class Buggy(Wesen):
         self._spuren()
         if fahrer:
             self._motor(dt)
+        self._kante_pruefen()
+
+    # ---- Ueber eine Kante: eine Ebene tiefer (seit 0.34.146) -----------------
+    # Gewuenscht: "eine Animation, wenn ein Fahrzeug eine Ebene herunterfaellt".
+    # Bis dahin waren Loecher fuer Fahrzeuge Waende - ein Wagen blieb an jeder
+    # Kante stehen. Jetzt faehrt ein Mensch darueber hinaus: der Wagen fliegt
+    # mit seinem Schwung weiter, senkt die Nase, faellt (gezeichnet mit dem
+    # Massstab seiner Hoehe, render.fliegende_zeichnen; die Ansicht der
+    # Insassen sinkt mit) und schlaegt unten auf (`fahrzeug_aufschlag`).
+    sturz_kippen = 0.0              # Grad, so weit ist die Nase gesenkt (fuers Bild)
+
+    @property
+    def loch_ist_wand(self) -> bool:
+        """Bots fahren nie ueber eine Kante: ihre Wege meiden Loecher, und wer
+        so lenkt, soll nicht aus Versehen abstuerzen. Menschen schon - und ein
+        leerer Wagen, den jemand schiebt."""
+        k = self.fahrer
+        return bool(k is not None and getattr(k, "ist_bot", False))
+
+    def _kante_pruefen(self) -> None:
+        if (self.ebene <= 0 or self.kaputt or getattr(self, "luft", False)
+                or self.flug > 0.0 or self.sturz_rest > 0.0):
+            return
+        if self.welt.loch_unter(self):
+            self.fahrzeug_sturz_beginnen()
+
+    def fahrzeug_sturz_beginnen(self) -> None:
+        """Die Mitte ist ueber dem Nichts: er faellt bis zur naechsten Ebene,
+        die hier Boden hat. Wo er aufkommt, steht jetzt schon fest - vorn,
+        wohin ihn sein Schwung traegt, oder daneben, wenn dort kein Platz ist."""
+        w = self.welt
+        f = K.FAHRZEUG_STURZ
+        ziel = w.boden_unter(self.pos, self.ebene)
+        dz = max(1.0, w.hoehe(self.ebene) - w.hoehe(ziel))
+        dauer = math.sqrt(2.0 * dz / K.STURZ["schwerkraft"])
+        self.geschw *= f["schwung"]
+        start = pygame.Vector2(self.pos)
+        lande = start + self.geschw * dauer
+        self.ebene = ziel
+        if not self.passt(lande):
+            gefunden = None
+            for weit in range(12, int(f["suche_weit"]) + 1, 12):
+                for i in range(16):
+                    p = lande + pygame.Vector2(weit, 0).rotate(i * 22.5)
+                    if self.passt(p):
+                        gefunden = p
+                        break
+                if gefunden is not None:
+                    break
+            lande = gefunden if gefunden is not None else lande
+        self._sturz_start = start
+        self._sturz_lande = lande
+        # Faehrt er rueckwaerts hinunter, senkt sich das Heck.
+        self._sturz_vorwaerts = self.geschw.dot(self.vorn) >= 0.0
+        self.flug = dz
+        self.sturz_hoehe = dz
+        self.sturz_dauer = dauer
+        self.sturz_rest = dauer
+        self.sturz_ziel = None
+        self.sturz_kippen = 0.0
+        w.klang("sturz", 0.5, self.pos, ziel)
+
+    def sturz_schritt(self, dt: float) -> None:
+        """Wie die Figur faellt (Wesen.sturz_schritt), aber auf vorbestimmter
+        Bahn vom Rand zum Landeplatz und mit gesenkter Nase."""
+        if not hasattr(self, "_sturz_lande"):
+            Wesen.sturz_schritt(self, dt)
+            return
+        self.sturz_rest -= dt
+        t = max(0.0, self.sturz_dauer - self.sturz_rest)
+        u = min(1.0, t / max(1e-6, self.sturz_dauer))
+        self.flug = max(0.0, self.sturz_hoehe - 0.5 * K.STURZ["schwerkraft"] * t * t)
+        self.pos.update(self._sturz_start.lerp(self._sturz_lande, u))
+        self.sturz_kippen = K.FAHRZEUG_STURZ["kippen"] * min(1.0, u * 1.3) * (1 if self._sturz_vorwaerts else -1)
+        if self.sturz_rest <= 0.0:
+            self.flug = 0.0
+            self.fahrzeug_aufschlag()
+
+    def fahrzeug_aufschlag(self) -> None:
+        """Unten: Staub, Brocken, Funken, ein Schlag - und Schaden je Fallhoehe,
+        am Wagen, an den Insassen und an jedem, auf den er faellt."""
+        f = K.FAHRZEUG_STURZ
+        w = self.welt
+        h = self.sturz_hoehe
+        self.sturz_hoehe = 0.0
+        self.__dict__.pop("_sturz_start", None)
+        self.__dict__.pop("_sturz_lande", None)
+        self.vorher.update(self.pos)
+        self.geschw *= f["ausrollen"]
+        self.tempo.update(self.geschw)
+        self._federn = f["nachfedern"]
+        # Staub, Brocken, Funken, Schlag und Ton - auch beim Gast (Welt.explosion).
+        w.explosion(pygame.Vector2(self.pos), self.ebene, float(h), "fahrzeug_aufprall", None)
+        # Wen er unter sich begraebt.
+        reich = float(getattr(self, "huelle_radius", 0.0) or self.radius) + 4.0
+        for a in list(w.nahe(self.pos, reich + 20.0, self.ebene)):
+            if (a is self or not getattr(a, "lebt", False) or getattr(a, "ist_fahrzeug", False)
+                    or getattr(a, "im_fahrzeug", False) or getattr(a, "fraktion", "") == "geschoss"
+                    or a.pos.distance_to(self.pos) > reich + float(getattr(a, "radius", 8.0))):
+                continue
+            weg = a.pos - self.pos
+            schub = weg.normalize() * 220.0 if weg.length_squared() > 1.0 else pygame.Vector2(220.0, 0)
+            if hasattr(a, "schaden"):
+                a.schaden(f["quetschen"], schub, None)
+        # Die Insassen: der Schlag geht durch.
+        for k in [self.fahrer] + list(self.__dict__.get("_mitfahrer") or ()):
+            if k is None or not getattr(k, "lebt", False):
+                continue
+            menge = f["insassen_je_100"] * h / 100.0
+            if hasattr(k, "sturz_schaden"):
+                k.sturz_schaden(menge)
+            elif hasattr(k, "schaden"):
+                k.schaden(menge, None, None)
+        self.schaden(self.max_leben * f["wagen_je_100"] * h / 100.0, None, None, art="ramm")
+
+    def _nachfedern(self, dt: float) -> None:
+        """Nach dem Aufschlag wippt er kurz nach (nur das Bild)."""
+        rest = self.__dict__.get("_federn", 0.0)
+        if rest <= 0.0:
+            if self.sturz_kippen:
+                self.sturz_kippen = 0.0
+            return
+        rest = max(0.0, rest - dt)
+        self._federn = rest
+        u = 1.0 - rest / K.FAHRZEUG_STURZ["nachfedern"]
+        self.sturz_kippen = -12.0 * math.sin(u * math.pi * 2.0) * (1.0 - u)
 
     def _motor(self, dt: float) -> None:
         """Kein Motor als Schleife - ein kurzes Brummen in einem Takt, solange
@@ -1266,7 +1401,7 @@ class Schwer(Buggy):
         verglichen, eine zerstoerte oder gebaute Kachel faellt also auf."""
         w = self.welt
         e = w.ebene(self.ebene)
-        schluessel = struct.pack("<3d", pos.x, pos.y, winkel)
+        schluessel = struct.pack("<3d?", pos.x, pos.y, winkel, self.loch_ist_wand)
         merk = self.__dict__.get("_kacheln_merk")
         if merk is not None and merk[0] == schluessel and merk[1] is e:
             x0, x1, y0, y1 = merk[2]
@@ -1299,7 +1434,7 @@ class Schwer(Buggy):
                 kachel = e.kachel(tx, ty)
                 if K.KACHELN[kachel]["fest"]:
                     form, rx, ry, rb, rh = w.huelle(kachel)
-                elif e.loch(tx, ty):
+                elif self.loch_ist_wand and e.loch(tx, ty):
                     form, rx, ry, rb, rh = "block", 0, 0, K.TILE, K.TILE
                 else:
                     continue

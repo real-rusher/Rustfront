@@ -189,6 +189,7 @@ def brocken(groesse: int, art: str, variante: int, winkel: int) -> pygame.Surfac
         farben = {"metall": ((110, 106, 98), (64, 60, 56), (26, 24, 22)),
                   "holz": ((168, 128, 80), (120, 86, 52), (52, 36, 22)),
                   "erde": ((150, 122, 86), (106, 84, 58), (48, 38, 26)),
+                  "stein": ((156, 140, 118), (110, 98, 84), (44, 38, 32)),
                   "gruen": ((112, 128, 86), (74, 88, 56), (32, 38, 24)),
                   "rot": ((214, 86, 60), (150, 52, 36), (60, 22, 16))}[art]
         r = random.Random(variante * 31 + groesse)
@@ -751,6 +752,26 @@ def absturz(welt, pos, ebene: int) -> None:
     welt.klang("absturz", 1.0, pygame.Vector2(x, y), ebene)
 
 
+def fahrzeug_aufprall(welt, pos, ebene: int, hoehe: float) -> None:
+    """Ein Wagen schlaegt nach dem Sturz ueber eine Kante auf (seit 0.34.146):
+    der Staub drueckt ringsum flach heraus, eine Wolke steigt, Gesteinsbrocken
+    und ein paar Blechteile springen, Funken unter den Raedern, ein Druckring.
+    Alles waechst mit der Fallhoehe `hoehe` (eine Ebene sind etwa 120 px)."""
+    r = _rnd(pos, 13)
+    x, y = pos[0], pos[1]
+    w = max(0.5, min(1.6, hoehe / 120.0))
+    ring(welt, x, y, ebene, 8, 70 + 50 * w, 0.5, (224, 204, 160))
+    staubwand(welt, r, x, y, ebene, 30 * w, int(14 + 10 * w), "staub", 220.0 + 80 * w, (5, 10), 1.6, dicht=1.4)
+    for _ in range(int(3 + 3 * w)):
+        rauch(welt, r, x + r.uniform(-12, 12), y + r.uniform(-9, 9), 2, ebene, "staub", 6, 14 + 4 * w, 2.0,
+              vz=r.uniform(14, 40), zaeh=1.3, dicht=1.4)
+    brockenwurf(welt, r, x, y, 2, ebene, int(6 + 6 * w), 160.0 + 60 * w, "stein", (1, 3), liegen=3.5)
+    brockenwurf(welt, r, x, y, 3, ebene, int(2 + 2 * w), 140.0, "metall", (1, 2), liegen=5.0)
+    funken(welt, r, x, y, 3, ebene, int(8 + 8 * w), 260.0, 0.35)
+    welt.ruckeln(3.0 + 4.0 * w, "sturz", pygame.Vector2(x, y), ebene)
+    welt.klang("absturz", min(1.0, 0.45 + 0.35 * w), pygame.Vector2(x, y), ebene)
+
+
 def raketenstart(welt, pos, ebene: int, code: float) -> None:
     """Eine Rakete verlaesst das Rohr. Vorn ein kurzer Feuerstoss; hinten der
     Rueckstrahl - wie bei einer Panzerfaust, nur viel mehr: ein Kegel aus
@@ -1022,6 +1043,7 @@ ARTEN = {
     "luft_mensch": lambda w, p, e, r: mensch_luft(w, p, e, r),         # r = Hoehe
     "fallschirm_riss": lambda w, p, e, r: schirm_reisst(w, p, e, *_seite_hoehe(r)),
     "absturz": lambda w, p, e, r: absturz(w, p, e),
+    "fahrzeug_aufprall": lambda w, p, e, r: fahrzeug_aufprall(w, p, e, r),  # r = Fallhoehe (seit 0.34.146)
     "flak_schuss": lambda w, p, e, r: flak_schuss(w, p, e, r),          # r = Richtung, Strecke, Hoehe
     "werfer_start": lambda w, p, e, r: raketenstart(w, p, e, r),       # r = Steilheit * 1000 + Richtung
     "werfer_gross": lambda w, p, e, r: werfer_explosion(w, p, e, r),   # r = Radius
