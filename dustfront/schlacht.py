@@ -1830,26 +1830,24 @@ class SchlachtTeil:
                 pygame.draw.circle(ziel, (232, 226, 210), q, n(2), n(1))
         # Fahrzeuge: eigene und unbesetzte in Sicht, feindliche in Sicht
         # oder markiert (mit Raute, sie bewegt sich mit).
+        from . import kartensymbole
         for b in getattr(self, "fahrzeuge", ()):
-            if getattr(b, "kaputt", False) or int(getattr(b, "ebene", 0)) != 0:
+            if getattr(b, "kaputt", False):
                 continue
             seite = getattr(b, "team", -1)
+            if seite not in (0, 1):
+                seite = getattr(b, "basis_team", -1)
             if getattr(b, "fahrer", None) is not None:
                 seite = getattr(b.fahrer, "team", seite)
             markiert = self.fahrzeug_fuer_mich_markiert(b)
             if seite != team and not sichtbar(b.pos) and not markiert:
                 continue
             q = punkt(b.pos)
-            vorn = pygame.Vector2(1, 0).rotate(getattr(b, "winkel", 0.0))
-            quer = pygame.Vector2(-vorn.y, vorn.x)
-            gross = 1.6 if getattr(b, "rechteckig", False) else 1.0
-            l, qq = 3.2 * gross * mm, 1.8 * gross * mm
-            mq = pygame.Vector2(q)
-            ecken = [mq + vorn * l + quer * qq, mq + vorn * l - quer * qq,
-                     mq - vorn * l - quer * qq, mq - vorn * l + quer * qq]
-            farbe = K.TEAMS["kombi"][seite]["hud"] if 0 <= seite < 2 else (214, 166, 70)
-            pygame.draw.polygon(ziel, farbe, ecken)
-            pygame.draw.polygon(ziel, (16, 11, 8), ecken, n(0.8))
+            # Seit 0.34.147 das Zeichen des Wagens (kartensymbole.py) in der Farbe
+            # seiner Seite; auf einer oberen Ebene blass (vorher fehlte er dort).
+            farbe = K.TEAMS["farben"][seite] if 0 <= seite < 2 else (214, 166, 70)
+            kartensymbole.zeichnen(ziel, b, q, f, farbe, K.MINIKARTE["zeichen_mindest"] * mm,
+                                   blass=int(getattr(b, "ebene", 0)) != 0)
             if markiert and seite != team:
                 self._ping(ziel, (q[0], q[1] - int(6 * mm)), mm)
             if b.art == "werfer":

@@ -60,6 +60,14 @@ C_TEAL_DK = (28, 96, 90)
 C_MUTED = (131, 108, 82)
 C_MUTED_DK = (84, 66, 49)
 C_RED = (203, 62, 42)
+# Die zwei Seiten (seit 0.34.147, gewuenscht: "klarere Farben ... sodass Orange
+# immer das eine und Blau immer das andere ist"): ROT ist Orange, BLAU ist
+# Blau - ueberall gleich, egal auf welcher Seite man selbst steht. Zombies gruen.
+C_TEAM_ORANGE = (255, 138, 30)
+C_TEAM_ORANGE_DK = (156, 72, 18)
+C_TEAM_BLAU = (52, 136, 255)
+C_TEAM_BLAU_DK = (26, 66, 142)
+C_ZOMBIE = (98, 214, 72)
 C_HULL = (170, 152, 112)
 C_HULL_DK = (108, 94, 66)
 C_HULL_SH = (58, 47, 32)
@@ -1483,15 +1491,16 @@ STANDARDRUNDE = dict(modus="team", karte="staubtal", ende_art="zeit",
 # noch dann, wenn beide klein und halb verdeckt sind.
 TEAMS = dict(
     namen=("ROT", "BLAU"),
-    farben=(C_ORANGE, C_TEAL),          # bleibt fuer bestehenden Code
-    dunkel=(C_RUST, C_TEAL_DK),
+    # Seit 0.34.147 klares Orange und klares Blau (vorher Orangerot und Tuerkis).
+    farben=(C_TEAM_ORANGE, C_TEAM_BLAU),
+    dunkel=(C_TEAM_ORANGE_DK, C_TEAM_BLAU_DK),
     kombi=(
         dict(name="ROT",
-             rumpf=(176, 88, 54), kante=(72, 30, 20), akzent=(248, 182, 92),
-             hud=C_ORANGE, hud_dunkel=C_RUST),
+             rumpf=(190, 98, 44), kante=(76, 34, 14), akzent=(255, 176, 76),
+             hud=C_TEAM_ORANGE, hud_dunkel=C_TEAM_ORANGE_DK),
         dict(name="BLAU",
-             rumpf=(82, 126, 146), kante=(24, 50, 62), akzent=(126, 230, 216),
-             hud=C_TEAL, hud_dunkel=C_TEAL_DK),
+             rumpf=(64, 106, 172), kante=(20, 36, 76), akzent=(122, 186, 255),
+             hud=C_TEAM_BLAU, hud_dunkel=C_TEAM_BLAU_DK),
     ),
 )
 
@@ -5726,6 +5735,13 @@ MINIKARTE = dict(
     # (mal dem Massstab der Karte). Gegner im Wagen nur, wenn ein Eigener
     # naeher als `sicht` px steht (oder er markiert ist).
     symbol_mass=2.2, symbol_mindest=5, symbol_hoechstens=16, sicht=650.0,
+    # Die Zeichen der Fahrzeuge (seit 0.34.147, kartensymbole.py): so breit wie
+    # der Wagen auf der Karte, aber nie kleiner als so viele Spielpixel - deutlich
+    # groesser als der Marker eines Spielers (gewuenscht).
+    zeichen_mindest=8.0,
+    # Die Marker der Leute (seit 0.34.147 kleiner): Radius eigener Leute und
+    # markierter Gegner, Groesse des eigenen Pfeils (Spielpixel).
+    leute_punkt=1.0, feind_raute=1.6, ich_pfeil=2.0,
     # Im Stoerkreis eines gegnerischen Funkwagens (seit 0.34.115): Rauschen
     # statt Punkte - dicht, das Bild wechselt `takt` mal je Sekunde unter
     # `bilder` Stellungen; ein heller Streifen wandert `streifen_tempo` mal
