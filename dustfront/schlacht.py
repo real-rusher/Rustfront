@@ -367,21 +367,25 @@ class SchlachtTeil:
         return 26.0
 
     def landeplatz_frei(self, art: str, pos, winkel: float = 0.0, ohne=None) -> bool:
-        """Kann hier etwas dieser Art landen, ohne auf etwas zu fallen?"""
-        e = self.welt.ebene(0)
+        """Kann hier etwas dieser Art landen, ohne auf etwas zu fallen? Auf der
+        obersten Ebene an diesem Ort (seit 0.34.146) - ueber einer Tafel auf
+        der Tafel."""
+        ebene = self.welt.oberste_ebene(pos)
+        e = self.welt.ebene(ebene)
         fuss = self.abwurf_fuss(art)
         if not (fuss <= pos.x < e.pixel_breite - fuss and fuss <= pos.y < e.pixel_hoehe - fuss):
             return False
         if art in fahrzeug_modul.ARTEN:
             probe = self._probe(art)
+            probe.ebene = ebene
             if not probe.passt(pygame.Vector2(pos), winkel):
                 return False
-            if self.welt.fahrwege.gebiet_bei(0, pos) < 0:
+            if self.welt.fahrwege.gebiet_bei(ebene, pos) < 0:
                 return False
-        elif not self.welt.frei(pygame.Vector2(pos), 12.0 if art == "mensch" else 16.0, 0):
+        elif not self.welt.frei(pygame.Vector2(pos), 12.0 if art == "mensch" else 16.0, ebene):
             return False
         for b in getattr(self, "fahrzeuge", ()):
-            if int(getattr(b, "ebene", 0)) != 0:
+            if int(getattr(b, "ebene", 0)) != ebene:
                 continue
             weite = fuss + max(float(getattr(b, "huelle_radius", 0.0)), float(b.radius))
             if b.pos.distance_squared_to(pos) < weite * weite:
@@ -433,11 +437,11 @@ class SchlachtTeil:
             stelle = self.freie_landestelle(ab.art, ab.pos, ab.winkel, ab)
             if stelle is not None:
                 ab.pos.update(stelle)
-        self.wegstossen(ab.pos, self.abwurf_fuss(ab.art))
+        self.wegstossen(ab.pos, self.abwurf_fuss(ab.art), ebene=self.welt.oberste_ebene(ab.pos))
 
-    def wegstossen(self, mitte, fuss: float, ausser=None) -> None:
+    def wegstossen(self, mitte, fuss: float, ausser=None, ebene: int = 0) -> None:
         """Alle Lebenden im Kreis `fuss` um `mitte` heraus an eine freie
-        Stelle, mit einem Stoss und etwas Schaden."""
+        Stelle, mit einem Stoss und etwas Schaden - auf der Ebene `ebene`."""
         a = S["abwurf"]
         mitte = pygame.Vector2(mitte)
         kandidaten = list(self.kaempfer.values()) + [
@@ -445,7 +449,7 @@ class SchlachtTeil:
             and getattr(w, "schiebbar", True) and not getattr(w, "ist_ausruestung", False)
             and w not in self.kaempfer.values()]
         for k in kandidaten:
-            if k is ausser or not getattr(k, "lebt", False) or int(getattr(k, "ebene", 0)) != 0:
+            if k is ausser or not getattr(k, "lebt", False) or int(getattr(k, "ebene", 0)) != ebene:
                 continue
             if getattr(k, "im_fahrzeug", False) or getattr(k, "schirm_hoehe", 0.0) > 0.0:
                 continue
@@ -459,7 +463,7 @@ class SchlachtTeil:
             ziel = None
             for dreh in (0, 30, -30, 60, -60, 90, -90, 120, -120, 150, -150, 180):
                 p = mitte + richtung.rotate(dreh) * (fuss + r + 6.0)
-                if self.welt.frei(p, r, 0):
+                if self.welt.frei(p, r, ebene):
                     ziel = p
                     break
             if ziel is not None:
@@ -474,24 +478,27 @@ class SchlachtTeil:
         w = self.welt
         self._abwurf_aufsetzen(ab)
         zone = ab.zone
-        wolke(w, ab.pos, 26, 160, 0.9, K.C_SAND_KORN, 0, 2, "bodenstaub", 360, 0)
-        w.ruckeln(2.5, "sturz", ab.pos, 0)
-        w.klang("buggy_tuer", 0.9, ab.pos, 0)
+        # Er landet auf dem obersten Boden (seit 0.34.146) - ueber einer Tafel
+        # auf der Tafel.
+        unten = w.oberste_ebene(ab.pos)
+        wolke(w, ab.pos, 26, 160, 0.9, K.C_SAND_KORN, unten, 2, "bodenstaub", 360, 0)
+        w.ruckeln(2.5, "sturz", ab.pos, unten)
+        w.klang("buggy_tuer", 0.9, ab.pos, unten)
         if ab.art in ("munition", "medkit"):
             from .mehrspieler import KampfBeute
             for i in range(S["abwurf"]["kisten"]):
                 p = ab.pos + pygame.Vector2(14, 0).rotate(i * 360.0 / S["abwurf"]["kisten"])
-                if not w.frei(p, 8.0, 0):
+                if not w.frei(p, 8.0, unten):
                     p = pygame.Vector2(ab.pos)     # nie in eine Mauer
-                w.dazu(KampfBeute(p, ab.art, 0, self.kaempfer))
+                w.dazu(KampfBeute(p, ab.art, unten, self.kaempfer))
             if zone in self.dropzonen:
                 self.dropzonen.remove(zone)
             return
-        b = fahrzeug_modul.neu(ab.art, ab.pos, 0, ab.winkel)
+        b = fahrzeug_modul.neu(ab.art, ab.pos, unten, ab.winkel)
         w.dazu(b)
         if hasattr(b, "aufbau"):
             b.aufbau = b.winkel
-        b.start = (pygame.Vector2(ab.pos), 0, ab.winkel)
+        b.start = (pygame.Vector2(ab.pos), unten, ab.winkel)
         b.basis_team = zone.team
         b.gekauft = zone.einmalig            # zaehlt fuer K.SCHLACHT hoechstens_je_seite
         b.dropzone = zone
@@ -499,7 +506,7 @@ class SchlachtTeil:
             # Gestuerzt (seit 0.34.118): der Schirm war ab, der Wagen schlaegt hart auf
             # und hat fast nichts mehr.
             b.leben = max(1.0, b.max_leben * K.FLAK["absturz_leben"])
-            w.explosion(pygame.Vector2(ab.pos), 0, 40.0, "absturz")
+            w.explosion(pygame.Vector2(ab.pos), unten, 40.0, "absturz")
         self.fahrzeuge.append(b)
         zone.fahrzeug = b
         if b.werte.get("nur_bot"):
@@ -639,12 +646,14 @@ class SchlachtTeil:
                     k.pos.update(stelle)
                     if hasattr(k, "vorher"):
                         k.vorher.update(stelle)
-            self.wegstossen(k.pos, 10.0, ausser=k)
+            # Auf dem obersten Boden (seit 0.34.146): ueber einer Tafel auf ihr.
+            k.ebene = self.welt.oberste_ebene(k.pos)
+            self.wegstossen(k.pos, 10.0, ausser=k, ebene=k.ebene)
             k.trefferbar = True
             k.schiebbar = True
             k.sprung_ort = None
             from .entities import wolke
-            wolke(self.welt, k.pos, 8, 60, 0.6, K.C_SAND_KORN, 0, 1, "bodenstaub", 360, 0)
+            wolke(self.welt, k.pos, 8, 60, 0.6, K.C_SAND_KORN, k.ebene, 1, "bodenstaub", 360, 0)
 
     def napalm_ende(self, start, richtung_punkt):
         """Wo die Bahn endet: immer gleich lang (laenge_anteil der Karten-
@@ -682,10 +691,13 @@ class SchlachtTeil:
             e = w.ebene(0)
             if not (0 <= ort.x < e.pixel_breite and 0 <= ort.y < e.pixel_hoehe):
                 continue
-            w.feuer.append(Brandflaeche(ort, 0, radius=radius, dauer=dauer, von=la.von, napalm=True))
-            w.explosion(ort, 0, 0.0, "feuer")
-            w.klang("napalm", 0.9, ort, 0)
-            w.laerm(ort, 0, la.von, 700.0)
+            # Auf dem obersten Boden (seit 0.34.146): ueber einer Tafel brennt es
+            # auf der Tafel, nicht im Fels darunter.
+            unten = w.oberste_ebene(ort)
+            w.feuer.append(Brandflaeche(ort, unten, radius=radius, dauer=dauer, von=la.von, napalm=True))
+            w.explosion(ort, unten, 0.0, "feuer")
+            w.klang("napalm", 0.9, ort, unten)
+            w.laerm(ort, unten, la.von, 700.0)
 
     def verstaerkung_weg(self) -> None:
         """Zur neuen Runde: die Fallschirmjaeger der alten gehen."""
@@ -1023,10 +1035,13 @@ class SchlachtTeil:
         """Die Zonen auf dem Boden: ein Achteck in der Farbe der Seite mit
         Eckwinkeln, Pfeile, die nach innen laufen, und in der Mitte, was
         kommt. Steht der Abwurf kurz bevor, pulsiert sie und zaehlt."""
-        if ebene != 0 or not self.dropzonen:
+        if not self.dropzonen:
             return
         zeit = self.welt.zeit if self.ist_gastgeber else self._zeit
         for z in self.dropzonen:
+            # Auf der Ebene, auf der der Abwurf landet (seit 0.34.146).
+            if self.welt.oberste_ebene(z.pos) != ebene:
+                continue
             p = z.pos - ecke
             if not (-80 < p.x < flaeche.get_width() + 80 and -80 < p.y < flaeche.get_height() + 80):
                 continue

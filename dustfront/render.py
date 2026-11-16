@@ -2724,6 +2724,11 @@ class Renderer:
         self.zustaende_zeichnen(ziel, welt, idx, ecke)
         self.flugleichen_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
         self.aufbauten_zeichnen(ziel, welt, idx, ecke, alpha, dunkel)
+        # Was das Gefecht auf seine Fahrzeuge setzt (Raketengestell, Funkmast,
+        # Beifahrer), mit dieser Ebene verkleinert und abgedunkelt (seit 0.34.146).
+        extra = self.__dict__.get("fahrzeug_aufbauten")
+        if extra is not None:
+            extra(ziel, idx, ecke, dunkel)
         self.laser_zeichnen(ziel, welt, idx, ecke)
         self.stehende_nachholen()
         # Nach den Mauern (seit 0.34.87, gemeldet: "die Aufladung des

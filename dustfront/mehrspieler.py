@@ -1677,20 +1677,25 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             return alt[1]
         eigen, feind = "team%d" % team, "team%d" % (1 - team)
         sicht2 = K.WERFER["salve"]["sicht"] ** 2
+        # Auf jeder Ebene (seit 0.34.146): wer auf einer Tafel steht, sieht
+        # dort und ist dort ein Ziel - Steilfeuer trifft die oberste Ebene.
+        # Nur wer unter freiem Himmel steht, ist von oben zu treffen.
+        w = self.welt
         freunde = [k for k in self.kaempfer.values()
-                   if k.lebt and not k.am_boden and k.ebene == 0 and getattr(k, "team", -1) == team]
+                   if k.lebt and not k.am_boden and getattr(k, "team", -1) == team]
         gegner = [k for k in self.kaempfer.values()
-                  if k.lebt and not k.am_boden and k.ebene == 0 and getattr(k, "team", -1) == 1 - team]
+                  if k.lebt and not k.am_boden and getattr(k, "team", -1) == 1 - team
+                  and w.unter_freiem_himmel(k)]
         gegner += [b for b in self.fahrzeuge
-                   if b.lebt and not b.kaputt and b.ebene == 0
+                   if b.lebt and not b.kaputt and w.unter_freiem_himmel(b)
                    and fahrzeug_modul.seite_von(b) == feind]
         orte = []
         for g in gegner:
             gesehen = getattr(g, "markiert_rest", 0.0) > 0.0 and getattr(g, "markiert_fuer", "") == eigen
             if not gesehen:
                 for f in freunde:
-                    if (f.pos.distance_squared_to(g.pos) <= sicht2
-                            and self.welt.sicht_frei(f.pos, g.pos, 0)):
+                    if (f.ebene == g.ebene and f.pos.distance_squared_to(g.pos) <= sicht2
+                            and self.welt.sicht_frei(f.pos, g.pos, g.ebene)):
                         gesehen = True
                         break
             if gesehen:
@@ -1741,7 +1746,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         sicht = float(K.SCHLACHT["karte_sicht"]) + z["sicht_rand"]
         zonen = []
         for k in self.kaempfer.values():
-            if not k.lebt or int(k.ebene) != 0:
+            if not k.lebt:                         # jede Ebene (seit 0.34.146)
                 continue
             if getattr(k, "team", -1) == team:
                 zonen.append((pygame.Vector2(k.pos), sicht, "sicht"))
@@ -1749,7 +1754,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                   and getattr(k, "markiert_fuer", "") == eigen):
                 zonen.append((pygame.Vector2(k.pos), z["feind"], "feind"))
         for b in getattr(self, "fahrzeuge", ()):
-            if (not b.kaputt and b.ebene == 0 and getattr(b, "markiert_rest", 0.0) > 0.0
+            if (not b.kaputt and getattr(b, "markiert_rest", 0.0) > 0.0
                     and getattr(b, "markiert_fuer", "") == eigen):
                 zonen.append((pygame.Vector2(b.pos), z["feind"], "feind"))
         for _t, pos, r, t_team in self.__dict__.get("_werfer_spuren", ()):
@@ -1863,8 +1868,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
 
     def _werfer_einschlag(self, b, p) -> None:
         s = K.WERFER["salve"]
-        self.welt.explosion(p, b.ebene, 1.0, "einschlag", b.fahrer)
-        self.flaechenschaden(p, b.ebene, s["radius"], s["schaden"], s["fahrzeug"], b.fahrer, "werfer",
+        # Steilfeuer kommt von oben: es trifft den obersten Boden am Zielort
+        # (seit 0.34.146) - Gegner auf einer Tafel, nicht den Fels darunter.
+        unten = self.welt.oberste_ebene(p)
+        self.welt.explosion(p, unten, 1.0, "einschlag", b.fahrer)
+        self.flaechenschaden(p, unten, s["radius"], s["schaden"], s["fahrzeug"], b.fahrer, "werfer",
                              s["volltreffer"])
 
     def _werfer_zeichnen_boden(self, flaeche, ebene: int, ecke) -> None:
@@ -1875,12 +1883,16 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         t = self.welt.zeit
         mein = None
         ich = self.ich
+        w = self.welt
         for b in self.fahrzeuge:
-            if b.art != "werfer" or b.kaputt or b.ebene != ebene:
+            if b.art != "werfer" or b.kaputt:
                 continue
             if ich is not None and ich.im_fahrzeug and ich.pos.distance_squared_to(b.pos) < 9.0:
                 mein = b
             for e in b.einschlaege:
+                # Auf der Ebene, auf der sie einschlagen (seit 0.34.146).
+                if w.oberste_ebene((e[1], e[2])) != ebene:
+                    continue
                 m = pygame.Vector2(e[1], e[2]) - ecke
                 if not (-80 < m.x < flaeche.get_width() + 80 and -80 < m.y < flaeche.get_height() + 80):
                     continue
@@ -1893,8 +1905,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 pygame.draw.circle(surf, K.C_RED + (200,), c, int(r), 1)
                 pygame.draw.circle(surf, (255, 236, 200, 220), c, max(2, int(r * rest)), 1)
                 flaeche.blit(surf, (m.x - c[0], m.y - c[1]))
-        if mein is not None and mein.aufgebaut:
-            p = self.app.eingabe.ziel_welt(self.kamera, ich.pos) - ecke
+        zeiger = self.app.eingabe.ziel_welt(self.kamera, ich.pos) if mein is not None else None
+        if mein is not None and mein.aufgebaut and w.oberste_ebene(zeiger) == ebene:
+            p = zeiger - ecke
             farbe = K.C_TEAL if mein.ziel_grund == 0 else K.C_RED
             pygame.draw.circle(flaeche, farbe, (int(p.x), int(p.y)), int(s["streu"]), 1)
             pygame.draw.line(flaeche, farbe, (p.x - 5, p.y), (p.x + 5, p.y))
@@ -1916,7 +1929,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         noch = set()
         w_, h_ = ziel.get_width(), ziel.get_height()
         for b in self.fahrzeuge:
-            if b.art != "werfer" or b.kaputt or b.ebene != self.blick:
+            # In der Luft sieht man sie von jeder Ebene (seit 0.34.146).
+            if b.art != "werfer" or b.kaputt:
                 continue
             for e in b.einschlaege:
                 if e[0] > s["flug"]:
@@ -1934,7 +1948,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                         qx = alt + (q - alt) * i / float(max(1, n))
                         px, py, pz, _g, _k = bahn(qx)
                         if -200 < px - ecke.x < w_ + 200 and -200 < py - pz - ecke.y < h_ + 200:
-                            effekte.rauchspur(self.welt, px, py, pz, b.ebene,
+                            effekte.rauchspur(self.welt, px, py, pz, self.welt.oberste_ebene((px, py)),
                                               int(qx * 1000) + int(e[1]) * 7 + e[4])
                     spur[schluessel] = q
                 sx, sy = x - ecke.x, y - ecke.y - z
@@ -6895,9 +6909,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             self._letzte_ebene = self.ich.ebene
             self.blick = self.ich.ebene
             self.blick_rest = 0.0
-            if self.ich.flug <= 0:
+            wagen = getattr(self.ich, "fahrzeug", None) or getattr(self.ich, "mitfahrt", None)
+            gleitet = getattr(wagen, "hoch_oben", False) or getattr(wagen, "flug", 0.0) > 0.0
+            if self.ich.flug <= 0 and not gleitet:
                 # Treppe, Luke, Aufzug: sofort dort, das alte Bild blendet
-                # aus (K.EBENENWECHSEL). Ein Sturz sinkt weiter mit.
+                # aus (K.EBENENWECHSEL). Ein Sturz sinkt weiter mit - und im
+                # Tragschrauber ueber einer Kante oder im fallenden Wagen
+                # gleitet die Ansicht (seit 0.34.146), statt zu springen.
                 self.blick_hoehe = float(self.welt.hoehe(self.ich.ebene))
                 self._ueberblendung.starten()
                 # Der Aufzug setzt eine Kachel weiter ab. Die Kamera geht
@@ -7792,20 +7810,23 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         # lag alles davon ueber der ganzen Welt, auch ueber Mauern und
         # Plateaus.
         gast = not self.ist_gastgeber
-        self.renderer.welt_zeichnen(
-            ziel, self.welt, self.kamera, misch,
-            self.blick_hoehe, blick=self.blick,
-            boden=self._kreis_zeichnen,
-            oben_aus=not self.obere_zeigen,
-            figuren=(lambda f, i, e: self._fremde_figuren(f, i, e, misch)) if gast else None,
-            luft=(lambda f, i, e: self._fremde_luft(f, i, e, misch)) if gast else None,
-            anzeige=(lambda f, i, e: self._fremde_anzeige(f, i, e, misch)) if gast else None)
+        # Gestell, Mast und Beifahrer je Ebene (seit 0.34.146, luft.py).
+        self.renderer.fahrzeug_aufbauten = (
+            lambda f, i, e, d: self.fahrzeug_aufbauten_zeichnen(f, i, e, d, misch))
+        try:
+            self.renderer.welt_zeichnen(
+                ziel, self.welt, self.kamera, misch,
+                self.blick_hoehe, blick=self.blick,
+                boden=self._kreis_zeichnen,
+                oben_aus=not self.obere_zeigen,
+                figuren=(lambda f, i, e: self._fremde_figuren(f, i, e, misch)) if gast else None,
+                luft=(lambda f, i, e: self._fremde_luft(f, i, e, misch)) if gast else None,
+                anzeige=(lambda f, i, e: self._fremde_anzeige(f, i, e, misch)) if gast else None)
+        finally:
+            self.renderer.fahrzeug_aufbauten = None
         if gast:
             self._fremde_fallende(ziel, misch)
         self._drohnen_zeichnen(ziel, misch)
-        self._beifahrer_zeichnen(ziel, misch)
-        self._werfer_gestelle_zeichnen(ziel, misch)
-        self._funkmasten_zeichnen(ziel, misch)
         self._luftfahrzeuge_zeichnen(ziel, misch)
         self._raketen_zeichnen(ziel)
         if self.schlacht or self.__dict__.get("nachschub_an"):

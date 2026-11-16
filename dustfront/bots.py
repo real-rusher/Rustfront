@@ -461,7 +461,7 @@ class BotHirn(Taktik):
         bekommt ein Bot seinen Zielfehler (K.BOTS luft_fehler)."""
         k, g = self.k, self.g
         if (feuern or (self.ziel is not None and self.ziel_ok(self.ziel))
-                or k.ebene != 0 or not hasattr(g, "luft_ziele")
+                or not hasattr(g, "luft_ziele")
                 or k._waffe_lesen().get("art") != "schuss"):
             self._luft_lz = None
             return ziel_punkt, feuern

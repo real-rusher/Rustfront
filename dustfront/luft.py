@@ -119,7 +119,9 @@ class LuftTeil:
         visuell klarer sein, wann man in die Luft schiesst und wann nicht").
         Beim Gastgeber und beim Gast aus dem, was beide kennen."""
         ich = self.ich
-        if ich is None or not ich.lebt or getattr(ich, "ebene", 0) != 0 or self.pausiert:
+        # Von jeder Ebene aus (seit 0.34.146): auch von einer Tafel schiesst man
+        # in die Luft. Vorher nur von Ebene 0.
+        if ich is None or not ich.lebt or self.pausiert:
             return
         maus = self.app.zu_spiel(pygame.mouse.get_pos())
         welt_maus = self.kamera.zu_welt(maus)
@@ -159,8 +161,6 @@ class LuftTeil:
         Luftziels, das `k` treffen darf und das nicht zu seiner Seite gehoert,
         rastet sein Ziel auf den Ort darunter ein."""
         k.luft_ziel = None
-        if getattr(k, "ebene", 0) != 0:
-            return
         ziel = getattr(k, "ziel", None)
         if ziel is None:
             return
@@ -325,8 +325,11 @@ class LuftTeil:
                 if e[0] <= 0.0:
                     b.bomben_fall.remove(e)
                     p = pygame.Vector2(e[1], e[2])
-                    self.welt.explosion(p, b.ebene, bo["radius"], "bombe", b.fahrer)
-                    self.flaechenschaden(p, b.ebene, bo["radius"], bo["schaden"], bo["fahrzeug"],
+                    # Sie schlaegt auf dem obersten Boden dort ein (seit 0.34.146):
+                    # ueber einer Tafel auf der Tafel, nicht im Fels darunter.
+                    unten = self.welt.oberste_ebene(p)
+                    self.welt.explosion(p, unten, bo["radius"], "bombe", b.fahrer)
+                    self.flaechenschaden(p, unten, bo["radius"], bo["schaden"], bo["fahrzeug"],
                                          b.fahrer, "bombe", bo["volltreffer"])
             if b.in_der_luft and b.bomben < f["bomben"] and not b.bomben_fall:
                 # Auch in der Luft laden die Bomben nach (seit 0.34.135, gemeldet:
@@ -348,8 +351,16 @@ class LuftTeil:
             return
         eigen, feind = "team%d" % team, "team%d" % (1 - team)
         r = K.TRAGSCHRAUBER["aufklaerung"]
-        for z in list(self.welt.nahe(b.pos, r + 60.0, b.ebene)):
+        w = self.welt
+        # Von oben sieht er auf jeder Ebene, was unter freiem Himmel steht
+        # (seit 0.34.146) - auch auf einer Tafel, ueber die er fliegt.
+        kandidaten = []
+        for i in range(len(w.ebenen)):
+            kandidaten.extend(w.nahe(b.pos, r + 60.0, i))
+        for z in kandidaten:
             if z is b or not z.lebt or z.pos.distance_to(b.pos) > r:
+                continue
+            if not w.unter_freiem_himmel(z):
                 continue
             seite = (fahrzeug_modul.seite_von(z) if getattr(z, "ist_fahrzeug", False)
                      else getattr(z, "fraktion", None))
@@ -372,15 +383,30 @@ class LuftTeil:
                 return k
         return None
 
-    def _beifahrer_zeichnen(self, ziel, misch: float) -> None:
+    def fahrzeug_aufbauten_zeichnen(self, ziel, ebene: int, ecke, dunkel, misch: float) -> None:
+        """Was auf einem Fahrzeug sitzt und mit ihm am Boden steht - Beifahrer
+        im Krad, Raketengestell, Funkmast. Seit 0.34.146 je Ebene mit deren
+        Inhalt gezeichnet (Renderer.fahrzeug_aufbauten): auf einer anderen
+        Ebene als der angeschauten wird es mit ihr verkleinert, abgedunkelt
+        und verdeckt wie der Wagen selbst. Vorher fehlte es dort ganz - vom
+        Tafelrand aus stand ein Werfer im Tal ohne Gestell."""
+        self._beifahrer_zeichnen(ziel, misch, ebene, ecke, dunkel)
+        self._werfer_gestelle_zeichnen(ziel, misch, ebene, ecke, dunkel)
+        self._funkmasten_zeichnen(ziel, misch, ebene, ecke, dunkel)
+
+    def _dunkel_oder(self, bild, dunkel):
+        return bild if dunkel is None else self.renderer.dunkel(bild, dunkel)
+
+    def _beifahrer_zeichnen(self, ziel, misch: float, ebene=None, ecke=None, dunkel=None) -> None:
         """Der Beifahrer sitzt im Beiwagen und zeigt seine Waffe in die Richtung,
         in die er zielt - nur so weit, wie der Sitz es erlaubt (K.KRAD
         `beifahrer_bogen`). Er wird mit dem Krad gezeichnet, aus dessen Lage,
         damit er nicht neben dem Beiwagen schwebt."""
-        ecke = self.kamera.ecke
+        ecke = self.kamera.ecke if ecke is None else ecke
+        ebene = self.blick if ebene is None else ebene
         r = self.renderer
         for b in self.fahrzeuge:
-            if b.art != "krad" or b.kaputt or b.ebene != self.blick:
+            if b.art != "krad" or b.kaputt or b.ebene != ebene or getattr(b, "flug", 0.0) > 0.0:
                 continue
             k = self._beifahrer_im_krad(b)
             if k is None:
@@ -392,38 +418,41 @@ class LuftTeil:
             name = k.bild
             if not name:
                 continue
-            s = r.bilder.gedreht(name, b.beifahrer_klemmen(k.winkel))
+            s = self._dunkel_oder(r.bilder.gedreht(name, b.beifahrer_klemmen(k.winkel)), dunkel)
             ziel.blit(s, s.get_rect(center=(int(round(sitz.x)), int(round(sitz.y)))))
 
     # ---- Das Raketengestell des Werfers (seit 0.34.120) -------------------------
-    def _werfer_gestelle_zeichnen(self, ziel, misch: float) -> None:
+    def _werfer_gestelle_zeichnen(self, ziel, misch: float, ebene=None, ecke=None, dunkel=None) -> None:
         """Das Raketengestell (art_werfer.py, seit 0.34.126 klassisch gemalt): fuer
         jede Richtung und Steilheit neu gemalt, mit Schatten auf der Pritsche.
         Es dreht sich weich zum Zeiger und richtet die Rohre nach der
         Entfernung auf. Beim Gastgeber und beim Gast (Zustand aus der Meldung)."""
         from .art_werfer import gestell_zugeschnitten
-        ecke = self.kamera.ecke
+        ecke = self.kamera.ecke if ecke is None else ecke
+        ebene = self.blick if ebene is None else ebene
         for b in self.fahrzeuge:
-            if b.art != "werfer" or b.kaputt or b.ebene != self.blick:
+            if b.art != "werfer" or b.kaputt or b.ebene != ebene or getattr(b, "flug", 0.0) > 0.0:
                 continue
             p = b.zeichenpos(misch) - ecke
             if not (-120 < p.x < ziel.get_width() + 120 and -120 < p.y < ziel.get_height() + 120):
                 continue
             mitte = p + pygame.Vector2(b.werte["rohr"]).rotate(b.winkel)
             bild, bv, schatten, sv = gestell_zugeschnitten(b.gestell_winkel(), b.erhebung(), b.rohre)
+            bild = self._dunkel_oder(bild, dunkel)
             ziel.blit(schatten, (int(round(mitte.x + sv[0])), int(round(mitte.y + sv[1]))))
             ziel.blit(bild, (int(round(mitte.x + bv[0])), int(round(mitte.y + bv[1]))))
 
     # ---- Der Mast des Funkwagens (seit 0.34.124) ------------------------------
-    def _funkmasten_zeichnen(self, ziel, misch: float) -> None:
+    def _funkmasten_zeichnen(self, ziel, misch: float, ebene=None, ecke=None, dunkel=None) -> None:
         """Mast, Peilkopf und Abspannseile des Funkwagens als 3D-Modell
         (art_funkmast.py), mit Schatten: der Mast liegt eingepackt auf dem
         Dach, richtet sich beim Aufbau auf, faehrt aus, der Kopf klappt auf
         und dreht sich. Beim Gastgeber und beim Gast (aus `fortschritt`)."""
         from .art_funkmast import MITTE, funkmast_zugeschnitten, schatten_zugeschnitten
-        ecke = self.kamera.ecke
+        ecke = self.kamera.ecke if ecke is None else ecke
+        ebene = self.blick if ebene is None else ebene
         for b in self.fahrzeuge:
-            if b.art != "funkwagen" or b.kaputt or b.ebene != self.blick:
+            if b.art != "funkwagen" or b.kaputt or b.ebene != ebene or getattr(b, "flug", 0.0) > 0.0:
                 continue
             p = b.zeichenpos(misch) - ecke
             if not (-140 < p.x < ziel.get_width() + 140 and -140 < p.y < ziel.get_height() + 140):
@@ -431,8 +460,10 @@ class LuftTeil:
             fuss = p + pygame.Vector2(b.werte["mast"]).rotate(b.winkel)
             mx, my = fuss.x + MITTE[0], fuss.y + MITTE[1]
             kopf = getattr(b, "kopf", 0.0)
-            for teil, (vx, vy) in (schatten_zugeschnitten(b.winkel, b.fortschritt, kopf),
-                                   funkmast_zugeschnitten(b.winkel, b.fortschritt, kopf)):
+            for i, (teil, (vx, vy)) in enumerate((schatten_zugeschnitten(b.winkel, b.fortschritt, kopf),
+                                                  funkmast_zugeschnitten(b.winkel, b.fortschritt, kopf))):
+                if i == 1:
+                    teil = self._dunkel_oder(teil, dunkel)
                 ziel.blit(teil, (int(round(mx + vx)), int(round(my + vy))))
 
     # ---- Zeichnen (Gastgeber und Gast) -----------------------------------------
@@ -445,7 +476,9 @@ class LuftTeil:
         for b in self.fahrzeuge:
             # Ein Wrack nur, solange es noch faellt (seit 0.34.127); am Boden
             # zeichnet es der Renderer wie jedes Wrack.
-            if b.art != "tragschrauber" or (b.kaputt and b.hoehe <= 2.0) or b.ebene != self.blick:
+            # In der Luft ueber allem und von jeder Ebene zu sehen (seit 0.34.146);
+            # am Boden nur auf der angeschauten Ebene (dort steht sein Rotor).
+            if b.art != "tragschrauber" or (b.kaputt and b.hoehe <= 2.0) or (b.ebene != self.blick and not b.hoch_oben):
                 continue
             p = b.zeichenpos(misch) - ecke
             if not (-120 < p.x < ziel.get_width() + 120 and -200 < p.y < ziel.get_height() + 200):

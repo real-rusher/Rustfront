@@ -1010,6 +1010,12 @@ def _seite_hoehe(radius: float) -> tuple:
 
 
 # Art -> Aufruf (welt, pos, ebene, radius). Was der Radius traegt, steht dabei.
+# Was in der Luft platzt (der Ort ist der Boden darunter, der Radius die
+# Hoehe): Welt.explosion legt es auf die oberste Ebene an diesem Ort (seit
+# 0.34.146) - so steht es ueber einer Tafel mit ihr im Bild.
+LUFT_ARTEN = frozenset(("flak", "luft_kiste", "luft_mensch", "fallschirm_riss", "bombe_los",
+                        "heli_treffer"))
+
 ARTEN = {
     "flak": lambda w, p, e, r: flak(w, p, e, r),                       # r = Hoehe
     "luft_kiste": lambda w, p, e, r: kiste_platzt(w, p, e, r),         # r = Hoehe

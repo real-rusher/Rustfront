@@ -2126,7 +2126,11 @@ TRAGSCHRAUBER = dict(
     # gerade (Mauer, Fels), verliert es den Schwung (`abprall`: so viel kommt
     # zurueck) und rutscht dort herunter. Am Boden schlaegt es auf.
     absturz=dict(schwere=230.0, bremse=0.35, drehen=150.0, rauch_takt=0.05, abprall=0.18,
-                 zurueck=96.0),       # so weit (px) sucht es rueckwaerts einen Platz zum Liegen
+                 zurueck=96.0,        # so weit (px) sucht es rueckwaerts einen Platz zum Liegen
+                 # Eine Ebene Unterschied, in der Hoehe des Bildes (seit 0.34.146): ueber
+                 # einer Kante faellt das Wrack so viel tiefer; an einer hoeheren Tafel
+                 # prallt es ab, ausser es ist noch so hoch darueber.
+                 ebene_px=40.0),
 )
 
 # Der Flakwagen (seit 0.34.114): ein Laster mit einem Vierling auf der

@@ -2525,6 +2525,10 @@ class Tragschrauber(Buggy):
         e = self.welt.ebene(self.ebene)
         self.pos.x = max(8.0, min(e.pixel_breite - 8.0, self.pos.x))
         self.pos.y = max(8.0, min(e.pixel_hoehe - 8.0, self.pos.y))
+        # Er folgt dem Gelaende (seit 0.34.146): in der Luft gehoert er zur
+        # obersten Ebene unter sich - ueber einer Tafel zur Tafel. So landet er
+        # dort, wo man ihn sieht, und Insassen schauen auf diese Ebene.
+        self.ebene = self.welt.oberste_ebene(self.pos)
         self.geschw = self.vorn * self.flug_v
         self.tempo.update(self.geschw)
         if self.landen:
@@ -2603,7 +2607,16 @@ class Tragschrauber(Buggy):
         e = w.ebene(self.ebene)
         neu.x = max(8.0, min(e.pixel_breite - 8.0, neu.x))
         neu.y = max(8.0, min(e.pixel_hoehe - 8.0, neu.y))
-        if self.geschw.length_squared() > 1.0 and w.kachel_hoehe(neu, self.ebene) >= self.hoehe:
+        # Ueber eine Kante (seit 0.34.146): tiefer unten faellt es weiter, an
+        # einer hoeheren Tafel prallt es ab wie an einer Mauer - ausser es
+        # ist noch hoch genug, um darueber hinwegzukommen.
+        unten = w.oberste_ebene(neu)
+        stufe = a["ebene_px"] * (unten - self.ebene)
+        wand = stufe > 0.0 and self.hoehe <= stufe
+        if unten != self.ebene and not wand:
+            self.ebene = unten
+            self.hoehe = max(0.0, self.hoehe - stufe)
+        if self.geschw.length_squared() > 1.0 and (wand or w.kachel_hoehe(neu, self.ebene) >= self.hoehe):
             # Dagegen geprallt: Funken und Splitter an der Wand, der Schwung
             # ist weg (ein wenig zurueck), es faellt an der Wand herunter.
             if self.geschw.length() > 40.0:

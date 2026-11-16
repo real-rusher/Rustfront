@@ -639,7 +639,12 @@ class Welt:
             self.klang("hammer_boden", 1.0, pos, ebene)
             return
         if art in effekte_modul.ARTEN:
-            # Seit 0.34.122 im eigenen Effektsystem (effekte.py).
+            # Seit 0.34.122 im eigenen Effektsystem (effekte.py). Was in der
+            # Luft passiert, gehoert seit 0.34.146 zur obersten Ebene unter
+            # dem Ort (`oberste_ebene`): ueber einer Tafel steht die Wolke mit
+            # der Tafel im Bild, nicht unter ihrem Fels im Tal.
+            if art in effekte_modul.LUFT_ARTEN and (art != "flak" or radius > 1.0):
+                ebene = self.oberste_ebene(pos)      # eine Flakwolke am Boden bleibt, wo sie ist
             effekte_modul.ARTEN[art](self, pos, ebene, radius)
             return
         if art == "emp":
@@ -1724,6 +1729,26 @@ class Welt:
         return True, fest
 
     # ---- Ebenenwechsel --------------------------------------------------
+    def oberste_ebene(self, pos) -> int:
+        """Die oberste Ebene, die an diesem Ort Boden hat - was man von oben
+        sieht (seit 0.34.146). Alles, was aus der Luft kommt, kommt hier an:
+        Bomben, Raketen, Napalm, Abwuerfe, Fallschirmjaeger, ein landender
+        oder abstuerzender Tragschrauber. Ueber einer Tafel ist das die Tafel;
+        die Ebene darunter ist dort Fels. Leer und Loch zaehlen nicht, Mauern
+        und Fels schon (sie sind die Oberseite dieser Ebene)."""
+        tx, ty = int(pos[0] // K.TILE), int(pos[1] // K.TILE)
+        for i in range(len(self.ebenen) - 1, 0, -1):
+            e = self.ebenen[i]
+            if not (0 <= tx < e.breite and 0 <= ty < e.hoehe):
+                continue
+            if e.kachel(tx, ty) != K.LEER and not e.loch(tx, ty):
+                return i
+        return 0
+
+    def unter_freiem_himmel(self, wesen) -> bool:
+        """Steht es oben auf seiner Stelle - sieht man es aus der Luft?"""
+        return self.oberste_ebene(wesen.pos) == int(getattr(wesen, "ebene", 0))
+
     def loch_unter(self, wesen) -> bool:
         """Steht das Wesen ueber einem Loch, unter dem es eine Ebene gibt?"""
         if wesen.ebene <= 0:
