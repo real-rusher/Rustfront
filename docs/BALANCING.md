@@ -6,6 +6,9 @@ stehen nur Buggy, Panzer und Panzerwagen fest auf der Karte - daran aendert
 sich nichts. Alle Zahlen stehen in `dustfront/config.py` (`SCHLACHT`), die
 Logik in `dustfront/schlacht.py` (Abschnitt "Freischalten und Balancing").
 
+Vorschlaege fuer Waffen, Fahrzeuge und Rundenablauf, die noch nicht
+eingebaut sind, mit Messungen: `docs/BALANCE_VORSCHLAEGE.md` (Stand 0.34.147).
+
 ## Grundsaetze
 
 * **Preis folgt Wirkung** - wie viel es zerstoert, wie weit es wirkt, wie
