@@ -919,7 +919,8 @@ class App:
 
             self._rechnen(echt, bild_dauer)
 
-            alpha = self._rest / K.FIXED_DT
+            # Begrenzt auf 0..1: pygame-ce wirft bei lerp sonst einen Fehler.
+            alpha = min(1.0, max(0.0, self._rest / K.FIXED_DT))
             self.hochaufgeloest = []
             self.flaeche.fill(K.C_VOID)
             for szene in self._sichtbar():
@@ -971,7 +972,12 @@ class App:
                 self.klaenge.versatz = schritte * abstand
                 for szene in self._aktive():
                     szene.schritt(K.FIXED_DT)
-                self._rest -= K.FIXED_DT
+                # Nie unter null (seit 0.34.152, gemeldet: Absturz "Argument 2
+                # must be in range [0, 1]" in lerp): ruft ein Schritt takt_neu()
+                # auf (Rundenstart nach langem Aufbau), steht der Rest schon auf
+                # null - ein weiterer Abzug machte ihn negativ, und das Bild
+                # danach ueberblendete mit -1.
+                self._rest = max(0.0, self._rest - K.FIXED_DT)
                 schritte += 1
         finally:
             # Was zwischen den Bildern klingt (Menue, Tasten), sofort.

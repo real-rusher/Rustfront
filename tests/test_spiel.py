@@ -21465,6 +21465,41 @@ os.environ["PATH"] = _alt150[2]
 _on150._gefunden.clear(); _on150._lader.clear()
 _on150.alle_beenden()
 
+# ══════════════════════════════════════════════════════════════════
+print("\n-- 0.34.152: kein Absturz, wenn ein Schritt die Uhr neu stellt")
+# Gemeldet: "ValueError: Argument 2 must be in range [0, 1]" in
+# Wesen.zeichenpos (lerp) - ein Schritt rief takt_neu() (Rundenstart nach
+# langem Aufbau), danach wurde noch ein Schritt abgezogen, der Rest war
+# negativ und das Bild ueberblendete mit -1.
+from dustfront.core import App as _App152, Szene as _Szene152
+_app152 = _App152("T152", None, headless=True)
+_alphas152 = []
+class _Start152(_Szene152):
+    bilder = 0
+    def schritt(self, dt):
+        self.app.takt_neu()
+    def zeichnen(self, ziel, alpha):
+        _alphas152.append(alpha)
+        pygame.Vector2(0, 0).lerp(pygame.Vector2(1, 1), alpha)   # wirft ausserhalb 0..1
+        _Start152.bilder += 1
+        if _Start152.bilder >= 6:
+            self.app.laeuft = False
+_app152.schieben(_Start152(_app152))
+_app152.uhr.tick()
+time.sleep(0.03)                                      # mehrere Schritte faellig
+_fehler152 = ""
+try:
+    _app152.laufen(beenden=False)
+except ValueError as e_:
+    _fehler152 = str(e_)
+pruef("Stellt ein Schritt die Uhr neu, bleibt der Bildanteil zwischen 0 und 1",
+      not _fehler152 and _alphas152 and all(0.0 <= a_ <= 1.0 for a_ in _alphas152)
+      and _app152._rest >= 0.0, _fehler152 or str(_alphas152))
+_app152._rest = 0.0
+_app152.stapel[:] = [_Start152(_app152)]
+pruef("... und nach takt_neu wird im selben Bild nichts mehr nachgerechnet",
+      _app152._rechnen(K.FIXED_DT * 3.5, K.FIXED_DT * 3.5) == 1 and _app152._rest == 0.0)
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()
