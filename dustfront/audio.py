@@ -1815,3 +1815,108 @@ class Klaenge:
                 pygame.mixer.stop()
             except pygame.error:
                 pass
+
+
+# ══════════════════════════════════════════════════════════════════
+# Die Toene des Hauptmenues
+# ══════════════════════════════════════════════════════════════════
+
+class MenueTon:
+    """Die kurzen Toene des Hauptmenues (Auswahl, Bestaetigen, Zurueck ...).
+
+    Bis 0.34.150 eine eigene Klasse in rustfront_menu.py mit eigenem
+    Mischer-Aufruf und eigenen Konstanten fuer Rate und Puffer. Seit
+    0.34.151 hier: derselbe Mischer wie im Spiel (RATE, K.AUDIO puffer -
+    wer ihn zuerst oeffnet, legt ihn fest), dieselbe Lautstaerke (GESAMT
+    und EFFEKTE aus den Einstellungen des Spiels). Die Toene selbst sind
+    unveraendert.
+    """
+
+    def __init__(self, opt) -> None:
+        self.opt = opt
+        self.ok = False
+        self.sounds: dict = {}
+        try:
+            if pygame.mixer.get_init() is None:
+                pygame.mixer.init(frequency=RATE, size=-16, channels=2, buffer=K.AUDIO["puffer"])
+            self.ok = pygame.mixer.get_init() is not None
+        except pygame.error:
+            self.ok = False
+        if not self.ok:
+            return
+        try:
+            self.sounds["move"] = self._ton(660, 45, 0.22, "square", sweep=0.25)
+            self.sounds["enter"] = self._akkord([(330, 55), (495, 90)], 0.28)
+            self.sounds["back"] = self._ton(220, 90, 0.24, "square", sweep=-0.4)
+            self.sounds["deny"] = self._ton(110, 130, 0.26, "saw", sweep=-0.15)
+            self.sounds["tick"] = self._ton(880, 25, 0.14, "square")
+            self.sounds["boot"] = self._ton(140, 220, 0.20, "saw", sweep=1.6)
+        except Exception:               # noqa: BLE001  ohne Ton geht das Menue trotzdem
+            self.ok = False
+            return
+        self.lautstaerke_setzen()
+
+    @staticmethod
+    def _welle(art, phase):
+        if art == "square":
+            return 1.0 if phase < 0.5 else -1.0
+        if art == "saw":
+            return 2.0 * phase - 1.0
+        if art == "noise":
+            return random.uniform(-1.0, 1.0)
+        return math.sin(2.0 * math.pi * phase)
+
+    def _ton(self, freq, ms, vol, art="square", sweep=0.0):
+        n = max(1, int(RATE * ms / 1000.0))
+        buf = array.array("h")
+        phase = 0.0
+        attack = max(1, int(RATE * 0.003))
+        for i in range(n):
+            f = freq * (1.0 + sweep * (i / n))
+            phase = (phase + f / RATE) % 1.0
+            env = (1.0 - i / n) ** 1.5
+            env *= min(1.0, i / attack)
+            s = int(max(-1.0, min(1.0, self._welle(art, phase) * env * vol)) * 32000)
+            buf.append(s)
+            buf.append(s)
+        return pygame.mixer.Sound(buffer=buf.tobytes())
+
+    def _akkord(self, teile, vol):
+        gesamt = sum(p[1] for p in teile)
+        n = max(1, int(RATE * gesamt / 1000.0))
+        buf = array.array("h")
+        idx, acc, phase = 0, 0, 0.0
+        for i in range(n):
+            while idx < len(teile) - 1 and i > acc + RATE * teile[idx][1] / 1000.0:
+                acc += RATE * teile[idx][1] / 1000.0
+                idx += 1
+            phase = (phase + teile[idx][0] / RATE) % 1.0
+            env = min(1.0, (1.0 - i / n) * 2.2) * min(1.0, i / 200.0)
+            s = int(max(-1.0, min(1.0, self._welle("square", phase) * env * vol)) * 32000)
+            buf.append(s)
+            buf.append(s)
+        return pygame.mixer.Sound(buffer=buf.tobytes())
+
+    def lautstaerke_setzen(self) -> None:
+        if not self.ok:
+            return
+        m = self.opt["ton_gesamt"] / 100.0
+        for s in self.sounds.values():
+            s.set_volume(m * self.opt["ton_effekte"] / 100.0 * 0.9)
+
+    def spielen(self, name) -> None:
+        if not self.ok:
+            return
+        snd = self.sounds.get(name)
+        if snd is not None:
+            try:
+                snd.play()
+            except pygame.error:
+                pass
+
+    def ausklingen(self) -> None:
+        if self.ok:
+            try:
+                pygame.mixer.fadeout(400)
+            except pygame.error:
+                pass

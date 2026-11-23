@@ -95,8 +95,7 @@ def eckwinkel(ziel, rect, farbe=K.C_AMBER, laenge=8, schnitt=5):
         pygame.draw.line(ziel, farbe, a, b, 1)
 
 
-def tafel(ziel, rect, titel: str = "", rahmen=K.C_LINE if hasattr(K, "C_LINE")
-          else K.C_MUTED_DK, fuellung=(9, 6, 5, 238)):
+def tafel(ziel, rect, titel: str = "", rahmen=K.C_MUTED_DK, fuellung=(9, 6, 5, 238)):
     """Grosse Flaeche mit Eckwinkeln und einer Lasche auf der Oberkante."""
     rect = pygame.Rect(rect)
     kasten(ziel, rect, rahmen, fuellung, 6)

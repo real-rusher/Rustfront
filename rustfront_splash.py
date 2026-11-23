@@ -483,7 +483,7 @@ class SplashAudio:
         self.gain = 0.7
         if app is not None:
             try:
-                self.gain = (app.settings.vol_master / 100.0) * (app.settings.vol_sfx / 100.0)
+                self.gain = (app.opt["ton_gesamt"] / 100.0) * (app.opt["ton_effekte"] / 100.0)
             except Exception:
                 pass
         if not self.ok:
@@ -666,7 +666,7 @@ def main() -> int:
         if KARTEN_AN.get(k, True):
             print("  %-11s %.2f s  (Original %.1f s)" % (NAMEN[k], karten_dauer(k), LENS[k]))
     play(app)
-    app.audio.shutdown()
+    app.audio.ausklingen()
     pygame.quit()
     return 0
 

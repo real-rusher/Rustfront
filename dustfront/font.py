@@ -2,8 +2,13 @@
 DUSTFRONT - Schrift
 ===================
 
-Dieselbe 5x7-Pixelschrift wie im Menue, damit HUD und Menue zusammenpassen.
-Liegt hier im Paket, damit das Spiel ohne das Menue laeuft.
+Die 5x7-Pixelschrift fuer HUD, Menues des Spiels und das Hauptmenue.
+
+Bis 0.34.150 hatte das Hauptmenue (rustfront_menu.py) eine eigene Kopie
+davon - Zeichen fuer Zeichen dieselbe, nur um ein paar Zeichen reicher.
+Seit 0.34.151 gibt es sie nur hier: SCHRIFT fuer das Spiel, MENUE_SCHRIFT
+fuer das Hauptmenue (mit den Zeichen aus _G_MENUE und echten runden
+Klammern).
 """
 
 from __future__ import annotations
@@ -91,6 +96,29 @@ _G = {
 _TRANS = {"\u00e4": "\u00c4", "\u00f6": "\u00d6", "\u00fc": "\u00dc", "\u00df": "\u1e9e",
           "(": "[", ")": "]"}
 
+# Was nur das Hauptmenue zeigt (seit 0.34.151 hier statt in einer eigenen
+# Schrift in rustfront_menu.py): Pfeile, Anfuehrungszeichen, & und echte
+# runde Klammern. GRUND fuer die Trennung: darstellbar() - und damit, was
+# in einem Spielernamen erlaubt ist - fragt nur _G; das bleibt, wie es war.
+_G_MENUE = {
+    "(": "00110/01000/01000/01000/01000/01000/00110",
+    ")": "01100/00010/00010/00010/00010/00010/01100",
+    ";": "00000/01100/01100/00000/01100/00100/01000",
+    "\\": "10000/10000/01000/00100/00010/00001/00001",
+    "'": "00100/00100/00000/00000/00000/00000/00000",
+    '"': "01010/01010/00000/00000/00000/00000/00000",
+    "|": "00100/00100/00100/00100/00100/00100/00100",
+    "&": "01100/10010/10100/01000/10101/10010/01101",
+    "\u00b0": "01100/10010/01100/00000/00000/00000/00000",
+    "\u25b2": "00100/00100/01110/01110/11111/11111/00000",
+    "\u25bc": "00000/11111/11111/01110/01110/00100/00100",
+    "\u25ba": "01000/01100/01110/01111/01110/01100/01000",
+    "\u25c4": "00010/00110/01110/11110/01110/00110/00010",
+    "\u2022": "00000/00000/01110/01110/01110/00000/00000",
+}
+# Pfeile und Punkt fuer die Fusszeilen des Hauptmenues.
+HOCH, RUNTER, RECHTS, LINKS, PUNKT = "\u25b2", "\u25bc", "\u25ba", "\u25c4", "\u2022"
+
 
 # Umlaut -> Grundbuchstabe. Die Punkte kommen zwei Pixel ueber die Zeile.
 _PUNKTE = {"\u00c4": "A", "\u00d6": "O", "\u00dc": "U"}
@@ -108,16 +136,24 @@ def darstellbar(zeichen: str) -> bool:
 
 
 class Schrift:
-    def __init__(self) -> None:
-        self._rows = {k: v.split("/") for k, v in _G.items()}
+    def __init__(self, menue: bool = False) -> None:
+        zeichen = dict(_G, **_G_MENUE) if menue else _G
+        self._rows = {k: v.split("/") for k, v in zeichen.items()}
         self._cache: dict[tuple, pygame.Surface] = {}
+        # Das Hauptmenue zeigt runde Klammern als runde Klammern.
+        self._trans = {k: v for k, v in _TRANS.items() if k not in "()"} if menue else _TRANS
 
     @staticmethod
     def vorbereiten(text: str) -> str:
+        """Wie das Spiel den Text zeigt (Grossbuchstaben, Umlaute, Klammern)."""
         return "".join(_TRANS.get(c, c.upper() if c.isalpha() else c) for c in text)
 
+    def _vorbereitet(self, text: str) -> str:
+        trans = self._trans
+        return "".join(trans.get(c, c.upper() if c.isalpha() else c) for c in text)
+
     def breite(self, text: str, skala=1, abstand=1) -> int:
-        n = len(self.vorbereiten(text))
+        n = len(self._vorbereitet(text))
         return 0 if n == 0 else n * (GW + abstand) * skala - abstand * skala
 
     def flaeche(self, text: str, farbe, skala=1, abstand=1) -> pygame.Surface:
@@ -125,7 +161,7 @@ class Schrift:
         hit = self._cache.get(key)
         if hit is not None:
             return hit
-        t = self.vorbereiten(text)
+        t = self._vorbereitet(text)
         # Mit Umlaut ist die Flaeche oben um UEBER hoeher; zeichnen() setzt
         # sie entsprechend hoeher an, die Grundlinie bleibt, wo sie war.
         oben = UEBER if any(c in _PUNKTE for c in t) else 0
@@ -190,3 +226,4 @@ class Schrift:
 
 
 SCHRIFT = Schrift()
+MENUE_SCHRIFT = Schrift(menue=True)

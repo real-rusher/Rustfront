@@ -423,13 +423,26 @@ pruef("Die Waffenplaetze liegen ueber den zwei Hinweiszeilen",
 import importlib
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 RM = importlib.import_module("rustfront_menu")
-RM.SETTINGS_PATH = Path(_WEG) / "rustfront_settings.json"
-_au = RM.Audio(RM.Settings())
+from dustfront import audio as _AU151, font as _FO151
+_au = RM.MenueTon(E.Einstellungen())
 pruef("Das Hauptmenue spielt keinen Dauerton mehr (seit 0.34.136: das Brummen ist weg)",
-      not hasattr(_au, "drone") and not hasattr(RM.Audio, "start_drone")
+      not hasattr(_au, "drone") and not hasattr(RM.MenueTon, "start_drone")
       and all(k_.get_length() < 0.5 for k_ in _au.sounds.values()),
       str({n_: round(k_.get_length(), 2) for n_, k_ in _au.sounds.items()}))
-pruef("... und oeffnet den Mischer mit demselben Puffer wie das Spiel", RM.MIX_PUFFER == K.AUDIO["puffer"])
+# Seit 0.34.151 ein Baukasten: Schrift, Farben, Tafeln, Einstellungen und
+# Toene des Hauptmenues sind die des Spiels, keine eigenen Kopien mehr.
+pruef("... und seine Toene kommen aus dem Spiel (derselbe Mischer, kein eigener Puffer)",
+      RM.MenueTon is _AU151.MenueTon and not hasattr(RM, "MIX_PUFFER") and not hasattr(RM, "Audio"))
+pruef("Das Hauptmenue hat keine eigene Schrift, Farben, Tafeln oder Einstellungsdatei mehr",
+      RM.FONT is _FO151.MENUE_SCHRIFT and not hasattr(RM, "PixelFont") and not hasattr(RM, "_GLYPHS")
+      and RM.C_LINE == K.C_LINE and RM.C_AMBER == K.C_AMBER and not hasattr(RM, "Settings")
+      and not hasattr(RM, "SETTINGS_PATH") and not hasattr(RM, "SAVE_PATH")
+      and RM.ui.ecken is __import__("dustfront.ui", fromlist=["ecken"]).ecken)
+pruef("... die Menueschrift ist die des Spiels, mit runden Klammern und & (fuer Namen bleibt es beim alten)",
+      _FO151.MENUE_SCHRIFT.breite("KLASSE & WAFFEN") == _FO151.SCHRIFT.breite("KLASSE & WAFFEN")
+      and _FO151.SCHRIFT.vorbereiten("(A)") == "[A]" and not _FO151.darstellbar("&")
+      and pygame.image.tobytes(_FO151.MENUE_SCHRIFT.flaeche("ZURÜCK 12", (9, 9, 9)), "RGBA")
+      == pygame.image.tobytes(_FO151.SCHRIFT.flaeche("ZURÜCK 12", (9, 9, 9)), "RGBA"))
 
 # Vorab uebersetzen (seit 0.34.137, gemeldet: auf schwachen Rechnern beim
 # ersten Start jeder Version ein langer schwarzer Schirm vor der ersten Runde).
@@ -454,16 +467,15 @@ app.opt["bildrate"] = 144
 app.opt["ton_gesamt"] = 40
 app.opt["fenstermodus"] = "randlos"
 app.opt.speichern()
-_rm = RM.Settings()
-pruef("Das Hauptmenue zeigt die Werte aus dem Spiel",
-      RM.BILDRATEN[_rm.fps_index] == 144 and _rm.vol_master == 40 and _rm.fullscreen,
-      "%s / %s" % (RM.BILDRATEN[_rm.fps_index], _rm.vol_master))
-_rm.set("vol_sfx", 30)
+_rm = RM.App(headless=True)
+pruef("Das Hauptmenue liest die Einstellungen des Spiels selbst (keine eigene Datei)",
+      _rm.opt["bildrate"] == 144 and _rm.opt["ton_gesamt"] == 40 and _rm.vollbild,
+      "%s / %s" % (_rm.opt["bildrate"], _rm.opt["ton_gesamt"]))
+_rm.apply_display = lambda: None             # das Fenster der Pruefung bleibt, wie es ist
+_rm.toggle_fullscreen()
 _neu = E.Einstellungen()
-pruef("Und schreibt, was man dort aendert, ins Spiel",
-      _neu["ton_effekte"] == 30, str(_neu["ton_effekte"]))
-pruef("Ohne etwas anderes umzustellen (RANDLOS bleibt RANDLOS)",
-      _neu["fenstermodus"] == "randlos" and _neu["bildrate"] == 144,
+pruef("F11 im Hauptmenue schreibt ins Spiel, ohne etwas anderes umzustellen",
+      _neu["fenstermodus"] == "fenster" and _neu["bildrate"] == 144 and _neu["ton_gesamt"] == 40,
       "%s / %s" % (_neu["fenstermodus"], _neu["bildrate"]))
 _zeilen = dict(RM.steuerung_zeilen())
 pruef("Die Steuerung im Hauptmenue ist die des Spiels",
@@ -482,13 +494,19 @@ pruef("Hauptmenue: Spielen, Ausruestung, Konto, Einstellungen, Hilfe",
        "EINSTELLUNGEN", "SO SPIELST DU", "BEENDEN"} <= set(_labels), str(_labels))
 pruef("Jeder Punkt hat eine Erklaerung",
       all(it.info for it in _hm.items if isinstance(it, RM.Action)))
-pruef("Roehrenbild, Intro und Brummen kommen aus dem Spiel",
-      {"crt", "splash", "vol_ambient"} <= set(RM.GETEILT))
 app.opt["menue_crt"] = False
 app.opt["intro"] = False
+app.opt["spielername"] = "KRAEHE"
 app.opt.speichern()
-_rm2 = RM.Settings()
-pruef("... und das Hauptmenue uebernimmt sie", _rm2.crt is False and _rm2.splash is False)
+_rm2 = RM.App(headless=True)
+pruef("Roehrenbild und Intro kommen aus dem Spiel", _rm2.opt["menue_crt"] is False
+      and RM.run_splash(_rm2) == "aus")
+_rm2.boot_done, _rm2.boot_t = False, 3.0
+_rm2.draw_boot(_rm2.canvas)
+_gruss = pygame.Surface((RM.VW, RM.VH)); _gruss.blit(_rm2.canvas, (0, 0))
+_rm2.canvas.fill((0, 0, 0)); _rm2.opt["spielername"] = ""; _rm2.draw_boot(_rm2.canvas)
+pruef("Beim Start gruesst es mit dem Namen aus dem Spiel, nicht mehr mit PILOT",
+      pygame.image.tobytes(_gruss, "RGB") != pygame.image.tobytes(_rm2.canvas, "RGB"))
 app.opt.zuruecksetzen_werte()
 app.opt.speichern()
 pruef("Die Einstellungen des Spiels kennen sie", {"menue_crt", "intro", "ton_menue"} <= set(E.VORGABE))

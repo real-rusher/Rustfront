@@ -60,6 +60,15 @@ C_TEAL_DK = (28, 96, 90)
 C_MUTED = (131, 108, 82)
 C_MUTED_DK = (84, 66, 49)
 C_RED = (203, 62, 42)
+# Seit 0.34.151 hier statt in rustfront_menu.py: was nur das Hauptmenue
+# braucht (Boden der Hintergrundszene, Linien und Tafeln).
+C_AMBER_LT = (250, 208, 133)
+C_GROUND = (33, 23, 16)
+C_GROUND_DK = (23, 15, 11)
+C_GROUND_LT = (46, 33, 23)
+C_PANEL = (14, 10, 8)
+C_LINE = (74, 52, 34)
+C_LINE_DK = (46, 32, 21)
 # Die zwei Seiten (seit 0.34.147, gewuenscht: "klarere Farben ... sodass Orange
 # immer das eine und Blau immer das andere ist"): ROT ist Orange, BLAU ist
 # Blau - ueberall gleich, egal auf welcher Seite man selbst steht. Zombies gruen.

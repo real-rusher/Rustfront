@@ -137,10 +137,10 @@ def bauen(ziel_ordner=None) -> list:
     start.fill(HIMMEL)
     start.blit(zeichen, ((breite - GROESSE) // 2, 0))
     skala = 3
-    w = rm.FONT.width(rm.SPIEL_TITEL, skala, 2)
+    w = rm.FONT.breite(rm.SPIEL_TITEL, skala, 2)
     x, y = (breite - w) // 2, GROESSE + 8
-    rm.FONT.draw(start, rm.SPIEL_TITEL, x, y, rm.C_CREAM, skala, spacing=2,
-                 shadow=(62, 26, 12))
+    rm.FONT.zeichnen(start, rm.SPIEL_TITEL, x, y, rm.C_CREAM, skala, abstand=2,
+                     schatten=(62, 26, 12))
     unten = y + 8 * skala
     pygame.draw.rect(start, rm.C_ORANGE, (x, unten, w, 2))
     pygame.draw.rect(start, rm.C_AMBER, (x, unten, 30, 2))

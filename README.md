@@ -6,7 +6,7 @@ Ausrüstung, Steuerung und Darstellung an.
 
 Geschrieben in Python mit pygame-ce. Schulprojekt, in Arbeit.
 
-**Aktuell: Version 0.34.150, PRE-ALPHA.** Was das heisst, steht weiter unten
+**Aktuell: Version 0.34.151, PRE-ALPHA.** Was das heisst, steht weiter unten
 unter [Versionsnummern](#versionsnummern).
 
 ## Mitwirkende
@@ -588,7 +588,7 @@ und verschwinden, sobald man mit dem Mausrad woanders hinschaut.
 
 ## Dateien
 
-Aussen liegt das Menü, innen das Spiel. Beides läuft auch einzeln.
+Aussen liegt das Menü, innen das Spiel. Das Spiel läuft auch allein (`python -m dustfront`); das Menü baut seit 0.34.151 auf dem Paket auf.
 
 | Datei | Inhalt |
 | --- | --- |
@@ -599,7 +599,7 @@ Aussen liegt das Menü, innen das Spiel. Beides läuft auch einzeln.
 | `ios/bauen.sh` | Baut auf dem Mac die App für iPhone und iPad (Anleitung `ios/LIESMICH.md`) |
 | `ios/aufspielen.sh` | Baut, signiert, spielt die App auf ein angestecktes iPhone oder iPad und startet sie, ohne Klick in Xcode |
 | `ios/start.py` | Einstieg der App auf iOS |
-| `rustfront_menu.py` | Hauptmenü, Kaltstart, Optionen, Spielstand, Einstiegspunkt |
+| `rustfront_menu.py` | Hauptmenü, Kaltstart, Einstiegspunkt (zeichnet mit Schrift, Farben und Tafeln aus `dustfront`) |
 | `rustfront_splash.py` | Ablauf, Zeitdehnung und Klangsynthese der Splash-Sequenz |
 | `splash_engine.py` | Zeichenwerk der Splash-Sequenz, portiert aus der Web-Fassung |
 
@@ -715,8 +715,10 @@ reparieren. Kaputte oder unbekannte Einträge werden verworfen und durch die
 Vorgabe ersetzt; eine beschädigte Datei kostet höchstens die eine
 Einstellung, die kaputt ist, nie den Start.
 
-Das alte Menü legt daneben weiter `rustfront_settings.json` und
-`rustfront_save.json` im Spielordner ab. Beide stehen in der `.gitignore`.
+Auch das Hauptmenü liest und schreibt seit 0.34.151 nur diese Datei. Wer
+noch `rustfront_settings.json` oder `rustfront_save.json` aus einer alten
+Fassung im Spielordner hat, kann beide löschen; sie stehen in der
+`.gitignore`.
 
 ## Texturen und Klänge
 
@@ -856,6 +858,7 @@ Die Phase hängt nur davon ab, wie weit das Spiel ist, nicht von der Nummer.
 
 | Version | Was dazukam |
 | --- | --- |
+| 0.34.151 | **Ein Baukasten fuer alle Menues.** Gewuenscht: die zwei Menue-Baukaesten zusammenfuehren. Das Hauptmenue (`rustfront_menu.py`) hatte aus der Zeit, als es allein laufen sollte, von allem eine eigene Kopie: Pixelschrift (Zeichen fuer Zeichen dieselbe), Farben, Tafeln mit Eckwinkeln, eine eigene Einstellungsdatei (`rustfront_settings.json`, die es mit der des Spiels abglich), einen Demo-Spielstand, einen eigenen Tonerzeuger mit eigenem Mischerpuffer und Eingabeelemente (Regler, Textfeld, Schalter, Auswahl), die seit 0.34.79 keine Seite mehr benutzte. Jetzt gibt es jedes davon nur einmal: `dustfront/font.py` (`MENUE_SCHRIFT` mit den Zusatzzeichen des Menues und echten runden Klammern; was in Namen erlaubt ist, bleibt wie es war), Farben aus `config.py`, Tafeln aus `ui.py`, Einstellungen nur noch die des Spiels, Toene in `dustfront.audio.MenueTon`. `rustfront_menu.py` ist dabei um rund 1000 Zeilen kuerzer. Aussehen und Bedienung bleiben (alle Seiten pixelgleich verglichen); zwei kleine Unterschiede: beim Start gruesst es mit dem Spielernamen aus dem Spiel statt immer mit PILOT, und zu lange Eintraege (LOBBY ERSTELLEN) enden wie im Spiel mit > statt mitten im Wort. Das Menue laeuft nicht mehr ohne das Paket `dustfront` (es liegt immer daneben). Pruefungen in `tests/test_menues.py` angepasst. **Netz/LAN: unveraendert**, Karten: unveraendert; wegen der Versionspruefung brauchen Gastgeber und Gast 0.34.151. |
 | 0.34.150 | **cloudflared wird beim Online-Spiel geladen, toter Code ist raus.** (1) **cloudflared nicht mehr im Spiel** (das waren 58 MB fuer drei Systeme, jeder brauchte eines): beim ersten Spiel ueber das Internet - Lobby aufmachen mit ONLINE-LOBBY oder mit einem Code beitreten - laedt das Spiel genau das passende vom offiziellen Release (Windows, macOS Apple/Intel, jetzt auch Linux x86-64 und ARM64), prueft Datei und Programm gegen die Pruefsummen in `K.ONLINE` und legt es in den Datenordner; danach nie wieder. Dazu ein **Ladebild mit Fortschrittsbalken** und Megabytes ueber der Lobby oder der Lobbysuche (`ladebild.py`), **ESC bricht ab**. Tunnel und Zugang warten solange im Zustand "laedt" und starten danach von selbst; scheitert das Laden, steht der Grund da, wo sonst der Code steht. Ein installiertes cloudflared geht vor. Wer es schon aus 0.34.13-0.34.149 ausgepackt hat, laedt nichts. Die Pruefungen laden nie aus dem Netz (`DUSTFRONT_OHNE_LADEN`). (2) **Toter Code entfernt** (gewuenscht): rund 20 nie aufgerufene Funktionen, eine doppelte `Gefecht._mein_wagen` (gegolten hat immer nur die zweite), unbenutzte Importe und Variablen, und `tests/_tx_tmp.py` (eine alte Kopie von `test_spiel.py`, 227 KB). Was noch einmal nuetzlich sein koennte, steht mit Code in `docs/ENTFERNT.md`. (3) **Behoben**: mit GPU SKALIERT las pygame beim Umstellen der Anzeige freigegebenen Speicher (SCALED zu SCALED bei vergroessertem Fenster, mit valgrind gefunden; konnte selten abstuerzen) - jetzt geht es ueber ein gewoehnliches Fenster dazwischen. Pruefungen in `tests/test_spiel.py` (Abschnitt 0.34.150, GPU-Abschnitt 0.34.90) und `tests/test_pruefung.py`. **Netz/LAN: Protokoll unveraendert**; geaendert ist, woher cloudflared kommt (`online.py`) und in `mehrspieler.py` nur Aufraeumen und das Ladebild beim Einschalten von ONLINE-LOBBY. Wegen der Versionspruefung brauchen Gastgeber und Gast 0.34.150. Karten: unveraendert. |
 | 0.34.149 | **BILD AUF DER GPU wird ein eigener Schalter, und schneller gerechnet ohne Aenderung am Spiel.** (1) Das Zusammensetzen des Bildes auf der Grafikkarte aus 0.34.148 ist jetzt **optional**: EINSTELLUNGEN > VIDEO > **BILD AUF DER GPU** (unter GPU SKALIERT, wirkt nur mit ihm), Vorgabe **aus**. Aus ist alles wie vor 0.34.148 (BESTE QUALITAET bleibt dann ganz beim Prozessor). (2) **Rechenzeit**, gewuenscht: "solange es absolut nichts am Gameplay aendert": die Reichweite der Wagen beim Schieben einmal je Schritt statt zweimal je Paar (`Gefecht._fahrzeuge_schieben`); Gefahren und Granaten sucht nicht mehr jeder Bot in allen Wesen, sondern in einem je Schritt gemerkten Auszug (`Welt.wesen_auszug`, fragt nur die Klasse; neu gebaut, sobald ein Wesen dazukommt); `braucht_schutz` ohne getattr fuer die Felder, die ein Kaempfer immer hat; die Rauchfackeln der Dropzonen rechnen ihre Farbe je Stufe einmal und die festen Werte vor der Schleife. Gemessen: Simulation bei 48 je Seite rund 4 % schneller, die Fackeln einer Dropzone rund 15 % billiger beim Zeichnen. **Nachgewiesen gleich**: 8 Gefechte (alle Karten, SCHLACHT, TEAM, PVE, PVPVE, HUEGEL) je 60 s mit festem Zufall ergeben Schritt fuer Schritt denselben Zustand wie 0.34.148 (Hash ueber alle Kaempfer, Wagen und Wesen), 160 Bilder an Dropzonen sind pixelgleich. Pruefungen in `tests/test_spiel.py` (Abschnitt 0.34.149, GPU-Abschnitt 0.34.90 angepasst). **Netz/LAN: unveraendert**; Gefecht und Bots rechnen dasselbe, nur schneller. Wegen der Versionspruefung brauchen Gastgeber und Gast 0.34.149. Karten: unveraendert. |
 | 0.34.148 | **GRAFIKKARTE setzt das Bild zusammen, auch mit BESTE QUALITAET.** Mit GRAFIKKARTE SKALIERT an zeichnet jetzt der Renderer der Grafikkarte (`pygame._sdl2.video`) das Bild ins Fenster (`core.App._gpu_ausgeben`): mit BESTE QUALITAET kommt die Weltleinwand als Textur in voller Fensteraufloesung, die Anzeige als zweite Textur darueber, Hochaufgeloestes (Minikarte) als weitere. Vorher schloss BESTE QUALITAET die Grafikkarte aus, und der Prozessor zog die Leinwand auf Fenstergroesse (bei 1920 x 1080 der groesste Brocken von `ausgeben`, rund 6 ms je Bild); auf dem Prozessor bleibt nur das Hochladen der Leinwand und das Heraustrennen der Anzeige. Ohne Renderer bleibt alles beim alten Weg. Texturen werden vor jedem Neuanlegen des Fensters und vor dem Beenden freigegeben (`gpu_freigeben`), sonst gibt SDL sie doppelt frei. Hilfetexte von GRAFIKKARTE und BESTE QUALITAET angepasst. Pruefungen in `tests/test_spiel.py` (Abschnitt 0.34.90, Bild wird jetzt aus dem Renderer in Fenstergroesse gelesen). **Netz/LAN: unveraendert** (nur Darstellung; in `mehrspieler.py` nur, wann BESTE QUALITAET greift), wegen der Versionspruefung brauchen Gastgeber und Gast trotzdem 0.34.148. Karten: unveraendert. |
@@ -1182,8 +1185,8 @@ pygame.mixer.music.set_volume(app.settings.vol_ambient / 100.0)
 pygame.mixer.music.play(-1)          # -1 = endlos wiederholen
 ```
 
-Der vorhandene Regler REAKTORBRUMM in den Optionen steuert dann auch die
-Musik, dafür muss `Audio.apply_volumes` die Lautstärke mitsetzen.
+Der Regler MUSIK in den Einstellungen (AUDIO) ist dafür schon da; die
+Töne des Hauptmenüs (`dustfront.audio.MenueTon`) folgen GESAMT und EFFEKTE.
 
 ## Einbinden ins Spiel
 
@@ -1191,11 +1194,12 @@ Musik, dafür muss `Audio.apply_volumes` die Lautstärke mitsetzen.
 from rustfront_menu import run_menu
 
 ergebnis = run_menu()
-# {"action": "new_game" | "continue" | "quit",
-#  "region": ..., "difficulty": ..., "callsign": ...}
+# {"action": "new_game" | "mehrspieler" | "testmodus" | "einstellungen" | ... | "quit"}
 ```
 
 Seit 0.12.0 ist das eingebaut: `spiel_scene()` in `rustfront_menu.py` ruft
 `dustfront.main.aus_menue()` auf und holt danach den Anzeigemodus des
-Menüs zurück. Fehlt das Paket `dustfront`, bleibt es bei der
-Platzhalter-Szene - das Menü läuft weiterhin auch allein.
+Menüs zurück. Seit 0.34.151 zeichnet das Menü mit den Bausteinen des
+Spiels (Schrift, Farben, Tafeln aus `dustfront`, Einstellungen des
+Spiels, Töne aus `dustfront.audio`) - allein, ohne das Paket, läuft es
+nicht mehr; das Paket liegt immer daneben.
