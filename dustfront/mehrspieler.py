@@ -3875,18 +3875,26 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         oft an leer stehenden Wagen haengen."""
         f = K.SCHIEBEN
         gew = f["gewicht"]
+        # Die Reichweite je Wagen einmal je Schritt (seit 0.34.149): vorher
+        # zweimal je Paar neu gerechnet, 10 % eines ganzen Schritts. Sie
+        # haengt nur an Art und Werten, nicht an der Lage - geschoben wird
+        # unten nur die Lage, das Ergebnis ist also dasselbe.
+        reichweite = None
         for a in self.fahrzeuge:
             if (a.fahrer is None or a.kaputt or a.nur_bild or getattr(a, "luft", False)
                     or abs(getattr(a, "gas", 0.0)) < f["gas"]):
                 continue
+            if reichweite is None:
+                reichweite = {id(v): self._fahrzeug_reichweite(v) for v in self.fahrzeuge}
             ga = gew.get(a.art, 2)
             richtung = a.vorn * (1.0 if a.gas > 0 else -1.0)
             probe = a.pos + richtung * 4.0
             kreise = a.kreise(probe)
+            ra = reichweite[id(a)]
             for b in self.fahrzeuge:
                 if b is a or b.nur_bild or b.ebene != a.ebene or getattr(b, "luft", False):
                     continue
-                weit = self._fahrzeug_reichweite(a) + self._fahrzeug_reichweite(b) + 12.0
+                weit = ra + reichweite[id(b)] + 12.0
                 if b.pos.distance_squared_to(a.pos) > weit * weit:
                     continue
                 gb = gew.get(b.art, 2)

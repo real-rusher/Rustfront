@@ -225,6 +225,12 @@ def bot_seltenes(waffen: list, wurf: str, rnd):
     return raus, wurf
 
 
+def _gefahr_moeglich(w) -> bool:
+    """Kann `w` fuer BotHirn._gefahren_sammeln je zaehlen? Fragt nur, was
+    sich an einem Wesen nie aendert: Ausruestung oder etwas zum Zuenden."""
+    return bool(getattr(w, "ist_ausruestung", False)) or hasattr(w, "zuenden")
+
+
 class BotHirn(Taktik):
     """Was ein Bot denkt. Liefert je Schritt eine Eingabemeldung. Funk und
     Taktik (flankieren, niederhalten, stuermen) stehen in bottaktik.py."""
@@ -2795,7 +2801,10 @@ class BotHirn(Taktik):
             return raus                  # was fliegt und liegt, sieht er nicht
         sicht = K.BOTS["granate_sieht"]
         fliegt = set()
-        for w in welt.wesen:
+        # Nur Ausruestung und Zuendbares kommt unten an (seit 0.34.149 einmal
+        # je Schritt herausgesucht, Welt.wesen_auszug) - die Pruefungen
+        # darunter sind dieselben wie vorher.
+        for w in welt.wesen_auszug("gefahr", _gefahr_moeglich):
             if not w.lebt or w.ebene != k.ebene or w is k:
                 continue
             art = getattr(w, "art", "")

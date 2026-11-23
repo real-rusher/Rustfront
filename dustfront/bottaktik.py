@@ -97,6 +97,23 @@ def kampffaehig(w) -> bool:
 
 def braucht_schutz(x) -> bool:
     """Braucht dieser Kamerad gerade Feuerschutz?"""
+    # Schneller Weg (seit 0.34.149): ein Kaempfer hat diese Felder immer;
+    # jeder Bot fragt das je Schritt fuer jeden Kameraden, und getattr mit
+    # Vorgabe kostet doppelt. Fehlt eines, unten wie bisher - das Lesen
+    # aendert nichts, die Antwort ist dieselbe.
+    try:
+        if x.am_boden or x.nachlade_rest > 0.0:
+            return True
+        if x.zieht is not None or x.hilft is not None:
+            return True
+        if x.leben < K.BOTS["deckung_leben"]:
+            return True
+    except AttributeError:
+        return _braucht_schutz_langsam(x)
+    return _braucht_schutz_hirn(x)
+
+
+def _braucht_schutz_langsam(x) -> bool:
     if getattr(x, "am_boden", False) or getattr(x, "nachlade_rest", 0.0) > 0.0:
         return True
     # Wer einen Gefallenen zieht oder ihm aufhilft, hat keine Hand frei
@@ -105,6 +122,10 @@ def braucht_schutz(x) -> bool:
         return True
     if getattr(x, "leben", 100.0) < K.BOTS["deckung_leben"]:
         return True
+    return _braucht_schutz_hirn(x)
+
+
+def _braucht_schutz_hirn(x) -> bool:
     hirn = getattr(x, "hirn", None)
     if hirn is not None:
         if (getattr(hirn, "taktik", None) or {}).get("art") == "flanke":

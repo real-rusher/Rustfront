@@ -1123,12 +1123,21 @@ class SchlachtTeil:
 
     def _rauch_farbe(self, freund: bool, alter: float, hell: float) -> tuple:
         """Frisch leuchtet der Rauch in der Farbe der Fackel, alt wird er grau."""
-        d = S["dropzone"]
-        kern = d["rauch_freund"] if freund else d["rauch_feind"]
-        grau = d["rauch_alt"]
         # In sechs Stufen: die Wolken werden je Groesse und Farbe gemerkt (_hauch).
-        t = round(min(1.0, alter * 1.4) * 6) / 6.0
-        return tuple(max(0, min(255, int((kern[k] * (1.0 - t) + grau[k] * t) * hell))) for k in range(3))
+        stufe = round(min(1.0, alter * 1.4) * 6)
+        # Je Stufe einmal gerechnet (seit 0.34.149) - vorher je Wolke und
+        # Bild neu, dieselbe Rechnung.
+        merk = self.__dict__.setdefault("_rauch_farben", {})
+        schluessel = (freund, stufe, hell)
+        farbe = merk.get(schluessel)
+        if farbe is None:
+            d = S["dropzone"]
+            kern = d["rauch_freund"] if freund else d["rauch_feind"]
+            grau = d["rauch_alt"]
+            t = stufe / 6.0
+            farbe = merk[schluessel] = tuple(
+                max(0, min(255, int((kern[k] * (1.0 - t) + grau[k] * t) * hell))) for k in range(3))
+        return farbe
 
     def _leuchtfackel(self, flaeche, ort, zeit: float, nr: int, stark: float, freund: bool) -> None:
         """Eine Signalfackel, die am Boden liegt und raucht."""
@@ -1139,23 +1148,36 @@ class SchlachtTeil:
         n = max(1, int(round(d["rauch"] * (0.45 + 0.55 * min(1.0, stark)))))
         wind = pygame.Vector2(d["wind"], 0).rotate(-30 + 18 * math.sin(zeit * 0.13 + nr))
         wolken = []
+        # Was in der Schleife gleich bleibt, einmal vorher (seit 0.34.149) -
+        # jeder Ausdruck rechnet genau wie vorher, in derselben Reihenfolge,
+        # das Bild ist also pixelgleich.
+        zt = zeit * d["rauch_tempo"]
+        nf = float(n)
+        sin, floor = math.sin, math.floor
+        wx, wy = wind.x, wind.y
+        steigen, gross, deck0 = d["steigen"], d["rauch_gross"], d["rauch_deck"]
+        nr37, nr19 = nr * 0.37, nr * 1.9
+        z09 = zeit * 0.9
+        stark1 = min(1.0, stark)
         for i in range(n):
-            alter = (zeit * d["rauch_tempo"] + i / float(n) + nr * 0.37) % 1.0
+            anteil = i / nf
+            alter = (zt + anteil + nr37) % 1.0
             # Jede Wolke quillt zu ihrer eigenen Seite (fest je Wolke), so wird
             # die Saeule breit und bauschig statt ein duenner Strich.
-            seite = math.sin(nr * 3.7 + i * 2.9 + math.floor(zeit * d["rauch_tempo"] + i / float(n)) * 1.3)
-            wackel = (seite * 14.0 + math.sin(zeit * 0.9 + nr * 1.9 + i * 2.3) * 4.0) * alter ** 0.6
-            px = x + wind.x * alter * 55.0 + wackel
-            py = y - 2 - d["steigen"] * (alter ** 0.75) + wind.y * alter * 18.0
-            r = int(4 + d["rauch_gross"] * (alter ** 0.55))
-            deck = d["rauch_deck"] * (1.0 - alter) ** 1.1 * min(1.0, alter * 10.0) * min(1.0, stark)
+            seite = sin(nr * 3.7 + i * 2.9 + floor(zt + anteil) * 1.3)
+            wackel = (seite * 14.0 + sin(z09 + nr19 + i * 2.3) * 4.0) * alter ** 0.6
+            px = x + wx * alter * 55.0 + wackel
+            py = y - 2 - steigen * (alter ** 0.75) + wy * alter * 18.0
+            r = int(4 + gross * (alter ** 0.55))
+            deck = deck0 * (1.0 - alter) ** 1.1 * min(1.0, alter * 10.0) * stark1
             wolken.append((alter, px, py, r, deck))
+        hauch, farbe_von, blit = self._hauch, self._rauch_farbe, flaeche.blit
         for alter, px, py, r, deck in sorted(wolken, reverse=True):
             if deck <= 2:
                 continue
-            puff = self._hauch(r, self._rauch_farbe(freund, alter, 1.0))
+            puff = hauch(r, farbe_von(freund, alter, 1.0))
             puff.set_alpha(int(min(255, deck)))
-            flaeche.blit(puff, (px - r - 1, py - r - 1))
+            blit(puff, (px - r - 1, py - r - 1))
         # Der Lichtschein auf dem Boden, flackernd.
         farbe = d["licht_freund"] if freund else d["licht_feind"]
         flacker = 0.7 + 0.3 * math.sin(zeit * 29.0 + nr * 2.1) * math.sin(zeit * 11.0 + nr)

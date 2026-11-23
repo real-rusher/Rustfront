@@ -458,12 +458,17 @@ HILFE = {
         "(Z.B. 1440X900): KEIN WISCHEN, ETWAS WEICHER, KOSTET LEISTUNG.",
     ],
     "grafikkarte": [
-        "AN: DIE GRAFIKKARTE SETZT DAS BILD IM FENSTER ZUSAMMEN - SPART",
-        "VOR ALLEM BEI GROSSEN FENSTERN UND IM VOLLBILD SPÜRBAR ZEIT,",
-        "AUCH MIT BESTE QUALITÄT (DIE WELT ALS TEXTUR IN VOLLER AUFLÖSUNG).",
+        "AN: DIE GRAFIKKARTE VERGRÖSSERT DAS BILD AUFS FENSTER - SPART",
+        "VOR ALLEM BEI GROSSEN FENSTERN UND IM VOLLBILD SPÜRBAR ZEIT.",
         "AUS: DER PROZESSOR MACHT ES WIE BISHER. AUF SEHR SCHWACHEN",
         "GRAFIKCHIPS KANN AUS SCHNELLER SEIN. OHNE SCHNELLE GRAFIKKARTE",
         "BLEIBT ES VON SELBST BEIM PROZESSOR.",
+    ],
+    "gpu_bild": [
+        "NUR MIT GPU SKALIERT: DIE GRAFIKKARTE SETZT DAS GANZE BILD",
+        "ZUSAMMEN, AUCH MIT BESTE QUALITÄT (DIE WELT IN VOLLER AUFLÖSUNG).",
+        "SPART DEM PROZESSOR ZEIT, VOR ALLEM BEI GROSSEN FENSTERN.",
+        "NEU - FALLS ES FLACKERT ODER LANGSAMER WIRD: AUS.",
     ],
     "ton_gesamt": ["REGELT ALLES ZUSAMMEN, AUCH SPÄTERE MUSIK."],
     "ton_effekte": [
@@ -479,7 +484,7 @@ HILFE = {
     "zoom_hochaufloesend": [
         "DIE WELT IN FENSTERAUFLÖSUNG, AUCH OHNE ZOOM: SO SCHARF WIE MÖGLICH,",
         "EIGENE FIGUR UND FAHRZEUG OHNE PIXELZITTERN. GILT SOFORT.",
-        "BRAUCHT MEHR RECHENZEIT - MIT GRAFIKKARTE AN DEUTLICH WENIGER.",
+        "BRAUCHT MEHR RECHENZEIT - MIT BILD AUF DER GPU DEUTLICH WENIGER.",
     ],
     "bildschirm_ruckeln": [
         "WIE STARK DAS BILD BEI EXPLOSIONEN UND TREFFERN WACKELT.",
@@ -635,6 +640,9 @@ class Einstellungen(Menue):
             # Kurz genug fuer die Spalte (vorher "GRAFIKKARTE SKALI>").
             ui.Schalter(self._reihe(zx, zy, zw, 4), "GPU SKALIERT",
                         "grafikkarte", o["grafikkarte"]),
+            # Eingerueckt wie WIE WEIT VORAUS: wirkt nur mit GPU SKALIERT.
+            ui.Schalter(self._reihe(zx, zy, zw, 5), "  BILD AUF DER GPU",
+                        "gpu_bild", o["gpu_bild"]),
         ]
 
     def _seite_audio(self, zx, zy, zw) -> None:
@@ -754,7 +762,7 @@ class Einstellungen(Menue):
                 if hasattr(szene, "netz_umstellen"):
                     szene.netz_umstellen()
         if el.name in ("fenstermodus", "aufloesung", "bildrate", "pixelraster", "grafikkarte",
-                       "zoom_hochaufloesend"):
+                       "gpu_bild", "zoom_hochaufloesend"):
             self.app.anzeige_uebernehmen()
             self.aufbauen()
         elif el.name in ("ton_gesamt", "ton_effekte"):

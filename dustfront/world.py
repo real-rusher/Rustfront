@@ -1042,6 +1042,26 @@ class Welt:
         if any(not w.lebt for w in self.wesen):
             self.wesen = [w for w in self.wesen if w.lebt]
 
+    def wesen_auszug(self, name: str, gehoert) -> list:
+        """Die Wesen, fuer die `gehoert(w)` gilt, in ihrer Reihenfolge in
+        self.wesen (seit 0.34.149). `gehoert` darf nur fragen, was sich an
+        einem Wesen nie aendert (Klasse, Art) - lebt, Ebene, Ort fragt der
+        Aufrufer selbst. Vorher ging jeder Bot jeden Schritt alle Wesen
+        durch (Gefahren, Granaten), bei 48 je Seite rund 100 Bots x 130.
+
+        Neu gebaut, sobald sich die Liste aendern kann: neue Wesen kommen
+        nur am Anfang von schritt dazu (aus self.neue), weg nur ueber eine
+        neue Liste - beides faellt mit Liste, Laenge oder Bildnummer auf.
+        Die Liste selbst wird gehalten (nicht nur ihre id), damit keine
+        neue Liste unter derselben id als die alte gilt."""
+        liste = self.wesen
+        merk = self.__dict__.setdefault("_auszug_merk", {})
+        nr = getattr(self, "bildnummer", 0)
+        m = merk.get(name)
+        if m is None or m[0] is not liste or m[1] != len(liste) or m[2] != nr:
+            m = merk[name] = (liste, len(liste), nr, [w for w in liste if gehoert(w)])
+        return m[3]
+
     # ---- Nachbarschaft ------------------------------------------------
     def _raster_bauen(self) -> None:
         self._raster.clear()

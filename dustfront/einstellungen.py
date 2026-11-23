@@ -39,6 +39,11 @@ VORGABE = {
     # Grafikchips kann es langsamer sein, und ohne schnelle Grafikkarte
     # faellt das Spiel ohnehin auf den alten Weg zurueck (core.App).
     "grafikkarte": False,
+    # Mit GPU SKALIERT das ganze Bild auf der Grafikkarte zusammensetzen,
+    # auch mit BESTE QUALITAET (seit 0.34.148, core.App._gpu_ausgeben).
+    # Aus als Vorgabe (gewuenscht: "optional, als Setting im Menue"): der
+    # Weg ist neu und auf echten Grafikkarten noch wenig erprobt.
+    "gpu_bild": False,
     # Ton
     "ton_gesamt": 75,
     "ton_effekte": 85,

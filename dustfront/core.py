@@ -631,7 +631,10 @@ class App:
         # Schalter wirkte stillschweigend gar nicht.
         # Seit 0.34.148 geht beides zusammen: die Grafikkarte zeichnet die
         # Welt dann selbst in Fensteraufloesung (_gpu_ausgeben) - ohne den
-        # Renderer dazu bleibt BESTE QUALITAET beim alten Weg.
+        # Renderer dazu bleibt BESTE QUALITAET beim alten Weg. Seit 0.34.149
+        # nur mit dem Schalter BILD AUF DER GPU (gpu_bild).
+        if self.opt["zoom_hochaufloesend"] and not self.opt["gpu_bild"]:
+            return False
         return (bool(self.opt["grafikkarte"]) and not self.headless
                 and not plattform.touch_an() and not plattform.nur_vollbild()
                 and hasattr(pygame, "SCALED"))
@@ -668,7 +671,9 @@ class App:
         langsam = any("no fast renderer" in str(m.message) for m in meldungen)
         if langsam and not K.ANZEIGE["gpu_ohne_grafikkarte"]:
             return False
-        renderer = _renderer_holen()
+        # Den Renderer nur mit BILD AUF DER GPU (seit 0.34.149 ein eigener
+        # Schalter); ohne ihn ist alles wie vor 0.34.148.
+        renderer = _renderer_holen() if self.opt["gpu_bild"] else None
         if renderer is None and self.opt["zoom_hochaufloesend"]:
             return False                  # BESTE QUALITAET braucht dann den alten Weg
         self.fenster = fenster

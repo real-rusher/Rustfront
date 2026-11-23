@@ -93,6 +93,11 @@ def faktor_von(w) -> float:
     return innen.faktor if innen is not None else 1.0
 
 
+def _ist_granate(w) -> bool:
+    """Fuer Welt.wesen_auszug (GoapHirn.granate_nah)."""
+    return isinstance(w, Granate)
+
+
 class GoapHirn(BotHirn):
     """Ein Bot, der plant, statt einer festen Reihenfolge zu folgen."""
 
@@ -540,7 +545,9 @@ class GoapHirn(BotHirn):
         if self.geblendet > 0.0:
             return None
         beste = None
-        for w in welt.wesen:
+        # Die Granaten einmal je Schritt herausgesucht (seit 0.34.149,
+        # Welt.wesen_auszug) statt je Bot alle Wesen durchzugehen.
+        for w in welt.wesen_auszug("granaten", _ist_granate):
             if not isinstance(w, Granate) or not w.lebt or w.ebene != k.ebene:
                 continue
             d = w.daten

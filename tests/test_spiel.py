@@ -16115,8 +16115,16 @@ def _foto190():
     teil_ = voll_.subsurface((0, 0, int(K.GAME_W * sk_), int(K.GAME_H * sk_)))
     return pygame.transform.scale(teil_, (K.GAME_W, K.GAME_H))
 pruef("... ausgeben legt das Spielbild unveraendert hinein", _foto190().get_at((5, 5))[:3] == (10, 200, 30))
-# 0.34.148: GRAFIKKARTE zusammen mit BESTE QUALITAET (Weg 1) - die Welt als Textur.
+pruef("Ohne BILD AUF DER GPU (Vorgabe aus, seit 0.34.149) kein Renderer: alles wie vor 0.34.148",
+      _E190.VORGABE["gpu_bild"] is False and app.__dict__.get("gpu_renderer") is None)
 app.opt.werte["zoom_hochaufloesend"] = True
+app.anzeige_setzen()
+pruef("... und mit BESTE QUALITAET bleibt es dann ganz beim Prozessor (kein SCALED-Fenster)",
+      not app.gpu and app.__dict__.get("gpu_renderer") is None
+      and app.fenster.get_size() == tuple(app.fenster_groesse), str(app.fenster.get_size()))
+# 0.34.148: GRAFIKKARTE zusammen mit BESTE QUALITAET (Weg 1) - die Welt als Textur,
+# seit 0.34.149 nur mit dem Schalter BILD AUF DER GPU.
+app.opt.werte["gpu_bild"] = True
 app.anzeige_setzen()
 pruef("GRAFIKKARTE und BESTE QUALITAET gehen zusammen: der Renderer der Grafikkarte ist da",
       app.gpu and app.__dict__.get("gpu_renderer") is not None)
@@ -21235,6 +21243,60 @@ pruef("... auf der Karte immer nach Seite, nicht nach Freund/Feind (Orange bleib
       _MK147.Minikarte._seitenfarbe(_Leut147(0), (1, 2, 3)) == _o147
       and _MK147.Minikarte._seitenfarbe(_Leut147(1), (1, 2, 3)) == _b147
       and _MK147.Minikarte._seitenfarbe(_Leut147(-1), (1, 2, 3)) == (1, 2, 3))
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- 0.34.149: schneller gerechnet, ohne etwas am Spiel zu aendern")
+from dustfront import bottaktik as _BT149, bots as _BO149, bot_goap as _BG149
+_w149, _g149 = gefechtspaar("team", regeln={"bots": 2})
+_welt149 = _w149.welt
+_vorher149 = list(_welt149.wesen)
+_a149 = _welt149.wesen_auszug("t149", lambda w_: w_ in _vorher149[:1])
+pruef("Welt.wesen_auszug: dieselben Wesen in derselben Reihenfolge wie ein Durchgang ueber welt.wesen",
+      _a149 == [w_ for w_ in _welt149.wesen if w_ in _vorher149[:1]], str(len(_a149)))
+pruef("... gemerkt, solange sich die Liste nicht aendert",
+      _welt149.wesen_auszug("t149", lambda w_: True) is _a149)
+class _Neu149:
+    lebt = True
+_welt149.wesen.append(_Neu149())                 # wie testmodus: in die Liste hinein
+pruef("... aber neu, sobald ein Wesen dazukommt (auch mitten im Schritt nie veraltet)",
+      _welt149.wesen_auszug("t149", lambda w_: isinstance(w_, _Neu149))[-1:] == _welt149.wesen[-1:])
+_welt149.wesen.pop()
+_welt149.wesen = list(_welt149.wesen)
+pruef("... und neu mit einer neuen Liste (aufgeraeumt am Ende des Schritts)",
+      _welt149.wesen_auszug("t149", lambda w_: isinstance(w_, _Neu149)) == [])
+_welt149.bildnummer = getattr(_welt149, "bildnummer", 0) + 1
+pruef("... und je Bild neu", _welt149.wesen_auszug("t149", lambda w_: True) == list(_welt149.wesen))
+pruef("Die Auszuege fuer die Bots fragen nur, was sich an einem Wesen nie aendert (Klasse)",
+      _BO149._gefahr_moeglich(_Neu149()) is False and _BG149._ist_granate(_Neu149()) is False)
+class _Wenig149:
+    pass
+_x149 = _Wenig149()
+_x149.leben = 100.0
+pruef("braucht_schutz: auch ohne die Felder eines Kaempfers dieselbe Antwort wie bisher (kein Absturz)",
+      _BT149.braucht_schutz(_x149) is False and _BT149._braucht_schutz_langsam(_x149) is False)
+_x149.am_boden = True
+pruef("... und mit ihnen", _BT149.braucht_schutz(_x149) is True)
+_k149 = next(iter(_w149.kaempfer.values()))
+for _feld149, _wert149 in (("am_boden", True), ("nachlade_rest", 0.5), ("zieht", 3), ("hilft", 2),
+                          ("leben", K.BOTS["deckung_leben"] - 1.0)):
+    _alt149 = getattr(_k149, _feld149)
+    setattr(_k149, _feld149, _wert149)
+    _gleich149 = _BT149.braucht_schutz(_k149) is True and _BT149._braucht_schutz_langsam(_k149) is True
+    setattr(_k149, _feld149, _alt149)
+    pruef("... schneller Weg und alter Weg sagen dasselbe: %s" % _feld149, _gleich149)
+pruef("... und ohne alles beide nein",
+      _BT149.braucht_schutz(_k149) == _BT149._braucht_schutz_langsam(_k149))
+from dustfront import schlacht as _SL149
+_d149 = _SL149.S["dropzone"]
+def _rauch_alt149(freund_, alter_, hell_):
+    kern_ = _d149["rauch_freund"] if freund_ else _d149["rauch_feind"]
+    grau_ = _d149["rauch_alt"]
+    t_ = round(min(1.0, alter_ * 1.4) * 6) / 6.0
+    return tuple(max(0, min(255, int((kern_[k_] * (1.0 - t_) + grau_[k_] * t_) * hell_))) for k_ in range(3))
+pruef("Rauchfarbe der Fackeln: gemerkt je Stufe, Farbe wie vorher gerechnet",
+      all(_w149._rauch_farbe(f_, a_ / 40.0, h_) == _rauch_alt149(f_, a_ / 40.0, h_)
+          for f_ in (True, False) for a_ in range(41) for h_ in (1.0, 0.6)))
+_w149.verlassen(); _g149.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")
