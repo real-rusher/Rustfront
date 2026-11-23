@@ -48,7 +48,6 @@ aus wie von einem Spieler mit Tastatur. Das ist der Kern von Crossplay.
 
 from __future__ import annotations
 
-import math
 
 import pygame
 

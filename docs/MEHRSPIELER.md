@@ -55,7 +55,7 @@ Ausnahmen stehen in 2.4.
 | `dustfront/mehrspieler.py` | ~1400 | Die Spielszene `Gefecht` und drei Wesen. Weiss alles vom Spiel. |
 | `dustfront/upnp.py` | ~250 | Der Weg durch den Router, fuer Runden ueber das Internet. Weiss nichts vom Spiel. |
 | `dustfront/online.py` | ~480 | Seit 0.34.13: der Online-Code ueber Cloudflare (7.9). Weiss nichts vom Spiel. |
-| `tools/cloudflared/` | - | Seit 0.34.13: das Programm dafuer, Windows und macOS, mit Lizenz und Pruefsummen. |
+| `tools/cloudflared/` | - | Lizenz und Pruefsummen von cloudflared. Das Programm selbst laedt das Spiel seit 0.34.150 beim ersten Online-Spiel (`online.Lader`, `ladebild.py`). |
 | `dustfront/bestenliste.py` | ~150 | MVP-Punkte und Auszeichnungen ueber alle Runden im Benutzerordner. |
 | `dustfront/regeln.py` | ~380 | Seit 0.27: jede Regel einer Runde einmal - Name, Werte, wann sie gilt (12b). |
 | `dustfront/lobby.py` | ~690 | Seit 0.27: Lobby, Rundenplan und die Tafel dazu (12b). |
@@ -714,11 +714,17 @@ draussen. Also lauscht niemand mehr nach draussen:
   wie im LAN** - dasselbe Protokoll, derselbe autoritative Gastgeber.
 * Beide Seiten bauen nur ausgehende Verbindungen auf (Cloudflare, Port 7844
   und 443). Das geht durch jeden Heimrouter, auch hinter Mobilfunk.
-* Das Programm liegt in `tools/cloudflared` (Windows amd64, macOS arm64 und
-  amd64, Fassung 2026.10.0, Apache 2.0). Beim ersten Gebrauch wird es in
-  den Datenordner ausgepackt und mit der Pruefsumme aus `K.ONLINE`
-  verglichen; selbst ausgepackt traegt es keinen "aus dem Internet"-Vermerk,
-  SmartScreen und Gatekeeper halten es nicht an. Unter Windows haengt es in
+* Das Programm (Fassung 2026.10.0, Apache 2.0) laedt das Spiel seit
+  0.34.150 beim ersten Spiel ueber das Internet vom offiziellen Release
+  (`online.Lader`, Windows amd64, macOS arm64/amd64, Linux amd64/arm64) -
+  vorher lag es fuer drei Systeme in `tools/cloudflared` bei (58 MB). Datei
+  und Programm werden mit den Pruefsummen aus `K.ONLINE` verglichen, dann
+  liegt es im Datenordner; weil das Spiel und kein Browser schreibt, traegt
+  es keinen "aus dem Internet"-Vermerk, SmartScreen und Gatekeeper halten
+  es nicht an. Waehrenddessen warten `Tunnel` und Zugang im Zustand
+  "laedt", das Ladebild (`ladebild.py`) zeigt den Fortschritt, ESC bricht
+  ab. Ein installiertes cloudflared geht vor. Die Pruefungen setzen
+  `DUSTFRONT_OHNE_LADEN`, damit nie etwas aus dem Netz kommt. Unter Windows haengt es in
   einem Job-Objekt mit KILL_ON_JOB_CLOSE: stuerzt das Spiel ab, endet
   cloudflared mit. `DUSTFRONT_CLOUDFLARED` zeigt auf ein anderes Programm
   (die Pruefungen nehmen `tests/attrappe_cloudflared.py`).
@@ -2030,6 +2036,7 @@ Was seit 0.32 anders ist als bei den Playtests davor: Frueher oeffnete nur
 der Gastgeber einen Port, jetzt jeder (jeder sitzt in seiner eigenen
 | 0.34.130 | Spielereintrag `ul`: je Waffe die Sekunden, die sie noch ueberhitzt ist (0, wenn keine). Brandflaechen in der Weltmeldung mit Feld 7 Dauer und Feld 8 Napalm (1/0). Napalm-Angriffe (`la`) mit Feld 6 Alter - daraus baut der Gast den Bombenplan und zeichnet die fallenden Bomben. Neue Netzklaenge `ueberhitzt`, `bomber` (mit Ort, wandert), `napalm_fall`; der ortlose Ton `jet` beim Napalm entfaellt. Neue Regel `fahrzeug_grenze`. | Gastgeber und Gast muessen 0.34.130 haben |
 | 0.34.131 | Schlachtmeldung `fp`: je Eroberungspunkt [Besitzer, Stand mal 1000, Anzahl ROT im Kreis, Anzahl BLAU im Kreis] (nur auf Karten mit Front). Neue Gast-Nachricht `{"t": "einstieg", "wahl": "b2"}` (Basis 2) oder `"p5"` (Punkt 5): wo er nach dem Tod einsteigen will - der Gastgeber prueft beim Einstieg, ob er noch frei ist. Neue Karten `flusstal` und `kanalstadt` mit Kopfzeilen `basisN`, `punktN`, `wegN`, `fahrer` und den Kartenzeichen `+` (seicht), `%` (tief), `|` (Bruecke). | Gastgeber und Gast muessen 0.34.131 haben (und dieselben Karten) |
+| 0.34.150 | Protokoll unveraendert. cloudflared kommt nicht mehr aus `tools/cloudflared`, sondern wird beim ersten Online-Spiel vom Release geladen (`online.Lader`); `Tunnel` und `CloudflaredZugang` haben den Zustand "laedt" und starten danach von selbst. Ein Gast ohne cloudflared nimmt den Weg ohne (`wszugang.py`) nur noch, wo es fuer das System keins gibt oder auf iOS. | Die Versionspruefung weist 0.34.149 ab - Gastgeber und Gast brauchen 0.34.150 |
 | 0.34.149 | Nichts am Netz und nichts am Gefecht: `Gefecht._fahrzeuge_schieben` und die Bots (`_gefahren_sammeln`, `granate_nah`, `braucht_schutz`) rechnen dasselbe in derselben Reihenfolge, nur schneller - nachgewiesen mit gleichem Zustand Schritt fuer Schritt in 8 Gefechten. Neuer Schalter BILD AUF DER GPU ist nur Darstellung. | Die Versionspruefung weist 0.34.148 ab - Gastgeber und Gast brauchen 0.34.149 |
 | 0.34.148 | Nichts am Netz: nur die Darstellung (Bild ueber den Renderer der Grafikkarte, `Gefecht._hochaufloesend_an` gilt jetzt auch mit GRAFIKKARTE). | Die Versionspruefung weist 0.34.147 ab, obwohl sich am Netz nichts aendert - Gastgeber und Gast brauchen 0.34.148 |
 | 0.34.147 | Tragschrauber Feld 20: Zusatzwert mit Feld 6 Flughoehe in Ebenen (`flugstufe`) und Feld 7 zu tief (1/0, fuer die Anzeige). Eingabe: in der Luft steigt RMB (`zielt`, Flanke) eine Ebene, `nachladen` (R) sinkt eine - rechnet der Gastgeber. Teamfarben und Kartenzeichen sind nur Darstellung. | Gastgeber und Gast muessen 0.34.147 haben |

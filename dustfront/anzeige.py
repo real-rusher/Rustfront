@@ -771,7 +771,6 @@ class Anzeige:
             self._gruppen_hotbar(ziel, ich)
             return
         n = len(ich.waffen)
-        gross = self.hotbar_gross(n)
         bw, bh, luecke = self._hotbar_mass(n)
         rahmen_ganz = self.hotbar_rechteck(n)
         hx, hy = rahmen_ganz.x, rahmen_ganz.y

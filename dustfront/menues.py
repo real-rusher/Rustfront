@@ -1430,8 +1430,6 @@ class Ausruestung(Menue):
             self.aufbauen()
             self.wahl = 0
             return
-        lo = K.LOADOUT
-        from . import klassen as klassen_modul
         waffen, wuerfe = [], []
         klasse = ""
         nahkampf = K.NAHKAMPF["waffe"]

@@ -53,30 +53,6 @@ class Flaeche:
 
 # ---- Koerper (lokal: +x ist vorn, +y rechts, +z oben) -------------------
 
-def stumpf(x0, x1, r0, r1, farbe, n=12, kappe0=True, kappe1=True, y=0.0, z=0.0, glanz=False) -> list:
-    """Ein Kegelstumpf entlang x: Radius r0 bei x0, r1 bei x1 (gleich: Zylinder)."""
-    raus = []
-    neigung = (r0 - r1) / max(1e-6, (x1 - x0))
-    for i in range(n):
-        a0 = 2 * math.pi * i / n
-        a1 = 2 * math.pi * (i + 1) / n
-        am = (a0 + a1) / 2
-        p = [(x0, y + math.cos(a0) * r0, z + math.sin(a0) * r0),
-             (x1, y + math.cos(a0) * r1, z + math.sin(a0) * r1),
-             (x1, y + math.cos(a1) * r1, z + math.sin(a1) * r1),
-             (x0, y + math.cos(a1) * r0, z + math.sin(a1) * r0)]
-        nx = neigung
-        ny, nz = math.cos(am), math.sin(am)
-        lang = math.sqrt(nx * nx + ny * ny + nz * nz)
-        raus.append(Flaeche(p, (nx / lang, ny / lang, nz / lang), farbe, glanz=glanz))
-    if kappe0 and r0 > 0.01:
-        raus.append(Flaeche([(x0, y + math.cos(2 * math.pi * i / n) * r0, z + math.sin(2 * math.pi * i / n) * r0)
-                             for i in range(n)], (-1, 0, 0), farbe))
-    if kappe1 and r1 > 0.01:
-        raus.append(Flaeche([(x1, y + math.cos(2 * math.pi * i / n) * r1, z + math.sin(2 * math.pi * i / n) * r1)
-                             for i in range(n)], (1, 0, 0), farbe))
-    return raus
-
 
 def platte(punkte, normale, farbe) -> list:
     return [Flaeche(punkte, normale, farbe, beidseitig=True)]
@@ -118,11 +94,6 @@ def bewegen(flaechen, gieren=0.0, kippen=0.0, rollen=0.0, dx=0.0, dy=0.0, dz=0.0
             pts.append((x + dx, y + dy, z + dz))
         raus.append(Flaeche(pts, _drehe(f.normale, cr, sr, cp, sp, cy, sy), f.farbe, f.beidseitig, f.glanz, f.ton))
     return raus
-
-
-def skalieren(flaechen, f: float) -> list:
-    return [Flaeche([(p[0] * f, p[1] * f, p[2] * f) for p in x.punkte], x.normale, x.farbe,
-                    x.beidseitig, x.glanz, x.ton) for x in flaechen]
 
 
 # ---- Malen ----------------------------------------------------------------

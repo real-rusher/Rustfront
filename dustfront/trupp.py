@@ -52,11 +52,6 @@ import pygame
 from . import config as K
 
 
-def trupp_von(k):
-    """Der Trupp eines Kaempfers, oder None."""
-    return getattr(getattr(k, "hirn", None), "trupp", None)
-
-
 def richtung_wort(von, nach) -> str:
     """Grob die Himmelsrichtung, fuer Sprueche wie "ZWEI IM NORDEN"."""
     d = pygame.Vector2(nach) - pygame.Vector2(von)

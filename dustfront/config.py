@@ -1046,27 +1046,48 @@ NETZ = dict(
 #
 # Weder Router noch Firewall muessen etwas erlauben: niemand lauscht nach
 # draussen. Der Gastgeber haengt seine Lobby an einen kostenlosen "Quick
-# Tunnel" von Cloudflare (Programm cloudflared, liegt in tools/cloudflared
-# bei) und bekommt dafuer einen Code aus vier Woertern. Wer den Code
-# eingibt, verbindet sich ueber dasselbe Programm - beide Seiten bauen nur
-# ausgehende Verbindungen auf, und was lokal lauscht, lauscht nur auf
-# 127.0.0.1. Genau das loest weder eine Freigabe im Router noch die
-# Abfrage der Windows-Firewall aus.
+# Tunnel" von Cloudflare (Programm cloudflared) und bekommt dafuer einen
+# Code aus vier Woertern. Wer den Code eingibt, verbindet sich ueber
+# dasselbe Programm - beide Seiten bauen nur ausgehende Verbindungen auf,
+# und was lokal lauscht, lauscht nur auf 127.0.0.1. Genau das loest weder
+# eine Freigabe im Router noch die Abfrage der Windows-Firewall aus.
 ONLINE = dict(
-    version="2026.10.0",      # die mitgelieferte Fassung von cloudflared
-    ordner="tools/cloudflared",
-    # Was im Ordner liegt, je System: Archiv, Name darin, Pruefsumme des
-    # ausgepackten Programms. Ausgepackt wird beim ersten Gebrauch in den
-    # Datenordner (pfade.py) - so traegt die Datei keinen "aus dem Internet"-
-    # Vermerk, und weder SmartScreen noch Gatekeeper halten sie an.
+    version="2026.10.0",      # die Fassung von cloudflared, die das Spiel laedt
+    # Seit 0.34.150 nicht mehr im Spiel mitgeliefert (das waren 58 MB fuer
+    # drei Systeme, von denen jeder eines braucht), sondern beim ersten
+    # Spiel ueber das Internet geladen - unveraendert vom offiziellen
+    # Release von Cloudflare und gegen die Pruefsumme hier verglichen.
+    # Abgelegt wird es im Datenordner (pfade.py); so traegt die Datei
+    # keinen "aus dem Internet"-Vermerk eines Browsers, und weder
+    # SmartScreen noch Gatekeeper halten sie an.
+    quelle="https://github.com/cloudflare/cloudflared/releases/download/{version}/{datei}",
+    # Je System: die Datei im Release, ihre Pruefsumme, der Name des
+    # Programms (in einem .tgz: der Name darin) und dessen Pruefsumme.
+    # Ohne Archiv sind beide Summen dieselbe.
     pakete={
-        "windows-amd64": ("cloudflared-windows-amd64.zip", "cloudflared.exe",
+        "windows-amd64": ("cloudflared-windows-amd64.exe",
+                          "86aee4017b26625cee8484c113558f48effa4cd47f7aa05fcf425604e5d2b23c",
+                          "cloudflared.exe",
                           "86aee4017b26625cee8484c113558f48effa4cd47f7aa05fcf425604e5d2b23c"),
-        "darwin-arm64": ("cloudflared-darwin-arm64.tgz", "cloudflared",
+        "darwin-arm64": ("cloudflared-darwin-arm64.tgz",
+                         "a2f79ff7b9420aa537d74af239f376da170bbabeb529aec416002adac6a72e70",
+                         "cloudflared",
                          "72edfd3eea463aef4d5cb89e2e209cecb048cc756c2b01915de2e0ad7cb39830"),
-        "darwin-amd64": ("cloudflared-darwin-amd64.tgz", "cloudflared",
+        "darwin-amd64": ("cloudflared-darwin-amd64.tgz",
+                         "903845b81828c8cb3c5d13d816a2de71c06a3da5785469df8eb0e1b736d92f9f",
+                         "cloudflared",
                          "0560c9ab7281ac3f746055323623ed23bc0405b6dab9400474020cba33a978da"),
+        "linux-amd64": ("cloudflared-linux-amd64",
+                        "d33ff2d14475178d2012c2c56beba87389ac5ded27649519f198a7d3134a99db",
+                        "cloudflared",
+                        "d33ff2d14475178d2012c2c56beba87389ac5ded27649519f198a7d3134a99db"),
+        "linux-arm64": ("cloudflared-linux-arm64",
+                        "e6422b9d4f72d3194bc5a38676f13667c06666523217b842a877d72a80b5ac08",
+                        "cloudflared",
+                        "e6422b9d4f72d3194bc5a38676f13667c06666523217b842a877d72a80b5ac08"),
     },
+    laden_block=65536,        # so viele Bytes liest der Lader je Durchgang
+    laden_frist=20.0,         # so lange darf das Laden ohne ein Byte stehen
     endung=".trycloudflare.com",
     start_frist=40.0,         # so lange darf der Tunnel brauchen, bis der Code steht
     zugang_frist=15.0,        # so lange darf der Zugang des Gastes brauchen

@@ -23,6 +23,7 @@ os.environ["XDG_CONFIG_HOME"] = _WEG               # Linux
 os.environ["HOME"] = _WEG                          # macOS (~/Library/...)
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+os.environ["DUSTFRONT_OHNE_LADEN"] = "1"      # nie cloudflared aus dem Netz (0.34.150)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

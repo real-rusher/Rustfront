@@ -112,7 +112,6 @@ class Klangpruefer:
                     self.laufzeit = 0.0
             if self.gehalten:
                 self._feuern(self.gehalten)
-            jetzt = pygame.time.get_ticks()
             self.flaeche.fill(HINTERGRUND)
             kopf, klein = self.schriften
             self.flaeche.blit(kopf.render("DUSTFRONT  /  KLANGPRUEFER", True, TEXT), (RAND, 12))

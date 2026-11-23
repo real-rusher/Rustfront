@@ -410,9 +410,6 @@ class Werk:
                 break
         return raus
 
-    @property
-    def beschaeftigt(self) -> bool:
-        return not self._hinein.empty()
 
     def schliessen(self) -> None:
         self._laeuft = False

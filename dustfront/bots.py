@@ -1299,7 +1299,6 @@ class BotHirn(Taktik):
 
     def _nahkampf(self, ein: dict, z, abstand: float):
         """Keine Munition mehr: mit dem Brecheisen hin und zuschlagen."""
-        k = self.k
         b = K.BOTS
         self.funken("leer")
         will = self._weg_richtung(z.pos, z.ebene)
@@ -1617,7 +1616,6 @@ class BotHirn(Taktik):
         """Richtung zum naechsten Wegpunkt nach `ort` auf `ebene` - um Waende
         herum und ueber Treppen. Gerechnet wird nur ab und zu (`weg_rest`)."""
         k = self.k
-        welt = self.g.welt
         ort = pygame.Vector2(ort)
         if (self.wegpunkt is None or self.weg_rest <= 0.0 or self.weg_ziel is None
                 or self.weg_ziel[1] != ebene or self.weg_ziel[0].distance_to(ort) > 24
@@ -2088,7 +2086,6 @@ class BotHirn(Taktik):
         bis ihm einer aufhilft. None, wenn es nichts zu decken gibt oder es
         zu weit oder zu gefaehrlich ist."""
         f = K.BOTS["fahren"]
-        k = self.k
         if b.art in ("buggy", "krad") or b.leben < b.max_leben * f["schutz_leben"]:
             return None
         feind = self.ziel if self.ziel is not None and self.ziel_ok(self.ziel) else None

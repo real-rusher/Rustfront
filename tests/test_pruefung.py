@@ -391,30 +391,26 @@ subprocess.run([sys.executable, str(WURZEL / "werkzeug_staubtal.py"), str(_ziel)
 pruef("Das Werkzeug erzeugt mit jeder Hash-Saat dieselbe Karte",
       _ziel.read_text(encoding="utf-8") == _ist)
 
-# ── cloudflared (seit 0.34.13): liegt es bei, und ist es das, was es sein soll?
-# Ausgepackt in einen leeren Ordner, genau wie beim Spieler, und mit der
-# Pruefsumme aus der config verglichen. Faengt ein vergessenes, kaputtes
-# oder ausgetauschtes Archiv, bevor es jemand herunterlaedt.
-from dustfront import online as _on  # noqa: E402
-from dustfront import pfade as _pf  # noqa: E402
-
-_ordner_cf = Path(tempfile.mkdtemp())
-_vorher_cf = _pf.ordner
-_pf.ordner = lambda: _ordner_cf
-try:
-    for _sys_cf, (_archiv, _name, _summe) in sorted(K.ONLINE["pakete"].items()):
-        _pfad_cf, _fehler_cf = _on._auspacken(_archiv, _name, _summe)
-        pruef("cloudflared fuer %s liegt bei und hat die richtige Pruefsumme"
-              % _sys_cf, bool(_pfad_cf) and os.access(_pfad_cf, os.X_OK)
-              or (bool(_pfad_cf) and os.name == "nt"), _fehler_cf)
-finally:
-    _pf.ordner = _vorher_cf
-pruef("Die Lizenz von cloudflared liegt dabei",
-      (WURZEL / K.ONLINE["ordner"] / "LICENSE").is_file()
-      and "Apache License" in (WURZEL / K.ONLINE["ordner"] / "LICENSE").read_text())
-pruef("Jedes Archiv ist kleiner als 50 MB (GitHub warnt darueber)",
-      all((WURZEL / K.ONLINE["ordner"] / a).stat().st_size < 50e6
-          for a, _n, _s in K.ONLINE["pakete"].values()))
+# ── cloudflared: seit 0.34.150 nicht mehr mitgeliefert, sondern beim ersten
+# Spiel ueber das Internet geladen (online.Lader) - hier, dass jedes System
+# eine Quelle mit Pruefsummen hat und keine 58 MB mehr im Spiel liegen.
+# Das Laden selbst pruefen tests/test_spiel.py (Abschnitt 0.34.150).
+import re as _re_cf  # noqa: E402
+_hex_cf = _re_cf.compile(r"^[0-9a-f]{64}$")
+pruef("cloudflared: fuer Windows, beide Macs und Linux gibt es eine Datei mit Pruefsummen",
+      {"windows-amd64", "darwin-arm64", "darwin-amd64", "linux-amd64"} <= set(K.ONLINE["pakete"])
+      and all(len(p_) == 4 and _hex_cf.match(p_[1]) and _hex_cf.match(p_[3])
+              and (p_[0].endswith(".tgz") or p_[1] == p_[3])
+              for p_ in K.ONLINE["pakete"].values()))
+pruef("... geladen vom offiziellen Release von Cloudflare, ueber HTTPS",
+      K.ONLINE["quelle"].startswith("https://github.com/cloudflare/cloudflared/releases/download/")
+      and "{version}" in K.ONLINE["quelle"] and "{datei}" in K.ONLINE["quelle"])
+_cf_ordner = WURZEL / "tools" / "cloudflared"
+pruef("Im Spiel liegt kein cloudflared mehr bei (nur Lizenz und LIESMICH)",
+      all(p_.stat().st_size < 100000 for p_ in _cf_ordner.iterdir())
+      and (_cf_ordner / "LICENSE").is_file()
+      and "Apache License" in (_cf_ordner / "LICENSE").read_text()
+      and K.ONLINE["version"] in (_cf_ordner / "LIESMICH.txt").read_text())
 
 print("\nFEHLER:", fails if fails else "keine")
 sys.exit(1 if fails else 0)

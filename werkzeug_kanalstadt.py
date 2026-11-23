@@ -219,7 +219,6 @@ def bauen() -> Leinwand:
         lw.rechteck(x - breit // 2 - 1, y0, x + breit // 2, y1, "_", nicht=set(":"))
         lw.rechteck(x - breit // 2, y0, x + breit // 2 - 1, y1, ":")
 
-    kanal_links = int(min(kanal_x(y) for y in range(HOEHE))) - 8
     for y in STRASSEN_Y:
         if y == 112:
             continue

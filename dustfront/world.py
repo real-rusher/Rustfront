@@ -20,7 +20,6 @@ Struktur erzeugen, ohne dass der Spielcode es merkt.
 from __future__ import annotations
 
 import math
-import random
 from bisect import bisect_left
 from pathlib import Path
 
@@ -311,8 +310,6 @@ class Ebene:
     def sichtdicht(self, tx: int, ty: int) -> bool:
         return K.KACHELN[self.kachel(tx, ty)]["sicht"]
 
-    def fest_an(self, x: float, y: float) -> bool:
-        return self.fest(int(x // K.TILE), int(y // K.TILE))
 
     def loch(self, tx: int, ty: int) -> bool:
         if not (0 <= tx < self.breite and 0 <= ty < self.hoehe):

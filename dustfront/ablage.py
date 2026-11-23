@@ -237,20 +237,22 @@ def _tls_merken(fehler, url: str) -> None:
                  "aussteller": zertifikat_aussteller(url)[:60]}
 
 
-def oeffnen(anfrage, url: str):
+def oeffnen(anfrage, url: str, wartezeit: float = WARTEZEIT):
     """urlopen mit der Zertifikatspruefung von oben - und unter Windows,
-    wenn OpenSSL ablehnt, mit der von Windows (windows_tls.py)."""
+    wenn OpenSSL ablehnt, mit der von Windows (windows_tls.py).
+    `wartezeit`: so lange darf jede einzelne Antwort ausbleiben (auch fuer
+    das Laden von cloudflared, online.Lader)."""
     global _windows_zuerst
     from . import windows_tls
     if _windows_zuerst and windows_tls.verfuegbar():
-        return windows_tls.oeffner().open(anfrage, timeout=WARTEZEIT)
+        return windows_tls.oeffner().open(anfrage, timeout=wartezeit)
     try:
-        return urllib.request.urlopen(anfrage, timeout=WARTEZEIT,
+        return urllib.request.urlopen(anfrage, timeout=wartezeit,
                                       context=tls_kontext())
     except urllib.error.URLError as fehler:
         if not (tls_fehler(fehler) and windows_tls.verfuegbar()):
             raise
-    antwort = windows_tls.oeffner().open(anfrage, timeout=WARTEZEIT)
+    antwort = windows_tls.oeffner().open(anfrage, timeout=wartezeit)
     _windows_zuerst = True
     return antwort
 

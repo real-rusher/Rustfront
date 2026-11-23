@@ -243,10 +243,6 @@ class Buggy(Wesen):
             anteil *= (eigene or s)[self.seite(herkunft)]
         return anteil
 
-    @property
-    def kugel_anteil(self) -> float:
-        """So viel einer Kugel kommt von der Seite am Blech an."""
-        return float(K.PANZERUNG.get(self.art, {}).get("kugel", 1.0))
 
     def schaden(self, menge, schub=None, von=None, kugel: bool = False,
                 art=None, herkunft=None) -> None:
@@ -1713,9 +1709,6 @@ class Panzer(Schwer):
         winkel = self.winkel if winkel is None else winkel
         return pos + pygame.Vector2(self.werte["turm_vor"], 0).rotate(winkel)
 
-    @property
-    def kanone_rest(self) -> float:
-        return self.takt.get("kanone", 0.0)
 
     def _physik(self, dt: float, gas: float, lenk: float, handbremse: bool) -> None:
         """Kein Einspurmodell: Vorwaerts- und Drehtempo naehern sich dem,

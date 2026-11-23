@@ -39,7 +39,6 @@ wenn er einen Gegner sieht, entscheidet weiter sein eigenes Hirn.
 from __future__ import annotations
 
 import heapq
-import math
 import random
 from collections import deque
 

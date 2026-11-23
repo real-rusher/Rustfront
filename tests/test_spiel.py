@@ -3,6 +3,9 @@
 import os, sys, math, time, random
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+# Die Pruefungen laden cloudflared nie aus dem Netz (seit 0.34.150) - wer
+# eine Lobby oeffnet, bekommt wie frueher ohne cloudflared einen Grund.
+os.environ["DUSTFRONT_OHNE_LADEN"] = "1"
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pygame
 from dustfront import config as K
@@ -16149,7 +16152,18 @@ pruef("... vor dem Neuanlegen des Fensters gibt es seine Texturen frei (sonst do
       bool(app.__dict__.get("_gpu_texturen")) and (app.gpu_freigeben() or True)
       and not app.__dict__.get("_gpu_texturen") and app.__dict__.get("gpu_renderer") is None)
 app.opt.werte["zoom_hochaufloesend"] = False
-app.anzeige_setzen()
+_modi190 = []
+_set_mode190 = pygame.display.set_mode
+pygame.display.set_mode = lambda *a_, **k_: (_modi190.append(a_[1] if len(a_) > 1 else 0),
+                                             _set_mode190(*a_, **k_))[1]
+try:
+    app.anzeige_setzen()
+finally:
+    pygame.display.set_mode = _set_mode190
+pruef("Von GPU SKALIERT zu GPU SKALIERT erst ueber ein gewoehnliches Fenster (pygame liest sonst "
+      "freigegebenen Speicher, valgrind)",
+      len(_modi190) >= 2 and not (_modi190[0] & pygame.SCALED) and (_modi190[-1] & pygame.SCALED)
+      and app.gpu, str(_modi190))
 app.opt.werte["grafikkarte"] = False
 app.anzeige_setzen()
 pruef("Ausgeschaltet: wieder das Fenster in voller Groesse, vergroessert vom Spiel",
@@ -21297,6 +21311,159 @@ pruef("Rauchfarbe der Fackeln: gemerkt je Stufe, Farbe wie vorher gerechnet",
       all(_w149._rauch_farbe(f_, a_ / 40.0, h_) == _rauch_alt149(f_, a_ / 40.0, h_)
           for f_ in (True, False) for a_ in range(41) for h_ in (1.0, 0.6)))
 _w149.verlassen(); _g149.verlassen()
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- 0.34.150: cloudflared wird beim Online-Spiel geladen, mit Ladebild")
+# Statt GitHub liefert ein kleiner Server auf 127.0.0.1 die Attrappe von
+# cloudflared aus - als Programm und als .tgz, wie Cloudflare es anbietet.
+import hashlib as _hl150, http.server as _hs150, io as _io150, shutil as _sh150
+import tarfile as _tar150, threading as _th150
+from dustfront import online as _on150, pfade as _pf150, ladebild as _lb150
+_quelle150 = _tf73.mkdtemp()
+_daten150 = _tf73.mkdtemp()
+_inhalt150 = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "attrappe_cloudflared.py"), "rb").read()
+open(os.path.join(_quelle150, "cf-roh"), "wb").write(_inhalt150)
+_tgz150 = _io150.BytesIO()
+with _tar150.open(fileobj=_tgz150, mode="w:gz") as _t150:
+    _ti150 = _tar150.TarInfo("cloudflared"); _ti150.size = len(_inhalt150); _ti150.mode = 0o755
+    _t150.addfile(_ti150, _io150.BytesIO(_inhalt150))
+open(os.path.join(_quelle150, "cf.tgz"), "wb").write(_tgz150.getvalue())
+_summe150 = _hl150.sha256(_inhalt150).hexdigest()
+_tgz_summe150 = _hl150.sha256(_tgz150.getvalue()).hexdigest()
+_halt150 = _th150.Event()
+
+class _Dienst150(_hs150.SimpleHTTPRequestHandler):
+    def __init__(self, *a, **k):
+        super().__init__(*a, directory=_quelle150, **k)
+    def log_message(self, *a):
+        pass
+    def do_GET(self):
+        if self.path.endswith("haengt"):
+            self.send_response(200); self.send_header("Content-Length", "999999"); self.end_headers()
+            self.wfile.write(b"x" * 1000); self.wfile.flush()
+            _halt150.wait(10.0)              # bleibt stehen, bis abgebrochen wurde
+            return
+        if self.path.endswith("cf-roh"):
+            # In Stuecken mit kleinen Pausen: so laesst sich ein Zwischenstand sehen.
+            self.send_response(200); self.send_header("Content-Length", str(len(_inhalt150)))
+            self.end_headers()
+            for i_ in range(0, len(_inhalt150), 400):
+                self.wfile.write(_inhalt150[i_:i_ + 400]); self.wfile.flush()
+                time.sleep(0.02)
+            return
+        super().do_GET()
+
+_srv150 = _hs150.ThreadingHTTPServer(("127.0.0.1", 0), _Dienst150)
+_th150.Thread(target=_srv150.serve_forever, daemon=True).start()
+_alt150 = (dict(K.ONLINE), _pf150.ordner, os.environ.get("PATH", ""),
+           os.environ.pop("DUSTFRONT_OHNE_LADEN", None), os.environ.pop("DUSTFRONT_CLOUDFLARED", None))
+K.ONLINE["quelle"] = "http://127.0.0.1:%d/{datei}" % _srv150.server_address[1]
+K.ONLINE["laden_block"] = 512                  # viele Stuecke: der Balken waechst sichtbar
+_sys150 = _on150.plattform()
+K.ONLINE["pakete"] = {_sys150: ("cf-roh", _summe150, "cloudflared", _summe150)}
+_pf150.ordner = lambda: Path(_daten150)
+# Kein installiertes cloudflared - nur Python, das die Attrappe braucht.
+os.environ["PATH"] = os.path.dirname(sys.executable)
+_on150._gefunden.clear(); _on150._lader.clear()
+os.environ["ATTRAPPE_ORDNER"] = _ordner73
+
+def _warten150(bedingung, sekunden=10.0):
+    ende = time.time() + sekunden
+    while time.time() < ende and not bedingung():
+        time.sleep(0.01)
+    return bedingung()
+
+pruef("Ohne cloudflared heisst es erst laden (nichts liegt mehr im Spiel bei)",
+      _on150.programm() == ("", _on150.LADEN_NOETIG), str(_on150.programm()))
+_neuer_port(); _p150 = _port[0]
+_tun150 = _on150.Tunnel(_p150)
+pruef("Der Tunnel wartet auf das Laden, statt mit einem Fehler aufzugeben",
+      _tun150.zustand == "laedt" and _tun150.beschreibung().startswith("CLOUDFLARED LÄDT")
+      and not _tun150.fehler, _tun150.beschreibung())
+_app150 = _App73("L", None, headless=True)
+_lb_bild150 = _lb150.zeigen_wenn_noetig(_app150)
+pruef("Das Ladebild liegt oben, solange geladen wird (die Lobby bleibt darunter zu sehen)",
+      _lb_bild150 is not None and _app150.oben is _lb_bild150 and _lb_bild150.deckt_zu is False
+      and _lb150.zeigen_wenn_noetig(_app150) is None)
+_bild150 = pygame.Surface((K.GAME_W, K.GAME_H))
+_lb_bild150.zeichnen(_bild150, 0.5)
+_l150 = _on150.lader()
+pruef("Gastgeber und Gast warten auf denselben Lader", _on150.laden_starten() is _l150)
+_anteile150 = []
+_warten150(lambda: (_anteile150.append(_l150.anteil), not _l150.laeuft)[1])
+pruef("Der Fortschritt waechst bis 1, die Groesse ist bekannt",
+      _l150.fertig and _l150.anteil == 1.0 and _l150.gesamt == len(_inhalt150)
+      and _l150.geladen == len(_inhalt150) and any(0.0 < a_ < 1.0 for a_ in _anteile150),
+      "%s %s %d" % (_l150.fertig, _l150.fehler, len(_anteile150)))
+_lb_bild150.zeichnen(_bild150, 0.5)
+_lb_bild150.schritt(K.FIXED_DT)
+pruef("... und danach geht das Ladebild von selbst", _app150.oben is not _lb_bild150)
+_ziel150 = Path(_daten150) / "cloudflared" / K.ONLINE["version"] / "cloudflared"
+pruef("Das Programm liegt geprueft im Datenordner, ausfuehrbar, ohne Reste",
+      _ziel150.is_file() and _hl150.sha256(_ziel150.read_bytes()).hexdigest() == _summe150
+      and (os.access(str(_ziel150), os.X_OK) or os.name == "nt")
+      and sorted(p_.name for p_ in _ziel150.parent.iterdir()) == ["cloudflared"])
+_bis73(lambda: (_tun150.schritt(), _tun150.zustand == "bereit")[1], [], 10.0)
+pruef("... und der Tunnel startet danach von selbst und gibt seinen Code",
+      _tun150.zustand == "bereit" and _tun150.code == "sample-tunnel-for-%d" % _p150,
+      _tun150.beschreibung())
+_tun150.schliessen()
+_on150._gefunden.clear()
+pruef("Beim naechsten Mal wird nichts mehr geladen",
+      _on150.programm() == (str(_ziel150), ""), str(_on150.programm()))
+
+# Falsche Pruefsumme: nichts wird ausgefuehrt, nichts bleibt liegen.
+_on150._gefunden.clear(); _on150._lader.clear()
+_sh150.rmtree(str(_ziel150.parent))
+K.ONLINE["pakete"] = {_sys150: ("cf-roh", "0" * 64, "cloudflared", _summe150)}
+_l150 = _on150.laden_starten()
+_warten150(lambda: not _l150.laeuft)
+pruef("Stimmt die Pruefsumme nicht, wird es nicht abgelegt - mit Grund",
+      not _l150.fertig and "PRÜFSUMME" in _l150.fehler and not _ziel150.exists()
+      and not list(_ziel150.parent.iterdir()), _l150.fehler)
+_zug150 = _on150.Zugang("sample-tunnel-for-%d" % _p150)
+_warten150(lambda: (_zug150.schritt(), bool(_zug150.fehler))[1])
+pruef("Ein Gast bekommt den Grund, statt ewig zu warten (und ein neuer Versuch laedt neu)",
+      isinstance(_zug150, _on150.CloudflaredZugang) and "PRÜFSUMME" in _zug150.fehler
+      and _on150.lader() is not _l150, _zug150.fehler)
+_warten150(lambda: not _on150.lader().laeuft)
+
+# Als .tgz (macOS): ausgepackt, und die Summe des Programms zaehlt.
+_on150._gefunden.clear(); _on150._lader.clear()
+K.ONLINE["pakete"] = {_sys150: ("cf.tgz", _tgz_summe150, "cloudflared", _summe150)}
+_l150 = _on150.laden_starten()
+_warten150(lambda: not _l150.laeuft)
+pruef("Aus dem .tgz wird das Programm ausgepackt und geprueft",
+      _l150.fertig and _hl150.sha256(_ziel150.read_bytes()).hexdigest() == _summe150
+      and sorted(p_.name for p_ in _ziel150.parent.iterdir()) == ["cloudflared"], _l150.fehler)
+
+# Abbrechen mit ESC, waehrend der Server stehenbleibt.
+_on150._gefunden.clear(); _on150._lader.clear()
+_sh150.rmtree(str(_ziel150.parent))
+K.ONLINE["pakete"] = {_sys150: ("haengt", _summe150, "cloudflared", _summe150)}
+_l150 = _on150.laden_starten()
+_lb_bild150 = _lb150.zeigen_wenn_noetig(_app150)
+_warten150(lambda: _l150.geladen > 0)
+_lb_bild150.zeichnen(_bild150, 0.5)
+_lb_bild150.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0, unicode=""))
+_lb_bild150.schritt(K.FIXED_DT)
+pruef("ESC im Ladebild bricht ab: Grund ABGEBROCHEN, Ladebild weg",
+      _l150.fehler == "LADEN ABGEBROCHEN" and not _l150.laeuft and _app150.oben is not _lb_bild150,
+      _l150.fehler)
+_halt150.set()
+pruef("... und es bleibt nichts halb Geladenes liegen",
+      _warten150(lambda: not _ziel150.parent.exists() or not list(_ziel150.parent.iterdir()), 5.0))
+
+pruef("In den Pruefungen laedt nichts aus dem Netz (DUSTFRONT_OHNE_LADEN)",
+      (os.environ.__setitem__("DUSTFRONT_OHNE_LADEN", "1"), _on150._gefunden.clear(),
+       _on150.programm())[2][1].startswith("CLOUDFLARED FEHLT"))
+_srv150.shutdown()
+K.ONLINE.clear(); K.ONLINE.update(_alt150[0])
+_pf150.ordner = _alt150[1]
+os.environ["PATH"] = _alt150[2]
+_on150._gefunden.clear(); _on150._lader.clear()
+_on150.alle_beenden()
 
 print()
 print("FEHLER:", fails or "keine")

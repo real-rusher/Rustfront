@@ -9,37 +9,46 @@ zusammen spielen kann, ohne etwas am Router freizugeben und ohne dass die
 Windows-Firewall nachfragt (siehe dustfront/online.py und
 docs/MEHRSPIELER.md, Abschnitt 7.9).
 
-Man muss hier nichts tun. Das Spiel packt das passende Programm beim
-ersten Gebrauch selbst in seinen Datenordner aus und prueft die
-Pruefsumme.
+Seit 0.34.150 liegt es nicht mehr hier bei
+-----------------------------------------
+Bis 0.34.149 lagen hier drei Archive (Windows, macOS Intel, macOS Apple),
+zusammen 58 MB - jeder brauchte davon nur eines. Jetzt laedt das Spiel
+beim ersten Spiel ueber das Internet genau das passende vom offiziellen
+Release, mit Ladebild und Fortschrittsbalken (dustfront/ladebild.py), und
+legt es in seinen Datenordner. Man muss nichts tun.
 
-Fassung und Herkunft
---------------------
-Fassung 2026.10.0, unveraendert von
-https://github.com/cloudflare/cloudflared/releases/tag/2026.10.0
+Geladen wird von
+  https://github.com/cloudflare/cloudflared/releases/download/<Fassung>/<Datei>
+und vor dem ersten Start gegen die Pruefsummen in dustfront/config.py
+(ONLINE, "pakete") verglichen - die der Datei und die des Programms darin.
+Ein installiertes cloudflared geht vor; dann wird nichts geladen.
 
-  cloudflared-windows-amd64.zip   enthaelt cloudflared.exe
-      (= cloudflared-windows-amd64.exe aus dem Release, nur gezippt)
-      SHA-256 der .exe:  86aee4017b26625cee8484c113558f48effa4cd47f7aa05fcf425604e5d2b23c
-  cloudflared-darwin-arm64.tgz    macOS mit Apple-Chip, wie im Release
-      SHA-256 des Archivs:   a2f79ff7b9420aa537d74af239f376da170bbabeb529aec416002adac6a72e70
-      SHA-256 des Programms: 72edfd3eea463aef4d5cb89e2e209cecb048cc756c2b01915de2e0ad7cb39830
-  cloudflared-darwin-amd64.tgz    macOS mit Intel-Chip, wie im Release
-      SHA-256 des Archivs:   903845b81828c8cb3c5d13d816a2de71c06a3da5785469df8eb0e1b736d92f9f
-      SHA-256 des Programms: 0560c9ab7281ac3f746055323623ed23bc0405b6dab9400474020cba33a978da
-
-Unter Linux wird ein installiertes cloudflared benutzt (Paketverwaltung),
-es liegt keines bei.
+Fassung 2026.10.0
+-----------------
+  Windows          cloudflared-windows-amd64.exe
+      SHA-256:     86aee4017b26625cee8484c113558f48effa4cd47f7aa05fcf425604e5d2b23c
+  macOS (Apple)    cloudflared-darwin-arm64.tgz
+      Archiv:      a2f79ff7b9420aa537d74af239f376da170bbabeb529aec416002adac6a72e70
+      Programm:    72edfd3eea463aef4d5cb89e2e209cecb048cc756c2b01915de2e0ad7cb39830
+  macOS (Intel)    cloudflared-darwin-amd64.tgz
+      Archiv:      903845b81828c8cb3c5d13d816a2de71c06a3da5785469df8eb0e1b736d92f9f
+      Programm:    0560c9ab7281ac3f746055323623ed23bc0405b6dab9400474020cba33a978da
+  Linux (x86-64)   cloudflared-linux-amd64
+      SHA-256:     d33ff2d14475178d2012c2c56beba87389ac5ded27649519f198a7d3134a99db
+  Linux (ARM64)    cloudflared-linux-arm64
+      SHA-256:     e6422b9d4f72d3194bc5a38676f13667c06666523217b842a877d72a80b5ac08
 
 Lizenz
 ------
 cloudflared steht unter der Apache License 2.0 (Datei LICENSE in diesem
-Ordner, unveraendert aus dem Quelltext von cloudflared). Sie erlaubt,
-das Programm unveraendert weiterzugeben. Copyright Cloudflare, Inc.
+Ordner, unveraendert aus dem Quelltext von cloudflared). Copyright
+Cloudflare, Inc.
 
 Neue Fassung einspielen
 -----------------------
-1. Die drei Dateien aus dem neuen Release holen (die .exe neu zippen,
-   Name darin: cloudflared.exe).
-2. In dustfront/config.py unter ONLINE die Fassung und die drei
-   Pruefsummen der ausgepackten Programme eintragen.
+1. Die fuenf Dateien aus dem neuen Release holen und ihre SHA-256 bilden
+   (bei den .tgz auch die des Programms "cloudflared" darin).
+2. In dustfront/config.py unter ONLINE die Fassung und die Pruefsummen
+   eintragen.
+3. python tests/test_spiel.py (Abschnitt 0.34.150) und ein Spiel ueber das
+   Internet ausprobieren.

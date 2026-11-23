@@ -1632,9 +1632,6 @@ class SchlachtTeil:
         x0, y0, f = self._karte_masse()
         return pygame.Vector2((punkt[0] - x0) / f, (punkt[1] - y0) / f)
 
-    def _welt_zu_karte(self, pos) -> tuple:
-        x0, y0, f = self._karte_masse()
-        return int(x0 + pos.x * f), int(y0 + pos.y * f)
 
     def _belohnung_anfordern(self, punkt) -> bool:
         """Anfordern, was gewaehlt ist, an `punkt`. True, wenn es ging."""

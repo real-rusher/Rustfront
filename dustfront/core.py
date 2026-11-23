@@ -587,6 +587,7 @@ class App:
         # Erst die Texturen der Grafikkarte freigeben, solange ihr Renderer noch
         # lebt: set_mode legt das Fenster neu an und raeumt den Renderer ab -
         # wer danach noch eine Textur haelt, gibt sie ein zweites Mal frei.
+        war_gpu = self.__dict__.get("gpu", False)
         self.gpu_freigeben()
         self.gpu = False
         if self.headless:
@@ -594,6 +595,17 @@ class App:
             self.viewport_rechnen()
             return
         modus = self.opt["fenstermodus"] if self.vollbild else "fenster"
+        if war_gpu and self._gpu_gewuenscht():
+            # GRUND (seit 0.34.150, mit valgrind gefunden): pygame-ce 2.5 liest
+            # beim Wechsel von SCALED zu SCALED Speicher, den es gerade
+            # freigegeben hat, sobald das Fenster vergroessert war - und das ist
+            # es mit GPU SKALIERT immer. Ueber ein gewoehnliches Fenster
+            # dazwischen geht es sauber. Kostet ein Neuanlegen mehr, nur beim
+            # Umstellen der Anzeige.
+            try:
+                pygame.display.set_mode(tuple(self.fenster_groesse), pygame.RESIZABLE)
+            except pygame.error:
+                pass
         if self._gpu_gewuenscht() and self._gpu_setzen(modus):
             self.viewport_rechnen()
             return
@@ -1244,9 +1256,6 @@ class App:
 # Kleine Helfer
 # ══════════════════════════════════════════════════════════════════
 
-def mische(a: float, b: float, t: float) -> float:
-    return a + (b - a) * t
-
 
 def naehern(wert: float, ziel: float, schritt: float) -> float:
     """Bewegt wert um hoechstens schritt in Richtung ziel."""
@@ -1255,5 +1264,3 @@ def naehern(wert: float, ziel: float, schritt: float) -> float:
     return max(ziel, wert - schritt)
 
 
-def winkel_zu(von: pygame.Vector2, nach: pygame.Vector2) -> float:
-    return math.degrees(math.atan2(nach.y - von.y, nach.x - von.x))

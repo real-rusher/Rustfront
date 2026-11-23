@@ -464,7 +464,7 @@ def szene_ueberfall(tm, rnd):
             break
     alpha = tm.trupp_setzen(a, 0, {"groesse": 4, "team": 0, "fuehrer": "funk", "mischung": "gemischt",
                                    "leben": 2.0})
-    bravo = tm.trupp_setzen(c, 0, {"groesse": 3, "team": 0, "fuehrer": "funk"})
+    tm.trupp_setzen(c, 0, {"groesse": 3, "team": 0, "fuehrer": "funk"})
     feinde = [tm.bot_setzen(p, 0, {"team": 1, "hirn": "goap", "leben": 2.0}) for p in kreis(b, 6, 30)]
     return ("Ueberfall: zu nah dran - der Hilferuf kommt nicht durch",
             alpha.mitglieder + feinde, alle_weg(alpha.mitglieder, feinde), 40, 1.75)

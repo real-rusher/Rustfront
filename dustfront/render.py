@@ -367,18 +367,6 @@ class Kamera:
         fy = m.y - self.hoehe / 2 + self.versatz.y
         return pygame.Vector2(e.x + round(weltpunkt[0] - fx), e.y + round(weltpunkt[1] - fy))
 
-    @property
-    def ecke_ruhig(self) -> pygame.Vector2:
-        """Dieselbe Ecke **ohne** Ruckeln, zum Umrechnen von Eingaben.
-
-        Der Unterschied ist keine Feinheit. `zu_welt` liefert den Punkt,
-        auf den gezielt wird, und daraus folgt der Winkel jedes Schusses
-        und - bei der Granate - die Wurfweite. Rechnete man das ueber die
-        wackelnde Ecke, veraenderte sich das Ziel mit jedem Zittern des
-        Bildes: man haelt still, und der Wurf geht trotzdem woandershin.
-        Das Ruckeln gehoert ins Bild, nicht in die Hand.
-        """
-        return self._ecke_bei(0.0, 0.0)
 
     def zu_welt(self, bildpunkt) -> pygame.Vector2:
         """Bildpunkt (im 640 x 360-Bild) -> Weltpunkt, auch mit Zoom.
@@ -889,27 +877,6 @@ class Renderer:
         self._weich[schluessel] = hit
         return hit
 
-    def _stehend_an(self, welt, e, x: float, y: float):
-        """Die Masse der stehenden Kachel am Weltpunkt, wenn er in ihrer
-        Grundflaeche liegt - sonst None."""
-        T = K.TILE
-        tx, ty = int(x // T), int(y // T)
-        daten = K.KACHELN[e.kachel(tx, ty)]
-        if not daten["fest"]:
-            return None
-        satz = self.SAETZE.get(getattr(welt, "satz", ""), {})
-        st = self._stehend(satz.get(daten["bild"], daten["bild"]), daten)
-        if st is None:
-            return None
-        rx, ry, rb, rh = st["rahmen"]
-        lx, ly = x - tx * T - rx, y - ty * T - ry
-        if not (0 <= lx < rb and 0 <= ly < rh):
-            return None
-        if st["form"] == "rund":
-            mx, my = rb / 2.0, rh / 2.0
-            if (lx - mx) ** 2 + (ly - my) ** 2 > mx * mx:
-                return None
-        return st
 
     def verdeckt(self, welt, index: int, pos, hoehe: float) -> bool:
         """Verdeckt eine Mauer, Kiste oder ein Fass diesen Punkt vom Auge?
@@ -1071,7 +1038,6 @@ class Renderer:
         cx, cy = zw / 2.0, zh / 2.0
         hell_f = 1.0 if dunkel is None else dunkel / 255.0
         licht = {(0, 1): 0.82, (1, 0): 0.66, (-1, 0): 0.74, (0, -1): 0.56}
-        voll = (0, 0, T, T)
         toene = self._toene
         if len(toene) > 4000:
             toene.clear()
@@ -1662,7 +1628,6 @@ class Renderer:
         die Welt waechst unter ihm heran. Genau das soll sich anfuehlen wie
         ein Blick von oben in echte Tiefe.
         """
-        p = K.PERSPEKTIVE
         fliegende = [w for w in welt.wesen
                      if w.lebt and w.flug > 0 and w.bild is not None]
         if not fliegende:
@@ -2833,15 +2798,6 @@ class Renderer:
     def _linie(self) -> pygame.Surface:
         return self._puffer("linie")
 
-    def rueckmeldung_zeichnen(self, ziel, welt, index: int, ecke) -> None:
-        """Staubringe und Aufschriften der Ebene.
-
-        Beides ist blockig gezeichnet, nicht als weicher Kreis: der Ring
-        besteht aus acht Kloetzen, die nach aussen wandern. Runde Verlaeufe
-        passen nicht zu einem Spiel, das aus Kacheln gebaut ist.
-        """
-        self.ringe_zeichnen(ziel, welt, index, ecke)
-        self.aufschriften_zeichnen(ziel, welt, index, ecke)
 
     def ringe_zeichnen(self, ziel, welt, index: int, ecke) -> None:
         """Staubringe: liegen am Boden, also vor den Mauern gezeichnet."""

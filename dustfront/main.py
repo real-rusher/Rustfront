@@ -198,6 +198,8 @@ def gefecht(gastgeber: bool, wohin: str = "", name: str = "",
                 # Ein Online-Code (seit 0.34.13): erst den Zugang abwarten.
                 import time
                 zugang = online.Zugang(code)
+                if getattr(zugang, "laedt", False):
+                    print("Lade cloudflared (nur beim ersten Mal) ...")
                 print("Verbinde ueber Cloudflare mit %s ..." % code)
                 while not zugang.bereit and not zugang.fehler:
                     zugang.schritt()

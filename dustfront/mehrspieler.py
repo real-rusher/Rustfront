@@ -1891,7 +1891,6 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         herunterzaehlen, fuer alle zu sehen - und, wer selbst am Werfer
         steht, der Zeiger mit seinem Streukreis (gruen: gilt, rot: gilt nicht)."""
         s = K.WERFER["salve"]
-        t = self.welt.zeit
         mein = None
         ich = self.ich
         w = self.welt
@@ -3288,6 +3287,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             self.ansager.schliessen()
             self.ansager = None
         self.gastgeber.tunnel_setzen(bool(o["online_lobby"]))
+        if o["online_lobby"]:
+            from .ladebild import zeigen_wenn_noetig
+            zeigen_wenn_noetig(self.app)      # cloudflared erst laden (0.34.150)
 
     def _loadout_beobachten(self) -> None:
         """Hat sich das eigene Loadout geaendert (Menue AUSRUESTUNG)?
@@ -3364,14 +3366,6 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                     b.start = (pygame.Vector2(b.pos), b.ebene, b.winkel)
                     self.fahrzeuge.append(b)
 
-    def _basis_fahrzeuge_aufstellen(self) -> None:
-        """SCHLACHT: jede Seite bekommt ihre Fahrzeuge an die Basis
-        (K.SCHLACHT fahrzeuge). Die aus der Karte bleiben weg - sie stehen
-        nicht gleich verteilt."""
-        for team in range(2):
-            for art, anzahl in K.basis_wagen(min(3, self.freischalt_stufe())):
-                for _ in range(anzahl):
-                    self._basis_fahrzeug(art, team)
 
     def _basis_fahrzeug(self, art: str, team: int):
         platz = self._fahrzeug_platz_bei(art, self.schlacht_basis(team),
@@ -4402,18 +4396,6 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                              ausrichtung="mitte")
             return
 
-    def _mein_wagen(self):
-        """Der Wagen, in dem man selbst sitzt - beim Gastgeber ueber den
-        Fahrer, beim Gast ueber den Ort (er bekommt nur `fz` gemeldet)."""
-        ich = self.ich
-        if ich is None or not ich.im_fahrzeug:
-            return None
-        if ich.fahrzeug is not None:
-            return ich.fahrzeug
-        for b in self.fahrzeuge:
-            if b.ebene == ich.ebene and b.pos.distance_squared_to(ich.pos) < 9.0:
-                return b
-        return None
 
     def _schritt_gastgeber(self, dt: float) -> None:
         self.hinweis = ""
@@ -7854,6 +7836,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             for (x, y, winkel, _eb, bild, _a, _kn, _h) in getattr(self, "_fremde_geraete", ()):
                 if bild.startswith("teil_drohne"):
                     r.hoch_oben_zeichnen(ziel, bild, pygame.Vector2(x - ecke.x, y - ecke.y), winkel)
+
 
     def _mein_wagen(self):
         """Der Wagen, in dem man sitzt - beim Gast aus der Meldung (wer faehrt)."""

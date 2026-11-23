@@ -190,13 +190,6 @@ def faehigkeit_bereit(k):
     return wahl if rest.get(wahl[0], 0.0) <= 0.0 else None
 
 
-def faehigkeiten_schritt(k, dt: float) -> None:
-    rest = getattr(k, "faehigkeit_rest", None)
-    if rest:
-        for art in list(rest):
-            rest[art] = max(0.0, rest[art] - dt)
-
-
 # Welcher Eintrag aus ausruestung.ARTEN zu welcher Faehigkeit gehoert.
 FAEHIGKEIT_ARTEN = {
     "munitionskiste": "MUNITIONSKISTE (STEHT)",

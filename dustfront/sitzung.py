@@ -106,6 +106,9 @@ def eigene_lobby(app, hinweis: str = "", headless_port: int | None = None):
     app.ersetzen(g)
     if hinweis:
         g.melden(hinweis, 6.0)
+    # Fehlt cloudflared noch, wird es jetzt geladen - mit Ladebild (0.34.150).
+    from .ladebild import zeigen_wenn_noetig
+    zeigen_wenn_noetig(app)
     return g
 
 
@@ -357,6 +360,8 @@ class LobbySuche(Menue):
         if code:
             self._zugang = online.Zugang(code)
             self._zugang_wort = passwort
+            from .ladebild import zeigen_wenn_noetig
+            zeigen_wenn_noetig(self.app)      # cloudflared erst laden (0.34.150)
             return
         self._verbinde = (adresse.strip(), passwort)
         self._verbinde_bild = 0

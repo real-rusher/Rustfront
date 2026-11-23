@@ -1789,29 +1789,6 @@ def _zufall(ix: int, iy: int, saat: int) -> float:
     return ((h ^ (h >> 16)) & 0xFFFF) / 65535.0
 
 
-def _gitterwert(x: float, y: float, masche: float, saat: int) -> float:
-    """Weich ueberblendetes Zufallsgitter an der Stelle (x, y).
-
-    Der Unterschied zu einem Wuerfel je Bildpunkt ist der ganze Punkt:
-    benachbarte Stellen bekommen aehnliche Werte, und daraus werden
-    zusammenhaengende Ballen statt Rauschen. Zwischen den Gitterpunkten
-    wird mit einer S-Kurve ueberblendet, nicht linear - sonst sieht man
-    die Maschen als Rauten.
-    """
-    gx, gy = x / masche, y / masche
-    ix, iy = math.floor(gx), math.floor(gy)
-    fx, fy = gx - ix, gy - iy
-    sx = fx * fx * (3.0 - 2.0 * fx)
-    sy = fy * fy * (3.0 - 2.0 * fy)
-    a = _zufall(ix, iy, saat)
-    b = _zufall(ix + 1, iy, saat)
-    c = _zufall(ix, iy + 1, saat)
-    d = _zufall(ix + 1, iy + 1, saat)
-    oben = a + (b - a) * sx
-    unten = c + (d - c) * sx
-    return oben + (unten - oben) * sy
-
-
 class Nagelfeld:
     """Naegel und Kraehenfuesse hinter einem Wagen (seit 0.34.65, der
     Nagelstreuer). Wie die Brandflaeche kein Wesen: sie liegt nur da.
@@ -2017,15 +1994,6 @@ class Rauchwolke:
         self._feld = (korn, breite, x0, y0, werte)
         return breite, x0, y0, werte
 
-    def dichte_bei(self, x: float, y: float) -> float:
-        """Dichte an einer Weltstelle, aus dem Feld abgelesen."""
-        korn = max(1, int(K.RAUCH["korn"]))
-        breite, x0, y0, werte = self.feld(korn)
-        gx = int((x - x0) // korn)
-        gy = int((y - y0) // korn)
-        if not (0 <= gx < breite and 0 <= gy < breite):
-            return 0.0
-        return werte[gy * breite + gx]
 
     def deckt(self, pos, ebene: int) -> bool:
         """Ist dieser Punkt vollstaendig verborgen?

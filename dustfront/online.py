@@ -36,11 +36,17 @@ GRUND fuer `--protocol http2`: cloudflared spricht sonst QUIC ueber UDP.
 Eine UDP-Steckdose, auf der Antworten von draussen ankommen, kann unter
 Windows die Firewall-Abfrage ausloesen - ueber TCP sicher nicht.
 
-**Das Programm** liegt in `tools/cloudflared` als Archiv je System
-(Windows, macOS Intel und Apple) mit seiner Lizenz (Apache 2.0). Beim
-ersten Gebrauch wird es in den Datenordner (pfade.py) ausgepackt und die
-Pruefsumme verglichen. Selbst ausgepackt traegt es keinen Vermerk "aus
-dem Internet geladen" - SmartScreen und Gatekeeper fragen deshalb nicht.
+**Das Programm** laedt das Spiel beim ersten Spiel ueber das Internet
+(seit 0.34.150, vorher lag es fuer drei Systeme in `tools/cloudflared` bei
+- 58 MB, von denen jeder ein Drittel brauchte): vom offiziellen Release
+auf GitHub, je System die passende Datei (K.ONLINE `pakete`), in einem
+eigenen Faden (`Lader`), mit Fortschritt fuer das Ladebild (ladebild.py).
+Bevor es laeuft, werden die Pruefsummen von Datei und Programm
+verglichen; liegt es einmal im Datenordner (pfade.py), wird nie wieder
+geladen. Weil das Spiel selbst schreibt und kein Browser, traegt die
+Datei keinen Vermerk "aus dem Internet geladen" - SmartScreen und
+Gatekeeper fragen deshalb nicht. Ein installiertes cloudflared oder
+DUSTFRONT_CLOUDFLARED geht vor, dann wird nichts geladen.
 
 **Threads.** Anders als in netz.py liest hier je Programm ein kleiner
 Faden dessen Ausgabe mit. GRUND: Unter Windows laesst sich eine Pipe nicht
@@ -66,12 +72,11 @@ import tarfile
 import tempfile
 import threading
 import time
-import zipfile
 from pathlib import Path
 
 from . import config as K
-# "geraet" und nicht "plattform": so heisst hier schon die Funktion, die das
-# passende cloudflared-Archiv waehlt.
+# "geraet" und nicht "plattform": so heisst hier schon die Funktion, die die
+# passende cloudflared-Datei waehlt.
 from . import plattform as geraet
 from . import pfade
 
@@ -93,7 +98,7 @@ HARMLOS = ("fetch features", "icmp", "ping_group_range", "update check")
 # ══════════════════════════════════════════════════════════════════
 
 def plattform() -> str:
-    """Welches der mitgelieferten Archive auf diesen Rechner passt."""
+    """Welche Datei von cloudflared auf diesen Rechner passt."""
     maschine = platform.machine().lower()
     if sys.platform.startswith("win"):
         # Windows auf ARM fuehrt das amd64-Programm ueber die eingebaute
@@ -114,54 +119,46 @@ def _summe(pfad) -> str:
     return h.hexdigest()
 
 
-_gefunden: dict = {}
-
-
-def _auspacken(archiv: str, name: str, summe: str) -> tuple[str, str]:
-    """Das Programm aus dem Archiv holen, einmal. Gibt (Pfad, Fehler)."""
+def _ziel(name: str) -> Path:
+    """Wo das geladene Programm liegt (dieselbe Stelle wie bis 0.34.149,
+    als es aus dem mitgelieferten Archiv kam - wer es so schon hat, laedt
+    nichts)."""
     basis = pfade.ordner()
     if basis is None:
         basis = Path(tempfile.gettempdir()) / "dustfront"
-    ziel = Path(basis) / "cloudflared" / O["version"] / name
-    if ziel.is_file():
-        try:
-            if _summe(ziel) == summe:
-                return str(ziel), ""
-        except OSError:
-            pass
-    quelle = pfade.spielordner() / O["ordner"] / archiv
-    if not quelle.is_file():
-        return "", "%s FEHLT IN %s" % (archiv.upper(), O["ordner"].upper())
+    return Path(basis) / "cloudflared" / O["version"] / name
+
+
+def _paket():
+    """(Datei, Summe der Datei, Programmname, Summe des Programms) fuer
+    dieses System - oder None, wenn Cloudflare keines anbietet."""
+    return O["pakete"].get(plattform())
+
+
+def _vorhanden() -> str:
+    """Pfad des schon geladenen und geprueften Programms, sonst ""."""
+    paket = _paket()
+    if paket is None:
+        return ""
+    ziel = _ziel(paket[2])
     try:
-        ziel.parent.mkdir(parents=True, exist_ok=True)
-        halb = ziel.with_name(ziel.name + ".neu")
-        if archiv.endswith(".zip"):
-            with zipfile.ZipFile(str(quelle)) as z, z.open(name) as rein, \
-                    open(str(halb), "wb") as raus:
-                shutil.copyfileobj(rein, raus)
-        else:
-            with tarfile.open(str(quelle), "r:gz") as t:
-                rein = t.extractfile(name)
-                if rein is None:
-                    return "", "%s IST KAPUTT" % archiv.upper()
-                with open(str(halb), "wb") as raus:
-                    shutil.copyfileobj(rein, raus)
-        if _summe(halb) != summe:
-            halb.unlink()
-            return "", "PRÜFSUMME VON CLOUDFLARED FALSCH"
-        os.chmod(str(halb), 0o755)
-        os.replace(str(halb), str(ziel))
-    except (OSError, KeyError, zipfile.BadZipFile, tarfile.TarError) as e:
-        return "", "AUSPACKEN GING NICHT: %s" % str(e)[:40]
-    return str(ziel), ""
+        if ziel.is_file() and _summe(ziel) == paket[3]:
+            return str(ziel)
+    except OSError:
+        pass
+    return ""
+
+
+_gefunden: dict = {}
 
 
 def programm() -> tuple[str, str]:
     """Wo cloudflared liegt: (Pfad, "") oder ("", Grund).
 
     Der Reihe nach: eine Umgebungsvariable (fuer Pruefungen und wer eine
-    andere Fassung will), das mitgelieferte Archiv, ein installiertes.
-    Gemerkt wird je Lauf - das Auspacken und Pruefen kostet einmal eine
+    andere Fassung will), das schon geladene, ein installiertes. Fehlt
+    alles, ist der Grund LADEN_NOETIG - dann laedt `laden_starten` es.
+    Gemerkt wird nur ein Fund: das Pruefen kostet einmal eine
     Zehntelsekunde, nicht bei jedem Tunnel.
     """
     eigen = os.environ.get("DUSTFRONT_CLOUDFLARED", "")
@@ -169,17 +166,152 @@ def programm() -> tuple[str, str]:
         return (eigen, "") if os.path.isfile(eigen) else \
             ("", "DUSTFRONT_CLOUDFLARED ZEIGT INS LEERE")
     if "pfad" in _gefunden:
-        return _gefunden["pfad"], _gefunden["fehler"]
-    pfad, fehler = "", "CLOUDFLARED GIBT ES FÜR DIESES SYSTEM NICHT MIT"
-    paket = O["pakete"].get(plattform())
-    if paket is not None:
-        pfad, fehler = _auspacken(*paket)
-    if not pfad:
-        installiert = shutil.which("cloudflared")
-        if installiert:
-            pfad, fehler = installiert, ""
-    _gefunden.update(pfad=pfad, fehler=fehler)
-    return pfad, fehler
+        return _gefunden["pfad"], ""
+    pfad = _vorhanden() or shutil.which("cloudflared") or ""
+    if pfad:
+        _gefunden["pfad"] = pfad
+        return pfad, ""
+    if os.environ.get("DUSTFRONT_OHNE_LADEN", "") not in ("", "0"):
+        # Fuer die Pruefungen: sie laden nichts aus dem Netz.
+        return "", "CLOUDFLARED FEHLT (DUSTFRONT_OHNE_LADEN)"
+    if _paket() is None:
+        return "", "CLOUDFLARED GIBT ES FÜR DIESES SYSTEM NICHT"
+    return "", LADEN_NOETIG
+
+
+LADEN_NOETIG = "CLOUDFLARED MUSS ERST GELADEN WERDEN"
+
+
+def lade_text(l) -> str:
+    """Eine Zeile zum Stand des Laders, fuer Anzeigen ohne Balken."""
+    if l.gesamt:
+        return "CLOUDFLARED LÄDT %d %%" % int(l.anteil * 100)
+    return "CLOUDFLARED LÄDT ..."
+
+
+class Lader:
+    """Laedt cloudflared einmal in einem eigenen Faden (seit 0.34.150).
+
+    Es gibt hoechstens einen (`lader()`): Gastgeber und Gast warten auf
+    denselben. `geladen`/`gesamt` (Bytes) fuer den Balken, `fertig`, wenn
+    das Programm geprueft im Datenordner liegt, sonst der Grund in `fehler`.
+    """
+
+    def __init__(self) -> None:
+        self.geladen = 0
+        self.gesamt = 0
+        self.fertig = False
+        self.fehler = ""
+        self._halt = threading.Event()
+        paket = _paket()
+        if paket is None:
+            self.fehler = "CLOUDFLARED GIBT ES FÜR DIESES SYSTEM NICHT"
+            return
+        self.paket = paket
+        self._faden = threading.Thread(target=self._laden, name="cloudflared laden",
+                                       daemon=True)
+        self._faden.start()
+
+    @property
+    def laeuft(self) -> bool:
+        return not self.fertig and not self.fehler
+
+    @property
+    def anteil(self) -> float:
+        """0 bis 1, so weit es ist (0, solange die Groesse unbekannt ist)."""
+        if self.fertig:
+            return 1.0
+        return min(1.0, self.geladen / float(self.gesamt)) if self.gesamt else 0.0
+
+    def abbrechen(self) -> None:
+        if self.laeuft:
+            self._halt.set()
+            self.fehler = "LADEN ABGEBROCHEN"
+
+    def _laden(self) -> None:
+        datei, summe_datei, name, summe = self.paket
+        ziel = _ziel(name)
+        teil = ziel.with_name(ziel.name + ".teil")
+        url = O["quelle"].format(version=O["version"], datei=datei)
+        try:
+            ziel.parent.mkdir(parents=True, exist_ok=True)
+            self._holen(url, teil, summe_datei)
+            if self._halt.is_set():
+                return
+            halb = ziel.with_name(ziel.name + ".neu")
+            if datei.endswith(".tgz"):
+                with tarfile.open(str(teil), "r:gz") as t:
+                    rein = t.extractfile(name)
+                    if rein is None:
+                        raise ValueError("%s FEHLT IM ARCHIV" % name.upper())
+                    with open(str(halb), "wb") as raus:
+                        shutil.copyfileobj(rein, raus)
+                teil.unlink()
+            else:
+                os.replace(str(teil), str(halb))
+            if _summe(halb) != summe:
+                halb.unlink()
+                raise ValueError("PRÜFSUMME VON CLOUDFLARED FALSCH")
+            os.chmod(str(halb), 0o755)
+            os.replace(str(halb), str(ziel))
+            _gefunden["pfad"] = str(ziel)
+            self.fertig = True
+        except ValueError as e:
+            self.fehler = str(e)
+        except (OSError, tarfile.TarError) as e:
+            if not self._halt.is_set():
+                self.fehler = "LADEN GING NICHT: %s" % _grund(e)
+        finally:
+            for rest in (teil, ziel.with_name(ziel.name + ".neu")):
+                if not self.fertig and rest.exists():
+                    try:
+                        rest.unlink()
+                    except OSError:
+                        pass
+
+    def _holen(self, url: str, teil: Path, summe: str) -> None:
+        """Die Datei Stueck fuer Stueck nach `teil`, mit Pruefsumme."""
+        import urllib.request
+        from . import ablage
+        anfrage = urllib.request.Request(url, headers={"User-Agent": "dustfront"})
+        h = hashlib.sha256()
+        with ablage.oeffnen(anfrage, url, wartezeit=O["laden_frist"]) as antwort, \
+                open(str(teil), "wb") as raus:
+            self.gesamt = int(antwort.headers.get("Content-Length") or 0)
+            while not self._halt.is_set():
+                stueck = antwort.read(O["laden_block"])
+                if not stueck:
+                    break
+                raus.write(stueck)
+                h.update(stueck)
+                self.geladen += len(stueck)
+        if not self._halt.is_set() and h.hexdigest() != summe:
+            raise ValueError("PRÜFSUMME DER DATEI FALSCH - NOCH EINMAL VERSUCHEN")
+
+
+def _grund(e) -> str:
+    """Ein kurzer Grund fuer die Anzeige."""
+    grund = getattr(e, "reason", None) or e
+    return str(grund).upper()[:40]
+
+
+_lader: list = []
+
+
+def lader() -> Lader | None:
+    """Der laufende oder letzte Lader, sonst None."""
+    return _lader[0] if _lader else None
+
+
+def laden_starten() -> Lader:
+    """Den Lader starten, wenn nicht schon einer laeuft oder fertig ist.
+    Ist der letzte gescheitert, versucht es ein neuer."""
+    alt = lader()
+    if alt is not None and not alt.fehler:
+        return alt
+    neu = Lader()
+    _lader[:] = [neu]
+    return neu
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -402,6 +534,7 @@ class Tunnel:
         self._seit = 0.0
         self._neustarts = 0
         self._neu_um = 0.0
+        self._lader: Lader | None = None
         self._starten()
 
     def _starten(self) -> None:
@@ -413,6 +546,10 @@ class Tunnel:
             return
         pfad, fehler = programm()
         if not pfad:
+            if fehler == LADEN_NOETIG:
+                # Erst laden (seit 0.34.150); schritt() startet danach.
+                self._lader = laden_starten()
+                return
             self.fehler = fehler
             return
         try:
@@ -432,9 +569,17 @@ class Tunnel:
             return "bereit"
         if self.fehler:
             return "fehler"
-        return "startet"
+        return "laedt" if self._lader is not None else "startet"
 
     def schritt(self) -> None:
+        if self._lader is not None:
+            if self._lader.fertig:
+                self._lader = None
+                self._starten()
+            elif self._lader.fehler:
+                self.fehler = self._lader.fehler
+                self._lader = None
+            return
         if self._p is None:
             if (self._neu_um and time.monotonic() >= self._neu_um
                     and self._neustarts < O["neustart_hoechstens"]):
@@ -483,6 +628,8 @@ class Tunnel:
             return self.code.upper()
         if self.fehler:
             return self.fehler
+        if self._lader is not None:
+            return lade_text(self._lader)
         return "STARTET ..." if not self.code else "VERBINDET ..."
 
 
@@ -499,7 +646,10 @@ def Zugang(code: str):
     Ausprobieren, ob der Weg eines iPhones durchkommt.
     """
     erzwungen = os.environ.get("DUSTFRONT_WS_ZUGANG", "") not in ("", "0")
-    if erzwungen or not geraet.prozesse_erlaubt() or not programm()[0]:
+    # Fehlt cloudflared nur, weil es noch nicht geladen ist, wird es
+    # geladen (seit 0.34.150) - ohne Weg ohne cloudflared nur, wo es keins gibt.
+    if erzwungen or not geraet.prozesse_erlaubt() or \
+            not (programm()[0] or programm()[1] == LADEN_NOETIG):
         from .wszugang import WsZugang
         return WsZugang(code)
     return CloudflaredZugang(code)
@@ -519,15 +669,22 @@ class CloudflaredZugang:
         self.bereit = False
         self.fehler = ""
         self._p: Prozess | None = None
-        self._seit = time.monotonic()
+        self._lader: Lader | None = None
+        self._starten()
+
+    def _starten(self) -> None:
+        self._seit = time.monotonic()      # die Frist zaehlt erst ab hier
         pfad, fehler = programm()
         if not pfad:
+            if fehler == LADEN_NOETIG:
+                self._lader = laden_starten()     # schritt() startet danach
+                return
             self.fehler = fehler
             return
         try:
             self.port = freier_port()
             self._p = Prozess([pfad, "access", "tcp",
-                               "--hostname", host(code),
+                               "--hostname", host(self.code),
                                "--url", "127.0.0.1:%d" % self.port,
                                "--loglevel", "info"])
         except OSError as e:
@@ -538,7 +695,19 @@ class CloudflaredZugang:
     def adresse(self) -> str:
         return "127.0.0.1:%d" % self.port
 
+    @property
+    def laedt(self) -> bool:
+        return self._lader is not None
+
     def schritt(self) -> None:
+        if self._lader is not None:
+            if self._lader.fertig:
+                self._lader = None
+                self._starten()
+            elif self._lader.fehler:
+                self.fehler = self._lader.fehler
+                self._lader = None
+            return
         if self._p is None:
             return
         for zeile in self._p.neue_zeilen():
