@@ -8177,7 +8177,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             r.groesse, r.vignette_an = (K.GAME_W, K.GAME_H), self._vignette_an()
             kam.pos.update(kamera_vorher)
         lage = (-versatz[0], -versatz[1])
-        if z > 1.0:
+        hoch_aus_fenster = self._hochaufloesend_an() and ziel is getattr(self.app, "flaeche", None)
+        if z > 1.0 and not hoch_aus_fenster:
             ziel.blit(pygame.transform.smoothscale(lw, ziel_groesse), lage)
         else:
             ziel.blit(pygame.transform.scale(lw, ziel_groesse), lage)
@@ -8206,7 +8207,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
     def _hochaufloesend_an(self) -> bool:
         """BESTE QUALITAET BEIM ZOOM (GRAFIK, seit 0.34.138)."""
         try:
-            return bool(self.app.opt["zoom_hochaufloesend"]) and not getattr(self.app, "gpu", False)
+            # Mit der Grafikkarte nur, wenn ihr Renderer die Welt aufnimmt
+            # (seit 0.34.148, core.App._gpu_ausgeben).
+            return bool(self.app.opt["zoom_hochaufloesend"]) and (
+                not getattr(self.app, "gpu", False) or self.app.__dict__.get("gpu_renderer") is not None)
         except (KeyError, TypeError, AttributeError):
             return False
 

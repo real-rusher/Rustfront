@@ -16100,7 +16100,48 @@ pruef("... und die Maus braucht kein Umrechnen mehr (pygame liefert Spielkoordin
       app.zu_spiel((123, 45)) == pygame.Vector2(123, 45))
 app.flaeche.fill((10, 200, 30))
 app.ausgeben()
-pruef("... ausgeben legt das Spielbild unveraendert hinein", app.fenster.get_at((5, 5))[:3] == (10, 200, 30))
+# Seit 0.34.148 setzt der Renderer der Grafikkarte das Bild zusammen - gelesen wird dort.
+def _foto190():
+    r_ = app.__dict__.get("gpu_renderer")
+    if r_ is None:
+        return app.fenster
+    # GRUND: to_surface() ohne Ziel legt die Flaeche in Spielgroesse (640 x 360)
+    # an, SDL liest aber die ganze Ausgabe in Fensterpixeln - bei groesserem
+    # Fenster schreibt es ueber deren Ende (pygame-ce 2.5, valgrind). Darum in
+    # eine Flaeche in Fenstergroesse lesen und auf Spielpixel verkleinern.
+    sk_ = app.gpu_skala()
+    voll_ = pygame.Surface(app._fenster_masse(), 0, 32)
+    r_.to_surface(voll_)
+    teil_ = voll_.subsurface((0, 0, int(K.GAME_W * sk_), int(K.GAME_H * sk_)))
+    return pygame.transform.scale(teil_, (K.GAME_W, K.GAME_H))
+pruef("... ausgeben legt das Spielbild unveraendert hinein", _foto190().get_at((5, 5))[:3] == (10, 200, 30))
+# 0.34.148: GRAFIKKARTE zusammen mit BESTE QUALITAET (Weg 1) - die Welt als Textur.
+app.opt.werte["zoom_hochaufloesend"] = True
+app.anzeige_setzen()
+pruef("GRAFIKKARTE und BESTE QUALITAET gehen zusammen: der Renderer der Grafikkarte ist da",
+      app.gpu and app.__dict__.get("gpu_renderer") is not None)
+_lw190 = pygame.Surface((int(K.GAME_W * 1.75), int(K.GAME_H * 1.75)))
+_lw190.fill((200, 30, 30))
+app.flaeche.fill((200, 30, 30))
+app.welt_hoch = {"leinwand": _lw190, "zoom": 1.75, "flach": app.flaeche.copy(), "ecke": (0.0, 0.0)}
+pygame.draw.rect(app.flaeche, (240, 240, 240), (20, 20, 60, 20))     # die Anzeige darueber
+_gemalt190 = []
+app.hoch_auflegen(pygame.Rect(200, 100, 40, 40),
+                  lambda f_, m_: (_gemalt190.append((f_.get_size(), m_)), f_.fill((30, 30, 220))))
+app.ausgeben()
+_bild190 = _foto190()
+pruef("... die Welt kommt aus der Leinwand, die Anzeige liegt darueber, Hochaufgeloestes auch",
+      _bild190.get_at((300, 300))[:3] == (200, 30, 30) and _bild190.get_at((40, 30))[:3] == (240, 240, 240)
+      and _bild190.get_at((220, 120))[:3] == (30, 30, 220),
+      "%s %s %s" % (_bild190.get_at((300, 300)), _bild190.get_at((40, 30)), _bild190.get_at((220, 120))))
+pruef("... das Hochaufgeloeste malt in Fenstergroesse (Faktor des Fensters)",
+      _gemalt190 and abs(_gemalt190[0][1] - app.gpu_skala()) < 1e-6
+      and _gemalt190[0][0] == (int(round(40 * app.gpu_skala())), int(round(40 * app.gpu_skala()))), str(_gemalt190))
+pruef("... vor dem Neuanlegen des Fensters gibt es seine Texturen frei (sonst doppelt freigegeben)",
+      bool(app.__dict__.get("_gpu_texturen")) and (app.gpu_freigeben() or True)
+      and not app.__dict__.get("_gpu_texturen") and app.__dict__.get("gpu_renderer") is None)
+app.opt.werte["zoom_hochaufloesend"] = False
+app.anzeige_setzen()
 app.opt.werte["grafikkarte"] = False
 app.anzeige_setzen()
 pruef("Ausgeschaltet: wieder das Fenster in voller Groesse, vergroessert vom Spiel",

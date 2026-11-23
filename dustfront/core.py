@@ -96,6 +96,24 @@ def _gpu_hinweise_weg() -> None:
     os.environ.pop("SDL_RENDER_SCALE_QUALITY", None)
 
 
+def _renderer_holen():
+    """Der SDL-Renderer, den pygame.SCALED fuer das Fenster angelegt hat
+    (seit 0.34.148) - oder None, wenn die pygame-Version ihn nicht hergibt.
+    Mit ihm zeichnet die Grafikkarte Texturen in voller Fensteraufloesung
+    (App._gpu_ausgeben)."""
+    try:
+        from pygame._sdl2 import video
+    except ImportError:
+        return None
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            fenster = video.Window.from_display_module()
+            return video.Renderer.from_window(fenster)
+    except (pygame.error, AttributeError, TypeError, ValueError):
+        return None
+
+
 def _fenster_objekt():
     """Das Fenster als pygame.Window (pygame-ce ab 2.4), sonst None."""
     fenster = getattr(pygame, "Window", None)
@@ -566,6 +584,10 @@ class App:
 
     # ---- Anzeige ----------------------------------------------------
     def anzeige_setzen(self) -> None:
+        # Erst die Texturen der Grafikkarte freigeben, solange ihr Renderer noch
+        # lebt: set_mode legt das Fenster neu an und raeumt den Renderer ab -
+        # wer danach noch eine Textur haelt, gibt sie ein zweites Mal frei.
+        self.gpu_freigeben()
         self.gpu = False
         if self.headless:
             self.fenster = pygame.display.set_mode(K.START_FENSTER)
@@ -607,8 +629,10 @@ class App:
         # BESTE QUALITAET BEIM ZOOM geht vor (seit 0.34.141): sie legt die Welt
         # selbst in Fensteraufloesung auf - mit SCALED ging das nicht, und der
         # Schalter wirkte stillschweigend gar nicht.
+        # Seit 0.34.148 geht beides zusammen: die Grafikkarte zeichnet die
+        # Welt dann selbst in Fensteraufloesung (_gpu_ausgeben) - ohne den
+        # Renderer dazu bleibt BESTE QUALITAET beim alten Weg.
         return (bool(self.opt["grafikkarte"]) and not self.headless
-                and not self.opt["zoom_hochaufloesend"]
                 and not plattform.touch_an() and not plattform.nur_vollbild()
                 and hasattr(pygame, "SCALED"))
 
@@ -644,8 +668,18 @@ class App:
         langsam = any("no fast renderer" in str(m.message) for m in meldungen)
         if langsam and not K.ANZEIGE["gpu_ohne_grafikkarte"]:
             return False
+        renderer = _renderer_holen()
+        if renderer is None and self.opt["zoom_hochaufloesend"]:
+            return False                  # BESTE QUALITAET braucht dann den alten Weg
         self.fenster = fenster
         self.gpu = True
+        self.gpu_renderer = renderer
+        self._gpu_texturen = {}
+        if renderer is not None:
+            # Auch wenn das Programm ohne laufen() endet: vor pygame.quit (das
+            # atexit spaeter ausfuehrt, die Reihenfolge ist umgekehrt).
+            import atexit
+            atexit.register(self.gpu_freigeben)
         if groesse is not None:
             fenster_obj = _fenster_objekt()
             if fenster_obj is not None:
@@ -725,7 +759,13 @@ class App:
         Faktor Fenster/Spielflaeche. Was gleichzeitig auf der Spielflaeche
         steht, bleibt der Ersatz, wenn es nichts zu vergroessern gibt (die
         Grafikkarte skaliert, Touch-Steuerung, ohne Fenster)."""
-        if (getattr(self, "gpu", False) or getattr(self, "touch", None) is not None
+        if getattr(self, "gpu", False):
+            # Mit dem Renderer (seit 0.34.148): in Fensteraufloesung als Textur.
+            if self.__dict__.get("gpu_renderer") is None or getattr(self, "touch", None) is not None:
+                return False
+            self.__dict__.setdefault("hochaufgeloest", []).append((pygame.Rect(rect), maler))
+            return True
+        if (getattr(self, "touch", None) is not None
                 or getattr(self, "skala", 1.0) <= 1.0 or getattr(self, "fenster", None) is None):
             return False
         self.__dict__.setdefault("hochaufgeloest", []).append((pygame.Rect(rect), maler))
@@ -876,6 +916,7 @@ class App:
         self.klaenge.stille()
         if beenden:
             self.klaenge.werkstatt_anhalten()
+            self.gpu_freigeben()
             pygame.quit()
 
     def takt_neu(self) -> None:
@@ -981,8 +1022,13 @@ class App:
         # ein gemerkter Ausschnitt auf Speicher, den es nicht mehr gibt.
         f = self.fenster
         if getattr(self, "gpu", False):
+            renderer = self.__dict__.get("gpu_renderer")
+            if renderer is not None and self._gpu_ausgeben(renderer):
+                return
             # Die Grafikkarte vergroessert (GRAFIKKARTE SKALIERT): nur die
             # 640 x 360 hineinkopieren, den Rest macht flip().
+            self.__dict__.pop("welt_hoch", None)
+            self.hochaufgeloest = []
             f.blit(self.flaeche, (0, 0))
             pygame.display.flip()
             return
@@ -1016,6 +1062,96 @@ class App:
         self._welt_hoch_auflegen(f, vp)
         self._hoch_zeichnen(f)
         pygame.display.flip()
+
+    # ---- Ausgabe ueber den Renderer der Grafikkarte (seit 0.34.148) ----------
+    def gpu_freigeben(self) -> None:
+        """Die Texturen und den Renderer loslassen (vor set_mode und pygame.quit)."""
+        merk = self.__dict__.get("_gpu_texturen")
+        if merk:
+            merk.clear()
+        self.gpu_renderer = None
+
+    def gpu_skala(self) -> float:
+        """Fensterpixel je Spielpixel, wenn die Grafikkarte vergroessert."""
+        fb, fh = self._fenster_masse()
+        return max(1.0, min(fb / float(K.GAME_W), fh / float(K.GAME_H)))
+
+    def _gpu_textur(self, renderer, name: str, groesse, weich: bool, streaming: bool = True):
+        """Eine gemerkte Textur je Zweck und Groesse. `weich`: beim Vergroessern
+        geglaettet (SDL liest die Wahl beim Anlegen, darum je Wahl eine)."""
+        from pygame._sdl2 import video
+        schluessel = (name, tuple(groesse), bool(weich))
+        merk = self.__dict__.setdefault("_gpu_texturen", {})
+        t = merk.get(schluessel)
+        if t is None:
+            alt = os.environ.get("SDL_RENDER_SCALE_QUALITY")
+            os.environ["SDL_RENDER_SCALE_QUALITY"] = "linear" if weich else "nearest"
+            try:
+                t = video.Texture(renderer, tuple(groesse), streaming=streaming)
+            finally:
+                if alt is None:
+                    os.environ.pop("SDL_RENDER_SCALE_QUALITY", None)
+                else:
+                    os.environ["SDL_RENDER_SCALE_QUALITY"] = alt
+            for k in [k for k in merk if k[0] == name]:
+                del merk[k]             # die alte Groesse dieses Zwecks weg
+            merk[schluessel] = t
+        return t
+
+    def _gpu_ausgeben(self, renderer) -> bool:
+        """GRAFIKKARTE (seit 0.34.148, gewuenscht: "Weg 1" - das Bild auf der
+        Grafikkarte zusammensetzen statt auf dem Prozessor). Mit BESTE
+        QUALITAET kommt die gezoomte Welt als Textur in voller Aufloesung ins
+        Fenster, darueber die Anzeige als zweite Textur; Hochaufgeloestes
+        (Minikarte) als weitere. Vorher zog der Prozessor die Leinwand auf
+        Fenstergroesse, und flip() lud das ganze Fenster (bei 1920 x 1080
+        rund 8 MB je Bild) noch einmal hoch. False: dann der alte Weg."""
+        from pygame._sdl2 import video
+        hoch = self.__dict__.pop("welt_hoch", None)
+        hochaufgeloest = self.__dict__.get("hochaufgeloest") or []
+        self.hochaufgeloest = []
+        try:
+            renderer.draw_color = tuple(K.C_VOID) + (255,)
+            renderer.clear()
+            sk = self.gpu_skala()
+            if hoch:
+                lw, z = hoch["leinwand"], hoch["zoom"]
+                ox, oy = hoch["ecke"]
+                # Hart vergroessert, solange ein Leinwandpixel mindestens zwei
+                # Fensterpixel deckt (scharfe Pixel), sonst geglaettet - wie bisher.
+                welt = self._gpu_textur(renderer, "welt", lw.get_size(), sk / z < 2.0)
+                welt.update(lw)
+                welt.draw(dstrect=pygame.FRect(ox, oy, lw.get_width() / z, lw.get_height() / z))
+                schicht = self._anzeige_schicht(hoch["flach"])
+                if schicht is not None:
+                    video.Texture.from_surface(renderer, schicht).draw(dstrect=(0, 0, K.GAME_W, K.GAME_H))
+            else:
+                bild = self._gpu_textur(renderer, "bild", self.flaeche.get_size(),
+                                        self.opt["pixelraster"] == "ruhig")
+                bild.update(self.flaeche)
+                bild.draw(dstrect=(0, 0, K.GAME_W, K.GAME_H))
+            for rect, maler in hochaufgeloest:
+                b, h = max(1, int(round(rect.width * sk))), max(1, int(round(rect.height * sk)))
+                teil = pygame.Surface((b, h), pygame.SRCALPHA)
+                maler(teil, sk)
+                video.Texture.from_surface(renderer, teil).draw(dstrect=rect)
+            renderer.present()
+            return True
+        except (pygame.error, ValueError, KeyError, TypeError, AttributeError):
+            return False
+
+    def _anzeige_schicht(self, flach):
+        """Was die Anzeige ueber das Weltbild gemalt hat - jedes Pixel der
+        Spielflaeche, das sich vom reinen Weltbild unterscheidet; der Rest
+        durchsichtig (Farbschluessel). None, wenn nichts darueber liegt."""
+        jetzt = self.flaeche
+        gleich = pygame.mask.from_threshold(jetzt, (0, 0, 0, 0), (3, 3, 3, 255), flach)
+        if gleich.count() == gleich.get_size()[0] * gleich.get_size()[1]:
+            return None
+        schicht = jetzt.copy()
+        gleich.to_surface(schicht, setcolor=self._LEER, unsetcolor=None)
+        schicht.set_colorkey(self._LEER)
+        return schicht
 
     @staticmethod
     def _rand_fuellen(f, vp, fb, fh) -> None:
