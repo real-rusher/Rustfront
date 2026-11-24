@@ -18580,6 +18580,10 @@ pruef("Basis: zwei Trosswagen und ein Flakwagen je Seite", _f117.get("trosswagen
 # Der Flakwagen wartet auf andere Fahrzeuge und faehrt dann hinter ihnen her.
 _e117 = _tm117.welt.ebene(0)
 _rnd117 = random.Random(117)
+# Fester Zufall fuer die Szene (seit 0.34.153): ihr Weg hing vom Zufallsstand ab,
+# den die Abschnitte davor hinterliessen - mit den neuen ab 0.34.148 fuhr der
+# Flakwagen einmal anders herum und die Pruefung fiel, einzeln lief sie gruen.
+random.seed(117); EN.RND.seed(117); _tm117._bot_rnd.seed(117)
 for _ in range(40000):
     _tx117 = _rnd117.randrange(60, _e117.breite - 90)
     _ty117 = _rnd117.randrange(20, _e117.hoehe - 40)
@@ -21499,6 +21503,64 @@ _app152._rest = 0.0
 _app152.stapel[:] = [_Start152(_app152)]
 pruef("... und nach takt_neu wird im selben Bild nichts mehr nachgerechnet",
       _app152._rechnen(K.FIXED_DT * 3.5, K.FIXED_DT * 3.5) == 1 and _app152._rest == 0.0)
+
+# ── 0.34.153: der eigene Wagen beim Gast faehrt ruhig ─────────────────────
+print("\n-- 0.34.153: Wagen beim Gast rollen weiter, statt stehen zu bleiben")
+from dustfront import fahrzeug as _FZ153
+_b153 = _FZ153.neu("panzerwagen", (100.0, 50.0), 0, 0.0, nur_bild=True)
+class _W153:
+    misch_roh = 1.5
+    paket_takt = 1.0 / 30.0
+_b153.welt = _W153()
+_b153.vorher.update(90.0, 50.0); _b153.pos.update(100.0, 50.0)
+_b153.geschw = pygame.Vector2(300.0, 0.0)
+pruef("Gast: kommt die naechste Meldung spaet, rollt der Wagen mit seinem Tempo weiter (statt bei der letzten stehen zu bleiben)",
+      abs(_b153.zeichenpos(1.0).x - (100.0 + 300.0 * 0.5 / 30.0)) < 1e-6, str(_b153.zeichenpos(1.0)))
+_W153.misch_roh = 9.0
+pruef("... aber hoechstens bis K.NETZ fahrzeug_vorhalt Meldungsabstaende",
+      abs(_b153.zeichenpos(1.0).x - (100.0 + 300.0 * (K.NETZ["fahrzeug_vorhalt"] - 1.0) / 30.0)) < 1e-6)
+_W153.misch_roh = 0.5
+pruef("... und davor wie bisher zwischen den zwei Meldungen", abs(_b153.zeichenpos(0.5).x - 95.0) < 1e-6)
+# Ganze Szene: 200 ms Ping, +-80 ms Schwankung, der Gast faehrt einen Panzerwagen geradeaus.
+_netz153 = (K.NETZ["puffer_an"], K.NETZ["eingabe_puffer"])
+K.NETZ["puffer_an"], K.NETZ["eingabe_puffer"] = True, False      # wie im Spiel (Vorgabe)
+w153, g153 = _paar303(0.2, 0.08, seed_=153)
+_gk153 = w153.kaempfer[g153.meine_nummer]
+from dustfront.world import freier_punkt as _fp153
+_rnd153 = _rnd303.Random(3)
+for _ in range(3000):
+    _p153 = _fp153(w153.welt, 0, _rnd153)
+    if all(w153.welt.frei(_p153 + pygame.Vector2(dx_, dy_), 40, 0, True)
+           for dx_ in range(-50, 1201, 50) for dy_ in range(-150, 151, 50)):
+        break
+w153.ich.pos.update(_p153 + pygame.Vector2(0, 600)); w153.ich.vorher.update(w153.ich.pos)
+_gk153.pos.update(_p153); _gk153.vorher.update(_p153)
+_wg153 = _FZ153.ARTEN["panzerwagen"](pygame.Vector2(_p153), 0, winkel=0.0)
+w153.fahrzeuge.append(_wg153); w153.welt.dazu(_wg153)
+w153._einsteigen(_gk153, _wg153)
+_lauf303(w153, g153, 1.5, ["vor"])
+_bild153 = pygame.Surface((K.GAME_W, K.GAME_H))
+_spur153 = []
+for _i in range(int(3.0 / K.FIXED_DT)):
+    _uhr303[0] += K.FIXED_DT
+    app.eingabe._gehalten = {"vor"}
+    w153.schritt(K.FIXED_DT); g153.schritt(K.FIXED_DT)
+    g153.zeichnen(_bild153, 0.5)
+    _gw153 = g153._gast_wagen()
+    if _gw153 is not None:
+        _spur153.append((pygame.Vector2(_gw153.zeichenpos(g153.misch(0.5))), pygame.Vector2(g153.kamera.mitte)))
+app.eingabe._gehalten = set()
+_still153 = sum(1 for a_, b_ in zip(_spur153, _spur153[1:]) if (b_[0] - a_[0]).x < 0.05)
+_rueck153 = sum(1 for a_, b_ in zip(_spur153, _spur153[1:])
+                if ((b_[0] - b_[1]) - (a_[0] - a_[1])).x < -0.5)
+pruef("200 ms Ping +-80 ms: der Gast erkennt seinen Wagen (Kamera und Festhalten folgen ihm)",
+      len(_spur153) > 300 and _wg153.geschw.length() > 150.0, "%d Bilder, Tempo %.0f" % (len(_spur153), _wg153.geschw.length()))
+pruef("... der Wagen bleibt kaum noch stehen (vorher in gut jedem dritten Bild)",
+      _still153 < len(_spur153) * 0.05, "%d von %d" % (_still153, len(_spur153)))
+pruef("... und springt gegenueber der Kamera kaum noch zurueck (vorher rund jedes vierte Bild)",
+      _rueck153 < len(_spur153) * 0.08, "%d von %d" % (_rueck153, len(_spur153)))
+w153.verlassen(); g153.verlassen()
+K.NETZ["puffer_an"], K.NETZ["eingabe_puffer"] = _netz153
 
 print()
 print("FEHLER:", fails or "keine")

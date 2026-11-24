@@ -4146,7 +4146,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 b.netz_kennung = kennung
                 b.welt = self.welt
             else:
-                b.vorher.update(b.pos)
+                # Von dort, wo er gerade gezeichnet steht (seit 0.34.153) - vorher
+                # von der vorigen Meldung: war die neue spaet, stand er dort
+                # schon eine Weile, oder er war schon weitergerollt.
+                gezeigt = b.netz_gezeigt(getattr(self, "_roh_vor_meldung", 1.0),
+                                         getattr(self, "_takt_vor_meldung", K.NETZ["takt"]))
+                if (gezeigt.distance_to((x, y)) > K.NETZ["fahrzeug_sprung"]
+                        or b.ebene != ebene):
+                    gezeigt = pygame.Vector2(x, y)
+                b.vorher.update(gezeigt)
                 b.pos.update(x, y)
             b.winkel = winkel
             b.ebene = ebene
@@ -6374,10 +6382,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         zeigten dasselbe - gemessen stand die Granate dann in 61 % der
         Bilder still. Mit ihm laeuft sie in jedem Bild weiter.
         """
+        return min(1.0, self.misch_roh(alpha))
+
+    def misch_roh(self, alpha: float = 0.0) -> float:
+        """Wie misch, aber nicht bei 1 gekappt: ueber 1 ist die naechste
+        Meldung spaet (seit 0.34.153 fuer die Wagen beim Gast,
+        Buggy.netz_gezeigt)."""
         vergangen = self._seit_paket + max(0.0, min(1.0, alpha)) * K.FIXED_DT
-        return max(0.0, min(1.0, vergangen / max(1e-4, self._paket_takt)))
+        return max(0.0, vergangen / max(1e-4, self._paket_takt))
 
     def _welt_uebernehmen(self, meldung: dict) -> None:
+        # Wo die Wagen gerade gezeichnet stehen (seit 0.34.153): von dort aus
+        # gleiten sie zur neuen Meldung (_fahrzeuge_uebernehmen).
+        self._roh_vor_meldung = self.misch_roh(0.0)
+        self._takt_vor_meldung = self._paket_takt
         # Den Meldungsabstand messen und weich mitfuehren. Ein einzelnes
         # spaetes Paket soll die Ueberblendung nicht gleich umwerfen.
         if self._seit_paket > 0.0:
@@ -7013,9 +7031,40 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             # Im Menue faehrt die Maus ueber die Eintraege - die Kamera
             # soll ihr dabei nicht folgen.
             self._kamera_versatz = self.app.eingabe.blick_versatz(self.kamera)
-        self.kamera.schritt(dt, self.ich.pos, self.ich.ziel,
+        self.kamera.schritt(dt, self._kamera_ziel(), self.ich.ziel,
                             (ebene.pixel_breite, ebene.pixel_hoehe),
                             versatz=self._kamera_versatz, scope=self.scope_an())
+
+    def _gast_wagen(self):
+        """Beim Gast der Wagen, den man selbst faehrt - sonst None. Der Gast
+        kennt ihn nur aus der Meldung (`fahrer_nummer`), `ich.fahrzeug` ist
+        bei ihm immer leer."""
+        ich = self.ich
+        if self.ist_gastgeber or ich is None or not getattr(ich, "im_fahrzeug", False):
+            return None
+        wagen = self._mein_wagen()
+        if wagen is None or getattr(wagen, "fahrer_nummer", -1) != ich.nummer:
+            return None
+        return wagen
+
+    def _kamera_ziel(self):
+        """Wem die Kamera folgt: der eigenen Figur - beim Gast am Steuer aber
+        dem Wagen, genau dort, wo er gezeichnet wird (seit 0.34.153).
+
+        Gemeldet: "wenn man mit dem Fahrzeug faehrt, wird es die ganze Zeit
+        hin und her gerissen, vor und zurueck, zum Teil zur Seite". Nur beim
+        Gast: der Wagen wird zwischen zwei Meldungen uebergeblendet (misch),
+        die Figur darin stand aber immer auf der neuesten - die Kamera folgte
+        ihr und sprang mit jeder Meldung eine ganze Strecke vor, der Wagen
+        holte gleitend auf. Ueber das Internet, wo Meldungen unregelmaessig
+        kommen, sind das etliche Pixel je Meldung. `misch(1.0)` ist die
+        Stelle am Ende dieses Schritts: die Kamera blendet von Schritt zu
+        Schritt mit dem Bildanteil weiter und trifft so in jedem Bild genau
+        die Ueberblendung des Wagens."""
+        wagen = self._gast_wagen()
+        if wagen is not None:
+            return wagen.netz_gezeigt(self.misch_roh(1.0), self._paket_takt)
+        return self.ich.pos
 
     def _kamera_folgt_mir(self) -> bool:
         """Folgt die Kamera der eigenen Figur? (Der Testmodus hat einen
@@ -7723,6 +7772,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         # Bewegung nach der halben Zeit fertig und stuende dann still.
         # Genau das sah man als Ruckeln der Mitspieler.
         misch = alpha if self.ist_gastgeber else self.misch(alpha)
+        if not self.ist_gastgeber and self.welt is not None:
+            # Fuer die Wagen beim Gast (seit 0.34.153, Buggy.zeichenpos).
+            self.welt.misch_roh = self.misch_roh(alpha)
+            self.welt.paket_takt = self._paket_takt
         # Die Kamera laeuft hier wie dort mit den eigenen Rechenschritten -
         # also mit dem Bildanteil, nicht mit dem Anteil der Meldungen.
         self.kamera.alpha = alpha
@@ -7735,7 +7788,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             # Schritt wie die Kamera: also mit dem Bildanteil, nicht mit dem
             # Anteil der Meldungen (seit 0.34.141).
             eigen = alpha if self.__dict__.get("_vh_gezeigt") is not None else misch
-            for w in (self.ich, getattr(self.ich, "fahrzeug", None)):
+            # Beim Gast steht der eigene Wagen nicht in ich.fahrzeug (seit
+            # 0.34.153 ueber die Meldung, _gast_wagen) - vorher wurde er dort
+            # nie festgehalten.
+            wagen = getattr(self.ich, "fahrzeug", None) or self._gast_wagen()
+            for w in (self.ich, wagen):
                 if w is not None:
                     genau = w.zeichenpos(eigen if w is self.ich else misch)
                     w._zeichen_fest = self.kamera.fest_im_bild(genau)

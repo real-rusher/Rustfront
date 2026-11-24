@@ -173,6 +173,31 @@ class Buggy(Wesen):
             return "buggy_wrack"
         return self._insassen_bild("buggy")
 
+    def zeichenpos(self, alpha: float) -> pygame.Vector2:
+        """Beim Gast (nur_bild) seit 0.34.153 mit Weiterrollen: das Gefecht
+        legt je Bild den ungekappten Anteil der Meldungen in die Welt
+        (`misch_roh`), siehe netz_gezeigt."""
+        fest = self.__dict__.get("_zeichen_fest")
+        if fest is not None:
+            return pygame.Vector2(fest)
+        if self.nur_bild and self.welt is not None:
+            roh = getattr(self.welt, "misch_roh", None)
+            if roh is not None:
+                return self.netz_gezeigt(roh, getattr(self.welt, "paket_takt", K.NETZ["takt"]))
+        return self.vorher.lerp(self.pos, alpha)
+
+    def netz_gezeigt(self, roh: float, takt: float) -> pygame.Vector2:
+        """Wo der Wagen beim Gast steht, beim Anteil `roh` der Meldungen
+        (0: die vorige, 1: die letzte). Ueber 1 - die naechste ist spaet -
+        rollt er mit seinem gemeldeten Tempo weiter, hoechstens bis
+        K.NETZ fahrzeug_vorhalt. Vorher blieb er dort stehen und holte mit der
+        naechsten Meldung ruckartig auf: vor der ruhigen Welt sah das aus wie
+        ein Reissen nach vorn und zurueck."""
+        if roh <= 1.0:
+            return self.vorher.lerp(self.pos, max(0.0, roh))
+        mehr = min(roh, K.NETZ["fahrzeug_vorhalt"]) - 1.0
+        return self.pos + self.geschw * (mehr * max(0.0, float(takt)))
+
     def _insassen_bild(self, grund: str) -> str:
         """Das Bild mit dem, der drinsitzt: leer, im Skin des Fahrers
         (`grund`_skin_<id>[_<team>], seit 0.34.60), sonst in den Farben

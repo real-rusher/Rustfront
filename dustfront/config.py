@@ -986,6 +986,14 @@ NETZ = dict(
     # stehen - jede Verzoegerung hier heisst, man zielt weiter hinter ihnen
     # her (bis zur Treffer-Rueckrechnung, docs/CLIENTSEITE.md Stufe D).
     puffer_hoechstens=0.08,     # seit 0.34.135 (0.15): weniger Verzoegerung im Bild
+    # Wagen beim Gast (seit 0.34.153, gemeldet: "die ganze Zeit hin und her
+    # gerissen"): kommt die naechste Meldung spaet, rollt der Wagen mit seinem
+    # gemeldeten Tempo weiter - hoechstens bis `fahrzeug_vorhalt` Meldungs-
+    # abstaende nach der letzten -, statt stehen zu bleiben; kommt sie, gleitet
+    # er von dort, wo er gezeichnet ist, statt zurueckzuspringen. Liegt die
+    # neue Stelle weiter als `fahrzeug_sprung` px weg, springt er hin.
+    fahrzeug_vorhalt=3.0,
+    fahrzeug_sprung=160.0,
     puffer_meldungen=20,
     puffer_schwankung=1.0,
     uhr_drift=0.01,
