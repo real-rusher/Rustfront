@@ -6626,9 +6626,14 @@ def _kennzahlen73(name):
 _kampf73 = [n for n, d in K.WAFFEN.items() if d.get("art", "schuss") in
             ("schuss", "werfer", "strahl", "kette", "kugel", "flamme", "nahkampf")]
 _sturm73 = _kennzahlen73("sturm")
-_zu_viel73 = [n for n in _kampf73 if _kennzahlen73(n)[1] > 1.35 * _sturm73[1]]
+# Seit 0.34.155 kosten die Waffen aus dem Nachschub Punkte und duerfen darum
+# staerker sein (gewuenscht) - fuer sie gilt ein eigener Deckel: 60 Prozent mehr.
+_ruf73 = set(K.LOADOUT["nur_nachschub"])
+_zu_viel73 = [n for n in _kampf73 if n not in _ruf73 and _kennzahlen73(n)[1] > 1.35 * _sturm73[1]]
 pruef("Keine Waffe macht im Dauerfeuer mehr als ein Drittel mehr Schaden als das Sturmgewehr",
       not _zu_viel73, str(_zu_viel73))
+_ruf_zu_viel73 = [n for n in _kampf73 if n in _ruf73 and _kennzahlen73(n)[1] > 1.6 * _sturm73[1]]
+pruef("... die aus dem Nachschub hoechstens 60 Prozent mehr", not _ruf_zu_viel73, str(_ruf_zu_viel73))
 # Ein Treffer, der toetet, nur mit einem Preis: aus naechster Naehe, voll
 # geladen und sichtbar (Spule), oder als Rakete.
 _ein_schuss73 = [n for n in _kampf73 if _kennzahlen73(n)[2] <= 1
@@ -15954,8 +15959,12 @@ pruef("Faechern: ein Klick leert die restliche Trommel", _n187[0] == 5 and _k187
 w187.verlassen(); g187.verlassen()
 # Spule: weniger, und Mauern wie Koerper kosten Kraft.
 _s187 = K.WAFFEN["spule"]
-pruef("Die Spule ist abgeschwaecht (hoechstens 100 Schaden, laenger laden, 3 Schuss)",
-      _s187["schaden"] <= 100.0 and _s187["ladezeit"] >= 2.0 and _s187["magazin"] <= 3
+# Seit 0.34.155 gibt es sie nur per Nachschub, und dafuer ist sie wieder stark
+# (gewuenscht) - Mauern und Koerper kosten aber weiter Kraft.
+pruef("Die Spule ist abgeschwaecht (hoechstens 100 Schaden, laenger laden, 3 Schuss) - "
+      "oder kommt nur per Nachschub (dann staerker)",
+      ((_s187["schaden"] <= 100.0 and _s187["ladezeit"] >= 2.0 and _s187["magazin"] <= 3)
+       or "spule" in K.LOADOUT["nur_nachschub"])
       and _s187["wand_verlust"] > 0 and _s187["koerper_verlust"] > 0)
 # Kuller: rollt ueber den Zeiger hinaus, zuendet frueher.
 _ku187 = K.WAFFEN["kuller"]
@@ -20858,7 +20867,9 @@ _tm143.werfer_schritt(0.02)
 pruef("... und nur einmal", _gehoert143.count("werfer_anflug") == 1, str(_gehoert143))
 _tm143.welt.klang = _klang_alt143
 # Flammenwerfer: mehr Reichweite, wer mit dem Koerper im Strahl steht, brennt.
-pruef("Flammenwerfer reicht 150 statt 130", K.WAFFEN["flammenwerfer"]["reichweite"] == 150.0)
+# Seit 0.34.155 nur per Nachschub und viel weiter (gewuenscht: "stark erhoehen").
+pruef("Flammenwerfer reicht 150 statt 130 (seit 0.34.155: 270, nur per Nachschub)",
+      K.WAFFEN["flammenwerfer"]["reichweite"] == 270.0 and "flammenwerfer" in K.LOADOUT["nur_nachschub"])
 _fl143 = _tm143.puppe_setzen(_z143(4, -4), 0, {"team": 0, "waffe_figur": "flammenwerfer"}, name="FLAMME")
 _rand143 = _tm143.puppe_setzen(_fl143.pos + pygame.Vector2(110, 0).rotate(15.0), 0, {"team": 1}, name="RAND")
 _weg143 = _tm143.puppe_setzen(_fl143.pos + pygame.Vector2(110, 0).rotate(-40.0), 0, {"team": 1}, name="DANEBEN")
@@ -20874,7 +20885,8 @@ pruef("Flammenwerfer: wer mit dem Koerper im Strahl steht (Mitte 15 Grad daneben
 pruef("... wer 40 Grad daneben steht, nicht", _weg143.leben >= 9999.0, "%.0f" % (9999.0 - _weg143.leben))
 _neu_feuer143 = _tm143.welt.feuer[_feuer_vor143:]
 pruef("... brennende Flecken etwa alle 0,15 s, auch mitten im Strahl (nicht nur an seinem Ende)",
-      len(_neu_feuer143) >= 5 and min(f_.pos.distance_to(_fl143.pos) for f_ in _neu_feuer143) < 130.0,
+      len(_neu_feuer143) >= 5 and min(f_.pos.distance_to(_fl143.pos) for f_ in _neu_feuer143)
+      < 0.88 * K.WAFFEN["flammenwerfer"]["reichweite"],
       "%d Flecken, nah %.0f" % (len(_neu_feuer143),
                                  min([f_.pos.distance_to(_fl143.pos) for f_ in _neu_feuer143] or [0])))
 _tm143.verlassen()

@@ -4514,7 +4514,7 @@ WAFFEN = {
         # lange wehrlos.
         # 0.34.73: 120 -> 70 gegen Figuren (zwei Treffer), gegen Fahrzeuge `fahrzeug_schaden`. Sie toetete auf 1600 px mit einem Schuss und war damit besser als der Scharfschuetze; gedacht ist sie gegen Fahrzeuge und grosse Gegner.
         # Seit 0.34.155 nur per Nachschub und dafuer staerker: 70 -> 95 gegen
-        # Figuren, gegen Fahrzeuge 220 -> 280, schneller geladen (3,2 -> 2,6 s).
+        # Figuren, gegen Fahrzeuge 220 -> 235, schneller geladen (3,2 -> 2,6 s).
         schaden=95.0,
         takt=0.8,
         magazin=1,
@@ -4535,7 +4535,9 @@ WAFFEN = {
         # weiter (gewuenscht: "penetriert ein paar Meter"); der Laser endet
         # am ersten Hindernis.
         durchdringen=80.0,
-        fahrzeug_schaden=280.0,   # 160 -> 220 (seit 0.34.95), 280 seit 0.34.155 (nur Nachschub)
+        # 160 -> 220 (seit 0.34.95), 235 seit 0.34.155 - gegen Blech nur wenig mehr:
+        # drei Treffer an der Seite fuer einen Panzerwagen (6 Punkte) bleiben.
+        fahrzeug_schaden=235.0,
         gegen_fahrzeug=True,
         laser=True,
     ),
@@ -4669,7 +4671,8 @@ WAFFEN = {
         # Sechs kleine, ungelenkte Raketen kurz nacheinander, die unruhig
         # fliegen: nah verheerend, auf Distanz wild gestreut.
         # Seit 0.34.155 nur per Nachschub und dafuer staerker: 38 -> 46, Radius
-        # 40 -> 48, gegen Blech 55 -> 72, schneller nachgeladen.
+        # 40 -> 48, gegen Blech 55 -> 60 (eine Salve nimmt einem Panzerwagen das
+        # meiste, aber nicht alles), schneller nachgeladen.
         schaden=46.0,
         radius=48.0,
         eigen_anteil=0.5,
@@ -4694,7 +4697,7 @@ WAFFEN = {
         # Seit 0.34.95 kleine Hohlladungen (vorher Spreng, gegen Blech
         # schwach): eine ganze Salve nimmt einem Panzerwagen fast alles.
         schadensart="hohlladung",
-        fahrzeug_schaden=72.0,
+        fahrzeug_schaden=60.0,
     ),
 
     # ── Gegen Fahrzeuge (seit 0.34.65) ─────────────────────────────────
