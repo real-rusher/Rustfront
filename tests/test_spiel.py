@@ -12141,9 +12141,13 @@ _sim87(60)
 pruef("ZEIT STEHT: nichts bewegt sich, die Weltzeit steht",
       _tm.welt.zeit == _z87 and _bot_a87.pos == _p87, "%.3f" % (_tm.welt.zeit - _z87))
 _vorher87 = len(_tm.welt.wesen)
-_tm.gegner_setzen("renner", _ort87 + pygame.Vector2(60, 60), 0, {"ki": True})
+_renner87 = _tm.gegner_setzen("renner", _ort87 + pygame.Vector2(60, 60), 0, {"ki": True})
+# Seit 0.34.154 nach dem Gesetzten selbst gefragt, nicht nach der Anzahl: lag
+# noch etwas zum Einsetzen bereit (eine Granate von eben), kam es mit hinein,
+# und die Anzahl stieg um zwei - im vollen Lauf je nach Zufall der Bots.
 pruef("... und gespawnt wird trotzdem, sofort sichtbar",
-      len(_tm.welt.wesen) == _vorher87 + 1, "")
+      _renner87 in _tm.welt.wesen and len(_tm.welt.wesen) > _vorher87,
+      "%d -> %d" % (_vorher87, len(_tm.welt.wesen)))
 _tm.taste(".")
 _sim87(1)
 pruef("EINZEL rechnet genau einen kleinen Schritt",
