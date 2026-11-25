@@ -490,6 +490,9 @@ class Geschoss(Wesen):
         # Der Spiegellaser (seit 0.34.68): so oft prallt er noch ab.
         self.abprall = int(daten.get("abprall", 0))
         self.abprall_faktor = float(daten.get("abprall_faktor", 1.0))
+        # Je Koerper, durch den es geht, so viel des Schadens bleibt (seit
+        # 0.34.154, Jagdkanone; sonst 1).
+        self.durch_faktor = float(daten.get("durch_faktor", 1.0))
         if daten.get("bild_flug"):
             self.bild = daten["bild_flug"]
             self.spur = None
@@ -553,13 +556,14 @@ class Geschoss(Wesen):
                     if self._eindringen is None:
                         self._eindringen = self.durchdringen
                     continue
-                if self.durch > 0 and not getattr(ziel, "rechteckig", False):
+                if self._durchschlaegt(ziel):
                     # Durchschlag (seit 0.34.62): treffen und weiterfliegen.
                     # Jeden nur einmal - sonst traefe sie ihn in jedem
                     # Teilschritt, solange sie in ihm steckt.
                     self.durch -= 1
                     self._durch_wen.append(ziel)
                     self.treffen(ziel)
+                    self.schaden_wert *= self.durch_faktor
                     continue
                 self.einschlag(ziel)
                 return
@@ -583,6 +587,11 @@ class Geschoss(Wesen):
                 self.lebt = False
                 return
 
+    def _durchschlaegt(self, ziel) -> bool:
+        """Geht es durch dieses Ziel hindurch? Durch alles ausser rechteckig
+        gepanzerten Wagen, solange Durchschlag uebrig ist."""
+        return self.durch > 0 and not getattr(ziel, "rechteckig", False)
+
     def _abprallen(self, teil) -> None:
         """An der Wand gespiegelt: welche Achse stoesst an, die kehrt um.
         Mit jedem Abprall staerker (Waffenpaket, SPIEGELLASER)."""
@@ -597,7 +606,13 @@ class Geschoss(Wesen):
         self.schaden_wert *= self.abprall_faktor
         self.winkel = math.degrees(math.atan2(self.tempo.y, self.tempo.x))
         self._durch_wen = []
-        wolke(w, self.pos, 6, 120, 0.2, K.ENTLADUNG["tuerkis"], self.ebene, 1, "funke")
+        wolke(w, self.pos, 6, 120, 0.2, self.daten_farbe("abprall_farbe", K.ENTLADUNG["tuerkis"]),
+              self.ebene, 1, "funke")
+
+    def daten_farbe(self, schluessel: str, sonst):
+        """Eine Farbe aus den Waffendaten, sonst `sonst`."""
+        d = getattr(self, "daten", None)
+        return tuple(d[schluessel]) if isinstance(d, dict) and d.get(schluessel) else sonst
 
     def einschlag(self, ziel) -> None:
         self.lebt = False

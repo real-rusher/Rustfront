@@ -101,6 +101,7 @@ class Kaempfer(Spieler):
     ist_bot = False
     team_fest = False         # vom Gastgeber eingeteilt (Team-Manager, seit 0.34.26)
     hirn = None
+    schwer = ""               # die gerufene Waffe, die er traegt (seit 0.34.154)
 
     def __init__(self, pos, ebene: int, nummer: int, name: str,
                  fraktion: str, knapp: bool = False, team: int = -1,
@@ -442,12 +443,53 @@ class Kaempfer(Spieler):
             voll = K.MUNITION["vorrat"].get(name, 0)
             if voll <= 0:
                 continue
+            if name == self.schwer and not K.SCHLACHT["waffen_abwurf"]["kiste_fuellt"]:
+                continue
             hat = self.vorrat.get(name, 0)
             if hat >= voll:
                 continue
             self.vorrat[name] = min(voll, hat + int(voll * anteil) + 1)
             genommen = True
         return genommen
+
+    def schwer_nehmen(self, name: str, magazin: int, vorrat: int) -> bool:
+        """Eine gerufene Waffe aufheben (seit 0.34.154). Sie kommt auf den
+        ersten Platz und ist gleich in der Hand. Nur eine zur Zeit, und keine,
+        die man schon traegt - sonst gaebe es sie beim Tod doppelt."""
+        if self.schwer or self.rpg or name in self.waffen or name not in K.WAFFEN:
+            return False
+        self.waffen.insert(0, name)
+        self.waffe = 0
+        self.magazin[name] = int(magazin)
+        self.vorrat[name] = int(vorrat)
+        self.schwer = name
+        self.nachlade_rest = 0.0
+        self.takt = 0.0
+        self.abbrechen()
+        return True
+
+    def schwer_ablegen(self):
+        """Die gerufene Waffe wieder hergeben: (Name, Magazin, Vorrat) oder
+        None. Der Platz verschwindet; die anderen Waffen bleiben."""
+        name = self.schwer
+        if not name:
+            return None
+        self.schwer = ""
+        rest = (name, int(self.magazin.get(name, 0)), int(self.vorrat.get(name, 0)))
+        if name in (getattr(self, "rpg_waffen", None) or ()):
+            # Traegt gerade das Rohr: die gerufene Waffe wartet in der Liste dahinter.
+            self.rpg_waffen.remove(name)
+            return rest
+        if name not in self.waffen:
+            return None
+        gewaehlt = self.waffe_name
+        self.waffen.remove(name)
+        self.magazin.pop(name, None)
+        self.vorrat.pop(name, None)
+        if not self.waffen:
+            self.waffen = list(K.HOTBAR)
+        self.waffe = self.waffen.index(gewaehlt) if gewaehlt in self.waffen else 0
+        return rest
 
 
 class KampfBeute(Aufsammler):
@@ -461,10 +503,21 @@ class KampfBeute(Aufsammler):
     BILDER = {"munition": "munikiste", "medkit": "medkit",
               "rakete": "rpg_kiste"}
 
-    def __init__(self, pos, art: str, ebene: int, kaempfer: dict) -> None:
+    def __init__(self, pos, art: str, ebene: int, kaempfer: dict, ladung=None) -> None:
         super().__init__(pos, art, ebene)
-        self.bild = self.BILDER.get(art, "medkit")
+        # Eine gerufene Waffe (seit 0.34.154) heisst "waffe_<name>" und zeigt
+        # ihr eigenes Bild; `ladung` ist (Magazin, Vorrat) - wer sie fallen
+        # laesst, gibt sie mit dem Rest weiter, nicht wieder voll.
+        self.bild = art if art.startswith("waffe_") else self.BILDER.get(art, "medkit")
+        self.ladung = tuple(ladung) if ladung else None
         self._kaempfer = kaempfer
+
+    @staticmethod
+    def volle_ladung(name: str) -> tuple:
+        """(Magazin, Vorrat) einer frisch gerufenen Waffe."""
+        voll = K.MUNITION["vorrat"].get(name, 0)
+        return (K.WAFFEN[name]["magazin"],
+                int(round(voll * K.SCHLACHT["waffen_abwurf"]["vorrat"])))
 
     def schritt(self, dt: float) -> None:
         for k in list(self._kaempfer.values()):
@@ -486,6 +539,9 @@ class KampfBeute(Aufsammler):
                 # Wer schon einen traegt, laesst ihn liegen. Sonst waere
                 # der Werfer einmal in der Runde eben doch zweimal da.
                 genommen = k.rpg_nehmen()
+            elif self.art.startswith("waffe_"):
+                mag, vorrat = self.ladung or self.volle_ladung(self.art[6:])
+                genommen = k.schwer_nehmen(self.art[6:], mag, vorrat)
             if genommen:
                 self.lebt = False
                 k.zaehlen("beute")
@@ -2515,6 +2571,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             return
         k.loadout = dict(lo) if self.mit_loadouts and lo else None
         self._nahkampf_setzen(k, lo)
+        k.schwer = ""            # eine gerufene Waffe ist mit dem neuen Satz weg
         k.waffen = plaetze
         k.waffe = 0
         k.magazin = {w: K.WAFFEN[w]["magazin"] for w in plaetze}
@@ -3725,6 +3782,26 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 k.ebene = b.ebene
                 k.tempo.update(0, 0)
 
+    @staticmethod
+    def _fahrer_zustand(k):
+        """Fuer die Vorhersage des eigenen Wagens beim Gast (seit 0.34.154):
+        alles, wovon die Fahrt abhaengt - Ort, Winkel, Tempo, Drehung,
+        Radeinschlag, Kennung - und ob er gerade gar nicht selbst faehrt
+        (`fest`: im Sturz, stromlos, beim Aufbauen, in der Luft, Wrack). Nur
+        fuer einen Menschen am Steuer; genau, weil sich jede Rundung ueber die
+        nachgerechneten Schritte aufaddiert."""
+        b = k.fahrzeug
+        if b is None or b.fahrer is not k or k.ist_bot:
+            return None
+        fest = (b.kaputt or b.emp_rest > 0.0 or b.sturz_rest > 0.0 or b.flug > 0.0
+                or getattr(b, "luft", False) or b.art in K.NETZ["wagen_ohne_vorhersage"]
+                or getattr(b, "phase", 0) in (1, 2) or getattr(b, "fortschritt", 0.0) > 0.0
+                or getattr(b, "anhang", None) is not None)
+        return [round(b.pos.x, 3), round(b.pos.y, 3), round(b.winkel, 4),
+                round(b.geschw.x, 3), round(b.geschw.y, 3), round(b.gier, 5),
+                round(b.lenkwinkel, 5), b.kennung, b.ebene,
+                1 if fest else 0]
+
     def _fahren(self, k: Kaempfer, will, ein: dict) -> None:
         """Am Steuer: vor und zurueck sind Gas und Bremse, links und
         rechts lenken. Geschossen, gedasht und geheilt wird nicht - die
@@ -3745,14 +3822,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 b.lenk = max(-1.0, min(1.0, float(gl[1])))
             except (TypeError, ValueError):
                 b.gas, b.lenk = 0.0, 0.0
-        elif ein.get("rl"):
-            # Ein Stick (Touch, seit 0.34.22): der Wagen faehrt dorthin,
-            # wohin er zeigt (fahrzeug.Buggy.stick_steuern).
-            b.gas, b.lenk = b.stick_steuern(will)
         else:
-            # Die Eingabe ist eine Richtung im Bild, W ist also y < 0.
-            b.gas = 1.0 if will.y < -0.3 else (-1.0 if will.y > 0.3 else 0.0)
-            b.lenk = 1.0 if will.x > 0.3 else (-1.0 if will.x < -0.3 else 0.0)
+            # Ein Stick (Touch, seit 0.34.22): der Wagen faehrt dorthin, wohin
+            # er zeigt; sonst ist die Eingabe eine Richtung im Bild (W: y < 0).
+            # Beides in Buggy.fahr_eingabe - die Vorhersage des Gasts rechnet
+            # dasselbe (seit 0.34.154).
+            b.gas, b.lenk = b.fahr_eingabe(will, bool(ein.get("rl")))
         b.handbremse = bool(ein.get("hb"))
         if getattr(b, "rechteckig", False) or getattr(b, "schiesst", False):
             b.feuer = bool(ein.get("feuert"))
@@ -4136,6 +4211,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 flug = max(0.0, min(2000.0, float(e[21]))) if len(e) > 21 else 0.0
                 sturz_hoehe = max(0.0, min(2000.0, float(e[22]))) if len(e) > 22 else 0.0
                 kippen = max(-90.0, min(90.0, float(e[23]))) if len(e) > 23 else 0.0
+                mg_hitze = max(0.0, min(1.0, float(e[24]))) if len(e) > 24 else 0.0
+                mg_heiss = max(0.0, min(30.0, float(e[25]))) if len(e) > 25 else 0.0
             except (TypeError, ValueError, IndexError, KeyError):
                 continue
             b = alt.get(kennung)
@@ -4159,6 +4236,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             b.winkel = winkel
             b.ebene = ebene
             b.flug, b.sturz_hoehe, b.sturz_kippen = flug, sturz_hoehe, kippen
+            b.mg_hitze, b.mg_heiss = mg_hitze, mg_heiss
             k = self.kaempfer.get(fahrer) if fahrer >= 0 else None
             b.besetzt = fahrer >= 0
             b.team = k.team if k is not None else -1
@@ -4189,6 +4267,24 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 b.takt["kanone"] = max(0.0, laden)
             neu.append(b)
         self.fahrzeuge = neu
+
+    def _mg_hitze_zeigen(self, ziel, wagen, x: int, y: int, unten: int) -> int:
+        """Die Hitze des Fahrzeug-MGs unter dem Wagen (seit 0.34.154): ein
+        schmaler Balken, ab der Haelfte gelb, kurz vor heiss rot; heiss ein
+        Text mit der Zeit, bis es wieder schiesst. Kalt: nichts."""
+        hitze = float(getattr(wagen, "mg_hitze", 0.0))
+        heiss = float(getattr(wagen, "mg_heiss", 0.0))
+        if heiss > 0.0:
+            SCHRIFT.zeichnen(ziel, "MG ÜBERHITZT %.1f" % heiss, x, y, K.C_RED, 1,
+                             ausrichtung="mitte")
+            return unten + 10
+        if hitze < 0.05:
+            return unten
+        breite = 34
+        farbe = K.C_RED if hitze >= 0.8 else (K.C_AMBER if hitze >= 0.5 else K.C_CREAM)
+        pygame.draw.rect(ziel, (12, 9, 7), (x - breite // 2 - 1, y, breite + 2, 4))
+        pygame.draw.rect(ziel, farbe, (x - breite // 2, y + 1, max(1, int(breite * hitze)), 2))
+        return unten + 7
 
     def _fahrhinweis_fuehren(self, dt: float) -> None:
         """Nach dem Einsteigen steht kurz, wie man faehrt und aussteigt."""
@@ -4226,6 +4322,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                                  K.C_AMBER if rest <= 0.0 else K.C_MUTED, 1,
                                  ausrichtung="mitte")
                 unten += 10
+            if (wagen is not None and not wagen.kaputt and getattr(wagen, "mg_waffe", None)
+                    and K.FAHRZEUG_WAFFEN.get(wagen.mg_waffe, {}).get("hitze")):
+                unten = self._mg_hitze_zeigen(ziel, wagen, int(p.x), int(p.y) + unten, unten)
             if wagen is not None and wagen.art == "tragschrauber" and not wagen.kaputt:
                 farbe = K.C_AMBER
                 if not wagen.luft:
@@ -4500,6 +4599,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             k = self.kaempfer.pop(nummer, None)
             if k is not None:
                 k.lebt = False
+                self._schwer_fallen_lassen(k)     # wer geht, laesst sie da
 
         if self.ich is not None:
             self._anwenden(self.ich, self._meine_eingabe())
@@ -4560,6 +4660,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                              and self.welt.zeit - zuletzt[1] <= K.SCHLACHT["fahrzeug_zuletzt"]
                              else getattr(b, "basis_team", -2))
                     if von is not None and getattr(von, "team", -1) != seite:
+                        if hasattr(von, "zaehlen"):
+                            von.zaehlen("fahrzeuge")      # Statistik der Siegtafel (0.34.154)
                         self.schlacht_punkte(von, self.fahrzeug_punkte(b.art),
                                              "%s ZERSTÖRT" % b.werte.get("name", b.art.upper()))
                         self.serie_punkte(von, "fahrzeug")
@@ -5388,6 +5490,22 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         Spieler.sterben(k, von)
         k.toeter = von
 
+    def _schwer_fallen_lassen(self, k: Kaempfer) -> None:
+        """Die gerufene Waffe eines Toten bleibt liegen (seit 0.34.154) - mit
+        dem, was noch drin ist. Leer geschossen liegt nichts da."""
+        rest = k.schwer_ablegen()
+        if rest is None:
+            return
+        name, mag, vorrat = rest
+        if mag + vorrat <= 0:
+            return
+        ebene = k.ebene
+        pos = pygame.Vector2(k.pos)
+        if not self.welt.frei(pos, 6.0, ebene):
+            pos = pygame.Vector2(getattr(k, "vorher", pos))
+        self.welt.dazu(KampfBeute(pos, "waffe_" + name, ebene, self.kaempfer,
+                                  ladung=(mag, vorrat)))
+
     def _tote_abrechnen(self, dt: float) -> None:
         if self.schlacht:
             self._umgeworfen_buchen()
@@ -5404,6 +5522,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 # Karte. Genau das sah aus wie ein Teleport beim
                 # Hinunterspringen.
                 k.abgerechnet = True
+                self._schwer_fallen_lassen(k)
                 toeter = getattr(k.toeter, "von", k.toeter)
                 if isinstance(toeter, Kaempfer) and toeter is not k:
                     toeter.abschuesse += K.GEFECHT["punkt_abschuss"]
@@ -5682,9 +5801,18 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         return werte
 
     def _werte_von(self, k) -> dict:
-        """Die Zahlen eines Kaempfers, so wie sie gebucht werden."""
+        """Die Zahlen eines Kaempfers, so wie sie gebucht werden - und dazu
+        (seit 0.34.154) `stat` fuer die Statistikseite der Siegtafel. Die geht
+        nur an die Tafel, nicht ins Konto und nicht in die Bestenliste."""
+        z = k.zaehler
+        stat = {"schaden": int(z.get("schaden", 0)), "hilfen": int(z.get("hilfen", 0)),
+                "fahrzeuge": int(z.get("fahrzeuge", 0)), "erobert": int(z.get("erobert", 0)),
+                "punkte": int(z.get("punkte_verdient", 0)),
+                "schuesse": int(z.get("schuesse", 0)), "treffer": int(z.get("treffer", 0)),
+                "bot": int(bool(getattr(k, "ist_bot", False)))}
         return {"werte": k.werte_runde(), "waffen": k.waffen_runde(),
-                "team": k.team, "name": k.name, "opfer": self._opfer_liste(k)}
+                "team": k.team, "name": k.name, "opfer": self._opfer_liste(k),
+                "stat": stat}
 
     def _namen_merken(self, k) -> None:
         """Name und Konto je Nummer, auch fuer die, die schon gegangen sind:
@@ -5943,6 +6071,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                     # Genau: ein gerundeter Faktor laeuft ueber viele
                     # Schritte zu Zehntelpixeln auf (seit 0.34.104).
                     "lf": round(k.__dict__.get("_luft", 1.0), 7)})
+                fz = self._fahrer_zustand(k)
+                if fz is not None:
+                    spieler[-1]["fz"] = fz
         flug = []
         gegner = []
         beute = []
@@ -6049,7 +6180,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                   # Seit 0.34.146: im Sturz ueber eine Kante - Hoehe ueber dem Boden,
                   # wie hoch der Sturz war, und wie weit die Nase gesenkt ist.
                   round(b.flug, 1), round(getattr(b, "sturz_hoehe", 0.0), 1),
-                  round(getattr(b, "sturz_kippen", 0.0), 1)]
+                  round(getattr(b, "sturz_kippen", 0.0), 1),
+                  # Seit 0.34.154: Hitze des MGs (0..1) und wie lange es noch schweigt.
+                  round(getattr(b, "mg_hitze", 0.0), 2), round(getattr(b, "mg_heiss", 0.0), 1)]
                  for b in self.fahrzeuge]
         # Nagelfelder (seit 0.34.65): wo die Naegel liegen, folgt aus der
         # Kennung (entities.Nagelfeld.stellen).
@@ -6263,6 +6396,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         self._puffer_schritt(dt)
         self._vorhersage_schritt(dt)
         self._vorhersage_zeigen()
+        # Der eigene Wagen ebenso (seit 0.34.154).
+        self._wagen_vorhersage_schritt(dt)
+        self._wagen_vorhersage_zeigen()
 
         # Der Gast simuliert nichts, seine Rueckmeldungen muessen aber
         # trotzdem laufen: Staubringe und Aufschriften altern hier.
@@ -6908,6 +7044,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         self._zeit += dt
         if not self.vorbei:
             self._rundenzeit += dt
+            # Die Siegtafel faengt wieder auf der Uebersicht an (0.34.154).
+            self._tafel_ab = None
+            self._tafel_seite_fest = None
         if getattr(self, "_sl_meldung_rest", 0.0) > 0.0:
             self._sl_meldung_rest -= dt
         if self.vorbei or self.in_lobby or not self.schlacht:
@@ -7063,6 +7202,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         die Ueberblendung des Wagens."""
         wagen = self._gast_wagen()
         if wagen is not None:
+            if wagen.__dict__.get("vh_aktiv"):
+                # Vorhergesagt (seit 0.34.154): Schritt fuer Schritt wie die Figur.
+                return pygame.Vector2(wagen.pos)
             return wagen.netz_gezeigt(self.misch_roh(1.0), self._paket_takt)
         return self.ich.pos
 
@@ -7297,6 +7439,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if self.schlacht and self.menue is None and self.belohnung_ereignis(ev):
             return
         if self.menue is None and self.einstieg_ereignis(ev):
+            return
+        if (self.vorbei and self.menue is None and ev.type == pygame.KEYDOWN
+                and ev.key in self.app.opt.codes("inventar")):
+            # Auf der Siegtafel blaettert TAB zwischen Uebersicht und
+            # Statistik (seit 0.34.154); dann wechselt sie nicht mehr von selbst.
+            self._tafel_seite_fest = 1 - self.tafel_seite()
             return
         if (self.schlacht and self.menue is None and not self.in_lobby and not self.vorbei
                 and ev.type == pygame.KEYDOWN and ev.key in self.app.opt.codes("inventar")):
@@ -7776,6 +7924,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             # Fuer die Wagen beim Gast (seit 0.34.153, Buggy.zeichenpos).
             self.welt.misch_roh = self.misch_roh(alpha)
             self.welt.paket_takt = self._paket_takt
+            self.welt.schritt_alpha = alpha       # der vorhergesagte Wagen (seit 0.34.154)
         # Die Kamera laeuft hier wie dort mit den eigenen Rechenschritten -
         # also mit dem Bildanteil, nicht mit dem Anteil der Meldungen.
         self.kamera.alpha = alpha
@@ -9365,13 +9514,14 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 "opfer": self._haeufigstes_opfer(eintrag.get("opfer")),
                 "mvp_punkte": float(werte.get("mvp_punkte", 0) or 0),
                 "mvp": bool(werte.get("mvp", 0)),
+                "stat": eintrag.get("stat") if isinstance(eintrag.get("stat"), dict) else {},
             })
         if not zeilen:
             for k in self.kaempfer.values():
                 zeilen.append({"nummer": k.nummer, "name": k.name,
                                "team": k.team, "abschuesse": k.abschuesse,
                                "tode": k.tode, "waffe": "", "opfer": "",
-                               "mvp_punkte": 0.0, "mvp": False})
+                               "mvp_punkte": 0.0, "mvp": False, "stat": {}})
         zeilen.sort(key=lambda z: (-z["mvp_punkte"], -z["abschuesse"],
                                    z["tode"], z["name"]))
         return zeilen
@@ -9432,6 +9582,17 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 bester, meiste = str(name), zahl
         return bester
 
+    def tafel_seite(self) -> int:
+        """Welche Seite der Siegtafel steht (seit 0.34.154): 0 Uebersicht,
+        1 Statistik. Von selbst alle K.SIEGTAFEL wechsel Sekunden, mit TAB fest."""
+        fest = self.__dict__.get("_tafel_seite_fest")
+        if fest is not None:
+            return int(fest)
+        ab = self.__dict__.get("_tafel_ab")
+        if ab is None:
+            self._tafel_ab = ab = self._zeit
+        return int((self._zeit - ab) // K.SIEGTAFEL["wechsel"]) % 2
+
     def _endtafel(self, ziel) -> None:
         # Fast blickdicht. Vorher schimmerten Namen und die ganze Anzeige
         # durch die Tafel, und beides stand quer durch die Zahlen, die man
@@ -9468,6 +9629,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                        ausrichtung="mitte")
 
         zeilen = self._tafel_zeilen()
+        statistik = self.tafel_seite() == 1
+        # Welche Seite: beide Namen, die aktive hell (seit 0.34.154).
+        for i_, (text_, links_) in enumerate((("ÜBERSICHT", True), ("STATISTIK", False))):
+            f.zeichnen(ziel, text_, K.GAME_W // 2 + (-8 if links_ else 8), 71,
+                       K.C_CREAM if (i_ == 1) == statistik else K.C_MUTED_DK, 1,
+                       ausrichtung="rechts" if links_ else "links")
         mvp = next((z for z in zeilen if z.get("mvp")), None)
         if mvp is not None:
             f.zeichnen(ziel, "MVP: %s  ·  %.0f PUNKTE" % (
@@ -9500,8 +9667,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 int(self.plan_weiter + 0.99), self.plan_ausblick()),
                 K.GAME_W // 2, K.GAME_H - 30, K.C_AMBER, 1,
                 ausrichtung="mitte")
-        f.zeichnen(ziel, "[ESC] MENÜ", K.GAME_W // 2, K.GAME_H - 18,
-                   K.C_MUTED_DK, 1, ausrichtung="mitte")
+        f.zeichnen(ziel, "[%s] SEITE  ·  [ESC] MENÜ" % self._tastenname("inventar"),
+                   K.GAME_W // 2, K.GAME_H - 18, K.C_MUTED_DK, 1, ausrichtung="mitte")
 
     @staticmethod
     def _tafel_hoehe(zeilen: int) -> int:
@@ -9526,6 +9693,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if 0 <= team < len(K.TEAMS["kombi"]):
             self._teamzeichen(ziel, x + 5, y + 6, K.TEAMS["kombi"][team])
         f.zeichnen(ziel, name, x + (16 if team >= 0 else 5), y + 6, hell, 1)
+        if self.tafel_seite() == 1:
+            self._statistik_block(ziel, x, y, breite, zeilen, hell, dunkel)
+            return
 
         # Spaltentitel. "K/D" steht fuer die Runde, nicht fuer die
         # Bestenliste - deshalb "RUNDE" darunter und nicht mehr.
@@ -9561,6 +9731,48 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 f.zeichnen(ziel, ui.kuerzen(z["opfer"], x + breite - 6
                                             - sx["opfer"]),
                            sx["opfer"], zy, K.C_MUTED_DK, 1)
+            zy += 11
+
+    # Die Statistikseite (seit 0.34.154, gewuenscht nach "Statistiktafel nach
+    # der Runde: wer wie viele Fahrzeuge zerstoert, wiederbelebt, erobert hat").
+    _STAT_SPALTEN = (("punkte", "PKT", 182), ("schaden", "SCHADEN", 122), ("fahrzeuge", "FZG", 90),
+                     ("hilfen", "HILF", 62), ("erobert", "EROB", 34), ("genau", "TREFF", 0))
+
+    @staticmethod
+    def _stat_wert(stat: dict, schluessel: str) -> int:
+        if schluessel == "genau":
+            schuesse = int(stat.get("schuesse", 0) or 0)
+            return int(round(100.0 * int(stat.get("treffer", 0) or 0) / schuesse)) if schuesse else -1
+        return int(stat.get(schluessel, 0) or 0)
+
+    def _statistik_block(self, ziel, x: int, y: int, breite: int, zeilen: list,
+                         hell, dunkel) -> None:
+        """Je Spieler: verdiente Punkte, Schaden, zerstoerte Fahrzeuge,
+        Wiederbelebungen, eroberte Punkte, Trefferquote. Der Beste je Spalte
+        steht in Bernstein; was null ist, als Strich."""
+        f = SCHRIFT
+        rechts = x + breite - 6
+        kopfzeile = y + 6
+        for schluessel, titel, ab in self._STAT_SPALTEN:
+            f.zeichnen(ziel, titel, rechts - ab, kopfzeile, dunkel, 1, 1, "rechts")
+        beste = {s: max([self._stat_wert(z.get("stat") or {}, s) for z in zeilen] or [0])
+                 for s, _t, _a in self._STAT_SPALTEN}
+        zy = y + 18
+        for platz, z in enumerate(zeilen, 1):
+            stat = z.get("stat") or {}
+            eigen = (self.ich is not None and z["nummer"] == self.ich.nummer)
+            if eigen:
+                pygame.draw.rect(ziel, (30, 22, 16), (x + 2, zy - 2, breite - 4, 11))
+            farbe = hell if eigen else K.C_MUTED
+            f.zeichnen(ziel, ui.kuerzen(z["name"], rechts - 200 - x - 16), x + 16, zy, farbe, 1)
+            for schluessel, _titel, ab in self._STAT_SPALTEN:
+                wert = self._stat_wert(stat, schluessel)
+                if wert <= 0:
+                    text, f_ = "-", K.C_MUTED_DK
+                else:
+                    text = "%d%%" % wert if schluessel == "genau" else "%d" % wert
+                    f_ = K.C_AMBER if wert == beste[schluessel] else (hell if eigen else K.C_CREAM)
+                f.zeichnen(ziel, text, rechts - ab, zy, f_, 1, 1, "rechts")
             zy += 11
 
     @staticmethod

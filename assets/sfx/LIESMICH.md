@@ -58,6 +58,9 @@ Aufnahmen ersetzt werden.
 | `falle_klick`, `drohne`, `horchposten`, `emp_aus`, `reifen_platt`, `schild` | Sprengfalle, Spaehdrohne, Horchposten, Fahrzeug faellt aus, Reifen platzt, Kugel am Schild |
 
 Die vollstaendige Liste steht als `KLANG_NAMEN` in `dustfront/config.py`.
+Eine Uebersicht mit Status (Datei oder Platzhalter), Zweck, Wunsch an die
+Aufnahme und Prioritaet steht in `docs/KLAENGE_UEBERSICHT.pdf` (seit
+0.34.154; neu erzeugen mit `python tools/klang_uebersicht.py`).
 Einige Namen zeigen absichtlich auf Unterordner: Nahkampf und Molotow sind
 unter `nahkampf/` beziehungsweise `molotov/` nach Trefferart sortiert. Der
 Brecheisenschwung liegt im Ordner `nahkampf/into_air`. Die

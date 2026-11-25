@@ -417,6 +417,8 @@ class FrontTeil:
                 for k in self._zaehlbar():
                     if k.team == p.besitzer and k.pos.distance_squared_to(p.pos) <= r2:
                         self.schlacht_punkte(k, K.SCHLACHT["punkte"]["erobern"], "EROBERT " + p.name)
+                        if hasattr(k, "zaehlen"):
+                            k.zaehlen("erobert")      # Statistik der Siegtafel (0.34.154)
             name = K.TEAMS["namen"][p.besitzer]
             self.__dict__.setdefault("_front_meldungen", []).append(
                 (self.welt.zeit, "%s NIMMT %s" % (name, p.name), p.besitzer))

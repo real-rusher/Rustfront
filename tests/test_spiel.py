@@ -11601,16 +11601,19 @@ _bot85.wieder_in = 0.0
 w85._wieder_einsteigen(_bot85)
 pruef("Nach dem Wiedereinstieg genauso: wieder eine Granate, kein Medkit",
       _ausgeruestet85(_bot85), "%s %s" % (_bot85.magazin, _bot85.medkits))
-# Die Granate kommt nicht wieder, auch nicht mit Nachladen.
-_gr85 = [i_ for i_, n_ in enumerate(_bot85.waffen) if n_ == "granate"][0]
-_bot85.magazin["granate"] = 0
+# Die Granate kommt nicht wieder, auch nicht mit Nachladen. Welche
+# Wurfwaffe er hat, waehlt der Zufall (seit 0.34.153 mehr Arten) - es
+# gilt fuer jede.
+_gr85 = [i_ for i_, n_ in enumerate(_bot85.waffen) if K.WAFFEN[n_].get("art") == "wurf"][0]
+_wurf85 = _bot85.waffen[_gr85]
+_bot85.magazin[_wurf85] = 0
 _bot85.waffe = _gr85
 _bot85.nachladen()
 for _ in range(int(5.0 / K.FIXED_DT)):
     _bot85.schritt(K.FIXED_DT)
 pruef("Ist die Granate geworfen, laedt er keine neue nach",
-      _bot85.magazin["granate"] == 0 and _bot85.hirn._wurf_platz() < 0,
-      str(_bot85.magazin))
+      _bot85.magazin[_wurf85] == 0 and _bot85.hirn._wurf_platz() < 0,
+      "%s %s" % (_wurf85, _bot85.magazin))
 _bot85.waffe = 0
 # Beute: liegt direkt unter ihm, er nimmt sie nicht.
 _bot85.medkits = 0
@@ -13626,6 +13629,10 @@ pruef("Die Untertitel ueber den Bots sind aus (K.BOTS callouts)", not K.BOTS["ca
 
 _tm = _TM87.Testmodus(app, karte="staubtal")
 _tm.wiedereinstieg = False
+# Fester Zufall fuer die ganze Szene (seit 0.34.154): der Bot-Zufall des
+# Testmodus war ungeseedet, und im vollen Lauf schlug die Panik-Pruefung
+# darum ab und zu fehl, ohne dass sich etwas geaendert hatte.
+random.seed(98); EN.RND.seed(98); _tm._bot_rnd.seed(98)
 _platz98 = _freie_flaeche86(_tm.welt, random.Random(98), 14, 9)
 pruef("(eine freie Flaeche fuer die Kistenwand)", _platz98 is not None, "")
 _tx98, _ty98 = _platz98
@@ -21561,6 +21568,316 @@ pruef("... und springt gegenueber der Kamera kaum noch zurueck (vorher rund jede
       _rueck153 < len(_spur153) * 0.08, "%d von %d" % (_rueck153, len(_spur153)))
 w153.verlassen(); g153.verlassen()
 K.NETZ["puffer_an"], K.NETZ["eingabe_puffer"] = _netz153
+
+# ── 0.34.154: Jagdkanone, MG-Hitze, Fallschirmjaeger, Statistik, Waffen-Abwurf,
+#    Werfer-Stuetzen, Vorhersage des eigenen Wagens beim Gast, Klaenge ─────────
+print("\n-- 0.34.154: Jagdkanone prallt ab und geht durch, ohne Explosion")
+from dustfront import fahrzeug as _FZ154
+from dustfront.fahrzeug import Panzergranate as _PG154
+from dustfront.mehrspieler import KampfBeute as _KB154
+_jk154 = K.FAHRZEUG_WAFFEN["jagdkanone"]
+pruef("Jagdkanone: keine Explosion, geht durch (3), prallt einmal ab, dann ein Viertel Schaden",
+      not _jk154.get("explosion", True) and _jk154["durchschlag"] == 3
+      and _jk154["abprall"] == 1 and abs(_jk154["abprall_faktor"] - 0.25) < 1e-9)
+_tm154 = _TM87.Testmodus(app, karte="staubtal_offen")
+_tm154.wiedereinstieg = False
+random.seed(154); EN.RND.seed(154); _tm154._bot_rnd.seed(154)
+_e154 = _tm154.welt.ebene(0)
+_r154 = random.Random(154)
+for _ in range(60000):
+    _ty154 = _r154.randrange(20, _e154.hoehe - 20); _tx154 = _r154.randrange(40, _e154.breite - 60)
+    if all(not K.KACHELN[_e154.kachel(_tx154 + x_, _ty154 + dy_)]["fest"]
+           for x_ in range(-2, 40) for dy_ in range(-6, 7)):
+        break
+def _z154(x_, y_):
+    return pygame.Vector2((_tx154 + x_ + 0.5) * K.TILE, (_ty154 + y_ + 0.5) * K.TILE)
+_jp154 = _tm154.fahrzeug_setzen("jagdpanzer", _z154(2, 0), 0, {"winkel": 0})
+_jf154 = _tm154.puppe_setzen(_jp154.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="J")
+_tm154._anwenden(_jf154, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_a154 = _tm154.puppe_setzen(_z154(10, 0), 0, {"team": 1}); _a154.leben = _a154.max_leben = 9999
+_bg154 = _tm154.fahrzeug_setzen("buggy", _z154(16, 0), 0, {"winkel": 90})
+_c154 = _tm154.puppe_setzen(_z154(22, 0), 0, {"team": 1}); _c154.leben = _c154.max_leben = 9999
+_pw154 = _tm154.fahrzeug_setzen("panzerwagen", _z154(30, 0), 0, {"winkel": 90})
+_leben154 = (_bg154.leben, _pw154.leben)
+_expl154 = []
+_alt_ex154 = _tm154.welt.explosion
+def _ex154(p_, e_, r_, art_="spreng", von_=None):
+    _expl154.append(art_)
+    return _alt_ex154(p_, e_, r_, art_, von_)
+_tm154.welt.explosion = _ex154
+_jp154.takt["kanone"] = 0
+for _i in range(int(2.5 / K.FIXED_DT)):
+    _tm154._anwenden(_jf154, {"will": [0, 0], "ziel": [_jp154.pos.x + 900, _jp154.pos.y],
+                              "knoepfe": [], "feuert": _i < 3})
+    _tm154.schritt(K.FIXED_DT)
+_tm154.welt.explosion = _alt_ex154
+_schaden154 = (9999 - _a154.leben, _leben154[0] - _bg154.leben, 9999 - _c154.leben, _leben154[1] - _pw154.leben)
+pruef("... sie geht durch Figur, Buggy und Figur (alle nehmen Schaden) und bleibt im Panzerwagen stecken",
+      all(x_ > 0 for x_ in _schaden154), "Figur %.0f Buggy %.0f Figur %.0f Panzerwagen %.0f" % _schaden154)
+pruef("... jedes Mal etwas schwaecher (durch_faktor)", _schaden154[2] < _schaden154[0], str(_schaden154))
+pruef("... ohne Explosion (nur der Einschlag ohne Flaeche)",
+      "panzer" not in _expl154 and "spreng" not in _expl154 and "jagd_einschlag" in _expl154, str(_expl154))
+# Abprall: flach an einer Mauer entlang prallt sie ab (einmal, ein Viertel), steil schlaegt sie ein.
+for _dy in range(-5, 6):
+    _e154.setzen(_tx154 + 36, _ty154 + _dy, K.WAND)
+_wand154 = (_tx154 + 36) * K.TILE
+_raus154 = {}
+for _name154, _winkel154 in (("steil", 10.0), ("flach", 75.0)):
+    _g154 = _PG154(pygame.Vector2(_wand154 - 40, (_ty154 - 3) * K.TILE), _winkel154, _jk154, 0, None, "jagdkanone")
+    _tm154.welt.dazu(_g154); _tm154.welt.wesen.extend(_tm154.welt.neue); _tm154.welt.neue.clear()
+    _voll154 = _g154.schaden_wert
+    for _ in range(80):
+        if not _g154.lebt or _g154.tempo.x < 0:
+            break
+        _g154.schritt(K.FIXED_DT)
+    _raus154[_name154] = (_g154.lebt, _g154.tempo.x, _g154.schaden_wert / _voll154, _g154.abprall)
+pruef("Steil auf die Mauer: kein Abprall, sie schlaegt ein", not _raus154["steil"][0], str(_raus154["steil"]))
+pruef("Flach an der Mauer: sie prallt ab (Richtung kehrt), mit einem Viertel Schaden, und nur einmal",
+      _raus154["flach"][0] and _raus154["flach"][1] < 0 and abs(_raus154["flach"][2] - 0.25) < 1e-6
+      and _raus154["flach"][3] == 0, str(_raus154["flach"]))
+_tm154.loeschen(_jf154); _tm154.loeschen(_jp154)
+
+print("\n-- 0.34.154: MG-Hitze je Fahrzeug, Panzerwagen-MG schwaecher")
+pruef("Ring-MG des Panzerwagens 10 % schwaecher (13 -> 11,7)",
+      abs(K.FAHRZEUG_WAFFEN["ring_mg"]["schaden"] - 11.7) < 1e-9)
+pruef("Hitze nur, wo es passt: Bug-MG und Ring-MG ja (Ring heisser), Flak und Jagdpanzer ohne MG-Hitze",
+      K.FAHRZEUG_WAFFEN["bug_mg"]["hitze"]["schuesse"] > K.FAHRZEUG_WAFFEN["ring_mg"]["hitze"]["schuesse"]
+      and _FZ154.Panzer.mg_waffe == "bug_mg" and _FZ154.Panzerwagen.mg_waffe == "ring_mg"
+      and _FZ154.Flakwagen.mg_waffe is None and _FZ154.Jagdpanzer.mg_waffe is None)
+_pw154 = _tm154.fahrzeug_setzen("panzerwagen", _z154(2, 0) + pygame.Vector2(0, -3 * K.TILE), 0, {"winkel": 0})
+_f154 = _tm154.puppe_setzen(_pw154.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="F")
+_tm154._anwenden(_f154, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_schuss154 = []
+_heiss_ab154 = None
+for _i in range(int(10.0 / K.FIXED_DT)):
+    _vor154 = _pw154.takt.get("ring_mg", 0)
+    _tm154._anwenden(_f154, {"will": [0, 0], "ziel": [_pw154.pos.x + 300, _pw154.pos.y],
+                             "knoepfe": [], "feuert": True})
+    _tm154.schritt(K.FIXED_DT)
+    if _pw154.takt.get("ring_mg", 0) > _vor154 + 0.01:
+        _schuss154.append(_i * K.FIXED_DT)
+    if _heiss_ab154 is None and _pw154.mg_heiss > 0:
+        _heiss_ab154 = _i * K.FIXED_DT
+_pause154 = max(b_ - a_ for a_, b_ in zip(_schuss154, _schuss154[1:]))
+pruef("Dauerfeuer mit dem Ring-MG: nach ein paar Sekunden ist es heiss",
+      _heiss_ab154 is not None and 3.0 < _heiss_ab154 < 10.0, str(_heiss_ab154))
+pruef("... und schiesst dann so lange nicht, bis es abgekuehlt ist (K.FAHRZEUG_WAFFEN ring_mg hitze sperre)",
+      _pause154 >= K.FAHRZEUG_WAFFEN["ring_mg"]["hitze"]["sperre"] - 0.05, "%.2f s" % _pause154)
+_tm154.verlassen()
+
+print("\n-- 0.34.154: Fallschirmjaeger hoechstens 2,5 mal die Seite")
+class _SL154(_SL107.SchlachtTeil):
+    def __init__(self):
+        self.kaempfer = {}
+_sl154 = _SL154()
+_sl154.schlacht_seite = 6
+pruef("Bei 6er-Seiten: hoechstens 15 lebende Fallschirmjaeger je Seite",
+      _sl154.fallschirmjaeger_grenze() == 15, str(_sl154.fallschirmjaeger_grenze()))
+_sl154.schlacht_seite = 1
+pruef("... nie weniger als ein Abwurf", _sl154.fallschirmjaeger_grenze() == K.SCHLACHT["fallschirmjaeger"]["anzahl"])
+
+print("\n-- 0.34.154: der Zufall der Bot-Waffen")
+from dustfront import bots as _BO154
+_r154 = random.Random(154)
+_mg154 = 0
+_kandidat154 = [w_ for w_, g_ in K.BOTS["waffen_gewicht"].items() if g_ < 1.0][0]
+for _ in range(600):
+    _r154.random()
+    if _kandidat154 in _BO154.bot_waffen_gewichten([_kandidat154, "sturm"], _r154):
+        _mg154 += 1
+_soll154 = K.BOTS["waffen_gewicht"][_kandidat154]
+pruef("Bots nacheinander: das MG bleibt so oft, wie sein Gewicht sagt (vorher alle oder keiner)",
+      abs(_mg154 / 600.0 - _soll154) < 0.08, "%d von 600, Gewicht %.2f" % (_mg154, _soll154))
+
+print("\n-- 0.34.154: Statistik nach der Runde")
+w154 = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_neuer_port()), modus="team", karte="staubtal", seed=154)
+_k154 = w154.ich
+_k154.zaehlen("fahrzeuge"); _k154.zaehlen("erobert"); _k154.zaehlen("punkte_verdient", 7)
+_st154 = w154._werte_von(_k154).get("stat", {})
+pruef("Die Werte der Runde haben eine Statistik: Schaden, Hilfen, Fahrzeuge, erobert, Punkte, Treffer",
+      all(n_ in _st154 for n_ in ("schaden", "hilfen", "fahrzeuge", "erobert", "punkte", "schuesse", "treffer"))
+      and _st154["fahrzeuge"] == 1 and _st154["erobert"] == 1 and _st154["punkte"] == 7, str(_st154))
+w154.vorbei = True
+w154.endwerte = {str(_k154.nummer): w154._werte_von(_k154)}
+_s0154 = w154.tafel_seite()
+w154._zeit += K.SIEGTAFEL["wechsel"] + 0.01
+_s1154 = w154.tafel_seite()
+pruef("Die Siegtafel wechselt von selbst zwischen UEBERSICHT und STATISTIK", _s0154 != _s1154, "%d %d" % (_s0154, _s1154))
+_ok154 = True
+try:
+    for _ in range(2):
+        w154.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+        w154._zeit += K.SIEGTAFEL["wechsel"]
+except Exception as _f:          # noqa: BLE001
+    _ok154 = repr(_f)
+pruef("... und zeichnet beide Seiten ohne Fehler", _ok154 is True, str(_ok154))
+w154.verlassen()
+
+print("\n-- 0.34.154: starke Waffen per Nachschub rufen")
+_namen154 = [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]]
+pruef("Minigun, Flammenwerfer, Raketenbuendel und Panzerbuechse sind im Nachschub",
+      all(("waffe_" + n_) in _namen154 for n_ in ("minigun", "flammenwerfer", "raketenbuendel", "panzerbuechse")))
+pruef("Die Nachschubtafel passt mit allen 19 Zeilen aufs Bild (ADMIN-Zeile ueber dem Stand)",
+      _SL107.SchlachtTeil._belohnung_hilfe_rect().bottom + 2 + 14 < K.GAME_H - 36,
+      str(_SL107.SchlachtTeil._belohnung_hilfe_rect()))
+_tm154 = _TM87.Testmodus(app, karte="staubtal_offen")
+_tm154.wiedereinstieg = False
+_nm154 = [e_.name for e_ in _tm154.eintraege]
+pruef("Testmodus: ABWURF: MINIGUN (Nachschub) und GERUFEN: MINIGUN (Beute) im Spawner",
+      "ABWURF: MINIGUN" in _nm154 and "GERUFEN: MINIGUN" in _nm154)
+_pl154 = _freie_flaeche86(_tm154.welt, random.Random(1542), 12, 9)
+_p154 = pygame.Vector2((_pl154[0] + 6) * K.TILE, (_pl154[1] + 4.5) * K.TILE)
+_tm154.nachschub_setzen("waffe_minigun", _p154, {"team": 0})
+for _ in range(int(15.0 / K.FIXED_DT)):
+    _tm154.schritt(K.FIXED_DT)
+_kb154 = [w_ for w_ in _tm154.welt.wesen if isinstance(w_, _KB154) and w_.art == "waffe_minigun" and w_.lebt]
+pruef("Der Abwurf landet als Minigun am Boden, mit vollem Magazin und Vorrat",
+      len(_kb154) == 1 and _kb154[0].ladung == (K.WAFFEN["minigun"]["magazin"], K.MUNITION["vorrat"]["minigun"]),
+      str([(b_.art, b_.ladung) for b_ in _kb154]))
+_bot154 = _tm154.bot_setzen(_kb154[0].pos + pygame.Vector2(0, 1), 0, {"team": 0})
+_bot154.hirn = None
+for _ in range(5):
+    _tm154.schritt(K.FIXED_DT)
+pruef("Ein Bot hebt sie nicht auf", _kb154[0].lebt and "minigun" not in _bot154.waffen)
+_bot154.pos.update(_kb154[0].pos + pygame.Vector2(200, 0))
+_m154 = _tm154.puppe_setzen(_kb154[0].pos + pygame.Vector2(0, 1), 0, {"team": 0, "waffe_figur": "sturm"})
+_vorher154 = list(_m154.waffen)
+for _ in range(5):
+    _tm154.schritt(K.FIXED_DT)
+pruef("Ein Mensch hebt sie auf: vorn in der Hotbar und gleich in der Hand, die anderen bleiben",
+      not _kb154[0].lebt and _m154.waffen[0] == "minigun" and _m154.waffe_name == "minigun"
+      and _m154.waffen[1:] == _vorher154 and _m154.schwer == "minigun", str(_m154.waffen))
+_m154.vorrat["minigun"] = 10
+_m154.auffuellen(1.0)
+pruef("Eine Munitionskiste fuellt die gerufene Waffe nicht nach", _m154.vorrat["minigun"] == 10)
+pruef("Eine zweite gerufene Waffe nimmt er nicht, solange er eine traegt",
+      not _m154.schwer_nehmen("flammenwerfer", 100, 0))
+_m154.magazin["minigun"] = 77
+_m154.unverwundbar = 0.0
+_m154.leben = 0.0; _m154.lebt = False; _m154.am_boden = False
+for _ in range(3):
+    _tm154.schritt(K.FIXED_DT)
+_kb154 = [w_ for w_ in _tm154.welt.wesen + _tm154.welt.neue
+          if isinstance(w_, _KB154) and w_.art == "waffe_minigun" and w_.lebt]
+pruef("Beim Tod faellt sie, mit dem, was noch drin ist", len(_kb154) == 1 and _kb154[0].ladung == (77, 10),
+      str([(b_.ladung) for b_ in _kb154]))
+pruef("... und ist aus seiner Hotbar weg", "minigun" not in _m154.waffen and not _m154.schwer, str(_m154.waffen))
+_tm154.verlassen()
+
+print("\n-- 0.34.154: Werfer-Stuetzen")
+pruef("Der Werfer hat 16 Stellungen der Stuetzen",
+      all(("werfer_stuetze_%d" % i_) in K.BILD_MASS for i_ in range(1, 17)))
+_wf154 = _FZ154.neu("werfer", (0, 0), 0, 0.0)
+_wf154.fortschritt = 0.0
+_b0154 = _wf154.bild
+_wf154.fortschritt = 0.25
+_b1154 = _wf154.bild
+_wf154.fortschritt = 0.6
+pruef("Eingepackt ohne Stuetzen, beim Aufbau fahren sie aus, ab der Haelfte stehen sie ganz",
+      _b0154 == "werfer" and _b1154 == "werfer_stuetze_8" and _wf154.bild == "werfer_stuetze_16",
+      "%s %s %s" % (_b0154, _b1154, _wf154.bild))
+from dustfront import effekte as _EF154
+pruef("Das Aufsetzen ist ein Effekt mit Klang, den auch der Gast bekommt (effekte.ARTEN)",
+      "stuetze_auf" in _EF154.ARTEN and "jagd_abprall" in _EF154.ARTEN and "mg_heiss" in _EF154.ARTEN)
+
+print("\n-- 0.34.154: der eigene Wagen beim Gast, vorhergesagt")
+_bg154 = _FZ154.neu("buggy", (0, 0), 0, 0.0)
+_alt154 = []
+for _will in ((0, -1), (0, 1), (1, 0), (-1, 0), (0.7, -0.7), (0, 0), (0.2, -0.2)):
+    v_ = pygame.Vector2(_will)
+    alt_gas = 1.0 if v_.y < -0.3 else (-1.0 if v_.y > 0.3 else 0.0)
+    alt_lenk = 1.0 if v_.x > 0.3 else (-1.0 if v_.x < -0.3 else 0.0)
+    _alt154.append(_bg154.fahr_eingabe(v_) == (alt_gas, alt_lenk))
+pruef("Gas und Lenkung aus W/A/S/D wie bisher (Buggy.fahr_eingabe, fuer beide Seiten dieselbe)", all(_alt154))
+# Der Geist faehrt genau wie der echte Wagen (Gastgeber).
+_tm154 = _TM87.Testmodus(app, karte="staubtal_offen")
+_pl154 = _freie_flaeche86(_tm154.welt, random.Random(1543), 24, 12)
+_p154 = pygame.Vector2((_pl154[0] + 4) * K.TILE, (_pl154[1] + 9) * K.TILE)
+_echt154 = _tm154.fahrzeug_setzen("buggy", _p154, 0, {"winkel": 0})
+_f154 = _tm154.puppe_setzen(_p154 + pygame.Vector2(0, 60), 0, {"team": 0})
+_tm154._einsteigen(_f154, _echt154)
+_geist154 = _FZ154.neu("buggy", _p154, 0, 0.0)
+_geist154.welt = _tm154.welt
+_geist154.geist_von = _echt154
+_geist154.pos.update(_echt154.pos); _geist154.winkel = _echt154.winkel
+for _i in range(int(2.0 / K.FIXED_DT)):
+    _will154 = pygame.Vector2(1, -1) if _i > 60 else pygame.Vector2(0, -1)
+    _echt154.gas, _echt154.lenk = _echt154.fahr_eingabe(_will154)
+    _tm154.schritt(K.FIXED_DT)
+    _geist154.geist_schritt(K.FIXED_DT, *_geist154.fahr_eingabe(_will154), False)
+pruef("Der Geist des Gasts faehrt dieselbe Bahn wie der Wagen beim Gastgeber (Ort und Winkel)",
+      _geist154.pos.distance_to(_echt154.pos) < 0.01 and abs(_geist154.winkel - _echt154.winkel) < 1e-6
+      and _echt154.geschw.length() > 100.0,
+      "%.4f px, %.6f Grad" % (_geist154.pos.distance_to(_echt154.pos), _geist154.winkel - _echt154.winkel))
+_tm154.verlassen()
+# Ganze Szene: 200 ms Ping, +-40 ms Schwankung, der Gast faehrt und lenkt.
+_netz154 = (K.NETZ["puffer_an"], K.NETZ["eingabe_puffer"])
+K.NETZ["puffer_an"], K.NETZ["eingabe_puffer"] = True, False      # wie im Spiel (Vorgabe)
+_wende154 = {}
+for _an154 in (True, False):
+    K.NETZ["wagen_vorhersage"] = _an154
+    w154, g154 = _paar303(0.2, 0.04, seed_=154)
+    _gk154 = w154.kaempfer[g154.meine_nummer]
+    _rnd154 = _rnd303.Random(4)
+    _frei154 = False
+    for _ in range(20000):
+        _p154 = _fp153(w154.welt, 0, _rnd154)
+        if all(w154.welt.frei(_p154 + pygame.Vector2(dx_, dy_), 45, 0, True)
+               for dx_ in range(-50, 751, 50) for dy_ in range(-100, 451, 50)):
+            _frei154 = True
+            break
+    w154.ich.pos.update(_p154 + pygame.Vector2(0, 600)); w154.ich.vorher.update(w154.ich.pos)
+    _gk154.pos.update(_p154); _gk154.vorher.update(_p154)
+    _wg154 = _FZ154.ARTEN["buggy"](pygame.Vector2(_p154), 0, winkel=0.0)
+    w154.fahrzeuge.append(_wg154); w154.welt.dazu(_wg154)
+    w154._einsteigen(_gk154, _wg154)
+    _lauf303(w154, g154, 1.0, ["vor"])
+    _bild154 = pygame.Surface((K.GAME_W, K.GAME_H))
+    _spur154 = []
+    _start_w154 = None
+    for _i in range(int(2.0 / K.FIXED_DT)):
+        _uhr303[0] += K.FIXED_DT
+        app.eingabe._gehalten = {"vor", "rechts"} if 30 <= _i < 90 else {"vor"}
+        w154.schritt(K.FIXED_DT); g154.schritt(K.FIXED_DT)
+        g154.zeichnen(_bild154, 0.5)
+        _gw154 = g154._gast_wagen()
+        if _gw154 is not None:
+            _spur154.append((pygame.Vector2(_gw154.zeichenpos(0.5)), _gw154.winkel))
+            if _i == 30:
+                _start_w154 = _gw154.winkel
+            if _i == 30 + 18:
+                _wende154[_an154] = abs((_gw154.winkel - _start_w154 + 180) % 360 - 180)
+    app.eingabe._gehalten = set()
+    if _an154:
+        _zweite154 = sorted((b_[0] - 2 * a_[0] + c_[0]).length()
+                            for c_, a_, b_ in zip(_spur154, _spur154[1:], _spur154[2:]))
+        pruef("(freie Flaeche fuer die Fahrt gefunden)", _frei154, str(_p154))
+        pruef("200 ms Ping: der Gast sagt seinen Wagen voraus (Geist aktiv, kein Sprung)",
+              g154._vw is not None and _wg154 is not None and g154.vw_spruenge == 0,
+              "Spruenge %d" % g154.vw_spruenge)
+        pruef("... der Abgleich zieht kaum nach (hoechstens ein paar Pixel, ohne Anstossen)",
+              g154.vw_fehler_max < 8.0, "%.2f px" % g154.vw_fehler_max)
+        pruef("... und der Wagen faehrt ruhig (95 % der Bilder unter 0,15 px Ruck)",
+              _zweite154[int(len(_zweite154) * 0.95)] < 0.15, "%.3f" % _zweite154[int(len(_zweite154) * 0.95)])
+    w154.verlassen(); g154.verlassen()
+K.NETZ["wagen_vorhersage"] = True
+K.NETZ["puffer_an"], K.NETZ["eingabe_puffer"] = _netz154
+pruef("Mit Vorhersage lenkt der Wagen sofort ein, ohne erst nach Hin- und Rueckweg",
+      _wende154.get(True, 0) > _wende154.get(False, 0) + 2.0, str(_wende154))
+pruef("Am Steuer puffert der Gastgeber die Fahrt des Gasts (exakte Dauer je Eingabe)",
+      K.NETZ["wagen_puffer"] and "tragschrauber" in K.NETZ["wagen_ohne_vorhersage"])
+
+print("\n-- 0.34.154: Klaenge")
+pruef("jet und napalm stehen in K.KLANG_NAMEN (werden vorgebaut, die erste Napalmbombe haengt nicht)",
+      "jet" in K.KLANG_NAMEN and "napalm" in K.KLANG_NAMEN)
+import importlib.util as _ilu154
+_spec154 = _ilu154.spec_from_file_location("klang_uebersicht", os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "tools", "klang_uebersicht.py"))
+_ku154 = _ilu154.module_from_spec(_spec154)
+_spec154.loader.exec_module(_ku154)
+pruef("tools/klang_uebersicht.py beschreibt jeden Klang (fuer docs/KLAENGE_UEBERSICHT.pdf)",
+      all(n_ in _ku154.BESCHREIBUNG for n_ in K.KLANG_NAMEN),
+      str([n_ for n_ in K.KLANG_NAMEN if n_ not in _ku154.BESCHREIBUNG]))
 
 print()
 print("FEHLER:", fails or "keine")

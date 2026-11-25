@@ -381,6 +381,17 @@ def eintraege() -> list:
         Eintrag("RAKETENWERFER", "BEUTE", ("anzahl", "streuung"),
                 _beute_setzer("rakete")),
     ]
+    # Seit 0.34.154: die gerufenen Waffen - am Schirm wie aus dem Nachschub,
+    # oder gleich am Boden (wie nach dem Tod ihres Traegers).
+    for art, _kosten, text in K.SCHLACHT["belohnungen"]:
+        if not art.startswith("waffe_"):
+            continue
+        name = K.WAFFEN[art[6:]]["name"]
+        raus.append(Eintrag("ABWURF: " + name, "NACHSCHUB", ("team",),
+                            (lambda a: lambda t, p, e, w: t.nachschub_setzen(a, p, w))(art),
+                            mehrfach=False))
+        raus.append(Eintrag("GERUFEN: " + name, "BEUTE", ("anzahl", "streuung"),
+                            _beute_setzer(art)))
     # Haftladung und EMP-Granate seit 0.34.65, Gas, Kuller, Knaller und
     # Schneeball seit 0.34.67.
     for art in ("granate", "rauch", "molotov", "blend", "haftladung", "emp",

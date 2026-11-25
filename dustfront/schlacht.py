@@ -494,6 +494,15 @@ class SchlachtTeil:
             if zone in self.dropzonen:
                 self.dropzonen.remove(zone)
             return
+        if ab.art.startswith("waffe_"):
+            # Eine gerufene Waffe (seit 0.34.154): liegt da, bis ein Mensch
+            # darueber laeuft - mit vollem Magazin und Vorrat.
+            from .mehrspieler import KampfBeute
+            w.dazu(KampfBeute(pygame.Vector2(ab.pos), ab.art, unten, self.kaempfer,
+                              ladung=KampfBeute.volle_ladung(ab.art[6:])))
+            if zone in self.dropzonen:
+                self.dropzonen.remove(zone)
+            return
         b = fahrzeug_modul.neu(ab.art, ab.pos, unten, ab.winkel)
         w.dazu(b)
         if hasattr(b, "aufbau"):
@@ -591,6 +600,17 @@ class SchlachtTeil:
         self._einsteigen(k, b)
         return k
 
+    def fallschirmjaeger_grenze(self) -> int:
+        """So viele lebende Fallschirmjaeger darf eine Seite haben (seit
+        0.34.154): K.SCHLACHT fallschirmjaeger_faktor mal Kaempfer je Seite."""
+        return max(S["fallschirmjaeger"]["anzahl"],
+                   int(S["fallschirmjaeger_faktor"] * max(1, int(self.schlacht_seite))))
+
+    def fallschirmjaeger_im_einsatz(self, team: int) -> int:
+        """Lebende Fallschirmjaeger dieser Seite - auch die noch am Schirm."""
+        return sum(1 for k in self.kaempfer.values()
+                   if getattr(k, "fallschirmjaeger", False) and k.team == team and k.lebt)
+
     def fallschirmjaeger_abwerfen(self, punkt, team: int) -> list:
         """Fuenf Bots dieser Seite am Schirm ueber `punkt` (Gastgeber)."""
         f = S["fallschirmjaeger"]
@@ -598,6 +618,7 @@ class SchlachtTeil:
         for i, stelle in enumerate(self._sprung_plaetze(punkt, team)):
             k = self._bot_dazu(team)
             k.verstaerkung = True
+            k.fallschirmjaeger = True     # fuer die Grenze (seit 0.34.154)
             k.darf_fahren = False
             k.pos.update(stelle)
             if hasattr(k, "vorher"):
@@ -712,6 +733,10 @@ class SchlachtTeil:
     def schlacht_punkte(self, k, wie_viel: int, grund: str = "") -> None:
         if self.schlacht and k is not None and not getattr(k, "ist_bot", False):
             k.schlacht_punkte = getattr(k, "schlacht_punkte", 0) + int(wie_viel)
+            if int(wie_viel) > 0 and hasattr(k, "zaehlen"):
+                # Fuer die Statistik der Siegtafel (seit 0.34.154; nicht in K.WERTE,
+                # also nicht im Konto).
+                k.zaehlen("punkte_verdient", int(wie_viel))
             if grund and int(wie_viel) > 0:
                 self._punkte_melden(k, int(wie_viel), grund)
 
@@ -909,6 +934,10 @@ class SchlachtTeil:
                 return "NICHT IN DER EIGENEN BASIS"
             if len(self._sprung_plaetze(punkt, k.team)) < S["fallschirmjaeger"]["anzahl"]:
                 return "ZU WENIG PLATZ"
+            grenze = self.fallschirmjaeger_grenze()
+            if (k.team in (0, 1)
+                    and self.fallschirmjaeger_im_einsatz(k.team) + S["fallschirmjaeger"]["anzahl"] > grenze):
+                return "HÖCHSTENS %d FALLSCHIRMJÄGER" % grenze
             return ""
         if was in fahrzeug_modul.ARTEN:
             probe = fahrzeug_modul.neu(was, punkt, 0)
@@ -1549,18 +1578,25 @@ class SchlachtTeil:
                     and str(getattr(k, "name", "")).strip().lower() == "admin")
 
     @staticmethod
-    def _belohnung_zeile(i: int) -> pygame.Rect:
+    def _zeilen_schritt() -> int:
+        # Seit 0.34.154 (mit den Waffen 19 Eintraege) enger, sobald 15 nicht
+        # mehr passen - sonst rutschen Hilfe und ADMIN unter den Rand.
+        return 15 if len(S["belohnungen"]) <= 15 else 12
+
+    @classmethod
+    def _belohnung_zeile(cls, i: int) -> pygame.Rect:
         # Eine Zeile je Eintrag (seit 0.34.110, damit auch 14 passen; seit
         # 0.34.114 enger, damit 15 passen); was der gewaehlte tut, steht
         # darunter (`_belohnung_hilfe_rect`).
-        return pygame.Rect(16, 62 + i * 15, 206, 14)
+        schritt = cls._zeilen_schritt()
+        return pygame.Rect(16, 62 + i * schritt, 206, schritt - 1)
 
-    @staticmethod
-    def _belohnung_hilfe_rect() -> pygame.Rect:
-        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 15 + 2, 206, 12)
+    @classmethod
+    def _belohnung_hilfe_rect(cls) -> pygame.Rect:
+        return pygame.Rect(16, 62 + len(S["belohnungen"]) * cls._zeilen_schritt() + 2, 206, 12)
 
     def _gratis_rect(self) -> pygame.Rect:
-        return pygame.Rect(16, 62 + len(S["belohnungen"]) * 15 + 16, 206, 14)
+        return pygame.Rect(16, 62 + len(S["belohnungen"]) * self._zeilen_schritt() + 16, 206, 14)
 
     def belohnung_ereignis(self, ev) -> bool:
         """Tasten und Maus, solange das Menue offen ist. True: verbraucht."""
@@ -1701,10 +1737,11 @@ class SchlachtTeil:
             pygame.draw.rect(ziel, (40, 30, 20) if gewaehlt else (20, 15, 11), r)
             pygame.draw.rect(ziel, K.C_AMBER if gewaehlt else (70, 56, 40), r, 1)
             farbe = K.C_CREAM if leistbar else K.C_MUTED_DK
-            SCHRIFT.zeichnen(ziel, "%d  %s" % (i + 1, text), r.x + 5, r.y + 4, farbe, 1)
+            oben = r.y + (r.height - 6) // 2
+            SCHRIFT.zeichnen(ziel, "%d  %s" % (i + 1, text), r.x + 5, oben, farbe, 1)
             # Gesperrt: nur die Zeit ("0:46"), damit lange Namen Platz haben.
             SCHRIFT.zeichnen(ziel, bis.replace("IN ", "") or ("GRATIS" if gratis else "%d P" % kosten),
-                             r.right - 5, r.y + 4,
+                             r.right - 5, oben,
                              K.C_AMBER if leistbar else K.C_MUTED_DK, 1, ausrichtung="rechts")
         wahl_ = self.belohnung_wahl
         if 0 <= wahl_ < len(S["belohnungen"]):

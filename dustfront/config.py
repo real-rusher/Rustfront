@@ -881,6 +881,10 @@ KLANG_NAMEN = (
     "ueberhitzt",           # eine Chor-Waffe ueberhitzt und kuehlt ab (seit 0.34.130)
     "bomber",               # ein Stueck Triebwerk des Napalm-Bombers (seit 0.34.130)
     "napalm_fall",          # eine Napalmbombe pfeift im Fall (seit 0.34.130)
+    # Seit 0.34.154 in der Liste: sie spielten schon, wurden aber nicht
+    # vorgebaut - die erste Napalmbombe hielt das Spiel kurz an.
+    "jet",                  # der Bomber zieht ueber die Karte
+    "napalm",               # eine Napalmbombe schlaegt auf und brennt
 
     # Der eigene Herzschlag bei wenig Leben. Wie jeder andere Name auch
     # ersetzbar: assets/sfx/herzschlag.wav gilt vor dem Platzhalter.
@@ -1007,6 +1011,20 @@ NETZ = dict(
     vorhersage_ohne_antwort=0.75,
     vorhersage_spur=480,
     vorhersage_nachrechnen=24,  # so viele Schritte rechnet der Abgleich hoechstens nach
+    # Vorhersage des eigenen Wagens (seit 0.34.154, gastseite.py): an/aus; ab
+    # wagen_sprung px Unterschied springt er, darunter gleitet die Anzeige mit
+    # wagen_glaetten (je s) nach, der Winkel ab wagen_sprung_winkel Grad; der
+    # Abgleich rechnet hoechstens wagen_nachrechnen Schritte neu (120 = 1 s,
+    # sonst gilt der Stand des Gastgebers). Ohne: der Tragschrauber (fliegt).
+    wagen_vorhersage=True,
+    wagen_sprung=96.0,
+    wagen_sprung_winkel=50.0,
+    wagen_glaetten=7.0,
+    wagen_nachrechnen=150,
+    wagen_ohne_vorhersage=("tragschrauber",),
+    # Am Steuer puffert der Gastgeber die Fahrt eines Gasts (siehe eingabe_puffer
+    # unten, gastseite.WirtTeil) - auch wenn der Puffer fuer Figuren aus ist.
+    wagen_puffer=True,
     # Eingabepuffer beim Gastgeber (gastseite.WirtTeil, seit 0.34.104): die
     # Bewegung eines Gasts genau so viele Schritte, wie er sie gemeint hat.
     # Mehr als eingabe_vorlauf_hoechstens Schritte Vorlauf (200 ms) werden
@@ -1343,6 +1361,13 @@ SCHLACHT = dict(
         ("werfer", 10, "DROPZONE: WERFER"),
         ("tragschrauber", 9, "DROPZONE: TRAGSCHRAUBER"),
         ("flakwagen", 5, "DROPZONE: FLAKWAGEN"),
+        # Schwere Waffen am Fallschirm (seit 0.34.154, gewuenscht: "ueber das
+        # Stratagem-Menue callen, fuer Punkte als Airdrop"). Wer sie traegt,
+        # laesst sie beim Tod fallen - jeder Mensch kann sie dann aufheben.
+        ("waffe_minigun", 4, "WAFFE: MINIGUN"),
+        ("waffe_flammenwerfer", 3, "WAFFE: FLAMMENWERFER"),
+        ("waffe_raketenbuendel", 5, "WAFFE: RAKETENBÜNDEL"),
+        ("waffe_panzerbuechse", 4, "WAFFE: PANZERBÜCHSE"),
     ),
     # FREISCHALTEN (seit 0.34.129, Regel der Runde): was man kaufen kann, kommt
     # in Stufen - nicht nach festen Minuten, sondern nach dem Spielverlauf,
@@ -1354,7 +1379,8 @@ SCHLACHT = dict(
     stufe=dict(munition=0, medkit=0, krad=0, buggy=0, aufklaerung=0,
                panzerwagen=1, flakwagen=1, funkwagen=1, fallschirmjaeger=1, napalm=1,
                panzer=2, jagdpanzer=2, spulenwagen=2, tragschrauber=2,
-               werfer=3),
+               werfer=3,
+               waffe_flammenwerfer=0, waffe_panzerbuechse=0, waffe_minigun=1, waffe_raketenbuendel=1),
     freischalten=dict(
         schnell=dict(stufen=(0.05, 0.12, 0.22), hoechstens=(60, 150, 270)),
         normal=dict(stufen=(0.10, 0.22, 0.35), hoechstens=(120, 270, 450)),
@@ -1372,7 +1398,16 @@ SCHLACHT = dict(
                          buggy="EINMAL, AUF FREIEM GELÄNDE", aufklaerung="DECKT AUF, MARKIERT LANGE",
                          panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE",
                          fallschirmjaeger="FÜNF BOTS AM SCHIRM, IN FORMATION",
-                         napalm="ZWEI KLICKS: START, DANN RICHTUNG"),
+                         napalm="ZWEI KLICKS: START, DANN RICHTUNG",
+                         waffe_minigun="AM SCHIRM, BEIM TOD LIEGT SIE DA",
+                         waffe_flammenwerfer="AM SCHIRM, BEIM TOD LIEGT ER DA",
+                         waffe_raketenbuendel="AM SCHIRM, BEIM TOD LIEGT ES DA",
+                         waffe_panzerbuechse="AM SCHIRM, BEIM TOD LIEGT SIE DA"),
+    # Gerufene Waffen (seit 0.34.154): mit wie viel Vorrat sie kommen (Anteil
+    # vom vollen Vorrat der Waffe; das Magazin ist immer voll) und ob eine
+    # Munitionskiste sie nachfuellt - nein: sonst waere eine gekaufte Waffe
+    # mit ein paar Kisten fuer die ganze Runde da.
+    waffen_abwurf=dict(vorrat=1.0, kiste_fuellt=False),
     # Napalm-Angriff (seit 0.34.101): ein Flugzeug, das man nicht sieht, nur
     # hoert, wirft entlang einer Bahn Napalm. Die Bahn ist immer gleich lang
     # (laenge_anteil der Kartenhoehe) - der zweite Klick gibt nur die
@@ -1411,6 +1446,11 @@ SCHLACHT = dict(
     fallschirmjaeger=dict(anzahl=5, abstand=46.0, breite=140.0, nicht_basis=900.0,
                           hoehe=420.0, sinken=70.0, versatz=0.8, waffen=("sturm", "mp", "unterhebel",
                                                                           "sturm", "autoschrot")),
+    # Hoechstens so viele lebende Fallschirmjaeger je Seite (seit 0.34.154,
+    # gewuenscht: "2 bis 3 mal so viele wie das komplette Team"): dieser Faktor
+    # mal Kaempfer je Seite (SCHLACHT-Groesse, Menschen und Bots). Bei 6 je Seite
+    # sind es 15 - drei Abwuerfe -, bei 16 je Seite 40.
+    fallschirmjaeger_faktor=2.5,
     aufsitzen_weite=260.0,
     krad_aufsitzen_weite=360.0,   # in den Beiwagen eines Krads (seit 0.34.143)
     absetzen_vor=650.0,
@@ -2427,12 +2467,21 @@ FAHRZEUG_WAFFEN = {
         schub=300.0,
     ),
     # Die Kanone des Jagdpanzers (seit 0.34.107): weiter, haerter, langsamer
-    # geladen; die Druckwelle klein - sie soll Blech knacken, keine Gruppen.
+    # geladen. Seit 0.34.154 ohne Druckwelle und ohne Explosion (gewuenscht):
+    # ein harter Treffer, der durch Figuren und leicht gepanzerte Wagen
+    # (Kugelanteil in K.PANZERUNG ab `durch_leicht_ab`) hindurchgeht - je
+    # Koerper `durch_faktor` weniger, hoechstens `durchschlag` - und an einer
+    # Mauer einmal abprallen kann, wenn er flacher als `abprall_winkel` Grad
+    # auftrifft, dann mit nur noch `abprall_faktor` des Schadens.
     "jagdkanone": dict(
         name="JAGDKANONE",
         schaden=190.0,
-        flaeche=45.0,
-        radius=26.0,
+        flaeche=0.0,
+        radius=0.0,
+        explosion=False,
+        schadensart="panzerbrechend",
+        durchschlag=3, durch_faktor=0.75, durch_leicht_ab=0.7,
+        abprall=1, abprall_faktor=0.25, abprall_winkel=40.0, abprall_farbe=(255, 214, 140),
         tempo=900.0,
         reichweite=1400.0,
         geschosse=1,
@@ -2441,8 +2490,15 @@ FAHRZEUG_WAFFEN = {
         muendung=2.6,
         schub=240.0,
     ),
+    # Hitze der Fahrzeug-MGs (seit 0.34.154, gewuenscht "bei verschiedenen
+    # Fahrzeugen unterschiedlich"): nach `schuesse` Schuss am Stueck ist es heiss
+    # und schweigt `sperre` s; ohne Feuer kuehlt es nach `warten` s mit `abbau`
+    # je Sekunde ab. Nur Ring-MG (stark, die Hauptwaffe des Panzerwagens) und,
+    # milder, das Bug-MG des Panzers. Flak, Spule und Kanonen nicht: die feuern
+    # ohnehin langsam, und die Flak braucht gegen Flieger langes Feuer.
     "bug_mg": dict(
         name="BUG-MG",
+        hitze=dict(schuesse=88, sperre=2.5, warten=0.35, abbau=0.3),   # rund 8 s Dauerfeuer
         schaden=13.0,
         tempo=520.0,
         reichweite=620.0,
@@ -2469,7 +2525,8 @@ FAHRZEUG_WAFFEN = {
     ),
     "ring_mg": dict(
         name="RING-MG",
-        schaden=13.0,
+        hitze=dict(schuesse=66, sperre=3.0, warten=0.35, abbau=0.28),  # rund 5,5 s Dauerfeuer
+        schaden=11.7,         # seit 0.34.154 (gewuenscht: 10 % weniger), vorher 13
         tempo=520.0,
         reichweite=620.0,
         geschosse=1,
@@ -3219,6 +3276,10 @@ TRUPP = dict(
 # etwas weh - man soll dort stehen und reden koennen, waehrend der
 # Gastgeber die naechste Runde einstellt. Nichts aus der Lobby wird
 # gebucht: keine Runde, kein Abschuss, keine Statistik.
+# Die Siegtafel (seit 0.34.154): zwei Seiten, Uebersicht und Statistik; sie
+# wechseln alle `wechsel` Sekunden von selbst, TAB blaettert.
+SIEGTAFEL = dict(wechsel=6.0)
+
 LOBBY = dict(
     karte="lobby",
     wieder_nach=1.5,          # so schnell steht man in der Lobby wieder auf
@@ -3229,7 +3290,7 @@ LOBBY = dict(
     gehege_takt=1.4,          # Sekunden zwischen zwei neuen
     gehege_arten=("laeufer", "laeufer", "renner", "brecher", "speier",
                   "blaeher"),
-    weiter_nach=12.0,         # so lange steht die Siegtafel vor der naechsten
+    weiter_nach=16.0,         # so lange steht die Siegtafel vor der naechsten (0.34.154: 12 -> 16, sie hat zwei Seiten)
     plan_hoechstens=12,       # mehr Runden plant niemand
     # Start mit Ladebild (seit 0.34.143): so lange wartet er hoechstens auf
     # Klaenge, die die Werkstatt noch baut - sonst baute sie sie mitten in
@@ -5388,7 +5449,7 @@ for _i in range(6):
     BILD_MASS["rotor_%d" % _i] = (192, 192)
 for _name in ("werfer", "werfer_wrack", "werfer_schatten"):
     BILD_MASS[_name] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
-for _i in range(1, 9):
+for _i in range(1, 17):
     BILD_MASS["werfer_stuetze_%d" % _i] = (FAHRZEUG_BILD["flaeche"], FAHRZEUG_BILD["flaeche"])
 for _name in ("funkwagen", "funkwagen_wrack"):
     BILD_MASS[_name] = (160, 160)

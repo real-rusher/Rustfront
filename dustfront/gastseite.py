@@ -90,6 +90,19 @@ class GastTeil:
         self.vh_korrekturen = 0            # nur zum Nachsehen (Tests, Messung)
         self.vh_spruenge = 0
         self.vh_fehler_max = 0.0
+        # Vorhersage des eigenen Wagens (seit 0.34.154, siehe unten)
+        self._ein_rl = False               # mit Stick gelenkt
+        self._ein_hb = False               # Handbremse
+        self._vw = None                    # der Geist: eine Kopie des Wagens
+        self._vw_kennung = None
+        self._vw_spur: deque = deque()     # (Nummer, seit, Richtung, Stick, Handbremse)
+        self._vw_stand = None              # der letzte Stand des Gastgebers (Liste "fz")
+        self._vw_anzeige = pygame.Vector2(0, 0)
+        self._vw_anzeige_winkel = 0.0
+        self._vw_gezeigt = None            # (Ort, Winkel), zuletzt gezeigt
+        self.vw_korrekturen = 0            # nur zum Nachsehen (Tests, Messung)
+        self.vw_spruenge = 0
+        self.vw_fehler_max = 0.0
 
     # ---- Puffer ------------------------------------------------------------
     def _puffer_jetzt(self) -> float:
@@ -231,6 +244,8 @@ class GastTeil:
             will.normalize_ip()
         self._ein_will = will
         self._ein_seit = 0.0
+        self._ein_rl = bool(meldung.get("rl"))
+        self._ein_hb = bool(meldung.get("hb"))
         # Ein Dash (seit 0.34.103 vorhergesagt): der Gastgeber loest ihn mit
         # dieser Eingabe aus (Spieler.dashen), wenn er darf - dieselben
         # Bedingungen, soweit der Gast sie kennt. Lag er falsch (die Sperre
@@ -252,6 +267,7 @@ class GastTeil:
                 break
         if eintrag is None or k is None:
             return
+        self._wagen_abgleich(eintrag)
         try:
             en = int(eintrag["en"])
             ea = float(eintrag.get("ea", 0.0))
@@ -428,6 +444,208 @@ class GastTeil:
         k.pos.update(ort)
         self._vh_gezeigt = pygame.Vector2(ort)
 
+    # ---- Vorhersage des eigenen Wagens (seit 0.34.154) ---------------------
+    #
+    # Gewuenscht: "Eigener Wagen mit dem Gast vorhersagen ... sehr, sehr gut".
+    # Bis dahin sah der Gast seinen Wagen so, wie der Gastgeber ihn meldete:
+    # um Hin- und Rueckweg und Puffer zu spaet, jede Lenkung kam spuerbar
+    # verzoegert an. Jetzt faehrt ein Geist - eine Kopie des Wagens, die nicht
+    # in der Welt steht - sofort mit der eigenen Eingabe, mit genau derselben
+    # Rechnung wie beim Gastgeber (Buggy.fahr_eingabe, Buggy.geist_schritt).
+    #
+    # Abgleich: Der Gastgeber meldet mit "en"/"ea" (welche Eingabe, wie lange)
+    # den ganzen Zustand der Fahrt ("fz": Ort, Winkel, Tempo, Drehung,
+    # Radeinschlag). Anders als bei der Figur reicht es nicht, den Unterschied
+    # zu verschieben - ein Wagen, der ein Grad anders steht, faehrt eine
+    # andere Bahn. Darum wird ab dem Stand des Gastgebers jede spaetere Eingabe
+    # der Spur noch einmal gefahren (wie bei Rennspielen im Netz). Die Anzeige
+    # bleibt, wo sie war, und gleitet den Unterschied in Ort und Winkel weich
+    # aus; erst ab wagen_sprung bzw. wagen_sprung_winkel springt sie.
+    #
+    # Sicherungen: Meldet der Gastgeber den Wagen als `fest` (im Sturz,
+    # stromlos, beim Aufbauen, in der Luft, Wrack, mit Anhaenger) oder steht
+    # er nicht mehr am Steuer, gilt sein Stand wie bisher. Ohne Antwort
+    # (vorhersage_ohne_antwort) faehrt der Geist nicht weiter. Findet sich
+    # der Punkt nicht in der Spur oder waere zu viel nachzurechnen, gilt der
+    # Stand des Gastgebers.
+
+    def _wagen_vorhersage_moeglich(self, wagen) -> bool:
+        n = K.NETZ
+        st = self._vw_stand
+        return bool(n["vorhersage_an"] and n["wagen_vorhersage"] and wagen is not None
+                    and st is not None and not st[9] and st[7] == getattr(wagen, "netz_kennung", None)
+                    and not wagen.kaputt and wagen.art not in n["wagen_ohne_vorhersage"]
+                    and not self.vorbei)
+
+    def _wagen_aus(self) -> None:
+        wagen = self._vw.geist_von if self._vw is not None else None
+        if wagen is not None:
+            wagen.__dict__.pop("vh_aktiv", None)
+        self._vw = None
+        self._vw_kennung = None
+        self._vw_spur.clear()
+        self._vw_anzeige.update(0, 0)
+        self._vw_anzeige_winkel = 0.0
+        self._vw_gezeigt = None
+
+    @staticmethod
+    def _stand_lesen(fz):
+        try:
+            return [float(fz[0]), float(fz[1]), float(fz[2]), float(fz[3]), float(fz[4]),
+                    float(fz[5]), float(fz[6]), int(fz[7]), int(fz[8]), int(fz[9])]
+        except (TypeError, ValueError, IndexError):
+            return None
+
+    def _geist_setzen(self, g, st) -> None:
+        g.pos.update(st[0], st[1])
+        g.vorher.update(g.pos)
+        g.winkel = st[2]
+        g.geschw = pygame.Vector2(st[3], st[4])
+        g.tempo.update(g.geschw)
+        g.gier = st[5]
+        g.lenkwinkel = st[6]
+        g.ebene = st[8]
+
+    def _wagen_abgleich(self, eintrag: dict) -> None:
+        """Mit dem Stand des Gastgebers: den Geist dorthin, wo der Wagen nach
+        der gemeldeten Eingabe stand, und alles danach noch einmal fahren."""
+        fz = eintrag.get("fz")
+        if fz is None:
+            self._vw_stand = None
+            return
+        st = self._stand_lesen(fz)
+        if st is None:
+            return
+        self._vw_stand = st
+        g = self._vw
+        if g is None or st[9] or st[7] != self._vw_kennung:
+            return
+        try:
+            en = int(eintrag["en"])
+            ea = float(eintrag.get("ea", 0.0))
+        except (KeyError, TypeError, ValueError):
+            return
+        spur = self._vw_spur
+        # Die Schritte der vorigen Eingabe bleiben: hat der Gastgeber die
+        # neue noch keinen Schritt lang angewendet (ea 0), passt der letzte
+        # Schritt der vorigen.
+        while spur and spur[0][0] < en - 1:
+            spur.popleft()
+        # Der Punkt der Spur, der zum Stand passt: dieselbe Eingabe, gleich
+        # lange gewirkt - oder ihr letzter, wenn sie dort laenger galt.
+        anker = -1
+        for i, e in enumerate(spur):
+            if e[0] < en or (e[0] == en and e[1] <= ea + K.FIXED_DT * 0.5):
+                anker = i
+            else:
+                break
+        if anker < 0 and spur and spur[0][0] >= en:
+            # Der Stand ist aelter als die Spur (gleich nach dem Einsteigen):
+            # weiter vorhersagen, bis die Antworten die Spur einholen.
+            return
+        alt_ort, alt_winkel = pygame.Vector2(g.pos), g.winkel
+        alt_ebene = g.ebene
+        nach = len(spur) - anker - 1
+        self._geist_setzen(g, st)
+        if anker < 0 or nach > K.NETZ["wagen_nachrechnen"] or st[8] != alt_ebene:
+            # Nicht zu finden (zu alt, zu neu) - der Stand des Gastgebers gilt.
+            spur.clear()
+        else:
+            for i in range(anker + 1, len(spur)):
+                e = spur[i]
+                self._geist_fahren(g, e[2], e[3], e[4], K.FIXED_DT)
+        fehler = alt_ort - g.pos
+        fehler_w = (alt_winkel - g.winkel + 180.0) % 360.0 - 180.0
+        if fehler.length_squared() > 0.0625 or abs(fehler_w) > 0.05:
+            self.vw_korrekturen += 1
+            self.vw_fehler_max = max(self.vw_fehler_max, fehler.length())
+        # Die Anzeige bleibt, wo sie war, und gleicht den Unterschied aus.
+        anzeige = self._vw_anzeige + fehler
+        anzeige_w = self._vw_anzeige_winkel + fehler_w
+        if (anzeige.length() > K.NETZ["wagen_sprung"] or abs(anzeige_w) > K.NETZ["wagen_sprung_winkel"]
+                or alt_ebene != g.ebene):
+            self._vw_anzeige.update(0, 0)
+            self._vw_anzeige_winkel = 0.0
+            self._vw_gezeigt = None
+            self.vw_spruenge += 1
+        else:
+            self._vw_anzeige = anzeige
+            self._vw_anzeige_winkel = anzeige_w
+
+    def _geist_fahren(self, g, will, stick: bool, hb: bool, dt: float) -> None:
+        gas, lenk = g.fahr_eingabe(will, stick)
+        g.geist_schritt(dt, gas, lenk, hb)
+
+    def _wagen_vorhersage_schritt(self, dt: float) -> None:
+        """Einen Schritt des eigenen Wagens vorausrechnen - mit der Eingabe,
+        die zuletzt hinausging. Nach _vorhersage_schritt (zaehlt _ein_seit)."""
+        from . import fahrzeug as fahrzeug_modul
+        wagen = self._gast_wagen() if not self.ist_gastgeber else None
+        if not self._wagen_vorhersage_moeglich(wagen):
+            if self._vw is not None:
+                self._wagen_aus()
+            return
+        st = self._vw_stand
+        if self._vw is None or self._vw_kennung != st[7] or self._vw.art != wagen.art:
+            if self._vw is not None:
+                self._wagen_aus()
+            g = fahrzeug_modul.neu(wagen.art, (st[0], st[1]), st[8], st[2])
+            g.welt = self.welt
+            g.geist_von = wagen
+            self._geist_setzen(g, st)
+            self._vw = g
+            self._vw_kennung = st[7]
+            # Von dort, wo er bisher gezeichnet stand: kein Sprung beim Einsteigen.
+            gezeigt = pygame.Vector2(wagen.zeichenpos(1.0))
+            self._vw_anzeige = gezeigt - g.pos
+            self._vw_anzeige_winkel = (wagen.winkel - g.winkel + 180.0) % 360.0 - 180.0
+            if self._vw_anzeige.length() > K.NETZ["wagen_sprung"]:
+                self._vw_anzeige.update(0, 0)
+                self._vw_anzeige_winkel = 0.0
+        g = self._vw
+        g.geist_hindernisse = [b for b in self.fahrzeuge if b is not wagen]
+        g.emp_rest = 0.0
+        will = pygame.Vector2(self._ein_will)
+        if self._vh_ohne_antwort <= K.NETZ["vorhersage_ohne_antwort"]:
+            self._geist_fahren(g, will, self._ein_rl, self._ein_hb, dt)
+        self._vw_spur.append((self._ein_nr, round(self._ein_seit, 6), will,
+                              self._ein_rl, self._ein_hb))
+        while len(self._vw_spur) > K.NETZ["vorhersage_spur"]:
+            self._vw_spur.popleft()
+        abbau = math.exp(-K.NETZ["wagen_glaetten"] * dt)
+        self._vw_anzeige *= abbau
+        self._vw_anzeige_winkel *= abbau
+        if self._vw_anzeige.length_squared() < 0.0004:
+            self._vw_anzeige.update(0, 0)
+        if abs(self._vw_anzeige_winkel) < 0.01:
+            self._vw_anzeige_winkel = 0.0
+
+    def _wagen_vorhersage_zeigen(self) -> None:
+        """Den eigenen Wagen (und die Figur darin) dorthin, wo der Geist ihn
+        sieht, plus der noch auszugleichende Versatz. `vorher` ist der Ort des
+        vorigen Schritts: eingeblendet wird mit dem Bildanteil, wie die Kamera."""
+        g = self._vw
+        if g is None:
+            return
+        wagen = g.geist_von
+        ort = g.pos + self._vw_anzeige
+        winkel = (g.winkel + self._vw_anzeige_winkel + 180.0) % 360.0 - 180.0
+        alt = self._vw_gezeigt
+        wagen.vh_aktiv = True
+        wagen.vorher.update(alt[0] if alt is not None and alt[0].distance_squared_to(ort) < 60.0 ** 2
+                            else ort)
+        wagen.pos.update(ort)
+        wagen.winkel = winkel
+        wagen.geschw = pygame.Vector2(g.geschw)
+        wagen.gier = g.gier
+        wagen.ebene = g.ebene
+        self._vw_gezeigt = (pygame.Vector2(ort), winkel)
+        k = self.ich
+        if k is not None:
+            # Die Figur sitzt im Wagen: Sicht, Ton und Zielen gehen von ihm aus.
+            k.vorher.update(wagen.vorher)
+            k.pos.update(ort)
+
 
 # ══════════════════════════════════════════════════════════════════
 # Beim Gastgeber: der Eingabepuffer fuer die Bewegung (seit 0.34.104)
@@ -453,22 +671,38 @@ class GastTeil:
 
 
 class _Bewegung:
-    __slots__ = ("nr", "will", "dash", "dauer")
+    __slots__ = ("nr", "will", "dash", "dauer", "hb", "rl")
 
-    def __init__(self, nr: int, will, dash: bool) -> None:
+    def __init__(self, nr: int, will, dash: bool, hb: bool = False, rl: bool = False) -> None:
         self.nr = nr
         self.will = will
         self.dash = dash
         self.dauer = None          # Schritte - bekannt, sobald die naechste Eingabe da ist
+        self.hb = hb               # Handbremse und Stick: am Steuer (seit 0.34.154)
+        self.rl = rl
 
 
 class WirtTeil:
     """Der Eingabepuffer beim Gastgeber. Ein Anteil des Gefechts."""
 
     @staticmethod
-    def _bewegung_puffern_moeglich(k) -> bool:
-        return (K.NETZ["eingabe_puffer"] and k.lebt and not k.am_boden
-                and k.fahrzeug is None and getattr(k, "mitfahrt", None) is None)
+    def _am_steuer_gepuffert(k) -> bool:
+        """Ein Mensch am Steuer (seit 0.34.154, K.NETZ wagen_puffer): seine
+        Fahrt wird gepuffert, auch wenn der Puffer fuer Figuren aus ist. Dann
+        faehrt der Wagen beim Gastgeber jede Eingabe genau so lange wie beim
+        Gast, und dessen Vorhersage muss kaum nachziehen. Die Verzoegerung,
+        die das kostet, spuert der Fahrer nicht - er sieht seine Vorhersage."""
+        b = k.fahrzeug
+        return (K.NETZ["wagen_puffer"] and K.NETZ["wagen_vorhersage"] and b is not None
+                and b.fahrer is k and not k.ist_bot and b.art not in K.NETZ["wagen_ohne_vorhersage"])
+
+    @classmethod
+    def _bewegung_puffern_moeglich(cls, k) -> bool:
+        if not k.lebt or k.am_boden or getattr(k, "mitfahrt", None) is not None:
+            return False
+        if k.fahrzeug is not None:
+            return cls._am_steuer_gepuffert(k)
+        return bool(K.NETZ["eingabe_puffer"])
 
     def _eingabe_vom_gast(self, k, nachricht: dict) -> None:
         """Eine Eingabe eines Gasts ist angekommen."""
@@ -507,9 +741,12 @@ class WirtTeil:
             will.normalize_ip()
         knoepfe = nachricht.get("knoepfe") or []
         dash = isinstance(knoepfe, list) and "dash" in knoepfe
-        # Alles ausser der Bewegung: sofort.
+        # Alles ausser der Bewegung: sofort. Am Steuer gehoeren Handbremse
+        # und Stick zur Bewegung.
         sofort = dict(nachricht)
         sofort["will"] = [k.will.x, k.will.y]
+        sofort["hb"] = k.__dict__.get("_bew_hb", False)
+        sofort["rl"] = k.__dict__.get("_bew_rl", False)
         if dash:
             sofort["knoepfe"] = [x for x in knoepfe if x != "dash"]
         self._anwenden(k, sofort)
@@ -521,7 +758,7 @@ class WirtTeil:
                 schlange[-1].dauer = es
         elif aktuell is not None and aktuell.dauer is None:
             aktuell.dauer = es
-        schlange.append(_Bewegung(nr, will, dash))
+        schlange.append(_Bewegung(nr, will, dash, bool(nachricht.get("hb")), bool(nachricht.get("rl"))))
 
     def _bewegung_fuehren(self) -> None:
         """Vor jedem Schritt der Welt: welche Bewegung jetzt gilt."""
@@ -578,10 +815,17 @@ class WirtTeil:
                 k._bew_schritte = 0
                 if not k.gehalten:
                     k.will = pygame.Vector2(b.will)
-                if b.dash:
+                k._bew_hb, k._bew_rl = b.hb, b.rl
+                if b.dash and k.fahrzeug is None:
                     k.dashen()
                 k.ein_nr = b.nr
                 k.ein_seit = 0.0
+            wagen = k.fahrzeug
+            if wagen is not None and k.__dict__.get("_bew_aktuell") is not None:
+                # Am Steuer: jeden Schritt, wie beim Gast (Buggy.fahr_eingabe -
+                # mit Stick haengt es am Winkel des Wagens).
+                wagen.gas, wagen.lenk = wagen.fahr_eingabe(k.will, k._bew_rl)
+                wagen.handbremse = bool(k._bew_hb)
 
     def _bewegung_gezaehlt(self) -> None:
         """Nach jedem Schritt der Welt."""

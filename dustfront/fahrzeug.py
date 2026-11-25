@@ -110,6 +110,13 @@ class Buggy(Wesen):
     # sitzt, schon.
     c4_haftet = True
     _passt_merk = None        # siehe passt: nur innerhalb von schritt
+    # Seit 0.34.154: die Vorhersage des eigenen Wagens beim Gast (gastseite.py)
+    # rechnet mit einem Geist - einer Kopie, die nicht in der Welt steht. Er
+    # kennt sein Vorbild (`geist_von`, an dem er nicht anstoesst) und die
+    # anderen Wagen, wie der Gast sie sieht (`geist_hindernisse`): das Raster
+    # der Welt (nahe) baut der Gast nicht.
+    geist_von = None
+    geist_hindernisse = ()
     # Seit 0.34.65: ein Fahrzeug fragt bei jedem Treffer nach der Art
     # (K.PANZERUNG, entities.schaden_an).
     ist_fahrzeug = True
@@ -180,6 +187,10 @@ class Buggy(Wesen):
         fest = self.__dict__.get("_zeichen_fest")
         if fest is not None:
             return pygame.Vector2(fest)
+        if self.__dict__.get("vh_aktiv") and self.welt is not None:
+            # Der eigene Wagen des Gasts, vorhergesagt (seit 0.34.154,
+            # gastseite.py): zwischen den eigenen Schritten mit dem Bildanteil.
+            return self.vorher.lerp(self.pos, getattr(self.welt, "schritt_alpha", alpha))
         if self.nur_bild and self.welt is not None:
             roh = getattr(self.welt, "misch_roh", None)
             if roh is not None:
@@ -515,13 +526,23 @@ class Buggy(Wesen):
         merk[nr] = (schluessel, e, reihen, antwort)
         return antwort
 
+    def _nahe_fuer_passt(self, w, pos, weite: float) -> list:
+        """Wer fuer passt in Frage kommt: aus dem Raster der Welt - beim Geist
+        (siehe oben) die anderen Wagen des Gasts, ohne das eigene Vorbild."""
+        if self.geist_von is None:
+            return w.nahe(pos, weite, self.ebene)
+        grenze = (weite + 40.0) ** 2
+        return [a for a in self.geist_hindernisse
+                if a is not self.geist_von and a.ebene == self.ebene
+                and a.pos.distance_squared_to(pos) <= grenze]
+
     def _passt_rechnen(self, w, pos, winkel) -> bool:
         r = self.radius
         kreise = self.kreise(pos, winkel)
         for nr, c in enumerate(kreise):
             if not self._frei_gemerkt(w, nr, c, r):
                 return False
-        for a in w.nahe(pos, self.werte["achse"] + r + 40, self.ebene):
+        for a in self._nahe_fuer_passt(w, pos, self.werte["achse"] + r + 40):
             if getattr(a, "rechteckig", False):
                 # Ein Panzer oder Panzerwagen (seit 0.34.59): Kreis an Rechteck.
                 if a.lebt and any(a.beruehrt(c, r) for c in kreise):
@@ -798,6 +819,36 @@ class Buggy(Wesen):
         gas = staerke if abs(ab) < f["stick_wenden"] else staerke * 0.5
         return gas, lenk
 
+    def fahr_eingabe(self, will, stick: bool = False) -> tuple:
+        """(Gas, Lenkung) aus der Eingabe eines Menschen am Steuer: mit Stick
+        (Touch) wie stick_steuern, sonst ist die Richtung W/A/S/D im Bild
+        (W ist y < 0). Seit 0.34.154 an einer Stelle, weil Gastgeber und
+        Vorhersage des Gasts genau dasselbe rechnen muessen."""
+        if stick:
+            return self.stick_steuern(will)
+        gas = 1.0 if will.y < -0.3 else (-1.0 if will.y > 0.3 else 0.0)
+        lenk = 1.0 if will.x > 0.3 else (-1.0 if will.x < -0.3 else 0.0)
+        return gas, lenk
+
+    def geist_schritt(self, dt: float, gas: float, lenk: float, handbremse: bool) -> None:
+        """Ein Schritt nur der Fahrt, wie in schritt mit Fahrer (seit 0.34.154,
+        fuer die Vorhersage beim Gast): Physik, Furt, Drehen, Fahren - ohne
+        Staub, Spuren, Klang, Schieben und Sturz. Was davon abweicht (ein
+        Gegner, den er rammt, ein Treffer), holt der Abgleich."""
+        self.vorher.update(self.pos)
+        self._physik(dt, gas, lenk, bool(handbremse))
+        if self.welt is not None and self.welt.seicht(self.pos, self.ebene):
+            hoechst = self.werte["hoechst"] * K.WASSER["seicht_fahrzeug"]
+            if self.geschw.length() > hoechst:
+                self.geschw.scale_to_length(hoechst)
+        self._passt_merk = ((), False)
+        try:
+            self._drehen(dt)
+            self._fahren(dt)
+        finally:
+            self._passt_merk = None
+        self.tempo.update(self.geschw)
+
     # Merkzelle fuer _physik (seit 0.34.75): (Eingaben als Bytes, Werte,
     # Ergebnis). Ein stehender Wagen rechnet jeden Schritt dasselbe.
     _physik_merk = None
@@ -976,7 +1027,7 @@ class Buggy(Wesen):
                 self.geschw *= -f["aufprall"]
                 self.gier *= 0.3
                 break
-        if stoss >= f["aufprall_hart"]:
+        if stoss >= f["aufprall_hart"] and self.geist_von is None:
             w = self.welt
             staerke = min(1.0, stoss / f["hoechst"])
             # Kein Klang mehr beim Anprall (seit 0.34.96, gewuenscht) - nur
@@ -1197,6 +1248,38 @@ class Panzergranate(Geschoss):
         self.lebt = False
         self._zuenden(ziel)
 
+    def _durchschlaegt(self, ziel) -> bool:
+        """Die Jagdkanone (seit 0.34.154, `durch_leicht_ab`) geht durch Figuren
+        und leicht gepanzerte Wagen - ob leicht, sagt der Kugelanteil in
+        K.PANZERUNG (Buggy, Krad, Werfer ... ja, Panzerwagen und Panzer nein)."""
+        leicht_ab = self.daten.get("durch_leicht_ab")
+        if leicht_ab is None:
+            return super()._durchschlaegt(ziel)
+        if self.durch <= 0:
+            return False
+        if not getattr(ziel, "ist_fahrzeug", False):
+            return True
+        return K.PANZERUNG.get(getattr(ziel, "art", ""), {}).get("kugel", 1.0) >= leicht_ab
+
+    def _abprallen(self, teil) -> None:
+        """Nur wer flach auf die Mauer trifft, prallt ab (seit 0.34.154,
+        `abprall_winkel`); steil schlaegt die Granate ein."""
+        w = self.welt
+        x_stoesst = w.schuss_halt(self.pos + pygame.Vector2(teil.x, 0), self.ebene, self.radius)
+        y_stoesst = w.schuss_halt(self.pos + pygame.Vector2(0, teil.y), self.ebene, self.radius)
+        v = pygame.Vector2(self.tempo)
+        if v.length_squared() < 1e-6 or (x_stoesst and y_stoesst) or not (x_stoesst or y_stoesst):
+            self.einschlag(None)
+            return
+        v = v.normalize()
+        # Winkel zur Mauerflaeche: 0 Grad streift, 90 Grad trifft senkrecht.
+        auf = math.degrees(math.asin(min(1.0, abs(v.x if x_stoesst else v.y))))
+        if auf > float(self.daten.get("abprall_winkel", 90.0)):
+            self.einschlag(None)
+            return
+        super()._abprallen(teil)
+        w.explosion(pygame.Vector2(self.pos), self.ebene, self.winkel, "jagd_abprall", self.von)
+
     def _zuenden(self, ziel) -> None:
         if getattr(self, "_gezuendet", False):
             return
@@ -1216,8 +1299,15 @@ class Panzergranate(Geschoss):
             herkunft = None
             if self.tempo.length_squared() > 0.01:
                 herkunft = self.pos - pygame.Vector2(self.tempo).normalize() * 40.0
-            schaden_an(ziel, d["schaden"], schub, self.von, "panzerbrechend", herkunft)
+            # schaden_wert: nach einem Abprall oder Durchschlag weniger (0.34.154).
+            schaden_an(ziel, self.schaden_wert, schub, self.von, "panzerbrechend", herkunft)
             abschuss_buchen(self.von, ziel, self.waffe, lebte)
+        if not d.get("explosion", True):
+            # Die Jagdkanone (seit 0.34.154): keine Druckwelle, kein Feuerball -
+            # nur der harte Einschlag (Funken, Staub, Schlag).
+            richtung = math.degrees(math.atan2(self.tempo.y, self.tempo.x)) if self.tempo.length_squared() > 0.01 else 0.0
+            w.explosion(pygame.Vector2(self.pos), self.ebene, richtung, "jagd_einschlag", self.von)
+            return
         r = d["radius"]
         for a in list(w.nahe(self.pos, r + 60, self.ebene)):
             if not a.lebt or a is ziel or a is self or not getattr(a, "trefferbar", True):
@@ -1481,7 +1571,7 @@ class Schwer(Buggy):
         if not self._kacheln_frei(pos, winkel):
             return False
         meine = None
-        for a in w.nahe(pos, self.huelle_radius + 60, self.ebene):
+        for a in self._nahe_fuer_passt(w, pos, self.huelle_radius + 60):
             if a is self or not a.lebt or a is self.fahrer:
                 continue
             if getattr(a, "rechteckig", False):
@@ -1526,6 +1616,7 @@ class Schwer(Buggy):
         if self.nur_bild or self.welt is None:
             return
         self._abklingen(dt)
+        self._mg_kuehlen(dt)
         self._ketten(dt)
         if self.kaputt:
             return
@@ -1564,9 +1655,40 @@ class Schwer(Buggy):
     def _schiessen(self) -> None:
         """Was die Maustasten des Fahrers ausloesen."""
 
+    # Welches MG heiss wird (seit 0.34.154, K.FAHRZEUG_WAFFEN hitze) - je Art.
+    mg_waffe = None
+    mg_hitze = 0.0          # 0 kalt, 1 heiss
+    mg_heiss = 0.0          # so viele Sekunden schweigt es noch
+
+    def _mg_kuehlen(self, dt: float) -> None:
+        """Das MG kuehlt ab: in der Sperre zaehlt sie herunter, danach ist es
+        kalt; sonst nach einer kurzen Pause stetig."""
+        h = K.FAHRZEUG_WAFFEN.get(self.mg_waffe or "", {}).get("hitze")
+        if not h:
+            return
+        if self.mg_heiss > 0.0:
+            self.mg_heiss = max(0.0, self.mg_heiss - dt)
+            if self.mg_heiss <= 0.0:
+                self.mg_hitze = 0.0
+            return
+        self._mg_seit = self.__dict__.get("_mg_seit", 0.0) + dt
+        if self._mg_seit >= h["warten"]:
+            self.mg_hitze = max(0.0, self.mg_hitze - h["abbau"] * dt)
+
     def _mg(self, waffe: str, muendung, richtung: float, huelse_von) -> None:
         """Ein Schuss aus einem MG: Geschoss, Knall, Huelse zur Seite."""
         d = K.FAHRZEUG_WAFFEN[waffe]
+        h = d.get("hitze")
+        if h:
+            # Heiss (seit 0.34.154): es schweigt, bis die Sperre um ist.
+            if self.mg_heiss > 0.0:
+                return
+            self.mg_hitze = min(1.0, self.mg_hitze + 1.0 / max(1, h["schuesse"]))
+            self._mg_seit = 0.0
+            if self.mg_hitze >= 1.0:
+                self.mg_heiss = float(h["sperre"])
+                self.welt.klang("ueberhitzt", 0.8, muendung, self.ebene)
+                self.welt.explosion(pygame.Vector2(muendung), self.ebene, richtung, "mg_heiss", self.fahrer)
         self.takt[waffe] = d["takt"]
         a = richtung + RND.uniform(-d["streuung"], d["streuung"])
         g = Geschoss(muendung, a, d, self.ebene, self.fahrer, waffe)
@@ -1724,6 +1846,7 @@ class Panzer(Schwer):
     art = "panzer"
     werte = K.PANZER
     aufbau_name = "panzer_turm"
+    mg_waffe = "bug_mg"
 
     @property
     def aufbau_dreh(self) -> float:
@@ -1834,6 +1957,7 @@ class Panzerwagen(Schwer):
     sehr schnell, lenkt sehr schlecht."""
 
     art = "panzerwagen"
+    mg_waffe = "ring_mg"
     werte = K.PANZERWAGEN
     aufbau_name = "panzerwagen_ring"
 
@@ -2438,7 +2562,9 @@ class Werfer(Aufbauwagen):
             return "werfer_wrack"
         if self.fortschritt <= 0.0:
             return "werfer"
-        return "werfer_stuetze_%d" % max(1, min(8, int(math.ceil(self.fortschritt * 8.0))))
+        # Die Stuetzen fahren in der ersten Haelfte des Aufbaus aus und senken
+        # sich (seit 0.34.154: 16 Stellungen, art_neue_fahrzeuge._werfer_stuetzen).
+        return "werfer_stuetze_%d" % max(1, min(16, int(math.ceil(min(1.0, self.fortschritt / 0.5) * 16.0))))
 
     def erhebung(self) -> float:
         """Wie steil das Gestell gerade steht (Grad): liegt flach, solange es
@@ -2468,9 +2594,14 @@ class Werfer(Aufbauwagen):
         return muendung3d(index, self.gestell_winkel(), self.erhebung())[2]
 
     def schritt(self, dt: float) -> None:
+        vorher = self.fortschritt
         super().schritt(dt)
         if self.kaputt:
             return
+        if not (self.nur_bild or self.welt is None) and vorher < 0.5 <= self.fortschritt:
+            # Die Teller setzen auf (seit 0.34.154): Staub an allen vier Stuetzen.
+            self.welt.explosion(pygame.Vector2(self.pos), self.ebene, float(self.winkel % 360.0),
+                                "stuetze_auf", self.fahrer)
         if self.nur_bild or self.welt is None:
             soll = self._rohr_soll                 # Gast: dem gemeldeten Wert folgen
         else:
@@ -2902,6 +3033,7 @@ class Jagdpanzer(Panzer):
     Kommandant) schwenkt um die Mitte der Wanne."""
 
     art = "jagdpanzer"
+    mg_waffe = None          # kein Bug-MG
     werte = K.JAGDPANZER
     aufbau_name = "jagdpanzer_rohr"
 
@@ -2938,6 +3070,7 @@ class Flakwagen(Panzerwagen):
 
     art = "flakwagen"
     werte = K.FLAKWAGEN
+    mg_waffe = None          # der Vierling wird nicht heiss (K.FAHRZEUG_WAFFEN hitze)
     aufbau_name = "flak_lafette"
     schatten_bild = "flakwagen_schatten"
     flak = True

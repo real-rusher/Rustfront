@@ -135,7 +135,10 @@ def bot_waffen_gewichten(waffen: list, rnd) -> list:
     Bots (Merkmale, Namen, Aufstellung) bleibt so genau, wie er war, und
     dieselbe Szene ergibt dieselben Waffen - egal, was vorher lief."""
     gewicht = K.BOTS["waffen_gewicht"]
-    zufall = random.Random(hash(rnd.getstate()[1][:24]))
+    # Seit 0.34.154 mit der Stelle im Zustand (_eigener_zufall): vorher bekamen
+    # rund 170 Bots hintereinander denselben Zufall - in einer Runde hatte dann
+    # entweder jeder MG-Kandidat das MG behalten oder keiner.
+    zufall = _eigener_zufall(rnd, 0)
     raus = list(waffen)
     for i, w in enumerate(raus):
         if zufall.random() < float(gewicht.get(w, 1.0)):

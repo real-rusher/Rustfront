@@ -676,6 +676,23 @@ def flak_schuss(welt, pos, ebene: int, code: float) -> None:
     _neu(welt, f)
 
 
+def stuetze_auf(welt, pos, ebene: int, winkel: float) -> None:
+    """Die vier Teller des Werfers setzen auf (seit 0.34.154): an jedem ein
+    flacher Staubkranz, der zur Seite weggedrueckt wird, und ein dumpfer Ruck."""
+    from .art_neue_fahrzeuge import STUETZEN
+    r = _rnd(pos, 12)
+    g = float(K.FAHRZEUG_BILD["groesse"])
+    for x, y in STUETZEN:
+        p = pygame.Vector2(x * g, y * g).rotate(winkel) + pygame.Vector2(pos)
+        aussen = pygame.Vector2(0, 1 if y > 0 else -1).rotate(winkel)
+        for i in range(6):
+            w = aussen.rotate(r.uniform(-70, 70)) * r.uniform(30, 70)
+            rauch(welt, r, p.x, p.y, 1, ebene, "staub", 3, r.uniform(7, 11), r.uniform(0.9, 1.4),
+                  vx=w.x, vy=w.y, vz=r.uniform(4, 12), zaeh=3.0)
+    welt.ruckeln(1.5, "explosion", pygame.Vector2(pos), ebene)
+    welt.klang("rammen", 0.35, pygame.Vector2(pos), ebene)
+
+
 def kiste_platzt(welt, pos, ebene: int, hoehe: float) -> None:
     """Eine Kiste am Schirm platzt: Bretter fliegen auseinander und fallen,
     der Inhalt (rot/gruen) streut, der Schirm reisst in Fetzen."""
@@ -1024,6 +1041,58 @@ for _i in range(8):
 # Welt.explosion -> Effekt
 # ══════════════════════════════════════════════════════════════════
 
+def jagd_einschlag(welt, pos, ebene: int, richtung: float) -> None:
+    """Die Granate der Jagdkanone schlaegt ein (seit 0.34.154): kein
+    Feuerball, keine Druckwelle - ein harter Schlag, Funken zurueck, wo sie
+    herkam, ein Staubstoss und ein kleiner Ring."""
+    r = _rnd(pos, 13)
+    x, y = pos[0], pos[1]
+    blitz(welt, x, y, 6, ebene, 34, 0.06)
+    zurueck = richtung + 180.0
+    for _ in range(14):
+        f = Fx("funke", x, y, r.uniform(3, 9), ebene, r.uniform(0.2, 0.45))
+        w = math.radians(zurueck + r.uniform(-50, 50))
+        v = r.uniform(140, 380)
+        f.vx, f.vy, f.vz = math.cos(w) * v, math.sin(w) * v, r.uniform(10, 90)
+        f.g = 320.0
+        f.farbe = (255, r.randint(190, 230), 130)
+        _neu(welt, f)
+    rauch(welt, r, x, y, 2, ebene, "staub", 4, r.uniform(9, 14), r.uniform(0.9, 1.3), vz=12.0, zaeh=2.4)
+    ring(welt, x, y, ebene, 4, 26, 0.25, (232, 214, 170))
+    brockenwurf(welt, r, x, y, 3, ebene, 4, 110.0, "erde", (1, 2), liegen=1.5)
+    welt.ruckeln(2.0, "explosion", pygame.Vector2(x, y), ebene)
+    welt.klang("panzer_einschlag", 0.55, pygame.Vector2(x, y), ebene)
+
+
+def jagd_abprall(welt, pos, ebene: int, richtung: float) -> None:
+    """Die Granate prallt an einer Mauer ab (seit 0.34.154): ein Funkenfaecher
+    in die neue Richtung und ein heller Schlag."""
+    r = _rnd(pos, 14)
+    x, y = pos[0], pos[1]
+    blitz(welt, x, y, 8, ebene, 22, 0.05)
+    for _ in range(10):
+        f = Fx("funke", x, y, r.uniform(4, 10), ebene, r.uniform(0.15, 0.35))
+        w = math.radians(richtung + r.uniform(-35, 35))
+        v = r.uniform(180, 420)
+        f.vx, f.vy, f.vz = math.cos(w) * v, math.sin(w) * v, r.uniform(0, 60)
+        f.g = 260.0
+        f.farbe = (255, 226, 160)
+        _neu(welt, f)
+    rauch(welt, r, x, y, 4, ebene, "grau", 2, r.uniform(6, 9), 0.7, vz=8.0, zaeh=2.6)
+    welt.klang("buggy_aufprall", 0.6, pygame.Vector2(x, y), ebene)
+
+
+def mg_heiss(welt, pos, ebene: int, richtung: float) -> None:
+    """Ein Fahrzeug-MG ist heiss gelaufen (seit 0.34.154): Rauch steigt vom
+    Lauf auf, ein paar Funken."""
+    r = _rnd(pos, 15)
+    x, y = pos[0], pos[1]
+    for i in range(5):
+        rauch(welt, r, x, y, 8, ebene, "grau", 2, r.uniform(5, 8), r.uniform(1.2, 1.8),
+              vz=r.uniform(10, 22), zaeh=2.2, verzoegert=i * 0.25)
+    funken(welt, r, x, y, 8, ebene, 6, 90.0, 0.25, farbe=(255, 190, 110), hoch=0.4)
+
+
 def _seite_hoehe(radius: float) -> tuple:
     """Fallschirme: `radius` = Hoehe * 10 + Seite (0 oder 1)."""
     r = int(round(radius))
@@ -1045,10 +1114,14 @@ ARTEN = {
     "absturz": lambda w, p, e, r: absturz(w, p, e),
     "fahrzeug_aufprall": lambda w, p, e, r: fahrzeug_aufprall(w, p, e, r),  # r = Fallhoehe (seit 0.34.146)
     "flak_schuss": lambda w, p, e, r: flak_schuss(w, p, e, r),          # r = Richtung, Strecke, Hoehe
+    "stuetze_auf": lambda w, p, e, r: stuetze_auf(w, p, e, r),          # r = Richtung des Werfers (0.34.154)
     "werfer_start": lambda w, p, e, r: raketenstart(w, p, e, r),       # r = Steilheit * 1000 + Richtung
     "werfer_gross": lambda w, p, e, r: werfer_explosion(w, p, e, r),   # r = Radius
     "einschlag": lambda w, p, e, r: einschlag(w, p, e, max(0.4, r)),   # r = Groesse
     "bombe": lambda w, p, e, r: bombe(w, p, e),
     "bombe_los": lambda w, p, e, r: bombe_los(w, p, e, r),            # r = Hoehe
     "heli_treffer": lambda w, p, e, r: heli_treffer(w, p, e, r),      # r = Hoehe (seit 0.34.127)
+    "jagd_einschlag": lambda w, p, e, r: jagd_einschlag(w, p, e, r),  # r = Flugrichtung (seit 0.34.154)
+    "jagd_abprall": lambda w, p, e, r: jagd_abprall(w, p, e, r),      # r = neue Richtung
+    "mg_heiss": lambda w, p, e, r: mg_heiss(w, p, e, r),              # r = Laufrichtung
 }

@@ -766,25 +766,50 @@ def _halbkette_gepanzert(b, rnd) -> None:
     _nieten(b, [(x, sy * 9.4) for x in (3.4, 9.4) for sy in (-1, 1)], HK_DK)
 
 
+def stuetzen_stellung(fortschritt: float) -> tuple:
+    """(ausfahren 0..1, absenken 0..1) der Werfer-Stuetzen."""
+    p = max(0.0, min(1.0, fortschritt))
+    a = max(0.0, min(1.0, p / 0.3))
+    s = max(0.0, min(1.0, (p - 0.3) / 0.2))
+    return a * a * (3 - 2 * a), s * s
+
+
+# Wo die Teller der vier Stuetzen stehen, ausgefahren (Entwurfspixel, +x vorn).
+STUETZEN = ((-26.0, -24.0), (-26.0, 24.0), (-2.0, -24.0), (-2.0, 24.0))
+
+
+def _werfer_stuetzen(b, fortschritt: float) -> None:
+    aus, ab = stuetzen_stellung(fortschritt)
+    if aus <= 0.0:
+        return
+    for x, y in STUETZEN:
+        sy = 1 if y > 0 else -1
+        ey = sy * (11.0 + (abs(y) - 11.0) * aus)
+        # Der Kastenausleger: dunkle Kante, Stahl, ein heller Grat oben.
+        b.rect(STAHL_DK, x - 2.0, min(sy * 10.0, ey), 4.0, abs(ey - sy * 10.0), 0.4)
+        b.rect(STAHL, x - 1.5, min(sy * 10.0, ey) + 0.3, 3.0, max(0.1, abs(ey - sy * 10.0) - 0.6), 0.3)
+        b.linie((168, 160, 146), (x - 1.2, sy * 10.4), (x - 1.2, ey - sy * 0.6), 0.35)
+        b.rect((176, 150, 60), x - 1.6, ey - sy * 2.2 - 0.6, 3.2, 1.2)        # Warnstreifen
+        hoch = (1.0 - ab) * 4.0                                              # Teller ueber dem Boden
+        # Der Schatten des Tellers bleibt am Boden, der Teller sitzt hoeher (im Bild oben).
+        b.ellipse((24, 20, 16, 120), x - 3.2 + hoch * 0.5, ey - 2.4 + hoch * 0.4, 6.4, 4.8)
+        b.rohr((x, ey), (x, ey - hoch * 0.6), 1.4, (176, 170, 156), STAHL_DK)    # Hubzylinder
+        b.rect(STAHL_DK, x - 3.0, ey - 2.2 - hoch * 0.6, 6.0, 4.4, 0.8)        # Teller
+        b.rect(STAHL, x - 2.5, ey - 1.7 - hoch * 0.6, 5.0, 3.4, 0.6)
+        b.kreis(STAHL_DK, (x, ey - hoch * 0.6), 0.8)
+
+
 def werfer_zeichnen(fortschritt: float = 0.0) -> pygame.Surface:
     """Halbkette mit Drehkranz auf der Pritsche und Reserveraketen im Regal -
-    ohne das Raketengestell (das ist ein eigenes Bild, art_werfer.py, und
-    dreht sich zum Ziel). `fortschritt` (0 bis 1): die vier Stuetzen
-    schwenken schraeg nach aussen (in den ersten zwei Dritteln der Zeit) und
-    setzen mit ihren Fuessen auf. 128 x 128 (seit 0.34.120)."""
+    ohne das Raketengestell (das ist ein 3D-Modell, art_werfer.py, und dreht
+    sich zum Ziel). `fortschritt` (0 bis 1): die vier Stuetzen (seit 0.34.154
+    neu) sind Kastenausleger, die gerade zur Seite aus dem Rahmen fahren
+    (erste 30 Prozent des Aufbaus); dann senken sich die Teller auf den Boden -
+    von oben sieht man den Teller zu seinem Schatten wandern, bis er aufsetzt.
+    128 x 128."""
     b = _Blatt()
     rnd = random.Random(7401)
-    ext = max(0.0, min(1.0, fortschritt / 0.62))
-    if ext > 0.0:
-        for sy in (-1, 1):
-            for x0, x1 in ((-26, -34), (-2, 6)):
-                ex, ey = x0 + (x1 - x0) * ext, sy * (12 + 12 * ext)
-                b.rohr((x0, sy * 12), (ex, ey), 2.0, (150, 146, 138))
-                if ext >= 0.9:
-                    b.rect(STAHL_DK, ex - 3, ey - 2.2, 6, 4.4, 0.6)
-                    b.rect(STAHL, ex - 2.5, ey - 1.7, 5, 3.4, 0.5)
-                else:
-                    b.kreis((150, 146, 138), (ex, ey), 1.3)
+    _werfer_stuetzen(b, fortschritt)
     _halbkette_gepanzert(b, rnd)
     wanne = [(1, -13), (-28, -13), (-31, -10.4), (-31, 10.4), (-28, 13), (1, 13)]
     b.poly(HK_DK, wanne)
@@ -833,12 +858,13 @@ def _werfer_schatten():
 
 def _werfer_stufe(i: int):
     def z():
-        return werfer_zeichnen(i / 8.0)
+        return werfer_zeichnen(i / 32.0)
     return z
 
 
-# Aufbau und Abbau: die Stuetzen schwenken aus (Werfer.bild), in acht Stellungen.
-for _i in range(1, 9):
+# Aufbau und Abbau: die Stuetzen fahren aus und senken sich (Werfer.bild), in
+# sechzehn Stellungen ueber die erste Haelfte des Aufbaus (seit 0.34.154).
+for _i in range(1, 17):
     platzhalter("werfer_stuetze_%d" % _i)(_werfer_stufe(_i))
 
 
