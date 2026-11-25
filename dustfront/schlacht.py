@@ -499,7 +499,7 @@ class SchlachtTeil:
             # darueber laeuft - mit vollem Magazin und Vorrat.
             from .mehrspieler import KampfBeute
             w.dazu(KampfBeute(pygame.Vector2(ab.pos), ab.art, unten, self.kaempfer,
-                              ladung=KampfBeute.volle_ladung(ab.art[6:])))
+                              inhalt=KampfBeute.volle_ladung(ab.art[6:])))
             if zone in self.dropzonen:
                 self.dropzonen.remove(zone)
             return

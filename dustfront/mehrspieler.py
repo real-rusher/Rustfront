@@ -503,13 +503,15 @@ class KampfBeute(Aufsammler):
     BILDER = {"munition": "munikiste", "medkit": "medkit",
               "rakete": "rpg_kiste"}
 
-    def __init__(self, pos, art: str, ebene: int, kaempfer: dict, ladung=None) -> None:
+    def __init__(self, pos, art: str, ebene: int, kaempfer: dict, inhalt=None) -> None:
         super().__init__(pos, art, ebene)
         # Eine gerufene Waffe (seit 0.34.154) heisst "waffe_<name>" und zeigt
-        # ihr eigenes Bild; `ladung` ist (Magazin, Vorrat) - wer sie fallen
-        # laesst, gibt sie mit dem Rest weiter, nicht wieder voll.
+        # ihr eigenes Bild; `inhalt` ist (Magazin, Vorrat) - wer sie fallen
+        # laesst, gibt sie mit dem Rest weiter, nicht wieder voll. Nicht
+        # `ladung`: so heisst die Aufladung der Chor-Waffen, die der Renderer
+        # bei jedem Wesen abfragt.
         self.bild = art if art.startswith("waffe_") else self.BILDER.get(art, "medkit")
-        self.ladung = tuple(ladung) if ladung else None
+        self.inhalt = tuple(inhalt) if inhalt else None
         self._kaempfer = kaempfer
 
     @staticmethod
@@ -540,7 +542,7 @@ class KampfBeute(Aufsammler):
                 # der Werfer einmal in der Runde eben doch zweimal da.
                 genommen = k.rpg_nehmen()
             elif self.art.startswith("waffe_"):
-                mag, vorrat = self.ladung or self.volle_ladung(self.art[6:])
+                mag, vorrat = self.inhalt or self.volle_ladung(self.art[6:])
                 genommen = k.schwer_nehmen(self.art[6:], mag, vorrat)
             if genommen:
                 self.lebt = False
@@ -5504,7 +5506,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if not self.welt.frei(pos, 6.0, ebene):
             pos = pygame.Vector2(getattr(k, "vorher", pos))
         self.welt.dazu(KampfBeute(pos, "waffe_" + name, ebene, self.kaempfer,
-                                  ladung=(mag, vorrat)))
+                                  inhalt=(mag, vorrat)))
 
     def _tote_abrechnen(self, dt: float) -> None:
         if self.schlacht:

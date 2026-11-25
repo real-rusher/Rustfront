@@ -13269,6 +13269,9 @@ _tm.alles_weg()
 
 # Funk: der eine haelt in der Unterzahl und ruft, der andere hat Ruhe und kommt.
 # Die Gegner in Sichtweite (330 px): wer haelt, geht nicht suchen.
+# Fester Zufall (seit 0.34.154): der Bot-Zufall des Testmodus war ungeseedet,
+# und im vollen Lauf fiel die Zusage von BRAVO ab und zu aus.
+random.seed(95); EN.RND.seed(95); _tm._bot_rnd.seed(95)
 _a95, _b95 = _feld95(220)
 _c95 = None
 for _ in range(400):
@@ -19457,7 +19460,10 @@ _vorschlag129 = dict(munition=3, medkit=3, buggy=4, krad=3, aufklaerung=5, napal
                      tragschrauber=12, flakwagen=6)
 _preis129 = {n_: c_ for n_, c_, _t in K.SCHLACHT["belohnungen"]}
 pruef("Preise: alles billiger als im Vorschlag, der Konter Flak billiger als der Tragschrauber",
-      set(_preis129) == set(_vorschlag129) and all(_preis129[n_] < _vorschlag129[n_] for n_ in _preis129)
+      # Seit 0.34.154 kommen die gerufenen Waffen dazu (waffe_*) - die gab es im Vorschlag nicht.
+      set(_vorschlag129) <= set(_preis129)
+      and all(n_ in _vorschlag129 or n_.startswith("waffe_") for n_ in _preis129)
+      and all(_preis129[n_] < _vorschlag129[n_] for n_ in _vorschlag129)
       and _preis129["flakwagen"] < _preis129["tragschrauber"], str(_preis129))
 pruef("... Panzer, Napalm und Tragschrauber frueher als im Vorschlag (dort erst ganz am Ende)",
       K.SCHLACHT["stufe"]["panzer"] <= 2 and K.SCHLACHT["stufe"]["napalm"] <= 1
@@ -21732,8 +21738,8 @@ for _ in range(int(15.0 / K.FIXED_DT)):
     _tm154.schritt(K.FIXED_DT)
 _kb154 = [w_ for w_ in _tm154.welt.wesen if isinstance(w_, _KB154) and w_.art == "waffe_minigun" and w_.lebt]
 pruef("Der Abwurf landet als Minigun am Boden, mit vollem Magazin und Vorrat",
-      len(_kb154) == 1 and _kb154[0].ladung == (K.WAFFEN["minigun"]["magazin"], K.MUNITION["vorrat"]["minigun"]),
-      str([(b_.art, b_.ladung) for b_ in _kb154]))
+      len(_kb154) == 1 and _kb154[0].inhalt == (K.WAFFEN["minigun"]["magazin"], K.MUNITION["vorrat"]["minigun"]),
+      str([(b_.art, b_.inhalt) for b_ in _kb154]))
 _bot154 = _tm154.bot_setzen(_kb154[0].pos + pygame.Vector2(0, 1), 0, {"team": 0})
 _bot154.hirn = None
 for _ in range(5):
@@ -21759,8 +21765,8 @@ for _ in range(3):
     _tm154.schritt(K.FIXED_DT)
 _kb154 = [w_ for w_ in _tm154.welt.wesen + _tm154.welt.neue
           if isinstance(w_, _KB154) and w_.art == "waffe_minigun" and w_.lebt]
-pruef("Beim Tod faellt sie, mit dem, was noch drin ist", len(_kb154) == 1 and _kb154[0].ladung == (77, 10),
-      str([(b_.ladung) for b_ in _kb154]))
+pruef("Beim Tod faellt sie, mit dem, was noch drin ist", len(_kb154) == 1 and _kb154[0].inhalt == (77, 10),
+      str([(b_.inhalt) for b_ in _kb154]))
 pruef("... und ist aus seiner Hotbar weg", "minigun" not in _m154.waffen and not _m154.schwer, str(_m154.waffen))
 _tm154.verlassen()
 
