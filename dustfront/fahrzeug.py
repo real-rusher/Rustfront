@@ -1261,6 +1261,21 @@ class Panzergranate(Geschoss):
             return True
         return K.PANZERUNG.get(getattr(ziel, "art", ""), {}).get("kugel", 1.0) >= leicht_ab
 
+    def treffen(self, ziel) -> None:
+        """Beim Durchschlagen (seit 0.34.155): dazu Ein- und Austritt als
+        Effekt, den auch der Gast sieht."""
+        super().treffen(ziel)
+        if not self.daten.get("durch_leicht_ab") or self.welt is None:
+            return
+        richtung = int(round(math.degrees(math.atan2(self.tempo.y, self.tempo.x)))) % 360
+        if getattr(ziel, "ist_fahrzeug", False):
+            weite = 2.0 * float(getattr(ziel, "huelle_radius", 0.0) or getattr(ziel, "radius", 12.0))
+        else:
+            weite = 2.0 * float(getattr(ziel, "radius", 8.0)) + 2.0
+        metall = 1 if getattr(ziel, "treffer_art", "") == "metall" or getattr(ziel, "ist_fahrzeug", False) else 0
+        code = metall * 100000 + max(4, min(99, int(weite))) * 1000 + richtung
+        self.welt.explosion(pygame.Vector2(self.pos), self.ebene, float(code), "jagd_durch", self.von)
+
     def _abprallen(self, teil) -> None:
         """Nur wer flach auf die Mauer trifft, prallt ab (seit 0.34.154,
         `abprall_winkel`); steil schlaegt die Granate ein."""

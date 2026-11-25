@@ -709,6 +709,12 @@ class Rundenplanung(Menue):
         self._gesamt = len(felder)
         self._platz = platz
         self._oben = max(0, min(getattr(self, "_oben", 0), len(felder) - platz))
+        # Passt nicht alles, rechts eine Bildlaufleiste (seit 0.34.155,
+        # gemeldet: "man kann nicht scrollen und so nicht alle sehen").
+        self._leiste_rect = None
+        if len(felder) > platz:
+            breite -= 10
+            self._leiste_rect = pygame.Rect(x + breite + 4, y, 6, platz * self.ZEILE - 3)
         self._spalte_rect = pygame.Rect(x, y, breite, platz * self.ZEILE)
         spalte = self.SPALTE if g.plan_offen else self.SPALTE + 40
         for i, f in enumerate(felder[self._oben:self._oben + platz]):
@@ -750,15 +756,63 @@ class Rundenplanung(Menue):
                     return
         super().wahl_schieben(d)
 
+    def _leiste_griff(self):
+        """Der Griff der Bildlaufleiste: (Rechteck, Pixel je Zeile) oder None."""
+        lr = getattr(self, "_leiste_rect", None)
+        gesamt, platz = getattr(self, "_gesamt", 0), getattr(self, "_platz", 0)
+        if lr is None or gesamt <= platz:
+            return None
+        hoch = max(10, int(lr.height * platz / float(gesamt)))
+        je = (lr.height - hoch) / float(max(1, gesamt - platz))
+        return pygame.Rect(lr.x, lr.y + int(round(getattr(self, "_oben", 0) * je)), lr.width, hoch), je
+
+    def _blaettern_bis(self, oben: int) -> None:
+        self._blaettern(int(oben) - getattr(self, "_oben", 0))
+
     def ereignis(self, ev) -> None:
-        if ev.type == pygame.MOUSEWHEEL and getattr(self, "_spalte_rect", None) is not None:
+        sr = getattr(self, "_spalte_rect", None)
+        lr = getattr(self, "_leiste_rect", None)
+        if sr is not None and ev.type == pygame.MOUSEWHEEL:
             maus = self.app.zu_spiel(pygame.mouse.get_pos())
-            r = self._spalte_rect
-            # Ueber den Namen blaettert das Rad die Liste, ueber den Werten
-            # verstellt es sie wie bisher.
-            if r.collidepoint(maus) and maus.x < r.x + self.SPALTE:
-                self._blaettern(-1 if ev.y > 0 else 1)
+            # Seit 0.34.155 blaettert das Rad ueberall ueber der Liste (vorher
+            # nur ueber den Namen - ueber den Werten verstellte es sie, und
+            # wer einfach scrollen wollte, kam nicht weiter).
+            flaeche = sr.union(lr) if lr is not None else sr
+            if flaeche.inflate(8, 8).collidepoint(maus):
+                if ev.y:
+                    self._blaettern(-2 if ev.y > 0 else 2)
                 return
+        if lr is not None and ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            maus = self.app.zu_spiel(ev.pos)
+            if lr.inflate(8, 4).collidepoint(maus):
+                griff = self._leiste_griff()
+                if griff is not None:
+                    g_rect, je = griff
+                    if g_rect.inflate(8, 0).collidepoint(maus):
+                        self._ziehen = (maus.y, getattr(self, "_oben", 0), je)
+                    elif maus.y < g_rect.y:
+                        self._blaettern(-self._platz)
+                    else:
+                        self._blaettern(self._platz)
+                return
+        if ev.type == pygame.MOUSEMOTION and self.__dict__.get("_ziehen") is not None:
+            start_y, start_oben, je = self._ziehen
+            maus = self.app.zu_spiel(ev.pos)
+            if je > 0:
+                self._blaettern_bis(start_oben + round((maus.y - start_y) / je))
+            return
+        if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1 and self.__dict__.get("_ziehen") is not None:
+            self._ziehen = None
+            return
+        if ev.type == pygame.KEYDOWN and sr is not None and ev.key in (
+                pygame.K_PAGEUP, pygame.K_PAGEDOWN, pygame.K_HOME, pygame.K_END):
+            # Auch fuer einen Gast, der nichts verstellen darf (seit 0.34.155):
+            # die Pfeile blaettern nur ueber waehlbare Zeilen.
+            schritt = {pygame.K_PAGEUP: -getattr(self, "_platz", 4),
+                       pygame.K_PAGEDOWN: getattr(self, "_platz", 4),
+                       pygame.K_HOME: -10 ** 6, pygame.K_END: 10 ** 6}[ev.key]
+            self._blaettern(schritt)
+            return
         super().ereignis(ev)
 
     def _fuss(self, r) -> None:
@@ -895,12 +949,21 @@ class Rundenplanung(Menue):
         r = self.tafel
         sr = getattr(self, "_spalte_rect", None)
         if sr is not None and getattr(self, "_gesamt", 0) > getattr(self, "_platz", 0):
-            if self._oben > 0:
+            if self._oben > 0 and getattr(self, "_leiste_rect", None) is None:
+                # Mit Leiste (seit 0.34.155) zeigt die, dass oben noch etwas ist;
+                # der Text stand dort ueber dem Knopf STANDARDRUNDE.
                 SCHRIFT.zeichnen(ziel, "^ MEHR", sr.right, sr.y - 10, K.C_MUTED, 1,
                                  ausrichtung="rechts")
             if self._oben + self._platz < self._gesamt:
-                SCHRIFT.zeichnen(ziel, "v MEHR (RAD ÜBER DEN NAMEN)", sr.right, sr.bottom,
+                SCHRIFT.zeichnen(ziel, "v MEHR (MAUSRAD, LEISTE, BILD AB)", sr.right, sr.bottom,
                                  K.C_MUTED, 1, ausrichtung="rechts")
+            griff = self._leiste_griff()
+            if griff is not None:
+                lr = self._leiste_rect
+                pygame.draw.rect(ziel, (22, 18, 14), lr)
+                pygame.draw.rect(ziel, (70, 58, 44), lr, 1)
+                gezogen = self.__dict__.get("_ziehen") is not None
+                pygame.draw.rect(ziel, K.C_AMBER if gezogen else (150, 120, 80), griff[0])
         # Welche Runde gerade eingestellt wird, als Ueberschrift der Regeln.
         if g.plan_offen:
             x = r.x + 196

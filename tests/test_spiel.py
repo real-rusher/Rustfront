@@ -5140,9 +5140,11 @@ from dustfront import fahrzeug as _FZ62
 _neu62 = ("revolver", "zwillinge", "mp", "praezision", "unterhebel", "panzerbuechse",
           "doppelflinte", "autoschrot", "minigun", "granatwerfer", "einwegwerfer",
           "raketenbuendel")
-pruef("Zwoelf neue Waffen stehen in der Auswahl der Loadouts, mit Namen und Vorrat",
-      all(w_ in K.LOADOUT["auswahl_waffen"] and K.WAFFEN[w_]["name"]
-          and w_ in K.MUNITION["vorrat"] for w_ in _neu62))
+# Seit 0.34.155 gibt es Minigun, Panzerbuechse und Raketenbuendel nur per
+# Nachschub (LOADOUT nur_nachschub) - sie stehen dann dort statt in der Auswahl.
+pruef("Zwoelf neue Waffen stehen in der Auswahl der Loadouts (oder nur im Nachschub), mit Namen und Vorrat",
+      all((w_ in K.LOADOUT["auswahl_waffen"]) != (w_ in K.LOADOUT["nur_nachschub"])
+          and K.WAFFEN[w_]["name"] and w_ in K.MUNITION["vorrat"] for w_ in _neu62))
 # Seit 0.34.91 in der Folge der Plaetze: Haupt-, Seiten-, Spezialwaffe.
 pruef("Ein Loadout mit neuen Waffen behaelt sie in der Hotbar (vorher fielen sie heraus)",
       _KO62.hotbar_aus_loadout({"waffen": ["mp", "revolver", "raketenbuendel"], "wuerfe": ["rauch"]})
@@ -6169,9 +6171,10 @@ _tm68 = _TM59.Testmodus(app, karte="staubtal")
 _ort68 = freier_punkt(_tm68.welt, 0, random.Random(68))
 _ich68 = _tm68.ich_setzen(_ort68, 0, {"team": 0, "waffe_figur": "spule"})
 _ich68 = _ich68[0] if isinstance(_ich68, list) else _ich68
-pruef("Die Energiewaffen und der Flammenwerfer sind waehlbar",
-      {"spule", "kettenblitz", "spiegellaser", "kugelblitz", "flammenwerfer"}
-      <= set(K.LOADOUT["auswahl_waffen"]))
+# Seit 0.34.155 Spulengewehr und Flammenwerfer nur per Nachschub.
+pruef("Die Energiewaffen und der Flammenwerfer sind waehlbar (oder kommen per Nachschub)",
+      {"kettenblitz", "spiegellaser", "kugelblitz"} <= set(K.LOADOUT["auswahl_waffen"])
+      and {"spule", "flammenwerfer"} <= set(K.LOADOUT["nur_nachschub"]))
 def _puppe68(dx, dy=0.0, leben=400.0):
     p_ = _tm68.puppe_setzen(_ich68.pos + pygame.Vector2(dx, dy), 0,
                             {"anzahl": 1, "streuung": 0, "team": 1, "leben": leben})
@@ -15819,8 +15822,10 @@ pruef("Ohne Datei: None (dann zeigt das Menue das Pixelbild)", _MB182.bild("gibt
 # ══════════════════════════════════════════════════════════════════
 print("\n-- Jeder hat alles: Kategorien-Hotbar und alle Werkzeuge auf C (0.34.85)")
 _alle185 = K.alles_waffen()
-pruef("JEDER HAT ALLES hat jede Waffe ausser denen auf F (Nahkampf) und dem Raketenwerfer (Karte)",
+pruef("JEDER HAT ALLES hat jede Waffe ausser denen auf F (Nahkampf), dem Raketenwerfer (Karte) "
+      "und seit 0.34.155 denen nur aus dem Nachschub",
       set(_alle185) == set(K.WAFFEN) - set(K.NAHKAMPF["waehlbar"]) - {"rakete"}
+      - set(K.LOADOUT["nur_nachschub"])
       and len(_alle185) == len(set(_alle185)),
       str(set(K.WAFFEN) - set(_alle185)))
 pruef("... in acht Gruppen (die NAHKAMPF-Gruppe liegt seit 0.34.96 auf F)", len(K.ALLES_GRUPPEN) == 8)
@@ -16206,8 +16211,10 @@ pruef("Manche Klassen (nicht alle) haben einen Platz fuer eine Spezialwaffe, FRE
       str(_spezial191))
 _lo191 = _KO191.loadout_saeubern({"name": "X", "klasse": "panzerjaeger",
                                   "waffen": ["panzerbuechse", "sturm", "mp", "repetierer"]})
+# Die Panzerbuechse gibt es seit 0.34.155 nur per Nachschub: der Spezialplatz
+# bekommt die naechste Waffe der Klasse dafuer (die Einwegrakete).
 pruef("Ein Satz traegt je Platz eine Waffe, in der Folge Haupt, Seite, Spezial",
-      _lo191["waffen"] == ["mp", "repetierer", "panzerbuechse"], str(_lo191["waffen"]))
+      _lo191["waffen"] == ["mp", "repetierer", "einwegwerfer"], str(_lo191["waffen"]))
 _sch191 = _KO191.loadout_saeubern({"name": "S", "klasse": "schildtraeger", "waffen": ["sturm", "revolver"]})
 pruef("Mit Schild nur die Seitenwaffe", _sch191["waffen"] == ["revolver"], str(_sch191["waffen"]))
 _frei191 = _KO191.loadout_saeubern({"name": "F", "waffen": ["sturm", "schrot", "minigun"]})
@@ -21727,7 +21734,7 @@ print("\n-- 0.34.154: starke Waffen per Nachschub rufen")
 _namen154 = [n_ for n_, _c, _t in K.SCHLACHT["belohnungen"]]
 pruef("Minigun, Flammenwerfer, Raketenbuendel und Panzerbuechse sind im Nachschub",
       all(("waffe_" + n_) in _namen154 for n_ in ("minigun", "flammenwerfer", "raketenbuendel", "panzerbuechse")))
-pruef("Die Nachschubtafel passt mit allen 19 Zeilen aufs Bild (ADMIN-Zeile ueber dem Stand)",
+pruef("Die Nachschubtafel passt mit allen Zeilen aufs Bild (ADMIN-Zeile ueber dem Stand)",
       _SL107.SchlachtTeil._belohnung_hilfe_rect().bottom + 2 + 14 < K.GAME_H - 36,
       str(_SL107.SchlachtTeil._belohnung_hilfe_rect()))
 _tm154 = _TM87.Testmodus(app, karte="staubtal_offen")
@@ -21759,7 +21766,9 @@ pruef("Ein Mensch hebt sie auf: vorn in der Hotbar und gleich in der Hand, die a
       and _m154.waffen[1:] == _vorher154 and _m154.schwer == "minigun", str(_m154.waffen))
 _m154.vorrat["minigun"] = 10
 _m154.auffuellen(1.0)
-pruef("Eine Munitionskiste fuellt die gerufene Waffe nicht nach", _m154.vorrat["minigun"] == 10)
+# Seit 0.34.155 doch (gewuenscht: "Munitionskisten duerfen die Waffe gerne nachfuellen").
+pruef("Eine Munitionskiste fuellt auch die gerufene Waffe nach", _m154.vorrat["minigun"] > 10)
+_m154.vorrat["minigun"] = 10
 pruef("Eine zweite gerufene Waffe nimmt er nicht, solange er eine traegt",
       not _m154.schwer_nehmen("flammenwerfer", 100, 0))
 _m154.magazin["minigun"] = 77
@@ -21888,6 +21897,244 @@ _spec154.loader.exec_module(_ku154)
 pruef("tools/klang_uebersicht.py beschreibt jeden Klang (fuer docs/KLAENGE_UEBERSICHT.pdf)",
       all(n_ in _ku154.BESCHREIBUNG for n_ in K.KLANG_NAMEN),
       str([n_ for n_ in K.KLANG_NAMEN if n_ not in _ku154.BESCHREIBUNG]))
+
+# ── 0.34.155: Waffen nur per Nachschub, Kapsel, Jagdkanone, Rundenliste, Serverliste ──
+print("\n-- 0.34.155: starke Waffen nur noch per Nachschub")
+from dustfront import konto as _KO155, klassen as _KL155, kapsel as _KA155
+from dustfront import serverliste as _SV155, effekte as _EF155
+_gesperrt155 = set(K.LOADOUT["nur_nachschub"])
+pruef("Minigun, Panzerbuechse, Raketenbuendel, Spulengewehr und Flammenwerfer gibt es nur per Nachschub",
+      _gesperrt155 == {"minigun", "panzerbuechse", "raketenbuendel", "spule", "flammenwerfer"}
+      and not _gesperrt155 & set(K.LOADOUT["auswahl_waffen"])
+      and not _gesperrt155 & set(K.alles_waffen())
+      and all(not _gesperrt155 & set(_KL155.waffen_von(k_)) for k_ in K.KLASSEN), str(_gesperrt155))
+_preise155 = {n_[6:]: c_ for n_, c_, _t in K.SCHLACHT["belohnungen"] if n_.startswith("waffe_")}
+pruef("... alle fuenf sind im Nachschub, und billiger als zuvor (hoechstens 3 Punkte)",
+      set(_preise155) == _gesperrt155 and max(_preise155.values()) <= 3, str(_preise155))
+_alt155 = [
+    {"name": "U", "klasse": "unterstuetzer", "waffen": ["lmg", "repetierer", "minigun"], "wuerfe": ["granate"]},
+    {"name": "P", "klasse": "panzerjaeger", "waffen": ["mp", "repetierer", "raketenbuendel"], "wuerfe": ["emp"]},
+    {"name": "F", "klasse": "flammentrupp", "waffen": ["schrot", "repetierer", "flammenwerfer"], "wuerfe": ["molotov"]},
+    {"name": "T", "klasse": "techniker", "waffen": ["kettenblitz", "nagler", "spule"], "wuerfe": ["emp"]},
+    {"name": "N", "klasse": "nahkaempfer", "waffen": ["schrot", "revolver", "flammenwerfer"], "wuerfe": ["rauch"]},
+    {"name": "O", "waffen": ["minigun", "panzerbuechse"], "wuerfe": ["granate"]},
+]
+_neu155 = [_KO155.loadout_saeubern(lo_) for lo_ in _alt155]
+pruef("Ein alter Satz mit einer davon bekommt die naechste Waffe fuer den Platz - sonst bleibt alles",
+      all(len(n_["waffen"]) == len(_KL155.plaetze_von(lo_.get("klasse", "")))
+          and not _gesperrt155 & set(n_["waffen"])
+          and n_["wuerfe"] == list(lo_["wuerfe"])
+          and n_.get("klasse", "") == lo_.get("klasse", "")
+          for lo_, n_ in zip(_alt155, _neu155))
+      and _neu155[0]["waffen"][:2] == ["lmg", "repetierer"]
+      and _neu155[3]["waffen"][2] == "kugelblitz",
+      str([n_["waffen"] for n_ in _neu155]))
+pruef("Jede Klasse mit Spezialplatz hat noch eine Spezialwaffe zur Wahl",
+      all(_KL155.waffen_von(k_, "spezial") for k_ in K.KLASSEN if "spezial" in _KL155.plaetze_von(k_)))
+_W155 = K.WAFFEN
+pruef("Dafuer staerker: Flammenwerfer viel weiter, Minigun, Panzerbuechse, Raketen und Spule mehr Schaden",
+      _W155["flammenwerfer"]["reichweite"] >= 250 and _W155["minigun"]["schaden"] > 9
+      and _W155["panzerbuechse"]["schaden"] > 70 and _W155["panzerbuechse"]["fahrzeug_schaden"] > 220
+      and _W155["raketenbuendel"]["schaden"] > 38 and _W155["spule"]["schaden"] > 75,
+      "Flamme %d" % _W155["flammenwerfer"]["reichweite"])
+pruef("Munitionskisten fuellen gerufene Waffen nach, der Flammenwerfer hat dafuer Vorrat",
+      K.SCHLACHT["waffen_abwurf"]["kiste_fuellt"] and K.MUNITION["vorrat"].get("flammenwerfer", 0) > 0)
+pruef("Die Nachschubtafel passt auch mit 20 Zeilen (Zeilenhoehe aus dem Platz gerechnet)",
+      len(K.SCHLACHT["belohnungen"]) >= 20
+      and _SL107.SchlachtTeil._belohnung_hilfe_rect().bottom + 2 + 14 < K.GAME_H - 36
+      and _SL107.SchlachtTeil._zeilen_schritt() >= 10, str(_SL107.SchlachtTeil._zeilen_schritt()))
+
+print("\n-- 0.34.155: die Abwurfkapsel")
+pruef("Die Kapsel faellt in gut einer halben Sekunde, die Fackeln stehen nur kurz",
+      0.35 < _KA155.fallzeit() < 0.8 and K.SCHLACHT["kapsel"]["vorlauf"] < K.SCHLACHT["abwurf"]["vorlauf_kauf"],
+      "%.2f s" % _KA155.fallzeit())
+pruef("Groesse, Seite und Richtung kommen heil durch die Zahl, die ans Netz geht (auf 0,1 gerundet)",
+      _KA155.dekodieren(round(_KA155.kodieren(34, 1, 136.0), 1)) == (34, 1, 136.0)
+      and _KA155.dekodieren(_KA155.kodieren(28, -1, 0.0))[1] == -1)
+pruef("Die Kapsel passt zur Waffe (die Panzerbuechse braucht die laengste)",
+      _KA155.groesse("waffe_panzerbuechse") > _KA155.groesse("waffe_spule"))
+pruef("Einschlag und Aufsprengen sind Effekte, die auch der Gast bekommt",
+      "kapsel_einschlag" in _EF155.ARTEN and "kapsel_auf" in _EF155.ARTEN)
+_tm155 = _TM87.Testmodus(app, karte="staubtal_offen")
+_tm155.wiedereinstieg = False
+_nm155 = [e_.name for e_ in _tm155.eintraege]
+pruef("Testmodus: ABWURF: SPULENGEWEHR und GERUFEN: SPULENGEWEHR im Spawner",
+      "ABWURF: SPULENGEWEHR" in _nm155 and "GERUFEN: SPULENGEWEHR" in _nm155)
+_pl155 = _freie_flaeche86(_tm155.welt, random.Random(1551), 12, 9)
+_p155 = pygame.Vector2((_pl155[0] + 6) * K.TILE, (_pl155[1] + 4.5) * K.TILE)
+_ex155 = []
+_alt_ex155 = _tm155.welt.explosion
+def _ex155f(p_, e_, r_, art_="spreng", von_=None):
+    _ex155.append((art_, round(_tm155.welt.zeit, 2)))
+    return _alt_ex155(p_, e_, r_, art_, von_)
+_tm155.welt.explosion = _ex155f
+_start155 = _tm155.welt.zeit
+_tm155.nachschub_setzen("waffe_spule", _p155, {"team": 1})
+_bild155 = pygame.Surface((K.GAME_W, K.GAME_H))
+_flug155 = _zu155 = _beute_frueh155 = False
+_ok155 = True
+_tm155.ich.pos.update(_p155); _tm155.ich.vorher.update(_p155)
+for _i in range(int(4.0 / K.FIXED_DT)):
+    _tm155.schritt(K.FIXED_DT)
+    if any(_KA155.ist_kapsel(a_.art) for a_ in _tm155.abwuerfe):
+        _flug155 = True
+        _ab155 = [a_ for a_ in _tm155.abwuerfe if _KA155.ist_kapsel(a_.art)][0]
+        _flug_hoehe155 = _ab155.hoehe
+    if any(f_.art == "kapsel_zu" for f_ in _tm155.welt.effekte):
+        _zu155 = True
+        if any(getattr(w_, "art", "") == "waffe_spule" for w_ in _tm155.welt.wesen):
+            _beute_frueh155 = True
+    if _i % 20 == 0:
+        try:
+            _tm155.zeichnen(_bild155, 0.5)
+        except Exception as _f:      # noqa: BLE001
+            _ok155 = repr(_f)
+_tm155.welt.explosion = _alt_ex155
+_arten155 = [a_ for a_, _z in _ex155]
+pruef("Gekauft fliegt eine Kapsel (ohne Schirm), schlaegt ein, steckt und sprengt dann auf",
+      _flug155 and _zu155 and "kapsel_einschlag" in _arten155 and "kapsel_auf" in _arten155
+      and _arten155.index("kapsel_einschlag") < _arten155.index("kapsel_auf"), str(_ex155))
+_z155 = dict((a_, z_) for a_, z_ in _ex155)
+pruef("... schnell: vom Kauf bis zur Waffe gut zwei Sekunden (vorher rund 14)",
+      _z155.get("kapsel_auf", 99) - _start155 < 3.5, "%.2f s" % (_z155.get("kapsel_auf", 99) - _start155))
+pruef("... die Waffe liegt erst da, wenn die Kapsel offen ist",
+      not _beute_frueh155 and any(getattr(w_, "art", "") == "waffe_spule" and w_.lebt
+                                  for w_ in _tm155.welt.wesen))
+pruef("... Ring und Klappen bleiben liegen, und alles zeichnet ohne Fehler",
+      any(f_.art == "kapsel_offen" for f_ in _tm155.welt.effekte)
+      and sum(1 for f_ in _tm155.welt.effekte if f_.art == "klappe") == 4 and _ok155 is True, str(_ok155))
+_ab155 = Abwurf_ = None
+from dustfront.schlacht import Dropzone as _DZ155, Abwurf as _AB155
+_ab155 = _AB155(_DZ155(_p155, 0, "waffe_minigun", 0.0, einmalig=True))
+_tm155.abwuerfe.append(_ab155)
+_tm155.__dict__.pop("_lz_merk", None)
+pruef("Die Flak zielt nicht auf eine Kapsel (eine halbe Sekunde im Fall)",
+      all(getattr(z_, "ziel", None) is not _ab155 for z_ in _tm155.luft_ziele()))
+_tm155.abwuerfe.remove(_ab155)
+_tm155.verlassen()
+
+print("\n-- 0.34.155: Jagdkanone - Ein- und Austritt")
+pruef("Durchschlagen hat einen eigenen Effekt (Eintritt klein, Austritt gross), den auch der Gast bekommt",
+      "jagd_durch" in _EF155.ARTEN and "jagd_abprall" in _EF155.ARTEN)
+_tm155 = _TM87.Testmodus(app, karte="staubtal_offen")
+_tm155.wiedereinstieg = False
+_e155 = _tm155.welt.ebene(0)
+_r155 = random.Random(155)
+for _ in range(60000):
+    _ty155 = _r155.randrange(20, _e155.hoehe - 20); _tx155 = _r155.randrange(40, _e155.breite - 60)
+    if all(not K.KACHELN[_e155.kachel(_tx155 + x_, _ty155 + dy_)]["fest"]
+           for x_ in range(-2, 40) for dy_ in range(-6, 7)):
+        break
+def _z155f(x_, y_):
+    return pygame.Vector2((_tx155 + x_ + 0.5) * K.TILE, (_ty155 + y_ + 0.5) * K.TILE)
+_jp155 = _tm155.fahrzeug_setzen("jagdpanzer", _z155f(2, 0), 0, {"winkel": 0})
+_jf155 = _tm155.puppe_setzen(_jp155.ausstiegsorte(9.0)[0], 0, {"team": 0}, name="J")
+_tm155._anwenden(_jf155, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"]})
+_a155 = _tm155.puppe_setzen(_z155f(10, 0), 0, {"team": 1}); _a155.leben = _a155.max_leben = 9999
+_bg155 = _tm155.fahrzeug_setzen("buggy", _z155f(16, 0), 0, {"winkel": 90})
+_pw155 = _tm155.fahrzeug_setzen("panzerwagen", _z155f(30, 0), 0, {"winkel": 90})
+_codes155 = []
+_alt_ex155 = _tm155.welt.explosion
+def _ex155g(p_, e_, r_, art_="spreng", von_=None):
+    _codes155.append((art_, int(round(r_))))
+    return _alt_ex155(p_, e_, r_, art_, von_)
+_tm155.welt.explosion = _ex155g
+_jp155.takt["kanone"] = 0
+for _i in range(int(2.0 / K.FIXED_DT)):
+    _tm155._anwenden(_jf155, {"will": [0, 0], "ziel": [_jp155.pos.x + 900, _jp155.pos.y],
+                              "knoepfe": [], "feuert": _i < 3})
+    _tm155.schritt(K.FIXED_DT)
+_tm155.welt.explosion = _alt_ex155
+_durch155 = [c_ for a_, c_ in _codes155 if a_ == "jagd_durch"]
+pruef("Durch die Figur (Blut) und den Buggy (Blech, Austritt hinter dem ganzen Wagen)",
+      len(_durch155) == 2 and _durch155[0] < 100000 and _durch155[1] >= 100000
+      and (_durch155[1] // 1000) % 100 > (_durch155[0] // 1000) % 100, str(_codes155))
+pruef("... und am schweren Blech kein Abprall, sondern Einschlag",
+      [a_ for a_, _c in _codes155][-1] == "jagd_einschlag"
+      and not any(a_ == "jagd_abprall" for a_, _c in _codes155), str(_codes155))
+_tm155.verlassen()
+
+print("\n-- 0.34.155: erweiterte Rundeneinstellungen blaettern")
+from dustfront.lobby import Rundenplanung as _RP155
+_w155 = Gefecht(app, "WIRT", gastgeber=netz.Gastgeber(_neuer_port()), modus="team", karte="staubtal", seed=155)
+app.schieben(_w155)
+_erw155 = app.opt["runden_erweitert"]
+app.opt["runden_erweitert"] = True
+_m155 = _RP155(app, _w155)
+app.schieben(_m155)
+_m155.aufbauen()
+pruef("Passt die Liste nicht, steht rechts eine Bildlaufleiste",
+      _m155._gesamt > _m155._platz and _m155._leiste_rect is not None and _m155._leiste_griff() is not None,
+      "%d Zeilen, %d Platz" % (_m155._gesamt, _m155._platz))
+_sr155 = _m155._spalte_rect
+_maus155 = pygame.mouse.get_pos
+pygame.mouse.get_pos = lambda: (0, 0)
+_zu_spiel155 = app.zu_spiel
+app.zu_spiel = lambda p_: pygame.Vector2(_sr155.right - 8, _sr155.centery)    # ueber den Werten
+_m155.ereignis(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=-1))
+_nach_rad155 = _m155._oben
+app.zu_spiel = _zu_spiel155
+pygame.mouse.get_pos = _maus155
+pruef("Das Mausrad blaettert auch ueber den Werten (vorher verstellte es dort den Wert)",
+      _nach_rad155 > 0, str(_nach_rad155))
+_m155.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_END, mod=0, unicode="", scancode=0))
+_ende155 = _m155._oben
+_m155.ereignis(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_HOME, mod=0, unicode="", scancode=0))
+pruef("ENDE zeigt die letzten Zeilen, POS1 die ersten",
+      _ende155 == _m155._gesamt - _m155._platz and _m155._oben == 0, "%d %d" % (_ende155, _m155._oben))
+_b155 = pygame.Surface((K.GAME_W, K.GAME_H))
+_m155.zeichnen(_b155, 1.0)
+app.opt["runden_erweitert"] = _erw155
+app.stapel.remove(_m155)
+_w155.verlassen()
+if _w155 in app.stapel:
+    app.stapel.remove(_w155)
+
+print("\n-- 0.34.155: Serverliste")
+_zeile155 = _SV155.zeile_bauen({"name": "MAX", "version": K.VERSION, "spieler": 3, "hoechstens": 9,
+                                "lobby": True, "modus": "Team", "karte": "Staubtal", "passwort": True},
+                               "thermal-underlying-providers-toe")
+_ein155 = _SV155.eintrag_aus_zeile(_zeile155)
+pruef("Was aushaengt, ist die LAN-Ansage plus Code - und nie das Kennwort selbst",
+      set(_zeile155) == {"code", "name", "version", "spieler", "hoechstens", "lobby", "modus", "karte", "passwort"}
+      and _zeile155["passwort"] is True)
+pruef("... und kommt in der Lobbysuche als Eintrag an, der ueber den Code beitritt",
+      _ein155 is not None and _ein155["adresse"] == "thermal-underlying-providers-toe" and _ein155["online"]
+      and _ein155["name"] == "MAX" and _ein155["spieler"] == 3, str(_ein155))
+pruef("Unsinn aus dem Netz fliegt heraus (kein Code, kaputte Zahlen)",
+      _SV155.eintrag_aus_zeile({"code": ""}) is None
+      and _SV155.eintrag_aus_zeile({"code": "a-b-c-d", "spieler": "viele"}) is None
+      and _SV155.eintrag_aus_zeile("kaputt") is None)
+class _Antw155:
+    def __init__(s_, ok_, daten_=None, fehler_=""):
+        s_.ok, s_.daten, s_.fehler = ok_, daten_, fehler_
+    def __bool__(s_):
+        return s_.ok
+_s155 = _SV155.Suche(app, ohne_code="eigene-lobby-ist-hier")
+_s155._rest = 99.0
+_s155._auftrag.ergebnis = _Antw155(True, [_zeile155, dict(_zeile155, code="eigene-lobby-ist-hier")])
+_s155.schritt(0.01)
+pruef("Die Suche zeigt fremde Lobbys, die eigene nicht", len(_s155.liste()) == 1
+      and _s155.liste()[0]["adresse"] == "thermal-underlying-providers-toe", _s155.zustand)
+_s155._auftrag.ergebnis = _Antw155(False, None, 'RELATION "PUBLIC.LOBBY" DOES NOT EXIST')
+_s155.schritt(0.01)
+pruef("Fehlt die Tabelle noch, sagt die Suche das (docs/KONTO.md 5.9)",
+      "NICHT EINGERICHTET" in _s155.zustand, _s155.zustand)
+_aus155 = _SV155.Aushang(app)
+_aus155.schritt(1.0, lambda: {"name": "X"}, "", True)
+pruef("Ohne Online-Code (oder ohne Anmeldung) haengt niemand aus",
+      not _aus155._haengt and not _aus155._auftrag.laeuft)
+from dustfront import sitzung as _SZ155
+_ls155 = _SZ155.LobbySuche(app, None)
+_ls155.online._liste = [_ein155]
+_ls155.online._rest = 99.0
+_ls155.aufbauen()
+pruef("In MITSPIELEN steht die Lobby aus der Serverliste als Zeile zum Anklicken",
+      any(getattr(e_, "eintrag", {}).get("online") for e_ in _ls155.elemente))
+_ls155.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
+_ls155.verlassen()
+pruef("EINSTELLUNGEN > NETZ: IN DER SERVERLISTE (Vorgabe an)",
+      "serverliste" in __import__("dustfront.einstellungen", fromlist=["VORGABE"]).VORGABE)
 
 print()
 print("FEHLER:", fails or "keine")

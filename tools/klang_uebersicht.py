@@ -160,7 +160,10 @@ MITBENUTZT = (
     ("jagd_abprall", "buggy_aufprall", "Granate der Jagdkanone prallt von einer Wand ab (seit 0.34.154)"),
     ("stuetze_auf", "rammen", "Werfer setzt beim Aufbauen seine Stützen auf (seit 0.34.154)"),
     ("mg_heiss", "ueberhitzt", "Fahrzeug-MG überhitzt (seit 0.34.154)"),
-    ("waffe_abwurf", "buggy_tuer", "Gerufene Waffe landet am Schirm (seit 0.34.154)"),
+    ("kapsel_fall", "werfer_anflug", "Die Abwurfkapsel heult herab (seit 0.34.155)"),
+    ("kapsel_einschlag", "einschlag + buggy_aufprall", "Die Kapsel schlaegt ein (seit 0.34.155)"),
+    ("kapsel_auf", "knaller + aufheben", "Die Kapsel sprengt ihre Klappen ab (seit 0.34.155)"),
+    ("jagd_durch", "buggy_aufprall", "Die Jagdkanone schlaegt durch Blech (seit 0.34.155)"),
 )
 
 

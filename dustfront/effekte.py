@@ -269,7 +269,7 @@ class Fx:
             f = math.exp(-self.zaeh * dt)
             self.vx *= f
             self.vy *= f
-            if self.art != "brocken":
+            if self.art not in ("brocken", "klappe"):
                 self.vz *= f
         self.x += self.vx * dt
         self.y += self.vy * dt
@@ -288,7 +288,7 @@ class Fx:
                 self.vx *= 0.2
                 self.vy *= 0.2
                 self.dreh = 0.0
-                if self.art in ("brocken", "fetzen") and self.liegt > 0.0:
+                if self.art in ("brocken", "fetzen", "klappe") and self.liegt > 0.0:
                     # Gelandet: liegen bleiben, dann verblassen.
                     self.dauer = min(self.dauer, self.alter + self.liegt)
                     self.liegt = 0.0
@@ -344,6 +344,11 @@ def _zeichne(ziel, f: Fx, ex: float, ey: float) -> None:
         return
     x = f.x - ex
     y = f.y - ey - f.z
+    if f.art in ("kapsel_zu", "kapsel_offen", "klappe"):
+        # Die Abwurfkapsel der gerufenen Waffen (seit 0.34.155, kapsel.py).
+        from . import kapsel
+        kapsel.fx_zeichnen(ziel, f, x, y)
+        return
     if f.art == "rauch":
         r = f.r0 + (f.r1 - f.r0) * (1.0 - (1.0 - a) ** 2)
         s = ballen(int(r), f.palette, f.variante % 4)
@@ -1082,6 +1087,50 @@ def jagd_abprall(welt, pos, ebene: int, richtung: float) -> None:
     welt.klang("buggy_aufprall", 0.6, pygame.Vector2(x, y), ebene)
 
 
+def jagd_durch(welt, pos, ebene: int, code: float) -> None:
+    """Die Granate der Jagdkanone geht durch etwas hindurch (seit 0.34.155):
+    am Eintritt ein kurzer Schlag zurueck, am Austritt (`weite` dahinter) ein
+    groesserer Ausbruch in Flugrichtung. Bei Blech Funken, Splitter und ein
+    Rauchstoss, bei Koerpern Blut.
+    `code` = Blech (0/1) * 100000 + Weite * 1000 + Richtung."""
+    c = int(round(code))
+    metall = c >= 100000
+    weite = (c // 1000) % 100
+    richtung = float(c % 1000)
+    r = _rnd(pos, 16)
+    x, y = pos[0], pos[1]
+    w = math.radians(richtung)
+    ax, ay = x + math.cos(w) * weite, y + math.sin(w) * weite
+    if metall:
+        blitz(welt, x, y, 6, ebene, 16, 0.05)
+        funken(welt, r, x, y, 6, ebene, 6, 160.0, 0.2, farbe=(255, 214, 150),
+               richtung=richtung + 180.0, streuung=70.0, hoch=0.3)
+        blitz(welt, ax, ay, 6, ebene, 22, 0.06)
+        funken(welt, r, ax, ay, 6, ebene, 16, 300.0, 0.32, farbe=(255, 228, 170),
+               richtung=richtung, streuung=55.0, hoch=0.4)
+        brockenwurf(welt, r, ax, ay, 6, ebene, 4, 160.0, "metall", (1, 2), liegen=1.5)
+        rauch(welt, r, ax, ay, 6, ebene, "grau", 2, r.uniform(6, 9), 0.8,
+              vx=math.cos(w) * 60.0, vy=math.sin(w) * 60.0, vz=10.0, zaeh=2.6)
+        welt.klang("buggy_aufprall", 0.5, pygame.Vector2(x, y), ebene)
+    else:
+        for _ in range(4):
+            f = Fx("funke", x, y, r.uniform(4, 9), ebene, r.uniform(0.15, 0.3))
+            ww = math.radians(richtung + 180.0 + r.uniform(-40, 40))
+            v = r.uniform(60, 140)
+            f.vx, f.vy, f.vz = math.cos(ww) * v, math.sin(ww) * v, r.uniform(10, 40)
+            f.g = 300.0
+            f.farbe = K.C_BLUT
+            _neu(welt, f)
+        for _ in range(14):
+            f = Fx("funke", ax, ay, r.uniform(4, 10), ebene, r.uniform(0.25, 0.5))
+            ww = math.radians(richtung + r.uniform(-28, 28))
+            v = r.uniform(120, 300)
+            f.vx, f.vy, f.vz = math.cos(ww) * v, math.sin(ww) * v, r.uniform(10, 70)
+            f.g = 360.0
+            f.farbe = K.C_BLUT
+            _neu(welt, f)
+
+
 def mg_heiss(welt, pos, ebene: int, richtung: float) -> None:
     """Ein Fahrzeug-MG ist heiss gelaufen (seit 0.34.154): Rauch steigt vom
     Lauf auf, ein paar Funken."""
@@ -1091,6 +1140,11 @@ def mg_heiss(welt, pos, ebene: int, richtung: float) -> None:
         rauch(welt, r, x, y, 8, ebene, "grau", 2, r.uniform(5, 8), r.uniform(1.2, 1.8),
               vz=r.uniform(10, 22), zaeh=2.2, verzoegert=i * 0.25)
     funken(welt, r, x, y, 8, ebene, 6, 90.0, 0.25, farbe=(255, 190, 110), hoch=0.4)
+
+
+def _kapsel():
+    from . import kapsel
+    return kapsel
 
 
 def _seite_hoehe(radius: float) -> tuple:
@@ -1123,5 +1177,9 @@ ARTEN = {
     "heli_treffer": lambda w, p, e, r: heli_treffer(w, p, e, r),      # r = Hoehe (seit 0.34.127)
     "jagd_einschlag": lambda w, p, e, r: jagd_einschlag(w, p, e, r),  # r = Flugrichtung (seit 0.34.154)
     "jagd_abprall": lambda w, p, e, r: jagd_abprall(w, p, e, r),      # r = neue Richtung
+    "jagd_durch": lambda w, p, e, r: jagd_durch(w, p, e, r),          # r = Blech, Weite, Richtung (0.34.155)
     "mg_heiss": lambda w, p, e, r: mg_heiss(w, p, e, r),              # r = Laufrichtung
+    # Die Abwurfkapsel (seit 0.34.155, kapsel.py): r = kapsel.kodieren(Laenge, Seite, Winkel).
+    "kapsel_einschlag": lambda w, p, e, r: _kapsel().einschlag(w, p, e, r),
+    "kapsel_auf": lambda w, p, e, r: _kapsel().auf(w, p, e, r),
 }

@@ -996,6 +996,78 @@ Filtern zusammen wie die eigenen: Version, Art, Abbrueche.
 ein nachgebautes Supabase in einem lokalen PostgreSQL aus und prueft jede
 Funktion, die Sperre und den Zeilenschutz.
 
+### 5.9 Die Serverliste (seit 0.34.155)
+
+Unter MITSPIELEN stehen seit 0.34.155 neben den Lobbys im eigenen Netz alle
+Lobbys mit Online-Code, deren Gastgeber angemeldet ist und IN DER
+SERVERLISTE eingeschaltet hat (`dustfront/serverliste.py`). Dafuer braucht
+es **eine Tabelle** - einmal im SQL-Editor ausfuehren. Bis dahin steht in
+der Lobbysuche "SERVERLISTE NOCH NICHT EINGERICHTET", sonst aendert sich
+nichts.
+
+```sql
+-- Je Konto hoechstens eine ausgehaengte Lobby.
+create table if not exists public.lobby (
+  konto        uuid primary key default auth.uid()
+               references auth.users (id) on delete cascade,
+  code         text not null check (char_length(code) between 8 and 80
+                                    and code ~ '^[a-z0-9-]+$'),
+  name         text not null default '' check (char_length(name) <= 24),
+  version      text not null default '' check (char_length(version) <= 16),
+  spieler      int  not null default 1  check (spieler between 0 and 99),
+  hoechstens   int  not null default 9  check (hoechstens between 1 and 99),
+  lobby        boolean not null default true,
+  modus        text not null default '' check (char_length(modus) <= 24),
+  karte        text not null default '' check (char_length(karte) <= 24),
+  passwort     boolean not null default false,
+  aktualisiert timestamptz not null default now()
+);
+
+-- Die Uhr setzt der Server, nicht der Klient (dessen Uhr kann falsch gehen).
+create or replace function public.lobby_zeit() returns trigger
+language plpgsql as $$
+begin
+  new.aktualisiert := now();
+  return new;
+end $$;
+drop trigger if exists lobby_zeit on public.lobby;
+create trigger lobby_zeit before insert or update on public.lobby
+  for each row execute function public.lobby_zeit();
+
+alter table public.lobby enable row level security;
+
+-- Lesen darf jeder (auch ohne Anmeldung) - aber nur, was in den letzten
+-- 90 Sekunden erneuert wurde (K.ONLINE serverliste gilt). Die eigene Zeile
+-- sieht man immer: sonst scheitert das Erneuern einer veralteten Zeile.
+drop policy if exists "lobby lesen" on public.lobby;
+create policy "lobby lesen" on public.lobby for select to anon, authenticated
+  using (aktualisiert > now() - interval '90 seconds' or konto = auth.uid());
+
+-- Schreiben und loeschen nur die eigene Zeile.
+drop policy if exists "lobby eintragen" on public.lobby;
+create policy "lobby eintragen" on public.lobby for insert to authenticated
+  with check (konto = auth.uid());
+drop policy if exists "lobby aendern" on public.lobby;
+create policy "lobby aendern" on public.lobby for update to authenticated
+  using (konto = auth.uid()) with check (konto = auth.uid());
+drop policy if exists "lobby loeschen" on public.lobby;
+create policy "lobby loeschen" on public.lobby for delete to authenticated
+  using (konto = auth.uid());
+
+grant select on public.lobby to anon, authenticated;
+grant insert, update, delete on public.lobby to authenticated;
+```
+
+**Was dort steht:** Name, Version, Spieler und Plaetze, Lobby oder Runde,
+Spielart, Karte, ob ein Kennwort gilt, und der Online-Code - also genau das,
+was die LAN-Suche auch zeigt, plus der Code zum Beitreten. Das Kennwort
+selbst nie. Wer seine Lobby nicht fuer alle zeigen will, schaltet IN DER
+SERVERLISTE aus (EINSTELLUNGEN > NETZ) oder setzt ein Kennwort.
+
+**Aufraeumen:** nicht noetig. Geht eine Lobby zu, loescht das Spiel seine
+Zeile; stuerzt es ab, ist sie nach 90 Sekunden unsichtbar und wird beim
+naechsten Aushaengen desselben Kontos ueberschrieben.
+
 ## 6. Ohne Server
 
 Alles laeuft weiter, nur eben auf diesem Rechner:

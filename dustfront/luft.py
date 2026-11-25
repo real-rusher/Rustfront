@@ -92,8 +92,10 @@ class LuftTeil:
         liste = []
         hub = S["abwurf"]["bild_hub"]
         for ab in getattr(self, "abwuerfe", ()):
-            if getattr(ab, "gerissen", 0.0) > 0.0:
-                continue                 # der Schirm ist ab: er faellt, daran ist nichts mehr zu schiessen
+            if getattr(ab, "gerissen", 0.0) > 0.0 or str(getattr(ab, "art", "")).startswith("waffe_"):
+                # Der Schirm ist ab, oder es ist eine Kapsel (seit 0.34.155, eine
+                # halbe Sekunde im Fall): daran ist nichts zu schiessen.
+                continue
             liste.append(LuftZiel(ab, "abwurf", "team%d" % ab.team if ab.team >= 0 else "", ab.pos,
                                   max(0.0, ab.hoehe) * hub, 26.0, True, self._abwurf_treffer))
         for k in self.kaempfer.values():
@@ -138,6 +140,8 @@ class LuftTeil:
                 kandidaten.append((pygame.Vector2(w.pos.x, w.pos.y - K.HOCH_OBEN["hoehe"]), 14.0))
         if flak:
             for ab in getattr(self, "abwuerfe", ()):
+                if str(getattr(ab, "art", "")).startswith("waffe_"):
+                    continue
                 hoch = max(0.0, getattr(ab, "hoehe", 0.0)) * S["abwurf"]["bild_hub"]
                 kandidaten.append((pygame.Vector2(ab.pos.x, ab.pos.y - hoch), 26.0))
         fang = K.LUFT_ZIELEN["fang_extra"]

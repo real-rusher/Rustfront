@@ -1087,6 +1087,11 @@ NETZ = dict(
 # und was lokal lauscht, lauscht nur auf 127.0.0.1. Genau das loest weder
 # eine Freigabe im Router noch die Abfrage der Windows-Firewall aus.
 ONLINE = dict(
+    # Die Serverliste (seit 0.34.155, serverliste.py): alle `takt` s haengt ein
+    # Gastgeber seine Lobby neu aus; was `gilt` s nicht erneuert wurde, zeigt
+    # der Server nicht mehr (siehe docs/KONTO.md, Serverliste). Die Suche fragt
+    # alle `suche_takt` s und zeigt hoechstens `hoechstens` Lobbys.
+    serverliste=dict(takt=30.0, gilt=90, suche_takt=8.0, hoechstens=60),
     version="2026.10.0",      # die Fassung von cloudflared, die das Spiel laedt
     # Seit 0.34.150 nicht mehr im Spiel mitgeliefert (das waren 58 MB fuer
     # drei Systeme, von denen jeder eines braucht), sondern beim ersten
@@ -1364,10 +1369,13 @@ SCHLACHT = dict(
         # Schwere Waffen am Fallschirm (seit 0.34.154, gewuenscht: "ueber das
         # Stratagem-Menue callen, fuer Punkte als Airdrop"). Wer sie traegt,
         # laesst sie beim Tod fallen - jeder Mensch kann sie dann aufheben.
-        ("waffe_minigun", 4, "WAFFE: MINIGUN"),
-        ("waffe_flammenwerfer", 3, "WAFFE: FLAMMENWERFER"),
-        ("waffe_raketenbuendel", 5, "WAFFE: RAKETENBÜNDEL"),
-        ("waffe_panzerbuechse", 4, "WAFFE: PANZERBÜCHSE"),
+        # Seit 0.34.155 billiger (gewuenscht: "die sind ja schwaecher als
+        # Fahrzeuge, die aehnlich viel kosten") und mit dem Spulengewehr.
+        ("waffe_minigun", 3, "WAFFE: MINIGUN"),
+        ("waffe_flammenwerfer", 2, "WAFFE: FLAMMENWERFER"),
+        ("waffe_raketenbuendel", 3, "WAFFE: RAKETENBÜNDEL"),
+        ("waffe_panzerbuechse", 3, "WAFFE: PANZERBÜCHSE"),
+        ("waffe_spule", 3, "WAFFE: SPULENGEWEHR"),
     ),
     # FREISCHALTEN (seit 0.34.129, Regel der Runde): was man kaufen kann, kommt
     # in Stufen - nicht nach festen Minuten, sondern nach dem Spielverlauf,
@@ -1380,7 +1388,8 @@ SCHLACHT = dict(
                panzerwagen=1, flakwagen=1, funkwagen=1, fallschirmjaeger=1, napalm=1,
                panzer=2, jagdpanzer=2, spulenwagen=2, tragschrauber=2,
                werfer=3,
-               waffe_flammenwerfer=0, waffe_panzerbuechse=0, waffe_minigun=1, waffe_raketenbuendel=1),
+               waffe_flammenwerfer=0, waffe_panzerbuechse=0, waffe_minigun=1, waffe_raketenbuendel=1,
+               waffe_spule=1),
     freischalten=dict(
         schnell=dict(stufen=(0.05, 0.12, 0.22), hoechstens=(60, 150, 270)),
         normal=dict(stufen=(0.10, 0.22, 0.35), hoechstens=(120, 270, 450)),
@@ -1399,15 +1408,26 @@ SCHLACHT = dict(
                          panzerwagen="EINMAL, AUF FREIEM GELÄNDE", panzer="EINMAL, AUF FREIEM GELÄNDE",
                          fallschirmjaeger="FÜNF BOTS AM SCHIRM, IN FORMATION",
                          napalm="ZWEI KLICKS: START, DANN RICHTUNG",
-                         waffe_minigun="AM SCHIRM, BEIM TOD LIEGT SIE DA",
-                         waffe_flammenwerfer="AM SCHIRM, BEIM TOD LIEGT ER DA",
-                         waffe_raketenbuendel="AM SCHIRM, BEIM TOD LIEGT ES DA",
-                         waffe_panzerbuechse="AM SCHIRM, BEIM TOD LIEGT SIE DA"),
+                         waffe_minigun="IN DER KAPSEL, BEIM TOD LIEGT SIE DA",
+                         waffe_flammenwerfer="IN DER KAPSEL, BEIM TOD LIEGT ER DA",
+                         waffe_raketenbuendel="IN DER KAPSEL, BEIM TOD LIEGT ES DA",
+                         waffe_panzerbuechse="IN DER KAPSEL, BEIM TOD LIEGT SIE DA",
+                         waffe_spule="IN DER KAPSEL, BEIM TOD LIEGT ES DA"),
     # Gerufene Waffen (seit 0.34.154): mit wie viel Vorrat sie kommen (Anteil
     # vom vollen Vorrat der Waffe; das Magazin ist immer voll) und ob eine
-    # Munitionskiste sie nachfuellt - nein: sonst waere eine gekaufte Waffe
-    # mit ein paar Kisten fuer die ganze Runde da.
-    waffen_abwurf=dict(vorrat=1.0, kiste_fuellt=False),
+    # Munitionskiste sie nachfuellt.
+    # Seit 0.34.155 fuellen Kisten sie doch nach (gewuenscht).
+    waffen_abwurf=dict(vorrat=1.0, kiste_fuellt=True),
+    # Die Abwurfkapsel der gerufenen Waffen (seit 0.34.155, kapsel.py):
+    # so lange stehen die Fackeln, aus dieser Hoehe faellt sie mit diesem
+    # Anfangstempo und dieser Beschleunigung (zusammen gut 0,5 s), so lange
+    # steckt sie zu im Boden, so lange liegen Ring und Klappen. `groesse`:
+    # Laenge der Kapsel je Waffe (Pixel), `fuss`: wen sie beim Einschlag
+    # beiseitestoesst.
+    kapsel=dict(vorlauf=1.5, hoehe=520.0, tempo=380.0, beschl=2300.0, auf_nach=0.6,
+                liegen=9.0, fuss=16.0, groesse_vorgabe=28,
+                groesse=dict(minigun=30, raketenbuendel=30, panzerbuechse=34,
+                             flammenwerfer=28, spule=28)),
     # Napalm-Angriff (seit 0.34.101): ein Flugzeug, das man nicht sieht, nur
     # hoert, wirft entlang einer Bahn Napalm. Die Bahn ist immer gleich lang
     # (laenge_anteil der Kartenhoehe) - der zweite Klick gibt nur die
@@ -2753,7 +2773,7 @@ BOTS = dict(
                        bolzer=26.0, nagler=200.0, hammer=24.0, schockstab=22.0,
                        schlagring=16.0, kettensaege=20.0, wurfmesser=18.0, speer=44.0,
                        spule=330.0, kettenblitz=200.0, spiegellaser=260.0,
-                       kugelblitz=240.0, flammenwerfer=105.0),   # 0.34.143: Flamme 150 statt 130
+                       kugelblitz=240.0, flammenwerfer=190.0),   # 0.34.143: Flamme 150 statt 130; 0.34.155: 270
     # Wer ein MG hat, schiesst damit (seit 0.34.38): so viele Pixel
     # Abstand nimmt er hin, bevor er lieber die andere Waffe nimmt. Vorher
     # nahm der MG-Schuetze auf mittlere Weite das Sturmgewehr.
@@ -2767,7 +2787,7 @@ BOTS = dict(
                     bolzer=44.0, nagler=300.0, hammer=40.0, schockstab=36.0,
                     schlagring=26.0, kettensaege=32.0, wurfmesser=26.0, speer=62.0,
                     spule=330.0, kettenblitz=300.0, spiegellaser=330.0,
-                    kugelblitz=330.0, flammenwerfer=145.0),
+                    kugelblitz=330.0, flammenwerfer=255.0),
     # Womit ein Bot kaempfen kann (seit 0.34.70): alles ausser Wurf und C4,
     # die gehen ueber den Wurf (_werfen).
     kampf_arten=("schuss", "werfer", "rakete", "strahl", "kette", "kugel", "flamme",
@@ -3644,7 +3664,9 @@ MUNITION = dict(
             "revolver": 24, "zwillinge": 72, "mp": 96, "praezision": 30,
             "unterhebel": 28, "panzerbuechse": 6, "doppelflinte": 12,
             "autoschrot": 24, "minigun": 240, "granatwerfer": 6,
-            "einwegwerfer": 0, "raketenbuendel": 12},
+            "einwegwerfer": 0, "raketenbuendel": 12,
+            # Seit 0.34.155: ein Tank Vorrat, damit Kisten auch ihn fuellen.
+            "flammenwerfer": 240},
     kiste_takt=14.0,          # Sekunden zwischen zwei Munitionskisten
     kiste_hoechstens=4,
     kiste_gibt=0.5,           # so viel vom vollen Vorrat gibt eine Kiste
@@ -4491,10 +4513,12 @@ WAFFEN = {
         # Der Ziellaser verraet den Schuetzen, nach einem Fehlschuss ist er
         # lange wehrlos.
         # 0.34.73: 120 -> 70 gegen Figuren (zwei Treffer), gegen Fahrzeuge `fahrzeug_schaden`. Sie toetete auf 1600 px mit einem Schuss und war damit besser als der Scharfschuetze; gedacht ist sie gegen Fahrzeuge und grosse Gegner.
-        schaden=70.0,
+        # Seit 0.34.155 nur per Nachschub und dafuer staerker: 70 -> 95 gegen
+        # Figuren, gegen Fahrzeuge 220 -> 280, schneller geladen (3,2 -> 2,6 s).
+        schaden=95.0,
         takt=0.8,
         magazin=1,
-        nachladen=3.2,
+        nachladen=2.6,
         streuung=0.3,
         streuung_lauf=6.0,
         geschosse=1,
@@ -4511,7 +4535,7 @@ WAFFEN = {
         # weiter (gewuenscht: "penetriert ein paar Meter"); der Laser endet
         # am ersten Hindernis.
         durchdringen=80.0,
-        fahrzeug_schaden=220.0,   # 160 -> 220 (seit 0.34.95): Panzerabwehr soll wirken
+        fahrzeug_schaden=280.0,   # 160 -> 220 (seit 0.34.95), 280 seit 0.34.155 (nur Nachschub)
         gegen_fahrzeug=True,
         laser=True,
     ),
@@ -4564,9 +4588,11 @@ WAFFEN = {
         # Das Paket sagt "kein Nachladen": ein Gurt, der so lange haelt
         # wie ein Gefecht, und sein Wechsel dauert.
         # 0.34.73 (Balancing): 12 -> 9. Bei voller Drehzahl 300 Schaden je Sekunde, im Dauerfeuer 173 - fast doppelt so viel wie das Sturmgewehr.
-        schaden=9.0,
+        # Seit 0.34.155 nur per Nachschub und dafuer staerker: 9 -> 11, weiter
+        # (700 -> 820), schneller auf Drehzahl (1,5 -> 1,1 s).
+        schaden=11.0,
         tempo=950.0,
-        reichweite=700.0,
+        reichweite=820.0,
         magazin=240,
         nachladen=7.0,
         geschosse=1,
@@ -4575,7 +4601,7 @@ WAFFEN = {
         rueckstoss=2.0,
         takt=0.04,            # bei voller Drehzahl
         anlauf_takt=0.32,     # und am Anfang
-        anlauf=1.5,
+        anlauf=1.1,
         anlauf_abbau=2.2,
         streuung=6.0,
         streuung_lauf=4.0,
@@ -4642,12 +4668,14 @@ WAFFEN = {
         name="RAKETENBÜNDEL",
         # Sechs kleine, ungelenkte Raketen kurz nacheinander, die unruhig
         # fliegen: nah verheerend, auf Distanz wild gestreut.
-        schaden=38.0,
-        radius=40.0,
+        # Seit 0.34.155 nur per Nachschub und dafuer staerker: 38 -> 46, Radius
+        # 40 -> 48, gegen Blech 55 -> 72, schneller nachgeladen.
+        schaden=46.0,
+        radius=48.0,
         eigen_anteil=0.5,
         takt=1.4,
         magazin=6,
-        nachladen=3.6,
+        nachladen=3.0,
         salve=6,
         salve_takt=0.11,
         tempo=300.0,
@@ -4666,7 +4694,7 @@ WAFFEN = {
         # Seit 0.34.95 kleine Hohlladungen (vorher Spreng, gegen Blech
         # schwach): eine ganze Salve nimmt einem Panzerwagen fast alles.
         schadensart="hohlladung",
-        fahrzeug_schaden=55.0,
+        fahrzeug_schaden=72.0,
     ),
 
     # ── Gegen Fahrzeuge (seit 0.34.65) ─────────────────────────────────
@@ -4956,8 +4984,10 @@ KLASSEN = {
                        wuerfe=("rauch", "blend", "granate"), aufhelfen=0.6, medkits=1,
                        faehigkeit=(("sanitasche", 20.0),)),
     "unterstuetzer": dict(name="UNTERSTÜTZER", text="Schwere Waffen, Munitionskiste, Selbstschussanlage",
+                          # Minigun und Raketenbuendel seit 0.34.155 nur per
+                          # Nachschub - fuer den Spezialplatz der Granatwerfer.
                           waffen=("lmg", "sturm", "autoschrot", "repetierer", "minigun",
-                                  "raketenbuendel"),
+                                  "raketenbuendel", "granatwerfer"),
                           plaetze=("haupt", "seite", "spezial"),
                           wuerfe=("granate", "rauch", "kuller"), tempo=0.94, leben=1.1,
                           faehigkeit=(("munitionskiste", 30.0), ("geschuetz", 60.0))),
@@ -4983,8 +5013,10 @@ KLASSEN = {
                       wuerfe=("granate", "kuller", "gas", "molotov"), granaten=1,
                       faehigkeit=(("sandsackwand", 35.0),)),
     "flammentrupp": dict(name="FLAMMENTRUPP", text="Feuer und Nahdistanz, haelt Feuer besser aus",
+                         # Der Flammenwerfer seit 0.34.155 nur per Nachschub -
+                         # fuer den Spezialplatz die Einwegrakete.
                          waffen=("doppelflinte", "schrot", "autoschrot", "repetierer",
-                                 "flammenwerfer"),
+                                 "flammenwerfer", "einwegwerfer"),
                          plaetze=("haupt", "seite", "spezial"),
                          wuerfe=("molotov", "gas", "rauch"), feuer=0.4, leben=1.1,
                          faehigkeit=(("kanister", 25.0),)),
@@ -5000,7 +5032,7 @@ KLASSEN = {
                         # seit 0.34.99 haerter und schneller zu.
                         nahkampf=1.4, nahkampf_takt=0.75,
                         waffen=("schrot", "doppelflinte", "autoschrot", "mp", "revolver",
-                                "zwillinge", "flammenwerfer"),
+                                "zwillinge", "flammenwerfer", "einwegwerfer"),
                         plaetze=("haupt", "seite", "spezial"),
                         wuerfe=("rauch", "blend", "schneeball"), leben=1.25, tempo=1.05,
                         faehigkeit=(("stacheldraht", 30.0),)),
@@ -5166,9 +5198,12 @@ ENERGIE_PAKET = {
         # Seit 0.34.135 noch einmal schwaecher (gemeldet: "die Chor-Waffe, die
         # durch Waende schiesst, ist zu stark"): 95 -> 75 Schaden, jede Mauer
         # kostet 60 statt 40 Prozent, laenger laden.
-        schaden=75.0, ladezeit=2.4, mindest=0.25, reichweite=760.0,
-        wand_verlust=0.6, koerper_verlust=0.35,
-        takt=0.9, magazin=3, nachladen=5.5, kuehlt=True, abkuehlen=3.4, ueberhitzt=7.5,
+        # Seit 0.34.155 nur per Nachschub und dafuer wieder stark: 75 -> 115,
+        # schneller geladen (2,4 -> 1,7 s), Mauern kosten 45 statt 60 Prozent,
+        # vier Schuss, weiter (760 -> 900).
+        schaden=115.0, ladezeit=1.7, mindest=0.25, reichweite=900.0,
+        wand_verlust=0.45, koerper_verlust=0.3,
+        takt=0.9, magazin=4, nachladen=5.5, kuehlt=True, abkuehlen=3.4, ueberhitzt=7.5,
         tempo_beim_laden=0.55, kamera=5.0, rueckstoss=60.0, huelsen=0,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
         klang="schuss_spule", muendung=1.2, schadensart="panzerbrechend"),
@@ -5214,7 +5249,9 @@ ENERGIE_PAKET = {
         # ein bisschen mehr vom Boden anzuenden"): 150 statt 130 weit,
         # brennende Flecken doppelt so oft und nicht nur am Ende, sondern
         # entlang der Flamme (ab `streifen_ab` ihrer Laenge), etwas groesser.
-        flamme=True, schaden=4.5, reichweite=150.0, winkel=24.0,
+        # Seit 0.34.155 nur per Nachschub (gewuenscht: "die Reichweite stark
+        # erhoehen"): 150 -> 270 weit, 4,5 -> 5,5 je Zug.
+        flamme=True, schaden=5.5, reichweite=270.0, winkel=24.0,
         takt=0.06, magazin=120, nachladen=4.2,
         streuung=0.0, streuung_lauf=0.0, geschosse=1, tempo=1.0,
         rueckstoss=0.0, kamera=0.4, huelsen=0, muendung=0.0,
@@ -5521,8 +5558,10 @@ ZEICHNEN_RAND = 200
 
 
 def alles_waffen() -> list:
-    """Alle Waffen von "jeder hat alles", Gruppe fuer Gruppe."""
-    return [w for _name, waffen in ALLES_GRUPPEN for w in waffen if w in WAFFEN]
+    """Alle Waffen von "jeder hat alles", Gruppe fuer Gruppe - seit 0.34.155
+    ohne die, die es nur per Nachschub gibt (LOADOUT nur_nachschub)."""
+    return [w for _name, waffen in ALLES_GRUPPEN for w in waffen
+            if w in WAFFEN and w not in LOADOUT["nur_nachschub"]]
 
 
 # Werkzeuge auf C fuer alle (seit 0.34.85): in "jeder hat alles" legt jeder
@@ -5565,18 +5604,25 @@ LOADOUT = dict(
     # Woraus gewaehlt werden darf. Bewusst als eigene Listen und nicht
     # aus WAFFEN abgeleitet: was waehlbar ist, ist eine Spielentscheidung
     # und nicht dasselbe wie das, was es gibt.
+    # Seit 0.34.155 ohne Minigun, Panzerbuechse, Raketenbuendel, Spulengewehr
+    # und Flammenwerfer: die gibt es nur noch aus dem Nachschub (`nur_nachschub`).
     auswahl_waffen=("repetierer", "sturm", "schrot", "scharf", "lmg",
                     # Aus dem Waffenpaket (seit 0.34.62)
                     "revolver", "zwillinge", "mp", "praezision", "unterhebel",
-                    "panzerbuechse", "doppelflinte", "autoschrot", "minigun",
-                    "granatwerfer", "einwegwerfer", "raketenbuendel",
+                    "doppelflinte", "autoschrot",
+                    "granatwerfer", "einwegwerfer",
                     # Nahkampf und Werkzeug (seit 0.34.66)
                     "bolzer", "nagler",
                     # Hammer, Schockstab, Schlagring, Kettensaege, Wurfmesser
                     # und Speer liegen seit 0.34.96 auf F (NAHKAMPF waehlbar).
-                    # Energie und Feuer (seit 0.34.68)
-                    "spule", "kettenblitz", "spiegellaser", "kugelblitz",
-                    "flammenwerfer"),
+                    # Energie (seit 0.34.68)
+                    "kettenblitz", "spiegellaser", "kugelblitz"),
+    # Nur per Nachschub (seit 0.34.155, gewuenscht: "welche Waffen so stark
+    # sind, dass man sie ueber das Stratagem-Menue callen kann"): in keinem
+    # Loadout und nicht in JEDER HAT ALLES. Ein gespeicherter Satz, der eine
+    # davon hatte, bekommt beim Laden einfach die naechste Waffe der Klasse
+    # fuer diesen Platz (konto.loadout_saeubern) - ohne weitere Folgen.
+    nur_nachschub=("minigun", "panzerbuechse", "raketenbuendel", "spule", "flammenwerfer"),
     auswahl_wuerfe=("granate", "rauch", "molotov", "blend", "c4",
                     # Gegen Fahrzeuge (seit 0.34.65)
                     "haftladung", "emp",

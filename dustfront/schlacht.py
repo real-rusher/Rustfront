@@ -31,6 +31,7 @@ import pygame
 
 from . import config as K
 from . import fahrzeug as fahrzeug_modul
+from . import kapsel as kapsel_modul
 from .font import SCHRIFT
 
 S = K.SCHLACHT
@@ -199,6 +200,7 @@ class SchlachtTeil:
     def _schlacht_anlegen(self) -> None:
         self.dropzonen: list = []
         self.abwuerfe: list = []
+        self.kapseln: list = []       # [Ort, Ebene, Art, Rest bis zum Aufsprengen, Code] (seit 0.34.155)
         self.ueberfluege: list = []
         self.luftangriffe: list = []
         self._napalm_start = None
@@ -212,6 +214,7 @@ class SchlachtTeil:
         fallen gleich alle (kurzer Vorlauf)."""
         self.dropzonen = []
         self.abwuerfe = []
+        self.kapseln = []
         self.ueberfluege = []
         self.luftangriffe = []
         self.verstaerkung_weg()
@@ -309,10 +312,26 @@ class SchlachtTeil:
                 zone.rest -= dt
                 if zone.rest <= 0.0:
                     zone.rest = 0.0
-                    self.abwuerfe.append(Abwurf(zone))
-                    self.welt.klang("anflug", 0.6, zone.pos, 0)
+                    ab = Abwurf(zone)
+                    if kapsel_modul.ist_kapsel(ab.art):
+                        # Die Kapsel (seit 0.34.155) faellt senkrecht und zu schnell, um
+                        # auszuweichen: ihre Landestelle steht gleich fest.
+                        ab.hoehe = kapsel_modul.daten()["hoehe"]
+                        stelle = self.freie_landestelle(ab.art, ab.pos, ab.winkel, ab)
+                        if stelle is not None:
+                            ab.pos.update(stelle)
+                        self.welt.klang("werfer_anflug", 0.8, ab.pos, 0)
+                    else:
+                        self.welt.klang("anflug", 0.6, zone.pos, 0)
+                    self.abwuerfe.append(ab)
         for ab in list(self.abwuerfe):
             ab.alter += dt
+            if kapsel_modul.ist_kapsel(ab.art):
+                ab.hoehe = kapsel_modul.hoehe(ab.alter)
+                if ab.hoehe <= 0.0:
+                    self.abwuerfe.remove(ab)
+                    self._kapsel_landet(ab)
+                continue
             if ab.gerissen > 0.0:
                 ab.gerissen += dt
                 F = K.FLAK
@@ -324,6 +343,7 @@ class SchlachtTeil:
             if ab.hoehe <= 0.0:
                 self.abwuerfe.remove(ab)
                 self._abwurf_landet(ab)
+        self._kapseln_schritt(dt)
         self._springer_schritt(dt)
         for la in list(getattr(self, "luftangriffe", ())):
             self._luftangriff_schritt(la, dt)
@@ -473,6 +493,39 @@ class SchlachtTeil:
             if hasattr(k, "schaden"):
                 k.schaden(a["quetschen"], richtung * a["stoss"])
 
+    # ---- Die Abwurfkapsel der gerufenen Waffen (seit 0.34.155, kapsel.py) -----
+    def _kapsel_landet(self, ab: Abwurf) -> None:
+        """Sie schlaegt ein: wer drunter steht, wird beiseitegestossen; der
+        Einschlag ist ein Effekt (der Gast sieht ihn genauso), und nach
+        `auf_nach` Sekunden sprengt sie auf (_kapseln_schritt)."""
+        d = kapsel_modul.daten()
+        unten = self.welt.oberste_ebene(ab.pos)
+        if not self.landeplatz_frei(ab.art, ab.pos, ab.winkel, ab):
+            stelle = self.freie_landestelle(ab.art, ab.pos, ab.winkel, ab)
+            if stelle is not None:
+                ab.pos.update(stelle)
+        self.wegstossen(ab.pos, d["fuss"], ebene=unten)
+        code = kapsel_modul.kodieren(kapsel_modul.groesse(ab.art), ab.team, ab.winkel)
+        self.welt.explosion(pygame.Vector2(ab.pos), unten, code, "kapsel_einschlag")
+        self.__dict__.setdefault("kapseln", []).append(
+            [pygame.Vector2(ab.pos), unten, ab.art, d["auf_nach"], code])
+        if ab.zone in self.dropzonen:
+            self.dropzonen.remove(ab.zone)
+
+    def _kapseln_schritt(self, dt: float) -> None:
+        """Steckt eine Kapsel lange genug, sprengt sie auf: die Waffe liegt da,
+        mit vollem Magazin und Vorrat."""
+        from .mehrspieler import KampfBeute
+        for kp in list(self.__dict__.get("kapseln", ())):
+            kp[3] -= dt
+            if kp[3] > 0.0:
+                continue
+            self.kapseln.remove(kp)
+            pos, ebene, art, _rest, code = kp
+            self.welt.explosion(pygame.Vector2(pos), ebene, code, "kapsel_auf")
+            self.welt.dazu(KampfBeute(pygame.Vector2(pos), art, ebene, self.kaempfer,
+                                      inhalt=KampfBeute.volle_ladung(art[6:])))
+
     def _abwurf_landet(self, ab: Abwurf) -> None:
         from .entities import wolke
         w = self.welt
@@ -491,15 +544,6 @@ class SchlachtTeil:
                 if not w.frei(p, 8.0, unten):
                     p = pygame.Vector2(ab.pos)     # nie in eine Mauer
                 w.dazu(KampfBeute(p, ab.art, unten, self.kaempfer))
-            if zone in self.dropzonen:
-                self.dropzonen.remove(zone)
-            return
-        if ab.art.startswith("waffe_"):
-            # Eine gerufene Waffe (seit 0.34.154): liegt da, bis ein Mensch
-            # darueber laeuft - mit vollem Magazin und Vorrat.
-            from .mehrspieler import KampfBeute
-            w.dazu(KampfBeute(pygame.Vector2(ab.pos), ab.art, unten, self.kaempfer,
-                              inhalt=KampfBeute.volle_ladung(ab.art[6:])))
             if zone in self.dropzonen:
                 self.dropzonen.remove(zone)
             return
@@ -978,7 +1022,9 @@ class SchlachtTeil:
                                                  k.team, k.fraktion, von=k))
             return ""
         zone = Dropzone(punkt, k.team, was, 0.0, einmalig=True)
-        zone.rest = S["abwurf"]["vorlauf_kauf"]
+        # Eine Kapsel (gerufene Waffe, seit 0.34.155) kommt viel schneller.
+        zone.rest = (kapsel_modul.daten()["vorlauf"] if kapsel_modul.ist_kapsel(was)
+                     else S["abwurf"]["vorlauf_kauf"])
         self.dropzonen.append(zone)
         return ""
 
@@ -1026,6 +1072,7 @@ class SchlachtTeil:
                 a = Abwurf(z)
                 a.hoehe = float(e[2])
                 a.alter = float(e[6])
+                a.empfangen = self._zeit_jetzt()      # die Kapsel faellt dazwischen weiter (0.34.155)
                 a.gerissen = float(e[7]) if len(e) > 7 else 0.0
                 abw.append(a)
             except (TypeError, ValueError, IndexError):
@@ -1293,6 +1340,16 @@ class SchlachtTeil:
         a = S["abwurf"]
         for ab in self.abwuerfe:
             boden = ab.pos - ecke
+            if kapsel_modul.ist_kapsel(ab.art):
+                # Die Abwurfkapsel (seit 0.34.155): ihre Hoehe folgt aus dem Alter -
+                # beim Gast zaehlt es zwischen zwei Meldungen weiter, sonst
+                # stuende sie bei 30 Meldungen je Sekunde in Stufen von 30 px.
+                alter = ab.alter
+                if not self.ist_gastgeber:
+                    alter += max(0.0, min(0.2, self._zeit_jetzt() - getattr(ab, "empfangen", self._zeit_jetzt())))
+                kapsel_modul.flug_zeichnen(ziel, boden, kapsel_modul.hoehe(alter) * a["bild_hub"],
+                                           kapsel_modul.groesse(ab.art), ab.team, alter, self._zeit_jetzt())
+                continue
             hoch = max(0.0, ab.hoehe)
             anteil = 1.0 - min(1.0, hoch / a["hoehe"])
             # Schatten.
@@ -1580,8 +1637,11 @@ class SchlachtTeil:
     @staticmethod
     def _zeilen_schritt() -> int:
         # Seit 0.34.154 (mit den Waffen 19 Eintraege) enger, sobald 15 nicht
-        # mehr passen - sonst rutschen Hilfe und ADMIN unter den Rand.
-        return 15 if len(S["belohnungen"]) <= 15 else 12
+        # mehr passen - sonst rutschen Hilfe und ADMIN unter den Rand. Seit
+        # 0.34.155 aus dem Platz gerechnet: von y 62 bis ueber die Stand-Zeile
+        # (GAME_H - 36) muessen alle Zeilen, die Hilfe (14) und ADMIN (16) passen.
+        platz = K.GAME_H - 36 - 62 - 30
+        return max(10, min(15, platz // max(1, len(S["belohnungen"]))))
 
     @classmethod
     def _belohnung_zeile(cls, i: int) -> pygame.Rect:

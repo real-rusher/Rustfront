@@ -29,6 +29,7 @@ from . import config as K
 from . import lan
 from . import netz
 from . import online
+from . import serverliste
 from . import ui
 from .font import SCHRIFT
 from .menues import Menue, _mitte
@@ -197,8 +198,13 @@ class LobbyZeile(ui.Knopf):
             art += " - " + e["karte"]
         SCHRIFT.zeichnen(ziel, ui.kuerzen(art, 190), r.x + 150, y,
                          K.C_TEAL if e["lobby"] else K.C_AMBER, 1)
+        rechts = r.right - 10
+        if e.get("online"):
+            # Aus der Serverliste (seit 0.34.155), nicht aus dem eigenen Netz.
+            SCHRIFT.zeichnen(ziel, "ONLINE", rechts, y, K.C_TEAL, 1, 1, "rechts")
+            rechts -= 44
         if e["passwort"]:
-            SCHRIFT.zeichnen(ziel, "KENNWORT", r.right - 10, y, K.C_MUTED, 1,
+            SCHRIFT.zeichnen(ziel, "KENNWORT", rechts, y, K.C_MUTED, 1,
                              1, "rechts")
 
 
@@ -221,6 +227,12 @@ class LobbySuche(Menue):
         # und auch die kann unter Windows die Firewall-Abfrage ausloesen.
         self.sucher = (lan.Sucher(ohne=eigen.kennung if eigen is not None else "")
                        if _wahl(app, "lan_offen") else None)
+        # Die Serverliste (seit 0.34.155): alle Lobbys mit Online-Code, die
+        # aushaengen - immer, sie braucht keine Firewall-Abfrage.
+        eigener_code = ""
+        if gefecht is not None and getattr(gefecht, "ist_gastgeber", False):
+            eigener_code = getattr(gefecht.gastgeber, "code", "") or ""
+        self.online = serverliste.Suche(app, ohne_code=eigener_code)
         self._stand = None          # woran die Liste zuletzt gebaut wurde
         self.tippt = -1             # welches Textfeld dran ist, -1 = keines
         self._verbinde: tuple[str, str] | None = None
@@ -234,7 +246,10 @@ class LobbySuche(Menue):
 
     # ---- Aufbau -------------------------------------------------------
     def _liste(self) -> list[dict]:
-        return self.sucher.liste() if self.sucher is not None else []
+        """Erst die Lobbys im eigenen Netz, dann die aus der Serverliste."""
+        lan_liste = self.sucher.liste() if self.sucher is not None else []
+        online_liste = self.online.liste() if getattr(self, "online", None) is not None else []
+        return lan_liste + online_liste
 
     def aufbauen(self) -> None:
         r = self.tafel
@@ -252,7 +267,8 @@ class LobbySuche(Menue):
             elif e["spieler"] >= e["hoechstens"]:
                 grund = "VOLL"
             neu.append(LobbyZeile((bx, y + i * 22, bw, 19), e, grund))
-        y = r.y + 44 + ZEILEN * 22 + 4
+        # Darunter eine Zeile fuer den Stand der Serverliste (seit 0.34.155).
+        y = r.y + 44 + ZEILEN * 22 + 14
         konto = self.app._konto
         angemeldet = konto is not None and konto.angemeldet
         neu.append(ui.Textfeld((bx, y, bw - 96, 17), "CODE", "adresse",
@@ -303,6 +319,8 @@ class LobbySuche(Menue):
             f.schritt(dt)
         if self.sucher is not None:
             self.sucher.schritt(dt)
+        if self.online is not None:
+            self.online.schritt(dt)
         self._zugang_fuehren()
         stand = tuple((e["adresse"], e["spieler"], e["lobby"], e["modus"],
                        e["version"], e["passwort"]) for e in self._liste())
@@ -371,6 +389,8 @@ class LobbySuche(Menue):
         self._name_merken()
         if self.sucher is not None:
             self.sucher.schliessen()
+        if self.online is not None:
+            self.online.schliessen()
         if self._zugang is not None:
             self._zugang.schliessen()
             self._zugang = None
@@ -440,6 +460,9 @@ class LobbySuche(Menue):
         SCHRIFT.zeichnen(ziel, ui.kuerzen(eigen, r.width - 140), r.x + 18,
                          r.y + 30, K.C_AMBER if g is not None and g.ist_gastgeber
                          and g.gastgeber.code else K.C_MUTED, 1)
+        if self.online is not None:
+            SCHRIFT.zeichnen(ziel, ui.kuerzen("SERVERLISTE: " + self.online.zustand, r.width - 40),
+                             r.x + 18, r.y + 44 + ZEILEN * 22 + 2, K.C_MUTED_DK, 1)
         if not self._liste():
             y = r.y + 44 + 22
             if self.sucher is None:

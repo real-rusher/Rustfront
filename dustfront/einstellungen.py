@@ -83,6 +83,8 @@ VORGABE = {
     # muss sie auf allen Netzkarten lauschen, und genau das loest unter
     # Windows die Abfrage der Firewall aus.
     "online_lobby": True,
+    # Seit 0.34.155: die eigene Lobby (mit Code, angemeldet) in der Serverliste.
+    "serverliste": True,
     "lan_offen": False,
     # Die Rundentafel zeigt erst die einfache Ansicht (regeln.EINFACH).
     # Wer einmal ERWEITERT gewaehlt hat, bekommt sie beim naechsten Mal

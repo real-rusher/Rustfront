@@ -539,6 +539,11 @@ HILFE = {
         "UNTER MITSPIELEN EINGIBT, KOMMT ÜBER DAS INTERNET HEREIN - OHNE",
         "ROUTER- ODER FIREWALL-EINSTELLUNG (ÜBER CLOUDFLARE, TOOLS/CLOUDFLARED).",
     ],
+    "serverliste": [
+        "DEINE LOBBY STEHT FÜR ALLE IN DER SERVERLISTE (UNTER MITSPIELEN),",
+        "SOLANGE SIE EINEN ONLINE-CODE HAT UND DU ANGEMELDET BIST. WER SIE",
+        "DORT ANKLICKT, KOMMT HEREIN - FÜR FREUNDE ALLEIN: KENNWORT SETZEN.",
+    ],
     "lan_offen": [
         "DEINE LOBBY STEHT BEI ANDEREN IM SELBEN NETZ IN DER LISTE, UND DU",
         "SIEHST DEREN LOBBYS. DAFÜR FRAGT WINDOWS BEIM ERSTEN MAL NACH",
@@ -700,7 +705,9 @@ class Einstellungen(Menue):
         self.elemente += [
             ui.Schalter(self._reihe(zx, zy, zw, 0), "ONLINE-LOBBY",
                         "online_lobby", o["online_lobby"]),
-            ui.Schalter(self._reihe(zx, zy, zw, 1), "IM LAN SICHTBAR",
+            ui.Schalter(self._reihe(zx, zy, zw, 1), "IN DER SERVERLISTE",
+                        "serverliste", o["serverliste"]),
+            ui.Schalter(self._reihe(zx, zy, zw, 2), "IM LAN SICHTBAR",
                         "lan_offen", o["lan_offen"]),
         ]
 

@@ -4514,6 +4514,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         self.gastgeber.annehmen()
         if self.ansager is not None:
             self.ansager.schritt(self._ansage)
+        self._aushang_fuehren(dt)
 
         for nummer, nachricht in self.gastgeber.holen():
             art = nachricht.get("t")
@@ -4697,6 +4698,22 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 # sonst, damit ein spaeter kommender Gast keine alten
                 # Explosionen sieht.
                 self._wirkung = []
+
+    def _aushang_fuehren(self, dt: float) -> None:
+        """Die eigene Lobby in der Serverliste (seit 0.34.155, serverliste.py):
+        nur mit Online-Code, angemeldet und eingeschaltet. Der Testmodus und die
+        Pruefungen (ohne Tunnel) haengen nie aus."""
+        code = getattr(self.gastgeber, "code", "") or ""
+        if not code and self.__dict__.get("aushang") is None:
+            return
+        from . import serverliste
+        if self.__dict__.get("aushang") is None:
+            self.aushang = serverliste.Aushang(self.app)
+        try:
+            an = bool(self.app.opt["serverliste"])
+        except (KeyError, TypeError, AttributeError):
+            an = True
+        self.aushang.schritt(dt, self._ansage, code, an)
 
     def _ansage(self) -> dict:
         """Was die Lobbysuche ueber diese Runde erfaehrt (lan.py).
@@ -9802,6 +9819,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         if self.ansager is not None:
             self.ansager.schliessen()
             self.ansager = None
+        aushang = self.__dict__.get("aushang")
+        if aushang is not None:
+            aushang.schliessen()          # aus der Serverliste (seit 0.34.155)
+            self.aushang = None
         if self.ist_gastgeber:
             self.gastgeber.schliessen()
         elif self.gast is not None:
