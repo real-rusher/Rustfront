@@ -6990,8 +6990,10 @@ pruef("Ein Boss aber nicht - ihn zu suchen gehoert dazu",
       boss.pos == boss_vorher)
 w6.verlassen(); g6.verlassen()
 
-# Fernkampf und Platzen.
-w7, g7 = gefechtspaar("pve")
+# Fernkampf und Platzen. Mit festem Seed (seit 0.34.155): gefechtspaar nimmt
+# sonst 20240 + Port, und je nachdem, welcher Port frei war, stand der Speier
+# hinter einer Mauer und konnte gar nicht spucken (in 23 von 90 Seeds).
+w7, g7 = gefechtspaar("pve", seed=20241)
 ziel_k = [k for k in w7.kaempfer.values() if k.lebt][0]
 sp = KampfGegner(ziel_k.pos + pygame.Vector2(200, 0), "speier", ziel_k.ebene, w7)
 w7.welt.dazu(sp)
