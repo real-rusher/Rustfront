@@ -853,6 +853,75 @@ def szene_krad(tm, rnd):
             [b], lambda: uhr["t"] > 11.0, 13, 1.0, jedes_bild)
 
 
+def szene_kapsel(tm, rnd):
+    """Seit 0.34.155: die Abwurfkapsel der gerufenen Waffen. Drei Kapseln
+    nacheinander (Panzerbuechse und Flammenwerfer fuer ROT, eine Minigun fuer
+    BLAU): Fackeln, Fall mit Feuerschweif, Einschlag, Dampf, die Klappen
+    fliegen ab. Dann laeuft ein Soldat zum Flammenwerfer, nimmt ihn auf und
+    zeigt die neue Reichweite."""
+    tx, ty, zelle = _feld_offen(tm, rnd, 28, 14)
+    blick = _Blick(zelle(13, 7.5))
+    kapseln = [(0.3, "waffe_panzerbuechse", zelle(10, 6), 0),
+               (2.0, "waffe_minigun", zelle(17, 5), 1),
+               (3.6, "waffe_flammenwerfer", zelle(14, 10), 0)]
+    soldat = tm.puppe_setzen(zelle(9, 10), 0, {"team": 0, "waffe_figur": "sturm"}, name="SOLDAT")
+    uhr = {"t": 0.0, "gesetzt": 0}
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        t = uhr["t"]
+        while uhr["gesetzt"] < len(kapseln) and t >= kapseln[uhr["gesetzt"]][0]:
+            _ab, art, ort, team = kapseln[uhr["gesetzt"]]
+            zone = tm.nachschub_setzen(art, ort, {"team": team})
+            zone.rest = K.SCHLACHT["kapsel"]["vorlauf"]       # wie im Spiel, nicht wie im Testmodus
+            uhr["gesetzt"] += 1
+        ziel = kapseln[2][2]
+        if 7.0 < t and soldat.waffe_name != "flammenwerfer":
+            weg = ziel - soldat.pos
+            _steuern(tm, soldat, (weg.normalize() if weg.length() > 2 else (0, 0)), ziel)
+        elif soldat.waffe_name == "flammenwerfer":
+            ziel_feuer = soldat.pos + pygame.Vector2(300, -40)
+            _steuern(tm, soldat, (0, 0), ziel_feuer, feuert=(t % 2.4) < 1.6)
+        else:
+            _steuern(tm, soldat, (0, 0), blick.pos)
+
+    # Zoom unter 1 heisst naeher heran (0,65: die Kapseln gross im Bild).
+    return ("Abwurfkapsel: Fall, Einschlag, Klappen fliegen ab - dann der Flammenwerfer",
+            [blick], lambda: uhr["t"] > 14.0, 16, 0.65, jedes_bild)
+
+
+def szene_jagdkanone(tm, rnd):
+    """Seit 0.34.155: die Jagdkanone. Erst ein Schuss durch eine Figur, einen
+    Buggy und noch eine Figur - mit Ein- und Austritt -, der im Panzerwagen
+    stecken bleibt (kein Abprall an schwerem Blech). Dann schiesst ein
+    zweiter Jagdpanzer flach an eine Mauer: die Granate prallt einmal ab."""
+    tx, ty, zelle = _feld_offen(tm, rnd, 20, 12)
+    e = tm.welt.ebene(0)
+    # Die Mauer unten im Bild: der zweite Schuss trifft sie flach (25 Grad).
+    for x in range(6, 20):
+        e.setzen(tx + x, ty + 11, K.WAND)
+    tm.welt._raster_bauen()
+    jp1, f1 = _fahrer_in(tm, "jagdpanzer", zelle(2, 4), 0.0)
+    jp2, f2 = _fahrer_in(tm, "jagdpanzer", zelle(2, 8), 25.0)
+    for i, x in enumerate((7, 14)):
+        tm.puppe_setzen(zelle(x, 4), 0, {"team": 1, "waffe_figur": "sturm"}, name="ZIEL %d" % (i + 1))
+    tm.fahrzeug_setzen("buggy", zelle(11, 4), 0, {"winkel": 90})
+    tm.fahrzeug_setzen("panzerwagen", zelle(18, 3), 0, {"winkel": 90})
+    blick = _Blick(zelle(10, 6))
+    uhr = {"t": 0.0}
+    jp1.takt["kanone"] = 0.0
+    jp2.takt["kanone"] = 0.0
+
+    def jedes_bild():
+        uhr["t"] += 1.0 / BILDER_JE_SEKUNDE
+        t = uhr["t"]
+        _steuern(tm, f1, (0, 0), jp1.pos + jp1.vorn * 600, feuert=1.2 < t < 1.3)
+        _steuern(tm, f2, (0, 0), jp2.pos + jp2.vorn * 600, feuert=5.0 < t < 5.1)
+
+    return ("Jagdkanone: durch Figur, Buggy, Figur - stecken im Panzerwagen; Abprall an der Mauer",
+            [blick], lambda: uhr["t"] > 8.5, 11, 1.0, jedes_bild)
+
+
 SZENEN = {
     "duell": ("1_goap_gegen_klassisch", szene_duell),
     "flanke": ("2_flanke_und_niederhalten", szene_flanke),
@@ -883,6 +952,8 @@ SZENEN = {
     "flak": ("27_flak_leuchtspur", szene_flak),
     "krad": ("28_krad_beifahrer", szene_krad),
     "heli_absturz": ("29_tragschrauber_absturz", szene_heli_absturz),
+    "kapsel": ("30_abwurfkapsel", szene_kapsel),
+    "jagdkanone": ("31_jagdkanone_durchschlag", szene_jagdkanone),
 }
 
 
