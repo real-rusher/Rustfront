@@ -1069,22 +1069,91 @@ def jagd_einschlag(welt, pos, ebene: int, richtung: float) -> None:
     welt.klang("panzer_einschlag", 0.55, pygame.Vector2(x, y), ebene)
 
 
-def jagd_abprall(welt, pos, ebene: int, richtung: float) -> None:
-    """Die Granate prallt an einer Mauer ab (seit 0.34.154): ein Funkenfaecher
-    in die neue Richtung und ein heller Schlag."""
+def jagd_abprall(welt, pos, ebene: int, code: float) -> None:
+    """Die Granate der Jagdkanone prallt an einer Mauer ab (seit 0.34.154,
+    seit 0.34.155 viel staerker - gewuenscht: "ein sehr starker und sehr lauter
+    Effekt ... in der Naehe grosse Funken spruehen, alles aber realistisch").
+    Ein greller Blitz, ein Faecher heller Funkenstreifen in die neue Richtung,
+    grosse gluehende Splitter, die im Bogen fliegen, aufspringen und ausgluehen,
+    Rueckspritzer und Mauerbrocken von der Wand weg, Staub, ein kurzer Druckring,
+    ein harter Ruck und drei Klaenge uebereinander. Kein Feuerball - es ist
+    Stahl auf Stein, keine Explosion.
+    `code` = (Achse + 1) * 1000 + neue Richtung (Achse 0: senkrechte Wand, 1:
+    waagrechte); unter 1000 nur die Richtung (wie bis 0.34.155)."""
+    c = float(code)
+    achse = int(c // 1000.0) - 1 if c >= 1000.0 else -1
+    richtung = c % 1000.0 if c >= 1000.0 else c
     r = _rnd(pos, 14)
     x, y = pos[0], pos[1]
-    blitz(welt, x, y, 8, ebene, 22, 0.05)
-    for _ in range(10):
-        f = Fx("funke", x, y, r.uniform(4, 10), ebene, r.uniform(0.15, 0.35))
-        w = math.radians(richtung + r.uniform(-35, 35))
-        v = r.uniform(180, 420)
-        f.vx, f.vy, f.vz = math.cos(w) * v, math.sin(w) * v, r.uniform(0, 60)
-        f.g = 260.0
-        f.farbe = (255, 226, 160)
+    w = math.radians(richtung)
+    vx0, vy0 = math.cos(w), math.sin(w)
+    # Weg von der Wand: die gespiegelte Achse zeigt jetzt von ihr fort.
+    if achse == 0:
+        nx, ny = (1.0 if vx0 >= 0 else -1.0), 0.0
+    elif achse == 1:
+        nx, ny = 0.0, (1.0 if vy0 >= 0 else -1.0)
+    else:
+        nx, ny = vx0, vy0
+    normale = math.degrees(math.atan2(ny, nx))
+    blitz(welt, x, y, 8, ebene, 70, 0.08)
+    blitz(welt, x, y, 8, ebene, 34, 0.16)
+    welt.lichtblitz(pygame.Vector2(x, y), ebene, 60.0)
+    ring(welt, x, y, ebene, 4, 46, 0.18, (255, 236, 190))
+    # Der Faecher: viele helle Streifen in die neue Richtung, schnell, flach.
+    for _ in range(46):
+        f = Fx("funke", x, y, r.uniform(3, 12), ebene, r.uniform(0.25, 0.6))
+        ww = math.radians(richtung + r.gauss(0.0, 16.0))
+        v = r.uniform(380, 900)
+        f.vx, f.vy, f.vz = math.cos(ww) * v, math.sin(ww) * v, r.uniform(0, 110)
+        f.g = 420.0
+        f.zaeh = 1.6
+        f.farbe = (255, r.randint(200, 245), r.randint(120, 190))
         _neu(welt, f)
-    rauch(welt, r, x, y, 4, ebene, "grau", 2, r.uniform(6, 9), 0.7, vz=8.0, zaeh=2.6)
-    welt.klang("buggy_aufprall", 0.6, pygame.Vector2(x, y), ebene)
+    # Grosse gluehende Splitter: im Bogen, sie springen auf und gluehen aus.
+    for _ in range(9):
+        f = Fx("glut", x, y, r.uniform(4, 10), ebene, r.uniform(0.9, 1.6))
+        ww = math.radians(richtung + r.uniform(-38, 38))
+        v = r.uniform(160, 420)
+        f.vx, f.vy, f.vz = math.cos(ww) * v, math.sin(ww) * v, r.uniform(90, 200)
+        f.g = 520.0
+        f.zaeh = 0.8
+        f.r0 = r.choice((2, 3, 3, 4))
+        f.prallt = True
+        _neu(welt, f)
+    # Rueckspritzer von der Wand weg - kuerzer, breiter gestreut.
+    for _ in range(18):
+        f = Fx("funke", x, y, r.uniform(4, 10), ebene, r.uniform(0.15, 0.35))
+        ww = math.radians(normale + r.uniform(-70, 70))
+        v = r.uniform(160, 420)
+        f.vx, f.vy, f.vz = math.cos(ww) * v, math.sin(ww) * v, r.uniform(20, 140)
+        f.g = 500.0
+        f.farbe = (255, 250, 228)
+        _neu(welt, f)
+    # Steinsplitter und Staub aus der Mauer.
+    for _ in range(8):
+        f = Fx("brocken", x, y, r.uniform(4, 10), ebene, 3.0)
+        ww = math.radians(normale + r.uniform(-60, 60))
+        v = r.uniform(90, 220)
+        f.vx, f.vy, f.vz = math.cos(ww) * v, math.sin(ww) * v, r.uniform(60, 160)
+        f.g = 520.0
+        f.r0 = r.choice((1, 2, 2, 3))
+        f.palette = "stein"
+        f.variante = r.randrange(5)
+        f.winkel = r.uniform(0, 360)
+        f.dreh = r.uniform(-500, 500)
+        f.prallt = True
+        f.liegt = 2.0
+        _neu(welt, f)
+    rauch(welt, r, x + nx * 4, y + ny * 4, 4, ebene, "staub", 3, r.uniform(12, 16), r.uniform(1.0, 1.4),
+          vx=nx * 70.0, vy=ny * 70.0, vz=16.0, zaeh=2.4)
+    rauch(welt, r, x, y, 6, ebene, "grau", 2, r.uniform(7, 10), 0.8,
+          vx=vx0 * 50.0, vy=vy0 * 50.0, vz=12.0, zaeh=2.6)
+    welt.brand_dekal(pygame.Vector2(x - nx * 3, y - ny * 3), ebene, 1, normale)
+    welt.ruckeln(7.0, "explosion", pygame.Vector2(x, y), ebene)
+    # Laut: der Schlag der Granate, das Kreischen von Stahl auf Stein, ein Rumms.
+    welt.klang("panzer_einschlag", 1.0, pygame.Vector2(x, y), ebene)
+    welt.klang("schild", 1.0, pygame.Vector2(x, y), ebene)
+    welt.klang("buggy_aufprall", 1.0, pygame.Vector2(x, y), ebene)
 
 
 def jagd_durch(welt, pos, ebene: int, code: float) -> None:
@@ -1176,7 +1245,7 @@ ARTEN = {
     "bombe_los": lambda w, p, e, r: bombe_los(w, p, e, r),            # r = Hoehe
     "heli_treffer": lambda w, p, e, r: heli_treffer(w, p, e, r),      # r = Hoehe (seit 0.34.127)
     "jagd_einschlag": lambda w, p, e, r: jagd_einschlag(w, p, e, r),  # r = Flugrichtung (seit 0.34.154)
-    "jagd_abprall": lambda w, p, e, r: jagd_abprall(w, p, e, r),      # r = neue Richtung
+    "jagd_abprall": lambda w, p, e, r: jagd_abprall(w, p, e, r),      # r = (Achse + 1) * 1000 + neue Richtung
     "jagd_durch": lambda w, p, e, r: jagd_durch(w, p, e, r),          # r = Blech, Weite, Richtung (0.34.155)
     "mg_heiss": lambda w, p, e, r: mg_heiss(w, p, e, r),              # r = Laufrichtung
     # Die Abwurfkapsel (seit 0.34.155, kapsel.py): r = kapsel.kodieren(Laenge, Seite, Winkel).

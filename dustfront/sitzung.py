@@ -219,7 +219,10 @@ class LobbySuche(Menue):
     titel = "MITSPIELEN"
 
     def __init__(self, app, gefecht=None) -> None:
-        self.gefecht = gefecht
+        # Nur ein Gefecht taugt als Lobby darunter (seit 0.34.156): kam
+        # etwas anderes (das Ladebild), stuerzte die Suche ab.
+        from .mehrspieler import Gefecht
+        self.gefecht = gefecht if isinstance(gefecht, Gefecht) else None
         self.tafel = _mitte(440, 300)
         eigen = getattr(gefecht, "ansager", None)
         # Im LAN gesucht wird nur, wenn IM LAN SICHTBAR an ist (seit

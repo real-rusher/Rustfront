@@ -12699,7 +12699,9 @@ for n_, (datei_, szene_) in _WA91.SZENEN.items():
                 rest_[0]()             # was die Szene vor jedem Bild tut
             tm_.schritt(_D87)
         tm_.zeichnen(_bild91, 1.0)
-        if not (wer_ and titel_ and sek_ > 0 and zoom_ >= 1.0 and not ende_()):
+        # Zoom: nie naeher als die naechste Stufe des Spiels (vorher fest 1,0 -
+        # die Stufe 0,75 kam spaeter; die Kapsel-Szene nutzt sie).
+        if not (wer_ and titel_ and sek_ > 0 and zoom_ >= min(K.ZOOM["stufen"]) and not ende_()):
             _fehler91.append(n_)
         tm_.verlassen()
     except Exception as err_:
@@ -22149,6 +22151,137 @@ _ls155.zeichnen(pygame.Surface((K.GAME_W, K.GAME_H)), 1.0)
 _ls155.verlassen()
 pruef("EINSTELLUNGEN > NETZ: IN DER SERVERLISTE (Vorgabe an)",
       "serverliste" in __import__("dustfront.einstellungen", fromlist=["VORGABE"]).VORGABE)
+
+# ── 0.34.156: Jagdkanone schneller, Abprall stark und laut ────────────────
+print("\n-- 0.34.156: Jagdkanone schneller, Abprall stark und laut")
+pruef("Die Jagdkanone fliegt doppelt so schnell (1800 px/s) - schneller als jede andere Waffe",
+      K.FAHRZEUG_WAFFEN["jagdkanone"]["tempo"] >= 1800.0
+      and all(d_.get("tempo", 0) < K.FAHRZEUG_WAFFEN["jagdkanone"]["tempo"]
+              for n_, d_ in list(K.WAFFEN.items()) + list(K.FAHRZEUG_WAFFEN.items()) if n_ != "jagdkanone"))
+_tm156 = _TM87.Testmodus(app, karte="staubtal_offen")
+_tm156.wiedereinstieg = False
+_e156 = _tm156.welt.ebene(0)
+_pl156 = _freie_flaeche86(_tm156.welt, random.Random(156), 16, 10)
+for _dy in range(0, 10):
+    _e156.setzen(_pl156[0] + 12, _pl156[1] + _dy, K.WAND)
+_wand156 = (_pl156[0] + 12) * K.TILE
+from dustfront.fahrzeug import Panzergranate as _PG156
+_g156 = _PG156(pygame.Vector2(_wand156 - 40, (_pl156[1] + 2) * K.TILE), 75.0,
+               K.FAHRZEUG_WAFFEN["jagdkanone"], 0, None, "jagdkanone")
+_tm156.welt.dazu(_g156); _tm156.welt.wesen.extend(_tm156.welt.neue); _tm156.welt.neue.clear()
+_tempo156 = _g156.tempo.length()
+_ex156 = []
+_alt_ex156 = _tm156.welt.explosion
+def _ex156f(p_, e_, r_, art_="spreng", von_=None):
+    _ex156.append((art_, r_, len(_tm156.welt.effekte)))
+    return _alt_ex156(p_, e_, r_, art_, von_)
+_tm156.welt.explosion = _ex156f
+_klaenge156 = []
+_alt_kl156 = _tm156.welt.klang
+_tm156.welt.klang = lambda n_, *a_, **k_: (_klaenge156.append(n_), _alt_kl156(n_, *a_, **k_))[1]
+_fx_vor156 = len(_tm156.welt.effekte)
+for _ in range(80):
+    if not _g156.lebt or _g156.tempo.x < 0:
+        break
+    _g156.schritt(K.FIXED_DT)
+_tm156.welt.explosion = _alt_ex156
+_tm156.welt.klang = _alt_kl156
+_ab156 = [e_ for e_ in _ex156 if e_[0] == "jagd_abprall"]
+_fx156 = [f_ for f_ in _tm156.welt.effekte[_fx_vor156:]]
+pruef("Beim Abprall bleibt das Tempo (nur die Richtung kehrt) - durchschlagen bremst ohnehin nicht",
+      _g156.lebt and _g156.tempo.x < 0 and abs(_g156.tempo.length() - _tempo156) < 1e-6,
+      "%.0f -> %.0f" % (_tempo156, _g156.tempo.length()))
+pruef("Der Effekt weiss, an welcher Wand: senkrechte Mauer = Achse 0 (Code 1000 + Richtung)",
+      len(_ab156) == 1 and int(_ab156[0][1] // 1000) - 1 == 0, str(_ab156))
+pruef("Stark: viele Funken, grosse gluehende Splitter, Mauerbrocken, Blitz und Ring",
+      sum(1 for f_ in _fx156 if f_.art == "funke") >= 50
+      and sum(1 for f_ in _fx156 if f_.art == "glut") >= 6
+      and sum(1 for f_ in _fx156 if f_.art == "brocken") >= 6
+      and any(f_.art == "blitz" for f_ in _fx156) and any(f_.art == "ring" for f_ in _fx156),
+      str(sorted(set(f_.art for f_ in _fx156))))
+_faecher156 = [f_ for f_ in _fx156 if f_.art == "funke" and f_.farbe != (255, 250, 228)]
+_mittel156 = sum((pygame.Vector2(f_.vx, f_.vy) for f_ in _faecher156), pygame.Vector2())
+_neu156 = pygame.Vector2(_g156.tempo)
+pruef("... der Funkenfaecher fliegt im Mittel in die neue Richtung, die Brocken von der Wand weg",
+      bool(_faecher156) and (abs(_mittel156.angle_to(_neu156) + 360.0) % 360.0 < 20.0
+                             or abs(_mittel156.angle_to(_neu156) + 360.0) % 360.0 > 340.0),
+      "%.0f Grad daneben" % _mittel156.angle_to(_neu156))
+pruef("... die Brocken fliegen von der Wand weg (nach links)",
+      all(f_.vx < 0 for f_ in _fx156 if f_.art == "brocken"))
+pruef("Laut: Schlag, Kreischen und Rumms zugleich",
+      {"panzer_einschlag", "schild", "buggy_aufprall"} <= set(_klaenge156), str(_klaenge156))
+_bild156 = pygame.Surface((K.GAME_W, K.GAME_H))
+_tm156.ich.pos.update(pygame.Vector2(_wand156, (_pl156[1] + 3) * K.TILE))
+_ok156 = True
+try:
+    for _ in range(30):
+        _tm156.schritt(K.FIXED_DT)
+        _tm156.zeichnen(_bild156, 0.5)
+except Exception as _f:           # noqa: BLE001
+    _ok156 = repr(_f)
+pruef("... und zeichnet ohne Fehler", _ok156 is True, str(_ok156))
+_tm156.verlassen()
+
+# LOBBY BEITRETEN stuerzte beim ersten Online-Spiel ab: oben lag das Ladebild
+# fuer cloudflared, und die Lobbysuche hielt es fuer die eigene Lobby.
+from dustfront import ladebild as _LB156, online as _ON156, sitzung as _SZ156
+from dustfront import main as _MA156
+from dustfront.core import App as _App156
+
+
+class _Lader156:
+    laeuft = True
+    gesamt = 0
+    geladen = 0
+    anteil = 0.0
+    fehler = ""
+
+    def abbrechen(self):
+        self.laeuft = False
+
+
+_ld156 = _Lader156()
+try:
+    _such156 = _SZ156.LobbySuche(app, _LB156.Ladebild(app, _ld156))
+    _ok156 = _such156.gefecht is None
+except Exception as _f:           # noqa: BLE001
+    _ok156 = repr(_f)
+pruef("Die Lobbysuche nimmt ein Ladebild nicht fuer die eigene Lobby (kein Absturz)",
+      _ok156 is True, str(_ok156))
+_alt156 = (_ON156.lader, _ON156.laden_starten, _App156.laufen)
+_stapel156 = {}
+
+
+def _laufen156(self, *a_, **k_):
+    _stapel156["vorher"] = [type(s_).__name__ for s_ in self.stapel]
+    _stapel156["gefecht"] = type(getattr(self.oben, "gefecht", None)).__name__
+    _ld156.laeuft = False             # cloudflared ist fertig
+    for _ in range(5):
+        self.oben.schritt(1 / 60)
+    _stapel156["nachher"] = [type(s_).__name__ for s_ in self.stapel]
+    _stapel156["such_gefecht"] = type(getattr(self.oben, "gefecht", None)).__name__
+    while self.stapel:
+        self.werfen()
+    return 0
+
+
+_ON156.lader = lambda: _ld156
+_ON156.laden_starten = lambda: _ld156
+_App156.laufen = _laufen156
+try:
+    _ok156 = _MA156.starten(headless=True, beenden=False,
+                            auftrag={"action": "mehrspieler_beitreten"}) == 0
+except Exception as _f:           # noqa: BLE001
+    _ok156 = repr(_f)
+finally:
+    _ON156.lader, _ON156.laden_starten, _App156.laufen = _alt156
+pruef("... LOBBY BEITRETEN, waehrend cloudflared laedt, startet ohne Absturz",
+      _ok156 is True, str(_ok156))
+pruef("... die Suche liegt ueber der eigenen Lobby, das Ladebild darueber",
+      _stapel156.get("vorher") == ["Gefecht", "LobbySuche", "Ladebild"], str(_stapel156))
+pruef("... ist es fertig, raeumt es sich weg und die Suche kennt ihre Lobby",
+      _stapel156.get("nachher") == ["Gefecht", "LobbySuche"]
+      and _stapel156.get("such_gefecht") == "Gefecht", str(_stapel156))
 
 print()
 print("FEHLER:", fails or "keine")

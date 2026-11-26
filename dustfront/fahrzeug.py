@@ -1293,7 +1293,11 @@ class Panzergranate(Geschoss):
             self.einschlag(None)
             return
         super()._abprallen(teil)
-        w.explosion(pygame.Vector2(self.pos), self.ebene, self.winkel, "jagd_abprall", self.von)
+        # Welche Achse gespiegelt wurde (seit 0.34.155): daraus weiss der Effekt,
+        # wo die Wand liegt - Rueckspritzer und Mauersplitter fliegen von ihr weg.
+        achse = 0 if x_stoesst else 1
+        w.explosion(pygame.Vector2(self.pos), self.ebene, (achse + 1) * 1000.0 + self.winkel % 360.0,
+                    "jagd_abprall", self.von)
 
     def _zuenden(self, ziel) -> None:
         if getattr(self, "_gezuendet", False):

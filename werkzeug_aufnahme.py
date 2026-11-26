@@ -885,9 +885,10 @@ def szene_kapsel(tm, rnd):
         else:
             _steuern(tm, soldat, (0, 0), blick.pos)
 
-    # Zoom unter 1 heisst naeher heran (0,65: die Kapseln gross im Bild).
+    # Zoom unter 1 heisst naeher heran: die naechste Stufe, die das Spiel
+    # selbst kennt (K.ZOOM stufen), damit die Kapseln gross im Bild sind.
     return ("Abwurfkapsel: Fall, Einschlag, Klappen fliegen ab - dann der Flammenwerfer",
-            [blick], lambda: uhr["t"] > 14.0, 16, 0.65, jedes_bild)
+            [blick], lambda: uhr["t"] > 14.0, 16, min(K.ZOOM["stufen"]), jedes_bild)
 
 
 def szene_jagdkanone(tm, rnd):

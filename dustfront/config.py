@@ -2502,7 +2502,7 @@ FAHRZEUG_WAFFEN = {
         schadensart="panzerbrechend",
         durchschlag=3, durch_faktor=0.75, durch_leicht_ab=0.7,
         abprall=1, abprall_faktor=0.25, abprall_winkel=40.0, abprall_farbe=(255, 214, 140),
-        tempo=900.0,
+        tempo=1800.0,          # 900 -> 1800 seit 0.34.155 (gewuenscht: "deutlich schneller")
         reichweite=1400.0,
         geschosse=1,
         takt=3.4,

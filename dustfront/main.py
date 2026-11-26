@@ -61,11 +61,20 @@ def starten(headless: bool = False, beenden: bool = True,
             return 1
     elif app.auftrag.get("action") == "mehrspieler_beitreten":
         from . import sitzung
-        if sitzung.eigene_lobby(app) is None:
+        lobby = sitzung.eigene_lobby(app)
+        if lobby is None:
             print("Keine Lobby moeglich: die Ports ab %d sind alle belegt."
                   % K.NETZ["port"])
             return 1
-        app.schieben(sitzung.LobbySuche(app, app.oben))
+        # Die eigene Lobby, nicht app.oben (seit 0.34.156): beim ersten
+        # Online-Spiel liegt dort das Ladebild fuer cloudflared, und die
+        # Suche stuerzte damit ab. Das Ladebild gehoert ueber die Suche -
+        # es raeumt sich nur selbst weg, wenn es oben liegt.
+        from .ladebild import Ladebild, zeigen_wenn_noetig
+        if isinstance(app.oben, Ladebild):
+            app.werfen()
+        app.schieben(sitzung.LobbySuche(app, lobby))
+        zeigen_wenn_noetig(app)
     elif app.auftrag.get("action") == "testmodus":
         from . import testmodus
         if not testmodus.verfuegbar():
