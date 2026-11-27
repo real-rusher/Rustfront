@@ -3113,13 +3113,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             return
         darf = not k.ist_bot or getattr(k, "darf_fahren", False)
         wagen = self._freier_buggy(k) if darf else None
+        if wagen is None and not k.ist_bot:
+            wagen = self._bot_wagen_bei(k)
         if wagen is not None:
             if wagen.fahrer is not None:
                 # Ein Bot der eigenen Seite am Steuer (seit 0.34.134): seit
                 # 0.34.138 E **halten** (K.FAHRZEUG_UEBERNEHMEN halten) - ein
                 # kurzer Druck soll nicht aus Versehen den Fahrer hinauswerfen
                 # (gewuenscht). Das Halten fuehrt _uebernehmen_halten.
-                k._uebernehmen = (wagen, self.welt.zeit)
+                k._uebernehmen = (wagen, self.welt.zeit, self._uebernahme_weite(wagen))
                 wagen._wartet_bis = self.welt.zeit + K.FAHRZEUG_UEBERNEHMEN["warten"]
                 return
             self._einsteigen(k, wagen)
@@ -3149,10 +3151,10 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         lauf = k.__dict__.get("_uebernehmen")
         if lauf is None:
             return False
-        wagen, seit = lauf
+        wagen, seit, weite = lauf
         if (not ein.get("nutzen") or wagen.kaputt or wagen.fahrer is None
                 or not self._bot_raus_erlaubt(k, wagen) or k.fahrzeug is not None
-                or wagen.pos.distance_to(k.pos) > wagen.werte["einsteigen"] + 30.0):
+                or wagen.pos.distance_to(k.pos) > weite + 30.0):
             k._uebernehmen = None
             return False
         # Solange gehalten wird, wartet der Bot am Steuer (seit 0.34.157,
@@ -3559,6 +3561,35 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 bester, abstand = b, d
         return bester
 
+    @staticmethod
+    def _uebernahme_weite(b) -> float:
+        """Bis zu diesem Abstand (zur Mitte) nimmt E einem Bot der eigenen
+        Seite den Wagen ab (seit 0.34.158, gemeldet: "E hat tatsaechlich gar
+        nichts gemacht"). Ein fahrender Wagen war weiter, bis das E beim
+        Gastgeber ankam - der Gast sieht fremde Wagen etwas spaeter und
+        seine eigene Figur kommt auch erst an. Darum waechst sie mit dem
+        Tempo; gleich nach dem Druck bremst der Bot (_wartet_bis)."""
+        f = K.FAHRZEUG_UEBERNEHMEN
+        geschw = getattr(b, "geschw", None)
+        v = geschw.length() if geschw is not None else 0.0
+        return b.werte["einsteigen"] + f["rand"] + v * f["nachlauf"]
+
+    def _bot_wagen_bei(self, k: Kaempfer):
+        """Der naechste Wagen mit einem Bot der eigenen Seite am Steuer in
+        der Reichweite von _uebernahme_weite - oder None (beim Gastgeber)."""
+        if (k.am_boden or k.flug > 0 or k.sturz_rest > 0 or k.fahrzeug is not None
+                or getattr(k, "mitfahrt", None) is not None):
+            return None
+        bester, abstand = None, 1e18
+        for b in self.fahrzeuge:
+            if (b.fahrer is None or b.ebene != k.ebene or b.nur_bild or not b.lebt
+                    or b.kaputt or not self._bot_raus_erlaubt(k, b)):
+                continue
+            d = b.pos.distance_squared_to(k.pos)
+            if d <= self._uebernahme_weite(b) ** 2 and d < abstand:
+                bester, abstand = b, d
+        return bester
+
     def _bot_raus_erlaubt(self, k: Kaempfer, b) -> bool:
         """Darf `k` den Bot am Steuer von `b` hinauswerfen? Ein Mensch, der
         Bot ist von seiner Seite, nicht beim Flakwagen (nur Bots, seit
@@ -3568,7 +3599,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             # Krad (seit 0.34.157): am Beiwagen sitzt man auf, naeher am
             # Fahrer uebernimmt man. Vorher galt die Regel des Panzerwagens
             # (nur von vorn), und vor der Nase eines Krads steht niemand.
-            if k.pos.distance_squared_to(b.beifahrer_sitz()) < k.pos.distance_squared_to(b.pos):
+            # Seit 0.34.158 nach der Seite, nicht nach dem Abstand: die Figur
+            # eines Gasts kommt beim Gastgeber etwas spaeter an, also hinter
+            # einem fahrenden Krad - und hinten war man naeher am Beiwagen.
+            vorn = b.vorn
+            quer = pygame.Vector2(-vorn.y, vorn.x)
+            seite = (b.beifahrer_sitz() - b.pos).dot(quer)
+            if seite < 0.0:
+                quer, seite = -quer, -seite
+            if (k.pos - b.pos).dot(quer) > seite * 0.5:
                 return False
         elif "plaetze" in b.werte and (k.pos - b.pos).dot(b.vorn) < b.werte.get("vorn", 40.0) * 0.25:
             # Ein Panzerwagen nimmt Leute mit: an der Mitte und hinten sitzt
@@ -4513,15 +4552,20 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             besetzt = b.fahrer is not None or b.besetzt
             if b.kaputt or b.ebene != ich.ebene:
                 continue
-            nah = b.pos.distance_squared_to(ich.pos) <= b.werte["einsteigen"] ** 2
+            d2 = b.pos.distance_squared_to(ich.pos)
+            nah = d2 <= b.werte["einsteigen"] ** 2
             if besetzt and "plaetze" in b.werte and getattr(b, "rechteckig", False):
                 # Aufsitzen nach dem Abstand zum Blech (seit 0.34.138).
                 nah = nah or b.beruehrt(ich.pos, ich.radius + K.FAHRZEUG_UEBERNEHMEN["aufsitzen_rand"])
+            fahrer = b.fahrer if self.ist_gastgeber else self.kaempfer.get(getattr(b, "fahrer_nummer", -1))
+            bot_steuer = (besetzt and fahrer is not None and getattr(fahrer, "ist_bot", False)
+                          and fahrer.fraktion == ich.fraktion and self._bot_raus_erlaubt(ich, b))
+            if bot_steuer:
+                # Dieselbe Reichweite wie das E beim Gastgeber (seit 0.34.158).
+                nah = nah or d2 <= self._uebernahme_weite(b) ** 2
             if not nah:
                 continue
-            fahrer = b.fahrer if self.ist_gastgeber else self.kaempfer.get(getattr(b, "fahrer_nummer", -1))
-            if (besetzt and fahrer is not None and getattr(fahrer, "ist_bot", False)
-                    and fahrer.fraktion == ich.fraktion and self._bot_raus_erlaubt(ich, b)):
+            if bot_steuer:
                 # Ein Bot der eigenen Seite am Steuer (seit 0.34.138: halten).
                 p = self.kamera.zu_bild(b.pos)
                 unten = int(getattr(b, "huelle_radius", 22)) + 8

@@ -22509,6 +22509,78 @@ pruef("Testmodus: MUNITION schaltet UNENDLICH -> KNAPP 1 MAGAZIN und zurueck",
       and not _tm157.knapp, "%s / %s" % (_vorher157, _eins157))
 _tm157.verlassen()
 
+print("\n-- 0.34.158: Bot-Wagen in voller Fahrt uebernehmen")
+# Gemeldet: "E hat tatsaechlich gar nichts gemacht und die UI dazu war nicht
+# erschienen". Ein Wagen in Fahrt war, bis das E ankam, schon zu weit weg.
+w158, g158 = _paar59("schlacht", karte="flusstal")
+w158._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="flusstal", schlacht_seite=6, freischalten="aus"))
+w158._einstiegszonen_waehlen(); w158._bots_fuehren(0.0, sofort=True)
+_ich158 = w158.ich
+_ich158.am_boden = False; _ich158.lebt = True
+if _ich158.fahrzeug is not None:
+    w158._aussteigen(_ich158)
+_bot158 = next(k_ for k_ in w158.kaempfer.values() if k_.ist_bot and k_.team == _ich158.team and k_.lebt)
+if _bot158.fahrzeug is not None:
+    w158._aussteigen(_bot158)
+_bw158 = _FZ59.neu("buggy", _ich158.pos + pygame.Vector2(0, 300), _ich158.ebene, 0.0)
+w158.welt.dazu(_bw158); w158.fahrzeuge.append(_bw158)
+_bot158.pos.update(_bw158.pos); _bot158.ebene = _bw158.ebene
+w158._einsteigen(_bot158, _bw158)
+_quer158 = pygame.Vector2(_bw158.vorn.y, -_bw158.vorn.x)
+_ich158.pos.update(_bw158.pos + _quer158 * (_bw158.werte["einsteigen"] + 30))
+_ich158.ebene = _bw158.ebene; _ich158.treppe_rest = 0.0
+_bw158.geschw.update(0, 0)
+pruef("Steht der Bot-Wagen, reicht E nicht weiter als bisher (plus rand)",
+      w158._bot_wagen_bei(_ich158) is None
+      and abs(w158._uebernahme_weite(_bw158) - _bw158.werte["einsteigen"]
+              - K.FAHRZEUG_UEBERNEHMEN["rand"]) < 1e-6)
+_bw158.geschw.update(_bw158.vorn * 200.0)
+pruef("Faehrt er 200 px/s, waechst die Reichweite mit (das E kommt spaeter an, der Gast sieht ihn spaeter)",
+      w158._bot_wagen_bei(_ich158) is _bw158 and w158._uebernahme_weite(_bw158) > _bw158.werte["einsteigen"] + 60)
+w158._anwenden(_ich158, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"], "nutzen": True})
+pruef("... E an ihm: das Halten laeuft, der Bot bremst",
+      _ich158.__dict__.get("_uebernehmen") is not None
+      and _bw158.__dict__.get("_wartet_bis", 0.0) > w158.welt.zeit)
+w158.welt.zeit += K.FAHRZEUG_UEBERNEHMEN["halten"] + 0.05
+_bw158.geschw.update(0, 0)
+w158._anwenden(_ich158, {"will": [0, 0], "ziel": [0, 0], "knoepfe": [], "nutzen": True})
+pruef("... und nach dem Halten faehrt man selbst", _bw158.fahrer is _ich158)
+w158._aussteigen(_ich158)
+if _bot158.fahrzeug is not None:
+    w158._aussteigen(_bot158)
+# Der Hinweis nimmt dieselbe Reichweite.
+w158._einsteigen(_bot158, _bw158)
+_ich158.pos.update(_bw158.pos + _quer158 * (_bw158.werte["einsteigen"] + 30))
+_bw158.geschw.update(_bw158.vorn * 200.0)
+_texte158 = []
+from dustfront import mehrspieler as _MS158
+_alt158 = _MS158.SCHRIFT.zeichnen
+_MS158.SCHRIFT.zeichnen = lambda ziel_, t_, *a_, **kw_: (_texte158.append(t_), _alt158(ziel_, t_, *a_, **kw_))[1]
+try:
+    w158.blick = _ich158.ebene
+    w158._fahrzeug_hinweis(pygame.Surface((K.GAME_W, K.GAME_H)))
+finally:
+    _MS158.SCHRIFT.zeichnen = _alt158
+pruef("... der Hinweis [E] HALTEN: STEUER UEBERNEHMEN steht auch dort",
+      any("STEUER ÜBERNEHMEN" in t_ for t_ in _texte158), str(_texte158))
+# Krad: die Seite entscheidet, nicht der Abstand - hinter dem fahrenden Krad
+# (dort kommt die Figur eines Gasts beim Gastgeber an) auf der Fahrerseite.
+_kr158 = _FZ59.neu("krad", _ich158.pos + pygame.Vector2(0, 200), _ich158.ebene, 0.0)
+w158.welt.dazu(_kr158); w158.fahrzeuge.append(_kr158)
+_bot158b = next(k_ for k_ in w158.kaempfer.values() if k_.ist_bot and k_.team == _ich158.team
+                and k_.lebt and k_ is not _bot158)
+if _bot158b.fahrzeug is not None or getattr(_bot158b, "mitfahrt", None) is not None:
+    w158._aussteigen(_bot158b)
+w158._einsteigen(_bot158b, _kr158)
+_sitz158 = _kr158.beifahrer_sitz() - _kr158.pos
+_fahrerseite158 = -_sitz158.normalize()
+_ich158.pos.update(_kr158.pos - _kr158.vorn * 40 + _fahrerseite158 * 4)
+pruef("Krad: hinten auf der Fahrerseite uebernimmt man (vorher naeher am Beiwagen: nichts)",
+      w158._bot_raus_erlaubt(_ich158, _kr158))
+_ich158.pos.update(_kr158.beifahrer_sitz() + _sitz158.normalize() * 12)
+pruef("... am Beiwagen sitzt man weiter auf", not w158._bot_raus_erlaubt(_ich158, _kr158))
+w158.verlassen(); g158.verlassen()
+
 print()
 print("FEHLER:", fails or "keine")
 pygame.quit()

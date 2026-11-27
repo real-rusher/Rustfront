@@ -1496,7 +1496,12 @@ FAHRZEUG_UEBERNEHMEN = dict(zurueck_weite=900.0, halten=0.6, aufsitzen_rand=18.0
                             # So lange nach dem letzten gehaltenen E bremst ein
                             # Bot am Steuer und wartet (seit 0.34.157).
                             warten=0.3,
-                            bremse=1100.0)      # px/s je Sekunde, so scharf haelt er dann an
+                            bremse=1100.0,      # px/s je Sekunde, so scharf haelt er dann an
+                            # Reichweite fuer E an einem Bot-Wagen (seit 0.34.158):
+                            # einsteigen + rand + Tempo * nachlauf. Ein fahrender Wagen
+                            # war, bis das E beim Gastgeber ankam, schon weiter
+                            # (Netz, verzoegertes Bild beim Gast) - E tat nichts.
+                            rand=16.0, nachlauf=0.3)
 
 # Die Front in SCHLACHT (seit 0.34.131, dustfront/front.py). Gilt auf Karten,
 # die ihre Basen, Eroberungspunkte und Wege im Kopf nennen (FLUSSTAL,

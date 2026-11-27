@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.158 | Bot-Wagen in Fahrt uebernehmen: FAHRER setzen, mit ICH neben dem fahrenden Wagen E halten - die Reichweite waechst mit dem Tempo, der Bot haelt an. |
 | 0.34.157 | Testmenue MUNITION: UNENDLICH (dann keine Munitionskisten, das Feld der Faehigkeit zeigt NICHT VERFUEGBAR) oder KNAPP mit 1 bis 9 Magazinen je Waffe (Links/Rechts). Bots aus Fahrzeugen werfen: BOT setzen, ins Fahrzeug, mit ICH daneben E halten - der Bot haelt an. |
 | 0.34.156 | Keine neuen Spawner-Eintraege. Abprall der Jagdkanone: JAGDPANZER setzen, mit ICH einsteigen und flach an einer Mauer entlang schiessen (unter etwa 40 Grad) - mit ZEIT STEHT (0) und EINZEL (.) Bild fuer Bild |
 | 0.34.155 | Spawner NACHSCHUB: ABWURF: SPULENGEWEHR (dazu die vier von 0.34.154) - alle kommen jetzt in der Abwurfkapsel; BEUTE: GERUFEN: SPULENGEWEHR. Jagdkanone: JAGDPANZER, davor PUPPE und BUGGY - am Austritt Funken und Splitter. Mit Taste 0 (ZEIT STEHT) und . (EINZEL) laesst sich die Kapsel Schritt fuer Schritt ansehen |
