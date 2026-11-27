@@ -22579,6 +22579,37 @@ pruef("Krad: hinten auf der Fahrerseite uebernimmt man (vorher naeher am Beiwage
       w158._bot_raus_erlaubt(_ich158, _kr158))
 _ich158.pos.update(_kr158.beifahrer_sitz() + _sitz158.normalize() * 12)
 pruef("... am Beiwagen sitzt man weiter auf", not w158._bot_raus_erlaubt(_ich158, _kr158))
+# Gemeldet nach dem Video: beim Gast fuellte sich der Balken nicht - das
+# Halten lief nur beim Gastgeber. Der Gast zaehlt jetzt selbst mit.
+_e158 = app.eingabe
+_te158 = _e158.tabelle["nutzen"][0]
+def _e_taste158(art_):
+    _e158.ereignis(pygame.event.Event(art_, key=_te158, mod=0, unicode="", scancode=0))
+_wg158 = object()                     # der Wagen, wie der Gast ihn kennt
+_e_taste158(pygame.KEYUP); g158._gast_halten_fuehren(_wg158)
+_e_taste158(pygame.KEYDOWN); g158._gast_halten_fuehren(_wg158)
+g158._zeit += K.FAHRZEUG_UEBERNEHMEN["halten"] * 0.5
+g158._gast_halten_fuehren(_wg158)
+_halb158 = g158.uebernehmen_anteil(g158.ich)
+_e_taste158(pygame.KEYUP); g158._gast_halten_fuehren(_wg158)
+pruef("Gast: E an einem Bot-Wagen gedrueckt und gehalten - sein Balken fuellt sich, losgelassen ist er weg",
+      abs(_halb158 - 0.5) < 0.05 and g158.uebernehmen_anteil(g158.ich) == 0.0, "%.2f" % _halb158)
+_e_taste158(pygame.KEYDOWN); g158._gast_halten_fuehren(None); g158._gast_halten_fuehren(_wg158)
+g158._zeit += 0.3
+pruef("... wer E schon vorher hielt, wirft niemanden hinaus (wie beim Gastgeber: nur ein Druck in Reichweite)",
+      g158.uebernehmen_anteil(g158.ich) == 0.0)
+_e_taste158(pygame.KEYUP); g158._gast_halten_fuehren(None)
+# Die Vorhersage endet, sobald der Gastgeber ihn in einen Wagen setzt - nicht
+# erst, wenn der Puffer es zeigt (vorher rutschte die Figur zwei Bilder lang
+# zur Seite aus dem Wagen).
+g158._vorhersage_setzen(pygame.Vector2(g158.ich.pos), pygame.Vector2(0, 0), g158.ich.ebene)
+g158._vorhersage_abgleich({"spieler": [{"i": g158.meine_nummer, "fz": True, "en": 0, "ea": 0.0,
+                                        "p": [g158.ich.pos.x, g158.ich.pos.y], "tv": [0, 0], "e": 0}]})
+pruef("Gast: meldet der Gastgeber ihn im Wagen, ist die Vorhersage der Figur sofort aus",
+      g158._vh_ort is None and not g158._vorhersage_moeglich(g158.ich))
+g158._vorhersage_abgleich({"spieler": [{"i": g158.meine_nummer, "fz": False, "en": 0, "ea": 0.0,
+                                        "p": [g158.ich.pos.x, g158.ich.pos.y], "tv": [0, 0], "e": 0}]})
+pruef("... und nach dem Aussteigen wieder moeglich", not g158.__dict__.get("_vh_im_wagen", False))
 w158.verlassen(); g158.verlassen()
 
 print()

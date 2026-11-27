@@ -209,6 +209,7 @@ class GastTeil:
         if not K.NETZ["vorhersage_an"] or k is None or not k.lebt:
             return False
         return not (k.am_boden or k.im_fahrzeug or getattr(k, "mitfahrt", None) is not None
+                    or self.__dict__.get("_vh_im_wagen", False)
                     or k.flug > 0.0 or k.sturz_rest > 0.0
                     or getattr(k, "schirm_hoehe", 0.0) > 0.0
                     or k.zieht is not None or k.hilft is not None
@@ -268,6 +269,15 @@ class GastTeil:
         if eintrag is None or k is None:
             return
         self._wagen_abgleich(eintrag)
+        # Sitzt er beim Gastgeber schon im Wagen (seit 0.34.158), ist die
+        # Vorhersage sofort vorbei - nicht erst, wenn der Puffer die Meldung
+        # zeigt. Dazwischen rechnete sie vom Ort im Wagen aus weiter, und
+        # figur_hinaus schob die Figur zwei Bilder lang zur Seite hinaus.
+        self._vh_im_wagen = bool(eintrag.get("fz"))
+        if self._vh_im_wagen:
+            self._vh_ohne_antwort = 0.0       # eine Antwort kam (die Wagenvorhersage fragt das)
+            self._vorhersage_aus()
+            return
         try:
             en = int(eintrag["en"])
             ea = float(eintrag.get("ea", 0.0))

@@ -3174,10 +3174,38 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
 
     def uebernehmen_anteil(self, k) -> float:
         """Wie weit das Halten zum Uebernehmen ist (0 bis 1), fuer die Anzeige."""
+        if not self.ist_gastgeber:
+            # Beim Gast (seit 0.34.158, gemeldet: der Balken fehlte): das
+            # Halten laeuft beim Gastgeber, der Gast zaehlt fuer den Balken
+            # selbst mit (_gast_halten_fuehren).
+            lauf = self.__dict__.get("_gast_halten")
+            if lauf is None or k is not self.ich:
+                return 0.0
+            return max(0.0, min(1.0, (self._zeit - lauf[1]) / K.FAHRZEUG_UEBERNEHMEN["halten"]))
         lauf = k.__dict__.get("_uebernehmen") if k is not None else None
         if lauf is None:
             return 0.0
         return max(0.0, min(1.0, (self.welt.zeit - lauf[1]) / K.FAHRZEUG_UEBERNEHMEN["halten"]))
+
+    def _gast_halten_fuehren(self, b) -> None:
+        """Beim Gast: E an `b` (Bot der eigenen Seite am Steuer) gedrueckt
+        und seither gehalten? Wie beim Gastgeber zaehlt nur ein Druck in
+        Reichweite - wer E schon vorher hielt, wirft niemanden hinaus.
+        `b` None: kein solcher Wagen in Reichweite."""
+        e = self.app.eingabe
+        offen = self.pausiert or self._admin_zeile is not None or getattr(self, "belohnung_offen", False)
+        haelt = not offen and e.gehalten("nutzen")
+        vorher = self.__dict__.get("_gast_e_vorher", False)
+        self._gast_e_vorher = haelt
+        lauf = self.__dict__.get("_gast_halten")
+        if b is None or not haelt:
+            self._gast_halten = None
+        elif lauf is not None and lauf[0] is b:
+            pass
+        elif not vorher:
+            self._gast_halten = (b, self._zeit)
+        else:
+            self._gast_halten = None
 
     @staticmethod
     def _e_gedrueckt(ein: dict) -> bool:
@@ -4380,6 +4408,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
     def _fahrzeug_hinweis(self, ziel) -> None:
         """Neben einem leeren Buggy in Reichweite: [E] EINSTEIGEN. Im
         Wagen, die ersten Sekunden: wie man faehrt und wieder rauskommt."""
+        self._gast_halten_gesehen = False
+        self._fahrzeug_hinweis_zeichnen(ziel)
+        if not self.ist_gastgeber and not self._gast_halten_gesehen:
+            self._gast_halten_fuehren(None)       # kein Bot-Wagen in Reichweite
+
+    def _fahrzeug_hinweis_zeichnen(self, ziel) -> None:
         ich = self.ich
         if ich is None or not ich.lebt or ich.am_boden or self.vorbei:
             return
@@ -4567,6 +4601,9 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 continue
             if bot_steuer:
                 # Ein Bot der eigenen Seite am Steuer (seit 0.34.138: halten).
+                if not self.ist_gastgeber:
+                    self._gast_halten_fuehren(b)
+                    self._gast_halten_gesehen = True
                 p = self.kamera.zu_bild(b.pos)
                 unten = int(getattr(b, "huelle_radius", 22)) + 8
                 anteil = self.uebernehmen_anteil(ich)
