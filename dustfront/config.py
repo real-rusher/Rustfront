@@ -1008,6 +1008,8 @@ NETZ = dict(
     vorhersage_an=True,
     vorhersage_sprung=72.0,
     vorhersage_glaetten=10.0,
+    # So nah muss ein Fahrzeug sein, damit die Vorhersage es fragt (seit 0.34.157).
+    vorhersage_wagen_nah=90.0,
     vorhersage_ohne_antwort=0.75,
     vorhersage_spur=480,
     vorhersage_nachrechnen=24,  # so viele Schritte rechnet der Abgleich hoechstens nach
@@ -1490,7 +1492,11 @@ LUFT_ZIELEN = dict(
 # Seit 0.34.138: E so lange `halten` (s), um einen Bot vom Steuer zu holen;
 # auf einen Panzerwagen sitzt auf, wer bis `aufsitzen_rand` px am Blech steht
 # (vorher zaehlte der Abstand zur Mitte, am Heck war man zu weit weg).
-FAHRZEUG_UEBERNEHMEN = dict(zurueck_weite=900.0, halten=0.6, aufsitzen_rand=18.0)
+FAHRZEUG_UEBERNEHMEN = dict(zurueck_weite=900.0, halten=0.6, aufsitzen_rand=18.0,
+                            # So lange nach dem letzten gehaltenen E bremst ein
+                            # Bot am Steuer und wartet (seit 0.34.157).
+                            warten=0.3,
+                            bremse=1100.0)      # px/s je Sekunde, so scharf haelt er dann an
 
 # Die Front in SCHLACHT (seit 0.34.131, dustfront/front.py). Gilt auf Karten,
 # die ihre Basen, Eroberungspunkte und Wege im Kopf nennen (FLUSSTAL,
@@ -1830,6 +1836,10 @@ PANZERWAGEN = dict(
     #   Wenderadius wende_grund + wende_je_tempo * v (Buggy: rund 40)
     hoechst=320.0,
     rueckwaerts=110.0,
+    # Kraft rueckwaerts (px/s je s, seit 0.34.157): vorher motor * 0.6 = 17,
+    # zum Rangieren viel zu zaeh. Gilt auch fuer die Wagen, die von hier erben.
+    # Nur fuer Menschen am Steuer - Bots fahren mit der alten (Buggy._physik).
+    rueck_motor=170.0,
     # Seit 0.34.96 deutlich wendiger (gewuenscht): zieht frueher an,
     # wendet auf engerem Kreis, lenkt schneller ein, faehrt flotter zurueck.
     motor=28.0,
@@ -2304,7 +2314,17 @@ for _d, _h in ((PANZER, dict(vorn=48.0, hinten=-46.0, halb=31.0)),
 # Mittleres (K.SCHIEBEN gewicht), keinen Panzer.
 ABSCHLEPPEN = dict(fang=30.0, abstand=6.0, reissen=70.0)
 
-SCHIEBEN = dict(gas=0.3, tempo=70.0,
+# Steckt ein Wagen in einer Mauer (seit 0.34.157, Buggy._mauer_befreien): so
+# weit (px) wird ringsum nach einer freien Stelle gesucht, die naechste gilt.
+# Stick am Steuer (seit 0.34.157): faehrt er schneller rueckwaerts als das
+# (px/s) und zeigt der Stick zur Seite oder nach vorn, haelt er erst an.
+FAHRZEUG_STICK = dict(rueck_halten=12.0)
+
+FAHRZEUG_BEFREIEN = dict(ringe=(1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 11.0, 15.0, 20.0))
+
+# vorn_anteil (seit 0.34.157): so weit muss der andere Wagen vorn liegen
+# (Kosinus des Winkels zur Fahrtrichtung, 0.5 = 60 Grad), damit geschoben wird.
+SCHIEBEN = dict(gas=0.3, tempo=70.0, vorn_anteil=0.5,
                 gewicht=dict(buggy=1, krad=1, tragschrauber=1, trosswagen=2, funkwagen=2,
                              spulenwagen=2, werfer=2, flakwagen=2, panzerwagen=2,
                              panzer=3, jagdpanzer=3))
@@ -3670,7 +3690,23 @@ MUNITION = dict(
     kiste_takt=14.0,          # Sekunden zwischen zwei Munitionskisten
     kiste_hoechstens=4,
     kiste_gibt=0.5,           # so viel vom vollen Vorrat gibt eine Kiste
+    # Regel MAGAZINE (seit 0.34.157, gewuenscht: "mit begrenzter Ammo soll die
+    # Anzahl der Mags zur Verfuegung einstellbar sein, Standard 3"): `vorrat`
+    # oben ist auf rund drei Nachladungen je Waffe abgestimmt - das ist
+    # `magazine`. Eine andere Zahl skaliert ihn (vorrat_voll); Wurfwaffen und
+    # C4 haben keine Magazine und bleiben.
+    magazine=3,
+    magazine_hoechstens=9,
 )
+
+
+def vorrat_voll(name: str, magazine: int = 3) -> int:
+    """Der volle Vorrat einer Waffe ausserhalb des Magazins bei `magazine`
+    Magazinen (Regel MAGAZINE, seit 0.34.157)."""
+    basis = MUNITION["vorrat"].get(name, 0)
+    if magazine == MUNITION["magazine"] or WAFFEN.get(name, {}).get("art") in ("wurf", "c4"):
+        return basis
+    return int(round(basis * magazine / float(MUNITION["magazine"])))
 
 # Der Ziellaser der Panzerbuechse (seit 0.34.62), fuer alle sichtbar:
 # Farbe und Deckkraft der Linie, der Punkt am Ende, wie weit vor der Figur

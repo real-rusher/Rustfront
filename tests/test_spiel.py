@@ -15857,16 +15857,19 @@ _k185.waffe_waehlen(0)
 pruef("Jedes Werkzeug auf C: zuerst das erste aus K.WERKZEUGE",
       _k185.alle_werkzeuge and _KL73.faehigkeiten_von(_k185)[0][0] == K.WERKZEUGE[0][0])
 w185._anwenden(_k185, {"knoepfe": ["werkzeug"], "will": [0, 0], "ziel": [0, 0]})
-pruef("X schaltet zum naechsten Werkzeug", _KL73.faehigkeiten_von(_k185)[0][0] == K.WERKZEUGE[1][0],
+# Seit 0.34.157 ueberspringt X, was es gerade nicht gibt (die Munitionskiste
+# bei unendlicher Munition, klassen.verfuegbar) - das naechste verfuegbare.
+_frei185 = [i_ for i_, (a_, _p) in enumerate(K.WERKZEUGE) if _KL73.verfuegbar(a_, _k185)]
+pruef("X schaltet zum naechsten Werkzeug", _KL73.faehigkeiten_von(_k185)[0][0] == K.WERKZEUGE[_frei185[1]][0],
       str(_KL73.faehigkeiten_von(_k185)))
 _was185 = _KL73.faehigkeit_nutzen(w185, _k185)
-pruef("... und C legt es hin", _was185 == _KL73.FAEHIGKEIT_NAMEN[K.WERKZEUGE[1][0]], _was185)
+pruef("... und C legt es hin", _was185 == _KL73.FAEHIGKEIT_NAMEN[K.WERKZEUGE[_frei185[1]][0]], _was185)
 for _ in range(10):
     w185.schritt(K.NETZ["takt"])
     g185.schritt(K.NETZ["takt"])
 _gk185 = g185.kaempfer.get(_k185.nummer)
 pruef("Der Gast kennt Werkzeug und Waffenliste", _gk185 is not None and _gk185.alle_werkzeuge
-      and _gk185.werkzeug == 1 and _gk185.waffen == _alle185)
+      and _gk185.werkzeug == _frei185[1] and _gk185.waffen == _alle185)
 _bild185 = pygame.Surface((K.GAME_W, K.GAME_H))
 w185.zeichnen(_bild185, 0.5)
 g185.zeichnen(_bild185, 0.5)
@@ -16387,8 +16390,11 @@ _wz195 = []
 for _ in range(len(K.WERKZEUGE)):
     _bild195(w195, _tx195)
     _wz195.append(_k195.werkzeug)
-pruef("X: jeder Druck genau ein Werkzeug weiter", _wz195 == [(i_ + 1) % len(K.WERKZEUGE)
-                                                   for i_ in range(len(K.WERKZEUGE))], str(_wz195))
+# Seit 0.34.157 ohne das, was es gerade nicht gibt (klassen.verfuegbar).
+_frei195 = [i_ for i_, (a_, _p) in enumerate(K.WERKZEUGE) if _KL73.verfuegbar(a_, _k195)]
+_soll195 = [_frei195[(_frei195.index(i_) + 1) % len(_frei195)] for i_ in [0] + _wz195[:-1]]
+pruef("X: jeder Druck genau ein Werkzeug weiter", _wz195 == _soll195 and len(set(_wz195)) == len(_frei195),
+      "%s soll %s" % (_wz195, _soll195))
 pruef("Die Bilder werden gezaehlt", e.bild > 0)
 w195.verlassen(); g195.verlassen()
 
@@ -20183,6 +20189,9 @@ pruef("Revolver: die rechte Maustaste feuert die ganze Trommel (FAECHERN), auch 
 from dustfront import klassen as _KL138
 _ich138.klasse = "unterstuetzer"
 _ich138.faehigkeit_wahl = 0
+# Mit knapper Munition: sonst gibt es seit 0.34.157 die Munitionskiste
+# nicht (klassen.verfuegbar), und X hat nichts zu waehlen.
+_ich138.munikiste_aus = False
 _ich138.faehigkeit_rest = {}
 _a138 = _KL138.faehigkeit_gewaehlt(_ich138)[0]
 _n138 = _KL138.faehigkeit_wechseln(_ich138)
@@ -22282,6 +22291,223 @@ pruef("... die Suche liegt ueber der eigenen Lobby, das Ladebild darueber",
 pruef("... ist es fertig, raeumt es sich weg und die Suche kennt ihre Lobby",
       _stapel156.get("nachher") == ["Gefecht", "LobbySuche"]
       and _stapel156.get("such_gefecht") == "Gefecht", str(_stapel156))
+
+# ══════════════════════════════════════════════════════════════════
+print("\n-- 0.34.157: Fahrzeuge, Munition")
+from dustfront import fahrzeug as _FZ157
+w157, g157 = _paar59("schlacht", karte="flusstal")
+w157._regeln_setzen(dict(_R199.vorgabe(), modus="schlacht", karte="flusstal", schlacht_seite=4, freischalten="aus"))
+w157._einstiegszonen_waehlen(); w157._bots_fuehren(0.0, sofort=True)
+_ich157 = w157.ich
+_ich157.lebt, _ich157.am_boden = True, False
+_bot157 = next(k_ for k_ in w157.kaempfer.values() if k_.ist_bot and k_.team == _ich157.team and k_.lebt)
+# Gemeldet: "Bots aus Fahrzeugen kicken geht gar nicht mehr" - der Bot fuhr
+# weiter, waehrend man E hielt, und war nach dem Halten ausser Reichweite.
+_bw157 = _FZ157.neu("buggy", _ich157.pos + pygame.Vector2(200, 0), 0)
+w157.welt.dazu(_bw157); w157.fahrzeuge.append(_bw157)
+_bot157.pos.update(_bw157.pos); w157._einsteigen(_bot157, _bw157)
+_bw157.geschw.update(_bw157.vorn * 220.0)                 # er faehrt mit vollem Tempo
+_ich157.pos.update(_bw157.pos + _bw157.vorn.rotate(90) * 28); _ich157.treppe_rest = 0.0
+_wo157 = pygame.Vector2(_bw157.pos)
+w157._anwenden(_ich157, {"will": [0, 0], "ziel": [0, 0], "knoepfe": ["nutzen"], "nutzen": True})
+for _ in range(int(0.7 / K.FIXED_DT)):
+    w157._anwenden(_bot157, {"will": [0, 0], "ziel": [0, 0], "knoepfe": [], "gl": [1.0, 0.0]})
+    w157._anwenden(_ich157, {"will": [0, 0], "ziel": [0, 0], "knoepfe": [], "nutzen": True})
+    w157.welt.zeit += K.FIXED_DT
+    _bw157.schritt(K.FIXED_DT)
+pruef("E halten an einem fahrenden Bot-Wagen: der Bot haelt an und man uebernimmt",
+      _bw157.fahrer is _ich157 and _bot157.fahrzeug is None and _bw157.pos.distance_to(_wo157) < 60,
+      "Fahrer %s, %.0f px gerollt" % (getattr(_bw157.fahrer, "name", None), _bw157.pos.distance_to(_wo157)))
+w157._aussteigen(_ich157)
+_kr157 = _FZ157.neu("krad", _ich157.pos + pygame.Vector2(0, 120), 0)
+w157.welt.dazu(_kr157); w157.fahrzeuge.append(_kr157)
+if _bot157.fahrzeug is not None:
+    w157._aussteigen(_bot157)                  # er war wieder eingestiegen
+w157._einsteigen(_bot157, _kr157)
+_beiwagen157 = _kr157.beifahrer_sitz()
+_ich157.pos.update(_kr157.pos + (_kr157.pos - _beiwagen157).normalize() * 26)
+_seite_fahrer157 = w157._bot_raus_erlaubt(_ich157, _kr157)
+_ich157.pos.update(_beiwagen157 + (_beiwagen157 - _kr157.pos).normalize() * 12)
+pruef("Krad: von der Fahrerseite uebernimmt man, am Beiwagen sitzt man auf (vorher nur vor der Nase)",
+      _seite_fahrer157 and not w157._bot_raus_erlaubt(_ich157, _kr157))
+# Gemeldet: "teils laeuft man auch noch leicht in Fahrzeug-Hitboxen rein".
+_pz157 = _FZ157.neu("panzer", _ich157.pos + pygame.Vector2(0, -160), 0)
+w157.welt.dazu(_pz157); w157.fahrzeuge.append(_pz157)
+w157.welt.wesen.extend(w157.welt.neue); w157.welt.neue.clear(); w157.welt._raster_bauen()   # das Raster kennt ihn jetzt
+_ich157.pos.update(_pz157.pos + _pz157.vorn * (_pz157.werte["vorn"] + 2))   # im Bug
+w157.welt.auseinander(_ich157)
+_lok157 = _pz157.lokal(_ich157.pos)
+pruef("Wer in einen stehenden Panzer laeuft, steht im selben Schritt wieder an seinem Rand",
+      _lok157.x >= _pz157.werte["vorn"] + _ich157.radius - 0.5, str(_lok157))
+_bild157 = _FZ157.neu("buggy", _ich157.pos + pygame.Vector2(200, 160), 0, nur_bild=True)
+_bild157.welt = None
+w157.fahrzeuge.append(_bild157)
+_ort157 = _bild157.pos + pygame.Vector2(-40, 0)
+_tempo157 = pygame.Vector2(0, 0)
+for _ in range(120):
+    _ort157, _tempo157, _r157 = w157._modell_schritt(_ort157, _tempo157, pygame.Vector2(1, 0), _bild157.ebene,
+                                                    0.0, pygame.Vector2(1, 0), K.FIXED_DT)
+_tief157 = max(_bild157.radius + _ich157.radius - c_.distance_to(_ort157) for c_ in _bild157.kreise())
+pruef("... und auch die Vorhersage des Gasts laeuft nicht in einen Wagen (dort sind Wagen nur Bilder)",
+      _tief157 <= 0.01, "%.1f px" % _tief157)
+w157.fahrzeuge.remove(_bild157)
+# Gemeldet: "als Gast kann man teils gar keine Fahrzeuge fahren, die Bewegung
+# startet nicht bzw. nur um einen Pixel" und "aus engen Orten heraus
+# manoevrieren ist unglaublich schwer und langsam".
+from dustfront.world import freier_punkt as _fp157
+import random as _rnd157
+_r157 = _rnd157.Random(4)
+for _ in range(3000):
+    _platz157 = _fp157(w157.welt, 0, _r157)
+    if all(w157.welt.frei(_platz157 + pygame.Vector2(dx_, dy_), 12, 0)
+           for dx_ in range(-200, 201, 20) for dy_ in range(-200, 201, 20)):
+        break
+def _wagen157(art_, pos_, winkel_=-90.0):
+    b_ = _FZ157.neu(art_, pygame.Vector2(pos_), 0, winkel_)
+    b_.welt = w157.welt
+    return b_
+def _fahren157(b_, will_, sek_=1.0, hindernisse_=()):
+    b_.geist_von = b_ if hindernisse_ else None
+    b_.geist_hindernisse = list(hindernisse_)
+    b_.fahrer = b_.fahrer or type("F157", (), {"fraktion": "x", "lebt": True})()
+    start_ = pygame.Vector2(b_.pos)
+    for _ in range(int(sek_ / K.FIXED_DT)):
+        g_, l_ = b_.fahr_eingabe(pygame.Vector2(will_), False)
+        b_.geist_schritt(K.FIXED_DT, g_, l_, False)
+    return b_.pos.distance_to(start_)
+_a157 = _wagen157("buggy", _platz157)
+_n157 = _wagen157("buggy", _platz157 + pygame.Vector2(_a157.radius * 2 - 6, 0))   # 6 px ineinander
+_vor157 = _fahren157(_a157, (0, -1), 1.0, [_n157])
+_a157 = _wagen157("buggy", _platz157)
+_zur157 = _fahren157(_a157, (0, 1), 1.0, [_n157])
+pruef("Zwei Wagen, die sich beruehren: man faehrt davon weg, vorwaerts wie rueckwaerts (vorher 0 px)",
+      _vor157 > 15 and _zur157 > 15, "vor %.0f, zurueck %.0f px" % (_vor157, _zur157))
+_mitte157 = _wagen157("buggy", _platz157)
+_daneben157 = _wagen157("buggy", _platz157 + pygame.Vector2(_mitte157.radius * 2 - 6, 0))
+_mitte157._passt_merk = ((), False)          # wie im eigenen Fahrschritt
+pruef("... naeher heran ist verboten, weg erlaubt (_haelt_auf)",
+      _mitte157._haelt_auf(_daneben157, _platz157 + pygame.Vector2(3, 0), -90.0, lambda p_, w_: True)
+      and not _mitte157._haelt_auf(_daneben157, _platz157 + pygame.Vector2(-3, 0), -90.0, lambda p_, w_: True))
+_mitte157._passt_merk = None
+pruef("... ausserhalb der Fahrt (Platz suchen, Spawner) passt nichts, was steckt",
+      _mitte157._haelt_auf(_daneben157, _platz157 + pygame.Vector2(-3, 0), -90.0, lambda p_, w_: True)
+      and _mitte157._haelt_auf(_daneben157, _platz157, -90.0, lambda p_, w_: True))
+_pw157 = _wagen157("panzerwagen", _platz157)
+_pw_zur157 = _fahren157(_pw157, (0, 1), 1.0)
+pruef("Panzerwagen und Lastwagen fahren zuegig rueckwaerts (eigene Kraft, vorher 8 px in 1 s)",
+      _pw_zur157 > 40 and K.TROSSWAGEN.get("rueck_motor") == K.PANZERWAGEN["rueck_motor"], "%.0f px" % _pw_zur157)
+_pwb157 = _wagen157("panzerwagen", _platz157)
+_pwb157.fahrer = type("B157", (), {"fraktion": "x", "lebt": True, "ist_bot": True})()
+_pwb_zur157 = _fahren157(_pwb157, (0, 1), 1.0)
+pruef("... ein Bot am Steuer mit der alten Kraft (sein Fahren ist darauf abgestimmt)",
+      _pwb_zur157 < 15, "%.0f px" % _pwb_zur157)
+# In der Mauer: auf die naechste freie Stelle, dann geht es weiter.
+_e157 = w157.welt.ebene(0)
+_bm157 = _wagen157("buggy", (0, 0))
+_fest157 = False
+for ty_ in range(4, _e157.hoehe - 8):
+    for tx_ in range(4, _e157.breite - 4):
+        if not K.KACHELN[_e157.kachel(tx_, ty_)]["fest"]:
+            continue
+        _bm157.pos.update(tx_ * K.TILE + K.TILE / 2,
+                          (ty_ + 1) * K.TILE + _bm157.werte["achse"] + _bm157.radius - 4)
+        # 4 px in der Mauer, aber 30 px weiter hinten ist alles frei
+        if (not _bm157._mauer_frei(_bm157.pos, _bm157.winkel)
+                and all(_bm157._mauer_frei(_bm157.pos + pygame.Vector2(0, d_), _bm157.winkel)
+                        for d_ in (8, 20, 40, 60, 80))):
+            _fest157 = True
+            break
+    if _fest157:
+        break
+_weg157 = _fahren157(_bm157, (0, 1), 1.0)
+pruef("Ein Wagen, der 4 px in einer Mauer steckt, kommt rueckwaerts heraus (vorher sass er fest)",
+      _fest157 and _weg157 > 30, "steckte: %s, %.0f px" % (_fest157, _weg157))
+# Seitlich anliegende Wagen werden nicht in Fahrtrichtung mitgeschoben.
+_s1 = _FZ157.neu("panzer", _platz157 + pygame.Vector2(0, 120), 0, -90.0)
+_s2 = _FZ157.neu("buggy", _s1.pos + pygame.Vector2(_s1.werte["halb"] + 14, 0), 0, -90.0)
+for b_ in (_s1, _s2):
+    w157.welt.dazu(b_); w157.fahrzeuge.append(b_)
+w157.welt.wesen.extend(w157.welt.neue); w157.welt.neue.clear(); w157.welt._raster_bauen()
+_s1.fahrer = _bot157 if _bot157.fahrzeug is None else _ich157
+_s1.gas = 1.0
+_wo_s2 = pygame.Vector2(_s2.pos)
+for _ in range(30):
+    w157._fahrzeuge_schieben(K.FIXED_DT)
+pruef("Schieben: ein Wagen an der Seite wird nicht in Fahrtrichtung mitgezogen",
+      _s2.pos.distance_to(_wo_s2) < 0.01, "%.1f px" % _s2.pos.distance_to(_wo_s2))
+_s1.fahrer = None
+# Munition (gewuenscht): bei unendlicher Munition keine Munitionskisten, das
+# Feld als nicht verfuegbar; mit knapper die Zahl der Magazine einstellbar,
+# Standard 3; nach dem Respawn nicht mehr nachladen muessen.
+from dustfront import klassen as _KL157, ausruestung as _AU157
+w157._regeln_setzen(dict(w157.regelwerk, knapp=False))
+w157.schritt(K.FIXED_DT)
+_ich157.klasse = "schuetze"; _ich157.alle_werkzeuge = False; _ich157.faehigkeit_rest = {}
+pruef("Unendliche Munition: der Schuetze hat keine Munitionskiste (C tut nichts)",
+      _ich157.munikiste_aus and _KL157.faehigkeit_gewaehlt(_ich157) is None
+      and _KL157.faehigkeit_nutzen(w157, _ich157) == "")
+_bild157b = pygame.Surface((K.GAME_W, K.GAME_H))
+_texte157 = []
+from dustfront import anzeige as _AZ157
+_alt_text157 = _AZ157._text
+_AZ157._text = lambda z_, t_, *a_, **k_: (_texte157.append(t_), _alt_text157(z_, t_, *a_, **k_))[1]
+try:
+    w157.hud._faehigkeit_rund(_bild157b, _ich157)
+finally:
+    _AZ157._text = _alt_text157
+pruef("... und das Feld der Faehigkeit sagt NICHT VERFÜGBAR",
+      "NICHT VERFÜGBAR" in _texte157, str(_texte157))
+_ich157.klasse = "unterstuetzer"
+pruef("... der Unterstuetzer hat nur noch das Geschuetz (X wechselt nicht auf die Kiste)",
+      _KL157.faehigkeit_gewaehlt(_ich157)[0] == "geschuetz" and _KL157.faehigkeit_wechseln(_ich157) == "")
+_ich157.klasse = ""; _ich157.alle_werkzeuge = True; _ich157.werkzeug = 0
+_gesehen157 = set()
+for _ in range(len(K.WERKZEUGE) + 2):
+    _gesehen157.add(_KL157.faehigkeit_gewaehlt(_ich157)[0]); _KL157.faehigkeit_wechseln(_ich157)
+pruef("... JEDER HAT ALLES: X ueberspringt die Kiste", "munitionskiste" not in _gesehen157
+      and len(_gesehen157) == len(K.WERKZEUGE) - 1, str(sorted(_gesehen157)))
+_ich157.alle_werkzeuge = False
+_kiste157 = _AU157.bauen("MUNITIONSKISTE (STEHT)", _ich157.pos + pygame.Vector2(30, 0), 0, "x", 0.0)[0]
+w157.welt.dazu(_kiste157)
+w157._regeln_setzen(dict(w157.regelwerk, knapp=True)); w157.schritt(K.FIXED_DT)
+_ich157.klasse = "schuetze"
+pruef("Knappe Munition: die Kiste ist wieder da", not _ich157.munikiste_aus
+      and _KL157.faehigkeit_gewaehlt(_ich157)[0] == "munitionskiste" and _kiste157.lebt)
+w157._regeln_setzen(dict(w157.regelwerk, knapp=False)); w157.schritt(K.FIXED_DT)
+pruef("Wird die Munition unendlich, verschwinden die Kisten, die schon stehen", not _kiste157.lebt)
+pruef("Regel MAGAZINE: Vorgabe 3, nur mit knapper Munition, 1 bis 9",
+      _R199.vorgabe()["magazine"] == 3 == K.MUNITION["magazine"]
+      and _R199.NACH_NAME["magazine"].gilt({"knapp": True}) and not _R199.NACH_NAME["magazine"].gilt({"knapp": False}))
+pruef("... 3 Magazine sind der Vorrat wie bisher, 6 doppelt, 1 ein Drittel; Wurfwaffen bleiben",
+      all(K.vorrat_voll(w_, 3) == K.MUNITION["vorrat"][w_] for w_ in K.MUNITION["vorrat"])
+      and K.vorrat_voll("sturm", 6) == 180 and K.vorrat_voll("sturm", 1) == 30
+      and K.vorrat_voll("granate", 9) == K.MUNITION["vorrat"]["granate"])
+w157._regeln_setzen(dict(w157.regelwerk, knapp=True, magazine=1)); w157.schritt(K.FIXED_DT)
+_ich157.unverwundbar = 0.0; _ich157.revive_an = False
+_ich157.waffe = 0
+_ich157.magazin[_ich157.waffe_name] = 0
+_ich157.nachladen()
+_lud157 = _ich157.nachlade_rest
+_ich157.sterben(None)
+w157._wieder_einsteigen(_ich157)
+pruef("Beim Wiedereinstieg: kein Nachladen aus dem alten Leben mehr (vorher bis 2 s), Vorrat nach MAGAZINE",
+      _lud157 > 0 and _ich157.lebt and _ich157.nachlade_rest == 0.0
+      and all(_ich157.magazin.get(w_, 0) == K.WAFFEN[w_]["magazin"] for w_ in _ich157.waffen if K.WAFFEN[w_].get("magazin"))
+      and all(_ich157.vorrat.get(w_, 0) == K.vorrat_voll(w_, 1) for w_ in _ich157.waffen),
+      "nachlade_rest %.2f, vorrat %s" % (_ich157.nachlade_rest, _ich157.vorrat))
+w157._regeln_setzen(dict(w157.regelwerk, knapp=False, magazine=3))
+# Testmodus: eine Zeile MUNITION
+from dustfront.testmodus import Testmodus as _TM157
+_tm157 = _TM157(app, karte="staubtal")
+_zeile157 = lambda: dict((s_, w_) for s_, _t, w_ in _tm157._menue_zeilen()).get("munition", "")
+_vorher157 = _zeile157()
+_tm157.menue_wirken("munition", 1)
+_eins157 = (_tm157.knapp, _tm157.magazine, _zeile157())
+_tm157.menue_wirken("munition", -1)
+pruef("Testmodus: MUNITION schaltet UNENDLICH -> KNAPP 1 MAGAZIN und zurueck",
+      "UNENDLICH" in _vorher157 and _eins157[:2] == (True, 1) and "1 MAGAZINE" in _eins157[2]
+      and not _tm157.knapp, "%s / %s" % (_vorher157, _eins157))
+_tm157.verlassen()
 
 print()
 print("FEHLER:", fails or "keine")

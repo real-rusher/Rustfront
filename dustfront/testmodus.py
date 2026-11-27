@@ -1120,8 +1120,7 @@ class Testmodus(Gefecht):
                 d = K.WAFFEN[name]
                 if d.get("magazin"):
                     k.magazin[name] = d["magazin"]
-                k.vorrat[name] = max(k.vorrat.get(name, 0),
-                                     K.MUNITION["vorrat"].get(name, 0))
+                k.vorrat[name] = max(k.vorrat.get(name, 0), k.vorrat_voll(name))
 
     def _gott_aufheben(self, k) -> None:
         if getattr(k, "_gott_unverwundbar", False):
@@ -1365,7 +1364,7 @@ class Testmodus(Gefecht):
         k.waffen = konto_modul.hotbar_aus_loadout(lo)
         k.waffe = k.waffen.index(waffe)
         k.magazin = {n: K.WAFFEN[n]["magazin"] for n in k.waffen}
-        k.vorrat = {n: K.MUNITION["vorrat"].get(n, 0) for n in k.waffen}
+        k.vorrat = {n: k.vorrat_voll(n) for n in k.waffen}
 
     def ich_setzen(self, pos, ebene: int, w: dict):
         w = dict(w)
@@ -1390,7 +1389,7 @@ class Testmodus(Gefecht):
         k.waffen = konto_modul.hotbar_aus_loadout(lo)
         k.waffe = 0
         k.magazin = {n: K.WAFFEN[n]["magazin"] for n in k.waffen}
-        k.vorrat = {n: K.MUNITION["vorrat"].get(n, 0) for n in k.waffen}
+        k.vorrat = {n: k.vorrat_voll(n) for n in k.waffen}
         from . import klassen as klassen_modul
         klassen_modul.anwenden(k)
         k.leben = k.max_leben
@@ -2128,6 +2127,10 @@ class Testmodus(Gefecht):
             ("wieder", "WIEDEREINSTIEG", "AN" if self.wiedereinstieg else "AUS"),
             ("wellen", "ZOMBIEWELLEN", "AN" if self.wellen_an else "AUS"),
             ("beute", "BEUTE NACHLEGEN", "AN" if self.beute_an else "AUS"),
+            # Seit 0.34.157: Munition unendlich (dann keine Munitionskisten)
+            # oder knapp mit 1 bis 9 Magazinen je Waffe (Regel MAGAZINE).
+            ("munition", "MUNITION",
+             "KNAPP: %d MAGAZINE" % self.magazine if self.knapp else "UNENDLICH - KEINE MUNITIONSKISTEN"),
             ("blend", "BEOBACHTER BLENDEN", "AN" if self.blend_beobachter else "AUS"),
             ("ruckeln", "BEOBACHTER RUCKELN", "AN" if self.ruckeln_beobachter else "AUS"),
             ("sauber", "SAUBERE ANSICHT (NUR AKTIONEN)", "AN" if self.sauber else "AUS"),
@@ -2293,6 +2296,19 @@ class Testmodus(Gefecht):
             self.wellen_an = not self.wellen_an
         elif schluessel == "beute":
             self.beute_an = not self.beute_an
+        elif schluessel == "munition":
+            # UNENDLICH, KNAPP 1 ... 9 MAGAZINE - im Kreis, beide Richtungen.
+            stufen = [None] + list(range(1, K.MUNITION["magazine_hoechstens"] + 1))
+            i = stufen.index(self.magazine if self.knapp else None)
+            neu = stufen[(i + (schritt or 1)) % len(stufen)]
+            self.knapp = neu is not None
+            self.magazine = neu if neu is not None else K.MUNITION["magazine"]
+            if isinstance(getattr(self, "regelwerk", None), dict):
+                self.regelwerk["knapp"], self.regelwerk["magazine"] = self.knapp, self.magazine
+            for k in self.kaempfer.values():
+                k.knapp = self.knapp or k.ist_bot
+                k.magazine = self.magazine
+                k.vorrat = {n: k.vorrat_voll(n) for n in k.waffen}
         elif schluessel == "blend":
             self.blend_beobachter = not self.blend_beobachter
         elif schluessel == "ruckeln":

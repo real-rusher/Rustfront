@@ -3156,8 +3156,7 @@ class BotTeil:
                 k.vorrat[w] = 0
             else:
                 k.magazin[w] = d["magazin"]
-                k.vorrat[w] = int(round(K.MUNITION["vorrat"].get(w, 0)
-                                        * b["vorrat_anteil"]))
+                k.vorrat[w] = int(round(k.vorrat_voll(w) * b["vorrat_anteil"]))
 
     def _bots_steuern(self, dt: float) -> None:
         """Jeder Bot schickt seine Eingabe, wie ein Gast."""

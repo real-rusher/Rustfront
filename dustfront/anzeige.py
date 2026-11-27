@@ -575,6 +575,9 @@ class Anzeige:
         # Seit 0.34.138 die gewaehlte (X wechselt), nicht alle zugleich.
         wahl = klassen_modul.faehigkeit_gewaehlt(ich) if alle else None
         arten = (wahl,) if wahl else ()
+        # Was es gerade gibt (seit 0.34.157: die Munitionskiste nicht bei
+        # unendlicher Munition) - gezaehlt wird nur das.
+        verf = tuple(f for f in alle if klassen_modul.verfuegbar(f[0], ich))
         if arten:
             rest = getattr(ich, "faehigkeit_rest", {}) or {}
             r0 = min(rest.get(a, 0.0) for a, _p in arten)
@@ -585,10 +588,10 @@ class Anzeige:
                 # Nach dem Benutzen der Countdown, in Grau (seit 0.34.93).
                 _text(ziel, "%d" % math.ceil(r0), mitte[0], mitte[1] - 3, (150, 146, 140), 1, "mitte")
             namen = ", ".join(klassen_modul.FAEHIGKEIT_NAMEN.get(a, a.upper()) for a, _p in arten)
-            if len(alle) > 1 or (getattr(ich, "alle_werkzeuge", False) and not getattr(ich, "klasse", "")):
+            if len(verf) > 1 or (getattr(ich, "alle_werkzeuge", False) and not getattr(ich, "klasse", "")):
                 # Es gibt mehr als eines: welches gilt, und wie man wechselt.
-                if len(alle) > 1:
-                    namen += " (%d/%d)" % (alle.index(wahl) + 1, len(alle))
+                if len(verf) > 1:
+                    namen += " (%d/%d)" % (verf.index(wahl) + 1, len(verf))
                 namen += " [%s]" % (g._tastenname("werkzeug")[:1]
                                     if hasattr(g, "_tastenname") else "X")
             # Links buendig ueber dem Kreis: so liegt er nie auf der Karte.
@@ -599,6 +602,13 @@ class Anzeige:
                   K.C_AMBER if r0 <= 0.0 else K.C_MUTED_DK)
         else:
             _text(ziel, "-", mitte[0], mitte[1] - 3, K.C_MUTED_DK, 1, "mitte")
+            if alle and not verf:
+                # Die Klasse hat eine Faehigkeit, die es in dieser Runde nicht
+                # gibt: das Feld sagt es, statt leer zu bleiben (gewuenscht).
+                # Nur das: mit dem Namen davor passte es nicht ueber den Kreis.
+                _text(ziel, ui.kuerzen("NICHT VERFÜGBAR", W // 2 - 60 - (mitte[0] - r)),
+                      mitte[0] - r + 4, mitte[1] - r - h["bogen_abstand"] - h["bogen_dicke"] - 12,
+                      K.C_MUTED_DK)
         # Dash: die Ladungen als Bogen, die naechste fuellt sich.
         voll = K.DASH["ladungen"]
         laden = ich.dash_laden

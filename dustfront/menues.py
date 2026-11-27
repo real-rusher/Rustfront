@@ -1613,7 +1613,8 @@ class Ausruestung(Menue):
         if d.get("faehigkeit"):
             y = self._zeilen(ziel, feld, y + 6, ["FÄHIGKEIT (TASTE C)"], K.C_MUTED_DK)
             y = self._zeilen(ziel, feld, y, [
-                "%s (%d S)" % (klassen_modul.FAEHIGKEIT_NAMEN.get(a, a.upper()), p)
+                "%s (%d S)%s" % (klassen_modul.FAEHIGKEIT_NAMEN.get(a, a.upper()), p,
+                                 (" - " + klassen_modul.FAEHIGKEIT_NUR[a]) if a in klassen_modul.FAEHIGKEIT_NUR else "")
                 for a, p in d["faehigkeit"]], K.C_ORANGE)
         if klasse:
             y = self._zeilen(ziel, feld, y + 6, [

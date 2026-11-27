@@ -132,6 +132,15 @@ def vorteile(klasse: str) -> list:
     return raus
 
 
+def verfuegbar(art: str, k) -> bool:
+    """Gibt es diese Faehigkeit fuer `k` gerade? Seit 0.34.157 nicht die
+    Munitionskiste, wenn die Munition unendlich ist (MUNITION KNAPP aus) -
+    gemeldet: "Ammo crates sind, wenn unendlich Ammo aktiviert ist, sehr
+    komisch vom Verhalten her, entfern sie, das Feld soll als nicht
+    verfuegbar markiert sein". Das Gefecht setzt `munikiste_aus` je Schritt."""
+    return not (art == "munitionskiste" and getattr(k, "munikiste_aus", False))
+
+
 def faehigkeiten_von(k) -> tuple:
     """((Art, Pause), ...) - was diese Figur auf C hat: die Faehigkeit
     ihrer Klasse, oder (JEDER HAT ALLES, seit 0.34.85) das gewaehlte
@@ -140,7 +149,10 @@ def faehigkeiten_von(k) -> tuple:
     if d.get("faehigkeit"):
         return tuple(d["faehigkeit"])
     if getattr(k, "alle_werkzeuge", False):
-        return (K.WERKZEUGE[getattr(k, "werkzeug", 0) % len(K.WERKZEUGE)],)
+        i = getattr(k, "werkzeug", 0) % len(K.WERKZEUGE)
+        if not verfuegbar(K.WERKZEUGE[i][0], k):
+            i = (i + 1) % len(K.WERKZEUGE)      # die Kiste gibt es gerade nicht
+        return (K.WERKZEUGE[i],)
     return ()
 
 
@@ -149,7 +161,7 @@ def faehigkeit_gewaehlt(k):
     waehlt X (WERKZEUG WECHSELN) auch zwischen den Faehigkeiten einer
     Klasse (gemeldet: "Faehigkeit wechseln funktioniert gar nicht" - C nahm
     immer die erste, die bereit war, und X wirkte nur ohne Klasse)."""
-    liste = faehigkeiten_von(k)
+    liste = [f for f in faehigkeiten_von(k) if verfuegbar(f[0], k)]
     if not liste:
         return None
     if len(liste) == 1:
@@ -162,12 +174,18 @@ def faehigkeit_wechseln(k) -> str:
     ALLES - das naechste Werkzeug. Gibt den Namen zurueck oder ""."""
     d = daten(getattr(k, "klasse", ""))
     if d.get("faehigkeit"):
-        liste = tuple(d["faehigkeit"])
+        liste = [f for f in d["faehigkeit"] if verfuegbar(f[0], k)]
         if len(liste) < 2:
             return ""
         k.faehigkeit_wahl = (getattr(k, "faehigkeit_wahl", 0) + 1) % len(liste)
     elif getattr(k, "alle_werkzeuge", False):
-        k.werkzeug = (getattr(k, "werkzeug", 0) + 1) % len(K.WERKZEUGE)
+        # Weiter zum naechsten, das es gerade gibt (die Kiste bei unendlicher
+        # Munition nicht, seit 0.34.157).
+        n = len(K.WERKZEUGE)
+        for _ in range(n):
+            k.werkzeug = (getattr(k, "werkzeug", 0) + 1) % n
+            if verfuegbar(K.WERKZEUGE[k.werkzeug][0], k):
+                break
     else:
         return ""
     wahl = faehigkeit_gewaehlt(k)
@@ -180,7 +198,7 @@ def faehigkeit_bereit(k):
     rest = getattr(k, "faehigkeit_rest", {})
     if getattr(k, "ist_bot", False):
         for art, pause in faehigkeiten_von(k):
-            if rest.get(art, 0.0) <= 0.0:
+            if rest.get(art, 0.0) <= 0.0 and verfuegbar(art, k):
                 return art, pause
         return None
     wahl = faehigkeit_gewaehlt(k)
@@ -202,6 +220,9 @@ FAEHIGKEIT_ARTEN = {
     "drohne": "SPÄHDROHNE",
     "stacheldraht": "STACHELDRAHT",
 }
+# Wann es eine Faehigkeit nicht gibt (seit 0.34.157, klassen.verfuegbar) -
+# so steht es im Menue AUSRUESTUNG.
+FAEHIGKEIT_NUR = {"munitionskiste": "NUR MIT KNAPPER MUNITION"}
 FAEHIGKEIT_NAMEN = {
     "munitionskiste": "MUNITIONSKISTE", "sanitasche": "SANITASCHE",
     "geschuetz": "SELBSTSCHUSSANLAGE", "horchposten": "HORCHPOSTEN",

@@ -1416,8 +1416,16 @@ class Welt:
         # wer an ihm vorbeiging, schob ihn aus der Reichweite, und er fing
         # neu an, waehrend der Fortschritt verfiel.
         fest_w = not getattr(wesen, "schiebbar", True) or getattr(wesen, "hilft", None) is not None
+        fahrzeug_frei = getattr(wesen, "flug", 0.0) <= 0.0 and not fest_w
         for a in self.nahe(wesen.pos, wesen.radius * 2, wesen.ebene):
             if a is wesen:
+                continue
+            if getattr(a, "ist_fahrzeug", False):
+                # In ein Fahrzeug laeuft man nicht hinein (seit 0.34.157): sofort
+                # an seinem Rand hinaus - an seiner wirklichen Form, nicht nur am
+                # Kreis um die Mitte (Buggy.figur_hinaus).
+                if fahrzeug_frei:
+                    a.figur_hinaus(wesen)
                 continue
             # Erst der Abstand (seit 0.34.75): die meisten aus dem Raster
             # sind zu weit weg, und die Fragen danach aendern nichts - sie

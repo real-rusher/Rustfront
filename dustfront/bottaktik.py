@@ -413,7 +413,8 @@ class Taktik:
             d = K.WAFFEN[name]
             if d.get("art") != "schuss":
                 continue
-            voll = d.get("magazin", 1) + K.MUNITION["vorrat"].get(name, 0)
+            voll = d.get("magazin", 1) + (k.vorrat_voll(name) if hasattr(k, "vorrat_voll")
+                                          else K.MUNITION["vorrat"].get(name, 0))
             hat = k.magazin.get(name, 0) + k.vorrat.get(name, 0)
             if not k.knapp or hat > voll * K.BOTS["druck_rest"]:
                 return True

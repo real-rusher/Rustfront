@@ -129,6 +129,7 @@ Testmodus). Diese Seite bekommt dazu eine Zeile:
 
 | Seit | Was im Testmodus dazukam |
 | --- | --- |
+| 0.34.157 | Testmenue MUNITION: UNENDLICH (dann keine Munitionskisten, das Feld der Faehigkeit zeigt NICHT VERFUEGBAR) oder KNAPP mit 1 bis 9 Magazinen je Waffe (Links/Rechts). Bots aus Fahrzeugen werfen: BOT setzen, ins Fahrzeug, mit ICH daneben E halten - der Bot haelt an. |
 | 0.34.156 | Keine neuen Spawner-Eintraege. Abprall der Jagdkanone: JAGDPANZER setzen, mit ICH einsteigen und flach an einer Mauer entlang schiessen (unter etwa 40 Grad) - mit ZEIT STEHT (0) und EINZEL (.) Bild fuer Bild |
 | 0.34.155 | Spawner NACHSCHUB: ABWURF: SPULENGEWEHR (dazu die vier von 0.34.154) - alle kommen jetzt in der Abwurfkapsel; BEUTE: GERUFEN: SPULENGEWEHR. Jagdkanone: JAGDPANZER, davor PUPPE und BUGGY - am Austritt Funken und Splitter. Mit Taste 0 (ZEIT STEHT) und . (EINZEL) laesst sich die Kapsel Schritt fuer Schritt ansehen |
 | 0.34.154 | Spawner NACHSCHUB: ABWURF: MINIGUN / FLAMMENWERFER / RAKETENBUENDEL / PANZERBUECHSE (am Schirm wie aus dem Nachschub); BEUTE: GERUFEN: ... (liegt gleich am Boden, wie nach dem Tod des Traegers). Jagdkanone: JAGDPANZER setzen, mit ICH einsteigen, auf PUPPE, BUGGY und PANZERWAGEN in einer Reihe schiessen (geht durch, bleibt stecken), flach an einer Mauer (prallt einmal ab). MG-Hitze: PANZERWAGEN, Dauerfeuer - Balken unter dem Wagen, MG UEBERHITZT. Werfer: aufbauen (RMB) - die Stuetzen fahren aus. Vorhersage des eigenen Wagens: nur mit Gast (zweites Fenster), siehe `tests/test_spiel.py` Abschnitt 0.34.154 |

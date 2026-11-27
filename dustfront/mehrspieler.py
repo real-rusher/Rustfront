@@ -203,7 +203,7 @@ class Kaempfer(Spieler):
         self.skin = ""
         # Munitionsvorrat
         self.knapp = knapp
-        self.vorrat = {w: K.MUNITION["vorrat"].get(w, 0) for w in self.waffen}
+        self.vorrat = {w: self.vorrat_voll(w) for w in self.waffen}
 
     @property
     def team_vorsatz(self) -> str:
@@ -436,11 +436,19 @@ class Kaempfer(Spieler):
         if gibt <= 0 or self.vorrat[name] <= 0:
             self.nachlade_rest = 0.0          # nichts mehr da: aufhoeren
 
+    # Wie viele Magazine Vorrat (Regel MAGAZINE, seit 0.34.157) - setzt das
+    # Gefecht je Schritt (Gefecht._munitions_regeln).
+    magazine = K.MUNITION["magazine"]
+
+    def vorrat_voll(self, name: str) -> int:
+        """Der volle Vorrat dieser Waffe nach der Regel MAGAZINE."""
+        return K.vorrat_voll(name, self.magazine)
+
     def auffuellen(self, anteil: float) -> bool:
         """Munitionskiste aufgesammelt. False, wenn schon alles voll ist."""
         genommen = False
         for name in self.waffen:
-            voll = K.MUNITION["vorrat"].get(name, 0)
+            voll = self.vorrat_voll(name)
             if voll <= 0:
                 continue
             if name == self.schwer and not K.SCHLACHT["waffen_abwurf"]["kiste_fuellt"]:
@@ -2324,6 +2332,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         self.mg_schub = bool(d.get("mg_schub", False))
         for k in getattr(self, "kaempfer", {}).values():
             k.mg_schub = self.mg_schub
+        try:
+            self.magazine = max(1, min(K.MUNITION["magazine_hoechstens"],
+                                       int(d.get("magazine", K.MUNITION["magazine"]))))
+        except (TypeError, ValueError):
+            self.magazine = K.MUNITION["magazine"]
         self.schwierigkeit = d["schwierigkeit"]
         self.stufe = K.SCHWIERIGKEIT[self.schwierigkeit]
         self.bosse_an = bool(d["bosse"])
@@ -2577,7 +2590,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         k.waffen = plaetze
         k.waffe = 0
         k.magazin = {w: K.WAFFEN[w]["magazin"] for w in plaetze}
-        k.vorrat = {w: K.MUNITION["vorrat"].get(w, 0) for w in plaetze}
+        k.vorrat = {w: k.vorrat_voll(w) for w in plaetze}
         klassen_modul.anwenden(k)
 
     def _nahkampf_setzen(self, k: Kaempfer, lo) -> None:
@@ -3107,6 +3120,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 # kurzer Druck soll nicht aus Versehen den Fahrer hinauswerfen
                 # (gewuenscht). Das Halten fuehrt _uebernehmen_halten.
                 k._uebernehmen = (wagen, self.welt.zeit)
+                wagen._wartet_bis = self.welt.zeit + K.FAHRZEUG_UEBERNEHMEN["warten"]
                 return
             self._einsteigen(k, wagen)
             return
@@ -3141,6 +3155,11 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                 or wagen.pos.distance_to(k.pos) > wagen.werte["einsteigen"] + 30.0):
             k._uebernehmen = None
             return False
+        # Solange gehalten wird, wartet der Bot am Steuer (seit 0.34.157,
+        # gemeldet: "Bots aus Fahrzeugen kicken geht gar nicht mehr") - er
+        # fuhr weiter, und nach dem Halten war der Wagen laengst ausser
+        # Reichweite.
+        wagen._wartet_bis = self.welt.zeit + K.FAHRZEUG_UEBERNEHMEN["warten"]
         if self.welt.zeit - seit < K.FAHRZEUG_UEBERNEHMEN["halten"]:
             k.feuert = False
             return True
@@ -3545,7 +3564,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         Bot ist von seiner Seite, nicht beim Flakwagen (nur Bots, seit
         0.34.114) - seit 0.34.134."""
         f = b.fahrer or self.kaempfer.get(getattr(b, "fahrer_nummer", -1))
-        if "plaetze" in b.werte and (k.pos - b.pos).dot(b.vorn) < b.werte.get("vorn", 40.0) * 0.25:
+        if b.art == "krad":
+            # Krad (seit 0.34.157): am Beiwagen sitzt man auf, naeher am
+            # Fahrer uebernimmt man. Vorher galt die Regel des Panzerwagens
+            # (nur von vorn), und vor der Nase eines Krads steht niemand.
+            if k.pos.distance_squared_to(b.beifahrer_sitz()) < k.pos.distance_squared_to(b.pos):
+                return False
+        elif "plaetze" in b.werte and (k.pos - b.pos).dot(b.vorn) < b.werte.get("vorn", 40.0) * 0.25:
             # Ein Panzerwagen nimmt Leute mit: an der Mitte und hinten sitzt
             # man auf wie bisher - das Steuer uebernimmt, wer vorn an der
             # Seite steht (an der Fahrertuer).
@@ -3831,6 +3856,15 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             # dasselbe (seit 0.34.154).
             b.gas, b.lenk = b.fahr_eingabe(will, bool(ein.get("rl")))
         b.handbremse = bool(ein.get("hb"))
+        if k.ist_bot and b.__dict__.get("_wartet_bis", 0.0) > self.welt.zeit:
+            # Ein Mitspieler haelt E, um zu uebernehmen: scharf anhalten und
+            # warten - die Handbremse allein liess ihn 140 px weiterrutschen.
+            b.gas = b.lenk = 0.0
+            b.handbremse = True
+            geschw = getattr(b, "geschw", None)
+            v = geschw.length() if geschw is not None else 0.0
+            if v > 0.0:
+                geschw *= max(0.0, v - K.FAHRZEUG_UEBERNEHMEN["bremse"] * K.FIXED_DT) / v
         if getattr(b, "rechteckig", False) or getattr(b, "schiesst", False):
             b.feuer = bool(ein.get("feuert"))
             b.zweit = bool(ein.get("zielt"))
@@ -3967,6 +4001,13 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
                     continue
                 weit = ra + reichweite[id(b)] + 12.0
                 if b.pos.distance_squared_to(a.pos) > weit * weit:
+                    continue
+                # Nur wer vorn (bzw. beim Rueckwaertsfahren hinten) im Weg
+                # steht, wird geschoben (seit 0.34.157). Ein Wagen, der seitlich
+                # anlag, wurde sonst in Fahrtrichtung mitgezogen und stand gleich
+                # wieder im Weg - der eigene Wagen kam nicht los.
+                d = b.pos - a.pos
+                if d.dot(richtung) < f["vorn_anteil"] * d.length():
                     continue
                 gb = gew.get(b.art, 2)
                 if ga < gb or (gb > 1 and ga == 1):
@@ -5421,6 +5462,27 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             self._seit_muni = 0.0
             self._beute_legen("munition", K.MUNITION["kiste_hoechstens"])
 
+    # Regel MAGAZINE (seit 0.34.157); _regeln_setzen liest sie.
+    magazine = K.MUNITION["magazine"]
+
+    def _munitions_regeln(self) -> None:
+        """Munitionskisten nur mit knapper Munition (seit 0.34.157, gemeldet:
+        "Ammo crates sind, wenn unendlich Ammo aktiviert ist, sehr komisch
+        vom Verhalten her, entfern sie, das Feld soll als nicht verfuegbar
+        markiert sein"). Die Faehigkeit fragt klassen.verfuegbar; wird die
+        Munition unendlich, verschwinden auch die Kisten, die schon stehen
+        oder liegen."""
+        aus = not self.knapp
+        for k in self.kaempfer.values():
+            k.munikiste_aus = aus
+            k.magazine = self.magazine
+        if aus and self.ist_gastgeber and self.__dict__.get("_munikiste_war") is not True:
+            for w in self.welt.wesen:
+                if ((getattr(w, "ist_ausruestung", False) and getattr(w, "art", "") == "munitionskiste")
+                        or (isinstance(w, KampfBeute) and w.art == "munition")):
+                    w.lebt = False
+        self._munikiste_war = aus
+
     def _beute_legen(self, art: str, hoechstens: int) -> None:
         liegen = sum(1 for w in self.welt.wesen
                      if isinstance(w, KampfBeute) and w.lebt and w.art == art)
@@ -5664,6 +5726,12 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
         # werden nach dem Tod nicht richtig zurueckgesetzt"): vorher blieben
         # die aufgesammelten aus dem alten Leben (max), bis zum Hoechstwert.
         k.medkits = 0 if k.ist_bot else self.start_medkits
+        # Was beim Tod gerade lief, laeuft nicht weiter (seit 0.34.157,
+        # gemeldet: "teils muss man, wenn man respawnt, noch immer Waffen
+        # sofort nachladen"): wer beim Nachladen starb, lud nach dem
+        # Wiedereinstieg bis zu zwei Sekunden weiter und konnte nicht schiessen.
+        k.abbrechen()
+        k.takt = 0.0
         if not k.ist_bot:
             # Was im alten Leben gerade lief, endet mit ihm: Dash, Hitze,
             # Zielerfassung. Nur fuer Menschen (gemeldet war es fuer sie).
@@ -5677,7 +5745,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             # zuverlaessig aufgefuellt"). Bisher nur, wenn sich das Loadout
             # geaendert hatte - sonst ging das alte Leben mit leerem Vorrat
             # weiter. Knapp bleibt es innerhalb eines Lebens.
-            k.vorrat = {w: K.MUNITION["vorrat"].get(w, 0) for w in k.waffen}
+            k.magazine = self.magazine
+            k.vorrat = {w: k.vorrat_voll(w) for w in k.waffen}
             k.magazin = {w: K.WAFFEN[w]["magazin"] for w in k.waffen}
         self._magazine_fuellen(k)
         if k not in self.welt.wesen and k not in self.welt.neue:
@@ -7061,6 +7130,7 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             self._start_ausfuehren()
             return
         self._zeit += dt
+        self._munitions_regeln()
         if not self.vorbei:
             self._rundenzeit += dt
             # Die Siegtafel faengt wieder auf der Uebersicht an (0.34.154).
@@ -7869,7 +7939,8 @@ class Gefecht(Szene, LobbyTeil, KosmetikTeil, BotTeil, SchlachtTeil, FrontTeil, 
             k.schlacht_punkte = 0          # Nachschubpunkte gelten je Runde (seit 0.34.98)
             # Bots haben immer begrenzte Munition (seit 0.34.26).
             k.knapp = self.knapp or k.ist_bot
-            k.vorrat = {v: K.MUNITION["vorrat"].get(v, 0) for v in k.waffen}
+            k.magazine = self.magazine
+            k.vorrat = {v: k.vorrat_voll(v) for v in k.waffen}
             if not self.mit_teams:
                 k.team = -1
             k.fraktion = self._fraktion_fuer(k.nummer, k.team)

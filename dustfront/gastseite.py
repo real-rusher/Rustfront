@@ -425,6 +425,13 @@ class GastTeil:
         k = self.ich
         geist = _Geist(ort, getattr(k, "radius", 8.0), ebene)
         self.welt.bewegen(geist, tempo.x * dt, tempo.y * dt)
+        # Auch nicht in Fahrzeuge hinein (seit 0.34.157, gemeldet: "teils laeuft
+        # man leicht in Fahrzeug-Hitboxen rein"): die Vorhersage kannte nur
+        # Mauern, der Gastgeber schob die Figur danach wieder hinaus.
+        for b in self.fahrzeuge:
+            if (b.ebene == ebene and b.lebt
+                    and b.pos.distance_squared_to(geist.pos) < K.NETZ["vorhersage_wagen_nah"] ** 2):
+                b.figur_hinaus(geist, welt=self.welt)
         return geist.pos, tempo, max(0.0, dash_rest)
 
     def _vorhersage_zeigen(self) -> None:

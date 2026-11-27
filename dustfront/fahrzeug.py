@@ -97,8 +97,11 @@ class Buggy(Wesen):
     zaehlt_treffer = False
     treffer_art = "metall"
     # Die weiche Abstossung der Welt kennt nur Kreise. Wer im Weg steht,
-    # schiebt der Buggy selbst beiseite (_beiseite_schieben).
+    # schiebt der Buggy selbst beiseite (_beiseite_schieben) - und wer selbst
+    # hineinlaeuft, den setzt die Welt sofort wieder hinaus (figur_hinaus,
+    # seit 0.34.157).
     schiebt = False
+    ist_fahrzeug = True
     # Statt des runden Schattens der Figuren ein eigener, laenglicher
     # (Renderer.wesen_zeichnen fragt nach `schatten_bild`).
     schatten = False
@@ -545,25 +548,49 @@ class Buggy(Wesen):
         for a in self._nahe_fuer_passt(w, pos, self.werte["achse"] + r + 40):
             if getattr(a, "rechteckig", False):
                 # Ein Panzer oder Panzerwagen (seit 0.34.59): Kreis an Rechteck.
-                if a.lebt and any(a.beruehrt(c, r) for c in kreise):
+                if a.lebt and self._haelt_auf(a, pos, winkel, lambda p_, w_, a=a: any(
+                        a.beruehrt(c, r) for c in self.kreise(p_, w_))):
                     return False
                 continue
             if isinstance(a, Buggy) and a is not self:
                 # Andere Wagen: Kreis an Kreis (seit 0.34.18 stehen sie im
                 # Raster, weil man sie treffen kann - vorher hielt nur der
                 # Fahrer des anderen Wagens einen auf, ein leerer gar nicht).
-                if any(c.distance_squared_to(d) < (r + a.radius) ** 2
-                       for c in kreise for d in a.kreise()):
+                if self._haelt_auf(a, pos, winkel, lambda p_, w_, a=a: any(
+                        c.distance_squared_to(d) < (r + a.radius) ** 2
+                        for c in self.kreise(p_, w_) for d in a.kreise())):
                     return False
                 continue
             if (a is self.fahrer or not a.lebt or a.flug > 0
                     or getattr(a, "schiebbar", True)
                     or getattr(a, "am_boden", False)):
                 continue
-            for c in kreise:
-                if c.distance_squared_to(a.pos) < (r + a.radius) ** 2:
-                    return False
+            if self._haelt_auf(a, pos, winkel, lambda p_, w_, a=a: any(
+                    c.distance_squared_to(a.pos) < (r + a.radius) ** 2 for c in self.kreise(p_, w_))):
+                return False
         return True
+
+    def _haelt_auf(self, a, pos, winkel, trifft) -> bool:
+        """Haelt `a` den Wagen an `pos` (mit `winkel`) auf? `trifft(pos,
+        winkel)` sagt, ob sie sich dort beruehren.
+
+        Seit 0.34.157 (gemeldet: "die Bewegung startet nicht bzw. nur um einen
+        Pixel und stoppt dann", "aus engen Orten heraus manoevrieren ist
+        unglaublich schwer"): steckt `a` schon jetzt im Wagen - zwei Wagen, die
+        dicht nebeneinander abgesetzt wurden, einer, der angeschoben wurde -,
+        haelt es ihn nur noch auf, wenn er naeher heranfaehrt. Vorher war jede
+        Lage verboten, die sich noch beruehrte, also auch jede, die davon weg
+        fuehrte: der Wagen sass fest, vorwaerts wie rueckwaerts.
+
+        Nur innerhalb des eigenen Fahrschritts (`_passt_merk` gesetzt): wer
+        einen Platz sucht (Spawner, Wiederaufbau, Aussteigen), fragt nach
+        einem Ort, an dem nichts steckt - sonst passte dort, wo der Wagen
+        gerade steht, auch ein zweiter."""
+        if not trifft(pos, winkel):
+            return False
+        if self._passt_merk is None or not trifft(self.pos, self.winkel):
+            return True
+        return pos.distance_squared_to(a.pos) < self.pos.distance_squared_to(a.pos) - 1e-6
 
     # ---- Ablauf -------------------------------------------------------
     def schritt(self, dt: float) -> None:
@@ -625,6 +652,7 @@ class Buggy(Wesen):
                 effekte.ring(self.welt, self.pos.x, self.pos.y, self.ebene,
                              self.werte.get("halb", 16.0) * 0.6, self.werte.get("halb", 16.0) * 1.6, 0.8,
                              (178, 214, 222))
+        self._mauer_befreien()
         self._passt_merk = ((), False)          # ab hier merken (passt)
         try:
             self._drehen(dt)
@@ -815,7 +843,12 @@ class Buggy(Wesen):
             if self.fahrt > f["stick_bremsen_ab"]:
                 return -1.0, 0.0                       # erst bremsen
             return -staerke, 0.0                       # dann rueckwaerts
-        lenk = max(-1.0, min(1.0, ab / f["stick_voll_lenken"]))
+        if self.fahrt < -K.FAHRZEUG_STICK["rueck_halten"]:
+            # Noch zuegig rueckwaerts (seit 0.34.157 faehrt er schneller
+            # zurueck): erst anhalten. Eingeschlagen drehte er rueckwaerts
+            # gegen den Stick und kam nicht auf die Seite, die er zeigt.
+            return 1.0, 0.0
+        lenk =max(-1.0, min(1.0, ab / f["stick_voll_lenken"]))
         gas = staerke if abs(ab) < f["stick_wenden"] else staerke * 0.5
         return gas, lenk
 
@@ -841,6 +874,7 @@ class Buggy(Wesen):
             hoechst = self.werte["hoechst"] * K.WASSER["seicht_fahrzeug"]
             if self.geschw.length() > hoechst:
                 self.geschw.scale_to_length(hoechst)
+        self._mauer_befreien()
         self._passt_merk = ((), False)
         try:
             self._drehen(dt)
@@ -848,6 +882,32 @@ class Buggy(Wesen):
         finally:
             self._passt_merk = None
         self.tempo.update(self.geschw)
+
+    def _mauer_frei(self, pos, winkel) -> bool:
+        """Beruehrt er an `pos` keine Mauer und (wo sie Wand sind) kein Loch?"""
+        lf = self.loch_ist_wand
+        return all(self.welt.frei(c, self.radius, self.ebene, lf) for c in self.kreise(pos, winkel))
+
+    def _mauer_befreien(self) -> None:
+        """Steckt er in einer Mauer, auf die naechste freie Stelle daneben.
+
+        Seit 0.34.157 (gemeldet: "aus engen Orten heraus manoevrieren ist
+        unglaublich schwer"): stak ein Wagen auch nur 2 px in einer Mauer -
+        von einem Stoss, einer Explosion, einer Landung -, war jede Lage
+        verboten, auch die, die herausfuehrte, und er sass fest. Gesucht wird
+        in wachsenden Ringen wie bei den Figuren (world.befreien), so nah wie
+        moeglich - meist ist es ein Ruck von ein paar Pixeln."""
+        if self.welt is None or getattr(self, "luft", False) or getattr(self, "sturz_rest", 0.0) > 0.0:
+            return
+        if self._mauer_frei(self.pos, self.winkel):
+            return
+        for r in K.FAHRZEUG_BEFREIEN["ringe"]:
+            for i in range(12):
+                a = math.tau * i / 12
+                p = self.pos + pygame.Vector2(math.cos(a), math.sin(a)) * r
+                if self._mauer_frei(p, self.winkel):
+                    self.pos.update(p)
+                    return
 
     # Merkzelle fuer _physik (seit 0.34.75): (Eingaben als Bytes, Werte,
     # Ergebnis). Ein stehender Wagen rechnet jeden Schritt dasselbe.
@@ -864,14 +924,16 @@ class Buggy(Wesen):
                                             dt, gas, lenk, bool(handbremse))
         merk = self._physik_merk
         f = self.werte
-        if merk is not None and merk[0] == schluessel and merk[1] is f:
+        # Ob ein Bot faehrt, gehoert dazu (seit 0.34.157, rueck_motor).
+        bot = bool(getattr(self.fahrer, "ist_bot", False))
+        if merk is not None and merk[0] == schluessel and merk[1] is f and merk[3] is bot:
             gx, gy, self.gier, self.lenkwinkel, self.rutschen = merk[2]
             g.update(gx, gy)
             return
         self._physik_rechnen(dt, gas, lenk, handbremse)
         g = self.geschw
         self._physik_merk = (schluessel, f, (g.x, g.y, self.gier, self.lenkwinkel,
-                                             self.rutschen))
+                                             self.rutschen), bot)
 
     def _physik_rechnen(self, dt: float, gas: float, lenk: float, handbremse: bool) -> None:
         """Ein Schritt Einspurmodell: Kraefte an Vorder- und Hinterachse,
@@ -926,7 +988,19 @@ class Buggy(Wesen):
             if vx > 5.0:
                 fx -= f["bremse"]
             else:
-                fx -= f["motor"] * 0.6 * max(0.0, 1.0 - max(0.0, -vx) / f["rueckwaerts"])
+                # Eigene Kraft rueckwaerts (seit 0.34.157, rueck_motor): die
+                # Lastwagen ziehen vorwaerts mit dem Tempo an (motor_wachsen),
+                # rueckwaerts blieb nur ihr kleiner Grundmotor - 6 px in der
+                # ersten Sekunde (gemeldet: "rueckwaerts fahren ist
+                # unglaublich schwer und langsam"). Nur am Steuer eines
+                # Menschen: das Fahren der Bots (bots._lenken) setzt nach Zeit
+                # zurueck und ist auf die alte Kraft abgestimmt - mit der neuen
+                # setzte ein Bot-Panzerwagen in der Kolonne auf den Wagen hinter
+                # ihm zurueck (test_verhalten, kolonne).
+                kraft = f["motor"] * 0.6
+                if not getattr(self.fahrer, "ist_bot", False):
+                    kraft = f.get("rueck_motor", kraft)
+                fx -= kraft * max(0.0, 1.0 - max(0.0, -vx) / f["rueckwaerts"])
         else:
             fx -= math.copysign(min(f["rollen"], abs(vx) / dt), vx)
         fx -= f["luft"] * vx * abs(vx)
@@ -1055,21 +1129,40 @@ class Buggy(Wesen):
             # dieser Schleife nicht, nur die Geschobenen.
             if kreise is None:
                 kreise = self.kreise()
-            for c in kreise:
-                d = a.pos - c
-                abstand = d.length()
-                mindest = r + a.radius
-                if abstand >= mindest:
-                    continue
-                if abstand < 0.001:
-                    d = pygame.Vector2(-self.vorn.y, self.vorn.x)
-                    abstand = 0.0
-                else:
-                    d /= abstand
-                weg = d * (mindest - abstand)
-                if w.frei(a.pos + weg, a.radius, a.ebene,
-                          not getattr(a, "faellt", False)):
-                    a.pos += weg
+            self.figur_hinaus(a, kreise)
+
+    def figur_hinaus(self, a, kreise=None, welt=None) -> bool:
+        """Steht `a` im Wagen, auf dem kuerzesten Weg hinaus - ohne Stoss und
+        ohne Schaden. True, wenn geschoben wurde. `welt`: fuer die Vorhersage
+        des Gasts, dessen Wagen nur Bilder sind (nur_bild) - sonst gilt ein
+        Bild nicht als Hindernis.
+
+        Seit 0.34.157 fragt das auch die Welt, sobald eine Figur sich bewegt
+        (world.auseinander; gemeldet: "teils laeuft man leicht in Fahrzeug-
+        Hitboxen rein"): ein stehender Wagen schob nur alle 0,1 s, dazwischen
+        lief man bis zu einer halben Figur weit hinein."""
+        if (self.nur_bild and welt is None) or getattr(self, "luft", False):
+            return False
+        w = welt or self.welt
+        r = self.radius
+        geschoben = False
+        for c in (self.kreise() if kreise is None else kreise):
+            d = a.pos - c
+            abstand = d.length()
+            mindest = r + a.radius
+            if abstand >= mindest:
+                continue
+            if abstand < 0.001:
+                d = pygame.Vector2(-self.vorn.y, self.vorn.x)
+                abstand = 0.0
+            else:
+                d /= abstand
+            weg = d * (mindest - abstand)
+            if w.frei(a.pos + weg, a.radius, a.ebene,
+                      not getattr(a, "faellt", False)):
+                a.pos += weg
+                geschoben = True
+        return geschoben
 
     def _staub(self, dt: float) -> None:
         """Staub hinter den Hinterraedern, sobald er schnell genug ist."""
@@ -1596,17 +1689,20 @@ class Schwer(Buggy):
             if getattr(a, "rechteckig", False):
                 if meine is None:
                     meine = self.ecken(pos, winkel)
-                if _vielecke_ueberlappen(meine, a.ecken()):
+                if _vielecke_ueberlappen(meine, a.ecken()) and self._haelt_auf(
+                        a, pos, winkel, lambda p_, w_, a=a: _vielecke_ueberlappen(
+                            self.ecken(p_, w_), a.ecken())):
                     return False
                 continue
             if isinstance(a, Buggy):
-                if any(self.beruehrt(c, a.radius, pos, winkel) for c in a.kreise()):
+                if self._haelt_auf(a, pos, winkel, lambda p_, w_, a=a: any(
+                        self.beruehrt(c, a.radius, p_, w_) for c in a.kreise())):
                     return False
                 continue
             if (a.flug > 0 or getattr(a, "schiebbar", True)
                     or getattr(a, "am_boden", False)):
                 continue
-            if self.beruehrt(a.pos, a.radius, pos, winkel):
+            if self._haelt_auf(a, pos, winkel, lambda p_, w_, a=a: self.beruehrt(a.pos, a.radius, p_, w_)):
                 return False
         return True
 
@@ -1738,20 +1834,9 @@ class Schwer(Buggy):
                     or getattr(a, "im_fahrzeug", False)):
                 continue
             lok = self.lokal(a.pos)
-            r = a.radius
-            tiefe = {"vorn": f["vorn"] + r - lok.x, "hinten": lok.x - (f["hinten"] - r),
-                     "links": lok.y + f["halb"] + r, "rechts": f["halb"] + r - lok.y}
-            if min(tiefe.values()) <= 0.0:
-                continue
-            seite = None
-            for s in sorted(tiefe, key=tiefe.get):
-                neu = self.pos + (lok + _SEITEN[s] * (tiefe[s] + 0.3)).rotate(self.winkel)
-                if w.frei(neu, r, a.ebene, not getattr(a, "faellt", False)):
-                    a.pos.update(neu)
-                    seite = s
-                    break
+            seite = self._hinaus_seite(a)
             if seite is None:
-                continue                  # klemmt an der Mauer: bleibt, wo er ist
+                continue                  # nicht im Wagen, oder klemmt an der Mauer
             n = _SEITEN[seite]
             # Das Tempo des Wagens an dieser Stelle, mit seiner Drehung.
             v_lok = geschw_lok + pygame.Vector2(-self.gier * lok.y, self.gier * lok.x)
@@ -1788,6 +1873,33 @@ class Schwer(Buggy):
                 t = getattr(a, "tempo", None)
                 if t is not None and t.dot(nw) < vn:
                     t += nw * (vn - max(0.0, t.dot(nw)))
+
+    def _mauer_frei(self, pos, winkel) -> bool:
+        return self._kacheln_frei(pos, winkel)
+
+    def _hinaus_seite(self, a, welt=None):
+        """Steht `a` im Fussabdruck: an der Seite mit der geringsten
+        Eindringtiefe hinaus, wo Platz ist. Gibt die Seite zurueck, oder None
+        (nicht im Wagen, oder kein Platz)."""
+        f = self.werte
+        lok = self.lokal(a.pos)
+        r = a.radius
+        tiefe = {"vorn": f["vorn"] + r - lok.x, "hinten": lok.x - (f["hinten"] - r),
+                 "links": lok.y + f["halb"] + r, "rechts": f["halb"] + r - lok.y}
+        if min(tiefe.values()) <= 0.0:
+            return None
+        for s in sorted(tiefe, key=tiefe.get):
+            neu = self.pos + (lok + _SEITEN[s] * (tiefe[s] + 0.3)).rotate(self.winkel)
+            if (welt or self.welt).frei(neu, r, a.ebene, not getattr(a, "faellt", False)):
+                a.pos.update(neu)
+                return s
+        return None
+
+    def figur_hinaus(self, a, kreise=None, welt=None) -> bool:
+        """Wie Buggy.figur_hinaus, am Rechteck (seit 0.34.157)."""
+        if self.nur_bild and welt is None:
+            return False
+        return self._hinaus_seite(a, welt) is not None
 
     # ---- Zeichnen -----------------------------------------------------
     def _wanne_flaeche(self, bilder):
